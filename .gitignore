@@ -1,0 +1,55 @@
+# Dependencies
+node_modules/
+
+# Build output (tracked for npm publish)
+*.tgz
+*.js.map
+
+# Code coverage
+coverage/
+*.lcov
+
+# Logs
+logs/
+*.log
+report.[0-9]*.[0-9]*.[0-9]*.[0-9]*.json
+
+# Environment variables
+.env
+.env.development.local
+.env.test.local
+.env.production.local
+.env.local
+
+# Caches
+.eslintcache
+.cache/
+parcel-cache/
+*.tsbuildinfo
+
+# IDE and editor settings
+.idea/
+.vscode/
+
+# OS files
+.DS_Store
+
+# Temporary files
+*.tmp
+
+# Claude Code related (development only)
+.claude/
+.omc/
+.projmnt4claude/
+
+# Claude Code related (development only)
+claude_code_helper.sh
+checkpoint.md
+CLAUDE.md
+
+# Local development directories
+docs/
+test-project/
+
+# Local build output
+dist/index.js
