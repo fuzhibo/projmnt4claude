@@ -223,8 +223,8 @@ function copySkillFiles(cwd: string, language: 'zh' | 'en', t: typeof i18n.zh): 
   ensureDir(targetDir);
   ensureDir(path.join(targetDir, 'skills'));
 
-  // 复制 SKILL.md
-  const skillSource = path.join(pluginRoot, 'skills', 'projmnt4claude', language, 'SKILL.md');
+  // 复制 SKILL.md - 使用新的 locales 目录
+  const skillSource = path.join(pluginRoot, 'locales', language, 'SKILL.md');
   const skillTarget = path.join(targetDir, 'SKILL.md');
 
   if (fs.existsSync(skillSource)) {
@@ -241,8 +241,8 @@ function copySkillFiles(cwd: string, language: 'zh' | 'en', t: typeof i18n.zh): 
     }
   }
 
-  // 复制命令文档
-  const commandsSourceDir = path.join(pluginRoot, 'commands', language);
+  // 复制命令文档 - 使用新的 locales 目录
+  const commandsSourceDir = path.join(pluginRoot, 'locales', language, 'commands');
   const commandsTargetDir = path.join(targetDir, 'commands');
   ensureDir(commandsTargetDir);
 
@@ -256,18 +256,7 @@ function copySkillFiles(cwd: string, language: 'zh' | 'en', t: typeof i18n.zh): 
     }
     console.log(`  ✓ 复制 ${commandFiles.length} 个命令文档 (${language})`);
   } else {
-    // 回退到默认位置
-    const defaultCommandsDir = path.join(pluginRoot, 'commands');
-    if (fs.existsSync(defaultCommandsDir)) {
-      const commandFiles = fs.readdirSync(defaultCommandsDir).filter(f => f.endsWith('.md'));
-      for (const file of commandFiles) {
-        fs.copyFileSync(
-          path.join(defaultCommandsDir, file),
-          path.join(commandsTargetDir, file)
-        );
-      }
-      console.log(`  ✓ 复制 ${commandFiles.length} 个命令文档 (default)`);
-    }
+    console.log(`  ⚠️ 命令文档目录未找到: ${commandsSourceDir}`);
   }
 
   console.log(`✅ ${t.skillsCopied}`);

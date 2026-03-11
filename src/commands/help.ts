@@ -1,5 +1,7 @@
 import * as fs from 'fs';
 import * as path from 'path';
+import { getLanguage } from '../i18n';
+
 
 /**
  * 命令元数据接口
@@ -19,28 +21,47 @@ function parseCommandMetadata(filePath: string): CommandMetadata | null {
 
     if (!frontmatterMatch) {
       return null;
-    }
+  }
 
     const frontmatter = frontmatterMatch[1];
     const metadata: CommandMetadata = {
       description: '',
       'argument-hint': '',
-    };
+  };
 
     const descriptionMatch = frontmatter.match(/description:\s*["'](.+?)["']/);
-    if (descriptionMatch) {
-      metadata.description = descriptionMatch[1];
-    }
+  if (descriptionMatch) {
+    metadata.description = descriptionMatch[1];
+  }
 
-    const argumentMatch = frontmatter.match(/argument-hint:\s*["'](.+?)["']/);
-    if (argumentMatch) {
-      metadata['argument-hint'] = argumentMatch[1];
-    }
+  const argumentMatch = frontmatter.match(/argument-hint:\s["'](.+?)["']/);
+  if (argumentMatch) {
+    metadata['argument-hint'] = argumentMatch[1];
+  }
 
-    return metadata;
+  return metadata;
   } catch (error) {
     return null;
   }
+}
+
+/**
+ * 获取命令文档目录路径 - 使用新的 locales 目录
+ */
+function getCommandsDir(cwd: string): string {
+  const language = getLanguage(cwd);
+  const pluginRoot = process.env.CLAUDE_PLUGIN_ROOT;
+
+  // 优先使用 locales 目录
+  if (pluginRoot) {
+    const localesDir = path.join(pluginRoot, 'locales', language, 'commands');
+    if (fs.existsSync(localesDir)) {
+      return localesDir;
+    }
+  }
+
+  // 回退到旧的 commands 目录
+  return path.join(cwd, 'commands');
 }
 
 /**
@@ -61,19 +82,20 @@ function getAvailableCommands(commandsDir: string): string[] {
 /**
  * 显示整体帮助（所有命令概览）
  */
-function showOverview(commandsDir: string): void {
+function showOverview(commandsDir: string, cwd: string): void {
+  const t = require('../i18n').getI18n(getLanguage(cwd));
   const commands = getAvailableCommands(commandsDir);
 
   console.log('');
   console.log('━'.repeat(70));
-  console.log('📚 命令参考');
+  console.log(`📚 ${t.help.commandReference}`);
   console.log('━'.repeat(70));
   console.log('');
-  console.log('使用方式: projmnt4claude help [command]');
+  console.log(`${t.help.usage}: projmnt4claude help [command]`);
   console.log('');
 
   if (commands.length === 0) {
-    console.log('暂无可用命令');
+    console.log(t.help.noDescription);
     return;
   }
 
@@ -81,39 +103,40 @@ function showOverview(commandsDir: string): void {
   const maxCommandLength = Math.max(...commands.map(cmd => cmd.length));
 
   // 表头
-  console.log('命令' + ' '.repeat(maxCommandLength - 2) + ' | 描述');
+  console.log(`${t.help.availableCommands}` + ' '.repeat(maxCommandLength - 22) + ' | ' + t.help.noDescription.split(' ')[0]);
   console.log('─'.repeat(maxCommandLength + 2) + '-+-' + '─'.repeat(50));
 
   // 命令列表
   for (const command of commands) {
     const metadata = parseCommandMetadata(path.join(commandsDir, `${command}.md`));
-    const description = metadata?.description || '暂无描述';
+    const description = metadata?.description || t.help.noDescription;
     const paddedCommand = command.padEnd(maxCommandLength);
     console.log(`${paddedCommand} | ${description}`);
   }
 
   console.log('');
-  console.log('提示: 使用 `projmnt4claude help <command>` 查看命令详细说明');
-  console.log('      例如: projmnt4claude help task');
+  console.log(t.help.tipUseHelp);
+  console.log(`      ${t.help.examples}`);
   console.log('');
 }
 
 /**
  * 显示特定命令的详细帮助
  */
-function showCommandHelp(commandsDir: string, commandName: string): void {
+function showCommandHelp(commandsDir: string, commandName: string, cwd: string): void {
+  const t = require('../i18n').getI18n(getLanguage(cwd));
   // 模糊匹配命令
   const commands = getAvailableCommands(commandsDir);
   const matchedCommand = commands.find(cmd => cmd === commandName.toLowerCase());
 
   if (!matchedCommand) {
     console.log('');
-    console.log(`❌ 未找到命令 "${commandName}"`);
+    console.log(`❌ ${t.help.commandNotFound} "${commandName}"`);
     console.log('');
-    console.log('可用命令:');
+    console.log(`${t.help.availableCommands}:`);
     commands.forEach(cmd => console.log(`  - ${cmd}`));
     console.log('');
-    console.log('使用 `projmnt4claude help` 查看所有命令');
+    console.log(`${t.help.usage.replace('[command]', 'help')} ${t.help.availableCommands.toLowerCase()}`);
     console.log('');
     return;
   }
@@ -121,7 +144,7 @@ function showCommandHelp(commandsDir: string, commandName: string): void {
   const filePath = path.join(commandsDir, `${matchedCommand}.md`);
 
   if (!fs.existsSync(filePath)) {
-    console.log(`❌ 命令帮助文件不存在: ${matchedCommand}`);
+    console.log(`❌ ${t.help.commandNotFound}: ${matchedCommand}`);
     return;
   }
 
@@ -133,17 +156,17 @@ function showCommandHelp(commandsDir: string, commandName: string): void {
   console.log('');
   console.log(cleanContent);
 }
-
 /**
  * 智能问答 - 根据关键词提供建议
  */
-function showSmartHelp(commandsDir: string, topic: string): void {
+function showSmartHelp(commandsDir: string, topic: string, cwd: string): void {
+  const t = require('../i18n').getI18n(getLanguage(cwd));
   const commands = getAvailableCommands(commandsDir);
   const lowerTopic = topic.toLowerCase();
 
   console.log('');
   console.log('━'.repeat(70));
-  console.log(`🔍 关于 "${topic}" 的帮助`);
+  console.log(`🔍 ${t.help.usage.replace('[command]', `"${topic}"`)}`);
   console.log('━'.repeat(70));
   console.log('');
 
@@ -156,25 +179,20 @@ function showSmartHelp(commandsDir: string, topic: string): void {
     'execute': ['执行任务', '运行任务', '开始任务'],
     'checkpoint': ['检查点', '验证检查点', '完成任务'],
     'dependency': ['依赖', '任务依赖', '添加依赖'],
-
     // 项目管理
     'project': ['项目管理', '初始化项目', '项目配置'],
     'init': ['初始化', '首次使用', '开始使用'],
     'setup': ['环境设置', '配置环境', '安装'],
-
     // 分析和规划
     'plan': ['计划', '执行计划', '任务计划'],
     'analyze': ['分析', '项目分析', '健康检查'],
-
     // 分支管理
     'branch': ['分支', 'git分支', '创建分支'],
     'git': ['版本控制', '提交', '推送'],
-
     // 工具
     'tool': ['工具', 'skill', '技能'],
     'hook': ['钩子', '脚本', '自动化'],
   };
-
   // 查找匹配的命令
   let matchedCommands: string[] = [];
 
@@ -183,13 +201,11 @@ function showSmartHelp(commandsDir: string, topic: string): void {
       matchedCommands.push(command);
     }
   }
-
   // 也检查直接命令名匹配
   const directMatch = commands.find(cmd => lowerTopic.includes(cmd));
   if (directMatch && !matchedCommands.includes(directMatch)) {
     matchedCommands.push(directMatch);
   }
-
   // 去重并排序
   matchedCommands = [...new Set(matchedCommands)].sort();
 
@@ -199,10 +215,10 @@ function showSmartHelp(commandsDir: string, topic: string): void {
 
     for (const cmd of matchedCommands) {
       const metadata = parseCommandMetadata(path.join(commandsDir, `${cmd}.md`));
-      const description = metadata?.description || '暂无描述';
+      const description = metadata?.description || t.help.noDescription;
       console.log(`  📌 ${cmd}`);
       console.log(`     ${description}`);
-      console.log(`     用法: projmnt4claude help ${cmd}`);
+      console.log(`     ${t.help.usage}: projmnt4claude help ${cmd}`);
       console.log('');
     }
   } else {
@@ -215,11 +231,9 @@ function showSmartHelp(commandsDir: string, topic: string): void {
     console.log('  • setup    - 初始化项目管理环境');
     console.log('');
   }
-
-  console.log('提示: 使用 `projmnt4claude help` 查看所有可用命令');
+  console.log(t.help.tipUseHelp);
   console.log('');
 }
-
 /**
  * 显示帮助信息
  *
@@ -227,31 +241,29 @@ function showSmartHelp(commandsDir: string, topic: string): void {
  * @param cwd - 当前工作目录 (默认: process.cwd())
  */
 export function showHelp(topic?: string, cwd: string = process.cwd()): void {
-  // 获取 commands 目录路径
-  const commandsDir = path.join(cwd, 'commands');
+  // 获取命令文档目录
+  const commandsDir = getCommandsDir(cwd);
 
-  // 检查 commands 目录是否存在
+  // 检查命令目录是否存在
   if (!fs.existsSync(commandsDir)) {
-    console.error('错误: 命令目录不存在');
+    const t = require('../i18n').getI18n(getLanguage(cwd));
+    console.error(`${t.error}: ${t.help.commandNotFound}`);
     console.error(`路径: ${commandsDir}`);
     process.exit(1);
   }
-
   // 无参数：显示整体帮助
   if (!topic) {
-    showOverview(commandsDir);
+    showOverview(commandsDir, cwd);
     return;
   }
-
   // 检查是否是已知命令
   const commands = getAvailableCommands(commandsDir);
   const matchedCommand = commands.find(cmd => cmd === topic.toLowerCase());
-
   if (matchedCommand) {
     // 是已知命令：显示该命令的详细帮助
-    showCommandHelp(commandsDir, topic);
+    showCommandHelp(commandsDir, topic, cwd);
   } else {
     // 不是已知命令：智能问答
-    showSmartHelp(commandsDir, topic);
+    showSmartHelp(commandsDir, topic, cwd);
   }
 }
