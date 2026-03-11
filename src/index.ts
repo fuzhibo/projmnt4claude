@@ -52,6 +52,23 @@ import {
 } from './commands/branch';
 import { initRequirement } from './commands/init-requirement';
 import { showHelp } from './commands/help';
+import { isInitialized } from './utils/path';
+
+/**
+ * 检查项目是否已初始化，未初始化则报错退出
+ */
+function requireInit(): void {
+  if (!isInitialized()) {
+    console.error('❌ 错误: 项目尚未初始化');
+    console.error('');
+    console.error('请先运行以下命令初始化项目管理环境:');
+    console.error('  projmnt4claude setup');
+    console.error('');
+    console.error('或者使用 slash command:');
+    console.error('  /projmnt4claude:setup');
+    process.exit(1);
+  }
+}
 
 const program = new Command();
 
@@ -73,6 +90,7 @@ program
   .command('config <action> [key] [value]')
   .description('管理配置 (list/get/set)')
   .action((action, key, value) => {
+    requireInit();
     switch (action) {
       case 'list':
         listConfig();
@@ -111,6 +129,7 @@ program
   .option('--token <token>', '检查点确认令牌 (仅 update)')
   .option('--topic <topic>', '讨论主题 (仅 discuss)')
   .action(async (action, id, options) => {
+    requireInit();
     switch (action) {
       case 'create':
         await createTask();
@@ -240,6 +259,7 @@ program
   .option('-f, --force', '强制执行，跳过确认 (仅 clear)')
   .option('-a, --after <taskId>', '在指定任务之后添加 (仅 add)')
   .action(async (action, id, options) => {
+    requireInit();
     switch (action) {
       case 'show':
         showPlan(options.json);
@@ -277,6 +297,7 @@ program
   .option('-j, --json', '以 JSON 格式输出 (仅 list)')
   .option('-s, --source <source>', '来源 URL (仅 install)')
   .action(async (action, name, options) => {
+    requireInit();
     switch (action) {
       case 'list':
         listTools(options.json);
@@ -325,6 +346,7 @@ program
   .option('--archived', '显示归档任务统计')
   .option('-a, --all', '显示所有任务（包括归档）')
   .action((options) => {
+    requireInit();
     showStatus(options.archived || options.all);
   });
 
@@ -334,6 +356,7 @@ program
   .description('分析项目健康状态')
   .option('--fix', '自动修复检测到的问题')
   .action(async (options) => {
+    requireInit();
     if (options.fix) {
       await fixIssues();
     } else {
@@ -346,6 +369,7 @@ program
   .command('hook <action>')
   .description('管理钩子会话 (enable/disable/status)')
   .action(async (action) => {
+    requireInit();
     switch (action) {
       case 'enable':
         await enableHook();
@@ -369,6 +393,7 @@ program
   .option('-b, --branch-name <branchName>', '分支名称 (仅 create)')
   .option('-m, --message <message>', '合并消息 (仅 merge)')
   .action(async (action, id, options) => {
+    requireInit();
     switch (action) {
       case 'checkout':
         if (!id) {
@@ -422,6 +447,7 @@ program
   .command('init-requirement <description>')
   .description('从自然语言需求描述创建任务，自动解析需求并生成任务结构\n示例: init-requirement "实现用户登录功能，包含表单验证和 JWT 认证"')
   .action(async (description) => {
+    requireInit();
     await initRequirement(description);
   });
 
