@@ -29,7 +29,7 @@ argument-hint: "<description>"
 ## 执行方式
 
 ```bash
-node ${CLAUDE_PLUGIN_ROOT}/skills/projmnt4claude/dist/projmnt4claude.js init-requirement "<需求描述>"
+node ${CLAUDE_PLUGIN_ROOT}/dist/projmnt4claude.js init-requirement "<需求描述>"
 ```
 
 ## 功能
@@ -44,13 +44,13 @@ node ${CLAUDE_PLUGIN_ROOT}/skills/projmnt4claude/dist/projmnt4claude.js init-req
 
 ```bash
 # 创建 API 任务
-node ${CLAUDE_PLUGIN_ROOT}/skills/projmnt4claude/dist/projmnt4claude.js init-requirement "实现一个用户登录API接口，需要高优先级处理"
+node ${CLAUDE_PLUGIN_ROOT}/dist/projmnt4claude.js init-requirement "实现一个用户登录API接口，需要高优先级处理"
 
 # 创建前端任务
-node ${CLAUDE_PLUGIN_ROOT}/skills/projmnt4claude/dist/projmnt4claude.js init-requirement "设计并实现用户个人中心页面，包含头像上传和资料编辑"
+node ${CLAUDE_PLUGIN_ROOT}/dist/projmnt4claude.js init-requirement "设计并实现用户个人中心页面，包含头像上传和资料编辑"
 
 # 创建测试任务
-node ${CLAUDE_PLUGIN_ROOT}/skills/projmnt4claude/dist/projmnt4claude.js init-requirement "为认证模块编写单元测试和集成测试"
+node ${CLAUDE_PLUGIN_ROOT}/dist/projmnt4claude.js init-requirement "为认证模块编写单元测试和集成测试"
 ```
 
 ## 关键词识别

@@ -10,7 +10,7 @@ argument-hint: "<action> [id] [options]"
 ## 执行方式
 
 ```bash
-node ${CLAUDE_PLUGIN_ROOT}/skills/projmnt4claude/dist/projmnt4claude.js plan <action> [options]
+node ${CLAUDE_PLUGIN_ROOT}/dist/projmnt4claude.js plan <action> [options]
 ```
 
 ## 可用操作

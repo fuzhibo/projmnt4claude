@@ -10,7 +10,7 @@ argument-hint: "[command|topic]"
 ## 执行方式
 
 ```bash
-node ${CLAUDE_PLUGIN_ROOT}/skills/projmnt4claude/dist/projmnt4claude.js help [command|topic]
+node ${CLAUDE_PLUGIN_ROOT}/dist/projmnt4claude.js help [command|topic]
 ```
 
 ## 使用方式

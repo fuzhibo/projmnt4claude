@@ -11,10 +11,10 @@ argument-hint: "[--fix]"
 
 ```bash
 # 仅分析
-node ${CLAUDE_PLUGIN_ROOT}/skills/projmnt4claude/dist/projmnt4claude.js analyze
+node ${CLAUDE_PLUGIN_ROOT}/dist/projmnt4claude.js analyze
 
 # 分析并修复
-node ${CLAUDE_PLUGIN_ROOT}/skills/projmnt4claude/dist/projmnt4claude.js analyze --fix
+node ${CLAUDE_PLUGIN_ROOT}/dist/projmnt4claude.js analyze --fix
 ```
 
 ## 检测项目

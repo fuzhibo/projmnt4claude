@@ -5,7 +5,7 @@ Manage Claude Code project tasks - create, view, update, and execute tasks.
 ## Usage
 
 ```bash
-node ${CLAUDE_PLUGIN_ROOT}/skills/projmnt4claude/dist/projmnt4claude.js <command> [options]
+node ${CLAUDE_PLUGIN_ROOT}/dist/projmnt4claude.js <command> [options]
 ```
 
 ## Available Commands
@@ -31,12 +31,12 @@ node ${CLAUDE_PLUGIN_ROOT}/skills/projmnt4claude/dist/projmnt4claude.js <command
 When user says "check project status" or "what are the issues":
 
 ```bash
-node ${CLAUDE_PLUGIN_ROOT}/skills/projmnt4claude/dist/projmnt4claude.js analyze
+node ${CLAUDE_PLUGIN_ROOT}/dist/projmnt4claude.js analyze
 ```
 
 Auto-fix detected issues:
 ```bash
-node ${CLAUDE_PLUGIN_ROOT}/skills/projmnt4claude/dist/projmnt4claude.js analyze --fix
+node ${CLAUDE_PLUGIN_ROOT}/dist/projmnt4claude.js analyze --fix
 ```
 
 ### Example 2: Create Task
@@ -44,7 +44,7 @@ node ${CLAUDE_PLUGIN_ROOT}/skills/projmnt4claude/dist/projmnt4claude.js analyze 
 When user says "create a new task" or "add task":
 
 ```bash
-node ${CLAUDE_PLUGIN_ROOT}/skills/projmnt4claude/dist/projmnt4claude.js task create
+node ${CLAUDE_PLUGIN_ROOT}/dist/projmnt4claude.js task create
 ```
 
 ### Example 3: Execute Task
@@ -52,7 +52,7 @@ node ${CLAUDE_PLUGIN_ROOT}/skills/projmnt4claude/dist/projmnt4claude.js task cre
 When user says "start working on task" or "execute task":
 
 ```bash
-node ${CLAUDE_PLUGIN_ROOT}/skills/projmnt4claude/dist/projmnt4claude.js task execute TASK-001
+node ${CLAUDE_PLUGIN_ROOT}/dist/projmnt4claude.js task execute TASK-001
 ```
 
 ### Example 4: Git Workflow
@@ -60,7 +60,7 @@ node ${CLAUDE_PLUGIN_ROOT}/skills/projmnt4claude/dist/projmnt4claude.js task exe
 When user says "switch to task branch":
 
 ```bash
-node ${CLAUDE_PLUGIN_ROOT}/skills/projmnt4claude/dist/projmnt4claude.js branch checkout <task-id>
+node ${CLAUDE_PLUGIN_ROOT}/dist/projmnt4claude.js branch checkout <task-id>
 ```
 
 ## Task Priority
@@ -109,7 +109,7 @@ In Claude Code, invoke the CLI using:
 # ${CLAUDE_PLUGIN_ROOT} is an environment variable for plugin installation directory
 # Or use absolute path
 
-node ${CLAUDE_PLUGIN_ROOT}/skills/projmnt4claude/dist/projmnt4claude.js <command> [options]
+node ${CLAUDE_PLUGIN_ROOT}/dist/projmnt4claude.js <command> [options]
 ```
 
 ## Important Notes
@@ -123,6 +123,6 @@ node ${CLAUDE_PLUGIN_ROOT}/skills/projmnt4claude/dist/projmnt4claude.js <command
 
 View command help:
 ```bash
-node ${CLAUDE_PLUGIN_ROOT}/skills/projmnt4claude/dist/projmnt4claude.js --help
-node ${CLAUDE_PLUGIN_ROOT}/skills/projmnt4claude/dist/projmnt4claude.js <command> --help
+node ${CLAUDE_PLUGIN_ROOT}/dist/projmnt4claude.js --help
+node ${CLAUDE_PLUGIN_ROOT}/dist/projmnt4claude.js <command> --help
 ```

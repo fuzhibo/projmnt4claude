@@ -10,7 +10,7 @@ argument-hint: ""
 ## 执行方式
 
 ```bash
-node ${CLAUDE_PLUGIN_ROOT}/skills/projmnt4claude/dist/projmnt4claude.js status
+node ${CLAUDE_PLUGIN_ROOT}/dist/projmnt4claude.js status
 ```
 
 ## 输出内容
