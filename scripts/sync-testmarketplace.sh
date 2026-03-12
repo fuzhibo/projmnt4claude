@@ -1,10 +1,40 @@
 #!/bin/bash
 
-# sync-testmarketplace.sh - 同步插件到测试 marketplace
+# ============================================================================
+# sync-testmarketplace.sh - 同步插件到【测试】 marketplace
+# ============================================================================
+#
+# ⚠️  重要警告 - 请仔细阅读 ⚠️
+#
+# 此脚本用于同步到【测试环境】，不是生产环境！
+#
+# 【测试环境】(此脚本的目标)
+#   路径: ~/claude-marketplace/
+#   用途: 开发和验证新版本
+#   安装: claude /plugins install projmnt4claude (从测试 marketplace)
+#
+# 【生产环境】(不要直接修改！)
+#   路径: ~/.claude/plugins/marketplaces/
+#   用途: Claude Code 实际使用的插件
+#   安装: 用户通过 /plugins install 从远程 marketplace 安装
+#
+# 为什么不能直接同步到生产环境？
+#   1. 会导致 installed_plugins.json 中缺少安装记录
+#   2. 用户无法正常卸载或更新插件
+#   3. 会报错 "Plugin is not installed"
+#
+# 正确的发布流程:
+#   1. 开发 → bun run build
+#   2. 测试 → bun run sync-testmarketplace (此脚本)
+#   3. 验证 → 在测试环境中验证功能
+#   4. 发布 → git push (用户通过正常流程安装)
+#
 # 用法:
-#   ./scripts/sync-testmarketplace.sh        # 自动递增小版本
-#   ./scripts/sync-testmarketplace.sh minor  # 递增中间版本
-#   ./scripts/sync-testmarketplace.sh major  # 递增大版本
+#   ./scripts/sync-testmarketplace.sh        # 自动递增小版本 (patch)
+#   ./scripts/sync-testmarketplace.sh minor  # 递增中间版本 (minor)
+#   ./scripts/sync-testmarketplace.sh major  # 递增大版本 (major)
+#
+# ============================================================================
 
 set -e
 
