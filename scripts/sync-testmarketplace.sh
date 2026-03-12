@@ -66,7 +66,11 @@ cp dist/$PLUGIN_NAME.js "$PLUGIN_DIR/skills/$PLUGIN_NAME/dist/"
 cp -r commands/* "$PLUGIN_DIR/commands/"
 cp skills/$PLUGIN_NAME/SKILL.md "$PLUGIN_DIR/skills/$PLUGIN_NAME/"
 cp README.md "$PLUGIN_DIR/"
-cp .claude-plugin/plugin.json "$PLUGIN_DIR/.claude-plugin/"
+cp .claude-plugin/plugin.json "$PLUGIN_DIR/.claude-plugin/"# 复制 marketplace.json 到根目录 (Claude Code 要求在根目录)
+cp marketplace.json "$PLUGIN_DIR/"
+
+# 复制 marketplace.json 到根目录 (Claude Code 要求在根目录)
+cp marketplace.json "$PLUGIN_DIR/"
 
 echo "✅ 已同步到 $PLUGIN_DIR"
 echo ""
