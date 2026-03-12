@@ -84,8 +84,9 @@ program
   .description('在当前项目初始化项目管理环境，支持语言选择 (中文/English)')
   .option('-y, --yes', '非交互模式：跳过所有确认，使用默认设置')
   .option('-l, --language <language>', '指定语言 (zh/en)')
+  .option('-f, --force', '强制重新初始化（重新复制技能文件）')
   .action(async (options) => {
-    await setup(process.cwd(), { nonInteractive: options.yes, language: options.language });
+    await setup(process.cwd(), { nonInteractive: options.yes, language: options.language, force: options.force });
   });
 
 // config 命令组

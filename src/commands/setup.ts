@@ -74,6 +74,7 @@ const i18n = {
 export interface SetupOptions {
   nonInteractive?: boolean;
   language?: 'zh' | 'en';
+  force?: boolean;  // 强制重新初始化
 }
 
 /**
@@ -83,10 +84,15 @@ export async function setup(cwd: string = process.cwd(), options: SetupOptions =
   const projectDir = getProjectDir(cwd);
 
   // 检查是否已初始化
-  if (isInitialized(cwd)) {
+  if (isInitialized(cwd) && !options.force) {
     console.log('项目管理环境已存在，跳过初始化。');
     console.log(`目录: ${projectDir}`);
+    console.log('提示: 使用 --force 选项强制重新初始化（重新复制技能文件）');
     return;
+  }
+
+  if (options.force && isInitialized(cwd)) {
+    console.log('⚠️ 强制重新初始化模式...');
   }
 
   // 语言选择
