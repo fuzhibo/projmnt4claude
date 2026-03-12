@@ -8,6 +8,13 @@ Initialize project management environment in current project.
 node ${CLAUDE_PLUGIN_ROOT}/skills/projmnt4claude/dist/projmnt4claude.js setup
 ```
 
+## Options
+
+| Option | Description |
+|--------|-------------|
+| `-y, --yes` | Non-interactive mode: skip all confirmations, use default settings |
+| `-l, --language <zh\|en>` | Specify language (Chinese/English) |
+
 ## Description
 
 The setup command initializes the project management environment:
@@ -41,9 +48,24 @@ project/
 ## Language Support
 
 The setup command supports:
-- **中文 (Chinese)** - Default,- **English**
+- **中文** - Default
+- **English**
 
 All skill files and command docs will be copied in the selected language.
+
+## AI Usage
+
+When AI needs to auto-initialize a project, use non-interactive mode:
+
+```bash
+node ${CLAUDE_PLUGIN_ROOT}/skills/projmnt4claude/dist/projmnt4claude.js setup -y
+```
+
+Or specify language:
+
+```bash
+node ${CLAUDE_PLUGIN_ROOT}/skills/projmnt4claude/dist/projmnt4claude.js setup -y --language en
+```
 
 ## Examples
 
@@ -52,12 +74,14 @@ All skill files and command docs will be copied in the selected language.
 projmnt4claude setup
 ```
 
-### Re-initialization
+### Non-interactive Setup (for AI)
 ```bash
-# If already initialized,projmnt4claude setup
-# Output: Project management environment already exists, skipping initialization.
+projmnt4claude setup -y
 ```
 
-## File
-
-/home/fuzhibo/workerplace/git/projmnt4claude/commands/setup.md
+### Re-initialization
+```bash
+# If already initialized
+projmnt4claude setup
+# Output: Project management environment already exists, skipping initialization.
+```
