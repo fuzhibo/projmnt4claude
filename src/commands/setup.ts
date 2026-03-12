@@ -30,6 +30,14 @@ const DEFAULT_CONFIG: ProjectConfig = {
   language: 'zh',
 };
 
+/**
+ * Setup 命令选项
+ */
+export interface SetupOptions {
+  nonInteractive?: boolean;  // 非交互模式：跳过所有确认
+  language?: string;         // 指定语言
+}
+
 // 国际化文本
 const i18n = {
   zh: {
@@ -61,9 +69,17 @@ const i18n = {
 };
 
 /**
+ * 初始化选项接口
+ */
+export interface SetupOptions {
+  nonInteractive?: boolean;
+  language?: 'zh' | 'en';
+}
+
+/**
  * 初始化项目管理环境
  */
-export async function setup(cwd: string = process.cwd()): Promise<void> {
+export async function setup(cwd: string = process.cwd(), options: SetupOptions = {}): Promise<void> {
   const projectDir = getProjectDir(cwd);
 
   // 检查是否已初始化
@@ -74,18 +90,27 @@ export async function setup(cwd: string = process.cwd()): Promise<void> {
   }
 
   // 语言选择
-  const langResponse = await prompts({
-    type: 'select',
-    name: 'language',
-    message: i18n.zh.selectLanguage + ' / ' + i18n.en.selectLanguage,
-    choices: [
-      { title: i18n.zh.chinese, value: 'zh' },
-      { title: i18n.en.english, value: 'en' },
-    ],
-    initial: 0,
-  });
-
-  const language: 'zh' | 'en' = langResponse.language || 'zh';
+  let language: 'zh' | 'en';
+  if (options.language) {
+    // 从命令行参数获取语言
+    language = options.language;
+  } else if (options.nonInteractive) {
+    // 非交互模式使用默认语言
+    language = 'zh';
+  } else {
+    // 交互式选择语言
+    const langResponse = await prompts({
+      type: 'select',
+      name: 'language',
+      message: i18n.zh.selectLanguage + ' / ' + i18n.en.selectLanguage,
+      choices: [
+        { title: i18n.zh.chinese, value: 'zh' },
+        { title: i18n.en.english, value: 'en' },
+      ],
+      initial: 0,
+    });
+    language = langResponse.language || 'zh';
+  }
   const t = i18n[language];
 
   console.log(t.initializing);
