@@ -10,6 +10,7 @@ set -e
 
 PLUGIN_JSON=".claude-plugin/plugin.json"
 PACKAGE_JSON="package.json"
+MARKETPLACE_JSON=".claude-plugin/marketplace.json"
 
 # 读取当前版本
 get_current_version() {
@@ -27,16 +28,22 @@ parse_version() {
 update_version() {
   local new_version=$1
 
-  # 更新 plugin.json
+  # 更新所有版本文件
+  # 注意: marketplace.json 有两处版本号需要更新（顶层和 plugins 数组中）
   if [[ "$OSTYPE" == "darwin"* ]]; then
     sed -i '' "s/\"version\": *\"[^\"]*\"/\"version\": \"$new_version\"/" "$PLUGIN_JSON"
     sed -i '' "s/\"version\": *\"[^\"]*\"/\"version\": \"$new_version\"/" "$PACKAGE_JSON"
+    sed -i '' "s/\"version\": *\"[^\"]*\"/\"version\": \"$new_version\"/g" "$MARKETPLACE_JSON"
   else
     sed -i "s/\"version\": *\"[^\"]*\"/\"version\": \"$new_version\"/" "$PLUGIN_JSON"
     sed -i "s/\"version\": *\"[^\"]*\"/\"version\": \"$new_version\"/" "$PACKAGE_JSON"
+    sed -i "s/\"version\": *\"[^\"]*\"/\"version\": \"$new_version\"/g" "$MARKETPLACE_JSON"
   fi
 
   echo "📦 版本号已更新: $CURRENT_VERSION -> $new_version"
+  echo "   - $PLUGIN_JSON"
+  echo "   - $PACKAGE_JSON"
+  echo "   - $MARKETPLACE_JSON"
 }
 
 # 递增版本号
