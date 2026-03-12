@@ -52,6 +52,7 @@ import {
 } from './commands/branch';
 import { initRequirement } from './commands/init-requirement';
 import { showHelp } from './commands/help';
+import { runDoctor } from './commands/doctor';
 import { isInitialized } from './utils/path';
 
 /**
@@ -450,6 +451,16 @@ program
     requireInit();
     await initRequirement(description);
   });
+
+// doctor 命令
+program
+  .command('doctor')
+  .description('运行环境诊断，检查并修复设置问题')
+  .option('--fix', '自动修复检测到的问题')
+  .action(async (options) => {
+    await runDoctor(options.fix);
+  });
+
 
 // help 命令
 program
