@@ -124,6 +124,9 @@ export async function setup(cwd: string = process.cwd()): Promise<void> {
   // 创建钩子脚本模板
   createHookTemplates(getHooksDir(cwd), language);
 
+  // 配置 Claude Code hooks（项目级别）
+  configureClaudeCodeHooks(cwd, language);
+
   // 复制技能文件到项目
   copySkillFiles(cwd, language, t);
 
@@ -260,4 +263,78 @@ function copySkillFiles(cwd: string, language: 'zh' | 'en', t: typeof i18n.zh): 
   }
 
   console.log(`✅ ${t.skillsCopied}`);
+}
+
+/**
+ * 配置 Claude Code 项目级 hooks
+ * 将任务验证 hooks 写入 .claude/settings.json
+ */
+function configureClaudeCodeHooks(cwd: string, language: 'zh' | 'en'): void {
+  const isZh = language === 'zh';
+
+  const claudeDir = path.join(cwd, '.claude');
+  const settingsPath = path.join(claudeDir, 'settings.json');
+
+  // 确保 .claude 目录存在
+  ensureDir(claudeDir);
+
+  // 读取现有配置或创建新配置
+  let settings: Record<string, unknown> = {};
+  if (fs.existsSync(settingsPath)) {
+    try {
+      settings = JSON.parse(fs.readFileSync(settingsPath, 'utf-8'));
+    } catch {
+      // 解析失败，使用空对象
+    }
+  }
+
+  // 获取 hooks 目录的绝对路径
+  const hooksDir = getHooksDir(cwd);
+
+  // 添加任务验证 hooks 配置
+  const taskHooks = {
+    'PreToolUse': [
+      {
+        // 在调用 TaskUpdate 前检查是否需要验证
+        matcher: 'TaskUpdate',
+        hooks: [
+          {
+            type: 'command',
+            command: `bun run ${hooksDir}/pre-complete.ts`
+          }
+        ]
+      }
+    ],
+    'PostToolUse': [
+      {
+        // 任务工具调用后的验证提醒
+        matcher: 'TaskUpdate|TaskCreate|TaskGet',
+        hooks: [
+          {
+            type: 'command',
+            command: `bun run ${hooksDir}/post-task.ts`
+          }
+        ]
+      }
+    ]
+  };
+
+  // 合并 hooks 配置（不覆盖现有配置）
+  settings['hooks'] = {
+    ...(settings['hooks'] as Record<string, unknown> || {}),
+    ...taskHooks,
+  };
+
+  // 写入配置
+  fs.writeFileSync(settingsPath, JSON.stringify(settings, null, 2), 'utf-8');
+
+  if (isZh) {
+    console.log('✓ 配置 Claude Code hooks: .claude/settings.json');
+    console.log('  - PreToolUse: 任务更新前验证');
+    console.log('  - PostToolUse: 任务完成后检查');
+  } else {
+    console.log('✓ Configured Claude Code hooks: .claude/settings.json');
+    console.log('  - PreToolUse: Pre-task verification');
+    console.log('  - PostToolUse: Post-task check');
+  }
 }

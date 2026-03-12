@@ -5,6 +5,7 @@ import {
   getProjectDir,
   getTasksDir,
   getToolboxDir,
+  getHooksDir,
 } from '../utils/path';
 import { getAllTaskIds } from '../utils/task';
 
@@ -47,6 +48,9 @@ export async function runDoctor(fix: boolean = false, cwd: string = process.cwd(
 
     // 5. 检查目录结构完整性
     results.push(...checkDirectoryStructure(cwd));
+
+    // 6. 检查 Hooks 配置
+    results.push(...checkHooksConfiguration(cwd));
   }
 
   // 显示结果
@@ -345,6 +349,120 @@ function checkDirectoryStructure(cwd: string): CheckResult[] {
 }
 
 /**
+ * 检查 Hooks 配置
+ */
+function checkHooksConfiguration(cwd: string): CheckResult[] {
+  const results: CheckResult[] = [];
+  const projectDir = getProjectDir(cwd);
+  const hooksDir = getHooksDir(cwd);
+  const claudeSettingsPath = path.join(cwd, '.claude', 'settings.json');
+
+  // 1. 检查 hooks 目录是否存在
+  if (!fs.existsSync(hooksDir)) {
+    results.push({
+      name: 'Hooks 目录',
+      status: 'warning',
+      message: 'hooks 目录缺失',
+      details: ['任务验证 Hook 机制需要 hooks 目录'],
+      fixable: true,
+    });
+    return results;
+  }
+
+  results.push({
+    name: 'Hooks 目录',
+    status: 'ok',
+    message: '存在',
+    details: [`位置: ${hooksDir}`],
+    fixable: false,
+  });
+
+  // 2. 检查必需的 hook 文件
+  const requiredHooks = ['pre-complete.ts', 'post-task.ts'];
+  for (const hookFile of requiredHooks) {
+    const hookPath = path.join(hooksDir, hookFile);
+    if (!fs.existsSync(hookPath)) {
+      results.push({
+        name: `Hook: ${hookFile}`,
+        status: 'warning',
+        message: '缺失',
+        details: [`任务验证需要此 Hook: ${hookPath}`],
+        fixable: true,
+      });
+    } else {
+      results.push({
+        name: `Hook: ${hookFile}`,
+        status: 'ok',
+        message: '存在',
+        details: [],
+        fixable: false,
+      });
+    }
+  }
+
+  // 3. 检查 .claude/settings.json 中的 hooks 配置
+  if (fs.existsSync(claudeSettingsPath)) {
+    try {
+      const settings = JSON.parse(fs.readFileSync(claudeSettingsPath, 'utf-8'));
+      const hooks = settings.hooks as Record<string, unknown> | undefined;
+
+      if (!hooks || !hooks.PreToolUse || !hooks.PostToolUse) {
+        results.push({
+          name: 'Claude Code Hooks 配置',
+          status: 'warning',
+          message: 'hooks 配置不完整',
+          details: [
+            '.claude/settings.json 中缺少必要的 hooks 配置',
+            '需要: PreToolUse 和 PostToolUse hooks',
+          ],
+          fixable: true,
+        });
+      } else {
+        // 检查是否配置了任务验证相关的 hooks
+        const preToolUseHooks = hooks.PreToolUse as Array<{ matcher?: string }>;
+        const hasTaskHook = preToolUseHooks?.some(h => h.matcher?.includes('Task'));
+
+        if (!hasTaskHook) {
+          results.push({
+            name: 'Claude Code Hooks 配置',
+            status: 'warning',
+            message: '缺少任务验证 hooks',
+            details: ['PreToolUse hooks 中没有配置任务相关的验证'],
+            fixable: true,
+          });
+        } else {
+          results.push({
+            name: 'Claude Code Hooks 配置',
+            status: 'ok',
+            message: '配置完整',
+            details: ['已配置任务验证 hooks'],
+            fixable: false,
+          });
+        }
+      }
+    } catch {
+      results.push({
+        name: 'Claude Code Hooks 配置',
+        status: 'warning',
+        message: '无法解析 settings.json',
+        details: ['文件可能格式错误'],
+        fixable: true,
+      });
+    }
+  } else {
+    results.push({
+      name: 'Claude Code Hooks 配置',
+      status: 'warning',
+      message: '.claude/settings.json 不存在',
+      details: ['需要配置 hooks 以启用任务验证机制'],
+      fixable: true,
+    });
+  }
+
+  return results;
+}
+
+/**
  * 显示检查结果
  */
 function displayResults(results: CheckResult[]): void {
@@ -459,6 +577,96 @@ async function fixIssues(issues: CheckResult[], cwd: string): Promise<void> {
         fs.mkdirSync(dirPath, { recursive: true });
         console.log(`  ✓ 已创建目录: ${dirName}/`);
       }
+    } else if (issue.name === 'Hooks 目录') {
+      // 创建 hooks 目录
+      const hooksDir = getHooksDir(cwd);
+      if (!fs.existsSync(hooksDir)) {
+        fs.mkdirSync(hooksDir, { recursive: true });
+        console.log(`  ✓ 已创建 hooks 目录`);
+      }
+    } else if (issue.name.startsWith('Hook: ')) {
+      // 创建缺失的 hook 文件
+      const hookFile = issue.name.replace('Hook: ', '');
+      const hooksDir = getHooksDir(cwd);
+      const hookPath = path.join(hooksDir, hookFile);
+
+      if (!fs.existsSync(hooksDir)) {
+        fs.mkdirSync(hooksDir, { recursive: true });
+      }
+
+      // 创建 hook 文件模板
+      const hookTemplates: Record<string, string> = {
+        'pre-complete.ts': `#!/usr/bin/env bun
+/**
+ * 任务完成前验证钩子
+ * 在任务状态更新为 resolved/closed 前触发
+ */
+
+export default async function preComplete(taskId: string) {
+  console.log(\`[pre-complete] 验证任务: \${taskId}\`);
+  // 在这里添加验证逻辑
+  return true;
+}
+`,
+        'post-task.ts': `#!/usr/bin/env bun
+/**
+ * 任务执行后钩子
+ * 在任务完成后自动调用
+ */
+
+export default async function postTask(taskId: string, success: boolean) {
+  console.log(\`[post-task] 任务 \${taskId} \${success ? '完成' : '失败'}\`);
+  // 在这里添加自定义逻辑
+}
+`,
+      };
+
+      if (hookTemplates[hookFile]) {
+        fs.writeFileSync(hookPath, hookTemplates[hookFile], 'utf-8');
+        console.log(`  ✓ 已创建 Hook: ${hookFile}`);
+      }
+    } else if (issue.name === 'Claude Code Hooks 配置') {
+      // 配置 .claude/settings.json 中的 hooks
+      const claudeDir = path.join(cwd, '.claude');
+      const settingsPath = path.join(claudeDir, 'settings.json');
+      const hooksDir = getHooksDir(cwd);
+
+      if (!fs.existsSync(claudeDir)) {
+        fs.mkdirSync(claudeDir, { recursive: true });
+      }
+
+      let settings: Record<string, unknown> = {};
+      if (fs.existsSync(settingsPath)) {
+        try {
+          settings = JSON.parse(fs.readFileSync(settingsPath, 'utf-8'));
+        } catch {
+          // 文件格式错误，使用空对象
+        }
+      }
+
+      // 添加任务验证 hooks 配置
+      const taskHooks = {
+        'PreToolUse': [
+          {
+            matcher: 'TaskUpdate',
+            hooks: [{ type: 'command', command: `bun run ${hooksDir}/pre-complete.ts` }]
+          }
+        ],
+        'PostToolUse': [
+          {
+            matcher: 'TaskUpdate|TaskCreate|TaskGet',
+            hooks: [{ type: 'command', command: `bun run ${hooksDir}/post-task.ts` }]
+          }
+        ]
+      };
+
+      settings['hooks'] = {
+        ...(settings['hooks'] as Record<string, unknown> || {}),
+        ...taskHooks,
+      };
+
+      fs.writeFileSync(settingsPath, JSON.stringify(settings, null, 2), 'utf-8');
+      console.log(`  ✓ 已配置 Claude Code hooks`);
     }
   }
 

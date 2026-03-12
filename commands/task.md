@@ -74,5 +74,78 @@ projmnt4claude task checkpoint TASK-001
 projmnt4claude task verify-checkpoint TASK-001
 ```
 
+## ⚠️ 任务完成验证流程 (重要)
+
+**在将任务标记为 resolved/closed 之前，必须完成以下验证步骤：**
+
+### 为什么需要验证？
+
+任务完成验证确保：
+1. 所有检查点都已完成并验证
+2. 任务产出物符合预期
+3. 避免遗漏重要工作项
+4. 保持项目质量一致性
+
+### 验证流程
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│                  任务完成验证流程                             │
+├─────────────────────────────────────────────────────────────┤
+│                                                             │
+│  1. 完成所有检查点                                           │
+│     └─ 编辑 checkpoint.md，将 [ ] 改为 [x]                   │
+│                                                             │
+│  2. 验证检查点                                               │
+│     └─ projmnt4claude task checkpoint verify <taskId>        │
+│     └─ 获取验证令牌 (token)                                  │
+│                                                             │
+│  3. 使用令牌完成任务                                         │
+│     └─ projmnt4claude task update <taskId> --status resolved │
+│        --token <token>                                       │
+│                                                             │
+└─────────────────────────────────────────────────────────────┘
+```
+
+### 没有检查点的任务
+
+如果任务没有 checkpoint.md 文件或检查点为空，可以直接更新状态：
+```bash
+projmnt4claude task update TASK-001 --status resolved
+```
+
+### 有检查点的任务
+
+**步骤 1: 确认所有检查点已完成**
+```bash
+# 查看检查点状态
+projmnt4claude task show TASK-001
+
+# 或直接查看 checkpoint.md 文件
+cat .projmnt4claude/tasks/TASK-001/checkpoint.md
+```
+
+**步骤 2: 验证检查点并获取令牌**
+```bash
+projmnt4claude task checkpoint verify TASK-001
+```
+
+**步骤 3: 使用令牌完成任务**
+```bash
+projmnt4claude task update TASK-001 --status resolved --token CP-XXXXXXX-XXXXXXXX
+```
+
+### ⚠️ AI 注意事项
+
+**禁止行为**：
+- ❌ 跳过检查点验证直接标记任务为 resolved
+- ❌ 忽略未完成的检查点
+- ❌ 伪造验证令牌
+
+**正确行为**：
+- ✅ 完成所有检查点后再验证
+- ✅ 获取有效的验证令牌
+- ✅ 使用令牌完成任务更新
+
 ## 文件
 /home/fuzhibo/workerplace/git/projmnt4claude/commands/task.md
