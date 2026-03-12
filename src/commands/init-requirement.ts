@@ -6,8 +6,8 @@ import {
   generateNewTaskId,
   writeTaskMeta,
 } from '../utils/task';
-import type { TaskMeta, TaskPriority, TaskStatus } from '../types/task';
-import { createDefaultTaskMeta } from '../types/task';
+import type { TaskMeta, TaskPriority, TaskStatus, TaskType } from '../types/task';
+import { createDefaultTaskMeta, inferTaskType } from '../types/task';
 
 /**
  * 需求分析结果接口
@@ -23,9 +23,23 @@ interface RequirementAnalysis {
 }
 
 /**
+ * 初始化需求选项
+ */
+export interface InitRequirementOptions {
+  nonInteractive?: boolean;  // 非交互模式：跳过所有确认
+  noPlan?: boolean;          // 不询问添加到计划
+}
+
+/**
  * 从自然语言需求创建任务
  */
-export async function initRequirement(description: string, cwd: string = process.cwd()): Promise<void> {
+export async function initRequirement(
+  description: string,
+  cwd: string = process.cwd(),
+  options: InitRequirementOptions = {}
+): Promise<void> {
+  const { nonInteractive = false, noPlan = false } = options;
+
   if (!isInitialized(cwd)) {
     console.error('错误: 项目未初始化。请先运行 `projmnt4claude setup`');
     process.exit(1);
@@ -65,63 +79,79 @@ export async function initRequirement(description: string, cwd: string = process
     console.log('');
   }
 
-  // 确认创建
-  const confirmCreate = await prompts({
-    type: 'confirm',
-    name: 'confirm',
-    message: '是否基于此分析创建任务?',
-    initial: true,
-  });
+  // 确认创建（非交互模式自动确认）
+  let confirmCreate = { confirm: true };
+  if (!nonInteractive) {
+    confirmCreate = await prompts({
+      type: 'confirm',
+      name: 'confirm',
+      message: '是否基于此分析创建任务?',
+      initial: true,
+    });
+  }
 
   if (!confirmCreate.confirm) {
     console.log('已取消');
     return;
   }
 
-  // 允许用户修改
-  const response = await prompts([
-    {
-      type: 'text',
-      name: 'title',
-      message: '任务标题',
-      initial: analysis.title,
-    },
-    {
-      type: 'text',
-      name: 'description',
-      message: '任务描述',
-      initial: analysis.description,
-    },
-    {
-      type: 'select',
-      name: 'priority',
-      message: '优先级',
-      choices: [
-        { title: '低', value: 'low' },
-        { title: '中', value: 'medium', selected: analysis.priority === 'medium' },
-        { title: '高', value: 'high', selected: analysis.priority === 'high' },
-        { title: '紧急', value: 'urgent', selected: analysis.priority === 'urgent' },
-      ],
-      initial: analysis.priority === 'low' ? 0 : analysis.priority === 'medium' ? 1 : analysis.priority === 'high' ? 2 : 3,
-    },
-    {
-      type: 'text',
-      name: 'recommendedRole',
-      message: '推荐角色',
-      initial: analysis.recommendedRole,
-    },
-  ]);
+  // 允许用户修改（非交互模式使用分析结果）
+  let response: { title: string; description: string; priority: string; recommendedRole: string };
+  if (nonInteractive) {
+    response = {
+      title: analysis.title,
+      description: analysis.description,
+      priority: analysis.priority,
+      recommendedRole: analysis.recommendedRole,
+    };
+  } else {
+    const promptResponse = await prompts([
+      {
+        type: 'text',
+        name: 'title',
+        message: '任务标题',
+        initial: analysis.title,
+      },
+      {
+        type: 'text',
+        name: 'description',
+        message: '任务描述',
+        initial: analysis.description,
+      },
+      {
+        type: 'select',
+        name: 'priority',
+        message: '优先级',
+        choices: [
+          { title: '低', value: 'low' },
+          { title: '中', value: 'medium', selected: analysis.priority === 'medium' },
+          { title: '高', value: 'high', selected: analysis.priority === 'high' },
+          { title: '紧急', value: 'urgent', selected: analysis.priority === 'urgent' },
+        ],
+        initial: analysis.priority === 'low' ? 0 : analysis.priority === 'medium' ? 1 : analysis.priority === 'high' ? 2 : 3,
+      },
+      {
+        type: 'text',
+        name: 'recommendedRole',
+        message: '推荐角色',
+        initial: analysis.recommendedRole,
+      },
+    ]);
+    response = promptResponse as { title: string; description: string; priority: string; recommendedRole: string };
+  }
 
   if (!response.title) {
     console.log('已取消创建');
     return;
   }
 
-  // 生成任务ID
-  const taskId = generateNewTaskId(cwd);
+  // 推断任务类型并生成任务ID
+  const taskType = inferTaskType(response.title);
+  const taskPriority = (response.priority as TaskPriority) || analysis.priority;
+  const taskId = generateNewTaskId(cwd, taskType, taskPriority, response.title);
 
   // 创建任务元数据
-  const task = createDefaultTaskMeta(taskId, response.title);
+  const task = createDefaultTaskMeta(taskId, response.title, taskType);
   task.description = response.description || analysis.description;
   task.priority = response.priority as TaskPriority;
   task.recommendedRole = response.recommendedRole || analysis.recommendedRole;
@@ -148,18 +178,20 @@ ${checkpoints.map((cp: string) => `- [ ] ${cp}`).join('\n')}
   console.log(`   检查点: ${checkpoints.length} 项`);
   console.log('');
 
-  // 询问是否添加到执行计划
-  const addToPlan = await prompts({
-    type: 'confirm',
-    name: 'add',
-    message: '是否将此任务添加到执行计划?',
-    initial: true,
-  });
+  // 询问是否添加到执行计划（非交互模式或 noPlan 时跳过）
+  if (!noPlan && !nonInteractive) {
+    const addToPlan = await prompts({
+      type: 'confirm',
+      name: 'add',
+      message: '是否将此任务添加到执行计划?',
+      initial: true,
+    });
 
-  if (addToPlan.add) {
-    // 动态导入 plan 模块
-    const planModule = await import('./plan');
-    planModule.addTask(taskId);
+    if (addToPlan.add) {
+      // 动态导入 plan 模块
+      const planModule = await import('./plan');
+      planModule.addTask(taskId);
+    }
   }
 }
 
