@@ -166,17 +166,17 @@ export function getAllTasks(cwd: string = process.cwd(), includeArchived: boolea
 
 /**
  * 生成新任务ID (新格式)
- * 格式: {priority}-{slug}-{status}-{group}-{date}
+ * 格式: TASK-{type}-{priority}-{slug}-{date}
+ * 例如: TASK-feature-P1-user-auth-20260312
  */
 export function generateNewTaskId(
   cwd: string = process.cwd(),
-  priority: string = 'P2',
-  title: string = 'task',
-  status: string = 'open',
-  group: string = ''
+  type: TaskType = 'feature',
+  priority: TaskPriority = 'P2',
+  title: string = 'task'
 ): string {
   const existingIds = getAllTaskIds(cwd);
-  return generateTaskId(priority, title, status, group, existingIds);
+  return generateTaskId(type, priority, title, existingIds);
 }
 
 /**
