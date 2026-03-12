@@ -9,7 +9,7 @@
 set -e
 
 PLUGIN_NAME="projmnt4claude"
-MARKETPLACE_DIR="$HOME/claude-marketplace"
+MARKETPLACE_DIR="$HOME/.claude/plugins/marketplaces"
 PLUGIN_DIR="$MARKETPLACE_DIR/plugins/$PLUGIN_NAME"
 VERSION_TYPE=${1:-patch}  # 默认递增小版本
 
