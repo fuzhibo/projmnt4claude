@@ -126,52 +126,168 @@ Filtered results for: ${this.inputValue?this.inputValue:q1.gray("Enter something
 ✅ ${Z.setupComplete}`),console.log(`
 ${Z.nextStep}`)}function uJ(H,$){let U=$==="zh"?{"pre-task.ts":`#!/usr/bin/env bun
 // 任务执行前钩子
-// 在执行任务前自动调用
+// Claude Code hooks 通过 stdin 传递 JSON 数据
 
-export default async function preTask(taskId: string) {
-  console.log(\`[pre-task] 准备执行任务: \${taskId}\`);
-  // 在这里添加自定义逻辑
+async function main() {
+  let input = {};
+  try {
+    const chunks: Buffer[] = [];
+    for await (const chunk of process.stdin) {
+      chunks.push(chunk);
+    }
+    const data = Buffer.concat(chunks).toString();
+    if (data.trim()) {
+      input = JSON.parse(data);
+    }
+  } catch {}
+
+  const toolInput = (input as any).tool_input || {};
+  const taskId = toolInput.taskId;
+
+  if (taskId) {
+    console.log(\`[pre-task] 准备执行任务: \${taskId}\`);
+  }
+  process.exit(0);
 }
+
+main().catch(() => process.exit(0));
 `,"post-task.ts":`#!/usr/bin/env bun
 // 任务执行后钩子
-// 在任务完成后自动调用
+// Claude Code hooks 通过 stdin 传递 JSON 数据
 
-export default async function postTask(taskId: string, success: boolean) {
-  console.log(\`[post-task] 任务 \${taskId} \${success ? '完成' : '失败'}\`);
-  // 在这里添加自定义逻辑
+async function main() {
+  let input = {};
+  try {
+    const chunks: Buffer[] = [];
+    for await (const chunk of process.stdin) {
+      chunks.push(chunk);
+    }
+    const data = Buffer.concat(chunks).toString();
+    if (data.trim()) {
+      input = JSON.parse(data);
+    }
+  } catch {}
+
+  const toolName = (input as any).tool_name || '';
+  const toolInput = (input as any).tool_input || {};
+
+  if (toolName.startsWith('Task')) {
+    const taskId = toolInput.taskId;
+    if (taskId) {
+      console.log(\`[post-task] 任务 \${taskId} 操作完成\`);
+    }
+  }
+  process.exit(0);
 }
+
+main().catch(() => process.exit(0));
 `,"plan-complete.ts":`#!/usr/bin/env bun
 // 计划完成钩子
-// 在执行计划全部完成时调用
+// Claude Code hooks 通过 stdin 传递 JSON 数据
 
-export default async function planComplete(planId: string) {
-  console.log(\`[plan-complete] 计划 \${planId} 已完成\`);
-  // 在这里添加自定义逻辑
+async function main() {
+  let input = {};
+  try {
+    const chunks: Buffer[] = [];
+    for await (const chunk of process.stdin) {
+      chunks.push(chunk);
+    }
+    const data = Buffer.concat(chunks).toString();
+    if (data.trim()) {
+      input = JSON.parse(data);
+    }
+  } catch {}
+
+  const planId = (input as any).planId;
+  if (planId) {
+    console.log(\`[plan-complete] 计划 \${planId} 已完成\`);
+  }
+  process.exit(0);
 }
+
+main().catch(() => process.exit(0));
 `}:{"pre-task.ts":`#!/usr/bin/env bun
 // Pre-task hook
-// Called automatically before task execution
+// Claude Code hooks receive JSON data via stdin
 
-export default async function preTask(taskId: string) {
-  console.log(\`[pre-task] Preparing to execute task: \${taskId}\`);
-  // Add custom logic here
+async function main() {
+  let input = {};
+  try {
+    const chunks: Buffer[] = [];
+    for await (const chunk of process.stdin) {
+      chunks.push(chunk);
+    }
+    const data = Buffer.concat(chunks).toString();
+    if (data.trim()) {
+      input = JSON.parse(data);
+    }
+  } catch {}
+
+  const toolInput = (input as any).tool_input || {};
+  const taskId = toolInput.taskId;
+
+  if (taskId) {
+    console.log(\`[pre-task] Preparing to execute task: \${taskId}\`);
+  }
+  process.exit(0);
 }
+
+main().catch(() => process.exit(0));
 `,"post-task.ts":`#!/usr/bin/env bun
 // Post-task hook
-// Called automatically after task completion
+// Claude Code hooks receive JSON data via stdin
 
-export default async function postTask(taskId: string, success: boolean) {
-  console.log(\`[post-task] Task \${taskId} \${success ? 'completed' : 'failed'}\`);
-  // Add custom logic here
+async function main() {
+  let input = {};
+  try {
+    const chunks: Buffer[] = [];
+    for await (const chunk of process.stdin) {
+      chunks.push(chunk);
+    }
+    const data = Buffer.concat(chunks).toString();
+    if (data.trim()) {
+      input = JSON.parse(data);
+    }
+  } catch {}
+
+  const toolName = (input as any).tool_name || '';
+  const toolInput = (input as any).tool_input || {};
+
+  if (toolName.startsWith('Task')) {
+    const taskId = toolInput.taskId;
+    if (taskId) {
+      console.log(\`[post-task] Task \${taskId} completed\`);
+    }
+  }
+  process.exit(0);
 }
+
+main().catch(() => process.exit(0));
 `,"plan-complete.ts":`#!/usr/bin/env bun
 // Plan complete hook
-// Called when all tasks in the plan are completed
+// Claude Code hooks receive JSON data via stdin
 
-export default async function planComplete(planId: string) {
-  console.log(\`[plan-complete] Plan \${planId} completed\`);
-  // Add custom logic here
+async function main() {
+  let input = {};
+  try {
+    const chunks: Buffer[] = [];
+    for await (const chunk of process.stdin) {
+      chunks.push(chunk);
+    }
+    const data = Buffer.concat(chunks).toString();
+    if (data.trim()) {
+      input = JSON.parse(data);
+    }
+  } catch {}
+
+  const planId = (input as any).planId;
+  if (planId) {
+    console.log(\`[plan-complete] Plan \${planId} completed\`);
+  }
+  process.exit(0);
 }
+
+main().catch(() => process.exit(0));
 `};for(let[Z,J]of Object.entries(U)){let X=g.join(H,Z);v.writeFileSync(X,J,"utf-8"),console.log(`✓ 创建钩子模板: hooks/${Z}`)}}function mJ(H,$,Y){console.log(`
 \uD83D\uDCE6 ${Y.copyingSkills}`);let U=process.env.CLAUDE_PLUGIN_ROOT;if(!U){console.log("  ⚠️ CLAUDE_PLUGIN_ROOT 环境变量未设置，跳过技能文件复制");return}let Z=O1(H),X=g.join(Z,"projmnt4claude");b1(X),b1(g.join(X,"skills"));let Q=g.join(U,"locales",$,"SKILL.md"),z=g.join(X,"SKILL.md");if(v.existsSync(Q))v.copyFileSync(Q,z),console.log(`  ✓ 复制 SKILL.md (${$})`);else{let W=g.join(U,"skills","projmnt4claude","SKILL.md");if(v.existsSync(W))v.copyFileSync(W,z),console.log("  ✓ 复制 SKILL.md (default)");else console.log("  ⚠️ SKILL.md 未找到")}let K=g.join(U,"locales",$,"commands"),R=g.join(X,"commands");if(b1(R),v.existsSync(K)){let W=v.readdirSync(K).filter((G)=>G.endsWith(".md"));for(let G of W)v.copyFileSync(g.join(K,G),g.join(R,G));console.log(`  ✓ 复制 ${W.length} 个命令文档 (${$})`)}else console.log(`  ⚠️ 命令文档目录未找到: ${K}`);console.log(`✅ ${Y.skillsCopied}`)}function lJ(H,$){let Y=$==="zh",U=g.join(H,".claude"),Z=g.join(U,"settings.json");b1(U);let J={};if(v.existsSync(Z))try{J=JSON.parse(v.readFileSync(Z,"utf-8"))}catch{}let X=E1(H),Q={PreToolUse:[{matcher:"TaskUpdate",hooks:[{type:"command",command:`bun run ${X}/pre-complete.ts`}]}],PostToolUse:[{matcher:"TaskUpdate|TaskCreate|TaskGet",hooks:[{type:"command",command:`bun run ${X}/post-task.ts`}]}]};if(J.hooks={...J.hooks||{},...Q},v.writeFileSync(Z,JSON.stringify(J,null,2),"utf-8"),Y)console.log("✓ 配置 Claude Code hooks: .claude/settings.json"),console.log("  - PreToolUse: 任务更新前验证"),console.log("  - PostToolUse: 任务完成后检查");else console.log("✓ Configured Claude Code hooks: .claude/settings.json"),console.log("  - PreToolUse: Pre-task verification"),console.log("  - PostToolUse: Post-task check")}w();import*as u0 from"fs";function IH(H=process.cwd()){if(!B(H))return null;let $=I1(H);try{let Y=u0.readFileSync($,"utf-8");return JSON.parse(Y)}catch{return null}}function dJ(H,$=process.cwd()){let Y=I1($);u0.writeFileSync(Y,JSON.stringify(H,null,2),"utf-8")}function cJ(H,$){let Y=$.split("."),U=H;for(let Z of Y)if(U&&typeof U==="object"&&Z in U)U=U[Z];else return;return U}function pJ(H,$,Y){let U=$.split("."),Z={...H},J=Z;for(let X=0;X<U.length-1;X++){let Q=U[X];if(!(Q in J)||typeof J[Q]!=="object")J[Q]={};J=J[Q]}try{J[U[U.length-1]]=JSON.parse(Y)}catch{J[U[U.length-1]]=Y}return Z}function yY(H=process.cwd()){if(!B(H))console.error("错误: 项目未初始化。请先运行 `projmnt4claude setup`"),process.exit(1);let $=IH(H);if(!$)console.error("错误: 无法读取配置文件"),process.exit(1);console.log(`当前配置:
 `),console.log(JSON.stringify($,null,2))}function fY(H,$=process.cwd()){if(!B($))console.error("错误: 项目未初始化。请先运行 `projmnt4claude setup`"),process.exit(1);let Y=IH($);if(!Y)console.error("错误: 无法读取配置文件"),process.exit(1);let U=cJ(Y,H);if(U===void 0)console.error(`错误: 配置项 '${H}' 不存在`),process.exit(1);console.log(U)}function vY(H,$,Y=process.cwd()){if(!B(Y))console.error("错误: 项目未初始化。请先运行 `projmnt4claude setup`"),process.exit(1);let U=IH(Y);if(!U)console.error("错误: 无法读取配置文件"),process.exit(1);let Z=pJ(U,H,$);dJ(Z,Y),console.log(`✓ 已设置 ${H} = ${$}`)}w();J1();var u1=r(Y1(),1);import*as I from"fs";import*as h from"path";async function uY(H=process.cwd()){if(!B(H))console.error("错误: 项目未初始化。请先运行 `projmnt4claude setup`"),process.exit(1);let $=await u1.default([{type:"text",name:"title",message:"任务标题",validate:(X)=>X.trim().length>0?!0:"标题不能为空"},{type:"text",name:"description",message:"任务描述 (可选，直接回车跳过)"},{type:"select",name:"priority",message:"优先级",choices:[{title:"低",value:"low"},{title:"中 (默认)",value:"medium"},{title:"高",value:"high"},{title:"紧急",value:"urgent"}],initial:1}]);if(!$.title){console.log("已取消创建任务");return}let Y=B0(H,$.priority,$.title,"open",""),U=W0(Y,$.title);if($.description)U.description=$.description;U.priority=$.priority,b(U,H);let Z=h.join(D(H),Y),J=h.join(Z,"checkpoint.md");I.writeFileSync(J,`# ${Y} 检查点
@@ -268,23 +384,86 @@ ${q.map((O)=>`- [ ] ${O}`).join(`
 /**
  * 任务完成前验证钩子
  * 在任务状态更新为 resolved/closed 前触发
+ *
+ * Claude Code hooks 通过 stdin 传递 JSON 数据
+ * 必须返回 JSON: { allowed: true/false, reason?: string }
  */
 
-export default async function preComplete(taskId: string) {
-  console.log(\`[pre-complete] 验证任务: \${taskId}\`);
-  // 在这里添加验证逻辑
-  return true;
+async function main() {
+  // 从 stdin 读取输入
+  let input = {};
+  try {
+    const chunks: Buffer[] = [];
+    for await (const chunk of process.stdin) {
+      chunks.push(chunk);
+    }
+    const data = Buffer.concat(chunks).toString();
+    if (data.trim()) {
+      input = JSON.parse(data);
+    }
+  } catch {
+    // 忽略解析错误
+  }
+
+  const toolInput = (input as any).tool_input || {};
+  const newStatus = toolInput.status;
+
+  // 只在任务即将完成时验证
+  if (!newStatus || !['resolved', 'closed'].includes(newStatus)) {
+    console.log(JSON.stringify({ allowed: true }));
+    process.exit(0);
+  }
+
+  // 在这里添加自定义验证逻辑
+  console.log(JSON.stringify({ allowed: true }));
+  process.exit(0);
 }
+
+main().catch(() => {
+  console.log(JSON.stringify({ allowed: true }));
+  process.exit(0);
+});
 `,"post-task.ts":`#!/usr/bin/env bun
 /**
  * 任务执行后钩子
- * 在任务完成后自动调用
+ * 在任务工具调用后触发
+ *
+ * Claude Code hooks 通过 stdin 传递 JSON 数据
  */
 
-export default async function postTask(taskId: string, success: boolean) {
-  console.log(\`[post-task] 任务 \${taskId} \${success ? '完成' : '失败'}\`);
-  // 在这里添加自定义逻辑
+async function main() {
+  // 从 stdin 读取输入
+  let input = {};
+  try {
+    const chunks: Buffer[] = [];
+    for await (const chunk of process.stdin) {
+      chunks.push(chunk);
+    }
+    const data = Buffer.concat(chunks).toString();
+    if (data.trim()) {
+      input = JSON.parse(data);
+    }
+  } catch {
+    // 忽略解析错误
+  }
+
+  const toolName = (input as any).tool_name || '';
+  const toolInput = (input as any).tool_input || {};
+
+  // 只处理任务相关的工具调用
+  if (toolName.startsWith('Task')) {
+    const taskId = toolInput.taskId;
+    if (taskId) {
+      console.log(\`[post-task] 任务 \${taskId} 操作完成 (\${toolName})\`);
+    }
+  }
+
+  process.exit(0);
 }
+
+main().catch(() => {
+  process.exit(0);
+});
 `};if(z[J])E.writeFileSync(Q,z[J],"utf-8"),console.log(`  ✓ 已创建 Hook: ${J}`)}else if(Z.name==="Claude Code Hooks 配置"){let J=F.join($,".claude"),X=F.join(J,"settings.json"),Q=E1($);if(!E.existsSync(J))E.mkdirSync(J,{recursive:!0});let z={};if(E.existsSync(X))try{z=JSON.parse(E.readFileSync(X,"utf-8"))}catch{}let K={PreToolUse:[{matcher:"TaskUpdate",hooks:[{type:"command",command:`bun run ${Q}/pre-complete.ts`}]}],PostToolUse:[{matcher:"TaskUpdate|TaskCreate|TaskGet",hooks:[{type:"command",command:`bun run ${Q}/post-task.ts`}]}]};z.hooks={...z.hooks||{},...K},E.writeFileSync(X,JSON.stringify(z,null,2),"utf-8"),console.log("  ✓ 已配置 Claude Code hooks")}console.log(""),console.log("✅ 修复完成")}import*as oH from"path";import*as aH from"fs";function f5(H=process.cwd()){return oH.join(H,".projmnt4claude")}function m7(H=process.cwd()){let $=f5(H),Y=oH.join($,"config.json");return aH.existsSync(Y)}function F1(){if(!m7())console.error("\u274C \u9519\u8BEF: \u9879\u76EE\u5C1A\u672A\u521D\u59CB\u5316"),console.error(""),console.error("\u8BF7\u5148\u8FD0\u884C\u4EE5\u4E0B\u547D\u4EE4\u521D\u59CB\u5316\u9879\u76EE\u7BA1\u7406\u73AF\u5883:"),console.error("  projmnt4claude setup"),console.error(""),console.error("\u6216\u8005\u4F7F\u7528 slash command:"),console.error("  /projmnt4claude:setup"),process.exit(1)}var l=new V4;l.name("projmnt4claude").description("Claude Code \u9879\u76EE\u7BA1\u7406 CLI \u5DE5\u5177").version("0.1.0");l.command("setup").description("\u5728\u5F53\u524D\u9879\u76EE\u521D\u59CB\u5316\u9879\u76EE\u7BA1\u7406\u73AF\u5883\uFF0C\u652F\u6301\u8BED\u8A00\u9009\u62E9 (\u4E2D\u6587/English)").option("-y, --yes","\u975E\u4EA4\u4E92\u6A21\u5F0F\uFF1A\u8DF3\u8FC7\u6240\u6709\u786E\u8BA4\uFF0C\u4F7F\u7528\u9ED8\u8BA4\u8BBE\u7F6E").option("-l, --language <language>","\u6307\u5B9A\u8BED\u8A00 (zh/en)").option("-f, --force","\u5F3A\u5236\u91CD\u65B0\u521D\u59CB\u5316\uFF08\u91CD\u65B0\u590D\u5236\u6280\u80FD\u6587\u4EF6\uFF09").action(async(H)=>{await IY(process.cwd(),{nonInteractive:H.yes,language:H.language,force:H.force})});l.command("config <action> [key] [value]").description("\u7BA1\u7406\u914D\u7F6E (list/get/set)").action((H,$,Y)=>{switch(F1(),H){case"list":yY();break;case"get":if(!$)console.error("\u9519\u8BEF: get \u64CD\u4F5C\u9700\u8981\u6307\u5B9A key"),process.exit(1);fY($);break;case"set":if(!$||Y===void 0)console.error("\u9519\u8BEF: set \u64CD\u4F5C\u9700\u8981\u6307\u5B9A key \u548C value"),process.exit(1);vY($,Y);break;default:console.error(`\u9519\u8BEF: \u672A\u77E5\u64CD\u4F5C '${H}'\u3002\u652F\u6301\u7684\u64CD\u4F5C: list, get, set`),process.exit(1)}});l.command("task <action> [id]").description("\u7BA1\u7406\u4EFB\u52A1 (create/list/show/update/delete/execute/checkpoint/dependency/add-subtask)").allowExcessArguments(!0).option("-s, --status <status>","\u6309\u72B6\u6001\u8FC7\u6EE4 (\u4EC5 list)").option("-p, --priority <priority>","\u6309\u4F18\u5148\u7EA7\u8FC7\u6EE4 (\u4EC5 list)").option("-r, --role <role>","\u6309\u63A8\u8350\u89D2\u8272\u8FC7\u6EE4 (\u4EC5 list)").option("--dep-id <depId>","\u4F9D\u8D56\u4EFB\u52A1ID (\u4EC5 dependency)").option("--title <title>","\u4EFB\u52A1\u6807\u9898 (\u4EC5 update)").option("--description <description>","\u4EFB\u52A1\u63CF\u8FF0 (\u4EC5 update)").option("--token <token>","\u68C0\u67E5\u70B9\u786E\u8BA4\u4EE4\u724C (\u4EC5 update)").option("--topic <topic>","\u8BA8\u8BBA\u4E3B\u9898 (\u4EC5 discuss)").action(async(H,$,Y)=>{switch(F1(),H){case"create":await uY();break;case"list":mY({status:Y.status,priority:Y.priority,role:Y.role});break;case"show":if(!$)console.error("\u9519\u8BEF: show \u64CD\u4F5C\u9700\u8981\u6307\u5B9A\u4EFB\u52A1ID"),process.exit(1);lY($);break;case"update":if(!$)console.error("\u9519\u8BEF: update \u64CD\u4F5C\u9700\u8981\u6307\u5B9A\u4EFB\u52A1ID"),process.exit(1);dY($,{title:Y.title,description:Y.description,status:Y.status,priority:Y.priority,role:Y.role,token:Y.token});break;case"delete":if(!$)console.error("\u9519\u8BEF: delete \u64CD\u4F5C\u9700\u8981\u6307\u5B9A\u4EFB\u52A1ID"),process.exit(1);await cY($);break;case"execute":if(!$)console.error("\u9519\u8BEF: execute \u64CD\u4F5C\u9700\u8981\u6307\u5B9A\u4EFB\u52A1ID"),process.exit(1);await iY($);break;case"checkpoint":if(!$)console.error("\u9519\u8BEF: checkpoint \u64CD\u4F5C\u9700\u8981\u6307\u5B9A\u4EFB\u52A1ID"),process.exit(1);if(process.argv[4]==="verify"||process.argv[5]==="verify")await aY($);else await rY($);break;case"discuss":if(!$)console.error("\u9519\u8BEF: discuss \u64CD\u4F5C\u9700\u8981\u6307\u5B9A\u4EFB\u52A1ID"),process.exit(1);console.log("\u63D0\u793A: \u8BF7\u4F7F\u7528 task update --needs-discussion \u6765\u6807\u8BB0\u4EFB\u52A1\u9700\u8981\u8BA8\u8BBA"),console.log('      \u4F7F\u7528 task update --topic "\u4E3B\u9898\u5185\u5BB9" \u6765\u6DFB\u52A0\u8BA8\u8BBA\u4E3B\u9898');break;case"dependency":{if(!$)console.error("\u9519\u8BEF: dependency \u64CD\u4F5C\u9700\u8981\u6307\u5B9A\u5B50\u64CD\u4F5C\u548C\u4EFB\u52A1ID"),console.error("\u7528\u6CD5: task dependency add <taskId> --dep-id <depId>"),console.error("      task dependency remove <taskId> --dep-id <depId>"),process.exit(1);if($!=="add"&&$!=="remove")console.error(`\u9519\u8BEF: \u672A\u77E5\u7684\u5B50\u64CD\u4F5C '${$}'\uFF0C\u652F\u6301: add, remove`),process.exit(1);let U=process.argv.indexOf("dependency"),Z=process.argv[U+2];if(!Z||Z.startsWith("-"))console.error("\u9519\u8BEF: \u9700\u8981\u6307\u5B9A\u4EFB\u52A1ID"),console.error("\u7528\u6CD5: task dependency add <taskId> --dep-id <depId>"),process.exit(1);if(!Y.depId)console.error("\u9519\u8BEF: \u9700\u8981\u6307\u5B9A --dep-id"),process.exit(1);if($==="add")pY(Z,Y.depId);else nY(Z,Y.depId);break}case"add-subtask":{if(!$)console.error("\u9519\u8BEF: add-subtask \u64CD\u4F5C\u9700\u8981\u6307\u5B9A\u7236\u4EFB\u52A1ID"),process.exit(1);let U=process.argv.slice(5).join(" ");await sY($,U);break}default:console.error(`\u9519\u8BEF: \u672A\u77E5\u64CD\u4F5C '${H}'\u3002\u652F\u6301\u7684\u64CD\u4F5C: create, list, show, update, delete, execute, checkpoint, dependency, discuss, add-subtask`),process.exit(1)}});l.command("plan <action> [id]").description("\u7BA1\u7406\u6267\u884C\u8BA1\u5212 (show/add/remove/clear/recommend)").option("-j, --json","\u4EE5 JSON \u683C\u5F0F\u8F93\u51FA (\u4EC5 show)").option("-f, --force","\u5F3A\u5236\u6267\u884C\uFF0C\u8DF3\u8FC7\u786E\u8BA4 (\u4EC5 clear)").option("-a, --after <taskId>","\u5728\u6307\u5B9A\u4EFB\u52A1\u4E4B\u540E\u6DFB\u52A0 (\u4EC5 add)").action(async(H,$,Y)=>{switch(F1(),H){case"show":$7(Y.json);break;case"add":if(!$)console.error("\u9519\u8BEF: add \u64CD\u4F5C\u9700\u8981\u6307\u5B9A\u4EFB\u52A1ID"),process.exit(1);Y7($,Y.after);break;case"remove":if(!$)console.error("\u9519\u8BEF: remove \u64CD\u4F5C\u9700\u8981\u6307\u5B9A\u4EFB\u52A1ID"),process.exit(1);U7($);break;case"clear":await Z7(Y.force);break;case"recommend":await J7();break;default:console.error(`\u9519\u8BEF: \u672A\u77E5\u64CD\u4F5C '${H}'\u3002\u652F\u6301\u7684\u64CD\u4F5C: show, add, remove, clear, recommend`),process.exit(1)}});l.command("tool <action> [name]").description("\u7BA1\u7406\u672C\u5730 skill (list/create/install/remove/deploy/undeploy)").option("-j, --json","\u4EE5 JSON \u683C\u5F0F\u8F93\u51FA (\u4EC5 list)").option("-s, --source <source>","\u6765\u6E90 URL (\u4EC5 install)").action(async(H,$,Y)=>{switch(F1(),H){case"list":Q7(Y.json);break;case"create":await z7();break;case"install":if(!Y.source&&!$)console.error("\u9519\u8BEF: install \u64CD\u4F5C\u9700\u8981\u6307\u5B9A\u6765\u6E90"),process.exit(1);await R7(Y.source||$);break;case"remove":if(!$)console.error("\u9519\u8BEF: remove \u64CD\u4F5C\u9700\u8981\u6307\u5B9A skill \u540D\u79F0"),process.exit(1);await W7($);break;case"deploy":if(!$)console.error("\u9519\u8BEF: deploy \u64CD\u4F5C\u9700\u8981\u6307\u5B9A skill \u540D\u79F0"),process.exit(1);L7($);break;case"undeploy":if(!$)console.error("\u9519\u8BEF: undeploy \u64CD\u4F5C\u9700\u8981\u6307\u5B9A skill \u540D\u79F0"),process.exit(1);B7($);break;default:console.error(`\u9519\u8BEF: \u672A\u77E5\u64CD\u4F5C '${H}'\u3002\u652F\u6301\u7684\u64CD\u4F5C: list, create, install, remove, deploy, undeploy`),process.exit(1)}});l.command("status").description("\u663E\u793A\u9879\u76EE\u72B6\u6001\u6458\u8981").option("--archived","\u663E\u793A\u5F52\u6863\u4EFB\u52A1\u7EDF\u8BA1").option("-a, --all","\u663E\u793A\u6240\u6709\u4EFB\u52A1\uFF08\u5305\u62EC\u5F52\u6863\uFF09").action((H)=>{F1(),E7(H.archived||H.all)});l.command("analyze").description("\u5206\u6790\u9879\u76EE\u5065\u5EB7\u72B6\u6001").option("--fix","\u81EA\u52A8\u4FEE\u590D\u68C0\u6D4B\u5230\u7684\u95EE\u9898").action(async(H)=>{if(F1(),H.fix)await q7();else G7()});l.command("hook <action>").description("\u7BA1\u7406\u94A9\u5B50\u4F1A\u8BDD (enable/disable/status)").action(async(H)=>{switch(F1(),H){case"enable":await M7();break;case"disable":await F7();break;case"status":S7();break;default:console.error(`\u9519\u8BEF: \u672A\u77E5\u64CD\u4F5C '${H}'\u3002\u652F\u6301\u7684\u64CD\u4F5C: enable, disable, status`),process.exit(1)}});l.command("branch <action> [id]").description("Git \u5206\u652F\u96C6\u6210 (checkout/status/create/delete/merge/push/sync)").option("-b, --branch-name <branchName>","\u5206\u652F\u540D\u79F0 (\u4EC5 create)").option("-m, --message <message>","\u5408\u5E76\u6D88\u606F (\u4EC5 merge)").action(async(H,$,Y)=>{switch(F1(),H){case"checkout":if(!$)console.error("\u9519\u8BEF: checkout \u64CD\u4F5C\u9700\u8981\u6307\u5B9A\u4EFB\u52A1ID"),process.exit(1);await A7($);break;case"status":j7();break;case"create":if(!$)console.error("\u9519\u8BEF: create \u64CD\u4F5C\u9700\u8981\u6307\u5B9A\u4EFB\u52A1ID"),process.exit(1);await N7($,Y.branchName);break;case"delete":if(!$)console.error("\u9519\u8BEF: delete \u64CD\u4F5C\u9700\u8981\u6307\u5B9A\u4EFB\u52A1ID"),process.exit(1);await O7($);break;case"merge":if(!$)console.error("\u9519\u8BEF: merge \u64CD\u4F5C\u9700\u8981\u6307\u5B9A\u4EFB\u52A1ID"),process.exit(1);await C7($,Y.message);break;case"push":if(!$)console.error("\u9519\u8BEF: push \u64CD\u4F5C\u9700\u8981\u6307\u5B9A\u4EFB\u52A1ID"),process.exit(1);_7($);break;case"sync":T7($);break;default:console.error(`\u9519\u8BEF: \u672A\u77E5\u64CD\u4F5C '${H}'\u3002\u652F\u6301\u7684\u64CD\u4F5C: checkout, status, create, delete, merge, push, sync`),process.exit(1)}});l.command("init-requirement <description>").description(`\u4ECE\u81EA\u7136\u8BED\u8A00\u9700\u6C42\u63CF\u8FF0\u521B\u5EFA\u4EFB\u52A1\uFF0C\u81EA\u52A8\u89E3\u6790\u9700\u6C42\u5E76\u751F\u6210\u4EFB\u52A1\u7ED3\u6784
 \u793A\u4F8B: init-requirement "\u5B9E\u73B0\u7528\u6237\u767B\u5F55\u529F\u80FD\uFF0C\u5305\u542B\u8868\u5355\u9A8C\u8BC1\u548C JWT \u8BA4\u8BC1"`).option("-y, --yes","\u975E\u4EA4\u4E92\u6A21\u5F0F\uFF1A\u8DF3\u8FC7\u6240\u6709\u786E\u8BA4\uFF0C\u76F4\u63A5\u4F7F\u7528\u5206\u6790\u7ED3\u679C\u521B\u5EFA\u4EFB\u52A1").option("--no-plan","\u521B\u5EFA\u4EFB\u52A1\u540E\u4E0D\u8BE2\u95EE\u662F\u5426\u6DFB\u52A0\u5230\u6267\u884C\u8BA1\u5212").action(async(H,$)=>{F1(),await I7(H,process.cwd(),{nonInteractive:$.yes,noPlan:$.noPlan})});l.command("doctor").description("\u8FD0\u884C\u73AF\u5883\u8BCA\u65AD\uFF0C\u68C0\u67E5\u5E76\u4FEE\u590D\u8BBE\u7F6E\u95EE\u9898").option("--fix","\u81EA\u52A8\u4FEE\u590D\u68C0\u6D4B\u5230\u7684\u95EE\u9898").action(async(H)=>{await rH(H.fix)});l.command("help [topic]").description(`\u663E\u793A\u5E2E\u52A9\u4FE1\u606F
   - \u65E0\u53C2\u6570: \u663E\u793A\u6574\u4F53\u5E2E\u52A9\u6982\u89C8

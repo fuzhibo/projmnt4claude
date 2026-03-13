@@ -174,58 +174,174 @@ function createHookTemplates(hooksDir: string, language: 'zh' | 'en'): void {
   const templates: Record<string, string> = isZh ? {
     'pre-task.ts': `#!/usr/bin/env bun
 // 任务执行前钩子
-// 在执行任务前自动调用
+// Claude Code hooks 通过 stdin 传递 JSON 数据
 
-export default async function preTask(taskId: string) {
-  console.log(\`[pre-task] 准备执行任务: \${taskId}\`);
-  // 在这里添加自定义逻辑
+async function main() {
+  let input = {};
+  try {
+    const chunks: Buffer[] = [];
+    for await (const chunk of process.stdin) {
+      chunks.push(chunk);
+    }
+    const data = Buffer.concat(chunks).toString();
+    if (data.trim()) {
+      input = JSON.parse(data);
+    }
+  } catch {}
+
+  const toolInput = (input as any).tool_input || {};
+  const taskId = toolInput.taskId;
+
+  if (taskId) {
+    console.log(\`[pre-task] 准备执行任务: \${taskId}\`);
+  }
+  process.exit(0);
 }
+
+main().catch(() => process.exit(0));
 `,
     'post-task.ts': `#!/usr/bin/env bun
 // 任务执行后钩子
-// 在任务完成后自动调用
+// Claude Code hooks 通过 stdin 传递 JSON 数据
 
-export default async function postTask(taskId: string, success: boolean) {
-  console.log(\`[post-task] 任务 \${taskId} \${success ? '完成' : '失败'}\`);
-  // 在这里添加自定义逻辑
+async function main() {
+  let input = {};
+  try {
+    const chunks: Buffer[] = [];
+    for await (const chunk of process.stdin) {
+      chunks.push(chunk);
+    }
+    const data = Buffer.concat(chunks).toString();
+    if (data.trim()) {
+      input = JSON.parse(data);
+    }
+  } catch {}
+
+  const toolName = (input as any).tool_name || '';
+  const toolInput = (input as any).tool_input || {};
+
+  if (toolName.startsWith('Task')) {
+    const taskId = toolInput.taskId;
+    if (taskId) {
+      console.log(\`[post-task] 任务 \${taskId} 操作完成\`);
+    }
+  }
+  process.exit(0);
 }
+
+main().catch(() => process.exit(0));
 `,
     'plan-complete.ts': `#!/usr/bin/env bun
 // 计划完成钩子
-// 在执行计划全部完成时调用
+// Claude Code hooks 通过 stdin 传递 JSON 数据
 
-export default async function planComplete(planId: string) {
-  console.log(\`[plan-complete] 计划 \${planId} 已完成\`);
-  // 在这里添加自定义逻辑
+async function main() {
+  let input = {};
+  try {
+    const chunks: Buffer[] = [];
+    for await (const chunk of process.stdin) {
+      chunks.push(chunk);
+    }
+    const data = Buffer.concat(chunks).toString();
+    if (data.trim()) {
+      input = JSON.parse(data);
+    }
+  } catch {}
+
+  const planId = (input as any).planId;
+  if (planId) {
+    console.log(\`[plan-complete] 计划 \${planId} 已完成\`);
+  }
+  process.exit(0);
 }
+
+main().catch(() => process.exit(0));
 `,
   } : {
     'pre-task.ts': `#!/usr/bin/env bun
 // Pre-task hook
-// Called automatically before task execution
+// Claude Code hooks receive JSON data via stdin
 
-export default async function preTask(taskId: string) {
-  console.log(\`[pre-task] Preparing to execute task: \${taskId}\`);
-  // Add custom logic here
+async function main() {
+  let input = {};
+  try {
+    const chunks: Buffer[] = [];
+    for await (const chunk of process.stdin) {
+      chunks.push(chunk);
+    }
+    const data = Buffer.concat(chunks).toString();
+    if (data.trim()) {
+      input = JSON.parse(data);
+    }
+  } catch {}
+
+  const toolInput = (input as any).tool_input || {};
+  const taskId = toolInput.taskId;
+
+  if (taskId) {
+    console.log(\`[pre-task] Preparing to execute task: \${taskId}\`);
+  }
+  process.exit(0);
 }
+
+main().catch(() => process.exit(0));
 `,
     'post-task.ts': `#!/usr/bin/env bun
 // Post-task hook
-// Called automatically after task completion
+// Claude Code hooks receive JSON data via stdin
 
-export default async function postTask(taskId: string, success: boolean) {
-  console.log(\`[post-task] Task \${taskId} \${success ? 'completed' : 'failed'}\`);
-  // Add custom logic here
+async function main() {
+  let input = {};
+  try {
+    const chunks: Buffer[] = [];
+    for await (const chunk of process.stdin) {
+      chunks.push(chunk);
+    }
+    const data = Buffer.concat(chunks).toString();
+    if (data.trim()) {
+      input = JSON.parse(data);
+    }
+  } catch {}
+
+  const toolName = (input as any).tool_name || '';
+  const toolInput = (input as any).tool_input || {};
+
+  if (toolName.startsWith('Task')) {
+    const taskId = toolInput.taskId;
+    if (taskId) {
+      console.log(\`[post-task] Task \${taskId} completed\`);
+    }
+  }
+  process.exit(0);
 }
+
+main().catch(() => process.exit(0));
 `,
     'plan-complete.ts': `#!/usr/bin/env bun
 // Plan complete hook
-// Called when all tasks in the plan are completed
+// Claude Code hooks receive JSON data via stdin
 
-export default async function planComplete(planId: string) {
-  console.log(\`[plan-complete] Plan \${planId} completed\`);
-  // Add custom logic here
+async function main() {
+  let input = {};
+  try {
+    const chunks: Buffer[] = [];
+    for await (const chunk of process.stdin) {
+      chunks.push(chunk);
+    }
+    const data = Buffer.concat(chunks).toString();
+    if (data.trim()) {
+      input = JSON.parse(data);
+    }
+  } catch {}
+
+  const planId = (input as any).planId;
+  if (planId) {
+    console.log(\`[plan-complete] Plan \${planId} completed\`);
+  }
+  process.exit(0);
 }
+
+main().catch(() => process.exit(0));
 `,
   };
 

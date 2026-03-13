@@ -600,24 +600,87 @@ async function fixIssues(issues: CheckResult[], cwd: string): Promise<void> {
 /**
  * 任务完成前验证钩子
  * 在任务状态更新为 resolved/closed 前触发
+ *
+ * Claude Code hooks 通过 stdin 传递 JSON 数据
+ * 必须返回 JSON: { allowed: true/false, reason?: string }
  */
 
-export default async function preComplete(taskId: string) {
-  console.log(\`[pre-complete] 验证任务: \${taskId}\`);
-  // 在这里添加验证逻辑
-  return true;
+async function main() {
+  // 从 stdin 读取输入
+  let input = {};
+  try {
+    const chunks: Buffer[] = [];
+    for await (const chunk of process.stdin) {
+      chunks.push(chunk);
+    }
+    const data = Buffer.concat(chunks).toString();
+    if (data.trim()) {
+      input = JSON.parse(data);
+    }
+  } catch {
+    // 忽略解析错误
+  }
+
+  const toolInput = (input as any).tool_input || {};
+  const newStatus = toolInput.status;
+
+  // 只在任务即将完成时验证
+  if (!newStatus || !['resolved', 'closed'].includes(newStatus)) {
+    console.log(JSON.stringify({ allowed: true }));
+    process.exit(0);
+  }
+
+  // 在这里添加自定义验证逻辑
+  console.log(JSON.stringify({ allowed: true }));
+  process.exit(0);
 }
+
+main().catch(() => {
+  console.log(JSON.stringify({ allowed: true }));
+  process.exit(0);
+});
 `,
         'post-task.ts': `#!/usr/bin/env bun
 /**
  * 任务执行后钩子
- * 在任务完成后自动调用
+ * 在任务工具调用后触发
+ *
+ * Claude Code hooks 通过 stdin 传递 JSON 数据
  */
 
-export default async function postTask(taskId: string, success: boolean) {
-  console.log(\`[post-task] 任务 \${taskId} \${success ? '完成' : '失败'}\`);
-  // 在这里添加自定义逻辑
+async function main() {
+  // 从 stdin 读取输入
+  let input = {};
+  try {
+    const chunks: Buffer[] = [];
+    for await (const chunk of process.stdin) {
+      chunks.push(chunk);
+    }
+    const data = Buffer.concat(chunks).toString();
+    if (data.trim()) {
+      input = JSON.parse(data);
+    }
+  } catch {
+    // 忽略解析错误
+  }
+
+  const toolName = (input as any).tool_name || '';
+  const toolInput = (input as any).tool_input || {};
+
+  // 只处理任务相关的工具调用
+  if (toolName.startsWith('Task')) {
+    const taskId = toolInput.taskId;
+    if (taskId) {
+      console.log(\`[post-task] 任务 \${taskId} 操作完成 (\${toolName})\`);
+    }
+  }
+
+  process.exit(0);
 }
+
+main().catch(() => {
+  process.exit(0);
+});
 `,
       };
 
