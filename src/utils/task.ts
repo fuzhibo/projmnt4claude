@@ -294,11 +294,17 @@ export function getSubtasks(
 /**
  * 从子任务ID解析父任务ID
  * 格式: {parentId}-{n} -> parentId
+ * 注意：子任务编号通常是 1-2 位数字（1-99），避免误判日期格式（如 20260316）
  */
 export function parseParentFromSubtaskId(subtaskId: string): string | null {
-  const match = subtaskId.match(/^(.+)-(\d+)$/);
+  // 匹配 {parentId}-{1-2位数字} 格式，避免匹配日期（8位数字）
+  const match = subtaskId.match(/^(.+)-(\d{1,2})$/);
   if (match) {
-    return match[1];
+    const parentId = match[1];
+    // 确保父 ID 不以数字结尾（避免匹配日期中的部分）
+    if (!/\d$/.test(parentId)) {
+      return parentId;
+    }
   }
   return null;
 }

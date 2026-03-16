@@ -18,11 +18,33 @@ import type {
 import { areDependenciesCompleted } from '../utils/plan';
 
 /**
+ * 优先级映射：将旧格式 (urgent/high/medium/low) 映射到新格式 (P0/P1/P2/P3)
+ */
+function normalizePriority(priority: string): TaskPriority {
+  const priorityMap: Record<string, TaskPriority> = {
+    'urgent': 'P0',
+    'high': 'P1',
+    'medium': 'P2',
+    'low': 'P3',
+    // 已经是新格式的直接返回
+    'P0': 'P0',
+    'P1': 'P1',
+    'P2': 'P2',
+    'P3': 'P3',
+    'Q1': 'Q1',
+    'Q2': 'Q2',
+    'Q3': 'Q3',
+    'Q4': 'Q4',
+  };
+  return priorityMap[priority] || 'P2'; // 默认为 P2
+}
+
+/**
  * 分析问题接口
  */
 export interface Issue {
   taskId: string;
-  type: 'stale' | 'orphan' | 'cycle' | 'blocked' | 'no_description';
+  type: 'stale' | 'orphan' | 'cycle' | 'blocked' | 'no_description' | 'legacy_priority';
   severity: 'low' | 'medium' | 'high';
   message: string;
   suggestion: string;
@@ -125,8 +147,9 @@ export function analyzeProject(cwd: string = process.cwd(), includeArchived: boo
     // 统计状态
     stats.byStatus[task.status]++;
 
-    // 统计优先级
-    stats.byPriority[task.priority]++;
+    // 统计优先级 (使用规范化函数)
+    const normalizedPriority = normalizePriority(task.priority);
+    stats.byPriority[normalizedPriority]++;
 
     // 检测过期任务 (stale)
     const updatedAt = new Date(task.updatedAt);
@@ -173,7 +196,8 @@ export function analyzeProject(cwd: string = process.cwd(), includeArchived: boo
     }
 
     // 检测孤儿任务 (无依赖但优先级高且状态为 open)
-    if (task.dependencies.length === 0 && task.priority === 'P0' && task.status === 'open') {
+    const taskNormalizedPriority = normalizePriority(task.priority);
+    if (task.dependencies.length === 0 && taskNormalizedPriority === 'P0' && task.status === 'open') {
       stats.orphan++;
       issues.push({
         taskId: task.id,
@@ -181,6 +205,17 @@ export function analyzeProject(cwd: string = process.cwd(), includeArchived: boo
         severity: 'low',
         message: 'P0紧急任务无依赖但未开始',
         suggestion: '考虑将此任务添加到执行计划中',
+      });
+    }
+
+    // 检测旧格式优先级 (urgent/high/medium/low)
+    if (['urgent', 'high', 'medium', 'low'].includes(task.priority)) {
+      issues.push({
+        taskId: task.id,
+        type: 'legacy_priority',
+        severity: 'low',
+        message: `任务使用旧格式优先级: ${task.priority}`,
+        suggestion: `将优先级更新为 ${normalizePriority(task.priority)}`,
       });
     }
 
@@ -303,8 +338,10 @@ export function showAnalysis(cwd: string = process.cwd()): void {
 
 /**
  * 自动修复问题
+ * @param cwd 工作目录
+ * @param nonInteractive 非交互模式：自动修复可修复的问题，跳过需要用户输入的问题
  */
-export async function fixIssues(cwd: string = process.cwd()): Promise<void> {
+export async function fixIssues(cwd: string = process.cwd(), nonInteractive: boolean = false): Promise<void> {
   const result = analyzeProject(cwd);
 
   if (result.issues.length === 0) {
@@ -315,10 +352,14 @@ export async function fixIssues(cwd: string = process.cwd()): Promise<void> {
   console.log('');
   console.log('━'.repeat(60));
   console.log('🔧 自动修复问题');
+  if (nonInteractive) {
+    console.log('   (非交互模式)');
+  }
   console.log('━'.repeat(60));
   console.log('');
 
   let fixedCount = 0;
+  let skippedCount = 0;
 
   for (const issue of result.issues) {
     const task = readTaskMeta(issue.taskId, cwd);
@@ -326,6 +367,11 @@ export async function fixIssues(cwd: string = process.cwd()): Promise<void> {
 
     switch (issue.type) {
       case 'stale': {
+        if (nonInteractive) {
+          console.log(`⏭️  跳过过期任务 ${issue.taskId} (非交互模式下需要手动处理)`);
+          skippedCount++;
+          break;
+        }
         console.log(`检查过期任务 ${issue.taskId}...`);
         const response = await prompts({
           type: 'select',
@@ -353,6 +399,11 @@ export async function fixIssues(cwd: string = process.cwd()): Promise<void> {
       }
 
       case 'no_description': {
+        if (nonInteractive) {
+          console.log(`⏭️  跳过无描述任务 ${issue.taskId} (非交互模式下需要手动处理)`);
+          skippedCount++;
+          break;
+        }
         console.log(`检查无描述任务 ${issue.taskId}...`);
         const response = await prompts({
           type: 'text',
@@ -371,6 +422,20 @@ export async function fixIssues(cwd: string = process.cwd()): Promise<void> {
 
       case 'cycle': {
         console.log(`⚠️  任务 ${issue.taskId} 存在循环依赖，需要手动处理`);
+        break;
+      }
+
+      case 'legacy_priority': {
+        console.log(`🔄 修复任务 ${issue.taskId} 的优先级格式...`);
+        const task = readTaskMeta(issue.taskId, cwd);
+        if (task) {
+          const oldPriority = task.priority;
+          const newPriority = normalizePriority(task.priority);
+          task.priority = newPriority;
+          writeTaskMeta(task, cwd);
+          console.log(`  ✅ 已将优先级从 ${oldPriority} 更新为 ${newPriority}`);
+          fixedCount++;
+        }
         break;
       }
 

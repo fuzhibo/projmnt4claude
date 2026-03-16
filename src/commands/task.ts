@@ -57,11 +57,51 @@ function generateCheckpointToken(): string {
 
 /**
  * 创建新任务
+ * 支持交互模式和非交互模式
  */
-export async function createTask(cwd: string = process.cwd()): Promise<void> {
+export async function createTask(
+  options: {
+    title?: string;
+    description?: string;
+    priority?: string;
+    type?: string;
+    nonInteractive?: boolean;
+  } = {},
+  cwd: string = process.cwd()
+): Promise<void> {
   if (!isInitialized(cwd)) {
     console.error('错误: 项目未初始化。请先运行 `projmnt4claude setup`');
     process.exit(1);
+  }
+
+  // 非交互模式：使用命令行参数
+  if (options.nonInteractive && options.title) {
+    const taskType = (options.type || 'feature') as TaskType;
+    const taskPriority = normalizePriorityToP(options.priority || 'P2');
+
+    // 生成任务ID (新格式)
+    const taskId = generateNewTaskId(cwd, taskType, taskPriority, options.title);
+
+    // 创建任务元数据
+    const task = createDefaultTaskMeta(taskId, options.title, taskType);
+    if (options.description) {
+      task.description = options.description;
+    }
+    task.priority = taskPriority;
+
+    // 写入任务
+    writeTaskMeta(task, cwd);
+
+    // 创建 checkpoint.md
+    const taskDir = path.join(getTasksDir(cwd), taskId);
+    const checkpointPath = path.join(taskDir, 'checkpoint.md');
+    fs.writeFileSync(checkpointPath, `# ${taskId} 检查点\n\n- [ ] 检查点1\n- [ ] 检查点2\n`, 'utf-8');
+
+    console.log(`\n✅ 任务创建成功!`);
+    console.log(`   ID: ${taskId}`);
+    console.log(`   标题: ${task.title}`);
+    console.log(`   优先级: ${formatPriority(task.priority)}`);
+    return;
   }
 
   // 交互式收集任务信息
@@ -82,10 +122,10 @@ export async function createTask(cwd: string = process.cwd()): Promise<void> {
       name: 'priority',
       message: '优先级',
       choices: [
-        { title: '低', value: 'low' },
-        { title: '中 (默认)', value: 'medium' },
-        { title: '高', value: 'high' },
-        { title: '紧急', value: 'urgent' },
+        { title: 'P3 低', value: 'P3' },
+        { title: 'P2 中 (默认)', value: 'P2' },
+        { title: 'P1 高', value: 'P1' },
+        { title: 'P0 紧急', value: 'P0' },
       ],
       initial: 1,
     },
@@ -97,7 +137,7 @@ export async function createTask(cwd: string = process.cwd()): Promise<void> {
   }
 
   // 生成任务ID (新格式)
-  const taskId = generateNewTaskId(cwd, response.priority, response.title, 'open', '');
+  const taskId = generateNewTaskId(cwd, 'feature', response.priority, response.title);
 
   // 创建任务元数据
   const task = createDefaultTaskMeta(taskId, response.title);
@@ -118,6 +158,18 @@ export async function createTask(cwd: string = process.cwd()): Promise<void> {
   console.log(`   ID: ${taskId}`);
   console.log(`   标题: ${task.title}`);
   console.log(`   优先级: ${formatPriority(task.priority)}`);
+}
+
+/**
+ * 将优先级规范化为 P0-P3 格式
+ */
+function normalizePriorityToP(priority: string): TaskPriority {
+  const map: Record<string, TaskPriority> = {
+    'urgent': 'P0', 'high': 'P1', 'medium': 'P2', 'low': 'P3',
+    'P0': 'P0', 'P1': 'P1', 'P2': 'P2', 'P3': 'P3',
+    'Q1': 'Q1', 'Q2': 'Q2', 'Q3': 'Q3', 'Q4': 'Q4',
+  };
+  return map[priority] || 'P2';
 }
 
 /**
@@ -540,30 +592,48 @@ function wouldCreateCycle(taskId: string, depId: string, cwd: string): boolean {
 
 /**
  * 格式化优先级
+ * 支持两种格式: P0/P1/P2/P3/Q1-Q4 和 low/medium/high/urgent
  */
-function formatPriority(priority: TaskPriority): string {
-  const map: Record<TaskPriority, string> = {
+function formatPriority(priority: TaskPriority | string): string {
+  const map: Record<string, string> = {
+    // P0-P3 格式
+    P0: '🔴 P0 紧急',
+    P1: '🟠 P1 高',
+    P2: '🟡 P2 中',
+    P3: '🟢 P3 低',
+    // Q1-Q4 象限格式
+    Q1: '📊 Q1',
+    Q2: '📊 Q2',
+    Q3: '📊 Q3',
+    Q4: '📊 Q4',
+    // low-urgent 格式（兼容旧数据）
     low: '🟢 低',
     medium: '🟡 中',
     high: '🟠 高',
     urgent: '🔴 紧急',
   };
-  return map[priority];
+  return map[priority] || `❓ ${priority}`;
 }
 
 /**
  * 格式化状态
+ * 支持所有状态格式
  */
-function formatStatus(status: TaskStatus): string {
-  const map: Record<TaskStatus, string> = {
+function formatStatus(status: TaskStatus | string): string {
+  const map: Record<string, string> = {
     open: '⬜ 待处理',
     in_progress: '🔵 进行中',
     resolved: '✅ 已解决',
     closed: '⚫ 已关闭',
     reopened: '🔄 已重开',
     abandoned: '❌ 已放弃',
+    // 兼容旧状态
+    pending: '⬜ 待处理',
+    completed: '✅ 已完成',
+    cancelled: '❌ 已取消',
+    reopen: '🔄 已重开',
   };
-  return map[status];
+  return map[status] || `❓ ${status}`;
 }
 
 /**

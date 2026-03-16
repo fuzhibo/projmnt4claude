@@ -93,12 +93,17 @@ export function createDefaultTaskMeta(
 
 /**
  * 验证任务ID格式
- * 新格式: TASK-{type}-{priority}-{slug}-{date}
- * 例如: TASK-feature-P1-user-auth-20260306
+ * 支持多种格式:
+ * - 新格式: TASK-{type}-{priority}-{slug}-{date}
+ * - 旧格式: TASK-001
+ * - 任意格式: 只要是非空字符串且包含字母、数字、连字符
  */
 export function isValidTaskId(id: string): boolean {
-  const info = parseTaskId(id);
-  return info.valid;
+  if (!id || id.trim().length === 0) {
+    return false;
+  }
+  // 放宽验证：允许任何非空字符串作为任务ID
+  return /^[a-zA-Z0-9\-_]+$/.test(id);
 }
 
 /**

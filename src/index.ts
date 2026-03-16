@@ -128,15 +128,23 @@ program
   .option('-p, --priority <priority>', '按优先级过滤 (仅 list)')
   .option('-r, --role <role>', '按推荐角色过滤 (仅 list)')
   .option('--dep-id <depId>', '依赖任务ID (仅 dependency)')
-  .option('--title <title>', '任务标题 (仅 update)')
-  .option('--description <description>', '任务描述 (仅 update)')
+  .option('--title <title>', '任务标题 (仅 create/update)')
+  .option('--description <description>', '任务描述 (仅 create/update)')
+  .option('--type <type>', '任务类型 (仅 create): bug/feature/research/docs/refactor/test')
+  .option('-y, --yes', '非交互模式 (仅 create)')
   .option('--token <token>', '检查点确认令牌 (仅 update)')
   .option('--topic <topic>', '讨论主题 (仅 discuss)')
   .action(async (action, id, options) => {
     requireInit();
     switch (action) {
       case 'create':
-        await createTask();
+        await createTask({
+          title: options.title,
+          description: options.description,
+          priority: options.priority,
+          type: options.type,
+          nonInteractive: options.yes,
+        });
         break;
       case 'list':
         listTasks({
@@ -359,10 +367,11 @@ program
   .command('analyze')
   .description('分析项目健康状态')
   .option('--fix', '自动修复检测到的问题')
+  .option('-y, --yes', '非交互模式：自动修复可修复的问题')
   .action(async (options) => {
     requireInit();
     if (options.fix) {
-      await fixIssues();
+      await fixIssues(process.cwd(), options.yes);
     } else {
       showAnalysis();
     }

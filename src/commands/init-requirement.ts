@@ -201,14 +201,14 @@ ${checkpoints.map((cp: string) => `- [ ] ${cp}`).join('\n')}
 function analyzeRequirement(description: string): RequirementAnalysis {
   const lowerDesc = description.toLowerCase();
 
-  // 检测优先级关键词
-  let priority: TaskPriority = 'medium';
+  // 检测优先级关键词 (使用 P0-P3 格式)
+  let priority: TaskPriority = 'P2'; // 默认中等优先级
   if (lowerDesc.includes('紧急') || lowerDesc.includes('urgent') || lowerDesc.includes('asap') || lowerDesc.includes('立即')) {
-    priority = 'urgent';
+    priority = 'P0';
   } else if (lowerDesc.includes('重要') || lowerDesc.includes('important') || lowerDesc.includes('优先') || lowerDesc.includes('high')) {
-    priority = 'high';
+    priority = 'P1';
   } else if (lowerDesc.includes('低优先级') || lowerDesc.includes('low priority') || lowerDesc.includes('可选') || lowerDesc.includes('optional')) {
-    priority = 'low';
+    priority = 'P3';
   }
 
   // 检测推荐角色
@@ -329,13 +329,25 @@ function analyzeRequirement(description: string): RequirementAnalysis {
 
 /**
  * 格式化优先级
+ * 支持两种格式: P0/P1/P2/P3/Q1-Q4 和 low/medium/high/urgent
  */
-function formatPriority(priority: TaskPriority): string {
-  const map: Record<TaskPriority, string> = {
+function formatPriority(priority: TaskPriority | string): string {
+  const map: Record<string, string> = {
+    // P0-P3 格式
+    P0: '🔴 P0 紧急',
+    P1: '🟠 P1 高',
+    P2: '🟡 P2 中',
+    P3: '🟢 P3 低',
+    // Q1-Q4 象限格式
+    Q1: '📊 Q1',
+    Q2: '📊 Q2',
+    Q3: '📊 Q3',
+    Q4: '📊 Q4',
+    // low-urgent 格式（兼容旧数据）
     low: '🟢 低',
     medium: '🟡 中',
     high: '🟠 高',
     urgent: '🔴 紧急',
   };
-  return map[priority];
+  return map[priority] || `❓ ${priority}`;
 }

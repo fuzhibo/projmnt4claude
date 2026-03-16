@@ -22,11 +22,33 @@ export function ensureDir(dir: string): void {
 
 /**
  * 检查项目是否已初始化
+ * 条件：config.json 存在，或者 tasks 目录存在且有有效任务
  */
 export function isInitialized(cwd: string = process.cwd()): boolean {
   const projectDir = getProjectDir(cwd);
   const configPath = path.join(projectDir, 'config.json');
-  return fs.existsSync(configPath);
+
+  // 条件1: config.json 存在
+  if (fs.existsSync(configPath)) {
+    return true;
+  }
+
+  // 条件2: tasks 目录存在且有有效任务文件
+  const tasksDir = path.join(projectDir, 'tasks');
+  if (fs.existsSync(tasksDir)) {
+    try {
+      const taskDirs = fs.readdirSync(tasksDir);
+      // 检查是否有任何包含 meta.json 的任务目录
+      return taskDirs.some(taskDir => {
+        const metaPath = path.join(tasksDir, taskDir, 'meta.json');
+        return fs.existsSync(metaPath);
+      });
+    } catch {
+      return false;
+    }
+  }
+
+  return false;
 }
 
 /**
