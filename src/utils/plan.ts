@@ -202,15 +202,37 @@ export function areDependenciesCompleted(taskId: string, cwd: string = process.c
 }
 
 /**
+ * 检查子任务的父任务是否已完成
+ */
+export function isParentTaskCompleted(taskId: string, cwd: string = process.cwd()): boolean {
+  const task = readTaskMeta(taskId, cwd);
+  if (!task || !task.parentId) {
+    return false;
+  }
+
+  const parentTask = readTaskMeta(task.parentId, cwd);
+  if (!parentTask) {
+    return false;
+  }
+
+  const normalizedStatus = normalizeStatus(parentTask.status);
+  return normalizedStatus === 'resolved' || normalizedStatus === 'closed';
+}
+
+/**
  * 获取可执行的任务（支持多种状态，按优先级排序）
  *
  * 状态优先级：
  * - reopened: 最高优先级（之前完成有问题，需要重新处理）
  * - in_progress: 进行中的任务应该继续
  * - open: 新任务
+ *
+ * 智能过滤：
+ * - 跳过父任务已完成的子任务
  */
 export function getExecutableTasks(cwd: string = process.cwd(), includeSubtasks: boolean = false): string[] {
   const tasks = getAllTasks(cwd);
+  const skippedDueToParent: string[] = [];
 
   // 过滤可执行任务
   const executableTasks = tasks.filter(task => {
@@ -218,6 +240,13 @@ export function getExecutableTasks(cwd: string = process.cwd(), includeSubtasks:
     if (!includeSubtasks && isSubtask(task.id)) {
       return false;
     }
+
+    // P0修复: 跳过父任务已完成的子任务
+    if (task.parentId && isParentTaskCompleted(task.id, cwd)) {
+      skippedDueToParent.push(task.id);
+      return false;
+    }
+
     // 检查状态是否可执行且依赖已完成
     return isExecutableStatus(task.status) && areDependenciesCompleted(task.id, cwd);
   });
@@ -228,6 +257,19 @@ export function getExecutableTasks(cwd: string = process.cwd(), includeSubtasks:
     const priorityB = getStatusPriority(b.status);
     return priorityA - priorityB;
   });
+
+  // 显示跳过原因（如果有）
+  if (skippedDueToParent.length > 0) {
+    console.log('');
+    console.log('⚠️  以下子任务的父任务已完成，跳过推荐:');
+    for (const taskId of skippedDueToParent) {
+      const task = tasks.find(t => t.id === taskId);
+      if (task) {
+        console.log(`   - ${taskId} (父任务 ${task.parentId} 已 resolved)`);
+      }
+    }
+    console.log('');
+  }
 
   return executableTasks.map(task => task.id);
 }

@@ -305,8 +305,9 @@ export function showTask(taskId: string, cwd: string = process.cwd()): void {
 
 /**
  * 更新任务
+ * 支持子任务状态同步
  */
-export function updateTask(
+export async function updateTask(
   taskId: string,
   options: {
     title?: string;
@@ -317,9 +318,11 @@ export function updateTask(
     branch?: string;
     needsDiscussion?: boolean;
     token?: string;
+    syncChildren?: boolean;
+    noSync?: boolean;
   },
   cwd: string = process.cwd()
-): void {
+): Promise<void> {
   if (!isInitialized(cwd)) {
     console.error('错误: 项目未初始化。请先运行 `projmnt4claude setup`');
     process.exit(1);
@@ -446,6 +449,57 @@ export function updateTask(
 
   writeTaskMeta(task, cwd);
   console.log(`✅ 任务 ${taskId} 已更新`);
+
+  // P1修复: 子任务状态同步
+  if ((options.status === 'resolved' || options.status === 'closed') && !options.noSync) {
+    const childTasks = task.subtaskIds || [];
+
+    if (childTasks.length > 0) {
+      console.log('');
+      console.log(`⚠️  检测到 ${childTasks.length} 个子任务:`);
+
+      // 显示子任务当前状态
+      for (const childId of childTasks) {
+        const childTask = readTaskMeta(childId, cwd);
+        if (childTask) {
+          console.log(`   - ${childId} (status: ${childTask.status})`);
+        }
+      }
+
+      // 如果明确指定了 syncChildren，或者用户交互确认
+      if (options.syncChildren) {
+        // 自动同步子任务状态
+        for (const childId of childTasks) {
+          const childTask = readTaskMeta(childId, cwd);
+          if (childTask && childTask.status !== 'resolved' && childTask.status !== 'closed') {
+            childTask.status = options.status as TaskStatus;
+
+            // 添加历史记录
+            if (!childTask.history) {
+              childTask.history = [];
+            }
+            childTask.history.push({
+              timestamp: new Date().toISOString(),
+              action: `状态同步自父任务 ${taskId}`,
+              field: 'status',
+              oldValue: childTask.status,
+              newValue: options.status,
+              reason: '父任务已完成，子任务功能已在父任务中实现',
+            });
+
+            writeTaskMeta(childTask, cwd);
+            console.log(`   ✅ ${childId} 已同步为 ${options.status}`);
+          }
+        }
+        console.log('');
+        console.log(`✅ 已同步 ${childTasks.length} 个子任务的状态`);
+      } else {
+        console.log('');
+        console.log('提示: 使用 --sync-children 参数可自动同步子任务状态');
+        console.log(`      projmnt4claude task update ${taskId} --status ${options.status} --sync-children`);
+      }
+    }
+  }
 }
 
 /**
@@ -1251,4 +1305,111 @@ export async function addSubtask(
   console.log(`   父任务 ID: ${parentId}`);
   console.log(`   标题: ${title}`);
   console.log(`   优先级: ${formatPriority(subtask.priority)}`);
+}
+
+/**
+ * 状态规范化映射
+ */
+function normalizeStatus(status: string): TaskStatus {
+  const statusMap: Record<string, TaskStatus> = {
+    'pending': 'open',
+    'reopen': 'reopened',
+    'completed': 'closed',
+    'cancelled': 'abandoned',
+    'blocked': 'open',
+    'open': 'open',
+    'in_progress': 'in_progress',
+    'resolved': 'resolved',
+    'closed': 'closed',
+    'reopened': 'reopened',
+    'abandoned': 'abandoned',
+  };
+  return statusMap[status] || 'open';
+}
+
+/**
+ * 同步父任务状态到子任务
+ * 用于将已完成父任务的状态同步到所有子任务
+ */
+export async function syncChildren(
+  parentTaskId: string,
+  options: { targetStatus?: string; children?: string[] } = {},
+  cwd: string = process.cwd()
+): Promise<void> {
+  if (!isInitialized(cwd)) {
+    console.error('❌ 错误: 项目尚未初始化');
+    process.exit(1);
+  }
+
+  // 读取父任务
+  const parentTask = readTaskMeta(parentTaskId, cwd);
+  if (!parentTask) {
+    console.error(`❌ 错误: 任务 ${parentTaskId} 不存在`);
+    process.exit(1);
+  }
+
+  // 获取子任务列表
+  const childrenToSync = options.children || parentTask.subtaskIds || [];
+
+  if (childrenToSync.length === 0) {
+    console.log(`\n⚠️  任务 ${parentTaskId} 没有子任务，无需同步`);
+    return;
+  }
+
+  // 确定目标状态
+  const targetStatus = options.targetStatus || parentTask.status;
+
+  console.log(`\n📋 同步子任务状态`);
+  console.log(`   父任务: ${parentTaskId} (${parentTask.status})`);
+  console.log(`   目标状态: ${targetStatus}`);
+  console.log(`   子任务数量: ${childrenToSync.length}`);
+  console.log('');
+
+  let syncedCount = 0;
+  let skippedCount = 0;
+
+  for (const childId of childrenToSync) {
+    const childTask = readTaskMeta(childId, cwd);
+    if (!childTask) {
+      console.log(`   ⚠️  ${childId}: 不存在，跳过`);
+      skippedCount++;
+      continue;
+    }
+
+    const normalizedChildStatus = normalizeStatus(childTask.status);
+    const normalizedTargetStatus = normalizeStatus(targetStatus);
+
+    // 如果子任务已经是目标状态，跳过
+    if (normalizedChildStatus === normalizedTargetStatus) {
+      console.log(`   ⏭️  ${childId}: 已经是 ${childTask.status}，跳过`);
+      skippedCount++;
+      continue;
+    }
+
+    // 如果子任务已关闭/已放弃，跳过（除非强制同步）
+    if (normalizedChildStatus === 'closed' || normalizedChildStatus === 'abandoned') {
+      console.log(`   ⏭️  ${childId}: 状态为 ${childTask.status}，跳过`);
+      skippedCount++;
+      continue;
+    }
+
+    // 更新子任务状态
+    const oldStatus = childTask.status;
+    childTask.status = targetStatus as TaskStatus;
+
+    // 添加历史记录
+    addHistoryEntry(
+      childTask,
+      'status_change',
+      `状态从 ${oldStatus} 同步为 ${targetStatus}`,
+      `父任务 ${parentTaskId} 状态同步`
+    );
+
+    writeTaskMeta(childTask, cwd);
+    console.log(`   ✅ ${childId}: ${oldStatus} → ${targetStatus}`);
+    syncedCount++;
+  }
+
+  console.log('');
+  console.log(`✅ 同步完成: ${syncedCount} 个子任务已更新, ${skippedCount} 个跳过`);
 }

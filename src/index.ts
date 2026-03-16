@@ -17,6 +17,7 @@ import {
   showStatusGuide,
   completeTask,
   showTaskHistory,
+  syncChildren,
 } from './commands/task';
 import {
   showPlan,
@@ -136,6 +137,8 @@ program
   .option('--type <type>', '任务类型 (仅 create): bug/feature/research/docs/refactor/test')
   .option('-y, --yes', '非交互模式 (仅 create/checkpoint)')
   .option('--token <token>', '检查点确认令牌 (仅 update)')
+  .option('--sync-children', '同步子任务状态 (仅 update resolved/closed)')
+  .option('--no-sync', '不同步子任务状态 (仅 update)')
   .option('--topic <topic>', '讨论主题 (仅 discuss)')
   .action(async (action, id, options) => {
     requireInit();
@@ -168,13 +171,15 @@ program
           console.error('错误: update 操作需要指定任务ID');
           process.exit(1);
         }
-        updateTask(id, {
+        await updateTask(id, {
           title: options.title,
           description: options.description,
           status: options.status,
           priority: options.priority,
           role: options.role,
           token: options.token,
+          syncChildren: options.syncChildren,
+          noSync: options.noSync,
         });
         break;
       case 'delete':
@@ -277,8 +282,18 @@ program
         await addSubtask(id, title);
         break;
       }
+      case 'sync-children': {
+        if (!id) {
+          console.error('错误: sync-children 操作需要指定父任务ID');
+          process.exit(1);
+        }
+        await syncChildren(id, {
+          targetStatus: options.status,
+        });
+        break;
+      }
       default:
-        console.error(`错误: 未知操作 '${action}'。支持的操作: create, list, show, update, delete, execute, checkpoint, dependency, discuss, add-subtask`);
+        console.error(`错误: 未知操作 '${action}'。支持的操作: create, list, show, update, delete, execute, checkpoint, dependency, discuss, add-subtask, sync-children`);
         process.exit(1);
     }
   });
