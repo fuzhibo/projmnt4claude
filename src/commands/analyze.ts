@@ -66,7 +66,7 @@ function normalizeStatus(status: string): TaskStatus {
  */
 export interface Issue {
   taskId: string;
-  type: 'stale' | 'orphan' | 'cycle' | 'blocked' | 'no_description' | 'legacy_priority';
+  type: 'stale' | 'orphan' | 'cycle' | 'blocked' | 'no_description' | 'legacy_priority' | 'legacy_status';
   severity: 'low' | 'medium' | 'high';
   message: string;
   suggestion: string;
@@ -241,6 +241,18 @@ export function analyzeProject(cwd: string = process.cwd(), includeArchived: boo
         severity: 'low',
         message: `任务使用旧格式优先级: ${task.priority}`,
         suggestion: `将优先级更新为 ${normalizePriority(task.priority)}`,
+      });
+    }
+
+    // 检测旧格式状态 (pending/completed/reopen/cancelled/blocked)
+    const legacyStatuses = ['pending', 'completed', 'reopen', 'cancelled', 'blocked'];
+    if (legacyStatuses.includes(task.status)) {
+      issues.push({
+        taskId: task.id,
+        type: 'legacy_status',
+        severity: 'low',
+        message: `任务使用旧格式状态: ${task.status}`,
+        suggestion: `将状态更新为 ${normalizeStatus(task.status)}`,
       });
     }
 
@@ -459,6 +471,20 @@ export async function fixIssues(cwd: string = process.cwd(), nonInteractive: boo
           task.priority = newPriority;
           writeTaskMeta(task, cwd);
           console.log(`  ✅ 已将优先级从 ${oldPriority} 更新为 ${newPriority}`);
+          fixedCount++;
+        }
+        break;
+      }
+
+      case 'legacy_status': {
+        console.log(`🔄 修复任务 ${issue.taskId} 的状态格式...`);
+        const task = readTaskMeta(issue.taskId, cwd);
+        if (task) {
+          const oldStatus = task.status;
+          const newStatus = normalizeStatus(task.status);
+          task.status = newStatus;
+          writeTaskMeta(task, cwd);
+          console.log(`  ✅ 已将状态从 ${oldStatus} 更新为 ${newStatus}`);
           fixedCount++;
         }
         break;
