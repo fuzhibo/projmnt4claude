@@ -2,6 +2,52 @@ import * as path from 'path';
 import * as fs from 'fs';
 import { getProjectDir, isInitialized } from './path';
 import { readTaskMeta, getAllTasks, isSubtask } from './task';
+import type { TaskStatus } from '../types/task';
+
+/**
+ * 状态映射：将旧格式/变体格式映射到标准格式
+ */
+function normalizeStatus(status: string): TaskStatus {
+  const statusMap: Record<string, TaskStatus> = {
+    'pending': 'open',
+    'reopen': 'reopened',
+    'completed': 'closed',
+    'cancelled': 'abandoned',
+    'blocked': 'open',
+    'open': 'open',
+    'in_progress': 'in_progress',
+    'resolved': 'resolved',
+    'closed': 'closed',
+    'reopened': 'reopened',
+    'abandoned': 'abandoned',
+  };
+  return statusMap[status] || 'open';
+}
+
+/**
+ * 可执行状态及其优先级（数字越小优先级越高）
+ */
+const EXECUTABLE_STATUS_PRIORITY: Record<string, number> = {
+  'reopened': 0,      // 最高优先级：重新打开的任务需要优先处理
+  'in_progress': 1,   // 进行中的任务应该继续
+  'open': 2,          // 新任务
+};
+
+/**
+ * 检查状态是否可执行
+ */
+function isExecutableStatus(status: string): boolean {
+  const normalized = normalizeStatus(status);
+  return normalized in EXECUTABLE_STATUS_PRIORITY;
+}
+
+/**
+ * 获取状态优先级
+ */
+function getStatusPriority(status: string): number {
+  const normalized = normalizeStatus(status);
+  return EXECUTABLE_STATUS_PRIORITY[normalized] ?? 999;
+}
 
 /**
  * 执行计划接口
@@ -142,7 +188,12 @@ export function areDependenciesCompleted(taskId: string, cwd: string = process.c
 
   for (const depId of task.dependencies) {
     const depTask = readTaskMeta(depId, cwd);
-    if (!depTask || (depTask.status !== 'resolved' && depTask.status !== 'closed')) {
+    if (!depTask) {
+      return false;
+    }
+    // 使用规范化状态检查依赖是否完成
+    const normalizedStatus = normalizeStatus(depTask.status);
+    if (normalizedStatus !== 'resolved' && normalizedStatus !== 'closed') {
       return false;
     }
   }
@@ -151,17 +202,32 @@ export function areDependenciesCompleted(taskId: string, cwd: string = process.c
 }
 
 /**
- * 获取可执行的任务（状态为 open 且依赖已完成）
+ * 获取可执行的任务（支持多种状态，按优先级排序）
+ *
+ * 状态优先级：
+ * - reopened: 最高优先级（之前完成有问题，需要重新处理）
+ * - in_progress: 进行中的任务应该继续
+ * - open: 新任务
  */
 export function getExecutableTasks(cwd: string = process.cwd(), includeSubtasks: boolean = false): string[] {
   const tasks = getAllTasks(cwd);
-  return tasks
-    .filter(task => {
-      // 过滤掉子任务（除非明确要求包含）
-      if (!includeSubtasks && isSubtask(task.id)) {
-        return false;
-      }
-      return task.status === 'open' && areDependenciesCompleted(task.id, cwd);
-    })
-    .map(task => task.id);
+
+  // 过滤可执行任务
+  const executableTasks = tasks.filter(task => {
+    // 过滤掉子任务（除非明确要求包含）
+    if (!includeSubtasks && isSubtask(task.id)) {
+      return false;
+    }
+    // 检查状态是否可执行且依赖已完成
+    return isExecutableStatus(task.status) && areDependenciesCompleted(task.id, cwd);
+  });
+
+  // 按状态优先级排序（reopened > in_progress > open）
+  executableTasks.sort((a, b) => {
+    const priorityA = getStatusPriority(a.status);
+    const priorityB = getStatusPriority(b.status);
+    return priorityA - priorityB;
+  });
+
+  return executableTasks.map(task => task.id);
 }
