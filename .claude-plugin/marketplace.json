@@ -2,7 +2,7 @@
   "$schema": "https://anthropic.com/claude-code/marketplace.schema.json",
   "name": "projmnt4claude",
   "description": "Claude Code 项目管理技能 - 提供任务管理、执行计划、子任务支持、项目分析、国际化支持等功能",
-  "version": "1.4.0",
+  "version": "1.4.1",
   "owner": {
     "name": "fuzhibo",
     "email": ""
@@ -11,7 +11,7 @@
     {
       "name": "projmnt4claude",
       "description": "Claude Code 项目管理技能 - 提供任务管理、执行计划、子任务支持、项目分析、国际化支持等功能",
-      "version": "1.4.0",
+      "version": "1.4.1",
       "author": {
         "name": "fuzhibo"
       },
