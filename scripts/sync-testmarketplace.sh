@@ -48,8 +48,11 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"
 
 echo "📌 版本管理..."
+# 注意: 版本递增已由 release:patch/minor/major 命令完成
+# 此脚本只负责同步，不再自动递增版本
 cd "$PROJECT_ROOT"
-bash scripts/version-bump.sh "$VERSION_TYPE"
+CURRENT_VERSION=$(grep -o '"version": *"[^"]*"' .claude-plugin/plugin.json | sed 's/"version": *"\([^"]*\)"/\1/')
+echo "   当前版本: $CURRENT_VERSION"
 
 echo "🔨 构建项目..."
 bun run build
