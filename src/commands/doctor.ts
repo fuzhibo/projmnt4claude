@@ -1,5 +1,6 @@
 import * as fs from 'fs';
 import * as path from 'path';
+import * as os from 'os';
 import {
   isInitialized,
   getProjectDir,
@@ -35,21 +36,24 @@ export async function runDoctor(fix: boolean = false, cwd: string = process.cwd(
   // 1. 检查项目初始化状态
   results.push(checkProjectInit(cwd));
 
+  // 2. 检查插件安装作用域（始终检查，不依赖项目初始化状态）
+  results.push(...checkPluginInstallationScope(cwd));
+
   // 只有项目已初始化才检查后续项
   if (isInitialized(cwd)) {
-    // 2. 检查插件缓存
+    // 3. 检查插件缓存
     results.push(checkPluginCache());
 
-    // 3. 检查项目技能文件
+    // 4. 检查项目技能文件
     results.push(...checkSkillFiles(cwd));
 
-    // 4. 检查任务命名格式
+    // 5. 检查任务命名格式
     results.push(...checkTaskNaming(cwd));
 
-    // 5. 检查目录结构完整性
+    // 6. 检查目录结构完整性
     results.push(...checkDirectoryStructure(cwd));
 
-    // 6. 检查 Hooks 配置
+    // 7. 检查 Hooks 配置
     results.push(...checkHooksConfiguration(cwd));
   }
 
@@ -343,6 +347,99 @@ function checkDirectoryStructure(cwd: string): CheckResult[] {
         fixable: true,
       });
     }
+  }
+
+  return results;
+}
+
+/**
+ * 检查插件安装作用域问题
+ * 检测 project-scope 安装可能导致的其他项目无法更新的问题
+ */
+function checkPluginInstallationScope(cwd: string): CheckResult[] {
+  const results: CheckResult[] = [];
+  const homeDir = os.homedir();
+  const installedPluginsPath = path.join(homeDir, '.claude', 'plugins', 'installed_plugins.json');
+
+  if (!fs.existsSync(installedPluginsPath)) {
+    return results;
+  }
+
+  try {
+    const pluginsConfig = JSON.parse(fs.readFileSync(installedPluginsPath, 'utf-8'));
+    const plugins = pluginsConfig.plugins || {};
+
+    // 查找所有 project-scope 安装的 projmnt4claude
+    const pluginKey = 'projmnt4claude@projmnt4claude';
+    const installations = plugins[pluginKey] || [];
+
+    const projectScopedInstalls = installations.filter(
+      (inst: { scope: string; projectPath?: string }) => inst.scope === 'project'
+    );
+
+    if (projectScopedInstalls.length === 0) {
+      // 没有发现 project-scope 安装，正常
+      return results;
+    }
+
+    // 检查当前项目是否是安装项目
+    const normalizedCwd = path.resolve(cwd);
+    const mismatchedInstalls = projectScopedInstalls.filter(
+      (inst: { scope: string; projectPath?: string }) => {
+        if (!inst.projectPath) return true;
+        return path.resolve(inst.projectPath) !== normalizedCwd;
+      }
+    );
+
+    if (mismatchedInstalls.length > 0) {
+      const mismatchedList = mismatchedInstalls.map(
+        (inst: { scope: string; projectPath?: string; version?: string }) =>
+          `  - 版本 ${inst.version || '未知'} 绑定到: ${inst.projectPath || '未知路径'}`
+      ).join('\n');
+
+      results.push({
+        name: '插件安装作用域',
+        status: 'warning',
+        message: '检测到 project-scope 安装可能导致跨项目更新问题',
+        details: [
+          'projmnt4claude 以 project-scope 安装在以下项目:',
+          mismatchedList,
+          '',
+          '⚠️  问题说明:',
+          '  Claude Code 的 project-scope 插件绑定到特定项目路径。',
+          '  从其他项目尝试更新时会报错: "Plugin is not installed at scope project"',
+          '',
+          '💡 建议解决方案:',
+          '  1. 卸载现有安装:',
+          '     claude plugins uninstall projmnt4claude@projmnt4claude',
+          '',
+          '  2. 以 user-scope 重新安装 (推荐):',
+          '     claude plugins install projmnt4claude@projmnt4claude --scope user',
+          '',
+          '  或者从原安装项目更新:',
+          `     cd ${mismatchedInstalls[0].projectPath || '<原项目路径>'}`,
+          '     claude plugins update projmnt4claude@projmnt4claude',
+        ],
+        fixable: false, // 需要用户手动操作
+      });
+    } else if (projectScopedInstalls.length > 0) {
+      // 当前项目匹配，但提醒 user-scope 更好
+      results.push({
+        name: '插件安装作用域',
+        status: 'warning',
+        message: '建议使用 user-scope 安装以便跨项目使用',
+        details: [
+          '当前项目已正确绑定 project-scope 安装',
+          '但建议使用 user-scope 以便在所有项目中使用:',
+          '',
+          '  claude plugins uninstall projmnt4claude@projmnt4claude',
+          '  claude plugins install projmnt4claude@projmnt4claude --scope user',
+        ],
+        fixable: false,
+      });
+    }
+  } catch {
+    // 忽略解析错误
   }
 
   return results;

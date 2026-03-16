@@ -44,6 +44,46 @@ bun run build
 /plugin install /path/to/projmnt4claude
 ```
 
+### ⚠️ Important: Scope Selection
+
+**We strongly recommend using `--scope user` for installation:**
+
+```bash
+# Recommended: Install with user scope (works across all projects)
+/plugin install projmnt4claude --scope user
+
+# NOT recommended: Project scope (causes update issues)
+/plugin install projmnt4claude --scope project
+```
+
+**Why user scope?**
+
+| Scope | Behavior | Recommendation |
+|-------|----------|----------------|
+| `user` | Works in ALL projects, update from anywhere | ✅ **Recommended** |
+| `project` | Bound to ONE project path, can't update from other projects | ❌ Not recommended |
+
+**Known Issue with project scope:**
+
+Claude Code's plugin system has a design limitation where `project` scope installations are bound to a specific project path. If you try to update the plugin from a different project, You'll get an error:
+
+```
+Failed to update: Plugin "projmnt4claude" is not installed at scope project (/different/project/path)
+```
+
+**If you encounter this issue:**
+
+1. Run `doctor` command to diagnose:
+   ```bash
+   node $PLUGIN_DIR/skills/projmnt4claude/dist/projmnt4claude.js doctor
+   ```
+
+2. Fix by reinstalling with user scope:
+   ```bash
+   /plugin uninstall projmnt4claude
+   /plugin install projmnt4claude --scope user
+   ```
+
 ## Quick Start
 
 ### 1. Initialize Project
