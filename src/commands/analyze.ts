@@ -40,6 +40,28 @@ function normalizePriority(priority: string): TaskPriority {
 }
 
 /**
+ * 状态映射：将旧格式/变体格式映射到标准格式
+ */
+function normalizeStatus(status: string): TaskStatus {
+  const statusMap: Record<string, TaskStatus> = {
+    // 旧格式映射
+    'pending': 'open',
+    'reopen': 'reopened',
+    'completed': 'closed',
+    'cancelled': 'abandoned',
+    'blocked': 'open',
+    // 标准格式直接返回
+    'open': 'open',
+    'in_progress': 'in_progress',
+    'resolved': 'resolved',
+    'closed': 'closed',
+    'reopened': 'reopened',
+    'abandoned': 'abandoned',
+  };
+  return statusMap[status] || 'open';
+}
+
+/**
  * 分析问题接口
  */
 export interface Issue {
@@ -144,8 +166,9 @@ export function analyzeProject(cwd: string = process.cwd(), includeArchived: boo
   }
 
   for (const task of tasks) {
-    // 统计状态
-    stats.byStatus[task.status]++;
+    // 统计状态 (使用规范化函数)
+    const normalizedStatus = normalizeStatus(task.status);
+    stats.byStatus[normalizedStatus]++;
 
     // 统计优先级 (使用规范化函数)
     const normalizedPriority = normalizePriority(task.priority);
@@ -154,7 +177,7 @@ export function analyzeProject(cwd: string = process.cwd(), includeArchived: boo
     // 检测过期任务 (stale)
     const updatedAt = new Date(task.updatedAt);
     if (now.getTime() - updatedAt.getTime() > staleThreshold &&
-        (task.status === 'open' || task.status === 'in_progress')) {
+        (normalizedStatus === 'open' || normalizedStatus === 'in_progress')) {
       stats.stale++;
       issues.push({
         taskId: task.id,
@@ -180,10 +203,12 @@ export function analyzeProject(cwd: string = process.cwd(), includeArchived: boo
     if (task.dependencies.length > 0) {
       const uncompletedDeps = task.dependencies.filter(depId => {
         const depTask = readTaskMeta(depId, cwd);
-        return !depTask || (depTask.status !== 'resolved' && depTask.status !== 'closed');
+        if (!depTask) return true;
+        const depStatus = normalizeStatus(depTask.status);
+        return depStatus !== 'resolved' && depStatus !== 'closed';
       });
 
-      if (uncompletedDeps.length > 0 && task.status !== 'resolved' && task.status !== 'closed') {
+      if (uncompletedDeps.length > 0 && normalizedStatus !== 'resolved' && normalizedStatus !== 'closed') {
         stats.blocked++;
         issues.push({
           taskId: task.id,
@@ -197,7 +222,7 @@ export function analyzeProject(cwd: string = process.cwd(), includeArchived: boo
 
     // 检测孤儿任务 (无依赖但优先级高且状态为 open)
     const taskNormalizedPriority = normalizePriority(task.priority);
-    if (task.dependencies.length === 0 && taskNormalizedPriority === 'P0' && task.status === 'open') {
+    if (task.dependencies.length === 0 && taskNormalizedPriority === 'P0' && normalizedStatus === 'open') {
       stats.orphan++;
       issues.push({
         taskId: task.id,
