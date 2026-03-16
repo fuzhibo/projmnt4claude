@@ -29,6 +29,9 @@ export interface TaskHistoryEntry {
   oldValue?: string;       // 旧值
   newValue?: string;       // 新值
   user?: string;           // 操作用户（可选）
+  reason?: string;         // 状态变更原因（如reopen原因）
+  relatedIssue?: string;   // 关联的 issue/PR
+  verificationDetails?: string; // 验证失败详细信息
 }
 
 /**

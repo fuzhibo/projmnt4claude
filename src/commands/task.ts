@@ -783,6 +783,118 @@ export async function completeTask(
 }
 
 /**
+ * 显示任务历史记录 (P2-006)
+ * 查看任务的完整变更历史
+ */
+export function showTaskHistory(taskId: string, cwd: string = process.cwd()): void {
+  if (!isInitialized(cwd)) {
+    console.error('错误: 项目未初始化。请先运行 `projmnt4claude setup`');
+    process.exit(1);
+  }
+
+  const task = readTaskMeta(taskId, cwd);
+  if (!task) {
+    console.error(`错误: 任务 '${taskId}' 不存在`);
+    process.exit(1);
+  }
+
+  console.log('');
+  console.log('━'.repeat(60));
+  console.log(`📜 任务历史: ${taskId}`);
+  console.log('━'.repeat(60));
+  console.log('');
+  console.log(`📌 标题: ${task.title}`);
+  console.log(`📊 当前状态: ${formatStatus(task.status)}`);
+  console.log('');
+
+  if (!task.history || task.history.length === 0) {
+    console.log('暂无历史记录');
+    console.log('');
+    return;
+  }
+
+  console.log('━'.repeat(60));
+  console.log('📝 变更历史:');
+  console.log('');
+
+  // 按时间倒序显示
+  const sortedHistory = [...task.history].reverse();
+
+  for (const entry of sortedHistory) {
+    const date = new Date(entry.timestamp);
+    const timeStr = date.toLocaleString('zh-CN', {
+      month: '2-digit',
+      day: '2-digit',
+      hour: '2-digit',
+      minute: '2-digit',
+    });
+
+    console.log(`[${timeStr}] ${entry.action}`);
+
+    if (entry.field && entry.oldValue !== undefined && entry.newValue !== undefined) {
+      console.log(`         字段: ${entry.field}`);
+      console.log(`         旧值: ${entry.oldValue}`);
+      console.log(`         新值: ${entry.newValue}`);
+    }
+
+    if (entry.reason) {
+      console.log(`         原因: ${entry.reason}`);
+    }
+
+    if (entry.relatedIssue) {
+      console.log(`         关联: ${entry.relatedIssue}`);
+    }
+
+    if (entry.verificationDetails) {
+      console.log(`         详情: ${entry.verificationDetails}`);
+    }
+
+    console.log('');
+  }
+
+  console.log('━'.repeat(60));
+  console.log(`📊 统计: 共 ${task.history.length} 条历史记录`);
+  console.log('');
+}
+
+/**
+ * 添加历史记录条目
+ */
+export function addHistoryEntry(
+  taskId: string,
+  entry: {
+    action: string;
+    field?: string;
+    oldValue?: string;
+    newValue?: string;
+    reason?: string;
+    relatedIssue?: string;
+    verificationDetails?: string;
+  },
+  cwd: string = process.cwd()
+): void {
+  const task = readTaskMeta(taskId, cwd);
+  if (!task) return;
+
+  if (!task.history) {
+    task.history = [];
+  }
+
+  task.history.push({
+    timestamp: new Date().toISOString(),
+    action: entry.action,
+    field: entry.field,
+    oldValue: entry.oldValue,
+    newValue: entry.newValue,
+    reason: entry.reason,
+    relatedIssue: entry.relatedIssue,
+    verificationDetails: entry.verificationDetails,
+  });
+
+  writeTaskMeta(task, cwd);
+}
+
+/**
  * 执行任务引导 (P-018, P-019, P-020)
  * 显示任务详情、检查点清单，引导用户完成任务
  */

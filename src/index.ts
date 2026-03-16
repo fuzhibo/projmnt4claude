@@ -16,6 +16,7 @@ import {
   addSubtask,
   showStatusGuide,
   completeTask,
+  showTaskHistory,
 } from './commands/task';
 import {
   showPlan,
@@ -192,6 +193,13 @@ program
         break;
       case 'status-guide':
         showStatusGuide();
+        break;
+      case 'history':
+        if (!id) {
+          console.error('错误: history 操作需要指定任务ID');
+          process.exit(1);
+        }
+        showTaskHistory(id);
         break;
       case 'complete':
         if (!id) {
