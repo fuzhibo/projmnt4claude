@@ -637,6 +637,152 @@ function formatStatus(status: TaskStatus | string): string {
 }
 
 /**
+ * 显示状态转换指导 (P2-004)
+ * 帮助用户理解任务状态流转
+ */
+export function showStatusGuide(): void {
+  console.log('');
+  console.log('━'.repeat(60));
+  console.log('📋 任务状态转换指南');
+  console.log('━'.repeat(60));
+  console.log('');
+
+  console.log('📊 状态说明:');
+  console.log('');
+  console.log('  ⬜ open        - 待处理，任务已创建等待开始');
+  console.log('  🔵 in_progress - 进行中，任务正在执行');
+  console.log('  ✅ resolved    - 已解决，任务完成并通过验证');
+  console.log('  ⚫ closed      - 已关闭，任务最终确认完成');
+  console.log('  🔄 reopened    - 已重开，之前完成的任务发现问题需要重新处理');
+  console.log('  ❌ abandoned   - 已放弃，任务不再需要');
+  console.log('');
+
+  console.log('━'.repeat(60));
+  console.log('🔄 状态转换矩阵:');
+  console.log('');
+
+  console.log('  open → in_progress');
+  console.log('       └─ 命令: task update <id> --status in_progress');
+  console.log('       └─ 说明: 开始执行任务');
+  console.log('');
+
+  console.log('  in_progress → resolved');
+  console.log('       └─ 命令: task checkpoint <id> -y  或');
+  console.log('              task update <id> --status resolved --token <token>');
+  console.log('       └─ 说明: 完成所有检查点并验证');
+  console.log('');
+
+  console.log('  resolved → closed');
+  console.log('       └─ 命令: task update <id> --status closed');
+  console.log('       └─ 说明: 最终确认任务完成');
+  console.log('');
+
+  console.log('  resolved/closed → reopened');
+  console.log('       └─ 命令: task update <id> --status reopened');
+  console.log('       └─ 说明: 发现问题需要重新处理');
+  console.log('');
+
+  console.log('  任意状态 → abandoned');
+  console.log('       └─ 命令: task delete <id>');
+  console.log('       └─ 说明: 任务不再需要');
+  console.log('');
+
+  console.log('━'.repeat(60));
+  console.log('💡 快捷命令:');
+  console.log('');
+  console.log('  task execute <id>     - 开始执行任务（自动设为 in_progress）');
+  console.log('  task checkpoint <id>  - 验证检查点并获取完成令牌');
+  console.log('  task complete <id>    - 一键完成任务（P2-005 新增）');
+  console.log('');
+
+  console.log('━'.repeat(60));
+}
+
+/**
+ * 一键完成任务 (P2-005)
+ * 自动执行：验证检查点 → 更新状态为 resolved
+ */
+export async function completeTask(
+  taskId: string,
+  options: { yes?: boolean } = {},
+  cwd: string = process.cwd()
+): Promise<void> {
+  if (!isInitialized(cwd)) {
+    console.error('错误: 项目未初始化。请先运行 `projmnt4claude setup`');
+    process.exit(1);
+  }
+
+  const task = readTaskMeta(taskId, cwd);
+  if (!task) {
+    console.error(`错误: 任务 '${taskId}' 不存在`);
+    process.exit(1);
+  }
+
+  console.log('');
+  console.log('━'.repeat(60));
+  console.log(`🚀 一键完成任务: ${taskId}`);
+  console.log('━'.repeat(60));
+  console.log('');
+
+  // 检查检查点
+  const taskDir = path.join(getTasksDir(cwd), taskId);
+  const checkpointPath = path.join(taskDir, 'checkpoint.md');
+
+  if (fs.existsSync(checkpointPath)) {
+    const content = fs.readFileSync(checkpointPath, 'utf-8');
+    const lines = content.split('\n').filter(line => line.trim().startsWith('- ['));
+
+    if (lines.length > 0) {
+      const unchecked = lines.filter(line => !line.includes('[x]') && !line.includes('[X]'));
+
+      if (unchecked.length > 0) {
+        console.log('⚠️  发现未完成的检查点:');
+        unchecked.forEach((line, idx) => {
+          const text = line.replace(/- \[[xX ]\] /, '').trim();
+          console.log(`   ${idx + 1}. ${text}`);
+        });
+        console.log('');
+
+        if (!options.yes) {
+          const response = await prompts({
+            type: 'confirm',
+            name: 'proceed',
+            message: '是否标记所有检查点为已完成并继续?',
+            initial: false,
+          });
+
+          if (!response.proceed) {
+            console.log('已取消。请先完成检查点后再试。');
+            return;
+          }
+        }
+
+        // 自动标记所有检查点为已完成
+        let newContent = content;
+        for (const line of unchecked) {
+          newContent = newContent.replace(line, line.replace('[ ]', '[x]'));
+        }
+        fs.writeFileSync(checkpointPath, newContent, 'utf-8');
+        console.log('✅ 已自动标记所有检查点为已完成');
+      }
+    }
+  }
+
+  // 更新任务状态
+  task.status = 'resolved' as TaskStatus;
+  writeTaskMeta(task, cwd);
+
+  console.log('');
+  console.log('━'.repeat(60));
+  console.log(`🎉 任务 ${taskId} 已完成！`);
+  console.log('');
+  console.log(`   标题: ${task.title}`);
+  console.log(`   状态: ✅ 已解决`);
+  console.log('');
+  console.log('━'.repeat(60));
+}
+
+/**
  * 执行任务引导 (P-018, P-019, P-020)
  * 显示任务详情、检查点清单，引导用户完成任务
  */

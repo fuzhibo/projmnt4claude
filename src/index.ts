@@ -14,6 +14,8 @@ import {
   completeCheckpoint,
   verifyCheckpoint,
   addSubtask,
+  showStatusGuide,
+  completeTask,
 } from './commands/task';
 import {
   showPlan,
@@ -122,7 +124,7 @@ program
 // task 命令组
 program
   .command('task <action> [id]')
-  .description('管理任务 (create/list/show/update/delete/execute/checkpoint/dependency/add-subtask)')
+  .description('管理任务 (create/list/show/update/delete/execute/checkpoint/dependency/add-subtask/status-guide/complete)')
   .allowExcessArguments(true)
   .option('-s, --status <status>', '按状态过滤 (仅 list)')
   .option('-p, --priority <priority>', '按优先级过滤 (仅 list)')
@@ -187,6 +189,16 @@ program
           process.exit(1);
         }
         await executeTask(id);
+        break;
+      case 'status-guide':
+        showStatusGuide();
+        break;
+      case 'complete':
+        if (!id) {
+          console.error('错误: complete 操作需要指定任务ID');
+          process.exit(1);
+        }
+        await completeTask(id, { yes: options.yes });
         break;
       case 'checkpoint':
         if (!id) {
