@@ -11,6 +11,7 @@ set -e
 PLUGIN_JSON=".claude-plugin/plugin.json"
 PACKAGE_JSON="package.json"
 MARKETPLACE_JSON=".claude-plugin/marketplace.json"
+ROOT_MARKETPLACE_JSON="marketplace.json"  # 根目录 marketplace.json (Claude Code 读取此文件)
 
 # 读取当前版本
 get_current_version() {
@@ -34,16 +35,21 @@ update_version() {
     sed -i '' "s/\"version\": *\"[^\"]*\"/\"version\": \"$new_version\"/" "$PLUGIN_JSON"
     sed -i '' "s/\"version\": *\"[^\"]*\"/\"version\": \"$new_version\"/" "$PACKAGE_JSON"
     sed -i '' "s/\"version\": *\"[^\"]*\"/\"version\": \"$new_version\"/g" "$MARKETPLACE_JSON"
+    # 更新根目录 marketplace.json (Claude Code marketplace 系统读取此文件)
+    sed -i '' "s/\"version\": *\"[^\"]*\"/\"version\": \"$new_version\"/g" "$ROOT_MARKETPLACE_JSON"
   else
     sed -i "s/\"version\": *\"[^\"]*\"/\"version\": \"$new_version\"/" "$PLUGIN_JSON"
     sed -i "s/\"version\": *\"[^\"]*\"/\"version\": \"$new_version\"/" "$PACKAGE_JSON"
     sed -i "s/\"version\": *\"[^\"]*\"/\"version\": \"$new_version\"/g" "$MARKETPLACE_JSON"
+    # 更新根目录 marketplace.json (Claude Code marketplace 系统读取此文件)
+    sed -i "s/\"version\": *\"[^\"]*\"/\"version\": \"$new_version\"/g" "$ROOT_MARKETPLACE_JSON"
   fi
 
   echo "📦 版本号已更新: $CURRENT_VERSION -> $new_version"
   echo "   - $PLUGIN_JSON"
   echo "   - $PACKAGE_JSON"
   echo "   - $MARKETPLACE_JSON"
+  echo "   - $ROOT_MARKETPLACE_JSON (Claude Code 读取此文件)"
 }
 
 # 递增版本号
