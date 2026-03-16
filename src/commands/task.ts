@@ -764,8 +764,13 @@ export async function executeTask(taskId: string, cwd: string = process.cwd()): 
 /**
  * 完成检查点确认 (P-020)
  * 交互式确认检查点，并提示更新状态
+ * 支持非交互模式 (--yes)
  */
-export async function completeCheckpoint(taskId: string, cwd: string = process.cwd()): Promise<void> {
+export async function completeCheckpoint(
+  taskId: string,
+  options: { yes?: boolean } = {},
+  cwd: string = process.cwd()
+): Promise<void> {
   if (!isInitialized(cwd)) {
     console.error('错误: 项目未初始化。请先运行 `projmnt4claude setup`');
     process.exit(1);
@@ -806,20 +811,27 @@ export async function completeCheckpoint(taskId: string, cwd: string = process.c
     const checkText = line.replace(/- \[[xX ]\] /, '').trim();
 
     if (!isChecked) {
-      const response = await prompts({
-        type: 'confirm',
-        name: 'passed',
-        message: `检查点: ${checkText}`,
-        initial: false,
-      });
-
-      if (response.passed) {
+      // 非交互模式：假设所有未完成的检查点都已通过
+      if (options.yes) {
         updatedLines.push(line.replace('[ ]', '[x]'));
-        console.log(`   ✅ 已通过`);
+        console.log(`   ✅ ${checkText} (自动确认)`);
       } else {
-        updatedLines.push(line);
-        allPassed = false;
-        console.log(`   ❌ 未通过`);
+        // 交互模式：询问用户
+        const response = await prompts({
+          type: 'confirm',
+          name: 'passed',
+          message: `检查点: ${checkText}`,
+          initial: false,
+        });
+
+        if (response.passed) {
+          updatedLines.push(line.replace('[ ]', '[x]'));
+          console.log(`   ✅ 已通过`);
+        } else {
+          updatedLines.push(line);
+          allPassed = false;
+          console.log(`   ❌ 未通过`);
+        }
       }
     } else {
       updatedLines.push(line);
@@ -842,46 +854,29 @@ export async function completeCheckpoint(taskId: string, cwd: string = process.c
     console.log('建议运行以下命令完成任务:');
     console.log(`   projmnt4claude task update ${taskId} --status resolved`);
 
-    const response = await prompts({
-      type: 'confirm',
-      name: 'complete',
-      message: '是否立即将任务标记为已解决?',
-      initial: true,
-    });
-
-    if (response.complete) {
+    // 非交互模式：自动标记为已解决
+    if (options.yes) {
       task.status = 'resolved' as TaskStatus;
       writeTaskMeta(task, cwd);
-      console.log(`✅ 任务 ${taskId} 已标记为已解决`);
+      console.log(`✅ 任务 ${taskId} 已自动标记为已解决`);
+    } else {
+      // 交互模式：询问用户
+      const response = await prompts({
+        type: 'confirm',
+        name: 'complete',
+        message: '是否立即将任务标记为已解决?',
+        initial: true,
+      });
+
+      if (response.complete) {
+        task.status = 'resolved' as TaskStatus;
+        writeTaskMeta(task, cwd);
+        console.log(`✅ 任务 ${taskId} 已标记为已解决`);
+      }
     }
   } else {
     console.log('⚠️  部分检查点未通过，请继续工作');
   }
-}
-
-/**
- * 生成检查点确认令牌
- */
-function generateCheckpointToken(): string {
-  return `CP-${Date.now()}-${Math.random().toString(36).substring(2, 10)}`;
-}
-
-/**
- * 解析检查点文件，返回检查项列表
- */
-function parseCheckpoints(checkpointPath: string): Array<{ text: string; checked: boolean }> {
-  if (!fs.existsSync(checkpointPath)) {
-    return [];
-  }
-
-  const content = fs.readFileSync(checkpointPath, 'utf-8');
-  const lines = content.split('\n').filter(line => line.trim().startsWith('- ['));
-
-  return lines.map(line => {
-    const isChecked = line.includes('[x]') || line.includes('[X]');
-    const text = line.replace(/- \[[xX ]\] /, '').trim();
-    return { text, checked: isChecked };
-  });
 }
 
 /**

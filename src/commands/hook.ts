@@ -89,8 +89,15 @@ export function createDefaultHookConfig(): HookConfig {
 
 /**
  * 启用钩子系统
+ * 支持交互模式和非交互模式
  */
-export async function enableHook(cwd: string = process.cwd()): Promise<void> {
+export async function enableHook(
+  options: {
+    nonInteractive?: boolean;
+    hooks?: string;
+  } = {},
+  cwd: string = process.cwd()
+): Promise<void> {
   if (!isInitialized(cwd)) {
     console.error('错误: 项目未初始化。请先运行 `projmnt4claude setup`');
     process.exit(1);
@@ -99,32 +106,60 @@ export async function enableHook(cwd: string = process.cwd()): Promise<void> {
   let config = readHookConfig(cwd);
 
   if (!config) {
-    // 交互式配置钩子
-    const response = await prompts([
-      {
-        type: 'multiselect',
-        name: 'hooks',
-        message: '选择要启用的钩子',
-        choices: [
-          { title: 'pre-commit (提交前检查)', value: 'preCommit', selected: true },
-          { title: 'post-commit (提交后处理)', value: 'postCommit', selected: false },
-          { title: 'pre-push (推送前检查)', value: 'prePush', selected: true },
-          { title: 'post-merge (合并后处理)', value: 'postMerge', selected: false },
-        ],
-      },
-    ]);
+    // 非交互模式：使用默认或指定的钩子配置
+    if (options.nonInteractive) {
+      let hooksConfig = {
+        preCommit: true,
+        postCommit: false,
+        prePush: true,
+        postMerge: false,
+      };
 
-    config = {
-      enabled: true,
-      hooks: {
-        preCommit: response.hooks?.includes('preCommit') ?? true,
-        postCommit: response.hooks?.includes('postCommit') ?? false,
-        prePush: response.hooks?.includes('prePush') ?? true,
-        postMerge: response.hooks?.includes('postMerge') ?? false,
-      },
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString(),
-    };
+      // 如果指定了 --hooks 参数，解析它
+      if (options.hooks) {
+        const hookList = options.hooks.split(',').map(h => h.trim().toLowerCase());
+        hooksConfig = {
+          preCommit: hookList.includes('pre-commit') || hookList.includes('precommit'),
+          postCommit: hookList.includes('post-commit') || hookList.includes('postcommit'),
+          prePush: hookList.includes('pre-push') || hookList.includes('prepush'),
+          postMerge: hookList.includes('post-merge') || hookList.includes('postmerge'),
+        };
+      }
+
+      config = {
+        enabled: true,
+        hooks: hooksConfig,
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      };
+    } else {
+      // 交互式配置钩子
+      const response = await prompts([
+        {
+          type: 'multiselect',
+          name: 'hooks',
+          message: '选择要启用的钩子',
+          choices: [
+            { title: 'pre-commit (提交前检查)', value: 'preCommit', selected: true },
+            { title: 'post-commit (提交后处理)', value: 'postCommit', selected: false },
+            { title: 'pre-push (推送前检查)', value: 'prePush', selected: true },
+            { title: 'post-merge (合并后处理)', value: 'postMerge', selected: false },
+          ],
+        },
+      ]);
+
+      config = {
+        enabled: true,
+        hooks: {
+          preCommit: response.hooks?.includes('preCommit') ?? true,
+          postCommit: response.hooks?.includes('postCommit') ?? false,
+          prePush: response.hooks?.includes('prePush') ?? true,
+          postMerge: response.hooks?.includes('postMerge') ?? false,
+        },
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      };
+    }
   } else {
     config.enabled = true;
   }

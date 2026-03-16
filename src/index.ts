@@ -131,7 +131,7 @@ program
   .option('--title <title>', '任务标题 (仅 create/update)')
   .option('--description <description>', '任务描述 (仅 create/update)')
   .option('--type <type>', '任务类型 (仅 create): bug/feature/research/docs/refactor/test')
-  .option('-y, --yes', '非交互模式 (仅 create)')
+  .option('-y, --yes', '非交互模式 (仅 create/checkpoint)')
   .option('--token <token>', '检查点确认令牌 (仅 update)')
   .option('--topic <topic>', '讨论主题 (仅 discuss)')
   .action(async (action, id, options) => {
@@ -197,7 +197,7 @@ program
         if (process.argv[4] === 'verify' || process.argv[5] === 'verify') {
           await verifyCheckpoint(id);
         } else {
-          await completeCheckpoint(id);
+          await completeCheckpoint(id, { yes: options.yes });
         }
         break;
       case 'discuss':
@@ -381,11 +381,16 @@ program
 program
   .command('hook <action>')
   .description('管理钩子会话 (enable/disable/status)')
-  .action(async (action) => {
+  .option('-y, --yes', '非交互模式，使用默认钩子配置 (仅 enable)')
+  .option('--hooks <hooks>', '指定要启用的钩子，逗号分隔 (仅 enable，如: pre-commit,pre-push)')
+  .action(async (action, options) => {
     requireInit();
     switch (action) {
       case 'enable':
-        await enableHook();
+        await enableHook({
+          nonInteractive: options.yes,
+          hooks: options.hooks,
+        });
         break;
       case 'disable':
         await disableHook();
