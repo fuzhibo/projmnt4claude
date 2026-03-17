@@ -140,6 +140,13 @@ program
   .option('--sync-children', '同步子任务状态 (仅 update resolved/closed)')
   .option('--no-sync', '不同步子任务状态 (仅 update)')
   .option('--topic <topic>', '讨论主题 (仅 discuss)')
+  // 新增选项 (bug_report_4.md)
+  .option('-v, --verbose', '显示完整信息 (仅 show)')
+  .option('--history', '仅显示变更历史 (仅 show)')
+  .option('--json', 'JSON 格式输出 (仅 show/list/status)')
+  .option('--compact', '精简输出 (仅 show)')
+  .option('--fields <fields>', '自定义输出字段 (仅 list)')
+  .option('--missing-verification', '筛选缺少验证的任务 (仅 list)')
   .action(async (action, id, options) => {
     requireInit();
     switch (action) {
@@ -157,6 +164,9 @@ program
           status: options.status,
           priority: options.priority,
           role: options.role,
+          fields: options.fields,
+          format: options.json ? 'json' : undefined,
+          missingVerification: options.missingVerification,
         });
         break;
       case 'show':
@@ -164,7 +174,12 @@ program
           console.error('错误: show 操作需要指定任务ID');
           process.exit(1);
         }
-        showTask(id);
+        showTask(id, {
+          verbose: options.verbose,
+          history: options.history,
+          json: options.json,
+          compact: options.compact,
+        });
         break;
       case 'update':
         if (!id) {
@@ -302,9 +317,10 @@ program
 program
   .command('plan <action> [id]')
   .description('管理执行计划 (show/add/remove/clear/recommend)')
-  .option('-j, --json', '以 JSON 格式输出 (仅 show)')
+  .option('-j, --json', '以 JSON 格式输出 (仅 show/recommend)')
   .option('-f, --force', '强制执行，跳过确认 (仅 clear)')
   .option('-a, --after <taskId>', '在指定任务之后添加 (仅 add)')
+  .option('-y, --yes', '非交互模式，自动应用推荐 (仅 recommend)')
   .action(async (action, id, options) => {
     requireInit();
     switch (action) {
@@ -329,7 +345,10 @@ program
         await clearPlanCmd(options.force);
         break;
       case 'recommend':
-        await recommendPlan();
+        await recommendPlan({
+          nonInteractive: options.yes,
+          json: options.json,
+        });
         break;
       default:
         console.error(`错误: 未知操作 '${action}'。支持的操作: show, add, remove, clear, recommend`);
@@ -392,9 +411,17 @@ program
   .description('显示项目状态摘要')
   .option('--archived', '显示归档任务统计')
   .option('-a, --all', '显示所有任务（包括归档）')
+  .option('-q, --quiet', '精简输出：仅显示关键指标')
+  .option('--json', 'JSON 格式输出')
+  .option('--compact', '使用简洁分隔符')
   .action((options) => {
     requireInit();
-    showStatus(options.archived || options.all);
+    showStatus({
+      includeArchived: options.archived || options.all,
+      quiet: options.quiet,
+      json: options.json,
+      compact: options.compact,
+    });
   });
 
 // analyze 命令
@@ -403,12 +430,13 @@ program
   .description('分析项目健康状态')
   .option('--fix', '自动修复检测到的问题')
   .option('-y, --yes', '非交互模式：自动修复可修复的问题')
+  .option('--compact', '使用简洁分隔符')
   .action(async (options) => {
     requireInit();
     if (options.fix) {
       await fixIssues(process.cwd(), options.yes);
     } else {
-      showAnalysis();
+      showAnalysis({ compact: options.compact });
     }
   });
 

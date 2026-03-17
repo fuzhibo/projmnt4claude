@@ -174,8 +174,20 @@ function normalizePriorityToP(priority: string): TaskPriority {
 
 /**
  * 列出所有任务
+ * 支持多种输出格式和过滤选项
  */
-export function listTasks(options: { status?: string; priority?: string; role?: string; needsDiscussion?: boolean } = {}, cwd: string = process.cwd()): void {
+export function listTasks(
+  options: {
+    status?: string;
+    priority?: string;
+    role?: string;
+    needsDiscussion?: boolean;
+    fields?: string;
+    format?: 'json';
+    missingVerification?: boolean;
+  } = {},
+  cwd: string = process.cwd()
+): void {
   if (!isInitialized(cwd)) {
     console.error('错误: 项目未初始化。请先运行 `projmnt4claude setup`');
     process.exit(1);
@@ -196,9 +208,49 @@ export function listTasks(options: { status?: string; priority?: string; role?: 
   if (options.needsDiscussion) {
     tasks = tasks.filter(t => t.needsDiscussion === true);
   }
+  // 新增：筛选缺少验证的任务
+  if (options.missingVerification) {
+    tasks = tasks.filter(t =>
+      (t.status === 'resolved' || t.status === 'closed') && !t.checkpointConfirmationToken
+    );
+  }
 
   if (tasks.length === 0) {
-    console.log('暂无任务');
+    if (options.format === 'json') {
+      console.log('[]');
+    } else {
+      console.log('暂无任务');
+    }
+    return;
+  }
+
+  // JSON 格式输出
+  if (options.format === 'json') {
+    const output = tasks.map(t => {
+      if (options.fields) {
+        const fields = options.fields.split(',').map(f => f.trim());
+        const picked: Record<string, unknown> = {};
+        for (const f of fields) {
+          if (f in t) {
+            picked[f] = t[f as keyof TaskMeta];
+          }
+        }
+        return picked;
+      }
+      return {
+        id: t.id,
+        title: t.title,
+        status: t.status,
+        priority: t.priority,
+        type: t.type,
+        description: t.description,
+        dependencies: t.dependencies,
+        recommendedRole: t.recommendedRole,
+        createdAt: t.createdAt,
+        updatedAt: t.updatedAt,
+      };
+    });
+    console.log(JSON.stringify(output, null, 2));
     return;
   }
 
@@ -248,8 +300,18 @@ export function listTasks(options: { status?: string; priority?: string; role?: 
 
 /**
  * 显示任务详情
+ * 支持多种输出格式：verbose, history, json, compact
  */
-export function showTask(taskId: string, cwd: string = process.cwd()): void {
+export function showTask(
+  taskId: string,
+  options: {
+    verbose?: boolean;
+    history?: boolean;
+    json?: boolean;
+    compact?: boolean;
+  } = {},
+  cwd: string = process.cwd()
+): void {
   if (!isInitialized(cwd)) {
     console.error('错误: 项目未初始化。请先运行 `projmnt4claude setup`');
     process.exit(1);
@@ -266,27 +328,88 @@ export function showTask(taskId: string, cwd: string = process.cwd()): void {
     process.exit(1);
   }
 
+  const separator = options.compact ? '' : '━'.repeat(60);
+
+  // JSON 格式输出
+  if (options.json) {
+    console.log(JSON.stringify(task, null, 2));
+    return;
+  }
+
+  // 仅显示历史
+  if (options.history) {
+    showTaskHistory(taskId, cwd, options.compact);
+    return;
+  }
+
+  // 精简输出
+  if (options.compact) {
+    console.log(`${task.id}: ${task.title}`);
+    console.log(`  状态: ${task.status} | 优先级: ${task.priority}`);
+    if (task.description) {
+      console.log(`  描述: ${task.description.substring(0, 100)}${task.description.length > 100 ? '...' : ''}`);
+    }
+    if (task.dependencies.length > 0) {
+      console.log(`  依赖: ${task.dependencies.join(', ')}`);
+    }
+    return;
+  }
+
+  // 详细输出 (verbose) 或标准输出
   console.log('');
+  console.log(separator);
   console.log(`任务: ${task.id}`);
-  console.log('='.repeat(50));
+  console.log(separator);
   console.log(`标题: ${task.title}`);
   console.log(`状态: ${formatStatus(task.status)}`);
   console.log(`优先级: ${formatPriority(task.priority)}`);
+  console.log(`类型: ${task.type || '未指定'}`);
 
   if (task.description) {
     console.log(`描述: ${task.description}`);
   }
 
-  if (task.recommendedRole) {
-    console.log(`推荐角色: ${task.recommendedRole}`);
-  }
+  // verbose 模式显示更多字段
+  if (options.verbose) {
+    if (task.recommendedRole) {
+      console.log(`推荐角色: ${task.recommendedRole}`);
+    }
 
-  if (task.branch) {
-    console.log(`关联分支: ${task.branch}`);
-  }
+    if (task.branch) {
+      console.log(`关联分支: ${task.branch}`);
+    }
 
-  if (task.dependencies.length > 0) {
-    console.log(`依赖: ${task.dependencies.join(', ')}`);
+    if (task.dependencies.length > 0) {
+      console.log(`依赖: ${task.dependencies.join(', ')}`);
+    } else {
+      console.log(`依赖: 无`);
+    }
+
+    if (task.subtaskIds && task.subtaskIds.length > 0) {
+      console.log(`子任务: ${task.subtaskIds.join(', ')}`);
+    }
+
+    if (task.parentId) {
+      console.log(`父任务: ${task.parentId}`);
+    }
+
+    // 显示验证信息
+    if (task.checkpointConfirmationToken) {
+      console.log(`验证令牌: ${task.checkpointConfirmationToken}`);
+    }
+  } else {
+    // 标准模式只显示关键字段
+    if (task.recommendedRole) {
+      console.log(`推荐角色: ${task.recommendedRole}`);
+    }
+
+    if (task.branch) {
+      console.log(`关联分支: ${task.branch}`);
+    }
+
+    if (task.dependencies.length > 0) {
+      console.log(`依赖: ${task.dependencies.join(', ')}`);
+    }
   }
 
   console.log(`创建时间: ${task.createdAt}`);
@@ -300,6 +423,28 @@ export function showTask(taskId: string, cwd: string = process.cwd()): void {
     console.log('检查点:');
     const content = fs.readFileSync(checkpointPath, 'utf-8');
     console.log(content);
+  }
+
+  // verbose 模式显示历史
+  if (options.verbose && task.history && task.history.length > 0) {
+    console.log('');
+    console.log('━'.repeat(60));
+    console.log('📜 变更历史:');
+    console.log('━'.repeat(60));
+    const sortedHistory = [...task.history].reverse();
+    for (const entry of sortedHistory) {
+      const date = new Date(entry.timestamp);
+      const timeStr = date.toLocaleString('zh-CN', {
+        month: '2-digit',
+        day: '2-digit',
+        hour: '2-digit',
+        minute: '2-digit',
+      });
+      console.log(`[${timeStr}] ${entry.action}`);
+      if (entry.field && entry.oldValue !== undefined && entry.newValue !== undefined) {
+        console.log(`    ${entry.field}: ${entry.oldValue} → ${entry.newValue}`);
+      }
+    }
   }
 }
 

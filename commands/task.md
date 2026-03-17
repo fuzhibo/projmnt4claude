@@ -13,6 +13,34 @@ argument-hint: "<action> [id] [options]"
 node ${CLAUDE_PLUGIN_ROOT}/dist/projmnt4claude.js task <action> [options]
 ```
 
+## 🎯 使用场景
+
+### 用户直接运行（人类友好模式）
+默认输出格式适合人类阅读，包含视觉装饰和格式化信息：
+```bash
+# 用户查看任务详情
+projmnt4claude task show TASK-001
+
+# 用户列出任务
+projmnt4claude task list --status open
+```
+
+### AI 调用（精简模式）
+AI 调用时应使用 `--json` 或 `--compact` 选项，减少上下文消耗：
+```bash
+# AI 获取任务详情 - JSON 格式
+projmnt4claude task show TASK-001 --json
+
+# AI 快速查看任务 - 精简格式
+projmnt4claude task show TASK-001 --compact
+
+# AI 列出任务 - JSON 格式
+projmnt4claude task list --json --fields id,title,status,priority
+
+# AI 获取完整任务信息
+projmnt4claude task show TASK-001 --verbose --json
+```
+
 ## 可用操作
 
 | 操作 | 描述 | 示例 |
@@ -25,7 +53,6 @@ node ${CLAUDE_PLUGIN_ROOT}/dist/projmnt4claude.js task <action> [options]
 | `execute` | 引导执行任务 | `task execute TASK-001` |
 | `checkpoint` | 完成检查点 | `task checkpoint TASK-001` |
 | `dependency` | 管理依赖 | `task dependency add TASK-001 TASK-002` |
-
 | `add-subtask` | 为父任务创建子任务 | `task add-subtask TASK-001 "实现登录功能"` |
 | `help` | 显示帮助 | `task help` |
 
@@ -33,6 +60,15 @@ node ${CLAUDE_PLUGIN_ROOT}/dist/projmnt4claude.js task <action> [options]
 - `--status <status>` - 按状态过滤
 - `--priority <priority>` - 按优先级过滤
 - `--role <role>` - 按推荐角色过滤
+- `--fields <fields>` - 自定义输出字段 (逗号分隔) **[AI 推荐]**
+- `--json` - JSON 格式输出 **[AI 推荐]**
+- `--missing-verification` - 筛选缺少验证的任务
+
+## 显示选项 (show)
+- `-v, --verbose` - 显示完整信息 (包含历史、依赖、验证信息)
+- `--history` - 仅显示变更历史
+- `--json` - JSON 格式输出 **[AI 推荐]**
+- `--compact` - 精简输出 (无装饰字符) **[AI 推荐]**
 
 ## 更新选项 (update)
 - `--title <title>` - 更新标题
@@ -60,6 +96,18 @@ projmnt4claude task show TASK-001-1
 
 # 更新子任务状态
 projmnt4claude task update TASK-001-1 --status in_progress
+
+# 显示完整任务信息 (新功能)
+projmnt4claude task show TASK-001 --verbose
+
+# JSON 格式输出 (新功能)
+projmnt4claude task show TASK-001 --json
+
+# 自定义字段输出 (新功能)
+projmnt4claude task list --fields id,title,status
+
+# 筛选缺少验证的任务 (新功能)
+projmnt4claude task list --missing-verification
 ```
 
 ## 检查点 (checkpoint)

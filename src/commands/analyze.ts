@@ -305,37 +305,17 @@ export function analyzeProject(cwd: string = process.cwd(), includeArchived: boo
 
 /**
  * 显示分析结果
+ * 重构版本：仅显示问题分析，不重复输出统计信息
  */
-export function showAnalysis(cwd: string = process.cwd()): void {
+export function showAnalysis(options: { compact?: boolean } = {}, cwd: string = process.cwd()): void {
   const result = analyzeProject(cwd);
 
-  console.log('');
-  console.log('━'.repeat(60));
-  console.log('📊 项目健康分析报告');
-  console.log('━'.repeat(60));
-  console.log('');
+  const separator = options.compact ? '---' : '━'.repeat(60);
 
-  // 显示统计
-  console.log('📈 统计概览:');
-  console.log(`   总任务数: ${result.stats.total}`);
   console.log('');
-  console.log('   按状态:');
-  console.log(`     ⬜ 待处理: ${result.stats.byStatus.open}`);
-  console.log(`     🔵 进行中: ${result.stats.byStatus.in_progress}`);
-  console.log(`     ✅ 已解决: ${result.stats.byStatus.resolved}`);
-  console.log(`     ⚫ 已关闭: ${result.stats.byStatus.closed}`);
-  console.log(`     🔄 已重开: ${result.stats.byStatus.reopened}`);
-  console.log(`     ❌ 已放弃: ${result.stats.byStatus.abandoned}`);
-  console.log('');
-  console.log('   按优先级:');
-  console.log(`     🔴 P0 (紧急): ${result.stats.byPriority.P0}`);
-  console.log(`     🟠 P1 (高): ${result.stats.byPriority.P1}`);
-  console.log(`     🟡 P2 (中): ${result.stats.byPriority.P2}`);
-  console.log(`     🟢 P3 (低): ${result.stats.byPriority.P3}`);
-  console.log(`     📊 Q1: ${result.stats.byPriority.Q1}`);
-  console.log(`     📊 Q2: ${result.stats.byPriority.Q2}`);
-  console.log(`     📊 Q3: ${result.stats.byPriority.Q3}`);
-  console.log(`     📊 Q4: ${result.stats.byPriority.Q4}`);
+  console.log(separator);
+  console.log('🔍 项目问题分析');
+  console.log(separator);
   console.log('');
 
   // 显示问题摘要
@@ -348,9 +328,9 @@ export function showAnalysis(cwd: string = process.cwd()): void {
 
   // 显示详细问题
   if (result.issues.length > 0) {
-    console.log('━'.repeat(60));
-    console.log('🔍 详细问题列表');
-    console.log('━'.repeat(60));
+    console.log(separator);
+    console.log('📋 详细问题列表');
+    console.log(separator);
     console.log('');
 
     // 按严重程度排序
@@ -370,7 +350,10 @@ export function showAnalysis(cwd: string = process.cwd()): void {
     console.log('✅ 未发现问题，项目状态良好！');
   }
 
-  console.log('━'.repeat(60));
+  console.log(separator);
+  console.log('');
+  console.log('💡 提示: 使用 `status` 命令查看完整统计信息');
+  console.log('');
 }
 
 /**
@@ -503,20 +486,61 @@ export async function fixIssues(cwd: string = process.cwd(), nonInteractive: boo
 
 /**
  * 显示项目状态摘要
+ * 支持多种输出格式：quiet, json, full
  */
-export function showStatus(includeArchived: boolean = false, cwd: string = process.cwd()): void {
+export function showStatus(
+  options: {
+    includeArchived?: boolean;
+    quiet?: boolean;
+    json?: boolean;
+    compact?: boolean;
+  } = {},
+  cwd: string = process.cwd()
+): void {
   if (!isInitialized(cwd)) {
     console.error('错误: 项目未初始化。请先运行 `projmnt4claude setup`');
     process.exit(1);
   }
 
+  const includeArchived = options.includeArchived || false;
   const tasks = getAllTasks(cwd, includeArchived);
   const result = analyzeProject(cwd, includeArchived);
+  const healthScore = calculateHealthScore(result);
+
+  // JSON 格式输出
+  if (options.json) {
+    console.log(JSON.stringify({
+      total: result.stats.total,
+      parentTasks: result.stats.parentTasks,
+      subtasks: result.stats.subtasks,
+      subtaskCompletionRate: result.stats.subtaskCompletionRate,
+      byStatus: result.stats.byStatus,
+      byPriority: result.stats.byPriority,
+      healthScore,
+      issues: {
+        stale: result.stats.stale,
+        blocked: result.stats.blocked,
+        orphan: result.stats.orphan,
+        cycle: result.stats.cycle,
+      },
+    }, null, 2));
+    return;
+  }
+
+  // 精简输出 (--quiet)
+  if (options.quiet) {
+    const healthIcon = healthScore >= 80 ? '🟢' : healthScore >= 50 ? '🟡' : '🔴';
+    console.log(`${result.stats.total} tasks | ${result.stats.byStatus.open} open | ${result.stats.byStatus.in_progress} in_progress | ${result.stats.byStatus.resolved + result.stats.byStatus.closed} done | health: ${healthIcon} ${healthScore}/100`);
+    return;
+  }
+
+  // 精简模式 (--compact)
+  const separator = options.compact ? '---' : '━'.repeat(60);
 
   console.log('');
-  console.log('━'.repeat(60));
+  console.log(separator);
   console.log('📋 项目状态摘要');
-  console.log('━'.repeat(60));
+  console.log(separator);
   console.log('');
 
   // 基本统计
@@ -556,7 +580,6 @@ export function showStatus(includeArchived: boolean = false, cwd: string = proce
   }
 
   // 健康指标
-  const healthScore = calculateHealthScore(result);
   const healthIcon = healthScore >= 80 ? '🟢' : healthScore >= 50 ? '🟡' : '🔴';
 
   console.log('💚 健康指标:');
@@ -577,7 +600,7 @@ export function showStatus(includeArchived: boolean = false, cwd: string = proce
   }
   console.log('');
 
-  console.log('━'.repeat(60));
+  console.log(separator);
 }
 
 /**

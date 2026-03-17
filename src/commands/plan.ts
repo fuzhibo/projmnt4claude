@@ -149,8 +149,12 @@ export async function clearPlanCmd(force: boolean = false, cwd: string = process
 
 /**
  * 推荐执行计划
+ * 支持非交互模式和 JSON 输出
  */
-export async function recommendPlan(cwd: string = process.cwd()): Promise<void> {
+export async function recommendPlan(
+  options: { nonInteractive?: boolean; json?: boolean } = {},
+  cwd: string = process.cwd()
+): Promise<void> {
   if (!isInitialized(cwd)) {
     console.error('错误: 项目未初始化。请先运行 `projmnt4claude setup`');
     process.exit(1);
@@ -162,11 +166,15 @@ export async function recommendPlan(cwd: string = process.cwd()): Promise<void> 
   const executableTasks = getExecutableTasks(cwd);
 
   if (executableTasks.length === 0) {
-    console.log('暂无可执行的任务');
-    console.log('');
-    console.log('可能的原因:');
-    console.log('  - 所有任务已完成');
-    console.log('  - 任务存在未完成的依赖');
+    if (options.json) {
+      console.log(JSON.stringify({ tasks: [], message: '暂无可执行的任务' }, null, 2));
+    } else {
+      console.log('暂无可执行的任务');
+      console.log('');
+      console.log('可能的原因:');
+      console.log('  - 所有任务已完成');
+      console.log('  - 任务存在未完成的依赖');
+    }
     return;
   }
 
@@ -187,6 +195,20 @@ export async function recommendPlan(cwd: string = process.cwd()): Promise<void> 
       };
       return priorityOrder[a!.priority] - priorityOrder[b!.priority];
     });
+
+  // JSON 输出
+  if (options.json) {
+    const output = tasksWithMeta.map((task, index) => ({
+      order: index + 1,
+      id: task!.id,
+      title: task!.title,
+      priority: task!.priority,
+      status: task!.status,
+      subtaskCount: task!.subtaskIds?.length || 0,
+    }));
+    console.log(JSON.stringify({ tasks: output }, null, 2));
+    return;
+  }
 
   // 显示推荐列表
   console.log('推荐执行计划:');
@@ -213,7 +235,18 @@ export async function recommendPlan(cwd: string = process.cwd()): Promise<void> 
 
   console.log('');
 
-  // 询问用户确认
+  // 非交互模式或检测到非 TTY
+  const isNonInteractive = options.nonInteractive || !process.stdout.isTTY;
+
+  if (isNonInteractive) {
+    const plan = getOrCreatePlan(cwd);
+    plan.tasks = tasksWithMeta.map(t => t!.id);
+    writePlan(plan, cwd);
+    console.log('✅ 执行计划已更新 (非交互模式)');
+    return;
+  }
+
+  // 交互模式：询问用户确认
   const response = await prompts({
     type: 'confirm',
     name: 'confirm',
