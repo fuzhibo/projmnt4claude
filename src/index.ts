@@ -18,6 +18,8 @@ import {
   completeTask,
   showTaskHistory,
   syncChildren,
+  updateCheckpoint,
+  listTaskCheckpoints,
 } from './commands/task';
 import {
   showPlan,
@@ -147,6 +149,9 @@ program
   .option('--compact', '精简输出 (仅 show)')
   .option('--fields <fields>', '自定义输出字段 (仅 list)')
   .option('--missing-verification', '筛选缺少验证的任务 (仅 list)')
+  .option('--checkpoints', '显示检查点详情 (仅 show)')
+  .option('--result <result>', '验证结果 (仅 checkpoint complete)')
+  .option('--note <note>', '检查点备注 (仅 checkpoint note/fail)')
   .action(async (action, id, options) => {
     requireInit();
     switch (action) {
@@ -179,6 +184,7 @@ program
           history: options.history,
           json: options.json,
           compact: options.compact,
+          checkpoints: options.checkpoints,
         });
         break;
       case 'update':
@@ -233,10 +239,46 @@ program
           console.error('错误: checkpoint 操作需要指定任务ID');
           process.exit(1);
         }
-        // Check for verify subcommand (process.argv[4] or process.argv[5] might)
-        if (process.argv[4] === 'verify' || process.argv[5] === 'verify') {
+        // 新增：支持多种 checkpoint 子命令
+        // 用法：
+        //   task checkpoint <taskId> list
+        //   task checkpoint <taskId> <checkpointId> complete --result "xxx"
+        //   task checkpoint <taskId> <checkpointId> fail --note "xxx"
+        //   task checkpoint <taskId> <checkpointId> note --note "xxx"
+        //   task checkpoint <taskId> <checkpointId> show
+        //   task checkpoint <taskId> verify (原有功能)
+
+        // 找到 checkpoint 在 process.argv 中的位置
+        const checkpointIndex = process.argv.indexOf('checkpoint');
+        // checkpoint 后面是 taskId，再后面是子命令
+        const afterTaskId = checkpointIndex + 2 < process.argv.length ? process.argv[checkpointIndex + 2] : undefined;
+        const afterSubCommand = checkpointIndex + 3 < process.argv.length ? process.argv[checkpointIndex + 3] : undefined;
+
+        // id 是 taskId (从 commander 解析)
+        const checkpointSubCmd = afterTaskId;
+        const checkpointAct = afterSubCommand;
+
+        if (checkpointSubCmd === 'list') {
+          // 列出所有检查点
+          await listTaskCheckpoints(id, { json: options.json, compact: options.compact });
+        } else if (checkpointSubCmd === 'verify') {
+          // 原有功能：验证检查点
           await verifyCheckpoint(id);
+        } else if (checkpointSubCmd && checkpointAct) {
+          // 检查点操作: task checkpoint <taskId> <checkpointId> <action>
+          const validActions = ['complete', 'fail', 'note', 'show'];
+          if (!validActions.includes(checkpointAct)) {
+            console.error(`错误: 无效的操作 '${checkpointAct}'`);
+            console.error(`支持的操作: ${validActions.join(', ')}`);
+            process.exit(1);
+          }
+          await updateCheckpoint(id, checkpointSubCmd, checkpointAct as any, {
+            result: options.result,
+            note: options.note,
+            yes: options.yes,
+          });
         } else {
+          // 默认行为：完成检查点确认（保持向后兼容）
           await completeCheckpoint(id, { yes: options.yes });
         }
         break;

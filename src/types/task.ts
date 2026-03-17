@@ -35,6 +35,31 @@ export interface TaskHistoryEntry {
 }
 
 /**
+ * 检查点验证信息
+ */
+export interface CheckpointVerification {
+  method: 'manual' | 'automated' | 'test';
+  command?: string;        // 验证命令（如有）
+  expected?: string;       // 期望结果
+  result?: string;         // 实际验证结果
+  verifiedAt?: string;     // 验证时间
+  verifiedBy?: string;     // 验证者
+}
+
+/**
+ * 检查点元数据
+ */
+export interface CheckpointMetadata {
+  id: string;                      // 检查点ID，如 CP-001 或 CP-check-screenshot
+  description: string;             // 描述（与 checkpoint.md 中的文本对应）
+  status: 'pending' | 'completed' | 'failed' | 'skipped';
+  note?: string;                   // 备注
+  verification?: CheckpointVerification;
+  createdAt: string;
+  updatedAt: string;
+}
+
+/**
  * 任务元数据接口
  */
 export interface TaskMeta {
@@ -50,6 +75,7 @@ export interface TaskMeta {
   needsDiscussion?: boolean; // 是否需要讨论
   discussionTopics?: string[]; // 讨论主题列表
   checkpointConfirmationToken?: string; // 检查点确认令牌
+  checkpoints?: CheckpointMetadata[];  // 检查点元数据
   parentId?: string;       // 父任务ID（子任务时使用）
   subtaskIds?: string[];   // 子任务ID列表（父任务时使用）
   createdAt: string;       // ISO时间

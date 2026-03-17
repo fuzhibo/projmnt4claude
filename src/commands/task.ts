@@ -9,10 +9,18 @@ import {
   getAllTasks,
   taskExists,
 } from '../utils/task';
+import {
+  parseCheckpointsWithIds,
+  syncCheckpointsToMeta,
+  updateCheckpointStatus,
+  getCheckpointDetail,
+  listCheckpoints,
+} from '../utils/checkpoint';
 import type {
   TaskMeta,
   TaskPriority,
   TaskStatus,
+  CheckpointMetadata,
 } from '../types/task';
 import {
   createDefaultTaskMeta,
@@ -309,6 +317,7 @@ export function showTask(
     history?: boolean;
     json?: boolean;
     compact?: boolean;
+    checkpoints?: boolean;
   } = {},
   cwd: string = process.cwd()
 ): void {
@@ -418,7 +427,39 @@ export function showTask(
   // 显示检查点
   const taskDir = path.join(getTasksDir(cwd), taskId);
   const checkpointPath = path.join(taskDir, 'checkpoint.md');
-  if (fs.existsSync(checkpointPath)) {
+
+  // 如果使用 --checkpoints 或 --verbose，显示详细的检查点元数据
+  if (options.checkpoints || options.verbose) {
+    const checkpointsMeta = listCheckpoints(taskId, cwd);
+
+    if (checkpointsMeta.length > 0) {
+      console.log('');
+      console.log('━'.repeat(60));
+      console.log('📋 检查点详情');
+      console.log('━'.repeat(60));
+
+      checkpointsMeta.forEach((cp, index) => {
+        const statusIcon = cp.status === 'completed' ? '✅' :
+                           cp.status === 'failed' ? '❌' :
+                           cp.status === 'skipped' ? '⏭️' : '⏳';
+
+        console.log(`${index + 1}. ${statusIcon} ${cp.id}`);
+        console.log(`   描述: ${cp.description}`);
+        console.log(`   状态: ${cp.status}`);
+
+        if (cp.note) {
+          console.log(`   备注: ${cp.note}`);
+        }
+
+        if (cp.verification?.result) {
+          console.log(`   验证结果: ${cp.verification.result}`);
+        }
+
+        console.log('');
+      });
+    }
+  } else if (fs.existsSync(checkpointPath)) {
+    // 默认显示 checkpoint.md 内容
     console.log('');
     console.log('检查点:');
     const content = fs.readFileSync(checkpointPath, 'utf-8');
@@ -1558,3 +1599,197 @@ export async function syncChildren(
   console.log('');
   console.log(`✅ 同步完成: ${syncedCount} 个子任务已更新, ${skippedCount} 个跳过`);
 }
+
+/**
+ * 更新检查点状态
+ * 命令: task checkpoint <taskId> <checkpointId> <action> [options]
+ */
+export async function updateCheckpoint(
+  taskId: string,
+  checkpointId: string,
+  action: 'complete' | 'fail' | 'note' | 'show',
+  options: {
+    result?: string;
+    note?: string;
+    yes?: boolean;
+  } = {},
+  cwd: string = process.cwd()
+): Promise<void> {
+  if (!isInitialized(cwd)) {
+    console.error('错误: 项目未初始化');
+    process.exit(1);
+  }
+
+  const task = readTaskMeta(taskId, cwd);
+  if (!task) {
+    console.error(`错误: 任务 '${taskId}' 不存在`);
+    process.exit(1);
+  }
+
+  // 确保检查点已同步
+  syncCheckpointsToMeta(taskId, cwd);
+
+  switch (action) {
+    case 'complete':
+      updateCheckpointStatus(taskId, checkpointId, 'completed', {
+        result: options.result,
+        note: options.note,
+      }, cwd);
+      console.log(`✅ 检查点 ${checkpointId} 已标记为完成`);
+      if (options.result) {
+        console.log(`   验证结果: ${options.result}`);
+      }
+      break;
+
+    case 'fail':
+      updateCheckpointStatus(taskId, checkpointId, 'failed', {
+        note: options.note,
+      }, cwd);
+      console.log(`❌ 检查点 ${checkpointId} 已标记为失败`);
+      if (options.note) {
+        console.log(`   备注: ${options.note}`);
+      }
+      break;
+
+    case 'note':
+      if (!options.note) {
+        console.error('错误: 使用 note 操作需要提供 --note 参数');
+        process.exit(1);
+      }
+      // 保持当前状态，只更新备注
+      const checkpoint = getCheckpointDetail(taskId, checkpointId, cwd);
+      if (!checkpoint) {
+        console.error(`错误: 检查点 '${checkpointId}' 不存在`);
+        process.exit(1);
+      }
+      updateCheckpointStatus(taskId, checkpointId, checkpoint.status, {
+        note: options.note,
+      }, cwd);
+      console.log(`📝 检查点 ${checkpointId} 备注已更新`);
+      console.log(`   备注: ${options.note}`);
+      break;
+
+    case 'show':
+      const cpDetail = getCheckpointDetail(taskId, checkpointId, cwd);
+      if (!cpDetail) {
+        console.error(`错误: 检查点 '${checkpointId}' 不存在`);
+        process.exit(1);
+      }
+      displayCheckpointDetail(cpDetail);
+      break;
+
+    default:
+      console.error(`错误: 未知操作 '${action}'`);
+      process.exit(1);
+  }
+}
+
+/**
+ * 列出任务的所有检查点
+ */
+export async function listTaskCheckpoints(
+  taskId: string,
+  options: {
+    json?: boolean;
+    compact?: boolean;
+  } = {},
+  cwd: string = process.cwd()
+): Promise<void> {
+  if (!isInitialized(cwd)) {
+    console.error('错误: 项目未初始化');
+    process.exit(1);
+  }
+
+  const task = readTaskMeta(taskId, cwd);
+  if (!task) {
+    console.error(`错误: 任务 '${taskId}' 不存在`);
+    process.exit(1);
+  }
+
+  const checkpoints = listCheckpoints(taskId, cwd);
+
+  if (options.json) {
+    console.log(JSON.stringify(checkpoints, null, 2));
+    return;
+  }
+
+  if (checkpoints.length === 0) {
+    console.log('暂无检查点');
+    return;
+  }
+
+  const separator = options.compact ? '' : '━'.repeat(60);
+
+  if (!options.compact) {
+    console.log('');
+    console.log(`📋 检查点列表 (${checkpoints.length} 个)`);
+    console.log(separator);
+  }
+
+  checkpoints.forEach((cp, index) => {
+    const statusIcon = cp.status === 'completed' ? '✅' :
+                       cp.status === 'failed' ? '❌' :
+                       cp.status === 'skipped' ? '⏭️' : '⏳';
+
+    if (options.compact) {
+      console.log(`${statusIcon} ${cp.id}: ${cp.description}`);
+    } else {
+      console.log(`${index + 1}. ${statusIcon} ${cp.id}`);
+      console.log(`   描述: ${cp.description}`);
+      console.log(`   状态: ${cp.status}`);
+      if (cp.note) {
+        console.log(`   备注: ${cp.note}`);
+      }
+      if (cp.verification?.result) {
+        console.log(`   验证结果: ${cp.verification.result}`);
+      }
+      console.log('');
+    }
+  });
+
+  if (!options.compact) {
+    console.log(separator);
+  }
+}
+
+/**
+ * 显示检查点详情
+ */
+function displayCheckpointDetail(checkpoint: CheckpointMetadata): void {
+  console.log('');
+  console.log(`📋 检查点详情: ${checkpoint.id}`);
+  console.log('━'.repeat(60));
+  console.log(`描述: ${checkpoint.description}`);
+  console.log(`状态: ${checkpoint.status}`);
+  console.log(`创建时间: ${checkpoint.createdAt}`);
+  console.log(`更新时间: ${checkpoint.updatedAt}`);
+
+  if (checkpoint.note) {
+    console.log('');
+    console.log('📝 备注:');
+    console.log(`   ${checkpoint.note}`);
+  }
+
+  if (checkpoint.verification) {
+    console.log('');
+    console.log('🔍 验证信息:');
+    console.log(`   方法: ${checkpoint.verification.method}`);
+    if (checkpoint.verification.command) {
+      console.log(`   命令: ${checkpoint.verification.command}`);
+    }
+    if (checkpoint.verification.expected) {
+      console.log(`   期望结果: ${checkpoint.verification.expected}`);
+    }
+    if (checkpoint.verification.result) {
+      console.log(`   实际结果: ${checkpoint.verification.result}`);
+    }
+    if (checkpoint.verification.verifiedBy) {
+      console.log(`   验证者: ${checkpoint.verification.verifiedBy}`);
+    }
+    if (checkpoint.verification.verifiedAt) {
+      console.log(`   验证时间: ${checkpoint.verification.verifiedAt}`);
+    }
+  }
+  console.log('');
+}
+

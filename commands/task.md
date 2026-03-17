@@ -108,6 +108,7 @@ projmnt4claude task show TASK-001 --verbose --json
 - `--history` - 仅显示变更历史
 - `--json` - JSON 格式输出 **[AI 推荐]**
 - `--compact` - 精简输出 (无装饰字符) **[AI 推荐]**
+- `--checkpoints` - 显示检查点详情（包含验证结果）
 
 ## 更新选项 (update)
 - `--title <title>` - 更新标题
@@ -151,15 +152,65 @@ projmnt4claude task list --missing-verification
 
 ## 检查点 (checkpoint)
 
-完成检查点以推进任务进度。
+检查点用于跟踪任务的完成进度。支持交互式确认和细粒度操作。
+
+### 检查点子命令
+
+| 子命令 | 描述 | 示例 |
+|--------|------|------|
+| `list` | 列出所有检查点 | `task checkpoint TASK-001 list` |
+| `complete` | 标记检查点完成 | `task checkpoint TASK-001 CP-001 complete --result "验证通过"` |
+| `fail` | 标记检查点失败 | `task checkpoint TASK-001 CP-001 fail --note "需要调查"` |
+| `note` | 更新检查点备注 | `task checkpoint TASK-001 CP-001 note --note "等待确认"` |
+| `show` | 显示检查点详情 | `task checkpoint TASK-001 CP-001 show` |
+| `verify` | 验证检查点并生成令牌 | `task checkpoint TASK-001 verify` |
+| (默认) | 交互式确认所有检查点 | `task checkpoint TASK-001` |
+
+### 检查点选项
+
+| 选项 | 描述 | 适用子命令 |
+|------|------|------------|
+| `--result <text>` | 验证结果 | `complete` |
+| `--note <text>` | 检查点备注 | `complete`, `fail`, `note` |
+| `--json` | JSON 格式输出 | `list` |
+| `--compact` | 精简输出 | `list` |
+| `-y, --yes` | 非交互模式 | (默认) |
+
+### 示例
 
 ```bash
-# 完成检查点
+# 列出所有检查点
+projmnt4claude task checkpoint TASK-001 list
+
+# 列出检查点 (JSON 格式)
+projmnt4claude task checkpoint TASK-001 list --json
+
+# 标记检查点完成并添加验证结果
+projmnt4claude task checkpoint TASK-001 CP-001 complete --result "截图确认：显示 Connection lost 错误"
+
+# 标记检查点失败
+projmnt4claude task checkpoint TASK-001 CP-001 fail --note "需要进一步调查"
+
+# 更新检查点备注
+projmnt4claude task checkpoint TASK-001 CP-001 note --note "等待用户确认"
+
+# 显示检查点详情
+projmnt4claude task checkpoint TASK-001 CP-001 show
+
+# 交互式确认所有检查点（原有功能）
 projmnt4claude task checkpoint TASK-001
 
-# 验证检查点
-projmnt4claude task verify-checkpoint TASK-001
+# 验证检查点并生成令牌
+projmnt4claude task checkpoint TASK-001 verify
 ```
+
+### 检查点数据存储
+
+检查点数据存储在两个位置：
+- **checkpoint.md** - 检查点列表和完成状态（人类可读）
+- **meta.json** - 检查点元数据（ID、验证结果、备注等）
+
+首次访问时自动同步，无需手动操作。
 
 ## ⚠️ 任务完成验证流程 (重要)
 
