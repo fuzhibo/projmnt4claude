@@ -13,7 +13,39 @@ argument-hint: "[options]"
 node ${CLAUDE_PLUGIN_ROOT}/dist/projmnt4claude.js status [options]
 ```
 
-## 🎯 使用场景
+## 🎯 AI 行为指南
+
+### 直接输出模式（无需 AI 处理）
+当用户**仅**调用命令，没有额外提示词时，**直接输出脚本结果**：
+
+```
+用户: projmnt4claude status
+AI: [直接输出命令结果]
+
+用户: projmnt4claude status --archived
+AI: [直接输出命令结果]
+```
+
+### AI 处理模式（需要进一步分析）
+当用户调用命令**后跟了额外提示词**，AI 才介入处理：
+
+```
+用户: projmnt4claude status，项目健康吗？
+AI: [分析健康分数，给出建议]
+
+用户: projmnt4claude status，有什么问题需要关注？
+AI: [分析过期任务、阻塞任务等]
+```
+
+### AI 内部调用（精简模式）
+AI 自主调用命令时，使用 `--quiet` 或 `--json`：
+
+```bash
+projmnt4claude status --quiet   # 单行输出，约 100 bytes
+projmnt4claude status --json    # 结构化数据
+```
+
+## 使用场景
 
 ### 用户直接运行（人类友好模式）
 默认输出格式适合人类阅读，包含完整的统计和健康指标：

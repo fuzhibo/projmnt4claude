@@ -13,7 +13,46 @@ argument-hint: "<action> [id] [options]"
 node ${CLAUDE_PLUGIN_ROOT}/dist/projmnt4claude.js task <action> [options]
 ```
 
-## 🎯 使用场景
+## 🎯 AI 行为指南
+
+### 直接输出模式（无需 AI 处理）
+当用户**仅**调用命令，没有额外提示词时，**直接输出脚本结果**，AI 无需处理：
+
+```
+用户: projmnt4claude task list
+AI: [直接输出命令结果，无需额外解释]
+
+用户: projmnt4claude task show TASK-001
+AI: [直接输出命令结果，无需额外解释]
+
+用户: projmnt4claude status
+AI: [直接输出命令结果，无需额外解释]
+```
+
+### AI 处理模式（需要进一步分析）
+当用户调用命令**后跟了额外提示词**，AI 才介入处理：
+
+```
+用户: projmnt4claude task list，帮我找出优先级最高的任务
+AI: [分析结果，找出 P0 任务]
+
+用户: projmnt4claude status，项目健康吗？
+AI: [分析健康分数，给出建议]
+
+用户: projmnt4claude task show TASK-001，这个任务还需要做什么？
+AI: [分析检查点，回答未完成项]
+```
+
+### AI 内部调用（精简模式）
+AI 自主调用命令时，使用 `--json` 或 `--compact` 减少上下文：
+
+```bash
+# AI 获取结构化数据
+projmnt4claude task show TASK-001 --json
+projmnt4claude task list --json --fields id,title,status
+```
+
+## 使用场景
 
 ### 用户直接运行（人类友好模式）
 默认输出格式适合人类阅读，包含视觉装饰和格式化信息：
