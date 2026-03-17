@@ -594,4 +594,26 @@ program
     showHelp(topic);
   });
 
+// 改进未知命令错误提示
+program.on('command:*', (operands) => {
+  const unknownCmd = operands[0];
+  const taskSubcommands = ['list', 'show', 'create', 'update', 'delete', 'execute', 'checkpoint', 'dependency', 'add-subtask'];
+
+  console.error(`❌ 错误: 未知命令 '${unknownCmd}'`);
+  console.error('');
+
+  // 检测是否是 task 子命令被误用为顶层命令
+  if (taskSubcommands.includes(unknownCmd)) {
+    console.error('💡 提示: \'%s\' 是 task 子命令的操作，请使用:', unknownCmd);
+    console.error('   projmnt4claude task %s [options]', unknownCmd);
+  } else {
+    console.error('💡 可用命令:');
+    console.error('   task, status, analyze, init-requirement, setup, doctor, help');
+  }
+
+  console.error('');
+  console.error('查看完整帮助: projmnt4claude help');
+  process.exit(1);
+});
+
 program.parse();
