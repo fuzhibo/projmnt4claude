@@ -66,7 +66,7 @@ function normalizeStatus(status: string): TaskStatus {
  */
 export interface Issue {
   taskId: string;
-  type: 'stale' | 'orphan' | 'cycle' | 'blocked' | 'no_description' | 'legacy_priority' | 'legacy_status';
+  type: 'stale' | 'orphan' | 'cycle' | 'blocked' | 'no_description' | 'legacy_priority' | 'legacy_status' | 'legacy_schema';
   severity: 'low' | 'medium' | 'high';
   message: string;
   suggestion: string;
@@ -253,6 +253,17 @@ export function analyzeProject(cwd: string = process.cwd(), includeArchived: boo
         severity: 'low',
         message: `任务使用旧格式状态: ${task.status}`,
         suggestion: `将状态更新为 ${normalizeStatus(task.status)}`,
+      });
+    }
+
+    // 检测旧格式 schema (缺少 reopenCount 或 requirementHistory 字段)
+    if (task.reopenCount === undefined || task.requirementHistory === undefined) {
+      issues.push({
+        taskId: task.id,
+        type: 'legacy_schema',
+        severity: 'low',
+        message: '任务 meta.json 缺少新规范字段',
+        suggestion: '添加 reopenCount 和 requirementHistory 字段以符合最新规范',
       });
     }
 
@@ -468,6 +479,25 @@ export async function fixIssues(cwd: string = process.cwd(), nonInteractive: boo
           task.status = newStatus;
           writeTaskMeta(task, cwd);
           console.log(`  ✅ 已将状态从 ${oldStatus} 更新为 ${newStatus}`);
+          fixedCount++;
+        }
+        break;
+      }
+
+      case 'legacy_schema': {
+        console.log(`🔄 修复任务 ${issue.taskId} 的规范字段...`);
+        const task = readTaskMeta(issue.taskId, cwd);
+        if (task) {
+          // 添加缺失的新规范字段
+          if (task.reopenCount === undefined) {
+            task.reopenCount = 0;
+            console.log(`  ✅ 已添加 reopenCount: 0`);
+          }
+          if (task.requirementHistory === undefined) {
+            task.requirementHistory = [];
+            console.log(`  ✅ 已添加 requirementHistory: []`);
+          }
+          writeTaskMeta(task, cwd);
           fixedCount++;
         }
         break;
