@@ -605,15 +605,24 @@ export function showStatus(
 
 /**
  * 计算 Reopen 统计
+ * 优先使用 reopenCount 字段，回退到历史记录计算
  */
 function calculateReopenStats(tasks: TaskMeta[]): { reopenCount: number; topReopened: { taskId: string; title: string; count: number }[] } {
   const reopenCount = tasks.filter(t => t.status === 'reopened').length;
 
-  // 统计历史记录中的 reopen 次数
+  // 统计 reopen 次数：优先使用 reopenCount 字段
   const reopenCounts: { taskId: string; title: string; count: number }[] = [];
 
   for (const task of tasks) {
-    if (task.history) {
+    // 优先使用专用的 reopenCount 字段
+    if (task.reopenCount && task.reopenCount > 0) {
+      reopenCounts.push({
+        taskId: task.id,
+        title: task.title,
+        count: task.reopenCount,
+      });
+    } else if (task.history) {
+      // 回退：从历史记录计算
       const reopenTimes = task.history.filter(h => h.action === 'status_change' && h.newValue === 'reopened').length;
       if (reopenTimes > 0) {
         reopenCounts.push({

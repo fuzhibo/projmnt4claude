@@ -424,6 +424,39 @@ export function showTask(
   console.log(`创建时间: ${task.createdAt}`);
   console.log(`更新时间: ${task.updatedAt}`);
 
+  // 显示重开次数
+  if (task.reopenCount && task.reopenCount > 0) {
+    console.log(`重开次数: ${task.reopenCount}`);
+  }
+
+  // 显示需求变更历史（verbose 模式或有变更时）
+  if (task.requirementHistory && task.requirementHistory.length > 0) {
+    console.log(`需求变更次数: ${task.requirementHistory.length}`);
+    if (options.verbose) {
+      console.log('');
+      console.log('━'.repeat(60));
+      console.log('📝 需求变更历史:');
+      console.log('━'.repeat(60));
+      task.requirementHistory.forEach((entry, index) => {
+        const date = new Date(entry.timestamp);
+        const timeStr = date.toLocaleString('zh-CN', {
+          month: '2-digit',
+          day: '2-digit',
+          hour: '2-digit',
+          minute: '2-digit',
+        });
+        console.log(`\n[v${entry.version}] ${timeStr}`);
+        console.log(`  变更原因: ${entry.changeReason}`);
+        if (entry.impactAnalysis) {
+          console.log(`  影响分析: ${entry.impactAnalysis}`);
+        }
+        if (entry.relatedIssue) {
+          console.log(`  关联Issue: ${entry.relatedIssue}`);
+        }
+      });
+    }
+  }
+
   // 显示检查点
   const taskDir = path.join(getTasksDir(cwd), taskId);
   const checkpointPath = path.join(taskDir, 'checkpoint.md');
@@ -608,7 +641,15 @@ export async function updateTask(
     updated = true;
   }
   if (options.status) {
+    const oldStatus = task.status;
     task.status = options.status as TaskStatus;
+
+    // 当状态变为 reopened 时，递增 reopenCount
+    if (options.status === 'reopened' && oldStatus !== 'reopened') {
+      task.reopenCount = (task.reopenCount || 0) + 1;
+      console.log(`📊 任务重开次数: ${task.reopenCount}`);
+    }
+
     updated = true;
   }
   if (options.description !== undefined) {

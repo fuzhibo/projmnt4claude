@@ -35,6 +35,22 @@ export interface TaskHistoryEntry {
 }
 
 /**
+ * 需求变更历史记录条目
+ * 用于追踪任务描述/需求的变化过程
+ */
+export interface RequirementHistoryEntry {
+  timestamp: string;       // ISO时间
+  version: number;         // 需求版本号（从1开始）
+  previousDescription?: string;  // 之前的描述内容
+  newDescription: string;  // 新的描述内容
+  changeReason: string;    // 变更原因
+  impactAnalysis?: string; // 影响分析
+  changedBy?: string;      // 变更人
+  relatedIssue?: string;   // 关联的 issue/PR
+  affectedCheckpoints?: string[]; // 受影响的检查点ID列表
+}
+
+/**
  * 检查点验证信息
  */
 export interface CheckpointVerification {
@@ -81,6 +97,8 @@ export interface TaskMeta {
   createdAt: string;       // ISO时间
   updatedAt: string;       // ISO时间
   history: TaskHistoryEntry[]; // 历史记录
+  reopenCount?: number;    // 重开次数（任务被重新打开的次数）
+  requirementHistory?: RequirementHistoryEntry[]; // 需求变更历史
 }
 
 /**
@@ -117,6 +135,8 @@ export function createDefaultTaskMeta(
     createdAt: now,
     updatedAt: now,
     history: [],
+    reopenCount: 0,
+    requirementHistory: [],
   };
 }
 
