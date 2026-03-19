@@ -205,26 +205,6 @@ function checkSkillFiles(cwd: string): CheckResult[] {
   const toolboxDir = getToolboxDir(cwd);
   const skillDir = path.join(toolboxDir, 'projmnt4claude');
 
-  // 检查 SKILL.md
-  const skillFile = path.join(skillDir, 'SKILL.md');
-  if (!fs.existsSync(skillFile)) {
-    results.push({
-      name: '技能文件',
-      status: 'warning',
-      message: 'SKILL.md 缺失',
-      details: ['项目中的技能文件不存在，可能需要重新运行 setup'],
-      fixable: true,
-    });
-  } else {
-    results.push({
-      name: '技能文件',
-      status: 'ok',
-      message: 'SKILL.md 存在',
-      details: [`位置: ${skillFile}`],
-      fixable: false,
-    });
-  }
-
   // 检查 commands 目录
   const commandsDir = path.join(skillDir, 'commands');
   if (fs.existsSync(commandsDir)) {
