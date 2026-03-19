@@ -55,6 +55,12 @@ export async function runDoctor(fix: boolean = false, cwd: string = process.cwd(
 
     // 7. 检查 Hooks 配置
     results.push(...checkHooksConfiguration(cwd));
+
+    // 8. 检查任务规范对齐（检测任务 meta.json 是否符合最新规范）
+    results.push(...checkTaskSpecificationAlignment(cwd));
+
+    // 9. 检查 Hook 可用性（验证 hook 文件存在性和执行测试）
+    results.push(...checkHookAvailability(cwd));
   }
 
   // 显示结果
@@ -440,6 +446,173 @@ function checkPluginInstallationScope(cwd: string): CheckResult[] {
     }
   } catch {
     // 忽略解析错误
+  }
+
+  return results;
+}
+
+/**
+ * 检查任务规范对齐
+ * 检测任务 meta.json 是否符合最新规范（reopenCount, requirementHistory 等字段）
+ */
+function checkTaskSpecificationAlignment(cwd: string): CheckResult[] {
+  const results: CheckResult[] = [];
+  const tasksDir = getTasksDir(cwd);
+
+  if (!fs.existsSync(tasksDir)) {
+    return [{
+      name: '任务规范对齐',
+      status: 'ok',
+      message: '任务目录不存在（无任务）',
+      details: [],
+      fixable: false,
+    }];
+  }
+
+  const taskIds = getAllTaskIds(cwd);
+  const tasksNeedingMigration: string[] = [];
+
+  for (const taskId of taskIds) {
+    const metaPath = path.join(tasksDir, taskId, 'meta.json');
+    if (fs.existsSync(metaPath)) {
+      try {
+        const meta = JSON.parse(fs.readFileSync(metaPath, 'utf-8'));
+        // 检查是否缺少新规范字段
+        if (meta.reopenCount === undefined || meta.requirementHistory === undefined) {
+          tasksNeedingMigration.push(taskId);
+        }
+      } catch {
+        // 忽略解析错误
+      }
+    }
+  }
+
+  if (tasksNeedingMigration.length === 0) {
+    results.push({
+      name: '任务规范对齐',
+      status: 'ok',
+      message: `所有 ${taskIds.length} 个任务符合最新规范`,
+      details: ['✓ reopenCount 字段已设置', '✓ requirementHistory 字段已设置'],
+      fixable: false,
+    });
+  } else {
+    results.push({
+      name: '任务规范对齐',
+      status: 'warning',
+      message: `${tasksNeedingMigration.length} 个任务需要迁移到最新规范`,
+      details: [
+        '缺少字段: reopenCount, requirementHistory',
+        '需要迁移的任务:',
+        ...tasksNeedingMigration.slice(0, 5).map(t => `  - ${t}`),
+        ...(tasksNeedingMigration.length > 5 ? [`  ... 还有 ${tasksNeedingMigration.length - 5} 个`] : []),
+        '',
+        '💡 运行 projmnt4claude analyze --fix -y 自动迁移',
+      ],
+      fixable: true,
+    });
+  }
+
+  return results;
+}
+
+/**
+ * 检查 Hook 可用性
+ * 验证 hook 文件存在性、配置正确性、执行测试
+ */
+function checkHookAvailability(cwd: string): CheckResult[] {
+  const results: CheckResult[] = [];
+  const projectDir = getProjectDir(cwd);
+  const hooksDir = getHooksDir(cwd);
+
+  // 1. 检查 hooks 目录
+  if (!fs.existsSync(hooksDir)) {
+    results.push({
+      name: 'Hook 文件',
+      status: 'warning',
+      message: 'hooks 目录不存在',
+      details: ['路径: ' + hooksDir, '需要运行 projmnt4claude setup 创建'],
+      fixable: true,
+    });
+    return results;
+  }
+
+  // 2. 检查必需的 hook 文件
+  const requiredHooks = ['pre-task.ts', 'post-task.ts'];
+  const missingHooks: string[] = [];
+
+  for (const hookFile of requiredHooks) {
+    const hookPath = path.join(hooksDir, hookFile);
+    if (!fs.existsSync(hookPath)) {
+      missingHooks.push(hookFile);
+    }
+  }
+
+  if (missingHooks.length > 0) {
+    results.push({
+      name: 'Hook 文件',
+      status: 'warning',
+      message: `${missingHooks.length} 个必需的 hook 文件缺失`,
+      details: [
+        '缺失文件:',
+        ...missingHooks.map(h => `  - ${h}`),
+        '',
+        '💡 运行 projmnt4claude setup --force 重新生成',
+      ],
+      fixable: true,
+    });
+  } else {
+    results.push({
+      name: 'Hook 文件',
+      status: 'ok',
+      message: '所有必需的 hook 文件存在',
+      details: requiredHooks.map(h => `✓ ${h}`),
+      fixable: false,
+    });
+  }
+
+  // 3. 检查 .claude/settings.json 中的 hooks 配置
+  const claudeSettingsPath = path.join(cwd, '.claude', 'settings.json');
+  if (fs.existsSync(claudeSettingsPath)) {
+    try {
+      const settings = JSON.parse(fs.readFileSync(claudeSettingsPath, 'utf-8'));
+      const hooks = settings.hooks || {};
+      const preToolUseHooks = hooks.PreToolUse || [];
+
+      // 检查是否有 projmnt4claude 相关的 hooks
+      const hasProjMntHooks = preToolUseHooks.some((h: { matcher?: string }) =>
+        h.matcher?.includes('projmnt4claude') || h.matcher?.includes('Task')
+      );
+
+      if (!hasProjMntHooks) {
+        results.push({
+          name: 'Hook 配置',
+          status: 'warning',
+          message: '.claude/settings.json 中缺少 projmnt4claude hooks',
+          details: [
+            'PreToolUse hooks 中没有配置任务相关验证',
+            '',
+            '💡 运行 projmnt4claude doctor --fix 自动配置',
+          ],
+          fixable: true,
+        });
+      } else {
+        results.push({
+          name: 'Hook 配置',
+          status: 'ok',
+          message: 'Hooks 已正确配置',
+          details: [`✓ PreToolUse hooks: ${preToolUseHooks.length} 个`],
+          fixable: false,
+        });
+      }
+    } catch {
+      results.push({
+        name: 'Hook 配置',
+        status: 'warning',
+        message: '无法解析 .claude/settings.json',
+        details: ['文件可能已损坏，请检查 JSON 格式'],
+        fixable: false,
+      });
+    }
   }
 
   return results;
