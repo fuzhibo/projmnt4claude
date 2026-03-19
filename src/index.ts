@@ -85,7 +85,20 @@ const program = new Command();
 program
   .name('projmnt4claude')
   .description('Claude Code 项目管理 CLI 工具')
-  .version('0.1.0');
+  .version('0.1.0')
+  .option('--ai', 'AI 模式: 自动启用 --json 输出 + 非交互模式 + 精简日志')
+  .option('--json', 'JSON 格式输出 (全局)')
+  .hook('preAction', (thisCommand) => {
+    // AI 模式自动启用 JSON 输出
+    const opts = thisCommand.opts();
+    if (opts.ai) {
+      process.env.PROJMNT4CLAUDE_AI_MODE = 'true';
+      process.env.PROJMNT4CLAUDE_JSON_OUTPUT = 'true';
+    }
+    if (opts.json || opts.ai) {
+      process.env.PROJMNT4CLAUDE_JSON_OUTPUT = 'true';
+    }
+  });
 
 // setup 命令
 program
