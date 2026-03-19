@@ -61,15 +61,174 @@ function normalizeStatus(status: string): TaskStatus {
   return statusMap[status] || 'open';
 }
 
+// ============== 规范验证辅助函数 ==============
+
 /**
- * 分析问题接口
+ * 有效的任务状态值
  */
+const VALID_STATUSES: TaskStatus[] = ['open', 'in_progress', 'resolved', 'closed', 'reopened', 'abandoned'];
+
+/**
+ * 有效的任务类型
+ */
+const VALID_TYPES = ['bug', 'feature', 'research', 'docs', 'refactor', 'test'];
+
+/**
+ * 有效的优先级
+ */
+const VALID_PRIORITIES: TaskPriority[] = ['P0', 'P1', 'P2', 'P3', 'Q1', 'Q2', 'Q3', 'Q4'];
+
+/**
+ * 验证 ISO 时间戳格式
+ */
+function isValidISOTimestamp(timestamp: string): boolean {
+  if (!timestamp || typeof timestamp !== 'string') return false;
+  // ISO 8601 格式: YYYY-MM-DDTHH:mm:ss.sssZ 或 YYYY-MM-DDTHH:mm:ssZ
+  const isoRegex = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d{3})?Z?$/;
+  if (!isoRegex.test(timestamp)) return false;
+  // 验证是否为有效日期
+  const date = new Date(timestamp);
+  return !isNaN(date.getTime());
+}
+
+/**
+ * 验证历史记录条目格式
+ */
+function validateHistoryEntry(entry: unknown, index: number): { valid: boolean; errors: string[] } {
+  const errors: string[] = [];
+
+  if (!entry || typeof entry !== 'object') {
+    return { valid: false, errors: [`history[${index}] 不是有效对象`] };
+  }
+
+  const e = entry as Record<string, unknown>;
+
+  // 必需字段: timestamp, action
+  if (!e.timestamp || typeof e.timestamp !== 'string') {
+    errors.push(`history[${index}].timestamp 缺失或格式错误`);
+  } else if (!isValidISOTimestamp(e.timestamp)) {
+    errors.push(`history[${index}].timestamp 不是有效的 ISO 时间戳`);
+  }
+
+  if (!e.action || typeof e.action !== 'string') {
+    errors.push(`history[${index}].action 缺失或格式错误`);
+  }
+
+  return { valid: errors.length === 0, errors };
+}
+
+/**
+ * 验证需求变更历史条目格式
+ */
+function validateRequirementHistoryEntry(entry: unknown, index: number): { valid: boolean; errors: string[] } {
+  const errors: string[] = [];
+
+  if (!entry || typeof entry !== 'object') {
+    return { valid: false, errors: [`requirementHistory[${index}] 不是有效对象`] };
+  }
+
+  const e = entry as Record<string, unknown>;
+
+  // 必需字段: timestamp, version, newDescription, changeReason
+  if (!e.timestamp || typeof e.timestamp !== 'string') {
+    errors.push(`requirementHistory[${index}].timestamp 缺失或格式错误`);
+  } else if (!isValidISOTimestamp(e.timestamp)) {
+    errors.push(`requirementHistory[${index}].timestamp 不是有效的 ISO 时间戳`);
+  }
+
+  if (typeof e.version !== 'number' || e.version < 1) {
+    errors.push(`requirementHistory[${index}].version 应为 >= 1 的数字`);
+  }
+
+  if (!e.newDescription || typeof e.newDescription !== 'string') {
+    errors.push(`requirementHistory[${index}].newDescription 缺失或格式错误`);
+  }
+
+  if (!e.changeReason || typeof e.changeReason !== 'string') {
+    errors.push(`requirementHistory[${index}].changeReason 缺失或格式错误`);
+  }
+
+  return { valid: errors.length === 0, errors };
+}
+
+/**
+ * 验证任务 ID 格式
+ */
+function validateTaskIdFormat(id: string): { valid: boolean; format: 'new' | 'old' | 'unknown'; errors: string[] } {
+  const errors: string[] = [];
+
+  if (!id || typeof id !== 'string') {
+    return { valid: false, format: 'unknown', errors: ['任务 ID 为空或格式错误'] };
+  }
+
+  // 旧格式: TASK-001
+  if (/^TASK-\d{3,}$/.test(id)) {
+    return { valid: true, format: 'old', errors: [] };
+  }
+
+  // 新格式: TASK-{type}-{priority}-{slug}-{date}[-suffix]
+  const newFormat = /^TASK-(bug|feature|research|docs|refactor|test)-([PQ]\d)-([a-z0-9\-]+)-(\d{8})(?:-\d+)?$/;
+  if (newFormat.test(id)) {
+    return { valid: true, format: 'new', errors: [] };
+  }
+
+  // 子任务格式: {parentId}-N
+  const subtaskFormat = /^TASK-(bug|feature|research|docs|refactor|test)-([PQ]\d)-([a-z0-9\-]+)-(\d{8})(?:-\d+)?-\d+$/;
+  if (subtaskFormat.test(id)) {
+    return { valid: true, format: 'new', errors: [] };
+  }
+
+  // 宽松格式：TASK-{任意内容}
+  if (id.startsWith('TASK-') && id.length > 5 && /^[a-zA-Z0-9\-_]+$/.test(id)) {
+    return { valid: true, format: 'unknown', errors: [] };
+  }
+
+  errors.push('任务 ID 格式不符合规范');
+  return { valid: false, format: 'unknown', errors };
+}
+
+/**
+ * 验证状态值是否有效
+ */
+function isValidStatusValue(status: string): boolean {
+  return VALID_STATUSES.includes(status as TaskStatus);
+}
+
+/**
+ * 验证类型值是否有效
+ */
+function isValidTypeValue(type: string): boolean {
+  return VALID_TYPES.includes(type);
+}
+
+/**
+ * 验证优先级值是否有效
+ */
+function isValidPriorityValue(priority: string): boolean {
+  return VALID_PRIORITIES.includes(priority as TaskPriority);
+}
+
+// ============== 分析问题接口 ==============
 export interface Issue {
   taskId: string;
-  type: 'stale' | 'orphan' | 'cycle' | 'blocked' | 'no_description' | 'legacy_priority' | 'legacy_status' | 'legacy_schema';
+  type:
+    | 'stale' | 'orphan' | 'cycle' | 'blocked' | 'no_description'
+    | 'legacy_priority' | 'legacy_status' | 'legacy_schema'
+    // 关系检查
+    | 'invalid_parent_ref' | 'invalid_subtask_ref' | 'invalid_dependency_ref'
+    | 'parent_child_mismatch' | 'subtask_not_in_parent'
+    // 状态检查
+    | 'invalid_status_value' | 'status_reopen_mismatch'
+    // 历史记录检查
+    | 'invalid_history_format' | 'invalid_requirement_history_format'
+    // 时间戳检查
+    | 'invalid_timestamp_format'
+    // ID 检查
+    | 'invalid_task_id_format';
   severity: 'low' | 'medium' | 'high';
   message: string;
   suggestion: string;
+  details?: Record<string, unknown>; // 额外详情用于修复
 }
 
 export interface AnalysisStats {
@@ -265,6 +424,198 @@ export function analyzeProject(cwd: string = process.cwd(), includeArchived: boo
         message: '任务 meta.json 缺少新规范字段',
         suggestion: '添加 reopenCount 和 requirementHistory 字段以符合最新规范',
       });
+    }
+
+    // ========== 新增：规范合规性检查 ==========
+
+    // 1. 检测无效的任务 ID 格式
+    const idValidation = validateTaskIdFormat(task.id);
+    if (!idValidation.valid) {
+      issues.push({
+        taskId: task.id,
+        type: 'invalid_task_id_format',
+        severity: 'medium',
+        message: `任务 ID 格式不符合规范: ${idValidation.errors.join(', ')}`,
+        suggestion: '使用格式 TASK-{type}-{priority}-{slug}-{date}，如 TASK-feature-P1-user-auth-20260319',
+        details: { format: idValidation.format },
+      });
+    }
+
+    // 2. 检测无效的状态值
+    if (!isValidStatusValue(task.status)) {
+      issues.push({
+        taskId: task.id,
+        type: 'invalid_status_value',
+        severity: 'high',
+        message: `任务状态值无效: ${task.status}`,
+        suggestion: `使用有效状态: ${VALID_STATUSES.join(', ')}`,
+        details: { currentValue: task.status },
+      });
+    }
+
+    // 3. 检测状态与 reopenCount 不一致
+    if (normalizedStatus === 'reopened' && (task.reopenCount === undefined || task.reopenCount === 0)) {
+      issues.push({
+        taskId: task.id,
+        type: 'status_reopen_mismatch',
+        severity: 'medium',
+        message: '任务状态为 reopened 但 reopenCount 为 0 或未设置',
+        suggestion: '设置 reopenCount >= 1 或将状态改为其他值',
+        details: { status: task.status, reopenCount: task.reopenCount },
+      });
+    }
+
+    // 4. 检测无效的类型值
+    if (!isValidTypeValue(task.type)) {
+      issues.push({
+        taskId: task.id,
+        type: 'invalid_status_value',
+        severity: 'high',
+        message: `任务类型值无效: ${task.type}`,
+        suggestion: `使用有效类型: ${VALID_TYPES.join(', ')}`,
+        details: { currentValue: task.type },
+      });
+    }
+
+    // 5. 检测无效的优先级值
+    if (!isValidPriorityValue(task.priority)) {
+      issues.push({
+        taskId: task.id,
+        type: 'invalid_status_value',
+        severity: 'high',
+        message: `任务优先级值无效: ${task.priority}`,
+        suggestion: `使用有效优先级: ${VALID_PRIORITIES.join(', ')}`,
+        details: { currentValue: task.priority },
+      });
+    }
+
+    // 6. 检测时间戳格式
+    if (!isValidISOTimestamp(task.createdAt)) {
+      issues.push({
+        taskId: task.id,
+        type: 'invalid_timestamp_format',
+        severity: 'medium',
+        message: 'createdAt 不是有效的 ISO 时间戳',
+        suggestion: '使用 ISO 8601 格式，如 2026-03-19T10:00:00.000Z',
+        details: { field: 'createdAt', value: task.createdAt },
+      });
+    }
+
+    if (!isValidISOTimestamp(task.updatedAt)) {
+      issues.push({
+        taskId: task.id,
+        type: 'invalid_timestamp_format',
+        severity: 'medium',
+        message: 'updatedAt 不是有效的 ISO 时间戳',
+        suggestion: '使用 ISO 8601 格式，如 2026-03-19T10:00:00.000Z',
+        details: { field: 'updatedAt', value: task.updatedAt },
+      });
+    }
+
+    // 7. 检测父任务引用有效性
+    if (task.parentId) {
+      if (!taskExists(task.parentId, cwd)) {
+        issues.push({
+          taskId: task.id,
+          type: 'invalid_parent_ref',
+          severity: 'high',
+          message: `父任务 ${task.parentId} 不存在`,
+          suggestion: '删除无效的 parentId 或创建父任务',
+          details: { parentId: task.parentId },
+        });
+      } else {
+        // 检查子任务是否在父任务的 subtaskIds 中
+        const parentTask = readTaskMeta(task.parentId, cwd);
+        if (parentTask && parentTask.subtaskIds && !parentTask.subtaskIds.includes(task.id)) {
+          issues.push({
+            taskId: task.id,
+            type: 'subtask_not_in_parent',
+            severity: 'medium',
+            message: `子任务未在父任务 ${task.parentId} 的 subtaskIds 中`,
+            suggestion: '将子任务 ID 添加到父任务的 subtaskIds 数组',
+            details: { parentId: task.parentId },
+          });
+        }
+      }
+    }
+
+    // 8. 检测子任务引用有效性
+    if (task.subtaskIds && task.subtaskIds.length > 0) {
+      for (const subtaskId of task.subtaskIds) {
+        if (!taskExists(subtaskId, cwd)) {
+          issues.push({
+            taskId: task.id,
+            type: 'invalid_subtask_ref',
+            severity: 'medium',
+            message: `子任务 ${subtaskId} 不存在`,
+            suggestion: '从 subtaskIds 中移除无效引用或创建子任务',
+            details: { subtaskId },
+          });
+        } else {
+          // 检查子任务的 parentId 是否指向当前任务
+          const subtask = readTaskMeta(subtaskId, cwd);
+          if (subtask && subtask.parentId !== task.id) {
+            issues.push({
+              taskId: task.id,
+              type: 'parent_child_mismatch',
+              severity: 'medium',
+              message: `子任务 ${subtaskId} 的 parentId 不指向当前任务`,
+              suggestion: `将子任务的 parentId 更新为 ${task.id}`,
+              details: { subtaskId, expectedParentId: task.id, actualParentId: subtask.parentId },
+            });
+          }
+        }
+      }
+    }
+
+    // 9. 检测依赖引用有效性
+    if (task.dependencies && task.dependencies.length > 0) {
+      for (const depId of task.dependencies) {
+        if (!taskExists(depId, cwd)) {
+          issues.push({
+            taskId: task.id,
+            type: 'invalid_dependency_ref',
+            severity: 'medium',
+            message: `依赖任务 ${depId} 不存在`,
+            suggestion: '从 dependencies 中移除无效引用或创建依赖任务',
+            details: { dependencyId: depId },
+          });
+        }
+      }
+    }
+
+    // 10. 检测历史记录格式
+    if (task.history && Array.isArray(task.history)) {
+      for (let i = 0; i < task.history.length; i++) {
+        const entryValidation = validateHistoryEntry(task.history[i], i);
+        if (!entryValidation.valid) {
+          issues.push({
+            taskId: task.id,
+            type: 'invalid_history_format',
+            severity: 'low',
+            message: `history[${i}] 格式不正确: ${entryValidation.errors.join(', ')}`,
+            suggestion: '确保每个历史条目包含 timestamp (ISO格式) 和 action 字段',
+            details: { index: i, errors: entryValidation.errors },
+          });
+        }
+      }
+    }
+
+    // 11. 检测需求变更历史格式
+    if (task.requirementHistory && Array.isArray(task.requirementHistory)) {
+      for (let i = 0; i < task.requirementHistory.length; i++) {
+        const reqValidation = validateRequirementHistoryEntry(task.requirementHistory[i], i);
+        if (!reqValidation.valid) {
+          issues.push({
+            taskId: task.id,
+            type: 'invalid_requirement_history_format',
+            severity: 'low',
+            message: `requirementHistory[${i}] 格式不正确: ${reqValidation.errors.join(', ')}`,
+            suggestion: '确保每个需求变更条目包含 timestamp, version, newDescription, changeReason',
+            details: { index: i, errors: reqValidation.errors },
+          });
+        }
+      }
     }
 
     // 检测循环依赖
@@ -500,6 +851,140 @@ export async function fixIssues(cwd: string = process.cwd(), nonInteractive: boo
           writeTaskMeta(task, cwd);
           fixedCount++;
         }
+        break;
+      }
+
+      // ========== 新增：规范合规性修复 ==========
+
+      case 'invalid_status_value': {
+        console.log(`🔄 修复任务 ${issue.taskId} 的无效状态值...`);
+        const task = readTaskMeta(issue.taskId, cwd);
+        if (task && issue.details?.currentValue) {
+          const oldStatus = task.status;
+          // 尝试规范化，如果失败则设为 'open'
+          task.status = normalizeStatus(task.status);
+          writeTaskMeta(task, cwd);
+          console.log(`  ✅ 已将状态从 ${oldStatus} 更新为 ${task.status}`);
+          fixedCount++;
+        }
+        break;
+      }
+
+      case 'status_reopen_mismatch': {
+        console.log(`🔄 修复任务 ${issue.taskId} 的 reopenCount 不一致...`);
+        const task = readTaskMeta(issue.taskId, cwd);
+        if (task) {
+          // 从历史记录计算 reopen 次数
+          const reopenFromHistory = task.history?.filter(
+            (h: TaskHistoryEntry) => h.action === 'status_change' && h.newValue === 'reopened'
+          ).length || 0;
+
+          task.reopenCount = Math.max(1, reopenFromHistory);
+          writeTaskMeta(task, cwd);
+          console.log(`  ✅ 已将 reopenCount 设置为 ${task.reopenCount}`);
+          fixedCount++;
+        }
+        break;
+      }
+
+      case 'invalid_timestamp_format': {
+        console.log(`🔄 修复任务 ${issue.taskId} 的时间戳格式...`);
+        const task = readTaskMeta(issue.taskId, cwd);
+        if (task && issue.details?.field) {
+          const field = issue.details.field as string;
+          const now = new Date().toISOString();
+
+          if (field === 'createdAt' || field === 'updatedAt') {
+            (task as Record<string, unknown>)[field] = now;
+            writeTaskMeta(task, cwd);
+            console.log(`  ✅ 已将 ${field} 更新为 ${now}`);
+            fixedCount++;
+          }
+        }
+        break;
+      }
+
+      case 'invalid_parent_ref': {
+        console.log(`⚠️  任务 ${issue.taskId} 的父任务引用无效，无法自动修复`);
+        console.log(`   建议: 手动检查并删除无效的 parentId 或创建父任务`);
+        skippedCount++;
+        break;
+      }
+
+      case 'invalid_subtask_ref': {
+        console.log(`🔄 修复任务 ${issue.taskId} 的无效子任务引用...`);
+        const task = readTaskMeta(issue.taskId, cwd);
+        if (task && task.subtaskIds && issue.details?.subtaskId) {
+          const invalidId = issue.details.subtaskId as string;
+          const oldLength = task.subtaskIds.length;
+          task.subtaskIds = task.subtaskIds.filter(id => id !== invalidId);
+          if (task.subtaskIds.length < oldLength) {
+            writeTaskMeta(task, cwd);
+            console.log(`  ✅ 已从 subtaskIds 中移除无效引用 ${invalidId}`);
+            fixedCount++;
+          }
+        }
+        break;
+      }
+
+      case 'invalid_dependency_ref': {
+        console.log(`🔄 修复任务 ${issue.taskId} 的无效依赖引用...`);
+        const task = readTaskMeta(issue.taskId, cwd);
+        if (task && task.dependencies && issue.details?.dependencyId) {
+          const invalidId = issue.details.dependencyId as string;
+          const oldLength = task.dependencies.length;
+          task.dependencies = task.dependencies.filter(id => id !== invalidId);
+          if (task.dependencies.length < oldLength) {
+            writeTaskMeta(task, cwd);
+            console.log(`  ✅ 已从 dependencies 中移除无效引用 ${invalidId}`);
+            fixedCount++;
+          }
+        }
+        break;
+      }
+
+      case 'subtask_not_in_parent': {
+        console.log(`🔄 修复子任务 ${issue.taskId} 在父任务中的引用...`);
+        const task = readTaskMeta(issue.taskId, cwd);
+        if (task && task.parentId) {
+          const parentTask = readTaskMeta(task.parentId, cwd);
+          if (parentTask) {
+            if (!parentTask.subtaskIds) {
+              parentTask.subtaskIds = [];
+            }
+            if (!parentTask.subtaskIds.includes(task.id)) {
+              parentTask.subtaskIds.push(task.id);
+              writeTaskMeta(parentTask, cwd);
+              console.log(`  ✅ 已将子任务添加到父任务的 subtaskIds 中`);
+              fixedCount++;
+            }
+          }
+        }
+        break;
+      }
+
+      case 'parent_child_mismatch': {
+        console.log(`🔄 修复任务 ${issue.taskId} 的父子关系不一致...`);
+        const task = readTaskMeta(issue.taskId, cwd);
+        if (task && issue.details?.subtaskId && issue.details?.expectedParentId) {
+          const subtaskId = issue.details.subtaskId as string;
+          const subtask = readTaskMeta(subtaskId, cwd);
+          if (subtask) {
+            subtask.parentId = issue.details.expectedParentId as string;
+            writeTaskMeta(subtask, cwd);
+            console.log(`  ✅ 已将子任务 ${subtaskId} 的 parentId 更新为 ${subtask.parentId}`);
+            fixedCount++;
+          }
+        }
+        break;
+      }
+
+      case 'invalid_history_format':
+      case 'invalid_requirement_history_format':
+      case 'invalid_task_id_format': {
+        console.log(`⚠️  任务 ${issue.taskId} 的 ${issue.type} 问题无法自动修复`);
+        console.log(`   建议: ${issue.suggestion}`);
+        skippedCount++;
         break;
       }
 
