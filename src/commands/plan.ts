@@ -12,7 +12,267 @@ import {
 } from '../utils/plan';
 import { isInitialized, getProjectDir } from '../utils/path';
 import { readTaskMeta, getAllTasks, taskExists, getSubtasks } from '../utils/task';
-import type { TaskPriority } from '../types/task';
+import type { TaskMeta, TaskPriority } from '../types/task';
+
+// ============== 任务链分析类型定义 ==============
+
+/**
+ * 任务链：具有依赖关系的任务序列
+ */
+interface TaskChain {
+  chainId: string;           // 链 ID（链首任务 ID）
+  tasks: TaskMeta[];         // 链中所有任务（按依赖顺序）
+  length: number;            // 链长度
+  totalReopenCount: number;  // 链中任务总 reopen 次数
+  maxPriority: number;       // 链中最高优先级（数字越小越紧急）
+  keywords: string[];        // 链涉及的关键字
+}
+
+/**
+ * AI 友好的推荐结果
+ */
+interface AIRecommendationOutput {
+  query?: string;            // 用户查询（如有）
+  keywords?: string[];       // 提取的关键字（如有）
+  filterStats: {
+    totalTasks: number;
+    filteredTasks: number;
+    chainCount: number;
+  };
+  chains: Array<{
+    chainId: string;
+    length: number;
+    totalReopenCount: number;
+    maxPriority: string;
+    keywords: string[];
+    tasks: Array<{
+      order: number;
+      id: string;
+      title: string;
+      priority: string;
+      status: string;
+      reopenCount: number;
+      dependencies: string[];
+    }>;
+  }>;
+  recommendation: {
+    summary: string;
+    topChains: string[];
+    suggestedOrder: string[];
+  };
+}
+
+// ============== 关键字提取与过滤 ==============
+
+/**
+ * 从用户描述中提取关键字
+ */
+function extractKeywords(description: string): string[] {
+  // 停用词
+  const stopWords = new Set([
+    '的', '了', '是', '在', '和', '有', '我', '要', '想', '把', '这', '那',
+    '对', '就', '也', '都', '会', '能', '可', '上', '下', '中', '来', '去',
+    '做', '给', '让', '被', '用', '为', '与', '或', '但', '如', '到', '从',
+    'the', 'a', 'an', 'is', 'are', 'was', 'were', 'be', 'been', 'being',
+    'have', 'has', 'had', 'do', 'does', 'did', 'will', 'would', 'could',
+    'should', 'may', 'might', 'must', 'shall', 'can', 'need', 'want',
+    'to', 'of', 'in', 'for', 'on', 'with', 'at', 'by', 'from', 'as',
+    'and', 'or', 'but', 'if', 'then', 'else', 'when', 'where', 'which',
+  ]);
+
+  // 分词（简单空格+标点分割）
+  const words = description
+    .toLowerCase()
+    .replace(/[^\w\u4e00-\u9fa5\s]/g, ' ')
+    .split(/\s+/)
+    .filter(w => w.length > 1 && !stopWords.has(w));
+
+  // 提取唯一关键字
+  return [...new Set(words)];
+}
+
+/**
+ * 检查任务是否匹配关键字
+ */
+function taskMatchesKeywords(task: TaskMeta, keywords: string[]): boolean {
+  if (keywords.length === 0) return true;
+
+  const searchText = [
+    task.id,
+    task.title,
+    task.description || '',
+    task.type,
+    task.recommendedRole || '',
+    ...task.dependencies,
+  ].join(' ').toLowerCase();
+
+  // 至少匹配一个关键字
+  return keywords.some(kw => searchText.includes(kw.toLowerCase()));
+}
+
+// ============== 任务链分析 ==============
+
+/**
+ * 构建任务依赖图并识别任务链
+ */
+function buildTaskChains(tasks: TaskMeta[], cwd: string): TaskChain[] {
+  const taskMap = new Map<string, TaskMeta>();
+  const chains: TaskChain[] = [];
+  const visited = new Set<string>();
+
+  // 建立任务映射
+  for (const task of tasks) {
+    taskMap.set(task.id, task);
+  }
+
+  /**
+   * 从指定任务开始，向下追踪依赖链
+   */
+  function traceChain(startTask: TaskMeta): TaskMeta[] {
+    const chain: TaskMeta[] = [];
+    const chainVisited = new Set<string>();
+
+    function dfs(task: TaskMeta) {
+      if (chainVisited.has(task.id)) return;
+      chainVisited.add(task.id);
+
+      // 先处理依赖
+      for (const depId of task.dependencies) {
+        const depTask = taskMap.get(depId);
+        if (depTask && !chainVisited.has(depTask.id)) {
+          dfs(depTask);
+        }
+      }
+
+      // 再添加当前任务
+      chain.push(task);
+    }
+
+    dfs(startTask);
+    return chain;
+  }
+
+  // 为每个未被访问的任务构建链
+  for (const task of tasks) {
+    if (visited.has(task.id)) continue;
+
+    const chainTasks = traceChain(task);
+
+    // 标记为已访问
+    for (const t of chainTasks) {
+      visited.add(t.id);
+    }
+
+    // 计算链的元数据
+    const totalReopenCount = chainTasks.reduce(
+      (sum, t) => sum + (t.reopenCount || 0),
+      0
+    );
+
+    const priorityOrder: Record<TaskPriority, number> = {
+      P0: 0, P1: 1, P2: 2, P3: 3,
+      Q1: 4, Q2: 5, Q3: 6, Q4: 7,
+    };
+    const maxPriority = Math.min(
+      ...chainTasks.map(t => priorityOrder[t.priority] ?? 2)
+    );
+
+    const keywords = extractKeywords(
+      chainTasks.map(t => `${t.title} ${t.description || ''}`).join(' ')
+    );
+
+    chains.push({
+      chainId: chainTasks[0]!.id,
+      tasks: chainTasks,
+      length: chainTasks.length,
+      totalReopenCount,
+      maxPriority,
+      keywords,
+    });
+  }
+
+  return chains;
+}
+
+/**
+ * 对任务链进行排序
+ * 排序优先级：1. 链长度（降序） 2. reopen 次数（降序） 3. 优先级（升序）
+ */
+function sortChains(chains: TaskChain[]): TaskChain[] {
+  return [...chains].sort((a, b) => {
+    // 1. 链长度降序
+    if (b.length !== a.length) {
+      return b.length - a.length;
+    }
+    // 2. reopen 次数降序
+    if (b.totalReopenCount !== a.totalReopenCount) {
+      return b.totalReopenCount - a.totalReopenCount;
+    }
+    // 3. 优先级升序（数字越小越紧急）
+    return a.maxPriority - b.maxPriority;
+  });
+}
+
+/**
+ * 生成 AI 友好的输出
+ */
+function generateAIOutput(
+  chains: TaskChain[],
+  originalCount: number,
+  filteredCount: number,
+  query?: string,
+  keywords?: string[]
+): AIRecommendationOutput {
+  const priorityNames: Record<number, string> = {
+    0: 'P0', 1: 'P1', 2: 'P2', 3: 'P3',
+    4: 'Q1', 5: 'Q2', 6: 'Q3', 7: 'Q4',
+  };
+
+  // 构建建议执行顺序（按链分组，链内按依赖顺序）
+  const suggestedOrder: string[] = [];
+  const topChains: string[] = [];
+
+  for (let i = 0; i < Math.min(chains.length, 5); i++) {
+    const chain = chains[i]!;
+    topChains.push(chain.chainId);
+    for (const task of chain.tasks) {
+      if (!suggestedOrder.includes(task.id)) {
+        suggestedOrder.push(task.id);
+      }
+    }
+  }
+
+  return {
+    query,
+    keywords,
+    filterStats: {
+      totalTasks: originalCount,
+      filteredTasks: filteredCount,
+      chainCount: chains.length,
+    },
+    chains: chains.map(chain => ({
+      chainId: chain.chainId,
+      length: chain.length,
+      totalReopenCount: chain.totalReopenCount,
+      maxPriority: priorityNames[chain.maxPriority] || 'P2',
+      keywords: chain.keywords.slice(0, 10),
+      tasks: chain.tasks.map((task, idx) => ({
+        order: idx + 1,
+        id: task.id,
+        title: task.title,
+        priority: task.priority,
+        status: task.status,
+        reopenCount: task.reopenCount || 0,
+        dependencies: task.dependencies,
+      })),
+    })),
+    recommendation: {
+      summary: `发现 ${chains.length} 个任务链，共 ${filteredCount} 个任务`,
+      topChains,
+      suggestedOrder,
+    },
+  };
+}
 
 /**
  * 显示执行计划
@@ -148,11 +408,15 @@ export async function clearPlanCmd(force: boolean = false, cwd: string = process
 }
 
 /**
- * 推荐执行计划
- * 支持非交互模式和 JSON 输出
+ * 推荐执行计划（增强版）
+ * 支持关键字过滤、任务链分析、AI 友好的 JSON 输出
+ *
+ * @param options.query - 可选的用户描述/查询，用于关键字过滤
+ * @param options.nonInteractive - 非交互模式
+ * @param options.json - JSON 格式输出
  */
 export async function recommendPlan(
-  options: { nonInteractive?: boolean; json?: boolean } = {},
+  options: { query?: string; nonInteractive?: boolean; json?: boolean } = {},
   cwd: string = process.cwd()
 ): Promise<void> {
   if (!isInitialized(cwd)) {
@@ -162,77 +426,112 @@ export async function recommendPlan(
 
   console.log('正在分析项目任务...\n');
 
-  // 获取可执行的任务
-  const executableTasks = getExecutableTasks(cwd);
+  // 获取所有任务（不仅仅是可执行的，用于构建完整的依赖图）
+  const allTasks = getAllTasks(cwd);
 
-  if (executableTasks.length === 0) {
+  // 0. 关键字过滤
+  let keywords: string[] = [];
+  let filteredTasks = allTasks;
+
+  if (options.query) {
+    keywords = extractKeywords(options.query);
+    console.log(`关键字: ${keywords.join(', ')}`);
+
+    filteredTasks = allTasks.filter(task => taskMatchesKeywords(task, keywords));
+    console.log(`过滤结果: ${filteredTasks.length}/${allTasks.length} 个任务匹配\n`);
+  }
+
+  if (filteredTasks.length === 0) {
+    const emptyResult = {
+      query: options.query,
+      keywords,
+      filterStats: {
+        totalTasks: allTasks.length,
+        filteredTasks: 0,
+        chainCount: 0,
+      },
+      chains: [],
+      recommendation: {
+        summary: '没有匹配的任务',
+        topChains: [],
+        suggestedOrder: [],
+      },
+    };
+
     if (options.json) {
-      console.log(JSON.stringify({ tasks: [], message: '暂无可执行的任务' }, null, 2));
+      console.log(JSON.stringify(emptyResult, null, 2));
     } else {
-      console.log('暂无可执行的任务');
-      console.log('');
-      console.log('可能的原因:');
-      console.log('  - 所有任务已完成');
-      console.log('  - 任务存在未完成的依赖');
+      console.log('没有匹配的任务');
+      if (options.query) {
+        console.log(`查询: "${options.query}"`);
+        console.log(`关键字: ${keywords.join(', ')}`);
+      }
     }
     return;
   }
 
-  // 获取任务详情并按优先级排序
-  const tasksWithMeta = executableTasks
-    .map(id => readTaskMeta(id, cwd))
-    .filter(t => t !== null)
-    .sort((a, b) => {
-      const priorityOrder: Record<TaskPriority, number> = {
-        P0: 0,
-        P1: 1,
-        P2: 2,
-        P3: 3,
-        Q1: 4,
-        Q2: 5,
-        Q3: 6,
-        Q4: 7,
-      };
-      return priorityOrder[a!.priority] - priorityOrder[b!.priority];
-    });
+  // 1. 构建任务链
+  console.log('正在分析任务依赖关系...');
+  const chains = buildTaskChains(filteredTasks, cwd);
 
-  // JSON 输出
+  // 2. 按链长度、reopen次数、优先级排序
+  const sortedChains = sortChains(chains);
+
+  // 3. 生成 AI 友好的输出
+  const aiOutput = generateAIOutput(
+    sortedChains,
+    allTasks.length,
+    filteredTasks.length,
+    options.query,
+    keywords.length > 0 ? keywords : undefined
+  );
+
+  // JSON 格式输出（AI 友好）
   if (options.json) {
-    const output = tasksWithMeta.map((task, index) => ({
-      order: index + 1,
-      id: task!.id,
-      title: task!.title,
-      priority: task!.priority,
-      status: task!.status,
-      subtaskCount: task!.subtaskIds?.length || 0,
-    }));
-    console.log(JSON.stringify({ tasks: output }, null, 2));
+    console.log(JSON.stringify(aiOutput, null, 2));
     return;
   }
 
-  // 显示推荐列表
-  console.log('推荐执行计划:');
-  console.log('='.repeat(60));
-  console.log('序号 | 任务ID    | 标题                         | 优先级');
-  console.log('-----|-----------|------------------------------|--------');
+  // 人类可读格式输出
+  console.log('━'.repeat(60));
+  console.log('📋 任务链分析结果');
+  console.log('━'.repeat(60));
+  console.log('');
 
-  for (let i = 0; i < tasksWithMeta.length; i++) {
-    const task = tasksWithMeta[i]!;
-    const order = String(i + 1).padEnd(4);
-    const id = task.id.padEnd(9);
-    const title = task.title.substring(0, 28).padEnd(28);
-    const priority = formatPriority(task.priority);
+  // 统计摘要
+  console.log('📊 统计摘要:');
+  console.log(`   总任务数: ${aiOutput.filterStats.totalTasks}`);
+  console.log(`   匹配任务: ${aiOutput.filterStats.filteredTasks}`);
+  console.log(`   任务链数: ${aiOutput.filterStats.chainCount}`);
+  console.log('');
 
-    console.log(`${order} | ${id} | ${title} | ${priority}`);
+  // 显示任务链（按排序后的顺序）
+  console.log('🔗 任务链（按长度↓ reopen↓ 优先级↑ 排序）:');
+  console.log('');
 
-    // 显示子任务进度
-    if (task.subtaskIds && task.subtaskIds.length > 0) {
-      const subtasks = getSubtasks(task.id, cwd);
-      const completed = subtasks.filter(s => s.status === 'resolved' || s.status === 'closed').length;
-      console.log(`     └─ 子任务: ${completed}/${subtasks.length} 完成`);
+  for (let i = 0; i < sortedChains.length; i++) {
+    const chain = sortedChains[i]!;
+    const chainNum = `[${i + 1}/${sortedChains.length}]`;
+    const priorityIcon = getPriorityIcon(chain.maxPriority);
+
+    console.log(`${chainNum} ${priorityIcon} 链: ${chain.chainId}`);
+    console.log(`     长度: ${chain.length} | Reopen: ${chain.totalReopenCount} | 关键字: ${chain.keywords.slice(0, 5).join(', ')}`);
+
+    // 显示链中任务
+    for (let j = 0; j < chain.tasks.length; j++) {
+      const task = chain.tasks[j]!;
+      const prefix = j === chain.tasks.length - 1 ? '     └─' : '     ├─';
+      const statusIcon = getStatusIcon(task.status);
+      console.log(`${prefix} ${statusIcon} ${task.id}: ${task.title.substring(0, 40)}`);
     }
+    console.log('');
   }
 
+  // 推荐摘要
+  console.log('━'.repeat(60));
+  console.log('💡 推荐摘要:');
+  console.log(`   ${aiOutput.recommendation.summary}`);
+  console.log(`   优先任务链: ${aiOutput.recommendation.topChains.slice(0, 3).join(', ')}`);
   console.log('');
 
   // 非交互模式或检测到非 TTY
@@ -240,7 +539,7 @@ export async function recommendPlan(
 
   if (isNonInteractive) {
     const plan = getOrCreatePlan(cwd);
-    plan.tasks = tasksWithMeta.map(t => t!.id);
+    plan.tasks = aiOutput.recommendation.suggestedOrder;
     writePlan(plan, cwd);
     console.log('✅ 执行计划已更新 (非交互模式)');
     return;
@@ -250,18 +549,44 @@ export async function recommendPlan(
   const response = await prompts({
     type: 'confirm',
     name: 'confirm',
-    message: '是否将此推荐写入执行计划？',
+    message: '是否将推荐的任务顺序写入执行计划？',
     initial: true,
   });
 
   if (response.confirm) {
     const plan = getOrCreatePlan(cwd);
-    plan.tasks = tasksWithMeta.map(t => t!.id);
+    plan.tasks = aiOutput.recommendation.suggestedOrder;
     writePlan(plan, cwd);
     console.log('✅ 执行计划已更新');
   } else {
     console.log('已取消');
   }
+}
+
+/**
+ * 获取优先级图标
+ */
+function getPriorityIcon(priority: number): string {
+  const icons: Record<number, string> = {
+    0: '🔴', 1: '🟠', 2: '🟡', 3: '🟢',
+    4: '📊', 5: '📊', 6: '📊', 7: '📊',
+  };
+  return icons[priority] || '⚪';
+}
+
+/**
+ * 获取状态图标
+ */
+function getStatusIcon(status: string): string {
+  const icons: Record<string, string> = {
+    open: '⬜',
+    in_progress: '🔵',
+    resolved: '✅',
+    closed: '⚫',
+    reopened: '🔄',
+    abandoned: '❌',
+  };
+  return icons[status] || '❓';
 }
 
 /**
