@@ -1020,6 +1020,55 @@ export async function completeTask(
   console.log(`   状态: ✅ 已解决`);
   console.log('');
   console.log('━'.repeat(60));
+
+  // CP-FEAT-008-01: 完成说明提示
+  if (!options.yes) {
+    console.log('');
+    console.log('💡 提示: 建议为任务添加完成说明，记录解决方案和经验');
+    console.log('');
+
+    const addNote = await prompts({
+      type: 'confirm',
+      name: 'confirm',
+      message: '是否添加完成说明?',
+      initial: true,
+    });
+
+    if (addNote.confirm) {
+      const noteResponse = await prompts({
+        type: 'text',
+        name: 'note',
+        message: '请输入完成说明（解决方案、关键决策等）:',
+        validate: (value) => value.trim().length > 0 ? true : '说明不能为空',
+      });
+
+      if (noteResponse.note) {
+        // 添加到历史记录
+        if (!task.history) {
+          task.history = [];
+        }
+        task.history.push({
+          timestamp: new Date().toISOString(),
+          action: '添加完成说明',
+          field: 'completionNote',
+          newValue: noteResponse.note,
+        });
+
+        // 更新任务描述或添加 notes
+        const taskDir = path.join(getTasksDir(cwd), taskId);
+        const notesDir = path.join(taskDir, 'notes');
+        if (!fs.existsSync(notesDir)) {
+          fs.mkdirSync(notesDir, { recursive: true });
+        }
+        const notePath = path.join(notesDir, `completion-${new Date().toISOString().slice(0, 10)}.md`);
+        fs.writeFileSync(notePath, `# 完成说明\n\n${noteResponse.note}\n`, 'utf-8');
+
+        writeTaskMeta(task, cwd);
+        console.log('');
+        console.log('✅ 完成说明已保存');
+      }
+    }
+  }
 }
 
 /**
@@ -1753,6 +1802,173 @@ export async function listTaskCheckpoints(
 }
 
 /**
+ * 拆分任务为多个子任务
+ * 命令: task split <taskId> --into <count> 或 --titles "title1,title2,..."
+ */
+export async function splitTask(
+  parentId: string,
+  options: {
+    into?: number;
+    titles?: string;
+    nonInteractive?: boolean;
+  } = {},
+  cwd: string = process.cwd()
+): Promise<void> {
+  if (!isInitialized(cwd)) {
+    console.error('错误: 项目未初始化。请先运行 `projmnt4claude setup`');
+    process.exit(1);
+  }
+
+  // 验证父任务存在
+  const parentTask = readTaskMeta(parentId, cwd);
+  if (!parentTask) {
+    console.error(`错误: 父任务 ${parentId} 不存在`);
+    process.exit(1);
+  }
+
+  // 解析子任务标题
+  let subtaskTitles: string[] = [];
+
+  if (options.titles) {
+    // 从 --titles 参数解析
+    subtaskTitles = options.titles.split(',').map(t => t.trim()).filter(t => t.length > 0);
+  } else if (options.into && options.into > 0) {
+    // 从 --into 参数生成默认标题
+    const count = options.into;
+    for (let i = 1; i <= count; i++) {
+      subtaskTitles.push(`${parentTask.title} - 部分 ${i}`);
+    }
+  } else {
+    // 交互模式：询问用户
+    if (options.nonInteractive) {
+      console.error('错误: 非交互模式需要指定 --into 或 --titles');
+      process.exit(1);
+    }
+
+    const response = await prompts({
+      type: 'select',
+      name: 'mode',
+      message: '选择拆分方式:',
+      choices: [
+        { title: '按数量拆分 (自动生成标题)', value: 'count' },
+        { title: '手动输入子任务标题', value: 'titles' },
+      ],
+    });
+
+    if (!response.mode) {
+      console.log('已取消');
+      return;
+    }
+
+    if (response.mode === 'count') {
+      const countResponse = await prompts({
+        type: 'number',
+        name: 'count',
+        message: '拆分为几个子任务?',
+        initial: 2,
+        min: 2,
+        max: 10,
+      });
+
+      if (!countResponse.count) {
+        console.log('已取消');
+        return;
+      }
+
+      for (let i = 1; i <= countResponse.count; i++) {
+        subtaskTitles.push(`${parentTask.title} - 部分 ${i}`);
+      }
+    } else {
+      const titlesResponse = await prompts({
+        type: 'text',
+        name: 'titles',
+        message: '输入子任务标题 (用逗号分隔):',
+        validate: (value) => {
+          const titles = value.split(',').map((t: string) => t.trim()).filter((t: string) => t);
+          return titles.length >= 2 ? true : '至少需要 2 个子任务';
+        },
+      });
+
+      if (!titlesResponse.titles) {
+        console.log('已取消');
+        return;
+      }
+
+      subtaskTitles = titlesResponse.titles.split(',').map((t: string) => t.trim()).filter((t: string) => t);
+    }
+  }
+
+  if (subtaskTitles.length < 2) {
+    console.error('错误: 至少需要拆分为 2 个子任务');
+    process.exit(1);
+  }
+
+  console.log('');
+  console.log(`📦 准备拆分任务: ${parentId}`);
+  console.log(`   标题: ${parentTask.title}`);
+  console.log(`   子任务数量: ${subtaskTitles.length}`);
+  console.log('');
+
+  // 导入工具函数
+  const { generateSubtaskId, addSubtaskToParent } = await import('../utils/task');
+
+  const createdSubtaskIds: string[] = [];
+
+  // 创建子任务
+  for (let i = 0; i < subtaskTitles.length; i++) {
+    const title = subtaskTitles[i];
+
+    // 生成子任务 ID
+    const subtaskId = generateSubtaskId(parentId, cwd);
+
+    // 创建子任务元数据
+    const subtask = createDefaultTaskMeta(subtaskId, title, parentTask.type);
+    subtask.parentId = parentId;
+    subtask.priority = parentTask.priority;
+    subtask.description = `从 ${parentId} 拆分的子任务`;
+
+    // 写入子任务
+    writeTaskMeta(subtask, cwd);
+
+    // 创建 checkpoint.md
+    const taskDir = path.join(getTasksDir(cwd), subtaskId);
+    const checkpointPath = path.join(taskDir, 'checkpoint.md');
+    fs.writeFileSync(checkpointPath, `# ${subtaskId} 检查点\n\n- [ ] 完成任务\n`, 'utf-8');
+
+    // 关联到父任务
+    addSubtaskToParent(parentId, subtaskId, cwd);
+
+    createdSubtaskIds.push(subtaskId);
+    console.log(`   ✅ 创建子任务: ${subtaskId} - ${title}`);
+  }
+
+  // 设置子任务之间的依赖关系（链式依赖）
+  for (let i = 1; i < createdSubtaskIds.length; i++) {
+    const currentId = createdSubtaskIds[i];
+    const prevId = createdSubtaskIds[i - 1];
+
+    const currentTask = readTaskMeta(currentId, cwd);
+    if (currentTask) {
+      currentTask.dependencies.push(prevId);
+      writeTaskMeta(currentTask, cwd);
+      console.log(`   🔗 设置依赖: ${currentId} 依赖 ${prevId}`);
+    }
+  }
+
+  console.log('');
+  console.log('✅ 任务拆分完成!');
+  console.log('');
+  console.log('📋 子任务列表:');
+  createdSubtaskIds.forEach((id, index) => {
+    const depInfo = index > 0 ? ` (依赖: ${createdSubtaskIds[index - 1]})` : '';
+    console.log(`   ${index + 1}. ${id}${depInfo}`);
+  });
+  console.log('');
+  console.log('💡 提示: 使用以下命令查看子任务:');
+  console.log(`   projmnt4claude task show ${parentId} --checkpoints`);
+}
+
+/**
  * 显示检查点详情
  */
 function displayCheckpointDetail(checkpoint: CheckpointMetadata): void {
@@ -1790,6 +2006,274 @@ function displayCheckpointDetail(checkpoint: CheckpointMetadata): void {
       console.log(`   验证时间: ${checkpoint.verification.verifiedAt}`);
     }
   }
+  console.log('');
+}
+
+/**
+ * 搜索任务
+ * 命令: task search <keyword>
+ */
+export function searchTasks(
+  keyword: string,
+  options: {
+    status?: string;
+    priority?: string;
+    json?: boolean;
+  } = {},
+  cwd: string = process.cwd()
+): void {
+  if (!isInitialized(cwd)) {
+    console.error('错误: 项目未初始化。请先运行 `projmnt4claude setup`');
+    process.exit(1);
+  }
+
+  const allTasks = getAllTasks(cwd);
+  const lowerKeyword = keyword.toLowerCase();
+
+  // 过滤匹配的任务
+  const matchedTasks = allTasks.filter(task => {
+    // 状态过滤
+    if (options.status && task.status !== options.status) {
+      return false;
+    }
+    // 优先级过滤
+    if (options.priority && task.priority !== options.priority) {
+      return false;
+    }
+    // 关键词匹配
+    const titleMatch = task.title.toLowerCase().includes(lowerKeyword);
+    const descMatch = task.description?.toLowerCase().includes(lowerKeyword) || false;
+    const idMatch = task.id.toLowerCase().includes(lowerKeyword);
+    return titleMatch || descMatch || idMatch;
+  });
+
+  if (options.json) {
+    console.log(JSON.stringify(matchedTasks, null, 2));
+    return;
+  }
+
+  if (matchedTasks.length === 0) {
+    console.log(`未找到匹配 "${keyword}" 的任务`);
+    return;
+  }
+
+  console.log('');
+  console.log(`🔍 搜索结果: "${keyword}" (${matchedTasks.length} 个匹配)`);
+  console.log('━'.repeat(60));
+  console.log('');
+
+  matchedTasks.forEach((task, index) => {
+    const statusIcon = task.status === 'completed' || task.status === 'resolved' || task.status === 'closed' ? '✅' :
+                       task.status === 'in_progress' ? '🔄' : '⏳';
+    console.log(`${index + 1}. ${statusIcon} ${task.id}`);
+    console.log(`   标题: ${task.title}`);
+    console.log(`   状态: ${task.status} | 优先级: ${task.priority}`);
+    console.log('');
+  });
+}
+
+/**
+ * 批量更新任务状态
+ * 命令: task update --status <status> --all
+ */
+export async function batchUpdateTasks(
+  options: {
+    status?: string;
+    priority?: string;
+    all?: boolean;
+    yes?: boolean;
+  } = {},
+  cwd: string = process.cwd()
+): Promise<void> {
+  if (!isInitialized(cwd)) {
+    console.error('错误: 项目未初始化。请先运行 `projmnt4claude setup`');
+    process.exit(1);
+  }
+
+  if (!options.status && !options.priority) {
+    console.error('错误: 批量更新需要指定 --status 或 --priority');
+    process.exit(1);
+  }
+
+  const allTasks = getAllTasks(cwd);
+
+  // 过滤出需要更新的任务（非已完成/已关闭的任务）
+  const tasksToUpdate = options.all
+    ? allTasks
+    : allTasks.filter(t => t.status !== 'resolved' && t.status !== 'closed' && t.status !== 'abandoned');
+
+  if (tasksToUpdate.length === 0) {
+    console.log('没有需要更新的任务');
+    return;
+  }
+
+  console.log('');
+  console.log(`📦 批量更新任务`);
+  console.log('━'.repeat(60));
+  console.log(`   目标任务数: ${tasksToUpdate.length}`);
+  if (options.status) {
+    console.log(`   新状态: ${options.status}`);
+  }
+  if (options.priority) {
+    console.log(`   新优先级: ${options.priority}`);
+  }
+  console.log('');
+
+  // 非交互模式或用户确认
+  if (!options.yes) {
+    const response = await prompts({
+      type: 'confirm',
+      name: 'confirm',
+      message: `确认更新 ${tasksToUpdate.length} 个任务?`,
+      initial: false,
+    });
+
+    if (!response.confirm) {
+      console.log('已取消');
+      return;
+    }
+  }
+
+  // 执行批量更新
+  let updatedCount = 0;
+  for (const task of tasksToUpdate) {
+    let updated = false;
+
+    if (options.status) {
+      task.status = options.status as TaskStatus;
+      updated = true;
+    }
+    if (options.priority) {
+      task.priority = options.priority as TaskPriority;
+      updated = true;
+    }
+
+    if (updated) {
+      writeTaskMeta(task, cwd);
+      updatedCount++;
+      console.log(`   ✅ ${task.id}`);
+    }
+  }
+
+  console.log('');
+  console.log(`✅ 批量更新完成: ${updatedCount} 个任务已更新`);
+}
+
+/**
+ * 检查点模板映射
+ * CP-FEAT-008-02: 基于任务类型生成检查点模板
+ */
+const CHECKPOINT_TEMPLATES: Record<string, string[]> = {
+  bug: [
+    '复现问题',
+    '定位根本原因',
+    '实现修复',
+    '编写测试用例验证修复',
+    '验证不影响其他功能',
+    '更新相关文档',
+  ],
+  feature: [
+    '理解需求和设计',
+    '实现核心功能',
+    '编写单元测试',
+    '编写集成测试',
+    '更新文档',
+    '代码审查',
+  ],
+  research: [
+    '明确研究目标',
+    '收集相关信息',
+    '分析可行性',
+    '记录发现和建议',
+    '总结结论',
+  ],
+  docs: [
+    '确定文档范围和受众',
+    '收集必要信息',
+    '编写文档内容',
+    '审阅和校对',
+    '发布文档',
+  ],
+  refactor: [
+    '分析现有代码结构',
+    '设计重构方案',
+    '实现重构',
+    '确保测试通过',
+    '验证功能不变',
+    '更新相关文档',
+  ],
+  test: [
+    '确定测试范围',
+    '设计测试用例',
+    '实现测试代码',
+    '运行测试验证',
+    '修复失败的测试',
+    '更新测试文档',
+  ],
+};
+
+/**
+ * 生成检查点模板
+ * 命令: task checkpoint template <taskId> [--type <type>]
+ */
+export function generateCheckpointTemplate(
+  taskId: string,
+  options: {
+    type?: string;
+    apply?: boolean;
+  } = {},
+  cwd: string = process.cwd()
+): void {
+  if (!isInitialized(cwd)) {
+    console.error('错误: 项目未初始化。请先运行 `projmnt4claude setup`');
+    process.exit(1);
+  }
+
+  const task = readTaskMeta(taskId, cwd);
+  if (!task) {
+    console.error(`错误: 任务 '${taskId}' 不存在`);
+    process.exit(1);
+  }
+
+  // 确定任务类型
+  const taskType = options.type || task.type || 'feature';
+
+  // 获取模板
+  const template = CHECKPOINT_TEMPLATES[taskType] || CHECKPOINT_TEMPLATES.feature;
+
+  console.log('');
+  console.log('━'.repeat(60));
+  console.log(`📋 检查点模板: ${taskId}`);
+  console.log('━'.repeat(60));
+  console.log('');
+  console.log(`任务类型: ${taskType}`);
+  console.log('');
+  console.log('建议的检查点:');
+  console.log('');
+
+  template.forEach((item, index) => {
+    console.log(`   ${index + 1}. ${item}`);
+  });
+
+  console.log('');
+
+  if (options.apply) {
+    // 应用模板到任务
+    const taskDir = path.join(getTasksDir(cwd), taskId);
+    const checkpointPath = path.join(taskDir, 'checkpoint.md');
+
+    let content = `# ${taskId} 检查点\n\n`;
+    template.forEach(item => {
+      content += `- [ ] ${item}\n`;
+    });
+    content += '\n';
+
+    fs.writeFileSync(checkpointPath, content, 'utf-8');
+    console.log('✅ 检查点模板已应用到任务');
+  } else {
+    console.log('💡 使用 --apply 参数将模板应用到任务');
+  }
+
   console.log('');
 }
 

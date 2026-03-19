@@ -20,6 +20,9 @@ import {
   syncChildren,
   updateCheckpoint,
   listTaskCheckpoints,
+  splitTask,
+  searchTasks,
+  batchUpdateTasks,
 } from './commands/task';
 import {
   showPlan,
@@ -128,7 +131,7 @@ program
 // task 命令组
 program
   .command('task <action> [id]')
-  .description('管理任务 (create/list/show/update/delete/execute/checkpoint/dependency/add-subtask/status-guide/complete)')
+  .description('管理任务 (create/list/show/update/delete/execute/checkpoint/dependency/add-subtask/status-guide/complete/split/search/batch-update)')
   .allowExcessArguments(true)
   .option('-s, --status <status>', '按状态过滤 (仅 list)')
   .option('-p, --priority <priority>', '按优先级过滤 (仅 list)')
@@ -152,6 +155,8 @@ program
   .option('--checkpoints', '显示检查点详情 (仅 show)')
   .option('--result <result>', '验证结果 (仅 checkpoint complete)')
   .option('--note <note>', '检查点备注 (仅 checkpoint note/fail)')
+  .option('--into <count>', '拆分数量 (仅 split)')
+  .option('--titles <titles>', '子任务标题列表，仅 split,')
   .action(async (action, id, options) => {
     requireInit();
     switch (action) {
@@ -346,6 +351,39 @@ program
         }
         await syncChildren(id, {
           targetStatus: options.status,
+        });
+        break;
+      }
+      case 'split': {
+        if (!id) {
+          console.error('错误: split 操作需要指定父任务ID');
+          process.exit(1);
+        }
+        await splitTask(id, {
+          into: options.into ? parseInt(options.into) : undefined,
+          titles: options.titles,
+          nonInteractive: options.yes,
+        });
+        break;
+      }
+      case 'search': {
+        if (!id) {
+          console.error('错误: search 操作需要指定搜索关键词');
+          process.exit(1);
+        }
+        searchTasks(id, {
+          status: options.status,
+          priority: options.priority,
+          json: options.json,
+        });
+        break;
+      }
+      case 'batch-update': {
+        await batchUpdateTasks({
+          status: options.status,
+          priority: options.priority,
+          all: options.all,
+          yes: options.yes,
         });
         break;
       }
