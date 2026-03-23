@@ -12,12 +12,13 @@ export type TaskPriority = 'P0' | 'P1' | 'P2' | 'P3' | 'Q1' | 'Q2' | 'Q3' | 'Q4'
  * 任务状态
  */
 export type TaskStatus =
-  | 'open'        // 待处理
-  | 'in_progress' // 进行中
-  | 'resolved'    // 已解决
-  | 'closed'      // 已关闭
-  | 'reopened'    // 已重开
-  | 'abandoned';  // 已放弃
+  | 'open'          // 待处理
+  | 'in_progress'   // 进行中
+  | 'wait_complete' // 等待验证（开发已完成，等待质量门禁）
+  | 'resolved'      // 已解决
+  | 'closed'        // 已关闭
+  | 'reopened'      // 已重开
+  | 'abandoned';    // 已放弃
 
 /**
  * 任务历史记录条目
@@ -51,15 +52,106 @@ export interface RequirementHistoryEntry {
 }
 
 /**
+ * 验证方法类型
+ * 注意：已移除 'manual' 类型，强制使用具体验证方法
+ */
+export type VerificationMethod =
+  | 'code_review'      // 代码审查
+  | 'lint'             // 静态检查
+  | 'functional_test'  // 功能测试
+  | 'e2e_test'         // 端到端测试
+  | 'architect_review' // 架构师审查
+  | 'automated';       // 自动化验证（通用）
+
+/**
  * 检查点验证信息
  */
 export interface CheckpointVerification {
-  method: 'manual' | 'automated' | 'test';
-  command?: string;        // 验证命令（如有）
-  expected?: string;       // 期望结果
-  result?: string;         // 实际验证结果
-  verifiedAt?: string;     // 验证时间
-  verifiedBy?: string;     // 验证者
+  method: VerificationMethod;  // 验证方法（禁止使用 'manual'）
+  commands?: string[];         // 验证命令列表
+  expected?: string;           // 期望结果
+  result?: string;             // 实际验证结果
+  evidencePath?: string;       // 证据路径（相对路径）
+  exitCode?: number;           // 命令退出码
+  verifiedAt?: string;         // 验证时间
+  verifiedBy?: string;         // 验证者
+}
+
+/**
+ * 任务级 Hook 类型
+ */
+export type TaskHookType =
+  | 'preTaskCreate'     // 任务创建前
+  | 'postTaskCreate'    // 任务创建后
+  | 'preTaskUpdate'     // 任务更新前（关键！状态变更前）
+  | 'postTaskUpdate'    // 任务更新后
+  | 'preTaskComplete'   // 任务完成前（关键！验证检查点）
+  | 'postTaskComplete'; // 任务完成后
+
+/**
+ * 任务级 Hook 配置
+ */
+export interface TaskHookConfig {
+  enabled: boolean;
+  hooks: {
+    preTaskUpdate?: boolean;
+    preTaskComplete?: boolean;
+    postTaskUpdate?: boolean;
+    postTaskComplete?: boolean;
+  };
+  scriptPath?: string;  // 自定义验证脚本路径
+  createdAt: string;
+  updatedAt: string;
+}
+
+/**
+ * Hook 执行上下文
+ */
+export interface HookExecutionContext {
+  hookType: TaskHookType;
+  taskId: string;
+  oldStatus?: TaskStatus;
+  newStatus?: TaskStatus;
+  taskData: TaskMeta;
+  cwd: string;
+}
+
+/**
+ * Hook 执行结果
+ */
+export interface HookResult {
+  success: boolean;
+  message?: string;
+  details?: string[];
+  shouldBlock?: boolean;  // 是否阻止操作
+}
+
+/**
+ * 验证错误
+ */
+export interface ValidationError {
+  code: string;
+  message: string;
+  details?: string[];
+}
+
+/**
+ * 验证警告
+ */
+export interface ValidationWarning {
+  code: string;
+  message: string;
+  details?: string[];
+}
+
+/**
+ * 任务验证结果
+ */
+export interface TaskValidationResult {
+  valid: boolean;
+  errors: ValidationError[];
+  warnings: ValidationWarning[];
+  evidenceCollected: string[];
 }
 
 /**

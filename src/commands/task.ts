@@ -730,6 +730,180 @@ export async function updateTask(
 }
 
 /**
+ * 提交任务等待验证
+ *
+ * 将任务状态设置为 wait_complete，等待质量门禁验证
+ * 等价于: projmnt4claude task update TASK-xxx --status wait_complete
+ */
+export async function submitTask(
+  taskId: string,
+  options: {
+    note?: string;
+  } = {},
+  cwd: string = process.cwd()
+): Promise<void> {
+  if (!isInitialized(cwd)) {
+    console.error('错误: 项目未初始化。请先运行 `projmnt4claude setup`');
+    process.exit(1);
+  }
+
+  const task = readTaskMeta(taskId, cwd);
+  if (!task) {
+    console.error(`错误: 任务 '${taskId}' 不存在`);
+    process.exit(1);
+  }
+
+  // 检查当前状态是否允许提交
+  const allowedStatuses: TaskStatus[] = ['in_progress', 'open'];
+  if (!allowedStatuses.includes(task.status)) {
+    console.error(`错误: 任务当前状态为 '${task.status}'，只有 ${allowedStatuses.join(', ')} 状态的任务可以提交`);
+    process.exit(1);
+  }
+
+  const oldStatus = task.status;
+
+  // 更新状态为 wait_complete
+  task.status = 'wait_complete' as TaskStatus;
+
+  // 记录历史
+  const historyEntry: TaskHistoryEntry = {
+    timestamp: new Date().toISOString(),
+    action: `提交等待验证: ${oldStatus} -> wait_complete`,
+    field: 'status',
+    oldValue: oldStatus,
+    newValue: 'wait_complete',
+    user: process.env.USER || undefined,
+  };
+
+  if (options.note) {
+    historyEntry.reason = options.note;
+  }
+
+  if (!task.history) {
+    task.history = [];
+  }
+  task.history.push(historyEntry);
+
+  writeTaskMeta(task, cwd);
+
+  console.log('');
+  console.log('━'.repeat(60));
+  console.log('📤 任务已提交等待验证');
+  console.log('━'.repeat(60));
+  console.log('');
+  console.log(`任务ID: ${taskId}`);
+  console.log(`标题: ${task.title}`);
+  console.log(`状态: ${oldStatus} → wait_complete`);
+  console.log('');
+  console.log('验证将通过以下方式自动执行:');
+  console.log('  1. Claude Code hooks 在后续操作时触发');
+  console.log('  2. 运行 projmnt4claude task validate 命令');
+  console.log('');
+  console.log('验证通过后，任务状态将自动更新为 resolved');
+  console.log('');
+}
+
+/**
+ * 验证 wait_complete 状态的任务
+ *
+ * 执行验证并更新任务状态
+ */
+export async function validateTask(
+  taskId: string,
+  options: {
+    executeCommands?: boolean;
+    autoResolve?: boolean;
+  } = {},
+  cwd: string = process.cwd()
+): Promise<void> {
+  // 动态导入避免循环依赖
+  const { validateTaskCompletion, generateValidationReport } = await import('../utils/validation.js');
+
+  if (!isInitialized(cwd)) {
+    console.error('错误: 项目未初始化。请先运行 `projmnt4claude setup`');
+    process.exit(1);
+  }
+
+  const task = readTaskMeta(taskId, cwd);
+  if (!task) {
+    console.error(`错误: 任务 '${taskId}' 不存在`);
+    process.exit(1);
+  }
+
+  if (task.status !== 'wait_complete') {
+    console.error(`错误: 任务状态为 '${task.status}'，只有 wait_complete 状态的任务可以验证`);
+    console.log('');
+    console.log('提示: 先提交任务等待验证');
+    console.log(`      projmnt4claude task submit ${taskId}`);
+    process.exit(1);
+  }
+
+  console.log('');
+  console.log('━'.repeat(60));
+  console.log('🔍 开始验证任务');
+  console.log('━'.repeat(60));
+  console.log('');
+
+  // 执行验证
+  const result = await validateTaskCompletion(taskId, cwd, {
+    executeCommands: options.executeCommands !== false,
+    collectEvidence: true,
+  });
+
+  // 输出验证报告
+  const report = generateValidationReport(taskId, result);
+  console.log(report);
+
+  if (result.valid) {
+    if (options.autoResolve !== false) {
+      // 自动更新为 resolved
+      task.status = 'resolved' as TaskStatus;
+
+      const historyEntry: TaskHistoryEntry = {
+        timestamp: new Date().toISOString(),
+        action: '验证通过，状态更新为 resolved',
+        field: 'status',
+        oldValue: 'wait_complete',
+        newValue: 'resolved',
+        user: process.env.USER || undefined,
+      };
+
+      if (!task.history) {
+        task.history = [];
+      }
+      task.history.push(historyEntry);
+
+      writeTaskMeta(task, cwd);
+      console.log('✅ 任务状态已更新为 resolved');
+    } else {
+      console.log('✅ 验证通过，可手动更新状态:');
+      console.log(`   projmnt4claude task update ${taskId} --status resolved`);
+    }
+  } else {
+    // 验证失败，返回 in_progress
+    task.status = 'in_progress';
+
+    const historyEntry: TaskHistoryEntry = {
+      timestamp: new Date().toISOString(),
+      action: '验证失败，返回开发状态',
+      field: 'status',
+      oldValue: 'wait_complete',
+      newValue: 'in_progress',
+      reason: result.errors.map(e => e.message).join('; '),
+      user: process.env.USER || undefined,
+    };
+
+    if (!task.history) {
+      task.history = [];
+    }
+    task.history.push(historyEntry);
+
+    writeTaskMeta(task, cwd);
+    console.log('❌ 任务已返回 in_progress 状态，请修复问题后重新提交');
+  }
+}
+
+/**
  * 删除任务（归档）
  */
 export async function deleteTask(taskId: string, force: boolean = false, cwd: string = process.cwd()): Promise<void> {

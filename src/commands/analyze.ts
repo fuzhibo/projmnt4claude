@@ -66,7 +66,7 @@ function normalizeStatus(status: string): TaskStatus {
 /**
  * 有效的任务状态值
  */
-const VALID_STATUSES: TaskStatus[] = ['open', 'in_progress', 'resolved', 'closed', 'reopened', 'abandoned'];
+const VALID_STATUSES: TaskStatus[] = ['open', 'in_progress', 'wait_complete', 'resolved', 'closed', 'reopened', 'abandoned'];
 
 /**
  * 有效的任务类型
@@ -224,7 +224,9 @@ export interface Issue {
     // 时间戳检查
     | 'invalid_timestamp_format'
     // ID 检查
-    | 'invalid_task_id_format';
+    | 'invalid_task_id_format'
+    // 验证方法检查
+    | 'manual_verification';
   severity: 'low' | 'medium' | 'high';
   message: string;
   suggestion: string;
@@ -512,7 +514,24 @@ export function analyzeProject(cwd: string = process.cwd(), includeArchived: boo
       });
     }
 
-    // 7. 检测父任务引用有效性
+    // 7. 检测 manual 验证方法（禁止使用）
+    if (task.checkpoints && task.checkpoints.length > 0) {
+      const manualCheckpoints = task.checkpoints.filter(
+        cp => (cp.verification?.method as string) === 'manual'
+      );
+      if (manualCheckpoints.length > 0) {
+        issues.push({
+          taskId: task.id,
+          type: 'manual_verification',
+          severity: 'high',
+          message: `有 ${manualCheckpoints.length} 个检查点使用了禁止的 manual 验证方法`,
+          suggestion: '将 manual 替换为 code_review/lint/functional_test/e2e_test/architect_review/automated 等具体验证方法',
+          details: { checkpointIds: manualCheckpoints.map(cp => cp.id) },
+        });
+      }
+    }
+
+    // 8. 检测父任务引用有效性
     if (task.parentId) {
       if (!taskExists(task.parentId, cwd)) {
         issues.push({
@@ -985,6 +1004,30 @@ export async function fixIssues(cwd: string = process.cwd(), nonInteractive: boo
         console.log(`⚠️  任务 ${issue.taskId} 的 ${issue.type} 问题无法自动修复`);
         console.log(`   建议: ${issue.suggestion}`);
         skippedCount++;
+        break;
+      }
+
+      // ========== 新增：manual 验证修复 ==========
+
+      case 'manual_verification': {
+        console.log(`🔄 修复任务 ${issue.taskId} 的 manual 验证方法...`);
+        const task = readTaskMeta(issue.taskId, cwd);
+        if (task && task.checkpoints && issue.details?.checkpointIds) {
+          let fixedCount_local = 0;
+          for (const cpId of issue.details.checkpointIds as string[]) {
+            const cp = task.checkpoints.find(c => c.id === cpId);
+            if (cp && cp.verification && (cp.verification.method as string) === 'manual') {
+              // 将 manual 替换为 automated
+              cp.verification.method = 'automated';
+              console.log(`  ✅ 检查点 ${cpId}: manual -> automated`);
+              fixedCount_local++;
+            }
+          }
+          if (fixedCount_local > 0) {
+            writeTaskMeta(task, cwd);
+            fixedCount++;
+          }
+        }
         break;
       }
 

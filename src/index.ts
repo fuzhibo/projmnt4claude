@@ -23,6 +23,8 @@ import {
   splitTask,
   searchTasks,
   batchUpdateTasks,
+  submitTask,
+  validateTask,
 } from './commands/task';
 import {
   showPlan,
@@ -355,6 +357,27 @@ program
         // title 应该是 process.argv[5] 之后的参数
         const title = process.argv.slice(5).join(' ');
         await addSubtask(id, title);
+        break;
+      }
+      case 'submit': {
+        if (!id) {
+          console.error('错误: submit 操作需要指定任务ID');
+          process.exit(1);
+        }
+        await submitTask(id, {
+          note: options.note,
+        });
+        break;
+      }
+      case 'validate': {
+        if (!id) {
+          console.error('错误: validate 操作需要指定任务ID');
+          process.exit(1);
+        }
+        await validateTask(id, {
+          executeCommands: options.executeCommands,
+          autoResolve: options.autoResolve,
+        });
         break;
       }
       case 'sync-children': {
