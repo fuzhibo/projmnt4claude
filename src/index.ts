@@ -48,11 +48,6 @@ import {
   showStatus,
 } from './commands/analyze';
 import {
-  enableHook,
-  disableHook,
-  showHookStatus,
-} from './commands/hook';
-import {
   checkoutTaskBranch,
   showBranchStatus,
   createTaskBranch,
@@ -64,6 +59,7 @@ import {
 import { initRequirement } from './commands/init-requirement';
 import { showHelp } from './commands/help';
 import { runDoctor } from './commands/doctor';
+import { harnessCommand } from './commands/harness';
 import { isInitialized } from './utils/path';
 
 /**
@@ -558,33 +554,6 @@ program
     }
   });
 
-// hook 命令组
-program
-  .command('hook <action>')
-  .description('管理钩子会话 (enable/disable/status)')
-  .option('-y, --yes', '非交互模式，使用默认钩子配置 (仅 enable)')
-  .option('--hooks <hooks>', '指定要启用的钩子，逗号分隔 (仅 enable，如: pre-commit,pre-push)')
-  .action(async (action, options) => {
-    requireInit();
-    switch (action) {
-      case 'enable':
-        await enableHook({
-          nonInteractive: options.yes,
-          hooks: options.hooks,
-        });
-        break;
-      case 'disable':
-        await disableHook();
-        break;
-      case 'status':
-        showHookStatus();
-        break;
-      default:
-        console.error(`错误: 未知操作 '${action}'。支持的操作: enable, disable, status`);
-        process.exit(1);
-    }
-  });
-
 // branch 命令组
 program
   .command('branch <action> [id]')
@@ -659,6 +628,31 @@ program
   .option('--fix', '自动修复检测到的问题')
   .action(async (options) => {
     await runDoctor(options.fix);
+  });
+
+
+// headless-harness-design 命令
+program
+  .command('headless-harness-design')
+  .description('使用 Harness Design 模式执行任务计划 (自动化开发与审查)')
+  .option('--plan <file>', '计划文件路径 (可选，不指定则自动读取/生成)')
+  .option('--max-retries <n>', '最大重试次数', '3')
+  .option('--timeout <seconds>', '单任务超时时间 (秒)', '300')
+  .option('--parallel <n>', '并行执行数', '1')
+  .option('--dry-run', '试运行模式 (不实际执行)')
+  .option('--continue', '从上次中断处继续执行')
+  .option('--json', 'JSON 格式输出')
+  .action(async (options) => {
+    requireInit();
+    await harnessCommand({
+      plan: options.plan,
+      maxRetries: options.maxRetries,
+      timeout: options.timeout,
+      parallel: options.parallel,
+      dryRun: options.dryRun,
+      continue: options.continue,
+      json: options.json,
+    });
   });
 
 
