@@ -193,6 +193,7 @@ export function listTasks(
     fields?: string;
     format?: 'json';
     missingVerification?: boolean;
+    group?: 'status' | 'priority' | 'type' | 'role';
   } = {},
   cwd: string = process.cwd()
 ): void {
@@ -232,6 +233,24 @@ export function listTasks(
     return;
   }
 
+  // 分离父任务和子任务（提前计算，供分组和普通列表使用）
+  const parentTasks = tasks.filter(t => !t.parentId);
+  const subtaskMap = new Map<string, TaskMeta[]>();
+  for (const task of tasks) {
+    if (task.parentId) {
+      if (!subtaskMap.has(task.parentId)) {
+        subtaskMap.set(task.parentId, []);
+      }
+      subtaskMap.get(task.parentId)!.push(task);
+    }
+  }
+
+  // 分组显示功能
+  if (options.group && options.format !== 'json') {
+    displayTasksGrouped(tasks, options.group, subtaskMap);
+    return;
+  }
+
   // JSON 格式输出
   if (options.format === 'json') {
     const output = tasks.map(t => {
@@ -260,18 +279,6 @@ export function listTasks(
     });
     console.log(JSON.stringify(output, null, 2));
     return;
-  }
-
-  // 分离父任务和子任务
-  const parentTasks = tasks.filter(t => !t.parentId);
-  const subtaskMap = new Map<string, TaskMeta[]>();
-  for (const task of tasks) {
-    if (task.parentId) {
-      if (!subtaskMap.has(task.parentId)) {
-        subtaskMap.set(task.parentId, []);
-      }
-      subtaskMap.get(task.parentId)!.push(task);
-    }
   }
 
   // 表头
@@ -304,6 +311,163 @@ export function listTasks(
   console.log('');
   const totalSubtasks = tasks.filter(t => t.parentId).length;
   console.log(`共 ${parentTasks.length} 个任务${totalSubtasks > 0 ? `, ${totalSubtasks} 个子任务` : ''}`);
+}
+
+/**
+ * 分组显示任务
+ * 支持 status, priority, type, role 分组
+ */
+function displayTasksGrouped(
+  tasks: TaskMeta[],
+  groupBy: 'status' | 'priority' | 'type' | 'role',
+  subtaskMap: Map<string, TaskMeta[]>
+): void {
+  // 过滤出父任务用于分组
+  const parentTasks = tasks.filter(t => !t.parentId);
+
+  // 按 groupBy 字段分组
+  const groups = new Map<string, TaskMeta[]>();
+
+  for (const task of parentTasks) {
+    let groupKey: string;
+    switch (groupBy) {
+      case 'status':
+        groupKey = task.status || 'open';
+        break;
+      case 'priority':
+        groupKey = task.priority || 'P2';
+        break;
+      case 'type':
+        groupKey = task.type || 'feature';
+        break;
+      case 'role':
+        groupKey = task.recommendedRole || '未分配';
+        break;
+      default:
+        groupKey = '其他';
+    }
+
+    if (!groups.has(groupKey)) {
+      groups.set(groupKey, []);
+    }
+    groups.get(groupKey)!.push(task);
+  }
+
+  // 定义分组排序顺序
+  const statusOrder = ['open', 'in_progress', 'wait_complete', 'resolved', 'closed', 'reopened', 'abandoned'];
+  const priorityOrder = ['P0', 'P1', 'P2', 'P3', 'Q1', 'Q2', 'Q3', 'Q4'];
+
+  // 获取排序后的分组键
+  let sortedKeys: string[];
+  if (groupBy === 'status') {
+    sortedKeys = [...groups.keys()].sort((a, b) => {
+      const idxA = statusOrder.indexOf(a);
+      const idxB = statusOrder.indexOf(b);
+      return (idxA === -1 ? 999 : idxA) - (idxB === -1 ? 999 : idxB);
+    });
+  } else if (groupBy === 'priority') {
+    sortedKeys = [...groups.keys()].sort((a, b) => {
+      const idxA = priorityOrder.indexOf(a);
+      const idxB = priorityOrder.indexOf(b);
+      return (idxA === -1 ? 999 : idxA) - (idxB === -1 ? 999 : idxB);
+    });
+  } else {
+    sortedKeys = [...groups.keys()].sort();
+  }
+
+  // 获取分组标题
+  const getGroupHeader = (key: string): string => {
+    switch (groupBy) {
+      case 'status':
+        return formatStatus(key);
+      case 'priority':
+        return formatPriority(key);
+      case 'type':
+        return `📁 类型: ${key}`;
+      case 'role':
+        return `👤 角色: ${key}`;
+      default:
+        return key;
+    }
+  };
+
+  // 显示分组任务
+  console.log('');
+
+  for (const groupKey of sortedKeys) {
+    const groupTasks = groups.get(groupKey)!;
+
+    // 分组标题
+    console.log('━'.repeat(60));
+    console.log(`${getGroupHeader(groupKey)} (${groupTasks.length})`);
+    console.log('━'.repeat(60));
+
+    // 表头
+    console.log('ID          | 标题                         | 优先级   | 状态');
+    console.log('------------|------------------------------|----------|------------');
+
+    // 分组内任务
+    for (const task of groupTasks) {
+      const id = task.id.padEnd(11);
+      const title = task.title.substring(0, 28).padEnd(28);
+      const priority = formatPriority(task.priority).padEnd(8);
+      const status = formatStatus(task.status);
+      const discussionIcon = task.needsDiscussion ? ' 💬' : '';
+      const subtaskCount = (task.subtaskIds?.length || subtaskMap.get(task.id)?.length || 0);
+      const subtaskIcon = subtaskCount > 0 ? ` [${subtaskCount}子任务]` : '';
+      console.log(`${id} | ${title} | ${priority} | ${status}${discussionIcon}${subtaskIcon}`);
+
+      // 显示子任务
+      const subtasks = subtaskMap.get(task.id) || [];
+      for (const subtask of subtasks) {
+        const subId = `  └─ ${subtask.id}`.substring(0, 11).padEnd(11);
+        const subTitle = subtask.title.substring(0, 26).padEnd(26);
+        const subPriority = formatPriority(subtask.priority).padEnd(8);
+        const subStatus = formatStatus(subtask.status);
+        console.log(`${subId} | ${subTitle} | ${subPriority} | ${subStatus}`);
+      }
+    }
+
+    console.log('');
+  }
+
+  // 统计信息
+  const totalSubtasks = tasks.filter(t => t.parentId).length;
+  console.log(`共 ${parentTasks.length} 个任务${totalSubtasks > 0 ? `, ${totalSubtasks} 个子任务` : ''}`);
+  console.log(`分组: ${groupBy === 'status' ? '状态' : groupBy === 'priority' ? '优先级' : groupBy === 'type' ? '类型' : '角色'}`);
+}
+
+/**
+ * 格式化时间为本地可读格式
+ */
+function formatLocalTime(isoString: string): string {
+  const date = new Date(isoString);
+  return date.toLocaleString('zh-CN', {
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+  });
+}
+
+/**
+ * 格式化相对时间
+ */
+function formatRelativeTime(isoString: string): string {
+  const date = new Date(isoString);
+  const now = new Date();
+  const diffMs = now.getTime() - date.getTime();
+  const diffMins = Math.floor(diffMs / 60000);
+  const diffHours = Math.floor(diffMs / 3600000);
+  const diffDays = Math.floor(diffMs / 86400000);
+
+  if (diffMins < 1) return '刚刚';
+  if (diffMins < 60) return `${diffMins}分钟前`;
+  if (diffHours < 24) return `${diffHours}小时前`;
+  if (diffDays < 7) return `${diffDays}天前`;
+
+  return formatLocalTime(isoString);
 }
 
 /**
@@ -353,105 +517,125 @@ export function showTask(
 
   // 精简输出
   if (options.compact) {
-    console.log(`${task.id}: ${task.title}`);
-    console.log(`  状态: ${task.status} | 优先级: ${task.priority}`);
+    const statusIcon = task.status === 'resolved' || task.status === 'closed' ? '✅' :
+                       task.status === 'in_progress' ? '🔄' :
+                       task.status === 'reopened' ? '🔁' :
+                       task.status === 'abandoned' ? '❌' : '⏳';
+    console.log(`${statusIcon} ${task.id}: ${task.title}`);
+    console.log(`   状态: ${formatStatus(task.status)} | 优先级: ${formatPriority(task.priority)}`);
     if (task.description) {
-      console.log(`  描述: ${task.description.substring(0, 100)}${task.description.length > 100 ? '...' : ''}`);
+      console.log(`   描述: ${task.description.substring(0, 100)}${task.description.length > 100 ? '...' : ''}`);
     }
     if (task.dependencies.length > 0) {
-      console.log(`  依赖: ${task.dependencies.join(', ')}`);
+      console.log(`   依赖: ${task.dependencies.join(', ')}`);
     }
+    console.log(`   创建: ${formatRelativeTime(task.createdAt)}`);
     return;
   }
 
   // 详细输出 (verbose) 或标准输出
-  console.log('');
-  console.log(separator);
-  console.log(`任务: ${task.id}`);
-  console.log(separator);
-  console.log(`标题: ${task.title}`);
-  console.log(`状态: ${formatStatus(task.status)}`);
-  console.log(`优先级: ${formatPriority(task.priority)}`);
-  console.log(`类型: ${task.type || '未指定'}`);
+  const line = '━'.repeat(60);
+  const statusIcon = task.status === 'resolved' || task.status === 'closed' ? '✅' :
+                     task.status === 'in_progress' ? '🔄' :
+                     task.status === 'reopened' ? '🔁' :
+                     task.status === 'abandoned' ? '❌' : '⬜';
 
+  console.log('');
+  console.log(`${statusIcon} ${task.id}`);
+  console.log(line);
+  console.log(`  ${task.title}`);
+  console.log('');
+  console.log(`  状态: ${formatStatus(task.status)}  │  优先级: ${formatPriority(task.priority)}  │  类型: ${task.type || '未指定'}`);
+
+  // 描述
   if (task.description) {
-    console.log(`描述: ${task.description}`);
+    console.log('');
+    console.log('📝 描述:');
+    // 多行描述缩进显示
+    const descLines = task.description.split('\n');
+    descLines.forEach(line => {
+      console.log(`   ${line}`);
+    });
   }
 
   // verbose 模式显示更多字段
   if (options.verbose) {
+    console.log('');
+    console.log(line);
+    console.log('📋 详细信息');
+    console.log(line);
+
     if (task.recommendedRole) {
-      console.log(`推荐角色: ${task.recommendedRole}`);
+      console.log(`   👤 推荐角色: ${task.recommendedRole}`);
     }
 
     if (task.branch) {
-      console.log(`关联分支: ${task.branch}`);
+      console.log(`   🌿 关联分支: ${task.branch}`);
     }
 
     if (task.dependencies.length > 0) {
-      console.log(`依赖: ${task.dependencies.join(', ')}`);
+      console.log(`   🔗 依赖: ${task.dependencies.join(', ')}`);
     } else {
-      console.log(`依赖: 无`);
+      console.log(`   🔗 依赖: 无`);
     }
 
     if (task.subtaskIds && task.subtaskIds.length > 0) {
-      console.log(`子任务: ${task.subtaskIds.join(', ')}`);
+      console.log(`   📎 子任务: ${task.subtaskIds.join(', ')}`);
     }
 
     if (task.parentId) {
-      console.log(`父任务: ${task.parentId}`);
+      console.log(`   ⬆️  父任务: ${task.parentId}`);
     }
 
     // 显示验证信息
     if (task.checkpointConfirmationToken) {
-      console.log(`验证令牌: ${task.checkpointConfirmationToken}`);
+      console.log(`   🔐 验证令牌: ${task.checkpointConfirmationToken}`);
     }
   } else {
     // 标准模式只显示关键字段
     if (task.recommendedRole) {
-      console.log(`推荐角色: ${task.recommendedRole}`);
+      console.log(`   👤 推荐角色: ${task.recommendedRole}`);
     }
 
     if (task.branch) {
-      console.log(`关联分支: ${task.branch}`);
+      console.log(`   🌿 关联分支: ${task.branch}`);
     }
 
     if (task.dependencies.length > 0) {
-      console.log(`依赖: ${task.dependencies.join(', ')}`);
+      console.log(`   🔗 依赖: ${task.dependencies.join(', ')}`);
     }
   }
 
-  console.log(`创建时间: ${task.createdAt}`);
-  console.log(`更新时间: ${task.updatedAt}`);
+  // 时间信息
+  console.log('');
+  console.log(line);
+  console.log('⏱️  时间信息');
+  console.log(line);
+  console.log(`   创建: ${formatLocalTime(task.createdAt)} (${formatRelativeTime(task.createdAt)})`);
+  console.log(`   更新: ${formatLocalTime(task.updatedAt)} (${formatRelativeTime(task.updatedAt)})`);
 
   // 显示重开次数
   if (task.reopenCount && task.reopenCount > 0) {
-    console.log(`重开次数: ${task.reopenCount}`);
+    console.log(`   重开次数: ${task.reopenCount}`);
   }
 
   // 显示需求变更历史（verbose 模式或有变更时）
   if (task.requirementHistory && task.requirementHistory.length > 0) {
-    console.log(`需求变更次数: ${task.requirementHistory.length}`);
+    console.log(`   需求变更: ${task.requirementHistory.length} 次`);
     if (options.verbose) {
       console.log('');
-      console.log('━'.repeat(60));
+      console.log(line);
       console.log('📝 需求变更历史:');
-      console.log('━'.repeat(60));
+      console.log(line);
       task.requirementHistory.forEach((entry, index) => {
-        const date = new Date(entry.timestamp);
-        const timeStr = date.toLocaleString('zh-CN', {
-          month: '2-digit',
-          day: '2-digit',
-          hour: '2-digit',
-          minute: '2-digit',
-        });
-        console.log(`\n[v${entry.version}] ${timeStr}`);
-        console.log(`  变更原因: ${entry.changeReason}`);
+        const timeStr = formatLocalTime(entry.timestamp);
+        console.log(`\n   [v${entry.version}] ${timeStr}`);
+        console.log(`      变更原因: ${entry.changeReason}`);
         if (entry.impactAnalysis) {
-          console.log(`  影响分析: ${entry.impactAnalysis}`);
+          console.log(`      影响分析: ${entry.impactAnalysis}`);
         }
         if (entry.relatedIssue) {
-          console.log(`  关联Issue: ${entry.relatedIssue}`);
+          console.log(`      关联Issue: ${entry.relatedIssue}`);
         }
       });
     }
@@ -461,65 +645,98 @@ export function showTask(
   const taskDir = path.join(getTasksDir(cwd), taskId);
   const checkpointPath = path.join(taskDir, 'checkpoint.md');
 
+  console.log('');
+
   // 如果使用 --checkpoints 或 --verbose，显示详细的检查点元数据
   if (options.checkpoints || options.verbose) {
     const checkpointsMeta = listCheckpoints(taskId, cwd);
 
     if (checkpointsMeta.length > 0) {
+      console.log(line);
+      console.log('✅ 检查点');
+      console.log(line);
       console.log('');
-      console.log('━'.repeat(60));
-      console.log('📋 检查点详情');
-      console.log('━'.repeat(60));
+
+      const completedCount = checkpointsMeta.filter(cp => cp.status === 'completed').length;
+      console.log(`   进度: ${completedCount}/${checkpointsMeta.length} 已完成`);
+      console.log('');
 
       checkpointsMeta.forEach((cp, index) => {
         const statusIcon = cp.status === 'completed' ? '✅' :
                            cp.status === 'failed' ? '❌' :
-                           cp.status === 'skipped' ? '⏭️' : '⏳';
+                           cp.status === 'skipped' ? '⏭️' : '⬜';
 
-        console.log(`${index + 1}. ${statusIcon} ${cp.id}`);
-        console.log(`   描述: ${cp.description}`);
-        console.log(`   状态: ${cp.status}`);
-
+        console.log(`   ${index + 1}. ${statusIcon} ${cp.description}`);
         if (cp.note) {
-          console.log(`   备注: ${cp.note}`);
+          console.log(`      备注: ${cp.note}`);
         }
-
         if (cp.verification?.result) {
-          console.log(`   验证结果: ${cp.verification.result}`);
+          console.log(`      验证: ${cp.verification.result}`);
         }
-
-        console.log('');
       });
     }
   } else if (fs.existsSync(checkpointPath)) {
-    // 默认显示 checkpoint.md 内容
+    // 默认显示 checkpoint.md 内容，格式化输出
+    console.log(line);
+    console.log('✅ 检查点');
+    console.log(line);
     console.log('');
-    console.log('检查点:');
+
     const content = fs.readFileSync(checkpointPath, 'utf-8');
-    console.log(content);
+    const checkpointLines = content.split('\n').filter(l => l.trim().startsWith('- ['));
+
+    if (checkpointLines.length > 0) {
+      const completedCount = checkpointLines.filter(l => l.includes('[x]') || l.includes('[X]')).length;
+      console.log(`   进度: ${completedCount}/${checkpointLines.length} 已完成`);
+      console.log('');
+
+      checkpointLines.forEach((l, index) => {
+        const isChecked = l.includes('[x]') || l.includes('[X]');
+        const statusIcon = isChecked ? '✅' : '⬜';
+        const text = l.replace(/- \[[xX ]\] /, '').trim();
+        console.log(`   ${index + 1}. ${statusIcon} ${text}`);
+      });
+    } else {
+      console.log('   暂无检查点');
+    }
   }
 
   // verbose 模式显示历史
   if (options.verbose && task.history && task.history.length > 0) {
     console.log('');
-    console.log('━'.repeat(60));
-    console.log('📜 变更历史:');
-    console.log('━'.repeat(60));
-    const sortedHistory = [...task.history].reverse();
-    for (const entry of sortedHistory) {
-      const date = new Date(entry.timestamp);
-      const timeStr = date.toLocaleString('zh-CN', {
-        month: '2-digit',
-        day: '2-digit',
-        hour: '2-digit',
-        minute: '2-digit',
-      });
-      console.log(`[${timeStr}] ${entry.action}`);
+    console.log(line);
+    console.log('📜 变更历史');
+    console.log(line);
+    console.log('');
+
+    // 过滤掉无意义的状态变更（oldValue === newValue）
+    const meaningfulHistory = task.history.filter(entry => {
+      // 保留没有字段变更的记录（如"添加完成说明"等）
+      if (!entry.field) return true;
+      // 过滤掉相同值的状态变更
+      return entry.oldValue !== entry.newValue;
+    });
+
+    const sortedHistory = [...meaningfulHistory].reverse();
+    const maxDisplay = 10;
+    const displayHistory = sortedHistory.slice(0, maxDisplay);
+
+    for (const entry of displayHistory) {
+      const timeStr = formatLocalTime(entry.timestamp);
+      console.log(`   [${timeStr}] ${entry.action}`);
       if (entry.field && entry.oldValue !== undefined && entry.newValue !== undefined) {
-        console.log(`    ${entry.field}: ${entry.oldValue} → ${entry.newValue}`);
+        console.log(`      ${entry.field}: ${entry.oldValue} → ${entry.newValue}`);
       }
     }
+
+    if (sortedHistory.length > maxDisplay) {
+      console.log('');
+      console.log(`   ... 还有 ${sortedHistory.length - maxDisplay} 条历史记录`);
+      console.log(`   使用 --history 选项查看完整历史`);
+    }
   }
+
+  console.log('');
 }
 
 /**
@@ -598,7 +815,7 @@ export async function updateTask(
 
       // 所有检查点已完成，但没有token，      console.log('');
       console.log('━'.repeat(60));
-      console.log('⚠️  飀查点确认提醒');
+      console.log('⚠️  检查点确认提醒');
       console.log('━'.repeat(60));
       console.log('');
       console.log('所有检查点已完成，但缺少确认令牌。');
@@ -2285,6 +2502,215 @@ export function searchTasks(
     console.log(`   状态: ${task.status} | 优先级: ${task.priority}`);
     console.log('');
   });
+}
+
+/**
+ * 统计任务数量
+ * 命令: task count [options]
+ * 支持按状态、优先级、类型分组统计
+ */
+export function countTasks(
+  options: {
+    status?: string;
+    priority?: string;
+    type?: string;
+    groupBy?: 'status' | 'priority' | 'type' | 'role';
+    json?: boolean;
+  } = {},
+  cwd: string = process.cwd()
+): void {
+  if (!isInitialized(cwd)) {
+    console.error('错误: 项目未初始化。请先运行 `projmnt4claude setup`');
+    process.exit(1);
+  }
+
+  let tasks = getAllTasks(cwd);
+
+  // 应用过滤
+  if (options.status) {
+    tasks = tasks.filter(t => t.status === options.status);
+  }
+  if (options.priority) {
+    tasks = tasks.filter(t => t.priority === options.priority);
+  }
+  if (options.type) {
+    tasks = tasks.filter(t => t.type === options.type);
+  }
+
+  // 分组统计
+  if (options.groupBy) {
+    const groups = new Map<string, number>();
+
+    for (const task of tasks) {
+      let key: string;
+      switch (options.groupBy) {
+        case 'status':
+          key = task.status || 'open';
+          break;
+        case 'priority':
+          key = task.priority || 'P2';
+          break;
+        case 'type':
+          key = task.type || 'feature';
+          break;
+        case 'role':
+          key = task.recommendedRole || '未分配';
+          break;
+        default:
+          key = '其他';
+      }
+
+      groups.set(key, (groups.get(key) || 0) + 1);
+    }
+
+    if (options.json) {
+      const result = Object.fromEntries(groups);
+      console.log(JSON.stringify(result, null, 2));
+      return;
+    }
+
+    // 格式化输出
+    console.log('');
+    console.log('━'.repeat(60));
+    console.log(`📊 任务统计 (按${options.groupBy === 'status' ? '状态' : options.groupBy === 'priority' ? '优先级' : options.groupBy === 'type' ? '类型' : '角色'}分组)`);
+    console.log('━'.repeat(60));
+    console.log('');
+
+    // 定义排序顺序
+    const statusOrder = ['open', 'in_progress', 'wait_complete', 'resolved', 'closed', 'reopened', 'abandoned'];
+    const priorityOrder = ['P0', 'P1', 'P2', 'P3', 'Q1', 'Q2', 'Q3', 'Q4'];
+
+    let sortedKeys: string[];
+    if (options.groupBy === 'status') {
+      sortedKeys = [...groups.keys()].sort((a, b) => {
+        const idxA = statusOrder.indexOf(a);
+        const idxB = statusOrder.indexOf(b);
+        return (idxA === -1 ? 999 : idxA) - (idxB === -1 ? 999 : idxB);
+      });
+    } else if (options.groupBy === 'priority') {
+      sortedKeys = [...groups.keys()].sort((a, b) => {
+        const idxA = priorityOrder.indexOf(a);
+        const idxB = priorityOrder.indexOf(b);
+        return (idxA === -1 ? 999 : idxA) - (idxB === -1 ? 999 : idxB);
+      });
+    } else {
+      sortedKeys = [...groups.keys()].sort();
+    }
+
+    for (const key of sortedKeys) {
+      const count = groups.get(key)!;
+      let label: string;
+
+      switch (options.groupBy) {
+        case 'status':
+          label = formatStatus(key);
+          break;
+        case 'priority':
+          label = formatPriority(key);
+          break;
+        case 'type':
+          label = `📁 ${key}`;
+          break;
+        case 'role':
+          label = `👤 ${key}`;
+          break;
+        default:
+          label = key;
+      }
+
+      const bar = '█'.repeat(Math.min(count, 20));
+      console.log(`  ${label.padEnd(20)} ${bar} ${count}`);
+    }
+
+    console.log('');
+    console.log(`总计: ${tasks.length} 个任务`);
+    console.log('');
+    return;
+  }
+
+  // 总体统计
+  const statusCounts = new Map<TaskStatus, number>();
+  const priorityCounts = new Map<TaskPriority, number>();
+  const typeCounts = new Map<string, number>();
+
+  for (const task of tasks) {
+    statusCounts.set(task.status, (statusCounts.get(task.status) || 0) + 1);
+    priorityCounts.set(task.priority, (priorityCounts.get(task.priority) || 0) + 1);
+    if (task.type) {
+      typeCounts.set(task.type, (typeCounts.get(task.type) || 0) + 1);
+    }
+  }
+
+  if (options.json) {
+    const result = {
+      total: tasks.length,
+      byStatus: Object.fromEntries(statusCounts),
+      byPriority: Object.fromEntries(priorityCounts),
+      byType: Object.fromEntries(typeCounts),
+    };
+    console.log(JSON.stringify(result, null, 2));
+    return;
+  }
+
+  // 格式化输出
+  console.log('');
+  console.log('━'.repeat(60));
+  console.log('📊 任务统计');
+  console.log('━'.repeat(60));
+  console.log('');
+
+  // 按状态统计
+  console.log('📋 按状态:');
+  const statusOrder = ['open', 'in_progress', 'wait_complete', 'resolved', 'closed', 'reopened', 'abandoned'];
+  for (const status of statusOrder) {
+    const count = statusCounts.get(status as TaskStatus) || 0;
+    if (count > 0 || status === 'open' || status === 'in_progress' || status === 'resolved') {
+      const bar = '█'.repeat(Math.min(count, 20));
+      console.log(`  ${formatStatus(status).padEnd(16)} ${bar} ${count}`);
+    }
+  }
+
+  console.log('');
+
+  // 按优先级统计
+  console.log('🎯 按优先级:');
+  const priorityOrder = ['P0', 'P1', 'P2', 'P3', 'Q1', 'Q2', 'Q3', 'Q4'];
+  for (const priority of priorityOrder) {
+    const count = priorityCounts.get(priority as TaskPriority) || 0;
+    if (count > 0) {
+      const bar = '█'.repeat(Math.min(count, 20));
+      console.log(`  ${formatPriority(priority).padEnd(16)} ${bar} ${count}`);
+    }
+  }
+
+  console.log('');
+
+  // 按类型统计
+  if (typeCounts.size > 0) {
+    console.log('📁 按类型:');
+    for (const [type, count] of typeCounts) {
+      const bar = '█'.repeat(Math.min(count, 20));
+      console.log(`  ${`📁 ${type}`.padEnd(16)} ${bar} ${count}`);
+    }
+    console.log('');
+  }
+
+  // 总计
+  console.log('━'.repeat(60));
+  console.log(`📌 总计: ${tasks.length} 个任务`);
+  console.log('');
+
+  // 完成率
+  const completed = (statusCounts.get('resolved') || 0) + (statusCounts.get('closed') || 0);
+  const inProgress = statusCounts.get('in_progress') || 0;
+  const pending = statusCounts.get('open') || 0;
+
+  if (tasks.length > 0) {
+    const completionRate = ((completed / tasks.length) * 100).toFixed(1);
+    console.log(`📈 完成率: ${completionRate}% (${completed}/${tasks.length})`);
+    console.log(`🔄 进行中: ${inProgress} | ⏳ 待处理: ${pending}`);
+    console.log('');
+  }
 }
 
 /**

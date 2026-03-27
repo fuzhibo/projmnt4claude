@@ -25,6 +25,7 @@ import {
   batchUpdateTasks,
   submitTask,
   validateTask,
+  countTasks,
 } from './commands/task';
 import {
   showPlan,
@@ -163,6 +164,7 @@ program
   .option('--compact', '精简输出 (仅 show)')
   .option('--fields <fields>', '自定义输出字段 (仅 list)')
   .option('--missing-verification', '筛选缺少验证的任务 (仅 list)')
+  .option('-g, --group <field>', '分组显示 (仅 list): status/priority/type/role')
   .option('--checkpoints', '显示检查点详情 (仅 show)')
   .option('--result <result>', '验证结果 (仅 checkpoint complete)')
   .option('--note <note>', '检查点备注 (仅 checkpoint note/fail)')
@@ -188,6 +190,7 @@ program
           fields: options.fields,
           format: options.json ? 'json' : undefined,
           missingVerification: options.missingVerification,
+          group: options.group,
         });
         break;
       case 'show':
