@@ -22,6 +22,44 @@ import { TaskMeta, CheckpointMetadata } from '../types/task.js';
 import { getProjectDir } from './path.js';
 import { readTaskMeta } from './task.js';
 
+/**
+ * 检测是否为可重试的 API 错误
+ */
+function isRetryableError(output: string, stderr: string): { retryable: boolean; waitSeconds?: number; reason?: string } {
+  const combinedOutput = `${output} ${stderr}`;
+
+  // 429 Rate Limit
+  const rateLimitMatch = combinedOutput.match(/API Error:\s*429.*?(\d{4}-\d{2}-\d{2}\s+\d{2}:\d{2}:\d{2})/);
+  if (rateLimitMatch) {
+    const resetTime = new Date(rateLimitMatch[1]);
+    const now = new Date();
+    const waitSeconds = Math.max(60, Math.ceil((resetTime.getTime() - now.getTime()) / 1000));
+    return { retryable: true, waitSeconds, reason: 'API 速率限制 (429)' };
+  }
+
+  // 500 Server Error
+  if (combinedOutput.includes('API Error: 500') || combinedOutput.includes('"code":"500"')) {
+    return { retryable: true, waitSeconds: 30, reason: 'API 服务器错误 (500)' };
+  }
+
+  // Network/Connection errors
+  if (combinedOutput.includes('ECONNRESET') ||
+      combinedOutput.includes('ETIMEDOUT') ||
+      combinedOutput.includes('ENOTFOUND') ||
+      combinedOutput.includes('network error')) {
+    return { retryable: true, waitSeconds: 10, reason: '网络连接错误' };
+  }
+
+  return { retryable: false };
+}
+
+/**
+ * 延迟函数
+ */
+function sleep(seconds: number): Promise<void> {
+  return new Promise(resolve => setTimeout(resolve, seconds * 1000));
+}
+
 export class HarnessEvaluator {
   private config: HarnessConfig;
 
@@ -211,13 +249,53 @@ export class HarnessEvaluator {
   }
 
   /**
-   * 运行评估会话
+   * 运行评估会话（带重试机制）
    */
   private async runEvaluationSession(options: HeadlessClaudeOptions): Promise<{ output: string; success: boolean }> {
+    const maxAttempts = this.config.apiRetryAttempts + 1;
+    const baseDelay = this.config.apiRetryDelay;
+    let lastOutput = '';
+    let lastStderr = '';
+
+    for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+      if (attempt > 1) {
+        console.log(`   🔄 评估会话重试 (${attempt - 1}/${this.config.apiRetryAttempts})...`);
+      }
+
+      const result = await this.executeEvaluationSession(options);
+      lastOutput = result.output;
+      lastStderr = result.stderr;
+
+      if (result.success) {
+        return { output: result.output, success: true };
+      }
+
+      // 检查是否为可重试错误
+      const errorInfo = isRetryableError(result.output, result.stderr);
+
+      if (!errorInfo.retryable || attempt >= maxAttempts) {
+        return { output: result.output, success: false };
+      }
+
+      // 计算退避延迟
+      const delay = Math.min(errorInfo.waitSeconds || baseDelay, baseDelay * Math.pow(2, attempt - 1));
+      console.log(`   ⏳ ${errorInfo.reason}，${delay} 秒后重试...`);
+
+      await sleep(delay);
+    }
+
+    return { output: lastOutput, success: false };
+  }
+
+  /**
+   * 执行单次评估会话
+   */
+  private executeEvaluationSession(options: HeadlessClaudeOptions): Promise<{ output: string; stderr: string; success: boolean }> {
     return new Promise((resolve) => {
       const args = [
         '--print',
-        '--allowedTools', options.allowedTools.join(','),
+        '--dangerously-skip-permissions',
+        `--allowedTools=${options.allowedTools.join(',')}`,
         options.prompt,
       ];
 
@@ -225,11 +303,17 @@ export class HarnessEvaluator {
         const child = spawn('claude', args, {
           cwd: options.cwd,
           stdio: ['ignore', 'pipe', 'pipe'],
-          timeout: options.timeout * 1000,
         });
 
         let stdout = '';
         let stderr = '';
+        let timedOut = false;
+
+        // 自定义超时逻辑
+        const timeoutId = setTimeout(() => {
+          timedOut = true;
+          child.kill('SIGTERM');
+        }, options.timeout * 1000);
 
         child.stdout?.on('data', (data) => {
           stdout += data.toString();
@@ -240,15 +324,19 @@ export class HarnessEvaluator {
         });
 
         child.on('close', (code) => {
+          clearTimeout(timeoutId);
           resolve({
             output: stdout,
-            success: code === 0,
+            stderr,
+            success: code === 0 && !timedOut,
           });
         });
 
         child.on('error', (error) => {
+          clearTimeout(timeoutId);
           resolve({
             output: '',
+            stderr: error.message,
             success: false,
           });
         });
@@ -256,6 +344,7 @@ export class HarnessEvaluator {
       } catch (error) {
         resolve({
           output: '',
+          stderr: error instanceof Error ? error.message : String(error),
           success: false,
         });
       }
