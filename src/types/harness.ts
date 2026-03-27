@@ -29,6 +29,10 @@ export interface HarnessConfig {
   jsonOutput: boolean;
   /** 工作目录 */
   cwd: string;
+  /** API 调用重试次数（针对 429/500 等临时错误），默认 3 */
+  apiRetryAttempts: number;
+  /** API 重试基础延迟（秒），默认 60，使用指数退避 */
+  apiRetryDelay: number;
 }
 
 /**
@@ -41,6 +45,8 @@ export const DEFAULT_HARNESS_CONFIG: Omit<HarnessConfig, 'cwd'> = {
   dryRun: false,
   continue: false,
   jsonOutput: false,
+  apiRetryAttempts: 3,
+  apiRetryDelay: 60,
 };
 
 /**

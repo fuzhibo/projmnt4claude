@@ -35,6 +35,8 @@ export interface HarnessCommandOptions {
   dryRun?: boolean;
   continue?: boolean;
   json?: boolean;
+  apiRetryAttempts?: string;
+  apiRetryDelay?: string;
 }
 
 /**
@@ -59,6 +61,8 @@ export async function harnessCommand(
     dryRun: options.dryRun ?? DEFAULT_HARNESS_CONFIG.dryRun,
     continue: options.continue ?? DEFAULT_HARNESS_CONFIG.continue,
     jsonOutput: options.json ?? DEFAULT_HARNESS_CONFIG.jsonOutput,
+    apiRetryAttempts: options.apiRetryAttempts ? parseInt(options.apiRetryAttempts, 10) : DEFAULT_HARNESS_CONFIG.apiRetryAttempts,
+    apiRetryDelay: options.apiRetryDelay ? parseInt(options.apiRetryDelay, 10) : DEFAULT_HARNESS_CONFIG.apiRetryDelay,
     cwd,
   };
 

@@ -143,7 +143,7 @@ program
 // task 命令组
 program
   .command('task <action> [id]')
-  .description('管理任务 (create/list/show/update/delete/execute/checkpoint/dependency/add-subtask/status-guide/complete/split/search/batch-update)')
+  .description('管理任务 (create/list/show/update/delete/execute/checkpoint/dependency/add-subtask/status-guide/complete/split/search/batch-update/count)')
   .allowExcessArguments(true)
   .option('-s, --status <status>', '按状态过滤 (仅 list)')
   .option('-p, --priority <priority>', '按优先级过滤 (仅 list)')
@@ -151,7 +151,7 @@ program
   .option('--dep-id <depId>', '依赖任务ID (仅 dependency)')
   .option('--title <title>', '任务标题 (仅 create/update)')
   .option('--description <description>', '任务描述 (仅 create/update)')
-  .option('--type <type>', '任务类型 (仅 create): bug/feature/research/docs/refactor/test')
+  .option('--type <type>', '任务类型 (create/count): bug/feature/research/docs/refactor/test')
   .option('-y, --yes', '非交互模式 (仅 create/checkpoint)')
   .option('--token <token>', '检查点确认令牌 (仅 update)')
   .option('--sync-children', '同步子任务状态 (仅 update resolved/closed)')
@@ -160,7 +160,7 @@ program
   // 新增选项 (bug_report_4.md)
   .option('-v, --verbose', '显示完整信息 (仅 show)')
   .option('--history', '仅显示变更历史 (仅 show)')
-  .option('--json', 'JSON 格式输出 (仅 show/list/status)')
+  .option('--json', 'JSON 格式输出 (仅 show/list/status/count)')
   .option('--compact', '精简输出 (仅 show)')
   .option('--fields <fields>', '自定义输出字段 (仅 list)')
   .option('--missing-verification', '筛选缺少验证的任务 (仅 list)')
@@ -422,8 +422,18 @@ program
         });
         break;
       }
+      case 'count': {
+        countTasks({
+          status: options.status,
+          priority: options.priority,
+          type: options.type,
+          groupBy: options.group as 'status' | 'priority' | 'type' | 'role' | undefined,
+          json: options.json || false,
+        });
+        break;
+      }
       default:
-        console.error(`错误: 未知操作 '${action}'。支持的操作: create, list, show, update, delete, execute, checkpoint, dependency, discuss, add-subtask, sync-children`);
+        console.error(`错误: 未知操作 '${action}'。支持的操作: create, list, show, update, delete, execute, checkpoint, dependency, discuss, add-subtask, sync-children, split, search, batch-update, submit, validate, history, status-guide, complete, count`);
         process.exit(1);
     }
   });
@@ -645,6 +655,8 @@ program
   .option('--dry-run', '试运行模式 (不实际执行)')
   .option('--continue', '从上次中断处继续执行')
   .option('--json', 'JSON 格式输出')
+  .option('--api-retry-attempts <n>', 'API 调用重试次数 (针对 429/500 错误)', '3')
+  .option('--api-retry-delay <seconds>', 'API 重试基础延迟 (秒)', '60')
   .action(async (options) => {
     requireInit();
     await harnessCommand({
@@ -655,6 +667,8 @@ program
       dryRun: options.dryRun,
       continue: options.continue,
       json: options.json,
+      apiRetryAttempts: options.apiRetryAttempts,
+      apiRetryDelay: options.apiRetryDelay,
     });
   });
 
