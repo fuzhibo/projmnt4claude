@@ -231,7 +231,8 @@ export class HarnessExecutor {
       // 构建命令参数
       const args = [
         '--print',  // 非交互模式
-        '--allowedTools', options.allowedTools.join(','),
+        '--dangerously-skip-permissions',  // 跳过权限确认（自动化模式必需）
+        `--allowedTools=${options.allowedTools.join(',')}`,  // 用 = 连接
         options.prompt,
       ];
 
@@ -241,15 +242,21 @@ export class HarnessExecutor {
 
       // 检查是否有 timeout 命令
       try {
-        // 使用 spawn 执行
+        // 使用 spawn 执行（不使用 spawn 的 timeout，因为它会发送 SIGTERM）
         const child = spawn(command, commandArgs, {
           cwd: options.cwd,
           stdio: ['ignore', 'pipe', 'pipe'],
-          timeout: options.timeout * 1000,
         });
 
         let stdout = '';
         let stderr = '';
+        let timedOut = false;
+
+        // 自己实现超时逻辑
+        const timeoutId = setTimeout(() => {
+          timedOut = true;
+          child.kill('SIGTERM');
+        }, options.timeout * 1000);
 
         child.stdout?.on('data', (data) => {
           stdout += data.toString();
@@ -267,17 +274,19 @@ export class HarnessExecutor {
         });
 
         child.on('close', (code) => {
+          clearTimeout(timeoutId);
           const duration = Date.now() - startTime;
           resolve({
-            success: code === 0,
+            success: code === 0 && !timedOut,
             output: stdout,
-            exitCode: code ?? 1,
+            exitCode: timedOut ? 124 : (code ?? 1),  // 124 是 timeout 命令的标准退出码
             duration,
-            error: code !== 0 ? stderr || `进程退出码: ${code}` : undefined,
+            error: timedOut ? `执行超时 (${options.timeout}s)` : (code !== 0 ? stderr || `进程退出码: ${code}` : undefined),
           });
         });
 
         child.on('error', (error) => {
+          clearTimeout(timeoutId);
           const duration = Date.now() - startTime;
           resolve({
             success: false,
