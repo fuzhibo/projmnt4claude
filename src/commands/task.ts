@@ -2278,7 +2278,7 @@ export function searchTasks(
   console.log('');
 
   matchedTasks.forEach((task, index) => {
-    const statusIcon = task.status === 'completed' || task.status === 'resolved' || task.status === 'closed' ? '✅' :
+    const statusIcon = task.status === 'resolved' || task.status === 'closed' ? '✅' :
                        task.status === 'in_progress' ? '🔄' : '⏳';
     console.log(`${index + 1}. ${statusIcon} ${task.id}`);
     console.log(`   标题: ${task.title}`);

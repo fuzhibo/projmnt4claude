@@ -324,4 +324,9 @@ function printSummary(summary: ExecutionSummary): void {
   } else {
     console.log(`⚠️  部分任务失败，请检查报告获取详情`);
   }
+  console.log('');
+  console.log('━'.repeat(60));
+  console.log('📊 流水线状态已保存到: .projmnt4claude/harness-status.json');
+  console.log('💡 查询进度: cat .projmnt4claude/harness-status.json');
+  console.log('━'.repeat(60));
 }

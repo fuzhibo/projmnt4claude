@@ -15,6 +15,33 @@ node ${CLAUDE_PLUGIN_ROOT}/dist/projmnt4claude.js headless-harness-design [optio
 
 ## 🎯 AI 行为指南
 
+### 流水线状态查询
+
+在执行过程中或执行完成后，你可以通过以下方式查询流水线状态：
+
+```bash
+# 查询当前流水线状态
+cat .projmnt4claude/harness-status.json
+
+# 使用 jq 格式化输出
+jq '.' .projmnt4claude/harness-status.json
+
+# 只看当前阶段
+jq '.currentPhase' .projmnt4claude/harness-status.json
+
+# 只看进度
+jq '.progress' .projmnt4claude/harness-status.json
+```
+
+**状态字段说明**：
+- `state`: 流水线状态（idle/running/completed/failed）
+- `currentPhase`: 当前阶段（development/code_review/qa_verification/evaluation）
+- `progress`: 进度百分比（0-100）
+- `message`: 状态消息
+- `phaseHistory`: 阶段历史时间线
+
+**用户询问进度时**：直接读取状态文件并给出报告。
+
 ### 触发场景
 当用户提到以下关键词时使用此命令：
 - "帮我执行任务"

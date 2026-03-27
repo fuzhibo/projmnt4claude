@@ -181,7 +181,7 @@ export function updateCheckpointStatus(
   if (options.result !== undefined) {
     if (!checkpoint.verification) {
       checkpoint.verification = {
-        method: 'manual',
+        method: 'human_verification',
       };
     }
     checkpoint.verification.result = options.result;

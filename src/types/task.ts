@@ -13,8 +13,10 @@ export type TaskPriority = 'P0' | 'P1' | 'P2' | 'P3' | 'Q1' | 'Q2' | 'Q3' | 'Q4'
  */
 export type TaskStatus =
   | 'open'          // 待处理
-  | 'in_progress'   // 进行中
-  | 'wait_complete' // 等待验证（开发已完成，等待质量门禁）
+  | 'in_progress'   // 进行中（开发阶段）
+  | 'wait_review'   // 等待代码审核
+  | 'wait_qa'       // 等待 QA 验证（可以是 AI 或 Human）
+  | 'wait_complete' // 等待最终确认（所有检查点完成）
   | 'resolved'      // 已解决
   | 'closed'        // 已关闭
   | 'reopened'      // 已重开
@@ -56,12 +58,32 @@ export interface RequirementHistoryEntry {
  * 注意：已移除 'manual' 类型，强制使用具体验证方法
  */
 export type VerificationMethod =
-  | 'code_review'      // 代码审查
-  | 'lint'             // 静态检查
-  | 'functional_test'  // 功能测试
-  | 'e2e_test'         // 端到端测试
-  | 'architect_review' // 架构师审查
-  | 'automated';       // 自动化验证（通用）
+  | 'code_review'       // 代码审查
+  | 'lint'              // 静态检查
+  | 'unit_test'         // 单元测试
+  | 'functional_test'   // 功能测试
+  | 'integration_test'  // 集成测试
+  | 'e2e_test'          // 端到端测试
+  | 'architect_review'  // 架构师审查
+  | 'automated'         // 自动化验证（通用）
+  | 'human_verification'; // 人工验证（需要用户介入）
+
+/**
+ * 任务角色类型
+ * 用于标识任务当前的处理者角色
+ */
+export type TaskRole =
+  | 'executor'        // 执行者（开发）
+  | 'code_reviewer'   // 代码审核员
+  | 'qa_tester'       // QA 测试员（可以是 AI 或 Human）
+  | 'architect';      // 架构师
+
+/**
+ * 检查点类别
+ */
+export type CheckpointCategory =
+  | 'code_review'      // 代码审核类检查点
+  | 'qa_verification'; // QA 验证类检查点
 
 /**
  * 检查点验证信息
@@ -161,6 +183,9 @@ export interface CheckpointMetadata {
   id: string;                      // 检查点ID，如 CP-001 或 CP-check-screenshot
   description: string;             // 描述（与 checkpoint.md 中的文本对应）
   status: 'pending' | 'completed' | 'failed' | 'skipped';
+  category?: CheckpointCategory;   // 检查点类别（代码审核/QA验证）
+  requiredRole?: TaskRole;         // 执行此检查点所需角色
+  requiresHuman?: boolean;         // 是否需要人工验证
   note?: string;                   // 备注
   verification?: CheckpointVerification;
   createdAt: string;

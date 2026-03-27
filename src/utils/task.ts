@@ -1,7 +1,7 @@
 import * as path from 'path';
 import * as fs from 'fs';
 import { getTasksDir, isInitialized } from './path';
-import type { TaskMeta, TaskHistoryEntry } from '../types/task';
+import type { TaskMeta, TaskHistoryEntry, TaskStatus, TaskRole } from '../types/task';
 import { createDefaultTaskMeta, isValidTaskId, generateNextTaskId, generateTaskId } from '../types/task';
 
 /**
@@ -328,4 +328,105 @@ export function getParentTask(
     return null;
   }
   return readTaskMeta(task.parentId, cwd);
+}
+
+// ============================================================
+// 程序化更新函数 - 流水线内部使用，不依赖 AI 记忆
+// ============================================================
+
+/**
+ * 程序化更新任务状态
+ * 直接修改 meta.json，不依赖 AI 上下文
+ */
+export function updateTaskStatus(
+  taskId: string,
+  status: TaskStatus,
+  cwd: string = process.cwd(),
+  reason?: string
+): void {
+  const task = readTaskMeta(taskId, cwd);
+  if (!task) {
+    throw new Error(`任务 '${taskId}' 不存在`);
+  }
+
+  const oldStatus = task.status;
+  task.status = status;
+  task.updatedAt = new Date().toISOString();
+
+  // 添加历史记录
+  task.history.push({
+    timestamp: new Date().toISOString(),
+    action: `状态变更: ${oldStatus} → ${status}`,
+    field: 'status',
+    oldValue: oldStatus,
+    newValue: status,
+    reason,
+    user: process.env.USER || undefined,
+  });
+
+  writeTaskMeta(task, cwd);
+}
+
+/**
+ * 程序化分配任务角色
+ * 直接修改 meta.json，不依赖 AI 上下文
+ */
+export function assignRole(
+  taskId: string,
+  role: TaskRole,
+  cwd: string = process.cwd()
+): void {
+  const task = readTaskMeta(taskId, cwd);
+  if (!task) {
+    throw new Error(`任务 '${taskId}' 不存在`);
+  }
+
+  const oldRole = task.recommendedRole || '无';
+  task.recommendedRole = role;
+  task.updatedAt = new Date().toISOString();
+
+  // 添加历史记录
+  task.history.push({
+    timestamp: new Date().toISOString(),
+    action: `角色分配: ${oldRole} → ${role}`,
+    field: 'recommendedRole',
+    oldValue: oldRole,
+    newValue: role,
+    user: process.env.USER || undefined,
+  });
+
+  writeTaskMeta(task, cwd);
+}
+
+/**
+ * 程序化递增重开次数
+ * 直接修改 meta.json，不依赖 AI 上下文
+ */
+export function incrementReopenCount(
+  taskId: string,
+  reason: string,
+  cwd: string = process.cwd()
+): void {
+  const task = readTaskMeta(taskId, cwd);
+  if (!task) {
+    throw new Error(`任务 '${taskId}' 不存在`);
+  }
+
+  const oldCount = task.reopenCount || 0;
+  task.reopenCount = oldCount + 1;
+  task.status = 'reopened';
+  task.updatedAt = new Date().toISOString();
+
+  // 添加历史记录
+  task.history.push({
+    timestamp: new Date().toISOString(),
+    action: `任务重开 (第 ${task.reopenCount} 次)`,
+    field: 'reopenCount',
+    oldValue: String(oldCount),
+    newValue: String(task.reopenCount),
+    reason,
+    user: process.env.USER || undefined,
+  });
+
+  writeTaskMeta(task, cwd);
 }

@@ -66,7 +66,7 @@ function normalizeStatus(status: string): TaskStatus {
 /**
  * 有效的任务状态值
  */
-const VALID_STATUSES: TaskStatus[] = ['open', 'in_progress', 'wait_complete', 'resolved', 'closed', 'reopened', 'abandoned'];
+const VALID_STATUSES: TaskStatus[] = ['open', 'in_progress', 'wait_review', 'wait_qa', 'wait_complete', 'resolved', 'closed', 'reopened', 'abandoned'];
 
 /**
  * 有效的任务类型
@@ -273,6 +273,9 @@ export function analyzeProject(cwd: string = process.cwd(), includeArchived: boo
     byStatus: {
       open: 0,
       in_progress: 0,
+      wait_review: 0,
+      wait_qa: 0,
+      wait_complete: 0,
       resolved: 0,
       closed: 0,
       reopened: 0,

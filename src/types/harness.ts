@@ -7,7 +7,7 @@
  * - Sprint Contract：开发前定义"完成"标准
  */
 
-import type { TaskMeta, TaskStatus } from './task.js';
+import type { TaskMeta, TaskStatus, TaskRole, CheckpointCategory } from './task.js';
 
 /**
  * Harness 执行配置
@@ -121,6 +121,77 @@ export interface ReviewVerdict {
 }
 
 /**
+ * 代码审核阶段结果
+ * 由 HarnessCodeReviewer 生成
+ */
+export interface CodeReviewVerdict {
+  /** 任务ID */
+  taskId: string;
+  /** 审核结果 */
+  result: ReviewResult;
+  /** 结果原因说明 */
+  reason: string;
+  /** 代码质量问题列表 */
+  codeQualityIssues: string[];
+  /** 未通过的代码审核检查点 */
+  failedCheckpoints: string[];
+  /** 审核时间 */
+  reviewedAt: string;
+  /** 审核者角色 */
+  reviewedBy: 'code_reviewer';
+  /** 详细反馈 */
+  details?: string;
+}
+
+/**
+ * QA 验证阶段结果
+ * 由 HarnessQATester 生成
+ */
+export interface QAVerdict {
+  /** 任务ID */
+  taskId: string;
+  /** 验证结果 */
+  result: ReviewResult;
+  /** 结果原因说明 */
+  reason: string;
+  /** 测试失败列表 */
+  testFailures: string[];
+  /** 未通过的 QA 检查点 */
+  failedCheckpoints: string[];
+  /** 是否需要人工验证 */
+  requiresHuman: boolean;
+  /** 需要人工验证的检查点 */
+  humanVerificationCheckpoints: string[];
+  /** 验证时间 */
+  verifiedAt: string;
+  /** 验证者角色 */
+  verifiedBy: 'qa_tester';
+  /** 详细反馈 */
+  details?: string;
+}
+
+/**
+ * 人工验证阶段结果
+ * 由 HarnessHumanVerifier 生成
+ */
+export interface HumanVerdict {
+  /** 任务ID */
+  taskId: string;
+  /** 验证结果 */
+  result: ReviewResult;
+  /** 结果原因说明 */
+  reason: string;
+  /** 验证的检查点ID */
+  checkpointId: string;
+  /** 验证人（用户） */
+  verifiedBy: string;
+  /** 验证时间 */
+  verifiedAt: string;
+  /** 用户反馈 */
+  userFeedback?: string;
+}
+
+/**
  * 任务执行记录
  */
 export interface TaskExecutionRecord {
@@ -132,6 +203,12 @@ export interface TaskExecutionRecord {
   contract: SprintContract;
   /** 开发报告 */
   devReport: DevReport;
+  /** 代码审核结果 */
+  codeReviewVerdict?: CodeReviewVerdict;
+  /** QA 验证结果 */
+  qaVerdict?: QAVerdict;
+  /** 人工验证结果列表 */
+  humanVerdicts?: HumanVerdict[];
   /** 审查结果 */
   reviewVerdict?: ReviewVerdict;
   /** 重试次数 */
@@ -149,7 +226,7 @@ export interface ExecutionTimelineEntry {
   /** 时间 */
   timestamp: string;
   /** 事件类型 */
-  event: 'started' | 'dev_started' | 'dev_completed' | 'review_started' | 'review_completed' | 'retry' | 'completed' | 'failed';
+  event: 'started' | 'dev_started' | 'dev_completed' | 'code_review_started' | 'code_review_completed' | 'qa_started' | 'qa_completed' | 'human_verification_started' | 'human_verification_completed' | 'review_started' | 'review_completed' | 'retry' | 'completed' | 'failed';
   /** 描述 */
   description: string;
   /** 附加数据 */
@@ -300,5 +377,101 @@ export function createDefaultRuntimeState(config: HarnessConfig): HarnessRuntime
     startTime: now,
     retryCounter: new Map(),
     updatedAt: now,
+  };
+}
+
+// ============================================================
+// 流水线状态报告类型（供 AI 读取）
+// ============================================================
+
+/**
+ * 流水线阶段
+ */
+export type HarnessReportPhase =
+  | 'idle'           // 空闲
+  | 'initialization' // 初始化
+  | 'development'    // 开发阶段
+  | 'code_review'    // 代码审核阶段
+  | 'qa_verification'// QA 验证阶段
+  | 'human_verification' // 人工验证阶段
+  | 'evaluation'     // 最终评估阶段
+  | 'completed'      // 完成
+  | 'failed';        // 失败
+
+/**
+ * 阶段历史条目
+ */
+export interface PhaseHistoryEntry {
+  /** 阶段 */
+  phase: HarnessReportPhase;
+  /** 任务ID */
+  taskId?: string;
+  /** 状态 */
+  status: 'started' | 'completed' | 'failed';
+  /** 时间戳 */
+  timestamp: string;
+  /** 消息 */
+  message?: string;
+  /** 持续时间（毫秒） */
+  duration?: number;
+}
+
+/**
+ * 流水线状态报告
+ * 存储位置：.projmnt4claude/harness-status.json
+ */
+export interface HarnessStatusReport {
+  /** 会话ID（关联到当前 AI 会话） */
+  sessionId?: string;
+
+  /** 流水线状态 */
+  state: HarnessState;
+
+  /** 当前阶段 */
+  currentPhase: HarnessReportPhase;
+
+  /** 当前任务ID */
+  currentTaskId?: string;
+
+  /** 总任务数 */
+  totalTasks: number;
+
+  /** 已完成任务数 */
+  completedTasks: number;
+
+  /** 进度百分比 (0-100) */
+  progress: number;
+
+  /** 状态消息 */
+  message: string;
+
+  /** 时间戳 */
+  timestamp: string;
+
+  /** 阶段历史 */
+  phaseHistory: PhaseHistoryEntry[];
+
+  /** 错误信息（如有） */
+  error?: {
+    code: string;
+    message: string;
+    taskId?: string;
+  };
+}
+
+/**
+ * 创建默认状态报告
+ */
+export function createDefaultStatusReport(sessionId?: string): HarnessStatusReport {
+  return {
+    sessionId,
+    state: 'idle',
+    currentPhase: 'idle',
+    totalTasks: 0,
+    completedTasks: 0,
+    progress: 0,
+    message: '流水线就绪',
+    timestamp: new Date().toISOString(),
+    phaseHistory: [],
   };
 }
