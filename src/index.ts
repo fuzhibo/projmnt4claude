@@ -423,12 +423,18 @@ program
         break;
       }
       case 'count': {
+        // Debug: log options
+        if (process.env.DEBUG_COUNT) {
+          console.error('DEBUG count options:', JSON.stringify(options));
+          console.error('DEBUG options.json:', options.json);
+          console.error('DEBUG optsWithGlobals.json:', program.opts().json);
+        }
         countTasks({
           status: options.status,
           priority: options.priority,
           type: options.type,
           groupBy: options.group as 'status' | 'priority' | 'type' | 'role' | undefined,
-          json: options.json || false,
+          json: options.json || program.opts().json || false,
         });
         break;
       }

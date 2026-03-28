@@ -369,53 +369,124 @@ export class HarnessEvaluator {
       details: '',
     };
 
-    // 提取评估结果
-    const resultMatch = output.match(/##\s*评估结果\s*[:：]\s*(PASS|NOPASS)/i);
-    if (resultMatch) {
-      result.passed = resultMatch[1].toUpperCase() === 'PASS';
+    // 多模式匹配评估结果
+    const resultPatterns = [
+      // 标准格式: ## 评估结果: PASS/NOPASS
+      /##\s*评估结果\s*[:：]?\s*(PASS|NOPASS)/i,
+      // 宽松格式: 评估结果 PASS/NOPASS
+      /(?:评估结果|Evaluation Result|Result)[:：]?\s*(PASS|NOPASS)/i,
+      // 简单匹配: PASS 或 NOPASS 单独出现
+      /\b(PASS|NOPASS)\b/i,
+      // JSON 格式: "result": "PASS"
+      /"result"\s*[:：]\s*"(PASS|NOPASS)"/i,
+    ];
+
+    let resultMatch: RegExpMatchArray | null = null;
+    for (const pattern of resultPatterns) {
+      resultMatch = output.match(pattern);
+      if (resultMatch) {
+        result.passed = resultMatch[1].toUpperCase() === 'PASS';
+        break;
+      }
     }
 
-    // 提取原因
-    const reasonMatch = output.match(/##\s*原因\s*[:：]\s*(.+?)(?=##|$)/si);
-    if (reasonMatch) {
-      result.reason = reasonMatch[1].trim();
+    // 如果没有匹配到，尝试中文判断
+    if (!resultMatch) {
+      const hasPositive = /(?:通过|✅|成功|符合要求|满足标准)/.test(output);
+      const hasNegative = /(?:不通过|未通过|❌|失败|不符合|不满足)/.test(output);
+      if (hasPositive && !hasNegative) {
+        result.passed = true;
+        resultMatch = ['通过', '通过'] as RegExpMatchArray;
+      } else if (hasNegative) {
+        result.passed = false;
+        resultMatch = ['不通过', 'NOPASS'] as RegExpMatchArray;
+      }
+    }
+
+    // 提取原因 - 多种格式
+    const reasonPatterns = [
+      /##\s*原因\s*[:：]\s*(.+?)(?=##|$)/si,
+      /(?:原因|Reason)[:：]?\s*(.+?)(?=##|##|$)/si,
+      /\*\*原因\*\*[:：]?\s*(.+?)(?=\*\*|##|$)/si,
+    ];
+    for (const pattern of reasonPatterns) {
+      const match = output.match(pattern);
+      if (match) {
+        result.reason = match[1].trim();
+        break;
+      }
     }
 
     // 提取未满足的标准
-    const criteriaMatch = output.match(/##\s*未满足的标准\s*[:：]\s*(.+?)(?=##|$)/si);
-    if (criteriaMatch) {
-      const criteriaText = criteriaMatch[1].trim();
-      if (criteriaText && criteriaText !== '无' && criteriaText !== 'N/A') {
-        result.failedCriteria = criteriaText.split('\n')
-          .map(line => line.replace(/^[-*]\s*/, '').trim())
-          .filter(line => line.length > 0);
+    const criteriaPatterns = [
+      /##\s*未满足的标准\s*[:：]\s*(.+?)(?=##|$)/si,
+      /(?:未满足的标准|Failed Criteria)[:：]?\s*(.+?)(?=##|$)/si,
+    ];
+    for (const pattern of criteriaPatterns) {
+      const match = output.match(pattern);
+      if (match) {
+        const criteriaText = match[1].trim();
+        if (criteriaText && criteriaText !== '无' && criteriaText !== 'N/A' && criteriaText !== 'None') {
+          result.failedCriteria = criteriaText.split('\n')
+            .map(line => line.replace(/^[-*]\s*/, '').trim())
+            .filter(line => line.length > 0);
+        }
+        break;
       }
     }
 
     // 提取未完成的检查点
-    const checkpointsMatch = output.match(/##\s*未完成的检查点\s*[:：]\s*(.+?)(?=##|$)/si);
-    if (checkpointsMatch) {
-      const checkpointsText = checkpointsMatch[1].trim();
-      if (checkpointsText && checkpointsText !== '无' && checkpointsText !== 'N/A') {
-        result.failedCheckpoints = checkpointsText.split('\n')
-          .map(line => line.replace(/^[-*]\s*/, '').trim())
-          .filter(line => line.length > 0);
+    const checkpointsPatterns = [
+      /##\s*未完成的检查点\s*[:：]\s*(.+?)(?=##|$)/si,
+      /(?:未完成的检查点|Failed Checkpoints)[:：]?\s*(.+?)(?=##|$)/si,
+    ];
+    for (const pattern of checkpointsPatterns) {
+      const match = output.match(pattern);
+      if (match) {
+        const checkpointsText = match[1].trim();
+        if (checkpointsText && checkpointsText !== '无' && checkpointsText !== 'N/A' && checkpointsText !== 'None') {
+          result.failedCheckpoints = checkpointsText.split('\n')
+            .map(line => line.replace(/^[-*]\s*/, '').trim())
+            .filter(line => line.length > 0);
+        }
+        break;
       }
     }
 
     // 提取详细反馈
-    const detailsMatch = output.match(/##\s*详细反馈\s*[:：]\s*(.+?)(?=##|$)/si);
-    if (detailsMatch) {
-      result.details = detailsMatch[1].trim();
+    const detailsPatterns = [
+      /##\s*详细反馈\s*[:：]\s*(.+?)(?=##|$)/si,
+      /(?:详细反馈|Details|Feedback)[:：]?\s*(.+?)(?=##|$)/si,
+    ];
+    for (const pattern of detailsPatterns) {
+      const match = output.match(pattern);
+      if (match) {
+        result.details = match[1].trim();
+        break;
+      }
     }
 
-    // 如果没有提取到结果，尝试简单判断
+    // 如果没有提取到原因，设置默认值
     if (!result.reason) {
-      if (output.toLowerCase().includes('pass') && !output.toLowerCase().includes('nopass')) {
-        result.passed = true;
-        result.reason = '基于输出内容的简单判断';
+      if (result.passed) {
+        result.reason = '基于输出内容的判断：评估通过';
+      } else if (resultMatch) {
+        result.reason = '基于输出内容的判断：评估未通过';
       } else {
-        result.reason = '无法解析评估结果';
+        // 最后尝试：检查是否包含明确的通过/不通过词汇
+        const lowerOutput = output.toLowerCase();
+        if (lowerOutput.includes('pass') && !lowerOutput.includes('nopass') && !lowerOutput.includes('not pass')) {
+          result.passed = true;
+          result.reason = '基于输出内容的简单判断：包含 PASS';
+        } else if (lowerOutput.includes('审查通过') || lowerOutput.includes('审核通过') || lowerOutput.includes('评估通过')) {
+          result.passed = true;
+          result.reason = '基于输出内容的简单判断：包含"通过"关键词';
+        } else {
+          result.reason = '无法解析评估结果';
+          // 添加调试信息
+          console.log('   ⚠️  解析失败，原始输出前500字符:');
+          console.log(output.substring(0, 500));
+        }
       }
     }
 

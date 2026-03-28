@@ -2537,6 +2537,11 @@ export function countTasks(
     tasks = tasks.filter(t => t.type === options.type);
   }
 
+  // Debug: log options
+  if (process.env.DEBUG_COUNT) {
+    console.error('DEBUG options:', JSON.stringify(options));
+  }
+
   // 分组统计
   if (options.groupBy) {
     const groups = new Map<string, number>();
