@@ -315,6 +315,20 @@ export async function createTask(
   // 生成任务ID (新格式)
   const taskId = generateNewTaskId(cwd, 'feature', response.priority, response.title);
 
+  // BUG-002: 交互模式也强制校验 - 在任务创建前验证
+  const defaultCheckpointContent = `# ${taskId} 检查点\n\n- [ ] 检查点1\n- [ ] 检查点2\n`;
+
+  if (!options.skipValidation) {
+    // 使用临时内容进行预校验
+    const tempValidation = hasValidCheckpoints(defaultCheckpointContent, true);
+    if (!tempValidation.valid) {
+      // 校验失败，显示错误并拒绝创建任务
+      displayCheckpointError(taskId, tempValidation.reason);
+      process.exitCode = 1;
+      return;
+    }
+  }
+
   // 创建任务元数据
   const task = createDefaultTaskMeta(taskId, response.title);
   if (response.description) {
@@ -328,20 +342,17 @@ export async function createTask(
   // 创建 checkpoint.md
   const taskDir = path.join(getTasksDir(cwd), taskId);
   const checkpointPath = path.join(taskDir, 'checkpoint.md');
-  fs.writeFileSync(checkpointPath, `# ${taskId} 检查点\n\n- [ ] 检查点1\n- [ ] 检查点2\n`, 'utf-8');
+  fs.writeFileSync(checkpointPath, defaultCheckpointContent, 'utf-8');
 
   console.log(`\n✅ 任务创建成功!`);
   console.log(`   ID: ${taskId}`);
   console.log(`   标题: ${task.title}`);
   console.log(`   优先级: ${formatPriority(task.priority)}`);
 
-  // BUG-002: 校验 checkpoints 质量（交互模式）
-  if (!options.skipValidation) {
-    const validation = hasValidCheckpoints(checkpointPath);
-    if (!validation.valid) {
-      displayCheckpointWarning(taskId, validation.reason, cwd);
-    }
-  }
+  // 提示用户编辑检查点
+  console.log('');
+  console.log('💡 提示: 请编辑 checkpoint.md 文件，添加具体的验收标准');
+  console.log(`   文件路径: .projmnt4claude/tasks/${taskId}/checkpoint.md`);
 }
 
 /**
@@ -648,7 +659,7 @@ function formatRelativeTime(isoString: string): string {
 
 /**
  * 显示任务详情
- * 支持多种输出格式：verbose, history, json, compact
+ * 支持多种输出格式：verbose, history, json, compact, panel
  */
 export function showTask(
   taskId: string,
@@ -658,6 +669,7 @@ export function showTask(
     json?: boolean;
     compact?: boolean;
     checkpoints?: boolean;
+    format?: 'panel' | 'classic';
   } = {},
   cwd: string = process.cwd()
 ): void {
@@ -677,8 +689,6 @@ export function showTask(
     process.exit(1);
   }
 
-  const separator = options.compact ? '' : '━'.repeat(60);
-
   // JSON 格式输出
   if (options.json) {
     console.log(JSON.stringify(task, null, 2));
@@ -693,28 +703,275 @@ export function showTask(
 
   // 精简输出
   if (options.compact) {
-    const statusIcon = task.status === 'resolved' || task.status === 'closed' ? '✅' :
-                       task.status === 'in_progress' ? '🔄' :
-                       task.status === 'reopened' ? '🔁' :
-                       task.status === 'abandoned' ? '❌' : '⏳';
-    console.log(`${statusIcon} ${task.id}: ${task.title}`);
-    console.log(`   状态: ${formatStatus(task.status)} | 优先级: ${formatPriority(task.priority)}`);
-    if (task.description) {
-      console.log(`   描述: ${task.description.substring(0, 100)}${task.description.length > 100 ? '...' : ''}`);
-    }
-    if (task.dependencies.length > 0) {
-      console.log(`   依赖: ${task.dependencies.join(', ')}`);
-    }
-    console.log(`   创建: ${formatRelativeTime(task.createdAt)}`);
+    showTaskCompact(task);
     return;
   }
 
-  // 详细输出 (verbose) 或标准输出
+  // 默认使用新面板格式（除非指定 --format classic 或 --verbose）
+  if (options.format !== 'classic' && !options.verbose) {
+    showTaskPanel(task, options, cwd);
+    return;
+  }
+
+  // 经典格式（verbose 模式或指定 classic）
+  showTaskClassic(task, options, cwd);
+}
+
+/**
+ * 精简输出格式
+ */
+function showTaskCompact(task: TaskMeta): void {
+  const statusIcon = getStatusIcon(task.status);
+  console.log(`${statusIcon} ${task.id}: ${task.title}`);
+  console.log(`   状态: ${formatStatus(task.status)} | 优先级: ${formatPriority(task.priority)}`);
+  if (task.description) {
+    console.log(`   描述: ${task.description.substring(0, 100)}${task.description.length > 100 ? '...' : ''}`);
+  }
+  if (task.dependencies.length > 0) {
+    console.log(`   依赖: ${task.dependencies.join(', ')}`);
+  }
+  console.log(`   创建: ${formatRelativeTime(task.createdAt)}`);
+}
+
+/**
+ * 获取状态图标
+ */
+function getStatusIcon(status: TaskStatus): string {
+  const icons: Record<string, string> = {
+    open: '⬜',
+    in_progress: '🔄',
+    wait_review: '👀',
+    wait_qa: '🧪',
+    wait_complete: '⏳',
+    resolved: '✅',
+    closed: '⚫',
+    reopened: '🔁',
+    abandoned: '❌',
+  };
+  return icons[status] || '❓';
+}
+
+/**
+ * 计算字符串的显示宽度（中文字符占2个宽度）
+ */
+function getDisplayWidth(str: string): number {
+  let width = 0;
+  for (const char of str) {
+    // 中文字符范围（包括中文标点）
+    if (/[\u4e00-\u9fff\u3000-\u303f\uff00-\uffef]/.test(char)) {
+      width += 2;
+    } else {
+      width += 1;
+    }
+  }
+  return width;
+}
+
+/**
+ * 按显示宽度截断字符串
+ */
+function truncateByDisplayWidth(str: string, maxDisplayWidth: number): string {
+  let result = '';
+  let currentWidth = 0;
+  for (const char of str) {
+    const charWidth = /[\u4e00-\u9fff\u3000-\u303f\uff00-\uffef]/.test(char) ? 2 : 1;
+    if (currentWidth + charWidth > maxDisplayWidth) {
+      break;
+    }
+    result += char;
+    currentWidth += charWidth;
+  }
+  return result;
+}
+
+/**
+ * 按显示宽度填充空格（用于对齐）
+ */
+function padByDisplayWidth(str: string, targetWidth: number): string {
+  const currentWidth = getDisplayWidth(str);
+  if (currentWidth >= targetWidth) {
+    return str;
+  }
+  return str + ' '.repeat(targetWidth - currentWidth);
+}
+
+/**
+ * 新面板格式 - 紧凑美观
+ */
+function showTaskPanel(
+  task: TaskMeta,
+  options: { checkpoints?: boolean; verbose?: boolean },
+  cwd: string
+): void {
+  const width = 60;
+  const hLine = '─'.repeat(width - 2);
+  const statusIcon = getStatusIcon(task.status);
+
+  console.log('');
+  console.log(`╭${hLine}╮`);
+
+  // 标题行
+  const titleLine = ` ${statusIcon} ${task.id}`;
+  console.log(`│${padByDisplayWidth(titleLine, width - 2)}│`);
+
+  // 标题（考虑中文字符宽度截断）
+  const maxTitleDisplayWidth = width - 6;
+  const displayTitle = truncateByDisplayWidth(task.title, maxTitleDisplayWidth - 3);
+  const truncatedTitle = getDisplayWidth(task.title) > maxTitleDisplayWidth ? displayTitle + '...' : task.title;
+  console.log(`│   ${padByDisplayWidth(truncatedTitle, width - 5)}│`);
+
+  console.log(`├${hLine}┤`);
+
+  // 状态行：使用简洁格式，一行显示状态、优先级、类型
+  const statusMap: Record<string, string> = {
+    open: '待处理',
+    in_progress: '进行中',
+    resolved: '已解决',
+    closed: '已关闭',
+    reopened: '已重开',
+    abandoned: '已放弃',
+    wait_review: '待审查',
+    wait_qa: '待测试',
+    wait_complete: '待完成',
+  };
+  const priorityMap: Record<string, string> = {
+    P0: 'P0紧急',
+    P1: 'P1高',
+    P2: 'P2中',
+    P3: 'P3低',
+    Q1: 'Q1',
+    Q2: 'Q2',
+    Q3: 'Q3',
+    Q4: 'Q4',
+  };
+  const statusText = statusMap[task.status] || task.status;
+  const priorityText = priorityMap[task.priority] || task.priority;
+  const typeText = task.type || '未指定';
+  const statusLine = `状态:${statusText} │ 优先级:${priorityText} │ 类型:${typeText}`;
+  console.log(`│ ${padByDisplayWidth(statusLine, width - 4)}│`);
+
+  // 描述（如果有）
+  if (task.description) {
+    console.log(`├${hLine}┤`);
+    const descLines = wrapText(task.description, width - 6);
+    for (const line of descLines.slice(0, 3)) {
+      console.log(`│ ${padByDisplayWidth(line, width - 4)}│`);
+    }
+    if (descLines.length > 3) {
+      const moreDesc = `... 还有 ${descLines.length - 3} 行`;
+      console.log(`│ ${padByDisplayWidth(moreDesc, width - 4)}│`);
+    }
+  }
+
+  // 检查点进度
+  const taskDir = path.join(getTasksDir(cwd), task.id);
+  const checkpointPath = path.join(taskDir, 'checkpoint.md');
+
+  if (fs.existsSync(checkpointPath)) {
+    console.log(`├${hLine}┤`);
+
+    const content = fs.readFileSync(checkpointPath, 'utf-8');
+    const checkpointLines = content.split('\n').filter(l => l.trim().startsWith('- ['));
+
+    if (checkpointLines.length > 0) {
+      const completedCount = checkpointLines.filter(l => l.includes('[x]') || l.includes('[X]')).length;
+      const totalCount = checkpointLines.length;
+      const percentage = Math.round((completedCount / totalCount) * 100);
+
+      // 进度条
+      const barWidth = 20;
+      const filledWidth = Math.round((completedCount / totalCount) * barWidth);
+      const bar = '█'.repeat(filledWidth) + '░'.repeat(barWidth - filledWidth);
+
+      const progressLine = `✅ 检查点 [${bar}] ${percentage}% (${completedCount}/${totalCount})`;
+      console.log(`│ ${padByDisplayWidth(progressLine, width - 4)}│`);
+
+      // 显示检查点（最多 5 个）
+      const displayCount = options.checkpoints ? checkpointLines.length : Math.min(5, checkpointLines.length);
+      for (let i = 0; i < displayCount; i++) {
+        const l = checkpointLines[i]!;
+        const isChecked = l.includes('[x]') || l.includes('[X]');
+        const cpIcon = isChecked ? '✅' : '⬜';
+        const text = l.replace(/- \[[xX ]\] /, '').trim();
+        const maxTextLen = width - 12;
+        const displayText = getDisplayWidth(text) > maxTextLen ? truncateByDisplayWidth(text, maxTextLen - 2) + '..' : text;
+        const cpLine = `  ${i + 1}. ${cpIcon} ${displayText}`;
+        console.log(`│${padByDisplayWidth(cpLine, width - 2)}│`);
+      }
+
+      if (!options.checkpoints && checkpointLines.length > 5) {
+        const moreLine = `  ... 还有 ${checkpointLines.length - 5} 个检查点`;
+        console.log(`│${padByDisplayWidth(moreLine, width - 2)}│`);
+      }
+    }
+  }
+
+  // 附加信息（依赖、角色、分支等）
+  const hasExtras = task.dependencies.length > 0 ||
+                    task.recommendedRole ||
+                    task.branch ||
+                    (task.subtaskIds && task.subtaskIds.length > 0) ||
+                    task.parentId;
+
+  if (hasExtras) {
+    console.log(`├${hLine}┤`);
+
+    if (task.dependencies.length > 0) {
+      const deps = task.dependencies.join(', ');
+      const maxLen = width - 10;
+      const depsText = getDisplayWidth(deps) > maxLen ? truncateByDisplayWidth(deps, maxLen - 2) + '..' : deps;
+      const depsLine = `🔗 依赖: ${depsText}`;
+      console.log(`│ ${padByDisplayWidth(depsLine, width - 4)}│`);
+    }
+
+    if (task.recommendedRole) {
+      const roleLine = `👤 角色: ${task.recommendedRole}`;
+      console.log(`│ ${padByDisplayWidth(roleLine, width - 4)}│`);
+    }
+
+    if (task.branch) {
+      const branchLine = `🌿 分支: ${task.branch}`;
+      console.log(`│ ${padByDisplayWidth(branchLine, width - 4)}│`);
+    }
+
+    if (task.subtaskIds && task.subtaskIds.length > 0) {
+      const subtaskLine = `📎 子任务: ${task.subtaskIds.length} 个`;
+      console.log(`│ ${padByDisplayWidth(subtaskLine, width - 4)}│`);
+    }
+
+    if (task.parentId) {
+      const parentLine = `⬆️ 父任务: ${task.parentId}`;
+      console.log(`│ ${padByDisplayWidth(parentLine, width - 4)}│`);
+    }
+  }
+
+  // 时间行（拆分为两行避免过长）
+  console.log(`├${hLine}┤`);
+  const createdTime = formatLocalTime(task.createdAt);
+  const updatedTime = formatRelativeTime(task.updatedAt);
+  const createdLine = `📅 创建: ${createdTime}`;
+  console.log(`│ ${padByDisplayWidth(createdLine, width - 4)}│`);
+
+  let updatedLine = `   更新: ${updatedTime}`;
+  if (task.reopenCount && task.reopenCount > 0) {
+    updatedLine += `  │  🔁 重开 ${task.reopenCount} 次`;
+  }
+  console.log(`│ ${padByDisplayWidth(updatedLine, width - 4)}│`);
+
+  console.log(`╰${hLine}╯`);
+  console.log('');
+}
+
+/**
+ * 经典格式 - 详细输出
+ */
+function showTaskClassic(
+  task: TaskMeta,
+  options: { verbose?: boolean; checkpoints?: boolean },
+  cwd: string
+): void {
   const line = '━'.repeat(60);
-  const statusIcon = task.status === 'resolved' || task.status === 'closed' ? '✅' :
-                     task.status === 'in_progress' ? '🔄' :
-                     task.status === 'reopened' ? '🔁' :
-                     task.status === 'abandoned' ? '❌' : '⬜';
+  const statusIcon = getStatusIcon(task.status);
 
   console.log('');
   console.log(`${statusIcon} ${task.id}`);
@@ -727,10 +984,9 @@ export function showTask(
   if (task.description) {
     console.log('');
     console.log('📝 描述:');
-    // 多行描述缩进显示
     const descLines = task.description.split('\n');
-    descLines.forEach(line => {
-      console.log(`   ${line}`);
+    descLines.forEach(descLine => {
+      console.log(`   ${descLine}`);
     });
   }
 
@@ -763,7 +1019,6 @@ export function showTask(
       console.log(`   ⬆️  父任务: ${task.parentId}`);
     }
 
-    // 显示验证信息
     if (task.checkpointConfirmationToken) {
       console.log(`   🔐 验证令牌: ${task.checkpointConfirmationToken}`);
     }
@@ -790,7 +1045,6 @@ export function showTask(
   console.log(`   创建: ${formatLocalTime(task.createdAt)} (${formatRelativeTime(task.createdAt)})`);
   console.log(`   更新: ${formatLocalTime(task.updatedAt)} (${formatRelativeTime(task.updatedAt)})`);
 
-  // 显示重开次数
   if (task.reopenCount && task.reopenCount > 0) {
     console.log(`   重开次数: ${task.reopenCount}`);
   }
@@ -803,7 +1057,7 @@ export function showTask(
       console.log(line);
       console.log('📝 需求变更历史:');
       console.log(line);
-      task.requirementHistory.forEach((entry, index) => {
+      task.requirementHistory.forEach((entry) => {
         const timeStr = formatLocalTime(entry.timestamp);
         console.log(`\n   [v${entry.version}] ${timeStr}`);
         console.log(`      变更原因: ${entry.changeReason}`);
@@ -818,14 +1072,14 @@ export function showTask(
   }
 
   // 显示检查点
-  const taskDir = path.join(getTasksDir(cwd), taskId);
+  const taskDir = path.join(getTasksDir(cwd), task.id);
   const checkpointPath = path.join(taskDir, 'checkpoint.md');
 
   console.log('');
 
   // 如果使用 --checkpoints 或 --verbose，显示详细的检查点元数据
   if (options.checkpoints || options.verbose) {
-    const checkpointsMeta = listCheckpoints(taskId, cwd);
+    const checkpointsMeta = listCheckpoints(task.id, cwd);
 
     if (checkpointsMeta.length > 0) {
       console.log(line);
@@ -838,11 +1092,11 @@ export function showTask(
       console.log('');
 
       checkpointsMeta.forEach((cp, index) => {
-        const statusIcon = cp.status === 'completed' ? '✅' :
-                           cp.status === 'failed' ? '❌' :
-                           cp.status === 'skipped' ? '⏭️' : '⬜';
+        const cpIcon = cp.status === 'completed' ? '✅' :
+                       cp.status === 'failed' ? '❌' :
+                       cp.status === 'skipped' ? '⏭️' : '⬜';
 
-        console.log(`   ${index + 1}. ${statusIcon} ${cp.description}`);
+        console.log(`   ${index + 1}. ${cpIcon} ${cp.description}`);
         if (cp.note) {
           console.log(`      备注: ${cp.note}`);
         }
@@ -868,16 +1122,16 @@ export function showTask(
 
       checkpointLines.forEach((l, index) => {
         const isChecked = l.includes('[x]') || l.includes('[X]');
-        const statusIcon = isChecked ? '✅' : '⬜';
+        const cpIcon = isChecked ? '✅' : '⬜';
         const text = l.replace(/- \[[xX ]\] /, '').trim();
-        console.log(`   ${index + 1}. ${statusIcon} ${text}`);
+        console.log(`   ${index + 1}. ${cpIcon} ${text}`);
       });
     } else {
       console.log('   暂无检查点');
     }
   }
 
-  // verbose 模式显示历史
+  // verbose 模式显示历史摘要（最多5条详细记录）
   if (options.verbose && task.history && task.history.length > 0) {
     console.log('');
     console.log(line);
@@ -885,18 +1139,28 @@ export function showTask(
     console.log(line);
     console.log('');
 
-    // 过滤掉无意义的状态变更（oldValue === newValue）
     const meaningfulHistory = task.history.filter(entry => {
-      // 保留没有字段变更的记录（如"添加完成说明"等）
       if (!entry.field) return true;
-      // 过滤掉相同值的状态变更
       return entry.oldValue !== entry.newValue;
     });
 
+    // 统计摘要
+    const statusChanges = meaningfulHistory.filter(e => e.field === 'status').length;
+    const priorityChanges = meaningfulHistory.filter(e => e.field === 'priority').length;
+    const otherChanges = meaningfulHistory.length - statusChanges - priorityChanges;
+
+    console.log(`   📊 摘要: 共 ${meaningfulHistory.length} 条变更`);
+    console.log(`      - 状态变更: ${statusChanges} 次`);
+    console.log(`      - 优先级变更: ${priorityChanges} 次`);
+    console.log(`      - 其他变更: ${otherChanges} 次`);
+    console.log('');
+
+    // 显示最近5条详细记录
     const sortedHistory = [...meaningfulHistory].reverse();
-    const maxDisplay = 10;
+    const maxDisplay = 5;
     const displayHistory = sortedHistory.slice(0, maxDisplay);
 
+    console.log('   最近变更:');
     for (const entry of displayHistory) {
       const timeStr = formatLocalTime(entry.timestamp);
       console.log(`   [${timeStr}] ${entry.action}`);
@@ -913,6 +1177,36 @@ export function showTask(
   }
 
   console.log('');
+}
+
+/**
+ * 文本换行辅助函数
+ */
+function wrapText(text: string, maxWidth: number): string[] {
+  const lines: string[] = [];
+  const paragraphs = text.split('\n');
+
+  for (const paragraph of paragraphs) {
+    if (paragraph.trim() === '') {
+      lines.push('');
+      continue;
+    }
+
+    let currentLine = '';
+    const words = paragraph.split(' ');
+
+    for (const word of words) {
+      if (currentLine.length + word.length + 1 <= maxWidth) {
+        currentLine += (currentLine ? ' ' : '') + word;
+      } else {
+        if (currentLine) lines.push(currentLine);
+        currentLine = word;
+      }
+    }
+    if (currentLine) lines.push(currentLine);
+  }
+
+  return lines;
 }
 
 /**

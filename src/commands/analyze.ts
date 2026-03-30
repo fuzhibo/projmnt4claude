@@ -14,6 +14,8 @@ import type {
   TaskPriority,
   TaskStatus,
   CheckpointMetadata,
+  TaskHistoryEntry,
+  VerificationMethod,
 } from '../types/task';
 import { generateCheckpointId } from '../utils/checkpoint';
 import type { SprintContract } from '../types/harness';
@@ -901,7 +903,7 @@ export async function fixIssues(cwd: string = process.cwd(), nonInteractive: boo
         if (task) {
           // 从历史记录计算 reopen 次数
           const reopenFromHistory = task.history?.filter(
-            (h: TaskHistoryEntry) => h.action === 'status_change' && h.newValue === 'reopened'
+            (h) => h.action === 'status_change' && h.newValue === 'reopened'
           ).length || 0;
 
           task.reopenCount = Math.max(1, reopenFromHistory);
@@ -920,7 +922,7 @@ export async function fixIssues(cwd: string = process.cwd(), nonInteractive: boo
           const now = new Date().toISOString();
 
           if (field === 'createdAt' || field === 'updatedAt') {
-            (task as Record<string, unknown>)[field] = now;
+            (task as unknown as Record<string, unknown>)[field] = now;
             writeTaskMeta(task, cwd);
             console.log(`  ✅ 已将 ${field} 更新为 ${now}`);
             fixedCount++;
@@ -1464,7 +1466,7 @@ function generateSmartCheckpoints(
 function inferSmartVerificationMethod(
   criteria: string,
   searchResults: CodeSearchResult[]
-): string {
+): VerificationMethod {
   const lowerCriteria = criteria.toLowerCase();
 
   // 1. 基于验收标准内容推断
@@ -1665,7 +1667,7 @@ function generateCheckpointsFromCriteria(
 /**
  * 根据描述内容推断验证方法
  */
-function inferVerificationMethod(description: string): string {
+function inferVerificationMethod(description: string): VerificationMethod {
   const lowerDesc = description.toLowerCase();
 
   // 测试相关
