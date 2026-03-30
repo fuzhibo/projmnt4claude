@@ -193,6 +193,32 @@ function displayCheckpointWarning(taskId: string, reason: string, cwd: string): 
 }
 
 /**
+ * BUG-002: 任务创建时显示检查点质量提醒
+ * 不阻止任务创建，但提醒用户需要编辑 checkpoint.md
+ */
+function displayCheckpointCreationWarning(taskId: string, cwd: string): void {
+  console.log('');
+  console.log('━'.repeat(60));
+  console.log('⚠️  检查点质量提醒');
+  console.log('━'.repeat(60));
+  console.log('');
+  console.log('任务已创建，但检查点目前使用的是默认模板。');
+  console.log('📋 高质量检查点对于任务验收至关重要。建议您：');
+  console.log('');
+  console.log('   1. 编辑 checkpoint.md 文件，添加具体的验收标准：');
+  console.log(`      文件路径: .projmnt4claude/tasks/${taskId}/checkpoint.md`);
+  console.log('');
+  console.log('   2. 使用 analyze 命令自动生成检查点（推荐）：');
+  console.log(`      projmnt4claude analyze --generate-checkpoints ${taskId}`);
+  console.log('');
+  console.log('   3. 使用 checkpoint 模板功能：');
+  console.log(`      projmnt4claude task checkpoint template ${taskId} --apply`);
+  console.log('');
+  console.log('💡 提示: 任务执行/完成时会进行严格校验');
+  console.log('━'.repeat(60));
+}
+
+/**
  * 创建新任务
  * 支持交互模式和非交互模式
  */
@@ -220,38 +246,9 @@ export async function createTask(
     // 生成任务ID (新格式)
     const taskId = generateNewTaskId(cwd, taskType, taskPriority, options.title);
 
-    // BUG-002: P0 强制校验 - 在任务创建前检查是否需要校验
-    // 如果不跳过校验，需要先生成 checkpoint 内容进行预校验
-    const defaultCheckpointContent = `# ${taskId} 检查点\n\n- [ ] 检查点1\n- [ ] 检查点2\n`;
-
-    if (!options.skipValidation) {
-      // 使用临时内容进行预校验 (isContent=true 表示第一个参数是内容而非路径)
-      const tempValidation = hasValidCheckpoints(defaultCheckpointContent, true);
-      if (!tempValidation.valid) {
-        // 校验失败，显示警告并拒绝创建任务
-        console.log('');
-        console.log('━'.repeat(60));
-        console.log('⚠️  检查点质量校验失败');
-        console.log('━'.repeat(60));
-        console.log('');
-        console.log(`无法创建任务 ${taskId}，原因：`);
-        console.log(`   ${tempValidation.reason}`);
-        console.log('');
-        console.log('📋 高质量检查点对于任务验收至关重要。建议您：');
-        console.log('');
-        console.log('   1. 使用交互模式创建任务，手动编辑检查点：');
-        console.log(`      projmnt4claude task create`);
-        console.log('');
-        console.log('   2. 创建任务后立即编辑 checkpoint.md 文件');
-        console.log('');
-        console.log('   3. 使用 --skip-validation 跳过校验（不推荐）：');
-        console.log(`      projmnt4claude task create --title "${options.title}" --skip-validation`);
-        console.log('');
-        console.log('━'.repeat(60));
-        process.exitCode = 1;
-        return;
-      }
-    }
+    // BUG-002: 创建任务时显示检查点质量警告（不阻止创建）
+    // 默认模板内容仅作为占位符，用户需要编辑添加具体的验收标准
+    const defaultCheckpointContent = `# ${taskId} 检查点\n\n- [ ] 检查点1（请替换为具体验收标准）\n- [ ] 检查点2（请替换为具体验收标准）\n`;
 
     // 创建任务元数据
     const task = createDefaultTaskMeta(taskId, options.title, taskType);
@@ -273,10 +270,10 @@ export async function createTask(
     console.log(`   标题: ${task.title}`);
     console.log(`   优先级: ${formatPriority(task.priority)}`);
 
-    // 提示用户编辑检查点
-    console.log('');
-    console.log('💡 提示: 请编辑 checkpoint.md 文件，添加具体的验收标准');
-    console.log(`   文件路径: .projmnt4claude/tasks/${taskId}/checkpoint.md`);
+    // BUG-002: 显示检查点质量警告（除非使用 --skip-validation）
+    if (!options.skipValidation) {
+      displayCheckpointCreationWarning(taskId, cwd);
+    }
     return;
   }
 
@@ -315,19 +312,8 @@ export async function createTask(
   // 生成任务ID (新格式)
   const taskId = generateNewTaskId(cwd, 'feature', response.priority, response.title);
 
-  // BUG-002: 交互模式也强制校验 - 在任务创建前验证
-  const defaultCheckpointContent = `# ${taskId} 检查点\n\n- [ ] 检查点1\n- [ ] 检查点2\n`;
-
-  if (!options.skipValidation) {
-    // 使用临时内容进行预校验
-    const tempValidation = hasValidCheckpoints(defaultCheckpointContent, true);
-    if (!tempValidation.valid) {
-      // 校验失败，显示错误并拒绝创建任务
-      displayCheckpointError(taskId, tempValidation.reason);
-      process.exitCode = 1;
-      return;
-    }
-  }
+  // BUG-002: 交互模式 - 创建默认检查点内容
+  const defaultCheckpointContent = `# ${taskId} 检查点\n\n- [ ] 检查点1（请替换为具体验收标准）\n- [ ] 检查点2（请替换为具体验收标准）\n`;
 
   // 创建任务元数据
   const task = createDefaultTaskMeta(taskId, response.title);
@@ -349,10 +335,10 @@ export async function createTask(
   console.log(`   标题: ${task.title}`);
   console.log(`   优先级: ${formatPriority(task.priority)}`);
 
-  // 提示用户编辑检查点
-  console.log('');
-  console.log('💡 提示: 请编辑 checkpoint.md 文件，添加具体的验收标准');
-  console.log(`   文件路径: .projmnt4claude/tasks/${taskId}/checkpoint.md`);
+  // BUG-002: 创建后显示检查点质量提醒（除非使用 --skip-validation）
+  if (!options.skipValidation) {
+    displayCheckpointCreationWarning(taskId, cwd);
+  }
 }
 
 /**
