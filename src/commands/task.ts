@@ -250,8 +250,7 @@ export async function createTask(
     // 生成任务ID (新格式)
     const taskId = generateNewTaskId(cwd, taskType, taskPriority, options.title);
 
-    // BUG-002: 默认模板内容仅作为占位符，不进行质量校验
-    // 默认模板本身就是占位符，用户需要在任务创建后编辑它
+    // BUG-002: 默认模板内容作为初始占位符，创建后会进行质量校验
     const defaultCheckpointContent = `# ${taskId} 检查点\n\n- [ ] 检查点1（请替换为具体验收标准）\n- [ ] 检查点2（请替换为具体验收标准）\n`;
 
     // 创建任务元数据
@@ -319,7 +318,7 @@ export async function createTask(
   // 生成任务ID (新格式)
   const taskId = generateNewTaskId(cwd, 'feature', response.priority, response.title);
 
-  // BUG-002: 交互模式 - 默认检查点内容仅作为占位符，不进行质量校验
+  // BUG-002: 交互模式 - 默认检查点内容作为初始占位符，创建后会进行质量校验
   const defaultCheckpointContent = `# ${taskId} 检查点\n\n- [ ] 检查点1（请替换为具体验收标准）\n- [ ] 检查点2（请替换为具体验收标准）\n`;
 
   // 创建任务元数据
@@ -902,12 +901,14 @@ function showTaskPanel(
     }
   }
 
-  // 附加信息（依赖、角色、分支等）
+  // 附加信息（依赖、角色、分支、讨论等）
   const hasExtras = task.dependencies.length > 0 ||
                     task.recommendedRole ||
                     task.branch ||
                     (task.subtaskIds && task.subtaskIds.length > 0) ||
-                    task.parentId;
+                    task.parentId ||
+                    task.needsDiscussion ||
+                    (task.requirementHistory && task.requirementHistory.length > 0);
 
   if (hasExtras) {
     console.log(`├${hLine}┤`);
@@ -938,6 +939,21 @@ function showTaskPanel(
     if (task.parentId) {
       const parentLine = `⬆️ 父任务: ${task.parentId}`;
       console.log(`│ ${padByDisplayWidth(parentLine, width - 4)}│`);
+    }
+
+    // 需要讨论的提示
+    if (task.needsDiscussion) {
+      const discussionCount = task.discussionTopics?.length || 0;
+      const discussionLine = discussionCount > 0
+        ? `💬 待讨论 (${discussionCount}个主题)`
+        : `💬 待讨论`;
+      console.log(`│ ${padByDisplayWidth(discussionLine, width - 4)}│`);
+    }
+
+    // 需求变更历史计数
+    if (task.requirementHistory && task.requirementHistory.length > 0) {
+      const reqLine = `📝 需求变更: ${task.requirementHistory.length} 次`;
+      console.log(`│ ${padByDisplayWidth(reqLine, width - 4)}│`);
     }
   }
 
