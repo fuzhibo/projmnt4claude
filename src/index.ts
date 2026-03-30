@@ -167,6 +167,7 @@ program
   .option('--missing-verification', '筛选缺少验证的任务 (仅 list)')
   .option('-g, --group <field>', '分组显示 (仅 list): status/priority/type/role')
   .option('--checkpoints', '显示检查点详情 (仅 show)')
+  .option('--format <format>', '输出格式 (仅 show): panel/classic')
   .option('--result <result>', '验证结果 (仅 checkpoint complete)')
   .option('--note <note>', '检查点备注 (仅 checkpoint note/fail)')
   .option('--into <count>', '拆分数量 (仅 split)')
@@ -207,6 +208,7 @@ program
           json: options.json || program.opts().json || false,
           compact: options.compact,
           checkpoints: options.checkpoints,
+          format: options.format,
         });
         break;
       case 'update':

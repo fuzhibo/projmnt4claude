@@ -250,8 +250,8 @@ export async function createTask(
     // 生成任务ID (新格式)
     const taskId = generateNewTaskId(cwd, taskType, taskPriority, options.title);
 
-    // BUG-002: 创建任务时显示检查点质量警告（不阻止创建）
-    // 默认模板内容仅作为占位符，用户需要编辑添加具体的验收标准
+    // BUG-002: 默认模板内容仅作为占位符，不进行质量校验
+    // 默认模板本身就是占位符，用户需要在任务创建后编辑它
     const defaultCheckpointContent = `# ${taskId} 检查点\n\n- [ ] 检查点1（请替换为具体验收标准）\n- [ ] 检查点2（请替换为具体验收标准）\n`;
 
     // 创建任务元数据
@@ -319,7 +319,7 @@ export async function createTask(
   // 生成任务ID (新格式)
   const taskId = generateNewTaskId(cwd, 'feature', response.priority, response.title);
 
-  // BUG-002: 交互模式 - 创建默认检查点内容
+  // BUG-002: 交互模式 - 默认检查点内容仅作为占位符，不进行质量校验
   const defaultCheckpointContent = `# ${taskId} 检查点\n\n- [ ] 检查点1（请替换为具体验收标准）\n- [ ] 检查点2（请替换为具体验收标准）\n`;
 
   // 创建任务元数据
