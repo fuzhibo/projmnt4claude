@@ -204,7 +204,7 @@ program
         showTask(id, {
           verbose: options.verbose,
           history: options.history,
-          json: options.json,
+          json: options.json || program.opts().json || false,
           compact: options.compact,
           checkpoints: options.checkpoints,
         });
