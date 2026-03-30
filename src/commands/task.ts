@@ -101,11 +101,15 @@ function hasValidCheckpoints(
   // 注意：这些模式匹配的是去掉 "- [ ] " 前缀后的纯文本
   const templatePatterns = [
     /^检查点\d+$/u,           // "检查点1", "检查点2" 等
+    /^检查点\d*[（(].*[)）]$/u, // "检查点1（请替换...）" 等
     /^checkpoint\s*\d+$/i,    // "checkpoint 1", "checkpoint 2" 等
     /^完成任务?$/u,            // "完成任务"
     /^待填写$/u,               // "待填写"
     /^TODO$/i,                 // "TODO"
     /^\.{3,}$/,                // "..."
+    /请替换为.*验收标准/u,     // "请替换为具体验收标准"
+    /请替换.*具体/u,           // "请替换为具体..."
+    /^CP-\d+$/u,              // "CP-001" 等纯ID形式
   ];
 
   let templateCount = 0;
@@ -270,9 +274,12 @@ export async function createTask(
     console.log(`   标题: ${task.title}`);
     console.log(`   优先级: ${formatPriority(task.priority)}`);
 
-    // BUG-002: 显示检查点质量警告（除非使用 --skip-validation）
+    // BUG-002: 校验检查点质量并显示警告（除非使用 --skip-validation）
     if (!options.skipValidation) {
-      displayCheckpointCreationWarning(taskId, cwd);
+      const validation = hasValidCheckpoints(checkpointPath, false);
+      if (!validation.valid) {
+        displayCheckpointWarning(taskId, validation.reason, cwd);
+      }
     }
     return;
   }
@@ -335,9 +342,12 @@ export async function createTask(
   console.log(`   标题: ${task.title}`);
   console.log(`   优先级: ${formatPriority(task.priority)}`);
 
-  // BUG-002: 创建后显示检查点质量提醒（除非使用 --skip-validation）
+  // BUG-002: 交互模式 - 校验检查点质量并显示警告
   if (!options.skipValidation) {
-    displayCheckpointCreationWarning(taskId, cwd);
+    const validation = hasValidCheckpoints(checkpointPath, false);
+    if (!validation.valid) {
+      displayCheckpointWarning(taskId, validation.reason, cwd);
+    }
   }
 }
 
@@ -1141,9 +1151,9 @@ function showTaskClassic(
     console.log(`      - 其他变更: ${otherChanges} 次`);
     console.log('');
 
-    // 显示最近5条详细记录
+    // 显示最近10条详细记录
     const sortedHistory = [...meaningfulHistory].reverse();
-    const maxDisplay = 5;
+    const maxDisplay = 10;
     const displayHistory = sortedHistory.slice(0, maxDisplay);
 
     console.log('   最近变更:');
