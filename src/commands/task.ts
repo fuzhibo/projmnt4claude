@@ -865,6 +865,7 @@ function showTaskPanel(
 
   if (fs.existsSync(checkpointPath)) {
     console.log(`├${hLine}┤`);
+    console.log(`│ ${padByDisplayWidth('✅ 检查点', width - 2)}│`);
 
     const content = fs.readFileSync(checkpointPath, 'utf-8');
     const checkpointLines = content.split('\n').filter(l => l.trim().startsWith('- ['));
@@ -874,12 +875,12 @@ function showTaskPanel(
       const totalCount = checkpointLines.length;
       const percentage = Math.round((completedCount / totalCount) * 100);
 
-      // 进度条
+      // 可视化进度条 - 寁填充槽 + 空槽
       const barWidth = 20;
       const filledWidth = Math.round((completedCount / totalCount) * barWidth);
-      const bar = '█'.repeat(filledWidth) + '░'.repeat(barWidth - filledWidth);
-
-      const progressLine = `✅ 检查点 [${bar}] ${percentage}% (${completedCount}/${totalCount})`;
+      const emptyWidth = barWidth - filledWidth;
+      const bar = '\x1b[32m'.repeat(filledWidth) + '\x1b[90m'.repeat(emptyWidth);
+      const progressLine = `✅ 检查点 [${bar}] ${percentage}%`;
       console.log(`│ ${padByDisplayWidth(progressLine, width - 4)}│`);
 
       // 显示检查点（最多 5 个）
@@ -889,15 +890,14 @@ function showTaskPanel(
         const isChecked = l.includes('[x]') || l.includes('[X]');
         const cpIcon = isChecked ? '✅' : '⬜';
         const text = l.replace(/- \[[xX ]\] /, '').trim();
-        const maxTextLen = width - 12;
-        const displayText = getDisplayWidth(text) > maxTextLen ? truncateByDisplayWidth(text, maxTextLen - 2) + '..' : text;
-        const cpLine = `  ${i + 1}. ${cpIcon} ${displayText}`;
-        console.log(`│${padByDisplayWidth(cpLine, width - 2)}│`);
+        const maxTextLen = width - 10;
+        const displayText = getDisplayWidth(text) > maxTextLen ? truncateByDisplayWidth(text, maxTextLen) + '..' : text;
+        console.log(`│  ${padByDisplayWidth(`  ${i + 1}. ${cpIcon} ${displayText}`, width - 3)}│`);
       }
 
       if (!options.checkpoints && checkpointLines.length > 5) {
-        const moreLine = `  ... 还有 ${checkpointLines.length - 5} 个检查点`;
-        console.log(`│${padByDisplayWidth(moreLine, width - 2)}│`);
+        const moreLine = `     ... 还有 ${checkpointLines.length - 5} 个检查点`;
+        console.log(`│  ${padByDisplayWidth(moreLine, width - 2)}│`);
       }
     }
   }
@@ -941,18 +941,19 @@ function showTaskPanel(
     }
   }
 
-  // 时间行（拆分为两行避免过长）
+  // 时间行 - 合并为更紧凑的一行
   console.log(`├${hLine}┤`);
   const createdTime = formatLocalTime(task.createdAt);
   const updatedTime = formatRelativeTime(task.updatedAt);
-  const createdLine = `📅 创建: ${createdTime}`;
-  console.log(`│ ${padByDisplayWidth(createdLine, width - 4)}│`);
+  // 合并创建和更新时间到一行显示
+  const timeLine = `📅 ${createdTime} · 更新: ${updatedTime}`;
+  console.log(`│ ${padByDisplayWidth(timeLine, width - 4)}│`);
 
-  let updatedLine = `   更新: ${updatedTime}`;
+  // 重开次数显示（如果有）
   if (task.reopenCount && task.reopenCount > 0) {
-    updatedLine += `  │  🔁 重开 ${task.reopenCount} 次`;
+    const reopenLine = `   🔁 重开 ${task.reopenCount} 次`;
+    console.log(`│ ${padByDisplayWidth(reopenLine, width - 4)}│`);
   }
-  console.log(`│ ${padByDisplayWidth(updatedLine, width - 4)}│`);
 
   console.log(`╰${hLine}╯`);
   console.log('');
