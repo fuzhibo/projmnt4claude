@@ -875,12 +875,12 @@ function showTaskPanel(
       const totalCount = checkpointLines.length;
       const percentage = Math.round((completedCount / totalCount) * 100);
 
-      // 可视化进度条 - 寁填充槽 + 空槽
+      // 可视化进度条 - 使用 Unicode 块字符
       const barWidth = 20;
       const filledWidth = Math.round((completedCount / totalCount) * barWidth);
       const emptyWidth = barWidth - filledWidth;
-      const bar = '\x1b[32m'.repeat(filledWidth) + '\x1b[90m'.repeat(emptyWidth);
-      const progressLine = `✅ 检查点 [${bar}] ${percentage}%`;
+      const bar = '█'.repeat(filledWidth) + '░'.repeat(emptyWidth);
+      const progressLine = `检查点进度 [${bar}] ${percentage}%`;
       console.log(`│ ${padByDisplayWidth(progressLine, width - 4)}│`);
 
       // 显示检查点（最多 5 个）
