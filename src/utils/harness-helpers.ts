@@ -59,9 +59,11 @@ export interface ParsedVerdict {
 
 export async function runHeadlessClaude(options: HeadlessClaudeOptions): Promise<HeadlessClaudeResult> {
   return new Promise((resolve) => {
+    // 注意：--allowedTools 必须在 --print 之前，否则 Claude CLI 会报错
+    // "Input must be provided either through stdin or as a prompt argument when using --print"
     const args = [
-      '--print',
       '--allowedTools', options.allowedTools.join(','),
+      '--print',
       options.prompt,
     ];
 
