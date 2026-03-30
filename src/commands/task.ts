@@ -20,6 +20,8 @@ import type {
   TaskMeta,
   TaskPriority,
   TaskStatus,
+  TaskType,
+  TaskHistoryEntry,
   CheckpointMetadata,
 } from '../types/task';
 import {
@@ -64,6 +66,133 @@ function generateCheckpointToken(): string {
 }
 
 /**
+ * 检查 checkpoint 内容是否为有效（非模板）内容
+ * BUG-002: 校验 checkpoints 是否有意义
+ * @param checkpointPathOrContent - 文件路径或直接内容字符串
+ * @param isContent - 如果为 true，第一个参数是内容字符串而非路径
+ */
+function hasValidCheckpoints(
+  checkpointPathOrContent: string | null,
+  isContent: boolean = false
+): { valid: boolean; reason: string } {
+  let content: string;
+
+  if (isContent && checkpointPathOrContent !== null) {
+    // 直接使用传入的内容
+    content = checkpointPathOrContent;
+  } else if (!isContent && checkpointPathOrContent) {
+    // 从文件读取
+    if (!fs.existsSync(checkpointPathOrContent)) {
+      return { valid: false, reason: 'checkpoint.md 文件不存在' };
+    }
+    content = fs.readFileSync(checkpointPathOrContent, 'utf-8');
+  } else {
+    // 无内容
+    return { valid: false, reason: '无检查点内容' };
+  }
+
+  const lines = content.split('\n').filter(line => line.trim().startsWith('- ['));
+
+  if (lines.length === 0) {
+    return { valid: false, reason: 'checkpoint.md 中没有检查点项' };
+  }
+
+  // 检测模板内容（无意义的默认检查点）
+  // 注意：这些模式匹配的是去掉 "- [ ] " 前缀后的纯文本
+  const templatePatterns = [
+    /^检查点\d+$/u,           // "检查点1", "检查点2" 等
+    /^checkpoint\s*\d+$/i,    // "checkpoint 1", "checkpoint 2" 等
+    /^完成任务?$/u,            // "完成任务"
+    /^待填写$/u,               // "待填写"
+    /^TODO$/i,                 // "TODO"
+    /^\.{3,}$/,                // "..."
+  ];
+
+  let templateCount = 0;
+  for (const line of lines) {
+    const checkText = line.replace(/- \[[xX ]\] /, '').trim();
+    for (const pattern of templatePatterns) {
+      if (pattern.test(checkText)) {
+        templateCount++;
+        break;
+      }
+    }
+  }
+
+  // 如果超过一半的检查点是模板内容，则认为无效
+  if (templateCount > lines.length / 2) {
+    return {
+      valid: false,
+      reason: `检测到 ${templateCount}/${lines.length} 个检查点为模板内容（如"检查点1"、"完成任务"等），请添加具体的验收标准`
+    };
+  }
+
+  return { valid: true, reason: '' };
+}
+
+/**
+ * 默认的 checkpoint.md 内容模板
+ */
+const DEFAULT_CHECKPOINT_CONTENT = `# {taskId} 检查点
+
+- [ ] 检查点1
+- [ ] 检查点2
+`;
+
+/**
+ * 显示检查点质量错误（阻止创建）
+ */
+function displayCheckpointError(taskId: string, reason: string): void {
+  console.log('');
+  console.log('━'.repeat(60));
+  console.log('❌  检查点质量错误');
+  console.log('━'.repeat(60));
+  console.log('');
+  console.log(`无法创建任务 ${taskId}: 检查点质量不符合要求`);
+  console.log('');
+  console.log(`原因: ${reason}`);
+  console.log('');
+  console.log('📋 高质量检查点对于任务验收至关重要。请先：');
+  console.log('');
+  console.log('   1. 使用 init-requirement 命令创建任务（推荐）:');
+  console.log('      projmnt4claude init-requirement "任务描述"');
+  console.log('');
+  console.log('   2. 或先创建任务，然后编辑 checkpoint.md 文件');
+  console.log('');
+  console.log('   3. 使用 --skip-validation 强制创建（不推荐）:');
+  console.log('      projmnt4claude task create --title "..." --skip-validation');
+  console.log('');
+  console.log('━'.repeat(60));
+}
+
+/**
+ * 显示 checkpoints 质量警告
+ */
+function displayCheckpointWarning(taskId: string, reason: string, cwd: string): void {
+  console.log('');
+  console.log('━'.repeat(60));
+  console.log('⚠️  检查点质量警告');
+  console.log('━'.repeat(60));
+  console.log('');
+  console.log(`任务 ${taskId} 创建成功，但检查点质量存在问题：`);
+  console.log(`   ${reason}`);
+  console.log('');
+  console.log('📋 高质量检查点对于任务验收至关重要。建议您：');
+  console.log('');
+  console.log('   1. 编辑 checkpoint.md 文件，添加具体的验收标准');
+  console.log(`      文件路径: .projmnt4claude/tasks/${taskId}/checkpoint.md`);
+  console.log('');
+  console.log('   2. 使用 checkpoint 模板生成功能：');
+  console.log(`      projmnt4claude task checkpoint template ${taskId} --apply`);
+  console.log('');
+  console.log('   3. 或使用 analyze 命令自动生成检查点：');
+  console.log(`      projmnt4claude analyze --generate-checkpoints ${taskId}`);
+  console.log('');
+  console.log('💡 提示: 使用 --skip-validation 可跳过此检查');
+  console.log('━'.repeat(60));
+}
+
+/**
  * 创建新任务
  * 支持交互模式和非交互模式
  */
@@ -74,6 +203,7 @@ export async function createTask(
     priority?: string;
     type?: string;
     nonInteractive?: boolean;
+    skipValidation?: boolean;
   } = {},
   cwd: string = process.cwd()
 ): Promise<void> {
@@ -90,6 +220,39 @@ export async function createTask(
     // 生成任务ID (新格式)
     const taskId = generateNewTaskId(cwd, taskType, taskPriority, options.title);
 
+    // BUG-002: P0 强制校验 - 在任务创建前检查是否需要校验
+    // 如果不跳过校验，需要先生成 checkpoint 内容进行预校验
+    const defaultCheckpointContent = `# ${taskId} 检查点\n\n- [ ] 检查点1\n- [ ] 检查点2\n`;
+
+    if (!options.skipValidation) {
+      // 使用临时内容进行预校验 (isContent=true 表示第一个参数是内容而非路径)
+      const tempValidation = hasValidCheckpoints(defaultCheckpointContent, true);
+      if (!tempValidation.valid) {
+        // 校验失败，显示警告并拒绝创建任务
+        console.log('');
+        console.log('━'.repeat(60));
+        console.log('⚠️  检查点质量校验失败');
+        console.log('━'.repeat(60));
+        console.log('');
+        console.log(`无法创建任务 ${taskId}，原因：`);
+        console.log(`   ${tempValidation.reason}`);
+        console.log('');
+        console.log('📋 高质量检查点对于任务验收至关重要。建议您：');
+        console.log('');
+        console.log('   1. 使用交互模式创建任务，手动编辑检查点：');
+        console.log(`      projmnt4claude task create`);
+        console.log('');
+        console.log('   2. 创建任务后立即编辑 checkpoint.md 文件');
+        console.log('');
+        console.log('   3. 使用 --skip-validation 跳过校验（不推荐）：');
+        console.log(`      projmnt4claude task create --title "${options.title}" --skip-validation`);
+        console.log('');
+        console.log('━'.repeat(60));
+        process.exitCode = 1;
+        return;
+      }
+    }
+
     // 创建任务元数据
     const task = createDefaultTaskMeta(taskId, options.title, taskType);
     if (options.description) {
@@ -103,12 +266,17 @@ export async function createTask(
     // 创建 checkpoint.md
     const taskDir = path.join(getTasksDir(cwd), taskId);
     const checkpointPath = path.join(taskDir, 'checkpoint.md');
-    fs.writeFileSync(checkpointPath, `# ${taskId} 检查点\n\n- [ ] 检查点1\n- [ ] 检查点2\n`, 'utf-8');
+    fs.writeFileSync(checkpointPath, defaultCheckpointContent, 'utf-8');
 
     console.log(`\n✅ 任务创建成功!`);
     console.log(`   ID: ${taskId}`);
     console.log(`   标题: ${task.title}`);
     console.log(`   优先级: ${formatPriority(task.priority)}`);
+
+    // 提示用户编辑检查点
+    console.log('');
+    console.log('💡 提示: 请编辑 checkpoint.md 文件，添加具体的验收标准');
+    console.log(`   文件路径: .projmnt4claude/tasks/${taskId}/checkpoint.md`);
     return;
   }
 
@@ -166,6 +334,14 @@ export async function createTask(
   console.log(`   ID: ${taskId}`);
   console.log(`   标题: ${task.title}`);
   console.log(`   优先级: ${formatPriority(task.priority)}`);
+
+  // BUG-002: 校验 checkpoints 质量（交互模式）
+  if (!options.skipValidation) {
+    const validation = hasValidCheckpoints(checkpointPath);
+    if (!validation.valid) {
+      displayCheckpointWarning(taskId, validation.reason, cwd);
+    }
+  }
 }
 
 /**
@@ -511,7 +687,7 @@ export function showTask(
 
   // 仅显示历史
   if (options.history) {
-    showTaskHistory(taskId, cwd, options.compact);
+    showTaskHistory(taskId, cwd);
     return;
   }
 
@@ -1538,8 +1714,14 @@ export function showTaskHistory(taskId: string, cwd: string = process.cwd()): vo
   console.log('📝 变更历史:');
   console.log('');
 
-  // 按时间倒序显示
-  const sortedHistory = [...task.history].reverse();
+  // 过滤并按时间倒序显示（与 showTaskCompactHistory 保持一致）
+  const meaningfulHistory = task.history.filter(entry => {
+    // 保留没有字段变更的记录（如"添加完成说明"等）
+    if (!entry.field) return true;
+    // 过滤掉相同值的状态变更
+    return entry.oldValue !== entry.newValue;
+  });
+  const sortedHistory = [...meaningfulHistory].reverse();
 
   for (const entry of sortedHistory) {
     const date = new Date(entry.timestamp);
@@ -2066,10 +2248,15 @@ export async function syncChildren(
 
     // 添加历史记录
     addHistoryEntry(
-      childTask,
-      'status_change',
-      `状态从 ${oldStatus} 同步为 ${targetStatus}`,
-      `父任务 ${parentTaskId} 状态同步`
+      childId,
+      {
+        action: `状态从 ${oldStatus} 同步为 ${targetStatus}`,
+        field: 'status',
+        oldValue: oldStatus,
+        newValue: targetStatus,
+        reason: `父任务 ${parentTaskId} 状态同步`,
+      },
+      cwd
     );
 
     writeTaskMeta(childTask, cwd);
@@ -2354,7 +2541,7 @@ export async function splitTask(
     const subtaskId = generateSubtaskId(parentId, cwd);
 
     // 创建子任务元数据
-    const subtask = createDefaultTaskMeta(subtaskId, title, parentTask.type);
+    const subtask = createDefaultTaskMeta(subtaskId, title, parentTask.type || 'feature');
     subtask.parentId = parentId;
     subtask.priority = parentTask.priority;
     subtask.description = `从 ${parentId} 拆分的子任务`;
@@ -2422,8 +2609,8 @@ function displayCheckpointDetail(checkpoint: CheckpointMetadata): void {
     console.log('');
     console.log('🔍 验证信息:');
     console.log(`   方法: ${checkpoint.verification.method}`);
-    if (checkpoint.verification.command) {
-      console.log(`   命令: ${checkpoint.verification.command}`);
+    if (checkpoint.verification.commands && checkpoint.verification.commands.length > 0) {
+      console.log(`   命令: ${checkpoint.verification.commands.join(', ')}`);
     }
     if (checkpoint.verification.expected) {
       console.log(`   期望结果: ${checkpoint.verification.expected}`);

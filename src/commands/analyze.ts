@@ -13,7 +13,10 @@ import type {
   TaskMeta,
   TaskPriority,
   TaskStatus,
+  CheckpointMetadata,
 } from '../types/task';
+import { generateCheckpointId } from '../utils/checkpoint';
+import type { SprintContract } from '../types/harness';
 
 import { areDependenciesCompleted } from '../utils/plan';
 
@@ -1239,4 +1242,654 @@ function calculateHealthScore(result: AnalysisResult): number {
   score -= noDescIssues * 0.5;
 
   return Math.max(0, Math.min(100, Math.round(score)));
+}
+
+// ============== 检查点生成功能 ==============
+
+/**
+ * 代码库搜索结果
+ */
+interface CodeSearchResult {
+  /** 匹配的文件路径 */
+  filePath: string;
+  /** 匹配的行号 */
+  lineNumbers: number[];
+  /** 匹配的关键词 */
+  matchedKeywords: string[];
+  /** 相关性分数 */
+  relevanceScore: number;
+}
+
+/**
+ * 从验收标准提取关键词
+ */
+function extractKeywordsFromCriteria(criteria: string): string[] {
+  const keywords: string[] = [];
+
+  // 移除常见的停用词
+  const stopWords = new Set([
+    '的', '和', '与', '或', '在', '是', '有', '为', '了', '对', '这', '那',
+    'the', 'a', 'an', 'is', 'are', 'was', 'were', 'be', 'been', 'being',
+    'have', 'has', 'had', 'do', 'does', 'did', 'will', 'would', 'could',
+    'should', 'may', 'might', 'must', 'shall', 'can', 'to', 'of', 'in',
+    'for', 'on', 'with', 'at', 'by', 'from', 'as', 'into', 'through',
+    '添加', '实现', '确保', '验证', '完成', '检查', '更新', '修改', '配置',
+    'add', 'implement', 'ensure', 'verify', 'complete', 'check', 'update',
+    'option', 'options', '功能', '选项',
+  ]);
+
+  // 提取英文单词
+  const englishWords = criteria.match(/[a-zA-Z][a-zA-Z0-9_-]*/g) || [];
+  for (const word of englishWords) {
+    const lower = word.toLowerCase();
+    if (!stopWords.has(lower) && word.length > 2) {
+      keywords.push(lower);
+    }
+  }
+
+  // 提取中文关键词（2-6个字符）
+  const chineseWords = criteria.match(/[\u4e00-\u9fa5]{2,6}/g) || [];
+  for (const word of chineseWords) {
+    if (!stopWords.has(word)) {
+      keywords.push(word);
+    }
+  }
+
+  // 提取驼峰命名和下划线命名
+  const identifiers = criteria.match(/[a-zA-Z_][a-zA-Z0-9_]+/g) || [];
+  for (const id of identifiers) {
+    if (id.length > 3 && !stopWords.has(id.toLowerCase())) {
+      keywords.push(id);
+    }
+  }
+
+  // 去重并返回
+  return [...new Set(keywords)];
+}
+
+/**
+ * 搜索代码库以找到与验收标准相关的文件
+ */
+function searchCodebaseForCriteria(
+  criteria: string,
+  cwd: string
+): CodeSearchResult[] {
+  const results: CodeSearchResult[] = [];
+  const keywords = extractKeywordsFromCriteria(criteria);
+
+  if (keywords.length === 0) {
+    return results;
+  }
+
+  // 定义搜索范围（排除不需要搜索的目录）
+  const excludeDirs = new Set([
+    'node_modules', 'dist', 'build', '.git', '.projmnt4claude',
+    'coverage', '.next', '.nuxt', 'out', 'tmp', 'temp',
+  ]);
+
+  // 定义优先搜索的文件扩展名
+  const priorityExtensions = new Set([
+    '.ts', '.tsx', '.js', '.jsx', '.vue', '.py', '.go', '.java', '.rs',
+  ]);
+
+  // 递归搜索目录
+  function searchDirectory(dir: string, depth: number = 0): void {
+    if (depth > 10) return; // 限制搜索深度
+
+    try {
+      const entries = fs.readdirSync(dir, { withFileTypes: true });
+
+      for (const entry of entries) {
+        const fullPath = path.join(dir, entry.name);
+
+        if (entry.isDirectory()) {
+          // 跳过排除的目录
+          if (excludeDirs.has(entry.name) || entry.name.startsWith('.')) {
+            continue;
+          }
+          searchDirectory(fullPath, depth + 1);
+        } else if (entry.isFile()) {
+          // 只处理源代码文件
+          const ext = path.extname(entry.name);
+          if (!priorityExtensions.has(ext)) {
+            continue;
+          }
+
+          try {
+            const content = fs.readFileSync(fullPath, 'utf-8');
+            const lines = content.split('\n');
+            const matchedKeywords: string[] = [];
+            const lineNumbers: number[] = [];
+
+            // 检查每个关键词
+            for (const keyword of keywords) {
+              const regex = new RegExp(escapeRegExp(keyword), 'gi');
+              let hasMatch = false;
+
+              lines.forEach((line, index) => {
+                if (regex.test(line)) {
+                  hasMatch = true;
+                  if (!lineNumbers.includes(index + 1)) {
+                    lineNumbers.push(index + 1);
+                  }
+                }
+              });
+
+              if (hasMatch) {
+                matchedKeywords.push(keyword);
+              }
+            }
+
+            // 如果有匹配，添加到结果
+            if (matchedKeywords.length > 0) {
+              // 计算相关性分数
+              const uniqueKeywordRatio = matchedKeywords.length / keywords.length;
+              const matchDensity = lineNumbers.length / Math.max(lines.length, 1);
+              const relevanceScore = (uniqueKeywordRatio * 0.7 + matchDensity * 0.3) * 100;
+
+              results.push({
+                filePath: path.relative(cwd, fullPath),
+                lineNumbers: lineNumbers.slice(0, 10), // 最多保留10个行号
+                matchedKeywords,
+                relevanceScore: Math.round(relevanceScore),
+              });
+            }
+          } catch {
+            // 忽略读取错误
+          }
+        }
+      }
+    } catch {
+      // 忽略目录读取错误
+    }
+  }
+
+  // 转义正则表达式特殊字符
+  function escapeRegExp(string: string): string {
+    return string.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  }
+
+  // 开始搜索
+  searchDirectory(cwd);
+
+  // 按相关性排序，返回前10个结果
+  results.sort((a, b) => b.relevanceScore - a.relevanceScore);
+  return results.slice(0, 10);
+}
+
+/**
+ * 基于代码库搜索结果生成智能检查点
+ */
+function generateSmartCheckpoints(
+  taskId: string,
+  criteria: string,
+  searchResults: CodeSearchResult[],
+  index: number
+): CheckpointMetadata {
+  const now = new Date().toISOString();
+  const id = generateCheckpointId(taskId, index, criteria);
+
+  // 基于搜索结果推断验证方法
+  const verificationMethod = inferSmartVerificationMethod(criteria, searchResults);
+
+  // 生成验证命令（如果可以推断）
+  const verificationCommands = inferVerificationCommands(criteria, searchResults);
+
+  const checkpoint: CheckpointMetadata = {
+    id,
+    description: criteria,
+    status: 'pending',
+    verification: {
+      method: verificationMethod,
+      commands: verificationCommands,
+    },
+    createdAt: now,
+    updatedAt: now,
+  };
+
+  // 如果有相关的代码文件，添加到验证信息中
+  if (searchResults.length > 0) {
+    checkpoint.verification!.evidencePath = searchResults
+      .slice(0, 3)
+      .map(r => r.filePath)
+      .join(', ');
+  }
+
+  return checkpoint;
+}
+
+/**
+ * 基于搜索结果智能推断验证方法
+ */
+function inferSmartVerificationMethod(
+  criteria: string,
+  searchResults: CodeSearchResult[]
+): string {
+  const lowerCriteria = criteria.toLowerCase();
+
+  // 1. 基于验收标准内容推断
+  // 测试相关
+  if (lowerCriteria.includes('测试') || lowerCriteria.includes('test')) {
+    if (lowerCriteria.includes('e2e') || lowerCriteria.includes('端到端')) {
+      return 'e2e_test';
+    }
+    if (lowerCriteria.includes('集成') || lowerCriteria.includes('integration')) {
+      return 'integration_test';
+    }
+    return 'unit_test';
+  }
+
+  // 代码审查相关
+  if (lowerCriteria.includes('审查') || lowerCriteria.includes('review') ||
+      lowerCriteria.includes('代码质量') || lowerCriteria.includes('重构')) {
+    return 'code_review';
+  }
+
+  // API 相关
+  if (lowerCriteria.includes('api') || lowerCriteria.includes('接口')) {
+    return 'functional_test';
+  }
+
+  // UI 相关
+  if (lowerCriteria.includes('ui') || lowerCriteria.includes('界面') ||
+      lowerCriteria.includes('页面') || lowerCriteria.includes('组件')) {
+    return 'e2e_test';
+  }
+
+  // 架构相关
+  if (lowerCriteria.includes('架构') || lowerCriteria.includes('architecture') ||
+      lowerCriteria.includes('设计') || lowerCriteria.includes('design')) {
+    return 'architect_review';
+  }
+
+  // 2. 基于搜索结果推断
+  if (searchResults.length > 0) {
+    // 检查匹配的文件路径
+    const filePaths = searchResults.map(r => r.filePath.toLowerCase()).join(' ');
+
+    // 测试文件
+    if (filePaths.includes('test') || filePaths.includes('spec')) {
+      return 'unit_test';
+    }
+
+    // API 路由
+    if (filePaths.includes('api') || filePaths.includes('route') || filePaths.includes('controller')) {
+      return 'functional_test';
+    }
+
+    // UI 组件
+    if (filePaths.includes('component') || filePaths.includes('page') || filePaths.includes('view')) {
+      return 'e2e_test';
+    }
+
+    // 配置文件
+    if (filePaths.includes('config') || filePaths.includes('setting')) {
+      return 'automated';
+    }
+  }
+
+  // 默认使用自动化验证
+  return 'automated';
+}
+
+/**
+ * 推断验证命令
+ */
+function inferVerificationCommands(
+  criteria: string,
+  searchResults: CodeSearchResult[]
+): string[] {
+  const commands: string[] = [];
+  const lowerCriteria = criteria.toLowerCase();
+
+  // 基于验收标准推断命令
+  if (lowerCriteria.includes('构建') || lowerCriteria.includes('build')) {
+    commands.push('npm run build');
+  }
+
+  if (lowerCriteria.includes('lint') || lowerCriteria.includes('代码规范')) {
+    commands.push('npm run lint');
+  }
+
+  if (lowerCriteria.includes('测试') || lowerCriteria.includes('test')) {
+    commands.push('npm test');
+  }
+
+  if (lowerCriteria.includes('类型检查') || lowerCriteria.includes('type check')) {
+    commands.push('npx tsc --noEmit');
+  }
+
+  // 基于搜索结果推断命令
+  if (searchResults.length > 0) {
+    // 如果匹配的是测试文件
+    const hasTestFiles = searchResults.some(r =>
+      r.filePath.includes('test') || r.filePath.includes('spec')
+    );
+    if (hasTestFiles && !commands.includes('npm test')) {
+      commands.push('npm test');
+    }
+  }
+
+  return commands;
+}
+
+/**
+ * 获取 Contract 文件路径
+ */
+function getContractPath(taskId: string, cwd: string): string {
+  return path.join(getTasksDir(cwd), taskId, 'contract.json');
+}
+
+/**
+ * 读取 Contract 文件
+ */
+function readContract(taskId: string, cwd: string): SprintContract | null {
+  const contractPath = getContractPath(taskId, cwd);
+  if (!fs.existsSync(contractPath)) {
+    return null;
+  }
+  try {
+    const content = fs.readFileSync(contractPath, 'utf-8');
+    return JSON.parse(content) as SprintContract;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * 保存 Contract 文件
+ */
+function saveContract(taskId: string, contract: SprintContract, cwd: string): void {
+  const contractPath = getContractPath(taskId, cwd);
+  const dir = path.dirname(contractPath);
+
+  if (!fs.existsSync(dir)) {
+    fs.mkdirSync(dir, { recursive: true });
+  }
+
+  contract.updatedAt = new Date().toISOString();
+  fs.writeFileSync(contractPath, JSON.stringify(contract, null, 2), 'utf-8');
+}
+
+/**
+ * 基于验收标准生成检查点
+ * 智能分析 acceptanceCriteria 并搜索代码库生成对应的检查点
+ */
+function generateCheckpointsFromCriteria(
+  taskId: string,
+  acceptanceCriteria: string[],
+  taskTitle?: string,
+  cwd: string = process.cwd()
+): CheckpointMetadata[] {
+  const checkpoints: CheckpointMetadata[] = [];
+  const now = new Date().toISOString();
+
+  // 如果有验收标准，基于每个标准生成检查点
+  if (acceptanceCriteria && acceptanceCriteria.length > 0) {
+    acceptanceCriteria.forEach((criteria, index) => {
+      // 搜索代码库以找到相关文件
+      const searchResults = searchCodebaseForCriteria(criteria, cwd);
+
+      // 使用智能检查点生成
+      const checkpoint = generateSmartCheckpoints(taskId, criteria, searchResults, index);
+
+      // 确保时间戳正确
+      checkpoint.createdAt = now;
+      checkpoint.updatedAt = now;
+      checkpoint.status = 'pending';
+
+      checkpoints.push(checkpoint);
+    });
+  } else {
+    // 如果没有验收标准，基于任务标题生成默认检查点
+    const defaultCheckpoints = generateDefaultCheckpoints(taskTitle || taskId);
+    defaultCheckpoints.forEach((cp, index) => {
+      // 搜索代码库以找到相关文件
+      const searchResults = searchCodebaseForCriteria(cp, cwd);
+
+      // 使用智能检查点生成
+      const checkpoint = generateSmartCheckpoints(taskId, cp, searchResults, index);
+
+      // 确保时间戳正确
+      checkpoint.createdAt = now;
+      checkpoint.updatedAt = now;
+      checkpoint.status = 'pending';
+
+      checkpoints.push(checkpoint);
+    });
+  }
+
+  return checkpoints;
+}
+
+/**
+ * 根据描述内容推断验证方法
+ */
+function inferVerificationMethod(description: string): string {
+  const lowerDesc = description.toLowerCase();
+
+  // 测试相关
+  if (lowerDesc.includes('测试') || lowerDesc.includes('test')) {
+    return 'unit_test';
+  }
+
+  // 代码审查相关
+  if (lowerDesc.includes('审查') || lowerDesc.includes('review') || lowerDesc.includes('代码质量')) {
+    return 'code_review';
+  }
+
+  // API 相关
+  if (lowerDesc.includes('api') || lowerDesc.includes('接口')) {
+    return 'functional_test';
+  }
+
+  // UI 相关
+  if (lowerDesc.includes('ui') || lowerDesc.includes('界面') || lowerDesc.includes('页面')) {
+    return 'e2e_test';
+  }
+
+  // 文档相关
+  if (lowerDesc.includes('文档') || lowerDesc.includes('document')) {
+    return 'automated';
+  }
+
+  // 默认使用自动化验证
+  return 'automated';
+}
+
+/**
+ * 生成默认检查点
+ */
+function generateDefaultCheckpoints(taskTitle: string): string[] {
+  const checkpoints: string[] = [];
+  const lowerTitle = taskTitle.toLowerCase();
+
+  // 基于任务标题推断检查点
+  if (lowerTitle.includes('api') || lowerTitle.includes('接口')) {
+    checkpoints.push('设计 API 接口');
+    checkpoints.push('实现 API 逻辑');
+    checkpoints.push('添加 API 测试');
+    checkpoints.push('代码审查');
+  } else if (lowerTitle.includes('ui') || lowerTitle.includes('界面') || lowerTitle.includes('页面')) {
+    checkpoints.push('设计 UI 组件');
+    checkpoints.push('实现 UI 逻辑');
+    checkpoints.push('响应式适配');
+    checkpoints.push('UI 测试');
+  } else if (lowerTitle.includes('修复') || lowerTitle.includes('fix') || lowerTitle.includes('bug')) {
+    checkpoints.push('定位问题根因');
+    checkpoints.push('实现修复方案');
+    checkpoints.push('验证修复效果');
+    checkpoints.push('回归测试');
+  } else if (lowerTitle.includes('重构') || lowerTitle.includes('refactor')) {
+    checkpoints.push('分析现有代码');
+    checkpoints.push('实施重构');
+    checkpoints.push('确保测试通过');
+    checkpoints.push('代码审查');
+  } else {
+    // 通用检查点
+    checkpoints.push('需求分析与设计');
+    checkpoints.push('核心功能实现');
+    checkpoints.push('测试与验证');
+    checkpoints.push('代码审查');
+  }
+
+  return checkpoints;
+}
+
+/**
+ * 修复单个任务的检查点
+ */
+function fixTaskCheckpoints(taskId: string, cwd: string): { fixed: boolean; reason: string } {
+  const task = readTaskMeta(taskId, cwd);
+  if (!task) {
+    return { fixed: false, reason: '任务不存在' };
+  }
+
+  // 读取或创建 contract
+  let contract = readContract(taskId, cwd);
+  const isNewContract = !contract;
+
+  if (!contract) {
+    const now = new Date().toISOString();
+    contract = {
+      taskId,
+      acceptanceCriteria: [],
+      verificationCommands: [],
+      checkpoints: [],
+      createdAt: now,
+      updatedAt: now,
+    };
+  }
+
+  // 检查是否需要修复（基于 contract.json 的 checkpoints 是否为空）
+  if (contract.checkpoints && contract.checkpoints.length > 0) {
+    return { fixed: false, reason: '检查点已存在' };
+  }
+
+  // 生成检查点（传递 cwd 以启用代码库搜索）
+  const checkpoints = generateCheckpointsFromCriteria(
+    taskId,
+    contract.acceptanceCriteria || [],
+    task.title,
+    cwd
+  );
+
+  if (checkpoints.length === 0) {
+    return { fixed: false, reason: '无法生成检查点' };
+  }
+
+  // 更新 contract
+  contract.checkpoints = checkpoints.map(cp => cp.id);
+
+  // 始终更新 meta.json 中的 checkpoints 字段（因为 contract.checkpoints 原本为空）
+  // 即使 task.checkpoints 已有旧数据，也用新生成的智能检查点替换
+  task.checkpoints = checkpoints;
+  writeTaskMeta(task, cwd);
+
+  // 同时更新 checkpoint.md 文件，确保与 meta.json 同步
+  // 这样 syncCheckpointsToMeta 不会覆盖我们的智能检查点
+  const taskDir = path.join(getTasksDir(cwd), taskId);
+  const checkpointPath = path.join(taskDir, 'checkpoint.md');
+  const checkpointContent = `# ${taskId} 检查点\n\n` +
+    checkpoints.map(cp => `- [ ] ${cp.description}`).join('\n') +
+    '\n';
+  fs.writeFileSync(checkpointPath, checkpointContent, 'utf-8');
+
+  // 保存 contract
+  saveContract(taskId, contract, cwd);
+
+  return { fixed: true, reason: `生成了 ${checkpoints.length} 个检查点` };
+}
+
+/**
+ * 修复所有任务的检查点
+ */
+export async function fixCheckpoints(
+  cwd: string = process.cwd(),
+  options: { nonInteractive?: boolean; taskId?: string } = {}
+): Promise<void> {
+  console.log('');
+  console.log('━'.repeat(60));
+  console.log('🔧 智能生成检查点');
+  console.log('━'.repeat(60));
+  console.log('');
+
+  let tasksToFix: TaskMeta[];
+
+  if (options.taskId) {
+    // 修复指定任务
+    const task = readTaskMeta(options.taskId, cwd);
+    if (!task) {
+      console.error(`❌ 任务 ${options.taskId} 不存在`);
+      return;
+    }
+    tasksToFix = [task];
+  } else {
+    // 获取所有任务
+    tasksToFix = getAllTasks(cwd, false);
+  }
+
+  // 筛选需要修复的任务
+  const tasksNeedingFix: TaskMeta[] = [];
+
+  for (const task of tasksToFix) {
+    const contract = readContract(task.id, cwd);
+    if (!contract || !contract.checkpoints || contract.checkpoints.length === 0) {
+      tasksNeedingFix.push(task);
+    }
+  }
+
+  if (tasksNeedingFix.length === 0) {
+    console.log('✅ 所有任务的检查点都已配置');
+    return;
+  }
+
+  console.log(`📋 发现 ${tasksNeedingFix.length} 个任务需要生成检查点:\n`);
+
+  // 显示任务列表
+  tasksNeedingFix.slice(0, 10).forEach((task, index) => {
+    console.log(`   ${index + 1}. ${task.id} - ${task.title}`);
+  });
+
+  if (tasksNeedingFix.length > 10) {
+    console.log(`   ... 还有 ${tasksNeedingFix.length - 10} 个任务`);
+  }
+  console.log('');
+
+  // 确认修复
+  if (!options.nonInteractive) {
+    const response = await prompts({
+      type: 'confirm',
+      name: 'proceed',
+      message: `是否为这 ${tasksNeedingFix.length} 个任务生成检查点?`,
+      initial: true,
+    });
+
+    if (!response.proceed) {
+      console.log('已取消');
+      return;
+    }
+  }
+
+  // 执行修复
+  let fixedCount = 0;
+  let skippedCount = 0;
+
+  for (const task of tasksNeedingFix) {
+    console.log(`\n处理 ${task.id}...`);
+    const result = fixTaskCheckpoints(task.id, cwd);
+
+    if (result.fixed) {
+      console.log(`  ✅ ${result.reason}`);
+      fixedCount++;
+    } else {
+      console.log(`  ⏭️  ${result.reason}`);
+      skippedCount++;
+    }
+  }
+
+  console.log('');
+  console.log('━'.repeat(60));
+  console.log(`✅ 完成: 修复 ${fixedCount} 个，跳过 ${skippedCount} 个`);
+  console.log('━'.repeat(60));
 }

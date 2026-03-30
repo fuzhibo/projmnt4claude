@@ -47,6 +47,7 @@ import {
   showAnalysis,
   fixIssues,
   showStatus,
+  fixCheckpoints,
 } from './commands/analyze';
 import {
   checkoutTaskBranch,
@@ -170,6 +171,7 @@ program
   .option('--note <note>', '检查点备注 (仅 checkpoint note/fail)')
   .option('--into <count>', '拆分数量 (仅 split)')
   .option('--titles <titles>', '子任务标题列表，仅 split,')
+  .option('--skip-validation', '跳过 checkpoints 质量校验 (仅 create)')
   .action(async (action, id, options) => {
     requireInit();
     switch (action) {
@@ -180,6 +182,7 @@ program
           priority: options.priority,
           type: options.type,
           nonInteractive: options.yes,
+          skipValidation: options.skipValidation,
         });
         break;
       case 'list':
@@ -562,11 +565,15 @@ program
   .command('analyze')
   .description('分析项目健康状态')
   .option('--fix', '自动修复检测到的问题')
+  .option('--fix-checkpoints', '智能生成缺失的检查点')
   .option('-y, --yes', '非交互模式：自动修复可修复的问题')
   .option('--compact', '使用简洁分隔符')
+  .option('--task <taskId>', '指定任务ID (仅 --fix-checkpoints)')
   .action(async (options) => {
     requireInit();
-    if (options.fix) {
+    if (options.fixCheckpoints) {
+      await fixCheckpoints(process.cwd(), { nonInteractive: options.yes, taskId: options.task });
+    } else if (options.fix) {
       await fixIssues(process.cwd(), options.yes);
     } else {
       showAnalysis({ compact: options.compact });
