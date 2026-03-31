@@ -292,10 +292,12 @@ export class HarnessEvaluator {
    */
   private executeEvaluationSession(options: HeadlessClaudeOptions): Promise<{ output: string; stderr: string; success: boolean }> {
     return new Promise((resolve) => {
+      // 注意：--allowedTools 必须在 --print 之前，否则 Claude CLI 会报错
+      // "Input must be provided either through stdin or as a prompt argument when using --print"
       const args = [
+        '--allowedTools', options.allowedTools.join(','),
         '--print',
         '--dangerously-skip-permissions',
-        `--allowedTools=${options.allowedTools.join(',')}`,
         options.prompt,
       ];
 
