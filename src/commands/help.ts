@@ -174,6 +174,7 @@ function showSmartHelp(commandsDir: string, topic: string, cwd: string): void {
   const keywordMap: Record<string, string[]> = {
     // 任务相关
     'task': ['创建任务', '新建任务', '添加任务', '任务管理'],
+    'init-requirement': ['需求创建', '自然语言创建任务', '需求分析', '创建需求', 'init-requirement', '需求转任务'],
     'list': ['任务列表', '查看任务', '所有任务', '显示任务'],
     'status': ['任务状态', '更新状态', '项目状态'],
     'execute': ['执行任务', '运行任务', '开始任务'],

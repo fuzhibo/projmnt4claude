@@ -46,7 +46,7 @@ export interface HeadlessClaudeResult {
  * - hook 失败 + stdout 为空 → 保守判定为失败
  * - 非 hook 错误 → 真实的任务失败
  */
-function classifyExitResult(
+export function classifyExitResult(
   code: number | null,
   stderr: string,
   stdout: string

@@ -44,7 +44,14 @@ export async function initRequirement(
   const { nonInteractive = false, noPlan = false, skipValidation = false } = options;
 
   if (!isInitialized(cwd)) {
-    console.error('错误: 项目未初始化。请先运行 `projmnt4claude setup`');
+    console.error('');
+    console.error('❌ 项目未初始化');
+    console.error('');
+    console.error('  请先运行以下命令初始化项目管理环境:');
+    console.error('    projmnt4claude setup');
+    console.error('');
+    console.error('  初始化后即可使用 init-requirement 创建任务。');
+    console.error('');
     process.exit(1);
   }
 
@@ -94,7 +101,10 @@ export async function initRequirement(
   }
 
   if (!confirmCreate.confirm) {
-    console.log('已取消');
+    console.log('');
+    console.log('ℹ️  已取消任务创建。');
+    console.log('   如需重新创建，请再次运行 init-requirement 命令。');
+    console.log('');
     return;
   }
 
@@ -144,7 +154,10 @@ export async function initRequirement(
   }
 
   if (!response.title) {
-    console.log('已取消创建');
+    console.log('');
+    console.log('ℹ️  已取消任务创建（标题不能为空）。');
+    console.log('   如需重新创建，请再次运行 init-requirement 命令。');
+    console.log('');
     return;
   }
 

@@ -6,21 +6,94 @@ import {
   readTaskMeta,
   writeTaskMeta,
   getAllTasks,
+  getAllTaskIds,
   taskExists,
   isSubtask,
+  buildTaskVerification,
+  renameTask,
 } from '../utils/task';
 import type {
   TaskMeta,
   TaskPriority,
   TaskStatus,
+  TaskType,
   CheckpointMetadata,
   TaskHistoryEntry,
   VerificationMethod,
 } from '../types/task';
+import { parseTaskId, generateTaskId } from '../types/task';
 import { generateCheckpointId } from '../utils/checkpoint';
 import type { SprintContract } from '../types/harness';
 
 import { areDependenciesCompleted } from '../utils/plan';
+import { readConfig } from './config';
+
+// ============== Analyze 配置 ==============
+
+/**
+ * analyze 命令的配置选项
+ * 在 .projmnt4claude/config.json 的 "analyze" 字段中定义
+ */
+export interface AnalyzeConfig {
+  /** 是否自动生成检查点 (默认 true) */
+  autoGenerateCheckpoints?: boolean;
+  /** 检查点生成器类型: "ai-powered" | "simple" (默认 "ai-powered") */
+  checkpointGenerator?: 'ai-powered' | 'simple';
+  /** 检查点最低覆盖率阈值 0-1 (默认 0.8)，低于此阈值会产生警告 */
+  minCheckpointCoverage?: number;
+  /** 忽略的任务 ID 匹配模式 (支持 * 通配符)，如 ["TASK-test-*"] */
+  ignorePatterns?: string[];
+}
+
+const DEFAULT_ANALYZE_CONFIG: AnalyzeConfig = {
+  autoGenerateCheckpoints: true,
+  checkpointGenerator: 'ai-powered',
+  minCheckpointCoverage: 0.8,
+  ignorePatterns: [],
+};
+
+/**
+ * 读取 analyze 配置，合并默认值
+ */
+export function readAnalyzeConfig(cwd: string = process.cwd()): AnalyzeConfig {
+  const config = readConfig(cwd);
+  if (!config) return { ...DEFAULT_ANALYZE_CONFIG };
+
+  const analyzeRaw = config.analyze;
+  if (!analyzeRaw || typeof analyzeRaw !== 'object') return { ...DEFAULT_ANALYZE_CONFIG };
+
+  const userConfig = analyzeRaw as Record<string, unknown>;
+  return {
+    autoGenerateCheckpoints: typeof userConfig.autoGenerateCheckpoints === 'boolean'
+      ? userConfig.autoGenerateCheckpoints
+      : DEFAULT_ANALYZE_CONFIG.autoGenerateCheckpoints,
+    checkpointGenerator: userConfig.checkpointGenerator === 'simple' || userConfig.checkpointGenerator === 'ai-powered'
+      ? userConfig.checkpointGenerator
+      : DEFAULT_ANALYZE_CONFIG.checkpointGenerator,
+    minCheckpointCoverage: typeof userConfig.minCheckpointCoverage === 'number' &&
+      userConfig.minCheckpointCoverage >= 0 && userConfig.minCheckpointCoverage <= 1
+      ? userConfig.minCheckpointCoverage
+      : DEFAULT_ANALYZE_CONFIG.minCheckpointCoverage,
+    ignorePatterns: Array.isArray(userConfig.ignorePatterns) &&
+      userConfig.ignorePatterns.every((p: unknown) => typeof p === 'string')
+      ? userConfig.ignorePatterns as string[]
+      : DEFAULT_ANALYZE_CONFIG.ignorePatterns,
+  };
+}
+
+/**
+ * 检查任务 ID 是否匹配忽略模式
+ * 支持简单的 glob 模式: * 匹配任意字符序列
+ */
+function matchesIgnorePattern(taskId: string, patterns: string[]): boolean {
+  for (const pattern of patterns) {
+    const regex = new RegExp(
+      '^' + pattern.replace(/[.+^${}()|[\]\\]/g, '\\$&').replace(/\*/g, '.*') + '$'
+    );
+    if (regex.test(taskId)) return true;
+  }
+  return false;
+}
 
 /**
  * 优先级映射：将旧格式 (urgent/high/medium/low) 映射到新格式 (P0/P1/P2/P3)
@@ -213,6 +286,58 @@ function isValidPriorityValue(priority: string): boolean {
   return VALID_PRIORITIES.includes(priority as TaskPriority);
 }
 
+/**
+ * 检测 slug 是否无意义
+ * 无意义的 slug 包括：
+ * - 哈希生成的短标识 (如 t1a2b3c, t5f8e2d)
+ * - 空或极短 (<=2 字符)
+ * - 通用词 task 或 task- 前缀
+ */
+function isMeaninglessSlug(slug: string): boolean {
+  if (!slug || slug.length === 0) return true;
+  // 哈希生成的标识: t + 短字母数字 (如 t1a2b3c)
+  if (/^t[0-9a-z]+$/.test(slug) && slug.length <= 12) return true;
+  // 通用词: task 或 task- 前缀
+  if (slug === 'task' || slug.startsWith('task-')) return true;
+  return false;
+}
+
+/**
+ * 从 description/title 提取有意义的关键词生成 slug
+ */
+function extractSlugFromTask(task: TaskMeta): string {
+  const source = task.description || task.title || '';
+  if (!source) return '';
+
+  // 优先提取英文关键词
+  const englishWords = source.match(/[a-zA-Z][a-zA-Z0-9_-]*/g) || [];
+  const stopWords = new Set([
+    'the', 'a', 'an', 'is', 'are', 'was', 'were', 'be', 'been', 'being',
+    'have', 'has', 'had', 'do', 'does', 'did', 'will', 'would', 'could',
+    'should', 'may', 'might', 'must', 'shall', 'can', 'to', 'of', 'in',
+    'for', 'on', 'with', 'at', 'by', 'from', 'as', 'into', 'through',
+    'add', 'implement', 'ensure', 'verify', 'complete', 'check', 'update',
+    'option', 'options', 'task', 'feature', 'bug', 'fix', 'and', 'or',
+    'not', 'this', 'that', 'it', 'its', 'but', 'if', 'so', 'no', 'yes',
+  ]);
+
+  const meaningful = englishWords
+    .filter(w => !stopWords.has(w.toLowerCase()) && w.length > 2)
+    .map(w => w.toLowerCase());
+
+  if (meaningful.length > 0) {
+    // 取前 4 个关键词组成 slug
+    return meaningful.slice(0, 4).join('-').substring(0, 40);
+  }
+
+  // 中文标题：生成短哈希标识（与 generateTaskId 相同逻辑，但用 description 内容）
+  let hash = 0;
+  for (let i = 0; i < source.length; i++) {
+    hash = ((hash << 5) - hash + source.charCodeAt(i)) | 0;
+  }
+  return `t${Math.abs(hash).toString(36)}`;
+}
+
 // ============== 分析问题接口 ==============
 export interface Issue {
   taskId: string;
@@ -231,7 +356,16 @@ export interface Issue {
     // ID 检查
     | 'invalid_task_id_format'
     // 验证方法检查
-    | 'manual_verification';
+    | 'manual_verification'
+    | 'missing_verification'  // resolved 状态但缺少 verification 字段
+    // 残留检查
+    | 'abandoned_residual'
+    // ID 质量检查
+    | 'meaningless_id'
+    // 覆盖率检查
+    | 'low_checkpoint_coverage'
+    // 配置忽略
+    | 'ignored_by_config';
   severity: 'low' | 'medium' | 'high';
   message: string;
   suggestion: string;
@@ -250,6 +384,9 @@ export interface AnalysisStats {
   orphan: number;
   cycle: number;
   orphanSubtasks: number;   // 孤儿子任务数
+  abandonedResidual: number; // 归档目录中的 abandoned 残留任务数
+  resolvedWithoutVerification: number; // resolved 但缺少 verification 的任务数
+  ignored: number;          // 被 ignorePatterns 忽略的任务数
 }
 
 export interface AnalysisResult {
@@ -269,9 +406,23 @@ export function analyzeProject(cwd: string = process.cwd(), includeArchived: boo
   const tasks = getAllTasks(cwd, includeArchived);
   const issues: Issue[] = [];
 
+  // 加载 analyze 配置
+  const analyzeConfig = readAnalyzeConfig(cwd);
+
+  // 过滤被忽略的任务
+  const filteredTasks = analyzeConfig.ignorePatterns && analyzeConfig.ignorePatterns.length > 0
+    ? tasks.filter(task => {
+        if (matchesIgnorePattern(task.id, analyzeConfig.ignorePatterns!)) {
+          return false;
+        }
+        return true;
+      })
+    : tasks;
+  const ignoredCount = tasks.length - filteredTasks.length;
+
   // 初始化统计
   const stats: AnalysisStats = {
-    total: tasks.length,
+    total: filteredTasks.length,
     parentTasks: 0,
     subtasks: 0,
     subtaskCompletionRate: 0,
@@ -301,6 +452,9 @@ export function analyzeProject(cwd: string = process.cwd(), includeArchived: boo
     orphan: 0,
     cycle: 0,
     orphanSubtasks: 0,
+    abandonedResidual: 0,
+    resolvedWithoutVerification: 0,
+    ignored: ignoredCount,
   };
 
   const now = new Date();
@@ -334,7 +488,7 @@ export function analyzeProject(cwd: string = process.cwd(), includeArchived: boo
     return false;
   }
 
-  for (const task of tasks) {
+  for (const task of filteredTasks) {
     // 统计状态 (使用规范化函数)
     const normalizedStatus = normalizeStatus(task.status);
     stats.byStatus[normalizedStatus]++;
@@ -451,6 +605,47 @@ export function analyzeProject(cwd: string = process.cwd(), includeArchived: boo
       });
     }
 
+    // 1.5 检测无意义的任务 ID（slug 为空、哈希或 task- 前缀）
+    const idInfo = parseTaskId(task.id);
+    if (idInfo.valid) {
+      let slugToCheck: string | undefined = idInfo.slug;
+
+      // 非标准格式（如 bugfix 类型）用宽松正则提取 slug
+      if (!slugToCheck && idInfo.format === 'unknown') {
+        const lenientMatch = task.id.match(/^TASK-[a-z]+-[PQ]\d-([a-z0-9\-]+)-\d{8}/);
+        if (lenientMatch) {
+          slugToCheck = lenientMatch[1];
+        }
+      }
+
+      if (slugToCheck) {
+        // 有 slug，检查是否无意义
+        if (isMeaninglessSlug(slugToCheck)) {
+          issues.push({
+            taskId: task.id,
+            type: 'meaningless_id',
+            severity: 'low',
+            message: `任务 ID 的 slug 无意义: "${slugToCheck}"`,
+            suggestion: '使用 --fix 自动从描述/标题提取关键词重命名，或手动重命名任务目录',
+            details: { slug: slugToCheck, format: idInfo.format },
+          });
+        }
+      } else {
+        // slug 为空：旧格式 (TASK-001) 或空 slug (TASK-feature-P2--20260330)
+        const reason = idInfo.format === 'old'
+          ? '任务使用旧格式 ID'
+          : '任务 ID 缺少有意义的 slug';
+        issues.push({
+          taskId: task.id,
+          type: 'meaningless_id',
+          severity: 'low',
+          message: `${reason}: ${task.id}`,
+          suggestion: '使用 --fix 自动从描述/标题提取关键词重命名',
+          details: { format: idInfo.format },
+        });
+      }
+    }
+
     // 2. 检测无效的状态值
     if (!isValidStatusValue(task.status)) {
       issues.push({
@@ -537,6 +732,19 @@ export function analyzeProject(cwd: string = process.cwd(), includeArchived: boo
           details: { checkpointIds: manualCheckpoints.map(cp => cp.id) },
         });
       }
+    }
+
+    // 7.5 检测 resolved 状态但缺少 verification 字段
+    if (normalizedStatus === 'resolved' && !task.verification) {
+      stats.resolvedWithoutVerification++;
+      issues.push({
+        taskId: task.id,
+        type: 'missing_verification',
+        severity: 'medium',
+        message: '任务已 resolved 但缺少 verification 字段',
+        suggestion: '运行 analyze --fix-verification 自动回填 verification 字段',
+        details: { status: task.status, hasCheckpoints: !!(task.checkpoints && task.checkpoints.length > 0) },
+      });
     }
 
     // 8. 检测父任务引用有效性
@@ -651,9 +859,34 @@ export function analyzeProject(cwd: string = process.cwd(), includeArchived: boo
     }
   }
 
+  // 检查检查点覆盖率
+  if (analyzeConfig.minCheckpointCoverage && analyzeConfig.minCheckpointCoverage > 0) {
+    const tasksWithCheckpoints = filteredTasks.filter(
+      t => t.checkpoints && t.checkpoints.length > 0
+    );
+    const coverageRate = filteredTasks.length > 0
+      ? tasksWithCheckpoints.length / filteredTasks.length
+      : 0;
+
+    if (coverageRate < analyzeConfig.minCheckpointCoverage) {
+      issues.push({
+        taskId: '__global__',
+        type: 'low_checkpoint_coverage',
+        severity: 'medium',
+        message: `检查点覆盖率 ${(coverageRate * 100).toFixed(1)}% 低于配置阈值 ${(analyzeConfig.minCheckpointCoverage * 100).toFixed(1)}%`,
+        suggestion: '为缺少检查点的任务添加验收标准，或运行 analyze --fix-checkpoints 自动生成',
+        details: {
+          coverageRate: Math.round(coverageRate * 100) / 100,
+          threshold: analyzeConfig.minCheckpointCoverage,
+          tasksWithoutCheckpoints: filteredTasks.length - tasksWithCheckpoints.length,
+        },
+      });
+    }
+  }
+
   // 计算子任务统计
-  const parentTasks = tasks.filter(t => !isSubtask(t.id));
-  const subtasks = tasks.filter(t => isSubtask(t.id));
+  const parentTasks = filteredTasks.filter(t => !isSubtask(t.id));
+  const subtasks = filteredTasks.filter(t => isSubtask(t.id));
   const completedSubtasks = subtasks.filter(t => t.status === 'resolved' || t.status === 'closed');
 
   stats.parentTasks = parentTasks.length;
@@ -673,6 +906,36 @@ export function analyzeProject(cwd: string = process.cwd(), includeArchived: boo
         severity: 'medium',
         message: `子任务的父任务 ${parentId} 不存在`,
         suggestion: '删除孤儿子任务或重新创建父任务',
+      });
+    }
+  }
+
+  // 检测归档目录中的 abandoned 残留任务
+  const archiveDir = getArchiveDir(cwd);
+  if (fs.existsSync(archiveDir)) {
+    const abandonedDirs = fs.readdirSync(archiveDir)
+      .filter(name => {
+        const dirPath = path.join(archiveDir, name);
+        if (!fs.statSync(dirPath).isDirectory()) return false;
+        const metaPath = path.join(dirPath, 'meta.json');
+        if (!fs.existsSync(metaPath)) return false;
+        try {
+          const meta = JSON.parse(fs.readFileSync(metaPath, 'utf-8'));
+          return meta.status === 'abandoned';
+        } catch {
+          return false;
+        }
+      });
+
+    if (abandonedDirs.length > 0) {
+      stats.abandonedResidual = abandonedDirs.length;
+      issues.push({
+        taskId: '__archive__',
+        type: 'abandoned_residual',
+        severity: 'low',
+        message: `归档目录中存在 ${abandonedDirs.length} 个 abandoned 任务残留`,
+        suggestion: '运行 task purge -y 清除残留的 abandoned 任务',
+        details: { count: abandonedDirs.length, tasks: abandonedDirs },
       });
     }
   }
@@ -713,6 +976,13 @@ export function showAnalysis(options: { compact?: boolean } = {}, cwd: string = 
   console.log(`   被阻塞: ${result.stats.blocked}`);
   console.log(`   孤儿任务: ${result.stats.orphan}`);
   console.log(`   循环依赖: ${result.stats.cycle}`);
+  console.log(`   Abandoned 残留: ${result.stats.abandonedResidual}`);
+  if (result.stats.resolvedWithoutVerification > 0) {
+    console.log(`   缺少 verification: ${result.stats.resolvedWithoutVerification}`);
+  }
+  if (result.stats.ignored > 0) {
+    console.log(`   已忽略 (配置): ${result.stats.ignored}`);
+  }
   console.log('');
 
   // 显示详细问题
@@ -746,21 +1016,402 @@ export function showAnalysis(options: { compact?: boolean } = {}, cwd: string = 
 }
 
 /**
+ * 修复选项类型
+ */
+export interface FixOptions {
+  nonInteractive?: boolean;
+  fixType?: 'all' | 'verification' | 'status' | 'checkpoints';
+}
+
+/**
+ * 判断问题类型是否属于 verification 类别
+ */
+function isVerificationIssue(type: Issue['type']): boolean {
+  return type === 'manual_verification' || type === 'missing_verification';
+}
+
+/**
+ * 判断问题类型是否属于 status 类别
+ */
+function isStatusIssue(type: Issue['type']): boolean {
+  return [
+    'legacy_status',
+    'invalid_status_value',
+    'status_reopen_mismatch',
+    'legacy_priority',
+    'legacy_schema',
+    'invalid_timestamp_format',
+  ].includes(type);
+}
+
+/**
+ * 修复单个问题
+ * @returns 修复结果: 'fixed' | 'skipped' | 'unfixable'
+ */
+async function fixSingleIssue(
+  issue: Issue,
+  cwd: string,
+  nonInteractive: boolean
+): Promise<'fixed' | 'skipped' | 'unfixable'> {
+  const task = readTaskMeta(issue.taskId, cwd);
+  if (!task) return 'skipped';
+
+  switch (issue.type) {
+    case 'stale': {
+      if (nonInteractive) {
+        console.log(`⏭️  跳过过期任务 ${issue.taskId} (非交互模式下需要手动处理)`);
+        return 'skipped';
+      }
+      console.log(`检查过期任务 ${issue.taskId}...`);
+      const response = await prompts({
+        type: 'select',
+        name: 'action',
+        message: `任务 ${issue.taskId} 已过期，如何处理?`,
+        choices: [
+          { title: '标记为已关闭', value: 'close' },
+          { title: '标记为进行中', value: 'progress' },
+          { title: '跳过', value: 'skip' },
+        ],
+      });
+
+      if (response.action === 'close') {
+        task.status = 'closed';
+        writeTaskMeta(task, cwd);
+        console.log(`  ✅ 已关闭任务 ${issue.taskId}`);
+        return 'fixed';
+      } else if (response.action === 'progress') {
+        task.status = 'in_progress';
+        writeTaskMeta(task, cwd);
+        console.log(`  ✅ 已将任务 ${issue.taskId} 标记为进行中`);
+        return 'fixed';
+      }
+      return 'skipped';
+    }
+
+    case 'no_description': {
+      if (nonInteractive) {
+        console.log(`⏭️  跳过无描述任务 ${issue.taskId} (非交互模式下需要手动处理)`);
+        return 'skipped';
+      }
+      console.log(`检查无描述任务 ${issue.taskId}...`);
+      const response = await prompts({
+        type: 'text',
+        name: 'description',
+        message: `为任务 ${issue.taskId} 添加描述 (留空跳过):`,
+      });
+
+      if (response.description && response.description.trim()) {
+        task.description = response.description.trim();
+        writeTaskMeta(task, cwd);
+        console.log(`  ✅ 已为任务 ${issue.taskId} 添加描述`);
+        return 'fixed';
+      }
+      return 'skipped';
+    }
+
+    case 'cycle': {
+      console.log(`⚠️  任务 ${issue.taskId} 存在循环依赖，需要手动处理`);
+      return 'unfixable';
+    }
+
+    case 'legacy_priority': {
+      console.log(`🔄 修复任务 ${issue.taskId} 的优先级格式...`);
+      const oldPriority = task.priority;
+      const newPriority = normalizePriority(task.priority);
+      task.priority = newPriority;
+      writeTaskMeta(task, cwd);
+      console.log(`  ✅ 已将优先级从 ${oldPriority} 更新为 ${newPriority}`);
+      return 'fixed';
+    }
+
+    case 'legacy_status': {
+      console.log(`🔄 修复任务 ${issue.taskId} 的状态格式...`);
+      const oldStatus = task.status;
+      const newStatus = normalizeStatus(task.status);
+      task.status = newStatus;
+      writeTaskMeta(task, cwd);
+      console.log(`  ✅ 已将状态从 ${oldStatus} 更新为 ${newStatus}`);
+      return 'fixed';
+    }
+
+    case 'legacy_schema': {
+      console.log(`🔄 修复任务 ${issue.taskId} 的规范字段...`);
+      if (task.reopenCount === undefined) {
+        task.reopenCount = 0;
+        console.log(`  ✅ 已添加 reopenCount: 0`);
+      }
+      if (task.requirementHistory === undefined) {
+        task.requirementHistory = [];
+        console.log(`  ✅ 已添加 requirementHistory: []`);
+      }
+      writeTaskMeta(task, cwd);
+      return 'fixed';
+    }
+
+    case 'invalid_status_value': {
+      console.log(`🔄 修复任务 ${issue.taskId} 的无效状态值...`);
+      if (issue.details?.currentValue) {
+        const oldStatus = task.status;
+        task.status = normalizeStatus(task.status);
+        writeTaskMeta(task, cwd);
+        console.log(`  ✅ 已将状态从 ${oldStatus} 更新为 ${task.status}`);
+        return 'fixed';
+      }
+      return 'unfixable';
+    }
+
+    case 'status_reopen_mismatch': {
+      console.log(`🔄 修复任务 ${issue.taskId} 的 reopenCount 不一致...`);
+      const reopenFromHistory = task.history?.filter(
+        (h) => h.action === 'status_change' && h.newValue === 'reopened'
+      ).length || 0;
+      task.reopenCount = Math.max(1, reopenFromHistory);
+      writeTaskMeta(task, cwd);
+      console.log(`  ✅ 已将 reopenCount 设置为 ${task.reopenCount}`);
+      return 'fixed';
+    }
+
+    case 'invalid_timestamp_format': {
+      console.log(`🔄 修复任务 ${issue.taskId} 的时间戳格式...`);
+      if (issue.details?.field) {
+        const field = issue.details.field as string;
+        const now = new Date().toISOString();
+        if (field === 'createdAt' || field === 'updatedAt') {
+          (task as unknown as Record<string, unknown>)[field] = now;
+          writeTaskMeta(task, cwd);
+          console.log(`  ✅ 已将 ${field} 更新为 ${now}`);
+          return 'fixed';
+        }
+      }
+      return 'unfixable';
+    }
+
+    case 'invalid_parent_ref': {
+      console.log(`⚠️  任务 ${issue.taskId} 的父任务引用无效，无法自动修复`);
+      console.log(`   建议: 手动检查并删除无效的 parentId 或创建父任务`);
+      return 'unfixable';
+    }
+
+    case 'invalid_subtask_ref': {
+      console.log(`🔄 修复任务 ${issue.taskId} 的无效子任务引用...`);
+      if (task.subtaskIds && issue.details?.subtaskId) {
+        const invalidId = issue.details.subtaskId as string;
+        const oldLength = task.subtaskIds.length;
+        task.subtaskIds = task.subtaskIds.filter(id => id !== invalidId);
+        if (task.subtaskIds.length < oldLength) {
+          writeTaskMeta(task, cwd);
+          console.log(`  ✅ 已从 subtaskIds 中移除无效引用 ${invalidId}`);
+          return 'fixed';
+        }
+      }
+      return 'skipped';
+    }
+
+    case 'invalid_dependency_ref': {
+      console.log(`🔄 修复任务 ${issue.taskId} 的无效依赖引用...`);
+      if (task.dependencies && issue.details?.dependencyId) {
+        const invalidId = issue.details.dependencyId as string;
+        const oldLength = task.dependencies.length;
+        task.dependencies = task.dependencies.filter(id => id !== invalidId);
+        if (task.dependencies.length < oldLength) {
+          writeTaskMeta(task, cwd);
+          console.log(`  ✅ 已从 dependencies 中移除无效引用 ${invalidId}`);
+          return 'fixed';
+        }
+      }
+      return 'skipped';
+    }
+
+    case 'subtask_not_in_parent': {
+      console.log(`🔄 修复子任务 ${issue.taskId} 在父任务中的引用...`);
+      if (task.parentId) {
+        const parentTask = readTaskMeta(task.parentId, cwd);
+        if (parentTask) {
+          if (!parentTask.subtaskIds) {
+            parentTask.subtaskIds = [];
+          }
+          if (!parentTask.subtaskIds.includes(task.id)) {
+            parentTask.subtaskIds.push(task.id);
+            writeTaskMeta(parentTask, cwd);
+            console.log(`  ✅ 已将子任务添加到父任务的 subtaskIds 中`);
+            return 'fixed';
+          }
+        }
+      }
+      return 'skipped';
+    }
+
+    case 'parent_child_mismatch': {
+      console.log(`🔄 修复任务 ${issue.taskId} 的父子关系不一致...`);
+      if (issue.details?.subtaskId && issue.details?.expectedParentId) {
+        const subtaskId = issue.details.subtaskId as string;
+        const subtask = readTaskMeta(subtaskId, cwd);
+        if (subtask) {
+          subtask.parentId = issue.details.expectedParentId as string;
+          writeTaskMeta(subtask, cwd);
+          console.log(`  ✅ 已将子任务 ${subtaskId} 的 parentId 更新为 ${subtask.parentId}`);
+          return 'fixed';
+        }
+      }
+      return 'skipped';
+    }
+
+    case 'meaningless_id': {
+      // 从 description/title 提取关键词生成新 ID
+      const slug = extractSlugFromTask(task);
+      if (!slug || isMeaninglessSlug(slug)) {
+        console.log(`⚠️  任务 ${issue.taskId} 无法提取有意义的关键词，跳过重命名`);
+        return 'unfixable';
+      }
+
+      const idInfo = parseTaskId(task.id);
+      // 优先使用 task 自身的 type/priority（更可靠），再从 ID 解析
+      const taskType = (task.type || idInfo.type || 'feature') as TaskType;
+      const taskPriority = (task.priority || idInfo.priority) as TaskPriority;
+      const existingIds = getAllTaskIds(cwd);
+      const newId = generateTaskId(taskType, taskPriority, slug, existingIds);
+
+      if (newId === task.id) {
+        console.log(`  ⏭️  任务 ${issue.taskId} 生成的 ID 与当前相同，跳过`);
+        return 'skipped';
+      }
+
+      console.log(`🔄 重命名任务: ${task.id} → ${newId}`);
+      const result = renameTask(task.id, newId, cwd);
+      if (result.success) {
+        console.log(`  ✅ 已重命名为 ${newId}`);
+        return 'fixed';
+      }
+      console.log(`  ❌ 重命名失败: ${result.error}`);
+      return 'unfixable';
+    }
+
+    case 'invalid_history_format':
+    case 'invalid_requirement_history_format':
+    case 'invalid_task_id_format': {
+      console.log(`⚠️  任务 ${issue.taskId} 的 ${issue.type} 问题无法自动修复`);
+      console.log(`   建议: ${issue.suggestion}`);
+      return 'unfixable';
+    }
+
+    case 'manual_verification': {
+      console.log(`🔄 修复任务 ${issue.taskId} 的 manual 验证方法...`);
+      if (task.checkpoints && issue.details?.checkpointIds) {
+        let fixedCount_local = 0;
+        for (const cpId of issue.details.checkpointIds as string[]) {
+          const cp = task.checkpoints.find(c => c.id === cpId);
+          if (cp && cp.verification && (cp.verification.method as string) === 'manual') {
+            cp.verification.method = 'automated';
+            console.log(`  ✅ 检查点 ${cpId}: manual -> automated`);
+            fixedCount_local++;
+          }
+        }
+        if (fixedCount_local > 0) {
+          writeTaskMeta(task, cwd);
+          return 'fixed';
+        }
+      }
+      return 'skipped';
+    }
+
+    case 'missing_verification': {
+      console.log(`🔄 修复任务 ${issue.taskId} 的缺失 verification 字段...`);
+      if (task.status === 'resolved' && !task.verification) {
+        task.verification = buildTaskVerification(task);
+        writeTaskMeta(task, cwd);
+        console.log(`  ✅ 已自动填充 verification 字段`);
+        console.log(`     结果: ${task.verification.result}`);
+        console.log(`     完成率: ${task.verification.checkpointCompletionRate}%`);
+        return 'fixed';
+      }
+      return 'skipped';
+    }
+    case 'abandoned_residual': {
+      const archiveDir = getArchiveDir(cwd);
+      const tasksToDelete = (issue.details?.tasks as string[]) || [];
+      if (tasksToDelete.length === 0) return 'skipped';
+
+      if (nonInteractive) {
+        let deleted = 0;
+        for (const taskId of tasksToDelete) {
+          const dirPath = path.join(archiveDir, taskId);
+          try {
+            fs.rmSync(dirPath, { recursive: true, force: true });
+            deleted++;
+          } catch {
+            console.error(`  ❌ 删除 ${taskId} 失败`);
+          }
+        }
+        console.log(`  ✅ 已清除 ${deleted} 个 abandoned 残留任务`);
+        return deleted > 0 ? 'fixed' : 'skipped';
+      } else {
+        console.log(`检查 abandoned 残留任务...`);
+        console.log(`  发现 ${tasksToDelete.length} 个: ${tasksToDelete.join(', ')}`);
+        const response = await prompts({
+          type: 'confirm',
+          name: 'confirm',
+          message: `是否清除这些 abandoned 残留任务?`,
+          initial: true,
+        });
+        if (response.confirm) {
+          let deleted = 0;
+          for (const taskId of tasksToDelete) {
+            const dirPath = path.join(archiveDir, taskId);
+            try {
+              fs.rmSync(dirPath, { recursive: true, force: true });
+              deleted++;
+            } catch {
+              console.error(`  ❌ 删除 ${taskId} 失败`);
+            }
+          }
+          console.log(`  ✅ 已清除 ${deleted} 个 abandoned 残留任务`);
+          return deleted > 0 ? 'fixed' : 'skipped';
+        }
+        return 'skipped';
+      }
+    }
+
+    default:
+      return 'unfixable';
+  }
+}
+
+/**
  * 自动修复问题
  * @param cwd 工作目录
- * @param nonInteractive 非交互模式：自动修复可修复的问题，跳过需要用户输入的问题
+ * @param options 修复选项
  */
-export async function fixIssues(cwd: string = process.cwd(), nonInteractive: boolean = false): Promise<void> {
+export async function fixIssues(
+  cwd: string = process.cwd(),
+  options: FixOptions = {}
+): Promise<{ fixed: number; skipped: number; unfixable: number }> {
+  const { nonInteractive = false, fixType = 'all' } = options;
   const result = analyzeProject(cwd);
 
   if (result.issues.length === 0) {
     console.log('✅ 没有需要修复的问题');
-    return;
+    return { fixed: 0, skipped: 0, unfixable: 0 };
+  }
+
+  // 根据修复类型过滤问题
+  let issuesToFix = result.issues;
+  if (fixType === 'verification') {
+    issuesToFix = result.issues.filter(i => isVerificationIssue(i.type));
+  } else if (fixType === 'status') {
+    issuesToFix = result.issues.filter(i => isStatusIssue(i.type));
+  }
+
+  if (issuesToFix.length === 0) {
+    console.log(`✅ 没有需要修复的 ${fixType === 'verification' ? '验证方法' : fixType === 'status' ? '状态' : ''} 问题`);
+    return { fixed: 0, skipped: 0, unfixable: 0 };
   }
 
   console.log('');
   console.log('━'.repeat(60));
   console.log('🔧 自动修复问题');
+  if (fixType !== 'all') {
+    console.log(`   修复类型: ${fixType}`);
+  }
   if (nonInteractive) {
     console.log('   (非交互模式)');
   }
@@ -769,285 +1420,47 @@ export async function fixIssues(cwd: string = process.cwd(), nonInteractive: boo
 
   let fixedCount = 0;
   let skippedCount = 0;
+  let unfixableCount = 0;
 
-  for (const issue of result.issues) {
-    const task = readTaskMeta(issue.taskId, cwd);
-    if (!task) continue;
-
-    switch (issue.type) {
-      case 'stale': {
-        if (nonInteractive) {
-          console.log(`⏭️  跳过过期任务 ${issue.taskId} (非交互模式下需要手动处理)`);
-          skippedCount++;
-          break;
-        }
-        console.log(`检查过期任务 ${issue.taskId}...`);
-        const response = await prompts({
-          type: 'select',
-          name: 'action',
-          message: `任务 ${issue.taskId} 已过期，如何处理?`,
-          choices: [
-            { title: '标记为已关闭', value: 'close' },
-            { title: '标记为进行中', value: 'progress' },
-            { title: '跳过', value: 'skip' },
-          ],
-        });
-
-        if (response.action === 'close') {
-          task.status = 'closed';
-          writeTaskMeta(task, cwd);
-          console.log(`  ✅ 已关闭任务 ${issue.taskId}`);
-          fixedCount++;
-        } else if (response.action === 'progress') {
-          task.status = 'in_progress';
-          writeTaskMeta(task, cwd);
-          console.log(`  ✅ 已将任务 ${issue.taskId} 标记为进行中`);
-          fixedCount++;
-        }
-        break;
-      }
-
-      case 'no_description': {
-        if (nonInteractive) {
-          console.log(`⏭️  跳过无描述任务 ${issue.taskId} (非交互模式下需要手动处理)`);
-          skippedCount++;
-          break;
-        }
-        console.log(`检查无描述任务 ${issue.taskId}...`);
-        const response = await prompts({
-          type: 'text',
-          name: 'description',
-          message: `为任务 ${issue.taskId} 添加描述 (留空跳过):`,
-        });
-
-        if (response.description && response.description.trim()) {
-          task.description = response.description.trim();
-          writeTaskMeta(task, cwd);
-          console.log(`  ✅ 已为任务 ${issue.taskId} 添加描述`);
-          fixedCount++;
-        }
-        break;
-      }
-
-      case 'cycle': {
-        console.log(`⚠️  任务 ${issue.taskId} 存在循环依赖，需要手动处理`);
-        break;
-      }
-
-      case 'legacy_priority': {
-        console.log(`🔄 修复任务 ${issue.taskId} 的优先级格式...`);
-        const task = readTaskMeta(issue.taskId, cwd);
-        if (task) {
-          const oldPriority = task.priority;
-          const newPriority = normalizePriority(task.priority);
-          task.priority = newPriority;
-          writeTaskMeta(task, cwd);
-          console.log(`  ✅ 已将优先级从 ${oldPriority} 更新为 ${newPriority}`);
-          fixedCount++;
-        }
-        break;
-      }
-
-      case 'legacy_status': {
-        console.log(`🔄 修复任务 ${issue.taskId} 的状态格式...`);
-        const task = readTaskMeta(issue.taskId, cwd);
-        if (task) {
-          const oldStatus = task.status;
-          const newStatus = normalizeStatus(task.status);
-          task.status = newStatus;
-          writeTaskMeta(task, cwd);
-          console.log(`  ✅ 已将状态从 ${oldStatus} 更新为 ${newStatus}`);
-          fixedCount++;
-        }
-        break;
-      }
-
-      case 'legacy_schema': {
-        console.log(`🔄 修复任务 ${issue.taskId} 的规范字段...`);
-        const task = readTaskMeta(issue.taskId, cwd);
-        if (task) {
-          // 添加缺失的新规范字段
-          if (task.reopenCount === undefined) {
-            task.reopenCount = 0;
-            console.log(`  ✅ 已添加 reopenCount: 0`);
-          }
-          if (task.requirementHistory === undefined) {
-            task.requirementHistory = [];
-            console.log(`  ✅ 已添加 requirementHistory: []`);
-          }
-          writeTaskMeta(task, cwd);
-          fixedCount++;
-        }
-        break;
-      }
-
-      // ========== 新增：规范合规性修复 ==========
-
-      case 'invalid_status_value': {
-        console.log(`🔄 修复任务 ${issue.taskId} 的无效状态值...`);
-        const task = readTaskMeta(issue.taskId, cwd);
-        if (task && issue.details?.currentValue) {
-          const oldStatus = task.status;
-          // 尝试规范化，如果失败则设为 'open'
-          task.status = normalizeStatus(task.status);
-          writeTaskMeta(task, cwd);
-          console.log(`  ✅ 已将状态从 ${oldStatus} 更新为 ${task.status}`);
-          fixedCount++;
-        }
-        break;
-      }
-
-      case 'status_reopen_mismatch': {
-        console.log(`🔄 修复任务 ${issue.taskId} 的 reopenCount 不一致...`);
-        const task = readTaskMeta(issue.taskId, cwd);
-        if (task) {
-          // 从历史记录计算 reopen 次数
-          const reopenFromHistory = task.history?.filter(
-            (h) => h.action === 'status_change' && h.newValue === 'reopened'
-          ).length || 0;
-
-          task.reopenCount = Math.max(1, reopenFromHistory);
-          writeTaskMeta(task, cwd);
-          console.log(`  ✅ 已将 reopenCount 设置为 ${task.reopenCount}`);
-          fixedCount++;
-        }
-        break;
-      }
-
-      case 'invalid_timestamp_format': {
-        console.log(`🔄 修复任务 ${issue.taskId} 的时间戳格式...`);
-        const task = readTaskMeta(issue.taskId, cwd);
-        if (task && issue.details?.field) {
-          const field = issue.details.field as string;
-          const now = new Date().toISOString();
-
-          if (field === 'createdAt' || field === 'updatedAt') {
-            (task as unknown as Record<string, unknown>)[field] = now;
-            writeTaskMeta(task, cwd);
-            console.log(`  ✅ 已将 ${field} 更新为 ${now}`);
-            fixedCount++;
-          }
-        }
-        break;
-      }
-
-      case 'invalid_parent_ref': {
-        console.log(`⚠️  任务 ${issue.taskId} 的父任务引用无效，无法自动修复`);
-        console.log(`   建议: 手动检查并删除无效的 parentId 或创建父任务`);
-        skippedCount++;
-        break;
-      }
-
-      case 'invalid_subtask_ref': {
-        console.log(`🔄 修复任务 ${issue.taskId} 的无效子任务引用...`);
-        const task = readTaskMeta(issue.taskId, cwd);
-        if (task && task.subtaskIds && issue.details?.subtaskId) {
-          const invalidId = issue.details.subtaskId as string;
-          const oldLength = task.subtaskIds.length;
-          task.subtaskIds = task.subtaskIds.filter(id => id !== invalidId);
-          if (task.subtaskIds.length < oldLength) {
-            writeTaskMeta(task, cwd);
-            console.log(`  ✅ 已从 subtaskIds 中移除无效引用 ${invalidId}`);
-            fixedCount++;
-          }
-        }
-        break;
-      }
-
-      case 'invalid_dependency_ref': {
-        console.log(`🔄 修复任务 ${issue.taskId} 的无效依赖引用...`);
-        const task = readTaskMeta(issue.taskId, cwd);
-        if (task && task.dependencies && issue.details?.dependencyId) {
-          const invalidId = issue.details.dependencyId as string;
-          const oldLength = task.dependencies.length;
-          task.dependencies = task.dependencies.filter(id => id !== invalidId);
-          if (task.dependencies.length < oldLength) {
-            writeTaskMeta(task, cwd);
-            console.log(`  ✅ 已从 dependencies 中移除无效引用 ${invalidId}`);
-            fixedCount++;
-          }
-        }
-        break;
-      }
-
-      case 'subtask_not_in_parent': {
-        console.log(`🔄 修复子任务 ${issue.taskId} 在父任务中的引用...`);
-        const task = readTaskMeta(issue.taskId, cwd);
-        if (task && task.parentId) {
-          const parentTask = readTaskMeta(task.parentId, cwd);
-          if (parentTask) {
-            if (!parentTask.subtaskIds) {
-              parentTask.subtaskIds = [];
-            }
-            if (!parentTask.subtaskIds.includes(task.id)) {
-              parentTask.subtaskIds.push(task.id);
-              writeTaskMeta(parentTask, cwd);
-              console.log(`  ✅ 已将子任务添加到父任务的 subtaskIds 中`);
-              fixedCount++;
-            }
-          }
-        }
-        break;
-      }
-
-      case 'parent_child_mismatch': {
-        console.log(`🔄 修复任务 ${issue.taskId} 的父子关系不一致...`);
-        const task = readTaskMeta(issue.taskId, cwd);
-        if (task && issue.details?.subtaskId && issue.details?.expectedParentId) {
-          const subtaskId = issue.details.subtaskId as string;
-          const subtask = readTaskMeta(subtaskId, cwd);
-          if (subtask) {
-            subtask.parentId = issue.details.expectedParentId as string;
-            writeTaskMeta(subtask, cwd);
-            console.log(`  ✅ 已将子任务 ${subtaskId} 的 parentId 更新为 ${subtask.parentId}`);
-            fixedCount++;
-          }
-        }
-        break;
-      }
-
-      case 'invalid_history_format':
-      case 'invalid_requirement_history_format':
-      case 'invalid_task_id_format': {
-        console.log(`⚠️  任务 ${issue.taskId} 的 ${issue.type} 问题无法自动修复`);
-        console.log(`   建议: ${issue.suggestion}`);
-        skippedCount++;
-        break;
-      }
-
-      // ========== 新增：manual 验证修复 ==========
-
-      case 'manual_verification': {
-        console.log(`🔄 修复任务 ${issue.taskId} 的 manual 验证方法...`);
-        const task = readTaskMeta(issue.taskId, cwd);
-        if (task && task.checkpoints && issue.details?.checkpointIds) {
-          let fixedCount_local = 0;
-          for (const cpId of issue.details.checkpointIds as string[]) {
-            const cp = task.checkpoints.find(c => c.id === cpId);
-            if (cp && cp.verification && (cp.verification.method as string) === 'manual') {
-              // 将 manual 替换为 automated
-              cp.verification.method = 'automated';
-              console.log(`  ✅ 检查点 ${cpId}: manual -> automated`);
-              fixedCount_local++;
-            }
-          }
-          if (fixedCount_local > 0) {
-            writeTaskMeta(task, cwd);
-            fixedCount++;
-          }
-        }
-        break;
-      }
-
-      default:
-        break;
+  for (const issue of issuesToFix) {
+    const fixResult = await fixSingleIssue(issue, cwd, nonInteractive);
+    if (fixResult === 'fixed') {
+      fixedCount++;
+    } else if (fixResult === 'skipped') {
+      skippedCount++;
+    } else {
+      unfixableCount++;
     }
   }
 
   console.log('');
-  console.log(`━`.repeat(60));
-  console.log(`✅ 共修复 ${fixedCount} 个问题`);
   console.log('━'.repeat(60));
+  console.log(`✅ 共修复 ${fixedCount} 个问题`);
+  if (skippedCount > 0) console.log(`⏭️  跳过 ${skippedCount} 个问题`);
+  if (unfixableCount > 0) console.log(`⚠️  ${unfixableCount} 个问题无法自动修复`);
+  console.log('━'.repeat(60));
+
+  return { fixed: fixedCount, skipped: skippedCount, unfixable: unfixableCount };
+}
+
+/**
+ * 仅修复验证方法问题
+ */
+export async function fixVerification(
+  cwd: string = process.cwd(),
+  nonInteractive: boolean = false
+): Promise<void> {
+  await fixIssues(cwd, { nonInteractive, fixType: 'verification' });
+}
+
+/**
+ * 仅修复状态相关问题
+ */
+export async function fixStatus(
+  cwd: string = process.cwd(),
+  nonInteractive: boolean = false
+): Promise<void> {
+  await fixIssues(cwd, { nonInteractive, fixType: 'status' });
 }
 
 /**
@@ -1088,6 +1501,8 @@ export function showStatus(
         blocked: result.stats.blocked,
         orphan: result.stats.orphan,
         cycle: result.stats.cycle,
+        resolvedWithoutVerification: result.stats.resolvedWithoutVerification,
+        ignored: result.stats.ignored,
       },
     }, null, 2));
     return;
@@ -1121,6 +1536,9 @@ export function showStatus(
   console.log(`   已完成: ${result.stats.byStatus.resolved + result.stats.byStatus.closed}`);
   console.log(`   已重开: ${result.stats.byStatus.reopened}`);
   console.log(`   已放弃: ${result.stats.byStatus.abandoned}`);
+  if (result.stats.ignored > 0) {
+    console.log(`   已忽略: ${result.stats.ignored} (配置 ignorePatterns)`);
+  }
   console.log('');
 
   // Reopen 统计
@@ -1238,6 +1656,9 @@ function calculateHealthScore(result: AnalysisResult): number {
 
   // 孤儿任务轻微扣分
   score -= result.stats.orphan * 1;
+
+  // abandoned 残留任务轻微扣分
+  score -= result.stats.abandonedResidual * 0.5;
 
   // 无描述任务轻微扣分
   const noDescIssues = result.issues.filter(i => i.type === 'no_description').length;
@@ -1626,39 +2047,38 @@ function generateCheckpointsFromCriteria(
   const checkpoints: CheckpointMetadata[] = [];
   const now = new Date().toISOString();
 
-  // 如果有验收标准，基于每个标准生成检查点
-  if (acceptanceCriteria && acceptanceCriteria.length > 0) {
-    acceptanceCriteria.forEach((criteria, index) => {
-      // 搜索代码库以找到相关文件
+  // 读取配置决定生成模式
+  const analyzeConfig = readAnalyzeConfig(cwd);
+  const useSimpleMode = analyzeConfig.checkpointGenerator === 'simple';
+
+  const criteriaList = (acceptanceCriteria && acceptanceCriteria.length > 0)
+    ? acceptanceCriteria
+    : generateDefaultCheckpoints(taskTitle || taskId);
+
+  for (let index = 0; index < criteriaList.length; index++) {
+    const criteria = criteriaList[index]!;
+    const id = generateCheckpointId(taskId, index, criteria);
+
+    if (useSimpleMode) {
+      // 简单模式: 不搜索代码库，直接基于关键词推断验证方法
+      const method = inferVerificationMethod(criteria);
+      checkpoints.push({
+        id,
+        description: criteria,
+        status: 'pending',
+        verification: { method },
+        createdAt: now,
+        updatedAt: now,
+      });
+    } else {
+      // 智能模式: 搜索代码库以找到相关文件，生成更精确的检查点
       const searchResults = searchCodebaseForCriteria(criteria, cwd);
-
-      // 使用智能检查点生成
       const checkpoint = generateSmartCheckpoints(taskId, criteria, searchResults, index);
-
-      // 确保时间戳正确
       checkpoint.createdAt = now;
       checkpoint.updatedAt = now;
       checkpoint.status = 'pending';
-
       checkpoints.push(checkpoint);
-    });
-  } else {
-    // 如果没有验收标准，基于任务标题生成默认检查点
-    const defaultCheckpoints = generateDefaultCheckpoints(taskTitle || taskId);
-    defaultCheckpoints.forEach((cp, index) => {
-      // 搜索代码库以找到相关文件
-      const searchResults = searchCodebaseForCriteria(cp, cwd);
-
-      // 使用智能检查点生成
-      const checkpoint = generateSmartCheckpoints(taskId, cp, searchResults, index);
-
-      // 确保时间戳正确
-      checkpoint.createdAt = now;
-      checkpoint.updatedAt = now;
-      checkpoint.status = 'pending';
-
-      checkpoints.push(checkpoint);
-    });
+    }
   }
 
   return checkpoints;
@@ -1845,9 +2265,20 @@ export async function fixCheckpoints(
   cwd: string = process.cwd(),
   options: { nonInteractive?: boolean; taskId?: string } = {}
 ): Promise<void> {
+  // 读取 analyze 配置，检查是否允许自动生成
+  const analyzeConfig = readAnalyzeConfig(cwd);
+  if (analyzeConfig.autoGenerateCheckpoints === false) {
+    console.log('');
+    console.log('⏭️  检查点自动生成已禁用 (analyze.autoGenerateCheckpoints = false)');
+    console.log('   提示: 在 .projmnt4claude/config.json 中设置 analyze.autoGenerateCheckpoints = true 以启用');
+    console.log('');
+    return;
+  }
+
+  const generatorLabel = analyzeConfig.checkpointGenerator === 'simple' ? '简单' : '智能';
   console.log('');
   console.log('━'.repeat(60));
-  console.log('🔧 智能生成检查点');
+  console.log(`🔧 ${generatorLabel}生成检查点 (模式: ${analyzeConfig.checkpointGenerator})`);
   console.log('━'.repeat(60));
   console.log('');
 

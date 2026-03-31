@@ -1703,6 +1703,83 @@ export async function deleteTask(taskId: string, force: boolean = false, cwd: st
 }
 
 /**
+ * 清除 abandoned 任务（物理删除归档目录）
+ */
+export function purgeTasks(options: { force?: boolean; json?: boolean } = {}, cwd: string = process.cwd()): void {
+  if (!isInitialized(cwd)) {
+    console.error('错误: 项目未初始化。请先运行 `projmnt4claude setup`');
+    process.exit(1);
+  }
+
+  const archiveDir = getArchiveDir(cwd);
+
+  if (!fs.existsSync(archiveDir)) {
+    const msg = '没有需要清除的 abandoned 任务';
+    if (options.json) {
+      console.log(JSON.stringify({ purged: 0, message: msg }));
+    } else {
+      console.log(msg);
+    }
+    return;
+  }
+
+  // 读取归档目录中的 abandoned 任务
+  const abandonedDirs = fs.readdirSync(archiveDir)
+    .filter(name => {
+      const dirPath = path.join(archiveDir, name);
+      if (!fs.statSync(dirPath).isDirectory()) return false;
+      const metaPath = path.join(dirPath, 'meta.json');
+      if (!fs.existsSync(metaPath)) return false;
+      try {
+        const meta = JSON.parse(fs.readFileSync(metaPath, 'utf-8'));
+        return meta.status === 'abandoned';
+      } catch {
+        return false;
+      }
+    });
+
+  if (abandonedDirs.length === 0) {
+    const msg = '没有需要清除的 abandoned 任务';
+    if (options.json) {
+      console.log(JSON.stringify({ purged: 0, message: msg }));
+    } else {
+      console.log(msg);
+    }
+    return;
+  }
+
+  // 确认删除
+  if (!options.force) {
+    console.log(`发现 ${abandonedDirs.length} 个 abandoned 任务:`);
+    for (const dir of abandonedDirs) {
+      console.log(`  - ${dir}`);
+    }
+    if (!process.stdout.isTTY) {
+      console.log('\n使用 --force 或 -y 确认删除');
+      return;
+    }
+    return;
+  }
+
+  let purged = 0;
+  for (const dir of abandonedDirs) {
+    const dirPath = path.join(archiveDir, dir);
+    try {
+      fs.rmSync(dirPath, { recursive: true, force: true });
+      purged++;
+    } catch (e) {
+      console.error(`删除 ${dir} 失败: ${e}`);
+    }
+  }
+
+  if (options.json) {
+    console.log(JSON.stringify({ purged, total: abandonedDirs.length }));
+  } else {
+    console.log(`✅ 已清除 ${purged}/${abandonedDirs.length} 个 abandoned 任务`);
+  }
+}
+
+/**
  * 添加任务依赖
  */
 export function addDependency(taskId: string, depId: string, cwd: string = process.cwd()): void {

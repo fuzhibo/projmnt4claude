@@ -1,8 +1,8 @@
 import * as path from 'path';
 import * as fs from 'fs';
 import { getTasksDir, isInitialized } from './path';
-import type { TaskMeta, TaskHistoryEntry, TaskStatus, TaskRole } from '../types/task';
-import { createDefaultTaskMeta, isValidTaskId, generateNextTaskId, generateTaskId } from '../types/task';
+import type { TaskMeta, TaskHistoryEntry, TaskStatus, TaskRole, TaskVerification, VerificationMethod, TaskType, TaskPriority } from '../types/task';
+import { createDefaultTaskMeta, isValidTaskId, generateNextTaskId, generateTaskId, parseTaskId } from '../types/task';
 
 /**
  * 获取任务目录路径
@@ -84,13 +84,30 @@ export function writeTaskMeta(task: TaskMeta, cwd: string = process.cwd()): void
           });
         }
       } else if (JSON.stringify(oldValue) !== JSON.stringify(newValue)) {
+        const oldStr = String(oldValue ?? '无');
+        const newStr = String(newValue ?? '无');
+
+        // 历史记录去重：检查最后一条同字段记录
+        const lastFieldEntry = [...(oldTask?.history || [])].reverse().find(e => e.field === field);
+        if (lastFieldEntry) {
+          // 相同状态变更不记录
+          if (lastFieldEntry.oldValue === oldStr && lastFieldEntry.newValue === newStr) {
+            continue;
+          }
+          // 1分钟内重复变更去重
+          const lastTime = new Date(lastFieldEntry.timestamp).getTime();
+          if (Date.now() - lastTime < 60_000 && lastFieldEntry.newValue === newStr) {
+            continue;
+          }
+        }
+
         // 其他字段的变更
         historyEntries.push({
           timestamp: new Date().toISOString(),
           action: `更新${field}`,
           field,
-          oldValue: String(oldValue ?? '无'),
-          newValue: String(newValue ?? '无'),
+          oldValue: oldStr,
+          newValue: newStr,
           user: process.env.USER || undefined,
         });
       }
@@ -335,8 +352,45 @@ export function getParentTask(
 // ============================================================
 
 /**
+ * 检查是否应该记录历史变更（去重逻辑）
+ * 1. 如果新值与当前值相同，不记录
+ * 2. 如果最后一条历史记录在1分钟内有相同的变更，不记录
+ */
+function shouldRecordHistory(
+  history: TaskHistoryEntry[],
+  field: string,
+  oldValue: string | undefined,
+  newValue: string | undefined
+): boolean {
+  // 新值与旧值相同，不需要记录
+  if (oldValue === newValue) {
+    return false;
+  }
+
+  // 检查最后一条历史记录
+  const lastEntry = history[history.length - 1];
+  if (lastEntry && lastEntry.field === field) {
+    // 检查是否在1分钟内有相同的变更
+    const lastTime = new Date(lastEntry.timestamp).getTime();
+    const now = Date.now();
+    const oneMinuteMs = 60 * 1000;
+
+    if (
+      now - lastTime < oneMinuteMs &&
+      lastEntry.oldValue === oldValue &&
+      lastEntry.newValue === newValue
+    ) {
+      return false;
+    }
+  }
+
+  return true;
+}
+
+/**
  * 程序化更新任务状态
  * 直接修改 meta.json，不依赖 AI 上下文
+ * 当状态变为 resolved 时，自动填充 verification 字段
  */
 export function updateTaskStatus(
   taskId: string,
@@ -350,21 +404,85 @@ export function updateTaskStatus(
   }
 
   const oldStatus = task.status;
+
+  // 去重：如果状态没有变化，直接返回
+  if (oldStatus === status) {
+    return;
+  }
+
   task.status = status;
   task.updatedAt = new Date().toISOString();
 
-  // 添加历史记录
-  task.history.push({
-    timestamp: new Date().toISOString(),
-    action: `状态变更: ${oldStatus} → ${status}`,
-    field: 'status',
-    oldValue: oldStatus,
-    newValue: status,
-    reason,
-    user: process.env.USER || undefined,
-  });
+  // 当状态变为 resolved 时，自动填充 verification 字段
+  if (status === 'resolved' && !task.verification) {
+    task.verification = buildTaskVerification(task);
+  }
+
+  // 添加历史记录（带去重检查）
+  if (shouldRecordHistory(task.history, 'status', oldStatus, status)) {
+    task.history.push({
+      timestamp: new Date().toISOString(),
+      action: `状态变更: ${oldStatus} → ${status}`,
+      field: 'status',
+      oldValue: oldStatus,
+      newValue: status,
+      reason,
+      user: process.env.USER || undefined,
+    });
+  }
 
   writeTaskMeta(task, cwd);
+}
+
+/**
+ * 构建任务验证信息
+ * 基于检查点状态计算验证结果
+ */
+export function buildTaskVerification(task: TaskMeta): TaskVerification {
+  const now = new Date().toISOString();
+  const checkpoints = task.checkpoints || [];
+
+  // 收集所有验证方法
+  const methods = new Set<VerificationMethod>();
+  let completedCount = 0;
+  let failedCount = 0;
+
+  for (const cp of checkpoints) {
+    if (cp.verification?.method) {
+      methods.add(cp.verification.method);
+    }
+    if (cp.status === 'completed') {
+      completedCount++;
+    } else if (cp.status === 'failed') {
+      failedCount++;
+    }
+  }
+
+  // 计算检查点完成率
+  const checkpointCompletionRate = checkpoints.length > 0
+    ? Math.round((completedCount / checkpoints.length) * 100)
+    : 100; // 无检查点时默认 100%
+
+  // 确定验证结果
+  let result: 'passed' | 'partial' | 'failed';
+  if (checkpointCompletionRate === 100 && failedCount === 0) {
+    result = 'passed';
+  } else if (checkpointCompletionRate >= 50 && failedCount === 0) {
+    result = 'partial';
+  } else {
+    result = 'failed';
+  }
+
+  return {
+    verifiedAt: now,
+    verifiedBy: process.env.USER || 'system',
+    methods: Array.from(methods),
+    checkpointCompletionRate,
+    result,
+    note: checkpoints.length === 0
+      ? '任务无检查点，自动通过验证'
+      : `完成 ${completedCount}/${checkpoints.length} 个检查点`,
+  };
 }
 
 /**
@@ -429,4 +547,132 @@ export function incrementReopenCount(
   });
 
   writeTaskMeta(task, cwd);
+}
+
+/**
+ * 重命名任务：修改任务目录名和 ID
+ * 同时更新所有引用该任务的其他任务
+ * @returns 新的任务 ID
+ */
+export function renameTask(
+  oldTaskId: string,
+  newTaskId: string,
+  cwd: string = process.cwd()
+): { success: boolean; oldId: string; newId: string; error?: string } {
+  // 1. 验证旧任务存在
+  const task = readTaskMeta(oldTaskId, cwd);
+  if (!task) {
+    return { success: false, oldId: oldTaskId, newId: newTaskId, error: `任务 '${oldTaskId}' 不存在` };
+  }
+
+  // 2. 验证新 ID 不与已有任务冲突
+  if (oldTaskId !== newTaskId && taskExists(newTaskId, cwd)) {
+    return { success: false, oldId: oldTaskId, newId: newTaskId, error: `目标 ID '${newTaskId}' 已被占用` };
+  }
+
+  const tasksDir = getTasksDir(cwd);
+  const oldDir = path.join(tasksDir, oldTaskId);
+  const newDir = path.join(tasksDir, newTaskId);
+
+  // 3. 更新 meta.json 中的 id
+  task.id = newTaskId;
+  task.updatedAt = new Date().toISOString();
+  task.history.push({
+    timestamp: new Date().toISOString(),
+    action: `任务重命名: ${oldTaskId} → ${newTaskId}`,
+    field: 'id',
+    oldValue: oldTaskId,
+    newValue: newTaskId,
+    user: process.env.USER || undefined,
+  });
+
+  // 4. 如果目录名需要改变，先写入新位置再删除旧目录
+  if (oldTaskId !== newTaskId) {
+    // 创建新目录并写入 meta.json
+    if (!fs.existsSync(newDir)) {
+      fs.mkdirSync(newDir, { recursive: true });
+    }
+    const newMetaPath = path.join(newDir, 'meta.json');
+    fs.writeFileSync(newMetaPath, JSON.stringify(task, null, 2), 'utf-8');
+
+    // 复制其他文件（checkpoint.md, contract.json 等）
+    const oldFiles = fs.readdirSync(oldDir);
+    for (const file of oldFiles) {
+      if (file === 'meta.json') continue; // 已写入
+      const srcPath = path.join(oldDir, file);
+      const dstPath = path.join(newDir, file);
+      if (!fs.existsSync(dstPath)) {
+        fs.copyFileSync(srcPath, dstPath);
+      }
+    }
+
+    // 删除旧目录
+    try {
+      fs.rmSync(oldDir, { recursive: true, force: true });
+    } catch {
+      // 旧目录删除失败不影响主流程
+    }
+  } else {
+    // ID 没变，只需更新 meta.json
+    writeTaskMeta(task, cwd);
+  }
+
+  // 5. 更新其他任务中的引用
+  updateTaskReferences(oldTaskId, newTaskId, cwd);
+
+  return { success: true, oldId: oldTaskId, newId: newTaskId };
+}
+
+/**
+ * 更新所有任务中对 oldId 的引用为 newId
+ * 涉及: dependencies, parentId, subtaskIds
+ */
+function updateTaskReferences(oldId: string, newId: string, cwd: string): void {
+  if (oldId === newId) return;
+
+  const allIds = getAllTaskIds(cwd);
+  for (const tid of allIds) {
+    if (tid === oldId || tid === newId) continue; // 跳过自身
+    const task = readTaskMeta(tid, cwd);
+    if (!task) continue;
+
+    let changed = false;
+
+    // 更新 dependencies
+    if (task.dependencies) {
+      const idx = task.dependencies.indexOf(oldId);
+      if (idx !== -1) {
+        task.dependencies[idx] = newId;
+        changed = true;
+      }
+    }
+
+    // 更新 parentId
+    if (task.parentId === oldId) {
+      task.parentId = newId;
+      changed = true;
+    }
+
+    // 更新 subtaskIds
+    if (task.subtaskIds) {
+      const idx = task.subtaskIds.indexOf(oldId);
+      if (idx !== -1) {
+        task.subtaskIds[idx] = newId;
+        changed = true;
+      }
+    }
+
+    if (changed) {
+      task.updatedAt = new Date().toISOString();
+      task.history.push({
+        timestamp: new Date().toISOString(),
+        action: `引用更新: ${oldId} → ${newId}`,
+        field: 'reference_update',
+        oldValue: oldId,
+        newValue: newId,
+        user: process.env.USER || undefined,
+      });
+      writeTaskMeta(task, cwd);
+    }
+  }
 }

@@ -100,6 +100,25 @@ export interface CheckpointVerification {
 }
 
 /**
+ * 任务级验证信息
+ * 当任务状态变为 resolved 时自动填充
+ */
+export interface TaskVerification {
+  /** 验证时间 (resolved 时间) */
+  verifiedAt: string;
+  /** 验证者 (system 或用户名) */
+  verifiedBy: string;
+  /** 验证方法汇总 (来自检查点) */
+  methods?: VerificationMethod[];
+  /** 检查点完成率 */
+  checkpointCompletionRate?: number;
+  /** 验证结果: passed | partial | failed */
+  result: 'passed' | 'partial' | 'failed';
+  /** 备注 */
+  note?: string;
+}
+
+/**
  * 任务级 Hook 类型
  */
 export type TaskHookType =
@@ -216,6 +235,7 @@ export interface TaskMeta {
   history: TaskHistoryEntry[]; // 历史记录
   reopenCount?: number;    // 重开次数（任务被重新打开的次数）
   requirementHistory?: RequirementHistoryEntry[]; // 需求变更历史
+  verification?: TaskVerification; // 任务级验证信息（resolved时自动填充）
 }
 
 /**
@@ -359,20 +379,32 @@ export function generateTaskId(
   existingIds: string[] = []
 ): string {
   // 从标题生成 slug
-  let slug = title
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, '-')
-    .replace(/^-+|-+$/g, '')
-    .substring(0, 40);
+  // 第一步：尝试提取 ASCII 单词和数字
+  const asciiParts = title.match(/[a-zA-Z][a-zA-Z0-9]*|\d+/g);
+  let slug: string;
 
-  // 中文标题（或纯非ASCII标题）经过上述处理后 slug 为空，
-  // 使用标题的短哈希作为有意义的标识
-  if (!slug) {
+  if (asciiParts && asciiParts.length > 0) {
+    // 标题包含英文/数字部分，直接使用
+    slug = asciiParts
+      .join('-')
+      .toLowerCase()
+      .substring(0, 40);
+  } else {
+    // 纯非ASCII标题（如中文），使用类型缩写+哈希生成有意义标识
+    const typePrefix: Record<string, string> = {
+      feature: 'feat',
+      bugfix: 'fix',
+      refactor: 'ref',
+      docs: 'doc',
+      test: 'test',
+      chore: 'chore',
+    };
     let hash = 0;
     for (let i = 0; i < title.length; i++) {
       hash = ((hash << 5) - hash + title.charCodeAt(i)) | 0;
     }
-    slug = `t${Math.abs(hash).toString(36)}`;
+    const prefix = typePrefix[type] || 'task';
+    slug = `${prefix}-${Math.abs(hash).toString(36)}`;
   }
 
   // 生成日期字符串

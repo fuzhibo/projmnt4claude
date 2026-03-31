@@ -26,6 +26,7 @@ import {
   submitTask,
   validateTask,
   countTasks,
+  purgeTasks,
 } from './commands/task';
 import {
   showPlan,
@@ -46,6 +47,8 @@ import {
   analyzeProject,
   showAnalysis,
   fixIssues,
+  fixVerification,
+  fixStatus,
   showStatus,
   fixCheckpoints,
 } from './commands/analyze';
@@ -144,7 +147,7 @@ program
 // task 命令组
 program
   .command('task <action> [id]')
-  .description('管理任务 (create/list/show/update/delete/execute/checkpoint/dependency/add-subtask/status-guide/complete/split/search/batch-update/count)')
+  .description('管理任务 (create/list/show/update/delete/purge/execute/checkpoint/dependency/add-subtask/status-guide/complete/split/search/batch-update/count)')
   .allowExcessArguments(true)
   .option('-s, --status <status>', '按状态过滤 (仅 list)')
   .option('-p, --priority <priority>', '按优先级过滤 (仅 list)')
@@ -233,6 +236,12 @@ program
           process.exit(1);
         }
         await deleteTask(id);
+        break;
+      case 'purge':
+        purgeTasks({
+          force: options.yes,
+          json: options.json || program.opts().json || false,
+        });
         break;
       case 'execute':
         if (!id) {
@@ -444,7 +453,7 @@ program
         break;
       }
       default:
-        console.error(`错误: 未知操作 '${action}'。支持的操作: create, list, show, update, delete, execute, checkpoint, dependency, discuss, add-subtask, sync-children, split, search, batch-update, submit, validate, history, status-guide, complete, count`);
+        console.error(`错误: 未知操作 '${action}'。支持的操作: create, list, show, update, delete, purge, execute, checkpoint, dependency, discuss, add-subtask, sync-children, split, search, batch-update, submit, validate, history, status-guide, complete, count`);
         process.exit(1);
     }
   });
@@ -458,7 +467,7 @@ program
   .option('-a, --after <taskId>', '在指定任务之后添加 (仅 add)')
   .option('-y, --yes', '非交互模式，自动应用推荐 (仅 recommend)')
   .option('-q, --query <query>', '用户描述/关键字过滤 (仅 recommend)')
-  .option('--all', '包含 abandoned 状态的任务 (仅 recommend)')
+  .option('--all', '显示全部状态任务，默认仅推荐 open (仅 recommend)')
   .action(async (action, id, options) => {
     requireInit();
     switch (action) {
@@ -568,8 +577,10 @@ program
 program
   .command('analyze')
   .description('分析项目健康状态')
-  .option('--fix', '自动修复检测到的问题')
+  .option('--fix', '自动修复所有可修复的问题')
   .option('--fix-checkpoints', '智能生成缺失的检查点')
+  .option('--fix-verification', '仅修复验证方法问题 (manual -> automated)')
+  .option('--fix-status', '仅修复状态相关问题 (状态格式、优先级、时间戳等)')
   .option('-y, --yes', '非交互模式：自动修复可修复的问题')
   .option('--compact', '使用简洁分隔符')
   .option('--task <taskId>', '指定任务ID (仅 --fix-checkpoints)')
@@ -577,8 +588,12 @@ program
     requireInit();
     if (options.fixCheckpoints) {
       await fixCheckpoints(process.cwd(), { nonInteractive: options.yes, taskId: options.task });
+    } else if (options.fixVerification) {
+      await fixVerification(process.cwd(), options.yes);
+    } else if (options.fixStatus) {
+      await fixStatus(process.cwd(), options.yes);
     } else if (options.fix) {
-      await fixIssues(process.cwd(), options.yes);
+      await fixIssues(process.cwd(), { nonInteractive: options.yes, fixType: 'all' });
     } else {
       showAnalysis({ compact: options.compact });
     }
@@ -643,7 +658,13 @@ program
 // init-requirement 命令
 program
   .command('init-requirement <description>')
-  .description('从自然语言需求描述创建任务，自动解析需求并生成任务结构\n示例: init-requirement "实现用户登录功能，包含表单验证和 JWT 认证"')
+  .description('从自然语言需求描述创建任务，自动解析需求并生成任务结构\n\n' +
+    '自动分析: 优先级(P0-P3)、推荐角色、复杂度、检查点、依赖\n' +
+    '示例:\n' +
+    '  init-requirement "实现用户登录API接口，需要高优先级处理"\n' +
+    '  init-requirement -y "紧急修复线上支付接口超时问题"\n' +
+    '  init-requirement -y --no-plan "为认证模块编写单元测试"\n\n' +
+    '前提: 需先运行 projmnt4claude setup 初始化项目')
   .option('-y, --yes', '非交互模式：跳过所有确认，直接使用分析结果创建任务')
   .option('--no-plan', '创建任务后不询问是否添加到执行计划')
   .option('--skip-validation', '跳过 checkpoints 质量校验')

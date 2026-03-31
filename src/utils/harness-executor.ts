@@ -24,6 +24,7 @@ import {
 import { TaskMeta } from '../types/task.js';
 import { getProjectDir } from './path.js';
 import { readTaskMeta } from './task.js';
+import { classifyExitResult } from './harness-helpers.js';
 
 export class HarnessExecutor {
   private config: HarnessConfig;
@@ -305,11 +306,12 @@ export class HarnessExecutor {
     return new Promise((resolve) => {
       // 注意：--allowedTools 必须在 --print 之前，否则 Claude CLI 会报错
       // "Input must be provided either through stdin or as a prompt argument when using --print"
+      // 注意：prompt 通过 stdin 传递，而不是命令行参数
+      // 这样可以避免多行文本作为命令行参数时的解析问题
       const args = [
         '--allowedTools', options.allowedTools.join(','),
         '--print',  // 非交互模式
         '--dangerously-skip-permissions',  // 跳过权限确认（自动化模式必需）
-        options.prompt,
       ];
 
       let command = 'claude';
@@ -319,8 +321,14 @@ export class HarnessExecutor {
         // 使用 spawn 执行（不使用 spawn 的 timeout，因为它会发送 SIGTERM）
         const child = spawn(command, commandArgs, {
           cwd: options.cwd,
-          stdio: ['ignore', 'pipe', 'pipe'],
+          stdio: ['pipe', 'pipe', 'pipe'],  // stdin 改为 pipe 以支持写入
         });
+
+        // 通过 stdin 传递 prompt
+        if (child.stdin) {
+          child.stdin.write(options.prompt);
+          child.stdin.end();
+        }
 
         let stdout = '';
         let stderr = '';
@@ -363,37 +371,16 @@ export class HarnessExecutor {
             return;
           }
 
-          // 使用智能判断区分 hook 失败和任务失败
-          const isHookError = /hook\s+.*\s+failed/i.test(stderr)
-            || /Hook cancelled/i.test(stderr)
-            || /SessionEnd\s+hook/i.test(stderr);
-          const hasOutput = stdout.trim().length > 0;
-
-          let success = code === 0;
-          let error: string | undefined;
-          let hookWarning: string | undefined;
-
-          if (code !== 0) {
-            if (isHookError && hasOutput) {
-              // Hook 失败但任务有有效输出 → 视为成功
-              success = true;
-              hookWarning = `Hook 错误已忽略: ${stderr.substring(0, 200)}`;
-            } else if (isHookError && !hasOutput) {
-              success = false;
-              error = `Hook 错误导致无输出: ${stderr.substring(0, 200)}`;
-            } else {
-              success = false;
-              error = stderr || `进程退出码: ${code}`;
-            }
-          }
+          // 使用共享函数智能判断区分 hook 失败和任务失败
+          const classified = classifyExitResult(code, stderr, stdout);
 
           resolve({
-            success,
+            success: classified.success,
             output: stdout,
             exitCode: code ?? 1,
             duration,
-            error,
-            hookWarning,
+            error: classified.error,
+            hookWarning: classified.hookWarning,
           });
         });
 

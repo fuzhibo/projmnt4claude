@@ -320,6 +320,8 @@ export interface HeadlessClaudeResult {
   duration: number;
   /** 错误信息 */
   error?: string;
+  /** Hook 错误隔离警告 */
+  hookWarning?: string;
 }
 
 /**

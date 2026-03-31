@@ -13,24 +13,43 @@ argument-hint: "<description>"
 
 执行此命令后：
 1. CLI 会显示需求分析结果
-2. CLI 会询问用户确认（非交互模式自动确认）
+2. CLI 会询问用户确认
 3. CLI 会创建任务文件（meta.json 和 checkpoint.md）
-4. CLI 会询问是否添加到执行计划（非交互模式跳过）
+4. CLI 会询问是否添加到执行计划
+
+**禁止行为**：
+- 不要在获取分析结果后直接在上下文中规划执行
+- 不要跳过 CLI 的交互式确认步骤
+
+**正确行为**：
+- 让 CLI 完成整个创建流程
+- 创建完成后，可从 `.projmnt4claude/tasks/` 读取任务信息
+- 如果上下文丢失，可从 `.projmnt4claude` 恢复项目状态
+
+## 前提条件
+
+运行此命令前，需要先初始化项目：
+```bash
+projmnt4claude setup
+```
 
 ## 执行方式
 
-### 交互模式（默认）
+### 交互模式（默认，适合人工使用）
 ```bash
-node ${CLAUDE_PLUGIN_ROOT}/dist/projmnt4claude.js init-requirement "<需求描述>"
+node ${CLAUDE_PLUGIN_ROOT}/skills/projmnt4claude/dist/projmnt4claude.js init-requirement "<需求描述>"
 ```
 
 ### 非交互模式（推荐 AI 使用）
 ```bash
 # 使用 -y 或 --yes 跳过所有确认
-node ${CLAUDE_PLUGIN_ROOT}/dist/projmnt4claude.js init-requirement -y "<需求描述>"
+node ${CLAUDE_PLUGIN_ROOT}/skills/projmnt4claude/dist/projmnt4claude.js init-requirement -y "<需求描述>"
 
 # 同时跳过添加到计划的询问
-node ${CLAUDE_PLUGIN_ROOT}/dist/projmnt4claude.js init-requirement -y --no-plan "<需求描述>"
+node ${CLAUDE_PLUGIN_ROOT}/skills/projmnt4claude/dist/projmnt4claude.js init-requirement -y --no-plan "<需求描述>"
+
+# 跳过 checkpoint 质量校验
+node ${CLAUDE_PLUGIN_ROOT}/skills/projmnt4claude/dist/projmnt4claude.js init-requirement -y --skip-validation "<需求描述>"
 ```
 
 ## 命令选项
@@ -39,27 +58,41 @@ node ${CLAUDE_PLUGIN_ROOT}/dist/projmnt4claude.js init-requirement -y --no-plan 
 |------|------|
 | `-y, --yes` | 非交互模式：跳过所有确认，直接使用分析结果创建任务 |
 | `--no-plan` | 创建任务后不询问是否添加到执行计划 |
+| `--skip-validation` | 跳过 checkpoint 质量校验（不推荐） |
 
-## 功能
+## 自动分析功能
 
-- 自动检测优先级（紧急/重要/低）
-- 自动识别推荐角色（前端/后端/测试等）
-- 估算任务复杂度
-- 生成建议检查点
-- 识别潜在依赖
-- **非交互模式支持**：适合 AI 自动化调用
+| 分析维度 | 说明 | 示例关键词 |
+|----------|------|-----------|
+| 优先级 | P0-P3 四级 | 紧急→P0, 重要→P1, 可选→P3 |
+| 推荐角色 | 匹配最佳执行角色 | UI→frontend, API→backend |
+| 复杂度 | low/medium/high | 重构→high, 修复→low |
+| 检查点 | 根据任务类型生成 | API任务→设计/实现/文档/测试 |
+| 依赖 | 识别潜在依赖 | 登录→依赖认证基础功能 |
 
-## 示例
+## 使用示例
 
 ```bash
 # 创建 API 任务（非交互模式）
-node ${CLAUDE_PLUGIN_ROOT}/dist/projmnt4claude.js init-requirement -y "实现一个用户登录API接口，需要高优先级处理"
+node ${CLAUDE_PLUGIN_ROOT}/skills/projmnt4claude/dist/projmnt4claude.js init-requirement -y "实现一个用户登录API接口，需要高优先级处理"
 
-# 创建前端任务（非交互模式）
-node ${CLAUDE_PLUGIN_ROOT}/dist/projmnt4claude.js init-requirement -y "设计并实现用户个人中心页面，包含头像上传和资料编辑"
+# 创建前端任务
+node ${CLAUDE_PLUGIN_ROOT}/skills/projmnt4claude/dist/projmnt4claude.js init-requirement -y "设计并实现用户个人中心页面，包含头像上传和资料编辑"
+
+# 创建紧急修复任务
+node ${CLAUDE_PLUGIN_ROOT}/skills/projmnt4claude/dist/projmnt4claude.js init-requirement -y "紧急修复线上支付接口超时问题"
 
 # 创建测试任务
-node ${CLAUDE_PLUGIN_ROOT}/dist/projmnt4claude.js init-requirement -y "为认证模块编写单元测试和集成测试"
+node ${CLAUDE_PLUGIN_ROOT}/skills/projmnt4claude/dist/projmnt4claude.js init-requirement -y "为认证模块编写单元测试和集成测试"
+
+# 创建文档任务
+node ${CLAUDE_PLUGIN_ROOT}/skills/projmnt4claude/dist/projmnt4claude.js init-requirement -y "为 API 模块编写使用文档"
+
+# 创建安全任务
+node ${CLAUDE_PLUGIN_ROOT}/skills/projmnt4claude/dist/projmnt4claude.js init-requirement -y "修复用户输入未做 XSS 过滤的安全漏洞"
+
+# 创建数据库任务
+node ${CLAUDE_PLUGIN_ROOT}/skills/projmnt4claude/dist/projmnt4claude.js init-requirement -y "设计并创建用户表的数据库迁移脚本"
 ```
 
 ## 关键词识别
@@ -77,3 +110,23 @@ node ${CLAUDE_PLUGIN_ROOT}/dist/projmnt4claude.js init-requirement -y "为认证
 - 文档/document/readme → writer
 - 安全/security/漏洞 → security
 - 性能/performance/优化 → performance
+- 架构/architecture/设计 → architect
+
+### 复杂度关键词
+- 重构/refactor/架构/迁移/集成/系统 → high
+- 修复/fix/更新/添加/修改/调整 → low
+- 其他 → medium（默认）
+
+## 常见问题
+
+**Q: 提示"项目未初始化"怎么办？**
+A: 先运行 `projmnt4claude setup` 初始化项目管理目录。
+
+**Q: 分析结果不准确怎么办？**
+A: 在交互模式下可以手动编辑每个字段。非交互模式下可以之后用 `task update` 修改。
+
+**Q: 如何查看已创建的任务？**
+A: 运行 `projmnt4claude task list` 查看所有任务。
+
+**Q: 如何修改已创建任务的优先级？**
+A: 运行 `projmnt4claude task update <taskId> --priority P1`。
