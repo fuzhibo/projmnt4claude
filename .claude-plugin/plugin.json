@@ -1,6 +1,6 @@
 {
   "name": "projmnt4claude",
-   "version": "1.13.9",
+   "version": "1.13.10",
   "description": "Claude Code 项目管理技能 - 提供任务管理、执行计划、工具箱、钩子系统、分支集成、子任务管理等功能",
   "author": {
     "name": "fuzhibo"

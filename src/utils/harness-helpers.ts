@@ -59,20 +59,25 @@ export interface ParsedVerdict {
 
 export async function runHeadlessClaude(options: HeadlessClaudeOptions): Promise<HeadlessClaudeResult> {
   return new Promise((resolve) => {
-    // 注意：--allowedTools 必须在 --print 之前，否则 Claude CLI 会报错
-    // "Input must be provided either through stdin or as a prompt argument when using --print"
+    // 注意：prompt 通过 stdin 传递，而不是命令行参数
+    // 这样可以避免多行文本作为命令行参数时的解析问题
     const args = [
       '--allowedTools', options.allowedTools.join(','),
       '--print',
-      options.prompt,
     ];
 
     try {
       const child = spawn('claude', args, {
         cwd: options.cwd,
-        stdio: ['ignore', 'pipe', 'pipe'],
+        stdio: ['pipe', 'pipe', 'pipe'],  // stdin 改为 pipe 以支持写入
         timeout: options.timeout * 1000,
       });
+
+      // 通过 stdin 传递 prompt
+      if (child.stdin) {
+        child.stdin.write(options.prompt);
+        child.stdin.end();
+      }
 
       let stdout = '';
       let stderr = '';

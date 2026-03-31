@@ -1739,6 +1739,34 @@ function generateDefaultCheckpoints(taskTitle: string): string[] {
 }
 
 /**
+ * 从任务描述提取验收标准
+ * 与 harness-executor.ts 中的 extractAcceptanceCriteria 逻辑一致
+ */
+function extractAcceptanceCriteriaFromDescription(description: string): string[] {
+  const criteria: string[] = [];
+
+  // 尝试提取列表项
+  const lines = description.split('\n');
+  for (const line of lines) {
+    const trimmed = line.trim();
+    // 匹配 "- [ ] xxx" 或 "- xxx" 或 "1. xxx" 格式
+    if (/^[-*]\s*(?:\[[ x]\])?\s*(.+)/.test(trimmed) || /^\d+\.\s*(.+)/.test(trimmed)) {
+      const match = trimmed.match(/^(?:[-*]|\d+\.)\s*(?:\[[ x]\])?\s*(.+)/);
+      if (match && match[1]) {
+        criteria.push(match[1].trim());
+      }
+    }
+  }
+
+  // 如果没有提取到，将整个描述作为一条标准
+  if (criteria.length === 0 && description.trim()) {
+    criteria.push(description.trim());
+  }
+
+  return criteria;
+}
+
+/**
  * 修复单个任务的检查点
  */
 function fixTaskCheckpoints(taskId: string, cwd: string): { fixed: boolean; reason: string } {
@@ -1749,7 +1777,6 @@ function fixTaskCheckpoints(taskId: string, cwd: string): { fixed: boolean; reas
 
   // 读取或创建 contract
   let contract = readContract(taskId, cwd);
-  const isNewContract = !contract;
 
   if (!contract) {
     const now = new Date().toISOString();
@@ -1768,10 +1795,18 @@ function fixTaskCheckpoints(taskId: string, cwd: string): { fixed: boolean; reas
     return { fixed: false, reason: '检查点已存在' };
   }
 
+  // 如果 contract 中没有验收标准，从任务描述中提取
+  let acceptanceCriteria = contract.acceptanceCriteria || [];
+  if (acceptanceCriteria.length === 0 && task.description) {
+    acceptanceCriteria = extractAcceptanceCriteriaFromDescription(task.description);
+    // 将提取的验收标准写回 contract
+    contract.acceptanceCriteria = acceptanceCriteria;
+  }
+
   // 生成检查点（传递 cwd 以启用代码库搜索）
   const checkpoints = generateCheckpointsFromCriteria(
     taskId,
-    contract.acceptanceCriteria || [],
+    acceptanceCriteria,
     task.title,
     cwd
   );
