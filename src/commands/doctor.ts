@@ -9,6 +9,7 @@ import {
   getHooksDir,
 } from '../utils/path';
 import { getAllTaskIds } from '../utils/task';
+import { SEPARATOR_WIDTH } from '../utils/format';
 
 /**
  * 检查结果接口
@@ -26,9 +27,9 @@ interface CheckResult {
  */
 export async function runDoctor(fix: boolean = false, cwd: string = process.cwd()): Promise<void> {
   console.log('');
-  console.log('━'.repeat(60));
+  console.log('━'.repeat(SEPARATOR_WIDTH));
   console.log('🔍 环境诊断');
-  console.log('━'.repeat(60));
+  console.log('━'.repeat(SEPARATOR_WIDTH));
   console.log('');
 
   const results: CheckResult[] = [];
@@ -70,9 +71,9 @@ export async function runDoctor(fix: boolean = false, cwd: string = process.cwd(
   const fixableIssues = results.filter(r => r.status !== 'ok' && r.fixable);
   if (fix && fixableIssues.length > 0) {
     console.log('');
-    console.log('━'.repeat(60));
+    console.log('━'.repeat(SEPARATOR_WIDTH));
     console.log('🔧 自动修复');
-    console.log('━'.repeat(60));
+    console.log('━'.repeat(SEPARATOR_WIDTH));
     console.log('');
 
     await fixIssues(fixableIssues, cwd);
@@ -742,7 +743,7 @@ function displayResults(results: CheckResult[]): void {
   }
 
   console.log('');
-  console.log('━'.repeat(60));
+  console.log('━'.repeat(SEPARATOR_WIDTH));
   console.log(`📊 汇总: ${errorCount} 错误, ${warningCount} 警告, ${okCount} 正常`);
 
   if (errorCount === 0 && warningCount === 0) {

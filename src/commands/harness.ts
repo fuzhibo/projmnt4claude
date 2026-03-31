@@ -23,6 +23,7 @@ import { AssemblyLine } from '../utils/hd-assembly-line.js';
 import { HarnessReporter } from '../utils/harness-reporter.js';
 import { readPlan } from '../utils/plan.js';
 import { readTaskMeta } from '../utils/task.js';
+import { SEPARATOR_WIDTH } from '../utils/format';
 import { recommendPlan } from './plan.js';
 
 /**
@@ -91,9 +92,9 @@ export async function harnessCommand(
 
   // 输出配置信息
   if (!config.jsonOutput) {
-    console.log('━'.repeat(60));
+    console.log('━'.repeat(SEPARATOR_WIDTH));
     console.log('🚀 Harness Design 执行模式');
-    console.log('━'.repeat(60));
+    console.log('━'.repeat(SEPARATOR_WIDTH));
     console.log(`📋 计划文件: ${options.plan}`);
     console.log(`📊 任务数量: ${taskQueue.length}`);
     console.log(`🔄 最大重试: ${config.maxRetries}`);
@@ -334,9 +335,9 @@ async function loadTaskQueue(options: HarnessCommandOptions, cwd: string): Promi
  */
 function printSummary(summary: ExecutionSummary): void {
   console.log('');
-  console.log('━'.repeat(60));
+  console.log('━'.repeat(SEPARATOR_WIDTH));
   console.log('📊 执行摘要');
-  console.log('━'.repeat(60));
+  console.log('━'.repeat(SEPARATOR_WIDTH));
   console.log(`   总任务数: ${summary.totalTasks}`);
   console.log(`   ✅ 通过: ${summary.passed}`);
   console.log(`   ❌ 失败: ${summary.failed}`);
@@ -354,15 +355,15 @@ function printSummary(summary: ExecutionSummary): void {
     console.log('');
   }
 
-  console.log('━'.repeat(60));
+  console.log('━'.repeat(SEPARATOR_WIDTH));
   if (summary.failed === 0) {
     console.log('✅ 所有任务执行成功！');
   } else {
     console.log(`⚠️  部分任务失败，请检查报告获取详情`);
   }
   console.log('');
-  console.log('━'.repeat(60));
+  console.log('━'.repeat(SEPARATOR_WIDTH));
   console.log('📊 流水线状态已保存到: .projmnt4claude/harness-status.json');
   console.log('💡 查询进度: cat .projmnt4claude/harness-status.json');
-  console.log('━'.repeat(60));
+  console.log('━'.repeat(SEPARATOR_WIDTH));
 }

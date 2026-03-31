@@ -29,6 +29,40 @@ import {
   isValidTaskId,
 } from '../types/task';
 import * as crypto from 'crypto';
+import { SEPARATOR_WIDTH } from '../utils/format';
+
+/** 历史记录最大显示条数 */
+const MAX_HISTORY_DISPLAY = 20;
+
+/**
+ * 过滤无意义的历史记录
+ * - 过滤掉相同值的状态变更
+ * - 过滤掉无实际内容的系统条目（仅有 action 但无 field/reason/relatedIssue）
+ * - 过滤掉纯信息提示类条目（如"查看任务"、"同步检查点"等）
+ */
+const NOISE_ACTIONS = new Set([
+  '查看任务', '同步检查点', '任务信息', '加载任务',
+  '初始化任务', '读取任务', '检查状态', '同步状态',
+]);
+
+function filterMeaningfulHistory(history: TaskHistoryEntry[]): TaskHistoryEntry[] {
+  return history.filter(entry => {
+    // 有字段变更的：仅保留值实际改变的
+    if (entry.field) {
+      return entry.oldValue !== entry.newValue;
+    }
+    // 无字段变更的条目：过滤噪音 action
+    if (NOISE_ACTIONS.has(entry.action)) {
+      return false;
+    }
+    // 有 reason 或 relatedIssue 的保留
+    if (entry.reason || entry.relatedIssue || entry.verificationDetails) {
+      return true;
+    }
+    // 其余无字段变更条目保留（如"添加完成说明"等有意义的操作）
+    return true;
+  });
+}
 
 /**
  * 检查点数据结构
@@ -149,9 +183,9 @@ const DEFAULT_CHECKPOINT_CONTENT = `# {taskId} 检查点
  */
 export function displayCheckpointCreationWarning(taskId: string, cwd: string): void {
   console.log('');
-  console.log('━'.repeat(60));
+  console.log('━'.repeat(SEPARATOR_WIDTH));
   console.log('⚠️  检查点质量提醒');
-  console.log('━'.repeat(60));
+  console.log('━'.repeat(SEPARATOR_WIDTH));
   console.log('');
   console.log('任务已创建，但检查点目前使用的是默认模板。');
   console.log('📋 高质量检查点对于任务验收至关重要。建议您：');
@@ -166,7 +200,7 @@ export function displayCheckpointCreationWarning(taskId: string, cwd: string): v
   console.log(`      projmnt4claude task checkpoint template ${taskId} --apply`);
   console.log('');
   console.log('💡 提示: 任务执行/完成时会进行严格校验');
-  console.log('━'.repeat(60));
+  console.log('━'.repeat(SEPARATOR_WIDTH));
 }
 
 /**
@@ -402,6 +436,10 @@ export function listTasks(
         description: t.description,
         dependencies: t.dependencies,
         recommendedRole: t.recommendedRole,
+        needsDiscussion: t.needsDiscussion,
+        discussionTopics: t.discussionTopics,
+        requirementHistoryCount: t.requirementHistory?.length || 0,
+        reopenCount: t.reopenCount || 0,
         createdAt: t.createdAt,
         updatedAt: t.updatedAt,
       };
@@ -422,9 +460,10 @@ export function listTasks(
     const priority = formatPriority(task.priority).padEnd(8);
     const status = formatStatus(task.status);
     const discussionIcon = task.needsDiscussion ? ' 💬' : '';
+    const reqChangeIcon = (task.requirementHistory && task.requirementHistory.length > 0) ? ` 📝${task.requirementHistory.length}` : '';
     const subtaskCount = (task.subtaskIds?.length || subtaskMap.get(task.id)?.length || 0);
     const subtaskIcon = subtaskCount > 0 ? ` [${subtaskCount}子任务]` : '';
-    console.log(`${id} | ${title} | ${priority} | ${status}${discussionIcon}${subtaskIcon}`);
+    console.log(`${id} | ${title} | ${priority} | ${status}${discussionIcon}${reqChangeIcon}${subtaskIcon}`);
 
     // 显示子任务
     const subtasks = subtaskMap.get(task.id) || [];
@@ -527,9 +566,9 @@ function displayTasksGrouped(
     const groupTasks = groups.get(groupKey)!;
 
     // 分组标题
-    console.log('━'.repeat(60));
+    console.log('━'.repeat(SEPARATOR_WIDTH));
     console.log(`${getGroupHeader(groupKey)} (${groupTasks.length})`);
-    console.log('━'.repeat(60));
+    console.log('━'.repeat(SEPARATOR_WIDTH));
 
     // 表头
     console.log('ID          | 标题                         | 优先级   | 状态');
@@ -695,6 +734,17 @@ function showTaskCompact(task: TaskMeta, cwd?: string): void {
     }
   }
 
+  // 待讨论提示
+  if (task.needsDiscussion) {
+    const discussionCount = task.discussionTopics?.length || 0;
+    console.log(`   💬 待讨论${discussionCount > 0 ? ` (${discussionCount}个主题)` : ''}`);
+  }
+
+  // 需求变更历史计数
+  if (task.requirementHistory && task.requirementHistory.length > 0) {
+    console.log(`   📝 需求变更: ${task.requirementHistory.length} 次`);
+  }
+
   console.log(`   创建: ${formatRelativeTime(task.createdAt)} · 更新: ${formatRelativeTime(task.updatedAt)}`);
 }
 
@@ -839,35 +889,50 @@ function showTaskPanel(
   const checkpointPath = path.join(taskDir, 'checkpoint.md');
 
   if (fs.existsSync(checkpointPath)) {
-    console.log(`├${hLine}┤`);
+    // --checkpoints 模式使用结构化元数据（支持四态图标）
+    if (options.checkpoints) {
+      const checkpointsMeta = listCheckpoints(task.id, cwd);
 
-    const content = fs.readFileSync(checkpointPath, 'utf-8');
-    const checkpointLines = content.split('\n').filter(l => l.trim().startsWith('- ['));
+      if (checkpointsMeta.length > 0) {
+        console.log(`├${hLine}┤`);
+        const sectionTitle = '📋 检查点';
+        console.log(`│ ${padByDisplayWidth(sectionTitle, width - 3)}│`);
 
-    if (checkpointLines.length > 0) {
-      const completedCount = checkpointLines.filter(l => l.includes('[x]') || l.includes('[X]')).length;
-      const totalCount = checkpointLines.length;
-      const percentage = Math.round((completedCount / totalCount) * 100);
+        const completedCount = checkpointsMeta.filter(cp => cp.status === 'completed').length;
+        const totalCount = checkpointsMeta.length;
+        const percentage = Math.round((completedCount / totalCount) * 100);
+        const barWidth = 20;
+        const bar = '█'.repeat(Math.round((completedCount / totalCount) * barWidth)) + '░'.repeat(barWidth - Math.round((completedCount / totalCount) * barWidth));
+        const progressLine = `   [${bar}] ${completedCount}/${totalCount} (${percentage}%)`;
+        console.log(`│ ${padByDisplayWidth(progressLine, width - 3)}│`);
 
-      // 进度条
-      const barWidth = 20;
-      const filledWidth = Math.round((completedCount / totalCount) * barWidth);
-      const emptyWidth = barWidth - filledWidth;
-      const bar = '█'.repeat(filledWidth) + '░'.repeat(emptyWidth);
-      const progressLine = `📋 [${bar}] ${completedCount}/${totalCount} (${percentage}%)`;
-      console.log(`│ ${padByDisplayWidth(progressLine, width - 3)}│`);
-
-      // 仅 --checkpoints 时显示详细检查点列表
-      if (options.checkpoints) {
-        for (let i = 0; i < checkpointLines.length; i++) {
-          const l = checkpointLines[i]!;
-          const isChecked = l.includes('[x]') || l.includes('[X]');
-          const cpIcon = isChecked ? '✅' : '⬜';
-          const text = l.replace(/- \[[xX ]\] /, '').trim();
-          const maxTextLen = width - 10;
-          const displayText = getDisplayWidth(text) > maxTextLen ? truncateByDisplayWidth(text, maxTextLen) + '..' : text;
+        for (let i = 0; i < checkpointsMeta.length; i++) {
+          const cp = checkpointsMeta[i]!;
+          const cpIcon = cp.status === 'completed' ? '✅' :
+                         cp.status === 'failed' ? '❌' :
+                         cp.status === 'skipped' ? '⏭️' : '⬜';
+          const maxTextLen = width - 12;
+          const displayText = getDisplayWidth(cp.description) > maxTextLen ? truncateByDisplayWidth(cp.description, maxTextLen) + '..' : cp.description;
           console.log(`│  ${padByDisplayWidth(`  ${i + 1}. ${cpIcon} ${displayText}`, width - 4)}│`);
         }
+      }
+    } else {
+      // 默认模式：读取 checkpoint.md 原始内容（两态图标）
+      const content = fs.readFileSync(checkpointPath, 'utf-8');
+      const checkpointLines = content.split('\n').filter(l => l.trim().startsWith('- ['));
+
+      if (checkpointLines.length > 0) {
+        console.log(`├${hLine}┤`);
+        const sectionTitle = '📋 检查点';
+        console.log(`│ ${padByDisplayWidth(sectionTitle, width - 3)}│`);
+
+        const completedCount = checkpointLines.filter(l => l.includes('[x]') || l.includes('[X]')).length;
+        const totalCount = checkpointLines.length;
+        const percentage = Math.round((completedCount / totalCount) * 100);
+        const barWidth = 20;
+        const bar = '█'.repeat(Math.round((completedCount / totalCount) * barWidth)) + '░'.repeat(barWidth - Math.round((completedCount / totalCount) * barWidth));
+        const progressLine = `   [${bar}] ${completedCount}/${totalCount} (${percentage}%)`;
+        console.log(`│ ${padByDisplayWidth(progressLine, width - 3)}│`);
       }
     }
   }
@@ -943,15 +1008,16 @@ function showTaskPanel(
     }
   }
 
-  // 时间行 - 合并创建时间、更新时间、重开次数到紧凑布局
+  // 时间行 - 创建/更新分离，重开次数独立行
   console.log(`├${hLine}┤`);
   const createdTime = formatLocalTime(task.createdAt);
   const updatedTime = formatRelativeTime(task.updatedAt);
-  let timeLine = `📅 ${createdTime} · 更新 ${updatedTime}`;
-  if (task.reopenCount && task.reopenCount > 0) {
-    timeLine += ` · 🔁 重开 ${task.reopenCount} 次`;
-  }
+  const timeLine = `📅 创建: ${createdTime}  ·  更新: ${updatedTime}`;
   console.log(`│ ${padByDisplayWidth(timeLine, width - 3)}│`);
+  if (task.reopenCount && task.reopenCount > 0) {
+    const reopenLine = `🔁 重开: ${task.reopenCount} 次`;
+    console.log(`│ ${padByDisplayWidth(reopenLine, width - 3)}│`);
+  }
 
   console.log(`╰${hLine}╯`);
   console.log('');
@@ -1009,7 +1075,7 @@ function makeSectionHeader(title: string): string {
   const prefix = '  ── ';
   const suffix = ' ';
   const usedWidth = getDisplayWidth(prefix) + getDisplayWidth(title) + getDisplayWidth(suffix);
-  const dashes = '─'.repeat(Math.max(0, 60 - usedWidth));
+  const dashes = '─'.repeat(Math.max(0, SEPARATOR_WIDTH - usedWidth));
   return `${prefix}${title}${suffix}${dashes}`;
 }
 
@@ -1021,7 +1087,7 @@ function showTaskClassic(
   options: { verbose?: boolean; checkpoints?: boolean },
   cwd: string
 ): void {
-  const line = '━'.repeat(60);
+  const line = '━'.repeat(SEPARATOR_WIDTH);
   const statusIcon = getStatusIcon(task.status);
 
   console.log('');
@@ -1102,6 +1168,12 @@ function showTaskClassic(
     console.log(`   重开次数: ${task.reopenCount}`);
   }
 
+  // 待讨论提示
+  if (task.needsDiscussion) {
+    const discussionCount = task.discussionTopics?.length || 0;
+    console.log(`   💬 待讨论${discussionCount > 0 ? ` (${discussionCount}个主题)` : ''}`);
+  }
+
   // 显示需求变更历史（verbose 模式或有变更时）
   if (task.requirementHistory && task.requirementHistory.length > 0) {
     console.log(`   需求变更: ${task.requirementHistory.length} 次`);
@@ -1142,7 +1214,7 @@ function showTaskClassic(
       const percentage = Math.round((completedCount / checkpointsMeta.length) * 100);
       const barFilled = Math.round((completedCount / checkpointsMeta.length) * 20);
       const bar = '█'.repeat(barFilled) + '░'.repeat(20 - barFilled);
-      console.log(`   进度: [${bar}] ${percentage}% (${completedCount}/${checkpointsMeta.length})`);
+      console.log(`   进度: [${bar}] ${completedCount}/${checkpointsMeta.length} (${percentage}%)`);
       console.log('');
 
       checkpointsMeta.forEach((cp, index) => {
@@ -1172,7 +1244,7 @@ function showTaskClassic(
       const percentage = Math.round((completedCount / checkpointLines.length) * 100);
       const barFilled = Math.round((completedCount / checkpointLines.length) * 20);
       const bar = '█'.repeat(barFilled) + '░'.repeat(20 - barFilled);
-      console.log(`   进度: [${bar}] ${percentage}% (${completedCount}/${checkpointLines.length})`);
+      console.log(`   进度: [${bar}] ${completedCount}/${checkpointLines.length} (${percentage}%)`);
       console.log('');
 
       checkpointLines.forEach((l, index) => {
@@ -1192,10 +1264,7 @@ function showTaskClassic(
     console.log(makeSectionHeader('变更历史'));
     console.log('');
 
-    const meaningfulHistory = task.history.filter(entry => {
-      if (!entry.field) return true;
-      return entry.oldValue !== entry.newValue;
-    });
+    const meaningfulHistory = filterMeaningfulHistory(task.history);
 
     // 统计摘要
     const statusChanges = meaningfulHistory.filter(e => e.field === 'status').length;
@@ -1324,9 +1393,9 @@ export async function updateTask(
       if (uncheckedCheckpoints.length > 0) {
         // 有未完成的检查点，显示提醒
         console.log('');
-        console.log('━'.repeat(60));
+        console.log('━'.repeat(SEPARATOR_WIDTH));
         console.log('⚠️  检查点确认提醒');
-        console.log('━'.repeat(60));
+        console.log('━'.repeat(SEPARATOR_WIDTH));
         console.log('');
         console.log('在将任务标记为已解决之前，请先完成以下检查点:');
         console.log('');
@@ -1334,7 +1403,7 @@ export async function updateTask(
           console.log(`  ${idx + 1}. ${cp.text}`);
         });
         console.log('');
-        console.log('━'.repeat(60));
+        console.log('━'.repeat(SEPARATOR_WIDTH));
         console.log('完成检查点后，请运行以下命令验证:');
         console.log(`   projmnt4claude task checkpoint verify ${taskId}`);
         console.log('');
@@ -1345,9 +1414,9 @@ export async function updateTask(
       }
 
       // 所有检查点已完成，但没有token，      console.log('');
-      console.log('━'.repeat(60));
+      console.log('━'.repeat(SEPARATOR_WIDTH));
       console.log('⚠️  检查点确认提醒');
-      console.log('━'.repeat(60));
+      console.log('━'.repeat(SEPARATOR_WIDTH));
       console.log('');
       console.log('所有检查点已完成，但缺少确认令牌。');
       console.log('');
@@ -1535,9 +1604,9 @@ export async function submitTask(
   writeTaskMeta(task, cwd);
 
   console.log('');
-  console.log('━'.repeat(60));
+  console.log('━'.repeat(SEPARATOR_WIDTH));
   console.log('📤 任务已提交等待验证');
-  console.log('━'.repeat(60));
+  console.log('━'.repeat(SEPARATOR_WIDTH));
   console.log('');
   console.log(`任务ID: ${taskId}`);
   console.log(`标题: ${task.title}`);
@@ -1587,9 +1656,9 @@ export async function validateTask(
   }
 
   console.log('');
-  console.log('━'.repeat(60));
+  console.log('━'.repeat(SEPARATOR_WIDTH));
   console.log('🔍 开始验证任务');
-  console.log('━'.repeat(60));
+  console.log('━'.repeat(SEPARATOR_WIDTH));
   console.log('');
 
   // 执行验证
@@ -1925,9 +1994,9 @@ function formatStatus(status: TaskStatus | string): string {
  */
 export function showStatusGuide(): void {
   console.log('');
-  console.log('━'.repeat(60));
+  console.log('━'.repeat(SEPARATOR_WIDTH));
   console.log('📋 任务状态转换指南');
-  console.log('━'.repeat(60));
+  console.log('━'.repeat(SEPARATOR_WIDTH));
   console.log('');
 
   console.log('📊 状态说明:');
@@ -1940,7 +2009,7 @@ export function showStatusGuide(): void {
   console.log('  ❌ abandoned   - 已放弃，任务不再需要');
   console.log('');
 
-  console.log('━'.repeat(60));
+  console.log('━'.repeat(SEPARATOR_WIDTH));
   console.log('🔄 状态转换矩阵:');
   console.log('');
 
@@ -1970,7 +2039,7 @@ export function showStatusGuide(): void {
   console.log('       └─ 说明: 任务不再需要');
   console.log('');
 
-  console.log('━'.repeat(60));
+  console.log('━'.repeat(SEPARATOR_WIDTH));
   console.log('💡 快捷命令:');
   console.log('');
   console.log('  task execute <id>     - 开始执行任务（自动设为 in_progress）');
@@ -1978,7 +2047,7 @@ export function showStatusGuide(): void {
   console.log('  task complete <id>    - 一键完成任务（P2-005 新增）');
   console.log('');
 
-  console.log('━'.repeat(60));
+  console.log('━'.repeat(SEPARATOR_WIDTH));
 }
 
 /**
@@ -2002,9 +2071,9 @@ export async function completeTask(
   }
 
   console.log('');
-  console.log('━'.repeat(60));
+  console.log('━'.repeat(SEPARATOR_WIDTH));
   console.log(`🚀 一键完成任务: ${taskId}`);
-  console.log('━'.repeat(60));
+  console.log('━'.repeat(SEPARATOR_WIDTH));
   console.log('');
 
   // 检查检查点
@@ -2056,13 +2125,13 @@ export async function completeTask(
   writeTaskMeta(task, cwd);
 
   console.log('');
-  console.log('━'.repeat(60));
+  console.log('━'.repeat(SEPARATOR_WIDTH));
   console.log(`🎉 任务 ${taskId} 已完成！`);
   console.log('');
   console.log(`   标题: ${task.title}`);
   console.log(`   状态: ✅ 已解决`);
   console.log('');
-  console.log('━'.repeat(60));
+  console.log('━'.repeat(SEPARATOR_WIDTH));
 
   // CP-FEAT-008-01: 完成说明提示
   if (!options.yes) {
@@ -2131,9 +2200,9 @@ export function showTaskHistory(taskId: string, cwd: string = process.cwd()): vo
   }
 
   console.log('');
-  console.log('━'.repeat(60));
+  console.log('━'.repeat(SEPARATOR_WIDTH));
   console.log(`📜 任务历史: ${taskId}`);
-  console.log('━'.repeat(60));
+  console.log('━'.repeat(SEPARATOR_WIDTH));
   console.log('');
   console.log(`📌 标题: ${task.title}`);
   console.log(`📊 当前状态: ${formatStatus(task.status)}`);
@@ -2145,20 +2214,19 @@ export function showTaskHistory(taskId: string, cwd: string = process.cwd()): vo
     return;
   }
 
-  console.log('━'.repeat(60));
+  console.log('━'.repeat(SEPARATOR_WIDTH));
   console.log('📝 变更历史:');
   console.log('');
 
-  // 过滤并按时间倒序显示（与 showTaskCompactHistory 保持一致）
-  const meaningfulHistory = task.history.filter(entry => {
-    // 保留没有字段变更的记录（如"添加完成说明"等）
-    if (!entry.field) return true;
-    // 过滤掉相同值的状态变更
-    return entry.oldValue !== entry.newValue;
-  });
+  // 过滤并按时间倒序显示（与 showTaskClassic 保持一致）
+  const meaningfulHistory = filterMeaningfulHistory(task.history);
   const sortedHistory = [...meaningfulHistory].reverse();
 
-  for (const entry of sortedHistory) {
+  // 限制显示数量
+  const totalCount = sortedHistory.length;
+  const displayHistory = sortedHistory.slice(0, MAX_HISTORY_DISPLAY);
+
+  for (const entry of displayHistory) {
     const date = new Date(entry.timestamp);
     const timeStr = date.toLocaleString('zh-CN', {
       month: '2-digit',
@@ -2190,8 +2258,13 @@ export function showTaskHistory(taskId: string, cwd: string = process.cwd()): vo
     console.log('');
   }
 
-  console.log('━'.repeat(60));
-  console.log(`📊 统计: 共 ${task.history.length} 条历史记录`);
+  if (totalCount > MAX_HISTORY_DISPLAY) {
+    console.log(`   ... 省略了 ${totalCount - MAX_HISTORY_DISPLAY} 条历史记录`);
+    console.log('');
+  }
+
+  console.log('━'.repeat(SEPARATOR_WIDTH));
+  console.log(`📊 统计: 共 ${task.history.length} 条历史记录，过滤后 ${meaningfulHistory.length} 条${totalCount > MAX_HISTORY_DISPLAY ? `，显示最近 ${MAX_HISTORY_DISPLAY} 条` : ''}`);
   console.log('');
 }
 
@@ -2254,9 +2327,9 @@ export async function executeTask(taskId: string, cwd: string = process.cwd()): 
   }
 
   console.log('');
-  console.log('━'.repeat(60));
+  console.log('━'.repeat(SEPARATOR_WIDTH));
   console.log(`📋 任务执行引导: ${task.id}`);
-  console.log('━'.repeat(60));
+  console.log('━'.repeat(SEPARATOR_WIDTH));
   console.log('');
 
   // P-019: 如果任务状态为 reopened，特别提示用户
@@ -2314,9 +2387,9 @@ export async function executeTask(taskId: string, cwd: string = process.cwd()): 
   const checkpointPath = path.join(taskDir, 'checkpoint.md');
 
   console.log('');
-  console.log('━'.repeat(60));
+  console.log('━'.repeat(SEPARATOR_WIDTH));
   console.log('✅ 检查点清单');
-  console.log('━'.repeat(60));
+  console.log('━'.repeat(SEPARATOR_WIDTH));
 
   if (fs.existsSync(checkpointPath)) {
     const content = fs.readFileSync(checkpointPath, 'utf-8');
@@ -2327,9 +2400,9 @@ export async function executeTask(taskId: string, cwd: string = process.cwd()): 
 
   // 工作引导
   console.log('');
-  console.log('━'.repeat(60));
+  console.log('━'.repeat(SEPARATOR_WIDTH));
   console.log('💡 工作建议');
-  console.log('━'.repeat(60));
+  console.log('━'.repeat(SEPARATOR_WIDTH));
   console.log('');
   console.log('1. 仔细阅读任务描述和检查点要求');
   console.log('2. 按照检查点逐项完成工作');
@@ -2396,7 +2469,7 @@ export async function completeCheckpoint(
 
   console.log('');
   console.log('📋 检查点确认');
-  console.log('━'.repeat(60));
+  console.log('━'.repeat(SEPARATOR_WIDTH));
   console.log('');
 
   let allPassed = true;
@@ -2442,7 +2515,7 @@ export async function completeCheckpoint(
   fs.writeFileSync(checkpointPath, newContent, 'utf-8');
 
   console.log('');
-  console.log('━'.repeat(60));
+  console.log('━'.repeat(SEPARATOR_WIDTH));
 
   if (allPassed) {
     console.log('🎉 所有检查点已通过！');
@@ -2501,9 +2574,9 @@ export async function verifyCheckpoint(taskId: string, cwd: string = process.cwd
   }
 
   console.log('');
-  console.log('━'.repeat(60));
+  console.log('━'.repeat(SEPARATOR_WIDTH));
   console.log(`🔍 检查点验证: ${taskId}`);
-  console.log('━'.repeat(60));
+  console.log('━'.repeat(SEPARATOR_WIDTH));
   console.log('');
 
   // 显示检查点状态
@@ -2530,7 +2603,7 @@ export async function verifyCheckpoint(taskId: string, cwd: string = process.cwd
   task.checkpointConfirmationToken = token;
   writeTaskMeta(task, cwd);
 
-  console.log('━'.repeat(60));
+  console.log('━'.repeat(SEPARATOR_WIDTH));
   console.log('✅ 所有检查点已验证通过！');
   console.log('');
   console.log('🔐 检查点确认令牌已生成:');
@@ -2821,7 +2894,7 @@ export async function listTaskCheckpoints(
     return;
   }
 
-  const separator = options.compact ? '' : '━'.repeat(60);
+  const separator = options.compact ? '' : '━'.repeat(SEPARATOR_WIDTH);
 
   if (!options.compact) {
     console.log('');
@@ -3028,7 +3101,7 @@ export async function splitTask(
 function displayCheckpointDetail(checkpoint: CheckpointMetadata): void {
   console.log('');
   console.log(`📋 检查点详情: ${checkpoint.id}`);
-  console.log('━'.repeat(60));
+  console.log('━'.repeat(SEPARATOR_WIDTH));
   console.log(`描述: ${checkpoint.description}`);
   console.log(`状态: ${checkpoint.status}`);
   console.log(`创建时间: ${checkpoint.createdAt}`);
@@ -3113,7 +3186,7 @@ export function searchTasks(
 
   console.log('');
   console.log(`🔍 搜索结果: "${keyword}" (${matchedTasks.length} 个匹配)`);
-  console.log('━'.repeat(60));
+  console.log('━'.repeat(SEPARATOR_WIDTH));
   console.log('');
 
   matchedTasks.forEach((task, index) => {
@@ -3198,9 +3271,9 @@ export function countTasks(
 
     // 格式化输出
     console.log('');
-    console.log('━'.repeat(60));
+    console.log('━'.repeat(SEPARATOR_WIDTH));
     console.log(`📊 任务统计 (按${options.groupBy === 'status' ? '状态' : options.groupBy === 'priority' ? '优先级' : options.groupBy === 'type' ? '类型' : '角色'}分组)`);
-    console.log('━'.repeat(60));
+    console.log('━'.repeat(SEPARATOR_WIDTH));
     console.log('');
 
     // 定义排序顺序
@@ -3281,9 +3354,9 @@ export function countTasks(
 
   // 格式化输出
   console.log('');
-  console.log('━'.repeat(60));
+  console.log('━'.repeat(SEPARATOR_WIDTH));
   console.log('📊 任务统计');
-  console.log('━'.repeat(60));
+  console.log('━'.repeat(SEPARATOR_WIDTH));
   console.log('');
 
   // 按状态统计
@@ -3323,7 +3396,7 @@ export function countTasks(
   }
 
   // 总计
-  console.log('━'.repeat(60));
+  console.log('━'.repeat(SEPARATOR_WIDTH));
   console.log(`📌 总计: ${tasks.length} 个任务`);
   console.log('');
 
@@ -3377,7 +3450,7 @@ export async function batchUpdateTasks(
 
   console.log('');
   console.log(`📦 批量更新任务`);
-  console.log('━'.repeat(60));
+  console.log('━'.repeat(SEPARATOR_WIDTH));
   console.log(`   目标任务数: ${tasksToUpdate.length}`);
   if (options.status) {
     console.log(`   新状态: ${options.status}`);
@@ -3510,9 +3583,9 @@ export function generateCheckpointTemplate(
   const template = CHECKPOINT_TEMPLATES[taskType] || CHECKPOINT_TEMPLATES.feature;
 
   console.log('');
-  console.log('━'.repeat(60));
+  console.log('━'.repeat(SEPARATOR_WIDTH));
   console.log(`📋 检查点模板: ${taskId}`);
-  console.log('━'.repeat(60));
+  console.log('━'.repeat(SEPARATOR_WIDTH));
   console.log('');
   console.log(`任务类型: ${taskType}`);
   console.log('');

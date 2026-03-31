@@ -4,6 +4,7 @@ import * as path from 'path';
 import { isInitialized, getProjectDir } from '../utils/path';
 import { readTaskMeta, getAllTasks, taskExists } from '../utils/task';
 import type { TaskMeta } from '../types/task';
+import { SEPARATOR_WIDTH } from '../utils/format';
 
 /**
  * 分支信息接口
@@ -225,9 +226,9 @@ export function showBranchStatus(cwd: string = process.cwd()): void {
   }
 
   console.log('');
-  console.log('━'.repeat(60));
+  console.log('━'.repeat(SEPARATOR_WIDTH));
   console.log('🌿 分支状态');
-  console.log('━'.repeat(60));
+  console.log('━'.repeat(SEPARATOR_WIDTH));
   console.log('');
 
   const currentBranch = getCurrentBranch(cwd);
@@ -284,7 +285,7 @@ export function showBranchStatus(cwd: string = process.cwd()): void {
     console.log('');
   }
 
-  console.log('━'.repeat(60));
+  console.log('━'.repeat(SEPARATOR_WIDTH));
 }
 
 /**

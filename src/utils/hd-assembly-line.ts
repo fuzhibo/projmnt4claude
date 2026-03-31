@@ -36,6 +36,7 @@ import { HarnessEvaluator } from './harness-evaluator.js';
 import { RetryHandler } from './harness-retry.js';
 import { HarnessStatusReporter } from './harness-status-reporter.js';
 import { saveRuntimeState } from '../commands/harness.js';
+import { SEPARATOR_WIDTH } from './format';
 
 export class AssemblyLine {
   private config: HarnessConfig;
@@ -86,9 +87,9 @@ export class AssemblyLine {
         continue;
       }
 
-      console.log(`\n${'━'.repeat(50)}`);
+      console.log(`\n${'━'.repeat(SEPARATOR_WIDTH)}`);
       console.log(`📋 处理任务 [${state.currentIndex + 1}/${state.taskQueue.length}]: ${taskId}`);
-      console.log('━'.repeat(50));
+      console.log('━'.repeat(SEPARATOR_WIDTH));
 
       try {
         // 执行单个任务

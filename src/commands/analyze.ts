@@ -23,6 +23,7 @@ import type {
 } from '../types/task';
 import { parseTaskId, generateTaskId } from '../types/task';
 import { generateCheckpointId } from '../utils/checkpoint';
+import { SEPARATOR_WIDTH } from '../utils/format';
 import type { SprintContract } from '../types/harness';
 
 import { areDependenciesCompleted } from '../utils/plan';
@@ -962,7 +963,7 @@ export function analyzeProject(cwd: string = process.cwd(), includeArchived: boo
 export function showAnalysis(options: { compact?: boolean } = {}, cwd: string = process.cwd()): void {
   const result = analyzeProject(cwd);
 
-  const separator = options.compact ? '---' : '━'.repeat(60);
+  const separator = options.compact ? '---' : '━'.repeat(SEPARATOR_WIDTH);
 
   console.log('');
   console.log(separator);
@@ -1407,7 +1408,7 @@ export async function fixIssues(
   }
 
   console.log('');
-  console.log('━'.repeat(60));
+  console.log('━'.repeat(SEPARATOR_WIDTH));
   console.log('🔧 自动修复问题');
   if (fixType !== 'all') {
     console.log(`   修复类型: ${fixType}`);
@@ -1415,7 +1416,7 @@ export async function fixIssues(
   if (nonInteractive) {
     console.log('   (非交互模式)');
   }
-  console.log('━'.repeat(60));
+  console.log('━'.repeat(SEPARATOR_WIDTH));
   console.log('');
 
   let fixedCount = 0;
@@ -1434,11 +1435,11 @@ export async function fixIssues(
   }
 
   console.log('');
-  console.log('━'.repeat(60));
+  console.log('━'.repeat(SEPARATOR_WIDTH));
   console.log(`✅ 共修复 ${fixedCount} 个问题`);
   if (skippedCount > 0) console.log(`⏭️  跳过 ${skippedCount} 个问题`);
   if (unfixableCount > 0) console.log(`⚠️  ${unfixableCount} 个问题无法自动修复`);
-  console.log('━'.repeat(60));
+  console.log('━'.repeat(SEPARATOR_WIDTH));
 
   return { fixed: fixedCount, skipped: skippedCount, unfixable: unfixableCount };
 }
@@ -1516,7 +1517,7 @@ export function showStatus(
   }
 
   // 精简模式 (--compact)
-  const separator = options.compact ? '---' : '━'.repeat(60);
+  const separator = options.compact ? '---' : '━'.repeat(SEPARATOR_WIDTH);
 
   console.log('');
   console.log(separator);
@@ -2277,9 +2278,9 @@ export async function fixCheckpoints(
 
   const generatorLabel = analyzeConfig.checkpointGenerator === 'simple' ? '简单' : '智能';
   console.log('');
-  console.log('━'.repeat(60));
+  console.log('━'.repeat(SEPARATOR_WIDTH));
   console.log(`🔧 ${generatorLabel}生成检查点 (模式: ${analyzeConfig.checkpointGenerator})`);
-  console.log('━'.repeat(60));
+  console.log('━'.repeat(SEPARATOR_WIDTH));
   console.log('');
 
   let tasksToFix: TaskMeta[];
@@ -2357,7 +2358,7 @@ export async function fixCheckpoints(
   }
 
   console.log('');
-  console.log('━'.repeat(60));
+  console.log('━'.repeat(SEPARATOR_WIDTH));
   console.log(`✅ 完成: 修复 ${fixedCount} 个，跳过 ${skippedCount} 个`);
-  console.log('━'.repeat(60));
+  console.log('━'.repeat(SEPARATOR_WIDTH));
 }

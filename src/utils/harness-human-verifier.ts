@@ -8,6 +8,7 @@
  */
 
 import * as fs from 'fs';
+import { SEPARATOR_WIDTH } from './format';
 import * as path from 'path';
 import * as readline from 'readline';
 import {
@@ -114,9 +115,9 @@ export class HarnessHumanVerifier {
    * 显示验证请求
    */
   private displayVerificationRequest(task: TaskMeta, checkpoint: CheckpointMetadata): void {
-    console.log('\n' + '━'.repeat(60));
+    console.log('\n' + '━'.repeat(SEPARATOR_WIDTH));
     console.log('📋 人工验证请求');
-    console.log('━'.repeat(60));
+    console.log('━'.repeat(SEPARATOR_WIDTH));
     console.log(`\n任务: ${task.title} (${task.id})`);
     console.log(`检查点: [${checkpoint.id}] ${checkpoint.description}`);
     console.log('');
@@ -139,11 +140,11 @@ export class HarnessHumanVerifier {
       console.log('');
     }
 
-    console.log('━'.repeat(60));
+    console.log('━'.repeat(SEPARATOR_WIDTH));
     console.log('请回复:');
     console.log('  - "通过" / "PASS" / "yes" / "y" - 验证通过');
     console.log('  - "不通过" / "NOPASS" / "no" / "n" - 验证失败（可附加原因）');
-    console.log('━'.repeat(60));
+    console.log('━'.repeat(SEPARATOR_WIDTH));
   }
 
   /**

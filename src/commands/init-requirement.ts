@@ -10,6 +10,7 @@ import { hasValidCheckpoints, displayCheckpointCreationWarning } from './task';
 import { syncCheckpointsToMeta } from '../utils/checkpoint';
 import type { TaskMeta, TaskPriority, TaskStatus, TaskType } from '../types/task';
 import { createDefaultTaskMeta, inferTaskType } from '../types/task';
+import { SEPARATOR_WIDTH } from '../utils/format';
 
 /**
  * 需求分析结果接口
@@ -56,9 +57,9 @@ export async function initRequirement(
   }
 
   console.log('');
-  console.log('━'.repeat(60));
+  console.log('━'.repeat(SEPARATOR_WIDTH));
   console.log('🔍 正在分析需求...');
-  console.log('━'.repeat(60));
+  console.log('━'.repeat(SEPARATOR_WIDTH));
   console.log('');
 
   // 分析需求

@@ -13,6 +13,7 @@ import {
 import { isInitialized, getProjectDir } from '../utils/path';
 import { readTaskMeta, getAllTasks, taskExists, getSubtasks } from '../utils/task';
 import type { TaskMeta, TaskPriority } from '../types/task';
+import { SEPARATOR_WIDTH } from '../utils/format';
 
 // ============== 任务链分析类型定义 ==============
 
@@ -311,7 +312,7 @@ export function showPlan(json: boolean = false, cwd: string = process.cwd()): vo
   // 表格格式输出
   console.log('');
   console.log('执行计划:');
-  console.log('━'.repeat(60));
+  console.log('━'.repeat(SEPARATOR_WIDTH));
   console.log('序号 | 任务ID    | 标题                         | 状态');
   console.log('-----|-----------|------------------------------|------------');
 
@@ -505,9 +506,9 @@ export async function recommendPlan(
   }
 
   // 人类可读格式输出
-  console.log('━'.repeat(60));
+  console.log('━'.repeat(SEPARATOR_WIDTH));
   console.log('📋 任务链分析结果');
-  console.log('━'.repeat(60));
+  console.log('━'.repeat(SEPARATOR_WIDTH));
   console.log('');
 
   // 统计摘要
@@ -540,7 +541,7 @@ export async function recommendPlan(
   }
 
   // 推荐摘要
-  console.log('━'.repeat(60));
+  console.log('━'.repeat(SEPARATOR_WIDTH));
   console.log('💡 推荐摘要:');
   console.log(`   ${aiOutput.recommendation.summary}`);
   console.log(`   优先任务链: ${aiOutput.recommendation.topChains.slice(0, 3).join(', ')}`);
