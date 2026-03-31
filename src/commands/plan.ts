@@ -311,7 +311,7 @@ export function showPlan(json: boolean = false, cwd: string = process.cwd()): vo
   // 表格格式输出
   console.log('');
   console.log('执行计划:');
-  console.log('='.repeat(60));
+  console.log('━'.repeat(60));
   console.log('序号 | 任务ID    | 标题                         | 状态');
   console.log('-----|-----------|------------------------------|------------');
 
@@ -429,14 +429,16 @@ export async function recommendPlan(
   // 获取所有任务（不仅仅是可执行的，用于构建完整的依赖图）
   const allTasks = getAllTasks(cwd);
 
-  // 0. 过滤任务（默认只推荐 open 状态，--all 显示全部）
+  // 0. 过滤任务（默认只推荐 open 状态，--all 排除终态）
+  const TERMINAL_STATUSES = new Set(['resolved', 'closed', 'abandoned']);
   const activeTasks = options.all
-    ? allTasks
+    ? allTasks.filter(t => !TERMINAL_STATUSES.has(t.status))
     : allTasks.filter(t => t.status === 'open');
 
-  if (!options.all && allTasks.length !== activeTasks.length) {
-    const excludedCount = allTasks.length - activeTasks.length;
-    console.log(`已排除 ${excludedCount} 个非 open 状态任务（使用 --all 显示全部）`);
+  const excludedCount = allTasks.length - activeTasks.length;
+  if (excludedCount > 0) {
+    const reason = options.all ? '终态(resolved/closed/abandoned)' : '非 open 状态';
+    console.log(`已排除 ${excludedCount} 个${reason}任务`);
   }
 
   // 1. 关键字过滤
