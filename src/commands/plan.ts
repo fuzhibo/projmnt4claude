@@ -416,7 +416,7 @@ export async function clearPlanCmd(force: boolean = false, cwd: string = process
  * @param options.json - JSON 格式输出
  */
 export async function recommendPlan(
-  options: { query?: string; nonInteractive?: boolean; json?: boolean } = {},
+  options: { query?: string; nonInteractive?: boolean; json?: boolean; all?: boolean } = {},
   cwd: string = process.cwd()
 ): Promise<void> {
   if (!isInitialized(cwd)) {
@@ -429,16 +429,25 @@ export async function recommendPlan(
   // 获取所有任务（不仅仅是可执行的，用于构建完整的依赖图）
   const allTasks = getAllTasks(cwd);
 
-  // 0. 关键字过滤
+  // 0. 过滤 abandoned 任务（默认排除，--all 显示全部）
+  const activeTasks = options.all
+    ? allTasks
+    : allTasks.filter(t => t.status !== 'abandoned');
+
+  if (!options.all && allTasks.length !== activeTasks.length) {
+    console.log(`已排除 ${allTasks.length - activeTasks.length} 个 abandoned 任务（使用 --all 显示全部）`);
+  }
+
+  // 1. 关键字过滤
   let keywords: string[] = [];
-  let filteredTasks = allTasks;
+  let filteredTasks = activeTasks;
 
   if (options.query) {
     keywords = extractKeywords(options.query);
     console.log(`关键字: ${keywords.join(', ')}`);
 
-    filteredTasks = allTasks.filter(task => taskMatchesKeywords(task, keywords));
-    console.log(`过滤结果: ${filteredTasks.length}/${allTasks.length} 个任务匹配\n`);
+    filteredTasks = activeTasks.filter(task => taskMatchesKeywords(task, keywords));
+    console.log(`过滤结果: ${filteredTasks.length}/${activeTasks.length} 个任务匹配\n`);
   }
 
   if (filteredTasks.length === 0) {
@@ -446,7 +455,7 @@ export async function recommendPlan(
       query: options.query,
       keywords,
       filterStats: {
-        totalTasks: allTasks.length,
+        totalTasks: activeTasks.length,
         filteredTasks: 0,
         chainCount: 0,
       },
@@ -480,7 +489,7 @@ export async function recommendPlan(
   // 3. 生成 AI 友好的输出
   const aiOutput = generateAIOutput(
     sortedChains,
-    allTasks.length,
+    activeTasks.length,
     filteredTasks.length,
     options.query,
     keywords.length > 0 ? keywords : undefined

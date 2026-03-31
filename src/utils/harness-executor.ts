@@ -350,12 +350,50 @@ export class HarnessExecutor {
         child.on('close', (code) => {
           clearTimeout(timeoutId);
           const duration = Date.now() - startTime;
+
+          // 超时场景直接失败
+          if (timedOut) {
+            resolve({
+              success: false,
+              output: stdout,
+              exitCode: 124,
+              duration,
+              error: `执行超时 (${options.timeout}s)`,
+            });
+            return;
+          }
+
+          // 使用智能判断区分 hook 失败和任务失败
+          const isHookError = /hook\s+.*\s+failed/i.test(stderr)
+            || /Hook cancelled/i.test(stderr)
+            || /SessionEnd\s+hook/i.test(stderr);
+          const hasOutput = stdout.trim().length > 0;
+
+          let success = code === 0;
+          let error: string | undefined;
+          let hookWarning: string | undefined;
+
+          if (code !== 0) {
+            if (isHookError && hasOutput) {
+              // Hook 失败但任务有有效输出 → 视为成功
+              success = true;
+              hookWarning = `Hook 错误已忽略: ${stderr.substring(0, 200)}`;
+            } else if (isHookError && !hasOutput) {
+              success = false;
+              error = `Hook 错误导致无输出: ${stderr.substring(0, 200)}`;
+            } else {
+              success = false;
+              error = stderr || `进程退出码: ${code}`;
+            }
+          }
+
           resolve({
-            success: code === 0 && !timedOut,
+            success,
             output: stdout,
-            exitCode: timedOut ? 124 : (code ?? 1),  // 124 是 timeout 命令的标准退出码
+            exitCode: code ?? 1,
             duration,
-            error: timedOut ? `执行超时 (${options.timeout}s)` : (code !== 0 ? stderr || `进程退出码: ${code}` : undefined),
+            error,
+            hookWarning,
           });
         });
 

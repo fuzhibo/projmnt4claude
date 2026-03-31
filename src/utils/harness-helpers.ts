@@ -35,6 +35,49 @@ export interface HeadlessClaudeResult {
   success: boolean;
   output: string;
   error?: string;
+  hookWarning?: string;
+}
+
+/**
+ * 分析 Headless Claude 的 exit code 和 stderr，区分 hook 失败和任务失败。
+ *
+ * Hook 失败（如 SessionEnd hook cancelled）不应阻断流水线：
+ * - hook 失败 + stdout 有有效输出 → 视为成功，附带警告
+ * - hook 失败 + stdout 为空 → 保守判定为失败
+ * - 非 hook 错误 → 真实的任务失败
+ */
+function classifyExitResult(
+  code: number | null,
+  stderr: string,
+  stdout: string
+): { success: boolean; error?: string; hookWarning?: string } {
+  if (code === 0) {
+    return { success: true };
+  }
+
+  const isHookError = /hook\s+.*\s+failed/i.test(stderr)
+    || /Hook cancelled/i.test(stderr)
+    || /SessionEnd\s+hook/i.test(stderr);
+  const hasOutput = stdout.trim().length > 0;
+
+  if (isHookError && hasOutput) {
+    return {
+      success: true,
+      hookWarning: `Hook 错误已忽略: ${stderr.substring(0, 200)}`,
+    };
+  }
+
+  if (isHookError && !hasOutput) {
+    return {
+      success: false,
+      error: `Hook 错误导致无输出: ${stderr.substring(0, 200)}`,
+    };
+  }
+
+  return {
+    success: false,
+    error: stderr || `进程退出码: ${code}`,
+  };
 }
 
 export interface ParseVerdictOptions {
@@ -91,10 +134,12 @@ export async function runHeadlessClaude(options: HeadlessClaudeOptions): Promise
       });
 
       child.on('close', (code) => {
+        const classified = classifyExitResult(code, stderr, stdout);
         resolve({
-          success: code === 0,
+          success: classified.success,
           output: stdout,
-          error: code !== 0 ? stderr || `进程退出码: ${code}` : undefined,
+          error: classified.error,
+          hookWarning: classified.hookWarning,
         });
       });
 

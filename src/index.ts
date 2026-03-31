@@ -458,6 +458,7 @@ program
   .option('-a, --after <taskId>', '在指定任务之后添加 (仅 add)')
   .option('-y, --yes', '非交互模式，自动应用推荐 (仅 recommend)')
   .option('-q, --query <query>', '用户描述/关键字过滤 (仅 recommend)')
+  .option('--all', '包含 abandoned 状态的任务 (仅 recommend)')
   .action(async (action, id, options) => {
     requireInit();
     switch (action) {
@@ -486,6 +487,7 @@ program
           query: options.query,
           nonInteractive: options.yes,
           json: options.json,
+          all: options.all,
         });
         break;
       default:

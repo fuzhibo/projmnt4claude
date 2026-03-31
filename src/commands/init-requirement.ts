@@ -7,6 +7,7 @@ import {
   writeTaskMeta,
 } from '../utils/task';
 import { hasValidCheckpoints, displayCheckpointCreationWarning } from './task';
+import { syncCheckpointsToMeta } from '../utils/checkpoint';
 import type { TaskMeta, TaskPriority, TaskStatus, TaskType } from '../types/task';
 import { createDefaultTaskMeta, inferTaskType } from '../types/task';
 
@@ -171,6 +172,9 @@ export async function initRequirement(
 ${checkpoints.map((cp: string) => `- [ ] ${cp}`).join('\n')}
 `;
   fs.writeFileSync(checkpointPath, checkpointContent, 'utf-8');
+
+  // 同步检查点到 meta.json
+  syncCheckpointsToMeta(taskId, cwd);
 
   console.log('');
   console.log(`✅ 任务创建成功!`);

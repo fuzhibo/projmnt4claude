@@ -232,7 +232,7 @@ export interface ExecutionTimelineEntry {
   /** 时间 */
   timestamp: string;
   /** 事件类型 */
-  event: 'started' | 'dev_started' | 'dev_completed' | 'code_review_started' | 'code_review_completed' | 'qa_started' | 'qa_completed' | 'human_verification_started' | 'human_verification_completed' | 'review_started' | 'review_completed' | 'retry' | 'completed' | 'failed';
+  event: 'started' | 'skipped' | 'dev_started' | 'dev_completed' | 'code_review_started' | 'code_review_completed' | 'qa_started' | 'qa_completed' | 'human_verification_started' | 'human_verification_completed' | 'review_started' | 'review_completed' | 'retry' | 'completed' | 'failed';
   /** 描述 */
   description: string;
   /** 附加数据 */

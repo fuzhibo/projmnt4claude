@@ -189,11 +189,20 @@ export class AssemblyLine {
       return record;
     }
 
-    // 2. 更新状态为 in_progress
+    // 2. 检查任务是否已完成
+    const completedStatuses: TaskStatus[] = ['resolved', 'closed'];
+    if (completedStatuses.includes(task.status)) {
+      console.log(`⏭️  任务 ${taskId} 已完成 (状态: ${task.status})，跳过`);
+      addTimeline('skipped', `任务已完成，跳过执行: ${task.status}`, { status: task.status });
+      record.finalStatus = task.status;
+      return record;
+    }
+
+    // 3. 更新状态为 in_progress
     await this.updateTaskStatus(taskId, 'in_progress');
     record.finalStatus = 'in_progress';
 
-    // 3. 开发阶段
+    // 4. 开发阶段
     addTimeline('dev_started', '开始开发阶段');
     this.statusReporter.startPhase('development', taskId, '开始开发阶段');
     console.log('\n🔨 开发阶段...');
@@ -240,12 +249,12 @@ export class AssemblyLine {
       return record;
     }
 
-    // 4. 更新状态为 wait_review（等待代码审核）
+    // 5. 更新状态为 wait_review（等待代码审核）
     await this.updateTaskStatus(taskId, 'wait_review');
     record.finalStatus = 'wait_review';
     console.log('✅ 开发完成，等待代码审核');
 
-    // 5. 代码审核阶段（新增）
+    // 6. 代码审核阶段（新增）
     addTimeline('code_review_started', '开始代码审核阶段');
     this.statusReporter.startPhase('code_review', taskId, '开始代码审核阶段');
     console.log('\n🔍 代码审核阶段...');
@@ -276,12 +285,12 @@ export class AssemblyLine {
       return this.handleFailure(taskId, record, state, addTimeline, 'code_review');
     }
 
-    // 6. 更新状态为 wait_qa（等待 QA 验证）
+    // 7. 更新状态为 wait_qa（等待 QA 验证）
     await this.updateTaskStatus(taskId, 'wait_qa');
     record.finalStatus = 'wait_qa';
     console.log('✅ 代码审核通过，等待 QA 验证');
 
-    // 7. QA 验证阶段（新增）
+    // 8. QA 验证阶段（新增）
     addTimeline('qa_started', '开始 QA 验证阶段');
     this.statusReporter.startPhase('qa_verification', taskId, '开始 QA 验证阶段');
     console.log('\n🧪 QA 验证阶段...');
@@ -317,7 +326,7 @@ export class AssemblyLine {
       return this.handleFailure(taskId, record, state, addTimeline, 'qa');
     }
 
-    // 7.5 人工验证阶段（条件触发）
+    // 8.5 人工验证阶段（条件触发）
     let humanVerdicts: HumanVerdict[] = [];
     if (qaVerdict.requiresHuman && qaVerdict.humanVerificationCheckpoints.length > 0) {
       addTimeline('human_verification_started', '开始人工验证阶段');
@@ -350,12 +359,12 @@ export class AssemblyLine {
       }
     }
 
-    // 8. 更新状态为 wait_complete
+    // 9. 更新状态为 wait_complete
     await this.updateTaskStatus(taskId, 'wait_complete');
     record.finalStatus = 'wait_complete';
     console.log('✅ 所有验证通过，等待最终确认');
 
-    // 9. 最终评估阶段（保留原有 Evaluator）
+    // 10. 最终评估阶段（保留原有 Evaluator）
     addTimeline('review_started', '开始最终评估阶段');
     this.statusReporter.startPhase('evaluation', taskId, '开始最终评估阶段');
     console.log('\n🎯 最终评估阶段...');
@@ -380,7 +389,7 @@ export class AssemblyLine {
       addTimeline('review_completed', `评估出错: ${verdict.reason}`, { error: verdict.reason });
     }
 
-    // 10. 根据评估结果更新状态
+    // 11. 根据评估结果更新状态
     if (verdict.result === 'PASS') {
       await this.updateTaskStatus(taskId, 'resolved');
       record.finalStatus = 'resolved';

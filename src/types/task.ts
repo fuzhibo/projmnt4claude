@@ -359,11 +359,21 @@ export function generateTaskId(
   existingIds: string[] = []
 ): string {
   // 从标题生成 slug
-  const slug = title
+  let slug = title
     .toLowerCase()
     .replace(/[^a-z0-9]+/g, '-')
     .replace(/^-+|-+$/g, '')
     .substring(0, 40);
+
+  // 中文标题（或纯非ASCII标题）经过上述处理后 slug 为空，
+  // 使用标题的短哈希作为有意义的标识
+  if (!slug) {
+    let hash = 0;
+    for (let i = 0; i < title.length; i++) {
+      hash = ((hash << 5) - hash + title.charCodeAt(i)) | 0;
+    }
+    slug = `t${Math.abs(hash).toString(36)}`;
+  }
 
   // 生成日期字符串
   const date = new Date().toISOString().slice(0, 10).replace(/-/g, '');
