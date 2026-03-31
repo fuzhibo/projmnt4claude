@@ -303,11 +303,12 @@ export class HarnessExecutor {
     const startTime = Date.now();
 
     return new Promise((resolve) => {
-      // 构建命令参数
+      // 注意：--allowedTools 必须在 --print 之前，否则 Claude CLI 会报错
+      // "Input must be provided either through stdin or as a prompt argument when using --print"
       const args = [
+        '--allowedTools', options.allowedTools.join(','),
         '--print',  // 非交互模式
         '--dangerously-skip-permissions',  // 跳过权限确认（自动化模式必需）
-        `--allowedTools=${options.allowedTools.join(',')}`,  // 用 = 连接
         options.prompt,
       ];
 
