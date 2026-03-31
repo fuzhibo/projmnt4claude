@@ -818,7 +818,7 @@ function showTaskPanel(
   const statusText = statusMap[task.status] || task.status;
   const priorityText = priorityMap[task.priority] || task.priority;
   const typeText = task.type || '未指定';
-  const statusLine = `状态: ${statusText}  │  优先级: ${priorityText}  │  类型: ${typeText}`;
+  const statusLine = `状态: ${statusText}  ·  优先级: ${priorityText}  ·  类型: ${typeText}`;
   console.log(`│ ${padByDisplayWidth(statusLine, width - 3)}│`);
 
   // 描述（如果有）
@@ -840,7 +840,6 @@ function showTaskPanel(
 
   if (fs.existsSync(checkpointPath)) {
     console.log(`├${hLine}┤`);
-    console.log(`│ ${padByDisplayWidth('📋 检查点', width - 3)}│`);
 
     const content = fs.readFileSync(checkpointPath, 'utf-8');
     const checkpointLines = content.split('\n').filter(l => l.trim().startsWith('- ['));
@@ -850,29 +849,25 @@ function showTaskPanel(
       const totalCount = checkpointLines.length;
       const percentage = Math.round((completedCount / totalCount) * 100);
 
-      // 可视化进度条 - 使用 Unicode 块字符
+      // 进度条
       const barWidth = 20;
       const filledWidth = Math.round((completedCount / totalCount) * barWidth);
       const emptyWidth = barWidth - filledWidth;
       const bar = '█'.repeat(filledWidth) + '░'.repeat(emptyWidth);
-      const progressLine = `检查点进度 [${bar}] ${percentage}%`;
+      const progressLine = `📋 [${bar}] ${completedCount}/${totalCount} (${percentage}%)`;
       console.log(`│ ${padByDisplayWidth(progressLine, width - 3)}│`);
 
-      // 显示检查点（最多 5 个）
-      const displayCount = options.checkpoints ? checkpointLines.length : Math.min(6, checkpointLines.length);
-      for (let i = 0; i < displayCount; i++) {
-        const l = checkpointLines[i]!;
-        const isChecked = l.includes('[x]') || l.includes('[X]');
-        const cpIcon = isChecked ? '✅' : '⬜';
-        const text = l.replace(/- \[[xX ]\] /, '').trim();
-        const maxTextLen = width - 10;
-        const displayText = getDisplayWidth(text) > maxTextLen ? truncateByDisplayWidth(text, maxTextLen) + '..' : text;
-        console.log(`│  ${padByDisplayWidth(`  ${i + 1}. ${cpIcon} ${displayText}`, width - 4)}│`);
-      }
-
-      if (!options.checkpoints && checkpointLines.length > 6) {
-        const moreLine = `     ... 还有 ${checkpointLines.length - 6} 个检查点`;
-        console.log(`│  ${padByDisplayWidth(moreLine, width - 2)}│`);
+      // 仅 --checkpoints 时显示详细检查点列表
+      if (options.checkpoints) {
+        for (let i = 0; i < checkpointLines.length; i++) {
+          const l = checkpointLines[i]!;
+          const isChecked = l.includes('[x]') || l.includes('[X]');
+          const cpIcon = isChecked ? '✅' : '⬜';
+          const text = l.replace(/- \[[xX ]\] /, '').trim();
+          const maxTextLen = width - 10;
+          const displayText = getDisplayWidth(text) > maxTextLen ? truncateByDisplayWidth(text, maxTextLen) + '..' : text;
+          console.log(`│  ${padByDisplayWidth(`  ${i + 1}. ${cpIcon} ${displayText}`, width - 4)}│`);
+        }
       }
     }
   }
@@ -908,7 +903,22 @@ function showTaskPanel(
     }
 
     if (task.subtaskIds && task.subtaskIds.length > 0) {
-      const subtaskLine = `📎 子任务: ${task.subtaskIds.length} 个`;
+      // 统计子任务状态分布
+      let doneCount = 0;
+      let activeCount = 0;
+      for (const subId of task.subtaskIds) {
+        const sub = readTaskMeta(subId, cwd);
+        if (sub && (sub.status === 'resolved' || sub.status === 'closed')) doneCount++;
+        else if (sub && (sub.status === 'in_progress' || sub.status === 'wait_review' || sub.status === 'wait_qa' || sub.status === 'wait_complete')) activeCount++;
+      }
+      const pendingCount = task.subtaskIds.length - doneCount - activeCount;
+      const parts: string[] = [];
+      if (doneCount > 0) parts.push(`✅ ${doneCount}`);
+      if (activeCount > 0) parts.push(`🔄 ${activeCount}`);
+      if (pendingCount > 0) parts.push(`⬜ ${pendingCount}`);
+      const subtaskLine = parts.length > 0
+        ? `📎 子任务: ${task.subtaskIds.length} 个 (${parts.join(' ')})`
+        : `📎 子任务: ${task.subtaskIds.length} 个`;
       console.log(`│ ${padByDisplayWidth(subtaskLine, width - 3)}│`);
     }
 
@@ -933,19 +943,15 @@ function showTaskPanel(
     }
   }
 
-  // 时间行 - 合并为更紧凑的一行
+  // 时间行 - 合并创建时间、更新时间、重开次数到紧凑布局
   console.log(`├${hLine}┤`);
   const createdTime = formatLocalTime(task.createdAt);
   const updatedTime = formatRelativeTime(task.updatedAt);
-  // 合并创建和更新时间到一行显示
-  const timeLine = `📅 ${createdTime} · 更新: ${updatedTime}`;
-  console.log(`│ ${padByDisplayWidth(timeLine, width - 3)}│`);
-
-  // 重开次数显示（如果有）
+  let timeLine = `📅 ${createdTime} · 更新 ${updatedTime}`;
   if (task.reopenCount && task.reopenCount > 0) {
-    const reopenLine = `   🔁 重开 ${task.reopenCount} 次`;
-    console.log(`│ ${padByDisplayWidth(reopenLine, width - 3)}│`);
+    timeLine += ` · 🔁 重开 ${task.reopenCount} 次`;
   }
+  console.log(`│ ${padByDisplayWidth(timeLine, width - 3)}│`);
 
   console.log(`╰${hLine}╯`);
   console.log('');
@@ -996,6 +1002,18 @@ function groupConsecutiveStatusChanges(history: TaskHistoryEntry[]): HistoryGrou
 }
 
 /**
+ * 生成统一宽度的段标题
+ * 格式: "  ── 标题 ────────" 总显示宽度 60
+ */
+function makeSectionHeader(title: string): string {
+  const prefix = '  ── ';
+  const suffix = ' ';
+  const usedWidth = getDisplayWidth(prefix) + getDisplayWidth(title) + getDisplayWidth(suffix);
+  const dashes = '─'.repeat(Math.max(0, 60 - usedWidth));
+  return `${prefix}${title}${suffix}${dashes}`;
+}
+
+/**
  * 经典格式 - 详细输出
  */
 function showTaskClassic(
@@ -1011,7 +1029,7 @@ function showTaskClassic(
   console.log(line);
   console.log(`  ${task.title}`);
   console.log('');
-  console.log(`  状态: ${formatStatus(task.status)}  │  优先级: ${formatPriority(task.priority)}  │  类型: ${task.type || '未指定'}`);
+  console.log(`  状态: ${formatStatus(task.status)}  ·  优先级: ${formatPriority(task.priority)}  ·  类型: ${task.type || '未指定'}`);
 
   // 描述
   if (task.description) {
@@ -1026,7 +1044,7 @@ function showTaskClassic(
   // verbose 模式显示更多字段
   if (options.verbose) {
     console.log('');
-    console.log('  ── 详细信息 ──────────────────────────────');
+    console.log(makeSectionHeader('详细信息'));
 
     if (task.recommendedRole) {
       console.log(`   👤 推荐角色: ${task.recommendedRole}`);
@@ -1043,7 +1061,14 @@ function showTaskClassic(
     }
 
     if (task.subtaskIds && task.subtaskIds.length > 0) {
-      console.log(`   📎 子任务: ${task.subtaskIds.join(', ')}`);
+      const subtaskDisplays = task.subtaskIds.map(subId => {
+        const sub = readTaskMeta(subId, cwd);
+        if (sub) {
+          return `${getStatusIcon(sub.status)} ${subId}`;
+        }
+        return `❓ ${subId}`;
+      });
+      console.log(`   📎 子任务: ${subtaskDisplays.join('  ')}`);
     }
 
     if (task.parentId) {
@@ -1110,11 +1135,14 @@ function showTaskClassic(
     const checkpointsMeta = listCheckpoints(task.id, cwd);
 
     if (checkpointsMeta.length > 0) {
-      console.log('  ── 检查点 ──────────────────────────────');
+      console.log(makeSectionHeader('检查点'));
       console.log('');
 
       const completedCount = checkpointsMeta.filter(cp => cp.status === 'completed').length;
-      console.log(`   进度: ${completedCount}/${checkpointsMeta.length} 已完成`);
+      const percentage = Math.round((completedCount / checkpointsMeta.length) * 100);
+      const barFilled = Math.round((completedCount / checkpointsMeta.length) * 20);
+      const bar = '█'.repeat(barFilled) + '░'.repeat(20 - barFilled);
+      console.log(`   进度: [${bar}] ${percentage}% (${completedCount}/${checkpointsMeta.length})`);
       console.log('');
 
       checkpointsMeta.forEach((cp, index) => {
@@ -1133,7 +1161,7 @@ function showTaskClassic(
     }
   } else if (fs.existsSync(checkpointPath)) {
     // 默认显示 checkpoint.md 内容，格式化输出
-    console.log('  ── 检查点 ──────────────────────────────');
+    console.log(makeSectionHeader('检查点'));
     console.log('');
 
     const content = fs.readFileSync(checkpointPath, 'utf-8');
@@ -1141,7 +1169,10 @@ function showTaskClassic(
 
     if (checkpointLines.length > 0) {
       const completedCount = checkpointLines.filter(l => l.includes('[x]') || l.includes('[X]')).length;
-      console.log(`   进度: ${completedCount}/${checkpointLines.length} 已完成`);
+      const percentage = Math.round((completedCount / checkpointLines.length) * 100);
+      const barFilled = Math.round((completedCount / checkpointLines.length) * 20);
+      const bar = '█'.repeat(barFilled) + '░'.repeat(20 - barFilled);
+      console.log(`   进度: [${bar}] ${percentage}% (${completedCount}/${checkpointLines.length})`);
       console.log('');
 
       checkpointLines.forEach((l, index) => {
@@ -1158,7 +1189,7 @@ function showTaskClassic(
   // verbose 模式显示历史摘要（智能分组）
   if (options.verbose && task.history && task.history.length > 0) {
     console.log('');
-    console.log('  ── 变更历史 ──────────────────────────────');
+    console.log(makeSectionHeader('变更历史'));
     console.log('');
 
     const meaningfulHistory = task.history.filter(entry => {
@@ -1795,6 +1826,9 @@ function formatStatus(status: TaskStatus | string): string {
   const map: Record<string, string> = {
     open: '⬜ 待处理',
     in_progress: '🔵 进行中',
+    wait_review: '👀 待审查',
+    wait_qa: '🧪 待测试',
+    wait_complete: '⏳ 待完成',
     resolved: '✅ 已解决',
     closed: '⚫ 已关闭',
     reopened: '🔄 已重开',

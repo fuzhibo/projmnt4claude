@@ -192,7 +192,7 @@ program
           priority: options.priority,
           role: options.role,
           fields: options.fields,
-          format: options.json ? 'json' : undefined,
+          format: (options.json || program.opts().json) ? 'json' : undefined,
           missingVerification: options.missingVerification,
           group: options.group,
         });
