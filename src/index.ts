@@ -644,9 +644,10 @@ program
   .description('从自然语言需求描述创建任务，自动解析需求并生成任务结构\n示例: init-requirement "实现用户登录功能，包含表单验证和 JWT 认证"')
   .option('-y, --yes', '非交互模式：跳过所有确认，直接使用分析结果创建任务')
   .option('--no-plan', '创建任务后不询问是否添加到执行计划')
+  .option('--skip-validation', '跳过 checkpoints 质量校验')
   .action(async (description, options) => {
     requireInit();
-    await initRequirement(description, process.cwd(), { nonInteractive: options.yes, noPlan: options.noPlan });
+    await initRequirement(description, process.cwd(), { nonInteractive: options.yes, noPlan: options.noPlan, skipValidation: options.skipValidation });
   });
 
 // doctor 命令

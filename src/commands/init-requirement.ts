@@ -6,6 +6,7 @@ import {
   generateNewTaskId,
   writeTaskMeta,
 } from '../utils/task';
+import { hasValidCheckpoints, displayCheckpointCreationWarning } from './task';
 import type { TaskMeta, TaskPriority, TaskStatus, TaskType } from '../types/task';
 import { createDefaultTaskMeta, inferTaskType } from '../types/task';
 
@@ -28,6 +29,7 @@ interface RequirementAnalysis {
 export interface InitRequirementOptions {
   nonInteractive?: boolean;  // 非交互模式：跳过所有确认
   noPlan?: boolean;          // 不询问添加到计划
+  skipValidation?: boolean;  // 跳过 checkpoints 质量校验
 }
 
 /**
@@ -38,7 +40,7 @@ export async function initRequirement(
   cwd: string = process.cwd(),
   options: InitRequirementOptions = {}
 ): Promise<void> {
-  const { nonInteractive = false, noPlan = false } = options;
+  const { nonInteractive = false, noPlan = false, skipValidation = false } = options;
 
   if (!isInitialized(cwd)) {
     console.error('错误: 项目未初始化。请先运行 `projmnt4claude setup`');
@@ -177,6 +179,14 @@ ${checkpoints.map((cp: string) => `- [ ] ${cp}`).join('\n')}
   console.log(`   优先级: ${formatPriority(task.priority)}`);
   console.log(`   检查点: ${checkpoints.length} 项`);
   console.log('');
+
+  // BUG-002: 校验检查点质量并显示警告（除非使用 --skip-validation）
+  if (!skipValidation) {
+    const validation = hasValidCheckpoints(checkpointPath, false);
+    if (!validation.valid) {
+      displayCheckpointCreationWarning(taskId, cwd);
+    }
+  }
 
   // 询问是否添加到执行计划（非交互模式或 noPlan 时跳过）
   if (!noPlan && !nonInteractive) {

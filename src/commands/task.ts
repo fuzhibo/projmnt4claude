@@ -71,7 +71,7 @@ function generateCheckpointToken(): string {
  * @param checkpointPathOrContent - 文件路径或直接内容字符串
  * @param isContent - 如果为 true，第一个参数是内容字符串而非路径
  */
-function hasValidCheckpoints(
+export function hasValidCheckpoints(
   checkpointPathOrContent: string | null,
   isContent: boolean = false
 ): { valid: boolean; reason: string } {
@@ -147,7 +147,7 @@ const DEFAULT_CHECKPOINT_CONTENT = `# {taskId} 检查点
  * BUG-002: 任务创建时显示检查点质量提醒
  * 不阻止任务创建，但提醒用户需要编辑 checkpoint.md
  */
-function displayCheckpointCreationWarning(taskId: string, cwd: string): void {
+export function displayCheckpointCreationWarning(taskId: string, cwd: string): void {
   console.log('');
   console.log('━'.repeat(60));
   console.log('⚠️  检查点质量提醒');
