@@ -276,12 +276,20 @@ function analyzeRequirement(description: string): RequirementAnalysis {
   // 生成标题 (提取关键词)
   let title = description;
   if (description.length > 50) {
-    // 尝试提取核心动词和名词
-    const keywords = description.match(/(?:实现|添加|修复|更新|创建|设计|优化|重构|集成|迁移)[\s\S]{1,30}?/);
-    if (keywords && keywords[0]) {
+    // 尝试提取核心动词和名词（贪婪匹配，取完整短语）
+    // 匹配动词后跟的内容，直到遇到句号、换行或字符串结束
+    // 动词列表：按常见程度排序，确保匹配最相关的动词
+    const keywords = description.match(/(?:修复|实现|添加|创建|更新|设计|优化|重构|集成|迁移|验证|初始化|编写|配置|部署|测试|分析|处理|支持|增强|完善)[^\n。！？]*/);
+    if (keywords && keywords[0] && keywords[0].length >= 5) {
+      // 确保标题至少有5个字符，避免截断成无意义的片段
       title = keywords[0].trim();
+      // 如果提取的标题超过50字符，截断并添加省略号
+      if (title.length > 50) {
+        title = title.substring(0, 47) + '...';
+      }
     } else {
-      title = description.substring(0, 50) + '...';
+      // 无法提取有效关键词时，使用原描述的前50字符
+      title = description.substring(0, 47) + '...';
     }
   }
 
