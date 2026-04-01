@@ -71,15 +71,17 @@ export function writeTaskMeta(task: TaskMeta, cwd: string = process.cwd()): void
 
       // 对于 dependencies 字段，需要特殊处理
       if (field === 'dependencies') {
-        const oldDeps = JSON.stringify(oldValue as string[] || []);
-        const newDeps = JSON.stringify(newValue as string[] || []);
+        const oldDepsArray = (oldValue as string[] || []);
+        const newDepsArray = (newValue as string[] || []);
+        const oldDeps = JSON.stringify(oldDepsArray);
+        const newDeps = JSON.stringify(newDepsArray);
         if (oldDeps !== newDeps) {
           historyEntries.push({
             timestamp: new Date().toISOString(),
             action: `更新依赖列表`,
             field: 'dependencies',
-            oldValue: oldDeps.length > 0 ? oldDeps.join(', ') : '无',
-            newValue: newDeps.length > 0 ? newDeps.join(', ') : '无',
+            oldValue: oldDepsArray.length > 0 ? oldDepsArray.join(', ') : '无',
+            newValue: newDepsArray.length > 0 ? newDepsArray.join(', ') : '无',
             user: process.env.USER || undefined,
           });
         }

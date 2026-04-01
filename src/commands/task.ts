@@ -8,6 +8,7 @@ import {
   writeTaskMeta,
   getAllTasks,
   taskExists,
+  renameTask,
 } from '../utils/task';
 import {
   parseCheckpointsWithIds,
@@ -215,6 +216,7 @@ export async function createTask(
     type?: string;
     nonInteractive?: boolean;
     skipValidation?: boolean;
+    id?: string;  // 用户指定的任务ID
   } = {},
   cwd: string = process.cwd()
 ): Promise<void> {
@@ -228,8 +230,23 @@ export async function createTask(
     const taskType = (options.type || 'feature') as TaskType;
     const taskPriority = normalizePriorityToP(options.priority || 'P2');
 
-    // 生成任务ID (新格式)
-    const taskId = generateNewTaskId(cwd, taskType, taskPriority, options.title);
+    // 确定任务ID：用户指定ID优先，否则自动生成
+    let taskId: string;
+    if (options.id) {
+      // 验证用户指定的ID格式
+      if (!isValidTaskId(options.id)) {
+        console.error(`错误: 无效的任务ID格式 '${options.id}'`);
+        process.exit(1);
+      }
+      // 检查ID是否已存在
+      if (taskExists(options.id, cwd)) {
+        console.error(`错误: 任务ID '${options.id}' 已存在`);
+        process.exit(1);
+      }
+      taskId = options.id;
+    } else {
+      taskId = generateNewTaskId(cwd, taskType, taskPriority, options.title);
+    }
 
     // BUG-002: 默认模板内容作为初始占位符，创建后会进行质量校验
     const defaultCheckpointContent = `# ${taskId} 检查点\n\n- [ ] 检查点1（请替换为具体验收标准）\n- [ ] 检查点2（请替换为具体验收标准）\n`;
@@ -296,8 +313,23 @@ export async function createTask(
     return;
   }
 
-  // 生成任务ID (新格式)
-  const taskId = generateNewTaskId(cwd, 'feature', response.priority, response.title);
+  // 确定任务ID：用户指定ID优先，否则自动生成
+  let taskId: string;
+  if (options.id) {
+    // 验证用户指定的ID格式
+    if (!isValidTaskId(options.id)) {
+      console.error(`错误: 无效的任务ID格式 '${options.id}'`);
+      process.exit(1);
+    }
+    // 检查ID是否已存在
+    if (taskExists(options.id, cwd)) {
+      console.error(`错误: 任务ID '${options.id}' 已存在`);
+      process.exit(1);
+    }
+    taskId = options.id;
+  } else {
+    taskId = generateNewTaskId(cwd, 'feature', response.priority, response.title);
+  }
 
   // BUG-002: 交互模式 - 默认检查点内容作为初始占位符，创建后会进行质量校验
   const defaultCheckpointContent = `# ${taskId} 检查点\n\n- [ ] 检查点1（请替换为具体验收标准）\n- [ ] 检查点2（请替换为具体验收标准）\n`;
@@ -3616,5 +3648,54 @@ export function generateCheckpointTemplate(
   }
 
   console.log('');
+}
+
+/**
+ * 重命名任务 CLI 命令
+ * 用法: task rename <oldTaskId> <newTaskId>
+ */
+export function renameTaskCommand(
+  oldTaskId: string,
+  newTaskId: string,
+  cwd: string = process.cwd()
+): void {
+  if (!isInitialized(cwd)) {
+    console.error('错误: 项目未初始化。请先运行 `projmnt4claude setup`');
+    process.exit(1);
+  }
+
+  // 验证参数
+  if (!oldTaskId || !newTaskId) {
+    console.error('错误: rename 操作需要指定旧任务ID和新任务ID');
+    console.error('');
+    console.error('用法: task rename <oldTaskId> <newTaskId>');
+    console.error('示例: task rename TASK-001 TASK-feature-new-name');
+    process.exit(1);
+  }
+
+  // 验证新 ID 格式
+  if (!isValidTaskId(newTaskId)) {
+    console.error(`错误: 无效的任务 ID 格式 '${newTaskId}'`);
+    console.error('任务 ID 必须以 TASK- 开头，后跟字母、数字、连字符或下划线');
+    process.exit(1);
+  }
+
+  const result = renameTask(oldTaskId, newTaskId, cwd);
+
+  if (result.success) {
+    console.log('');
+    console.log('━'.repeat(SEPARATOR_WIDTH));
+    console.log('✅ 任务重命名成功');
+    console.log('━'.repeat(SEPARATOR_WIDTH));
+    console.log('');
+    console.log(`  旧 ID: ${result.oldId}`);
+    console.log(`  新 ID: ${result.newId}`);
+    console.log('');
+    console.log('💡 提示: 已自动更新其他任务中的引用');
+    console.log('');
+  } else {
+    console.error(`❌ 重命名失败: ${result.error}`);
+    process.exit(1);
+  }
 }
 

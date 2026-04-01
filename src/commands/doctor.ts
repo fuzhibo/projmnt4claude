@@ -10,6 +10,7 @@ import {
 } from '../utils/path';
 import { getAllTaskIds } from '../utils/task';
 import { SEPARATOR_WIDTH } from '../utils/format';
+import { parseTaskId, TaskIdInfo } from '../types/task';
 
 /**
  * 检查结果接口
@@ -60,8 +61,7 @@ export async function runDoctor(fix: boolean = false, cwd: string = process.cwd(
     // 8. 检查任务规范对齐（检测任务 meta.json 是否符合最新规范）
     results.push(...checkTaskSpecificationAlignment(cwd));
 
-    // 9. 检查 Hook 可用性（验证 hook 文件存在性和执行测试）
-    results.push(...checkHookAvailability(cwd));
+    // 9. Hook 配置已由 checkHooksConfiguration 统一检查
   }
 
   // 显示结果
@@ -128,9 +128,9 @@ function checkPluginCache(): CheckResult {
   if (!pluginRoot) {
     return {
       name: '插件缓存',
-      status: 'warning',
-      message: 'CLAUDE_PLUGIN_ROOT 环境变量未设置',
-      details: ['这可能是因为插件未正确安装或环境变量未配置'],
+      status: 'ok',
+      message: 'CLI 模式运行，跳过插件缓存检查',
+      details: ['CLAUDE_PLUGIN_ROOT 未设置（CLI 模式下正常）'],
       fixable: false,
     };
   }
@@ -239,7 +239,7 @@ function checkTaskNaming(cwd: string): CheckResult[] {
 
   if (!fs.existsSync(tasksDir)) {
     return [{
-      name: '任务命名',
+      name: '任务命名格式',
       status: 'ok',
       message: '任务目录不存在（无任务）',
       details: [],
@@ -248,36 +248,91 @@ function checkTaskNaming(cwd: string): CheckResult[] {
   }
 
   const taskIds = getAllTaskIds(cwd);
-  const invalidTasks: string[] = [];
-  const taskPattern = /^TASK-\d{3,}$/;
+  const invalidFormatTasks: string[] = [];
+  const typeMismatchTasks: { taskId: string; idType: string; metaType: string }[] = [];
 
   for (const taskId of taskIds) {
-    if (!taskPattern.test(taskId)) {
-      invalidTasks.push(taskId);
+    // 使用 parseTaskId 替代硬编码正则
+    const idInfo = parseTaskId(taskId);
+
+    // 检查格式是否合法（valid=true 且 format 为 old 或 new）
+    if (!idInfo.valid || (idInfo.format !== 'old' && idInfo.format !== 'new')) {
+      invalidFormatTasks.push(taskId);
+    }
+
+    // 检查 ID type 与 meta.json type 一致性（仅新格式有 type 信息）
+    if (idInfo.valid && idInfo.format === 'new' && idInfo.type) {
+      const metaPath = path.join(tasksDir, taskId, 'meta.json');
+      if (fs.existsSync(metaPath)) {
+        try {
+          const meta = JSON.parse(fs.readFileSync(metaPath, 'utf-8'));
+          if (meta.type && meta.type !== idInfo.type) {
+            typeMismatchTasks.push({
+              taskId,
+              idType: idInfo.type,
+              metaType: meta.type,
+            });
+          }
+        } catch {
+          // 忽略解析错误
+        }
+      }
     }
   }
 
-  if (invalidTasks.length === 0) {
+  // 报告 1: 格式不合法
+  if (invalidFormatTasks.length === 0) {
     results.push({
-      name: '任务命名',
+      name: '任务命名格式',
       status: 'ok',
       message: `所有 ${taskIds.length} 个任务命名格式正确`,
-      details: ['格式: TASK-XXX'],
+      details: ['支持格式: TASK-XXX (旧) 或 TASK-{type}-{priority}-{slug}-{date} (新)'],
       fixable: false,
     });
   } else {
     results.push({
-      name: '任务命名',
+      name: '任务命名格式',
       status: 'warning',
-      message: `${invalidTasks.length} 个任务命名格式不规范`,
+      message: `${invalidFormatTasks.length} 个任务命名格式不规范`,
       details: [
         '不规范的命名:',
-        ...invalidTasks.slice(0, 5).map(t => `  - ${t}`),
-        ...(invalidTasks.length > 5 ? [`  ... 还有 ${invalidTasks.length - 5} 个`] : []),
-        '建议格式: TASK-XXX',
+        ...invalidFormatTasks.slice(0, 5).map(t => `  - ${t}`),
+        ...(invalidFormatTasks.length > 5 ? [`  ... 还有 ${invalidFormatTasks.length - 5} 个`] : []),
+        '建议格式: TASK-{type}-{priority}-{slug}-{date}',
       ],
       fixable: false, // 任务重命名需要手动处理
     });
+  }
+
+  // 报告 2: ID/meta type 不一致
+  if (typeMismatchTasks.length > 0) {
+    results.push({
+      name: '任务类型一致性',
+      status: 'warning',
+      message: `${typeMismatchTasks.length} 个任务的 ID 类型与 meta.json 不一致`,
+      details: [
+        '不一致的任务:',
+        ...typeMismatchTasks.slice(0, 5).map(t => `  - ${t.taskId}: ID=${t.idType}, meta=${t.metaType}`),
+        ...(typeMismatchTasks.length > 5 ? [`  ... 还有 ${typeMismatchTasks.length - 5} 个`] : []),
+        '建议: 手动修正 meta.json 中的 type 字段或重命名任务',
+      ],
+      fixable: false,
+    });
+  } else if (taskIds.length > 0) {
+    // 仅在有任务时报告一致性检查通过
+    const newFormatCount = taskIds.filter(id => {
+      const info = parseTaskId(id);
+      return info.valid && info.format === 'new' && info.type;
+    }).length;
+    if (newFormatCount > 0) {
+      results.push({
+        name: '任务类型一致性',
+        status: 'ok',
+        message: `${newFormatCount} 个新格式任务 ID 与 meta.json 类型一致`,
+        details: [],
+        fixable: false,
+      });
+    }
   }
 
   return results;
@@ -293,13 +348,6 @@ function checkDirectoryStructure(cwd: string): CheckResult[] {
   const requiredDirs = [
     { name: 'tasks', path: getTasksDir(cwd) },
     { name: 'toolbox', path: getToolboxDir(cwd) },
-  ];
-
-  const optionalDirs = [
-    { name: 'archive', path: path.join(projectDir, 'archive') },
-    { name: 'hooks', path: path.join(projectDir, 'hooks') },
-    { name: 'bin', path: path.join(projectDir, 'bin') },
-    { name: 'reports', path: path.join(projectDir, 'reports') },
   ];
 
   // 检查必需目录
@@ -323,16 +371,31 @@ function checkDirectoryStructure(cwd: string): CheckResult[] {
     }
   }
 
-  // 检查可选目录
-  for (const dir of optionalDirs) {
-    if (!fs.existsSync(dir.path)) {
-      results.push({
-        name: `目录: ${dir.name}`,
-        status: 'warning',
-        message: '可选目录缺失',
-        details: [`缺失: ${dir.path}`],
-        fixable: true,
-      });
+  // 检查 archive 目录 - 仅在存在 abandoned 任务时才有意义
+  const tasksDir = getTasksDir(cwd);
+  if (fs.existsSync(tasksDir)) {
+    const taskIds = getAllTaskIds(cwd);
+    const hasAbandonedTasks = taskIds.some(taskId => {
+      const metaPath = path.join(tasksDir, taskId, 'meta.json');
+      try {
+        const meta = JSON.parse(fs.readFileSync(metaPath, 'utf-8'));
+        return meta.status === 'abandoned';
+      } catch {
+        return false;
+      }
+    });
+
+    if (hasAbandonedTasks) {
+      const archiveDir = path.join(projectDir, 'archive');
+      if (!fs.existsSync(archiveDir)) {
+        results.push({
+          name: '目录: archive',
+          status: 'warning',
+          message: '存在已废弃任务但 archive 目录缺失',
+          details: [`缺失: ${archiveDir}`],
+          fixable: true,
+        });
+      }
     }
   }
 
@@ -497,114 +560,10 @@ function checkTaskSpecificationAlignment(cwd: string): CheckResult[] {
 }
 
 /**
- * 检查 Hook 可用性
- * 验证 hook 文件存在性、配置正确性、执行测试
- */
-function checkHookAvailability(cwd: string): CheckResult[] {
-  const results: CheckResult[] = [];
-  const projectDir = getProjectDir(cwd);
-  const hooksDir = getHooksDir(cwd);
-
-  // 1. 检查 hooks 目录
-  if (!fs.existsSync(hooksDir)) {
-    results.push({
-      name: 'Hook 文件',
-      status: 'warning',
-      message: 'hooks 目录不存在',
-      details: ['路径: ' + hooksDir, '需要运行 projmnt4claude setup 创建'],
-      fixable: true,
-    });
-    return results;
-  }
-
-  // 2. 检查必需的 hook 文件
-  const requiredHooks = ['pre-task.ts', 'post-task.ts'];
-  const missingHooks: string[] = [];
-
-  for (const hookFile of requiredHooks) {
-    const hookPath = path.join(hooksDir, hookFile);
-    if (!fs.existsSync(hookPath)) {
-      missingHooks.push(hookFile);
-    }
-  }
-
-  if (missingHooks.length > 0) {
-    results.push({
-      name: 'Hook 文件',
-      status: 'warning',
-      message: `${missingHooks.length} 个必需的 hook 文件缺失`,
-      details: [
-        '缺失文件:',
-        ...missingHooks.map(h => `  - ${h}`),
-        '',
-        '💡 运行 projmnt4claude setup --force 重新生成',
-      ],
-      fixable: true,
-    });
-  } else {
-    results.push({
-      name: 'Hook 文件',
-      status: 'ok',
-      message: '所有必需的 hook 文件存在',
-      details: requiredHooks.map(h => `✓ ${h}`),
-      fixable: false,
-    });
-  }
-
-  // 3. 检查 .claude/settings.json 中的 hooks 配置
-  const claudeSettingsPath = path.join(cwd, '.claude', 'settings.json');
-  if (fs.existsSync(claudeSettingsPath)) {
-    try {
-      const settings = JSON.parse(fs.readFileSync(claudeSettingsPath, 'utf-8'));
-      const hooks = settings.hooks || {};
-      const preToolUseHooks = hooks.PreToolUse || [];
-
-      // 检查是否有 projmnt4claude 相关的 hooks
-      const hasProjMntHooks = preToolUseHooks.some((h: { matcher?: string }) =>
-        h.matcher?.includes('projmnt4claude') || h.matcher?.includes('Task')
-      );
-
-      if (!hasProjMntHooks) {
-        results.push({
-          name: 'Hook 配置',
-          status: 'warning',
-          message: '.claude/settings.json 中缺少 projmnt4claude hooks',
-          details: [
-            'PreToolUse hooks 中没有配置任务相关验证',
-            '',
-            '💡 运行 projmnt4claude doctor --fix 自动配置',
-          ],
-          fixable: true,
-        });
-      } else {
-        results.push({
-          name: 'Hook 配置',
-          status: 'ok',
-          message: 'Hooks 已正确配置',
-          details: [`✓ PreToolUse hooks: ${preToolUseHooks.length} 个`],
-          fixable: false,
-        });
-      }
-    } catch {
-      results.push({
-        name: 'Hook 配置',
-        status: 'warning',
-        message: '无法解析 .claude/settings.json',
-        details: ['文件可能已损坏，请检查 JSON 格式'],
-        fixable: false,
-      });
-    }
-  }
-
-  return results;
-}
-
-/**
  * 检查 Hooks 配置
  */
 function checkHooksConfiguration(cwd: string): CheckResult[] {
   const results: CheckResult[] = [];
-  const projectDir = getProjectDir(cwd);
   const hooksDir = getHooksDir(cwd);
   const claudeSettingsPath = path.join(cwd, '.claude', 'settings.json');
 
@@ -752,11 +711,38 @@ function displayResults(results: CheckResult[]): void {
 }
 
 /**
+ * 解析插件根目录
+ * 优先使用 CLAUDE_PLUGIN_ROOT 环境变量（插件模式）
+ * 回退到相对于当前文件的包根目录（CLI/开发模式）
+ */
+function resolvePluginRoot(): string | null {
+  // 1. 插件模式 - Claude Code 注入的环境变量
+  if (process.env.CLAUDE_PLUGIN_ROOT) {
+    return process.env.CLAUDE_PLUGIN_ROOT;
+  }
+
+  // 2. CLI/开发模式 - 从当前文件位置向上查找包含 locales 的目录
+  try {
+    let dir = __dirname;
+    for (let i = 0; i < 3; i++) {
+      if (fs.existsSync(path.join(dir, 'locales'))) {
+        return dir;
+      }
+      dir = path.dirname(dir);
+    }
+  } catch {
+    // 忽略路径解析错误
+  }
+
+  return null;
+}
+
+/**
  * 修复问题
  */
 async function fixIssues(issues: CheckResult[], cwd: string): Promise<void> {
   const projectDir = getProjectDir(cwd);
-  const pluginRoot = process.env.CLAUDE_PLUGIN_ROOT;
+  const pluginRoot = resolvePluginRoot();
 
   for (const issue of issues) {
     console.log(`修复: ${issue.name}...`);
@@ -809,7 +795,7 @@ async function fixIssues(issues: CheckResult[], cwd: string): Promise<void> {
           console.log(`  ✓ 已复制 ${commandFiles.length} 个命令文档`);
         }
       } else {
-        console.log(`  ✗ 无法修复: CLAUDE_PLUGIN_ROOT 未设置`);
+        console.log(`  ✗ 无法修复: 未找到插件根目录（CLAUDE_PLUGIN_ROOT 未设置且无法自动定位）`);
       }
     } else if (issue.name.startsWith('目录:')) {
       // 创建缺失的目录
@@ -818,9 +804,6 @@ async function fixIssues(issues: CheckResult[], cwd: string): Promise<void> {
         'tasks': getTasksDir(cwd),
         'toolbox': getToolboxDir(cwd),
         'archive': path.join(projectDir, 'archive'),
-        'hooks': path.join(projectDir, 'hooks'),
-        'bin': path.join(projectDir, 'bin'),
-        'reports': path.join(projectDir, 'reports'),
       };
 
       const dirPath = dirMap[dirName];

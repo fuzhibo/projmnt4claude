@@ -27,6 +27,7 @@ import {
   validateTask,
   countTasks,
   purgeTasks,
+  renameTaskCommand,
 } from './commands/task';
 import {
   showPlan,
@@ -147,7 +148,23 @@ program
 // task 命令组
 program
   .command('task <action> [id]')
-  .description('管理任务 (create/list/show/update/delete/purge/execute/checkpoint/dependency/add-subtask/status-guide/complete/split/search/batch-update/count)')
+  .description(`管理任务
+
+基本操作: create/list/show/update/delete/rename/purge/execute/checkpoint
+高级操作: dependency/add-subtask/status-guide/complete/split/search/batch-update/count
+
+⚠️  dependency 子命令格式 (注意参数顺序):
+  task dependency <add|remove> <taskId> --dep-id <depTaskId>
+
+  示例:
+    task dependency add TASK-001 --dep-id TASK-002    # TASK-001 依赖 TASK-002
+    task dependency remove TASK-001 --dep-id TASK-002 # 移除依赖
+
+rename 子命令格式:
+  task rename <oldTaskId> <newTaskId>
+
+  示例:
+    task rename TASK-001 TASK-feature-new-name`)
   .allowExcessArguments(true)
   .option('-s, --status <status>', '按状态过滤 (仅 list)')
   .option('-p, --priority <priority>', '按优先级过滤 (仅 list)')
@@ -156,7 +173,7 @@ program
   .option('--title <title>', '任务标题 (仅 create/update)')
   .option('--description <description>', '任务描述 (仅 create/update)')
   .option('--type <type>', '任务类型 (create/count): bug/feature/research/docs/refactor/test')
-  .option('-y, --yes', '非交互模式 (仅 create/checkpoint)')
+  .option('-y, --yes', '非交互模式 (仅 create/checkpoint/delete)')
   .option('--token <token>', '检查点确认令牌 (仅 update)')
   .option('--sync-children', '同步子任务状态 (仅 update resolved/closed)')
   .option('--no-sync', '不同步子任务状态 (仅 update)')
@@ -187,6 +204,7 @@ program
           type: options.type,
           nonInteractive: options.yes,
           skipValidation: options.skipValidation,
+          id: id,  // 传递用户指定的任务ID
         });
         break;
       case 'list':
@@ -235,7 +253,7 @@ program
           console.error('错误: delete 操作需要指定任务ID');
           process.exit(1);
         }
-        await deleteTask(id);
+        await deleteTask(id, options.yes);
         break;
       case 'purge':
         purgeTasks({
@@ -327,16 +345,45 @@ program
       case 'dependency': {
         // 用法: task dependency add <taskId> --dep-id <depId>
         //       task dependency remove <taskId> --dep-id <depId>
+
+        // 显示帮助信息的辅助函数
+        const showDependencyHelp = () => {
+          console.error('');
+          console.error('dependency 子命令用法:');
+          console.error('  task dependency add <taskId> --dep-id <depTaskId>');
+          console.error('  task dependency remove <taskId> --dep-id <depTaskId>');
+          console.error('');
+          console.error('示例:');
+          console.error('  task dependency add TASK-001 --dep-id TASK-002');
+          console.error('  task dependency remove TASK-001 --dep-id TASK-002');
+          console.error('');
+          console.error('说明:');
+          console.error('  - add: 添加依赖关系，表示 taskId 依赖于 depTaskId');
+          console.error('  - remove: 移除依赖关系');
+          console.error('  - taskId: 要添加/移除依赖的任务ID');
+          console.error('  - --dep-id: 被依赖的任务ID');
+        };
+
         if (!id) {
-          console.error('错误: dependency 操作需要指定子操作和任务ID');
-          console.error('用法: task dependency add <taskId> --dep-id <depId>');
-          console.error('      task dependency remove <taskId> --dep-id <depId>');
+          console.error('❌ 错误: dependency 操作需要指定子操作 (add/remove)');
+          showDependencyHelp();
           process.exit(1);
         }
 
         // id 应该是 'add' 或 'remove'
         if (id !== 'add' && id !== 'remove') {
-          console.error(`错误: 未知的子操作 '${id}'，支持: add, remove`);
+          // 检测常见错误：用户可能把 taskId 放在了 add/remove 的位置
+          if (id.startsWith('TASK-') || id.startsWith('task-')) {
+            console.error(`❌ 错误: 参数顺序错误`);
+            console.error('');
+            console.error(`您输入的是: task dependency ${id} ...`);
+            console.error(`正确格式应该是: task dependency <add|remove> ${id} --dep-id <depTaskId>`);
+            console.error('');
+            console.error(`提示: 子操作 (add/remove) 必须紧跟在 dependency 后面`);
+          } else {
+            console.error(`❌ 错误: 未知的子操作 '${id}'，支持: add, remove`);
+          }
+          showDependencyHelp();
           process.exit(1);
         }
 
@@ -345,13 +392,15 @@ program
         const taskId = process.argv[depIndex + 2]; // 跳过 'dependency' 和 'add/remove'
 
         if (!taskId || taskId.startsWith('-')) {
-          console.error('错误: 需要指定任务ID');
-          console.error('用法: task dependency add <taskId> --dep-id <depId>');
+          console.error('❌ 错误: 需要指定任务ID');
+          showDependencyHelp();
           process.exit(1);
         }
 
         if (!options.depId) {
-          console.error('错误: 需要指定 --dep-id');
+          console.error('❌ 错误: 需要指定 --dep-id (被依赖的任务ID)');
+          console.error('');
+          console.error(`示例: task dependency ${id} ${taskId} --dep-id TASK-xxx`);
           process.exit(1);
         }
 
@@ -452,8 +501,25 @@ program
         });
         break;
       }
+      case 'rename': {
+        // 用法: task rename <oldTaskId> <newTaskId>
+        const renameIndex = process.argv.indexOf('rename');
+        const oldTaskId = renameIndex + 1 < process.argv.length ? process.argv[renameIndex + 1] : undefined;
+        const newTaskId = renameIndex + 2 < process.argv.length ? process.argv[renameIndex + 2] : undefined;
+
+        if (!oldTaskId || !newTaskId) {
+          console.error('错误: rename 操作需要指定旧任务ID和新任务ID');
+          console.error('');
+          console.error('用法: task rename <oldTaskId> <newTaskId>');
+          console.error('示例: task rename TASK-001 TASK-feature-new-name');
+          process.exit(1);
+        }
+
+        renameTaskCommand(oldTaskId, newTaskId);
+        break;
+      }
       default:
-        console.error(`错误: 未知操作 '${action}'。支持的操作: create, list, show, update, delete, purge, execute, checkpoint, dependency, discuss, add-subtask, sync-children, split, search, batch-update, submit, validate, history, status-guide, complete, count`);
+        console.error(`错误: 未知操作 '${action}'。支持的操作: create, list, show, update, delete, rename, purge, execute, checkpoint, dependency, discuss, add-subtask, sync-children, split, search, batch-update, submit, validate, history, status-guide, complete, count`);
         process.exit(1);
     }
   });
