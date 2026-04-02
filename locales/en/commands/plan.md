@@ -20,9 +20,12 @@ node ${CLAUDE_PLUGIN_ROOT}/skills/projmnt4claude/dist/projmnt4claude.js plan <ac
 
 ## Options
 
-- `-j, --json` - Output as JSON (show only)
+- `-j, --json` - Output as JSON (show/recommend)
 - `-f, --force` - Skip confirmation (clear only)
 - `-a, --after <taskId>` - Add after specified task (add only)
+- `-y, --yes` - Non-interactive, auto-apply recommendations (recommend only)
+- `-q, --query <query>` - Filter by user description/keywords (recommend only)
+- `--all` - Show all status tasks, default only open (recommend only)
 
 ## Examples
 

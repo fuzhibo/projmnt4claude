@@ -332,6 +332,21 @@ export interface HarnessRuntimeState {
   resumeFrom: Map<string, 'development' | 'code_review' | 'qa' | 'evaluation'>;
   /** 重新评估次数计数器（独立于重试次数，上限2次） */
   reevaluateCounter: Map<string, number>;
+  /**
+   * 批次边界索引列表（来自 plan recommend 的批次分组数据）
+   * 例如 [0, 3, 7] 表示: 批次1=[0,3), 批次2=[3,7), 批次3=[7,...)
+   * 与 batchLabels 配合使用，为流水线提供批次感知能力
+   */
+  batchBoundaries?: number[];
+  /**
+   * 批次标签列表（与 batchBoundaries 一一对应）
+   * 例如 ['P0 紧急', 'P1 高', 'P2 中']
+   */
+  batchLabels?: string[];
+  /**
+   * 批次内是否可并行标记（与 batchBoundaries 一一对应）
+   */
+  batchParallelizable?: boolean[];
 }
 
 /**
@@ -431,6 +446,9 @@ export function createDefaultRuntimeState(config: HarnessConfig): HarnessRuntime
     updatedAt: now,
     resumeFrom: new Map(),
     reevaluateCounter: new Map(),
+    batchBoundaries: [],
+    batchLabels: [],
+    batchParallelizable: [],
   };
 }
 

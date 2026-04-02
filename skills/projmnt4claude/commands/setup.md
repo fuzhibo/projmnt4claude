@@ -13,6 +13,14 @@ argument-hint: ""
 node ${CLAUDE_PLUGIN_ROOT}/skills/projmnt4claude/dist/projmnt4claude.js setup
 ```
 
+## 选项
+
+| 选项 | 描述 |
+|------|------|
+| `-y, --yes` | 非交互模式：跳过所有确认，使用默认设置 |
+| `-l, --language <zh\|en>` | 指定语言 (中文/English) |
+| `-f, --force` | 强制重新初始化（重新复制技能文件） |
+
 ## 功能说明
 
 此命令将在用户项目根目录创建 `.projmnt4claude/` 目录结构：

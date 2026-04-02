@@ -74,10 +74,15 @@ export class AssemblyLine {
     state.state = 'running';
     state.startTime = startTime;
 
+    const hasBatches = (state.batchBoundaries?.length ?? 0) > 0;
+
     // 报告流水线开始
     this.statusReporter.startPipeline(state.taskQueue.length);
 
-    console.log(`\n🚀 开始执行流水线，共 ${state.taskQueue.length} 个任务\n`);
+    const batchInfo = hasBatches
+      ? `，${state.batchBoundaries!.length} 个批次`
+      : '';
+    console.log(`\n🚀 开始执行流水线，共 ${state.taskQueue.length} 个任务${batchInfo}\n`);
 
     while (state.currentIndex < state.taskQueue.length) {
       const taskId = state.taskQueue[state.currentIndex];
@@ -95,7 +100,9 @@ export class AssemblyLine {
       }
 
       console.log(`\n${'━'.repeat(SEPARATOR_WIDTH)}`);
-      console.log(`📋 处理任务 [${state.currentIndex + 1}/${state.taskQueue.length}]: ${taskId}`);
+      const batchPos = this.getBatchPosition(state.currentIndex, state);
+      const batchPrefix = batchPos ? `[${batchPos.batchLabel} ${batchPos.taskInBatch}/${batchPos.batchSize}] ` : '';
+      console.log(`📋 ${batchPrefix}处理任务 [${state.currentIndex + 1}/${state.taskQueue.length}]: ${taskId}`);
       console.log('━'.repeat(SEPARATOR_WIDTH));
 
       try {
@@ -110,7 +117,19 @@ export class AssemblyLine {
         state.updatedAt = new Date().toISOString();
 
         // 更新进度报告
-        this.statusReporter.updateProgress(state.currentIndex, state.taskQueue.length);
+        const batchCtx = this.getBatchPosition(state.currentIndex, state);
+        this.statusReporter.updateProgress(state.currentIndex, state.taskQueue.length,
+          batchCtx ? {
+            batchIndex: batchCtx.batchIndex,
+            totalBatches: batchCtx.totalBatches,
+            batchLabel: batchCtx.batchLabel,
+          } : undefined
+        );
+
+        // 跨批次边界时输出批次摘要
+        if (hasBatches && batchPos && batchCtx && batchPos.batchIndex !== batchCtx.batchIndex) {
+          this.outputBatchSummary(state, batchPos.batchIndex);
+        }
 
         // 保存状态（用于中断恢复）
         saveRuntimeState(state, this.config.cwd);
@@ -132,7 +151,20 @@ export class AssemblyLine {
         }
 
         state.currentIndex++;
+
+        // 跨批次边界时输出批次摘要（错误路径）
+        if (hasBatches && batchPos) {
+          const nextBatch = this.getBatchPosition(state.currentIndex, state);
+          if (nextBatch && batchPos.batchIndex !== nextBatch.batchIndex) {
+            this.outputBatchSummary(state, batchPos.batchIndex);
+          }
+        }
       }
+    }
+
+    // 输出最后一个批次的摘要
+    if (hasBatches && state.batchBoundaries!.length > 0) {
+      this.outputBatchSummary(state, state.batchBoundaries!.length - 1);
     }
 
     // 生成摘要
@@ -889,5 +921,90 @@ export class AssemblyLine {
    */
   requeue(taskId: string, state: HarnessRuntimeState): void {
     state.taskQueue.push(taskId);
+  }
+
+  /**
+   * 输出批次级摘要
+   *
+   * 当完成一个批次的所有任务后，统计该批次的通过/失败/跳过情况
+   */
+  private outputBatchSummary(state: HarnessRuntimeState, batchIndex: number): void {
+    const boundaries = state.batchBoundaries!;
+    const labels = state.batchLabels;
+    const batchStart = boundaries[batchIndex]!;
+    const batchEnd = batchIndex + 1 < boundaries.length
+      ? boundaries[batchIndex + 1]!
+      : state.taskQueue.length;
+    const batchSize = batchEnd - batchStart;
+
+    const batchTaskIds = state.taskQueue.slice(batchStart, batchEnd);
+
+    // 使用每个任务的最新记录（处理重试情况）
+    const lastRecordByTask = new Map<string, TaskExecutionRecord>();
+    for (const record of state.records) {
+      if (batchTaskIds.includes(record.taskId)) {
+        lastRecordByTask.set(record.taskId, record);
+      }
+    }
+
+    let passed = 0;
+    let failed = 0;
+    let skipped = 0;
+    for (const taskId of batchTaskIds) {
+      const record = lastRecordByTask.get(taskId);
+      if (!record) {
+        skipped++;
+      } else if (record.finalStatus === 'resolved' || record.finalStatus === 'closed') {
+        passed++;
+      } else if (record.finalStatus === 'abandoned' || record.finalStatus === 'needs_human') {
+        failed++;
+      } else {
+        skipped++;
+      }
+    }
+
+    const label = labels?.[batchIndex] || `批次 ${batchIndex + 1}`;
+    console.log(`\n📊 ${label} 完成: ${passed} 通过, ${failed} 失败, ${skipped} 跳过 (${batchSize} 任务)`);
+  }
+
+  /**
+   * 获取当前索引在批次中的位置信息
+   *
+   * 根据 state.batchBoundaries 计算当前任务属于哪个批次，
+   * 以及在批次内的相对位置
+   */
+  private getBatchPosition(
+    currentIndex: number,
+    state: HarnessRuntimeState
+  ): { batchIndex: number; totalBatches: number; batchLabel: string; taskInBatch: number; batchSize: number } | null {
+    const boundaries = state.batchBoundaries;
+    const labels = state.batchLabels;
+    if (!boundaries || boundaries.length === 0) {
+      return null;
+    }
+
+    // 找到当前索引所属的批次（二分查找：最后一个 start <= currentIndex 的批次）
+    let batchIndex = 0;
+    for (let i = boundaries.length - 1; i >= 0; i--) {
+      if (currentIndex >= boundaries[i]!) {
+        batchIndex = i;
+        break;
+      }
+    }
+
+    const batchStart = boundaries[batchIndex]!;
+    const batchEnd = batchIndex + 1 < boundaries.length
+      ? boundaries[batchIndex + 1]!
+      : state.taskQueue.length;
+    const batchSize = batchEnd - batchStart;
+    const taskInBatch = currentIndex - batchStart + 1;
+
+    return {
+      batchIndex,
+      totalBatches: boundaries.length,
+      batchLabel: labels?.[batchIndex] || `批次 ${batchIndex + 1}`,
+      taskInBatch,
+      batchSize,
+    };
   }
 }

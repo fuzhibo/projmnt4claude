@@ -12,6 +12,9 @@ node ${CLAUDE_PLUGIN_ROOT}/skills/projmnt4claude/dist/projmnt4claude.js status [
 
 - `--archived` - Show archived task statistics
 - `-a, --all` - Show all tasks (including archived)
+- `-q, --quiet` - Compact output: key metrics only
+- `--json` - JSON format output
+- `--compact` - Use compact separators
 
 ## Output
 

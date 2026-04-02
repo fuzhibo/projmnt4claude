@@ -92,6 +92,13 @@ node ${CLAUDE_PLUGIN_ROOT}/dist/projmnt4claude.js setup
 | `status` | 显示项目状态摘要 |
 | `analyze [--fix]` | 分析项目健康状态 |
 
+### 全局选项
+
+| 选项 | 描述 |
+|------|------|
+| `--ai` | AI 模式: 自动启用 --json 输出 + 非交互模式 + 精简日志 |
+| `--json` | JSON 格式输出 (全局，适用于所有命令) |
+
 ### 帮助系统
 
 | 命令 | 描述 |

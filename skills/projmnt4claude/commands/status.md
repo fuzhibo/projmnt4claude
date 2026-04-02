@@ -13,6 +13,16 @@ argument-hint: ""
 node ${CLAUDE_PLUGIN_ROOT}/skills/projmnt4claude/dist/projmnt4claude.js status
 ```
 
+## 选项
+
+| 选项 | 描述 |
+|------|------|
+| `--archived` | 显示归档任务统计 |
+| `-a, --all` | 显示所有任务（包括归档） |
+| `-q, --quiet` | 精简输出：仅显示关键指标 |
+| `--json` | JSON 格式输出 |
+| `--compact` | 使用简洁分隔符 |
+
 ## 输出内容
 
 - 任务状态分布（open/in_progress/resolved/blocked）

@@ -39,6 +39,58 @@ import {
   DEFAULT_QUALITY_GATE_CONFIG,
   type QualityGateConfig,
 } from '../utils/quality-gate.js';
+import type { ExecutionPlan } from '../utils/plan.js';
+
+/**
+ * 批次感知的任务队列
+ * 将 plan recommend 的批次分组数据转换为流水线可消费的结构
+ */
+export interface BatchAwareQueue {
+  /** 扁平任务队列（向后兼容） */
+  taskQueue: string[];
+  /** 批次边界索引列表，例如 [0, 3, 7] 表示批次1=[0,3), 批次2=[3,7) */
+  batchBoundaries: number[];
+  /** 批次标签列表，与 batchBoundaries 一一对应 */
+  batchLabels: string[];
+  /** 批次内是否可并行，与 batchBoundaries 一一对应 */
+  batchParallelizable: boolean[];
+}
+
+/**
+ * 从 ExecutionPlan 的 batches 数据构建 BatchAwareQueue
+ *
+ * 将 plan.batches（string[][]，按优先级分桶的任务ID二维数组）
+ * 转换为基于索引的 batchBoundaries + batchLabels，供流水线消费
+ */
+export function buildBatchAwareQueue(
+  taskQueue: string[],
+  batches?: string[][]
+): BatchAwareQueue {
+  if (!batches || batches.length === 0) {
+    return {
+      taskQueue,
+      batchBoundaries: [],
+      batchLabels: [],
+      batchParallelizable: [],
+    };
+  }
+
+  const batchBoundaries: number[] = [];
+  const batchLabels: string[] = [];
+  const batchParallelizable: boolean[] = [];
+  let offset = 0;
+
+  for (let i = 0; i < batches.length; i++) {
+    const batch = batches[i]!;
+    batchBoundaries.push(offset);
+    batchLabels.push(`批次 ${i + 1}`);
+    // 多个任务且超过1条链时标记为可并行
+    batchParallelizable.push(batch.length > 1);
+    offset += batch.length;
+  }
+
+  return { taskQueue, batchBoundaries, batchLabels, batchParallelizable };
+}
 
 /**
  * 命令选项
@@ -116,12 +168,14 @@ export async function harnessCommand(
   }
 
   // 加载任务列表 - 3级优先级
-  const taskQueue = await loadTaskQueue(options, cwd);
+  const batchQueue = await loadTaskQueue(options, cwd);
 
-  if (taskQueue.length === 0) {
+  if (batchQueue.taskQueue.length === 0) {
     console.error('错误: 没有可执行的任务');
     process.exit(1);
   }
+
+  const hasBatches = batchQueue.batchBoundaries.length > 0;
 
   // 输出配置信息
   if (!config.jsonOutput) {
@@ -129,7 +183,10 @@ export async function harnessCommand(
     console.log('🚀 Harness Design 执行模式');
     console.log('━'.repeat(SEPARATOR_WIDTH));
     console.log(`📋 计划文件: ${options.plan}`);
-    console.log(`📊 任务数量: ${taskQueue.length}`);
+    console.log(`📊 任务数量: ${batchQueue.taskQueue.length}`);
+    if (hasBatches) {
+      console.log(`📦 批次数: ${batchQueue.batchBoundaries.length}`);
+    }
     console.log(`🔄 最大重试: ${config.maxRetries}`);
     console.log(`⏱️  超时时间: ${config.timeout}s`);
     console.log(`🔀 并行数: ${config.parallel}`);
@@ -141,9 +198,25 @@ export async function harnessCommand(
   // 试运行模式
   if (config.dryRun) {
     console.log('📝 试运行模式 - 以下是将执行的任务顺序:');
-    taskQueue.forEach((taskId, index) => {
-      console.log(`   ${index + 1}. ${taskId}`);
-    });
+    if (hasBatches) {
+      // 按批次分组展示
+      for (let b = 0; b < batchQueue.batchBoundaries.length; b++) {
+        const start = batchQueue.batchBoundaries[b]!;
+        const end = b + 1 < batchQueue.batchBoundaries.length
+          ? batchQueue.batchBoundaries[b + 1]!
+          : batchQueue.taskQueue.length;
+        const label = batchQueue.batchLabels[b]!;
+        const parallelTag = batchQueue.batchParallelizable[b!] ? ' [可并行]' : '';
+        console.log(`\n   📦 ${label}${parallelTag} (${end - start} 个任务):`);
+        for (let i = start; i < end; i++) {
+          console.log(`      ${i + 1}. ${batchQueue.taskQueue[i]!}`);
+        }
+      }
+    } else {
+      batchQueue.taskQueue.forEach((taskId, index) => {
+        console.log(`   ${index + 1}. ${taskId}`);
+      });
+    }
     console.log('');
     console.log('✅ 试运行完成（未实际执行）');
     return;
@@ -158,7 +231,7 @@ export async function harnessCommand(
     console.log(`📊 最低质量分阈值: ${qualityGateConfig.minQualityScore}`);
     console.log('');
 
-    const batchResult = batchCheckQualityGate(taskQueue, qualityGateConfig, cwd);
+    const batchResult = batchCheckQualityGate(batchQueue.taskQueue, qualityGateConfig, cwd);
 
     // 输出检查结果
     console.log(formatBatchQualityGateResult(batchResult, { compact: false, showDetails: true }));
@@ -204,11 +277,17 @@ export async function harnessCommand(
       } else {
         console.log('📦 没有找到之前的执行状态，从头开始');
         state = createDefaultRuntimeState(config);
-        state.taskQueue = taskQueue;
+        state.taskQueue = batchQueue.taskQueue;
+        state.batchBoundaries = batchQueue.batchBoundaries;
+        state.batchLabels = batchQueue.batchLabels;
+        state.batchParallelizable = batchQueue.batchParallelizable;
       }
     } else {
       state = createDefaultRuntimeState(config);
-      state.taskQueue = taskQueue;
+      state.taskQueue = batchQueue.taskQueue;
+      state.batchBoundaries = batchQueue.batchBoundaries;
+      state.batchLabels = batchQueue.batchLabels;
+      state.batchParallelizable = batchQueue.batchParallelizable;
     }
 
     // 执行流水线
@@ -312,13 +391,13 @@ function summaryToJSON(summary: ExecutionSummary): Record<string, unknown> {
 }
 
 /**
- * 加载任务队列 - 3级优先级
+ * 加载任务队列 - 3级优先级（批次感知版）
  *
  * 优先级1: 显式指定的文件（--plan）
  * 优先级2: 读取项目计划（.projmnt4claude/current-plan.json）
  * 优先级3: 自动生成计划
  */
-async function loadTaskQueue(options: HarnessCommandOptions, cwd: string): Promise<string[]> {
+async function loadTaskQueue(options: HarnessCommandOptions, cwd: string): Promise<BatchAwareQueue> {
   // 优先级1: 显式指定的文件
   if (options.plan) {
     const planFile = path.resolve(cwd, options.plan);
@@ -331,6 +410,7 @@ async function loadTaskQueue(options: HarnessCommandOptions, cwd: string): Promi
       const planContent = fs.readFileSync(planFile, 'utf-8');
       const planData = JSON.parse(planContent);
       let taskQueue: string[] = planData.recommendation?.suggestedOrder || [];
+      const batches: string[][] | undefined = planData.batchOrder || planData.batches;
 
       if (taskQueue.length === 0) {
         console.error('错误: 计划文件中没有任务');
@@ -347,7 +427,7 @@ async function loadTaskQueue(options: HarnessCommandOptions, cwd: string): Promi
         console.log(`📋 使用计划文件: ${options.plan}`);
       }
 
-      return taskQueue;
+      return buildBatchAwareQueue(taskQueue, batches);
     } catch (error) {
       console.error(`错误: 无法解析计划文件: ${planFile}`);
       console.error(error instanceof Error ? error.message : String(error));
@@ -358,19 +438,9 @@ async function loadTaskQueue(options: HarnessCommandOptions, cwd: string): Promi
   // 优先级2: 读取项目计划
   const executionPlan = readPlan(cwd);
   if (executionPlan && executionPlan.tasks.length > 0) {
-    // 统一可执行验证（依赖完成检查+状态检查+子任务检查）
-    const executableIds = new Set(getExecutableTasks(cwd, true));
-    const filteredTasks = executionPlan.tasks.filter(taskId => executableIds.has(taskId));
-
-    const filteredCount = executionPlan.tasks.length - filteredTasks.length;
-    if (filteredCount > 0) {
-      console.log(`📋 使用项目执行计划 (已过滤 ${filteredCount} 个不可执行任务)`);
-    } else {
-      console.log('📋 使用项目执行计划');
-    }
-
-    if (filteredTasks.length > 0) {
-      return filteredTasks;
+    const queue = filterExecutableFromPlan(executionPlan, cwd, '📋 使用项目执行计划');
+    if (queue.taskQueue.length > 0) {
+      return queue;
     }
     console.log('⚠️  执行计划中所有任务均已处于终态');
   }
@@ -383,19 +453,9 @@ async function loadTaskQueue(options: HarnessCommandOptions, cwd: string): Promi
 
     const newPlan = readPlan(cwd);
     if (newPlan && newPlan.tasks.length > 0) {
-      // 统一可执行验证
-      const executableIds = new Set(getExecutableTasks(cwd, true));
-      const filteredTasks = newPlan.tasks.filter(taskId => executableIds.has(taskId));
-
-      const filteredCount = newPlan.tasks.length - filteredTasks.length;
-      if (filteredCount > 0) {
-        console.log(`✅ 已自动生成执行计划 (已过滤 ${filteredCount} 个不可执行任务)`);
-      } else {
-        console.log('✅ 已自动生成执行计划');
-      }
-
-      if (filteredTasks.length > 0) {
-        return filteredTasks;
+      const queue = filterExecutableFromPlan(newPlan, cwd, '✅ 已自动生成执行计划');
+      if (queue.taskQueue.length > 0) {
+        return queue;
       }
     }
   } catch (error) {
@@ -405,6 +465,27 @@ async function loadTaskQueue(options: HarnessCommandOptions, cwd: string): Promi
   console.error('错误: 无法获取任务列表');
   console.error('提示: 请先运行 `projmnt4claude plan recommend` 生成执行计划');
   process.exit(1);
+}
+
+/**
+ * 从执行计划中过滤可执行任务并构建批次感知队列
+ */
+function filterExecutableFromPlan(
+  plan: ExecutionPlan,
+  cwd: string,
+  logPrefix: string
+): BatchAwareQueue {
+  const executableIds = new Set(getExecutableTasks(cwd, true));
+  const filteredTasks = plan.tasks.filter(taskId => executableIds.has(taskId));
+
+  const filteredCount = plan.tasks.length - filteredTasks.length;
+  if (filteredCount > 0) {
+    console.log(`${logPrefix} (已过滤 ${filteredCount} 个不可执行任务)`);
+  } else {
+    console.log(logPrefix);
+  }
+
+  return buildBatchAwareQueue(filteredTasks, plan.batches);
 }
 
 /**

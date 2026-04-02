@@ -14,6 +14,7 @@ node ${CLAUDE_PLUGIN_ROOT}/skills/projmnt4claude/dist/projmnt4claude.js setup
 |--------|-------------|
 | `-y, --yes` | Non-interactive mode: skip all confirmations, use default settings |
 | `-l, --language <zh\|en>` | Specify language (Chinese/English) |
+| `-f, --force` | Force re-initialization (re-copy skill files) |
 
 ## Description
 

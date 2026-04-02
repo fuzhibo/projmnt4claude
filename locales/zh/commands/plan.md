@@ -25,6 +25,9 @@ node ${CLAUDE_PLUGIN_ROOT}/skills/projmnt4claude/dist/projmnt4claude.js plan <ac
 
 ## 选项
 
-- `--json` - JSON 格式输出 (show)
-- `--after <id>` - 在指定任务后添加 (add)
-- `--force` - 跳过确认 (clear)
+- `-j, --json` - JSON 格式输出 (show/recommend)
+- `-f, --force` - 跳过确认 (clear)
+- `-a, --after <id>` - 在指定任务后添加 (add)
+- `-y, --yes` - 非交互模式，自动应用推荐 (recommend)
+- `-q, --query <query>` - 用户描述/关键字过滤 (recommend)
+- `--all` - 显示全部状态任务，默认仅推荐 open (recommend)

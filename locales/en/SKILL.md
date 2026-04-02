@@ -18,11 +18,17 @@ node ${CLAUDE_PLUGIN_ROOT}/dist/projmnt4claude.js <command> [options]
 | `config` | Configuration management (list/get/set) |
 | `status` | Display project status summary |
 | `analyze` | Analyze project health status |
-| `hook` | Hook session management (enable/disable/status) |
 | `branch` | Git branch integration (checkout/status/create/delete/merge/push/sync) |
 | `tool` | Local skill management (list/create/install/remove/deploy/undeploy) |
 | `init-requirement` | Create tasks from natural language requirements |
 | `help` | Display help information |
+
+## Global Options
+
+| Option | Description |
+|--------|-------------|
+| `--ai` | AI mode: auto-enable --json output + non-interactive mode + compact logging |
+| `--json` | JSON format output (global, applies to all commands) |
 
 ## Examples
 

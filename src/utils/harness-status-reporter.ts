@@ -38,6 +38,7 @@ export class HarnessStatusReporter {
   private statusPath: string;
   private sessionId?: string;
   private currentReport: HarnessStatusReport;
+  private lastBatchContext?: { batchIndex: number; totalBatches: number; batchLabel: string };
 
   constructor(cwd: string, sessionId?: string) {
     this.statusPath = path.join(getProjectDir(cwd), 'harness-status.json');
@@ -145,11 +146,19 @@ export class HarnessStatusReporter {
   /**
    * 更新进度
    */
-  updateProgress(completedTasks: number, totalTasks: number): void {
+  updateProgress(
+    completedTasks: number,
+    totalTasks: number,
+    batchContext?: { batchIndex: number; totalBatches: number; batchLabel: string }
+  ): void {
     this.currentReport.completedTasks = completedTasks;
     this.currentReport.totalTasks = totalTasks;
     this.currentReport.progress = totalTasks > 0 ? Math.round((completedTasks / totalTasks) * 100) : 0;
     this.currentReport.timestamp = new Date().toISOString();
+    if (batchContext) {
+      this.currentReport.message = `${batchContext.batchLabel} (${batchContext.batchIndex + 1}/${batchContext.totalBatches}) - ${completedTasks}/${totalTasks} 完成`;
+      this.lastBatchContext = batchContext;
+    }
     this.writeStatus();
   }
 
@@ -223,7 +232,10 @@ export class HarnessStatusReporter {
   private logToConsole(phase: HarnessReportPhase, status: string, message?: string): void {
     const progress = `${this.currentReport.completedTasks}/${this.currentReport.totalTasks}`;
     const statusIcon = status === 'started' ? '▶' : status === 'completed' ? '✓' : '✗';
-    console.log(`[Harness] ${statusIcon} [${progress}] ${phase}${message ? ` - ${message}` : ''}`);
+    const progressLabel = this.lastBatchContext
+      ? `批次 ${this.lastBatchContext.batchIndex + 1}/${this.lastBatchContext.totalBatches} ${this.lastBatchContext.batchLabel} | 任务 ${progress}`
+      : progress;
+    console.log(`[Harness] ${statusIcon} [${progressLabel}] ${phase}${message ? ` - ${message}` : ''}`);
   }
 
   /**

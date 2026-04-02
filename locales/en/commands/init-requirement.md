@@ -51,6 +51,8 @@ node ${CLAUDE_PLUGIN_ROOT}/skills/projmnt4claude/dist/projmnt4claude.js init-req
 | `-y, --yes` | Non-interactive mode: skip all confirmations, create task directly with analysis results |
 | `--no-plan` | Don't ask whether to add the task to the execution plan |
 | `--skip-validation` | Skip checkpoint quality validation (not recommended) |
+| `--template <type>` | Description template type: simple (default) or detailed (structured) |
+| `--auto-split` | Auto-split complex tasks into subtasks (when complexity is high) |
 
 ## Auto-Analysis Features
 

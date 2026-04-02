@@ -2,7 +2,7 @@
 
 [中文](#中文文档) | **English**
 
-A project management skill designed for Claude Code, providing task management, execution planning, toolbox, hook system, and Git branch integration.
+A project management skill designed for Claude Code, providing task management, execution planning, toolbox, and Git branch integration.
 
 ## Features
 
@@ -10,7 +10,6 @@ A project management skill designed for Claude Code, providing task management, 
 - **Execution Planning** - Intelligent execution order recommendation, manual plan adjustment
 - **Subtask Support** - Create subtasks under parent tasks with progress tracking
 - **Project Analysis** - Health analysis, status summary, issue detection
-- **Hook System** - Integrate with Git events, automate workflows
 - **Branch Integration** - Link tasks with Git branches, auto switch/create
 - **Natural Language Parsing** - Auto-create structured tasks from natural descriptions
 - **i18n Support** - Bilingual interface (Chinese/English)
@@ -178,6 +177,13 @@ After installation, use slash commands directly in Claude Code:
 |---------|-------------|
 | `init-requirement "<desc>"` | Create tasks from description |
 
+### Global Options
+
+| Option | Description |
+|--------|-------------|
+| `--ai` | AI mode: auto-enable --json output + non-interactive mode + compact logging |
+| `--json` | JSON format output (global, applies to all commands) |
+
 ## Data Structure
 
 ```
@@ -247,7 +253,7 @@ GNU Affero General Public License v3.0 (AGPLv3)
 
 [English](#projmnt4claude---claude-code-project-management-skill) | **中文**
 
-专为 Claude Code 设计的项目管理技能，提供任务管理、执行计划、工具箱、钩子系统和 Git 分支集成功能。
+专为 Claude Code 设计的项目管理技能，提供任务管理、执行计划、工具箱和 Git 分支集成功能。
 
 ## 功能特性
 
@@ -255,7 +261,6 @@ GNU Affero General Public License v3.0 (AGPLv3)
 - **执行计划** - 智能推荐执行顺序，手动调整计划
 - **子任务支持** - 在父任务下创建子任务，支持进度跟踪
 - **项目分析** - 健康分析、状态摘要、问题检测
-- **钩子系统** - 与 Git 事件联动，自动化工作流
 - **分支集成** - 任务与 Git 分支关联，自动切换创建
 - **自然语言解析** - 从自然描述自动创建结构化任务
 - **国际化支持** - 双语界面（中文/英文）
@@ -382,6 +387,13 @@ node $PLUGIN_DIR/skills/projmnt4claude/dist/projmnt4claude.js status
 | 命令 | 描述 |
 |------|------|
 | `init-requirement "<desc>"` | 从描述创建任务 |
+
+### 全局选项
+
+| 选项 | 描述 |
+|------|------|
+| `--ai` | AI 模式: 自动启用 --json 输出 + 非交互模式 + 精简日志 |
+| `--json` | JSON 格式输出 (全局，适用于所有命令) |
 
 ## 数据结构
 

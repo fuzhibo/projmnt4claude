@@ -87,7 +87,9 @@ projmnt4claude plan recommend --json
 
 | 选项 | 描述 | 推荐场景 |
 |------|------|----------|
-| `--json` | JSON 格式输出 (show/recommend) | **AI 推荐** |
-| `--after <id>` | 在指定任务后添加 (add) | 用户 |
-| `--force` | 跳过确认 (clear) | 用户/AI |
+| `-j, --json` | JSON 格式输出 (show/recommend) | **AI 推荐** |
+| `-f, --force` | 跳过确认 (clear) | 用户/AI |
+| `-a, --after <id>` | 在指定任务后添加 (add) | 用户 |
 | `-y, --yes` | 非交互模式，自动应用推荐 (recommend) | **AI 推荐** |
+| `-q, --query <query>` | 用户描述/关键字过滤 (recommend) | **AI 推荐** |
+| `--all` | 显示全部状态任务，默认仅推荐 open (recommend) | 用户/AI |

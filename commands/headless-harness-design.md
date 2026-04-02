@@ -141,6 +141,10 @@ projmnt4claude headless-harness-design --max-retries 5 --timeout 600
 | `--dry-run` | 试运行模式 | false |
 | `--continue` | 从中断处继续 | false |
 | `--json` | JSON 格式输出 | false |
+| `--api-retry-attempts <n>` | API 调用重试次数（针对 429/500 错误） | 3 |
+| `--api-retry-delay <seconds>` | API 重试基础延迟（秒） | 60 |
+| `--require-quality <n>` | 质量门禁：最低质量分阈值（0-100） | 60 |
+| `--skip-quality-gate` | 跳过质量门禁检查（不推荐） | false |
 
 ## 输出
 

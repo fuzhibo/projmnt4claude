@@ -1,11 +1,11 @@
 ---
 name: projmnt4claude
-description: Claude Code 项目管理技能。用于管理任务、执行计划、工具箱、钩子系统、Git分支集成等。当用户提到"任务管理"、"项目管理"、"创建任务"、"执行计划"时使用。
+description: Claude Code 项目管理技能。用于管理任务、执行计划、工具箱、Git分支集成等。当用户提到"任务管理"、"项目管理"、"创建任务"、"执行计划"时使用。
 ---
 
 # projmnt4claude - Claude Code 项目管理技能
 
-一个专为 Claude Code 设计的项目管理技能，帮助管理开发任务、执行计划、本地工具箱、钩子系统和 Git 分支集成。
+一个专为 Claude Code 设计的项目管理技能，帮助管理开发任务、执行计划、本地工具箱和 Git 分支集成。
 
 ## 快速开始
 
@@ -62,19 +62,18 @@ node ${CLAUDE_PLUGIN_ROOT}/dist/projmnt4claude.js setup
 | `status` | 显示项目状态摘要 |
 | `analyze [--fix]` | 分析项目健康状态 |
 
+### 全局选项
+
+| 选项 | 描述 |
+|------|------|
+| `--ai` | AI 模式: 自动启用 --json 输出 + 非交互模式 + 精简日志 |
+| `--json` | JSON 格式输出 (全局，适用于所有命令) |
+
 ### 帮助系统
 
 | 命令 | 描述 |
 |------|------|
 | `help [command|topic]` | 显示命令使用说明和帮助信息 |
-
-### 钩子系统
-
-| 命令 | 描述 |
-|------|------|
-| `hook enable` | 启用钩子系统 |
-| `hook disable` | 禁用钩子系统 |
-| `hook status` | 显示钩子状态 |
 
 ### Git 分支集成
 
