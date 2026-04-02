@@ -21,7 +21,16 @@ import type {
   TaskHistoryEntry,
   VerificationMethod,
 } from '../types/task';
-import { parseTaskId, generateTaskId, inferTaskType } from '../types/task';
+import {
+  parseTaskId,
+  generateTaskId,
+  inferTaskType,
+  CURRENT_TASK_SCHEMA_VERSION,
+  PIPELINE_INTERMEDIATE_STATUSES,
+  PIPELINE_STATUS_MIGRATION_MAP,
+} from '../types/task';
+import type { VerdictAction } from '../types/harness';
+import { VALID_VERDICT_ACTIONS } from '../types/harness';
 import { generateCheckpointId } from '../utils/checkpoint';
 import { inferCheckpointsFromDescription } from '../utils/description-template';
 import { SEPARATOR_WIDTH } from '../utils/format';
@@ -146,7 +155,7 @@ function normalizeStatus(status: string): TaskStatus {
 /**
  * 有效的任务状态值
  */
-const VALID_STATUSES: TaskStatus[] = ['open', 'in_progress', 'wait_review', 'wait_qa', 'wait_complete', 'resolved', 'closed', 'reopened', 'abandoned'];
+const VALID_STATUSES: TaskStatus[] = ['open', 'in_progress', 'wait_review', 'wait_qa', 'wait_complete', 'needs_human', 'resolved', 'closed', 'reopened', 'abandoned'];
 
 /**
  * 有效的任务类型
@@ -157,6 +166,153 @@ const VALID_TYPES = ['bug', 'feature', 'research', 'docs', 'refactor', 'test'];
  * 有效的优先级
  */
 const VALID_PRIORITIES: TaskPriority[] = ['P0', 'P1', 'P2', 'P3', 'Q1', 'Q2', 'Q3', 'Q4'];
+
+// ============== Schema 版本化迁移框架 ==============
+
+/**
+ * Schema 迁移步骤定义
+ */
+export interface SchemaMigrationStep {
+  /** 目标版本号（迁移到此版本） */
+  version: number;
+  /** 迁移名称 */
+  name: string;
+  /** 迁移描述 */
+  description: string;
+  /** 执行迁移 */
+  migrate: (task: TaskMeta) => { changed: boolean; details: string[] };
+}
+
+/**
+ * 获取从 fromVersion 到最新版本的所有待执行迁移步骤
+ */
+export function getPendingMigrations(fromVersion: number): SchemaMigrationStep[] {
+  return SCHEMA_MIGRATIONS.filter(m => m.version > fromVersion);
+}
+
+/**
+ * 一次性应用所有待执行的 schema 迁移
+ * @returns 迁移结果，包含变更的详情列表
+ */
+export function applySchemaMigrations(task: TaskMeta): { changed: boolean; details: string[] } {
+  const fromVersion = task.schemaVersion ?? 0;
+  const pending = getPendingMigrations(fromVersion);
+
+  if (pending.length === 0) {
+    return { changed: false, details: [] };
+  }
+
+  let anyChanged = false;
+  const allDetails: string[] = [];
+
+  for (const migration of pending) {
+    const result = migration.migrate(task);
+    if (result.changed) {
+      anyChanged = true;
+      allDetails.push(...result.details);
+    }
+  }
+
+  // 更新 schema 版本到最新
+  if (anyChanged || pending.length > 0) {
+    task.schemaVersion = CURRENT_TASK_SCHEMA_VERSION;
+    task.updatedAt = new Date().toISOString();
+    allDetails.push(`schemaVersion: ${fromVersion} → ${CURRENT_TASK_SCHEMA_VERSION}`);
+  }
+
+  return { changed: anyChanged || pending.length > 0, details: allDetails };
+}
+
+/**
+ * Schema 迁移步骤注册表
+ * 按版本号升序排列，每个步骤将任务从上一版本迁移到当前版本
+ *
+ * 版本 1: 基础 schema（reopenCount + requirementHistory）
+ * 版本 2: pipeline 状态规范化 + verdict action 验证
+ */
+export const SCHEMA_MIGRATIONS: SchemaMigrationStep[] = [
+  {
+    version: 1,
+    name: 'legacy_schema_fields',
+    description: '添加 reopenCount 和 requirementHistory 字段',
+    migrate(task: TaskMeta): { changed: boolean; details: string[] } {
+      const details: string[] = [];
+      let changed = false;
+
+      if (task.reopenCount === undefined) {
+        task.reopenCount = 0;
+        details.push('添加 reopenCount: 0');
+        changed = true;
+      }
+      if (task.requirementHistory === undefined) {
+        task.requirementHistory = [];
+        details.push('添加 requirementHistory: []');
+        changed = true;
+      }
+
+      return { changed, details };
+    },
+  },
+  {
+    version: 2,
+    name: 'pipeline_status_and_verdict_action',
+    description: 'pipeline 状态规范化 + verdict action schema 验证',
+    migrate(task: TaskMeta): { changed: boolean; details: string[] } {
+      const details: string[] = [];
+      let changed = false;
+
+      // 迁移 pipeline 中间状态
+      if ((task.status as string) in PIPELINE_STATUS_MIGRATION_MAP) {
+        const oldStatus = task.status;
+        const newStatus = PIPELINE_STATUS_MIGRATION_MAP[task.status];
+        if (newStatus && oldStatus !== newStatus) {
+          task.status = newStatus;
+          details.push(`status: ${oldStatus} → ${newStatus}`);
+          changed = true;
+        }
+      }
+
+      // 清除无效 VerdictAction 值（从 history 中）
+      const invalidActionEntries: number[] = [];
+      for (let i = 0; i < (task.history?.length || 0); i++) {
+        const entry = task.history![i]!;
+        if (entry.action === 'verdict' && entry.newValue && typeof entry.newValue === 'string') {
+          if (!VALID_VERDICT_ACTIONS.includes(entry.newValue as VerdictAction)) {
+            invalidActionEntries.push(i);
+          }
+        }
+      }
+      if (invalidActionEntries.length > 0) {
+        // 标记无效条目而非删除，保留审计记录
+        for (const idx of invalidActionEntries) {
+          const entry = task.history![idx]!;
+          task.history[idx] = {
+            ...entry,
+            timestamp: entry.timestamp,
+            newValue: `[migrated: invalid_verdict_action "${entry.newValue}" removed]`,
+          };
+          details.push(`history[${idx}]: 清除无效 verdict action "${entry.newValue}"`);
+        }
+        changed = true;
+      }
+
+      // 清除 verification 中的无效 verdictAction
+      if (task.verification) {
+        const verification = task.verification as unknown as Record<string, unknown>;
+        if (verification.verdictAction && typeof verification.verdictAction === 'string') {
+          if (!VALID_VERDICT_ACTIONS.includes(verification.verdictAction as VerdictAction)) {
+            const oldValue = verification.verdictAction;
+            delete verification.verdictAction;
+            details.push(`verification: 清除无效 verdictAction "${oldValue}"`);
+            changed = true;
+          }
+        }
+      }
+
+      return { changed, details };
+    },
+  },
+];
 
 /**
  * 验证 ISO 时间戳格式
@@ -372,7 +528,13 @@ export interface Issue {
     // 文件引用检查
     | 'file_not_found'
     // 配置忽略
-    | 'ignored_by_config';
+    | 'ignored_by_config'
+    // Pipeline 状态迁移
+    | 'pipeline_status_migration'
+    // VerdictAction schema 验证
+    | 'verdict_action_schema'
+    // Schema 版本迁移
+    | 'schema_version_outdated';
   severity: 'low' | 'medium' | 'high';
   message: string;
   suggestion: string;
@@ -922,6 +1084,7 @@ export function analyzeProject(cwd: string = process.cwd(), includeArchived: boo
       closed: 0,
       reopened: 0,
       abandoned: 0,
+      needs_human: 0,
     },
     byPriority: {
       P0: 0,
@@ -1076,6 +1239,77 @@ export function analyzeProject(cwd: string = process.cwd(), includeArchived: boo
         severity: 'low',
         message: '任务 meta.json 缺少新规范字段',
         suggestion: '添加 reopenCount 和 requirementHistory 字段以符合最新规范',
+      });
+    }
+
+    // ========== Schema 版本化检测 ==========
+
+    // 检测 pipeline 中间状态（wait_review/wait_qa/wait_complete/needs_human）
+    // 这些状态仅在 harness pipeline 执行期间使用，旧任务停留在此表示 pipeline 中断或版本过旧
+    if (PIPELINE_INTERMEDIATE_STATUSES.includes(task.status)) {
+      const targetStatus = PIPELINE_STATUS_MIGRATION_MAP[task.status];
+      issues.push({
+        taskId: task.id,
+        type: 'pipeline_status_migration',
+        severity: 'medium',
+        message: `任务使用 pipeline 中间状态: ${task.status}，应迁移为 ${targetStatus}`,
+        suggestion: `使用 --fix 将状态从 ${task.status} 自动迁移为 ${targetStatus}`,
+        details: {
+          currentStatus: task.status,
+          targetStatus,
+          migrationReason: task.status === 'needs_human'
+            ? 'needs_human 已弃用，重置为 open 以便人工重新处理'
+            : `pipeline 中间状态 ${task.status} 表明 pipeline 中断，建议迁移到 ${targetStatus}`,
+        },
+      });
+    }
+
+    // 检测无效的 VerdictAction 值
+    // 检查 history 条目中是否包含无效的 verdict action 数据
+    const invalidVerdictActions: string[] = [];
+    for (const entry of task.history || []) {
+      if (entry.action === 'verdict' && entry.newValue && typeof entry.newValue === 'string') {
+        if (!VALID_VERDICT_ACTIONS.includes(entry.newValue as VerdictAction)) {
+          invalidVerdictActions.push(entry.newValue);
+        }
+      }
+    }
+    // 也检查 verification 字段中可能的 verdict 相关数据
+    if (task.verification) {
+      const verification = task.verification as unknown as Record<string, unknown>;
+      // 检查是否有嵌套的 verdict action
+      if (verification.verdictAction && typeof verification.verdictAction === 'string') {
+        if (!VALID_VERDICT_ACTIONS.includes(verification.verdictAction as VerdictAction)) {
+          invalidVerdictActions.push(verification.verdictAction as string);
+        }
+      }
+    }
+    if (invalidVerdictActions.length > 0) {
+      issues.push({
+        taskId: task.id,
+        type: 'verdict_action_schema',
+        severity: 'medium',
+        message: `任务包含无效的 VerdictAction 值: ${[...new Set(invalidVerdictActions)].join(', ')}`,
+        suggestion: `使用 --fix 清除无效的 VerdictAction 值，有效值为: ${VALID_VERDICT_ACTIONS.join(', ')}`,
+        details: { invalidActions: [...new Set(invalidVerdictActions)] },
+      });
+    }
+
+    // 检测 schema 版本过时
+    const taskSchemaVersion = task.schemaVersion ?? 0;
+    if (taskSchemaVersion < CURRENT_TASK_SCHEMA_VERSION) {
+      const pendingMigrations = getPendingMigrations(taskSchemaVersion);
+      issues.push({
+        taskId: task.id,
+        type: 'schema_version_outdated',
+        severity: taskSchemaVersion === 0 ? 'medium' : 'low',
+        message: `任务 schema 版本过时: v${taskSchemaVersion} → v${CURRENT_TASK_SCHEMA_VERSION}，需迁移 ${pendingMigrations.map(m => m.name).join(', ')}`,
+        suggestion: '使用 --fix 一次性完成所有版本迁移',
+        details: {
+          currentVersion: taskSchemaVersion,
+          targetVersion: CURRENT_TASK_SCHEMA_VERSION,
+          pendingMigrations: pendingMigrations.map(m => ({ version: m.version, name: m.name })),
+        },
       });
     }
 
@@ -1584,6 +1818,9 @@ function isStatusIssue(type: Issue['type']): boolean {
     'legacy_schema',
     'missing_createdBy',
     'invalid_timestamp_format',
+    'pipeline_status_migration',
+    'verdict_action_schema',
+    'schema_version_outdated',
   ].includes(type);
 }
 
@@ -1689,6 +1926,79 @@ async function fixSingleIssue(
       }
       writeTaskMeta(task, cwd);
       return 'fixed';
+    }
+
+    case 'pipeline_status_migration': {
+      console.log(`🔄 迁移任务 ${issue.taskId} 的 pipeline 状态...`);
+      const oldStatus = task.status;
+      const targetStatus = issue.details?.targetStatus as TaskStatus;
+      if (targetStatus && PIPELINE_STATUS_MIGRATION_MAP[oldStatus]) {
+        task.status = targetStatus;
+        task.history.push({
+          timestamp: new Date().toISOString(),
+          action: `pipeline_status_migration`,
+          field: 'status',
+          oldValue: oldStatus,
+          newValue: targetStatus,
+          reason: `analyze 迁移: pipeline 中间状态 ${oldStatus} → ${targetStatus}`,
+          user: 'analyze-fix',
+        });
+        writeTaskMeta(task, cwd);
+        console.log(`  ✅ 状态已从 ${oldStatus} 迁移为 ${targetStatus}`);
+        return 'fixed';
+      }
+      console.log(`  ⚠️ 无法确定迁移目标状态`);
+      return 'unfixable';
+    }
+
+    case 'verdict_action_schema': {
+      console.log(`🔄 修复任务 ${issue.taskId} 的无效 VerdictAction 值...`);
+      let fixedAny = false;
+
+      // 修复 history 中的无效 verdict action
+      for (let i = 0; i < (task.history?.length || 0); i++) {
+        const entry = task.history![i]!;
+        if (entry.action === 'verdict' && entry.newValue && typeof entry.newValue === 'string') {
+          if (!VALID_VERDICT_ACTIONS.includes(entry.newValue as VerdictAction)) {
+            const oldVal = entry.newValue;
+            entry.newValue = `[migrated: invalid_verdict_action "${oldVal}" removed]`;
+            console.log(`  ✅ history[${i}]: 清除无效 verdict action "${oldVal}"`);
+            fixedAny = true;
+          }
+        }
+      }
+
+      // 修复 verification 中的无效 verdictAction
+      if (task.verification) {
+        const verification = task.verification as unknown as Record<string, unknown>;
+        if (verification.verdictAction && typeof verification.verdictAction === 'string') {
+          if (!VALID_VERDICT_ACTIONS.includes(verification.verdictAction as VerdictAction)) {
+            const oldVal = verification.verdictAction as string;
+            delete verification.verdictAction;
+            console.log(`  ✅ verification: 清除无效 verdictAction "${oldVal}"`);
+            fixedAny = true;
+          }
+        }
+      }
+
+      if (fixedAny) {
+        writeTaskMeta(task, cwd);
+        return 'fixed';
+      }
+      return 'skipped';
+    }
+
+    case 'schema_version_outdated': {
+      console.log(`🔄 迁移任务 ${issue.taskId} 的 schema 版本...`);
+      const migrationResult = applySchemaMigrations(task);
+      if (migrationResult.changed) {
+        writeTaskMeta(task, cwd);
+        for (const detail of migrationResult.details) {
+          console.log(`  ✅ ${detail}`);
+        }
+        return 'fixed';
+      }
+      return 'skipped';
     }
 
     case 'missing_createdBy': {

@@ -116,6 +116,18 @@ export type VerdictAction =
   | 'escalate_human'; // 需要人工介入
 
 /**
+ * 所有有效的 VerdictAction 值
+ * 用于 validate_task_data 检测旧任务中是否存在无效的 verdict action
+ */
+export const VALID_VERDICT_ACTIONS: VerdictAction[] = [
+  'resolve',
+  'redevelop',
+  'retest',
+  'reevaluate',
+  'escalate_human',
+];
+
+/**
  * 失败分类
  */
 export type FailureCategory =

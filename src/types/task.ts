@@ -285,6 +285,40 @@ export interface ExecutionStats {
 }
 
 /**
+ * 当前任务元数据 schema 版本
+ * 每次规范变更时递增，analyze 命令据此进行增量迁移
+ *
+ * 版本历史:
+ * - 0: 无 schemaVersion 字段（旧版任务）
+ * - 1: 添加 reopenCount + requirementHistory（legacy_schema）
+ * - 2: pipeline_status 规范化 + verdict_action_schema 验证
+ */
+export const CURRENT_TASK_SCHEMA_VERSION = 2;
+
+/**
+ * 流水线中间状态列表
+ * 这些状态仅用于 harness pipeline 执行期间，旧任务若停留在此状态
+ * 表示 pipeline 中断或使用了旧版规范
+ */
+export const PIPELINE_INTERMEDIATE_STATUSES: TaskStatus[] = [
+  'wait_review',
+  'wait_qa',
+  'wait_complete',
+  'needs_human',
+];
+
+/**
+ * 流水线状态迁移映射
+ * 旧版 pipeline 中间状态 → 最新规范状态
+ */
+export const PIPELINE_STATUS_MIGRATION_MAP: Record<string, TaskStatus> = {
+  'needs_human': 'open',       // 需要人工介入 → 重置为待处理
+  'wait_review': 'in_progress', // 等待代码审核 → 回到开发中
+  'wait_qa': 'in_progress',    // 等待 QA → 回到开发中
+  'wait_complete': 'resolved',  // 等待最终确认 → 标记为已解决
+};
+
+/**
  * 任务元数据接口
  */
 export interface TaskMeta {
@@ -312,6 +346,7 @@ export interface TaskMeta {
   executionStats?: ExecutionStats; // 执行统计信息（流水线完成后记录）
   fileWarnings?: string[];        // 创建时引用但不存在的文件路径
   createdBy?: TaskCreatedBy;      // 任务创建来源
+  schemaVersion?: number;         // schema 版本号，用于增量迁移
 }
 
 /**
@@ -395,6 +430,7 @@ export function createDefaultTaskMeta(
     reopenCount: 0,
     requirementHistory: [],
     createdBy,
+    schemaVersion: CURRENT_TASK_SCHEMA_VERSION,
   };
 }
 
