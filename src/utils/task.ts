@@ -1,7 +1,7 @@
 import * as path from 'path';
 import * as fs from 'fs';
 import { getTasksDir, isInitialized, getProjectDir } from './path';
-import type { TaskMeta, TaskHistoryEntry, TaskStatus, TaskRole, TaskVerification, VerificationMethod, TaskType, TaskPriority } from '../types/task';
+import type { TaskMeta, TaskHistoryEntry, TaskStatus, TaskRole, TaskVerification, VerificationMethod, TaskType, TaskPriority, ExecutionStats } from '../types/task';
 import { createDefaultTaskMeta, isValidTaskId, generateNextTaskId, generateTaskId, parseTaskId } from '../types/task';
 
 /**
@@ -585,6 +585,36 @@ export function incrementReopenCount(
     oldValue: String(oldCount),
     newValue: String(task.reopenCount),
     reason,
+    user: process.env.USER || undefined,
+  });
+
+  writeTaskMeta(task, cwd);
+}
+
+/**
+ * 程序化记录执行统计信息
+ * 直接修改 meta.json，不依赖 AI 上下文
+ */
+export function recordExecutionStats(
+  taskId: string,
+  stats: ExecutionStats,
+  cwd: string = process.cwd()
+): void {
+  const task = readTaskMeta(taskId, cwd);
+  if (!task) {
+    throw new Error(`任务 '${taskId}' 不存在`);
+  }
+
+  task.executionStats = stats;
+  task.updatedAt = new Date().toISOString();
+
+  // 添加历史记录
+  task.history.push({
+    timestamp: new Date().toISOString(),
+    action: `记录执行统计: 耗时 ${stats.duration}ms, 重试 ${stats.retryCount} 次`,
+    field: 'executionStats',
+    oldValue: task.executionStats ? JSON.stringify(task.executionStats) : '无',
+    newValue: JSON.stringify(stats),
     user: process.env.USER || undefined,
   });
 

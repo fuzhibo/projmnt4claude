@@ -25,6 +25,7 @@ import {
 } from '../types/harness.js';
 import type { TaskMeta } from '../types/task.js';
 import { getProjectDir } from './path.js';
+import { getDevRoleTemplate } from './role-prompts.js';
 import { readTaskMeta } from './task.js';
 import { classifyExitResult } from './harness-helpers.js';
 
@@ -214,6 +215,9 @@ export class HarnessExecutor {
       parts.push('');
     }
 
+    // 角色感知提示词
+    const roleTemplate = getDevRoleTemplate(task.recommendedRole);
+
     parts.push('## 指示');
     parts.push('1. 仔细阅读任务描述和验收标准');
     parts.push('2. 实现所需的功能或修复');
@@ -222,8 +226,16 @@ export class HarnessExecutor {
     parts.push('5. 完成后简要总结所做的更改');
     parts.push('');
 
+    if (roleTemplate.extraInstructions.length > 0) {
+      parts.push('## 角色专项要求');
+      roleTemplate.extraInstructions.forEach((inst, i) => {
+        parts.push(`${i + 1}. ${inst}`);
+      });
+      parts.push('');
+    }
+
     parts.push('## ⛔ 禁止操作（严格遵守）');
-    parts.push('你是一个开发者，你的唯一职责是实现被分配任务的代码变更。以下操作被严格禁止：');
+    parts.push(`${roleTemplate.roleDeclaration}以下操作被严格禁止：`);
     parts.push('');
     parts.push('1. **禁止创建新任务** - 不要运行 `task create`、`init-requirement` 或任何创建任务的命令');
     parts.push('2. **禁止修改任务元数据** - 不要修改 `.projmnt4claude/tasks/` 下的 meta.json 文件');

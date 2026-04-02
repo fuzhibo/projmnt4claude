@@ -268,6 +268,22 @@ export interface CheckpointMetadata {
 }
 
 /**
+ * 执行统计信息
+ */
+export interface ExecutionStats {
+  /** 执行耗时(毫秒) */
+  duration: number;
+  /** 重试次数 */
+  retryCount: number;
+  /** 执行完成时间 */
+  completedAt: string;
+  /** 分支信息 */
+  branch?: string;
+  /** 标签信息 */
+  tags?: string[];
+}
+
+/**
  * 任务元数据接口
  */
 export interface TaskMeta {
@@ -292,6 +308,7 @@ export interface TaskMeta {
   reopenCount?: number;    // 重开次数（任务被重新打开的次数）
   requirementHistory?: RequirementHistoryEntry[]; // 需求变更历史
   verification?: TaskVerification; // 任务级验证信息（resolved时自动填充）
+  executionStats?: ExecutionStats; // 执行统计信息（流水线完成后记录）
   fileWarnings?: string[];        // 创建时引用但不存在的文件路径
   createdBy?: TaskCreatedBy;      // 任务创建来源
 }

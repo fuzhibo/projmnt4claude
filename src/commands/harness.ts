@@ -29,8 +29,7 @@ import {
 import { isInitialized, getProjectDir } from '../utils/path.js';
 import { AssemblyLine } from '../utils/hd-assembly-line.js';
 import { HarnessReporter } from '../utils/harness-reporter.js';
-import { readPlan } from '../utils/plan.js';
-import { readTaskMeta } from '../utils/task.js';
+import { readPlan, getExecutableTasks } from '../utils/plan.js';
 import { SEPARATOR_WIDTH } from '../utils/format';
 import { recommendPlan } from './plan.js';
 import {
@@ -331,14 +330,23 @@ async function loadTaskQueue(options: HarnessCommandOptions, cwd: string): Promi
     try {
       const planContent = fs.readFileSync(planFile, 'utf-8');
       const planData = JSON.parse(planContent);
-      const taskQueue = planData.recommendation?.suggestedOrder || [];
+      let taskQueue: string[] = planData.recommendation?.suggestedOrder || [];
 
       if (taskQueue.length === 0) {
         console.error('错误: 计划文件中没有任务');
         process.exit(1);
       }
 
-      console.log(`📋 使用计划文件: ${options.plan}`);
+      // 统一可执行验证
+      const executableIds = new Set(getExecutableTasks(cwd, true));
+      const originalCount = taskQueue.length;
+      taskQueue = taskQueue.filter((id: string) => executableIds.has(id));
+      if (originalCount - taskQueue.length > 0) {
+        console.log(`📋 使用计划文件: ${options.plan} (已过滤 ${originalCount - taskQueue.length} 个不可执行任务)`);
+      } else {
+        console.log(`📋 使用计划文件: ${options.plan}`);
+      }
+
       return taskQueue;
     } catch (error) {
       console.error(`错误: 无法解析计划文件: ${planFile}`);
@@ -350,16 +358,13 @@ async function loadTaskQueue(options: HarnessCommandOptions, cwd: string): Promi
   // 优先级2: 读取项目计划
   const executionPlan = readPlan(cwd);
   if (executionPlan && executionPlan.tasks.length > 0) {
-    const terminalStatuses = new Set(['resolved', 'closed', 'abandoned']);
-    const filteredTasks = executionPlan.tasks.filter(taskId => {
-      const meta = readTaskMeta(taskId, cwd);
-      if (!meta) return false; // 任务不存在则跳过
-      return !terminalStatuses.has(meta.status);
-    });
+    // 统一可执行验证（依赖完成检查+状态检查+子任务检查）
+    const executableIds = new Set(getExecutableTasks(cwd, true));
+    const filteredTasks = executionPlan.tasks.filter(taskId => executableIds.has(taskId));
 
     const filteredCount = executionPlan.tasks.length - filteredTasks.length;
     if (filteredCount > 0) {
-      console.log(`📋 使用项目执行计划 (已过滤 ${filteredCount} 个终态任务)`);
+      console.log(`📋 使用项目执行计划 (已过滤 ${filteredCount} 个不可执行任务)`);
     } else {
       console.log('📋 使用项目执行计划');
     }
@@ -378,16 +383,13 @@ async function loadTaskQueue(options: HarnessCommandOptions, cwd: string): Promi
 
     const newPlan = readPlan(cwd);
     if (newPlan && newPlan.tasks.length > 0) {
-      const terminalStatuses = new Set(['resolved', 'closed', 'abandoned']);
-      const filteredTasks = newPlan.tasks.filter(taskId => {
-        const meta = readTaskMeta(taskId, cwd);
-        if (!meta) return false;
-        return !terminalStatuses.has(meta.status);
-      });
+      // 统一可执行验证
+      const executableIds = new Set(getExecutableTasks(cwd, true));
+      const filteredTasks = newPlan.tasks.filter(taskId => executableIds.has(taskId));
 
       const filteredCount = newPlan.tasks.length - filteredTasks.length;
       if (filteredCount > 0) {
-        console.log(`✅ 已自动生成执行计划 (已过滤 ${filteredCount} 个终态任务)`);
+        console.log(`✅ 已自动生成执行计划 (已过滤 ${filteredCount} 个不可执行任务)`);
       } else {
         console.log('✅ 已自动生成执行计划');
       }

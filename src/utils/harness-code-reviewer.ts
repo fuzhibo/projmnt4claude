@@ -23,6 +23,7 @@ import {
   getReportPath,
   REVIEW_TIMEOUT_RATIO,
 } from './harness-helpers.js';
+import { getCodeReviewRoleTemplate } from './role-prompts.js';
 
 export class HarnessCodeReviewer {
   private config: HarnessConfig;
@@ -154,9 +155,11 @@ export class HarnessCodeReviewer {
   ): string {
     const parts: string[] = [];
 
+    const roleTemplate = getCodeReviewRoleTemplate(task.recommendedRole);
+
     parts.push('# 代码审核任务');
     parts.push('');
-    parts.push('你是一个专业的代码审核员。你需要审核一个任务的代码实现，确保代码质量符合标准。');
+    parts.push(`${roleTemplate.roleDeclaration}你需要审核一个任务的代码实现，确保代码质量符合标准。`);
     parts.push('');
     parts.push('**重要**: 你必须严格审核，发现所有代码质量问题。');
     parts.push('');
@@ -198,11 +201,9 @@ export class HarnessCodeReviewer {
     }
 
     parts.push('## 审核要求');
-    parts.push('1. 检查代码质量和可读性');
-    parts.push('2. 检查代码规范遵守情况');
-    parts.push('3. 检查潜在的安全问题');
-    parts.push('4. 检查错误处理是否完善');
-    parts.push('5. 运行 lint 检查（如有配置）');
+    roleTemplate.reviewFocus.forEach((focus, i) => {
+      parts.push(`${i + 1}. ${focus}`);
+    });
     parts.push('');
 
     parts.push('## 输出格式');

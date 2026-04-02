@@ -338,6 +338,24 @@ function tryTransitionTaskStatus(taskId: string, cwd: string): void {
 }
 
 /**
+ * 根据检查点的验证方法和期望结果生成建议操作
+ * BUG-014-2C: 为每个待验证检查点提供上下文化的操作建议
+ */
+function suggestAction(item: {
+  checkpointDescription?: string;
+  verificationSteps?: string[];
+  expectedResult?: string;
+}): string {
+  if (item.verificationSteps?.length) {
+    return `按验证步骤执行: ${item.verificationSteps[0]}${item.verificationSteps.length > 1 ? ' 等' : ''}`;
+  }
+  if (item.expectedResult) {
+    return `确认是否满足: ${item.expectedResult}`;
+  }
+  return '人工检查并确认是否通过';
+}
+
+/**
  * 生成验证报告
  */
 export function generateVerificationReport(cwd: string, sessionId?: string): string {
@@ -368,13 +386,25 @@ export function generateVerificationReport(cwd: string, sessionId?: string): str
     '',
   ];
 
+  // BUG-014-2C: 增强汇总表 - 任务 ID、检查点描述、建议操作
   if (pending.length > 0) {
-    lines.push('## 待验证检查点');
+    lines.push('## 待验证检查点汇总');
+    lines.push('');
+    lines.push('| # | 任务 ID | 任务标题 | 检查点 | 建议操作 |');
+    lines.push('|---|---------|----------|--------|----------|');
+    pending.forEach((item, i) => {
+      const action = suggestAction(item);
+      lines.push(`| ${i + 1} | ${item.taskId} | ${item.taskTitle} | ${item.checkpointDescription} | ${action} |`);
+    });
+    lines.push('');
+
+    lines.push('## 待验证检查点详情');
     lines.push('');
     for (const item of pending) {
       lines.push(`### ${item.taskId} - ${item.checkpointId}`);
       lines.push(`- 任务: ${item.taskTitle}`);
       lines.push(`- 检查点: ${item.checkpointDescription}`);
+      lines.push(`- 建议操作: ${suggestAction(item)}`);
       if (item.verificationSteps?.length) {
         lines.push(`- 验证步骤:`);
         item.verificationSteps.forEach((step, i) => {

@@ -177,6 +177,22 @@ export class HarnessEvaluator {
   ): string {
     const parts: string[] = [];
 
+    // BUG-014-2A: 过滤掉 requiresHuman 检查点，仅评估自动化检查点
+    const humanCheckpointIds = new Set<string>();
+    const humanCheckpointDescs = new Set<string>();
+    if (task.checkpoints) {
+      for (const cp of task.checkpoints) {
+        if (cp.requiresHuman === true) {
+          humanCheckpointIds.add(cp.id);
+          humanCheckpointDescs.add(cp.description);
+        }
+      }
+    }
+    const isHumanCheckpoint = (cp: string) =>
+      humanCheckpointIds.has(cp) || humanCheckpointDescs.has(cp);
+    const filteredContractCheckpoints = contract.checkpoints.filter(cp => !isHumanCheckpoint(cp));
+    const filteredDevCheckpoints = devReport.checkpointsCompleted.filter(cp => !isHumanCheckpoint(cp));
+
     parts.push('# 代码审查任务');
     parts.push('');
     parts.push('你是一个独立的代码审查员。你需要评估一个任务的完成情况，判断是否满足验收标准。');
@@ -217,12 +233,20 @@ export class HarnessEvaluator {
       parts.push('');
     }
 
-    if (contract.checkpoints.length > 0) {
+    if (filteredContractCheckpoints.length > 0) {
       parts.push('## 检查点');
       parts.push('请确认以下检查点是否完成:');
-      contract.checkpoints.forEach((cp, i) => {
+      filteredContractCheckpoints.forEach((cp, i) => {
         parts.push(`${i + 1}. ${cp}`);
       });
+      parts.push('');
+    }
+
+    // 注释：需要人工验证的检查点由后处理单独管理，不影响评估结果
+    if (humanCheckpointIds.size > 0) {
+      parts.push('## 关于人工验证检查点');
+      parts.push(`本任务有 ${humanCheckpointIds.size} 个需要人工验证的检查点（如 ${Array.from(humanCheckpointIds).slice(0, 3).join(', ')}）。`);
+      parts.push('这些检查点由后处理流程单独管理，不在本评估范围内。请仅基于上方的自动化检查点进行判断。');
       parts.push('');
     }
 
@@ -235,9 +259,9 @@ export class HarnessEvaluator {
       parts.push('');
     }
 
-    if (devReport.checkpointsCompleted.length > 0) {
+    if (filteredDevCheckpoints.length > 0) {
       parts.push('## 开发者声明的完成检查点');
-      devReport.checkpointsCompleted.forEach(cp => {
+      filteredDevCheckpoints.forEach(cp => {
         parts.push(`- ${cp}`);
       });
       parts.push('');

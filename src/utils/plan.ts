@@ -53,7 +53,8 @@ function getStatusPriority(status: string): number {
  * 执行计划接口
  */
 export interface ExecutionPlan {
-  tasks: string[];      // 任务ID列表（有序）
+  tasks: string[];      // 任务ID列表（有序，向后兼容）
+  batches?: string[][]; // 按批次分组的任务ID二维数组
   createdAt: string;    // 创建时间
   updatedAt: string;    // 更新时间
 }

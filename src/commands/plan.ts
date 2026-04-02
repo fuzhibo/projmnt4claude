@@ -30,6 +30,18 @@ interface TaskChain {
 }
 
 /**
+ * 执行批次：同优先级的任务链归入同一批次
+ */
+interface ExecutionBatch {
+  batchId: string;            // 批次 ID（如 "batch-P0"）
+  priority: string;           // 批次优先级标签（如 "P0", "P1"）
+  priorityValue: number;      // 优先级数值（用于排序）
+  chains: string[];           // 批次包含的链 ID
+  tasks: string[];            // 批次包含的任务 ID（按链内拓扑序）
+  parallelizable: boolean;    // 同批次内的不同链是否可并行执行
+}
+
+/**
  * AI 友好的推荐结果
  */
 interface AIRecommendationOutput {
@@ -56,6 +68,14 @@ interface AIRecommendationOutput {
       dependencies: string[];
     }>;
   }>;
+  batches: Array<{
+    batchId: string;
+    priority: string;
+    chains: string[];
+    tasks: string[];
+    parallelizable: boolean;
+  }>;
+  batchOrder: string[][];  // 按批次排列的任务ID二维数组
   recommendation: {
     summary: string;
     topChains: string[];
@@ -197,21 +217,73 @@ function buildTaskChains(tasks: TaskMeta[], cwd: string): TaskChain[] {
 
 /**
  * 对任务链进行排序
- * 排序优先级：1. 链长度（降序） 2. reopen 次数（降序） 3. 优先级（升序）
+ * 排序优先级：1. 优先级（升序，数字越小越紧急） 2. 链长度（降序） 3. reopen 次数（降序）
  */
 function sortChains(chains: TaskChain[]): TaskChain[] {
   return [...chains].sort((a, b) => {
-    // 1. 链长度降序
+    // 1. 优先级升序（数字越小越紧急，优先执行）
+    if (a.maxPriority !== b.maxPriority) {
+      return a.maxPriority - b.maxPriority;
+    }
+    // 2. 链长度降序（同优先级下长链优先）
     if (b.length !== a.length) {
       return b.length - a.length;
     }
-    // 2. reopen 次数降序
-    if (b.totalReopenCount !== a.totalReopenCount) {
-      return b.totalReopenCount - a.totalReopenCount;
-    }
-    // 3. 优先级升序（数字越小越紧急）
-    return a.maxPriority - b.maxPriority;
+    // 3. reopen 次数降序
+    return b.totalReopenCount - a.totalReopenCount;
   });
+}
+
+/**
+ * 按优先级分桶构建执行批次
+ * 同一优先级桶内的不同链标记为可并行
+ */
+function buildBatches(sortedChains: TaskChain[]): ExecutionBatch[] {
+  const priorityNames: Record<number, string> = {
+    0: 'P0', 1: 'P1', 2: 'P2', 3: 'P3',
+    4: 'Q1', 5: 'Q2', 6: 'Q3', 7: 'Q4',
+  };
+
+  // 按优先级分桶
+  const buckets = new Map<number, TaskChain[]>();
+  for (const chain of sortedChains) {
+    const existing = buckets.get(chain.maxPriority);
+    if (existing) {
+      existing.push(chain);
+    } else {
+      buckets.set(chain.maxPriority, [chain]);
+    }
+  }
+
+  // 按优先级排序桶
+  const sortedPriorities = [...buckets.keys()].sort((a, b) => a - b);
+
+  const batches: ExecutionBatch[] = [];
+  for (const priority of sortedPriorities) {
+    const chainsInBucket = buckets.get(priority)!;
+    const allTasks: string[] = [];
+    const chainIds: string[] = [];
+
+    for (const chain of chainsInBucket) {
+      chainIds.push(chain.chainId);
+      for (const task of chain.tasks) {
+        if (!allTasks.includes(task.id)) {
+          allTasks.push(task.id);
+        }
+      }
+    }
+
+    batches.push({
+      batchId: `batch-${priorityNames[priority] || `L${priority}`}`,
+      priority: priorityNames[priority] || `L${priority}`,
+      priorityValue: priority,
+      chains: chainIds,
+      tasks: allTasks,
+      parallelizable: chainsInBucket.length > 1,
+    });
+  }
+
+  return batches;
 }
 
 /**
@@ -243,6 +315,10 @@ function generateAIOutput(
     }
   }
 
+  // 构建执行批次
+  const batches = buildBatches(chains);
+  const batchOrder = batches.map(b => b.tasks);
+
   return {
     query,
     keywords,
@@ -267,8 +343,16 @@ function generateAIOutput(
         dependencies: task.dependencies,
       })),
     })),
+    batches: batches.map(b => ({
+      batchId: b.batchId,
+      priority: b.priority,
+      chains: b.chains,
+      tasks: b.tasks,
+      parallelizable: b.parallelizable,
+    })),
+    batchOrder,
     recommendation: {
-      summary: `发现 ${chains.length} 个任务链，共 ${filteredCount} 个任务`,
+      summary: `发现 ${chains.length} 个任务链，共 ${filteredCount} 个任务，分 ${batches.length} 个批次`,
       topChains,
       suggestedOrder,
     },
@@ -454,6 +538,14 @@ export async function recommendPlan(
     console.log(`过滤结果: ${filteredTasks.length}/${activeTasks.length} 个任务匹配\n`);
   }
 
+  // 1.5 统一可执行过滤（依赖完成检查+状态检查+子任务检查）
+  const executableIds = new Set(getExecutableTasks(cwd));
+  const beforeExecFilter = filteredTasks.length;
+  filteredTasks = filteredTasks.filter(task => executableIds.has(task.id));
+  if (beforeExecFilter - filteredTasks.length > 0) {
+    console.log(`已排除 ${beforeExecFilter - filteredTasks.length} 个依赖未完成或不可执行的任务`);
+  }
+
   if (filteredTasks.length === 0) {
     const emptyResult = {
       query: options.query,
@@ -464,6 +556,8 @@ export async function recommendPlan(
         chainCount: 0,
       },
       chains: [],
+      batches: [],
+      batchOrder: [],
       recommendation: {
         summary: '没有匹配的任务',
         topChains: [],
@@ -487,7 +581,7 @@ export async function recommendPlan(
   console.log('正在分析任务依赖关系...');
   const chains = buildTaskChains(filteredTasks, cwd);
 
-  // 2. 按链长度、reopen次数、优先级排序
+  // 2. 按优先级↑ 链长度↓ reopen↓ 排序
   const sortedChains = sortChains(chains);
 
   // 3. 生成 AI 友好的输出
@@ -507,7 +601,7 @@ export async function recommendPlan(
 
   // 人类可读格式输出
   console.log('━'.repeat(SEPARATOR_WIDTH));
-  console.log('📋 任务链分析结果');
+  console.log('📋 任务链分析结果（按批次分组）');
   console.log('━'.repeat(SEPARATOR_WIDTH));
   console.log('');
 
@@ -516,28 +610,42 @@ export async function recommendPlan(
   console.log(`   总任务数: ${aiOutput.filterStats.totalTasks}`);
   console.log(`   匹配任务: ${aiOutput.filterStats.filteredTasks}`);
   console.log(`   任务链数: ${aiOutput.filterStats.chainCount}`);
+  console.log(`   批次数: ${aiOutput.batches.length}`);
   console.log('');
 
-  // 显示任务链（按排序后的顺序）
-  console.log('🔗 任务链（按长度↓ reopen↓ 优先级↑ 排序）:');
-  console.log('');
+  // 按批次展示
+  const batches = buildBatches(sortedChains);
+  for (let b = 0; b < batches.length; b++) {
+    const batch = batches[b]!;
+    const batchIcon = getPriorityIcon(batch.priorityValue);
+    const parallelTag = batch.parallelizable ? ' [可并行]' : '';
 
-  for (let i = 0; i < sortedChains.length; i++) {
-    const chain = sortedChains[i]!;
-    const chainNum = `[${i + 1}/${sortedChains.length}]`;
-    const priorityIcon = getPriorityIcon(chain.maxPriority);
-
-    console.log(`${chainNum} ${priorityIcon} 链: ${chain.chainId}`);
-    console.log(`     长度: ${chain.length} | Reopen: ${chain.totalReopenCount} | 关键字: ${chain.keywords.slice(0, 5).join(', ')}`);
-
-    // 显示链中任务
-    for (let j = 0; j < chain.tasks.length; j++) {
-      const task = chain.tasks[j]!;
-      const prefix = j === chain.tasks.length - 1 ? '     └─' : '     ├─';
-      const statusIcon = getStatusIcon(task.status);
-      console.log(`${prefix} ${statusIcon} ${task.id}: ${task.title.substring(0, 40)}`);
-    }
+    console.log(`📦 批次 ${b + 1}/${batches.length} ${batchIcon} ${batch.priority}${parallelTag}`);
+    console.log(`   链数: ${batch.chains.length} | 任务数: ${batch.tasks.length}`);
     console.log('');
+
+    // 显示批次内的链
+    const chainsInBatch = sortedChains.filter(c => batch.chains.includes(c.chainId));
+    for (let i = 0; i < chainsInBatch.length; i++) {
+      const chain = chainsInBatch[i]!;
+      const chainLabel = batch.parallelizable ? `[链${i + 1}]` : `[链]`;
+
+      console.log(`   ${chainLabel} ${chain.chainId} (长度:${chain.length} Reopen:${chain.totalReopenCount})`);
+
+      // 显示链中任务（拓扑序）
+      for (let j = 0; j < chain.tasks.length; j++) {
+        const task = chain.tasks[j]!;
+        const prefix = j === chain.tasks.length - 1 ? '      └─' : '      ├─';
+        const statusIcon = getStatusIcon(task.status);
+        console.log(`${prefix} ${statusIcon} ${task.id}: ${task.title.substring(0, 40)}`);
+      }
+      console.log('');
+    }
+
+    if (b < batches.length - 1) {
+      console.log('   ─────────────────────────────────');
+      console.log('');
+    }
   }
 
   // 推荐摘要
@@ -553,6 +661,7 @@ export async function recommendPlan(
   if (isNonInteractive) {
     const plan = getOrCreatePlan(cwd);
     plan.tasks = aiOutput.recommendation.suggestedOrder;
+    plan.batches = aiOutput.batchOrder;
     writePlan(plan, cwd);
     console.log('✅ 执行计划已更新 (非交互模式)');
     return;
@@ -569,6 +678,7 @@ export async function recommendPlan(
   if (response.confirm) {
     const plan = getOrCreatePlan(cwd);
     plan.tasks = aiOutput.recommendation.suggestedOrder;
+    plan.batches = aiOutput.batchOrder;
     writePlan(plan, cwd);
     console.log('✅ 执行计划已更新');
   } else {

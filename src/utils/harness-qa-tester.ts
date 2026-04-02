@@ -24,6 +24,7 @@ import {
   getReportPath,
   REVIEW_TIMEOUT_RATIO,
 } from './harness-helpers.js';
+import { getQARoleTemplate } from './role-prompts.js';
 
 /**
  * 验证检查点的验证信息完整性
@@ -91,11 +92,14 @@ export class HarnessQATester {
         verdict.failedCheckpoints = qaResult.failedCheckpoints;
         verdict.details = qaResult.details;
 
-        // 4. 判断是否需要人工验证
+        // 4. 标记需要人工验证的检查点（仅信息标记，不影响 PASS/NOPASS 判定）
         if (humanCheckpoints.length > 0) {
           verdict.requiresHuman = true;
-          verdict.reason += `\n需要人工验证 ${humanCheckpoints.length} 个检查点`;
-          console.log(`\n   ⚠️  需要人工验证 ${humanCheckpoints.length} 个检查点`);
+          // 注意: requiresHuman 仅作为信息标记，reason 不附加人工检查点信息
+          // 人工检查点信息通过 requiresHuman + humanVerificationCheckpoints 字段传递
+          const deferredInfo = `${humanCheckpoints.length} 个检查点已延期（deferred），等待人工验证: ${humanCheckpoints.map(cp => cp.id).join(', ')}`;
+          verdict.details = verdict.details ? `${verdict.details}\n${deferredInfo}` : deferredInfo;
+          console.log(`\n   ⏳ ${deferredInfo}`);
         }
 
         if (verdict.result === 'PASS' && !verdict.requiresHuman) {
@@ -213,9 +217,11 @@ export class HarnessQATester {
   ): string {
     const parts: string[] = [];
 
+    const roleTemplate = getQARoleTemplate(task.recommendedRole);
+
     parts.push('# QA 验证任务');
     parts.push('');
-    parts.push('你是一个专业的 QA 测试员。你需要验证一个任务的实现是否满足功能要求。');
+    parts.push(`${roleTemplate.roleDeclaration}你需要验证一个任务的实现是否满足功能要求。`);
     parts.push('');
     parts.push('**重要**: 你必须严格验证，确保所有功能正常工作。');
     parts.push('');
@@ -254,11 +260,9 @@ export class HarnessQATester {
     parts.push('');
 
     parts.push('## 验证要求');
-    parts.push('1. 运行单元测试（如有配置）');
-    parts.push('2. 运行功能测试（如有配置）');
-    parts.push('3. 验证功能是否符合预期');
-    parts.push('4. 检查边界情况处理');
-    parts.push('5. 收集测试证据');
+    roleTemplate.testStrategy.forEach((strategy, i) => {
+      parts.push(`${i + 1}. ${strategy}`);
+    });
     parts.push('');
 
     parts.push('## 输出格式');
@@ -346,9 +350,10 @@ export class HarnessQATester {
     }
 
     if (verdict.humanVerificationCheckpoints.length > 0) {
-      lines.push('## 需要人工验证的检查点');
+      lines.push('## 已延期（deferred）的检查点 - 等待人工验证');
+      lines.push('*这些检查点不参与 PASS/NOPASS 判定，仅等待人工后处理*');
       verdict.humanVerificationCheckpoints.forEach(checkpoint => {
-        lines.push(`- ${checkpoint}`);
+        lines.push(`- ${checkpoint} [deferred]`);
       });
       lines.push('');
     }
