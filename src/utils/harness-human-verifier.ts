@@ -11,13 +11,14 @@ import * as fs from 'fs';
 import { SEPARATOR_WIDTH } from './format';
 import * as path from 'path';
 import * as readline from 'readline';
-import {
+import type {
   HarnessConfig,
   QAVerdict,
   HumanVerdict,
 } from '../types/harness.js';
-import { TaskMeta, CheckpointMetadata } from '../types/task.js';
+import type { TaskMeta, CheckpointMetadata } from '../types/task.js';
 import { getProjectDir } from './path.js';
+import { enqueueBatch } from './harness-verification-queue.js';
 
 export class HarnessHumanVerifier {
   private config: HarnessConfig;
@@ -31,11 +32,11 @@ export class HarnessHumanVerifier {
    *
    * 流程：
    * 1. 获取需要人工验证的检查点
-   * 2. 显示验证请求
-   * 3. 等待用户响应
+   * 2. 在交互模式下：显示验证请求，等待用户响应
+   * 3. 在非交互模式（headless）下：将检查点入队待验证队列
    * 4. 记录验证结果
    */
-  async requestVerification(task: TaskMeta, qaVerdict: QAVerdict): Promise<HumanVerdict[]> {
+  async requestVerification(task: TaskMeta, qaVerdict: QAVerdict, sessionId?: string): Promise<HumanVerdict[]> {
     console.log(`\n👤 人工验证阶段...`);
     console.log(`   任务: ${task.title}`);
 
@@ -51,13 +52,54 @@ export class HarnessHumanVerifier {
 
     console.log(`   📋 需要人工验证 ${humanCheckpoints.length} 个检查点\n`);
 
-    // 对每个需要人工验证的检查点进行验证
+    // 非交互模式（headless）：入队待验证，返回 deferred 通过
+    if (!process.stdin.isTTY || this.config.jsonOutput) {
+      return this.handleHeadlessVerification(task, humanCheckpoints, sessionId);
+    }
+
+    // 交互模式：逐个验证
     for (const checkpoint of humanCheckpoints) {
       const verdict = await this.verifyCheckpoint(task, checkpoint);
       verdicts.push(verdict);
     }
 
     return verdicts;
+  }
+
+  /**
+   * Headless 模式处理：将检查点入队待验证队列
+   */
+  private handleHeadlessVerification(
+    task: TaskMeta,
+    checkpoints: CheckpointMetadata[],
+    sessionId?: string
+  ): HumanVerdict[] {
+    console.log('   📝 Headless 模式：将人工验证检查点加入待验证队列');
+    console.log(`   共 ${checkpoints.length} 个检查点需要后续人工验证\n`);
+
+    // 批量入队
+    const queueItems = checkpoints.map(cp => ({
+      taskId: task.id,
+      taskTitle: task.title,
+      checkpointId: cp.id,
+      checkpointDescription: cp.description,
+      verificationSteps: cp.verification?.commands,
+      expectedResult: cp.verification?.expected,
+      sessionId,
+    }));
+
+    enqueueBatch(queueItems, this.config.cwd);
+
+    // 返回 PASS（deferred），让流水线继续
+    return checkpoints.map(cp => ({
+      taskId: task.id,
+      result: 'PASS' as const,
+      reason: '已加入待验证队列，等待人工确认 (deferred)',
+      checkpointId: cp.id,
+      verifiedBy: 'system',
+      verifiedAt: new Date().toISOString(),
+      userFeedback: 'Headless 模式自动延迟，待人工验证',
+    }));
   }
 
   /**
@@ -148,15 +190,9 @@ export class HarnessHumanVerifier {
   }
 
   /**
-   * 获取用户响应
+   * 获取用户响应（仅交互模式调用）
    */
   private async getUserResponse(): Promise<{ passed: boolean; feedback?: string }> {
-    // 在非交互模式下，默认通过
-    if (!process.stdin.isTTY || this.config.jsonOutput) {
-      console.log('\n   ⚠️  非交互模式，自动通过人工验证');
-      return { passed: true, feedback: '非交互模式自动通过' };
-    }
-
     return new Promise((resolve) => {
       const rl = readline.createInterface({
         input: process.stdin,
@@ -270,7 +306,8 @@ export class HarnessHumanVerifier {
   async batchVerification(
     task: TaskMeta,
     qaVerdict: QAVerdict,
-    autoApprove: boolean = false
+    autoApprove: boolean = false,
+    sessionId?: string
   ): Promise<HumanVerdict[]> {
     if (autoApprove) {
       console.log('\n   ⚠️  自动批准模式，跳过人工验证');
@@ -286,6 +323,6 @@ export class HarnessHumanVerifier {
       }));
     }
 
-    return this.requestVerification(task, qaVerdict);
+    return this.requestVerification(task, qaVerdict, sessionId);
   }
 }

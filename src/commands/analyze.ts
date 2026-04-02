@@ -21,8 +21,9 @@ import type {
   TaskHistoryEntry,
   VerificationMethod,
 } from '../types/task';
-import { parseTaskId, generateTaskId } from '../types/task';
+import { parseTaskId, generateTaskId, inferTaskType } from '../types/task';
 import { generateCheckpointId } from '../utils/checkpoint';
+import { inferCheckpointsFromDescription } from '../utils/description-template';
 import { SEPARATOR_WIDTH } from '../utils/format';
 import type { SprintContract } from '../types/harness';
 
@@ -359,12 +360,17 @@ export interface Issue {
     // 验证方法检查
     | 'manual_verification'
     | 'missing_verification'  // resolved 状态但缺少 verification 字段
+    | 'missing_createdBy'     // 任务缺少 createdBy 字段（无法追踪创建来源）
+    // 状态一致性检查
+    | 'inconsistent_status'
     // 残留检查
     | 'abandoned_residual'
     // ID 质量检查
     | 'meaningless_id'
     // 覆盖率检查
     | 'low_checkpoint_coverage'
+    // 文件引用检查
+    | 'file_not_found'
     // 配置忽略
     | 'ignored_by_config';
   severity: 'low' | 'medium' | 'high';
@@ -387,12 +393,491 @@ export interface AnalysisStats {
   orphanSubtasks: number;   // 孤儿子任务数
   abandonedResidual: number; // 归档目录中的 abandoned 残留任务数
   resolvedWithoutVerification: number; // resolved 但缺少 verification 的任务数
+  inconsistentStatus: number;         // resolved 但 verification.result=failed 的任务数
+  fileNotFound: number;     // 引用不存在文件的任务数
   ignored: number;          // 被 ignorePatterns 忽略的任务数
+  missingCreatedBy: number; // 缺少 createdBy 字段的任务数
 }
 
 export interface AnalysisResult {
   issues: Issue[];
   stats: AnalysisStats;
+  qualityScores?: Map<string, ContentQualityScore>;
+}
+
+// ============== 内容质量检测 ==============
+
+/**
+ * 内容质量评分结果
+ */
+export interface ContentQualityScore {
+  /** 总分 (0-100) */
+  totalScore: number;
+  /** 描述完整度评分 (0-100) */
+  descriptionScore: number;
+  /** 检查点质量评分 (0-100) */
+  checkpointScore: number;
+  /** 关联文件评分 (0-100) */
+  relatedFilesScore: number;
+  /** 解决方案评分 (0-100) */
+  solutionScore: number;
+  /** 扣分项详情 */
+  deductions: QualityDeduction[];
+  /** 检测时间 */
+  checkedAt: string;
+}
+
+/**
+ * 质量扣分项
+ */
+export interface QualityDeduction {
+  category: 'description' | 'checkpoint' | 'related_files' | 'solution';
+  reason: string;
+  points: number;
+  suggestion?: string;
+}
+
+/**
+ * 泛化检查点模板列表
+ * 这些是过于泛化、不具体的检查点描述
+ */
+const GENERIC_CHECKPOINT_PATTERNS = [
+  /^需求分析与?设计$/,
+  /^核心功能实现$/,
+  /^测试与?验证$/,
+  /^代码审查$/,
+  /^功能实现$/,
+  /^实现功能$/,
+  /^完成功能$/,
+  /^开发功能$/,
+  /^编写代码$/,
+  /^测试通过$/,
+  /^验证通过$/,
+  /^集成测试$/,
+  /^单元测试$/,
+  /^功能测试$/,
+  /^完成开发$/,
+  /^完成实现$/,
+  /^实现完成$/,
+  /^开发完成$/,
+  /^测试完成$/,
+  /^验收通过$/,
+  /^检查通过$/,
+  /^实现逻辑$/,
+  /^编写逻辑$/,
+  /^完成逻辑$/,
+  /^开发完成$/,
+  /^代码完成$/,
+  /^功能完成$/,
+  /^开发功能$/,
+];
+
+/**
+ * 计算任务内容质量评分
+ */
+export function calculateContentQuality(task: TaskMeta): ContentQualityScore {
+  const deductions: QualityDeduction[] = [];
+  let descriptionScore = 100;
+  let checkpointScore = 100;
+  let relatedFilesScore = 100;
+  let solutionScore = 100;
+
+  // 1. 描述完整度检测
+  const descResult = evaluateDescription(task.description);
+  descriptionScore = descResult.score;
+  deductions.push(...descResult.deductions);
+
+  // 2. 检查点质量检测
+  const cpResult = evaluateCheckpoints(task.checkpoints);
+  checkpointScore = cpResult.score;
+  deductions.push(...cpResult.deductions);
+
+  // 3. 关联文件检测
+  const filesResult = evaluateRelatedFiles(task.description, task.checkpoints);
+  relatedFilesScore = filesResult.score;
+  deductions.push(...filesResult.deductions);
+
+  // 4. 解决方案检测
+  const solResult = evaluateSolution(task.description);
+  solutionScore = solResult.score;
+  deductions.push(...solResult.deductions);
+
+  // 计算总分 (加权平均)
+  const totalScore = Math.round(
+    descriptionScore * 0.35 +
+    checkpointScore * 0.30 +
+    relatedFilesScore * 0.15 +
+    solutionScore * 0.20
+  );
+
+  return {
+    totalScore,
+    descriptionScore,
+    checkpointScore,
+    relatedFilesScore,
+    solutionScore,
+    deductions,
+    checkedAt: new Date().toISOString(),
+  };
+}
+
+/**
+ * 评估描述完整度
+ */
+function evaluateDescription(description?: string): { score: number; deductions: QualityDeduction[] } {
+  const deductions: QualityDeduction[] = [];
+  let score = 100;
+
+  if (!description || description.trim().length === 0) {
+    deductions.push({
+      category: 'description',
+      reason: '缺少描述',
+      points: -100,
+      suggestion: '添加任务描述以提供更多上下文',
+    });
+    return { score: 0, deductions };
+  }
+
+  const descLength = description.trim().length;
+
+  // 长度检测
+  if (descLength < 30) {
+    const deduction = -30;
+    score += deduction;
+    deductions.push({
+      category: 'description',
+      reason: `描述过短 (< 30字): ${descLength}字`,
+      points: deduction,
+      suggestion: '扩展描述，详细说明问题背景和需求',
+    });
+  } else if (descLength < 50) {
+    const deduction = -15;
+    score += deduction;
+    deductions.push({
+      category: 'description',
+      reason: `描述较短 (< 50字): ${descLength}字`,
+      points: deduction,
+      suggestion: '添加更多细节，如根因分析、解决方案等',
+    });
+  }
+
+  // 结构化段落检测
+  const hasProblemSection = /##\s*问题描述|##\s*问题|#\s*问题描述|#\s*问题/i.test(description);
+  const hasRootCauseSection = /##\s*根因分析|##\s*根因|##\s*原因|#\s*根因分析|#\s*原因/i.test(description);
+  const hasSolutionSection = /##\s*解决方案|##\s*方案|#\s*解决方案|#\s*方案/i.test(description);
+  const hasCheckpointSection = /##\s*检查点|#\s*检查点|##\s*验收|#\s*验收/i.test(description);
+
+  // 检测结构化程度
+  const sectionCount = [hasProblemSection, hasRootCauseSection, hasSolutionSection, hasCheckpointSection]
+    .filter(Boolean).length;
+
+  if (sectionCount < 2 && descLength >= 50) {
+    const deduction = -10;
+    score += deduction;
+    deductions.push({
+      category: 'description',
+      reason: '缺少结构化段落',
+      points: deduction,
+      suggestion: '使用结构化格式，如"## 问题描述"、"## 解决方案"等',
+    });
+  }
+
+  // 检测根因分析（对于 bug 类型任务尤其重要）
+  if (!hasRootCauseSection && !/因为|由于|原因|根因|caused by|because|root cause/i.test(description)) {
+    // 只在描述足够长但缺少根因时扣分
+    if (descLength >= 50) {
+      const deduction = -10;
+      score += deduction;
+      deductions.push({
+        category: 'description',
+        reason: '缺少根因分析',
+        points: deduction,
+        suggestion: '添加"## 根因分析"部分说明问题产生的原因',
+      });
+    }
+  }
+
+  return { score: Math.max(0, score), deductions };
+}
+
+/**
+ * 评估检查点质量
+ */
+function evaluateCheckpoints(checkpoints?: CheckpointMetadata[]): { score: number; deductions: QualityDeduction[] } {
+  const deductions: QualityDeduction[] = [];
+  let score = 100;
+
+  if (!checkpoints || checkpoints.length === 0) {
+    // 没有检查点不扣分，因为可能使用 checkpoint.md
+    return { score: 100, deductions };
+  }
+
+  // 检测泛化检查点
+  const genericCheckpoints: string[] = [];
+  for (const cp of checkpoints) {
+    const desc = cp.description.trim();
+    for (const pattern of GENERIC_CHECKPOINT_PATTERNS) {
+      if (pattern.test(desc)) {
+        genericCheckpoints.push(desc);
+        break;
+      }
+    }
+  }
+
+  if (genericCheckpoints.length > 0) {
+    // 根据泛化检查点比例扣分
+    const ratio = genericCheckpoints.length / checkpoints.length;
+    const deduction = Math.round(-20 * ratio);
+    score += deduction;
+    deductions.push({
+      category: 'checkpoint',
+      reason: `检查点过于泛化: "${genericCheckpoints[0]}"${genericCheckpoints.length > 1 ? ` 等 ${genericCheckpoints.length} 项` : ''}`,
+      points: deduction,
+      suggestion: '使用更具体的检查点描述，如"实现用户登录 API"而非"核心功能实现"',
+    });
+  }
+
+  // 检测检查点数量过少
+  if (checkpoints.length < 2) {
+    const deduction = -10;
+    score += deduction;
+    deductions.push({
+      category: 'checkpoint',
+      reason: '检查点数量过少 (< 2)',
+      points: deduction,
+      suggestion: '添加更多验收检查点以明确完成标准',
+    });
+  }
+
+  return { score: Math.max(0, score), deductions };
+}
+
+/**
+ * 评估关联文件
+ */
+function evaluateRelatedFiles(
+  description?: string,
+  checkpoints?: CheckpointMetadata[]
+): { score: number; deductions: QualityDeduction[] } {
+  const deductions: QualityDeduction[] = [];
+  let score = 100;
+
+  // 从描述中检测文件引用
+  const descFiles = extractFileReferences(description || '');
+
+  // 从检查点 evidencePath 检测
+  const cpFiles: string[] = [];
+  if (checkpoints) {
+    for (const cp of checkpoints) {
+      if (cp.verification?.evidencePath) {
+        cpFiles.push(cp.verification.evidencePath);
+      }
+    }
+  }
+
+  // 检测描述中的 "## 相关文件" 部分
+  const hasRelatedFilesSection = /##\s*相关文件|#\s*相关文件|##\s*Related|#\s*Related/i.test(description || '');
+
+  const allFiles = [...descFiles, ...cpFiles];
+  const hasAnyFiles = allFiles.length > 0 || hasRelatedFilesSection;
+
+  if (!hasAnyFiles) {
+    const deduction = -15;
+    score += deduction;
+    deductions.push({
+      category: 'related_files',
+      reason: '缺少关联文件',
+      points: deduction,
+      suggestion: '添加"## 相关文件"部分，列出需要修改的源文件',
+    });
+  }
+
+  return { score: Math.max(0, score), deductions };
+}
+
+/**
+ * 评估解决方案
+ */
+function evaluateSolution(description?: string): { score: number; deductions: QualityDeduction[] } {
+  const deductions: QualityDeduction[] = [];
+  let score = 100;
+
+  if (!description || description.trim().length === 0) {
+    return { score: 100, deductions }; // 没有描述时不在此项扣分
+  }
+
+  // 检测解决方案部分
+  const hasSolutionSection = /##\s*解决方案|##\s*方案|#\s*解决方案|#\s*方案/i.test(description);
+
+  // 检测解决方案关键词
+  const hasSolutionKeywords = /建议|应该|需要|实现|修改|添加|更新|重构|suggest|should|need to|implement|modify|add|update|refactor/i.test(description);
+
+  if (!hasSolutionSection && !hasSolutionKeywords) {
+    const deduction = -25;
+    score += deduction;
+    deductions.push({
+      category: 'solution',
+      reason: '缺少解决方案',
+      points: deduction,
+      suggestion: '添加"## 解决方案"部分，说明具体的修改方案',
+    });
+  } else if (!hasSolutionSection && hasSolutionKeywords) {
+    // 有关键词但没有明确的章节
+    const deduction = -10;
+    score += deduction;
+    deductions.push({
+      category: 'solution',
+      reason: '解决方案未结构化',
+      points: deduction,
+      suggestion: '使用"## 解决方案"标题组织解决方案内容',
+    });
+  }
+
+  return { score: Math.max(0, score), deductions };
+}
+
+/**
+ * 从文本中提取文件引用
+ * BUG-012-0: 仅匹配包含目录分隔符的路径，避免误匹配裸文件名
+ */
+function extractFileReferences(text: string): string[] {
+  const files: string[] = [];
+  const seen = new Set<string>();
+
+  const patterns = [
+    // 标准源码路径（至少一级目录）
+    /(?:src|lib|test|tests|docs|bin|scripts|config)\/[\w/.-]+\.[a-z]+/g,
+    // 相对路径
+    /\.{1,2}\/[\w/.-]+\.[a-z]+/g,
+    // 带目录分隔符的文件路径（至少包含一个 /）
+    /[\w-]+\/[\w/.-]+\.(ts|tsx|js|jsx|py|go|java|rs|md|json|yaml|yml)/g,
+  ];
+
+  for (const pattern of patterns) {
+    const matches = text.match(pattern);
+    if (matches) {
+      for (const match of matches) {
+        if (!seen.has(match)) {
+          seen.add(match);
+          files.push(match);
+        }
+      }
+    }
+  }
+
+  return files;
+}
+
+/**
+ * 执行内容质量检测
+ */
+export function performQualityCheck(cwd: string = process.cwd()): Map<string, ContentQualityScore> {
+  const tasks = getAllTasks(cwd, false);
+  const scores = new Map<string, ContentQualityScore>();
+
+  for (const task of tasks) {
+    const score = calculateContentQuality(task);
+    scores.set(task.id, score);
+  }
+
+  return scores;
+}
+
+/**
+ * 显示内容质量检测结果
+ */
+export function showQualityReport(
+  scores: Map<string, ContentQualityScore>,
+  options: { compact?: boolean; json?: boolean; threshold?: number } = {}
+): void {
+  const { compact = false, json = false, threshold = 60 } = options;
+
+  if (json) {
+    const result: Record<string, ContentQualityScore> = {};
+    scores.forEach((score, taskId) => {
+      result[taskId] = score;
+    });
+    console.log(JSON.stringify(result, null, 2));
+    return;
+  }
+
+  const separator = compact ? '---' : '━'.repeat(SEPARATOR_WIDTH);
+
+  console.log('');
+  console.log(separator);
+  console.log('📊 内容质量检测报告');
+  console.log(separator);
+  console.log('');
+
+  // 按总分排序
+  const sortedScores = Array.from(scores.entries()).sort((a, b) => a[1].totalScore - b[1].totalScore);
+
+  // 统计
+  const lowQualityTasks = sortedScores.filter(([_, s]) => s.totalScore < threshold);
+  const avgScore = sortedScores.reduce((sum, [_, s]) => sum + s.totalScore, 0) / sortedScores.length;
+
+  console.log(`📈 总体统计:`);
+  console.log(`   检测任务数: ${scores.size}`);
+  console.log(`   平均分数: ${avgScore.toFixed(1)}/100`);
+  console.log(`   低质量任务 (< ${threshold}分): ${lowQualityTasks.length}`);
+  console.log('');
+
+  if (sortedScores.length === 0) {
+    console.log('✅ 没有任务需要检测');
+    console.log('');
+    return;
+  }
+
+  // 显示详细评分
+  console.log(separator);
+  console.log('📋 任务质量评分');
+  console.log(separator);
+  console.log('');
+
+  for (const [taskId, score] of sortedScores) {
+    const icon = score.totalScore >= 80 ? '🟢' : score.totalScore >= 60 ? '🟡' : '🔴';
+    console.log(`${icon} ${taskId}: ${score.totalScore}/100`);
+    console.log(`   描述完整度: ${score.descriptionScore}%`);
+    console.log(`   检查点质量: ${score.checkpointScore}%`);
+    console.log(`   关联文件: ${score.relatedFilesScore}%`);
+    console.log(`   解决方案: ${score.solutionScore}%`);
+
+    // 显示扣分项
+    if (score.deductions.length > 0) {
+      for (const deduction of score.deductions) {
+        console.log(`   └─ ${deduction.reason} (${deduction.points}分)`);
+      }
+    }
+    console.log('');
+  }
+
+  // 显示改进建议
+  if (lowQualityTasks.length > 0) {
+    console.log(separator);
+    console.log('💡 改进建议');
+    console.log(separator);
+    console.log('');
+
+    for (const [taskId, score] of lowQualityTasks.slice(0, 5)) {
+      console.log(`📌 ${taskId}:`);
+      const suggestions = score.deductions
+        .filter(d => d.suggestion)
+        .map(d => d.suggestion);
+
+      if (suggestions.length > 0) {
+        console.log(`   ${suggestions[0]}`);
+      }
+      console.log('');
+    }
+
+    if (lowQualityTasks.length > 5) {
+      console.log(`   ... 还有 ${lowQualityTasks.length - 5} 个低质量任务`);
+      console.log('');
+    }
+  }
+
+  console.log(separator);
+  console.log('');
 }
 
 /**
@@ -455,7 +940,10 @@ export function analyzeProject(cwd: string = process.cwd(), includeArchived: boo
     orphanSubtasks: 0,
     abandonedResidual: 0,
     resolvedWithoutVerification: 0,
+    inconsistentStatus: 0,
+    fileNotFound: 0,
     ignored: ignoredCount,
+    missingCreatedBy: 0,
   };
 
   const now = new Date();
@@ -588,6 +1076,18 @@ export function analyzeProject(cwd: string = process.cwd(), includeArchived: boo
         severity: 'low',
         message: '任务 meta.json 缺少新规范字段',
         suggestion: '添加 reopenCount 和 requirementHistory 字段以符合最新规范',
+      });
+    }
+
+    // 检测缺少 createdBy 字段（无法追踪任务创建来源）
+    if (!task.createdBy) {
+      stats.missingCreatedBy++;
+      issues.push({
+        taskId: task.id,
+        type: 'missing_createdBy',
+        severity: 'low',
+        message: '任务缺少 createdBy 字段，无法追踪创建来源',
+        suggestion: '设置 createdBy 字段以符合最新规范（cli | init-requirement | harness-dev | harness-review | harness-qa | harness-eval | import）',
       });
     }
 
@@ -748,6 +1248,24 @@ export function analyzeProject(cwd: string = process.cwd(), includeArchived: boo
       });
     }
 
+    // 7.6 检测状态一致性：resolved 但 verification.result=failed 或 checkpointCompletionRate=0
+    if (normalizedStatus === 'resolved' && task.verification && task.verification.result === 'failed') {
+      stats.inconsistentStatus++;
+      issues.push({
+        taskId: task.id,
+        type: 'inconsistent_status',
+        severity: 'high',
+        message: `任务状态矛盾: status=resolved 但 verification.result=failed, checkpointCompletionRate=${task.verification.checkpointCompletionRate ?? 0}`,
+        suggestion: '运行 analyze --fix-status 自动将状态改为 reopened，或手动检查验收标准',
+        details: {
+          status: task.status,
+          verificationResult: task.verification.result,
+          checkpointCompletionRate: task.verification.checkpointCompletionRate,
+          reopenCount: task.reopenCount,
+        },
+      });
+    }
+
     // 8. 检测父任务引用有效性
     if (task.parentId) {
       if (!taskExists(task.parentId, cwd)) {
@@ -852,6 +1370,22 @@ export function analyzeProject(cwd: string = process.cwd(), includeArchived: boo
           });
         }
       }
+    }
+
+    // 12. 检测引用文件不存在 (file_not_found)
+    const taskText = `${task.description || ''}\n${task.title || ''}`;
+    const referencedFiles = extractFileReferences(taskText);
+    const missingRefs = referencedFiles.filter(fp => !fs.existsSync(path.resolve(cwd, fp)));
+    if (missingRefs.length > 0) {
+      stats.fileNotFound++;
+      issues.push({
+        taskId: task.id,
+        type: 'file_not_found',
+        severity: 'high',
+        message: `任务引用了 ${missingRefs.length} 个不存在的文件: ${missingRefs.join(', ')}`,
+        suggestion: '检查文件路径是否正确，或移除对不存在文件的引用',
+        details: { missingFiles: missingRefs },
+      });
     }
 
     // 检测循环依赖
@@ -981,6 +1515,12 @@ export function showAnalysis(options: { compact?: boolean } = {}, cwd: string = 
   if (result.stats.resolvedWithoutVerification > 0) {
     console.log(`   缺少 verification: ${result.stats.resolvedWithoutVerification}`);
   }
+  if (result.stats.inconsistentStatus > 0) {
+    console.log(`   状态矛盾 (resolved+failed): ${result.stats.inconsistentStatus}`);
+  }
+  if (result.stats.fileNotFound > 0) {
+    console.log(`   文件不存在引用: ${result.stats.fileNotFound}`);
+  }
   if (result.stats.ignored > 0) {
     console.log(`   已忽略 (配置): ${result.stats.ignored}`);
   }
@@ -1039,8 +1579,10 @@ function isStatusIssue(type: Issue['type']): boolean {
     'legacy_status',
     'invalid_status_value',
     'status_reopen_mismatch',
+    'inconsistent_status',
     'legacy_priority',
     'legacy_schema',
+    'missing_createdBy',
     'invalid_timestamp_format',
   ].includes(type);
 }
@@ -1149,6 +1691,16 @@ async function fixSingleIssue(
       return 'fixed';
     }
 
+    case 'missing_createdBy': {
+      console.log(`🔄 修复任务 ${issue.taskId} 的 createdBy 字段...`);
+      if (!task.createdBy) {
+        task.createdBy = 'import';
+        console.log(`  ✅ 已添加 createdBy: import`);
+      }
+      writeTaskMeta(task, cwd);
+      return 'fixed';
+    }
+
     case 'invalid_status_value': {
       console.log(`🔄 修复任务 ${issue.taskId} 的无效状态值...`);
       if (issue.details?.currentValue) {
@@ -1169,6 +1721,26 @@ async function fixSingleIssue(
       task.reopenCount = Math.max(1, reopenFromHistory);
       writeTaskMeta(task, cwd);
       console.log(`  ✅ 已将 reopenCount 设置为 ${task.reopenCount}`);
+      return 'fixed';
+    }
+
+    case 'inconsistent_status': {
+      console.log(`🔄 修复任务 ${issue.taskId} 的状态矛盾 (resolved + verification.failed)...`);
+      // 将状态改回 reopened，清除旧的 verification
+      task.status = 'reopened';
+      task.verification = undefined;
+      task.updatedAt = new Date().toISOString();
+      task.history.push({
+        timestamp: new Date().toISOString(),
+        action: `状态变更: resolved → reopened`,
+        field: 'status',
+        oldValue: 'resolved',
+        newValue: 'reopened',
+        reason: '修复状态矛盾: resolved 但 verification.result=failed',
+        user: 'analyze-fix',
+      });
+      writeTaskMeta(task, cwd);
+      console.log(`  ✅ 已将状态从 resolved 改为 reopened，清除旧 verification`);
       return 'fixed';
     }
 
@@ -1372,6 +1944,15 @@ async function fixSingleIssue(
       }
     }
 
+    case 'file_not_found': {
+      console.log(`⚠️  任务 ${issue.taskId} 引用了不存在的文件，无法自动修复`);
+      if (issue.details?.missingFiles) {
+        console.log(`   不存在的文件: ${(issue.details.missingFiles as string[]).join(', ')}`);
+      }
+      console.log(`   建议: ${issue.suggestion}`);
+      return 'unfixable';
+    }
+
     default:
       return 'unfixable';
   }
@@ -1503,7 +2084,10 @@ export function showStatus(
         orphan: result.stats.orphan,
         cycle: result.stats.cycle,
         resolvedWithoutVerification: result.stats.resolvedWithoutVerification,
+        inconsistentStatus: result.stats.inconsistentStatus,
+        fileNotFound: result.stats.fileNotFound,
         ignored: result.stats.ignored,
+        missingCreatedBy: result.stats.missingCreatedBy,
       },
     }, null, 2));
     return;
@@ -2043,7 +2627,8 @@ function generateCheckpointsFromCriteria(
   taskId: string,
   acceptanceCriteria: string[],
   taskTitle?: string,
-  cwd: string = process.cwd()
+  cwd: string = process.cwd(),
+  taskDescription?: string
 ): CheckpointMetadata[] {
   const checkpoints: CheckpointMetadata[] = [];
   const now = new Date().toISOString();
@@ -2054,7 +2639,7 @@ function generateCheckpointsFromCriteria(
 
   const criteriaList = (acceptanceCriteria && acceptanceCriteria.length > 0)
     ? acceptanceCriteria
-    : generateDefaultCheckpoints(taskTitle || taskId);
+    : generateDefaultCheckpoints(taskTitle || taskId, taskDescription);
 
   for (let index = 0; index < criteriaList.length; index++) {
     const criteria = criteriaList[index]!;
@@ -2121,42 +2706,76 @@ function inferVerificationMethod(description: string): VerificationMethod {
 }
 
 /**
- * 生成默认检查点
+ * 生成智能默认检查点
+ *
+ * 优先使用 inferCheckpointsFromDescription 从任务标题/描述中提取
+ * 具体的可验证条件，避免生成泛化的流程阶段检查点。
  */
-function generateDefaultCheckpoints(taskTitle: string): string[] {
-  const checkpoints: string[] = [];
-  const lowerTitle = taskTitle.toLowerCase();
+function generateDefaultCheckpoints(taskTitle: string, taskDescription?: string): string[] {
+  const content = taskDescription || taskTitle;
+  const taskType = inferTaskType(taskTitle);
 
-  // 基于任务标题推断检查点
-  if (lowerTitle.includes('api') || lowerTitle.includes('接口')) {
-    checkpoints.push('设计 API 接口');
-    checkpoints.push('实现 API 逻辑');
-    checkpoints.push('添加 API 测试');
-    checkpoints.push('代码审查');
-  } else if (lowerTitle.includes('ui') || lowerTitle.includes('界面') || lowerTitle.includes('页面')) {
-    checkpoints.push('设计 UI 组件');
-    checkpoints.push('实现 UI 逻辑');
-    checkpoints.push('响应式适配');
-    checkpoints.push('UI 测试');
-  } else if (lowerTitle.includes('修复') || lowerTitle.includes('fix') || lowerTitle.includes('bug')) {
-    checkpoints.push('定位问题根因');
-    checkpoints.push('实现修复方案');
-    checkpoints.push('验证修复效果');
-    checkpoints.push('回归测试');
-  } else if (lowerTitle.includes('重构') || lowerTitle.includes('refactor')) {
-    checkpoints.push('分析现有代码');
-    checkpoints.push('实施重构');
-    checkpoints.push('确保测试通过');
-    checkpoints.push('代码审查');
-  } else {
-    // 通用检查点
-    checkpoints.push('需求分析与设计');
-    checkpoints.push('核心功能实现');
-    checkpoints.push('测试与验证');
-    checkpoints.push('代码审查');
+  // 使用智能检查点生成器
+  const smartCheckpoints = inferCheckpointsFromDescription(content, taskType);
+  if (smartCheckpoints.length > 0) {
+    return smartCheckpoints;
   }
 
-  return checkpoints;
+  // 最后回退：基于标题中的具体实体生成检查点
+  return generateTitleBasedCheckpoints(taskTitle);
+}
+
+/**
+ * 基于标题中的具体实体生成检查点
+ * 仅在智能生成无法提取任何内容时使用
+ * 不使用泛化的流程阶段（如"需求分析与设计"）
+ */
+function generateTitleBasedCheckpoints(taskTitle: string): string[] {
+  const checkpoints: string[] = [];
+
+  // 从标题中提取具体标识符（PascalCase、camelCase、snake_case）
+  const identifierMatches = taskTitle.match(/\b[A-Z][a-zA-Z0-9]{2,}\b|\b[a-z][a-zA-Z0-9]*_[a-zA-Z0-9_]+\b/g);
+  if (identifierMatches) {
+    const uniqueIds = [...new Set(identifierMatches)].slice(0, 3);
+    for (const id of uniqueIds) {
+      checkpoints.push(`${id} 相关功能已实现`);
+    }
+  }
+
+  // 从标题中提取文件路径
+  const fileMatches = taskTitle.match(/(?:src|lib|test|config)\/[\w/.-]+\.[a-z]+/g);
+  if (fileMatches) {
+    const uniqueFiles = [...new Set(fileMatches)].slice(0, 2);
+    for (const file of uniqueFiles) {
+      checkpoints.push(`${file} 包含所需修改`);
+    }
+  }
+
+  // 如果标题包含动作动词，生成针对性检查点
+  const actionPatterns: [RegExp, string][] = [
+    [/修复|fix/i, '问题已定位并修复'],
+    [/实现|implement/i, '核心功能已实现'],
+    [/添加|add/i, '新功能已添加并可用'],
+    [/优化|optimize/i, '性能优化已完成并验证'],
+    [/重构|refactor/i, '重构完成，行为不变'],
+    [/集成|integrate/i, '集成完成，接口连通'],
+    [/迁移|migrate/i, '迁移完成，功能等价'],
+    [/配置|config/i, '配置已生效'],
+  ];
+  for (const [pattern, checkpoint] of actionPatterns) {
+    if (pattern.test(taskTitle)) {
+      checkpoints.push(checkpoint);
+      break;
+    }
+  }
+
+  // 确保至少有 2 个检查点
+  if (checkpoints.length < 2) {
+    checkpoints.push(`${taskTitle.substring(0, 30)} 目标已达成`);
+    checkpoints.push('相关代码已通过验证');
+  }
+
+  return [...new Set(checkpoints)];
 }
 
 /**
@@ -2229,7 +2848,8 @@ function fixTaskCheckpoints(taskId: string, cwd: string): { fixed: boolean; reas
     taskId,
     acceptanceCriteria,
     task.title,
-    cwd
+    cwd,
+    task.description
   );
 
   if (checkpoints.length === 0) {

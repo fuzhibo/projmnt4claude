@@ -9,12 +9,12 @@
  */
 
 import * as path from 'path';
-import {
+import type {
   HarnessConfig,
   DevReport,
   CodeReviewVerdict,
 } from '../types/harness.js';
-import { TaskMeta, CheckpointMetadata } from '../types/task.js';
+import type { TaskMeta, CheckpointMetadata } from '../types/task.js';
 import {
   runHeadlessClaude,
   saveReport,

@@ -52,6 +52,8 @@ import {
   fixStatus,
   showStatus,
   fixCheckpoints,
+  performQualityCheck,
+  showQualityReport,
 } from './commands/analyze';
 import {
   checkoutTaskBranch,
@@ -66,6 +68,13 @@ import { initRequirement } from './commands/init-requirement';
 import { showHelp } from './commands/help';
 import { runDoctor } from './commands/doctor';
 import { harnessCommand } from './commands/harness';
+import {
+  listHumanVerifications,
+  approveHumanVerification,
+  rejectHumanVerification,
+  batchHumanVerification,
+  showVerificationReport,
+} from './commands/human-verification';
 import { isInitialized } from './utils/path';
 
 /**
@@ -647,6 +656,9 @@ program
   .option('--fix-checkpoints', '智能生成缺失的检查点')
   .option('--fix-verification', '仅修复验证方法问题 (manual -> automated)')
   .option('--fix-status', '仅修复状态相关问题 (状态格式、优先级、时间戳等)')
+  .option('--quality-check', '检测任务内容质量（描述完整度、检查点质量、关联文件、解决方案）')
+  .option('--threshold <score>', '质量检测阈值，低于此分数的任务将被标记 (默认: 60)', '60')
+  .option('-j, --json', 'JSON 格式输出 (仅 --quality-check)')
   .option('-y, --yes', '非交互模式：自动修复可修复的问题')
   .option('--compact', '使用简洁分隔符')
   .option('--task <taskId>', '指定任务ID (仅 --fix-checkpoints)')
@@ -660,6 +672,13 @@ program
       await fixStatus(process.cwd(), options.yes);
     } else if (options.fix) {
       await fixIssues(process.cwd(), { nonInteractive: options.yes, fixType: 'all' });
+    } else if (options.qualityCheck) {
+      const scores = performQualityCheck(process.cwd());
+      showQualityReport(scores, {
+        compact: options.compact,
+        json: options.json || program.opts().json || false,
+        threshold: parseInt(options.threshold) || 60,
+      });
     } else {
       showAnalysis({ compact: options.compact });
     }
@@ -734,9 +753,17 @@ program
   .option('-y, --yes', '非交互模式：跳过所有确认，直接使用分析结果创建任务')
   .option('--no-plan', '创建任务后不询问是否添加到执行计划')
   .option('--skip-validation', '跳过 checkpoints 质量校验')
+  .option('--template <type>', '描述模板类型: simple (默认) 或 detailed (详细结构化)', 'simple')
+  .option('--auto-split', '自动拆分复杂任务为子任务（复杂度评估为 high 时生效）')
   .action(async (description, options) => {
     requireInit();
-    await initRequirement(description, process.cwd(), { nonInteractive: options.yes, noPlan: options.noPlan, skipValidation: options.skipValidation });
+    await initRequirement(description, process.cwd(), {
+      nonInteractive: options.yes,
+      noPlan: options.noPlan,
+      skipValidation: options.skipValidation,
+      template: options.template,
+      autoSplit: options.autoSplit,
+    });
   });
 
 // doctor 命令
@@ -762,6 +789,8 @@ program
   .option('--json', 'JSON 格式输出')
   .option('--api-retry-attempts <n>', 'API 调用重试次数 (针对 429/500 错误)', '3')
   .option('--api-retry-delay <seconds>', 'API 重试基础延迟 (秒)', '60')
+  .option('--require-quality <n>', '质量门禁: 最低质量分阈值 (0-100, 默认 60)', '60')
+  .option('--skip-quality-gate', '跳过质量门禁检查 (不推荐)')
   .action(async (options) => {
     requireInit();
     await harnessCommand({
@@ -774,7 +803,67 @@ program
       json: options.json,
       apiRetryAttempts: options.apiRetryAttempts,
       apiRetryDelay: options.apiRetryDelay,
+      requireQuality: options.requireQuality,
+      skipQualityGate: options.skipQualityGate,
     });
+  });
+
+
+// human-verification 命令组
+program
+  .command('human-verification <action> [taskId]')
+  .description('管理待人工验证检查点 (list/approve/reject/batch/report)')
+  .option('--checkpoint <id>', '指定检查点ID (仅 approve/reject)')
+  .option('--reason <reason>', '拒绝原因 (仅 reject)')
+  .option('--feedback <feedback>', '验证反馈 (仅 approve/batch)')
+  .option('--approve-all', '批准全部待验证 (仅 batch)')
+  .option('--status <status>', '按状态过滤: pending/approved/rejected (仅 list)')
+  .option('--json', 'JSON 格式输出 (仅 list/report)')
+  .action(async (action, taskId, options) => {
+    requireInit();
+    switch (action) {
+      case 'list':
+        listHumanVerifications({
+          json: options.json || program.opts().json || false,
+          status: options.status,
+          taskId,
+        });
+        break;
+      case 'approve':
+        if (!taskId) {
+          console.error('错误: approve 操作需要指定任务ID');
+          process.exit(1);
+        }
+        approveHumanVerification(taskId, {
+          checkpoint: options.checkpoint,
+          feedback: options.feedback,
+        });
+        break;
+      case 'reject':
+        if (!taskId) {
+          console.error('错误: reject 操作需要指定任务ID');
+          process.exit(1);
+        }
+        rejectHumanVerification(taskId, {
+          checkpoint: options.checkpoint,
+          reason: options.reason,
+        });
+        break;
+      case 'batch':
+        batchHumanVerification({
+          approveAll: options.approveAll,
+          feedback: options.feedback,
+        });
+        break;
+      case 'report':
+        showVerificationReport({
+          json: options.json || program.opts().json || false,
+        });
+        break;
+      default:
+        console.error(`错误: 未知操作 '${action}'。支持的操作: list, approve, reject, batch, report`);
+        process.exit(1);
+    }
   });
 
 

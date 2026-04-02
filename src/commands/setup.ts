@@ -30,14 +30,6 @@ const DEFAULT_CONFIG: ProjectConfig = {
   language: 'zh',
 };
 
-/**
- * Setup 命令选项
- */
-export interface SetupOptions {
-  nonInteractive?: boolean;  // 非交互模式：跳过所有确认
-  language?: string;         // 指定语言
-}
-
 // 国际化文本
 const i18n = {
   zh: {

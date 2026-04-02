@@ -199,19 +199,19 @@ export function parseVerdictResult(
   const resultPattern = new RegExp(`##\\s*${options.resultField}\\s*[:：]\\s*(PASS|NOPASS)`, 'i');
   const resultMatch = output.match(resultPattern);
   if (resultMatch) {
-    result.passed = resultMatch[1].toUpperCase() === 'PASS';
+    result.passed = resultMatch[1]!.toUpperCase() === 'PASS';
   }
 
   const reasonPattern = new RegExp(`##\\s*${options.reasonField}\\s*[:：]\\s*(.+?)(?=##|$)`, 'si');
   const reasonMatch = output.match(reasonPattern);
   if (reasonMatch) {
-    result.reason = reasonMatch[1].trim();
+    result.reason = reasonMatch[1]!.trim();
   }
 
   const listPattern = new RegExp(`##\\s*${options.listField}\\s*[:：]\\s*(.+?)(?=##|$)`, 'si');
   const listMatch = output.match(listPattern);
   if (listMatch) {
-    const listText = listMatch[1].trim();
+    const listText = listMatch[1]!.trim();
     if (listText && listText !== '无' && listText !== 'N/A') {
       result.items = listText.split('\n')
         .map(line => line.replace(/^[-*]\s*/, '').trim())
@@ -222,7 +222,7 @@ export function parseVerdictResult(
   const checkpointPattern = new RegExp(`##\\s*${options.checkpointField}\\s*[:：]\\s*(.+?)(?=##|$)`, 'si');
   const checkpointMatch = output.match(checkpointPattern);
   if (checkpointMatch) {
-    const checkpointText = checkpointMatch[1].trim();
+    const checkpointText = checkpointMatch[1]!.trim();
     if (checkpointText && checkpointText !== '无' && checkpointText !== 'N/A') {
       result.failedCheckpoints = checkpointText.split('\n')
         .map(line => line.replace(/^[-*]\s*/, '').trim())
@@ -234,7 +234,7 @@ export function parseVerdictResult(
     const detailsPattern = new RegExp(`##\\s*${options.detailsField}\\s*[:：]\\s*(.+?)(?=##|$)`, 'si');
     const detailsMatch = output.match(detailsPattern);
     if (detailsMatch) {
-      result.details = detailsMatch[1].trim();
+      result.details = detailsMatch[1]!.trim();
     }
   }
 

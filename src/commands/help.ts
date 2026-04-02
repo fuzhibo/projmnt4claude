@@ -23,7 +23,7 @@ function parseCommandMetadata(filePath: string): CommandMetadata | null {
       return null;
   }
 
-    const frontmatter = frontmatterMatch[1];
+    const frontmatter = frontmatterMatch[1]!;
     const metadata: CommandMetadata = {
       description: '',
       'argument-hint': '',
@@ -31,12 +31,12 @@ function parseCommandMetadata(filePath: string): CommandMetadata | null {
 
     const descriptionMatch = frontmatter.match(/description:\s*["'](.+?)["']/);
   if (descriptionMatch) {
-    metadata.description = descriptionMatch[1];
+    metadata.description = descriptionMatch[1]!;
   }
 
   const argumentMatch = frontmatter.match(/argument-hint:\s["'](.+?)["']/);
   if (argumentMatch) {
-    metadata['argument-hint'] = argumentMatch[1];
+    metadata['argument-hint'] = argumentMatch[1]!;
   }
 
   return metadata;

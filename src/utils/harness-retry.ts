@@ -8,8 +8,8 @@
  * - 智能重试条件判断
  */
 
-import { HarnessConfig, ReviewVerdict } from '../types/harness.js';
-import { TaskMeta } from '../types/task.js';
+import type { HarnessConfig, ReviewVerdict } from '../types/harness.js';
+import type { TaskMeta } from '../types/task.js';
 
 export class RetryHandler {
   private config: HarnessConfig;

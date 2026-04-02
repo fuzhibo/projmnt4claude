@@ -10,7 +10,8 @@ import {
 } from '../utils/path';
 import { getAllTaskIds } from '../utils/task';
 import { SEPARATOR_WIDTH } from '../utils/format';
-import { parseTaskId, TaskIdInfo } from '../types/task';
+import { parseTaskId } from '../types/task';
+import type { TaskIdInfo } from '../types/task';
 
 /**
  * 检查结果接口

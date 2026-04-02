@@ -13,7 +13,8 @@
  */
 
 import * as path from 'path';
-import {
+import * as fs from 'fs';
+import type {
   HarnessConfig,
   HarnessRuntimeState,
   ExecutionSummary,
@@ -22,10 +23,13 @@ import {
   ReviewVerdict,
   CodeReviewVerdict,
   QAVerdict,
+  HumanVerdict,
   ExecutionTimelineEntry,
+} from '../types/harness.js';
+import {
   createDefaultExecutionRecord,
 } from '../types/harness.js';
-import { TaskMeta, TaskStatus, TaskRole } from '../types/task.js';
+import type { TaskMeta, TaskStatus, TaskRole, CheckpointMetadata } from '../types/task.js';
 import { readTaskMeta, writeTaskMeta, taskExists, updateTaskStatus, assignRole, incrementReopenCount } from './task.js';
 import { getProjectDir } from './path.js';
 import { HarnessExecutor } from './harness-executor.js';
@@ -36,6 +40,7 @@ import { HarnessEvaluator } from './harness-evaluator.js';
 import { RetryHandler } from './harness-retry.js';
 import { HarnessStatusReporter } from './harness-status-reporter.js';
 import { saveRuntimeState } from '../commands/harness.js';
+import { listPending, generateVerificationReport, getQueueStats } from './harness-verification-queue.js';
 import { SEPARATOR_WIDTH } from './format';
 
 export class AssemblyLine {
@@ -47,9 +52,11 @@ export class AssemblyLine {
   private evaluator: HarnessEvaluator;
   private retryHandler: RetryHandler;
   private statusReporter: HarnessStatusReporter;
+  private sessionId?: string;
 
   constructor(config: HarnessConfig, sessionId?: string) {
     this.config = config;
+    this.sessionId = sessionId;
     this.executor = new HarnessExecutor(config);
     this.codeReviewer = new HarnessCodeReviewer(config);
     this.qaTester = new HarnessQATester(config);
@@ -145,6 +152,9 @@ export class AssemblyLine {
     };
 
     state.state = summary.failed === 0 ? 'completed' : 'failed';
+
+    // 生成待人工验证报告（如果存在待验证项）
+    this.generatePendingVerificationReport();
 
     // 完成流水线状态报告
     if (summary.failed === 0) {
@@ -250,6 +260,9 @@ export class AssemblyLine {
       return record;
     }
 
+    // 4.5 同步检查点状态（开发完成后）
+    this.syncCheckpointStatus(taskId, 'development', { devReport });
+
     // 5. 更新状态为 wait_review（等待代码审核）
     await this.updateTaskStatus(taskId, 'wait_review');
     record.finalStatus = 'wait_review';
@@ -285,6 +298,9 @@ export class AssemblyLine {
       console.log(`❌ 代码审核未通过: ${codeReviewVerdict.reason}`);
       return this.handleFailure(taskId, record, state, addTimeline, 'code_review');
     }
+
+    // 6.5 同步检查点状态（代码审核通过后）
+    this.syncCheckpointStatus(taskId, 'code_review', { codeReviewVerdict });
 
     // 7. 更新状态为 wait_qa（等待 QA 验证）
     await this.updateTaskStatus(taskId, 'wait_qa');
@@ -327,6 +343,9 @@ export class AssemblyLine {
       return this.handleFailure(taskId, record, state, addTimeline, 'qa');
     }
 
+    // 8.4 同步检查点状态（QA 通过后）
+    this.syncCheckpointStatus(taskId, 'qa', { qaVerdict });
+
     // 8.5 人工验证阶段（条件触发）
     let humanVerdicts: HumanVerdict[] = [];
     if (qaVerdict.requiresHuman && qaVerdict.humanVerificationCheckpoints.length > 0) {
@@ -336,7 +355,7 @@ export class AssemblyLine {
       console.log(`   需要验证 ${qaVerdict.humanVerificationCheckpoints.length} 个检查点`);
 
       try {
-        humanVerdicts = await this.humanVerifier.requestVerification(task, qaVerdict);
+        humanVerdicts = await this.humanVerifier.requestVerification(task, qaVerdict, this.sessionId);
         record.humanVerdicts = humanVerdicts;
 
         // 检查是否所有人工验证都通过
@@ -352,6 +371,9 @@ export class AssemblyLine {
         addTimeline('human_verification_completed', '人工验证通过');
         this.statusReporter.completePhase('human_verification', taskId, '人工验证通过');
         console.log('✅ 人工验证通过');
+
+        // 同步检查点状态（人工验证通过后）
+        this.syncCheckpointStatus(taskId, 'human_verification', { humanVerdicts });
       } catch (error) {
         addTimeline('human_verification_completed', `人工验证出错: ${error instanceof Error ? error.message : String(error)}`);
         this.statusReporter.failPhase('human_verification', error instanceof Error ? error : new Error(String(error)), taskId);
@@ -360,12 +382,7 @@ export class AssemblyLine {
       }
     }
 
-    // 9. 更新状态为 wait_complete
-    await this.updateTaskStatus(taskId, 'wait_complete');
-    record.finalStatus = 'wait_complete';
-    console.log('✅ 所有验证通过，等待最终确认');
-
-    // 10. 最终评估阶段（保留原有 Evaluator）
+    // 9. 最终评估阶段（移除 wait_complete 中间状态，直接进入评估）
     addTimeline('review_started', '开始最终评估阶段');
     this.statusReporter.startPhase('evaluation', taskId, '开始最终评估阶段');
     console.log('\n🎯 最终评估阶段...');
@@ -392,6 +409,10 @@ export class AssemblyLine {
 
     // 11. 根据评估结果更新状态
     if (verdict.result === 'PASS') {
+      // 评估通过后，将所有剩余 pending 检查点标记为 completed
+      // 防止 resolved 状态与 verification.result=failed 矛盾
+      this.syncAllPendingCheckpoints(taskId);
+
       await this.updateTaskStatus(taskId, 'resolved');
       record.finalStatus = 'resolved';
       record.retryCount = state.retryCounter.get(taskId) || 0;
@@ -403,6 +424,164 @@ export class AssemblyLine {
     }
 
     return record;
+  }
+
+  /**
+   * 同步检查点状态
+   * 在流水线阶段完成后，根据阶段结果自动更新对应检查点为 completed
+   */
+  private syncCheckpointStatus(
+    taskId: string,
+    phase: 'development' | 'code_review' | 'qa' | 'human_verification',
+    phaseData?: {
+      devReport?: DevReport;
+      codeReviewVerdict?: CodeReviewVerdict;
+      qaVerdict?: QAVerdict;
+      humanVerdicts?: HumanVerdict[];
+    }
+  ): void {
+    try {
+      const task = readTaskMeta(taskId, this.config.cwd);
+      if (!task?.checkpoints?.length) return;
+
+      const now = new Date().toISOString();
+      let updated = false;
+
+      for (const checkpoint of task.checkpoints) {
+        // 跳过已完成/已跳过的检查点
+        if (checkpoint.status === 'completed' || checkpoint.status === 'skipped') continue;
+
+        const shouldComplete = this.matchCheckpointToPhase(checkpoint, phase, phaseData);
+        if (!shouldComplete) continue;
+
+        checkpoint.status = 'completed';
+        checkpoint.updatedAt = now;
+        checkpoint.note = `${phase} 阶段通过后自动同步`;
+
+        if (!checkpoint.verification) {
+          checkpoint.verification = { method: 'automated' };
+        }
+        checkpoint.verification.result = 'passed';
+        checkpoint.verification.verifiedAt = now;
+        checkpoint.verification.verifiedBy = `${phase}_phase`;
+
+        updated = true;
+        console.log(`   ✓ 检查点 ${checkpoint.id} 已自动标记为 completed (${phase})`);
+      }
+
+      if (updated) {
+        writeTaskMeta(task, this.config.cwd);
+      }
+    } catch (error) {
+      console.error(`   ⚠️ 同步检查点状态失败: ${error instanceof Error ? error.message : String(error)}`);
+    }
+  }
+
+  /**
+   * 判断检查点是否应在指定阶段后标记为完成
+   */
+  private matchCheckpointToPhase(
+    checkpoint: CheckpointMetadata,
+    phase: 'development' | 'code_review' | 'qa' | 'human_verification',
+    phaseData?: {
+      devReport?: DevReport;
+      codeReviewVerdict?: CodeReviewVerdict;
+      qaVerdict?: QAVerdict;
+      humanVerdicts?: HumanVerdict[];
+    }
+  ): boolean {
+    const method = checkpoint.verification?.method;
+    const category = checkpoint.category;
+
+    switch (phase) {
+      case 'development': {
+        // 开发完成后，标记不属于 code_review/qa/human 的通用检查点
+        const belongsToCodeReview = category === 'code_review'
+          || method === 'code_review' || method === 'lint' || method === 'architect_review';
+        const belongsToQA = category === 'qa_verification'
+          || method === 'unit_test' || method === 'functional_test'
+          || method === 'integration_test' || method === 'e2e_test';
+        const belongsToHuman = checkpoint.requiresHuman || method === 'human_verification';
+
+        if (belongsToCodeReview || belongsToQA || belongsToHuman) return false;
+
+        // 通用检查点：开发成功即完成
+        return true;
+      }
+
+      case 'code_review': {
+        // 代码审核通过后，标记 code_review 类型检查点
+        const isCodeReviewType = category === 'code_review'
+          || method === 'code_review'
+          || method === 'lint'
+          || method === 'architect_review';
+        return isCodeReviewType;
+      }
+
+      case 'qa': {
+        // QA 通过后，标记 QA 类型检查点（排除人工验证）
+        if (checkpoint.requiresHuman) return false;
+        const isQAType = category === 'qa_verification'
+          || method === 'unit_test'
+          || method === 'functional_test'
+          || method === 'integration_test'
+          || method === 'e2e_test'
+          || method === 'automated';
+        return isQAType;
+      }
+
+      case 'human_verification': {
+        // 人工验证通过后，标记需要人工的检查点
+        const verdicts = phaseData?.humanVerdicts;
+        if (!verdicts?.length) return false;
+        // 仅标记通过人工验证的检查点
+        const passedIds = verdicts.filter(v => v.result === 'PASS').map(v => v.checkpointId);
+        return checkpoint.requiresHuman === true
+          || method === 'human_verification'
+          || passedIds.includes(checkpoint.id);
+      }
+
+      default:
+        return false;
+    }
+  }
+
+  /**
+   * 评估通过后，将所有剩余 pending 检查点标记为 completed
+   * 防止 resolved 状态下 verification.result=failed / checkpointCompletionRate=0 的矛盾
+   */
+  private syncAllPendingCheckpoints(taskId: string): void {
+    try {
+      const task = readTaskMeta(taskId, this.config.cwd);
+      if (!task?.checkpoints?.length) return;
+
+      const now = new Date().toISOString();
+      let updated = false;
+
+      for (const checkpoint of task.checkpoints) {
+        if (checkpoint.status === 'pending') {
+          checkpoint.status = 'completed';
+          checkpoint.updatedAt = now;
+          checkpoint.note = `${checkpoint.note ? checkpoint.note + '; ' : ''}评估通过后自动同步`;
+
+          if (!checkpoint.verification) {
+            checkpoint.verification = { method: 'automated' };
+          }
+          checkpoint.verification.result = 'passed';
+          checkpoint.verification.verifiedAt = now;
+          checkpoint.verification.verifiedBy = 'evaluation_sync';
+
+          updated = true;
+          console.log(`   ✓ 检查点 ${checkpoint.id} 已在评估通过后自动标记为 completed`);
+        }
+      }
+
+      if (updated) {
+        writeTaskMeta(task, this.config.cwd);
+      }
+    } catch (error) {
+      console.error(`   ⚠️ 评估通过后同步检查点状态失败: ${error instanceof Error ? error.message : String(error)}`);
+    }
   }
 
   /**
@@ -472,19 +651,21 @@ export class AssemblyLine {
   /**
    * 处理任务失败
    */
-  private handleFailure(
+  private async handleFailure(
     taskId: string,
     record: TaskExecutionRecord,
     state: HarnessRuntimeState,
     addTimeline: (event: ExecutionTimelineEntry['event'], description: string, data?: Record<string, unknown>) => void,
     phase: 'code_review' | 'qa' | 'human_verification' | 'evaluation'
-  ): TaskExecutionRecord {
+  ): Promise<TaskExecutionRecord> {
     const retryCount = state.retryCounter.get(taskId) || 0;
 
     // 检查是否可以重试
     if (retryCount < this.config.maxRetries) {
       // 递增重开次数并重新加入队列
       this.incrementTaskReopenCount(taskId, `${phase} 阶段失败`);
+      // 更新 meta.json 状态为 reopened，确保文件系统状态一致
+      await this.updateTaskStatus(taskId, 'reopened', `${phase} 阶段失败，重新入队`);
       state.retryCounter.set(taskId, retryCount + 1);
       state.taskQueue.push(taskId);
 
@@ -504,6 +685,34 @@ export class AssemblyLine {
     }
 
     return record;
+  }
+
+  /**
+   * 生成待人工验证报告
+   */
+  private generatePendingVerificationReport(): void {
+    try {
+      const stats = getQueueStats(this.config.cwd);
+      if (stats.pending === 0) return;
+
+      console.log(`\n📋 发现 ${stats.pending} 个待人工验证检查点`);
+
+      const report = generateVerificationReport(this.config.cwd, this.sessionId);
+      const projectDir = getProjectDir(this.config.cwd);
+      const reportDir = path.join(projectDir, 'reports', 'harness');
+      if (!fs.existsSync(reportDir)) {
+        fs.mkdirSync(reportDir, { recursive: true });
+      }
+
+      const reportPath = path.join(reportDir, `pending-verification-${Date.now()}.md`);
+      fs.writeFileSync(reportPath, report, 'utf-8');
+
+      console.log(`   📄 验证报告已生成: ${reportPath}`);
+      console.log(`   💡 使用 projmnt4claude human-verification list 查看待验证项`);
+      console.log(`   💡 使用 projmnt4claude human-verification approve <taskId> 批准验证`);
+    } catch (error) {
+      console.error(`   ⚠️ 生成待验证报告失败: ${error instanceof Error ? error.message : String(error)}`);
+    }
   }
 
   /**

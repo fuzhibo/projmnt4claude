@@ -1,6 +1,6 @@
 {
   "name": "projmnt4claude",
-  "version": "1.14.0",
+  "version": "1.15.0",
   "description": "Claude Code 项目管理 CLI 工具",
   "module": "src/index.ts",
   "main": "dist/projmnt4claude.js",

@@ -5,12 +5,66 @@ import { isInitialized, getTasksDir } from '../utils/path';
 import {
   generateNewTaskId,
   writeTaskMeta,
+  readTaskMeta,
 } from '../utils/task';
 import { hasValidCheckpoints, displayCheckpointCreationWarning } from './task';
 import { syncCheckpointsToMeta } from '../utils/checkpoint';
 import type { TaskMeta, TaskPriority, TaskStatus, TaskType } from '../types/task';
-import { createDefaultTaskMeta, inferTaskType } from '../types/task';
+import { createDefaultTaskMeta, inferTaskType, validateCheckpointVerification } from '../types/task';
 import { SEPARATOR_WIDTH } from '../utils/format';
+
+/**
+ * 复杂度评估结果
+ */
+export interface ComplexityAssessment {
+  /** 复杂度等级 */
+  level: 'low' | 'medium' | 'high';
+  /** 评估分数 (0-100) */
+  score: number;
+  /** 检测到的涉及文件数 */
+  fileCount: number;
+  /** 检测到的独立工作项数 */
+  workItemCount: number;
+  /** 预估耗时（分钟） */
+  estimatedMinutes: number;
+  /** 拆分建议 */
+  splitSuggestions: SplitSuggestion[];
+  /** 评估信号 */
+  signals: ComplexitySignal[];
+}
+
+/**
+ * 复杂度评估信号
+ */
+interface ComplexitySignal {
+  type: 'file_count' | 'work_items' | 'cross_module' | 'checkpoint_count' | 'description_length' | 'action_verb_density';
+  weight: number;
+  description: string;
+}
+
+/**
+ * 拆分建议
+ */
+export interface SplitSuggestion {
+  /** 子任务标题 */
+  title: string;
+  /** 子任务描述 */
+  description: string;
+  /** 涉及文件 */
+  files: string[];
+  /** 预估耗时（分钟） */
+  estimatedMinutes: number;
+  /** 依赖的子任务索引 (0-based, -1 表示无依赖) */
+  dependsOn: number;
+}
+import {
+  generateStructuredDescription,
+  extractStructuredInfo,
+  inferCheckpointsFromDescription,
+  inferRelatedFiles,
+  type DescriptionTemplateType,
+  type StructuredDescription,
+} from '../utils/description-template';
 
 /**
  * 需求分析结果接口
@@ -32,6 +86,8 @@ export interface InitRequirementOptions {
   nonInteractive?: boolean;  // 非交互模式：跳过所有确认
   noPlan?: boolean;          // 不询问添加到计划
   skipValidation?: boolean;  // 跳过 checkpoints 质量校验
+  template?: DescriptionTemplateType;  // 描述模板类型：simple | detailed
+  autoSplit?: boolean;       // 自动拆分复杂任务为子任务
 }
 
 /**
@@ -42,7 +98,7 @@ export async function initRequirement(
   cwd: string = process.cwd(),
   options: InitRequirementOptions = {}
 ): Promise<void> {
-  const { nonInteractive = false, noPlan = false, skipValidation = false } = options;
+  const { nonInteractive = false, noPlan = false, skipValidation = false, template = 'simple', autoSplit = false } = options;
 
   if (!isInitialized(cwd)) {
     console.error('');
@@ -65,14 +121,44 @@ export async function initRequirement(
   // 分析需求
   const analysis = analyzeRequirement(description);
 
+  // 执行复杂度评估
+  const complexity = assessComplexity(description, analysis);
+
   // 显示分析结果
   console.log('📋 需求分析结果:');
   console.log('');
   console.log(`  标题: ${analysis.title}`);
   console.log(`  优先级: ${formatPriority(analysis.priority)}`);
-  console.log(`  复杂度: ${analysis.estimatedComplexity}`);
+  console.log(`  复杂度: ${formatComplexity(complexity)}`);
   console.log(`  推荐角色: ${analysis.recommendedRole}`);
+  console.log(`  涉及文件: ${complexity.fileCount} 个`);
+  console.log(`  工作项: ${complexity.workItemCount} 项`);
+  console.log(`  预估耗时: ~${complexity.estimatedMinutes} 分钟`);
   console.log('');
+
+  // 复杂度预警
+  if (complexity.level === 'high') {
+    console.log('━'.repeat(SEPARATOR_WIDTH));
+    console.log('⚠️  复杂度预警');
+    console.log('━'.repeat(SEPARATOR_WIDTH));
+    console.log('');
+    console.log(`  此任务预估耗时 ${complexity.estimatedMinutes} 分钟，超过 Harness 默认超时阈值。`);
+    console.log('  建议将此任务拆分为多个子任务，每个子任务控制在 15 分钟以内。');
+    console.log('');
+
+    if (complexity.splitSuggestions.length > 0) {
+      console.log('  拆分建议:');
+      for (let i = 0; i < complexity.splitSuggestions.length; i++) {
+        const s = complexity.splitSuggestions[i];
+        if (!s) continue;
+        const depLabel = s.dependsOn >= 0 ? ` (依赖子任务 ${s.dependsOn + 1})` : '';
+        console.log(`    ${i + 1}. ${s.title}${depLabel}`);
+        console.log(`       文件: ${s.files.length > 0 ? s.files.join(', ') : '未指定'}`);
+        console.log(`       预估: ~${s.estimatedMinutes} 分钟`);
+      }
+      console.log('');
+    }
+  }
 
   if (analysis.suggestedCheckpoints.length > 0) {
     console.log('  建议检查点:');
@@ -137,12 +223,12 @@ export async function initRequirement(
         name: 'priority',
         message: '优先级',
         choices: [
-          { title: '低', value: 'low' },
-          { title: '中', value: 'medium', selected: analysis.priority === 'medium' },
-          { title: '高', value: 'high', selected: analysis.priority === 'high' },
-          { title: '紧急', value: 'urgent', selected: analysis.priority === 'urgent' },
+          { title: 'P3 低', value: 'P3' },
+          { title: 'P2 中', value: 'P2', selected: analysis.priority === 'P2' },
+          { title: 'P1 高', value: 'P1', selected: analysis.priority === 'P1' },
+          { title: 'P0 紧急', value: 'P0', selected: analysis.priority === 'P0' },
         ],
-        initial: analysis.priority === 'low' ? 0 : analysis.priority === 'medium' ? 1 : analysis.priority === 'high' ? 2 : 3,
+        initial: analysis.priority === 'P3' ? 0 : analysis.priority === 'P2' ? 1 : analysis.priority === 'P1' ? 2 : 3,
       },
       {
         type: 'text',
@@ -168,18 +254,39 @@ export async function initRequirement(
   const taskId = generateNewTaskId(cwd, taskType, taskPriority, response.title);
 
   // 创建任务元数据
-  const task = createDefaultTaskMeta(taskId, response.title, taskType);
-  task.description = response.description || analysis.description;
+  const task = createDefaultTaskMeta(taskId, response.title, taskType, undefined, 'init-requirement');
+
+  // 生成结构化描述
+  const structuredInfo = extractStructuredInfo(response.description || analysis.description);
+  const inferredCheckpoints = inferCheckpointsFromDescription(response.description || analysis.description, taskType);
+  const inferredFiles = inferRelatedFiles(response.description || analysis.description, taskType);
+
+  // 合并提取的检查点和推断的检查点
+  const allCheckpoints = [...new Set([...structuredInfo.checkpoints, ...inferredCheckpoints, ...analysis.suggestedCheckpoints])];
+  const allRelatedFiles = [...new Set([...structuredInfo.relatedFiles, ...inferredFiles])];
+
+  // 构建结构化描述数据
+  const structuredData: StructuredDescription = {
+    problem: structuredInfo.problem || analysis.description,
+    rootCause: structuredInfo.rootCause,
+    solution: structuredInfo.solution,
+    checkpoints: allCheckpoints.length > 0 ? allCheckpoints : analysis.suggestedCheckpoints,
+    relatedFiles: allRelatedFiles,
+    notes: structuredInfo.notes,
+  };
+
+  // 根据模板类型生成描述
+  task.description = generateStructuredDescription(structuredData, template as DescriptionTemplateType);
   task.priority = response.priority as TaskPriority;
   task.recommendedRole = response.recommendedRole || analysis.recommendedRole;
 
   // 写入任务
   writeTaskMeta(task, cwd);
 
-  // 创建 checkpoint.md
+  // 创建 checkpoint.md（使用合并后的检查点集合，包含结构化提取+智能推断+分析建议）
   const taskDir = path.join(getTasksDir(cwd), taskId);
   const checkpointPath = path.join(taskDir, 'checkpoint.md');
-  const checkpoints = analysis.suggestedCheckpoints;
+  const checkpoints = allCheckpoints.length > 0 ? allCheckpoints : analysis.suggestedCheckpoints;
 
   const checkpointContent = `# ${taskId} 检查点
 
@@ -187,10 +294,25 @@ ${checkpoints.map((cp: string) => `- [ ] ${cp}`).join('\n')}
 `;
   fs.writeFileSync(checkpointPath, checkpointContent, 'utf-8');
 
-  // 同步检查点到 meta.json
+  // 同步检查点到 meta.json（包含验证信息推断)
   syncCheckpointsToMeta(taskId, cwd);
 
-  console.log('');
+  // BUG-013-2: 验证检查点验证命令完整性
+  const updatedTask = readTaskMeta(taskId, cwd);
+  if (updatedTask?.checkpoints) {
+    const checkpointsWithoutCommands = updatedTask.checkpoints.filter(cp => {
+      const result = validateCheckpointVerification(cp);
+      return !result.valid;
+    });
+    if (checkpointsWithoutCommands.length > 0) {
+      console.log(`\n   ⚠️  ${checkpointsWithoutCommands.length} 个检查点验证命令缺失:`);
+      for (const cp of checkpointsWithoutCommands) {
+        const result = validateCheckpointVerification(cp);
+        console.log(`   - [${cp.id}] ${result.warning || cp.description}`);
+      }
+    }
+  }
+
   console.log(`✅ 任务创建成功!`);
   console.log(`   ID: ${taskId}`);
   console.log(`   标题: ${task.title}`);
@@ -198,7 +320,60 @@ ${checkpoints.map((cp: string) => `- [ ] ${cp}`).join('\n')}
   console.log(`   检查点: ${checkpoints.length} 项`);
   console.log('');
 
-  // BUG-002: 校验检查点质量并显示警告（除非使用 --skip-validation）
+  // 自动拆分复杂任务
+  if (autoSplit && complexity.level === 'high' && complexity.splitSuggestions.length > 0) {
+    console.log('━'.repeat(SEPARATOR_WIDTH));
+    console.log('🔀 自动拆分复杂任务...');
+    console.log('━'.repeat(SEPARATOR_WIDTH));
+    console.log('');
+
+    const subtaskIds: string[] = [];
+
+    for (let i = 0; i < complexity.splitSuggestions.length; i++) {
+      const sub = complexity.splitSuggestions[i];
+      if (!sub) continue;
+      const subType = inferTaskType(sub.title);
+      const subPriority = taskPriority;
+      const subId = generateNewTaskId(cwd, subType, subPriority, sub.title);
+      subtaskIds.push(subId);
+      const subTask = createDefaultTaskMeta(subId, sub.title, subType, undefined, 'init-requirement');
+      subTask.description = sub.description;
+      subTask.priority = taskPriority;
+      subTask.recommendedRole = analysis.recommendedRole;
+
+      // 设置父子关系
+      subTask.parentId = taskId;
+
+      // 设置依赖关系（使用已创建的子任务ID，避免重新生成不匹配的ID）
+      if (sub.dependsOn >= 0 && sub.dependsOn < i) {
+        const depSubId = subtaskIds[sub.dependsOn];
+        if (depSubId) {
+          subTask.dependencies = [depSubId];
+        }
+      }
+
+      writeTaskMeta(subTask, cwd);
+
+      // 创建子任务 checkpoint
+      const subTaskDir = path.join(getTasksDir(cwd), subId);
+      const subCheckpointPath = path.join(subTaskDir, 'checkpoint.md');
+      const subCheckpointContent = `# ${subId} 检查点\n\n- [ ] 完成 ${sub.title}\n`;
+      fs.writeFileSync(subCheckpointPath, subCheckpointContent, 'utf-8');
+      syncCheckpointsToMeta(subId, cwd);
+
+      console.log(`  ${i + 1}. ${subId}: ${sub.title}`);
+      console.log(`     文件: ${sub.files.length > 0 ? sub.files.join(', ') : '待确认'}`);
+      console.log(`     预估: ~${sub.estimatedMinutes} 分钟`);
+      if (subTask.dependencies && subTask.dependencies.length > 0) {
+        console.log(`     依赖: ${subTask.dependencies.join(', ')}`);
+      }
+      console.log('');
+    }
+
+    console.log(`✅ 已拆分为 ${complexity.splitSuggestions.length} 个子任务`);
+    console.log(`   父任务: ${taskId}`);
+    console.log('');
+  }
   if (!skipValidation) {
     const validation = hasValidCheckpoints(checkpointPath, false);
     if (!validation.valid) {
@@ -221,6 +396,337 @@ ${checkpoints.map((cp: string) => `- [ ] ${cp}`).join('\n')}
       planModule.addTask(taskId);
     }
   }
+}
+
+/**
+ * 格式化复杂度显示
+ */
+function formatComplexity(assessment: ComplexityAssessment): string {
+  const icons: Record<string, string> = {
+    low: '🟢 low',
+    medium: '🟡 medium',
+    high: '🔴 high',
+  };
+  return `${icons[assessment.level]} (评分: ${assessment.score}/100)`;
+}
+
+/**
+ * 从描述中提取文件路径
+ */
+function extractFilePaths(description: string): string[] {
+  const files: string[] = [];
+  const patterns = [
+    /(?:src|lib|test|tests|docs|bin|scripts|config)\/[\w/.-]+\.[a-z]+/g,
+    /\.{1,2}\/[\w/.-]+\.[a-z]+/g,
+    /\b[\w-]+\.(ts|tsx|js|jsx|py|go|java|rs|json|yaml|yml|md)\b/g,
+  ];
+  for (const pattern of patterns) {
+    const matches = description.match(pattern);
+    if (matches) {
+      for (const m of matches) {
+        if (!files.includes(m)) files.push(m);
+      }
+    }
+  }
+  return files;
+}
+
+/**
+ * 从描述中提取工作项（动作+目标的数量）
+ */
+function countWorkItems(description: string): number {
+  // 匹配编号列表项、bullet 列表项、以及独立动作行
+  const actionPatterns = [
+    /(?:^\s*(?:\d+\.|[-*])\s+[^\n]+)/gm,         // 列表项
+    /(?:验证|修复|创建|修改|添加|实现|配置|部署|更新|增强|完善|重构|编写|分析|处理|集成|迁移|支持|移除)[^\n,;，；。、]+/g,  // 动作短语
+  ];
+  const items = new Set<string>();
+  for (const pattern of actionPatterns) {
+    const matches = description.match(pattern);
+    if (matches) {
+      for (const m of matches) {
+        items.add(m.trim());
+      }
+    }
+  }
+  return items.size;
+}
+
+/**
+ * 检测是否涉及跨模块修改
+ */
+function countCrossModuleReferences(description: string): number {
+  const modulePatterns = [
+    /(?:模块|module|系统|system|服务|service|组件|component|插件|plugin)/gi,
+  ];
+  let count = 0;
+  for (const pattern of modulePatterns) {
+    const matches = description.match(pattern);
+    if (matches) count += matches.length;
+  }
+  // 用 "/" 分隔的路径段落数量也反映模块跨度
+  const files = extractFilePaths(description);
+  const dirs = new Set(files.map(f => {
+    const parts = f.split('/');
+    return parts.length > 1 ? parts.slice(0, -1).join('/') : '';
+  }).filter(Boolean));
+  count += dirs.size;
+  return count;
+}
+
+/**
+ * 评估任务复杂度
+ *
+ * 算法基于多维信号：
+ * - 文件数量: 涉及文件越多越复杂
+ * - 工作项数量: 独立动作越多越复杂
+ * - 跨模块引用: 跨越多模块增加复杂度
+ * - 检查点数量: 需要验证的点越多越复杂
+ * - 描述长度: 过长的描述往往暗示范围不清晰
+ */
+export function assessComplexity(
+  description: string,
+  analysis: RequirementAnalysis
+): ComplexityAssessment {
+  const signals: ComplexitySignal[] = [];
+
+  // 1. 文件数量信号
+  const files = extractFilePaths(description);
+  const fileCount = files.length;
+  const fileWeight = Math.min(fileCount * 8, 30); // 每文件 8 分，上限 30
+  signals.push({
+    type: 'file_count',
+    weight: fileWeight,
+    description: `涉及 ${fileCount} 个文件`,
+  });
+
+  // 2. 工作项信号
+  const workItemCount = countWorkItems(description);
+  const workItemWeight = Math.min(workItemCount * 5, 25); // 每项 5 分，上限 25
+  signals.push({
+    type: 'work_items',
+    weight: workItemWeight,
+    description: `包含 ${workItemCount} 个工作项`,
+  });
+
+  // 3. 跨模块信号
+  const crossModuleCount = countCrossModuleReferences(description);
+  const crossModuleWeight = Math.min(crossModuleCount * 6, 20); // 每引用 6 分，上限 20
+  signals.push({
+    type: 'cross_module',
+    weight: crossModuleWeight,
+    description: `跨 ${crossModuleCount} 个模块/系统`,
+  });
+
+  // 4. 检查点数量信号
+  const checkpointCount = analysis.suggestedCheckpoints.length;
+  const checkpointWeight = Math.min(checkpointCount * 4, 15); // 每检查点 4 分，上限 15
+  signals.push({
+    type: 'checkpoint_count',
+    weight: checkpointWeight,
+    description: `包含 ${checkpointCount} 个检查点`,
+  });
+
+  // 5. 描述长度信号
+  const descLength = description.length;
+  const descWeight = descLength > 500 ? 10 : descLength > 200 ? 5 : 0;
+  signals.push({
+    type: 'description_length',
+    weight: descWeight,
+    description: `描述长度 ${descLength} 字符`,
+  });
+
+  // 6. 动作密度信号 (动作动词数量 / 描述长度)
+  const actionVerbPattern = /(?:验证|修复|创建|修改|添加|实现|配置|部署|更新|增强|完善|重构|编写|分析|处理|集成|迁移|支持|移除|检查|测试)/g;
+  const actionVerbMatches = description.match(actionVerbPattern);
+  const actionVerbCount = actionVerbMatches ? actionVerbMatches.length : 0;
+  const actionDensityWeight = actionVerbCount > 10 ? 10 : actionVerbCount > 5 ? 5 : 0;
+  signals.push({
+    type: 'action_verb_density',
+    weight: actionDensityWeight,
+    description: `包含 ${actionVerbCount} 个动作动词`,
+  });
+
+  // 计算总分
+  const totalScore = Math.min(
+    signals.reduce((sum, s) => sum + s.weight, 0),
+    100
+  );
+
+  // 确定等级
+  let level: 'low' | 'medium' | 'high';
+  if (totalScore >= 40) {
+    level = 'high';
+  } else if (totalScore >= 20) {
+    level = 'medium';
+  } else {
+    level = 'low';
+  }
+
+  // 预估耗时: 基于文件数和工作项数
+  // 经验值: 每文件 ~3分钟 + 每工作项 ~2分钟 + 基础 5 分钟
+  const estimatedMinutes = Math.max(
+    5 + fileCount * 3 + workItemCount * 2,
+    Math.ceil(descLength / 100) // 备选: 每百字 1 分钟
+  );
+
+  // 超过 15 分钟强制标记为 high
+  if (estimatedMinutes > 15 && level !== 'high') {
+    level = 'high';
+  }
+
+  // 生成拆分建议
+  const splitSuggestions = generateSplitSuggestions(
+    description,
+    files,
+    workItemCount,
+    estimatedMinutes,
+    analysis
+  );
+
+  return {
+    level,
+    score: totalScore,
+    fileCount,
+    workItemCount,
+    estimatedMinutes,
+    splitSuggestions,
+    signals,
+  };
+}
+
+/**
+ * 生成任务拆分建议
+ *
+ * 策略：
+ * - 按文件/模块边界拆分
+ * - 每个子任务控制在 15 分钟以内
+ * - 设置合理的依赖关系（基础模块 -> 功能模块 -> 测试/文档）
+ */
+function generateSplitSuggestions(
+  description: string,
+  files: string[],
+  workItemCount: number,
+  totalMinutes: number,
+  analysis: RequirementAnalysis
+): SplitSuggestion[] {
+  // 只有复杂任务才需要拆分建议
+  if (totalMinutes <= 15) return [];
+
+  const suggestions: SplitSuggestion[] = [];
+
+  // 尝试按文件组拆分
+  if (files.length >= 3) {
+    // 将文件按目录分组
+    const fileGroups = new Map<string, string[]>();
+    for (const file of files) {
+      const parts = file.split('/');
+      const dir = parts.length > 1 ? parts.slice(0, -1).join('/') : 'root';
+      if (!fileGroups.has(dir)) fileGroups.set(dir, []);
+      fileGroups.get(dir)!.push(file);
+    }
+
+    // 如果只有一组但文件多，按功能拆分
+    if (fileGroups.size <= 1 && files.length >= 3) {
+      // 按文件列表均分
+      const mid = Math.ceil(files.length / 2);
+      const firstHalf = files.slice(0, mid);
+      const secondHalf = files.slice(mid);
+
+      suggestions.push({
+        title: `${analysis.title} - 基础实现`,
+        description: `完成核心功能实现，涉及文件: ${firstHalf.join(', ')}`,
+        files: firstHalf,
+        estimatedMinutes: Math.ceil(totalMinutes * 0.6),
+        dependsOn: -1,
+      });
+      suggestions.push({
+        title: `${analysis.title} - 完善与测试`,
+        description: `完成剩余修改和验证，涉及文件: ${secondHalf.join(', ')}`,
+        files: secondHalf,
+        estimatedMinutes: Math.ceil(totalMinutes * 0.4),
+        dependsOn: 0,
+      });
+    } else {
+      // 按目录分组拆分
+      const groups = Array.from(fileGroups.entries());
+      for (let i = 0; i < groups.length; i++) {
+        const group = groups[i];
+        if (!group) continue;
+        const [dir, groupFiles] = group;
+        const isFirst = i === 0;
+        suggestions.push({
+          title: `${analysis.title} - ${dir} 模块`,
+          description: `修改 ${dir} 目录下文件: ${groupFiles.join(', ')}`,
+          files: groupFiles,
+          estimatedMinutes: Math.max(5, Math.ceil(groupFiles.length * 3 + 2)),
+          dependsOn: isFirst ? -1 : i - 1,
+        });
+      }
+    }
+  } else if (workItemCount >= 4) {
+    // 文件少但工作项多：按工作阶段拆分
+    suggestions.push({
+      title: `${analysis.title} - 核心修改`,
+      description: `完成核心代码修改和功能实现`,
+      files: files.slice(0, Math.ceil(files.length / 2)),
+      estimatedMinutes: Math.ceil(totalMinutes * 0.5),
+      dependsOn: -1,
+    });
+    suggestions.push({
+      title: `${analysis.title} - 配置与集成`,
+      description: `完成配置修改和模块集成`,
+      files: files.slice(Math.ceil(files.length / 2)),
+      estimatedMinutes: Math.ceil(totalMinutes * 0.3),
+      dependsOn: 0,
+    });
+    suggestions.push({
+      title: `${analysis.title} - 验证与测试`,
+      description: `验证修改正确性，运行测试并确保无回归`,
+      files: [],
+      estimatedMinutes: Math.ceil(totalMinutes * 0.2),
+      dependsOn: 1,
+    });
+  } else {
+    // 无法智能拆分，提供时间提醒
+    suggestions.push({
+      title: `${analysis.title} (建议拆分)`,
+      description: `此任务预估 ${totalMinutes} 分钟，建议手动拆分为更小的子任务`,
+      files,
+      estimatedMinutes: totalMinutes,
+      dependsOn: -1,
+    });
+  }
+
+  // 确保每个子任务不超过 15 分钟
+  const finalSuggestions: SplitSuggestion[] = [];
+  for (const s of suggestions) {
+    if (s.estimatedMinutes <= 15) {
+      finalSuggestions.push(s);
+    } else {
+      // 子任务仍然太大，再拆
+      const half = Math.ceil(s.files.length / 2);
+      if (half > 0 && s.files.length > 1) {
+        finalSuggestions.push({
+          ...s,
+          title: `${s.title} (前半)`,
+          files: s.files.slice(0, half),
+          estimatedMinutes: Math.ceil(s.estimatedMinutes / 2),
+        });
+        finalSuggestions.push({
+          ...s,
+          title: `${s.title} (后半)`,
+          files: s.files.slice(half),
+          estimatedMinutes: Math.ceil(s.estimatedMinutes / 2),
+          dependsOn: finalSuggestions.length - 1,
+        });
+      } else {
+        finalSuggestions.push(s);
+      }
+    }
+  }
+
+  return finalSuggestions;
 }
 
 /**
@@ -293,48 +799,10 @@ function analyzeRequirement(description: string): RequirementAnalysis {
     }
   }
 
-  // 生成建议检查点
-  const suggestedCheckpoints: string[] = [];
-
-  if (lowerDesc.includes('api') || lowerDesc.includes('接口')) {
-    suggestedCheckpoints.push('设计 API 接口');
-    suggestedCheckpoints.push('实现 API 逻辑');
-    suggestedCheckpoints.push('编写 API 文档');
-    suggestedCheckpoints.push('添加 API 测试');
-  }
-
-  if (lowerDesc.includes('ui') || lowerDesc.includes('界面') || lowerDesc.includes('页面')) {
-    suggestedCheckpoints.push('设计 UI 原型');
-    suggestedCheckpoints.push('实现 UI 组件');
-    suggestedCheckpoints.push('添加交互逻辑');
-    suggestedCheckpoints.push('响应式适配');
-  }
-
-  if (lowerDesc.includes('测试') || lowerDesc.includes('test')) {
-    suggestedCheckpoints.push('编写单元测试');
-    suggestedCheckpoints.push('编写集成测试');
-    suggestedCheckpoints.push('测试覆盖率检查');
-  }
-
-  if (lowerDesc.includes('数据库') || lowerDesc.includes('database') || lowerDesc.includes('db')) {
-    suggestedCheckpoints.push('设计数据模型');
-    suggestedCheckpoints.push('创建数据库迁移');
-    suggestedCheckpoints.push('实现数据访问层');
-  }
-
-  if (lowerDesc.includes('文档') || lowerDesc.includes('document')) {
-    suggestedCheckpoints.push('收集文档需求');
-    suggestedCheckpoints.push('编写文档内容');
-    suggestedCheckpoints.push('文档审核');
-  }
-
-  // 如果没有生成任何检查点，使用通用检查点
-  if (suggestedCheckpoints.length === 0) {
-    suggestedCheckpoints.push('需求分析与设计');
-    suggestedCheckpoints.push('核心功能实现');
-    suggestedCheckpoints.push('测试与验证');
-    suggestedCheckpoints.push('代码审查');
-  }
+  // 使用智能检查点生成器生成具体可验证的检查点
+  // 推断任务类型用于智能检查点生成
+  const taskType = inferTaskType(title);
+  const suggestedCheckpoints = inferCheckpointsFromDescription(description, taskType);
 
   // 生成潜在依赖
   const potentialDependencies: string[] = [];

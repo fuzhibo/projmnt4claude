@@ -7,15 +7,23 @@
  * 1. Planner: 解析计划文件，生成任务执行列表
  * 2. Generator: 开发阶段 - 执行任务实现
  * 3. Evaluator: 审查阶段 - 独立验证结果
+ *
+ * 质量门禁（BUG-011-5）：
+ * - --require-quality N: 质量分低于N时自动提示完善
+ * - 方案验证检查点：任务开始前要求确认理解解决方案
+ * - 影响文件清单：任务必须关联受影响文件列表
+ * - 变更范围预估：标记 small/medium/large 变更
  */
 
 import * as fs from 'fs';
 import * as path from 'path';
-import {
+import type {
   HarnessConfig,
-  DEFAULT_HARNESS_CONFIG,
   ExecutionSummary,
   HarnessRuntimeState,
+} from '../types/harness.js';
+import {
+  DEFAULT_HARNESS_CONFIG,
   createDefaultRuntimeState,
 } from '../types/harness.js';
 import { isInitialized, getProjectDir } from '../utils/path.js';
@@ -25,6 +33,13 @@ import { readPlan } from '../utils/plan.js';
 import { readTaskMeta } from '../utils/task.js';
 import { SEPARATOR_WIDTH } from '../utils/format';
 import { recommendPlan } from './plan.js';
+import {
+  batchCheckQualityGate,
+  formatBatchQualityGateResult,
+  showQualityImprovementGuide,
+  DEFAULT_QUALITY_GATE_CONFIG,
+  type QualityGateConfig,
+} from '../utils/quality-gate.js';
 
 /**
  * 命令选项
@@ -39,6 +54,10 @@ export interface HarnessCommandOptions {
   json?: boolean;
   apiRetryAttempts?: string;
   apiRetryDelay?: string;
+  /** 最低质量分阈值 (0-100) */
+  requireQuality?: string;
+  /** 跳过质量门禁检查 */
+  skipQualityGate?: boolean;
 }
 
 /**
@@ -51,6 +70,21 @@ export async function harnessCommand(
   // 检查项目初始化
   if (!isInitialized(cwd)) {
     console.error('错误: 项目未初始化。请先运行 `projmnt4claude setup`');
+    process.exit(1);
+  }
+
+  // 构建质量门禁配置
+  const qualityGateConfig: QualityGateConfig = {
+    ...DEFAULT_QUALITY_GATE_CONFIG,
+    minQualityScore: options.requireQuality
+      ? parseInt(options.requireQuality, 10)
+      : DEFAULT_QUALITY_GATE_CONFIG.minQualityScore,
+    enabled: !options.skipQualityGate,
+  };
+
+  // 验证质量分阈值
+  if (qualityGateConfig.minQualityScore < 0 || qualityGateConfig.minQualityScore > 100) {
+    console.error('错误: --require-quality 必须在 0-100 之间');
     process.exit(1);
   }
 
@@ -116,13 +150,54 @@ export async function harnessCommand(
     return;
   }
 
+  // 质量门禁检查（BUG-011-5）
+  if (qualityGateConfig.enabled) {
+    console.log('');
+    console.log('━'.repeat(SEPARATOR_WIDTH));
+    console.log('🚦 质量门禁检查');
+    console.log('━'.repeat(SEPARATOR_WIDTH));
+    console.log(`📊 最低质量分阈值: ${qualityGateConfig.minQualityScore}`);
+    console.log('');
+
+    const batchResult = batchCheckQualityGate(taskQueue, qualityGateConfig, cwd);
+
+    // 输出检查结果
+    console.log(formatBatchQualityGateResult(batchResult, { compact: false, showDetails: true }));
+
+    if (!batchResult.allPassed) {
+      console.log('');
+      console.log('❌ 质量门禁检查未通过，以下任务需要完善:');
+      console.log('');
+
+      for (const taskId of batchResult.blockedTasks) {
+        const result = batchResult.results.get(taskId);
+        if (result) {
+          showQualityImprovementGuide(result);
+        }
+      }
+
+      console.log('');
+      console.log('💡 提示:');
+      console.log('   1. 完善任务描述，添加 "## 问题描述"、"## 根因分析"、"## 解决方案" 部分');
+      console.log('   2. 在 "## 相关文件" 部分列出受影响的源文件');
+      console.log('   3. 使用更具体的检查点描述，避免泛化描述如 "核心功能实现"');
+      console.log('   4. 使用 --skip-quality-gate 跳过质量检查（不推荐）');
+      console.log('   5. 使用 --require-quality N 调整质量分阈值（默认 60）');
+      console.log('');
+      process.exit(1);
+    }
+
+    console.log('✅ 所有任务通过质量门禁检查');
+    console.log('');
+  }
+
   // 创建 AssemblyLine 并执行
   const assemblyLine = new AssemblyLine(config);
   const reporter = new HarnessReporter(config);
 
   try {
     // 加载或创建运行时状态
-    let state: HarnessRuntimeState;
+    let state: HarnessRuntimeState | null;
     if (config.continue) {
       state = loadRuntimeState(cwd);
       if (state) {

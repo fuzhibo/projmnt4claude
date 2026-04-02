@@ -12,16 +12,18 @@
 import * as fs from 'fs';
 import * as path from 'path';
 import { spawn } from 'child_process';
-import {
+import type {
   HarnessConfig,
   SprintContract,
   DevReport,
   HeadlessClaudeOptions,
   HeadlessClaudeResult,
+} from '../types/harness.js';
+import {
   createDefaultDevReport,
   createDefaultSprintContract,
 } from '../types/harness.js';
-import { TaskMeta } from '../types/task.js';
+import type { TaskMeta } from '../types/task.js';
 import { getProjectDir } from './path.js';
 import { readTaskMeta } from './task.js';
 import { classifyExitResult } from './harness-helpers.js';
@@ -218,6 +220,17 @@ export class HarnessExecutor {
     parts.push('3. 确保代码符合项目规范');
     parts.push('4. 运行必要的测试验证实现');
     parts.push('5. 完成后简要总结所做的更改');
+    parts.push('');
+
+    parts.push('## ⛔ 禁止操作（严格遵守）');
+    parts.push('你是一个开发者，你的唯一职责是实现被分配任务的代码变更。以下操作被严格禁止：');
+    parts.push('');
+    parts.push('1. **禁止创建新任务** - 不要运行 `task create`、`init-requirement` 或任何创建任务的命令');
+    parts.push('2. **禁止修改任务元数据** - 不要修改 `.projmnt4claude/tasks/` 下的 meta.json 文件');
+    parts.push('3. **禁止创建子任务** - 不要将当前任务拆分为多个子任务并尝试创建它们');
+    parts.push('');
+    parts.push('如果任务确实需要拆分，请在开发报告中 **建议** 拆分方案，由人工决定是否创建新任务。');
+    parts.push('违反以上任何禁令将导致评估不通过。');
 
     return parts.join('\n');
   }
@@ -231,7 +244,7 @@ export class HarnessExecutor {
     // 429 Rate Limit
     const rateLimitMatch = combinedOutput.match(/API Error:\s*429.*?(\d{4}-\d{2}-\d{2}\s+\d{2}:\d{2}:\d{2})/);
     if (rateLimitMatch) {
-      const resetTime = new Date(rateLimitMatch[1]);
+      const resetTime = new Date(rateLimitMatch[1]!);
       const now = new Date();
       const waitSeconds = Math.max(60, Math.ceil((resetTime.getTime() - now.getTime()) / 1000));
       return { retryable: true, waitSeconds, reason: 'API 速率限制 (429)' };

@@ -9,12 +9,13 @@
  */
 
 import * as path from 'path';
-import {
+import type {
   HarnessConfig,
   CodeReviewVerdict,
   QAVerdict,
 } from '../types/harness.js';
-import { TaskMeta, CheckpointMetadata } from '../types/task.js';
+import type { TaskMeta, CheckpointMetadata } from '../types/task.js';
+import { validateCheckpointVerification } from '../types/task.js';
 import {
   runHeadlessClaude,
   saveReport,
@@ -23,6 +24,14 @@ import {
   getReportPath,
   REVIEW_TIMEOUT_RATIO,
 } from './harness-helpers.js';
+
+/**
+ * 验证检查点的验证信息完整性
+ * 用于 QA 提示词中显示警告
+ */
+function checkCheckpointVerification(cp: CheckpointMetadata): { valid: boolean; warning?: string } {
+  return validateCheckpointVerification(cp);
+}
 
 export class HarnessQATester {
   private config: HarnessConfig;
@@ -144,6 +153,20 @@ export class HarnessQATester {
     const automatedCheckpoints = checkpoints.filter(cp => !cp.requiresHuman);
     const humanCheckpoints = checkpoints.filter(cp => cp.requiresHuman === true);
 
+    // BUG-013-2: 检查自动化检查点中是否有缺少验证命令的情况
+    const checkpointsWithoutCommands = automatedCheckpoints.filter(cp => {
+      const result = validateCheckpointVerification(cp);
+      return !result.valid;
+    });
+    if (checkpointsWithoutCommands.length > 0) {
+      console.log(`\n   ⚠️  ${checkpointsWithoutCommands.length} 个自动化检查点缺少验证命令:`);
+      for (const cp of checkpointsWithoutCommands) {
+        const result = validateCheckpointVerification(cp);
+        console.log(`      - [${cp.id}] ${result.warning || '缺少 commands/steps'}`);
+      }
+      console.log('      这些检查点将依赖 AI 自由验证，可能影响验证质量。');
+    }
+
     if (automatedCheckpoints.length === 0) {
       // 只有需要人工验证的检查点
       return {
@@ -208,7 +231,7 @@ export class HarnessQATester {
       parts.push('');
     }
 
-    parts.push('## QA 验证检查点');
+    parts.push('## QA 飀证检查点');
     checkpoints.forEach((cp, i) => {
       parts.push(`${i + 1}. [${cp.id}] ${cp.description}`);
       if (cp.verification?.commands && cp.verification.commands.length > 0) {
@@ -216,6 +239,11 @@ export class HarnessQATester {
       }
       if (cp.verification?.expected) {
         parts.push(`   期望结果: ${cp.verification.expected}`);
+      }
+      // BUG-013-2: 裁判断点验证方法是否缺少 commands/steps
+      const cpValidation = validateCheckpointVerification(cp);
+      if (!cpValidation.valid && cpValidation.warning) {
+        parts.push(`   ⚠️ ${cpValidation.warning}`);
       }
     });
     parts.push('');

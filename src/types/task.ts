@@ -9,6 +9,19 @@ export type TaskType = 'bug' | 'feature' | 'research' | 'docs' | 'refactor' | 't
 export type TaskPriority = 'P0' | 'P1' | 'P2' | 'P3' | 'Q1' | 'Q2' | 'Q3' | 'Q4';
 
 /**
+ * 任务创建来源
+ * 用于追踪任务是由哪个入口创建的
+ */
+export type TaskCreatedBy =
+  | 'cli'              // 通过 task create 命令创建
+  | 'init-requirement' // 通过 init-requirement 命令创建
+  | 'harness-dev'      // 由 harness 开发阶段创建
+  | 'harness-review'   // 由 harness 代码审核阶段创建
+  | 'harness-qa'       // 由 harness QA 阶段创建
+  | 'harness-eval'     // 由 harness 评估阶段创建
+  | 'import';          // 通过导入/迁移创建
+
+/**
  * 任务状态
  */
 export type TaskStatus =
@@ -91,12 +104,55 @@ export type CheckpointCategory =
 export interface CheckpointVerification {
   method: VerificationMethod;  // 验证方法（禁止使用 'manual'）
   commands?: string[];         // 验证命令列表
+  steps?: string[];            // 验证步骤描述（当无法用命令表达时使用）
   expected?: string;           // 期望结果
   result?: string;             // 实际验证结果
   evidencePath?: string;       // 证据路径（相对路径）
   exitCode?: number;           // 命令退出码
   verifiedAt?: string;         // 验证时间
   verifiedBy?: string;         // 验证者
+}
+
+/**
+ * 需要验证命令的验证方法类型
+ * functional_test 等自动化验证方法必须包含 commands 或 steps
+ */
+const METHODS_REQUIRING_COMMANDS: VerificationMethod[] = [
+  'functional_test',
+  'unit_test',
+  'integration_test',
+  'e2e_test',
+  'automated',
+  'lint',
+];
+
+/**
+ * 校验检查点的验证信息是否完整
+ * - functional_test 等自动化方法必须有 commands 或 steps
+ * - 返回校验结果和警告信息
+ */
+export function validateCheckpointVerification(
+  checkpoint: { description: string; verification?: CheckpointVerification }
+): { valid: boolean; warning?: string } {
+  if (!checkpoint.verification) {
+    return { valid: true };
+  }
+
+  const { method, commands, steps } = checkpoint.verification;
+
+  if (METHODS_REQUIRING_COMMANDS.includes(method)) {
+    const hasCommands = commands && commands.length > 0;
+    const hasSteps = steps && steps.length > 0;
+
+    if (!hasCommands && !hasSteps) {
+      return {
+        valid: false,
+        warning: `检查点 "${checkpoint.description}" 的验证方法为 ${method}，但缺少 commands 或 steps`,
+      };
+    }
+  }
+
+  return { valid: true };
 }
 
 /**
@@ -236,6 +292,8 @@ export interface TaskMeta {
   reopenCount?: number;    // 重开次数（任务被重新打开的次数）
   requirementHistory?: RequirementHistoryEntry[]; // 需求变更历史
   verification?: TaskVerification; // 任务级验证信息（resolved时自动填充）
+  fileWarnings?: string[];        // 创建时引用但不存在的文件路径
+  createdBy?: TaskCreatedBy;      // 任务创建来源
 }
 
 /**
@@ -252,13 +310,57 @@ export interface TaskIdInfo {
 }
 
 /**
+ * 待人工验证条目
+ * 用于在 headless 模式下收集需要人工验证的检查点
+ */
+export interface PendingVerification {
+  /** 任务ID */
+  taskId: string;
+  /** 任务标题 */
+  taskTitle: string;
+  /** 检查点ID */
+  checkpointId: string;
+  /** 检查点描述 */
+  checkpointDescription: string;
+  /** 验证步骤 */
+  verificationSteps?: string[];
+  /** 期望结果 */
+  expectedResult?: string;
+  /** 入队时间 */
+  enqueuedAt: string;
+  /** 验证状态: pending | approved | rejected */
+  status: 'pending' | 'approved' | 'rejected';
+  /** 验证人 */
+  verifiedBy?: string;
+  /** 验证时间 */
+  verifiedAt?: string;
+  /** 验证反馈 */
+  feedback?: string;
+  /** 关联的流水线会话ID */
+  sessionId?: string;
+}
+
+/**
+ * 待验证队列文件结构
+ */
+export interface PendingVerificationQueue {
+  /** 队列版本 */
+  version: 1;
+  /** 队列条目 */
+  items: PendingVerification[];
+  /** 最后更新时间 */
+  updatedAt: string;
+}
+
+/**
  * 创建默认任务元数据
  */
 export function createDefaultTaskMeta(
   id: string,
   title: string,
   type: TaskType = 'feature',
-  description?: string
+  description?: string,
+  createdBy?: TaskCreatedBy
 ): TaskMeta {
   const now = new Date().toISOString();
   return {
@@ -274,6 +376,7 @@ export function createDefaultTaskMeta(
     history: [],
     reopenCount: 0,
     requirementHistory: [],
+    createdBy,
   };
 }
 

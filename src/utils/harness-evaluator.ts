@@ -11,16 +11,16 @@
 import * as fs from 'fs';
 import * as path from 'path';
 import { spawn } from 'child_process';
-import {
+import type {
   HarnessConfig,
   SprintContract,
   DevReport,
   ReviewVerdict,
   HeadlessClaudeOptions,
 } from '../types/harness.js';
-import { TaskMeta, CheckpointMetadata } from '../types/task.js';
+import type { TaskMeta, CheckpointMetadata } from '../types/task.js';
 import { getProjectDir } from './path.js';
-import { readTaskMeta } from './task.js';
+import { readTaskMeta, getAllTaskIds } from './task.js';
 import { classifyExitResult } from './harness-helpers.js';
 
 /**
@@ -32,7 +32,7 @@ function isRetryableError(output: string, stderr: string): { retryable: boolean;
   // 429 Rate Limit
   const rateLimitMatch = combinedOutput.match(/API Error:\s*429.*?(\d{4}-\d{2}-\d{2}\s+\d{2}:\d{2}:\d{2})/);
   if (rateLimitMatch) {
-    const resetTime = new Date(rateLimitMatch[1]);
+    const resetTime = new Date(rateLimitMatch[1]!);
     const now = new Date();
     const waitSeconds = Math.max(60, Math.ceil((resetTime.getTime() - now.getTime()) / 1000));
     return { retryable: true, waitSeconds, reason: 'API 速率限制 (429)' };
@@ -109,11 +109,27 @@ export class HarnessEvaluator {
         Object.assign(contract, loadedContract);
       }
 
-      // 2. 构建评估提示词
-      const prompt = this.buildEvaluationPrompt(task, devReport, contract);
+      // 2. 检测幽灵任务（开发者在执行期间创建的额外任务）
+      const phantomTasks = this.detectPhantomTasks(task.id, devReport);
+
+      // 幽灵任务为严重违规，自动 NOPASS（无需运行评估会话）
+      if (phantomTasks.length > 0) {
+        verdict.result = 'NOPASS';
+        verdict.reason = `严重违规：开发者在执行期间创建了 ${phantomTasks.length} 个额外任务 (${phantomTasks.join(', ')}). 开发者被严格禁止创建新任务。`;
+        verdict.failedCriteria = ['禁止创建新任务'];
+        verdict.failedCheckpoints = phantomTasks.map(tid => `幽灵任务: ${tid}`);
+        verdict.details = `检测到开发者创建了不属于原始计划的额外任务。这违反了开发者职责范围——开发者只应实现被分配任务的代码变更，而非创建新任务。`;
+        console.log(`\n   ❌ 检测到幽灵任务，自动 NOPASS`);
+
+        await this.saveReviewReport(task.id, verdict, devReport);
+        return verdict;
+      }
+
+      // 3. 构建评估提示词
+      const prompt = this.buildEvaluationPrompt(task, devReport, contract, phantomTasks);
       console.log('\n   📝 评估提示词已生成');
 
-      // 3. 运行独立评估会话
+      // 4. 运行独立评估会话
       console.log('\n   🔍 启动独立评估会话...');
       const result = await this.runEvaluationSession({
         prompt,
@@ -123,7 +139,7 @@ export class HarnessEvaluator {
         outputFormat: 'text',
       });
 
-      // 4. 解析评估结果
+      // 5. 解析评估结果
       const evaluation = this.parseEvaluationResult(result.output);
 
       verdict.result = evaluation.passed ? 'PASS' : 'NOPASS';
@@ -156,7 +172,8 @@ export class HarnessEvaluator {
   private buildEvaluationPrompt(
     task: TaskMeta,
     devReport: DevReport,
-    contract: SprintContract
+    contract: SprintContract,
+    phantomTasks: string[] = []
   ): string {
     const parts: string[] = [];
 
@@ -226,12 +243,26 @@ export class HarnessEvaluator {
       parts.push('');
     }
 
+    // 幽灵任务检测报告
+    if (phantomTasks.length > 0) {
+      parts.push('## ⚠️ 幽灵任务检测');
+      parts.push(`**严重违规**: 开发者在执行任务期间创建了 ${phantomTasks.length} 个额外任务:`);
+      phantomTasks.forEach(tid => {
+        parts.push(`- ${tid}`);
+      });
+      parts.push('');
+      parts.push('开发者被严格禁止创建新任务。这是一个自动 NOPASS 的严重违规。');
+      parts.push('请在评估结果中明确标注此违规，并将结果设为 NOPASS。');
+      parts.push('');
+    }
+
     parts.push('## 评估要求');
     parts.push('1. 阅读任务描述和验收标准');
     parts.push('2. 检查相关代码文件');
     parts.push('3. 运行验证命令（如有）');
     parts.push('4. 验证每个验收标准是否满足');
     parts.push('5. 检查代码质量（可读性、可维护性）');
+    parts.push('6. 检查开发者是否违反禁止操作（特别是是否创建了额外任务）');
     parts.push('');
 
     parts.push('## 输出格式');
@@ -408,7 +439,7 @@ export class HarnessEvaluator {
     for (const pattern of resultPatterns) {
       resultMatch = output.match(pattern);
       if (resultMatch) {
-        result.passed = resultMatch[1].toUpperCase() === 'PASS';
+        result.passed = resultMatch[1]!.toUpperCase() === 'PASS';
         break;
       }
     }
@@ -435,7 +466,7 @@ export class HarnessEvaluator {
     for (const pattern of reasonPatterns) {
       const match = output.match(pattern);
       if (match) {
-        result.reason = match[1].trim();
+        result.reason = match[1]!.trim();
         break;
       }
     }
@@ -448,7 +479,7 @@ export class HarnessEvaluator {
     for (const pattern of criteriaPatterns) {
       const match = output.match(pattern);
       if (match) {
-        const criteriaText = match[1].trim();
+        const criteriaText = match[1]!.trim();
         if (criteriaText && criteriaText !== '无' && criteriaText !== 'N/A' && criteriaText !== 'None') {
           result.failedCriteria = criteriaText.split('\n')
             .map(line => line.replace(/^[-*]\s*/, '').trim())
@@ -466,7 +497,7 @@ export class HarnessEvaluator {
     for (const pattern of checkpointsPatterns) {
       const match = output.match(pattern);
       if (match) {
-        const checkpointsText = match[1].trim();
+        const checkpointsText = match[1]!.trim();
         if (checkpointsText && checkpointsText !== '无' && checkpointsText !== 'N/A' && checkpointsText !== 'None') {
           result.failedCheckpoints = checkpointsText.split('\n')
             .map(line => line.replace(/^[-*]\s*/, '').trim())
@@ -484,7 +515,7 @@ export class HarnessEvaluator {
     for (const pattern of detailsPatterns) {
       const match = output.match(pattern);
       if (match) {
-        result.details = match[1].trim();
+        result.details = match[1]!.trim();
         break;
       }
     }
@@ -514,6 +545,77 @@ export class HarnessEvaluator {
     }
 
     return result;
+  }
+
+  /**
+   * 检测幽灵任务：开发者在执行期间创建的、不属于原始任务计划的额外任务
+   *
+   * 检测逻辑：对比开发报告的 Claude 输出中是否包含 task create / init-requirement 命令调用，
+   * 并检查文件系统中是否存在在开发阶段时间窗口内创建的新任务。
+   *
+   * @regression BUG-012-2 (2026-04-01)
+   * 回归测试案例：2026-04-01 Harness 运行中，BUG-011-1 开发者为演示 auto-split 功能
+   * 创建了 ModeRegistry 和 Channel 两个子任务；BUG-011-3 开发者创建了 6 个认证系统测试任务。
+   * 这些"幽灵任务"引用不存在的文件，导致后续重试浪费 3600s 执行时间和 API 配额。
+   * 本检测方法通过文件系统时间窗口比对来捕获此类违规行为。
+   */
+  private detectPhantomTasks(currentTaskId: string, devReport: DevReport): string[] {
+    const phantomTasks: string[] = [];
+
+    // 1. 从 Claude 输出中检测 task create / init-requirement 命令
+    const output = devReport.claudeOutput || '';
+    const taskCreatePatterns = [
+      /task\s+create/i,
+      /init-requirement/i,
+      /创建.*任务/,
+      /projmnt4claude\s+(task\s+create|init-requirement)/i,
+    ];
+
+    const hasCreateCommand = taskCreatePatterns.some(p => p.test(output));
+
+    // 2. 检查文件系统中是否存在由开发者创建的额外任务
+    //    通过对比开发时间窗口内的任务创建时间来判断
+    try {
+      const allTaskIds = getAllTaskIds(this.config.cwd);
+
+      for (const tid of allTaskIds) {
+        // 跳过当前任务
+        if (tid === currentTaskId) continue;
+
+        const task = readTaskMeta(tid, this.config.cwd);
+        if (!task) continue;
+
+        // 检查任务是否在开发时间窗口内创建
+        const taskCreatedAt = task.createdAt;
+        const devStartTime = devReport.startTime;
+        const devEndTime = devReport.endTime;
+
+        if (taskCreatedAt && devStartTime && devEndTime) {
+          const created = new Date(taskCreatedAt).getTime();
+          const start = new Date(devStartTime).getTime();
+          const end = new Date(devEndTime).getTime();
+
+          // 任务在开发窗口内创建（允许 60 秒误差）
+          if (created >= start - 60000 && created <= end + 60000) {
+            phantomTasks.push(tid);
+          }
+        }
+      }
+    } catch (error) {
+      console.log(`   ⚠️ 幽灵任务检测出错: ${error instanceof Error ? error.message : String(error)}`);
+    }
+
+    // 3. 如果 Claude 输出中包含创建命令但文件系统中未检测到，也记录警告
+    if (hasCreateCommand && phantomTasks.length === 0) {
+      console.log('   ⚠️ 开发者输出中包含 task create / init-requirement 命令，但未在文件系统中检测到新任务');
+      console.log('   ⚠️ 这可能意味着创建操作失败，但意图已存在');
+    }
+
+    if (phantomTasks.length > 0) {
+      console.log(`   ⚠️ 检测到 ${phantomTasks.length} 个幽灵任务: ${phantomTasks.join(', ')}`);
+    }
+
+    return phantomTasks;
   }
 
   /**

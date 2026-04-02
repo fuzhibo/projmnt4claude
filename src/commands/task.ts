@@ -28,6 +28,7 @@ import type {
 import {
   createDefaultTaskMeta,
   isValidTaskId,
+  validateCheckpointVerification,
 } from '../types/task';
 import * as crypto from 'crypto';
 import { SEPARATOR_WIDTH } from '../utils/format';
@@ -205,6 +206,142 @@ export function displayCheckpointCreationWarning(taskId: string, cwd: string): v
 }
 
 /**
+ * BUG-013-2: 验证任务检查点是否具有所需的验证命令
+ * 返回缺少命令的检查点警告列表
+ */
+function validateTaskCheckpointCommands(taskId: string, cwd: string): string[] {
+  const task = readTaskMeta(taskId, cwd);
+  if (!task?.checkpoints) return [];
+
+  const warnings: string[] = [];
+  for (const cp of task.checkpoints) {
+    const result = validateCheckpointVerification(cp);
+    if (!result.valid && result.warning) {
+      warnings.push(result.warning);
+    }
+  }
+  return warnings;
+}
+
+/**
+ * 显示检查点验证命令缺失的警告
+ * (重uses validateCheckpointCommands from init-requirement.ts)
+ */
+export function displayCheckpointVerificationWarnings(warnings: string[]): void {
+  if (warnings.length === 0) return;
+
+  console.log('');
+  console.log('━'.repeat(SEPARATOR_WIDTH));
+  console.log('⚠️  检查点验证命令缺失提醒');
+  console.log('━'.repeat(SEPARATOR_WIDTH));
+  console.log('');
+  console.log(`发现 ${warnings.length} 个检查点缺少自动化验证命令：`);
+  for (const w of warnings) {
+    console.log(`   - ${w}`);
+  }
+  console.log('');
+  console.log('💡 提示: QA 阶段将无法自动验证这些检查点。');
+  console.log('   请在 checkpoint.md 中补充验证命令，或使用 init-requirement 重新生成。');
+  console.log('━'.repeat(SEPARATOR_WIDTH));
+}
+
+/**
+ * BUG-012-0: 从描述/标题中提取文件路径引用
+ * 匹配 src/xxx、path/to/file.ext 等常见模式
+ */
+function extractFileReferencesFromText(text: string): string[] {
+  if (!text) return [];
+  const files: string[] = [];
+  const seen = new Set<string>();
+
+  const patterns = [
+    // 标准源码路径
+    /(?:src|lib|test|tests|docs|bin|scripts|config)\/[\w/.-]+\.[a-z]+/g,
+    // 相对路径
+    /\.{1,2}\/[\w/.-]+\.[a-z]+/g,
+    // 常见扩展名的文件名（带目录深度 ≥ 1 个 /）
+    /[\w-]+\/[\w/.-]+\.(ts|tsx|js|jsx|py|go|java|rs|json|yaml|yml|md)/g,
+  ];
+
+  for (const pattern of patterns) {
+    const matches = text.match(pattern);
+    if (matches) {
+      for (const match of matches) {
+        if (!seen.has(match)) {
+          seen.add(match);
+          files.push(match);
+        }
+      }
+    }
+  }
+
+  return files;
+}
+
+/**
+ * BUG-012-0: 校验引用的文件是否存在于项目中
+ * 返回不存在的文件列表
+ */
+function findMissingFiles(filePaths: string[], cwd: string): string[] {
+  const missing: string[] = [];
+  for (const fp of filePaths) {
+    // 检查相对于项目根目录的路径
+    const absolutePath = path.resolve(cwd, fp);
+    if (!fs.existsSync(absolutePath)) {
+      missing.push(fp);
+    }
+  }
+  return missing;
+}
+
+/**
+ * BUG-012-0: 校验任务描述中的文件引用
+ * 交互模式：显示警告并询问是否继续
+ * -y 模式：记录警告到 meta.json 但不阻止创建
+ */
+async function validateFileReferences(
+  description: string | undefined,
+  title: string | undefined,
+  nonInteractive: boolean,
+  cwd: string
+): Promise<{ proceed: boolean; missingFiles: string[] }> {
+  const source = `${title || ''}\n${description || ''}`;
+  const fileRefs = extractFileReferencesFromText(source);
+
+  if (fileRefs.length === 0) {
+    return { proceed: true, missingFiles: [] };
+  }
+
+  const missingFiles = findMissingFiles(fileRefs, cwd);
+
+  if (missingFiles.length === 0) {
+    return { proceed: true, missingFiles: [] };
+  }
+
+  // 有不存在的文件引用
+  console.log('');
+  console.log(`⚠️  检测到 ${missingFiles.length} 个引用的文件不存在于项目中:`);
+  for (const fp of missingFiles) {
+    console.log(`   - ${fp}`);
+  }
+
+  if (nonInteractive) {
+    console.log('   (非交互模式，警告已记录，继续创建任务)');
+    return { proceed: true, missingFiles };
+  }
+
+  // 交互模式：询问是否继续
+  const response = await prompts({
+    type: 'confirm',
+    name: 'proceed',
+    message: '以上文件不存在，确认继续创建任务?',
+    initial: false,
+  });
+
+  return { proceed: response.proceed !== false, missingFiles };
+}
+
+/**
  * 创建新任务
  * 支持交互模式和非交互模式
  */
@@ -248,15 +385,29 @@ export async function createTask(
       taskId = generateNewTaskId(cwd, taskType, taskPriority, options.title);
     }
 
+    // BUG-012-0: 校验描述中引用的文件是否存在
+    const fileValidation = await validateFileReferences(
+      options.description, options.title, true, cwd
+    );
+    if (!fileValidation.proceed) {
+      console.log('已取消创建任务');
+      return;
+    }
+
     // BUG-002: 默认模板内容作为初始占位符，创建后会进行质量校验
     const defaultCheckpointContent = `# ${taskId} 检查点\n\n- [ ] 检查点1（请替换为具体验收标准）\n- [ ] 检查点2（请替换为具体验收标准）\n`;
 
     // 创建任务元数据
-    const task = createDefaultTaskMeta(taskId, options.title, taskType);
+    const task = createDefaultTaskMeta(taskId, options.title, taskType, undefined, 'cli');
     if (options.description) {
       task.description = options.description;
     }
     task.priority = taskPriority;
+
+    // BUG-012-0: 记录文件警告到 meta.json
+    if (fileValidation.missingFiles.length > 0) {
+      task.fileWarnings = fileValidation.missingFiles;
+    }
 
     // 写入任务
     writeTaskMeta(task, cwd);
@@ -278,6 +429,12 @@ export async function createTask(
         displayCheckpointCreationWarning(taskId, cwd);
       }
     }
+
+    // BUG-013-2: 同步检查点元数据并验证验证命令完整性
+    syncCheckpointsToMeta(taskId, cwd);
+    const cpWarnings = validateTaskCheckpointCommands(taskId, cwd);
+    displayCheckpointVerificationWarnings(cpWarnings);
+
     return;
   }
 
@@ -331,15 +488,29 @@ export async function createTask(
     taskId = generateNewTaskId(cwd, 'feature', response.priority, response.title);
   }
 
+  // BUG-012-0: 交互模式 - 校验描述中引用的文件是否存在
+  const fileValidation = await validateFileReferences(
+    response.description, response.title, false, cwd
+  );
+  if (!fileValidation.proceed) {
+    console.log('已取消创建任务');
+    return;
+  }
+
   // BUG-002: 交互模式 - 默认检查点内容作为初始占位符，创建后会进行质量校验
   const defaultCheckpointContent = `# ${taskId} 检查点\n\n- [ ] 检查点1（请替换为具体验收标准）\n- [ ] 检查点2（请替换为具体验收标准）\n`;
 
   // 创建任务元数据
-  const task = createDefaultTaskMeta(taskId, response.title);
+  const task = createDefaultTaskMeta(taskId, response.title, undefined, undefined, 'cli');
   if (response.description) {
     task.description = response.description;
   }
   task.priority = response.priority as TaskPriority;
+
+  // BUG-012-0: 记录文件警告到 meta.json
+  if (fileValidation.missingFiles.length > 0) {
+    task.fileWarnings = fileValidation.missingFiles;
+  }
 
   // 写入任务
   writeTaskMeta(task, cwd);
@@ -361,6 +532,11 @@ export async function createTask(
       displayCheckpointCreationWarning(taskId, cwd);
     }
   }
+
+  // BUG-013-2: 同步检查点元数据并验证验证命令完整性
+  syncCheckpointsToMeta(taskId, cwd);
+  const cpWarnings = validateTaskCheckpointCommands(taskId, cwd);
+  displayCheckpointVerificationWarnings(cpWarnings);
 }
 
 /**
@@ -2673,10 +2849,9 @@ export async function addSubtask(
   const subtaskId = generateSubtaskId(parentId, cwd);
 
   // 创建子任务元数据
-  const subtask = createDefaultTaskMeta(subtaskId, title);
+  const subtask = createDefaultTaskMeta(subtaskId, title, parentTask.type, undefined, 'cli');
   subtask.parentId = parentId;
   subtask.priority = parentTask.priority;
-  subtask.type = parentTask.type;
 
   // 写入子任务
   writeTaskMeta(subtask, cwd);
@@ -3075,13 +3250,13 @@ export async function splitTask(
 
   // 创建子任务
   for (let i = 0; i < subtaskTitles.length; i++) {
-    const title = subtaskTitles[i];
+    const title = subtaskTitles[i]!;
 
     // 生成子任务 ID
     const subtaskId = generateSubtaskId(parentId, cwd);
 
     // 创建子任务元数据
-    const subtask = createDefaultTaskMeta(subtaskId, title, parentTask.type || 'feature');
+    const subtask = createDefaultTaskMeta(subtaskId, title, parentTask.type || 'feature', undefined, 'cli');
     subtask.parentId = parentId;
     subtask.priority = parentTask.priority;
     subtask.description = `从 ${parentId} 拆分的子任务`;
@@ -3103,8 +3278,8 @@ export async function splitTask(
 
   // 设置子任务之间的依赖关系（链式依赖）
   for (let i = 1; i < createdSubtaskIds.length; i++) {
-    const currentId = createdSubtaskIds[i];
-    const prevId = createdSubtaskIds[i - 1];
+    const currentId = createdSubtaskIds[i]!;
+    const prevId = createdSubtaskIds[i - 1]!;
 
     const currentTask = readTaskMeta(currentId, cwd);
     if (currentTask) {
@@ -3624,7 +3799,7 @@ export function generateCheckpointTemplate(
   console.log('建议的检查点:');
   console.log('');
 
-  template.forEach((item, index) => {
+  template!.forEach((item, index) => {
     console.log(`   ${index + 1}. ${item}`);
   });
 
@@ -3636,7 +3811,7 @@ export function generateCheckpointTemplate(
     const checkpointPath = path.join(taskDir, 'checkpoint.md');
 
     let content = `# ${taskId} 检查点\n\n`;
-    template.forEach(item => {
+    template!.forEach(item => {
       content += `- [ ] ${item}\n`;
     });
     content += '\n';

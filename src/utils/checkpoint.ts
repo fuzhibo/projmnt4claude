@@ -7,7 +7,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 import { getTasksDir } from './path';
 import { readTaskMeta, writeTaskMeta } from './task';
-import type { TaskMeta, CheckpointMetadata, CheckpointVerification } from '../types/task';
+import type { TaskMeta, CheckpointMetadata, CheckpointVerification, VerificationMethod } from '../types/task';
 
 /**
  * 解析后的检查点信息
@@ -89,6 +89,183 @@ export function parseCheckpointsWithIds(taskId: string, cwd: string = process.cw
 }
 
 /**
+ * 从检查点描述和任务元数据中提取测试文件/目录模式
+ * 用于生成有意义的 npm test 命令
+ */
+function extractTestPatterns(desc: string, task?: TaskMeta): string[] {
+  const patterns: string[] = [];
+
+  // 1. 从描述中提取源文件路径并转换为测试路径
+  const srcFileMatch = desc.match(/(?:src\/[\w/.-]+)\.[a-z]+/g);
+  if (srcFileMatch) {
+    for (const f of srcFileMatch) {
+      // src/utils/foo.ts -> foo
+      const base = path.basename(f, path.extname(f));
+      if (base && base.length > 2) {
+        patterns.push(base);
+      }
+    }
+  }
+
+  // 2. 从描述中提取模块/功能名称
+  const moduleKeywords = desc.match(
+    /(?:验证|测试|检查|test|verify|check|validate)\s*([\w-]{3,})/i
+  );
+  if (moduleKeywords?.[1]) {
+    patterns.push(moduleKeywords[1].toLowerCase());
+  }
+
+  // 3. 从任务标题中提取关键词
+  if (task?.title) {
+    const titleWords = task.title.match(/[a-zA-Z][a-zA-Z0-9-]{2,}/g);
+    if (titleWords) {
+      for (const w of titleWords) {
+        if (!patterns.includes(w.toLowerCase())) {
+          patterns.push(w.toLowerCase());
+          break; // 只取标题中第一个关键词
+        }
+      }
+    }
+  }
+
+  // 4. 从任务描述中的文件引用推断测试模式
+  if (task?.description) {
+    const descFiles = task.description.match(/src\/([\w/-]+)\.[a-z]+/g);
+    if (descFiles) {
+      for (const f of descFiles.slice(0, 2)) {
+        const dir = path.dirname(f).replace('src/', '');
+        if (dir && dir !== '.' && dir.length > 2) {
+          patterns.push(dir);
+          break;
+        }
+      }
+    }
+  }
+
+  return [...new Set(patterns)].slice(0, 2);
+}
+
+/**
+ * 检查点描述关键词到验证方法的映射
+ * 用于自动推断检查点的验证方法
+ */
+const VERIFICATION_KEYWORDS: Array<{
+  method: VerificationMethod;
+  keywords: RegExp;
+  commands: (desc: string, task?: TaskMeta) => string[];
+  expected: string;
+  category: 'code_review' | 'qa_verification';
+}> = [
+  {
+    method: 'functional_test',
+    keywords: /功能测试|功能验证|functional.?test|功能检查|功能正常|验证功能|测试通过|测试验证|功能工作/,
+    commands: (desc, task) => {
+      // 从描述中提取关键词生成测试命令
+      const patterns = extractTestPatterns(desc, task);
+      if (patterns.length > 0) {
+        return patterns.map(p => `npm test -- --testPathPattern="${p}"`);
+      }
+      return ['npm test'];
+    },
+    expected: '所有功能测试通过，无失败用例',
+    category: 'qa_verification',
+  },
+  {
+    method: 'unit_test',
+    keywords: /单元测试|unit.?test|ut测试|单元覆盖/,
+    commands: (desc, task) => {
+      const patterns = extractTestPatterns(desc, task);
+      if (patterns.length > 0) {
+        return patterns.map(p => `npm test -- --testPathPattern="${p}"`);
+      }
+      return ['npm test'];
+    },
+    expected: '所有单元测试通过',
+    category: 'qa_verification',
+  },
+  {
+    method: 'integration_test',
+    keywords: /集成测试|integration.?test|接口测试/,
+    commands: (desc) => ['npm run test:integration'],
+    expected: '所有集成测试通过',
+    category: 'qa_verification',
+  },
+  {
+    method: 'e2e_test',
+    keywords: /端到端|e2e.?test|end.?to.?end|全链路/,
+    commands: (desc) => ['npm run test:e2e'],
+    expected: '所有 E2E 测试通过',
+    category: 'qa_verification',
+  },
+  {
+    method: 'lint',
+    keywords: /lint|静态检查|代码风格|eslint|代码规范/,
+    commands: (desc) => ['npm run lint'],
+    expected: '无 lint 错误或警告',
+    category: 'code_review',
+  },
+  {
+    method: 'code_review',
+    keywords: /代码审查|code.?review|代码审核/,
+    commands: () => [],
+    expected: '代码审查通过，无待处理意见',
+    category: 'code_review',
+  },
+  {
+    method: 'automated',
+    keywords: /自动化验证|自动检查|自动化测试|automated/,
+    commands: (desc) => ['npm test'],
+    expected: '自动化验证通过',
+    category: 'qa_verification',
+  },
+];
+
+/**
+ * 根据检查点描述推断验证方法
+ * 返回推断的 CheckpointVerification 或 undefined（无法推断时）
+ */
+export function inferVerificationFromDescription(
+  description: string,
+  task?: TaskMeta
+): CheckpointVerification | undefined {
+  const lowerDesc = description.toLowerCase();
+
+  for (const rule of VERIFICATION_KEYWORDS) {
+    if (rule.keywords.test(lowerDesc)) {
+      const commands = rule.commands(description, task);
+      return {
+        method: rule.method,
+        commands: commands.length > 0 ? commands : undefined,
+        expected: rule.expected,
+      };
+    }
+  }
+
+  return undefined;
+}
+
+/**
+ * 为检查点推断验证类别
+ */
+export function inferCheckpointCategory(
+  description: string
+): 'code_review' | 'qa_verification' | undefined {
+  const lowerDesc = description.toLowerCase();
+
+  // 代码审查类
+  if (/代码审查|code.?review|代码审核|lint|静态检查/.test(lowerDesc)) {
+    return 'code_review';
+  }
+
+  // QA 验证类
+  if (/测试|test|验证|verify|检查|功能|qa/.test(lowerDesc)) {
+    return 'qa_verification';
+  }
+
+  return undefined;
+}
+
+/**
  * 同步 checkpoint.md 到 meta.json
  * 确保检查点元数据与 checkpoint.md 文件保持一致
  */
@@ -115,12 +292,25 @@ export function syncCheckpointsToMeta(taskId: string, cwd: string = process.cwd(
   const mergedCheckpoints: CheckpointMetadata[] = parsedCheckpoints.map((cp, index) => {
     const existing = existingMeta.find(ec => ec.id === cp.id || ec.description === cp.text);
 
+    // 如果已有验证信息，保留；否则尝试推断
+    let verification = existing?.verification;
+    let category = existing?.category;
+
+    if (!verification) {
+      verification = inferVerificationFromDescription(cp.text, task);
+    }
+
+    if (!category) {
+      category = inferCheckpointCategory(cp.text);
+    }
+
     return {
       id: cp.id,
       description: cp.text,
       status: cp.checked ? 'completed' : (existing?.status || 'pending'),
+      category,
       note: existing?.note,
-      verification: existing?.verification,
+      verification,
       createdAt: existing?.createdAt || now,
       updatedAt: existing?.updatedAt || now,
     };
