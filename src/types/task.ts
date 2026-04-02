@@ -33,7 +33,8 @@ export type TaskStatus =
   | 'resolved'      // 已解决
   | 'closed'        // 已关闭
   | 'reopened'      // 已重开
-  | 'abandoned';    // 已放弃
+  | 'abandoned'     // 已放弃
+  | 'needs_human';  // 需要人工介入
 
 /**
  * 任务历史记录条目

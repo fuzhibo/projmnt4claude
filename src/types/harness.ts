@@ -105,6 +105,30 @@ export interface DevReport {
 export type ReviewResult = 'PASS' | 'NOPASS';
 
 /**
+ * 评估者建议的动作类型
+ * 由 architect 角色评估者输出，驱动状态流转
+ */
+export type VerdictAction =
+  | 'resolve'         // 通过，标记为 resolved
+  | 'redevelop'       // 从开发阶段重试（消耗重试次数）
+  | 'retest'          // 从 QA 阶段重试（消耗重试次数）
+  | 'reevaluate'      // 重新评估（不消耗重试次数，独立上限2次）
+  | 'escalate_human'; // 需要人工介入
+
+/**
+ * 失败分类
+ */
+export type FailureCategory =
+  | 'acceptance_criteria'  // 验收标准未满足
+  | 'code_quality'         // 代码质量问题
+  | 'test_failure'         // 测试失败
+  | 'architecture'         // 架构问题
+  | 'specification'        // 规格不符
+  | 'phantom_task'         // 幽灵任务违规
+  | 'incomplete'           // 实现不完整
+  | 'other';               // 其他
+
+/**
  * 审查阶段报告
  */
 export interface ReviewVerdict {
@@ -124,6 +148,10 @@ export interface ReviewVerdict {
   reviewedBy: string;
   /** 详细反馈 */
   details?: string;
+  /** 评估者建议的动作（NOPASS 时由 architect 输出） */
+  action?: VerdictAction;
+  /** 失败分类（NOPASS 时由 architect 输出） */
+  failureCategory?: FailureCategory;
 }
 
 /**
@@ -288,6 +316,10 @@ export interface HarnessRuntimeState {
   retryCounter: Map<string, number>;
   /** 最后更新时间 */
   updatedAt: string;
+  /** 重试时从哪个阶段恢复 */
+  resumeFrom: Map<string, 'development' | 'code_review' | 'qa' | 'evaluation'>;
+  /** 重新评估次数计数器（独立于重试次数，上限2次） */
+  reevaluateCounter: Map<string, number>;
 }
 
 /**
@@ -385,6 +417,8 @@ export function createDefaultRuntimeState(config: HarnessConfig): HarnessRuntime
     startTime: now,
     retryCounter: new Map(),
     updatedAt: now,
+    resumeFrom: new Map(),
+    reevaluateCounter: new Map(),
   };
 }
 

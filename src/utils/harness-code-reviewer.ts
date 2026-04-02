@@ -16,7 +16,7 @@ import type {
 } from '../types/harness.js';
 import type { TaskMeta, CheckpointMetadata } from '../types/task.js';
 import {
-  runHeadlessClaude,
+  runHeadlessClaudeWithRetry,
   saveReport,
   filterCheckpoints,
   parseVerdictResult,
@@ -126,12 +126,15 @@ export class HarnessCodeReviewer {
     console.log('\n   📝 代码审核提示词已生成');
 
     console.log('\n   🤖 启动代码审核会话...');
-    const claudeResult = await runHeadlessClaude({
-      prompt,
-      allowedTools: ['Read', 'Bash', 'Grep', 'Glob'],
-      timeout: Math.floor(this.config.timeout / REVIEW_TIMEOUT_RATIO),
-      cwd: this.config.cwd,
-    });
+    const claudeResult = await runHeadlessClaudeWithRetry(
+      {
+        prompt,
+        allowedTools: ['Read', 'Bash', 'Grep', 'Glob'],
+        timeout: Math.floor(this.config.timeout / REVIEW_TIMEOUT_RATIO),
+        cwd: this.config.cwd,
+      },
+      { maxAttempts: this.config.apiRetryAttempts, baseDelay: this.config.apiRetryDelay },
+    );
 
     if (!claudeResult.success) {
       return {

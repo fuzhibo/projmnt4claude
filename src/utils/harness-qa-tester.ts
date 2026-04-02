@@ -17,7 +17,7 @@ import type {
 import type { TaskMeta, CheckpointMetadata } from '../types/task.js';
 import { validateCheckpointVerification } from '../types/task.js';
 import {
-  runHeadlessClaude,
+  runHeadlessClaudeWithRetry,
   saveReport,
   filterCheckpoints,
   parseVerdictResult,
@@ -187,12 +187,15 @@ export class HarnessQATester {
 
     // 运行独立验证会话
     console.log('\n   🤖 启动 QA 验证会话...');
-    const claudeResult = await runHeadlessClaude({
-      prompt,
-      allowedTools: ['Read', 'Bash', 'Grep', 'Glob'],
-      timeout: Math.floor(this.config.timeout / REVIEW_TIMEOUT_RATIO),
-      cwd: this.config.cwd,
-    });
+    const claudeResult = await runHeadlessClaudeWithRetry(
+      {
+        prompt,
+        allowedTools: ['Read', 'Bash', 'Grep', 'Glob'],
+        timeout: Math.floor(this.config.timeout / REVIEW_TIMEOUT_RATIO),
+        cwd: this.config.cwd,
+      },
+      { maxAttempts: this.config.apiRetryAttempts, baseDelay: this.config.apiRetryDelay },
+    );
 
     if (!claudeResult.success) {
       return {

@@ -24,6 +24,7 @@ import type {
   CodeReviewVerdict,
   QAVerdict,
   ExecutionTimelineEntry,
+  VerdictAction,
 } from '../types/harness.js';
 import {
   createDefaultExecutionRecord,
@@ -40,6 +41,9 @@ import { HarnessStatusReporter } from './harness-status-reporter.js';
 import { saveRuntimeState } from '../commands/harness.js';
 import { listPending, generateVerificationReport, getQueueStats, enqueueBatch } from './harness-verification-queue.js';
 import { SEPARATOR_WIDTH } from './format';
+
+/** 重新评估最大次数（独立于重试次数） */
+const MAX_REEVALUATE_ATTEMPTS = 2;
 
 export class AssemblyLine {
   private config: HarnessConfig;
@@ -208,64 +212,84 @@ export class AssemblyLine {
       return record;
     }
 
-    // 3. 更新状态为 in_progress
-    await this.updateTaskStatus(taskId, 'in_progress');
-    record.finalStatus = 'in_progress';
-
-    // 4. 开发阶段
-    addTimeline('dev_started', '开始开发阶段');
-    this.statusReporter.startPhase('development', taskId, '开始开发阶段');
-    console.log('\n🔨 开发阶段...');
-
-    let devReport: DevReport;
-    try {
-      devReport = await this.executor.execute(task, record.contract);
-      record.devReport = devReport;
-      addTimeline('dev_completed', `开发完成: ${devReport.status}`, { status: devReport.status });
-      this.statusReporter.completePhase('development', taskId, `开发完成: ${devReport.status}`);
-    } catch (error) {
-      devReport = {
-        taskId,
-        status: 'failed',
-        changes: [],
-        evidence: [],
-        checkpointsCompleted: [],
-        startTime: new Date().toISOString(),
-        endTime: new Date().toISOString(),
-        duration: 0,
-        error: error instanceof Error ? error.message : String(error),
-      };
-      record.devReport = devReport;
-      addTimeline('dev_completed', `开发失败: ${devReport.error}`, { error: devReport.error });
+    // Check for phase resumption (retest/reevaluate actions)
+    const resumePhase = state.resumeFrom?.get(taskId);
+    if (resumePhase) {
+      state.resumeFrom.delete(taskId);
     }
+    const prevRecord = resumePhase
+      ? [...state.records].reverse().find(r => r.taskId === taskId)
+      : undefined;
+    if (resumePhase && !prevRecord) {
+      console.log(`   ⚠️ 未找到前次执行记录，从开发阶段重新开始`);
+    }
+    const effectiveResume = (resumePhase && prevRecord) ? resumePhase : null;
 
-    // 检查开发是否成功
-    if (devReport.status !== 'success') {
-      console.log(`❌ 开发阶段失败: ${devReport.error || '未知错误'}`);
+    // 3-4. Development phase (skip if resuming from qa or evaluation)
+    let devReport: DevReport;
+    if (!effectiveResume) {
+      await this.updateTaskStatus(taskId, 'in_progress');
+      record.finalStatus = 'in_progress';
 
-      // 尝试重试
-      const shouldRetry = await this.retryHandler.shouldRetry(taskId, state.retryCounter);
-      if (shouldRetry) {
-        addTimeline('retry', `准备重试 (第 ${state.retryCounter.get(taskId) || 0} 次)`);
-        // 重新加入队列
-        state.taskQueue.push(taskId);
-        state.retryCounter.set(taskId, (state.retryCounter.get(taskId) || 0) + 1);
-      } else {
-        await this.updateTaskStatus(taskId, 'abandoned');
-        record.finalStatus = 'abandoned';
-        addTimeline('failed', '超过最大重试次数，任务放弃');
+      addTimeline('dev_started', '开始开发阶段');
+      this.statusReporter.startPhase('development', taskId, '开始开发阶段');
+      console.log('\n🔨 开发阶段...');
+
+      try {
+        devReport = await this.executor.execute(task, record.contract);
+        record.devReport = devReport;
+        addTimeline('dev_completed', `开发完成: ${devReport.status}`, { status: devReport.status });
+        this.statusReporter.completePhase('development', taskId, `开发完成: ${devReport.status}`);
+      } catch (error) {
+        devReport = {
+          taskId,
+          status: 'failed',
+          changes: [],
+          evidence: [],
+          checkpointsCompleted: [],
+          startTime: new Date().toISOString(),
+          endTime: new Date().toISOString(),
+          duration: 0,
+          error: error instanceof Error ? error.message : String(error),
+        };
+        record.devReport = devReport;
+        addTimeline('dev_completed', `开发失败: ${devReport.error}`, { error: devReport.error });
       }
 
-      return record;
+      // 检查开发是否成功
+      if (devReport.status !== 'success') {
+        console.log(`❌ 开发阶段失败: ${devReport.error || '未知错误'}`);
+
+        // 尝试重试
+        const shouldRetry = await this.retryHandler.shouldRetry(taskId, state.retryCounter);
+        if (shouldRetry) {
+          addTimeline('retry', `准备重试 (第 ${state.retryCounter.get(taskId) || 0} 次)`);
+          // 重新加入队列
+          state.taskQueue.push(taskId);
+          state.retryCounter.set(taskId, (state.retryCounter.get(taskId) || 0) + 1);
+        } else {
+          await this.updateTaskStatus(taskId, 'abandoned');
+          record.finalStatus = 'abandoned';
+          addTimeline('failed', '超过最大重试次数，任务放弃');
+        }
+
+        return record;
+      }
+
+      // 4.5 同步检查点状态（开发完成后）
+      this.syncCheckpointStatus(taskId, 'development', { devReport });
+
+      // 5. 更新状态为 wait_review（等待代码审核）
+      await this.updateTaskStatus(taskId, 'wait_review');
+      record.finalStatus = 'wait_review';
+      console.log('✅ 开发完成，等待代码审核');
+    } else {
+      // Resume: reuse previous development results
+      devReport = prevRecord!.devReport;
+      record.devReport = devReport;
+      addTimeline('dev_completed', `[恢复] 复用前次开发结果: ${devReport.status}`, { resumed: true, phase: effectiveResume });
+      console.log(`   ⏩ 跳过开发阶段（从 ${effectiveResume} 阶段恢复）`);
     }
-
-    // 4.5 同步检查点状态（开发完成后）
-    this.syncCheckpointStatus(taskId, 'development', { devReport });
-
-    // 5. 更新状态为 wait_review（等待代码审核）
-    await this.updateTaskStatus(taskId, 'wait_review');
-    record.finalStatus = 'wait_review';
-    console.log('✅ 开发完成，等待代码审核');
 
     // 6. 代码审核阶段（新增）
     addTimeline('code_review_started', '开始代码审核阶段');
@@ -295,7 +319,7 @@ export class AssemblyLine {
     // 代码审核未通过，进入重试流程
     if (codeReviewVerdict.result !== 'PASS') {
       console.log(`❌ 代码审核未通过: ${codeReviewVerdict.reason}`);
-      return this.handleFailure(taskId, record, state, addTimeline, 'code_review');
+      return this.handleVerdictBasedTransition(taskId, record, state, addTimeline, 'code_review');
     }
 
     // 6.5 同步检查点状态（代码审核通过后）
@@ -339,7 +363,7 @@ export class AssemblyLine {
     // QA 验证未通过，进入重试流程
     if (qaVerdict.result !== 'PASS') {
       console.log(`❌ QA 验证未通过: ${qaVerdict.reason}`);
-      return this.handleFailure(taskId, record, state, addTimeline, 'qa');
+      return this.handleVerdictBasedTransition(taskId, record, state, addTimeline, 'qa');
     }
 
     // 8.4 同步检查点状态（QA 通过后）
@@ -404,7 +428,7 @@ export class AssemblyLine {
       addTimeline('completed', '任务完成');
     } else {
       console.log(`❌ 评估未通过: ${verdict.reason}`);
-      return this.handleFailure(taskId, record, state, addTimeline, 'evaluation');
+      return this.handleVerdictBasedTransition(taskId, record, state, addTimeline, 'evaluation', verdict.action);
     }
 
     return record;
@@ -631,42 +655,155 @@ export class AssemblyLine {
   }
 
   /**
-   * 处理任务失败
+   * 基于评估者动作的状态路由
+   *
+   * 根据 architect 评估者输出的 action 关键字驱动不同的状态流转：
+   * - resolve: 直接标记为 resolved（评估通过）
+   * - redevelop: 从开发阶段重试（消耗重试次数）
+   * - retest: 从 QA 阶段重试（消耗重试次数）
+   * - reevaluate: 重新评估（不消耗重试次数，独立上限 MAX_REEVALUATE_ATTEMPTS 次）
+   * - escalate_human: 转为 needs_human 状态
    */
-  private async handleFailure(
+  private async handleVerdictBasedTransition(
     taskId: string,
     record: TaskExecutionRecord,
     state: HarnessRuntimeState,
     addTimeline: (event: ExecutionTimelineEntry['event'], description: string, data?: Record<string, unknown>) => void,
-    phase: 'code_review' | 'qa' | 'evaluation'
+    phase: 'code_review' | 'qa' | 'evaluation',
+    verdictAction?: VerdictAction,
   ): Promise<TaskExecutionRecord> {
-    const retryCount = state.retryCounter.get(taskId) || 0;
+    // 确定有效的 action
+    // 对于 code_review/qa 阶段（无 architect verdict），默认 redevelop
+    const action: VerdictAction = verdictAction ?? 'redevelop';
 
-    // 检查是否可以重试
-    if (retryCount < this.config.maxRetries) {
-      // 递增重开次数并重新加入队列
-      this.incrementTaskReopenCount(taskId, `${phase} 阶段失败`);
-      // 更新 meta.json 状态为 reopened，确保文件系统状态一致
-      await this.updateTaskStatus(taskId, 'reopened', `${phase} 阶段失败，重新入队`);
-      state.retryCounter.set(taskId, retryCount + 1);
-      state.taskQueue.push(taskId);
+    switch (action) {
+      case 'resolve': {
+        // architect 判定通过，直接 resolved
+        await this.ensureTransition(taskId, 'resolved', `architect 建议完成 (action: resolve, phase: ${phase})`);
+        record.finalStatus = 'resolved';
+        addTimeline('completed', 'architect 建议完成', { action, phase });
+        console.log('✅ architect 建议完成任务');
+        return record;
+      }
 
-      addTimeline('retry', `任务将在 ${phase} 阶段重试 (第 ${retryCount + 1} 次)`);
-      console.log(`⚠️  任务将在 ${phase} 阶段重试 (第 ${retryCount + 1} 次)`);
+      case 'redevelop': {
+        const retryCount = state.retryCounter.get(taskId) || 0;
+        if (retryCount >= this.config.maxRetries) {
+          await this.ensureTransition(taskId, 'abandoned', `超过最大重试次数 (${this.config.maxRetries})`);
+          record.finalStatus = 'abandoned';
+          record.retryCount = retryCount;
+          addTimeline('failed', '超过最大重试次数，任务放弃');
+          console.log(`❌ 超过最大重试次数 (${this.config.maxRetries})，任务放弃`);
+          return record;
+        }
 
-      record.finalStatus = 'reopened';
-      record.retryCount = retryCount + 1;
-    } else {
-      // 超过最大重试次数，放弃任务
-      this.updateTaskStatus(taskId, 'abandoned', `超过最大重试次数 (${this.config.maxRetries})`);
-      record.finalStatus = 'abandoned';
-      record.retryCount = retryCount;
+        // 消耗重试次数，从开发阶段重试（不设 resumeFrom，完整重跑流水线）
+        this.incrementTaskReopenCount(taskId, `${phase} 阶段失败，从开发阶段重试`);
+        await this.ensureTransition(taskId, 'reopened', `${phase} 阶段失败，从开发阶段重试`);
+        state.retryCounter.set(taskId, retryCount + 1);
+        state.taskQueue.push(taskId);
 
-      addTimeline('failed', `超过最大重试次数，任务放弃`);
-      console.log(`❌ 超过最大重试次数 (${this.config.maxRetries})，任务放弃`);
+        addTimeline('retry', `任务将从开发阶段重试 (第 ${retryCount + 1} 次)`, { action, phase });
+        console.log(`⚠️  任务将从开发阶段重试 (第 ${retryCount + 1} 次)`);
+        record.finalStatus = 'reopened';
+        record.retryCount = retryCount + 1;
+        return record;
+      }
+
+      case 'retest': {
+        const retryCount = state.retryCounter.get(taskId) || 0;
+        if (retryCount >= this.config.maxRetries) {
+          await this.ensureTransition(taskId, 'abandoned', `超过最大重试次数 (${this.config.maxRetries})`);
+          record.finalStatus = 'abandoned';
+          record.retryCount = retryCount;
+          addTimeline('failed', '超过最大重试次数，任务放弃');
+          console.log(`❌ 超过最大重试次数 (${this.config.maxRetries})，任务放弃`);
+          return record;
+        }
+
+        // 消耗重试次数，从 QA 阶段重试
+        this.incrementTaskReopenCount(taskId, `${phase} 阶段失败，从 QA 阶段重试`);
+        await this.ensureTransition(taskId, 'reopened', `${phase} 阶段失败，从 QA 阶段重试`);
+        state.retryCounter.set(taskId, retryCount + 1);
+        state.resumeFrom.set(taskId, 'qa');
+        state.taskQueue.push(taskId);
+
+        addTimeline('retry', `任务将从 QA 阶段重试 (第 ${retryCount + 1} 次)`, { action, phase });
+        console.log(`⚠️  任务将从 QA 阶段重试 (第 ${retryCount + 1} 次)`);
+        record.finalStatus = 'reopened';
+        record.retryCount = retryCount + 1;
+        return record;
+      }
+
+      case 'reevaluate': {
+        const reevalCount = state.reevaluateCounter?.get(taskId) || 0;
+        if (reevalCount >= MAX_REEVALUATE_ATTEMPTS) {
+          // 重新评估次数已达上限，回退到 redevelop
+          console.log(`⚠️  重新评估次数已达上限 (${MAX_REEVALUATE_ATTEMPTS})，转为从开发阶段重试`);
+          return this.handleVerdictBasedTransition(taskId, record, state, addTimeline, phase, 'redevelop');
+        }
+
+        // 不消耗重试次数，使用独立的 reevaluateCounter
+        await this.ensureTransition(taskId, 'reopened', `评估不明确，重新评估 (${reevalCount + 1}/${MAX_REEVALUATE_ATTEMPTS})`);
+        state.reevaluateCounter.set(taskId, reevalCount + 1);
+        state.resumeFrom.set(taskId, 'evaluation');
+        state.taskQueue.push(taskId);
+
+        addTimeline('retry', `任务将重新评估 (${reevalCount + 1}/${MAX_REEVALUATE_ATTEMPTS})`, { action, reevalCount: reevalCount + 1 });
+        console.log(`🔄  任务将重新评估 (${reevalCount + 1}/${MAX_REEVALUATE_ATTEMPTS})`);
+        record.finalStatus = 'reopened';
+        return record;
+      }
+
+      case 'escalate_human': {
+        await this.ensureTransition(taskId, 'needs_human', `architect 建议人工介入 (action: escalate_human)`);
+        record.finalStatus = 'needs_human';
+        addTimeline('failed', 'architect 建议人工介入', { action });
+        console.log('🔴 任务需要人工介入');
+        return record;
+      }
+
+      default: {
+        // 未知 action，安全回退到 redevelop
+        return this.handleVerdictBasedTransition(taskId, record, state, addTimeline, phase, 'redevelop');
+      }
+    }
+  }
+
+  /**
+   * 程序化状态变更保证
+   *
+   * 执行状态转换并验证转换是否成功，最多重试 3 次。
+   * 确保文件系统中的任务状态与预期一致。
+   */
+  private async ensureTransition(
+    taskId: string,
+    targetStatus: TaskStatus,
+    reason?: string,
+  ): Promise<void> {
+    const MAX_ENSURE_ATTEMPTS = 3;
+
+    for (let attempt = 1; attempt <= MAX_ENSURE_ATTEMPTS; attempt++) {
+      try {
+        await this.updateTaskStatus(taskId, targetStatus, reason);
+
+        // 验证转换是否生效
+        const task = readTaskMeta(taskId, this.config.cwd);
+        if (task?.status === targetStatus) {
+          return; // 转换已验证
+        }
+
+        if (attempt < MAX_ENSURE_ATTEMPTS) {
+          console.log(`   ⚠️ ensureTransition: 状态验证未通过 (尝试 ${attempt}/${MAX_ENSURE_ATTEMPTS})，重试...`);
+        }
+      } catch (error) {
+        if (attempt < MAX_ENSURE_ATTEMPTS) {
+          console.log(`   ⚠️ ensureTransition: 转换失败 (尝试 ${attempt}/${MAX_ENSURE_ATTEMPTS}): ${error instanceof Error ? error.message : String(error)}`);
+        }
+      }
     }
 
-    return record;
+    console.error(`   ❌ ensureTransition: 无法验证 ${taskId} 的状态转换为 ${targetStatus} (已尝试 ${MAX_ENSURE_ATTEMPTS} 次)`);
   }
 
   /**

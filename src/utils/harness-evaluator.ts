@@ -147,6 +147,8 @@ export class HarnessEvaluator {
       verdict.failedCriteria = evaluation.failedCriteria;
       verdict.failedCheckpoints = evaluation.failedCheckpoints;
       verdict.details = evaluation.details;
+      verdict.action = evaluation.action as any;
+      verdict.failureCategory = evaluation.failureCategory as any;
 
       if (verdict.result === 'PASS') {
         console.log('\n   ✅ 审查通过');
@@ -193,9 +195,9 @@ export class HarnessEvaluator {
     const filteredContractCheckpoints = contract.checkpoints.filter(cp => !isHumanCheckpoint(cp));
     const filteredDevCheckpoints = devReport.checkpointsCompleted.filter(cp => !isHumanCheckpoint(cp));
 
-    parts.push('# 代码审查任务');
+    parts.push('# 架构评估任务');
     parts.push('');
-    parts.push('你是一个独立的代码审查员。你需要评估一个任务的完成情况，判断是否满足验收标准。');
+    parts.push('你是一位资深架构师。你需要从架构角度评估任务的完成质量，判断是否满足验收标准，并给出明确的后续动作建议。');
     parts.push('');
     parts.push('**重要**: 你必须独立判断，不要因为这是 AI 完成的工作就给予优待。');
     parts.push('');
@@ -294,10 +296,19 @@ export class HarnessEvaluator {
     parts.push('```');
     parts.push('## 评估结果: PASS 或 NOPASS');
     parts.push('## 原因: [简要说明为什么通过或不通过]');
+    parts.push('## 后续动作: [resolve|redevelop|retest|reevaluate|escalate_human]');
+    parts.push('## 失败分类: [acceptance_criteria|code_quality|test_failure|architecture|specification|phantom_task|incomplete|other]');
     parts.push('## 未满足的标准: [列出未满足的验收标准，如果没有则为空]');
     parts.push('## 未完成的检查点: [列出未完成的检查点，如果没有则为空]');
     parts.push('## 详细反馈: [可选的详细反馈]');
     parts.push('```');
+    parts.push('');
+    parts.push('**动作说明（评估结果为 NOPASS 时必须填写）**:');
+    parts.push('- resolve: 评估通过，任务可以完成（仅 PASS 时使用）');
+    parts.push('- redevelop: 实现有严重问题，需要从开发阶段重新开始');
+    parts.push('- retest: 实现基本OK但测试未通过，从QA阶段重试即可');
+    parts.push('- reevaluate: 评估不明确需要更多信息，重新评估');
+    parts.push('- escalate_human: 问题超出自动处理范围，需要人工介入');
     parts.push('');
     parts.push('现在开始评估。');
 
@@ -438,6 +449,8 @@ export class HarnessEvaluator {
     failedCriteria: string[];
     failedCheckpoints: string[];
     details?: string;
+    action?: string;
+    failureCategory?: string;
   } {
     const result = {
       passed: false,
@@ -445,6 +458,8 @@ export class HarnessEvaluator {
       failedCriteria: [] as string[],
       failedCheckpoints: [] as string[],
       details: '',
+      action: undefined as string | undefined,
+      failureCategory: undefined as string | undefined,
     };
 
     // 多模式匹配评估结果
@@ -540,6 +555,32 @@ export class HarnessEvaluator {
       const match = output.match(pattern);
       if (match) {
         result.details = match[1]!.trim();
+        break;
+      }
+    }
+
+    // 提取后续动作（action）
+    const actionPatterns = [
+      /##\s*后续动作\s*[:：]\s*(resolve|redevelop|retest|reevaluate|escalate_human)/i,
+      /(?:后续动作|Action|Verdict Action|Next Action)[:：]?\s*(resolve|redevelop|retest|reevaluate|escalate_human)/i,
+    ];
+    for (const pattern of actionPatterns) {
+      const match = output.match(pattern);
+      if (match) {
+        result.action = match[1]!.toLowerCase();
+        break;
+      }
+    }
+
+    // 提取失败分类（failureCategory）
+    const categoryPatterns = [
+      /##\s*失败分类\s*[:：]\s*(acceptance_criteria|code_quality|test_failure|architecture|specification|phantom_task|incomplete|other)/i,
+      /(?:失败分类|Failure Category|Category)[:：]?\s*(acceptance_criteria|code_quality|test_failure|architecture|specification|phantom_task|incomplete|other)/i,
+    ];
+    for (const pattern of categoryPatterns) {
+      const match = output.match(pattern);
+      if (match) {
+        result.failureCategory = match[1]!.toLowerCase();
         break;
       }
     }

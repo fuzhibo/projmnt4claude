@@ -161,6 +161,98 @@ export async function runHeadlessClaude(options: HeadlessClaudeOptions): Promise
   });
 }
 
+/**
+ * 检测是否为可重试的 API 错误
+ * 统一的 API 重试判断逻辑，供所有 Harness 阶段共用
+ *
+ * 重试条件: HTTP 429, 500, 网络超时, 进程异常退出
+ */
+export function isRetryableError(output: string, stderr: string): { retryable: boolean; waitSeconds?: number; reason?: string } {
+  const combinedOutput = `${output} ${stderr}`;
+
+  // 429 Rate Limit
+  const rateLimitMatch = combinedOutput.match(/API Error:\s*429.*?(\d{4}-\d{2}-\d{2}\s+\d{2}:\d{2}:\d{2})/);
+  if (rateLimitMatch) {
+    const resetTime = new Date(rateLimitMatch[1]!);
+    const now = new Date();
+    const waitSeconds = Math.max(60, Math.ceil((resetTime.getTime() - now.getTime()) / 1000));
+    return { retryable: true, waitSeconds, reason: 'API 速率限制 (429)' };
+  }
+
+  // 500 Server Error
+  if (combinedOutput.includes('API Error: 500') || combinedOutput.includes('"code":"500"')) {
+    return { retryable: true, waitSeconds: 30, reason: 'API 服务器错误 (500)' };
+  }
+
+  // Network/Connection errors
+  if (combinedOutput.includes('ECONNRESET') ||
+      combinedOutput.includes('ETIMEDOUT') ||
+      combinedOutput.includes('ENOTFOUND') ||
+      combinedOutput.includes('network error')) {
+    return { retryable: true, waitSeconds: 10, reason: '网络连接错误' };
+  }
+
+  return { retryable: false };
+}
+
+/**
+ * 延迟函数（秒）
+ */
+export function sleep(seconds: number): Promise<void> {
+  return new Promise(resolve => setTimeout(resolve, seconds * 1000));
+}
+
+/**
+ * API 重试配置
+ */
+export interface RetryConfig {
+  /** 最大重试次数（不含首次调用） */
+  maxAttempts: number;
+  /** 基础延迟（秒），使用指数退避 */
+  baseDelay: number;
+}
+
+/**
+ * 运行 Headless Claude（带 API 级重试机制）
+ *
+ * 统一的重试封装，供 Code Review / QA / Evaluation 等阶段共用。
+ * 重试条件: HTTP 429, 500, 网络超时, 进程异常退出
+ */
+export async function runHeadlessClaudeWithRetry(
+  options: HeadlessClaudeOptions,
+  retryConfig: RetryConfig,
+): Promise<HeadlessClaudeResult> {
+  const maxAttempts = retryConfig.maxAttempts + 1; // +1 因为第一次不算重试
+  let lastResult: HeadlessClaudeResult | null = null;
+
+  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+    if (attempt > 1) {
+      console.log(`   🔄 API 调用重试 (${attempt - 1}/${retryConfig.maxAttempts})...`);
+    }
+
+    lastResult = await runHeadlessClaude(options);
+
+    if (lastResult.success) {
+      return lastResult;
+    }
+
+    // 检查是否为可重试错误
+    const errorInfo = isRetryableError(lastResult.output, lastResult.error || '');
+
+    if (!errorInfo.retryable || attempt >= maxAttempts) {
+      return lastResult;
+    }
+
+    // 计算退避延迟（指数退避）
+    const delay = Math.min(errorInfo.waitSeconds || retryConfig.baseDelay, retryConfig.baseDelay * Math.pow(2, attempt - 1));
+    console.log(`   ⏳ ${errorInfo.reason}，${delay} 秒后重试...`);
+
+    await sleep(delay);
+  }
+
+  return lastResult!;
+}
+
 export async function saveReport(reportPath: string, content: string): Promise<void> {
   const dir = path.dirname(reportPath);
 

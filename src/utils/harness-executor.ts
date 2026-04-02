@@ -27,7 +27,7 @@ import type { TaskMeta } from '../types/task.js';
 import { getProjectDir } from './path.js';
 import { getDevRoleTemplate } from './role-prompts.js';
 import { readTaskMeta } from './task.js';
-import { classifyExitResult } from './harness-helpers.js';
+import { classifyExitResult, isRetryableError, sleep } from './harness-helpers.js';
 
 export class HarnessExecutor {
   private config: HarnessConfig;
@@ -248,44 +248,6 @@ export class HarnessExecutor {
   }
 
   /**
-   * 检测是否为可重试的 API 错误
-   */
-  private isRetryableError(output: string, stderr: string): { retryable: boolean; waitSeconds?: number; reason?: string } {
-    const combinedOutput = `${output} ${stderr}`;
-
-    // 429 Rate Limit
-    const rateLimitMatch = combinedOutput.match(/API Error:\s*429.*?(\d{4}-\d{2}-\d{2}\s+\d{2}:\d{2}:\d{2})/);
-    if (rateLimitMatch) {
-      const resetTime = new Date(rateLimitMatch[1]!);
-      const now = new Date();
-      const waitSeconds = Math.max(60, Math.ceil((resetTime.getTime() - now.getTime()) / 1000));
-      return { retryable: true, waitSeconds, reason: 'API 速率限制 (429)' };
-    }
-
-    // 500 Server Error
-    if (combinedOutput.includes('API Error: 500') || combinedOutput.includes('"code":"500"')) {
-      return { retryable: true, waitSeconds: 30, reason: 'API 服务器错误 (500)' };
-    }
-
-    // Network/Connection errors
-    if (combinedOutput.includes('ECONNRESET') ||
-        combinedOutput.includes('ETIMEDOUT') ||
-        combinedOutput.includes('ENOTFOUND') ||
-        combinedOutput.includes('network error')) {
-      return { retryable: true, waitSeconds: 10, reason: '网络连接错误' };
-    }
-
-    return { retryable: false };
-  }
-
-  /**
-   * 延迟函数
-   */
-  private sleep(seconds: number): Promise<void> {
-    return new Promise(resolve => setTimeout(resolve, seconds * 1000));
-  }
-
-  /**
    * 运行 Headless Claude（带重试机制）
    */
   private async runHeadlessClaude(options: HeadlessClaudeOptions): Promise<HeadlessClaudeResult> {
@@ -306,7 +268,7 @@ export class HarnessExecutor {
       }
 
       // 检查是否为可重试错误
-      const errorInfo = this.isRetryableError(lastResult.output, lastResult.error || '');
+      const errorInfo = isRetryableError(lastResult.output, lastResult.error || '');
 
       if (!errorInfo.retryable || attempt >= maxAttempts) {
         return lastResult;
@@ -316,7 +278,7 @@ export class HarnessExecutor {
       const delay = Math.min(errorInfo.waitSeconds || baseDelay, baseDelay * Math.pow(2, attempt - 1));
       console.log(`   ⏳ ${errorInfo.reason}，${delay} 秒后重试...`);
 
-      await this.sleep(delay);
+      await sleep(delay);
     }
 
     return lastResult!;
