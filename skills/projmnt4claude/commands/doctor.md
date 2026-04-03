@@ -40,6 +40,7 @@ projmnt4claude doctor --bug-report
 | 目录结构 | 检查 tasks、toolbox、archive 目录是否存在 | 是 |
 | Hooks 配置 | 检查 hooks 目录、hook 文件、settings.json 配置完整性 | 是 |
 | 任务规范对齐 | 检查任务 meta.json 是否包含最新规范字段 (reopenCount, requirementHistory) | 是 |
+| 日志模块就绪性 | 检查日志配置完整性、日志目录是否存在、日志级别是否有效 | 否 |
 
 ## --bug-report（Bug 报告生成）
 

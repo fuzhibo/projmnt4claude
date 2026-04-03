@@ -99,13 +99,20 @@ node ${CLAUDE_PLUGIN_ROOT}/dist/projmnt4claude.js config set language en
 
 | 配置项 | 类型 | 默认值 | 说明 |
 |--------|------|--------|------|
-| `ai.provider` | string | `"claude-code"` | AI 提供者标识 |
+| `ai.provider` | string | `"claude-code"` | AI 提供者标识: claude-code/custom-endpoint |
+| `ai.customEndpoint` | string | `undefined` | 自定义 AI 端点 URL (仅 provider 为 custom-endpoint 时生效) |
 | `ai.providerOptions` | object | `{}` | 提供者专有配置（API 密钥、自定义端点等） |
 
 **示例:**
 ```bash
-projmnt4claude config set ai.provider openai
-projmnt4claude config set ai.providerOptions '{"baseUrl": "https://api.example.com/v1"}'
+# 设置 AI 提供者
+projmnt4claude config set ai.provider custom-endpoint
+
+# 设置自定义端点 URL
+projmnt4claude config set ai.customEndpoint "https://api.example.com/v1"
+
+# 设置提供者专有配置（API 密钥等）
+projmnt4claude config set ai.providerOptions '{"apiKey": "sk-xxx"}'
 ```
 
 ### 日志配置 (`logging.*`)
@@ -114,8 +121,8 @@ projmnt4claude config set ai.providerOptions '{"baseUrl": "https://api.example.c
 |--------|------|--------|------|
 | `logging.level` | string | `"info"` | 日志级别: error/warn/info/debug |
 | `logging.maxFiles` | number | `30` | 日志文件最大保留数量（按天轮转） |
-| `logging.recordInputs` | boolean | `false` | 是否记录 AI 调用的输入内容 |
-| `logging.inputMaxLength` | number | `1000` | 输入内容记录的最大字符长度 |
+| `logging.recordInputs` | boolean | `true` | 是否记录 AI 调用的输入内容 |
+| `logging.inputMaxLength` | number | `500` | 输入内容记录的最大字符长度 |
 
 **示例:**
 ```bash

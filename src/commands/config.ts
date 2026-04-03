@@ -1,12 +1,93 @@
 import * as fs from 'fs';
 import { getConfigPath, isInitialized } from '../utils/path';
 
+interface LoggingConfig {
+  level: 'error' | 'warn' | 'info' | 'debug';
+  maxFiles: number;
+  recordInputs: boolean;
+  inputMaxLength: number;
+}
+
+interface AIConfig {
+  provider: 'claude-code' | 'custom-endpoint';
+  customEndpoint?: string;
+}
+
+interface TrainingConfig {
+  exportEnabled: boolean;
+  outputDir: string;
+}
+
 interface ProjectConfig {
   projectName: string;
   createdAt: string;
   branchPrefix: string;
   defaultPriority: 'low' | 'medium' | 'high' | 'urgent';
+  logging?: LoggingConfig;
+  ai?: AIConfig;
+  training?: TrainingConfig;
   [key: string]: unknown;
+}
+
+/** 日志配置默认值 */
+const DEFAULT_LOGGING: LoggingConfig = {
+  level: 'info',
+  maxFiles: 30,
+  recordInputs: true,
+  inputMaxLength: 500,
+};
+
+/** AI 配置默认值 */
+const DEFAULT_AI: AIConfig = {
+  provider: 'claude-code',
+};
+
+/** 训练数据配置默认值 */
+const DEFAULT_TRAINING: TrainingConfig = {
+  exportEnabled: false,
+  outputDir: '.projmnt4claude/training-data/',
+};
+
+/**
+ * 确保配置文件包含所有默认配置项
+ * 缺失的配置项自动写入默认值
+ */
+export function ensureConfigDefaults(config: ProjectConfig): ProjectConfig {
+  const result = { ...config };
+
+  // logging 配置完整性
+  if (!result.logging) {
+    result.logging = { ...DEFAULT_LOGGING };
+  } else {
+    result.logging = {
+      level: result.logging.level ?? DEFAULT_LOGGING.level,
+      maxFiles: result.logging.maxFiles ?? DEFAULT_LOGGING.maxFiles,
+      recordInputs: result.logging.recordInputs ?? DEFAULT_LOGGING.recordInputs,
+      inputMaxLength: result.logging.inputMaxLength ?? DEFAULT_LOGGING.inputMaxLength,
+    };
+  }
+
+  // ai 配置完整性
+  if (!result.ai) {
+    result.ai = { ...DEFAULT_AI };
+  } else {
+    result.ai = {
+      provider: result.ai.provider ?? DEFAULT_AI.provider,
+      ...(result.ai.customEndpoint !== undefined ? { customEndpoint: result.ai.customEndpoint } : {}),
+    };
+  }
+
+  // training 配置完整性
+  if (!result.training) {
+    result.training = { ...DEFAULT_TRAINING };
+  } else {
+    result.training = {
+      exportEnabled: result.training.exportEnabled ?? DEFAULT_TRAINING.exportEnabled,
+      outputDir: result.training.outputDir ?? DEFAULT_TRAINING.outputDir,
+    };
+  }
+
+  return result;
 }
 
 /**

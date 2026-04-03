@@ -103,6 +103,34 @@ projmnt4claude analyze --no-ai
 | `--task <taskId>` | 指定任务ID (仅 --fix-checkpoints) | - | AI |
 | `--deep-analyze` | 深度分析: 启用 AI 语义重复检测、陈旧评估、语义质量评分 | false | 用户/AI |
 | `--no-ai` | 禁用所有 AI 功能，仅使用规则引擎分析 | false | 用户 |
+| `--bug-report <path>` | Bug Report 分析模式: 分析指定的 bug report 文件或目录 | - | 用户/AI |
+| `--export-training-data` | 导出训练数据为 JSONL 格式 (需 --bug-report, 需 config training.exportEnabled) | false | AI |
+
+## Bug Report 分析模式
+
+使用 `--bug-report <path>` 对指定的 bug report 文件或目录进行深度分析：
+
+```bash
+# 分析单个 bug report 文件
+projmnt4claude analyze --bug-report .projmnt4claude/logs/bug-report-20260404.md
+
+# 分析整个 bug report 目录
+projmnt4claude analyze --bug-report .projmnt4claude/logs/
+
+# 分析并导出训练数据（需先启用 training.exportEnabled）
+projmnt4claude analyze --bug-report .projmnt4claude/logs/ --export-training-data
+```
+
+### 分析内容
+- **问题模式识别**: 从日志中提取错误模式和异常堆栈
+- **根因分析**: 结合代码上下文推断可能的根因
+- **修复建议**: AI 生成针对性修复方案
+
+### 训练数据导出
+配合 `--export-training-data` 可将分析结果导出为 JSONL 格式训练数据：
+- 需要在配置中启用 `training.exportEnabled`
+- 导出路径由 `training.outputDir` 控制
+- 数据格式为 `{ instruction, input, output }` 结构
 
 ## AI 分析功能
 

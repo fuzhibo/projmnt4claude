@@ -606,6 +606,8 @@ export interface ContentQualityScore {
   relatedFilesScore: number;
   /** 解决方案评分 (0-100) */
   solutionScore: number;
+  /** AI 语义评分 (0-100), 仅 deepAnalyze 且非 noAi 时可用 */
+  aiSemanticScore?: number;
   /** 扣分项详情 */
   deductions: QualityDeduction[];
   /** 检测时间 */
@@ -1058,6 +1060,9 @@ export function showQualityReport(
     console.log(`   检查点质量: ${score.checkpointScore}%`);
     console.log(`   关联文件: ${score.relatedFilesScore}%`);
     console.log(`   解决方案: ${score.solutionScore}%`);
+    if (score.aiSemanticScore !== undefined) {
+      console.log(`   AI 语义评分: ${score.aiSemanticScore}% (结构 60% + AI 40%)`);
+    }
 
     // 显示扣分项
     if (score.deductions.length > 0) {

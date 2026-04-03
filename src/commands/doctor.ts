@@ -7,12 +7,14 @@ import {
   getTasksDir,
   getToolboxDir,
   getHooksDir,
+  getLogsDir,
 } from '../utils/path';
 import { getAllTaskIds } from '../utils/task';
 import { SEPARATOR_WIDTH } from '../utils/format';
 import { parseTaskId } from '../types/task';
 import type { TaskIdInfo } from '../types/task';
 import { Logger } from '../utils/logger';
+import { readConfig, writeConfig, ensureConfigDefaults } from './config';
 
 /**
  * 检查结果接口
@@ -63,7 +65,10 @@ export async function runDoctor(fix: boolean = false, cwd: string = process.cwd(
     // 8. 检查任务规范对齐（检测任务 meta.json 是否符合最新规范）
     results.push(...checkTaskSpecificationAlignment(cwd));
 
-    // 9. Hook 配置已由 checkHooksConfiguration 统一检查
+    // 9. 检查日志模块就绪性
+    results.push(...checkLoggingModule(cwd));
+
+    // 10. Hook 配置已由 checkHooksConfiguration 统一检查
   }
 
   // 显示结果
@@ -562,6 +567,185 @@ function checkTaskSpecificationAlignment(cwd: string): CheckResult[] {
 }
 
 /**
+ * 检查日志模块就绪性
+ * 包含: logs 目录存在性、logging.* 配置完整性、日志文件健康检查
+ */
+function checkLoggingModule(cwd: string): CheckResult[] {
+  const results: CheckResult[] = [];
+  const logsDir = getLogsDir(cwd);
+
+  // CP-12: logs 目录存在性检查
+  if (!fs.existsSync(logsDir)) {
+    results.push({
+      name: '日志目录',
+      status: 'warning',
+      message: 'logs 目录不存在',
+      details: [
+        `缺失: ${logsDir}`,
+        '请运行 projmnt4claude setup 升级项目结构',
+      ],
+      fixable: true,
+    });
+    // 目录不存在时跳过后续日志健康检查
+    return results;
+  }
+
+  results.push({
+    name: '日志目录',
+    status: 'ok',
+    message: '存在',
+    details: [`位置: ${logsDir}`],
+    fixable: false,
+  });
+
+  // CP-13: logging.* 配置完整性检查
+  const config = readConfig(cwd);
+  if (config) {
+    const loggingConfig = config.logging as Record<string, unknown> | undefined;
+    const requiredKeys: Record<string, unknown> = {
+      level: 'info',
+      maxFiles: 30,
+      recordInputs: true,
+      inputMaxLength: 500,
+    };
+
+    const missingKeys: string[] = [];
+    for (const [key, defaultValue] of Object.entries(requiredKeys)) {
+      if (!loggingConfig || loggingConfig[key] === undefined) {
+        missingKeys.push(`logging.${key} (默认: ${JSON.stringify(defaultValue)})`);
+      }
+    }
+
+    if (missingKeys.length > 0) {
+      results.push({
+        name: '日志配置完整性',
+        status: 'warning',
+        message: `${missingKeys.length} 个日志配置项缺失`,
+        details: [
+          '缺失的配置项:',
+          ...missingKeys.map(k => `  - ${k}`),
+          '',
+          '💡 运行 projmnt4claude doctor --fix 自动补全默认值',
+        ],
+        fixable: true,
+      });
+    } else {
+      results.push({
+        name: '日志配置完整性',
+        status: 'ok',
+        message: '所有 logging.* 配置项完整',
+        details: [
+          `level: ${loggingConfig!.level}`,
+          `maxFiles: ${loggingConfig!.maxFiles}`,
+          `recordInputs: ${loggingConfig!.recordInputs}`,
+          `inputMaxLength: ${loggingConfig!.inputMaxLength}`,
+        ],
+        fixable: false,
+      });
+    }
+
+    // 检查 ai 和 training 配置
+    const aiConfig = config.ai as Record<string, unknown> | undefined;
+    if (!aiConfig || aiConfig.provider === undefined) {
+      results.push({
+        name: 'AI 配置完整性',
+        status: 'warning',
+        message: 'ai.provider 配置缺失',
+        details: [`默认值: claude-code`, '💡 运行 projmnt4claude doctor --fix 自动补全'],
+        fixable: true,
+      });
+    } else {
+      results.push({
+        name: 'AI 配置完整性',
+        status: 'ok',
+        message: `provider: ${aiConfig.provider}`,
+        details: aiConfig.customEndpoint ? [`自定义端点: ${aiConfig.customEndpoint}`] : [],
+        fixable: false,
+      });
+    }
+
+    const trainingConfig = config.training as Record<string, unknown> | undefined;
+    if (!trainingConfig || trainingConfig.exportEnabled === undefined) {
+      results.push({
+        name: '训练数据配置完整性',
+        status: 'warning',
+        message: 'training.* 配置缺失',
+        details: ['💡 运行 projmnt4claude doctor --fix 自动补全默认值'],
+        fixable: true,
+      });
+    } else {
+      results.push({
+        name: '训练数据配置完整性',
+        status: 'ok',
+        message: `exportEnabled: ${trainingConfig.exportEnabled}`,
+        details: [`outputDir: ${trainingConfig.outputDir}`],
+        fixable: false,
+      });
+    }
+  }
+
+  // CP-14: 日志健康检查
+  const oversizedFiles: string[] = [];
+  let totalSizeMB = 0;
+
+  try {
+    const files = fs.readdirSync(logsDir).filter(f => f.endsWith('.log'));
+    for (const file of files) {
+      const filePath = path.join(logsDir, file);
+      try {
+        const stat = fs.statSync(filePath);
+        const sizeMB = stat.size / (1024 * 1024);
+        totalSizeMB += sizeMB;
+        if (sizeMB > 10) {
+          oversizedFiles.push(`${file} (${sizeMB.toFixed(1)}MB)`);
+        }
+      } catch {
+        // 跳过无法读取的文件
+      }
+    }
+
+    const details: string[] = [];
+    let status: 'ok' | 'warning' = 'ok';
+    let message = `日志健康 (${files.length} 个文件, ${totalSizeMB.toFixed(1)}MB)`;
+
+    if (oversizedFiles.length > 0) {
+      status = 'warning';
+      message = `${oversizedFiles.length} 个日志文件超过 10MB`;
+      details.push('超过 10MB 的文件:');
+      details.push(...oversizedFiles.slice(0, 5).map(f => `  - ${f}`));
+    }
+
+    if (totalSizeMB > 100) {
+      status = 'warning';
+      message = `日志目录总大小超过 100MB (${totalSizeMB.toFixed(1)}MB)`;
+      details.push(`建议清理旧日志: projmnt4claude config set logging.maxFiles 15`);
+    }
+
+    if (status === 'ok') {
+      details.push(`总大小: ${totalSizeMB.toFixed(1)}MB`);
+    }
+
+    results.push({
+      name: '日志健康',
+      status,
+      message,
+      details,
+      fixable: false,
+    });
+  } catch {
+    results.push({
+      name: '日志健康',
+      status: 'warning',
+      message: '无法读取日志目录',
+      details: [`路径: ${logsDir}`],
+      fixable: false,
+    });
+  }
+
+  return results;
+}
+
+/**
  * 检查 Hooks 配置
  */
 function checkHooksConfiguration(cwd: string): CheckResult[] {
@@ -813,6 +997,21 @@ async function fixIssues(issues: CheckResult[], cwd: string): Promise<void> {
         fs.mkdirSync(dirPath, { recursive: true });
         console.log(`  ✓ 已创建目录: ${dirName}/`);
       }
+    } else if (issue.name === '日志目录') {
+      // 创建 logs 目录
+      const logsDir = getLogsDir(cwd);
+      if (!fs.existsSync(logsDir)) {
+        fs.mkdirSync(logsDir, { recursive: true });
+        console.log(`  ✓ 已创建 logs 目录`);
+      }
+    } else if (issue.name === '日志配置完整性' || issue.name === 'AI 配置完整性' || issue.name === '训练数据配置完整性') {
+      // 自动补全缺失的配置项
+      const config = readConfig(cwd);
+      if (config) {
+        const fixedConfig = ensureConfigDefaults(config);
+        writeConfig(fixedConfig, cwd);
+        console.log(`  ✓ 已自动补全缺失的配置项`);
+      }
     } else if (issue.name === 'Hooks 目录') {
       // 创建 hooks 目录
       const hooksDir = getHooksDir(cwd);
@@ -923,6 +1122,21 @@ main().catch(() => {
       if (hookTemplates[hookFile]) {
         fs.writeFileSync(hookPath, hookTemplates[hookFile], 'utf-8');
         console.log(`  ✓ 已创建 Hook: ${hookFile}`);
+      }
+    } else if (issue.name === '日志目录') {
+      // 创建 logs 目录
+      const logsDir = getLogsDir(cwd);
+      if (!fs.existsSync(logsDir)) {
+        fs.mkdirSync(logsDir, { recursive: true });
+        console.log(`  ✓ 已创建 logs 目录: ${logsDir}`);
+      }
+    } else if (issue.name === '日志配置完整性' || issue.name === 'AI 配置完整性' || issue.name === '训练数据配置完整性') {
+      // 自动补全缺失的配置项
+      const config = readConfig(cwd);
+      if (config) {
+        const patched = ensureConfigDefaults(config);
+        writeConfig(patched, cwd);
+        console.log(`  ✓ 已补全缺失配置项`);
       }
     } else if (issue.name === 'Claude Code Hooks 配置') {
       // 配置 .claude/settings.json 中的 hooks
