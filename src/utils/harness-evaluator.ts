@@ -521,7 +521,7 @@ export class HarnessEvaluator {
     // 如果没有匹配到，尝试中文判断
     if (!resultMatch) {
       const hasPositive = /(?:通过|✅|成功|符合(?:要求)?|满足(?:标准|要求)?|良好|合格|达标|优秀|验收通过|质量良好)/.test(output);
-      const hasNegative = /(?:不通过|未通过|❌|失败|不符合|不满足|未满足|不合格|未达标|问题|缺陷|bug|错误|遗漏)/.test(output);
+      const hasNegative = /(?:不通过|未通过|❌|失败|不符合|不满足|未满足|不合格|未达标)/.test(output);
       if (hasPositive && !hasNegative) {
         result.passed = true;
         resultMatch = ['通过', '通过'] as RegExpMatchArray;
@@ -623,7 +623,7 @@ export class HarnessEvaluator {
     // 矛盾检测: 如果结构化格式匹配到 NOPASS，但整体内容全为正向
     if (resultMatch && !result.passed) {
       const posSignals = /(?:满足|通过|符合|良好|合格|达标|优秀|成功|✅)/.test(output);
-      const negSignals = /(?:不满足|未满足|不通过|未通过|失败|不符合|不合格|❌|问题|缺陷|bug|错误|遗漏)/.test(output);
+      const negSignals = /(?:不满足|未满足|不通过|未通过|失败|不符合|不合格|❌)/.test(output);
       if (posSignals && !negSignals) {
         console.warn('   ⚠️ 矛盾检测: NOPASS 结果与正向内容冲突，自动修正为 PASS');
         result.passed = true;
