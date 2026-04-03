@@ -12,6 +12,7 @@ import {
   getHooksDir,
   getBinDir,
   getReportsDir,
+  getLogsDir,
 } from '../utils/path';
 
 interface ProjectConfig {
@@ -20,6 +21,13 @@ interface ProjectConfig {
   branchPrefix: string;
   defaultPriority: 'low' | 'medium' | 'high' | 'urgent';
   language: 'zh' | 'en';
+  /** AI Agent 配置 */
+  ai?: {
+    /** 提供者标识，默认 'claude-code' */
+    provider: string;
+    /** 提供者专有配置 */
+    providerOptions?: Record<string, unknown>;
+  };
 }
 
 const DEFAULT_CONFIG: ProjectConfig = {
@@ -28,6 +36,7 @@ const DEFAULT_CONFIG: ProjectConfig = {
   branchPrefix: 'task/',
   defaultPriority: 'medium',
   language: 'zh',
+  ai: { provider: 'claude-code' },
 };
 
 // 国际化文本
@@ -125,6 +134,7 @@ export async function setup(cwd: string = process.cwd(), options: SetupOptions =
     { dir: getHooksDir(cwd), name: 'hooks' },
     { dir: getBinDir(cwd), name: 'bin' },
     { dir: getReportsDir(cwd), name: 'reports' },
+    { dir: getLogsDir(cwd), name: 'logs' },
   ];
 
   for (const { dir, name } of subDirs) {

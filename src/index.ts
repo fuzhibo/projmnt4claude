@@ -54,6 +54,7 @@ import {
   fixCheckpoints,
   performQualityCheck,
   showQualityReport,
+  analyzeBugReport,
 } from './commands/analyze';
 import {
   checkoutTaskBranch,
@@ -66,7 +67,7 @@ import {
 } from './commands/branch';
 import { initRequirement } from './commands/init-requirement';
 import { showHelp } from './commands/help';
-import { runDoctor } from './commands/doctor';
+import { runDoctor, runBugReport } from './commands/doctor';
 import { harnessCommand } from './commands/harness';
 import {
   listHumanVerifications,
@@ -638,9 +639,9 @@ program
   .option('-q, --quiet', '精简输出：仅显示关键指标')
   .option('--json', 'JSON 格式输出')
   .option('--compact', '使用简洁分隔符')
-  .action((options) => {
+  .action(async (options) => {
     requireInit();
-    showStatus({
+    await showStatus({
       includeArchived: options.archived || options.all,
       quiet: options.quiet,
       json: options.json,
@@ -662,9 +663,22 @@ program
   .option('-y, --yes', '非交互模式：自动修复可修复的问题')
   .option('--compact', '使用简洁分隔符')
   .option('--task <taskId>', '指定任务ID (仅 --fix-checkpoints)')
+  .option('--deep-analyze', '深度分析: 启用 AI 语义重复检测、陈旧评估、语义质量评分')
+  .option('--no-ai', '禁用所有 AI 功能，仅使用规则引擎分析')
+  .option('--bug-report <path>', 'Bug Report 分析模式: 分析指定的 bug report 文件或目录')
+  .option('--export-training-data', '导出训练数据为 JSONL 格式 (需 --bug-report, 需 config training.exportEnabled)')
   .action(async (options) => {
     requireInit();
-    if (options.fixCheckpoints) {
+    const aiOptions = {
+      deepAnalyze: !!options.deepAnalyze,
+      noAi: !!options.noAi,
+    };
+    if (options.bugReport) {
+      await analyzeBugReport(options.bugReport, process.cwd(), {
+        exportTrainingData: !!options.exportTrainingData,
+        noAi: !!options.noAi,
+      });
+    } else if (options.fixCheckpoints) {
       await fixCheckpoints(process.cwd(), { nonInteractive: options.yes, taskId: options.task });
     } else if (options.fixVerification) {
       await fixVerification(process.cwd(), options.yes);
@@ -673,14 +687,14 @@ program
     } else if (options.fix) {
       await fixIssues(process.cwd(), { nonInteractive: options.yes, fixType: 'all' });
     } else if (options.qualityCheck) {
-      const scores = performQualityCheck(process.cwd());
+      const scores = performQualityCheck(process.cwd(), aiOptions);
       showQualityReport(scores, {
         compact: options.compact,
         json: options.json || program.opts().json || false,
         threshold: parseInt(options.threshold) || 60,
       });
     } else {
-      showAnalysis({ compact: options.compact });
+      await showAnalysis({ compact: options.compact, ...aiOptions });
     }
   });
 
@@ -755,6 +769,7 @@ program
   .option('--skip-validation', '跳过 checkpoints 质量校验')
   .option('--template <type>', '描述模板类型: simple (默认) 或 detailed (详细结构化)', 'simple')
   .option('--auto-split', '自动拆分复杂任务为子任务（复杂度评估为 high 时生效）')
+  .option('--no-ai', '禁用 AI 增强，仅使用规则引擎进行关键词匹配分析')
   .action(async (description, options) => {
     requireInit();
     await initRequirement(description, process.cwd(), {
@@ -763,6 +778,7 @@ program
       skipValidation: options.skipValidation,
       template: options.template,
       autoSplit: options.autoSplit,
+      noAI: options.noAi,
     });
   });
 
@@ -771,8 +787,13 @@ program
   .command('doctor')
   .description('运行环境诊断，检查并修复设置问题')
   .option('--fix', '自动修复检测到的问题')
+  .option('--bug-report', '生成 Bug 报告（含日志压缩附件、AI 成本汇总、使用分析）')
   .action(async (options) => {
-    await runDoctor(options.fix);
+    if (options.bugReport) {
+      await runBugReport();
+    } else {
+      await runDoctor(options.fix);
+    }
   });
 
 

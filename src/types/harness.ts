@@ -144,6 +144,17 @@ export type FailureCategory =
   | 'other';               // 其他
 
 /**
+ * 评估推断类型
+ * 标注评估结果的解析方式，便于审计
+ */
+export type EvaluationInferenceType =
+  | 'explicit_match'         // 明确匹配 - 正则表达式匹配到 PASS/NOPASS
+  | 'content_inference'      // 内容推断 - 基于中文关键词推断
+  | 'prior_stage_inference'  // 前置阶段推断 - 矛盾检测修正
+  | 'parse_failure_default'  // 解析失败默认 - 无法解析，使用默认值
+  | 'empty_output';          // 空输出 - Claude 进程异常退出导致输出为空
+
+/**
  * 审查阶段报告
  */
 export interface ReviewVerdict {
@@ -167,6 +178,8 @@ export interface ReviewVerdict {
   action?: VerdictAction;
   /** 失败分类（NOPASS 时由 architect 输出） */
   failureCategory?: FailureCategory;
+  /** 推断类型（审计用，标注评估结果的解析方式） */
+  inferenceType?: EvaluationInferenceType;
 }
 
 /**

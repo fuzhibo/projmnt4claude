@@ -61,6 +61,26 @@ node ${CLAUDE_PLUGIN_ROOT}/skills/projmnt4claude/dist/projmnt4claude.js init-req
 | `--skip-validation` | 跳过 checkpoint 质量校验（不推荐） |
 | `--template <type>` | 描述模板类型: simple (默认) 或 detailed (详细结构化) |
 | `--auto-split` | 自动拆分复杂任务为子任务（复杂度评估为 high 时生效） |
+| `--no-ai` | 禁用 AI 增强，仅使用规则引擎分析 |
+
+## AI 增强行为
+
+### 默认启用
+`init-requirement` 默认启用 AI 增强，在规则引擎分析后额外调用 AI 进行需求优化：
+- **标题优化**: AI 生成的标题如果长度在 10-50 字符之间则采用
+- **优先级修正**: AI 可修正基于关键词推断的优先级
+- **角色推荐**: AI 根据语义理解推荐更合适的执行角色
+- **检查点增强**: AI 生成更精确的检查点，与规则引擎检查点合并去重
+- **依赖识别**: AI 识别规则引擎未覆盖的潜在依赖
+
+### 回退机制
+当 AI 调用失败（网络错误、API 不可用等）时，自动回退到纯规则引擎结果，不会阻断任务创建流程。
+
+### 禁用 AI
+使用 `--no-ai` 可禁用所有 AI 功能，仅使用规则引擎进行关键词匹配分析。适用于离线环境或不需要 AI 增强的场景。
+
+### AI 增强标识
+分析结果中 AI 增强的字段会标注 `(AI enhanced)` 标记，方便用户区分来源。
 
 ## 自动分析功能
 
@@ -121,6 +141,11 @@ node ${CLAUDE_PLUGIN_ROOT}/skills/projmnt4claude/dist/projmnt4claude.js init-req
 node ${CLAUDE_PLUGIN_ROOT}/skills/projmnt4claude/dist/projmnt4claude.js init-requirement "重构认证模块架构，需要支持多租户"
 ```
 交互模式会让你确认并修改标题、描述、优先级和角色。
+
+### 禁用 AI 增强（仅规则引擎分析）
+```bash
+node ${CLAUDE_PLUGIN_ROOT}/skills/projmnt4claude/dist/projmnt4claude.js init-requirement -y --no-ai "重构认证模块架构"
+```
 
 ## 关键词识别参考
 

@@ -12,6 +12,8 @@ import { syncCheckpointsToMeta } from '../utils/checkpoint';
 import type { TaskMeta, TaskPriority, TaskStatus, TaskType } from '../types/task';
 import { createDefaultTaskMeta, inferTaskType, validateCheckpointVerification } from '../types/task';
 import { SEPARATOR_WIDTH } from '../utils/format';
+import { createLogger, type InstrumentationRecord, type AICostSummary } from '../utils/logger';
+import { AIMetadataAssistant, type EnhancedRequirement } from '../utils/ai-metadata';
 
 /**
  * 复杂度评估结果
@@ -88,6 +90,92 @@ export interface InitRequirementOptions {
   skipValidation?: boolean;  // 跳过 checkpoints 质量校验
   template?: DescriptionTemplateType;  // 描述模板类型：simple | detailed
   autoSplit?: boolean;       // 自动拆分复杂任务为子任务
+  noAI?: boolean;            // 禁用 AI 增强，仅使用规则引擎
+}
+
+/**
+ * 混合分析结果（规则引擎 + AI 增强）
+ */
+interface HybridAnalysisResult extends RequirementAnalysis {
+  /** AI 增强的字段列表 */
+  aiEnhancedFields: string[];
+  /** AI 是否被使用 */
+  aiUsed: boolean;
+}
+
+/**
+ * 合并规则引擎和 AI 增强结果
+ *
+ * 合并策略:
+ * - title: AI 标题 ≤50 字符且 ≥10 字符用 AI，否则用规则
+ * - priority: AI 提供合理值时用 AI
+ * - recommendedRole: AI 提供合理值时用 AI
+ * - checkpoints: AI + 规则并集去重（AI 检查点通常质量更高）
+ * - dependencies: AI + 规则并集去重
+ * - description: AI 优先，否则原始描述
+ * - estimatedComplexity: 始终用规则引擎结果
+ */
+function mergeAnalysisResults(
+  ruleBased: RequirementAnalysis,
+  aiEnhanced: EnhancedRequirement,
+): HybridAnalysisResult {
+  const aiEnhancedFields: string[] = [];
+
+  // title: AI 标题 ≤50 字符且 ≥10 字符用 AI，否则用规则
+  let title = ruleBased.title;
+  if (aiEnhanced.title && aiEnhanced.title.length <= 50 && aiEnhanced.title.length >= 10) {
+    title = aiEnhanced.title;
+    aiEnhancedFields.push('title');
+  }
+
+  // priority: AI 提供合理值时用 AI
+  let priority = ruleBased.priority;
+  if (aiEnhanced.priority && ['P0', 'P1', 'P2', 'P3'].includes(aiEnhanced.priority)) {
+    priority = aiEnhanced.priority;
+    aiEnhancedFields.push('priority');
+  }
+
+  // recommendedRole: AI 提供合理值时用 AI
+  let recommendedRole = ruleBased.recommendedRole;
+  if (aiEnhanced.recommendedRole) {
+    recommendedRole = aiEnhanced.recommendedRole;
+    aiEnhancedFields.push('recommendedRole');
+  }
+
+  // checkpoints: AI + 规则并集去重（AI 检查点通常质量更高，排在前面）
+  let suggestedCheckpoints = ruleBased.suggestedCheckpoints;
+  if (aiEnhanced.checkpoints && aiEnhanced.checkpoints.length > 0) {
+    const combined = [...aiEnhanced.checkpoints, ...ruleBased.suggestedCheckpoints];
+    suggestedCheckpoints = [...new Set(combined)];
+    aiEnhancedFields.push('checkpoints');
+  }
+
+  // dependencies: AI + 规则并集去重
+  let potentialDependencies = ruleBased.potentialDependencies;
+  if (aiEnhanced.dependencies && aiEnhanced.dependencies.length > 0) {
+    const combined = [...aiEnhanced.dependencies, ...ruleBased.potentialDependencies];
+    potentialDependencies = [...new Set(combined)];
+    aiEnhancedFields.push('dependencies');
+  }
+
+  // description: AI 优先
+  let description = ruleBased.description;
+  if (aiEnhanced.description) {
+    description = aiEnhanced.description;
+    aiEnhancedFields.push('description');
+  }
+
+  return {
+    title,
+    description,
+    priority,
+    recommendedRole,
+    estimatedComplexity: ruleBased.estimatedComplexity, // 始终用规则引擎
+    suggestedCheckpoints,
+    potentialDependencies,
+    aiEnhancedFields,
+    aiUsed: true,
+  };
 }
 
 /**
@@ -98,7 +186,13 @@ export async function initRequirement(
   cwd: string = process.cwd(),
   options: InitRequirementOptions = {}
 ): Promise<void> {
-  const { nonInteractive = false, noPlan = false, skipValidation = false, template = 'simple', autoSplit = false } = options;
+  const { nonInteractive = false, noPlan = false, skipValidation = false, template = 'simple', autoSplit = false, noAI = false } = options;
+
+  // CP-2: 模块日志 + 埋点初始化
+  const logger = createLogger('init-requirement', cwd);
+  const startTime = Date.now();
+  const inputDescLength = description.length;
+  let userEditCount = 0;
 
   if (!isInitialized(cwd)) {
     console.error('');
@@ -118,22 +212,62 @@ export async function initRequirement(
   console.log('━'.repeat(SEPARATOR_WIDTH));
   console.log('');
 
-  // 分析需求
-  const analysis = analyzeRequirement(description);
+  // 步骤 1: 规则引擎分析（始终执行）
+  const ruleAnalysis = analyzeRequirement(description);
+
+  // 步骤 2: AI 增强（默认启用，--no-ai 时跳过）
+  let analysis: HybridAnalysisResult = {
+    ...ruleAnalysis,
+    aiEnhancedFields: [],
+    aiUsed: false,
+  };
+  let aiCost: AICostSummary | undefined;
+
+  if (!noAI) {
+    try {
+      const aiAssistant = new AIMetadataAssistant(cwd);
+      const aiStartTime = Date.now();
+      const aiResult = await aiAssistant.enhanceRequirement(description, { cwd });
+      const aiDurationMs = Date.now() - aiStartTime;
+
+      if (aiResult.aiUsed) {
+        // 步骤 3: 合并结果
+        analysis = mergeAnalysisResults(ruleAnalysis, aiResult);
+
+        // 记录 AI 成本
+        aiCost = {
+          field: 'enhanceRequirement',
+          durationMs: aiDurationMs,
+          inputTokens: 0,
+          outputTokens: 0,
+          totalTokens: 0,
+        };
+        logger.logAICost(aiCost);
+      }
+    } catch (err) {
+      logger.warn('AI 增强调用失败，使用规则引擎结果', {
+        error: err instanceof Error ? err.message : String(err),
+      });
+    }
+  }
 
   // 执行复杂度评估
   const complexity = assessComplexity(description, analysis);
 
   // 显示分析结果
+  const aiTag = (field: string) => analysis.aiEnhancedFields.includes(field) ? ' (AI enhanced)' : '';
   console.log('📋 需求分析结果:');
   console.log('');
-  console.log(`  标题: ${analysis.title}`);
-  console.log(`  优先级: ${formatPriority(analysis.priority)}`);
+  console.log(`  标题: ${analysis.title}${aiTag('title')}`);
+  console.log(`  优先级: ${formatPriority(analysis.priority)}${aiTag('priority')}`);
   console.log(`  复杂度: ${formatComplexity(complexity)}`);
-  console.log(`  推荐角色: ${analysis.recommendedRole}`);
+  console.log(`  推荐角色: ${analysis.recommendedRole}${aiTag('recommendedRole')}`);
   console.log(`  涉及文件: ${complexity.fileCount} 个`);
   console.log(`  工作项: ${complexity.workItemCount} 项`);
   console.log(`  预估耗时: ~${complexity.estimatedMinutes} 分钟`);
+  if (analysis.aiUsed) {
+    console.log(`  AI 增强: ${analysis.aiEnhancedFields.join(', ')}`);
+  }
   console.log('');
 
   // 复杂度预警
@@ -161,7 +295,7 @@ export async function initRequirement(
   }
 
   if (analysis.suggestedCheckpoints.length > 0) {
-    console.log('  建议检查点:');
+    console.log(`  建议检查点${aiTag('checkpoints')}:`);
     for (const cp of analysis.suggestedCheckpoints) {
       console.log(`    - ${cp}`);
     }
@@ -169,7 +303,7 @@ export async function initRequirement(
   }
 
   if (analysis.potentialDependencies.length > 0) {
-    console.log('  潜在依赖:');
+    console.log(`  潜在依赖${aiTag('dependencies')}:`);
     for (const dep of analysis.potentialDependencies) {
       console.log(`    - ${dep}`);
     }
@@ -192,6 +326,19 @@ export async function initRequirement(
     console.log('ℹ️  已取消任务创建。');
     console.log('   如需重新创建，请再次运行 init-requirement 命令。');
     console.log('');
+    // CP-8 埋点: 用户取消
+    logger.logInstrumentation({
+      module: 'init-requirement',
+      action: 'cancel',
+      input_summary: `desc_len=${inputDescLength}`,
+      output_summary: '用户取消创建',
+      ai_used: analysis.aiUsed,
+      ai_enhanced_fields: analysis.aiEnhancedFields,
+      duration_ms: Date.now() - startTime,
+      user_edit_count: 0,
+      module_data: { cancel_reason: 'user_rejected_confirm' },
+    });
+    logger.flush();
     return;
   }
 
@@ -238,6 +385,11 @@ export async function initRequirement(
       },
     ]);
     response = promptResponse as { title: string; description: string; priority: string; recommendedRole: string };
+
+    // CP-8: 追踪用户编辑回退率（对比用户输入 vs 规则建议）
+    if (response.title !== analysis.title) userEditCount++;
+    if (response.priority !== analysis.priority) userEditCount++;
+    if (response.recommendedRole !== analysis.recommendedRole) userEditCount++;
   }
 
   if (!response.title) {
@@ -245,6 +397,17 @@ export async function initRequirement(
     console.log('ℹ️  已取消任务创建（标题不能为空）。');
     console.log('   如需重新创建，请再次运行 init-requirement 命令。');
     console.log('');
+    logger.logInstrumentation({
+      module: 'init-requirement',
+      action: 'cancel',
+      input_summary: `desc_len=${inputDescLength}`,
+      output_summary: '标题为空，取消创建',
+      ai_used: analysis.aiUsed,
+      ai_enhanced_fields: analysis.aiEnhancedFields,
+      duration_ms: Date.now() - startTime,
+      user_edit_count: userEditCount,
+    });
+    logger.flush();
     return;
   }
 
@@ -396,6 +559,19 @@ ${checkpoints.map((cp: string) => `- [ ] ${cp}`).join('\n')}
       planModule.addTask(taskId);
     }
   }
+
+  // CP-8: 记录 init-requirement 埋点
+  logger.logInstrumentation({
+    module: 'init-requirement',
+    action: 'create_task',
+    input_summary: `desc_len=${inputDescLength}, non_interactive=${nonInteractive}`,
+    output_summary: `task_id=${taskId}, checkpoints=${checkpoints.length}, complexity=${complexity.level}`,
+    ai_used: analysis.aiUsed,
+    ai_enhanced_fields: analysis.aiEnhancedFields,
+    duration_ms: Date.now() - startTime,
+    user_edit_count: userEditCount,
+  });
+  logger.flush();
 }
 
 /**

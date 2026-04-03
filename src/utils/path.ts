@@ -99,3 +99,10 @@ export function getBinDir(cwd: string = process.cwd()): string {
 export function getReportsDir(cwd: string = process.cwd()): string {
   return path.join(getProjectDir(cwd), 'reports');
 }
+
+/**
+ * 获取日志目录路径
+ */
+export function getLogsDir(cwd: string = process.cwd()): string {
+  return path.join(getProjectDir(cwd), 'logs');
+}

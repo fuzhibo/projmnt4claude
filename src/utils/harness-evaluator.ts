@@ -17,7 +17,9 @@ import type {
   DevReport,
   ReviewVerdict,
   HeadlessClaudeOptions,
+  EvaluationInferenceType,
 } from '../types/harness.js';
+import { createDefaultSprintContract } from '../types/harness.js';
 import type { TaskMeta, CheckpointMetadata } from '../types/task.js';
 import { getProjectDir } from './path.js';
 import { readTaskMeta, getAllTaskIds } from './task.js';
@@ -95,6 +97,7 @@ export class HarnessEvaluator {
     if (devReport.status !== 'success') {
       verdict.result = 'NOPASS';
       verdict.reason = `开发阶段未成功完成: ${devReport.status}`;
+      verdict.inferenceType = 'explicit_match'; // 开发阶段直接判定，非解析推断
       if (devReport.error) {
         verdict.reason += ` - ${devReport.error}`;
       }
@@ -104,9 +107,19 @@ export class HarnessEvaluator {
 
     try {
       // 1. 加载 Sprint Contract（从文件系统，确保隔离）
+      // BUG-013-1: 安全合并，仅覆盖已验证的字段
       const loadedContract = this.loadContract(task.id);
       if (loadedContract) {
-        Object.assign(contract, loadedContract);
+        // 仅在加载值非空时覆盖，防止用 undefined 覆盖默认值
+        contract.taskId = loadedContract.taskId;
+        contract.acceptanceCriteria = loadedContract.acceptanceCriteria.length > 0
+          ? loadedContract.acceptanceCriteria : contract.acceptanceCriteria;
+        contract.verificationCommands = loadedContract.verificationCommands.length > 0
+          ? loadedContract.verificationCommands : contract.verificationCommands;
+        contract.checkpoints = loadedContract.checkpoints.length > 0
+          ? loadedContract.checkpoints : contract.checkpoints;
+        contract.createdAt = loadedContract.createdAt;
+        contract.updatedAt = loadedContract.updatedAt;
       }
 
       // 2. 检测幽灵任务（开发者在执行期间创建的额外任务）
@@ -119,6 +132,7 @@ export class HarnessEvaluator {
         verdict.failedCriteria = ['禁止创建新任务'];
         verdict.failedCheckpoints = phantomTasks.map(tid => `幽灵任务: ${tid}`);
         verdict.details = `检测到开发者创建了不属于原始计划的额外任务。这违反了开发者职责范围——开发者只应实现被分配任务的代码变更，而非创建新任务。`;
+        verdict.inferenceType = 'explicit_match'; // 幽灵任务是确定性检测，非解析推断
         console.log(`\n   ❌ 检测到幽灵任务，自动 NOPASS`);
 
         await this.saveReviewReport(task.id, verdict, devReport);
@@ -139,6 +153,22 @@ export class HarnessEvaluator {
         outputFormat: 'text',
       });
 
+      // 4.5 保存原始评估输出（用于事后诊断）
+      this.saveRawEvaluationOutput(task.id, result.output, result.stderr, result.success);
+
+      // 4.6 检测空输出（Claude 进程异常退出）
+      if (!result.output || result.output.trim().length === 0) {
+        verdict.result = 'NOPASS';
+        verdict.reason = `评估会话输出为空：Claude 进程可能异常退出${result.stderr ? ` (stderr: ${result.stderr.substring(0, 200)})` : ''}`;
+        verdict.inferenceType = 'empty_output';
+        console.log('\n   ❌ 评估输出为空，Claude 进程可能异常退出');
+        if (result.stderr) {
+          console.log(`   📝 stderr: ${result.stderr.substring(0, 300)}`);
+        }
+        await this.saveReviewReport(task.id, verdict, devReport);
+        return verdict;
+      }
+
       // 5. 解析评估结果
       const evaluation = this.parseEvaluationResult(result.output);
 
@@ -149,16 +179,18 @@ export class HarnessEvaluator {
       verdict.details = evaluation.details;
       verdict.action = evaluation.action as any;
       verdict.failureCategory = evaluation.failureCategory as any;
+      verdict.inferenceType = evaluation.inferenceType;
 
       if (verdict.result === 'PASS') {
-        console.log('\n   ✅ 审查通过');
+        console.log(`\n   ✅ 审查通过 [推断类型: ${verdict.inferenceType || 'unknown'}]`);
       } else {
-        console.log(`\n   ❌ 审查未通过: ${verdict.reason}`);
+        console.log(`\n   ❌ 审查未通过 [推断类型: ${verdict.inferenceType || 'unknown'}]: ${verdict.reason}`);
       }
 
     } catch (error) {
       verdict.result = 'NOPASS';
       verdict.reason = `评估过程出错: ${error instanceof Error ? error.message : String(error)}`;
+      verdict.inferenceType = 'parse_failure_default';
       console.log(`\n   ❌ 评估出错: ${verdict.reason}`);
     }
 
@@ -180,6 +212,13 @@ export class HarnessEvaluator {
     const parts: string[] = [];
 
     // BUG-014-2A: 过滤掉 requiresHuman 检查点，仅评估自动化检查点
+    // BUG-013-1: 防御性处理，确保数组字段始终为有效数组
+    const contractCheckpoints = Array.isArray(contract.checkpoints) ? contract.checkpoints : [];
+    const contractCriteria = Array.isArray(contract.acceptanceCriteria) ? contract.acceptanceCriteria : [];
+    const contractCommands = Array.isArray(contract.verificationCommands) ? contract.verificationCommands : [];
+    const devCheckpointsCompleted = Array.isArray(devReport.checkpointsCompleted) ? devReport.checkpointsCompleted : [];
+    const devEvidence = Array.isArray(devReport.evidence) ? devReport.evidence : [];
+
     const humanCheckpointIds = new Set<string>();
     const humanCheckpointDescs = new Set<string>();
     if (task.checkpoints) {
@@ -192,8 +231,8 @@ export class HarnessEvaluator {
     }
     const isHumanCheckpoint = (cp: string) =>
       humanCheckpointIds.has(cp) || humanCheckpointDescs.has(cp);
-    const filteredContractCheckpoints = contract.checkpoints.filter(cp => !isHumanCheckpoint(cp));
-    const filteredDevCheckpoints = devReport.checkpointsCompleted.filter(cp => !isHumanCheckpoint(cp));
+    const filteredContractCheckpoints = contractCheckpoints.filter(cp => !isHumanCheckpoint(cp));
+    const filteredDevCheckpoints = devCheckpointsCompleted.filter(cp => !isHumanCheckpoint(cp));
 
     parts.push('# 架构评估任务');
     parts.push('');
@@ -215,8 +254,8 @@ export class HarnessEvaluator {
     }
 
     parts.push('## 验收标准');
-    if (contract.acceptanceCriteria.length > 0) {
-      contract.acceptanceCriteria.forEach((criteria, i) => {
+    if (contractCriteria.length > 0) {
+      contractCriteria.forEach((criteria, i) => {
         parts.push(`${i + 1}. ${criteria}`);
       });
     } else {
@@ -224,11 +263,11 @@ export class HarnessEvaluator {
     }
     parts.push('');
 
-    if (contract.verificationCommands.length > 0) {
+    if (contractCommands.length > 0) {
       parts.push('## 验证命令');
       parts.push('请运行以下命令验证实现:');
       parts.push('```bash');
-      contract.verificationCommands.forEach(cmd => {
+      contractCommands.forEach(cmd => {
         parts.push(cmd);
       });
       parts.push('```');
@@ -252,10 +291,10 @@ export class HarnessEvaluator {
       parts.push('');
     }
 
-    if (devReport.evidence.length > 0) {
+    if (devEvidence.length > 0) {
       parts.push('## 提交的证据');
       parts.push('开发者提交了以下证据:');
-      devReport.evidence.forEach(evidence => {
+      devEvidence.forEach(evidence => {
         parts.push(`- ${evidence}`);
       });
       parts.push('');
@@ -353,7 +392,7 @@ export class HarnessEvaluator {
   /**
    * 运行评估会话（带重试机制）
    */
-  private async runEvaluationSession(options: HeadlessClaudeOptions): Promise<{ output: string; success: boolean }> {
+  private async runEvaluationSession(options: HeadlessClaudeOptions): Promise<{ output: string; stderr: string; success: boolean }> {
     const maxAttempts = this.config.apiRetryAttempts + 1;
     const baseDelay = this.config.apiRetryDelay;
     let lastOutput = '';
@@ -369,14 +408,14 @@ export class HarnessEvaluator {
       lastStderr = result.stderr;
 
       if (result.success) {
-        return { output: result.output, success: true };
+        return { output: result.output, stderr: result.stderr, success: true };
       }
 
       // 检查是否为可重试错误
       const errorInfo = isRetryableError(result.output, result.stderr);
 
       if (!errorInfo.retryable || attempt >= maxAttempts) {
-        return { output: result.output, success: false };
+        return { output: result.output, stderr: result.stderr, success: false };
       }
 
       // 计算退避延迟
@@ -386,7 +425,7 @@ export class HarnessEvaluator {
       await sleep(delay);
     }
 
-    return { output: lastOutput, success: false };
+    return { output: lastOutput, stderr: lastStderr, success: false };
   }
 
   /**
@@ -486,6 +525,7 @@ export class HarnessEvaluator {
     details?: string;
     action?: string;
     failureCategory?: string;
+    inferenceType: EvaluationInferenceType;
   } {
     const result = {
       passed: false,
@@ -495,7 +535,15 @@ export class HarnessEvaluator {
       details: '',
       action: undefined as string | undefined,
       failureCategory: undefined as string | undefined,
+      inferenceType: 'parse_failure_default' as EvaluationInferenceType,
     };
+
+    // 空输出早期返回：Claude 进程异常退出导致 stdout 为空
+    if (!output || output.trim().length === 0) {
+      result.reason = '评估输出为空，无法解析评估结果';
+      result.inferenceType = 'empty_output';
+      return result;
+    }
 
     // 多模式匹配评估结果
     const resultPatterns = [
@@ -514,6 +562,7 @@ export class HarnessEvaluator {
       resultMatch = output.match(pattern);
       if (resultMatch) {
         result.passed = resultMatch[1]!.toUpperCase() === 'PASS';
+        result.inferenceType = 'explicit_match';
         break;
       }
     }
@@ -525,9 +574,11 @@ export class HarnessEvaluator {
       const hasNegative = /(?:不通过|未通过|❌|失败|不符合|不满足|未满足|不合格|未达标)/.test(contentWithoutHeaders);
       if (hasPositive && !hasNegative) {
         result.passed = true;
+        result.inferenceType = 'content_inference';
         resultMatch = ['通过', '通过'] as RegExpMatchArray;
       } else if (hasNegative) {
         result.passed = false;
+        result.inferenceType = 'content_inference';
         resultMatch = ['不通过', 'NOPASS'] as RegExpMatchArray;
       }
     }
@@ -630,6 +681,7 @@ export class HarnessEvaluator {
       if (posSignals && !negSignals) {
         console.warn('   ⚠️ 矛盾检测: NOPASS 结果与正向内容冲突，自动修正为 PASS');
         result.passed = true;
+        result.inferenceType = 'prior_stage_inference';
         result.reason = result.reason
           ? `[矛盾修正] ${result.reason}`
           : '原始结果为 NOPASS 但内容仅包含正向评价，已自动修正';
@@ -648,11 +700,14 @@ export class HarnessEvaluator {
         if (lowerOutput.includes('pass') && !lowerOutput.includes('nopass') && !lowerOutput.includes('not pass')) {
           result.passed = true;
           result.reason = '基于输出内容的简单判断：包含 PASS';
+          result.inferenceType = 'content_inference';
         } else if (/(?:审查通过|审核通过|评估通过|验收通过|所有.*满足|全部.*通过|均已满足|完全符合|质量良好)/.test(output)) {
           result.passed = true;
           result.reason = '基于输出内容的简单判断：包含正向通过关键词';
+          result.inferenceType = 'content_inference';
         } else {
           result.reason = '无法解析评估结果';
+          result.inferenceType = 'parse_failure_default';
           // 添加调试信息
           console.log('   ⚠️  解析失败，原始输出前500字符:');
           console.log(output.substring(0, 500));
@@ -735,6 +790,45 @@ export class HarnessEvaluator {
   }
 
   /**
+   * 验证并规范化 SprintContract 数据
+   * BUG-013-1: 防止 contract.json 字段缺失导致下游 TypeError
+   */
+  private validateSprintContract(raw: unknown, taskId: string): SprintContract | null {
+    if (raw === null || raw === undefined || typeof raw !== 'object') {
+      return null;
+    }
+
+    const obj = raw as Record<string, unknown>;
+
+    // taskId 必须匹配或至少存在
+    if (obj.taskId !== undefined && typeof obj.taskId !== 'string') {
+      return null;
+    }
+
+    // 确保数组字段为数组类型，否则使用默认空数组
+    const normalizeStringArray = (field: string): string[] => {
+      const val = obj[field];
+      return Array.isArray(val) ? val.filter(v => typeof v === 'string') : [];
+    };
+
+    // 时间字段必须是字符串
+    const normalizeTimestamp = (field: string, fallback: string): string => {
+      const val = obj[field];
+      return typeof val === 'string' ? val : fallback;
+    };
+
+    const now = new Date().toISOString();
+    return {
+      taskId: typeof obj.taskId === 'string' ? obj.taskId : taskId,
+      acceptanceCriteria: normalizeStringArray('acceptanceCriteria'),
+      verificationCommands: normalizeStringArray('verificationCommands'),
+      checkpoints: normalizeStringArray('checkpoints'),
+      createdAt: normalizeTimestamp('createdAt', now),
+      updatedAt: normalizeTimestamp('updatedAt', now),
+    };
+  }
+
+  /**
    * 加载 Contract
    */
   private loadContract(taskId: string): SprintContract | null {
@@ -746,8 +840,14 @@ export class HarnessEvaluator {
 
     try {
       const content = fs.readFileSync(contractPath, 'utf-8');
-      return JSON.parse(content);
-    } catch {
+      const parsed = JSON.parse(content);
+      const validated = this.validateSprintContract(parsed, taskId);
+      if (!validated) {
+        console.warn(`   ⚠️ contract.json 存在但数据无效，使用默认 Contract`);
+      }
+      return validated;
+    } catch (error) {
+      console.warn(`   ⚠️ contract.json 解析失败: ${error instanceof Error ? error.message : String(error)}`);
       return null;
     }
   }
@@ -788,20 +888,80 @@ export class HarnessEvaluator {
   }
 
   /**
+   * 保存原始评估输出（用于事后诊断）
+   *
+   * 当评估会话输出为空或解析失败时，原始输出和 stderr 可用于排查：
+   * - Claude 进程是否异常退出（SIGKILL/OOM）
+   * - API 限流/认证错误信息
+   * - 网络超时细节
+   */
+  private saveRawEvaluationOutput(
+    taskId: string,
+    output: string,
+    stderr: string,
+    success: boolean
+  ): void {
+    try {
+      const projectDir = getProjectDir(this.config.cwd);
+      const dir = path.join(projectDir, 'reports', 'harness', taskId);
+      if (!fs.existsSync(dir)) {
+        fs.mkdirSync(dir, { recursive: true });
+      }
+
+      const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+      const rawPath = path.join(dir, `evaluation-raw-${timestamp}.log`);
+
+      const lines = [
+        `# 评估会话原始输出`,
+        `Task: ${taskId}`,
+        `Time: ${new Date().toISOString()}`,
+        `Success: ${success}`,
+        `Output length: ${output.length}`,
+        `Stderr length: ${stderr.length}`,
+        '',
+        '--- STDOUT ---',
+        output || '(empty)',
+        '',
+        '--- STDERR ---',
+        stderr || '(empty)',
+      ];
+
+      fs.writeFileSync(rawPath, lines.join('\n'), 'utf-8');
+      console.log(`   📄 原始评估输出已保存: evaluation-raw-${timestamp}.log`);
+    } catch (error) {
+      // 日志保存失败不中断主流程
+      console.warn(`   ⚠️ 保存原始评估输出失败: ${error instanceof Error ? error.message : String(error)}`);
+    }
+  }
+
+  /**
    * 格式化审查报告
    */
   private formatReviewReport(verdict: ReviewVerdict, devReport: DevReport): string {
+    const INFERENCE_TYPE_LABELS: Record<string, string> = {
+      explicit_match: '明确匹配',
+      content_inference: '内容推断',
+      prior_stage_inference: '前置阶段推断',
+      parse_failure_default: '解析失败默认',
+      empty_output: '空输出',
+    };
+
     const lines: string[] = [
       `# 审查报告 - ${verdict.taskId}`,
       '',
       `**结果**: ${verdict.result === 'PASS' ? '✅ PASS' : '❌ NOPASS'}`,
       `**审查时间**: ${verdict.reviewedAt}`,
       `**审查者**: ${verdict.reviewedBy}`,
-      '',
-      '## 原因',
-      verdict.reason,
-      '',
     ];
+
+    if (verdict.inferenceType) {
+      lines.push(`**推断类型**: ${INFERENCE_TYPE_LABELS[verdict.inferenceType] || verdict.inferenceType} (${verdict.inferenceType})`);
+    }
+
+    lines.push('');
+    lines.push('## 原因');
+    lines.push(verdict.reason);
+    lines.push('');
 
     if (verdict.failedCriteria.length > 0) {
       lines.push('## 未满足的验收标准');
@@ -825,11 +985,15 @@ export class HarnessEvaluator {
       lines.push('');
     }
 
+    // BUG-013-1: 防御性处理，确保数组字段存在
+    const devEvidence = Array.isArray(devReport.evidence) ? devReport.evidence : [];
+    const devCheckpointsCompleted = Array.isArray(devReport.checkpointsCompleted) ? devReport.checkpointsCompleted : [];
+
     lines.push('## 开发阶段信息');
     lines.push(`- 状态: ${devReport.status}`);
     lines.push(`- 耗时: ${(devReport.duration / 1000).toFixed(1)}s`);
-    lines.push(`- 证据数量: ${devReport.evidence.length}`);
-    lines.push(`- 完成检查点: ${devReport.checkpointsCompleted.length}`);
+    lines.push(`- 证据数量: ${devEvidence.length}`);
+    lines.push(`- 完成检查点: ${devCheckpointsCompleted.length}`);
 
     return lines.join('\n');
   }

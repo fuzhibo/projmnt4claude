@@ -12,6 +12,7 @@ import { getAllTaskIds } from '../utils/task';
 import { SEPARATOR_WIDTH } from '../utils/format';
 import { parseTaskId } from '../types/task';
 import type { TaskIdInfo } from '../types/task';
+import { Logger } from '../utils/logger';
 
 /**
  * 检查结果接口
@@ -970,4 +971,93 @@ main().catch(() => {
 
   console.log('');
   console.log('✅ 修复完成');
+}
+
+/**
+ * 生成 Bug 报告
+ * 调用 Logger 生成 Markdown 报告 + .tar.gz 日志压缩附件
+ */
+export async function runBugReport(cwd: string = process.cwd()): Promise<void> {
+  console.log('');
+  console.log('━'.repeat(SEPARATOR_WIDTH));
+  console.log('📋 Bug 报告生成');
+  console.log('━'.repeat(SEPARATOR_WIDTH));
+  console.log('');
+
+  if (!isInitialized(cwd)) {
+    console.error('❌ 错误: 项目尚未初始化，无法生成 Bug 报告');
+    console.error('请先运行 projmnt4claude setup 初始化项目');
+    process.exit(1);
+  }
+
+  const logger = new Logger({ cwd });
+
+  try {
+    // 生成 Bug 报告
+    const report = logger.generateBugReport(100);
+
+    // 输出报告
+    console.log(report.markdown);
+    console.log('');
+    console.log('━'.repeat(SEPARATOR_WIDTH));
+
+    // 输出成本汇总
+    console.log('');
+    console.log('━'.repeat(SEPARATOR_WIDTH));
+    console.log('💰 AI 成本汇总');
+    console.log('━'.repeat(SEPARATOR_WIDTH));
+    console.log('');
+
+    const costSummary = logger.getCostSummary();
+    console.log(`总 AI 调用次数: ${costSummary.totalCalls}`);
+    console.log(`总耗时: ${(costSummary.totalDurationMs / 1000).toFixed(1)}s`);
+    console.log(`总 Tokens: ${costSummary.totalTokens} (输入: ${costSummary.totalInputTokens}, 输出: ${costSummary.totalOutputTokens})`);
+
+    if (Object.keys(costSummary.byField).length > 0) {
+      console.log('');
+      console.log('按字段分组:');
+      for (const [field, info] of Object.entries(costSummary.byField)) {
+        console.log(`  ${field}: ${info.calls} 次调用, ${(info.durationMs / 1000).toFixed(1)}s, ${info.totalTokens} tokens`);
+      }
+    }
+
+    // 输出使用分析
+    console.log('');
+    console.log('━'.repeat(SEPARATOR_WIDTH));
+    console.log('📊 使用分析');
+    console.log('━'.repeat(SEPARATOR_WIDTH));
+    console.log('');
+
+    const usage = logger.analyzeUsage();
+    console.log(`总命令执行次数: ${usage.totalCommands}`);
+    console.log(`平均耗时: ${(usage.averageDurationMs / 1000).toFixed(1)}s`);
+    console.log(`AI 使用率: ${(usage.aiUsageRate * 100).toFixed(1)}%`);
+    console.log(`错误数: ${usage.totalErrors}, 警告数: ${usage.totalWarnings}`);
+
+    if (Object.keys(usage.commandFrequency).length > 0) {
+      console.log('');
+      console.log('命令使用频率:');
+      const sorted = Object.entries(usage.commandFrequency).sort((a, b) => b[1] - a[1]);
+      for (const [cmd, count] of sorted) {
+        console.log(`  ${cmd}: ${count} 次`);
+      }
+    }
+
+    if (usage.commonErrors.length > 0) {
+      console.log('');
+      console.log('常见错误:');
+      for (const err of usage.commonErrors.slice(0, 5)) {
+        console.log(`  [${err.count}x] ${err.message}`);
+      }
+    }
+
+    console.log('');
+    console.log('━'.repeat(SEPARATOR_WIDTH));
+    console.log(`✅ Bug 报告已生成`);
+    console.log(`📎 日志压缩附件: ${report.archivePath}`);
+  } catch (err) {
+    console.error('');
+    console.error(`❌ Bug 报告生成失败: ${err instanceof Error ? err.message : String(err)}`);
+    process.exit(1);
+  }
 }

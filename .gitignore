@@ -41,6 +41,7 @@ parcel-cache/
 .claude/
 .omc/
 .projmnt4claude/
+.projmnt4claude/logs/
 
 # Claude Code related (development only)
 claude_code_helper.sh

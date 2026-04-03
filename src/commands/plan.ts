@@ -14,6 +14,7 @@ import { isInitialized, getProjectDir } from '../utils/path';
 import { readTaskMeta, getAllTasks, taskExists, getSubtasks } from '../utils/task';
 import type { TaskMeta, TaskPriority } from '../types/task';
 import { SEPARATOR_WIDTH } from '../utils/format';
+import { createLogger, type InstrumentationRecord } from '../utils/logger';
 
 // ============== 任务链分析类型定义 ==============
 
@@ -511,6 +512,13 @@ export async function recommendPlan(
 
   console.log('正在分析项目任务...\n');
 
+  // CP-4: 模块日志 + 埋点初始化
+  const logger = createLogger('plan-recommend', cwd);
+  const startTime = Date.now();
+  const inputQuery = options.query || '';
+  let recommendationAccepted = false;
+  let suggestedOrder: string[] = [];
+
   // 获取所有任务（不仅仅是可执行的，用于构建完整的依赖图）
   const allTasks = getAllTasks(cwd);
 
@@ -574,6 +582,19 @@ export async function recommendPlan(
         console.log(`关键字: ${keywords.join(', ')}`);
       }
     }
+    // CP-10: 空结果埋点
+    logger.logInstrumentation({
+      module: 'plan-recommend',
+      action: 'recommend_empty',
+      input_summary: `query="${inputQuery}", all=${options.all || false}`,
+      output_summary: `no_match, active=${activeTasks.length}, filtered=0`,
+      ai_used: false,
+      ai_enhanced_fields: [],
+      duration_ms: Date.now() - startTime,
+      user_edit_count: 0,
+      module_data: { keywords, excluded: excludedCount },
+    });
+    logger.flush();
     return;
   }
 
@@ -594,8 +615,25 @@ export async function recommendPlan(
   );
 
   // JSON 格式输出（AI 友好）
+  suggestedOrder = aiOutput.recommendation.suggestedOrder;
   if (options.json) {
     console.log(JSON.stringify(aiOutput, null, 2));
+    // CP-10: JSON 输出埋点
+    logger.logInstrumentation({
+      module: 'plan-recommend',
+      action: 'recommend_json',
+      input_summary: `query="${inputQuery}", all=${options.all || false}`,
+      output_summary: `chains=${chains.length}, tasks=${filteredTasks.length}, batches=${aiOutput.batches.length}`,
+      ai_used: false,
+      ai_enhanced_fields: [],
+      duration_ms: Date.now() - startTime,
+      user_edit_count: 0,
+      module_data: {
+        hit_rate: filteredTasks.length / activeTasks.length,
+        suggested_order: suggestedOrder.slice(0, 5),
+      },
+    });
+    logger.flush();
     return;
   }
 
@@ -664,6 +702,22 @@ export async function recommendPlan(
     plan.batches = aiOutput.batchOrder;
     writePlan(plan, cwd);
     console.log('✅ 执行计划已更新 (非交互模式)');
+    // CP-10: 非交互模式埋点
+    logger.logInstrumentation({
+      module: 'plan-recommend',
+      action: 'recommend_auto',
+      input_summary: `query="${inputQuery}", all=${options.all || false}`,
+      output_summary: `chains=${chains.length}, tasks=${filteredTasks.length}, accepted=true`,
+      ai_used: false,
+      ai_enhanced_fields: [],
+      duration_ms: Date.now() - startTime,
+      user_edit_count: 0,
+      module_data: {
+        hit_rate: filteredTasks.length / activeTasks.length,
+        suggested_order: aiOutput.recommendation.suggestedOrder.slice(0, 5),
+      },
+    });
+    logger.flush();
     return;
   }
 
@@ -681,9 +735,29 @@ export async function recommendPlan(
     plan.batches = aiOutput.batchOrder;
     writePlan(plan, cwd);
     console.log('✅ 执行计划已更新');
+    recommendationAccepted = true;
   } else {
     console.log('已取消');
   }
+
+  // CP-10: 交互模式埋点（推荐命中率 + 用户跳过率 + 排序偏差）
+  logger.logInstrumentation({
+    module: 'plan-recommend',
+    action: response.confirm ? 'recommend_accept' : 'recommend_skip',
+    input_summary: `query="${inputQuery}", all=${options.all || false}`,
+    output_summary: `chains=${chains.length}, tasks=${filteredTasks.length}, accepted=${response.confirm}`,
+    ai_used: false,
+    ai_enhanced_fields: [],
+    duration_ms: Date.now() - startTime,
+    user_edit_count: response.confirm ? 0 : 1,
+    module_data: {
+      hit_rate: filteredTasks.length / activeTasks.length,
+      skip_rate: response.confirm ? 0 : 1,
+      suggested_order: suggestedOrder.slice(0, 5),
+      accepted: recommendationAccepted,
+    },
+  });
+  logger.flush();
 }
 
 /**

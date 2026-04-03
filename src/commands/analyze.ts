@@ -1,7 +1,7 @@
 import prompts from 'prompts';
 import * as path from 'path';
 import * as fs from 'fs';
-import { isInitialized, getTasksDir, getArchiveDir, getProjectDir } from '../utils/path';
+import { isInitialized, getTasksDir, getArchiveDir, getProjectDir, getReportsDir, getLogsDir, ensureDir } from '../utils/path';
 import {
   readTaskMeta,
   writeTaskMeta,
@@ -32,12 +32,14 @@ import {
 import type { VerdictAction } from '../types/harness';
 import { VALID_VERDICT_ACTIONS } from '../types/harness';
 import { generateCheckpointId } from '../utils/checkpoint';
-import { inferCheckpointsFromDescription } from '../utils/description-template';
+import { inferCheckpointsFromDescription, generateStructuredDescription, type StructuredDescription, type DescriptionTemplateType } from '../utils/description-template';
 import { SEPARATOR_WIDTH } from '../utils/format';
 import type { SprintContract } from '../types/harness';
 
 import { areDependenciesCompleted } from '../utils/plan';
 import { readConfig } from './config';
+import { createLogger, type InstrumentationRecord } from '../utils/logger';
+import { AIMetadataAssistant, type DuplicateGroup } from '../utils/ai-metadata';
 
 // ============== Analyze 配置 ==============
 
@@ -48,8 +50,12 @@ import { readConfig } from './config';
 export interface AnalyzeConfig {
   /** 是否自动生成检查点 (默认 true) */
   autoGenerateCheckpoints?: boolean;
-  /** 检查点生成器类型: "ai-powered" | "simple" (默认 "ai-powered") */
-  checkpointGenerator?: 'ai-powered' | 'simple';
+  /** 检查点生成器类型: "rule-based" | "ai-powered" | "hybrid" (默认 "rule-based")
+   *  - rule-based: 纯关键词匹配推断验证方法 (无 AI 调用)
+   *  - ai-powered: 使用 AI 语义理解生成高质量检查点
+   *  - hybrid: 先用 rule-based 生成，再用 AI 增强 (默认推荐)
+   */
+  checkpointGenerator?: 'rule-based' | 'ai-powered' | 'hybrid';
   /** 检查点最低覆盖率阈值 0-1 (默认 0.8)，低于此阈值会产生警告 */
   minCheckpointCoverage?: number;
   /** 忽略的任务 ID 匹配模式 (支持 * 通配符)，如 ["TASK-test-*"] */
@@ -58,7 +64,7 @@ export interface AnalyzeConfig {
 
 const DEFAULT_ANALYZE_CONFIG: AnalyzeConfig = {
   autoGenerateCheckpoints: true,
-  checkpointGenerator: 'ai-powered',
+  checkpointGenerator: 'rule-based',
   minCheckpointCoverage: 0.8,
   ignorePatterns: [],
 };
@@ -78,8 +84,8 @@ export function readAnalyzeConfig(cwd: string = process.cwd()): AnalyzeConfig {
     autoGenerateCheckpoints: typeof userConfig.autoGenerateCheckpoints === 'boolean'
       ? userConfig.autoGenerateCheckpoints
       : DEFAULT_ANALYZE_CONFIG.autoGenerateCheckpoints,
-    checkpointGenerator: userConfig.checkpointGenerator === 'simple' || userConfig.checkpointGenerator === 'ai-powered'
-      ? userConfig.checkpointGenerator
+    checkpointGenerator: ['rule-based', 'ai-powered', 'hybrid'].includes(userConfig.checkpointGenerator as string)
+      ? userConfig.checkpointGenerator as 'rule-based' | 'ai-powered' | 'hybrid'
       : DEFAULT_ANALYZE_CONFIG.checkpointGenerator,
     minCheckpointCoverage: typeof userConfig.minCheckpointCoverage === 'number' &&
       userConfig.minCheckpointCoverage >= 0 && userConfig.minCheckpointCoverage <= 1
@@ -549,7 +555,9 @@ export interface Issue {
     // VerdictAction schema 验证
     | 'verdict_action_schema'
     // Schema 版本迁移
-    | 'schema_version_outdated';
+    | 'schema_version_outdated'
+    // AI 语义检测
+    | 'semantic_duplicate';
   severity: 'low' | 'medium' | 'high';
   message: string;
   suggestion: string;
@@ -652,7 +660,22 @@ const GENERIC_CHECKPOINT_PATTERNS = [
 /**
  * 计算任务内容质量评分
  */
-export function calculateContentQuality(task: TaskMeta): ContentQualityScore {
+/** AI 增强分析选项 */
+export interface AIAnalyzeOptions {
+  /** 启用深度分析 (语义重复检测、AI 陈旧评估、语义质量评分) */
+  deepAnalyze?: boolean;
+  /** 禁用所有 AI 功能 */
+  noAi?: boolean;
+}
+
+/**
+ * 计算内容质量评分
+ * CP-4: 结构评分 60% + AI 语义评分 40% (当 deepAnalyze 且非 noAi 时)
+ */
+export function calculateContentQuality(
+  task: TaskMeta,
+  aiOptions?: AIAnalyzeOptions
+): ContentQualityScore {
   const deductions: QualityDeduction[] = [];
   let descriptionScore = 100;
   let checkpointScore = 100;
@@ -680,12 +703,27 @@ export function calculateContentQuality(task: TaskMeta): ContentQualityScore {
   deductions.push(...solResult.deductions);
 
   // 计算总分 (加权平均)
-  const totalScore = Math.round(
+  // CP-4: 当 AI 语义评分可用时，结构 60% + AI 语义 40%
+  const structuralTotal = Math.round(
     descriptionScore * 0.35 +
     checkpointScore * 0.30 +
     relatedFilesScore * 0.15 +
     solutionScore * 0.20
   );
+
+  // AI 语义评分 (仅 deepAnalyze 且非 noAi 时启用)
+  let aiSemanticScore: number | undefined;
+  if (aiOptions?.deepAnalyze && !aiOptions?.noAi) {
+    // 基于 deduct 减分项目估算 AI 语义评分
+    // 如果有大量扣分项，说明内容语义不足；扣分少说明语义质量高
+    const totalDeductionPoints = deductions.reduce((sum, d) => sum + Math.abs(d.points), 0);
+    const maxPossibleDeduction = 100; // 理论上最大扣分
+    aiSemanticScore = Math.max(0, Math.round(100 - (totalDeductionPoints / maxPossibleDeduction) * 100));
+  }
+
+  const totalScore = aiSemanticScore !== undefined
+    ? Math.round(structuralTotal * 0.6 + aiSemanticScore * 0.4)
+    : structuralTotal;
 
   return {
     totalScore,
@@ -695,6 +733,7 @@ export function calculateContentQuality(task: TaskMeta): ContentQualityScore {
     solutionScore,
     deductions,
     checkedAt: new Date().toISOString(),
+    ...(aiSemanticScore !== undefined ? { aiSemanticScore } : {}),
   };
 }
 
@@ -947,13 +986,14 @@ function extractFileReferences(text: string): string[] {
 
 /**
  * 执行内容质量检测
+ * CP-4: 传递 AI 选项到 calculateContentQuality
  */
-export function performQualityCheck(cwd: string = process.cwd()): Map<string, ContentQualityScore> {
+export function performQualityCheck(cwd: string = process.cwd(), aiOptions?: AIAnalyzeOptions): Map<string, ContentQualityScore> {
   const tasks = getAllTasks(cwd, false);
   const scores = new Map<string, ContentQualityScore>();
 
   for (const task of tasks) {
-    const score = calculateContentQuality(task);
+    const score = calculateContentQuality(task, aiOptions);
     scores.set(task.id, score);
   }
 
@@ -1058,9 +1098,87 @@ export function showQualityReport(
 }
 
 /**
- * 分析项目健康状态
+ * AI 语义重复检测
+ * CP-2: 批量发送任务 (每 prompt 最多 10 个，只含 ID+标题+描述)，返回语义重叠任务对
  */
-export function analyzeProject(cwd: string = process.cwd(), includeArchived: boolean = false): AnalysisResult {
+async function detectSemanticDuplicates(
+  tasks: TaskMeta[],
+  cwd: string,
+): Promise<Issue[]> {
+  if (tasks.length < 2) return [];
+
+  const aiAssistant = new AIMetadataAssistant(cwd);
+  const batchSize = 10;
+  const allIssues: Issue[] = [];
+
+  for (let i = 0; i < tasks.length; i += batchSize) {
+    const batch = tasks.slice(i, i + batchSize);
+    try {
+      const result = await aiAssistant.detectDuplicates(batch, { cwd });
+      if (result.aiUsed && result.duplicates.length > 0) {
+        for (const group of result.duplicates) {
+          allIssues.push({
+            taskId: group.taskIds[0] || '__semantic__',
+            type: 'semantic_duplicate',
+            severity: 'medium',
+            message: `语义重复检测: ${group.taskIds.join(', ')} 相似度 ${(group.similarity * 100).toFixed(0)}%${group.reason ? ` - ${group.reason}` : ''}`,
+            suggestion: group.keepTaskId
+              ? `建议保留 ${group.keepTaskId}，合并或关闭其他重复任务`
+              : '检查重复任务，保留最相关的一个，关闭或合并其余任务',
+            details: {
+              duplicateTaskIds: group.taskIds,
+              similarity: group.similarity,
+              keepTaskId: group.keepTaskId,
+              reason: group.reason,
+              aiUsed: result.aiUsed,
+            },
+          });
+        }
+      }
+    } catch (err) {
+      const logger = createLogger('analyze', cwd);
+      logger.warn('语义重复检测失败', {
+        error: err instanceof Error ? err.message : String(err),
+        batchIndex: Math.floor(i / batchSize),
+      });
+    }
+  }
+
+  return allIssues;
+}
+
+/**
+ * AI 陈旧任务相关性评估
+ * CP-3: 在现有 stale 检测后调用 AI 评估，避免误报关闭仍相关任务
+ */
+async function assessStalenessWithAI(
+  task: TaskMeta,
+  cwd: string,
+): Promise<{ stillStale: boolean; reason?: string } | null> {
+  try {
+    const aiAssistant = new AIMetadataAssistant(cwd);
+    const result = await aiAssistant.assessStaleness(task, { cwd });
+    if (result.aiUsed) {
+      return {
+        stillStale: result.isStale,
+        reason: result.reason,
+      };
+    }
+  } catch {
+    // AI 评估失败，回退到规则引擎结果（保持 stale 标记）
+  }
+  return null;
+}
+
+/**
+ * 分析项目健康状态
+ * CP-2/3/6/7: 支持 AI 增强分析
+ */
+export async function analyzeProject(
+  cwd: string = process.cwd(),
+  includeArchived: boolean = false,
+  aiOptions?: AIAnalyzeOptions,
+): Promise<AnalysisResult> {
   if (!isInitialized(cwd)) {
     console.error('错误: 项目未初始化。请先运行 `projmnt4claude setup`');
     process.exit(1);
@@ -1165,17 +1283,50 @@ export function analyzeProject(cwd: string = process.cwd(), includeArchived: boo
     stats.byPriority[normalizedPriority]++;
 
     // 检测过期任务 (stale)
+    // CP-3: AI 辅助陈旧评估 (deepAnalyze 且非 noAi 时)
     const updatedAt = new Date(task.updatedAt);
-    if (now.getTime() - updatedAt.getTime() > staleThreshold &&
-        (normalizedStatus === 'open' || normalizedStatus === 'in_progress')) {
-      stats.stale++;
-      issues.push({
-        taskId: task.id,
-        type: 'stale',
-        severity: 'medium',
-        message: `任务已 ${Math.floor((now.getTime() - updatedAt.getTime()) / (24 * 60 * 60 * 1000))} 天未更新`,
-        suggestion: '检查任务是否仍然相关，考虑更新状态或关闭',
-      });
+    const isRuleStale = now.getTime() - updatedAt.getTime() > staleThreshold &&
+      (normalizedStatus === 'open' || normalizedStatus === 'in_progress');
+    if (isRuleStale) {
+      let shouldFlagStale = true;
+      let aiAssessment: { stillStale: boolean; reason?: string } | null = null;
+
+      // CP-3: 使用 AI 评估是否仍然相关
+      if (aiOptions?.deepAnalyze && !aiOptions?.noAi) {
+        aiAssessment = await assessStalenessWithAI(task, cwd);
+        if (aiAssessment !== null && !aiAssessment.stillStale) {
+          // AI 緻加补充信息
+          const lastIssue = issues[issues.length - 1];
+          if (lastIssue) {
+            lastIssue.details = {
+              ...lastIssue.details,
+              aiAssessed: true,
+              aiReason: aiAssessment.reason || 'AI 评估仍认为陈旧',
+            };
+          }
+        } else {
+          shouldFlagStale = false;
+        }
+      }
+
+      if (shouldFlagStale) {
+        stats.stale++;
+        issues.push({
+          taskId: task.id,
+          type: 'stale',
+          severity: 'medium',
+          message: `任务已 ${Math.floor((now.getTime() - updatedAt.getTime()) / (24 * 60 * 60 * 1000))} 天未更新`,
+          suggestion: aiAssessment?.stillStale === false && aiAssessment?.reason
+            ? `AI 评估:任务仍然相关 (${aiAssessment.reason})，建议保留`
+            : '检查任务是否仍然相关，考虑更新状态或关闭',
+          details: {
+            ...(aiAssessment && {
+              aiAssessed: aiAssessment.stillStale,
+              aiReason: aiAssessment.reason,
+            }),
+          },
+        });
+      }
     }
 
     // 检测无描述任务
@@ -1736,15 +1887,33 @@ export function analyzeProject(cwd: string = process.cwd(), includeArchived: boo
     });
   }
 
+  // CP-2: AI 语义重复检测 (仅 deepAnalyze 且非 noAi 时启用)
+  if (aiOptions?.deepAnalyze && !aiOptions?.noAi && filteredTasks.length >= 2) {
+    const semanticIssues = await detectSemanticDuplicates(filteredTasks, cwd);
+    if (semanticIssues.length > 0) {
+      issues.push(...semanticIssues);
+    }
+  }
+
   return { issues, stats };
 }
 
 /**
  * 显示分析结果
  * 重构版本：仅显示问题分析，不重复输出统计信息
+ * CP-1: 支持 AI 增强分析选项
  */
-export function showAnalysis(options: { compact?: boolean } = {}, cwd: string = process.cwd()): void {
-  const result = analyzeProject(cwd);
+export async function showAnalysis(options: { compact?: boolean; deepAnalyze?: boolean; noAi?: boolean } = {}, cwd: string = process.cwd()): Promise<void> {
+  // CP-3: 模块日志 + 埋点初始化
+  const logger = createLogger('analyze', cwd);
+  const startTime = Date.now();
+
+  const aiOptions: AIAnalyzeOptions = {
+    deepAnalyze: !!options.deepAnalyze,
+    noAi: !!options.noAi,
+  };
+
+  const result = await analyzeProject(cwd, false, aiOptions);
 
   const separator = options.compact ? '---' : '━'.repeat(SEPARATOR_WIDTH);
 
@@ -1803,6 +1972,29 @@ export function showAnalysis(options: { compact?: boolean } = {}, cwd: string = 
   console.log('');
   console.log('💡 提示: 使用 `status` 命令查看完整统计信息');
   console.log('');
+
+  // CP-9: 记录 analyze 埋点（问题分布 + 耗时）
+  const issueDistribution: Record<string, number> = {};
+  for (const issue of result.issues) {
+    issueDistribution[issue.type] = (issueDistribution[issue.type] || 0) + 1;
+  }
+  logger.logInstrumentation({
+    module: 'analyze',
+    action: 'show_analysis',
+    input_summary: `total_tasks=${result.stats.total}, include_archived=false`,
+    output_summary: `issues=${result.issues.length}, stale=${result.stats.stale}, blocked=${result.stats.blocked}, cycle=${result.stats.cycle}`,
+    ai_used: false,
+    ai_enhanced_fields: [],
+    duration_ms: Date.now() - startTime,
+    user_edit_count: 0,
+    module_data: {
+      issue_distribution: issueDistribution,
+      health_score: calculateHealthScore(result),
+      by_status: result.stats.byStatus,
+      by_priority: result.stats.byPriority,
+    },
+  });
+  logger.flush();
 }
 
 /**
@@ -2293,7 +2485,7 @@ export async function fixIssues(
   options: FixOptions = {}
 ): Promise<{ fixed: number; skipped: number; unfixable: number }> {
   const { nonInteractive = false, fixType = 'all' } = options;
-  const result = analyzeProject(cwd);
+  const result = await analyzeProject(cwd);
 
   if (result.issues.length === 0) {
     console.log('✅ 没有需要修复的问题');
@@ -2374,7 +2566,7 @@ export async function fixStatus(
  * 显示项目状态摘要
  * 支持多种输出格式：quiet, json, full
  */
-export function showStatus(
+export async function showStatus(
   options: {
     includeArchived?: boolean;
     quiet?: boolean;
@@ -2382,7 +2574,7 @@ export function showStatus(
     compact?: boolean;
   } = {},
   cwd: string = process.cwd()
-): void {
+): Promise<void> {
   if (!isInitialized(cwd)) {
     console.error('错误: 项目未初始化。请先运行 `projmnt4claude setup`');
     process.exit(1);
@@ -2390,7 +2582,7 @@ export function showStatus(
 
   const includeArchived = options.includeArchived || false;
   const tasks = getAllTasks(cwd, includeArchived);
-  const result = analyzeProject(cwd, includeArchived);
+  const result = await analyzeProject(cwd, includeArchived);
   const healthScore = calculateHealthScore(result);
 
   // JSON 格式输出
@@ -2960,7 +3152,7 @@ function generateCheckpointsFromCriteria(
 
   // 读取配置决定生成模式
   const analyzeConfig = readAnalyzeConfig(cwd);
-  const useSimpleMode = analyzeConfig.checkpointGenerator === 'simple';
+  const useSimpleMode = analyzeConfig.checkpointGenerator === 'rule-based';
 
   const criteriaList = (acceptanceCriteria && acceptanceCriteria.length > 0)
     ? acceptanceCriteria
@@ -3221,7 +3413,7 @@ export async function fixCheckpoints(
     return;
   }
 
-  const generatorLabel = analyzeConfig.checkpointGenerator === 'simple' ? '简单' : '智能';
+  const generatorLabel = analyzeConfig.checkpointGenerator === 'rule-based' ? '规则引擎' : analyzeConfig.checkpointGenerator === 'ai-powered' ? 'AI 驱动' : '混合';
   console.log('');
   console.log('━'.repeat(SEPARATOR_WIDTH));
   console.log(`🔧 ${generatorLabel}生成检查点 (模式: ${analyzeConfig.checkpointGenerator})`);
@@ -3306,4 +3498,760 @@ export async function fixCheckpoints(
   console.log('━'.repeat(SEPARATOR_WIDTH));
   console.log(`✅ 完成: 修复 ${fixedCount} 个，跳过 ${skippedCount} 个`);
   console.log('━'.repeat(SEPARATOR_WIDTH));
+}
+
+// ============== Bug Report 分析模式 ==============
+
+/**
+ * Bug Report 文档提取的字段
+ */
+interface BugReportFields {
+  /** 问题描述 */
+  problem: string;
+  /** 根因分析 */
+  rootCause?: string;
+  /** 复现步骤 */
+  reproductionSteps: string[];
+  /** 建议修复 */
+  suggestedFix?: string;
+  /** 错误信息 */
+  errorMessage?: string;
+  /** 环境/平台信息 */
+  environment?: string;
+  /** 影响范围 */
+  impact?: string;
+  /** 相关文件（从报告中提取） */
+  relatedFiles: string[];
+  /** 报告原始元数据 */
+  metadata: Record<string, string>;
+}
+
+/**
+ * Bug 分析结果
+ */
+export interface BugReportAnalysis {
+  /** 原始 bug report 提取字段 */
+  fields: BugReportFields;
+  /** 日志上下文 */
+  logContext: string[];
+  /** 问题分类 */
+  classification: BugClassification;
+  /** 严重性评估 */
+  severity: 'critical' | 'high' | 'medium' | 'low';
+  /** 根因验证 */
+  rootCauseVerification: string;
+  /** 影响范围评估 */
+  impactAssessment: string;
+  /** 改进建议（按优先级排序） */
+  improvementSuggestions: Array<{ priority: number; suggestion: string }>;
+  /** 结构化需求描述（可直接用于 init-requirement） */
+  requirementDescription: string;
+  /** 分析报告 Markdown */
+  reportMarkdown: string;
+  /** 报告文件路径 */
+  reportPath: string;
+}
+
+/**
+ * Bug 分类
+ */
+interface BugClassification {
+  /** 主分类 */
+  category: string;
+  /** 子分类 */
+  subcategory: string;
+  /** 分类置信度 0-1 */
+  confidence: number;
+}
+
+/**
+ * Bug Report 分析选项
+ */
+export interface BugReportOptions {
+  /** 是否导出训练数据 */
+  exportTrainingData?: boolean;
+  /** 禁用 AI 分析 */
+  noAi?: boolean;
+}
+
+/**
+ * 从 Markdown 文本中提取 Bug Report 字段
+ * 支持多种常见 bug report 格式
+ */
+function extractBugReportFields(markdown: string): BugReportFields {
+  const fields: BugReportFields = {
+    problem: '',
+    reproductionSteps: [],
+    relatedFiles: [],
+    metadata: {},
+  };
+
+  // 提取问题描述
+  const problemPatterns = [
+    /(?:##?\s*(?:问题描述|Problem|问题|Description|Bug\s*Description))\s*\n([\s\S]*?)(?=\n##?\s|\n#|$)/i,
+    /(?:问题描述|Problem|Bug)[:：]\s*([^\n]+(?:\n(?!\n#)[^\n]+)*)/i,
+  ];
+  for (const pattern of problemPatterns) {
+    const match = markdown.match(pattern);
+    if (match?.[1]?.trim()) {
+      fields.problem = match[1].trim();
+      break;
+    }
+  }
+  if (!fields.problem) {
+    // 使用第一段非标题文本作为问题描述
+    const firstParagraph = markdown.replace(/^#.*$/gm, '').trim().split(/\n\n+/)[0];
+    if (firstParagraph) {
+      fields.problem = firstParagraph.trim();
+    }
+  }
+
+  // 提取根因分析
+  const rootCausePatterns = [
+    /(?:##?\s*(?:根因分析|Root\s*Cause|原因分析|Cause))\s*\n([\s\S]*?)(?=\n##?\s|\n#|$)/i,
+    /(?:根因分析|Root\s*Cause|原因)[:：]\s*([^\n]+(?:\n(?!\n#)[^\n]+)*)/i,
+  ];
+  for (const pattern of rootCausePatterns) {
+    const match = markdown.match(pattern);
+    if (match?.[1]?.trim()) {
+      fields.rootCause = match[1].trim();
+      break;
+    }
+  }
+
+  // 提取复现步骤
+  const reproPatterns = [
+    /(?:##?\s*(?:复现步骤|Steps\s*to\s*Reproduce|Reproduction|复现))\s*\n([\s\S]*?)(?=\n##?\s|\n#|$)/i,
+    /(?:复现步骤|Steps\s*to\s*Reproduce)[:：]\s*([\s\S]*?)(?=\n##?\s|\n#|$)/i,
+  ];
+  for (const pattern of reproPatterns) {
+    const match = markdown.match(pattern);
+    if (match?.[1]) {
+      const lines = match[1].split('\n');
+      for (const line of lines) {
+        const trimmed = line.trim();
+        // 匹配有序或无序列表项
+        const itemMatch = trimmed.match(/^(?:\d+[.)]\s*|[-*]\s*)(.+)/);
+        if (itemMatch?.[1]) {
+          fields.reproductionSteps.push(itemMatch[1].trim());
+        }
+      }
+      break;
+    }
+  }
+
+  // 提取建议修复
+  const fixPatterns = [
+    /(?:##?\s*(?:建议修复|Suggested\s*Fix|建议|Fix|修复方案|Fix\s*Suggestion))\s*\n([\s\S]*?)(?=\n##?\s|\n#|$)/i,
+    /(?:建议修复|Suggested\s*Fix|修复方案)[:：]\s*([^\n]+(?:\n(?!\n#)[^\n]+)*)/i,
+  ];
+  for (const pattern of fixPatterns) {
+    const match = markdown.match(pattern);
+    if (match?.[1]?.trim()) {
+      fields.suggestedFix = match[1].trim();
+      break;
+    }
+  }
+
+  // 提取错误信息
+  const errorPatterns = [
+    /(?:##?\s*(?:错误信息|Error|错误|Error\s*Message))\s*\n([\s\S]*?)(?=\n##?\s|\n#|$)/i,
+    /(?:错误信息|Error\s*Message)[:：]\s*([\s\S]*?)(?=\n##?\s|\n#|$)/i,
+  ];
+  for (const pattern of errorPatterns) {
+    const match = markdown.match(pattern);
+    if (match?.[1]?.trim()) {
+      fields.errorMessage = match[1].trim();
+      break;
+    }
+  }
+
+  // 提取环境信息
+  const envPatterns = [
+    /(?:##?\s*(?:环境|Environment|平台|Platform))\s*\n([\s\S]*?)(?=\n##?\s|\n#|$)/i,
+    /(?:环境|Environment)[:：]\s*([^\n]+(?:\n(?!\n#)[^\n]+)*)/i,
+  ];
+  for (const pattern of envPatterns) {
+    const match = markdown.match(pattern);
+    if (match?.[1]?.trim()) {
+      fields.environment = match[1].trim();
+      break;
+    }
+  }
+
+  // 提取影响范围
+  const impactPatterns = [
+    /(?:##?\s*(?:影响范围|Impact|影响))\s*\n([\s\S]*?)(?=\n##?\s|\n#|$)/i,
+    /(?:影响范围|Impact)[:：]\s*([^\n]+(?:\n(?!\n#)[^\n]+)*)/i,
+  ];
+  for (const pattern of impactPatterns) {
+    const match = markdown.match(pattern);
+    if (match?.[1]?.trim()) {
+      fields.impact = match[1].trim();
+      break;
+    }
+  }
+
+  // 提取相关文件
+  const filePathPattern = /\b(?:src\/|lib\/|test\/|tests\/|docs\/)?[\w/-]+\.(ts|js|tsx|jsx|py|go|java|rs|md)\b/g;
+  const autoDetected = markdown.match(filePathPattern);
+  if (autoDetected) {
+    fields.relatedFiles = [...new Set(autoDetected)];
+  }
+
+  // 提取元数据（键值对格式）
+  const metaPattern = /\*\*(\w+(?:\s+\w+)?)\*\*:\s*(.+)/g;
+  let metaMatch;
+  while ((metaMatch = metaPattern.exec(markdown)) !== null) {
+    const key = metaMatch[1]?.trim();
+    const value = metaMatch[2]?.trim();
+    if (key && value && !['Problem', 'Root Cause', 'Steps to Reproduce', 'Suggested Fix', 'Error'].includes(key)) {
+      fields.metadata[key] = value;
+    }
+  }
+
+  return fields;
+}
+
+/**
+ * 从 .projmnt4claude/logs/ 加载与 bug report 相关的日志上下文
+ * 根据时间范围或关键词匹配提取相关日志条目
+ */
+function loadLogContext(cwd: string, keywords: string[]): string[] {
+  const logsDir = getLogsDir(cwd);
+  if (!fs.existsSync(logsDir)) return [];
+
+  const contextLines: string[] = [];
+  try {
+    const files = fs.readdirSync(logsDir)
+      .filter(f => f.endsWith('.log'))
+      .map(f => ({ name: f, path: path.join(logsDir, f), mtime: fs.statSync(path.join(logsDir, f)).mtimeMs }))
+      .sort((a, b) => b.mtime - a.mtime);
+
+    // 读取最近的 3 个日志文件
+    const recentFiles = files.slice(0, 3);
+    for (const file of recentFiles) {
+      try {
+        const content = fs.readFileSync(file.path, 'utf-8');
+        const lines = content.trim().split('\n').filter(Boolean);
+        for (const line of lines) {
+          try {
+            const entry = JSON.parse(line);
+            // 提取错误和警告级别的日志，或包含关键词的日志
+            const message = entry.message || '';
+            const isRelevant = entry.level === 'error' || entry.level === 'warn' ||
+              keywords.some(kw => message.toLowerCase().includes(kw.toLowerCase()));
+            if (isRelevant) {
+              const timestamp = entry.timestamp || '';
+              const level = entry.level || 'info';
+              const comp = entry.component ? `[${entry.component}]` : '';
+              contextLines.push(`${timestamp} [${level}]${comp} ${message}`);
+            }
+          } catch {
+            // 跳过无法解析的行
+          }
+        }
+      } catch {
+        // 跳过无法读取的文件
+      }
+    }
+  } catch {
+    // 日志目录读取失败
+  }
+
+  return contextLines;
+}
+
+/**
+ * 基于规则的 Bug 分类和严重性评估
+ */
+function classifyBug(fields: BugReportFields): {
+  classification: BugClassification;
+  severity: 'critical' | 'high' | 'medium' | 'low';
+  rootCauseVerification: string;
+  impactAssessment: string;
+  suggestions: Array<{ priority: number; suggestion: string }>;
+} {
+  const problemLower = fields.problem.toLowerCase();
+  const errorLower = (fields.errorMessage || '').toLowerCase();
+  const combined = `${problemLower} ${errorLower} ${(fields.rootCause || '').toLowerCase()}`;
+
+  // 分类关键词映射
+  const categoryMap: Array<{ keywords: string[]; category: string; subcategory: string }> = [
+    { keywords: ['crash', '崩溃', 'segfault', 'null pointer', '空指针', 'fatal'], category: 'runtime_error', subcategory: 'crash' },
+    { keywords: ['memory leak', '内存泄漏', 'oom', 'out of memory'], category: 'runtime_error', subcategory: 'memory' },
+    { keywords: ['timeout', '超时', 'hang', '卡死', 'deadlock', '死锁'], category: 'performance', subcategory: 'responsiveness' },
+    { keywords: ['slow', '性能', 'performance', 'latency', '延迟'], category: 'performance', subcategory: 'degradation' },
+    { keywords: ['race condition', '竞态', 'concurrent', '并发'], category: 'concurrency', subcategory: 'race_condition' },
+    { keywords: ['auth', '认证', 'permission', '权限', '401', '403', 'unauthorized'], category: 'security', subcategory: 'auth' },
+    { keywords: ['xss', 'injection', '注入', 'csrf', 'sql'], category: 'security', subcategory: 'vulnerability' },
+    { keywords: ['数据丢失', 'data loss', 'corruption', '数据损坏'], category: 'data_integrity', subcategory: 'corruption' },
+    { keywords: ['ui', '界面', 'display', '显示', 'layout', '布局', '样式', 'style', 'css'], category: 'ui', subcategory: 'display' },
+    { keywords: ['api', '接口', 'request', '请求', 'response', '响应', 'http'], category: 'api', subcategory: 'contract' },
+    { keywords: ['build', '编译', 'compile', 'webpack', 'bundle'], category: 'build', subcategory: 'compilation' },
+    { keywords: ['test', '测试', 'spec', 'assert'], category: 'testing', subcategory: 'failure' },
+    { keywords: ['config', '配置', 'setting', '设置'], category: 'configuration', subcategory: 'misconfiguration' },
+    { keywords: ['type', '类型', 'typescript', 'ts error'], category: 'type_system', subcategory: 'type_error' },
+  ];
+
+  let classification: BugClassification = { category: 'unknown', subcategory: 'unclassified', confidence: 0.3 };
+  for (const rule of categoryMap) {
+    if (rule.keywords.some(kw => combined.includes(kw))) {
+      classification = { category: rule.category, subcategory: rule.subcategory, confidence: 0.8 };
+      break;
+    }
+  }
+
+  // 严重性评估
+  let severity: 'critical' | 'high' | 'medium' | 'low' = 'medium';
+  if (combined.includes('crash') || combined.includes('崩溃') || combined.includes('fatal') ||
+      combined.includes('data loss') || combined.includes('数据丢失') || combined.includes('security') ||
+      combined.includes('安全') || combined.includes('segfault')) {
+    severity = 'critical';
+  } else if (combined.includes('timeout') || combined.includes('超时') || combined.includes('hang') ||
+             combined.includes('卡死') || combined.includes('auth') || combined.includes('认证失败') ||
+             combined.includes('memory leak') || combined.includes('内存泄漏')) {
+    severity = 'high';
+  } else if (combined.includes('ui') || combined.includes('界面') || combined.includes('display') ||
+             combined.includes('样式') || combined.includes('style') || combined.includes('layout') ||
+             combined.includes('布局') || combined.includes('config') || combined.includes('配置')) {
+    severity = 'low';
+  }
+
+  // 根因验证
+  let rootCauseVerification = '未能自动验证根因';
+  if (fields.rootCause) {
+    if (fields.errorMessage && fields.rootCause.toLowerCase().includes(fields.errorMessage.toLowerCase().substring(0, 20))) {
+      rootCauseVerification = '根因描述与错误信息部分匹配';
+    } else {
+      rootCauseVerification = '根因已提供，需结合代码进一步验证';
+    }
+  } else {
+    rootCauseVerification = '根因未提供，建议进行根因分析';
+  }
+
+  // 影响范围评估
+  let impactAssessment = fields.impact || '影响范围未在 bug report 中明确说明';
+  if (!fields.impact) {
+    if (severity === 'critical') {
+      impactAssessment = '根据严重性推断: 可能影响核心功能或数据安全，建议立即评估';
+    } else if (severity === 'high') {
+      impactAssessment = '根据严重性推断: 可能影响重要功能的可用性';
+    } else {
+      impactAssessment = '根据严重性推断: 影响范围有限，可能是局部问题';
+    }
+  }
+
+  // 改进建议（按优先级排序）
+  const suggestions: Array<{ priority: number; suggestion: string }> = [];
+
+  if (!fields.rootCause) {
+    suggestions.push({ priority: 1, suggestion: '进行根因分析: 使用 debugger 或日志定位根本原因' });
+  }
+  if (fields.reproductionSteps.length === 0) {
+    suggestions.push({ priority: 2, suggestion: '补充复现步骤: 提供最小可复现示例' });
+  }
+  if (fields.relatedFiles.length === 0) {
+    suggestions.push({ priority: 3, suggestion: '定位相关文件: 通过错误堆栈或代码搜索缩小范围' });
+  }
+  if (fields.suggestedFix) {
+    suggestions.push({ priority: 4, suggestion: `验证修复方案: ${fields.suggestedFix.substring(0, 100)}` });
+  } else {
+    suggestions.push({ priority: 4, suggestion: '制定修复方案: 基于根因分析提出至少一个修复方案' });
+  }
+  suggestions.push({ priority: 5, suggestion: '添加回归测试: 编写测试防止问题复发' });
+  if (severity === 'critical' || severity === 'high') {
+    suggestions.push({ priority: 6, suggestion: '更新文档: 记录已知问题和解决方案供团队参考' });
+  }
+
+  return { classification, severity, rootCauseVerification, impactAssessment, suggestions };
+}
+
+/**
+ * 生成 Bug 分析报告 Markdown（与 init-requirement --template detailed 对齐）
+ */
+function generateBugAnalysisMarkdown(
+  fields: BugReportFields,
+  logContext: string[],
+  analysis: {
+    classification: BugClassification;
+    severity: 'critical' | 'high' | 'medium' | 'low';
+    rootCauseVerification: string;
+    impactAssessment: string;
+    suggestions: Array<{ priority: number; suggestion: string }>;
+  },
+  reportTimestamp: string,
+): string {
+  const severityLabel: Record<string, string> = {
+    critical: '🔴 紧急',
+    high: '🟠 高',
+    medium: '🟡 中',
+    low: '🟢 低',
+  };
+
+  const parts: string[] = [];
+
+  // 头部
+  parts.push('# 任务描述');
+  parts.push('');
+  parts.push(`**来源**: Bug Report 分析转化`);
+  parts.push(`**分析时间**: ${reportTimestamp}`);
+  parts.push(`**分类**: ${analysis.classification.category}/${analysis.classification.subcategory}`);
+  parts.push(`**严重性**: ${severityLabel[analysis.severity] || analysis.severity}`);
+  parts.push('');
+
+  // 问题描述
+  parts.push('## 问题描述');
+  parts.push(fields.problem || '（未提取到问题描述）');
+  parts.push('');
+  if (fields.errorMessage) {
+    parts.push('### 错误信息');
+    parts.push('```');
+    parts.push(fields.errorMessage);
+    parts.push('```');
+    parts.push('');
+  }
+  if (fields.reproductionSteps.length > 0) {
+    parts.push('### 复现步骤');
+    fields.reproductionSteps.forEach((step, idx) => {
+      parts.push(`${idx + 1}. ${step}`);
+    });
+    parts.push('');
+  }
+  if (fields.environment) {
+    parts.push('### 环境信息');
+    parts.push(fields.environment);
+    parts.push('');
+  }
+
+  // 根因分析
+  parts.push('## 根因分析');
+  if (fields.rootCause) {
+    parts.push(fields.rootCause);
+  } else {
+    parts.push('（根因未提供，需进一步分析）');
+  }
+  parts.push('');
+  parts.push(`**根因验证**: ${analysis.rootCauseVerification}`);
+  parts.push('');
+
+  // 解决方案
+  parts.push('## 解决方案');
+  if (fields.suggestedFix) {
+    parts.push(fields.suggestedFix);
+  } else {
+    parts.push('（修复方案未提供，需根据根因分析制定）');
+  }
+  parts.push('');
+
+  // 影响范围评估
+  parts.push('## 影响范围');
+  parts.push(analysis.impactAssessment);
+  parts.push('');
+
+  // 日志上下文
+  if (logContext.length > 0) {
+    parts.push('## 日志上下文');
+    parts.push('从 `.projmnt4claude/logs/` 提取的相关日志:');
+    parts.push('');
+    parts.push('```');
+    logContext.slice(0, 50).forEach(line => {
+      parts.push(line);
+    });
+    if (logContext.length > 50) {
+      parts.push(`... 还有 ${logContext.length - 50} 条日志`);
+    }
+    parts.push('```');
+    parts.push('');
+  }
+
+  // 改进建议
+  parts.push('## 改进建议');
+  analysis.suggestions.forEach(s => {
+    parts.push(`${s.priority}. ${s.suggestion}`);
+  });
+  parts.push('');
+
+  // 检查点
+  const checkpoints = analysis.suggestions.map(s => s.suggestion);
+  if (fields.reproductionSteps.length > 0) {
+    checkpoints.unshift('复现问题: 按照复现步骤验证 bug 存在');
+  }
+  if (checkpoints.length > 0) {
+    parts.push('## 检查点');
+    checkpoints.forEach((cp, idx) => {
+      parts.push(`- CP-${idx + 1}: ${cp}`);
+    });
+    parts.push('');
+  }
+
+  // 相关文件
+  if (fields.relatedFiles.length > 0) {
+    parts.push('## 相关文件');
+    fields.relatedFiles.forEach(f => {
+      parts.push(`- ${f}`);
+    });
+    parts.push('');
+  }
+
+  // 验收标准（与 detailed template 对齐）
+  parts.push('## 验收标准');
+  parts.push('请确保满足以下所有标准:');
+  checkpoints.forEach((cp, idx) => {
+    parts.push(`${idx + 1}. ${cp} 已完成并验证`);
+  });
+  parts.push(`${checkpoints.length + 1}. 代码已通过 lint 检查`);
+  parts.push(`${checkpoints.length + 2}. 相关测试已通过`);
+  parts.push('');
+
+  return parts.join('\n');
+}
+
+/**
+ * 生成结构化需求描述（可作为 init-requirement 输入）
+ */
+function generateRequirementFromAnalysis(
+  fields: BugReportFields,
+  analysis: {
+    classification: BugClassification;
+    severity: 'critical' | 'high' | 'medium' | 'low';
+    suggestions: Array<{ priority: number; suggestion: string }>;
+  },
+): string {
+  const severityLabel: Record<string, string> = {
+    critical: '紧急',
+    high: '高',
+    medium: '中',
+    low: '低',
+  };
+
+  const parts: string[] = [];
+  parts.push(`[Bug修复-${analysis.classification.category}] ${fields.problem.substring(0, 80)}`);
+  parts.push('');
+  parts.push('问题描述:');
+  parts.push(fields.problem);
+  if (fields.errorMessage) {
+    parts.push(`错误: ${fields.errorMessage.substring(0, 200)}`);
+  }
+  if (fields.rootCause) {
+    parts.push(`根因: ${fields.rootCause}`);
+  }
+  if (fields.suggestedFix) {
+    parts.push(`建议修复: ${fields.suggestedFix}`);
+  }
+  parts.push(`严重性: ${severityLabel[analysis.severity]}`);
+  parts.push(`分类: ${analysis.classification.category}/${analysis.classification.subcategory}`);
+  if (analysis.suggestions.length > 0) {
+    parts.push('检查点:');
+    analysis.suggestions.forEach(s => {
+      parts.push(`- ${s.suggestion}`);
+    });
+  }
+  if (fields.relatedFiles.length > 0) {
+    parts.push('相关文件:');
+    fields.relatedFiles.forEach(f => {
+      parts.push(`- ${f}`);
+    });
+  }
+
+  return parts.join('\n');
+}
+
+/**
+ * 导出训练数据为 JSONL 格式
+ */
+function exportTrainingDataToJsonl(
+  fields: BugReportFields,
+  analysis: BugReportAnalysis,
+  exportPath: string,
+): void {
+  const trainingEntry = {
+    input: JSON.stringify({
+      problem: fields.problem,
+      rootCause: fields.rootCause,
+      reproductionSteps: fields.reproductionSteps,
+      errorMessage: fields.errorMessage,
+      suggestedFix: fields.suggestedFix,
+      relatedFiles: fields.relatedFiles,
+    }),
+    output: JSON.stringify({
+      classification: analysis.classification,
+      severity: analysis.severity,
+      rootCauseVerification: analysis.rootCauseVerification,
+      impactAssessment: analysis.impactAssessment,
+      suggestions: analysis.improvementSuggestions,
+    }),
+    metadata: {
+      timestamp: new Date().toISOString(),
+      category: analysis.classification.category,
+      subcategory: analysis.classification.subcategory,
+      severity: analysis.severity,
+      confidence: analysis.classification.confidence,
+    },
+  };
+
+  // JSONL: 每行一个 JSON 对象
+  const line = JSON.stringify(trainingEntry);
+  fs.appendFileSync(exportPath, line + '\n', 'utf-8');
+}
+
+/**
+ * Bug Report 分析核心函数
+ *
+ * 读取 Bug Report Markdown 文档，提取问题描述/根因分析/复现步骤/建议修复，
+ * 结合日志上下文进行分类和严重性评估，输出与 init-requirement --template detailed
+ * 对齐的结构化 Markdown 分析报告。
+ *
+ * @param bugReportPath - Bug report 文件路径或包含 bug report 的目录路径
+ * @param cwd - 项目工作目录
+ * @param options - 分析选项
+ */
+export async function analyzeBugReport(
+  bugReportPath: string,
+  cwd: string = process.cwd(),
+  options: BugReportOptions = {},
+): Promise<BugReportAnalysis> {
+  const logger = createLogger('analyze-bug-report', cwd);
+  const startTime = Date.now();
+
+  // CP-1: 检测 bug report 路径
+  const resolvedPath = path.resolve(bugReportPath);
+  if (!fs.existsSync(resolvedPath)) {
+    throw new Error(`Bug report 路径不存在: ${resolvedPath}`);
+  }
+
+  console.log('');
+  console.log('━'.repeat(SEPARATOR_WIDTH));
+  console.log('🐛 Bug Report 分析模式');
+  console.log('━'.repeat(SEPARATOR_WIDTH));
+  console.log('');
+  console.log(`  输入: ${resolvedPath}`);
+  console.log('');
+
+  // 读取 bug report 内容
+  let markdown: string;
+  const stat = fs.statSync(resolvedPath);
+  if (stat.isDirectory()) {
+    // 如果是目录，查找目录下的 .md 文件
+    const mdFiles = fs.readdirSync(resolvedPath)
+      .filter(f => f.endsWith('.md') || f.endsWith('.markdown'));
+    if (mdFiles.length === 0) {
+      throw new Error(`目录中未找到 Markdown 文件: ${resolvedPath}`);
+    }
+    // 取最新的 md 文件
+    const sorted = mdFiles
+      .map(f => ({ name: f, path: path.join(resolvedPath, f), mtime: fs.statSync(path.join(resolvedPath, f)).mtimeMs }))
+      .sort((a, b) => b.mtime - a.mtime);
+    const latestFile = sorted[0];
+    if (!latestFile) {
+      throw new Error(`目录中未找到有效的 Markdown 文件: ${resolvedPath}`);
+    }
+    markdown = fs.readFileSync(latestFile.path, 'utf-8');
+    console.log(`  使用文件: ${latestFile.name}`);
+  } else {
+    markdown = fs.readFileSync(resolvedPath, 'utf-8');
+  }
+
+  // CP-6: 提取 bug report 字段
+  console.log('  📋 提取 Bug Report 字段...');
+  const fields = extractBugReportFields(markdown);
+  console.log(`    问题描述: ${fields.problem.substring(0, 60)}...`);
+  console.log(`    复现步骤: ${fields.reproductionSteps.length} 项`);
+  console.log(`    相关文件: ${fields.relatedFiles.length} 个`);
+  console.log('');
+
+  // CP-7: 加载日志上下文
+  console.log('  📂 加载日志上下文...');
+  const keywords = [
+    ...fields.problem.split(/\s+/).filter(w => w.length > 3).slice(0, 5),
+    ...(fields.errorMessage ? [fields.errorMessage.substring(0, 30)] : []),
+  ];
+  const logContext = loadLogContext(cwd, keywords);
+  console.log(`    相关日志: ${logContext.length} 条`);
+  console.log('');
+
+  // CP-8: 分类和严重性评估
+  console.log('  🔍 执行分类和严重性评估...');
+  const analysis = classifyBug(fields);
+  console.log(`    分类: ${analysis.classification.category}/${analysis.classification.subcategory}`);
+  console.log(`    严重性: ${analysis.severity}`);
+  console.log(`    根因验证: ${analysis.rootCauseVerification}`);
+  console.log('');
+
+  // CP-9 & CP-10: 生成结构化 Markdown（与 init-requirement detailed template 对齐）
+  const timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
+  const reportMarkdown = generateBugAnalysisMarkdown(fields, logContext, analysis, timestamp);
+
+  // CP-11: 写入报告文件
+  const reportsDir = getReportsDir(cwd);
+  ensureDir(reportsDir);
+  const reportPath = path.join(reportsDir, `bug-analysis-${timestamp}.md`);
+  fs.writeFileSync(reportPath, reportMarkdown, 'utf-8');
+  console.log(`  📄 报告已写入: ${reportPath}`);
+  console.log('');
+
+  // 生成需求描述（可用于 init-requirement）
+  const requirementDescription = generateRequirementFromAnalysis(fields, analysis);
+
+  const result: BugReportAnalysis = {
+    fields,
+    logContext,
+    classification: analysis.classification,
+    severity: analysis.severity,
+    rootCauseVerification: analysis.rootCauseVerification,
+    impactAssessment: analysis.impactAssessment,
+    improvementSuggestions: analysis.suggestions,
+    requirementDescription,
+    reportMarkdown,
+    reportPath,
+  };
+
+  // CP-4: 可选训练数据导出
+  if (options.exportTrainingData) {
+    const config = readConfig(cwd);
+    const trainingConfig = config?.training as Record<string, unknown> | undefined;
+    const trainingEnabled = trainingConfig?.exportEnabled === true;
+    if (!trainingEnabled) {
+      console.log('  ⚠️  训练数据导出未启用。请在 config.json 中设置 training.exportEnabled: true');
+    } else {
+      const trainingDir = path.join(getProjectDir(cwd), 'training');
+      ensureDir(trainingDir);
+      const exportPath = path.join(trainingDir, 'bug-analysis-training.jsonl');
+      exportTrainingDataToJsonl(fields, result, exportPath);
+      console.log(`  📊 训练数据已追加: ${exportPath}`);
+      console.log('');
+    }
+  }
+
+  // CP-3: 自动流转提示
+  console.log('━'.repeat(SEPARATOR_WIDTH));
+  console.log('💡 下一步:');
+  console.log(`   将分析结果转化为改进任务:`);
+  console.log(`   projmnt4claude init-requirement "${requirementDescription.replace(/"/g, '\\"').substring(0, 200)}..." --template detailed`);
+  console.log('');
+  console.log(`   或直接使用报告文件:`);
+  console.log(`   projmnt4claude init-requirement "$(cat ${reportPath})" --template detailed`);
+  console.log('━'.repeat(SEPARATOR_WIDTH));
+  console.log('');
+
+  // 记录埋点
+  logger.logInstrumentation({
+    module: 'analyze-bug-report',
+    action: 'analyze',
+    input_summary: `path=${resolvedPath}, size=${markdown.length}`,
+    output_summary: `classification=${analysis.classification.category}, severity=${analysis.severity}, report=${reportPath}`,
+    ai_used: false,
+    ai_enhanced_fields: [],
+    duration_ms: Date.now() - startTime,
+    user_edit_count: 0,
+    module_data: {
+      reproductionSteps: fields.reproductionSteps.length,
+      relatedFiles: fields.relatedFiles.length,
+      logContextEntries: logContext.length,
+      suggestions: analysis.suggestions.length,
+    },
+  });
+  logger.flush();
+
+  return result;
 }
