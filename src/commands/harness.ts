@@ -514,7 +514,13 @@ function filterExecutableFromPlan(
     console.log(logPrefix);
   }
 
-  return buildBatchAwareQueue(filteredTasks, plan.batches);
+  // 重建 batches：过滤已移除的任务，移除空批次，确保与 filteredTasks 一致
+  const filteredSet = new Set(filteredTasks);
+  const rebuiltBatches = (plan.batches || [])
+    .map(batch => batch.filter(taskId => filteredSet.has(taskId)))
+    .filter(batch => batch.length > 0);
+
+  return buildBatchAwareQueue(filteredTasks, rebuiltBatches);
 }
 
 /**

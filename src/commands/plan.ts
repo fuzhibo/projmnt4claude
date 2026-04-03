@@ -305,7 +305,7 @@ function generateAIOutput(
   const suggestedOrder: string[] = [];
   const topChains: string[] = [];
 
-  for (let i = 0; i < Math.min(chains.length, 5); i++) {
+  for (let i = 0; i < chains.length; i++) {
     const chain = chains[i]!;
     topChains.push(chain.chainId);
     for (const task of chain.tasks) {
