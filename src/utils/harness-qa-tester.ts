@@ -172,10 +172,11 @@ export class HarnessQATester {
     }
 
     if (automatedCheckpoints.length === 0) {
-      // 只有需要人工验证的检查点
+      // 只有需要人工验证的检查点，自动化 QA 自动通过
+      // BUG-014-2B: reason 不包含"需要人工验证"字样，避免误导下游评估者
       return {
         passed: true,
-        reason: '所有检查点都需要人工验证',
+        reason: '无自动化 QA 检查点，自动化验证自动通过',
         failures: [],
         failedCheckpoints: [],
       };
