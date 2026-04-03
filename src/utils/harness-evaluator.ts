@@ -620,8 +620,8 @@ export class HarnessEvaluator {
       }
     }
 
-    // 矛盾检测: 如果结构化格式匹配到 NOPASS，但整体内容全为正向
-    if (resultMatch && !result.passed) {
+    // 矛盾检测: 如果结果为 NOPASS，但整体内容全为正向（包括中文情感判断路径）
+    if (!result.passed) {
       const posSignals = /(?:满足|通过|符合|良好|合格|达标|优秀|成功|✅)/.test(output);
       const negSignals = /(?:不满足|未满足|不通过|未通过|失败|不符合|不合格|❌)/.test(output);
       if (posSignals && !negSignals) {

@@ -359,6 +359,8 @@ function loadRuntimeState(cwd: string): HarnessRuntimeState | null {
     // 恢复 Map
     data.retryCounter = new Map(Object.entries(data.retryCounter || {}));
     data.taskResults = new Map(Object.entries(data.taskResults || {}));
+    data.resumeFrom = new Map(Object.entries(data.resumeFrom || {}));
+    data.reevaluateCounter = new Map(Object.entries(data.reevaluateCounter || {}));
     return data;
   } catch {
     return null;
@@ -373,6 +375,8 @@ export function saveRuntimeState(state: HarnessRuntimeState, cwd: string): void 
   const data = {
     ...state,
     retryCounter: Object.fromEntries(state.retryCounter),
+    resumeFrom: Object.fromEntries(state.resumeFrom || []),
+    reevaluateCounter: Object.fromEntries(state.reevaluateCounter || []),
   };
   fs.writeFileSync(statePath, JSON.stringify(data, null, 2), 'utf-8');
 }

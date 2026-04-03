@@ -130,6 +130,15 @@ projmnt4claude headless-harness-design --continue
 projmnt4claude headless-harness-design --max-retries 5 --timeout 600
 ```
 
+### 场景6：批次自动提交
+
+用户说 "每个批次执行完自动提交"：
+```bash
+projmnt4claude headless-harness-design --batch-git-commit
+```
+
+启用后，每个批次完成时会自动执行 `git add -A` + `git commit`，commit message 包含批次标签和统计信息（通过/失败/文件变更数）。配合 `--dry-run` 可预览提交行为。
+
 ## 选项
 
 | 选项 | 描述 | 默认值 |
@@ -145,6 +154,7 @@ projmnt4claude headless-harness-design --max-retries 5 --timeout 600
 | `--api-retry-delay <seconds>` | API 重试基础延迟（秒） | 60 |
 | `--require-quality <n>` | 质量门禁：最低质量分阈值（0-100） | 60 |
 | `--skip-quality-gate` | 跳过质量门禁检查（不推荐） | false |
+| `--batch-git-commit` | 每个批次完成后自动 git commit | false |
 
 ## 输出
 
@@ -176,6 +186,8 @@ projmnt4claude headless-harness-design --max-retries 5 --timeout 600
 3. **超时设置**: 复杂任务可能需要更长的超时时间
 4. **并行执行**: 目前仅支持串行（parallel=1）
 5. **中断恢复**: 使用 `--continue` 从上次中断处恢复
+6. **批次提交**: 启用 `--batch-git-commit` 后，每个批次完成时自动 git commit。commit message 格式：`harness: 批次 N 完成 (X 通过, Y 失败, Z 文件变更)`。`--continue` 恢复时不会重复提交已完成批次的变更
+7. **状态文件**: `harness-status.json` 记录流水线状态，启用批次模式时会追踪批次边界和进度。批次提交失败不影响流水线继续执行
 
 ## 故障排除
 

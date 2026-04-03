@@ -28,6 +28,7 @@ node ${CLAUDE_PLUGIN_ROOT}/skills/projmnt4claude/dist/projmnt4claude.js headless
 | `--api-retry-delay <seconds>` | API retry base delay (seconds) | 60 |
 | `--require-quality <n>` | Quality gate: minimum quality score threshold (0-100) | 60 |
 | `--skip-quality-gate` | Skip quality gate check (not recommended) | false |
+| `--batch-git-commit` | Auto git commit after each batch completes | false |
 
 ## Pipeline Status Query
 
@@ -94,8 +95,24 @@ projmnt4claude headless-harness-design --require-quality 80
 projmnt4claude headless-harness-design --api-retry-attempts 5 --api-retry-delay 30
 ```
 
+### Batch Auto Commit
+```bash
+projmnt4claude headless-harness-design --batch-git-commit
+```
+
+When enabled, automatically runs `git add -A` + `git commit` after each batch completes. The commit message includes the batch label and statistics (passed/failed/file changes). Combine with `--dry-run` to preview commit behavior.
+
 ## Output
 
 - `.projmnt4claude/reports/harness/summary-{timestamp}.md` - Execution summary
 - `.projmnt4claude/reports/harness/{taskId}/dev-report.md` - Development report
 - `.projmnt4claude/reports/harness/{taskId}/review-report.md` - Review report
+
+## Notes
+
+1. **Auto Plan**: If `--plan` is not specified, the plan is auto-read or generated
+2. **Headless Claude**: Requires `claude` CLI installed and authenticated
+3. **Timeout**: Complex tasks may need longer timeout values
+4. **Parallel**: Currently only serial execution (parallel=1)
+5. **Batch Git Commit**: With `--batch-git-commit`, auto git commit after each batch completes. Commit message format: `harness: batch N completed (X passed, Y failed, Z file changes)`. Resuming with `--continue` won't re-commit already-committed batch changes
+6. **State File**: `harness-status.json` tracks pipeline state. In batch mode, batch boundaries and progress are tracked. Batch commit failure does not block pipeline execution
