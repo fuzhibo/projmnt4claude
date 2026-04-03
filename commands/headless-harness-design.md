@@ -85,9 +85,13 @@ projmnt4claude headless-harness-design --json
 
 2. **开发阶段** - 对每个任务执行开发工作
 
-3. **审查阶段** - 独立验证开发结果
+3. **代码审核阶段** - 独立代码审核，检查代码质量和规范
 
-4. **生成报告** - 输出执行摘要
+4. **QA 验证阶段** - 自动化测试和功能验证
+
+5. **评估阶段** - 最终评估是否满足验收标准
+
+6. **生成报告** - 输出执行摘要
 
 ## 使用场景
 
@@ -138,6 +142,16 @@ projmnt4claude headless-harness-design --batch-git-commit
 ```
 
 启用后，每个批次完成时会自动执行 `git add -A` + `git commit`，commit message 包含批次标签和统计信息（通过/失败/文件变更数）。配合 `--dry-run` 可预览提交行为。
+
+### 批次提交追溯
+
+启用 `--batch-git-commit` 后，每个批次完成时会自动创建 git commit，形成可追溯的执行历史：
+
+- **Commit 格式**: `harness: 批次 N 完成 (X 通过, Y 失败, Z 文件变更)`
+- **追溯方式**: 使用 `git log --oneline | grep "harness:"` 查看所有批次提交
+- **批次内容**: 每个 commit 包含该批次所有任务的文件变更
+- **中断安全**: `--continue` 恢复时不会重复提交已完成批次的变更
+- **Dry-run 预览**: 配合 `--dry-run` 可预览提交行为，不实际执行
 
 ## 选项
 

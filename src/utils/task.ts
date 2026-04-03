@@ -605,6 +605,12 @@ export function recordExecutionStats(
     throw new Error(`任务 '${taskId}' 不存在`);
   }
 
+  // 保留已有的 commitHistory（由 commitBatchChanges 写入），防止被覆盖
+  const existingCommitHistory = task.executionStats?.commitHistory;
+  if (existingCommitHistory && !stats.commitHistory) {
+    stats.commitHistory = existingCommitHistory;
+  }
+
   task.executionStats = stats;
   task.updatedAt = new Date().toISOString();
 

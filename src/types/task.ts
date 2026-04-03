@@ -269,6 +269,19 @@ export interface CheckpointMetadata {
 }
 
 /**
+ * 批次提交历史条目
+ * 用于追踪 harness pipeline 批次 git commit 与任务的关联
+ */
+export interface CommitHistoryEntry {
+  /** Git commit SHA */
+  sha: string;
+  /** 批次标签（如 "批次 1"） */
+  batchLabel: string;
+  /** 提交时间 (ISO) */
+  timestamp: string;
+}
+
+/**
  * 执行统计信息
  */
 export interface ExecutionStats {
@@ -282,6 +295,8 @@ export interface ExecutionStats {
   branch?: string;
   /** 标签信息 */
   tags?: string[];
+  /** 批次提交历史（harness pipeline 批次 git commit SHA 追踪） */
+  commitHistory?: CommitHistoryEntry[];
 }
 
 /**
@@ -293,7 +308,7 @@ export interface ExecutionStats {
  * - 1: 添加 reopenCount + requirementHistory（legacy_schema）
  * - 2: pipeline_status 规范化 + verdict_action_schema 验证
  */
-export const CURRENT_TASK_SCHEMA_VERSION = 2;
+export const CURRENT_TASK_SCHEMA_VERSION = 3;
 
 /**
  * 流水线中间状态列表

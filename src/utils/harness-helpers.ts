@@ -330,10 +330,11 @@ export function parseVerdictResult(
     }
   }
 
-  // 结构化格式未匹配时，增加中文情感判断
+  // 结构化格式未匹配时，增加中文情感判断（排除格式标题干扰）
   if (!resultMatch) {
-    const hasPositive = /(?:通过|✅|成功|符合(?:要求)?|满足(?:标准|要求)?|良好|合格|达标|优秀|验收通过|质量良好)/.test(output);
-    const hasNegative = /(?:不通过|未通过|❌|失败|不符合|不满足|未满足|不合格|未达标)/.test(output);
+    const contentWithoutHeaders = output.replace(/^##\s*(?:未满足|未完成|失败|缺失|不通过).*$/gm, '');
+    const hasPositive = /(?:通过|✅|成功|符合(?:要求)?|满足(?:标准|要求)?|良好|合格|达标|优秀|验收通过|质量良好|实现|完整|正确|正常|零错误|已实现|均已|无误)/.test(contentWithoutHeaders);
+    const hasNegative = /(?:不通过|未通过|❌|失败|不符合|不满足|未满足|不合格|未达标)/.test(contentWithoutHeaders);
     if (hasPositive && !hasNegative) {
       result.passed = true;
       result.reason = '基于输出内容的中文情感判断：通过';

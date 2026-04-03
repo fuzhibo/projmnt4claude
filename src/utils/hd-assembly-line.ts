@@ -30,7 +30,7 @@ import type {
 import {
   createDefaultExecutionRecord,
 } from '../types/harness.js';
-import type { TaskMeta, TaskStatus, TaskRole, CheckpointMetadata } from '../types/task.js';
+import type { TaskMeta, TaskStatus, TaskRole, CheckpointMetadata, CommitHistoryEntry } from '../types/task.js';
 import { readTaskMeta, writeTaskMeta, taskExists, updateTaskStatus, assignRole, incrementReopenCount, recordExecutionStats } from './task.js';
 import { getProjectDir } from './path.js';
 import { HarnessExecutor } from './harness-executor.js';
@@ -1061,13 +1061,62 @@ export class AssemblyLine {
       });
 
       const commitMessage = `harness: ${label} 完成 (${passed} 通过, ${failed} 失败, ${changedFiles} 文件变更)`;
-      execSync(`git commit -m ${JSON.stringify(commitMessage)}`, {
+      const commitOutput = execSync(`git commit -m ${JSON.stringify(commitMessage)}`, {
         cwd: this.config.cwd,
         encoding: 'utf-8',
         timeout: 30000,
       });
 
-      console.log(`\n📦 ${label}: 已提交 ${changedFiles} 个文件变更 (git commit)`);
+      // 提取 commit SHA（优先从 commit 输出解析，回退到 git rev-parse HEAD）
+      let commitSha = '';
+      const shaMatch = commitOutput.match(/\[.+?\s+([0-9a-f]{7,40})\]/);
+      if (shaMatch) {
+        commitSha = shaMatch[1]!;
+      } else {
+        try {
+          commitSha = execSync('git rev-parse HEAD', {
+            cwd: this.config.cwd,
+            encoding: 'utf-8',
+            timeout: 5000,
+          }).trim();
+        } catch {
+          // 无法获取 SHA，留空
+        }
+      }
+
+      console.log(`\n📦 ${label}: 已提交 ${changedFiles} 个文件变更 (git commit${commitSha ? ` ${commitSha.substring(0, 7)}` : ''})`);
+
+      // 将 commit SHA 写入该批次所有任务的 executionStats.commitHistory
+      if (commitSha) {
+        const entry: CommitHistoryEntry = {
+          sha: commitSha,
+          batchLabel: label,
+          timestamp: new Date().toISOString(),
+        };
+        for (const taskId of batchTaskIds) {
+          try {
+            const task = readTaskMeta(taskId, this.config.cwd);
+            if (task) {
+              if (!task.executionStats) {
+                task.executionStats = {
+                  duration: 0,
+                  retryCount: 0,
+                  completedAt: new Date().toISOString(),
+                  commitHistory: [entry],
+                };
+              } else {
+                if (!task.executionStats.commitHistory) {
+                  task.executionStats.commitHistory = [];
+                }
+                task.executionStats.commitHistory.push(entry);
+              }
+              writeTaskMeta(task, this.config.cwd);
+            }
+          } catch (err) {
+            console.error(`   ⚠️ 写入 ${taskId} 的 commitHistory 失败: ${err instanceof Error ? err.message : String(err)}`);
+          }
+        }
+      }
     } catch (error) {
       console.error(`   ⚠️ 批次 git commit 失败: ${error instanceof Error ? error.message : String(error)}`);
     }

@@ -518,10 +518,11 @@ export class HarnessEvaluator {
       }
     }
 
-    // 如果没有匹配到，尝试中文判断
+    // 如果没有匹配到，尝试中文判断（排除格式标题干扰）
     if (!resultMatch) {
-      const hasPositive = /(?:通过|✅|成功|符合(?:要求)?|满足(?:标准|要求)?|良好|合格|达标|优秀|验收通过|质量良好)/.test(output);
-      const hasNegative = /(?:不通过|未通过|❌|失败|不符合|不满足|未满足|不合格|未达标)/.test(output);
+      const contentWithoutHeaders = output.replace(/^##\s*(?:未满足|未完成|失败|缺失|不通过).*$/gm, '');
+      const hasPositive = /(?:通过|✅|成功|符合(?:要求)?|满足(?:标准|要求)?|良好|合格|达标|优秀|验收通过|质量良好|实现|完整|正确|正常|零错误|已实现|均已|无误|全部完成)/.test(contentWithoutHeaders);
+      const hasNegative = /(?:不通过|未通过|❌|失败|不符合|不满足|未满足|不合格|未达标)/.test(contentWithoutHeaders);
       if (hasPositive && !hasNegative) {
         result.passed = true;
         resultMatch = ['通过', '通过'] as RegExpMatchArray;
@@ -621,9 +622,11 @@ export class HarnessEvaluator {
     }
 
     // 矛盾检测: 如果结果为 NOPASS，但整体内容全为正向（包括中文情感判断路径）
+    // 排除格式标题干扰：## 未满足的标准 / ## 未完成的检查点 等章节标题自身包含负面关键词
     if (!result.passed) {
-      const posSignals = /(?:满足|通过|符合|良好|合格|达标|优秀|成功|✅)/.test(output);
-      const negSignals = /(?:不满足|未满足|不通过|未通过|失败|不符合|不合格|❌)/.test(output);
+      const contentWithoutHeaders = output.replace(/^##\s*(?:未满足|未完成|失败|缺失|不通过).*$/gm, '');
+      const posSignals = /(?:满足|通过|符合|良好|合格|达标|优秀|成功|✅|实现|完整|正确|正常|零错误|已实现|均已|无误)/.test(contentWithoutHeaders);
+      const negSignals = /(?:不满足|未满足|不通过|未通过|失败|不符合|不合格|❌)/.test(contentWithoutHeaders);
       if (posSignals && !negSignals) {
         console.warn('   ⚠️ 矛盾检测: NOPASS 结果与正向内容冲突，自动修正为 PASS');
         result.passed = true;

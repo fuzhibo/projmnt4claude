@@ -312,6 +312,21 @@ export const SCHEMA_MIGRATIONS: SchemaMigrationStep[] = [
       return { changed, details };
     },
   },
+  {
+    version: 3,
+    name: 'commit_history_field',
+    description: '为 ExecutionStats 添加 commitHistory 字段（harness 批次 git commit SHA 追踪）',
+    migrate(task: TaskMeta): { changed: boolean; details: string[] } {
+      const details: string[] = [];
+      // 幂等：仅当 executionStats 存在但缺少 commitHistory 时补空数组
+      if (task.executionStats && task.executionStats.commitHistory === undefined) {
+        task.executionStats.commitHistory = [];
+        details.push('添加 executionStats.commitHistory: []');
+        return { changed: true, details };
+      }
+      return { changed: false, details };
+    },
+  },
 ];
 
 /**

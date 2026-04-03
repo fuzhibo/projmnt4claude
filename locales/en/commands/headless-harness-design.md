@@ -59,8 +59,10 @@ jq '.progress' .projmnt4claude/harness-status.json
 
 1. **Load Plan** - Priority: `--plan` file > `.projmnt4claude/current-plan.json` > auto `plan recommend`
 2. **Development Phase** - Execute development work for each task
-3. **Review Phase** - Independently verify development results
-4. **Generate Report** - Output execution summary
+3. **Code Review Phase** - Independent code review for quality and standards
+4. **QA Verification Phase** - Automated testing and functional verification
+5. **Evaluation Phase** - Final evaluation against acceptance criteria
+6. **Generate Report** - Output execution summary
 
 ## Examples
 
@@ -101,6 +103,16 @@ projmnt4claude headless-harness-design --batch-git-commit
 ```
 
 When enabled, automatically runs `git add -A` + `git commit` after each batch completes. The commit message includes the batch label and statistics (passed/failed/file changes). Combine with `--dry-run` to preview commit behavior.
+
+### Batch Commit Tracing
+
+With `--batch-git-commit`, a git commit is automatically created after each batch completes, creating a traceable execution history:
+
+- **Commit Format**: `harness: batch N completed (X passed, Y failed, Z file changes)`
+- **Tracing**: Use `git log --oneline | grep "harness:"` to view all batch commits
+- **Batch Content**: Each commit includes file changes from all tasks in that batch
+- **Resume Safety**: `--continue` won't re-commit changes from completed batches
+- **Dry-run Preview**: Combine with `--dry-run` to preview commit behavior without executing
 
 ## Output
 
