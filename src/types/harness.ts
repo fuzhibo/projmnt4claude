@@ -33,6 +33,8 @@ export interface HarnessConfig {
   apiRetryAttempts: number;
   /** API 重试基础延迟（秒），默认 60，使用指数退避 */
   apiRetryDelay: number;
+  /** 每个批次完成后自动 git commit */
+  batchGitCommit: boolean;
 }
 
 /**
@@ -47,6 +49,7 @@ export const DEFAULT_HARNESS_CONFIG: Omit<HarnessConfig, 'cwd'> = {
   jsonOutput: false,
   apiRetryAttempts: 3,
   apiRetryDelay: 60,
+  batchGitCommit: false,
 };
 
 /**

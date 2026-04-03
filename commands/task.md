@@ -130,15 +130,6 @@ projmnt4claude task show TASK-001 --verbose --json
 - `--status <status>` - 更新状态
 - `--priority <priority>` - 更新优先级
 
-- `--dependency add <parentId> <subtaskId>` - 添加子任务依赖
-- `--dependency remove <parentId> <subtaskId>` - 移除子任务依赖
-
-- `--help` | 显示帮助信息
-- `--help [topic]` - 显示帮助信息
-- `--help` | 显示整体帮助
-- `--help status` - 显示状态统计
-- `--help priority` - 显示优先级统计
-- `--help` | 显示智能问答帮助
 
 ## rename - 重命名任务
 

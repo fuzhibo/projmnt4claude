@@ -144,6 +144,26 @@ export class HarnessStatusReporter {
   }
 
   /**
+   * 强制标记状态为失败（公共方法）
+   *
+   * 供外部调用方在检测到异常时强制将 harness-status.json 标记为失败，
+   * 而无需经过完整的 failPhase 流程。
+   */
+  forceFailStatus(phase: HarnessReportPhase, errorMessage: string, taskId?: string): void {
+    this.currentReport.state = 'failed';
+    this.currentReport.currentPhase = phase;
+    this.currentReport.error = {
+      code: 'FORCE_FAILED',
+      message: errorMessage,
+      taskId,
+    };
+    this.currentReport.message = errorMessage;
+    this.currentReport.timestamp = new Date().toISOString();
+    this.writeStatus();
+    this.logToConsole(phase, 'failed', errorMessage);
+  }
+
+  /**
    * 更新进度
    */
   updateProgress(
@@ -163,9 +183,16 @@ export class HarnessStatusReporter {
   }
 
   /**
+   * 过期状态阈值（5 分钟）
+   * 正常流水线每个任务至少 1-2 分钟，超过 5 分钟无更新必然异常
+   */
+  private static readonly STALE_THRESHOLD_MS = 5 * 60 * 1000;
+
+  /**
    * 标记流水线开始
    */
   startPipeline(totalTasks: number, message?: string): void {
+    this.checkStaleStatus();
     this.currentReport = {
       ...this.currentReport,
       state: 'running',
@@ -213,6 +240,27 @@ export class HarnessStatusReporter {
     };
     this.writeStatus();
     this.logToConsole('failed', 'failed', this.currentReport.message);
+  }
+
+  /**
+   * 检测 harness-status.json 是否存在过期 running 状态
+   * 仅警告不阻塞，忽略 JSON 解析错误
+   */
+  private checkStaleStatus(): void {
+    try {
+      if (!fs.existsSync(this.statusPath)) return;
+      const raw = fs.readFileSync(this.statusPath, 'utf-8');
+      const existing = JSON.parse(raw) as HarnessStatusReport;
+      if (existing.state !== 'running') return;
+      const age = Date.now() - new Date(existing.timestamp).getTime();
+      if (age > HarnessStatusReporter.STALE_THRESHOLD_MS) {
+        console.warn(
+          `[Harness] ⚠ 检测到过期 running 状态: ${this.statusPath} 已 ${Math.round(age / 60000)} 分钟未更新，将被覆盖`
+        );
+      }
+    } catch {
+      // 忽略 JSON 解析错误（文件可能损坏）
+    }
   }
 
   /**

@@ -10,7 +10,74 @@ argument-hint: "<action> [id] [options]"
 ## 执行方式
 
 ```bash
-node ${CLAUDE_PLUGIN_ROOT}/skills/projmnt4claude/dist/projmnt4claude.js task <action> [options]
+node ${CLAUDE_PLUGIN_ROOT}/dist/projmnt4claude.js task <action> [options]
+```
+
+## 🎯 AI 行为指南
+
+### 直接输出模式（无需 AI 处理）
+当用户**仅**调用命令，没有额外提示词时，**直接输出脚本结果**，AI 无需处理：
+
+```
+用户: projmnt4claude task list
+AI: [直接输出命令结果，无需额外解释]
+
+用户: projmnt4claude task show TASK-001
+AI: [直接输出命令结果，无需额外解释]
+
+用户: projmnt4claude status
+AI: [直接输出命令结果，无需额外解释]
+```
+
+### AI 处理模式（需要进一步分析）
+当用户调用命令**后跟了额外提示词**，AI 才介入处理：
+
+```
+用户: projmnt4claude task list，帮我找出优先级最高的任务
+AI: [分析结果，找出 P0 任务]
+
+用户: projmnt4claude status，项目健康吗？
+AI: [分析健康分数，给出建议]
+
+用户: projmnt4claude task show TASK-001，这个任务还需要做什么？
+AI: [分析检查点，回答未完成项]
+```
+
+### AI 内部调用（精简模式）
+AI 自主调用命令时，使用 `--json` 或 `--compact` 减少上下文：
+
+```bash
+# AI 获取结构化数据
+projmnt4claude task show TASK-001 --json
+projmnt4claude task list --json --fields id,title,status
+```
+
+## 使用场景
+
+### 用户直接运行（人类友好模式）
+默认输出格式适合人类阅读，包含视觉装饰和格式化信息：
+```bash
+# 用户查看任务详情
+projmnt4claude task show TASK-001
+
+# 用户列出任务
+projmnt4claude task list --status open
+```
+
+### AI 调用（精简模式）
+AI 调用时应使用 `--json` 或 `--compact` 选项，减少上下文消耗：
+```bash
+# AI 获取任务详情 - JSON 格式
+projmnt4claude task show TASK-001 --json
+
+# AI 快速查看任务 - 精简格式
+projmnt4claude task show TASK-001 --compact
+
+# AI 列出任务 - JSON 格式
+projmnt4claude task list --json --fields id,title,status,priority
+
+# AI 获取完整任务信息
+projmnt4claude task show TASK-001 --verbose --json
 ```
 
 ## 可用操作
@@ -22,7 +89,7 @@ node ${CLAUDE_PLUGIN_ROOT}/skills/projmnt4claude/dist/projmnt4claude.js task <ac
 | `show` | 显示任务详情 | `task show TASK-001` |
 | `update` | 更新任务属性 | `task update TASK-001 --status resolved` |
 | `delete` | 删除（归档)任务 | `task delete TASK-001` |
-| `rename` | 重命名任务 ID | `task rename TASK-001 TASK-feature-new-name` |
+| `rename` | 重命名任务 ID | `task rename TASK-001 TASK-feature-new` |
 | `purge` | 清除已归档的 abandoned 任务 | `task purge -y` |
 | `execute` | 引导执行任务 | `task execute TASK-001` |
 | `checkpoint` | 完成检查点 | `task checkpoint TASK-001` |
@@ -36,7 +103,7 @@ node ${CLAUDE_PLUGIN_ROOT}/skills/projmnt4claude/dist/projmnt4claude.js task <ac
 | `history` | 查看任务变更历史 | `task history TASK-001` |
 | `status-guide` | 显示状态转换指南 | `task status-guide` |
 | `complete` | 一键完成任务 | `task complete TASK-001` |
-| `count` | 统计任务数量 | `task count -g status` |
+| `count` | 统计任务数量 | `task count --group-by status` |
 | `sync-children` | 同步子任务状态 | `task sync-children TASK-001` |
 | `discuss` | 标记任务需要讨论 | `task discuss TASK-001 --topic "方案选择"` |
 | `help` | 显示帮助 | `task help` |
@@ -62,11 +129,7 @@ node ${CLAUDE_PLUGIN_ROOT}/skills/projmnt4claude/dist/projmnt4claude.js task <ac
 - `--description <desc>` - 更新描述
 - `--status <status>` - 更新状态
 - `--priority <priority>` - 更新优先级
-- `--role <role>` - 更新推荐角色
-- `--branch <branch>` - 更新关联分支
-- `--token <token>` - 检查点确认令牌 (仅 update resolved)
-- `--sync-children` - 同步子任务状态 (仅 update resolved/closed)
-- `--no-sync` - 不同步子任务状态 (仅 update)
+
 
 ## rename - 重命名任务
 
@@ -95,6 +158,10 @@ projmnt4claude task purge [-y]
 
 **示例:**
 ```bash
+# 预览将被清除的任务
+projmnt4claude task purge
+
+# 确认清除
 projmnt4claude task purge -y
 ```
 
@@ -113,8 +180,14 @@ projmnt4claude task split <taskId> [--into <count>] [--titles <titles>] [-y]
 
 **示例:**
 ```bash
+# 按数量拆分为 3 个子任务
 projmnt4claude task split TASK-001 --into 3
+
+# 指定标题拆分
 projmnt4claude task split TASK-001 --titles "前端实现,后端API,测试验证"
+
+# 非交互模式
+projmnt4claude task split TASK-001 --into 2 -y
 ```
 
 ## search - 搜索任务
@@ -152,7 +225,11 @@ projmnt4claude task batch-update --status <status> [--priority <priority>] [--al
 
 **示例:**
 ```bash
+# 批量设置所有未完成任务为 in_progress
 projmnt4claude task batch-update --status in_progress -y
+
+# 批量调整优先级（不含已完成任务）
+projmnt4claude task batch-update --priority P1 -y
 ```
 
 ## submit - 提交任务等待验证
@@ -206,6 +283,11 @@ projmnt4claude task history TASK-001
 projmnt4claude task status-guide
 ```
 
+**示例:**
+```bash
+projmnt4claude task status-guide
+```
+
 ## complete - 一键完成任务
 
 自动执行：验证检查点 → 更新状态为 `resolved`。未完成的检查点会提示是否自动标记完成。
@@ -240,8 +322,13 @@ projmnt4claude task count [--status <status>] [--priority <priority>] [--type <t
 
 **示例:**
 ```bash
+# 总体统计
 projmnt4claude task count
+
+# 按状态分组
 projmnt4claude task count -g status
+
+# JSON 格式输出
 projmnt4claude task count --json
 ```
 
@@ -258,7 +345,10 @@ projmnt4claude task sync-children <parentTaskId> [--status <status>]
 
 **示例:**
 ```bash
+# 同步父任务状态到子任务
 projmnt4claude task sync-children TASK-001
+
+# 指定目标状态
 projmnt4claude task sync-children TASK-001 --status resolved
 ```
 
@@ -272,17 +362,180 @@ projmnt4claude task discuss <taskId> --topic <topic>
 
 > **提示**: 推荐使用 `task update TASK-001 --needs-discussion` 来标记，使用 `--topic "主题"` 添加讨论主题。
 
-## 检查点 (checkpoint)
-
-完成检查点以推进任务进度。
+## 更多示例
 
 ```bash
-# 完成检查点
+# 创建子任务
+projmnt4claude task add-subtask TASK-001 "实现用户登录功能"
+
+# 查看子任务
+projmnt4claude task show TASK-001-1
+
+# 更新子任务状态
+projmnt4claude task update TASK-001-1 --status in_progress
+
+# 显示完整任务信息
+projmnt4claude task show TASK-001 --verbose
+
+# JSON 格式输出
+projmnt4claude task show TASK-001 --json
+
+# 自定义字段输出
+projmnt4claude task list --fields id,title,status
+
+# 筛选缺少验证的任务
+projmnt4claude task list --missing-verification
+
+# 重命名任务
+projmnt4claude task rename TASK-001 TASK-feature-new-name
+
+# 拆分任务
+projmnt4claude task split TASK-001 --into 3
+
+# 搜索任务
+projmnt4claude task search "登录"
+
+# 统计任务
+projmnt4claude task count -g status
+
+# 一键完成
+projmnt4claude task complete TASK-001 -y
+```
+
+## 检查点 (checkpoint)
+
+检查点用于跟踪任务的完成进度。支持交互式确认和细粒度操作。
+
+### 检查点子命令
+
+| 子命令 | 描述 | 示例 |
+|--------|------|------|
+| `list` | 列出所有检查点 | `task checkpoint TASK-001 list` |
+| `complete` | 标记检查点完成 | `task checkpoint TASK-001 CP-001 complete --result "验证通过"` |
+| `fail` | 标记检查点失败 | `task checkpoint TASK-001 CP-001 fail --note "需要调查"` |
+| `note` | 更新检查点备注 | `task checkpoint TASK-001 CP-001 note --note "等待确认"` |
+| `show` | 显示检查点详情 | `task checkpoint TASK-001 CP-001 show` |
+| `verify` | 验证检查点并生成令牌 | `task checkpoint TASK-001 verify` |
+| (默认) | 交互式确认所有检查点 | `task checkpoint TASK-001` |
+
+### 检查点选项
+
+| 选项 | 描述 | 适用子命令 |
+|------|------|------------|
+| `--result <text>` | 验证结果 | `complete` |
+| `--note <text>` | 检查点备注 | `complete`, `fail`, `note` |
+| `--json` | JSON 格式输出 | `list` |
+| `--compact` | 精简输出 | `list` |
+| `-y, --yes` | 非交互模式 | (默认) |
+
+### 示例
+
+```bash
+# 列出所有检查点
+projmnt4claude task checkpoint TASK-001 list
+
+# 列出检查点 (JSON 格式)
+projmnt4claude task checkpoint TASK-001 list --json
+
+# 标记检查点完成并添加验证结果
+projmnt4claude task checkpoint TASK-001 CP-001 complete --result "截图确认：显示 Connection lost 错误"
+
+# 标记检查点失败
+projmnt4claude task checkpoint TASK-001 CP-001 fail --note "需要进一步调查"
+
+# 更新检查点备注
+projmnt4claude task checkpoint TASK-001 CP-001 note --note "等待用户确认"
+
+# 显示检查点详情
+projmnt4claude task checkpoint TASK-001 CP-001 show
+
+# 交互式确认所有检查点（原有功能）
 projmnt4claude task checkpoint TASK-001
 
-# 验证检查点
+# 验证检查点并生成令牌
 projmnt4claude task checkpoint TASK-001 verify
 ```
+
+### 检查点数据存储
+
+检查点数据存储在两个位置：
+- **checkpoint.md** - 检查点列表和完成状态（人类可读）
+- **meta.json** - 检查点元数据（ID、验证结果、备注等）
+
+首次访问时自动同步，无需手动操作。
+
+## ⚠️ 任务完成验证流程 (重要)
+
+**在将任务标记为 resolved/closed 之前，必须完成以下验证步骤：**
+
+### 为什么需要验证？
+
+任务完成验证确保：
+1. 所有检查点都已完成并验证
+2. 任务产出物符合预期
+3. 避免遗漏重要工作项
+4. 保持项目质量一致性
+
+### 验证流程
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│                  任务完成验证流程                             │
+├─────────────────────────────────────────────────────────────┤
+│                                                             │
+│  1. 完成所有检查点                                           │
+│     └─ 编辑 checkpoint.md，将 [ ] 改为 [x]                   │
+│                                                             │
+│  2. 验证检查点                                               │
+│     └─ projmnt4claude task checkpoint verify <taskId>        │
+│     └─ 获取验证令牌 (token)                                  │
+│                                                             │
+│  3. 使用令牌完成任务                                         │
+│     └─ projmnt4claude task update <taskId> --status resolved │
+│        --token <token>                                       │
+│                                                             │
+└─────────────────────────────────────────────────────────────┘
+```
+
+### 没有检查点的任务
+
+如果任务没有 checkpoint.md 文件或检查点为空，可以直接更新状态：
+```bash
+projmnt4claude task update TASK-001 --status resolved
+```
+
+### 有检查点的任务
+
+**步骤 1: 确认所有检查点已完成**
+```bash
+# 查看检查点状态
+projmnt4claude task show TASK-001
+
+# 或直接查看 checkpoint.md 文件
+cat .projmnt4claude/tasks/TASK-001/checkpoint.md
+```
+
+**步骤 2: 验证检查点并获取令牌**
+```bash
+projmnt4claude task checkpoint verify TASK-001
+```
+
+**步骤 3: 使用令牌完成任务**
+```bash
+projmnt4claude task update TASK-001 --status resolved --token CP-XXXXXXX-XXXXXXXX
+```
+
+### ⚠️ AI 注意事项
+
+**禁止行为**：
+- ❌ 跳过检查点验证直接标记任务为 resolved
+- ❌ 忽略未完成的检查点
+- ❌ 伪造验证令牌
+
+**正确行为**：
+- ✅ 完成所有检查点后再验证
+- ✅ 获取有效的验证令牌
+- ✅ 使用令牌完成任务更新
 
 ## 文件
 /home/fuzhibo/workerplace/git/projmnt4claude/commands/task.md

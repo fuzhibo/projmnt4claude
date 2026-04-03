@@ -109,6 +109,8 @@ export interface HarnessCommandOptions {
   requireQuality?: string;
   /** 跳过质量门禁检查 */
   skipQualityGate?: boolean;
+  /** 每个批次完成后自动 git commit */
+  batchGitCommit?: boolean;
 }
 
 /**
@@ -150,6 +152,7 @@ export async function harnessCommand(
     jsonOutput: options.json ?? DEFAULT_HARNESS_CONFIG.jsonOutput,
     apiRetryAttempts: options.apiRetryAttempts ? parseInt(options.apiRetryAttempts, 10) : DEFAULT_HARNESS_CONFIG.apiRetryAttempts,
     apiRetryDelay: options.apiRetryDelay ? parseInt(options.apiRetryDelay, 10) : DEFAULT_HARNESS_CONFIG.apiRetryDelay,
+    batchGitCommit: options.batchGitCommit ?? DEFAULT_HARNESS_CONFIG.batchGitCommit,
     cwd,
   };
 
@@ -267,6 +270,21 @@ export async function harnessCommand(
   const assemblyLine = new AssemblyLine(config);
   const reporter = new HarnessReporter(config);
 
+  // BUG-014-2: 流水线完成标志 & 信号防重入
+  let pipelineCompleted = false;
+  let shutdownInProgress = false;
+
+  const gracefulShutdown = (signal: string) => {
+    if (shutdownInProgress) return;
+    shutdownInProgress = true;
+    console.log(`\n⚠️ 收到 ${signal}，正在优雅关闭...`);
+    assemblyLine.forceFailStatus(new Error(`收到 ${signal}，流水线被中断`));
+    process.exit(signal === 'SIGINT' ? 130 : 143);
+  };
+
+  process.on('SIGINT', gracefulShutdown);
+  process.on('SIGTERM', gracefulShutdown);
+
   try {
     // 加载或创建运行时状态
     let state: HarnessRuntimeState | null;
@@ -292,12 +310,10 @@ export async function harnessCommand(
 
     // 执行流水线
     const summary = await assemblyLine.run(state);
+    pipelineCompleted = true;
 
     // 生成报告
     await reporter.generateSummaryReport(summary);
-
-    // 清理运行时状态
-    clearRuntimeState(cwd);
 
     // 输出结果
     if (config.jsonOutput) {
@@ -307,8 +323,17 @@ export async function harnessCommand(
     }
 
   } catch (error) {
+    assemblyLine.forceFailStatus(error);
     console.error('❌ 执行失败:', error instanceof Error ? error.message : String(error));
     process.exit(1);
+  } finally {
+    // 仅在流水线正常完成时清理运行时状态（保留 --continue 恢复能力）
+    if (pipelineCompleted) {
+      clearRuntimeState(cwd);
+    }
+    // 移除信号处理
+    process.removeListener('SIGINT', gracefulShutdown);
+    process.removeListener('SIGTERM', gracefulShutdown);
   }
 }
 

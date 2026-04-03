@@ -791,6 +791,7 @@ program
   .option('--api-retry-delay <seconds>', 'API 重试基础延迟 (秒)', '60')
   .option('--require-quality <n>', '质量门禁: 最低质量分阈值 (0-100, 默认 60)', '60')
   .option('--skip-quality-gate', '跳过质量门禁检查 (不推荐)')
+  .option('--batch-git-commit', '每个批次完成后自动 git commit')
   .action(async (options) => {
     requireInit();
     await harnessCommand({
@@ -805,6 +806,7 @@ program
       apiRetryDelay: options.apiRetryDelay,
       requireQuality: options.requireQuality,
       skipQualityGate: options.skipQualityGate,
+      batchGitCommit: options.batchGitCommit,
     });
   });
 

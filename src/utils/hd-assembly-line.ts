@@ -14,6 +14,7 @@
 
 import * as path from 'path';
 import * as fs from 'fs';
+import { execSync } from 'child_process';
 import type {
   HarnessConfig,
   HarnessRuntimeState,
@@ -129,6 +130,7 @@ export class AssemblyLine {
         // 跨批次边界时输出批次摘要
         if (hasBatches && batchPos && batchCtx && batchPos.batchIndex !== batchCtx.batchIndex) {
           this.outputBatchSummary(state, batchPos.batchIndex);
+          this.commitBatchChanges(state, batchPos.batchIndex);
         }
 
         // 保存状态（用于中断恢复）
@@ -157,6 +159,7 @@ export class AssemblyLine {
           const nextBatch = this.getBatchPosition(state.currentIndex, state);
           if (nextBatch && batchPos.batchIndex !== nextBatch.batchIndex) {
             this.outputBatchSummary(state, batchPos.batchIndex);
+            this.commitBatchChanges(state, batchPos.batchIndex);
           }
         }
       }
@@ -165,6 +168,7 @@ export class AssemblyLine {
     // 输出最后一个批次的摘要
     if (hasBatches && state.batchBoundaries!.length > 0) {
       this.outputBatchSummary(state, state.batchBoundaries!.length - 1);
+      this.commitBatchChanges(state, state.batchBoundaries!.length - 1);
     }
 
     // 生成摘要
@@ -286,11 +290,13 @@ export class AssemblyLine {
         };
         record.devReport = devReport;
         addTimeline('dev_completed', `开发失败: ${devReport.error}`, { error: devReport.error });
+        this.statusReporter.failPhase('development', error instanceof Error ? error : new Error(String(error)), taskId);
       }
 
       // 检查开发是否成功
       if (devReport.status !== 'success') {
         console.log(`❌ 开发阶段失败: ${devReport.error || '未知错误'}`);
+        this.statusReporter.failPhase('development', new Error(devReport.error || '开发阶段失败'), taskId);
 
         // 尝试重试
         const shouldRetry = await this.retryHandler.shouldRetry(taskId, state.retryCounter);
@@ -346,11 +352,13 @@ export class AssemblyLine {
       };
       record.codeReviewVerdict = codeReviewVerdict;
       addTimeline('code_review_completed', `代码审核出错: ${codeReviewVerdict.reason}`, { error: codeReviewVerdict.reason });
+      this.statusReporter.failPhase('code_review', error instanceof Error ? error : new Error(String(error)), taskId);
     }
 
     // 代码审核未通过，进入重试流程
     if (codeReviewVerdict.result !== 'PASS') {
       console.log(`❌ 代码审核未通过: ${codeReviewVerdict.reason}`);
+      this.statusReporter.failPhase('code_review', new Error(codeReviewVerdict.reason || '代码审核未通过'), taskId);
       return this.handleVerdictBasedTransition(taskId, record, state, addTimeline, 'code_review');
     }
 
@@ -390,11 +398,13 @@ export class AssemblyLine {
       };
       record.qaVerdict = qaVerdict;
       addTimeline('qa_completed', `QA 验证出错: ${qaVerdict.reason}`, { error: qaVerdict.reason });
+      this.statusReporter.failPhase('qa_verification', error instanceof Error ? error : new Error(String(error)), taskId);
     }
 
     // QA 验证未通过，进入重试流程
     if (qaVerdict.result !== 'PASS') {
       console.log(`❌ QA 验证未通过: ${qaVerdict.reason}`);
+      this.statusReporter.failPhase('qa_verification', new Error(qaVerdict.reason || 'QA 验证未通过'), taskId);
       return this.handleVerdictBasedTransition(taskId, record, state, addTimeline, 'qa');
     }
 
@@ -425,6 +435,7 @@ export class AssemblyLine {
       };
       record.reviewVerdict = verdict;
       addTimeline('review_completed', `评估出错: ${verdict.reason}`, { error: verdict.reason });
+      this.statusReporter.failPhase('evaluation', error instanceof Error ? error : new Error(String(error)), taskId);
     }
 
     // 11. 根据评估结果更新状态
@@ -460,6 +471,7 @@ export class AssemblyLine {
       addTimeline('completed', '任务完成');
     } else {
       console.log(`❌ 评估未通过: ${verdict.reason}`);
+      this.statusReporter.failPhase('evaluation', new Error(verdict.reason || '评估未通过'), taskId);
       return this.handleVerdictBasedTransition(taskId, record, state, addTimeline, 'evaluation', verdict.action);
     }
 
@@ -917,6 +929,17 @@ export class AssemblyLine {
   }
 
   /**
+   * 强制标记流水线状态为失败（公共方法）
+   *
+   * 供 harnessCommand() 在 catch 块或信号处理中调用，
+   * 确保 harness-status.json 不会永远停留在 running 状态。
+   */
+  forceFailStatus(error: unknown): void {
+    const message = error instanceof Error ? error.message : String(error);
+    this.statusReporter.forceFailStatus('failed', message);
+  }
+
+  /**
    * 将任务重新加入队列
    */
   requeue(taskId: string, state: HarnessRuntimeState): void {
@@ -965,6 +988,89 @@ export class AssemblyLine {
 
     const label = labels?.[batchIndex] || `批次 ${batchIndex + 1}`;
     console.log(`\n📊 ${label} 完成: ${passed} 通过, ${failed} 失败, ${skipped} 跳过 (${batchSize} 任务)`);
+  }
+
+  /**
+   * 批次间自动 git commit
+   *
+   * 当启用 --batch-git-commit 且跨批次边界时，检查工作区是否有变更，
+   * 有则执行 git add -A + git commit，commit message 包含批次标签和统计。
+   * dry-run 模式仅输出提示不实际提交。
+   */
+  private commitBatchChanges(
+    state: HarnessRuntimeState,
+    batchIndex: number
+  ): void {
+    if (!this.config.batchGitCommit) return;
+
+    const boundaries = state.batchBoundaries;
+    if (!boundaries || boundaries.length === 0) return;
+
+    const label = state.batchLabels?.[batchIndex] || `批次 ${batchIndex + 1}`;
+
+    // 统计该批次的通过/失败数
+    const batchStart = boundaries[batchIndex]!;
+    const batchEnd = batchIndex + 1 < boundaries.length
+      ? boundaries[batchIndex + 1]!
+      : state.taskQueue.length;
+    const batchTaskIds = new Set(state.taskQueue.slice(batchStart, batchEnd));
+
+    const lastRecordByTask = new Map<string, TaskExecutionRecord>();
+    for (const record of state.records) {
+      if (batchTaskIds.has(record.taskId)) {
+        lastRecordByTask.set(record.taskId, record);
+      }
+    }
+
+    let passed = 0;
+    let failed = 0;
+    for (const taskId of batchTaskIds) {
+      const record = lastRecordByTask.get(taskId);
+      if (record && (record.finalStatus === 'resolved' || record.finalStatus === 'closed')) {
+        passed++;
+      } else if (record && (record.finalStatus === 'abandoned' || record.finalStatus === 'needs_human')) {
+        failed++;
+      }
+    }
+
+    if (this.config.dryRun) {
+      console.log(`\n📝 [dry-run] 将为 ${label} 创建 git commit (${passed} 通过, ${failed} 失败)`);
+      return;
+    }
+
+    try {
+      // 检查是否有未提交的变更
+      const statusOutput = execSync('git status --porcelain', {
+        cwd: this.config.cwd,
+        encoding: 'utf-8',
+        timeout: 10000,
+      });
+
+      if (!statusOutput.trim()) {
+        console.log(`\n📦 ${label}: 无文件变更，跳过 git commit`);
+        return;
+      }
+
+      const changedFiles = statusOutput.trim().split('\n').length;
+
+      // git add + commit
+      execSync('git add -A', {
+        cwd: this.config.cwd,
+        encoding: 'utf-8',
+        timeout: 30000,
+      });
+
+      const commitMessage = `harness: ${label} 完成 (${passed} 通过, ${failed} 失败, ${changedFiles} 文件变更)`;
+      execSync(`git commit -m ${JSON.stringify(commitMessage)}`, {
+        cwd: this.config.cwd,
+        encoding: 'utf-8',
+        timeout: 30000,
+      });
+
+      console.log(`\n📦 ${label}: 已提交 ${changedFiles} 个文件变更 (git commit)`);
+    } catch (error) {
+      console.error(`   ⚠️ 批次 git commit 失败: ${error instanceof Error ? error.message : String(error)}`);
+    }
   }
 
   /**

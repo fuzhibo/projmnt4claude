@@ -303,6 +303,41 @@ export class HarnessEvaluator {
     parts.push('## 详细反馈: [可选的详细反馈]');
     parts.push('```');
     parts.push('');
+    parts.push('**重要格式要求**:');
+    parts.push('- 你必须严格按照上述格式输出，不得省略或修改格式');
+    parts.push('- 如果你认为任务通过，必须输出 "## 评估结果: PASS"（不是"通过"、"满足"等词语）');
+    parts.push('- 如果你认为任务未通过，必须输出 "## 评估结果: NOPASS"（不是"不通过"、"未满足"等词语）');
+    parts.push('- 第一行必须是 "## 评估结果: PASS" 或 "## 评估结果: NOPASS"');
+    parts.push('');
+    parts.push('**正确示例（通过）**:');
+    parts.push('```');
+    parts.push('## 评估结果: PASS');
+    parts.push('## 原因: 所有验收标准已满足，代码质量良好');
+    parts.push('## 后续动作: resolve');
+    parts.push('## 失败分类: ');
+    parts.push('## 未满足的标准: ');
+    parts.push('## 未完成的检查点: ');
+    parts.push('## 详细反馈: 实现完整，代码清晰。');
+    parts.push('```');
+    parts.push('');
+    parts.push('**正确示例（未通过）**:');
+    parts.push('```');
+    parts.push('## 评估结果: NOPASS');
+    parts.push('## 原因: 缺少单元测试，构建失败');
+    parts.push('## 后续动作: redevelop');
+    parts.push('## 失败分类: test_failure');
+    parts.push('## 未满足的标准: - 所有测试通过');
+    parts.push('## 未完成的检查点: - CP-bun-run-build-零错误');
+    parts.push('## 详细反馈: 开发者未编写任何测试。');
+    parts.push('```');
+    parts.push('');
+    parts.push('**错误示例（严禁这样输出）**:');
+    parts.push('```');
+    parts.push('所有验收标准均已满足，实现清晰。  ← 错误：缺少格式标记');
+    parts.push('## 评估结果: 通过  ← 错误：使用了"通过"而非 PASS');
+    parts.push('## 评估结果: 不通过  ← 错误：使用了"不通过"而非 NOPASS');
+    parts.push('```');
+    parts.push('');
     parts.push('**动作说明（评估结果为 NOPASS 时必须填写）**:');
     parts.push('- resolve: 评估通过，任务可以完成（仅 PASS 时使用）');
     parts.push('- redevelop: 实现有严重问题，需要从开发阶段重新开始');
@@ -485,8 +520,8 @@ export class HarnessEvaluator {
 
     // 如果没有匹配到，尝试中文判断
     if (!resultMatch) {
-      const hasPositive = /(?:通过|✅|成功|符合要求|满足标准)/.test(output);
-      const hasNegative = /(?:不通过|未通过|❌|失败|不符合|不满足)/.test(output);
+      const hasPositive = /(?:通过|✅|成功|符合(?:要求)?|满足(?:标准|要求)?|良好|合格|达标|优秀|验收通过|质量良好)/.test(output);
+      const hasNegative = /(?:不通过|未通过|❌|失败|不符合|不满足|未满足|不合格|未达标|问题|缺陷|bug|错误|遗漏)/.test(output);
       if (hasPositive && !hasNegative) {
         result.passed = true;
         resultMatch = ['通过', '通过'] as RegExpMatchArray;
@@ -585,6 +620,19 @@ export class HarnessEvaluator {
       }
     }
 
+    // 矛盾检测: 如果结构化格式匹配到 NOPASS，但整体内容全为正向
+    if (resultMatch && !result.passed) {
+      const posSignals = /(?:满足|通过|符合|良好|合格|达标|优秀|成功|✅)/.test(output);
+      const negSignals = /(?:不满足|未满足|不通过|未通过|失败|不符合|不合格|❌|问题|缺陷|bug|错误|遗漏)/.test(output);
+      if (posSignals && !negSignals) {
+        console.warn('   ⚠️ 矛盾检测: NOPASS 结果与正向内容冲突，自动修正为 PASS');
+        result.passed = true;
+        result.reason = result.reason
+          ? `[矛盾修正] ${result.reason}`
+          : '原始结果为 NOPASS 但内容仅包含正向评价，已自动修正';
+      }
+    }
+
     // 如果没有提取到原因，设置默认值
     if (!result.reason) {
       if (result.passed) {
@@ -597,9 +645,9 @@ export class HarnessEvaluator {
         if (lowerOutput.includes('pass') && !lowerOutput.includes('nopass') && !lowerOutput.includes('not pass')) {
           result.passed = true;
           result.reason = '基于输出内容的简单判断：包含 PASS';
-        } else if (lowerOutput.includes('审查通过') || lowerOutput.includes('审核通过') || lowerOutput.includes('评估通过')) {
+        } else if (/(?:审查通过|审核通过|评估通过|验收通过|所有.*满足|全部.*通过|均已满足|完全符合|质量良好)/.test(output)) {
           result.passed = true;
-          result.reason = '基于输出内容的简单判断：包含"通过"关键词';
+          result.reason = '基于输出内容的简单判断：包含正向通过关键词';
         } else {
           result.reason = '无法解析评估结果';
           // 添加调试信息

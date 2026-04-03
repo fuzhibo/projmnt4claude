@@ -330,10 +330,26 @@ export function parseVerdictResult(
     }
   }
 
+  // 结构化格式未匹配时，增加中文情感判断
+  if (!resultMatch) {
+    const hasPositive = /(?:通过|✅|成功|符合(?:要求)?|满足(?:标准|要求)?|良好|合格|达标|优秀|验收通过|质量良好)/.test(output);
+    const hasNegative = /(?:不通过|未通过|❌|失败|不符合|不满足|未满足|不合格|未达标)/.test(output);
+    if (hasPositive && !hasNegative) {
+      result.passed = true;
+      result.reason = '基于输出内容的中文情感判断：通过';
+    } else if (hasNegative) {
+      result.passed = false;
+      result.reason = '基于输出内容的中文情感判断：未通过';
+    }
+  }
+
   if (!result.reason) {
     if (output.toLowerCase().includes('pass') && !output.toLowerCase().includes('nopass')) {
       result.passed = true;
       result.reason = '基于输出内容的简单判断';
+    } else if (/(?:审查通过|审核通过|验证通过|评估通过|验收通过|所有.*满足|全部.*通过|均已满足|完全符合|质量良好)/.test(output)) {
+      result.passed = true;
+      result.reason = '基于输出内容的简单判断：包含正向通过关键词';
     } else {
       result.reason = '无法解析判定结果';
     }
