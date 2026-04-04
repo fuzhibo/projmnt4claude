@@ -36,7 +36,7 @@ import { readTaskMeta, writeTaskMeta, taskExists, updateTaskStatus, assignRole, 
 import { getProjectDir } from './path.js';
 import { HarnessExecutor } from './harness-executor.js';
 import { HarnessCodeReviewer } from './harness-code-reviewer.js';
-import { HarnessQATester } from './harness-qa-tester.js';
+import { HarnessQATester, RetryContext } from './harness-qa-tester.js';
 import { HarnessEvaluator } from './harness-evaluator.js';
 import { RetryHandler } from './harness-retry.js';
 import { HarnessStatusReporter } from './harness-status-reporter.js';
@@ -56,10 +56,12 @@ export class AssemblyLine {
   private retryHandler: RetryHandler;
   private statusReporter: HarnessStatusReporter;
   private sessionId?: string;
+  private qaFailureReasons: Map<string, string> = new Map();
 
   constructor(config: HarnessConfig, sessionId?: string) {
     this.config = config;
     this.sessionId = sessionId;
+    this.qaFailureReasons = new Map();
     this.executor = new HarnessExecutor(config);
     this.codeReviewer = new HarnessCodeReviewer(config);
     this.qaTester = new HarnessQATester(config);
@@ -386,7 +388,11 @@ export class AssemblyLine {
 
     let qaVerdict: QAVerdict;
     try {
-      qaVerdict = await this.qaTester.verify(task, codeReviewVerdict);
+      // 构建重试上下文：如果该任务之前有 QA 失败记录，传递前次失败原因
+      const retryContext: RetryContext | undefined = this.qaFailureReasons.has(taskId)
+        ? { previousFailureReason: this.qaFailureReasons.get(taskId) }
+        : undefined;
+      qaVerdict = await this.qaTester.verify(task, codeReviewVerdict, retryContext);
       record.qaVerdict = qaVerdict;
       addTimeline('qa_completed', `QA 验证完成: ${qaVerdict.result}`, {
         result: qaVerdict.result,
@@ -413,6 +419,8 @@ export class AssemblyLine {
     // QA 验证未通过，进入重试流程
     if (qaVerdict.result !== 'PASS') {
       console.log(`❌ QA 验证未通过: ${qaVerdict.reason}`);
+      // 存储失败原因，供重试时传递给 buildQAPrompt
+      this.qaFailureReasons.set(taskId, qaVerdict.reason || 'QA 验证未通过（无详细原因）');
       this.statusReporter.failPhase('qa_verification', new Error(qaVerdict.reason || 'QA 验证未通过'), taskId);
       return this.handleVerdictBasedTransition(taskId, record, state, addTimeline, 'qa');
     }
