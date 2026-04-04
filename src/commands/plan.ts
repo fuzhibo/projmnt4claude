@@ -23,7 +23,7 @@ import { classifyFileToLayer, AIMetadataAssistant, type ArchitectureLayer } from
 /**
  * 任务链：具有依赖关系的任务序列
  */
-interface InferredDependency {
+export interface InferredDependency {
   /** 被依赖的任务ID */
   depTaskId: string;
   /** 重叠的文件路径列表 */
@@ -34,7 +34,7 @@ interface InferredDependency {
   reason?: string;
 }
 
-interface TaskChain {
+export interface TaskChain {
   chainId: string;           // 链 ID（链首任务 ID）
   tasks: TaskMeta[];         // 链中所有任务（按依赖顺序）
   length: number;            // 链长度
@@ -50,7 +50,7 @@ interface TaskChain {
 /**
  * 执行批次：同优先级的任务链归入同一批次
  */
-interface ExecutionBatch {
+export interface ExecutionBatch {
   batchId: string;            // 批次 ID（如 "batch-P0"）
   priority: string;           // 批次优先级标签（如 "P0", "P1"）
   priorityValue: number;      // 优先级数值（用于排序）
@@ -168,7 +168,7 @@ function taskMatchesKeywords(task: TaskMeta, keywords: string[]): boolean {
  *
  * @returns Map<taskId, InferredDependency[]> 每个任务的推断依赖列表
  */
-function inferDependenciesFromFiles(tasks: TaskMeta[]): Map<string, InferredDependency[]> {
+export function inferDependenciesFromFiles(tasks: TaskMeta[]): Map<string, InferredDependency[]> {
   const inferredMap = new Map<string, InferredDependency[]>();
 
   if (tasks.length === 0) return inferredMap;
@@ -232,7 +232,7 @@ function inferDependenciesFromFiles(tasks: TaskMeta[]): Map<string, InferredDepe
  * 使用任务关联文件中最低（最基础）的层级作为该任务的层级
  * Layer0(类型定义) → Layer3(命令入口)，基础层优先执行
  */
-function inferArchitectureLayer(task: TaskMeta): { layer: ArchitectureLayer; layerValue: number } {
+export function inferArchitectureLayer(task: TaskMeta): { layer: ArchitectureLayer; layerValue: number } {
   const files = extractAffectedFiles(task);
   const layerOrder: Record<ArchitectureLayer, number> = { Layer0: 0, Layer1: 1, Layer2: 2, Layer3: 3 };
 
@@ -268,7 +268,7 @@ function inferArchitectureLayer(task: TaskMeta): { layer: ArchitectureLayer; lay
  * 构建任务依赖图并识别任务链
  * 合并显式依赖 (task.dependencies) 与推断依赖 (文件重叠)
  */
-function buildTaskChains(tasks: TaskMeta[], cwd: string): TaskChain[] {
+export function buildTaskChains(tasks: TaskMeta[], cwd: string): TaskChain[] {
   const taskMap = new Map<string, TaskMeta>();
   const chains: TaskChain[] = [];
   const visited = new Set<string>();
@@ -377,7 +377,7 @@ function buildTaskChains(tasks: TaskMeta[], cwd: string): TaskChain[] {
  * 对任务链进行排序
  * 排序优先级：1. 优先级（升序，数字越小越紧急） 2. 链长度（降序） 3. reopen 次数（降序）
  */
-function sortChains(chains: TaskChain[]): TaskChain[] {
+export function sortChains(chains: TaskChain[]): TaskChain[] {
   return [...chains].sort((a, b) => {
     // 1. 优先级升序（数字越小越紧急，优先执行）
     if (a.maxPriority !== b.maxPriority) {
@@ -400,7 +400,7 @@ function sortChains(chains: TaskChain[]): TaskChain[] {
  * 按优先级分桶构建执行批次
  * 同一优先级桶内的不同链标记为可并行
  */
-function buildBatches(sortedChains: TaskChain[]): ExecutionBatch[] {
+export function buildBatches(sortedChains: TaskChain[]): ExecutionBatch[] {
   const priorityNames: Record<number, string> = {
     0: 'P0', 1: 'P1', 2: 'P2', 3: 'P3',
     4: 'Q1', 5: 'Q2', 6: 'Q3', 7: 'Q4',

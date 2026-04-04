@@ -1109,7 +1109,7 @@ function extractFilePathsForDependency(description: string): string[] {
  *
  * @returns 推断的依赖列表，每项包含 taskId 和匹配原因
  */
-function inferDependencies(
+export function inferDependencies(
   currentTaskDescription: string,
   potentialDeps: string[],
   cwd: string
