@@ -677,7 +677,7 @@ program
     } else if (options.fixCheckpoints) {
       await fixCheckpoints(process.cwd(), { nonInteractive: options.yes, taskId: options.task });
     } else if (options.fix) {
-      await fixIssues(process.cwd(), { nonInteractive: options.yes, fixType: 'all' });
+      await fixIssues(process.cwd(), { nonInteractive: options.yes });
     } else if (options.qualityCheck) {
       const scores = await performQualityCheck(process.cwd(), aiOptions);
       showQualityReport(scores, {

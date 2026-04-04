@@ -2202,35 +2202,6 @@ export async function showAnalysis(options: { compact?: boolean; deepAnalyze?: b
  */
 export interface FixOptions {
   nonInteractive?: boolean;
-  fixType?: 'all' | 'verification' | 'status' | 'checkpoints';
-}
-
-/**
- * 判断问题类型是否属于 verification 类别
- */
-function isVerificationIssue(type: Issue['type']): boolean {
-  return type === 'manual_verification' || type === 'missing_verification';
-}
-
-/**
- * 判断问题类型是否属于 status 类别
- */
-function isStatusIssue(type: Issue['type']): boolean {
-  return [
-    'legacy_status',
-    'invalid_status_value',
-    'status_reopen_mismatch',
-    'inconsistent_status',
-    'legacy_priority',
-    'legacy_schema',
-    'missing_createdBy',
-    'invalid_timestamp_format',
-    'pipeline_status_migration',
-    'verdict_action_schema',
-    'schema_version_outdated',
-    'missing_transition_note',
-    'interrupted_task',
-  ].includes(type);
 }
 
 /**
@@ -2841,7 +2812,7 @@ export async function fixIssues(
   cwd: string = process.cwd(),
   options: FixOptions = {}
 ): Promise<{ fixed: number; skipped: number; unfixable: number }> {
-  const { nonInteractive = false, fixType = 'all' } = options;
+  const { nonInteractive = false } = options;
   const result = await analyzeProject(cwd);
 
   if (result.issues.length === 0) {
@@ -2849,25 +2820,9 @@ export async function fixIssues(
     return { fixed: 0, skipped: 0, unfixable: 0 };
   }
 
-  // 根据修复类型过滤问题
-  let issuesToFix = result.issues;
-  if (fixType === 'verification') {
-    issuesToFix = result.issues.filter(i => isVerificationIssue(i.type));
-  } else if (fixType === 'status') {
-    issuesToFix = result.issues.filter(i => isStatusIssue(i.type));
-  }
-
-  if (issuesToFix.length === 0) {
-    console.log(`✅ 没有需要修复的 ${fixType === 'verification' ? '验证方法' : fixType === 'status' ? '状态' : ''} 问题`);
-    return { fixed: 0, skipped: 0, unfixable: 0 };
-  }
-
   console.log('');
   console.log('━'.repeat(SEPARATOR_WIDTH));
   console.log('🔧 自动修复问题');
-  if (fixType !== 'all') {
-    console.log(`   修复类型: ${fixType}`);
-  }
   if (nonInteractive) {
     console.log('   (非交互模式)');
   }
@@ -2878,7 +2833,7 @@ export async function fixIssues(
   let skippedCount = 0;
   let unfixableCount = 0;
 
-  for (const issue of issuesToFix) {
+  for (const issue of result.issues) {
     const fixResult = await fixSingleIssue(issue, cwd, nonInteractive);
     if (fixResult === 'fixed') {
       fixedCount++;
