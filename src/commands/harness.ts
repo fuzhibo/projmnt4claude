@@ -234,7 +234,7 @@ export async function harnessCommand(
     console.log(`📊 最低质量分阈值: ${qualityGateConfig.minQualityScore}`);
     console.log('');
 
-    const batchResult = batchCheckQualityGate(batchQueue.taskQueue, qualityGateConfig, cwd);
+    const batchResult = await batchCheckQualityGate(batchQueue.taskQueue, qualityGateConfig, cwd);
 
     // 输出检查结果
     console.log(formatBatchQualityGateResult(batchResult, { compact: false, showDetails: true }));

@@ -687,7 +687,7 @@ program
     } else if (options.fix) {
       await fixIssues(process.cwd(), { nonInteractive: options.yes, fixType: 'all' });
     } else if (options.qualityCheck) {
-      const scores = performQualityCheck(process.cwd(), aiOptions);
+      const scores = await performQualityCheck(process.cwd(), aiOptions);
       showQualityReport(scores, {
         compact: options.compact,
         json: options.json || program.opts().json || false,

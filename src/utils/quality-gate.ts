@@ -270,11 +270,11 @@ function generateSuggestions(
 /**
  * 检查单个任务的质量门禁
  */
-export function checkQualityGate(
+export async function checkQualityGate(
   taskId: string,
   config: QualityGateConfig = DEFAULT_QUALITY_GATE_CONFIG,
   cwd: string = process.cwd()
-): QualityGateResult {
+): Promise<QualityGateResult> {
   const task = readTaskMeta(taskId, cwd);
   if (!task) {
     return {
@@ -307,7 +307,7 @@ export function checkQualityGate(
   }
 
   // 计算内容质量评分
-  const score = calculateContentQuality(task);
+  const score = await calculateContentQuality(task, undefined, cwd);
 
   // 提取受影响文件
   const affectedFiles = extractAffectedFiles(task);
@@ -372,18 +372,18 @@ export function checkQualityGate(
 /**
  * 批量检查任务队列的质量门禁
  */
-export function batchCheckQualityGate(
+export async function batchCheckQualityGate(
   taskIds: string[],
   config: QualityGateConfig = DEFAULT_QUALITY_GATE_CONFIG,
   cwd: string = process.cwd()
-): BatchQualityGateResult {
+): Promise<BatchQualityGateResult> {
   const results = new Map<string, QualityGateResult>();
   let passedCount = 0;
   let failedCount = 0;
   const blockedTasks: string[] = [];
 
   for (const taskId of taskIds) {
-    const result = checkQualityGate(taskId, config, cwd);
+    const result = await checkQualityGate(taskId, config, cwd);
     results.set(taskId, result);
 
     if (result.passed) {

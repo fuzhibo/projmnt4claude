@@ -674,10 +674,11 @@ export interface AIAnalyzeOptions {
  * 计算内容质量评分
  * CP-4: 结构评分 60% + AI 语义评分 40% (当 deepAnalyze 且非 noAi 时)
  */
-export function calculateContentQuality(
+export async function calculateContentQuality(
   task: TaskMeta,
-  aiOptions?: AIAnalyzeOptions
-): ContentQualityScore {
+  aiOptions?: AIAnalyzeOptions,
+  cwd?: string
+): Promise<ContentQualityScore> {
   const deductions: QualityDeduction[] = [];
   let descriptionScore = 100;
   let checkpointScore = 100;
@@ -715,12 +716,17 @@ export function calculateContentQuality(
 
   // AI 语义评分 (仅 deepAnalyze 且非 noAi 时启用)
   let aiSemanticScore: number | undefined;
-  if (aiOptions?.deepAnalyze && !aiOptions?.noAi) {
-    // 基于 deduct 减分项目估算 AI 语义评分
-    // 如果有大量扣分项，说明内容语义不足；扣分少说明语义质量高
-    const totalDeductionPoints = deductions.reduce((sum, d) => sum + Math.abs(d.points), 0);
-    const maxPossibleDeduction = 100; // 理论上最大扣分
-    aiSemanticScore = Math.max(0, Math.round(100 - (totalDeductionPoints / maxPossibleDeduction) * 100));
+  if (aiOptions?.deepAnalyze && !aiOptions?.noAi && cwd) {
+    // CP-4: 使用真实 AI 调用进行语义质量评估
+    try {
+      const aiAssistant = new AIMetadataAssistant(cwd);
+      const qualityResult = await aiAssistant.analyzeTaskQuality(task, { cwd });
+      if (qualityResult.aiUsed) {
+        aiSemanticScore = qualityResult.score;
+      }
+    } catch {
+      // AI 评估失败，仅使用结构评分
+    }
   }
 
   const totalScore = aiSemanticScore !== undefined
@@ -990,12 +996,12 @@ function extractFileReferences(text: string): string[] {
  * 执行内容质量检测
  * CP-4: 传递 AI 选项到 calculateContentQuality
  */
-export function performQualityCheck(cwd: string = process.cwd(), aiOptions?: AIAnalyzeOptions): Map<string, ContentQualityScore> {
+export async function performQualityCheck(cwd: string = process.cwd(), aiOptions?: AIAnalyzeOptions): Promise<Map<string, ContentQualityScore>> {
   const tasks = getAllTasks(cwd, false);
   const scores = new Map<string, ContentQualityScore>();
 
   for (const task of tasks) {
-    const score = calculateContentQuality(task, aiOptions);
+    const score = await calculateContentQuality(task, aiOptions, cwd);
     scores.set(task.id, score);
   }
 
@@ -1300,18 +1306,10 @@ export async function analyzeProject(
       if (aiOptions?.deepAnalyze && !aiOptions?.noAi) {
         aiAssessment = await assessStalenessWithAI(task, cwd);
         if (aiAssessment !== null && !aiAssessment.stillStale) {
-          // AI 緻加补充信息
-          const lastIssue = issues[issues.length - 1];
-          if (lastIssue) {
-            lastIssue.details = {
-              ...lastIssue.details,
-              aiAssessed: true,
-              aiReason: aiAssessment.reason || 'AI 评估仍认为陈旧',
-            };
-          }
-        } else {
+          // AI 评估认为不再陈旧，抑制 stale 标记
           shouldFlagStale = false;
         }
+        // AI 确认仍然陈旧时，保留 shouldFlagStale = true
       }
 
       if (shouldFlagStale) {
@@ -1321,8 +1319,8 @@ export async function analyzeProject(
           type: 'stale',
           severity: 'medium',
           message: `任务已 ${Math.floor((now.getTime() - updatedAt.getTime()) / (24 * 60 * 60 * 1000))} 天未更新`,
-          suggestion: aiAssessment?.stillStale === false && aiAssessment?.reason
-            ? `AI 评估:任务仍然相关 (${aiAssessment.reason})，建议保留`
+          suggestion: aiAssessment?.stillStale && aiAssessment?.reason
+            ? `AI 确认任务陈旧: ${aiAssessment.reason}，建议更新或关闭`
             : '检查任务是否仍然相关，考虑更新状态或关闭',
           details: {
             ...(aiAssessment && {
