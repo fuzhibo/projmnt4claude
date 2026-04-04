@@ -297,6 +297,57 @@ const VERIFICATION_KEYWORDS: Array<{
 ];
 
 /**
+ * 为 automated 方法但缺少 commands/steps 的检查点生成回退验证
+ * 从描述中提取文件引用生成验证步骤，默认回退 bun run build + bun test
+ */
+export function generateFallbackVerification(
+  description: string,
+  task?: TaskMeta
+): CheckpointVerification {
+  const commands: string[] = [];
+  const steps: string[] = [];
+
+  // 1. 从描述中提取 src/ 路径文件引用，生成文件存在性验证步骤
+  const srcFileMatches = description.match(/src\/[\w/.-]+\.[a-z]+/g);
+  if (srcFileMatches) {
+    const uniqueFiles = [...new Set(srcFileMatches)];
+    for (const file of uniqueFiles.slice(0, 5)) {
+      steps.push(`确认文件 ${file} 存在并包含预期实现`);
+    }
+  }
+
+  // 2. 从描述中提取模块/函数名关键词
+  const funcMatches = description.match(/(?:函数|function)\s+([a-zA-Z_]\w{2,})/i);
+  if (funcMatches?.[1]) {
+    steps.push(`确认 ${funcMatches[1]} 函数已导出且可调用`);
+  }
+
+  // 3. 从描述中提取类名关键词
+  const classMatches = description.match(/(?:类|class)\s+([A-Z]\w{2,})/i);
+  if (classMatches?.[1]) {
+    steps.push(`确认 ${classMatches[1]} 类已导出且可实例化`);
+  }
+
+  // 4. 默认回退验证命令
+  commands.push('bun run build');
+  commands.push('bun test');
+
+  // 5. 构建 expected 描述
+  const expectedParts: string[] = [];
+  if (steps.length > 0) {
+    expectedParts.push('文件引用验证通过');
+  }
+  expectedParts.push('bun run build 编译成功', 'bun test 测试通过');
+
+  return {
+    method: 'automated',
+    commands,
+    steps: steps.length > 0 ? steps : undefined,
+    expected: expectedParts.join('；'),
+  };
+}
+
+/**
  * 根据检查点描述推断验证方法
  * 返回推断的 CheckpointVerification 或 undefined（无法推断时）
  */
@@ -381,6 +432,15 @@ export function syncCheckpointsToMeta(taskId: string, cwd: string = process.cwd(
 
     if (!verification) {
       verification = inferVerificationFromDescription(cp.text, task);
+    }
+
+    // 为 automated 方法但缺少 commands/steps 的检查点生成回退验证
+    if (verification?.method === 'automated') {
+      const hasCommands = verification.commands && verification.commands.length > 0;
+      const hasSteps = verification.steps && verification.steps.length > 0;
+      if (!hasCommands && !hasSteps) {
+        verification = generateFallbackVerification(cp.text, task);
+      }
     }
 
     if (!category) {

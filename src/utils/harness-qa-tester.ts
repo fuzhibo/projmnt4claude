@@ -25,6 +25,7 @@ import {
   REVIEW_TIMEOUT_RATIO,
 } from './harness-helpers.js';
 import { getQARoleTemplate } from './role-prompts.js';
+import { generateFallbackVerification } from './checkpoint.js';
 
 /**
  * 验证检查点的验证信息完整性
@@ -285,6 +286,17 @@ export class HarnessQATester {
       parts.push(`${i + 1}. [${cp.id}] ${cp.description}`);
       if (cp.verification?.commands && cp.verification.commands.length > 0) {
         parts.push(`   验证命令: ${cp.verification.commands.join(', ')}`);
+      } else if (cp.verification?.steps && cp.verification.steps.length > 0) {
+        parts.push(`   验证步骤: ${cp.verification.steps.join('；')}`);
+      } else {
+        // 无 commands/steps 的检查点：生成回退验证建议
+        const fallback = generateFallbackVerification(cp.description, task);
+        if (fallback.steps && fallback.steps.length > 0) {
+          parts.push(`   建议验证步骤: ${fallback.steps.join('；')}`);
+        }
+        if (fallback.commands && fallback.commands.length > 0) {
+          parts.push(`   回退验证命令: ${fallback.commands.join(', ')}`);
+        }
       }
       if (cp.verification?.expected) {
         parts.push(`   期望结果: ${cp.verification.expected}`);
