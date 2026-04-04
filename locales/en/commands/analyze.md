@@ -12,10 +12,8 @@ node ${CLAUDE_PLUGIN_ROOT}/skills/projmnt4claude/dist/projmnt4claude.js analyze 
 
 | Option | Description | Default | Recommended |
 |--------|-------------|---------|-------------|
-| `--fix` | Auto-fix all fixable issues | - | User/AI |
+| `--fix` | Auto-fix all fixable issues (schema migration, deprecated statuses, field completeness, etc.) | - | User/AI |
 | `--fix-checkpoints` | Smart-generate missing checkpoints | - | User/AI |
-| `--fix-verification` | Fix verification method issues (manual -> automated) | - | AI |
-| `--fix-status` | Fix status-related issues (format, priority, timestamps, etc.) | - | AI |
 | `--quality-check` | Check task content quality (description, checkpoints, files, solution) | - | User/AI |
 | `--threshold <score>` | Quality threshold; tasks below this score are flagged | 60 | User/AI |
 | `-j, --json` | JSON output (only with --quality-check) | false | AI |
@@ -31,8 +29,31 @@ node ${CLAUDE_PLUGIN_ROOT}/skills/projmnt4claude/dist/projmnt4claude.js analyze 
 4. **Config Validity** - Check configuration file format
 5. **Schema Compliance** - Validate status, priority, type, timestamps against spec
 6. **Relationship Integrity** - Validate parent-child and dependency references
-7. **Verification Method** - Flag manual verification (deprecated)
-8. **Content Quality** - Score description completeness, checkpoint quality, related files, solution
+7. **Deprecated Status Detection** - Flag reopened/needs_human (deprecated in v4) and auto-migrate
+8. **Field Completeness** - Ensure transitionNotes, schemaVersion, and other v4+ fields are initialized
+9. **Verification Method** - Flag manual verification (deprecated)
+10. **Content Quality** - Score description completeness, checkpoint quality, related files, solution
+
+## Auto-fix Capabilities (`--fix`)
+
+The `--fix` flag handles all fixable issues in a single pass:
+
+- **Schema migration**: Upgrades tasks from any schema version to the current version
+- **Deprecated status migration**: `reopened` → `open` (with reopenCount tracking), `needs_human` → `open` (with resumeAction)
+- **Field initialization**: Adds missing transitionNotes, reopenCount, requirementHistory, etc.
+- **Priority normalization**: Converts old format (urgent/high/medium/low) to new (P0-P3)
+- **Status normalization**: Converts old format (pending/completed/cancelled) to current
+- **Pipeline state migration**: Migrates intermediate pipeline statuses
+- **Invalid reference cleanup**: Removes invalid dependency/subtask references
+- **Verification backfill**: Auto-generates verification data for resolved tasks missing it
+- **Inconsistent state repair**: Fixes resolved tasks with failed verification
+
+### Post Human-Verification Processing
+
+After human verification checkpoints complete:
+1. Run `analyze --fix -y` to sync all detected issues
+2. Run `doctor --fix` to verify project-level health
+3. The `--fix` flag automatically handles deprecated status cleanup and field migration
 
 ## Examples
 
@@ -51,21 +72,26 @@ projmnt4claude analyze --fix -y
 projmnt4claude analyze --fix-checkpoints -y
 ```
 
-### Fix Verification Methods Only
-```bash
-projmnt4claude analyze --fix-verification -y
-```
-
-### Fix Status Issues Only
-```bash
-projmnt4claude analyze --fix-status -y
-```
-
 ### Content Quality Check
 ```bash
 projmnt4claude analyze --quality-check
 projmnt4claude analyze --quality-check --threshold 70 --json
 ```
+
+## Valid Task Statuses
+
+| Status | Description |
+|--------|-------------|
+| `open` | Task is pending (includes reopened tasks, tracked via reopenCount) |
+| `in_progress` | Task is actively being worked on |
+| `wait_review` | Awaiting code review (pipeline intermediate) |
+| `wait_qa` | Awaiting QA verification (pipeline intermediate) |
+| `wait_complete` | Awaiting completion confirmation (pipeline intermediate) |
+| `resolved` | Task completed and verified |
+| `closed` | Task closed (terminal state) |
+| `abandoned` | Task abandoned (terminal state) |
+
+> **Note**: `reopened` and `needs_human` were deprecated in schema v4. Tasks previously using these statuses are migrated to `open` with appropriate tracking fields (reopenCount, resumeAction, transitionNotes).
 
 ## Output Example
 
@@ -79,7 +105,3 @@ projmnt4claude analyze --quality-check --threshold 70 --json
 
 💡 Run 'analyze --fix' to auto-fix issues
 ```
-
-## File
-
-/home/fuzhibo/workerplace/git/projmnt4claude/commands/analyze.md

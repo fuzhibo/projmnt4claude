@@ -11,8 +11,8 @@ import {
 } from '../utils/path';
 import { getAllTaskIds } from '../utils/task';
 import { SEPARATOR_WIDTH } from '../utils/format';
-import { parseTaskId } from '../types/task';
-import type { TaskIdInfo } from '../types/task';
+import { parseTaskId, CURRENT_TASK_SCHEMA_VERSION } from '../types/task';
+import type { TaskIdInfo, TaskStatus } from '../types/task';
 import { Logger } from '../utils/logger';
 import { readConfig, writeConfig, ensureConfigDefaults } from './config';
 
@@ -68,7 +68,16 @@ export async function runDoctor(fix: boolean = false, cwd: string = process.cwd(
     // 9. 检查日志模块就绪性
     results.push(...checkLoggingModule(cwd));
 
-    // 10. Hook 配置已由 checkHooksConfiguration 统一检查
+    // 10. 检查 Schema 版本合规（>=4）
+    results.push(...checkSchemaVersionCompliance(cwd));
+
+    // 11. 检查废弃状态残留
+    results.push(...checkDeprecatedStatuses(cwd));
+
+    // 12. 检查字段完整性（transitionNotes 初始化）
+    results.push(...checkFieldCompleteness(cwd));
+
+    // 13. Hook 配置已由 checkHooksConfiguration 统一检查
   }
 
   // 显示结果
@@ -746,6 +755,197 @@ function checkLoggingModule(cwd: string): CheckResult[] {
 }
 
 /**
+ * 检查任务 Schema 版本合规
+ * 确保所有任务的 schemaVersion >= CURRENT_TASK_SCHEMA_VERSION
+ */
+function checkSchemaVersionCompliance(cwd: string): CheckResult[] {
+  const results: CheckResult[] = [];
+  const tasksDir = getTasksDir(cwd);
+
+  if (!fs.existsSync(tasksDir)) {
+    return [{
+      name: 'Schema 版本合规',
+      status: 'ok',
+      message: '任务目录不存在（无任务）',
+      details: [],
+      fixable: false,
+    }];
+  }
+
+  const taskIds = getAllTaskIds(cwd);
+  const outdatedTasks: string[] = [];
+
+  for (const taskId of taskIds) {
+    const metaPath = path.join(tasksDir, taskId, 'meta.json');
+    if (fs.existsSync(metaPath)) {
+      try {
+        const meta = JSON.parse(fs.readFileSync(metaPath, 'utf-8'));
+        const schemaVersion = meta.schemaVersion ?? 0;
+        if (schemaVersion < CURRENT_TASK_SCHEMA_VERSION) {
+          outdatedTasks.push(`${taskId} (v${schemaVersion} < v${CURRENT_TASK_SCHEMA_VERSION})`);
+        }
+      } catch {
+        // 忽略解析错误
+      }
+    }
+  }
+
+  if (outdatedTasks.length === 0) {
+    results.push({
+      name: 'Schema 版本合规',
+      status: 'ok',
+      message: `所有 ${taskIds.length} 个任务 schema 版本 >= v${CURRENT_TASK_SCHEMA_VERSION}`,
+      details: [],
+      fixable: false,
+    });
+  } else {
+    results.push({
+      name: 'Schema 版本合规',
+      status: 'warning',
+      message: `${outdatedTasks.length} 个任务 schema 版本过时 (当前: v${CURRENT_TASK_SCHEMA_VERSION})`,
+      details: [
+        '版本过时的任务:',
+        ...outdatedTasks.slice(0, 5).map(t => `  - ${t}`),
+        ...(outdatedTasks.length > 5 ? [`  ... 还有 ${outdatedTasks.length - 5} 个`] : []),
+        '',
+        '💡 运行 projmnt4claude analyze --fix -y 自动迁移',
+      ],
+      fixable: true,
+    });
+  }
+
+  return results;
+}
+
+/**
+ * 检查废弃状态残留
+ * 检测任务 meta.json 中是否包含已废弃的 reopened/needs_human 状态
+ */
+function checkDeprecatedStatuses(cwd: string): CheckResult[] {
+  const results: CheckResult[] = [];
+  const tasksDir = getTasksDir(cwd);
+
+  if (!fs.existsSync(tasksDir)) {
+    return [{
+      name: '废弃状态检测',
+      status: 'ok',
+      message: '任务目录不存在（无任务）',
+      details: [],
+      fixable: false,
+    }];
+  }
+
+  const taskIds = getAllTaskIds(cwd);
+  const deprecatedStatuses = ['reopened', 'needs_human'];
+  const tasksWithDeprecatedStatus: { taskId: string; status: string }[] = [];
+
+  for (const taskId of taskIds) {
+    const metaPath = path.join(tasksDir, taskId, 'meta.json');
+    if (fs.existsSync(metaPath)) {
+      try {
+        const meta = JSON.parse(fs.readFileSync(metaPath, 'utf-8'));
+        if (deprecatedStatuses.includes(meta.status)) {
+          tasksWithDeprecatedStatus.push({ taskId, status: meta.status });
+        }
+      } catch {
+        // 忽略解析错误
+      }
+    }
+  }
+
+  if (tasksWithDeprecatedStatus.length === 0) {
+    results.push({
+      name: '废弃状态检测',
+      status: 'ok',
+      message: `所有 ${taskIds.length} 个任务无废弃状态残留`,
+      details: ['✓ 无 reopened/needs_human 状态'],
+      fixable: false,
+    });
+  } else {
+    results.push({
+      name: '废弃状态检测',
+      status: 'warning',
+      message: `${tasksWithDeprecatedStatus.length} 个任务使用废弃状态`,
+      details: [
+        '废弃状态的任务:',
+        ...tasksWithDeprecatedStatus.map(t => `  - ${t.taskId}: status=${t.status}`),
+        '',
+        '⚠️  废弃说明:',
+        '  - reopened (v4 废弃): 应使用 open + reopenCount + transitionNote',
+        '  - needs_human (v4 废弃): 应使用 open + resumeAction',
+        '',
+        '💡 运行 projmnt4claude analyze --fix -y 自动迁移',
+      ],
+      fixable: true,
+    });
+  }
+
+  return results;
+}
+
+/**
+ * 检查字段完整性
+ * 确保 transitionNotes 字段已初始化（v4 新增必需字段）
+ */
+function checkFieldCompleteness(cwd: string): CheckResult[] {
+  const results: CheckResult[] = [];
+  const tasksDir = getTasksDir(cwd);
+
+  if (!fs.existsSync(tasksDir)) {
+    return [{
+      name: '字段完整性',
+      status: 'ok',
+      message: '任务目录不存在（无任务）',
+      details: [],
+      fixable: false,
+    }];
+  }
+
+  const taskIds = getAllTaskIds(cwd);
+  const incompleteTasks: string[] = [];
+
+  for (const taskId of taskIds) {
+    const metaPath = path.join(tasksDir, taskId, 'meta.json');
+    if (fs.existsSync(metaPath)) {
+      try {
+        const meta = JSON.parse(fs.readFileSync(metaPath, 'utf-8'));
+        if (meta.transitionNotes === undefined) {
+          incompleteTasks.push(taskId);
+        }
+      } catch {
+        // 忽略解析错误
+      }
+    }
+  }
+
+  if (incompleteTasks.length === 0) {
+    results.push({
+      name: '字段完整性',
+      status: 'ok',
+      message: `所有 ${taskIds.length} 个任务字段完整`,
+      details: ['✓ transitionNotes 已初始化'],
+      fixable: false,
+    });
+  } else {
+    results.push({
+      name: '字段完整性',
+      status: 'warning',
+      message: `${incompleteTasks.length} 个任务缺少 transitionNotes 字段`,
+      details: [
+        '缺少字段的任务:',
+        ...incompleteTasks.slice(0, 5).map(t => `  - ${t}`),
+        ...(incompleteTasks.length > 5 ? [`  ... 还有 ${incompleteTasks.length - 5} 个`] : []),
+        '',
+        '💡 运行 projmnt4claude analyze --fix -y 自动补全',
+      ],
+      fixable: true,
+    });
+  }
+
+  return results;
+}
+
+/**
  * 检查 Hooks 配置
  */
 function checkHooksConfiguration(cwd: string): CheckResult[] {
@@ -1180,6 +1380,80 @@ main().catch(() => {
 
       fs.writeFileSync(settingsPath, JSON.stringify(settings, null, 2), 'utf-8');
       console.log(`  ✓ 已配置 Claude Code hooks`);
+    } else if (issue.name === 'Schema 版本合规') {
+      // 迁移过时的 schema 版本
+      const tasksDir = getTasksDir(cwd);
+      let fixedCount = 0;
+      for (const taskId of getAllTaskIds(cwd)) {
+        const metaPath = path.join(tasksDir, taskId, 'meta.json');
+        if (fs.existsSync(metaPath)) {
+          try {
+            const meta = JSON.parse(fs.readFileSync(metaPath, 'utf-8'));
+            const schemaVersion = meta.schemaVersion ?? 0;
+            if (schemaVersion < CURRENT_TASK_SCHEMA_VERSION) {
+              meta.schemaVersion = CURRENT_TASK_SCHEMA_VERSION;
+              meta.updatedAt = new Date().toISOString();
+              fs.writeFileSync(metaPath, JSON.stringify(meta, null, 2), 'utf-8');
+              fixedCount++;
+            }
+          } catch {
+            // 忽略解析错误
+          }
+        }
+      }
+      console.log(`  ✓ 已迁移 ${fixedCount} 个任务到 schema v${CURRENT_TASK_SCHEMA_VERSION}`);
+    } else if (issue.name === '废弃状态检测') {
+      // 迁移废弃状态 reopened/needs_human → open
+      const tasksDir = getTasksDir(cwd);
+      const deprecatedMap: Record<string, string> = { 'reopened': 'open', 'needs_human': 'open' };
+      let fixedCount = 0;
+      for (const taskId of getAllTaskIds(cwd)) {
+        const metaPath = path.join(tasksDir, taskId, 'meta.json');
+        if (fs.existsSync(metaPath)) {
+          try {
+            const meta = JSON.parse(fs.readFileSync(metaPath, 'utf-8'));
+            if (deprecatedMap[meta.status]) {
+              const oldStatus = meta.status;
+              meta.status = deprecatedMap[oldStatus];
+              if (!meta.transitionNotes) meta.transitionNotes = [];
+              meta.transitionNotes.push({
+                timestamp: new Date().toISOString(),
+                fromStatus: oldStatus,
+                toStatus: meta.status,
+                note: `doctor --fix: ${oldStatus} 状态已废弃（v4），迁移为 ${meta.status}`,
+                author: 'doctor-fix',
+              });
+              meta.updatedAt = new Date().toISOString();
+              fs.writeFileSync(metaPath, JSON.stringify(meta, null, 2), 'utf-8');
+              fixedCount++;
+            }
+          } catch {
+            // 忽略解析错误
+          }
+        }
+      }
+      console.log(`  ✓ 已迁移 ${fixedCount} 个废弃状态任务`);
+    } else if (issue.name === '字段完整性') {
+      // 补全缺失的 transitionNotes 字段
+      const tasksDir = getTasksDir(cwd);
+      let fixedCount = 0;
+      for (const taskId of getAllTaskIds(cwd)) {
+        const metaPath = path.join(tasksDir, taskId, 'meta.json');
+        if (fs.existsSync(metaPath)) {
+          try {
+            const meta = JSON.parse(fs.readFileSync(metaPath, 'utf-8'));
+            if (meta.transitionNotes === undefined) {
+              meta.transitionNotes = [];
+              meta.updatedAt = new Date().toISOString();
+              fs.writeFileSync(metaPath, JSON.stringify(meta, null, 2), 'utf-8');
+              fixedCount++;
+            }
+          } catch {
+            // 忽略解析错误
+          }
+        }
+      }
+      console.log(`  ✓ 已为 ${fixedCount} 个任务补全 transitionNotes 字段`);
     }
   }
 

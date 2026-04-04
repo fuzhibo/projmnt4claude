@@ -605,7 +605,11 @@ export interface Issue {
     // 流转完整性检查
     | 'missing_transition_note'
     // 中断任务检测
-    | 'interrupted_task';
+    | 'interrupted_task'
+    // 废弃状态检测
+    | 'reopened_status'
+    | 'needs_human_status'
+    | 'deprecated_status_reference';
   severity: 'low' | 'medium' | 'high';
   message: string;
   suggestion: string;
@@ -1605,6 +1609,53 @@ export async function analyzeProject(
         message: `任务状态值无效: ${task.status}`,
         suggestion: `使用有效状态: ${VALID_STATUSES.join(', ')}`,
         details: { currentValue: task.status },
+      });
+    }
+
+    // 2.5 检测废弃状态 reopened（v4 已废弃，应迁移为 open + reopenCount）
+    if ((task.status as string) === 'reopened') {
+      issues.push({
+        taskId: task.id,
+        type: 'reopened_status',
+        severity: 'high',
+        message: `任务使用已废弃的 reopened 状态（v4 已废弃，应使用 open + reopenCount 追踪）`,
+        suggestion: '使用 --fix 自动迁移: reopened → open，并记录 transitionNote',
+        details: { currentValue: task.status, targetValue: 'open' },
+      });
+    }
+
+    // 2.6 检测废弃状态 needs_human（v4 已废弃，应迁移为 open + resumeAction）
+    if ((task.status as string) === 'needs_human') {
+      issues.push({
+        taskId: task.id,
+        type: 'needs_human_status',
+        severity: 'high',
+        message: `任务使用已废弃的 needs_human 状态（v4 已废弃，应使用 open + resumeAction 追踪）`,
+        suggestion: '使用 --fix 自动迁移: needs_human → open，并设置 resumeAction',
+        details: { currentValue: task.status, targetValue: 'open' },
+      });
+    }
+
+    // 2.7 检测历史记录中对废弃状态的引用
+    const deprecatedStatusRefs: string[] = [];
+    for (const entry of task.history || []) {
+      if ((entry.oldValue as string) === 'reopened' || (entry.newValue as string) === 'reopened' ||
+          (entry.oldValue as string) === 'needs_human' || (entry.newValue as string) === 'needs_human') {
+        const ref = [entry.oldValue, entry.newValue]
+          .filter(v => v === 'reopened' || v === 'needs_human')
+          .join(', ');
+        deprecatedStatusRefs.push(ref);
+      }
+    }
+    if (deprecatedStatusRefs.length > 0) {
+      const uniqueRefs = [...new Set(deprecatedStatusRefs)].join(', ');
+      issues.push({
+        taskId: task.id,
+        type: 'deprecated_status_reference',
+        severity: 'low',
+        message: `历史记录中引用了废弃状态: ${uniqueRefs}`,
+        suggestion: '使用 --fix 自动清理历史记录中的废弃状态引用',
+        details: { deprecatedRefs: [...new Set(deprecatedStatusRefs)] },
       });
     }
 
@@ -2793,6 +2844,95 @@ async function fixSingleIssue(
 
         writeTaskMeta(task, cwd);
         console.log(`  ✅ 已将任务 ${issue.taskId} 状态从 ${oldStatus} 修改为 ${suggestedStatus}`);
+        return 'fixed';
+      }
+      return 'skipped';
+    }
+
+    case 'reopened_status': {
+      console.log(`🔄 迁移任务 ${issue.taskId} 的废弃 reopened 状态...`);
+      const oldStatus = task.status;
+      task.status = 'open';
+      if (!task.transitionNotes) task.transitionNotes = [];
+      task.transitionNotes.push({
+        timestamp: new Date().toISOString(),
+        fromStatus: 'reopened',
+        toStatus: 'open',
+        note: 'analyze --fix: reopened 状态已废弃，迁移为 open',
+        author: 'analyze-fix',
+      });
+      if (!task.history) task.history = [];
+      task.history.push({
+        timestamp: new Date().toISOString(),
+        action: 'deprecated_status_migration',
+        field: 'status',
+        oldValue: oldStatus,
+        newValue: 'open',
+        reason: 'reopened 状态已废弃（v4），迁移为 open',
+        user: 'analyze-fix',
+      });
+      writeTaskMeta(task, cwd);
+      console.log(`  ✅ 状态已从 reopened 迁移为 open`);
+      return 'fixed';
+    }
+
+    case 'needs_human_status': {
+      console.log(`🔄 迁移任务 ${issue.taskId} 的废弃 needs_human 状态...`);
+      const oldStatus = task.status;
+      task.status = 'open';
+      if (!task.transitionNotes) task.transitionNotes = [];
+      task.transitionNotes.push({
+        timestamp: new Date().toISOString(),
+        fromStatus: 'needs_human',
+        toStatus: 'open',
+        note: 'analyze --fix: needs_human 状态已废弃，迁移为 open 以便重新处理',
+        author: 'analyze-fix',
+      });
+      if (!task.history) task.history = [];
+      task.history.push({
+        timestamp: new Date().toISOString(),
+        action: 'deprecated_status_migration',
+        field: 'status',
+        oldValue: oldStatus,
+        newValue: 'open',
+        reason: 'needs_human 状态已废弃（v4），迁移为 open',
+        user: 'analyze-fix',
+      });
+      writeTaskMeta(task, cwd);
+      console.log(`  ✅ 状态已从 needs_human 迁移为 open`);
+      return 'fixed';
+    }
+
+    case 'deprecated_status_reference': {
+      console.log(`🔄 清理任务 ${issue.taskId} 历史记录中的废弃状态引用...`);
+      let fixedAny = false;
+      for (const entry of task.history || []) {
+        if ((entry.oldValue as string) === 'reopened' || (entry.oldValue as string) === 'needs_human') {
+          entry.oldValue = 'open';
+          fixedAny = true;
+        }
+        if ((entry.newValue as string) === 'reopened') {
+          entry.newValue = 'open';
+          fixedAny = true;
+        }
+        if ((entry.newValue as string) === 'needs_human') {
+          entry.newValue = 'open';
+          fixedAny = true;
+        }
+      }
+      for (const note of task.transitionNotes || []) {
+        if ((note.fromStatus as string) === 'reopened' || (note.fromStatus as string) === 'needs_human') {
+          note.fromStatus = 'open';
+          fixedAny = true;
+        }
+        if ((note.toStatus as string) === 'reopened' || (note.toStatus as string) === 'needs_human') {
+          note.toStatus = 'open';
+          fixedAny = true;
+        }
+      }
+      if (fixedAny) {
+        writeTaskMeta(task, cwd);
+        console.log(`  ✅ 已清理历史记录中的废弃状态引用`);
         return 'fixed';
       }
       return 'skipped';
