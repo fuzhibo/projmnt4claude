@@ -16,7 +16,7 @@ import type { TaskMeta, TaskPriority } from '../types/task';
 import { SEPARATOR_WIDTH } from '../utils/format';
 import { createLogger, type InstrumentationRecord } from '../utils/logger';
 import { extractAffectedFiles } from '../utils/quality-gate';
-import { classifyFileToLayer, type ArchitectureLayer } from '../utils/ai-metadata';
+import { classifyFileToLayer, AIMetadataAssistant, type ArchitectureLayer } from '../utils/ai-metadata';
 
 // ============== 任务链分析类型定义 ==============
 
@@ -28,6 +28,10 @@ interface InferredDependency {
   depTaskId: string;
   /** 重叠的文件路径列表 */
   overlappingFiles: string[];
+  /** 推断来源: file-overlap (Layer1/2 文件重叠) | ai-semantic (Layer3 AI 语义推断) */
+  source: 'file-overlap' | 'ai-semantic';
+  /** 推断原因 (仅 ai-semantic 时有值) */
+  reason?: string;
 }
 
 interface TaskChain {
@@ -85,6 +89,8 @@ interface AIRecommendationOutput {
       inferredDependencies?: Array<{
         depTaskId: string;
         overlappingFiles: string[];
+        source: 'file-overlap' | 'ai-semantic';
+        reason?: string;
       }>;
     }>;
   }>;
@@ -203,6 +209,7 @@ function inferDependenciesFromFiles(tasks: TaskMeta[]): Map<string, InferredDepe
         const dep: InferredDependency = {
           depTaskId: earlierTask.id,
           overlappingFiles: overlap,
+          source: 'file-overlap',
         };
 
         const existing = inferredMap.get(laterTask.id);
@@ -483,7 +490,8 @@ function generateAIOutput(
   originalCount: number,
   filteredCount: number,
   query?: string,
-  keywords?: string[]
+  keywords?: string[],
+  genOptions?: { smart?: boolean }
 ): AIRecommendationOutput {
   const priorityNames: Record<number, string> = {
     0: 'P0', 1: 'P1', 2: 'P2', 3: 'P3',
@@ -541,6 +549,8 @@ function generateAIOutput(
           taskEntry.inferredDependencies = inferred.map(d => ({
             depTaskId: d.depTaskId,
             overlappingFiles: d.overlappingFiles,
+            source: d.source,
+            reason: d.reason,
           }));
         }
         return taskEntry;
@@ -555,13 +565,13 @@ function generateAIOutput(
         parallelizable: b.parallelizable,
       };
       if (!b.parallelizable && b.chains.length > 1) {
-        batchEntry.parallelBlockedBy = '推断依赖: 文件重叠';
+        batchEntry.parallelBlockedBy = '推断依赖: 文件重叠/AI语义';
       }
       return batchEntry;
     }),
     batchOrder,
     recommendation: {
-      summary: `发现 ${chains.length} 个任务链，共 ${filteredCount} 个任务，分 ${batches.length} 个批次。同优先级内已按架构层级排序（Layer0→Layer3），确保底层变更优先于上层依赖执行`,
+      summary: `发现 ${chains.length} 个任务链，共 ${filteredCount} 个任务，分 ${batches.length} 个批次。三层依赖推断: Layer1/2 文件路径重叠 + ${genOptions?.smart ? 'Layer3 AI语义推断(已启用)' : 'Layer3 AI语义推断(未启用, --smart 激活)'}。同优先级内已按架构层级排序（Layer0→Layer3）`,
       topChains,
       suggestedOrder,
     },
@@ -710,7 +720,7 @@ export async function clearPlanCmd(force: boolean = false, cwd: string = process
  * @param options.json - JSON 格式输出
  */
 export async function recommendPlan(
-  options: { query?: string; nonInteractive?: boolean; json?: boolean; all?: boolean } = {},
+  options: { query?: string; nonInteractive?: boolean; json?: boolean; all?: boolean; smart?: boolean } = {},
   cwd: string = process.cwd()
 ): Promise<void> {
   if (!isInitialized(cwd)) {
@@ -810,6 +820,46 @@ export async function recommendPlan(
   console.log('正在分析任务依赖关系...');
   const chains = buildTaskChains(filteredTasks, cwd);
 
+  // 1.5 AI 语义依赖推断 (Layer3, 仅 --smart 时激活，零 AI 调用开销)
+  if (options.smart) {
+    console.log('正在通过 AI 分析语义依赖关系...');
+    try {
+      const aiAssistant = new AIMetadataAssistant(cwd);
+      const semanticResult = await aiAssistant.inferSemanticDependencies(filteredTasks, { cwd });
+
+      if (semanticResult.aiUsed && semanticResult.dependencies.length > 0) {
+        // 合并 AI 推断的语义依赖到链数据中
+        for (const chain of chains) {
+          if (!chain.inferredDependencies) {
+            chain.inferredDependencies = new Map();
+          }
+          for (const task of chain.tasks) {
+            const aiDeps = semanticResult.dependencies.filter(d => d.taskId === task.id);
+            for (const aiDep of aiDeps) {
+              const existing = chain.inferredDependencies.get(task.id) || [];
+              // 跳过已通过文件重叠推断的依赖（避免重复）
+              const alreadyInferred = existing.some(e => e.depTaskId === aiDep.depTaskId);
+              if (!alreadyInferred) {
+                existing.push({
+                  depTaskId: aiDep.depTaskId,
+                  overlappingFiles: [],
+                  source: 'ai-semantic',
+                  reason: aiDep.reason,
+                });
+                chain.inferredDependencies.set(task.id, existing);
+              }
+            }
+          }
+        }
+        console.log(`  AI 发现 ${semanticResult.dependencies.length} 条语义依赖`);
+      } else {
+        console.log('  AI 未发现额外语义依赖');
+      }
+    } catch {
+      console.log('  AI 语义依赖推断失败（非致命），继续使用文件重叠推断');
+    }
+  }
+
   // 2. 按优先级↑ 链长度↓ reopen↓ 排序
   const sortedChains = sortChains(chains);
 
@@ -819,7 +869,8 @@ export async function recommendPlan(
     activeTasks.length,
     filteredTasks.length,
     options.query,
-    keywords.length > 0 ? keywords : undefined
+    keywords.length > 0 ? keywords : undefined,
+    { smart: options.smart }
   );
 
   // JSON 格式输出（AI 友好）
@@ -867,7 +918,7 @@ export async function recommendPlan(
     const parallelTag = batch.parallelizable
       ? ' [可并行]'
       : batch.chains.length > 1
-        ? ' [不可并行: 文件重叠推断依赖]'
+        ? ' [不可并行: 推断依赖]'
         : '';
 
     console.log(`📦 批次 ${b + 1}/${batches.length} ${batchIcon} ${batch.priority}${parallelTag}`);
@@ -892,8 +943,17 @@ export async function recommendPlan(
         const inferredDeps = chain.inferredDependencies?.get(task.id);
         let inferredTag = '';
         if (inferredDeps && inferredDeps.length > 0) {
-          const files = [...new Set(inferredDeps.flatMap(d => d.overlappingFiles))].slice(0, 2);
-          inferredTag = ` [推断] 文件重叠: ${files.join(', ')}${inferredDeps.flatMap(d => d.overlappingFiles).length > 2 ? '...' : ''}`;
+          const fileOverlapDeps = inferredDeps.filter(d => d.source !== 'ai-semantic');
+          const aiSemanticDeps = inferredDeps.filter(d => d.source === 'ai-semantic');
+
+          if (fileOverlapDeps.length > 0) {
+            const files = [...new Set(fileOverlapDeps.flatMap(d => d.overlappingFiles))].slice(0, 2);
+            inferredTag = ` [推断:文件重叠] ${files.join(', ')}${fileOverlapDeps.flatMap(d => d.overlappingFiles).length > 2 ? '...' : ''}`;
+          }
+          if (aiSemanticDeps.length > 0) {
+            const reasons = aiSemanticDeps.map(d => d.reason || '语义关联').slice(0, 2);
+            inferredTag += ` [推断:AI语义] ${reasons.join('; ')}`;
+          }
         }
 
         console.log(`${prefix} ${statusIcon} ${task.id}: ${task.title.substring(0, 40)}${inferredTag}`);

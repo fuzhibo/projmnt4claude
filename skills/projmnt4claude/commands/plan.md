@@ -48,6 +48,34 @@ projmnt4claude plan recommend --json      # 仅查看不应用
 
 **重要**: 在非 TTY 环境（如 Claude Code），`recommend` 会自动跳过交互确认。
 
+### 三层依赖推断机制
+
+`recommend` 子命令使用三层依赖推断，逐层增强依赖识别精度：
+
+| 层级 | 名称 | 激活条件 | 推断方式 |
+|------|------|----------|----------|
+| Layer1/2 | 文件路径重叠 | 默认启用 | O(n²) 比较任务对文件集合交集，时间序确定方向 |
+| Layer3 | AI 语义推断 | `--smart` 激活 | AI 分析任务标题/描述语义，推断隐含功能依赖 |
+
+**Layer3 AI 语义推断** 能识别文件重叠无法发现的依赖：
+- 登录功能依赖用户模型定义
+- API 端点依赖数据库 schema
+- 测试任务依赖被测试的实现
+- 配置模块依赖环境变量定义
+
+**零开销保证**: 不使用 `--smart` 时，Layer3 代码路径完全跳过，不产生任何 AI 调用。
+
+```bash
+# 标准推荐（仅 Layer1/2 文件重叠推断）
+projmnt4claude plan recommend
+
+# 智能推荐（Layer1/2 + Layer3 AI 语义推断）
+projmnt4claude plan recommend --smart
+
+# 智能推荐 + JSON 输出 + 自动应用
+projmnt4claude plan recommend --smart --yes --json
+```
+
 ## 使用场景
 
 ### 用户直接运行（人类友好模式）
@@ -81,7 +109,7 @@ projmnt4claude plan recommend --json
 | `add` | 添加任务到计划 | `plan add TASK-001 --after TASK-000` |
 | `remove` | 从计划移除任务 | `plan remove TASK-001` |
 | `clear` | 清空计划 | `plan clear --force` |
-| `recommend` | 智能推荐计划 | `plan recommend` |
+| `recommend` | 智能推荐计划（三层依赖推断） | `plan recommend` / `plan recommend --smart` |
 
 ## 选项
 
@@ -92,4 +120,5 @@ projmnt4claude plan recommend --json
 | `-a, --after <id>` | 在指定任务后添加 (add) | 用户 |
 | `-y, --yes` | 非交互模式，自动应用推荐 (recommend) | **AI 推荐** |
 | `-q, --query <query>` | 用户描述/关键字过滤 (recommend) | **AI 推荐** |
+| `--smart` | 启用 AI 语义依赖推断 Layer3 (recommend) | **AI 推荐** |
 | `--all` | 显示全部状态任务，默认仅推荐 open (recommend) | 用户/AI |

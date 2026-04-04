@@ -192,6 +192,24 @@ export interface StalenessAssessment {
   aiUsed: boolean;
 }
 
+/** AI 语义依赖推断结果 */
+export interface SemanticDependency {
+  /** 依赖任务 ID（被依赖方） */
+  depTaskId: string;
+  /** 依赖方任务 ID */
+  taskId: string;
+  /** AI 推断的依赖原因 */
+  reason: string;
+}
+
+/** 语义依赖推断整体结果 */
+export interface SemanticDependencyResult {
+  /** 推断出的语义依赖列表 */
+  dependencies: SemanticDependency[];
+  /** AI 是否可用 */
+  aiUsed: boolean;
+}
+
 /** Bug 报告分析结果 */
 export interface BugReportAnalysis {
   /** 建议的标题 (动词开头) */
@@ -326,6 +344,44 @@ const BUG_REPORT_SCHEMA = {
     },
     rootCause: { type: ['string', 'null'] },
     impactScope: { type: ['string', 'null'] },
+  },
+};
+
+const SEMANTIC_DEPS_SCHEMA = {
+  type: 'object',
+  required: ['dependencies'],
+  properties: {
+    dependencies: {
+      type: 'array',
+      items: {
+        type: 'object',
+        required: ['taskId', 'depTaskId', 'reason'],
+        properties: {
+          taskId: { type: 'string' },
+          depTaskId: { type: 'string' },
+          reason: { type: 'string' },
+        },
+      },
+    },
+  },
+};
+
+const SEMANTIC_DEP_SCHEMA = {
+  type: 'object',
+  required: ['dependencies'],
+  properties: {
+    dependencies: {
+      type: 'array',
+      items: {
+        type: 'object',
+        required: ['taskId', 'depTaskId', 'reason'],
+        properties: {
+          taskId: { type: 'string' },
+          depTaskId: { type: 'string' },
+          reason: { type: 'string' },
+        },
+      },
+    },
   },
 };
 
@@ -588,9 +644,109 @@ export class AIMetadataAssistant {
     };
   }
 
+  // ----------------------------------------------------------
+  // CP-13: inferSemanticDependencies - AI 语义依赖推断
+  // ----------------------------------------------------------
+
+  /**
+   * 通过 AI 分析任务描述的语义关系，推断任务间隐含的依赖关系
+   *
+   * @param tasks - 任务元数据列表
+   * @param options - AI 调用选项
+   * @returns 语义依赖推断结果
+   */
+  async inferSemanticDependencies(tasks: TaskMeta[], options: AIMetadataCallOptions): Promise<SemanticDependencyResult> {
+    if (tasks.length < 2) {
+      return { dependencies: [], aiUsed: false };
+    }
+
+    const prompt = this.buildSemanticDependencyPrompt(tasks);
+
+    const result = await this.invokeWithRetry(prompt, SEMANTIC_DEPS_SCHEMA, {
+      ...options,
+      maxRetries: options.maxRetries ?? 2,
+      timeoutSeconds: options.timeoutSeconds ?? 30,
+    });
+
+    if (!result.success) {
+      this.logger.warn('AI 语义依赖推断失败');
+      return { dependencies: [], aiUsed: false };
+    }
+
+    const parsed = this.parseJSON(result.output);
+    if (!parsed || !Array.isArray(parsed.dependencies)) {
+      this.logger.warn('AI 语义依赖输出解析失败');
+      return { dependencies: [], aiUsed: false };
+    }
+
+    // 验证并清洗结果
+    const validTaskIds = new Set(tasks.map(t => t.id));
+    const deps: SemanticDependency[] = [];
+
+    for (const dep of parsed.dependencies) {
+      if (
+        typeof dep === 'object' && dep !== null &&
+        typeof dep.taskId === 'string' &&
+        typeof dep.depTaskId === 'string' &&
+        typeof dep.reason === 'string' &&
+        validTaskIds.has(dep.taskId) &&
+        validTaskIds.has(dep.depTaskId) &&
+        dep.taskId !== dep.depTaskId
+      ) {
+        deps.push({
+          taskId: dep.taskId,
+          depTaskId: dep.depTaskId,
+          reason: dep.reason,
+        });
+      }
+    }
+
+    return { dependencies: deps, aiUsed: true };
+  }
+
   // ============================================================
   // Prompt 构建
   // ============================================================
+
+  private buildSemanticDependencyPrompt(tasks: TaskMeta[]): string {
+    // 精简任务信息列表：ID、标题、描述摘要
+    const taskList = tasks.slice(0, 50).map(t =>
+      `ID: ${t.id}\n标题: ${t.title}\n描述: ${(t.description || '').substring(0, 150)}`
+    ).join('\n---\n');
+
+    return `你是一个项目管理助手。分析以下任务列表，推断任务间的语义依赖关系。
+
+## 任务列表
+${taskList}
+
+## 输出要求
+输出纯 JSON 对象，不要用 markdown 代码块包裹。
+
+分析每个任务的标题和描述中的功能语义，推断任务间隐含的依赖关系。
+例如：
+- 登录功能依赖用户模型定义
+- API 端点依赖数据库 schema
+- 工具函数依赖类型定义
+- 测试任务依赖被测试的实现
+
+## 输出格式
+{
+  "dependencies": [
+    {
+      "taskId": "依赖方任务ID",
+      "depTaskId": "被依赖方任务ID",
+      "reason": "推断依赖的原因"
+    }
+  ]
+}
+
+## 约束
+- 只推断语义上合理的依赖，不要推断已通过文件重叠检测到的依赖
+- taskId 必须依赖 depTaskId（depTaskId 对应的任务应先完成）
+- reason 必须说明推断的语义原因
+- 如果没有发现语义依赖，返回空数组
+- 只输出 JSON`;
+  }
 
   private buildRequirementPrompt(description: string, errorFeedback?: string): string {
     let prompt = `你是一个项目管理助手。根据以下需求描述，提取结构化元数据。

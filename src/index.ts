@@ -535,12 +535,13 @@ rename 子命令格式:
 // plan 命令组
 program
   .command('plan <action> [id]')
-  .description('管理执行计划 (show/add/remove/clear/recommend)')
+  .description('管理执行计划 (show/add/remove/clear/recommend)\n\nrecommend 子命令支持三层依赖推断:\n  Layer1/2: 文件路径重叠 (默认)\n  Layer3: AI 语义推断 (--smart 激活)')
   .option('-j, --json', '以 JSON 格式输出 (仅 show/recommend)')
   .option('-f, --force', '强制执行，跳过确认 (仅 clear)')
   .option('-a, --after <taskId>', '在指定任务之后添加 (仅 add)')
   .option('-y, --yes', '非交互模式，自动应用推荐 (仅 recommend)')
   .option('-q, --query <query>', '用户描述/关键字过滤 (仅 recommend)')
+  .option('--smart', '启用 AI 语义依赖推断 (仅 recommend, Layer3 增强)')
   .option('--all', '显示全部状态任务，默认仅推荐 open (仅 recommend)')
   .action(async (action, id, options) => {
     requireInit();
@@ -571,6 +572,7 @@ program
           nonInteractive: options.yes,
           json: options.json,
           all: options.all,
+          smart: options.smart,
         });
         break;
       default:
