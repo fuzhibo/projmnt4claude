@@ -4173,9 +4173,76 @@ export async function analyzeBugReport(
   console.log(`    相关日志: ${logContext.length} 条`);
   console.log('');
 
-  // CP-8: 分类和严重性评估
+  // CP-8: 分类和严重性评估（规则引擎基础 + AI 增强）
   console.log('  🔍 执行分类和严重性评估...');
   const analysis = classifyBug(fields);
+
+  // CP-8: AI 辅助深层分析 — 当未禁用 AI 时调用 AIMetadataAssistant 增强规则引擎结果
+  let aiUsed = false;
+  let aiEnhancedFields: string[] = [];
+  if (options.noAi !== true) {
+    try {
+      const aiAssistant = new AIMetadataAssistant(cwd);
+      const logContextStr = logContext.length > 0 ? logContext.join('\n') : undefined;
+      const aiResult = await aiAssistant.analyzeBugReport(markdown, logContextStr, { cwd });
+
+      if (aiResult.aiUsed) {
+        aiUsed = true;
+
+        // AI 提供的任务类型信息增强分类
+        if (aiResult.type) {
+          analysis.classification.subcategory = `${analysis.classification.subcategory} (AI: ${aiResult.type})`;
+          aiEnhancedFields.push('classification');
+        }
+
+        // AI 优先级评估可能更准确，取更严重的结果
+        if (aiResult.priority) {
+          const priorityToSeverity: Record<string, 'critical' | 'high' | 'medium' | 'low'> = {
+            P0: 'critical', P1: 'high', P2: 'medium', P3: 'low',
+          };
+          const aiSeverity = priorityToSeverity[aiResult.priority];
+          if (aiSeverity) {
+            const severityOrder = ['low', 'medium', 'high', 'critical'];
+            if (severityOrder.indexOf(aiSeverity) > severityOrder.indexOf(analysis.severity)) {
+              analysis.severity = aiSeverity;
+              aiEnhancedFields.push('severity');
+            }
+          }
+        }
+
+        // AI 根因验证
+        if (aiResult.rootCause) {
+          analysis.rootCauseVerification = `AI 验证: ${aiResult.rootCause}`;
+          aiEnhancedFields.push('rootCauseVerification');
+        }
+
+        // AI 影响范围评估
+        if (aiResult.impactScope) {
+          analysis.impactAssessment = `AI 评估: ${aiResult.impactScope}`;
+          aiEnhancedFields.push('impactAssessment');
+        }
+
+        // AI 检查点作为改进建议追加
+        if (aiResult.checkpoints && aiResult.checkpoints.length > 0) {
+          const maxExistingPriority = analysis.suggestions.length > 0
+            ? Math.max(...analysis.suggestions.map(s => s.priority))
+            : 0;
+          for (let i = 0; i < aiResult.checkpoints.length; i++) {
+            analysis.suggestions.push({
+              priority: maxExistingPriority + i + 1,
+              suggestion: `[AI] ${aiResult.checkpoints[i]}`,
+            });
+          }
+          aiEnhancedFields.push('suggestions');
+        }
+
+        console.log(`    ✅ AI 分析完成，增强了 ${aiEnhancedFields.length} 个字段`);
+      }
+    } catch (aiError) {
+      console.log(`    ⚠️  AI 分析失败，使用规则引擎结果: ${aiError instanceof Error ? aiError.message : String(aiError)}`);
+    }
+  }
+
   console.log(`    分类: ${analysis.classification.category}/${analysis.classification.subcategory}`);
   console.log(`    严重性: ${analysis.severity}`);
   console.log(`    根因验证: ${analysis.rootCauseVerification}`);
@@ -4243,8 +4310,8 @@ export async function analyzeBugReport(
     action: 'analyze',
     input_summary: `path=${resolvedPath}, size=${markdown.length}`,
     output_summary: `classification=${analysis.classification.category}, severity=${analysis.severity}, report=${reportPath}`,
-    ai_used: false,
-    ai_enhanced_fields: [],
+    ai_used: aiUsed,
+    ai_enhanced_fields: aiEnhancedFields,
     duration_ms: Date.now() - startTime,
     user_edit_count: 0,
     module_data: {
