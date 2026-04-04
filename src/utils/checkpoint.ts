@@ -10,6 +10,82 @@ import { readTaskMeta, writeTaskMeta } from './task';
 import type { TaskMeta, CheckpointMetadata, CheckpointVerification, VerificationMethod } from '../types/task';
 
 /**
+ * 低质量检查点过滤结果
+ */
+export interface FilterResult {
+  /** 过滤后保留的检查点列表 */
+  kept: string[];
+  /** 被移除的检查点列表 */
+  removed: string[];
+  /** 被移除检查点的原因映射 */
+  reasons: Map<string, string>;
+}
+
+/**
+ * 过滤低质量检查点（AI 解析伪影）
+ *
+ * 三种过滤规则：
+ * 1. 单字母类要求：如 "O 类"、"O(n^2) 类" 等 Big-O 记号被误解析为类结构要求
+ * 2. 算法名称类要求：如 "DFS类"、"BFS类"、"AST类" 等算法术语被误解析为类定义要求
+ * 3. 带 CP-N: 前缀的重复检查点：AI 生成时重复添加了编号前缀
+ */
+export function filterLowQualityCheckpoints(checkpoints: string[]): FilterResult {
+  const kept: string[] = [];
+  const removed: string[] = [];
+  const reasons = new Map<string, string>();
+
+  // 规则1: 单字母类要求 (Big-O 记号误解析)
+  const singleLetterClassPattern = /^[A-Z]\s*类/;
+
+  // 规则2: 算法名称类要求
+  const algorithmNamePatterns = [
+    /^(DFS|BFS|AST|DAG|DP|KMP|RBM|LRU|LFU|AC自动机)\s*类/i,
+    /^(深度优先|广度优先|拓扑排序|动态规划|贪心|回溯|分治|哈希|双指针|滑动窗口|二分|递归)\s*类/,
+    /^O\s*[\(（]/,  // O(n^2), O(n) 等复杂度记号
+  ];
+
+  // 规则3: CP-N: 前缀的重复检查点
+  const cpPrefixPattern = /^CP-\d+:\s*/;
+
+  for (const cp of checkpoints) {
+    const trimmed = cp.trim();
+
+    // 检查规则1: 单字母类要求
+    if (singleLetterClassPattern.test(trimmed)) {
+      removed.push(cp);
+      reasons.set(cp, '单字母类要求（疑似 Big-O 记号伪影）');
+      continue;
+    }
+
+    // 检查规则2: 算法名称类要求
+    const matchedAlgorithm = algorithmNamePatterns.some(p => p.test(trimmed));
+    if (matchedAlgorithm) {
+      removed.push(cp);
+      reasons.set(cp, '算法名称类要求（疑似算法术语伪影）');
+      continue;
+    }
+
+    // 检查规则3: CP-N: 前缀重复检查点（去掉前缀后检查是否与已有检查点重复）
+    const cpPrefixMatch = trimmed.match(cpPrefixPattern);
+    if (cpPrefixMatch) {
+      const stripped = trimmed.replace(cpPrefixPattern, '').trim();
+      // 检查去掉前缀后是否与已有检查点重复
+      const isDuplicate = kept.some(existing => existing.trim() === stripped) ||
+        checkpoints.some(other => other !== cp && other.trim() === stripped);
+      if (isDuplicate) {
+        removed.push(cp);
+        reasons.set(cp, '带 CP-N: 前缀的重复检查点');
+        continue;
+      }
+    }
+
+    kept.push(cp);
+  }
+
+  return { kept, removed, reasons };
+}
+
+/**
  * 解析后的检查点信息
  */
 export interface ParsedCheckpoint {
@@ -279,8 +355,15 @@ export function syncCheckpointsToMeta(taskId: string, cwd: string = process.cwd(
   const existingMeta = task.checkpoints || [];
   const now = new Date().toISOString();
 
+  // 过滤低质量检查点（AI 解析伪影）
+  const checkpointTexts = parsedCheckpoints.map(cp => cp.text);
+  const filterResult = filterLowQualityCheckpoints(checkpointTexts);
+  const filteredCheckpoints = parsedCheckpoints.filter(
+    cp => !filterResult.removed.includes(cp.text)
+  );
+
   // 如果没有检查点，清空 meta 中的 checkpoints
-  if (parsedCheckpoints.length === 0) {
+  if (filteredCheckpoints.length === 0) {
     if (task.checkpoints && task.checkpoints.length > 0) {
       task.checkpoints = [];
       writeTaskMeta(task, cwd);
@@ -288,8 +371,8 @@ export function syncCheckpointsToMeta(taskId: string, cwd: string = process.cwd(
     return;
   }
 
-  // 合并现有元数据和新解析的检查点
-  const mergedCheckpoints: CheckpointMetadata[] = parsedCheckpoints.map((cp, index) => {
+  // 合并现有元数据和新解析的检查点（已过滤）
+  const mergedCheckpoints: CheckpointMetadata[] = filteredCheckpoints.map((cp, index) => {
     const existing = existingMeta.find(ec => ec.id === cp.id || ec.description === cp.text);
 
     // 如果已有验证信息，保留；否则尝试推断

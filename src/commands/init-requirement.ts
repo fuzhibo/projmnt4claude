@@ -10,7 +10,7 @@ import {
 } from '../utils/task';
 import { extractAffectedFiles } from '../utils/quality-gate';
 import { hasValidCheckpoints, displayCheckpointCreationWarning } from './task';
-import { syncCheckpointsToMeta } from '../utils/checkpoint';
+import { syncCheckpointsToMeta, filterLowQualityCheckpoints } from '../utils/checkpoint';
 import type { TaskMeta, TaskPriority, TaskStatus, TaskType } from '../types/task';
 import { createDefaultTaskMeta, inferTaskType, validateCheckpointVerification } from '../types/task';
 import { SEPARATOR_WIDTH } from '../utils/format';
@@ -463,7 +463,18 @@ export async function initRequirement(
   // 创建 checkpoint.md（使用合并后的检查点集合，包含结构化提取+智能推断+分析建议）
   const taskDir = path.join(getTasksDir(cwd), taskId);
   const checkpointPath = path.join(taskDir, 'checkpoint.md');
-  const checkpoints = allCheckpoints.length > 0 ? allCheckpoints : analysis.suggestedCheckpoints;
+  const checkpointsRaw = allCheckpoints.length > 0 ? allCheckpoints : analysis.suggestedCheckpoints;
+
+  // 过滤低质量检查点（AI 解析伪影）
+  const filterResult = filterLowQualityCheckpoints(checkpointsRaw);
+  if (filterResult.removed.length > 0) {
+    console.log(`   🔍 已过滤 ${filterResult.removed.length} 个低质量检查点:`);
+    for (const removed of filterResult.removed) {
+      const reason = filterResult.reasons.get(removed) || '未知原因';
+      console.log(`     - "${removed}" (${reason})`);
+    }
+  }
+  const checkpoints = filterResult.kept;
 
   const checkpointContent = `# ${taskId} 检查点
 
