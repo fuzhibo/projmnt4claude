@@ -730,7 +730,7 @@ function displayTasksGrouped(
   }
 
   // 定义分组排序顺序
-  const statusOrder = ['open', 'in_progress', 'wait_complete', 'resolved', 'closed', 'reopened', 'abandoned'];
+  const statusOrder = ['open', 'in_progress', 'wait_complete', 'resolved', 'closed', 'abandoned'];
   const priorityOrder = ['P0', 'P1', 'P2', 'P3', 'Q1', 'Q2', 'Q3', 'Q4'];
 
   // 获取排序后的分组键
@@ -968,7 +968,6 @@ function getStatusIcon(status: TaskStatus): string {
     wait_complete: '⏳',
     resolved: '✅',
     closed: '⚫',
-    reopened: '🔁',
     abandoned: '❌',
   };
   return icons[status] || '❓';
@@ -1057,7 +1056,6 @@ function showTaskPanel(
     in_progress: '进行中',
     resolved: '已解决',
     closed: '已关闭',
-    reopened: '已重开',
     abandoned: '已放弃',
     wait_review: '待审查',
     wait_qa: '待测试',
@@ -1667,12 +1665,41 @@ export async function updateTask(
   }
   if (options.status) {
     const oldStatus = task.status;
-    task.status = options.status as TaskStatus;
 
-    // 当状态变为 reopened 时，递增 reopenCount
-    if (options.status === 'reopened' && oldStatus !== 'reopened') {
+    // reopened 状态映射为 open + reopenCount 递增 + transitionNote
+    if (options.status === 'reopened') {
+      task.status = 'open';
       task.reopenCount = (task.reopenCount || 0) + 1;
-      console.log(`📊 任务重开次数: ${task.reopenCount}`);
+
+      // 添加 transitionNote
+      if (!task.transitionNotes) {
+        task.transitionNotes = [];
+      }
+      task.transitionNotes.push({
+        timestamp: new Date().toISOString(),
+        fromStatus: oldStatus as TaskStatus,
+        toStatus: 'open',
+        note: `任务从 ${oldStatus} 重开为 open (reopenCount: ${task.reopenCount})`,
+        author: process.env.USER || undefined,
+      });
+
+      // 添加历史记录
+      if (!task.history) {
+        task.history = [];
+      }
+      task.history.push({
+        timestamp: new Date().toISOString(),
+        action: `任务重开: ${oldStatus} → open (reopenCount: ${task.reopenCount})`,
+        field: 'status',
+        oldValue: oldStatus,
+        newValue: 'open',
+        reason: '用户发起重开，状态映射为 open + reopenCount 递增',
+      });
+
+      console.log(`🔁 任务已重开 (第 ${task.reopenCount} 次)`);
+      console.log(`   ${oldStatus} → open (reopenCount: ${task.reopenCount})`);
+    } else {
+      task.status = options.status as TaskStatus;
     }
 
     updated = true;
@@ -2185,13 +2212,11 @@ function formatStatus(status: TaskStatus | string): string {
     wait_complete: '⏳ 待完成',
     resolved: '✅ 已解决',
     closed: '⚫ 已关闭',
-    reopened: '🔄 已重开',
     abandoned: '❌ 已放弃',
-    // 兼容旧状态
+    // 兼容旧状态（reopened/reopen 已废弃，自动映射为 open + reopenCount 递增）
     pending: '⬜ 待处理',
     completed: '✅ 已完成',
     cancelled: '❌ 已取消',
-    reopen: '🔄 已重开',
   };
   return map[status] || `❓ ${status}`;
 }
@@ -2213,8 +2238,10 @@ export function showStatusGuide(): void {
   console.log('  🔵 in_progress - 进行中，任务正在执行');
   console.log('  ✅ resolved    - 已解决，任务完成并通过验证');
   console.log('  ⚫ closed      - 已关闭，任务最终确认完成');
-  console.log('  🔄 reopened    - 已重开，之前完成的任务发现问题需要重新处理');
   console.log('  ❌ abandoned   - 已放弃，任务不再需要');
+  console.log('');
+  console.log('  💡 说明: resolved/closed 状态可通过 --status reopened 重开为 open');
+  console.log('           系统会自动递增 reopenCount 并记录 transitionNote');
   console.log('');
 
   console.log('━'.repeat(SEPARATOR_WIDTH));
@@ -2237,9 +2264,9 @@ export function showStatusGuide(): void {
   console.log('       └─ 说明: 最终确认任务完成');
   console.log('');
 
-  console.log('  resolved/closed → reopened');
+  console.log('  resolved/closed → open (重开)');
   console.log('       └─ 命令: task update <id> --status reopened');
-  console.log('       └─ 说明: 发现问题需要重新处理');
+  console.log('       └─ 说明: 发现问题需要重新处理（自动映射为 open + reopenCount 递增）');
   console.log('');
 
   console.log('  任意状态 → abandoned');
@@ -2540,10 +2567,10 @@ export async function executeTask(taskId: string, cwd: string = process.cwd()): 
   console.log('━'.repeat(SEPARATOR_WIDTH));
   console.log('');
 
-  // P-019: 如果任务状态为 reopened，特别提示用户
-  if (task.status === 'reopened') {
-    console.log('⚠️  警告: 此任务已被重新打开！');
-    console.log('   请仔细调查任务历史，了解之前为什么被关闭后又重新打开。');
+  // P-019: 如果任务被重开过（reopenCount > 0），特别提示用户
+  if ((task.reopenCount || 0) > 0 && task.status === 'open') {
+    console.log('⚠️  注意: 此任务已被重开过！');
+    console.log(`   重开次数: ${task.reopenCount}，请仔细调查任务历史。`);
     console.log('   建议先查看任务详情和检查点记录。');
     console.log('');
   }
@@ -2877,7 +2904,8 @@ export async function addSubtask(
 function normalizeStatus(status: string): TaskStatus {
   const statusMap: Record<string, TaskStatus> = {
     'pending': 'open',
-    'reopen': 'reopened',
+    'reopen': 'open',
+    'reopened': 'open',
     'completed': 'closed',
     'cancelled': 'abandoned',
     'blocked': 'open',
@@ -2885,7 +2913,6 @@ function normalizeStatus(status: string): TaskStatus {
     'in_progress': 'in_progress',
     'resolved': 'resolved',
     'closed': 'closed',
-    'reopened': 'reopened',
     'abandoned': 'abandoned',
   };
   return statusMap[status] || 'open';
@@ -3484,7 +3511,7 @@ export function countTasks(
     console.log('');
 
     // 定义排序顺序
-    const statusOrder = ['open', 'in_progress', 'wait_complete', 'resolved', 'closed', 'reopened', 'abandoned'];
+    const statusOrder = ['open', 'in_progress', 'wait_complete', 'resolved', 'closed', 'abandoned'];
     const priorityOrder = ['P0', 'P1', 'P2', 'P3', 'Q1', 'Q2', 'Q3', 'Q4'];
 
     let sortedKeys: string[];
@@ -3568,7 +3595,7 @@ export function countTasks(
 
   // 按状态统计
   console.log('📋 按状态:');
-  const statusOrder = ['open', 'in_progress', 'wait_complete', 'resolved', 'closed', 'reopened', 'abandoned'];
+  const statusOrder = ['open', 'in_progress', 'wait_complete', 'resolved', 'closed', 'abandoned'];
   for (const status of statusOrder) {
     const count = statusCounts.get(status as TaskStatus) || 0;
     if (count > 0 || status === 'open' || status === 'in_progress' || status === 'resolved') {
@@ -3616,6 +3643,94 @@ export function countTasks(
     const completionRate = ((completed / tasks.length) * 100).toFixed(1);
     console.log(`📈 完成率: ${completionRate}% (${completed}/${tasks.length})`);
     console.log(`🔄 进行中: ${inProgress} | ⏳ 待处理: ${pending}`);
+    console.log('');
+  }
+}
+
+/**
+ * 显示项目状态摘要 + 主动操作提示
+ * 命令: task status
+ *
+ * 在统计输出末尾追加提示模块，检测:
+ * - wait_complete 任务（待验证确认）
+ * - pending 人工验证检查点
+ * - in_progress 中断任务（pipeline 中间状态残留）
+ */
+export function showStatus(
+  options: {
+    json?: boolean;
+  } = {},
+  cwd: string = process.cwd()
+): void {
+  if (!isInitialized(cwd)) {
+    console.error('错误: 项目未初始化。请先运行 `projmnt4claude setup`');
+    process.exit(1);
+  }
+
+  // 先输出标准统计
+  countTasks({}, cwd);
+
+  // 主动提示模块
+  const allTasks = getAllTasks(cwd);
+  const hints: string[] = [];
+
+  // 1. 检测 wait_complete 任务
+  const waitCompleteTasks = allTasks.filter(t => t.status === 'wait_complete');
+  if (waitCompleteTasks.length > 0) {
+    hints.push(`⏳ ${waitCompleteTasks.length} 个任务处于 wait_complete 状态，等待验证:`);
+    for (const t of waitCompleteTasks.slice(0, 5)) {
+      hints.push(`   - ${t.id}: ${t.title.substring(0, 40)}`);
+    }
+    if (waitCompleteTasks.length > 5) {
+      hints.push(`   ... 还有 ${waitCompleteTasks.length - 5} 个`);
+    }
+    hints.push('   💡 运行 task validate <id> 验证任务');
+  }
+
+  // 2. 检测 pending 人工验证检查点
+  const humanVerificationTasks: string[] = [];
+  for (const task of allTasks) {
+    if (task.status !== 'open' && task.status !== 'in_progress') continue;
+    const checkpoints = task.checkpoints || [];
+    const pendingHuman = checkpoints.filter(
+      cp => cp.status === 'pending' && cp.verification?.method === 'human_verification'
+    );
+    if (pendingHuman.length > 0) {
+      humanVerificationTasks.push(
+        `   - ${task.id}: ${pendingHuman.length} 个待人工验证检查点 (${pendingHuman.map(cp => cp.id).join(', ')})`
+      );
+    }
+  }
+  if (humanVerificationTasks.length > 0) {
+    hints.push('');
+    hints.push(`👤 ${humanVerificationTasks.length} 个任务有待人工验证的检查点:`);
+    hints.push(...humanVerificationTasks.slice(0, 5));
+    hints.push('   💡 运行 task checkpoint <taskId> <cpId> complete 进行验证');
+  }
+
+  // 3. 检测 in_progress 中断任务（pipeline 中间状态残留）
+  const intermediateStatuses = ['wait_review', 'wait_qa'];
+  const interruptedTasks = allTasks.filter(t => intermediateStatuses.includes(t.status));
+  if (interruptedTasks.length > 0) {
+    hints.push('');
+    hints.push(`⚠️  ${interruptedTasks.length} 个任务处于 pipeline 中间状态（可能已中断）:`);
+    for (const t of interruptedTasks.slice(0, 5)) {
+      hints.push(`   - ${t.id}: ${t.status} - ${t.title.substring(0, 40)}`);
+    }
+    if (interruptedTasks.length > 5) {
+      hints.push(`   ... 还有 ${interruptedTasks.length - 5} 个`);
+    }
+    hints.push('   💡 运行 task update <id> --status open 重置，或继续 pipeline');
+  }
+
+  // 输出提示
+  if (hints.length > 0) {
+    console.log('━'.repeat(SEPARATOR_WIDTH));
+    console.log('💡 操作提示:');
+    console.log('');
+    for (const hint of hints) {
+      console.log(hint);
+    }
     console.log('');
   }
 }

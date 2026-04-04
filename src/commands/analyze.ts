@@ -20,6 +20,7 @@ import type {
   CheckpointMetadata,
   TaskHistoryEntry,
   VerificationMethod,
+  TransitionNote,
 } from '../types/task';
 import {
   parseTaskId,
@@ -141,7 +142,7 @@ function normalizeStatus(status: string): TaskStatus {
   const statusMap: Record<string, TaskStatus> = {
     // 旧格式映射
     'pending': 'open',
-    'reopen': 'reopened',
+    'reopen': 'open',
     'completed': 'closed',
     'cancelled': 'abandoned',
     'blocked': 'open',
@@ -150,7 +151,7 @@ function normalizeStatus(status: string): TaskStatus {
     'in_progress': 'in_progress',
     'resolved': 'resolved',
     'closed': 'closed',
-    'reopened': 'reopened',
+    'reopened': 'open',
     'abandoned': 'abandoned',
   };
   return statusMap[status] || 'open';
@@ -161,7 +162,7 @@ function normalizeStatus(status: string): TaskStatus {
 /**
  * 有效的任务状态值
  */
-const VALID_STATUSES: TaskStatus[] = ['open', 'in_progress', 'wait_review', 'wait_qa', 'wait_complete', 'needs_human', 'resolved', 'closed', 'reopened', 'abandoned'];
+const VALID_STATUSES: TaskStatus[] = ['open', 'in_progress', 'wait_review', 'wait_qa', 'wait_complete', 'resolved', 'closed', 'abandoned'];
 
 /**
  * 有效的任务类型
@@ -341,23 +342,31 @@ export const SCHEMA_MIGRATIONS: SchemaMigrationStep[] = [
       const details: string[] = [];
       let changed = false;
 
-      // 迁移 reopened 状态到 open（让任务可被重新处理）
-      if (task.status === 'reopened') {
-        task.status = 'open';
-        details.push('status: reopened → open');
-        changed = true;
-      }
-
-      // 初始化 transitionNotes
+      // 初始化 transitionNotes（必须在状态迁移之前，以便写入迁移记录）
       if (task.transitionNotes === undefined) {
         task.transitionNotes = [];
         details.push('添加 transitionNotes: []');
         changed = true;
       }
 
+      // 迁移 reopened 状态到 open（让任务可被重新处理）
+      if ((task.status as string) === 'reopened') {
+        task.transitionNotes.push({
+          timestamp: new Date().toISOString(),
+          fromStatus: 'reopened',
+          toStatus: 'open',
+          note: 'Schema v4 迁移: reopened → open（reopened 状态已废弃）',
+          author: 'schema-migration',
+        });
+        task.status = 'open';
+        details.push('status: reopened → open');
+        details.push('transitionNote: 记录 reopened → open 迁移');
+        changed = true;
+      }
+
       // 初始化 resumeAction（仅对 pipeline 中间状态的任务设置）
       if (task.resumeAction === undefined) {
-        const intermediateStatuses: TaskStatus[] = ['wait_review', 'wait_qa', 'wait_complete', 'needs_human'];
+        const intermediateStatuses: string[] = ['wait_review', 'wait_qa', 'wait_complete', 'needs_human'];
         if (intermediateStatuses.includes(task.status)) {
           task.resumeAction = 'resume_pipeline';
           details.push(`添加 resumeAction: resume_pipeline (status=${task.status})`);
@@ -592,7 +601,11 @@ export interface Issue {
     // Schema 版本迁移
     | 'schema_version_outdated'
     // AI 语义检测
-    | 'semantic_duplicate';
+    | 'semantic_duplicate'
+    // 流转完整性检查
+    | 'missing_transition_note'
+    // 中断任务检测
+    | 'interrupted_task';
   severity: 'low' | 'medium' | 'high';
   message: string;
   suggestion: string;
@@ -1261,9 +1274,7 @@ export async function analyzeProject(
       wait_complete: 0,
       resolved: 0,
       closed: 0,
-      reopened: 0,
       abandoned: 0,
-      needs_human: 0,
     },
     byPriority: {
       P0: 0,
@@ -1461,7 +1472,7 @@ export async function analyzeProject(
         details: {
           currentStatus: task.status,
           targetStatus,
-          migrationReason: task.status === 'needs_human'
+          migrationReason: (task.status as string) === 'needs_human'
             ? 'needs_human 已弃用，重置为 open 以便人工重新处理'
             : `pipeline 中间状态 ${task.status} 表明 pipeline 中断，建议迁移到 ${targetStatus}`,
         },
@@ -1597,16 +1608,28 @@ export async function analyzeProject(
       });
     }
 
-    // 3. 检测状态与 reopenCount 不一致
-    if (normalizedStatus === 'reopened' && (task.reopenCount === undefined || task.reopenCount === 0)) {
-      issues.push({
-        taskId: task.id,
-        type: 'status_reopen_mismatch',
-        severity: 'medium',
-        message: '任务状态为 reopened 但 reopenCount 为 0 或未设置',
-        suggestion: '设置 reopenCount >= 1 或将状态改为其他值',
-        details: { status: task.status, reopenCount: task.reopenCount },
-      });
+    // 3. 检测 reopenCount 与流转记录不一致（reopened 状态已废弃，通过 reopenCount + transitionNote 追踪）
+    if ((task.reopenCount ?? 0) > 0) {
+      const reopenHistoryCount = task.history?.filter(
+        (h: TaskHistoryEntry) =>
+          (h.action === 'status_change' && h.newValue === 'reopened') ||
+          (h.field === 'status' && h.oldValue === 'resolved' && h.newValue === 'open')
+      ).length || 0;
+      const reopenTransitionCount = task.transitionNotes?.filter(
+        (note: TransitionNote) =>
+          note.fromStatus === 'resolved' && (note.toStatus === 'open' || (note.toStatus as string) === 'reopened')
+      ).length || 0;
+
+      if (reopenHistoryCount === 0 && reopenTransitionCount === 0) {
+        issues.push({
+          taskId: task.id,
+          type: 'status_reopen_mismatch',
+          severity: 'medium',
+          message: `任务 reopenCount=${task.reopenCount} 但无对应的 reopen 流转记录`,
+          suggestion: '确保 reopen 操作有对应的 transitionNote 和 history 记录',
+          details: { reopenCount: task.reopenCount, status: task.status },
+        });
+      }
     }
 
     // 4. 检测无效的类型值
@@ -1681,7 +1704,7 @@ export async function analyzeProject(
         type: 'missing_verification',
         severity: 'medium',
         message: '任务已 resolved 但缺少 verification 字段',
-        suggestion: '运行 analyze --fix-verification 自动回填 verification 字段',
+        suggestion: '运行 analyze --fix 自动回填 verification 字段',
         details: { status: task.status, hasCheckpoints: !!(task.checkpoints && task.checkpoints.length > 0) },
       });
     }
@@ -1694,7 +1717,7 @@ export async function analyzeProject(
         type: 'inconsistent_status',
         severity: 'high',
         message: `任务状态矛盾: status=resolved 但 verification.result=failed, checkpointCompletionRate=${task.verification.checkpointCompletionRate ?? 0}`,
-        suggestion: '运行 analyze --fix-status 自动将状态改为 reopened，或手动检查验收标准',
+        suggestion: '运行 analyze --fix 自动将状态改为 open，或手动检查验收标准',
         details: {
           status: task.status,
           verificationResult: task.verification.result,
@@ -1810,7 +1833,146 @@ export async function analyzeProject(
       }
     }
 
-    // 12. 检测引用文件不存在 (file_not_found)
+    // 12. 检测历史流转缺失 transitionNote
+    if (task.history && Array.isArray(task.history)) {
+      const statusEntries = task.history.filter(
+        (entry: TaskHistoryEntry) => entry.field === 'status' && entry.oldValue && entry.newValue
+      );
+      const existingNotes = task.transitionNotes || [];
+
+      for (const entry of statusEntries) {
+        const hasMatchingNote = existingNotes.some(
+          (note: TransitionNote) =>
+            note.fromStatus === entry.oldValue && note.toStatus === entry.newValue
+        );
+        if (!hasMatchingNote) {
+          // 推断 author
+          const actionLower = (entry.action || '').toLowerCase();
+          const author = (actionLower.includes('pipeline') || actionLower.includes('harness'))
+            ? 'pipeline'
+            : 'user';
+
+          // 推断 decision 描述
+          const decisionMap: Record<string, string> = {
+            'open→in_progress': '开始执行任务',
+            'in_progress→wait_review': '提交代码审查',
+            'wait_review→wait_qa': '审查通过，进入QA',
+            'wait_qa→wait_complete': 'QA通过，等待完成确认',
+            'wait_complete→resolved': '任务完成',
+            'open→closed': '关闭任务',
+            'in_progress→resolved': '直接标记完成',
+            'resolved→reopened': '重新打开任务',
+            'reopened→in_progress': '重新开始执行',
+            'open→abandoned': '放弃任务',
+            'in_progress→open': '退回待办',
+          };
+          const statusKey = `${entry.oldValue}→${entry.newValue}`;
+          const decision = decisionMap[statusKey] || `${entry.oldValue} → ${entry.newValue}`;
+
+          issues.push({
+            taskId: task.id,
+            type: 'missing_transition_note',
+            severity: 'low',
+            message: `历史流转 ${statusKey} 缺少 transitionNote 记录`,
+            suggestion: '使用 --fix 自动从历史条目回填 transitionNote',
+            details: {
+              historyEntry: {
+                timestamp: entry.timestamp,
+                action: entry.action,
+                oldValue: entry.oldValue,
+                newValue: entry.newValue,
+                reason: entry.reason,
+                user: entry.user,
+                verificationDetails: entry.verificationDetails,
+              },
+              inferredAuthor: author,
+              inferredDecision: decision,
+              inferredAnalysis: entry.reason || '',
+              inferredEvidence: entry.verificationDetails || '',
+            },
+          });
+        }
+      }
+    }
+
+    // 13. 检测中断任务（in_progress 且无活跃 Pipeline）
+    if (normalizedStatus === 'in_progress') {
+      // 检查是否有活跃 pipeline 状态文件
+      const omcStateDir = path.resolve(cwd, '.omc/state');
+      let hasActivePipeline = false;
+
+      if (fs.existsSync(omcStateDir)) {
+        const pipelineStateFiles = fs.readdirSync(omcStateDir)
+          .filter(f => f.includes('pipeline') && f.endsWith('.json'));
+
+        for (const stateFile of pipelineStateFiles) {
+          try {
+            const stateData = JSON.parse(
+              fs.readFileSync(path.join(omcStateDir, stateFile), 'utf-8')
+            );
+            if (stateData.active === true) {
+              // 检查 pipeline 状态是否关联当前任务
+              const taskIds: string[] = stateData.taskIds || (stateData.taskDescription ? [task.id] : []);
+              if (taskIds.length === 0 || taskIds.includes(task.id)) {
+                hasActivePipeline = true;
+                break;
+              }
+            }
+          } catch { /* ignore invalid state files */ }
+        }
+      }
+
+      if (!hasActivePipeline) {
+        // 计算中断时长
+        const lastUpdated = new Date(task.updatedAt);
+        const interruptedDurationMs = now.getTime() - lastUpdated.getTime();
+        const interruptedDays = Math.floor(interruptedDurationMs / (24 * 60 * 60 * 1000));
+
+        // 计算检查点完成率
+        const totalCheckpoints = task.checkpoints?.length || 0;
+        const completedCheckpoints = task.checkpoints?.filter(
+          cp => cp.status === 'completed'
+        ).length || 0;
+        const checkpointRate = totalCheckpoints > 0 ? completedCheckpoints / totalCheckpoints : 0;
+
+        // 检查是否有 requiresHuman 的检查点
+        const hasRequiresHuman = task.checkpoints?.some(cp => cp.requiresHuman === true) || false;
+
+        // 给出状态建议
+        let suggestion_status: string;
+        let suggestion_reason: string;
+        if (checkpointRate >= 0.8 && totalCheckpoints > 0) {
+          suggestion_status = 'wait_qa';
+          suggestion_reason = `检查点完成率 ${(checkpointRate * 100).toFixed(0)}%，建议转为 wait_qa`;
+        } else if (interruptedDays < 1 && !hasRequiresHuman) {
+          suggestion_status = 'in_progress';
+          suggestion_reason = '中断时间短且无需人工检查点，建议保持 in_progress';
+        } else {
+          suggestion_status = 'open';
+          suggestion_reason = '任务中断较久，建议重置为 open 以便重新规划';
+        }
+
+        issues.push({
+          taskId: task.id,
+          type: 'interrupted_task',
+          severity: 'medium',
+          message: `in_progress 任务无活跃 Pipeline，已中断 ${interruptedDays} 天`,
+          suggestion: `建议: ${suggestion_reason}。使用 --fix 自动应用建议状态`,
+          details: {
+            currentStatus: task.status,
+            interruptedDays,
+            checkpointRate: Math.round(checkpointRate * 100) / 100,
+            totalCheckpoints,
+            completedCheckpoints,
+            hasRequiresHuman,
+            suggestedStatus: suggestion_status,
+            suggestionReason: suggestion_reason,
+          },
+        });
+      }
+    }
+
+    // 14. 检测引用文件不存在 (file_not_found)
     const taskText = `${task.description || ''}\n${task.title || ''}`;
     const referencedFiles = extractFileReferences(taskText);
     const missingRefs = referencedFiles.filter(fp => !fs.existsSync(path.resolve(cwd, fp)));
@@ -2066,6 +2228,8 @@ function isStatusIssue(type: Issue['type']): boolean {
     'pipeline_status_migration',
     'verdict_action_schema',
     'schema_version_outdated',
+    'missing_transition_note',
+    'interrupted_task',
   ].includes(type);
 }
 
@@ -2269,33 +2433,46 @@ async function fixSingleIssue(
     }
 
     case 'status_reopen_mismatch': {
-      console.log(`🔄 修复任务 ${issue.taskId} 的 reopenCount 不一致...`);
-      const reopenFromHistory = task.history?.filter(
-        (h) => h.action === 'status_change' && h.newValue === 'reopened'
-      ).length || 0;
-      task.reopenCount = Math.max(1, reopenFromHistory);
+      console.log(`🔄 修复任务 ${issue.taskId} 的 reopen 流转记录缺失...`);
+      // 确保 transitionNotes 已初始化
+      if (!task.transitionNotes) task.transitionNotes = [];
+
+      // 补录 reopen transitionNote
+      task.transitionNotes.push({
+        timestamp: new Date().toISOString(),
+        fromStatus: 'resolved',
+        toStatus: 'open',
+        note: `补录 reopen 流转记录 (reopenCount=${task.reopenCount})`,
+        author: 'analyze-fix',
+      });
+
+      // 确保 status 为 open（已废弃 reopened）
+      if ((task.status as string) === 'reopened') {
+        task.status = 'open';
+      }
+
       writeTaskMeta(task, cwd);
-      console.log(`  ✅ 已将 reopenCount 设置为 ${task.reopenCount}`);
+      console.log(`  ✅ 已补录 transitionNote，reopenCount=${task.reopenCount}`);
       return 'fixed';
     }
 
     case 'inconsistent_status': {
       console.log(`🔄 修复任务 ${issue.taskId} 的状态矛盾 (resolved + verification.failed)...`);
-      // 将状态改回 reopened，清除旧的 verification
-      task.status = 'reopened';
+      // 将状态改回 open，清除旧的 verification
+      task.status = 'open';
       task.verification = undefined;
       task.updatedAt = new Date().toISOString();
       task.history.push({
         timestamp: new Date().toISOString(),
-        action: `状态变更: resolved → reopened`,
+        action: `状态变更: resolved → open`,
         field: 'status',
         oldValue: 'resolved',
-        newValue: 'reopened',
+        newValue: 'open',
         reason: '修复状态矛盾: resolved 但 verification.result=failed',
         user: 'analyze-fix',
       });
       writeTaskMeta(task, cwd);
-      console.log(`  ✅ 已将状态从 resolved 改为 reopened，清除旧 verification`);
+      console.log(`  ✅ 已将状态从 resolved 改为 open，清除旧 verification`);
       return 'fixed';
     }
 
@@ -2508,6 +2685,148 @@ async function fixSingleIssue(
       return 'unfixable';
     }
 
+    case 'missing_transition_note': {
+      console.log(`🔄 回填任务 ${issue.taskId} 的 transitionNote...`);
+      const historyEntry = issue.details?.historyEntry as TaskHistoryEntry | undefined;
+      if (!historyEntry) {
+        console.log(`  ⚠️  缺少历史条目详情，无法回填`);
+        return 'unfixable';
+      }
+
+      // 推断各字段
+      const actionLower = (historyEntry.action || '').toLowerCase();
+      const author: string = (actionLower.includes('pipeline') || actionLower.includes('harness'))
+        ? 'pipeline'
+        : 'user';
+      const analysis = historyEntry.reason || '';
+      const evidence = historyEntry.verificationDetails || '';
+
+      // 构建 decision 描述
+      const decisionMap: Record<string, string> = {
+        'open→in_progress': '开始执行任务',
+        'in_progress→wait_review': '提交代码审查',
+        'wait_review→wait_qa': '审查通过，进入QA',
+        'wait_qa→wait_complete': 'QA通过，等待完成确认',
+        'wait_complete→resolved': '任务完成',
+        'open→closed': '关闭任务',
+        'in_progress→resolved': '直接标记完成',
+        'resolved→reopened': '重新打开任务',
+        'reopened→in_progress': '重新开始执行',
+        'open→abandoned': '放弃任务',
+        'in_progress→open': '退回待办',
+      };
+      const statusKey = `${historyEntry.oldValue}→${historyEntry.newValue}`;
+      const decision = decisionMap[statusKey] || `${historyEntry.oldValue} → ${historyEntry.newValue}`;
+
+      // 组合 note 内容
+      const noteParts = [decision];
+      if (analysis) noteParts.push(`分析: ${analysis}`);
+      if (evidence) noteParts.push(`证据: ${evidence}`);
+      const note = noteParts.join(' | ');
+
+      if (!task.transitionNotes) {
+        task.transitionNotes = [];
+      }
+      task.transitionNotes.push({
+        timestamp: historyEntry.timestamp || new Date().toISOString(),
+        fromStatus: historyEntry.oldValue as TaskStatus,
+        toStatus: historyEntry.newValue as TaskStatus,
+        note,
+        author,
+      });
+      writeTaskMeta(task, cwd);
+      console.log(`  ✅ 已回填 transitionNote: ${statusKey} (${author})`);
+      return 'fixed';
+    }
+
+    case 'interrupted_task': {
+      const suggestedStatus = issue.details?.suggestedStatus as string | undefined;
+      if (!suggestedStatus) {
+        console.log(`  ⚠️  缺少状态建议，无法自动修复`);
+        return 'unfixable';
+      }
+
+      console.log(`🔄 修复中断任务 ${issue.taskId}...`);
+      console.log(`   当前状态: ${task.status} → 建议状态: ${suggestedStatus}`);
+      console.log(`   原因: ${issue.details?.suggestionReason || issue.suggestion}`);
+
+      // 如果建议保持 in_progress，跳过
+      if (suggestedStatus === 'in_progress') {
+        console.log(`  ⏭️  建议保持 in_progress，跳过修复`);
+        return 'skipped';
+      }
+
+      // 非交互模式下直接应用建议
+      if (nonInteractive || !process.stdin.isTTY) {
+        const oldStatus = task.status;
+        task.status = suggestedStatus as TaskStatus;
+        task.updatedAt = new Date().toISOString();
+
+        // 添加 history 记录
+        if (!task.history) task.history = [];
+        task.history.push({
+          timestamp: new Date().toISOString(),
+          action: 'analyze_interrupted_task_fix',
+          field: 'status',
+          oldValue: oldStatus,
+          newValue: suggestedStatus,
+          reason: `中断任务自动修复: ${issue.details?.suggestionReason || ''}`,
+        });
+
+        // 添加 transitionNote
+        if (!task.transitionNotes) task.transitionNotes = [];
+        task.transitionNotes.push({
+          timestamp: new Date().toISOString(),
+          fromStatus: oldStatus as TaskStatus,
+          toStatus: suggestedStatus as TaskStatus,
+          note: `中断任务自动修复: ${(issue.details?.interruptedDays as number) || 0} 天无活跃 Pipeline`,
+          author: 'analyze',
+        });
+
+        writeTaskMeta(task, cwd);
+        console.log(`  ✅ 已将任务 ${issue.taskId} 状态从 ${oldStatus} 修改为 ${suggestedStatus}`);
+        return 'fixed';
+      }
+
+      // 交互模式下询问用户
+      const response = await prompts({
+        type: 'confirm',
+        name: 'apply',
+        message: `是否将任务 ${issue.taskId} 状态从 ${task.status} 修改为 ${suggestedStatus}?`,
+        initial: true,
+      });
+
+      if (response.apply) {
+        const oldStatus = task.status;
+        task.status = suggestedStatus as TaskStatus;
+        task.updatedAt = new Date().toISOString();
+
+        if (!task.history) task.history = [];
+        task.history.push({
+          timestamp: new Date().toISOString(),
+          action: 'analyze_interrupted_task_fix',
+          field: 'status',
+          oldValue: oldStatus,
+          newValue: suggestedStatus,
+          reason: `中断任务手动确认修复: ${issue.details?.suggestionReason || ''}`,
+        });
+
+        if (!task.transitionNotes) task.transitionNotes = [];
+        task.transitionNotes.push({
+          timestamp: new Date().toISOString(),
+          fromStatus: oldStatus as TaskStatus,
+          toStatus: suggestedStatus as TaskStatus,
+          note: `中断任务手动确认修复: ${(issue.details?.interruptedDays as number) || 0} 天无活跃 Pipeline`,
+          author: 'analyze',
+        });
+
+        writeTaskMeta(task, cwd);
+        console.log(`  ✅ 已将任务 ${issue.taskId} 状态从 ${oldStatus} 修改为 ${suggestedStatus}`);
+        return 'fixed';
+      }
+      return 'skipped';
+    }
+
     default:
       return 'unfixable';
   }
@@ -2578,26 +2897,6 @@ export async function fixIssues(
   console.log('━'.repeat(SEPARATOR_WIDTH));
 
   return { fixed: fixedCount, skipped: skippedCount, unfixable: unfixableCount };
-}
-
-/**
- * 仅修复验证方法问题
- */
-export async function fixVerification(
-  cwd: string = process.cwd(),
-  nonInteractive: boolean = false
-): Promise<void> {
-  await fixIssues(cwd, { nonInteractive, fixType: 'verification' });
-}
-
-/**
- * 仅修复状态相关问题
- */
-export async function fixStatus(
-  cwd: string = process.cwd(),
-  nonInteractive: boolean = false
-): Promise<void> {
-  await fixIssues(cwd, { nonInteractive, fixType: 'status' });
 }
 
 /**
@@ -2674,15 +2973,9 @@ export async function showStatus(
   console.log(`   待处理: ${result.stats.byStatus.open}`);
   console.log(`   进行中: ${result.stats.byStatus.in_progress}`);
   console.log(`   已完成: ${result.stats.byStatus.resolved + result.stats.byStatus.closed}`);
-  console.log(`   已重开: ${result.stats.byStatus.reopened}`);
-  console.log(`   已放弃: ${result.stats.byStatus.abandoned}`);
-  if (result.stats.ignored > 0) {
-    console.log(`   已忽略: ${result.stats.ignored} (配置 ignorePatterns)`);
-  }
-  console.log('');
-
-  // Reopen 统计
   const reopenStats = calculateReopenStats(tasks);
+  console.log(`   已重开: ${reopenStats.reopenCount}`);
+  console.log(`   已放弃: ${result.stats.byStatus.abandoned}`);
   if (reopenStats.reopenCount > 0) {
     console.log('🔄 Reopen 统计:');
     console.log(`   当前 reopen 任务数: ${reopenStats.reopenCount}`);
@@ -2732,7 +3025,7 @@ export async function showStatus(
  * 优先使用 reopenCount 字段，回退到历史记录计算
  */
 function calculateReopenStats(tasks: TaskMeta[]): { reopenCount: number; topReopened: { taskId: string; title: string; count: number }[] } {
-  const reopenCount = tasks.filter(t => t.status === 'reopened').length;
+  const reopenCount = tasks.filter(t => (t.reopenCount ?? 0) > 0).length;
 
   // 统计 reopen 次数：优先使用 reopenCount 字段
   const reopenCounts: { taskId: string; title: string; count: number }[] = [];

@@ -328,25 +328,26 @@ function tryTransitionTaskStatus(taskId: string, cwd: string): void {
   );
 
   if (rejectedForTask.length > 0) {
-    // 有拒绝的检查点，将任务标记为 in_progress 并设置恢复动作
-    updateTaskStatus(taskId, 'in_progress', '人工验证未通过', cwd);
+    // 有拒绝的检查点，将任务回退到 open 状态以便重新入队
+    const fromStatus = task.status; // wait_qa
+    updateTaskStatus(taskId, 'open', '人工验证未通过', cwd);
 
     // 设置 resumeAction 和 transitionNote 以支持角色感知恢复
-    const task = readTaskMeta(taskId, cwd);
-    if (task) {
-      task.resumeAction = 'retry';
-      // 写入 transitionNote
-      if (!task.transitionNotes) {
-        task.transitionNotes = [];
+    const updatedTask = readTaskMeta(taskId, cwd);
+    if (updatedTask) {
+      updatedTask.resumeAction = 'retry';
+      // 写入 transitionNote 记录拒绝原因和上下文
+      if (!updatedTask.transitionNotes) {
+        updatedTask.transitionNotes = [];
       }
-      task.transitionNotes.push({
+      updatedTask.transitionNotes.push({
         timestamp: new Date().toISOString(),
-        fromStatus: task.status,
-        toStatus: 'in_progress' as TaskStatus,
-        note: `人工验证未通过 (${rejectedForTask.length} 个检查点被拒绝)，需要从开发阶段重试`,
+        fromStatus: fromStatus,
+        toStatus: 'open' as TaskStatus,
+        note: `人工验证未通过 (${rejectedForTask.length} 个检查点被拒绝)，任务回退至 open 状态等待重新入队`,
         author: 'verification-queue',
       });
-      writeTaskMeta(task, cwd);
+      writeTaskMeta(updatedTask, cwd);
     }
     return;
   }

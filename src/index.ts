@@ -48,8 +48,6 @@ import {
   analyzeProject,
   showAnalysis,
   fixIssues,
-  fixVerification,
-  fixStatus,
   showStatus,
   fixCheckpoints,
   performQualityCheck,
@@ -655,8 +653,6 @@ program
   .description('分析项目健康状态')
   .option('--fix', '自动修复所有可修复的问题')
   .option('--fix-checkpoints', '智能生成缺失的检查点')
-  .option('--fix-verification', '仅修复验证方法问题 (manual -> automated)')
-  .option('--fix-status', '仅修复状态相关问题 (状态格式、优先级、时间戳等)')
   .option('--quality-check', '检测任务内容质量（描述完整度、检查点质量、关联文件、解决方案）')
   .option('--threshold <score>', '质量检测阈值，低于此分数的任务将被标记 (默认: 60)', '60')
   .option('-j, --json', 'JSON 格式输出 (仅 --quality-check)')
@@ -680,10 +676,6 @@ program
       });
     } else if (options.fixCheckpoints) {
       await fixCheckpoints(process.cwd(), { nonInteractive: options.yes, taskId: options.task });
-    } else if (options.fixVerification) {
-      await fixVerification(process.cwd(), options.yes);
-    } else if (options.fixStatus) {
-      await fixStatus(process.cwd(), options.yes);
     } else if (options.fix) {
       await fixIssues(process.cwd(), { nonInteractive: options.yes, fixType: 'all' });
     } else if (options.qualityCheck) {

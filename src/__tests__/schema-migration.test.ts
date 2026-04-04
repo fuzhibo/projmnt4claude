@@ -69,8 +69,7 @@ describe('Pipeline Status Constants', () => {
     expect(PIPELINE_INTERMEDIATE_STATUSES).toContain('wait_review');
     expect(PIPELINE_INTERMEDIATE_STATUSES).toContain('wait_qa');
     expect(PIPELINE_INTERMEDIATE_STATUSES).toContain('wait_complete');
-    expect(PIPELINE_INTERMEDIATE_STATUSES).toContain('needs_human');
-    expect(PIPELINE_INTERMEDIATE_STATUSES).toHaveLength(4);
+    expect(PIPELINE_INTERMEDIATE_STATUSES).toHaveLength(3);
   });
 
   test('PIPELINE_STATUS_MIGRATION_MAP should map all intermediate statuses', () => {
@@ -295,7 +294,7 @@ describe('applySchemaMigrations', () => {
 
   test('v2 migration should migrate needs_human to open', () => {
     const task = createTestTask({
-      status: 'needs_human',
+      status: 'needs_human' as any,
       reopenCount: 0,
       requirementHistory: [],
       schemaVersion: 1,
@@ -466,7 +465,7 @@ describe('applySchemaMigrations', () => {
 
   test('v4 migration should migrate reopened to open', () => {
     const task = createTestTask({
-      status: 'reopened',
+      status: 'reopened' as any,
       schemaVersion: 3,
     });
 
@@ -509,10 +508,10 @@ describe('applySchemaMigrations', () => {
   });
 
   test('v4 migration should set resumeAction for pipeline intermediate status', () => {
-    const intermediateStatuses: TaskStatus[] = ['wait_review', 'wait_qa', 'wait_complete', 'needs_human'];
+    const intermediateStatuses: string[] = ['wait_review', 'wait_qa', 'wait_complete', 'needs_human'];
     for (const status of intermediateStatuses) {
       const task = createTestTask({
-        status,
+        status: status as any,
         schemaVersion: 3,
       });
 
@@ -548,19 +547,21 @@ describe('applySchemaMigrations', () => {
 
   test('v4 migration should handle reopened status + initialize fields together', () => {
     const task = createTestTask({
-      status: 'reopened',
+      status: 'reopened' as any,
       schemaVersion: 3,
     });
 
     const result = applySchemaMigrations(task);
 
     expect(task.status).toBe('open');
-    expect(task.transitionNotes).toEqual([]);
+    expect(task.transitionNotes).toHaveLength(1);
+    expect(task.transitionNotes![0]!.fromStatus).toBe('reopened');
+    expect(task.transitionNotes![0]!.toStatus).toBe('open');
     expect(task.resumeAction).toBeUndefined();
     expect(task.schemaVersion).toBe(CURRENT_TASK_SCHEMA_VERSION);
     expect(result.changed).toBe(true);
     expect(result.details).toContain('status: reopened → open');
-    expect(result.details).toContain('添加 transitionNotes: []');
+    expect(result.details).toContain('transitionNote: 记录 reopened → open 迁移');
   });
 
   test('TransitionNote write and read roundtrip', () => {
@@ -780,7 +781,7 @@ describe('Individual Migration Steps', () => {
   });
 
   test('v2 migration: should not change already-valid status', () => {
-    const nonPipelineStatuses = ['open', 'in_progress', 'resolved', 'closed', 'reopened', 'abandoned'];
+    const nonPipelineStatuses = ['open', 'in_progress', 'resolved', 'closed', 'abandoned'];
     for (const status of nonPipelineStatuses) {
       const task = createTestTask({ status: status as any, history: [] });
       const v2 = SCHEMA_MIGRATIONS.find(m => m.version === 2)!;
@@ -832,7 +833,7 @@ describe('Individual Migration Steps', () => {
   // --- v4 individual migration ---
 
   test('v4 migration: should convert reopened to open', () => {
-    const task = createTestTask({ status: 'reopened' });
+    const task = createTestTask({ status: 'reopened' as any });
     const v4 = SCHEMA_MIGRATIONS.find(m => m.version === 4)!;
     const result = v4.migrate(task);
     expect(task.status).toBe('open');
@@ -871,7 +872,7 @@ describe('Individual Migration Steps', () => {
   });
 
   test('v4 migration: should set resumeAction for needs_human', () => {
-    const task = createTestTask({ status: 'needs_human' });
+    const task = createTestTask({ status: 'needs_human' as any });
     const v4 = SCHEMA_MIGRATIONS.find(m => m.version === 4)!;
     const result = v4.migrate(task);
     expect(task.resumeAction).toBe('resume_pipeline');

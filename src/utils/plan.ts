@@ -10,7 +10,7 @@ import type { TaskStatus } from '../types/task';
 function normalizeStatus(status: string): TaskStatus {
   const statusMap: Record<string, TaskStatus> = {
     'pending': 'open',
-    'reopen': 'reopened',
+    'reopen': 'open',
     'completed': 'closed',
     'cancelled': 'abandoned',
     'blocked': 'open',
@@ -18,7 +18,7 @@ function normalizeStatus(status: string): TaskStatus {
     'in_progress': 'in_progress',
     'resolved': 'resolved',
     'closed': 'closed',
-    'reopened': 'reopened',
+    'reopened': 'open',
     'abandoned': 'abandoned',
   };
   return statusMap[status] || 'open';
@@ -28,7 +28,6 @@ function normalizeStatus(status: string): TaskStatus {
  * 可执行状态及其优先级（数字越小优先级越高）
  */
 const EXECUTABLE_STATUS_PRIORITY: Record<string, number> = {
-  'reopened': 0,      // 最高优先级：重新打开的任务需要优先处理
   'in_progress': 1,   // 进行中的任务应该继续
   'open': 2,          // 新任务
 };

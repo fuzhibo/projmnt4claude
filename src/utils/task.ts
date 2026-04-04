@@ -398,7 +398,8 @@ export function updateTaskStatus(
   taskId: string,
   status: TaskStatus,
   cwd: string = process.cwd(),
-  reason?: string
+  reason?: string,
+  transitionNote?: string
 ): void {
   const task = readTaskMeta(taskId, cwd);
   if (!task) {
@@ -414,11 +415,6 @@ export function updateTaskStatus(
 
   task.status = status;
   task.updatedAt = new Date().toISOString();
-
-  // 当状态变为 reopened 时，清除 verification 字段（下次 resolve 时重建）
-  if (status === 'reopened') {
-    task.verification = undefined;
-  }
 
   // 当状态变为 resolved 时，始终重建 verification 字段
   // 确保与当前检查点状态一致，避免 resolved + failed 矛盾
@@ -470,6 +466,20 @@ export function updateTaskStatus(
       newValue: status,
       reason,
       user: process.env.USER || undefined,
+    });
+  }
+
+  // 自动写入 transitionNote（状态变更的结构化决策记录）
+  if (transitionNote) {
+    if (!task.transitionNotes) {
+      task.transitionNotes = [];
+    }
+    task.transitionNotes.push({
+      timestamp: new Date().toISOString(),
+      fromStatus: oldStatus,
+      toStatus: status,
+      note: transitionNote,
+      author: 'system',
     });
   }
 
@@ -574,13 +584,12 @@ export function incrementReopenCount(
 
   const oldCount = task.reopenCount || 0;
   task.reopenCount = oldCount + 1;
-  task.status = 'reopened';
   task.updatedAt = new Date().toISOString();
 
-  // 添加历史记录
+  // 添加历史记录（仅记录 reopenCount 变更，调用方负责设置目标状态）
   task.history.push({
     timestamp: new Date().toISOString(),
-    action: `任务重开 (第 ${task.reopenCount} 次)`,
+    action: `任务重开计数递增 (第 ${task.reopenCount} 次)`,
     field: 'reopenCount',
     oldValue: String(oldCount),
     newValue: String(task.reopenCount),

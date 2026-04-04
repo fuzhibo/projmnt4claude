@@ -780,7 +780,6 @@ function getStatusIcon(status: string): string {
     in_progress: '🔵',
     resolved: '✅',
     closed: '⚫',
-    reopened: '🔄',
     abandoned: '❌',
   };
   return icons[status] || '❓';
@@ -812,7 +811,6 @@ function formatStatus(status: string): string {
     in_progress: '🔵 进行中',
     resolved: '✅ 已解决',
     closed: '⚫ 已关闭',
-    reopened: '🔄 已重开',
     abandoned: '❌ 已放弃',
   };
   return map[status] || status;

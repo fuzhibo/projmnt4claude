@@ -32,9 +32,7 @@ export type TaskStatus =
   | 'wait_complete' // 等待最终确认（所有检查点完成）
   | 'resolved'      // 已解决
   | 'closed'        // 已关闭
-  | 'reopened'      // 已重开
-  | 'abandoned'     // 已放弃
-  | 'needs_human';  // 需要人工介入
+  | 'abandoned';    // 已放弃
 
 /**
  * 任务历史记录条目
@@ -49,6 +47,7 @@ export interface TaskHistoryEntry {
   reason?: string;         // 状态变更原因（如reopen原因）
   relatedIssue?: string;   // 关联的 issue/PR
   verificationDetails?: string; // 验证失败详细信息
+  transitionNote?: TransitionNote; // 状态流转的结构化决策记录
 }
 
 /**
@@ -306,8 +305,8 @@ export interface ExecutionStats {
 export interface TransitionNote {
   /** 流转发生时间 (ISO) */
   timestamp: string;
-  /** 源状态 */
-  fromStatus: TaskStatus;
+  /** 源状态（允许已废弃状态字符串，如 'reopened'、'needs_human'） */
+  fromStatus: string;
   /** 目标状态 */
   toStatus: TaskStatus;
   /** 流转说明（由操作者或系统自动填写） */
@@ -441,7 +440,6 @@ export const PIPELINE_INTERMEDIATE_STATUSES: TaskStatus[] = [
   'wait_review',
   'wait_qa',
   'wait_complete',
-  'needs_human',
 ];
 
 /**
@@ -449,6 +447,7 @@ export const PIPELINE_INTERMEDIATE_STATUSES: TaskStatus[] = [
  * 旧版 pipeline 中间状态 → 最新规范状态
  */
 export const PIPELINE_STATUS_MIGRATION_MAP: Record<string, TaskStatus> = {
+  'reopened': 'open',           // 已重开 → 重新打开
   'needs_human': 'open',       // 需要人工介入 → 重置为待处理
   'wait_review': 'in_progress', // 等待代码审核 → 回到开发中
   'wait_qa': 'in_progress',    // 等待 QA → 回到开发中

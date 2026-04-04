@@ -490,7 +490,16 @@ export class AssemblyLine {
     } else {
       console.log(`❌ 评估未通过: ${verdict.reason}`);
       this.statusReporter.failPhase('evaluation', new Error(verdict.reason || '评估未通过'), taskId);
-      return this.handleVerdictBasedTransition(taskId, record, state, addTimeline, 'evaluation', verdict.action);
+      const failRecord = await this.handleVerdictBasedTransition(taskId, record, state, addTimeline, 'evaluation', verdict.action);
+      // 质量门禁验证（评估失败路径）
+      const failStatus = failRecord.finalStatus as TaskStatus;
+      if (failStatus !== 'abandoned') {
+        const evalFailGate = this.validateTransitionCompleteness(taskId, failStatus, 'evaluation');
+        if (!evalFailGate.valid) {
+          await this.handleTransitionValidationFailure(taskId, failStatus, 'wait_qa', 'evaluation', evalFailGate.errors);
+        }
+      }
+      return failRecord;
     }
 
     return record;
@@ -833,8 +842,8 @@ export class AssemblyLine {
       }
 
       case 'escalate_human': {
-        await this.ensureTransition(taskId, 'needs_human', `architect 建议人工介入 (action: escalate_human)`);
-        record.finalStatus = 'needs_human';
+        await this.ensureTransition(taskId, 'open', `architect 建议人工介入 (action: escalate_human)`);
+        record.finalStatus = 'open';
         addTimeline('failed', 'architect 建议人工介入', { action });
         console.log('🔴 任务需要人工介入');
         return record;
@@ -1033,8 +1042,9 @@ export class AssemblyLine {
       console.error(`   ⚠️ 记录质量门禁失败信息时出错: ${err instanceof Error ? err.message : String(err)}`);
     }
 
-    // 尝试退回到安全状态（仅当 rollbackStatus 与 expectedStatus 不同时）
-    if (rollbackStatus !== expectedStatus) {
+    // 尝试退回到安全状态（当实际状态与期望不一致时）
+    const currentTask = readTaskMeta(taskId, this.config.cwd);
+    if (currentTask && currentTask.status !== expectedStatus) {
       try {
         await this.updateTaskStatus(taskId, rollbackStatus, `质量门禁验证失败，退回 [${phase}]`);
         console.warn(`   ⚠️ 已退回任务 ${taskId} 到 ${rollbackStatus} 状态`);
@@ -1227,7 +1237,7 @@ export class AssemblyLine {
         skipped++;
       } else if (record.finalStatus === 'resolved' || record.finalStatus === 'closed') {
         passed++;
-      } else if (record.finalStatus === 'abandoned' || record.finalStatus === 'needs_human') {
+      } else if (record.finalStatus === 'abandoned') {
         failed++;
       } else {
         skipped++;
@@ -1276,7 +1286,7 @@ export class AssemblyLine {
       const record = lastRecordByTask.get(taskId);
       if (record && (record.finalStatus === 'resolved' || record.finalStatus === 'closed')) {
         passed++;
-      } else if (record && (record.finalStatus === 'abandoned' || record.finalStatus === 'needs_human')) {
+      } else if (record && record.finalStatus === 'abandoned') {
         failed++;
       }
     }
