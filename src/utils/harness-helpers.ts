@@ -253,6 +253,39 @@ export async function runHeadlessClaudeWithRetry(
   return lastResult!;
 }
 
+/**
+ * 归档已存在的报告文件
+ *
+ * 在重试场景中，报告文件可能已存在。此函数将旧报告复制到 archive/ 子目录，
+ * 保留历史记录用于事后根因分析。
+ *
+ * 归档路径格式: {报告目录}/archive/{ISO-timestamp}-{原始文件名}
+ */
+export function archiveReportIfExists(reportPath: string): void {
+  try {
+    if (!fs.existsSync(reportPath)) {
+      return;
+    }
+
+    const dir = path.dirname(reportPath);
+    const filename = path.basename(reportPath);
+    const archiveDir = path.join(dir, 'archive');
+
+    if (!fs.existsSync(archiveDir)) {
+      fs.mkdirSync(archiveDir, { recursive: true });
+    }
+
+    const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+    const archivePath = path.join(archiveDir, `${timestamp}-${filename}`);
+
+    fs.copyFileSync(reportPath, archivePath);
+    console.log(`   📦 已归档旧报告: archive/${timestamp}-${filename}`);
+  } catch (error) {
+    // 归档失败不阻断报告写入流程
+    console.warn(`   ⚠️ 归档报告失败: ${error instanceof Error ? error.message : String(error)}`);
+  }
+}
+
 export async function saveReport(reportPath: string, content: string): Promise<void> {
   const dir = path.dirname(reportPath);
 
@@ -260,6 +293,7 @@ export async function saveReport(reportPath: string, content: string): Promise<v
     if (!fs.existsSync(dir)) {
       fs.mkdirSync(dir, { recursive: true });
     }
+    archiveReportIfExists(reportPath);
     fs.writeFileSync(reportPath, content, 'utf-8');
   } catch (error) {
     throw new Error(`保存报告失败: ${error instanceof Error ? error.message : String(error)}`);

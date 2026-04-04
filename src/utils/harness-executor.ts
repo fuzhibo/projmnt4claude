@@ -27,7 +27,7 @@ import type { TaskMeta } from '../types/task.js';
 import { getProjectDir } from './path.js';
 import { getDevRoleTemplate } from './role-prompts.js';
 import { readTaskMeta } from './task.js';
-import { classifyExitResult, isRetryableError, sleep } from './harness-helpers.js';
+import { classifyExitResult, isRetryableError, sleep, archiveReportIfExists } from './harness-helpers.js';
 
 export class HarnessExecutor {
   private config: HarnessConfig;
@@ -490,6 +490,7 @@ export class HarnessExecutor {
       fs.mkdirSync(dir, { recursive: true });
     }
 
+    archiveReportIfExists(reportPath);
     const content = this.formatDevReport(report);
     fs.writeFileSync(reportPath, content, 'utf-8');
   }

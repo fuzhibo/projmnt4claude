@@ -23,7 +23,7 @@ import { createDefaultSprintContract } from '../types/harness.js';
 import type { TaskMeta, CheckpointMetadata } from '../types/task.js';
 import { getProjectDir } from './path.js';
 import { readTaskMeta, getAllTaskIds } from './task.js';
-import { classifyExitResult } from './harness-helpers.js';
+import { classifyExitResult, archiveReportIfExists } from './harness-helpers.js';
 
 /**
  * 检测是否为可重试的 API 错误
@@ -883,6 +883,7 @@ export class HarnessEvaluator {
       fs.mkdirSync(dir, { recursive: true });
     }
 
+    archiveReportIfExists(reportPath);
     const content = this.formatReviewReport(verdict, devReport);
     fs.writeFileSync(reportPath, content, 'utf-8');
   }
