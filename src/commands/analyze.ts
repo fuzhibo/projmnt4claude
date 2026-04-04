@@ -333,6 +333,41 @@ export const SCHEMA_MIGRATIONS: SchemaMigrationStep[] = [
       return { changed: false, details };
     },
   },
+  {
+    version: 4,
+    name: 'reopened_to_open_and_transition_notes',
+    description: 'reopened→open 迁移 + TransitionNote + resumeAction 初始化',
+    migrate(task: TaskMeta): { changed: boolean; details: string[] } {
+      const details: string[] = [];
+      let changed = false;
+
+      // 迁移 reopened 状态到 open（让任务可被重新处理）
+      if (task.status === 'reopened') {
+        task.status = 'open';
+        details.push('status: reopened → open');
+        changed = true;
+      }
+
+      // 初始化 transitionNotes
+      if (task.transitionNotes === undefined) {
+        task.transitionNotes = [];
+        details.push('添加 transitionNotes: []');
+        changed = true;
+      }
+
+      // 初始化 resumeAction（仅对 pipeline 中间状态的任务设置）
+      if (task.resumeAction === undefined) {
+        const intermediateStatuses: TaskStatus[] = ['wait_review', 'wait_qa', 'wait_complete', 'needs_human'];
+        if (intermediateStatuses.includes(task.status)) {
+          task.resumeAction = 'resume_pipeline';
+          details.push(`添加 resumeAction: resume_pipeline (status=${task.status})`);
+          changed = true;
+        }
+      }
+
+      return { changed, details };
+    },
+  },
 ];
 
 /**

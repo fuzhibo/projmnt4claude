@@ -300,6 +300,126 @@ export interface ExecutionStats {
 }
 
 /**
+ * 流转说明记录
+ * 每次任务状态变更时自动追加，用于追踪流转上下文
+ */
+export interface TransitionNote {
+  /** 流转发生时间 (ISO) */
+  timestamp: string;
+  /** 源状态 */
+  fromStatus: TaskStatus;
+  /** 目标状态 */
+  toStatus: TaskStatus;
+  /** 流转说明（由操作者或系统自动填写） */
+  note: string;
+  /** 操作者 */
+  author?: string;
+}
+
+/**
+ * Pipeline 恢复动作类型
+ * 记录中断任务被恢复时应执行的动作
+ */
+export type ResumeAction =
+  | 'resume_pipeline'    // 继续 pipeline 执行
+  | 'restart_stage'      // 重启当前阶段
+  | 'manual_review'      // 需要人工审核后决定
+  | 'reset_to_open'      // 重置为 open 状态
+  | 'retry'              // 重试当前阶段（从失败阶段重新开始）
+  | 'next';              // 跳到下一阶段
+
+/**
+ * Pipeline 阶段到角色的映射
+ * 用于角色感知恢复逻辑，确定每个阶段对应的处理角色
+ */
+export const PHASE_ROLE_MAP: Record<string, TaskRole> = {
+  development: 'executor',
+  code_review: 'code_reviewer',
+  qa_verification: 'qa_tester',
+  qa: 'qa_tester',
+  evaluation: 'architect',
+};
+
+/**
+ * 阶段历史条目
+ * 记录任务在每个 pipeline 阶段的执行情况，用于角色感知恢复
+ */
+export interface PhaseHistoryEntry {
+  /** 阶段名称 */
+  phase: string;
+  /** 执行角色 */
+  role: TaskRole;
+  /** 阶段结论 */
+  verdict: 'PASS' | 'NOPASS';
+  /** 执行时间 (ISO) */
+  timestamp: string;
+  /** 分析说明 */
+  analysis?: string;
+  /** 恢复动作建议 */
+  resumeAction?: 'retry' | 'next';
+}
+
+/**
+ * Pipeline 类
+ * 提供阶段流转和角色感知恢复的核心逻辑
+ */
+export class Pipeline {
+  /** 阶段到角色的映射 */
+  static readonly PHASE_ROLE_MAP = PHASE_ROLE_MAP;
+
+  /** Pipeline 阶段顺序 */
+  static readonly PHASE_ORDER = ['development', 'code_review', 'qa_verification', 'evaluation'];
+
+  /**
+   * 根据阶段获取对应角色
+   */
+  static getRoleForPhase(phase: string): TaskRole {
+    return Pipeline.PHASE_ROLE_MAP[phase] || 'executor';
+  }
+
+  /**
+   * 角色感知恢复逻辑
+   * 根据 resumeAction 和已完成的阶段确定恢复点（阶段+角色）
+   *
+   * @param phaseHistory - 已完成的阶段历史
+   * @param resumeAction - 恢复动作：retry=重试失败阶段，next=跳到下一阶段
+   * @returns 恢复点信息（阶段+角色），或 null 表示无法确定
+   */
+  static determineResumePoint(
+    phaseHistory: PhaseHistoryEntry[],
+    resumeAction: 'retry' | 'next',
+  ): { phase: string; role: TaskRole } | null {
+    if (phaseHistory.length === 0) {
+      // 无历史记录，从开发阶段开始
+      return { phase: 'development', role: 'executor' };
+    }
+
+    const lastEntry = phaseHistory[phaseHistory.length - 1]!;
+    const lastPhaseIndex = Pipeline.PHASE_ORDER.indexOf(lastEntry.phase);
+
+    if (resumeAction === 'retry') {
+      // retry: 重试最后失败/执行的阶段
+      return {
+        phase: lastEntry.phase,
+        role: Pipeline.getRoleForPhase(lastEntry.phase),
+      };
+    }
+
+    // next: 跳到下一阶段
+    if (lastPhaseIndex === -1 || lastPhaseIndex >= Pipeline.PHASE_ORDER.length - 1) {
+      // 已在最后阶段或未知阶段，从开发阶段重新开始
+      return { phase: 'development', role: 'executor' };
+    }
+
+    const nextPhase = Pipeline.PHASE_ORDER[lastPhaseIndex + 1]!;
+    return {
+      phase: nextPhase,
+      role: Pipeline.getRoleForPhase(nextPhase),
+    };
+  }
+}
+
+/**
  * 当前任务元数据 schema 版本
  * 每次规范变更时递增，analyze 命令据此进行增量迁移
  *
@@ -307,8 +427,10 @@ export interface ExecutionStats {
  * - 0: 无 schemaVersion 字段（旧版任务）
  * - 1: 添加 reopenCount + requirementHistory（legacy_schema）
  * - 2: pipeline_status 规范化 + verdict_action_schema 验证
+ * - 3: commitHistory 字段（harness 批次 git commit SHA 追踪）
+ * - 4: reopened→open 迁移 + TransitionNote + resumeAction
  */
-export const CURRENT_TASK_SCHEMA_VERSION = 3;
+export const CURRENT_TASK_SCHEMA_VERSION = 4;
 
 /**
  * 流水线中间状态列表
@@ -359,6 +481,9 @@ export interface TaskMeta {
   requirementHistory?: RequirementHistoryEntry[]; // 需求变更历史
   verification?: TaskVerification; // 任务级验证信息（resolved时自动填充）
   executionStats?: ExecutionStats; // 执行统计信息（流水线完成后记录）
+  transitionNotes?: TransitionNote[]; // 流转说明记录（状态变更时追加）
+  phaseHistory?: PhaseHistoryEntry[]; // 阶段历史记录（角色感知恢复用）
+  resumeAction?: ResumeAction;     // 中断任务恢复动作
   fileWarnings?: string[];        // 创建时引用但不存在的文件路径
   createdBy?: TaskCreatedBy;      // 任务创建来源
   schemaVersion?: number;         // schema 版本号，用于增量迁移

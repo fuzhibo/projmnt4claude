@@ -14,7 +14,7 @@ import type {
   PendingVerification,
   PendingVerificationQueue,
 } from '../types/task.js';
-import type { TaskMeta, CheckpointMetadata, TaskStatus } from '../types/task.js';
+import type { TaskMeta, CheckpointMetadata, TaskStatus, TransitionNote } from '../types/task.js';
 import { readTaskMeta, writeTaskMeta, updateTaskStatus } from './task.js';
 import { getProjectDir } from './path.js';
 
@@ -328,8 +328,26 @@ function tryTransitionTaskStatus(taskId: string, cwd: string): void {
   );
 
   if (rejectedForTask.length > 0) {
-    // 有拒绝的检查点，将任务标记为 reopened（需要重做）
-    updateTaskStatus(taskId, 'reopened', '人工验证未通过', cwd);
+    // 有拒绝的检查点，将任务标记为 in_progress 并设置恢复动作
+    updateTaskStatus(taskId, 'in_progress', '人工验证未通过', cwd);
+
+    // 设置 resumeAction 和 transitionNote 以支持角色感知恢复
+    const task = readTaskMeta(taskId, cwd);
+    if (task) {
+      task.resumeAction = 'retry';
+      // 写入 transitionNote
+      if (!task.transitionNotes) {
+        task.transitionNotes = [];
+      }
+      task.transitionNotes.push({
+        timestamp: new Date().toISOString(),
+        fromStatus: task.status,
+        toStatus: 'in_progress' as TaskStatus,
+        note: `人工验证未通过 (${rejectedForTask.length} 个检查点被拒绝)，需要从开发阶段重试`,
+        author: 'verification-queue',
+      });
+      writeTaskMeta(task, cwd);
+    }
     return;
   }
 

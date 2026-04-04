@@ -9,8 +9,13 @@ import {
   PIPELINE_INTERMEDIATE_STATUSES,
   PIPELINE_STATUS_MIGRATION_MAP,
 } from '../types/task';
+import type {
+  TaskMeta,
+  TaskStatus,
+  TransitionNote,
+  ResumeAction,
+} from '../types/task';
 import { VALID_VERDICT_ACTIONS } from '../types/harness';
-import type { TaskMeta, TaskStatus } from '../types/task';
 
 // Helper to create a minimal valid TaskMeta for testing
 function createTestTask(overrides: Partial<TaskMeta> = {}): TaskMeta {
@@ -32,17 +37,19 @@ function createTestTask(overrides: Partial<TaskMeta> = {}): TaskMeta {
 // ============== Schema Version Constants ==============
 
 describe('Schema Version Constants', () => {
-  test('CURRENT_TASK_SCHEMA_VERSION should be 2', () => {
-    expect(CURRENT_TASK_SCHEMA_VERSION).toBe(2);
+  test('CURRENT_TASK_SCHEMA_VERSION should be 4', () => {
+    expect(CURRENT_TASK_SCHEMA_VERSION).toBe(4);
   });
 
-  test('SCHEMA_MIGRATIONS should have 2 steps', () => {
-    expect(SCHEMA_MIGRATIONS).toHaveLength(2);
+  test('SCHEMA_MIGRATIONS should have 4 steps', () => {
+    expect(SCHEMA_MIGRATIONS).toHaveLength(4);
   });
 
   test('SCHEMA_MIGRATIONS versions should be sequential starting from 1', () => {
     expect(SCHEMA_MIGRATIONS[0]!.version).toBe(1);
     expect(SCHEMA_MIGRATIONS[1]!.version).toBe(2);
+    expect(SCHEMA_MIGRATIONS[2]!.version).toBe(3);
+    expect(SCHEMA_MIGRATIONS[3]!.version).toBe(4);
   });
 
   test('SCHEMA_MIGRATIONS should have required fields', () => {
@@ -121,16 +128,27 @@ describe('VerdictAction Constants', () => {
 describe('getPendingMigrations', () => {
   test('from version 0 should return all migrations', () => {
     const pending = getPendingMigrations(0);
-    expect(pending).toHaveLength(2);
+    expect(pending).toHaveLength(4);
     expect(pending[0]!.version).toBe(1);
     expect(pending[1]!.version).toBe(2);
+    expect(pending[2]!.version).toBe(3);
+    expect(pending[3]!.version).toBe(4);
   });
 
-  test('from version 1 should return only v2 migration', () => {
+  test('from version 1 should return v2, v3, v4 migrations', () => {
     const pending = getPendingMigrations(1);
-    expect(pending).toHaveLength(1);
+    expect(pending).toHaveLength(3);
     expect(pending[0]!.version).toBe(2);
     expect(pending[0]!.name).toBe('pipeline_status_and_verdict_action');
+    expect(pending[1]!.version).toBe(3);
+    expect(pending[2]!.version).toBe(4);
+  });
+
+  test('from version 3 should return only v4 migration', () => {
+    const pending = getPendingMigrations(3);
+    expect(pending).toHaveLength(1);
+    expect(pending[0]!.version).toBe(4);
+    expect(pending[0]!.name).toBe('reopened_to_open_and_transition_notes');
   });
 
   test('from current version should return no migrations', () => {
@@ -444,6 +462,131 @@ describe('applySchemaMigrations', () => {
     expect(task.history[2]!.newValue).toContain('bad2');
   });
 
+  // --- Version 3 → v4 (reopened→open + TransitionNote + resumeAction) ---
+
+  test('v4 migration should migrate reopened to open', () => {
+    const task = createTestTask({
+      status: 'reopened',
+      schemaVersion: 3,
+    });
+
+    const result = applySchemaMigrations(task);
+
+    expect(task.status).toBe('open');
+    expect(result.details).toContain('status: reopened → open');
+    expect(result.changed).toBe(true);
+  });
+
+  test('v4 migration should initialize transitionNotes when missing', () => {
+    const task = createTestTask({
+      status: 'open',
+      schemaVersion: 3,
+    });
+
+    const result = applySchemaMigrations(task);
+
+    expect(task.transitionNotes).toEqual([]);
+    expect(result.details).toContain('添加 transitionNotes: []');
+  });
+
+  test('v4 migration should not overwrite existing transitionNotes', () => {
+    const existingNotes: TransitionNote[] = [{
+      timestamp: '2026-04-01T00:00:00.000Z',
+      fromStatus: 'in_progress',
+      toStatus: 'resolved',
+      note: 'Task completed',
+      author: 'test',
+    }];
+    const task = createTestTask({
+      status: 'open',
+      transitionNotes: existingNotes,
+      schemaVersion: 3,
+    });
+
+    applySchemaMigrations(task);
+
+    expect(task.transitionNotes).toEqual(existingNotes);
+  });
+
+  test('v4 migration should set resumeAction for pipeline intermediate status', () => {
+    const intermediateStatuses: TaskStatus[] = ['wait_review', 'wait_qa', 'wait_complete', 'needs_human'];
+    for (const status of intermediateStatuses) {
+      const task = createTestTask({
+        status,
+        schemaVersion: 3,
+      });
+
+      const result = applySchemaMigrations(task);
+
+      expect(task.resumeAction).toBe('resume_pipeline');
+      expect(result.changed).toBe(true);
+    }
+  });
+
+  test('v4 migration should not set resumeAction for non-intermediate status', () => {
+    const task = createTestTask({
+      status: 'open',
+      schemaVersion: 3,
+    });
+
+    applySchemaMigrations(task);
+
+    expect(task.resumeAction).toBeUndefined();
+  });
+
+  test('v4 migration should not overwrite existing resumeAction', () => {
+    const task = createTestTask({
+      status: 'wait_review',
+      resumeAction: 'restart_stage' as ResumeAction,
+      schemaVersion: 3,
+    });
+
+    applySchemaMigrations(task);
+
+    expect(task.resumeAction).toBe('restart_stage');
+  });
+
+  test('v4 migration should handle reopened status + initialize fields together', () => {
+    const task = createTestTask({
+      status: 'reopened',
+      schemaVersion: 3,
+    });
+
+    const result = applySchemaMigrations(task);
+
+    expect(task.status).toBe('open');
+    expect(task.transitionNotes).toEqual([]);
+    expect(task.resumeAction).toBeUndefined();
+    expect(task.schemaVersion).toBe(CURRENT_TASK_SCHEMA_VERSION);
+    expect(result.changed).toBe(true);
+    expect(result.details).toContain('status: reopened → open');
+    expect(result.details).toContain('添加 transitionNotes: []');
+  });
+
+  test('TransitionNote write and read roundtrip', () => {
+    const note: TransitionNote = {
+      timestamp: '2026-04-04T00:00:00.000Z',
+      fromStatus: 'in_progress',
+      toStatus: 'resolved',
+      note: 'All checkpoints passed',
+      author: 'harness',
+    };
+    const task = createTestTask({
+      status: 'resolved',
+      transitionNotes: [note],
+      schemaVersion: CURRENT_TASK_SCHEMA_VERSION,
+    });
+
+    const result = applySchemaMigrations(task);
+
+    expect(result.changed).toBe(false);
+    expect(task.transitionNotes).toHaveLength(1);
+    expect(task.transitionNotes![0]!.fromStatus).toBe('in_progress');
+    expect(task.transitionNotes![0]!.toStatus).toBe('resolved');
+    expect(task.transitionNotes![0]!.note).toBe('All checkpoints passed');
+    expect(task.transitionNotes![0]!.author).toBe('harness');
+  });
+
   // --- Already at current version ---
 
   test('should return unchanged for task at current version', () => {
@@ -644,5 +787,108 @@ describe('Individual Migration Steps', () => {
       v2.migrate(task);
       expect(task.status).toBe(status as TaskStatus);
     }
+  });
+
+  // --- v3 individual migration ---
+
+  test('v3 migration: should add commitHistory to existing executionStats', () => {
+    const task = createTestTask({
+      executionStats: {
+        duration: 1000,
+        retryCount: 0,
+        completedAt: '2026-04-01T00:00:00.000Z',
+      },
+    });
+    const v3 = SCHEMA_MIGRATIONS.find(m => m.version === 3)!;
+    const result = v3.migrate(task);
+    expect(result.changed).toBe(true);
+    expect(task.executionStats!.commitHistory).toEqual([]);
+    expect(result.details).toContain('添加 executionStats.commitHistory: []');
+  });
+
+  test('v3 migration: should not change task without executionStats', () => {
+    const task = createTestTask({});
+    const v3 = SCHEMA_MIGRATIONS.find(m => m.version === 3)!;
+    const result = v3.migrate(task);
+    expect(result.changed).toBe(false);
+  });
+
+  test('v3 migration: should not overwrite existing commitHistory', () => {
+    const existingHistory = [{ sha: 'abc123', batchLabel: '批次 1', timestamp: '2026-04-01T00:00:00.000Z' }];
+    const task = createTestTask({
+      executionStats: {
+        duration: 1000,
+        retryCount: 0,
+        completedAt: '2026-04-01T00:00:00.000Z',
+        commitHistory: existingHistory,
+      },
+    });
+    const v3 = SCHEMA_MIGRATIONS.find(m => m.version === 3)!;
+    const result = v3.migrate(task);
+    expect(result.changed).toBe(false);
+    expect(task.executionStats!.commitHistory).toEqual(existingHistory);
+  });
+
+  // --- v4 individual migration ---
+
+  test('v4 migration: should convert reopened to open', () => {
+    const task = createTestTask({ status: 'reopened' });
+    const v4 = SCHEMA_MIGRATIONS.find(m => m.version === 4)!;
+    const result = v4.migrate(task);
+    expect(task.status).toBe('open');
+    expect(result.changed).toBe(true);
+    expect(result.details).toContain('status: reopened → open');
+  });
+
+  test('v4 migration: should initialize transitionNotes', () => {
+    const task = createTestTask({ status: 'open' });
+    const v4 = SCHEMA_MIGRATIONS.find(m => m.version === 4)!;
+    const result = v4.migrate(task);
+    expect(task.transitionNotes).toEqual([]);
+    expect(result.details).toContain('添加 transitionNotes: []');
+  });
+
+  test('v4 migration: should set resumeAction for wait_review', () => {
+    const task = createTestTask({ status: 'wait_review' });
+    const v4 = SCHEMA_MIGRATIONS.find(m => m.version === 4)!;
+    const result = v4.migrate(task);
+    expect(task.resumeAction).toBe('resume_pipeline');
+    expect(result.changed).toBe(true);
+  });
+
+  test('v4 migration: should set resumeAction for wait_qa', () => {
+    const task = createTestTask({ status: 'wait_qa' });
+    const v4 = SCHEMA_MIGRATIONS.find(m => m.version === 4)!;
+    const result = v4.migrate(task);
+    expect(task.resumeAction).toBe('resume_pipeline');
+  });
+
+  test('v4 migration: should set resumeAction for wait_complete', () => {
+    const task = createTestTask({ status: 'wait_complete' });
+    const v4 = SCHEMA_MIGRATIONS.find(m => m.version === 4)!;
+    const result = v4.migrate(task);
+    expect(task.resumeAction).toBe('resume_pipeline');
+  });
+
+  test('v4 migration: should set resumeAction for needs_human', () => {
+    const task = createTestTask({ status: 'needs_human' });
+    const v4 = SCHEMA_MIGRATIONS.find(m => m.version === 4)!;
+    const result = v4.migrate(task);
+    expect(task.resumeAction).toBe('resume_pipeline');
+  });
+
+  test('v4 migration: should not set resumeAction for open status', () => {
+    const task = createTestTask({ status: 'open' });
+    const v4 = SCHEMA_MIGRATIONS.find(m => m.version === 4)!;
+    v4.migrate(task);
+    expect(task.resumeAction).toBeUndefined();
+  });
+
+  test('v4 migration: should not change already-open status', () => {
+    const task = createTestTask({ status: 'open' });
+    const v4 = SCHEMA_MIGRATIONS.find(m => m.version === 4)!;
+    const result = v4.migrate(task);
+    // Only transitionNotes change, not status
+    expect(task.status).toBe('open');
   });
 });

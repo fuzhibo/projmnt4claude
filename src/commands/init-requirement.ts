@@ -6,7 +6,9 @@ import {
   generateNewTaskId,
   writeTaskMeta,
   readTaskMeta,
+  getAllTasks,
 } from '../utils/task';
+import { extractAffectedFiles } from '../utils/quality-gate';
 import { hasValidCheckpoints, displayCheckpointCreationWarning } from './task';
 import { syncCheckpointsToMeta } from '../utils/checkpoint';
 import type { TaskMeta, TaskPriority, TaskStatus, TaskType } from '../types/task';
@@ -443,6 +445,18 @@ export async function initRequirement(
   task.priority = response.priority as TaskPriority;
   task.recommendedRole = response.recommendedRole || analysis.recommendedRole;
 
+  // 推断依赖关系（文件重叠 + AI potentialDependencies 标题匹配）
+  const inferredDeps = inferDependencies(
+    task.description || '',
+    analysis.potentialDependencies,
+    cwd
+  );
+
+  // 将推断的依赖写入 task.dependencies
+  if (inferredDeps.length > 0) {
+    task.dependencies = inferredDeps.map(d => d.taskId);
+  }
+
   // 写入任务
   writeTaskMeta(task, cwd);
 
@@ -481,6 +495,13 @@ ${checkpoints.map((cp: string) => `- [ ] ${cp}`).join('\n')}
   console.log(`   标题: ${task.title}`);
   console.log(`   优先级: ${formatPriority(task.priority)}`);
   console.log(`   检查点: ${checkpoints.length} 项`);
+  if (inferredDeps.length > 0) {
+    console.log(`   推断依赖:`);
+    for (const dep of inferredDeps) {
+      const sharedInfo = dep.sharedFiles ? `(共享文件: ${dep.sharedFiles.join(', ')})` : '';
+      console.log(`     - ${dep.taskId} ${sharedInfo}`);
+    }
+  }
   console.log('');
 
   // 自动拆分复杂任务
@@ -983,6 +1004,23 @@ function analyzeRequirement(description: string): RequirementAnalysis {
   // 生成潜在依赖
   const potentialDependencies: string[] = [];
 
+  // 文件重叠依赖推断：从描述中提取文件路径，与已有任务 affectedFiles 比较
+  const currentFiles = extractFilePaths(description);
+  if (currentFiles.length > 0) {
+    const existingTasks = getAllTasks();
+    for (const existing of existingTasks) {
+      if (existing.status === 'resolved' || existing.status === 'closed' || existing.status === 'abandoned') continue;
+      const existingFiles = extractAffectedFiles(existing);
+      const overlap = currentFiles.filter(f => existingFiles.includes(f));
+      if (overlap.length > 0) {
+        const depHint = `文件重叠依赖 ${existing.id}: 共享 ${overlap.join(', ')}`;
+        if (!potentialDependencies.some(d => d.includes(existing.id))) {
+          potentialDependencies.push(depHint);
+        }
+      }
+    }
+  }
+
   if (lowerDesc.includes('登录') || lowerDesc.includes('auth') || lowerDesc.includes('认证')) {
     potentialDependencies.push('可能需要先完成用户认证基础功能');
   }
@@ -1005,6 +1043,98 @@ function analyzeRequirement(description: string): RequirementAnalysis {
     suggestedCheckpoints,
     potentialDependencies,
   };
+}
+
+/**
+ * 从描述中提取受影响文件列表（简化版，与 quality-gate.extractAffectedFiles 逻辑一致）
+ * 用于 analyzeRequirement 中对尚未创建的任务进行文件提取
+ */
+function extractFilePathsForDependency(description: string): string[] {
+  const files: string[] = [];
+  const patterns = [
+    /(?:src|lib|test|tests|docs|bin|scripts|config)\/[\w/.-]+\.[a-z]+/g,
+    /\.{1,2}\/[\w/.-]+\.[a-z]+/g,
+    /\b[\w-]+\.(ts|tsx|js|jsx|py|go|java|rs|json|yaml|yml|md)\b/g,
+  ];
+  for (const pattern of patterns) {
+    const matches = description.match(pattern);
+    if (matches) {
+      for (const m of matches) {
+        if (!files.includes(m)) files.push(m);
+      }
+    }
+  }
+  return files;
+}
+
+/**
+ * 推断任务依赖关系
+ *
+ * 策略：
+ * 1. 文件路径重叠：当前任务 affectedFiles 与已有任务 affectedFiles 比较
+ * 2. AI potentialDependencies 文本匹配：通过标题关键词匹配关联到已有任务ID
+ *
+ * @returns 推断的依赖列表，每项包含 taskId 和匹配原因
+ */
+function inferDependencies(
+  currentTaskDescription: string,
+  potentialDeps: string[],
+  cwd: string
+): Array<{ taskId: string; reason: string; sharedFiles?: string[] }> {
+  const inferred: Array<{ taskId: string; reason: string; sharedFiles?: string[] }> = [];
+
+  // 获取所有现有任务
+  const existingTasks = getAllTasks(cwd);
+  const currentFiles = extractFilePathsForDependency(currentTaskDescription);
+
+  // 策略1：文件路径重叠推断
+  if (currentFiles.length > 0) {
+    for (const existing of existingTasks) {
+      // 跳过已结束状态的任务
+      if (existing.status === 'resolved' || existing.status === 'closed' || existing.status === 'abandoned') continue;
+
+      const existingFiles = extractAffectedFiles(existing);
+      const overlap = currentFiles.filter(f => existingFiles.includes(f));
+
+      if (overlap.length > 0 && !inferred.some(d => d.taskId === existing.id)) {
+        inferred.push({
+          taskId: existing.id,
+          reason: `共享文件: ${overlap.join(', ')}`,
+          sharedFiles: overlap,
+        });
+      }
+    }
+  }
+
+  // 策略2：AI potentialDependencies 文本通过标题关键词匹配
+  for (const depText of potentialDeps) {
+    // 跳过已处理的文件重叠依赖
+    if (depText.startsWith('文件重叠依赖 ')) continue;
+
+    // 从依赖文本中提取关键词
+    const keywords = depText.toLowerCase()
+      .replace(/[^\w\u4e00-\u9fff]/g, ' ')
+      .split(/\s+/)
+      .filter(w => w.length > 2);
+
+    for (const existing of existingTasks) {
+      if (existing.status === 'resolved' || existing.status === 'closed' || existing.status === 'abandoned') continue;
+      if (inferred.some(d => d.taskId === existing.id)) continue;
+
+      const titleLower = existing.title.toLowerCase();
+      const matchedKeywords = keywords.filter(kw => titleLower.includes(kw));
+
+      // 至少匹配2个关键词或匹配1个且关键词占标题比例较高
+      if (matchedKeywords.length >= 2 || (matchedKeywords.length === 1 && matchedKeywords[0]!.length >= 4)) {
+        inferred.push({
+          taskId: existing.id,
+          reason: `AI匹配: "${depText}" → ${existing.title}`,
+        });
+      }
+    }
+  }
+
+  return inferred;
 }
 
 /**

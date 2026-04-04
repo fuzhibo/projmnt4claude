@@ -103,8 +103,9 @@ export interface BatchQualityGateResult {
 
 /**
  * 从任务描述中提取受影响文件列表
+ * 导出供 init-requirement 等模块复用
  */
-function extractAffectedFiles(task: TaskMeta): string[] {
+export function extractAffectedFiles(task: TaskMeta): string[] {
   const files: string[] = [];
   const description = task.description || '';
 

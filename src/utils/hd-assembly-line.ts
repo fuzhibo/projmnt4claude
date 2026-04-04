@@ -30,7 +30,8 @@ import type {
 import {
   createDefaultExecutionRecord,
 } from '../types/harness.js';
-import type { TaskMeta, TaskStatus, TaskRole, CheckpointMetadata, CommitHistoryEntry } from '../types/task.js';
+import type { TaskMeta, TaskStatus, TaskRole, CheckpointMetadata, CommitHistoryEntry, TransitionNote, PhaseHistoryEntry } from '../types/task.js';
+import { Pipeline } from '../types/task.js';
 import { readTaskMeta, writeTaskMeta, taskExists, updateTaskStatus, assignRole, incrementReopenCount, recordExecutionStats } from './task.js';
 import { getProjectDir } from './path.js';
 import { HarnessExecutor } from './harness-executor.js';
@@ -264,7 +265,7 @@ export class AssemblyLine {
     // 3-4. Development phase (skip if resuming from qa or evaluation)
     let devReport: DevReport;
     if (!effectiveResume) {
-      await this.updateTaskStatus(taskId, 'in_progress');
+      await this.ensureTransition(taskId, 'in_progress', '开始开发阶段');
       record.finalStatus = 'in_progress';
 
       addTimeline('dev_started', '开始开发阶段');
@@ -318,8 +319,12 @@ export class AssemblyLine {
       this.syncCheckpointStatus(taskId, 'development', { devReport });
 
       // 5. 更新状态为 wait_review（等待代码审核）
-      await this.updateTaskStatus(taskId, 'wait_review');
+      await this.ensureTransition(taskId, 'wait_review', '开发完成，等待代码审核');
       record.finalStatus = 'wait_review';
+      const devGateResult = this.validateTransitionCompleteness(taskId, 'wait_review', 'development');
+      if (!devGateResult.valid) {
+        await this.handleTransitionValidationFailure(taskId, 'wait_review', 'in_progress', 'development', devGateResult.errors);
+      }
       console.log('✅ 开发完成，等待代码审核');
     } else {
       // Resume: reuse previous development results
@@ -366,8 +371,12 @@ export class AssemblyLine {
     this.syncCheckpointStatus(taskId, 'code_review', { codeReviewVerdict });
 
     // 7. 更新状态为 wait_qa（等待 QA 验证）
-    await this.updateTaskStatus(taskId, 'wait_qa');
+    await this.ensureTransition(taskId, 'wait_qa', '代码审核通过，等待QA验证');
     record.finalStatus = 'wait_qa';
+    const crGateResult = this.validateTransitionCompleteness(taskId, 'wait_qa', 'code_review');
+    if (!crGateResult.valid) {
+      await this.handleTransitionValidationFailure(taskId, 'wait_qa', 'wait_review', 'code_review', crGateResult.errors);
+    }
     console.log('✅ 代码审核通过，等待 QA 验证');
 
     // 8. QA 验证阶段（新增）
@@ -410,6 +419,11 @@ export class AssemblyLine {
 
     // 8.4 同步检查点状态（QA 通过后）
     this.syncCheckpointStatus(taskId, 'qa', { qaVerdict });
+    // 8.5 质量门禁验证（QA 阶段完成后）
+    const qaGateResult = this.validateTransitionCompleteness(taskId, 'wait_qa', 'qa');
+    if (!qaGateResult.valid) {
+      await this.handleTransitionValidationFailure(taskId, 'wait_qa', 'wait_qa', 'qa', qaGateResult.errors);
+    }
 
     // 9. 最终评估阶段（移除 wait_complete 中间状态，直接进入评估）
     // 注: 人工验证已从流水线阶段移至后处理，不再阻塞评估流程
@@ -464,8 +478,12 @@ export class AssemblyLine {
         console.error(`   ⚠️ 记录执行统计失败: ${error instanceof Error ? error.message : String(error)}`);
       }
 
-      await this.updateTaskStatus(taskId, 'resolved');
+      await this.ensureTransition(taskId, 'resolved', '评估通过，任务完成');
       record.finalStatus = 'resolved';
+      const evalGateResult = this.validateTransitionCompleteness(taskId, 'resolved', 'evaluation');
+      if (!evalGateResult.valid) {
+        await this.handleTransitionValidationFailure(taskId, 'resolved', 'wait_qa', 'evaluation', evalGateResult.errors);
+      }
       record.retryCount = retryCount;
       console.log('✅ 评估通过！');
       addTimeline('completed', '任务完成');
@@ -743,13 +761,18 @@ export class AssemblyLine {
 
         // 消耗重试次数，从开发阶段重试（不设 resumeFrom，完整重跑流水线）
         this.incrementTaskReopenCount(taskId, `${phase} 阶段失败，从开发阶段重试`);
-        await this.ensureTransition(taskId, 'reopened', `${phase} 阶段失败，从开发阶段重试`);
+        await this.ensureTransition(taskId, 'in_progress', `${phase} 阶段失败，从开发阶段重试`);
+        // 设置 resumeAction 和角色感知恢复
+        await this.setTaskResumeAction(taskId, 'retry', 'development');
+        await this.assignTaskRole(taskId, 'executor');
+        // 记录阶段历史
+        this.appendPhaseHistory(taskId, { phase: 'development', role: 'executor', verdict: 'NOPASS', timestamp: new Date().toISOString(), analysis: `${phase} 阶段失败，retry from development`, resumeAction: 'retry' });
         state.retryCounter.set(taskId, retryCount + 1);
         state.taskQueue.push(taskId);
 
         addTimeline('retry', `任务将从开发阶段重试 (第 ${retryCount + 1} 次)`, { action, phase });
         console.log(`⚠️  任务将从开发阶段重试 (第 ${retryCount + 1} 次)`);
-        record.finalStatus = 'reopened';
+        record.finalStatus = 'in_progress';
         record.retryCount = retryCount + 1;
         return record;
       }
@@ -767,14 +790,19 @@ export class AssemblyLine {
 
         // 消耗重试次数，从 QA 阶段重试
         this.incrementTaskReopenCount(taskId, `${phase} 阶段失败，从 QA 阶段重试`);
-        await this.ensureTransition(taskId, 'reopened', `${phase} 阶段失败，从 QA 阶段重试`);
+        await this.ensureTransition(taskId, 'in_progress', `${phase} 阶段失败，从 QA 阶段重试`);
+        // 设置 resumeAction 和角色感知恢复
+        await this.setTaskResumeAction(taskId, 'retry', 'qa');
+        await this.assignTaskRole(taskId, 'qa_tester');
+        // 记录阶段历史
+        this.appendPhaseHistory(taskId, { phase: 'qa_verification', role: 'qa_tester', verdict: 'NOPASS', timestamp: new Date().toISOString(), analysis: `${phase} 阶段失败，retry from qa`, resumeAction: 'retry' });
         state.retryCounter.set(taskId, retryCount + 1);
         state.resumeFrom.set(taskId, 'qa');
         state.taskQueue.push(taskId);
 
         addTimeline('retry', `任务将从 QA 阶段重试 (第 ${retryCount + 1} 次)`, { action, phase });
         console.log(`⚠️  任务将从 QA 阶段重试 (第 ${retryCount + 1} 次)`);
-        record.finalStatus = 'reopened';
+        record.finalStatus = 'in_progress';
         record.retryCount = retryCount + 1;
         return record;
       }
@@ -788,14 +816,19 @@ export class AssemblyLine {
         }
 
         // 不消耗重试次数，使用独立的 reevaluateCounter
-        await this.ensureTransition(taskId, 'reopened', `评估不明确，重新评估 (${reevalCount + 1}/${MAX_REEVALUATE_ATTEMPTS})`);
+        await this.ensureTransition(taskId, 'in_progress', `评估不明确，重新评估 (${reevalCount + 1}/${MAX_REEVALUATE_ATTEMPTS})`);
+        // 设置 resumeAction 和角色感知恢复
+        await this.setTaskResumeAction(taskId, 'retry', 'evaluation');
+        await this.assignTaskRole(taskId, 'architect');
+        // 记录阶段历史
+        this.appendPhaseHistory(taskId, { phase: 'evaluation', role: 'architect', verdict: 'NOPASS', timestamp: new Date().toISOString(), analysis: `评估不明确，重新评估 (${reevalCount + 1}/${MAX_REEVALUATE_ATTEMPTS})`, resumeAction: 'retry' });
         state.reevaluateCounter.set(taskId, reevalCount + 1);
         state.resumeFrom.set(taskId, 'evaluation');
         state.taskQueue.push(taskId);
 
         addTimeline('retry', `任务将重新评估 (${reevalCount + 1}/${MAX_REEVALUATE_ATTEMPTS})`, { action, reevalCount: reevalCount + 1 });
         console.log(`🔄  任务将重新评估 (${reevalCount + 1}/${MAX_REEVALUATE_ATTEMPTS})`);
-        record.finalStatus = 'reopened';
+        record.finalStatus = 'in_progress';
         return record;
       }
 
@@ -819,6 +852,7 @@ export class AssemblyLine {
    *
    * 执行状态转换并验证转换是否成功，最多重试 3 次。
    * 确保文件系统中的任务状态与预期一致。
+   * 同时写入 transitionNote 记录流转上下文。
    */
   private async ensureTransition(
     taskId: string,
@@ -827,6 +861,10 @@ export class AssemblyLine {
   ): Promise<void> {
     const MAX_ENSURE_ATTEMPTS = 3;
 
+    // 先读取当前状态用于记录 fromStatus
+    const taskBefore = readTaskMeta(taskId, this.config.cwd);
+    const fromStatus = taskBefore?.status;
+
     for (let attempt = 1; attempt <= MAX_ENSURE_ATTEMPTS; attempt++) {
       try {
         await this.updateTaskStatus(taskId, targetStatus, reason);
@@ -834,6 +872,8 @@ export class AssemblyLine {
         // 验证转换是否生效
         const task = readTaskMeta(taskId, this.config.cwd);
         if (task?.status === targetStatus) {
+          // 写入 transitionNote（附带 author/decision/analysis/context）
+          this.addTransitionNote(task, fromStatus, targetStatus, reason);
           return; // 转换已验证
         }
 
@@ -848,6 +888,214 @@ export class AssemblyLine {
     }
 
     console.error(`   ❌ ensureTransition: 无法验证 ${taskId} 的状态转换为 ${targetStatus} (已尝试 ${MAX_ENSURE_ATTEMPTS} 次)`);
+  }
+
+  /**
+   * 写入 transitionNote 到任务元数据
+   * 每次状态变更时追加完整的流转上下文
+   */
+  private addTransitionNote(
+    task: TaskMeta,
+    fromStatus: TaskStatus | undefined,
+    toStatus: TaskStatus,
+    reason?: string,
+  ): void {
+    try {
+      if (!task.transitionNotes) {
+        task.transitionNotes = [];
+      }
+      task.transitionNotes.push({
+        timestamp: new Date().toISOString(),
+        fromStatus: fromStatus || 'open',
+        toStatus,
+        note: reason || `状态流转至 ${toStatus}`,
+        author: 'assembly-line',
+      });
+      writeTaskMeta(task, this.config.cwd);
+    } catch (error) {
+      console.error(`   ⚠️ 写入 transitionNote 失败: ${error instanceof Error ? error.message : String(error)}`);
+    }
+  }
+
+  /**
+   * 验证阶段流转完整性
+   *
+   * 在每个阶段完成后程序化检测：
+   * 1. 任务状态是否正确变更为预期值
+   * 2. 最新 transitionNote 条目是否包含有效的决策记录（note 非空且 toStatus 匹配）
+   *
+   * @param taskId - 任务ID
+   * @param expectedStatus - 阶段完成后期望的任务状态
+   * @param phase - 阶段名称（用于日志和错误信息）
+   * @returns 验证结果
+   */
+  private validateTransitionCompleteness(
+    taskId: string,
+    expectedStatus: TaskStatus,
+    phase: string,
+  ): { valid: boolean; errors: string[] } {
+    const errors: string[] = [];
+
+    try {
+      const task = readTaskMeta(taskId, this.config.cwd);
+      if (!task) {
+        errors.push(`任务 ${taskId} 不存在，无法验证流转完整性`);
+        return { valid: false, errors };
+      }
+
+      // 检查 1: 任务状态是否与期望一致
+      if (task.status !== expectedStatus) {
+        errors.push(
+          `状态不匹配: 期望 ${expectedStatus}, 实际 ${task.status} (阶段: ${phase})`
+        );
+      }
+
+      // 检查 2: 最新 transitionNote 是否包含有效决策记录
+      const notes = task.transitionNotes;
+      if (!notes || notes.length === 0) {
+        errors.push(
+          `transitionNotes 为空，缺少流转记录 (阶段: ${phase}, 期望状态: ${expectedStatus})`
+        );
+      } else {
+        const latest = notes[notes.length - 1]!;
+        // 检查 note 字段（决策说明）非空
+        if (!latest.note || latest.note.trim().length === 0) {
+          errors.push(
+            `最新 transitionNote 缺少决策说明 (阶段: ${phase})`
+          );
+        }
+        // 检查 toStatus 与期望一致
+        if (latest.toStatus !== expectedStatus) {
+          errors.push(
+            `transitionNote.toStatus 不匹配: 期望 ${expectedStatus}, 实际 ${latest.toStatus} (阶段: ${phase})`
+          );
+        }
+      }
+
+      if (errors.length > 0) {
+        console.error(`   🚨 质量门禁验证失败 [${phase} -> ${expectedStatus}]:`);
+        for (const err of errors) {
+          console.error(`      - ${err}`);
+        }
+      }
+
+      return { valid: errors.length === 0, errors };
+    } catch (error) {
+      const errMsg = `验证异常: ${error instanceof Error ? error.message : String(error)}`;
+      errors.push(errMsg);
+      console.error(`   🚨 质量门禁验证异常 [${phase}]: ${errMsg}`);
+      return { valid: false, errors };
+    }
+  }
+
+  /**
+   * 处理质量门禁验证失败
+   *
+   * 记录告警日志并将任务退回到安全状态（前一阶段的状态），
+   * 同时追加质量门禁失败的 transitionNote 记录。
+   *
+   * @param taskId - 任务ID
+   * @param expectedStatus - 验证期望的状态
+   * @param rollbackStatus - 退回到的安全状态
+   * @param phase - 阶段名称
+   * @param errors - 验证失败的错误列表
+   */
+  private async handleTransitionValidationFailure(
+    taskId: string,
+    expectedStatus: TaskStatus,
+    rollbackStatus: TaskStatus,
+    phase: string,
+    errors: string[],
+  ): Promise<void> {
+    console.error(`\n   🚨 质量门禁失败 [${phase}]: 任务 ${taskId}`);
+    console.error(`   期望状态: ${expectedStatus}, 退回到: ${rollbackStatus}`);
+    for (const err of errors) {
+      console.error(`   - ${err}`);
+    }
+
+    // 追加质量门禁失败记录到 transitionNotes
+    try {
+      const task = readTaskMeta(taskId, this.config.cwd);
+      if (task) {
+        if (!task.transitionNotes) {
+          task.transitionNotes = [];
+        }
+        task.transitionNotes.push({
+          timestamp: new Date().toISOString(),
+          fromStatus: expectedStatus,
+          toStatus: task.status,
+          note: `质量门禁验证失败 [${phase}]: ${errors.join('; ')}`,
+          author: 'quality-gate',
+        });
+        writeTaskMeta(task, this.config.cwd);
+      }
+    } catch (err) {
+      console.error(`   ⚠️ 记录质量门禁失败信息时出错: ${err instanceof Error ? err.message : String(err)}`);
+    }
+
+    // 尝试退回到安全状态（仅当 rollbackStatus 与 expectedStatus 不同时）
+    if (rollbackStatus !== expectedStatus) {
+      try {
+        await this.updateTaskStatus(taskId, rollbackStatus, `质量门禁验证失败，退回 [${phase}]`);
+        console.warn(`   ⚠️ 已退回任务 ${taskId} 到 ${rollbackStatus} 状态`);
+      } catch (err) {
+        console.error(`   ❌ 退回状态失败: ${err instanceof Error ? err.message : String(err)}`);
+      }
+    }
+  }
+
+  /**
+   * 设置任务恢复动作和恢复阶段
+   */
+  private async setTaskResumeAction(
+    taskId: string,
+    action: 'retry' | 'next',
+    resumeFrom: string,
+  ): Promise<void> {
+    try {
+      const task = readTaskMeta(taskId, this.config.cwd);
+      if (!task) return;
+      task.resumeAction = action;
+      writeTaskMeta(task, this.config.cwd);
+    } catch (error) {
+      console.error(`   ⚠️ 设置 resumeAction 失败: ${error instanceof Error ? error.message : String(error)}`);
+    }
+  }
+
+  /**
+   * 角色感知恢复逻辑
+   * 根据 resumeAction 和已完成的阶段确定恢复点（阶段+角色）
+   */
+  private determineResumePoint(task: TaskMeta): { phase: string; role: TaskRole } | null {
+    const phaseHistory = task.phaseHistory || [];
+    const resumeAction = task.resumeAction;
+
+    if (!resumeAction || phaseHistory.length === 0) {
+      // 无历史或无动作，从开发阶段开始
+      return { phase: 'development', role: 'executor' };
+    }
+
+    return Pipeline.determineResumePoint(phaseHistory, resumeAction as 'retry' | 'next');
+  }
+
+  /**
+   * 追加阶段历史条目
+   */
+  private appendPhaseHistory(
+    taskId: string,
+    entry: { phase: string; role: TaskRole; verdict: 'PASS' | 'NOPASS'; timestamp: string; analysis?: string; resumeAction?: 'retry' | 'next' },
+  ): void {
+    try {
+      const task = readTaskMeta(taskId, this.config.cwd);
+      if (!task) return;
+      if (!task.phaseHistory) {
+        task.phaseHistory = [];
+      }
+      task.phaseHistory.push(entry as PhaseHistoryEntry);
+      writeTaskMeta(task, this.config.cwd);
+    } catch (error) {
+      console.error(`   ⚠️ 追加阶段历史失败: ${error instanceof Error ? error.message : String(error)}`);
+    }
   }
 
   /**
