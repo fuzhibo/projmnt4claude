@@ -84,10 +84,14 @@ node ${CLAUDE_PLUGIN_ROOT}/dist/projmnt4claude.js branch checkout <task-id>
 |--------|-------------|
 | `open` | New task |
 | `in_progress` | In progress |
-| `blocked` | Blocked |
-| `resolved` | Completed |
-| `reopened` | Reopened |
+| `wait_review` | Pending review |
+| `wait_qa` | Pending QA |
+| `wait_complete` | Pending completion |
+| `resolved` | Resolved |
+| `closed` | Closed |
 | `abandoned` | Abandoned |
+
+> **Deprecated status**: `reopened` is deprecated. Using `task update <id> --status reopened` automatically maps to `open` + increments `reopenCount` + records a `transitionNote`.
 
 ## Data Storage
 

@@ -241,10 +241,14 @@ node ${CLAUDE_PLUGIN_ROOT}/dist/projmnt4claude.js branch checkout <task-id>
 |------|------|
 | `open` | 新建任务 |
 | `in_progress` | 进行中 |
-| `blocked` | 被阻塞 |
-| `resolved` | 已完成 |
-| `reopened` | 重新打开 |
+| `wait_review` | 待审查 |
+| `wait_qa` | 待测试 |
+| `wait_complete` | 待完成 |
+| `resolved` | 已解决 |
+| `closed` | 已关闭 |
 | `abandoned` | 已放弃 |
+
+> **已废弃状态**: `reopened` 已废弃，使用 `task update <id> --status reopened` 会自动映射为 `open` + `reopenCount` 递增 + `transitionNote` 记录。
 
 ## 数据存储
 
