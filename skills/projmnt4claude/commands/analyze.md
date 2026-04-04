@@ -87,8 +87,6 @@ projmnt4claude analyze --compact
 |------|------|--------|----------|
 | `--fix` | 自动修复所有可修复的问题 | - | 用户/AI |
 | `--fix-checkpoints` | 智能生成缺失的检查点 | - | 用户/AI |
-| `--fix-verification` | 仅修复验证方法问题 (manual -> automated) | - | AI |
-| `--fix-status` | 仅修复状态相关问题 (状态格式、优先级、时间戳等) | - | AI |
 | `--quality-check` | 检测任务内容质量（描述完整度、检查点质量、关联文件、解决方案） | - | 用户/AI |
 | `--threshold <score>` | 质量检测阈值，低于此分数的任务将被标记 | 60 | 用户/AI |
 | `-j, --json` | JSON 格式输出 (仅 --quality-check) | false | AI |
@@ -160,17 +158,6 @@ projmnt4claude analyze --bug-report .projmnt4claude/logs/ --export-training-data
 - 为缺少检查点的任务生成精确的检查点
 - 使用 `--task <taskId>` 可针对单个任务操作
 
-### --fix-verification（验证方法修复）
-- 将 manual 验证方法替换为 automated
-- 为 resolved 但缺少 verification 的任务回填字段
-
-### --fix-status（状态修复）
-- 修复旧格式状态 (pending/completed/reopen/cancelled)
-- 修复旧格式优先级 (urgent/high/medium/low)
-- 修复 pipeline 中间状态迁移
-- 修复时间戳格式
-- 修复无效 VerdictAction 值
-- 修复 schema 版本过时
 
 ### --quality-check（质量检测）
 - 描述完整度评分 (35% 权重)

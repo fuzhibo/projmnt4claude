@@ -16,6 +16,7 @@ import type { TaskMeta, TaskPriority } from '../types/task';
 import { SEPARATOR_WIDTH } from '../utils/format';
 import { createLogger, type InstrumentationRecord } from '../utils/logger';
 import { extractAffectedFiles } from '../utils/quality-gate';
+import { classifyFileToLayer, type ArchitectureLayer } from '../utils/ai-metadata';
 
 // ============== 任务链分析类型定义 ==============
 
@@ -35,6 +36,8 @@ interface TaskChain {
   length: number;            // 链长度
   totalReopenCount: number;  // 链中任务总 reopen 次数
   maxPriority: number;       // 链中最高优先级（数字越小越紧急）
+  minLayer: ArchitectureLayer; // 链中最低架构层级（基础层）
+  minLayerValue: number;     // 层级数值（用于排序，0=Layer0最基础）
   keywords: string[];        // 链涉及的关键字
   /** 推断依赖（通过文件重叠检测），taskId -> 推断信息列表 */
   inferredDependencies?: Map<string, InferredDependency[]>;
@@ -68,6 +71,7 @@ interface AIRecommendationOutput {
     length: number;
     totalReopenCount: number;
     maxPriority: string;
+    minLayer: string;
     keywords: string[];
     tasks: Array<{
       order: number;
@@ -76,6 +80,7 @@ interface AIRecommendationOutput {
       priority: string;
       status: string;
       reopenCount: number;
+      layer: string;
       dependencies: string[];
       inferredDependencies?: Array<{
         depTaskId: string;
@@ -213,6 +218,43 @@ function inferDependenciesFromFiles(tasks: TaskMeta[]): Map<string, InferredDepe
   return inferredMap;
 }
 
+// ============== 架构层级推断 ==============
+
+/**
+ * 根据任务涉及文件推断架构层级
+ * 使用任务关联文件中最低（最基础）的层级作为该任务的层级
+ * Layer0(类型定义) → Layer3(命令入口)，基础层优先执行
+ */
+function inferArchitectureLayer(task: TaskMeta): { layer: ArchitectureLayer; layerValue: number } {
+  const files = extractAffectedFiles(task);
+  const layerOrder: Record<ArchitectureLayer, number> = { Layer0: 0, Layer1: 1, Layer2: 2, Layer3: 3 };
+
+  if (files.length === 0) {
+    // 无文件信息时从任务描述推断
+    const desc = `${task.title} ${task.description || ''}`.toLowerCase();
+    if (desc.includes('类型') || desc.includes('type') || desc.includes('接口') || desc.includes('interface')) {
+      return { layer: 'Layer0', layerValue: 0 };
+    }
+    if (desc.includes('命令') || desc.includes('command') || desc.includes('cli')) {
+      return { layer: 'Layer3', layerValue: 3 };
+    }
+    return { layer: 'Layer1', layerValue: 1 };
+  }
+
+  // 取所有文件中最低层级（最基础的依赖层）
+  let minValue = 3;
+  for (const file of files) {
+    const fileLayer = classifyFileToLayer(file);
+    const value = layerOrder[fileLayer];
+    if (value < minValue) {
+      minValue = value;
+    }
+  }
+
+  const layers: ArchitectureLayer[] = ['Layer0', 'Layer1', 'Layer2', 'Layer3'];
+  return { layer: layers[minValue]!, layerValue: minValue };
+}
+
 // ============== 任务链分析 ==============
 
 /**
@@ -302,12 +344,20 @@ function buildTaskChains(tasks: TaskMeta[], cwd: string): TaskChain[] {
       chainTasks.map(t => `${t.title} ${t.description || ''}`).join(' ')
     );
 
+    // 计算链中最低架构层级（基础层优先执行）
+    const chainLayers = chainTasks.map(t => inferArchitectureLayer(t));
+    const minLayerValue = Math.min(...chainLayers.map(cl => cl.layerValue));
+    const layerOrder: ArchitectureLayer[] = ['Layer0', 'Layer1', 'Layer2', 'Layer3'];
+    const minLayer = layerOrder[minLayerValue]!;
+
     chains.push({
       chainId: chainTasks[0]!.id,
       tasks: chainTasks,
       length: chainTasks.length,
       totalReopenCount,
       maxPriority,
+      minLayer,
+      minLayerValue,
       keywords,
       inferredDependencies: inferredDeps,
     });
@@ -326,11 +376,15 @@ function sortChains(chains: TaskChain[]): TaskChain[] {
     if (a.maxPriority !== b.maxPriority) {
       return a.maxPriority - b.maxPriority;
     }
-    // 2. 链长度降序（同优先级下长链优先）
+    // 2. 架构层级升序（同优先级下，Layer0 基础层优先于 Layer3 入口层）
+    if (a.minLayerValue !== b.minLayerValue) {
+      return a.minLayerValue - b.minLayerValue;
+    }
+    // 3. 链长度降序（同层级下长链优先）
     if (b.length !== a.length) {
       return b.length - a.length;
     }
-    // 3. reopen 次数降序
+    // 4. reopen 次数降序
     return b.totalReopenCount - a.totalReopenCount;
   });
 }
@@ -467,8 +521,10 @@ function generateAIOutput(
       length: chain.length,
       totalReopenCount: chain.totalReopenCount,
       maxPriority: priorityNames[chain.maxPriority] || 'P2',
+      minLayer: chain.minLayer,
       keywords: chain.keywords.slice(0, 10),
       tasks: chain.tasks.map((task, idx) => {
+        const taskLayerInfo = inferArchitectureLayer(task);
         const taskEntry: AIRecommendationOutput['chains'][number]['tasks'][number] = {
           order: idx + 1,
           id: task.id,
@@ -476,6 +532,7 @@ function generateAIOutput(
           priority: task.priority,
           status: task.status,
           reopenCount: task.reopenCount || 0,
+          layer: taskLayerInfo.layer,
           dependencies: task.dependencies,
         };
         // 添加推断依赖信息
@@ -504,7 +561,7 @@ function generateAIOutput(
     }),
     batchOrder,
     recommendation: {
-      summary: `发现 ${chains.length} 个任务链，共 ${filteredCount} 个任务，分 ${batches.length} 个批次`,
+      summary: `发现 ${chains.length} 个任务链，共 ${filteredCount} 个任务，分 ${batches.length} 个批次。同优先级内已按架构层级排序（Layer0→Layer3），确保底层变更优先于上层依赖执行`,
       topChains,
       suggestedOrder,
     },
@@ -823,7 +880,7 @@ export async function recommendPlan(
       const chain = chainsInBatch[i]!;
       const chainLabel = batch.parallelizable ? `[链${i + 1}]` : `[链]`;
 
-      console.log(`   ${chainLabel} ${chain.chainId} (长度:${chain.length} Reopen:${chain.totalReopenCount})`);
+      console.log(`   ${chainLabel} ${chain.chainId} (${chain.minLayer} 长度:${chain.length} Reopen:${chain.totalReopenCount})`);
 
       // 显示链中任务（拓扑序）
       for (let j = 0; j < chain.tasks.length; j++) {
