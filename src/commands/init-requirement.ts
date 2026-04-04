@@ -15,7 +15,7 @@ import type { TaskMeta, TaskPriority, TaskStatus, TaskType } from '../types/task
 import { createDefaultTaskMeta, inferTaskType, validateCheckpointVerification } from '../types/task';
 import { SEPARATOR_WIDTH } from '../utils/format';
 import { createLogger, type InstrumentationRecord, type AICostSummary } from '../utils/logger';
-import { AIMetadataAssistant, type EnhancedRequirement } from '../utils/ai-metadata';
+import { AIMetadataAssistant, type EnhancedRequirement, classifyFileToLayer, groupFilesByLayer, sortFilesByLayer, type ArchitectureLayer, LAYER_DEFINITIONS } from '../utils/ai-metadata';
 
 /**
  * 复杂度评估结果
@@ -795,10 +795,12 @@ export function assessComplexity(
 /**
  * 生成任务拆分建议
  *
- * 策略：
- * - 按文件/模块边界拆分
+ * 策略（按优先级）：
+ * 1. 按架构层级拆分（Layer0类型 → Layer1工具 → Layer2核心 → Layer3命令）
+ * 2. 按文件目录边界拆分
+ * 3. 按工作项数量拆分
  * - 每个子任务控制在 15 分钟以内
- * - 设置合理的依赖关系（基础模块 -> 功能模块 -> 测试/文档）
+ * - 依赖关系遵循底层先于上层
  */
 function generateSplitSuggestions(
   description: string,
@@ -812,9 +814,37 @@ function generateSplitSuggestions(
 
   const suggestions: SplitSuggestion[] = [];
 
-  // 尝试按文件组拆分
-  if (files.length >= 3) {
-    // 将文件按目录分组
+  // 策略1: 按架构层级拆分（优先策略）
+  const layerGroups = groupFilesByLayer(files);
+  if (layerGroups.size >= 2 && files.length >= 2) {
+    const layerOrder: ArchitectureLayer[] = ['Layer0', 'Layer1', 'Layer2', 'Layer3'];
+    let prevIdx = -1;
+
+    for (const layer of layerOrder) {
+      const layerFiles = layerGroups.get(layer);
+      if (!layerFiles || layerFiles.length === 0) continue;
+
+      const layerDef = LAYER_DEFINITIONS[layer];
+      const estMinutes = Math.max(5, Math.ceil(layerFiles.length * 3 + 2));
+
+      suggestions.push({
+        title: `${analysis.title} - ${layerDef.label}`,
+        description: `修改${layerDef.description}层文件: ${layerFiles.join(', ')}`,
+        files: layerFiles,
+        estimatedMinutes: estMinutes,
+        dependsOn: prevIdx,
+      });
+      prevIdx = suggestions.length - 1;
+    }
+
+    // 如果没有按层级成功拆分（所有文件都在同一层），回退到目录拆分
+    if (suggestions.length <= 1) {
+      suggestions.length = 0; // 清空，走下面的策略
+    }
+  }
+
+  // 策略2: 按文件目录边界拆分（当策略1不适用时）
+  if (suggestions.length === 0 && files.length >= 3) {
     const fileGroups = new Map<string, string[]>();
     for (const file of files) {
       const parts = file.split('/');
@@ -823,29 +853,27 @@ function generateSplitSuggestions(
       fileGroups.get(dir)!.push(file);
     }
 
-    // 如果只有一组但文件多，按功能拆分
     if (fileGroups.size <= 1 && files.length >= 3) {
-      // 按文件列表均分
-      const mid = Math.ceil(files.length / 2);
-      const firstHalf = files.slice(0, mid);
-      const secondHalf = files.slice(mid);
+      const sortedFiles = sortFilesByLayer(files);
+      const mid = Math.ceil(sortedFiles.length / 2);
+      const firstHalf = sortedFiles.slice(0, mid);
+      const secondHalf = sortedFiles.slice(mid);
 
       suggestions.push({
         title: `${analysis.title} - 基础实现`,
-        description: `完成核心功能实现，涉及文件: ${firstHalf.join(', ')}`,
+        description: `完成核心功能实现（底层依赖），涉及文件: ${firstHalf.join(', ')}`,
         files: firstHalf,
         estimatedMinutes: Math.ceil(totalMinutes * 0.6),
         dependsOn: -1,
       });
       suggestions.push({
         title: `${analysis.title} - 完善与测试`,
-        description: `完成剩余修改和验证，涉及文件: ${secondHalf.join(', ')}`,
+        description: `完成剩余修改和验证（上层逻辑），涉及文件: ${secondHalf.join(', ')}`,
         files: secondHalf,
         estimatedMinutes: Math.ceil(totalMinutes * 0.4),
         dependsOn: 0,
       });
     } else {
-      // 按目录分组拆分
       const groups = Array.from(fileGroups.entries());
       for (let i = 0; i < groups.length; i++) {
         const group = groups[i];
@@ -861,8 +889,10 @@ function generateSplitSuggestions(
         });
       }
     }
-  } else if (workItemCount >= 4) {
-    // 文件少但工作项多：按工作阶段拆分
+  }
+
+  // 策略3: 按工作项数量拆分
+  if (suggestions.length === 0 && workItemCount >= 4) {
     suggestions.push({
       title: `${analysis.title} - 核心修改`,
       description: `完成核心代码修改和功能实现`,
@@ -884,11 +914,13 @@ function generateSplitSuggestions(
       estimatedMinutes: Math.ceil(totalMinutes * 0.2),
       dependsOn: 1,
     });
-  } else {
-    // 无法智能拆分，提供时间提醒
+  }
+
+  // 兜底: 无法智能拆分
+  if (suggestions.length === 0) {
     suggestions.push({
       title: `${analysis.title} (建议拆分)`,
-      description: `此任务预估 ${totalMinutes} 分钟，建议手动拆分为更小的子任务`,
+      description: `此任务预估 ${totalMinutes} 分钟，建议按架构层级（类型→工具→核心→命令）手动拆分为更小的子任务`,
       files,
       estimatedMinutes: totalMinutes,
       dependsOn: -1,
@@ -901,19 +933,20 @@ function generateSplitSuggestions(
     if (s.estimatedMinutes <= 15) {
       finalSuggestions.push(s);
     } else {
-      // 子任务仍然太大，再拆
-      const half = Math.ceil(s.files.length / 2);
-      if (half > 0 && s.files.length > 1) {
+      // 子任务仍然太大，按层级排序后拆分
+      const sortedFiles = sortFilesByLayer(s.files);
+      const half = Math.ceil(sortedFiles.length / 2);
+      if (half > 0 && sortedFiles.length > 1) {
         finalSuggestions.push({
           ...s,
           title: `${s.title} (前半)`,
-          files: s.files.slice(0, half),
+          files: sortedFiles.slice(0, half),
           estimatedMinutes: Math.ceil(s.estimatedMinutes / 2),
         });
         finalSuggestions.push({
           ...s,
           title: `${s.title} (后半)`,
-          files: s.files.slice(half),
+          files: sortedFiles.slice(half),
           estimatedMinutes: Math.ceil(s.estimatedMinutes / 2),
           dependsOn: finalSuggestions.length - 1,
         });

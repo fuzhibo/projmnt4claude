@@ -18,6 +18,93 @@ import type { TaskMeta, TaskPriority, TaskType } from '../types/task';
 import { inferTaskType, inferTaskPriority } from '../types/task';
 
 // ============================================================
+// 架构层级分类 (Layer0-Layer3)
+// ============================================================
+
+/**
+ * 架构层级枚举
+ * 用于任务拆分时按依赖顺序排列
+ */
+export type ArchitectureLayer = 'Layer0' | 'Layer1' | 'Layer2' | 'Layer3';
+
+/**
+ * 层级定义与描述
+ */
+export const LAYER_DEFINITIONS: Record<ArchitectureLayer, { label: string; description: string; pathPatterns: string[] }> = {
+  Layer0: {
+    label: '类型定义层',
+    description: '基础类型、接口、枚举定义，被所有上层模块依赖',
+    pathPatterns: ['src/types/', 'src/interfaces/', 'src/schemas/'],
+  },
+  Layer1: {
+    label: '工具函数层',
+    description: '纯函数工具、辅助模块，依赖类型层但不依赖命令层',
+    pathPatterns: ['src/utils/', 'src/helpers/', 'src/lib/'],
+  },
+  Layer2: {
+    label: '核心逻辑层',
+    description: '核心业务逻辑、数据处理，依赖工具层和类型层',
+    pathPatterns: ['src/core/', 'src/services/', 'src/processors/'],
+  },
+  Layer3: {
+    label: '命令/入口层',
+    description: 'CLI 命令、入口文件，依赖所有下层模块',
+    pathPatterns: ['src/commands/', 'src/index.ts', 'src/cli/'],
+  },
+};
+
+/**
+ * 根据文件路径推断所属架构层级
+ */
+export function classifyFileToLayer(filePath: string): ArchitectureLayer {
+  const normalized = filePath.replace(/\\/g, '/');
+  // 从高依赖层（Layer3）到低依赖层（Layer0）匹配
+  if (normalized.includes('src/commands/') || normalized.includes('src/cli/') || normalized.endsWith('src/index.ts')) {
+    return 'Layer3';
+  }
+  if (normalized.includes('src/core/') || normalized.includes('src/services/') || normalized.includes('src/processors/')) {
+    return 'Layer2';
+  }
+  if (normalized.includes('src/utils/') || normalized.includes('src/helpers/') || normalized.includes('src/lib/')) {
+    return 'Layer1';
+  }
+  if (normalized.includes('src/types/') || normalized.includes('src/interfaces/') || normalized.includes('src/schemas/')) {
+    return 'Layer0';
+  }
+  // 默认归为工具层
+  return 'Layer1';
+}
+
+/**
+ * 对文件列表按架构层级排序（Layer0 → Layer3）
+ */
+export function sortFilesByLayer(files: string[]): string[] {
+  const layerOrder: Record<ArchitectureLayer, number> = { Layer0: 0, Layer1: 1, Layer2: 2, Layer3: 3 };
+  return [...files].sort((a, b) => layerOrder[classifyFileToLayer(a)] - layerOrder[classifyFileToLayer(b)]);
+}
+
+/**
+ * 将文件列表按层级分组
+ */
+export function groupFilesByLayer(files: string[]): Map<ArchitectureLayer, string[]> {
+  const groups = new Map<ArchitectureLayer, string[]>();
+  for (const file of files) {
+    const layer = classifyFileToLayer(file);
+    if (!groups.has(layer)) groups.set(layer, []);
+    groups.get(layer)!.push(file);
+  }
+  // 按层级排序
+  const sorted = new Map<ArchitectureLayer, string[]>();
+  const order: ArchitectureLayer[] = ['Layer0', 'Layer1', 'Layer2', 'Layer3'];
+  for (const layer of order) {
+    if (groups.has(layer)) {
+      sorted.set(layer, groups.get(layer)!);
+    }
+  }
+  return sorted;
+}
+
+// ============================================================
 // 类型定义
 // ============================================================
 
@@ -531,7 +618,15 @@ ${description}
 - title 必须以动词开头，长度 10-50 字符
 - checkpoints 每条必须以动词开头，不能是泛泛的阶段名称（如"开发阶段""测试阶段"）
 - priority 必须是 P0/P1/P2/P3 之一或 null
-- 只输出 JSON`;
+- 只输出 JSON
+
+## 任务拆分最佳实践（影响 checkpoints 生成）
+1. 单个任务预估耗时控制在 15 分钟以内
+2. 按架构层级拆分优先级：Layer0(类型定义) → Layer1(工具函数) → Layer2(核心逻辑) → Layer3(命令入口)
+3. 按文件目录边界拆分，每个子任务聚焦同一目录下的文件
+4. 检查点必须具体可验证，格式如"实现 XXX 函数""运行 tsc --noEmit 通过"
+5. 依赖关系遵循底层先于上层（先改类型，再改工具，再改命令）
+6. 如果需求涉及 3 个以上文件或跨 2 个以上目录，应生成粒度更细的检查点，暗示可拆分`;
 
     if (errorFeedback) {
       prompt += `\n\n## 上次输出错误\n${errorFeedback}\n请修正以上错误并重新输出。`;
@@ -565,7 +660,15 @@ ${type || '未指定'}${existingStr}
 - 每条检查点必须以动词开头
 - 不能是泛泛的阶段名称（如"开发阶段""测试阶段"）
 - 每条至少 5 字符
-- 只输出 JSON`;
+- 只输出 JSON
+
+## 检查点质量规范
+1. 每条必须是可独立验证的原子操作，例如"实现 parseConfig 函数"而非"完成配置解析"
+2. 引用具体文件路径或函数名，例如"修改 src/utils/foo.ts 中的 bar() 函数"
+3. 验证类检查点附带可执行命令，例如"运行 tsc --noEmit 确认类型检查通过"
+4. 按架构层级排列：先类型定义 → 再工具函数 → 再核心逻辑 → 最后命令入口
+5. 依赖底层完成后再做上层，例如先"定义 XXX 接口"再"实现 XXX 功能"
+6. 每个检查点预估耗时不超过 15 分钟，超过则应拆分为多条`;
   }
 
   private buildQualityPrompt(task: TaskMeta): string {
@@ -598,9 +701,11 @@ ${JSON.stringify({
 ## 评估维度
 - 标题: 是否动词开头，是否具体
 - 描述: 是否包含足够的上下文和目标
-- 检查点: 是否具体可验证
+- 检查点: 是否具体可验证（必须引用具体文件路径、函数名或可执行命令）
 - 优先级: 是否合理
 - 依赖: 是否遗漏关键依赖
+- 任务粒度: 单个任务是否控制在15分钟内可完成
+- 层级拆分: 涉及多文件时是否按架构层级（类型→工具→核心→命令）拆分检查点
 - 只输出 JSON`;
   }
 

@@ -15,12 +15,20 @@ import { readTaskMeta, getAllTasks, taskExists, getSubtasks } from '../utils/tas
 import type { TaskMeta, TaskPriority } from '../types/task';
 import { SEPARATOR_WIDTH } from '../utils/format';
 import { createLogger, type InstrumentationRecord } from '../utils/logger';
+import { extractAffectedFiles } from '../utils/quality-gate';
 
 // ============== 任务链分析类型定义 ==============
 
 /**
  * 任务链：具有依赖关系的任务序列
  */
+interface InferredDependency {
+  /** 被依赖的任务ID */
+  depTaskId: string;
+  /** 重叠的文件路径列表 */
+  overlappingFiles: string[];
+}
+
 interface TaskChain {
   chainId: string;           // 链 ID（链首任务 ID）
   tasks: TaskMeta[];         // 链中所有任务（按依赖顺序）
@@ -28,6 +36,8 @@ interface TaskChain {
   totalReopenCount: number;  // 链中任务总 reopen 次数
   maxPriority: number;       // 链中最高优先级（数字越小越紧急）
   keywords: string[];        // 链涉及的关键字
+  /** 推断依赖（通过文件重叠检测），taskId -> 推断信息列表 */
+  inferredDependencies?: Map<string, InferredDependency[]>;
 }
 
 /**
@@ -67,6 +77,10 @@ interface AIRecommendationOutput {
       status: string;
       reopenCount: number;
       dependencies: string[];
+      inferredDependencies?: Array<{
+        depTaskId: string;
+        overlappingFiles: string[];
+      }>;
     }>;
   }>;
   batches: Array<{
@@ -75,6 +89,7 @@ interface AIRecommendationOutput {
     chains: string[];
     tasks: string[];
     parallelizable: boolean;
+    parallelBlockedBy?: string;
   }>;
   batchOrder: string[][];  // 按批次排列的任务ID二维数组
   recommendation: {
@@ -132,10 +147,77 @@ function taskMatchesKeywords(task: TaskMeta, keywords: string[]): boolean {
   return keywords.some(kw => searchText.includes(kw.toLowerCase()));
 }
 
+// ============== 文件重叠依赖推断 ==============
+
+/**
+ * 从文件路径重叠推断任务间的隐式依赖关系
+ *
+ * 策略：O(n²) 比较所有任务对的文件路径集合，
+ * 有交集则建立推断依赖，方向为后创建的任务依赖先创建的任务（时间序）
+ *
+ * @returns Map<taskId, InferredDependency[]> 每个任务的推断依赖列表
+ */
+function inferDependenciesFromFiles(tasks: TaskMeta[]): Map<string, InferredDependency[]> {
+  const inferredMap = new Map<string, InferredDependency[]>();
+
+  if (tasks.length === 0) return inferredMap;
+
+  // 预计算每个任务的文件路径集合
+  const taskFilesMap = new Map<string, Set<string>>();
+  for (const task of tasks) {
+    const files = extractAffectedFiles(task);
+    // 规范化路径：去掉尾部斜杠、转小写
+    const normalized = new Set(files.map(f => f.replace(/\/+$/, '').toLowerCase()));
+    taskFilesMap.set(task.id, normalized);
+  }
+
+  // 按创建时间排序（升序），用于确定依赖方向
+  const sortedByTime = [...tasks].sort((a, b) =>
+    a.createdAt.localeCompare(b.createdAt)
+  );
+
+  // O(n²) 比较所有任务对
+  for (let i = 0; i < sortedByTime.length; i++) {
+    const laterTask = sortedByTime[i]!;
+    const laterFiles = taskFilesMap.get(laterTask.id)!;
+
+    for (let j = 0; j < i; j++) {
+      const earlierTask = sortedByTime[j]!;
+      const earlierFiles = taskFilesMap.get(earlierTask.id)!;
+
+      // 计算文件交集
+      const overlap: string[] = [];
+      for (const f of laterFiles) {
+        if (earlierFiles.has(f)) {
+          overlap.push(f);
+        }
+      }
+
+      if (overlap.length > 0) {
+        // 后创建的任务依赖先创建的任务
+        const dep: InferredDependency = {
+          depTaskId: earlierTask.id,
+          overlappingFiles: overlap,
+        };
+
+        const existing = inferredMap.get(laterTask.id);
+        if (existing) {
+          existing.push(dep);
+        } else {
+          inferredMap.set(laterTask.id, [dep]);
+        }
+      }
+    }
+  }
+
+  return inferredMap;
+}
+
 // ============== 任务链分析 ==============
 
 /**
  * 构建任务依赖图并识别任务链
+ * 合并显式依赖 (task.dependencies) 与推断依赖 (文件重叠)
  */
 function buildTaskChains(tasks: TaskMeta[], cwd: string): TaskChain[] {
   const taskMap = new Map<string, TaskMeta>();
@@ -145,6 +227,23 @@ function buildTaskChains(tasks: TaskMeta[], cwd: string): TaskChain[] {
   // 建立任务映射
   for (const task of tasks) {
     taskMap.set(task.id, task);
+  }
+
+  // 推断文件重叠依赖
+  const inferredDeps = inferDependenciesFromFiles(tasks);
+
+  /**
+   * 获取任务的完整依赖列表（显式 + 推断）
+   */
+  function getAllDeps(task: TaskMeta): string[] {
+    const explicit = new Set(task.dependencies);
+    const inferred = inferredDeps.get(task.id);
+    if (inferred) {
+      for (const dep of inferred) {
+        explicit.add(dep.depTaskId);
+      }
+    }
+    return [...explicit];
   }
 
   /**
@@ -158,8 +257,8 @@ function buildTaskChains(tasks: TaskMeta[], cwd: string): TaskChain[] {
       if (chainVisited.has(task.id)) return;
       chainVisited.add(task.id);
 
-      // 先处理依赖
-      for (const depId of task.dependencies) {
+      // 先处理依赖（合并显式 + 推断）
+      for (const depId of getAllDeps(task)) {
         const depTask = taskMap.get(depId);
         if (depTask && !chainVisited.has(depTask.id)) {
           dfs(depTask);
@@ -210,6 +309,7 @@ function buildTaskChains(tasks: TaskMeta[], cwd: string): TaskChain[] {
       totalReopenCount,
       maxPriority,
       keywords,
+      inferredDependencies: inferredDeps,
     });
   }
 
@@ -265,6 +365,37 @@ function buildBatches(sortedChains: TaskChain[]): ExecutionBatch[] {
     const allTasks: string[] = [];
     const chainIds: string[] = [];
 
+    // 收集本桶内所有任务ID集合
+    const bucketTaskIds = new Set<string>();
+    for (const chain of chainsInBucket) {
+      for (const task of chain.tasks) {
+        bucketTaskIds.add(task.id);
+      }
+    }
+
+    // 检查是否有跨链的推断依赖（桶内不同链的任务间有文件重叠）
+    let hasCrossChainInferredDep = false;
+    for (const chain of chainsInBucket) {
+      if (hasCrossChainInferredDep) break;
+      const inferredDeps = chain.inferredDependencies;
+      if (!inferredDeps) continue;
+
+      // 查找本链任务是否推断依赖了其他链中的任务
+      for (const task of chain.tasks) {
+        if (hasCrossChainInferredDep) break;
+        const deps = inferredDeps.get(task.id);
+        if (!deps) continue;
+        // 检查被依赖的任务是否在其他链中（即也在桶内但不与本任务同链）
+        const myChainTaskIds = new Set(chain.tasks.map(t => t.id));
+        for (const dep of deps) {
+          if (bucketTaskIds.has(dep.depTaskId) && !myChainTaskIds.has(dep.depTaskId)) {
+            hasCrossChainInferredDep = true;
+            break;
+          }
+        }
+      }
+    }
+
     for (const chain of chainsInBucket) {
       chainIds.push(chain.chainId);
       for (const task of chain.tasks) {
@@ -274,13 +405,16 @@ function buildBatches(sortedChains: TaskChain[]): ExecutionBatch[] {
       }
     }
 
+    // parallelizable: 只有多个链且无跨链推断依赖时才为 true
+    const parallelizable = chainsInBucket.length > 1 && !hasCrossChainInferredDep;
+
     batches.push({
       batchId: `batch-${priorityNames[priority] || `L${priority}`}`,
       priority: priorityNames[priority] || `L${priority}`,
       priorityValue: priority,
       chains: chainIds,
       tasks: allTasks,
-      parallelizable: chainsInBucket.length > 1,
+      parallelizable,
     });
   }
 
@@ -334,23 +468,40 @@ function generateAIOutput(
       totalReopenCount: chain.totalReopenCount,
       maxPriority: priorityNames[chain.maxPriority] || 'P2',
       keywords: chain.keywords.slice(0, 10),
-      tasks: chain.tasks.map((task, idx) => ({
-        order: idx + 1,
-        id: task.id,
-        title: task.title,
-        priority: task.priority,
-        status: task.status,
-        reopenCount: task.reopenCount || 0,
-        dependencies: task.dependencies,
-      })),
+      tasks: chain.tasks.map((task, idx) => {
+        const taskEntry: AIRecommendationOutput['chains'][number]['tasks'][number] = {
+          order: idx + 1,
+          id: task.id,
+          title: task.title,
+          priority: task.priority,
+          status: task.status,
+          reopenCount: task.reopenCount || 0,
+          dependencies: task.dependencies,
+        };
+        // 添加推断依赖信息
+        const inferred = chain.inferredDependencies?.get(task.id);
+        if (inferred && inferred.length > 0) {
+          taskEntry.inferredDependencies = inferred.map(d => ({
+            depTaskId: d.depTaskId,
+            overlappingFiles: d.overlappingFiles,
+          }));
+        }
+        return taskEntry;
+      }),
     })),
-    batches: batches.map(b => ({
-      batchId: b.batchId,
-      priority: b.priority,
-      chains: b.chains,
-      tasks: b.tasks,
-      parallelizable: b.parallelizable,
-    })),
+    batches: batches.map(b => {
+      const batchEntry: AIRecommendationOutput['batches'][number] = {
+        batchId: b.batchId,
+        priority: b.priority,
+        chains: b.chains,
+        tasks: b.tasks,
+        parallelizable: b.parallelizable,
+      };
+      if (!b.parallelizable && b.chains.length > 1) {
+        batchEntry.parallelBlockedBy = '推断依赖: 文件重叠';
+      }
+      return batchEntry;
+    }),
     batchOrder,
     recommendation: {
       summary: `发现 ${chains.length} 个任务链，共 ${filteredCount} 个任务，分 ${batches.length} 个批次`,
@@ -656,7 +807,11 @@ export async function recommendPlan(
   for (let b = 0; b < batches.length; b++) {
     const batch = batches[b]!;
     const batchIcon = getPriorityIcon(batch.priorityValue);
-    const parallelTag = batch.parallelizable ? ' [可并行]' : '';
+    const parallelTag = batch.parallelizable
+      ? ' [可并行]'
+      : batch.chains.length > 1
+        ? ' [不可并行: 文件重叠推断依赖]'
+        : '';
 
     console.log(`📦 批次 ${b + 1}/${batches.length} ${batchIcon} ${batch.priority}${parallelTag}`);
     console.log(`   链数: ${batch.chains.length} | 任务数: ${batch.tasks.length}`);
@@ -675,7 +830,16 @@ export async function recommendPlan(
         const task = chain.tasks[j]!;
         const prefix = j === chain.tasks.length - 1 ? '      └─' : '      ├─';
         const statusIcon = getStatusIcon(task.status);
-        console.log(`${prefix} ${statusIcon} ${task.id}: ${task.title.substring(0, 40)}`);
+
+        // 显示推断依赖标注
+        const inferredDeps = chain.inferredDependencies?.get(task.id);
+        let inferredTag = '';
+        if (inferredDeps && inferredDeps.length > 0) {
+          const files = [...new Set(inferredDeps.flatMap(d => d.overlappingFiles))].slice(0, 2);
+          inferredTag = ` [推断] 文件重叠: ${files.join(', ')}${inferredDeps.flatMap(d => d.overlappingFiles).length > 2 ? '...' : ''}`;
+        }
+
+        console.log(`${prefix} ${statusIcon} ${task.id}: ${task.title.substring(0, 40)}${inferredTag}`);
       }
       console.log('');
     }
