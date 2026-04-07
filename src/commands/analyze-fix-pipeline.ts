@@ -34,8 +34,14 @@ import type { VerdictAction } from '../types/harness';
 import { VALID_VERDICT_ACTIONS } from '../types/harness';
 import { SEPARATOR_WIDTH } from '../utils/format';
 
-import { applySchemaMigrations, analyzeProject } from './analyze';
-import type { Issue, AnalysisResult } from './analyze';
+import {
+  applySchemaMigrations,
+  analyzeProject,
+  fixCheckpoints,
+  performQualityCheck,
+  showQualityReport,
+} from './analyze';
+import type { Issue, AnalysisResult, AIAnalyzeOptions } from './analyze';
 
 // ============== 辅助函数（从 analyze.ts 迁移） ==============
 
@@ -879,4 +885,321 @@ export async function fixIssues(
   console.log('━'.repeat(SEPARATOR_WIDTH));
 
   return { fixed: fixedCount, skipped: skippedCount, unfixable: unfixableCount };
+}
+
+// ============== 5阶段修复流水线 ==============
+
+export interface FixPipelineOptions {
+  nonInteractive?: boolean;
+  /** Only run rule-based stages (1, 2) */
+  rulesOnly?: boolean;
+  /** Only run checkpoint fixes (stage 4) */
+  checkpointsOnly?: boolean;
+  /** Only run quality report (stage 5) */
+  qualityOnly?: boolean;
+  /** Skip AI analysis stage (stage 3) */
+  noAi?: boolean;
+  /** AI options for stages that use AI */
+  aiOptions?: AIAnalyzeOptions;
+  /** Quality report display options */
+  compact?: boolean;
+  json?: boolean;
+  threshold?: number;
+  /** Target task ID for checkpoint stage */
+  taskId?: string;
+}
+
+interface StageResult {
+  executed: boolean;
+  skipped: boolean;
+  duration: number;
+  summary: string;
+}
+
+export interface FixPipelineResult {
+  stages: {
+    stage1: StageResult;
+    stage2: StageResult;
+    stage3: StageResult;
+    stage4: StageResult;
+    stage5: StageResult;
+  };
+  totalTime: number;
+}
+
+function emptyStageResult(summary: string): StageResult {
+  return { executed: false, skipped: true, duration: 0, summary };
+}
+
+/**
+ * 5阶段修复流水线
+ *
+ * Stage 1: 规则引擎分析 (无AI消耗)
+ * Stage 2: 规则修复 (无AI消耗)
+ * Stage 3: AI 分析 (--no-ai 跳过)
+ * Stage 4: 检查点修复
+ * Stage 5: 质量报告
+ *
+ * 参数组合:
+ *   --fix                → 全部5阶段
+ *   --fix --no-ai        → 1,2,4,5 跳过3
+ *   --fix --rules-only   → 仅1,2
+ *   --fix --checkpoints-only → 仅4
+ *   --fix --quality-only → 仅5
+ */
+export async function fixPipeline(
+  cwd: string = process.cwd(),
+  options: FixPipelineOptions = {},
+): Promise<FixPipelineResult> {
+  const pipelineStart = Date.now();
+  const {
+    nonInteractive = false,
+    rulesOnly = false,
+    checkpointsOnly = false,
+    qualityOnly = false,
+    noAi = false,
+    aiOptions = {},
+    compact = false,
+    json = false,
+    threshold = 60,
+    taskId,
+  } = options;
+
+  // Determine which stages to run
+  const runStage1 = !checkpointsOnly && !qualityOnly;
+  const runStage2 = !checkpointsOnly && !qualityOnly;
+  const runStage3 = !noAi && !rulesOnly && !checkpointsOnly && !qualityOnly;
+  const runStage4 = !rulesOnly && !qualityOnly;
+  const runStage5 = !rulesOnly && !checkpointsOnly;
+
+  let analysisResult: AnalysisResult | undefined;
+
+  console.log('');
+  console.log('━'.repeat(SEPARATOR_WIDTH));
+  console.log('🔧 analyze --fix 流水线模式');
+  const stages: string[] = [];
+  if (runStage1) stages.push('1');
+  if (runStage2) stages.push('2');
+  if (runStage3) stages.push('3');
+  if (runStage4) stages.push('4');
+  if (runStage5) stages.push('5');
+  console.log(`   执行阶段: ${stages.join(', ')} / 5`);
+  console.log('━'.repeat(SEPARATOR_WIDTH));
+
+  // ===== Stage 1: 规则引擎分析 =====
+  let stage1Result: StageResult;
+  if (runStage1) {
+    const start = Date.now();
+    console.log('\n📋 Stage 1: 规则引擎分析...');
+    try {
+      analysisResult = await analyzeProject(cwd, false, aiOptions);
+      const issueCount = analysisResult.issues.length;
+      const duration = Date.now() - start;
+      stage1Result = {
+        executed: true,
+        skipped: false,
+        duration,
+        summary: `发现 ${issueCount} 个问题`,
+      };
+      console.log(`   ✅ Stage 1 完成: 发现 ${issueCount} 个问题 (${(duration / 1000).toFixed(1)}s)`);
+    } catch (error) {
+      const duration = Date.now() - start;
+      stage1Result = {
+        executed: true,
+        skipped: false,
+        duration,
+        summary: `分析失败: ${error instanceof Error ? error.message : String(error)}`,
+      };
+      console.error(`   ❌ Stage 1 失败: ${error instanceof Error ? error.message : String(error)}`);
+    }
+  } else {
+    stage1Result = emptyStageResult('跳过 (--checkpoints-only 或 --quality-only)');
+    console.log('   ⏭️  Stage 1: 跳过');
+  }
+
+  // ===== Stage 2: 规则修复 =====
+  let stage2Result: StageResult;
+  if (runStage2 && analysisResult) {
+    const start = Date.now();
+    console.log('\n🔧 Stage 2: 规则修复...');
+    try {
+      const fixResult = await fixIssues(cwd, { nonInteractive }, analysisResult);
+      const duration = Date.now() - start;
+      stage2Result = {
+        executed: true,
+        skipped: false,
+        duration,
+        summary: `修复 ${fixResult.fixed} 个, 跳过 ${fixResult.skipped} 个, 不可修复 ${fixResult.unfixable} 个`,
+      };
+      console.log(`   ✅ Stage 2 完成: ${fixResult.fixed} 修复, ${fixResult.skipped} 跳过 (${(duration / 1000).toFixed(1)}s)`);
+    } catch (error) {
+      const duration = Date.now() - start;
+      stage2Result = {
+        executed: true,
+        skipped: false,
+        duration,
+        summary: `修复失败: ${error instanceof Error ? error.message : String(error)}`,
+      };
+      console.error(`   ❌ Stage 2 失败: ${error instanceof Error ? error.message : String(error)}`);
+    }
+  } else if (runStage2 && !analysisResult) {
+    // Stage 1 was skipped but we still need analysis for stage 2
+    const start = Date.now();
+    console.log('\n🔧 Stage 2: 规则修复 (含分析)...');
+    try {
+      const fixResult = await fixIssues(cwd, { nonInteractive });
+      const duration = Date.now() - start;
+      stage2Result = {
+        executed: true,
+        skipped: false,
+        duration,
+        summary: `修复 ${fixResult.fixed} 个, 跳过 ${fixResult.skipped} 个, 不可修复 ${fixResult.unfixable} 个`,
+      };
+      console.log(`   ✅ Stage 2 完成: ${fixResult.fixed} 修复, ${fixResult.skipped} 跳过 (${(duration / 1000).toFixed(1)}s)`);
+    } catch (error) {
+      const duration = Date.now() - start;
+      stage2Result = {
+        executed: true,
+        skipped: false,
+        duration,
+        summary: `修复失败: ${error instanceof Error ? error.message : String(error)}`,
+      };
+      console.error(`   ❌ Stage 2 失败: ${error instanceof Error ? error.message : String(error)}`);
+    }
+  } else {
+    stage2Result = emptyStageResult('跳过 (--rules-only 未设置但缺少分析结果, 或 --checkpoints-only/--quality-only)');
+    console.log('   ⏭️  Stage 2: 跳过');
+  }
+
+  // ===== Stage 3: AI 分析 =====
+  let stage3Result: StageResult;
+  if (runStage3) {
+    const start = Date.now();
+    console.log('\n🤖 Stage 3: AI 深度分析...');
+    // Stage 3 is a placeholder for AI per-task analysis.
+    // Currently uses deepAnalyze option if provided.
+    if (aiOptions.deepAnalyze && !aiOptions.noAi) {
+      try {
+        // Re-analyze with AI options for semantic detection
+        if (!analysisResult) {
+          analysisResult = await analyzeProject(cwd, false, aiOptions);
+        }
+        const aiIssues = analysisResult.issues.filter(
+          i => i.type === 'semantic_duplicate' || i.type === 'missing_inferred_dependency'
+        );
+        const duration = Date.now() - start;
+        stage3Result = {
+          executed: true,
+          skipped: false,
+          duration,
+          summary: `AI 发现 ${aiIssues.length} 个语义问题`,
+        };
+        console.log(`   ✅ Stage 3 完成: AI 发现 ${aiIssues.length} 个语义问题 (${(duration / 1000).toFixed(1)}s)`);
+      } catch (error) {
+        const duration = Date.now() - start;
+        stage3Result = {
+          executed: true,
+          skipped: false,
+          duration,
+          summary: `AI 分析失败: ${error instanceof Error ? error.message : String(error)}`,
+        };
+        console.error(`   ❌ Stage 3 失败: ${error instanceof Error ? error.message : String(error)}`);
+      }
+    } else {
+      const duration = Date.now() - start;
+      stage3Result = {
+        executed: true,
+        skipped: false,
+        duration,
+        summary: 'AI 深度分析未启用 (使用 --deep-analyze 激活)',
+      };
+      console.log('   ⏭️  Stage 3: AI 深度分析未启用 (使用 --deep-analyze 激活完整 AI 分析)');
+    }
+  } else {
+    stage3Result = emptyStageResult(noAi ? '跳过 (--no-ai)' : '跳过 (--rules-only/--checkpoints-only/--quality-only)');
+    console.log(`   ⏭️  Stage 3: 跳过 (${noAi ? '--no-ai' : '未选择'})`);
+  }
+
+  // ===== Stage 4: 检查点修复 =====
+  let stage4Result: StageResult;
+  if (runStage4) {
+    const start = Date.now();
+    console.log('\n📌 Stage 4: 检查点修复...');
+    try {
+      await fixCheckpoints(cwd, { nonInteractive, taskId });
+      const duration = Date.now() - start;
+      stage4Result = {
+        executed: true,
+        skipped: false,
+        duration,
+        summary: '检查点修复完成',
+      };
+      console.log(`   ✅ Stage 4 完成: 检查点修复 (${(duration / 1000).toFixed(1)}s)`);
+    } catch (error) {
+      const duration = Date.now() - start;
+      stage4Result = {
+        executed: true,
+        skipped: false,
+        duration,
+        summary: `检查点修复失败: ${error instanceof Error ? error.message : String(error)}`,
+      };
+      console.error(`   ❌ Stage 4 失败: ${error instanceof Error ? error.message : String(error)}`);
+    }
+  } else {
+    stage4Result = emptyStageResult('跳过 (--rules-only 或 --quality-only)');
+    console.log('   ⏭️  Stage 4: 跳过');
+  }
+
+  // ===== Stage 5: 质量报告 =====
+  let stage5Result: StageResult;
+  if (runStage5) {
+    const start = Date.now();
+    console.log('\n📊 Stage 5: 质量报告...');
+    try {
+      const scores = await performQualityCheck(cwd, aiOptions);
+      showQualityReport(scores, { compact, json, threshold });
+      const lowQualityCount = Array.from(scores.values()).filter(s => s.totalScore < threshold).length;
+      const duration = Date.now() - start;
+      stage5Result = {
+        executed: true,
+        skipped: false,
+        duration,
+        summary: `检测 ${scores.size} 个任务, ${lowQualityCount} 个低质量`,
+      };
+      console.log(`   ✅ Stage 5 完成: 检测 ${scores.size} 个任务 (${(duration / 1000).toFixed(1)}s)`);
+    } catch (error) {
+      const duration = Date.now() - start;
+      stage5Result = {
+        executed: true,
+        skipped: false,
+        duration,
+        summary: `质量报告失败: ${error instanceof Error ? error.message : String(error)}`,
+      };
+      console.error(`   ❌ Stage 5 失败: ${error instanceof Error ? error.message : String(error)}`);
+    }
+  } else {
+    stage5Result = emptyStageResult('跳过 (--rules-only 或 --checkpoints-only)');
+    console.log('   ⏭️  Stage 5: 跳过');
+  }
+
+  // ===== Pipeline Summary =====
+  const totalTime = Date.now() - pipelineStart;
+  const allStages = [stage1Result, stage2Result, stage3Result, stage4Result, stage5Result];
+  const executedStages = allStages.filter(s => s.executed).length;
+
+  console.log('');
+  console.log('━'.repeat(SEPARATOR_WIDTH));
+  console.log(`✅ 流水线完成: ${executedStages}/5 阶段已执行 (${(totalTime / 1000).toFixed(1)}s)`);
+  console.log('━'.repeat(SEPARATOR_WIDTH));
+
+  return {
+    stages: {
+      stage1: stage1Result,
+      stage2: stage2Result,
+      stage3: stage3Result,
+      stage4: stage4Result,
+      stage5: stage5Result,
+    },
+    totalTime,
+  };
 }

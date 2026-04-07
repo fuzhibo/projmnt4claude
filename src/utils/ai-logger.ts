@@ -1,6 +1,10 @@
 /**
  * AI 日志工具
  * 记录 AI API 调用成本和延迟指标
+ *
+ * @deprecated 请迁移到 Logger（src/utils/logger.ts）的 logAICost 方法。
+ * Logger 提供结构化 JSON Lines 日志、组件标记、成本聚合等完整能力。
+ * 此模块将在未来版本移除。
  */
 
 export interface AICostRecord {
@@ -18,6 +22,7 @@ export interface AICostRecord {
 
 /**
  * 记录 AI API 调用成本
+ * @deprecated 请使用 Logger.logAICost() 替代
  */
 export function logAICost(record: AICostRecord): void {
   const costPerToken = {

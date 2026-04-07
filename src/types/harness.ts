@@ -33,6 +33,8 @@ export interface HarnessConfig {
   apiRetryAttempts: number;
   /** API 重试基础延迟（秒），默认 60，使用指数退避 */
   apiRetryDelay: number;
+  /** 各阶段独立重试上限配置 */
+  phaseRetryLimits?: PhaseRetryLimits;
   /** 每个批次完成后自动 git commit */
   batchGitCommit: boolean;
 }
@@ -114,6 +116,7 @@ export type ReviewResult = 'PASS' | 'NOPASS';
 export type VerdictAction =
   | 'resolve'         // 通过，标记为 resolved
   | 'redevelop'       // 从开发阶段重试（消耗重试次数）
+  | 'minor_fix'       // 审核/QA 小问题修复（从开发阶段重试，消耗对应阶段重试次数）
   | 'retest'          // 从 QA 阶段重试（消耗重试次数）
   | 'reevaluate'      // 重新评估（不消耗重试次数，独立上限2次）
   | 'escalate_human'; // 需要人工介入
@@ -125,6 +128,7 @@ export type VerdictAction =
 export const VALID_VERDICT_ACTIONS: VerdictAction[] = [
   'resolve',
   'redevelop',
+  'minor_fix',
   'retest',
   'reevaluate',
   'escalate_human',
@@ -154,6 +158,52 @@ export type EvaluationInferenceType =
   | 'prior_stage_inference'  // 前置阶段推断 - 矛盾检测修正（已弃用，保留兼容）
   | 'parse_failure_default'  // 解析失败默认 - 无法解析，使用默认值
   | 'empty_output';          // 空输出 - Claude 进程异常退出导致输出为空
+
+/**
+ * 全阶段重试上下文
+ * 在各阶段失败后重试时传递前次失败信息，帮助 Claude 理解历史上下文
+ */
+export interface RetryContext {
+  /** 前次失败原因 */
+  previousFailureReason?: string;
+  /** 前次失败的阶段 */
+  previousPhase?: 'development' | 'code_review' | 'qa' | 'evaluation';
+  /** 当前尝试次数（含本次） */
+  attemptNumber: number;
+  /** 部分完成进度 */
+  partialProgress?: {
+    completedCheckpoints?: string[];
+    passedPhases?: string[];
+  };
+  /** 上游失败信息（级联失败恢复时携带） */
+  upstreamFailureInfo?: {
+    taskId: string;
+    reason: string;
+    failedAt: string;
+  };
+}
+
+/**
+ * 各阶段独立重试上限配置
+ */
+export interface PhaseRetryLimits {
+  /** 开发阶段重试上限，默认 3 */
+  development: number;
+  /** 代码审核阶段重试上限，默认 1 */
+  code_review: number;
+  /** QA 验证阶段重试上限，默认 2 */
+  qa: number;
+  /** 评估阶段重试上限，默认 2 */
+  evaluation: number;
+}
+
+/** 默认阶段重试上限 */
+export const DEFAULT_PHASE_RETRY_LIMITS: PhaseRetryLimits = {
+  development: 3,
+  code_review: 1,
+  qa: 2,
+  evaluation: 2,
+};
 
 /**
  * 审查阶段报告
@@ -349,6 +399,8 @@ export interface HarnessRuntimeState {
   resumeFrom: Map<string, 'development' | 'code_review' | 'qa' | 'evaluation'>;
   /** 重新评估次数计数器（独立于重试次数，上限2次） */
   reevaluateCounter: Map<string, number>;
+  /** 各阶段独立重试计数器 - key format: `${taskId}:${phase}` */
+  phaseRetryCounters: Map<string, number>;
   /**
    * 批次边界索引列表（来自 plan recommend 的批次分组数据）
    * 例如 [0, 3, 7] 表示: 批次1=[0,3), 批次2=[3,7), 批次3=[7,...)
@@ -475,6 +527,7 @@ export function createDefaultRuntimeState(config: HarnessConfig): HarnessRuntime
     updatedAt: now,
     resumeFrom: new Map(),
     reevaluateCounter: new Map(),
+    phaseRetryCounters: new Map(),
     batchBoundaries: [],
     batchLabels: [],
     batchParallelizable: [],

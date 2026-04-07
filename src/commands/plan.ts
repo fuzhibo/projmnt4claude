@@ -17,6 +17,7 @@ import { SEPARATOR_WIDTH } from '../utils/format';
 import { createLogger, type InstrumentationRecord } from '../utils/logger';
 import { extractAffectedFiles } from '../utils/quality-gate';
 import { classifyFileToLayer, AIMetadataAssistant, type ArchitectureLayer } from '../utils/ai-metadata';
+import { withAIEnhancement } from '../utils/ai-helpers';
 import { inferDependenciesBatch, type InferredDependency } from '../utils/dependency-engine';
 
 // Re-export InferredDependency for backward compatibility
@@ -753,40 +754,40 @@ export async function recommendPlan(
   // 1.5 AI 语义依赖推断 (Layer3, 仅 --smart 时激活，零 AI 调用开销)
   if (options.smart) {
     console.log('正在通过 AI 分析语义依赖关系...');
-    try {
-      const aiAssistant = new AIMetadataAssistant(cwd);
-      const semanticResult = await aiAssistant.inferSemanticDependencies(filteredTasks, { cwd });
+    const semanticResult = await withAIEnhancement({
+      enabled: true,
+      aiCall: () => new AIMetadataAssistant(cwd).inferSemanticDependencies(filteredTasks, { cwd }),
+      fallback: { dependencies: [], aiUsed: false },
+      operationName: '语义依赖推断',
+    });
 
-      if (semanticResult.aiUsed && semanticResult.dependencies.length > 0) {
-        // 合并 AI 推断的语义依赖到链数据中
-        for (const chain of chains) {
-          if (!chain.inferredDependencies) {
-            chain.inferredDependencies = new Map();
-          }
-          for (const task of chain.tasks) {
-            const aiDeps = semanticResult.dependencies.filter(d => d.taskId === task.id);
-            for (const aiDep of aiDeps) {
-              const existing = chain.inferredDependencies.get(task.id) || [];
-              // 跳过已通过文件重叠推断的依赖（避免重复）
-              const alreadyInferred = existing.some(e => e.depTaskId === aiDep.depTaskId);
-              if (!alreadyInferred) {
-                existing.push({
-                  depTaskId: aiDep.depTaskId,
-                  overlappingFiles: [],
-                  source: 'ai-semantic',
-                  reason: aiDep.reason,
-                });
-                chain.inferredDependencies.set(task.id, existing);
-              }
+    if (semanticResult.aiUsed && semanticResult.dependencies.length > 0) {
+      // 合并 AI 推断的语义依赖到链数据中
+      for (const chain of chains) {
+        if (!chain.inferredDependencies) {
+          chain.inferredDependencies = new Map();
+        }
+        for (const task of chain.tasks) {
+          const aiDeps = semanticResult.dependencies.filter(d => d.taskId === task.id);
+          for (const aiDep of aiDeps) {
+            const existing = chain.inferredDependencies.get(task.id) || [];
+            // 跳过已通过文件重叠推断的依赖（避免重复）
+            const alreadyInferred = existing.some(e => e.depTaskId === aiDep.depTaskId);
+            if (!alreadyInferred) {
+              existing.push({
+                depTaskId: aiDep.depTaskId,
+                overlappingFiles: [],
+                source: 'ai-semantic',
+                reason: aiDep.reason,
+              });
+              chain.inferredDependencies.set(task.id, existing);
             }
           }
         }
-        console.log(`  AI 发现 ${semanticResult.dependencies.length} 条语义依赖`);
-      } else {
-        console.log('  AI 未发现额外语义依赖');
       }
-    } catch {
-      console.log('  AI 语义依赖推断失败（非致命），继续使用文件重叠推断');
+      console.log(`  AI 发现 ${semanticResult.dependencies.length} 条语义依赖`);
+    } else {
+      console.log('  AI 未发现额外语义依赖');
     }
   }
 

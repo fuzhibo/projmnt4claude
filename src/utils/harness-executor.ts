@@ -15,6 +15,7 @@ import type {
   HarnessConfig,
   SprintContract,
   DevReport,
+  RetryContext,
 } from '../types/harness.js';
 import {
   createDefaultDevReport,
@@ -25,6 +26,7 @@ import { getProjectDir } from './path.js';
 import { getDevRoleTemplate } from './role-prompts.js';
 import { archiveReportIfExists } from './harness-helpers.js';
 import { getAgent } from './headless-agent.js';
+import { loadPromptTemplate, resolveTemplate } from './prompt-templates.js';
 
 export class HarnessExecutor {
   private config: HarnessConfig;
@@ -39,7 +41,7 @@ export class HarnessExecutor {
    * @param contract - Sprint Contract
    * @param timeoutOverride - 可选的每任务超时覆盖（秒），优先于 config.timeout
    */
-  async execute(task: TaskMeta, contract: SprintContract, timeoutOverride?: number): Promise<DevReport> {
+  async execute(task: TaskMeta, contract: SprintContract, timeoutOverride?: number, retryContext?: RetryContext): Promise<DevReport> {
     const startTime = new Date();
     const report = createDefaultDevReport(task.id);
     report.startTime = startTime.toISOString();
@@ -59,7 +61,7 @@ export class HarnessExecutor {
       Object.assign(contract, sprintContract);
 
       // 2. 构建开发提示词（注入超时信息）
-      const prompt = this.buildDevPrompt(task, sprintContract, timeoutMinutes);
+      const prompt = this.buildDevPrompt(task, sprintContract, timeoutMinutes, retryContext);
       console.log('\n   📝 开发提示词已生成');
 
       // 3. 执行 headless Claude（通过 headless-agent 抽象层）
@@ -182,83 +184,103 @@ export class HarnessExecutor {
    * @param contract - Sprint Contract
    * @param timeoutMinutes - 超时时间（分钟），注入到提示词中提醒开发者
    */
-  private buildDevPrompt(task: TaskMeta, contract: SprintContract, timeoutMinutes?: number): string {
-    const parts: string[] = [];
-
-    parts.push(`# 任务: ${task.title}`);
-    parts.push('');
-    parts.push(`## 任务ID: ${task.id}`);
-    parts.push(`## 类型: ${task.type}`);
-    parts.push(`## 优先级: ${task.priority}`);
-    if (timeoutMinutes) {
-      parts.push(`## 超时限制: ${timeoutMinutes} 分钟`);
-    }
-    parts.push('');
-
-    if (task.description) {
-      parts.push('## 任务描述');
-      parts.push(task.description);
-      parts.push('');
-    }
-
-    if (task.dependencies && task.dependencies.length > 0) {
-      parts.push('## 依赖任务');
-      task.dependencies.forEach(dep => {
-        parts.push(`- ${dep}`);
-      });
-      parts.push('');
-    }
-
-    if (contract.acceptanceCriteria.length > 0) {
-      parts.push('## 验收标准');
-      parts.push('请确保满足以下所有标准:');
-      contract.acceptanceCriteria.forEach((criteria, i) => {
-        parts.push(`${i + 1}. ${criteria}`);
-      });
-      parts.push('');
-    }
-
-    if (contract.checkpoints.length > 0) {
-      parts.push('## 检查点');
-      parts.push('请完成以下检查点:');
-      contract.checkpoints.forEach((cp, i) => {
-        parts.push(`${i + 1}. ${cp}`);
-      });
-      parts.push('');
-    }
-
+  private buildDevPrompt(task: TaskMeta, contract: SprintContract, timeoutMinutes?: number, retryContext?: RetryContext): string {
     // 角色感知提示词
     const roleTemplate = getDevRoleTemplate(task.recommendedRole);
 
-    parts.push('## 指示');
-    if (timeoutMinutes) {
-      parts.push(`你需要在 ${timeoutMinutes} 分钟内完成此任务。请合理分配时间，优先完成核心功能。`);
-      parts.push('');
+    // Build section variables (each non-empty section ends with \n for blank-line separation)
+    const timeoutHeader = timeoutMinutes
+      ? `## 超时限制: ${timeoutMinutes} 分钟\n`
+      : '';
+
+    const descriptionSection = task.description
+      ? `## 任务描述\n${task.description}\n`
+      : '';
+
+    const dependenciesSection = (task.dependencies && task.dependencies.length > 0)
+      ? `## 依赖任务\n${task.dependencies.map(dep => `- ${dep}`).join('\n')}\n`
+      : '';
+
+    const acceptanceCriteriaSection = contract.acceptanceCriteria.length > 0
+      ? `## 验收标准\n请确保满足以下所有标准:\n${contract.acceptanceCriteria.map((criteria, i) => `${i + 1}. ${criteria}`).join('\n')}\n`
+      : '';
+
+    const checkpointsSection = contract.checkpoints.length > 0
+      ? `## 检查点\n请完成以下检查点:\n${contract.checkpoints.map((cp, i) => `${i + 1}. ${cp}`).join('\n')}\n`
+      : '';
+
+    const timeoutInstruction = timeoutMinutes
+      ? `你需要在 ${timeoutMinutes} 分钟内完成此任务。请合理分配时间，优先完成核心功能。\n`
+      : '';
+
+    const extraInstructionsSection = roleTemplate.extraInstructions.length > 0
+      ? `## 角色专项要求\n${roleTemplate.extraInstructions.map((inst, i) => `${i + 1}. ${inst}`).join('\n')}\n`
+      : '';
+
+    const template = loadPromptTemplate('dev', this.config.cwd);
+    let result = resolveTemplate(template, {
+      title: task.title,
+      taskId: task.id,
+      type: task.type,
+      priority: task.priority,
+      timeoutHeader,
+      descriptionSection,
+      dependenciesSection,
+      acceptanceCriteriaSection,
+      checkpointsSection,
+      timeoutInstruction,
+      extraInstructionsSection,
+      roleDeclaration: roleTemplate.roleDeclaration,
+    });
+
+    // Inject retry context if present (previous failure info)
+    if (retryContext?.previousFailureReason) {
+      const retrySection = this.buildRetryContextSection(retryContext);
+      result = retrySection + '\n\n' + result;
     }
-    parts.push('1. 仔细阅读任务描述和验收标准');
-    parts.push('2. 实现所需的功能或修复');
-    parts.push('3. 确保代码符合项目规范');
-    parts.push('4. 运行必要的测试验证实现');
-    parts.push('5. 完成后简要总结所做的更改');
+
+    // Normalize: collapse 3+ consecutive newlines into 2 (handles empty section placeholders)
+    return result.replace(/\n{3,}/g, '\n\n');
+  }
+
+  /**
+   * 构建重试上下文章节（注入到开发提示词中）
+   */
+  private buildRetryContextSection(retryContext: RetryContext): string {
+    const parts: string[] = [];
+    const phaseLabel: Record<string, string> = {
+      development: '开发',
+      code_review: '代码审核',
+      qa: 'QA 验证',
+      evaluation: '评估',
+    };
+
+    parts.push('## 重试上下文（前次失败信息）');
+    parts.push('');
+    parts.push(`这是第 ${retryContext.attemptNumber} 次尝试。上一次在 **${phaseLabel[retryContext.previousPhase || ''] || retryContext.previousPhase}** 阶段失败。`);
+    parts.push('');
+    parts.push('**前次失败原因:**');
+    parts.push(`> ${retryContext.previousFailureReason}`);
     parts.push('');
 
-    if (roleTemplate.extraInstructions.length > 0) {
-      parts.push('## 角色专项要求');
-      roleTemplate.extraInstructions.forEach((inst, i) => {
-        parts.push(`${i + 1}. ${inst}`);
-      });
+    if (retryContext.partialProgress?.completedCheckpoints?.length) {
+      parts.push('**已完成的部分进度:**');
+      for (const cp of retryContext.partialProgress.completedCheckpoints) {
+        parts.push(`- ✅ ${cp}`);
+      }
       parts.push('');
     }
 
-    parts.push('## ⛔ 禁止操作（严格遵守）');
-    parts.push(`${roleTemplate.roleDeclaration}以下操作被严格禁止：`);
+    if (retryContext.upstreamFailureInfo) {
+      parts.push('**上游失败信息:**');
+      parts.push(`- 上游任务: ${retryContext.upstreamFailureInfo.taskId}`);
+      parts.push(`- 失败原因: ${retryContext.upstreamFailureInfo.reason}`);
+      parts.push(`- 失败时间: ${retryContext.upstreamFailureInfo.failedAt}`);
+      parts.push('');
+    }
+
+    parts.push('请参考前次失败原因，避免重复相同的问题。');
     parts.push('');
-    parts.push('1. **禁止创建新任务** - 不要运行 `task create`、`init-requirement` 或任何创建任务的命令');
-    parts.push('2. **禁止修改任务元数据** - 不要修改 `.projmnt4claude/tasks/` 下的 meta.json 文件');
-    parts.push('3. **禁止创建子任务** - 不要将当前任务拆分为多个子任务并尝试创建它们');
-    parts.push('');
-    parts.push('如果任务确实需要拆分，请在开发报告中 **建议** 拆分方案，由人工决定是否创建新任务。');
-    parts.push('违反以上任何禁令将导致评估不通过。');
 
     return parts.join('\n');
   }

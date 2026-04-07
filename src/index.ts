@@ -54,6 +54,7 @@ import {
   showQualityReport,
   analyzeBugReport,
 } from './commands/analyze';
+import { fixPipeline } from './commands/analyze-fix-pipeline';
 import {
   checkoutTaskBranch,
   showBranchStatus,
@@ -663,6 +664,9 @@ program
   .option('--task <taskId>', '指定任务ID (仅 --fix-checkpoints)')
   .option('--deep-analyze', '深度分析: 启用 AI 语义重复检测、陈旧评估、语义质量评分')
   .option('--no-ai', '禁用所有 AI 功能，仅使用规则引擎分析')
+  .option('--rules-only', '仅执行规则分析+修复 (Stage 1,2), 需配合 --fix')
+  .option('--checkpoints-only', '仅执行检查点修复 (Stage 4), 需配合 --fix')
+  .option('--quality-only', '仅执行质量报告 (Stage 5), 需配合 --fix')
   .option('--bug-report <path>', 'Bug Report 分析模式: 分析指定的 bug report 文件或目录')
   .option('--export-training-data', '导出训练数据为 JSONL 格式 (需 --bug-report, 需 config training.exportEnabled)')
   .action(async (options) => {
@@ -676,10 +680,22 @@ program
         exportTrainingData: !!options.exportTrainingData,
         noAi: !!options.noAi,
       });
+    } else if (options.fix) {
+      // --fix 流水线模式: 支持 --no-ai, --rules-only, --checkpoints-only, --quality-only
+      await fixPipeline(process.cwd(), {
+        nonInteractive: options.yes,
+        rulesOnly: !!options.rulesOnly,
+        checkpointsOnly: !!options.checkpointsOnly,
+        qualityOnly: !!options.qualityOnly,
+        noAi: !!options.noAi,
+        aiOptions,
+        compact: options.compact,
+        json: options.json || program.opts().json || false,
+        threshold: parseInt(options.threshold) || 60,
+        taskId: options.task,
+      });
     } else if (options.fixCheckpoints) {
       await fixCheckpoints(process.cwd(), { nonInteractive: options.yes, taskId: options.task });
-    } else if (options.fix) {
-      await fixIssues(process.cwd(), { nonInteractive: options.yes });
     } else if (options.qualityCheck) {
       const scores = await performQualityCheck(process.cwd(), aiOptions);
       showQualityReport(scores, {

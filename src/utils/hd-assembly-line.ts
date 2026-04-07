@@ -26,9 +26,12 @@ import type {
   QAVerdict,
   ExecutionTimelineEntry,
   VerdictAction,
+  RetryContext,
+  PhaseRetryLimits,
 } from '../types/harness.js';
 import {
   createDefaultExecutionRecord,
+  DEFAULT_PHASE_RETRY_LIMITS,
 } from '../types/harness.js';
 import type { TaskMeta, TaskStatus, TaskRole, CheckpointMetadata, CommitHistoryEntry, TransitionNote, PhaseHistoryEntry, FailureReason } from '../types/task.js';
 import { Pipeline } from '../types/task.js';
@@ -36,7 +39,7 @@ import { readTaskMeta, writeTaskMeta, taskExists, updateTaskStatus, assignRole, 
 import { getProjectDir } from './path.js';
 import { HarnessExecutor } from './harness-executor.js';
 import { HarnessCodeReviewer } from './harness-code-reviewer.js';
-import { HarnessQATester, type RetryContext } from './harness-qa-tester.js';
+import { HarnessQATester } from './harness-qa-tester.js';
 import { HarnessEvaluator } from './harness-evaluator.js';
 import { RetryHandler } from './harness-retry.js';
 import { HarnessStatusReporter } from './harness-status-reporter.js';
@@ -56,12 +59,13 @@ export class AssemblyLine {
   private retryHandler: RetryHandler;
   private statusReporter: HarnessStatusReporter;
   private sessionId?: string;
-  private qaFailureReasons: Map<string, string> = new Map();
+  /** 各任务的重试上下文，存储前次失败信息供重试时传递给 Claude */
+  private taskRetryContexts: Map<string, RetryContext> = new Map();
 
   constructor(config: HarnessConfig, sessionId?: string) {
     this.config = config;
     this.sessionId = sessionId;
-    this.qaFailureReasons = new Map();
+    this.taskRetryContexts = new Map();
     this.executor = new HarnessExecutor(config);
     this.codeReviewer = new HarnessCodeReviewer(config);
     this.qaTester = new HarnessQATester(config);
@@ -284,9 +288,10 @@ export class AssemblyLine {
       console.log(`   ⚠️ 未找到前次执行记录，从开发阶段重新开始`);
     }
     const effectiveResume = (resumePhase && prevRecord) ? resumePhase : null;
+    let needsFullDev = !effectiveResume;
 
     // 3-4. Development phase (skip if resuming from qa or evaluation)
-    let devReport: DevReport;
+    let devReport!: DevReport;
     if (!effectiveResume) {
       await this.ensureTransition(taskId, 'in_progress', '开始开发阶段');
       record.finalStatus = 'in_progress';
@@ -304,7 +309,9 @@ export class AssemblyLine {
       }
 
       try {
-        devReport = await this.executor.execute(task, record.contract, adaptiveTimeout);
+        // Build retry context for development phase (carries previous failure info)
+        const devRetryContext = this.buildRetryContextForPhase(taskId, 'development', state);
+        devReport = await this.executor.execute(task, record.contract, adaptiveTimeout, devRetryContext);
         record.devReport = devReport;
         addTimeline('dev_completed', `开发完成: ${devReport.status}`, { status: devReport.status });
         this.statusReporter.completePhase('development', taskId, `开发完成: ${devReport.status}`);
@@ -331,12 +338,18 @@ export class AssemblyLine {
         console.log(`❌ 开发阶段${isTimeout ? '超时' : '失败'}: ${devReport.error || '未知错误'}`);
         this.statusReporter.failPhase('development', new Error(devReport.error || '开发阶段失败'), taskId);
 
-        // 尝试重试
-        const shouldRetry = await this.retryHandler.shouldRetry(taskId, state.retryCounter);
-        if (shouldRetry) {
-          addTimeline('retry', `准备重试 (第 ${state.retryCounter.get(taskId) || 0} 次)`);
+        // 存储失败原因到重试上下文
+        this.storeFailureContext(taskId, 'development', devReport.error || '开发阶段失败', state);
+
+        // 尝试重试（使用阶段独立重试上限）
+        const devPhaseLimit = this.getPhaseRetryLimit('development');
+        const devRetryCount = this.getPhaseRetryCount(taskId, 'development', state);
+        const canRetry = devRetryCount < devPhaseLimit;
+        if (canRetry) {
+          addTimeline('retry', `准备重试 (开发阶段第 ${devRetryCount + 1}/${devPhaseLimit} 次)`);
           // 重新加入队列
           state.taskQueue.push(taskId);
+          this.incrementPhaseRetryCount(taskId, 'development', state);
           state.retryCounter.set(taskId, (state.retryCounter.get(taskId) || 0) + 1);
         } else if (isTimeout) {
           // 超时标记为 failed(timeout)
@@ -366,11 +379,68 @@ export class AssemblyLine {
       }
       console.log('✅ 开发完成，等待代码审核');
     } else {
-      // Resume: reuse previous development results
-      devReport = prevRecord!.devReport;
-      record.devReport = devReport;
-      addTimeline('dev_completed', `[恢复] 复用前次开发结果: ${devReport.status}`, { resumed: true, phase: effectiveResume });
-      console.log(`   ⏩ 跳过开发阶段（从 ${effectiveResume} 阶段恢复）`);
+      // Resume: validate previous phase result files before reusing
+      if (!this.validatePreviousPhaseResults(taskId, effectiveResume)) {
+        console.log(`   ⚠️ 前阶段结果文件不完整，从开发阶段重新开始`);
+        needsFullDev = true;
+        // Fall through to run development phase below
+      }
+      if (!needsFullDev) {
+        // Resume: reuse previous development results
+        devReport = prevRecord!.devReport;
+        record.devReport = devReport;
+        addTimeline('dev_completed', `[恢复] 复用前次开发结果: ${devReport.status}`, { resumed: true, phase: effectiveResume });
+        console.log(`   ⏩ 跳过开发阶段（从 ${effectiveResume} 阶段恢复）`);
+      }
+    }
+    // If resumption failed validation, run full development
+    if (effectiveResume && needsFullDev) {
+      await this.ensureTransition(taskId, 'in_progress', '前阶段结果不完整，重新开始开发');
+      record.finalStatus = 'in_progress';
+      addTimeline('dev_started', '前阶段结果不完整，重新开始开发');
+      this.statusReporter.startPhase('development', taskId, '重新开始开发阶段');
+      console.log('\n🔨 重新开始开发阶段...');
+      const fallbackTimeout = this.computeAdaptiveTimeout(task);
+      const fallbackRetryCtx = this.buildRetryContextForPhase(taskId, 'development', state);
+      try {
+        devReport = await this.executor.execute(task, record.contract, fallbackTimeout, fallbackRetryCtx);
+        record.devReport = devReport;
+        addTimeline('dev_completed', `开发完成: ${devReport.status}`, { status: devReport.status });
+        this.statusReporter.completePhase('development', taskId, `开发完成: ${devReport.status}`);
+      } catch (error) {
+        devReport = {
+          taskId,
+          status: 'failed',
+          changes: [],
+          evidence: [],
+          checkpointsCompleted: [],
+          startTime: new Date().toISOString(),
+          endTime: new Date().toISOString(),
+          duration: 0,
+          error: error instanceof Error ? error.message : String(error),
+        };
+        record.devReport = devReport;
+        addTimeline('dev_completed', `开发失败: ${devReport.error}`, { error: devReport.error });
+        this.statusReporter.failPhase('development', error instanceof Error ? error : new Error(String(error)), taskId);
+      }
+      if (devReport.status !== 'success') {
+        const devPhaseLimit = this.getPhaseRetryLimit('development');
+        const devRetryCount = this.getPhaseRetryCount(taskId, 'development', state);
+        if (devRetryCount < devPhaseLimit) {
+          state.taskQueue.push(taskId);
+          this.incrementPhaseRetryCount(taskId, 'development', state);
+          state.retryCounter.set(taskId, (state.retryCounter.get(taskId) || 0) + 1);
+        } else {
+          await this.markTaskFailed(taskId, 'max_retries_exceeded', '超过最大重试次数，开发阶段失败');
+          record.finalStatus = 'failed';
+          addTimeline('failed', '超过最大重试次数，任务标记为 failed(max_retries_exceeded)');
+        }
+        return record;
+      }
+      this.syncCheckpointStatus(taskId, 'development', { devReport });
+      await this.ensureTransition(taskId, 'wait_review', '开发完成，等待代码审核');
+      record.finalStatus = 'wait_review';
+      console.log('✅ 开发完成，等待代码审核');
     }
 
     // 6. 代码审核阶段（新增）
@@ -380,7 +450,8 @@ export class AssemblyLine {
 
     let codeReviewVerdict: CodeReviewVerdict;
     try {
-      codeReviewVerdict = await this.codeReviewer.review(task, devReport);
+      const crRetryContext = this.buildRetryContextForPhase(taskId, 'code_review', state);
+      codeReviewVerdict = await this.codeReviewer.review(task, devReport, crRetryContext);
       record.codeReviewVerdict = codeReviewVerdict;
       addTimeline('code_review_completed', `代码审核完成: ${codeReviewVerdict.result}`, { result: codeReviewVerdict.result });
       this.statusReporter.completePhase('code_review', taskId, `代码审核完成: ${codeReviewVerdict.result}`);
@@ -402,8 +473,17 @@ export class AssemblyLine {
     // 代码审核未通过，进入重试流程
     if (codeReviewVerdict.result !== 'PASS') {
       console.log(`❌ 代码审核未通过: ${codeReviewVerdict.reason}`);
+      // 假失败检测：审核结果为 NOPASS 但无具体失败项
+      if (this.detectFalseFailure('code_review', record)) {
+        console.log(`   ⚠️ 检测到可能的假失败：审核标记为 NOPASS 但无具体失败项，重新检查`);
+      }
+      // 存储失败原因到重试上下文
+      this.storeFailureContext(taskId, 'code_review', codeReviewVerdict.reason || '代码审核未通过', state);
       this.statusReporter.failPhase('code_review', new Error(codeReviewVerdict.reason || '代码审核未通过'), taskId);
-      return this.handleVerdictBasedTransition(taskId, record, state, addTimeline, 'code_review');
+      // 分类失败严重程度，决定 minor_fix 或 redevelop
+      const crSeverity = this.classifyFailureSeverity('code_review', record);
+      const crAction: VerdictAction = crSeverity === 'minor' ? 'minor_fix' : 'redevelop';
+      return this.handleVerdictBasedTransition(taskId, record, state, addTimeline, 'code_review', crAction);
     }
 
     // 6.5 同步检查点状态（代码审核通过后）
@@ -425,11 +505,9 @@ export class AssemblyLine {
 
     let qaVerdict: QAVerdict;
     try {
-      // 构建重试上下文：如果该任务之前有 QA 失败记录，传递前次失败原因
-      const retryContext: RetryContext | undefined = this.qaFailureReasons.has(taskId)
-        ? { previousFailureReason: this.qaFailureReasons.get(taskId) }
-        : undefined;
-      qaVerdict = await this.qaTester.verify(task, codeReviewVerdict, retryContext);
+      // 构建重试上下文：传递前次失败信息给 QA
+      const qaRetryContext = this.buildRetryContextForPhase(taskId, 'qa', state);
+      qaVerdict = await this.qaTester.verify(task, codeReviewVerdict, qaRetryContext);
       record.qaVerdict = qaVerdict;
       addTimeline('qa_completed', `QA 验证完成: ${qaVerdict.result}`, {
         result: qaVerdict.result,
@@ -456,10 +534,17 @@ export class AssemblyLine {
     // QA 验证未通过，进入重试流程
     if (qaVerdict.result !== 'PASS') {
       console.log(`❌ QA 验证未通过: ${qaVerdict.reason}`);
-      // 存储失败原因，供重试时传递给 buildQAPrompt
-      this.qaFailureReasons.set(taskId, qaVerdict.reason || 'QA 验证未通过（无详细原因）');
+      // 假失败检测：QA 结果为 NOPASS 但无具体失败项
+      if (this.detectFalseFailure('qa', record)) {
+        console.log(`   ⚠️ 检测到可能的假失败：QA 标记为 NOPASS 但无具体失败项，重新检查`);
+      }
+      // 存储失败原因到重试上下文
+      this.storeFailureContext(taskId, 'qa', qaVerdict.reason || 'QA 验证未通过', state);
       this.statusReporter.failPhase('qa_verification', new Error(qaVerdict.reason || 'QA 验证未通过'), taskId);
-      return this.handleVerdictBasedTransition(taskId, record, state, addTimeline, 'qa');
+      // 分类失败严重程度，决定 minor_fix 或 redevelop
+      const qaSeverity = this.classifyFailureSeverity('qa', record);
+      const qaAction: VerdictAction = qaSeverity === 'minor' ? 'minor_fix' : 'redevelop';
+      return this.handleVerdictBasedTransition(taskId, record, state, addTimeline, 'qa', qaAction);
     }
 
     // 8.4 同步检查点状态（QA 通过后）
@@ -478,7 +563,8 @@ export class AssemblyLine {
 
     let verdict: ReviewVerdict;
     try {
-      verdict = await this.evaluator.evaluate(task, devReport, record.contract);
+      const evalRetryContext = this.buildRetryContextForPhase(taskId, 'evaluation', state);
+      verdict = await this.evaluator.evaluate(task, devReport, record.contract, evalRetryContext);
       record.reviewVerdict = verdict;
       addTimeline('review_completed', `评估完成: ${verdict.result}`, { result: verdict.result });
       this.statusReporter.completePhase('evaluation', taskId, `评估完成: ${verdict.result}`);
@@ -822,6 +908,18 @@ export class AssemblyLine {
         state.failedTasks.push(downstreamId);
         failedIds.add(downstreamId);
 
+        // 存储上游失败信息到重试上下文（CP-19: 供 task reopen 恢复时使用）
+        this.taskRetryContexts.set(downstreamId, {
+          previousFailureReason: `上游任务 ${failedTaskId} 失败，级联标记为 failed`,
+          previousPhase: 'development',
+          attemptNumber: 1,
+          upstreamFailureInfo: {
+            taskId: failedTaskId,
+            reason: 'upstream_failed',
+            failedAt: new Date().toISOString(),
+          },
+        });
+
         // 记录需要从队列中移除的索引
         toRemove.push(i);
       }
@@ -888,13 +986,14 @@ export class AssemblyLine {
       }
 
       case 'redevelop': {
-        const retryCount = state.retryCounter.get(taskId) || 0;
-        if (retryCount >= this.config.maxRetries) {
-          await this.markTaskFailed(taskId, 'max_retries_exceeded', `超过最大重试次数 (${this.config.maxRetries})`);
+        const devPhaseLimit = this.getPhaseRetryLimit('development');
+        const devRetryCount = this.getPhaseRetryCount(taskId, 'development', state);
+        if (devRetryCount >= devPhaseLimit) {
+          await this.markTaskFailed(taskId, 'max_retries_exceeded', `开发阶段重试次数已达上限 (${devPhaseLimit})`);
           record.finalStatus = 'failed';
-          record.retryCount = retryCount;
-          addTimeline('failed', '超过最大重试次数，任务标记为 failed');
-          console.log(`❌ 超过最大重试次数 (${this.config.maxRetries})，任务标记为 failed`);
+          record.retryCount = devRetryCount;
+          addTimeline('failed', `开发阶段重试次数已达上限 (${devPhaseLimit})，任务标记为 failed`);
+          console.log(`❌ 开发阶段重试次数已达上限 (${devPhaseLimit})，任务标记为 failed`);
           return record;
         }
 
@@ -906,25 +1005,50 @@ export class AssemblyLine {
         await this.assignTaskRole(taskId, 'executor');
         // 记录阶段历史
         this.appendPhaseHistory(taskId, { phase: 'development', role: 'executor', verdict: 'NOPASS', timestamp: new Date().toISOString(), analysis: `${phase} 阶段失败，retry from development`, resumeAction: 'retry' });
-        state.retryCounter.set(taskId, retryCount + 1);
+        this.incrementPhaseRetryCount(taskId, 'development', state);
+        state.retryCounter.set(taskId, (state.retryCounter.get(taskId) || 0) + 1);
         state.taskQueue.push(taskId);
 
-        addTimeline('retry', `任务将从开发阶段重试 (第 ${retryCount + 1} 次)`, { action, phase });
-        console.log(`⚠️  任务将从开发阶段重试 (第 ${retryCount + 1} 次)`);
+        addTimeline('retry', `任务将从开发阶段重试 (第 ${devRetryCount + 1}/${devPhaseLimit} 次)`, { action, phase });
+        console.log(`⚠️  任务将从开发阶段重试 (第 ${devRetryCount + 1}/${devPhaseLimit} 次)`);
         record.finalStatus = 'in_progress';
-        record.retryCount = retryCount + 1;
+        record.retryCount = devRetryCount + 1;
+        return record;
+      }
+
+      case 'minor_fix': {
+        // minor_fix: 小问题修复，从开发阶段重试但消耗对应阶段的重试次数
+        const phaseLimit = this.getPhaseRetryLimit(phase === 'evaluation' ? 'evaluation' : phase === 'qa' ? 'qa' : 'code_review');
+        const phaseRetryCount = this.getPhaseRetryCount(taskId, phase, state);
+        if (phaseRetryCount >= phaseLimit) {
+          console.log(`⚠️  ${phase} 阶段重试次数已达上限 (${phaseLimit})，转为完整重开发`);
+          return this.handleVerdictBasedTransition(taskId, record, state, addTimeline, phase, 'redevelop');
+        }
+
+        // 消耗对应阶段的重试次数，从开发阶段重试（minor fix 模式）
+        this.incrementTaskReopenCount(taskId, `${phase} 阶段小问题，从开发阶段修复`);
+        await this.ensureTransition(taskId, 'in_progress', `${phase} 阶段小问题，从开发阶段修复 (minor_fix)`);
+        await this.setTaskResumeAction(taskId, 'retry', 'development');
+        await this.assignTaskRole(taskId, 'executor');
+        this.appendPhaseHistory(taskId, { phase, role: 'executor', verdict: 'NOPASS', timestamp: new Date().toISOString(), analysis: `${phase} 阶段小问题，minor_fix from development`, resumeAction: 'retry' });
+        this.incrementPhaseRetryCount(taskId, phase, state);
+        state.retryCounter.set(taskId, (state.retryCounter.get(taskId) || 0) + 1);
+        state.taskQueue.push(taskId);
+
+        addTimeline('retry', `任务将从开发阶段修复小问题 (${phase} 第 ${phaseRetryCount + 1}/${phaseLimit} 次)`, { action, phase });
+        console.log(`🔧 任务将从开发阶段修复小问题 (${phase} 第 ${phaseRetryCount + 1}/${phaseLimit} 次)`);
+        record.finalStatus = 'in_progress';
+        record.retryCount = phaseRetryCount + 1;
         return record;
       }
 
       case 'retest': {
-        const retryCount = state.retryCounter.get(taskId) || 0;
-        if (retryCount >= this.config.maxRetries) {
-          await this.markTaskFailed(taskId, 'max_retries_exceeded', `超过最大重试次数 (${this.config.maxRetries})`);
-          record.finalStatus = 'failed';
-          record.retryCount = retryCount;
-          addTimeline('failed', '超过最大重试次数，任务标记为 failed');
-          console.log(`❌ 超过最大重试次数 (${this.config.maxRetries})，任务标记为 failed`);
-          return record;
+        const qaPhaseLimit = this.getPhaseRetryLimit('qa');
+        const qaRetryCount = this.getPhaseRetryCount(taskId, 'qa', state);
+        if (qaRetryCount >= qaPhaseLimit) {
+          // QA 重试次数已达上限，回退到 redevelop
+          console.log(`⚠️  QA 阶段重试次数已达上限 (${qaPhaseLimit})，转为从开发阶段重试`);
+          return this.handleVerdictBasedTransition(taskId, record, state, addTimeline, phase, 'redevelop');
         }
 
         // 消耗重试次数，从 QA 阶段重试
@@ -935,14 +1059,15 @@ export class AssemblyLine {
         await this.assignTaskRole(taskId, 'qa_tester');
         // 记录阶段历史
         this.appendPhaseHistory(taskId, { phase: 'qa_verification', role: 'qa_tester', verdict: 'NOPASS', timestamp: new Date().toISOString(), analysis: `${phase} 阶段失败，retry from qa`, resumeAction: 'retry' });
-        state.retryCounter.set(taskId, retryCount + 1);
+        this.incrementPhaseRetryCount(taskId, 'qa', state);
+        state.retryCounter.set(taskId, (state.retryCounter.get(taskId) || 0) + 1);
         state.resumeFrom.set(taskId, 'qa');
         state.taskQueue.push(taskId);
 
-        addTimeline('retry', `任务将从 QA 阶段重试 (第 ${retryCount + 1} 次)`, { action, phase });
-        console.log(`⚠️  任务将从 QA 阶段重试 (第 ${retryCount + 1} 次)`);
+        addTimeline('retry', `任务将从 QA 阶段重试 (第 ${qaRetryCount + 1}/${qaPhaseLimit} 次)`, { action, phase });
+        console.log(`⚠️  任务将从 QA 阶段重试 (第 ${qaRetryCount + 1}/${qaPhaseLimit} 次)`);
         record.finalStatus = 'in_progress';
-        record.retryCount = retryCount + 1;
+        record.retryCount = qaRetryCount + 1;
         return record;
       }
 
@@ -1216,6 +1341,214 @@ export class AssemblyLine {
     }
 
     return Pipeline.determineResumePoint(phaseHistory, resumeAction as 'retry' | 'next');
+  }
+
+  // ============================================================
+  // 重试上下文和阶段独立重试辅助方法
+  // ============================================================
+
+  /**
+   * 获取指定阶段的独立重试上限
+   */
+  private getPhaseRetryLimit(phase: 'development' | 'code_review' | 'qa' | 'evaluation'): number {
+    const limits = this.config.phaseRetryLimits ?? DEFAULT_PHASE_RETRY_LIMITS;
+    return limits[phase];
+  }
+
+  /**
+   * 获取指定任务的指定阶段已重试次数
+   */
+  private getPhaseRetryCount(
+    taskId: string,
+    phase: 'development' | 'code_review' | 'qa' | 'evaluation',
+    state: HarnessRuntimeState,
+  ): number {
+    const key = `${taskId}:${phase}`;
+    return state.phaseRetryCounters?.get(key) || 0;
+  }
+
+  /**
+   * 递增指定任务的指定阶段重试计数器
+   */
+  private incrementPhaseRetryCount(
+    taskId: string,
+    phase: 'development' | 'code_review' | 'qa' | 'evaluation',
+    state: HarnessRuntimeState,
+  ): void {
+    if (!state.phaseRetryCounters) {
+      state.phaseRetryCounters = new Map();
+    }
+    const key = `${taskId}:${phase}`;
+    const current = state.phaseRetryCounters.get(key) || 0;
+    state.phaseRetryCounters.set(key, current + 1);
+  }
+
+  /**
+   * 构建指定阶段的重试上下文（供 Claude 会话使用）
+   */
+  private buildRetryContextForPhase(
+    taskId: string,
+    phase: 'development' | 'code_review' | 'qa' | 'evaluation',
+    state: HarnessRuntimeState,
+  ): RetryContext | undefined {
+    const stored = this.taskRetryContexts.get(taskId);
+    if (!stored) return undefined;
+
+    const attemptNumber = this.getPhaseRetryCount(taskId, phase, state) + 1;
+    return {
+      ...stored,
+      attemptNumber,
+      previousPhase: stored.previousPhase ?? phase,
+    };
+  }
+
+  /**
+   * 存储失败上下文供重试时使用
+   */
+  private storeFailureContext(
+    taskId: string,
+    phase: 'development' | 'code_review' | 'qa' | 'evaluation',
+    reason: string,
+    state: HarnessRuntimeState,
+  ): void {
+    const existing = this.taskRetryContexts.get(taskId);
+    const phaseRetryCount = this.getPhaseRetryCount(taskId, phase, state);
+
+    // Collect partial progress from previous record
+    const prevRecord = [...state.records].reverse().find(r => r.taskId === taskId);
+    const partialProgress: RetryContext['partialProgress'] = {};
+    if (prevRecord) {
+      const completedCheckpoints: string[] = [];
+      if (prevRecord.devReport?.checkpointsCompleted) {
+        completedCheckpoints.push(...prevRecord.devReport.checkpointsCompleted);
+      }
+      const passedPhases: string[] = [];
+      if (prevRecord.codeReviewVerdict?.result === 'PASS') passedPhases.push('code_review');
+      if (prevRecord.qaVerdict?.result === 'PASS') passedPhases.push('qa');
+      if (completedCheckpoints.length > 0) partialProgress.completedCheckpoints = completedCheckpoints;
+      if (passedPhases.length > 0) partialProgress.passedPhases = passedPhases;
+    }
+
+    this.taskRetryContexts.set(taskId, {
+      previousFailureReason: reason,
+      previousPhase: phase,
+      attemptNumber: phaseRetryCount + 1,
+      partialProgress: Object.keys(partialProgress).length > 0 ? partialProgress : existing?.partialProgress,
+      upstreamFailureInfo: existing?.upstreamFailureInfo, // preserve upstream info if present
+    });
+  }
+
+  /**
+   * 分类失败严重程度：minor（小问题）或 major（大问题）
+   *
+   * 判定标准：
+   * - code_review minor: 仅 1-2 个质量问题和 0 个失败检查点，且原因为代码风格/命名等
+   * - qa minor: 仅 1 个测试失败或 1 个失败检查点
+   * - 其余均为 major
+   */
+  private classifyFailureSeverity(
+    phase: 'code_review' | 'qa',
+    record: TaskExecutionRecord,
+  ): 'minor' | 'major' {
+    if (phase === 'code_review') {
+      const verdict = record.codeReviewVerdict;
+      if (!verdict) return 'major';
+      const hasFewIssues = verdict.codeQualityIssues.length <= 2;
+      const noFailedCheckpoints = verdict.failedCheckpoints.length === 0;
+      const reason = verdict.reason || '';
+      const isMinorContent = /(?:命名|格式|注释|import|类型|风格|naming|format|comment|style|lint|typo|typo|拼写|缩进|indent)/i.test(reason);
+      return (hasFewIssues && noFailedCheckpoints && isMinorContent) ? 'minor' : 'major';
+    }
+    if (phase === 'qa') {
+      const verdict = record.qaVerdict;
+      if (!verdict) return 'major';
+      const hasFewFailures = verdict.testFailures.length <= 1;
+      const hasFewCheckpoints = verdict.failedCheckpoints.length <= 1;
+      return (hasFewFailures && hasFewCheckpoints) ? 'minor' : 'major';
+    }
+    return 'major';
+  }
+
+  /**
+   * 假失败检测：检测审核/QA 结果标记为 NOPASS 但无具体失败项的情况
+   *
+   * 返回 true 表示可能是假失败。这不自动修正结果，仅输出警告供诊断。
+   */
+  private detectFalseFailure(
+    phase: 'code_review' | 'qa',
+    record: TaskExecutionRecord,
+  ): boolean {
+    if (phase === 'code_review') {
+      const verdict = record.codeReviewVerdict;
+      if (!verdict) return false;
+      if (!verdict.reason || verdict.reason.trim().length === 0) return true;
+      if (verdict.codeQualityIssues.length === 0 && verdict.failedCheckpoints.length === 0) return true;
+    }
+    if (phase === 'qa') {
+      const verdict = record.qaVerdict;
+      if (!verdict) return false;
+      if (!verdict.reason || verdict.reason.trim().length === 0) return true;
+      if (verdict.testFailures.length === 0 && verdict.failedCheckpoints.length === 0) return true;
+    }
+    return false;
+  }
+
+  /**
+   * 恢复前校验前一阶段结果文件完整性
+   *
+   * 检查各阶段的报告文件是否存在且非空。
+   * 如果文件缺失或为空，返回 false 表示不应恢复而应重新执行。
+   */
+  private validatePreviousPhaseResults(
+    taskId: string,
+    resumePhase: string | null,
+  ): boolean {
+    if (!resumePhase) return true;
+
+    const projectDir = getProjectDir(this.config.cwd);
+    const reportDir = path.join(projectDir, 'reports', 'harness', taskId);
+
+    const checks: { file: string; label: string }[] = [];
+
+    switch (resumePhase) {
+      case 'qa':
+        // Resuming from QA: need dev report and code review report
+        checks.push({ file: path.join(reportDir, 'dev-report.md'), label: '开发报告' });
+        checks.push({ file: path.join(reportDir, 'code-review-report.md'), label: '代码审核报告' });
+        break;
+      case 'evaluation':
+        // Resuming from evaluation: need all previous reports
+        checks.push({ file: path.join(reportDir, 'dev-report.md'), label: '开发报告' });
+        checks.push({ file: path.join(reportDir, 'code-review-report.md'), label: '代码审核报告' });
+        checks.push({ file: path.join(reportDir, 'qa-report.md'), label: 'QA报告' });
+        break;
+      case 'code_review':
+        // Resuming from code review: need dev report
+        checks.push({ file: path.join(reportDir, 'dev-report.md'), label: '开发报告' });
+        break;
+      case 'development':
+        // Resuming from development: no previous results needed
+        return true;
+    }
+
+    for (const check of checks) {
+      if (!fs.existsSync(check.file)) {
+        console.log(`   ⚠️ 缺少${check.label}: ${check.file}`);
+        return false;
+      }
+      try {
+        const content = fs.readFileSync(check.file, 'utf-8');
+        if (content.trim().length === 0) {
+          console.log(`   ⚠️ ${check.label}为空: ${check.file}`);
+          return false;
+        }
+      } catch {
+        console.log(`   ⚠️ 读取${check.label}失败: ${check.file}`);
+        return false;
+      }
+    }
+
+    return true;
   }
 
   /**

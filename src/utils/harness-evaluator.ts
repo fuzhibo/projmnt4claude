@@ -16,6 +16,7 @@ import type {
   DevReport,
   ReviewVerdict,
   EvaluationInferenceType,
+  RetryContext,
 } from '../types/harness.js';
 import type { TaskMeta } from '../types/task.js';
 import { getProjectDir } from './path.js';
@@ -23,6 +24,7 @@ import { readTaskMeta, getAllTaskIds } from './task.js';
 import { archiveReportIfExists, parseStructuredResult } from './harness-helpers.js';
 import { getAgent } from './headless-agent.js';
 import { detectContradiction } from './contradiction-detector.js';
+import { loadPromptTemplate, resolveTemplate } from './prompt-templates.js';
 
 export class HarnessEvaluator {
   private config: HarnessConfig;
@@ -39,7 +41,8 @@ export class HarnessEvaluator {
   async evaluate(
     task: TaskMeta,
     devReport: DevReport,
-    contract: SprintContract
+    contract: SprintContract,
+    retryContext?: RetryContext
   ): Promise<ReviewVerdict> {
     console.log(`   评估任务: ${task.title}`);
     console.log(`   开发状态: ${devReport.status}`);
@@ -101,7 +104,7 @@ export class HarnessEvaluator {
       }
 
       // 3. 构建评估提示词
-      const prompt = this.buildEvaluationPrompt(task, devReport, contract, phantomTasks);
+      const prompt = this.buildEvaluationPrompt(task, devReport, contract, phantomTasks, retryContext);
       console.log('\n   📝 评估提示词已生成');
 
       // 4. 运行评估会话（带格式重试，最多 2 次）
@@ -210,10 +213,9 @@ export class HarnessEvaluator {
     task: TaskMeta,
     devReport: DevReport,
     contract: SprintContract,
-    phantomTasks: string[] = []
+    phantomTasks: string[] = [],
+    retryContext?: RetryContext
   ): string {
-    const parts: string[] = [];
-
     // BUG-014-2A: 过滤掉 requiresHuman 检查点，仅评估自动化检查点
     // BUG-013-1: 防御性处理，确保数组字段始终为有效数组
     const contractCheckpoints = Array.isArray(contract.checkpoints) ? contract.checkpoints : [];
@@ -237,175 +239,81 @@ export class HarnessEvaluator {
     const filteredContractCheckpoints = contractCheckpoints.filter(cp => !isHumanCheckpoint(cp));
     const filteredDevCheckpoints = devCheckpointsCompleted.filter(cp => !isHumanCheckpoint(cp));
 
-    parts.push('# 架构评估任务');
-    parts.push('');
-    parts.push('你是一位资深架构师。你需要从架构角度评估任务的完成质量，判断是否满足验收标准，并给出明确的后续动作建议。');
-    parts.push('');
-    parts.push('**重要**: 你必须独立判断，不要因为这是 AI 完成的工作就给予优待。');
-    parts.push('');
+    // Build section variables (each non-empty section ends with \n for blank-line separation)
+    const descriptionSection = task.description
+      ? `## 任务描述\n${task.description}\n`
+      : '';
 
-    parts.push('## 任务信息');
-    parts.push(`- ID: ${task.id}`);
-    parts.push(`- 标题: ${task.title}`);
-    parts.push(`- 类型: ${task.type}`);
-    parts.push('');
+    const acceptanceCriteriaList = contractCriteria.length > 0
+      ? `${contractCriteria.map((criteria, i) => `${i + 1}. ${criteria}`).join('\n')}\n`
+      : '（未定义具体验收标准，请根据任务描述判断）\n';
 
-    if (task.description) {
-      parts.push('## 任务描述');
-      parts.push(task.description);
-      parts.push('');
+    const verificationCommandsSection = contractCommands.length > 0
+      ? `## 验证命令\n请运行以下命令验证实现:\n\`\`\`bash\n${contractCommands.join('\n')}\n\`\`\`\n`
+      : '';
+
+    const checkpointsSection = filteredContractCheckpoints.length > 0
+      ? `## 检查点\n请确认以下检查点是否完成:\n${filteredContractCheckpoints.map((cp, i) => `${i + 1}. ${cp}`).join('\n')}\n`
+      : '';
+
+    const humanCheckpointsSection = humanCheckpointIds.size > 0
+      ? `## 关于人工验证检查点\n本任务有 ${humanCheckpointIds.size} 个需要人工验证的检查点（如 ${Array.from(humanCheckpointIds).slice(0, 3).join(', ')}）。\n这些检查点由后处理流程单独管理，不在本评估范围内。请仅基于上方的自动化检查点进行判断。\n`
+      : '';
+
+    const evidenceSection = devEvidence.length > 0
+      ? `## 提交的证据\n开发者提交了以下证据:\n${devEvidence.map(e => `- ${e}`).join('\n')}\n`
+      : '';
+
+    const completedCheckpointsSection = filteredDevCheckpoints.length > 0
+      ? `## 开发者声明的完成检查点\n${filteredDevCheckpoints.map(cp => `- ${cp}`).join('\n')}\n`
+      : '';
+
+    const phantomTasksSection = phantomTasks.length > 0
+      ? `## ⚠️ 幽灵任务检测\n**严重违规**: 开发者在执行任务期间创建了 ${phantomTasks.length} 个额外任务:\n${phantomTasks.map(tid => `- ${tid}`).join('\n')}\n\n开发者被严格禁止创建新任务。这是一个自动 NOPASS 的严重违规。\n请在评估结果中明确标注此违规，并将结果设为 NOPASS。\n`
+      : '';
+
+    const template = loadPromptTemplate('evaluation', this.config.cwd);
+
+    // Build retry context section if present
+    let retryContextSection = '';
+    if (retryContext?.previousFailureReason) {
+      const phaseLabel: Record<string, string> = {
+        development: '开发',
+        code_review: '代码审核',
+        qa: 'QA 验证',
+        evaluation: '评估',
+      };
+      const lines: string[] = [
+        `## 重试上下文（前次评估失败信息）`,
+        ``,
+        `这是第 ${retryContext.attemptNumber} 次评估尝试。上一次在 **${phaseLabel[retryContext.previousPhase || ''] || retryContext.previousPhase}** 阶段失败。`,
+        ``,
+        `**前次失败原因:**`,
+        `> ${retryContext.previousFailureReason}`,
+        ``,
+        `请参考前次失败原因，确保本次评估覆盖所有问题。`,
+        ``,
+      ];
+      retryContextSection = lines.join('\n');
     }
 
-    parts.push('## 验收标准');
-    if (contractCriteria.length > 0) {
-      contractCriteria.forEach((criteria, i) => {
-        parts.push(`${i + 1}. ${criteria}`);
-      });
-    } else {
-      parts.push('（未定义具体验收标准，请根据任务描述判断）');
-    }
-    parts.push('');
+    const result = resolveTemplate(template, {
+      taskId: task.id,
+      title: task.title,
+      type: task.type,
+      descriptionSection,
+      acceptanceCriteriaList,
+      verificationCommandsSection,
+      checkpointsSection,
+      humanCheckpointsSection,
+      evidenceSection,
+      completedCheckpointsSection,
+      phantomTasksSection,
+      retryContextSection,
+    });
 
-    if (contractCommands.length > 0) {
-      parts.push('## 验证命令');
-      parts.push('请运行以下命令验证实现:');
-      parts.push('```bash');
-      contractCommands.forEach(cmd => {
-        parts.push(cmd);
-      });
-      parts.push('```');
-      parts.push('');
-    }
-
-    if (filteredContractCheckpoints.length > 0) {
-      parts.push('## 检查点');
-      parts.push('请确认以下检查点是否完成:');
-      filteredContractCheckpoints.forEach((cp, i) => {
-        parts.push(`${i + 1}. ${cp}`);
-      });
-      parts.push('');
-    }
-
-    // 注释：需要人工验证的检查点由后处理单独管理，不影响评估结果
-    if (humanCheckpointIds.size > 0) {
-      parts.push('## 关于人工验证检查点');
-      parts.push(`本任务有 ${humanCheckpointIds.size} 个需要人工验证的检查点（如 ${Array.from(humanCheckpointIds).slice(0, 3).join(', ')}）。`);
-      parts.push('这些检查点由后处理流程单独管理，不在本评估范围内。请仅基于上方的自动化检查点进行判断。');
-      parts.push('');
-    }
-
-    if (devEvidence.length > 0) {
-      parts.push('## 提交的证据');
-      parts.push('开发者提交了以下证据:');
-      devEvidence.forEach(evidence => {
-        parts.push(`- ${evidence}`);
-      });
-      parts.push('');
-    }
-
-    if (filteredDevCheckpoints.length > 0) {
-      parts.push('## 开发者声明的完成检查点');
-      filteredDevCheckpoints.forEach(cp => {
-        parts.push(`- ${cp}`);
-      });
-      parts.push('');
-    }
-
-    // 幽灵任务检测报告
-    if (phantomTasks.length > 0) {
-      parts.push('## ⚠️ 幽灵任务检测');
-      parts.push(`**严重违规**: 开发者在执行任务期间创建了 ${phantomTasks.length} 个额外任务:`);
-      phantomTasks.forEach(tid => {
-        parts.push(`- ${tid}`);
-      });
-      parts.push('');
-      parts.push('开发者被严格禁止创建新任务。这是一个自动 NOPASS 的严重违规。');
-      parts.push('请在评估结果中明确标注此违规，并将结果设为 NOPASS。');
-      parts.push('');
-    }
-
-    parts.push('## 评估要求');
-    parts.push('1. 阅读任务描述和验收标准');
-    parts.push('2. 检查相关代码文件');
-    parts.push('3. 运行验证命令（如有）');
-    parts.push('4. 验证每个验收标准是否满足');
-    parts.push('5. 检查代码质量（可读性、可维护性）');
-    parts.push('6. 检查开发者是否违反禁止操作（特别是是否创建了额外任务）');
-    parts.push('');
-
-    parts.push('## 输出格式（严格遵守）');
-    parts.push('');
-    parts.push('**强制要求**: 你的输出必须以以下两行标记开头:');
-    parts.push('```');
-    parts.push('EVALUATION_RESULT: PASS');
-    parts.push('EVALUATION_REASON: [简要说明为什么通过或不通过]');
-    parts.push('```');
-    parts.push('或:');
-    parts.push('```');
-    parts.push('EVALUATION_RESULT: NOPASS');
-    parts.push('EVALUATION_REASON: [简要说明为什么通过或不通过]');
-    parts.push('```');
-    parts.push('');
-    parts.push('然后按以下 Markdown 格式输出详细评估:');
-    parts.push('```');
-    parts.push('## 评估结果: PASS 或 NOPASS');
-    parts.push('## 原因: [简要说明为什么通过或不通过]');
-    parts.push('## 后续动作: [resolve|redevelop|retest|reevaluate|escalate_human]');
-    parts.push('## 失败分类: [acceptance_criteria|code_quality|test_failure|architecture|specification|phantom_task|incomplete|other]');
-    parts.push('## 未满足的标准: [列出未满足的验收标准，如果没有则为空]');
-    parts.push('## 未完成的检查点: [列出未完成的检查点，如果没有则为空]');
-    parts.push('## 详细反馈: [可选的详细反馈]');
-    parts.push('```');
-    parts.push('');
-    parts.push('**重要格式要求**:');
-    parts.push('- 你必须严格按照上述格式输出，不得省略或修改格式');
-    parts.push('- 必须输出 EVALUATION_RESULT: PASS 或 EVALUATION_RESULT: NOPASS 标记行');
-    parts.push('- 如果你认为任务通过，必须输出 PASS（不是"通过"、"满足"等词语）');
-    parts.push('- 如果你认为任务未通过，必须输出 NOPASS（不是"不通过"、"未满足"等词语）');
-    parts.push('');
-    parts.push('**正确示例（通过）**:');
-    parts.push('```');
-    parts.push('EVALUATION_RESULT: PASS');
-    parts.push('EVALUATION_REASON: 所有验收标准已满足，代码质量良好');
-    parts.push('## 评估结果: PASS');
-    parts.push('## 原因: 所有验收标准已满足，代码质量良好');
-    parts.push('## 后续动作: resolve');
-    parts.push('## 失败分类: ');
-    parts.push('## 未满足的标准: ');
-    parts.push('## 未完成的检查点: ');
-    parts.push('## 详细反馈: 实现完整，代码清晰。');
-    parts.push('```');
-    parts.push('');
-    parts.push('**正确示例（未通过）**:');
-    parts.push('```');
-    parts.push('EVALUATION_RESULT: NOPASS');
-    parts.push('EVALUATION_REASON: 缺少单元测试，构建失败');
-    parts.push('## 评估结果: NOPASS');
-    parts.push('## 原因: 缺少单元测试，构建失败');
-    parts.push('## 后续动作: redevelop');
-    parts.push('## 失败分类: test_failure');
-    parts.push('## 未满足的标准: - 所有测试通过');
-    parts.push('## 未完成的检查点: - CP-bun-run-build-零错误');
-    parts.push('## 详细反馈: 开发者未编写任何测试。');
-    parts.push('```');
-    parts.push('');
-    parts.push('**错误示例（严禁这样输出）**:');
-    parts.push('```');
-    parts.push('所有验收标准均已满足，实现清晰。  ← 错误：缺少 EVALUATION_RESULT 标记');
-    parts.push('EVALUATION_RESULT: 通过  ← 错误：使用了"通过"而非 PASS');
-    parts.push('EVALUATION_RESULT: 不通过  ← 错误：使用了"不通过"而非 NOPASS');
-    parts.push('```');
-    parts.push('');
-    parts.push('**动作说明（评估结果为 NOPASS 时必须填写）**:');
-    parts.push('- resolve: 评估通过，任务可以完成（仅 PASS 时使用）');
-    parts.push('- redevelop: 实现有严重问题，需要从开发阶段重新开始');
-    parts.push('- retest: 实现基本OK但测试未通过，从QA阶段重试即可');
-    parts.push('- reevaluate: 评估不明确需要更多信息，重新评估');
-    parts.push('- escalate_human: 问题超出自动处理范围，需要人工介入');
-    parts.push('');
-    parts.push('现在开始评估。');
-
-    return parts.join('\n');
+    // Normalize: collapse 3+ consecutive newlines into 2 (handles empty section placeholders)
+    return result.replace(/\n{3,}/g, '\n\n');
   }
 
   /**

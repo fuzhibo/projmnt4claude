@@ -16,6 +16,7 @@ import { Logger } from './logger.js';
 import { getAgent, type HeadlessAgent, type AgentResult, type AgentInvokeOptions } from './headless-agent.js';
 import type { TaskMeta, TaskPriority, TaskType } from '../types/task';
 import { inferTaskType, inferTaskPriority } from '../types/task';
+import { loadPromptTemplate, resolveTemplate } from './prompt-templates.js';
 
 // ============================================================
 // 架构层级分类 (Layer0-Layer3)
@@ -414,7 +415,7 @@ export class AIMetadataAssistant {
    * 单次调用返回: title, description, type, priority, checkpoints, dependencies
    */
   async enhanceRequirement(description: string, options: AIMetadataCallOptions): Promise<EnhancedRequirement> {
-    const prompt = this.buildRequirementPrompt(description);
+    const prompt = this.buildRequirementPrompt(description, undefined, options.cwd);
 
     const result = await this.invokeWithRetry(prompt, REQUIREMENT_SCHEMA, {
       ...options,
@@ -467,7 +468,7 @@ export class AIMetadataAssistant {
     existing: string[],
     options: AIMetadataCallOptions,
   ): Promise<EnhancedCheckpoints> {
-    const prompt = this.buildCheckpointsPrompt(description, type, existing);
+    const prompt = this.buildCheckpointsPrompt(description, type, existing, options.cwd);
 
     const result = await this.invokeWithRetry(prompt, CHECKPOINTS_SCHEMA, {
       ...options,
@@ -501,7 +502,7 @@ export class AIMetadataAssistant {
    * @param task - 任务元数据
    */
   async analyzeTaskQuality(task: TaskMeta, options: AIMetadataCallOptions): Promise<TaskQualityAssessment> {
-    const prompt = this.buildQualityPrompt(task);
+    const prompt = this.buildQualityPrompt(task, options.cwd);
 
     const result = await this.invokeWithRetry(prompt, QUALITY_SCHEMA, {
       ...options,
@@ -540,7 +541,7 @@ export class AIMetadataAssistant {
       return { duplicates: [], aiUsed: false };
     }
 
-    const prompt = this.buildDuplicatesPrompt(tasks);
+    const prompt = this.buildDuplicatesPrompt(tasks, options.cwd);
 
     const result = await this.invokeWithRetry(prompt, DUPLICATES_SCHEMA, {
       ...options,
@@ -573,7 +574,7 @@ export class AIMetadataAssistant {
    * @param task - 任务元数据
    */
   async assessStaleness(task: TaskMeta, options: AIMetadataCallOptions): Promise<StalenessAssessment> {
-    const prompt = this.buildStalenessPrompt(task);
+    const prompt = this.buildStalenessPrompt(task, options.cwd);
 
     const result = await this.invokeWithRetry(prompt, STALENESS_SCHEMA, {
       ...options,
@@ -614,7 +615,7 @@ export class AIMetadataAssistant {
     logContext: string | undefined,
     options: AIMetadataCallOptions,
   ): Promise<BugReportAnalysis> {
-    const prompt = this.buildBugReportPrompt(reportContent, logContext);
+    const prompt = this.buildBugReportPrompt(reportContent, logContext, options.cwd);
 
     const result = await this.invokeWithRetry(prompt, BUG_REPORT_SCHEMA, {
       ...options,
@@ -660,7 +661,7 @@ export class AIMetadataAssistant {
       return { dependencies: [], aiUsed: false };
     }
 
-    const prompt = this.buildSemanticDependencyPrompt(tasks);
+    const prompt = this.buildSemanticDependencyPrompt(tasks, options.cwd);
 
     const result = await this.invokeWithRetry(prompt, SEMANTIC_DEPS_SCHEMA, {
       ...options,
@@ -708,257 +709,93 @@ export class AIMetadataAssistant {
   // Prompt 构建
   // ============================================================
 
-  private buildSemanticDependencyPrompt(tasks: TaskMeta[]): string {
-    // 精简任务信息列表：ID、标题、描述摘要
+  private buildSemanticDependencyPrompt(tasks: TaskMeta[], cwd?: string): string {
     const taskList = tasks.slice(0, 50).map(t =>
       `ID: ${t.id}\n标题: ${t.title}\n描述: ${(t.description || '').substring(0, 150)}`
     ).join('\n---\n');
 
-    return `你是一个项目管理助手。分析以下任务列表，推断任务间的语义依赖关系。
-
-## 任务列表
-${taskList}
-
-## 输出要求
-输出纯 JSON 对象，不要用 markdown 代码块包裹。
-
-分析每个任务的标题和描述中的功能语义，推断任务间隐含的依赖关系。
-例如：
-- 登录功能依赖用户模型定义
-- API 端点依赖数据库 schema
-- 工具函数依赖类型定义
-- 测试任务依赖被测试的实现
-
-## 输出格式
-{
-  "dependencies": [
-    {
-      "taskId": "依赖方任务ID",
-      "depTaskId": "被依赖方任务ID",
-      "reason": "推断依赖的原因"
-    }
-  ]
-}
-
-## 约束
-- 只推断语义上合理的依赖，不要推断已通过文件重叠检测到的依赖
-- taskId 必须依赖 depTaskId（depTaskId 对应的任务应先完成）
-- reason 必须说明推断的语义原因
-- 如果没有发现语义依赖，返回空数组
-- 只输出 JSON`;
+    const template = loadPromptTemplate('semanticDependency', cwd);
+    return resolveTemplate(template, { taskList });
   }
 
-  private buildRequirementPrompt(description: string, errorFeedback?: string): string {
-    let prompt = `你是一个项目管理助手。根据以下需求描述，提取结构化元数据。
+  private buildRequirementPrompt(description: string, errorFeedback?: string, cwd?: string): string {
+    const errorFeedbackSection = errorFeedback
+      ? `\n\n## 上次输出错误\n${errorFeedback}\n请修正以上错误并重新输出。`
+      : '';
 
-## 输入
-需求描述:
-${description}
-
-## 输出要求
-输出纯 JSON 对象，不要用 markdown 代码块包裹。
-如果无法判断某个字段，设为 null 而非猜测。
-
-## 输出格式
-{
-  "title": "动词开头，10-50 字符的简洁标题",
-  "description": "结构化的详细描述，包含背景、目标、方案要点",
-  "type": "bug | feature | research | docs | refactor | test | null",
-  "priority": "P0 | P1 | P2 | P3 | null",
-  "recommendedRole": "推荐角色或 null",
-  "checkpoints": ["动词开头的具体验证步骤，每条 5 字符以上"],
-  "dependencies": ["依赖项 ID 列表或 null"]
-}
-
-## 约束
-- title 必须以动词开头，长度 10-50 字符
-- checkpoints 每条必须以动词开头，不能是泛泛的阶段名称（如"开发阶段""测试阶段"）
-- priority 必须是 P0/P1/P2/P3 之一或 null
-- 只输出 JSON
-
-## 任务拆分最佳实践（影响 checkpoints 生成）
-1. 单个任务预估耗时控制在 15 分钟以内
-2. 按架构层级拆分优先级：Layer0(类型定义) → Layer1(工具函数) → Layer2(核心逻辑) → Layer3(命令入口)
-3. 按文件目录边界拆分，每个子任务聚焦同一目录下的文件
-4. 检查点必须具体可验证，格式如"实现 XXX 函数""运行 tsc --noEmit 通过"
-5. 依赖关系遵循底层先于上层（先改类型，再改工具，再改命令）
-6. 如果需求涉及 3 个以上文件或跨 2 个以上目录，应生成粒度更细的检查点，暗示可拆分`;
-
-    if (errorFeedback) {
-      prompt += `\n\n## 上次输出错误\n${errorFeedback}\n请修正以上错误并重新输出。`;
-    }
-
-    return prompt;
+    const template = loadPromptTemplate('requirement', cwd);
+    return resolveTemplate(template, { description, errorFeedback: errorFeedbackSection });
   }
 
-  private buildCheckpointsPrompt(description: string, type: TaskType | undefined, existing: string[]): string {
-    const existingStr = existing.length > 0
+  private buildCheckpointsPrompt(description: string, type: TaskType | undefined, existing: string[], cwd?: string): string {
+    const existingCheckpointsSection = existing.length > 0
       ? `\n\n## 已有检查点\n${existing.map((c, i) => `${i + 1}. ${c}`).join('\n')}`
       : '';
 
-    return `你是一个项目管理助手。为以下任务生成检查点列表。
-
-## 任务描述
-${description}
-
-## 任务类型
-${type || '未指定'}${existingStr}
-
-## 输出要求
-输出纯 JSON 对象，不要用 markdown 代码块包裹。
-
-## 输出格式
-{
-  "checkpoints": ["动词开头的具体验证步骤"]
-}
-
-## 约束
-- 每条检查点必须以动词开头
-- 不能是泛泛的阶段名称（如"开发阶段""测试阶段"）
-- 每条至少 5 字符
-- 只输出 JSON
-
-## 检查点质量规范
-1. 每条必须是可独立验证的原子操作，例如"实现 parseConfig 函数"而非"完成配置解析"
-2. 引用具体文件路径或函数名，例如"修改 src/utils/foo.ts 中的 bar() 函数"
-3. 验证类检查点附带可执行命令，例如"运行 tsc --noEmit 确认类型检查通过"
-4. 按架构层级排列：先类型定义 → 再工具函数 → 再核心逻辑 → 最后命令入口
-5. 依赖底层完成后再做上层，例如先"定义 XXX 接口"再"实现 XXX 功能"
-6. 每个检查点预估耗时不超过 15 分钟，超过则应拆分为多条`;
+    const template = loadPromptTemplate('checkpoints', cwd);
+    return resolveTemplate(template, {
+      description,
+      type: type || '未指定',
+      existingCheckpointsSection,
+    });
   }
 
-  private buildQualityPrompt(task: TaskMeta): string {
-    return `你是一个项目质量审查助手。评估以下任务的质量。
+  private buildQualityPrompt(task: TaskMeta, cwd?: string): string {
+    const taskData = JSON.stringify({
+      id: task.id,
+      title: task.title,
+      description: task.description,
+      type: task.type,
+      priority: task.priority,
+      status: task.status,
+      checkpoints: task.checkpoints?.map(c => c.description),
+      dependencies: task.dependencies,
+    }, null, 2);
 
-## 任务数据
-${JSON.stringify({
-  id: task.id,
-  title: task.title,
-  description: task.description,
-  type: task.type,
-  priority: task.priority,
-  status: task.status,
-  checkpoints: task.checkpoints?.map(c => c.description),
-  dependencies: task.dependencies,
-}, null, 2)}
-
-## 输出要求
-输出纯 JSON 对象，不要用 markdown 代码块包裹。
-
-## 输出格式
-{
-  "score": 0-100,
-  "issues": [
-    {"field": "字段名", "severity": "error|warning|info", "message": "问题描述"}
-  ],
-  "suggestions": ["改进建议列表"]
-}
-
-## 评估维度
-- 标题: 是否动词开头，是否具体
-- 描述: 是否包含足够的上下文和目标
-- 检查点: 是否具体可验证（必须引用具体文件路径、函数名或可执行命令）
-- 优先级: 是否合理
-- 依赖: 是否遗漏关键依赖
-- 任务粒度: 单个任务是否控制在15分钟内可完成
-- 层级拆分: 涉及多文件时是否按架构层级（类型→工具→核心→命令）拆分检查点
-- 只输出 JSON`;
+    const template = loadPromptTemplate('quality', cwd);
+    return resolveTemplate(template, { taskData });
   }
 
-  private buildDuplicatesPrompt(tasks: TaskMeta[]): string {
-    const taskSummaries = tasks.slice(0, 50).map(t =>
+  private buildDuplicatesPrompt(tasks: TaskMeta[], cwd?: string): string {
+    const taskList = tasks.slice(0, 50).map(t =>
       `ID: ${t.id}\n标题: ${t.title}\n描述: ${(t.description || '').substring(0, 200)}\n类型: ${t.type}`
     ).join('\n---\n');
 
-    return `你是一个项目管理助手。检测以下任务列表中的语义重复。
-
-## 任务列表
-${taskSummaries}
-
-## 输出要求
-输出纯 JSON 对象，不要用 markdown 代码块包裹。
-
-## 输出格式
-{
-  "duplicates": [
-    {
-      "taskIds": ["重复任务ID列表"],
-      "similarity": 0.0-1.0,
-      "keepTaskId": "建议保留的任务ID或null",
-      "reason": "判断依据或null"
-    }
-  ]
-}
-
-## 约束
-- 只报告相似度 >= 0.7 的组
-- 只输出 JSON`;
+    const template = loadPromptTemplate('duplicates', cwd);
+    return resolveTemplate(template, { taskList });
   }
 
-  private buildStalenessPrompt(task: TaskMeta): string {
+  private buildStalenessPrompt(task: TaskMeta, cwd?: string): string {
     const ageMs = Date.now() - new Date(task.updatedAt).getTime();
     const ageDays = Math.round(ageMs / (1000 * 60 * 60 * 24));
 
-    return `你是一个项目管理助手。评估以下任务是否陈旧。
+    const taskData = JSON.stringify({
+      id: task.id,
+      title: task.title,
+      status: task.status,
+      priority: task.priority,
+      type: task.type,
+      createdAt: task.createdAt,
+      updatedAt: task.updatedAt,
+      ageDays,
+      checkpointCount: task.checkpoints?.length ?? 0,
+      completedCheckpoints: task.checkpoints?.filter(c => c.status === 'completed').length ?? 0,
+    }, null, 2);
 
-## 任务数据
-${JSON.stringify({
-  id: task.id,
-  title: task.title,
-  status: task.status,
-  priority: task.priority,
-  type: task.type,
-  createdAt: task.createdAt,
-  updatedAt: task.updatedAt,
-  ageDays,
-  checkpointCount: task.checkpoints?.length ?? 0,
-  completedCheckpoints: task.checkpoints?.filter(c => c.status === 'completed').length ?? 0,
-}, null, 2)}
-
-## 输出要求
-输出纯 JSON 对象，不要用 markdown 代码块包裹。
-
-## 输出格式
-{
-  "isStale": true/false,
-  "stalenessScore": 0.0-1.0,
-  "suggestedAction": "keep | close | update | split",
-  "reason": "判断依据"
-}
-
-## 约束
-- 只输出 JSON`;
+    const template = loadPromptTemplate('staleness', cwd);
+    return resolveTemplate(template, { taskData });
   }
 
-  private buildBugReportPrompt(reportContent: string, logContext?: string): string {
-    const contextStr = logContext
+  private buildBugReportPrompt(reportContent: string, logContext?: string, cwd?: string): string {
+    const logContextSection = logContext
       ? `\n## 日志上下文\n${logContext.substring(0, 2000)}`
       : '';
 
-    return `你是一个 Bug 分析助手。将以下 Bug 报告转为结构化需求文档。
-
-## Bug 报告
-${reportContent.substring(0, 4000)}${contextStr}
-
-## 输出要求
-输出纯 JSON 对象，不要用 markdown 代码块包裹。
-如果无法判断某个字段，设为 null 而非猜测。
-
-## 输出格式
-{
-  "title": "动词开头的标题",
-  "description": "结构化描述：背景、复现步骤、期望行为、实际行为",
-  "type": "bug | feature | null",
-  "priority": "P0 | P1 | P2 | P3 | null",
-  "checkpoints": ["验证步骤列表或null"],
-  "rootCause": "根因分析或null",
-  "impactScope": "影响范围或null"
-}
-
-## 约束
-- title 必须以动词开头
-- checkpoints 每条必须以动词开头
-- 只输出 JSON`;
+    const template = loadPromptTemplate('bugReport', cwd);
+    return resolveTemplate(template, {
+      reportContent: reportContent.substring(0, 4000),
+      logContextSection,
+    });
   }
 
   // ============================================================

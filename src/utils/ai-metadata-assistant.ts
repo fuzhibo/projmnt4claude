@@ -5,7 +5,9 @@
  */
 
 import type { TaskPriority, TaskType } from '../types/task';
-import { logAICost } from './ai-logger';
+import { Logger } from './logger';
+
+const logger = new Logger({ component: 'ai-metadata-assistant' });
 
 /**
  * AI 增强后的需求元数据
@@ -98,12 +100,12 @@ async function callAnthropicAPI(systemPrompt: string, userPrompt: string): Promi
     const outputTokens = data?.usage?.output_tokens || 0;
     const durationMs = Date.now() - startTime;
 
-    logAICost({
-      model: MODEL,
-      operation: 'enhanceRequirement',
+    logger.logAICost({
+      field: 'enhanceRequirement',
+      durationMs,
       inputTokens,
       outputTokens,
-      durationMs,
+      totalTokens: inputTokens + outputTokens,
     });
 
     return {

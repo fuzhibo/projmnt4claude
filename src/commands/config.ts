@@ -1,5 +1,6 @@
 import * as fs from 'fs';
 import { getConfigPath, isInitialized } from '../utils/path';
+import { PROMPT_TEMPLATE_NAMES, DEFAULT_TEMPLATES } from '../utils/prompt-templates';
 
 interface LoggingConfig {
   level: 'error' | 'warn' | 'info' | 'debug';
@@ -176,8 +177,14 @@ export function setConfigValue(config: ProjectConfig, key: string, value: string
   return result;
 }
 
+/** 日志级别合法值 */
+const VALID_LOG_LEVELS = ['debug', 'info', 'warn', 'error'];
+
 /**
- * 列出所有配置项
+ * 列出所有配置项（分类展示）
+ *
+ * 按类别分组展示：基础、日志、AI、提示词
+ * 提示词模板标注使用默认或自定义
  */
 export function listConfig(cwd: string = process.cwd()): void {
   if (!isInitialized(cwd)) {
@@ -191,8 +198,69 @@ export function listConfig(cwd: string = process.cwd()): void {
     process.exit(1);
   }
 
-  console.log('当前配置:\n');
-  console.log(JSON.stringify(config, null, 2));
+  // 基础配置
+  console.log('## 基础');
+  console.log(`  projectName: ${config.projectName}`);
+  console.log(`  branchPrefix: ${config.branchPrefix}`);
+  console.log(`  defaultPriority: ${config.defaultPriority}`);
+  console.log('');
+
+  // 日志配置
+  console.log('## 日志');
+  const logging = config.logging;
+  if (logging) {
+    console.log(`  logging.level: ${logging.level}`);
+    console.log(`  logging.maxFiles: ${logging.maxFiles}`);
+    console.log(`  logging.recordInputs: ${logging.recordInputs}`);
+    console.log(`  logging.inputMaxLength: ${logging.inputMaxLength}`);
+  } else {
+    console.log('  (使用默认值)');
+  }
+  console.log('');
+
+  // AI 配置
+  console.log('## AI');
+  const ai = config.ai;
+  if (ai) {
+    console.log(`  ai.provider: ${ai.provider}`);
+    if (ai.customEndpoint) {
+      console.log(`  ai.customEndpoint: ${ai.customEndpoint}`);
+    }
+  } else {
+    console.log('  (使用默认值)');
+  }
+  console.log('');
+
+  // 训练数据配置
+  console.log('## 训练数据');
+  const training = config.training;
+  if (training) {
+    console.log(`  training.exportEnabled: ${training.exportEnabled}`);
+    console.log(`  training.outputDir: ${training.outputDir}`);
+  } else {
+    console.log('  (使用默认值)');
+  }
+  console.log('');
+
+  // 质量配置
+  console.log('## 质量');
+  const quality = config.quality;
+  if (quality?.minScore !== undefined) {
+    console.log(`  quality.minScore: ${quality.minScore}`);
+  } else {
+    console.log('  (使用默认值)');
+  }
+  console.log('');
+
+  // 提示词模板
+  console.log('## 提示词模板');
+  const prompts = config.prompts as Record<string, string> | undefined;
+  for (const name of PROMPT_TEMPLATE_NAMES) {
+    const hasCustom = prompts && typeof prompts[name] === 'string';
+    const label = hasCustom ? '自定义' : '默认';
+    console.log(`  ${name}: [${label}]`);
+  }
+  console.log('');
 }
 
 /**
@@ -220,7 +288,11 @@ export function getConfig(key: string, cwd: string = process.cwd()): void {
 }
 
 /**
- * 设置指定配置值
+ * 设置指定配置值（带验证）
+ *
+ * 验证规则：
+ * - logging.level: 仅允许 debug/info/warn/error
+ * - prompts.*: 检查模板变量格式（{variableName}）
  */
 export function setConfig(key: string, value: string, cwd: string = process.cwd()): void {
   if (!isInitialized(cwd)) {
@@ -232,6 +304,38 @@ export function setConfig(key: string, value: string, cwd: string = process.cwd(
   if (!config) {
     console.error('错误: 无法读取配置文件');
     process.exit(1);
+  }
+
+  // Validate logging.level enum
+  if (key === 'logging.level') {
+    if (!VALID_LOG_LEVELS.includes(value)) {
+      console.error(`错误: logging.level 仅允许: ${VALID_LOG_LEVELS.join(', ')}`);
+      process.exit(1);
+    }
+  }
+
+  // Validate prompts.* template variable format
+  if (key.startsWith('prompts.')) {
+    const templateName = key.substring('prompts.'.length);
+    if (!PROMPT_TEMPLATE_NAMES.includes(templateName as any)) {
+      console.error(`错误: 未知提示词模板名称 '${templateName}'。可选: ${PROMPT_TEMPLATE_NAMES.join(', ')}`);
+      process.exit(1);
+    }
+    // Check template has valid {variable} placeholders
+    const variables = value.match(/\{(\w+)\}/g);
+    if (variables) {
+      // Valid format - check default template for comparison
+      const defaultTemplate = DEFAULT_TEMPLATES[templateName as keyof typeof DEFAULT_TEMPLATES];
+      if (defaultTemplate) {
+        const defaultVars = new Set((defaultTemplate.match(/\{(\w+)\}/g) || []).map(v => v));
+        const customVars = new Set(variables);
+        const missing = [...defaultVars].filter(v => !customVars.has(v));
+        if (missing.length > 0) {
+          console.warn(`警告: 自定义模板缺少默认模板中的变量: ${missing.join(', ')}`);
+          console.warn('缺少变量可能导致提示词中出现未替换的占位符。');
+        }
+      }
+    }
   }
 
   const newConfig = setConfigValue(config, key, value);

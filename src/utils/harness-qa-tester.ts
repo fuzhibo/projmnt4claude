@@ -13,6 +13,7 @@ import type {
   HarnessConfig,
   CodeReviewVerdict,
   QAVerdict,
+  RetryContext,
 } from '../types/harness.js';
 import type { TaskMeta, CheckpointMetadata } from '../types/task.js';
 import { validateCheckpointVerification } from '../types/task.js';
@@ -27,6 +28,7 @@ import { getAgent } from './headless-agent.js';
 import { getQARoleTemplate } from './role-prompts.js';
 import { generateFallbackVerification } from './checkpoint.js';
 import { detectContradiction } from './contradiction-detector.js';
+import { loadPromptTemplate, resolveTemplate } from './prompt-templates.js';
 
 /**
  * 验证检查点的验证信息完整性
@@ -34,14 +36,6 @@ import { detectContradiction } from './contradiction-detector.js';
  */
 function checkCheckpointVerification(cp: CheckpointMetadata): { valid: boolean; warning?: string } {
   return validateCheckpointVerification(cp);
-}
-
-/**
- * QA 重试上下文
- * 在 QA 验证失败后重试时，传递前次失败原因以确保判定一致性
- */
-export interface RetryContext {
-  previousFailureReason?: string;
 }
 
 export class HarnessQATester {
@@ -238,112 +232,70 @@ export class HarnessQATester {
     checkpoints: CheckpointMetadata[],
     retryContext?: RetryContext
   ): string {
-    const parts: string[] = [];
-
     const roleTemplate = getQARoleTemplate(task.recommendedRole);
 
-    parts.push('# QA 验证任务');
-    parts.push('');
-    parts.push(`${roleTemplate.roleDeclaration}你需要验证一个任务的实现是否满足功能要求。`);
-    parts.push('');
-    parts.push('**重要**: 你必须严格验证，确保所有功能正常工作。');
-    parts.push('');
-
-    // 验证原则章节
-    parts.push('## 验证原则');
-    parts.push('');
-    parts.push('请遵循以下原则进行验证：');
-    parts.push('');
-    parts.push('1. **功能优先**: 验证的核心是功能是否正确实现，而非实现形式。');
-    parts.push('   - 内联函数与类方法在功能等价时应视为通过。例如：如果任务要求创建一个类方法，但实现使用了功能等价的内联函数/导出函数，只要功能正确就应通过。');
-    parts.push('   - 不要因为代码组织方式（如使用独立函数代替类方法）而判定为不通过，除非任务明确要求特定的实现结构。');
-    parts.push('');
-    parts.push('2. **解析伪影识别**: 忽略由自然语言描述算法步骤时产生的结构要求。');
-    parts.push('   - 任务描述中的"创建类"、"定义接口"等措辞可能是算法描述的产物，不构成实际的代码结构要求。');
-    parts.push('   - 如果代码通过不同结构（如模块级函数代替类方法）实现了相同功能，应视为满足要求。');
-    parts.push('');
-
-    // 重试上下文章节（仅在有前次失败原因时添加）
+    // Build retry context section
+    let retryContextSection = '';
     if (retryContext?.previousFailureReason) {
-      parts.push('## 前次验证失败原因');
-      parts.push('');
-      parts.push('上一次 QA 验证未通过，失败原因如下：');
-      parts.push('');
-      parts.push(`> ${retryContext.previousFailureReason}`);
-      parts.push('');
-      parts.push('请特别注意：');
-      parts.push('- 仔细审视前次失败原因是否构成真正的功能缺陷（参考上述验证原则）');
-      parts.push('- 如果前次判定是基于形式要求而非功能缺陷，本次应修正判定为 PASS');
-      parts.push('- 如果前次失败原因仍然存在且确属功能问题，继续保持 NOPASS');
-      parts.push('');
+      retryContextSection = [
+        '## 前次验证失败原因',
+        '',
+        '上一次 QA 验证未通过，失败原因如下：',
+        '',
+        `> ${retryContext.previousFailureReason}`,
+        '',
+        '请特别注意：',
+        '- 仔细审视前次失败原因是否构成真正的功能缺陷（参考上述验证原则）',
+        '- 如果前次判定是基于形式要求而非功能缺陷，本次应修正判定为 PASS',
+        '- 如果前次失败原因仍然存在且确属功能问题，继续保持 NOPASS',
+        '',
+      ].join('\n');
     }
 
-    parts.push('## 任务信息');
-    parts.push(`- ID: ${task.id}`);
-    parts.push(`- 标题: ${task.title}`);
-    parts.push('');
+    const descriptionSection = task.description
+      ? `## 任务描述\n${task.description}`
+      : '';
 
-    if (task.description) {
-      parts.push('## 任务描述');
-      parts.push(task.description);
-      parts.push('');
-    }
-
-    parts.push('## QA 飀证检查点');
-    checkpoints.forEach((cp, i) => {
-      parts.push(`${i + 1}. [${cp.id}] ${cp.description}`);
+    // Build checkpoints list with verification details
+    const checkpointsList = checkpoints.map((cp, i) => {
+      const lines: string[] = [`${i + 1}. [${cp.id}] ${cp.description}`];
       if (cp.verification?.commands && cp.verification.commands.length > 0) {
-        parts.push(`   验证命令: ${cp.verification.commands.join(', ')}`);
+        lines.push(`   验证命令: ${cp.verification.commands.join(', ')}`);
       } else if (cp.verification?.steps && cp.verification.steps.length > 0) {
-        parts.push(`   验证步骤: ${cp.verification.steps.join('；')}`);
+        lines.push(`   验证步骤: ${cp.verification.steps.join('；')}`);
       } else {
-        // 无 commands/steps 的检查点：生成回退验证建议
         const fallback = generateFallbackVerification(cp.description, task);
         if (fallback.steps && fallback.steps.length > 0) {
-          parts.push(`   建议验证步骤: ${fallback.steps.join('；')}`);
+          lines.push(`   建议验证步骤: ${fallback.steps.join('；')}`);
         }
         if (fallback.commands && fallback.commands.length > 0) {
-          parts.push(`   回退验证命令: ${fallback.commands.join(', ')}`);
+          lines.push(`   回退验证命令: ${fallback.commands.join(', ')}`);
         }
       }
       if (cp.verification?.expected) {
-        parts.push(`   期望结果: ${cp.verification.expected}`);
+        lines.push(`   期望结果: ${cp.verification.expected}`);
       }
-      // BUG-013-2: 裁判断点验证方法是否缺少 commands/steps
       const cpValidation = validateCheckpointVerification(cp);
       if (!cpValidation.valid && cpValidation.warning) {
-        parts.push(`   ⚠️ ${cpValidation.warning}`);
+        lines.push(`   ⚠️ ${cpValidation.warning}`);
       }
-    });
-    parts.push('');
+      return lines.join('\n');
+    }).join('\n');
 
-    parts.push('## 代码审核结果');
-    parts.push(`- 结果: ${codeReviewVerdict.result}`);
-    parts.push(`- 原因: ${codeReviewVerdict.reason}`);
-    parts.push('');
+    const testStrategy = roleTemplate.testStrategy.map((strategy, i) => `${i + 1}. ${strategy}`).join('\n');
 
-    parts.push('## 验证要求');
-    roleTemplate.testStrategy.forEach((strategy, i) => {
-      parts.push(`${i + 1}. ${strategy}`);
-    });
-    parts.push('');
-
-    parts.push('## 输出格式');
-    parts.push('请按以下格式输出验证结果:');
-    parts.push('```');
-    parts.push('VERDICT: PASS 或 VERDICT: NOPASS');
-    parts.push('## 验证结果: PASS 或 NOPASS');
-    parts.push('## 原因: [简要说明为什么通过或不通过]');
-    parts.push('## 测试失败: [列出失败的测试，如果没有则为空]');
-    parts.push('## 未通过的检查点: [列出未通过的检查点ID，如果没有则为空]');
-    parts.push('## 详细反馈: [可选的详细反馈]');
-    parts.push('```');
-    parts.push('');
-    parts.push('**重要**: 必须输出 VERDICT: PASS 或 VERDICT: NOPASS，不得使用"通过"、"不通过"等中文词语。');
-    parts.push('');
-    parts.push('现在开始验证。');
-
-    return parts.join('\n');
+    const template = loadPromptTemplate('qa', this.config.cwd);
+    return resolveTemplate(template, {
+      roleDeclaration: roleTemplate.roleDeclaration,
+      taskId: task.id,
+      title: task.title,
+      descriptionSection,
+      checkpointsList,
+      codeReviewResult: codeReviewVerdict.result,
+      codeReviewReason: codeReviewVerdict.reason,
+      testStrategy,
+      retryContextSection,
+    }).replace(/\n{3,}/g, '\n\n');
   }
 
   /**

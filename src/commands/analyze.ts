@@ -48,6 +48,7 @@ import { areDependenciesCompleted } from '../utils/plan';
 import { readConfig } from './config';
 import { createLogger, type InstrumentationRecord } from '../utils/logger';
 import { AIMetadataAssistant, type DuplicateGroup, classifyFileToLayer, groupFilesByLayer, sortFilesByLayer, type ArchitectureLayer, LAYER_DEFINITIONS } from '../utils/ai-metadata';
+import { withAIEnhancement } from '../utils/ai-helpers';
 import { extractFilePaths } from '../utils/quality-gate';
 import { inferDependenciesBatch } from '../utils/dependency-engine';
 
@@ -690,17 +691,14 @@ export async function calculateContentQuality(
 
   // AI 语义评分 (仅 deepAnalyze 且非 noAi 时启用)
   let aiSemanticScore: number | undefined;
-  if (aiOptions?.deepAnalyze && !aiOptions?.noAi && cwd) {
-    // CP-4: 使用真实 AI 调用进行语义质量评估
-    try {
-      const aiAssistant = new AIMetadataAssistant(cwd);
-      const qualityResult = await aiAssistant.analyzeTaskQuality(task, { cwd });
-      if (qualityResult.aiUsed) {
-        aiSemanticScore = qualityResult.score;
-      }
-    } catch {
-      // AI 评估失败，仅使用结构评分
-    }
+  const qualityResult = await withAIEnhancement({
+    enabled: !!(aiOptions?.deepAnalyze && !aiOptions?.noAi && cwd),
+    aiCall: () => new AIMetadataAssistant(cwd!).analyzeTaskQuality(task, { cwd: cwd! }),
+    fallback: { score: 0, issues: [], suggestions: [], aiUsed: false },
+    operationName: '语义质量评估',
+  });
+  if (qualityResult.aiUsed) {
+    aiSemanticScore = qualityResult.score;
   }
 
   const totalScore = aiSemanticScore !== undefined
@@ -1152,39 +1150,38 @@ async function detectSemanticDuplicates(
   if (tasks.length < 2) return [];
 
   const aiAssistant = new AIMetadataAssistant(cwd);
+  const analyzeLogger = createLogger('analyze', cwd);
   const batchSize = 10;
   const allIssues: Issue[] = [];
 
   for (let i = 0; i < tasks.length; i += batchSize) {
     const batch = tasks.slice(i, i + batchSize);
-    try {
-      const result = await aiAssistant.detectDuplicates(batch, { cwd });
-      if (result.aiUsed && result.duplicates.length > 0) {
-        for (const group of result.duplicates) {
-          allIssues.push({
-            taskId: group.taskIds[0] || '__semantic__',
-            type: 'semantic_duplicate',
-            severity: 'medium',
-            message: `语义重复检测: ${group.taskIds.join(', ')} 相似度 ${(group.similarity * 100).toFixed(0)}%${group.reason ? ` - ${group.reason}` : ''}`,
-            suggestion: group.keepTaskId
-              ? `建议保留 ${group.keepTaskId}，合并或关闭其他重复任务`
-              : '检查重复任务，保留最相关的一个，关闭或合并其余任务',
-            details: {
-              duplicateTaskIds: group.taskIds,
-              similarity: group.similarity,
-              keepTaskId: group.keepTaskId,
-              reason: group.reason,
-              aiUsed: result.aiUsed,
-            },
-          });
-        }
+    const result = await withAIEnhancement({
+      enabled: true,
+      aiCall: () => aiAssistant.detectDuplicates(batch, { cwd }),
+      fallback: { duplicates: [], aiUsed: false },
+      operationName: '语义重复检测',
+      logger: analyzeLogger,
+    });
+    if (result.aiUsed && result.duplicates.length > 0) {
+      for (const group of result.duplicates) {
+        allIssues.push({
+          taskId: group.taskIds[0] || '__semantic__',
+          type: 'semantic_duplicate',
+          severity: 'medium',
+          message: `语义重复检测: ${group.taskIds.join(', ')} 相似度 ${(group.similarity * 100).toFixed(0)}%${group.reason ? ` - ${group.reason}` : ''}`,
+          suggestion: group.keepTaskId
+            ? `建议保留 ${group.keepTaskId}，合并或关闭其他重复任务`
+            : '检查重复任务，保留最相关的一个，关闭或合并其余任务',
+          details: {
+            duplicateTaskIds: group.taskIds,
+            similarity: group.similarity,
+            keepTaskId: group.keepTaskId,
+            reason: group.reason,
+            aiUsed: result.aiUsed,
+          },
+        });
       }
-    } catch (err) {
-      const logger = createLogger('analyze', cwd);
-      logger.warn('语义重复检测失败', {
-        error: err instanceof Error ? err.message : String(err),
-        batchIndex: Math.floor(i / batchSize),
-      });
     }
   }
 
@@ -1199,17 +1196,17 @@ async function assessStalenessWithAI(
   task: TaskMeta,
   cwd: string,
 ): Promise<{ stillStale: boolean; reason?: string } | null> {
-  try {
-    const aiAssistant = new AIMetadataAssistant(cwd);
-    const result = await aiAssistant.assessStaleness(task, { cwd });
-    if (result.aiUsed) {
-      return {
-        stillStale: result.isStale,
-        reason: result.reason,
-      };
-    }
-  } catch {
-    // AI 评估失败，回退到规则引擎结果（保持 stale 标记）
+  const result = await withAIEnhancement({
+    enabled: true,
+    aiCall: () => new AIMetadataAssistant(cwd).assessStaleness(task, { cwd }),
+    fallback: { isStale: false, stalenessScore: 0, suggestedAction: 'keep' as const, reason: '', aiUsed: false },
+    operationName: '陈旧任务评估',
+  });
+  if (result.aiUsed) {
+    return {
+      stillStale: result.isStale,
+      reason: result.reason,
+    };
   }
   return null;
 }
@@ -3863,67 +3860,65 @@ export async function analyzeBugReport(
   // CP-8: AI 辅助深层分析 — 当未禁用 AI 时调用 AIMetadataAssistant 增强规则引擎结果
   let aiUsed = false;
   let aiEnhancedFields: string[] = [];
-  if (options.noAi !== true) {
-    try {
-      const aiAssistant = new AIMetadataAssistant(cwd);
-      const logContextStr = logContext.length > 0 ? logContext.join('\n') : undefined;
-      const aiResult = await aiAssistant.analyzeBugReport(markdown, logContextStr, { cwd });
+  const logContextStr = logContext.length > 0 ? logContext.join('\n') : undefined;
+  const aiResult = await withAIEnhancement({
+    enabled: options.noAi !== true,
+    aiCall: () => new AIMetadataAssistant(cwd).analyzeBugReport(markdown, logContextStr, { cwd }),
+    fallback: { title: null, description: null, type: null, priority: null, checkpoints: null, rootCause: null, impactScope: null, aiUsed: false },
+    operationName: 'Bug 报告分析',
+  });
 
-      if (aiResult.aiUsed) {
-        aiUsed = true;
+  if (aiResult.aiUsed) {
+    aiUsed = true;
 
-        // AI 提供的任务类型信息增强分类
-        if (aiResult.type) {
-          analysis.classification.subcategory = `${analysis.classification.subcategory} (AI: ${aiResult.type})`;
-          aiEnhancedFields.push('classification');
-        }
-
-        // AI 优先级评估可能更准确，取更严重的结果
-        if (aiResult.priority) {
-          const priorityToSeverity: Record<string, 'critical' | 'high' | 'medium' | 'low'> = {
-            P0: 'critical', P1: 'high', P2: 'medium', P3: 'low',
-          };
-          const aiSeverity = priorityToSeverity[aiResult.priority];
-          if (aiSeverity) {
-            const severityOrder = ['low', 'medium', 'high', 'critical'];
-            if (severityOrder.indexOf(aiSeverity) > severityOrder.indexOf(analysis.severity)) {
-              analysis.severity = aiSeverity;
-              aiEnhancedFields.push('severity');
-            }
-          }
-        }
-
-        // AI 根因验证
-        if (aiResult.rootCause) {
-          analysis.rootCauseVerification = `AI 验证: ${aiResult.rootCause}`;
-          aiEnhancedFields.push('rootCauseVerification');
-        }
-
-        // AI 影响范围评估
-        if (aiResult.impactScope) {
-          analysis.impactAssessment = `AI 评估: ${aiResult.impactScope}`;
-          aiEnhancedFields.push('impactAssessment');
-        }
-
-        // AI 检查点作为改进建议追加
-        if (aiResult.checkpoints && aiResult.checkpoints.length > 0) {
-          const maxExistingPriority = analysis.suggestions.length > 0
-            ? Math.max(...analysis.suggestions.map(s => s.priority))
-            : 0;
-          for (let i = 0; i < aiResult.checkpoints.length; i++) {
-            analysis.suggestions.push({
-              priority: maxExistingPriority + i + 1,
-              suggestion: `[AI] ${aiResult.checkpoints[i]}`,
-            });
-          }
-          aiEnhancedFields.push('suggestions');
-        }
-
-        console.log(`    ✅ AI 分析完成，增强了 ${aiEnhancedFields.length} 个字段`);
-      }
-    } catch (aiError) {
-      console.log(`    ⚠️  AI 分析失败，使用规则引擎结果: ${aiError instanceof Error ? aiError.message : String(aiError)}`);
+    // AI 提供的任务类型信息增强分类
+    if (aiResult.type) {
+      analysis.classification.subcategory = `${analysis.classification.subcategory} (AI: ${aiResult.type})`;
+      aiEnhancedFields.push('classification');
     }
+
+    // AI 优先级评估可能更准确，取更严重的结果
+    if (aiResult.priority) {
+      const priorityToSeverity: Record<string, 'critical' | 'high' | 'medium' | 'low'> = {
+        P0: 'critical', P1: 'high', P2: 'medium', P3: 'low',
+      };
+      const aiSeverity = priorityToSeverity[aiResult.priority];
+      if (aiSeverity) {
+        const severityOrder = ['low', 'medium', 'high', 'critical'];
+        if (severityOrder.indexOf(aiSeverity) > severityOrder.indexOf(analysis.severity)) {
+          analysis.severity = aiSeverity;
+          aiEnhancedFields.push('severity');
+        }
+      }
+    }
+
+    // AI 根因验证
+    if (aiResult.rootCause) {
+      analysis.rootCauseVerification = `AI 验证: ${aiResult.rootCause}`;
+      aiEnhancedFields.push('rootCauseVerification');
+    }
+
+    // AI 影响范围评估
+    if (aiResult.impactScope) {
+      analysis.impactAssessment = `AI 评估: ${aiResult.impactScope}`;
+      aiEnhancedFields.push('impactAssessment');
+    }
+
+    // AI 检查点作为改进建议追加
+    if (aiResult.checkpoints && aiResult.checkpoints.length > 0) {
+      const maxExistingPriority = analysis.suggestions.length > 0
+        ? Math.max(...analysis.suggestions.map(s => s.priority))
+        : 0;
+      for (let i = 0; i < aiResult.checkpoints.length; i++) {
+        analysis.suggestions.push({
+          priority: maxExistingPriority + i + 1,
+          suggestion: `[AI] ${aiResult.checkpoints[i]}`,
+        });
+      }
+      aiEnhancedFields.push('suggestions');
+    }
+
+    console.log(`    ✅ AI 分析完成，增强了 ${aiEnhancedFields.length} 个字段`);
   }
 
   console.log(`    分类: ${analysis.classification.category}/${analysis.classification.subcategory}`);

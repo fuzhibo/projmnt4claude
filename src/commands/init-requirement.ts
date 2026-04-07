@@ -17,6 +17,7 @@ import type { TaskMeta, TaskPriority, TaskStatus, TaskType } from '../types/task
 import { createDefaultTaskMeta, inferTaskType, validateCheckpointVerification } from '../types/task';
 import { SEPARATOR_WIDTH } from '../utils/format';
 import { createLogger, type InstrumentationRecord, type AICostSummary } from '../utils/logger';
+import { withAIEnhancement } from '../utils/ai-helpers';
 import { AIMetadataAssistant, type EnhancedRequirement, classifyFileToLayer, groupFilesByLayer, sortFilesByLayer, type ArchitectureLayer, LAYER_DEFINITIONS } from '../utils/ai-metadata';
 
 /**
@@ -228,30 +229,29 @@ export async function initRequirement(
   let aiCost: AICostSummary | undefined;
 
   if (!noAI) {
-    try {
-      const aiAssistant = new AIMetadataAssistant(cwd);
-      const aiStartTime = Date.now();
-      const aiResult = await aiAssistant.enhanceRequirement(description, { cwd });
+    const aiStartTime = Date.now();
+    const aiResult = await withAIEnhancement<EnhancedRequirement>({
+      enabled: true,
+      aiCall: () => new AIMetadataAssistant(cwd).enhanceRequirement(description, { cwd }),
+      fallback: { title: null, description: null, type: null, priority: null, recommendedRole: null, checkpoints: null, dependencies: null, aiUsed: false },
+      operationName: '增强调用',
+      logger,
+    });
+
+    if (aiResult.aiUsed) {
+      // 步骤 3: 合并结果
+      analysis = mergeAnalysisResults(ruleAnalysis, aiResult);
+
+      // 记录 AI 成本
       const aiDurationMs = Date.now() - aiStartTime;
-
-      if (aiResult.aiUsed) {
-        // 步骤 3: 合并结果
-        analysis = mergeAnalysisResults(ruleAnalysis, aiResult);
-
-        // 记录 AI 成本
-        aiCost = {
-          field: 'enhanceRequirement',
-          durationMs: aiDurationMs,
-          inputTokens: 0,
-          outputTokens: 0,
-          totalTokens: 0,
-        };
-        logger.logAICost(aiCost);
-      }
-    } catch (err) {
-      logger.warn('AI 增强调用失败，使用规则引擎结果', {
-        error: err instanceof Error ? err.message : String(err),
-      });
+      aiCost = {
+        field: 'enhanceRequirement',
+        durationMs: aiDurationMs,
+        inputTokens: 0,
+        outputTokens: 0,
+        totalTokens: 0,
+      };
+      logger.logAICost(aiCost);
     }
   }
 
