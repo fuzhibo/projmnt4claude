@@ -36,6 +36,8 @@ export interface AgentInvokeOptions {
   schema?: Record<string, unknown>;
   /** 工作目录 */
   cwd: string;
+  /** 跳过权限确认（对应 --dangerously-skip-permissions） */
+  dangerouslySkipPermissions?: boolean;
 }
 
 /** Agent 调用结果 */
@@ -56,6 +58,10 @@ export interface AgentResult {
   error?: string;
   /** Hook 警告（成功但含 hook 错误时） */
   hookWarning?: string;
+  /** 捕获的 stderr 输出 */
+  stderr?: string;
+  /** 进程退出码 */
+  exitCode?: number;
 }
 
 /** Headless Agent 核心接口 */
@@ -65,6 +71,34 @@ export interface HeadlessAgent {
 
   /** 调用 Agent */
   invoke(prompt: string, options: AgentInvokeOptions): Promise<AgentResult>;
+}
+
+// ============================================================
+// Provider → CLI flag 翻译
+// ============================================================
+
+/**
+ * 将 AgentInvokeOptions 映射为 claude CLI 参数
+ *
+ * 提供从抽象 provider 选项到具体 CLI flag 的翻译层，
+ * 使不同 provider 的参数格式可以正确适配 CLI。
+ */
+export function translateOptionsToCliArgs(options: AgentInvokeOptions): string[] {
+  const args: string[] = ['--print'];
+
+  if (options.allowedTools && options.allowedTools.length > 0) {
+    args.push('--allowedTools', options.allowedTools.join(','));
+  }
+
+  if (options.dangerouslySkipPermissions) {
+    args.push('--dangerously-skip-permissions');
+  }
+
+  if (options.outputFormat === 'json') {
+    args.push('--output-format', 'json');
+  }
+
+  return args;
 }
 
 /** AI 配置（对应 config.json 中 ai 字段） */
@@ -152,6 +186,8 @@ export class ClaudeCodeProvider implements HeadlessAgent {
       timeout: options.timeout,
       allowedTools: options.allowedTools,
       cwd: options.cwd,
+      dangerouslySkipPermissions: options.dangerouslySkipPermissions,
+      outputFormat: options.outputFormat,
     });
 
     const claudeOptions = {
@@ -159,6 +195,8 @@ export class ClaudeCodeProvider implements HeadlessAgent {
       allowedTools: options.allowedTools,
       timeout: options.timeout,
       cwd: options.cwd,
+      dangerouslySkipPermissions: options.dangerouslySkipPermissions,
+      outputFormat: options.outputFormat === 'json' ? 'json' : undefined,
     };
 
     let result;
@@ -173,13 +211,15 @@ export class ClaudeCodeProvider implements HeadlessAgent {
 
     const durationMs = Date.now() - startTime;
 
-    // 提取 token 使用量（从输出中解析，Claude CLI 不直接返回 token 统计）
+    // 从输出中提取 token 使用量（支持 JSON/text 格式）
     const tokensUsed = this.extractTokens(result.output);
+    const model = this.extractModel(result.output);
 
     this.logger.info('Claude Code 调用完成', {
       success: result.success,
       durationMs,
       tokensUsed,
+      model,
     });
 
     if (result.success) {
@@ -198,18 +238,70 @@ export class ClaudeCodeProvider implements HeadlessAgent {
       provider: this.name,
       durationMs,
       tokensUsed,
-      model: 'claude-code',
+      model,
       error: result.error,
       hookWarning: result.hookWarning,
+      stderr: result.stderr,
     };
   }
 
-  /** 从 Claude 输出中尝试提取 token 信息 */
+  /**
+   * 从 Claude 输出中提取 token 使用量
+   *
+   * 支持三种格式：
+   * 1. JSON 输出（--output-format json）：解析 usage 字段
+   * 2. JSONL 输出（--output-format stream-json）：逐行解析累计
+   * 3. 文本输出：正则匹配 token 报告
+   *
+   * 限制：Claude CLI --print 模式的 text 输出不包含 token 统计，
+   * 使用 --output-format json 可获得更准确的统计。
+   */
   private extractTokens(output: string): number {
-    // Claude CLI 的 --print 模式不直接输出 token 统计
-    // 尝试从可能的 token 报告格式中提取
+    // 策略 1：尝试解析为单个 JSON 对象（--output-format json）
+    try {
+      const jsonOutput = JSON.parse(output);
+      if (jsonOutput && typeof jsonOutput === 'object') {
+        const usage = jsonOutput.usage;
+        if (usage) {
+          return (usage.input_tokens || 0) + (usage.output_tokens || 0);
+        }
+      }
+    } catch {
+      // 非 JSON 格式，继续尝试其他策略
+    }
+
+    // 策略 2：尝试解析为 JSONL（--output-format stream-json）
+    let totalTokens = 0;
+    let foundJsonl = false;
+    for (const line of output.split('\n')) {
+      const trimmed = line.trim();
+      if (!trimmed) continue;
+      try {
+        const obj = JSON.parse(trimmed);
+        foundJsonl = true;
+        if (obj?.usage) {
+          totalTokens += (obj.usage.input_tokens || 0) + (obj.usage.output_tokens || 0);
+        }
+      } catch {
+        // 忽略非 JSON 行
+      }
+    }
+    if (foundJsonl && totalTokens > 0) return totalTokens;
+
+    // 策略 3：正则匹配文本中的 token 报告（兜底）
     const tokenMatch = output.match(/tokens?[:\s]+(\d+)/i);
     return tokenMatch ? parseInt(tokenMatch[1]!, 10) : 0;
+  }
+
+  /** 从 Claude 输出中提取模型名称 */
+  private extractModel(output: string): string {
+    try {
+      const jsonOutput = JSON.parse(output);
+      if (jsonOutput?.model) return jsonOutput.model;
+    } catch {
+      // 非 JSON
+    }
+    return 'claude-code';
   }
 }
 

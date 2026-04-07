@@ -29,6 +29,8 @@ import {
   CURRENT_TASK_SCHEMA_VERSION,
   PIPELINE_INTERMEDIATE_STATUSES,
   PIPELINE_STATUS_MIGRATION_MAP,
+  normalizeStatus,
+  normalizePriority,
 } from '../types/task';
 import type { VerdictAction } from '../types/harness';
 import { VALID_VERDICT_ACTIONS } from '../types/harness';
@@ -111,50 +113,6 @@ function matchesIgnorePattern(taskId: string, patterns: string[]): boolean {
     if (regex.test(taskId)) return true;
   }
   return false;
-}
-
-/**
- * 优先级映射：将旧格式 (urgent/high/medium/low) 映射到新格式 (P0/P1/P2/P3)
- */
-function normalizePriority(priority: string): TaskPriority {
-  const priorityMap: Record<string, TaskPriority> = {
-    'urgent': 'P0',
-    'high': 'P1',
-    'medium': 'P2',
-    'low': 'P3',
-    // 已经是新格式的直接返回
-    'P0': 'P0',
-    'P1': 'P1',
-    'P2': 'P2',
-    'P3': 'P3',
-    'Q1': 'Q1',
-    'Q2': 'Q2',
-    'Q3': 'Q3',
-    'Q4': 'Q4',
-  };
-  return priorityMap[priority] || 'P2'; // 默认为 P2
-}
-
-/**
- * 状态映射：将旧格式/变体格式映射到标准格式
- */
-function normalizeStatus(status: string): TaskStatus {
-  const statusMap: Record<string, TaskStatus> = {
-    // 旧格式映射
-    'pending': 'open',
-    'reopen': 'open',
-    'completed': 'closed',
-    'cancelled': 'abandoned',
-    'blocked': 'open',
-    // 标准格式直接返回
-    'open': 'open',
-    'in_progress': 'in_progress',
-    'resolved': 'resolved',
-    'closed': 'closed',
-    'reopened': 'open',
-    'abandoned': 'abandoned',
-  };
-  return statusMap[status] || 'open';
 }
 
 function normalizeType(type: string): string {
@@ -1395,6 +1353,7 @@ export async function analyzeProject(
       resolved: 0,
       closed: 0,
       abandoned: 0,
+      failed: 0,
     },
     byPriority: {
       P0: 0,

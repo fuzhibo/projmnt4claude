@@ -2,27 +2,7 @@ import * as path from 'path';
 import * as fs from 'fs';
 import { getProjectDir, isInitialized } from './path';
 import { readTaskMeta, getAllTasks, isSubtask } from './task';
-import type { TaskStatus } from '../types/task';
-
-/**
- * 状态映射：将旧格式/变体格式映射到标准格式
- */
-function normalizeStatus(status: string): TaskStatus {
-  const statusMap: Record<string, TaskStatus> = {
-    'pending': 'open',
-    'reopen': 'open',
-    'completed': 'closed',
-    'cancelled': 'abandoned',
-    'blocked': 'open',
-    'open': 'open',
-    'in_progress': 'in_progress',
-    'resolved': 'resolved',
-    'closed': 'closed',
-    'reopened': 'open',
-    'abandoned': 'abandoned',
-  };
-  return statusMap[status] || 'open';
-}
+import { normalizeStatus } from '../types/task';
 
 /**
  * 可执行状态及其优先级（数字越小优先级越高）

@@ -29,6 +29,8 @@ import {
   createDefaultTaskMeta,
   isValidTaskId,
   validateCheckpointVerification,
+  normalizeStatus,
+  normalizePriority,
 } from '../types/task';
 import * as crypto from 'crypto';
 import { SEPARATOR_WIDTH } from '../utils/format';
@@ -365,7 +367,7 @@ export async function createTask(
   // 非交互模式：使用命令行参数
   if (options.nonInteractive && options.title) {
     const taskType = (options.type || 'feature') as TaskType;
-    const taskPriority = normalizePriorityToP(options.priority || 'P2');
+    const taskPriority = normalizePriority(options.priority || 'P2');
 
     // 确定任务ID：用户指定ID优先，否则自动生成
     let taskId: string;
@@ -537,18 +539,6 @@ export async function createTask(
   syncCheckpointsToMeta(taskId, cwd);
   const cpWarnings = validateTaskCheckpointCommands(taskId, cwd);
   displayCheckpointVerificationWarnings(cpWarnings);
-}
-
-/**
- * 将优先级规范化为 P0-P3 格式
- */
-function normalizePriorityToP(priority: string): TaskPriority {
-  const map: Record<string, TaskPriority> = {
-    'urgent': 'P0', 'high': 'P1', 'medium': 'P2', 'low': 'P3',
-    'P0': 'P0', 'P1': 'P1', 'P2': 'P2', 'P3': 'P3',
-    'Q1': 'Q1', 'Q2': 'Q2', 'Q3': 'Q3', 'Q4': 'Q4',
-  };
-  return map[priority] || 'P2';
 }
 
 /**
@@ -2896,26 +2886,6 @@ export async function addSubtask(
   console.log(`   父任务 ID: ${parentId}`);
   console.log(`   标题: ${title}`);
   console.log(`   优先级: ${formatPriority(subtask.priority)}`);
-}
-
-/**
- * 状态规范化映射
- */
-function normalizeStatus(status: string): TaskStatus {
-  const statusMap: Record<string, TaskStatus> = {
-    'pending': 'open',
-    'reopen': 'open',
-    'reopened': 'open',
-    'completed': 'closed',
-    'cancelled': 'abandoned',
-    'blocked': 'open',
-    'open': 'open',
-    'in_progress': 'in_progress',
-    'resolved': 'resolved',
-    'closed': 'closed',
-    'abandoned': 'abandoned',
-  };
-  return statusMap[status] || 'open';
 }
 
 /**

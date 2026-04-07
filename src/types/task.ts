@@ -32,7 +32,8 @@ export type TaskStatus =
   | 'wait_complete' // 等待最终确认（所有检查点完成）
   | 'resolved'      // 已解决
   | 'closed'        // 已关闭
-  | 'abandoned';    // 已放弃
+  | 'abandoned'     // 已放弃
+  | 'failed';       // 已失败
 
 /**
  * 任务历史记录条目
@@ -453,6 +454,58 @@ export const PIPELINE_STATUS_MIGRATION_MAP: Record<string, TaskStatus> = {
   'wait_qa': 'in_progress',    // 等待 QA → 回到开发中
   'wait_complete': 'resolved',  // 等待最终确认 → 标记为已解决
 };
+
+/**
+ * 统一的状态规范化函数
+ * 合并所有已知变体: pending→open, completed→resolved, cancelled→abandoned,
+ * reopened→open, needs_human→open, blocked→open, reopen→open 等
+ */
+export function normalizeStatus(status: string): TaskStatus {
+  const statusMap: Record<string, TaskStatus> = {
+    // 旧格式映射
+    'pending': 'open',
+    'reopen': 'open',
+    'reopened': 'open',
+    'completed': 'resolved',
+    'cancelled': 'abandoned',
+    'blocked': 'open',
+    'needs_human': 'open',
+    // 标准格式直接返回
+    'open': 'open',
+    'in_progress': 'in_progress',
+    'wait_review': 'wait_review',
+    'wait_qa': 'wait_qa',
+    'wait_complete': 'wait_complete',
+    'resolved': 'resolved',
+    'closed': 'closed',
+    'abandoned': 'abandoned',
+    'failed': 'failed',
+  };
+  return statusMap[status] || 'open';
+}
+
+/**
+ * 统一的优先级规范化函数
+ * 映射: urgent→P0, high→P1, medium→P2, low→P3 等
+ */
+export function normalizePriority(priority: string): TaskPriority {
+  const priorityMap: Record<string, TaskPriority> = {
+    'urgent': 'P0',
+    'high': 'P1',
+    'medium': 'P2',
+    'low': 'P3',
+    // 已经是新格式的直接返回
+    'P0': 'P0',
+    'P1': 'P1',
+    'P2': 'P2',
+    'P3': 'P3',
+    'Q1': 'Q1',
+    'Q2': 'Q2',
+    'Q3': 'Q3',
+    'Q4': 'Q4',
+  };
+  return priorityMap[priority] || 'P2';
+}
 
 /**
  * 任务元数据接口

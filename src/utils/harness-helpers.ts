@@ -29,6 +29,10 @@ export interface HeadlessClaudeOptions {
   allowedTools: string[];
   timeout: number;
   cwd: string;
+  /** 跳过权限确认（对应 --dangerously-skip-permissions） */
+  dangerouslySkipPermissions?: boolean;
+  /** 输出格式（对应 --output-format: text/json/stream-json） */
+  outputFormat?: string;
 }
 
 export interface HeadlessClaudeResult {
@@ -36,6 +40,8 @@ export interface HeadlessClaudeResult {
   output: string;
   error?: string;
   hookWarning?: string;
+  /** 原始 stderr 输出 */
+  stderr?: string;
 }
 
 /**
@@ -109,6 +115,14 @@ export async function runHeadlessClaude(options: HeadlessClaudeOptions): Promise
       '--print',
     ];
 
+    if (options.dangerouslySkipPermissions) {
+      args.push('--dangerously-skip-permissions');
+    }
+
+    if (options.outputFormat) {
+      args.push('--output-format', options.outputFormat);
+    }
+
     try {
       const child = spawn('claude', args, {
         cwd: options.cwd,
@@ -140,6 +154,7 @@ export async function runHeadlessClaude(options: HeadlessClaudeOptions): Promise
           output: stdout,
           error: classified.error,
           hookWarning: classified.hookWarning,
+          stderr,
         });
       });
 
@@ -148,6 +163,7 @@ export async function runHeadlessClaude(options: HeadlessClaudeOptions): Promise
           success: false,
           output: '',
           error: error.message,
+          stderr: '',
         });
       });
 
@@ -156,6 +172,7 @@ export async function runHeadlessClaude(options: HeadlessClaudeOptions): Promise
         success: false,
         output: '',
         error: error instanceof Error ? error.message : String(error),
+        stderr: '',
       });
     }
   });
