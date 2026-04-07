@@ -258,7 +258,7 @@ export async function initRequirement(
   }
 
   // 执行复杂度评估
-  const complexity = assessComplexity(description, analysis);
+  let complexity = assessComplexity(description, analysis);
 
   // 显示分析结果
   const aiTag = (field: string) => analysis.aiEnhancedFields.includes(field) ? ' (AI enhanced)' : '';
@@ -317,14 +317,34 @@ export async function initRequirement(
   }
 
   // 确认创建（非交互模式自动确认）
-  let confirmCreate = { confirm: true };
+  let confirmCreate: { confirm: boolean } = { confirm: true };
   if (!nonInteractive) {
-    confirmCreate = await prompts({
+    const result = await prompts({
       type: 'confirm',
       name: 'confirm',
       message: '是否基于此分析创建任务?',
       initial: true,
     });
+    // IR-01-09: Ctrl+C safety — prompts returns undefined on SIGINT
+    if (result === undefined) {
+      console.log('');
+      console.log('ℹ️  已取消任务创建。');
+      console.log('');
+      logger.logInstrumentation({
+        module: 'init-requirement',
+        action: 'cancel',
+        input_summary: `desc_len=${inputDescLength}`,
+        output_summary: 'Ctrl+C 取消创建',
+        ai_used: analysis.aiUsed,
+        ai_enhanced_fields: analysis.aiEnhancedFields,
+        duration_ms: Date.now() - startTime,
+        user_edit_count: 0,
+        module_data: { cancel_reason: 'sigint' },
+      });
+      logger.flush();
+      return;
+    }
+    confirmCreate = result;
   }
 
   if (!confirmCreate.confirm) {
@@ -390,12 +410,47 @@ export async function initRequirement(
         initial: analysis.recommendedRole,
       },
     ]);
+
+    // IR-01-09: Ctrl+C safety — prompts returns undefined on SIGINT
+    if (promptResponse === undefined) {
+      console.log('');
+      console.log('ℹ️  已取消任务创建。');
+      console.log('');
+      logger.logInstrumentation({
+        module: 'init-requirement',
+        action: 'cancel',
+        input_summary: `desc_len=${inputDescLength}`,
+        output_summary: 'Ctrl+C 取消创建',
+        ai_used: analysis.aiUsed,
+        ai_enhanced_fields: analysis.aiEnhancedFields,
+        duration_ms: Date.now() - startTime,
+        user_edit_count: userEditCount,
+      });
+      logger.flush();
+      return;
+    }
     response = promptResponse as { title: string; description: string; priority: string; recommendedRole: string };
 
     // CP-8: 追踪用户编辑回退率（对比用户输入 vs 规则建议）
     if (response.title !== analysis.title) userEditCount++;
     if (response.priority !== analysis.priority) userEditCount++;
     if (response.recommendedRole !== analysis.recommendedRole) userEditCount++;
+
+    // IR-01-15: Re-evaluate complexity if description changed significantly
+    if (response.description && response.description !== analysis.description) {
+      const newAnalysis: RequirementAnalysis = {
+        ...analysis,
+        description: response.description,
+        title: response.title || analysis.title,
+        priority: (response.priority as TaskPriority) || analysis.priority,
+        recommendedRole: response.recommendedRole || analysis.recommendedRole,
+      };
+      const newComplexity = assessComplexity(response.description, newAnalysis);
+      if (newComplexity.level !== complexity.level || newComplexity.estimatedMinutes !== complexity.estimatedMinutes) {
+        console.log(`   📊 复杂度已重新评估: ${formatComplexity(newComplexity)} (原: ${formatComplexity(complexity)})`);
+        complexity = newComplexity;
+      }
+    }
   }
 
   if (!response.title) {
@@ -449,6 +504,16 @@ export async function initRequirement(
   task.priority = response.priority as TaskPriority;
   task.recommendedRole = response.recommendedRole || analysis.recommendedRole;
 
+  // IR-01-16: Add creation history record
+  task.history = task.history || [];
+  task.history.push({
+    timestamp: new Date().toISOString(),
+    action: '任务创建',
+    field: 'status',
+    oldValue: '',
+    newValue: 'open',
+  });
+
   // 推断依赖关系（文件重叠 + AI potentialDependencies 标题匹配）
   // IR-08-03: 使用统一依赖推断引擎
   const existingTasksForDeps = getAllTasks(cwd);
@@ -461,6 +526,20 @@ export async function initRequirement(
   // 将推断的依赖写入 task.dependencies
   if (inferredDeps.length > 0) {
     task.dependencies = inferredDeps.map(d => d.depTaskId);
+  }
+
+  // IR-01-16: Check for file warnings (referenced files that don't exist on disk)
+  const referencedFiles = allRelatedFiles.length > 0
+    ? allRelatedFiles
+    : extractFilePaths(task.description || '', { includeBareFilenames: false });
+  const fileWarnings: string[] = [];
+  for (const file of referencedFiles) {
+    if (!fs.existsSync(path.join(cwd, file))) {
+      fileWarnings.push(file);
+    }
+  }
+  if (fileWarnings.length > 0) {
+    task.fileWarnings = fileWarnings;
   }
 
   // 写入任务
@@ -612,6 +691,7 @@ ${checkpoints.map((cp: string) => `- [ ] ${cp}`).join('\n')}
 
     const subtaskIds: string[] = [];
 
+    try {
     for (let i = 0; i < complexity.splitSuggestions.length; i++) {
       const sub = complexity.splitSuggestions[i];
       if (!sub) continue;
@@ -693,9 +773,37 @@ ${checkpoints.map((cp: string) => `- [ ] ${cp}`).join('\n')}
       }
     }
 
-    console.log(`✅ 已拆分为 ${complexity.splitSuggestions.length} 个子任务`);
-    console.log(`   父任务: ${taskId}`);
-    console.log('');
+    } catch (err) {
+      // IR-01-13: Partial failure — clean up already-created subtasks
+      console.error(`\n❌ 子任务创建失败: ${err instanceof Error ? err.message : String(err)}`);
+      if (subtaskIds.length > 0) {
+        console.log(`   清理已创建的 ${subtaskIds.length} 个子任务...`);
+        for (const cleanupId of subtaskIds) {
+          try {
+            const cleanupDir = path.join(getTasksDir(cwd), cleanupId);
+            if (fs.existsSync(cleanupDir)) {
+              fs.rmSync(cleanupDir, { recursive: true, force: true });
+            }
+          } catch {
+            // Best-effort cleanup
+          }
+        }
+        // Remove subtaskIds from parent
+        const parentMeta = readTaskMeta(taskId, cwd);
+        if (parentMeta) {
+          parentMeta.subtaskIds = (parentMeta.subtaskIds || []).filter(id => !subtaskIds.includes(id));
+          writeTaskMeta(parentMeta, cwd);
+        }
+        console.log(`   已清理。父任务 ${taskId} 保留。`);
+      }
+      console.log('');
+    }
+
+    if (subtaskIds.length > 0) {
+      console.log(`✅ 已拆分为 ${subtaskIds.length} 个子任务`);
+      console.log(`   父任务: ${taskId}`);
+      console.log('');
+    }
   }
   if (!skipValidation) {
     const validation = hasValidCheckpoints(checkpointPath, false);
@@ -713,7 +821,10 @@ ${checkpoints.map((cp: string) => `- [ ] ${cp}`).join('\n')}
       initial: true,
     });
 
-    if (addToPlan.add) {
+    // IR-01-09: Ctrl+C safety — prompts returns undefined on SIGINT
+    if (addToPlan === undefined) {
+      // Silently skip plan addition on Ctrl+C
+    } else if (addToPlan.add) {
       // 动态导入 plan 模块
       const planModule = await import('./plan');
       planModule.addTask(taskId);
@@ -1046,20 +1157,34 @@ function generateSplitSuggestions(
   }
 
   // 确保每个子任务不超过 15 分钟
+  // IR-01-11: Remap dependsOn indices from `suggestions` to `finalSuggestions`
   const finalSuggestions: SplitSuggestion[] = [];
-  for (const s of suggestions) {
+  const indexMap = new Map<number, number>(); // old suggestions index → new finalSuggestions index
+
+  for (let si = 0; si < suggestions.length; si++) {
+    const s = suggestions[si];
+    if (!s) continue;
+
+    // Remap dependsOn from original suggestions index to finalSuggestions index
+    const remappedDependsOn = s.dependsOn >= 0 && indexMap.has(s.dependsOn)
+      ? indexMap.get(s.dependsOn)!
+      : s.dependsOn;
+
     if (s.estimatedMinutes <= 15) {
-      finalSuggestions.push(s);
+      indexMap.set(si, finalSuggestions.length);
+      finalSuggestions.push({ ...s, dependsOn: remappedDependsOn });
     } else {
       // 子任务仍然太大，按层级排序后拆分
       const sortedFiles = sortFilesByLayer(s.files);
       const half = Math.ceil(sortedFiles.length / 2);
       if (half > 0 && sortedFiles.length > 1) {
+        indexMap.set(si, finalSuggestions.length);
         finalSuggestions.push({
           ...s,
           title: `${s.title} (前半)`,
           files: sortedFiles.slice(0, half),
           estimatedMinutes: Math.ceil(s.estimatedMinutes / 2),
+          dependsOn: remappedDependsOn,
         });
         finalSuggestions.push({
           ...s,
@@ -1069,12 +1194,58 @@ function generateSplitSuggestions(
           dependsOn: finalSuggestions.length - 1,
         });
       } else {
-        finalSuggestions.push(s);
+        indexMap.set(si, finalSuggestions.length);
+        finalSuggestions.push({ ...s, dependsOn: remappedDependsOn });
       }
     }
   }
 
   return finalSuggestions;
+}
+
+/**
+ * Detect recommended role by scanning project structure and matching keywords.
+ * IR-01-12: Replaces hardcoded keyword-only mapping with dynamic project structure discovery.
+ */
+function detectRoleFromProject(cwd: string, description: string): string {
+  const lowerDesc = description.toLowerCase();
+
+  // Scan project src/ directory to detect architecture signals
+  const srcDir = path.join(cwd, 'src');
+  let projectDirs: string[] = [];
+  try {
+    if (fs.existsSync(srcDir)) {
+      projectDirs = fs.readdirSync(srcDir, { withFileTypes: true })
+        .filter(e => e.isDirectory())
+        .map(e => e.name);
+    }
+  } catch {
+    // Directory scan failed, fall through to keyword-only detection
+  }
+
+  // Combine project structure signals with description keywords
+  const signals: Record<string, boolean> = {
+    frontend: projectDirs.some(d => ['components', 'pages', 'views', 'styles', 'assets', 'public'].includes(d))
+      || lowerDesc.includes('ui') || lowerDesc.includes('界面') || lowerDesc.includes('前端') || lowerDesc.includes('frontend'),
+    backend: projectDirs.some(d => ['routes', 'controllers', 'middleware', 'services', 'api', 'models'].includes(d))
+      || lowerDesc.includes('api') || lowerDesc.includes('后端') || lowerDesc.includes('backend') || lowerDesc.includes('服务端'),
+    qa: projectDirs.some(d => ['__tests__', 'test', 'tests', 'spec'].includes(d))
+      || lowerDesc.includes('测试') || lowerDesc.includes('test') || lowerDesc.includes('qa'),
+    writer: projectDirs.some(d => ['docs', 'documents'].includes(d))
+      || lowerDesc.includes('文档') || lowerDesc.includes('document') || lowerDesc.includes('readme'),
+    security: lowerDesc.includes('安全') || lowerDesc.includes('security') || lowerDesc.includes('漏洞'),
+    performance: lowerDesc.includes('性能') || lowerDesc.includes('performance') || lowerDesc.includes('优化'),
+    architect: lowerDesc.includes('架构') || lowerDesc.includes('architecture') || lowerDesc.includes('设计'),
+  };
+
+  if (signals.frontend) return 'frontend';
+  if (signals.backend) return 'backend';
+  if (signals.qa) return 'qa';
+  if (signals.writer) return 'writer';
+  if (signals.security) return 'security';
+  if (signals.performance) return 'performance';
+  if (signals.architect) return 'architect';
+  return 'developer';
 }
 
 /**
@@ -1093,23 +1264,8 @@ function analyzeRequirement(description: string, cwd: string): RequirementAnalys
     priority = 'P3';
   }
 
-  // 检测推荐角色
-  let recommendedRole = 'developer';
-  if (lowerDesc.includes('ui') || lowerDesc.includes('界面') || lowerDesc.includes('前端') || lowerDesc.includes('frontend')) {
-    recommendedRole = 'frontend';
-  } else if (lowerDesc.includes('api') || lowerDesc.includes('后端') || lowerDesc.includes('backend') || lowerDesc.includes('服务端')) {
-    recommendedRole = 'backend';
-  } else if (lowerDesc.includes('测试') || lowerDesc.includes('test') || lowerDesc.includes('qa')) {
-    recommendedRole = 'qa';
-  } else if (lowerDesc.includes('文档') || lowerDesc.includes('document') || lowerDesc.includes('readme')) {
-    recommendedRole = 'writer';
-  } else if (lowerDesc.includes('安全') || lowerDesc.includes('security') || lowerDesc.includes('漏洞')) {
-    recommendedRole = 'security';
-  } else if (lowerDesc.includes('性能') || lowerDesc.includes('performance') || lowerDesc.includes('优化')) {
-    recommendedRole = 'performance';
-  } else if (lowerDesc.includes('架构') || lowerDesc.includes('architecture') || lowerDesc.includes('设计')) {
-    recommendedRole = 'architect';
-  }
+  // IR-01-12: 检测推荐角色 — 使用 glob 扫描替代硬编码关键词映射
+  const recommendedRole = detectRoleFromProject(cwd, description);
 
   // 检测复杂度
   let estimatedComplexity: 'low' | 'medium' | 'high' = 'medium';
@@ -1156,7 +1312,8 @@ function analyzeRequirement(description: string, cwd: string): RequirementAnalys
   const potentialDependencies: string[] = [];
 
   // 文件重叠依赖推断：从描述中提取文件路径，与已有任务 affectedFiles 比较
-  const currentFiles = extractFilePaths(description);
+  // IR-01-14: 禁用裸文件名匹配，要求目录前缀或代码块上下文
+  const currentFiles = extractFilePaths(description, { includeBareFilenames: false });
   if (currentFiles.length > 0) {
     const existingTasks = getAllTasks(cwd);
     for (const existing of existingTasks) {

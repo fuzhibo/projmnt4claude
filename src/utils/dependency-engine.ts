@@ -140,10 +140,10 @@ export function inferDependencies(
         const titleLower = candidate.title.toLowerCase();
         const matchedKeywords = keywords.filter(kw => titleLower.includes(kw));
 
-        // 至少匹配 2 个关键词或 1 个长度 >= 4 的关键词
+        // 至少匹配 2 个关键词或 1 个长度 >= 6 的关键词
         if (
           matchedKeywords.length >= 2 ||
-          (matchedKeywords.length === 1 && matchedKeywords[0]!.length >= 4)
+          (matchedKeywords.length === 1 && matchedKeywords[0]!.length >= 6)
         ) {
           seen.add(candidate.id);
           results.push({
