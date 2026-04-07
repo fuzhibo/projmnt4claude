@@ -10,20 +10,19 @@
 
 import * as fs from 'fs';
 import * as path from 'path';
-import { spawn } from 'child_process';
 import type {
   HarnessConfig,
   SprintContract,
   DevReport,
   ReviewVerdict,
-  HeadlessClaudeOptions,
   EvaluationInferenceType,
 } from '../types/harness.js';
-import { createDefaultSprintContract } from '../types/harness.js';
-import type { TaskMeta, CheckpointMetadata } from '../types/task.js';
+import type { TaskMeta } from '../types/task.js';
 import { getProjectDir } from './path.js';
 import { readTaskMeta, getAllTaskIds } from './task.js';
-import { classifyExitResult, archiveReportIfExists, parseStructuredResult, isRetryableError, sleep } from './harness-helpers.js';
+import { archiveReportIfExists, parseStructuredResult } from './harness-helpers.js';
+import { getAgent } from './headless-agent.js';
+import { detectContradiction } from './contradiction-detector.js';
 
 export class HarnessEvaluator {
   private config: HarnessConfig;
@@ -121,16 +120,18 @@ export class HarnessEvaluator {
           console.log('\n   🔍 启动独立评估会话...');
         }
 
-        const result = await this.runEvaluationSession({
-          prompt: currentPrompt,
+        const agent = getAgent(this.config.cwd);
+        const result = await agent.invoke(currentPrompt, {
           allowedTools: ['Read', 'Bash', 'Grep', 'Glob'],
           timeout: Math.floor(this.config.timeout / 2), // 审查时间较短
-          cwd: this.config.cwd,
           outputFormat: 'text',
+          maxRetries: this.config.apiRetryAttempts,
+          cwd: this.config.cwd,
+          dangerouslySkipPermissions: true,
         });
 
         // 4.5 保存原始评估输出（用于事后诊断）
-        this.saveRawEvaluationOutput(task.id, result.output, result.stderr, result.success);
+        this.saveRawEvaluationOutput(task.id, result.output, result.stderr || '', result.success);
 
         // 4.6 检测空输出（Claude 进程异常退出）
         if (!result.output || result.output.trim().length === 0) {
@@ -174,6 +175,14 @@ export class HarnessEvaluator {
       verdict.action = evaluation!.action as any;
       verdict.failureCategory = evaluation!.failureCategory as any;
       verdict.inferenceType = evaluation!.inferenceType;
+
+      // IR-08-05: 矛盾检测 — 当结果标签与内容矛盾时自动修正
+      const contradiction = detectContradiction(verdict.result, lastRawOutput || verdict.reason || '');
+      if (contradiction.hasContradiction && contradiction.correctedResult) {
+        console.log(`   ⚠️  矛盾检测: ${contradiction.reason}`);
+        verdict.result = contradiction.correctedResult;
+        verdict.reason += ` [矛盾修正: ${contradiction.reason}]`;
+      }
 
       if (verdict.result === 'PASS') {
         console.log(`\n   ✅ 审查通过 [推断类型: ${verdict.inferenceType || 'unknown'}]`);
@@ -440,131 +449,6 @@ export class HarnessEvaluator {
     parts.push('');
     parts.push('请基于上次评估内容，按上述格式重新输出结果。');
     return parts.join('\n');
-  }
-
-  /**
-   * 运行评估会话（带重试机制）
-   */
-  private async runEvaluationSession(options: HeadlessClaudeOptions): Promise<{ output: string; stderr: string; success: boolean }> {
-    const maxAttempts = this.config.apiRetryAttempts + 1;
-    const baseDelay = this.config.apiRetryDelay;
-    let lastOutput = '';
-    let lastStderr = '';
-
-    for (let attempt = 1; attempt <= maxAttempts; attempt++) {
-      if (attempt > 1) {
-        console.log(`   🔄 评估会话重试 (${attempt - 1}/${this.config.apiRetryAttempts})...`);
-      }
-
-      const result = await this.executeEvaluationSession(options);
-      lastOutput = result.output;
-      lastStderr = result.stderr;
-
-      if (result.success) {
-        return { output: result.output, stderr: result.stderr, success: true };
-      }
-
-      // 检查是否为可重试错误
-      const errorInfo = isRetryableError(result.output, result.stderr);
-
-      if (!errorInfo.retryable || attempt >= maxAttempts) {
-        return { output: result.output, stderr: result.stderr, success: false };
-      }
-
-      // 计算退避延迟
-      const delay = Math.min(errorInfo.waitSeconds || baseDelay, baseDelay * Math.pow(2, attempt - 1));
-      console.log(`   ⏳ ${errorInfo.reason}，${delay} 秒后重试...`);
-
-      await sleep(delay);
-    }
-
-    return { output: lastOutput, stderr: lastStderr, success: false };
-  }
-
-  /**
-   * 执行单次评估会话
-   */
-  private executeEvaluationSession(options: HeadlessClaudeOptions): Promise<{ output: string; stderr: string; success: boolean }> {
-    return new Promise((resolve) => {
-      // 注意：--allowedTools 必须在 --print 之前，否则 Claude CLI 会报错
-      // "Input must be provided either through stdin or as a prompt argument when using --print"
-      // 注意：prompt 通过 stdin 传递，而不是命令行参数
-      // 这样可以避免多行文本作为命令行参数时的解析问题
-      const args = [
-        '--allowedTools', options.allowedTools.join(','),
-        '--print',
-        '--dangerously-skip-permissions',
-      ];
-
-      try {
-        const child = spawn('claude', args, {
-          cwd: options.cwd,
-          stdio: ['pipe', 'pipe', 'pipe'],  // stdin 改为 pipe 以支持写入
-        });
-
-        // 通过 stdin 传递 prompt
-        if (child.stdin) {
-          child.stdin.write(options.prompt);
-          child.stdin.end();
-        }
-
-        let stdout = '';
-        let stderr = '';
-        let timedOut = false;
-
-        // 自定义超时逻辑
-        const timeoutId = setTimeout(() => {
-          timedOut = true;
-          child.kill('SIGTERM');
-        }, options.timeout * 1000);
-
-        child.stdout?.on('data', (data) => {
-          stdout += data.toString();
-        });
-
-        child.stderr?.on('data', (data) => {
-          stderr += data.toString();
-        });
-
-        child.on('close', (code) => {
-          clearTimeout(timeoutId);
-
-          // 超时场景直接失败
-          if (timedOut) {
-            resolve({
-              output: stdout,
-              stderr,
-              success: false,
-            });
-            return;
-          }
-
-          // 使用共享函数智能判断区分 hook 失败和任务失败
-          const classified = classifyExitResult(code, stderr, stdout);
-          resolve({
-            output: stdout,
-            stderr,
-            success: classified.success,
-          });
-        });
-
-        child.on('error', (error) => {
-          clearTimeout(timeoutId);
-          resolve({
-            output: '',
-            stderr: error.message,
-            success: false,
-          });
-        });
-
-      } catch (error) {
-        resolve({
-          output: '',
-          stderr: error instanceof Error ? error.message : String(error),
-          success: false,
-        });
-      }
-    });
   }
 
   /**

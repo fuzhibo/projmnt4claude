@@ -17,22 +17,12 @@ import { SEPARATOR_WIDTH } from '../utils/format';
 import { createLogger, type InstrumentationRecord } from '../utils/logger';
 import { extractAffectedFiles } from '../utils/quality-gate';
 import { classifyFileToLayer, AIMetadataAssistant, type ArchitectureLayer } from '../utils/ai-metadata';
+import { inferDependenciesBatch, type InferredDependency } from '../utils/dependency-engine';
+
+// Re-export InferredDependency for backward compatibility
+export type { InferredDependency };
 
 // ============== 任务链分析类型定义 ==============
-
-/**
- * 任务链：具有依赖关系的任务序列
- */
-export interface InferredDependency {
-  /** 被依赖的任务ID */
-  depTaskId: string;
-  /** 重叠的文件路径列表 */
-  overlappingFiles: string[];
-  /** 推断来源: file-overlap (Layer1/2 文件重叠) | ai-semantic (Layer3 AI 语义推断) */
-  source: 'file-overlap' | 'ai-semantic';
-  /** 推断原因 (仅 ai-semantic 时有值) */
-  reason?: string;
-}
 
 export interface TaskChain {
   chainId: string;           // 链 ID（链首任务 ID）
@@ -89,7 +79,7 @@ interface AIRecommendationOutput {
       inferredDependencies?: Array<{
         depTaskId: string;
         overlappingFiles: string[];
-        source: 'file-overlap' | 'ai-semantic';
+        source: 'file-overlap' | 'ai-semantic' | 'keyword';
         reason?: string;
       }>;
     }>;
@@ -161,69 +151,9 @@ function taskMatchesKeywords(task: TaskMeta, keywords: string[]): boolean {
 // ============== 文件重叠依赖推断 ==============
 
 /**
- * 从文件路径重叠推断任务间的隐式依赖关系
- *
- * 策略：O(n²) 比较所有任务对的文件路径集合，
- * 有交集则建立推断依赖，方向为后创建的任务依赖先创建的任务（时间序）
- *
- * @returns Map<taskId, InferredDependency[]> 每个任务的推断依赖列表
+ * @deprecated Use inferDependenciesBatch from '../utils/dependency-engine' instead (IR-08-03)
  */
-export function inferDependenciesFromFiles(tasks: TaskMeta[]): Map<string, InferredDependency[]> {
-  const inferredMap = new Map<string, InferredDependency[]>();
-
-  if (tasks.length === 0) return inferredMap;
-
-  // 预计算每个任务的文件路径集合
-  const taskFilesMap = new Map<string, Set<string>>();
-  for (const task of tasks) {
-    const files = extractAffectedFiles(task);
-    // 规范化路径：去掉尾部斜杠、转小写
-    const normalized = new Set(files.map(f => f.replace(/\/+$/, '').toLowerCase()));
-    taskFilesMap.set(task.id, normalized);
-  }
-
-  // 按创建时间排序（升序），用于确定依赖方向
-  const sortedByTime = [...tasks].sort((a, b) =>
-    a.createdAt.localeCompare(b.createdAt)
-  );
-
-  // O(n²) 比较所有任务对
-  for (let i = 0; i < sortedByTime.length; i++) {
-    const laterTask = sortedByTime[i]!;
-    const laterFiles = taskFilesMap.get(laterTask.id)!;
-
-    for (let j = 0; j < i; j++) {
-      const earlierTask = sortedByTime[j]!;
-      const earlierFiles = taskFilesMap.get(earlierTask.id)!;
-
-      // 计算文件交集
-      const overlap: string[] = [];
-      for (const f of laterFiles) {
-        if (earlierFiles.has(f)) {
-          overlap.push(f);
-        }
-      }
-
-      if (overlap.length > 0) {
-        // 后创建的任务依赖先创建的任务
-        const dep: InferredDependency = {
-          depTaskId: earlierTask.id,
-          overlappingFiles: overlap,
-          source: 'file-overlap',
-        };
-
-        const existing = inferredMap.get(laterTask.id);
-        if (existing) {
-          existing.push(dep);
-        } else {
-          inferredMap.set(laterTask.id, [dep]);
-        }
-      }
-    }
-  }
-
-  return inferredMap;
-}
+export const inferDependenciesFromFiles = inferDependenciesBatch;
 
 // ============== 架构层级推断 ==============
 
@@ -278,8 +208,8 @@ export function buildTaskChains(tasks: TaskMeta[], cwd: string): TaskChain[] {
     taskMap.set(task.id, task);
   }
 
-  // 推断文件重叠依赖
-  const inferredDeps = inferDependenciesFromFiles(tasks);
+  // 推断文件重叠依赖 (IR-08-03: 统一依赖推断引擎)
+  const inferredDeps = inferDependenciesBatch(tasks);
 
   /**
    * 获取任务的完整依赖列表（显式 + 推断）
@@ -741,7 +671,7 @@ export async function recommendPlan(
   const allTasks = getAllTasks(cwd);
 
   // 0. 过滤任务（默认只推荐 open 状态，--all 排除终态）
-  const TERMINAL_STATUSES = new Set(['resolved', 'closed', 'abandoned']);
+  const TERMINAL_STATUSES = new Set(['resolved', 'closed', 'abandoned', 'failed']);
   const activeTasks = options.all
     ? allTasks.filter(t => !TERMINAL_STATUSES.has(t.status))
     : allTasks.filter(t => t.status === 'open');

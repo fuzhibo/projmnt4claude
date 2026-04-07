@@ -16,14 +16,15 @@ import type {
 } from '../types/harness.js';
 import type { TaskMeta, CheckpointMetadata } from '../types/task.js';
 import {
-  runHeadlessClaudeWithRetry,
   saveReport,
   filterCheckpoints,
   parseVerdictResult,
   getReportPath,
   REVIEW_TIMEOUT_RATIO,
 } from './harness-helpers.js';
+import { getAgent } from './headless-agent.js';
 import { getCodeReviewRoleTemplate } from './role-prompts.js';
+import { detectContradiction } from './contradiction-detector.js';
 
 export class HarnessCodeReviewer {
   private config: HarnessConfig;
@@ -79,6 +80,14 @@ export class HarnessCodeReviewer {
         verdict.failedCheckpoints = reviewResult.failedCheckpoints;
         verdict.details = reviewResult.details;
 
+        // IR-08-05: 矛盾检测 — 当结果标签与内容矛盾时自动修正
+        const contradiction = detectContradiction(verdict.result, verdict.reason || '');
+        if (contradiction.hasContradiction && contradiction.correctedResult) {
+          console.log(`   ⚠️  矛盾检测: ${contradiction.reason}`);
+          verdict.result = contradiction.correctedResult;
+          verdict.reason += ` [矛盾修正: ${contradiction.reason}]`;
+        }
+
         if (verdict.result === 'PASS') {
           console.log('\n   ✅ 代码审核通过');
         } else {
@@ -126,15 +135,14 @@ export class HarnessCodeReviewer {
     console.log('\n   📝 代码审核提示词已生成');
 
     console.log('\n   🤖 启动代码审核会话...');
-    const claudeResult = await runHeadlessClaudeWithRetry(
-      {
-        prompt,
-        allowedTools: ['Read', 'Bash', 'Grep', 'Glob'],
-        timeout: Math.floor(this.config.timeout / REVIEW_TIMEOUT_RATIO),
-        cwd: this.config.cwd,
-      },
-      { maxAttempts: this.config.apiRetryAttempts, baseDelay: this.config.apiRetryDelay },
-    );
+    const agent = getAgent(this.config.cwd);
+    const claudeResult = await agent.invoke(prompt, {
+      allowedTools: ['Read', 'Bash', 'Grep', 'Glob'],
+      timeout: Math.floor(this.config.timeout / REVIEW_TIMEOUT_RATIO),
+      cwd: this.config.cwd,
+      maxRetries: this.config.apiRetryAttempts,
+      outputFormat: 'text',
+    });
 
     if (!claudeResult.success) {
       return {

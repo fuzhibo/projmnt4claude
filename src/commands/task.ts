@@ -720,7 +720,7 @@ function displayTasksGrouped(
   }
 
   // 定义分组排序顺序
-  const statusOrder = ['open', 'in_progress', 'wait_complete', 'resolved', 'closed', 'abandoned'];
+  const statusOrder = ['open', 'in_progress', 'wait_complete', 'resolved', 'closed', 'abandoned', 'failed'];
   const priorityOrder = ['P0', 'P1', 'P2', 'P3', 'Q1', 'Q2', 'Q3', 'Q4'];
 
   // 获取排序后的分组键
@@ -959,6 +959,7 @@ function getStatusIcon(status: TaskStatus): string {
     resolved: '✅',
     closed: '⚫',
     abandoned: '❌',
+    failed: '⛔',
   };
   return icons[status] || '❓';
 }
@@ -1661,6 +1662,11 @@ export async function updateTask(
       task.status = 'open';
       task.reopenCount = (task.reopenCount || 0) + 1;
 
+      // 清除失败原因（从 failed 状态重开时）
+      if (oldStatus === 'failed') {
+        delete task.failureReason;
+      }
+
       // 添加 transitionNote
       if (!task.transitionNotes) {
         task.transitionNotes = [];
@@ -2203,6 +2209,7 @@ function formatStatus(status: TaskStatus | string): string {
     resolved: '✅ 已解决',
     closed: '⚫ 已关闭',
     abandoned: '❌ 已放弃',
+    failed: '⛔ 已失败',
     // 兼容旧状态（reopened/reopen 已废弃，自动映射为 open + reopenCount 递增）
     pending: '⬜ 待处理',
     completed: '✅ 已完成',
@@ -2229,6 +2236,7 @@ export function showStatusGuide(): void {
   console.log('  ✅ resolved    - 已解决，任务完成并通过验证');
   console.log('  ⚫ closed      - 已关闭，任务最终确认完成');
   console.log('  ❌ abandoned   - 已放弃，任务不再需要');
+  console.log('  ⛔ failed      - 已失败，任务执行失败（超时/质量门禁/重试耗尽）');
   console.log('');
   console.log('  💡 说明: resolved/closed 状态可通过 --status reopened 重开为 open');
   console.log('           系统会自动递增 reopenCount 并记录 transitionNote');
@@ -2262,6 +2270,11 @@ export function showStatusGuide(): void {
   console.log('  任意状态 → abandoned');
   console.log('       └─ 命令: task delete <id>');
   console.log('       └─ 说明: 任务不再需要');
+  console.log('');
+
+  console.log('  failed → open (重开失败任务)');
+  console.log('       └─ 命令: task update <id> --status reopened');
+  console.log('       └─ 说明: 重新处理失败任务（自动映射为 open + reopenCount 递增）');
   console.log('');
 
   console.log('━'.repeat(SEPARATOR_WIDTH));
@@ -3481,7 +3494,7 @@ export function countTasks(
     console.log('');
 
     // 定义排序顺序
-    const statusOrder = ['open', 'in_progress', 'wait_complete', 'resolved', 'closed', 'abandoned'];
+    const statusOrder = ['open', 'in_progress', 'wait_complete', 'resolved', 'closed', 'abandoned', 'failed'];
     const priorityOrder = ['P0', 'P1', 'P2', 'P3', 'Q1', 'Q2', 'Q3', 'Q4'];
 
     let sortedKeys: string[];
@@ -3565,7 +3578,7 @@ export function countTasks(
 
   // 按状态统计
   console.log('📋 按状态:');
-  const statusOrder = ['open', 'in_progress', 'wait_complete', 'resolved', 'closed', 'abandoned'];
+  const statusOrder = ['open', 'in_progress', 'wait_complete', 'resolved', 'closed', 'abandoned', 'failed'];
   for (const status of statusOrder) {
     const count = statusCounts.get(status as TaskStatus) || 0;
     if (count > 0 || status === 'open' || status === 'in_progress' || status === 'resolved') {
@@ -3733,7 +3746,7 @@ export async function batchUpdateTasks(
   // 过滤出需要更新的任务（非已完成/已关闭的任务）
   const tasksToUpdate = options.all
     ? allTasks
-    : allTasks.filter(t => t.status !== 'resolved' && t.status !== 'closed' && t.status !== 'abandoned');
+    : allTasks.filter(t => t.status !== 'resolved' && t.status !== 'closed' && t.status !== 'abandoned' && t.status !== 'failed');
 
   if (tasksToUpdate.length === 0) {
     console.log('没有需要更新的任务');

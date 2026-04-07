@@ -364,6 +364,18 @@ export interface HarnessRuntimeState {
    * 批次内是否可并行标记（与 batchBoundaries 一一对应）
    */
   batchParallelizable?: boolean[];
+  /**
+   * 已通过的任务ID列表（任务级状态追踪）
+   */
+  passedTasks?: string[];
+  /**
+   * 已失败的任务ID列表（任务级状态追踪）
+   */
+  failedTasks?: string[];
+  /**
+   * 正在重试的任务ID列表（任务级状态追踪）
+   */
+  retryingTasks?: string[];
 }
 
 /**
@@ -466,6 +478,9 @@ export function createDefaultRuntimeState(config: HarnessConfig): HarnessRuntime
     batchBoundaries: [],
     batchLabels: [],
     batchParallelizable: [],
+    passedTasks: [],
+    failedTasks: [],
+    retryingTasks: [],
   };
 }
 

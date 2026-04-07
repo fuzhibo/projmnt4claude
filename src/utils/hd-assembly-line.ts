@@ -30,7 +30,7 @@ import type {
 import {
   createDefaultExecutionRecord,
 } from '../types/harness.js';
-import type { TaskMeta, TaskStatus, TaskRole, CheckpointMetadata, CommitHistoryEntry, TransitionNote, PhaseHistoryEntry } from '../types/task.js';
+import type { TaskMeta, TaskStatus, TaskRole, CheckpointMetadata, CommitHistoryEntry, TransitionNote, PhaseHistoryEntry, FailureReason } from '../types/task.js';
 import { Pipeline } from '../types/task.js';
 import { readTaskMeta, writeTaskMeta, taskExists, updateTaskStatus, assignRole, incrementReopenCount, recordExecutionStats } from './task.js';
 import { getProjectDir } from './path.js';
@@ -116,6 +116,20 @@ export class AssemblyLine {
         // 记录结果
         state.records.push(record);
 
+        // 任务级状态追踪
+        if (!state.passedTasks) state.passedTasks = [];
+        if (!state.failedTasks) state.failedTasks = [];
+        if (!state.retryingTasks) state.retryingTasks = [];
+        if (record.finalStatus === 'resolved' || record.finalStatus === 'closed') {
+          state.passedTasks.push(taskId);
+        } else if (record.finalStatus === 'failed') {
+          state.failedTasks.push(taskId);
+          // 上游失败级联：标记依赖该任务的下游任务为 failed
+          this.cascadeFailureToDownstream(taskId, state);
+        } else if (record.finalStatus === 'in_progress' && state.taskQueue.includes(taskId)) {
+          state.retryingTasks.push(taskId);
+        }
+
         // 更新状态
         state.currentIndex++;
         state.updatedAt = new Date().toISOString();
@@ -146,13 +160,20 @@ export class AssemblyLine {
         const task = readTaskMeta(taskId, this.config.cwd);
         if (task) {
           const record = createDefaultExecutionRecord(task);
-          record.finalStatus = 'abandoned';
+          record.finalStatus = 'failed';
           record.timeline.push({
             timestamp: new Date().toISOString(),
             event: 'failed',
             description: `执行出错: ${error instanceof Error ? error.message : String(error)}`,
           });
           state.records.push(record);
+
+          // 任务级状态追踪
+          if (!state.failedTasks) state.failedTasks = [];
+          state.failedTasks.push(taskId);
+
+          // 上游失败级联
+          this.cascadeFailureToDownstream(taskId, state);
         }
 
         state.currentIndex++;
@@ -242,8 +263,8 @@ export class AssemblyLine {
       return record;
     }
 
-    // 2. 检查任务是否已完成
-    const completedStatuses: TaskStatus[] = ['resolved', 'closed'];
+    // 2. 检查任务是否已完成或已失败（跳过不可重试的终态）
+    const completedStatuses: TaskStatus[] = ['resolved', 'closed', 'failed'];
     if (completedStatuses.includes(task.status)) {
       console.log(`⏭️  任务 ${taskId} 已完成 (状态: ${task.status})，跳过`);
       addTimeline('skipped', `任务已完成，跳过执行: ${task.status}`, { status: task.status });
@@ -274,8 +295,16 @@ export class AssemblyLine {
       this.statusReporter.startPhase('development', taskId, '开始开发阶段');
       console.log('\n🔨 开发阶段...');
 
+      // 计算自适应超时
+      const adaptiveTimeout = this.computeAdaptiveTimeout(task);
+
+      // 超时提示：当预估耗时 > 15 分钟时建议拆分
+      if ((task.estimatedMinutes ?? 0) > 15) {
+        console.log(`   💡 提示: 此任务预估耗时 ${task.estimatedMinutes} 分钟，建议使用 --auto-split 拆分为子任务`);
+      }
+
       try {
-        devReport = await this.executor.execute(task, record.contract);
+        devReport = await this.executor.execute(task, record.contract, adaptiveTimeout);
         record.devReport = devReport;
         addTimeline('dev_completed', `开发完成: ${devReport.status}`, { status: devReport.status });
         this.statusReporter.completePhase('development', taskId, `开发完成: ${devReport.status}`);
@@ -298,7 +327,8 @@ export class AssemblyLine {
 
       // 检查开发是否成功
       if (devReport.status !== 'success') {
-        console.log(`❌ 开发阶段失败: ${devReport.error || '未知错误'}`);
+        const isTimeout = devReport.status === 'timeout';
+        console.log(`❌ 开发阶段${isTimeout ? '超时' : '失败'}: ${devReport.error || '未知错误'}`);
         this.statusReporter.failPhase('development', new Error(devReport.error || '开发阶段失败'), taskId);
 
         // 尝试重试
@@ -308,10 +338,17 @@ export class AssemblyLine {
           // 重新加入队列
           state.taskQueue.push(taskId);
           state.retryCounter.set(taskId, (state.retryCounter.get(taskId) || 0) + 1);
+        } else if (isTimeout) {
+          // 超时标记为 failed(timeout)
+          await this.markTaskFailed(taskId, 'timeout', `开发超时: ${devReport.error || '超过时间限制'}`);
+          record.finalStatus = 'failed';
+          addTimeline('failed', '开发超时，任务标记为 failed(timeout)');
+          console.log(`   ⏰ 任务 ${taskId} 因超时标记为 failed(timeout)`);
         } else {
-          await this.updateTaskStatus(taskId, 'abandoned');
-          record.finalStatus = 'abandoned';
-          addTimeline('failed', '超过最大重试次数，任务放弃');
+          // 开发失败，超过最大重试次数
+          await this.markTaskFailed(taskId, 'max_retries_exceeded', '超过最大重试次数，开发阶段失败');
+          record.finalStatus = 'failed';
+          addTimeline('failed', '超过最大重试次数，任务标记为 failed(max_retries_exceeded)');
         }
 
         return record;
@@ -712,6 +749,91 @@ export class AssemblyLine {
   }
 
   /**
+   * 标记任务为 failed 并记录 failureReason
+   */
+  private async markTaskFailed(taskId: string, reason: FailureReason, message: string): Promise<void> {
+    try {
+      const task = readTaskMeta(taskId, this.config.cwd);
+      if (task) {
+        task.failureReason = reason;
+        writeTaskMeta(task, this.config.cwd);
+      }
+      await this.ensureTransition(taskId, 'failed', message);
+    } catch (error) {
+      console.error(`标记任务失败失败: ${error instanceof Error ? error.message : String(error)}`);
+    }
+  }
+
+  /**
+   * 上游失败级联：当任务失败时，将依赖该任务的下游任务标记为 failed
+   *
+   * 遍历队列中剩余任务，检查其 dependencies 是否包含失败任务 ID，
+   * 若包含则标记 failed(failureReason='upstream_failed') 并从队列中移除。
+   */
+  private cascadeFailureToDownstream(failedTaskId: string, state: HarnessRuntimeState): void {
+    if (!state.failedTasks) state.failedTasks = [];
+    const failedIds = new Set(state.failedTasks);
+
+    // 遍历队列中剩余的任务（从 currentIndex+1 开始）
+    const toRemove: number[] = [];
+    for (let i = state.currentIndex + 1; i < state.taskQueue.length; i++) {
+      const downstreamId = state.taskQueue[i];
+      if (!downstreamId || failedIds.has(downstreamId)) continue;
+
+      const downstreamTask = readTaskMeta(downstreamId, this.config.cwd);
+      if (!downstreamTask) continue;
+
+      // 检查是否依赖已失败的任务
+      if (downstreamTask.dependencies.includes(failedTaskId)) {
+        console.log(`   ⛓️  上游失败级联: 任务 ${downstreamId} 依赖失败任务 ${failedTaskId}，标记为 failed(upstream_failed)`);
+
+        // 标记下游任务为 failed
+        try {
+          downstreamTask.status = 'failed';
+          downstreamTask.failureReason = 'upstream_failed';
+          downstreamTask.updatedAt = new Date().toISOString();
+          if (!downstreamTask.transitionNotes) {
+            downstreamTask.transitionNotes = [];
+          }
+          downstreamTask.transitionNotes.push({
+            timestamp: new Date().toISOString(),
+            fromStatus: downstreamTask.status,
+            toStatus: 'failed',
+            note: `上游任务 ${failedTaskId} 失败，级联标记为 failed(upstream_failed)`,
+            author: 'assembly-line-cascade',
+          });
+          writeTaskMeta(downstreamTask, this.config.cwd);
+        } catch (err) {
+          console.error(`   ⚠️ 级联标记 ${downstreamId} 失败: ${err instanceof Error ? err.message : String(err)}`);
+        }
+
+        // 创建执行记录
+        const cascadeRecord = createDefaultExecutionRecord(downstreamTask);
+        cascadeRecord.finalStatus = 'failed';
+        cascadeRecord.timeline.push({
+          timestamp: new Date().toISOString(),
+          event: 'failed',
+          description: `上游任务 ${failedTaskId} 失败，级联跳过`,
+          data: { upstreamTaskId: failedTaskId, failureReason: 'upstream_failed' },
+        });
+        state.records.push(cascadeRecord);
+
+        if (!state.failedTasks) state.failedTasks = [];
+        state.failedTasks.push(downstreamId);
+        failedIds.add(downstreamId);
+
+        // 记录需要从队列中移除的索引
+        toRemove.push(i);
+      }
+    }
+
+    // 从队列中移除被级联失败的任务（倒序移除以避免索引偏移）
+    for (let i = toRemove.length - 1; i >= 0; i--) {
+      state.taskQueue.splice(toRemove[i]!, 1);
+    }
+  }
+
+  /**
    * 分配任务角色（程序化更新）
    */
   private async assignTaskRole(taskId: string, role: TaskRole): Promise<void> {
@@ -768,11 +890,11 @@ export class AssemblyLine {
       case 'redevelop': {
         const retryCount = state.retryCounter.get(taskId) || 0;
         if (retryCount >= this.config.maxRetries) {
-          await this.ensureTransition(taskId, 'abandoned', `超过最大重试次数 (${this.config.maxRetries})`);
-          record.finalStatus = 'abandoned';
+          await this.markTaskFailed(taskId, 'max_retries_exceeded', `超过最大重试次数 (${this.config.maxRetries})`);
+          record.finalStatus = 'failed';
           record.retryCount = retryCount;
-          addTimeline('failed', '超过最大重试次数，任务放弃');
-          console.log(`❌ 超过最大重试次数 (${this.config.maxRetries})，任务放弃`);
+          addTimeline('failed', '超过最大重试次数，任务标记为 failed');
+          console.log(`❌ 超过最大重试次数 (${this.config.maxRetries})，任务标记为 failed`);
           return record;
         }
 
@@ -797,11 +919,11 @@ export class AssemblyLine {
       case 'retest': {
         const retryCount = state.retryCounter.get(taskId) || 0;
         if (retryCount >= this.config.maxRetries) {
-          await this.ensureTransition(taskId, 'abandoned', `超过最大重试次数 (${this.config.maxRetries})`);
-          record.finalStatus = 'abandoned';
+          await this.markTaskFailed(taskId, 'max_retries_exceeded', `超过最大重试次数 (${this.config.maxRetries})`);
+          record.finalStatus = 'failed';
           record.retryCount = retryCount;
-          addTimeline('failed', '超过最大重试次数，任务放弃');
-          console.log(`❌ 超过最大重试次数 (${this.config.maxRetries})，任务放弃`);
+          addTimeline('failed', '超过最大重试次数，任务标记为 failed');
+          console.log(`❌ 超过最大重试次数 (${this.config.maxRetries})，任务标记为 failed`);
           return record;
         }
 
@@ -1097,6 +1219,27 @@ export class AssemblyLine {
   }
 
   /**
+   * 计算自适应超时（秒）
+   *
+   * 基于 task.estimatedMinutes 计算超时：
+   * - 有预估: estimatedMinutes * 60 * 2（双倍余量），上限 60 分钟
+   * - 无预估: 使用 config.timeout 兜底（默认 5 分钟）
+   */
+  private computeAdaptiveTimeout(task: TaskMeta): number | undefined {
+    const estimated = task.estimatedMinutes;
+    if (!estimated || estimated <= 0) {
+      return undefined; // 无预估，使用 config.timeout 兜底
+    }
+
+    const TIMEOUT_MULTIPLIER = 2; // 双倍余量
+    const MAX_TIMEOUT_SECONDS = 60 * 60; // 上限 60 分钟
+
+    const computed = Math.min(estimated * 60 * TIMEOUT_MULTIPLIER, MAX_TIMEOUT_SECONDS);
+    console.log(`   ⏱️  自适应超时: 预估 ${estimated} 分钟 → 超时 ${computed / 60} 分钟 (${computed} 秒)`);
+    return computed;
+  }
+
+  /**
    * 追加阶段历史条目
    */
   private appendPhaseHistory(
@@ -1245,7 +1388,7 @@ export class AssemblyLine {
         skipped++;
       } else if (record.finalStatus === 'resolved' || record.finalStatus === 'closed') {
         passed++;
-      } else if (record.finalStatus === 'abandoned') {
+      } else if (record.finalStatus === 'abandoned' || record.finalStatus === 'failed') {
         failed++;
       } else {
         skipped++;
@@ -1294,7 +1437,7 @@ export class AssemblyLine {
       const record = lastRecordByTask.get(taskId);
       if (record && (record.finalStatus === 'resolved' || record.finalStatus === 'closed')) {
         passed++;
-      } else if (record && record.finalStatus === 'abandoned') {
+      } else if (record && (record.finalStatus === 'abandoned' || record.finalStatus === 'failed')) {
         failed++;
       }
     }

@@ -11,13 +11,10 @@
 
 import * as fs from 'fs';
 import * as path from 'path';
-import { spawn } from 'child_process';
 import type {
   HarnessConfig,
   SprintContract,
   DevReport,
-  HeadlessClaudeOptions,
-  HeadlessClaudeResult,
 } from '../types/harness.js';
 import {
   createDefaultDevReport,
@@ -26,8 +23,8 @@ import {
 import type { TaskMeta } from '../types/task.js';
 import { getProjectDir } from './path.js';
 import { getDevRoleTemplate } from './role-prompts.js';
-import { readTaskMeta } from './task.js';
-import { classifyExitResult, isRetryableError, sleep, archiveReportIfExists } from './harness-helpers.js';
+import { archiveReportIfExists } from './harness-helpers.js';
+import { getAgent } from './headless-agent.js';
 
 export class HarnessExecutor {
   private config: HarnessConfig;
@@ -38,40 +35,49 @@ export class HarnessExecutor {
 
   /**
    * 执行开发阶段
+   * @param task - 任务元数据
+   * @param contract - Sprint Contract
+   * @param timeoutOverride - 可选的每任务超时覆盖（秒），优先于 config.timeout
    */
-  async execute(task: TaskMeta, contract: SprintContract): Promise<DevReport> {
+  async execute(task: TaskMeta, contract: SprintContract, timeoutOverride?: number): Promise<DevReport> {
     const startTime = new Date();
     const report = createDefaultDevReport(task.id);
     report.startTime = startTime.toISOString();
     report.status = 'running';
 
+    const effectiveTimeout = timeoutOverride ?? this.config.timeout;
+    const timeoutMinutes = Math.round(effectiveTimeout / 60);
+
     console.log(`   任务: ${task.title}`);
     console.log(`   类型: ${task.type}`);
     console.log(`   优先级: ${task.priority}`);
+    console.log(`   超时: ${timeoutMinutes} 分钟 (${effectiveTimeout} 秒)`);
 
     try {
       // 1. 构建或加载 Sprint Contract
       const sprintContract = await this.buildOrLoadContract(task);
       Object.assign(contract, sprintContract);
 
-      // 2. 构建开发提示词
-      const prompt = this.buildDevPrompt(task, sprintContract);
+      // 2. 构建开发提示词（注入超时信息）
+      const prompt = this.buildDevPrompt(task, sprintContract, timeoutMinutes);
       console.log('\n   📝 开发提示词已生成');
 
-      // 3. 执行 headless Claude
+      // 3. 执行 headless Claude（通过 headless-agent 抽象层）
       console.log('\n   🤖 启动 Headless Claude...');
-      const result = await this.runHeadlessClaude({
-        prompt,
+      const agent = getAgent(this.config.cwd);
+      const agentResult = await agent.invoke(prompt, {
+        timeout: effectiveTimeout,
         allowedTools: ['Read', 'Edit', 'Write', 'Bash', 'Grep', 'Glob'],
-        timeout: this.config.timeout,
-        cwd: this.config.cwd,
         outputFormat: 'text',
+        maxRetries: this.config.apiRetryAttempts,
+        cwd: this.config.cwd,
+        dangerouslySkipPermissions: true,
       });
 
-      report.claudeOutput = result.output;
-      report.duration = result.duration;
+      report.claudeOutput = agentResult.output;
+      report.duration = agentResult.durationMs;
 
-      if (result.success) {
+      if (agentResult.success) {
         report.status = 'success';
         console.log('\n   ✅ 开发阶段完成');
 
@@ -84,8 +90,8 @@ export class HarnessExecutor {
         console.log(`   ✓ 完成检查点: ${report.checkpointsCompleted.length}/${sprintContract.checkpoints.length}`);
 
       } else {
-        report.status = result.exitCode === 124 ? 'timeout' : 'failed';
-        report.error = result.error || `退出码: ${result.exitCode}`;
+        report.status = agentResult.exitCode === 124 ? 'timeout' : 'failed';
+        report.error = agentResult.error || `退出码: ${agentResult.exitCode}`;
         console.log(`\n   ❌ 开发阶段失败: ${report.error}`);
       }
 
@@ -172,8 +178,11 @@ export class HarnessExecutor {
 
   /**
    * 构建开发提示词
+   * @param task - 任务元数据
+   * @param contract - Sprint Contract
+   * @param timeoutMinutes - 超时时间（分钟），注入到提示词中提醒开发者
    */
-  private buildDevPrompt(task: TaskMeta, contract: SprintContract): string {
+  private buildDevPrompt(task: TaskMeta, contract: SprintContract, timeoutMinutes?: number): string {
     const parts: string[] = [];
 
     parts.push(`# 任务: ${task.title}`);
@@ -181,6 +190,9 @@ export class HarnessExecutor {
     parts.push(`## 任务ID: ${task.id}`);
     parts.push(`## 类型: ${task.type}`);
     parts.push(`## 优先级: ${task.priority}`);
+    if (timeoutMinutes) {
+      parts.push(`## 超时限制: ${timeoutMinutes} 分钟`);
+    }
     parts.push('');
 
     if (task.description) {
@@ -219,6 +231,10 @@ export class HarnessExecutor {
     const roleTemplate = getDevRoleTemplate(task.recommendedRole);
 
     parts.push('## 指示');
+    if (timeoutMinutes) {
+      parts.push(`你需要在 ${timeoutMinutes} 分钟内完成此任务。请合理分配时间，优先完成核心功能。`);
+      parts.push('');
+    }
     parts.push('1. 仔细阅读任务描述和验收标准');
     parts.push('2. 实现所需的功能或修复');
     parts.push('3. 确保代码符合项目规范');
@@ -245,154 +261,6 @@ export class HarnessExecutor {
     parts.push('违反以上任何禁令将导致评估不通过。');
 
     return parts.join('\n');
-  }
-
-  /**
-   * 运行 Headless Claude（带重试机制）
-   */
-  private async runHeadlessClaude(options: HeadlessClaudeOptions): Promise<HeadlessClaudeResult> {
-    const maxAttempts = this.config.apiRetryAttempts + 1; // +1 因为第一次不算重试
-    const baseDelay = this.config.apiRetryDelay;
-
-    let lastResult: HeadlessClaudeResult | null = null;
-
-    for (let attempt = 1; attempt <= maxAttempts; attempt++) {
-      if (attempt > 1) {
-        console.log(`   🔄 API 调用重试 (${attempt - 1}/${this.config.apiRetryAttempts})...`);
-      }
-
-      lastResult = await this.executeHeadlessClaude(options);
-
-      if (lastResult.success) {
-        return lastResult;
-      }
-
-      // 检查是否为可重试错误
-      const errorInfo = isRetryableError(lastResult.output, lastResult.error || '');
-
-      if (!errorInfo.retryable || attempt >= maxAttempts) {
-        return lastResult;
-      }
-
-      // 计算退避延迟（指数退避）
-      const delay = Math.min(errorInfo.waitSeconds || baseDelay, baseDelay * Math.pow(2, attempt - 1));
-      console.log(`   ⏳ ${errorInfo.reason}，${delay} 秒后重试...`);
-
-      await sleep(delay);
-    }
-
-    return lastResult!;
-  }
-
-  /**
-   * 执行单次 Headless Claude 调用
-   */
-  private executeHeadlessClaude(options: HeadlessClaudeOptions): Promise<HeadlessClaudeResult> {
-    const startTime = Date.now();
-
-    return new Promise((resolve) => {
-      // 注意：--allowedTools 必须在 --print 之前，否则 Claude CLI 会报错
-      // "Input must be provided either through stdin or as a prompt argument when using --print"
-      // 注意：prompt 通过 stdin 传递，而不是命令行参数
-      // 这样可以避免多行文本作为命令行参数时的解析问题
-      const args = [
-        '--allowedTools', options.allowedTools.join(','),
-        '--print',  // 非交互模式
-        '--dangerously-skip-permissions',  // 跳过权限确认（自动化模式必需）
-      ];
-
-      let command = 'claude';
-      let commandArgs = args;
-
-      try {
-        // 使用 spawn 执行（不使用 spawn 的 timeout，因为它会发送 SIGTERM）
-        const child = spawn(command, commandArgs, {
-          cwd: options.cwd,
-          stdio: ['pipe', 'pipe', 'pipe'],  // stdin 改为 pipe 以支持写入
-        });
-
-        // 通过 stdin 传递 prompt
-        if (child.stdin) {
-          child.stdin.write(options.prompt);
-          child.stdin.end();
-        }
-
-        let stdout = '';
-        let stderr = '';
-        let timedOut = false;
-
-        // 自己实现超时逻辑
-        const timeoutId = setTimeout(() => {
-          timedOut = true;
-          child.kill('SIGTERM');
-        }, options.timeout * 1000);
-
-        child.stdout?.on('data', (data) => {
-          stdout += data.toString();
-          // 实时输出进度
-          const lines = data.toString().split('\n');
-          for (const line of lines) {
-            if (line.trim()) {
-              console.log(`   [Claude] ${line.trim().substring(0, 100)}${line.length > 100 ? '...' : ''}`);
-            }
-          }
-        });
-
-        child.stderr?.on('data', (data) => {
-          stderr += data.toString();
-        });
-
-        child.on('close', (code) => {
-          clearTimeout(timeoutId);
-          const duration = Date.now() - startTime;
-
-          // 超时场景直接失败
-          if (timedOut) {
-            resolve({
-              success: false,
-              output: stdout,
-              exitCode: 124,
-              duration,
-              error: `执行超时 (${options.timeout}s)`,
-            });
-            return;
-          }
-
-          // 使用共享函数智能判断区分 hook 失败和任务失败
-          const classified = classifyExitResult(code, stderr, stdout);
-
-          resolve({
-            success: classified.success,
-            output: stdout,
-            exitCode: code ?? 1,
-            duration,
-            error: classified.error,
-            hookWarning: classified.hookWarning,
-          });
-        });
-
-        child.on('error', (error) => {
-          clearTimeout(timeoutId);
-          const duration = Date.now() - startTime;
-          resolve({
-            success: false,
-            output: '',
-            exitCode: 1,
-            duration,
-            error: error.message,
-          });
-        });
-
-      } catch (error) {
-        resolve({
-          success: false,
-          output: '',
-          exitCode: 1,
-          duration: Date.now() - startTime,
-          error: error instanceof Error ? error.message : String(error),
-        });
-      }
-    });
   }
 
   /**

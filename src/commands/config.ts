@@ -18,6 +18,20 @@ interface TrainingConfig {
   outputDir: string;
 }
 
+/**
+ * 提示词模板配置
+ * 键为模板名称（如 dev, codeReview, qa 等），值为自定义模板字符串
+ * 未配置的模板使用内置默认值
+ */
+interface PromptsConfig {
+  [templateName: string]: string;
+}
+
+interface QualityConfig {
+  /** 最低质量评分阈值 (0-100)，低于此分数判定为 NOPASS (IR-08-06) */
+  minScore?: number;
+}
+
 interface ProjectConfig {
   projectName: string;
   createdAt: string;
@@ -26,6 +40,8 @@ interface ProjectConfig {
   logging?: LoggingConfig;
   ai?: AIConfig;
   training?: TrainingConfig;
+  prompts?: PromptsConfig;
+  quality?: QualityConfig;
   [key: string]: unknown;
 }
 

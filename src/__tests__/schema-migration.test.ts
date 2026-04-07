@@ -79,7 +79,7 @@ describe('Pipeline Status Constants', () => {
   });
 
   test('PIPELINE_STATUS_MIGRATION_MAP should map to valid target statuses', () => {
-    const validTargets = ['open', 'in_progress', 'resolved', 'closed', 'reopened', 'abandoned'];
+    const validTargets = ['open', 'in_progress', 'resolved', 'closed', 'reopened', 'abandoned', 'failed'];
     for (const [, target] of Object.entries(PIPELINE_STATUS_MIGRATION_MAP)) {
       expect(validTargets).toContain(target);
     }
@@ -781,7 +781,7 @@ describe('Individual Migration Steps', () => {
   });
 
   test('v2 migration: should not change already-valid status', () => {
-    const nonPipelineStatuses = ['open', 'in_progress', 'resolved', 'closed', 'abandoned'];
+    const nonPipelineStatuses = ['open', 'in_progress', 'resolved', 'closed', 'abandoned', 'failed'];
     for (const status of nonPipelineStatuses) {
       const task = createTestTask({ status: status as any, history: [] });
       const v2 = SCHEMA_MIGRATIONS.find(m => m.version === 2)!;

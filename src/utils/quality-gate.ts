@@ -18,6 +18,7 @@ import {
 } from '../commands/analyze.js';
 import { readTaskMeta } from './task.js';
 import { SEPARATOR_WIDTH } from './format';
+import { getQualityMinScore, qualityScoreToVerdict } from './contradiction-detector.js';
 
 /**
  * 变更范围大小
@@ -102,11 +103,57 @@ export interface BatchQualityGateResult {
 }
 
 /**
+ * 从文本中统一提取文件路径
+ *
+ * 使用3级正则模式（优先前缀路径 > 带分隔符文件名 > 裸文件名）：
+ * 1. 优先: src/lib/app/pkg/cmd/internal/api 等前缀路径 + 相对路径
+ * 2. 次要: 带目录分隔符的文件名（至少包含一个 /）
+ * 3. 兜底: 裸文件名（可通过 includeBareFilenames=false 关闭）
+ */
+export function extractFilePaths(
+  text: string,
+  options?: { includeBareFilenames?: boolean }
+): string[] {
+  const files: string[] = [];
+  const seen = new Set<string>();
+  const includeBare = options?.includeBareFilenames !== false;
+
+  const patterns: RegExp[] = [
+    // Level 1: 标准源码目录前缀路径
+    /(?:src|lib|app|pkg|cmd|internal|api|test|tests|docs|bin|scripts|config)\/[\w/.-]+\.[a-z]+/g,
+    // Level 1: 相对路径
+    /\.{1,2}\/[\w/.-]+\.[a-z]+/g,
+    // Level 2: 带目录分隔符的文件路径（至少包含一个 /）
+    /[\w-]+\/[\w/.-]+\.(ts|tsx|js|jsx|py|go|java|rs|md|json|yaml|yml)/g,
+  ];
+
+  if (includeBare) {
+    // Level 3: 裸文件名
+    patterns.push(/\b[\w-]+\.(ts|tsx|js|jsx|py|go|java|rs|json|yaml|yml|md)\b/g);
+  }
+
+  for (const pattern of patterns) {
+    const matches = text.match(pattern);
+    if (matches) {
+      for (const match of matches) {
+        if (!seen.has(match)) {
+          seen.add(match);
+          files.push(match);
+        }
+      }
+    }
+  }
+
+  return files;
+}
+
+/**
  * 从任务描述中提取受影响文件列表
  * 导出供 init-requirement 等模块复用
  */
 export function extractAffectedFiles(task: TaskMeta): string[] {
   const files: string[] = [];
+  const seen = new Set<string>();
   const description = task.description || '';
 
   // 匹配 "## 相关文件" 部分
@@ -118,26 +165,21 @@ export function extractAffectedFiles(task: TaskMeta): string[] {
       // 匹配 "- src/xxx" 或 "src/xxx" 格式
       const fileMatch = trimmed.match(/^-?\s*(?:\[[ x]\])?\s*(.+\.[a-z]+)$/);
       if (fileMatch && fileMatch[1]) {
-        files.push(fileMatch[1].trim());
+        const file = fileMatch[1].trim();
+        if (!seen.has(file)) {
+          seen.add(file);
+          files.push(file);
+        }
       }
     }
   }
 
-  // 从描述中提取文件路径模式
-  const pathPatterns = [
-    /(?:src|lib|test|tests|docs|bin|scripts|config)\/[\w/-]+\.[a-z]+/g,
-    /\.{1,2}\/[\w/-]+\.[a-z]+/g,
-    /\b[\w-]+\.(ts|tsx|js|jsx|py|go|java|rs|md|json|yaml|yml)\b/g,
-  ];
-
-  for (const pattern of pathPatterns) {
-    const matches = description.match(pattern);
-    if (matches) {
-      for (const match of matches) {
-        if (!files.includes(match)) {
-          files.push(match);
-        }
-      }
+  // 使用统一的 extractFilePaths 提取路径
+  const extracted = extractFilePaths(description);
+  for (const file of extracted) {
+    if (!seen.has(file)) {
+      seen.add(file);
+      files.push(file);
     }
   }
 
@@ -147,7 +189,8 @@ export function extractAffectedFiles(task: TaskMeta): string[] {
       if (cp.verification?.evidencePath) {
         const cpFiles = cp.verification.evidencePath.split(',').map(f => f.trim());
         for (const file of cpFiles) {
-          if (!files.includes(file)) {
+          if (!seen.has(file)) {
+            seen.add(file);
             files.push(file);
           }
         }
@@ -276,6 +319,14 @@ export async function checkQualityGate(
   config: QualityGateConfig = DEFAULT_QUALITY_GATE_CONFIG,
   cwd: string = process.cwd()
 ): Promise<QualityGateResult> {
+  // IR-08-06: 读取配置的 quality.minScore 覆盖默认阈值
+  const configuredMinScore = getQualityMinScore(cwd);
+  const effectiveConfig: QualityGateConfig = {
+    ...config,
+    minQualityScore: config.minQualityScore === DEFAULT_QUALITY_GATE_CONFIG.minQualityScore
+      ? configuredMinScore
+      : config.minQualityScore,
+  };
   const task = readTaskMeta(taskId, cwd);
   if (!task) {
     return {
@@ -343,18 +394,18 @@ export async function checkQualityGate(
   // 判断是否通过门禁
   let passed = true;
 
-  // 检查质量分
-  if (score.totalScore < config.minQualityScore) {
+  // 检查质量分 (IR-08-04: 使用统一的质量评分→PASS/NOPASS映射)
+  if (qualityScoreToVerdict(score.totalScore, effectiveConfig.minQualityScore) === 'NOPASS') {
     passed = false;
   }
 
   // 检查必需字段
-  if (config.requireAffectedFiles && affectedFiles.length === 0) {
+  if (effectiveConfig.requireAffectedFiles && affectedFiles.length === 0) {
     passed = false;
   }
 
   // 检查解决方案确认
-  if (config.requireSolutionConfirmation && needsConfirmation && score.solutionScore < 50) {
+  if (effectiveConfig.requireSolutionConfirmation && needsConfirmation && score.solutionScore < 50) {
     passed = false;
   }
 

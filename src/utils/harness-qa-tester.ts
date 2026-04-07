@@ -17,15 +17,16 @@ import type {
 import type { TaskMeta, CheckpointMetadata } from '../types/task.js';
 import { validateCheckpointVerification } from '../types/task.js';
 import {
-  runHeadlessClaudeWithRetry,
   saveReport,
   filterCheckpoints,
   parseVerdictResult,
   getReportPath,
   REVIEW_TIMEOUT_RATIO,
 } from './harness-helpers.js';
+import { getAgent } from './headless-agent.js';
 import { getQARoleTemplate } from './role-prompts.js';
 import { generateFallbackVerification } from './checkpoint.js';
+import { detectContradiction } from './contradiction-detector.js';
 
 /**
  * 验证检查点的验证信息完整性
@@ -100,6 +101,14 @@ export class HarnessQATester {
         verdict.testFailures = qaResult.failures;
         verdict.failedCheckpoints = qaResult.failedCheckpoints;
         verdict.details = qaResult.details;
+
+        // IR-08-05: 矛盾检测 — 当结果标签与内容矛盾时自动修正
+        const contradiction = detectContradiction(verdict.result, verdict.reason || '');
+        if (contradiction.hasContradiction && contradiction.correctedResult) {
+          console.log(`   ⚠️  矛盾检测: ${contradiction.reason}`);
+          verdict.result = contradiction.correctedResult;
+          verdict.reason += ` [矛盾修正: ${contradiction.reason}]`;
+        }
 
         // 4. 标记需要人工验证的检查点（仅信息标记，不影响 PASS/NOPASS 判定）
         if (humanCheckpoints.length > 0) {
@@ -198,15 +207,14 @@ export class HarnessQATester {
 
     // 运行独立验证会话
     console.log('\n   🤖 启动 QA 验证会话...');
-    const claudeResult = await runHeadlessClaudeWithRetry(
-      {
-        prompt,
-        allowedTools: ['Read', 'Bash', 'Grep', 'Glob'],
-        timeout: Math.floor(this.config.timeout / REVIEW_TIMEOUT_RATIO),
-        cwd: this.config.cwd,
-      },
-      { maxAttempts: this.config.apiRetryAttempts, baseDelay: this.config.apiRetryDelay },
-    );
+    const agent = getAgent(this.config.cwd);
+    const claudeResult = await agent.invoke(prompt, {
+      allowedTools: ['Read', 'Bash', 'Grep', 'Glob'],
+      timeout: Math.floor(this.config.timeout / REVIEW_TIMEOUT_RATIO),
+      cwd: this.config.cwd,
+      maxRetries: this.config.apiRetryAttempts,
+      outputFormat: 'text',
+    });
 
     if (!claudeResult.success) {
       return {

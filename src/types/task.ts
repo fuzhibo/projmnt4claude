@@ -36,6 +36,18 @@ export type TaskStatus =
   | 'failed';       // 已失败
 
 /**
+ * 任务失败原因
+ * 用于区分任务进入 failed 状态的具体原因
+ */
+export type FailureReason =
+  | 'timeout'              // 开发/执行超时
+  | 'quality_gate'         // 质量门禁未通过
+  | 'code_error'           // 代码错误/构建失败
+  | 'evaluation_nopass'    // 评估阶段未通过（达到最大重试次数）
+  | 'max_retries_exceeded' // 超过最大重试次数
+  | 'upstream_failed';     // 上游依赖任务失败（级联失败）
+
+/**
  * 任务历史记录条目
  */
 export interface TaskHistoryEntry {
@@ -539,6 +551,8 @@ export interface TaskMeta {
   fileWarnings?: string[];        // 创建时引用但不存在的文件路径
   createdBy?: TaskCreatedBy;      // 任务创建来源
   schemaVersion?: number;         // schema 版本号，用于增量迁移
+  estimatedMinutes?: number;      // AI 评估的预估耗时（分钟），用于自适应超时
+  failureReason?: FailureReason;  // 任务失败原因（status 为 failed 时记录具体原因）
 }
 
 /**

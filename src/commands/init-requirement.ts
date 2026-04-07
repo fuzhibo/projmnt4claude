@@ -9,9 +9,10 @@ import {
   getAllTasks,
   addSubtaskToParent,
 } from '../utils/task';
-import { extractAffectedFiles } from '../utils/quality-gate';
+import { extractAffectedFiles, extractFilePaths } from '../utils/quality-gate';
 import { hasValidCheckpoints, displayCheckpointCreationWarning } from './task';
 import { syncCheckpointsToMeta, filterLowQualityCheckpoints } from '../utils/checkpoint';
+import { inferDependencies as inferDependenciesUnified, type InferredDependency } from '../utils/dependency-engine';
 import type { TaskMeta, TaskPriority, TaskStatus, TaskType } from '../types/task';
 import { createDefaultTaskMeta, inferTaskType, validateCheckpointVerification } from '../types/task';
 import { SEPARATOR_WIDTH } from '../utils/format';
@@ -447,15 +448,17 @@ export async function initRequirement(
   task.recommendedRole = response.recommendedRole || analysis.recommendedRole;
 
   // 推断依赖关系（文件重叠 + AI potentialDependencies 标题匹配）
-  const inferredDeps = inferDependencies(
+  // IR-08-03: 使用统一依赖推断引擎
+  const existingTasksForDeps = getAllTasks(cwd);
+  const inferredDeps = inferDependenciesUnified(
     task.description || '',
-    analysis.potentialDependencies,
-    cwd
+    existingTasksForDeps,
+    { keywordHints: analysis.potentialDependencies },
   );
 
   // 将推断的依赖写入 task.dependencies
   if (inferredDeps.length > 0) {
-    task.dependencies = inferredDeps.map(d => d.taskId);
+    task.dependencies = inferredDeps.map(d => d.depTaskId);
   }
 
   // 写入任务
@@ -510,8 +513,9 @@ ${checkpoints.map((cp: string) => `- [ ] ${cp}`).join('\n')}
   if (inferredDeps.length > 0) {
     console.log(`   推断依赖:`);
     for (const dep of inferredDeps) {
-      const sharedInfo = dep.sharedFiles ? `(共享文件: ${dep.sharedFiles.join(', ')})` : '';
-      console.log(`     - ${dep.taskId} ${sharedInfo}`);
+      const sharedInfo = dep.overlappingFiles.length > 0 ? `(共享文件: ${dep.overlappingFiles.join(', ')})` : '';
+      const sourceLabel = dep.source === 'keyword' ? '[关键词] ' : '';
+      console.log(`     - ${dep.depTaskId} ${sourceLabel}${sharedInfo}`);
     }
   }
   console.log('');
@@ -620,27 +624,6 @@ function formatComplexity(assessment: ComplexityAssessment): string {
     high: '🔴 high',
   };
   return `${icons[assessment.level]} (评分: ${assessment.score}/100)`;
-}
-
-/**
- * 从描述中提取文件路径
- */
-function extractFilePaths(description: string): string[] {
-  const files: string[] = [];
-  const patterns = [
-    /(?:src|lib|test|tests|docs|bin|scripts|config)\/[\w/.-]+\.[a-z]+/g,
-    /\.{1,2}\/[\w/.-]+\.[a-z]+/g,
-    /\b[\w-]+\.(ts|tsx|js|jsx|py|go|java|rs|json|yaml|yml|md)\b/g,
-  ];
-  for (const pattern of patterns) {
-    const matches = description.match(pattern);
-    if (matches) {
-      for (const m of matches) {
-        if (!files.includes(m)) files.push(m);
-      }
-    }
-  }
-  return files;
 }
 
 /**
@@ -1057,7 +1040,7 @@ function analyzeRequirement(description: string, cwd: string): RequirementAnalys
   if (currentFiles.length > 0) {
     const existingTasks = getAllTasks(cwd);
     for (const existing of existingTasks) {
-      if (existing.status === 'resolved' || existing.status === 'closed' || existing.status === 'abandoned') continue;
+      if (existing.status === 'resolved' || existing.status === 'closed' || existing.status === 'abandoned' || existing.status === 'failed') continue;
       const existingFiles = extractAffectedFiles(existing);
       const overlap = currentFiles.filter(f => existingFiles.includes(f));
       if (overlap.length > 0) {
@@ -1094,96 +1077,10 @@ function analyzeRequirement(description: string, cwd: string): RequirementAnalys
 }
 
 /**
- * 从描述中提取受影响文件列表（简化版，与 quality-gate.extractAffectedFiles 逻辑一致）
- * 用于 analyzeRequirement 中对尚未创建的任务进行文件提取
+ * @deprecated Use inferDependencies from '../utils/dependency-engine' instead (IR-08-03)
+ * Re-exported for backward compatibility.
  */
-function extractFilePathsForDependency(description: string): string[] {
-  const files: string[] = [];
-  const patterns = [
-    /(?:src|lib|test|tests|docs|bin|scripts|config)\/[\w/.-]+\.[a-z]+/g,
-    /\.{1,2}\/[\w/.-]+\.[a-z]+/g,
-    /\b[\w-]+\.(ts|tsx|js|jsx|py|go|java|rs|json|yaml|yml|md)\b/g,
-  ];
-  for (const pattern of patterns) {
-    const matches = description.match(pattern);
-    if (matches) {
-      for (const m of matches) {
-        if (!files.includes(m)) files.push(m);
-      }
-    }
-  }
-  return files;
-}
-
-/**
- * 推断任务依赖关系
- *
- * 策略：
- * 1. 文件路径重叠：当前任务 affectedFiles 与已有任务 affectedFiles 比较
- * 2. AI potentialDependencies 文本匹配：通过标题关键词匹配关联到已有任务ID
- *
- * @returns 推断的依赖列表，每项包含 taskId 和匹配原因
- */
-export function inferDependencies(
-  currentTaskDescription: string,
-  potentialDeps: string[],
-  cwd: string
-): Array<{ taskId: string; reason: string; sharedFiles?: string[] }> {
-  const inferred: Array<{ taskId: string; reason: string; sharedFiles?: string[] }> = [];
-
-  // 获取所有现有任务
-  const existingTasks = getAllTasks(cwd);
-  const currentFiles = extractFilePathsForDependency(currentTaskDescription);
-
-  // 策略1：文件路径重叠推断
-  if (currentFiles.length > 0) {
-    for (const existing of existingTasks) {
-      // 跳过已结束状态的任务
-      if (existing.status === 'resolved' || existing.status === 'closed' || existing.status === 'abandoned') continue;
-
-      const existingFiles = extractAffectedFiles(existing);
-      const overlap = currentFiles.filter(f => existingFiles.includes(f));
-
-      if (overlap.length > 0 && !inferred.some(d => d.taskId === existing.id)) {
-        inferred.push({
-          taskId: existing.id,
-          reason: `共享文件: ${overlap.join(', ')}`,
-          sharedFiles: overlap,
-        });
-      }
-    }
-  }
-
-  // 策略2：AI potentialDependencies 文本通过标题关键词匹配
-  for (const depText of potentialDeps) {
-    // 跳过已处理的文件重叠依赖
-    if (depText.startsWith('文件重叠依赖 ')) continue;
-
-    // 从依赖文本中提取关键词
-    const keywords = depText.toLowerCase()
-      .replace(/[^\w\u4e00-\u9fff]/g, ' ')
-      .split(/\s+/)
-      .filter(w => w.length > 2);
-
-    for (const existing of existingTasks) {
-      if (existing.status === 'resolved' || existing.status === 'closed' || existing.status === 'abandoned') continue;
-      if (inferred.some(d => d.taskId === existing.id)) continue;
-
-      const titleLower = existing.title.toLowerCase();
-      const matchedKeywords = keywords.filter(kw => titleLower.includes(kw));
-
-      // 至少匹配2个关键词或匹配1个且关键词占标题比例较高
-      if (matchedKeywords.length >= 2 || (matchedKeywords.length === 1 && matchedKeywords[0]!.length >= 4)) {
-        inferred.push({
-          taskId: existing.id,
-          reason: `AI匹配: "${depText}" → ${existing.title}`,
-        });
-      }
-    }
-  }
-
-  return inferred;
-}
+export { inferDependencies } from '../utils/dependency-engine';
 
 /**
  * 格式化优先级
