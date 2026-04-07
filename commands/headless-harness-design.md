@@ -74,6 +74,14 @@ AI 自主调用时，使用 `--json` 获取结构化输出：
 projmnt4claude headless-harness-design --json
 ```
 
+### 质量门禁（重要）
+
+**不要使用 `--skip-harness-gate`（或已弃用的 `--skip-quality-gate`）**。
+
+`init-requirement` 创建任务时已集成质量检查（`checkQualityGate`），会显示质量评分并在质量不达标时给出改进建议。任务经过创建阶段的质量验证后，harness 执行前的质量门禁通常可以正常通过。
+
+只有在明确收到用户指示时才使用 `--skip-harness-gate`。
+
 ## 工作流程
 
 命令执行时会自动：
@@ -167,7 +175,7 @@ projmnt4claude headless-harness-design --batch-git-commit
 | `--api-retry-attempts <n>` | API 调用重试次数（针对 429/500 错误） | 3 |
 | `--api-retry-delay <seconds>` | API 重试基础延迟（秒） | 60 |
 | `--require-quality <n>` | 质量门禁：最低质量分阈值（0-100） | 60 |
-| `--skip-quality-gate` | 跳过质量门禁检查（不推荐） | false |
+| `--skip-harness-gate` | 跳过 Harness 执行前质量门禁检查（不推荐，`--skip-quality-gate` 为向后兼容别名） | false |
 | `--batch-git-commit` | 每个批次完成后自动 git commit | false |
 
 ## 输出

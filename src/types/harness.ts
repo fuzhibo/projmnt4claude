@@ -576,12 +576,23 @@ export interface PhaseHistoryEntry {
 /**
  * 流水线状态报告
  * 存储位置：.projmnt4claude/harness-status.json
+ *
+ * CP-23/24/25/26: 状态准确性修复
+ * - state 仅表示进程级别状态 (running/completed/stopped)
+ * - 个别任务失败不影响 state，仅记录在 failedTasks 数组中
+ * - totalTasks 基于唯一任务ID，不因重试虚增
  */
 export interface HarnessStatusReport {
   /** 会话ID（关联到当前 AI 会话） */
   sessionId?: string;
 
-  /** 流水线状态 */
+  /**
+   * 流水线状态（CP-23: 仅表示进程级别状态）
+   * - running: 流水线正在执行
+   * - completed: 流水线正常结束（即使有任务失败）
+   * - failed: 流水线异常中断（进程级错误）
+   * - idle/cancelled: 初始/取消状态
+   */
   state: HarnessState;
 
   /** 当前阶段 */
@@ -590,7 +601,9 @@ export interface HarnessStatusReport {
   /** 当前任务ID */
   currentTaskId?: string;
 
-  /** 总任务数 */
+  /**
+   * 总任务数（CP-25: 基于唯一任务ID，不含重试虚增）
+   */
   totalTasks: number;
 
   /** 已完成任务数 */
@@ -614,6 +627,39 @@ export interface HarnessStatusReport {
     message: string;
     taskId?: string;
   };
+
+  // --- CP-24: 任务级别状态追踪 ---
+
+  /** 已通过任务ID列表 */
+  passedTasks?: string[];
+
+  /** 已失败任务详情列表 */
+  failedTasks?: Array<{
+    id: string;
+    reason?: string;
+    phase?: string;
+  }>;
+
+  /** 正在重试的任务列表 */
+  retryingTasks?: Array<{
+    id: string;
+    attempt: number;
+    maxRetries: number;
+  }>;
+
+  // --- CP-26: 重试历史记录 ---
+
+  /** 总重试次数（唯一任务维度） */
+  retryCount?: number;
+
+  /** 重试历史详情 */
+  retryHistory?: Array<{
+    taskId: string;
+    attempt: number;
+    phase: string;
+    reason: string;
+    timestamp: string;
+  }>;
 }
 
 /**
@@ -630,5 +676,10 @@ export function createDefaultStatusReport(sessionId?: string): HarnessStatusRepo
     message: '流水线就绪',
     timestamp: new Date().toISOString(),
     phaseHistory: [],
+    passedTasks: [],
+    failedTasks: [],
+    retryingTasks: [],
+    retryCount: 0,
+    retryHistory: [],
   };
 }

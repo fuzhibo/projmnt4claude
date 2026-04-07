@@ -118,6 +118,10 @@ export class HarnessStatusReporter {
 
   /**
    * 阶段失败
+   *
+   * CP-23: 不再设置 state='failed'，state 仅表示进程级别状态。
+   * 个别任务/阶段失败记录在 phaseHistory 中，不影响整体 state。
+   * 只有 failPipeline/forceFailStatus 才会改变整体 state。
    */
   failPhase(phase: HarnessReportPhase, error: Error, taskId?: string): void {
     const lastEntry = [...this.currentReport.phaseHistory]
@@ -130,7 +134,8 @@ export class HarnessStatusReporter {
       lastEntry.message = error.message;
     }
 
-    this.currentReport.state = 'failed';
+    // CP-23: 不再设置 this.currentReport.state = 'failed'
+    // 仅记录错误信息，不影响整体进程状态
     this.currentReport.error = {
       code: 'PHASE_FAILED',
       message: error.message,
@@ -179,6 +184,96 @@ export class HarnessStatusReporter {
       this.currentReport.message = `${batchContext.batchLabel} (${batchContext.batchIndex + 1}/${batchContext.totalBatches}) - ${completedTasks}/${totalTasks} 完成`;
       this.lastBatchContext = batchContext;
     }
+    this.writeStatus();
+  }
+
+  // ============================================================
+  // CP-24/25/26: 任务级别状态追踪方法
+  // ============================================================
+
+  /**
+   * 记录任务通过
+   */
+  recordTaskPassed(taskId: string): void {
+    if (!this.currentReport.passedTasks) {
+      this.currentReport.passedTasks = [];
+    }
+    if (!this.currentReport.passedTasks.includes(taskId)) {
+      this.currentReport.passedTasks.push(taskId);
+    }
+    // 从 retryingTasks 中移除（如果存在）
+    if (this.currentReport.retryingTasks) {
+      this.currentReport.retryingTasks = this.currentReport.retryingTasks.filter(r => r.id !== taskId);
+    }
+    this.currentReport.timestamp = new Date().toISOString();
+    this.writeStatus();
+  }
+
+  /**
+   * 记录任务失败
+   */
+  recordTaskFailed(taskId: string, reason?: string, phase?: string): void {
+    if (!this.currentReport.failedTasks) {
+      this.currentReport.failedTasks = [];
+    }
+    // 避免重复记录
+    if (!this.currentReport.failedTasks.some(f => f.id === taskId)) {
+      this.currentReport.failedTasks.push({ id: taskId, reason, phase });
+    }
+    // 从 retryingTasks 中移除（如果存在）
+    if (this.currentReport.retryingTasks) {
+      this.currentReport.retryingTasks = this.currentReport.retryingTasks.filter(r => r.id !== taskId);
+    }
+    this.currentReport.timestamp = new Date().toISOString();
+    this.writeStatus();
+  }
+
+  /**
+   * 记录任务正在重试
+   */
+  recordTaskRetrying(taskId: string, attempt: number, maxRetries: number): void {
+    if (!this.currentReport.retryingTasks) {
+      this.currentReport.retryingTasks = [];
+    }
+    // 更新或添加重试记录
+    const existing = this.currentReport.retryingTasks.find(r => r.id === taskId);
+    if (existing) {
+      existing.attempt = attempt;
+      existing.maxRetries = maxRetries;
+    } else {
+      this.currentReport.retryingTasks.push({ id: taskId, attempt, maxRetries });
+    }
+    // 记录重试历史 (CP-26)
+    if (!this.currentReport.retryHistory) {
+      this.currentReport.retryHistory = [];
+    }
+    if (!this.currentReport.retryCount) {
+      this.currentReport.retryCount = 0;
+    }
+    this.currentReport.retryCount++;
+    this.currentReport.retryHistory.push({
+      taskId,
+      attempt,
+      phase: 'unknown',
+      reason: 'retry',
+      timestamp: new Date().toISOString(),
+    });
+    this.currentReport.timestamp = new Date().toISOString();
+    this.writeStatus();
+  }
+
+  /**
+   * 更新总任务数（CP-25: 基于唯一任务ID，不因重试虚增）
+   */
+  setUniqueTaskCount(count: number): void {
+    this.currentReport.totalTasks = count;
+    // 重新计算进度
+    const passed = this.currentReport.passedTasks?.length || 0;
+    const failed = this.currentReport.failedTasks?.length || 0;
+    const completed = passed + failed;
+    this.currentReport.completedTasks = completed;
+    this.currentReport.progress = count > 0 ? Math.round((completed / count) * 100) : 0;
+    this.currentReport.timestamp = new Date().toISOString();
     this.writeStatus();
   }
 

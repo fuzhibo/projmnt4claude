@@ -134,7 +134,26 @@ async function fixSingleIssue(
   switch (issue.type) {
     case 'stale': {
       if (nonInteractive) {
-        console.log(`⏭️  跳过过期任务 ${issue.taskId} (非交互模式下需要手动处理)`);
+        // 自动决策: 超过 30 天的过期任务自动关闭
+        const updatedAt = new Date(task.updatedAt);
+        const staleDays = Math.floor((Date.now() - updatedAt.getTime()) / (24 * 60 * 60 * 1000));
+        if (staleDays > 30) {
+          task.status = 'closed';
+          if (!task.history) task.history = [];
+          task.history.push({
+            timestamp: new Date().toISOString(),
+            action: 'auto_close_stale',
+            field: 'status',
+            oldValue: task.status,
+            newValue: 'closed',
+            reason: `非交互模式自动关闭: 任务已过期 ${staleDays} 天 (>30天阈值)`,
+            user: 'analyze-fix',
+          });
+          writeTaskMeta(task, cwd);
+          console.log(`  ✅ 已自动关闭过期 ${staleDays} 天的任务 ${issue.taskId} (>30天阈值)`);
+          return 'fixed';
+        }
+        console.log(`⏭️  跳过过期任务 ${issue.taskId} (${staleDays}天, 非交互模式下超过30天才自动关闭)`);
         return 'skipped';
       }
       console.log(`检查过期任务 ${issue.taskId}...`);
@@ -794,6 +813,30 @@ async function fixSingleIssue(
       return 'fixed';
     }
 
+    case 'low_checkpoint_coverage': {
+      console.log(`⚠️  项目检查点覆盖率不足，需人工补充`);
+      if (issue.details?.tasksWithoutCheckpoints) {
+        console.log(`   缺少检查点的任务数: ${issue.details.tasksWithoutCheckpoints}`);
+      }
+      if (issue.details?.coverageRate != null) {
+        console.log(`   当前覆盖率: ${((issue.details.coverageRate as number) * 100).toFixed(1)}%`);
+      }
+      console.log(`   建议: 使用 --fix --checkpoints-only 自动生成检查点，或手动为任务添加验收标准`);
+      return 'unfixable';
+    }
+
+    case 'low_quality': {
+      console.log(`⚠️  任务 ${issue.taskId} 内容质量低 (${issue.details?.totalScore ?? '?'}分/100)`);
+      const deductions = (issue.details?.deductions as Array<{ reason: string; suggestion?: string }> | undefined) ?? [];
+      if (deductions.length > 0) {
+        for (const d of deductions.slice(0, 3)) {
+          console.log(`   └─ ${d.reason}${d.suggestion ? ` (建议: ${d.suggestion})` : ''}`);
+        }
+      }
+      console.log(`   建议: ${issue.suggestion}`);
+      return 'unfixable';
+    }
+
     case 'deprecated_status_reference': {
       console.log(`🔄 清理任务 ${issue.taskId} 历史记录中的废弃状态引用...`);
       let fixedAny = false;
@@ -867,7 +910,13 @@ export async function fixIssues(
   let unfixableCount = 0;
 
   for (const issue of result.issues) {
-    const fixResult = await fixSingleIssue(issue, cwd, nonInteractive);
+    let fixResult: 'fixed' | 'skipped' | 'unfixable';
+    try {
+      fixResult = await fixSingleIssue(issue, cwd, nonInteractive);
+    } catch (error) {
+      console.error(`❌ 修复 ${issue.taskId} (${issue.type}) 时出错: ${error instanceof Error ? error.message : String(error)}`);
+      fixResult = 'skipped';
+    }
     if (fixResult === 'fixed') {
       fixedCount++;
     } else if (fixResult === 'skipped') {
@@ -1159,14 +1208,37 @@ export async function fixPipeline(
       const scores = await performQualityCheck(cwd, aiOptions);
       showQualityReport(scores, { compact, json, threshold });
       const lowQualityCount = Array.from(scores.values()).filter(s => s.totalScore < threshold).length;
+
+      // 将低质量任务生成为 issue 并通过 fixSingleIssue 报告
+      let qualityReportedCount = 0;
+      if (lowQualityCount > 0) {
+        console.log(`\n   🔍 检测到 ${lowQualityCount} 个低质量任务，生成修复建议...`);
+        for (const [taskId, score] of scores) {
+          if (score.totalScore < threshold) {
+            const qualityIssue: Issue = {
+              taskId,
+              type: 'low_quality',
+              severity: score.totalScore < 40 ? 'high' : 'medium',
+              message: `任务内容质量低 (${score.totalScore}/100)`,
+              suggestion: score.deductions.length > 0 && score.deductions[0]?.suggestion
+                ? score.deductions[0].suggestion
+                : '改善任务描述、检查点、关联文件等质量',
+              details: { totalScore: score.totalScore, deductions: score.deductions },
+            };
+            await fixSingleIssue(qualityIssue, cwd, nonInteractive);
+            qualityReportedCount++;
+          }
+        }
+      }
+
       const duration = Date.now() - start;
       stage5Result = {
         executed: true,
         skipped: false,
         duration,
-        summary: `检测 ${scores.size} 个任务, ${lowQualityCount} 个低质量`,
+        summary: `检测 ${scores.size} 个任务, ${lowQualityCount} 个低质量, ${qualityReportedCount} 个已生成改进建议`,
       };
-      console.log(`   ✅ Stage 5 完成: 检测 ${scores.size} 个任务 (${(duration / 1000).toFixed(1)}s)`);
+      console.log(`   ✅ Stage 5 完成: 检测 ${scores.size} 个任务, ${qualityReportedCount} 个改进建议 (${(duration / 1000).toFixed(1)}s)`);
     } catch (error) {
       const duration = Date.now() - start;
       stage5Result = {

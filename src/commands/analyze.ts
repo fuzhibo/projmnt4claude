@@ -527,7 +527,9 @@ export interface Issue {
     | 'needs_human_status'
     | 'deprecated_status_reference'
     // 依赖推断检测 (IR-08-03)
-    | 'missing_inferred_dependency';
+    | 'missing_inferred_dependency'
+    // 质量检测
+    | 'low_quality';
   severity: 'low' | 'medium' | 'high';
   message: string;
   suggestion: string;
@@ -1068,21 +1070,22 @@ export function showQualityReport(
   // 按总分排序
   const sortedScores = Array.from(scores.entries()).sort((a, b) => a[1].totalScore - b[1].totalScore);
 
-  // 统计
-  const lowQualityTasks = sortedScores.filter(([_, s]) => s.totalScore < threshold);
-  const avgScore = sortedScores.reduce((sum, [_, s]) => sum + s.totalScore, 0) / sortedScores.length;
-
   console.log(`📈 总体统计:`);
   console.log(`   检测任务数: ${scores.size}`);
-  console.log(`   平均分数: ${avgScore.toFixed(1)}/100`);
-  console.log(`   低质量任务 (< ${threshold}分): ${lowQualityTasks.length}`);
-  console.log('');
 
+  // 除零保护: 空数组时直接返回
   if (sortedScores.length === 0) {
     console.log('✅ 没有任务需要检测');
     console.log('');
     return;
   }
+
+  // 统计（sortedScores.length > 0 保证安全）
+  const lowQualityTasks = sortedScores.filter(([_, s]) => s.totalScore < threshold);
+  const avgScore = sortedScores.reduce((sum, [_, s]) => sum + s.totalScore, 0) / sortedScores.length;
+  console.log(`   平均分数: ${avgScore.toFixed(1)}/100`);
+  console.log(`   低质量任务 (< ${threshold}分): ${lowQualityTasks.length}`);
+  console.log('');
 
   // 显示详细评分
   console.log(separator);
@@ -3821,10 +3824,14 @@ export async function analyzeBugReport(
     if (mdFiles.length === 0) {
       throw new Error(`目录中未找到 Markdown 文件: ${resolvedPath}`);
     }
-    // 取最新的 md 文件
+    // 按 mtime 排序，取最新的 md 文件
     const sorted = mdFiles
       .map(f => ({ name: f, path: path.join(resolvedPath, f), mtime: fs.statSync(path.join(resolvedPath, f)).mtimeMs }))
       .sort((a, b) => b.mtime - a.mtime);
+    if (sorted.length > 1) {
+      console.log(`  ⚠️  目录中有 ${sorted.length} 个 Markdown 文件，仅分析最新的: ${sorted[0]!.name}`);
+      console.log(`     其他文件: ${sorted.slice(1).map(f => f.name).join(', ')}`);
+    }
     const latestFile = sorted[0];
     if (!latestFile) {
       throw new Error(`目录中未找到有效的 Markdown 文件: ${resolvedPath}`);
@@ -3962,9 +3969,10 @@ export async function analyzeBugReport(
     if (!trainingEnabled) {
       console.log('  ⚠️  训练数据导出未启用。请在 config.json 中设置 training.exportEnabled: true');
     } else {
-      const trainingDir = path.join(getProjectDir(cwd), 'training');
-      ensureDir(trainingDir);
-      const exportPath = path.join(trainingDir, 'bug-analysis-training.jsonl');
+      const trainingDir = (trainingConfig.outputDir as string) || '.projmnt4claude/training-data/';
+      const resolvedTrainingDir = path.isAbsolute(trainingDir) ? trainingDir : path.join(getProjectDir(cwd), trainingDir);
+      ensureDir(resolvedTrainingDir);
+      const exportPath = path.join(resolvedTrainingDir, 'bug-analysis-training.jsonl');
       exportTrainingDataToJsonl(fields, result, exportPath);
       console.log(`  📊 训练数据已追加: ${exportPath}`);
       console.log('');

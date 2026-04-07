@@ -8,7 +8,7 @@
 import * as fs from 'fs';
 import * as path from 'path';
 import { execSync } from 'child_process';
-import { getProjectDir, ensureDir, getLogsDir } from './path';
+import { getProjectDir, ensureDir, getLogsDir, getConfigPath } from './path';
 
 /** 日志级别 */
 export type LogLevel = 'error' | 'warn' | 'info' | 'debug';
@@ -141,8 +141,38 @@ export class Logger {
     this.cwd = options.cwd || process.cwd();
     this.command = options.command;
     this.buffer = [];
-    this.minLevel = (process.env.LOG_LEVEL as LogLevel) || 'info';
+    this.minLevel = this.resolveLogLevel();
     this.lastWrittenIndex = 0;
+  }
+
+  /**
+   * 解析日志级别
+   * 优先级: 环境变量 LOG_LEVEL > config.json logging.level > 默认 'info'
+   */
+  private resolveLogLevel(): LogLevel {
+    // 1. 环境变量最高优先级
+    const envLevel = process.env.LOG_LEVEL;
+    if (envLevel && envLevel in LEVEL_PRIORITY) {
+      return envLevel as LogLevel;
+    }
+
+    // 2. 从 config.json 读取 logging.level
+    try {
+      const configPath = getConfigPath(this.cwd);
+      if (fs.existsSync(configPath)) {
+        const raw = fs.readFileSync(configPath, 'utf-8');
+        const config = JSON.parse(raw) as { logging?: { level?: string } };
+        const configLevel = config?.logging?.level;
+        if (configLevel && configLevel in LEVEL_PRIORITY) {
+          return configLevel as LogLevel;
+        }
+      }
+    } catch {
+      // 配置读取失败不影响 Logger 初始化
+    }
+
+    // 3. 默认 info
+    return 'info';
   }
 
   /**

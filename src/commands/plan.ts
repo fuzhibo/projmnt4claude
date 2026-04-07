@@ -12,6 +12,7 @@ import {
 } from '../utils/plan';
 import { isInitialized, getProjectDir } from '../utils/path';
 import { readTaskMeta, getAllTasks, taskExists, getSubtasks } from '../utils/task';
+import { normalizeStatus } from '../types/task';
 import type { TaskMeta, TaskPriority } from '../types/task';
 import { SEPARATOR_WIDTH } from '../utils/format';
 import { createLogger, type InstrumentationRecord } from '../utils/logger';
@@ -199,72 +200,89 @@ export function inferArchitectureLayer(task: TaskMeta): { layer: ArchitectureLay
  * 构建任务依赖图并识别任务链
  * 合并显式依赖 (task.dependencies) 与推断依赖 (文件重叠)
  */
-export function buildTaskChains(tasks: TaskMeta[], cwd: string): TaskChain[] {
-  const taskMap = new Map<string, TaskMeta>();
-  const chains: TaskChain[] = [];
-  const visited = new Set<string>();
+export function buildTaskChains(
+  tasks: TaskMeta[],
+  cwd: string,
+  precomputedDeps?: Map<string, InferredDependency[]>
+): TaskChain[] {
+  if (tasks.length === 0) return [];
 
-  // 建立任务映射
+  const taskMap = new Map<string, TaskMeta>();
   for (const task of tasks) {
     taskMap.set(task.id, task);
   }
 
-  // 推断文件重叠依赖 (IR-08-03: 统一依赖推断引擎)
-  const inferredDeps = inferDependenciesBatch(tasks);
+  // 使用预计算依赖或重新推断文件重叠依赖
+  const inferredDeps = precomputedDeps || inferDependenciesBatch(tasks);
 
-  /**
-   * 获取任务的完整依赖列表（显式 + 推断）
-   */
-  function getAllDeps(task: TaskMeta): string[] {
-    const explicit = new Set(task.dependencies);
+  // --- CP-2: Union-Find 连通分量检测，确保链边界不依赖迭代顺序 ---
+
+  const ufParent = new Map<string, string>();
+
+  function ufFind(x: string): string {
+    if (!ufParent.has(x)) ufParent.set(x, x);
+    let root = x;
+    while (ufParent.get(root) !== root) {
+      root = ufParent.get(root)!;
+    }
+    // 路径压缩
+    let curr = x;
+    while (curr !== root) {
+      const next = ufParent.get(curr)!;
+      ufParent.set(curr, root);
+      curr = next;
+    }
+    return root;
+  }
+
+  function ufUnion(a: string, b: string): void {
+    const rootA = ufFind(a);
+    const rootB = ufFind(b);
+    if (rootA !== rootB) {
+      ufParent.set(rootA, rootB);
+    }
+  }
+
+  // 初始化
+  for (const task of tasks) {
+    ufParent.set(task.id, task.id);
+  }
+
+  // 合并所有有依赖关系的任务到同一连通分量
+  for (const task of tasks) {
+    for (const depId of task.dependencies) {
+      if (taskMap.has(depId)) {
+        ufUnion(task.id, depId);
+      }
+    }
     const inferred = inferredDeps.get(task.id);
     if (inferred) {
       for (const dep of inferred) {
-        explicit.add(dep.depTaskId);
-      }
-    }
-    return [...explicit];
-  }
-
-  /**
-   * 从指定任务开始，向下追踪依赖链
-   */
-  function traceChain(startTask: TaskMeta): TaskMeta[] {
-    const chain: TaskMeta[] = [];
-    const chainVisited = new Set<string>();
-
-    function dfs(task: TaskMeta) {
-      if (chainVisited.has(task.id)) return;
-      chainVisited.add(task.id);
-
-      // 先处理依赖（合并显式 + 推断）
-      for (const depId of getAllDeps(task)) {
-        const depTask = taskMap.get(depId);
-        if (depTask && !chainVisited.has(depTask.id)) {
-          dfs(depTask);
+        if (taskMap.has(dep.depTaskId)) {
+          ufUnion(task.id, dep.depTaskId);
         }
       }
-
-      // 再添加当前任务
-      chain.push(task);
     }
-
-    dfs(startTask);
-    return chain;
   }
 
-  // 为每个未被访问的任务构建链
+  // 按连通分量分组
+  const componentMap = new Map<string, TaskMeta[]>();
   for (const task of tasks) {
-    if (visited.has(task.id)) continue;
-
-    const chainTasks = traceChain(task);
-
-    // 标记为已访问
-    for (const t of chainTasks) {
-      visited.add(t.id);
+    const root = ufFind(task.id);
+    const group = componentMap.get(root);
+    if (group) {
+      group.push(task);
+    } else {
+      componentMap.set(root, [task]);
     }
+  }
 
-    // 计算链的元数据
+  // 为每个连通分量构建链（拓扑排序）
+  const chains: TaskChain[] = [];
+
+  for (const [, componentTasks] of componentMap) {
+    const chainTasks = topoSortDFS(componentTasks, taskMap, inferredDeps);
+
     const totalReopenCount = chainTasks.reduce(
       (sum, t) => sum + (t.reopenCount || 0),
       0
@@ -282,7 +300,6 @@ export function buildTaskChains(tasks: TaskMeta[], cwd: string): TaskChain[] {
       chainTasks.map(t => `${t.title} ${t.description || ''}`).join(' ')
     );
 
-    // 计算链中最低架构层级（基础层优先执行）
     const chainLayers = chainTasks.map(t => inferArchitectureLayer(t));
     const minLayerValue = Math.min(...chainLayers.map(cl => cl.layerValue));
     const layerOrder: ArchitectureLayer[] = ['Layer0', 'Layer1', 'Layer2', 'Layer3'];
@@ -302,6 +319,51 @@ export function buildTaskChains(tasks: TaskMeta[], cwd: string): TaskChain[] {
   }
 
   return chains;
+}
+
+/**
+ * 连通分量内的拓扑排序（DFS 后序）
+ * 使用确定性起始顺序（按 ID 排序）保证结果稳定
+ */
+function topoSortDFS(
+  componentTasks: TaskMeta[],
+  taskMap: Map<string, TaskMeta>,
+  inferredDeps: Map<string, InferredDependency[]>
+): TaskMeta[] {
+  const taskIds = new Set(componentTasks.map(t => t.id));
+  const visited = new Set<string>();
+  const result: TaskMeta[] = [];
+
+  function getAllDeps(task: TaskMeta): string[] {
+    const deps = new Set(task.dependencies);
+    const inferred = inferredDeps.get(task.id);
+    if (inferred) {
+      for (const d of inferred) {
+        deps.add(d.depTaskId);
+      }
+    }
+    return [...deps].filter(id => taskIds.has(id));
+  }
+
+  function dfs(task: TaskMeta) {
+    if (visited.has(task.id)) return;
+    visited.add(task.id);
+
+    for (const depId of getAllDeps(task)) {
+      const depTask = taskMap.get(depId);
+      if (depTask) dfs(depTask);
+    }
+
+    result.push(task);
+  }
+
+  // 确定性起始顺序
+  const sorted = [...componentTasks].sort((a, b) => a.id.localeCompare(b.id));
+  for (const task of sorted) {
+    dfs(task);
+  }
+
+  return result;
 }
 
 /**
@@ -420,6 +482,7 @@ function generateAIOutput(
   chains: TaskChain[],
   originalCount: number,
   filteredCount: number,
+  batches: ExecutionBatch[],
   query?: string,
   keywords?: string[],
   genOptions?: { smart?: boolean }
@@ -443,8 +506,7 @@ function generateAIOutput(
     }
   }
 
-  // 构建执行批次
-  const batches = buildBatches(chains);
+  // CP-3: 使用传入的缓存批次（不再重复计算）
   const batchOrder = batches.map(b => b.tasks);
 
   return {
@@ -671,11 +733,15 @@ export async function recommendPlan(
   // 获取所有任务（不仅仅是可执行的，用于构建完整的依赖图）
   const allTasks = getAllTasks(cwd);
 
+  // CP-4: 分离 in_progress 任务，单独展示
+  const inProgressTasks = allTasks.filter(t => normalizeStatus(t.status) === 'in_progress');
+
   // 0. 过滤任务（默认只推荐 open 状态，--all 排除终态）
+  // CP-9: 使用 normalizeStatus 确保状态比较标准化
   const TERMINAL_STATUSES = new Set(['resolved', 'closed', 'abandoned', 'failed']);
   const activeTasks = options.all
-    ? allTasks.filter(t => !TERMINAL_STATUSES.has(t.status))
-    : allTasks.filter(t => t.status === 'open');
+    ? allTasks.filter(t => !TERMINAL_STATUSES.has(normalizeStatus(t.status)))
+    : allTasks.filter(t => normalizeStatus(t.status) === 'open');
 
   const excludedCount = allTasks.length - activeTasks.length;
   if (excludedCount > 0) {
@@ -683,24 +749,38 @@ export async function recommendPlan(
     console.log(`已排除 ${excludedCount} 个${reason}任务`);
   }
 
+  // CP-8: 展示进行中的任务（特殊标识）
+  if (inProgressTasks.length > 0) {
+    console.log('🔵 进行中的任务:');
+    for (const t of inProgressTasks) {
+      console.log(`   ${t.id}: ${t.title.substring(0, 60)}`);
+    }
+    console.log('');
+  }
+
+  // 排除 in_progress 任务，避免放入依赖链中造成混淆
+  const chainEligibleTasks = activeTasks.filter(t => normalizeStatus(t.status) !== 'in_progress');
+
   // 1. 关键字过滤
   let keywords: string[] = [];
-  let filteredTasks = activeTasks;
+  let filteredTasks = chainEligibleTasks;
 
   if (options.query) {
     keywords = extractKeywords(options.query);
     console.log(`关键字: ${keywords.join(', ')}`);
 
-    filteredTasks = activeTasks.filter(task => taskMatchesKeywords(task, keywords));
-    console.log(`过滤结果: ${filteredTasks.length}/${activeTasks.length} 个任务匹配\n`);
+    filteredTasks = chainEligibleTasks.filter(task => taskMatchesKeywords(task, keywords));
+    console.log(`过滤结果: ${filteredTasks.length}/${chainEligibleTasks.length} 个任务匹配\n`);
   }
 
-  // 1.5 统一可执行过滤（依赖完成检查+状态检查+子任务检查）
-  const executableIds = new Set(getExecutableTasks(cwd));
-  const beforeExecFilter = filteredTasks.length;
-  filteredTasks = filteredTasks.filter(task => executableIds.has(task.id));
-  if (beforeExecFilter - filteredTasks.length > 0) {
-    console.log(`已排除 ${beforeExecFilter - filteredTasks.length} 个依赖未完成或不可执行的任务`);
+  // Bug1 fix: --all 模式跳过依赖过滤，显示全部任务
+  if (!options.all) {
+    const executableIds = new Set(getExecutableTasks(cwd));
+    const beforeExecFilter = filteredTasks.length;
+    filteredTasks = filteredTasks.filter(task => executableIds.has(task.id));
+    if (beforeExecFilter - filteredTasks.length > 0) {
+      console.log(`已排除 ${beforeExecFilter - filteredTasks.length} 个依赖未完成或不可执行的任务`);
+    }
   }
 
   if (filteredTasks.length === 0) {
@@ -747,11 +827,12 @@ export async function recommendPlan(
     return;
   }
 
-  // 1. 构建任务链
+  // CP-1: 先推断依赖，再构建链（确保 AI 依赖影响链结构）
   console.log('正在分析任务依赖关系...');
-  const chains = buildTaskChains(filteredTasks, cwd);
+  const fileOverlapDeps = inferDependenciesBatch(filteredTasks);
 
-  // 1.5 AI 语义依赖推断 (Layer3, 仅 --smart 时激活，零 AI 调用开销)
+  // CP-6: --smart 时在链构建前运行 AI 语义推断，合并到依赖图
+  let mergedDeps = fileOverlapDeps;
   if (options.smart) {
     console.log('正在通过 AI 分析语义依赖关系...');
     const semanticResult = await withAIEnhancement({
@@ -762,27 +843,18 @@ export async function recommendPlan(
     });
 
     if (semanticResult.aiUsed && semanticResult.dependencies.length > 0) {
-      // 合并 AI 推断的语义依赖到链数据中
-      for (const chain of chains) {
-        if (!chain.inferredDependencies) {
-          chain.inferredDependencies = new Map();
-        }
-        for (const task of chain.tasks) {
-          const aiDeps = semanticResult.dependencies.filter(d => d.taskId === task.id);
-          for (const aiDep of aiDeps) {
-            const existing = chain.inferredDependencies.get(task.id) || [];
-            // 跳过已通过文件重叠推断的依赖（避免重复）
-            const alreadyInferred = existing.some(e => e.depTaskId === aiDep.depTaskId);
-            if (!alreadyInferred) {
-              existing.push({
-                depTaskId: aiDep.depTaskId,
-                overlappingFiles: [],
-                source: 'ai-semantic',
-                reason: aiDep.reason,
-              });
-              chain.inferredDependencies.set(task.id, existing);
-            }
-          }
+      mergedDeps = new Map(fileOverlapDeps);
+      for (const aiDep of semanticResult.dependencies) {
+        const existing = mergedDeps.get(aiDep.taskId) || [];
+        const alreadyInferred = existing.some(e => e.depTaskId === aiDep.depTaskId);
+        if (!alreadyInferred) {
+          existing.push({
+            depTaskId: aiDep.depTaskId,
+            overlappingFiles: [],
+            source: 'ai-semantic' as const,
+            reason: aiDep.reason,
+          });
+          mergedDeps.set(aiDep.taskId, existing);
         }
       }
       console.log(`  AI 发现 ${semanticResult.dependencies.length} 条语义依赖`);
@@ -791,14 +863,21 @@ export async function recommendPlan(
     }
   }
 
+  // 构建任务链（使用合并后的依赖图）
+  const chains = buildTaskChains(filteredTasks, cwd, mergedDeps);
+
   // 2. 按优先级↑ 链长度↓ reopen↓ 排序
   const sortedChains = sortChains(chains);
 
-  // 3. 生成 AI 友好的输出
+  // CP-3/CP-7: buildBatches 仅调用一次，结果缓存复用
+  const cachedBatches = buildBatches(sortedChains);
+
+  // 3. 生成 AI 友好的输出（传入缓存批次）
   const aiOutput = generateAIOutput(
     sortedChains,
     activeTasks.length,
     filteredTasks.length,
+    cachedBatches,
     options.query,
     keywords.length > 0 ? keywords : undefined,
     { smart: options.smart }
@@ -841,8 +920,8 @@ export async function recommendPlan(
   console.log(`   批次数: ${aiOutput.batches.length}`);
   console.log('');
 
-  // 按批次展示
-  const batches = buildBatches(sortedChains);
+  // 按批次展示（使用缓存批次，不再重复计算）
+  const batches = cachedBatches;
   for (let b = 0; b < batches.length; b++) {
     const batch = batches[b]!;
     const batchIcon = getPriorityIcon(batch.priorityValue);
@@ -987,14 +1066,16 @@ function getPriorityIcon(priority: number): string {
  * 获取状态图标
  */
 function getStatusIcon(status: string): string {
+  const normalized = normalizeStatus(status);
   const icons: Record<string, string> = {
     open: '⬜',
     in_progress: '🔵',
     resolved: '✅',
     closed: '⚫',
     abandoned: '❌',
+    failed: '❌',
   };
-  return icons[status] || '❓';
+  return icons[normalized] || '❓';
 }
 
 /**
@@ -1018,12 +1099,14 @@ function formatPriority(priority: TaskPriority): string {
  * 格式化状态
  */
 function formatStatus(status: string): string {
+  const normalized = normalizeStatus(status);
   const map: Record<string, string> = {
     open: '⬜ 待处理',
     in_progress: '🔵 进行中',
     resolved: '✅ 已解决',
     closed: '⚫ 已关闭',
     abandoned: '❌ 已放弃',
+    failed: '❌ 已失败',
   };
-  return map[status] || status;
+  return map[normalized] || status;
 }

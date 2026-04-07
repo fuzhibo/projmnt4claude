@@ -27,7 +27,7 @@ node ${CLAUDE_PLUGIN_ROOT}/skills/projmnt4claude/dist/projmnt4claude.js headless
 | `--api-retry-attempts <n>` | API call retry count (for 429/500 errors) | 3 |
 | `--api-retry-delay <seconds>` | API retry base delay (seconds) | 60 |
 | `--require-quality <n>` | Quality gate: minimum quality score threshold (0-100) | 60 |
-| `--skip-quality-gate` | Skip quality gate check (not recommended) | false |
+| `--skip-harness-gate` | Skip Harness pre-execution quality gate (not recommended, `--skip-quality-gate` is backward-compatible alias) | false |
 | `--batch-git-commit` | Auto git commit after each batch completes | false |
 
 ## Pipeline Status Query
@@ -119,6 +119,16 @@ With `--batch-git-commit`, a git commit is automatically created after each batc
 - `.projmnt4claude/reports/harness/summary-{timestamp}.md` - Execution summary
 - `.projmnt4claude/reports/harness/{taskId}/dev-report.md` - Development report
 - `.projmnt4claude/reports/harness/{taskId}/review-report.md` - Review report
+
+## AI Behavior Guidelines
+
+### Quality Gate (Important)
+
+**Do NOT use `--skip-harness-gate` (or the deprecated `--skip-quality-gate`)**.
+
+`init-requirement` already integrates quality checking (`checkQualityGate`) when creating tasks, displaying quality scores and improvement suggestions for substandard tasks. After quality validation during creation, tasks typically pass the pre-execution quality gate.
+
+Only use `--skip-harness-gate` when explicitly instructed by the user.
 
 ## Notes
 

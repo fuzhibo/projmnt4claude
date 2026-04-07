@@ -9,7 +9,7 @@ import {
   getAllTasks,
   addSubtaskToParent,
 } from '../utils/task';
-import { extractAffectedFiles, extractFilePaths } from '../utils/quality-gate';
+import { extractAffectedFiles, extractFilePaths, checkQualityGate, type QualityGateConfig, DEFAULT_QUALITY_GATE_CONFIG } from '../utils/quality-gate';
 import { hasValidCheckpoints, displayCheckpointCreationWarning } from './task';
 import { syncCheckpointsToMeta, filterLowQualityCheckpoints } from '../utils/checkpoint';
 import { inferDependencies as inferDependenciesUnified, type InferredDependency } from '../utils/dependency-engine';
@@ -96,6 +96,8 @@ export interface InitRequirementOptions {
   template?: DescriptionTemplateType;  // 描述模板类型：simple | detailed
   autoSplit?: boolean;       // 自动拆分复杂任务为子任务
   noAI?: boolean;            // 禁用 AI 增强，仅使用规则引擎
+  /** 质量门禁: 低于此阈值时阻止创建 (0-100) */
+  requireQuality?: number;
 }
 
 /**
@@ -191,7 +193,7 @@ export async function initRequirement(
   cwd: string = process.cwd(),
   options: InitRequirementOptions = {}
 ): Promise<void> {
-  const { nonInteractive = false, noPlan = false, skipValidation = false, template = 'simple', autoSplit = false, noAI = false } = options;
+  const { nonInteractive = false, noPlan = false, skipValidation = false, template = 'simple', autoSplit = false, noAI = false, requireQuality } = options;
 
   // CP-2: 模块日志 + 埋点初始化
   const logger = createLogger('init-requirement', cwd);
@@ -520,6 +522,87 @@ ${checkpoints.map((cp: string) => `- [ ] ${cp}`).join('\n')}
   }
   console.log('');
 
+  // CP-1/CP-6: 质量门禁检查 - 任务创建后调用 checkQualityGate 并显示评分
+  const qualityGateConfig: QualityGateConfig = {
+    ...DEFAULT_QUALITY_GATE_CONFIG,
+    minQualityScore: requireQuality ?? DEFAULT_QUALITY_GATE_CONFIG.minQualityScore,
+  };
+
+  if (qualityGateConfig.minQualityScore < 0 || qualityGateConfig.minQualityScore > 100) {
+    console.error('错误: --require-quality 必须在 0-100 之间');
+    process.exit(1);
+  }
+
+  const qualityResult = await checkQualityGate(taskId, qualityGateConfig, cwd);
+
+  // CP-6: 显示质量评分
+  const scoreIcon = qualityResult.score.totalScore >= 80 ? '🟢' :
+                    qualityResult.score.totalScore >= 60 ? '🟡' : '🔴';
+  console.log(`📊 质量评分: ${scoreIcon} ${qualityResult.score.totalScore}/100`);
+  console.log(`   描述完整度: ${qualityResult.score.descriptionScore}%`);
+  console.log(`   检查点质量: ${qualityResult.score.checkpointScore}%`);
+  console.log(`   关联文件: ${qualityResult.score.relatedFilesScore}%`);
+  console.log(`   解决方案: ${qualityResult.score.solutionScore}%`);
+  console.log('');
+
+  // CP-3/CP-7: --require-quality 阻止低质量任务创建
+  if (requireQuality !== undefined && !qualityResult.passed) {
+    console.log('━'.repeat(SEPARATOR_WIDTH));
+    console.log(`❌ 质量门禁未通过: ${qualityResult.score.totalScore} < ${requireQuality}`);
+    console.log('━'.repeat(SEPARATOR_WIDTH));
+    console.log('');
+
+    // 显示改进建议
+    if (qualityResult.suggestions.length > 0) {
+      const sorted = [...qualityResult.suggestions].sort((a, b) => {
+        const order = { high: 0, medium: 1, low: 2 };
+        return order[a.priority] - order[b.priority];
+      });
+      console.log('💡 改进建议:');
+      for (const s of sorted.slice(0, 5)) {
+        const icon = s.priority === 'high' ? '🔴' : s.priority === 'medium' ? '🟠' : '🟡';
+        console.log(`  ${icon} [${s.category}] ${s.message}`);
+        console.log(`     👉 ${s.action}`);
+      }
+      console.log('');
+    }
+
+    console.log(`任务 ${taskId} 已创建但未通过质量门禁 (分数 ${qualityResult.score.totalScore} < 阈值 ${requireQuality})。`);
+    console.log('请完善任务描述后重新创建，或使用较低的 --require-quality 阈值。');
+    console.log('');
+
+    // 记录埋点
+    logger.logInstrumentation({
+      module: 'init-requirement',
+      action: 'quality_gate_blocked',
+      input_summary: `desc_len=${inputDescLength}, require_quality=${requireQuality}`,
+      output_summary: `task_id=${taskId}, quality_score=${qualityResult.score.totalScore}, blocked=true`,
+      ai_used: analysis.aiUsed,
+      ai_enhanced_fields: analysis.aiEnhancedFields,
+      duration_ms: Date.now() - startTime,
+      user_edit_count: userEditCount,
+    });
+    logger.flush();
+    process.exit(1);
+  }
+
+  // CP-2: 质量不达标时输出警告和改进建议（不阻断创建）
+  if (!qualityResult.passed) {
+    console.log('⚠️  质量门禁警告: 任务质量评分低于默认阈值，建议改进');
+    if (qualityResult.suggestions.length > 0) {
+      const sorted = [...qualityResult.suggestions].sort((a, b) => {
+        const order = { high: 0, medium: 1, low: 2 };
+        return order[a.priority] - order[b.priority];
+      });
+      for (const s of sorted.slice(0, 3)) {
+        const icon = s.priority === 'high' ? '🔴' : s.priority === 'medium' ? '🟠' : '🟡';
+        console.log(`  ${icon} ${s.message}`);
+        console.log(`     👉 ${s.action}`);
+      }
+    }
+    console.log('');
+  }
+
   // 自动拆分复杂任务
   if (autoSplit && complexity.level === 'high' && complexity.splitSuggestions.length > 0) {
     console.log('━'.repeat(SEPARATOR_WIDTH));
@@ -537,7 +620,20 @@ ${checkpoints.map((cp: string) => `- [ ] ${cp}`).join('\n')}
       const subId = generateNewTaskId(cwd, subType, subPriority, sub.title);
       subtaskIds.push(subId);
       const subTask = createDefaultTaskMeta(subId, sub.title, subType, undefined, 'init-requirement');
-      subTask.description = sub.description;
+
+      // CP-3 (IR-01-06): 使用结构化描述替代原始文本
+      const subStructuredInfo = extractStructuredInfo(sub.description);
+      const subInferredCheckpoints = inferCheckpointsFromDescription(sub.description, subType);
+      const subStructuredData: StructuredDescription = {
+        problem: subStructuredInfo.problem || sub.description,
+        rootCause: subStructuredInfo.rootCause,
+        solution: subStructuredInfo.solution,
+        checkpoints: [...new Set([...subStructuredInfo.checkpoints, ...subInferredCheckpoints])],
+        relatedFiles: sub.files.length > 0 ? sub.files : subStructuredInfo.relatedFiles,
+        notes: subStructuredInfo.notes,
+      };
+      subTask.description = generateStructuredDescription(subStructuredData, template as DescriptionTemplateType);
+
       subTask.priority = taskPriority;
       subTask.recommendedRole = analysis.recommendedRole;
 
@@ -554,10 +650,15 @@ ${checkpoints.map((cp: string) => `- [ ] ${cp}`).join('\n')}
 
       writeTaskMeta(subTask, cwd);
 
-      // 创建子任务 checkpoint
+      // CP-1 (IR-01-04): 使用 inferCheckpointsFromDescription 替代硬编码检查点
+      const subCheckpointTexts = subInferredCheckpoints.length > 0
+        ? subInferredCheckpoints
+        : [`完成 ${sub.title}`];
+      const subFilterResult = filterLowQualityCheckpoints(subCheckpointTexts);
+      const subFilteredCheckpoints = subFilterResult.kept;
       const subTaskDir = path.join(getTasksDir(cwd), subId);
       const subCheckpointPath = path.join(subTaskDir, 'checkpoint.md');
-      const subCheckpointContent = `# ${subId} 检查点\n\n- [ ] 完成 ${sub.title}\n`;
+      const subCheckpointContent = `# ${subId} 检查点\n\n${subFilteredCheckpoints.map((cp: string) => `- [ ] ${cp}`).join('\n')}\n`;
       fs.writeFileSync(subCheckpointPath, subCheckpointContent, 'utf-8');
       syncCheckpointsToMeta(subId, cwd);
 
@@ -571,6 +672,25 @@ ${checkpoints.map((cp: string) => `- [ ] ${cp}`).join('\n')}
         console.log(`     依赖: ${subTask.dependencies.join(', ')}`);
       }
       console.log('');
+    }
+
+    // CP-2 (IR-01-05): 对每个子任务调用 inferDependencies 推断文件重叠依赖
+    const allTasksForSubDeps = getAllTasks(cwd);
+    for (const subId of subtaskIds) {
+      const subTaskMeta = readTaskMeta(subId, cwd);
+      if (!subTaskMeta) continue;
+
+      const subDeps = inferDependenciesUnified(subTaskMeta, allTasksForSubDeps, { strategy: 'file-overlap' });
+      if (subDeps.length > 0) {
+        const existingDeps = subTaskMeta.dependencies || [];
+        const newDepIds = subDeps
+          .map(d => d.depTaskId)
+          .filter(id => !existingDeps.includes(id));
+        if (newDepIds.length > 0) {
+          subTaskMeta.dependencies = [...existingDeps, ...newDepIds];
+          writeTaskMeta(subTaskMeta, cwd);
+        }
+      }
     }
 
     console.log(`✅ 已拆分为 ${complexity.splitSuggestions.length} 个子任务`);
@@ -1052,18 +1172,8 @@ function analyzeRequirement(description: string, cwd: string): RequirementAnalys
     }
   }
 
-  if (lowerDesc.includes('登录') || lowerDesc.includes('auth') || lowerDesc.includes('认证')) {
-    potentialDependencies.push('可能需要先完成用户认证基础功能');
-  }
-
-  if (lowerDesc.includes('支付') || lowerDesc.includes('payment')) {
-    potentialDependencies.push('可能需要先完成订单系统');
-    potentialDependencies.push('可能需要接入第三方支付');
-  }
-
-  if (lowerDesc.includes('通知') || lowerDesc.includes('notification')) {
-    potentialDependencies.push('可能需要先完成消息队列配置');
-  }
+  // IR-01-07: 已移除硬编码关键词映射（登录→认证基础、支付→订单系统、通知→消息队列）
+  // 仅依赖文件重叠推断，通过 inferDependenciesUnified 统一处理
 
   return {
     title,

@@ -14,6 +14,7 @@
 
 import { Logger } from './logger.js';
 import { runHeadlessClaude, runHeadlessClaudeWithRetry, isRetryableError } from './harness-helpers.js';
+import { type AIConfig, DEFAULT_AI } from '../types/config.js';
 
 // ============================================================
 // 类型定义
@@ -99,14 +100,6 @@ export function translateOptionsToCliArgs(options: AgentInvokeOptions): string[]
   }
 
   return args;
-}
-
-/** AI 配置（对应 config.json 中 ai 字段） */
-export interface AIConfig {
-  /** 提供者标识，默认 'claude-code' */
-  provider: string;
-  /** 提供者专有配置 */
-  providerOptions?: Record<string, unknown>;
 }
 
 // ============================================================
@@ -327,28 +320,24 @@ import * as fs from 'fs';
 import * as path from 'path';
 import { getConfigPath } from './path.js';
 
-/** 默认 AI 配置 */
-export const DEFAULT_AI_CONFIG: AIConfig = {
-  provider: 'claude-code',
-};
-
 /** 从项目 config.json 加载 AI 配置 */
 export function loadAIConfig(cwd: string): AIConfig {
   try {
     const configPath = getConfigPath(cwd);
     if (!fs.existsSync(configPath)) {
-      return DEFAULT_AI_CONFIG;
+      return DEFAULT_AI;
     }
     const config = JSON.parse(fs.readFileSync(configPath, 'utf-8'));
     if (!config.ai) {
-      return DEFAULT_AI_CONFIG;
+      return DEFAULT_AI;
     }
     return {
-      provider: config.ai.provider || DEFAULT_AI_CONFIG.provider,
+      provider: config.ai.provider || DEFAULT_AI.provider,
+      customEndpoint: config.ai.customEndpoint,
       providerOptions: config.ai.providerOptions,
     };
   } catch {
-    return DEFAULT_AI_CONFIG;
+    return DEFAULT_AI;
   }
 }
 

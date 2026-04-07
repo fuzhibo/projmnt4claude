@@ -780,6 +780,7 @@ program
   .option('--template <type>', '描述模板类型: simple (默认) 或 detailed (详细结构化)', 'simple')
   .option('--auto-split', '自动拆分复杂任务为子任务（复杂度评估为 high 时生效）')
   .option('--no-ai', '禁用 AI 增强，仅使用规则引擎进行关键词匹配分析')
+  .option('--require-quality <n>', '质量门禁: 低于阈值时阻止创建 (0-100)')
   .action(async (description, options) => {
     requireInit();
     await initRequirement(description, process.cwd(), {
@@ -789,6 +790,7 @@ program
       template: options.template,
       autoSplit: options.autoSplit,
       noAI: options.noAi,
+      requireQuality: options.requireQuality ? parseInt(options.requireQuality, 10) : undefined,
     });
   });
 
@@ -821,7 +823,8 @@ program
   .option('--api-retry-attempts <n>', 'API 调用重试次数 (针对 429/500 错误)', '3')
   .option('--api-retry-delay <seconds>', 'API 重试基础延迟 (秒)', '60')
   .option('--require-quality <n>', '质量门禁: 最低质量分阈值 (0-100, 默认 60)', '60')
-  .option('--skip-quality-gate', '跳过质量门禁检查 (不推荐)')
+  .option('--skip-harness-gate', '跳过 Harness 执行前质量门禁检查 (不推荐)')
+  .option('--skip-quality-gate', '[已弃用] 请使用 --skip-harness-gate')
   .option('--batch-git-commit', '每个批次完成后自动 git commit')
   .action(async (options) => {
     requireInit();
@@ -836,7 +839,7 @@ program
       apiRetryAttempts: options.apiRetryAttempts,
       apiRetryDelay: options.apiRetryDelay,
       requireQuality: options.requireQuality,
-      skipQualityGate: options.skipQualityGate,
+      skipHarnessGate: options.skipHarnessGate || options.skipQualityGate,
       batchGitCommit: options.batchGitCommit,
     });
   });

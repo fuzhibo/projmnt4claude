@@ -34,7 +34,7 @@ import {
   DEFAULT_PHASE_RETRY_LIMITS,
 } from '../types/harness.js';
 import type { TaskMeta, TaskStatus, TaskRole, CheckpointMetadata, CommitHistoryEntry, TransitionNote, PhaseHistoryEntry, FailureReason } from '../types/task.js';
-import { Pipeline } from '../types/task.js';
+import { Pipeline, normalizeStatus } from '../types/task.js';
 import { readTaskMeta, writeTaskMeta, taskExists, updateTaskStatus, assignRole, incrementReopenCount, recordExecutionStats } from './task.js';
 import { getProjectDir } from './path.js';
 import { HarnessExecutor } from './harness-executor.js';
@@ -85,12 +85,14 @@ export class AssemblyLine {
     const hasBatches = (state.batchBoundaries?.length ?? 0) > 0;
 
     // 报告流水线开始
-    this.statusReporter.startPipeline(state.taskQueue.length);
+    // CP-25: 计算唯一任务数（去重，避免重试虚增）
+    const uniqueTaskIds = new Set(state.taskQueue);
+    this.statusReporter.startPipeline(uniqueTaskIds.size);
 
     const batchInfo = hasBatches
       ? `，${state.batchBoundaries!.length} 个批次`
       : '';
-    console.log(`\n🚀 开始执行流水线，共 ${state.taskQueue.length} 个任务${batchInfo}\n`);
+    console.log(`\n🚀 开始执行流水线，共 ${uniqueTaskIds.size} 个唯一任务 (队列长度 ${state.taskQueue.length})${batchInfo}\n`);
 
     while (state.currentIndex < state.taskQueue.length) {
       const taskId = state.taskQueue[state.currentIndex];
@@ -126,12 +128,17 @@ export class AssemblyLine {
         if (!state.retryingTasks) state.retryingTasks = [];
         if (record.finalStatus === 'resolved' || record.finalStatus === 'closed') {
           state.passedTasks.push(taskId);
+          this.statusReporter.recordTaskPassed(taskId);
         } else if (record.finalStatus === 'failed') {
           state.failedTasks.push(taskId);
+          this.statusReporter.recordTaskFailed(taskId, 'task_failed', 'execution');
           // 上游失败级联：标记依赖该任务的下游任务为 failed
           this.cascadeFailureToDownstream(taskId, state);
         } else if (record.finalStatus === 'in_progress' && state.taskQueue.includes(taskId)) {
           state.retryingTasks.push(taskId);
+          const retryCount = state.retryCounter.get(taskId) || 0;
+          const devLimit = this.getPhaseRetryLimit('development');
+          this.statusReporter.recordTaskRetrying(taskId, retryCount + 1, devLimit);
         }
 
         // 更新状态
@@ -175,6 +182,7 @@ export class AssemblyLine {
           // 任务级状态追踪
           if (!state.failedTasks) state.failedTasks = [];
           state.failedTasks.push(taskId);
+          this.statusReporter.recordTaskFailed(taskId, error instanceof Error ? error.message : String(error), 'execution');
 
           // 上游失败级联
           this.cascadeFailureToDownstream(taskId, state);
@@ -203,8 +211,10 @@ export class AssemblyLine {
     const endTime = new Date().toISOString();
     const duration = new Date(endTime).getTime() - new Date(startTime).getTime();
 
+    // CP-25: totalTasks 使用唯一任务ID数，不因重试虚增
+    const uniqueTaskCount = uniqueTaskIds.size;
     const summary: ExecutionSummary = {
-      totalTasks: state.taskQueue.length,
+      totalTasks: uniqueTaskCount,
       passed: state.records.filter(r => r.reviewVerdict?.result === 'PASS').length,
       failed: state.records.filter(r => r.reviewVerdict?.result === 'NOPASS' || r.devReport.status === 'failed').length,
       totalRetries: Array.from(state.retryCounter.values()).reduce((sum, count) => sum + count, 0),
@@ -215,7 +225,9 @@ export class AssemblyLine {
       config: this.config,
     };
 
-    state.state = summary.failed === 0 ? 'completed' : 'failed';
+    // CP-23: state 仅表示进程级别状态，正常结束均为 completed
+    // 个别任务失败记录在 HarnessStatusReport.failedTasks 中
+    state.state = 'completed';
 
     // 后处理: 扫描并收集 requiresHuman 检查点到验证队列
     this.collectAndEnqueueHumanCheckpoints(state.records);
@@ -224,10 +236,11 @@ export class AssemblyLine {
     this.generatePendingVerificationReport();
 
     // 完成流水线状态报告
+    // CP-23: 始终使用 completePipeline，任务失败信息已在 failedTasks 中
     if (summary.failed === 0) {
-      this.statusReporter.completePipeline(`流水线执行完成，${summary.passed}/${summary.totalTasks} 任务通过`);
+      this.statusReporter.completePipeline(`流水线执行完成，${summary.passed}/${uniqueTaskCount} 任务通过`);
     } else {
-      this.statusReporter.failPipeline(new Error(`${summary.failed} 个任务失败`), `流水线执行失败，${summary.failed}/${summary.totalTasks} 任务失败`);
+      this.statusReporter.completePipeline(`流水线执行完成，${summary.passed}/${uniqueTaskCount} 通过，${summary.failed} 失败`);
     }
 
     return summary;
@@ -269,7 +282,8 @@ export class AssemblyLine {
 
     // 2. 检查任务是否已完成或已失败（跳过不可重试的终态）
     const completedStatuses: TaskStatus[] = ['resolved', 'closed', 'failed'];
-    if (completedStatuses.includes(task.status)) {
+    const normalizedTaskStatus = normalizeStatus(task.status) as TaskStatus;
+    if (completedStatuses.includes(normalizedTaskStatus)) {
       console.log(`⏭️  任务 ${taskId} 已完成 (状态: ${task.status})，跳过`);
       addTimeline('skipped', `任务已完成，跳过执行: ${task.status}`, { status: task.status });
       record.finalStatus = task.status;
@@ -814,7 +828,8 @@ export class AssemblyLine {
         continue;
       }
 
-      if (depTask.status !== 'resolved' && depTask.status !== 'closed') {
+      const normalizedStatus = normalizeStatus(depTask.status);
+      if (normalizedStatus !== 'resolved' && normalizedStatus !== 'closed') {
         console.log(`⚠️  依赖任务 ${depId} 未完成 (状态: ${depTask.status})`);
         return false;
       }
@@ -907,6 +922,9 @@ export class AssemblyLine {
         if (!state.failedTasks) state.failedTasks = [];
         state.failedTasks.push(downstreamId);
         failedIds.add(downstreamId);
+
+        // 报告级联失败到状态追踪
+        this.statusReporter.recordTaskFailed(downstreamId, `upstream_failed: ${failedTaskId}`, 'cascade');
 
         // 存储上游失败信息到重试上下文（CP-19: 供 task reopen 恢复时使用）
         this.taskRetryContexts.set(downstreamId, {

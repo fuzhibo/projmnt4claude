@@ -217,7 +217,13 @@ export function getExecutableTasks(cwd: string = process.cwd(), includeSubtasks:
   // 过滤可执行任务
   const executableTasks = tasks.filter(task => {
     // 过滤掉子任务（除非明确要求包含）
-    if (!includeSubtasks && isSubtask(task.id)) {
+    // Bug3 fix: 同时检查 ID 命名模式和 meta.json parentId 字段
+    if (!includeSubtasks && (isSubtask(task.id) || !!task.parentId)) {
+      return false;
+    }
+
+    // Bug4 fix: 排除有子任务的父任务（跟踪容器），不应被推荐执行
+    if (task.subtaskIds && task.subtaskIds.length > 0) {
       return false;
     }
 
@@ -228,6 +234,7 @@ export function getExecutableTasks(cwd: string = process.cwd(), includeSubtasks:
     }
 
     // 检查状态是否可执行且依赖已完成
+    // CP-5: isExecutableStatus 内部已调用 normalizeStatus
     return isExecutableStatus(task.status) && areDependenciesCompleted(task.id, cwd);
   });
 

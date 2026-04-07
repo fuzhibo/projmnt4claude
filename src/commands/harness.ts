@@ -29,7 +29,9 @@ import {
 import { isInitialized, getProjectDir } from '../utils/path.js';
 import { AssemblyLine } from '../utils/hd-assembly-line.js';
 import { HarnessReporter } from '../utils/harness-reporter.js';
-import { readPlan, getExecutableTasks } from '../utils/plan.js';
+import { readPlan } from '../utils/plan.js';
+import { readTaskMeta } from '../utils/task.js';
+import { normalizeStatus } from '../types/task.js';
 import { SEPARATOR_WIDTH } from '../utils/format';
 import { recommendPlan } from './plan.js';
 import {
@@ -108,7 +110,9 @@ export interface HarnessCommandOptions {
   /** 最低质量分阈值 (0-100) */
   requireQuality?: string;
   /** 跳过质量门禁检查 */
-  skipQualityGate?: boolean;
+  skipQualityGate?: boolean;  // 已弃用，保持向后兼容
+  /** 跳过 Harness 执行前质量门禁检查 (--skip-harness-gate) */
+  skipHarnessGate?: boolean;
   /** 每个批次完成后自动 git commit */
   batchGitCommit?: boolean;
 }
@@ -132,7 +136,7 @@ export async function harnessCommand(
     minQualityScore: options.requireQuality
       ? parseInt(options.requireQuality, 10)
       : DEFAULT_QUALITY_GATE_CONFIG.minQualityScore,
-    enabled: !options.skipQualityGate,
+    enabled: !(options.skipHarnessGate || options.skipQualityGate),
   };
 
   // 验证质量分阈值
@@ -256,7 +260,7 @@ export async function harnessCommand(
       console.log('   1. 完善任务描述，添加 "## 问题描述"、"## 根因分析"、"## 解决方案" 部分');
       console.log('   2. 在 "## 相关文件" 部分列出受影响的源文件');
       console.log('   3. 使用更具体的检查点描述，避免泛化描述如 "核心功能实现"');
-      console.log('   4. 使用 --skip-quality-gate 跳过质量检查（不推荐）');
+      console.log('   4. 使用 --skip-harness-gate 跳过质量检查（不推荐）');
       console.log('   5. 使用 --require-quality N 调整质量分阈值（默认 60）');
       console.log('');
       process.exit(1);
@@ -446,12 +450,16 @@ async function loadTaskQueue(options: HarnessCommandOptions, cwd: string): Promi
         process.exit(1);
       }
 
-      // 统一可执行验证
-      const executableIds = new Set(getExecutableTasks(cwd, true));
+      // CP-19: 仅过滤终态任务，信任计划排序处理依赖关系
+      const TERMINAL_STATUSES = new Set(['resolved', 'closed', 'abandoned', 'failed']);
       const originalCount = taskQueue.length;
-      taskQueue = taskQueue.filter((id: string) => executableIds.has(id));
+      taskQueue = taskQueue.filter((id: string) => {
+        const task = readTaskMeta(id, cwd);
+        if (!task) return false;
+        return !TERMINAL_STATUSES.has(normalizeStatus(task.status));
+      });
       if (originalCount - taskQueue.length > 0) {
-        console.log(`📋 使用计划文件: ${options.plan} (已过滤 ${originalCount - taskQueue.length} 个不可执行任务)`);
+        console.log(`📋 使用计划文件: ${options.plan} (已过滤 ${originalCount - taskQueue.length} 个终态任务)`);
       } else {
         console.log(`📋 使用计划文件: ${options.plan}`);
       }
@@ -498,18 +506,32 @@ async function loadTaskQueue(options: HarnessCommandOptions, cwd: string): Promi
 
 /**
  * 从执行计划中过滤可执行任务并构建批次感知队列
+ *
+ * 批次感知过滤策略（CP-19 修复）：
+ * - 信任计划批次排序，不过滤依赖未满足的后续批次任务
+ * - 仅排除终态任务（resolved/closed/abandoned/failed），避免重复执行
+ * - 依赖完成检查由 AssemblyLine.checkDependencies() 在运行时逐任务执行
+ * - 这确保后续批次任务在前序批次完成后仍可执行
  */
 function filterExecutableFromPlan(
   plan: ExecutionPlan,
   cwd: string,
   logPrefix: string
 ): BatchAwareQueue {
-  const executableIds = new Set(getExecutableTasks(cwd, true));
-  const filteredTasks = plan.tasks.filter(taskId => executableIds.has(taskId));
+  // 终态集合：已完成/失败/放弃的任务不再执行
+  const TERMINAL_STATUSES = new Set(['resolved', 'closed', 'abandoned', 'failed']);
+
+  // 仅过滤终态任务，信任计划排序处理依赖关系
+  // CP-9: 使用 normalizeStatus 确保状态比较标准化
+  const filteredTasks = plan.tasks.filter(taskId => {
+    const task = readTaskMeta(taskId, cwd);
+    if (!task) return false;
+    return !TERMINAL_STATUSES.has(normalizeStatus(task.status));
+  });
 
   const filteredCount = plan.tasks.length - filteredTasks.length;
   if (filteredCount > 0) {
-    console.log(`${logPrefix} (已过滤 ${filteredCount} 个不可执行任务)`);
+    console.log(`${logPrefix} (已过滤 ${filteredCount} 个终态任务)`);
   } else {
     console.log(logPrefix);
   }

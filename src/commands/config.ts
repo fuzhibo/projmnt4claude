@@ -1,69 +1,15 @@
 import * as fs from 'fs';
 import { getConfigPath, isInitialized } from '../utils/path';
 import { PROMPT_TEMPLATE_NAMES, DEFAULT_TEMPLATES } from '../utils/prompt-templates';
-
-interface LoggingConfig {
-  level: 'error' | 'warn' | 'info' | 'debug';
-  maxFiles: number;
-  recordInputs: boolean;
-  inputMaxLength: number;
-}
-
-interface AIConfig {
-  provider: 'claude-code' | 'custom-endpoint';
-  customEndpoint?: string;
-}
-
-interface TrainingConfig {
-  exportEnabled: boolean;
-  outputDir: string;
-}
-
-/**
- * 提示词模板配置
- * 键为模板名称（如 dev, codeReview, qa 等），值为自定义模板字符串
- * 未配置的模板使用内置默认值
- */
-interface PromptsConfig {
-  [templateName: string]: string;
-}
-
-interface QualityConfig {
-  /** 最低质量评分阈值 (0-100)，低于此分数判定为 NOPASS (IR-08-06) */
-  minScore?: number;
-}
-
-interface ProjectConfig {
-  projectName: string;
-  createdAt: string;
-  branchPrefix: string;
-  defaultPriority: 'low' | 'medium' | 'high' | 'urgent';
-  logging?: LoggingConfig;
-  ai?: AIConfig;
-  training?: TrainingConfig;
-  prompts?: PromptsConfig;
-  quality?: QualityConfig;
-  [key: string]: unknown;
-}
-
-/** 日志配置默认值 */
-const DEFAULT_LOGGING: LoggingConfig = {
-  level: 'info',
-  maxFiles: 30,
-  recordInputs: true,
-  inputMaxLength: 500,
-};
-
-/** AI 配置默认值 */
-const DEFAULT_AI: AIConfig = {
-  provider: 'claude-code',
-};
-
-/** 训练数据配置默认值 */
-const DEFAULT_TRAINING: TrainingConfig = {
-  exportEnabled: false,
-  outputDir: '.projmnt4claude/training-data/',
-};
+import {
+  type ProjectConfig,
+  type AIConfig,
+  type LoggingConfig,
+  type TrainingConfig,
+  DEFAULT_LOGGING,
+  DEFAULT_AI,
+  DEFAULT_TRAINING,
+} from '../types/config.js';
 
 /**
  * 确保配置文件包含所有默认配置项
@@ -91,6 +37,7 @@ export function ensureConfigDefaults(config: ProjectConfig): ProjectConfig {
     result.ai = {
       provider: result.ai.provider ?? DEFAULT_AI.provider,
       ...(result.ai.customEndpoint !== undefined ? { customEndpoint: result.ai.customEndpoint } : {}),
+      ...(result.ai.providerOptions !== undefined ? { providerOptions: result.ai.providerOptions } : {}),
     };
   }
 
@@ -177,8 +124,69 @@ export function setConfigValue(config: ProjectConfig, key: string, value: string
   return result;
 }
 
-/** 日志级别合法值 */
-const VALID_LOG_LEVELS = ['debug', 'info', 'warn', 'error'];
+// ============================================================
+// Config Schema 验证 (IR-05-05)
+// ============================================================
+
+/** 配置键验证规则 */
+interface ConfigKeySchema {
+  type: 'string' | 'number' | 'boolean';
+  enum?: string[];
+  min?: number;
+  max?: number;
+}
+
+/** 已知配置项及其验证规则 */
+const CONFIG_SCHEMA: Record<string, ConfigKeySchema> = {
+  'projectName': { type: 'string' },
+  'branchPrefix': { type: 'string' },
+  'defaultPriority': { type: 'string', enum: ['low', 'medium', 'high', 'urgent'] },
+  'logging.level': { type: 'string', enum: ['debug', 'info', 'warn', 'error'] },
+  'logging.maxFiles': { type: 'number', min: 1 },
+  'logging.recordInputs': { type: 'boolean' },
+  'logging.inputMaxLength': { type: 'number', min: 0 },
+  'ai.provider': { type: 'string' },
+  'ai.customEndpoint': { type: 'string' },
+  'training.exportEnabled': { type: 'boolean' },
+  'training.outputDir': { type: 'string' },
+  'quality.minScore': { type: 'number', min: 0, max: 100 },
+};
+
+/**
+ * 验证配置值类型和约束
+ */
+function validateConfigValue(key: string, value: string, schema: ConfigKeySchema): void {
+  switch (schema.type) {
+    case 'string':
+      if (schema.enum && !schema.enum.includes(value)) {
+        console.error(`错误: ${key} 仅允许: ${schema.enum.join(', ')}`);
+        process.exit(1);
+      }
+      break;
+    case 'number': {
+      const num = Number(value);
+      if (isNaN(num)) {
+        console.error(`错误: ${key} 需要数字值，得到 '${value}'`);
+        process.exit(1);
+      }
+      if (schema.min !== undefined && num < schema.min) {
+        console.error(`错误: ${key} 最小值为 ${schema.min}`);
+        process.exit(1);
+      }
+      if (schema.max !== undefined && num > schema.max) {
+        console.error(`错误: ${key} 最大值为 ${schema.max}`);
+        process.exit(1);
+      }
+      break;
+    }
+    case 'boolean':
+      if (value !== 'true' && value !== 'false') {
+        console.error(`错误: ${key} 仅允许: true, false`);
+        process.exit(1);
+      }
+      break;
+  }
+}
 
 /**
  * 列出所有配置项（分类展示）
@@ -288,11 +296,13 @@ export function getConfig(key: string, cwd: string = process.cwd()): void {
 }
 
 /**
- * 设置指定配置值（带验证）
+ * 设置指定配置值（带 Schema 验证）
  *
  * 验证规则：
+ * - 拒绝未知配置键
  * - logging.level: 仅允许 debug/info/warn/error
- * - prompts.*: 检查模板变量格式（{variableName}）
+ * - prompts.*: 检查模板名称和变量格式
+ * - 数值/布尔类型严格校验
  */
 export function setConfig(key: string, value: string, cwd: string = process.cwd()): void {
   if (!isInitialized(cwd)) {
@@ -306,15 +316,7 @@ export function setConfig(key: string, value: string, cwd: string = process.cwd(
     process.exit(1);
   }
 
-  // Validate logging.level enum
-  if (key === 'logging.level') {
-    if (!VALID_LOG_LEVELS.includes(value)) {
-      console.error(`错误: logging.level 仅允许: ${VALID_LOG_LEVELS.join(', ')}`);
-      process.exit(1);
-    }
-  }
-
-  // Validate prompts.* template variable format
+  // 1. prompts.* 特殊验证（模板名称 + 变量格式）
   if (key.startsWith('prompts.')) {
     const templateName = key.substring('prompts.'.length);
     if (!PROMPT_TEMPLATE_NAMES.includes(templateName as any)) {
@@ -324,7 +326,6 @@ export function setConfig(key: string, value: string, cwd: string = process.cwd(
     // Check template has valid {variable} placeholders
     const variables = value.match(/\{(\w+)\}/g);
     if (variables) {
-      // Valid format - check default template for comparison
       const defaultTemplate = DEFAULT_TEMPLATES[templateName as keyof typeof DEFAULT_TEMPLATES];
       if (defaultTemplate) {
         const defaultVars = new Set((defaultTemplate.match(/\{(\w+)\}/g) || []).map(v => v));
@@ -336,6 +337,14 @@ export function setConfig(key: string, value: string, cwd: string = process.cwd(
         }
       }
     }
+  } else if (key in CONFIG_SCHEMA) {
+    // 2. 已知配置项：按 schema 验证类型和约束
+    validateConfigValue(key, value, CONFIG_SCHEMA[key]!);
+  } else {
+    // 3. 未知配置键：拒绝
+    console.error(`错误: 未知配置项 '${key}'`);
+    console.error(`可设置的配置项: ${Object.keys(CONFIG_SCHEMA).join(', ')}, prompts.*`);
+    process.exit(1);
   }
 
   const newConfig = setConfigValue(config, key, value);

@@ -1,0 +1,88 @@
+/**
+ * 统一配置类型定义
+ *
+ * 所有配置相关的类型、默认值集中定义于此，
+ * config.ts 和 headless-agent.ts 统一导入。
+ */
+
+/** 日志级别 */
+export type LogLevel = 'error' | 'warn' | 'info' | 'debug';
+
+/** 日志配置 */
+export interface LoggingConfig {
+  level: LogLevel;
+  maxFiles: number;
+  recordInputs: boolean;
+  inputMaxLength: number;
+}
+
+/**
+ * AI 配置（统一类型）
+ *
+ * 合并了原 config.ts 和 headless-agent.ts 中的 AIConfig 定义。
+ * - provider: 提供者标识
+ * - customEndpoint: 自定义端点 URL（原 config.ts 字段）
+ * - providerOptions: 提供者专有配置（原 headless-agent.ts 字段）
+ */
+export interface AIConfig {
+  provider: string;
+  customEndpoint?: string;
+  providerOptions?: Record<string, unknown>;
+}
+
+/** 训练数据配置 */
+export interface TrainingConfig {
+  exportEnabled: boolean;
+  outputDir: string;
+}
+
+/**
+ * 提示词模板配置
+ * 键为模板名称（如 dev, codeReview, qa 等），值为自定义模板字符串
+ * 未配置的模板使用内置默认值
+ */
+export interface PromptsConfig {
+  [templateName: string]: string;
+}
+
+/** 质量配置 */
+export interface QualityConfig {
+  /** 最低质量评分阈值 (0-100)，低于此分数判定为 NOPASS */
+  minScore?: number;
+}
+
+/** 项目配置 */
+export interface ProjectConfig {
+  projectName: string;
+  createdAt: string;
+  branchPrefix: string;
+  defaultPriority: 'low' | 'medium' | 'high' | 'urgent';
+  logging?: LoggingConfig;
+  ai?: AIConfig;
+  training?: TrainingConfig;
+  prompts?: PromptsConfig;
+  quality?: QualityConfig;
+  [key: string]: unknown;
+}
+
+/** 日志配置默认值 */
+export const DEFAULT_LOGGING: LoggingConfig = {
+  level: 'info',
+  maxFiles: 30,
+  recordInputs: true,
+  inputMaxLength: 500,
+};
+
+/** AI 配置默认值 */
+export const DEFAULT_AI: AIConfig = {
+  provider: 'claude-code',
+};
+
+/** 训练数据配置默认值 */
+export const DEFAULT_TRAINING: TrainingConfig = {
+  exportEnabled: false,
+  outputDir: '.projmnt4claude/training-data/',
+};
+
+/** 日志级别合法值 */
+export const VALID_LOG_LEVELS: readonly LogLevel[] = ['debug', 'info', 'warn', 'error'];
