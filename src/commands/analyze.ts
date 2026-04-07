@@ -157,6 +157,24 @@ function normalizeStatus(status: string): TaskStatus {
   return statusMap[status] || 'open';
 }
 
+function normalizeType(type: string): string {
+  const typeMap: Record<string, string> = {
+    'bugfix': 'bug',
+    'feat': 'feature',
+    'documentation': 'docs',
+    'testing': 'test',
+    'refactoring': 'refactor',
+    // 标准格式直接返回
+    'bug': 'bug',
+    'feature': 'feature',
+    'research': 'research',
+    'docs': 'docs',
+    'refactor': 'refactor',
+    'test': 'test',
+  };
+  return typeMap[type] || 'feature';
+}
+
 // ============== 规范验证辅助函数 ==============
 
 /**
@@ -572,6 +590,7 @@ export interface Issue {
     | 'parent_child_mismatch' | 'subtask_not_in_parent'
     // 状态检查
     | 'invalid_status_value' | 'status_reopen_mismatch'
+    | 'invalid_type_value' | 'invalid_priority_value'
     // 历史记录检查
     | 'invalid_history_format' | 'invalid_requirement_history_format'
     // 时间戳检查
@@ -1783,7 +1802,7 @@ export async function analyzeProject(
     if (!isValidTypeValue(task.type)) {
       issues.push({
         taskId: task.id,
-        type: 'invalid_status_value',
+        type: 'invalid_type_value',
         severity: 'high',
         message: `任务类型值无效: ${task.type}`,
         suggestion: `使用有效类型: ${VALID_TYPES.join(', ')}`,
@@ -1795,7 +1814,7 @@ export async function analyzeProject(
     if (!isValidPriorityValue(task.priority)) {
       issues.push({
         taskId: task.id,
-        type: 'invalid_status_value',
+        type: 'invalid_priority_value',
         severity: 'high',
         message: `任务优先级值无效: ${task.priority}`,
         suggestion: `使用有效优先级: ${VALID_PRIORITIES.join(', ')}`,
@@ -2545,6 +2564,30 @@ async function fixSingleIssue(
         task.status = normalizeStatus(task.status);
         writeTaskMeta(task, cwd);
         console.log(`  ✅ 已将状态从 ${oldStatus} 更新为 ${task.status}`);
+        return 'fixed';
+      }
+      return 'unfixable';
+    }
+
+    case 'invalid_type_value': {
+      console.log(`🔄 修复任务 ${issue.taskId} 的无效类型值...`);
+      if (issue.details?.currentValue) {
+        const oldType = task.type;
+        task.type = normalizeType(task.type) as TaskType;
+        writeTaskMeta(task, cwd);
+        console.log(`  ✅ 已将类型从 ${oldType} 更新为 ${task.type}`);
+        return 'fixed';
+      }
+      return 'unfixable';
+    }
+
+    case 'invalid_priority_value': {
+      console.log(`🔄 修复任务 ${issue.taskId} 的无效优先级值...`);
+      if (issue.details?.currentValue) {
+        const oldPriority = task.priority;
+        task.priority = normalizePriority(task.priority);
+        writeTaskMeta(task, cwd);
+        console.log(`  ✅ 已将优先级从 ${oldPriority} 更新为 ${task.priority}`);
         return 'fixed';
       }
       return 'unfixable';

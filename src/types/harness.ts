@@ -148,9 +148,10 @@ export type FailureCategory =
  * 标注评估结果的解析方式，便于审计
  */
 export type EvaluationInferenceType =
-  | 'explicit_match'         // 明确匹配 - 正则表达式匹配到 PASS/NOPASS
-  | 'content_inference'      // 内容推断 - 基于中文关键词推断
-  | 'prior_stage_inference'  // 前置阶段推断 - 矛盾检测修正
+  | 'structured_match'       // 结构化匹配 - EVALUATION_RESULT 行精确匹配
+  | 'explicit_match'         // 明确匹配 - Markdown标题/关键词匹配到 PASS/NOPASS
+  | 'content_inference'      // 内容推断 - 基于中文关键词推断（已弃用，保留兼容）
+  | 'prior_stage_inference'  // 前置阶段推断 - 矛盾检测修正（已弃用，保留兼容）
   | 'parse_failure_default'  // 解析失败默认 - 无法解析，使用默认值
   | 'empty_output';          // 空输出 - Claude 进程异常退出导致输出为空
 

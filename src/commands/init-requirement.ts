@@ -7,6 +7,7 @@ import {
   writeTaskMeta,
   readTaskMeta,
   getAllTasks,
+  addSubtaskToParent,
 } from '../utils/task';
 import { extractAffectedFiles } from '../utils/quality-gate';
 import { hasValidCheckpoints, displayCheckpointCreationWarning } from './task';
@@ -555,6 +556,9 @@ ${checkpoints.map((cp: string) => `- [ ] ${cp}`).join('\n')}
       const subCheckpointContent = `# ${subId} 检查点\n\n- [ ] 完成 ${sub.title}\n`;
       fs.writeFileSync(subCheckpointPath, subCheckpointContent, 'utf-8');
       syncCheckpointsToMeta(subId, cwd);
+
+      // 关联到父任务（更新父任务 subtaskIds 和 history）
+      addSubtaskToParent(taskId, subId, cwd);
 
       console.log(`  ${i + 1}. ${subId}: ${sub.title}`);
       console.log(`     文件: ${sub.files.length > 0 ? sub.files.join(', ') : '待确认'}`);

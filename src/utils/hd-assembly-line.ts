@@ -36,7 +36,7 @@ import { readTaskMeta, writeTaskMeta, taskExists, updateTaskStatus, assignRole, 
 import { getProjectDir } from './path.js';
 import { HarnessExecutor } from './harness-executor.js';
 import { HarnessCodeReviewer } from './harness-code-reviewer.js';
-import { HarnessQATester, RetryContext } from './harness-qa-tester.js';
+import { HarnessQATester, type RetryContext } from './harness-qa-tester.js';
 import { HarnessEvaluator } from './harness-evaluator.js';
 import { RetryHandler } from './harness-retry.js';
 import { HarnessStatusReporter } from './harness-status-reporter.js';

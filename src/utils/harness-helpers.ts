@@ -310,6 +310,59 @@ export function filterCheckpoints(
   return task.checkpoints.filter(filterFn);
 }
 
+// ============================================================
+// 结构化结果匹配
+// ============================================================
+
+export interface StructuredResult {
+  passed: boolean | null;
+  /** 匹配级别: 1=EVALUATION_RESULT行, 2=Markdown标题, 3=关键词, null=无匹配 */
+  matchLevel: 1 | 2 | 3 | null;
+}
+
+/**
+ * 按三级优先级匹配结构化评估结果
+ *
+ * Level 1: EVALUATION_RESULT: PASS/NOPASS 行（强制格式）
+ * Level 2: Markdown 标题格式（向后兼容: ## 评估结果: PASS 等）
+ * Level 3: PASS/NOPASS 关键词（首次出现）
+ *
+ * 替代中文情感判断，避免技术文档中高频词导致假 PASS
+ */
+export function parseStructuredResult(output: string): StructuredResult {
+  if (!output || output.trim().length === 0) {
+    return { passed: null, matchLevel: null };
+  }
+
+  // Level 1: 结构化标记行（强制格式）
+  // 匹配 EVALUATION_RESULT: PASS/NOPASS 和 VERDICT: PASS/NOPASS
+  const level1 = output.match(/(?:EVALUATION_RESULT|VERDICT)\s*[:：]\s*(PASS|NOPASS)/i);
+  if (level1) {
+    return { passed: level1[1]!.toUpperCase() === 'PASS', matchLevel: 1 };
+  }
+
+  // Level 2: Markdown 标题格式（向后兼容）
+  const level2Patterns = [
+    /##\s*(?:评估结果|审核结果|验证结果|Evaluation Result|Result|Verdict)\s*[:：]?\s*(PASS|NOPASS)/i,
+    /(?:评估结果|审核结果|验证结果|Evaluation Result|Result|Verdict)[:：]?\s*(PASS|NOPASS)/i,
+    /"result"\s*[:：]\s*"(PASS|NOPASS)"/i,
+  ];
+  for (const pattern of level2Patterns) {
+    const match = output.match(pattern);
+    if (match) {
+      return { passed: match[1]!.toUpperCase() === 'PASS', matchLevel: 2 };
+    }
+  }
+
+  // Level 3: PASS/NOPASS 关键词（首次出现）
+  const level3 = output.match(/\b(PASS|NOPASS)\b/i);
+  if (level3) {
+    return { passed: level3[1]!.toUpperCase() === 'PASS', matchLevel: 3 };
+  }
+
+  return { passed: null, matchLevel: null };
+}
+
 export function parseVerdictResult(
   output: string,
   options: ParseVerdictOptions
@@ -364,30 +417,19 @@ export function parseVerdictResult(
     }
   }
 
-  // 结构化格式未匹配时，增加中文情感判断（排除格式标题干扰）
+  // 结构化格式未匹配时，使用三级优先级关键词匹配（替代中文情感判断）
   if (!resultMatch) {
-    const contentWithoutHeaders = output.replace(/^##\s*(?:未满足|未完成|失败|缺失|不通过).*$/gm, '');
-    const hasPositive = /(?:通过|✅|成功|符合(?:要求)?|满足(?:标准|要求)?|良好|合格|达标|优秀|验收通过|质量良好|实现|完整|正确|正常|零错误|已实现|均已|无误)/.test(contentWithoutHeaders);
-    const hasNegative = /(?:不通过|未通过|❌|失败|不符合|不满足|未满足|不合格|未达标)/.test(contentWithoutHeaders);
-    if (hasPositive && !hasNegative) {
-      result.passed = true;
-      result.reason = '基于输出内容的中文情感判断：通过';
-    } else if (hasNegative) {
-      result.passed = false;
-      result.reason = '基于输出内容的中文情感判断：未通过';
+    const structured = parseStructuredResult(output);
+    if (structured.passed !== null) {
+      result.passed = structured.passed;
+      if (!result.reason) {
+        result.reason = `基于结构化关键词匹配（级别 ${structured.matchLevel}）`;
+      }
     }
   }
 
   if (!result.reason) {
-    if (output.toLowerCase().includes('pass') && !output.toLowerCase().includes('nopass')) {
-      result.passed = true;
-      result.reason = '基于输出内容的简单判断';
-    } else if (/(?:审查通过|审核通过|验证通过|评估通过|验收通过|所有.*满足|全部.*通过|均已满足|完全符合|质量良好)/.test(output)) {
-      result.passed = true;
-      result.reason = '基于输出内容的简单判断：包含正向通过关键词';
-    } else {
-      result.reason = '无法解析判定结果';
-    }
+    result.reason = '无法解析判定结果';
   }
 
   return result;

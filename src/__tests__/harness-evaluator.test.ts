@@ -290,6 +290,34 @@ describe('BUG-013-3: parseEvaluationResult inference type tracking', () => {
     return (evaluator as any).parseEvaluationResult(output);
   }
 
+  // --- Level 1: EVALUATION_RESULT structured format ---
+
+  test('should return structured_match for EVALUATION_RESULT: PASS', () => {
+    const result = parse(
+      'EVALUATION_RESULT: PASS\n' +
+      'EVALUATION_REASON: 所有验收标准已满足\n' +
+      '## 评估结果: PASS\n' +
+      '## 原因: 所有验收标准已满足\n' +
+      '## 后续动作: resolve\n'
+    );
+    expect(result.passed).toBe(true);
+    expect(result.inferenceType).toBe('structured_match');
+  });
+
+  test('should return structured_match for EVALUATION_RESULT: NOPASS', () => {
+    const result = parse(
+      'EVALUATION_RESULT: NOPASS\n' +
+      'EVALUATION_REASON: 缺少单元测试\n' +
+      '## 评估结果: NOPASS\n' +
+      '## 原因: 缺少单元测试\n' +
+      '## 后续动作: redevelop\n'
+    );
+    expect(result.passed).toBe(false);
+    expect(result.inferenceType).toBe('structured_match');
+  });
+
+  // --- Level 2: Markdown heading format (backward compatible) ---
+
   test('should return explicit_match for standard ## 评估结果: PASS format', () => {
     const result = parse(
       '## 评估结果: PASS\n' +
@@ -324,45 +352,53 @@ describe('BUG-013-3: parseEvaluationResult inference type tracking', () => {
     expect(result.inferenceType).toBe('explicit_match');
   });
 
-  test('should return explicit_match for bare PASS keyword', () => {
-    const result = parse('The task is PASS. Everything looks good.');
-    expect(result.passed).toBe(true);
-    expect(result.inferenceType).toBe('explicit_match');
-  });
-
   test('should return explicit_match for JSON format', () => {
     const result = parse('{"result": "PASS", "reason": "ok"}');
     expect(result.passed).toBe(true);
     expect(result.inferenceType).toBe('explicit_match');
   });
 
-  test('should return content_inference for positive Chinese keywords without format markers', () => {
+  // --- Level 3: PASS/NOPASS keyword ---
+
+  test('should return explicit_match for bare PASS keyword', () => {
+    const result = parse('The task is PASS. Everything looks good.');
+    expect(result.passed).toBe(true);
+    expect(result.inferenceType).toBe('explicit_match');
+  });
+
+  // --- No match: Chinese-only output without PASS/NOPASS ---
+
+  test('should return parse_failure_default for Chinese-only positive text without PASS/NOPASS', () => {
     const result = parse(
       '经过审查，所有验收标准均已满足，实现完整正确，代码质量良好。'
     );
-    expect(result.passed).toBe(true);
-    expect(result.inferenceType).toBe('content_inference');
+    expect(result.passed).toBe(false);
+    expect(result.inferenceType).toBe('parse_failure_default');
   });
 
-  test('should return content_inference for negative Chinese keywords without format markers', () => {
+  test('should return parse_failure_default for Chinese-only negative text without PASS/NOPASS', () => {
     const result = parse(
       '实现未通过审查，存在多个问题，不符合验收标准。'
     );
     expect(result.passed).toBe(false);
-    expect(result.inferenceType).toBe('content_inference');
+    expect(result.inferenceType).toBe('parse_failure_default');
   });
 
-  test('should return prior_stage_inference when contradiction detection corrects NOPASS to PASS', () => {
-    // Output has NOPASS explicitly but all actual content is positive (contradiction)
+  // --- No contradiction detection (removed Chinese sentiment analysis) ---
+
+  test('should NOT auto-correct NOPASS to PASS based on Chinese sentiment (contradiction detection removed)', () => {
+    // Previously: contradiction detection would auto-correct to PASS
+    // Now: respects the explicit NOPASS from ## 评估结果: NOPASS
     const result = parse(
       '## 评估结果: NOPASS\n' +
       '## 原因: 代码质量满足要求\n' +
       '所有功能均已实现，代码正确完整，零错误。'
     );
-    expect(result.passed).toBe(true);
-    expect(result.inferenceType).toBe('prior_stage_inference');
-    expect(result.reason).toContain('矛盾修正');
+    expect(result.passed).toBe(false);
+    expect(result.inferenceType).toBe('explicit_match');
   });
+
+  // --- Unparseable output ---
 
   test('should return parse_failure_default for completely unparseable output', () => {
     const result = parse(
@@ -374,18 +410,17 @@ describe('BUG-013-3: parseEvaluationResult inference type tracking', () => {
     expect(result.reason).toContain('无法解析');
   });
 
-  test('should return content_inference for last-resort "pass" substring match', () => {
-    // "passed" contains "pass" but doesn't match \bPASS\b (word boundary regex)
-    // so it falls through to the last-resort lowerOutput.includes('pass') check
+  test('should return parse_failure_default for text with "passed" (not PASS keyword)', () => {
+    // "passed" does not match \bPASS\b (word boundary regex)
     const result = parse('The code passed the review successfully.');
-    expect(result.passed).toBe(true);
-    expect(result.inferenceType).toBe('content_inference');
+    expect(result.passed).toBe(false);
+    expect(result.inferenceType).toBe('parse_failure_default');
   });
 
-  test('should return content_inference for last-resort Chinese positive keyword match', () => {
+  test('should return parse_failure_default for Chinese positive keyword without PASS/NOPASS', () => {
     const result = parse('审查通过，实现良好。');
-    expect(result.passed).toBe(true);
-    expect(result.inferenceType).toBe('content_inference');
+    expect(result.passed).toBe(false);
+    expect(result.inferenceType).toBe('parse_failure_default');
   });
 
   test('should always have inferenceType set (never undefined)', () => {
@@ -442,6 +477,7 @@ describe('BUG-013-3: formatReviewReport inference type annotation', () => {
 
   test('should include different inference type labels correctly', () => {
     const types = [
+      { type: 'structured_match', label: '结构化匹配' },
       { type: 'explicit_match', label: '明确匹配' },
       { type: 'content_inference', label: '内容推断' },
       { type: 'prior_stage_inference', label: '前置阶段推断' },

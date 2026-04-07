@@ -23,7 +23,7 @@ import { createDefaultSprintContract } from '../types/harness.js';
 import type { TaskMeta, CheckpointMetadata } from '../types/task.js';
 import { getProjectDir } from './path.js';
 import { readTaskMeta, getAllTaskIds } from './task.js';
-import { classifyExitResult, archiveReportIfExists } from './harness-helpers.js';
+import { classifyExitResult, archiveReportIfExists, parseStructuredResult } from './harness-helpers.js';
 
 /**
  * 检测是否为可重试的 API 错误
@@ -143,43 +143,75 @@ export class HarnessEvaluator {
       const prompt = this.buildEvaluationPrompt(task, devReport, contract, phantomTasks);
       console.log('\n   📝 评估提示词已生成');
 
-      // 4. 运行独立评估会话
-      console.log('\n   🔍 启动独立评估会话...');
-      const result = await this.runEvaluationSession({
-        prompt,
-        allowedTools: ['Read', 'Bash', 'Grep', 'Glob'],
-        timeout: Math.floor(this.config.timeout / 2), // 审查时间较短
-        cwd: this.config.cwd,
-        outputFormat: 'text',
-      });
+      // 4. 运行评估会话（带格式重试，最多 2 次）
+      const MAX_PARSE_RETRIES = 2;
+      let evaluation: ReturnType<typeof this.parseEvaluationResult> | null = null;
+      let lastRawOutput = '';
 
-      // 4.5 保存原始评估输出（用于事后诊断）
-      this.saveRawEvaluationOutput(task.id, result.output, result.stderr, result.success);
+      for (let parseAttempt = 0; parseAttempt <= MAX_PARSE_RETRIES; parseAttempt++) {
+        const currentPrompt = parseAttempt === 0
+          ? prompt
+          : this.buildRetryPrompt(lastRawOutput);
 
-      // 4.6 检测空输出（Claude 进程异常退出）
-      if (!result.output || result.output.trim().length === 0) {
-        verdict.result = 'NOPASS';
-        verdict.reason = `评估会话输出为空：Claude 进程可能异常退出${result.stderr ? ` (stderr: ${result.stderr.substring(0, 200)})` : ''}`;
-        verdict.inferenceType = 'empty_output';
-        console.log('\n   ❌ 评估输出为空，Claude 进程可能异常退出');
-        if (result.stderr) {
-          console.log(`   📝 stderr: ${result.stderr.substring(0, 300)}`);
+        if (parseAttempt > 0) {
+          console.log(`   🔄 评估结果格式不匹配，重新评估 (${parseAttempt}/${MAX_PARSE_RETRIES})...`);
+        } else {
+          console.log('\n   🔍 启动独立评估会话...');
         }
-        await this.saveReviewReport(task.id, verdict, devReport);
-        return verdict;
+
+        const result = await this.runEvaluationSession({
+          prompt: currentPrompt,
+          allowedTools: ['Read', 'Bash', 'Grep', 'Glob'],
+          timeout: Math.floor(this.config.timeout / 2), // 审查时间较短
+          cwd: this.config.cwd,
+          outputFormat: 'text',
+        });
+
+        // 4.5 保存原始评估输出（用于事后诊断）
+        this.saveRawEvaluationOutput(task.id, result.output, result.stderr, result.success);
+
+        // 4.6 检测空输出（Claude 进程异常退出）
+        if (!result.output || result.output.trim().length === 0) {
+          verdict.result = 'NOPASS';
+          verdict.reason = `评估会话输出为空：Claude 进程可能异常退出${result.stderr ? ` (stderr: ${result.stderr.substring(0, 200)})` : ''}`;
+          verdict.inferenceType = 'empty_output';
+          console.log('\n   ❌ 评估输出为空，Claude 进程可能异常退出');
+          if (result.stderr) {
+            console.log(`   📝 stderr: ${result.stderr.substring(0, 300)}`);
+          }
+          await this.saveReviewReport(task.id, verdict, devReport);
+          return verdict;
+        }
+
+        // 5. 解析评估结果
+        evaluation = this.parseEvaluationResult(result.output);
+
+        // 成功匹配则跳出循环
+        if (evaluation.inferenceType !== 'parse_failure_default') {
+          break;
+        }
+
+        lastRawOutput = result.output;
       }
 
-      // 5. 解析评估结果
-      const evaluation = this.parseEvaluationResult(result.output);
+      // CP-16: 重试后仍无法解析时，默认 PASS（保守策略）
+      if (evaluation!.inferenceType === 'parse_failure_default') {
+        console.log('   ⚠️ 重试后仍无法解析评估结果，默认 PASS（保守策略）');
+        evaluation = {
+          ...evaluation!,
+          passed: true,
+          reason: `重试 ${MAX_PARSE_RETRIES} 次后仍无法解析评估结果，采用保守策略默认通过`,
+        };
+      }
 
-      verdict.result = evaluation.passed ? 'PASS' : 'NOPASS';
-      verdict.reason = evaluation.reason;
-      verdict.failedCriteria = evaluation.failedCriteria;
-      verdict.failedCheckpoints = evaluation.failedCheckpoints;
-      verdict.details = evaluation.details;
-      verdict.action = evaluation.action as any;
-      verdict.failureCategory = evaluation.failureCategory as any;
-      verdict.inferenceType = evaluation.inferenceType;
+      verdict.result = evaluation!.passed ? 'PASS' : 'NOPASS';
+      verdict.reason = evaluation!.reason;
+      verdict.failedCriteria = evaluation!.failedCriteria;
+      verdict.failedCheckpoints = evaluation!.failedCheckpoints;
+      verdict.details = evaluation!.details;
+      verdict.action = evaluation!.action as any;
+      verdict.failureCategory = evaluation!.failureCategory as any;
+      verdict.inferenceType = evaluation!.inferenceType;
 
       if (verdict.result === 'PASS') {
         console.log(`\n   ✅ 审查通过 [推断类型: ${verdict.inferenceType || 'unknown'}]`);
@@ -330,8 +362,20 @@ export class HarnessEvaluator {
     parts.push('6. 检查开发者是否违反禁止操作（特别是是否创建了额外任务）');
     parts.push('');
 
-    parts.push('## 输出格式');
-    parts.push('请按以下格式输出评估结果:');
+    parts.push('## 输出格式（严格遵守）');
+    parts.push('');
+    parts.push('**强制要求**: 你的输出必须以以下两行标记开头:');
+    parts.push('```');
+    parts.push('EVALUATION_RESULT: PASS');
+    parts.push('EVALUATION_REASON: [简要说明为什么通过或不通过]');
+    parts.push('```');
+    parts.push('或:');
+    parts.push('```');
+    parts.push('EVALUATION_RESULT: NOPASS');
+    parts.push('EVALUATION_REASON: [简要说明为什么通过或不通过]');
+    parts.push('```');
+    parts.push('');
+    parts.push('然后按以下 Markdown 格式输出详细评估:');
     parts.push('```');
     parts.push('## 评估结果: PASS 或 NOPASS');
     parts.push('## 原因: [简要说明为什么通过或不通过]');
@@ -344,12 +388,14 @@ export class HarnessEvaluator {
     parts.push('');
     parts.push('**重要格式要求**:');
     parts.push('- 你必须严格按照上述格式输出，不得省略或修改格式');
-    parts.push('- 如果你认为任务通过，必须输出 "## 评估结果: PASS"（不是"通过"、"满足"等词语）');
-    parts.push('- 如果你认为任务未通过，必须输出 "## 评估结果: NOPASS"（不是"不通过"、"未满足"等词语）');
-    parts.push('- 第一行必须是 "## 评估结果: PASS" 或 "## 评估结果: NOPASS"');
+    parts.push('- 必须输出 EVALUATION_RESULT: PASS 或 EVALUATION_RESULT: NOPASS 标记行');
+    parts.push('- 如果你认为任务通过，必须输出 PASS（不是"通过"、"满足"等词语）');
+    parts.push('- 如果你认为任务未通过，必须输出 NOPASS（不是"不通过"、"未满足"等词语）');
     parts.push('');
     parts.push('**正确示例（通过）**:');
     parts.push('```');
+    parts.push('EVALUATION_RESULT: PASS');
+    parts.push('EVALUATION_REASON: 所有验收标准已满足，代码质量良好');
     parts.push('## 评估结果: PASS');
     parts.push('## 原因: 所有验收标准已满足，代码质量良好');
     parts.push('## 后续动作: resolve');
@@ -361,6 +407,8 @@ export class HarnessEvaluator {
     parts.push('');
     parts.push('**正确示例（未通过）**:');
     parts.push('```');
+    parts.push('EVALUATION_RESULT: NOPASS');
+    parts.push('EVALUATION_REASON: 缺少单元测试，构建失败');
     parts.push('## 评估结果: NOPASS');
     parts.push('## 原因: 缺少单元测试，构建失败');
     parts.push('## 后续动作: redevelop');
@@ -372,9 +420,9 @@ export class HarnessEvaluator {
     parts.push('');
     parts.push('**错误示例（严禁这样输出）**:');
     parts.push('```');
-    parts.push('所有验收标准均已满足，实现清晰。  ← 错误：缺少格式标记');
-    parts.push('## 评估结果: 通过  ← 错误：使用了"通过"而非 PASS');
-    parts.push('## 评估结果: 不通过  ← 错误：使用了"不通过"而非 NOPASS');
+    parts.push('所有验收标准均已满足，实现清晰。  ← 错误：缺少 EVALUATION_RESULT 标记');
+    parts.push('EVALUATION_RESULT: 通过  ← 错误：使用了"通过"而非 PASS');
+    parts.push('EVALUATION_RESULT: 不通过  ← 错误：使用了"不通过"而非 NOPASS');
     parts.push('```');
     parts.push('');
     parts.push('**动作说明（评估结果为 NOPASS 时必须填写）**:');
@@ -386,6 +434,49 @@ export class HarnessEvaluator {
     parts.push('');
     parts.push('现在开始评估。');
 
+    return parts.join('\n');
+  }
+
+  /**
+   * 构建格式重试提示词
+   *
+   * 当评估输出未包含 EVALUATION_RESULT 标记时，
+   * 使用此提示词要求重新按格式输出
+   */
+  private buildRetryPrompt(previousOutput: string): string {
+    const parts: string[] = [];
+    parts.push('# 评估结果格式纠正');
+    parts.push('');
+    parts.push('上一次评估输出未包含要求的格式标记。请基于上次评估内容重新输出。');
+    parts.push('');
+    parts.push('**强制格式要求**: 输出必须包含以下两行:');
+    parts.push('```');
+    parts.push('EVALUATION_RESULT: PASS');
+    parts.push('EVALUATION_REASON: [简要说明]');
+    parts.push('```');
+    parts.push('或:');
+    parts.push('```');
+    parts.push('EVALUATION_RESULT: NOPASS');
+    parts.push('EVALUATION_REASON: [简要说明]');
+    parts.push('```');
+    parts.push('');
+    parts.push('同时提供 Markdown 格式的详细评估:');
+    parts.push('```');
+    parts.push('## 评估结果: PASS 或 NOPASS');
+    parts.push('## 原因: [简要说明]');
+    parts.push('## 后续动作: [resolve|redevelop|retest|reevaluate|escalate_human]');
+    parts.push('## 失败分类: [acceptance_criteria|code_quality|test_failure|architecture|specification|phantom_task|incomplete|other]');
+    parts.push('## 未满足的标准: [列出未满足的验收标准]');
+    parts.push('## 未完成的检查点: [列出未完成的检查点]');
+    parts.push('## 详细反馈: [可选的详细反馈]');
+    parts.push('```');
+    parts.push('');
+    parts.push('上一次评估输出:');
+    parts.push('```');
+    parts.push(previousOutput.substring(0, 2000));
+    parts.push('```');
+    parts.push('');
+    parts.push('请基于上次评估内容，按上述格式重新输出结果。');
     return parts.join('\n');
   }
 
@@ -545,42 +636,11 @@ export class HarnessEvaluator {
       return result;
     }
 
-    // 多模式匹配评估结果
-    const resultPatterns = [
-      // 标准格式: ## 评估结果: PASS/NOPASS
-      /##\s*评估结果\s*[:：]?\s*(PASS|NOPASS)/i,
-      // 宽松格式: 评估结果 PASS/NOPASS
-      /(?:评估结果|Evaluation Result|Result)[:：]?\s*(PASS|NOPASS)/i,
-      // 简单匹配: PASS 或 NOPASS 单独出现
-      /\b(PASS|NOPASS)\b/i,
-      // JSON 格式: "result": "PASS"
-      /"result"\s*[:：]\s*"(PASS|NOPASS)"/i,
-    ];
-
-    let resultMatch: RegExpMatchArray | null = null;
-    for (const pattern of resultPatterns) {
-      resultMatch = output.match(pattern);
-      if (resultMatch) {
-        result.passed = resultMatch[1]!.toUpperCase() === 'PASS';
-        result.inferenceType = 'explicit_match';
-        break;
-      }
-    }
-
-    // 如果没有匹配到，尝试中文判断（排除格式标题干扰）
-    if (!resultMatch) {
-      const contentWithoutHeaders = output.replace(/^##\s*(?:未满足|未完成|失败|缺失|不通过).*$/gm, '');
-      const hasPositive = /(?:通过|✅|成功|符合(?:要求)?|满足(?:标准|要求)?|良好|合格|达标|优秀|验收通过|质量良好|实现|完整|正确|正常|零错误|已实现|均已|无误|全部完成)/.test(contentWithoutHeaders);
-      const hasNegative = /(?:不通过|未通过|❌|失败|不符合|不满足|未满足|不合格|未达标)/.test(contentWithoutHeaders);
-      if (hasPositive && !hasNegative) {
-        result.passed = true;
-        result.inferenceType = 'content_inference';
-        resultMatch = ['通过', '通过'] as RegExpMatchArray;
-      } else if (hasNegative) {
-        result.passed = false;
-        result.inferenceType = 'content_inference';
-        resultMatch = ['不通过', 'NOPASS'] as RegExpMatchArray;
-      }
+    // 使用结构化关键词匹配（替代多模式匹配和中文情感判断）
+    const structured = parseStructuredResult(output);
+    if (structured.passed !== null) {
+      result.passed = structured.passed;
+      result.inferenceType = structured.matchLevel === 1 ? 'structured_match' : 'explicit_match';
     }
 
     // 提取原因 - 多种格式
@@ -672,46 +732,17 @@ export class HarnessEvaluator {
       }
     }
 
-    // 矛盾检测: 如果结果为 NOPASS，但整体内容全为正向（包括中文情感判断路径）
-    // 排除格式标题干扰：## 未满足的标准 / ## 未完成的检查点 等章节标题自身包含负面关键词
-    if (!result.passed) {
-      const contentWithoutHeaders = output.replace(/^##\s*(?:未满足|未完成|失败|缺失|不通过).*$/gm, '');
-      const posSignals = /(?:满足|通过|符合|良好|合格|达标|优秀|成功|✅|实现|完整|正确|正常|零错误|已实现|均已|无误)/.test(contentWithoutHeaders);
-      const negSignals = /(?:不满足|未满足|不通过|未通过|失败|不符合|不合格|❌)/.test(contentWithoutHeaders);
-      if (posSignals && !negSignals) {
-        console.warn('   ⚠️ 矛盾检测: NOPASS 结果与正向内容冲突，自动修正为 PASS');
-        result.passed = true;
-        result.inferenceType = 'prior_stage_inference';
-        result.reason = result.reason
-          ? `[矛盾修正] ${result.reason}`
-          : '原始结果为 NOPASS 但内容仅包含正向评价，已自动修正';
-      }
-    }
-
     // 如果没有提取到原因，设置默认值
     if (!result.reason) {
       if (result.passed) {
-        result.reason = '基于输出内容的判断：评估通过';
-      } else if (resultMatch) {
-        result.reason = '基于输出内容的判断：评估未通过';
+        result.reason = '基于结构化关键词匹配：评估通过';
+      } else if (structured.passed !== null) {
+        result.reason = '基于结构化关键词匹配：评估未通过';
       } else {
-        // 最后尝试：检查是否包含明确的通过/不通过词汇
-        const lowerOutput = output.toLowerCase();
-        if (lowerOutput.includes('pass') && !lowerOutput.includes('nopass') && !lowerOutput.includes('not pass')) {
-          result.passed = true;
-          result.reason = '基于输出内容的简单判断：包含 PASS';
-          result.inferenceType = 'content_inference';
-        } else if (/(?:审查通过|审核通过|评估通过|验收通过|所有.*满足|全部.*通过|均已满足|完全符合|质量良好)/.test(output)) {
-          result.passed = true;
-          result.reason = '基于输出内容的简单判断：包含正向通过关键词';
-          result.inferenceType = 'content_inference';
-        } else {
-          result.reason = '无法解析评估结果';
-          result.inferenceType = 'parse_failure_default';
-          // 添加调试信息
-          console.log('   ⚠️  解析失败，原始输出前500字符:');
-          console.log(output.substring(0, 500));
-        }
+        result.reason = '无法解析评估结果';
+        result.inferenceType = 'parse_failure_default';
+        console.log('   ⚠️  解析失败，原始输出前500字符:');
+        console.log(output.substring(0, 500));
       }
     }
 
@@ -940,6 +971,7 @@ export class HarnessEvaluator {
    */
   private formatReviewReport(verdict: ReviewVerdict, devReport: DevReport): string {
     const INFERENCE_TYPE_LABELS: Record<string, string> = {
+      structured_match: '结构化匹配',
       explicit_match: '明确匹配',
       content_inference: '内容推断',
       prior_stage_inference: '前置阶段推断',

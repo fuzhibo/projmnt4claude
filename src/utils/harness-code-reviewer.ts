@@ -212,12 +212,15 @@ export class HarnessCodeReviewer {
     parts.push('## 输出格式');
     parts.push('请按以下格式输出审核结果:');
     parts.push('```');
+    parts.push('VERDICT: PASS 或 VERDICT: NOPASS');
     parts.push('## 审核结果: PASS 或 NOPASS');
     parts.push('## 原因: [简要说明为什么通过或不通过]');
     parts.push('## 代码质量问题: [列出发现的问题，如果没有则为空]');
     parts.push('## 未通过的检查点: [列出未通过的检查点ID，如果没有则为空]');
     parts.push('## 详细反馈: [可选的详细反馈]');
     parts.push('```');
+    parts.push('');
+    parts.push('**重要**: 必须输出 VERDICT: PASS 或 VERDICT: NOPASS，不得使用"通过"、"不通过"等中文词语。');
     parts.push('');
     parts.push('现在开始审核。');
 
