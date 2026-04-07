@@ -216,7 +216,7 @@ export async function initRequirement(
   console.log('');
 
   // 步骤 1: 规则引擎分析（始终执行）
-  const ruleAnalysis = analyzeRequirement(description);
+  const ruleAnalysis = analyzeRequirement(description, cwd);
 
   // 步骤 2: AI 增强（默认启用，--no-ai 时跳过）
   let analysis: HybridAnalysisResult = {
@@ -977,7 +977,7 @@ function generateSplitSuggestions(
 /**
  * 分析自然语言需求
  */
-function analyzeRequirement(description: string): RequirementAnalysis {
+function analyzeRequirement(description: string, cwd: string): RequirementAnalysis {
   const lowerDesc = description.toLowerCase();
 
   // 检测优先级关键词 (使用 P0-P3 格式)
@@ -1055,7 +1055,7 @@ function analyzeRequirement(description: string): RequirementAnalysis {
   // 文件重叠依赖推断：从描述中提取文件路径，与已有任务 affectedFiles 比较
   const currentFiles = extractFilePaths(description);
   if (currentFiles.length > 0) {
-    const existingTasks = getAllTasks();
+    const existingTasks = getAllTasks(cwd);
     for (const existing of existingTasks) {
       if (existing.status === 'resolved' || existing.status === 'closed' || existing.status === 'abandoned') continue;
       const existingFiles = extractAffectedFiles(existing);

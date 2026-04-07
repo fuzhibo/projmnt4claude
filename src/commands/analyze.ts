@@ -298,9 +298,10 @@ export const SCHEMA_MIGRATIONS: SchemaMigrationStep[] = [
       }
 
       // 清除无效 VerdictAction 值（从 history 中）
+      if (!task.history) task.history = [];
       const invalidActionEntries: number[] = [];
-      for (let i = 0; i < (task.history?.length || 0); i++) {
-        const entry = task.history![i]!;
+      for (let i = 0; i < task.history.length; i++) {
+        const entry = task.history[i]!;
         if (entry.action === 'verdict' && entry.newValue && typeof entry.newValue === 'string') {
           if (!VALID_VERDICT_ACTIONS.includes(entry.newValue as VerdictAction)) {
             invalidActionEntries.push(i);
@@ -2480,6 +2481,7 @@ async function fixSingleIssue(
       const targetStatus = issue.details?.targetStatus as TaskStatus;
       if (targetStatus && PIPELINE_STATUS_MIGRATION_MAP[oldStatus]) {
         task.status = targetStatus;
+        if (!task.history) task.history = [];
         task.history.push({
           timestamp: new Date().toISOString(),
           action: `pipeline_status_migration`,
@@ -2502,8 +2504,9 @@ async function fixSingleIssue(
       let fixedAny = false;
 
       // 修复 history 中的无效 verdict action
-      for (let i = 0; i < (task.history?.length || 0); i++) {
-        const entry = task.history![i]!;
+      if (!task.history) task.history = [];
+      for (let i = 0; i < task.history.length; i++) {
+        const entry = task.history[i]!;
         if (entry.action === 'verdict' && entry.newValue && typeof entry.newValue === 'string') {
           if (!VALID_VERDICT_ACTIONS.includes(entry.newValue as VerdictAction)) {
             const oldVal = entry.newValue;
@@ -2623,6 +2626,7 @@ async function fixSingleIssue(
       task.status = 'open';
       task.verification = undefined;
       task.updatedAt = new Date().toISOString();
+      if (!task.history) task.history = [];
       task.history.push({
         timestamp: new Date().toISOString(),
         action: `状态变更: resolved → open`,

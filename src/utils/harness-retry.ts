@@ -10,6 +10,7 @@
 
 import type { HarnessConfig, ReviewVerdict } from '../types/harness.js';
 import type { TaskMeta } from '../types/task.js';
+import { isRetryableError } from './harness-helpers.js';
 
 export class RetryHandler {
   private config: HarnessConfig;
@@ -64,24 +65,6 @@ export class RetryHandler {
   }
 
   /**
-   * 判断是否为可重试的错误
-   */
-  isRetryableError(error: string): boolean {
-    const retryablePatterns = [
-      /timeout/i,
-      /network/i,
-      /connection/i,
-      /temporarily/i,
-      /rate limit/i,
-      /资源暂时不可用/,
-      /ETIMEDOUT/,
-      /ECONNRESET/,
-    ];
-
-    return retryablePatterns.some(pattern => pattern.test(error));
-  }
-
-  /**
    * 获取重试建议
    */
   getRetryRecommendation(verdict: ReviewVerdict): {
@@ -101,7 +84,7 @@ export class RetryHandler {
     }
 
     // 判断是否值得重试
-    const isTransientError = this.isRetryableError(verdict.reason);
+    const isTransientError = isRetryableError(verdict.reason, '').retryable;
     const hasFixableIssues = verdict.failedCriteria.length > 0 || verdict.failedCheckpoints.length > 0;
 
     if (isTransientError) {
