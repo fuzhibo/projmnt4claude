@@ -26,6 +26,8 @@ import {
 import { getAgent, buildEffectiveTools } from './headless-agent.js';
 import { getCodeReviewRoleTemplate } from './role-prompts.js';
 import { detectContradiction } from './contradiction-detector.js';
+import { createMarkdownFeedbackEngine } from './feedback-constraint-engine.js';
+import { verdictResultMarker, verdictHasReason } from './validation-rules/verdict-rules.js';
 import { loadPromptTemplate, resolveTemplate } from './prompt-templates.js';
 
 export class HarnessCodeReviewer {
@@ -140,25 +142,39 @@ export class HarnessCodeReviewer {
     console.log('\n   🤖 启动代码审核会话...');
     const agent = getAgent(this.config.cwd);
     const effectiveTools = buildEffectiveTools('codeReview', this.config.cwd, task);
-    const claudeResult = await agent.invoke(prompt, {
+    const invokeOptions = {
       allowedTools: effectiveTools.tools,
       timeout: Math.floor(this.config.timeout / REVIEW_TIMEOUT_RATIO),
       cwd: this.config.cwd,
       maxRetries: this.config.apiRetryAttempts,
       outputFormat: 'text',
       dangerouslySkipPermissions: effectiveTools.skipPermissions,
-    });
+    };
 
-    if (!claudeResult.success) {
+    const engine = createMarkdownFeedbackEngine(
+      [verdictResultMarker, verdictHasReason],
+      1, // maxRetriesOnError (code review: 1 retry)
+    );
+    const engineResult = await engine.runWithFeedback(
+      agent.invoke.bind(agent),
+      prompt,
+      invokeOptions,
+    );
+
+    if (engineResult.retries > 0) {
+      console.log(`   🔄 代码审核结果格式不匹配，已重试 ${engineResult.retries} 次`);
+    }
+
+    if (!engineResult.result.success) {
       return {
         passed: false,
-        reason: `代码审核会话失败: ${claudeResult.error || '未知错误'}`,
+        reason: `代码审核会话失败: ${engineResult.result.error || '未知错误'}`,
         issues: [],
         failedCheckpoints: [],
       };
     }
 
-    return this.parseCodeReviewResult(claudeResult.output);
+    return this.parseCodeReviewResult(engineResult.result.output || '');
   }
 
   /**
