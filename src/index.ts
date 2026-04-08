@@ -544,6 +544,7 @@ program
   .option('-q, --query <query>', '用户描述/关键字过滤 (仅 recommend)')
   .option('--smart', '启用 AI 语义依赖推断 (仅 recommend, Layer3 增强)')
   .option('--all', '显示全部状态任务，默认仅推荐 open (仅 recommend)')
+  .option('--strict-subtask-coverage', '严格子任务覆盖检测：发现缺失子任务时中止推荐 (仅 recommend)')
   .action(async (action, id, options) => {
     requireInit();
     switch (action) {
@@ -574,6 +575,7 @@ program
           json: options.json,
           all: options.all,
           smart: options.smart,
+          strictSubtaskCoverage: options.strictSubtaskCoverage,
         });
         break;
       default:

@@ -3,6 +3,7 @@ import * as fs from 'fs';
 import { getProjectDir, isInitialized } from './path';
 import { readTaskMeta, getAllTasks, isSubtask } from './task';
 import { normalizeStatus } from '../types/task';
+import type { TaskMeta } from '../types/task';
 
 /**
  * 可执行状态及其优先级（数字越小优先级越高）
@@ -259,4 +260,59 @@ export function getExecutableTasks(cwd: string = process.cwd(), includeSubtasks:
   }
 
   return executableTasks.map(task => task.id);
+}
+
+/**
+ * 子任务缺失检测结果
+ */
+export interface MissingSubtaskWarning {
+  parentTaskId: string;     // 父任务 ID
+  parentTitle: string;      // 父任务标题
+  missingSubtaskIds: string[];  // 已声明但不存在的子任务 ID
+  expectedCount: number;    // 预期子任务数（subtaskIds 长度）
+  actualCount: number;      // 实际存在的子任务数
+}
+
+/**
+ * 检测所有任务中声明了但实际缺失的子任务
+ *
+ * 遍历所有父任务（有 subtaskIds 的任务），检查每个 subtaskId 是否能被
+ * readTaskMeta 成功读取。缺失的子任务可能是被手动删除、ID 错误、或创建流程中断。
+ *
+ * @param cwd - 项目目录
+ * @returns 缺失子任务告警列表
+ */
+export function detectMissingSubtasks(cwd: string = process.cwd()): MissingSubtaskWarning[] {
+  const allTasks = getAllTasks(cwd);
+  const warnings: MissingSubtaskWarning[] = [];
+
+  for (const task of allTasks) {
+    if (!task.subtaskIds || task.subtaskIds.length === 0) {
+      continue;
+    }
+
+    const missingIds: string[] = [];
+    let actualCount = 0;
+
+    for (const subtaskId of task.subtaskIds) {
+      const subtask = readTaskMeta(subtaskId, cwd);
+      if (subtask) {
+        actualCount++;
+      } else {
+        missingIds.push(subtaskId);
+      }
+    }
+
+    if (missingIds.length > 0) {
+      warnings.push({
+        parentTaskId: task.id,
+        parentTitle: task.title,
+        missingSubtaskIds: missingIds,
+        expectedCount: task.subtaskIds.length,
+        actualCount,
+      });
+    }
+  }
+
+  return warnings;
 }

@@ -9,6 +9,7 @@ import {
   clearPlan,
   areDependenciesCompleted,
   getExecutableTasks,
+  detectMissingSubtasks,
 } from '../utils/plan';
 import { isInitialized, getProjectDir } from '../utils/path';
 import { readTaskMeta, getAllTasks, taskExists, getSubtasks } from '../utils/task';
@@ -55,6 +56,15 @@ export interface ExecutionBatch {
  * AI 友好的推荐结果
  */
 interface AIRecommendationOutput {
+  /** 子任务缺失告警（仅在有缺失时出现） */
+  missingSubtaskWarnings?: Array<{
+    parentTaskId: string;
+    parentTitle: string;
+    missingSubtaskIds: string[];
+    expectedCount: number;
+    actualCount: number;
+  }>;
+
   query?: string;            // 用户查询（如有）
   keywords?: string[];       // 提取的关键字（如有）
   filterStats: {
@@ -485,7 +495,8 @@ function generateAIOutput(
   batches: ExecutionBatch[],
   query?: string,
   keywords?: string[],
-  genOptions?: { smart?: boolean }
+  genOptions?: { smart?: boolean },
+  subtaskWarnings?: Array<{ parentTaskId: string; parentTitle: string; missingSubtaskIds: string[]; expectedCount: number; actualCount: number }>
 ): AIRecommendationOutput {
   const priorityNames: Record<number, string> = {
     0: 'P0', 1: 'P1', 2: 'P2', 3: 'P3',
@@ -510,6 +521,7 @@ function generateAIOutput(
   const batchOrder = batches.map(b => b.tasks);
 
   return {
+    missingSubtaskWarnings: subtaskWarnings && subtaskWarnings.length > 0 ? subtaskWarnings : undefined,
     query,
     keywords,
     filterStats: {
@@ -713,7 +725,7 @@ export async function clearPlanCmd(force: boolean = false, cwd: string = process
  * @param options.json - JSON 格式输出
  */
 export async function recommendPlan(
-  options: { query?: string; nonInteractive?: boolean; json?: boolean; all?: boolean; smart?: boolean } = {},
+  options: { query?: string; nonInteractive?: boolean; json?: boolean; all?: boolean; smart?: boolean; strictSubtaskCoverage?: boolean } = {},
   cwd: string = process.cwd()
 ): Promise<void> {
   if (!isInitialized(cwd)) {
@@ -761,6 +773,25 @@ export async function recommendPlan(
   // 排除 in_progress 任务，避免放入依赖链中造成混淆
   const chainEligibleTasks = activeTasks.filter(t => normalizeStatus(t.status) !== 'in_progress');
 
+  // 子任务缺失检测（始终运行，--strict-subtask-coverage 时作为错误级别）
+  const missingSubtaskWarnings = detectMissingSubtasks(cwd);
+  if (missingSubtaskWarnings.length > 0) {
+    const label = options.strictSubtaskCoverage ? '❌ ERR' : '⚠️  WARN';
+    console.log(`${label} 子任务缺失检测 (${missingSubtaskWarnings.length} 个父任务受影响):`);
+    for (const w of missingSubtaskWarnings) {
+      console.log(`   ${label} 父任务 ${w.parentTaskId} ("${w.parentTitle.substring(0, 30)}"): 缺失 ${w.missingSubtaskIds.length}/${w.expectedCount} 个子任务`);
+      for (const missingId of w.missingSubtaskIds) {
+        console.log(`      - ${missingId} 不存在`);
+      }
+    }
+    console.log('');
+
+    if (options.strictSubtaskCoverage) {
+      console.error('❌ --strict-subtask-coverage: 检测到缺失子任务，中止推荐。请先创建缺失的子任务或清理无效的 subtaskIds。');
+      process.exit(1);
+    }
+  }
+
   // 1. 关键字过滤
   let keywords: string[] = [];
   let filteredTasks = chainEligibleTasks;
@@ -785,6 +816,7 @@ export async function recommendPlan(
 
   if (filteredTasks.length === 0) {
     const emptyResult = {
+      missingSubtaskWarnings: missingSubtaskWarnings.length > 0 ? missingSubtaskWarnings : undefined,
       query: options.query,
       keywords,
       filterStats: {
@@ -880,7 +912,8 @@ export async function recommendPlan(
     cachedBatches,
     options.query,
     keywords.length > 0 ? keywords : undefined,
-    { smart: options.smart }
+    { smart: options.smart },
+    missingSubtaskWarnings
   );
 
   // JSON 格式输出（AI 友好）
