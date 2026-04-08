@@ -24,6 +24,8 @@ import { readTaskMeta, getAllTaskIds } from './task.js';
 import { archiveReportIfExists, parseStructuredResult } from './harness-helpers.js';
 import { getAgent, buildEffectiveTools } from './headless-agent.js';
 import { detectContradiction } from './contradiction-detector.js';
+import { createMarkdownFeedbackEngine } from './feedback-constraint-engine.js';
+import { verdictResultMarker, verdictHasReason } from './validation-rules/verdict-rules.js';
 import { loadPromptTemplate, resolveTemplate } from './prompt-templates.js';
 
 export class HarnessEvaluator {
@@ -107,67 +109,62 @@ export class HarnessEvaluator {
       const prompt = this.buildEvaluationPrompt(task, devReport, contract, phantomTasks, retryContext);
       console.log('\n   📝 评估提示词已生成');
 
-      // 4. 运行评估会话（带格式重试，最多 2 次）
-      const MAX_PARSE_RETRIES = 2;
-      let evaluation: ReturnType<typeof this.parseEvaluationResult> | null = null;
-      let lastRawOutput = '';
+      // 4. 运行评估会话（使用 FeedbackConstraintEngine 带格式重试，最多 2 次）
+      const agent = getAgent(this.config.cwd);
+      const effectiveTools = buildEffectiveTools('evaluation', this.config.cwd, task);
+      const invokeOptions = {
+        allowedTools: effectiveTools.tools,
+        timeout: Math.floor(this.config.timeout / 2), // 审查时间较短
+        outputFormat: 'text',
+        maxRetries: this.config.apiRetryAttempts,
+        cwd: this.config.cwd,
+        dangerouslySkipPermissions: effectiveTools.skipPermissions,
+      };
 
-      for (let parseAttempt = 0; parseAttempt <= MAX_PARSE_RETRIES; parseAttempt++) {
-        const currentPrompt = parseAttempt === 0
-          ? prompt
-          : this.buildRetryPrompt(lastRawOutput);
+      console.log('\n   🔍 启动独立评估会话...');
 
-        if (parseAttempt > 0) {
-          console.log(`   🔄 评估结果格式不匹配，重新评估 (${parseAttempt}/${MAX_PARSE_RETRIES})...`);
-        } else {
-          console.log('\n   🔍 启动独立评估会话...');
-        }
+      const engine = createMarkdownFeedbackEngine(
+        [verdictResultMarker, verdictHasReason],
+        2, // maxRetriesOnError, equivalent to MAX_PARSE_RETRIES
+      );
+      const engineResult = await engine.runWithFeedback(
+        agent.invoke.bind(agent),
+        prompt,
+        invokeOptions,
+      );
 
-        const agent = getAgent(this.config.cwd);
-        const effectiveTools = buildEffectiveTools('evaluation', this.config.cwd, task);
-        const result = await agent.invoke(currentPrompt, {
-          allowedTools: effectiveTools.tools,
-          timeout: Math.floor(this.config.timeout / 2), // 审查时间较短
-          outputFormat: 'text',
-          maxRetries: this.config.apiRetryAttempts,
-          cwd: this.config.cwd,
-          dangerouslySkipPermissions: effectiveTools.skipPermissions,
-        });
-
-        // 4.5 保存原始评估输出（用于事后诊断）
-        this.saveRawEvaluationOutput(task.id, result.output, result.stderr || '', result.success);
-
-        // 4.6 检测空输出（Claude 进程异常退出）
-        if (!result.output || result.output.trim().length === 0) {
-          verdict.result = 'NOPASS';
-          verdict.reason = `评估会话输出为空：Claude 进程可能异常退出${result.stderr ? ` (stderr: ${result.stderr.substring(0, 200)})` : ''}`;
-          verdict.inferenceType = 'empty_output';
-          console.log('\n   ❌ 评估输出为空，Claude 进程可能异常退出');
-          if (result.stderr) {
-            console.log(`   📝 stderr: ${result.stderr.substring(0, 300)}`);
-          }
-          await this.saveReviewReport(task.id, verdict, devReport);
-          return verdict;
-        }
-
-        // 5. 解析评估结果
-        evaluation = this.parseEvaluationResult(result.output);
-
-        // 成功匹配则跳出循环
-        if (evaluation.inferenceType !== 'parse_failure_default') {
-          break;
-        }
-
-        lastRawOutput = result.output;
+      if (engineResult.retries > 0) {
+        console.log(`   🔄 评估结果格式不匹配，已重试 ${engineResult.retries} 次`);
       }
 
+      const lastRawOutput = engineResult.result.output ?? '';
+
+      // 4.5 保存原始评估输出（用于事后诊断）
+      this.saveRawEvaluationOutput(task.id, engineResult.result.output, engineResult.result.stderr || '', engineResult.result.success);
+
+      // 4.6 检测空输出（Claude 进程异常退出）
+      if (!engineResult.result.output || engineResult.result.output.trim().length === 0) {
+        verdict.result = 'NOPASS';
+        verdict.reason = `评估会话输出为空：Claude 进程可能异常退出${engineResult.result.stderr ? ` (stderr: ${engineResult.result.stderr.substring(0, 200)})` : ''}`;
+        verdict.inferenceType = 'empty_output';
+        console.log('\n   ❌ 评估输出为空，Claude 进程可能异常退出');
+        if (engineResult.result.stderr) {
+          console.log(`   📝 stderr: ${engineResult.result.stderr.substring(0, 300)}`);
+        }
+        await this.saveReviewReport(task.id, verdict, devReport);
+        return verdict;
+      }
+
+      // 5. 解析评估结果
+      let evaluation = this.parseEvaluationResult(engineResult.result.output);
+
       // CP-16: 重试后仍无法解析时，默认 PASS（保守策略）
-      if (evaluation!.inferenceType === 'parse_failure_default') {
+      if (evaluation.inferenceType === 'parse_failure_default') {
         console.log('   ⚠️ 重试后仍无法解析评估结果，默认 PASS（保守策略）');
         evaluation = {
-          ...evaluation!,
+          ...evaluation,
           passed: true,
-          reason: `重试 ${MAX_PARSE_RETRIES} 次后仍无法解析评估结果，采用保守策略默认通过`,
+          reason: `重试 ${engineResult.retries} 次后仍无法解析评估结果，采用保守策略默认通过`,
         };
       }
 
@@ -315,49 +312,6 @@ export class HarnessEvaluator {
 
     // Normalize: collapse 3+ consecutive newlines into 2 (handles empty section placeholders)
     return result.replace(/\n{3,}/g, '\n\n');
-  }
-
-  /**
-   * 构建格式重试提示词
-   *
-   * 当评估输出未包含 EVALUATION_RESULT 标记时，
-   * 使用此提示词要求重新按格式输出
-   */
-  private buildRetryPrompt(previousOutput: string): string {
-    const parts: string[] = [];
-    parts.push('# 评估结果格式纠正');
-    parts.push('');
-    parts.push('上一次评估输出未包含要求的格式标记。请基于上次评估内容重新输出。');
-    parts.push('');
-    parts.push('**强制格式要求**: 输出必须包含以下两行:');
-    parts.push('```');
-    parts.push('EVALUATION_RESULT: PASS');
-    parts.push('EVALUATION_REASON: [简要说明]');
-    parts.push('```');
-    parts.push('或:');
-    parts.push('```');
-    parts.push('EVALUATION_RESULT: NOPASS');
-    parts.push('EVALUATION_REASON: [简要说明]');
-    parts.push('```');
-    parts.push('');
-    parts.push('同时提供 Markdown 格式的详细评估:');
-    parts.push('```');
-    parts.push('## 评估结果: PASS 或 NOPASS');
-    parts.push('## 原因: [简要说明]');
-    parts.push('## 后续动作: [resolve|redevelop|retest|reevaluate|escalate_human]');
-    parts.push('## 失败分类: [acceptance_criteria|code_quality|test_failure|architecture|specification|phantom_task|incomplete|other]');
-    parts.push('## 未满足的标准: [列出未满足的验收标准]');
-    parts.push('## 未完成的检查点: [列出未完成的检查点]');
-    parts.push('## 详细反馈: [可选的详细反馈]');
-    parts.push('```');
-    parts.push('');
-    parts.push('上一次评估输出:');
-    parts.push('```');
-    parts.push(previousOutput.substring(0, 2000));
-    parts.push('```');
-    parts.push('');
-    parts.push('请基于上次评估内容，按上述格式重新输出结果。');
-    return parts.join('\n');
   }
 
   /**

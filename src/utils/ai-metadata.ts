@@ -17,6 +17,15 @@ import { getAgent, type HeadlessAgent, type AgentResult, type AgentInvokeOptions
 import type { TaskMeta, TaskPriority, TaskType } from '../types/task';
 import { inferTaskType, inferTaskPriority } from '../types/task';
 import { loadPromptTemplate, resolveTemplate } from './prompt-templates.js';
+import { createJsonFeedbackEngine } from './feedback-constraint-engine.js';
+import type { ValidationRule } from '../types/feedback-constraint.js';
+import {
+  requirementOutputRules,
+  qualityOutputRules,
+  duplicatesOutputRules,
+  stalenessOutputRules,
+  bugReportOutputRules,
+} from './validation-rules/ai-metadata-rules.js';
 
 // ============================================================
 // 架构层级分类 (Layer0-Layer3)
@@ -417,7 +426,7 @@ export class AIMetadataAssistant {
   async enhanceRequirement(description: string, options: AIMetadataCallOptions): Promise<EnhancedRequirement> {
     const prompt = this.buildRequirementPrompt(description, undefined, options.cwd);
 
-    const result = await this.invokeWithRetry(prompt, REQUIREMENT_SCHEMA, {
+    const result = await this.invokeWithEngine(prompt, requirementOutputRules, {
       ...options,
       maxRetries: options.maxRetries ?? 2,
       timeoutSeconds: options.timeoutSeconds ?? 30,
@@ -470,7 +479,7 @@ export class AIMetadataAssistant {
   ): Promise<EnhancedCheckpoints> {
     const prompt = this.buildCheckpointsPrompt(description, type, existing, options.cwd);
 
-    const result = await this.invokeWithRetry(prompt, CHECKPOINTS_SCHEMA, {
+    const result = await this.invokeWithEngine(prompt, [], {
       ...options,
       maxRetries: options.maxRetries ?? 2,
       timeoutSeconds: options.timeoutSeconds ?? 30,
@@ -504,7 +513,7 @@ export class AIMetadataAssistant {
   async analyzeTaskQuality(task: TaskMeta, options: AIMetadataCallOptions): Promise<TaskQualityAssessment> {
     const prompt = this.buildQualityPrompt(task, options.cwd);
 
-    const result = await this.invokeWithRetry(prompt, QUALITY_SCHEMA, {
+    const result = await this.invokeWithEngine(prompt, qualityOutputRules, {
       ...options,
       maxRetries: options.maxRetries ?? 2,
       timeoutSeconds: options.timeoutSeconds ?? 30,
@@ -543,7 +552,7 @@ export class AIMetadataAssistant {
 
     const prompt = this.buildDuplicatesPrompt(tasks, options.cwd);
 
-    const result = await this.invokeWithRetry(prompt, DUPLICATES_SCHEMA, {
+    const result = await this.invokeWithEngine(prompt, duplicatesOutputRules, {
       ...options,
       maxRetries: options.maxRetries ?? 2,
       timeoutSeconds: options.timeoutSeconds ?? 30,
@@ -576,7 +585,7 @@ export class AIMetadataAssistant {
   async assessStaleness(task: TaskMeta, options: AIMetadataCallOptions): Promise<StalenessAssessment> {
     const prompt = this.buildStalenessPrompt(task, options.cwd);
 
-    const result = await this.invokeWithRetry(prompt, STALENESS_SCHEMA, {
+    const result = await this.invokeWithEngine(prompt, stalenessOutputRules, {
       ...options,
       maxRetries: options.maxRetries ?? 2,
       timeoutSeconds: options.timeoutSeconds ?? 30,
@@ -617,7 +626,7 @@ export class AIMetadataAssistant {
   ): Promise<BugReportAnalysis> {
     const prompt = this.buildBugReportPrompt(reportContent, logContext, options.cwd);
 
-    const result = await this.invokeWithRetry(prompt, BUG_REPORT_SCHEMA, {
+    const result = await this.invokeWithEngine(prompt, bugReportOutputRules, {
       ...options,
       maxRetries: options.maxRetries ?? 2,
       timeoutSeconds: options.timeoutSeconds ?? 30,
@@ -663,7 +672,7 @@ export class AIMetadataAssistant {
 
     const prompt = this.buildSemanticDependencyPrompt(tasks, options.cwd);
 
-    const result = await this.invokeWithRetry(prompt, SEMANTIC_DEPS_SCHEMA, {
+    const result = await this.invokeWithEngine(prompt, [], {
       ...options,
       maxRetries: options.maxRetries ?? 2,
       timeoutSeconds: options.timeoutSeconds ?? 30,
@@ -803,68 +812,60 @@ export class AIMetadataAssistant {
   // ============================================================
 
   /**
-   * 带重试的 AI 调用
+   * 基于 FeedbackConstraintEngine 的 AI 调用
+   *
+   * 替代原先的手动重试循环，使用引擎进行：
+   * - JSON 可解析性验证
+   * - 非空输出检查
+   * - 方法级业务规则验证（additionalRules）
+   * - 结构化反馈生成与自动重试
+   *
    * CP-3: 失败自动重试 (最多 maxRetries 次) + 错误反馈追加到 prompt
    * CP-5: 超时 30 秒/次
    */
-  private async invokeWithRetry(
+  private async invokeWithEngine(
     prompt: string,
-    _schema: Record<string, unknown>,
+    additionalRules: ValidationRule[],
     options: AIMetadataCallOptions & { maxRetries: number; timeoutSeconds: number },
   ): Promise<AgentResult> {
     const { cwd, maxRetries, timeoutSeconds } = options;
-    let lastError: string | undefined;
-    let currentPrompt = prompt;
 
-    for (let attempt = 0; attempt <= maxRetries; attempt++) {
-      try {
-        const agent = getAgent(cwd);
-        const invokeOptions: AgentInvokeOptions = {
-          timeout: timeoutSeconds,
-          allowedTools: [],
-          outputFormat: 'json',
-          maxRetries: 0, // 我们自己管理重试
-          cwd,
-        };
+    try {
+      const agent = getAgent(cwd);
+      const engine = createJsonFeedbackEngine(additionalRules, maxRetries);
 
-        const result = await agent.invoke(currentPrompt, invokeOptions);
+      const invokeOptions: AgentInvokeOptions = {
+        timeout: timeoutSeconds,
+        allowedTools: [],
+        outputFormat: 'json',
+        maxRetries: 0,
+        cwd,
+      };
 
-        if (result.success) {
-          // 尝试解析 JSON 验证格式
-          const parsed = this.parseJSON(result.output);
-          if (parsed) {
-            return result;
-          }
-          // JSON 解析失败，构建错误反馈用于重试
-          lastError = `输出不是有效的 JSON。请只输出 JSON，不要包含 markdown 代码块或其他文本。`;
-        } else {
-          lastError = result.error || '调用失败';
-        }
+      const engineResult = await engine.runWithFeedback(
+        agent.invoke.bind(agent),
+        prompt,
+        invokeOptions,
+      );
 
-        this.logger.warn(`AI 调用尝试 ${attempt + 1}/${maxRetries + 1} 失败`, {
-          error: lastError,
-          attempt,
-        });
-
-        // 追加错误反馈到 prompt
-        if (attempt < maxRetries) {
-          currentPrompt = prompt + `\n\n## 上次输出错误\n${lastError}\n请修正以上错误并重新输出纯 JSON。`;
-        }
-      } catch (err) {
-        lastError = err instanceof Error ? err.message : String(err);
-        this.logger.warn(`AI 调用异常 ${attempt + 1}/${maxRetries + 1}`, { error: lastError });
+      if (engineResult.retries > 0) {
+        this.logger.debug(`FeedbackConstraintEngine 重试 ${engineResult.retries} 次`);
       }
-    }
 
-    return {
-      output: '',
-      success: false,
-      provider: 'none',
-      durationMs: 0,
-      tokensUsed: 0,
-      model: '',
-      error: lastError || `AI 调用失败，已重试 ${maxRetries} 次`,
-    };
+      return engineResult.result;
+    } catch (error) {
+      const errorMsg = error instanceof Error ? error.message : String(error);
+      this.logger.warn(`AI 调用异常: ${errorMsg}`);
+      return {
+        output: '',
+        success: false,
+        provider: 'none',
+        durationMs: 0,
+        tokensUsed: 0,
+        model: '',
+        error: errorMsg,
+      };
+    }
   }
 
   // ============================================================
