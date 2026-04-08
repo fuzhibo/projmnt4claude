@@ -104,6 +104,12 @@ export const nonEmptyOutputRule: ValidationRule = {
  * 将违规信息格式化为面向 Agent 的 JSON 修正提示词
  */
 export class JsonFeedbackTemplate implements FeedbackTemplate {
+  private truncationLimit: number;
+
+  constructor(truncationLimit: number = 4000) {
+    this.truncationLimit = truncationLimit;
+  }
+
   buildFeedbackPrompt(
     violations: ValidationViolation[],
     originalOutput: string,
@@ -125,8 +131,8 @@ export class JsonFeedbackTemplate implements FeedbackTemplate {
       '',
       '## 原始输出（供参考）',
       '```json',
-      originalOutput.length > 2000
-        ? originalOutput.slice(0, 2000) + '\n... (已截断)'
+      originalOutput.length > this.truncationLimit
+        ? originalOutput.slice(0, this.truncationLimit) + '\n... (已截断)'
         : originalOutput,
       '```',
       '',
@@ -143,6 +149,12 @@ export class JsonFeedbackTemplate implements FeedbackTemplate {
  * 将违规信息格式化为面向 Agent 的 Markdown 修正提示词
  */
 export class MarkdownFeedbackTemplate implements FeedbackTemplate {
+  private truncationLimit: number;
+
+  constructor(truncationLimit: number = 4000) {
+    this.truncationLimit = truncationLimit;
+  }
+
   buildFeedbackPrompt(
     violations: ValidationViolation[],
     originalOutput: string,
@@ -163,8 +175,8 @@ export class MarkdownFeedbackTemplate implements FeedbackTemplate {
       '',
       '### 原始输出（供参考）',
       '```markdown',
-      originalOutput.length > 2000
-        ? originalOutput.slice(0, 2000) + '\n... (已截断)'
+      originalOutput.length > this.truncationLimit
+        ? originalOutput.slice(0, this.truncationLimit) + '\n... (已截断)'
         : originalOutput,
       '```',
       '',
@@ -344,6 +356,10 @@ export class FeedbackConstraintEngineImpl implements FeedbackConstraintEngine {
       this.retryCount++;
       const feedback = this.buildFeedback(violations, output);
       currentPrompt = [
+        currentPrompt,
+        '',
+        '---',
+        '',
         feedback,
         '',
         `这是第 ${this.retryCount} 次重试，请根据上述反馈修正输出。`,
