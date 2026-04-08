@@ -16,7 +16,6 @@ import type {
 } from '../types/feedback-constraint.js';
 import type { AgentResult } from './headless-agent.js';
 import { Logger } from './logger.js';
-import { randomUUID } from 'crypto';
 
 const logger = new Logger({ component: 'feedback-constraint-engine' });
 
@@ -302,10 +301,8 @@ export class FeedbackConstraintEngineImpl implements FeedbackConstraintEngine {
    * 流程：
    * 1. 使用 invokeFn 调用 Agent
    * 2. 验证输出
-   * 3. 如果存在违规且应该重试，生成反馈并重新调用
-   * 4. 重试时使用 session 连续性（--session-id + --resume），
-   *    Claude 可在前次完整上下文中进行修正
-   * 5. 重复直到通过或达到重试上限
+   * 3. 如果存在违规且应该重试，使用反馈模板生成包含原始输出的完整反馈
+   * 4. 重复直到通过或达到重试上限
    */
   async runWithFeedback(
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -318,9 +315,9 @@ export class FeedbackConstraintEngineImpl implements FeedbackConstraintEngine {
     let currentPrompt = prompt;
     let lastResult: AgentResult;
 
-    // 生成 session ID 用于重试时的上下文连续性
-    const sessionId = `fce-${Date.now()}-${randomUUID().slice(0, 8)}`;
-    let currentOptions = { ...options, sessionId };
+    // 重试时不使用 session 连续性（--session-id 需要 --resume，
+    // 但首次调用无法创建具名 session），改为在重试 prompt 中包含完整上下文
+    let currentOptions = { ...options };
 
     // eslint-disable-next-line no-constant-condition
     while (true) {
@@ -335,7 +332,7 @@ export class FeedbackConstraintEngineImpl implements FeedbackConstraintEngine {
       // 无违规，通过
       if (violations.length === 0) {
         logger.debug(
-          `[FeedbackConstraintEngine] 验证通过 (重试 ${this.retryCount} 次, session: ${sessionId})`,
+          `[FeedbackConstraintEngine] 验证通过 (重试 ${this.retryCount} 次)`,
         );
         return {
           result: lastResult,
@@ -343,8 +340,7 @@ export class FeedbackConstraintEngineImpl implements FeedbackConstraintEngine {
           retries: this.retryCount,
           passed: true,
           sessionContinuity: {
-            used: this.retryCount > 0,
-            sessionId,
+            used: false,
           },
         };
       }
@@ -361,8 +357,7 @@ export class FeedbackConstraintEngineImpl implements FeedbackConstraintEngine {
           retries: this.retryCount,
           passed: !hasErrors,
           sessionContinuity: {
-            used: this.retryCount > 0,
-            sessionId,
+            used: false,
           },
         };
       }
@@ -370,29 +365,13 @@ export class FeedbackConstraintEngineImpl implements FeedbackConstraintEngine {
       // 生成反馈并准备重试
       this.retryCount++;
 
-      // Session 模式下 Claude 已有前次输出，仅发送违规摘要避免 token 浪费
-      const violationSummary = violations
-        .map((v, i) => `${i + 1}. [${v.severity.toUpperCase()}] ${v.ruleId}: ${v.message}`)
-        .join('\n');
+      // 使用完整反馈模板（包含原始输出），不依赖 session 连续性
+      currentPrompt = this.buildFeedback(violations, output);
 
-      currentPrompt = [
-        '上一次输出存在以下格式问题，请修正后重新输出：',
-        '',
-        violationSummary,
-        '',
-        `这是第 ${this.retryCount} 次重试（session 已包含前次完整输出）。`,
-      ].join('\n');
-
-      // 重试时恢复同一 session，Claude 可看到前次完整输出
-      currentOptions = {
-        ...options,
-        sessionId,
-        resumeSession: true,
-        forkSession: false,
-      };
+      currentOptions = { ...options };
 
       logger.debug(
-        `[FeedbackConstraintEngine] 准备第 ${this.retryCount} 次重试 (session: ${sessionId})，违规项: ${violations.map((v) => v.ruleId).join(', ')}`,
+        `[FeedbackConstraintEngine] 准备第 ${this.retryCount} 次重试，违规项: ${violations.map((v) => v.ruleId).join(', ')}`,
       );
     }
   }
