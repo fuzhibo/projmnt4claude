@@ -369,11 +369,18 @@ export class FeedbackConstraintEngineImpl implements FeedbackConstraintEngine {
 
       // 生成反馈并准备重试
       this.retryCount++;
-      const feedback = this.buildFeedback(violations, output);
+
+      // Session 模式下 Claude 已有前次输出，仅发送违规摘要避免 token 浪费
+      const violationSummary = violations
+        .map((v, i) => `${i + 1}. [${v.severity.toUpperCase()}] ${v.ruleId}: ${v.message}`)
+        .join('\n');
+
       currentPrompt = [
-        feedback,
+        '上一次输出存在以下格式问题，请修正后重新输出：',
         '',
-        `这是第 ${this.retryCount} 次重试，请根据上述反馈修正输出。`,
+        violationSummary,
+        '',
+        `这是第 ${this.retryCount} 次重试（session 已包含前次完整输出）。`,
       ].join('\n');
 
       // 重试时恢复同一 session，Claude 可看到前次完整输出

@@ -689,12 +689,6 @@ describe('BUG-017: 空输出检测与日志持久化', () => {
     }).not.toThrow();
   });
 
-  // --- runEvaluationSession return type includes stderr ---
-
-  test('runEvaluationSession return type should include stderr field', () => {
-    // Verify the method signature accepts and propagates stderr
-    const method = (evaluator as any).runEvaluationSession;
-    expect(typeof method).toBe('function');
-    // The return type is enforced at compile time; we verify the method exists
-  });
+  // runEvaluationSession was replaced by createSessionAwareEngine integration
+  // The stderr field is now propagated through EngineResult.result.stderr
 });

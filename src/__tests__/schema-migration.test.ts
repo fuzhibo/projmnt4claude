@@ -108,10 +108,11 @@ describe('VerdictAction Constants', () => {
   test('VALID_VERDICT_ACTIONS should contain all valid actions', () => {
     expect(VALID_VERDICT_ACTIONS).toContain('resolve');
     expect(VALID_VERDICT_ACTIONS).toContain('redevelop');
+    expect(VALID_VERDICT_ACTIONS).toContain('minor_fix');
     expect(VALID_VERDICT_ACTIONS).toContain('retest');
     expect(VALID_VERDICT_ACTIONS).toContain('reevaluate');
     expect(VALID_VERDICT_ACTIONS).toContain('escalate_human');
-    expect(VALID_VERDICT_ACTIONS).toHaveLength(5);
+    expect(VALID_VERDICT_ACTIONS).toHaveLength(6);
   });
 
   test('VALID_VERDICT_ACTIONS should not contain invalid actions', () => {
