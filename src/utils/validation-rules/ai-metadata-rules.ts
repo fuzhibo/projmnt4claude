@@ -214,6 +214,104 @@ export const qualityScoreRange: ValidationRule = {
   },
 };
 
+/**
+ * issues 必须是数组类型
+ */
+export const qualityIssuesArrayType: ValidationRule = {
+  id: 'quality-issues-array-type',
+  description: 'issues 必须是数组类型',
+  severity: 'warning',
+  check: (output: unknown): ValidationViolation | null => {
+    const parsed = safeParseJson(output);
+    if (!parsed || !('issues' in parsed)) return null;
+    if (parsed.issues !== null && !Array.isArray(parsed.issues)) {
+      return {
+        ruleId: 'quality-issues-array-type',
+        severity: 'warning',
+        message: `issues 不是数组类型，实际类型: ${typeof parsed.issues}`,
+        value: String(parsed.issues),
+      };
+    }
+    return null;
+  },
+};
+
+/**
+ * issues 中每个元素必须包含 field, severity, message 字段且 severity 为有效枚举值
+ */
+export const qualityIssuesItemStructure: ValidationRule = {
+  id: 'quality-issues-item-structure',
+  description: 'issues 中每个元素必须包含 field, severity, message 且 severity 为 error/warning/info 之一',
+  severity: 'warning',
+  check: (output: unknown): ValidationViolation | null => {
+    const parsed = safeParseJson(output);
+    if (!parsed || !('issues' in parsed) || !Array.isArray(parsed.issues)) return null;
+    const validSeverities = ['error', 'warning', 'info'];
+    for (let i = 0; i < parsed.issues.length; i++) {
+      const item = parsed.issues[i] as Record<string, unknown>;
+      if (!item || typeof item !== 'object') {
+        return {
+          ruleId: 'quality-issues-item-structure',
+          severity: 'warning',
+          message: `issues[${i}] 不是对象类型`,
+          value: String(item),
+        };
+      }
+      const missing = ['field', 'severity', 'message'].filter(f => !(f in item));
+      if (missing.length > 0) {
+        return {
+          ruleId: 'quality-issues-item-structure',
+          severity: 'warning',
+          message: `issues[${i}] 缺少必需字段: ${missing.join(', ')}`,
+        };
+      }
+      if (typeof item.severity === 'string' && !validSeverities.includes(item.severity)) {
+        return {
+          ruleId: 'quality-issues-item-structure',
+          severity: 'warning',
+          message: `issues[${i}].severity 值 "${item.severity}" 不是有效枚举值 (error/warning/info)`,
+          value: String(item.severity),
+        };
+      }
+    }
+    return null;
+  },
+};
+
+/**
+ * suggestions 必须是字符串数组类型
+ */
+export const qualitySuggestionsArrayType: ValidationRule = {
+  id: 'quality-suggestions-array-type',
+  description: 'suggestions 必须是字符串数组类型',
+  severity: 'warning',
+  check: (output: unknown): ValidationViolation | null => {
+    const parsed = safeParseJson(output);
+    if (!parsed || !('suggestions' in parsed)) return null;
+    if (parsed.suggestions !== null && !Array.isArray(parsed.suggestions)) {
+      return {
+        ruleId: 'quality-suggestions-array-type',
+        severity: 'warning',
+        message: `suggestions 不是数组类型，实际类型: ${typeof parsed.suggestions}`,
+        value: String(parsed.suggestions),
+      };
+    }
+    if (Array.isArray(parsed.suggestions)) {
+      for (let i = 0; i < parsed.suggestions.length; i++) {
+        if (typeof parsed.suggestions[i] !== 'string') {
+          return {
+            ruleId: 'quality-suggestions-array-type',
+            severity: 'warning',
+            message: `suggestions[${i}] 不是字符串类型，实际类型: ${typeof parsed.suggestions[i]}`,
+            value: String(parsed.suggestions[i]),
+          };
+        }
+      }
+    }
+    return null;
+  },
+};
+
 // ============================================================
 // detectDuplicates 输出规则
 // ============================================================
@@ -234,6 +332,111 @@ export const duplicatesRequiredFields: ValidationRule = {
         severity: 'error',
         message: '重复检测输出缺少 duplicates 数组字段',
       };
+    }
+    return null;
+  },
+};
+
+/**
+ * duplicates 数组中每个元素必须包含 taskIds 和 similarity 字段
+ */
+export const duplicatesItemRequiredFields: ValidationRule = {
+  id: 'duplicates-item-required-fields',
+  description: 'duplicates 中每个元素必须包含 taskIds 和 similarity 字段',
+  severity: 'warning',
+  check: (output: unknown): ValidationViolation | null => {
+    const parsed = safeParseJson(output);
+    if (!parsed || !('duplicates' in parsed) || !Array.isArray(parsed.duplicates)) return null;
+    for (let i = 0; i < parsed.duplicates.length; i++) {
+      const item = parsed.duplicates[i] as Record<string, unknown>;
+      if (!item || typeof item !== 'object') {
+        return {
+          ruleId: 'duplicates-item-required-fields',
+          severity: 'warning',
+          message: `duplicates[${i}] 不是对象类型`,
+          value: String(item),
+        };
+      }
+      const missing = ['taskIds', 'similarity'].filter(f => !(f in item));
+      if (missing.length > 0) {
+        return {
+          ruleId: 'duplicates-item-required-fields',
+          severity: 'warning',
+          message: `duplicates[${i}] 缺少必需字段: ${missing.join(', ')}`,
+        };
+      }
+    }
+    return null;
+  },
+};
+
+/**
+ * taskIds 必须是包含至少 2 个字符串的数组
+ */
+export const duplicatesTaskIdsValidation: ValidationRule = {
+  id: 'duplicates-taskids-validation',
+  description: 'taskIds 必须是包含至少 2 个字符串的数组',
+  severity: 'warning',
+  check: (output: unknown): ValidationViolation | null => {
+    const parsed = safeParseJson(output);
+    if (!parsed || !('duplicates' in parsed) || !Array.isArray(parsed.duplicates)) return null;
+    for (let i = 0; i < parsed.duplicates.length; i++) {
+      const item = parsed.duplicates[i] as Record<string, unknown>;
+      if (!item || !('taskIds' in item)) continue;
+      const taskIds = item.taskIds;
+      if (!Array.isArray(taskIds)) {
+        return {
+          ruleId: 'duplicates-taskids-validation',
+          severity: 'warning',
+          message: `duplicates[${i}].taskIds 不是数组类型，实际类型: ${typeof taskIds}`,
+          value: String(taskIds),
+        };
+      }
+      if (taskIds.length < 2) {
+        return {
+          ruleId: 'duplicates-taskids-validation',
+          severity: 'warning',
+          message: `duplicates[${i}].taskIds 长度 ${taskIds.length} 小于最小值 2`,
+          value: JSON.stringify(taskIds),
+        };
+      }
+      for (let j = 0; j < taskIds.length; j++) {
+        if (typeof taskIds[j] !== 'string') {
+          return {
+            ruleId: 'duplicates-taskids-validation',
+            severity: 'warning',
+            message: `duplicates[${i}].taskIds[${j}] 不是字符串类型`,
+            value: String(taskIds[j]),
+          };
+        }
+      }
+    }
+    return null;
+  },
+};
+
+/**
+ * similarity 必须是 0-1 范围内的数字
+ */
+export const duplicatesSimilarityRange: ValidationRule = {
+  id: 'duplicates-similarity-range',
+  description: 'similarity 必须是 0-1 范围内的数字',
+  severity: 'warning',
+  check: (output: unknown): ValidationViolation | null => {
+    const parsed = safeParseJson(output);
+    if (!parsed || !('duplicates' in parsed) || !Array.isArray(parsed.duplicates)) return null;
+    for (let i = 0; i < parsed.duplicates.length; i++) {
+      const item = parsed.duplicates[i] as Record<string, unknown>;
+      if (!item || !('similarity' in item)) continue;
+      const sim = item.similarity;
+      if (typeof sim !== 'number' || sim < 0 || sim > 1) {
+        return {
+          ruleId: 'duplicates-similarity-range',
+          severity: 'warning',
+          message: `duplicates[${i}].similarity 值 "${sim}" 不在 0-1 范围内`,
+          value: String(sim),
+        };
+      }
     }
     return null;
   },
@@ -260,6 +463,96 @@ export const stalenessRequiredFields: ValidationRule = {
   },
 };
 
+/**
+ * isStale 必须是布尔类型
+ */
+export const stalenessIsStaleType: ValidationRule = {
+  id: 'staleness-is-stale-type',
+  description: 'isStale 必须是布尔类型',
+  severity: 'warning',
+  check: (output: unknown): ValidationViolation | null => {
+    const parsed = safeParseJson(output);
+    if (!parsed || !('isStale' in parsed)) return null;
+    if (typeof parsed.isStale !== 'boolean') {
+      return {
+        ruleId: 'staleness-is-stale-type',
+        severity: 'warning',
+        message: `isStale 不是布尔类型，实际类型: ${typeof parsed.isStale}`,
+        value: String(parsed.isStale),
+      };
+    }
+    return null;
+  },
+};
+
+/**
+ * stalenessScore 必须是 0-1 范围内的数字
+ */
+export const stalenessScoreRange: ValidationRule = {
+  id: 'staleness-score-range',
+  description: 'stalenessScore 必须是 0-1 范围内的数字',
+  severity: 'warning',
+  check: (output: unknown): ValidationViolation | null => {
+    const parsed = safeParseJson(output);
+    if (!parsed || !('stalenessScore' in parsed)) return null;
+    const score = parsed.stalenessScore;
+    if (typeof score !== 'number' || score < 0 || score > 1) {
+      return {
+        ruleId: 'staleness-score-range',
+        severity: 'warning',
+        message: `stalenessScore 值 "${score}" 不在 0-1 范围内`,
+        value: String(score),
+      };
+    }
+    return null;
+  },
+};
+
+/**
+ * suggestedAction 必须是有效枚举值 (keep/close/update/split)
+ */
+export const stalenessActionEnum: ValidationRule = {
+  id: 'staleness-action-enum',
+  description: 'suggestedAction 必须是 keep/close/update/split 之一',
+  severity: 'warning',
+  check: (output: unknown): ValidationViolation | null => {
+    const parsed = safeParseJson(output);
+    if (!parsed || !('suggestedAction' in parsed)) return null;
+    const validActions = ['keep', 'close', 'update', 'split'];
+    if (!validActions.includes(parsed.suggestedAction as string)) {
+      return {
+        ruleId: 'staleness-action-enum',
+        severity: 'warning',
+        message: `suggestedAction 值 "${parsed.suggestedAction}" 不是有效枚举值 (keep/close/update/split)`,
+        value: String(parsed.suggestedAction),
+      };
+    }
+    return null;
+  },
+};
+
+/**
+ * reason 必须是字符串类型
+ */
+export const stalenessReasonType: ValidationRule = {
+  id: 'staleness-reason-type',
+  description: 'reason 必须是字符串类型',
+  severity: 'warning',
+  check: (output: unknown): ValidationViolation | null => {
+    const parsed = safeParseJson(output);
+    if (!parsed || !('reason' in parsed)) return null;
+    if (typeof parsed.reason !== 'string') {
+      return {
+        ruleId: 'staleness-reason-type',
+        severity: 'warning',
+        message: `reason 不是字符串类型，实际类型: ${typeof parsed.reason}`,
+        value: String(parsed.reason),
+      };
+    }
+    return null;
+  },
+};
+
 // ============================================================
 // analyzeBugReport 输出规则
 // ============================================================
@@ -281,6 +574,121 @@ export const bugReportRequiredFields: ValidationRule = {
   },
 };
 
+/**
+ * type 必须是有效枚举值 (bug/feature/research/docs/refactor/test/null)
+ */
+export const bugReportTypeEnum: ValidationRule = {
+  id: 'bug-report-type-enum',
+  description: 'type 必须是 bug/feature/research/docs/refactor/test/null 之一',
+  severity: 'warning',
+  check: (output: unknown): ValidationViolation | null => {
+    const parsed = safeParseJson(output);
+    if (!parsed || !('type' in parsed)) return null;
+    const validTypes = ['bug', 'feature', 'research', 'docs', 'refactor', 'test', null];
+    if (!validTypes.includes(parsed.type as string | null)) {
+      return {
+        ruleId: 'bug-report-type-enum',
+        severity: 'warning',
+        message: `type 值 "${parsed.type}" 不是有效枚举值`,
+        value: String(parsed.type),
+      };
+    }
+    return null;
+  },
+};
+
+/**
+ * priority 必须是有效枚举值 (P0/P1/P2/P3/null)
+ */
+export const bugReportPriorityEnum: ValidationRule = {
+  id: 'bug-report-priority-enum',
+  description: 'priority 必须是 P0/P1/P2/P3/null 之一',
+  severity: 'warning',
+  check: (output: unknown): ValidationViolation | null => {
+    const parsed = safeParseJson(output);
+    if (!parsed || !('priority' in parsed)) return null;
+    const validPriorities = ['P0', 'P1', 'P2', 'P3', null];
+    if (!validPriorities.includes(parsed.priority as string | null)) {
+      return {
+        ruleId: 'bug-report-priority-enum',
+        severity: 'warning',
+        message: `priority 值 "${parsed.priority}" 不是有效枚举值`,
+        value: String(parsed.priority),
+      };
+    }
+    return null;
+  },
+};
+
+/**
+ * checkpoints 必须是数组或 null 类型
+ */
+export const bugReportCheckpointsType: ValidationRule = {
+  id: 'bug-report-checkpoints-type',
+  description: 'checkpoints 必须是数组或 null 类型',
+  severity: 'warning',
+  check: (output: unknown): ValidationViolation | null => {
+    const parsed = safeParseJson(output);
+    if (!parsed || !('checkpoints' in parsed)) return null;
+    const cp = parsed.checkpoints;
+    if (cp !== null && !Array.isArray(cp)) {
+      return {
+        ruleId: 'bug-report-checkpoints-type',
+        severity: 'warning',
+        message: `checkpoints 不是数组或 null 类型，实际类型: ${typeof cp}`,
+        value: String(cp),
+      };
+    }
+    return null;
+  },
+};
+
+/**
+ * rootCause 必须是字符串或 null 类型
+ */
+export const bugReportRootCauseType: ValidationRule = {
+  id: 'bug-report-root-cause-type',
+  description: 'rootCause 必须是字符串或 null 类型',
+  severity: 'warning',
+  check: (output: unknown): ValidationViolation | null => {
+    const parsed = safeParseJson(output);
+    if (!parsed || !('rootCause' in parsed)) return null;
+    const rc = parsed.rootCause;
+    if (rc !== null && typeof rc !== 'string') {
+      return {
+        ruleId: 'bug-report-root-cause-type',
+        severity: 'warning',
+        message: `rootCause 不是字符串或 null 类型，实际类型: ${typeof rc}`,
+        value: String(rc),
+      };
+    }
+    return null;
+  },
+};
+
+/**
+ * impactScope 必须是字符串或 null 类型
+ */
+export const bugReportImpactScopeType: ValidationRule = {
+  id: 'bug-report-impact-scope-type',
+  description: 'impactScope 必须是字符串或 null 类型',
+  severity: 'warning',
+  check: (output: unknown): ValidationViolation | null => {
+    const parsed = safeParseJson(output);
+    if (!parsed || !('impactScope' in parsed)) return null;
+    const is = parsed.impactScope;
+    if (is !== null && typeof is !== 'string') {
+      return {
+        ruleId: 'bug-report-impact-scope-type',
+        severity: 'warning',
+        message: `impactScope 不是字符串或 null 类型，实际类型: ${typeof is}`,
+        value: String(is),
+      };
+    }
+    return null;
+  },
+};
+
 // ============================================================
 // 按方法分组的规则集
 // ============================================================
@@ -296,13 +704,37 @@ export const requirementOutputRules: ValidationRule[] = [
 ];
 
 /** analyzeTaskQuality 方法验证规则 */
-export const qualityOutputRules: ValidationRule[] = [qualityRequiredFields, qualityScoreRange];
+export const qualityOutputRules: ValidationRule[] = [
+  qualityRequiredFields,
+  qualityScoreRange,
+  qualityIssuesArrayType,
+  qualityIssuesItemStructure,
+  qualitySuggestionsArrayType,
+];
 
 /** detectDuplicates 方法验证规则 */
-export const duplicatesOutputRules: ValidationRule[] = [duplicatesRequiredFields];
+export const duplicatesOutputRules: ValidationRule[] = [
+  duplicatesRequiredFields,
+  duplicatesItemRequiredFields,
+  duplicatesTaskIdsValidation,
+  duplicatesSimilarityRange,
+];
 
 /** assessStaleness 方法验证规则 */
-export const stalenessOutputRules: ValidationRule[] = [stalenessRequiredFields];
+export const stalenessOutputRules: ValidationRule[] = [
+  stalenessRequiredFields,
+  stalenessIsStaleType,
+  stalenessScoreRange,
+  stalenessActionEnum,
+  stalenessReasonType,
+];
 
 /** analyzeBugReport 方法验证规则 */
-export const bugReportOutputRules: ValidationRule[] = [bugReportRequiredFields];
+export const bugReportOutputRules: ValidationRule[] = [
+  bugReportRequiredFields,
+  bugReportTypeEnum,
+  bugReportPriorityEnum,
+  bugReportCheckpointsType,
+  bugReportRootCauseType,
+  bugReportImpactScopeType,
+];

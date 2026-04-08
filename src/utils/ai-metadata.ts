@@ -26,6 +26,7 @@ import {
   stalenessOutputRules,
   bugReportOutputRules,
 } from './validation-rules/ai-metadata-rules.js';
+import { semanticDependencyOutputRules } from './validation-rules/plan-rules.js';
 
 // ============================================================
 // 架构层级分类 (Layer0-Layer3)
@@ -672,7 +673,7 @@ export class AIMetadataAssistant {
 
     const prompt = this.buildSemanticDependencyPrompt(tasks, options.cwd);
 
-    const result = await this.invokeWithEngine(prompt, [], {
+    const result = await this.invokeWithEngine(prompt, semanticDependencyOutputRules, {
       ...options,
       maxRetries: options.maxRetries ?? 2,
       timeoutSeconds: options.timeoutSeconds ?? 30,
