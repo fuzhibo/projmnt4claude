@@ -31,7 +31,27 @@ const PASS_INDICATORS = [
   /\b(?:good\s+quality|well\s+implemented|code\s+is\s+clean|works?\s+correctly)\b/i,
   /\b(?:验收标准|检查点|所有)\s*(?:已|均|都)?\s*(?:满足|通过|完成|达成)\b/,
   /\b(?:代码质量|实现)\s*(?:良好|优秀|完整|清晰|正确)\b/,
+  /\b(?:均已?|已|全部)\s*(?:实现|完成|通过|满足|达成)\b/,
+  /\b(?:实现|完成)\s*(?:完整|正确|正常)\b/,
+  /\b(?:零错误|无误|全部完成|完全正确)\b/,
 ];
+
+/** 需要在评分前剥离的 Markdown 章节标题行（模板格式标题包含负向词汇，会干扰评分） */
+const SECTION_HEADER_PATTERNS = [
+  /^##\s*(?:未满足|未完成|失败|缺失|问题|缺陷|错误)/gm,
+];
+
+/**
+ * 剥离 Markdown 格式章节标题行，防止模板格式标题干扰评分
+ * 例如 `## 未满足的标准:` 中的「未满足」不应被计为负向指标
+ */
+function stripSectionHeaders(content: string): string {
+  let cleaned = content;
+  for (const pattern of SECTION_HEADER_PATTERNS) {
+    cleaned = cleaned.replace(pattern, '');
+  }
+  return cleaned;
+}
 
 /** 负向指标：暗示 NOPASS */
 const NOPASS_INDICATORS = [
@@ -58,13 +78,16 @@ export function detectContradiction(
     return { hasContradiction: false };
   }
 
+  // 剥离 Markdown 格式章节标题，防止模板标题干扰评分
+  const cleanContent = stripSectionHeaders(content);
+
   const passScore = PASS_INDICATORS.reduce((score, pattern) => {
-    const matches = content.match(pattern);
+    const matches = cleanContent.match(pattern);
     return score + (matches ? matches.length : 0);
   }, 0);
 
   const nopassScore = NOPASS_INDICATORS.reduce((score, pattern) => {
-    const matches = content.match(pattern);
+    const matches = cleanContent.match(pattern);
     return score + (matches ? matches.length : 0);
   }, 0);
 
