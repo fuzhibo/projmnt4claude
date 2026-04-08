@@ -14,7 +14,8 @@
 
 import { Logger } from './logger.js';
 import { runHeadlessClaude, runHeadlessClaudeWithRetry, isRetryableError } from './harness-helpers.js';
-import { type AIConfig, DEFAULT_AI } from '../types/config.js';
+import { type AIConfig, DEFAULT_AI, type HarnessToolsConfig } from '../types/config.js';
+import type { TaskMeta } from '../types/task.js';
 
 // ============================================================
 // 类型定义
@@ -100,6 +101,76 @@ export function translateOptionsToCliArgs(options: AgentInvokeOptions): string[]
   }
 
   return args;
+}
+
+// ============================================================
+// 阶段默认工具 & 3级优先级链
+// ============================================================
+
+/** 各阶段硬编码的默认工具列表 */
+const PHASE_DEFAULT_TOOLS: Record<string, string[]> = {
+  development: ['Read', 'Edit', 'Write', 'Bash', 'Grep', 'Glob'],
+  codeReview: ['Read', 'Bash', 'Grep', 'Glob'],
+  qaVerification: ['Read', 'Bash', 'Grep', 'Glob'],
+  evaluation: ['Read', 'Bash', 'Grep', 'Glob'],
+};
+
+/** Harness 阶段名称到 config perPhaseTools 键的映射 */
+const PHASE_CONFIG_KEY: Record<string, keyof HarnessToolsConfig> = {
+  development: 'development',
+  codeReview: 'codeReview',
+  code_review: 'codeReview',
+  qaVerification: 'qaVerification',
+  qa_verification: 'qaVerification',
+  evaluation: 'evaluation',
+};
+
+/**
+ * 按三级优先级链解析有效工具列表
+ *
+ * Level 1: TaskMeta.allowedTools（任务级限制，过滤下级工具）
+ * Level 2: config.harness.perPhaseTools[phase]（阶段级配置）
+ * Level 3: PHASE_DEFAULT_TOOLS[phase]（代码默认值）
+ *
+ * @param phase - 阶段名称（development/codeReview/qaVerification/evaluation）
+ * @param cwd - 工作目录（用于读取 config）
+ * @param task - 可选的任务元数据（提供任务级 allowedTools）
+ * @returns { tools: string[], skipPermissions: boolean }
+ */
+export function buildEffectiveTools(
+  phase: string,
+  cwd: string,
+  task?: TaskMeta,
+): { tools: string[]; skipPermissions: boolean } {
+  // Level 3: 代码默认值
+  const codeDefaults = PHASE_DEFAULT_TOOLS[phase] || ['Read', 'Bash', 'Grep', 'Glob'];
+
+  // Level 2: config 阶段级配置
+  const configKey = PHASE_CONFIG_KEY[phase];
+  let phaseTools = codeDefaults;
+  try {
+    const configPath = getConfigPath(cwd);
+    if (fs.existsSync(configPath)) {
+      const config = JSON.parse(fs.readFileSync(configPath, 'utf-8'));
+      const configPhaseTools = config?.harness?.perPhaseTools?.[configKey || phase];
+      if (Array.isArray(configPhaseTools) && configPhaseTools.length > 0) {
+        phaseTools = configPhaseTools;
+      }
+    }
+  } catch {
+    // 配置读取失败，使用代码默认值
+  }
+
+  // Level 1: TaskMeta 任务级限制
+  if (task?.allowedTools && task.allowedTools.length > 0) {
+    // 任务指定了 allowedTools → 过滤阶段工具，不跳过权限
+    const taskToolSet = new Set(task.allowedTools);
+    const effectiveTools = phaseTools.filter(t => taskToolSet.has(t));
+    return { tools: effectiveTools, skipPermissions: false };
+  }
+
+  // 无任务级限制 → 使用阶段工具，跳过权限（向后兼容）
+  return { tools: phaseTools, skipPermissions: true };
 }
 
 // ============================================================

@@ -51,6 +51,24 @@ export interface QualityConfig {
   minScore?: number;
 }
 
+/** Harness 阶段工具配置 */
+export interface HarnessToolsConfig {
+  /** 开发阶段允许的工具 */
+  development?: string[];
+  /** 代码审核阶段允许的工具 */
+  codeReview?: string[];
+  /** QA 验证阶段允许的工具 */
+  qaVerification?: string[];
+  /** 评估阶段允许的工具 */
+  evaluation?: string[];
+}
+
+/** Harness 配置 */
+export interface HarnessConfig {
+  /** 各阶段允许的工具列表（覆盖代码默认值） */
+  perPhaseTools?: HarnessToolsConfig;
+}
+
 /** 项目配置 */
 export interface ProjectConfig {
   projectName: string;
@@ -62,6 +80,7 @@ export interface ProjectConfig {
   training?: TrainingConfig;
   prompts?: PromptsConfig;
   quality?: QualityConfig;
+  harness?: HarnessConfig;
   [key: string]: unknown;
 }
 

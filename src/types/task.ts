@@ -553,6 +553,7 @@ export interface TaskMeta {
   schemaVersion?: number;         // schema 版本号，用于增量迁移
   estimatedMinutes?: number;      // AI 评估的预估耗时（分钟），用于自适应超时
   failureReason?: FailureReason;  // 任务失败原因（status 为 failed 时记录具体原因）
+  allowedTools?: string[];        // 允许的工具列表（为空时使用默认 --dangerously-skip-permissions）
 }
 
 /**

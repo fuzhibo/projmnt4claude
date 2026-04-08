@@ -23,7 +23,7 @@ import {
   getReportPath,
   REVIEW_TIMEOUT_RATIO,
 } from './harness-helpers.js';
-import { getAgent } from './headless-agent.js';
+import { getAgent, buildEffectiveTools } from './headless-agent.js';
 import { getCodeReviewRoleTemplate } from './role-prompts.js';
 import { detectContradiction } from './contradiction-detector.js';
 import { loadPromptTemplate, resolveTemplate } from './prompt-templates.js';
@@ -139,12 +139,14 @@ export class HarnessCodeReviewer {
 
     console.log('\n   🤖 启动代码审核会话...');
     const agent = getAgent(this.config.cwd);
+    const effectiveTools = buildEffectiveTools('codeReview', this.config.cwd, task);
     const claudeResult = await agent.invoke(prompt, {
-      allowedTools: ['Read', 'Bash', 'Grep', 'Glob'],
+      allowedTools: effectiveTools.tools,
       timeout: Math.floor(this.config.timeout / REVIEW_TIMEOUT_RATIO),
       cwd: this.config.cwd,
       maxRetries: this.config.apiRetryAttempts,
       outputFormat: 'text',
+      dangerouslySkipPermissions: effectiveTools.skipPermissions,
     });
 
     if (!claudeResult.success) {

@@ -25,7 +25,7 @@ import type { TaskMeta } from '../types/task.js';
 import { getProjectDir } from './path.js';
 import { getDevRoleTemplate } from './role-prompts.js';
 import { archiveReportIfExists } from './harness-helpers.js';
-import { getAgent } from './headless-agent.js';
+import { getAgent, buildEffectiveTools } from './headless-agent.js';
 import { loadPromptTemplate, resolveTemplate } from './prompt-templates.js';
 
 export class HarnessExecutor {
@@ -67,13 +67,14 @@ export class HarnessExecutor {
       // 3. 执行 headless Claude（通过 headless-agent 抽象层）
       console.log('\n   🤖 启动 Headless Claude...');
       const agent = getAgent(this.config.cwd);
+      const effectiveTools = buildEffectiveTools('development', this.config.cwd, task);
       const agentResult = await agent.invoke(prompt, {
         timeout: effectiveTimeout,
-        allowedTools: ['Read', 'Edit', 'Write', 'Bash', 'Grep', 'Glob'],
+        allowedTools: effectiveTools.tools,
         outputFormat: 'text',
         maxRetries: this.config.apiRetryAttempts,
         cwd: this.config.cwd,
-        dangerouslySkipPermissions: true,
+        dangerouslySkipPermissions: effectiveTools.skipPermissions,
       });
 
       report.claudeOutput = agentResult.output;

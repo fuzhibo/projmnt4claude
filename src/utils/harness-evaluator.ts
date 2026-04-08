@@ -22,7 +22,7 @@ import type { TaskMeta } from '../types/task.js';
 import { getProjectDir } from './path.js';
 import { readTaskMeta, getAllTaskIds } from './task.js';
 import { archiveReportIfExists, parseStructuredResult } from './harness-helpers.js';
-import { getAgent } from './headless-agent.js';
+import { getAgent, buildEffectiveTools } from './headless-agent.js';
 import { detectContradiction } from './contradiction-detector.js';
 import { loadPromptTemplate, resolveTemplate } from './prompt-templates.js';
 
@@ -124,13 +124,14 @@ export class HarnessEvaluator {
         }
 
         const agent = getAgent(this.config.cwd);
+        const effectiveTools = buildEffectiveTools('evaluation', this.config.cwd, task);
         const result = await agent.invoke(currentPrompt, {
-          allowedTools: ['Read', 'Bash', 'Grep', 'Glob'],
+          allowedTools: effectiveTools.tools,
           timeout: Math.floor(this.config.timeout / 2), // 审查时间较短
           outputFormat: 'text',
           maxRetries: this.config.apiRetryAttempts,
           cwd: this.config.cwd,
-          dangerouslySkipPermissions: true,
+          dangerouslySkipPermissions: effectiveTools.skipPermissions,
         });
 
         // 4.5 保存原始评估输出（用于事后诊断）
