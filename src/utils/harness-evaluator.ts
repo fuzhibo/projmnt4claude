@@ -24,7 +24,7 @@ import { readTaskMeta, getAllTaskIds } from './task.js';
 import { archiveReportIfExists, parseStructuredResult } from './harness-helpers.js';
 import { getAgent, buildEffectiveTools } from './headless-agent.js';
 import { detectContradiction } from './contradiction-detector.js';
-import { createMarkdownFeedbackEngine } from './feedback-constraint-engine.js';
+import { createSessionAwareEngine } from './feedback-constraint-engine.js';
 import { verdictResultMarker, verdictHasReason } from './validation-rules/verdict-rules.js';
 import { loadPromptTemplate, resolveTemplate } from './prompt-templates.js';
 
@@ -123,7 +123,8 @@ export class HarnessEvaluator {
 
       console.log('\n   🔍 启动独立评估会话...');
 
-      const engine = createMarkdownFeedbackEngine(
+      const engine = createSessionAwareEngine(
+        'markdown',
         [verdictResultMarker, verdictHasReason],
         2, // maxRetriesOnError, equivalent to MAX_PARSE_RETRIES
       );

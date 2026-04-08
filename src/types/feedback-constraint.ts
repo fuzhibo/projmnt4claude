@@ -89,6 +89,13 @@ export interface EngineResult {
   retries: number;
   /** 最终是否通过验证 */
   passed: boolean;
+  /** Session 连续性信息 */
+  sessionContinuity?: {
+    /** 是否使用了 session 连续性 */
+    used: boolean;
+    /** 使用的 session ID */
+    sessionId?: string;
+  };
 }
 
 /**

@@ -28,7 +28,7 @@ import { getAgent, buildEffectiveTools } from './headless-agent.js';
 import { getQARoleTemplate } from './role-prompts.js';
 import { generateFallbackVerification } from './checkpoint.js';
 import { detectContradiction } from './contradiction-detector.js';
-import { createMarkdownFeedbackEngine } from './feedback-constraint-engine.js';
+import { createSessionAwareEngine } from './feedback-constraint-engine.js';
 import { verdictResultMarker, verdictHasReason } from './validation-rules/verdict-rules.js';
 import { loadPromptTemplate, resolveTemplate } from './prompt-templates.js';
 
@@ -214,7 +214,8 @@ export class HarnessQATester {
       dangerouslySkipPermissions: effectiveTools.skipPermissions,
     };
 
-    const engine = createMarkdownFeedbackEngine(
+    const engine = createSessionAwareEngine(
+      'markdown',
       [verdictResultMarker, verdictHasReason],
       1, // maxRetriesOnError (QA: 1 retry)
     );

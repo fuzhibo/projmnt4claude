@@ -17,7 +17,7 @@ import { getAgent, type HeadlessAgent, type AgentResult, type AgentInvokeOptions
 import type { TaskMeta, TaskPriority, TaskType } from '../types/task';
 import { inferTaskType, inferTaskPriority } from '../types/task';
 import { loadPromptTemplate, resolveTemplate } from './prompt-templates.js';
-import { createJsonFeedbackEngine } from './feedback-constraint-engine.js';
+import { createSessionAwareEngine } from './feedback-constraint-engine.js';
 import type { ValidationRule } from '../types/feedback-constraint.js';
 import {
   requirementOutputRules,
@@ -833,7 +833,7 @@ export class AIMetadataAssistant {
 
     try {
       const agent = getAgent(cwd);
-      const engine = createJsonFeedbackEngine(additionalRules, maxRetries);
+      const engine = createSessionAwareEngine('json', additionalRules, maxRetries);
 
       const invokeOptions: AgentInvokeOptions = {
         timeout: timeoutSeconds,

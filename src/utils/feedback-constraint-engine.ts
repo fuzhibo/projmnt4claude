@@ -16,6 +16,7 @@ import type {
 } from '../types/feedback-constraint.js';
 import type { AgentResult } from './headless-agent.js';
 import { Logger } from './logger.js';
+import { randomUUID } from 'crypto';
 
 const logger = new Logger({ component: 'feedback-constraint-engine' });
 
@@ -302,7 +303,9 @@ export class FeedbackConstraintEngineImpl implements FeedbackConstraintEngine {
    * 1. 使用 invokeFn 调用 Agent
    * 2. 验证输出
    * 3. 如果存在违规且应该重试，生成反馈并重新调用
-   * 4. 重复直到通过或达到重试上限
+   * 4. 重试时使用 session 连续性（--session-id + --resume），
+   *    Claude 可在前次完整上下文中进行修正
+   * 5. 重复直到通过或达到重试上限
    */
   async runWithFeedback(
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -315,10 +318,14 @@ export class FeedbackConstraintEngineImpl implements FeedbackConstraintEngine {
     let currentPrompt = prompt;
     let lastResult: AgentResult;
 
+    // 生成 session ID 用于重试时的上下文连续性
+    const sessionId = `fce-${Date.now()}-${randomUUID().slice(0, 8)}`;
+    let currentOptions = { ...options, sessionId };
+
     // eslint-disable-next-line no-constant-condition
     while (true) {
       // 调用 Agent
-      lastResult = await invokeFn(currentPrompt, options);
+      lastResult = await invokeFn(currentPrompt, currentOptions);
 
       const output = lastResult.output;
 
@@ -328,13 +335,17 @@ export class FeedbackConstraintEngineImpl implements FeedbackConstraintEngine {
       // 无违规，通过
       if (violations.length === 0) {
         logger.debug(
-          `[FeedbackConstraintEngine] 验证通过 (重试 ${this.retryCount} 次)`,
+          `[FeedbackConstraintEngine] 验证通过 (重试 ${this.retryCount} 次, session: ${sessionId})`,
         );
         return {
           result: lastResult,
           violations: [],
           retries: this.retryCount,
           passed: true,
+          sessionContinuity: {
+            used: this.retryCount > 0,
+            sessionId,
+          },
         };
       }
 
@@ -349,6 +360,10 @@ export class FeedbackConstraintEngineImpl implements FeedbackConstraintEngine {
           violations,
           retries: this.retryCount,
           passed: !hasErrors,
+          sessionContinuity: {
+            used: this.retryCount > 0,
+            sessionId,
+          },
         };
       }
 
@@ -356,17 +371,21 @@ export class FeedbackConstraintEngineImpl implements FeedbackConstraintEngine {
       this.retryCount++;
       const feedback = this.buildFeedback(violations, output);
       currentPrompt = [
-        currentPrompt,
-        '',
-        '---',
-        '',
         feedback,
         '',
         `这是第 ${this.retryCount} 次重试，请根据上述反馈修正输出。`,
       ].join('\n');
 
+      // 重试时恢复同一 session，Claude 可看到前次完整输出
+      currentOptions = {
+        ...options,
+        sessionId,
+        resumeSession: true,
+        forkSession: false,
+      };
+
       logger.debug(
-        `[FeedbackConstraintEngine] 准备第 ${this.retryCount} 次重试，违规项: ${violations.map((v) => v.ruleId).join(', ')}`,
+        `[FeedbackConstraintEngine] 准备第 ${this.retryCount} 次重试 (session: ${sessionId})，违规项: ${violations.map((v) => v.ruleId).join(', ')}`,
       );
     }
   }
@@ -418,6 +437,39 @@ export function createMarkdownFeedbackEngine(
     name: 'markdown-output',
     outputType: 'markdown',
     rules: [nonEmptyOutputRule, ...rules],
+    maxRetriesOnError,
+  });
+  return engine;
+}
+
+/**
+ * Session 感知的验证引擎工厂
+ *
+ * 创建使用 CLI session 连续性（--session-id + --resume）的引擎实例。
+ * 重试时在同一 session 中继续，Claude 可在前次完整上下文中进行修正，
+ * 避免重试 prompt 丢失原始任务上下文的问题。
+ *
+ * @param outputType - 输出格式：json 或 markdown
+ * @param rules - 额外验证规则
+ * @param maxRetriesOnError - error 级违规最大重试次数
+ */
+export function createSessionAwareEngine(
+  outputType: 'json' | 'markdown' = 'json',
+  rules: ValidationRule[] = [],
+  maxRetriesOnError = 2,
+): FeedbackConstraintEngineImpl {
+  const template = outputType === 'json'
+    ? new JsonFeedbackTemplate()
+    : new MarkdownFeedbackTemplate();
+  const baseRules = outputType === 'json'
+    ? [nonEmptyOutputRule, jsonParseableRule, ...rules]
+    : [nonEmptyOutputRule, ...rules];
+
+  const engine = new FeedbackConstraintEngineImpl(template);
+  engine.addRuleSet({
+    name: `${outputType}-session-aware`,
+    outputType,
+    rules: baseRules,
     maxRetriesOnError,
   });
   return engine;

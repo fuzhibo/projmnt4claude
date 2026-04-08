@@ -33,6 +33,12 @@ export interface HeadlessClaudeOptions {
   dangerouslySkipPermissions?: boolean;
   /** 输出格式（对应 --output-format: text/json/stream-json） */
   outputFormat?: string;
+  /** 指定 Claude Code CLI session ID，用于跨调用保持上下文连续性 */
+  sessionId?: string;
+  /** 恢复已有 session（对应 --resume），需配合 sessionId 使用 */
+  resumeSession?: boolean;
+  /** 分叉 session 而非覆盖原 session（对应 --fork-session） */
+  forkSession?: boolean;
 }
 
 export interface HeadlessClaudeResult {
@@ -121,6 +127,17 @@ export async function runHeadlessClaude(options: HeadlessClaudeOptions): Promise
 
     if (options.outputFormat) {
       args.push('--output-format', options.outputFormat);
+    }
+
+    // Session 连续性支持
+    if (options.sessionId) {
+      args.push('--session-id', options.sessionId);
+    }
+    if (options.resumeSession) {
+      args.push('--resume');
+    }
+    if (options.forkSession) {
+      args.push('--fork-session');
     }
 
     try {
