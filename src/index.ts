@@ -1,5 +1,7 @@
 #!/usr/bin/env bun
 import { Command } from 'commander';
+import * as fs from 'fs';
+import * as path from 'path';
 import { setup } from './commands/setup';
 import { listConfig, getConfig, setConfig } from './commands/config';
 import {
@@ -768,13 +770,14 @@ program
 
 // init-requirement 命令
 program
-  .command('init-requirement <description>')
+  .command('init-requirement [description]')
   .description('从自然语言需求描述创建任务，自动解析需求并生成任务结构\n\n' +
     '自动分析: 优先级(P0-P3)、推荐角色、复杂度、检查点、依赖\n' +
     '示例:\n' +
     '  init-requirement "实现用户登录API接口，需要高优先级处理"\n' +
     '  init-requirement -y "紧急修复线上支付接口超时问题"\n' +
-    '  init-requirement -y --no-plan "为认证模块编写单元测试"\n\n' +
+    '  init-requirement -y --no-plan "为认证模块编写单元测试"\n' +
+    '  init-requirement -y --file ./description.md\n\n' +
     '前提: 需先运行 projmnt4claude setup 初始化项目')
   .option('-y, --yes', '非交互模式：跳过所有确认，直接使用分析结果创建任务')
   .option('--no-plan', '创建任务后不询问是否添加到执行计划')
@@ -783,9 +786,67 @@ program
   .option('--auto-split', '自动拆分复杂任务为子任务（复杂度评估为 high 时生效）')
   .option('--no-ai', '禁用 AI 增强，仅使用规则引擎进行关键词匹配分析')
   .option('--require-quality <n>', '质量门禁: 低于阈值时阻止创建 (0-100)')
+  .option('-f, --file <path>', '从文件读取描述（用于包含特殊字符的长描述）')
   .action(async (description, options) => {
+    let finalDescription: string | undefined;
+
+    // 优先级: --file > 命令行参数
+    if (options.file) {
+      const filePath = path.resolve(options.file);
+
+      // 验证文件是否存在
+      if (!fs.existsSync(filePath)) {
+        console.error(`❌ 错误: 描述文件不存在: ${filePath}`);
+        process.exit(1);
+      }
+
+      // 验证是否为文件
+      const stat = fs.statSync(filePath);
+      if (!stat.isFile()) {
+        console.error(`❌ 错误: 指定路径不是文件: ${filePath}`);
+        process.exit(1);
+      }
+
+      // 验证文件大小（限制10MB防止内存问题）
+      const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10MB
+      if (stat.size > MAX_FILE_SIZE) {
+        console.error(`❌ 错误: 描述文件过大 (${(stat.size / 1024 / 1024).toFixed(2)}MB)，最大允许10MB`);
+        process.exit(1);
+      }
+
+      try {
+        finalDescription = fs.readFileSync(filePath, 'utf-8');
+      } catch (error: any) {
+        console.error(`❌ 错误: 无法读取描述文件: ${error.message}`);
+        process.exit(1);
+      }
+
+      // 清理临时文件（如果是/tmp下的文件）
+      if (filePath.startsWith('/tmp/')) {
+        try {
+          fs.unlinkSync(filePath);
+        } catch {
+          // 忽略删除失败
+        }
+      }
+    } else if (description) {
+      finalDescription = description;
+    }
+
+    // 验证描述必须存在
+    if (!finalDescription || finalDescription.trim().length === 0) {
+      console.error('❌ 错误: 需要提供描述或使用 --file 选项');
+      console.error('');
+      console.error('用法:');
+      console.error('  projmnt4claude init-requirement "需求描述"');
+      console.error('  projmnt4claude init-requirement --file ./description.md');
+      console.error('');
+      console.error('提示: 当描述包含代码块或特殊字符时，推荐使用 --file 选项');
+      process.exit(1);
+    }
+
     requireInit();
-    await initRequirement(description, process.cwd(), {
+    await initRequirement(finalDescription, process.cwd(), {
       nonInteractive: options.yes,
       noPlan: options.noPlan,
       skipValidation: options.skipValidation,

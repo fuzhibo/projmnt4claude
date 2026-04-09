@@ -122,6 +122,9 @@ node ${CLAUDE_PLUGIN_ROOT}/dist/projmnt4claude.js setup
 | 命令 | 描述 |
 |------|------|
 | `init-requirement "<description>"` | 从自然语言描述创建任务 |
+| `init-requirement -y --file <path>` | 从文件读取描述创建任务（推荐用于复杂描述） |
+
+> ⚠️ **AI调用限制**: 当描述包含代码块（特别是包含 `{}` 或 `$()` 的代码）时，**必须**使用 `--file` 选项，否则会导致Bash解析错误。详见下方的 [AI调用限制说明](#ai调用限制说明)。
 
 ### Harness Design 执行
 
@@ -328,4 +331,226 @@ node ${CLAUDE_PLUGIN_ROOT}/dist/projmnt4claude.js <command> [options]
 ```bash
 node ${CLAUDE_PLUGIN_ROOT}/dist/projmnt4claude.js --help
 node ${CLAUDE_PLUGIN_ROOT}/dist/projmnt4claude.js <command> --help
+```
+
+---
+
+## AI调用限制说明
+
+> **重要**: 本节详细说明AI在调用 `projmnt4claude` 命令时的限制和边界，**必须仔细阅读**以避免调用错误。
+
+### 1. 特殊字符限制（关键）
+
+#### ❌ 不能直接在命令行传递包含以下内容的描述
+
+| 问题字符/模式 | 示例 | 原因 |
+|-------------|------|------|
+| **花括号 `{}`** | `if (condition) { ... }` | Bash解释为复合命令语法 |
+| **命令替换 `$()`** | `$(command)` | Bash执行命令替换 |
+| **反引号** | `` `command` `` | Bash执行命令替换 |
+| **变量扩展 `${}`** | `${variable}` | Bash解释为变量扩展 |
+| **管道符 `\|`** | `command1 \| command2` | Bash解释为管道操作 |
+| **分号 `;`** | `cmd1 ; cmd2` | Bash解释为命令分隔符 |
+| **重定向 `< >`** | `echo > file` | Bash解释为IO重定向 |
+| **与号 `&`** | `command &` | Bash解释为后台执行 |
+| **美元符 `$`** | `$variable` | Bash解释为变量引用 |
+
+#### ✅ 解决方案：使用 `--file` 选项
+
+当描述包含上述任何特殊字符时，**必须使用 `--file` 选项**：
+
+```bash
+# Step 1: 将描述写入临时文件
+cat > /tmp/task-desc.md << 'EOF'
+## 修复 blocked 统计逻辑
+
+当前代码问题：
+```typescript
+if (uncompletedDeps.length > 0 && 
+    normalizedStatus !== 'resolved' && 
+    normalizedStatus !== 'closed') {
+  stats.blocked++;
+}
+```
+
+需要添加对 `abandoned` 状态的排除。
+EOF
+
+# Step 2: 使用 --file 选项调用
+node ${CLAUDE_PLUGIN_ROOT}/dist/projmnt4claude.js init-requirement -y --file /tmp/task-desc.md
+
+# Step 3: 清理临时文件
+rm /tmp/task-desc.md
+```
+
+### 2. 命令行参数长度限制
+
+| 限制类型 | 限制值 | 说明 |
+|---------|-------|------|
+| 单个参数长度 | 约 128KB-2MB（系统相关） | 超长描述会截断或失败 |
+| 总命令行长度 | 约 2MB（Linux） | 超过会报错 "Argument list too long" |
+
+**建议**: 超过 1000 字符的描述，使用 `--file` 选项。
+
+### 3. 命令调用方式限制
+
+#### ✅ 正确的调用方式
+
+```bash
+# 1. 简单描述（无特殊字符）
+node ${CLAUDE_PLUGIN_ROOT}/dist/projmnt4claude.js init-requirement -y "实现用户登录功能"
+
+# 2. 复杂描述（使用 --file）
+node ${CLAUDE_PLUGIN_ROOT}/dist/projmnt4claude.js init-requirement -y --file /tmp/desc.md
+
+# 3. 非交互模式（AI推荐）
+node ${CLAUDE_PLUGIN_ROOT}/dist/projmnt4claude.js init-requirement -y --no-plan --file /tmp/desc.md
+```
+
+#### ❌ 错误的调用方式
+
+```bash
+# 错误1: 包含代码块的直接传递
+node projmnt4claude.js init-requirement -y "修复 { if (x) { return; } }"
+
+# 错误2: 包含变量扩展
+node projmnt4claude.js init-requirement -y "使用 ${variable} 配置"
+
+# 错误3: 包含命令替换
+node projmnt4claude.js init-requirement -y "输出 $(command) 的结果"
+```
+
+### 4. 文件路径限制
+
+| 限制 | 说明 | 解决方案 |
+|------|------|---------|
+| 相对路径 | 相对于当前工作目录 | 使用 `$(pwd)/relative/path` |
+| 空格路径 | 路径包含空格 | 使用 `--file` 时无需转义，直接写路径 |
+| 不存在路径 | `--file` 指定不存在的文件 | 命令会报错并退出 |
+| 目录路径 | `--file` 指定目录而非文件 | 命令会报错并退出 |
+
+### 5. 多行描述处理
+
+当需要传递多行描述时：
+
+```bash
+# ✅ 推荐：使用 --file 选项
+node ${CLAUDE_PLUGIN_ROOT}/dist/projmnt4claude.js init-requirement -y --file ./description.md
+
+# ⚠️ 不推荐：命令行换行（容易出错）
+node ${CLAUDE_PLUGIN_ROOT}/dist/projmnt4claude.js init-requirement -y "第一行
+第二行
+第三行"
+```
+
+### 6. 快速决策流程图
+
+```
+开始创建任务
+    │
+    ▼
+描述是否包含代码块？
+    │
+    ├── 是 ──→ 使用 --file 选项
+    │              │
+    │              ▼
+    │          写入临时文件
+    │              │
+    │              ▼
+    │          调用命令
+    │              │
+    │              ▼
+    │          清理临时文件
+    │
+    └── 否 ──→ 描述是否 > 1000字符？
+                   │
+                   ├── 是 ──→ 使用 --file 选项
+                   │
+                   └── 否 ──→ 直接传递参数
+```
+
+### 7. 常见错误及解决方案
+
+| 错误信息 | 原因 | 解决方案 |
+|---------|------|---------|
+| `syntax error near unexpected token '{'` | 描述包含 `{}` | 使用 `--file` 选项 |
+| `command substitution: line X: ...` | 描述包含 `$()` 或 `` ` `` | 使用 `--file` 选项 |
+| `bad substitution` | 描述包含 `${}` | 使用 `--file` 选项 |
+| `Argument list too long` | 描述过长 | 使用 `--file` 选项 |
+| `错误: 描述文件不存在` | `--file` 路径错误 | 检查文件路径 |
+| `错误: 指定路径不是文件` | `--file` 指向目录 | 检查路径是否为文件 |
+
+### 8. 最佳实践
+
+1. **始终使用 `--file` 选项处理复杂描述**
+   - 任何包含代码、JSON、XML的描述都应使用 `--file`
+
+2. **使用临时文件**
+   - 将临时文件放在 `/tmp/` 目录
+   - 命名格式: `task-desc-$$.md`（$$会被替换为PID）
+
+3. **及时清理**
+   - 命令执行后立即删除临时文件
+   - 或使用 `--no-plan` 避免交互阻塞
+
+4. **验证文件存在**
+   - 在调用前检查文件是否成功创建
+
+5. **使用 `<< 'EOF'` 语法**
+   - 单引号包裹的 `EOF` 不会进行变量扩展
+   - 确保内容原样写入文件
+
+### 9. 示例：完整的AI任务创建流程
+
+```bash
+#!/bin/bash
+# AI任务创建脚本示例
+
+# 1. 准备任务描述
+TASK_DESC=$(cat << 'ENDOFDESC'
+## 任务标题：修复性能瓶颈
+
+### 问题描述
+当前接口响应时间过长：
+
+```typescript
+// 问题代码
+async function getData() {
+  const data = await db.query("SELECT * FROM large_table");
+  return data.map(item => process(item));
+}
+```
+
+### 优化方案
+1. 添加分页查询
+2. 使用 Redis 缓存
+3. 异步处理大数据
+
+### 验收标准
+- [ ] 接口响应时间 < 200ms
+- [ ] 支持分页参数
+- [ ] 添加缓存机制
+ENDOFDESC
+)
+
+# 2. 写入临时文件
+TEMP_FILE="/tmp/task-desc-$$.md"
+echo "$TASK_DESC" > "$TEMP_FILE"
+
+# 3. 验证文件
+if [ ! -f "$TEMP_FILE" ]; then
+  echo "错误: 无法创建临时文件"
+  exit 1
+fi
+
+# 4. 创建任务
+node ${CLAUDE_PLUGIN_ROOT}/dist/projmnt4claude.js init-requirement \
+  -y \
+  --no-plan \
+  --file "$TEMP_FILE"
+
+# 5. 清理
+rm -f "$TEMP_FILE"
+
+echo "任务创建完成"
 ```
