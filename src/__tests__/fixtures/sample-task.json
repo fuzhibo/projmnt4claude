@@ -1,0 +1,38 @@
+{
+  "id": "TASK-sample-001",
+  "title": "示例任务",
+  "description": "这是一个用于测试的示例任务",
+  "type": "feature",
+  "priority": "P2",
+  "status": "open",
+  "dependencies": [],
+  "createdAt": "2026-04-09T00:00:00.000Z",
+  "updatedAt": "2026-04-09T00:00:00.000Z",
+  "history": [
+    {
+      "timestamp": "2026-04-09T00:00:00.000Z",
+      "action": "任务创建",
+      "field": "status",
+      "newValue": "open"
+    }
+  ],
+  "checkpoints": [
+    {
+      "id": "CP-001",
+      "description": "需求分析完成",
+      "status": "completed",
+      "createdAt": "2026-04-09T00:00:00.000Z",
+      "updatedAt": "2026-04-09T00:00:00.000Z"
+    },
+    {
+      "id": "CP-002",
+      "description": "代码实现完成",
+      "status": "pending",
+      "createdAt": "2026-04-09T00:00:00.000Z",
+      "updatedAt": "2026-04-09T00:00:00.000Z"
+    }
+  ],
+  "schemaVersion": 4,
+  "reopenCount": 0,
+  "requirementHistory": []
+}
