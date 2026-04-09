@@ -360,13 +360,25 @@ function loadRuntimeState(cwd: string): HarnessRuntimeState | null {
   try {
     const content = fs.readFileSync(statePath, 'utf-8');
     const data = JSON.parse(content);
-    // 恢复 Map
+
+    // 版本检查：如果版本不匹配，重置状态
+    if (data.stateFormatVersion !== 1) {
+      logger.warn('状态文件版本不匹配，重置运行时状态');
+      return null;
+    }
+
+    // 防御性编程：确保所有Map字段都被正确初始化
+    // 恢复 Map（修复：添加 phaseRetryCounters 恢复）
     data.retryCounter = new Map(Object.entries(data.retryCounter || {}));
     data.taskResults = new Map(Object.entries(data.taskResults || {}));
     data.resumeFrom = new Map(Object.entries(data.resumeFrom || {}));
     data.reevaluateCounter = new Map(Object.entries(data.reevaluateCounter || {}));
+    data.phaseRetryCounters = new Map(Object.entries(data.phaseRetryCounters || {}));
+
     return data;
-  } catch {
+  } catch (error) {
+    // 降级处理：日志记录错误但返回null而非抛出异常
+    logger.warn('加载运行时状态失败，重置状态:', error);
     return null;
   }
 }
@@ -378,9 +390,13 @@ export function saveRuntimeState(state: HarnessRuntimeState, cwd: string): void 
   const statePath = getRuntimeStatePath(cwd);
   const data = {
     ...state,
+    // 版本标记：便于未来版本演进时识别状态文件格式
+    stateFormatVersion: 1,
     retryCounter: Object.fromEntries(state.retryCounter),
     resumeFrom: Object.fromEntries(state.resumeFrom || []),
     reevaluateCounter: Object.fromEntries(state.reevaluateCounter || []),
+    // 修复：添加 phaseRetryCounters 保存
+    phaseRetryCounters: Object.fromEntries(state.phaseRetryCounters || []),
   };
   fs.writeFileSync(statePath, JSON.stringify(data, null, 2), 'utf-8');
 }
