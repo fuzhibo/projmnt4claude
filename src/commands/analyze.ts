@@ -4,7 +4,6 @@ import * as fs from 'fs';
 import { isInitialized, getTasksDir, getArchiveDir, getProjectDir, getReportsDir, getLogsDir, ensureDir } from '../utils/path';
 import {
   readTaskMeta,
-  writeTaskMeta,
   getAllTasks,
   getAllTaskIds,
   taskExists,
@@ -34,7 +33,7 @@ import {
 } from '../types/task';
 import type { VerdictAction } from '../types/harness';
 import { VALID_VERDICT_ACTIONS } from '../types/harness';
-import { generateCheckpointId } from '../utils/checkpoint';
+import { generateCheckpointId, syncCheckpointsToMeta, fixMissingCheckpoints } from '../utils/checkpoint';
 import { inferCheckpointsFromDescription, generateStructuredDescription, type StructuredDescription, type DescriptionTemplateType } from '../utils/description-template';
 import { SEPARATOR_WIDTH } from '../utils/format';
 import type { SprintContract } from '../types/harness';
@@ -3062,19 +3061,9 @@ function fixTaskCheckpoints(taskId: string, cwd: string): { fixed: boolean; reas
   // 更新 contract
   contract.checkpoints = checkpoints.map(cp => cp.id);
 
-  // 始终更新 meta.json 中的 checkpoints 字段（因为 contract.checkpoints 原本为空）
-  // 即使 task.checkpoints 已有旧数据，也用新生成的智能检查点替换
-  task.checkpoints = checkpoints;
-  writeTaskMeta(task, cwd);
-
-  // 同时更新 checkpoint.md 文件，确保与 meta.json 同步
-  // 这样 syncCheckpointsToMeta 不会覆盖我们的智能检查点
-  const taskDir = path.join(getTasksDir(cwd), taskId);
-  const checkpointPath = path.join(taskDir, 'checkpoint.md');
-  const checkpointContent = `# ${taskId} 检查点\n\n` +
-    checkpoints.map(cp => `- [ ] ${cp.description}`).join('\n') +
-    '\n';
-  fs.writeFileSync(checkpointPath, checkpointContent, 'utf-8');
+  // 使用 checkpoint 模块的 syncCheckpointsToMeta 函数同步检查点
+  // 这会同时更新 meta.json 和 checkpoint.md，确保两者保持一致
+  syncCheckpointsToMeta(taskId, checkpoints, cwd);
 
   // 保存 contract
   saveContract(taskId, contract, cwd);

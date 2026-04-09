@@ -393,15 +393,57 @@ export function inferCheckpointCategory(
 }
 
 /**
+ * 将检查点同步到任务元数据（重载版本）
+ * @param taskId 任务ID
+ * @param checkpoints 检查点列表
+ * @param cwd 工作目录
+ */
+export function syncCheckpointsToMeta(
+  taskId: string,
+  checkpoints: CheckpointMetadata[],
+  cwd?: string
+): void;
+
+/**
  * 同步 checkpoint.md 到 meta.json
  * 确保检查点元数据与 checkpoint.md 文件保持一致
  */
-export function syncCheckpointsToMeta(taskId: string, cwd: string = process.cwd()): void {
+export function syncCheckpointsToMeta(taskId: string, cwd?: string): void;
+
+/**
+ * 实现：同步检查点到 meta.json
+ * 支持两种调用方式：
+ * 1. syncCheckpointsToMeta(taskId, cwd) - 从 checkpoint.md 同步
+ * 2. syncCheckpointsToMeta(taskId, checkpoints, cwd) - 直接同步指定检查点
+ */
+export function syncCheckpointsToMeta(
+  taskId: string,
+  checkpointsOrCwd?: CheckpointMetadata[] | string,
+  maybeCwd?: string
+): void {
+  // 解析参数
+  const cwd = typeof checkpointsOrCwd === 'string'
+    ? checkpointsOrCwd
+    : (maybeCwd ?? process.cwd());
+  const checkpoints = Array.isArray(checkpointsOrCwd) ? checkpointsOrCwd : undefined;
+
   const task = readTaskMeta(taskId, cwd);
   if (!task) {
     throw new Error(`任务 '${taskId}' 不存在`);
   }
 
+  // 如果传入了检查点列表，直接使用；否则从 checkpoint.md 解析
+  if (checkpoints && Array.isArray(checkpoints)) {
+    // 直接同步传入的检查点
+    task.checkpoints = checkpoints;
+    writeTaskMeta(task, cwd);
+
+    // 同时更新 checkpoint.md 文件
+    updateCheckpointMdFromArray(taskId, checkpoints, cwd);
+    return;
+  }
+
+  // 原有的逻辑：从 checkpoint.md 解析并同步
   const parsedCheckpoints = parseCheckpointsWithIds(taskId, cwd);
   const existingMeta = task.checkpoints || [];
   const now = new Date().toISOString();
@@ -602,4 +644,190 @@ export function findCheckpointIdByDescription(
     description.includes(cp.description)
   );
   return found?.id || null;
+}
+
+/**
+ * 从检查点数组更新 checkpoint.md 文件
+ * @param taskId 任务ID
+ * @param checkpoints 检查点数组
+ * @param cwd 工作目录
+ */
+function updateCheckpointMdFromArray(
+  taskId: string,
+  checkpoints: CheckpointMetadata[],
+  cwd: string = process.cwd()
+): void {
+  const checkpointPath = path.join(getTasksDir(cwd), taskId, 'checkpoint.md');
+  const content = `# ${taskId} 检查点\n\n` +
+    checkpoints.map(cp => `- [ ] ${cp.description}`).join('\n') +
+    '\n';
+  fs.writeFileSync(checkpointPath, content, 'utf-8');
+}
+
+/**
+ * 修复缺失的检查点选项
+ */
+export interface FixMissingCheckpointsOptions {
+  /** 是否使用 AI 生成检查点 */
+  useAI?: boolean;
+  /** 任务标题（用于生成默认检查点） */
+  taskTitle?: string;
+  /** 任务描述（用于推断检查点） */
+  taskDescription?: string;
+  /** 相关文件列表 */
+  relatedFiles?: string[];
+}
+
+/**
+ * 修复缺失的检查点
+ * 智能生成缺失的检查点并返回完整的检查点列表
+ * @param taskId 任务ID
+ * @param options 修复选项
+ * @param cwd 工作目录
+ * @returns 修复后的检查点列表
+ */
+export async function fixMissingCheckpoints(
+  taskId: string,
+  options: FixMissingCheckpointsOptions = {},
+  cwd: string = process.cwd()
+): Promise<CheckpointMetadata[]> {
+  const task = readTaskMeta(taskId, cwd);
+  if (!task) {
+    throw new Error(`任务 '${taskId}' 不存在`);
+  }
+
+  const now = new Date().toISOString();
+  const existingCheckpoints = task.checkpoints || [];
+
+  // 如果已有检查点，直接返回
+  if (existingCheckpoints.length > 0) {
+    return existingCheckpoints;
+  }
+
+  // 智能生成检查点
+  const generatedCheckpoints = await generateCheckpointsForTask(task, options, cwd);
+
+  // 合并现有和新生成的检查点
+  const mergedCheckpoints = mergeCheckpoints(existingCheckpoints, generatedCheckpoints);
+
+  return mergedCheckpoints;
+}
+
+/**
+ * 为任务生成检查点
+ * 基于任务描述和相关信息生成智能检查点
+ */
+async function generateCheckpointsForTask(
+  task: TaskMeta,
+  options: FixMissingCheckpointsOptions,
+  cwd: string
+): Promise<CheckpointMetadata[]> {
+  const now = new Date().toISOString();
+  const checkpoints: CheckpointMetadata[] = [];
+
+  // 从任务描述中提取验收标准
+  const acceptanceCriteria = extractAcceptanceCriteria(
+    options.taskDescription || task.description || '',
+    options.taskTitle || task.title
+  );
+
+  // 基于验收标准生成检查点
+  for (let index = 0; index < acceptanceCriteria.length; index++) {
+    const criteria = acceptanceCriteria[index]!;
+    const id = generateCheckpointId(task.id, index, criteria);
+
+    // 推断验证方法
+    const verification = inferVerificationFromDescription(criteria, task);
+
+    checkpoints.push({
+      id,
+      description: criteria,
+      status: 'pending',
+      category: inferCheckpointCategory(criteria),
+      verification: verification || {
+        method: 'automated',
+        expected: '验证通过',
+      },
+      createdAt: now,
+      updatedAt: now,
+    });
+  }
+
+  return checkpoints;
+}
+
+/**
+ * 从任务描述中提取验收标准
+ */
+function extractAcceptanceCriteria(description: string, taskTitle?: string): string[] {
+  const criteria: string[] = [];
+  const content = description || taskTitle || '';
+
+  if (!content.trim()) {
+    return criteria;
+  }
+
+  // 尝试提取列表项（"- [ ] xxx" 或 "- xxx" 或 "1. xxx" 格式）
+  const lines = content.split('\n');
+  for (const line of lines) {
+    const trimmed = line.trim();
+    const match = trimmed.match(/^(?:[-*]|\d+\.)\s*(?:\[[ x]\])?\s*(.+)/);
+    if (match?.[1]) {
+      const item = match[1].trim();
+      if (item.length > 5) { // 过滤过短的项
+        criteria.push(item);
+      }
+    }
+  }
+
+  // 如果没有提取到，将整个描述作为一条标准
+  if (criteria.length === 0 && content.trim().length > 10) {
+    criteria.push(content.trim());
+  }
+
+  return criteria;
+}
+
+/**
+ * 合并现有检查点和新生成的检查点
+ * 保留现有的状态信息，避免重复
+ */
+function mergeCheckpoints(
+  existing: CheckpointMetadata[],
+  generated: CheckpointMetadata[]
+): CheckpointMetadata[] {
+  const merged: CheckpointMetadata[] = [];
+  const usedExisting = new Set<string>();
+
+  // 首先尝试匹配新生成的检查点与现有检查点
+  for (const gen of generated) {
+    const match = existing.find(ex =>
+      ex.description === gen.description ||
+      ex.id === gen.id
+    );
+
+    if (match) {
+      // 保留现有检查点的状态，但更新其他信息
+      merged.push({
+        ...gen,
+        status: match.status,
+        note: match.note,
+        verification: match.verification || gen.verification,
+        createdAt: match.createdAt,
+      });
+      usedExisting.add(match.id);
+    } else {
+      // 全新的检查点
+      merged.push(gen);
+    }
+  }
+
+  // 添加未匹配的现有检查点（保留它们）
+  for (const ex of existing) {
+    if (!usedExisting.has(ex.id)) {
+      merged.push(ex);
+    }
+  }
+
+  return merged;
 }
