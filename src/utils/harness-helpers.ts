@@ -457,7 +457,23 @@ export function parseVerdictResult(
     if (structured.passed !== null) {
       result.passed = structured.passed;
       if (!result.reason) {
-        result.reason = `基于结构化关键词匹配（级别 ${structured.matchLevel}）`;
+        // 尝试从 REASON/EVALUATION_REASON/原因 字段提取原因
+        const reasonPatterns = [
+          /REASON\s*[:：]\s*(.+?)(?=\n\n|\n## |$)/si,
+          /EVALUATION_REASON\s*[:：]\s*(.+?)(?=\n\n|\n## |$)/si,
+          new RegExp(`##?\s*${options.reasonField}\s*[:：]?\s*(.+?)(?=\n\n|\n## |$)`, 'si'),
+        ];
+        for (const pattern of reasonPatterns) {
+          const match = output.match(pattern);
+          if (match && match[1]?.trim()) {
+            result.reason = match[1].trim();
+            break;
+          }
+        }
+        // 如果仍然找不到原因，使用默认消息
+        if (!result.reason) {
+          result.reason = `基于结构化关键词匹配（级别 ${structured.matchLevel}）`;
+        }
       }
     }
   }
