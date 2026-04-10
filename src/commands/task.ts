@@ -16,6 +16,7 @@ import {
   updateCheckpointStatus,
   getCheckpointDetail,
   listCheckpoints,
+  filterLowQualityCheckpoints,
 } from '../utils/checkpoint';
 import type {
   TaskMeta,
@@ -31,9 +32,20 @@ import {
   validateCheckpointVerification,
   normalizeStatus,
   normalizePriority,
+  inferTaskType,
 } from '../types/task';
 import * as crypto from 'crypto';
 import { SEPARATOR_WIDTH } from '../utils/format';
+import { inferDependencies, type InferredDependency } from '../utils/dependency-engine';
+import {
+  generateStructuredDescription,
+  extractStructuredInfo,
+  inferCheckpointsFromDescription,
+  inferRelatedFiles,
+  type DescriptionTemplateType,
+  type StructuredDescription,
+} from '../utils/description-template';
+import { extractFilePaths } from '../utils/quality-gate';
 
 /** 历史记录最大显示条数 */
 const MAX_HISTORY_DISPLAY = 20;
@@ -344,21 +356,46 @@ async function validateFileReferences(
 }
 
 /**
+ * 创建任务选项接口
+ * 支持基础选项和 AI 增强选项
+ */
+export interface CreateTaskOptions {
+  // 基础选项
+  title?: string;
+  description?: string;
+  priority?: string;
+  type?: string;
+  nonInteractive?: boolean;
+  skipValidation?: boolean;
+  id?: string;  // 用户指定的任务ID
+
+  // AI 增强选项（原 init-requirement 特有）
+  /** 启用 AI 增强分析 */
+  aiEnhancement?: boolean;
+  /** 描述模板类型：simple | detailed */
+  template?: DescriptionTemplateType;
+  /** 建议的检查点列表（AI 或外部提供） */
+  suggestedCheckpoints?: string[];
+  /** 潜在依赖任务 ID 列表 */
+  potentialDependencies?: string[];
+  /** 推荐的角色 */
+  recommendedRole?: string;
+  /** 相关文件列表 */
+  relatedFiles?: string[];
+
+  // 子任务选项
+  /** 父任务 ID（创建子任务时使用） */
+  parentId?: string;
+}
+
+/**
  * 创建新任务
  * 支持交互模式和非交互模式
  */
 export async function createTask(
-  options: {
-    title?: string;
-    description?: string;
-    priority?: string;
-    type?: string;
-    nonInteractive?: boolean;
-    skipValidation?: boolean;
-    id?: string;  // 用户指定的任务ID
-  } = {},
+  options: CreateTaskOptions = {},
   cwd: string = process.cwd()
-): Promise<void> {
+): Promise<TaskMeta> {
   if (!isInitialized(cwd)) {
     console.error('错误: 项目未初始化。请先运行 `projmnt4claude setup`');
     process.exit(1);
@@ -366,7 +403,10 @@ export async function createTask(
 
   // 非交互模式：使用命令行参数
   if (options.nonInteractive && options.title) {
-    const taskType = (options.type || 'feature') as TaskType;
+    // 推断任务类型（如果启用 AI 增强或需要自动推断）
+    const taskType = options.type
+      ? options.type as TaskType
+      : (options.aiEnhancement ? inferTaskType(options.title) : 'feature' as TaskType);
     const taskPriority = normalizePriority(options.priority || 'P2');
 
     // 确定任务ID：用户指定ID优先，否则自动生成
@@ -393,22 +433,112 @@ export async function createTask(
     );
     if (!fileValidation.proceed) {
       console.log('已取消创建任务');
-      return;
+      process.exit(0);
     }
-
-    // BUG-002: 默认模板内容作为初始占位符，创建后会进行质量校验
-    const defaultCheckpointContent = `# ${taskId} 检查点\n\n- [ ] 检查点1（请替换为具体验收标准）\n- [ ] 检查点2（请替换为具体验收标准）\n`;
 
     // 创建任务元数据
-    const task = createDefaultTaskMeta(taskId, options.title, taskType, undefined, 'cli');
-    if (options.description) {
-      task.description = options.description;
-    }
+    const task = createDefaultTaskMeta(taskId, options.title, taskType, options.parentId, 'cli');
     task.priority = taskPriority;
 
-    // BUG-012-0: 记录文件警告到 meta.json
+    // AI 增强：结构化描述和检查点推断
+    let finalCheckpoints: string[] = [];
+    let finalRelatedFiles: string[] = options.relatedFiles || [];
+
+    if (options.aiEnhancement && options.description) {
+      // 提取结构化信息
+      const structuredInfo = extractStructuredInfo(options.description);
+      // 推断检查点
+      const inferredCheckpoints = inferCheckpointsFromDescription(options.description, taskType);
+      // 推断相关文件
+      const inferredFiles = inferRelatedFiles(options.description, taskType);
+
+      // 合并检查点：建议的检查点 + 推断的检查点 + 结构化提取的检查点
+      finalCheckpoints = [...new Set([
+        ...(options.suggestedCheckpoints || []),
+        ...inferredCheckpoints,
+        ...structuredInfo.checkpoints,
+      ])];
+      finalRelatedFiles = [...new Set([...finalRelatedFiles, ...inferredFiles, ...structuredInfo.relatedFiles])];
+
+      // 构建结构化描述数据
+      const template = options.template || 'detailed';
+      const structuredData: StructuredDescription = {
+        problem: structuredInfo.problem || options.description,
+        rootCause: structuredInfo.rootCause,
+        solution: structuredInfo.solution,
+        checkpoints: finalCheckpoints,
+        relatedFiles: finalRelatedFiles,
+        notes: structuredInfo.notes,
+      };
+
+      // 根据模板类型生成描述
+      task.description = generateStructuredDescription(structuredData, template);
+    } else if (options.description) {
+      // 非 AI 增强模式：直接使用描述
+      task.description = options.description;
+
+      // 推断检查点（如果未提供）
+      if (!options.suggestedCheckpoints || options.suggestedCheckpoints.length === 0) {
+        finalCheckpoints = inferCheckpointsFromDescription(options.description, taskType);
+      } else {
+        finalCheckpoints = options.suggestedCheckpoints;
+      }
+    }
+
+    // 设置推荐角色
+    if (options.recommendedRole) {
+      task.recommendedRole = options.recommendedRole;
+    }
+
+    // 添加创建历史记录
+    task.history = task.history || [];
+    task.history.push({
+      timestamp: new Date().toISOString(),
+      action: '任务创建',
+      field: 'status',
+      oldValue: '',
+      newValue: 'open',
+    });
+
+    // 推断依赖关系（如果启用 AI 增强或有潜在依赖）
+    if ((options.aiEnhancement || options.potentialDependencies) && options.description) {
+      const existingTasks = getAllTasks(cwd);
+      const inferredDeps = inferDependencies(
+        options.description,
+        existingTasks,
+        { keywordHints: options.potentialDependencies },
+      );
+      if (inferredDeps.length > 0) {
+        task.dependencies = inferredDeps.map(d => d.depTaskId);
+      }
+    }
+
+    // 检查文件警告（引用但不存在的文件）
+    const referencedFiles = finalRelatedFiles.length > 0
+      ? finalRelatedFiles
+      : extractFilePaths(task.description || '', { includeBareFilenames: false });
+    const fileWarnings: string[] = [];
+    for (const file of referencedFiles) {
+      if (!fs.existsSync(path.join(cwd, file))) {
+        fileWarnings.push(file);
+      }
+    }
+    if (fileWarnings.length > 0) {
+      task.fileWarnings = fileWarnings;
+    }
+
+    // BUG-012-0: 记录文件验证的缺失文件到 fileWarnings
     if (fileValidation.missingFiles.length > 0) {
-      task.fileWarnings = fileValidation.missingFiles;
+      task.fileWarnings = [...new Set([...(task.fileWarnings || []), ...fileValidation.missingFiles])];
+    }
+
+    // 过滤低质量检查点
+    if (finalCheckpoints.length > 0) {
+      const filterResult = filterLowQualityCheckpoints(finalCheckpoints);
+      if (filterResult.removed.length > 0) {
+        console.log(`   🔍 已过滤 ${filterResult.removed.length} 个低质量检查点`);
+      }
+      finalCheckpoints = filterResult.kept;
     }
 
     // 写入任务
@@ -417,12 +547,24 @@ export async function createTask(
     // 创建 checkpoint.md
     const taskDir = path.join(getTasksDir(cwd), taskId);
     const checkpointPath = path.join(taskDir, 'checkpoint.md');
-    fs.writeFileSync(checkpointPath, defaultCheckpointContent, 'utf-8');
+
+    // 生成检查点内容
+    let checkpointContent: string;
+    if (finalCheckpoints.length > 0) {
+      checkpointContent = `# ${taskId} 检查点\n\n${finalCheckpoints.map((cp: string) => `- [ ] ${cp}`).join('\n')}\n`;
+    } else {
+      // BUG-002: 默认模板内容作为初始占位符
+      checkpointContent = `# ${taskId} 检查点\n\n- [ ] 检查点1（请替换为具体验收标准）\n- [ ] 检查点2（请替换为具体验收标准）\n`;
+    }
+    fs.writeFileSync(checkpointPath, checkpointContent, 'utf-8');
 
     console.log(`\n✅ 任务创建成功!`);
     console.log(`   ID: ${taskId}`);
     console.log(`   标题: ${task.title}`);
     console.log(`   优先级: ${formatPriority(task.priority)}`);
+    if (task.dependencies && task.dependencies.length > 0) {
+      console.log(`   依赖: ${task.dependencies.join(', ')}`);
+    }
 
     // BUG-002: 校验检查点质量并显示警告（除非使用 --skip-validation）
     if (!options.skipValidation) {
@@ -437,7 +579,7 @@ export async function createTask(
     const cpWarnings = validateTaskCheckpointCommands(taskId, cwd);
     displayCheckpointVerificationWarnings(cpWarnings);
 
-    return;
+    return task;
   }
 
   // 交互式收集任务信息
@@ -469,7 +611,7 @@ export async function createTask(
 
   if (!response.title) {
     console.log('已取消创建任务');
-    return;
+    process.exit(0);
   }
 
   // 确定任务ID：用户指定ID优先，否则自动生成
@@ -496,7 +638,7 @@ export async function createTask(
   );
   if (!fileValidation.proceed) {
     console.log('已取消创建任务');
-    return;
+    process.exit(0);
   }
 
   // BUG-002: 交互模式 - 默认检查点内容作为初始占位符，创建后会进行质量校验
@@ -539,6 +681,8 @@ export async function createTask(
   syncCheckpointsToMeta(taskId, cwd);
   const cpWarnings = validateTaskCheckpointCommands(taskId, cwd);
   displayCheckpointVerificationWarnings(cpWarnings);
+
+  return task;
 }
 
 /**

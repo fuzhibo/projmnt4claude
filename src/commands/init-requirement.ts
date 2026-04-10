@@ -10,7 +10,7 @@ import {
   addSubtaskToParent,
 } from '../utils/task';
 import { extractAffectedFiles, extractFilePaths, checkQualityGate, type QualityGateConfig, DEFAULT_QUALITY_GATE_CONFIG } from '../utils/quality-gate';
-import { hasValidCheckpoints, displayCheckpointCreationWarning } from './task';
+import { hasValidCheckpoints, displayCheckpointCreationWarning, createTask, type CreateTaskOptions } from './task';
 import { syncCheckpointsToMeta, filterLowQualityCheckpoints } from '../utils/checkpoint';
 import { inferDependencies as inferDependenciesUnified, type InferredDependency } from '../utils/dependency-engine';
 import type { TaskMeta, TaskPriority, TaskStatus, TaskType } from '../types/task';
@@ -475,10 +475,6 @@ export async function initRequirement(
   // 推断任务类型并生成任务ID
   const taskType = inferTaskType(response.title);
   const taskPriority = (response.priority as TaskPriority) || analysis.priority;
-  const taskId = generateNewTaskId(cwd, taskType, taskPriority, response.title);
-
-  // 创建任务元数据
-  const task = createDefaultTaskMeta(taskId, response.title, taskType, undefined, 'init-requirement');
 
   // 生成结构化描述
   const structuredInfo = extractStructuredInfo(response.description || analysis.description);
@@ -489,69 +485,8 @@ export async function initRequirement(
   const allCheckpoints = [...new Set([...structuredInfo.checkpoints, ...inferredCheckpoints, ...analysis.suggestedCheckpoints])];
   const allRelatedFiles = [...new Set([...structuredInfo.relatedFiles, ...inferredFiles])];
 
-  // 构建结构化描述数据
-  const structuredData: StructuredDescription = {
-    problem: structuredInfo.problem || analysis.description,
-    rootCause: structuredInfo.rootCause,
-    solution: structuredInfo.solution,
-    checkpoints: allCheckpoints.length > 0 ? allCheckpoints : analysis.suggestedCheckpoints,
-    relatedFiles: allRelatedFiles,
-    notes: structuredInfo.notes,
-  };
-
-  // 根据模板类型生成描述
-  task.description = generateStructuredDescription(structuredData, template as DescriptionTemplateType);
-  task.priority = response.priority as TaskPriority;
-  task.recommendedRole = response.recommendedRole || analysis.recommendedRole;
-
-  // IR-01-16: Add creation history record
-  task.history = task.history || [];
-  task.history.push({
-    timestamp: new Date().toISOString(),
-    action: '任务创建',
-    field: 'status',
-    oldValue: '',
-    newValue: 'open',
-  });
-
-  // 推断依赖关系（文件重叠 + AI potentialDependencies 标题匹配）
-  // IR-08-03: 使用统一依赖推断引擎
-  const existingTasksForDeps = getAllTasks(cwd);
-  const inferredDeps = inferDependenciesUnified(
-    task.description || '',
-    existingTasksForDeps,
-    { keywordHints: analysis.potentialDependencies },
-  );
-
-  // 将推断的依赖写入 task.dependencies
-  if (inferredDeps.length > 0) {
-    task.dependencies = inferredDeps.map(d => d.depTaskId);
-  }
-
-  // IR-01-16: Check for file warnings (referenced files that don't exist on disk)
-  const referencedFiles = allRelatedFiles.length > 0
-    ? allRelatedFiles
-    : extractFilePaths(task.description || '', { includeBareFilenames: false });
-  const fileWarnings: string[] = [];
-  for (const file of referencedFiles) {
-    if (!fs.existsSync(path.join(cwd, file))) {
-      fileWarnings.push(file);
-    }
-  }
-  if (fileWarnings.length > 0) {
-    task.fileWarnings = fileWarnings;
-  }
-
-  // 写入任务
-  writeTaskMeta(task, cwd);
-
-  // 创建 checkpoint.md（使用合并后的检查点集合，包含结构化提取+智能推断+分析建议）
-  const taskDir = path.join(getTasksDir(cwd), taskId);
-  const checkpointPath = path.join(taskDir, 'checkpoint.md');
-  const checkpointsRaw = allCheckpoints.length > 0 ? allCheckpoints : analysis.suggestedCheckpoints;
-
   // 过滤低质量检查点（AI 解析伪影）
-  const filterResult = filterLowQualityCheckpoints(checkpointsRaw);
+  const filterResult = filterLowQualityCheckpoints(allCheckpoints.length > 0 ? allCheckpoints : analysis.suggestedCheckpoints);
   if (filterResult.removed.length > 0) {
     console.log(`   🔍 已过滤 ${filterResult.removed.length} 个低质量检查点:`);
     for (const removed of filterResult.removed) {
@@ -561,14 +496,35 @@ export async function initRequirement(
   }
   const checkpoints = filterResult.kept;
 
-  const checkpointContent = `# ${taskId} 检查点
+  // 使用重构后的 createTask 创建任务
+  const finalDescription = generateStructuredDescription({
+    problem: structuredInfo.problem || analysis.description,
+    rootCause: structuredInfo.rootCause,
+    solution: structuredInfo.solution,
+    checkpoints: checkpoints,
+    relatedFiles: allRelatedFiles,
+    notes: structuredInfo.notes,
+  }, template as DescriptionTemplateType);
 
-${checkpoints.map((cp: string) => `- [ ] ${cp}`).join('\n')}
-`;
-  fs.writeFileSync(checkpointPath, checkpointContent, 'utf-8');
+  const task = await createTask({
+    title: response.title,
+    description: finalDescription,
+    type: taskType,
+    priority: taskPriority,
+    nonInteractive: true,
+    skipValidation: true, // 我们在后面手动进行质量门禁检查
+    aiEnhancement: false, // 已经在上面手动完成了结构化处理
+    suggestedCheckpoints: checkpoints,
+    potentialDependencies: analysis.potentialDependencies,
+    recommendedRole: response.recommendedRole || analysis.recommendedRole,
+    relatedFiles: allRelatedFiles,
+  }, cwd);
 
-  // 同步检查点到 meta.json（包含验证信息推断)
-  syncCheckpointsToMeta(taskId, cwd);
+  const taskId = task.id;
+
+  // 定义 checkpointPath 供后续验证使用
+  const taskDir = path.join(getTasksDir(cwd), taskId);
+  const checkpointPath = path.join(taskDir, 'checkpoint.md');
 
   // BUG-013-2: 验证检查点验证命令完整性
   const updatedTask = readTaskMeta(taskId, cwd);
@@ -591,13 +547,8 @@ ${checkpoints.map((cp: string) => `- [ ] ${cp}`).join('\n')}
   console.log(`   标题: ${task.title}`);
   console.log(`   优先级: ${formatPriority(task.priority)}`);
   console.log(`   检查点: ${checkpoints.length} 项`);
-  if (inferredDeps.length > 0) {
-    console.log(`   推断依赖:`);
-    for (const dep of inferredDeps) {
-      const sharedInfo = dep.overlappingFiles.length > 0 ? `(共享文件: ${dep.overlappingFiles.join(', ')})` : '';
-      const sourceLabel = dep.source === 'keyword' ? '[关键词] ' : '';
-      console.log(`     - ${dep.depTaskId} ${sourceLabel}${sharedInfo}`);
-    }
+  if (task.dependencies && task.dependencies.length > 0) {
+    console.log(`   推断依赖: ${task.dependencies.join(', ')}`);
   }
   console.log('');
 
