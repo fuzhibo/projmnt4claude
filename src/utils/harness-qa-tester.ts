@@ -29,7 +29,7 @@ import { getQARoleTemplate } from './role-prompts.js';
 import { generateFallbackVerification } from './checkpoint.js';
 import { detectContradiction } from './contradiction-detector.js';
 import { createSessionAwareEngine } from './feedback-constraint-engine.js';
-import { verdictResultMarker, verdictHasReason } from './validation-rules/verdict-rules.js';
+import { qaVerdictResultMarker, qaVerdictHasReason } from './validation-rules/verdict-rules.js';
 import { loadPromptTemplate, resolveTemplate } from './prompt-templates.js';
 
 /**
@@ -216,7 +216,7 @@ export class HarnessQATester {
 
     const engine = createSessionAwareEngine(
       'markdown',
-      [verdictResultMarker, verdictHasReason],
+      [qaVerdictResultMarker, qaVerdictHasReason],
       1, // maxRetriesOnError (QA: 1 retry)
     );
     const engineResult = await engine.runWithFeedback(

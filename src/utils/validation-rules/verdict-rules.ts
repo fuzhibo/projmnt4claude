@@ -1,8 +1,8 @@
 /**
  * Verdict 验证规则集
  *
- * 为 HarnessEvaluator 评估输出提供格式约束验证，
- * 确保评估结果包含必需的 EVALUATION_RESULT 标记和原因说明。
+ * 为 HarnessEvaluator 评估输出和 QA 验证输出提供格式约束验证，
+ * 确保评估结果包含必需的标记和原因说明。
  */
 
 import type {
@@ -100,8 +100,104 @@ export const verdictHasReason: ValidationRule = {
   },
 };
 
-/** 所有 Verdict 验证规则 */
+/**
+ * Rule 3: qaVerdictResultMarker (severity: error)
+ * QA 验证输出必须包含 VERDICT: PASS 或 VERDICT: NOPASS 标记
+ */
+export const qaVerdictResultMarker: ValidationRule = {
+  id: 'qa-verdict-result-marker',
+  description: 'QA 验证输出必须包含 VERDICT: PASS 或 VERDICT: NOPASS 标记',
+  severity: 'error' as const,
+  check: (output: unknown): ValidationViolation | null => {
+    if (typeof output !== 'string') {
+      return {
+        ruleId: 'qa-verdict-result-marker',
+        severity: 'error',
+        message: '输出不是字符串类型，无法检测 VERDICT 标记',
+        value: typeof output,
+      };
+    }
+
+    const trimmed = output.trim();
+    if (trimmed.length === 0) {
+      return {
+        ruleId: 'qa-verdict-result-marker',
+        severity: 'error',
+        message: '输出为空字符串，无法检测 VERDICT 标记',
+      };
+    }
+
+    const passMatch = /VERDICT\s*:\s*PASS/i.test(trimmed);
+    const nopassMatch = /VERDICT\s*:\s*NOPASS/i.test(trimmed);
+
+    if (passMatch || nopassMatch) {
+      return null;
+    }
+
+    return {
+      ruleId: 'qa-verdict-result-marker',
+      severity: 'error',
+      message: '输出中未包含 VERDICT: PASS 或 VERDICT: NOPASS 标记',
+      value: trimmed.slice(0, 200),
+    };
+  },
+};
+
+/**
+ * Rule 4: qaVerdictHasReason (severity: warning)
+ * QA 验证输出应包含原因说明章节
+ */
+export const qaVerdictHasReason: ValidationRule = {
+  id: 'qa-verdict-has-reason',
+  description: 'QA 验证输出应包含原因说明章节（## 原因 或 ## 验证结果）',
+  severity: 'warning' as const,
+  check: (output: unknown): ValidationViolation | null => {
+    if (typeof output !== 'string') {
+      return {
+        ruleId: 'qa-verdict-has-reason',
+        severity: 'warning',
+        message: '输出不是字符串类型，无法检测原因说明',
+        value: typeof output,
+      };
+    }
+
+    const trimmed = output.trim();
+    if (trimmed.length === 0) {
+      return {
+        ruleId: 'qa-verdict-has-reason',
+        severity: 'warning',
+        message: '输出为空字符串，无法检测原因说明',
+      };
+    }
+
+    const reasonPatterns = [
+      /##\s*验证结果/i,
+      /##\s*原因/i,
+      /##\s*Reason/i,
+      /原因[:：]/i,
+    ];
+
+    const hasReason = reasonPatterns.some(p => p.test(trimmed));
+    if (hasReason) {
+      return null;
+    }
+
+    return {
+      ruleId: 'qa-verdict-has-reason',
+      severity: 'warning',
+      message: '输出中未包含原因说明章节（缺少 ## 验证结果 或 ## 原因 标记）',
+    };
+  },
+};
+
+/** 所有 Verdict 验证规则（评估阶段用） */
 export const verdictValidationRules: ValidationRule[] = [
   verdictResultMarker,
   verdictHasReason,
+];
+
+/** QA 验证规则（QA 阶段用） */
+export const qaVerdictValidationRules: ValidationRule[] = [
+  qaVerdictResultMarker,
+  qaVerdictHasReason,
 ];
