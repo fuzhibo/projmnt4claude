@@ -364,10 +364,21 @@ export function loadRuntimeState(cwd: string): HarnessRuntimeState | null {
     const content = fs.readFileSync(statePath, 'utf-8');
     const data = JSON.parse(content);
 
-    // 版本检查：如果版本不匹配，重置状态
-    if (data.stateFormatVersion !== 1) {
-      console.warn('状态文件版本不匹配，重置运行时状态');
+    // 版本检查与自动迁移
+    // v1 → v2: wait_evaluation 状态支持（新增 evaluation 阶段）
+    const version = data.stateFormatVersion ?? 0;
+    if (version < 1 || version > 2) {
+      console.warn(`状态文件版本不匹配 (v${version})，重置运行时状态`);
       return null;
+    }
+
+    // v1 → v2 自动迁移
+    if (version === 1) {
+      // v1 不含 evaluation 阶段的重试计数，补空
+      // resumeFrom 中可能缺少 evaluation 相关键值，无需特殊处理
+      // （Map 反序列化时 evaluation 键不存在即视为未设置，等同于从头开始）
+      data.stateFormatVersion = 2;
+      console.log('📦 状态文件从 v1 自动迁移到 v2');
     }
 
     // 防御性编程：确保所有Map字段都被正确初始化
@@ -394,7 +405,8 @@ export function saveRuntimeState(state: HarnessRuntimeState, cwd: string): void 
   const data = {
     ...state,
     // 版本标记：便于未来版本演进时识别状态文件格式
-    stateFormatVersion: 1,
+    // v2: wait_evaluation 状态支持
+    stateFormatVersion: 2,
     retryCounter: Object.fromEntries(state.retryCounter),
     resumeFrom: Object.fromEntries(state.resumeFrom || []),
     reevaluateCounter: Object.fromEntries(state.reevaluateCounter || []),

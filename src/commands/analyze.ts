@@ -133,7 +133,7 @@ export function matchesIgnorePattern(taskId: string, patterns: string[]): boolea
 /**
  * 有效的任务状态值
  */
-const VALID_STATUSES: TaskStatus[] = ['open', 'in_progress', 'wait_review', 'wait_qa', 'wait_complete', 'resolved', 'closed', 'abandoned', 'failed'];
+const VALID_STATUSES: TaskStatus[] = ['open', 'in_progress', 'wait_review', 'wait_qa', 'wait_evaluation', 'wait_complete', 'resolved', 'closed', 'abandoned', 'failed'];
 
 /**
  * 有效的任务类型
@@ -1853,6 +1853,8 @@ export async function analyzeProject(
             'open→in_progress': '开始执行任务',
             'in_progress→wait_review': '提交代码审查',
             'wait_review→wait_qa': '审查通过，进入QA',
+            'wait_qa→wait_evaluation': 'QA通过，等待评估',
+            'wait_evaluation→wait_complete': '评估通过，等待完成确认',
             'wait_qa→wait_complete': 'QA通过，等待完成确认',
             'wait_complete→resolved': '任务完成',
             'open→closed': '关闭任务',
