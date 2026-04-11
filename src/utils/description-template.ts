@@ -3,6 +3,8 @@
  * 用于生成结构化的任务描述，包含问题分析、解决方案、验收标准等
  */
 
+import { inferCheckpointPrefix } from './validation-rules/checkpoint-rules.js';
+
 /**
  * 描述模板类型
  */
@@ -624,14 +626,30 @@ export function inferCheckpointsFromDescription(
   // 4. 从动作模式提取检查点
   checkpoints.push(...extractActionBasedCheckpoints(description));
 
-  // 5. 如果有具体检查点，去重返回
+  // 5. 如果有具体检查点，去重并添加前缀后返回
   if (checkpoints.length > 0) {
-    return [...new Set(checkpoints)];
+    const uniqueCheckpoints = [...new Set(checkpoints)];
+    return uniqueCheckpoints.map(cp => {
+      const prefix = inferCheckpointPrefix(cp);
+      // 如果检查点已包含前缀，不再重复添加
+      if (cp.trim().toLowerCase().startsWith(prefix.toLowerCase())) {
+        return cp;
+      }
+      return `${prefix} ${cp}`;
+    });
   }
 
   // 6. 回退：基于实体生成可验证的检查点
   const entities = extractEntities(description);
-  return generateEntityFallbackCheckpoints(entities, type, description);
+  const fallbackCheckpoints = generateEntityFallbackCheckpoints(entities, type, description);
+  return fallbackCheckpoints.map(cp => {
+    const prefix = inferCheckpointPrefix(cp);
+    // 如果检查点已包含前缀，不再重复添加
+    if (cp.trim().toLowerCase().startsWith(prefix.toLowerCase())) {
+      return cp;
+    }
+    return `${prefix} ${cp}`;
+  });
 }
 
 /**

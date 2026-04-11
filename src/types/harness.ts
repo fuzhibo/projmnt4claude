@@ -288,7 +288,6 @@ export interface QAVerdict {
 
 /**
  * 人工验证阶段结果
- * 由 HarnessHumanVerifier 生成
  */
 export interface HumanVerdict {
   /** 任务ID */
