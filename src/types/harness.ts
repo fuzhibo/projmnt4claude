@@ -398,7 +398,10 @@ export interface HarnessRuntimeState {
   retryCounter: Map<string, number>;
   /** 最后更新时间 */
   updatedAt: string;
-  /** 重试时从哪个阶段恢复 */
+  /**
+   * 重试时从哪个阶段恢复
+   * @deprecated 使用状态驱动的 determineResumePhase 替代。保留用于向后兼容序列化。
+   */
   resumeFrom: Map<string, 'development' | 'code_review' | 'qa' | 'evaluation'>;
   /** 重新评估次数计数器（独立于重试次数，上限2次） */
   reevaluateCounter: Map<string, number>;

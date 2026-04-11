@@ -296,23 +296,28 @@ export class AssemblyLine {
       return record;
     }
 
-    // Check for phase resumption (retest/reevaluate actions)
-    const resumePhase = state.resumeFrom?.get(taskId);
-    if (resumePhase) {
-      state.resumeFrom.delete(taskId);
+    // 3. Phase-skippable pipeline: determine resume phase via decision interface (C2)
+    // Replaces deprecated resumeFrom mechanism with state-based determineResumePhase
+    const phases = ['development', 'code_review', 'qa', 'evaluation'] as const;
+    const resumePhase = this.determineResumePhase(taskId, normalizedTaskStatus, state);
+    if (resumePhase === 'skip') {
+      console.log(`⏭️  任务 ${taskId} 所有阶段已完成，跳过`);
+      addTimeline('skipped', `任务所有阶段已完成，跳过执行`);
+      record.finalStatus = task.status;
+      return record;
     }
-    const prevRecord = resumePhase
-      ? [...state.records].reverse().find(r => r.taskId === taskId)
-      : undefined;
-    if (resumePhase && !prevRecord) {
+    const resumeIndex = phases.indexOf(resumePhase);
+
+    // Find previous record for rebuilding prerequisite data when skipping phases
+    const prevRecord = [...state.records].reverse().find(r => r.taskId === taskId);
+    if (resumeIndex > 0 && !prevRecord) {
       console.log(`   ⚠️ 未找到前次执行记录，从开发阶段重新开始`);
     }
-    const effectiveResume = (resumePhase && prevRecord) ? resumePhase : null;
-    let needsFullDev = !effectiveResume;
 
-    // 3-4. Development phase (skip if resuming from qa or evaluation)
+    // 4. Development phase (phase index 0) - skip if already completed
     let devReport!: DevReport;
-    if (!effectiveResume) {
+    const shouldRunDev = resumeIndex <= 0 || !prevRecord;
+    if (shouldRunDev) {
       await this.ensureTransition(taskId, 'in_progress', '开始开发阶段');
       record.finalStatus = 'in_progress';
 
@@ -400,77 +405,20 @@ export class AssemblyLine {
       console.log('✅ 开发完成，等待代码审核');
       this.savePhaseCheckpoint(taskId, 'development', state);
     } else {
-      // Resume: validate previous phase result files before reusing
-      if (!this.validatePreviousPhaseResults(taskId, effectiveResume)) {
-        console.log(`   ⚠️ 前阶段结果文件不完整，从开发阶段重新开始`);
-        needsFullDev = true;
-        // Fall through to run development phase below
-      }
-      if (!needsFullDev) {
-        // Resume: reuse previous development results
-        devReport = prevRecord!.devReport;
-        record.devReport = devReport;
-        addTimeline('dev_completed', `[恢复] 复用前次开发结果: ${devReport.status}`, { resumed: true, phase: effectiveResume });
-        console.log(`   ⏩ 跳过开发阶段（从 ${effectiveResume} 阶段恢复）`);
-      }
-    }
-    // If resumption failed validation, run full development
-    if (effectiveResume && needsFullDev) {
-      await this.ensureTransition(taskId, 'in_progress', '前阶段结果不完整，重新开始开发');
-      record.finalStatus = 'in_progress';
-      addTimeline('dev_started', '前阶段结果不完整，重新开始开发');
-      this.statusReporter.startPhase('development', taskId, '重新开始开发阶段');
-      console.log('\n🔨 重新开始开发阶段...');
-      const fallbackTimeout = this.computeAdaptiveTimeout(task);
-      const fallbackRetryCtx = this.buildRetryContextForPhase(taskId, 'development', state);
-      try {
-        devReport = await this.executor.execute(task, record.contract, fallbackTimeout, fallbackRetryCtx);
-        record.devReport = devReport;
-        addTimeline('dev_completed', `开发完成: ${devReport.status}`, { status: devReport.status });
-        this.statusReporter.completePhase('development', taskId, `开发完成: ${devReport.status}`);
-      } catch (error) {
-        devReport = {
-          taskId,
-          status: 'failed',
-          changes: [],
-          evidence: [],
-          checkpointsCompleted: [],
-          startTime: new Date().toISOString(),
-          endTime: new Date().toISOString(),
-          duration: 0,
-          error: error instanceof Error ? error.message : String(error),
-        };
-        record.devReport = devReport;
-        addTimeline('dev_completed', `开发失败: ${devReport.error}`, { error: devReport.error });
-        this.statusReporter.failPhase('development', error instanceof Error ? error : new Error(String(error)), taskId);
-      }
-      if (devReport.status !== 'success') {
-        const devPhaseLimit = this.getPhaseRetryLimit('development');
-        const devRetryCount = this.getPhaseRetryCount(taskId, 'development', state);
-        if (devRetryCount < devPhaseLimit) {
-          state.taskQueue.push(taskId);
-          this.incrementPhaseRetryCount(taskId, 'development', state);
-          state.retryCounter.set(taskId, (state.retryCounter.get(taskId) || 0) + 1);
-        } else {
-          await this.markTaskFailed(taskId, 'max_retries_exceeded', '超过最大重试次数，开发阶段失败');
-          record.finalStatus = 'failed';
-          addTimeline('failed', '超过最大重试次数，任务标记为 failed(max_retries_exceeded)');
-        }
-        return record;
-      }
-      this.syncCheckpointStatus(taskId, 'development', { devReport });
-      await this.ensureTransition(taskId, 'wait_review', '开发完成，等待代码审核');
-      record.finalStatus = 'wait_review';
-      console.log('✅ 开发完成，等待代码审核');
-      this.savePhaseCheckpoint(taskId, 'development', state);
+      // Skip development - rebuild prerequisite data from prevRecord
+      devReport = prevRecord!.devReport!;
+      record.devReport = devReport;
+      addTimeline('dev_completed', `[恢复] 复用前次开发结果: ${devReport.status}`, { resumed: true, phase: resumePhase });
+      console.log(`   ⏩ 跳过开发阶段（已有完成报告）`);
     }
 
-    // 6. 代码审核阶段（新增）
+    // 5. Code review phase (phase index 1) - skip if already completed
+    let codeReviewVerdict!: CodeReviewVerdict;
+    if (resumeIndex <= 1) {
     addTimeline('code_review_started', '开始代码审核阶段');
     this.statusReporter.startPhase('code_review', taskId, '开始代码审核阶段');
     console.log('\n🔍 代码审核阶段...');
 
-    let codeReviewVerdict: CodeReviewVerdict;
     try {
       const crRetryContext = this.buildRetryContextForPhase(taskId, 'code_review', state);
       codeReviewVerdict = await this.codeReviewer.review(task, devReport, crRetryContext);
@@ -520,13 +468,21 @@ export class AssemblyLine {
     }
     console.log('✅ 代码审核通过，等待 QA 验证');
     this.savePhaseCheckpoint(taskId, 'code_review', state);
+    } else {
+      // Skip code review - rebuild prerequisite data from prevRecord
+      codeReviewVerdict = prevRecord!.codeReviewVerdict!;
+      record.codeReviewVerdict = codeReviewVerdict;
+      addTimeline('code_review_completed', `[恢复] 复用前次代码审核结果: ${codeReviewVerdict.result}`, { resumed: true });
+      console.log(`   ⏩ 跳过代码审核阶段（已有完成报告）`);
+    }
 
-    // 8. QA 验证阶段（新增）
+    // 6. QA verification phase (phase index 2) - skip if already completed
+    let qaVerdict!: QAVerdict;
+    if (resumeIndex <= 2) {
     addTimeline('qa_started', '开始 QA 验证阶段');
     this.statusReporter.startPhase('qa_verification', taskId, '开始 QA 验证阶段');
     console.log('\n🧪 QA 验证阶段...');
 
-    let qaVerdict: QAVerdict;
     try {
       // 构建重试上下文：传递前次失败信息给 QA
       const qaRetryContext = this.buildRetryContextForPhase(taskId, 'qa', state);
@@ -572,15 +528,23 @@ export class AssemblyLine {
 
     // 8.4 同步检查点状态（QA 通过后）
     this.syncCheckpointStatus(taskId, 'qa', { qaVerdict });
-    // 8.5 质量门禁验证（QA 阶段完成后）
-    const qaGateResult = this.validateTransitionCompleteness(taskId, 'wait_qa', 'qa');
+    // 8.5 QA 通过后转为 wait_evaluation 状态
+    await this.ensureTransition(taskId, 'wait_evaluation', 'QA验证通过');
+    // 8.6 质量门禁验证（QA 阶段完成后）
+    const qaGateResult = this.validateTransitionCompleteness(taskId, 'wait_evaluation', 'qa');
     if (!qaGateResult.valid) {
-      await this.handleTransitionValidationFailure(taskId, 'wait_qa', 'wait_qa', 'qa', qaGateResult.errors);
+      await this.handleTransitionValidationFailure(taskId, 'wait_evaluation', 'wait_qa', 'qa', qaGateResult.errors);
     }
     this.savePhaseCheckpoint(taskId, 'qa', state);
+    } else {
+      // Skip QA - rebuild prerequisite data from prevRecord
+      qaVerdict = prevRecord!.qaVerdict!;
+      record.qaVerdict = qaVerdict;
+      addTimeline('qa_completed', `[恢复] 复用前次QA结果: ${qaVerdict.result}`, { resumed: true });
+      console.log(`   ⏩ 跳过QA验证阶段（已有完成报告）`);
+    }
 
-    // 9. 最终评估阶段（移除 wait_complete 中间状态，直接进入评估）
-    // 注: 人工验证已从流水线阶段移至后处理，不再阻塞评估流程
+    // 7. Final evaluation phase (phase index 3 - always runs)
     addTimeline('review_started', '开始最终评估阶段');
     this.statusReporter.startPhase('evaluation', taskId, '开始最终评估阶段');
     console.log('\n🎯 最终评估阶段...');
@@ -1119,9 +1083,9 @@ export class AssemblyLine {
           return this.handleVerdictBasedTransition(taskId, record, state, addTimeline, phase, 'redevelop');
         }
 
-        // 消耗重试次数，从 QA 阶段重试
+        // 消耗重试次数，从 QA 阶段重试（状态驱动：wait_qa → determineResumePhase 返回 qa）
         this.incrementTaskReopenCount(taskId, `${phase} 阶段失败，从 QA 阶段重试`);
-        await this.ensureTransition(taskId, 'in_progress', `${phase} 阶段失败，从 QA 阶段重试`);
+        await this.ensureTransition(taskId, 'wait_qa', `${phase} 阶段失败，从 QA 阶段重试`);
         // 设置 resumeAction 和角色感知恢复
         await this.setTaskResumeAction(taskId, 'retry', 'qa');
         await this.assignTaskRole(taskId, 'qa_tester');
@@ -1129,13 +1093,13 @@ export class AssemblyLine {
         this.appendPhaseHistory(taskId, { phase: 'qa_verification', role: 'qa_tester', verdict: 'NOPASS', timestamp: new Date().toISOString(), analysis: `${phase} 阶段失败，retry from qa`, resumeAction: 'retry' });
         this.incrementPhaseRetryCount(taskId, 'qa', state);
         state.retryCounter.set(taskId, (state.retryCounter.get(taskId) || 0) + 1);
-        state.resumeFrom.set(taskId, 'qa');
+        // resumeFrom deprecated: status wait_qa drives resume via determineResumePhase
         state.taskQueue.push(taskId);
 
         addTimeline('retry', `任务将从 QA 阶段重试 (第 ${qaRetryCount + 1}/${qaPhaseLimit} 次)`, { action, phase });
         console.log(`⚠️  任务将从 QA 阶段重试 (第 ${qaRetryCount + 1}/${qaPhaseLimit} 次)`);
         this.statusReporter.recordTaskRetrying(taskId, qaRetryCount + 1, qaPhaseLimit, 'qa', `${phase} 阶段失败，从 QA 阶段重试`);
-        record.finalStatus = 'in_progress';
+        record.finalStatus = 'wait_qa';
         record.retryCount = qaRetryCount + 1;
         return record;
       }
@@ -1148,21 +1112,21 @@ export class AssemblyLine {
           return this.handleVerdictBasedTransition(taskId, record, state, addTimeline, phase, 'redevelop');
         }
 
-        // 不消耗重试次数，使用独立的 reevaluateCounter
-        await this.ensureTransition(taskId, 'in_progress', `评估不明确，重新评估 (${reevalCount + 1}/${MAX_REEVALUATE_ATTEMPTS})`);
+        // 不消耗重试次数，使用独立的 reevaluateCounter（状态驱动：wait_evaluation → determineResumePhase 返回 evaluation）
+        await this.ensureTransition(taskId, 'wait_evaluation', `评估不明确，重新评估 (${reevalCount + 1}/${MAX_REEVALUATE_ATTEMPTS})`);
         // 设置 resumeAction 和角色感知恢复
         await this.setTaskResumeAction(taskId, 'retry', 'evaluation');
         await this.assignTaskRole(taskId, 'architect');
         // 记录阶段历史
         this.appendPhaseHistory(taskId, { phase: 'evaluation', role: 'architect', verdict: 'NOPASS', timestamp: new Date().toISOString(), analysis: `评估不明确，重新评估 (${reevalCount + 1}/${MAX_REEVALUATE_ATTEMPTS})`, resumeAction: 'retry' });
         state.reevaluateCounter.set(taskId, reevalCount + 1);
-        state.resumeFrom.set(taskId, 'evaluation');
+        // resumeFrom deprecated: status wait_evaluation drives resume via determineResumePhase
         state.taskQueue.push(taskId);
 
         addTimeline('retry', `任务将重新评估 (${reevalCount + 1}/${MAX_REEVALUATE_ATTEMPTS})`, { action, reevalCount: reevalCount + 1 });
         console.log(`🔄  任务将重新评估 (${reevalCount + 1}/${MAX_REEVALUATE_ATTEMPTS})`);
         this.statusReporter.recordTaskRetrying(taskId, reevalCount + 1, MAX_REEVALUATE_ATTEMPTS, 'evaluation', `评估不明确，重新评估`);
-        record.finalStatus = 'in_progress';
+        record.finalStatus = 'wait_evaluation';
         return record;
       }
 
