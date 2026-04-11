@@ -18,6 +18,10 @@ import {
   runHeadlessClaudeWithRetry,
   DEFAULT_TIMEOUT_SECONDS,
   REVIEW_TIMEOUT_RATIO,
+  parseDevReport,
+  parseCodeReviewReport,
+  parseQAReport,
+  rebuildPrerequisiteData,
 } from '../utils/harness-helpers.js';
 import type { TaskMeta, CheckpointMetadata } from '../types/task.js';
 
@@ -963,5 +967,447 @@ describe('runHeadlessClaudeWithRetry', () => {
       { maxAttempts: 3, baseDelay: 0.01 },
     );
     expect(result.success).toBe(true);
+  });
+});
+
+// ============================================================
+// parseDevReport
+// ============================================================
+
+describe('parseDevReport', () => {
+  let tmpDir: string;
+
+  beforeEach(() => {
+    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'parse-dev-report-'));
+  });
+
+  afterEach(() => {
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  test('parses normal dev-report.md', () => {
+    const report = [
+      '# 开发报告 - TASK-test-001',
+      '',
+      '**状态**: success',
+      '**开始时间**: 2026-04-08T05:18:59.074Z',
+      '**结束时间**: 2026-04-08T05:22:07.174Z',
+      '**耗时**: 188.1s',
+      '',
+      '## 完成的检查点',
+      '- CP-1',
+      '- CP-2',
+      '',
+      '## 证据文件',
+      '- src/foo.ts',
+      '- src/bar.ts',
+      '',
+      '## Claude 输出',
+      '```',
+      'done',
+      '```',
+    ].join('\n');
+    const filePath = path.join(tmpDir, 'dev-report.md');
+    fs.writeFileSync(filePath, report);
+    const result = parseDevReport(filePath);
+    expect(result).not.toBeNull();
+    expect(result!.taskId).toBe('TASK-test-001');
+    expect(result!.status).toBe('success');
+    expect(result!.duration).toBe(188100);
+    expect(result!.startTime).toBe('2026-04-08T05:18:59.074Z');
+    expect(result!.endTime).toBe('2026-04-08T05:22:07.174Z');
+    expect(result!.checkpointsCompleted).toEqual(['CP-1', 'CP-2']);
+    expect(result!.evidence).toEqual(['src/foo.ts', 'src/bar.ts']);
+    expect(result!.error).toBeUndefined();
+  });
+
+  test('parses failed dev-report with error', () => {
+    const report = [
+      '# 开发报告 - TASK-test-002',
+      '',
+      '**状态**: failed',
+      '**开始时间**: 2026-04-08T05:00:00.000Z',
+      '**结束时间**: 2026-04-08T05:01:30.000Z',
+      '**耗时**: 90.0s',
+      '',
+      '## 错误信息',
+      'Build failed: TypeScript compilation error',
+    ].join('\n');
+    const filePath = path.join(tmpDir, 'dev-report.md');
+    fs.writeFileSync(filePath, report);
+    const result = parseDevReport(filePath);
+    expect(result).not.toBeNull();
+    expect(result!.status).toBe('failed');
+    expect(result!.error).toBe('Build failed: TypeScript compilation error');
+    expect(result!.checkpointsCompleted).toEqual([]);
+    expect(result!.evidence).toEqual([]);
+  });
+
+  test('parses dev-report with empty checkpoint/evidence sections', () => {
+    const report = [
+      '# 开发报告 - TASK-test-003',
+      '',
+      '**状态**: success',
+      '**开始时间**: 2026-04-08T05:00:00.000Z',
+      '**结束时间**: 2026-04-08T05:01:00.000Z',
+      '**耗时**: 60.0s',
+      '',
+      '## 完成的检查点',
+      '- (无)',
+      '',
+      '## 证据文件',
+      '无',
+    ].join('\n');
+    const filePath = path.join(tmpDir, 'dev-report.md');
+    fs.writeFileSync(filePath, report);
+    const result = parseDevReport(filePath);
+    expect(result).not.toBeNull();
+    expect(result!.checkpointsCompleted).toEqual([]);
+    expect(result!.evidence).toEqual([]);
+  });
+
+  test('returns null for non-existent file', () => {
+    const result = parseDevReport(path.join(tmpDir, 'nonexistent.md'));
+    expect(result).toBeNull();
+  });
+
+  test('returns null for empty file', () => {
+    const filePath = path.join(tmpDir, 'dev-report.md');
+    fs.writeFileSync(filePath, '');
+    const result = parseDevReport(filePath);
+    expect(result).toBeNull();
+  });
+
+  test('returns null for whitespace-only file', () => {
+    const filePath = path.join(tmpDir, 'dev-report.md');
+    fs.writeFileSync(filePath, '   \n\t\n   ');
+    const result = parseDevReport(filePath);
+    expect(result).toBeNull();
+  });
+});
+
+// ============================================================
+// parseCodeReviewReport
+// ============================================================
+
+describe('parseCodeReviewReport', () => {
+  let tmpDir: string;
+
+  beforeEach(() => {
+    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'parse-cr-report-'));
+  });
+
+  afterEach(() => {
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  test('parses PASS code review report', () => {
+    const report = [
+      '# 代码审核报告 - TASK-test-001',
+      '',
+      '**结果**: ✅ PASS',
+      '**审核时间**: 2026-04-08T05:22:07.182Z',
+      '**审核者**: code_reviewer',
+      '',
+      '## 原因',
+      'Code looks good, all checks pass.',
+      '',
+      '## 代码质量问题',
+      '- (无)',
+      '',
+      '## 未通过的检查点',
+      '- (无)',
+    ].join('\n');
+    const filePath = path.join(tmpDir, 'code-review-report.md');
+    fs.writeFileSync(filePath, report);
+    const result = parseCodeReviewReport(filePath);
+    expect(result).not.toBeNull();
+    expect(result!.taskId).toBe('TASK-test-001');
+    expect(result!.result).toBe('PASS');
+    expect(result!.reason).toContain('Code looks good');
+    expect(result!.failedCheckpoints).toEqual([]);
+  });
+
+  test('parses NOPASS code review report with failed checkpoints', () => {
+    const report = [
+      '# 代码审核报告 - TASK-test-002',
+      '',
+      '**结果**: ❌ NOPASS',
+      '**审核时间**: 2026-04-08T05:22:07.182Z',
+      '**审核者**: code_reviewer',
+      '',
+      '## 原因',
+      'Code quality issues found.',
+      '',
+      '## 未通过的检查点',
+      '- CP-1',
+      '- CP-3',
+      '',
+      '## 详细反馈',
+      'Detailed feedback here.',
+    ].join('\n');
+    const filePath = path.join(tmpDir, 'code-review-report.md');
+    fs.writeFileSync(filePath, report);
+    const result = parseCodeReviewReport(filePath);
+    expect(result).not.toBeNull();
+    expect(result!.result).toBe('NOPASS');
+    expect(result!.failedCheckpoints).toEqual(['CP-1', 'CP-3']);
+    expect(result!.details).toBe('Detailed feedback here.');
+  });
+
+  test('returns null for non-existent file', () => {
+    const result = parseCodeReviewReport(path.join(tmpDir, 'nonexistent.md'));
+    expect(result).toBeNull();
+  });
+
+  test('returns null for empty file', () => {
+    const filePath = path.join(tmpDir, 'code-review-report.md');
+    fs.writeFileSync(filePath, '');
+    const result = parseCodeReviewReport(filePath);
+    expect(result).toBeNull();
+  });
+
+  test('returns null when result field is missing', () => {
+    const report = [
+      '# 代码审核报告 - TASK-test-003',
+      '',
+      '**审核时间**: 2026-04-08T05:22:07.182Z',
+      '',
+      '## 原因',
+      'Some reason',
+    ].join('\n');
+    const filePath = path.join(tmpDir, 'code-review-report.md');
+    fs.writeFileSync(filePath, report);
+    const result = parseCodeReviewReport(filePath);
+    expect(result).toBeNull();
+  });
+});
+
+// ============================================================
+// parseQAReport
+// ============================================================
+
+describe('parseQAReport', () => {
+  let tmpDir: string;
+
+  beforeEach(() => {
+    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'parse-qa-report-'));
+  });
+
+  afterEach(() => {
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  test('parses PASS QA report', () => {
+    const report = [
+      '# QA 验证报告 - TASK-test-001',
+      '',
+      '**结果**: ✅ PASS',
+      '**验证时间**: 2026-04-08T05:24:03.284Z',
+      '**验证者**: qa_tester',
+      '**需要人工验证**: 否',
+      '',
+      '## 原因',
+      'All tests pass.',
+      '',
+      '## 测试失败',
+      '- (无)',
+      '',
+      '## 未通过的检查点',
+      '- (无)',
+    ].join('\n');
+    const filePath = path.join(tmpDir, 'qa-report.md');
+    fs.writeFileSync(filePath, report);
+    const result = parseQAReport(filePath);
+    expect(result).not.toBeNull();
+    expect(result!.taskId).toBe('TASK-test-001');
+    expect(result!.result).toBe('PASS');
+    expect(result!.reason).toContain('All tests pass');
+    expect(result!.failedCheckpoints).toEqual([]);
+  });
+
+  test('parses NOPASS QA report with failures', () => {
+    const report = [
+      '# QA 验证报告 - TASK-test-002',
+      '',
+      '**结果**: ❌ NOPASS',
+      '**验证时间**: 2026-04-08T05:30:00.000Z',
+      '**验证者**: qa_tester',
+      '**需要人工验证**: 是',
+      '',
+      '## 原因',
+      'Some tests failed.',
+      '',
+      '## 测试失败',
+      '- Test suite A failed',
+      '',
+      '## 未通过的检查点',
+      '- CP-QA-1',
+    ].join('\n');
+    const filePath = path.join(tmpDir, 'qa-report.md');
+    fs.writeFileSync(filePath, report);
+    const result = parseQAReport(filePath);
+    expect(result).not.toBeNull();
+    expect(result!.result).toBe('NOPASS');
+    expect(result!.failedCheckpoints).toEqual(['CP-QA-1']);
+  });
+
+  test('returns null for non-existent file', () => {
+    const result = parseQAReport(path.join(tmpDir, 'nonexistent.md'));
+    expect(result).toBeNull();
+  });
+
+  test('returns null for empty file', () => {
+    const filePath = path.join(tmpDir, 'qa-report.md');
+    fs.writeFileSync(filePath, '');
+    const result = parseQAReport(filePath);
+    expect(result).toBeNull();
+  });
+});
+
+// ============================================================
+// rebuildPrerequisiteData
+// ============================================================
+
+describe('rebuildPrerequisiteData', () => {
+  let tmpDir: string;
+  let reportDir: string;
+
+  beforeEach(() => {
+    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'rebuild-prereq-'));
+    reportDir = path.join(tmpDir, '.projmnt4claude', 'reports', 'harness', 'TASK-test-001');
+    fs.mkdirSync(reportDir, { recursive: true });
+  });
+
+  afterEach(() => {
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  function writeDevReport(): void {
+    const report = [
+      '# 开发报告 - TASK-test-001',
+      '',
+      '**状态**: success',
+      '**开始时间**: 2026-04-08T05:00:00.000Z',
+      '**结束时间**: 2026-04-08T05:01:00.000Z',
+      '**耗时**: 60.0s',
+      '',
+      '## 完成的检查点',
+      '- CP-1',
+    ].join('\n');
+    fs.writeFileSync(path.join(reportDir, 'dev-report.md'), report);
+  }
+
+  function writeCodeReviewReport(): void {
+    const report = [
+      '# 代码审核报告 - TASK-test-001',
+      '',
+      '**结果**: ✅ PASS',
+      '**审核时间**: 2026-04-08T05:02:00.000Z',
+      '**审核者**: code_reviewer',
+      '',
+      '## 原因',
+      'Code review passed.',
+      '',
+      '## 未通过的检查点',
+      '- (无)',
+    ].join('\n');
+    fs.writeFileSync(path.join(reportDir, 'code-review-report.md'), report);
+  }
+
+  function writeQAReport(): void {
+    const report = [
+      '# QA 验证报告 - TASK-test-001',
+      '',
+      '**结果**: ✅ PASS',
+      '**验证时间**: 2026-04-08T05:03:00.000Z',
+      '**验证者**: qa_tester',
+      '**需要人工验证**: 否',
+      '',
+      '## 原因',
+      'QA passed.',
+      '',
+      '## 未通过的检查点',
+      '- (无)',
+    ].join('\n');
+    fs.writeFileSync(path.join(reportDir, 'qa-report.md'), report);
+  }
+
+  test('development phase returns null prerequisites', () => {
+    const result = rebuildPrerequisiteData('TASK-test-001', 'development', tmpDir);
+    expect(result).not.toBeNull();
+    expect(result!.devReport).toBeNull();
+    expect(result!.codeReviewVerdict).toBeNull();
+    expect(result!.qaVerdict).toBeNull();
+  });
+
+  test('code_review phase requires only dev-report', () => {
+    writeDevReport();
+    const result = rebuildPrerequisiteData('TASK-test-001', 'code_review', tmpDir);
+    expect(result).not.toBeNull();
+    expect(result!.devReport).not.toBeNull();
+    expect(result!.devReport!.status).toBe('success');
+    expect(result!.codeReviewVerdict).toBeNull();
+    expect(result!.qaVerdict).toBeNull();
+  });
+
+  test('code_review phase returns null when dev-report is missing', () => {
+    const result = rebuildPrerequisiteData('TASK-test-001', 'code_review', tmpDir);
+    expect(result).toBeNull();
+  });
+
+  test('qa phase requires dev-report and code-review-report', () => {
+    writeDevReport();
+    writeCodeReviewReport();
+    const result = rebuildPrerequisiteData('TASK-test-001', 'qa', tmpDir);
+    expect(result).not.toBeNull();
+    expect(result!.devReport).not.toBeNull();
+    expect(result!.codeReviewVerdict).not.toBeNull();
+    expect(result!.codeReviewVerdict!.result).toBe('PASS');
+    expect(result!.qaVerdict).toBeNull();
+  });
+
+  test('qa phase returns null when code-review-report is missing', () => {
+    writeDevReport();
+    const result = rebuildPrerequisiteData('TASK-test-001', 'qa', tmpDir);
+    expect(result).toBeNull();
+  });
+
+  test('evaluation phase requires all three reports', () => {
+    writeDevReport();
+    writeCodeReviewReport();
+    writeQAReport();
+    const result = rebuildPrerequisiteData('TASK-test-001', 'evaluation', tmpDir);
+    expect(result).not.toBeNull();
+    expect(result!.devReport).not.toBeNull();
+    expect(result!.codeReviewVerdict).not.toBeNull();
+    expect(result!.qaVerdict).not.toBeNull();
+    expect(result!.qaVerdict!.result).toBe('PASS');
+  });
+
+  test('evaluation phase returns null when qa-report is missing', () => {
+    writeDevReport();
+    writeCodeReviewReport();
+    const result = rebuildPrerequisiteData('TASK-test-001', 'evaluation', tmpDir);
+    expect(result).toBeNull();
+  });
+
+  test('unknown phase returns null', () => {
+    writeDevReport();
+    const result = rebuildPrerequisiteData('TASK-test-001', 'unknown_phase', tmpDir);
+    expect(result).toBeNull();
+  });
+
+  test('qa_verification alias works like qa', () => {
+    writeDevReport();
+    writeCodeReviewReport();
+    const result = rebuildPrerequisiteData('TASK-test-001', 'qa_verification', tmpDir);
+    expect(result).not.toBeNull();
+    expect(result!.codeReviewVerdict).not.toBeNull();
+  });
+
+  test('non-existent task returns null', () => {
+    const result = rebuildPrerequisiteData('TASK-nonexistent-999', 'code_review', tmpDir);
+    expect(result).toBeNull();
   });
 });

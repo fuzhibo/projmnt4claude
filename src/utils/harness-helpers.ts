@@ -492,3 +492,225 @@ export function getReportDir(taskId: string, cwd: string): string {
 export function getReportPath(taskId: string, reportType: string, cwd: string): string {
   return path.join(getReportDir(taskId, cwd), `${reportType}-report.md`);
 }
+
+// ============================================================
+// 报告文件解析（用于 pipeline 恢复时重建前置数据）
+// ============================================================
+
+/** parseDevReport 返回的解析结果 */
+export interface ParsedDevReport {
+  taskId: string;
+  status: string;
+  duration: number;
+  evidence: string[];
+  checkpointsCompleted: string[];
+  startTime: string;
+  endTime: string;
+  error?: string;
+}
+
+/** parseCodeReviewReport / parseQAReport 返回的解析结果 */
+export interface ParsedVerdictReport {
+  taskId: string;
+  result: 'PASS' | 'NOPASS';
+  reason: string;
+  failedCheckpoints: string[];
+  details?: string;
+}
+
+/** rebuildPrerequisiteData 返回的重建数据 */
+export interface PrerequisiteData {
+  devReport: ParsedDevReport | null;
+  codeReviewVerdict: ParsedVerdictReport | null;
+  qaVerdict: ParsedVerdictReport | null;
+}
+
+/**
+ * 从报告文件中提取列表项（支持 "无" / "N/A" / "(无)" 等空值标记）
+ */
+function extractListItems(text: string | undefined): string[] {
+  if (!text) return [];
+  const trimmed = text.trim();
+  if (!trimmed || /^(无|N\/A|\(无\)|\s*- \(无\)\s*)$/i.test(trimmed)) return [];
+  return trimmed.split('\n')
+    .map(line => line.replace(/^[-*]\s*/, '').trim())
+    .filter(line => line.length > 0 && line !== '(无)');
+}
+
+/**
+ * CP-1: 从 dev-report.md 提取状态(status)、耗时(duration)、证据文件(evidence)
+ *
+ * 解析失败时返回 null，调用方负责降级处理
+ */
+export function parseDevReport(filePath: string): ParsedDevReport | null {
+  try {
+    if (!fs.existsSync(filePath)) return null;
+    const content = fs.readFileSync(filePath, 'utf-8');
+    if (!content.trim()) return null;
+
+    // 提取 taskId（标题行）
+    const titleMatch = content.match(/^#\s*开发报告\s*[-–—]\s*(.+?)\s*$/m);
+    const taskId = titleMatch?.[1]?.trim() || '';
+
+    // 提取状态
+    const statusMatch = content.match(/\*\*状态\*\*\s*[:：]\s*(.+?)\s*$/m);
+    const status = statusMatch?.[1]?.trim() || 'unknown';
+
+    // 提取耗时
+    const durationMatch = content.match(/\*\*耗时\*\*\s*[:：]\s*([\d.]+)\s*s/m);
+    const duration = durationMatch ? parseFloat(durationMatch[1]!) * 1000 : 0;
+
+    // 提取时间
+    const startTimeMatch = content.match(/\*\*开始时间\*\*\s*[:：]\s*(.+?)\s*$/m);
+    const endTimeMatch = content.match(/\*\*结束时间\*\*\s*[:：]\s*(.+?)\s*$/m);
+
+    // 提取证据文件
+    const evidenceMatch = content.match(/##\s*证据文件\s*[:：]?\s*\n([\s\S]*?)(?=\n##|\n```|$)/i);
+    const evidence = extractListItems(evidenceMatch?.[1]);
+
+    // 提取完成的检查点
+    const checkpointsMatch = content.match(/##\s*完成的检查点\s*[:：]?\s*\n([\s\S]*?)(?=\n##|\n```|$)/i);
+    const checkpointsCompleted = extractListItems(checkpointsMatch?.[1]);
+
+    // 提取错误信息
+    const errorMatch = content.match(/##\s*错误信息\s*[:：]?\s*\n([\s\S]*?)(?=\n##|$)/i);
+    const error = errorMatch?.[1]?.trim() || undefined;
+
+    return {
+      taskId,
+      status,
+      duration,
+      evidence,
+      checkpointsCompleted,
+      startTime: startTimeMatch?.[1]?.trim() || '',
+      endTime: endTimeMatch?.[1]?.trim() || '',
+      error,
+    };
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * CP-2: 从 code-review-report.md 提取 PASS/NOPASS 结果和原因
+ *
+ * 解析失败时返回 null，调用方负责降级处理
+ */
+export function parseCodeReviewReport(filePath: string): ParsedVerdictReport | null {
+  try {
+    if (!fs.existsSync(filePath)) return null;
+    const content = fs.readFileSync(filePath, 'utf-8');
+    if (!content.trim()) return null;
+
+    return parseVerdictReportContent(content, 'code_review');
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * CP-3: 从 qa-report.md 提取 PASS/NOPASS 结果和原因
+ *
+ * 解析失败时返回 null，调用方负责降级处理
+ */
+export function parseQAReport(filePath: string): ParsedVerdictReport | null {
+  try {
+    if (!fs.existsSync(filePath)) return null;
+    const content = fs.readFileSync(filePath, 'utf-8');
+    if (!content.trim()) return null;
+
+    return parseVerdictReportContent(content, 'qa');
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * 共用的审核报告内容解析逻辑
+ */
+function parseVerdictReportContent(content: string, _source: 'code_review' | 'qa'): ParsedVerdictReport | null {
+  // 提取 taskId（标题行）
+  const titleMatch = content.match(/^#\s*(?:代码审核|QA\s*验证)\s*报告\s*[-–—]\s*(.+?)\s*$/m);
+  const taskId = titleMatch?.[1]?.trim() || '';
+
+  // 提取结果：**结果**: ✅ PASS / ❌ NOPASS
+  const resultMatch = content.match(/\*\*结果\*\*\s*[:：]\s*(?:✅|❌)?\s*(PASS|NOPASS)/i);
+  if (!resultMatch) return null;
+  const result = resultMatch[1]!.toUpperCase() as 'PASS' | 'NOPASS';
+
+  // 提取原因
+  const reasonMatch = content.match(/##\s*原因\s*[:：]?\s*\n([\s\S]*?)(?=\n##|$)/i);
+  const reason = reasonMatch?.[1]?.trim() || '';
+
+  // 提取未通过的检查点
+  const failedCpMatch = content.match(/##\s*未通过的检查点\s*[:：]?\s*\n([\s\S]*?)(?=\n##|$)/i);
+  const failedCheckpoints = extractListItems(failedCpMatch?.[1]);
+
+  // 提取详细反馈
+  const detailsMatch = content.match(/##\s*详细反馈\s*[:：]?\s*\n([\s\S]*?)(?=\n##|$)/i);
+  const details = detailsMatch?.[1]?.trim() || undefined;
+
+  return {
+    taskId,
+    result,
+    reason,
+    failedCheckpoints,
+    details,
+  };
+}
+
+/**
+ * CP-4: 根据目标阶段，从报告文件重建前置数据
+ *
+ * 阶段依赖关系：
+ * - development: 无前置（从头开始）
+ * - code_review: 需要 dev-report
+ * - qa: 需要 dev-report + code-review-report
+ * - evaluation: 需要 dev-report + code-review-report + qa-report
+ *
+ * 解析失败时返回 null，调用方负责降级处理（降级为从 development 重新开始）
+ */
+export function rebuildPrerequisiteData(
+  taskId: string,
+  phase: string,
+  cwd: string,
+): PrerequisiteData | null {
+  try {
+    const reportDir = getReportDir(taskId, cwd);
+
+    // development 阶段不需要前置数据
+    if (phase === 'development') {
+      return { devReport: null, codeReviewVerdict: null, qaVerdict: null };
+    }
+
+    // 始终需要 dev-report（除 development 外的所有阶段）
+    const devReport = parseDevReport(path.join(reportDir, 'dev-report.md'));
+    if (!devReport) return null;
+
+    // code_review 阶段只需要 dev-report
+    if (phase === 'code_review') {
+      return { devReport, codeReviewVerdict: null, qaVerdict: null };
+    }
+
+    // qa / qa_verification 阶段还需要 code-review-report
+    if (phase === 'qa' || phase === 'qa_verification') {
+      const codeReviewVerdict = parseCodeReviewReport(path.join(reportDir, 'code-review-report.md'));
+      if (!codeReviewVerdict) return null;
+      return { devReport, codeReviewVerdict, qaVerdict: null };
+    }
+
+    // evaluation 阶段还需要 code-review-report + qa-report
+    if (phase === 'evaluation') {
+      const codeReviewVerdict = parseCodeReviewReport(path.join(reportDir, 'code-review-report.md'));
+      if (!codeReviewVerdict) return null;
+      const qaVerdict = parseQAReport(path.join(reportDir, 'qa-report.md'));
+      if (!qaVerdict) return null;
+      return { devReport, codeReviewVerdict, qaVerdict };
+    }
+
+    // 未知阶段，返回 null 触发降级
+    return null;
+  } catch {
+    return null;
+  }
+}
