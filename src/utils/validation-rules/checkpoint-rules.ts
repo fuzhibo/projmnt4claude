@@ -397,6 +397,79 @@ export function getCheckpointPhase(description: string): string | null {
 }
 
 /**
+ * 根据检查点描述内容推断合适的前缀
+ *
+ * 前缀映射规则：
+ * - [ai review]: 涉及代码审查、代码质量、代码规范、重构、逻辑正确性
+ * - [ai qa]: 涉及测试、验证、覆盖率、自动化检查
+ * - [human qa]: 涉及人工确认、用户体验、手动操作、UI/UX、设计稿
+ * - [script]: 涉及脚本、构建、命令执行、CI/CD、部署
+ * - 默认: [ai review]
+ *
+ * @param description - 检查点描述文本
+ * @returns 推断的前缀字符串（包含方括号）
+ */
+export function inferCheckpointPrefix(description: string): string {
+  if (!description || typeof description !== 'string') {
+    return '[ai review]';
+  }
+
+  const lowerDesc = description.toLowerCase();
+
+  // [ai qa] 关键词: 测试、验证、覆盖率
+  const aiQaKeywords = [
+    '测试', '验证', '覆盖率', 'test', 'testing', 'verify',
+    'verification', 'coverage', '单元测试', '集成测试', 'e2e',
+    '自动化', 'automated', '回归', 'regression', 'lint',
+    '静态分析', 'type check', '类型检查',
+  ];
+
+  // [human qa] 关键词: 人工确认、用户体验、手动操作
+  const humanQaKeywords = [
+    '人工', '手动', '用户体验', 'ux', 'ui', '界面', '设计稿',
+    '交互', '视觉效果', '样式', '布局', '手动测试', '人工确认',
+    '用户确认', '视觉检查', '视觉验证', 'design', 'visual',
+    'mockup', 'prototype', '原型',
+  ];
+
+  // [script] 关键词: 脚本、构建、命令执行
+  const scriptKeywords = [
+    '脚本', '构建', '编译', '部署', 'ci/cd', 'pipeline',
+    'script', 'build', 'compile', 'deploy', '发布', 'publish',
+    '打包', 'bundle', 'install', 'npm run', 'yarn ', 'pnpm ',
+    '命令', 'command', 'shell', 'bash', 'npm install', '依赖安装',
+  ];
+
+  // [ai review] 关键词: 代码审查、代码质量
+  const aiReviewKeywords = [
+    '代码审查', '代码质量', '重构', '代码规范', '风格',
+    'review', 'refactor', 'quality', '规范', '命名',
+    '逻辑正确', '边界处理', '错误处理', '异常处理',
+    '性能优化', '复杂度', '可读性', '可维护性',
+  ];
+
+  // 计算各分类匹配次数
+  const matches = {
+    '[ai qa]': aiQaKeywords.filter(kw => lowerDesc.includes(kw)).length,
+    '[human qa]': humanQaKeywords.filter(kw => lowerDesc.includes(kw)).length,
+    '[script]': scriptKeywords.filter(kw => lowerDesc.includes(kw)).length,
+    '[ai review]': aiReviewKeywords.filter(kw => lowerDesc.includes(kw)).length,
+  };
+
+  // 找到匹配次数最多的分类
+  const sorted = Object.entries(matches).sort((a, b) => b[1] - a[1]);
+  const [bestMatch, bestCount] = sorted[0]!;
+
+  // 如果有明确匹配（至少1个关键词），返回对应前缀
+  if (bestCount > 0) {
+    return bestMatch;
+  }
+
+  // 默认返回 [ai review]
+  return '[ai review]';
+}
+
+/**
  * Rule 6: checkpointRequiredPrefix (severity: error)
  * 检查点描述必须以验证类别前缀开头: [ai review] / [ai qa] / [human qa] / [script]
  */

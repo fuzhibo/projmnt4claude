@@ -11,7 +11,7 @@
  */
 
 import type { TaskMeta, CheckpointMetadata } from '../types/task.js';
-import type { ValidationViolation } from '../types/feedback-constraint.js';
+import type { ValidationViolation, ViolationSeverity } from '../types/feedback-constraint.js';
 import * as fs from 'fs';
 import * as path from 'path';
 import {
@@ -58,6 +58,10 @@ export interface QualityGateResult {
   affectedFiles: string[];
   /** 变更范围预估 */
   changeSize: ChangeSize;
+  /** Error 级别违规列表 */
+  errorViolations: ValidationViolation[];
+  /** Warning 级别违规列表 */
+  warningViolations: ValidationViolation[];
 }
 
 /**
@@ -498,6 +502,15 @@ export async function checkQualityGate(
   }
 
   if (!task) {
+    const errorViolations: ValidationViolation[] = [];
+    const warningViolations: ValidationViolation[] = [];
+    if (metaViolations) {
+      if (metaViolations.severity === 'error') {
+        errorViolations.push(metaViolations);
+      } else {
+        warningViolations.push(metaViolations);
+      }
+    }
     return {
       passed: false,
       score: {
@@ -524,6 +537,8 @@ export async function checkQualityGate(
       }],
       affectedFiles: [],
       changeSize: 'small',
+      errorViolations,
+      warningViolations,
     };
   }
 
@@ -610,6 +625,28 @@ export async function checkQualityGate(
     passed = false;
   }
 
+  // 将违规按级别分类
+  const errorViolations: ValidationViolation[] = [];
+  const warningViolations: ValidationViolation[] = [];
+
+  // 分类检查点违规
+  for (const violation of checkpointViolations) {
+    if (violation.severity === 'error') {
+      errorViolations.push(violation);
+    } else {
+      warningViolations.push(violation);
+    }
+  }
+
+  // 分类 meta.json 违规
+  if (metaViolations) {
+    if (metaViolations.severity === 'error') {
+      errorViolations.push(metaViolations);
+    } else {
+      warningViolations.push(metaViolations);
+    }
+  }
+
   return {
     passed,
     score,
@@ -619,6 +656,8 @@ export async function checkQualityGate(
     suggestions,
     affectedFiles,
     changeSize,
+    errorViolations,
+    warningViolations,
   };
 }
 

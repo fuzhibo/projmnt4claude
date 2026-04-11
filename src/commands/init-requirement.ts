@@ -645,6 +645,43 @@ export async function initRequirement(
   }
   console.log('');
 
+  // CP-quality-gate-error-list: Error 级别违规默认阻断任务创建
+  if (qualityResult.errorViolations.length > 0) {
+    console.log('━'.repeat(SEPARATOR_WIDTH));
+    console.log(`❌ 质量门禁未通过: 发现 ${qualityResult.errorViolations.length} 项错误级别违规`);
+    console.log('━'.repeat(SEPARATOR_WIDTH));
+    console.log('');
+
+    console.log('🚫 以下错误必须修复后才能创建任务:');
+    for (const violation of qualityResult.errorViolations) {
+      console.log(`   ❌ [${violation.ruleId}] ${violation.message}`);
+      if (violation.field) {
+        console.log(`      字段: ${violation.field}`);
+      }
+    }
+    console.log('');
+
+    console.log('💡 修复方案:');
+    console.log('   1. 检查点必须以标准前缀开头: [implem]、[test]、[doc]、[verify]');
+    console.log('   2. meta.json 必须符合规范格式，包含所有必需字段');
+    console.log('   3. 使用 --skip-quality-gate 临时跳过（不推荐用于生产环境）');
+    console.log('');
+
+    // 记录埋点
+    logger.logInstrumentation({
+      module: 'init-requirement',
+      action: 'quality_gate_error_blocked',
+      input_summary: `desc_len=${inputDescLength}, error_count=${qualityResult.errorViolations.length}`,
+      output_summary: `task_id=${taskId}, error_violations=${qualityResult.errorViolations.map(v => v.ruleId).join(',')}`,
+      ai_used: analysis.aiUsed,
+      ai_enhanced_fields: analysis.aiEnhancedFields,
+      duration_ms: Date.now() - startTime,
+      user_edit_count: userEditCount,
+    });
+    logger.flush();
+    process.exit(1);
+  }
+
   // CP-3/CP-7: --require-quality 阻止低质量任务创建
   if (requireQuality !== undefined && !qualityResult.passed) {
     console.log('━'.repeat(SEPARATOR_WIDTH));
