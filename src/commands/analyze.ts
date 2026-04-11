@@ -48,6 +48,7 @@ import { readConfig } from './config';
 import { createLogger, type InstrumentationRecord } from '../utils/logger';
 import { AIMetadataAssistant, type DuplicateGroup, classifyFileToLayer, groupFilesByLayer, sortFilesByLayer, type ArchitectureLayer, LAYER_DEFINITIONS } from '../utils/ai-metadata';
 import { withAIEnhancement } from '../utils/ai-helpers';
+import { invokeAgent, type AgentInvokeOptions } from '../utils/headless-agent';
 import { parseCheckRange, getTasksByRange, AnalyzeError } from '../utils/analyze-range-parser';
 import { extractFilePaths, evaluateRelatedFiles } from '../utils/quality-gate';
 import { inferDependenciesBatch } from '../utils/dependency-engine';
@@ -542,7 +543,8 @@ export interface Issue {
     // 状态推断检测 (Layer 1 质量门禁规则)
     | 'report_status_mismatch'        // 报告文件 PASS 但状态未推进
     | 'checkpoint_status_mismatch'    // resolved 但检查点全 pending (旧版遗留)
-    | 'missing_pipeline_evidence';    // pipeline 中间状态缺少前置报告
+    | 'missing_pipeline_evidence'    // pipeline 中间状态缺少前置报告
+    | 'ai_status_inference';         // AI 辅助推断的状态异常 (Layer 2)
   severity: 'low' | 'medium' | 'high';
   message: string;
   suggestion: string;
@@ -1401,6 +1403,296 @@ export function checkMissingPipelineEvidence(
   return null;
 }
 
+// ============== Layer 2 AI 辅助推断层 — 历史记录语义理解 ==============
+
+/** AI 推断结果 */
+interface AIInferenceResult {
+  /** 推断的状态 */
+  inferredStatus: TaskStatus;
+  /** 置信度 0-1 */
+  confidence: number;
+  /** 推断依据 */
+  reasoning: string;
+  /** 修复建议 */
+  suggestion: string;
+}
+
+/** 终态集合 */
+const TERMINAL_STATUSES: ReadonlySet<string> = new Set(['resolved', 'closed', 'abandoned', 'failed']);
+
+/**
+ * CP-1: shouldTriggerAIInference - 判断是否需要 AI 分析
+ *
+ * 规则:
+ * - CP-2: 终态任务不需要
+ * - CP-3: 有丰富历史记录(≥3条)但无报告文件 → 需要
+ * - CP-4: open 但有 transitionNotes → 需要（可能被重新打开）
+ * - CP-5: in_progress 且创建时间超过 1 天 → 需要
+ */
+export function shouldTriggerAIInference(
+  task: TaskMeta,
+  layer1Issues: Issue[],
+  cwd: string,
+): boolean {
+  const currentStatus = normalizeStatus(task.status);
+
+  // CP-2: 终态任务不需要 AI 推断
+  if (TERMINAL_STATUSES.has(currentStatus)) return false;
+
+  // 如果 Layer 1 已经发现问题，不需要 Layer 2（确定性规则已足够）
+  if (layer1Issues.length > 0) return false;
+
+  // CP-3: 有丰富历史记录但无报告文件 → 需要 AI 分析语义
+  const historyCount = task.history?.length ?? 0;
+  if (historyCount >= 3) {
+    const reportDir = getHarnessReportDir(task.id, cwd);
+    // 有历史但没有报告 → 可能是手动操作的任务
+    if (!fs.existsSync(reportDir)) return true;
+  }
+
+  // CP-4: open 但有 transitionNotes → 可能被重新打开，需要 AI 分析上下文
+  if (currentStatus === 'open' && task.transitionNotes && task.transitionNotes.length > 0) {
+    return true;
+  }
+
+  // CP-5: in_progress 且创建时间超过 1 天 → 可能卡住，需要 AI 分析
+  if (currentStatus === 'in_progress' && task.createdAt) {
+    const createdDate = new Date(task.createdAt);
+    const oneDayAgo = new Date(Date.now() - 24 * 60 * 60 * 1000);
+    if (createdDate < oneDayAgo) return true;
+  }
+
+  return false;
+}
+
+/**
+ * CP-6: buildStatusInferencePrompt - 构建包含完整任务上下文的 AI 提示词
+ *
+ * 包含: CP-7 任务基本信息、描述、历史记录、转换记录、检查点、验证信息
+ * 以及 CP-8 Layer 1 检测结果作为输入
+ * CP-9: 要求输出结构化 JSON
+ */
+export function buildStatusInferencePrompt(
+  task: TaskMeta,
+  layer1Findings: Issue[],
+): string {
+  const currentStatus = normalizeStatus(task.status);
+
+  // CP-7: 任务基本信息
+  const taskInfo = [
+    `## 任务基本信息`,
+    `- ID: ${task.id}`,
+    `- 标题: ${task.title}`,
+    `- 类型: ${task.type}`,
+    `- 优先级: ${task.priority}`,
+    `- 当前状态: ${currentStatus}`,
+    `- 创建时间: ${task.createdAt || '未知'}`,
+    `- 更新时间: ${task.updatedAt || '未知'}`,
+    `- 描述: ${task.description || '无'}`,
+  ].join('\n');
+
+  // 历史记录
+  const historySection = task.history && task.history.length > 0
+    ? [
+        `## 历史记录 (${task.history.length} 条)`,
+        ...task.history.slice(-10).map((h, i) =>
+          `${i + 1}. [${h.timestamp}] ${h.action}${h.field ? ` (${h.field}: ${h.oldValue} → ${h.newValue})` : ''}${h.reason ? ` 原因: ${h.reason}` : ''}`
+        ),
+      ].join('\n')
+    : '## 历史记录: 无';
+
+  // 转换记录
+  const transitionSection = task.transitionNotes && task.transitionNotes.length > 0
+    ? [
+        `## 状态转换记录 (${task.transitionNotes.length} 条)`,
+        ...task.transitionNotes.map((tn, i) =>
+          `${i + 1}. [${tn.timestamp}] ${tn.fromStatus} → ${tn.toStatus}: ${tn.note}${tn.author ? ` (by ${tn.author})` : ''}`
+        ),
+      ].join('\n')
+    : '## 状态转换记录: 无';
+
+  // 检查点
+  const checkpointSection = task.checkpoints && task.checkpoints.length > 0
+    ? [
+        `## 检查点 (${task.checkpoints.length} 个)`,
+        ...task.checkpoints.map((cp, i) =>
+          `${i + 1}. [${cp.status}] ${cp.description || cp.id}`
+        ),
+      ].join('\n')
+    : '## 检查点: 无';
+
+  // 验证信息
+  const verificationSection = task.verification
+    ? `## 验证信息\n- 方法: ${task.verification.methods?.join(', ') || '未知'}\n- 结果: ${task.verification.result || '未知'}`
+    : '## 验证信息: 无';
+
+  // CP-8: Layer 1 检测结果
+  const layer1Section = layer1Findings.length > 0
+    ? [
+        `## Layer 1 检测结果 (${layer1Findings.length} 个问题)`,
+        ...layer1Findings.map(issue =>
+          `- [${issue.severity}] ${issue.type}: ${issue.message}`
+        ),
+      ].join('\n')
+    : '## Layer 1 检测结果: 无问题';
+
+  // CP-9: 结构化输出要求
+  return `你是一个任务状态分析专家。根据以下任务上下文，推断任务的正确状态。
+
+${taskInfo}
+
+${historySection}
+
+${transitionSection}
+
+${checkpointSection}
+
+${verificationSection}
+
+${layer1Section}
+
+请分析任务的历史记录、转换记录和当前状态，推断任务当前应该处于什么状态。
+
+严格按照以下 JSON 格式输出（不要输出其他内容）:
+{
+  "inferredStatus": "状态值，必须是: open, in_progress, wait_review, wait_qa, wait_evaluation, wait_complete, resolved, closed, abandoned, failed",
+  "confidence": 0.0到1.0之间的置信度,
+  "reasoning": "推断依据的简短说明",
+  "suggestion": "修复建议"
+}`;
+}
+
+/**
+ * CP-10: runAIStatusInference - 调用 Headless Claude CLI 进行 AI 状态推断
+ *
+ * CP-11: 复用项目已有的 headless-agent 抽象层 (invokeAgent)
+ * CP-12: 超时 2 分钟
+ * CP-13: 解析 AI 返回的 JSON 结果
+ */
+export async function runAIStatusInference(
+  task: TaskMeta,
+  layer1Findings: Issue[],
+  cwd: string,
+): Promise<AIInferenceResult | null> {
+  const prompt = buildStatusInferencePrompt(task, layer1Findings);
+
+  const options: AgentInvokeOptions = {
+    timeout: 120, // CP-12: 2 分钟超时
+    allowedTools: [], // 只读分析，不需要工具
+    outputFormat: 'text',
+    maxRetries: 0,
+    cwd,
+  };
+
+  try {
+    const result = await invokeAgent(prompt, options);
+
+    if (!result.success) {
+      return null;
+    }
+
+    // CP-13: 解析 AI 返回的 JSON 结果
+    const output = result.output.trim();
+
+    // 尝试从输出中提取 JSON（可能包含在 markdown 代码块中）
+    const jsonMatch = output.match(/```(?:json)?\s*\n?([\s\S]*?)\n?```/) ||
+                      output.match(/(\{[\s\S]*\})/);
+
+    if (!jsonMatch) return null;
+
+    const parsed = JSON.parse(jsonMatch[1]!);
+
+    // 验证必需字段
+    if (!parsed.inferredStatus || typeof parsed.confidence !== 'number') {
+      return null;
+    }
+
+    // 验证 inferredStatus 是合法值
+    const validStatuses: TaskStatus[] = [
+      'open', 'in_progress', 'wait_review', 'wait_qa',
+      'wait_evaluation', 'wait_complete', 'resolved', 'closed', 'abandoned', 'failed',
+    ];
+    if (!validStatuses.includes(parsed.inferredStatus)) {
+      return null;
+    }
+
+    return {
+      inferredStatus: parsed.inferredStatus,
+      confidence: Math.max(0, Math.min(1, parsed.confidence)),
+      reasoning: parsed.reasoning || 'AI 未提供依据',
+      suggestion: parsed.suggestion || '',
+    };
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * CP-14: detectStatusInferenceIssues - 编排两层检测流程
+ *
+ * CP-15: 先运行 Layer 1 确定性规则
+ * CP-16: 判断是否需要 Layer 2
+ * CP-17: 需要时调用 AI 推断
+ * CP-18: 合并两层结果
+ * CP-19: 输出增强: Layer 1/2 结果分区显示，标注置信度
+ */
+export async function detectStatusInferenceIssues(
+  task: TaskMeta,
+  cwd: string,
+  aiOptions?: AIAnalyzeOptions,
+): Promise<Issue[]> {
+  const issues: Issue[] = [];
+
+  // CP-15: 先运行 Layer 1 确定性规则
+  const reportIssue = checkReportStatusConsistency(task.id, task, cwd);
+  if (reportIssue) issues.push(reportIssue);
+
+  const checkpointIssue = checkCheckpointConsistency(task.id, task);
+  if (checkpointIssue) issues.push(checkpointIssue);
+
+  const evidenceIssue = checkMissingPipelineEvidence(task.id, task, cwd);
+  if (evidenceIssue) issues.push(evidenceIssue);
+
+  // CP-16: 判断是否需要 Layer 2
+  const aiEnabled = aiOptions?.deepAnalyze && !aiOptions?.noAi;
+  if (!aiEnabled) return issues;
+
+  if (!shouldTriggerAIInference(task, issues, cwd)) return issues;
+
+  // CP-17: 需要时调用 AI 推断
+  const aiResult = await runAIStatusInference(task, issues, cwd);
+  if (!aiResult) return issues;
+
+  const currentStatus = normalizeStatus(task.status);
+
+  // 仅当 AI 推断状态与当前状态不同且置信度足够高时才报告
+  if (aiResult.inferredStatus !== currentStatus && aiResult.confidence >= 0.6) {
+    // CP-18: 合并两层结果
+    issues.push({
+      taskId: task.id,
+      type: 'ai_status_inference',
+      severity: aiResult.confidence >= 0.8 ? 'high' : 'medium',
+      message: `AI 推断任务状态应为 ${aiResult.inferredStatus}（当前: ${currentStatus}，置信度: ${(aiResult.confidence * 100).toFixed(0)}%）`,
+      suggestion: aiResult.suggestion || `考虑将状态更新为 ${aiResult.inferredStatus}`,
+      details: {
+        layer: 'L2',
+        currentStatus,
+        inferredStatus: aiResult.inferredStatus,
+        confidence: aiResult.confidence,
+        reasoning: aiResult.reasoning,
+        layer1Issues: issues.filter(i =>
+          i.type === 'report_status_mismatch' ||
+          i.type === 'checkpoint_status_mismatch' ||
+          i.type === 'missing_pipeline_evidence'
+        ).length,
+      },
+    });
+  }
+
+  // CP-19: 返回合并后的结果（Layer 1/2 分区由 issues 的 layer details 区分）
+  return issues;
+}
+
 /**
  * 分析项目健康状态
  * CP-2/3/6/7: 支持 AI 增强分析
@@ -2191,23 +2483,10 @@ export async function analyzeProject(
       }
     }
 
-    // 15. Layer 1 质量门禁规则 — 状态推断检测
-    // CP-2: 报告文件与状态一致性
-    const reportIssue = checkReportStatusConsistency(task.id, task, cwd);
-    if (reportIssue) {
-      issues.push(reportIssue);
-    }
-
-    // CP-3: resolved 但检查点全 pending
-    const checkpointIssue = checkCheckpointConsistency(task.id, task);
-    if (checkpointIssue) {
-      issues.push(checkpointIssue);
-    }
-
-    // CP-4: pipeline 中间状态缺少前置报告
-    const evidenceIssue = checkMissingPipelineEvidence(task.id, task, cwd);
-    if (evidenceIssue) {
-      issues.push(evidenceIssue);
+    // 15. 状态推断检测 — Layer 1 确定性规则 + Layer 2 AI 辅助推断
+    const statusInferenceIssues = await detectStatusInferenceIssues(task, cwd, aiOptions);
+    if (statusInferenceIssues.length > 0) {
+      issues.push(...statusInferenceIssues);
     }
 
     // 14. 检测引用文件不存在 (file_not_found)
