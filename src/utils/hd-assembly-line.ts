@@ -1427,6 +1427,152 @@ export class AssemblyLine {
   }
 
   // ============================================================
+  // C2: 恢复决策逻辑层 — 根据任务状态和检查点决定从哪个阶段恢复
+  // ============================================================
+
+  /**
+   * 任务状态 → 恢复阶段映射表
+   * 将 meta.json 中的任务状态映射到对应的流水线阶段
+   */
+  static readonly STATUS_RESUME_PHASE: Record<string, 'development' | 'code_review' | 'qa' | 'evaluation' | 'skip'> = {
+    open: 'development',
+    in_progress: 'development',
+    wait_review: 'code_review',
+    wait_qa: 'qa',
+    wait_evaluation: 'evaluation',
+    resolved: 'skip',
+    closed: 'skip',
+    failed: 'skip',
+    abandoned: 'skip',
+    wait_complete: 'skip',
+  };
+
+  /**
+   * 每个阶段所需的前置报告文件
+   */
+  static readonly PHASE_PREREQUISITES: Record<string, string[]> = {
+    development: [],
+    code_review: ['dev-report.md'],
+    qa: ['dev-report.md', 'code-review-report.md'],
+    evaluation: ['dev-report.md', 'code-review-report.md', 'qa-report.md'],
+  };
+
+  /**
+   * 三级优先级恢复决策
+   *
+   * 优先级1: harness-state.json 的 taskPhaseCheckpoints（最精确）
+   * 优先级2: STATUS_RESUME_PHASE 状态映射
+   * 优先级3: 前置报告文件完整性验证（失败则降级为 development）
+   *
+   * @param taskId 任务 ID
+   * @param status 任务当前状态
+   * @param state 运行时状态（含 taskPhaseCheckpoints）
+   * @returns 决定的恢复阶段，'skip' 表示跳过
+   */
+  determineResumePhase(
+    taskId: string,
+    status: TaskStatus,
+    state: HarnessRuntimeState,
+  ): 'development' | 'code_review' | 'qa' | 'evaluation' | 'skip' {
+    // 优先级1: 检查 harness-state.json 的 taskPhaseCheckpoints（最精确）
+    const checkpoint = state.taskPhaseCheckpoints?.get(taskId);
+    if (checkpoint) {
+      const nextPhase = this.nextPhaseAfter(checkpoint.completedPhase);
+      if (nextPhase === 'skip' || nextPhase === null) {
+        // 所有阶段已完成，跳过
+        return 'skip';
+      }
+      // 验证前置报告完整性
+      if (this.validatePrerequisites(taskId, nextPhase)) {
+        return nextPhase;
+      }
+      // 验证失败降级为 development
+      console.log(`   ⚠️ taskPhaseCheckpoints 指向 ${nextPhase} 但前置报告不完整，降级为 development`);
+      return 'development';
+    }
+
+    // 优先级2: 降级到 STATUS_RESUME_PHASE 状态映射
+    const mappedPhase = AssemblyLine.STATUS_RESUME_PHASE[status];
+    if (!mappedPhase || mappedPhase === 'skip') {
+      return 'skip';
+    }
+
+    // 旧状态迁移: wait_qa + qa-report.md 存在 → 自动转为 wait_evaluation
+    if (status === 'wait_qa') {
+      const projectDir = getProjectDir(this.config.cwd);
+      const qaReportPath = path.join(projectDir, 'reports', 'harness', taskId, 'qa-report.md');
+      if (fs.existsSync(qaReportPath)) {
+        const content = fs.readFileSync(qaReportPath, 'utf-8');
+        if (content.trim().length > 0) {
+          console.log(`   📋 检测到 wait_qa 但 qa-report.md 已存在，自动迁移为 wait_evaluation`);
+          return 'evaluation';
+        }
+      }
+    }
+
+    // 优先级3: 验证前置报告文件完整性
+    if (!this.validatePrerequisites(taskId, mappedPhase)) {
+      console.log(`   ⚠️ 状态 ${status} 映射到 ${mappedPhase} 但前置报告不完整，降级为 development`);
+      return 'development';
+    }
+
+    return mappedPhase;
+  }
+
+  /**
+   * 获取指定阶段之后的下一个阶段
+   */
+  private nextPhaseAfter(
+    completedPhase: 'development' | 'code_review' | 'qa' | 'evaluation',
+  ): 'code_review' | 'qa' | 'evaluation' | 'skip' | null {
+    const order: Array<'development' | 'code_review' | 'qa' | 'evaluation'> = ['development', 'code_review', 'qa', 'evaluation'];
+    const idx = order.indexOf(completedPhase);
+    if (idx < 0 || idx >= order.length - 1) {
+      return 'skip'; // evaluation 之后没有下一阶段
+    }
+    return order[idx + 1] as 'code_review' | 'qa' | 'evaluation';
+  }
+
+  /**
+   * 前置报告完整性验证
+   *
+   * 检查指定阶段所需的所有前置报告文件是否存在且非空
+   *
+   * @param taskId 任务 ID
+   * @param phase 要恢复的阶段
+   * @returns true = 所有前置报告完整
+   */
+  validatePrerequisites(
+    taskId: string,
+    phase: 'development' | 'code_review' | 'qa' | 'evaluation',
+  ): boolean {
+    const required = AssemblyLine.PHASE_PREREQUISITES[phase];
+    if (!required || required.length === 0) {
+      return true; // development 阶段不需要前置报告
+    }
+
+    const projectDir = getProjectDir(this.config.cwd);
+    const reportDir = path.join(projectDir, 'reports', 'harness', taskId);
+
+    for (const reportFile of required) {
+      const filePath = path.join(reportDir, reportFile);
+      if (!fs.existsSync(filePath)) {
+        return false;
+      }
+      try {
+        const content = fs.readFileSync(filePath, 'utf-8');
+        if (content.trim().length === 0) {
+          return false;
+        }
+      } catch {
+        return false;
+      }
+    }
+
+    return true;
+  }
+
+  // ============================================================
   // 重试上下文和阶段独立重试辅助方法
   // ============================================================
 
