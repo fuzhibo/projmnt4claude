@@ -9,10 +9,11 @@ import {
   getAllTasks,
   addSubtaskToParent,
 } from '../utils/task';
-import { extractAffectedFiles, extractFilePaths, checkQualityGate, type QualityGateConfig, DEFAULT_QUALITY_GATE_CONFIG } from '../utils/quality-gate';
+import { extractAffectedFiles, extractFilePaths, checkQualityGate, validateBasicFields, validateFilesExist, type QualityGateConfig, DEFAULT_QUALITY_GATE_CONFIG } from '../utils/quality-gate';
 import { hasValidCheckpoints, displayCheckpointCreationWarning, createTask, type CreateTaskOptions } from './task';
 import { syncCheckpointsToMeta, filterLowQualityCheckpoints } from '../utils/checkpoint';
 import { inferDependencies as inferDependenciesUnified, type InferredDependency } from '../utils/dependency-engine';
+import { DependencyGraph, validateNewTaskDeps } from '../utils/dependency-graph';
 import type { TaskMeta, TaskPriority, TaskStatus, TaskType } from '../types/task';
 import { createDefaultTaskMeta, inferTaskType, validateCheckpointVerification } from '../types/task';
 import { SEPARATOR_WIDTH } from '../utils/format';
@@ -200,6 +201,28 @@ export async function initRequirement(
   const startTime = Date.now();
   const inputDescLength = description.length;
   let userEditCount = 0;
+
+  // 输入验证
+  const trimmedDesc = description?.trim() ?? '';
+  if (trimmedDesc.length === 0) {
+    console.error('');
+    console.error('❌ 需求描述不能为空');
+    console.error('');
+    console.error('  请提供需求描述，例如:');
+    console.error('    projmnt4claude init-requirement "修复登录按钮的样式问题"');
+    console.error('    projmnt4claude init-requirement "添加用户注册功能，包含表单验证"');
+    console.error('');
+    process.exit(1);
+  }
+  if (trimmedDesc.length < 2) {
+    console.error('');
+    console.error('❌ 需求描述过短');
+    console.error('');
+    console.error(`  当前描述: "${trimmedDesc}" (${trimmedDesc.length} 个字符)`);
+    console.error('  请提供更详细的需求描述（至少 2 个字符），说明要做什么以及为什么。');
+    console.error('');
+    process.exit(1);
+  }
 
   if (!isInitialized(cwd)) {
     console.error('');
@@ -542,6 +565,28 @@ export async function initRequirement(
     }
   }
 
+  // 基础字段验证
+  if (updatedTask) {
+    const basicValidation = validateBasicFields(updatedTask);
+    if (!basicValidation.valid) {
+      console.log(`\n   ⚠️  基础字段验证未通过:`);
+      for (const err of basicValidation.errors) {
+        console.log(`     - ${err}`);
+      }
+    }
+  }
+
+  // 文件存在性验证
+  if (updatedTask) {
+    const filesValidation = validateFilesExist(updatedTask, cwd);
+    if (!filesValidation.valid) {
+      console.log(`\n   ⚠️  ${filesValidation.missingFiles.length} 个引用文件不存在:`);
+      for (const f of filesValidation.missingFiles) {
+        console.log(`     - ${f}`);
+      }
+    }
+  }
+
   console.log(`✅ 任务创建成功!`);
   console.log(`   ID: ${taskId}`);
   console.log(`   标题: ${task.title}`);
@@ -565,6 +610,13 @@ export async function initRequirement(
 
   const qualityResult = await checkQualityGate(taskId, qualityGateConfig, cwd);
 
+  // 将质量评分写入任务元数据
+  const taskWithScore = readTaskMeta(taskId, cwd);
+  if (taskWithScore) {
+    taskWithScore.initQualityScore = qualityResult.score.totalScore;
+    writeTaskMeta(taskWithScore, cwd);
+  }
+
   // CP-6: 显示质量评分
   const scoreIcon = qualityResult.score.totalScore >= 80 ? '🟢' :
                     qualityResult.score.totalScore >= 60 ? '🟡' : '🔴';
@@ -573,6 +625,24 @@ export async function initRequirement(
   console.log(`   检查点质量: ${qualityResult.score.checkpointScore}%`);
   console.log(`   关联文件: ${qualityResult.score.relatedFilesScore}%`);
   console.log(`   解决方案: ${qualityResult.score.solutionScore}%`);
+  console.log('');
+
+  // CP-16: 依赖关系质量门禁 - 验证新任务的依赖完整性 (GATE-DEP-001/002/003)
+  const allExistingTasks = getAllTasks(cwd);
+  const depGraph = DependencyGraph.fromTasks(allExistingTasks);
+  const depValidation = validateNewTaskDeps(taskId, task.dependencies || [], depGraph, allExistingTasks);
+  if (depValidation.warnings.length > 0) {
+    console.log('📋 依赖关系门禁:');
+    for (const w of depValidation.warnings) {
+      console.log(`   ⚠️  ${w}`);
+    }
+  }
+  if (depValidation.errors.length > 0) {
+    console.log('📋 依赖关系错误:');
+    for (const e of depValidation.errors) {
+      console.log(`   ❌ ${e}`);
+    }
+  }
   console.log('');
 
   // CP-3/CP-7: --require-quality 阻止低质量任务创建
@@ -705,8 +775,9 @@ export async function initRequirement(
       console.log('');
     }
 
-    // CP-2 (IR-01-05): 对每个子任务调用 inferDependencies 推断文件重叠依赖
+    // CP-4/CP-2 (IR-01-05): Use graph module for dependency inference with cycle validation
     const allTasksForSubDeps = getAllTasks(cwd);
+    const subDepGraph = DependencyGraph.fromTasks(allTasksForSubDeps);
     for (const subId of subtaskIds) {
       const subTaskMeta = readTaskMeta(subId, cwd);
       if (!subTaskMeta) continue;
@@ -714,12 +785,38 @@ export async function initRequirement(
       const subDeps = inferDependenciesUnified(subTaskMeta, allTasksForSubDeps, { strategy: 'file-overlap' });
       if (subDeps.length > 0) {
         const existingDeps = subTaskMeta.dependencies || [];
-        const newDepIds = subDeps
+        // Filter inferred deps: only add if they don't create cycles (GATE-DEP-002)
+        const safeNewDepIds = subDeps
           .map(d => d.depTaskId)
-          .filter(id => !existingDeps.includes(id));
-        if (newDepIds.length > 0) {
-          subTaskMeta.dependencies = [...existingDeps, ...newDepIds];
+          .filter(id => !existingDeps.includes(id) && !subDepGraph.wouldCreateCycle(subId, id));
+
+        if (safeNewDepIds.length > 0) {
+          subTaskMeta.dependencies = [...existingDeps, ...safeNewDepIds];
           writeTaskMeta(subTaskMeta, cwd);
+          // Update graph to reflect new edges
+          for (const newDepId of safeNewDepIds) {
+            subDepGraph.addEdge(subId, newDepId);
+          }
+        }
+
+        // CP-4: Validate subtask dependencies with GATE-DEP-001/002/003
+        const subValidation = validateNewTaskDeps(subId, subTaskMeta.dependencies || [], subDepGraph, allTasksForSubDeps);
+        if (subValidation.warnings.length > 0) {
+          for (const w of subValidation.warnings) {
+            console.log(`   ⚠️  ${subId}: ${w}`);
+          }
+        }
+        if (subValidation.errors.length > 0) {
+          for (const e of subValidation.errors) {
+            console.log(`   ❌ ${subId}: ${e}`);
+          }
+        }
+
+        // Report skipped deps due to cycle detection
+        const skippedDeps = subDeps
+          .filter(d => !existingDeps.includes(d.depTaskId) && subDepGraph.wouldCreateCycle(subId, d.depTaskId));
+        if (skippedDeps.length > 0) {
+          console.log(`   ⚠️  ${subId}: 跳过 ${skippedDeps.length} 个推断依赖（会形成环）`);
         }
       }
     }

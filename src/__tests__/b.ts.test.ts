@@ -1,376 +1,813 @@
 /**
- * file-utils.ts 单元测试
- * 测试文件操作工具函数
+ * src/utils/task.ts 单元测试（补充）
+ *
+ * 测试覆盖: getTaskDir, getTaskMetaPath, readTaskMeta, writeTaskMeta,
+ * getAllTaskIds, taskExists, parseParentFromSubtaskId, isSubtask,
+ * generateSubtaskId, addSubtaskToParent, getSubtasks, getParentTask,
+ * updateTaskStatus, buildTaskVerification, assignRole,
+ * incrementReopenCount, recordExecutionStats, renameTask
  */
 
-import { describe, test, expect, beforeEach, afterEach } from 'bun:test';
+import { describe, it, expect, beforeEach, afterEach, spyOn } from 'bun:test';
 import * as fs from 'fs';
 import * as path from 'path';
-import {
-  copyTemplateFiles,
-  ensureDirectory,
-  listDirectoryFiles,
-  writeJsonFile,
-  readJsonFile,
-} from '../utils/file-utils';
+import * as os from 'os';
+import type { TaskMeta, ExecutionStats } from '../types/task';
+import { createDefaultTaskMeta } from '../types/task';
 
-describe('copyTemplateFiles 复制模板文件', () => {
-  const testDir = path.join(process.cwd(), 'test-temp', 'copy-template-test');
-  const sourceDir = path.join(testDir, 'source');
-  const targetDir = path.join(testDir, 'target');
+const taskUtils = () => import('../utils/task.js');
+const pathUtils = () => import('../utils/path.js');
 
-  beforeEach(() => {
-    // 清理并创建测试目录
-    if (fs.existsSync(testDir)) {
-      fs.rmSync(testDir, { recursive: true });
-    }
-    fs.mkdirSync(sourceDir, { recursive: true });
+function makeTask(overrides: Partial<TaskMeta> = {}): TaskMeta {
+  return {
+    ...createDefaultTaskMeta('TASK-001', 'Test Task'),
+    ...overrides,
+  };
+}
+
+function writeTaskToDisk(taskDir: string, task: TaskMeta): void {
+  if (!fs.existsSync(taskDir)) {
+    fs.mkdirSync(taskDir, { recursive: true });
+  }
+  fs.writeFileSync(path.join(taskDir, 'meta.json'), JSON.stringify(task, null, 2), 'utf-8');
+}
+
+// ============================================================
+// getTaskDir / getTaskMetaPath
+// ============================================================
+
+describe('getTaskDir', () => {
+  let getTasksDirSpy: ReturnType<typeof spyOn>;
+
+  beforeEach(async () => {
+    const pMod = await pathUtils();
+    getTasksDirSpy = spyOn(pMod, 'getTasksDir').mockReturnValue('/project/.projmnt4claude/tasks');
   });
 
   afterEach(() => {
-    // 清理测试目录
-    if (fs.existsSync(testDir)) {
-      fs.rmSync(testDir, { recursive: true });
-    }
+    getTasksDirSpy.mockRestore();
   });
 
-  test('成功复制模板文件', () => {
-    // 创建源文件
-    fs.writeFileSync(path.join(sourceDir, 'file1.txt'), 'content1');
-    fs.writeFileSync(path.join(sourceDir, 'file2.txt'), 'content2');
-
-    const copied = copyTemplateFiles(sourceDir, targetDir);
-
-    expect(copied).toHaveLength(2);
-    expect(fs.existsSync(path.join(targetDir, 'file1.txt'))).toBe(true);
-    expect(fs.existsSync(path.join(targetDir, 'file2.txt'))).toBe(true);
-    expect(fs.readFileSync(path.join(targetDir, 'file1.txt'), 'utf-8')).toBe('content1');
+  it('returns correct task directory path', async () => {
+    const { getTaskDir } = await taskUtils();
+    expect(getTaskDir('TASK-001')).toBe('/project/.projmnt4claude/tasks/TASK-001');
   });
 
-  test('递归复制子目录', () => {
-    const subDir = path.join(sourceDir, 'subdir');
-    fs.mkdirSync(subDir, { recursive: true });
-    fs.writeFileSync(path.join(subDir, 'nested.txt'), 'nested content');
-
-    const copied = copyTemplateFiles(sourceDir, targetDir);
-
-    expect(copied).toHaveLength(1);
-    expect(fs.existsSync(path.join(targetDir, 'subdir', 'nested.txt'))).toBe(true);
-  });
-
-  test('源目录不存在时返回空数组', () => {
-    const nonExistentSource = path.join(testDir, 'non-existent');
-
-    const copied = copyTemplateFiles(nonExistentSource, targetDir);
-
-    expect(copied).toHaveLength(0);
-    expect(fs.existsSync(targetDir)).toBe(false);
-  });
-
-  test('目标目录已存在时仍正常复制', () => {
-    fs.mkdirSync(targetDir, { recursive: true });
-    fs.writeFileSync(path.join(targetDir, 'existing.txt'), 'existing');
-    fs.writeFileSync(path.join(sourceDir, 'new.txt'), 'new content');
-
-    const copied = copyTemplateFiles(sourceDir, targetDir);
-
-    expect(copied).toHaveLength(1);
-    expect(fs.existsSync(path.join(targetDir, 'new.txt'))).toBe(true);
-    expect(fs.existsSync(path.join(targetDir, 'existing.txt'))).toBe(true);
+  it('respects cwd parameter', async () => {
+    const { getTaskDir } = await taskUtils();
+    expect(getTaskDir('TASK-ABC', '/custom')).toBe('/project/.projmnt4claude/tasks/TASK-ABC');
   });
 });
 
-describe('ensureDirectory 确保目录存在', () => {
-  const testDir = path.join(process.cwd(), 'test-temp', 'ensure-dir-test');
+describe('getTaskMetaPath', () => {
+  let getTasksDirSpy: ReturnType<typeof spyOn>;
+
+  beforeEach(async () => {
+    const pMod = await pathUtils();
+    getTasksDirSpy = spyOn(pMod, 'getTasksDir').mockReturnValue('/project/.projmnt4claude/tasks');
+  });
 
   afterEach(() => {
-    if (fs.existsSync(testDir)) {
-      fs.rmSync(testDir, { recursive: true });
-    }
+    getTasksDirSpy.mockRestore();
   });
 
-  test('目录不存在时创建', () => {
-    const newDir = path.join(testDir, 'new-directory');
-
-    const result = ensureDirectory(newDir);
-
-    expect(result).toBe(true);
-    expect(fs.existsSync(newDir)).toBe(true);
-    expect(fs.statSync(newDir).isDirectory()).toBe(true);
-  });
-
-  test('目录已存在时返回 true', () => {
-    fs.mkdirSync(testDir, { recursive: true });
-
-    const result = ensureDirectory(testDir);
-
-    expect(result).toBe(true);
-  });
-
-  test('递归创建嵌套目录', () => {
-    const nestedDir = path.join(testDir, 'level1', 'level2', 'level3');
-
-    const result = ensureDirectory(nestedDir);
-
-    expect(result).toBe(true);
-    expect(fs.existsSync(nestedDir)).toBe(true);
+  it('returns meta.json path inside task directory', async () => {
+    const { getTaskMetaPath } = await taskUtils();
+    expect(getTaskMetaPath('TASK-001')).toBe('/project/.projmnt4claude/tasks/TASK-001/meta.json');
   });
 });
 
-describe('listDirectoryFiles 列出目录文件', () => {
-  const testDir = path.join(process.cwd(), 'test-temp', 'list-files-test');
+// ============================================================
+// readTaskMeta
+// ============================================================
 
-  beforeEach(() => {
-    if (fs.existsSync(testDir)) {
-      fs.rmSync(testDir, { recursive: true });
-    }
-    fs.mkdirSync(testDir, { recursive: true });
+describe('readTaskMeta', () => {
+  let tempDir: string;
+  let tasksDir: string;
+  let isInitSpy: ReturnType<typeof spyOn>;
+  let getTasksDirSpy: ReturnType<typeof spyOn>;
+
+  beforeEach(async () => {
+    tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'task-b-test-'));
+    tasksDir = path.join(tempDir, 'tasks');
+    const pMod = await pathUtils();
+    isInitSpy = spyOn(pMod, 'isInitialized').mockReturnValue(true);
+    getTasksDirSpy = spyOn(pMod, 'getTasksDir').mockReturnValue(tasksDir);
   });
 
   afterEach(() => {
-    if (fs.existsSync(testDir)) {
-      fs.rmSync(testDir, { recursive: true });
-    }
+    isInitSpy.mockRestore();
+    getTasksDirSpy.mockRestore();
+    fs.rmSync(tempDir, { recursive: true, force: true });
   });
 
-  test('列出目录文件', () => {
-    fs.writeFileSync(path.join(testDir, 'file1.txt'), 'content1');
-    fs.writeFileSync(path.join(testDir, 'file2.txt'), 'content2');
-
-    const files = listDirectoryFiles(testDir);
-
-    expect(files).toHaveLength(2);
-    expect(files).toContain('file1.txt');
-    expect(files).toContain('file2.txt');
+  it('returns null when not initialized', async () => {
+    isInitSpy.mockReturnValue(false);
+    const { readTaskMeta } = await taskUtils();
+    expect(readTaskMeta('TASK-001', tempDir)).toBeNull();
   });
 
-  test('空目录返回空数组', () => {
-    const files = listDirectoryFiles(testDir);
-
-    expect(files).toEqual([]);
+  it('returns null when meta.json missing', async () => {
+    const { readTaskMeta } = await taskUtils();
+    expect(readTaskMeta('TASK-NONEXIST', tempDir)).toBeNull();
   });
 
-  test('目录不存在时返回空数组', () => {
-    const nonExistentDir = path.join(testDir, 'non-existent');
-
-    const files = listDirectoryFiles(nonExistentDir);
-
-    expect(files).toEqual([]);
+  it('returns null for invalid JSON', async () => {
+    const taskDir = path.join(tasksDir, 'TASK-001');
+    fs.mkdirSync(taskDir, { recursive: true });
+    fs.writeFileSync(path.join(taskDir, 'meta.json'), 'bad json');
+    const { readTaskMeta } = await taskUtils();
+    expect(readTaskMeta('TASK-001', tempDir)).toBeNull();
   });
 
-  test('递归列出子目录文件', () => {
-    const subDir = path.join(testDir, 'subdir');
-    fs.mkdirSync(subDir, { recursive: true });
-    fs.writeFileSync(path.join(testDir, 'root.txt'), 'root');
-    fs.writeFileSync(path.join(subDir, 'nested.txt'), 'nested');
-
-    const files = listDirectoryFiles(testDir, { recursive: true });
-
-    expect(files).toHaveLength(2);
-    expect(files).toContain('root.txt');
-    expect(files).toContain(path.join('subdir', 'nested.txt'));
-  });
-
-  test('返回绝对路径', () => {
-    fs.writeFileSync(path.join(testDir, 'file.txt'), 'content');
-
-    const files = listDirectoryFiles(testDir, { absolute: true });
-
-    expect(files).toHaveLength(1);
-    expect(files[0]).toBe(path.join(testDir, 'file.txt'));
-  });
-
-  test('包含目录项', () => {
-    const subDir = path.join(testDir, 'subdir');
-    fs.mkdirSync(subDir, { recursive: true });
-    fs.writeFileSync(path.join(testDir, 'file.txt'), 'content');
-
-    const files = listDirectoryFiles(testDir, { includeDirs: true });
-
-    expect(files).toHaveLength(2);
-    expect(files).toContain('file.txt');
-    expect(files).toContain('subdir');
+  it('reads valid task meta', async () => {
+    writeTaskToDisk(path.join(tasksDir, 'TASK-001'), makeTask({ id: 'TASK-001', title: 'Hello' }));
+    const { readTaskMeta } = await taskUtils();
+    const result = readTaskMeta('TASK-001', tempDir);
+    expect(result).not.toBeNull();
+    expect(result!.id).toBe('TASK-001');
+    expect(result!.title).toBe('Hello');
   });
 });
 
-describe('writeJsonFile 写入 JSON 文件', () => {
-  const testDir = path.join(process.cwd(), 'test-temp', 'write-json-test');
+// ============================================================
+// writeTaskMeta
+// ============================================================
 
-  beforeEach(() => {
-    if (fs.existsSync(testDir)) {
-      fs.rmSync(testDir, { recursive: true });
-    }
-    fs.mkdirSync(testDir, { recursive: true });
+describe('writeTaskMeta', () => {
+  let tempDir: string;
+  let tasksDir: string;
+  let isInitSpy: ReturnType<typeof spyOn>;
+  let getTasksDirSpy: ReturnType<typeof spyOn>;
+
+  beforeEach(async () => {
+    tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'task-b-test-'));
+    tasksDir = path.join(tempDir, 'tasks');
+    const pMod = await pathUtils();
+    isInitSpy = spyOn(pMod, 'isInitialized').mockReturnValue(true);
+    getTasksDirSpy = spyOn(pMod, 'getTasksDir').mockReturnValue(tasksDir);
   });
 
   afterEach(() => {
-    if (fs.existsSync(testDir)) {
-      fs.rmSync(testDir, { recursive: true });
-    }
+    isInitSpy.mockRestore();
+    getTasksDirSpy.mockRestore();
+    fs.rmSync(tempDir, { recursive: true, force: true });
   });
 
-  test('成功写入 JSON 文件', () => {
-    const filePath = path.join(testDir, 'data.json');
-    const data = { name: 'test', value: 123 };
-
-    const result = writeJsonFile(filePath, data);
-
-    expect(result).toBe(true);
-    expect(fs.existsSync(filePath)).toBe(true);
-    const content = fs.readFileSync(filePath, 'utf-8');
-    expect(JSON.parse(content)).toEqual(data);
+  it('creates directory and writes meta.json', async () => {
+    const { writeTaskMeta, readTaskMeta } = await taskUtils();
+    writeTaskMeta(makeTask({ id: 'TASK-001', title: 'New' }), tempDir);
+    const result = readTaskMeta('TASK-001', tempDir);
+    expect(result).not.toBeNull();
+    expect(result!.title).toBe('New');
   });
 
-  test('格式化输出', () => {
-    const filePath = path.join(testDir, 'formatted.json');
-    const data = { name: 'test' };
-
-    writeJsonFile(filePath, data, { pretty: true, space: 2 });
-
-    const content = fs.readFileSync(filePath, 'utf-8');
-    expect(content).toContain('\n');
-    expect(content).toContain('  ');
+  it('updates updatedAt on write', async () => {
+    const { writeTaskMeta, readTaskMeta } = await taskUtils();
+    const task = makeTask({ id: 'TASK-001', updatedAt: '2020-01-01T00:00:00.000Z' });
+    writeTaskMeta(task, tempDir);
+    const result = readTaskMeta('TASK-001', tempDir);
+    expect(result!.updatedAt).not.toBe('2020-01-01T00:00:00.000Z');
   });
 
-  test('紧凑格式输出', () => {
-    const filePath = path.join(testDir, 'compact.json');
-    const data = { name: 'test' };
-
-    writeJsonFile(filePath, data, { pretty: false });
-
-    const content = fs.readFileSync(filePath, 'utf-8');
-    expect(content).not.toContain('\n  ');
+  it('records history on status change', async () => {
+    const { writeTaskMeta, readTaskMeta } = await taskUtils();
+    const task = makeTask({ id: 'TASK-001', status: 'open' });
+    writeTaskMeta(task, tempDir);
+    task.status = 'in_progress';
+    writeTaskMeta(task, tempDir);
+    const result = readTaskMeta('TASK-001', tempDir);
+    const statusEntry = result!.history.find(h => h.field === 'status');
+    expect(statusEntry).toBeDefined();
+    expect(statusEntry!.oldValue).toBe('open');
+    expect(statusEntry!.newValue).toBe('in_progress');
   });
 
-  test('循环引用处理', () => {
-    const filePath = path.join(testDir, 'circular.json');
-    const data: Record<string, unknown> = { name: 'test' };
-    data.self = data; // 创建循环引用
-
-    const result = writeJsonFile(filePath, data);
-
-    expect(result).toBe(true);
-    const content = fs.readFileSync(filePath, 'utf-8');
-    expect(content).toContain('[Circular Reference]');
+  it('records history on priority change', async () => {
+    const { writeTaskMeta, readTaskMeta } = await taskUtils();
+    const task = makeTask({ id: 'TASK-001', priority: 'P2' });
+    writeTaskMeta(task, tempDir);
+    task.priority = 'P0';
+    writeTaskMeta(task, tempDir);
+    const result = readTaskMeta('TASK-001', tempDir);
+    const prioEntry = result!.history.find(h => h.field === 'priority');
+    expect(prioEntry).toBeDefined();
   });
 
-  test('自动创建父目录', () => {
-    const filePath = path.join(testDir, 'level1', 'level2', 'data.json');
-    const data = { test: true };
-
-    const result = writeJsonFile(filePath, data);
-
-    expect(result).toBe(true);
-    expect(fs.existsSync(filePath)).toBe(true);
-  });
-
-  test('数组数据写入', () => {
-    const filePath = path.join(testDir, 'array.json');
-    const data = [1, 2, 3, 'test'];
-
-    const result = writeJsonFile(filePath, data);
-
-    expect(result).toBe(true);
-    const content = fs.readFileSync(filePath, 'utf-8');
-    expect(JSON.parse(content)).toEqual(data);
-  });
-
-  test('嵌套对象写入', () => {
-    const filePath = path.join(testDir, 'nested.json');
-    const data = { level1: { level2: { value: 'deep' } } };
-
-    const result = writeJsonFile(filePath, data);
-
-    expect(result).toBe(true);
-    const content = fs.readFileSync(filePath, 'utf-8');
-    expect(JSON.parse(content)).toEqual(data);
+  it('records history on dependencies change', async () => {
+    const { writeTaskMeta, readTaskMeta } = await taskUtils();
+    const task = makeTask({ id: 'TASK-001', dependencies: [] });
+    writeTaskMeta(task, tempDir);
+    task.dependencies = ['TASK-002', 'TASK-003'];
+    writeTaskMeta(task, tempDir);
+    const result = readTaskMeta('TASK-001', tempDir);
+    const depEntry = result!.history.find(h => h.field === 'dependencies');
+    expect(depEntry).toBeDefined();
+    expect(depEntry!.newValue).toContain('TASK-002');
   });
 });
 
-describe('readJsonFile 读取 JSON 文件', () => {
-  const testDir = path.join(process.cwd(), 'test-temp', 'read-json-test');
+// ============================================================
+// getAllTaskIds
+// ============================================================
 
-  beforeEach(() => {
-    if (fs.existsSync(testDir)) {
-      fs.rmSync(testDir, { recursive: true });
-    }
-    fs.mkdirSync(testDir, { recursive: true });
+describe('getAllTaskIds', () => {
+  let tempDir: string;
+  let tasksDir: string;
+  let isInitSpy: ReturnType<typeof spyOn>;
+  let getTasksDirSpy: ReturnType<typeof spyOn>;
+
+  beforeEach(async () => {
+    tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'task-b-test-'));
+    tasksDir = path.join(tempDir, 'tasks');
+    const pMod = await pathUtils();
+    isInitSpy = spyOn(pMod, 'isInitialized').mockReturnValue(true);
+    getTasksDirSpy = spyOn(pMod, 'getTasksDir').mockReturnValue(tasksDir);
   });
 
   afterEach(() => {
-    if (fs.existsSync(testDir)) {
-      fs.rmSync(testDir, { recursive: true });
-    }
+    isInitSpy.mockRestore();
+    getTasksDirSpy.mockRestore();
+    fs.rmSync(tempDir, { recursive: true, force: true });
   });
 
-  test('成功读取 JSON 文件', () => {
-    const filePath = path.join(testDir, 'data.json');
-    const data = { name: 'test', value: 123 };
-    fs.writeFileSync(filePath, JSON.stringify(data));
-
-    const result = readJsonFile(filePath);
-
-    expect(result).toEqual(data);
+  it('returns empty when not initialized', async () => {
+    isInitSpy.mockReturnValue(false);
+    const { getAllTaskIds } = await taskUtils();
+    expect(getAllTaskIds(tempDir)).toEqual([]);
   });
 
-  test('文件不存在返回 null', () => {
-    const filePath = path.join(testDir, 'non-existent.json');
-
-    const result = readJsonFile(filePath);
-
-    expect(result).toBeNull();
+  it('returns empty when tasks dir missing', async () => {
+    const { getAllTaskIds } = await taskUtils();
+    expect(getAllTaskIds(tempDir)).toEqual([]);
   });
 
-  test('无效 JSON 格式处理', () => {
-    const filePath = path.join(testDir, 'invalid.json');
-    fs.writeFileSync(filePath, 'not valid json {{{');
+  it('returns only directories with meta.json', async () => {
+    writeTaskToDisk(path.join(tasksDir, 'TASK-001'), makeTask({ id: 'TASK-001' }));
+    writeTaskToDisk(path.join(tasksDir, 'TASK-002'), makeTask({ id: 'TASK-002' }));
+    fs.mkdirSync(path.join(tasksDir, 'empty-dir'), { recursive: true });
+    const { getAllTaskIds } = await taskUtils();
+    const ids = getAllTaskIds(tempDir);
+    expect(ids.sort()).toEqual(['TASK-001', 'TASK-002']);
+  });
+});
 
-    const result = readJsonFile(filePath);
+// ============================================================
+// taskExists
+// ============================================================
 
-    expect(result).toBeNull();
+describe('taskExists', () => {
+  let tempDir: string;
+  let tasksDir: string;
+  let isInitSpy: ReturnType<typeof spyOn>;
+  let getTasksDirSpy: ReturnType<typeof spyOn>;
+
+  beforeEach(async () => {
+    tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'task-b-test-'));
+    tasksDir = path.join(tempDir, 'tasks');
+    const pMod = await pathUtils();
+    isInitSpy = spyOn(pMod, 'isInitialized').mockReturnValue(true);
+    getTasksDirSpy = spyOn(pMod, 'getTasksDir').mockReturnValue(tasksDir);
   });
 
-  test('读取数组 JSON', () => {
-    const filePath = path.join(testDir, 'array.json');
-    const data = [1, 2, 3, 'test'];
-    fs.writeFileSync(filePath, JSON.stringify(data));
-
-    const result = readJsonFile(filePath);
-
-    expect(result).toEqual(data);
+  afterEach(() => {
+    isInitSpy.mockRestore();
+    getTasksDirSpy.mockRestore();
+    fs.rmSync(tempDir, { recursive: true, force: true });
   });
 
-  test('读取带类型的数据', () => {
-    interface TestData {
-      id: number;
-      name: string;
-    }
-    const filePath = path.join(testDir, 'typed.json');
-    const data: TestData = { id: 1, name: 'test' };
-    fs.writeFileSync(filePath, JSON.stringify(data));
-
-    const result = readJsonFile<TestData>(filePath);
-
-    expect(result).toEqual(data);
-    expect(result?.id).toBe(1);
-    expect(result?.name).toBe('test');
+  it('returns true for existing task', async () => {
+    writeTaskToDisk(path.join(tasksDir, 'TASK-001'), makeTask({ id: 'TASK-001' }));
+    const { taskExists } = await taskUtils();
+    expect(taskExists('TASK-001', tempDir)).toBe(true);
   });
 
-  test('读取空对象', () => {
-    const filePath = path.join(testDir, 'empty.json');
-    fs.writeFileSync(filePath, '{}');
+  it('returns false for non-existing task', async () => {
+    const { taskExists } = await taskUtils();
+    expect(taskExists('TASK-NONEXIST', tempDir)).toBe(false);
+  });
+});
 
-    const result = readJsonFile(filePath);
+// ============================================================
+// parseParentFromSubtaskId / isSubtask
+// ============================================================
 
-    expect(result).toEqual({});
+describe('parseParentFromSubtaskId', () => {
+  it('parses 1-digit subtask suffix', async () => {
+    const { parseParentFromSubtaskId } = await taskUtils();
+    expect(parseParentFromSubtaskId('TASK-ABC-1')).toBe('TASK-ABC');
   });
 
-  test('读取空数组', () => {
-    const filePath = path.join(testDir, 'empty-array.json');
-    fs.writeFileSync(filePath, '[]');
+  it('parses 2-digit subtask suffix', async () => {
+    const { parseParentFromSubtaskId } = await taskUtils();
+    expect(parseParentFromSubtaskId('TASK-ABC-99')).toBe('TASK-ABC');
+  });
 
-    const result = readJsonFile(filePath);
+  it('returns null for date-like suffixes (3+ digits)', async () => {
+    const { parseParentFromSubtaskId } = await taskUtils();
+    expect(parseParentFromSubtaskId('TASK-20260411')).toBeNull();
+  });
 
-    expect(result).toEqual([]);
+  it('returns null when parent ends with digit', async () => {
+    const { parseParentFromSubtaskId } = await taskUtils();
+    expect(parseParentFromSubtaskId('TASK-001-1')).toBeNull();
+  });
+
+  it('returns null for plain ID without dash', async () => {
+    const { parseParentFromSubtaskId } = await taskUtils();
+    expect(parseParentFromSubtaskId('TASK001')).toBeNull();
+  });
+});
+
+describe('isSubtask', () => {
+  it('returns true for valid subtask ID', async () => {
+    const { isSubtask } = await taskUtils();
+    expect(isSubtask('TASK-ABC-1')).toBe(true);
+  });
+
+  it('returns false for non-subtask ID', async () => {
+    const { isSubtask } = await taskUtils();
+    expect(isSubtask('TASK-feature-P2-auth-20260411')).toBe(false);
+  });
+});
+
+// ============================================================
+// generateSubtaskId
+// ============================================================
+
+describe('generateSubtaskId', () => {
+  let tempDir: string;
+  let tasksDir: string;
+  let isInitSpy: ReturnType<typeof spyOn>;
+  let getTasksDirSpy: ReturnType<typeof spyOn>;
+
+  beforeEach(async () => {
+    tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'task-b-test-'));
+    tasksDir = path.join(tempDir, 'tasks');
+    const pMod = await pathUtils();
+    isInitSpy = spyOn(pMod, 'isInitialized').mockReturnValue(true);
+    getTasksDirSpy = spyOn(pMod, 'getTasksDir').mockReturnValue(tasksDir);
+  });
+
+  afterEach(() => {
+    isInitSpy.mockRestore();
+    getTasksDirSpy.mockRestore();
+    fs.rmSync(tempDir, { recursive: true, force: true });
+  });
+
+  it('generates first subtask', async () => {
+    const { writeTaskMeta, generateSubtaskId } = await taskUtils();
+    writeTaskMeta(makeTask({ id: 'TASK-001' }), tempDir);
+    expect(generateSubtaskId('TASK-001', tempDir)).toBe('TASK-001-1');
+  });
+
+  it('increments from existing subtasks', async () => {
+    const { writeTaskMeta, generateSubtaskId } = await taskUtils();
+    writeTaskMeta(makeTask({ id: 'TASK-001', subtaskIds: ['TASK-001-1', 'TASK-001-2'] }), tempDir);
+    expect(generateSubtaskId('TASK-001', tempDir)).toBe('TASK-001-3');
+  });
+
+  it('throws when parent missing', async () => {
+    const { generateSubtaskId } = await taskUtils();
+    expect(() => generateSubtaskId('TASK-NONEXIST', tempDir)).toThrow('不存在');
+  });
+});
+
+// ============================================================
+// addSubtaskToParent
+// ============================================================
+
+describe('addSubtaskToParent', () => {
+  let tempDir: string;
+  let tasksDir: string;
+  let isInitSpy: ReturnType<typeof spyOn>;
+  let getTasksDirSpy: ReturnType<typeof spyOn>;
+
+  beforeEach(async () => {
+    tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'task-b-test-'));
+    tasksDir = path.join(tempDir, 'tasks');
+    const pMod = await pathUtils();
+    isInitSpy = spyOn(pMod, 'isInitialized').mockReturnValue(true);
+    getTasksDirSpy = spyOn(pMod, 'getTasksDir').mockReturnValue(tasksDir);
+  });
+
+  afterEach(() => {
+    isInitSpy.mockRestore();
+    getTasksDirSpy.mockRestore();
+    fs.rmSync(tempDir, { recursive: true, force: true });
+  });
+
+  it('adds subtask to parent and records history', async () => {
+    const { writeTaskMeta, addSubtaskToParent, readTaskMeta } = await taskUtils();
+    writeTaskMeta(makeTask({ id: 'TASK-001' }), tempDir);
+    addSubtaskToParent('TASK-001', 'TASK-001-1', tempDir);
+    const result = readTaskMeta('TASK-001', tempDir);
+    expect(result!.subtaskIds).toContain('TASK-001-1');
+    expect(result!.history.find(h => h.action.includes('添加子任务'))).toBeDefined();
+  });
+
+  it('skips duplicate subtask', async () => {
+    const { writeTaskMeta, addSubtaskToParent, readTaskMeta } = await taskUtils();
+    writeTaskMeta(makeTask({ id: 'TASK-001', subtaskIds: ['TASK-001-1'] }), tempDir);
+    addSubtaskToParent('TASK-001', 'TASK-001-1', tempDir);
+    const result = readTaskMeta('TASK-001', tempDir);
+    expect(result!.subtaskIds!.filter(id => id === 'TASK-001-1').length).toBe(1);
+  });
+
+  it('throws when parent missing', async () => {
+    const { addSubtaskToParent } = await taskUtils();
+    expect(() => addSubtaskToParent('TASK-NONEXIST', 'X', tempDir)).toThrow('不存在');
+  });
+});
+
+// ============================================================
+// getSubtasks
+// ============================================================
+
+describe('getSubtasks', () => {
+  let tempDir: string;
+  let tasksDir: string;
+  let isInitSpy: ReturnType<typeof spyOn>;
+  let getTasksDirSpy: ReturnType<typeof spyOn>;
+
+  beforeEach(async () => {
+    tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'task-b-test-'));
+    tasksDir = path.join(tempDir, 'tasks');
+    const pMod = await pathUtils();
+    isInitSpy = spyOn(pMod, 'isInitialized').mockReturnValue(true);
+    getTasksDirSpy = spyOn(pMod, 'getTasksDir').mockReturnValue(tasksDir);
+  });
+
+  afterEach(() => {
+    isInitSpy.mockRestore();
+    getTasksDirSpy.mockRestore();
+    fs.rmSync(tempDir, { recursive: true, force: true });
+  });
+
+  it('returns subtasks sorted by createdAt', async () => {
+    const { writeTaskMeta, getSubtasks } = await taskUtils();
+    writeTaskMeta(makeTask({ id: 'TASK-001', subtaskIds: ['TASK-001-1', 'TASK-001-2'] }), tempDir);
+    writeTaskMeta(makeTask({ id: 'TASK-001-1', createdAt: '2020-01-02T00:00:00.000Z' }), tempDir);
+    writeTaskMeta(makeTask({ id: 'TASK-001-2', createdAt: '2020-01-01T00:00:00.000Z' }), tempDir);
+    const subtasks = getSubtasks('TASK-001', tempDir);
+    expect(subtasks[0]!.id).toBe('TASK-001-2');
+    expect(subtasks[1]!.id).toBe('TASK-001-1');
+  });
+
+  it('returns empty for missing parent', async () => {
+    const { getSubtasks } = await taskUtils();
+    expect(getSubtasks('TASK-NONEXIST', tempDir)).toEqual([]);
+  });
+});
+
+// ============================================================
+// getParentTask
+// ============================================================
+
+describe('getParentTask', () => {
+  let tempDir: string;
+  let tasksDir: string;
+  let isInitSpy: ReturnType<typeof spyOn>;
+  let getTasksDirSpy: ReturnType<typeof spyOn>;
+
+  beforeEach(async () => {
+    tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'task-b-test-'));
+    tasksDir = path.join(tempDir, 'tasks');
+    const pMod = await pathUtils();
+    isInitSpy = spyOn(pMod, 'isInitialized').mockReturnValue(true);
+    getTasksDirSpy = spyOn(pMod, 'getTasksDir').mockReturnValue(tasksDir);
+  });
+
+  afterEach(() => {
+    isInitSpy.mockRestore();
+    getTasksDirSpy.mockRestore();
+    fs.rmSync(tempDir, { recursive: true, force: true });
+  });
+
+  it('returns parent when parentId set', async () => {
+    const { writeTaskMeta, getParentTask } = await taskUtils();
+    writeTaskMeta(makeTask({ id: 'TASK-001' }), tempDir);
+    writeTaskMeta(makeTask({ id: 'TASK-001-1', parentId: 'TASK-001' }), tempDir);
+    expect(getParentTask('TASK-001-1', tempDir)!.id).toBe('TASK-001');
+  });
+
+  it('returns null when no parentId', async () => {
+    const { writeTaskMeta, getParentTask } = await taskUtils();
+    writeTaskMeta(makeTask({ id: 'TASK-001' }), tempDir);
+    expect(getParentTask('TASK-001', tempDir)).toBeNull();
+  });
+});
+
+// ============================================================
+// updateTaskStatus
+// ============================================================
+
+describe('updateTaskStatus', () => {
+  let tempDir: string;
+  let tasksDir: string;
+  let isInitSpy: ReturnType<typeof spyOn>;
+  let getTasksDirSpy: ReturnType<typeof spyOn>;
+
+  beforeEach(async () => {
+    tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'task-b-test-'));
+    tasksDir = path.join(tempDir, 'tasks');
+    const pMod = await pathUtils();
+    isInitSpy = spyOn(pMod, 'isInitialized').mockReturnValue(true);
+    getTasksDirSpy = spyOn(pMod, 'getTasksDir').mockReturnValue(tasksDir);
+  });
+
+  afterEach(() => {
+    isInitSpy.mockRestore();
+    getTasksDirSpy.mockRestore();
+    fs.rmSync(tempDir, { recursive: true, force: true });
+  });
+
+  it('updates status and records history', async () => {
+    const { writeTaskMeta, updateTaskStatus, readTaskMeta } = await taskUtils();
+    writeTaskMeta(makeTask({ id: 'TASK-001', status: 'open' }), tempDir);
+    updateTaskStatus('TASK-001', 'in_progress', tempDir, 'starting');
+    const result = readTaskMeta('TASK-001', tempDir);
+    expect(result!.status).toBe('in_progress');
+    const entry = result!.history.find(h => h.field === 'status');
+    expect(entry).toBeDefined();
+    expect(entry!.oldValue).toBe('open');
+    expect(entry!.newValue).toBe('in_progress');
+  });
+
+  it('no-ops when status unchanged', async () => {
+    const { writeTaskMeta, updateTaskStatus, readTaskMeta } = await taskUtils();
+    writeTaskMeta(makeTask({ id: 'TASK-001', status: 'open' }), tempDir);
+    const beforeLen = readTaskMeta('TASK-001', tempDir)!.history.length;
+    updateTaskStatus('TASK-001', 'open', tempDir);
+    expect(readTaskMeta('TASK-001', tempDir)!.history.length).toBe(beforeLen);
+  });
+
+  it('throws for missing task', async () => {
+    const { updateTaskStatus } = await taskUtils();
+    expect(() => updateTaskStatus('TASK-NONEXIST', 'open', tempDir)).toThrow('不存在');
+  });
+
+  it('auto-completes pending checkpoints on resolve', async () => {
+    const { writeTaskMeta, updateTaskStatus, readTaskMeta } = await taskUtils();
+    writeTaskMeta(makeTask({
+      id: 'TASK-001',
+      status: 'in_progress',
+      checkpoints: [
+        { id: 'CP-001', description: 'A', status: 'completed', createdAt: '2020-01-01T00:00:00.000Z', updatedAt: '2020-01-01T00:00:00.000Z', verification: { method: 'automated' as const } },
+        { id: 'CP-002', description: 'B', status: 'pending', createdAt: '2020-01-01T00:00:00.000Z', updatedAt: '2020-01-01T00:00:00.000Z' },
+      ],
+    }), tempDir);
+    updateTaskStatus('TASK-001', 'resolved', tempDir);
+    const result = readTaskMeta('TASK-001', tempDir);
+    expect(result!.checkpoints![1]!.status).toBe('completed');
+    expect(result!.verification!.result).toBe('passed');
+  });
+
+  it('adds transitionNote', async () => {
+    const { writeTaskMeta, updateTaskStatus, readTaskMeta } = await taskUtils();
+    writeTaskMeta(makeTask({ id: 'TASK-001', status: 'open' }), tempDir);
+    updateTaskStatus('TASK-001', 'in_progress', tempDir, undefined, 'dev started');
+    const result = readTaskMeta('TASK-001', tempDir);
+    expect(result!.transitionNotes![0]!.note).toBe('dev started');
+  });
+});
+
+// ============================================================
+// buildTaskVerification
+// ============================================================
+
+describe('buildTaskVerification', () => {
+  it('passed when all checkpoints completed', async () => {
+    const { buildTaskVerification } = await taskUtils();
+    const task = makeTask({
+      checkpoints: [
+        { id: 'CP-001', description: 'A', status: 'completed', createdAt: '2020-01-01T00:00:00.000Z', updatedAt: '2020-01-01T00:00:00.000Z', verification: { method: 'unit_test' as const } },
+      ],
+    });
+    const v = buildTaskVerification(task);
+    expect(v.result).toBe('passed');
+    expect(v.checkpointCompletionRate).toBe(100);
+    expect(v.methods).toContain('unit_test');
+  });
+
+  it('passed when no checkpoints', async () => {
+    const { buildTaskVerification } = await taskUtils();
+    expect(buildTaskVerification(makeTask({ checkpoints: [] })).result).toBe('passed');
+  });
+
+  it('partial when >= 50% completed without failures', async () => {
+    const { buildTaskVerification } = await taskUtils();
+    const task = makeTask({
+      checkpoints: [
+        { id: 'CP-001', description: 'A', status: 'completed', createdAt: '2020-01-01T00:00:00.000Z', updatedAt: '2020-01-01T00:00:00.000Z' },
+        { id: 'CP-002', description: 'B', status: 'pending', createdAt: '2020-01-01T00:00:00.000Z', updatedAt: '2020-01-01T00:00:00.000Z' },
+      ],
+    });
+    expect(buildTaskVerification(task).result).toBe('partial');
+  });
+
+  it('failed when any checkpoint failed', async () => {
+    const { buildTaskVerification } = await taskUtils();
+    const task = makeTask({
+      checkpoints: [
+        { id: 'CP-001', description: 'A', status: 'completed', createdAt: '2020-01-01T00:00:00.000Z', updatedAt: '2020-01-01T00:00:00.000Z' },
+        { id: 'CP-002', description: 'B', status: 'failed', createdAt: '2020-01-01T00:00:00.000Z', updatedAt: '2020-01-01T00:00:00.000Z' },
+      ],
+    });
+    expect(buildTaskVerification(task).result).toBe('failed');
+  });
+});
+
+// ============================================================
+// assignRole
+// ============================================================
+
+describe('assignRole', () => {
+  let tempDir: string;
+  let tasksDir: string;
+  let isInitSpy: ReturnType<typeof spyOn>;
+  let getTasksDirSpy: ReturnType<typeof spyOn>;
+
+  beforeEach(async () => {
+    tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'task-b-test-'));
+    tasksDir = path.join(tempDir, 'tasks');
+    const pMod = await pathUtils();
+    isInitSpy = spyOn(pMod, 'isInitialized').mockReturnValue(true);
+    getTasksDirSpy = spyOn(pMod, 'getTasksDir').mockReturnValue(tasksDir);
+  });
+
+  afterEach(() => {
+    isInitSpy.mockRestore();
+    getTasksDirSpy.mockRestore();
+    fs.rmSync(tempDir, { recursive: true, force: true });
+  });
+
+  it('assigns role with history', async () => {
+    const { writeTaskMeta, assignRole, readTaskMeta } = await taskUtils();
+    writeTaskMeta(makeTask({ id: 'TASK-001' }), tempDir);
+    assignRole('TASK-001', 'executor', tempDir);
+    const result = readTaskMeta('TASK-001', tempDir);
+    expect(result!.recommendedRole).toBe('executor');
+    expect(result!.history.find(h => h.field === 'recommendedRole')).toBeDefined();
+  });
+
+  it('throws for missing task', async () => {
+    const { assignRole } = await taskUtils();
+    expect(() => assignRole('TASK-NONEXIST', 'executor', tempDir)).toThrow('不存在');
+  });
+});
+
+// ============================================================
+// incrementReopenCount
+// ============================================================
+
+describe('incrementReopenCount', () => {
+  let tempDir: string;
+  let tasksDir: string;
+  let isInitSpy: ReturnType<typeof spyOn>;
+  let getTasksDirSpy: ReturnType<typeof spyOn>;
+
+  beforeEach(async () => {
+    tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'task-b-test-'));
+    tasksDir = path.join(tempDir, 'tasks');
+    const pMod = await pathUtils();
+    isInitSpy = spyOn(pMod, 'isInitialized').mockReturnValue(true);
+    getTasksDirSpy = spyOn(pMod, 'getTasksDir').mockReturnValue(tasksDir);
+  });
+
+  afterEach(() => {
+    isInitSpy.mockRestore();
+    getTasksDirSpy.mockRestore();
+    fs.rmSync(tempDir, { recursive: true, force: true });
+  });
+
+  it('increments from default 0', async () => {
+    const { writeTaskMeta, incrementReopenCount, readTaskMeta } = await taskUtils();
+    writeTaskMeta(makeTask({ id: 'TASK-001' }), tempDir);
+    incrementReopenCount('TASK-001', 'QA fail', tempDir);
+    expect(readTaskMeta('TASK-001', tempDir)!.reopenCount).toBe(1);
+  });
+
+  it('increments existing count', async () => {
+    const { writeTaskMeta, incrementReopenCount, readTaskMeta } = await taskUtils();
+    writeTaskMeta(makeTask({ id: 'TASK-001', reopenCount: 5 }), tempDir);
+    incrementReopenCount('TASK-001', 'again', tempDir);
+    expect(readTaskMeta('TASK-001', tempDir)!.reopenCount).toBe(6);
+  });
+
+  it('throws for missing task', async () => {
+    const { incrementReopenCount } = await taskUtils();
+    expect(() => incrementReopenCount('TASK-NONEXIST', 'r', tempDir)).toThrow('不存在');
+  });
+});
+
+// ============================================================
+// recordExecutionStats
+// ============================================================
+
+describe('recordExecutionStats', () => {
+  let tempDir: string;
+  let tasksDir: string;
+  let isInitSpy: ReturnType<typeof spyOn>;
+  let getTasksDirSpy: ReturnType<typeof spyOn>;
+
+  beforeEach(async () => {
+    tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'task-b-test-'));
+    tasksDir = path.join(tempDir, 'tasks');
+    const pMod = await pathUtils();
+    isInitSpy = spyOn(pMod, 'isInitialized').mockReturnValue(true);
+    getTasksDirSpy = spyOn(pMod, 'getTasksDir').mockReturnValue(tasksDir);
+  });
+
+  afterEach(() => {
+    isInitSpy.mockRestore();
+    getTasksDirSpy.mockRestore();
+    fs.rmSync(tempDir, { recursive: true, force: true });
+  });
+
+  it('records stats', async () => {
+    const { writeTaskMeta, recordExecutionStats, readTaskMeta } = await taskUtils();
+    writeTaskMeta(makeTask({ id: 'TASK-001' }), tempDir);
+    const stats: ExecutionStats = { duration: 5000, retryCount: 2, completedAt: new Date().toISOString() };
+    recordExecutionStats('TASK-001', stats, tempDir);
+    const result = readTaskMeta('TASK-001', tempDir);
+    expect(result!.executionStats!.duration).toBe(5000);
+  });
+
+  it('preserves existing commitHistory', async () => {
+    const { writeTaskMeta, recordExecutionStats, readTaskMeta } = await taskUtils();
+    writeTaskMeta(makeTask({
+      id: 'TASK-001',
+      executionStats: { duration: 1000, retryCount: 0, completedAt: '2020-01-01T00:00:00.000Z', commitHistory: [{ sha: 'abc', batchLabel: 'B1', timestamp: '2020-01-01T00:00:00.000Z' }] },
+    }), tempDir);
+    recordExecutionStats('TASK-001', { duration: 2000, retryCount: 1, completedAt: new Date().toISOString() }, tempDir);
+    expect(readTaskMeta('TASK-001', tempDir)!.executionStats!.commitHistory!.length).toBe(1);
+  });
+
+  it('throws for missing task', async () => {
+    const { recordExecutionStats } = await taskUtils();
+    expect(() => recordExecutionStats('TASK-NONEXIST', { duration: 1, retryCount: 0, completedAt: new Date().toISOString() }, tempDir)).toThrow('不存在');
+  });
+});
+
+// ============================================================
+// renameTask
+// ============================================================
+
+describe('renameTask', () => {
+  let tempDir: string;
+  let tasksDir: string;
+  let isInitSpy: ReturnType<typeof spyOn>;
+  let getTasksDirSpy: ReturnType<typeof spyOn>;
+
+  beforeEach(async () => {
+    tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'task-b-test-'));
+    tasksDir = path.join(tempDir, 'tasks');
+    const pMod = await pathUtils();
+    isInitSpy = spyOn(pMod, 'isInitialized').mockReturnValue(true);
+    getTasksDirSpy = spyOn(pMod, 'getTasksDir').mockReturnValue(tasksDir);
+  });
+
+  afterEach(() => {
+    isInitSpy.mockRestore();
+    getTasksDirSpy.mockRestore();
+    fs.rmSync(tempDir, { recursive: true, force: true });
+  });
+
+  it('renames task and updates meta id', async () => {
+    const { writeTaskMeta, renameTask, readTaskMeta } = await taskUtils();
+    writeTaskMeta(makeTask({ id: 'TASK-001' }), tempDir);
+    const result = renameTask('TASK-001', 'TASK-NEW', tempDir);
+    expect(result.success).toBe(true);
+    expect(readTaskMeta('TASK-NEW', tempDir)!.id).toBe('TASK-NEW');
+    expect(fs.existsSync(path.join(tasksDir, 'TASK-001'))).toBe(false);
+  });
+
+  it('fails for non-existent source', async () => {
+    const { renameTask } = await taskUtils();
+    expect(renameTask('TASK-NONEXIST', 'TASK-NEW', tempDir).success).toBe(false);
+  });
+
+  it('fails when target ID occupied', async () => {
+    const { writeTaskMeta, renameTask } = await taskUtils();
+    writeTaskMeta(makeTask({ id: 'TASK-001' }), tempDir);
+    writeTaskMeta(makeTask({ id: 'TASK-002' }), tempDir);
+    expect(renameTask('TASK-001', 'TASK-002', tempDir).success).toBe(false);
+  });
+
+  it('updates dependency references', async () => {
+    const { writeTaskMeta, renameTask, readTaskMeta } = await taskUtils();
+    writeTaskMeta(makeTask({ id: 'TASK-001' }), tempDir);
+    writeTaskMeta(makeTask({ id: 'TASK-002', dependencies: ['TASK-001'] }), tempDir);
+    renameTask('TASK-001', 'TASK-NEW', tempDir);
+    expect(readTaskMeta('TASK-002', tempDir)!.dependencies).toContain('TASK-NEW');
+  });
+
+  it('copies extra files during rename', async () => {
+    const { writeTaskMeta, renameTask } = await taskUtils();
+    writeTaskMeta(makeTask({ id: 'TASK-001' }), tempDir);
+    fs.writeFileSync(path.join(tasksDir, 'TASK-001', 'checkpoint.md'), '# CP');
+    renameTask('TASK-001', 'TASK-002', tempDir);
+    expect(fs.readFileSync(path.join(tasksDir, 'TASK-002', 'checkpoint.md'), 'utf-8')).toBe('# CP');
   });
 });

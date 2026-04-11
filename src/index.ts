@@ -68,7 +68,7 @@ import {
 } from './commands/branch';
 import { initRequirement } from './commands/init-requirement';
 import { showHelp } from './commands/help';
-import { runDoctor, runBugReport } from './commands/doctor';
+import { runDoctor, runBugReport, runDoctorDeep } from './commands/doctor';
 import { harnessCommand } from './commands/harness';
 import {
   listHumanVerifications,
@@ -161,7 +161,7 @@ program
   .command('task <action> [id]')
   .description(`管理任务
 
-基本操作: create/list/show/update/delete/rename/purge/execute/checkpoint
+基本操作: create/list/show/get/update/delete/rename/purge/execute/checkpoint
 高级操作: dependency/add-subtask/status-guide/complete/split/search/batch-update/count
 
 ⚠️  dependency 子命令格式 (注意参数顺序):
@@ -192,7 +192,7 @@ rename 子命令格式:
   // 新增选项 (bug_report_4.md)
   .option('-v, --verbose', '显示完整信息 (仅 show)')
   .option('--history', '仅显示变更历史 (仅 show)')
-  .option('--json', 'JSON 格式输出 (仅 show/list/status/count)')
+  .option('--json', 'JSON 格式输出 (仅 show/get/list/status/count)')
   .option('--compact', '精简输出 (仅 show)')
   .option('--fields <fields>', '自定义输出字段 (仅 list)')
   .option('--missing-verification', '筛选缺少验证的任务 (仅 list)')
@@ -204,13 +204,41 @@ rename 子命令格式:
   .option('--into <count>', '拆分数量 (仅 split)')
   .option('--titles <titles>', '子任务标题列表，仅 split,')
   .option('--skip-validation', '跳过 checkpoints 质量校验 (仅 create)')
+  .option('-f, --file <path>', '从文件读取描述 (仅 create, 用于包含特殊字符的长描述)')
   .action(async (action, id, options) => {
     requireInit();
     switch (action) {
-      case 'create':
+      case 'create': {
+        let taskDescription = options.description;
+        if (options.file) {
+          const filePath = path.resolve(options.file);
+          if (!fs.existsSync(filePath)) {
+            console.error(`❌ 错误: 描述文件不存在: ${filePath}`);
+            process.exit(1);
+          }
+          const stat = fs.statSync(filePath);
+          if (!stat.isFile()) {
+            console.error(`❌ 错误: 指定路径不是文件: ${filePath}`);
+            process.exit(1);
+          }
+          const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10MB
+          if (stat.size > MAX_FILE_SIZE) {
+            console.error(`❌ 错误: 描述文件过大 (${(stat.size / 1024 / 1024).toFixed(2)}MB)，最大允许10MB`);
+            process.exit(1);
+          }
+          try {
+            taskDescription = fs.readFileSync(filePath, 'utf-8');
+          } catch (error: any) {
+            console.error(`❌ 错误: 无法读取描述文件: ${error.message}`);
+            process.exit(1);
+          }
+          if (filePath.startsWith('/tmp/')) {
+            try { fs.unlinkSync(filePath); } catch { /* ignore */ }
+          }
+        }
         await createTask({
           title: options.title,
-          description: options.description,
+          description: taskDescription,
           priority: options.priority,
           type: options.type,
           nonInteractive: options.yes,
@@ -218,6 +246,7 @@ rename 子命令格式:
           id: id,  // 传递用户指定的任务ID
         });
         break;
+      }
       case 'list':
         listTasks({
           status: options.status,
@@ -229,9 +258,10 @@ rename 子命令格式:
           group: options.group,
         });
         break;
+      case 'get':
       case 'show':
         if (!id) {
-          console.error('错误: show 操作需要指定任务ID');
+          console.error(`错误: ${action} 操作需要指定任务ID`);
           process.exit(1);
         }
         showTask(id, {
@@ -666,6 +696,7 @@ program
   .option('-y, --yes', '非交互模式：自动修复可修复的问题')
   .option('--compact', '使用简洁分隔符')
   .option('--task <taskId>', '指定任务ID (仅 --fix-checkpoints)')
+  .option('--check-range <range>', '分析范围: all(默认), tasks:ID1,ID2, keyword:pattern')
   .option('--deep-analyze', '深度分析: 启用 AI 语义重复检测、陈旧评估、语义质量评分')
   .option('--no-ai', '禁用所有 AI 功能，仅使用规则引擎分析')
   .option('--rules-only', '仅执行规则分析+修复 (Stage 1,2), 需配合 --fix')
@@ -708,7 +739,7 @@ program
         threshold: parseInt(options.threshold) || 60,
       });
     } else {
-      await showAnalysis({ compact: options.compact, ...aiOptions });
+      await showAnalysis({ compact: options.compact, ...aiOptions, checkRange: options.checkRange });
     }
   });
 
@@ -862,10 +893,13 @@ program
   .command('doctor')
   .description('运行环境诊断，检查并修复设置问题')
   .option('--fix', '自动修复检测到的问题')
+  .option('--deep', '深度日志分析：运行所有日志分析器（规则 + AI 混合策略）')
   .option('--bug-report', '生成 Bug 报告（含日志压缩附件、AI 成本汇总、使用分析）')
   .action(async (options) => {
     if (options.bugReport) {
       await runBugReport();
+    } else if (options.deep) {
+      await runDoctorDeep();
     } else {
       await runDoctor(options.fix);
     }

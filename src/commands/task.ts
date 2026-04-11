@@ -36,6 +36,7 @@ import {
 } from '../types/task';
 import * as crypto from 'crypto';
 import { SEPARATOR_WIDTH } from '../utils/format';
+import { DependencyGraph, validateNewTaskDeps } from '../utils/dependency-graph';
 import { inferDependencies, type InferredDependency } from '../utils/dependency-engine';
 import {
   generateStructuredDescription,
@@ -578,6 +579,23 @@ export async function createTask(
     syncCheckpointsToMeta(taskId, cwd);
     const cpWarnings = validateTaskCheckpointCommands(taskId, cwd);
     displayCheckpointVerificationWarnings(cpWarnings);
+
+    // CP-16: 依赖关系质量门禁 - 验证新任务的依赖完整性 (GATE-DEP-001/002/003)
+    const allExistingTasks = getAllTasks(cwd);
+    const depGraph = DependencyGraph.fromTasks(allExistingTasks);
+    const depValidation = validateNewTaskDeps(taskId, task.dependencies || [], depGraph, allExistingTasks);
+    if (depValidation.warnings.length > 0) {
+      console.log('📋 依赖关系门禁:');
+      for (const w of depValidation.warnings) {
+        console.log(`   ⚠️  ${w}`);
+      }
+    }
+    if (depValidation.errors.length > 0) {
+      console.log('📋 依赖关系错误:');
+      for (const e of depValidation.errors) {
+        console.log(`   ❌ ${e}`);
+      }
+    }
 
     return task;
   }
@@ -2097,6 +2115,7 @@ export async function validateTask(
 
 /**
  * 删除任务（归档）
+ * CP-9: 新增下游影响检查，删除前警告依赖此任务的其他任务
  */
 export async function deleteTask(taskId: string, force: boolean = false, cwd: string = process.cwd()): Promise<void> {
   if (!isInitialized(cwd)) {
@@ -2108,6 +2127,28 @@ export async function deleteTask(taskId: string, force: boolean = false, cwd: st
   if (!task) {
     console.error(`错误: 任务 '${taskId}' 不存在`);
     process.exit(1);
+  }
+
+  // CP-9: Check downstream impact using graph
+  const allTasks = getAllTasks(cwd);
+  const graph = DependencyGraph.fromTasks(allTasks);
+  const downstream = graph.getDirectDownstream(taskId);
+  const allDownstream = graph.getAllDownstream(taskId);
+
+  if (downstream.length > 0 || allDownstream.length > 0) {
+    console.log('');
+    console.log(`⚠️  此任务有 ${downstream.length} 个直接依赖者和 ${allDownstream.length} 个传递依赖者:`);
+    for (const depId of downstream.slice(0, 10)) {
+      const depTask = readTaskMeta(depId, cwd);
+      const status = depTask ? formatStatus(depTask.status) : '❓';
+      console.log(`   - ${depId} (${depTask?.title?.substring(0, 30) || '未知'} ${status})`);
+    }
+    if (downstream.length > 10) {
+      console.log(`   ... 还有 ${downstream.length - 10} 个`);
+    }
+    console.log('');
+    console.log('   删除后，这些任务的依赖引用将变为无效。建议先移除相关依赖。');
+    console.log('');
   }
 
   // 确认删除
@@ -2225,6 +2266,7 @@ export function purgeTasks(options: { force?: boolean; json?: boolean } = {}, cw
 
 /**
  * 添加任务依赖
+ * CP-5: 使用 graph.addEdge() 替代直接数组操作 + wouldCreateCycle
  */
 export function addDependency(taskId: string, depId: string, cwd: string = process.cwd()): void {
   if (!isInitialized(cwd)) {
@@ -2249,9 +2291,11 @@ export function addDependency(taskId: string, depId: string, cwd: string = proce
     return;
   }
 
-  // 检查循环依赖
-  if (wouldCreateCycle(taskId, depId, cwd)) {
-    console.error(`错误: 添加依赖 ${depId} 会造成循环依赖`);
+  // CP-5: Use graph.addEdge() for cycle detection
+  const allTasks = getAllTasks(cwd);
+  const graph = DependencyGraph.fromTasks(allTasks);
+  if (!graph.addEdge(taskId, depId)) {
+    console.error(`错误: 添加依赖 ${depId} 会造成循环依赖 (GATE-DEP-002)`);
     process.exit(1);
   }
 
@@ -2263,6 +2307,7 @@ export function addDependency(taskId: string, depId: string, cwd: string = proce
 
 /**
  * 移除任务依赖
+ * CP-7: 使用 graph.removeEdge() 并检查是否有推断依赖可替代
  */
 export function removeDependency(taskId: string, depId: string, cwd: string = process.cwd()): void {
   if (!isInitialized(cwd)) {
@@ -2282,36 +2327,35 @@ export function removeDependency(taskId: string, depId: string, cwd: string = pr
     return;
   }
 
+  // CP-7: Use graph.removeEdge() to update the graph model
+  const allTasks = getAllTasks(cwd);
+  const graph = DependencyGraph.fromTasks(allTasks);
+  graph.removeEdge(taskId, depId);
+
   task.dependencies.splice(index, 1);
   writeTaskMeta(task, cwd);
 
   console.log(`✅ 已移除依赖: ${taskId} -/-> ${depId}`);
+
+  // Check if there are inferred dependencies that could replace the removed one
+  const remainingDeps = task.dependencies;
+  if (remainingDeps.length === 0) {
+    // No dependencies left - check if graph detects any inferred alternatives
+    const inferredDownstream = graph.getDirectUpstream(taskId);
+    if (inferredDownstream.length > 0) {
+      console.log(`💡 提示: 图中检测到可能的隐含依赖: ${inferredDownstream.join(', ')}`);
+    }
+  }
 }
 
 /**
  * 检查是否会造成循环依赖
+ * 使用 dependency-graph 模块的 DependencyGraph.wouldCreateCycle 替代内联 BFS
  */
 function wouldCreateCycle(taskId: string, depId: string, cwd: string): boolean {
-  const visited = new Set<string>();
-  const queue: string[] = [depId];
-
-  while (queue.length > 0) {
-    const current = queue.shift()!;
-    if (current === taskId) {
-      return true;
-    }
-    if (visited.has(current)) {
-      continue;
-    }
-    visited.add(current);
-
-    const task = readTaskMeta(current, cwd);
-    if (task) {
-      queue.push(...task.dependencies);
-    }
-  }
-
-  return false;
+  const allTasks = getAllTasks(cwd);
+  const graph = DependencyGraph.fromTasks(allTasks);
+  return graph.wouldCreateCycle(taskId, depId);
 }
 
 /**
@@ -2740,22 +2784,32 @@ export async function executeTask(taskId: string, cwd: string = process.cwd()): 
   }
 
   // 检查依赖状态
+  // CP-10: 使用 graph.getDirectUpstream() 进行上游状态校验
   if (task.dependencies.length > 0) {
     console.log('');
     console.log('🔗 依赖任务:');
+
+    // Use graph for upstream validation
+    const allExTasks = getAllTasks(cwd);
+    const exGraph = DependencyGraph.fromTasks(allExTasks);
+    const upstreamIds = exGraph.getDirectUpstream(taskId);
+    const terminalStatuses = new Set(['resolved', 'closed']);
+
     const depsStatus = task.dependencies.map(depId => {
       const depTask = readTaskMeta(depId, cwd);
       const status = depTask
-        ? (depTask.status === 'resolved' || depTask.status === 'closed' ? '✅' : '❌')
+        ? (terminalStatuses.has(depTask.status) ? '✅' : '❌')
         : '❓';
-      return `   ${status} ${depId}`;
+      const upstreamValid = upstreamIds.includes(depId);
+      const graphTag = upstreamValid ? '' : ' (⚠️ 图中不存在)';
+      return `   ${status} ${depId}${graphTag}`;
     });
     console.log(depsStatus.join('\n'));
 
     // 检查是否有未完成的依赖
     const uncompletedDeps = task.dependencies.filter(depId => {
       const depTask = readTaskMeta(depId, cwd);
-      return !depTask || (depTask.status !== 'resolved' && depTask.status !== 'closed');
+      return !depTask || !terminalStatuses.has(depTask.status);
     });
 
     if (uncompletedDeps.length > 0) {

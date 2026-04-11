@@ -31,6 +31,7 @@ import {
   PIPELINE_STATUS_MIGRATION_MAP,
 } from '../types/task';
 import type { VerdictAction } from '../types/harness';
+import { DependencyGraph } from '../utils/dependency-graph';
 import { VALID_VERDICT_ACTIONS } from '../types/harness';
 import { SEPARATOR_WIDTH } from '../utils/format';
 
@@ -204,7 +205,44 @@ async function fixSingleIssue(
     }
 
     case 'cycle': {
-      console.log(`⚠️  任务 ${issue.taskId} 存在循环依赖，需要手动处理`);
+      console.log(`🔄 分析任务 ${issue.taskId} 的循环依赖...`);
+      // CP-1/CP-15: Use graph module to detect cycles and get auto-fix suggestions
+      const allCycleTasks = getAllTaskIds(cwd).map(id => readTaskMeta(id, cwd)).filter((t): t is TaskMeta => t !== null);
+      const cycleGraph = DependencyGraph.fromTasks(allCycleTasks);
+      const anomalies = cycleGraph.detectAnomalies();
+
+      // Find cycle anomalies involving this task
+      const cycleAnomalies = anomalies.filter(a => a.type === 'cycle' && a.nodeIds.includes(issue.taskId));
+      if (cycleAnomalies.length === 0) {
+        console.log(`   ⚠️  未找到涉及 ${issue.taskId} 的循环依赖（可能已修复）`);
+        return 'skipped';
+      }
+
+      // Try to apply auto-fix suggestions
+      let fixedAny = false;
+      for (const anomaly of cycleAnomalies) {
+        if (anomaly.autoFix) {
+          console.log(`   💡 ${anomaly.autoFix.description}`);
+          for (const change of anomaly.autoFix.edgeChanges) {
+            if (change.action === 'remove') {
+              const fromTask = readTaskMeta(change.from, cwd);
+              if (fromTask && fromTask.dependencies.includes(change.to)) {
+                fromTask.dependencies = fromTask.dependencies.filter(d => d !== change.to);
+                writeTaskMeta(fromTask, cwd);
+                console.log(`  ✅ 已断开 ${change.from} → ${change.to} 的依赖以打破循环`);
+                fixedAny = true;
+              }
+            }
+          }
+        } else {
+          console.log(`   ⚠️  循环 ${(anomaly.cyclePath || anomaly.nodeIds).join(' → ')} 中所有边均为显式依赖，需人工处理`);
+        }
+      }
+
+      if (fixedAny) {
+        return 'fixed';
+      }
+      console.log(`   建议: 手动检查并调整循环依赖中任务的依赖关系`);
       return 'unfixable';
     }
 
@@ -237,6 +275,30 @@ async function fixSingleIssue(
       if (task.requirementHistory === undefined) {
         task.requirementHistory = [];
         console.log(`  ✅ 已添加 requirementHistory: []`);
+      }
+      writeTaskMeta(task, cwd);
+      return 'fixed';
+    }
+
+    case 'null_array_field': {
+      const fields = (issue.details?.fields as string[]) ?? [];
+      if (fields.length === 0) return 'skipped';
+      console.log(`🔄 修复任务 ${issue.taskId} 的空数组字段: ${fields.join(', ')}`);
+      const FIELD_DEFAULTS: Record<string, unknown[]> = {
+        dependencies: [],
+        history: [],
+        checkpoints: [],
+        subtaskIds: [],
+        discussionTopics: [],
+        fileWarnings: [],
+        allowedTools: [],
+      };
+      for (const field of fields) {
+        const key = field as keyof TaskMeta;
+        if (task[key] === null || task[key] === undefined) {
+          (task as unknown as Record<string, unknown>)[key] = FIELD_DEFAULTS[field] ?? [];
+          console.log(`  ✅ 已初始化 ${field}: []`);
+        }
       }
       writeTaskMeta(task, cwd);
       return 'fixed';
@@ -446,14 +508,73 @@ async function fixSingleIssue(
 
     case 'invalid_dependency_ref': {
       console.log(`🔄 修复任务 ${issue.taskId} 的无效依赖引用...`);
-      if (task.dependencies && issue.details?.dependencyId) {
+      // CP-2: Use graph to validate all dependency references
+      const allDepTasks = getAllTaskIds(cwd).map(id => readTaskMeta(id, cwd)).filter((t): t is TaskMeta => t !== null);
+      const validTaskIds = new Set(allDepTasks.map(t => t.id));
+      let removedAny = false;
+
+      if (task.dependencies) {
+        // Validate ALL dependency refs using graph, not just the reported one
+        const invalidRefs = task.dependencies.filter(depId => !validTaskIds.has(depId));
+        if (invalidRefs.length > 0) {
+          const oldLength = task.dependencies.length;
+          task.dependencies = task.dependencies.filter(depId => validTaskIds.has(depId));
+          removedAny = task.dependencies.length < oldLength;
+          if (removedAny) {
+            writeTaskMeta(task, cwd);
+            for (const invalidId of invalidRefs) {
+              console.log(`  ✅ 已从 dependencies 中移除无效引用 ${invalidId}`);
+            }
+          }
+        }
+      }
+
+      // Also handle the specific reported invalid ref if not caught above
+      if (!removedAny && task.dependencies && issue.details?.dependencyId) {
         const invalidId = issue.details.dependencyId as string;
         const oldLength = task.dependencies.length;
         task.dependencies = task.dependencies.filter(id => id !== invalidId);
         if (task.dependencies.length < oldLength) {
           writeTaskMeta(task, cwd);
           console.log(`  ✅ 已从 dependencies 中移除无效引用 ${invalidId}`);
-          return 'fixed';
+          removedAny = true;
+        }
+      }
+
+      return removedAny ? 'fixed' : 'skipped';
+    }
+
+    case 'missing_inferred_dependency': {
+      console.log(`🔄 修复任务 ${issue.taskId} 的推断依赖缺失...`);
+      // CP-3: Use graph to compare inferred vs explicit dependencies
+      const allInferredTasks = getAllTaskIds(cwd).map(id => readTaskMeta(id, cwd)).filter((t): t is TaskMeta => t !== null);
+      const inferredGraph = DependencyGraph.fromTasks(allInferredTasks);
+
+      if (issue.details?.inferredDependencies) {
+        const inferredDeps = issue.details.inferredDependencies as Array<{ depTaskId: string; reason: string }>;
+        if (inferredDeps.length > 0) {
+          let addedAny = false;
+          for (const inferred of inferredDeps) {
+            if (!task.dependencies.includes(inferred.depTaskId)) {
+              // Use graph to verify target node exists
+              if (!inferredGraph.hasNode(inferred.depTaskId)) {
+                console.log(`   ⚠️  推断依赖 ${inferred.depTaskId} 不存在，跳过`);
+                continue;
+              }
+              // Use graph to check if adding this dep would create a cycle
+              if (inferredGraph.wouldCreateCycle(issue.taskId, inferred.depTaskId)) {
+                console.log(`   ⚠️  添加推断依赖 ${inferred.depTaskId} 会形成循环，跳过 (GATE-DEP-002)`);
+                continue;
+              }
+              task.dependencies.push(inferred.depTaskId);
+              console.log(`  ✅ 已添加推断依赖 ${inferred.depTaskId}: ${inferred.reason}`);
+              addedAny = true;
+            }
+          }
+          if (addedAny) {
+            writeTaskMeta(task, cwd);
+            return 'fixed';
+          }
         }
       }
       return 'skipped';

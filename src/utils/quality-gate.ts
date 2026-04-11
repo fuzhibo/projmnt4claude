@@ -10,15 +10,28 @@
  * 4. --require-quality N 参数：质量分低于N时自动提示完善
  */
 
-import type { TaskMeta } from '../types/task.js';
+import type { TaskMeta, CheckpointMetadata } from '../types/task.js';
+import type { ValidationViolation } from '../types/feedback-constraint.js';
+import * as fs from 'fs';
+import * as path from 'path';
 import {
   calculateContentQuality,
   type ContentQualityScore,
   type QualityDeduction,
 } from '../commands/analyze.js';
-import { readTaskMeta } from './task.js';
+import { getTaskMetaPath } from './task.js';
 import { SEPARATOR_WIDTH } from './format';
 import { getQualityMinScore, qualityScoreToVerdict } from './contradiction-detector.js';
+import {
+  checkpointRequiredPrefix,
+  checkpointHasVerificationCommands,
+  metaJsonValid,
+  VALID_CHECKPOINT_PREFIXES,
+  getCheckpointPhase,
+} from './validation-rules/checkpoint-rules.js';
+
+// Re-export for external consumers
+export { VALID_CHECKPOINT_PREFIXES, getCheckpointPhase };
 
 /**
  * 变更范围大小
@@ -148,6 +161,49 @@ export function extractFilePaths(
 }
 
 /**
+ * 评估关联文件
+ */
+export function evaluateRelatedFiles(
+  description?: string,
+  checkpoints?: CheckpointMetadata[]
+): { score: number; deductions: QualityDeduction[] } {
+  const deductions: QualityDeduction[] = [];
+  let score = 100;
+
+  // 从描述中检测文件引用
+  const descFiles = extractFilePaths(description || '', { includeBareFilenames: false });
+
+  // 从检查点 evidencePath 检测
+  const cpFiles: string[] = [];
+  if (checkpoints) {
+    for (const cp of checkpoints) {
+      if (cp.verification?.evidencePath) {
+        cpFiles.push(cp.verification.evidencePath);
+      }
+    }
+  }
+
+  // 检测描述中的 "## 相关文件" 部分
+  const hasRelatedFilesSection = /##\s*相关文件|#\s*相关文件|##\s*Related|#\s*Related/i.test(description || '');
+
+  const allFiles = [...descFiles, ...cpFiles];
+  const hasAnyFiles = allFiles.length > 0 || hasRelatedFilesSection;
+
+  if (!hasAnyFiles) {
+    const deduction = -15;
+    score += deduction;
+    deductions.push({
+      category: 'related_files',
+      reason: '缺少关联文件',
+      points: deduction,
+      suggestion: '添加"## 相关文件"部分，列出需要修改的源文件',
+    });
+  }
+
+  return { score: Math.max(0, score), deductions };
+}
+
+/**
  * 从任务描述中提取受影响文件列表
  * 导出供 init-requirement 等模块复用
  */
@@ -199,6 +255,104 @@ export function extractAffectedFiles(task: TaskMeta): string[] {
   }
 
   return files;
+}
+
+/**
+ * 基础字段验证结果
+ */
+export interface BasicFieldsValidationResult {
+  /** 是否通过验证 */
+  valid: boolean;
+  /** 验证错误列表 */
+  errors: string[];
+  /** 缺失的必需字段 */
+  missingFields: string[];
+}
+
+/**
+ * 验证任务基础字段完整性
+ *
+ * 检查任务是否包含执行所需的基础字段：
+ * 1. title: 任务标题不能为空
+ * 2. description: 任务描述至少 10 个字符
+ * 3. checkpoints: 至少包含一个检查点
+ * 4. id: 任务 ID 不能为空
+ *
+ * 供 AssemblyLine.validateTransitionCompleteness 复用，
+ * 在流水线阶段流转时做兜底的基础字段检查。
+ */
+export function validateBasicFields(task: TaskMeta): BasicFieldsValidationResult {
+  const errors: string[] = [];
+  const missingFields: string[] = [];
+
+  // 检查 ID
+  if (!task.id || task.id.trim().length === 0) {
+    errors.push('任务 ID 为空');
+    missingFields.push('id');
+  }
+
+  // 检查标题
+  if (!task.title || task.title.trim().length === 0) {
+    errors.push('任务标题为空');
+    missingFields.push('title');
+  }
+
+  // 检查描述
+  if (!task.description || task.description.trim().length < 10) {
+    errors.push('任务描述不足 10 个字符');
+    missingFields.push('description');
+  }
+
+  // 检查检查点
+  if (!task.checkpoints || task.checkpoints.length === 0) {
+    errors.push('任务缺少检查点');
+    missingFields.push('checkpoints');
+  }
+
+  return {
+    valid: errors.length === 0,
+    errors,
+    missingFields,
+  };
+}
+
+/**
+ * 文件存在性验证结果
+ */
+export interface FilesExistValidationResult {
+  /** 是否所有引用的文件都存在 */
+  valid: boolean;
+  /** 不存在的文件列表 */
+  missingFiles: string[];
+  /** 存在的文件列表 */
+  existingFiles: string[];
+}
+
+/**
+ * 验证任务引用的文件是否实际存在于磁盘
+ *
+ * 检查任务描述和检查点中引用的文件路径，
+ * 确保引用的文件在项目目录中真实存在。
+ */
+export function validateFilesExist(task: TaskMeta, cwd: string = process.cwd()): FilesExistValidationResult {
+  const affectedFiles = extractAffectedFiles(task);
+  const missingFiles: string[] = [];
+  const existingFiles: string[] = [];
+
+  for (const file of affectedFiles) {
+    const fullPath = path.resolve(cwd, file);
+    if (fs.existsSync(fullPath)) {
+      existingFiles.push(file);
+    } else {
+      missingFiles.push(file);
+    }
+  }
+
+  return {
+    valid: missingFiles.length === 0,
+    missingFiles,
+    existingFiles,
+  };
 }
 
 /**
@@ -327,7 +481,22 @@ export async function checkQualityGate(
       ? configuredMinScore
       : config.minQualityScore,
   };
-  const task = readTaskMeta(taskId, cwd);
+  // 读取原始 meta.json 内容，使 JSON 格式验证在主入口路径中可执行
+  const metaPath = getTaskMetaPath(taskId, cwd);
+  let task: TaskMeta | null = null;
+  let metaViolations: ValidationViolation | null = null;
+
+  if (fs.existsSync(metaPath)) {
+    const rawContent = fs.readFileSync(metaPath, 'utf-8');
+    // 传入原始字符串，触发 metaJsonValid 的 JSON 格式验证 + 递归结构验证
+    metaViolations = metaJsonValid.check(rawContent);
+    try {
+      task = JSON.parse(rawContent) as TaskMeta;
+    } catch {
+      // JSON 格式错误已由 metaJsonValid 捕获并记录到 metaViolations
+    }
+  }
+
   if (!task) {
     return {
       passed: false,
@@ -339,7 +508,7 @@ export async function checkQualityGate(
         solutionScore: 0,
         deductions: [{
           category: 'description',
-          reason: '任务不存在',
+          reason: metaViolations ? metaViolations.message : '任务不存在',
           points: -100,
         }],
         checkedAt: new Date().toISOString(),
@@ -350,13 +519,16 @@ export async function checkQualityGate(
       suggestions: [{
         category: 'description',
         priority: 'high',
-        message: '任务不存在',
-        action: '请检查任务ID是否正确',
+        message: metaViolations ? metaViolations.message : '任务不存在',
+        action: metaViolations ? '修复 meta.json 格式错误后重试' : '请检查任务ID是否正确',
       }],
       affectedFiles: [],
       changeSize: 'small',
     };
   }
+
+  // 运行检查点验证规则
+  const checkpointViolations = validateCheckpoints(task);
 
   // 计算内容质量评分
   const score = await calculateContentQuality(task, undefined, cwd);
@@ -391,6 +563,25 @@ export async function checkQualityGate(
     needsConfirmation
   );
 
+  // 将检查点验证违规转化为建议
+  for (const violation of checkpointViolations) {
+    suggestions.push({
+      category: 'checkpoint',
+      priority: violation.severity === 'error' ? 'high' : 'medium',
+      message: violation.message,
+      action: '修复检查点配置以满足验证要求',
+    });
+  }
+
+  if (metaViolations) {
+    suggestions.push({
+      category: 'description',
+      priority: 'high',
+      message: metaViolations.message,
+      action: '修复 meta.json 结构，确保必需字段完整且格式正确',
+    });
+  }
+
   // 判断是否通过门禁
   let passed = true;
 
@@ -409,6 +600,16 @@ export async function checkQualityGate(
     passed = false;
   }
 
+  // 检查点验证违规阻止通过
+  if (checkpointViolations.some(v => v.severity === 'error')) {
+    passed = false;
+  }
+
+  // meta.json 验证违规阻止通过
+  if (metaViolations && metaViolations.severity === 'error') {
+    passed = false;
+  }
+
   return {
     passed,
     score,
@@ -419,6 +620,31 @@ export async function checkQualityGate(
     affectedFiles,
     changeSize,
   };
+}
+
+/**
+ * 对任务的检查点运行验证规则
+ */
+export function validateCheckpoints(task: TaskMeta): ValidationViolation[] {
+  const violations: ValidationViolation[] = [];
+
+  if (!task.checkpoints || task.checkpoints.length === 0) {
+    return violations;
+  }
+
+  // 运行 checkpointRequiredPrefix 规则
+  const prefixViolation = checkpointRequiredPrefix.check(task.checkpoints);
+  if (prefixViolation) {
+    violations.push(prefixViolation);
+  }
+
+  // 运行 checkpointHasVerificationCommands 规则
+  const commandsViolation = checkpointHasVerificationCommands.check(task.checkpoints);
+  if (commandsViolation) {
+    violations.push(commandsViolation);
+  }
+
+  return violations;
 }
 
 /**

@@ -48,8 +48,14 @@ import { readConfig } from './config';
 import { createLogger, type InstrumentationRecord } from '../utils/logger';
 import { AIMetadataAssistant, type DuplicateGroup, classifyFileToLayer, groupFilesByLayer, sortFilesByLayer, type ArchitectureLayer, LAYER_DEFINITIONS } from '../utils/ai-metadata';
 import { withAIEnhancement } from '../utils/ai-helpers';
-import { extractFilePaths } from '../utils/quality-gate';
+import { parseCheckRange, getTasksByRange, AnalyzeError } from '../utils/analyze-range-parser';
+import { extractFilePaths, evaluateRelatedFiles } from '../utils/quality-gate';
 import { inferDependenciesBatch } from '../utils/dependency-engine';
+import {
+  DependencyGraph,
+  renderAnomalySummary,
+  renderBridgeReport,
+} from '../utils/dependency-graph';
 
 // ============== Analyze 配置 ==============
 
@@ -112,7 +118,7 @@ export function readAnalyzeConfig(cwd: string = process.cwd()): AnalyzeConfig {
  * 检查任务 ID 是否匹配忽略模式
  * 支持简单的 glob 模式: * 匹配任意字符序列
  */
-function matchesIgnorePattern(taskId: string, patterns: string[]): boolean {
+export function matchesIgnorePattern(taskId: string, patterns: string[]): boolean {
   for (const pattern of patterns) {
     const regex = new RegExp(
       '^' + pattern.replace(/[.+^${}()|[\]\\]/g, '\\$&').replace(/\*/g, '.*') + '$'
@@ -348,7 +354,7 @@ export const SCHEMA_MIGRATIONS: SchemaMigrationStep[] = [
 /**
  * 验证 ISO 时间戳格式
  */
-function isValidISOTimestamp(timestamp: string): boolean {
+export function isValidISOTimestamp(timestamp: string): boolean {
   if (!timestamp || typeof timestamp !== 'string') return false;
   // ISO 8601 格式: YYYY-MM-DDTHH:mm:ss.sssZ 或 YYYY-MM-DDTHH:mm:ssZ
   const isoRegex = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d{3})?Z?$/;
@@ -361,7 +367,7 @@ function isValidISOTimestamp(timestamp: string): boolean {
 /**
  * 验证历史记录条目格式
  */
-function validateHistoryEntry(entry: unknown, index: number): { valid: boolean; errors: string[] } {
+export function validateHistoryEntry(entry: unknown, index: number): { valid: boolean; errors: string[] } {
   const errors: string[] = [];
 
   if (!entry || typeof entry !== 'object') {
@@ -387,7 +393,7 @@ function validateHistoryEntry(entry: unknown, index: number): { valid: boolean; 
 /**
  * 验证需求变更历史条目格式
  */
-function validateRequirementHistoryEntry(entry: unknown, index: number): { valid: boolean; errors: string[] } {
+export function validateRequirementHistoryEntry(entry: unknown, index: number): { valid: boolean; errors: string[] } {
   const errors: string[] = [];
 
   if (!entry || typeof entry !== 'object') {
@@ -421,7 +427,7 @@ function validateRequirementHistoryEntry(entry: unknown, index: number): { valid
 /**
  * 验证任务 ID 格式
  */
-function validateTaskIdFormat(id: string): { valid: boolean; format: 'new' | 'old' | 'unknown'; errors: string[] } {
+export function validateTaskIdFormat(id: string): { valid: boolean; format: 'new' | 'old' | 'unknown'; errors: string[] } {
   const errors: string[] = [];
 
   if (!id || typeof id !== 'string') {
@@ -457,21 +463,21 @@ function validateTaskIdFormat(id: string): { valid: boolean; format: 'new' | 'ol
 /**
  * 验证状态值是否有效
  */
-function isValidStatusValue(status: string): boolean {
+export function isValidStatusValue(status: string): boolean {
   return VALID_STATUSES.includes(status as TaskStatus);
 }
 
 /**
  * 验证类型值是否有效
  */
-function isValidTypeValue(type: string): boolean {
+export function isValidTypeValue(type: string): boolean {
   return VALID_TYPES.includes(type);
 }
 
 /**
  * 验证优先级值是否有效
  */
-function isValidPriorityValue(priority: string): boolean {
+export function isValidPriorityValue(priority: string): boolean {
   return VALID_PRIORITIES.includes(priority as TaskPriority);
 }
 
@@ -528,7 +534,11 @@ export interface Issue {
     // 依赖推断检测 (IR-08-03)
     | 'missing_inferred_dependency'
     // 质量检测
-    | 'low_quality';
+    | 'low_quality'
+    // 数组字段空值检测
+    | 'null_array_field'
+    // 依赖图分析
+    | 'bridge_nodes' | 'redundant_dep';
   severity: 'low' | 'medium' | 'high';
   message: string;
   suggestion: string;
@@ -721,7 +731,7 @@ export async function calculateContentQuality(
 /**
  * 评估描述完整度
  */
-function evaluateDescription(description?: string): { score: number; deductions: QualityDeduction[] } {
+export function evaluateDescription(description?: string): { score: number; deductions: QualityDeduction[] } {
   const deductions: QualityDeduction[] = [];
   let score = 100;
 
@@ -800,7 +810,7 @@ function evaluateDescription(description?: string): { score: number; deductions:
 /**
  * 评估检查点质量
  */
-function evaluateCheckpoints(checkpoints?: CheckpointMetadata[]): { score: number; deductions: QualityDeduction[] } {
+export function evaluateCheckpoints(checkpoints?: CheckpointMetadata[]): { score: number; deductions: QualityDeduction[] } {
   const deductions: QualityDeduction[] = [];
   let score = 100;
 
@@ -852,7 +862,7 @@ function evaluateCheckpoints(checkpoints?: CheckpointMetadata[]): { score: numbe
 /**
  * 从文本中提取文件引用路径（用于层级分析）
  */
-function extractFileRefsForLayer(text: string): string[] {
+export function extractFileRefsForLayer(text: string): string[] {
   const files: string[] = [];
   const seen = new Set<string>();
   const patterns = [
@@ -877,7 +887,7 @@ function extractFileRefsForLayer(text: string): string[] {
  * 检查检查点是否遵循架构层级顺序
  * Layer0(类型) → Layer1(工具) → Layer2(核心) → Layer3(命令)
  */
-function evaluateLayerOrdering(
+export function evaluateLayerOrdering(
   checkpoints?: CheckpointMetadata[],
   description?: string
 ): { score: number; deductions: QualityDeduction[] } {
@@ -941,52 +951,9 @@ function evaluateLayerOrdering(
 }
 
 /**
- * 评估关联文件
- */
-function evaluateRelatedFiles(
-  description?: string,
-  checkpoints?: CheckpointMetadata[]
-): { score: number; deductions: QualityDeduction[] } {
-  const deductions: QualityDeduction[] = [];
-  let score = 100;
-
-  // 从描述中检测文件引用
-  const descFiles = extractFilePaths(description || '', { includeBareFilenames: false });
-
-  // 从检查点 evidencePath 检测
-  const cpFiles: string[] = [];
-  if (checkpoints) {
-    for (const cp of checkpoints) {
-      if (cp.verification?.evidencePath) {
-        cpFiles.push(cp.verification.evidencePath);
-      }
-    }
-  }
-
-  // 检测描述中的 "## 相关文件" 部分
-  const hasRelatedFilesSection = /##\s*相关文件|#\s*相关文件|##\s*Related|#\s*Related/i.test(description || '');
-
-  const allFiles = [...descFiles, ...cpFiles];
-  const hasAnyFiles = allFiles.length > 0 || hasRelatedFilesSection;
-
-  if (!hasAnyFiles) {
-    const deduction = -15;
-    score += deduction;
-    deductions.push({
-      category: 'related_files',
-      reason: '缺少关联文件',
-      points: deduction,
-      suggestion: '添加"## 相关文件"部分，列出需要修改的源文件',
-    });
-  }
-
-  return { score: Math.max(0, score), deductions };
-}
-
-/**
  * 评估解决方案
  */
-function evaluateSolution(description?: string): { score: number; deductions: QualityDeduction[] } {
+export function evaluateSolution(description?: string): { score: number; deductions: QualityDeduction[] } {
   const deductions: QualityDeduction[] = [];
   let score = 100;
 
@@ -1287,33 +1254,20 @@ export async function analyzeProject(
   const now = new Date();
   const staleThreshold = 7 * 24 * 60 * 60 * 1000; // 7 天
 
-  // 检测循环依赖
-  const visited = new Set<string>();
-  const recursionStack = new Set<string>();
+  // 构建依赖图（使用 dependency-graph 模块统一管理）
+  const depGraph = DependencyGraph.fromTasks(filteredTasks);
+  const graphAnomalies = depGraph.detectAnomalies();
   const cycleTasks = new Set<string>();
-
-  function detectCycle(taskId: string): boolean {
-    visited.add(taskId);
-    recursionStack.add(taskId);
-
-    const task = readTaskMeta(taskId, cwd);
-    if (task) {
-      for (const dep of task.dependencies) {
-        if (!visited.has(dep)) {
-          if (detectCycle(dep)) {
-            cycleTasks.add(taskId);
-            return true;
-          }
-        } else if (recursionStack.has(dep)) {
-          cycleTasks.add(taskId);
-          return true;
-        }
+  for (const anomaly of graphAnomalies) {
+    if (anomaly.type === 'cycle') {
+      for (const taskId of anomaly.nodeIds) {
+        cycleTasks.add(taskId);
       }
     }
-
-    recursionStack.delete(taskId);
-    return false;
   }
+  const graphOrphans = depGraph.findOrphans();
+  const graphBridges = depGraph.findBridgeNodes();
+  const graphRedundantDeps = depGraph.findRedundantDeps();
 
   for (const task of filteredTasks) {
     // 统计状态 (使用规范化函数)
@@ -1395,18 +1349,7 @@ export async function analyzeProject(
       }
     }
 
-    // 检测孤儿任务 (无依赖但优先级高且状态为 open)
-    const taskNormalizedPriority = normalizePriority(task.priority);
-    if (task.dependencies.length === 0 && taskNormalizedPriority === 'P0' && normalizedStatus === 'open') {
-      stats.orphan++;
-      issues.push({
-        taskId: task.id,
-        type: 'orphan',
-        severity: 'low',
-        message: 'P0紧急任务无依赖但未开始',
-        suggestion: '考虑将此任务添加到执行计划中',
-      });
-    }
+    // 孤儿任务由 dependency-graph 模块在循环后统一检测（全量，非仅 P0+open）
 
     // 检测旧格式优先级 (urgent/high/medium/low)
     if (['urgent', 'high', 'medium', 'low'].includes(task.priority)) {
@@ -1439,6 +1382,26 @@ export async function analyzeProject(
         severity: 'low',
         message: '任务 meta.json 缺少新规范字段',
         suggestion: '添加 reopenCount 和 requirementHistory 字段以符合最新规范',
+      });
+    }
+
+    // 检测数组字段为 null 或缺失
+    const ARRAY_FIELDS: (keyof TaskMeta)[] = [
+      'dependencies', 'history', 'checkpoints',
+      'subtaskIds', 'discussionTopics', 'fileWarnings', 'allowedTools',
+    ];
+    const nullArrayFields = ARRAY_FIELDS.filter(field => {
+      const val = task[field];
+      return val === null || val === undefined;
+    });
+    if (nullArrayFields.length > 0) {
+      issues.push({
+        taskId: task.id,
+        type: 'null_array_field',
+        severity: 'medium',
+        message: `任务数组字段为 null 或缺失: ${nullArrayFields.join(', ')}`,
+        suggestion: `使用 --fix 将缺失的数组字段初始化为空数组`,
+        details: { fields: nullArrayFields },
       });
     }
 
@@ -1818,7 +1781,7 @@ export async function analyzeProject(
     // 9. 检测依赖引用有效性
     if (task.dependencies && task.dependencies.length > 0) {
       for (const depId of task.dependencies) {
-        if (!taskExists(depId, cwd)) {
+        if (!depGraph.hasNode(depId)) {
           issues.push({
             taskId: task.id,
             type: 'invalid_dependency_ref',
@@ -2019,11 +1982,6 @@ export async function analyzeProject(
         details: { missingFiles: missingRefs },
       });
     }
-
-    // 检测循环依赖
-    if (!visited.has(task.id)) {
-      detectCycle(task.id);
-    }
   }
 
   // 检查检查点覆盖率
@@ -2107,25 +2065,63 @@ export async function analyzeProject(
     }
   }
 
-  // 添加循环依赖问题
-  for (const taskId of cycleTasks) {
+  // 使用 dependency-graph 模块的统一异常检测结果
+
+  // 循环依赖
+  for (const anomaly of graphAnomalies.filter(a => a.type === 'cycle')) {
     stats.cycle++;
     issues.push({
-      taskId,
+      taskId: anomaly.nodeIds[0] || '',
       type: 'cycle',
       severity: 'high',
-      message: '检测到循环依赖',
-      suggestion: '移除循环依赖以避免死锁',
+      message: anomaly.message,
+      suggestion: anomaly.suggestion,
+      details: anomaly.cyclePath ? { cyclePath: anomaly.cyclePath } : undefined,
+    });
+  }
+
+  // 孤儿任务（全量，非仅 P0+open）
+  for (const orphan of graphOrphans) {
+    stats.orphan++;
+    issues.push({
+      taskId: orphan.nodeId,
+      type: 'orphan',
+      severity: orphan.isInboundBridgeTarget ? 'medium' : 'low',
+      message: `孤立任务: ${orphan.node.title || orphan.nodeId}`,
+      suggestion: orphan.isInboundBridgeTarget
+        ? '该任务可能有隐含的依赖关系，请确认是否独立'
+        : '该任务为独立模块，无需处理',
+    });
+  }
+
+  // 桥接节点（信息性输出）
+  if (graphBridges.length > 0) {
+    issues.push({
+      taskId: '__graph__',
+      type: 'bridge_nodes',
+      severity: 'low',
+      message: renderBridgeReport(graphBridges),
+      suggestion: '桥接节点连接多个任务树，是关键依赖路径',
+    });
+  }
+
+  // 冗余依赖检测（传递闭包）
+  for (const rd of graphRedundantDeps) {
+    issues.push({
+      taskId: rd.from,
+      type: 'redundant_dep',
+      severity: 'low',
+      message: `冗余依赖: ${rd.from} → ${rd.to} (可通过 ${rd.viaPath.join(' → ')} 达到)`,
+      suggestion: `可移除直接依赖 ${rd.from} → ${rd.to}`,
+      details: { from: rd.from, to: rd.to, viaPath: rd.viaPath },
     });
   }
 
   // IR-08-03: 使用统一依赖推断引擎检测缺失的推断依赖
-  // 检测任务间有文件重叠但未建立显式依赖的情况
   const inferredDeps = inferDependenciesBatch(filteredTasks);
   for (const [taskId, deps] of inferredDeps) {
     const task = filteredTasks.find(t => t.id === taskId);
     if (!task) continue;
-    // 筛选出尚未在显式依赖中声明的推断依赖
     const explicitDeps = new Set(task.dependencies);
     const missingDeps = deps.filter(d => !explicitDeps.has(d.depTaskId));
     if (missingDeps.length > 0) {
@@ -2158,7 +2154,7 @@ export async function analyzeProject(
  * 重构版本：仅显示问题分析，不重复输出统计信息
  * CP-1: 支持 AI 增强分析选项
  */
-export async function showAnalysis(options: { compact?: boolean; deepAnalyze?: boolean; noAi?: boolean } = {}, cwd: string = process.cwd()): Promise<void> {
+export async function showAnalysis(options: { compact?: boolean; deepAnalyze?: boolean; noAi?: boolean; checkRange?: string } = {}, cwd: string = process.cwd()): Promise<void> {
   // CP-3: 模块日志 + 埋点初始化
   const logger = createLogger('analyze', cwd);
   const startTime = Date.now();
@@ -2168,7 +2164,28 @@ export async function showAnalysis(options: { compact?: boolean; deepAnalyze?: b
     noAi: !!options.noAi,
   };
 
-  const result = await analyzeProject(cwd, false, aiOptions);
+  // --check-range 过滤
+  let result = await analyzeProject(cwd, false, aiOptions);
+  if (options.checkRange) {
+    try {
+      const range = parseCheckRange(options.checkRange);
+      if (range.type !== 'all') {
+        const rangeTasks = getTasksByRange(range, cwd);
+        const allowedIds = new Set(rangeTasks.map(t => t.id));
+        result = {
+          ...result,
+          issues: result.issues.filter(i => allowedIds.has(i.taskId)),
+        };
+      }
+    } catch (e) {
+      if (e instanceof AnalyzeError) {
+        console.error(`❌ check-range 参数错误: ${e.message}`);
+        if (e.detail) console.error(`   ${e.detail}`);
+        process.exit(1);
+      }
+      throw e;
+    }
+  }
 
   const separator = options.compact ? '---' : '━'.repeat(SEPARATOR_WIDTH);
 
@@ -2185,6 +2202,25 @@ export async function showAnalysis(options: { compact?: boolean; deepAnalyze?: b
   console.log(`   孤儿任务: ${result.stats.orphan}`);
   console.log(`   循环依赖: ${result.stats.cycle}`);
   console.log(`   Abandoned 残留: ${result.stats.abandonedResidual}`);
+
+  // 依赖图异常摘要
+  const graphAnomalyIssues = result.issues.filter(
+    i => ['cycle', 'orphan', 'bridge_nodes', 'redundant_dep', 'invalid_dependency_ref', 'missing_inferred_dependency'].includes(i.type),
+  );
+  if (graphAnomalyIssues.length > 0) {
+    console.log('');
+    console.log('🔗 依赖关系分析:');
+    const anomalySummary = renderAnomalySummary(
+      graphAnomalyIssues.map(i => ({
+        type: i.type as any,
+        severity: i.severity as any,
+        nodeIds: [i.taskId],
+        message: i.message,
+        suggestion: i.suggestion,
+      })),
+    );
+    console.log(anomalySummary.split('\n').map(l => `   ${l}`).join('\n'));
+  }
   if (result.stats.resolvedWithoutVerification > 0) {
     console.log(`   缺少 verification: ${result.stats.resolvedWithoutVerification}`);
   }
@@ -2378,7 +2414,7 @@ export async function showStatus(
  * 计算 Reopen 统计
  * 优先使用 reopenCount 字段，回退到历史记录计算
  */
-function calculateReopenStats(tasks: TaskMeta[]): { reopenCount: number; topReopened: { taskId: string; title: string; count: number }[] } {
+export function calculateReopenStats(tasks: TaskMeta[]): { reopenCount: number; topReopened: { taskId: string; title: string; count: number }[] } {
   const reopenCount = tasks.filter(t => (t.reopenCount ?? 0) > 0).length;
 
   // 统计 reopen 次数：优先使用 reopenCount 字段
@@ -2427,7 +2463,7 @@ function countArchivedTasks(cwd: string): number {
 /**
  * 计算健康分数 (0-100)
  */
-function calculateHealthScore(result: AnalysisResult): number {
+export function calculateHealthScore(result: AnalysisResult): number {
   if (result.stats.total === 0) return 100;
 
   let score = 100;
@@ -2473,7 +2509,7 @@ interface CodeSearchResult {
 /**
  * 从验收标准提取关键词
  */
-function extractKeywordsFromCriteria(criteria: string): string[] {
+export function extractKeywordsFromCriteria(criteria: string): string[] {
   const keywords: string[] = [];
 
   // 移除常见的停用词
@@ -2875,7 +2911,7 @@ function generateCheckpointsFromCriteria(
 /**
  * 根据描述内容推断验证方法
  */
-function inferVerificationMethod(description: string): VerificationMethod {
+export function inferVerificationMethod(description: string): VerificationMethod {
   const lowerDesc = description.toLowerCase();
 
   // 测试相关
@@ -2984,7 +3020,7 @@ function generateTitleBasedCheckpoints(taskTitle: string): string[] {
  * 从任务描述提取验收标准
  * 与 harness-executor.ts 中的 extractAcceptanceCriteria 逻辑一致
  */
-function extractAcceptanceCriteriaFromDescription(description: string): string[] {
+export function extractAcceptanceCriteriaFromDescription(description: string): string[] {
   const criteria: string[] = [];
 
   // 尝试提取列表项

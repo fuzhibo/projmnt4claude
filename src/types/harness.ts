@@ -37,6 +37,8 @@ export interface HarnessConfig {
   phaseRetryLimits?: PhaseRetryLimits;
   /** 每个批次完成后自动 git commit */
   batchGitCommit: boolean;
+  /** 跳过基础字段验证失败时的流水线阻塞 (--force-continue) */
+  forceContinue: boolean;
 }
 
 /**
@@ -52,6 +54,7 @@ export const DEFAULT_HARNESS_CONFIG: Omit<HarnessConfig, 'cwd'> = {
   apiRetryAttempts: 3,
   apiRetryDelay: 60,
   batchGitCommit: false,
+  forceContinue: false,
 };
 
 /**
@@ -645,6 +648,10 @@ export interface HarnessStatusReport {
     id: string;
     attempt: number;
     maxRetries: number;
+    /** 重试的阶段 */
+    phase?: string;
+    /** 重试原因 */
+    reason?: string;
   }>;
 
   // --- CP-26: 重试历史记录 ---

@@ -115,6 +115,8 @@ export interface HarnessCommandOptions {
   skipHarnessGate?: boolean;
   /** 每个批次完成后自动 git commit */
   batchGitCommit?: boolean;
+  /** 跳过基础字段验证失败时的流水线阻塞 */
+  forceContinue?: boolean;
 }
 
 /**
@@ -157,6 +159,7 @@ export async function harnessCommand(
     apiRetryAttempts: options.apiRetryAttempts ? parseInt(options.apiRetryAttempts, 10) : DEFAULT_HARNESS_CONFIG.apiRetryAttempts,
     apiRetryDelay: options.apiRetryDelay ? parseInt(options.apiRetryDelay, 10) : DEFAULT_HARNESS_CONFIG.apiRetryDelay,
     batchGitCommit: options.batchGitCommit ?? DEFAULT_HARNESS_CONFIG.batchGitCommit,
+    forceContinue: options.forceContinue ?? DEFAULT_HARNESS_CONFIG.forceContinue,
     cwd,
   };
 
@@ -351,7 +354,7 @@ function getRuntimeStatePath(cwd: string): string {
 /**
  * 加载运行时状态
  */
-function loadRuntimeState(cwd: string): HarnessRuntimeState | null {
+export function loadRuntimeState(cwd: string): HarnessRuntimeState | null {
   const statePath = getRuntimeStatePath(cwd);
   if (!fs.existsSync(statePath)) {
     return null;
@@ -363,7 +366,7 @@ function loadRuntimeState(cwd: string): HarnessRuntimeState | null {
 
     // 版本检查：如果版本不匹配，重置状态
     if (data.stateFormatVersion !== 1) {
-      logger.warn('状态文件版本不匹配，重置运行时状态');
+      console.warn('状态文件版本不匹配，重置运行时状态');
       return null;
     }
 
@@ -378,7 +381,7 @@ function loadRuntimeState(cwd: string): HarnessRuntimeState | null {
     return data;
   } catch (error) {
     // 降级处理：日志记录错误但返回null而非抛出异常
-    logger.warn('加载运行时状态失败，重置状态:', error);
+    console.warn('加载运行时状态失败，重置状态:', error);
     return null;
   }
 }

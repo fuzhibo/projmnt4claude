@@ -26,6 +26,7 @@ import { getProjectDir } from './path.js';
 import { getDevRoleTemplate } from './role-prompts.js';
 import { archiveReportIfExists } from './harness-helpers.js';
 import { getAgent, buildEffectiveTools } from './headless-agent.js';
+import { createSessionAwareEngine } from './feedback-constraint-engine.js';
 import { loadPromptTemplate, resolveTemplate } from './prompt-templates.js';
 
 export class HarnessExecutor {
@@ -64,23 +65,51 @@ export class HarnessExecutor {
       const prompt = this.buildDevPrompt(task, sprintContract, timeoutMinutes, retryContext);
       console.log('\n   📝 开发提示词已生成');
 
-      // 3. 执行 headless Claude（通过 headless-agent 抽象层）
+      // 3. 执行 headless Claude（通过 FeedbackConstraintEngine 进行输出格式验证和反馈重试）
       console.log('\n   🤖 启动 Headless Claude...');
       const agent = getAgent(this.config.cwd);
       const effectiveTools = buildEffectiveTools('development', this.config.cwd, task);
-      const agentResult = await agent.invoke(prompt, {
+      const invokeOptions = {
         timeout: effectiveTimeout,
         allowedTools: effectiveTools.tools,
-        outputFormat: 'text',
+        outputFormat: 'text' as const,
         maxRetries: this.config.apiRetryAttempts,
         cwd: this.config.cwd,
         dangerouslySkipPermissions: effectiveTools.skipPermissions,
-      });
+      };
 
-      report.claudeOutput = agentResult.output;
-      report.duration = agentResult.durationMs;
+      const engine = createSessionAwareEngine(
+        'markdown',
+        [], // 开发阶段仅需非空输出验证，不需要 verdict 标记
+        1,  // maxRetriesOnError: 最多重试 1 次
+      );
+      const engineResult = await engine.runWithFeedback(
+        agent.invoke.bind(agent),
+        prompt,
+        invokeOptions,
+      );
 
-      if (agentResult.success) {
+      if (engineResult.retries > 0) {
+        console.log(`   🔄 开发输出格式验证不匹配，已重试 ${engineResult.retries} 次`);
+      }
+
+      report.claudeOutput = engineResult.result.output;
+      report.duration = engineResult.result.durationMs;
+
+      if (!engineResult.result.success) {
+        // Agent 调用本身失败（超时、进程异常等）
+        report.status = engineResult.result.exitCode === 124 ? 'timeout' : 'failed';
+        report.error = engineResult.result.error || `退出码: ${engineResult.result.exitCode}`;
+        console.log(`\n   ❌ 开发阶段失败: ${report.error}`);
+      } else if (!engineResult.passed) {
+        // 输出格式验证未通过（如空输出）
+        const violationMessages = engineResult.violations
+          .map(v => `${v.ruleId}: ${v.message}`)
+          .join('; ');
+        report.status = 'failed';
+        report.error = `开发输出格式验证未通过: ${violationMessages}`;
+        console.log(`\n   ❌ 开发输出格式验证未通过: ${violationMessages}`);
+      } else {
         report.status = 'success';
         console.log('\n   ✅ 开发阶段完成');
 
@@ -91,11 +120,6 @@ export class HarnessExecutor {
         // 5. 检查完成的检查点
         report.checkpointsCompleted = await this.checkCompletedCheckpoints(task, sprintContract);
         console.log(`   ✓ 完成检查点: ${report.checkpointsCompleted.length}/${sprintContract.checkpoints.length}`);
-
-      } else {
-        report.status = agentResult.exitCode === 124 ? 'timeout' : 'failed';
-        report.error = agentResult.error || `退出码: ${agentResult.exitCode}`;
-        console.log(`\n   ❌ 开发阶段失败: ${report.error}`);
       }
 
     } catch (error) {

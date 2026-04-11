@@ -11,10 +11,10 @@ import {
 } from '../utils/path';
 import { getAllTaskIds } from '../utils/task';
 import { SEPARATOR_WIDTH } from '../utils/format';
-import { parseTaskId, CURRENT_TASK_SCHEMA_VERSION } from '../types/task';
-import type { TaskIdInfo, TaskStatus } from '../types/task';
 import { Logger } from '../utils/logger';
 import { readConfig, writeConfig, ensureConfigDefaults } from './config';
+import { LogCollector, LogAnalyzerRegistry, AnalysisReporter } from '../utils/log-analyzer';
+import { getBuiltInAnalyzers } from '../utils/log-analyzers';
 
 /**
  * 检查结果接口
@@ -53,31 +53,19 @@ export async function runDoctor(fix: boolean = false, cwd: string = process.cwd(
     // 4. 检查项目技能文件
     results.push(...checkSkillFiles(cwd));
 
-    // 5. 检查任务命名格式
-    results.push(...checkTaskNaming(cwd));
-
-    // 6. 检查目录结构完整性
+    // 5. 检查目录结构完整性
     results.push(...checkDirectoryStructure(cwd));
 
-    // 7. 检查 Hooks 配置
+    // 6. 检查 Hooks 配置
     results.push(...checkHooksConfiguration(cwd));
 
-    // 8. 检查任务规范对齐（检测任务 meta.json 是否符合最新规范）
-    results.push(...checkTaskSpecificationAlignment(cwd));
-
-    // 9. 检查日志模块就绪性
+    // 7. 检查日志模块就绪性
     results.push(...checkLoggingModule(cwd));
 
-    // 10. 检查 Schema 版本合规（>=4）
-    results.push(...checkSchemaVersionCompliance(cwd));
-
-    // 11. 检查废弃状态残留
+    // 8. 检查废弃状态残留
     results.push(...checkDeprecatedStatuses(cwd));
 
-    // 12. 检查字段完整性（transitionNotes 初始化）
-    results.push(...checkFieldCompleteness(cwd));
-
-    // 13. Hook 配置已由 checkHooksConfiguration 统一检查
+    // 9. Hook 配置已由 checkHooksConfiguration 统一检查
   }
 
   // 显示结果
@@ -247,114 +235,6 @@ function checkSkillFiles(cwd: string): CheckResult[] {
 }
 
 /**
- * 检查任务命名格式
- */
-function checkTaskNaming(cwd: string): CheckResult[] {
-  const results: CheckResult[] = [];
-  const tasksDir = getTasksDir(cwd);
-
-  if (!fs.existsSync(tasksDir)) {
-    return [{
-      name: '任务命名格式',
-      status: 'ok',
-      message: '任务目录不存在（无任务）',
-      details: [],
-      fixable: false,
-    }];
-  }
-
-  const taskIds = getAllTaskIds(cwd);
-  const invalidFormatTasks: string[] = [];
-  const typeMismatchTasks: { taskId: string; idType: string; metaType: string }[] = [];
-
-  for (const taskId of taskIds) {
-    // 使用 parseTaskId 替代硬编码正则
-    const idInfo = parseTaskId(taskId);
-
-    // 检查格式是否合法（valid=true 且 format 为 old 或 new）
-    if (!idInfo.valid || (idInfo.format !== 'old' && idInfo.format !== 'new')) {
-      invalidFormatTasks.push(taskId);
-    }
-
-    // 检查 ID type 与 meta.json type 一致性（仅新格式有 type 信息）
-    if (idInfo.valid && idInfo.format === 'new' && idInfo.type) {
-      const metaPath = path.join(tasksDir, taskId, 'meta.json');
-      if (fs.existsSync(metaPath)) {
-        try {
-          const meta = JSON.parse(fs.readFileSync(metaPath, 'utf-8'));
-          if (meta.type && meta.type !== idInfo.type) {
-            typeMismatchTasks.push({
-              taskId,
-              idType: idInfo.type,
-              metaType: meta.type,
-            });
-          }
-        } catch {
-          // 忽略解析错误
-        }
-      }
-    }
-  }
-
-  // 报告 1: 格式不合法
-  if (invalidFormatTasks.length === 0) {
-    results.push({
-      name: '任务命名格式',
-      status: 'ok',
-      message: `所有 ${taskIds.length} 个任务命名格式正确`,
-      details: ['支持格式: TASK-XXX (旧) 或 TASK-{type}-{priority}-{slug}-{date} (新)'],
-      fixable: false,
-    });
-  } else {
-    results.push({
-      name: '任务命名格式',
-      status: 'warning',
-      message: `${invalidFormatTasks.length} 个任务命名格式不规范`,
-      details: [
-        '不规范的命名:',
-        ...invalidFormatTasks.slice(0, 5).map(t => `  - ${t}`),
-        ...(invalidFormatTasks.length > 5 ? [`  ... 还有 ${invalidFormatTasks.length - 5} 个`] : []),
-        '建议格式: TASK-{type}-{priority}-{slug}-{date}',
-      ],
-      fixable: false, // 任务重命名需要手动处理
-    });
-  }
-
-  // 报告 2: ID/meta type 不一致
-  if (typeMismatchTasks.length > 0) {
-    results.push({
-      name: '任务类型一致性',
-      status: 'warning',
-      message: `${typeMismatchTasks.length} 个任务的 ID 类型与 meta.json 不一致`,
-      details: [
-        '不一致的任务:',
-        ...typeMismatchTasks.slice(0, 5).map(t => `  - ${t.taskId}: ID=${t.idType}, meta=${t.metaType}`),
-        ...(typeMismatchTasks.length > 5 ? [`  ... 还有 ${typeMismatchTasks.length - 5} 个`] : []),
-        '建议: 手动修正 meta.json 中的 type 字段或重命名任务',
-      ],
-      fixable: false,
-    });
-  } else if (taskIds.length > 0) {
-    // 仅在有任务时报告一致性检查通过
-    const newFormatCount = taskIds.filter(id => {
-      const info = parseTaskId(id);
-      return info.valid && info.format === 'new' && info.type;
-    }).length;
-    if (newFormatCount > 0) {
-      results.push({
-        name: '任务类型一致性',
-        status: 'ok',
-        message: `${newFormatCount} 个新格式任务 ID 与 meta.json 类型一致`,
-        details: [],
-        fixable: false,
-      });
-    }
-  }
-
-  return results;
-}
-
-/**
  * 检查目录结构完整性
  */
 function checkDirectoryStructure(cwd: string): CheckResult[] {
@@ -506,70 +386,6 @@ function checkPluginInstallationScope(cwd: string): CheckResult[] {
     }
   } catch {
     // 忽略解析错误
-  }
-
-  return results;
-}
-
-/**
- * 检查任务规范对齐
- * 检测任务 meta.json 是否符合最新规范（reopenCount, requirementHistory 等字段）
- */
-function checkTaskSpecificationAlignment(cwd: string): CheckResult[] {
-  const results: CheckResult[] = [];
-  const tasksDir = getTasksDir(cwd);
-
-  if (!fs.existsSync(tasksDir)) {
-    return [{
-      name: '任务规范对齐',
-      status: 'ok',
-      message: '任务目录不存在（无任务）',
-      details: [],
-      fixable: false,
-    }];
-  }
-
-  const taskIds = getAllTaskIds(cwd);
-  const tasksNeedingMigration: string[] = [];
-
-  for (const taskId of taskIds) {
-    const metaPath = path.join(tasksDir, taskId, 'meta.json');
-    if (fs.existsSync(metaPath)) {
-      try {
-        const meta = JSON.parse(fs.readFileSync(metaPath, 'utf-8'));
-        // 检查是否缺少新规范字段
-        if (meta.reopenCount === undefined || meta.requirementHistory === undefined) {
-          tasksNeedingMigration.push(taskId);
-        }
-      } catch {
-        // 忽略解析错误
-      }
-    }
-  }
-
-  if (tasksNeedingMigration.length === 0) {
-    results.push({
-      name: '任务规范对齐',
-      status: 'ok',
-      message: `所有 ${taskIds.length} 个任务符合最新规范`,
-      details: ['✓ reopenCount 字段已设置', '✓ requirementHistory 字段已设置'],
-      fixable: false,
-    });
-  } else {
-    results.push({
-      name: '任务规范对齐',
-      status: 'warning',
-      message: `${tasksNeedingMigration.length} 个任务需要迁移到最新规范`,
-      details: [
-        '缺少字段: reopenCount, requirementHistory',
-        '需要迁移的任务:',
-        ...tasksNeedingMigration.slice(0, 5).map(t => `  - ${t}`),
-        ...(tasksNeedingMigration.length > 5 ? [`  ... 还有 ${tasksNeedingMigration.length - 5} 个`] : []),
-        '',
-        '💡 运行 projmnt4claude analyze --fix -y 自动迁移',
-      ],
-      fixable: true,
-    });
   }
 
   return results;
@@ -755,69 +571,6 @@ function checkLoggingModule(cwd: string): CheckResult[] {
 }
 
 /**
- * 检查任务 Schema 版本合规
- * 确保所有任务的 schemaVersion >= CURRENT_TASK_SCHEMA_VERSION
- */
-function checkSchemaVersionCompliance(cwd: string): CheckResult[] {
-  const results: CheckResult[] = [];
-  const tasksDir = getTasksDir(cwd);
-
-  if (!fs.existsSync(tasksDir)) {
-    return [{
-      name: 'Schema 版本合规',
-      status: 'ok',
-      message: '任务目录不存在（无任务）',
-      details: [],
-      fixable: false,
-    }];
-  }
-
-  const taskIds = getAllTaskIds(cwd);
-  const outdatedTasks: string[] = [];
-
-  for (const taskId of taskIds) {
-    const metaPath = path.join(tasksDir, taskId, 'meta.json');
-    if (fs.existsSync(metaPath)) {
-      try {
-        const meta = JSON.parse(fs.readFileSync(metaPath, 'utf-8'));
-        const schemaVersion = meta.schemaVersion ?? 0;
-        if (schemaVersion < CURRENT_TASK_SCHEMA_VERSION) {
-          outdatedTasks.push(`${taskId} (v${schemaVersion} < v${CURRENT_TASK_SCHEMA_VERSION})`);
-        }
-      } catch {
-        // 忽略解析错误
-      }
-    }
-  }
-
-  if (outdatedTasks.length === 0) {
-    results.push({
-      name: 'Schema 版本合规',
-      status: 'ok',
-      message: `所有 ${taskIds.length} 个任务 schema 版本 >= v${CURRENT_TASK_SCHEMA_VERSION}`,
-      details: [],
-      fixable: false,
-    });
-  } else {
-    results.push({
-      name: 'Schema 版本合规',
-      status: 'warning',
-      message: `${outdatedTasks.length} 个任务 schema 版本过时 (当前: v${CURRENT_TASK_SCHEMA_VERSION})`,
-      details: [
-        '版本过时的任务:',
-        ...outdatedTasks.slice(0, 5).map(t => `  - ${t}`),
-        ...(outdatedTasks.length > 5 ? [`  ... 还有 ${outdatedTasks.length - 5} 个`] : []),
-        '',
-        '💡 运行 projmnt4claude analyze --fix -y 自动迁移',
-      ],
-      fixable: true,
-    });
-  }
-
-  return results;
-}
-
-/**
  * 检查废弃状态残留
  * 检测任务 meta.json 中是否包含已废弃的 reopened/needs_human 状态
  */
@@ -875,68 +628,6 @@ function checkDeprecatedStatuses(cwd: string): CheckResult[] {
         '  - needs_human (v4 废弃): 应使用 open + resumeAction',
         '',
         '💡 运行 projmnt4claude analyze --fix -y 自动迁移',
-      ],
-      fixable: true,
-    });
-  }
-
-  return results;
-}
-
-/**
- * 检查字段完整性
- * 确保 transitionNotes 字段已初始化（v4 新增必需字段）
- */
-function checkFieldCompleteness(cwd: string): CheckResult[] {
-  const results: CheckResult[] = [];
-  const tasksDir = getTasksDir(cwd);
-
-  if (!fs.existsSync(tasksDir)) {
-    return [{
-      name: '字段完整性',
-      status: 'ok',
-      message: '任务目录不存在（无任务）',
-      details: [],
-      fixable: false,
-    }];
-  }
-
-  const taskIds = getAllTaskIds(cwd);
-  const incompleteTasks: string[] = [];
-
-  for (const taskId of taskIds) {
-    const metaPath = path.join(tasksDir, taskId, 'meta.json');
-    if (fs.existsSync(metaPath)) {
-      try {
-        const meta = JSON.parse(fs.readFileSync(metaPath, 'utf-8'));
-        if (meta.transitionNotes === undefined) {
-          incompleteTasks.push(taskId);
-        }
-      } catch {
-        // 忽略解析错误
-      }
-    }
-  }
-
-  if (incompleteTasks.length === 0) {
-    results.push({
-      name: '字段完整性',
-      status: 'ok',
-      message: `所有 ${taskIds.length} 个任务字段完整`,
-      details: ['✓ transitionNotes 已初始化'],
-      fixable: false,
-    });
-  } else {
-    results.push({
-      name: '字段完整性',
-      status: 'warning',
-      message: `${incompleteTasks.length} 个任务缺少 transitionNotes 字段`,
-      details: [
-        '缺少字段的任务:',
-        ...incompleteTasks.slice(0, 5).map(t => `  - ${t}`),
-        ...(incompleteTasks.length > 5 ? [`  ... 还有 ${incompleteTasks.length - 5} 个`] : []),
-        '',
-        '💡 运行 projmnt4claude analyze --fix -y 自动补全',
       ],
       fixable: true,
     });
@@ -1380,28 +1071,6 @@ main().catch(() => {
 
       fs.writeFileSync(settingsPath, JSON.stringify(settings, null, 2), 'utf-8');
       console.log(`  ✓ 已配置 Claude Code hooks`);
-    } else if (issue.name === 'Schema 版本合规') {
-      // 迁移过时的 schema 版本
-      const tasksDir = getTasksDir(cwd);
-      let fixedCount = 0;
-      for (const taskId of getAllTaskIds(cwd)) {
-        const metaPath = path.join(tasksDir, taskId, 'meta.json');
-        if (fs.existsSync(metaPath)) {
-          try {
-            const meta = JSON.parse(fs.readFileSync(metaPath, 'utf-8'));
-            const schemaVersion = meta.schemaVersion ?? 0;
-            if (schemaVersion < CURRENT_TASK_SCHEMA_VERSION) {
-              meta.schemaVersion = CURRENT_TASK_SCHEMA_VERSION;
-              meta.updatedAt = new Date().toISOString();
-              fs.writeFileSync(metaPath, JSON.stringify(meta, null, 2), 'utf-8');
-              fixedCount++;
-            }
-          } catch {
-            // 忽略解析错误
-          }
-        }
-      }
-      console.log(`  ✓ 已迁移 ${fixedCount} 个任务到 schema v${CURRENT_TASK_SCHEMA_VERSION}`);
     } else if (issue.name === '废弃状态检测') {
       // 迁移废弃状态 reopened/needs_human → open
       const tasksDir = getTasksDir(cwd);
@@ -1433,27 +1102,6 @@ main().catch(() => {
         }
       }
       console.log(`  ✓ 已迁移 ${fixedCount} 个废弃状态任务`);
-    } else if (issue.name === '字段完整性') {
-      // 补全缺失的 transitionNotes 字段
-      const tasksDir = getTasksDir(cwd);
-      let fixedCount = 0;
-      for (const taskId of getAllTaskIds(cwd)) {
-        const metaPath = path.join(tasksDir, taskId, 'meta.json');
-        if (fs.existsSync(metaPath)) {
-          try {
-            const meta = JSON.parse(fs.readFileSync(metaPath, 'utf-8'));
-            if (meta.transitionNotes === undefined) {
-              meta.transitionNotes = [];
-              meta.updatedAt = new Date().toISOString();
-              fs.writeFileSync(metaPath, JSON.stringify(meta, null, 2), 'utf-8');
-              fixedCount++;
-            }
-          } catch {
-            // 忽略解析错误
-          }
-        }
-      }
-      console.log(`  ✓ 已为 ${fixedCount} 个任务补全 transitionNotes 字段`);
     }
   }
 
@@ -1547,5 +1195,88 @@ export async function runBugReport(cwd: string = process.cwd()): Promise<void> {
     console.error('');
     console.error(`❌ Bug 报告生成失败: ${err instanceof Error ? err.message : String(err)}`);
     process.exit(1);
+  }
+}
+
+/**
+ * 运行深度诊断（--deep 模式）
+ *
+ * 在规则快速分析基础上，运行所有日志分析器（规则 + AI 混合策略），
+ * 提供更深入的问题检测和修复建议。
+ */
+export async function runDoctorDeep(cwd: string = process.cwd()): Promise<void> {
+  console.log('');
+  console.log('━'.repeat(SEPARATOR_WIDTH));
+  console.log('🔬 深度日志分析 (--deep)');
+  console.log('━'.repeat(SEPARATOR_WIDTH));
+  console.log('');
+
+  // 1. 先运行常规 doctor 检查
+  await runDoctor(false, cwd);
+
+  console.log('');
+  console.log('━'.repeat(SEPARATOR_WIDTH));
+  console.log('📊 日志深度分析');
+  console.log('━'.repeat(SEPARATOR_WIDTH));
+  console.log('');
+
+  // 2. 收集日志
+  const collector = new LogCollector(cwd);
+  const stats = collector.getStats();
+
+  if (stats.fileCount === 0) {
+    console.log('ℹ️  未找到日志文件，跳过日志分析');
+    console.log(`   日志目录: ${getLogsDir(cwd)}`);
+    return;
+  }
+
+  console.log(`📂 日志文件: ${stats.fileCount} 个 (${stats.totalSizeKB} KB)`);
+
+  // 收集最近 24 小时的日志
+  const entries = collector.collectSince(24, { maxEntries: 10000 });
+  console.log(`📋 日志条目: ${entries.length} 条 (最近 24 小时)`);
+  console.log('');
+
+  if (entries.length === 0) {
+    console.log('ℹ️  最近 24 小时无日志条目');
+    return;
+  }
+
+  // 3. 注册并运行所有分析器
+  const registry = new LogAnalyzerRegistry(cwd);
+  for (const analyzer of getBuiltInAnalyzers()) {
+    registry.register(analyzer);
+  }
+
+  console.log(`🔧 已注册 ${registry.size} 个分析器:`);
+  for (const analyzer of registry.getAll()) {
+    console.log(`   - ${analyzer.name} (${analyzer.category}) [${analyzer.supportedStrategies.join(', ')}]`);
+  }
+  console.log('');
+
+  // 使用 hybrid 策略（规则 + AI）
+  const results = await registry.runAll(entries, 'hybrid', { cwd, enableAI: true });
+
+  // 4. 生成报告
+  const reporter = new AnalysisReporter();
+  const report = reporter.buildReport(results, stats.fileCount, entries.length);
+
+  console.log(reporter.formatText(report));
+
+  // 5. 输出建议
+  if (report.summary.totalFindings > 0) {
+    console.log('━'.repeat(SEPARATOR_WIDTH));
+    console.log(`📊 发现 ${report.summary.totalFindings} 个问题`);
+
+    const critical = report.summary.bySeverity['critical'] || 0;
+    const errors = report.summary.bySeverity['error'] || 0;
+    if (critical > 0) {
+      console.log(`🔴 ${critical} 个严重问题需要立即处理`);
+    }
+    if (errors > 0) {
+      console.log(`❌ ${errors} 个错误需要关注`);
+    }
+  } else {
+    console.log('✅ 日志深度分析完成，未发现异常');
   }
 }

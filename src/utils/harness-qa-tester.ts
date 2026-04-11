@@ -238,6 +238,29 @@ export class HarnessQATester {
       };
     }
 
+    // 验证规则未通过（如缺少 VERDICT 标记），直接返回 NOPASS 避免解析失败
+    if (!engineResult.passed) {
+      const violationMessages = engineResult.violations
+        .map((v: { ruleId: string; message: string }) => `${v.ruleId}: ${v.message}`)
+        .join('; ');
+      console.log(`   ⚠️  QA 验证输出格式验证未通过: ${violationMessages}`);
+
+      // 尝试从原始输出中提取可用信息
+      const rawOutput = engineResult.result.output || '';
+      const parsed = this.parseQAResult(rawOutput);
+      // 如果解析到了有效结果（非默认原因），使用解析结果
+      if (parsed.reason && parsed.reason !== '无法解析判定结果') {
+        return parsed;
+      }
+
+      return {
+        passed: false,
+        reason: `QA 验证输出格式不符合要求: ${violationMessages}`,
+        failures: [],
+        failedCheckpoints: [],
+      };
+    }
+
     // 解析验证结果
     return this.parseQAResult(engineResult.result.output || '');
   }

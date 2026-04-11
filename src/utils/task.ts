@@ -32,7 +32,19 @@ export function readTaskMeta(taskId: string, cwd: string = process.cwd()): TaskM
       return null;
     }
     const content = fs.readFileSync(metaPath, 'utf-8');
-    return JSON.parse(content) as TaskMeta;
+    const parsed = JSON.parse(content) as TaskMeta;
+    // 确保所有数组字段都有默认空数组，防止下游访问 .length 抛出 TypeError
+    parsed.dependencies = parsed.dependencies ?? [];
+    parsed.history = parsed.history ?? [];
+    parsed.checkpoints = parsed.checkpoints ?? [];
+    parsed.subtaskIds = parsed.subtaskIds ?? [];
+    parsed.discussionTopics = parsed.discussionTopics ?? [];
+    parsed.fileWarnings = parsed.fileWarnings ?? [];
+    parsed.allowedTools = parsed.allowedTools ?? [];
+    parsed.requirementHistory = parsed.requirementHistory ?? [];
+    parsed.transitionNotes = parsed.transitionNotes ?? [];
+    parsed.phaseHistory = parsed.phaseHistory ?? [];
+    return parsed;
   } catch {
     return null;
   }

@@ -44,7 +44,9 @@ import { HarnessEvaluator } from './harness-evaluator.js';
 import { RetryHandler } from './harness-retry.js';
 import { HarnessStatusReporter } from './harness-status-reporter.js';
 import { saveRuntimeState } from '../commands/harness.js';
+import { validateBasicFields } from './quality-gate.js';
 import { listPending, generateVerificationReport, getQueueStats, enqueueBatch } from './harness-verification-queue.js';
+import { DependencyGraph, executeFailureCascade } from './dependency-graph/index.js';
 import { SEPARATOR_WIDTH } from './format';
 
 /** 重新评估最大次数（独立于重试次数） */
@@ -137,8 +139,12 @@ export class AssemblyLine {
         } else if (record.finalStatus === 'in_progress' && state.taskQueue.includes(taskId)) {
           state.retryingTasks.push(taskId);
           const retryCount = state.retryCounter.get(taskId) || 0;
-          const devLimit = this.getPhaseRetryLimit('development');
-          this.statusReporter.recordTaskRetrying(taskId, retryCount + 1, devLimit);
+          // 推断重试阶段：从最近的时间线条目获取
+          const lastRetryEntry = record.timeline.findLast(e => e.event === 'retry');
+          const retryPhase = lastRetryEntry?.data?.phase as string | undefined;
+          const retryReason = lastRetryEntry?.description;
+          const phaseLimit = retryPhase ? this.getPhaseRetryLimit(retryPhase as 'development' | 'code_review' | 'qa' | 'evaluation') : this.getPhaseRetryLimit('development');
+          this.statusReporter.recordTaskRetrying(taskId, retryCount + 1, phaseLimit, retryPhase || 'development', retryReason);
         }
 
         // 更新状态
@@ -868,79 +874,99 @@ export class AssemblyLine {
   /**
    * 上游失败级联：当任务失败时，将依赖该任务的下游任务标记为 failed
    *
-   * 遍历队列中剩余任务，检查其 dependencies 是否包含失败任务 ID，
-   * 若包含则标记 failed(failureReason='upstream_failed') 并从队列中移除。
+   * 使用 dependency-graph/cascade.ts 的 executeFailureCascade 替代内联线性扫描，
+   * 支持多级传递级联（A→B→C），而非仅直接依赖。
    */
   private cascadeFailureToDownstream(failedTaskId: string, state: HarnessRuntimeState): void {
-    if (!state.failedTasks) state.failedTasks = [];
-    const failedIds = new Set(state.failedTasks);
+    // 收集队列中剩余任务的元数据
+    const remainingMeta = new Map<string, TaskMeta>();
+    for (let i = state.currentIndex + 1; i < state.taskQueue.length; i++) {
+      const taskId = state.taskQueue[i];
+      if (taskId && !remainingMeta.has(taskId)) {
+        const task = readTaskMeta(taskId, this.config.cwd);
+        if (task) remainingMeta.set(taskId, task);
+      }
+    }
 
-    // 遍历队列中剩余的任务（从 currentIndex+1 开始）
+    if (remainingMeta.size === 0) return;
+
+    // 通过依赖图模块计算级联影响（支持多级传递）
+    const graph = DependencyGraph.fromTasks([...remainingMeta.values()]);
+    const completedTaskIds = new Set(
+      state.records
+        .filter(r => r.finalStatus === 'resolved')
+        .map(r => r.taskId)
+    );
+    const { affectedTasks } = executeFailureCascade(
+      failedTaskId, graph, this.config.cwd, completedTaskIds
+    );
+
+    if (affectedTasks.length === 0) return;
+
+    // 对受影响任务执行标记和记录
+    const affectedSet = new Set(affectedTasks);
     const toRemove: number[] = [];
+    const now = new Date().toISOString();
+
     for (let i = state.currentIndex + 1; i < state.taskQueue.length; i++) {
       const downstreamId = state.taskQueue[i];
-      if (!downstreamId || failedIds.has(downstreamId)) continue;
+      if (!downstreamId || !affectedSet.has(downstreamId)) continue;
 
-      const downstreamTask = readTaskMeta(downstreamId, this.config.cwd);
+      const downstreamTask = remainingMeta.get(downstreamId);
       if (!downstreamTask) continue;
 
-      // 检查是否依赖已失败的任务
-      if (downstreamTask.dependencies.includes(failedTaskId)) {
-        console.log(`   ⛓️  上游失败级联: 任务 ${downstreamId} 依赖失败任务 ${failedTaskId}，标记为 failed(upstream_failed)`);
+      console.log(`   ⛓️  上游失败级联: 任务 ${downstreamId} 因上游 ${failedTaskId} 失败，标记为 failed(upstream_failed)`);
 
-        // 标记下游任务为 failed
-        try {
-          downstreamTask.status = 'failed';
-          downstreamTask.failureReason = 'upstream_failed';
-          downstreamTask.updatedAt = new Date().toISOString();
-          if (!downstreamTask.transitionNotes) {
-            downstreamTask.transitionNotes = [];
-          }
-          downstreamTask.transitionNotes.push({
-            timestamp: new Date().toISOString(),
-            fromStatus: downstreamTask.status,
-            toStatus: 'failed',
-            note: `上游任务 ${failedTaskId} 失败，级联标记为 failed(upstream_failed)`,
-            author: 'assembly-line-cascade',
-          });
-          writeTaskMeta(downstreamTask, this.config.cwd);
-        } catch (err) {
-          console.error(`   ⚠️ 级联标记 ${downstreamId} 失败: ${err instanceof Error ? err.message : String(err)}`);
+      // 标记下游任务为 failed
+      try {
+        const previousStatus = downstreamTask.status;
+        downstreamTask.status = 'failed';
+        downstreamTask.failureReason = 'upstream_failed';
+        downstreamTask.updatedAt = now;
+        if (!downstreamTask.transitionNotes) {
+          downstreamTask.transitionNotes = [];
         }
-
-        // 创建执行记录
-        const cascadeRecord = createDefaultExecutionRecord(downstreamTask);
-        cascadeRecord.finalStatus = 'failed';
-        cascadeRecord.timeline.push({
-          timestamp: new Date().toISOString(),
-          event: 'failed',
-          description: `上游任务 ${failedTaskId} 失败，级联跳过`,
-          data: { upstreamTaskId: failedTaskId, failureReason: 'upstream_failed' },
+        downstreamTask.transitionNotes.push({
+          timestamp: now,
+          fromStatus: previousStatus,
+          toStatus: 'failed',
+          note: `上游任务 ${failedTaskId} 失败，级联标记为 failed(upstream_failed)`,
+          author: 'assembly-line-cascade',
         });
-        state.records.push(cascadeRecord);
-
-        if (!state.failedTasks) state.failedTasks = [];
-        state.failedTasks.push(downstreamId);
-        failedIds.add(downstreamId);
-
-        // 报告级联失败到状态追踪
-        this.statusReporter.recordTaskFailed(downstreamId, `upstream_failed: ${failedTaskId}`, 'cascade');
-
-        // 存储上游失败信息到重试上下文（CP-19: 供 task reopen 恢复时使用）
-        this.taskRetryContexts.set(downstreamId, {
-          previousFailureReason: `上游任务 ${failedTaskId} 失败，级联标记为 failed`,
-          previousPhase: 'development',
-          attemptNumber: 1,
-          upstreamFailureInfo: {
-            taskId: failedTaskId,
-            reason: 'upstream_failed',
-            failedAt: new Date().toISOString(),
-          },
-        });
-
-        // 记录需要从队列中移除的索引
-        toRemove.push(i);
+        writeTaskMeta(downstreamTask, this.config.cwd);
+      } catch (err) {
+        console.error(`   ⚠️ 级联标记 ${downstreamId} 失败: ${err instanceof Error ? err.message : String(err)}`);
       }
+
+      // 创建执行记录
+      const cascadeRecord = createDefaultExecutionRecord(downstreamTask);
+      cascadeRecord.finalStatus = 'failed';
+      cascadeRecord.timeline.push({
+        timestamp: now,
+        event: 'failed',
+        description: `上游任务 ${failedTaskId} 失败，级联跳过`,
+        data: { upstreamTaskId: failedTaskId, failureReason: 'upstream_failed' },
+      });
+      state.records.push(cascadeRecord);
+
+      if (!state.failedTasks) state.failedTasks = [];
+      state.failedTasks.push(downstreamId);
+
+      this.statusReporter.recordTaskFailed(downstreamId, `upstream_failed: ${failedTaskId}`, 'cascade');
+
+      // 存储上游失败信息到重试上下文（CP-19: 供 task reopen 恢复时使用）
+      this.taskRetryContexts.set(downstreamId, {
+        previousFailureReason: `上游任务 ${failedTaskId} 失败，级联标记为 failed`,
+        previousPhase: 'development',
+        attemptNumber: 1,
+        upstreamFailureInfo: {
+          taskId: failedTaskId,
+          reason: 'upstream_failed',
+          failedAt: now,
+        },
+      });
+
+      toRemove.push(i);
     }
 
     // 从队列中移除被级联失败的任务（倒序移除以避免索引偏移）
@@ -1029,6 +1055,7 @@ export class AssemblyLine {
 
         addTimeline('retry', `任务将从开发阶段重试 (第 ${devRetryCount + 1}/${devPhaseLimit} 次)`, { action, phase });
         console.log(`⚠️  任务将从开发阶段重试 (第 ${devRetryCount + 1}/${devPhaseLimit} 次)`);
+        this.statusReporter.recordTaskRetrying(taskId, devRetryCount + 1, devPhaseLimit, 'development', `${phase} 阶段失败，从开发阶段重试`);
         record.finalStatus = 'in_progress';
         record.retryCount = devRetryCount + 1;
         return record;
@@ -1055,6 +1082,7 @@ export class AssemblyLine {
 
         addTimeline('retry', `任务将从开发阶段修复小问题 (${phase} 第 ${phaseRetryCount + 1}/${phaseLimit} 次)`, { action, phase });
         console.log(`🔧 任务将从开发阶段修复小问题 (${phase} 第 ${phaseRetryCount + 1}/${phaseLimit} 次)`);
+        this.statusReporter.recordTaskRetrying(taskId, phaseRetryCount + 1, phaseLimit, phase, `${phase} 阶段小问题，minor_fix`);
         record.finalStatus = 'in_progress';
         record.retryCount = phaseRetryCount + 1;
         return record;
@@ -1084,6 +1112,7 @@ export class AssemblyLine {
 
         addTimeline('retry', `任务将从 QA 阶段重试 (第 ${qaRetryCount + 1}/${qaPhaseLimit} 次)`, { action, phase });
         console.log(`⚠️  任务将从 QA 阶段重试 (第 ${qaRetryCount + 1}/${qaPhaseLimit} 次)`);
+        this.statusReporter.recordTaskRetrying(taskId, qaRetryCount + 1, qaPhaseLimit, 'qa', `${phase} 阶段失败，从 QA 阶段重试`);
         record.finalStatus = 'in_progress';
         record.retryCount = qaRetryCount + 1;
         return record;
@@ -1110,6 +1139,7 @@ export class AssemblyLine {
 
         addTimeline('retry', `任务将重新评估 (${reevalCount + 1}/${MAX_REEVALUATE_ATTEMPTS})`, { action, reevalCount: reevalCount + 1 });
         console.log(`🔄  任务将重新评估 (${reevalCount + 1}/${MAX_REEVALUATE_ATTEMPTS})`);
+        this.statusReporter.recordTaskRetrying(taskId, reevalCount + 1, MAX_REEVALUATE_ATTEMPTS, 'evaluation', `评估不明确，重新评估`);
         record.finalStatus = 'in_progress';
         return record;
       }
@@ -1223,6 +1253,19 @@ export class AssemblyLine {
       if (!task) {
         errors.push(`任务 ${taskId} 不存在，无法验证流转完整性`);
         return { valid: false, errors };
+      }
+
+      // 复用 quality-gate.ts 的 validateBasicFields 做基础字段兜底检查
+      const basicResult = validateBasicFields(task);
+      if (!basicResult.valid) {
+        if (this.config.forceContinue) {
+          console.warn(`   ⚠️ 基础字段验证失败 (--force-continue 跳过阻塞):`);
+          for (const err of basicResult.errors) {
+            console.warn(`      - ${err}`);
+          }
+        } else {
+          errors.push(...basicResult.errors);
+        }
       }
 
       // 检查 1: 任务状态是否与期望一致

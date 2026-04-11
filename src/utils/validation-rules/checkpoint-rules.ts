@@ -317,6 +317,268 @@ function extractCheckpointDescriptions(output: unknown): string[] {
   return [];
 }
 
+/**
+ * 从未知输出中提取检查点对象数组。
+ *
+ * 支持的输入格式：
+ * - Array<object> — 对象数组，每个元素作为检查点对象
+ * - object (含 checkpoints 字段) — 提取 checkpoints 数组
+ * - string (JSON) — 尝试解析后递归提取
+ */
+function extractCheckpointObjects(output: unknown): Record<string, unknown>[] {
+  if (Array.isArray(output)) {
+    return output.filter(
+      (item): item is Record<string, unknown> =>
+        item !== null && typeof item === 'object' && !Array.isArray(item),
+    );
+  }
+
+  if (typeof output === 'string') {
+    try {
+      const parsed = JSON.parse(output.trim());
+      return extractCheckpointObjects(parsed);
+    } catch {
+      return [];
+    }
+  }
+
+  if (output !== null && typeof output === 'object') {
+    const obj = output as Record<string, unknown>;
+    if (Array.isArray(obj.checkpoints)) {
+      return obj.checkpoints.filter(
+        (item): item is Record<string, unknown> =>
+          item !== null && typeof item === 'object' && !Array.isArray(item),
+      );
+    }
+  }
+
+  return [];
+}
+
+// ============================================================
+// 结构化检查点验证规则（Rule 6-8）
+// ============================================================
+
+/** 需要验证命令的自动化验证方法 */
+const METHODS_REQUIRING_COMMANDS: string[] = [
+  'functional_test',
+  'unit_test',
+  'integration_test',
+  'e2e_test',
+  'automated',
+  'lint',
+];
+
+/** 允许的检查点描述前缀（验证类别标识） */
+export const VALID_CHECKPOINT_PREFIXES: ReadonlyArray<string> = [
+  '[ai review]',
+  '[ai qa]',
+  '[human qa]',
+  '[script]',
+];
+
+/**
+ * 根据检查点前缀映射到 Harness Design 阶段
+ *
+ * 将验证类别前缀映射为流水线阶段，供检查点阶段推断使用。
+ * 无前缀或未知前缀返回 null。
+ *
+ * @param description - 检查点描述文本
+ * @returns 对应的 Harness Design 阶段名称，或 null
+ */
+export function getCheckpointPhase(description: string): string | null {
+  if (!description || typeof description !== 'string') return null;
+  const trimmed = description.trim().toLowerCase();
+  if (trimmed.startsWith('[ai review]')) return 'code_review';
+  if (trimmed.startsWith('[ai qa]')) return 'qa_verification';
+  if (trimmed.startsWith('[human qa]')) return 'human_verification';
+  if (trimmed.startsWith('[script]')) return 'evaluation';
+  return null;
+}
+
+/**
+ * Rule 6: checkpointRequiredPrefix (severity: error)
+ * 检查点描述必须以验证类别前缀开头: [ai review] / [ai qa] / [human qa] / [script]
+ */
+export const checkpointRequiredPrefix: ValidationRule = {
+  id: 'checkpoint-required-prefix',
+  description: '检查点描述必须以 [ai review]/[ai qa]/[human qa]/[script] 前缀开头',
+  severity: 'error' as const,
+  check: (output: unknown): ValidationViolation | null => {
+    const checkpoints = extractCheckpointObjects(output);
+    if (checkpoints.length === 0) return null;
+
+    const invalid = checkpoints.filter(cp => {
+      const desc = cp['description'];
+      if (typeof desc !== 'string') return true;
+      const trimmed = desc.trim().toLowerCase();
+      return !VALID_CHECKPOINT_PREFIXES.some(prefix => trimmed.startsWith(prefix));
+    });
+
+    if (invalid.length === 0) return null;
+
+    return {
+      ruleId: 'checkpoint-required-prefix',
+      severity: 'error',
+      message: `${invalid.length} 条检查点描述缺少验证类别前缀 ([ai review]/[ai qa]/[human qa]/[script]): ${invalid.map(cp => `"${cp['description'] ?? cp['id'] ?? 'unknown'}"`).join(', ')}`,
+    };
+  },
+};
+
+/**
+ * Rule 7: checkpointHasVerificationCommands (severity: warning)
+ * 使用自动化验证方法的检查点应包含验证命令或步骤
+ */
+export const checkpointHasVerificationCommands: ValidationRule = {
+  id: 'checkpoint-has-verification-commands',
+  description: '使用自动化验证方法的检查点应包含 verification.commands 或 verification.steps',
+  severity: 'warning' as const,
+  check: (output: unknown): ValidationViolation | null => {
+    const checkpoints = extractCheckpointObjects(output);
+    if (checkpoints.length === 0) return null;
+
+    const missing: Record<string, unknown>[] = [];
+
+    for (const cp of checkpoints) {
+      const verification = cp['verification'] as Record<string, unknown> | undefined;
+      if (!verification || typeof verification !== 'object') continue;
+
+      const method = verification['method'] as string;
+      if (!method || !METHODS_REQUIRING_COMMANDS.includes(method)) continue;
+
+      const commands = verification['commands'] as unknown[] | undefined;
+      const steps = verification['steps'] as unknown[] | undefined;
+      const hasCommands = Array.isArray(commands) && commands.length > 0;
+      const hasSteps = Array.isArray(steps) && steps.length > 0;
+
+      if (!hasCommands && !hasSteps) {
+        missing.push(cp);
+      }
+    }
+
+    if (missing.length === 0) return null;
+
+    return {
+      ruleId: 'checkpoint-has-verification-commands',
+      severity: 'warning',
+      message: `${missing.length} 条检查点的自动化验证方法缺少 commands 或 steps: ${missing.map(cp => {
+        const desc = (cp['description'] as string) || (cp['id'] as string) || 'unknown';
+        const method = ((cp['verification'] as Record<string, unknown>)?.['method'] as string) || '';
+        return `"${desc}" (method: ${method})`;
+      }).join(', ')}`,
+    };
+  },
+};
+
+/**
+ * 检测字符串值中的 JSON 格式问题：
+ * - 未转义引号（值中间出现裸引号）
+ * - 控制字符（\x00-\x1F 除 \t \n \r 外）
+ * - 截断/不完整的字符串
+ */
+function detectStringFormatIssues(value: string): string[] {
+  const issues: string[] = [];
+
+  // 检测未转义的控制字符
+  if (/[\x00-\x08\x0b\x0c\x0e-\x1f]/.test(value)) {
+    issues.push('contains unescaped control characters');
+  }
+
+  // 检测未转义引号：字符串中间出现 " 但不是 \" 或开头/结尾的引号
+  // 先去除合法转义引号，再检查是否有裸引号混在字符串中间
+  const withoutEscapes = value.replace(/\\"/g, '');
+  // 匹配: 非引号字符 + 裸引号 + 非引号字符 (表示引号嵌入在文本中)
+  if (/[^"]"[^"]/.test(withoutEscapes)) {
+    issues.push('contains unescaped quotes');
+  }
+
+  return issues;
+}
+
+/**
+ * Rule 8: metaJsonValid (severity: error)
+ * 验证任务 meta.json 结构完整性和 JSON 格式正确性
+ */
+export const metaJsonValid: ValidationRule = {
+  id: 'meta-json-valid',
+  description: 'meta.json 必须包含必需字段、值合法且 JSON 格式正确',
+  severity: 'error' as const,
+  check: (output: unknown): ValidationViolation | null => {
+    // JSON 格式验证：当输入为字符串时，尝试解析并捕获语法错误
+    if (typeof output === 'string') {
+      try {
+        JSON.parse(output);
+      } catch (e) {
+        const msg = e instanceof Error ? e.message : String(e);
+        return {
+          ruleId: 'meta-json-valid',
+          severity: 'error',
+          message: `meta.json JSON 格式错误: ${msg}`,
+        };
+      }
+      // 解析成功后递归验证结构
+      return metaJsonValid.check(JSON.parse(output));
+    }
+
+    if (typeof output !== 'object' || output === null) return null;
+
+    const obj = output as Record<string, unknown>;
+    const errors: string[] = [];
+
+    // 必需字段检查
+    if (!obj['id'] || typeof obj['id'] !== 'string') errors.push('id');
+    if (!obj['title'] || typeof obj['title'] !== 'string') errors.push('title');
+    if (!obj['type'] || typeof obj['type'] !== 'string') errors.push('type');
+    if (!obj['status'] || typeof obj['status'] !== 'string') errors.push('status');
+    if (!Array.isArray(obj['dependencies'])) errors.push('dependencies');
+    if (!Array.isArray(obj['history'])) errors.push('history');
+    if (!Array.isArray(obj['checkpoints'])) errors.push('checkpoints');
+    if (!Array.isArray(obj['subtaskIds'])) errors.push('subtaskIds');
+    if (!Array.isArray(obj['discussionTopics'])) errors.push('discussionTopics');
+    if (!Array.isArray(obj['fileWarnings'])) errors.push('fileWarnings');
+    if (!Array.isArray(obj['allowedTools'])) errors.push('allowedTools');
+    if (!obj['createdAt'] || typeof obj['createdAt'] !== 'string') errors.push('createdAt');
+    if (!obj['updatedAt'] || typeof obj['updatedAt'] !== 'string') errors.push('updatedAt');
+
+    // 字符串字段 JSON 格式检查（未转义引号、控制字符等）
+    const stringFields = ['id', 'title', 'type', 'status', 'description'] as const;
+    for (const field of stringFields) {
+      const val = obj[field];
+      if (typeof val === 'string') {
+        const issues = detectStringFormatIssues(val);
+        if (issues.length > 0) {
+          errors.push(`${field}(${issues.join('; ')})`);
+        }
+      }
+    }
+
+    // 状态值校验
+    const validStatuses = [
+      'open', 'in_progress', 'wait_review', 'wait_qa', 'wait_complete',
+      'resolved', 'closed', 'abandoned', 'failed',
+    ];
+    const status = obj['status'];
+    if (typeof status === 'string' && !validStatuses.includes(status)) {
+      errors.push(`status(Invalid value: "${status}")`);
+    }
+
+    // 优先级值校验
+    const validPriorities = ['P0', 'P1', 'P2', 'P3', 'Q1', 'Q2', 'Q3', 'Q4'];
+    const priority = obj['priority'];
+    if (priority !== undefined && typeof priority === 'string' && !validPriorities.includes(priority)) {
+      errors.push(`priority(Invalid value: "${priority}")`);
+    }
+
+    if (errors.length === 0) return null;
+
+    return {
+      ruleId: 'meta-json-valid',
+      severity: 'error',
+      message: `meta.json 验证失败: ${errors.join(', ')}`,
+    };
+  },
+};
+
 // ============================================================
 // 导出规则集
 // ============================================================
@@ -328,4 +590,7 @@ export const checkpointValidationRules: ValidationRule[] = [
   checkpointCountControl,
   checkpointVerbPrefix,
   checkpointMinLength,
+  checkpointRequiredPrefix,
+  checkpointHasVerificationCommands,
+  metaJsonValid,
 ];

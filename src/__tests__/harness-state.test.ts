@@ -1,0 +1,349 @@
+import { describe, test, expect, beforeEach, afterEach } from 'bun:test';
+import * as fs from 'fs';
+import * as path from 'path';
+import * as os from 'os';
+import {
+  buildBatchAwareQueue,
+  saveRuntimeState,
+  loadRuntimeState,
+} from '../commands/harness.js';
+import type { HarnessConfig, HarnessRuntimeState } from '../types/harness.js';
+import { createDefaultRuntimeState } from '../types/harness.js';
+
+function createTestConfig(cwd: string): HarnessConfig {
+  return {
+    maxRetries: 3,
+    timeout: 60,
+    parallel: 1,
+    dryRun: false,
+    continue: false,
+    jsonOutput: false,
+    cwd,
+    apiRetryAttempts: 0,
+    apiRetryDelay: 10,
+    batchGitCommit: false,
+  };
+}
+
+function setupProjectDir(tmpDir: string): string {
+  const projDir = path.join(tmpDir, '.projmnt4claude');
+  fs.mkdirSync(projDir, { recursive: true });
+  return projDir;
+}
+
+function stateFilePath(tmpDir: string): string {
+  return path.join(tmpDir, '.projmnt4claude', 'harness-state.json');
+}
+
+// ============== buildBatchAwareQueue ==============
+
+describe('buildBatchAwareQueue', () => {
+  test('returns empty batch info when batches is undefined', () => {
+    const result = buildBatchAwareQueue(['T1', 'T2', 'T3']);
+    expect(result.taskQueue).toEqual(['T1', 'T2', 'T3']);
+    expect(result.batchBoundaries).toEqual([]);
+    expect(result.batchLabels).toEqual([]);
+    expect(result.batchParallelizable).toEqual([]);
+  });
+
+  test('returns empty batch info when batches is empty array', () => {
+    const result = buildBatchAwareQueue(['T1', 'T2'], []);
+    expect(result.batchBoundaries).toEqual([]);
+    expect(result.batchLabels).toEqual([]);
+    expect(result.batchParallelizable).toEqual([]);
+  });
+
+  test('builds single batch with multiple tasks', () => {
+    const result = buildBatchAwareQueue(['T1', 'T2', 'T3'], [['T1', 'T2', 'T3']]);
+    expect(result.batchBoundaries).toEqual([0]);
+    expect(result.batchLabels).toEqual(['批次 1']);
+    expect(result.batchParallelizable).toEqual([true]);
+  });
+
+  test('builds single batch with single task (not parallelizable)', () => {
+    const result = buildBatchAwareQueue(['T1'], [['T1']]);
+    expect(result.batchBoundaries).toEqual([0]);
+    expect(result.batchLabels).toEqual(['批次 1']);
+    expect(result.batchParallelizable).toEqual([false]);
+  });
+
+  test('builds multiple batches with correct offset boundaries', () => {
+    const result = buildBatchAwareQueue(
+      ['T1', 'T2', 'T3', 'T4', 'T5'],
+      [['T1', 'T2'], ['T3', 'T4'], ['T5']]
+    );
+    expect(result.batchBoundaries).toEqual([0, 2, 4]);
+    expect(result.batchLabels).toEqual(['批次 1', '批次 2', '批次 3']);
+    expect(result.batchParallelizable).toEqual([true, true, false]);
+  });
+
+  test('preserves original taskQueue reference', () => {
+    const queue = ['A', 'B', 'C'];
+    const result = buildBatchAwareQueue(queue, [['A', 'B', 'C']]);
+    expect(result.taskQueue).toBe(queue);
+  });
+
+  test('labels batches sequentially starting from 1', () => {
+    const result = buildBatchAwareQueue(
+      ['T1', 'T2', 'T3', 'T4'],
+      [['T1'], ['T2'], ['T3'], ['T4']]
+    );
+    expect(result.batchLabels).toEqual(['批次 1', '批次 2', '批次 3', '批次 4']);
+  });
+
+  test('handles batches of varying sizes', () => {
+    const result = buildBatchAwareQueue(
+      ['T1', 'T2', 'T3', 'T4', 'T5', 'T6'],
+      [['T1', 'T2', 'T3', 'T4', 'T5'], ['T6']]
+    );
+    expect(result.batchBoundaries).toEqual([0, 5]);
+    expect(result.batchParallelizable).toEqual([true, false]);
+  });
+});
+
+// ============== saveRuntimeState ==============
+
+describe('saveRuntimeState', () => {
+  let tmpDir: string;
+
+  beforeEach(() => {
+    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'harness-state-test-'));
+    setupProjectDir(tmpDir);
+  });
+
+  afterEach(() => {
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  test('creates harness-state.json file', () => {
+    const config = createTestConfig(tmpDir);
+    const state = createDefaultRuntimeState(config);
+    saveRuntimeState(state, tmpDir);
+
+    expect(fs.existsSync(stateFilePath(tmpDir))).toBe(true);
+  });
+
+  test('writes valid JSON with pretty formatting', () => {
+    const config = createTestConfig(tmpDir);
+    const state = createDefaultRuntimeState(config);
+    saveRuntimeState(state, tmpDir);
+
+    const content = fs.readFileSync(stateFilePath(tmpDir), 'utf-8');
+    expect(() => JSON.parse(content)).not.toThrow();
+    expect(content).toContain('  "');
+  });
+
+  test('includes stateFormatVersion 1', () => {
+    const config = createTestConfig(tmpDir);
+    const state = createDefaultRuntimeState(config);
+    saveRuntimeState(state, tmpDir);
+
+    const data = JSON.parse(fs.readFileSync(stateFilePath(tmpDir), 'utf-8'));
+    expect(data.stateFormatVersion).toBe(1);
+  });
+
+  test('preserves scalar fields', () => {
+    const config = createTestConfig(tmpDir);
+    const state = createDefaultRuntimeState(config);
+    state.state = 'running';
+    state.currentIndex = 5;
+    state.taskQueue = ['T1', 'T2'];
+    state.passedTasks = ['T1'];
+    state.failedTasks = ['T2'];
+    state.retryingTasks = ['T3'];
+
+    saveRuntimeState(state, tmpDir);
+
+    const data = JSON.parse(fs.readFileSync(stateFilePath(tmpDir), 'utf-8'));
+    expect(data.state).toBe('running');
+    expect(data.currentIndex).toBe(5);
+    expect(data.taskQueue).toEqual(['T1', 'T2']);
+    expect(data.passedTasks).toEqual(['T1']);
+    expect(data.failedTasks).toEqual(['T2']);
+    expect(data.retryingTasks).toEqual(['T3']);
+  });
+
+  test('serializes Maps to plain objects', () => {
+    const config = createTestConfig(tmpDir);
+    const state = createDefaultRuntimeState(config);
+    state.retryCounter.set('TASK-1', 2);
+    state.resumeFrom.set('TASK-2', 'development');
+    state.reevaluateCounter.set('TASK-3', 1);
+    state.phaseRetryCounters.set('TASK-1:development', 3);
+
+    saveRuntimeState(state, tmpDir);
+
+    const data = JSON.parse(fs.readFileSync(stateFilePath(tmpDir), 'utf-8'));
+    expect(data.retryCounter).toEqual({ 'TASK-1': 2 });
+    expect(data.resumeFrom).toEqual({ 'TASK-2': 'development' });
+    expect(data.reevaluateCounter).toEqual({ 'TASK-3': 1 });
+    expect(data.phaseRetryCounters).toEqual({ 'TASK-1:development': 3 });
+  });
+
+  test('serializes empty Maps as empty objects', () => {
+    const config = createTestConfig(tmpDir);
+    const state = createDefaultRuntimeState(config);
+
+    saveRuntimeState(state, tmpDir);
+
+    const data = JSON.parse(fs.readFileSync(stateFilePath(tmpDir), 'utf-8'));
+    expect(data.retryCounter).toEqual({});
+    expect(data.resumeFrom).toEqual({});
+    expect(data.reevaluateCounter).toEqual({});
+    expect(data.phaseRetryCounters).toEqual({});
+  });
+
+  test('preserves batch metadata', () => {
+    const config = createTestConfig(tmpDir);
+    const state = createDefaultRuntimeState(config);
+    state.batchBoundaries = [0, 3];
+    state.batchLabels = ['批次 1', '批次 2'];
+    state.batchParallelizable = [true, false];
+
+    saveRuntimeState(state, tmpDir);
+
+    const data = JSON.parse(fs.readFileSync(stateFilePath(tmpDir), 'utf-8'));
+    expect(data.batchBoundaries).toEqual([0, 3]);
+    expect(data.batchLabels).toEqual(['批次 1', '批次 2']);
+    expect(data.batchParallelizable).toEqual([true, false]);
+  });
+
+  test('overwrites existing state file', () => {
+    const config = createTestConfig(tmpDir);
+    const state1 = createDefaultRuntimeState(config);
+    state1.currentIndex = 3;
+    saveRuntimeState(state1, tmpDir);
+
+    const state2 = createDefaultRuntimeState(config);
+    state2.currentIndex = 7;
+    saveRuntimeState(state2, tmpDir);
+
+    const data = JSON.parse(fs.readFileSync(stateFilePath(tmpDir), 'utf-8'));
+    expect(data.currentIndex).toBe(7);
+  });
+});
+
+// ============== loadRuntimeState ==============
+
+describe('loadRuntimeState', () => {
+  let tmpDir: string;
+
+  beforeEach(() => {
+    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'harness-state-test-'));
+    setupProjectDir(tmpDir);
+  });
+
+  afterEach(() => {
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  test('returns null when state file does not exist', () => {
+    const result = loadRuntimeState(tmpDir);
+    expect(result).toBeNull();
+  });
+
+  test('loads valid state and restores Map fields', () => {
+    const config = createTestConfig(tmpDir);
+    const state = createDefaultRuntimeState(config);
+    state.retryCounter.set('TASK-1', 2);
+    state.resumeFrom.set('TASK-2', 'qa');
+    state.reevaluateCounter.set('TASK-3', 1);
+    state.phaseRetryCounters.set('TASK-1:development', 3);
+    saveRuntimeState(state, tmpDir);
+
+    const loaded = loadRuntimeState(tmpDir);
+    expect(loaded).not.toBeNull();
+    expect(loaded!.retryCounter).toBeInstanceOf(Map);
+    expect(loaded!.retryCounter.get('TASK-1')).toBe(2);
+    expect(loaded!.resumeFrom).toBeInstanceOf(Map);
+    expect(loaded!.resumeFrom.get('TASK-2')).toBe('qa');
+    expect(loaded!.reevaluateCounter).toBeInstanceOf(Map);
+    expect(loaded!.reevaluateCounter.get('TASK-3')).toBe(1);
+    expect(loaded!.phaseRetryCounters).toBeInstanceOf(Map);
+    expect(loaded!.phaseRetryCounters.get('TASK-1:development')).toBe(3);
+  });
+
+  test('preserves scalar fields through round-trip', () => {
+    const config = createTestConfig(tmpDir);
+    const state = createDefaultRuntimeState(config);
+    state.state = 'running';
+    state.currentIndex = 4;
+    state.taskQueue = ['T1', 'T2', 'T3'];
+    state.passedTasks = ['T1'];
+    state.failedTasks = ['T2'];
+    saveRuntimeState(state, tmpDir);
+
+    const loaded = loadRuntimeState(tmpDir);
+    expect(loaded!.state).toBe('running');
+    expect(loaded!.currentIndex).toBe(4);
+    expect(loaded!.taskQueue).toEqual(['T1', 'T2', 'T3']);
+    expect(loaded!.passedTasks).toEqual(['T1']);
+    expect(loaded!.failedTasks).toEqual(['T2']);
+  });
+
+  test('preserves batch metadata through round-trip', () => {
+    const config = createTestConfig(tmpDir);
+    const state = createDefaultRuntimeState(config);
+    state.batchBoundaries = [0, 3, 7];
+    state.batchLabels = ['批次 1', '批次 2', '批次 3'];
+    state.batchParallelizable = [true, true, false];
+    saveRuntimeState(state, tmpDir);
+
+    const loaded = loadRuntimeState(tmpDir);
+    expect(loaded!.batchBoundaries).toEqual([0, 3, 7]);
+    expect(loaded!.batchLabels).toEqual(['批次 1', '批次 2', '批次 3']);
+    expect(loaded!.batchParallelizable).toEqual([true, true, false]);
+  });
+
+  test('handles empty Map fields', () => {
+    const config = createTestConfig(tmpDir);
+    const state = createDefaultRuntimeState(config);
+    saveRuntimeState(state, tmpDir);
+
+    const loaded = loadRuntimeState(tmpDir);
+    expect(loaded).not.toBeNull();
+    expect(loaded!.retryCounter.size).toBe(0);
+    expect(loaded!.resumeFrom.size).toBe(0);
+    expect(loaded!.reevaluateCounter.size).toBe(0);
+    expect(loaded!.phaseRetryCounters.size).toBe(0);
+  });
+
+  test('handles state with missing optional Map fields in JSON', () => {
+    // Write a minimal valid state file without Map data
+    const config = createTestConfig(tmpDir);
+    const statePath = stateFilePath(tmpDir);
+    fs.writeFileSync(statePath, JSON.stringify({
+      stateFormatVersion: 1,
+      state: 'idle',
+      config,
+      taskQueue: [],
+      currentIndex: 0,
+      records: [],
+      startTime: '2026-04-11T00:00:00.000Z',
+      updatedAt: '2026-04-11T00:00:00.000Z',
+      // Missing retryCounter, resumeFrom, etc.
+    }, null, 2), 'utf-8');
+
+    const loaded = loadRuntimeState(tmpDir);
+    expect(loaded).not.toBeNull();
+    expect(loaded!.retryCounter).toBeInstanceOf(Map);
+    expect(loaded!.retryCounter.size).toBe(0);
+    expect(loaded!.resumeFrom).toBeInstanceOf(Map);
+    expect(loaded!.resumeFrom.size).toBe(0);
+  });
+
+  test('round-trips config correctly', () => {
+    const config = createTestConfig(tmpDir);
+    config.maxRetries = 5;
+    config.timeout = 120;
+    config.parallel = 3;
+    const state = createDefaultRuntimeState(config);
+    saveRuntimeState(state, tmpDir);
+
+    const loaded = loadRuntimeState(tmpDir);
+    expect(loaded!.config.maxRetries).toBe(5);
+    expect(loaded!.config.timeout).toBe(120);
+    expect(loaded!.config.parallel).toBe(3);
+    expect(loaded!.config.cwd).toBe(tmpDir);
+  });
+});

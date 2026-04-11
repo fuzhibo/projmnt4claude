@@ -1,0 +1,13 @@
+[test]
+# Coverage configuration
+coverage = true
+coverageThreshold = 0.8
+
+# Coverage reporters
+coverageReporter = ["text", "lcov"]
+
+# Test timeout (30 seconds)
+testTimeout = 30000
+
+# Bail on first failure in CI
+bail = true

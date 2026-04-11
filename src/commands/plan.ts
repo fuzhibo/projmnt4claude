@@ -21,6 +21,7 @@ import { extractAffectedFiles } from '../utils/quality-gate';
 import { classifyFileToLayer, AIMetadataAssistant, type ArchitectureLayer } from '../utils/ai-metadata';
 import { withAIEnhancement } from '../utils/ai-helpers';
 import { inferDependenciesBatch, type InferredDependency } from '../utils/dependency-engine';
+import { topologicalSortDFS, findComponentsUnionFind, DependencyGraph, validatePlanOperation, type EdgeMeta, type GraphNode } from '../utils/dependency-graph';
 
 // Re-export InferredDependency for backward compatibility
 export type { InferredDependency };
@@ -225,73 +226,65 @@ export function buildTaskChains(
   // 使用预计算依赖或重新推断文件重叠依赖
   const inferredDeps = precomputedDeps || inferDependenciesBatch(tasks);
 
-  // --- CP-2: Union-Find 连通分量检测，确保链边界不依赖迭代顺序 ---
+  // 构建合并邻接表（显式 + 推断依赖）和节点映射，供 dependency-graph 模块使用
+  const taskIds = new Set(tasks.map(t => t.id));
+  const adjacency = new Map<string, Map<string, EdgeMeta>>();
+  const nodesMap = new Map<string, GraphNode>();
 
-  const ufParent = new Map<string, string>();
-
-  function ufFind(x: string): string {
-    if (!ufParent.has(x)) ufParent.set(x, x);
-    let root = x;
-    while (ufParent.get(root) !== root) {
-      root = ufParent.get(root)!;
-    }
-    // 路径压缩
-    let curr = x;
-    while (curr !== root) {
-      const next = ufParent.get(curr)!;
-      ufParent.set(curr, root);
-      curr = next;
-    }
-    return root;
-  }
-
-  function ufUnion(a: string, b: string): void {
-    const rootA = ufFind(a);
-    const rootB = ufFind(b);
-    if (rootA !== rootB) {
-      ufParent.set(rootA, rootB);
-    }
-  }
-
-  // 初始化
   for (const task of tasks) {
-    ufParent.set(task.id, task.id);
-  }
+    nodesMap.set(task.id, {
+      taskId: task.id,
+      status: task.status,
+      priority: task.priority,
+      title: task.title,
+      type: task.type,
+    });
 
-  // 合并所有有依赖关系的任务到同一连通分量
-  for (const task of tasks) {
+    const deps = new Map<string, EdgeMeta>();
+    // 显式依赖
     for (const depId of task.dependencies) {
-      if (taskMap.has(depId)) {
-        ufUnion(task.id, depId);
+      if (taskIds.has(depId)) {
+        deps.set(depId, { source: 'explicit', confidence: 1.0 });
       }
     }
+    // 推断依赖（去重：不覆盖已有的显式依赖）
     const inferred = inferredDeps.get(task.id);
     if (inferred) {
-      for (const dep of inferred) {
-        if (taskMap.has(dep.depTaskId)) {
-          ufUnion(task.id, dep.depTaskId);
+      for (const d of inferred) {
+        if (taskIds.has(d.depTaskId) && !deps.has(d.depTaskId)) {
+          deps.set(d.depTaskId, { source: d.source, confidence: 0.5 });
         }
       }
     }
+    adjacency.set(task.id, deps);
   }
 
-  // 按连通分量分组
-  const componentMap = new Map<string, TaskMeta[]>();
-  for (const task of tasks) {
-    const root = ufFind(task.id);
-    const group = componentMap.get(root);
-    if (group) {
-      group.push(task);
-    } else {
-      componentMap.set(root, [task]);
-    }
-  }
+  // 使用 dependency-graph 模块的 findComponentsUnionFind 替代内联 Union-Find
+  const components = findComponentsUnionFind(adjacency, nodesMap);
 
   // 为每个连通分量构建链（拓扑排序）
   const chains: TaskChain[] = [];
 
-  for (const [, componentTasks] of componentMap) {
-    const chainTasks = topoSortDFS(componentTasks, taskMap, inferredDeps);
+  for (const component of components) {
+    // 提取分量内的邻接表，用于拓扑排序
+    const componentNodeIds = new Set(component.nodes);
+    const componentAdj = new Map<string, Map<string, EdgeMeta>>();
+    for (const nodeId of component.nodes) {
+      const allDeps = adjacency.get(nodeId);
+      const filtered = new Map<string, EdgeMeta>();
+      if (allDeps) {
+        for (const [depId, meta] of allDeps) {
+          if (componentNodeIds.has(depId)) {
+            filtered.set(depId, meta);
+          }
+        }
+      }
+      componentAdj.set(nodeId, filtered);
+    }
+
+    // 使用 dependency-graph 模块的 topologicalSortDFS 进行拓扑排序
+    const topoResult = topologicalSortDFS(componentAdj, componentNodeIds);
+    const chainTasks = topoResult.order.map(id => taskMap.get(id)!).filter(Boolean);
 
     const totalReopenCount = chainTasks.reduce(
       (sum, t) => sum + (t.reopenCount || 0),
@@ -329,51 +322,6 @@ export function buildTaskChains(
   }
 
   return chains;
-}
-
-/**
- * 连通分量内的拓扑排序（DFS 后序）
- * 使用确定性起始顺序（按 ID 排序）保证结果稳定
- */
-function topoSortDFS(
-  componentTasks: TaskMeta[],
-  taskMap: Map<string, TaskMeta>,
-  inferredDeps: Map<string, InferredDependency[]>
-): TaskMeta[] {
-  const taskIds = new Set(componentTasks.map(t => t.id));
-  const visited = new Set<string>();
-  const result: TaskMeta[] = [];
-
-  function getAllDeps(task: TaskMeta): string[] {
-    const deps = new Set(task.dependencies);
-    const inferred = inferredDeps.get(task.id);
-    if (inferred) {
-      for (const d of inferred) {
-        deps.add(d.depTaskId);
-      }
-    }
-    return [...deps].filter(id => taskIds.has(id));
-  }
-
-  function dfs(task: TaskMeta) {
-    if (visited.has(task.id)) return;
-    visited.add(task.id);
-
-    for (const depId of getAllDeps(task)) {
-      const depTask = taskMap.get(depId);
-      if (depTask) dfs(depTask);
-    }
-
-    result.push(task);
-  }
-
-  // 确定性起始顺序
-  const sorted = [...componentTasks].sort((a, b) => a.id.localeCompare(b.id));
-  for (const task of sorted) {
-    dfs(task);
-  }
-
-  return result;
 }
 
 /**
@@ -678,6 +626,17 @@ export function removeTask(taskId: string, cwd: string = process.cwd()): void {
   if (!isInitialized(cwd)) {
     console.error('错误: 项目未初始化。请先运行 `projmnt4claude setup`');
     process.exit(1);
+  }
+
+  // CP-16: 删除前依赖关系检查
+  const allTasks = getAllTasks(cwd);
+  const depGraph = DependencyGraph.fromTasks(allTasks);
+  const opValidation = validatePlanOperation('delete', [taskId], depGraph);
+  if (opValidation.warnings.length > 0) {
+    console.log('📋 删除前依赖检查:');
+    for (const w of opValidation.warnings) {
+      console.log(`   ⚠️  ${w}`);
+    }
   }
 
   const success = removeTaskFromPlan(taskId, cwd);

@@ -231,7 +231,7 @@ export class HarnessStatusReporter {
   /**
    * 记录任务正在重试
    */
-  recordTaskRetrying(taskId: string, attempt: number, maxRetries: number): void {
+  recordTaskRetrying(taskId: string, attempt: number, maxRetries: number, phase?: string, reason?: string): void {
     if (!this.currentReport.retryingTasks) {
       this.currentReport.retryingTasks = [];
     }
@@ -240,8 +240,10 @@ export class HarnessStatusReporter {
     if (existing) {
       existing.attempt = attempt;
       existing.maxRetries = maxRetries;
+      if (phase) existing.phase = phase;
+      if (reason) existing.reason = reason;
     } else {
-      this.currentReport.retryingTasks.push({ id: taskId, attempt, maxRetries });
+      this.currentReport.retryingTasks.push({ id: taskId, attempt, maxRetries, phase, reason });
     }
     // 记录重试历史 (CP-26)
     if (!this.currentReport.retryHistory) {
@@ -254,8 +256,8 @@ export class HarnessStatusReporter {
     this.currentReport.retryHistory.push({
       taskId,
       attempt,
-      phase: 'unknown',
-      reason: 'retry',
+      phase: phase || 'unknown',
+      reason: reason || 'retry',
       timestamp: new Date().toISOString(),
     });
     this.currentReport.timestamp = new Date().toISOString();
