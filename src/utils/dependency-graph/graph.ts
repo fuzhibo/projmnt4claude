@@ -878,6 +878,7 @@ export class DependencyGraph {
       case 'in_progress': return 'blue';
       case 'wait_review': return 'orange';
       case 'wait_qa': return 'yellow';
+      case 'wait_evaluation': return 'yellow';
       case 'resolved': return 'green';
       case 'closed': return 'gray';
       case 'failed': return 'red';

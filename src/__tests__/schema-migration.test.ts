@@ -68,8 +68,9 @@ describe('Pipeline Status Constants', () => {
   test('PIPELINE_INTERMEDIATE_STATUSES should contain expected values', () => {
     expect(PIPELINE_INTERMEDIATE_STATUSES).toContain('wait_review');
     expect(PIPELINE_INTERMEDIATE_STATUSES).toContain('wait_qa');
+    expect(PIPELINE_INTERMEDIATE_STATUSES).toContain('wait_evaluation');
     expect(PIPELINE_INTERMEDIATE_STATUSES).toContain('wait_complete');
-    expect(PIPELINE_INTERMEDIATE_STATUSES).toHaveLength(3);
+    expect(PIPELINE_INTERMEDIATE_STATUSES).toHaveLength(4);
   });
 
   test('PIPELINE_STATUS_MIGRATION_MAP should map all intermediate statuses', () => {
@@ -79,7 +80,7 @@ describe('Pipeline Status Constants', () => {
   });
 
   test('PIPELINE_STATUS_MIGRATION_MAP should map to valid target statuses', () => {
-    const validTargets = ['open', 'in_progress', 'resolved', 'closed', 'reopened', 'abandoned', 'failed'];
+    const validTargets = ['open', 'in_progress', 'wait_qa', 'resolved', 'closed', 'reopened', 'abandoned', 'failed'];
     for (const [, target] of Object.entries(PIPELINE_STATUS_MIGRATION_MAP)) {
       expect(validTargets).toContain(target);
     }
@@ -99,6 +100,10 @@ describe('Pipeline Status Constants', () => {
 
   test('wait_complete should map to resolved', () => {
     expect(PIPELINE_STATUS_MIGRATION_MAP['wait_complete']).toBe('resolved');
+  });
+
+  test('wait_evaluation should map to wait_qa', () => {
+    expect(PIPELINE_STATUS_MIGRATION_MAP['wait_evaluation']).toBe('wait_qa');
   });
 });
 

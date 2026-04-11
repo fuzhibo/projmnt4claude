@@ -1222,6 +1222,7 @@ export async function analyzeProject(
       in_progress: 0,
       wait_review: 0,
       wait_qa: 0,
+      wait_evaluation: 0,
       wait_complete: 0,
       resolved: 0,
       closed: 0,

@@ -1333,7 +1333,7 @@ function showTaskPanel(
       for (const subId of task.subtaskIds) {
         const sub = readTaskMeta(subId, cwd);
         if (sub && (sub.status === 'resolved' || sub.status === 'closed')) doneCount++;
-        else if (sub && (sub.status === 'in_progress' || sub.status === 'wait_review' || sub.status === 'wait_qa' || sub.status === 'wait_complete')) activeCount++;
+        else if (sub && (sub.status === 'in_progress' || sub.status === 'wait_review' || sub.status === 'wait_qa' || sub.status === 'wait_evaluation' || sub.status === 'wait_complete')) activeCount++;
       }
       const pendingCount = task.subtaskIds.length - doneCount - activeCount;
       const parts: string[] = [];
