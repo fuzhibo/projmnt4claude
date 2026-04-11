@@ -538,7 +538,11 @@ export interface Issue {
     // 数组字段空值检测
     | 'null_array_field'
     // 依赖图分析
-    | 'bridge_nodes' | 'redundant_dep';
+    | 'bridge_nodes' | 'redundant_dep'
+    // 状态推断检测 (Layer 1 质量门禁规则)
+    | 'report_status_mismatch'        // 报告文件 PASS 但状态未推进
+    | 'checkpoint_status_mismatch'    // resolved 但检查点全 pending (旧版遗留)
+    | 'missing_pipeline_evidence';    // pipeline 中间状态缺少前置报告
   severity: 'low' | 'medium' | 'high';
   message: string;
   suggestion: string;
@@ -1177,6 +1181,223 @@ async function assessStalenessWithAI(
       reason: result.reason,
     };
   }
+  return null;
+}
+
+// ============== Layer 1 质量门禁规则 — 状态推断检测 ==============
+
+/**
+ * 报告文件 → 阶段 → 推断状态的映射
+ * 用于 checkReportStatusConsistency: 报告文件存在且 PASS 时推断应有状态
+ */
+const REPORT_PHASE_STATUS_MAP: Array<{
+  reportFile: string;       // 报告文件名 (相对报告目录)
+  phase: string;            // 对应的 pipeline 阶段
+  impliesStatus: TaskStatus; // 报告 PASS 时推断任务应至少处于此状态
+  prerequisiteStatuses: TaskStatus[]; // 能触发此检查的当前状态
+}> = [
+  {
+    reportFile: 'dev-report.md',
+    phase: 'development',
+    impliesStatus: 'wait_review',
+    prerequisiteStatuses: ['open', 'in_progress'],
+  },
+  {
+    reportFile: 'code-review-report.md',
+    phase: 'code_review',
+    impliesStatus: 'wait_qa',
+    prerequisiteStatuses: ['in_progress', 'wait_review'],
+  },
+  {
+    reportFile: 'qa-report.md',
+    phase: 'qa_verification',
+    impliesStatus: 'wait_evaluation',
+    prerequisiteStatuses: ['wait_review', 'wait_qa'],
+  },
+  {
+    reportFile: 'review-report.md',
+    phase: 'evaluation',
+    impliesStatus: 'resolved',
+    prerequisiteStatuses: ['wait_qa', 'wait_evaluation', 'wait_complete'],
+  },
+];
+
+/**
+ * 报告文件解析：提取 PASS/NOPASS 结果
+ */
+function parseReportVerdict(reportPath: string): 'PASS' | 'NOPASS' | null {
+  if (!fs.existsSync(reportPath)) return null;
+  try {
+    const content = fs.readFileSync(reportPath, 'utf-8');
+    // 匹配 **结果**: ✅ PASS 或 **结果**: ❌ NOPASS 或 Result: PASS/NOPASS
+    const passMatch = content.match(/\*\*结果\*\*:\s*✅\s*PASS|Result:\s*PASS|\bPASS\b/i);
+    const nopassMatch = content.match(/\*\*结果\*\*:\s*❌\s*NOPASS|Result:\s*NOPASS|\bNOPASS\b/i);
+    if (nopassMatch) return 'NOPASS';
+    if (passMatch) return 'PASS';
+    return null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * 获取任务的 harness 报告目录路径
+ */
+function getHarnessReportDir(taskId: string, cwd: string): string {
+  return path.join(getProjectDir(cwd), 'reports', 'harness', taskId);
+}
+
+/**
+ * CP-2: 检查报告文件与状态的一致性
+ * 报告文件存在且 PASS → 对应阶段已完成，推断应有状态与当前状态对比
+ */
+export function checkReportStatusConsistency(
+  taskId: string,
+  task: TaskMeta,
+  cwd: string,
+): Issue | null {
+  const reportDir = getHarnessReportDir(taskId, cwd);
+  if (!fs.existsSync(reportDir)) return null;
+
+  const currentStatus = normalizeStatus(task.status);
+  // 终态任务不需要检查
+  if (['resolved', 'closed', 'abandoned', 'failed'].includes(currentStatus)) return null;
+
+  for (const mapping of REPORT_PHASE_STATUS_MAP) {
+    const reportPath = path.join(reportDir, mapping.reportFile);
+    const verdict = parseReportVerdict(reportPath);
+
+    if (verdict === 'PASS' && mapping.prerequisiteStatuses.includes(currentStatus)) {
+      // 报告 PASS 但当前状态还在前置状态 → 状态不一致
+      return {
+        taskId,
+        type: 'report_status_mismatch',
+        severity: 'medium',
+        message: `报告 ${mapping.reportFile} 显示 PASS，但任务状态仍为 ${currentStatus}，应至少为 ${mapping.impliesStatus}`,
+        suggestion: `使用 --fix 将状态更新为 ${mapping.impliesStatus}`,
+        details: {
+          currentStatus,
+          impliedStatus: mapping.impliesStatus,
+          reportFile: mapping.reportFile,
+          phase: mapping.phase,
+          verdict: 'PASS',
+        },
+      };
+    }
+  }
+
+  return null;
+}
+
+/**
+ * CP-3: 检查 resolved 但检查点全 pending 的不一致
+ * resolved 任务的所有检查点均为 pending → 旧版遗留（检查点在 resolved 后才添加）
+ */
+export function checkCheckpointConsistency(
+  taskId: string,
+  task: TaskMeta,
+): Issue | null {
+  if (normalizeStatus(task.status) !== 'resolved') return null;
+  if (!task.checkpoints || task.checkpoints.length === 0) return null;
+
+  const totalCps = task.checkpoints.length;
+  const pendingCps = task.checkpoints.filter(cp => cp.status === 'pending').length;
+  const completedCps = task.checkpoints.filter(cp => cp.status === 'completed').length;
+
+  // 所有检查点都 pending → 旧版遗留
+  if (pendingCps === totalCps && totalCps > 0) {
+    return {
+      taskId,
+      type: 'checkpoint_status_mismatch',
+      severity: 'medium',
+      message: `任务已 resolved 但全部 ${totalCps} 个检查点仍为 pending (旧版遗留)`,
+      suggestion: '使用 --fix 自动完成所有检查点（旧版遗留任务无检查点状态追踪）',
+      details: {
+        totalCheckpoints: totalCps,
+        pendingCheckpoints: pendingCps,
+        completedCheckpoints: completedCps,
+        status: task.status,
+      },
+    };
+  }
+
+  return null;
+}
+
+/**
+ * CP-4: 检查 pipeline 中间状态缺少前置报告
+ * wait_review/wait_qa/wait_evaluation 但缺少前置报告文件
+ */
+export function checkMissingPipelineEvidence(
+  taskId: string,
+  task: TaskMeta,
+  cwd: string,
+): Issue | null {
+  const currentStatus = normalizeStatus(task.status);
+  const reportDir = getHarnessReportDir(taskId, cwd);
+
+  // 定义每个中间状态所需的前置报告
+  const STATUS_REQUIRED_REPORTS: Record<string, Array<{ reportFile: string; phase: string }>> = {
+    wait_review: [
+      { reportFile: 'dev-report.md', phase: 'development' },
+    ],
+    wait_qa: [
+      { reportFile: 'code-review-report.md', phase: 'code_review' },
+    ],
+    wait_evaluation: [
+      { reportFile: 'qa-report.md', phase: 'qa_verification' },
+    ],
+    wait_complete: [
+      { reportFile: 'review-report.md', phase: 'evaluation' },
+    ],
+  };
+
+  const required = STATUS_REQUIRED_REPORTS[currentStatus];
+  if (!required) return null;
+
+  // 检查报告目录是否存在
+  if (!fs.existsSync(reportDir)) {
+    // 报告目录不存在，全部前置报告缺失
+    return {
+      taskId,
+      type: 'missing_pipeline_evidence',
+      severity: 'high',
+      message: `任务处于 ${currentStatus} 但报告目录不存在，缺少前置 pipeline 证据`,
+      suggestion: '使用 --fix 将任务重置为 open 状态（缺少恢复证据）',
+      details: {
+        currentStatus,
+        missingReports: required.map(r => r.reportFile),
+        reportDirExists: false,
+        fixAction: 'reset_to_open',
+      },
+    };
+  }
+
+  // 检查各个必需的报告文件
+  const missingReports: Array<{ reportFile: string; phase: string }> = [];
+  for (const req of required) {
+    const reportPath = path.join(reportDir, req.reportFile);
+    if (!fs.existsSync(reportPath)) {
+      missingReports.push(req);
+    }
+  }
+
+  if (missingReports.length > 0) {
+    return {
+      taskId,
+      type: 'missing_pipeline_evidence',
+      severity: 'high',
+      message: `任务处于 ${currentStatus} 但缺少前置报告: ${missingReports.map(r => r.reportFile).join(', ')}`,
+      suggestion: '使用 --fix 将任务重置为 open 状态（缺少恢复证据）',
+      details: {
+        currentStatus,
+        missingReports: missingReports.map(r => r.reportFile),
+        reportDirExists: true,
+        fixAction: 'reset_to_open',
+      },
+    };
+  }
+
   return null;
 }
 
@@ -1968,6 +2189,25 @@ export async function analyzeProject(
           },
         });
       }
+    }
+
+    // 15. Layer 1 质量门禁规则 — 状态推断检测
+    // CP-2: 报告文件与状态一致性
+    const reportIssue = checkReportStatusConsistency(task.id, task, cwd);
+    if (reportIssue) {
+      issues.push(reportIssue);
+    }
+
+    // CP-3: resolved 但检查点全 pending
+    const checkpointIssue = checkCheckpointConsistency(task.id, task);
+    if (checkpointIssue) {
+      issues.push(checkpointIssue);
+    }
+
+    // CP-4: pipeline 中间状态缺少前置报告
+    const evidenceIssue = checkMissingPipelineEvidence(task.id, task, cwd);
+    if (evidenceIssue) {
+      issues.push(evidenceIssue);
     }
 
     // 14. 检测引用文件不存在 (file_not_found)

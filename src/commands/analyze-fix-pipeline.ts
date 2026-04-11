@@ -124,7 +124,7 @@ export interface FixOptions {
  * 修复单个问题
  * @returns 修复结果: 'fixed' | 'skipped' | 'unfixable'
  */
-async function fixSingleIssue(
+export async function fixSingleIssue(
   issue: Issue,
   cwd: string,
   nonInteractive: boolean
@@ -993,6 +993,83 @@ async function fixSingleIssue(
       return 'skipped';
     }
 
+    // ============== Layer 1 质量门禁规则修复 ==============
+
+    case 'report_status_mismatch': {
+      // CP-6: update_status — 更新状态到推断值
+      const impliedStatus = issue.details?.impliedStatus as TaskStatus | undefined;
+      if (!impliedStatus) {
+        console.log(`  ⚠️  缺少推断状态信息，无法修复`);
+        return 'unfixable';
+      }
+
+      console.log(`🔄 修复任务 ${issue.taskId} 的报告-状态不一致...`);
+      const oldStatus = task.status;
+      task.status = impliedStatus;
+      task.updatedAt = new Date().toISOString();
+
+      // writeTaskMeta 会自动记录状态变更历史
+      writeTaskMeta(task, cwd);
+      console.log(`  ✅ 状态已从 ${oldStatus} 更新为 ${impliedStatus} (${issue.details?.reportFile} PASS)`);
+      return 'fixed';
+    }
+
+    case 'checkpoint_status_mismatch': {
+      // CP-7: complete_checkpoints — 自动完成 pending 检查点（旧版遗留）
+      console.log(`🔄 修复任务 ${issue.taskId} 的检查点-状态不一致 (resolved + 全 pending)...`);
+      if (!task.checkpoints || task.checkpoints.length === 0) {
+        return 'skipped';
+      }
+
+      const now = new Date().toISOString();
+      let completedCount = 0;
+      for (const cp of task.checkpoints) {
+        if (cp.status === 'pending') {
+          cp.status = 'completed';
+          cp.updatedAt = now;
+          if (cp.verification) {
+            cp.verification.result = 'passed (auto-completed by analyze-fix: legacy task)';
+            cp.verification.verifiedAt = now;
+            cp.verification.verifiedBy = 'analyze-fix';
+          }
+          completedCount++;
+        }
+      }
+
+      if (completedCount > 0) {
+        task.updatedAt = now;
+        // writeTaskMeta 会自动记录变更
+        writeTaskMeta(task, cwd);
+        console.log(`  ✅ 已自动完成 ${completedCount} 个 pending 检查点 (旧版遗留)`);
+        return 'fixed';
+      }
+      return 'skipped';
+    }
+
+    case 'missing_pipeline_evidence': {
+      // CP-1: reset_to_open — 缺少恢复证据，重置为 open
+      const fixAction = issue.details?.fixAction as string | undefined;
+      if (fixAction !== 'reset_to_open') {
+        console.log(`  ⚠️  未知的修复动作: ${fixAction}`);
+        return 'unfixable';
+      }
+
+      console.log(`🔄 重置任务 ${issue.taskId} 到 open 状态 (缺少 pipeline 恢复证据)...`);
+      const oldStatus = task.status;
+      task.status = 'open';
+      task.updatedAt = new Date().toISOString();
+
+      // 设置 resumeAction 以便后续恢复
+      if (!task.resumeAction) {
+        task.resumeAction = 'reset_to_open';
+      }
+
+      // writeTaskMeta 会自动记录状态变更历史
+      writeTaskMeta(task, cwd);
+      console.log(`  ✅ 已将任务从 ${oldStatus} 重置为 open (缺少恢复证据)`);
+      return 'fixed';
+    }
+
     default:
       return 'unfixable';
   }
@@ -1395,4 +1472,128 @@ export async function fixPipeline(
     },
     totalTime,
   };
+}
+
+// ============== CP-5: applyStatusInferenceFix 统一修复管道 ==============
+
+/**
+ * 状态推断修复动作
+ */
+export type StatusInferenceAction =
+  | 'reset_to_open'       // CP-1: 缺少恢复证据，重置为 open
+  | 'update_status'       // CP-6: 更新状态到推断值
+  | 'complete_checkpoints'; // CP-7: 自动完成 pending 检查点（旧版遗留）
+
+/**
+ * 状态推断修复结果
+ */
+export interface StatusInferenceFixResult {
+  taskId: string;
+  action: StatusInferenceAction;
+  applied: boolean;
+  oldValue?: string;
+  newValue?: string;
+  reason: string;
+}
+
+/**
+ * CP-5: applyStatusInferenceFix — 统一修复管道
+ *
+ * 对所有任务执行 Layer 1 质量门禁规则检测，并自动应用修复：
+ * - reset_to_open: pipeline 中间状态缺少前置报告
+ * - update_status: 报告文件 PASS 但状态未推进
+ * - complete_checkpoints: resolved 但检查点全 pending（旧版遗留）
+ *
+ * @param cwd 工作目录
+ * @param nonInteractive 是否非交互模式
+ * @returns 修复结果列表
+ */
+export async function applyStatusInferenceFix(
+  cwd: string = process.cwd(),
+  nonInteractive: boolean = true,
+): Promise<StatusInferenceFixResult[]> {
+  // 动态导入避免循环依赖（analyze.ts 已导入本模块）
+  const {
+    checkReportStatusConsistency,
+    checkCheckpointConsistency,
+    checkMissingPipelineEvidence,
+  } = await import('./analyze');
+  const { getAllTasks } = await import('../utils/task');
+
+  const tasks = getAllTasks(cwd, false);
+  const results: StatusInferenceFixResult[] = [];
+
+  console.log('');
+  console.log('━'.repeat(SEPARATOR_WIDTH));
+  console.log('🔧 applyStatusInferenceFix — 状态推断统一修复管道');
+  console.log(`   检查任务数: ${tasks.length}`);
+  console.log('━'.repeat(SEPARATOR_WIDTH));
+
+  for (const task of tasks) {
+    // CP-4 → CP-1: missing_pipeline_evidence → reset_to_open
+    const evidenceIssue = checkMissingPipelineEvidence(task.id, task, cwd);
+    if (evidenceIssue) {
+      const fixIssue: Issue = {
+        ...evidenceIssue,
+        type: 'missing_pipeline_evidence',
+      };
+      const fixResult = await fixSingleIssue(fixIssue, cwd, nonInteractive);
+      results.push({
+        taskId: task.id,
+        action: 'reset_to_open',
+        applied: fixResult === 'fixed',
+        oldValue: task.status,
+        newValue: 'open',
+        reason: evidenceIssue.message,
+      });
+      if (fixResult === 'fixed') {
+        // 重新读取已更新的 task
+        const updatedTask = readTaskMeta(task.id, cwd);
+        if (updatedTask) Object.assign(task, updatedTask);
+      }
+    }
+
+    // CP-2 → CP-6: report_status_mismatch → update_status
+    const reportIssue = checkReportStatusConsistency(task.id, task, cwd);
+    if (reportIssue) {
+      const fixResult = await fixSingleIssue(reportIssue, cwd, nonInteractive);
+      results.push({
+        taskId: task.id,
+        action: 'update_status',
+        applied: fixResult === 'fixed',
+        oldValue: task.status,
+        newValue: reportIssue.details?.impliedStatus as string,
+        reason: reportIssue.message,
+      });
+      if (fixResult === 'fixed') {
+        const updatedTask = readTaskMeta(task.id, cwd);
+        if (updatedTask) Object.assign(task, updatedTask);
+      }
+    }
+
+    // CP-3 → CP-7: checkpoint_status_mismatch → complete_checkpoints
+    const checkpointIssue = checkCheckpointConsistency(task.id, task);
+    if (checkpointIssue) {
+      const fixResult = await fixSingleIssue(checkpointIssue, cwd, nonInteractive);
+      results.push({
+        taskId: task.id,
+        action: 'complete_checkpoints',
+        applied: fixResult === 'fixed',
+        oldValue: `${checkpointIssue.details?.pendingCheckpoints} pending`,
+        newValue: `${checkpointIssue.details?.totalCheckpoints} completed`,
+        reason: checkpointIssue.message,
+      });
+    }
+  }
+
+  // 汇总
+  const applied = results.filter(r => r.applied).length;
+  const skipped = results.filter(r => !r.applied).length;
+
+  console.log('');
+  console.log('━'.repeat(SEPARATOR_WIDTH));
+  console.log(`✅ 状态推断修复完成: ${applied} 个已修复, ${skipped} 个跳过`);
+  console.log('━'.repeat(SEPARATOR_WIDTH));
+
+  return results;
 }
