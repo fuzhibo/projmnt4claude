@@ -133,13 +133,13 @@ describe('saveRuntimeState', () => {
     expect(content).toContain('  "');
   });
 
-  test('includes stateFormatVersion 1', () => {
+  test('includes stateFormatVersion 2', () => {
     const config = createTestConfig(tmpDir);
     const state = createDefaultRuntimeState(config);
     saveRuntimeState(state, tmpDir);
 
     const data = JSON.parse(fs.readFileSync(stateFilePath(tmpDir), 'utf-8'));
-    expect(data.stateFormatVersion).toBe(1);
+    expect(data.stateFormatVersion).toBe(2);
   });
 
   test('preserves scalar fields', () => {
@@ -191,6 +191,27 @@ describe('saveRuntimeState', () => {
     expect(data.resumeFrom).toEqual({});
     expect(data.reevaluateCounter).toEqual({});
     expect(data.phaseRetryCounters).toEqual({});
+  });
+
+  test('serializes taskPhaseCheckpoints to plain objects', () => {
+    const config = createTestConfig(tmpDir);
+    const state = createDefaultRuntimeState(config);
+    state.taskPhaseCheckpoints.set('TASK-1', {
+      completedPhase: 'development',
+      completedAt: '2026-04-11T10:00:00.000Z',
+    });
+    state.taskPhaseCheckpoints.set('TASK-2', {
+      completedPhase: 'qa',
+      completedAt: '2026-04-11T11:30:00.000Z',
+    });
+
+    saveRuntimeState(state, tmpDir);
+
+    const data = JSON.parse(fs.readFileSync(stateFilePath(tmpDir), 'utf-8'));
+    expect(data.taskPhaseCheckpoints).toEqual({
+      'TASK-1': { completedPhase: 'development', completedAt: '2026-04-11T10:00:00.000Z' },
+      'TASK-2': { completedPhase: 'qa', completedAt: '2026-04-11T11:30:00.000Z' },
+    });
   });
 
   test('preserves batch metadata', () => {
@@ -345,5 +366,76 @@ describe('loadRuntimeState', () => {
     expect(loaded!.config.timeout).toBe(120);
     expect(loaded!.config.parallel).toBe(3);
     expect(loaded!.config.cwd).toBe(tmpDir);
+  });
+
+  test('restores taskPhaseCheckpoints as Map', () => {
+    const config = createTestConfig(tmpDir);
+    const state = createDefaultRuntimeState(config);
+    state.taskPhaseCheckpoints.set('TASK-1', {
+      completedPhase: 'development',
+      completedAt: '2026-04-11T10:00:00.000Z',
+    });
+    state.taskPhaseCheckpoints.set('TASK-2', {
+      completedPhase: 'evaluation',
+      completedAt: '2026-04-11T12:00:00.000Z',
+    });
+    saveRuntimeState(state, tmpDir);
+
+    const loaded = loadRuntimeState(tmpDir);
+    expect(loaded!.taskPhaseCheckpoints).toBeInstanceOf(Map);
+    expect(loaded!.taskPhaseCheckpoints.size).toBe(2);
+    expect(loaded!.taskPhaseCheckpoints.get('TASK-1')).toEqual({
+      completedPhase: 'development',
+      completedAt: '2026-04-11T10:00:00.000Z',
+    });
+    expect(loaded!.taskPhaseCheckpoints.get('TASK-2')).toEqual({
+      completedPhase: 'evaluation',
+      completedAt: '2026-04-11T12:00:00.000Z',
+    });
+  });
+
+  test('adds empty taskPhaseCheckpoints when loading v1 state', () => {
+    const config = createTestConfig(tmpDir);
+    const statePath = stateFilePath(tmpDir);
+    fs.writeFileSync(statePath, JSON.stringify({
+      stateFormatVersion: 1,
+      state: 'idle',
+      config,
+      taskQueue: ['T1'],
+      currentIndex: 0,
+      records: [],
+      startTime: '2026-04-11T00:00:00.000Z',
+      updatedAt: '2026-04-11T00:00:00.000Z',
+      retryCounter: {},
+      resumeFrom: {},
+      reevaluateCounter: {},
+      phaseRetryCounters: {},
+    }, null, 2), 'utf-8');
+
+    const loaded = loadRuntimeState(tmpDir);
+    expect(loaded).not.toBeNull();
+    expect(loaded!.taskPhaseCheckpoints).toBeInstanceOf(Map);
+    expect(loaded!.taskPhaseCheckpoints.size).toBe(0);
+  });
+
+  test('round-trips taskPhaseCheckpoints through save/load', () => {
+    const config = createTestConfig(tmpDir);
+    const state = createDefaultRuntimeState(config);
+    const phases: Array<'development' | 'code_review' | 'qa' | 'evaluation'> = ['development', 'code_review', 'qa', 'evaluation'];
+    phases.forEach((phase, i) => {
+      state.taskPhaseCheckpoints.set(`TASK-${i + 1}`, {
+        completedPhase: phase,
+        completedAt: new Date(Date.now() + i * 60000).toISOString(),
+      });
+    });
+    saveRuntimeState(state, tmpDir);
+
+    const loaded = loadRuntimeState(tmpDir);
+    expect(loaded!.taskPhaseCheckpoints.size).toBe(4);
+    phases.forEach((phase, i) => {
+      const cp = loaded!.taskPhaseCheckpoints.get(`TASK-${i + 1}`);
+      expect(cp).not.toBeUndefined();
+      expect(cp!.completedPhase).toBe(phase);
+    });
   });
 });

@@ -398,6 +398,7 @@ export class AssemblyLine {
         await this.handleTransitionValidationFailure(taskId, 'wait_review', 'in_progress', 'development', devGateResult.errors);
       }
       console.log('✅ 开发完成，等待代码审核');
+      this.savePhaseCheckpoint(taskId, 'development', state);
     } else {
       // Resume: validate previous phase result files before reusing
       if (!this.validatePreviousPhaseResults(taskId, effectiveResume)) {
@@ -461,6 +462,7 @@ export class AssemblyLine {
       await this.ensureTransition(taskId, 'wait_review', '开发完成，等待代码审核');
       record.finalStatus = 'wait_review';
       console.log('✅ 开发完成，等待代码审核');
+      this.savePhaseCheckpoint(taskId, 'development', state);
     }
 
     // 6. 代码审核阶段（新增）
@@ -517,6 +519,7 @@ export class AssemblyLine {
       await this.handleTransitionValidationFailure(taskId, 'wait_qa', 'wait_review', 'code_review', crGateResult.errors);
     }
     console.log('✅ 代码审核通过，等待 QA 验证');
+    this.savePhaseCheckpoint(taskId, 'code_review', state);
 
     // 8. QA 验证阶段（新增）
     addTimeline('qa_started', '开始 QA 验证阶段');
@@ -574,6 +577,7 @@ export class AssemblyLine {
     if (!qaGateResult.valid) {
       await this.handleTransitionValidationFailure(taskId, 'wait_qa', 'wait_qa', 'qa', qaGateResult.errors);
     }
+    this.savePhaseCheckpoint(taskId, 'qa', state);
 
     // 9. 最终评估阶段（移除 wait_complete 中间状态，直接进入评估）
     // 注: 人工验证已从流水线阶段移至后处理，不再阻塞评估流程
@@ -637,6 +641,7 @@ export class AssemblyLine {
       }
       record.retryCount = retryCount;
       console.log('✅ 评估通过！');
+      this.savePhaseCheckpoint(taskId, 'evaluation', state);
       addTimeline('completed', '任务完成');
     } else {
       console.log(`❌ 评估未通过: ${verdict.reason}`);
@@ -654,6 +659,23 @@ export class AssemblyLine {
     }
 
     return record;
+  }
+
+  /**
+   * 保存阶段检查点到运行时状态
+   * 在每个阶段完成后立即调用，确保护进程崩溃时可从该检查点恢复
+   */
+  private savePhaseCheckpoint(
+    taskId: string,
+    completedPhase: 'development' | 'code_review' | 'qa' | 'evaluation',
+    state: HarnessRuntimeState
+  ): void {
+    state.taskPhaseCheckpoints.set(taskId, {
+      completedPhase,
+      completedAt: new Date().toISOString(),
+    });
+    saveRuntimeState(state, this.config.cwd);
+    console.log(`   💾 检查点已保存: ${taskId} @ ${completedPhase}`);
   }
 
   /**

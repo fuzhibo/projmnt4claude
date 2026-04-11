@@ -431,6 +431,12 @@ export interface HarnessRuntimeState {
    * 正在重试的任务ID列表（任务级状态追踪）
    */
   retryingTasks?: string[];
+  /**
+   * 任务阶段检查点 - 记录每个任务已完成的最后一个阶段和时间戳
+   * 用于崩溃恢复时跳过已完成的阶段
+   * key: taskId, value: { completedPhase, completedAt }
+   */
+  taskPhaseCheckpoints: Map<string, { completedPhase: 'development' | 'code_review' | 'qa' | 'evaluation'; completedAt: string }>;
 }
 
 /**
@@ -537,6 +543,7 @@ export function createDefaultRuntimeState(config: HarnessConfig): HarnessRuntime
     passedTasks: [],
     failedTasks: [],
     retryingTasks: [],
+    taskPhaseCheckpoints: new Map(),
   };
 }
 

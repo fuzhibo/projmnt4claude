@@ -388,6 +388,8 @@ export function loadRuntimeState(cwd: string): HarnessRuntimeState | null {
     data.resumeFrom = new Map(Object.entries(data.resumeFrom || {}));
     data.reevaluateCounter = new Map(Object.entries(data.reevaluateCounter || {}));
     data.phaseRetryCounters = new Map(Object.entries(data.phaseRetryCounters || {}));
+    // v1/v2 兼容：旧版不含 taskPhaseCheckpoints，补空 Map
+    data.taskPhaseCheckpoints = new Map(Object.entries(data.taskPhaseCheckpoints || {}));
 
     return data;
   } catch (error) {
@@ -412,6 +414,7 @@ export function saveRuntimeState(state: HarnessRuntimeState, cwd: string): void 
     reevaluateCounter: Object.fromEntries(state.reevaluateCounter || []),
     // 修复：添加 phaseRetryCounters 保存
     phaseRetryCounters: Object.fromEntries(state.phaseRetryCounters || []),
+    taskPhaseCheckpoints: Object.fromEntries(state.taskPhaseCheckpoints || []),
   };
   fs.writeFileSync(statePath, JSON.stringify(data, null, 2), 'utf-8');
 }
