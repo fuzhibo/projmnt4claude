@@ -397,6 +397,63 @@ export function getCheckpointPhase(description: string): string | null {
 }
 
 /**
+ * 根据检查点前缀推断检查点属性
+ *
+ * 前缀映射规则：
+ * - [human qa] → requiresHuman=true, verification.method=human_verification
+ * - [ai review] → 无额外属性（默认）
+ * - [ai qa] → verification.method=automated
+ * - [script] → verification.method=automated
+ *
+ * @param description - 检查点描述文本
+ * @returns 推断的属性对象，包含 requiresHuman 和 verification.method
+ */
+export function inferCheckpointAttributesFromPrefix(description: string): {
+  requiresHuman?: boolean;
+  verificationMethod?: 'code_review' | 'lint' | 'unit_test' | 'functional_test' | 'integration_test' | 'e2e_test' | 'architect_review' | 'automated' | 'human_verification';
+} {
+  if (!description || typeof description !== 'string') {
+    return {};
+  }
+
+  const trimmed = description.trim().toLowerCase();
+
+  // [human qa] → 需要人工验证
+  if (trimmed.startsWith('[human qa]')) {
+    return {
+      requiresHuman: true,
+      verificationMethod: 'human_verification',
+    };
+  }
+
+  // [ai qa] → 自动化 QA 验证
+  if (trimmed.startsWith('[ai qa]')) {
+    return {
+      requiresHuman: false,
+      verificationMethod: 'automated',
+    };
+  }
+
+  // [script] → 自动化脚本验证
+  if (trimmed.startsWith('[script]')) {
+    return {
+      requiresHuman: false,
+      verificationMethod: 'automated',
+    };
+  }
+
+  // [ai review] → 默认，不设置额外属性
+  if (trimmed.startsWith('[ai review]')) {
+    return {
+      requiresHuman: false,
+    };
+  }
+
+  // 无前缀或未知前缀，返回空对象（使用默认逻辑）
+  return {};
+}
+
+/**
  * 根据检查点描述内容推断合适的前缀
  *
  * 前缀映射规则：
