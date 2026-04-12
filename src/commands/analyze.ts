@@ -1851,7 +1851,7 @@ export async function analyzeProject(
         return depStatus !== 'resolved' && depStatus !== 'closed';
       });
 
-      if (uncompletedDeps.length > 0 && normalizedStatus !== 'resolved' && normalizedStatus !== 'closed') {
+      if (uncompletedDeps.length > 0 && normalizedStatus !== 'resolved' && normalizedStatus !== 'closed' && normalizedStatus !== 'abandoned') {
         stats.blocked++;
         issues.push({
           taskId: task.id,

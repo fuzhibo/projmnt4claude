@@ -42,7 +42,7 @@ mock.module('../utils/harness-helpers.js', () => ({
 
 function createConfig(overrides: Partial<HarnessConfig> = {}): HarnessConfig {
   const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'harness-exec-test-'));
-  return {
+  const config: HarnessConfig = {
     maxRetries: 3,
     timeout: 300,
     parallel: 1,
@@ -56,6 +56,11 @@ function createConfig(overrides: Partial<HarnessConfig> = {}): HarnessConfig {
     forceContinue: false,
     ...overrides,
   };
+  // 如果 overrides 覆盖了 cwd，清理未使用的 tmpDir 防止泄漏
+  if (config.cwd !== tmpDir) {
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  }
+  return config;
 }
 
 function createTask(overrides: Partial<TaskMeta> = {}): TaskMeta {
