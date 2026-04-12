@@ -1125,3 +1125,221 @@ describe('renameTask', () => {
     expect(renameEntry!.newValue).toBe('TASK-002');
   });
 });
+
+// ============================================================
+// validateStatusTransition
+// ============================================================
+
+describe('validateStatusTransition', () => {
+  let tempDir: string;
+  let tasksDir: string;
+  let isInitSpy: ReturnType<typeof spyOn>;
+  let getTasksDirSpy: ReturnType<typeof spyOn>;
+
+  beforeEach(async () => {
+    tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'task-validation-test-'));
+    tasksDir = path.join(tempDir, 'tasks');
+
+    const pMod = await pathUtils();
+    isInitSpy = spyOn(pMod, 'isInitialized').mockReturnValue(true);
+    getTasksDirSpy = spyOn(pMod, 'getTasksDir').mockReturnValue(tasksDir);
+  });
+
+  afterEach(() => {
+    isInitSpy.mockRestore();
+    getTasksDirSpy.mockRestore();
+    fs.rmSync(tempDir, { recursive: true, force: true });
+  });
+
+  // ---- 合法转换 ----
+
+  it('allows open → in_progress', async () => {
+    const { validateStatusTransition } = await taskUtils();
+    expect(validateStatusTransition('open', 'in_progress')).toEqual({ valid: true });
+  });
+
+  it('allows open → closed', async () => {
+    const { validateStatusTransition } = await taskUtils();
+    expect(validateStatusTransition('open', 'closed')).toEqual({ valid: true });
+  });
+
+  it('allows open → abandoned', async () => {
+    const { validateStatusTransition } = await taskUtils();
+    expect(validateStatusTransition('open', 'abandoned')).toEqual({ valid: true });
+  });
+
+  it('allows in_progress → wait_review', async () => {
+    const { validateStatusTransition } = await taskUtils();
+    expect(validateStatusTransition('in_progress', 'wait_review')).toEqual({ valid: true });
+  });
+
+  it('allows in_progress → resolved', async () => {
+    const { validateStatusTransition } = await taskUtils();
+    expect(validateStatusTransition('in_progress', 'resolved')).toEqual({ valid: true });
+  });
+
+  it('allows in_progress → failed', async () => {
+    const { validateStatusTransition } = await taskUtils();
+    expect(validateStatusTransition('in_progress', 'failed')).toEqual({ valid: true });
+  });
+
+  it('allows in_progress → open', async () => {
+    const { validateStatusTransition } = await taskUtils();
+    expect(validateStatusTransition('in_progress', 'open')).toEqual({ valid: true });
+  });
+
+  it('allows wait_review → wait_qa', async () => {
+    const { validateStatusTransition } = await taskUtils();
+    expect(validateStatusTransition('wait_review', 'wait_qa')).toEqual({ valid: true });
+  });
+
+  it('allows wait_qa → wait_evaluation', async () => {
+    const { validateStatusTransition } = await taskUtils();
+    expect(validateStatusTransition('wait_qa', 'wait_evaluation')).toEqual({ valid: true });
+  });
+
+  it('allows wait_evaluation → wait_complete', async () => {
+    const { validateStatusTransition } = await taskUtils();
+    expect(validateStatusTransition('wait_evaluation', 'wait_complete')).toEqual({ valid: true });
+  });
+
+  it('allows wait_complete → resolved', async () => {
+    const { validateStatusTransition } = await taskUtils();
+    expect(validateStatusTransition('wait_complete', 'resolved')).toEqual({ valid: true });
+  });
+
+  it('allows resolved → open (reopen)', async () => {
+    const { validateStatusTransition } = await taskUtils();
+    expect(validateStatusTransition('resolved', 'open')).toEqual({ valid: true });
+  });
+
+  it('allows failed → in_progress (retry)', async () => {
+    const { validateStatusTransition } = await taskUtils();
+    expect(validateStatusTransition('failed', 'in_progress')).toEqual({ valid: true });
+  });
+
+  it('allows closed → open (reopen)', async () => {
+    const { validateStatusTransition } = await taskUtils();
+    expect(validateStatusTransition('closed', 'open')).toEqual({ valid: true });
+  });
+
+  it('allows same status (no-op)', async () => {
+    const { validateStatusTransition } = await taskUtils();
+    expect(validateStatusTransition('open', 'open')).toEqual({ valid: true });
+    expect(validateStatusTransition('in_progress', 'in_progress')).toEqual({ valid: true });
+  });
+
+  // ---- 非法转换 ----
+
+  it('rejects open → resolved (skipping in_progress)', async () => {
+    const { validateStatusTransition } = await taskUtils();
+    const result = validateStatusTransition('open', 'resolved');
+    expect(result.valid).toBe(false);
+    expect(result.reason).toContain('open → resolved');
+  });
+
+  it('rejects open → wait_qa (skipping pipeline)', async () => {
+    const { validateStatusTransition } = await taskUtils();
+    const result = validateStatusTransition('open', 'wait_qa');
+    expect(result.valid).toBe(false);
+  });
+
+  it('rejects open → failed (cannot fail without starting)', async () => {
+    const { validateStatusTransition } = await taskUtils();
+    const result = validateStatusTransition('open', 'failed');
+    expect(result.valid).toBe(false);
+  });
+
+  it('rejects resolved → in_progress (must reopen first)', async () => {
+    const { validateStatusTransition } = await taskUtils();
+    const result = validateStatusTransition('resolved', 'in_progress');
+    expect(result.valid).toBe(false);
+  });
+
+  it('rejects resolved → failed (must reopen first)', async () => {
+    const { validateStatusTransition } = await taskUtils();
+    const result = validateStatusTransition('resolved', 'failed');
+    expect(result.valid).toBe(false);
+  });
+
+  it('rejects closed → resolved (must reopen first)', async () => {
+    const { validateStatusTransition } = await taskUtils();
+    const result = validateStatusTransition('closed', 'resolved');
+    expect(result.valid).toBe(false);
+  });
+
+  it('rejects failed → resolved (must go through in_progress)', async () => {
+    const { validateStatusTransition } = await taskUtils();
+    const result = validateStatusTransition('failed', 'resolved');
+    expect(result.valid).toBe(false);
+  });
+
+  it('rejects abandoned → resolved (must reopen first)', async () => {
+    const { validateStatusTransition } = await taskUtils();
+    const result = validateStatusTransition('abandoned', 'resolved');
+    expect(result.valid).toBe(false);
+  });
+
+  // ---- updateTaskStatus enforcement ----
+
+  it('updateTaskStatus throws on illegal transition', async () => {
+    const { updateTaskStatus, StatusTransitionError, readTaskMeta, writeTaskMeta } = await taskUtils();
+
+    // Create an open task
+    const task = makeTask({ status: 'open' });
+    writeTaskMeta(task, tempDir);
+
+    // Attempt illegal transition: open → resolved
+    expect(() => updateTaskStatus('TASK-001', 'resolved', tempDir)).toThrow();
+    try {
+      updateTaskStatus('TASK-001', 'resolved', tempDir);
+    } catch (e) {
+      expect(e).toBeInstanceOf(StatusTransitionError);
+      expect((e as Error).message).toContain('open → resolved');
+    }
+
+    // Verify status was NOT changed
+    const unchanged = readTaskMeta('TASK-001', tempDir);
+    expect(unchanged!.status).toBe('open');
+  });
+
+  it('updateTaskStatus allows legal transition', async () => {
+    const { updateTaskStatus, readTaskMeta, writeTaskMeta } = await taskUtils();
+
+    // Create an open task
+    const task = makeTask({ status: 'open' });
+    writeTaskMeta(task, tempDir);
+
+    // Legal transition: open → in_progress
+    updateTaskStatus('TASK-001', 'in_progress', tempDir);
+
+    const updated = readTaskMeta('TASK-001', tempDir);
+    expect(updated!.status).toBe('in_progress');
+  });
+
+  it('updateTaskStatus with force bypasses validation', async () => {
+    const { updateTaskStatus, readTaskMeta, writeTaskMeta } = await taskUtils();
+
+    // Create an open task
+    const task = makeTask({ status: 'open' });
+    writeTaskMeta(task, tempDir);
+
+    // Illegal transition with force: open → resolved
+    expect(() =>
+      updateTaskStatus('TASK-001', 'resolved', tempDir, 'repair', undefined, { force: true })
+    ).not.toThrow();
+
+    const updated = readTaskMeta('TASK-001', tempDir);
+    expect(updated!.status).toBe('resolved');
+  });
+
+  it('StatusTransitionError has correct properties', async () => {
+    const { StatusTransitionError } = await taskUtils();
+    const err = new StatusTransitionError('open', 'resolved', 'test reason');
+    expect(err.name).toBe('StatusTransitionError');
+    expect(err.fromStatus).toBe('open');
+    expect(err.toStatus).toBe('resolved');
+    expect(err.message).toContain('open → resolved');
+    expect(err.message).toContain('test reason');
+  });
+});

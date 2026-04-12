@@ -4,6 +4,82 @@ import { getTasksDir, isInitialized, getProjectDir } from './path';
 import type { TaskMeta, TaskHistoryEntry, TaskStatus, TaskRole, TaskVerification, VerificationMethod, TaskType, TaskPriority, ExecutionStats } from '../types/task';
 import { createDefaultTaskMeta, isValidTaskId, generateNextTaskId, generateTaskId, parseTaskId } from '../types/task';
 
+// ============================================================
+// 状态转换验证
+// ============================================================
+
+/**
+ * 合法状态转换规则
+ * 定义每个状态可以转换到的目标状态列表
+ */
+export const VALID_TRANSITIONS: Record<TaskStatus, TaskStatus[]> = {
+  open:          ['in_progress', 'closed', 'abandoned'],
+  in_progress:   ['wait_review', 'resolved', 'failed', 'closed', 'abandoned', 'open'],
+  wait_review:   ['wait_qa', 'in_progress', 'failed', 'closed', 'abandoned'],
+  wait_qa:       ['wait_evaluation', 'wait_complete', 'in_progress', 'failed', 'closed', 'abandoned'],
+  wait_evaluation: ['wait_complete', 'in_progress', 'failed', 'closed', 'abandoned'],
+  wait_complete: ['resolved', 'failed', 'closed', 'abandoned'],
+  resolved:      ['open', 'closed'],
+  closed:        ['open', 'in_progress'],
+  abandoned:     ['open', 'in_progress'],
+  failed:        ['in_progress', 'open', 'closed', 'abandoned'],
+};
+
+/**
+ * 状态转换验证结果
+ */
+export interface StatusTransitionResult {
+  valid: boolean;
+  reason?: string;
+}
+
+/**
+ * 状态转换验证错误
+ */
+export class StatusTransitionError extends Error {
+  constructor(
+    public readonly fromStatus: TaskStatus,
+    public readonly toStatus: TaskStatus,
+    reason?: string,
+  ) {
+    super(`非法状态转换: ${fromStatus} → ${toStatus}${reason ? ` (${reason})` : ''}`);
+    this.name = 'StatusTransitionError';
+  }
+}
+
+/**
+ * 验证状态转换是否合法
+ * @param fromStatus 当前状态
+ * @param toStatus 目标状态
+ * @returns 验证结果，包含是否合法和原因
+ */
+export function validateStatusTransition(
+  fromStatus: TaskStatus,
+  toStatus: TaskStatus,
+): StatusTransitionResult {
+  // 相同状态不需要转换
+  if (fromStatus === toStatus) {
+    return { valid: true };
+  }
+
+  const allowed = VALID_TRANSITIONS[fromStatus];
+  if (!allowed) {
+    return { valid: false, reason: `未知状态: ${fromStatus}` };
+  }
+  if (allowed.includes(toStatus)) {
+    return { valid: true };
+  }
+  return { valid: false, reason: `${fromStatus} → ${toStatus} 不在允许的转换路径中` };
+}
+
+/**
+ * updateTaskStatus 选项
+ */
+export interface UpdateStatusOptions {
+  /** 跳过状态转换验证（用于修复管线等需要强制设置的场景） */
+  force?: boolean;
+}
+
 /**
  * 获取任务目录路径
  */
@@ -70,7 +146,7 @@ export function writeTaskMeta(task: TaskMeta, cwd: string = process.cwd()): void
 
   if (oldTask) {
     // 比较并记录字段变更
-    const fields: (keyof TaskMeta)[] = ['title', 'description', 'priority', 'status', 'recommendedRole', 'branch', 'dependencies'];
+    const fields: (keyof TaskMeta)[] = ['title', 'description', 'priority', 'status', 'recommendedRole', 'branch', 'dependencies', 'type', 'subtaskIds', 'parentId', 'checkpoints', 'schemaVersion'];
 
     for (const field of fields) {
       const oldValue = oldTask[field as keyof TaskMeta];
@@ -94,6 +170,32 @@ export function writeTaskMeta(task: TaskMeta, cwd: string = process.cwd()): void
             field: 'dependencies',
             oldValue: oldDepsArray.length > 0 ? oldDepsArray.join(', ') : '无',
             newValue: newDepsArray.length > 0 ? newDepsArray.join(', ') : '无',
+            user: process.env.USER || undefined,
+          });
+        }
+      } else if (field === 'subtaskIds') {
+        const oldArr = (oldValue as string[] || []);
+        const newArr = (newValue as string[] || []);
+        if (JSON.stringify(oldArr) !== JSON.stringify(newArr)) {
+          historyEntries.push({
+            timestamp: new Date().toISOString(),
+            action: `更新子任务列表`,
+            field: 'subtaskIds',
+            oldValue: oldArr.length > 0 ? oldArr.join(', ') : '无',
+            newValue: newArr.length > 0 ? newArr.join(', ') : '无',
+            user: process.env.USER || undefined,
+          });
+        }
+      } else if (field === 'checkpoints') {
+        const oldArr = (oldValue as unknown[] || []);
+        const newArr = (newValue as unknown[] || []);
+        if (JSON.stringify(oldArr) !== JSON.stringify(newArr)) {
+          historyEntries.push({
+            timestamp: new Date().toISOString(),
+            action: `更新检查点`,
+            field: 'checkpoints',
+            oldValue: oldArr.length > 0 ? `${oldArr.length} 个检查点` : '无',
+            newValue: newArr.length > 0 ? `${newArr.length} 个检查点` : '无',
             user: process.env.USER || undefined,
           });
         }
@@ -130,7 +232,7 @@ export function writeTaskMeta(task: TaskMeta, cwd: string = process.cwd()): void
 
   // 合并历史记录
   if (historyEntries.length > 0) {
-    task.history = [...(oldTask?.history || []), ...historyEntries];
+    task.history = [...(task.history || []), ...historyEntries];
   }
 
   // 更新时间戳
@@ -411,7 +513,8 @@ export function updateTaskStatus(
   status: TaskStatus,
   cwd: string = process.cwd(),
   reason?: string,
-  transitionNote?: string
+  transitionNote?: string,
+  options?: UpdateStatusOptions,
 ): void {
   const task = readTaskMeta(taskId, cwd);
   if (!task) {
@@ -423,6 +526,14 @@ export function updateTaskStatus(
   // 去重：如果状态没有变化，直接返回
   if (oldStatus === status) {
     return;
+  }
+
+  // 状态转换验证（force 模式跳过）
+  if (!options?.force) {
+    const validation = validateStatusTransition(oldStatus, status);
+    if (!validation.valid) {
+      throw new StatusTransitionError(oldStatus, status, validation.reason);
+    }
   }
 
   task.status = status;
