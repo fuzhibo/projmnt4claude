@@ -45,7 +45,6 @@ const i18n = {
     initializing: '正在初始化项目管理环境...',
     createDir: '创建目录',
     createConfig: '创建配置: config.json',
-    createHook: '创建钩子模板: hooks/',
     setupComplete: '项目管理环境初始化完成！',
     nextStep: '使用 \'projmnt4claude task create\' 创建第一个任务',
     selectLanguage: '请选择语言:',
@@ -58,7 +57,6 @@ const i18n = {
     initializing: 'Initializing project management environment...',
     createDir: 'Create directory',
     createConfig: 'Create config: config.json',
-    createHook: 'Create hook template: hooks/',
     setupComplete: 'Project management environment initialized!',
     nextStep: 'Use \'projmnt4claude task create\' to create your first task',
     selectLanguage: 'Select language:',
@@ -154,204 +152,11 @@ export async function setup(cwd: string = process.cwd(), options: SetupOptions =
   fs.writeFileSync(configPath, JSON.stringify(config, null, 2), 'utf-8');
   console.log(`✓ ${t.createConfig}`);
 
-  // 创建钩子脚本模板
-  createHookTemplates(getHooksDir(cwd), language);
-
-  // 配置 Claude Code hooks（项目级别）
-  configureClaudeCodeHooks(cwd, language);
-
   // 复制技能文件到项目
   copySkillFiles(cwd, language, t);
 
   console.log(`\n✅ ${t.setupComplete}`);
   console.log(`\n${t.nextStep}`);
-}
-
-/**
- * 创建钩子脚本模板
- */
-function createHookTemplates(hooksDir: string, language: 'zh' | 'en'): void {
-  const isZh = language === 'zh';
-
-  const templates: Record<string, string> = isZh ? {
-    'pre-task.ts': `#!/usr/bin/env bun
-// 任务执行前钩子
-// Claude Code hooks 通过 stdin 传递 JSON 数据
-
-async function main() {
-  let input = {};
-  try {
-    const chunks: Buffer[] = [];
-    for await (const chunk of process.stdin) {
-      chunks.push(chunk);
-    }
-    const data = Buffer.concat(chunks).toString();
-    if (data.trim()) {
-      input = JSON.parse(data);
-    }
-  } catch {}
-
-  const toolInput = (input as any).tool_input || {};
-  const taskId = toolInput.taskId;
-
-  if (taskId) {
-    console.log(\`[pre-task] 准备执行任务: \${taskId}\`);
-  }
-  process.exit(0);
-}
-
-main().catch(() => process.exit(0));
-`,
-    'post-task.ts': `#!/usr/bin/env bun
-// 任务执行后钩子
-// Claude Code hooks 通过 stdin 传递 JSON 数据
-
-async function main() {
-  let input = {};
-  try {
-    const chunks: Buffer[] = [];
-    for await (const chunk of process.stdin) {
-      chunks.push(chunk);
-    }
-    const data = Buffer.concat(chunks).toString();
-    if (data.trim()) {
-      input = JSON.parse(data);
-    }
-  } catch {}
-
-  const toolName = (input as any).tool_name || '';
-  const toolInput = (input as any).tool_input || {};
-
-  if (toolName.startsWith('Task')) {
-    const taskId = toolInput.taskId;
-    if (taskId) {
-      console.log(\`[post-task] 任务 \${taskId} 操作完成\`);
-    }
-  }
-  process.exit(0);
-}
-
-main().catch(() => process.exit(0));
-`,
-    'plan-complete.ts': `#!/usr/bin/env bun
-// 计划完成钩子
-// Claude Code hooks 通过 stdin 传递 JSON 数据
-
-async function main() {
-  let input = {};
-  try {
-    const chunks: Buffer[] = [];
-    for await (const chunk of process.stdin) {
-      chunks.push(chunk);
-    }
-    const data = Buffer.concat(chunks).toString();
-    if (data.trim()) {
-      input = JSON.parse(data);
-    }
-  } catch {}
-
-  const planId = (input as any).planId;
-  if (planId) {
-    console.log(\`[plan-complete] 计划 \${planId} 已完成\`);
-  }
-  process.exit(0);
-}
-
-main().catch(() => process.exit(0));
-`,
-  } : {
-    'pre-task.ts': `#!/usr/bin/env bun
-// Pre-task hook
-// Claude Code hooks receive JSON data via stdin
-
-async function main() {
-  let input = {};
-  try {
-    const chunks: Buffer[] = [];
-    for await (const chunk of process.stdin) {
-      chunks.push(chunk);
-    }
-    const data = Buffer.concat(chunks).toString();
-    if (data.trim()) {
-      input = JSON.parse(data);
-    }
-  } catch {}
-
-  const toolInput = (input as any).tool_input || {};
-  const taskId = toolInput.taskId;
-
-  if (taskId) {
-    console.log(\`[pre-task] Preparing to execute task: \${taskId}\`);
-  }
-  process.exit(0);
-}
-
-main().catch(() => process.exit(0));
-`,
-    'post-task.ts': `#!/usr/bin/env bun
-// Post-task hook
-// Claude Code hooks receive JSON data via stdin
-
-async function main() {
-  let input = {};
-  try {
-    const chunks: Buffer[] = [];
-    for await (const chunk of process.stdin) {
-      chunks.push(chunk);
-    }
-    const data = Buffer.concat(chunks).toString();
-    if (data.trim()) {
-      input = JSON.parse(data);
-    }
-  } catch {}
-
-  const toolName = (input as any).tool_name || '';
-  const toolInput = (input as any).tool_input || {};
-
-  if (toolName.startsWith('Task')) {
-    const taskId = toolInput.taskId;
-    if (taskId) {
-      console.log(\`[post-task] Task \${taskId} completed\`);
-    }
-  }
-  process.exit(0);
-}
-
-main().catch(() => process.exit(0));
-`,
-    'plan-complete.ts': `#!/usr/bin/env bun
-// Plan complete hook
-// Claude Code hooks receive JSON data via stdin
-
-async function main() {
-  let input = {};
-  try {
-    const chunks: Buffer[] = [];
-    for await (const chunk of process.stdin) {
-      chunks.push(chunk);
-    }
-    const data = Buffer.concat(chunks).toString();
-    if (data.trim()) {
-      input = JSON.parse(data);
-    }
-  } catch {}
-
-  const planId = (input as any).planId;
-  if (planId) {
-    console.log(\`[plan-complete] Plan \${planId} completed\`);
-  }
-  process.exit(0);
-}
-
-main().catch(() => process.exit(0));
-`,
-  };
-
-  for (const [filename, content] of Object.entries(templates)) {
-    const filePath = path.join(hooksDir, filename);
-    fs.writeFileSync(filePath, content, 'utf-8');
-    console.log(`✓ 创建钩子模板: hooks/${filename}`);
-  }
 }
 
 /**
@@ -414,76 +219,3 @@ function copySkillFiles(cwd: string, language: 'zh' | 'en', t: typeof i18n.zh): 
   console.log(`✅ ${t.skillsCopied}`);
 }
 
-/**
- * 配置 Claude Code 项目级 hooks
- * 将任务验证 hooks 写入 .claude/settings.json
- */
-function configureClaudeCodeHooks(cwd: string, language: 'zh' | 'en'): void {
-  const isZh = language === 'zh';
-
-  const claudeDir = path.join(cwd, '.claude');
-  const settingsPath = path.join(claudeDir, 'settings.json');
-
-  // 确保 .claude 目录存在
-  ensureDir(claudeDir);
-
-  // 读取现有配置或创建新配置
-  let settings: Record<string, unknown> = {};
-  if (fs.existsSync(settingsPath)) {
-    try {
-      settings = JSON.parse(fs.readFileSync(settingsPath, 'utf-8'));
-    } catch {
-      // 解析失败，使用空对象
-    }
-  }
-
-  // 获取 hooks 目录的绝对路径
-  const hooksDir = getHooksDir(cwd);
-
-  // 添加任务验证 hooks 配置
-  const taskHooks = {
-    'PreToolUse': [
-      {
-        // 在调用 TaskUpdate 前检查是否需要验证
-        matcher: 'TaskUpdate',
-        hooks: [
-          {
-            type: 'command',
-            command: `bun run ${hooksDir}/pre-complete.ts`
-          }
-        ]
-      }
-    ],
-    'PostToolUse': [
-      {
-        // 任务工具调用后的验证提醒
-        matcher: 'TaskUpdate|TaskCreate|TaskGet',
-        hooks: [
-          {
-            type: 'command',
-            command: `bun run ${hooksDir}/post-task.ts`
-          }
-        ]
-      }
-    ]
-  };
-
-  // 合并 hooks 配置（不覆盖现有配置）
-  settings['hooks'] = {
-    ...(settings['hooks'] as Record<string, unknown> || {}),
-    ...taskHooks,
-  };
-
-  // 写入配置
-  fs.writeFileSync(settingsPath, JSON.stringify(settings, null, 2), 'utf-8');
-
-  if (isZh) {
-    console.log('✓ 配置 Claude Code hooks: .claude/settings.json');
-    console.log('  - PreToolUse: 任务更新前验证');
-    console.log('  - PostToolUse: 任务完成后检查');
-  } else {
-    console.log('✓ Configured Claude Code hooks: .claude/settings.json');
-    console.log('  - PreToolUse: Pre-task verification');
-    console.log('  - PostToolUse: Post-task check');
-  }
-}

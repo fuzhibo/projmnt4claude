@@ -85,14 +85,6 @@ export interface I18nTexts {
     keyNotFound: string;
     invalidAction: string;
   };
-  // hook 命令
-  hook: {
-    enableHeader: string;
-    disableHeader: string;
-    statusHeader: string;
-    alreadyEnabled: string;
-    alreadyDisabled: string;
-  };
   // branch 命令
   branch: {
     checkoutHeader: string;

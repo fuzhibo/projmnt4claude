@@ -81,14 +81,6 @@ export const zhTexts: I18nTexts = {
     invalidAction: '未知操作',
   },
 
-  hook: {
-    enableHeader: '启用钩子',
-    disableHeader: '禁用钩子',
-    statusHeader: '钩子状态',
-    alreadyEnabled: '钩子已启用',
-    alreadyDisabled: '钩子已禁用',
-  },
-
   branch: {
     checkoutHeader: '切换分支',
     statusHeader: '分支状态',

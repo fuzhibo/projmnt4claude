@@ -3,7 +3,7 @@
  *
  * 覆盖: runDoctor, runBugReport, runDoctorDeep
  *       checkProjectInit, checkPluginCache, checkSkillFiles,
- *       checkDirectoryStructure, checkHooksConfiguration,
+ *       checkDirectoryStructure,
  *       checkLoggingModule, checkDeprecatedStatuses,
  *       checkPluginInstallationScope,
  *       fixIssues (via --fix), displayResults
@@ -17,7 +17,6 @@ const CWD = '/tmp/test-doctor-project';
 const PROJECT_DIR = path.join(CWD, '.projmnt4claude');
 const TASKS_DIR = path.join(PROJECT_DIR, 'tasks');
 const TOOLBOX_DIR = path.join(PROJECT_DIR, 'toolbox');
-const HOOKS_DIR = path.join(PROJECT_DIR, 'hooks');
 const LOGS_DIR = path.join(PROJECT_DIR, 'logs');
 const CONFIG_PATH = path.join(PROJECT_DIR, 'config.json');
 
@@ -100,7 +99,6 @@ const mockIsInitialized = mock((cwd: string) => fsExists(CONFIG_PATH));
 const mockGetProjectDir = mock((cwd: string) => PROJECT_DIR);
 const mockGetTasksDir = mock((cwd: string) => TASKS_DIR);
 const mockGetToolboxDir = mock((cwd: string) => TOOLBOX_DIR);
-const mockGetHooksDir = mock((cwd: string) => HOOKS_DIR);
 const mockGetLogsDir = mock((cwd: string) => LOGS_DIR);
 
 const mockGetAllTaskIds = mock((cwd: string) => {
@@ -137,7 +135,6 @@ mock.module('../utils/path', () => ({
   getConfigPath: (cwd: string) => CONFIG_PATH,
   getTasksDir: mockGetTasksDir,
   getToolboxDir: mockGetToolboxDir,
-  getHooksDir: mockGetHooksDir,
   getLogsDir: mockGetLogsDir,
   getArchiveDir: (cwd: string) => path.join(PROJECT_DIR, 'archive'),
   ensureDir: (dir: string) => { fsMkdir(dir); },
@@ -210,11 +207,8 @@ import { runDoctor, runBugReport, runDoctorDeep } from '../commands/doctor';
 function setupInitializedProject(overrides: {
   config?: Record<string, any>;
   tasks?: Record<string, Record<string, any>>;
-  hooksDir?: boolean;
-  hookFiles?: string[];
   logsDir?: boolean;
   logFiles?: Record<string, string>;
-  settingsJson?: Record<string, any>;
 } = {}) {
   fsReset();
   // project dir structure
@@ -223,7 +217,6 @@ function setupInitializedProject(overrides: {
   fsMkdir(TOOLBOX_DIR);
   fsMkdir(path.join(TOOLBOX_DIR, 'projmnt4claude'));
   fsMkdir(path.join(TOOLBOX_DIR, 'projmnt4claude', 'commands'));
-  fsMkdir(HOOKS_DIR);
   fsMkdir(LOGS_DIR);
 
   // config
@@ -253,25 +246,11 @@ function setupInitializedProject(overrides: {
     }
   }
 
-  // hooks files
-  if (overrides.hookFiles) {
-    for (const f of overrides.hookFiles) {
-      fsSet(path.join(HOOKS_DIR, f), '// hook content');
-    }
-  }
-
   // logs
   if (overrides.logFiles) {
     for (const [name, content] of Object.entries(overrides.logFiles)) {
       fsSet(path.join(LOGS_DIR, name), content);
     }
-  }
-
-  // .claude/settings.json
-  if (overrides.settingsJson) {
-    const claudeDir = path.join(CWD, '.claude');
-    fsMkdir(claudeDir);
-    fsSet(path.join(claudeDir, 'settings.json'), JSON.stringify(overrides.settingsJson));
   }
 
   // command docs
@@ -387,35 +366,6 @@ describe('runDoctor', () => {
     expect(logContains('目录: tasks')).toBe(true);
   });
 
-  // ── CP-009: checkHooksConfiguration — all hooks present ──
-  test('reports ok when all hooks are configured', async () => {
-    setupInitializedProject({
-      hookFiles: ['pre-complete.ts', 'post-task.ts'],
-      settingsJson: {
-        hooks: {
-          PreToolUse: [{ matcher: 'TaskUpdate' }],
-          PostToolUse: [{ matcher: 'TaskUpdate|TaskCreate' }],
-        },
-      },
-    });
-
-    await runDoctor(false, CWD);
-
-    expect(logContains('Hook: pre-complete.ts')).toBe(true);
-    expect(logContains('Hook: post-task.ts')).toBe(true);
-    expect(logContains('Hooks 配置')).toBe(true);
-  });
-
-  // ── CP-010: checkHooksConfiguration — hooks dir missing ───
-  test('reports warning when hooks dir is missing', async () => {
-    setupInitializedProject();
-    delete fsState[HOOKS_DIR];
-
-    await runDoctor(false, CWD);
-
-    expect(logContains('hooks 目录缺失')).toBe(true);
-  });
-
   // ── CP-015: checkLoggingModule — logs dir and config ok ──
   test('reports ok when logging module is fully configured', async () => {
     setupInitializedProject();
@@ -525,7 +475,7 @@ describe('runDoctor', () => {
   test('suggests --fix when fixable issues exist', async () => {
     setupInitializedProject({
       tasks: {
-        'TASK-001': { schemaVersion: 2 },
+        'TASK-001': { status: 'reopened' },
       },
     });
 
@@ -566,16 +516,6 @@ describe('runDoctor', () => {
     expect(Array.isArray(meta.transitionNotes)).toBe(true);
   });
 
-  // ── CP-031: --fix creates missing hooks dir ──────────────
-  test('auto-fix creates missing hooks directory', async () => {
-    setupInitializedProject();
-    delete fsState[HOOKS_DIR];
-
-    await runDoctor(true, CWD);
-
-    expect(fsExists(HOOKS_DIR)).toBe(true);
-  });
-
   // ── CP-032: --fix creates missing logs dir ───────────────
   test('auto-fix creates missing logs directory', async () => {
     setupInitializedProject();
@@ -584,26 +524,6 @@ describe('runDoctor', () => {
     await runDoctor(true, CWD);
 
     expect(fsExists(LOGS_DIR)).toBe(true);
-  });
-
-  // ── CP-033: --fix creates missing hook files ─────────────
-  test('auto-fix creates missing hook template files', async () => {
-    setupInitializedProject({
-      settingsJson: {
-        hooks: {
-          PreToolUse: [{ matcher: 'TaskUpdate' }],
-          PostToolUse: [{ matcher: 'TaskUpdate' }],
-        },
-      },
-    });
-    // Remove hook files but keep dir
-    delete fsState[path.join(HOOKS_DIR, 'pre-complete.ts')];
-    delete fsState[path.join(HOOKS_DIR, 'post-task.ts')];
-
-    await runDoctor(true, CWD);
-
-    expect(fsExists(path.join(HOOKS_DIR, 'pre-complete.ts'))).toBe(true);
-    expect(fsExists(path.join(HOOKS_DIR, 'post-task.ts'))).toBe(true);
   });
 
   // ── CP-034: --fix auto-fixes config completeness ────────
@@ -666,35 +586,6 @@ describe('runDoctor', () => {
     expect(logContains('任务目录不存在')).toBe(true);
   });
 
-  // ── CP-040: checkHooksConfiguration — settings.json missing ──
-  test('reports warning when .claude/settings.json is missing', async () => {
-    setupInitializedProject({
-      hookFiles: ['pre-complete.ts', 'post-task.ts'],
-      // No settingsJson
-    });
-
-    await runDoctor(false, CWD);
-
-    expect(logContains('settings.json 不存在')).toBe(true);
-  });
-
-  // ── CP-041: checkHooksConfiguration — hooks incomplete in settings ──
-  test('reports warning when hooks config is incomplete in settings', async () => {
-    setupInitializedProject({
-      hookFiles: ['pre-complete.ts', 'post-task.ts'],
-      settingsJson: {
-        hooks: {
-          // Only PreToolUse, missing PostToolUse
-          PreToolUse: [{ matcher: 'TaskUpdate' }],
-        },
-      },
-    });
-
-    await runDoctor(false, CWD);
-
-    expect(logContains('hooks 配置不完整')).toBe(true);
-  });
-
   // ── CP-042: checkDirectoryStructure — archive with abandoned tasks ──
   test('reports warning when abandoned tasks exist but archive dir missing', async () => {
     setupInitializedProject({
@@ -710,37 +601,6 @@ describe('runDoctor', () => {
 
     expect(logContains('archive')).toBe(true);
     expect(logContains('archive 目录缺失')).toBe(true);
-  });
-
-  // ── CP-043: checkHooksConfiguration — malformed settings.json ──
-  test('reports warning when settings.json is malformed', async () => {
-    setupInitializedProject({
-      hookFiles: ['pre-complete.ts', 'post-task.ts'],
-    });
-    const claudeDir = path.join(CWD, '.claude');
-    fsMkdir(claudeDir);
-    fsSet(path.join(claudeDir, 'settings.json'), 'NOT VALID JSON {{{');
-
-    await runDoctor(false, CWD);
-
-    expect(logContains('无法解析 settings.json')).toBe(true);
-  });
-
-  // ── CP-044: checkHooksConfiguration — no Task matcher ────
-  test('reports warning when PreToolUse hooks lack Task matcher', async () => {
-    setupInitializedProject({
-      hookFiles: ['pre-complete.ts', 'post-task.ts'],
-      settingsJson: {
-        hooks: {
-          PreToolUse: [{ matcher: 'SomethingElse' }],
-          PostToolUse: [{ matcher: 'TaskUpdate' }],
-        },
-      },
-    });
-
-    await runDoctor(false, CWD);
-
-    expect(logContains('缺少任务验证 hooks')).toBe(true);
   });
 
   // ── CP-045: checkLoggingModule — AI config missing ───────
@@ -790,13 +650,6 @@ describe('runDoctor', () => {
           transitionNotes: [],
           reopenCount: 0,
           requirementHistory: [],
-        },
-      },
-      hookFiles: ['pre-complete.ts', 'post-task.ts'],
-      settingsJson: {
-        hooks: {
-          PreToolUse: [{ matcher: 'TaskUpdate' }],
-          PostToolUse: [{ matcher: 'TaskUpdate|TaskCreate' }],
         },
       },
     });

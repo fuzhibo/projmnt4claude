@@ -45,6 +45,12 @@ export interface PromptsConfig {
   [templateName: string]: string;
 }
 
+/** Git Hook 配置 */
+export interface GitHookConfig {
+  /** 是否启用 git hook 检测和创建（默认 true） */
+  enabled: boolean;
+}
+
 /** 质量配置 */
 export interface QualityConfig {
   /** 最低质量评分阈值 (0-100)，低于此分数判定为 NOPASS */
@@ -81,6 +87,7 @@ export interface ProjectConfig {
   prompts?: PromptsConfig;
   quality?: QualityConfig;
   harness?: HarnessConfig;
+  gitHook?: GitHookConfig;
   [key: string]: unknown;
 }
 
@@ -101,6 +108,11 @@ export const DEFAULT_AI: AIConfig = {
 export const DEFAULT_TRAINING: TrainingConfig = {
   exportEnabled: false,
   outputDir: '.projmnt4claude/training-data/',
+};
+
+/** Git Hook 配置默认值 */
+export const DEFAULT_GIT_HOOK: GitHookConfig = {
+  enabled: true,
 };
 
 /** 日志级别合法值 */

@@ -6,9 +6,11 @@ import {
   type AIConfig,
   type LoggingConfig,
   type TrainingConfig,
+  type GitHookConfig,
   DEFAULT_LOGGING,
   DEFAULT_AI,
   DEFAULT_TRAINING,
+  DEFAULT_GIT_HOOK,
 } from '../types/config.js';
 
 /**
@@ -48,6 +50,15 @@ export function ensureConfigDefaults(config: ProjectConfig): ProjectConfig {
     result.training = {
       exportEnabled: result.training.exportEnabled ?? DEFAULT_TRAINING.exportEnabled,
       outputDir: result.training.outputDir ?? DEFAULT_TRAINING.outputDir,
+    };
+  }
+
+  // gitHook 配置完整性
+  if (!result.gitHook) {
+    result.gitHook = { ...DEFAULT_GIT_HOOK };
+  } else {
+    result.gitHook = {
+      enabled: result.gitHook.enabled ?? DEFAULT_GIT_HOOK.enabled,
     };
   }
 
@@ -150,6 +161,7 @@ const CONFIG_SCHEMA: Record<string, ConfigKeySchema> = {
   'training.exportEnabled': { type: 'boolean' },
   'training.outputDir': { type: 'string' },
   'quality.minScore': { type: 'number', min: 0, max: 100 },
+  'gitHook.enabled': { type: 'boolean' },
 };
 
 /**
@@ -255,6 +267,16 @@ export function listConfig(cwd: string = process.cwd()): void {
   const quality = config.quality;
   if (quality?.minScore !== undefined) {
     console.log(`  quality.minScore: ${quality.minScore}`);
+  } else {
+    console.log('  (使用默认值)');
+  }
+  console.log('');
+
+  // Git Hook 配置
+  console.log('## Git Hook');
+  const gitHook = config.gitHook;
+  if (gitHook) {
+    console.log(`  gitHook.enabled: ${gitHook.enabled}`);
   } else {
     console.log('  (使用默认值)');
   }

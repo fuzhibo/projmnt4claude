@@ -81,14 +81,6 @@ export const enTexts: I18nTexts = {
     invalidAction: 'Unknown action',
   },
 
-  hook: {
-    enableHeader: 'Enable Hooks',
-    disableHeader: 'Disable Hooks',
-    statusHeader: 'Hook Status',
-    alreadyEnabled: 'Hooks already enabled',
-    alreadyDisabled: 'Hooks already disabled',
-  },
-
   branch: {
     checkoutHeader: 'Checkout Branch',
     statusHeader: 'Branch Status',
