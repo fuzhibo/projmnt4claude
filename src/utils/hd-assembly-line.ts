@@ -249,6 +249,9 @@ export class AssemblyLine {
       this.statusReporter.completePipeline(`流水线执行完成，${summary.passed}/${uniqueTaskCount} 通过，${summary.failed} 失败`);
     }
 
+    // 显示醒目的待人工验证通知（流水线最后输出）
+    this.displayPendingVerificationNotification();
+
     return summary;
   }
 
@@ -1860,6 +1863,34 @@ export class AssemblyLine {
       console.log(`   💡 使用 projmnt4claude human-verification approve <taskId> 批准验证`);
     } catch (error) {
       console.error(`   ⚠️ 生成待验证报告失败: ${error instanceof Error ? error.message : String(error)}`);
+    }
+  }
+
+  /**
+   * 显示醒目的待人工验证通知
+   *
+   * 流水线完成后在终端输出醒目的待验证项列表，
+   * 确保用户不会遗漏需要人工验证的检查点。
+   */
+  private displayPendingVerificationNotification(): void {
+    try {
+      const pendingItems = listPending(this.config.cwd, { status: 'pending' });
+      if (pendingItems.length === 0) return;
+
+      console.log('');
+      console.log(`⚠️  待人工验证检查点 (${pendingItems.length} 项)`);
+      console.log('━'.repeat(SEPARATOR_WIDTH));
+
+      for (let i = 0; i < pendingItems.length; i++) {
+        const item = pendingItems[i]!;
+        console.log(`  ${i + 1}. [${item.taskTitle}] ${item.checkpointDescription}`);
+      }
+
+      console.log('');
+      console.log('💡 运行 projmnt4claude human-verification list 查看详情');
+      console.log('');
+    } catch (error) {
+      console.error(`   ⚠️ 显示待验证通知失败: ${error instanceof Error ? error.message : String(error)}`);
     }
   }
 
