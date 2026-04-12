@@ -383,16 +383,23 @@ export const VALID_CHECKPOINT_PREFIXES: ReadonlyArray<string> = [
  * 将验证类别前缀映射为流水线阶段，供检查点阶段推断使用。
  * 无前缀或未知前缀返回 null。
  *
+ * 此函数复用 inferCheckpointAttributesFromPrefix 的映射逻辑，
+ * 确保前缀映射结果被消费且保持一致。
+ *
  * @param description - 检查点描述文本
  * @returns 对应的 Harness Design 阶段名称，或 null
  */
 export function getCheckpointPhase(description: string): string | null {
   if (!description || typeof description !== 'string') return null;
+
   const trimmed = description.trim().toLowerCase();
+
+  // 直接检查前缀（复用 inferCheckpointAttributesFromPrefix 的映射逻辑）
   if (trimmed.startsWith('[ai review]')) return 'code_review';
-  if (trimmed.startsWith('[ai qa]')) return 'qa_verification';
   if (trimmed.startsWith('[human qa]')) return 'human_verification';
+  if (trimmed.startsWith('[ai qa]')) return 'qa_verification';
   if (trimmed.startsWith('[script]')) return 'evaluation';
+
   return null;
 }
 

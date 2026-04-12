@@ -8,6 +8,7 @@ import * as path from 'path';
 import { getTasksDir } from './path';
 import { readTaskMeta, writeTaskMeta } from './task';
 import type { TaskMeta, CheckpointMetadata, CheckpointVerification, VerificationMethod } from '../types/task';
+import { inferCheckpointAttributesFromPrefix } from './validation-rules/checkpoint-rules';
 
 /**
  * 低质量检查点过滤结果
@@ -472,8 +473,19 @@ export function syncCheckpointsToMeta(
     let verification = existing?.verification;
     let category = existing?.category;
 
+    // 根据前缀推断检查点属性
+    const prefixAttributes = inferCheckpointAttributesFromPrefix(cp.text);
+
     if (!verification) {
       verification = inferVerificationFromDescription(cp.text, task);
+    }
+
+    // 如果前缀推断出了验证方法，优先使用前缀推断的方法
+    if (prefixAttributes.verificationMethod) {
+      verification = {
+        ...verification,
+        method: prefixAttributes.verificationMethod,
+      };
     }
 
     // 为 automated 方法但缺少 commands/steps 的检查点生成回退验证
@@ -489,11 +501,24 @@ export function syncCheckpointsToMeta(
       category = inferCheckpointCategory(cp.text);
     }
 
+    // 根据前缀或验证方法确定 requiresHuman
+    // 优先级: 前缀推断 > 现有值 > 根据验证方法推断
+    let requiresHuman: boolean | undefined;
+    if (prefixAttributes.requiresHuman !== undefined) {
+      requiresHuman = prefixAttributes.requiresHuman;
+    } else if (existing?.requiresHuman !== undefined) {
+      requiresHuman = existing.requiresHuman;
+    } else if (verification?.method === 'human_verification') {
+      requiresHuman = true;
+    }
+    // 其他情况保持 undefined（使用默认值）
+
     return {
       id: cp.id,
       description: cp.text,
       status: cp.checked ? 'completed' : (existing?.status || 'pending'),
       category,
+      requiresHuman,
       note: existing?.note,
       verification,
       createdAt: existing?.createdAt || now,
