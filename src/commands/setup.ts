@@ -14,6 +14,8 @@ import {
   getReportsDir,
   getLogsDir,
 } from '../utils/path';
+import { Pre } from '../utils/pre';
+import { DEFAULT_GIT_HOOK, type GitHookConfig } from '../types/config';
 
 interface ProjectConfig {
   projectName: string;
@@ -28,6 +30,8 @@ interface ProjectConfig {
     /** 提供者专有配置 */
     providerOptions?: Record<string, unknown>;
   };
+  /** Git Hook 配置 */
+  gitHook?: GitHookConfig;
 }
 
 const DEFAULT_CONFIG: ProjectConfig = {
@@ -154,6 +158,22 @@ export async function setup(cwd: string = process.cwd(), options: SetupOptions =
 
   // 复制技能文件到项目
   copySkillFiles(cwd, language, t);
+
+  // Git Hook 创建（配置驱动）
+  const gitHookConfig = config.gitHook ?? DEFAULT_GIT_HOOK;
+  if (gitHookConfig.enabled) {
+    const pre = new Pre(cwd);
+    if (fs.existsSync(pre.gitDir)) {
+      try {
+        pre.installAll();
+        console.log('  ✓ Git Hook 创建完成 (pre-commit, prepublishOnly)');
+      } catch (e) {
+        console.log(`  ⚠️ Git Hook 创建失败: ${(e as Error).message}`);
+      }
+    }
+  } else {
+    console.log('  ⏭️  Git Hook 创建已通过配置禁用 (gitHook.enabled = false)');
+  }
 
   console.log(`\n✅ ${t.setupComplete}`);
   console.log(`\n${t.nextStep}`);

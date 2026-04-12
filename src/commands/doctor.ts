@@ -14,6 +14,8 @@ import { Logger } from '../utils/logger';
 import { readConfig, writeConfig, ensureConfigDefaults } from './config';
 import { LogCollector, LogAnalyzerRegistry, AnalysisReporter } from '../utils/log-analyzer';
 import { getBuiltInAnalyzers } from '../utils/log-analyzers';
+import { Pre } from '../utils/pre';
+import { DEFAULT_GIT_HOOK } from '../types/config';
 
 /**
  * 检查结果接口
@@ -60,6 +62,9 @@ export async function runDoctor(fix: boolean = false, cwd: string = process.cwd(
 
     // 8. 检查废弃状态残留
     results.push(...checkDeprecatedStatuses(cwd));
+
+    // 9. 检查 Git Hook 状态
+    results.push(...checkGitHooks(cwd));
   }
 
   // 显示结果
@@ -628,6 +633,59 @@ function checkDeprecatedStatuses(cwd: string): CheckResult[] {
   }
 
   return results;
+}
+
+/**
+ * 检查 Git Hook 状态
+ * 读取 gitHook.enabled 配置决定是否检测
+ * 配置禁用时跳过检测，非 git 仓库时自动降级
+ */
+function checkGitHooks(cwd: string): CheckResult[] {
+  const config = readConfig(cwd);
+  const gitHookConfig = config?.gitHook ?? DEFAULT_GIT_HOOK;
+
+  // CP-2: 配置禁用时跳过
+  if (!gitHookConfig.enabled) {
+    return [{ status: 'ok', name: 'Git Hooks', message: 'Git Hook 检测已通过配置禁用', fixable: false }];
+  }
+
+  // CP-3: 非 git 仓库时自动降级
+  const gitDir = path.join(cwd, '.git');
+  if (!fs.existsSync(gitDir)) {
+    return [{ status: 'ok', name: 'Git Hooks', message: '非 git 仓库，跳过 Git Hook 检测', fixable: false }];
+  }
+
+  // CP-1: 正常检测 git hook 状态
+  try {
+    const pre = new Pre(cwd);
+
+    if (pre.isPreCommitInstalled()) {
+      return [{
+        name: 'Git Hooks',
+        status: 'ok',
+        message: 'pre-commit hook 已安装',
+        fixable: false,
+      }];
+    }
+
+    return [{
+      name: 'Git Hooks',
+      status: 'warning',
+      message: 'pre-commit hook 未安装',
+      details: [
+        '建议安装 pre-commit hook 以在提交前自动运行测试',
+        '运行 projmnt4claude pre install 安装',
+      ],
+      fixable: false,
+    }];
+  } catch {
+    return [{
+      name: 'Git Hooks',
+      status: 'warning',
+      message: '无法检查 Git Hook 状态',
+      fixable: false,
+    }];
+  }
 }
 
 /**

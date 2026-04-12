@@ -139,17 +139,17 @@ export async function fixSingleIssue(
         const updatedAt = new Date(task.updatedAt);
         const staleDays = Math.floor((Date.now() - updatedAt.getTime()) / (24 * 60 * 60 * 1000));
         if (staleDays > 30) {
+          const oldStatus = task.status;
           task.status = 'closed';
-          if (!task.history) task.history = [];
-          task.history.push({
+          if (!task.transitionNotes) task.transitionNotes = [];
+          task.transitionNotes.push({
             timestamp: new Date().toISOString(),
-            action: 'auto_close_stale',
-            field: 'status',
-            oldValue: task.status,
-            newValue: 'closed',
-            reason: `非交互模式自动关闭: 任务已过期 ${staleDays} 天 (>30天阈值)`,
-            user: 'analyze-fix',
+            fromStatus: oldStatus as TaskStatus,
+            toStatus: 'closed',
+            note: `analyze --fix: 非交互模式下自动关闭过期 ${staleDays} 天的任务 (>30天阈值)`,
+            author: 'analyze-fix',
           });
+          // writeTaskMeta 自动监听 status 字段变更并生成 history 记录
           writeTaskMeta(task, cwd);
           console.log(`  ✅ 已自动关闭过期 ${staleDays} 天的任务 ${issue.taskId} (>30天阈值)`);
           return 'fixed';
@@ -170,12 +170,30 @@ export async function fixSingleIssue(
       });
 
       if (response.action === 'close') {
+        const oldStatus = task.status;
         task.status = 'closed';
+        if (!task.transitionNotes) task.transitionNotes = [];
+        task.transitionNotes.push({
+          timestamp: new Date().toISOString(),
+          fromStatus: oldStatus as TaskStatus,
+          toStatus: 'closed',
+          note: 'analyze --fix: 用户交互选择关闭过期任务',
+          author: 'analyze-fix',
+        });
         writeTaskMeta(task, cwd);
         console.log(`  ✅ 已关闭任务 ${issue.taskId}`);
         return 'fixed';
       } else if (response.action === 'progress') {
+        const oldStatus = task.status;
         task.status = 'in_progress';
+        if (!task.transitionNotes) task.transitionNotes = [];
+        task.transitionNotes.push({
+          timestamp: new Date().toISOString(),
+          fromStatus: oldStatus as TaskStatus,
+          toStatus: 'in_progress',
+          note: 'analyze --fix: 用户交互选择将过期任务标记为进行中',
+          author: 'analyze-fix',
+        });
         writeTaskMeta(task, cwd);
         console.log(`  ✅ 已将任务 ${issue.taskId} 标记为进行中`);
         return 'fixed';
@@ -261,6 +279,14 @@ export async function fixSingleIssue(
       const oldStatus = task.status;
       const newStatus = normalizeStatus(task.status);
       task.status = newStatus;
+      if (!task.transitionNotes) task.transitionNotes = [];
+      task.transitionNotes.push({
+        timestamp: new Date().toISOString(),
+        fromStatus: oldStatus as TaskStatus,
+        toStatus: newStatus,
+        note: `analyze --fix: 修复无效状态格式 ${oldStatus} → ${newStatus}`,
+        author: 'analyze-fix',
+      });
       writeTaskMeta(task, cwd);
       console.log(`  ✅ 已将状态从 ${oldStatus} 更新为 ${newStatus}`);
       return 'fixed';
@@ -310,16 +336,15 @@ export async function fixSingleIssue(
       const targetStatus = issue.details?.targetStatus as TaskStatus;
       if (targetStatus && PIPELINE_STATUS_MIGRATION_MAP[oldStatus]) {
         task.status = targetStatus;
-        if (!task.history) task.history = [];
-        task.history.push({
+        if (!task.transitionNotes) task.transitionNotes = [];
+        task.transitionNotes.push({
           timestamp: new Date().toISOString(),
-          action: `pipeline_status_migration`,
-          field: 'status',
-          oldValue: oldStatus,
-          newValue: targetStatus,
-          reason: `analyze 迁移: pipeline 中间状态 ${oldStatus} → ${targetStatus}`,
-          user: 'analyze-fix',
+          fromStatus: oldStatus as TaskStatus,
+          toStatus: targetStatus,
+          note: `analyze --fix: pipeline 中间状态迁移 ${oldStatus} → ${targetStatus}`,
+          author: 'analyze-fix',
         });
+        // writeTaskMeta 自动监听 status 字段变更并生成 history 记录
         writeTaskMeta(task, cwd);
         console.log(`  ✅ 状态已从 ${oldStatus} 迁移为 ${targetStatus}`);
         return 'fixed';
@@ -394,6 +419,14 @@ export async function fixSingleIssue(
       if (issue.details?.currentValue) {
         const oldStatus = task.status;
         task.status = normalizeStatus(task.status);
+        if (!task.transitionNotes) task.transitionNotes = [];
+        task.transitionNotes.push({
+          timestamp: new Date().toISOString(),
+          fromStatus: oldStatus as TaskStatus,
+          toStatus: task.status,
+          note: `analyze --fix: 修复无效状态值 ${oldStatus} → ${task.status}`,
+          author: 'analyze-fix',
+        });
         writeTaskMeta(task, cwd);
         console.log(`  ✅ 已将状态从 ${oldStatus} 更新为 ${task.status}`);
         return 'fixed';
@@ -452,19 +485,19 @@ export async function fixSingleIssue(
     case 'inconsistent_status': {
       console.log(`🔄 修复任务 ${issue.taskId} 的状态矛盾 (resolved + verification.failed)...`);
       // 将状态改回 open，清除旧的 verification
+      const oldStatus = task.status;
       task.status = 'open';
       task.verification = undefined;
       task.updatedAt = new Date().toISOString();
-      if (!task.history) task.history = [];
-      task.history.push({
+      if (!task.transitionNotes) task.transitionNotes = [];
+      task.transitionNotes.push({
         timestamp: new Date().toISOString(),
-        action: `状态变更: resolved → open`,
-        field: 'status',
-        oldValue: 'resolved',
-        newValue: 'open',
-        reason: '修复状态矛盾: resolved 但 verification.result=failed',
-        user: 'analyze-fix',
+        fromStatus: oldStatus as TaskStatus,
+        toStatus: 'open',
+        note: 'analyze --fix: 修复状态矛盾 (resolved + verification.failed)，重置为 open',
+        author: 'analyze-fix',
       });
+      // writeTaskMeta 自动监听 status 字段变更并生成 history 记录
       writeTaskMeta(task, cwd);
       console.log(`  ✅ 已将状态从 resolved 改为 open，清除旧 verification`);
       return 'fixed';
@@ -815,16 +848,7 @@ export async function fixSingleIssue(
         task.status = suggestedStatus as TaskStatus;
         task.updatedAt = new Date().toISOString();
 
-        // 添加 history 记录
-        if (!task.history) task.history = [];
-        task.history.push({
-          timestamp: new Date().toISOString(),
-          action: 'analyze_interrupted_task_fix',
-          field: 'status',
-          oldValue: oldStatus,
-          newValue: suggestedStatus,
-          reason: `中断任务自动修复: ${issue.details?.suggestionReason || ''}`,
-        });
+        // writeTaskMeta 自动监听 status 字段变更并生成 history 记录
 
         // 添加 transitionNote
         if (!task.transitionNotes) task.transitionNotes = [];
@@ -854,15 +878,7 @@ export async function fixSingleIssue(
         task.status = suggestedStatus as TaskStatus;
         task.updatedAt = new Date().toISOString();
 
-        if (!task.history) task.history = [];
-        task.history.push({
-          timestamp: new Date().toISOString(),
-          action: 'analyze_interrupted_task_fix',
-          field: 'status',
-          oldValue: oldStatus,
-          newValue: suggestedStatus,
-          reason: `中断任务手动确认修复: ${issue.details?.suggestionReason || ''}`,
-        });
+        // writeTaskMeta 自动监听 status 字段变更并生成 history 记录
 
         if (!task.transitionNotes) task.transitionNotes = [];
         task.transitionNotes.push({
@@ -892,16 +908,7 @@ export async function fixSingleIssue(
         note: 'analyze --fix: reopened 状态已废弃，迁移为 open',
         author: 'analyze-fix',
       });
-      if (!task.history) task.history = [];
-      task.history.push({
-        timestamp: new Date().toISOString(),
-        action: 'deprecated_status_migration',
-        field: 'status',
-        oldValue: oldStatus,
-        newValue: 'open',
-        reason: 'reopened 状态已废弃（v4），迁移为 open',
-        user: 'analyze-fix',
-      });
+      // writeTaskMeta 自动监听 status 字段变更并生成 history 记录
       writeTaskMeta(task, cwd);
       console.log(`  ✅ 状态已从 reopened 迁移为 open`);
       return 'fixed';
@@ -919,16 +926,7 @@ export async function fixSingleIssue(
         note: 'analyze --fix: needs_human 状态已废弃，迁移为 open 以便重新处理',
         author: 'analyze-fix',
       });
-      if (!task.history) task.history = [];
-      task.history.push({
-        timestamp: new Date().toISOString(),
-        action: 'deprecated_status_migration',
-        field: 'status',
-        oldValue: oldStatus,
-        newValue: 'open',
-        reason: 'needs_human 状态已废弃（v4），迁移为 open',
-        user: 'analyze-fix',
-      });
+      // writeTaskMeta 自动监听 status 字段变更并生成 history 记录
       writeTaskMeta(task, cwd);
       console.log(`  ✅ 状态已从 needs_human 迁移为 open`);
       return 'fixed';
@@ -1007,8 +1005,16 @@ export async function fixSingleIssue(
       const oldStatus = task.status;
       task.status = impliedStatus;
       task.updatedAt = new Date().toISOString();
+      if (!task.transitionNotes) task.transitionNotes = [];
+      task.transitionNotes.push({
+        timestamp: new Date().toISOString(),
+        fromStatus: oldStatus as TaskStatus,
+        toStatus: impliedStatus,
+        note: `analyze --fix: 报告-状态不一致，状态从 ${oldStatus} 更新为 ${impliedStatus} (${issue.details?.reportFile} PASS)`,
+        author: 'analyze-fix',
+      });
 
-      // writeTaskMeta 会自动记录状态变更历史
+      // writeTaskMeta 自动监听 7 个字段(title/description/priority/status/recommendedRole/branch/dependencies)变更并生成 history 记录
       writeTaskMeta(task, cwd);
       console.log(`  ✅ 状态已从 ${oldStatus} 更新为 ${impliedStatus} (${issue.details?.reportFile} PASS)`);
       return 'fixed';
@@ -1038,7 +1044,7 @@ export async function fixSingleIssue(
 
       if (completedCount > 0) {
         task.updatedAt = now;
-        // writeTaskMeta 会自动记录变更
+        // writeTaskMeta 自动监听 7 个字段(title/description/priority/status/recommendedRole/branch/dependencies)变更并生成 history 记录
         writeTaskMeta(task, cwd);
         console.log(`  ✅ 已自动完成 ${completedCount} 个 pending 检查点 (旧版遗留)`);
         return 'fixed';
@@ -1059,12 +1065,21 @@ export async function fixSingleIssue(
       task.status = 'open';
       task.updatedAt = new Date().toISOString();
 
+      if (!task.transitionNotes) task.transitionNotes = [];
+      task.transitionNotes.push({
+        timestamp: new Date().toISOString(),
+        fromStatus: oldStatus as TaskStatus,
+        toStatus: 'open',
+        note: `analyze --fix: 缺少 pipeline 恢复证据，从 ${oldStatus} 重置为 open`,
+        author: 'analyze-fix',
+      });
+
       // 设置 resumeAction 以便后续恢复
       if (!task.resumeAction) {
         task.resumeAction = 'reset_to_open';
       }
 
-      // writeTaskMeta 会自动记录状态变更历史
+      // writeTaskMeta 自动监听 7 个字段(title/description/priority/status/recommendedRole/branch/dependencies)变更并生成 history 记录
       writeTaskMeta(task, cwd);
       console.log(`  ✅ 已将任务从 ${oldStatus} 重置为 open (缺少恢复证据)`);
       return 'fixed';
