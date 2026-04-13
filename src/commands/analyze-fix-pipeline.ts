@@ -498,6 +498,13 @@ export async function fixSingleIssue(
       // 确保 status 为 open（已废弃 reopened）
       if ((task.status as string) === 'reopened') {
         setTaskStatusValidated(task, 'open', 'reopen-mismatch-fix');
+        task.transitionNotes.push({
+          timestamp: new Date().toISOString(),
+          fromStatus: 'reopened',
+          toStatus: 'open',
+          note: 'analyze --fix: reopened 状态已废弃，迁移为 open',
+          author: 'analyze-fix',
+        });
       }
 
       validatedWriteTaskMeta(task, cwd);

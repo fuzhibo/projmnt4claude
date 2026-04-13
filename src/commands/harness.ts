@@ -13,6 +13,11 @@
  * - 方案验证检查点：任务开始前要求确认理解解决方案
  * - 影响文件清单：任务必须关联受影响文件列表
  * - 变更范围预估：标记 small/medium/large 变更
+ *
+ * 计划快照机制（CP-snapshot）：
+ * - 流水线启动时创建计划快照（PlanSnapshot）
+ * - 全流程读取快照而非 current-plan.json
+ * - 正常退出时清理快照，异常时保留供诊断
  */
 
 import * as fs from 'fs';
@@ -21,6 +26,7 @@ import type {
   HarnessConfig,
   ExecutionSummary,
   HarnessRuntimeState,
+  PlanSnapshot,
 } from '../types/harness.js';
 import {
   DEFAULT_HARNESS_CONFIG,
@@ -29,7 +35,7 @@ import {
 import { isInitialized, getProjectDir } from '../utils/path.js';
 import { AssemblyLine } from '../utils/hd-assembly-line.js';
 import { HarnessReporter } from '../utils/harness-reporter.js';
-import { readPlan } from '../utils/plan.js';
+import { readPlan, type ExecutionPlan } from '../utils/plan.js';
 import { readTaskMeta } from '../utils/task.js';
 import { normalizeStatus } from '../types/task.js';
 import { SEPARATOR_WIDTH } from '../utils/format';
@@ -41,7 +47,14 @@ import {
   DEFAULT_QUALITY_GATE_CONFIG,
   type QualityGateConfig,
 } from '../utils/quality-gate.js';
-import type { ExecutionPlan } from '../utils/plan.js';
+import {
+  createPlanSnapshot,
+  readPlanSnapshot,
+  cleanupSnapshot,
+  getCurrentProcessSnapshot,
+  rebuildExecutionPlanFromSnapshot,
+  validateSnapshot,
+} from '../utils/harness-snapshot.js';
 
 /**
  * 批次感知的任务队列
@@ -57,6 +70,9 @@ export interface BatchAwareQueue {
   /** 批次内是否可并行，与 batchBoundaries 一一对应 */
   batchParallelizable: boolean[];
 }
+
+/** 当前流水线计划快照ID（用于清理） */
+let currentSnapshotId: string | null = null;
 
 /**
  * 从 ExecutionPlan 的 batches 数据构建 BatchAwareQueue
@@ -273,6 +289,21 @@ export async function harnessCommand(
     console.log('');
   }
 
+  // CP-3: 流水线启动时创建计划快照
+  const executionPlan: ExecutionPlan = {
+    tasks: batchQueue.taskQueue,
+    batches: batchQueue.batchBoundaries.length > 0 ? rebuildBatchesFromBoundaries(batchQueue) : undefined,
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
+  };
+  const snapshot = createPlanSnapshot(executionPlan, cwd, {
+    batchBoundaries: batchQueue.batchBoundaries,
+    batchLabels: batchQueue.batchLabels,
+    batchParallelizable: batchQueue.batchParallelizable,
+  });
+  currentSnapshotId = snapshot.snapshotId;
+  console.log(`   💾 计划快照已创建: ${snapshot.snapshotId} (${snapshot.tasks.length} 个任务)`);
+
   // 创建 AssemblyLine 并执行
   const assemblyLine = new AssemblyLine(config);
   const reporter = new HarnessReporter(config);
@@ -337,6 +368,16 @@ export async function harnessCommand(
     // 仅在流水线正常完成时清理运行时状态（保留 --continue 恢复能力）
     if (pipelineCompleted) {
       clearRuntimeState(cwd);
+    }
+    // CP-5: 流水线退出时清理快照（正常清理，异常保留供诊断）
+    if (currentSnapshotId && pipelineCompleted) {
+      if (cleanupSnapshot(currentSnapshotId, cwd)) {
+        console.log(`   🧹 计划快照已清理: ${currentSnapshotId}`);
+      }
+      currentSnapshotId = null;
+    } else if (currentSnapshotId) {
+      // 异常退出时保留快照，但输出路径供诊断
+      console.log(`   💾 计划快照保留供诊断: .projmnt4claude/runs/${currentSnapshotId}`);
     }
     // 移除信号处理
     process.removeListener('SIGINT', gracefulShutdown);

@@ -523,6 +523,39 @@ export function createDefaultExecutionRecord(task: TaskMeta): TaskExecutionRecor
 }
 
 /**
+ * 计划快照 - 流水线运行时计划状态的不可变快照
+ *
+ * 解决幽灵任务检测缺乏计划上下文的问题：
+ * - 流水线启动时创建快照，记录当时的完整计划状态
+ * - 全流程读取快照而非 current-plan.json
+ * - 流水线退出时清理（正常清理，异常保留供诊断）
+ */
+export interface PlanSnapshot {
+  /** 快照ID (format: harness-plan-snapshot-{pid}-{timestamp}) */
+  snapshotId: string;
+  /** 进程ID */
+  pid: number;
+  /** 创建时间戳 */
+  timestamp: string;
+  /** 快照文件路径 */
+  path: string;
+  /** 计划任务ID列表（有序） */
+  tasks: string[];
+  /** 批次分组 */
+  batches?: string[][];
+  /** 批次边界索引 */
+  batchBoundaries?: number[];
+  /** 批次标签 */
+  batchLabels?: string[];
+  /** 批次内是否可并行 */
+  batchParallelizable?: boolean[];
+  /** 原始计划文件路径 */
+  sourcePlanPath: string;
+  /** 创建快照时的任务状态快照（taskId -> status） */
+  taskStatusSnapshot: Record<string, string>;
+}
+
+/**
  * 创建默认运行时状态
  */
 export function createDefaultRuntimeState(config: HarnessConfig): HarnessRuntimeState {

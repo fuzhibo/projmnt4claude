@@ -80,13 +80,6 @@ export function getToolboxDir(cwd: string = process.cwd()): string {
 }
 
 /**
- * 获取钩子目录路径
- */
-export function getHooksDir(cwd: string = process.cwd()): string {
-  return path.join(getProjectDir(cwd), 'hooks');
-}
-
-/**
  * 获取 bin 目录路径
  */
 export function getBinDir(cwd: string = process.cwd()): string {

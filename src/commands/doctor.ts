@@ -65,6 +65,9 @@ export async function runDoctor(fix: boolean = false, cwd: string = process.cwd(
 
     // 9. 检查 Git Hook 状态
     results.push(...checkGitHooks(cwd));
+
+    // 10. 检查废弃的 Claude Code Hook 残留
+    results.push(...checkDeprecatedHooks(cwd));
   }
 
   // 显示结果
@@ -689,6 +692,125 @@ function checkGitHooks(cwd: string): CheckResult[] {
 }
 
 /**
+ * 废弃的 hook 脚本文件名列表
+ */
+const DEPRECATED_HOOK_SCRIPTS = ['pre-complete.ts', 'post-task.ts', 'pre-task.ts', 'plan-complete.ts', 'config.json'];
+
+/**
+ * 检查废弃的 Claude Code Hook 残留
+ * 检测 .claude/settings.json 中的 hooks 字段和 .projmnt4claude/hooks/ 目录
+ */
+function checkDeprecatedHooks(cwd: string): CheckResult[] {
+  const results: CheckResult[] = [];
+  const deprecatedSettings: string[] = [];
+  const deprecatedFiles: string[] = [];
+
+  // 1. 检查 .claude/settings.json 中的废弃 hooks
+  const settingsPath = path.join(cwd, '.claude', 'settings.json');
+  if (fs.existsSync(settingsPath)) {
+    try {
+      const settings = JSON.parse(fs.readFileSync(settingsPath, 'utf-8'));
+      const hooks = settings.hooks || {};
+
+      // 检查所有 hook 类型
+      for (const [hookType, hookConfig] of Object.entries(hooks)) {
+        if (typeof hookConfig === 'string') {
+          // 简单字符串格式
+          if (hookConfig.includes('projmnt4claude/hooks/')) {
+            deprecatedSettings.push(`${hookType}: ${hookConfig}`);
+          }
+        } else if (Array.isArray(hookConfig)) {
+          // 数组格式
+          for (const item of hookConfig) {
+            if (typeof item === 'string' && item.includes('projmnt4claude/hooks/')) {
+              deprecatedSettings.push(`${hookType}[]: ${item}`);
+            } else if (typeof item === 'object' && item !== null) {
+              const hookItem = item as { command?: string; script?: string; run?: string };
+              const hookValue = hookItem.command || hookItem.script || hookItem.run || '';
+              if (hookValue.includes('projmnt4claude/hooks/')) {
+                deprecatedSettings.push(`${hookType}: ${hookValue}`);
+              }
+            }
+          }
+        } else if (typeof hookConfig === 'object' && hookConfig !== null) {
+          // 对象格式
+          const hookObj = hookConfig as { command?: string; script?: string; run?: string };
+          const hookValue = hookObj.command || hookObj.script || hookObj.run || '';
+          if (hookValue.includes('projmnt4claude/hooks/')) {
+            deprecatedSettings.push(`${hookType}: ${hookValue}`);
+          }
+        }
+      }
+    } catch {
+      // 忽略解析错误
+    }
+  }
+
+  // 2. 检查 .projmnt4claude/hooks/ 目录是否存在废弃脚本
+  const hooksDir = path.join(cwd, '.projmnt4claude', 'hooks');
+  if (fs.existsSync(hooksDir)) {
+    try {
+      const files = fs.readdirSync(hooksDir);
+      for (const file of files) {
+        if (DEPRECATED_HOOK_SCRIPTS.includes(file)) {
+          deprecatedFiles.push(file);
+        }
+      }
+    } catch {
+      // 忽略目录读取错误
+    }
+  }
+
+  // 3. 生成检查结果
+  const hasSettingsIssue = deprecatedSettings.length > 0;
+  const hasFilesIssue = deprecatedFiles.length > 0;
+
+  if (hasSettingsIssue || hasFilesIssue) {
+    const details: string[] = ['发现废弃的 Claude Code Hook 配置，建议运行 doctor --fix 清理'];
+
+    if (hasSettingsIssue) {
+      details.push('');
+      details.push('.claude/settings.json 中的废弃 hooks:');
+      for (const setting of deprecatedSettings) {
+        details.push(`  - ${setting}`);
+      }
+    }
+
+    if (hasFilesIssue) {
+      details.push('');
+      details.push(`.projmnt4claude/hooks/ 目录中的废弃脚本:`);
+      for (const file of deprecatedFiles) {
+        details.push(`  - ${file}`);
+      }
+    }
+
+    details.push('');
+    details.push('⚠️  废弃说明:');
+    details.push('  Claude Code Hook 功能已被移除，残留配置可能导致问题');
+    details.push('');
+    details.push('💡 运行 projmnt4claude doctor --fix 自动清理');
+
+    results.push({
+      name: '废弃 Hook 检测',
+      status: 'warning',
+      message: '发现废弃的 Claude Code Hook 配置',
+      details,
+      fixable: true,
+    });
+  } else {
+    results.push({
+      name: '废弃 Hook 检测',
+      status: 'ok',
+      message: '未发现废弃的 Claude Code Hook 配置',
+      details: [],
+      fixable: false,
+    });
+  }
+
+  return results;
+}
+
+/**
  * 显示检查结果
  */
 function displayResults(results: CheckResult[]): void {
@@ -873,6 +995,100 @@ async function fixIssues(issues: CheckResult[], cwd: string): Promise<void> {
         }
       }
       console.log(`  ✓ 已迁移 ${fixedCount} 个废弃状态任务`);
+    } else if (issue.name === '废弃 Hook 检测') {
+      // 清理废弃的 Claude Code Hook 配置
+      let removedSettings = false;
+      let removedFiles = false;
+
+      // 1. 清理 .claude/settings.json 中的废弃 hooks
+      const settingsPath = path.join(cwd, '.claude', 'settings.json');
+      if (fs.existsSync(settingsPath)) {
+        try {
+          const settings = JSON.parse(fs.readFileSync(settingsPath, 'utf-8'));
+          const hooks = settings.hooks || {};
+          let modified = false;
+
+          for (const [hookType, hookConfig] of Object.entries(hooks)) {
+            let shouldRemove = false;
+
+            if (typeof hookConfig === 'string') {
+              if (hookConfig.includes('projmnt4claude/hooks/')) {
+                shouldRemove = true;
+              }
+            } else if (Array.isArray(hookConfig)) {
+              const filtered = hookConfig.filter(item => {
+                if (typeof item === 'string') {
+                  return !item.includes('projmnt4claude/hooks/');
+                } else if (typeof item === 'object' && item !== null) {
+                  const hookItem = item as { command?: string; script?: string; run?: string };
+                  const hookValue = hookItem.command || hookItem.script || hookItem.run || '';
+                  return !hookValue.includes('projmnt4claude/hooks/');
+                }
+                return true;
+              });
+              if (filtered.length !== hookConfig.length) {
+                if (filtered.length === 0) {
+                  shouldRemove = true;
+                } else {
+                  hooks[hookType] = filtered;
+                  modified = true;
+                }
+              }
+            } else if (typeof hookConfig === 'object' && hookConfig !== null) {
+              const hookObj = hookConfig as { command?: string; script?: string; run?: string };
+              const hookValue = hookObj.command || hookObj.script || hookObj.run || '';
+              if (hookValue.includes('projmnt4claude/hooks/')) {
+                shouldRemove = true;
+              }
+            }
+
+            if (shouldRemove) {
+              delete hooks[hookType];
+              modified = true;
+            }
+          }
+
+          if (modified) {
+            fs.writeFileSync(settingsPath, JSON.stringify(settings, null, 2), 'utf-8');
+            removedSettings = true;
+          }
+        } catch {
+          // 忽略解析错误
+        }
+      }
+
+      // 2. 清理 .projmnt4claude/hooks/ 目录中的废弃脚本
+      const hooksDir = path.join(cwd, '.projmnt4claude', 'hooks');
+      if (fs.existsSync(hooksDir)) {
+        try {
+          const files = fs.readdirSync(hooksDir);
+          for (const file of files) {
+            if (DEPRECATED_HOOK_SCRIPTS.includes(file)) {
+              const filePath = path.join(hooksDir, file);
+              fs.unlinkSync(filePath);
+              removedFiles = true;
+            }
+          }
+
+          // 如果目录为空，删除目录
+          const remainingFiles = fs.readdirSync(hooksDir);
+          if (remainingFiles.length === 0) {
+            fs.rmdirSync(hooksDir);
+          }
+        } catch {
+          // 忽略文件操作错误
+        }
+      }
+
+      if (removedSettings || removedFiles) {
+        console.log(`  ✓ 已清理废弃的 Claude Code Hook 配置`);
+        if (removedSettings) {
+          console.log(`    - 已更新 .claude/settings.json`);
+        }
+        if (removedFiles) {
+          console.log(`    - 已删除 .projmnt4claude/hooks/ 中的废弃脚本`);
+        }
+      }
     }
   }
 
