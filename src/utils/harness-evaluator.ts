@@ -27,6 +27,7 @@ import { detectContradiction } from './contradiction-detector.js';
 import { createSessionAwareEngine } from './feedback-constraint-engine.js';
 import { verdictResultMarker, verdictHasReason } from './validation-rules/verdict-rules.js';
 import { loadPromptTemplate, resolveTemplate } from './prompt-templates.js';
+import { getLatestSnapshot } from './harness-snapshot.js';
 
 export class HarnessEvaluator {
   private config: HarnessConfig;
@@ -462,14 +463,21 @@ export class HarnessEvaluator {
   /**
    * 检测幽灵任务：开发者在执行期间创建的、不属于原始任务计划的额外任务
    *
-   * 检测逻辑：对比开发报告的 Claude 输出中是否包含 task create / init-requirement 命令调用，
-   * 并检查文件系统中是否存在在开发阶段时间窗口内创建的新任务。
+   * 检测逻辑（基于计划快照）：
+   * 1. 加载流水线计划快照，获取计划内任务 ID 列表
+   * 2. 排除计划内的任务（这些任务即使创建时间在开发窗口内也是合法的）
+   * 3. 只检测不在计划中的任务，且在开发时间窗口内创建
+   *
+   * 快照不可用时回退到时间窗口检测（向后兼容）
    *
    * @regression BUG-012-2 (2026-04-01)
    * 回归测试案例：2026-04-01 Harness 运行中，BUG-011-1 开发者为演示 auto-split 功能
    * 创建了 ModeRegistry 和 Channel 两个子任务；BUG-011-3 开发者创建了 6 个认证系统测试任务。
    * 这些"幽灵任务"引用不存在的文件，导致后续重试浪费 3600s 执行时间和 API 配额。
-   * 本检测方法通过文件系统时间窗口比对来捕获此类违规行为。
+   *
+   * @fix P-2 (2026-04-13)
+   * 修复幽灵任务误判：基于计划快照排除计划内任务，避免用户在流水线运行期间创建的
+   * 合法任务被误判为幽灵任务（如 schema-checkpoint-validation 案例中 11 个钩子清理任务）。
    */
   private detectPhantomTasks(currentTaskId: string, devReport: DevReport): string[] {
     const phantomTasks: string[] = [];
@@ -485,14 +493,40 @@ export class HarnessEvaluator {
 
     const hasCreateCommand = taskCreatePatterns.some(p => p.test(output));
 
-    // 2. 检查文件系统中是否存在由开发者创建的额外任务
-    //    通过对比开发时间窗口内的任务创建时间来判断
+    // 2. 加载计划快照获取计划内任务列表
+    let plannedTaskIds: Set<string> = new Set();
+    let usingSnapshot = false;
+    let snapshotTaskCount = 0;
+
+    try {
+      const snapshot = getLatestSnapshot(this.config.cwd);
+      if (snapshot && snapshot.tasks) {
+        plannedTaskIds = new Set(snapshot.tasks);
+        snapshotTaskCount = snapshot.tasks.length;
+        usingSnapshot = true;
+        console.log(`   📋 幽灵任务检测使用计划快照: ${snapshot.snapshotId} (${snapshotTaskCount} 个计划任务)`);
+      } else {
+        console.log(`   📋 幽灵任务检测: 未找到计划快照，使用时间窗口回退模式`);
+      }
+    } catch (error) {
+      console.log(`   ⚠️ 加载计划快照失败: ${error instanceof Error ? error.message : String(error)}，使用时间窗口回退模式`);
+    }
+
+    // 3. 检查文件系统中是否存在由开发者创建的额外任务
+    //    基于计划快照排除计划内任务，只检测计划外且在开发窗口内创建的任务
     try {
       const allTaskIds = getAllTaskIds(this.config.cwd);
+      let excludedCount = 0;
 
       for (const tid of allTaskIds) {
         // 跳过当前任务
         if (tid === currentTaskId) continue;
+
+        // 使用快照时：排除计划内的任务
+        if (usingSnapshot && plannedTaskIds.has(tid)) {
+          excludedCount++;
+          continue;
+        }
 
         const task = readTaskMeta(tid, this.config.cwd);
         if (!task) continue;
@@ -513,11 +547,15 @@ export class HarnessEvaluator {
           }
         }
       }
+
+      if (usingSnapshot) {
+        console.log(`   📊 幽灵任务检测统计: 总任务 ${allTaskIds.length}, 计划内排除 ${excludedCount}, 计划外检测中 ${allTaskIds.length - excludedCount - 1}`);
+      }
     } catch (error) {
       console.log(`   ⚠️ 幽灵任务检测出错: ${error instanceof Error ? error.message : String(error)}`);
     }
 
-    // 3. 如果 Claude 输出中包含创建命令但文件系统中未检测到，也记录警告
+    // 4. 如果 Claude 输出中包含创建命令但文件系统中未检测到，也记录警告
     if (hasCreateCommand && phantomTasks.length === 0) {
       console.log('   ⚠️ 开发者输出中包含 task create / init-requirement 命令，但未在文件系统中检测到新任务');
       console.log('   ⚠️ 这可能意味着创建操作失败，但意图已存在');
@@ -525,6 +563,16 @@ export class HarnessEvaluator {
 
     if (phantomTasks.length > 0) {
       console.log(`   ⚠️ 检测到 ${phantomTasks.length} 个幽灵任务: ${phantomTasks.join(', ')}`);
+      if (usingSnapshot) {
+        console.log(`   ℹ️  检测模式: 基于计划快照（已排除 ${snapshotTaskCount} 个计划内任务）`);
+      } else {
+        console.log(`   ℹ️  检测模式: 时间窗口回退（建议启用计划快照以提高准确性）`);
+      }
+    } else {
+      console.log(`   ✅ 未检测到幽灵任务`);
+      if (usingSnapshot) {
+        console.log(`   ℹ️  已基于计划快照排除 ${snapshotTaskCount} 个计划内任务`);
+      }
     }
 
     return phantomTasks;

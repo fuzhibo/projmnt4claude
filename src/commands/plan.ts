@@ -21,6 +21,7 @@ import { extractAffectedFiles } from '../utils/quality-gate';
 import { classifyFileToLayer, AIMetadataAssistant, type ArchitectureLayer } from '../utils/ai-metadata';
 import { withAIEnhancement } from '../utils/ai-helpers';
 import { inferDependenciesBatch, type InferredDependency } from '../utils/dependency-engine';
+import { detectActiveSnapshot } from '../utils/harness-snapshot.js';
 import { topologicalSortDFS, findComponentsUnionFind, DependencyGraph, validatePlanOperation, type EdgeMeta, type GraphNode } from '../utils/dependency-graph';
 
 // Re-export InferredDependency for backward compatibility
@@ -692,6 +693,16 @@ export async function recommendPlan(
     process.exit(1);
   }
 
+  // CP-1: 检测活跃流水线，防止在流水线执行期间修改计划
+  const activeCheck = detectActiveSnapshot(cwd);
+  if (activeCheck.hasActive) {
+    console.error('❌ 错误: 检测到正在运行的流水线');
+    console.error(`   ${activeCheck.message}`);
+    console.error('   请等待流水线完成或使用 `projmnt4claude harness --continue` 恢复');
+    console.error('   如需强制创建新计划，请先停止正在运行的流水线进程');
+    process.exit(1);
+  }
+
   console.log('正在分析项目任务...\n');
 
   // CP-4: 模块日志 + 埋点初始化
@@ -703,6 +714,27 @@ export async function recommendPlan(
 
   // 获取所有任务（不仅仅是可执行的，用于构建完整的依赖图）
   const allTasks = getAllTasks(cwd);
+
+  // CP-2: 质量检测规则 - failed 任务重试确认
+  const failedTasks = allTasks.filter(t => normalizeStatus(t.status) === 'failed');
+  if (failedTasks.length > 0) {
+    console.log('⚠️  质量检测: 发现以下 failed 状态任务:');
+    for (const task of failedTasks) {
+      console.log(`   ❌ ${task.id}: ${task.title.substring(0, 50)}`);
+    }
+    console.log('');
+    console.log('💡 约束提示:');
+    console.log('   • 如需重试 failed 任务，请先查看失败原因并修复');
+    console.log('   • 使用 `projmnt4claude task update <id> --status open` 重置状态后重试');
+    console.log('   • 或在 `plan recommend` 后手动将 failed 任务加入计划');
+    console.log('');
+
+    // 非交互模式下直接提示，但不阻止执行
+    if (options.nonInteractive || !process.stdout.isTTY) {
+      console.log('   (非交互模式: 继续执行，但请注意上述 failed 任务)');
+      console.log('');
+    }
+  }
 
   // CP-4: 分离 in_progress 任务，单独展示
   const inProgressTasks = allTasks.filter(t => normalizeStatus(t.status) === 'in_progress');

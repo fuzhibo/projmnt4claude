@@ -55,6 +55,9 @@ import {
   getLatestSnapshot,
   rebuildExecutionPlanFromSnapshot,
   validateSnapshot,
+  detectActiveSnapshot,
+  listSnapshots,
+  isSnapshotActive,
 } from '../utils/harness-snapshot.js';
 
 /**
@@ -160,6 +163,118 @@ export interface HarnessCommandOptions {
 }
 
 /**
+ * Harness 清理命令选项
+ */
+export interface HarnessCleanupOptions {
+  /** 仅清理孤儿快照（进程已不存在的） */
+  orphansOnly?: boolean;
+  /** 强制清理所有快照 */
+  force?: boolean;
+}
+
+/**
+ * 清理 Harness 快照
+ *
+ * @param options - 清理选项
+ * @param cwd - 工作目录
+ * @returns 清理的快照数量
+ */
+export async function cleanupHarnessSnapshots(
+  options: HarnessCleanupOptions = {},
+  cwd: string = process.cwd()
+): Promise<number> {
+  if (!isInitialized(cwd)) {
+    console.error('错误: 项目未初始化。请先运行 `projmnt4claude setup`');
+    process.exit(1);
+  }
+
+  const snapshots = listSnapshots(cwd);
+
+  if (snapshots.length === 0) {
+    console.log('✅ 没有找到任何快照');
+    return 0;
+  }
+
+  let cleaned = 0;
+  const activeSnapshots: PlanSnapshot[] = [];
+  const orphanSnapshots: PlanSnapshot[] = [];
+
+  // 分类快照
+  for (const snapshot of snapshots) {
+    if (isSnapshotActive(snapshot, cwd)) {
+      activeSnapshots.push(snapshot);
+    } else {
+      orphanSnapshots.push(snapshot);
+    }
+  }
+
+  // 清理孤儿快照
+  for (const snapshot of orphanSnapshots) {
+    if (cleanupSnapshot(snapshot.snapshotId, cwd)) {
+      cleaned++;
+      console.log(`  🧹 已清理孤儿快照: ${snapshot.snapshotId} (PID: ${snapshot.pid})`);
+    }
+  }
+
+  // 如果需要强制清理，也清理活跃快照
+  if (options.force && !options.orphansOnly) {
+    for (const snapshot of activeSnapshots) {
+      if (cleanupSnapshot(snapshot.snapshotId, cwd)) {
+        cleaned++;
+        console.log(`  ⚠️  已强制清理活跃快照: ${snapshot.snapshotId} (PID: ${snapshot.pid})`);
+      }
+    }
+  }
+
+  // 输出活跃流水线信息
+  if (activeSnapshots.length > 0 && !options.force) {
+    console.log(`\n⚠️  发现 ${activeSnapshots.length} 个活跃流水线快照（进程仍在运行）:`);
+    for (const snapshot of activeSnapshots) {
+      console.log(`   - ${snapshot.snapshotId} (PID: ${snapshot.pid}, 创建于 ${snapshot.timestamp})`);
+    }
+    console.log('\n💡 使用 --force 选项强制清理所有快照，或等待活跃流水线完成');
+  }
+
+  console.log(`\n✅ 共清理 ${cleaned} 个快照`);
+  return cleaned;
+}
+
+/**
+ * 检查并发并报告
+ *
+ * @param cwd - 工作目录
+ * @returns 是否存在活跃流水线
+ */
+function checkConcurrency(cwd: string): boolean {
+  const detection = detectActiveSnapshot(cwd);
+
+  if (detection.hasActive && detection.activeSnapshot) {
+    console.error('');
+    console.error('❌ 错误: 检测到另一个 Harness 流水线正在运行');
+    console.error('');
+    console.error('活跃流水线信息:');
+    console.error(`   快照ID: ${detection.activeSnapshot.snapshotId}`);
+    console.error(`   进程ID: ${detection.activeSnapshot.pid}`);
+    console.error(`   创建时间: ${detection.activeSnapshot.timestamp}`);
+    console.error(`   任务数量: ${detection.activeSnapshot.tasks.length}`);
+    console.error('');
+    console.error('可能的原因:');
+    console.error('   1. 另一个 Harness 流水线正在运行');
+    console.error('   2. 之前的流水线异常退出，残留了快照');
+    console.error('');
+    console.error('解决方案:');
+    console.error('   - 如果确定没有其他流水线在运行，使用以下命令清理:');
+    console.error('     projmnt4claude headless-harness-design cleanup');
+    console.error('   - 或强制清理所有残留快照:');
+    console.error('     projmnt4claude headless-harness-design cleanup --force');
+    console.error('');
+    return true;
+  }
+
+  return false;
+}
+
+/**
  * 主命令入口
  */
 export async function harnessCommand(
@@ -169,6 +284,12 @@ export async function harnessCommand(
   // 检查项目初始化
   if (!isInitialized(cwd)) {
     console.error('错误: 项目未初始化。请先运行 `projmnt4claude setup`');
+    process.exit(1);
+  }
+
+  // CP-concurrency: 启动前检查并发
+  // 注意: --continue 模式下允许并发（恢复执行）
+  if (!options.continue && checkConcurrency(cwd)) {
     process.exit(1);
   }
 

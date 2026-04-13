@@ -69,7 +69,7 @@ import {
 import { initRequirement } from './commands/init-requirement';
 import { showHelp } from './commands/help';
 import { runDoctor, runBugReport, runDoctorDeep } from './commands/doctor';
-import { harnessCommand } from './commands/harness';
+import { harnessCommand, cleanupHarnessSnapshots } from './commands/harness';
 import {
   listHumanVerifications,
   approveHumanVerification,
@@ -908,8 +908,13 @@ program
 
 // headless-harness-design 命令
 program
-  .command('headless-harness-design')
-  .description('使用 Harness Design 模式执行任务计划 (自动化开发与审查)')
+  .command('headless-harness-design [action]')
+  .description(`使用 Harness Design 模式执行任务计划 (自动化开发与审查)
+
+子命令:
+  cleanup           清理残留的快照文件
+    --force         强制清理所有快照（包括活跃进程的快照）
+    --orphans-only  仅清理孤儿快照（进程已不存在）`)
   .option('--plan <file>', '计划文件路径 (可选，不指定则自动读取/生成)')
   .option('--max-retries <n>', '最大重试次数', '3')
   .option('--timeout <seconds>', '单任务超时时间 (秒)', '300')
@@ -923,8 +928,35 @@ program
   .option('--skip-harness-gate', '跳过 Harness 执行前质量门禁检查 (不推荐)')
   .option('--skip-quality-gate', '[已弃用] 请使用 --skip-harness-gate')
   .option('--batch-git-commit', '每个批次完成后自动 git commit')
-  .action(async (options) => {
+  .option('--force', '强制清理所有快照 (仅 cleanup 子命令)')
+  .option('--orphans-only', '仅清理孤儿快照 (仅 cleanup 子命令)')
+  .action(async (action, options) => {
     requireInit();
+
+    // 处理 cleanup 子命令
+    if (action === 'cleanup') {
+      await cleanupHarnessSnapshots({
+        force: options.force,
+        orphansOnly: options.orphansOnly,
+      });
+      return;
+    }
+
+    // 如果有未知子命令，报错
+    if (action && action !== 'cleanup') {
+      console.error(`❌ 错误: 未知子命令 '${action}'`);
+      console.error('');
+      console.error('支持的子命令:');
+      console.error('  cleanup    清理残留的快照文件');
+      console.error('');
+      console.error('用法示例:');
+      console.error('  projmnt4claude headless-harness-design                    # 运行流水线');
+      console.error('  projmnt4claude headless-harness-design cleanup           # 清理孤儿快照');
+      console.error('  projmnt4claude headless-harness-design cleanup --force   # 强制清理所有快照');
+      process.exit(1);
+    }
+
+    // 运行主命令
     await harnessCommand({
       plan: options.plan,
       maxRetries: options.maxRetries,

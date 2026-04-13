@@ -340,6 +340,36 @@ export function rebuildExecutionPlanFromSnapshot(snapshot: PlanSnapshot): Execut
 }
 
 /**
+ * 检测是否存在活跃的快照（任何正在运行的流水线）
+ *
+ * @param cwd - 工作目录
+ * @returns 检测结果，包含是否活跃、活跃快照信息和提示消息
+ */
+export function detectActiveSnapshot(cwd: string = process.cwd()): {
+  hasActive: boolean;
+  activeSnapshot: PlanSnapshot | null;
+  message: string;
+} {
+  const snapshots = listSnapshots(cwd);
+
+  for (const snapshot of snapshots) {
+    if (isSnapshotActive(snapshot, cwd)) {
+      return {
+        hasActive: true,
+        activeSnapshot: snapshot,
+        message: `检测到活跃流水线: PID ${snapshot.pid}, 创建于 ${snapshot.timestamp}, 包含 ${snapshot.tasks.length} 个任务`,
+      };
+    }
+  }
+
+  return {
+    hasActive: false,
+    activeSnapshot: null,
+    message: '未检测到活跃流水线',
+  };
+}
+
+/**
  * 验证快照完整性
  *
  * @param snapshot - 快照对象

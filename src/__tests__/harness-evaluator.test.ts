@@ -692,3 +692,302 @@ describe('BUG-017: 空输出检测与日志持久化', () => {
   // runEvaluationSession was replaced by createSessionAwareEngine integration
   // The stderr field is now propagated through EngineResult.result.stderr
 });
+
+// ============== P-2: detectPhantomTasks with plan snapshot ==============
+
+describe('P-2: detectPhantomTasks with plan snapshot', () => {
+  let tmpDir: string;
+  let evaluator: HarnessEvaluator;
+  const runsDir = () => path.join(tmpDir, '.projmnt4claude', 'runs');
+
+  beforeEach(() => {
+    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'harness-phantom-test-'));
+    fs.mkdirSync(path.join(tmpDir, '.projmnt4claude', 'tasks'), { recursive: true });
+    fs.mkdirSync(runsDir(), { recursive: true });
+    evaluator = new HarnessEvaluator(createTestConfig(tmpDir));
+  });
+
+  afterEach(() => {
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  // Helper to create a task with specific createdAt
+  function createTaskFile(taskId: string, createdAt: string, status: string = 'pending') {
+    const taskDir = path.join(tmpDir, '.projmnt4claude', 'tasks', taskId);
+    fs.mkdirSync(taskDir, { recursive: true });
+    const taskMeta = {
+      id: taskId,
+      title: `Test ${taskId}`,
+      description: 'Test task',
+      type: 'feature',
+      priority: 'P2',
+      status,
+      dependencies: [],
+      createdAt,
+      updatedAt: createdAt,
+      history: [],
+    };
+    fs.writeFileSync(path.join(taskDir, 'meta.json'), JSON.stringify(taskMeta, null, 2));
+    return taskMeta;
+  }
+
+  // Helper to create a plan snapshot
+  function createPlanSnapshot(tasks: string[], timestamp?: number) {
+    const pid = process.pid;
+    const ts = timestamp || Date.now();
+    const snapshotId = `harness-plan-snapshot-${pid}-${ts}.json`;
+    const snapshotPath = path.join(runsDir(), snapshotId);
+
+    const snapshot = {
+      snapshotId,
+      pid,
+      timestamp: new Date(ts).toISOString(),
+      path: snapshotPath,
+      tasks,
+      batches: [tasks],
+      batchBoundaries: tasks.length > 0 ? [0, tasks.length] : [0],
+      batchLabels: ['Batch 1'],
+      batchParallelizable: [false],
+      sourcePlanPath: path.join(tmpDir, '.projmnt4claude', 'current-plan.json'),
+      taskStatusSnapshot: tasks.reduce((acc, tid) => { acc[tid] = 'pending'; return acc; }, {} as Record<string, string>),
+    };
+
+    fs.writeFileSync(snapshotPath, JSON.stringify(snapshot, null, 2));
+    return snapshot;
+  }
+
+  // Helper to create dev report with specific time window
+  function createDevReportWithWindow(taskId: string, startTime: string, endTime: string): DevReport {
+    return {
+      taskId,
+      status: 'success',
+      changes: [],
+      evidence: [],
+      checkpointsCompleted: [],
+      startTime,
+      endTime,
+      duration: new Date(endTime).getTime() - new Date(startTime).getTime(),
+      claudeOutput: '',
+    };
+  }
+
+  test('CP-1: should exclude tasks in plan snapshot from phantom detection (snapshot mode)', () => {
+    const currentTaskId = 'TASK-current';
+    const plannedTaskId = 'TASK-planned-in-window';
+    const unplannedTaskId = 'TASK-unplanned-in-window';
+
+    // Setup: current task and two tasks created during dev window
+    const devStart = '2026-04-12T15:00:00.000Z';
+    const devEnd = '2026-04-12T15:30:00.000Z';
+    const inWindowTime = '2026-04-12T15:15:00.000Z';
+
+    createTaskFile(currentTaskId, '2026-04-12T10:00:00.000Z');
+    createTaskFile(plannedTaskId, inWindowTime); // In plan + in window
+    createTaskFile(unplannedTaskId, inWindowTime); // Not in plan + in window
+
+    // Create plan snapshot including plannedTaskId but NOT unplannedTaskId
+    createPlanSnapshot([currentTaskId, plannedTaskId]);
+
+    const devReport = createDevReportWithWindow(currentTaskId, devStart, devEnd);
+
+    // Execute
+    const phantomTasks = (evaluator as any).detectPhantomTasks(currentTaskId, devReport);
+
+    // Assert: plannedTaskId should be excluded, unplannedTaskId should be detected
+    expect(phantomTasks).not.toContain(plannedTaskId);
+    expect(phantomTasks).toContain(unplannedTaskId);
+    expect(phantomTasks.length).toBe(1);
+  });
+
+  test('CP-2: should detect tasks using time window when snapshot not available (fallback mode)', () => {
+    const currentTaskId = 'TASK-current';
+    const taskInWindow = 'TASK-in-window';
+    const taskOutsideWindow = 'TASK-outside-window';
+
+    const devStart = '2026-04-12T15:00:00.000Z';
+    const devEnd = '2026-04-12T15:30:00.000Z';
+
+    createTaskFile(currentTaskId, '2026-04-12T10:00:00.000Z');
+    createTaskFile(taskInWindow, '2026-04-12T15:15:00.000Z'); // In window
+    createTaskFile(taskOutsideWindow, '2026-04-12T16:00:00.000Z'); // Outside window
+
+    // No snapshot created - should use fallback mode
+    const devReport = createDevReportWithWindow(currentTaskId, devStart, devEnd);
+
+    const phantomTasks = (evaluator as any).detectPhantomTasks(currentTaskId, devReport);
+
+    // In fallback mode, taskInWindow should be detected
+    expect(phantomTasks).toContain(taskInWindow);
+    expect(phantomTasks).not.toContain(taskOutsideWindow);
+    expect(phantomTasks.length).toBe(1);
+  });
+
+  test('CP-3: should respect 60-second tolerance boundary', () => {
+    const currentTaskId = 'TASK-current';
+
+    // Tasks at exact boundaries (±60s)
+    const taskAtStartBoundary = 'TASK-start-boundary';
+    const taskAtEndBoundary = 'TASK-end-boundary';
+    const taskJustOutsideStart = 'TASK-outside-start';
+    const taskJustOutsideEnd = 'TASK-outside-end';
+
+    const devStart = '2026-04-12T15:00:00.000Z'; // 15:00:00
+    const devEnd = '2026-04-12T15:30:00.000Z';   // 15:30:00
+
+    createTaskFile(currentTaskId, '2026-04-12T10:00:00.000Z');
+    // 14:59:00 = start - 60s (at boundary - should be included in fallback)
+    createTaskFile(taskAtStartBoundary, '2026-04-12T14:59:00.000Z');
+    // 15:31:00 = end + 60s (at boundary - should be included in fallback)
+    createTaskFile(taskAtEndBoundary, '2026-04-12T15:31:00.000Z');
+    // 14:58:59 = start - 61s (just outside - should NOT be detected)
+    createTaskFile(taskJustOutsideStart, '2026-04-12T14:58:59.000Z');
+    // 15:31:01 = end + 61s (just outside - should NOT be detected)
+    createTaskFile(taskJustOutsideEnd, '2026-04-12T15:31:01.000Z');
+
+    // No snapshot - fallback mode
+    const devReport = createDevReportWithWindow(currentTaskId, devStart, devEnd);
+    const phantomTasks = (evaluator as any).detectPhantomTasks(currentTaskId, devReport);
+
+    // At boundary - should be detected
+    expect(phantomTasks).toContain(taskAtStartBoundary);
+    expect(phantomTasks).toContain(taskAtEndBoundary);
+
+    // Just outside boundary - should NOT be detected
+    expect(phantomTasks).not.toContain(taskJustOutsideStart);
+    expect(phantomTasks).not.toContain(taskJustOutsideEnd);
+  });
+
+  test('should always exclude current task from phantom detection', () => {
+    const currentTaskId = 'TASK-current-created-in-window';
+
+    const devStart = '2026-04-12T15:00:00.000Z';
+    const devEnd = '2026-04-12T15:30:00.000Z';
+    const inWindowTime = '2026-04-12T15:15:00.000Z';
+
+    // Current task created in the dev window
+    createTaskFile(currentTaskId, inWindowTime);
+
+    const devReport = createDevReportWithWindow(currentTaskId, devStart, devEnd);
+    const phantomTasks = (evaluator as any).detectPhantomTasks(currentTaskId, devReport);
+
+    // Current task should never be in phantom list
+    expect(phantomTasks).not.toContain(currentTaskId);
+    expect(phantomTasks.length).toBe(0);
+  });
+
+  test('should exclude all planned tasks even if created during dev window', () => {
+    const currentTaskId = 'TASK-current';
+    const plannedTasks: string[] = [];
+    const unplannedTasks: string[] = [];
+
+    const devStart = '2026-04-12T15:00:00.000Z';
+    const devEnd = '2026-04-12T15:30:00.000Z';
+    const inWindowTime = '2026-04-12T15:15:00.000Z';
+
+    createTaskFile(currentTaskId, '2026-04-12T10:00:00.000Z');
+
+    // Create 5 planned tasks and 3 unplanned tasks, all in window
+    for (let i = 0; i < 5; i++) {
+      const tid = `TASK-planned-${i}`;
+      plannedTasks.push(tid);
+      createTaskFile(tid, inWindowTime);
+    }
+
+    for (let i = 0; i < 3; i++) {
+      const tid = `TASK-unplanned-${i}`;
+      unplannedTasks.push(tid);
+      createTaskFile(tid, inWindowTime);
+    }
+
+    // Create snapshot with only planned tasks
+    createPlanSnapshot([currentTaskId, ...plannedTasks]);
+
+    const devReport = createDevReportWithWindow(currentTaskId, devStart, devEnd);
+    const phantomTasks = (evaluator as any).detectPhantomTasks(currentTaskId, devReport);
+
+    // All planned tasks should be excluded
+    for (const tid of plannedTasks) {
+      expect(phantomTasks).not.toContain(tid);
+    }
+
+    // All unplanned tasks should be detected
+    for (const tid of unplannedTasks) {
+      expect(phantomTasks).toContain(tid);
+    }
+
+    expect(phantomTasks.length).toBe(3);
+  });
+
+  test('should handle empty plan snapshot', () => {
+    const currentTaskId = 'TASK-current';
+    const otherTask = 'TASK-other';
+
+    const devStart = '2026-04-12T15:00:00.000Z';
+    const devEnd = '2026-04-12T15:30:00.000Z';
+    const inWindowTime = '2026-04-12T15:15:00.000Z';
+
+    createTaskFile(currentTaskId, '2026-04-12T10:00:00.000Z');
+    createTaskFile(otherTask, inWindowTime);
+
+    // Create empty plan snapshot
+    createPlanSnapshot([currentTaskId]); // Only current task in plan
+
+    const devReport = createDevReportWithWindow(currentTaskId, devStart, devEnd);
+    const phantomTasks = (evaluator as any).detectPhantomTasks(currentTaskId, devReport);
+
+    // otherTask should be detected as phantom (not in plan)
+    expect(phantomTasks).toContain(otherTask);
+    expect(phantomTasks.length).toBe(1);
+  });
+
+  test('should handle corrupt snapshot gracefully (fallback mode)', () => {
+    const currentTaskId = 'TASK-current';
+    const taskInWindow = 'TASK-in-window';
+
+    const devStart = '2026-04-12T15:00:00.000Z';
+    const devEnd = '2026-04-12T15:30:00.000Z';
+
+    createTaskFile(currentTaskId, '2026-04-12T10:00:00.000Z');
+    createTaskFile(taskInWindow, '2026-04-12T15:15:00.000Z');
+
+    // Create corrupt snapshot file
+    const corruptSnapshotPath = path.join(runsDir(), `harness-plan-snapshot-${process.pid}-12345.json`);
+    fs.writeFileSync(corruptSnapshotPath, '{invalid json');
+
+    const devReport = createDevReportWithWindow(currentTaskId, devStart, devEnd);
+
+    // Should not throw, should fall back to time window mode
+    expect(() => {
+      (evaluator as any).detectPhantomTasks(currentTaskId, devReport);
+    }).not.toThrow();
+
+    const phantomTasks = (evaluator as any).detectPhantomTasks(currentTaskId, devReport);
+    // In fallback mode, task should be detected
+    expect(phantomTasks).toContain(taskInWindow);
+  });
+
+  test('should handle missing dev report times gracefully', () => {
+    const currentTaskId = 'TASK-current';
+    const otherTask = 'TASK-other';
+
+    createTaskFile(currentTaskId, '2026-04-12T10:00:00.000Z');
+    createTaskFile(otherTask, '2026-04-12T15:15:00.000Z');
+
+    // Dev report with missing times
+    const devReport: DevReport = {
+      taskId: currentTaskId,
+      status: 'success',
+      changes: [],
+      evidence: [],
+      checkpointsCompleted: [],
+      startTime: '', // Missing
+      endTime: '',   // Missing
+      duration: 0,
+    };
+
+    const phantomTasks = (evaluator as any).detectPhantomTasks(currentTaskId, devReport);
+
+    // No tasks should be detected when time window is invalid
+    expect(phantomTasks.length).toBe(0);
+  });
+});
