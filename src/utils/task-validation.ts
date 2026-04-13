@@ -501,6 +501,18 @@ export function validateRelationship(
 // ============================================================
 
 /**
+ * 写入前验证选项
+ */
+export interface ValidateBeforeWriteOptions {
+  /** 是否验证 Schema 迁移 */
+  validateSchema?: boolean;
+  /** 是否验证 Checkpoint 操作 */
+  validateCheckpoint?: boolean;
+  /** 是否验证 Backfill */
+  validateBackfill?: boolean;
+}
+
+/**
  * 写入前验证任务的所有字段和关系。
  * 包含 Schema 迁移、Checkpoint 操作、Backfill 验证。
  */
@@ -508,11 +520,18 @@ export function validateTaskBeforeWrite(
   task: TaskMeta,
   cwd: string,
   oldTask: TaskMeta | null = null,
+  options: ValidateBeforeWriteOptions = {},
 ): TaskValidationResult {
+  const {
+    validateSchema = true,
+    validateCheckpoint = true,
+    validateBackfill = true,
+  } = options;
+
   const allErrors: string[] = [];
   const allWarnings: string[] = [];
 
-  // 字段验证
+  // 字段验证（始终执行）
   const fields: Array<[string, unknown]> = [
     ['priority', task.priority],
     ['type', task.type],
@@ -526,7 +545,7 @@ export function validateTaskBeforeWrite(
     allWarnings.push(...result.warnings);
   }
 
-  // 关系验证
+  // 关系验证（始终执行）
   const relResult = validateRelationship(
     task.id,
     { parentId: task.parentId, subtaskIds: task.subtaskIds },
@@ -535,41 +554,75 @@ export function validateTaskBeforeWrite(
   allErrors.push(...relResult.errors);
   allWarnings.push(...relResult.warnings);
 
-  // Schema 迁移验证
-  const schemaResult = validateSchemaMigration(oldTask, task);
-  allErrors.push(...schemaResult.errors);
-  allWarnings.push(...schemaResult.warnings);
+  // Schema 迁移验证（可选）
+  if (validateSchema) {
+    const schemaResult = validateSchemaMigration(oldTask, task);
+    allErrors.push(...schemaResult.errors);
+    allWarnings.push(...schemaResult.warnings);
+  }
 
-  // Checkpoint 操作验证
-  const cpResult = validateCheckpointOperations(oldTask, task);
-  allErrors.push(...cpResult.errors);
-  allWarnings.push(...cpResult.warnings);
+  // Checkpoint 操作验证（可选）
+  if (validateCheckpoint) {
+    const cpResult = validateCheckpointOperations(oldTask, task);
+    allErrors.push(...cpResult.errors);
+    allWarnings.push(...cpResult.warnings);
+  }
 
-  // Backfill 验证
-  const backfillResult = validateBackfillOperation(oldTask, task);
-  allErrors.push(...backfillResult.errors);
-  allWarnings.push(...backfillResult.warnings);
+  // Backfill 验证（可选）
+  if (validateBackfill) {
+    const backfillResult = validateBackfillOperation(oldTask, task);
+    allErrors.push(...backfillResult.errors);
+    allWarnings.push(...backfillResult.warnings);
+  }
 
   return { valid: allErrors.length === 0, errors: allErrors, warnings: allWarnings };
 }
 
 /**
+ * 带验证的 writeTaskMeta 包装选项
+ */
+export interface ValidatedWriteOptions {
+  /** 严格模式：验证错误时抛出异常，阻止写入 */
+  strict?: boolean;
+  /** 验证类型过滤：只验证指定类型 */
+  validateSchema?: boolean;
+  validateCheckpoint?: boolean;
+  validateBackfill?: boolean;
+}
+
+/**
  * 带验证的 writeTaskMeta 包装。
  *
- * 验证字段、关系、Schema 迁移、Checkpoint 操作和 Backfill 后输出警告，
- * 但不阻止写入（修复管线需要能写入修正后的数据）。
+ * 验证字段、关系、Schema 迁移、Checkpoint 操作和 Backfill 后输出警告。
+ * 在 strict 模式下，验证错误会抛出异常阻止写入；非严格模式下仅输出警告。
  *
  * @returns 验证结果
+ * @throws 严格模式下验证错误时抛出 TaskValidationError
  */
 export function validatedWriteTaskMeta(
   task: TaskMeta,
   cwd: string,
+  options: ValidatedWriteOptions = {},
 ): { validation: TaskValidationResult } {
+  const {
+    strict = false,
+    validateSchema = true,
+    validateCheckpoint = true,
+    validateBackfill = true,
+  } = options;
+
   // 读取旧任务用于对比验证
   const oldTask = readTaskMeta(task.id, cwd);
-  const validation = validateTaskBeforeWrite(task, cwd, oldTask);
+  const validation = validateTaskBeforeWrite(task, cwd, oldTask, {
+    validateSchema,
+    validateCheckpoint,
+    validateBackfill,
+  });
 
   for (const error of validation.errors) {
+    if (strict) {
+      throw new TaskValidationError(task.id, error);
+    }
     console.warn(`  ⚠️  验证错误 (${task.id}): ${error}`);
   }
   for (const warning of validation.warnings) {
@@ -578,4 +631,17 @@ export function validatedWriteTaskMeta(
 
   writeTaskMeta(task, cwd);
   return { validation };
+}
+
+/**
+ * 任务验证错误
+ */
+export class TaskValidationError extends Error {
+  constructor(
+    public readonly taskId: string,
+    public readonly validationError: string,
+  ) {
+    super(`任务 ${taskId} 验证失败: ${validationError}`);
+    this.name = 'TaskValidationError';
+  }
 }

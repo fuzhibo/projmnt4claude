@@ -298,6 +298,33 @@ export function getCurrentProcessSnapshot(cwd: string = process.cwd()): PlanSnap
 }
 
 /**
+ * 获取最新的快照（不限于当前进程）
+ * 用于 --continue 恢复时查找之前的计划快照
+ *
+ * @param cwd - 工作目录
+ * @param maxAgeMs - 最大年龄（毫秒），默认 24 小时
+ * @returns 最新的快照，不存在或太旧则返回 null
+ */
+export function getLatestSnapshot(cwd: string = process.cwd(), maxAgeMs: number = 24 * 60 * 60 * 1000): PlanSnapshot | null {
+  const snapshots = listSnapshots(cwd);
+
+  if (snapshots.length === 0) {
+    return null;
+  }
+
+  // 找最新的快照（第一个，因为 listSnapshots 按时间倒序排列）
+  const latest = snapshots[0]!;
+
+  // 检查年龄
+  const age = Date.now() - new Date(latest.timestamp).getTime();
+  if (age > maxAgeMs) {
+    return null;
+  }
+
+  return latest;
+}
+
+/**
  * 从快照重建 ExecutionPlan
  *
  * @param snapshot - 快照对象

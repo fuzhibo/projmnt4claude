@@ -52,6 +52,7 @@ import {
   readPlanSnapshot,
   cleanupSnapshot,
   getCurrentProcessSnapshot,
+  getLatestSnapshot,
   rebuildExecutionPlanFromSnapshot,
   validateSnapshot,
 } from '../utils/harness-snapshot.js';
@@ -108,6 +109,29 @@ export function buildBatchAwareQueue(
   }
 
   return { taskQueue, batchBoundaries, batchLabels, batchParallelizable };
+}
+
+/**
+ * 从 batchBoundaries 重建 batches 数组
+ *
+ * 反向操作：将 batchBoundaries + taskQueue 转换回 batches 二维数组
+ * 例如：boundaries=[0,3,7], taskQueue=[a,b,c,d,e,f,g,h] -> [[a,b,c],[d,e,f,g],[h]]
+ */
+function rebuildBatchesFromBoundaries(batchQueue: BatchAwareQueue): string[][] {
+  const { taskQueue, batchBoundaries } = batchQueue;
+
+  if (batchBoundaries.length === 0) {
+    return [taskQueue];
+  }
+
+  const batches: string[][] = [];
+  for (let i = 0; i < batchBoundaries.length; i++) {
+    const start = batchBoundaries[i]!;
+    const end = i + 1 < batchBoundaries.length ? batchBoundaries[i + 1]! : taskQueue.length;
+    batches.push(taskQueue.slice(start, end));
+  }
+
+  return batches;
 }
 
 /**
@@ -329,7 +353,21 @@ export async function harnessCommand(
     if (config.continue) {
       state = loadRuntimeState(cwd);
       if (state) {
-        console.log(`📦 从中断处继续 (任务 ${state.currentIndex + 1}/${state.taskQueue.length})`);
+        // CP-4: 尝试从快照恢复计划（确保使用创建时的计划版本）
+        const latestSnapshot = getLatestSnapshot(cwd);
+        if (latestSnapshot) {
+          console.log(`📦 从中断处继续 (任务 ${state.currentIndex + 1}/${state.taskQueue.length})`);
+          console.log(`   💾 使用计划快照: ${latestSnapshot.snapshotId}`);
+          // 从快照恢复计划数据（如果状态中的计划数据不完整）
+          if (latestSnapshot.tasks.length > 0 && state.taskQueue.length === 0) {
+            state.taskQueue = latestSnapshot.tasks;
+            state.batchBoundaries = latestSnapshot.batchBoundaries || [];
+            state.batchLabels = latestSnapshot.batchLabels || [];
+            state.batchParallelizable = latestSnapshot.batchParallelizable || [];
+          }
+        } else {
+          console.log(`📦 从中断处继续 (任务 ${state.currentIndex + 1}/${state.taskQueue.length})`);
+        }
       } else {
         console.log('📦 没有找到之前的执行状态，从头开始');
         state = createDefaultRuntimeState(config);
