@@ -100,6 +100,8 @@ projmnt4claude analyze --compact
 
 ## Bug Report 分析模式
 
+> **⚠️ 实验性功能**: Bug Report 分析和训练数据导出功能处于实验阶段，数据格式和 API 可能在未来版本变更。详见 [LLM 训练数据 Pipeline 设计文档](../../docs/llm-training-pipeline-design.md)。
+
 使用 `--bug-report <path>` 对指定的 bug report 文件或目录进行深度分析：
 
 ```bash
@@ -113,16 +115,88 @@ projmnt4claude analyze --bug-report .projmnt4claude/logs/
 projmnt4claude analyze --bug-report .projmnt4claude/logs/ --export-training-data
 ```
 
+### 使用场景
+
+#### 场景 1: 问题诊断与修复
+快速分析错误日志，获取分类、严重级别和修复建议：
+```bash
+projmnt4claude analyze --bug-report ./error-log.md
+```
+
+#### 场景 2: 批量日志分析
+分析整个目录的 bug reports，识别问题模式：
+```bash
+projmnt4claude analyze --bug-report .projmnt4claude/logs/ --compact
+```
+
+#### 场景 3: 训练数据收集 (实验性)
+将分析结果导出为 LLM 微调训练数据：
+```bash
+# 启用训练数据导出
+projmnt4claude config set training.exportEnabled true
+projmnt4claude config set training.outputDir ./training-data/
+
+# 分析并导出
+projmnt4claude analyze --bug-report .projmnt4claude/logs/ --export-training-data
+```
+
 ### 分析内容
 - **问题模式识别**: 从日志中提取错误模式和异常堆栈
 - **根因分析**: 结合代码上下文推断可能的根因
 - **修复建议**: AI 生成针对性修复方案
 
-### 训练数据导出
-配合 `--export-training-data` 可将分析结果导出为 JSONL 格式训练数据：
-- 需要在配置中启用 `training.exportEnabled`
-- 导出路径由 `training.outputDir` 控制
-- 数据格式为 `{ instruction, input, output }` 结构
+### 训练数据导出 (实验性)
+
+配合 `--export-training-data` 可将分析结果导出为 JSONL 格式训练数据，用于 LLM 微调：
+
+**前置条件**:
+- 在配置中启用 `training.exportEnabled: true`
+- 配置导出路径 `training.outputDir` (默认: `.projmnt4claude/training-data/`)
+
+**数据格式**:
+```json
+{
+  "input": "{\"problem\":\"...\",\"rootCause\":\"...\",\"errorMessage\":\"...\"}",
+  "output": "{\"classification\":{...},\"severity\":\"...\",\"suggestions\":[...]}",
+  "metadata": {
+    "timestamp": "2026-04-13T10:30:00.000Z",
+    "category": "error-handling",
+    "severity": "high",
+    "confidence": 0.92
+  }
+}
+```
+
+**字段说明**:
+| 字段 | 类型 | 说明 |
+|------|------|------|
+| `input` | string (JSON) | Bug Report 输入数据 (问题/根因/错误日志/建议修复/相关文件) |
+| `output` | string (JSON) | 分析结果 (分类/严重级别/根因验证/影响评估/改进建议) |
+| `metadata` | object | 元数据 (时间戳/分类/严重级别/置信度) |
+
+**配置示例**:
+```json
+{
+  "training": {
+    "exportEnabled": true,
+    "outputDir": ".projmnt4claude/training-data/"
+  }
+}
+```
+
+**完整 Pipeline**:
+训练数据导出只是完整 LLM 微调 Pipeline 的第一步。详见 [LLM 训练数据 Pipeline 设计文档](../../docs/llm-training-pipeline-design.md)，了解从数据收集到模型部署的完整流程。
+
+**数据质量建议**:
+- 确保输入数据完整性 (问题描述、错误日志)
+- 过滤低置信度数据 (< 0.7)
+- 定期人工审核导出数据
+- 避免重复数据
+
+**未来规划**:
+- v1.9.0: 格式转换工具 (Alpaca/ShareGPT/OpenAI)
+- v2.0.0: 数据增强和清洗 Pipeline
+- v2.1.0: 自动化模型训练和评估
 
 ## AI 分析功能
 

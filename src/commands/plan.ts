@@ -114,42 +114,124 @@ interface AIRecommendationOutput {
   };
 }
 
-// ============== 关键字提取与过滤 ==============
+// ============== 查询解析与过滤 ==============
+
+// 停用词
+const STOP_WORDS = new Set([
+  '的', '了', '是', '在', '和', '有', '我', '要', '想', '把', '这', '那',
+  '对', '就', '也', '都', '会', '能', '可', '上', '下', '中', '来', '去',
+  '做', '给', '让', '被', '用', '为', '与', '或', '但', '如', '到', '从',
+  'the', 'a', 'an', 'is', 'are', 'was', 'were', 'be', 'been', 'being',
+  'have', 'has', 'had', 'do', 'does', 'did', 'will', 'would', 'could',
+  'should', 'may', 'might', 'must', 'shall', 'can', 'need', 'want',
+  'to', 'of', 'in', 'for', 'on', 'with', 'at', 'by', 'from', 'as',
+  'and', 'or', 'but', 'if', 'then', 'else', 'when', 'where', 'which',
+]);
 
 /**
- * 从用户描述中提取关键字
+ * 查询过滤器类型
  */
-function extractKeywords(description: string): string[] {
-  // 停用词
-  const stopWords = new Set([
-    '的', '了', '是', '在', '和', '有', '我', '要', '想', '把', '这', '那',
-    '对', '就', '也', '都', '会', '能', '可', '上', '下', '中', '来', '去',
-    '做', '给', '让', '被', '用', '为', '与', '或', '但', '如', '到', '从',
-    'the', 'a', 'an', 'is', 'are', 'was', 'were', 'be', 'been', 'being',
-    'have', 'has', 'had', 'do', 'does', 'did', 'will', 'would', 'could',
-    'should', 'may', 'might', 'must', 'shall', 'can', 'need', 'want',
-    'to', 'of', 'in', 'for', 'on', 'with', 'at', 'by', 'from', 'as',
-    'and', 'or', 'but', 'if', 'then', 'else', 'when', 'where', 'which',
-  ]);
+type QueryFilter =
+  | { type: 'keywords'; keywords: string[] }
+  | { type: 'regex'; pattern: string; flags?: string };
 
-  // 分词（简单空格+标点分割）
-  const words = description
-    .toLowerCase()
-    .replace(/[^\w\u4e00-\u9fa5\s]/g, ' ')
-    .split(/\s+/)
-    .filter(w => w.length > 1 && !stopWords.has(w));
+/**
+ * 检测查询是否为正则表达式模式
+ * 识别常见正则元字符: . * + ? ^ $ | [ ] { } ( ) \\ 等
+ */
+function isRegexPattern(query: string): boolean {
+  // 正则元字符检测模式
+  const regexMetaChars = /[.*+?^${}()|\[\]]/;
 
-  // 提取唯一关键字
-  return [...new Set(words)];
+  // 检查是否包含正则元字符
+  if (!regexMetaChars.test(query)) {
+    return false;
+  }
+
+  // 如果查询以 /.../flags 格式出现，确定是正则
+  if (/^\/.*\/[gimsuy]*$/.test(query)) {
+    return true;
+  }
+
+  // 检查是否有足够的正则特征（不只是偶然的标点）
+  // 例如: .* .+ [] () {} ^ $ | 等组合
+  const regexPatterns = [
+    /\..*[+*?]/,        // .* .+ .?
+    /\[.*\]/,           // [...]
+    /\(.*\)/,           // (...)
+    /\{.*\}/,           // {...}
+    /\^|\$/,            // 行首行尾
+    /\|/,               // 或操作符
+    /\\[dDsSwW]/,       // 字符类转义
+    /\\[bB]/,           // 单词边界
+  ];
+
+  return regexPatterns.some(pattern => pattern.test(query));
 }
 
 /**
- * 检查任务是否匹配关键字
+ * 解析查询字符串，返回 QueryFilter
  */
-function taskMatchesKeywords(task: TaskMeta, keywords: string[]): boolean {
-  if (keywords.length === 0) return true;
+function parseQuery(query: string): QueryFilter {
+  // 清理查询字符串
+  const trimmed = query.trim();
 
-  const searchText = [
+  // 检查是否为正则模式
+  if (!isRegexPattern(trimmed)) {
+    // 关键字模式：分词并过滤停用词
+    const words = trimmed
+      .toLowerCase()
+      .replace(/[^\w\u4e00-\u9fa5\s]/g, ' ')
+      .split(/\s+/)
+      .filter(w => w.length > 1 && !STOP_WORDS.has(w));
+
+    return { type: 'keywords', keywords: [...new Set(words)] };
+  }
+
+  // 尝试解析 /pattern/flags 格式
+  const slashPattern = /^\/(.*)\/([gimsuy]*)$/;
+  const match = trimmed.match(slashPattern);
+
+  if (match) {
+    const [, pattern, flags] = match;
+    // 验证正则有效性
+    try {
+      new RegExp(pattern, flags);
+      return { type: 'regex', pattern, flags: flags || undefined };
+    } catch (e) {
+      // 无效正则，回退到关键字匹配
+      console.warn(`⚠️  无效的正则表达式 "${pattern}"，回退到关键字匹配`);
+      const words = trimmed
+        .toLowerCase()
+        .replace(/[^\w\u4e00-\u9fa5\s]/g, ' ')
+        .split(/\s+/)
+        .filter(w => w.length > 1 && !STOP_WORDS.has(w));
+      return { type: 'keywords', keywords: [...new Set(words)] };
+    }
+  }
+
+  // 无斜杠格式的正则，尝试直接解析为正则
+  try {
+    // 尝试用空字符串作为标志验证
+    new RegExp(trimmed);
+    return { type: 'regex', pattern: trimmed };
+  } catch (e) {
+    // 无效正则，回退到关键字匹配
+    console.warn(`⚠️  无效的正则表达式 "${trimmed}"，回退到关键字匹配`);
+    const words = trimmed
+      .toLowerCase()
+      .replace(/[^\w\u4e00-\u9fa5\s]/g, ' ')
+      .split(/\s+/)
+      .filter(w => w.length > 1 && !STOP_WORDS.has(w));
+    return { type: 'keywords', keywords: [...new Set(words)] };
+  }
+}
+
+/**
+ * 构建任务搜索文本
+ */
+function buildTaskSearchText(task: TaskMeta): string {
+  return [
     task.id,
     task.title,
     task.description || '',
@@ -157,8 +239,59 @@ function taskMatchesKeywords(task: TaskMeta, keywords: string[]): boolean {
     task.recommendedRole || '',
     ...task.dependencies,
   ].join(' ').toLowerCase();
+}
 
-  // 至少匹配一个关键字
+/**
+ * 统一任务匹配函数
+ * 支持关键字匹配和正则匹配两种模式
+ */
+function taskMatchesFilter(task: TaskMeta, filter: QueryFilter): boolean {
+  const searchText = buildTaskSearchText(task);
+
+  if (filter.type === 'keywords') {
+    if (filter.keywords.length === 0) return true;
+    // 至少匹配一个关键字
+    return filter.keywords.some(kw => searchText.includes(kw.toLowerCase()));
+  }
+
+  if (filter.type === 'regex') {
+    try {
+      const regex = new RegExp(filter.pattern, filter.flags || 'i');
+      return regex.test(searchText);
+    } catch (e) {
+      // 如果正则执行失败，打印警告但不崩溃
+      console.warn(`⚠️  正则执行失败: ${filter.pattern}，跳过此过滤`);
+      return true; // 匹配所有（不过滤）
+    }
+  }
+
+  return true;
+}
+
+/**
+ * 从用户描述中提取关键字（向后兼容）
+ * @deprecated 使用 parseQuery + taskMatchesFilter 替代
+ */
+function extractKeywords(description: string): string[] {
+  const filter = parseQuery(description);
+  if (filter.type === 'keywords') {
+    return filter.keywords;
+  }
+  // 如果是正则模式，提取可能的字面量关键字
+  return description
+    .toLowerCase()
+    .replace(/[^\w\u4e00-\u9fa5\s]/g, ' ')
+    .split(/\s+/)
+    .filter(w => w.length > 1 && !STOP_WORDS.has(w));
+}
+
+/**
+ * 检查任务是否匹配关键字（向后兼容）
+ * @deprecated 使用 taskMatchesFilter 替代
+ */
+function taskMatchesKeywords(task: TaskMeta, keywords: string[]): boolean {
+  if (keywords.length === 0) return true;
+  const searchText = buildTaskSearchText(task);
   return keywords.some(kw => searchText.includes(kw.toLowerCase()));
 }
 
@@ -472,7 +605,7 @@ function generateAIOutput(
   return {
     missingSubtaskWarnings: subtaskWarnings && subtaskWarnings.length > 0 ? subtaskWarnings : undefined,
     query,
-    keywords,
+    filter.keywords,
     filterStats: {
       totalTasks: originalCount,
       filteredTasks: filteredCount,
@@ -783,15 +916,20 @@ export async function recommendPlan(
     }
   }
 
-  // 1. 关键字过滤
-  let keywords: string[] = [];
+  // 1. 查询过滤（支持关键字和正则表达式）
+  let filter: QueryFilter = { type: 'keywords', keywords: [] };
   let filteredTasks = chainEligibleTasks;
 
   if (options.query) {
-    keywords = extractKeywords(options.query);
-    console.log(`关键字: ${keywords.join(', ')}`);
+    filter = parseQuery(options.query);
 
-    filteredTasks = chainEligibleTasks.filter(task => taskMatchesKeywords(task, keywords));
+    if (filter.type === 'regex') {
+      console.log(`正则模式: /${filter.pattern}/${filter.flags || ''}`);
+    } else {
+      console.log(`关键字: ${filter.keywords.join(', ')}`);
+    }
+
+    filteredTasks = chainEligibleTasks.filter(task => taskMatchesFilter(task, filter));
     console.log(`过滤结果: ${filteredTasks.length}/${chainEligibleTasks.length} 个任务匹配\n`);
   }
 
@@ -809,7 +947,7 @@ export async function recommendPlan(
     const emptyResult = {
       missingSubtaskWarnings: missingSubtaskWarnings.length > 0 ? missingSubtaskWarnings : undefined,
       query: options.query,
-      keywords,
+      keywords: filter.filter.keywords,
       filterStats: {
         totalTasks: activeTasks.length,
         filteredTasks: 0,
@@ -831,7 +969,7 @@ export async function recommendPlan(
       console.log('没有匹配的任务');
       if (options.query) {
         console.log(`查询: "${options.query}"`);
-        console.log(`关键字: ${keywords.join(', ')}`);
+        console.log(`关键字: ${filter.keywords.join(', ')}`);
       }
     }
     // CP-10: 空结果埋点
@@ -844,7 +982,7 @@ export async function recommendPlan(
       ai_enhanced_fields: [],
       duration_ms: Date.now() - startTime,
       user_edit_count: 0,
-      module_data: { keywords, excluded: excludedCount },
+      module_data: { filter.keywords, excluded: excludedCount },
     });
     logger.flush();
     return;
@@ -902,7 +1040,7 @@ export async function recommendPlan(
     filteredTasks.length,
     cachedBatches,
     options.query,
-    keywords.length > 0 ? keywords : undefined,
+    filter.keywords.length > 0 ? filter.keywords : undefined,
     { smart: options.smart },
     missingSubtaskWarnings
   );
