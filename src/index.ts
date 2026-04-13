@@ -164,6 +164,41 @@ program
 基本操作: create/list/show/get/update/delete/rename/purge/execute/checkpoint
 高级操作: dependency/add-subtask/status-guide/complete/split/search/batch-update/count
 
+全局选项:
+  --token <n>            令牌数估算
+  -f, --force            强制操作
+
+create 子命令选项:
+  --from-requirement     从需求创建
+  --requirement-text <text>  需求文本
+
+list 子命令选项:
+  --status <status>      过滤状态
+  --priority <priority>  过滤优先级
+  --type <type>          过滤类型
+
+show 子命令选项:
+  --json                 JSON格式输出
+
+update 子命令选项:
+  --status <status>      更新状态
+  --priority <priority>  更新优先级
+  --sync-children        同步子任务
+
+dependency 子命令选项:
+  --from <id>            依赖来源
+  --to <id>              依赖目标
+  --remove               移除依赖
+
+split 子命令选项:
+  --parts <n>            拆分数量
+  --strategy <strategy>  拆分策略
+
+checkpoint 子命令选项:
+  --pass                 通过检查点
+  --fail                 失败检查点
+  --missing-verification 标记待验证
+
 ⚠️  dependency 子命令格式 (注意参数顺序):
   task dependency <add|remove> <taskId> --dep-id <depTaskId>
 
@@ -185,7 +220,7 @@ rename 子命令格式:
   .option('--description <description>', '任务描述 (仅 create/update)')
   .option('--type <type>', '任务类型 (create/count): bug/feature/research/docs/refactor/test')
   .option('-y, --yes', '非交互模式 (仅 create/checkpoint/delete)')
-  .option('--token <token>', '检查点确认令牌 (仅 update)')
+  .option('--token <n>', '令牌数估算')
   .option('--sync-children', '同步子任务状态 (仅 update resolved/closed)')
   .option('--no-sync', '不同步子任务状态 (仅 update)')
   .option('--topic <topic>', '讨论主题 (仅 discuss)')
@@ -204,7 +239,17 @@ rename 子命令格式:
   .option('--into <count>', '拆分数量 (仅 split)')
   .option('--titles <titles>', '子任务标题列表，仅 split,')
   .option('--skip-validation', '跳过 checkpoints 质量校验 (仅 create)')
-  .option('-f, --file <path>', '从文件读取描述 (仅 create, 用于包含特殊字符的长描述)')
+  .option('-f, --force', '强制操作')
+  .option('--file <path>', '从文件读取描述 (仅 create, 用于包含特殊字符的长描述)')
+  .option('--from-requirement', '从需求创建 (仅 create)')
+  .option('--requirement-text <text>', '需求文本 (仅 create)')
+  .option('--from <id>', '依赖来源 (仅 dependency)')
+  .option('--to <id>', '依赖目标 (仅 dependency)')
+  .option('--remove', '移除依赖 (仅 dependency)')
+  .option('--parts <n>', '拆分数量 (仅 split)')
+  .option('--strategy <strategy>', '拆分策略 (仅 split)')
+  .option('--pass', '通过检查点 (仅 checkpoint)')
+  .option('--fail', '失败检查点 (仅 checkpoint)')
   .action(async (action, id, options) => {
     requireInit();
     switch (action) {
@@ -803,12 +848,21 @@ program
 program
   .command('init-requirement [description]')
   .description('从自然语言需求描述创建任务，自动解析需求并生成任务结构\n\n' +
-    '自动分析: 优先级(P0-P3)、推荐角色、复杂度、检查点、依赖\n' +
+    '自动分析: 优先级(P0-P3)、推荐角色、复杂度、检查点、依赖\n\n' +
     '示例:\n' +
     '  init-requirement "实现用户登录API接口，需要高优先级处理"\n' +
     '  init-requirement -y "紧急修复线上支付接口超时问题"\n' +
     '  init-requirement -y --no-plan "为认证模块编写单元测试"\n' +
     '  init-requirement -y --file ./description.md\n\n' +
+    '选项:\n' +
+    '  -y, --yes                非交互模式：跳过所有确认，直接使用分析结果创建任务\n' +
+    '  --no-plan                创建任务后不询问是否添加到执行计划\n' +
+    '  --skip-validation        跳过 checkpoints 质量校验\n' +
+    '  --template <type>        描述模板类型: simple (默认) 或 detailed (详细结构化)\n' +
+    '  --auto-split             自动拆分复杂任务为子任务（复杂度评估为 high 时生效）\n' +
+    '  --no-ai                  禁用 AI 增强，仅使用规则引擎进行关键词匹配分析\n' +
+    '  --require-quality <n>    质量门禁: 低于阈值时阻止创建 (0-100)\n' +
+    '  -f, --file <path>        从文件读取描述（用于包含特殊字符的长描述）\n\n' +
     '前提: 需先运行 projmnt4claude setup 初始化项目')
   .option('-y, --yes', '非交互模式：跳过所有确认，直接使用分析结果创建任务')
   .option('--no-plan', '创建任务后不询问是否添加到执行计划')
