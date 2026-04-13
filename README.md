@@ -1,32 +1,292 @@
 # projmnt4claude - Claude Code Project Management Skill
 
-[中文](#中文文档) | **English**
+[中文](#projmnt4claude---claude-code项目管理技能) | **English**
 
-A project management skill designed for Claude Code, providing task management, execution planning, toolbox, and Git branch integration.
+A project management skill designed for Claude Code, implementing a **task-centric workflow** with a complete **development → code review → QA verification → evaluation** closed-loop mechanism.
 
-## Features
+## Core Philosophy
 
-- **Task Management** - Create, view, update, delete tasks with dependency management and status tracking
-- **Execution Planning** - Intelligent execution order recommendation, manual plan adjustment
-- **Subtask Support** - Create subtasks under parent tasks with progress tracking
-- **Project Analysis** - Health analysis, status summary, issue detection
-- **Branch Integration** - Link tasks with Git branches, auto switch/create
-- **Natural Language Parsing** - Auto-create structured tasks from natural descriptions
-- **i18n Support** - Bilingual interface (Chinese/English)
+**projmnt4claude** is built around a fundamental principle: **every problem or requirement should be transformed into a task**. Each task follows a rigorous closed-loop process:
+
+- **Investigation & Analysis** - Deep understanding of the problem, root cause analysis
+- **Solution Design** - Structured approach with clear implementation plan
+- **Development** - Code implementation by specialized agents
+- **Code Review** - Independent quality assessment
+- **QA Verification** - Functional validation against acceptance criteria
+- **Evaluation** - Final assessment of completeness and quality
+
+This methodology ensures that every task is thoroughly analyzed, properly planned, and rigorously validated before completion.
+
+## Headless Harness Design
+
+The `headless-harness-design` command is the **core execution engine** of projmnt4claude, implementing the **Harness Design** pattern inspired by Anthropic's research on AI-assisted software development.
+
+### The 4-Stage Pipeline
+
+```
+┌─────────────┐    ┌─────────────┐    ┌─────────────┐    ┌─────────────┐
+│ Development │ → │ Code Review │ → │ QA Verification│ → │ Evaluation  │
+│  (Developer)│    │  (Reviewer) │    │   (Tester)   │    │ (Architect) │
+└─────────────┘    └─────────────┘    └─────────────┘    └─────────────┘
+      │                   │                   │                   │
+   Implement          Inspect             Validate           Assess
+   Solution           Quality             Functionality      Completeness
+```
+
+**Stage 1: Development**
+- Specialized agent (executor) implements the solution
+- Follows acceptance criteria defined in the task
+- Generates code changes and development report
+
+**Stage 2: Code Review**
+- Independent agent (reviewer) assesses code quality
+- Checks against coding standards and best practices
+- Identifies potential issues and improvement areas
+
+**Stage 3: QA Verification**
+- Tester agent validates functional requirements
+- Runs automated tests and manual verification
+- Ensures acceptance criteria are met
+
+**Stage 4: Evaluation**
+- Architect agent makes final assessment
+- Determines PASS, NOPASS, or NEEDS_REEVALUATION
+- Authorizes task completion or requests revision
+
+### Key Features
+
+- **Context Isolation** - Each stage runs in an independent Claude session
+- **Sprint Contract** - Pre-defined acceptance criteria prevent subjective judgment
+- **Auto-Retry** - Failed tasks automatically retry (configurable)
+- **Evidence Collection** - Automatic collection of execution artifacts
+- **Batch Processing** - Execute multiple tasks in organized batches
+- **Git Integration** - Automatic commits per batch with detailed messages
+
+## Quick Start Guide
+
+### 0. Initialize Project
+
+Set up projmnt4claude in your project:
+
+```bash
+node $PLUGIN_DIR/skills/projmnt4claude/dist/projmnt4claude.js setup
+# or
+/projmnt4claude:setup
+```
+
+This creates a `.projmnt4claude/` directory with the project structure.
+
+### 1. Create Tasks from Requirements
+
+Transform a problem description or requirement document into structured tasks:
+
+```bash
+# From natural language description
+node $PLUGIN_DIR/skills/projmnt4claude/dist/projmnt4claude.js init-requirement "Fix the memory leak in the authentication module that occurs under high concurrency"
+
+# From a requirement file
+node $PLUGIN_DIR/skills/projmnt4claude/dist/projmnt4claude.js init-requirement --file ./requirements.md
+
+# Or use slash command
+/projmnt4claude:init-requirement "Implement user authentication API with JWT support"
+```
+
+**Features:**
+- Auto-extracts keywords and analyzes complexity
+- Suggests priority (P0-P3) and recommended role
+- Generates checkpoints with verification methods
+- Optionally auto-splits complex tasks into subtasks
+
+### 2. Recommend Execution Plan
+
+Intelligently organize tasks into an optimized execution plan:
+
+```bash
+# Smart recommendation based on priority and dependencies
+node $PLUGIN_DIR/skills/projmnt4claude/dist/projmnt4claude.js plan recommend
+
+# With query filter (supports keywords and regex)
+node $PLUGIN_DIR/skills/projmnt4claude/dist/projmnt4claude.js plan recommend --query "bug|fix|auth"
+node $PLUGIN_DIR/skills/projmnt4claude/dist/projmnt4claude.js plan recommend --query "^TASK-refactor-.*"
+
+# Include all non-terminal tasks
+node $PLUGIN_DIR/skills/projmnt4claude/dist/projmnt4claude.js plan recommend --all
+
+# Enable AI-powered semantic dependency detection
+node $PLUGIN_DIR/skills/projmnt4claude/dist/projmnt4claude.js plan recommend --smart
+```
+
+**Smart Grouping:**
+- Groups tasks into **chains** based on dependencies
+- Organizes chains into **batches** by priority
+- Detects parallelizable tasks within same priority
+- Three-layer dependency inference:
+  - Layer 1/2: File path overlap detection
+  - Layer 3: AI semantic analysis (with --smart)
+
+### 3. Execute with Headless Harness
+
+Run the complete 4-stage pipeline on your plan:
+
+```bash
+# Execute current plan
+node $PLUGIN_DIR/skills/projmnt4claude/dist/projmnt4claude.js headless-harness-design
+
+# With batch auto-commit
+node $PLUGIN_DIR/skills/projmnt4claude/dist/projmnt4claude.js headless-harness-design --batch-git-commit
+
+# Continue from interruption
+node $PLUGIN_DIR/skills/projmnt4claude/dist/projmnt4claude.js headless-harness-design --continue
+
+# Dry run to preview
+node $PLUGIN_DIR/skills/projmnt4claude/dist/projmnt4claude.js headless-harness-design --dry-run
+```
+
+**Execution Flow:**
+1. Loads tasks from `current-plan.json`
+2. Processes each task through Development → Code Review → QA → Evaluation
+3. Auto-retries failed tasks (up to max-retries)
+4. Generates reports in `.projmnt4claude/reports/harness/`
+5. Optionally commits changes per batch
+
+### 4. Analyze Project Health
+
+Get insights and recommendations for your project:
+
+```bash
+# Comprehensive analysis
+node $PLUGIN_DIR/skills/projmnt4claude/dist/projmnt4claude.js analyze
+
+# With AI-powered insights
+node $PLUGIN_DIR/skills/projmnt4claude/dist/projmnt4claude.js analyze --deep
+
+# Export training data for LLM fine-tuning
+node $PLUGIN_DIR/skills/projmnt4claude/dist/projmnt4claude.js analyze --export-training-data
+
+# Fix detected issues automatically
+node $PLUGIN_DIR/skills/projmnt4claude/dist/projmnt4claude.js analyze --fix
+```
+
+**Analysis Includes:**
+- Task status distribution
+- Dependency health check
+- Checkpoint completion tracking
+- Bottleneck identification
+- Recommendations for improvement
+
+### 5. System Diagnostics
+
+Check project integrity and generate reports:
+
+```bash
+# Full system check
+node $PLUGIN_DIR/skills/projmnt4claude/dist/projmnt4claude.js doctor
+
+# Generate bug report
+node $PLUGIN_DIR/skills/projmnt4claude/dist/projmnt4claude.js doctor --bug-report
+
+# Fix common issues
+node $PLUGIN_DIR/skills/projmnt4claude/dist/projmnt4claude.js doctor --fix
+```
+
+**Checks Include:**
+- Project initialization status
+- Task schema validation
+- Orphaned task detection
+- Hook availability verification
+- Plan synchronization validation
+
+## Advanced Mode
+
+For users who want fine-grained control over task and plan management:
+
+### Task Management Commands
+
+Direct manipulation of tasks without the harness pipeline:
+
+```bash
+# Create task manually
+projmnt4claude task create --title "Fix login bug" --priority P1 --type bugfix
+
+# List tasks with filters
+projmnt4claude task list --status open --priority P0,P1
+projmnt4claude task list --type feature --role executor
+
+# Show task details
+projmnt4claude task show TASK-001
+
+# Update task properties
+projmnt4claude task update TASK-001 --status in_progress --priority P0
+
+# Delete task
+projmnt4claude task delete TASK-001
+
+# Manage subtasks
+projmnt4claude task add-subtask TASK-001 "Implement OAuth flow"
+projmnt4claude task split TASK-001 --parts 3
+
+# Manage dependencies
+projmnt4claude task dependency add --from TASK-001 --to TASK-002
+projmnt4claude task dependency remove --from TASK-001 --to TASK-002
+```
+
+### Plan Management Commands
+
+Manual plan creation and adjustment:
+
+```bash
+# View current plan
+projmnt4claude plan show
+
+# Manually add/remove tasks
+projmnt4claude plan add TASK-001
+projmnt4claude plan add TASK-002 --after TASK-001
+projmnt4claude plan remove TASK-001
+
+# Clear plan
+projmnt4claude plan clear
+
+# Smart recommendation with options
+projmnt4claude plan recommend --query "security" --all --smart
+```
+
+### Configuration Commands
+
+Customize system behavior:
+
+```bash
+# View current configuration
+projmnt4claude config list
+
+# Update configuration
+projmnt4claude config set ai.model claude-sonnet-4-6
+projmnt4claude config set harness.maxRetries 5
+projmnt4claude config set harness.timeout 1800
+
+# Reset to defaults
+projmnt4claude config reset
+```
+
+**Configurable Areas:**
+- AI model selection for different roles
+- Harness pipeline timeouts and retry limits
+- Quality gate thresholds
+- Prompt templates for headless agents
+- Default task templates
 
 ## Installation
 
-### Option 1: Install from Marketplace
+### From Marketplace (Recommended)
 
 ```bash
 # Add marketplace
 /plugin marketplace add fuzhibo/projmnt4claude
 
-# Install plugin
-/plugin install projmnt4claude
+# Install with user scope (works across all projects)
+/plugin install projmnt4claude --scope user
 ```
 
-### Option 2: Local Development
+### Local Development
 
 ```bash
 # Clone repository
@@ -40,183 +300,54 @@ bun install
 bun run build
 
 # Install in Claude Code
-/plugin install /path/to/projmnt4claude
+/plugin install /path/to/projmnt4claude --scope user
 ```
 
-### ⚠️ Important: Scope Selection
-
-**We strongly recommend using `--scope user` for installation:**
-
-```bash
-# Recommended: Install with user scope (works across all projects)
-/plugin install projmnt4claude --scope user
-
-# NOT recommended: Project scope (causes update issues)
-/plugin install projmnt4claude --scope project
-```
-
-**Why user scope?**
-
-| Scope | Behavior | Recommendation |
-|-------|----------|----------------|
-| `user` | Works in ALL projects, update from anywhere | ✅ **Recommended** |
-| `project` | Bound to ONE project path, can't update from other projects | ❌ Not recommended |
-
-**Known Issue with project scope:**
-
-Claude Code's plugin system has a design limitation where `project` scope installations are bound to a specific project path. If you try to update the plugin from a different project, You'll get an error:
-
-```
-Failed to update: Plugin "projmnt4claude" is not installed at scope project (/different/project/path)
-```
-
-**If you encounter this issue:**
-
-1. Run `doctor` command to diagnose:
-   ```bash
-   node $PLUGIN_DIR/skills/projmnt4claude/dist/projmnt4claude.js doctor
-   ```
-
-2. Fix by reinstalling with user scope:
-   ```bash
-   /plugin uninstall projmnt4claude
-   /plugin install projmnt4claude --scope user
-   ```
-
-## Quick Start
-
-### 1. Initialize Project
-
-Initialize in your project:
-
-```bash
-node $PLUGIN_DIR/skills/projmnt4claude/dist/projmnt4claude.js setup
-```
-
-This creates a `.projmnt4claude/` directory structure in your project root.
-
-### 2. Create Tasks
-
-Using natural language:
-
-```bash
-node $PLUGIN_DIR/skills/projmnt4claude/dist/projmnt4claude.js init-requirement "Implement user login API"
-```
-
-Or interactive mode:
-
-```bash
-node $PLUGIN_DIR/skills/projmnt4claude/dist/projmnt4claude.js task create
-```
-
-### 3. Manage Execution Plan
-
-```bash
-# View recommended plan
-node $PLUGIN_DIR/skills/projmnt4claude/dist/projmnt4claude.js plan recommend
-
-# View current plan
-node $PLUGIN_DIR/skills/projmnt4claude/dist/projmnt4claude.js plan show
-
-# Add task to plan
-node $PLUGIN_DIR/skills/projmnt4claude/dist/projmnt4claude.js plan add TASK-001
-```
-
-### 4. View Project Status
-
-```bash
-node $PLUGIN_DIR/skills/projmnt4claude/dist/projmnt4claude.js status
-```
-
-## Usage in Claude Code
-
-After installation, use slash commands directly in Claude Code:
-
-```
-/projmnt4claude:task list
-/projmnt4claude:plan recommend
-/projmnt4claude:init-requirement "Implement user authentication"
-/projmnt4claude:status
-/projmnt4claude:analyze
-```
-
-## Command Reference
-
-### Task Management
-
-| Command | Description |
-|---------|-------------|
-| `task create` | Create new task |
-| `task list [--status] [--priority] [--role]` | List tasks |
-| `task show <id>` | Show task details |
-| `task update <id> [options]` | Update task |
-| `task delete <id>` | Delete task |
-| `task execute <id>` | Execute task |
-| `task add-subtask <parentId> <title>` | Add subtask |
-
-### Execution Planning
-
-| Command | Description |
-|---------|-------------|
-| `plan show [--json]` | Show plan |
-| `plan add <id> [--after]` | Add task |
-| `plan remove <id>` | Remove task |
-| `plan clear` | Clear plan |
-| `plan recommend` | Smart recommendation |
-
-### Project Analysis
-
-| Command | Description |
-|---------|-------------|
-| `status` | Project status summary |
-| `analyze [--fix]` | Analyze project health |
-
-### Natural Language
-
-| Command | Description |
-|---------|-------------|
-| `init-requirement "<desc>"` | Create tasks from description |
-
-### Global Options
-
-| Option | Description |
-|--------|-------------|
-| `--ai` | AI mode: auto-enable --json output + non-interactive mode + compact logging |
-| `--json` | JSON format output (global, applies to all commands) |
-
-## Data Structure
+## Project Structure
 
 ```
 your-project/
 └── .projmnt4claude/
-    ├── config.json          # Project config
-    ├── tasks/               # Tasks directory
+    ├── config.json              # Project configuration
+    ├── current-plan.json        # Active execution plan
+    ├── harness-status.json      # Pipeline execution state
+    ├── tasks/                   # Task directory
     │   └── TASK-001/
-    │       ├── meta.json    # Task metadata
-    │       └── checkpoint.md
-    ├── archive/             # Archived tasks
-    ├── toolbox/             # Local skills
-    ├── hooks/               # Hook scripts
-    ├── current-plan.json    # Execution plan
-    └── reports/             # Analysis reports
+    │       ├── meta.json        # Task metadata
+    │       └── checkpoints.md   # Checkpoint documentation
+    ├── archive/                 # Archived tasks
+    ├── reports/                 # Analysis & execution reports
+    │   └── harness/             # Harness execution reports
+    └── hooks/                   # Hook scripts
 ```
 
-## Task Metadata
+## Task Metadata Structure
 
 ```typescript
 interface TaskMeta {
-  id: string;                    // Task ID
-  title: string;                 // Title
-  description?: string;          // Description
-  status: TaskStatus;            // Status
-  priority: TaskPriority;        // Priority (P0-P3, Q1-Q4)
-  dependencies: string[];        // Dependencies
-  recommendedRole?: string;      // Recommended role
-  branch?: string;               // Linked branch
-  parentId?: string;             // Parent task ID (for subtasks)
-  subtaskIds?: string[];         // Subtask IDs
-  createdAt: string;             // Created at
-  updatedAt: string;             // Updated at
+  id: string;                    // Task ID (e.g., TASK-001)
+  title: string;                 // Task title
+  description: string;           // Problem analysis + solution design
+  type: 'feature' | 'bugfix' | 'refactor' | 'docs' | 'research';
+  priority: 'P0' | 'P1' | 'P2' | 'P3' | 'Q1' | 'Q2' | 'Q3' | 'Q4';
+  status: 'open' | 'in_progress' | 'wait_review' | 'wait_qa' | 'wait_evaluation' | 'resolved' | 'failed' | 'abandoned';
+  role: 'executor' | 'researcher' | 'writer';
+  dependencies: string[];        // Task IDs this task depends on
+  checkpoints: Checkpoint[];     // Development → Review → QA → Evaluation
+  acceptanceCriteria: string[];  // Sprint contract for completion
+  createdAt: string;
+  updatedAt: string;
+}
+
+interface Checkpoint {
+  id: string;
+  description: string;
+  status: 'pending' | 'completed' | 'failed';
+  requiresHuman: boolean;
+  verification?: {
+    method: 'automated' | 'manual' | 'script';
+    result?: 'passed' | 'failed';
+  };
 }
 ```
 
@@ -226,22 +357,26 @@ interface TaskMeta {
 # Install dependencies
 bun install
 
-# Run CLI (dev mode)
+# Run in dev mode
 bun run src/index.ts --help
 
-# Build CLI
+# Build
 bun run build
 
 # Type check
 bunx tsc --noEmit
+
+# Run tests
+bun test
 ```
 
 ## Tech Stack
 
-- TypeScript
-- Bun Runtime
-- Commander.js (CLI parsing)
-- prompts (interactive input)
+- **TypeScript** - Type-safe development
+- **Bun** - Fast JavaScript runtime
+- **Commander.js** - CLI framework
+- **prompts** - Interactive CLI prompts
+- **Claude Code** - AI-powered execution engine
 
 ## License
 
@@ -249,35 +384,294 @@ GNU Affero General Public License v3.0 (AGPLv3)
 
 ---
 
-# 中文文档
+# projmnt4claude - Claude Code项目管理技能
 
-[English](#projmnt4claude---claude-code-project-management-skill) | **中文**
+**中文** | [English](#projmnt4claude---claude-code-project-management-skill)
 
-专为 Claude Code 设计的项目管理技能，提供任务管理、执行计划、工具箱和 Git 分支集成功能。
+专为 Claude Code 设计的项目管理技能，实现以**任务为中心的工作流**，具备完整的**开发 → 代码审核 → QA验证 → 评估**闭环机制。
 
-## 功能特性
+## 核心理念
 
-- **任务管理** - 创建、查看、更新、删除任务，支持依赖管理和状态跟踪
-- **执行计划** - 智能推荐执行顺序，手动调整计划
-- **子任务支持** - 在父任务下创建子任务，支持进度跟踪
-- **项目分析** - 健康分析、状态摘要、问题检测
-- **分支集成** - 任务与 Git 分支关联，自动切换创建
-- **自然语言解析** - 从自然描述自动创建结构化任务
-- **国际化支持** - 双语界面（中文/英文）
+**projmnt4claude** 围绕一个基本原则构建：**每个问题或需求都应该被转化为任务**。每个任务遵循严格的闭环流程：
+
+- **调查与分析** - 深入理解问题，根因分析
+- **方案设计** - 结构化的实现方法，清晰的执行计划
+- **开发** - 由专业智能体执行代码实现
+- **代码审核** - 独立的质量评估
+- **QA验证** - 针对验收标准的功能验证
+- **评估** - 对完整性和质量的最终评估
+
+这种方法论确保每个任务在被标记为完成之前都经过充分分析、妥善规划和严格验证。
+
+## Headless Harness Design
+
+`headless-harness-design` 命令是 projmnt4claude 的**核心执行引擎**，实现了受 Anthropic AI 辅助软件开发研究启发的 **Harness Design** 模式。
+
+### 四阶段流水线
+
+```
+┌─────────────┐    ┌─────────────┐    ┌─────────────┐    ┌─────────────┐
+│    开发     │ →  │   代码审核  │ →  │   QA验证    │ →  │    评估     │
+│  (开发者)   │    │  (审核员)   │    │   (测试员)  │    │  (架构师)   │
+└─────────────┘    └─────────────┘    └─────────────┘    └─────────────┘
+      │                   │                   │                   │
+    实现方案            检查质量             验证功能            评估完整性
+```
+
+**阶段 1：开发**
+- 专业智能体（执行者）实现解决方案
+- 遵循任务中定义的验收标准
+- 生成代码变更和开发报告
+
+**阶段 2：代码审核**
+- 独立智能体（审核员）评估代码质量
+- 对照编码标准和最佳实践进行检查
+- 识别潜在问题和改进领域
+
+**阶段 3：QA验证**
+- 测试智能体验证功能需求
+- 运行自动化测试和手动验证
+- 确保验收标准得到满足
+
+**阶段 4：评估**
+- 架构智能体进行最终评估
+- 判定通过（PASS）、不通过（NOPASS）或需重新评估（NEEDS_REEVALUATION）
+- 授权任务完成或请求修改
+
+### 关键特性
+
+- **上下文隔离** - 每个阶段在独立的 Claude 会话中运行
+- **Sprint合约** - 预定义的验收标准避免主观判断
+- **自动重试** - 失败任务自动重试（可配置）
+- **证据收集** - 自动收集执行产物
+- **批处理** - 按组织好的批次执行多个任务
+- **Git集成** - 每批次自动提交，附带详细提交信息
+
+## 快速入门指南
+
+### 0. 初始化项目
+
+在您的项目中设置 projmnt4claude：
+
+```bash
+node $PLUGIN_DIR/skills/projmnt4claude/dist/projmnt4claude.js setup
+# 或
+/projmnt4claude:setup
+```
+
+这会创建 `.projmnt4claude/` 目录和项目结构。
+
+### 1. 从需求创建任务
+
+将问题描述或需求文档转化为结构化任务：
+
+```bash
+# 从自然语言描述
+node $PLUGIN_DIR/skills/projmnt4claude/dist/projmnt4claude.js init-requirement "修复高并发下认证模块的内存泄漏问题"
+
+# 从需求文件
+node $PLUGIN_DIR/skills/projmnt4claude/dist/projmnt4claude.js init-requirement --file ./requirements.md
+
+# 或使用斜杠命令
+/projmnt4claude:init-requirement "实现带JWT支持的用户认证API"
+```
+
+**特性：**
+- 自动提取关键词和分析复杂度
+- 建议优先级（P0-P3）和推荐角色
+- 生成带验证方法的检查点
+- 可选地将复杂任务自动拆分为子任务
+
+### 2. 推荐执行计划
+
+智能地将任务组织成优化的执行计划：
+
+```bash
+# 基于优先级和依赖的智能推荐
+node $PLUGIN_DIR/skills/projmnt4claude/dist/projmnt4claude.js plan recommend
+
+# 带查询过滤（支持关键词和正则）
+node $PLUGIN_DIR/skills/projmnt4claude/dist/projmnt4claude.js plan recommend --query "bug|fix|auth"
+node $PLUGIN_DIR/skills/projmnt4claude/dist/projmnt4claude.js plan recommend --query "^TASK-refactor-.*"
+
+# 包含所有非终态任务
+node $PLUGIN_DIR/skills/projmnt4claude/dist/projmnt4claude.js plan recommend --all
+
+# 启用AI驱动的语义依赖检测
+node $PLUGIN_DIR/skills/projmnt4claude/dist/projmnt4claude.js plan recommend --smart
+```
+
+**智能分组：**
+- 根据依赖将任务分组为**任务链**
+- 按优先级将任务链组织为**批次**
+- 在同一优先级内检测可并行执行的任务
+- 三层依赖推断：
+  - 第1/2层：文件路径重叠检测
+  - 第3层：AI语义分析（使用 --smart）
+
+### 3. 使用 Headless Harness 执行
+
+在您的计划上运行完整的四阶段流水线：
+
+```bash
+# 执行当前计划
+node $PLUGIN_DIR/skills/projmnt4claude/dist/projmnt4claude.js headless-harness-design
+
+# 带批次自动提交
+node $PLUGIN_DIR/skills/projmnt4claude/dist/projmnt4claude.js headless-harness-design --batch-git-commit
+
+# 从中断处继续
+node $PLUGIN_DIR/skills/projmnt4claude/dist/projmnt4claude.js headless-harness-design --continue
+
+# 试运行预览
+node $PLUGIN_DIR/skills/projmnt4claude/dist/projmnt4claude.js headless-harness-design --dry-run
+```
+
+**执行流程：**
+1. 从 `current-plan.json` 加载任务
+2. 将每个任务处理通过 开发 → 代码审核 → QA → 评估
+3. 失败任务自动重试（最多 max-retries 次）
+4. 在 `.projmnt4claude/reports/harness/` 生成报告
+5. 可选地每批次提交变更
+
+### 4. 分析项目健康
+
+获取项目的洞察和建议：
+
+```bash
+# 综合分析
+node $PLUGIN_DIR/skills/projmnt4claude/dist/projmnt4claude.js analyze
+
+# 带AI深度洞察
+node $PLUGIN_DIR/skills/projmnt4claude/dist/projmnt4claude.js analyze --deep
+
+# 导出LLM微调训练数据
+node $PLUGIN_DIR/skills/projmnt4claude/dist/projmnt4claude.js analyze --export-training-data
+
+# 自动修复检测到的问题
+node $PLUGIN_DIR/skills/projmnt4claude/dist/projmnt4claude.js analyze --fix
+```
+
+**分析包括：**
+- 任务状态分布
+- 依赖健康检查
+- 检查点完成跟踪
+- 瓶颈识别
+- 改进建议
+
+### 5. 系统诊断
+
+检查项目完整性并生成报告：
+
+```bash
+# 完整系统检查
+node $PLUGIN_DIR/skills/projmnt4claude/dist/projmnt4claude.js doctor
+
+# 生成错误报告
+node $PLUGIN_DIR/skills/projmnt4claude/dist/projmnt4claude.js doctor --bug-report
+
+# 修复常见问题
+node $PLUGIN_DIR/skills/projmnt4claude/dist/projmnt4claude.js doctor --fix
+```
+
+**检查包括：**
+- 项目初始化状态
+- 任务 schema 验证
+- 孤儿任务检测
+- Hook 可用性验证
+- 计划同步验证
+
+## 高级模式
+
+希望对任务和计划管理进行细粒度控制的用户：
+
+### 任务管理命令
+
+直接操作任务，不经过 harness 流水线：
+
+```bash
+# 手动创建任务
+projmnt4claude task create --title "修复登录bug" --priority P1 --type bugfix
+
+# 带过滤列出任务
+projmnt4claude task list --status open --priority P0,P1
+projmnt4claude task list --type feature --role executor
+
+# 显示任务详情
+projmnt4claude task show TASK-001
+
+# 更新任务属性
+projmnt4claude task update TASK-001 --status in_progress --priority P0
+
+# 删除任务
+projmnt4claude task delete TASK-001
+
+# 管理子任务
+projmnt4claude task add-subtask TASK-001 "实现OAuth流程"
+projmnt4claude task split TASK-001 --parts 3
+
+# 管理依赖
+projmnt4claude task dependency add --from TASK-001 --to TASK-002
+projmnt4claude task dependency remove --from TASK-001 --to TASK-002
+```
+
+### 计划管理命令
+
+手动创建和调整计划：
+
+```bash
+# 查看当前计划
+projmnt4claude plan show
+
+# 手动添加/移除任务
+projmnt4claude plan add TASK-001
+projmnt4claude plan add TASK-002 --after TASK-001
+projmnt4claude plan remove TASK-001
+
+# 清空计划
+projmnt4claude plan clear
+
+# 带选项的智能推荐
+projmnt4claude plan recommend --query "security" --all --smart
+```
+
+### 配置命令
+
+自定义系统行为：
+
+```bash
+# 查看当前配置
+projmnt4claude config list
+
+# 更新配置
+projmnt4claude config set ai.model claude-sonnet-4-6
+projmnt4claude config set harness.maxRetries 5
+projmnt4claude config set harness.timeout 1800
+
+# 重置为默认
+projmnt4claude config reset
+```
+
+**可配置项：**
+- 不同角色的 AI 模型选择
+- Harness 流水线超时和重试限制
+- 质量门禁阈值
+- 无头智能体的提示词模板
+- 默认任务模板
 
 ## 安装
 
-### 方式 1: 从 Marketplace 安装
+### 从 Marketplace 安装（推荐）
 
 ```bash
 # 添加 marketplace
 /plugin marketplace add fuzhibo/projmnt4claude
 
-# 安装插件
-/plugin install projmnt4claude
+# 使用 user 范围安装（适用于所有项目）
+/plugin install projmnt4claude --scope user
 ```
 
-### 方式 2: 本地开发安装
+### 本地开发
 
 ```bash
 # 克隆仓库
@@ -291,143 +685,54 @@ bun install
 bun run build
 
 # 在 Claude Code 中安装
-/plugin install /path/to/projmnt4claude
+/plugin install /path/to/projmnt4claude --scope user
 ```
 
-## 快速开始
-
-### 1. 初始化项目
-
-在用户项目中初始化：
-
-```bash
-node $PLUGIN_DIR/skills/projmnt4claude/dist/projmnt4claude.js setup
-```
-
-这将在用户项目根目录创建 `.projmnt4claude/` 目录结构。
-
-### 2. 创建任务
-
-使用自然语言创建：
-
-```bash
-node $PLUGIN_DIR/skills/projmnt4claude/dist/projmnt4claude.js init-requirement "实现用户登录API接口"
-```
-
-或交互式创建：
-
-```bash
-node $PLUGIN_DIR/skills/projmnt4claude/dist/projmnt4claude.js task create
-```
-
-### 3. 管理执行计划
-
-```bash
-# 查看推荐计划
-node $PLUGIN_DIR/skills/projmnt4claude/dist/projmnt4claude.js plan recommend
-
-# 查看当前计划
-node $PLUGIN_DIR/skills/projmnt4claude/dist/projmnt4claude.js plan show
-
-# 添加任务到计划
-node $PLUGIN_DIR/skills/projmnt4claude/dist/projmnt4claude.js plan add TASK-001
-```
-
-### 4. 查看项目状态
-
-```bash
-node $PLUGIN_DIR/skills/projmnt4claude/dist/projmnt4claude.js status
-```
-
-## 在 Claude Code 中使用
-
-安装后，可以在 Claude Code 对话中直接使用斜杠命令：
+## 项目结构
 
 ```
-/projmnt4claude:task list
-/projmnt4claude:plan recommend
-/projmnt4claude:init-requirement "实现用户认证功能"
-/projmnt4claude:status
-/projmnt4claude:analyze
-```
-
-## 命令参考
-
-### 任务管理
-
-| 命令 | 描述 |
-|------|------|
-| `task create` | 创建新任务 |
-| `task list [--status] [--priority] [--role]` | 列出任务 |
-| `task show <id>` | 显示任务详情 |
-| `task update <id> [options]` | 更新任务 |
-| `task delete <id>` | 删除任务 |
-| `task execute <id>` | 执行任务 |
-| `task add-subtask <parentId> <title>` | 添加子任务 |
-
-### 执行计划
-
-| 命令 | 描述 |
-|------|------|
-| `plan show [--json]` | 显示计划 |
-| `plan add <id> [--after]` | 添加任务 |
-| `plan remove <id>` | 移除任务 |
-| `plan clear` | 清空计划 |
-| `plan recommend` | 智能推荐 |
-
-### 项目分析
-
-| 命令 | 描述 |
-|------|------|
-| `status` | 项目状态摘要 |
-| `analyze [--fix]` | 分析项目健康状态 |
-
-### 自然语言
-
-| 命令 | 描述 |
-|------|------|
-| `init-requirement "<desc>"` | 从描述创建任务 |
-
-### 全局选项
-
-| 选项 | 描述 |
-|------|------|
-| `--ai` | AI 模式: 自动启用 --json 输出 + 非交互模式 + 精简日志 |
-| `--json` | JSON 格式输出 (全局，适用于所有命令) |
-
-## 数据结构
-
-```
-用户项目/
+your-project/
 └── .projmnt4claude/
-    ├── config.json          # 项目配置
-    ├── tasks/               # 任务目录
+    ├── config.json              # 项目配置
+    ├── current-plan.json        # 活动执行计划
+    ├── harness-status.json      # 流水线执行状态
+    ├── tasks/                   # 任务目录
     │   └── TASK-001/
-    │       ├── meta.json    # 任务元数据
-    │       └── checkpoint.md
-    ├── archive/             # 归档任务
-    ├── toolbox/             # 本地 skill
-    ├── hooks/               # 钩子脚本
-    ├── current-plan.json    # 执行计划
-    └── reports/             # 分析报告
+    │       ├── meta.json        # 任务元数据
+    │       └── checkpoints.md   # 检查点文档
+    ├── archive/                 # 归档任务
+    ├── reports/                 # 分析和执行报告
+    │   └── harness/             # Harness 执行报告
+    └── hooks/                   # 钩子脚本
 ```
 
-## 任务元数据
+## 任务元数据结构
 
 ```typescript
 interface TaskMeta {
-  id: string;                    // 任务ID
-  title: string;                 // 标题
-  description?: string;          // 描述
-  status: TaskStatus;            // 状态
-  priority: TaskPriority;        // 优先级 (P0-P3, Q1-Q4)
-  dependencies: string[];        // 依赖
-  recommendedRole?: string;      // 推荐角色
-  branch?: string;               // 关联分支
-  parentId?: string;             // 父任务ID (子任务用)
-  subtaskIds?: string[];         // 子任务ID列表
-  createdAt: string;             // 创建时间
-  updatedAt: string;             // 更新时间
+  id: string;                    // 任务 ID（如 TASK-001）
+  title: string;                 // 任务标题
+  description: string;           // 问题分析 + 方案设计
+  type: 'feature' | 'bugfix' | 'refactor' | 'docs' | 'research';
+  priority: 'P0' | 'P1' | 'P2' | 'P3' | 'Q1' | 'Q2' | 'Q3' | 'Q4';
+  status: 'open' | 'in_progress' | 'wait_review' | 'wait_qa' | 'wait_evaluation' | 'resolved' | 'failed' | 'abandoned';
+  role: 'executor' | 'researcher' | 'writer';
+  dependencies: string[];        // 此任务依赖的任务ID
+  checkpoints: Checkpoint[];     // 开发 → 审核 → QA → 评估
+  acceptanceCriteria: string[];  // 完成的 Sprint 合约
+  createdAt: string;
+  updatedAt: string;
+}
+
+interface Checkpoint {
+  id: string;
+  description: string;
+  status: 'pending' | 'completed' | 'failed';
+  requiresHuman: boolean;
+  verification?: {
+    method: 'automated' | 'manual' | 'script';
+    result?: 'passed' | 'failed';
+  };
 }
 ```
 
@@ -437,22 +742,26 @@ interface TaskMeta {
 # 安装依赖
 bun install
 
-# 运行 CLI (开发模式)
+# 开发模式运行
 bun run src/index.ts --help
 
-# 打包 CLI
+# 打包
 bun run build
 
 # 类型检查
 bunx tsc --noEmit
+
+# 运行测试
+bun test
 ```
 
 ## 技术栈
 
-- TypeScript
-- Bun 运行时
-- Commander.js (CLI 解析)
-- prompts (交互式输入)
+- **TypeScript** - 类型安全开发
+- **Bun** - 快速 JavaScript 运行时
+- **Commander.js** - CLI 框架
+- **prompts** - 交互式 CLI 提示
+- **Claude Code** - AI 驱动的执行引擎
 
 ## 许可证
 
