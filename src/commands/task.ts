@@ -3868,28 +3868,7 @@ export function showStatus(
     hints.push('   💡 运行 task validate <id> 验证任务');
   }
 
-  // 2. 检测 pending 人工验证检查点
-  const humanVerificationTasks: string[] = [];
-  for (const task of allTasks) {
-    if (task.status !== 'open' && task.status !== 'in_progress') continue;
-    const checkpoints = task.checkpoints || [];
-    const pendingHuman = checkpoints.filter(
-      cp => cp.status === 'pending' && cp.verification?.method === 'human_verification'
-    );
-    if (pendingHuman.length > 0) {
-      humanVerificationTasks.push(
-        `   - ${task.id}: ${pendingHuman.length} 个待人工验证检查点 (${pendingHuman.map(cp => cp.id).join(', ')})`
-      );
-    }
-  }
-  if (humanVerificationTasks.length > 0) {
-    hints.push('');
-    hints.push(`👤 ${humanVerificationTasks.length} 个任务有待人工验证的检查点:`);
-    hints.push(...humanVerificationTasks.slice(0, 5));
-    hints.push('   💡 运行 task checkpoint <taskId> <cpId> complete 进行验证');
-  }
-
-  // 3. 检测 in_progress 中断任务（pipeline 中间状态残留）
+  // 2. 检测 in_progress 中断任务（pipeline 中间状态残留）
   const intermediateStatuses = ['wait_review', 'wait_qa'];
   const interruptedTasks = allTasks.filter(t => intermediateStatuses.includes(t.status));
   if (interruptedTasks.length > 0) {

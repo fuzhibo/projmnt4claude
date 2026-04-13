@@ -702,15 +702,14 @@ export class AssemblyLine {
 
     switch (phase) {
       case 'development': {
-        // 开发完成后，标记不属于 code_review/qa/human 的通用检查点
+        // 开发完成后，标记不属于 code_review/qa 的通用检查点
         const belongsToCodeReview = category === 'code_review'
           || method === 'code_review' || method === 'lint' || method === 'architect_review';
         const belongsToQA = category === 'qa_verification'
           || method === 'unit_test' || method === 'functional_test'
           || method === 'integration_test' || method === 'e2e_test';
-        const belongsToHuman = checkpoint.requiresHuman || method === 'human_verification';
 
-        if (belongsToCodeReview || belongsToQA || belongsToHuman) return false;
+        if (belongsToCodeReview || belongsToQA) return false;
 
         // 通用检查点：开发成功即完成
         return true;
@@ -756,17 +755,6 @@ export class AssemblyLine {
 
       for (const checkpoint of task.checkpoints) {
         if (checkpoint.status === 'pending') {
-          // BUG-014-2: requiresHuman/human_verification 检查点不自动同步，需等待人工验证后处理
-          if (checkpoint.requiresHuman || checkpoint.verification?.method === 'human_verification') {
-            checkpoint.verification = checkpoint.verification || { method: 'human_verification' };
-            checkpoint.verification.result = 'deferred';
-            checkpoint.verification.verifiedAt = now;
-            checkpoint.verification.verifiedBy = 'post_process_deferred';
-            checkpoint.note = `${checkpoint.note ? checkpoint.note + '; ' : ''}等待人工验证（流水线后处理）`;
-            updated = true;
-            console.log(`   ⏳ 检查点 ${checkpoint.id} 已标记为 deferred（等待人工验证）`);
-            continue;
-          }
           checkpoint.status = 'completed';
           checkpoint.updatedAt = now;
           checkpoint.note = `${checkpoint.note ? checkpoint.note + '; ' : ''}评估通过后自动同步`;

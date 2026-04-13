@@ -605,7 +605,7 @@ function generateAIOutput(
   return {
     missingSubtaskWarnings: subtaskWarnings && subtaskWarnings.length > 0 ? subtaskWarnings : undefined,
     query,
-    keywords: filter.keywords,
+    keywords,
     filterStats: {
       totalTasks: originalCount,
       filteredTasks: filteredCount,
@@ -947,7 +947,7 @@ export async function recommendPlan(
     const emptyResult = {
       missingSubtaskWarnings: missingSubtaskWarnings.length > 0 ? missingSubtaskWarnings : undefined,
       query: options.query,
-      keywords: filter.filter.keywords,
+      keywords: filter.type === 'keywords' ? filter.keywords : [filter.pattern],
       filterStats: {
         totalTasks: activeTasks.length,
         filteredTasks: 0,
@@ -969,10 +969,12 @@ export async function recommendPlan(
       console.log('没有匹配的任务');
       if (options.query) {
         console.log(`查询: "${options.query}"`);
-        console.log(`关键字: ${filter.keywords.join(', ')}`);
+        const displayKeywords = filter.type === 'keywords' ? filter.keywords : [filter.pattern];
+        console.log(`关键字: ${displayKeywords.join(', ')}`);
       }
     }
     // CP-10: 空结果埋点
+    const logKeywords = filter.type === 'keywords' ? filter.keywords : [filter.pattern];
     logger.logInstrumentation({
       module: 'plan-recommend',
       action: 'recommend_empty',
@@ -982,7 +984,7 @@ export async function recommendPlan(
       ai_enhanced_fields: [],
       duration_ms: Date.now() - startTime,
       user_edit_count: 0,
-      module_data: { keywords: filter.keywords, excluded: excludedCount },
+      module_data: { keywords: logKeywords, excluded: excludedCount },
     });
     logger.flush();
     return;
@@ -1034,13 +1036,16 @@ export async function recommendPlan(
   const cachedBatches = buildBatches(sortedChains);
 
   // 3. 生成 AI 友好的输出（传入缓存批次）
+  const keywordsForOutput = filter.type === 'keywords'
+    ? (filter.keywords.length > 0 ? filter.keywords : undefined)
+    : [filter.pattern];
   const aiOutput = generateAIOutput(
     sortedChains,
     activeTasks.length,
     filteredTasks.length,
     cachedBatches,
     options.query,
-    filter.keywords.length > 0 ? filter.keywords : undefined,
+    keywordsForOutput,
     { smart: options.smart },
     missingSubtaskWarnings
   );

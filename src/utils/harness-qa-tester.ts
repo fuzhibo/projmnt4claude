@@ -148,7 +148,6 @@ export class HarnessQATester {
       cp.verification?.method === 'integration_test' ||
       cp.verification?.method === 'e2e_test' ||
       cp.verification?.method === 'automated' ||
-      cp.verification?.method === 'human_verification' ||
       cp.requiresHuman === true
     );
   }

@@ -145,6 +145,7 @@ program
   -f, --force            强制操作
 
 create 子命令选项:
+  --into <id>            创建为子任务
   --from-requirement     从需求创建
   --requirement-text <text>  需求文本
 
@@ -836,10 +837,31 @@ program
   .command('headless-harness-design [action]')
   .description(`使用 Harness Design 模式执行任务计划 (自动化开发与审查)
 
-子命令:
-  cleanup           清理残留的快照文件
-    --force         强制清理所有快照（包括活跃进程的快照）
-    --orphans-only  仅清理孤儿快照（进程已不存在）`)
+主命令选项:
+  --plan <file>           计划文件路径 (默认: 自动读取/生成)
+  --max-retries <n>       最大重试次数 (默认: 3)
+  --timeout <seconds>     单任务超时时间 (默认: 300秒)
+  --parallel <n>          并行执行数 (默认: 1)
+  --dry-run               试运行模式 (不实际执行)
+  --continue              从上次中断处继续执行
+  --json                  JSON 格式输出
+  --batch-git-commit      每个批次完成后自动 git commit
+
+质量门禁选项:
+  --require-quality <n>   质量分阈值 (0-100, 默认: 60)
+  --skip-harness-gate     跳过质量门禁检查 (不推荐)
+
+API选项:
+  --api-retry-attempts <n>  API 调用重试次数 (默认: 3)
+  --api-retry-delay <seconds>  API 重试基础延迟 (默认: 60秒)
+
+子命令: cleanup
+  cleanup                 清理残留的快照文件
+  --force                 强制清理所有快照 (包括活跃进程的快照)
+  --orphans-only          仅清理孤儿快照 (进程已不存在)
+
+弃用选项:
+  --skip-quality-gate     已弃用，请使用 --skip-harness-gate`)
   .option('--plan <file>', '计划文件路径 (可选，不指定则自动读取/生成)')
   .option('--max-retries <n>', '最大重试次数', '3')
   .option('--timeout <seconds>', '单任务超时时间 (秒)', '300')

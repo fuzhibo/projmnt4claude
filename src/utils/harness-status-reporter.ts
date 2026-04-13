@@ -400,7 +400,6 @@ export class HarnessStatusReporter {
       development: { started: '开发阶段进行中...', completed: '开发阶段完成', failed: '开发阶段失败' },
       code_review: { started: '代码审核中...', completed: '代码审核完成', failed: '代码审核失败' },
       qa_verification: { started: 'QA 验证中...', completed: 'QA 验证完成', failed: 'QA 验证失败' },
-      human_verification: { started: '人工验证中...', completed: '人工验证完成', failed: '人工验证失败' },
       evaluation: { started: '最终评估中...', completed: '最终评估完成', failed: '最终评估失败' },
       completed: { started: '流水线完成', completed: '流水线完成', failed: '流水线失败' },
       failed: { started: '流水线失败', completed: '流水线失败', failed: '流水线失败' },

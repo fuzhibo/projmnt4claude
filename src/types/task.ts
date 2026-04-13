@@ -92,8 +92,7 @@ export type VerificationMethod =
   | 'integration_test'  // 集成测试
   | 'e2e_test'          // 端到端测试
   | 'architect_review'  // 架构师审查
-  | 'automated'         // 自动化验证（通用）
-  | 'human_verification'; // 人工验证（需要用户介入）
+  | 'automated';        // 自动化验证（通用）
 
 /**
  * 任务角色类型
@@ -608,14 +607,6 @@ export interface PendingVerification {
 /**
  * 待验证队列文件结构
  */
-export interface PendingVerificationQueue {
-  /** 队列版本 */
-  version: 1;
-  /** 队列条目 */
-  items: PendingVerification[];
-  /** 最后更新时间 */
-  updatedAt: string;
-}
 
 /**
  * 创建默认任务元数据

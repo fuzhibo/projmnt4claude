@@ -48,9 +48,9 @@ The `--fix` flag handles all fixable issues in a single pass:
 - **Verification backfill**: Auto-generates verification data for resolved tasks missing it
 - **Inconsistent state repair**: Fixes resolved tasks with failed verification
 
-### Post Human-Verification Processing
+### Post Processing
 
-After human verification checkpoints complete:
+After checkpoints complete:
 1. Run `analyze --fix -y` to sync all detected issues
 2. Run `doctor --fix` to verify project-level health
 3. The `--fix` flag automatically handles deprecated status cleanup and field migration

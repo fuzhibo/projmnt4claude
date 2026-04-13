@@ -341,7 +341,7 @@ export interface ExecutionTimelineEntry {
   /** 时间 */
   timestamp: string;
   /** 事件类型 */
-  event: 'started' | 'skipped' | 'dev_started' | 'dev_completed' | 'code_review_started' | 'code_review_completed' | 'qa_started' | 'qa_completed' | 'human_verification_started' | 'human_verification_completed' | 'review_started' | 'review_completed' | 'retry' | 'completed' | 'failed';
+  event: 'started' | 'skipped' | 'dev_started' | 'dev_completed' | 'code_review_started' | 'code_review_completed' | 'qa_started' | 'qa_completed' | 'review_started' | 'review_completed' | 'retry' | 'completed' | 'failed';
   /** 描述 */
   description: string;
   /** 附加数据 */
@@ -595,7 +595,6 @@ export type HarnessReportPhase =
   | 'development'    // 开发阶段
   | 'code_review'    // 代码审核阶段
   | 'qa_verification'// QA 验证阶段
-  | 'human_verification' // 人工验证阶段
   | 'evaluation'     // 最终评估阶段
   | 'completed'      // 完成
   | 'failed';        // 失败

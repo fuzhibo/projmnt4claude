@@ -266,7 +266,7 @@ const VALID_VERIFICATION_RESULTS = ['passed', 'partial', 'failed'] as const;
 const VALID_VERIFICATION_METHODS: VerificationMethod[] = [
   'code_review', 'lint', 'unit_test', 'functional_test',
   'integration_test', 'e2e_test', 'architect_review',
-  'automated', 'human_verification',
+  'automated',
 ];
 
 /**

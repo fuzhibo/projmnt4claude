@@ -396,7 +396,6 @@ export function getCheckpointPhase(description: string): string | null {
 
   // 直接检查前缀（复用 inferCheckpointAttributesFromPrefix 的映射逻辑）
   if (trimmed.startsWith('[ai review]')) return 'code_review';
-  if (trimmed.startsWith('[human qa]')) return 'human_verification';
   if (trimmed.startsWith('[ai qa]')) return 'qa_verification';
   if (trimmed.startsWith('[script]')) return 'evaluation';
 
@@ -407,7 +406,6 @@ export function getCheckpointPhase(description: string): string | null {
  * 根据检查点前缀推断检查点属性
  *
  * 前缀映射规则：
- * - [human qa] → requiresHuman=true, verification.method=human_verification
  * - [ai review] → 无额外属性（默认）
  * - [ai qa] → verification.method=automated
  * - [script] → verification.method=automated
@@ -417,21 +415,13 @@ export function getCheckpointPhase(description: string): string | null {
  */
 export function inferCheckpointAttributesFromPrefix(description: string): {
   requiresHuman?: boolean;
-  verificationMethod?: 'code_review' | 'lint' | 'unit_test' | 'functional_test' | 'integration_test' | 'e2e_test' | 'architect_review' | 'automated' | 'human_verification';
+  verificationMethod?: 'code_review' | 'lint' | 'unit_test' | 'functional_test' | 'integration_test' | 'e2e_test' | 'architect_review' | 'automated';
 } {
   if (!description || typeof description !== 'string') {
     return {};
   }
 
   const trimmed = description.trim().toLowerCase();
-
-  // [human qa] → 需要人工验证
-  if (trimmed.startsWith('[human qa]')) {
-    return {
-      requiresHuman: true,
-      verificationMethod: 'human_verification',
-    };
-  }
 
   // [ai qa] → 自动化 QA 验证
   if (trimmed.startsWith('[ai qa]')) {

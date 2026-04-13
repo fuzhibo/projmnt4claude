@@ -501,15 +501,13 @@ export function syncCheckpointsToMeta(
       category = inferCheckpointCategory(cp.text);
     }
 
-    // 根据前缀或验证方法确定 requiresHuman
-    // 优先级: 前缀推断 > 现有值 > 根据验证方法推断
+    // 根据前缀确定 requiresHuman
+    // 优先级: 前缀推断 > 现有值
     let requiresHuman: boolean | undefined;
     if (prefixAttributes.requiresHuman !== undefined) {
       requiresHuman = prefixAttributes.requiresHuman;
     } else if (existing?.requiresHuman !== undefined) {
       requiresHuman = existing.requiresHuman;
-    } else if (verification?.method === 'human_verification') {
-      requiresHuman = true;
     }
     // 其他情况保持 undefined（使用默认值）
 
@@ -581,7 +579,7 @@ export function updateCheckpointStatus(
   if (options.result !== undefined) {
     if (!checkpoint.verification) {
       checkpoint.verification = {
-        method: 'human_verification',
+        method: 'automated',
       };
     }
     checkpoint.verification.result = options.result;
