@@ -191,7 +191,6 @@ function showSmartHelp(commandsDir: string, topic: string, cwd: string): void {
     'branch': ['分支', 'git分支', '创建分支'],
     'git': ['版本控制', '提交', '推送'],
     // 工具
-    'tool': ['工具', 'skill', '技能'],
     'hook': ['钩子', '脚本', '自动化'],
   };
   // 查找匹配的命令

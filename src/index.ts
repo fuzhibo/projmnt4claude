@@ -39,14 +39,6 @@ import {
   recommendPlan,
 } from './commands/plan';
 import {
-  listTools,
-  createTool,
-  installTool,
-  removeTool,
-  deployTool,
-  undeployTool,
-} from './commands/tool';
-import {
   analyzeProject,
   showAnalysis,
   fixIssues,
@@ -57,26 +49,10 @@ import {
   analyzeBugReport,
 } from './commands/analyze';
 import { fixPipeline } from './commands/analyze-fix-pipeline';
-import {
-  checkoutTaskBranch,
-  showBranchStatus,
-  createTaskBranch,
-  deleteTaskBranch,
-  mergeTaskBranch,
-  pushTaskBranch,
-  syncBranch,
-} from './commands/branch';
 import { initRequirement } from './commands/init-requirement';
 import { showHelp } from './commands/help';
 import { runDoctor, runBugReport, runDoctorDeep } from './commands/doctor';
 import { harnessCommand, cleanupHarnessSnapshots } from './commands/harness';
-import {
-  listHumanVerifications,
-  approveHumanVerification,
-  rejectHumanVerification,
-  batchHumanVerification,
-  showVerificationReport,
-} from './commands/human-verification';
 import { isInitialized } from './utils/path';
 
 /**
@@ -661,55 +637,6 @@ program
     }
   });
 
-// tool 命令组
-program
-  .command('tool <action> [name]')
-  .description('管理本地 skill (list/create/install/remove/deploy/undeploy)')
-  .option('-j, --json', '以 JSON 格式输出 (仅 list)')
-  .option('-s, --source <source>', '来源 URL (仅 install)')
-  .action(async (action, name, options) => {
-    requireInit();
-    switch (action) {
-      case 'list':
-        listTools(options.json);
-        break;
-      case 'create':
-        await createTool();
-        break;
-      case 'install':
-        if (!options.source && !name) {
-          console.error('错误: install 操作需要指定来源');
-          process.exit(1);
-        }
-        await installTool(options.source || name);
-        break;
-      case 'remove':
-        if (!name) {
-          console.error('错误: remove 操作需要指定 skill 名称');
-          process.exit(1);
-        }
-        await removeTool(name);
-        break;
-      case 'deploy':
-        if (!name) {
-          console.error('错误: deploy 操作需要指定 skill 名称');
-          process.exit(1);
-        }
-        deployTool(name);
-        break;
-      case 'undeploy':
-        if (!name) {
-          console.error('错误: undeploy 操作需要指定 skill 名称');
-          process.exit(1);
-        }
-        undeployTool(name);
-        break;
-      default:
-        console.error(`错误: 未知操作 '${action}'。支持的操作: list, create, install, remove, deploy, undeploy`);
-        process.exit(1);
-    }
-  });
-
 // status 命令
 program
   .command('status')
@@ -785,62 +712,6 @@ program
       });
     } else {
       await showAnalysis({ compact: options.compact, ...aiOptions, checkRange: options.checkRange });
-    }
-  });
-
-// branch 命令组
-program
-  .command('branch <action> [id]')
-  .description('Git 分支集成 (checkout/status/create/delete/merge/push/sync)')
-  .option('-b, --branch-name <branchName>', '分支名称 (仅 create)')
-  .option('-m, --message <message>', '合并消息 (仅 merge)')
-  .action(async (action, id, options) => {
-    requireInit();
-    switch (action) {
-      case 'checkout':
-        if (!id) {
-          console.error('错误: checkout 操作需要指定任务ID');
-          process.exit(1);
-        }
-        await checkoutTaskBranch(id);
-        break;
-      case 'status':
-        showBranchStatus();
-        break;
-      case 'create':
-        if (!id) {
-          console.error('错误: create 操作需要指定任务ID');
-          process.exit(1);
-        }
-        await createTaskBranch(id, options.branchName);
-        break;
-      case 'delete':
-        if (!id) {
-          console.error('错误: delete 操作需要指定任务ID');
-          process.exit(1);
-        }
-        await deleteTaskBranch(id);
-        break;
-      case 'merge':
-        if (!id) {
-          console.error('错误: merge 操作需要指定任务ID');
-          process.exit(1);
-        }
-        await mergeTaskBranch(id, options.message);
-        break;
-      case 'push':
-        if (!id) {
-          console.error('错误: push 操作需要指定任务ID');
-          process.exit(1);
-        }
-        pushTaskBranch(id);
-        break;
-      case 'sync':
-        syncBranch(id);
-        break;
-      default:
-        console.error(`错误: 未知操作 '${action}'。支持的操作: checkout, status, create, delete, merge, push, sync`);
-        process.exit(1);
     }
   });
 
@@ -1025,64 +896,6 @@ program
       skipHarnessGate: options.skipHarnessGate || options.skipQualityGate,
       batchGitCommit: options.batchGitCommit,
     });
-  });
-
-
-// human-verification 命令组
-program
-  .command('human-verification <action> [taskId]')
-  .description('管理待人工验证检查点 (list/approve/reject/batch/report)')
-  .option('--checkpoint <id>', '指定检查点ID (仅 approve/reject)')
-  .option('--reason <reason>', '拒绝原因 (仅 reject)')
-  .option('--feedback <feedback>', '验证反馈 (仅 approve/batch)')
-  .option('--approve-all', '批准全部待验证 (仅 batch)')
-  .option('--status <status>', '按状态过滤: pending/approved/rejected (仅 list)')
-  .option('--json', 'JSON 格式输出 (仅 list/report)')
-  .action(async (action, taskId, options) => {
-    requireInit();
-    switch (action) {
-      case 'list':
-        listHumanVerifications({
-          json: options.json || program.opts().json || false,
-          status: options.status,
-          taskId,
-        });
-        break;
-      case 'approve':
-        if (!taskId) {
-          console.error('错误: approve 操作需要指定任务ID');
-          process.exit(1);
-        }
-        approveHumanVerification(taskId, {
-          checkpoint: options.checkpoint,
-          feedback: options.feedback,
-        });
-        break;
-      case 'reject':
-        if (!taskId) {
-          console.error('错误: reject 操作需要指定任务ID');
-          process.exit(1);
-        }
-        rejectHumanVerification(taskId, {
-          checkpoint: options.checkpoint,
-          reason: options.reason,
-        });
-        break;
-      case 'batch':
-        batchHumanVerification({
-          approveAll: options.approveAll,
-          feedback: options.feedback,
-        });
-        break;
-      case 'report':
-        showVerificationReport({
-          json: options.json || program.opts().json || false,
-        });
-        break;
-      default:
-        console.error(`错误: 未知操作 '${action}'。支持的操作: list, approve, reject, batch, report`);
-        process.exit(1);
-    }
   });
 
 

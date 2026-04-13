@@ -605,7 +605,7 @@ function generateAIOutput(
   return {
     missingSubtaskWarnings: subtaskWarnings && subtaskWarnings.length > 0 ? subtaskWarnings : undefined,
     query,
-    filter.keywords,
+    keywords: filter.keywords,
     filterStats: {
       totalTasks: originalCount,
       filteredTasks: filteredCount,
@@ -982,7 +982,7 @@ export async function recommendPlan(
       ai_enhanced_fields: [],
       duration_ms: Date.now() - startTime,
       user_edit_count: 0,
-      module_data: { filter.keywords, excluded: excludedCount },
+      module_data: { keywords: filter.keywords, excluded: excludedCount },
     });
     logger.flush();
     return;

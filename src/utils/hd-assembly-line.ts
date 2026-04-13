@@ -45,7 +45,6 @@ import { RetryHandler } from './harness-retry.js';
 import { HarnessStatusReporter } from './harness-status-reporter.js';
 import { saveRuntimeState } from '../commands/harness.js';
 import { validateBasicFields } from './quality-gate.js';
-import { listPending, generateVerificationReport, getQueueStats, enqueueBatch } from './harness-verification-queue.js';
 import { DependencyGraph, executeFailureCascade } from './dependency-graph/index.js';
 import { SEPARATOR_WIDTH } from './format';
 
@@ -235,12 +234,6 @@ export class AssemblyLine {
     // 个别任务失败记录在 HarnessStatusReport.failedTasks 中
     state.state = 'completed';
 
-    // 后处理: 扫描并收集 requiresHuman 检查点到验证队列
-    this.collectAndEnqueueHumanCheckpoints(state.records);
-
-    // 生成待人工验证报告（如果存在待验证项）
-    this.generatePendingVerificationReport();
-
     // 完成流水线状态报告
     // CP-23: 始终使用 completePipeline，任务失败信息已在 failedTasks 中
     if (summary.failed === 0) {
@@ -248,9 +241,6 @@ export class AssemblyLine {
     } else {
       this.statusReporter.completePipeline(`流水线执行完成，${summary.passed}/${uniqueTaskCount} 通过，${summary.failed} 失败`);
     }
-
-    // 显示醒目的待人工验证通知（流水线最后输出）
-    this.displayPendingVerificationNotification();
 
     return summary;
   }
@@ -1785,112 +1775,6 @@ export class AssemblyLine {
       writeTaskMeta(task, this.config.cwd);
     } catch (error) {
       console.error(`   ⚠️ 追加阶段历史失败: ${error instanceof Error ? error.message : String(error)}`);
-    }
-  }
-
-  /**
-   * 后处理: 扫描已完成任务中的 requiresHuman 检查点并入队
-   *
-   * BUG-014-2: 人工验证从流水线阶段移至后处理
-   * - 流水线完成后统一扫描所有 resolved 任务
-   * - 将 requiresHuman 且仍为 pending 的检查点入队到验证队列
-   * - 这些检查点的 verification.result 已在 syncAllPendingCheckpoints 中标记为 'deferred'
-   */
-  private collectAndEnqueueHumanCheckpoints(records: TaskExecutionRecord[]): void {
-    let totalEnqueued = 0;
-
-    for (const record of records) {
-      // 仅处理已通过评估的任务
-      if (record.finalStatus !== 'resolved') continue;
-
-      const task = readTaskMeta(record.taskId, this.config.cwd);
-      if (!task?.checkpoints?.length) continue;
-
-      // 收集需要人工验证且仍为 pending 的检查点
-      const humanCheckpoints = task.checkpoints.filter(cp =>
-        (cp.requiresHuman === true || cp.verification?.method === 'human_verification') && cp.status === 'pending'
-      );
-
-      if (humanCheckpoints.length === 0) continue;
-
-      console.log(`\n📋 任务 ${record.taskId}: 发现 ${humanCheckpoints.length} 个待人工验证检查点`);
-
-      // 入队到验证队列
-      const queueItems = humanCheckpoints.map(cp => ({
-        taskId: task.id,
-        taskTitle: task.title,
-        checkpointId: cp.id,
-        checkpointDescription: cp.description,
-        verificationSteps: cp.verification?.commands,
-        expectedResult: cp.verification?.expected,
-        sessionId: this.sessionId,
-      }));
-
-      enqueueBatch(queueItems, this.config.cwd);
-      totalEnqueued += queueItems.length;
-
-      console.log(`   ✓ ${queueItems.length} 个检查点已加入人工验证队列`);
-    }
-
-    if (totalEnqueued > 0) {
-      console.log(`\n📋 后处理完成: 共 ${totalEnqueued} 个检查点已加入人工验证队列`);
-      console.log(`   💡 使用 projmnt4claude human-verification list 查看待验证项`);
-    }
-  }
-
-  /**
-   * 生成待人工验证报告
-   */
-  private generatePendingVerificationReport(): void {
-    try {
-      const stats = getQueueStats(this.config.cwd);
-      if (stats.pending === 0) return;
-
-      console.log(`\n📋 发现 ${stats.pending} 个待人工验证检查点`);
-
-      const report = generateVerificationReport(this.config.cwd, this.sessionId);
-      const projectDir = getProjectDir(this.config.cwd);
-      const reportDir = path.join(projectDir, 'reports', 'harness');
-      if (!fs.existsSync(reportDir)) {
-        fs.mkdirSync(reportDir, { recursive: true });
-      }
-
-      const reportPath = path.join(reportDir, `pending-verification-${Date.now()}.md`);
-      fs.writeFileSync(reportPath, report, 'utf-8');
-
-      console.log(`   📄 验证报告已生成: ${reportPath}`);
-      console.log(`   💡 使用 projmnt4claude human-verification list 查看待验证项`);
-      console.log(`   💡 使用 projmnt4claude human-verification approve <taskId> 批准验证`);
-    } catch (error) {
-      console.error(`   ⚠️ 生成待验证报告失败: ${error instanceof Error ? error.message : String(error)}`);
-    }
-  }
-
-  /**
-   * 显示醒目的待人工验证通知
-   *
-   * 流水线完成后在终端输出醒目的待验证项列表，
-   * 确保用户不会遗漏需要人工验证的检查点。
-   */
-  private displayPendingVerificationNotification(): void {
-    try {
-      const pendingItems = listPending(this.config.cwd, { status: 'pending' });
-      if (pendingItems.length === 0) return;
-
-      console.log('');
-      console.log(`⚠️  待人工验证检查点 (${pendingItems.length} 项)`);
-      console.log('━'.repeat(SEPARATOR_WIDTH));
-
-      for (let i = 0; i < pendingItems.length; i++) {
-        const item = pendingItems[i]!;
-        console.log(`  ${i + 1}. [${item.taskTitle}] ${item.checkpointDescription}`);
-      }
-
-      console.log('');
-      console.log('💡 运行 projmnt4claude human-verification list 查看详情');
-      console.log('');
-    } catch (error) {
-      console.error(`   ⚠️ 显示待验证通知失败: ${error instanceof Error ? error.message : String(error)}`);
     }
   }
 
