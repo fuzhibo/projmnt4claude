@@ -64,13 +64,13 @@ The `headless-harness-design` command is the **core execution engine** of projmn
 
 ## Quick Start Guide
 
+The following examples use **Claude Code CLI** commands (recommended). For advanced usage with direct Node.js execution, see the [Advanced Usage](#advanced-usage) section.
+
 ### 0. Initialize Project
 
 Set up projmnt4claude in your project:
 
 ```bash
-node $PLUGIN_DIR/skills/projmnt4claude/dist/projmnt4claude.js setup
-# or
 /projmnt4claude:setup
 ```
 
@@ -82,13 +82,13 @@ Transform a problem description or requirement document into structured tasks:
 
 ```bash
 # From natural language description
-node $PLUGIN_DIR/skills/projmnt4claude/dist/projmnt4claude.js init-requirement "Fix the memory leak in the authentication module that occurs under high concurrency"
+/projmnt4claude:init-requirement "Fix the memory leak in the authentication module that occurs under high concurrency"
 
 # From a requirement file
-node $PLUGIN_DIR/skills/projmnt4claude/dist/projmnt4claude.js init-requirement --file ./requirements.md
+/projmnt4claude:init-requirement --file ./requirements.md
 
-# Or use slash command
-/projmnt4claude:init-requirement "Implement user authentication API with JWT support"
+# Non-interactive mode with auto-accept
+/projmnt4claude:init-requirement --yes "Implement user authentication API with JWT support"
 ```
 
 **Features:**
@@ -103,17 +103,17 @@ Intelligently organize tasks into an optimized execution plan:
 
 ```bash
 # Smart recommendation based on priority and dependencies
-node $PLUGIN_DIR/skills/projmnt4claude/dist/projmnt4claude.js plan recommend
+/projmnt4claude:plan recommend
 
 # With query filter (supports keywords and regex)
-node $PLUGIN_DIR/skills/projmnt4claude/dist/projmnt4claude.js plan recommend --query "bug|fix|auth"
-node $PLUGIN_DIR/skills/projmnt4claude/dist/projmnt4claude.js plan recommend --query "^TASK-refactor-.*"
+/projmnt4claude:plan recommend --query "bug|fix|auth"
+/projmnt4claude:plan recommend --query "^TASK-refactor-.*"
 
 # Include all non-terminal tasks
-node $PLUGIN_DIR/skills/projmnt4claude/dist/projmnt4claude.js plan recommend --all
+/projmnt4claude:plan recommend --all
 
 # Enable AI-powered semantic dependency detection
-node $PLUGIN_DIR/skills/projmnt4claude/dist/projmnt4claude.js plan recommend --smart
+/projmnt4claude:plan recommend --smart
 ```
 
 **Smart Grouping:**
@@ -130,16 +130,16 @@ Run the complete 4-stage pipeline on your plan:
 
 ```bash
 # Execute current plan
-node $PLUGIN_DIR/skills/projmnt4claude/dist/projmnt4claude.js headless-harness-design
+/projmnt4claude:headless-harness-design
 
 # With batch auto-commit
-node $PLUGIN_DIR/skills/projmnt4claude/dist/projmnt4claude.js headless-harness-design --batch-git-commit
+/projmnt4claude:headless-harness-design --batch-git-commit
 
 # Continue from interruption
-node $PLUGIN_DIR/skills/projmnt4claude/dist/projmnt4claude.js headless-harness-design --continue
+/projmnt4claude:headless-harness-design --continue
 
 # Dry run to preview
-node $PLUGIN_DIR/skills/projmnt4claude/dist/projmnt4claude.js headless-harness-design --dry-run
+/projmnt4claude:headless-harness-design --dry-run
 ```
 
 **Execution Flow:**
@@ -155,16 +155,16 @@ Get insights and recommendations for your project:
 
 ```bash
 # Comprehensive analysis
-node $PLUGIN_DIR/skills/projmnt4claude/dist/projmnt4claude.js analyze
+/projmnt4claude:analyze
 
 # With AI-powered insights
-node $PLUGIN_DIR/skills/projmnt4claude/dist/projmnt4claude.js analyze --deep
+/projmnt4claude:analyze --deep
 
 # Export training data for LLM fine-tuning
-node $PLUGIN_DIR/skills/projmnt4claude/dist/projmnt4claude.js analyze --export-training-data
+/projmnt4claude:analyze --export-training-data
 
 # Fix detected issues automatically
-node $PLUGIN_DIR/skills/projmnt4claude/dist/projmnt4claude.js analyze --fix
+/projmnt4claude:analyze --fix
 ```
 
 **Analysis Includes:**
@@ -180,13 +180,13 @@ Check project integrity and generate reports:
 
 ```bash
 # Full system check
-node $PLUGIN_DIR/skills/projmnt4claude/dist/projmnt4claude.js doctor
+/projmnt4claude:doctor
 
 # Generate bug report
-node $PLUGIN_DIR/skills/projmnt4claude/dist/projmnt4claude.js doctor --bug-report
+/projmnt4claude:doctor --bug-report
 
 # Fix common issues
-node $PLUGIN_DIR/skills/projmnt4claude/dist/projmnt4claude.js doctor --fix
+/projmnt4claude:doctor --fix
 ```
 
 **Checks Include:**
@@ -196,7 +196,26 @@ node $PLUGIN_DIR/skills/projmnt4claude/dist/projmnt4claude.js doctor --fix
 - Hook availability verification
 - Plan synchronization validation
 
-## Advanced Mode
+## Advanced Usage
+
+For users who prefer direct Node.js execution or want to customize the plugin behavior:
+
+### Direct Node.js Execution
+
+You can also run the CLI directly using Node.js:
+
+```bash
+# Setup
+node $PLUGIN_DIR/skills/projmnt4claude/dist/projmnt4claude.js setup
+
+# Create task from requirement
+node $PLUGIN_DIR/skills/projmnt4claude/dist/projmnt4claude.js init-requirement "Your requirement description"
+
+# Execute harness pipeline
+node $PLUGIN_DIR/skills/projmnt4claude/dist/projmnt4claude.js headless-harness-design
+```
+
+### Advanced Mode
 
 For users who want fine-grained control over task and plan management:
 
@@ -449,13 +468,13 @@ GNU Affero General Public License v3.0 (AGPLv3)
 
 ## 快速入门指南
 
+以下示例使用 **Claude Code CLI** 命令（推荐）。如需使用 Node.js 直接执行的高级用法，请参考 [高级用法](#高级用法) 章节。
+
 ### 0. 初始化项目
 
 在您的项目中设置 projmnt4claude：
 
 ```bash
-node $PLUGIN_DIR/skills/projmnt4claude/dist/projmnt4claude.js setup
-# 或
 /projmnt4claude:setup
 ```
 
@@ -467,13 +486,13 @@ node $PLUGIN_DIR/skills/projmnt4claude/dist/projmnt4claude.js setup
 
 ```bash
 # 从自然语言描述
-node $PLUGIN_DIR/skills/projmnt4claude/dist/projmnt4claude.js init-requirement "修复高并发下认证模块的内存泄漏问题"
+/projmnt4claude:init-requirement "修复高并发下认证模块的内存泄漏问题"
 
 # 从需求文件
-node $PLUGIN_DIR/skills/projmnt4claude/dist/projmnt4claude.js init-requirement --file ./requirements.md
+/projmnt4claude:init-requirement --file ./requirements.md
 
-# 或使用斜杠命令
-/projmnt4claude:init-requirement "实现带JWT支持的用户认证API"
+# 非交互模式，自动接受
+/projmnt4claude:init-requirement --yes "实现带JWT支持的用户认证API"
 ```
 
 **特性：**
@@ -488,17 +507,17 @@ node $PLUGIN_DIR/skills/projmnt4claude/dist/projmnt4claude.js init-requirement -
 
 ```bash
 # 基于优先级和依赖的智能推荐
-node $PLUGIN_DIR/skills/projmnt4claude/dist/projmnt4claude.js plan recommend
+/projmnt4claude:plan recommend
 
 # 带查询过滤（支持关键词和正则）
-node $PLUGIN_DIR/skills/projmnt4claude/dist/projmnt4claude.js plan recommend --query "bug|fix|auth"
-node $PLUGIN_DIR/skills/projmnt4claude/dist/projmnt4claude.js plan recommend --query "^TASK-refactor-.*"
+/projmnt4claude:plan recommend --query "bug|fix|auth"
+/projmnt4claude:plan recommend --query "^TASK-refactor-.*"
 
 # 包含所有非终态任务
-node $PLUGIN_DIR/skills/projmnt4claude/dist/projmnt4claude.js plan recommend --all
+/projmnt4claude:plan recommend --all
 
 # 启用AI驱动的语义依赖检测
-node $PLUGIN_DIR/skills/projmnt4claude/dist/projmnt4claude.js plan recommend --smart
+/projmnt4claude:plan recommend --smart
 ```
 
 **智能分组：**
@@ -515,16 +534,16 @@ node $PLUGIN_DIR/skills/projmnt4claude/dist/projmnt4claude.js plan recommend --s
 
 ```bash
 # 执行当前计划
-node $PLUGIN_DIR/skills/projmnt4claude/dist/projmnt4claude.js headless-harness-design
+/projmnt4claude:headless-harness-design
 
 # 带批次自动提交
-node $PLUGIN_DIR/skills/projmnt4claude/dist/projmnt4claude.js headless-harness-design --batch-git-commit
+/projmnt4claude:headless-harness-design --batch-git-commit
 
 # 从中断处继续
-node $PLUGIN_DIR/skills/projmnt4claude/dist/projmnt4claude.js headless-harness-design --continue
+/projmnt4claude:headless-harness-design --continue
 
 # 试运行预览
-node $PLUGIN_DIR/skills/projmnt4claude/dist/projmnt4claude.js headless-harness-design --dry-run
+/projmnt4claude:headless-harness-design --dry-run
 ```
 
 **执行流程：**
@@ -540,16 +559,16 @@ node $PLUGIN_DIR/skills/projmnt4claude/dist/projmnt4claude.js headless-harness-d
 
 ```bash
 # 综合分析
-node $PLUGIN_DIR/skills/projmnt4claude/dist/projmnt4claude.js analyze
+/projmnt4claude:analyze
 
 # 带AI深度洞察
-node $PLUGIN_DIR/skills/projmnt4claude/dist/projmnt4claude.js analyze --deep
+/projmnt4claude:analyze --deep
 
 # 导出LLM微调训练数据
-node $PLUGIN_DIR/skills/projmnt4claude/dist/projmnt4claude.js analyze --export-training-data
+/projmnt4claude:analyze --export-training-data
 
 # 自动修复检测到的问题
-node $PLUGIN_DIR/skills/projmnt4claude/dist/projmnt4claude.js analyze --fix
+/projmnt4claude:analyze --fix
 ```
 
 **分析包括：**
@@ -565,13 +584,13 @@ node $PLUGIN_DIR/skills/projmnt4claude/dist/projmnt4claude.js analyze --fix
 
 ```bash
 # 完整系统检查
-node $PLUGIN_DIR/skills/projmnt4claude/dist/projmnt4claude.js doctor
+/projmnt4claude:doctor
 
 # 生成错误报告
-node $PLUGIN_DIR/skills/projmnt4claude/dist/projmnt4claude.js doctor --bug-report
+/projmnt4claude:doctor --bug-report
 
 # 修复常见问题
-node $PLUGIN_DIR/skills/projmnt4claude/dist/projmnt4claude.js doctor --fix
+/projmnt4claude:doctor --fix
 ```
 
 **检查包括：**
@@ -580,6 +599,25 @@ node $PLUGIN_DIR/skills/projmnt4claude/dist/projmnt4claude.js doctor --fix
 - 孤儿任务检测
 - Hook 可用性验证
 - 计划同步验证
+
+## 高级用法
+
+对于偏好直接 Node.js 执行或希望自定义插件行为的用户：
+
+### 直接 Node.js 执行
+
+您也可以使用 Node.js 直接运行 CLI：
+
+```bash
+# 初始化
+node $PLUGIN_DIR/skills/projmnt4claude/dist/projmnt4claude.js setup
+
+# 从需求创建任务
+node $PLUGIN_DIR/skills/projmnt4claude/dist/projmnt4claude.js init-requirement "您的需求描述"
+
+# 执行 harness 流水线
+node $PLUGIN_DIR/skills/projmnt4claude/dist/projmnt4claude.js headless-harness-design
+```
 
 ## 高级模式
 
