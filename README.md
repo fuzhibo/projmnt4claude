@@ -66,7 +66,21 @@ The `headless-harness-design` command is the **core execution engine** of projmn
 
 The following examples use **Claude Code CLI** commands (recommended). For advanced usage with direct Node.js execution, see the [Advanced Usage](#advanced-usage) section.
 
-### 0. Initialize Project
+### 0. Install from Marketplace
+
+Install projmnt4claude via Claude Code's plugin marketplace:
+
+```bash
+# Add the marketplace (if not already added)
+/plugin marketplace add fuzhibo/projmnt4claude
+
+# Install the plugin with user scope (recommended)
+/plugin install projmnt4claude --scope user
+```
+
+**Why user scope?** User scope allows the plugin to work across all your projects and be updated from anywhere.
+
+### 1. Initialize Project
 
 Set up projmnt4claude in your project:
 
@@ -76,7 +90,7 @@ Set up projmnt4claude in your project:
 
 This creates a `.projmnt4claude/` directory with the project structure.
 
-### 1. Create Tasks from Requirements
+### 2. Create Tasks from Requirements
 
 Transform a problem description or requirement document into structured tasks:
 
@@ -97,7 +111,7 @@ Transform a problem description or requirement document into structured tasks:
 - Generates checkpoints with verification methods
 - Optionally auto-splits complex tasks into subtasks
 
-### 2. Recommend Execution Plan
+### 3. Recommend Execution Plan
 
 Intelligently organize tasks into an optimized execution plan:
 
@@ -124,7 +138,7 @@ Intelligently organize tasks into an optimized execution plan:
   - Layer 1/2: File path overlap detection
   - Layer 3: AI semantic analysis (with --smart)
 
-### 3. Execute with Headless Harness
+### 4. Execute with Headless Harness
 
 Run the complete 4-stage pipeline on your plan:
 
@@ -149,7 +163,7 @@ Run the complete 4-stage pipeline on your plan:
 4. Generates reports in `.projmnt4claude/reports/harness/`
 5. Optionally commits changes per batch
 
-### 4. Analyze Project Health
+### 5. Analyze Project Health
 
 Get insights and recommendations for your project:
 
@@ -174,7 +188,7 @@ Get insights and recommendations for your project:
 - Bottleneck identification
 - Recommendations for improvement
 
-### 5. System Diagnostics
+### 6. System Diagnostics
 
 Check project integrity and generate reports:
 
@@ -470,7 +484,21 @@ GNU Affero General Public License v3.0 (AGPLv3)
 
 以下示例使用 **Claude Code CLI** 命令（推荐）。如需使用 Node.js 直接执行的高级用法，请参考 [高级用法](#高级用法) 章节。
 
-### 0. 初始化项目
+### 0. 从 Marketplace 安装
+
+通过 Claude Code 的插件 marketplace 安装 projmnt4claude：
+
+```bash
+# 添加 marketplace（如果尚未添加）
+/plugin marketplace add fuzhibo/projmnt4claude
+
+# 使用 user 范围安装插件（推荐）
+/plugin install projmnt4claude --scope user
+```
+
+**为什么使用 user 范围？** User 范围允许插件在您所有项目中工作，并可以从任何地方更新。
+
+### 1. 初始化项目
 
 在您的项目中设置 projmnt4claude：
 
@@ -480,7 +508,7 @@ GNU Affero General Public License v3.0 (AGPLv3)
 
 这会创建 `.projmnt4claude/` 目录和项目结构。
 
-### 1. 从需求创建任务
+### 2. 从需求创建任务
 
 将问题描述或需求文档转化为结构化任务：
 
@@ -501,7 +529,7 @@ GNU Affero General Public License v3.0 (AGPLv3)
 - 生成带验证方法的检查点
 - 可选地将复杂任务自动拆分为子任务
 
-### 2. 推荐执行计划
+### 3. 推荐执行计划
 
 智能地将任务组织成优化的执行计划：
 
@@ -528,7 +556,7 @@ GNU Affero General Public License v3.0 (AGPLv3)
   - 第1/2层：文件路径重叠检测
   - 第3层：AI语义分析（使用 --smart）
 
-### 3. 使用 Headless Harness 执行
+### 4. 使用 Headless Harness 执行
 
 在您的计划上运行完整的四阶段流水线：
 
@@ -553,7 +581,7 @@ GNU Affero General Public License v3.0 (AGPLv3)
 4. 在 `.projmnt4claude/reports/harness/` 生成报告
 5. 可选地每批次提交变更
 
-### 4. 分析项目健康
+### 5. 分析项目健康
 
 获取项目的洞察和建议：
 
@@ -578,7 +606,7 @@ GNU Affero General Public License v3.0 (AGPLv3)
 - 瓶颈识别
 - 改进建议
 
-### 5. 系统诊断
+### 6. 系统诊断
 
 检查项目完整性并生成报告：
 

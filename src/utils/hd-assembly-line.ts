@@ -299,7 +299,7 @@ export class AssemblyLine {
       record.finalStatus = task.status;
       return record;
     }
-    const resumeIndex = phases.indexOf(resumePhase);
+    let resumeIndex = phases.indexOf(resumePhase);
 
     // Find previous record for rebuilding prerequisite data when skipping phases
     const prevRecord = [...state.records].reverse().find(r => r.taskId === taskId);
@@ -307,103 +307,120 @@ export class AssemblyLine {
       console.log(`   ⚠️ 未找到前次执行记录，从开发阶段重新开始`);
     }
 
-    // 4. Development phase (phase index 0) - skip if already completed
-    let devReport!: DevReport;
-    const shouldRunDev = resumeIndex <= 0 || !prevRecord;
-    if (shouldRunDev) {
-      await this.ensureTransition(taskId, 'in_progress', '开始开发阶段');
-      record.finalStatus = 'in_progress';
+    // Phase execution loop - handles retries and downgrades gracefully
+    let currentPhaseIndex = phases.indexOf(resumePhase);
+    let devReport: DevReport | undefined;
+    let codeReviewVerdict: CodeReviewVerdict | undefined;
+    let qaVerdict: QAVerdict | undefined;
 
-      addTimeline('dev_started', '开始开发阶段');
-      this.statusReporter.startPhase('development', taskId, '开始开发阶段');
-      console.log('\n🔨 开发阶段...');
+    while (currentPhaseIndex <= 3) {
+      const phase = phases[currentPhaseIndex];
 
-      // 计算自适应超时
-      const adaptiveTimeout = this.computeAdaptiveTimeout(task);
+      if (phase === 'development') {
+        // 4. Development phase (phase index 0)
+        const shouldRunDev = currentPhaseIndex <= 0 || !prevRecord;
+        if (shouldRunDev) {
+          await this.ensureTransition(taskId, 'in_progress', '开始开发阶段');
+          record.finalStatus = 'in_progress';
 
-      // 超时提示：当预估耗时 > 15 分钟时建议拆分
-      if ((task.estimatedMinutes ?? 0) > 15) {
-        console.log(`   💡 提示: 此任务预估耗时 ${task.estimatedMinutes} 分钟，建议使用 --auto-split 拆分为子任务`);
-      }
+          addTimeline('dev_started', '开始开发阶段');
+          this.statusReporter.startPhase('development', taskId, '开始开发阶段');
+          console.log('\n🔨 开发阶段...');
 
-      try {
-        // Build retry context for development phase (carries previous failure info)
-        const devRetryContext = this.buildRetryContextForPhase(taskId, 'development', state);
-        devReport = await this.executor.execute(task, record.contract, adaptiveTimeout, devRetryContext);
-        record.devReport = devReport;
-        addTimeline('dev_completed', `开发完成: ${devReport.status}`, { status: devReport.status });
-        this.statusReporter.completePhase('development', taskId, `开发完成: ${devReport.status}`);
-      } catch (error) {
-        devReport = {
-          taskId,
-          status: 'failed',
-          changes: [],
-          evidence: [],
-          checkpointsCompleted: [],
-          startTime: new Date().toISOString(),
-          endTime: new Date().toISOString(),
-          duration: 0,
-          error: error instanceof Error ? error.message : String(error),
-        };
-        record.devReport = devReport;
-        addTimeline('dev_completed', `开发失败: ${devReport.error}`, { error: devReport.error });
-        this.statusReporter.failPhase('development', error instanceof Error ? error : new Error(String(error)), taskId);
-      }
+          // 计算自适应超时
+          const adaptiveTimeout = this.computeAdaptiveTimeout(task);
 
-      // 检查开发是否成功
-      if (devReport.status !== 'success') {
-        const isTimeout = devReport.status === 'timeout';
-        console.log(`❌ 开发阶段${isTimeout ? '超时' : '失败'}: ${devReport.error || '未知错误'}`);
-        this.statusReporter.failPhase('development', new Error(devReport.error || '开发阶段失败'), taskId);
+          // 超时提示：当预估耗时 > 15 分钟时建议拆分
+          if ((task.estimatedMinutes ?? 0) > 15) {
+            console.log(`   💡 提示: 此任务预估耗时 ${task.estimatedMinutes} 分钟，建议使用 --auto-split 拆分为子任务`);
+          }
 
-        // 存储失败原因到重试上下文
-        this.storeFailureContext(taskId, 'development', devReport.error || '开发阶段失败', state);
+          try {
+            // Build retry context for development phase (carries previous failure info)
+            const devRetryContext = this.buildRetryContextForPhase(taskId, 'development', state);
+            devReport = await this.executor.execute(task, record.contract, adaptiveTimeout, devRetryContext);
+            record.devReport = devReport;
+            addTimeline('dev_completed', `开发完成: ${devReport.status}`, { status: devReport.status });
+            this.statusReporter.completePhase('development', taskId, `开发完成: ${devReport.status}`);
+          } catch (error) {
+            devReport = {
+              taskId,
+              status: 'failed',
+              changes: [],
+              evidence: [],
+              checkpointsCompleted: [],
+              startTime: new Date().toISOString(),
+              endTime: new Date().toISOString(),
+              duration: 0,
+              error: error instanceof Error ? error.message : String(error),
+            };
+            record.devReport = devReport;
+            addTimeline('dev_completed', `开发失败: ${devReport.error}`, { error: devReport.error });
+            this.statusReporter.failPhase('development', error instanceof Error ? error : new Error(String(error)), taskId);
+          }
 
-        // 尝试重试（使用阶段独立重试上限）
-        const devPhaseLimit = this.getPhaseRetryLimit('development');
-        const devRetryCount = this.getPhaseRetryCount(taskId, 'development', state);
-        const canRetry = devRetryCount < devPhaseLimit;
-        if (canRetry) {
-          addTimeline('retry', `准备重试 (开发阶段第 ${devRetryCount + 1}/${devPhaseLimit} 次)`);
-          // 重新加入队列
-          state.taskQueue.push(taskId);
-          this.incrementPhaseRetryCount(taskId, 'development', state);
-          state.retryCounter.set(taskId, (state.retryCounter.get(taskId) || 0) + 1);
-        } else if (isTimeout) {
-          // 超时标记为 failed(timeout)
-          await this.markTaskFailed(taskId, 'timeout', `开发超时: ${devReport.error || '超过时间限制'}`);
-          record.finalStatus = 'failed';
-          addTimeline('failed', '开发超时，任务标记为 failed(timeout)');
-          console.log(`   ⏰ 任务 ${taskId} 因超时标记为 failed(timeout)`);
+          // 检查开发是否成功
+          if (devReport.status !== 'success') {
+            const isTimeout = devReport.status === 'timeout';
+            console.log(`❌ 开发阶段${isTimeout ? '超时' : '失败'}: ${devReport.error || '未知错误'}`);
+            this.statusReporter.failPhase('development', new Error(devReport.error || '开发阶段失败'), taskId);
+
+            // 存储失败原因到重试上下文
+            this.storeFailureContext(taskId, 'development', devReport.error || '开发阶段失败', state);
+
+            // 尝试重试（使用阶段独立重试上限）
+            const devPhaseLimit = this.getPhaseRetryLimit('development');
+            const devRetryCount = this.getPhaseRetryCount(taskId, 'development', state);
+            const canRetry = devRetryCount < devPhaseLimit;
+            if (canRetry) {
+              addTimeline('retry', `准备重试 (开发阶段第 ${devRetryCount + 1}/${devPhaseLimit} 次)`);
+              // 重新加入队列
+              state.taskQueue.push(taskId);
+              this.incrementPhaseRetryCount(taskId, 'development', state);
+              state.retryCounter.set(taskId, (state.retryCounter.get(taskId) || 0) + 1);
+            } else if (isTimeout) {
+              // 超时标记为 failed(timeout)
+              await this.markTaskFailed(taskId, 'timeout', `开发超时: ${devReport.error || '超过时间限制'}`);
+              record.finalStatus = 'failed';
+              addTimeline('failed', '开发超时，任务标记为 failed(timeout)');
+              console.log(`   ⏰ 任务 ${taskId} 因超时标记为 failed(timeout)`);
+            } else {
+              // 开发失败，超过最大重试次数
+              await this.markTaskFailed(taskId, 'max_retries_exceeded', '超过最大重试次数，开发阶段失败');
+              record.finalStatus = 'failed';
+              addTimeline('failed', '超过最大重试次数，任务标记为 failed(max_retries_exceeded)');
+            }
+
+            return record;
+          }
+
+          // 4.5 同步检查点状态（开发完成后）
+          this.syncCheckpointStatus(taskId, 'development', { devReport });
+
+          // 5. 更新状态为 wait_review（等待代码审核）
+          await this.ensureTransition(taskId, 'wait_review', '开发完成，等待代码审核');
+          record.finalStatus = 'wait_review';
+          const devGateResult = this.validateTransitionCompleteness(taskId, 'wait_review', 'development');
+          if (!devGateResult.valid) {
+            await this.handleTransitionValidationFailure(taskId, 'wait_review', 'in_progress', 'development', devGateResult.errors);
+          }
+          console.log('✅ 开发完成，等待代码审核');
+          this.savePhaseCheckpoint(taskId, 'development', state);
         } else {
-          // 开发失败，超过最大重试次数
-          await this.markTaskFailed(taskId, 'max_retries_exceeded', '超过最大重试次数，开发阶段失败');
-          record.finalStatus = 'failed';
-          addTimeline('failed', '超过最大重试次数，任务标记为 failed(max_retries_exceeded)');
+          // Skip development - rebuild prerequisite data from prevRecord
+          if (!prevRecord?.devReport) {
+            console.log(`   ⚠️ 前次记录缺少开发报告，从开发阶段重新开始`);
+            // 降级处理：重新执行开发阶段
+            currentPhaseIndex = 0;
+            continue;
+          } else {
+            devReport = prevRecord.devReport;
+            record.devReport = devReport;
+            addTimeline('dev_completed', `[恢复] 复用前次开发结果: ${devReport.status}`, { resumed: true, phase: resumePhase });
+            console.log(`   ⏩ 跳过开发阶段（已有完成报告）`);
+          }
         }
-
-        return record;
       }
-
-      // 4.5 同步检查点状态（开发完成后）
-      this.syncCheckpointStatus(taskId, 'development', { devReport });
-
-      // 5. 更新状态为 wait_review（等待代码审核）
-      await this.ensureTransition(taskId, 'wait_review', '开发完成，等待代码审核');
-      record.finalStatus = 'wait_review';
-      const devGateResult = this.validateTransitionCompleteness(taskId, 'wait_review', 'development');
-      if (!devGateResult.valid) {
-        await this.handleTransitionValidationFailure(taskId, 'wait_review', 'in_progress', 'development', devGateResult.errors);
-      }
-      console.log('✅ 开发完成，等待代码审核');
-      this.savePhaseCheckpoint(taskId, 'development', state);
-    } else {
-      // Skip development - rebuild prerequisite data from prevRecord
-      devReport = prevRecord!.devReport!;
-      record.devReport = devReport;
-      addTimeline('dev_completed', `[恢复] 复用前次开发结果: ${devReport.status}`, { resumed: true, phase: resumePhase });
-      console.log(`   ⏩ 跳过开发阶段（已有完成报告）`);
-    }
 
     // 5. Code review phase (phase index 1) - skip if already completed
     let codeReviewVerdict!: CodeReviewVerdict;
@@ -463,10 +480,16 @@ export class AssemblyLine {
     this.savePhaseCheckpoint(taskId, 'code_review', state);
     } else {
       // Skip code review - rebuild prerequisite data from prevRecord
-      codeReviewVerdict = prevRecord!.codeReviewVerdict!;
-      record.codeReviewVerdict = codeReviewVerdict;
-      addTimeline('code_review_completed', `[恢复] 复用前次代码审核结果: ${codeReviewVerdict.result}`, { resumed: true });
-      console.log(`   ⏩ 跳过代码审核阶段（已有完成报告）`);
+      if (!prevRecord?.codeReviewVerdict) {
+        console.log(`   ⚠️ 前次记录缺少代码审核结果，从代码审核阶段重新开始`);
+        // 降级处理：强制从 code_review 阶段执行
+        resumeIndex = 1;
+      } else {
+        codeReviewVerdict = prevRecord.codeReviewVerdict;
+        record.codeReviewVerdict = codeReviewVerdict;
+        addTimeline('code_review_completed', `[恢复] 复用前次代码审核结果: ${codeReviewVerdict.result}`, { resumed: true });
+        console.log(`   ⏩ 跳过代码审核阶段（已有完成报告）`);
+      }
     }
 
     // 6. QA verification phase (phase index 2) - skip if already completed
@@ -531,10 +554,16 @@ export class AssemblyLine {
     this.savePhaseCheckpoint(taskId, 'qa', state);
     } else {
       // Skip QA - rebuild prerequisite data from prevRecord
-      qaVerdict = prevRecord!.qaVerdict!;
-      record.qaVerdict = qaVerdict;
-      addTimeline('qa_completed', `[恢复] 复用前次QA结果: ${qaVerdict.result}`, { resumed: true });
-      console.log(`   ⏩ 跳过QA验证阶段（已有完成报告）`);
+      if (!prevRecord?.qaVerdict) {
+        console.log(`   ⚠️ 前次记录缺少QA验证结果，从QA验证阶段重新开始`);
+        // 降级处理：强制从 qa 阶段执行
+        resumeIndex = 2;
+      } else {
+        qaVerdict = prevRecord.qaVerdict;
+        record.qaVerdict = qaVerdict;
+        addTimeline('qa_completed', `[恢复] 复用前次QA结果: ${qaVerdict.result}`, { resumed: true });
+        console.log(`   ⏩ 跳过QA验证阶段（已有完成报告）`);
+      }
     }
 
     // 7. Final evaluation phase (phase index 3 - always runs)
