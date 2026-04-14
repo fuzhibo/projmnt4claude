@@ -37,6 +37,11 @@ import type { VerdictAction } from '../types/harness';
 import { DependencyGraph } from '../utils/dependency-graph';
 import { VALID_VERDICT_ACTIONS } from '../types/harness';
 import { SEPARATOR_WIDTH } from '../utils/format';
+import {
+  inferCheckpointPrefix,
+  VALID_CHECKPOINT_PREFIXES,
+} from '../utils/validation-rules/checkpoint-rules.js';
+import { syncCheckpointsToMeta } from '../utils/checkpoint.js';
 
 import {
   applySchemaMigrations,
@@ -1113,6 +1118,90 @@ export async function fixSingleIssue(
       validatedWriteTaskMeta(task, cwd);
       console.log(`  ✅ 已将任务从 ${oldStatus} 重置为 open (缺少恢复证据)`);
       return 'fixed';
+    }
+
+    case 'checkpoint_validation_error': {
+      // 检查点验证错误修复 - 目前支持前缀修复
+      const ruleId = issue.details?.ruleId as string | undefined;
+
+      // 只处理 checkpoint-required-prefix 规则的错误
+      if (ruleId !== 'checkpoint-required-prefix') {
+        console.log(`  ⚠️  不支持的检查点验证规则: ${ruleId}`);
+        return 'unfixable';
+      }
+
+      console.log(`🔄 修复任务 ${issue.taskId} 的检查点前缀...`);
+
+      if (!task.checkpoints || task.checkpoints.length === 0) {
+        console.log(`  ⚠️  任务没有检查点`);
+        return 'skipped';
+      }
+
+      let updatedCount = 0;
+      const now = new Date().toISOString();
+
+      for (const cp of task.checkpoints) {
+        const trimmed = cp.description.trim().toLowerCase();
+        const hasValidPrefix = VALID_CHECKPOINT_PREFIXES.some(prefix =>
+          trimmed.startsWith(prefix.toLowerCase())
+        );
+
+        if (!hasValidPrefix) {
+          const inferredPrefix = inferCheckpointPrefix(cp.description);
+          cp.description = `${inferredPrefix} ${cp.description}`;
+          cp.updatedAt = now;
+          updatedCount++;
+        }
+      }
+
+      if (updatedCount > 0) {
+        task.updatedAt = now;
+        // 同步检查点到 meta.json 和 checkpoint.md
+        syncCheckpointsToMeta(task.id, task.checkpoints, cwd);
+        console.log(`  ✅ 已为 ${updatedCount} 个检查点添加前缀`);
+        return 'fixed';
+      }
+
+      console.log(`  ℹ️  所有检查点已有有效前缀`);
+      return 'skipped';
+    }
+
+    case 'missing_checkpoint_prefix': {
+      // 专门的检查点前缀缺失修复 - 复用 checkpoint_validation_error 中的前缀修复逻辑
+      console.log(`🔄 修复任务 ${issue.taskId} 的检查点前缀...`);
+
+      if (!task.checkpoints || task.checkpoints.length === 0) {
+        console.log(`  ⚠️  任务没有检查点`);
+        return 'skipped';
+      }
+
+      let updatedCount = 0;
+      const now = new Date().toISOString();
+
+      for (const cp of task.checkpoints) {
+        const trimmed = cp.description.trim().toLowerCase();
+        const hasValidPrefix = VALID_CHECKPOINT_PREFIXES.some(prefix =>
+          trimmed.startsWith(prefix.toLowerCase())
+        );
+
+        if (!hasValidPrefix) {
+          const inferredPrefix = inferCheckpointPrefix(cp.description);
+          cp.description = `${inferredPrefix} ${cp.description}`;
+          cp.updatedAt = now;
+          updatedCount++;
+        }
+      }
+
+      if (updatedCount > 0) {
+        task.updatedAt = now;
+        // 同步检查点到 meta.json 和 checkpoint.md
+        syncCheckpointsToMeta(task.id, task.checkpoints, cwd);
+        console.log(`  ✅ 已为 ${updatedCount} 个检查点添加前缀`);
+        return 'fixed';
+      }
+
+      console.log(`  ℹ️  所有检查点已有有效前缀`);
+      return 'skipped';
     }
 
     default:

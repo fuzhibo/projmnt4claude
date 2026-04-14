@@ -13,3 +13,12 @@ export type {
   EngineResult,
   FeedbackConstraintEngine,
 } from './feedback-constraint.js';
+
+// 需求分解类型
+export type {
+  DecomposedTaskItem,
+  RequirementDecomposition,
+  DecomposeOptions,
+  ProblemPattern,
+  DecompositionStrategy,
+} from './decomposition.js';

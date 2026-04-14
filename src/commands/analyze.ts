@@ -555,6 +555,7 @@ export interface Issue {
     | 'report_status_mismatch'        // 报告文件 PASS 但状态未推进
     | 'checkpoint_status_mismatch'    // resolved 但检查点全 pending (旧版遗留)
     | 'checkpoint_validation_error'   // 检查点验证错误（前缀、格式等）
+    | 'missing_checkpoint_prefix'     // 检查点缺少前缀 ([ai review]/[ai qa]/[human qa]/[script])
     | 'missing_pipeline_evidence'    // pipeline 中间状态缺少前置报告
     | 'ai_status_inference';         // AI 辅助推断的状态异常 (Layer 2)
   severity: 'low' | 'medium' | 'high';
@@ -934,14 +935,26 @@ export function checkCheckpointValidation(
   const violations = validateCheckpoints(task);
 
   for (const violation of violations) {
-    issues.push({
-      taskId,
-      type: 'checkpoint_validation_error',
-      severity: violation.severity,
-      message: violation.message,
-      suggestion: violation.suggestion || '修复检查点配置以满足验证要求',
-      details: violation.details,
-    });
+    // 将 checkpoint-required-prefix 规则违规映射为专门的 missing_checkpoint_prefix issue 类型
+    if (violation.ruleId === 'checkpoint-required-prefix') {
+      issues.push({
+        taskId,
+        type: 'missing_checkpoint_prefix',
+        severity: violation.severity,
+        message: violation.message,
+        suggestion: '运行 analyze --fix 自动为检查点添加前缀',
+        details: violation.details,
+      });
+    } else {
+      issues.push({
+        taskId,
+        type: 'checkpoint_validation_error',
+        severity: violation.severity,
+        message: violation.message,
+        suggestion: violation.suggestion || '修复检查点配置以满足验证要求',
+        details: violation.details,
+      });
+    }
   }
 
   return issues;

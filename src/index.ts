@@ -228,6 +228,7 @@ rename 子命令格式:
   .option('--strategy <strategy>', '拆分策略 (仅 split)')
   .option('--pass', '通过检查点 (仅 checkpoint)')
   .option('--fail', '失败检查点 (仅 checkpoint)')
+  .option('--all', '包含所有任务，包括已解决/已关闭的 (仅 batch-update)')
   .action(async (action, id, options) => {
     requireInit();
     switch (action) {
@@ -750,6 +751,8 @@ program
   .option('--require-quality <n>', '质量门禁阈值')
   .option('-f, --force', '强制覆盖')
   .option('--file <path>', '从文件读取描述（用于包含特殊字符的长描述）')
+  .option('--decompose', '自动分解多问题需求/报告（默认启用）', true)
+  .option('--no-decompose', '禁用需求分解，强制创建单个任务')
   .option('--accept-draft', '接受草稿')
   .option('--accept-audit', '接受审计')
   .option('--accept-eval', '接受评估')
@@ -820,6 +823,7 @@ program
       autoSplit: options.autoSplit,
       noAI: options.noAi,
       requireQuality: options.requireQuality ? parseInt(options.requireQuality, 10) : undefined,
+      decompose: options.decompose,
     });
   });
 

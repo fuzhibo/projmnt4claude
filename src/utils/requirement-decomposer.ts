@@ -1,0 +1,438 @@
+/**
+ * 需求/问题分解器
+ *
+ * 将复杂需求或调查报告分解为多个独立的子任务
+ * 支持模式匹配和 AI 增强两种策略
+ */
+
+import type {
+  RequirementDecomposition,
+  DecomposedTaskItem,
+  DecomposeOptions,
+  ProblemPattern,
+} from '../types/decomposition';
+import type { TaskType, TaskPriority } from '../types/task';
+import { inferTaskType, inferTaskPriority } from '../types/task';
+import { extractFilePaths } from './quality-gate';
+import { AIMetadataAssistant } from './ai-metadata';
+
+/**
+ * 判断内容是否为调查报告格式
+ * 调查报告特征：
+ * - 包含多个"问题"条目
+ * - 有编号列表（1. 2. 3. 或 - *）
+ * - 包含多个章节标题
+ */
+function isInvestigationReport(content: string): boolean {
+  // 检查是否包含"问题"关键词多次
+  const problemKeywords = ['问题', 'Issue', 'Bug', '缺陷', '发现'];
+  let problemCount = 0;
+  for (const keyword of problemKeywords) {
+    const regex = new RegExp(keyword, 'gi');
+    const matches = content.match(regex);
+    if (matches) {
+      problemCount += matches.length;
+    }
+  }
+
+  // 检查是否有编号列表项
+  const numberedItems = content.match(/(?:^|\n)\s*\d+[.:\-]\s+/g);
+  const bulletItems = content.match(/(?:^|\n)\s*[-*]\s+/g);
+
+  // 检查是否有章节标题
+  const headers = content.match(/(?:^|\n)#{1,3}\s+[^\n]+/g);
+
+  // 调查报告判定：多个问题关键词 + (编号列表或章节标题)
+  const hasListStructure = (!!numberedItems && numberedItems.length >= 2) ||
+                          (!!bulletItems && bulletItems.length >= 2) ||
+                          (!!headers && headers.length >= 2);
+
+  return problemCount >= 2 || (hasListStructure && content.length > 300);
+}
+
+/**
+ * 基于模式匹配提取问题项
+ */
+function extractProblemsByPattern(content: string): Array<{
+  title: string;
+  description: string;
+  priority: TaskPriority;
+}> {
+  const problems: Array<{
+    title: string;
+    description: string;
+    priority: TaskPriority;
+  }> = [];
+
+  const seen = new Set<string>();
+
+  // 模式1: 标准问题格式 "问题 X:" 或 "Issue X:"
+  const problemRegex = /(?:^|\n)(?:#{1,3}\s+)?(?:问题|Issue|Bug|缺陷)\s*(?:[#]?\s*)?(\d+[A-Z]?)[.:\-]?\s*([^\n]+)(?:\n([^]*?))?(?=\n(?:问题|Issue|Bug|缺陷)\s*[#]?\s*\d+|\n#{1,3}\s|$)/gi;
+
+  let match;
+  while ((match = problemRegex.exec(content)) !== null) {
+    const problemId = match[1]?.trim() || '';
+    const title = match[2]?.trim() || '';
+    const body = match[3]?.trim() || '';
+
+    if (!title || seen.has(title)) continue;
+    seen.add(title);
+
+    // 提取优先级
+    let priority: TaskPriority = 'P2';
+    const priorityMatch = content.substring(Math.max(0, match.index - 100), match.index)
+      .match(/(P\d|紧急|urgent|高|high|中|medium|低|low)/i);
+    if (priorityMatch && priorityMatch[1]) {
+      const p = priorityMatch[1].toUpperCase();
+      if (p === 'P0' || p.includes('紧急') || p.includes('URGENT')) priority = 'P0';
+      else if (p === 'P1' || p.includes('高') || p.includes('HIGH')) priority = 'P1';
+      else if (p === 'P3' || p.includes('低') || p.includes('LOW')) priority = 'P3';
+    }
+
+    problems.push({
+      title: title.length > 100 ? title.substring(0, 97) + '...' : title,
+      description: body || title,
+      priority,
+    });
+  }
+
+  // 模式2: 编号列表项（如果模式1未提取到足够的问题）
+  if (problems.length < 2) {
+    const numberedRegex = /(?:^|\n)\s*(\d+)[.:\-]\s*([^\n]{10,200})/g;
+    while ((match = numberedRegex.exec(content)) !== null) {
+      const title = match[2]?.trim() || '';
+      if (!title || seen.has(title)) continue;
+
+      // 检查是否为有效的问题描述
+      const hasActionVerb = /(?:修复|解决|实现|添加|创建|修改|更新|验证|分析|优化|重构|删除|移除|调整|配置|部署)/.test(title);
+      if (!hasActionVerb && title.length < 20) continue;
+
+      seen.add(title);
+
+      // 提取该编号项下的内容（直到下一个编号或结束）
+      const startIdx = match.index + match[0].length;
+      const nextMatch = numberedRegex.exec(content);
+      numberedRegex.lastIndex = startIdx; // 重置索引
+      const endIdx = nextMatch ? nextMatch.index : content.length;
+      const body = content.substring(startIdx, endIdx).trim();
+
+      problems.push({
+        title: title.length > 100 ? title.substring(0, 97) + '...' : title,
+        description: body || title,
+        priority: 'P2',
+      });
+
+      if (problems.length >= 10) break; // 限制最大数量
+    }
+  }
+
+  // 模式3: 章节标题（如果前两种模式都未提取到足够的问题）
+  if (problems.length < 2) {
+    const headerRegex = /(?:^|\n)(#{1,3}\s+)([^\n]{5,100})/g;
+    while ((match = headerRegex.exec(content)) !== null) {
+      const title = match[2]?.trim() || '';
+      if (!title || seen.has(title)) continue;
+
+      // 过滤掉常见的非问题标题
+      const nonProblemTitles = ['概述', '总结', '结论', '背景', '目标', '介绍', '前言', '附录',
+        'Summary', 'Conclusion', 'Background', 'Overview', 'Introduction', 'Appendix'];
+      if (nonProblemTitles.some(t => title.includes(t))) continue;
+
+      seen.add(title);
+
+      // 提取该章节下的内容
+      const startIdx = match.index + match[0].length;
+      const nextMatch = headerRegex.exec(content);
+      headerRegex.lastIndex = startIdx;
+      const endIdx = nextMatch ? nextMatch.index : content.length;
+      const body = content.substring(startIdx, endIdx).trim();
+
+      problems.push({
+        title: title.length > 100 ? title.substring(0, 97) + '...' : title,
+        description: body || title,
+        priority: 'P2',
+      });
+
+      if (problems.length >= 10) break;
+    }
+  }
+
+  return problems;
+}
+
+/**
+ * 使用 AI 增强分解
+ */
+async function decomposeWithAI(
+  content: string,
+  cwd: string
+): Promise<RequirementDecomposition | null> {
+  try {
+    const assistant = new AIMetadataAssistant(cwd);
+
+    const prompt = `请将以下需求/报告分解为多个独立的开发任务。
+
+输入内容：
+${content.substring(0, 4000)}
+
+请分析输入内容，识别出其中包含的独立问题或需求项，并返回 JSON 格式的分解结果：
+{
+  "decomposable": true,
+  "summary": "分解摘要",
+  "items": [
+    {
+      "title": "任务标题（动词开头，简洁明确）",
+      "description": "任务详细描述",
+      "type": "bug|feature|research|docs|refactor|test",
+      "priority": "P0|P1|P2|P3",
+      "suggestedCheckpoints": ["检查点1", "检查点2"],
+      "relatedFiles": ["文件路径1", "文件路径2"],
+      "estimatedMinutes": 15,
+      "dependsOn": []
+    }
+  ]
+}
+
+规则：
+1. 每个 item 应该是一个独立的、可执行的任务
+2. title 必须以动词开头（如：修复、实现、添加、更新等）
+3. priority 根据紧急程度判断：P0=紧急/阻塞，P1=高优先级，P2=中等，P3=低优先级
+4. type 根据内容推断：bug=修复问题，feature=新功能，refactor=重构，docs=文档，test=测试
+5. estimatedMinutes 预估完成时间（分钟），建议每个任务控制在 15-30 分钟
+6. dependsOn 是依赖项的索引数组（如：[0] 表示依赖第一个任务）
+7. 如果无法分解（如内容过于简单），返回 {"decomposable": false, "reason": "原因", "items": []}`;
+
+    // 使用类型安全的方式访问 protected 方法
+    const result = await (assistant as unknown as {
+      invokeWithEngine: (
+        prompt: string,
+        additionalRules: unknown[],
+        options: { cwd: string; maxRetries: number; timeoutSeconds: number }
+      ) => Promise<{ success: boolean; output: string }>
+    }).invokeWithEngine(
+      prompt,
+      [],
+      { cwd, maxRetries: 2, timeoutSeconds: 30 }
+    );
+
+    if (!result.success) {
+      return null;
+    }
+
+    const parsed = (assistant as unknown as {
+      parseJSON: (output: string) => Record<string, unknown> | null
+    }).parseJSON(result.output);
+    if (!parsed || !parsed.items || !Array.isArray(parsed.items)) {
+      return null;
+    }
+
+    return {
+      decomposable: parsed.decomposable === true,
+      reason: typeof parsed.reason === 'string' ? parsed.reason : undefined,
+      summary: typeof parsed.summary === 'string' ? parsed.summary : `分解为 ${parsed.items.length} 个子任务`,
+      items: parsed.items.map((item: Record<string, unknown>, index: number) => ({
+        title: String(item.title || `任务 ${index + 1}`),
+        description: String(item.description || item.title || ''),
+        type: (item.type as TaskType) || inferTaskType(String(item.title)),
+        priority: (item.priority as TaskPriority) || 'P2',
+        suggestedCheckpoints: Array.isArray(item.suggestedCheckpoints)
+          ? item.suggestedCheckpoints.filter((c): c is string => typeof c === 'string')
+          : [],
+        relatedFiles: Array.isArray(item.relatedFiles)
+          ? item.relatedFiles.filter((f): f is string => typeof f === 'string')
+          : extractFilePaths(String(item.description || '')),
+        estimatedMinutes: typeof item.estimatedMinutes === 'number'
+          ? item.estimatedMinutes
+          : 15,
+        dependsOn: Array.isArray(item.dependsOn)
+          ? item.dependsOn.filter((d): d is number => typeof d === 'number')
+          : [],
+      })),
+    };
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * 分解需求/问题报告
+ *
+ * 主入口函数，根据内容自动选择合适的分解策略
+ */
+export async function decomposeRequirement(
+  content: string,
+  options: DecomposeOptions = {}
+): Promise<RequirementDecomposition> {
+  const { minItems = 2, maxItems = 10, useAI = true, cwd = process.cwd() } = options;
+
+  // 清理输入内容
+  const trimmedContent = content.trim();
+  if (trimmedContent.length < 100) {
+    return {
+      decomposable: false,
+      reason: '内容过短，无需分解',
+      items: [],
+      summary: '单任务',
+    };
+  }
+
+  // 检查是否为调查报告格式
+  const isReport = isInvestigationReport(trimmedContent);
+
+  // 策略1: 尝试使用 AI 分解（如果启用）
+  if (useAI) {
+    const aiResult = await decomposeWithAI(trimmedContent, cwd);
+    if (aiResult && aiResult.decomposable && aiResult.items.length >= minItems) {
+      return {
+        ...aiResult,
+        items: aiResult.items.slice(0, maxItems),
+      };
+    }
+  }
+
+  // 策略2: 基于模式匹配分解
+  const problems = extractProblemsByPattern(trimmedContent);
+
+  if (problems.length < minItems) {
+    return {
+      decomposable: false,
+      reason: `仅识别到 ${problems.length} 个问题项，少于阈值 ${minItems}`,
+      items: [],
+      summary: '单任务',
+    };
+  }
+
+  // 将提取的问题转换为子任务项
+  const items: DecomposedTaskItem[] = problems.slice(0, maxItems).map((problem, index) => {
+    const title = problem.title;
+    const description = problem.description;
+
+    // 推断任务类型
+    const type = inferTaskType(title);
+
+    // 使用提取的优先级或推断
+    const priority = problem.priority || inferTaskPriority(title);
+
+    // 提取相关文件
+    const relatedFiles = extractFilePaths(description);
+
+    // 生成检查点
+    const suggestedCheckpoints = generateCheckpoints(type, title, description);
+
+    // 估算时间
+    const estimatedMinutes = Math.max(10, Math.min(60, 10 + relatedFiles.length * 5));
+
+    return {
+      title,
+      description,
+      type,
+      priority,
+      suggestedCheckpoints,
+      relatedFiles,
+      estimatedMinutes,
+      dependsOn: index > 0 ? [index - 1] : [], // 默认线性依赖
+    };
+  });
+
+  return {
+    decomposable: true,
+    items,
+    summary: `基于模式匹配分解为 ${items.length} 个子任务`,
+  };
+}
+
+/**
+ * 根据任务类型生成默认检查点
+ */
+function generateCheckpoints(type: TaskType, title: string, description: string): string[] {
+  const checkpoints: string[] = [];
+
+  switch (type) {
+    case 'bug':
+      checkpoints.push('[implem] 定位并修复问题根因');
+      checkpoints.push('[test] 验证修复后问题不再复现');
+      break;
+    case 'feature':
+      checkpoints.push('[implem] 实现核心功能逻辑');
+      checkpoints.push('[test] 功能测试通过');
+      break;
+    case 'refactor':
+      checkpoints.push('[implem] 完成代码重构');
+      checkpoints.push('[test] 回归测试通过');
+      break;
+    case 'docs':
+      checkpoints.push('[implem] 完成文档编写');
+      checkpoints.push('[verify] 文档内容审核通过');
+      break;
+    case 'test':
+      checkpoints.push('[implem] 编写测试用例');
+      checkpoints.push('[verify] 测试覆盖率达标');
+      break;
+    default:
+      checkpoints.push('[implem] 完成功能实现');
+      checkpoints.push('[verify] 验证功能正确性');
+  }
+
+  // 如果描述中包含文件路径，添加文件检查点
+  const files = extractFilePaths(description);
+  if (files.length > 0) {
+    checkpoints.push(`[verify] 确认修改文件: ${files.slice(0, 3).join(', ')}${files.length > 3 ? ' 等' : ''}`);
+  }
+
+  return checkpoints;
+}
+
+/**
+ * 检查内容是否需要分解
+ * 快速预检查，用于决定是否显示分解选项
+ */
+export function shouldDecompose(content: string): boolean {
+  if (content.length < 200) return false;
+
+  // 检查是否包含多个问题
+  const problemCount = (
+    content.match(/(?:^|\n)(?:问题|Issue|Bug|缺陷)\s*\d+/gi) || []
+  ).length;
+
+  // 检查是否有编号列表
+  const numberedCount = (content.match(/(?:^|\n)\s*\d+[.:\-]\s+/g) || []).length;
+
+  // 检查是否有章节标题
+  const headerCount = (content.match(/(?:^|\n)#{1,3}\s+/g) || []).length;
+
+  return problemCount >= 2 || numberedCount >= 3 || headerCount >= 3;
+}
+
+/**
+ * 格式化分解结果供显示
+ */
+export function formatDecomposition(decomposition: RequirementDecomposition): string {
+  if (!decomposition.decomposable) {
+    return `不可分解: ${decomposition.reason || '未知原因'}`;
+  }
+
+  const lines: string[] = [
+    `📋 ${decomposition.summary}`,
+    '',
+  ];
+
+  for (let i = 0; i < decomposition.items.length; i++) {
+    const item = decomposition.items[i]!;
+    const priorityIcon = item.priority === 'P0' ? '🔴' :
+                         item.priority === 'P1' ? '🟠' :
+                         item.priority === 'P2' ? '🟡' : '🟢';
+    const typeIcon = item.type === 'bug' ? '🐛' :
+                     item.type === 'feature' ? '✨' :
+                     item.type === 'refactor' ? '♻️' :
+                     item.type === 'docs' ? '📚' :
+                     item.type === 'test' ? '🧪' : '📝';
+
+    lines.push(`  ${i + 1}. ${typeIcon} ${priorityIcon} ${item.title}`);
+    lines.push(`     类型: ${item.type} | 优先级: ${item.priority} | 预估: ${item.estimatedMinutes}分钟`);
+    if (item.dependsOn.length > 0) {
+      lines.push(`     依赖: ${item.dependsOn.map(d => `#${d + 1}`).join(', ')}`);
+    }
+  }
+
+  return lines.join('\n');
+}

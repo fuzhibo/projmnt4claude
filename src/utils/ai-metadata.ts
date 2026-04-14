@@ -823,8 +823,10 @@ export class AIMetadataAssistant {
    *
    * CP-3: 失败自动重试 (最多 maxRetries 次) + 错误反馈追加到 prompt
    * CP-5: 超时 30 秒/次
+   *
+   * @internal 用于需求分解等内部功能
    */
-  private async invokeWithEngine(
+  protected async invokeWithEngine(
     prompt: string,
     additionalRules: ValidationRule[],
     options: AIMetadataCallOptions & { maxRetries: number; timeoutSeconds: number },
@@ -876,8 +878,10 @@ export class AIMetadataAssistant {
   /**
    * 解析 JSON 字符串
    * CP-13: 只输出 JSON，不要 markdown 代码块包裹
+   *
+   * @internal 用于需求分解等内部功能
    */
-  private parseJSON(output: string): Record<string, unknown> | null {
+  protected parseJSON(output: string): Record<string, unknown> | null {
     if (!output || !output.trim()) return null;
 
     let text = output.trim();

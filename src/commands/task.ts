@@ -47,6 +47,11 @@ import {
   type StructuredDescription,
 } from '../utils/description-template';
 import { extractFilePaths } from '../utils/quality-gate';
+import {
+  writeBatchUpdateLog,
+  detectOperationSource,
+  type OperationSource,
+} from '../utils/batch-update-logger';
 
 /** 历史记录最大显示条数 */
 const MAX_HISTORY_DISPLAY = 20;
@@ -3907,6 +3912,8 @@ export function showStatus(
 /**
  * 批量更新任务状态
  * 命令: task update --status <status> --all
+ *
+ * 日志记录：所有批量更新操作都会被记录到 .projmnt4claude/logs/batch-update-YYYY-MM-DD.log
  */
 export async function batchUpdateTasks(
   options: {
@@ -3914,9 +3921,15 @@ export async function batchUpdateTasks(
     priority?: string;
     all?: boolean;
     yes?: boolean;
+    /** 调用来源标识 (CLI/IDE/Hook等) */
+    source?: string;
   } = {},
   cwd: string = process.cwd()
 ): Promise<void> {
+  // 记录操作开始时间
+  const operationStartTime = new Date().toISOString();
+  const commandArgs = process.argv.slice(2); // 获取命令行参数
+
   if (!isInitialized(cwd)) {
     console.error('错误: 项目未初始化。请先运行 `projmnt4claude setup`');
     process.exit(1);
@@ -3933,6 +3946,11 @@ export async function batchUpdateTasks(
   const tasksToUpdate = options.all
     ? allTasks
     : allTasks.filter(t => t.status !== 'resolved' && t.status !== 'closed' && t.status !== 'abandoned' && t.status !== 'failed');
+
+  // 记录被过滤掉的已解决任务（用于审计）
+  const filteredTasks = options.all
+    ? []
+    : allTasks.filter(t => t.status === 'resolved' || t.status === 'closed' || t.status === 'abandoned' || t.status === 'failed');
 
   if (tasksToUpdate.length === 0) {
     console.log('没有需要更新的任务');
@@ -3951,6 +3969,20 @@ export async function batchUpdateTasks(
   }
   console.log('');
 
+  // 显示即将更新的任务列表
+  console.log('   即将更新的任务:');
+  for (const task of tasksToUpdate) {
+    const changeInfo: string[] = [];
+    if (options.status && task.status !== options.status) {
+      changeInfo.push(`${task.status} → ${options.status}`);
+    }
+    if (options.priority && task.priority !== options.priority) {
+      changeInfo.push(`priority: ${task.priority} → ${options.priority}`);
+    }
+    console.log(`     • ${task.id}: ${changeInfo.join(', ') || '(无变化)'}`);
+  }
+  console.log('');
+
   // 非交互模式或用户确认
   if (!options.yes) {
     const response = await prompts({
@@ -3961,34 +3993,158 @@ export async function batchUpdateTasks(
     });
 
     if (!response.confirm) {
+      // 记录取消操作
+      writeBatchUpdateLog({
+        commandArgs,
+        options: {
+          status: options.status,
+          priority: options.priority,
+          all: options.all,
+          yes: options.yes,
+        },
+        tasks: [],
+        summary: {
+          totalCount: tasksToUpdate.length,
+          updatedCount: 0,
+          filteredCount: filteredTasks.length,
+        },
+      }, cwd);
       console.log('已取消');
       return;
     }
   }
 
+  // 准备日志记录的任务变更列表
+  const taskChanges: Array<{
+    id: string;
+    title: string;
+    oldStatus: string;
+    newStatus: string;
+    oldPriority?: string;
+    newPriority?: string;
+  }> = [];
+
   // 执行批量更新
   let updatedCount = 0;
   for (const task of tasksToUpdate) {
+    const oldStatus = task.status;
+    const oldPriority = task.priority;
     let updated = false;
 
     if (options.status) {
-      task.status = options.status as TaskStatus;
+      const newStatus = options.status as TaskStatus;
+
+      // 从 resolved/closed 变为 open 时，增加 reopenCount
+      if (newStatus === 'open' && (oldStatus === 'resolved' || oldStatus === 'closed')) {
+        task.reopenCount = (task.reopenCount || 0) + 1;
+
+        // 添加 transitionNote
+        if (!task.transitionNotes) {
+          task.transitionNotes = [];
+        }
+        task.transitionNotes.push({
+          timestamp: new Date().toISOString(),
+          fromStatus: oldStatus,
+          toStatus: 'open',
+          note: `任务从 ${oldStatus} 被批量更新为 open (reopenCount: ${task.reopenCount})`,
+          author: process.env.USER || undefined,
+        });
+
+        // 添加历史记录
+        if (!task.history) {
+          task.history = [];
+        }
+        task.history.push({
+          timestamp: new Date().toISOString(),
+          action: `批量更新: ${oldStatus} → open (reopenCount: ${task.reopenCount})`,
+          field: 'status',
+          oldValue: oldStatus,
+          newValue: 'open',
+          reason: 'batch-update 命令触发，状态从 resolved/closed 重开为 open',
+        });
+      } else {
+        // 普通状态变更，只添加历史记录
+        if (!task.history) {
+          task.history = [];
+        }
+        task.history.push({
+          timestamp: new Date().toISOString(),
+          action: `批量更新: ${oldStatus} → ${newStatus}`,
+          field: 'status',
+          oldValue: oldStatus,
+          newValue: newStatus,
+          reason: 'batch-update 命令触发状态变更',
+        });
+      }
+
+      task.status = newStatus;
       updated = true;
     }
     if (options.priority) {
-      task.priority = options.priority as TaskPriority;
+      const newPriority = options.priority as TaskPriority;
+
+      // 记录优先级变更历史
+      if (oldPriority !== newPriority) {
+        if (!task.history) {
+          task.history = [];
+        }
+        task.history.push({
+          timestamp: new Date().toISOString(),
+          action: `批量更新: 优先级 ${oldPriority} → ${newPriority}`,
+          field: 'priority',
+          oldValue: oldPriority,
+          newValue: newPriority,
+          reason: 'batch-update 命令触发优先级变更',
+        });
+      }
+
+      task.priority = newPriority;
       updated = true;
     }
 
     if (updated) {
+      // 更新 updatedAt 时间戳
+      task.updatedAt = new Date().toISOString();
+
       writeTaskMeta(task, cwd);
       updatedCount++;
       console.log(`   ✅ ${task.id}`);
+
+      // 记录变更
+      taskChanges.push({
+        id: task.id,
+        title: task.title || '(无标题)',
+        oldStatus,
+        newStatus: task.status,
+        oldPriority,
+        newPriority: task.priority,
+      });
     }
   }
 
+  // 写入操作日志
+  writeBatchUpdateLog({
+    commandArgs,
+    options: {
+      status: options.status,
+      priority: options.priority,
+      all: options.all,
+      yes: options.yes,
+    },
+    tasks: taskChanges,
+    summary: {
+      totalCount: tasksToUpdate.length,
+      updatedCount,
+      filteredCount: filteredTasks.length,
+    },
+  }, cwd);
+
   console.log('');
   console.log(`✅ 批量更新完成: ${updatedCount} 个任务已更新`);
+
+  // 显示日志记录信息
+  console.log('');
+  console.log(`📝 操作已记录到: .projmnt4claude/logs/batch-update-${operationStartTime.split('T')[0]}.log`);
 }
 
 /**

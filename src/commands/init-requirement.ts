@@ -15,11 +15,13 @@ import { syncCheckpointsToMeta, filterLowQualityCheckpoints } from '../utils/che
 import { inferDependencies as inferDependenciesUnified, type InferredDependency } from '../utils/dependency-engine';
 import { DependencyGraph, validateNewTaskDeps } from '../utils/dependency-graph';
 import type { TaskMeta, TaskPriority, TaskStatus, TaskType } from '../types/task';
+import type { RequirementDecomposition, DecomposedTaskItem } from '../types/decomposition';
 import { createDefaultTaskMeta, inferTaskType, validateCheckpointVerification } from '../types/task';
 import { SEPARATOR_WIDTH } from '../utils/format';
 import { createLogger, type InstrumentationRecord, type AICostSummary } from '../utils/logger';
 import { withAIEnhancement } from '../utils/ai-helpers';
 import { AIMetadataAssistant, type EnhancedRequirement, classifyFileToLayer, groupFilesByLayer, sortFilesByLayer, type ArchitectureLayer, LAYER_DEFINITIONS } from '../utils/ai-metadata';
+import { decomposeRequirement, shouldDecompose, formatDecomposition } from '../utils/requirement-decomposer';
 
 /**
  * 复杂度评估结果
@@ -99,6 +101,10 @@ export interface InitRequirementOptions {
   noAI?: boolean;            // 禁用 AI 增强，仅使用规则引擎
   /** 质量门禁: 低于此阈值时阻止创建 (0-100) */
   requireQuality?: number;
+  /** 自动分解多问题需求/报告 */
+  decompose?: boolean;
+  /** 从文件读取需求 */
+  file?: string;
 }
 
 /**
@@ -194,7 +200,7 @@ export async function initRequirement(
   cwd: string = process.cwd(),
   options: InitRequirementOptions = {}
 ): Promise<void> {
-  const { nonInteractive = false, noPlan = false, skipValidation = false, template = 'simple', autoSplit = false, noAI = false, requireQuality } = options;
+  const { nonInteractive = false, noPlan = false, skipValidation = false, template = 'simple', autoSplit = false, noAI = false, requireQuality, decompose: shouldDecomposeOption = true } = options;
 
   // CP-2: 模块日志 + 埋点初始化
   const logger = createLogger('init-requirement', cwd);
@@ -234,6 +240,117 @@ export async function initRequirement(
     console.error('  初始化后即可使用 init-requirement 创建任务。');
     console.error('');
     process.exit(1);
+  }
+
+  // 阶段 1: 需求/问题分解（新增）
+  if (shouldDecomposeOption && shouldDecompose(description)) {
+    console.log('');
+    console.log('━'.repeat(SEPARATOR_WIDTH));
+    console.log('🔍 检测到可分解内容，正在进行需求分解...');
+    console.log('━'.repeat(SEPARATOR_WIDTH));
+    console.log('');
+
+    const decomposition = await decomposeRequirement(description, {
+      cwd,
+      useAI: !noAI,
+      minItems: 2,
+      maxItems: 10,
+    });
+
+    if (decomposition.decomposable && decomposition.items.length >= 2) {
+      console.log(formatDecomposition(decomposition));
+      console.log('');
+
+      // 确认是否分解创建（非交互模式自动确认）
+      let confirmDecompose = true;
+      if (!nonInteractive) {
+        const result = await prompts({
+          type: 'confirm',
+          name: 'confirm',
+          message: `是否将需求分解为 ${decomposition.items.length} 个独立任务创建?`,
+          initial: true,
+        });
+        if (result === undefined) {
+          console.log('');
+          console.log('ℹ️  已取消任务创建。');
+          console.log('');
+          return;
+        }
+        confirmDecompose = result.confirm;
+      }
+
+      if (confirmDecompose) {
+        // 阶段 2: 循环创建任务
+        const createdTaskIds: string[] = [];
+        const taskIdMap = new Map<number, string>(); // 索引 -> 任务ID 映射
+
+        console.log('');
+        console.log('━'.repeat(SEPARATOR_WIDTH));
+        console.log('📝 正在创建任务...');
+        console.log('━'.repeat(SEPARATOR_WIDTH));
+        console.log('');
+
+        for (let i = 0; i < decomposition.items.length; i++) {
+          const item = decomposition.items[i]!;
+          const itemOptions: InitRequirementOptions = {
+            ...options,
+            nonInteractive: true, // 子任务使用非交互模式
+            decompose: false, // 防止递归分解
+          };
+
+          const taskId = await initRequirementSingle(item, cwd, itemOptions);
+          if (taskId) {
+            createdTaskIds.push(taskId);
+            taskIdMap.set(i, taskId);
+          }
+        }
+
+        // 更新依赖关系
+        if (createdTaskIds.length > 0) {
+          console.log('');
+          console.log('━'.repeat(SEPARATOR_WIDTH));
+          console.log('🔗 正在设置任务依赖关系...');
+          console.log('━'.repeat(SEPARATOR_WIDTH));
+          console.log('');
+
+          for (let i = 0; i < decomposition.items.length; i++) {
+            const item = decomposition.items[i]!;
+            const taskId = taskIdMap.get(i);
+            if (!taskId || item.dependsOn.length === 0) continue;
+
+            const task = readTaskMeta(taskId, cwd);
+            if (!task) continue;
+
+            const deps: string[] = [];
+            for (const depIndex of item.dependsOn) {
+              const depId = taskIdMap.get(depIndex);
+              if (depId && !deps.includes(depId)) {
+                deps.push(depId);
+              }
+            }
+
+            if (deps.length > 0) {
+              task.dependencies = [...(task.dependencies || []), ...deps];
+              writeTaskMeta(task, cwd);
+              console.log(`  ${taskId} 依赖: ${deps.join(', ')}`);
+            }
+          }
+
+          console.log('');
+          console.log(`✅ 已创建 ${createdTaskIds.length} 个任务:`);
+          for (const taskId of createdTaskIds) {
+            console.log(`   - ${taskId}`);
+          }
+          console.log('');
+        }
+
+        return;
+      }
+    }
+
+    // 分解失败或用户选择不分解，继续单任务流程
+    console.log('  跳过分解，继续创建单个任务...');
+    console.log('');
   }
 
   console.log('');
@@ -1457,4 +1574,70 @@ function formatPriority(priority: TaskPriority | string): string {
     urgent: '🔴 紧急',
   };
   return map[priority] || `❓ ${priority}`;
+}
+
+/**
+ * 从分解后的任务项创建单个任务
+ * 用于分解流程中创建子任务
+ */
+async function initRequirementSingle(
+  item: DecomposedTaskItem,
+  cwd: string,
+  options: InitRequirementOptions
+): Promise<string | null> {
+  const { template = 'simple', nonInteractive = true, skipValidation = true, requireQuality } = options;
+
+  try {
+    // 生成结构化描述
+    const structuredData = {
+      problem: item.description,
+      rootCause: '',
+      solution: '',
+      checkpoints: item.suggestedCheckpoints,
+      relatedFiles: item.relatedFiles,
+      notes: '',
+    };
+
+    const finalDescription = generateStructuredDescription(structuredData, template);
+
+    // 创建任务
+    const task = await createTask({
+      title: item.title,
+      description: finalDescription,
+      type: item.type,
+      priority: item.priority,
+      nonInteractive,
+      skipValidation,
+      aiEnhancement: false,
+      suggestedCheckpoints: item.suggestedCheckpoints,
+      potentialDependencies: [],
+    }, cwd);
+
+    const taskId = task.id;
+
+    // 质量门禁检查
+    if (requireQuality !== undefined) {
+      const qualityGateConfig = {
+        ...DEFAULT_QUALITY_GATE_CONFIG,
+        minQualityScore: requireQuality,
+      };
+
+      const qualityResult = await checkQualityGate(taskId, qualityGateConfig, cwd);
+
+      // 将质量评分写入任务元数据
+      const taskWithScore = readTaskMeta(taskId, cwd);
+      if (taskWithScore) {
+        taskWithScore.initQualityScore = qualityResult.score.totalScore;
+        writeTaskMeta(taskWithScore, cwd);
+      }
+    }
+
+    console.log(`  ✅ ${taskId}: ${item.title}`);
+
+    return taskId;
+  } catch (error) {
+    console.error(`  ❌ 创建任务失败: ${item.title}`);
+    console.error(`     ${error instanceof Error ? error.message : String(error)}`);
+    return null;
+  }
 }
