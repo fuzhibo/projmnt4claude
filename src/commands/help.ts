@@ -187,8 +187,7 @@ function showSmartHelp(commandsDir: string, topic: string, cwd: string): void {
     // 分析和规划
     'plan': ['计划', '执行计划', '任务计划'],
     'analyze': ['分析', '项目分析', '健康检查'],
-    // 分支管理
-    'branch': ['分支', 'git分支', '创建分支'],
+    // 版本控制
     'git': ['版本控制', '提交', '推送'],
     // 工具
     'hook': ['钩子', '脚本', '自动化'],

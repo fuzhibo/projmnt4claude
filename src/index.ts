@@ -729,21 +729,28 @@ program
     '选项:\n' +
     '  -y, --yes                非交互模式：跳过所有确认，直接使用分析结果创建任务\n' +
     '  --no-plan                创建任务后不询问是否添加到执行计划\n' +
-    '  --skip-validation        跳过 checkpoints 质量校验\n' +
-    '  --template <type>        描述模板类型: simple (默认) 或 detailed (详细结构化)\n' +
-    '  --auto-split             自动拆分复杂任务为子任务（复杂度评估为 high 时生效）\n' +
-    '  --no-ai                  禁用 AI 增强，仅使用规则引擎进行关键词匹配分析\n' +
-    '  --require-quality <n>    质量门禁: 低于阈值时阻止创建 (0-100)\n' +
-    '  -f, --file <path>        从文件读取描述（用于包含特殊字符的长描述）\n\n' +
+    '  --skip-validation        跳过初始化验证\n' +
+    '  --template <file>        使用需求模板文件\n' +
+    '  --auto-split             自动拆分为子任务\n' +
+    '  --no-ai                  禁用 AI 辅助\n' +
+    '  --require-quality <n>    质量门禁阈值\n' +
+    '  -f, --force              强制覆盖\n' +
+    '  --accept-draft           接受草稿\n' +
+    '  --accept-audit           接受审计\n' +
+    '  --accept-eval            接受评估\n\n' +
     '前提: 需先运行 projmnt4claude setup 初始化项目')
   .option('-y, --yes', '非交互模式：跳过所有确认，直接使用分析结果创建任务')
   .option('--no-plan', '创建任务后不询问是否添加到执行计划')
-  .option('--skip-validation', '跳过 checkpoints 质量校验')
-  .option('--template <type>', '描述模板类型: simple (默认) 或 detailed (详细结构化)', 'simple')
-  .option('--auto-split', '自动拆分复杂任务为子任务（复杂度评估为 high 时生效）')
-  .option('--no-ai', '禁用 AI 增强，仅使用规则引擎进行关键词匹配分析')
-  .option('--require-quality <n>', '质量门禁: 低于阈值时阻止创建 (0-100)')
-  .option('-f, --file <path>', '从文件读取描述（用于包含特殊字符的长描述）')
+  .option('--skip-validation', '跳过初始化验证')
+  .option('--template <file>', '使用需求模板文件', 'simple')
+  .option('--auto-split', '自动拆分为子任务')
+  .option('--no-ai', '禁用 AI 辅助')
+  .option('--require-quality <n>', '质量门禁阈值')
+  .option('-f, --force', '强制覆盖')
+  .option('--file <path>', '从文件读取描述（用于包含特殊字符的长描述）')
+  .option('--accept-draft', '接受草稿')
+  .option('--accept-audit', '接受审计')
+  .option('--accept-eval', '接受评估')
   .action(async (description, options) => {
     let finalDescription: string | undefined;
 
@@ -838,30 +845,30 @@ program
   .description(`使用 Harness Design 模式执行任务计划 (自动化开发与审查)
 
 主命令选项:
-  --plan <file>           计划文件路径 (默认: 自动读取/生成)
-  --max-retries <n>       最大重试次数 (默认: 3)
-  --timeout <seconds>     单任务超时时间 (默认: 300秒)
-  --parallel <n>          并行执行数 (默认: 1)
-  --dry-run               试运行模式 (不实际执行)
-  --continue              从上次中断处继续执行
-  --json                  JSON 格式输出
-  --batch-git-commit      每个批次完成后自动 git commit
+  --plan <file>              计划文件路径（默认：自动读取/生成）
+  --max-retries <n>          最大重试次数（默认：3）
+  --timeout <seconds>        单任务超时时间（默认：300秒）
+  --parallel <n>             并行执行数（默认：1）
+  --dry-run                  试运行模式（不实际执行）
+  --continue                 从上次中断处继续执行
+  --json                     JSON 格式输出
+  --batch-git-commit         每个批次完成后自动 git commit
 
 质量门禁选项:
-  --require-quality <n>   质量分阈值 (0-100, 默认: 60)
-  --skip-harness-gate     跳过质量门禁检查 (不推荐)
+  --require-quality <n>      质量分阈值（0-100，默认：60）
+  --skip-harness-gate        跳过质量门禁检查（不推荐）
 
-API选项:
-  --api-retry-attempts <n>  API 调用重试次数 (默认: 3)
-  --api-retry-delay <seconds>  API 重试基础延迟 (默认: 60秒)
+API 选项:
+  --api-retry-attempts <n>   API 调用重试次数（默认：3）
+  --api-retry-delay <seconds>  API 重试基础延迟（默认：60秒）
 
 子命令: cleanup
-  cleanup                 清理残留的快照文件
-  --force                 强制清理所有快照 (包括活跃进程的快照)
-  --orphans-only          仅清理孤儿快照 (进程已不存在)
+  cleanup                    清理残留的快照文件
+  --force                    强制清理所有快照（包括活跃进程的快照）
+  --orphans-only             仅清理孤儿快照（进程已不存在）
 
-弃用选项:
-  --skip-quality-gate     已弃用，请使用 --skip-harness-gate`)
+Deprecated 选项:
+  ~~--skip-quality-gate~~    已弃用，请使用 --skip-harness-gate`)
   .option('--plan <file>', '计划文件路径 (可选，不指定则自动读取/生成)')
   .option('--max-retries <n>', '最大重试次数', '3')
   .option('--timeout <seconds>', '单任务超时时间 (秒)', '300')

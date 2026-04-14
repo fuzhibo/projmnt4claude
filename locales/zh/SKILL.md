@@ -44,17 +44,6 @@ node ${CLAUDE_PLUGIN_ROOT}/dist/projmnt4claude.js setup
 | `plan clear [--force]` | 清空计划 |
 | `plan recommend` | 智能推荐执行计划 |
 
-### 工具箱管理
-
-| 命令 | 描述 |
-|------|------|
-| `tool list [--json]` | 列出本地 skill |
-| `tool create` | 创建新 skill 脚手架 |
-| `tool install <source>` | 安装 skill |
-| `tool remove <name>` | 删除 skill |
-| `tool deploy <name>` | 部署 skill 到 Claude Code |
-| `tool undeploy <name>` | 卸载 skill |
-
 ### 项目分析
 
 | 命令 | 描述 |
@@ -74,18 +63,6 @@ node ${CLAUDE_PLUGIN_ROOT}/dist/projmnt4claude.js setup
 | 命令 | 描述 |
 |------|------|
 | `help [command|topic]` | 显示命令使用说明和帮助信息 |
-
-### Git 分支集成
-
-| 命令 | 描述 |
-|------|------|
-| `branch checkout <id>` | 切换到任务关联分支 |
-| `branch status` | 显示分支状态 |
-| `branch create <id>` | 创建任务分支 |
-| `branch delete <id>` | 删除任务分支 |
-| `branch merge <id>` | 合并任务分支 |
-| `branch push <id>` | 推送任务分支 |
-| `branch sync` | 同步分支状态 |
 
 ### 自然语言需求
 
@@ -216,14 +193,6 @@ node ${CLAUDE_PLUGIN_ROOT}/dist/projmnt4claude.js analyze
 自动修复检测到的问题：
 ```bash
 node ${CLAUDE_PLUGIN_ROOT}/dist/projmnt4claude.js analyze --fix
-```
-
-### 示例 4: Git 工作流
-
-当用户说 "切换到某个任务分支"：
-
-```bash
-node ${CLAUDE_PLUGIN_ROOT}/dist/projmnt4claude.js branch checkout <task-id>
 ```
 
 ## 任务优先级

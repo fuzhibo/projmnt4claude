@@ -18,8 +18,6 @@ node ${CLAUDE_PLUGIN_ROOT}/dist/projmnt4claude.js <command> [options]
 | `config` | Configuration management (list/get/set) |
 | `status` | Display project status summary |
 | `analyze` | Analyze project health status |
-| `branch` | Git branch integration (checkout/status/create/delete/merge/push/sync) |
-| `tool` | Local skill management (list/create/install/remove/deploy/undeploy) |
 | `init-requirement` | Create tasks from natural language requirements |
 | `help` | Display help information |
 
@@ -59,14 +57,6 @@ When user says "start working on task" or "execute task":
 
 ```bash
 node ${CLAUDE_PLUGIN_ROOT}/dist/projmnt4claude.js task execute TASK-001
-```
-
-### Example 4: Git Workflow
-
-When user says "switch to task branch":
-
-```bash
-node ${CLAUDE_PLUGIN_ROOT}/dist/projmnt4claude.js branch checkout <task-id>
 ```
 
 ## Task Priority
