@@ -46,7 +46,7 @@ import { isMeaninglessSlug } from './analyze-fix-pipeline';
 import { areDependenciesCompleted } from '../utils/plan';
 import { readConfig } from './config';
 import { createLogger, type InstrumentationRecord } from '../utils/logger';
-import { AIMetadataAssistant, type DuplicateGroup, classifyFileToLayer, groupFilesByLayer, sortFilesByLayer, type ArchitectureLayer, LAYER_DEFINITIONS } from '../utils/ai-metadata';
+import { AIMetadataAssistant, type DuplicateGroup, sortFilesByLayer, type ArchitectureLayer, LAYER_DEFINITIONS } from '../utils/ai-metadata';
 import { withAIEnhancement } from '../utils/ai-helpers';
 import { invokeAgent, type AgentInvokeOptions } from '../utils/headless-agent';
 import { parseCheckRange, getTasksByRange, AnalyzeError } from '../utils/analyze-range-parser';
@@ -57,6 +57,7 @@ import {
   evaluateCheckpoints,
   evaluateSolution,
   validateCheckpoints,
+  calculateContentQuality,
   type ContentQualityScore,
   type QualityDeduction,
   type AIAnalyzeOptions,
@@ -553,6 +554,7 @@ export interface Issue {
     // 状态推断检测 (Layer 1 质量门禁规则)
     | 'report_status_mismatch'        // 报告文件 PASS 但状态未推进
     | 'checkpoint_status_mismatch'    // resolved 但检查点全 pending (旧版遗留)
+    | 'checkpoint_validation_error'   // 检查点验证错误（前缀、格式等）
     | 'missing_pipeline_evidence'    // pipeline 中间状态缺少前置报告
     | 'ai_status_inference';         // AI 辅助推断的状态异常 (Layer 2)
   severity: 'low' | 'medium' | 'high';
@@ -588,303 +590,8 @@ export interface AnalysisResult {
 }
 
 // ============== 内容质量检测 ==============
-
-// 类型和基础评估函数从 quality-gate.ts 导入
-// ContentQualityScore, QualityDeduction, AIAnalyzeOptions, evaluateDescription, evaluateCheckpoints, evaluateSolution
-
-/**
- * 计算内容质量评分
- * CP-4: 结构评分 60% + AI 语义评分 40% (当 deepAnalyze 且非 noAi 时)
- */
-export async function calculateContentQuality(
-  task: TaskMeta,
-  aiOptions?: AIAnalyzeOptions,
-  cwd?: string
-): Promise<ContentQualityScore> {
-  const deductions: QualityDeduction[] = [];
-  let descriptionScore = 100;
-  let checkpointScore = 100;
-  let relatedFilesScore = 100;
-  let solutionScore = 100;
-
-  // 1. 描述完整度检测 (复用 quality-gate.ts)
-  const descResult = evaluateDescription(task.description);
-  descriptionScore = descResult.score;
-  deductions.push(...descResult.deductions);
-
-  // 2. 检查点质量检测
-  const cpResult = evaluateCheckpoints(task.checkpoints);
-  checkpointScore = cpResult.score;
-  deductions.push(...cpResult.deductions);
-
-  // 2.5 架构层级排序检测
-  const layerResult = evaluateLayerOrdering(task.checkpoints, task.description);
-  checkpointScore = Math.max(0, checkpointScore + (layerResult.score - 100));
-  deductions.push(...layerResult.deductions);
-
-  // 3. 关联文件检测
-  const filesResult = evaluateRelatedFiles(task.description, task.checkpoints);
-  relatedFilesScore = filesResult.score;
-  deductions.push(...filesResult.deductions);
-
-  // 4. 解决方案检测
-  const solResult = evaluateSolution(task.description);
-  solutionScore = solResult.score;
-  deductions.push(...solResult.deductions);
-
-  // 计算总分 (加权平均)
-  // CP-4: 当 AI 语义评分可用时，结构 60% + AI 语义 40%
-  const structuralTotal = Math.round(
-    descriptionScore * 0.35 +
-    checkpointScore * 0.30 +
-    relatedFilesScore * 0.15 +
-    solutionScore * 0.20
-  );
-
-  // AI 语义评分 (仅 deepAnalyze 且非 noAi 时启用)
-  let aiSemanticScore: number | undefined;
-  const qualityResult = await withAIEnhancement({
-    enabled: !!(aiOptions?.deepAnalyze && !aiOptions?.noAi && cwd),
-    aiCall: () => new AIMetadataAssistant(cwd!).analyzeTaskQuality(task, { cwd: cwd! }),
-    fallback: { score: 0, issues: [], suggestions: [], aiUsed: false },
-    operationName: '语义质量评估',
-  });
-  if (qualityResult.aiUsed) {
-    aiSemanticScore = qualityResult.score;
-  }
-
-  const totalScore = aiSemanticScore !== undefined
-    ? Math.round(structuralTotal * 0.6 + aiSemanticScore * 0.4)
-    : structuralTotal;
-
-  return {
-    totalScore,
-    descriptionScore,
-    checkpointScore,
-    relatedFilesScore,
-    solutionScore,
-    deductions,
-    checkedAt: new Date().toISOString(),
-    ...(aiSemanticScore !== undefined ? { aiSemanticScore } : {}),
-  };
-}
-
-/**
- * 评估描述完整度
- */
-export function evaluateDescription(description?: string): { score: number; deductions: QualityDeduction[] } {
-  const deductions: QualityDeduction[] = [];
-  let score = 100;
-
-  if (!description || description.trim().length === 0) {
-    deductions.push({
-      category: 'description',
-      reason: '缺少描述',
-      points: -100,
-      suggestion: '添加任务描述以提供更多上下文',
-    });
-    return { score: 0, deductions };
-  }
-
-  const descLength = description.trim().length;
-
-  // 长度检测
-  if (descLength < 30) {
-    const deduction = -30;
-    score += deduction;
-    deductions.push({
-      category: 'description',
-      reason: `描述过短 (< 30字): ${descLength}字`,
-      points: deduction,
-      suggestion: '扩展描述，详细说明问题背景和需求',
-    });
-  } else if (descLength < 50) {
-    const deduction = -15;
-    score += deduction;
-    deductions.push({
-      category: 'description',
-      reason: `描述较短 (< 50字): ${descLength}字`,
-      points: deduction,
-      suggestion: '添加更多细节，如根因分析、解决方案等',
-    });
-  }
-
-  // 结构化段落检测
-  const hasProblemSection = /##\s*问题描述|##\s*问题|#\s*问题描述|#\s*问题/i.test(description);
-  const hasRootCauseSection = /##\s*根因分析|##\s*根因|##\s*原因|#\s*根因分析|#\s*原因/i.test(description);
-  const hasSolutionSection = /##\s*解决方案|##\s*方案|#\s*解决方案|#\s*方案/i.test(description);
-  const hasCheckpointSection = /##\s*检查点|#\s*检查点|##\s*验收|#\s*验收/i.test(description);
-
-  // 检测结构化程度
-  const sectionCount = [hasProblemSection, hasRootCauseSection, hasSolutionSection, hasCheckpointSection]
-    .filter(Boolean).length;
-
-  if (sectionCount < 2 && descLength >= 50) {
-    const deduction = -10;
-    score += deduction;
-    deductions.push({
-      category: 'description',
-      reason: '缺少结构化段落',
-      points: deduction,
-      suggestion: '使用结构化格式，如"## 问题描述"、"## 解决方案"等',
-    });
-  }
-
-  // 检测根因分析（对于 bug 类型任务尤其重要）
-  if (!hasRootCauseSection && !/因为|由于|原因|根因|caused by|because|root cause/i.test(description)) {
-    // 只在描述足够长但缺少根因时扣分
-    if (descLength >= 50) {
-      const deduction = -10;
-      score += deduction;
-      deductions.push({
-        category: 'description',
-        reason: '缺少根因分析',
-        points: deduction,
-        suggestion: '添加"## 根因分析"部分说明问题产生的原因',
-      });
-    }
-  }
-
-  return { score: Math.max(0, score), deductions };
-}
-
-/**
- * 评估检查点质量 - 已从 quality-gate.ts 复用
- * 保留此别名以保持向后兼容
- */
-export { evaluateCheckpoints } from '../utils/quality-gate';
-
-/**
- * 从文本中提取文件引用路径（用于层级分析）
- */
-export function extractFileRefsForLayer(text: string): string[] {
-  const files: string[] = [];
-  const seen = new Set<string>();
-  const patterns = [
-    /(?:src|lib|test|tests|docs|bin|scripts|config)\/[\w/.-]+\.[a-z]+/g,
-    /\.{1,2}\/[\w/.-]+\.[a-z]+/g,
-  ];
-  for (const pattern of patterns) {
-    const matches = text.match(pattern);
-    if (matches) {
-      for (const m of matches) {
-        if (!seen.has(m)) {
-          seen.add(m);
-          files.push(m);
-        }
-      }
-    }
-  }
-  return files;
-}
-
-/**
- * 检查检查点是否遵循架构层级顺序
- * Layer0(类型) → Layer1(工具) → Layer2(核心) → Layer3(命令)
- */
-export function evaluateLayerOrdering(
-  checkpoints?: CheckpointMetadata[],
-  description?: string
-): { score: number; deductions: QualityDeduction[] } {
-  const deductions: QualityDeduction[] = [];
-  let score = 100;
-
-  if (!checkpoints || checkpoints.length < 2) {
-    return { score: 100, deductions };
-  }
-
-  // 从检查点描述和任务描述中提取文件路径
-  const allText = [
-    description || '',
-    ...checkpoints.map(cp => cp.description),
-  ].join('\n');
-
-  const filePaths = extractFileRefsForLayer(allText);
-  if (filePaths.length < 2) {
-    // 文件引用不足，无法评估层级排序
-    return { score: 100, deductions };
-  }
-
-  // 将文件按层级分组
-  const layerGroups = groupFilesByLayer(filePaths);
-
-  // 检查是否有层级跨度跳跃（如直接从 Layer0 跳到 Layer3）
-  const layersPresent = Array.from(layerGroups.keys());
-  if (layersPresent.length >= 2) {
-    // 检查检查点描述中是否提到了文件路径
-    const cpWithFiles = checkpoints.filter(cp =>
-      filePaths.some(fp => cp.description.includes(fp))
-    );
-
-    if (cpWithFiles.length >= 2) {
-      // 验证检查点顺序是否遵循层级依赖
-      let prevLayerOrder = -1;
-      for (const cp of cpWithFiles) {
-        const referencedFile = filePaths.find(fp => cp.description.includes(fp));
-        if (referencedFile) {
-          const currentLayer = classifyFileToLayer(referencedFile);
-          const layerOrder = ['Layer0', 'Layer1', 'Layer2', 'Layer3'].indexOf(currentLayer);
-          if (layerOrder < prevLayerOrder) {
-            // 检查点顺序违反层级依赖（上层出现在底层之前）
-            const deduction = -5;
-            score += deduction;
-            deductions.push({
-              category: 'checkpoint',
-              reason: `检查点层级顺序异常: "${cp.description}" (${currentLayer}) 出现在更底层检查点之前`,
-              points: deduction,
-              suggestion: '按架构层级重新排列检查点: 类型定义(Layer0) → 工具函数(Layer1) → 核心逻辑(Layer2) → 命令入口(Layer3)',
-            });
-            break; // 只报告一次
-          }
-          prevLayerOrder = layerOrder;
-        }
-      }
-    }
-  }
-
-  return { score: Math.max(0, score), deductions };
-}
-
-/**
- * 评估解决方案
- */
-export function evaluateSolution(description?: string): { score: number; deductions: QualityDeduction[] } {
-  const deductions: QualityDeduction[] = [];
-  let score = 100;
-
-  if (!description || description.trim().length === 0) {
-    return { score: 100, deductions }; // 没有描述时不在此项扣分
-  }
-
-  // 检测解决方案部分
-  const hasSolutionSection = /##\s*解决方案|##\s*方案|#\s*解决方案|#\s*方案/i.test(description);
-
-  // 检测解决方案关键词
-  const hasSolutionKeywords = /建议|应该|需要|实现|修改|添加|更新|重构|suggest|should|need to|implement|modify|add|update|refactor/i.test(description);
-
-  if (!hasSolutionSection && !hasSolutionKeywords) {
-    const deduction = -25;
-    score += deduction;
-    deductions.push({
-      category: 'solution',
-      reason: '缺少解决方案',
-      points: deduction,
-      suggestion: '添加"## 解决方案"部分，说明具体的修改方案',
-    });
-  } else if (!hasSolutionSection && hasSolutionKeywords) {
-    // 有关键词但没有明确的章节
-    const deduction = -10;
-    score += deduction;
-    deductions.push({
-      category: 'solution',
-      reason: '解决方案未结构化',
-      points: deduction,
-      suggestion: '使用"## 解决方案"标题组织解决方案内容',
-    });
-  }
-
-  return { score: Math.max(0, score), deductions };
-}
+// 所有质量评估函数已从 quality-gate.ts 复用
+// calculateContentQuality, evaluateDescription, evaluateCheckpoints, evaluateSolution
 
 /**
  * 执行内容质量检测
@@ -1216,6 +923,31 @@ export function checkCheckpointConsistency(
 }
 
 /**
+ * 检查检查点验证规则（前缀、命令等）
+ * 复用 quality-gate.ts 的 validateCheckpoints 函数
+ */
+export function checkCheckpointValidation(
+  taskId: string,
+  task: TaskMeta,
+): Issue[] {
+  const issues: Issue[] = [];
+  const violations = validateCheckpoints(task);
+
+  for (const violation of violations) {
+    issues.push({
+      taskId,
+      type: 'checkpoint_validation_error',
+      severity: violation.severity,
+      message: violation.message,
+      suggestion: violation.suggestion || '修复检查点配置以满足验证要求',
+      details: violation.details,
+    });
+  }
+
+  return issues;
+}
+
+/**
  * CP-4: 检查 pipeline 中间状态缺少前置报告
  * wait_review/wait_qa/wait_evaluation 但缺少前置报告文件
  */
@@ -1538,6 +1270,10 @@ export async function detectStatusInferenceIssues(
 
   const checkpointIssue = checkCheckpointConsistency(task.id, task);
   if (checkpointIssue) issues.push(checkpointIssue);
+
+  // 检查检查点验证规则（前缀、命令等）
+  const checkpointValidationIssues = checkCheckpointValidation(task.id, task);
+  issues.push(...checkpointValidationIssues);
 
   const evidenceIssue = checkMissingPipelineEvidence(task.id, task, cwd);
   if (evidenceIssue) issues.push(evidenceIssue);

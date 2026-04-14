@@ -1,20 +1,19 @@
 /**
  * analyze.ts 综合单元测试
- * 覆盖纯函数导出: evaluateDescription, evaluateCheckpoints, evaluateSolution,
- * evaluateLayerOrdering, evaluateRelatedFiles, readAnalyzeConfig, matchesIgnorePattern,
+ * 覆盖纯函数导出: readAnalyzeConfig, matchesIgnorePattern,
  * isValidISOTimestamp, validateHistoryEntry, validateRequirementHistoryEntry,
  * validateTaskIdFormat, isValidStatusValue, isValidTypeValue, isValidPriorityValue,
  * extractKeywordsFromCriteria, extractAcceptanceCriteriaFromDescription,
  * inferVerificationMethod, calculateHealthScore, applySchemaMigrations,
- * getPendingMigrations, extractFileRefsForLayer, calculateReopenStats
+ * getPendingMigrations, calculateReopenStats
+ *
+ * 质量评估函数 (evaluateDescription, evaluateCheckpoints, evaluateSolution,
+ * evaluateLayerOrdering, evaluateRelatedFiles, extractFileRefsForLayer) 已从
+ * quality-gate.ts 导入，相关测试在 quality-gate.test.ts 中覆盖
  */
 
 import { describe, test, expect } from 'bun:test';
 import {
-  evaluateDescription,
-  evaluateCheckpoints,
-  evaluateSolution,
-  evaluateLayerOrdering,
   readAnalyzeConfig,
   matchesIgnorePattern,
   isValidISOTimestamp,
@@ -30,12 +29,18 @@ import {
   calculateHealthScore,
   applySchemaMigrations,
   getPendingMigrations,
-  extractFileRefsForLayer,
   calculateReopenStats,
 } from '../commands/analyze';
 import type { AnalysisResult, ContentQualityScore } from '../commands/analyze';
 import type { TaskMeta, CheckpointMetadata } from '../types/task';
-import { evaluateRelatedFiles } from '../utils/quality-gate';
+import {
+  evaluateRelatedFiles,
+  evaluateDescription,
+  evaluateCheckpoints,
+  evaluateSolution,
+  evaluateLayerOrdering,
+  extractFileRefsForLayer,
+} from '../utils/quality-gate';
 
 // ============== evaluateDescription ==============
 

@@ -24,6 +24,8 @@ import {
   VALID_CHECKPOINT_PREFIXES,
   getCheckpointPhase,
 } from './validation-rules/checkpoint-rules.js';
+import { AIMetadataAssistant, classifyFileToLayer, groupFilesByLayer, type ArchitectureLayer } from './ai-metadata.js';
+import { withAIEnhancement } from './ai-helpers.js';
 
 // Re-export for external consumers
 export { VALID_CHECKPOINT_PREFIXES, getCheckpointPhase };
@@ -706,7 +708,22 @@ export async function checkQualityGate(
 export function validateCheckpoints(task: TaskMeta): ValidationViolation[] {
   const violations: ValidationViolation[] = [];
 
+  // 检查空检查点数组 - P0/P1 任务必须包含检查点
   if (!task.checkpoints || task.checkpoints.length === 0) {
+    if (task.priority === 'P0' || task.priority === 'P1') {
+      violations.push({
+        ruleId: 'checkpoint-array-not-empty',
+        severity: 'error',
+        message: `${task.priority} 任务必须包含至少 2 个结构化检查点，当前: 0`,
+      });
+    } else {
+      // P2/P3 任务可以没有检查点，但给出警告
+      violations.push({
+        ruleId: 'checkpoint-array-empty',
+        severity: 'warning',
+        message: '任务检查点数组为空，建议添加检查点以跟踪进度',
+      });
+    }
     return violations;
   }
 
@@ -932,6 +949,174 @@ export function evaluateSolution(description?: string): { score: number; deducti
   }
 
   return { score: Math.max(0, score), deductions };
+}
+
+/**
+ * 从文本中提取文件引用路径（用于层级分析）
+ */
+export function extractFileRefsForLayer(text: string): string[] {
+  const files: string[] = [];
+  const seen = new Set<string>();
+  const patterns = [
+    /(?:src|lib|test|tests|docs|bin|scripts|config)\/[\w/.-]+\.[a-z]+/g,
+    /\.{1,2}\/[\w/.-]+\.[a-z]+/g,
+  ];
+  for (const pattern of patterns) {
+    const matches = text.match(pattern);
+    if (matches) {
+      for (const m of matches) {
+        if (!seen.has(m)) {
+          seen.add(m);
+          files.push(m);
+        }
+      }
+    }
+  }
+  return files;
+}
+
+/**
+ * 检查检查点是否遵循架构层级顺序
+ * Layer0(类型) → Layer1(工具) → Layer2(核心) → Layer3(命令)
+ */
+export function evaluateLayerOrdering(
+  checkpoints?: CheckpointMetadata[],
+  description?: string
+): { score: number; deductions: QualityDeduction[] } {
+  const deductions: QualityDeduction[] = [];
+  let score = 100;
+
+  if (!checkpoints || checkpoints.length < 2) {
+    return { score: 100, deductions };
+  }
+
+  // 从检查点描述和任务描述中提取文件路径
+  const allText = [
+    description || '',
+    ...checkpoints.map(cp => cp.description),
+  ].join('\n');
+
+  const filePaths = extractFileRefsForLayer(allText);
+  if (filePaths.length < 2) {
+    // 文件引用不足，无法评估层级排序
+    return { score: 100, deductions };
+  }
+
+  // 将文件按层级分组
+  const layerGroups = groupFilesByLayer(filePaths);
+
+  // 检查是否有层级跨度跳跃（如直接从 Layer0 跳到 Layer3）
+  const layersPresent = Array.from(layerGroups.keys());
+  if (layersPresent.length >= 2) {
+    // 检查检查点描述中是否提到了文件路径
+    const cpWithFiles = checkpoints.filter(cp =>
+      filePaths.some(fp => cp.description.includes(fp))
+    );
+
+    if (cpWithFiles.length >= 2) {
+      // 验证检查点顺序是否遵循层级依赖
+      let prevLayerOrder = -1;
+      for (const cp of cpWithFiles) {
+        const referencedFile = filePaths.find(fp => cp.description.includes(fp));
+        if (referencedFile) {
+          const currentLayer = classifyFileToLayer(referencedFile);
+          const layerOrder = ['Layer0', 'Layer1', 'Layer2', 'Layer3'].indexOf(currentLayer);
+          if (layerOrder < prevLayerOrder) {
+            // 检查点顺序违反层级依赖（上层出现在底层之前）
+            const deduction = -5;
+            score += deduction;
+            deductions.push({
+              category: 'checkpoint',
+              reason: `检查点层级顺序异常: "${cp.description}" (${currentLayer}) 出现在更底层检查点之前`,
+              points: deduction,
+              suggestion: '按架构层级重新排列检查点: 类型定义(Layer0) → 工具函数(Layer1) → 核心逻辑(Layer2) → 命令入口(Layer3)',
+            });
+            break; // 只报告一次
+          }
+          prevLayerOrder = layerOrder;
+        }
+      }
+    }
+  }
+
+  return { score: Math.max(0, score), deductions };
+}
+
+/**
+ * 计算内容质量评分
+ * CP-4: 结构评分 60% + AI 语义评分 40% (当 deepAnalyze 且非 noAi 时)
+ */
+export async function calculateContentQuality(
+  task: TaskMeta,
+  aiOptions?: AIAnalyzeOptions,
+  cwd?: string
+): Promise<ContentQualityScore> {
+  const deductions: QualityDeduction[] = [];
+  let descriptionScore = 100;
+  let checkpointScore = 100;
+  let relatedFilesScore = 100;
+  let solutionScore = 100;
+
+  // 1. 描述完整度检测 (复用 quality-gate.ts)
+  const descResult = evaluateDescription(task.description);
+  descriptionScore = descResult.score;
+  deductions.push(...descResult.deductions);
+
+  // 2. 检查点质量检测
+  const cpResult = evaluateCheckpoints(task.checkpoints);
+  checkpointScore = cpResult.score;
+  deductions.push(...cpResult.deductions);
+
+  // 2.5 架构层级排序检测
+  const layerResult = evaluateLayerOrdering(task.checkpoints, task.description);
+  checkpointScore = Math.max(0, checkpointScore + (layerResult.score - 100));
+  deductions.push(...layerResult.deductions);
+
+  // 3. 关联文件检测
+  const filesResult = evaluateRelatedFiles(task.description, task.checkpoints);
+  relatedFilesScore = filesResult.score;
+  deductions.push(...filesResult.deductions);
+
+  // 4. 解决方案检测
+  const solResult = evaluateSolution(task.description);
+  solutionScore = solResult.score;
+  deductions.push(...solResult.deductions);
+
+  // 计算总分 (加权平均)
+  // CP-4: 当 AI 语义评分可用时，结构 60% + AI 语义 40%
+  const structuralTotal = Math.round(
+    descriptionScore * 0.35 +
+    checkpointScore * 0.30 +
+    relatedFilesScore * 0.15 +
+    solutionScore * 0.20
+  );
+
+  // AI 语义评分 (仅 deepAnalyze 且非 noAi 时启用)
+  let aiSemanticScore: number | undefined;
+  const qualityResult = await withAIEnhancement({
+    enabled: !!(aiOptions?.deepAnalyze && !aiOptions?.noAi && cwd),
+    aiCall: () => new AIMetadataAssistant(cwd!).analyzeTaskQuality(task, { cwd: cwd! }),
+    fallback: { score: 0, issues: [], suggestions: [], aiUsed: false },
+    operationName: '语义质量评估',
+  });
+  if (qualityResult.aiUsed) {
+    aiSemanticScore = qualityResult.score;
+  }
+
+  const totalScore = aiSemanticScore !== undefined
+    ? Math.round(structuralTotal * 0.6 + aiSemanticScore * 0.4)
+    : structuralTotal;
+
+  return {
+    totalScore,
+    descriptionScore,
+    checkpointScore,
+    relatedFilesScore,
+    solutionScore,
+    deductions,
+    checkedAt: new Date().toISOString(),
+    ...(aiSemanticScore !== undefined ? { aiSemanticScore } : {}),
+  };
 }
 
 /**

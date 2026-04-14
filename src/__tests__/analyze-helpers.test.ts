@@ -16,10 +16,6 @@ import {
   isValidStatusValue,
   isValidTypeValue,
   isValidPriorityValue,
-  evaluateDescription,
-  evaluateCheckpoints,
-  evaluateSolution,
-  extractFileRefsForLayer,
   calculateReopenStats,
   calculateHealthScore,
   extractKeywordsFromCriteria,
@@ -27,11 +23,17 @@ import {
   extractAcceptanceCriteriaFromDescription,
   getPendingMigrations,
   applySchemaMigrations,
-  calculateContentQuality,
-  evaluateLayerOrdering,
 } from '../commands/analyze';
 import type { TaskMeta, CheckpointMetadata } from '../types/task';
-import { evaluateRelatedFiles } from '../utils/quality-gate';
+import {
+  evaluateRelatedFiles,
+  evaluateDescription,
+  evaluateCheckpoints,
+  evaluateSolution,
+  extractFileRefsForLayer,
+  calculateContentQuality,
+  evaluateLayerOrdering,
+} from '../utils/quality-gate';
 
 // ============== normalizeStatus ==============
 

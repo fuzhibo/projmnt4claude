@@ -44,7 +44,7 @@ import { HarnessEvaluator } from './harness-evaluator.js';
 import { RetryHandler } from './harness-retry.js';
 import { HarnessStatusReporter } from './harness-status-reporter.js';
 import { saveRuntimeState } from '../commands/harness.js';
-import { validateBasicFields } from './quality-gate.js';
+import { validateBasicFields, validateCheckpoints } from './quality-gate.js';
 import { DependencyGraph, executeFailureCascade } from './dependency-graph/index.js';
 import { SEPARATOR_WIDTH } from './format';
 
@@ -1297,6 +1297,22 @@ export class AssemblyLine {
           }
         } else {
           errors.push(...basicResult.errors);
+        }
+      }
+
+      // 复用 quality-gate.ts 的 validateCheckpoints 做检查点结构验证
+      // 确保初始化阶段和转换阶段的检查点规则一致
+      const checkpointViolations = validateCheckpoints(task);
+      if (checkpointViolations.length > 0) {
+        if (this.config.forceContinue) {
+          console.warn(`   ⚠️ 检查点验证失败 (--force-continue 跳过阻塞):`);
+          for (const violation of checkpointViolations) {
+            console.warn(`      - [${violation.severity}] ${violation.message}`);
+          }
+        } else {
+          for (const violation of checkpointViolations) {
+            errors.push(`[${violation.severity}] ${violation.message}`);
+          }
         }
       }
 
