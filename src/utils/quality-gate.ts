@@ -14,11 +14,6 @@ import type { TaskMeta, CheckpointMetadata } from '../types/task.js';
 import type { ValidationViolation, ViolationSeverity } from '../types/feedback-constraint.js';
 import * as fs from 'fs';
 import * as path from 'path';
-import {
-  calculateContentQuality,
-  type ContentQualityScore,
-  type QualityDeduction,
-} from '../commands/analyze.js';
 import { getTaskMetaPath } from './task.js';
 import { SEPARATOR_WIDTH } from './format';
 import { getQualityMinScore, qualityScoreToVerdict } from './contradiction-detector.js';
@@ -32,6 +27,50 @@ import {
 
 // Re-export for external consumers
 export { VALID_CHECKPOINT_PREFIXES, getCheckpointPhase };
+
+// ============== 内容质量评分类型定义 ==============
+
+/**
+ * 内容质量评分结果
+ */
+export interface ContentQualityScore {
+  /** 总分 (0-100) */
+  totalScore: number;
+  /** 描述完整度评分 (0-100) */
+  descriptionScore: number;
+  /** 检查点质量评分 (0-100) */
+  checkpointScore: number;
+  /** 关联文件评分 (0-100) */
+  relatedFilesScore: number;
+  /** 解决方案评分 (0-100) */
+  solutionScore: number;
+  /** AI 语义评分 (0-100), 仅 deepAnalyze 且非 noAi 时可用 */
+  aiSemanticScore?: number;
+  /** 扣分项详情 */
+  deductions: QualityDeduction[];
+  /** 检测时间 */
+  checkedAt: string;
+}
+
+/**
+ * 质量扣分项
+ */
+export interface QualityDeduction {
+  category: 'description' | 'checkpoint' | 'related_files' | 'solution';
+  reason: string;
+  points: number;
+  suggestion?: string;
+}
+
+/**
+ * AI 增强分析选项
+ */
+export interface AIAnalyzeOptions {
+  /** 启用深度分析 (语义重复检测、AI 陈旧评估、语义质量评分) */
+  deepAnalyze?: boolean;
+  /** 禁用所有 AI 功能 */
+  noAi?: boolean;
+}
 
 /**
  * 变更范围大小
@@ -684,6 +723,215 @@ export function validateCheckpoints(task: TaskMeta): ValidationViolation[] {
   }
 
   return violations;
+}
+
+// ============== 内容质量评估函数 (从 analyze.ts 迁移) ==============
+
+/**
+ * 泛化检查点模板列表
+ * 这些是过于泛化、不具体的检查点描述
+ */
+const GENERIC_CHECKPOINT_PATTERNS = [
+  /^需求分析与?设计$/,
+  /^核心功能实现$/,
+  /^测试与?验证$/,
+  /^代码审查$/,
+  /^功能实现$/,
+  /^实现功能$/,
+  /^完成功能$/,
+  /^开发功能$/,
+  /^编写代码$/,
+  /^测试通过$/,
+  /^验证通过$/,
+  /^集成测试$/,
+  /^单元测试$/,
+  /^功能测试$/,
+  /^完成开发$/,
+  /^完成实现$/,
+  /^实现完成$/,
+  /^开发完成$/,
+  /^测试完成$/,
+  /^验收通过$/,
+  /^检查通过$/,
+  /^实现逻辑$/,
+  /^编写逻辑$/,
+  /^完成逻辑$/,
+  /^开发完成$/,
+  /^代码完成$/,
+  /^功能完成$/,
+  /^开发功能$/,
+];
+
+/**
+ * 评估描述完整度
+ */
+export function evaluateDescription(description?: string): { score: number; deductions: QualityDeduction[] } {
+  const deductions: QualityDeduction[] = [];
+  let score = 100;
+
+  if (!description || description.trim().length === 0) {
+    deductions.push({
+      category: 'description',
+      reason: '缺少描述',
+      points: -100,
+      suggestion: '添加任务描述以提供更多上下文',
+    });
+    return { score: 0, deductions };
+  }
+
+  const descLength = description.trim().length;
+
+  // 长度检测
+  if (descLength < 30) {
+    const deduction = -30;
+    score += deduction;
+    deductions.push({
+      category: 'description',
+      reason: `描述过短 (< 30字): ${descLength}字`,
+      points: deduction,
+      suggestion: '扩展描述，详细说明问题背景和需求',
+    });
+  } else if (descLength < 50) {
+    const deduction = -15;
+    score += deduction;
+    deductions.push({
+      category: 'description',
+      reason: `描述较短 (< 50字): ${descLength}字`,
+      points: deduction,
+      suggestion: '添加更多细节，如根因分析、解决方案等',
+    });
+  }
+
+  // 结构化段落检测
+  const hasProblemSection = /##\s*问题描述|##\s*问题|#\s*问题描述|#\s*问题/i.test(description);
+  const hasRootCauseSection = /##\s*根因分析|##\s*根因|##\s*原因|#\s*根因分析|#\s*原因/i.test(description);
+  const hasSolutionSection = /##\s*解决方案|##\s*方案|#\s*解决方案|#\s*方案/i.test(description);
+  const hasCheckpointSection = /##\s*检查点|#\s*检查点|##\s*验收|#\s*验收/i.test(description);
+
+  // 检测结构化程度
+  const sectionCount = [hasProblemSection, hasRootCauseSection, hasSolutionSection, hasCheckpointSection]
+    .filter(Boolean).length;
+
+  if (sectionCount < 2 && descLength >= 50) {
+    const deduction = -10;
+    score += deduction;
+    deductions.push({
+      category: 'description',
+      reason: '缺少结构化段落',
+      points: deduction,
+      suggestion: '使用结构化格式，如"## 问题描述"、"## 解决方案"等',
+    });
+  }
+
+  // 检测根因分析（对于 bug 类型任务尤其重要）
+  if (!hasRootCauseSection && !/因为|由于|原因|根因|caused by|because|root cause/i.test(description)) {
+    // 只在描述足够长但缺少根因时扣分
+    if (descLength >= 50) {
+      const deduction = -10;
+      score += deduction;
+      deductions.push({
+        category: 'description',
+        reason: '缺少根因分析',
+        points: deduction,
+        suggestion: '添加"## 根因分析"部分说明问题产生的原因',
+      });
+    }
+  }
+
+  return { score: Math.max(0, score), deductions };
+}
+
+/**
+ * 评估检查点质量
+ */
+export function evaluateCheckpoints(checkpoints?: CheckpointMetadata[]): { score: number; deductions: QualityDeduction[] } {
+  const deductions: QualityDeduction[] = [];
+  let score = 100;
+
+  if (!checkpoints || checkpoints.length === 0) {
+    // 没有检查点不扣分，因为可能使用 checkpoint.md
+    return { score: 100, deductions };
+  }
+
+  // 检测泛化检查点
+  const genericCheckpoints: string[] = [];
+  for (const cp of checkpoints) {
+    const desc = cp.description.trim();
+    for (const pattern of GENERIC_CHECKPOINT_PATTERNS) {
+      if (pattern.test(desc)) {
+        genericCheckpoints.push(desc);
+        break;
+      }
+    }
+  }
+
+  if (genericCheckpoints.length > 0) {
+    // 根据泛化检查点比例扣分
+    const ratio = genericCheckpoints.length / checkpoints.length;
+    const deduction = Math.round(-20 * ratio);
+    score += deduction;
+    deductions.push({
+      category: 'checkpoint',
+      reason: `检查点过于泛化: "${genericCheckpoints[0]}"${genericCheckpoints.length > 1 ? ` 等 ${genericCheckpoints.length} 项` : ''}`,
+      points: deduction,
+      suggestion: '使用更具体的检查点描述，如"实现用户登录 API"而非"核心功能实现"',
+    });
+  }
+
+  // 检测检查点数量过少
+  if (checkpoints.length < 2) {
+    const deduction = -10;
+    score += deduction;
+    deductions.push({
+      category: 'checkpoint',
+      reason: '检查点数量过少 (< 2)',
+      points: deduction,
+      suggestion: '添加更多验收检查点以明确完成标准',
+    });
+  }
+
+  return { score: Math.max(0, score), deductions };
+}
+
+/**
+ * 评估解决方案
+ */
+export function evaluateSolution(description?: string): { score: number; deductions: QualityDeduction[] } {
+  const deductions: QualityDeduction[] = [];
+  let score = 100;
+
+  if (!description || description.trim().length === 0) {
+    return { score: 100, deductions }; // 没有描述时不在此项扣分
+  }
+
+  // 检测解决方案部分
+  const hasSolutionSection = /##\s*解决方案|##\s*方案|#\s*解决方案|#\s*方案/i.test(description);
+
+  // 检测解决方案关键词
+  const hasSolutionKeywords = /建议|应该|需要|实现|修改|添加|更新|重构|suggest|should|need to|implement|modify|add|update|refactor/i.test(description);
+
+  if (!hasSolutionSection && !hasSolutionKeywords) {
+    const deduction = -25;
+    score += deduction;
+    deductions.push({
+      category: 'solution',
+      reason: '缺少解决方案',
+      points: deduction,
+      suggestion: '添加"## 解决方案"部分，说明具体的修改方案',
+    });
+  } else if (!hasSolutionSection && hasSolutionKeywords) {
+    // 有关键词但没有明确的章节
+    const deduction = -10;
+    score += deduction;
+    deductions.push({
+      category: 'solution',
+      reason: '解决方案未结构化',
+      points: deduction,
+      suggestion: '使用"## 解决方案"标题组织解决方案内容',
+    });
+  }
+
+  return { score: Math.max(0, score), deductions };
 }
 
 /**

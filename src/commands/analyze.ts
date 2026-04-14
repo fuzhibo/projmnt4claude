@@ -50,7 +50,17 @@ import { AIMetadataAssistant, type DuplicateGroup, classifyFileToLayer, groupFil
 import { withAIEnhancement } from '../utils/ai-helpers';
 import { invokeAgent, type AgentInvokeOptions } from '../utils/headless-agent';
 import { parseCheckRange, getTasksByRange, AnalyzeError } from '../utils/analyze-range-parser';
-import { extractFilePaths, evaluateRelatedFiles } from '../utils/quality-gate';
+import {
+  extractFilePaths,
+  evaluateRelatedFiles,
+  evaluateDescription,
+  evaluateCheckpoints,
+  evaluateSolution,
+  validateCheckpoints,
+  type ContentQualityScore,
+  type QualityDeduction,
+  type AIAnalyzeOptions,
+} from '../utils/quality-gate';
 import { inferDependenciesBatch } from '../utils/dependency-engine';
 import {
   DependencyGraph,
@@ -579,83 +589,8 @@ export interface AnalysisResult {
 
 // ============== 内容质量检测 ==============
 
-/**
- * 内容质量评分结果
- */
-export interface ContentQualityScore {
-  /** 总分 (0-100) */
-  totalScore: number;
-  /** 描述完整度评分 (0-100) */
-  descriptionScore: number;
-  /** 检查点质量评分 (0-100) */
-  checkpointScore: number;
-  /** 关联文件评分 (0-100) */
-  relatedFilesScore: number;
-  /** 解决方案评分 (0-100) */
-  solutionScore: number;
-  /** AI 语义评分 (0-100), 仅 deepAnalyze 且非 noAi 时可用 */
-  aiSemanticScore?: number;
-  /** 扣分项详情 */
-  deductions: QualityDeduction[];
-  /** 检测时间 */
-  checkedAt: string;
-}
-
-/**
- * 质量扣分项
- */
-export interface QualityDeduction {
-  category: 'description' | 'checkpoint' | 'related_files' | 'solution';
-  reason: string;
-  points: number;
-  suggestion?: string;
-}
-
-/**
- * 泛化检查点模板列表
- * 这些是过于泛化、不具体的检查点描述
- */
-const GENERIC_CHECKPOINT_PATTERNS = [
-  /^需求分析与?设计$/,
-  /^核心功能实现$/,
-  /^测试与?验证$/,
-  /^代码审查$/,
-  /^功能实现$/,
-  /^实现功能$/,
-  /^完成功能$/,
-  /^开发功能$/,
-  /^编写代码$/,
-  /^测试通过$/,
-  /^验证通过$/,
-  /^集成测试$/,
-  /^单元测试$/,
-  /^功能测试$/,
-  /^完成开发$/,
-  /^完成实现$/,
-  /^实现完成$/,
-  /^开发完成$/,
-  /^测试完成$/,
-  /^验收通过$/,
-  /^检查通过$/,
-  /^实现逻辑$/,
-  /^编写逻辑$/,
-  /^完成逻辑$/,
-  /^开发完成$/,
-  /^代码完成$/,
-  /^功能完成$/,
-  /^开发功能$/,
-];
-
-/**
- * 计算任务内容质量评分
- */
-/** AI 增强分析选项 */
-export interface AIAnalyzeOptions {
-  /** 启用深度分析 (语义重复检测、AI 陈旧评估、语义质量评分) */
-  deepAnalyze?: boolean;
-  /** 禁用所有 AI 功能 */
-  noAi?: boolean;
-}
+// 类型和基础评估函数从 quality-gate.ts 导入
+// ContentQualityScore, QualityDeduction, AIAnalyzeOptions, evaluateDescription, evaluateCheckpoints, evaluateSolution
 
 /**
  * 计算内容质量评分
@@ -672,7 +607,7 @@ export async function calculateContentQuality(
   let relatedFilesScore = 100;
   let solutionScore = 100;
 
-  // 1. 描述完整度检测
+  // 1. 描述完整度检测 (复用 quality-gate.ts)
   const descResult = evaluateDescription(task.description);
   descriptionScore = descResult.score;
   deductions.push(...descResult.deductions);
@@ -814,56 +749,10 @@ export function evaluateDescription(description?: string): { score: number; dedu
 }
 
 /**
- * 评估检查点质量
+ * 评估检查点质量 - 已从 quality-gate.ts 复用
+ * 保留此别名以保持向后兼容
  */
-export function evaluateCheckpoints(checkpoints?: CheckpointMetadata[]): { score: number; deductions: QualityDeduction[] } {
-  const deductions: QualityDeduction[] = [];
-  let score = 100;
-
-  if (!checkpoints || checkpoints.length === 0) {
-    // 没有检查点不扣分，因为可能使用 checkpoint.md
-    return { score: 100, deductions };
-  }
-
-  // 检测泛化检查点
-  const genericCheckpoints: string[] = [];
-  for (const cp of checkpoints) {
-    const desc = cp.description.trim();
-    for (const pattern of GENERIC_CHECKPOINT_PATTERNS) {
-      if (pattern.test(desc)) {
-        genericCheckpoints.push(desc);
-        break;
-      }
-    }
-  }
-
-  if (genericCheckpoints.length > 0) {
-    // 根据泛化检查点比例扣分
-    const ratio = genericCheckpoints.length / checkpoints.length;
-    const deduction = Math.round(-20 * ratio);
-    score += deduction;
-    deductions.push({
-      category: 'checkpoint',
-      reason: `检查点过于泛化: "${genericCheckpoints[0]}"${genericCheckpoints.length > 1 ? ` 等 ${genericCheckpoints.length} 项` : ''}`,
-      points: deduction,
-      suggestion: '使用更具体的检查点描述，如"实现用户登录 API"而非"核心功能实现"',
-    });
-  }
-
-  // 检测检查点数量过少
-  if (checkpoints.length < 2) {
-    const deduction = -10;
-    score += deduction;
-    deductions.push({
-      category: 'checkpoint',
-      reason: '检查点数量过少 (< 2)',
-      points: deduction,
-      suggestion: '添加更多验收检查点以明确完成标准',
-    });
-  }
-
-  return { score: Math.max(0, score), deductions };
-}
+export { evaluateCheckpoints } from '../utils/quality-gate';
 
 /**
  * 从文本中提取文件引用路径（用于层级分析）
