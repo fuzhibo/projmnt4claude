@@ -81,16 +81,6 @@ export const enTexts: I18nTexts = {
     invalidAction: 'Unknown action',
   },
 
-  branch: {
-    checkoutHeader: 'Checkout Branch',
-    statusHeader: 'Branch Status',
-    createHeader: 'Create Branch',
-    deleteHeader: 'Delete Branch',
-    mergeHeader: 'Merge Branch',
-    pushHeader: 'Push Branch',
-    syncHeader: 'Sync Status',
-  },
-
   tool: {
     listHeader: 'Local Skill List',
     createHeader: 'Create Skill',

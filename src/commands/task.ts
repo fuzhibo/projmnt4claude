@@ -387,6 +387,10 @@ export interface CreateTaskOptions {
   // 子任务选项
   /** 父任务 ID（创建子任务时使用） */
   parentId?: string;
+
+  // 分支选项
+  /** 关联分支 */
+  branch?: string;
 }
 
 /**
@@ -489,6 +493,11 @@ export async function createTask(
     // 设置推荐角色
     if (options.recommendedRole) {
       task.recommendedRole = options.recommendedRole;
+    }
+
+    // 设置关联分支
+    if (options.branch) {
+      task.branch = options.branch;
     }
 
     // 添加创建历史记录

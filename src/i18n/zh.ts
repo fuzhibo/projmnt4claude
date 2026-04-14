@@ -81,16 +81,6 @@ export const zhTexts: I18nTexts = {
     invalidAction: '未知操作',
   },
 
-  branch: {
-    checkoutHeader: '切换分支',
-    statusHeader: '分支状态',
-    createHeader: '创建分支',
-    deleteHeader: '删除分支',
-    mergeHeader: '合并分支',
-    pushHeader: '推送分支',
-    syncHeader: '同步状态',
-  },
-
   tool: {
     listHeader: '本地 skill 列表',
     createHeader: '创建 skill',

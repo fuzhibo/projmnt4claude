@@ -85,16 +85,6 @@ export interface I18nTexts {
     keyNotFound: string;
     invalidAction: string;
   };
-  // branch 命令
-  branch: {
-    checkoutHeader: string;
-    statusHeader: string;
-    createHeader: string;
-    deleteHeader: string;
-    mergeHeader: string;
-    pushHeader: string;
-    syncHeader: string;
-  };
   // tool 命令
   tool: {
     listHeader: string;

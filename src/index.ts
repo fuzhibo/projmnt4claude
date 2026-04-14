@@ -220,6 +220,7 @@ rename 子命令格式:
   .option('--file <path>', '从文件读取描述 (仅 create, 用于包含特殊字符的长描述)')
   .option('--from-requirement', '从需求创建 (仅 create)')
   .option('--requirement-text <text>', '需求文本 (仅 create)')
+  .option('--branch <branch>', '关联分支 (仅 create)')
   .option('--from <id>', '依赖来源 (仅 dependency)')
   .option('--to <id>', '依赖目标 (仅 dependency)')
   .option('--remove', '移除依赖 (仅 dependency)')
@@ -266,6 +267,7 @@ rename 子命令格式:
           nonInteractive: options.yes,
           skipValidation: options.skipValidation,
           id: id,  // 传递用户指定的任务ID
+          branch: options.branch,
         });
         break;
       }
