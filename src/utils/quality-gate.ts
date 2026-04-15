@@ -10,7 +10,8 @@
  * 4. --require-quality N 参数：质量分低于N时自动提示完善
  */
 
-import type { TaskMeta, CheckpointMetadata } from '../types/task.js';
+import type { TaskMeta, CheckpointMetadata, CheckpointPolicy } from '../types/task.js';
+import { inferCheckpointPolicy } from '../types/task.js';
 import type { ValidationViolation, ViolationSeverity } from '../types/feedback-constraint.js';
 import * as fs from 'fs';
 import * as path from 'path';
@@ -348,9 +349,12 @@ export function validateBasicFields(task: TaskMeta): BasicFieldsValidationResult
     missingFields.push('description');
   }
 
-  // 检查检查点
-  if (!task.checkpoints || task.checkpoints.length === 0) {
-    errors.push('任务缺少检查点');
+  // 检查检查点（考虑 checkpointPolicy）
+  const policy = task.checkpointPolicy ?? inferCheckpointPolicy(task.type, task.priority);
+  const hasCheckpoints = task.checkpoints && task.checkpoints.length > 0;
+
+  if (!hasCheckpoints && policy === 'required') {
+    errors.push('任务缺少检查点（策略为 required）');
     missingFields.push('checkpoints');
   }
 
@@ -603,9 +607,14 @@ export async function checkQualityGate(
   if (!task.description || task.description.trim().length < 30) {
     missingFields.push('description');
   }
-  if (!task.checkpoints || task.checkpoints.length === 0) {
+
+  // 检查检查点（考虑 checkpointPolicy）
+  const checkpointPolicy = task.checkpointPolicy ?? inferCheckpointPolicy(task.type, task.priority);
+  const hasCheckpoints = task.checkpoints && task.checkpoints.length > 0;
+  if (!hasCheckpoints && checkpointPolicy === 'required') {
     missingFields.push('checkpoints');
   }
+
   if (affectedFiles.length === 0) {
     missingFields.push('affected_files');
   }
@@ -704,37 +713,67 @@ export async function checkQualityGate(
 
 /**
  * 对任务的检查点运行验证规则
+ *
+ * 检查点策略处理逻辑：
+ * 1. 若 task.checkpointPolicy 已设置，直接使用该策略
+ * 2. 若未设置，根据任务类型和优先级自动推断
+ *
+ * 策略规则：
+ * - 'required': 必须包含至少 2 个检查点，否则报错
+ * - 'optional': 检查点可选，无检查点时给出警告而非错误
+ * - 'none': 无需检查点，跳过检查点相关验证
  */
 export function validateCheckpoints(task: TaskMeta): ValidationViolation[] {
   const violations: ValidationViolation[] = [];
 
-  // 检查空检查点数组 - P0/P1 任务必须包含检查点
-  if (!task.checkpoints || task.checkpoints.length === 0) {
-    if (task.priority === 'P0' || task.priority === 'P1') {
+  // 获取检查点策略（显式声明 > 自动推断）
+  const policy: CheckpointPolicy = task.checkpointPolicy ?? inferCheckpointPolicy(task.type, task.priority);
+
+  // 策略为 'none' 时，无需检查点，直接跳过所有验证
+  if (policy === 'none') {
+    return violations;
+  }
+
+  // 检查空检查点数组
+  const hasCheckpoints = task.checkpoints && task.checkpoints.length > 0;
+  const checkpointCount = task.checkpoints?.length ?? 0;
+
+  if (!hasCheckpoints) {
+    if (policy === 'required') {
+      // 'required' 策略：必须包含检查点
       violations.push({
         ruleId: 'checkpoint-array-not-empty',
         severity: 'error',
-        message: `${task.priority} 任务必须包含至少 2 个结构化检查点，当前: 0`,
+        message: `${task.type}/${task.priority} 任务配置为必须包含检查点（策略: ${policy}），当前: 0 个检查点`,
       });
-    } else {
-      // P2/P3 任务可以没有检查点，但给出警告
+    } else if (policy === 'optional') {
+      // 'optional' 策略：检查点可选，仅给出警告
       violations.push({
         ruleId: 'checkpoint-array-empty',
         severity: 'warning',
-        message: '任务检查点数组为空，建议添加检查点以跟踪进度',
+        message: `任务检查点数组为空（策略: ${policy}），建议添加检查点以跟踪进度`,
       });
     }
     return violations;
   }
 
+  // 检查检查点数量（'required' 策略下至少需要 2 个）
+  if (policy === 'required' && checkpointCount < 2) {
+    violations.push({
+      ruleId: 'checkpoint-min-count',
+      severity: 'error',
+      message: `'required' 策略要求至少 2 个检查点，当前: ${checkpointCount} 个`,
+    });
+  }
+
   // 运行 checkpointRequiredPrefix 规则
-  const prefixViolation = checkpointRequiredPrefix.check(task.checkpoints);
+  const prefixViolation = checkpointRequiredPrefix.check(task.checkpoints!);
   if (prefixViolation) {
     violations.push(prefixViolation);
   }
 
   // 运行 checkpointHasVerificationCommands 规则
-  const commandsViolation = checkpointHasVerificationCommands.check(task.checkpoints);
+  const commandsViolation = checkpointHasVerificationCommands.check(task.checkpoints!);
   if (commandsViolation) {
     violations.push(commandsViolation);
   }
@@ -861,13 +900,41 @@ export function evaluateDescription(description?: string): { score: number; dedu
 /**
  * 评估检查点质量
  */
-export function evaluateCheckpoints(checkpoints?: CheckpointMetadata[]): { score: number; deductions: QualityDeduction[] } {
+export function evaluateCheckpoints(
+  checkpoints?: CheckpointMetadata[],
+  policy?: CheckpointPolicy
+): { score: number; deductions: QualityDeduction[] } {
   const deductions: QualityDeduction[] = [];
   let score = 100;
 
   if (!checkpoints || checkpoints.length === 0) {
-    // 没有检查点不扣分，因为可能使用 checkpoint.md
-    return { score: 100, deductions };
+    // 没有检查点时的评分取决于策略
+    if (policy === 'none') {
+      // 'none' 策略：明确声明无需检查点，不扣分
+      return { score: 100, deductions };
+    } else if (policy === 'required') {
+      // 'required' 策略：必须配置检查点但没配置，严重扣分
+      const deduction = -40;
+      score += deduction;
+      deductions.push({
+        category: 'checkpoint',
+        reason: '策略要求必须配置检查点，但当前无检查点',
+        points: deduction,
+        suggestion: '添加至少 2 个结构化检查点，或修改 checkpointPolicy 为 optional/none',
+      });
+      return { score: Math.max(0, score), deductions };
+    } else {
+      // 'optional' 策略或其他：检查点可选，轻微扣分
+      const deduction = -10;
+      score += deduction;
+      deductions.push({
+        category: 'checkpoint',
+        reason: '无检查点',
+        points: deduction,
+        suggestion: '建议添加检查点以跟踪进度，或将 checkpointPolicy 设为 none 明确声明无需检查点',
+      });
+      return { score: Math.max(0, score), deductions };
+    }
   }
 
   // 检测泛化检查点
@@ -1062,8 +1129,9 @@ export async function calculateContentQuality(
   descriptionScore = descResult.score;
   deductions.push(...descResult.deductions);
 
-  // 2. 检查点质量检测
-  const cpResult = evaluateCheckpoints(task.checkpoints);
+  // 2. 检查点质量检测（考虑 checkpointPolicy）
+  const checkpointPolicy = task.checkpointPolicy ?? inferCheckpointPolicy(task.type, task.priority);
+  const cpResult = evaluateCheckpoints(task.checkpoints, checkpointPolicy);
   checkpointScore = cpResult.score;
   deductions.push(...cpResult.deductions);
 

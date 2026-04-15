@@ -9,6 +9,16 @@ export type TaskType = 'bug' | 'feature' | 'research' | 'docs' | 'refactor' | 't
 export type TaskPriority = 'P0' | 'P1' | 'P2' | 'P3' | 'Q1' | 'Q2' | 'Q3' | 'Q4';
 
 /**
+ * 检查点策略
+ * 用于明确声明任务是否需要检查点
+ *
+ * - 'required': 必须配置检查点（P0/P1 任务、bug/feature 类型）
+ * - 'optional': 检查点可选（P2/P3 的 docs/refactor 类型任务）
+ * - 'none': 无需检查点（简单文档修复、配置变更等）
+ */
+export type CheckpointPolicy = 'required' | 'optional' | 'none';
+
+/**
  * 任务创建来源
  * 用于追踪任务是由哪个入口创建的
  */
@@ -558,6 +568,15 @@ export interface TaskMeta {
   failureReason?: FailureReason;  // 任务失败原因（status 为 failed 时记录具体原因）
   allowedTools?: string[];        // 允许的工具列表（为空时使用默认 --dangerously-skip-permissions）
   initQualityScore?: number;      // 任务创建时的质量评分（init-requirement 流程中写入）
+  /**
+   * 检查点策略
+   * - 'required': 必须配置检查点（默认推断值）
+   * - 'optional': 检查点可选
+   * - 'none': 无需检查点
+   *
+   * 若未指定，将根据任务类型和优先级自动推断
+   */
+  checkpointPolicy?: CheckpointPolicy;
 }
 
 /**
@@ -610,6 +629,11 @@ export interface PendingVerification {
 
 /**
  * 创建默认任务元数据
+ *
+ * 自动推断 checkpointPolicy 基于任务类型和优先级：
+ * - P0/P1 优先级：'required'（必须配置检查点）
+ * - bug/feature 类型：'required'（必须配置检查点）
+ * - docs/refactor 类型：'optional'（检查点可选）
  */
 export function createDefaultTaskMeta(
   id: string,
@@ -619,12 +643,15 @@ export function createDefaultTaskMeta(
   createdBy?: TaskCreatedBy
 ): TaskMeta {
   const now = new Date().toISOString();
+  const priority: TaskPriority = 'P2';
+  const checkpointPolicy = inferCheckpointPolicy(type, priority);
+
   return {
     id,
     title,
     description,
     type,
-    priority: 'P2',
+    priority,
     status: 'open',
     dependencies: [],
     createdAt: now,
@@ -634,6 +661,7 @@ export function createDefaultTaskMeta(
     requirementHistory: [],
     createdBy,
     schemaVersion: CURRENT_TASK_SCHEMA_VERSION,
+    checkpointPolicy,
   };
 }
 
@@ -859,6 +887,48 @@ export function inferTaskPriority(title: string): TaskPriority {
   }
 
   return 'P2';
+}
+
+/**
+ * 根据任务类型和优先级推断检查点策略
+ *
+ * 推断规则：
+ * - P0/P1 优先级：必须配置检查点 ('required')
+ * - bug/feature 类型：必须配置检查点 ('required')
+ * - P2/P3 的 docs/refactor 类型：检查点可选 ('optional')
+ *
+ * @param type - 任务类型
+ * @param priority - 任务优先级
+ * @returns CheckpointPolicy 推断的检查点策略
+ *
+ * @example
+ * ```typescript
+ * inferCheckpointPolicy('bug', 'P0');     // 'required'
+ * inferCheckpointPolicy('docs', 'P3');    // 'optional'
+ * inferCheckpointPolicy('feature', 'P2'); // 'required'
+ * ```
+ */
+export function inferCheckpointPolicy(
+  type: TaskType,
+  priority: TaskPriority
+): CheckpointPolicy {
+  // P0/P1 高优先级任务必须配置检查点
+  if (priority === 'P0' || priority === 'P1') {
+    return 'required';
+  }
+
+  // bug/feature 类型任务需要检查点
+  if (type === 'bug' || type === 'feature') {
+    return 'required';
+  }
+
+  // docs/refactor 类型任务检查点可选
+  if (type === 'docs' || type === 'refactor') {
+    return 'optional';
+  }
+
+  // 其他情况（如 research、test）默认为可选
+  return 'optional';
 }
 
 /**

@@ -408,16 +408,16 @@ export class AssemblyLine {
           this.savePhaseCheckpoint(taskId, 'development', state);
         } else {
           // Skip development - rebuild prerequisite data from prevRecord
-          if (!prevRecord?.devReport) {
-            console.log(`   ⚠️ 前次记录缺少开发报告，从开发阶段重新开始`);
-            // 降级处理：重新执行开发阶段
-            currentPhaseIndex = 0;
-            continue;
-          } else {
+          if (prevRecord?.devReport) {
             devReport = prevRecord.devReport;
             record.devReport = devReport;
             addTimeline('dev_completed', `[恢复] 复用前次开发结果: ${devReport.status}`, { resumed: true, phase: resumePhase });
             console.log(`   ⏩ 跳过开发阶段（已有完成报告）`);
+          } else {
+            console.log(`   ⚠️ 前次记录缺少开发报告，从开发阶段重新开始`);
+            // 降级处理：重新执行开发阶段
+            currentPhaseIndex = 0;
+            continue;
           }
         }
       }
@@ -488,16 +488,16 @@ export class AssemblyLine {
           this.savePhaseCheckpoint(taskId, 'code_review', state);
         } else {
           // Skip code review - rebuild prerequisite data from prevRecord
-          if (!prevRecord?.codeReviewVerdict) {
-            console.log(`   ⚠️ 前次记录缺少代码审核结果，从代码审核阶段重新开始`);
-            // 降级处理：重新执行代码审核阶段
-            currentPhaseIndex = 1;
-            continue;
-          } else {
+          if (prevRecord?.codeReviewVerdict) {
             codeReviewVerdict = prevRecord.codeReviewVerdict;
             record.codeReviewVerdict = codeReviewVerdict;
             addTimeline('code_review_completed', `[恢复] 复用前次代码审核结果: ${codeReviewVerdict.result}`, { resumed: true });
             console.log(`   ⏩ 跳过代码审核阶段（已有完成报告）`);
+          } else {
+            console.log(`   ⚠️ 前次记录缺少代码审核结果，从代码审核阶段重新开始`);
+            // 降级处理：重新执行代码审核阶段
+            currentPhaseIndex = 1;
+            continue;
           }
         }
       }
@@ -572,16 +572,16 @@ export class AssemblyLine {
           this.savePhaseCheckpoint(taskId, 'qa', state);
         } else {
           // Skip QA - rebuild prerequisite data from prevRecord
-          if (!prevRecord?.qaVerdict) {
-            console.log(`   ⚠️ 前次记录缺少QA验证结果，从QA验证阶段重新开始`);
-            // 降级处理：重新执行 QA 阶段
-            currentPhaseIndex = 2;
-            continue;
-          } else {
+          if (prevRecord?.qaVerdict) {
             qaVerdict = prevRecord.qaVerdict;
             record.qaVerdict = qaVerdict;
             addTimeline('qa_completed', `[恢复] 复用前次QA结果: ${qaVerdict.result}`, { resumed: true });
             console.log(`   ⏩ 跳过QA验证阶段（已有完成报告）`);
+          } else {
+            console.log(`   ⚠️ 前次记录缺少QA验证结果，从QA验证阶段重新开始`);
+            // 降级处理：重新执行 QA 阶段
+            currentPhaseIndex = 2;
+            continue;
           }
         }
       }
