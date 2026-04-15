@@ -11,7 +11,7 @@ import {
 } from '../utils/task';
 import { extractAffectedFiles, extractFilePaths, checkQualityGate, validateBasicFields, validateFilesExist, type QualityGateConfig, DEFAULT_QUALITY_GATE_CONFIG } from '../utils/quality-gate';
 import { hasValidCheckpoints, displayCheckpointCreationWarning, createTask, type CreateTaskOptions } from './task';
-import { syncCheckpointsToMeta, filterLowQualityCheckpoints } from '../utils/checkpoint';
+import { syncCheckpointsToMeta, filterLowQualityCheckpoints, convertParsedCheckpointsToMetadata, updateCheckpointMdFromArray } from '../utils/checkpoint';
 import { inferDependencies as inferDependenciesUnified, type InferredDependency } from '../utils/dependency-engine';
 import { DependencyGraph, validateNewTaskDeps } from '../utils/dependency-graph';
 import type { TaskMeta, TaskPriority, TaskStatus, TaskType } from '../types/task';
@@ -661,6 +661,29 @@ export async function initRequirement(
   }, cwd);
 
   const taskId = task.id;
+
+  // BUG-014: 文本检查点与结构化检查点双轨制修复
+  // 在创建任务后立即生成结构化检查点并写入 meta.json
+  if (checkpoints.length > 0) {
+    const parsedCheckpoints = checkpoints.map((desc, index) => ({
+      id: `CP-${String(index + 1).padStart(3, '0')}`,
+      description: desc,
+      originalText: `- [ ] ${desc}`,
+      lineNumber: index,
+    }));
+
+    const checkpointMetadata = convertParsedCheckpointsToMetadata(parsedCheckpoints, task);
+
+    // 更新任务元数据中的检查点
+    const taskToUpdate = readTaskMeta(taskId, cwd);
+    if (taskToUpdate) {
+      taskToUpdate.checkpoints = checkpointMetadata;
+      writeTaskMeta(taskToUpdate, cwd);
+
+      // 更新 checkpoint.md 文件以包含正确的 ID
+      updateCheckpointMdFromArray(taskId, checkpointMetadata, cwd);
+    }
+  }
 
   // 定义 checkpointPath 供后续验证使用
   const taskDir = path.join(getTasksDir(cwd), taskId);

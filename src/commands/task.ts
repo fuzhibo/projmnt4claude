@@ -50,6 +50,9 @@ import { extractFilePaths } from '../utils/quality-gate';
 import {
   writeBatchUpdateLog,
   detectOperationSource,
+  formatLogList,
+  queryBatchUpdateLogs,
+  showLogSummary,
   type OperationSource,
 } from '../utils/batch-update-logger';
 
@@ -1822,6 +1825,10 @@ export async function updateTask(
   // 其他状态更新，正常处理
   let updated = false;
 
+  // 保存原始值用于日志记录
+  const originalStatus = task.status;
+  const originalPriority = task.priority;
+
   if (options.title) {
     task.title = options.title;
     updated = true;
@@ -1900,6 +1907,33 @@ export async function updateTask(
 
   writeTaskMeta(task, cwd);
   console.log(`✅ 任务 ${taskId} 已更新`);
+
+  // 记录单行更新操作日志（状态或优先级变更时）
+  if (options.status || options.priority) {
+    const commandArgs = process.argv.slice(2);
+    writeBatchUpdateLog({
+      commandArgs,
+      options: {
+        status: options.status,
+        priority: options.priority,
+        all: false,
+        yes: true,
+      },
+      tasks: [{
+        id: task.id,
+        title: task.title || '(无标题)',
+        oldStatus: originalStatus,
+        newStatus: task.status,
+        oldPriority: originalPriority,
+        newPriority: task.priority,
+      }],
+      summary: {
+        totalCount: 1,
+        updatedCount: 1,
+        filteredCount: 0,
+      },
+    }, cwd);
+  }
 
   // P1修复: 子任务状态同步
   if ((options.status === 'resolved' || options.status === 'closed') && !options.noSync) {
@@ -3969,6 +4003,88 @@ export async function batchUpdateTasks(
   }
   console.log('');
 
+  // 检测高风险操作：从 resolved/closed 变为 open
+  const terminalStatuses = ['resolved', 'closed', 'abandoned'];
+  const reopeningTasks = tasksToUpdate.filter(t =>
+    options.status === 'open' && terminalStatuses.includes(t.status)
+  );
+
+  // 检测是否使用了 --all 选项（这会导致包含已解决的任务）
+  const isUsingAllFlag = options.all === true;
+  const highRiskCount = reopeningTasks.length;
+
+  if (highRiskCount > 0) {
+    console.log('');
+    console.log('⚠️  高风险操作警告');
+    console.log('━'.repeat(SEPARATOR_WIDTH));
+    console.log(`   您正在将 ${highRiskCount} 个已结束的任务重新打开:`);
+    console.log('');
+    for (const task of reopeningTasks.slice(0, 5)) {
+      console.log(`     • ${task.id}: ${task.status} → open (${task.title.slice(0, 40)}${task.title.length > 40 ? '...' : ''})`);
+    }
+    if (reopeningTasks.length > 5) {
+      console.log(`     ... 还有 ${reopeningTasks.length - 5} 个任务`);
+    }
+    console.log('');
+
+    // 特别警告 --all 选项的使用
+    if (isUsingAllFlag) {
+      console.log('🚨 使用了 --all 选项');
+      console.log('   这会导致包含所有已解决/已关闭的任务');
+      console.log('');
+    }
+
+    console.log('   这通常发生在以下情况:');
+    console.log('   • 误操作：使用 --yes 参数跳过了确认');
+    console.log('   • 自动化脚本：IDE 插件或钩子意外触发');
+    console.log('   • 快捷键冲突：终端快捷键误触发');
+    console.log('   • 使用了 --all 选项但未意识到会包含已解决任务');
+    console.log('');
+    console.log('   操作将被记录到 batch-update 日志供审计');
+    console.log('');
+
+    // 如果有大量任务被重开，额外警告
+    if (highRiskCount >= 5) {
+      console.log('🚨 严重警告: 大量任务将被重新打开！');
+      console.log('   请确认这是您期望的操作。');
+      console.log('');
+    }
+
+    // 对 --all 选项或大量重开操作，强制要求额外确认（即使使用了 --yes）
+    if ((isUsingAllFlag || highRiskCount >= 5) && options.yes) {
+      console.log('⚠️  尽管使用了 --yes，但此高风险操作需要额外确认:');
+      console.log('');
+
+      const extraConfirm = await prompts({
+        type: 'confirm',
+        name: 'confirmed',
+        message: `确认要将 ${highRiskCount} 个已结束的任务重新打开吗？`,
+        initial: false,
+      });
+
+      if (!extraConfirm.confirmed) {
+        // 记录取消操作
+        writeBatchUpdateLog({
+          commandArgs,
+          options: {
+            status: options.status,
+            priority: options.priority,
+            all: options.all,
+            yes: options.yes,
+          },
+          tasks: [],
+          summary: {
+            totalCount: tasksToUpdate.length,
+            updatedCount: 0,
+            filteredCount: filteredTasks.length,
+          },
+        }, cwd);
+        console.log('已取消');
+        return;
+      }
+    }
+  }
+
   // 显示即将更新的任务列表
   console.log('   即将更新的任务:');
   for (const task of tasksToUpdate) {
@@ -4145,6 +4261,32 @@ export async function batchUpdateTasks(
   // 显示日志记录信息
   console.log('');
   console.log(`📝 操作已记录到: .projmnt4claude/logs/batch-update-${operationStartTime.split('T')[0]}.log`);
+}
+
+/**
+ * 显示 batch-update 操作日志
+ */
+export function showBatchUpdateLogs(
+  options: {
+    date?: string;
+    taskId?: string;
+    source?: string;
+    verbose?: boolean;
+    summary?: boolean;
+  } = {},
+  cwd: string = process.cwd()
+): void {
+  if (options.summary) {
+    console.log(showLogSummary(cwd));
+    return;
+  }
+
+  const entries = queryBatchUpdateLogs({
+    taskId: options.taskId,
+    source: options.source as any,
+  }, cwd);
+
+  console.log(formatLogList(entries, options.verbose));
 }
 
 /**

@@ -41,6 +41,8 @@ const mockCheckQualityGate = mock(() => Promise.resolve({
   missingFields: [] as string[],
   affectedFiles: [] as string[],
   changeSize: 'small' as const,
+  errorViolations: [] as any[],
+  warningViolations: [] as any[],
 }));
 
 // Simple extractFilePaths mock matching common file path patterns
@@ -150,6 +152,8 @@ function resetMocks() {
     missingFields: [],
     affectedFiles: [],
     changeSize: 'small',
+    errorViolations: [],
+    warningViolations: [],
   }));
   mockCreateTask.mockReturnValue(Promise.resolve({ id: 'TASK-test-001', title: 'Test Task', priority: 'P2' }));
   mockReadTaskMeta.mockImplementation((id: string) => ({
@@ -361,6 +365,8 @@ describe('initRequirement', () => {
       missingFields: ['description'],
       affectedFiles: [],
       changeSize: 'medium',
+      errorViolations: [],
+      warningViolations: [],
     }));
     try {
       await initRequirement('简单描述', '/test', {
@@ -391,6 +397,8 @@ describe('initRequirement', () => {
       missingFields: [],
       affectedFiles: [],
       changeSize: 'small',
+      errorViolations: [],
+      warningViolations: [],
     }));
     // No requireQuality → quality warning but no exit
     await initRequirement('添加一个按钮', '/test', {

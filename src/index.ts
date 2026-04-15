@@ -30,6 +30,7 @@ import {
   countTasks,
   purgeTasks,
   renameTaskCommand,
+  showBatchUpdateLogs,
 } from './commands/task';
 import {
   showPlan,
@@ -138,7 +139,7 @@ program
   .description(`管理任务
 
 基本操作: create/list/show/get/update/delete/rename/purge/execute/checkpoint
-高级操作: dependency/add-subtask/status-guide/complete/split/search/batch-update/count
+高级操作: dependency/add-subtask/status-guide/complete/split/search/batch-update/batch-update-logs/count
 
 全局选项:
   --token <n>            令牌数估算
@@ -229,6 +230,8 @@ rename 子命令格式:
   .option('--pass', '通过检查点 (仅 checkpoint)')
   .option('--fail', '失败检查点 (仅 checkpoint)')
   .option('--all', '包含所有任务，包括已解决/已关闭的 (仅 batch-update)')
+  .option('--source <source>', '过滤日志来源 (仅 batch-update-logs): cli/ide/hook/script/unknown')
+  .option('--summary', '显示日志统计摘要 (仅 batch-update-logs)')
   .action(async (action, id, options) => {
     requireInit();
     switch (action) {
@@ -551,6 +554,15 @@ rename 子命令格式:
         });
         break;
       }
+      case 'batch-update-logs': {
+        showBatchUpdateLogs({
+          taskId: options.taskId,
+          source: options.source,
+          verbose: options.verbose,
+          summary: options.summary,
+        });
+        break;
+      }
       case 'count': {
         // Debug: log options
         if (process.env.DEBUG_COUNT) {
@@ -585,7 +597,7 @@ rename 子命令格式:
         break;
       }
       default:
-        console.error(`错误: 未知操作 '${action}'。支持的操作: create, list, show, update, delete, rename, purge, execute, checkpoint, dependency, discuss, add-subtask, sync-children, split, search, batch-update, submit, validate, history, status-guide, complete, count`);
+        console.error(`错误: 未知操作 '${action}'。支持的操作: create, list, show, update, delete, rename, purge, execute, checkpoint, dependency, discuss, add-subtask, sync-children, split, search, batch-update, batch-update-logs, submit, validate, history, status-guide, complete, count`);
         process.exit(1);
     }
   });

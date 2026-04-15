@@ -28,6 +28,8 @@ import {
   getCheckpointDetail,
   listCheckpoints,
   findCheckpointIdByDescription,
+  parseTextCheckpoints,
+  convertParsedCheckpointsToMetadata,
 } from '../utils/checkpoint.js';
 import * as pathModule from '../utils/path.js';
 import * as taskModule from '../utils/task.js';
@@ -835,5 +837,157 @@ describe('findCheckpointIdByDescription', () => {
 
     expect(findCheckpointIdByDescription('TASK-1', '完全无关的描述')).toBeNull();
     readFileSyncSpy.mockRestore();
+  });
+});
+
+// ============== parseTextCheckpoints ==============
+
+describe('parseTextCheckpoints', () => {
+  it('returns empty array for empty description', () => {
+    expect(parseTextCheckpoints('')).toEqual([]);
+    expect(parseTextCheckpoints('   ')).toEqual([]);
+  });
+
+  it('returns empty array when no checkpoint section', () => {
+    const desc = '# Task Description\n\nSome content without checkpoints.';
+    expect(parseTextCheckpoints(desc)).toEqual([]);
+  });
+
+  it('parses checkpoints from ## 检查点 section', () => {
+    const desc = `## 检查点
+- CP-1: 修复第 466 行 codeReviewVerdict 空值访问
+- CP-2: 修复第 403 行 devReport 空值访问
+`;
+    const result = parseTextCheckpoints(desc);
+    expect(result).toHaveLength(2);
+    expect(result[0].id).toBe('CP-1');
+    expect(result[0].description).toBe('修复第 466 行 codeReviewVerdict 空值访问');
+    expect(result[1].id).toBe('CP-2');
+    expect(result[1].description).toBe('修复第 403 行 devReport 空值访问');
+  });
+
+  it('parses checkpoints from ## Checkpoints section (English)', () => {
+    const desc = `## Checkpoints
+- Fix login bug
+- Add unit tests
+`;
+    const result = parseTextCheckpoints(desc);
+    expect(result).toHaveLength(2);
+    expect(result[0].id).toBe('CP-001');
+    expect(result[0].description).toBe('Fix login bug');
+  });
+
+  it('parses checkpoints without explicit IDs', () => {
+    const desc = `## 检查点
+- 验证用户登录功能正常
+- 确认数据库迁移脚本执行成功
+- 检查 API 响应格式符合规范
+`;
+    const result = parseTextCheckpoints(desc);
+    expect(result).toHaveLength(3);
+    expect(result[0].id).toBe('CP-001');
+    expect(result[1].id).toBe('CP-002');
+    expect(result[2].id).toBe('CP-003');
+  });
+
+  it('handles mixed format with and without IDs', () => {
+    const desc = `## 检查点
+- CP-fix-login: 修复登录功能
+- 添加单元测试
+`;
+    const result = parseTextCheckpoints(desc);
+    expect(result).toHaveLength(2);
+    expect(result[0].id).toBe('CP-fix-login');
+    expect(result[1].id).toBe('CP-002');
+  });
+
+  it('handles checkboxes in list items', () => {
+    const desc = `## 检查点
+- [ ] 待完成任务
+- [x] 已完成任务
+`;
+    const result = parseTextCheckpoints(desc);
+    expect(result).toHaveLength(2);
+    expect(result[0].description).toBe('待完成任务');
+    expect(result[1].description).toBe('已完成任务');
+  });
+
+  it('stops at next ## section', () => {
+    const desc = `## 检查点
+- 检查点1
+- 检查点2
+
+## 相关文件
+- src/file.ts
+`;
+    const result = parseTextCheckpoints(desc);
+    expect(result).toHaveLength(2);
+  });
+
+  it('handles numeric list format', () => {
+    const desc = `## 验收标准
+1. 第一个检查点
+2. 第二个检查点
+`;
+    const result = parseTextCheckpoints(desc);
+    expect(result).toHaveLength(2);
+    expect(result[0].description).toBe('第一个检查点');
+  });
+});
+
+// ============== convertParsedCheckpointsToMetadata ==============
+
+describe('convertParsedCheckpointsToMetadata', () => {
+  it('converts parsed checkpoints to metadata format', () => {
+    const parsed = [
+      { id: 'CP-001', description: '验证登录功能', originalText: '- 验证登录功能', lineNumber: 0 },
+      { id: 'CP-002', description: '检查数据库连接', originalText: '- 检查数据库连接', lineNumber: 1 },
+    ];
+
+    const result = convertParsedCheckpointsToMetadata(parsed);
+
+    expect(result).toHaveLength(2);
+    expect(result[0].id).toBe('CP-001');
+    expect(result[0].description).toBe('验证登录功能');
+    expect(result[0].status).toBe('pending');
+    expect(result[0].verification).toBeDefined();
+    expect(result[0].createdAt).toBeDefined();
+    expect(result[0].updatedAt).toBeDefined();
+  });
+
+  it('infers verification method from description', () => {
+    const parsed = [
+      { id: 'CP-001', description: '单元测试覆盖核心逻辑', originalText: '- 单元测试覆盖核心逻辑', lineNumber: 0 },
+    ];
+
+    const result = convertParsedCheckpointsToMetadata(parsed);
+
+    expect(result[0].verification?.method).toBe('unit_test');
+  });
+
+  it('infers code_review category from description', () => {
+    const parsed = [
+      { id: 'CP-001', description: '代码审查确认质量', originalText: '- 代码审查确认质量', lineNumber: 0 },
+    ];
+
+    const result = convertParsedCheckpointsToMetadata(parsed);
+
+    expect(result[0].category).toBe('code_review');
+  });
+
+  it('infers requiresHuman from keywords', () => {
+    const parsed = [
+      { id: 'CP-001', description: '人工验证登录流程', originalText: '- 人工验证登录流程', lineNumber: 0 },
+      { id: 'CP-002', description: 'Manual review required', originalText: '- Manual review required', lineNumber: 1 },
+    ];
+
+    const result = convertParsedCheckpointsToMetadata(parsed);
+
+    expect(result[0].requiresHuman).toBe(true);
+    expect(result[1].requiresHuman).toBe(true);
+  });
+
+  it('returns empty array for empty input', () => {
+    expect(convertParsedCheckpointsToMetadata([])).toEqual([]);
   });
 });

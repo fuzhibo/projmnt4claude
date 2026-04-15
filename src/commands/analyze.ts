@@ -33,7 +33,7 @@ import {
 } from '../types/task';
 import type { VerdictAction } from '../types/harness';
 import { VALID_VERDICT_ACTIONS } from '../types/harness';
-import { generateCheckpointId, syncCheckpointsToMeta, fixMissingCheckpoints } from '../utils/checkpoint';
+import { generateCheckpointId, syncCheckpointsToMeta, fixMissingCheckpoints, syncTextCheckpointsToMeta } from '../utils/checkpoint';
 import { inferCheckpointsFromDescription, generateStructuredDescription, type StructuredDescription, type DescriptionTemplateType } from '../utils/description-template';
 import { SEPARATOR_WIDTH } from '../utils/format';
 import type { SprintContract } from '../types/harness';
@@ -2141,6 +2141,30 @@ export async function analyzeProject(
         suggestion: '检查文件路径是否正确，或移除对不存在文件的引用',
         details: { missingFiles: missingRefs },
       });
+    }
+  }
+
+  // BUG-014: 文本检查点与结构化检查点双轨制同步
+  // 自动检测并从描述中同步文本检查点到 meta.json
+  let syncedCheckpointCount = 0;
+  for (const task of filteredTasks) {
+    // 如果任务没有结构化检查点，但有描述，尝试从描述中解析
+    if ((!task.checkpoints || task.checkpoints.length === 0) && task.description) {
+      try {
+        const synced = syncTextCheckpointsToMeta(task.id, cwd);
+        if (synced) {
+          syncedCheckpointCount++;
+          issues.push({
+            taskId: task.id,
+            type: 'checkpoint_synced',
+            severity: 'low',
+            message: `从任务描述中自动同步了检查点到 meta.json`,
+            suggestion: '已自动修复，无需手动操作',
+          });
+        }
+      } catch (e) {
+        // 同步失败不影响主流程
+      }
     }
   }
 

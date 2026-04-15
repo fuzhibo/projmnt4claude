@@ -675,7 +675,7 @@ export function findCheckpointIdByDescription(
  * @param checkpoints 检查点数组
  * @param cwd 工作目录
  */
-function updateCheckpointMdFromArray(
+export function updateCheckpointMdFromArray(
   taskId: string,
   checkpoints: CheckpointMetadata[],
   cwd: string = process.cwd()
@@ -685,6 +685,162 @@ function updateCheckpointMdFromArray(
     checkpoints.map(cp => `- [ ] ${cp.description}`).join('\n') +
     '\n';
   fs.writeFileSync(checkpointPath, content, 'utf-8');
+}
+
+/**
+ * 解析后的文本检查点
+ */
+export interface ParsedTextCheckpoint {
+  id: string;
+  description: string;
+  originalText: string;
+  lineNumber: number;
+}
+
+/**
+ * 从任务描述中解析文本检查点
+ * 支持格式：
+ * - `## 检查点` 或 `## Checkpoints` 章节下的列表项
+ * - `- CP-1: xxx` 或 `- [ ] CP-1: xxx` 格式
+ * - 普通列表项 `- xxx`
+ *
+ * @param description 任务描述文本
+ * @returns 解析出的检查点列表
+ */
+export function parseTextCheckpoints(description: string): ParsedTextCheckpoint[] {
+  if (!description || description.trim().length === 0) {
+    return [];
+  }
+
+  const checkpoints: ParsedTextCheckpoint[] = [];
+
+  // 匹配检查点章节：## 检查点 或 ## Checkpoints
+  const checkpointSectionMatch = description.match(/##\s*(?:检查点|Checkpoints|验收标准|Acceptance Criteria)\s*\n([\s\S]*?)(?=\n## |$)/i);
+
+  if (!checkpointSectionMatch) {
+    return [];
+  }
+
+  const sectionContent = checkpointSectionMatch[1] || '';
+  const lines = sectionContent.split('\n');
+
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
+    const trimmed = line.trim();
+
+    // 匹配列表项格式：- [ ] xxx 或 - xxx 或 1. xxx
+    const listItemMatch = trimmed.match(/^(?:[-*]|\d+\.)\s*(?:\[[ xX]\])?\s*(.+)$/);
+    if (!listItemMatch) {
+      continue;
+    }
+
+    let checkpointText = listItemMatch[1].trim();
+
+    // 提取 CP-ID（如果存在）
+    // 格式：CP-1: xxx 或 CP-001: xxx 或 CP-fix-login: xxx
+    const cpIdMatch = checkpointText.match(/^(CP-[a-zA-Z0-9-]+):\s*/i);
+    let id: string;
+
+    if (cpIdMatch) {
+      id = cpIdMatch[1]!;
+      checkpointText = checkpointText.slice(cpIdMatch[0].length).trim();
+    } else {
+      // 生成序号 ID
+      id = `CP-${String(checkpoints.length + 1).padStart(3, '0')}`;
+    }
+
+    checkpoints.push({
+      id,
+      description: checkpointText,
+      originalText: trimmed,
+      lineNumber: i,
+    });
+  }
+
+  return checkpoints;
+}
+
+/**
+ * 将解析的文本检查点转换为元数据格式
+ *
+ * @param parsedCheckpoints 解析的文本检查点
+ * @param task 任务元数据（用于推断验证信息）
+ * @returns 检查点元数据列表
+ */
+export function convertParsedCheckpointsToMetadata(
+  parsedCheckpoints: ParsedTextCheckpoint[],
+  task?: TaskMeta
+): CheckpointMetadata[] {
+  const now = new Date().toISOString();
+
+  return parsedCheckpoints.map((parsed, index) => {
+    // 推断验证信息
+    let verification = inferVerificationFromDescription(parsed.description, task);
+
+    // 如果没有推断出验证方法，生成默认验证
+    if (!verification) {
+      verification = generateFallbackVerification(parsed.description, task);
+    }
+
+    // 推断类别
+    const category = inferCheckpointCategory(parsed.description);
+
+    // 根据前缀推断是否需要人工验证
+    const requiresHuman = parsed.description.toLowerCase().includes('人工') ||
+      parsed.description.toLowerCase().includes('manual');
+
+    return {
+      id: parsed.id,
+      description: parsed.description,
+      status: 'pending',
+      category,
+      requiresHuman: requiresHuman || undefined,
+      verification,
+      createdAt: now,
+      updatedAt: now,
+    };
+  });
+}
+
+/**
+ * 同步任务描述中的文本检查点到 meta.json
+ * 如果 meta.json 中的 checkpoints 为空，但从描述中解析出了检查点，则自动同步
+ *
+ * @param taskId 任务ID
+ * @param cwd 工作目录
+ * @returns 是否进行了同步
+ */
+export function syncTextCheckpointsToMeta(
+  taskId: string,
+  cwd: string = process.cwd()
+): boolean {
+  const task = readTaskMeta(taskId, cwd);
+  if (!task) {
+    throw new Error(`任务 '${taskId}' 不存在`);
+  }
+
+  // 如果已经有检查点，不进行同步
+  if (task.checkpoints && task.checkpoints.length > 0) {
+    return false;
+  }
+
+  // 从描述中解析检查点
+  const parsedCheckpoints = parseTextCheckpoints(task.description || '');
+  if (parsedCheckpoints.length === 0) {
+    return false;
+  }
+
+  // 转换为元数据格式
+  const checkpointMetadata = convertParsedCheckpointsToMetadata(parsedCheckpoints, task);
+
+  // 更新任务元数据
+  task.checkpoints = checkpointMetadata;
+  writeTaskMeta(task, cwd);
+
+  // 同时更新 checkpoint.md 文件
+  updateCheckpointMdFromArray(taskId, checkpointMetadata, cwd);
+
+  return true;
 }
 
 /**
