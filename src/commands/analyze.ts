@@ -58,9 +58,14 @@ import {
   evaluateSolution,
   validateCheckpoints,
   calculateContentQuality,
+  checkQualityGate,
+  validateFilesExist,
   type ContentQualityScore,
   type QualityDeduction,
   type AIAnalyzeOptions,
+  type QualityGateResult,
+  type QualityGateConfig,
+  DEFAULT_QUALITY_GATE_CONFIG,
 } from '../utils/quality-gate';
 import { inferDependenciesBatch } from '../utils/dependency-engine';
 import {
@@ -961,6 +966,119 @@ export function checkCheckpointValidation(
 }
 
 /**
+ * 检查质量门禁（复用 quality-gate.ts 的 checkQualityGate 函数）
+ * 将质量门禁结果转换为 analyze issues
+ *
+ * 包含以下检查：
+ * 1. 内容质量评分（calculateContentQuality）
+ * 2. 文件存在性验证（validateFilesExist）
+ * 3. 综合质量评分（checkQualityGate）
+ * 4. 质量分阈值检查
+ * 5. 解决方案确认检查
+ * 6. 质量建议生成
+ */
+export async function checkQualityGateIssues(
+  taskId: string,
+  task: TaskMeta,
+  cwd: string,
+  config?: Partial<QualityGateConfig>,
+): Promise<Issue[]> {
+  const issues: Issue[] = [];
+
+  // 调用完整的质量门禁检查
+  const qualityConfig = {
+    ...DEFAULT_QUALITY_GATE_CONFIG,
+    ...config,
+  };
+  const result = await checkQualityGate(taskId, qualityConfig, cwd);
+
+  // 1. 检查质量分数是否低于阈值
+  if (result.score.totalScore < qualityConfig.minQualityScore) {
+    issues.push({
+      taskId,
+      type: 'low_quality',
+      severity: 'medium',
+      message: `内容质量评分 ${result.score.totalScore}/100，低于阈值 ${qualityConfig.minQualityScore}`,
+      suggestion: `完善任务描述、检查点和解决方案以提高质量分数。当前：描述完整度=${result.score.descriptionScore}，检查点质量=${result.score.checkpointScore}，解决方案=${result.score.solutionScore}`,
+      details: {
+        totalScore: result.score.totalScore,
+        threshold: qualityConfig.minQualityScore,
+        descriptionScore: result.score.descriptionScore,
+        checkpointScore: result.score.checkpointScore,
+        relatedFilesScore: result.score.relatedFilesScore,
+        solutionScore: result.score.solutionScore,
+        aiSemanticScore: result.score.aiSemanticScore,
+        deductions: result.score.deductions,
+      },
+    });
+  }
+
+  // 2. 检查缺失的必需字段
+  for (const field of result.missingFields) {
+    issues.push({
+      taskId,
+      type: field === 'checkpoints' ? 'low_checkpoint_coverage' : 'low_quality',
+      severity: field === 'affected_files' ? 'high' : 'medium',
+      message: `质量门禁: 缺少必需字段 ${field}`,
+      suggestion: `请补充 ${field} 字段以通过质量门禁`,
+      details: { missingField: field },
+    });
+  }
+
+  // 3. 转换检查点验证违规为 issues
+  for (const violation of result.errorViolations) {
+    if (violation.ruleId === 'checkpoint-required-prefix') {
+      issues.push({
+        taskId,
+        type: 'missing_checkpoint_prefix',
+        severity: violation.severity,
+        message: violation.message,
+        suggestion: '运行 analyze --fix 自动为检查点添加前缀',
+        details: violation.details,
+      });
+    } else {
+      issues.push({
+        taskId,
+        type: 'checkpoint_validation_error',
+        severity: violation.severity,
+        message: violation.message,
+        suggestion: violation.suggestion || '修复检查点配置以满足验证要求',
+        details: violation.details,
+      });
+    }
+  }
+
+  // 4. 检查文件存在性
+  const filesResult = validateFilesExist(task, cwd);
+  if (!filesResult.valid) {
+    issues.push({
+      taskId,
+      type: 'file_not_found',
+      severity: 'high',
+      message: `引用的文件不存在: ${filesResult.missingFiles.join(', ')}`,
+      suggestion: '检查文件路径是否正确，或移除对不存在文件的引用',
+      details: { missingFiles: filesResult.missingFiles },
+    });
+  }
+
+  // 5. 转换质量建议为 issues（仅 high priority）
+  for (const suggestion of result.suggestions) {
+    if (suggestion.priority === 'high') {
+      issues.push({
+        taskId,
+        type: 'low_quality',
+        severity: 'medium',
+        message: `质量建议: ${suggestion.message}`,
+        suggestion: suggestion.action,
+        details: { category: suggestion.category, priority: suggestion.priority },
+      });
+    }
+  }
+
+  return issues;
+}
+
+/**
  * CP-4: 检查 pipeline 中间状态缺少前置报告
  * wait_review/wait_qa/wait_evaluation 但缺少前置报告文件
  */
@@ -1281,9 +1399,10 @@ export async function detectStatusInferenceIssues(
   const checkpointIssue = checkCheckpointConsistency(task.id, task);
   if (checkpointIssue) issues.push(checkpointIssue);
 
-  // 检查检查点验证规则（前缀、命令等）
-  const checkpointValidationIssues = checkCheckpointValidation(task.id, task);
-  issues.push(...checkpointValidationIssues);
+  // CP-质量门禁: 调用完整的质量门禁检查（复用 checkQualityGate）
+  // 包含内容质量评分、文件存在性验证、检查点验证等
+  const qualityGateIssues = await checkQualityGateIssues(task.id, task, cwd);
+  issues.push(...qualityGateIssues);
 
   const evidenceIssue = checkMissingPipelineEvidence(task.id, task, cwd);
   if (evidenceIssue) issues.push(evidenceIssue);
