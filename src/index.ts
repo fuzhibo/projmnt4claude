@@ -72,6 +72,14 @@ function requireInit(): void {
   }
 }
 
+/**
+ * 收集多次指定的选项值
+ * 用于支持 --tasks TASK-001 --tasks TASK-002 格式
+ */
+function collectValues(value: string, previous: string[]): string[] {
+  return previous.concat(value);
+}
+
 const program = new Command();
 
 program
@@ -230,6 +238,9 @@ rename 子命令格式:
   .option('--pass', '通过检查点 (仅 checkpoint)')
   .option('--fail', '失败检查点 (仅 checkpoint)')
   .option('--all', '包含所有任务，包括已解决/已关闭的 (仅 batch-update)')
+  .option('--tasks <ids>', '指定任务ID列表，逗号分隔 (仅 batch-update)', collectValues, [])
+  .option('--task-file <path>', '从文件读取任务ID列表，每行一个或逗号分隔 (仅 batch-update)')
+  .option('--change-note <note>', '修改说明，至少10个字符，记录到transitionNotes (仅 batch-update)')
   .option('--source <source>', '过滤日志来源 (仅 batch-update-logs): cli/ide/hook/script/unknown')
   .option('--summary', '显示日志统计摘要 (仅 batch-update-logs)')
   .action(async (action, id, options) => {
@@ -551,6 +562,9 @@ rename 子命令格式:
           priority: options.priority,
           all: options.all,
           yes: options.yes,
+          tasks: options.tasks,
+          taskFile: options.taskFile,
+          changeNote: options.changeNote,
         });
         break;
       }

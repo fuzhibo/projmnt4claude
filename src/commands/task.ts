@@ -3957,6 +3957,12 @@ export async function batchUpdateTasks(
     yes?: boolean;
     /** 调用来源标识 (CLI/IDE/Hook等) */
     source?: string;
+    /** 任务ID列表（逗号分隔或多次指定） */
+    tasks?: string[];
+    /** 从文件读取任务列表 */
+    taskFile?: string;
+    /** 修改说明，记录到 transitionNotes */
+    changeNote?: string;
   } = {},
   cwd: string = process.cwd()
 ): Promise<void> {
@@ -3974,17 +3980,85 @@ export async function batchUpdateTasks(
     process.exit(1);
   }
 
+  // 强制要求 --change-note 参数
+  if (!options.changeNote || options.changeNote.trim().length < 10) {
+    console.error('错误: 必须提供 --change-note 参数说明修改原因，至少10个字符');
+    console.error('示例: --change-note "修复了XX问题，已通过测试"');
+    process.exit(1);
+  }
+
   const allTasks = getAllTasks(cwd);
 
-  // 过滤出需要更新的任务（非已完成/已关闭的任务）
-  const tasksToUpdate = options.all
-    ? allTasks
-    : allTasks.filter(t => t.status !== 'resolved' && t.status !== 'closed' && t.status !== 'abandoned' && t.status !== 'failed');
+  // 解析任务ID列表（从 --tasks 或 --task-file）
+  let specifiedTaskIds: string[] = [];
 
-  // 记录被过滤掉的已解决任务（用于审计）
-  const filteredTasks = options.all
-    ? []
-    : allTasks.filter(t => t.status === 'resolved' || t.status === 'closed' || t.status === 'abandoned' || t.status === 'failed');
+  // 从 --task-file 读取任务列表
+  if (options.taskFile) {
+    const taskFilePath = path.resolve(cwd, options.taskFile);
+    if (!fs.existsSync(taskFilePath)) {
+      console.error(`错误: 任务文件不存在: ${taskFilePath}`);
+      process.exit(1);
+    }
+    try {
+      const fileContent = fs.readFileSync(taskFilePath, 'utf-8');
+      // 支持每行一个任务ID，或逗号分隔
+      specifiedTaskIds = fileContent
+        .split(/[\n,]/)
+        .map(id => id.trim())
+        .filter(id => id.length > 0);
+    } catch (error: any) {
+      console.error(`错误: 无法读取任务文件: ${error.message}`);
+      process.exit(1);
+    }
+  }
+
+  // 从 --tasks 参数解析任务列表（支持多次指定或逗号分隔）
+  if (options.tasks && options.tasks.length > 0) {
+    // 展平并解析逗号分隔的任务ID
+    specifiedTaskIds = options.tasks
+      .flatMap(t => t.split(','))
+      .map(id => id.trim())
+      .filter(id => id.length > 0);
+  }
+
+  // 过滤出需要更新的任务
+  let tasksToUpdate: typeof allTasks;
+  let filteredTasks: typeof allTasks;
+
+  if (specifiedTaskIds.length > 0) {
+    // 指定了任务ID列表，只更新这些任务
+    const taskIdSet = new Set(specifiedTaskIds);
+    tasksToUpdate = allTasks.filter(t => taskIdSet.has(t.id));
+
+    // 检查是否有不存在的任务ID
+    const foundIds = new Set(tasksToUpdate.map(t => t.id));
+    const notFoundIds = specifiedTaskIds.filter(id => !foundIds.has(id));
+    if (notFoundIds.length > 0) {
+      console.error(`错误: 以下任务不存在: ${notFoundIds.join(', ')}`);
+      process.exit(1);
+    }
+
+    // 记录被跳过的已解决任务（用于审计提示）
+    filteredTasks = tasksToUpdate.filter(t =>
+      t.status === 'resolved' || t.status === 'closed' || t.status === 'abandoned' || t.status === 'failed'
+    );
+
+    // 当指定任务列表时，默认只更新非终态任务，除非使用 --all
+    if (!options.all) {
+      tasksToUpdate = tasksToUpdate.filter(t =>
+        t.status !== 'resolved' && t.status !== 'closed' && t.status !== 'abandoned' && t.status !== 'failed'
+      );
+    }
+  } else {
+    // 未指定任务列表，使用原有逻辑
+    tasksToUpdate = options.all
+      ? allTasks
+      : allTasks.filter(t => t.status !== 'resolved' && t.status !== 'closed' && t.status !== 'abandoned' && t.status !== 'failed');
+
+    filteredTasks = options.all
+      ? []
+      : allTasks.filter(t => t.status === 'resolved' || t.status === 'closed' || t.status === 'abandoned' || t.status === 'failed');
+  }
 
   if (tasksToUpdate.length === 0) {
     console.log('没有需要更新的任务');
@@ -4153,45 +4227,32 @@ export async function batchUpdateTasks(
       // 从 resolved/closed 变为 open 时，增加 reopenCount
       if (newStatus === 'open' && (oldStatus === 'resolved' || oldStatus === 'closed')) {
         task.reopenCount = (task.reopenCount || 0) + 1;
-
-        // 添加 transitionNote
-        if (!task.transitionNotes) {
-          task.transitionNotes = [];
-        }
-        task.transitionNotes.push({
-          timestamp: new Date().toISOString(),
-          fromStatus: oldStatus,
-          toStatus: 'open',
-          note: `任务从 ${oldStatus} 被批量更新为 open (reopenCount: ${task.reopenCount})`,
-          author: process.env.USER || undefined,
-        });
-
-        // 添加历史记录
-        if (!task.history) {
-          task.history = [];
-        }
-        task.history.push({
-          timestamp: new Date().toISOString(),
-          action: `批量更新: ${oldStatus} → open (reopenCount: ${task.reopenCount})`,
-          field: 'status',
-          oldValue: oldStatus,
-          newValue: 'open',
-          reason: 'batch-update 命令触发，状态从 resolved/closed 重开为 open',
-        });
-      } else {
-        // 普通状态变更，只添加历史记录
-        if (!task.history) {
-          task.history = [];
-        }
-        task.history.push({
-          timestamp: new Date().toISOString(),
-          action: `批量更新: ${oldStatus} → ${newStatus}`,
-          field: 'status',
-          oldValue: oldStatus,
-          newValue: newStatus,
-          reason: 'batch-update 命令触发状态变更',
-        });
       }
+
+      // 添加 transitionNote（使用用户提供的 changeNote）
+      if (!task.transitionNotes) {
+        task.transitionNotes = [];
+      }
+      task.transitionNotes.push({
+        timestamp: new Date().toISOString(),
+        fromStatus: oldStatus,
+        toStatus: newStatus,
+        note: options.changeNote!,
+        author: process.env.USER || 'batch-update',
+      });
+
+      // 添加历史记录
+      if (!task.history) {
+        task.history = [];
+      }
+      task.history.push({
+        timestamp: new Date().toISOString(),
+        action: `批量更新: ${oldStatus} → ${newStatus}`,
+        field: 'status',
+        oldValue: oldStatus,
+        newValue: newStatus,
+        reason: options.changeNote!,
+      });
 
       task.status = newStatus;
       updated = true;
@@ -4199,7 +4260,7 @@ export async function batchUpdateTasks(
     if (options.priority) {
       const newPriority = options.priority as TaskPriority;
 
-      // 记录优先级变更历史
+      // 记录优先级变更历史和 transitionNote
       if (oldPriority !== newPriority) {
         if (!task.history) {
           task.history = [];
@@ -4210,7 +4271,19 @@ export async function batchUpdateTasks(
           field: 'priority',
           oldValue: oldPriority,
           newValue: newPriority,
-          reason: 'batch-update 命令触发优先级变更',
+          reason: options.changeNote!,
+        });
+
+        // 添加 transitionNote（使用用户提供的 changeNote）
+        if (!task.transitionNotes) {
+          task.transitionNotes = [];
+        }
+        task.transitionNotes.push({
+          timestamp: new Date().toISOString(),
+          fromStatus: task.status,
+          toStatus: task.status,
+          note: `优先级变更: ${oldPriority} → ${newPriority} | ${options.changeNote!}`,
+          author: process.env.USER || 'batch-update',
         });
       }
 
@@ -4246,6 +4319,7 @@ export async function batchUpdateTasks(
       priority: options.priority,
       all: options.all,
       yes: options.yes,
+      changeNote: options.changeNote,
     },
     tasks: taskChanges,
     summary: {
