@@ -1198,14 +1198,9 @@ describe('validateStatusTransition', () => {
     expect(validateStatusTransition('wait_qa', 'wait_evaluation')).toEqual({ valid: true });
   });
 
-  it('allows wait_evaluation → wait_complete', async () => {
+  it('allows wait_evaluation → resolved', async () => {
     const { validateStatusTransition } = await taskUtils();
-    expect(validateStatusTransition('wait_evaluation', 'wait_complete')).toEqual({ valid: true });
-  });
-
-  it('allows wait_complete → resolved', async () => {
-    const { validateStatusTransition } = await taskUtils();
-    expect(validateStatusTransition('wait_complete', 'resolved')).toEqual({ valid: true });
+    expect(validateStatusTransition('wait_evaluation', 'resolved')).toEqual({ valid: true });
   });
 
   it('allows resolved → open (reopen)', async () => {

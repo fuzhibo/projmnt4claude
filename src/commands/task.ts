@@ -899,7 +899,7 @@ function displayTasksGrouped(
   }
 
   // 定义分组排序顺序
-  const statusOrder = ['open', 'in_progress', 'wait_complete', 'resolved', 'closed', 'abandoned', 'failed'];
+  const statusOrder = ['open', 'in_progress', 'wait_evaluation', 'resolved', 'closed', 'abandoned', 'failed'];
   const priorityOrder = ['P0', 'P1', 'P2', 'P3', 'Q1', 'Q2', 'Q3', 'Q4'];
 
   // 获取排序后的分组键
@@ -1134,7 +1134,7 @@ function getStatusIcon(status: TaskStatus): string {
     in_progress: '🔄',
     wait_review: '👀',
     wait_qa: '🧪',
-    wait_complete: '⏳',
+    wait_evaluation: '⏳',
     resolved: '✅',
     closed: '⚫',
     abandoned: '❌',
@@ -1229,7 +1229,7 @@ function showTaskPanel(
     abandoned: '已放弃',
     wait_review: '待审查',
     wait_qa: '待测试',
-    wait_complete: '待完成',
+    wait_evaluation: '待评估',
   };
   const priorityMap: Record<string, string> = {
     P0: 'P0紧急',
@@ -1350,7 +1350,7 @@ function showTaskPanel(
       for (const subId of task.subtaskIds) {
         const sub = readTaskMeta(subId, cwd);
         if (sub && (sub.status === 'resolved' || sub.status === 'closed')) doneCount++;
-        else if (sub && (sub.status === 'in_progress' || sub.status === 'wait_review' || sub.status === 'wait_qa' || sub.status === 'wait_evaluation' || sub.status === 'wait_complete')) activeCount++;
+        else if (sub && (sub.status === 'in_progress' || sub.status === 'wait_review' || sub.status === 'wait_qa' || sub.status === 'wait_evaluation')) activeCount++;
       }
       const pendingCount = task.subtaskIds.length - doneCount - activeCount;
       const parts: string[] = [];
@@ -1401,8 +1401,8 @@ function showTaskPanel(
 
 /**
  * 将连续的状态变更分组为流式显示
- * 例如: [in_progress→wait_review, wait_review→wait_qa, wait_qa→wait_complete]
- * 合并为: in_progress → wait_review → wait_qa → wait_complete
+ * 例如: [in_progress→wait_review, wait_review→wait_qa, wait_qa→wait_evaluation]
+ * 合并为: in_progress → wait_review → wait_qa → wait_evaluation
  */
 interface HistoryGroup {
   type: 'status-flow' | 'single';
@@ -1990,8 +1990,8 @@ export async function updateTask(
 /**
  * 提交任务等待验证
  *
- * 将任务状态设置为 wait_complete，等待质量门禁验证
- * 等价于: projmnt4claude task update TASK-xxx --status wait_complete
+ * 将任务状态设置为 wait_evaluation，等待质量门禁验证
+ * 等价于: projmnt4claude task update TASK-xxx --status wait_evaluation
  */
 export async function submitTask(
   taskId: string,
@@ -2020,16 +2020,16 @@ export async function submitTask(
 
   const oldStatus = task.status;
 
-  // 更新状态为 wait_complete
-  task.status = 'wait_complete' as TaskStatus;
+  // 更新状态为 wait_evaluation
+  task.status = 'wait_evaluation';
 
   // 记录历史
   const historyEntry: TaskHistoryEntry = {
     timestamp: new Date().toISOString(),
-    action: `提交等待验证: ${oldStatus} -> wait_complete`,
+    action: `提交等待验证: ${oldStatus} -> wait_evaluation`,
     field: 'status',
     oldValue: oldStatus,
-    newValue: 'wait_complete',
+    newValue: 'wait_evaluation',
     user: process.env.USER || undefined,
   };
 
@@ -2051,7 +2051,7 @@ export async function submitTask(
   console.log('');
   console.log(`任务ID: ${taskId}`);
   console.log(`标题: ${task.title}`);
-  console.log(`状态: ${oldStatus} → wait_complete`);
+  console.log(`状态: ${oldStatus} → wait_evaluation`);
   console.log('');
   console.log('验证将通过以下方式自动执行:');
   console.log('  1. Claude Code hooks 在后续操作时触发');
@@ -2062,7 +2062,7 @@ export async function submitTask(
 }
 
 /**
- * 验证 wait_complete 状态的任务
+ * 验证 wait_evaluation 状态的任务
  *
  * 执行验证并更新任务状态
  */
@@ -2088,8 +2088,8 @@ export async function validateTask(
     process.exit(1);
   }
 
-  if (task.status !== 'wait_complete') {
-    console.error(`错误: 任务状态为 '${task.status}'，只有 wait_complete 状态的任务可以验证`);
+  if (task.status !== 'wait_evaluation') {
+    console.error(`错误: 任务状态为 '${task.status}'，只有 wait_evaluation 状态的任务可以验证`);
     console.log('');
     console.log('提示: 先提交任务等待验证');
     console.log(`      projmnt4claude task submit ${taskId}`);
@@ -2121,7 +2121,7 @@ export async function validateTask(
         timestamp: new Date().toISOString(),
         action: '验证通过，状态更新为 resolved',
         field: 'status',
-        oldValue: 'wait_complete',
+        oldValue: 'wait_evaluation',
         newValue: 'resolved',
         user: process.env.USER || undefined,
       };
@@ -2441,7 +2441,7 @@ function formatStatus(status: TaskStatus | string): string {
     in_progress: '🔵 进行中',
     wait_review: '👀 待审查',
     wait_qa: '🧪 待测试',
-    wait_complete: '⏳ 待完成',
+    wait_evaluation: '⏳ 待评估',
     resolved: '✅ 已解决',
     closed: '⚫ 已关闭',
     abandoned: '❌ 已放弃',
@@ -3740,7 +3740,7 @@ export function countTasks(
     console.log('');
 
     // 定义排序顺序
-    const statusOrder = ['open', 'in_progress', 'wait_complete', 'resolved', 'closed', 'abandoned', 'failed'];
+    const statusOrder = ['open', 'in_progress', 'wait_evaluation', 'resolved', 'closed', 'abandoned', 'failed'];
     const priorityOrder = ['P0', 'P1', 'P2', 'P3', 'Q1', 'Q2', 'Q3', 'Q4'];
 
     let sortedKeys: string[];
@@ -3824,7 +3824,7 @@ export function countTasks(
 
   // 按状态统计
   console.log('📋 按状态:');
-  const statusOrder = ['open', 'in_progress', 'wait_complete', 'resolved', 'closed', 'abandoned', 'failed'];
+  const statusOrder = ['open', 'in_progress', 'wait_evaluation', 'resolved', 'closed', 'abandoned', 'failed'];
   for (const status of statusOrder) {
     const count = statusCounts.get(status as TaskStatus) || 0;
     if (count > 0 || status === 'open' || status === 'in_progress' || status === 'resolved') {
@@ -3881,7 +3881,7 @@ export function countTasks(
  * 命令: task status
  *
  * 在统计输出末尾追加提示模块，检测:
- * - wait_complete 任务（待验证确认）
+ * - wait_evaluation 任务（待验证确认）
  * - pending 人工验证检查点
  * - in_progress 中断任务（pipeline 中间状态残留）
  */
@@ -3903,15 +3903,15 @@ export function showStatus(
   const allTasks = getAllTasks(cwd);
   const hints: string[] = [];
 
-  // 1. 检测 wait_complete 任务
-  const waitCompleteTasks = allTasks.filter(t => t.status === 'wait_complete');
-  if (waitCompleteTasks.length > 0) {
-    hints.push(`⏳ ${waitCompleteTasks.length} 个任务处于 wait_complete 状态，等待验证:`);
-    for (const t of waitCompleteTasks.slice(0, 5)) {
+  // 1. 检测 wait_evaluation 任务
+  const waitEvaluationTasks = allTasks.filter(t => t.status === 'wait_evaluation');
+  if (waitEvaluationTasks.length > 0) {
+    hints.push(`⏳ ${waitEvaluationTasks.length} 个任务处于 wait_evaluation 状态，等待验证:`);
+    for (const t of waitEvaluationTasks.slice(0, 5)) {
       hints.push(`   - ${t.id}: ${t.title.substring(0, 40)}`);
     }
-    if (waitCompleteTasks.length > 5) {
-      hints.push(`   ... 还有 ${waitCompleteTasks.length - 5} 个`);
+    if (waitEvaluationTasks.length > 5) {
+      hints.push(`   ... 还有 ${waitEvaluationTasks.length - 5} 个`);
     }
     hints.push('   💡 运行 task validate <id> 验证任务');
   }

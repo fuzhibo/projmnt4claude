@@ -291,8 +291,8 @@ describe('checkMissingPipelineEvidence', () => {
     expect(result!.details?.missingReports).toContain('qa-report.md');
   });
 
-  test('detects wait_complete with missing review-report', () => {
-    const task = createTask({ status: 'wait_complete' });
+  test('detects wait_evaluation with missing review-report', () => {
+    const task = createTask({ status: 'wait_evaluation' });
     setupProjectWithTask(tmpDir, task);
     createReportDir(tmpDir, task.id);
 

@@ -69,8 +69,7 @@ describe('Pipeline Status Constants', () => {
     expect(PIPELINE_INTERMEDIATE_STATUSES).toContain('wait_review');
     expect(PIPELINE_INTERMEDIATE_STATUSES).toContain('wait_qa');
     expect(PIPELINE_INTERMEDIATE_STATUSES).toContain('wait_evaluation');
-    expect(PIPELINE_INTERMEDIATE_STATUSES).toContain('wait_complete');
-    expect(PIPELINE_INTERMEDIATE_STATUSES).toHaveLength(4);
+    expect(PIPELINE_INTERMEDIATE_STATUSES).toHaveLength(3);
   });
 
   test('PIPELINE_STATUS_MIGRATION_MAP should map all intermediate statuses', () => {
@@ -98,8 +97,8 @@ describe('Pipeline Status Constants', () => {
     expect(PIPELINE_STATUS_MIGRATION_MAP['wait_qa']).toBe('in_progress');
   });
 
-  test('wait_complete should map to resolved', () => {
-    expect(PIPELINE_STATUS_MIGRATION_MAP['wait_complete']).toBe('resolved');
+  test('wait_complete should map to wait_evaluation', () => {
+    expect(PIPELINE_STATUS_MIGRATION_MAP['wait_complete']).toBe('wait_evaluation');
   });
 
   test('wait_evaluation should map to wait_qa', () => {
@@ -284,9 +283,9 @@ describe('applySchemaMigrations', () => {
     expect(result.details).toContain('status: wait_qa → in_progress');
   });
 
-  test('v2 migration should migrate wait_complete to resolved', () => {
+  test('v2 migration should migrate wait_complete to wait_evaluation', () => {
     const task = createTestTask({
-      status: 'wait_complete',
+      status: 'wait_complete' as any,
       reopenCount: 0,
       requirementHistory: [],
       schemaVersion: 1,
@@ -294,8 +293,8 @@ describe('applySchemaMigrations', () => {
 
     const result = applySchemaMigrations(task);
 
-    expect(task.status).toBe('resolved');
-    expect(result.details).toContain('status: wait_complete → resolved');
+    expect(task.status).toBe('wait_evaluation');
+    expect(result.details).toContain('status: wait_complete → wait_evaluation');
   });
 
   test('v2 migration should migrate needs_human to open', () => {
@@ -514,7 +513,7 @@ describe('applySchemaMigrations', () => {
   });
 
   test('v4 migration should set resumeAction for pipeline intermediate status', () => {
-    const intermediateStatuses: string[] = ['wait_review', 'wait_qa', 'wait_complete', 'needs_human'];
+    const intermediateStatuses: string[] = ['wait_review', 'wait_qa', 'wait_evaluation', 'needs_human'];
     for (const status of intermediateStatuses) {
       const task = createTestTask({
         status: status as any,
@@ -870,8 +869,8 @@ describe('Individual Migration Steps', () => {
     expect(task.resumeAction).toBe('resume_pipeline');
   });
 
-  test('v4 migration: should set resumeAction for wait_complete', () => {
-    const task = createTestTask({ status: 'wait_complete' });
+  test('v4 migration: should set resumeAction for wait_evaluation', () => {
+    const task = createTestTask({ status: 'wait_evaluation' });
     const v4 = SCHEMA_MIGRATIONS.find(m => m.version === 4)!;
     const result = v4.migrate(task);
     expect(task.resumeAction).toBe('resume_pipeline');

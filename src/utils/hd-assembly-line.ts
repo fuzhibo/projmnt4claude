@@ -1470,7 +1470,6 @@ export class AssemblyLine {
     closed: 'skip',
     failed: 'skip',
     abandoned: 'skip',
-    wait_complete: 'skip',
   };
 
   /**

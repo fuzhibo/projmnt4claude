@@ -145,7 +145,7 @@ export function matchesIgnorePattern(taskId: string, patterns: string[]): boolea
 /**
  * 有效的任务状态值
  */
-const VALID_STATUSES: TaskStatus[] = ['open', 'in_progress', 'wait_review', 'wait_qa', 'wait_evaluation', 'wait_complete', 'resolved', 'closed', 'abandoned', 'failed'];
+const VALID_STATUSES: TaskStatus[] = ['open', 'in_progress', 'wait_review', 'wait_qa', 'wait_evaluation', 'resolved', 'closed', 'abandoned', 'failed'];
 
 /**
  * 有效的任务类型
@@ -350,7 +350,7 @@ export const SCHEMA_MIGRATIONS: SchemaMigrationStep[] = [
 
       // 初始化 resumeAction（仅对 pipeline 中间状态的任务设置）
       if (task.resumeAction === undefined) {
-        const intermediateStatuses: string[] = ['wait_review', 'wait_qa', 'wait_complete', 'needs_human'];
+        const intermediateStatuses: string[] = ['wait_review', 'wait_qa', 'wait_evaluation', 'needs_human'];
         if (intermediateStatuses.includes(task.status)) {
           task.resumeAction = 'resume_pipeline';
           details.push(`添加 resumeAction: resume_pipeline (status=${task.status})`);
@@ -817,7 +817,7 @@ const REPORT_PHASE_STATUS_MAP: Array<{
     reportFile: 'review-report.md',
     phase: 'evaluation',
     impliesStatus: 'resolved',
-    prerequisiteStatuses: ['wait_qa', 'wait_evaluation', 'wait_complete'],
+    prerequisiteStatuses: ['wait_qa', 'wait_evaluation'],
   },
 ];
 
@@ -982,9 +982,6 @@ export function checkMissingPipelineEvidence(
     ],
     wait_evaluation: [
       { reportFile: 'qa-report.md', phase: 'qa_verification' },
-    ],
-    wait_complete: [
-      { reportFile: 'review-report.md', phase: 'evaluation' },
     ],
   };
 
@@ -1189,7 +1186,7 @@ ${layer1Section}
 
 严格按照以下 JSON 格式输出（不要输出其他内容）:
 {
-  "inferredStatus": "状态值，必须是: open, in_progress, wait_review, wait_qa, wait_evaluation, wait_complete, resolved, closed, abandoned, failed",
+  "inferredStatus": "状态值，必须是: open, in_progress, wait_review, wait_qa, wait_evaluation, resolved, closed, abandoned, failed",
   "confidence": 0.0到1.0之间的置信度,
   "reasoning": "推断依据的简短说明",
   "suggestion": "修复建议"
@@ -1244,7 +1241,7 @@ export async function runAIStatusInference(
     // 验证 inferredStatus 是合法值
     const validStatuses: TaskStatus[] = [
       'open', 'in_progress', 'wait_review', 'wait_qa',
-      'wait_evaluation', 'wait_complete', 'resolved', 'closed', 'abandoned', 'failed',
+      'wait_evaluation', 'resolved', 'closed', 'abandoned', 'failed',
     ];
     if (!validStatuses.includes(parsed.inferredStatus)) {
       return null;
@@ -1374,7 +1371,6 @@ export async function analyzeProject(
       wait_review: 0,
       wait_qa: 0,
       wait_evaluation: 0,
-      wait_complete: 0,
       resolved: 0,
       closed: 0,
       abandoned: 0,
@@ -1559,7 +1555,7 @@ export async function analyzeProject(
 
     // ========== Schema 版本化检测 ==========
 
-    // 检测 pipeline 中间状态（wait_review/wait_qa/wait_complete/needs_human）
+    // 检测 pipeline 中间状态（wait_review/wait_qa/wait_evaluation/needs_human）
     // 这些状态仅在 harness pipeline 执行期间使用，旧任务停留在此表示 pipeline 中断或版本过旧
     if (PIPELINE_INTERMEDIATE_STATUSES.includes(task.status)) {
       const targetStatus = PIPELINE_STATUS_MIGRATION_MAP[task.status];
@@ -2005,9 +2001,7 @@ export async function analyzeProject(
             'in_progress→wait_review': '提交代码审查',
             'wait_review→wait_qa': '审查通过，进入QA',
             'wait_qa→wait_evaluation': 'QA通过，等待评估',
-            'wait_evaluation→wait_complete': '评估通过，等待完成确认',
-            'wait_qa→wait_complete': 'QA通过，等待完成确认',
-            'wait_complete→resolved': '任务完成',
+            'wait_evaluation→resolved': '评估通过，任务完成',
             'open→closed': '关闭任务',
             'in_progress→resolved': '直接标记完成',
             'resolved→reopened': '重新打开任务',

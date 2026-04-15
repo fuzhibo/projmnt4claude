@@ -285,8 +285,7 @@ export function getTasksByRange(
         t.status === 'in_progress' ||
         t.status === 'wait_review' ||
         t.status === 'wait_qa' ||
-        t.status === 'wait_evaluation' ||
-        t.status === 'wait_complete',
+        t.status === 'wait_evaluation'
       );
     }
 

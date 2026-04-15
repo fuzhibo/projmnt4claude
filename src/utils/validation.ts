@@ -234,10 +234,10 @@ export function getTasksByStatus(
 }
 
 /**
- * 获取所有 wait_complete 状态的任务
+ * 获取所有 wait_evaluation 状态的任务
  */
-export function getWaitCompleteTasks(cwd: string = process.cwd()): TaskMeta[] {
-  return getTasksByStatus('wait_complete', cwd);
+export function getWaitEvaluationTasks(cwd: string = process.cwd()): TaskMeta[] {
+  return getTasksByStatus('wait_evaluation', cwd);
 }
 
 /**

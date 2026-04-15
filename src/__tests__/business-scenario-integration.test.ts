@@ -472,7 +472,7 @@ describe('Scenario 2: Harness Full Pipeline', () => {
   });
 
   test('S2.8: PIPELINE_INTERMEDIATE_STATUSES and migration map are consistent', () => {
-    expect(PIPELINE_INTERMEDIATE_STATUSES).toEqual(['wait_review', 'wait_qa', 'wait_evaluation', 'wait_complete']);
+    expect(PIPELINE_INTERMEDIATE_STATUSES).toEqual(['wait_review', 'wait_qa', 'wait_evaluation']);
     // Migration map should map intermediate statuses to valid states
     for (const status of PIPELINE_INTERMEDIATE_STATUSES) {
       const mapped = PIPELINE_STATUS_MIGRATION_MAP[status];

@@ -40,7 +40,6 @@ export type TaskStatus =
   | 'wait_review'   // 等待代码审核
   | 'wait_qa'           // 等待 QA 验证（可以是 AI 或 Human）
   | 'wait_evaluation'   // 等待评估（QA 通过后，等待最终评估）
-  | 'wait_complete'     // 等待最终确认（所有检查点完成）
   | 'resolved'      // 已解决
   | 'closed'        // 已关闭
   | 'abandoned'     // 已放弃
@@ -463,7 +462,6 @@ export const PIPELINE_INTERMEDIATE_STATUSES: TaskStatus[] = [
   'wait_review',
   'wait_qa',
   'wait_evaluation',
-  'wait_complete',
 ];
 
 /**
@@ -476,7 +474,7 @@ export const PIPELINE_STATUS_MIGRATION_MAP: Record<string, TaskStatus> = {
   'wait_review': 'in_progress',   // 等待代码审核 → 回到开发中
   'wait_qa': 'in_progress',      // 等待 QA → 回到开发中
   'wait_evaluation': 'wait_qa',   // 等待评估 → 回退到等待 QA（无评估报告时）
-  'wait_complete': 'resolved',    // 等待最终确认 → 标记为已解决
+  'wait_complete': 'wait_evaluation',  // 等待最终确认 → 映射到 wait_evaluation
 };
 
 /**
@@ -500,7 +498,7 @@ export function normalizeStatus(status: string): TaskStatus {
     'wait_review': 'wait_review',
     'wait_qa': 'wait_qa',
     'wait_evaluation': 'wait_evaluation',
-    'wait_complete': 'wait_complete',
+    'wait_complete': 'wait_evaluation',  // 已废弃状态 → 映射到 wait_evaluation
     'resolved': 'resolved',
     'closed': 'closed',
     'abandoned': 'abandoned',

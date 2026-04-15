@@ -532,7 +532,7 @@ describe('calculateHealthScore', () => {
         parentTasks: 10,
         subtasks: 0,
         subtaskCompletionRate: 0,
-        byStatus: { open: 5, in_progress: 2, wait_review: 0, wait_qa: 0, wait_evaluation: 0, wait_complete: 0, resolved: 3, closed: 0, abandoned: 0, failed: 0 },
+        byStatus: { open: 5, in_progress: 2, wait_review: 0, wait_qa: 0, wait_evaluation: 0, resolved: 3, closed: 0, abandoned: 0, failed: 0 },
         byPriority: { P0: 0, P1: 2, P2: 5, P3: 3, Q1: 0, Q2: 0, Q3: 0, Q4: 0 },
         blocked: 0,
         stale: 0,

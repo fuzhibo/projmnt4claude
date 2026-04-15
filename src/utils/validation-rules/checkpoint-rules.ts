@@ -681,7 +681,7 @@ export const metaJsonValid: ValidationRule = {
 
     // 状态值校验
     const validStatuses = [
-      'open', 'in_progress', 'wait_review', 'wait_qa', 'wait_complete',
+      'open', 'in_progress', 'wait_review', 'wait_qa', 'wait_evaluation',
       'resolved', 'closed', 'abandoned', 'failed',
     ];
     const status = obj['status'];
