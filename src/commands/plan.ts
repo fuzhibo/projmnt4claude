@@ -18,6 +18,7 @@ import type { TaskMeta, TaskPriority } from '../types/task';
 import { SEPARATOR_WIDTH } from '../utils/format';
 import { createLogger, type InstrumentationRecord } from '../utils/logger';
 import { extractAffectedFiles } from '../utils/quality-gate';
+import { runQualityGate, type QualityGateValidationResult } from '../utils/quality-gate-registry';
 import { classifyFileToLayer, AIMetadataAssistant, type ArchitectureLayer } from '../utils/ai-metadata';
 import { withAIEnhancement } from '../utils/ai-helpers';
 import { inferDependenciesBatch, type InferredDependency } from '../utils/dependency-engine';
@@ -818,7 +819,7 @@ export async function clearPlanCmd(force: boolean = false, cwd: string = process
  * @param options.json - JSON 格式输出
  */
 export async function recommendPlan(
-  options: { query?: string; nonInteractive?: boolean; json?: boolean; all?: boolean; smart?: boolean; strictSubtaskCoverage?: boolean } = {},
+  options: { query?: string; nonInteractive?: boolean; json?: boolean; all?: boolean; smart?: boolean; strictSubtaskCoverage?: boolean; requireQuality?: boolean } = {},
   cwd: string = process.cwd()
 ): Promise<void> {
   if (!isInitialized(cwd)) {
@@ -942,6 +943,80 @@ export async function recommendPlan(
       console.log(`已排除 ${beforeExecFilter - filteredTasks.length} 个依赖未完成或不可执行的任务`);
     }
   }
+
+  // ========== 质量门禁检查 (plan_recommend 阶段) ==========
+  if (options.requireQuality !== false && filteredTasks.length > 0) {
+    console.log('正在执行质量门禁检查...');
+    const qualityGateResults: QualityGateValidationResult[] = [];
+    let passedCount = 0;
+    let failedCount = 0;
+    const failedTasks: string[] = [];
+
+    for (const task of filteredTasks) {
+      const result = runQualityGate(task, 'plan_recommend');
+      qualityGateResults.push(result);
+      if (result.passed) {
+        passedCount++;
+      } else {
+        failedCount++;
+        failedTasks.push(task.id);
+      }
+    }
+
+    // 显示质量门禁检查结果
+    if (failedCount > 0) {
+      console.log('');
+      console.log('━'.repeat(SEPARATOR_WIDTH));
+      console.log('🚦 质量门禁检查结果 (plan_recommend 阶段)');
+      console.log('━'.repeat(SEPARATOR_WIDTH));
+      console.log(`总任务: ${filteredTasks.length} | ✅ 通过: ${passedCount} | ❌ 未通过: ${failedCount}`);
+      console.log('');
+
+      // 显示未通过的任务及其违规信息
+      for (const result of qualityGateResults) {
+        if (!result.passed) {
+          console.log(`❌ ${result.taskId}:`);
+          for (const error of result.errors) {
+            console.log(`   • ${error.message}`);
+          }
+          if (result.warnings.length > 0) {
+            console.log(`   ⚠️ 警告:`);
+            for (const warning of result.warnings) {
+              console.log(`      • ${warning.message}`);
+            }
+          }
+        }
+      }
+      console.log('━'.repeat(SEPARATOR_WIDTH));
+      console.log('');
+
+      // 非交互模式下直接退出
+      if (options.nonInteractive || !process.stdout.isTTY) {
+        console.error('❌ 质量门禁检查未通过，中止计划推荐');
+        console.error(`   未通过任务: ${failedTasks.join(', ')}`);
+        console.error('   使用 --no-quality-gate 跳过质量检查（不推荐）');
+        process.exit(1);
+      }
+
+      // 交互模式下询问用户
+      const { continueAnyway } = await prompts({
+        type: 'confirm',
+        name: 'continueAnyway',
+        message: `${failedCount} 个任务未通过质量门禁，是否继续？`,
+        initial: false,
+      });
+
+      if (!continueAnyway) {
+        console.log('已取消');
+        return;
+      }
+      console.log('');
+    } else {
+      console.log(`✅ 质量门禁检查通过 (${passedCount}/${filteredTasks.length})`);
+      console.log('');
+    }
+  }
+  // ========== 质量门禁检查结束 ==========
 
   if (filteredTasks.length === 0) {
     const emptyResult = {

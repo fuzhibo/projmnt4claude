@@ -407,6 +407,26 @@ export const SCHEMA_MIGRATIONS: SchemaMigrationStep[] = [
       return { changed, details };
     },
   },
+  {
+    version: 6,
+    name: 'checkpoint_policy_field',
+    description: '添加 checkpointPolicy 字段（根据任务类型和优先级自动推断）',
+    migrate(task: TaskMeta): { changed: boolean; details: string[] } {
+      const details: string[] = [];
+      let changed = false;
+
+      // 如果任务没有 checkpointPolicy 字段，自动推断并添加
+      if (task.checkpointPolicy === undefined) {
+        const { inferCheckpointPolicy } = require('../types/task.js');
+        const inferredPolicy = inferCheckpointPolicy(task.type, task.priority);
+        task.checkpointPolicy = inferredPolicy;
+        details.push(`添加 checkpointPolicy: ${inferredPolicy} (基于 ${task.type}/${task.priority} 推断)`);
+        changed = true;
+      }
+
+      return { changed, details };
+    },
+  },
 ];
 
 /**

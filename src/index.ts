@@ -628,6 +628,8 @@ program
   .option('--smart', '启用 AI 语义依赖推断 (仅 recommend, Layer3 增强)')
   .option('--all', '显示全部状态任务，默认仅推荐 open (仅 recommend)')
   .option('--strict-subtask-coverage', '严格子任务覆盖检测：发现缺失子任务时中止推荐 (仅 recommend)')
+  .option('--require-quality', '启用质量门禁检查，过滤低质量任务 (仅 recommend)')
+  .option('--no-quality-gate', '禁用质量门禁检查 (仅 recommend)')
   .action(async (action, id, options) => {
     requireInit();
     switch (action) {
@@ -659,6 +661,7 @@ program
           all: options.all,
           smart: options.smart,
           strictSubtaskCoverage: options.strictSubtaskCoverage,
+          requireQuality: options.qualityGate === false ? false : options.requireQuality || true,
         });
         break;
       default:

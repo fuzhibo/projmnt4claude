@@ -2145,7 +2145,7 @@ export async function validateTask(
       timestamp: new Date().toISOString(),
       action: '验证失败，返回开发状态',
       field: 'status',
-      oldValue: 'wait_complete',
+      oldValue: 'wait_evaluation',
       newValue: 'in_progress',
       reason: result.errors.map(e => e.message).join('; '),
       user: process.env.USER || undefined,

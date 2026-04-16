@@ -744,14 +744,14 @@ export function validateCheckpoints(task: TaskMeta): ValidationViolation[] {
       violations.push({
         ruleId: 'checkpoint-array-not-empty',
         severity: 'error',
-        message: `${task.type}/${task.priority} 任务配置为必须包含检查点（策略: ${policy}），当前: 0 个检查点`,
+        message: `${task.type}/${task.priority} 任务必须包含至少 2 个结构化检查点`,
       });
     } else if (policy === 'optional') {
       // 'optional' 策略：检查点可选，仅给出警告
       violations.push({
         ruleId: 'checkpoint-array-empty',
         severity: 'warning',
-        message: `任务检查点数组为空（策略: ${policy}），建议添加检查点以跟踪进度`,
+        message: `任务检查点数组为空，建议添加检查点以跟踪进度`,
       });
     }
     return violations;
@@ -909,8 +909,8 @@ export function evaluateCheckpoints(
 
   if (!checkpoints || checkpoints.length === 0) {
     // 没有检查点时的评分取决于策略
-    if (policy === 'none') {
-      // 'none' 策略：明确声明无需检查点，不扣分
+    if (policy === 'none' || policy === undefined) {
+      // 'none' 策略或策略未指定：不扣分（向后兼容）
       return { score: 100, deductions };
     } else if (policy === 'required') {
       // 'required' 策略：必须配置检查点但没配置，严重扣分
@@ -924,7 +924,7 @@ export function evaluateCheckpoints(
       });
       return { score: Math.max(0, score), deductions };
     } else {
-      // 'optional' 策略或其他：检查点可选，轻微扣分
+      // 'optional' 策略：检查点可选，轻微扣分作为建议
       const deduction = -10;
       score += deduction;
       deductions.push({

@@ -408,8 +408,8 @@ export class AssemblyLine {
           this.savePhaseCheckpoint(taskId, 'development', state);
         } else {
           // Skip development - rebuild prerequisite data from prevRecord
-          if (prevRecord?.devReport) {
-            devReport = prevRecord.devReport;
+          devReport = prevRecord?.devReport;
+          if (devReport) {
             record.devReport = devReport;
             addTimeline('dev_completed', `[恢复] 复用前次开发结果: ${devReport.status}`, { resumed: true, phase: resumePhase });
             console.log(`   ⏩ 跳过开发阶段（已有完成报告）`);
@@ -488,8 +488,8 @@ export class AssemblyLine {
           this.savePhaseCheckpoint(taskId, 'code_review', state);
         } else {
           // Skip code review - rebuild prerequisite data from prevRecord
-          if (prevRecord?.codeReviewVerdict) {
-            codeReviewVerdict = prevRecord.codeReviewVerdict;
+          codeReviewVerdict = prevRecord?.codeReviewVerdict;
+          if (codeReviewVerdict) {
             record.codeReviewVerdict = codeReviewVerdict;
             addTimeline('code_review_completed', `[恢复] 复用前次代码审核结果: ${codeReviewVerdict.result}`, { resumed: true });
             console.log(`   ⏩ 跳过代码审核阶段（已有完成报告）`);
@@ -572,8 +572,8 @@ export class AssemblyLine {
           this.savePhaseCheckpoint(taskId, 'qa', state);
         } else {
           // Skip QA - rebuild prerequisite data from prevRecord
-          if (prevRecord?.qaVerdict) {
-            qaVerdict = prevRecord.qaVerdict;
+          qaVerdict = prevRecord?.qaVerdict;
+          if (qaVerdict) {
             record.qaVerdict = qaVerdict;
             addTimeline('qa_completed', `[恢复] 复用前次QA结果: ${qaVerdict.result}`, { resumed: true });
             console.log(`   ⏩ 跳过QA验证阶段（已有完成报告）`);

@@ -242,6 +242,9 @@ export async function createIsolatedTestEnv(
  * 清除所有测试数据，但保留环境结构
  * 适用于需要在同一测试中重置状态的场景
  *
+ * @param env - 隔离测试环境上下文，必须是有效的 IsolatedTestEnv 对象
+ * @throws {TypeError} 当 env 为 null/undefined 或缺少 reset 方法时抛出
+ *
  * @example
  * ```typescript
  * it('should handle multiple tasks', async () => {
@@ -256,6 +259,31 @@ export async function createIsolatedTestEnv(
  * ```
  */
 export function resetTestEnv(env: IsolatedTestEnv): void {
+  // 参数存在性验证
+  if (env === null || env === undefined) {
+    throw new TypeError(
+      'resetTestEnv: 参数 env 不能为 null 或 undefined。' +
+      '请确保传入有效的 IsolatedTestEnv 对象（通过 createIsolatedTestEnv 创建）。'
+    );
+  }
+
+  // 参数类型验证
+  if (typeof env !== 'object') {
+    throw new TypeError(
+      `resetTestEnv: 参数 env 必须是对象类型，但收到 ${typeof env}。` +
+      '请确保传入有效的 IsolatedTestEnv 对象。'
+    );
+  }
+
+  // 必要属性验证
+  if (typeof env.reset !== 'function') {
+    throw new TypeError(
+      'resetTestEnv: 参数 env 必须包含 reset 方法。' +
+      '请确保传入通过 createIsolatedTestEnv 创建的有效 IsolatedTestEnv 对象。'
+    );
+  }
+
+  // 执行重置
   env.reset();
 }
 

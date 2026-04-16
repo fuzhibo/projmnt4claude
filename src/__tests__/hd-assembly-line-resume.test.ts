@@ -396,3 +396,142 @@ describe('AssemblyLine.validatePrerequisites', () => {
     expect(assemblyLine.validatePrerequisites(taskId, 'code_review')).toBe(false);
   });
 });
+
+// ============================================================
+// 恢复场景空值访问保护测试
+// 确保 prevRecord 存在但缺少字段时不会崩溃
+// ============================================================
+
+describe('AssemblyLine.executeTask - resume with missing fields', () => {
+  let tmpDir: string;
+  let assemblyLine: AssemblyLine;
+  const taskId = 'TEST-TASK-RESUME-001';
+
+  beforeEach(() => {
+    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'resume-null-test-'));
+  });
+
+  afterEach(() => {
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  test('should handle prevRecord with devReport but missing codeReviewVerdict', async () => {
+    const config = createTestConfig(tmpDir);
+    config.dryRun = true; // Use dryRun to avoid actual agent calls
+    assemblyLine = new AssemblyLine(config);
+
+    // Setup state with a record that has devReport but no codeReviewVerdict
+    // This simulates: development completed, code_review not executed
+    const state = createDefaultRuntimeState(config);
+    state.records = [{
+      taskId,
+      finalStatus: 'wait_review' as TaskStatus,
+      devReport: {
+        taskId,
+        status: 'success',
+        claudeOutput: 'Development completed',
+        evidence: ['src/test.ts'],
+        changes: ['src/test.ts'],
+        duration: 1000,
+        checkpointsCompleted: ['CP-1'],
+        startTime: new Date().toISOString(),
+        endTime: new Date().toISOString(),
+      },
+      // codeReviewVerdict is intentionally missing to simulate the bug scenario
+      codeReviewVerdict: undefined,
+      // Satisfy TypeScript with minimal required fields
+      task: { id: taskId, title: 'Test', type: 'feature', priority: 'P2', status: 'wait_review' } as any,
+      contract: { taskId, checkpoints: [] } as any,
+      retryCount: 0,
+      timeline: [],
+    }];
+
+    // Set checkpoint to development (completed)
+    state.taskPhaseCheckpoints = new Map();
+    state.taskPhaseCheckpoints.set(taskId, {
+      completedPhase: 'development',
+      completedAt: new Date().toISOString(),
+    });
+
+    // Verify the state is set up correctly
+    const prevRecord = [...state.records].reverse().find(r => r.taskId === taskId);
+    expect(prevRecord).toBeDefined();
+    expect(prevRecord?.devReport).toBeDefined();
+    expect(prevRecord?.codeReviewVerdict).toBeUndefined();
+
+    // The bug was: code would crash with "Cannot read properties of undefined (reading 'codeReviewVerdict')"
+    // With the fix, this should not throw
+    const result = assemblyLine.determineResumePhase(taskId, 'wait_review', state);
+
+    // Should determine to resume at code_review (or degrade appropriately)
+    // The key assertion is that it doesn't throw
+    expect(['code_review', 'development']).toContain(result);
+  });
+
+  test('should handle prevRecord with devReport and codeReviewVerdict but missing qaVerdict', async () => {
+    const config = createTestConfig(tmpDir);
+    config.dryRun = true;
+    assemblyLine = new AssemblyLine(config);
+
+    const state = createDefaultRuntimeState(config);
+    state.records = [{
+      taskId,
+      finalStatus: 'wait_qa' as TaskStatus,
+      devReport: {
+        taskId,
+        status: 'success',
+        claudeOutput: 'Development completed',
+        evidence: ['src/test.ts'],
+        changes: ['src/test.ts'],
+        duration: 1000,
+        checkpointsCompleted: ['CP-1'],
+        startTime: new Date().toISOString(),
+        endTime: new Date().toISOString(),
+      },
+      codeReviewVerdict: {
+        taskId,
+        result: 'PASS',
+        reason: 'Code quality is good',
+        codeQualityIssues: [],
+        failedCheckpoints: [],
+        reviewedAt: new Date().toISOString(),
+        reviewedBy: 'code_reviewer',
+      },
+      // qaVerdict is missing to simulate partial completion
+      qaVerdict: undefined,
+      // Satisfy TypeScript with minimal required fields
+      task: { id: taskId, title: 'Test', type: 'feature', priority: 'P2', status: 'wait_qa' } as any,
+      contract: { taskId, checkpoints: [] } as any,
+      retryCount: 0,
+      timeline: [],
+    }];
+
+    state.taskPhaseCheckpoints = new Map();
+    state.taskPhaseCheckpoints.set(taskId, {
+      completedPhase: 'code_review',
+      completedAt: new Date().toISOString(),
+    });
+
+    const prevRecord = [...state.records].reverse().find(r => r.taskId === taskId);
+    expect(prevRecord).toBeDefined();
+    expect(prevRecord?.devReport).toBeDefined();
+    expect(prevRecord?.codeReviewVerdict).toBeDefined();
+    expect(prevRecord?.qaVerdict).toBeUndefined();
+
+    // Should not throw
+    const result = assemblyLine.determineResumePhase(taskId, 'wait_qa', state);
+    expect(['qa', 'code_review', 'development']).toContain(result);
+  });
+
+  test('should handle empty prevRecord gracefully', async () => {
+    const config = createTestConfig(tmpDir);
+    assemblyLine = new AssemblyLine(config);
+
+    const state = createDefaultRuntimeState(config);
+    // No records
+    state.records = [];
+
+    const result = assemblyLine.determineResumePhase(taskId, 'in_progress', state);
+    expect(result).toBe('development');
+  });
+});

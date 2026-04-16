@@ -107,6 +107,36 @@ describe('resetTestEnv', () => {
     expect(pathModule.getTasksDir(env.tempDir)).toBe(env.tasksDir);
     expect(pathModule.getProjectDir(env.tempDir)).toBe(env.projectDir);
   });
+
+  describe('参数验证', () => {
+    it('当 env 为 null 时抛出 TypeError', () => {
+      expect(() => resetTestEnv(null as unknown as typeof env)).toThrow(TypeError);
+      expect(() => resetTestEnv(null as unknown as typeof env)).toThrow('不能为 null 或 undefined');
+    });
+
+    it('当 env 为 undefined 时抛出 TypeError', () => {
+      expect(() => resetTestEnv(undefined as unknown as typeof env)).toThrow(TypeError);
+      expect(() => resetTestEnv(undefined as unknown as typeof env)).toThrow('不能为 null 或 undefined');
+    });
+
+    it('当 env 不是对象时抛出 TypeError', () => {
+      expect(() => resetTestEnv('string' as unknown as typeof env)).toThrow(TypeError);
+      expect(() => resetTestEnv('string' as unknown as typeof env)).toThrow('必须是对象类型');
+      expect(() => resetTestEnv(123 as unknown as typeof env)).toThrow('必须是对象类型');
+      expect(() => resetTestEnv(true as unknown as typeof env)).toThrow('必须是对象类型');
+    });
+
+    it('当 env 缺少 reset 方法时抛出 TypeError', () => {
+      const invalidEnv = { tempDir: '/tmp', tasksDir: '/tmp/tasks' } as unknown as typeof env;
+      expect(() => resetTestEnv(invalidEnv)).toThrow(TypeError);
+      expect(() => resetTestEnv(invalidEnv)).toThrow('必须包含 reset 方法');
+    });
+
+    it('当传入有效 env 时正常工作', () => {
+      // 不应该抛出错误
+      expect(() => resetTestEnv(env)).not.toThrow();
+    });
+  });
 });
 
 describe('createTaskDir', () => {

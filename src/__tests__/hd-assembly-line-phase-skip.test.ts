@@ -688,8 +688,8 @@ describe('CP-5: prerequisite data rebuild from prevRecord', () => {
       path.resolve(__dirname, '../utils/hd-assembly-line.ts'),
       'utf-8'
     );
-    // Verify the code rebuilds devReport from prevRecord when skipping
-    expect(sourceCode).toContain('devReport = prevRecord!.devReport!');
+    // Verify the code safely rebuilds devReport from prevRecord when skipping (using optional chaining)
+    expect(sourceCode).toContain('devReport = prevRecord?.devReport');
     expect(sourceCode).toContain('record.devReport = devReport');
   });
 
@@ -698,7 +698,8 @@ describe('CP-5: prerequisite data rebuild from prevRecord', () => {
       path.resolve(__dirname, '../utils/hd-assembly-line.ts'),
       'utf-8'
     );
-    expect(sourceCode).toContain('codeReviewVerdict = prevRecord!.codeReviewVerdict!');
+    // Verify the code safely rebuilds codeReviewVerdict from prevRecord when skipping (using optional chaining)
+    expect(sourceCode).toContain('codeReviewVerdict = prevRecord?.codeReviewVerdict');
     expect(sourceCode).toContain('record.codeReviewVerdict = codeReviewVerdict');
   });
 
@@ -707,7 +708,8 @@ describe('CP-5: prerequisite data rebuild from prevRecord', () => {
       path.resolve(__dirname, '../utils/hd-assembly-line.ts'),
       'utf-8'
     );
-    expect(sourceCode).toContain('qaVerdict = prevRecord!.qaVerdict!');
+    // Verify the code safely rebuilds qaVerdict from prevRecord when skipping (using optional chaining)
+    expect(sourceCode).toContain('qaVerdict = prevRecord?.qaVerdict');
     expect(sourceCode).toContain('record.qaVerdict = qaVerdict');
   });
 

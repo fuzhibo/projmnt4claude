@@ -451,8 +451,9 @@ export class Pipeline {
  * - 3: commitHistory 字段（harness 批次 git commit SHA 追踪）
  * - 4: reopened→open 迁移 + TransitionNote + resumeAction
  * - 5: 检查点前缀自动补全（为无前缀的检查点添加规范前缀）
+ * - 6: 添加 checkpointPolicy 字段（自动推断检查点策略）
  */
-export const CURRENT_TASK_SCHEMA_VERSION = 5;
+export const CURRENT_TASK_SCHEMA_VERSION = 6;
 
 /**
  * 流水线中间状态列表
@@ -893,8 +894,8 @@ export function inferTaskPriority(title: string): TaskPriority {
  *
  * 推断规则：
  * - P0/P1 优先级：必须配置检查点 ('required')
- * - bug/feature 类型：必须配置检查点 ('required')
- * - P2/P3 的 docs/refactor 类型：检查点可选 ('optional')
+ * - P2/P3 优先级：检查点可选 ('optional')
+ * - Q1-Q4 优先级：检查点可选 ('optional')
  *
  * @param type - 任务类型
  * @param priority - 任务优先级
@@ -904,7 +905,7 @@ export function inferTaskPriority(title: string): TaskPriority {
  * ```typescript
  * inferCheckpointPolicy('bug', 'P0');     // 'required'
  * inferCheckpointPolicy('docs', 'P3');    // 'optional'
- * inferCheckpointPolicy('feature', 'P2'); // 'required'
+ * inferCheckpointPolicy('feature', 'P2'); // 'optional'
  * ```
  */
 export function inferCheckpointPolicy(
@@ -916,17 +917,7 @@ export function inferCheckpointPolicy(
     return 'required';
   }
 
-  // bug/feature 类型任务需要检查点
-  if (type === 'bug' || type === 'feature') {
-    return 'required';
-  }
-
-  // docs/refactor 类型任务检查点可选
-  if (type === 'docs' || type === 'refactor') {
-    return 'optional';
-  }
-
-  // 其他情况（如 research、test）默认为可选
+  // P2/P3 及 Q1-Q4 优先级任务检查点可选
   return 'optional';
 }
 
