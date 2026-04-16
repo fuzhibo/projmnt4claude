@@ -37,12 +37,12 @@ function createTestTask(overrides: Partial<TaskMeta> = {}): TaskMeta {
 // ============== Schema Version Constants ==============
 
 describe('Schema Version Constants', () => {
-  test('CURRENT_TASK_SCHEMA_VERSION should be 4', () => {
-    expect(CURRENT_TASK_SCHEMA_VERSION).toBe(4);
+  test('CURRENT_TASK_SCHEMA_VERSION should be 5', () => {
+    expect(CURRENT_TASK_SCHEMA_VERSION).toBe(5);
   });
 
-  test('SCHEMA_MIGRATIONS should have 4 steps', () => {
-    expect(SCHEMA_MIGRATIONS).toHaveLength(4);
+  test('SCHEMA_MIGRATIONS should have 5 steps', () => {
+    expect(SCHEMA_MIGRATIONS).toHaveLength(5);
   });
 
   test('SCHEMA_MIGRATIONS versions should be sequential starting from 1', () => {
@@ -50,6 +50,7 @@ describe('Schema Version Constants', () => {
     expect(SCHEMA_MIGRATIONS[1]!.version).toBe(2);
     expect(SCHEMA_MIGRATIONS[2]!.version).toBe(3);
     expect(SCHEMA_MIGRATIONS[3]!.version).toBe(4);
+    expect(SCHEMA_MIGRATIONS[4]!.version).toBe(5);
   });
 
   test('SCHEMA_MIGRATIONS should have required fields', () => {
@@ -132,27 +133,31 @@ describe('VerdictAction Constants', () => {
 describe('getPendingMigrations', () => {
   test('from version 0 should return all migrations', () => {
     const pending = getPendingMigrations(0);
-    expect(pending).toHaveLength(4);
+    expect(pending).toHaveLength(5);
     expect(pending[0]!.version).toBe(1);
     expect(pending[1]!.version).toBe(2);
     expect(pending[2]!.version).toBe(3);
     expect(pending[3]!.version).toBe(4);
+    expect(pending[4]!.version).toBe(5);
   });
 
-  test('from version 1 should return v2, v3, v4 migrations', () => {
+  test('from version 1 should return v2, v3, v4, v5 migrations', () => {
     const pending = getPendingMigrations(1);
-    expect(pending).toHaveLength(3);
+    expect(pending).toHaveLength(4);
     expect(pending[0]!.version).toBe(2);
     expect(pending[0]!.name).toBe('pipeline_status_and_verdict_action');
     expect(pending[1]!.version).toBe(3);
     expect(pending[2]!.version).toBe(4);
+    expect(pending[3]!.version).toBe(5);
   });
 
-  test('from version 3 should return only v4 migration', () => {
+  test('from version 3 should return v4, v5 migrations', () => {
     const pending = getPendingMigrations(3);
-    expect(pending).toHaveLength(1);
+    expect(pending).toHaveLength(2);
     expect(pending[0]!.version).toBe(4);
     expect(pending[0]!.name).toBe('reopened_to_open_and_transition_notes');
+    expect(pending[1]!.version).toBe(5);
+    expect(pending[1]!.name).toBe('checkpoint_prefix_completion');
   });
 
   test('from current version should return no migrations', () => {
@@ -896,5 +901,76 @@ describe('Individual Migration Steps', () => {
     const result = v4.migrate(task);
     // Only transitionNotes change, not status
     expect(task.status).toBe('open');
+  });
+
+  // --- v5 individual migration ---
+
+  test('v5 migration: should add prefix to checkpoints without valid prefix', () => {
+    const task = createTestTask({
+      status: 'open',
+      checkpoints: [
+        { id: 'CP-1', description: '实现用户登录功能', completed: false },
+        { id: 'CP-2', description: '验证测试通过', completed: false },
+        { id: 'CP-3', description: '部署到生产环境', completed: false },
+      ],
+    });
+    const v5 = SCHEMA_MIGRATIONS.find(m => m.version === 5)!;
+    const result = v5.migrate(task);
+    expect(result.changed).toBe(true);
+    expect(task.checkpoints![0]!.description).toMatch(/^\[(ai review|ai qa|human qa|script)\] 实现用户登录功能$/);
+    expect(task.checkpoints![1]!.description).toMatch(/^\[(ai review|ai qa|human qa|script)\] 验证测试通过$/);
+    expect(task.checkpoints![2]!.description).toMatch(/^\[(ai review|ai qa|human qa|script)\] 部署到生产环境$/);
+  });
+
+  test('v5 migration: should not modify checkpoints that already have valid prefix', () => {
+    const task = createTestTask({
+      status: 'open',
+      checkpoints: [
+        { id: 'CP-1', description: '[ai review] 实现用户登录功能', completed: false },
+        { id: 'CP-2', description: '[ai qa] 验证测试通过', completed: false },
+      ],
+    });
+    const v5 = SCHEMA_MIGRATIONS.find(m => m.version === 5)!;
+    const result = v5.migrate(task);
+    expect(result.changed).toBe(false);
+    expect(task.checkpoints![0]!.description).toBe('[ai review] 实现用户登录功能');
+    expect(task.checkpoints![1]!.description).toBe('[ai qa] 验证测试通过');
+  });
+
+  test('v5 migration: should handle mixed checkpoints (some with prefix, some without)', () => {
+    const task = createTestTask({
+      status: 'open',
+      checkpoints: [
+        { id: 'CP-1', description: '[ai review] 实现用户登录功能', completed: false },
+        { id: 'CP-2', description: '手动验证UI效果', completed: false },
+      ],
+    });
+    const v5 = SCHEMA_MIGRATIONS.find(m => m.version === 5)!;
+    const result = v5.migrate(task);
+    expect(result.changed).toBe(true);
+    expect(task.checkpoints![0]!.description).toBe('[ai review] 实现用户登录功能');
+    expect(task.checkpoints![1]!.description).toMatch(/^\[(ai review|ai qa|human qa|script)\] 手动验证UI效果$/);
+  });
+
+  test('v5 migration: should handle empty checkpoints', () => {
+    const task = createTestTask({
+      status: 'open',
+      checkpoints: [],
+    });
+    const v5 = SCHEMA_MIGRATIONS.find(m => m.version === 5)!;
+    const result = v5.migrate(task);
+    expect(result.changed).toBe(false);
+    expect(task.checkpoints).toEqual([]);
+  });
+
+  test('v5 migration: should handle task without checkpoints field', () => {
+    const task = createTestTask({
+      status: 'open',
+    });
+    // @ts-expect-error - testing undefined checkpoints
+    task.checkpoints = undefined;
+    const v5 = SCHEMA_MIGRATIONS.find(m => m.version === 5)!;
+    const result = v5.migrate(task);
+    expect(result.changed).toBe(false);
   });
 });

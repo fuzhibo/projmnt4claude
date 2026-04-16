@@ -450,8 +450,9 @@ export class Pipeline {
  * - 2: pipeline_status 规范化 + verdict_action_schema 验证
  * - 3: commitHistory 字段（harness 批次 git commit SHA 追踪）
  * - 4: reopened→open 迁移 + TransitionNote + resumeAction
+ * - 5: 检查点前缀自动补全（为无前缀的检查点添加规范前缀）
  */
-export const CURRENT_TASK_SCHEMA_VERSION = 4;
+export const CURRENT_TASK_SCHEMA_VERSION = 5;
 
 /**
  * 流水线中间状态列表

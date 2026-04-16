@@ -366,6 +366,47 @@ export const SCHEMA_MIGRATIONS: SchemaMigrationStep[] = [
       return { changed, details };
     },
   },
+  {
+    version: 5,
+    name: 'checkpoint_prefix_completion',
+    description: '为无规范前缀的检查点自动推断并添加前缀 ([ai review]/[ai qa]/[human qa]/[script])',
+    migrate(task: TaskMeta): { changed: boolean; details: string[] } {
+      const details: string[] = [];
+      let changed = false;
+
+      const { inferCheckpointPrefix, VALID_CHECKPOINT_PREFIXES } =
+        require('../utils/validation-rules/checkpoint-rules.js');
+
+      const checkpoints = task.checkpoints || [];
+      const updatedCheckpoints: typeof checkpoints = [];
+
+      for (const cp of checkpoints) {
+        const desc = cp.description;
+        if (typeof desc !== 'string') continue;
+
+        const trimmed = desc.trim().toLowerCase();
+        const hasValidPrefix = VALID_CHECKPOINT_PREFIXES.some(
+          (prefix: string) => trimmed.startsWith(prefix.toLowerCase())
+        );
+
+        if (!hasValidPrefix) {
+          const inferredPrefix = inferCheckpointPrefix(desc);
+          const newDesc = `${inferredPrefix} ${desc}`;
+          updatedCheckpoints.push({ ...cp, description: newDesc });
+          details.push(`检查点前缀补全: "${desc}" → "${newDesc}"`);
+          changed = true;
+        } else {
+          updatedCheckpoints.push(cp);
+        }
+      }
+
+      if (changed) {
+        task.checkpoints = updatedCheckpoints;
+      }
+
+      return { changed, details };
+    },
+  },
 ];
 
 /**
