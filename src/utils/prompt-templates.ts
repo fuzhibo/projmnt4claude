@@ -198,6 +198,7 @@ export const DEFAULT_QA_TEMPLATE: PromptTemplate = `# QA 验证任务
 {testStrategy}
 ## 输出格式
 请按以下格式输出验证结果:
+
 \`\`\`
 VERDICT: PASS 或 VERDICT: NOPASS
 ## 验证结果: PASS 或 NOPASS
@@ -207,7 +208,38 @@ VERDICT: PASS 或 VERDICT: NOPASS
 ## 详细反馈: [可选的详细反馈]
 \`\`\`
 
-**重要**: 必须输出 VERDICT: PASS 或 VERDICT: NOPASS，不得使用"通过"、"不通过"等中文词语。
+**重要格式要求**:
+- 必须输出 VERDICT: PASS 或 VERDICT: NOPASS 标记行
+- 不得使用"通过"、"不通过"等中文词语
+- 所有检查点都通过时，必须输出 PASS
+- 有任何检查点失败时，必须输出 NOPASS
+
+**正确示例（通过）**:
+\`\`\`
+VERDICT: PASS
+## 验证结果: PASS
+## 原因: 所有功能测试通过，检查点验证完成
+## 测试失败:
+## 未通过的检查点:
+## 详细反馈: 实现符合需求，功能正确。
+\`\`\`
+
+**正确示例（未通过）**:
+\`\`\`
+VERDICT: NOPASS
+## 验证结果: NOPASS
+## 原因: 单元测试未通过
+## 测试失败: - 测试用例 test_add_user 失败
+## 未通过的检查点: - CP-2-unit-test
+## 详细反馈: 边界条件处理不正确。
+\`\`\`
+
+**错误示例（严禁这样输出）**:
+\`\`\`
+所有功能测试都已通过。 ← 错误：缺少 VERDICT 标记
+VERDICT: 通过 ← 错误：使用了"通过"而非 PASS
+VERDICT: 不通过 ← 错误：使用了"不通过"而非 NOPASS
+\`\`\`
 
 现在开始验证。`;
 
