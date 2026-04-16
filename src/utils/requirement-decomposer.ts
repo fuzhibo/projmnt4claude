@@ -10,7 +10,10 @@ import type {
   DecomposedTaskItem,
   DecomposeOptions,
   ProblemPattern,
+  DecomposedItem,
+  DecompositionValidation,
 } from '../types/decomposition';
+import { DECOMPOSITION_CONSTRAINTS } from '../types/decomposition';
 import type { TaskType, TaskPriority } from '../types/task';
 import { inferTaskType, inferTaskPriority } from '../types/task';
 import { extractFilePaths } from './quality-gate';
@@ -263,7 +266,13 @@ export async function decomposeRequirement(
   content: string,
   options: DecomposeOptions = {}
 ): Promise<RequirementDecomposition> {
-  const { minItems = 2, maxItems = 10, useAI = true, cwd = process.cwd() } = options;
+  const {
+    minItems = 2,
+    maxItems = 10,
+    useAI = true,
+    cwd = process.cwd(),
+    validateQuality = false,
+  } = options;
 
   // 清理输入内容
   const trimmedContent = content.trim();
@@ -283,10 +292,31 @@ export async function decomposeRequirement(
   if (useAI) {
     const aiResult = await decomposeWithAI(trimmedContent, cwd);
     if (aiResult && aiResult.decomposable && aiResult.items.length >= minItems) {
-      return {
+      const result: RequirementDecomposition = {
         ...aiResult,
         items: aiResult.items.slice(0, maxItems),
       };
+
+      // 质量检查（如果启用）
+      if (validateQuality) {
+        const validation = validateDecomposition(result);
+        if (!validation.valid) {
+          // 报告验证失败
+          reportDecompositionFailure(
+            'AI 分解结果未通过质量检查',
+            validation.errors,
+            'AI 分解任务'
+          );
+          return {
+            decomposable: false,
+            reason: `质量检查失败: ${validation.errors.join('; ')}`,
+            items: [],
+            summary: '分解质量检查未通过',
+          };
+        }
+      }
+
+      return result;
     }
   }
 
@@ -334,11 +364,32 @@ export async function decomposeRequirement(
     };
   });
 
-  return {
+  const result: RequirementDecomposition = {
     decomposable: true,
     items,
     summary: `基于模式匹配分解为 ${items.length} 个子任务`,
   };
+
+  // 质量检查（如果启用）
+  if (validateQuality) {
+    const validation = validateDecomposition(result);
+    if (!validation.valid) {
+      // 报告验证失败
+      reportDecompositionFailure(
+        '模式匹配分解结果未通过质量检查',
+        validation.errors,
+        '模式匹配分解任务'
+      );
+      return {
+        decomposable: false,
+        reason: `质量检查失败: ${validation.errors.join('; ')}`,
+        items: [],
+        summary: '分解质量检查未通过',
+      };
+    }
+  }
+
+  return result;
 }
 
 /**
@@ -435,4 +486,267 @@ export function formatDecomposition(decomposition: RequirementDecomposition): st
   }
 
   return lines.join('\n');
+}
+
+/**
+ * 验证分解项的质量
+ *
+ * 检查以下内容：
+ * - 标题长度（至少10个字符）
+ * - 问题描述长度（至少50个字符）
+ * - 解决方案长度（至少50个字符）
+ * - 优先级有效性（必须是 P0/P1/P2/P3 之一）
+ * - 检查点数量（至少1个）
+ *
+ * @param item 要验证的分解项
+ * @returns 验证结果
+ */
+export function validateDecompositionItem(item: DecomposedItem): DecompositionValidation {
+  const errors: string[] = [];
+  const warnings: string[] = [];
+
+  const {
+    MIN_TITLE_LENGTH,
+    MIN_PROBLEM_LENGTH,
+    MIN_SOLUTION_LENGTH,
+    MIN_CHECKPOINTS,
+    VALID_PRIORITIES,
+  } = DECOMPOSITION_CONSTRAINTS;
+
+  // 检查标题
+  if (!item.title || item.title.trim().length === 0) {
+    errors.push('标题不能为空');
+  } else if (item.title.trim().length < MIN_TITLE_LENGTH) {
+    errors.push(`标题过短，需要至少 ${MIN_TITLE_LENGTH} 个字符（当前 ${item.title.trim().length} 个）`);
+  }
+
+  // 检查问题描述和解决方案
+  // 注意：如果是从旧格式转换（problem === solution），则验证合并后的长度
+  const isLegacyFormat = item.problem === item.solution;
+
+  if (isLegacyFormat) {
+    // 旧格式：验证总长度（problem + solution 实际上是同一个 description）
+    const totalLength = (item.problem || '').trim().length;
+    if (totalLength === 0) {
+      errors.push('描述不能为空');
+    } else if (totalLength < MIN_PROBLEM_LENGTH) {
+      errors.push(
+        `描述过短，需要至少 ${MIN_PROBLEM_LENGTH} 个字符（当前 ${totalLength} 个）。建议提供详细的问题描述和解决方案`
+      );
+    }
+  } else {
+    // 新格式：分别验证 problem 和 solution
+    if (!item.problem || item.problem.trim().length === 0) {
+      errors.push('问题描述不能为空');
+    } else if (item.problem.trim().length < MIN_PROBLEM_LENGTH) {
+      errors.push(
+        `问题描述过短或不完整，需要至少 ${MIN_PROBLEM_LENGTH} 个字符描述现象和背景（当前 ${item.problem.trim().length} 个）`
+      );
+    }
+
+    if (!item.solution || item.solution.trim().length === 0) {
+      errors.push('解决方案不能为空');
+    } else if (item.solution.trim().length < MIN_SOLUTION_LENGTH) {
+      errors.push(
+        `解决方案过短或不完整，需要至少 ${MIN_SOLUTION_LENGTH} 个字符描述具体解决步骤（当前 ${item.solution.trim().length} 个）`
+      );
+    }
+  }
+
+  // 检查优先级
+  if (!item.priority) {
+    errors.push('优先级不能为空');
+  } else if (!VALID_PRIORITIES.includes(item.priority)) {
+    errors.push(`优先级无效，必须是 ${VALID_PRIORITIES.join('/')} 之一`);
+  }
+
+  // 检查检查点
+  if (!item.checkpoints || item.checkpoints.length === 0) {
+    errors.push(`缺少检查点，需要至少 ${MIN_CHECKPOINTS} 个验证步骤`);
+  } else if (item.checkpoints.length < MIN_CHECKPOINTS) {
+    errors.push(`检查点数量不足，需要至少 ${MIN_CHECKPOINTS} 个`);
+  }
+
+  // 检查根因分析（可选，但建议有）
+  if (!item.rootCause || item.rootCause.trim().length < 20) {
+    warnings.push('建议提供根因分析（至少20个字符），以便更好地理解问题本质');
+  }
+
+  // 检查预估时间（可选）
+  if (!item.estimatedMinutes || item.estimatedMinutes <= 0) {
+    warnings.push('建议提供预估耗时（分钟），以便合理安排开发计划');
+  }
+
+  return {
+    valid: errors.length === 0,
+    errors,
+    warnings,
+  };
+}
+
+/**
+ * 批量验证多个分解项
+ *
+ * @param items 分解项列表
+ * @returns 验证结果，包含通过项和失败项
+ */
+export function validateDecompositionItems(
+  items: DecomposedItem[]
+): {
+  valid: boolean;
+  validItems: DecomposedItem[];
+  invalidItems: Array<{ item: DecomposedItem; errors: string[] }>;
+  allErrors: string[];
+} {
+  const validItems: DecomposedItem[] = [];
+  const invalidItems: Array<{ item: DecomposedItem; errors: string[] }> = [];
+  const allErrors: string[] = [];
+
+  for (let i = 0; i < items.length; i++) {
+    const item = items[i]!;
+    const validation = validateDecompositionItem(item);
+
+    if (validation.valid) {
+      validItems.push(item);
+    } else {
+      invalidItems.push({ item, errors: validation.errors });
+      allErrors.push(`\n[项 ${i + 1}: "${item.title}"]`);
+      for (const error of validation.errors) {
+        allErrors.push(`  - ${error}`);
+      }
+    }
+  }
+
+  return {
+    valid: invalidItems.length === 0,
+    validItems,
+    invalidItems,
+    allErrors,
+  };
+}
+
+/**
+ * 报告分解失败信息
+ *
+ * 输出格式化的错误信息和改进建议
+ *
+ * @param reason 失败原因
+ * @param errors 具体错误列表
+ * @param itemTitle 失败项的标题（可选）
+ */
+export function reportDecompositionFailure(
+  reason: string,
+  errors?: string[],
+  itemTitle?: string
+): void {
+  console.error('❌ 分解失败');
+
+  if (itemTitle) {
+    console.error(`任务: ${itemTitle}`);
+  }
+
+  console.error(`原因: ${reason}`);
+
+  if (errors && errors.length > 0) {
+    console.error('\n具体问题:');
+    for (const error of errors) {
+      console.error(`  - ${error}`);
+    }
+  }
+
+  console.error('\n💡 建议:');
+  console.error('  1. 提供详细的问题描述（现象、背景、影响）');
+  console.error('  2. 提供根因分析，解释为什么会出现这个问题');
+  console.error('  3. 提供具体的解决方案步骤，包括实现思路');
+  console.error('  4. 参考格式：问题描述 → 根因分析 → 解决方案');
+  console.error('  5. 确保问题描述和解决方案各至少50个字符');
+  console.error('  6. 提供至少1个检查点用于验证完成情况');
+}
+
+/**
+ * 将 DecomposedTaskItem 转换为 DecomposedItem 进行验证
+ *
+ * 用于兼容现有的分解结果格式
+ *
+ * @param item 原始分解任务项
+ * @returns 转换后的分解项
+ */
+export function convertToDecomposedItem(item: DecomposedTaskItem): DecomposedItem {
+  return {
+    title: item.title,
+    // 从 description 中尝试提取 problem 和 solution
+    problem: item.description,
+    solution: item.description, // 如果没有明确的 solution，使用 description 作为回退
+    type: item.type,
+    priority: item.priority,
+    checkpoints: item.suggestedCheckpoints,
+    relatedFiles: item.relatedFiles,
+    estimatedMinutes: item.estimatedMinutes,
+  };
+}
+
+/**
+ * 验证分解结果的质量
+ *
+ * 包装函数，直接对 RequirementDecomposition 进行验证
+ *
+ * @param decomposition 分解结果
+ * @returns 验证结果
+ */
+export function validateDecomposition(
+  decomposition: RequirementDecomposition
+): DecompositionValidation & { itemsWithIssues?: Array<{ index: number; title: string; errors: string[] }> } {
+  // 如果不可分解，直接返回通过（因为没有要验证的项）
+  if (!decomposition.decomposable || decomposition.items.length === 0) {
+    return { valid: true, errors: [] };
+  }
+
+  const allErrors: string[] = [];
+  const warnings: string[] = [];
+  const itemsWithIssues: Array<{ index: number; title: string; errors: string[] }> = [];
+
+  for (let i = 0; i < decomposition.items.length; i++) {
+    const item = decomposition.items[i]!;
+    const decomposedItem = convertToDecomposedItem(item);
+    const validation = validateDecompositionItem(decomposedItem);
+
+    if (!validation.valid) {
+      const itemErrors = validation.errors;
+      itemsWithIssues.push({ index: i, title: item.title, errors: itemErrors });
+      allErrors.push(`\n[子任务 ${i + 1}: "${item.title}"]`);
+      for (const error of itemErrors) {
+        allErrors.push(`  - ${error}`);
+      }
+    }
+
+    if (validation.warnings && validation.warnings.length > 0) {
+      for (const warning of validation.warnings) {
+        warnings.push(`[${item.title}] ${warning}`);
+      }
+    }
+  }
+
+  // 如果所有项都失败，报告整体失败
+  if (itemsWithIssues.length === decomposition.items.length) {
+    const summary = `所有 ${decomposition.items.length} 个子任务均未通过质量检查`;
+    return {
+      valid: false,
+      errors: [summary, ...allErrors],
+      warnings,
+      itemsWithIssues,
+    };
+  }
+
+  // 如果部分项失败，报告警告
+  if (itemsWithIssues.length > 0) {
+    const summary = `${itemsWithIssues.length}/${decomposition.items.length} 个子任务未通过质量检查`;
+    return {
+      valid: false,
+      errors: [summary, ...allErrors],
+      warnings,
+      itemsWithIssues,
+    };
+  }
+
+  return { valid: true, errors: [], warnings };
 }

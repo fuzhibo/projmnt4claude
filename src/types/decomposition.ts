@@ -54,6 +54,8 @@ export interface DecomposeOptions {
   useAI?: boolean;
   /** 工作目录 */
   cwd?: string;
+  /** 是否启用质量检查（默认 true） */
+  validateQuality?: boolean;
 }
 
 /**
@@ -103,3 +105,58 @@ export type DecompositionStrategy =
   | 'pattern'   // 基于模式匹配
   | 'ai'        // 基于 AI 分析
   | 'section';  // 基于章节分割
+
+/**
+ * 分解项（包含问题分析和解决方案）
+ * 用于质量门禁验证的完整需求项
+ */
+export interface DecomposedItem {
+  /** 标题 */
+  title: string;
+  /** 问题描述（现象和背景） */
+  problem: string;
+  /** 解决方案（具体解决步骤） */
+  solution: string;
+  /** 根因分析 */
+  rootCause?: string;
+  /** 任务类型 */
+  type: TaskType;
+  /** 优先级 */
+  priority: TaskPriority;
+  /** 检查点 */
+  checkpoints: string[];
+  /** 相关文件 */
+  relatedFiles?: string[];
+  /** 预估耗时（分钟） */
+  estimatedMinutes?: number;
+}
+
+/**
+ * 分解验证结果
+ */
+export interface DecompositionValidation {
+  /** 验证是否通过 */
+  valid: boolean;
+  /** 错误信息列表 */
+  errors: string[];
+  /** 警告信息列表 */
+  warnings?: string[];
+}
+
+/**
+ * 最小字段长度约束
+ */
+export const DECOMPOSITION_CONSTRAINTS = {
+  /** 标题最小长度 */
+  MIN_TITLE_LENGTH: 10,
+  /** 问题描述最小长度 */
+  MIN_PROBLEM_LENGTH: 50,
+  /** 解决方案最小长度 */
+  MIN_SOLUTION_LENGTH: 50,
+  /** 根因分析最小长度 */
+  MIN_ROOT_CAUSE_LENGTH: 20,
+  /** 最小检查点数量 */
+  MIN_CHECKPOINTS: 1,
+  /** 有效优先级列表 */
+  VALID_PRIORITIES: ['P0', 'P1', 'P2', 'P3'] as TaskPriority[],
+};
