@@ -57,7 +57,7 @@ export class HarnessEvaluator {
       failedCriteria: [],
       failedCheckpoints: [],
       reviewedAt: new Date().toISOString(),
-      reviewedBy: 'harness-evaluator',
+      reviewedBy: 'architect',
     };
 
     // 如果开发阶段失败，直接返回 NOPASS

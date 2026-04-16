@@ -28,6 +28,7 @@ import {
   createTestTasks,
   createTaskDependency,
   createTestLifecycle,
+  resetTestEnv,
   type IsolatedTestEnv,
 } from '../utils/test-env.js';
 
@@ -72,7 +73,11 @@ function writeTaskToDisk(tasksDir: string, task: TaskMeta): void {
 function readTaskFromDisk(tasksDir: string, taskId: string): TaskMeta | null {
   const metaPath = path.join(tasksDir, taskId, 'meta.json');
   if (!fs.existsSync(metaPath)) return null;
-  return JSON.parse(fs.readFileSync(metaPath, 'utf-8'));
+  try {
+    return JSON.parse(fs.readFileSync(metaPath, 'utf-8'));
+  } catch {
+    return null;
+  }
 }
 
 // ============================================================
@@ -558,33 +563,33 @@ describe('场景 10: resetTestEnv 错误处理', () => {
   });
 
   test('S10.1: resetTestEnv 传入 null 抛出 TypeError', () => {
-    const { resetTestEnv } = require('../utils/test-env.js');
+    // resetTestEnv 已从文件顶部导入
     expect(() => resetTestEnv(null)).toThrow(TypeError);
     expect(() => resetTestEnv(null)).toThrow('参数 env 不能为 null 或 undefined');
   });
 
   test('S10.2: resetTestEnv 传入 undefined 抛出 TypeError', () => {
-    const { resetTestEnv } = require('../utils/test-env.js');
+    // resetTestEnv 已从文件顶部导入
     expect(() => resetTestEnv(undefined)).toThrow(TypeError);
     expect(() => resetTestEnv(undefined)).toThrow('参数 env 不能为 null 或 undefined');
   });
 
   test('S10.3: resetTestEnv 传入非对象类型抛出 TypeError', () => {
-    const { resetTestEnv } = require('../utils/test-env.js');
+    // resetTestEnv 已从文件顶部导入
     expect(() => resetTestEnv('string')).toThrow(TypeError);
     expect(() => resetTestEnv(123)).toThrow(TypeError);
     expect(() => resetTestEnv(true)).toThrow(TypeError);
   });
 
   test('S10.4: resetTestEnv 传入缺少 reset 方法的对象抛出 TypeError', () => {
-    const { resetTestEnv } = require('../utils/test-env.js');
+    // resetTestEnv 已从文件顶部导入
     const invalidEnv = { tempDir: '/tmp', tasksDir: '/tmp/tasks' };
     expect(() => resetTestEnv(invalidEnv)).toThrow(TypeError);
     expect(() => resetTestEnv(invalidEnv)).toThrow('参数 env 必须包含 reset 方法');
   });
 
   test('S10.5: resetTestEnv 正确调用 env.reset', () => {
-    const { resetTestEnv } = require('../utils/test-env.js');
+    // resetTestEnv 已从文件顶部导入
 
     // 创建任务
     createTaskDir(env.tasksDir, 'TASK-001');

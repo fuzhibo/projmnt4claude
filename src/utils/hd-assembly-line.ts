@@ -275,7 +275,7 @@ export class AssemblyLine {
     if (!await this.checkDependencies(task, state)) {
       console.log(`⚠️  依赖未完成，延后处理`);
       addTimeline('failed', '依赖未完成');
-      record.finalStatus = 'open';
+      record.finalStatus = 'needs_human';
       return record;
     }
 
@@ -630,8 +630,18 @@ export class AssemblyLine {
           // CP-1: 评估通过后分配任务角色（激活 assignTaskRole）
           await this.assignTaskRole(taskId, 'executor');
 
-          // CP-3: 记录执行统计到任务 meta
+          // CP-7: 先执行状态转换，再验证，最后记录统计（修复竞态条件）
           const retryCount = state.retryCounter.get(taskId) || 0;
+          await this.ensureTransition(taskId, 'resolved', '评估通过，任务完成');
+          record.finalStatus = 'resolved';
+
+          // 验证状态转换成功
+          const evalGateResult = this.validateTransitionCompleteness(taskId, 'resolved', 'evaluation');
+          if (!evalGateResult.valid) {
+            await this.handleTransitionValidationFailure(taskId, 'resolved', 'wait_qa', 'evaluation', evalGateResult.errors);
+          }
+
+          // 状态确认后，再记录执行统计（避免与 ensureTransition 形成读写冲突）
           const taskStartTime = record.timeline[0]?.timestamp;
           const taskDuration = taskStartTime
             ? new Date().getTime() - new Date(taskStartTime).getTime()
@@ -645,13 +655,6 @@ export class AssemblyLine {
             }, this.config.cwd);
           } catch (error) {
             console.error(`   ⚠️ 记录执行统计失败: ${error instanceof Error ? error.message : String(error)}`);
-          }
-
-          await this.ensureTransition(taskId, 'resolved', '评估通过，任务完成');
-          record.finalStatus = 'resolved';
-          const evalGateResult = this.validateTransitionCompleteness(taskId, 'resolved', 'evaluation');
-          if (!evalGateResult.valid) {
-            await this.handleTransitionValidationFailure(taskId, 'resolved', 'wait_qa', 'evaluation', evalGateResult.errors);
           }
           record.retryCount = retryCount;
           console.log('✅ 评估通过！');
@@ -1177,8 +1180,8 @@ export class AssemblyLine {
       }
 
       case 'escalate_human': {
-        await this.ensureTransition(taskId, 'open', `architect 建议人工介入 (action: escalate_human)`);
-        record.finalStatus = 'open';
+        await this.ensureTransition(taskId, 'needs_human', `architect 建议人工介入 (action: escalate_human)`);
+        record.finalStatus = 'needs_human';
         addTimeline('failed', 'architect 建议人工介入', { action });
         console.log('🔴 任务需要人工介入');
         return record;
