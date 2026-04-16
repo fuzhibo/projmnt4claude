@@ -29,7 +29,7 @@ import { validateBasicFields, validateCheckpoints, type BasicFieldsValidationRes
 // ============================================================
 
 /** 规则执行阶段类型 */
-export type QualityGatePhase = 'initialization' | 'transition' | 'execution' | 'completion';
+export type QualityGatePhase = 'plan_recommend' | 'initialization' | 'transition' | 'execution' | 'completion';
 
 /** 规则优先级 */
 export type RulePriority = 'critical' | 'high' | 'medium' | 'low';
@@ -283,6 +283,15 @@ export const QUALITY_GATE_RULES: Record<string, RegisteredRule> = {
 
 /** 阶段到规则的映射 */
 export const PHASE_RULES: Record<QualityGatePhase, string[]> = {
+  plan_recommend: [
+    'meta-json-valid',
+    'checkpoint-array-not-empty',
+    'checkpoint-required-prefix',
+    'checkpoint-no-duplicate',
+    'checkpoint-no-file-path',
+    'checkpoint-count-control',
+    'basic-fields-valid',
+  ],
   initialization: [
     'meta-json-valid',
     'checkpoint-array-not-empty',
