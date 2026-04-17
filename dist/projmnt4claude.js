@@ -12853,7 +12853,54 @@ function safeParseJson2(output) {
     return null;
   }
 }
-var semanticDepsRequiredFields, semanticDepsArrayType, semanticDepsItemStructure, semanticDepsNoSelfRef, semanticDepsCountControl, semanticDepsReasonMinLength, semanticDependencyOutputRules;
+function detectTaskCycles(tasks) {
+  const adjacency = new Map;
+  for (const task of tasks) {
+    if (!adjacency.has(task.id)) {
+      adjacency.set(task.id, new Set);
+    }
+    for (const depId of task.dependencies) {
+      adjacency.get(task.id).add(depId);
+    }
+  }
+  const cycles = [];
+  const visited = new Set;
+  const onStack = new Set;
+  const path8 = [];
+  function dfs(node) {
+    if (onStack.has(node)) {
+      const cycleStart = path8.indexOf(node);
+      if (cycleStart !== -1) {
+        cycles.push([...path8.slice(cycleStart), node]);
+      }
+      return;
+    }
+    if (visited.has(node))
+      return;
+    visited.add(node);
+    onStack.add(node);
+    path8.push(node);
+    const neighbors = adjacency.get(node);
+    if (neighbors) {
+      for (const neighbor of neighbors) {
+        dfs(neighbor);
+      }
+    }
+    path8.pop();
+    onStack.delete(node);
+  }
+  for (const taskId of adjacency.keys()) {
+    if (!visited.has(taskId)) {
+      dfs(taskId);
+    }
+  }
+  return {
+    hasCycle: cycles.length > 0,
+    cycles,
+    taskId: cycles.length > 0 ? cycles[0][0] : ""
+  };
+}
+var semanticDepsRequiredFields, semanticDepsArrayType, semanticDepsItemStructure, semanticDepsNoSelfRef, semanticDepsCountControl, semanticDepsReasonMinLength, semanticDependencyOutputRules, planCycleDetection, planInvalidDependency, planOrphanSubtask, planOrphanTask, planBlockedTask, planBridgeNode, planInferredOnlyDependency;
 var init_plan_rules = __esm(() => {
   semanticDepsRequiredFields = {
     id: "semantic-deps-required-fields",
@@ -13010,6 +13057,183 @@ var init_plan_rules = __esm(() => {
     semanticDepsCountControl,
     semanticDepsReasonMinLength
   ];
+  planCycleDetection = {
+    id: "plan-cycle-detection",
+    description: "\u68C0\u6D4B\u4EFB\u52A1\u4F9D\u8D56\u5173\u7CFB\u4E2D\u662F\u5426\u5B58\u5728\u5FAA\u73AF\u4F9D\u8D56",
+    severity: "error",
+    check: (task, context) => {
+      const t = task;
+      const allTasks = context?.allTasks;
+      if (!allTasks || allTasks.length === 0) {
+        return null;
+      }
+      const result = detectTaskCycles(allTasks);
+      if (result.hasCycle) {
+        const cycleStr = result.cycles.map((c) => c.join(" \u2192 ")).join("; ");
+        return {
+          ruleId: "plan-cycle-detection",
+          severity: "error",
+          message: `\u68C0\u6D4B\u5230\u5FAA\u73AF\u4F9D\u8D56: ${cycleStr}\u3002\u8BF7\u68C0\u67E5\u4EFB\u52A1\u4F9D\u8D56\u5173\u7CFB\uFF0C\u79FB\u9664\u5FAA\u73AF\u5F15\u7528`
+        };
+      }
+      return null;
+    }
+  };
+  planInvalidDependency = {
+    id: "plan-invalid-dependency",
+    description: "\u68C0\u6D4B\u4EFB\u52A1\u4F9D\u8D56\u662F\u5426\u5F15\u7528\u4E0D\u5B58\u5728\u7684\u4EFB\u52A1",
+    severity: "error",
+    check: (task, context) => {
+      const t = task;
+      const allTasks = context?.allTasks;
+      if (!allTasks || allTasks.length === 0) {
+        return null;
+      }
+      const validTaskIds = new Set(allTasks.map((task2) => task2.id));
+      const invalidDeps = [];
+      for (const depId of t.dependencies) {
+        if (!validTaskIds.has(depId)) {
+          invalidDeps.push(depId);
+        }
+      }
+      if (invalidDeps.length > 0) {
+        return {
+          ruleId: "plan-invalid-dependency",
+          severity: "error",
+          message: `\u4EFB\u52A1 ${t.id} \u5305\u542B\u65E0\u6548\u4F9D\u8D56: ${invalidDeps.join(", ")}\u3002\u8FD9\u4E9B\u4EFB\u52A1ID\u4E0D\u5B58\u5728`
+        };
+      }
+      return null;
+    }
+  };
+  planOrphanSubtask = {
+    id: "plan-orphan-subtask",
+    description: "\u68C0\u6D4B\u6709 parentId \u4F46\u7236\u4EFB\u52A1\u4E0D\u5B58\u5728\u7684\u5B64\u513F\u5B50\u4EFB\u52A1",
+    severity: "error",
+    check: (task, context) => {
+      const t = task;
+      const allTasks = context?.allTasks;
+      if (!allTasks || allTasks.length === 0) {
+        return null;
+      }
+      if (!t.parentId) {
+        return null;
+      }
+      const validTaskIds = new Set(allTasks.map((task2) => task2.id));
+      if (!validTaskIds.has(t.parentId)) {
+        return {
+          ruleId: "plan-orphan-subtask",
+          severity: "error",
+          message: `\u4EFB\u52A1 ${t.id} \u58F0\u660E\u4E86\u7236\u4EFB\u52A1 ${t.parentId}\uFF0C\u4F46\u8BE5\u7236\u4EFB\u52A1\u4E0D\u5B58\u5728\u3002\u8BF7\u68C0\u67E5 parentId \u6216\u521B\u5EFA\u7236\u4EFB\u52A1`
+        };
+      }
+      return null;
+    }
+  };
+  planOrphanTask = {
+    id: "plan-orphan-task",
+    description: "\u68C0\u6D4B\u5B64\u7ACB\u4EFB\u52A1\uFF08\u65E0\u4F9D\u8D56\u4E14\u4E0D\u88AB\u4F9D\u8D56\u7684\u4EFB\u52A1\uFF09",
+    severity: "warning",
+    check: (task, context) => {
+      const t = task;
+      const allTasks = context?.allTasks;
+      if (!allTasks || allTasks.length === 0) {
+        return null;
+      }
+      if (t.dependencies.length > 0 || t.subtaskIds && t.subtaskIds.length > 0) {
+        return null;
+      }
+      const isDependedOn = allTasks.some((otherTask) => otherTask.dependencies.includes(t.id));
+      if (!isDependedOn) {
+        return {
+          ruleId: "plan-orphan-task",
+          severity: "warning",
+          message: `\u4EFB\u52A1 ${t.id} \u662F\u5B64\u7ACB\u4EFB\u52A1\uFF1A\u6CA1\u6709\u4F9D\u8D56\u4E14\u4E0D\u88AB\u5176\u4ED6\u4EFB\u52A1\u4F9D\u8D56\u3002\u5EFA\u8BAE\u68C0\u67E5\u662F\u5426\u9057\u6F0F\u4F9D\u8D56\u5173\u7CFB\u6216\u5220\u9664\u65E0\u7528\u4EFB\u52A1`
+        };
+      }
+      return null;
+    }
+  };
+  planBlockedTask = {
+    id: "plan-blocked-task",
+    description: "\u68C0\u6D4B\u88AB\u963B\u585E\u7684\u4EFB\u52A1\uFF08\u6240\u6709\u4F9D\u8D56\u90FD\u672A\u5B8C\u6210\uFF09",
+    severity: "warning",
+    check: (task, context) => {
+      const t = task;
+      const allTasks = context?.allTasks;
+      if (!allTasks || allTasks.length === 0) {
+        return null;
+      }
+      if (t.dependencies.length === 0) {
+        return null;
+      }
+      if (t.status === "resolved" || t.status === "closed") {
+        return null;
+      }
+      const incompleteDeps = [];
+      for (const depId of t.dependencies) {
+        const depTask = allTasks.find((task2) => task2.id === depId);
+        if (depTask) {
+          const isCompleted = depTask.status === "resolved" || depTask.status === "closed";
+          if (!isCompleted) {
+            incompleteDeps.push(depId);
+          }
+        }
+      }
+      if (incompleteDeps.length === t.dependencies.length) {
+        return {
+          ruleId: "plan-blocked-task",
+          severity: "warning",
+          message: `\u4EFB\u52A1 ${t.id} \u88AB\u963B\u585E\uFF1A\u6240\u6709 ${t.dependencies.length} \u4E2A\u4F9D\u8D56\u4EFB\u52A1\u90FD\u672A\u5B8C\u6210\u3002\u5EFA\u8BAE\u4F18\u5148\u5904\u7406\u4F9D\u8D56\u4EFB\u52A1\uFF1A${incompleteDeps.join(", ")}`
+        };
+      }
+      return null;
+    }
+  };
+  planBridgeNode = {
+    id: "plan-bridge-node",
+    description: "\u68C0\u6D4B\u6865\u63A5\u8282\u70B9\u4EFB\u52A1\uFF08\u4F5C\u4E3A\u4F9D\u8D56\u6865\u6881\u4F46\u7F3A\u5C11\u68C0\u67E5\u70B9\uFF09",
+    severity: "warning",
+    check: (task, context) => {
+      const t = task;
+      const allTasks = context?.allTasks;
+      if (!allTasks || allTasks.length === 0) {
+        return null;
+      }
+      const dependentTasks = allTasks.filter((otherTask) => otherTask.dependencies.includes(t.id));
+      const hasManyDependents = dependentTasks.length >= 2;
+      const hasDependencies = t.dependencies.length > 0;
+      const hasMinimalCheckpoints = !t.checkpoints || t.checkpoints.length <= 1;
+      if (hasManyDependents && hasDependencies && hasMinimalCheckpoints) {
+        return {
+          ruleId: "plan-bridge-node",
+          severity: "warning",
+          message: `\u4EFB\u52A1 ${t.id} \u53EF\u80FD\u662F\u6865\u63A5\u8282\u70B9\uFF1A\u88AB ${dependentTasks.length} \u4E2A\u4EFB\u52A1\u4F9D\u8D56\u4E14\u6709 ${t.dependencies.length} \u4E2A\u4F9D\u8D56\uFF0C\u4F46\u68C0\u67E5\u70B9\u8FC7\u5C11\uFF08${t.checkpoints?.length || 0} \u4E2A\uFF09\u3002\u5EFA\u8BAE\u6DFB\u52A0\u66F4\u591A\u68C0\u67E5\u70B9\u786E\u4FDD\u8D28\u91CF`
+        };
+      }
+      return null;
+    }
+  };
+  planInferredOnlyDependency = {
+    id: "plan-inferred-only-dependency",
+    description: "\u68C0\u6D4B\u53EA\u6709\u63A8\u65AD\u4F9D\u8D56\u7684\u4EFB\u52A1\uFF08\u5EFA\u8BAE\u663E\u5F0F\u58F0\u660E\u5173\u952E\u4F9D\u8D56\uFF09",
+    severity: "warning",
+    check: (task, context) => {
+      const t = task;
+      if (t.dependencies.length === 0) {
+        return null;
+      }
+      const hasExplicitDeps = context?.hasExplicitDeps;
+      if (hasExplicitDeps !== false) {
+        return null;
+      }
+      return {
+        ruleId: "plan-inferred-only-dependency",
+        severity: "warning",
+        message: `\u4EFB\u52A1 ${t.id} \u53EA\u6709\u63A8\u65AD\u4F9D\u8D56\uFF08${t.dependencies.length} \u4E2A\uFF09\uFF0C\u6CA1\u6709\u663E\u5F0F\u58F0\u660E\u7684\u4F9D\u8D56\u3002\u5EFA\u8BAE\u663E\u5F0F\u58F0\u660E\u5173\u952E\u4F9D\u8D56\u4EE5\u63D0\u9AD8\u53EF\u7EF4\u62A4\u6027`
+      };
+    }
+  };
 });
 
 // src/utils/ai-metadata.ts
@@ -15831,6 +16055,7 @@ function runQualityGate(task, phase, context) {
 var QUALITY_GATE_RULES, PHASE_RULES;
 var init_quality_gate_registry = __esm(() => {
   init_checkpoint_rules();
+  init_plan_rules();
   init_quality_gate();
   QUALITY_GATE_RULES = {
     "meta-json-valid": {
@@ -15995,6 +16220,62 @@ var init_quality_gate_registry = __esm(() => {
       },
       appliesToPriorities: null,
       phases: ["transition"]
+    },
+    "plan-cycle-detection": {
+      id: "plan-cycle-detection",
+      description: "\u68C0\u6D4B\u4EFB\u52A1\u4F9D\u8D56\u5173\u7CFB\u4E2D\u662F\u5426\u5B58\u5728\u5FAA\u73AF\u4F9D\u8D56",
+      priority: "critical",
+      rule: planCycleDetection,
+      appliesToPriorities: null,
+      phases: ["plan_recommend"]
+    },
+    "plan-invalid-dependency": {
+      id: "plan-invalid-dependency",
+      description: "\u68C0\u6D4B\u4EFB\u52A1\u4F9D\u8D56\u662F\u5426\u5F15\u7528\u4E0D\u5B58\u5728\u7684\u4EFB\u52A1",
+      priority: "critical",
+      rule: planInvalidDependency,
+      appliesToPriorities: null,
+      phases: ["plan_recommend"]
+    },
+    "plan-orphan-subtask": {
+      id: "plan-orphan-subtask",
+      description: "\u68C0\u6D4B\u6709 parentId \u4F46\u7236\u4EFB\u52A1\u4E0D\u5B58\u5728\u7684\u5B64\u513F\u5B50\u4EFB\u52A1",
+      priority: "critical",
+      rule: planOrphanSubtask,
+      appliesToPriorities: null,
+      phases: ["plan_recommend"]
+    },
+    "plan-orphan-task": {
+      id: "plan-orphan-task",
+      description: "\u68C0\u6D4B\u5B64\u7ACB\u4EFB\u52A1\uFF08\u65E0\u4F9D\u8D56\u4E14\u4E0D\u88AB\u4F9D\u8D56\u7684\u4EFB\u52A1\uFF09",
+      priority: "medium",
+      rule: planOrphanTask,
+      appliesToPriorities: null,
+      phases: ["plan_recommend"]
+    },
+    "plan-blocked-task": {
+      id: "plan-blocked-task",
+      description: "\u68C0\u6D4B\u88AB\u963B\u585E\u7684\u4EFB\u52A1\uFF08\u6240\u6709\u4F9D\u8D56\u90FD\u672A\u5B8C\u6210\uFF09",
+      priority: "medium",
+      rule: planBlockedTask,
+      appliesToPriorities: null,
+      phases: ["plan_recommend"]
+    },
+    "plan-bridge-node": {
+      id: "plan-bridge-node",
+      description: "\u68C0\u6D4B\u6865\u63A5\u8282\u70B9\u4EFB\u52A1\uFF08\u4F5C\u4E3A\u4F9D\u8D56\u6865\u6881\u4F46\u7F3A\u5C11\u68C0\u67E5\u70B9\uFF09",
+      priority: "medium",
+      rule: planBridgeNode,
+      appliesToPriorities: null,
+      phases: ["plan_recommend"]
+    },
+    "plan-inferred-only-dependency": {
+      id: "plan-inferred-only-dependency",
+      description: "\u68C0\u6D4B\u53EA\u6709\u63A8\u65AD\u4F9D\u8D56\u7684\u4EFB\u52A1\uFF08\u5EFA\u8BAE\u663E\u5F0F\u58F0\u660E\u5173\u952E\u4F9D\u8D56\uFF09",
+      priority: "low",
+      rule: planInferredOnlyDependency,
+      appliesToPriorities: null,
+      phases: ["plan_recommend"]
     }
   };
   PHASE_RULES = {
@@ -16005,7 +16286,14 @@ var init_quality_gate_registry = __esm(() => {
       "checkpoint-no-duplicate",
       "checkpoint-no-file-path",
       "checkpoint-count-control",
-      "basic-fields-valid"
+      "basic-fields-valid",
+      "plan-cycle-detection",
+      "plan-invalid-dependency",
+      "plan-orphan-subtask",
+      "plan-orphan-task",
+      "plan-blocked-task",
+      "plan-bridge-node",
+      "plan-inferred-only-dependency"
     ],
     initialization: [
       "meta-json-valid",
@@ -24329,6 +24617,10 @@ async function submitTask(taskId, options = {}, cwd = process.cwd()) {
 }
 async function validateTask(taskId, options = {}, cwd = process.cwd()) {
   const { validateTaskCompletion: validateTaskCompletion2, generateValidationReport: generateValidationReport2 } = await Promise.resolve().then(() => (init_validation(), exports_validation));
+  console.warn("[Notice]: task validate command is deprecated");
+  console.warn("   Use: projmnt4claude task update <taskId> --status wait_evaluation");
+  console.warn("   Validation will be automatically executed by harness evaluation phase");
+  console.warn("");
   if (!isInitialized(cwd)) {
     console.error("\u9519\u8BEF: \u9879\u76EE\u672A\u521D\u59CB\u5316\u3002\u8BF7\u5148\u8FD0\u884C `projmnt4claude setup`");
     process.exit(1);
@@ -26568,60 +26860,7 @@ async function initRequirement(description, cwd = process.cwd(), options = {}) {
         confirmDecompose = result.confirm;
       }
       if (confirmDecompose) {
-        const createdTaskIds = [];
-        const taskIdMap = new Map;
-        console.log("");
-        console.log("\u2501".repeat(SEPARATOR_WIDTH));
-        console.log("\uD83D\uDCDD \u6B63\u5728\u521B\u5EFA\u4EFB\u52A1...");
-        console.log("\u2501".repeat(SEPARATOR_WIDTH));
-        console.log("");
-        for (let i = 0;i < decomposition.items.length; i++) {
-          const item = decomposition.items[i];
-          const itemOptions = {
-            ...options,
-            nonInteractive: true,
-            decompose: false
-          };
-          const taskId2 = await initRequirementSingle(item, cwd, itemOptions);
-          if (taskId2) {
-            createdTaskIds.push(taskId2);
-            taskIdMap.set(i, taskId2);
-          }
-        }
-        if (createdTaskIds.length > 0) {
-          console.log("");
-          console.log("\u2501".repeat(SEPARATOR_WIDTH));
-          console.log("\uD83D\uDD17 \u6B63\u5728\u8BBE\u7F6E\u4EFB\u52A1\u4F9D\u8D56\u5173\u7CFB...");
-          console.log("\u2501".repeat(SEPARATOR_WIDTH));
-          console.log("");
-          for (let i = 0;i < decomposition.items.length; i++) {
-            const item = decomposition.items[i];
-            const taskId2 = taskIdMap.get(i);
-            if (!taskId2 || item.dependsOn.length === 0)
-              continue;
-            const task2 = readTaskMeta(taskId2, cwd);
-            if (!task2)
-              continue;
-            const deps = [];
-            for (const depIndex of item.dependsOn) {
-              const depId = taskIdMap.get(depIndex);
-              if (depId && !deps.includes(depId)) {
-                deps.push(depId);
-              }
-            }
-            if (deps.length > 0) {
-              task2.dependencies = [...task2.dependencies || [], ...deps];
-              writeTaskMeta(task2, cwd);
-              console.log(`  ${taskId2} \u4F9D\u8D56: ${deps.join(", ")}`);
-            }
-          }
-          console.log("");
-          console.log(`\u2705 \u5DF2\u521B\u5EFA ${createdTaskIds.length} \u4E2A\u4EFB\u52A1:`);
-          for (const taskId2 of createdTaskIds) {
-            console.log(`   - ${taskId2}`);
-          }
-          console.log("");
-        }
+        await initRequirementBatch(decomposition.items, cwd, options);
         return;
       }
     }
@@ -27637,6 +27876,91 @@ async function initRequirementSingle(item, cwd, options) {
     console.error(`     ${error instanceof Error ? error.message : String(error)}`);
     return null;
   }
+}
+function reportBatchResult(created, failed, totalCount) {
+  console.log(`
+` + "\u2501".repeat(50));
+  console.log("\uD83D\uDCCA \u6279\u91CF\u521B\u5EFA\u5B8C\u6210");
+  console.log("\u2501".repeat(50));
+  console.log(`   \u6210\u529F: ${created.length}/${totalCount}`);
+  if (created.length > 0) {
+    console.log(`   \u4EFB\u52A1\u5217\u8868:`);
+    created.forEach((id) => console.log(`     - ${id}`));
+  }
+  if (failed.length > 0) {
+    console.log(`   \u5931\u8D25: ${failed.length}`);
+    failed.forEach((f) => console.log(`     - ${f.item.title}: ${f.reason}`));
+  }
+}
+async function initRequirementBatch(items, cwd, options) {
+  const createdTaskIds = [];
+  const failedTasks = [];
+  const taskIdMap = new Map;
+  console.log("");
+  console.log("\u2501".repeat(SEPARATOR_WIDTH));
+  console.log(`\uD83D\uDCDD \u5206\u89E3\u7ED3\u679C: ${items.length} \u4E2A\u4EFB\u52A1`);
+  items.forEach((item, i) => {
+    console.log(`   ${i + 1}. [${item.priority}] ${item.title}`);
+  });
+  console.log("\u2501".repeat(SEPARATOR_WIDTH));
+  console.log("");
+  console.log("\u2501".repeat(SEPARATOR_WIDTH));
+  console.log("\uD83D\uDCDD \u6B63\u5728\u521B\u5EFA\u4EFB\u52A1...");
+  console.log("\u2501".repeat(SEPARATOR_WIDTH));
+  console.log("");
+  for (let i = 0;i < items.length; i++) {
+    const item = items[i];
+    console.log(`\u521B\u5EFA\u4EFB\u52A1 ${i + 1}/${items.length}...`);
+    const itemOptions = {
+      ...options,
+      nonInteractive: true,
+      decompose: false
+    };
+    try {
+      const taskId = await initRequirementSingle(item, cwd, itemOptions);
+      if (taskId) {
+        createdTaskIds.push(taskId);
+        taskIdMap.set(i, taskId);
+        console.log(`\u2705 ${taskId}`);
+      } else {
+        failedTasks.push({ item, reason: "\u521B\u5EFA\u5931\u8D25\uFF08\u8FD4\u56DE null\uFF09" });
+        console.log(`\u274C \u5931\u8D25: \u8FD4\u56DE null`);
+      }
+    } catch (error) {
+      const reason = error instanceof Error ? error.message : String(error);
+      failedTasks.push({ item, reason });
+      console.log(`\u274C \u5931\u8D25: ${reason}`);
+    }
+  }
+  if (createdTaskIds.length > 0) {
+    console.log("");
+    console.log("\u2501".repeat(SEPARATOR_WIDTH));
+    console.log("\uD83D\uDD17 \u6B63\u5728\u8BBE\u7F6E\u4EFB\u52A1\u4F9D\u8D56\u5173\u7CFB...");
+    console.log("\u2501".repeat(SEPARATOR_WIDTH));
+    console.log("");
+    for (let i = 0;i < items.length; i++) {
+      const item = items[i];
+      const taskId = taskIdMap.get(i);
+      if (!taskId || item.dependsOn.length === 0)
+        continue;
+      const task = readTaskMeta(taskId, cwd);
+      if (!task)
+        continue;
+      const deps = [];
+      for (const depIndex of item.dependsOn) {
+        const depId = taskIdMap.get(depIndex);
+        if (depId && !deps.includes(depId)) {
+          deps.push(depId);
+        }
+      }
+      if (deps.length > 0) {
+        task.dependencies = [...task.dependencies || [], ...deps];
+        writeTaskMeta(task, cwd);
+        console.log(`  ${taskId} \u4F9D\u8D56: ${deps.join(", ")}`);
+      }
+    }
+  }
+  reportBatchResult(createdTaskIds, failedTasks, items.length);
 }
 
 // src/commands/help.ts
@@ -33637,6 +33961,7 @@ Advanced: dependency/add-subtask/status-guide/complete/split/search/batch-update
 
 [Deprecated - will be removed]:
   submit                 Use: task update <id> --status wait_evaluation
+  validate               Use: harness evaluation phase (auto-executed)
 
 Global Options:
   --token <n>            Token estimation

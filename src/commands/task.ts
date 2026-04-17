@@ -2073,6 +2073,10 @@ export async function submitTask(
 /**
  * 验证 wait_evaluation 状态的任务
  *
+ * @deprecated 此命令已废弃，请使用 harness 流水线进行自动验证
+ *   替代方案: projmnt4claude task update <taskId> --status wait_evaluation
+ *   验证将通过 harness evaluation 阶段自动执行
+ *
  * 执行验证并更新任务状态
  */
 export async function validateTask(
@@ -2085,6 +2089,12 @@ export async function validateTask(
 ): Promise<void> {
   // 动态导入避免循环依赖
   const { validateTaskCompletion, generateValidationReport } = await import('../utils/validation.js');
+
+  // 废弃警告
+  console.warn('[Notice]: task validate command is deprecated');
+  console.warn('   Use: projmnt4claude task update <taskId> --status wait_evaluation');
+  console.warn('   Validation will be automatically executed by harness evaluation phase');
+  console.warn('');
 
   if (!isInitialized(cwd)) {
     console.error('错误: 项目未初始化。请先运行 `projmnt4claude setup`');

@@ -280,70 +280,8 @@ export async function initRequirement(
       }
 
       if (confirmDecompose) {
-        // 阶段 2: 循环创建任务
-        const createdTaskIds: string[] = [];
-        const taskIdMap = new Map<number, string>(); // 索引 -> 任务ID 映射
-
-        console.log('');
-        console.log('━'.repeat(SEPARATOR_WIDTH));
-        console.log('📝 正在创建任务...');
-        console.log('━'.repeat(SEPARATOR_WIDTH));
-        console.log('');
-
-        for (let i = 0; i < decomposition.items.length; i++) {
-          const item = decomposition.items[i]!;
-          const itemOptions: InitRequirementOptions = {
-            ...options,
-            nonInteractive: true, // 子任务使用非交互模式
-            decompose: false, // 防止递归分解
-          };
-
-          const taskId = await initRequirementSingle(item, cwd, itemOptions);
-          if (taskId) {
-            createdTaskIds.push(taskId);
-            taskIdMap.set(i, taskId);
-          }
-        }
-
-        // 更新依赖关系
-        if (createdTaskIds.length > 0) {
-          console.log('');
-          console.log('━'.repeat(SEPARATOR_WIDTH));
-          console.log('🔗 正在设置任务依赖关系...');
-          console.log('━'.repeat(SEPARATOR_WIDTH));
-          console.log('');
-
-          for (let i = 0; i < decomposition.items.length; i++) {
-            const item = decomposition.items[i]!;
-            const taskId = taskIdMap.get(i);
-            if (!taskId || item.dependsOn.length === 0) continue;
-
-            const task = readTaskMeta(taskId, cwd);
-            if (!task) continue;
-
-            const deps: string[] = [];
-            for (const depIndex of item.dependsOn) {
-              const depId = taskIdMap.get(depIndex);
-              if (depId && !deps.includes(depId)) {
-                deps.push(depId);
-              }
-            }
-
-            if (deps.length > 0) {
-              task.dependencies = [...(task.dependencies || []), ...deps];
-              writeTaskMeta(task, cwd);
-              console.log(`  ${taskId} 依赖: ${deps.join(', ')}`);
-            }
-          }
-
-          console.log('');
-          console.log(`✅ 已创建 ${createdTaskIds.length} 个任务:`);
-          for (const taskId of createdTaskIds) {
-            console.log(`   - ${taskId}`);
-          }
-          console.log('');
-        }
-
+        // 使用批量创建函数
+        await initRequirementBatch(decomposition.items, cwd, options);
         return;
       }
     }
@@ -1663,4 +1601,132 @@ async function initRequirementSingle(
     console.error(`     ${error instanceof Error ? error.message : String(error)}`);
     return null;
   }
+}
+
+/**
+ * 格式化分解项为任务描述
+ */
+function formatItemDescription(item: DecomposedTaskItem): string {
+  const sections: string[] = [];
+  sections.push(`## 问题描述\n${item.description}`);
+  sections.push(`## 解决方案\n实现 ${item.title}`);
+  if (item.suggestedCheckpoints.length > 0) {
+    sections.push(`## 检查点\n${item.suggestedCheckpoints.map(cp => `- ${cp}`).join('\n')}`);
+  }
+  return sections.join('\n\n');
+}
+
+/**
+ * 报告批量创建结果
+ */
+function reportBatchResult(
+  created: string[],
+  failed: { item: DecomposedTaskItem; reason: string }[],
+  totalCount: number
+): void {
+  console.log('\n' + '━'.repeat(50));
+  console.log('📊 批量创建完成');
+  console.log('━'.repeat(50));
+  console.log(`   成功: ${created.length}/${totalCount}`);
+
+  if (created.length > 0) {
+    console.log(`   任务列表:`);
+    created.forEach(id => console.log(`     - ${id}`));
+  }
+
+  if (failed.length > 0) {
+    console.log(`   失败: ${failed.length}`);
+    failed.forEach(f => console.log(`     - ${f.item.title}: ${f.reason}`));
+  }
+}
+
+/**
+ * 批量创建任务
+ * 用于分解流程中批量创建多个子任务
+ */
+async function initRequirementBatch(
+  items: DecomposedTaskItem[],
+  cwd: string,
+  options: InitRequirementOptions
+): Promise<void> {
+  const createdTaskIds: string[] = [];
+  const failedTasks: { item: DecomposedTaskItem; reason: string }[] = [];
+  const taskIdMap = new Map<number, string>(); // 索引 -> 任务ID 映射
+
+  console.log('');
+  console.log('━'.repeat(SEPARATOR_WIDTH));
+  console.log(`📝 分解结果: ${items.length} 个任务`);
+  items.forEach((item, i) => {
+    console.log(`   ${i + 1}. [${item.priority}] ${item.title}`);
+  });
+  console.log('━'.repeat(SEPARATOR_WIDTH));
+  console.log('');
+
+  // 阶段 1: 批量创建任务
+  console.log('━'.repeat(SEPARATOR_WIDTH));
+  console.log('📝 正在创建任务...');
+  console.log('━'.repeat(SEPARATOR_WIDTH));
+  console.log('');
+
+  for (let i = 0; i < items.length; i++) {
+    const item = items[i]!;
+    console.log(`创建任务 ${i + 1}/${items.length}...`);
+
+    const itemOptions: InitRequirementOptions = {
+      ...options,
+      nonInteractive: true, // 子任务使用非交互模式
+      decompose: false, // 防止递归分解
+    };
+
+    try {
+      const taskId = await initRequirementSingle(item, cwd, itemOptions);
+      if (taskId) {
+        createdTaskIds.push(taskId);
+        taskIdMap.set(i, taskId);
+        console.log(`✅ ${taskId}`);
+      } else {
+        failedTasks.push({ item, reason: '创建失败（返回 null）' });
+        console.log(`❌ 失败: 返回 null`);
+      }
+    } catch (error) {
+      const reason = error instanceof Error ? error.message : String(error);
+      failedTasks.push({ item, reason });
+      console.log(`❌ 失败: ${reason}`);
+    }
+  }
+
+  // 阶段 2: 更新依赖关系
+  if (createdTaskIds.length > 0) {
+    console.log('');
+    console.log('━'.repeat(SEPARATOR_WIDTH));
+    console.log('🔗 正在设置任务依赖关系...');
+    console.log('━'.repeat(SEPARATOR_WIDTH));
+    console.log('');
+
+    for (let i = 0; i < items.length; i++) {
+      const item = items[i]!;
+      const taskId = taskIdMap.get(i);
+      if (!taskId || item.dependsOn.length === 0) continue;
+
+      const task = readTaskMeta(taskId, cwd);
+      if (!task) continue;
+
+      const deps: string[] = [];
+      for (const depIndex of item.dependsOn) {
+        const depId = taskIdMap.get(depIndex);
+        if (depId && !deps.includes(depId)) {
+          deps.push(depId);
+        }
+      }
+
+      if (deps.length > 0) {
+        task.dependencies = [...(task.dependencies || []), ...deps];
+        writeTaskMeta(task, cwd);
+        console.log(`  ${taskId} 依赖: ${deps.join(', ')}`);
+      }
+    }
+  }
+
+  // 阶段 3: 报告批量创建结果
+  reportBatchResult(createdTaskIds, failedTasks, items.length);
 }

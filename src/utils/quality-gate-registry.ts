@@ -22,6 +22,15 @@ import {
   checkpointHasVerificationCommands,
   metaJsonValid,
 } from './validation-rules/checkpoint-rules.js';
+import {
+  planCycleDetection,
+  planInvalidDependency,
+  planOrphanSubtask,
+  planOrphanTask,
+  planBlockedTask,
+  planBridgeNode,
+  planInferredOnlyDependency,
+} from './validation-rules/plan-rules.js';
 import { validateBasicFields, validateCheckpoints, type BasicFieldsValidationResult } from './quality-gate.js';
 
 // ============================================================
@@ -279,6 +288,71 @@ export const QUALITY_GATE_RULES: Record<string, RegisteredRule> = {
     appliesToPriorities: null,
     phases: ['transition'],
   },
+
+  // ========== plan_recommend 阶段阻断性规则 (QG-PLAN-003) ==========
+  'plan-cycle-detection': {
+    id: 'plan-cycle-detection',
+    description: '检测任务依赖关系中是否存在循环依赖',
+    priority: 'critical',
+    rule: planCycleDetection,
+    appliesToPriorities: null,
+    phases: ['plan_recommend'],
+  },
+
+  'plan-invalid-dependency': {
+    id: 'plan-invalid-dependency',
+    description: '检测任务依赖是否引用不存在的任务',
+    priority: 'critical',
+    rule: planInvalidDependency,
+    appliesToPriorities: null,
+    phases: ['plan_recommend'],
+  },
+
+  'plan-orphan-subtask': {
+    id: 'plan-orphan-subtask',
+    description: '检测有 parentId 但父任务不存在的孤儿子任务',
+    priority: 'critical',
+    rule: planOrphanSubtask,
+    appliesToPriorities: null,
+    phases: ['plan_recommend'],
+  },
+
+  // ========== plan_recommend 阶段警告性规则 (QG-PLAN-004) ==========
+  'plan-orphan-task': {
+    id: 'plan-orphan-task',
+    description: '检测孤立任务（无依赖且不被依赖的任务）',
+    priority: 'medium',
+    rule: planOrphanTask,
+    appliesToPriorities: null,
+    phases: ['plan_recommend'],
+  },
+
+  'plan-blocked-task': {
+    id: 'plan-blocked-task',
+    description: '检测被阻塞的任务（所有依赖都未完成）',
+    priority: 'medium',
+    rule: planBlockedTask,
+    appliesToPriorities: null,
+    phases: ['plan_recommend'],
+  },
+
+  'plan-bridge-node': {
+    id: 'plan-bridge-node',
+    description: '检测桥接节点任务（作为依赖桥梁但缺少检查点）',
+    priority: 'medium',
+    rule: planBridgeNode,
+    appliesToPriorities: null,
+    phases: ['plan_recommend'],
+  },
+
+  'plan-inferred-only-dependency': {
+    id: 'plan-inferred-only-dependency',
+    description: '检测只有推断依赖的任务（建议显式声明关键依赖）',
+    priority: 'low',
+    rule: planInferredOnlyDependency,
+    appliesToPriorities: null,
+    phases: ['plan_recommend'],
+  },
 };
 
 /** 阶段到规则的映射 */
@@ -291,6 +365,15 @@ export const PHASE_RULES: Record<QualityGatePhase, string[]> = {
     'checkpoint-no-file-path',
     'checkpoint-count-control',
     'basic-fields-valid',
+    // QG-PLAN-003: 阻断性质量门禁规则
+    'plan-cycle-detection',
+    'plan-invalid-dependency',
+    'plan-orphan-subtask',
+    // QG-PLAN-004: 警告性质量门禁规则
+    'plan-orphan-task',
+    'plan-blocked-task',
+    'plan-bridge-node',
+    'plan-inferred-only-dependency',
   ],
   initialization: [
     'meta-json-valid',

@@ -209,13 +209,16 @@ describe('Plan Recommend 质量门禁集成', () => {
       }
     });
 
-    it('plan_recommend 阶段应该比 initialization 阶段规则更少', () => {
+    it('plan_recommend 阶段应该包含核心规则', () => {
       const planRecommendRules = getRulesForPhase('plan_recommend');
-      const initializationRules = getRulesForPhase('initialization');
 
       // plan_recommend 专注于核心质量检查，规则数量应该适中
       expect(planRecommendRules.length).toBeGreaterThan(0);
-      expect(planRecommendRules.length).toBeLessThanOrEqual(initializationRules.length);
+      // 验证包含阻断性和警告性质量门禁规则
+      const ruleIds = planRecommendRules.map(r => r.id);
+      expect(ruleIds).toContain('plan-cycle-detection');
+      expect(ruleIds).toContain('plan-orphan-task');
+      expect(ruleIds).toContain('plan-blocked-task');
     });
   });
 });
