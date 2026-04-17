@@ -11,7 +11,7 @@
  */
 
 import type { TaskMeta, CheckpointMetadata } from '../types/task.js';
-import type { ValidationViolation, ValidationRule } from '../types/feedback-constraint.js';
+import type { ValidationViolation, ValidationRule, QualityGateContext } from '../types/feedback-constraint.js';
 import {
   checkpointNoDuplicate,
   checkpointNoFilePath,
@@ -230,7 +230,7 @@ export const QUALITY_GATE_RULES: Record<string, RegisteredRule> = {
       id: 'status-transition-valid',
       description: '状态转换验证',
       severity: 'error',
-      check: (task: unknown, context?: { expectedStatus?: string; phase?: string }): ValidationViolation | null => {
+      check: (task: unknown, context?: QualityGateContext): ValidationViolation | null => {
         const t = task as TaskMeta;
         const expectedStatus = context?.expectedStatus;
         const phase = context?.phase;
@@ -354,7 +354,7 @@ export const PHASE_RULES: Record<QualityGatePhase, string[]> = {
 export function runQualityGate(
   task: TaskMeta,
   phase: QualityGatePhase,
-  context?: { expectedStatus?: string; phase?: string }
+  context?: QualityGateContext
 ): QualityGateValidationResult {
   const violations: ValidationViolation[] = [];
   const errors: ValidationViolation[] = [];
@@ -423,18 +423,20 @@ export function runQualityGate(
  *
  * @param tasks - 任务列表
  * @param phase - 验证阶段
+ * @param context - 可选的上下文信息（传递给每个任务的验证）
  * @returns 批量验证结果
  */
 export function batchRunQualityGate(
   tasks: TaskMeta[],
-  phase: QualityGatePhase
+  phase: QualityGatePhase,
+  context?: QualityGateContext
 ): BatchValidationResult {
   const results = new Map<string, QualityGateValidationResult>();
   let passedCount = 0;
   let failedCount = 0;
 
   for (const task of tasks) {
-    const result = runQualityGate(task, phase);
+    const result = runQualityGate(task, phase, context);
     results.set(task.id, result);
 
     if (result.passed) {

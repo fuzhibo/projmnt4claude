@@ -29,6 +29,12 @@ export interface ValidationViolation {
 }
 
 /**
+ * 质量门禁上下文类型
+ * 支持动态传递的上下文信息
+ */
+export type QualityGateContext = Record<string, unknown>;
+
+/**
  * 原子验证规则
  * 每条规则检查输出中的单一约束条件
  */
@@ -37,8 +43,8 @@ export interface ValidationRule {
   id: string;
   /** 规则描述 */
   description: string;
-  /** 检查函数：返回违规项或 null */
-  check: (output: unknown) => ValidationViolation | null;
+  /** 检查函数：返回违规项或 null，支持可选的上下文参数 */
+  check: (output: unknown, context?: QualityGateContext) => ValidationViolation | null;
   /** 默认严重级别 */
   severity: ViolationSeverity;
 }
