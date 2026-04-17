@@ -11,9 +11,9 @@
 import { describe, it, expect, beforeEach, afterEach, spyOn } from 'bun:test';
 import * as fs from 'fs';
 import * as path from 'path';
-import * as os from 'os';
 import type { TaskMeta, ExecutionStats } from '../types/task';
 import { createDefaultTaskMeta } from '../types/task';
+import { createIsolatedTestEnv, type IsolatedTestEnv } from '../utils/test-env.js';
 
 const taskUtils = () => import('../utils/task.js');
 const pathUtils = () => import('../utils/path.js');
@@ -82,48 +82,39 @@ describe('getTaskMetaPath', () => {
 // ============================================================
 
 describe('readTaskMeta', () => {
-  let tempDir: string;
-  let tasksDir: string;
-  let isInitSpy: ReturnType<typeof spyOn>;
-  let getTasksDirSpy: ReturnType<typeof spyOn>;
+  let env: IsolatedTestEnv;
 
   beforeEach(async () => {
-    tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'task-b-test-'));
-    tasksDir = path.join(tempDir, 'tasks');
-    const pMod = await pathUtils();
-    isInitSpy = spyOn(pMod, 'isInitialized').mockReturnValue(true);
-    getTasksDirSpy = spyOn(pMod, 'getTasksDir').mockReturnValue(tasksDir);
+    env = await createIsolatedTestEnv();
   });
 
-  afterEach(() => {
-    isInitSpy.mockRestore();
-    getTasksDirSpy.mockRestore();
-    fs.rmSync(tempDir, { recursive: true, force: true });
+  afterEach(async () => {
+    await env.cleanup();
   });
 
   it('returns null when not initialized', async () => {
-    isInitSpy.mockReturnValue(false);
+    env.mocks.isInitialized.mockReturnValue(false);
     const { readTaskMeta } = await taskUtils();
-    expect(readTaskMeta('TASK-001', tempDir)).toBeNull();
+    expect(readTaskMeta('TASK-001', env.tempDir)).toBeNull();
   });
 
   it('returns null when meta.json missing', async () => {
     const { readTaskMeta } = await taskUtils();
-    expect(readTaskMeta('TASK-NONEXIST', tempDir)).toBeNull();
+    expect(readTaskMeta('TASK-NONEXIST', env.tempDir)).toBeNull();
   });
 
   it('returns null for invalid JSON', async () => {
-    const taskDir = path.join(tasksDir, 'TASK-001');
+    const taskDir = path.join(env.tasksDir, 'TASK-001');
     fs.mkdirSync(taskDir, { recursive: true });
     fs.writeFileSync(path.join(taskDir, 'meta.json'), 'bad json');
     const { readTaskMeta } = await taskUtils();
-    expect(readTaskMeta('TASK-001', tempDir)).toBeNull();
+    expect(readTaskMeta('TASK-001', env.tempDir)).toBeNull();
   });
 
   it('reads valid task meta', async () => {
-    writeTaskToDisk(path.join(tasksDir, 'TASK-001'), makeTask({ id: 'TASK-001', title: 'Hello' }));
+    writeTaskToDisk(path.join(env.tasksDir, 'TASK-001'), makeTask({ id: 'TASK-001', title: 'Hello' }));
     const { readTaskMeta } = await taskUtils();
-    const result = readTaskMeta('TASK-001', tempDir);
+    const result = readTaskMeta('TASK-001', env.tempDir);
     expect(result).not.toBeNull();
     expect(result!.id).toBe('TASK-001');
     expect(result!.title).toBe('Hello');
@@ -135,29 +126,20 @@ describe('readTaskMeta', () => {
 // ============================================================
 
 describe('writeTaskMeta', () => {
-  let tempDir: string;
-  let tasksDir: string;
-  let isInitSpy: ReturnType<typeof spyOn>;
-  let getTasksDirSpy: ReturnType<typeof spyOn>;
+  let env: IsolatedTestEnv;
 
   beforeEach(async () => {
-    tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'task-b-test-'));
-    tasksDir = path.join(tempDir, 'tasks');
-    const pMod = await pathUtils();
-    isInitSpy = spyOn(pMod, 'isInitialized').mockReturnValue(true);
-    getTasksDirSpy = spyOn(pMod, 'getTasksDir').mockReturnValue(tasksDir);
+    env = await createIsolatedTestEnv();
   });
 
-  afterEach(() => {
-    isInitSpy.mockRestore();
-    getTasksDirSpy.mockRestore();
-    fs.rmSync(tempDir, { recursive: true, force: true });
+  afterEach(async () => {
+    await env.cleanup();
   });
 
   it('creates directory and writes meta.json', async () => {
     const { writeTaskMeta, readTaskMeta } = await taskUtils();
-    writeTaskMeta(makeTask({ id: 'TASK-001', title: 'New' }), tempDir);
-    const result = readTaskMeta('TASK-001', tempDir);
+    writeTaskMeta(makeTask({ id: 'TASK-001', title: 'New' }), env.tempDir);
+    const result = readTaskMeta('TASK-001', env.tempDir);
     expect(result).not.toBeNull();
     expect(result!.title).toBe('New');
   });
@@ -165,18 +147,18 @@ describe('writeTaskMeta', () => {
   it('updates updatedAt on write', async () => {
     const { writeTaskMeta, readTaskMeta } = await taskUtils();
     const task = makeTask({ id: 'TASK-001', updatedAt: '2020-01-01T00:00:00.000Z' });
-    writeTaskMeta(task, tempDir);
-    const result = readTaskMeta('TASK-001', tempDir);
+    writeTaskMeta(task, env.tempDir);
+    const result = readTaskMeta('TASK-001', env.tempDir);
     expect(result!.updatedAt).not.toBe('2020-01-01T00:00:00.000Z');
   });
 
   it('records history on status change', async () => {
     const { writeTaskMeta, readTaskMeta } = await taskUtils();
     const task = makeTask({ id: 'TASK-001', status: 'open' });
-    writeTaskMeta(task, tempDir);
+    writeTaskMeta(task, env.tempDir);
     task.status = 'in_progress';
-    writeTaskMeta(task, tempDir);
-    const result = readTaskMeta('TASK-001', tempDir);
+    writeTaskMeta(task, env.tempDir);
+    const result = readTaskMeta('TASK-001', env.tempDir);
     const statusEntry = result!.history.find(h => h.field === 'status');
     expect(statusEntry).toBeDefined();
     expect(statusEntry!.oldValue).toBe('open');
@@ -186,10 +168,10 @@ describe('writeTaskMeta', () => {
   it('records history on priority change', async () => {
     const { writeTaskMeta, readTaskMeta } = await taskUtils();
     const task = makeTask({ id: 'TASK-001', priority: 'P2' });
-    writeTaskMeta(task, tempDir);
+    writeTaskMeta(task, env.tempDir);
     task.priority = 'P0';
-    writeTaskMeta(task, tempDir);
-    const result = readTaskMeta('TASK-001', tempDir);
+    writeTaskMeta(task, env.tempDir);
+    const result = readTaskMeta('TASK-001', env.tempDir);
     const prioEntry = result!.history.find(h => h.field === 'priority');
     expect(prioEntry).toBeDefined();
   });
@@ -197,10 +179,10 @@ describe('writeTaskMeta', () => {
   it('records history on dependencies change', async () => {
     const { writeTaskMeta, readTaskMeta } = await taskUtils();
     const task = makeTask({ id: 'TASK-001', dependencies: [] });
-    writeTaskMeta(task, tempDir);
+    writeTaskMeta(task, env.tempDir);
     task.dependencies = ['TASK-002', 'TASK-003'];
-    writeTaskMeta(task, tempDir);
-    const result = readTaskMeta('TASK-001', tempDir);
+    writeTaskMeta(task, env.tempDir);
+    const result = readTaskMeta('TASK-001', env.tempDir);
     const depEntry = result!.history.find(h => h.field === 'dependencies');
     expect(depEntry).toBeDefined();
     expect(depEntry!.newValue).toContain('TASK-002');
@@ -212,42 +194,33 @@ describe('writeTaskMeta', () => {
 // ============================================================
 
 describe('getAllTaskIds', () => {
-  let tempDir: string;
-  let tasksDir: string;
-  let isInitSpy: ReturnType<typeof spyOn>;
-  let getTasksDirSpy: ReturnType<typeof spyOn>;
+  let env: IsolatedTestEnv;
 
   beforeEach(async () => {
-    tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'task-b-test-'));
-    tasksDir = path.join(tempDir, 'tasks');
-    const pMod = await pathUtils();
-    isInitSpy = spyOn(pMod, 'isInitialized').mockReturnValue(true);
-    getTasksDirSpy = spyOn(pMod, 'getTasksDir').mockReturnValue(tasksDir);
+    env = await createIsolatedTestEnv();
   });
 
-  afterEach(() => {
-    isInitSpy.mockRestore();
-    getTasksDirSpy.mockRestore();
-    fs.rmSync(tempDir, { recursive: true, force: true });
+  afterEach(async () => {
+    await env.cleanup();
   });
 
   it('returns empty when not initialized', async () => {
-    isInitSpy.mockReturnValue(false);
+    env.mocks.isInitialized.mockReturnValue(false);
     const { getAllTaskIds } = await taskUtils();
-    expect(getAllTaskIds(tempDir)).toEqual([]);
+    expect(getAllTaskIds(env.tempDir)).toEqual([]);
   });
 
   it('returns empty when tasks dir missing', async () => {
     const { getAllTaskIds } = await taskUtils();
-    expect(getAllTaskIds(tempDir)).toEqual([]);
+    expect(getAllTaskIds(env.tempDir)).toEqual([]);
   });
 
   it('returns only directories with meta.json', async () => {
-    writeTaskToDisk(path.join(tasksDir, 'TASK-001'), makeTask({ id: 'TASK-001' }));
-    writeTaskToDisk(path.join(tasksDir, 'TASK-002'), makeTask({ id: 'TASK-002' }));
-    fs.mkdirSync(path.join(tasksDir, 'empty-dir'), { recursive: true });
+    writeTaskToDisk(path.join(env.tasksDir, 'TASK-001'), makeTask({ id: 'TASK-001' }));
+    writeTaskToDisk(path.join(env.tasksDir, 'TASK-002'), makeTask({ id: 'TASK-002' }));
+    fs.mkdirSync(path.join(env.tasksDir, 'empty-dir'), { recursive: true });
     const { getAllTaskIds } = await taskUtils();
-    const ids = getAllTaskIds(tempDir);
+    const ids = getAllTaskIds(env.tempDir);
     expect(ids.sort()).toEqual(['TASK-001', 'TASK-002']);
   });
 });
@@ -257,34 +230,25 @@ describe('getAllTaskIds', () => {
 // ============================================================
 
 describe('taskExists', () => {
-  let tempDir: string;
-  let tasksDir: string;
-  let isInitSpy: ReturnType<typeof spyOn>;
-  let getTasksDirSpy: ReturnType<typeof spyOn>;
+  let env: IsolatedTestEnv;
 
   beforeEach(async () => {
-    tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'task-b-test-'));
-    tasksDir = path.join(tempDir, 'tasks');
-    const pMod = await pathUtils();
-    isInitSpy = spyOn(pMod, 'isInitialized').mockReturnValue(true);
-    getTasksDirSpy = spyOn(pMod, 'getTasksDir').mockReturnValue(tasksDir);
+    env = await createIsolatedTestEnv();
   });
 
-  afterEach(() => {
-    isInitSpy.mockRestore();
-    getTasksDirSpy.mockRestore();
-    fs.rmSync(tempDir, { recursive: true, force: true });
+  afterEach(async () => {
+    await env.cleanup();
   });
 
   it('returns true for existing task', async () => {
-    writeTaskToDisk(path.join(tasksDir, 'TASK-001'), makeTask({ id: 'TASK-001' }));
+    writeTaskToDisk(path.join(env.tasksDir, 'TASK-001'), makeTask({ id: 'TASK-001' }));
     const { taskExists } = await taskUtils();
-    expect(taskExists('TASK-001', tempDir)).toBe(true);
+    expect(taskExists('TASK-001', env.tempDir)).toBe(true);
   });
 
   it('returns false for non-existing task', async () => {
     const { taskExists } = await taskUtils();
-    expect(taskExists('TASK-NONEXIST', tempDir)).toBe(false);
+    expect(taskExists('TASK-NONEXIST', env.tempDir)).toBe(false);
   });
 });
 
@@ -336,40 +300,31 @@ describe('isSubtask', () => {
 // ============================================================
 
 describe('generateSubtaskId', () => {
-  let tempDir: string;
-  let tasksDir: string;
-  let isInitSpy: ReturnType<typeof spyOn>;
-  let getTasksDirSpy: ReturnType<typeof spyOn>;
+  let env: IsolatedTestEnv;
 
   beforeEach(async () => {
-    tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'task-b-test-'));
-    tasksDir = path.join(tempDir, 'tasks');
-    const pMod = await pathUtils();
-    isInitSpy = spyOn(pMod, 'isInitialized').mockReturnValue(true);
-    getTasksDirSpy = spyOn(pMod, 'getTasksDir').mockReturnValue(tasksDir);
+    env = await createIsolatedTestEnv();
   });
 
-  afterEach(() => {
-    isInitSpy.mockRestore();
-    getTasksDirSpy.mockRestore();
-    fs.rmSync(tempDir, { recursive: true, force: true });
+  afterEach(async () => {
+    await env.cleanup();
   });
 
   it('generates first subtask', async () => {
     const { writeTaskMeta, generateSubtaskId } = await taskUtils();
-    writeTaskMeta(makeTask({ id: 'TASK-001' }), tempDir);
-    expect(generateSubtaskId('TASK-001', tempDir)).toBe('TASK-001-1');
+    writeTaskMeta(makeTask({ id: 'TASK-001' }), env.tempDir);
+    expect(generateSubtaskId('TASK-001', env.tempDir)).toBe('TASK-001-1');
   });
 
   it('increments from existing subtasks', async () => {
     const { writeTaskMeta, generateSubtaskId } = await taskUtils();
-    writeTaskMeta(makeTask({ id: 'TASK-001', subtaskIds: ['TASK-001-1', 'TASK-001-2'] }), tempDir);
-    expect(generateSubtaskId('TASK-001', tempDir)).toBe('TASK-001-3');
+    writeTaskMeta(makeTask({ id: 'TASK-001', subtaskIds: ['TASK-001-1', 'TASK-001-2'] }), env.tempDir);
+    expect(generateSubtaskId('TASK-001', env.tempDir)).toBe('TASK-001-3');
   });
 
   it('throws when parent missing', async () => {
     const { generateSubtaskId } = await taskUtils();
-    expect(() => generateSubtaskId('TASK-NONEXIST', tempDir)).toThrow('不存在');
+    expect(() => generateSubtaskId('TASK-NONEXIST', env.tempDir)).toThrow('不存在');
   });
 });
 
@@ -378,45 +333,36 @@ describe('generateSubtaskId', () => {
 // ============================================================
 
 describe('addSubtaskToParent', () => {
-  let tempDir: string;
-  let tasksDir: string;
-  let isInitSpy: ReturnType<typeof spyOn>;
-  let getTasksDirSpy: ReturnType<typeof spyOn>;
+  let env: IsolatedTestEnv;
 
   beforeEach(async () => {
-    tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'task-b-test-'));
-    tasksDir = path.join(tempDir, 'tasks');
-    const pMod = await pathUtils();
-    isInitSpy = spyOn(pMod, 'isInitialized').mockReturnValue(true);
-    getTasksDirSpy = spyOn(pMod, 'getTasksDir').mockReturnValue(tasksDir);
+    env = await createIsolatedTestEnv();
   });
 
-  afterEach(() => {
-    isInitSpy.mockRestore();
-    getTasksDirSpy.mockRestore();
-    fs.rmSync(tempDir, { recursive: true, force: true });
+  afterEach(async () => {
+    await env.cleanup();
   });
 
   it('adds subtask to parent and records history', async () => {
     const { writeTaskMeta, addSubtaskToParent, readTaskMeta } = await taskUtils();
-    writeTaskMeta(makeTask({ id: 'TASK-001' }), tempDir);
-    addSubtaskToParent('TASK-001', 'TASK-001-1', tempDir);
-    const result = readTaskMeta('TASK-001', tempDir);
+    writeTaskMeta(makeTask({ id: 'TASK-001' }), env.tempDir);
+    addSubtaskToParent('TASK-001', 'TASK-001-1', env.tempDir);
+    const result = readTaskMeta('TASK-001', env.tempDir);
     expect(result!.subtaskIds).toContain('TASK-001-1');
     expect(result!.history.find(h => h.action.includes('添加子任务'))).toBeDefined();
   });
 
   it('skips duplicate subtask', async () => {
     const { writeTaskMeta, addSubtaskToParent, readTaskMeta } = await taskUtils();
-    writeTaskMeta(makeTask({ id: 'TASK-001', subtaskIds: ['TASK-001-1'] }), tempDir);
-    addSubtaskToParent('TASK-001', 'TASK-001-1', tempDir);
-    const result = readTaskMeta('TASK-001', tempDir);
+    writeTaskMeta(makeTask({ id: 'TASK-001', subtaskIds: ['TASK-001-1'] }), env.tempDir);
+    addSubtaskToParent('TASK-001', 'TASK-001-1', env.tempDir);
+    const result = readTaskMeta('TASK-001', env.tempDir);
     expect(result!.subtaskIds!.filter(id => id === 'TASK-001-1').length).toBe(1);
   });
 
   it('throws when parent missing', async () => {
     const { addSubtaskToParent } = await taskUtils();
-    expect(() => addSubtaskToParent('TASK-NONEXIST', 'X', tempDir)).toThrow('不存在');
+    expect(() => addSubtaskToParent('TASK-NONEXIST', 'X', env.tempDir)).toThrow('不存在');
   });
 });
 
@@ -425,38 +371,29 @@ describe('addSubtaskToParent', () => {
 // ============================================================
 
 describe('getSubtasks', () => {
-  let tempDir: string;
-  let tasksDir: string;
-  let isInitSpy: ReturnType<typeof spyOn>;
-  let getTasksDirSpy: ReturnType<typeof spyOn>;
+  let env: IsolatedTestEnv;
 
   beforeEach(async () => {
-    tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'task-b-test-'));
-    tasksDir = path.join(tempDir, 'tasks');
-    const pMod = await pathUtils();
-    isInitSpy = spyOn(pMod, 'isInitialized').mockReturnValue(true);
-    getTasksDirSpy = spyOn(pMod, 'getTasksDir').mockReturnValue(tasksDir);
+    env = await createIsolatedTestEnv();
   });
 
-  afterEach(() => {
-    isInitSpy.mockRestore();
-    getTasksDirSpy.mockRestore();
-    fs.rmSync(tempDir, { recursive: true, force: true });
+  afterEach(async () => {
+    await env.cleanup();
   });
 
   it('returns subtasks sorted by createdAt', async () => {
     const { writeTaskMeta, getSubtasks } = await taskUtils();
-    writeTaskMeta(makeTask({ id: 'TASK-001', subtaskIds: ['TASK-001-1', 'TASK-001-2'] }), tempDir);
-    writeTaskMeta(makeTask({ id: 'TASK-001-1', createdAt: '2020-01-02T00:00:00.000Z' }), tempDir);
-    writeTaskMeta(makeTask({ id: 'TASK-001-2', createdAt: '2020-01-01T00:00:00.000Z' }), tempDir);
-    const subtasks = getSubtasks('TASK-001', tempDir);
+    writeTaskMeta(makeTask({ id: 'TASK-001', subtaskIds: ['TASK-001-1', 'TASK-001-2'] }), env.tempDir);
+    writeTaskMeta(makeTask({ id: 'TASK-001-1', createdAt: '2020-01-02T00:00:00.000Z' }), env.tempDir);
+    writeTaskMeta(makeTask({ id: 'TASK-001-2', createdAt: '2020-01-01T00:00:00.000Z' }), env.tempDir);
+    const subtasks = getSubtasks('TASK-001', env.tempDir);
     expect(subtasks[0]!.id).toBe('TASK-001-2');
     expect(subtasks[1]!.id).toBe('TASK-001-1');
   });
 
   it('returns empty for missing parent', async () => {
     const { getSubtasks } = await taskUtils();
-    expect(getSubtasks('TASK-NONEXIST', tempDir)).toEqual([]);
+    expect(getSubtasks('TASK-NONEXIST', env.tempDir)).toEqual([]);
   });
 });
 
@@ -465,36 +402,27 @@ describe('getSubtasks', () => {
 // ============================================================
 
 describe('getParentTask', () => {
-  let tempDir: string;
-  let tasksDir: string;
-  let isInitSpy: ReturnType<typeof spyOn>;
-  let getTasksDirSpy: ReturnType<typeof spyOn>;
+  let env: IsolatedTestEnv;
 
   beforeEach(async () => {
-    tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'task-b-test-'));
-    tasksDir = path.join(tempDir, 'tasks');
-    const pMod = await pathUtils();
-    isInitSpy = spyOn(pMod, 'isInitialized').mockReturnValue(true);
-    getTasksDirSpy = spyOn(pMod, 'getTasksDir').mockReturnValue(tasksDir);
+    env = await createIsolatedTestEnv();
   });
 
-  afterEach(() => {
-    isInitSpy.mockRestore();
-    getTasksDirSpy.mockRestore();
-    fs.rmSync(tempDir, { recursive: true, force: true });
+  afterEach(async () => {
+    await env.cleanup();
   });
 
   it('returns parent when parentId set', async () => {
     const { writeTaskMeta, getParentTask } = await taskUtils();
-    writeTaskMeta(makeTask({ id: 'TASK-001' }), tempDir);
-    writeTaskMeta(makeTask({ id: 'TASK-001-1', parentId: 'TASK-001' }), tempDir);
-    expect(getParentTask('TASK-001-1', tempDir)!.id).toBe('TASK-001');
+    writeTaskMeta(makeTask({ id: 'TASK-001' }), env.tempDir);
+    writeTaskMeta(makeTask({ id: 'TASK-001-1', parentId: 'TASK-001' }), env.tempDir);
+    expect(getParentTask('TASK-001-1', env.tempDir)!.id).toBe('TASK-001');
   });
 
   it('returns null when no parentId', async () => {
     const { writeTaskMeta, getParentTask } = await taskUtils();
-    writeTaskMeta(makeTask({ id: 'TASK-001' }), tempDir);
-    expect(getParentTask('TASK-001', tempDir)).toBeNull();
+    writeTaskMeta(makeTask({ id: 'TASK-001' }), env.tempDir);
+    expect(getParentTask('TASK-001', env.tempDir)).toBeNull();
   });
 });
 
@@ -503,30 +431,21 @@ describe('getParentTask', () => {
 // ============================================================
 
 describe('updateTaskStatus', () => {
-  let tempDir: string;
-  let tasksDir: string;
-  let isInitSpy: ReturnType<typeof spyOn>;
-  let getTasksDirSpy: ReturnType<typeof spyOn>;
+  let env: IsolatedTestEnv;
 
   beforeEach(async () => {
-    tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'task-b-test-'));
-    tasksDir = path.join(tempDir, 'tasks');
-    const pMod = await pathUtils();
-    isInitSpy = spyOn(pMod, 'isInitialized').mockReturnValue(true);
-    getTasksDirSpy = spyOn(pMod, 'getTasksDir').mockReturnValue(tasksDir);
+    env = await createIsolatedTestEnv();
   });
 
-  afterEach(() => {
-    isInitSpy.mockRestore();
-    getTasksDirSpy.mockRestore();
-    fs.rmSync(tempDir, { recursive: true, force: true });
+  afterEach(async () => {
+    await env.cleanup();
   });
 
   it('updates status and records history', async () => {
     const { writeTaskMeta, updateTaskStatus, readTaskMeta } = await taskUtils();
-    writeTaskMeta(makeTask({ id: 'TASK-001', status: 'open' }), tempDir);
-    updateTaskStatus('TASK-001', 'in_progress', tempDir, 'starting');
-    const result = readTaskMeta('TASK-001', tempDir);
+    writeTaskMeta(makeTask({ id: 'TASK-001', status: 'open' }), env.tempDir);
+    updateTaskStatus('TASK-001', 'in_progress', env.tempDir, 'starting');
+    const result = readTaskMeta('TASK-001', env.tempDir);
     expect(result!.status).toBe('in_progress');
     const entry = result!.history.find(h => h.field === 'status');
     expect(entry).toBeDefined();
@@ -536,15 +455,15 @@ describe('updateTaskStatus', () => {
 
   it('no-ops when status unchanged', async () => {
     const { writeTaskMeta, updateTaskStatus, readTaskMeta } = await taskUtils();
-    writeTaskMeta(makeTask({ id: 'TASK-001', status: 'open' }), tempDir);
-    const beforeLen = readTaskMeta('TASK-001', tempDir)!.history.length;
-    updateTaskStatus('TASK-001', 'open', tempDir);
-    expect(readTaskMeta('TASK-001', tempDir)!.history.length).toBe(beforeLen);
+    writeTaskMeta(makeTask({ id: 'TASK-001', status: 'open' }), env.tempDir);
+    const beforeLen = readTaskMeta('TASK-001', env.tempDir)!.history.length;
+    updateTaskStatus('TASK-001', 'open', env.tempDir);
+    expect(readTaskMeta('TASK-001', env.tempDir)!.history.length).toBe(beforeLen);
   });
 
   it('throws for missing task', async () => {
     const { updateTaskStatus } = await taskUtils();
-    expect(() => updateTaskStatus('TASK-NONEXIST', 'open', tempDir)).toThrow('不存在');
+    expect(() => updateTaskStatus('TASK-NONEXIST', 'open', env.tempDir)).toThrow('不存在');
   });
 
   it('auto-completes pending checkpoints on resolve', async () => {
@@ -556,18 +475,18 @@ describe('updateTaskStatus', () => {
         { id: 'CP-001', description: 'A', status: 'completed', createdAt: '2020-01-01T00:00:00.000Z', updatedAt: '2020-01-01T00:00:00.000Z', verification: { method: 'automated' as const } },
         { id: 'CP-002', description: 'B', status: 'pending', createdAt: '2020-01-01T00:00:00.000Z', updatedAt: '2020-01-01T00:00:00.000Z' },
       ],
-    }), tempDir);
-    updateTaskStatus('TASK-001', 'resolved', tempDir);
-    const result = readTaskMeta('TASK-001', tempDir);
+    }), env.tempDir);
+    updateTaskStatus('TASK-001', 'resolved', env.tempDir);
+    const result = readTaskMeta('TASK-001', env.tempDir);
     expect(result!.checkpoints![1]!.status).toBe('completed');
     expect(result!.verification!.result).toBe('passed');
   });
 
   it('adds transitionNote', async () => {
     const { writeTaskMeta, updateTaskStatus, readTaskMeta } = await taskUtils();
-    writeTaskMeta(makeTask({ id: 'TASK-001', status: 'open' }), tempDir);
-    updateTaskStatus('TASK-001', 'in_progress', tempDir, undefined, 'dev started');
-    const result = readTaskMeta('TASK-001', tempDir);
+    writeTaskMeta(makeTask({ id: 'TASK-001', status: 'open' }), env.tempDir);
+    updateTaskStatus('TASK-001', 'in_progress', env.tempDir, undefined, 'dev started');
+    const result = readTaskMeta('TASK-001', env.tempDir);
     expect(result!.transitionNotes![0]!.note).toBe('dev started');
   });
 });
@@ -623,37 +542,28 @@ describe('buildTaskVerification', () => {
 // ============================================================
 
 describe('assignRole', () => {
-  let tempDir: string;
-  let tasksDir: string;
-  let isInitSpy: ReturnType<typeof spyOn>;
-  let getTasksDirSpy: ReturnType<typeof spyOn>;
+  let env: IsolatedTestEnv;
 
   beforeEach(async () => {
-    tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'task-b-test-'));
-    tasksDir = path.join(tempDir, 'tasks');
-    const pMod = await pathUtils();
-    isInitSpy = spyOn(pMod, 'isInitialized').mockReturnValue(true);
-    getTasksDirSpy = spyOn(pMod, 'getTasksDir').mockReturnValue(tasksDir);
+    env = await createIsolatedTestEnv();
   });
 
-  afterEach(() => {
-    isInitSpy.mockRestore();
-    getTasksDirSpy.mockRestore();
-    fs.rmSync(tempDir, { recursive: true, force: true });
+  afterEach(async () => {
+    await env.cleanup();
   });
 
   it('assigns role with history', async () => {
     const { writeTaskMeta, assignRole, readTaskMeta } = await taskUtils();
-    writeTaskMeta(makeTask({ id: 'TASK-001' }), tempDir);
-    assignRole('TASK-001', 'executor', tempDir);
-    const result = readTaskMeta('TASK-001', tempDir);
+    writeTaskMeta(makeTask({ id: 'TASK-001' }), env.tempDir);
+    assignRole('TASK-001', 'executor', env.tempDir);
+    const result = readTaskMeta('TASK-001', env.tempDir);
     expect(result!.recommendedRole).toBe('executor');
     expect(result!.history.find(h => h.field === 'recommendedRole')).toBeDefined();
   });
 
   it('throws for missing task', async () => {
     const { assignRole } = await taskUtils();
-    expect(() => assignRole('TASK-NONEXIST', 'executor', tempDir)).toThrow('不存在');
+    expect(() => assignRole('TASK-NONEXIST', 'executor', env.tempDir)).toThrow('不存在');
   });
 });
 
@@ -662,42 +572,33 @@ describe('assignRole', () => {
 // ============================================================
 
 describe('incrementReopenCount', () => {
-  let tempDir: string;
-  let tasksDir: string;
-  let isInitSpy: ReturnType<typeof spyOn>;
-  let getTasksDirSpy: ReturnType<typeof spyOn>;
+  let env: IsolatedTestEnv;
 
   beforeEach(async () => {
-    tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'task-b-test-'));
-    tasksDir = path.join(tempDir, 'tasks');
-    const pMod = await pathUtils();
-    isInitSpy = spyOn(pMod, 'isInitialized').mockReturnValue(true);
-    getTasksDirSpy = spyOn(pMod, 'getTasksDir').mockReturnValue(tasksDir);
+    env = await createIsolatedTestEnv();
   });
 
-  afterEach(() => {
-    isInitSpy.mockRestore();
-    getTasksDirSpy.mockRestore();
-    fs.rmSync(tempDir, { recursive: true, force: true });
+  afterEach(async () => {
+    await env.cleanup();
   });
 
   it('increments from default 0', async () => {
     const { writeTaskMeta, incrementReopenCount, readTaskMeta } = await taskUtils();
-    writeTaskMeta(makeTask({ id: 'TASK-001' }), tempDir);
-    incrementReopenCount('TASK-001', 'QA fail', tempDir);
-    expect(readTaskMeta('TASK-001', tempDir)!.reopenCount).toBe(1);
+    writeTaskMeta(makeTask({ id: 'TASK-001' }), env.tempDir);
+    incrementReopenCount('TASK-001', 'QA fail', env.tempDir);
+    expect(readTaskMeta('TASK-001', env.tempDir)!.reopenCount).toBe(1);
   });
 
   it('increments existing count', async () => {
     const { writeTaskMeta, incrementReopenCount, readTaskMeta } = await taskUtils();
-    writeTaskMeta(makeTask({ id: 'TASK-001', reopenCount: 5 }), tempDir);
-    incrementReopenCount('TASK-001', 'again', tempDir);
-    expect(readTaskMeta('TASK-001', tempDir)!.reopenCount).toBe(6);
+    writeTaskMeta(makeTask({ id: 'TASK-001', reopenCount: 5 }), env.tempDir);
+    incrementReopenCount('TASK-001', 'again', env.tempDir);
+    expect(readTaskMeta('TASK-001', env.tempDir)!.reopenCount).toBe(6);
   });
 
   it('throws for missing task', async () => {
     const { incrementReopenCount } = await taskUtils();
-    expect(() => incrementReopenCount('TASK-NONEXIST', 'r', tempDir)).toThrow('不存在');
+    expect(() => incrementReopenCount('TASK-NONEXIST', 'r', env.tempDir)).toThrow('不存在');
   });
 });
 
@@ -706,31 +607,22 @@ describe('incrementReopenCount', () => {
 // ============================================================
 
 describe('recordExecutionStats', () => {
-  let tempDir: string;
-  let tasksDir: string;
-  let isInitSpy: ReturnType<typeof spyOn>;
-  let getTasksDirSpy: ReturnType<typeof spyOn>;
+  let env: IsolatedTestEnv;
 
   beforeEach(async () => {
-    tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'task-b-test-'));
-    tasksDir = path.join(tempDir, 'tasks');
-    const pMod = await pathUtils();
-    isInitSpy = spyOn(pMod, 'isInitialized').mockReturnValue(true);
-    getTasksDirSpy = spyOn(pMod, 'getTasksDir').mockReturnValue(tasksDir);
+    env = await createIsolatedTestEnv();
   });
 
-  afterEach(() => {
-    isInitSpy.mockRestore();
-    getTasksDirSpy.mockRestore();
-    fs.rmSync(tempDir, { recursive: true, force: true });
+  afterEach(async () => {
+    await env.cleanup();
   });
 
   it('records stats', async () => {
     const { writeTaskMeta, recordExecutionStats, readTaskMeta } = await taskUtils();
-    writeTaskMeta(makeTask({ id: 'TASK-001' }), tempDir);
+    writeTaskMeta(makeTask({ id: 'TASK-001' }), env.tempDir);
     const stats: ExecutionStats = { duration: 5000, retryCount: 2, completedAt: new Date().toISOString() };
-    recordExecutionStats('TASK-001', stats, tempDir);
-    const result = readTaskMeta('TASK-001', tempDir);
+    recordExecutionStats('TASK-001', stats, env.tempDir);
+    const result = readTaskMeta('TASK-001', env.tempDir);
     expect(result!.executionStats!.duration).toBe(5000);
   });
 
@@ -739,14 +631,14 @@ describe('recordExecutionStats', () => {
     writeTaskMeta(makeTask({
       id: 'TASK-001',
       executionStats: { duration: 1000, retryCount: 0, completedAt: '2020-01-01T00:00:00.000Z', commitHistory: [{ sha: 'abc', batchLabel: 'B1', timestamp: '2020-01-01T00:00:00.000Z' }] },
-    }), tempDir);
-    recordExecutionStats('TASK-001', { duration: 2000, retryCount: 1, completedAt: new Date().toISOString() }, tempDir);
-    expect(readTaskMeta('TASK-001', tempDir)!.executionStats!.commitHistory!.length).toBe(1);
+    }), env.tempDir);
+    recordExecutionStats('TASK-001', { duration: 2000, retryCount: 1, completedAt: new Date().toISOString() }, env.tempDir);
+    expect(readTaskMeta('TASK-001', env.tempDir)!.executionStats!.commitHistory!.length).toBe(1);
   });
 
   it('throws for missing task', async () => {
     const { recordExecutionStats } = await taskUtils();
-    expect(() => recordExecutionStats('TASK-NONEXIST', { duration: 1, retryCount: 0, completedAt: new Date().toISOString() }, tempDir)).toThrow('不存在');
+    expect(() => recordExecutionStats('TASK-NONEXIST', { duration: 1, retryCount: 0, completedAt: new Date().toISOString() }, env.tempDir)).toThrow('不存在');
   });
 });
 
@@ -755,59 +647,50 @@ describe('recordExecutionStats', () => {
 // ============================================================
 
 describe('renameTask', () => {
-  let tempDir: string;
-  let tasksDir: string;
-  let isInitSpy: ReturnType<typeof spyOn>;
-  let getTasksDirSpy: ReturnType<typeof spyOn>;
+  let env: IsolatedTestEnv;
 
   beforeEach(async () => {
-    tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'task-b-test-'));
-    tasksDir = path.join(tempDir, 'tasks');
-    const pMod = await pathUtils();
-    isInitSpy = spyOn(pMod, 'isInitialized').mockReturnValue(true);
-    getTasksDirSpy = spyOn(pMod, 'getTasksDir').mockReturnValue(tasksDir);
+    env = await createIsolatedTestEnv();
   });
 
-  afterEach(() => {
-    isInitSpy.mockRestore();
-    getTasksDirSpy.mockRestore();
-    fs.rmSync(tempDir, { recursive: true, force: true });
+  afterEach(async () => {
+    await env.cleanup();
   });
 
   it('renames task and updates meta id', async () => {
     const { writeTaskMeta, renameTask, readTaskMeta } = await taskUtils();
-    writeTaskMeta(makeTask({ id: 'TASK-001' }), tempDir);
-    const result = renameTask('TASK-001', 'TASK-NEW', tempDir);
+    writeTaskMeta(makeTask({ id: 'TASK-001' }), env.tempDir);
+    const result = renameTask('TASK-001', 'TASK-NEW', env.tempDir);
     expect(result.success).toBe(true);
-    expect(readTaskMeta('TASK-NEW', tempDir)!.id).toBe('TASK-NEW');
-    expect(fs.existsSync(path.join(tasksDir, 'TASK-001'))).toBe(false);
+    expect(readTaskMeta('TASK-NEW', env.tempDir)!.id).toBe('TASK-NEW');
+    expect(fs.existsSync(path.join(env.tasksDir, 'TASK-001'))).toBe(false);
   });
 
   it('fails for non-existent source', async () => {
     const { renameTask } = await taskUtils();
-    expect(renameTask('TASK-NONEXIST', 'TASK-NEW', tempDir).success).toBe(false);
+    expect(renameTask('TASK-NONEXIST', 'TASK-NEW', env.tempDir).success).toBe(false);
   });
 
   it('fails when target ID occupied', async () => {
     const { writeTaskMeta, renameTask } = await taskUtils();
-    writeTaskMeta(makeTask({ id: 'TASK-001' }), tempDir);
-    writeTaskMeta(makeTask({ id: 'TASK-002' }), tempDir);
-    expect(renameTask('TASK-001', 'TASK-002', tempDir).success).toBe(false);
+    writeTaskMeta(makeTask({ id: 'TASK-001' }), env.tempDir);
+    writeTaskMeta(makeTask({ id: 'TASK-002' }), env.tempDir);
+    expect(renameTask('TASK-001', 'TASK-002', env.tempDir).success).toBe(false);
   });
 
   it('updates dependency references', async () => {
     const { writeTaskMeta, renameTask, readTaskMeta } = await taskUtils();
-    writeTaskMeta(makeTask({ id: 'TASK-001' }), tempDir);
-    writeTaskMeta(makeTask({ id: 'TASK-002', dependencies: ['TASK-001'] }), tempDir);
-    renameTask('TASK-001', 'TASK-NEW', tempDir);
-    expect(readTaskMeta('TASK-002', tempDir)!.dependencies).toContain('TASK-NEW');
+    writeTaskMeta(makeTask({ id: 'TASK-001' }), env.tempDir);
+    writeTaskMeta(makeTask({ id: 'TASK-002', dependencies: ['TASK-001'] }), env.tempDir);
+    renameTask('TASK-001', 'TASK-NEW', env.tempDir);
+    expect(readTaskMeta('TASK-002', env.tempDir)!.dependencies).toContain('TASK-NEW');
   });
 
   it('copies extra files during rename', async () => {
     const { writeTaskMeta, renameTask } = await taskUtils();
-    writeTaskMeta(makeTask({ id: 'TASK-001' }), tempDir);
-    fs.writeFileSync(path.join(tasksDir, 'TASK-001', 'checkpoint.md'), '# CP');
-    renameTask('TASK-001', 'TASK-002', tempDir);
-    expect(fs.readFileSync(path.join(tasksDir, 'TASK-002', 'checkpoint.md'), 'utf-8')).toBe('# CP');
+    writeTaskMeta(makeTask({ id: 'TASK-001' }), env.tempDir);
+    fs.writeFileSync(path.join(env.tasksDir, 'TASK-001', 'checkpoint.md'), '# CP');
+    renameTask('TASK-001', 'TASK-002', env.tempDir);
+    expect(fs.readFileSync(path.join(env.tasksDir, 'TASK-002', 'checkpoint.md'), 'utf-8')).toBe('# CP');
   });
 });

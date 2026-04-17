@@ -70,7 +70,8 @@ describe('Pipeline Status Constants', () => {
     expect(PIPELINE_INTERMEDIATE_STATUSES).toContain('wait_review');
     expect(PIPELINE_INTERMEDIATE_STATUSES).toContain('wait_qa');
     expect(PIPELINE_INTERMEDIATE_STATUSES).toContain('wait_evaluation');
-    expect(PIPELINE_INTERMEDIATE_STATUSES).toHaveLength(3);
+    expect(PIPELINE_INTERMEDIATE_STATUSES).toContain('needs_human');
+    expect(PIPELINE_INTERMEDIATE_STATUSES).toHaveLength(4);
   });
 
   test('PIPELINE_STATUS_MIGRATION_MAP should map all intermediate statuses', () => {
@@ -503,8 +504,7 @@ describe('applySchemaMigrations', () => {
   });
 
   test('v4 migration should set resumeAction for pipeline intermediate status', () => {
-    const intermediateStatuses: string[] = ['wait_review', 'wait_qa', 'wait_evaluation', 'needs_human'];
-    for (const status of intermediateStatuses) {
+    for (const status of PIPELINE_INTERMEDIATE_STATUSES) {
       const task = createTestTask({
         status: status as any,
         schemaVersion: 3,

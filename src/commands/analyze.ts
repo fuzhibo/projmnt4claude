@@ -355,8 +355,7 @@ export const SCHEMA_MIGRATIONS: SchemaMigrationStep[] = [
 
       // 初始化 resumeAction（仅对 pipeline 中间状态的任务设置）
       if (task.resumeAction === undefined) {
-        const intermediateStatuses: string[] = ['wait_review', 'wait_qa', 'wait_evaluation', 'needs_human'];
-        if (intermediateStatuses.includes(task.status)) {
+        if (PIPELINE_INTERMEDIATE_STATUSES.includes(task.status)) {
           task.resumeAction = 'resume_pipeline';
           details.push(`添加 resumeAction: resume_pipeline (status=${task.status})`);
           changed = true;

@@ -11,17 +11,16 @@
  * - Backfill 验证
  */
 
-import { describe, it, expect, beforeEach, afterEach, spyOn } from 'bun:test';
+import { describe, it, expect, beforeEach, afterEach } from 'bun:test';
 import * as fs from 'fs';
 import * as path from 'path';
-import * as os from 'os';
 import type { TaskMeta } from '../types/task';
 import { createDefaultTaskMeta, CURRENT_TASK_SCHEMA_VERSION } from '../types/task';
+import { createIsolatedTestEnv, type IsolatedTestEnv } from '../utils/test-env.js';
 
 // Import validation module
 const validationUtils = () => import('../utils/task-validation.js');
 const taskUtils = () => import('../utils/task.js');
-const pathUtils = () => import('../utils/path.js');
 
 function makeTask(overrides: Partial<TaskMeta> = {}): TaskMeta {
   return {
@@ -145,24 +144,14 @@ describe('validateFieldUpdate', () => {
 // ============================================================
 
 describe('validateRelationship', () => {
-  let tempDir: string;
-  let tasksDir: string;
-  let isInitSpy: ReturnType<typeof spyOn>;
-  let getTasksDirSpy: ReturnType<typeof spyOn>;
+  let env: IsolatedTestEnv;
 
   beforeEach(async () => {
-    tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'task-validation-test-'));
-    tasksDir = path.join(tempDir, 'tasks');
-
-    const pMod = await pathUtils();
-    isInitSpy = spyOn(pMod, 'isInitialized').mockReturnValue(true);
-    getTasksDirSpy = spyOn(pMod, 'getTasksDir').mockReturnValue(tasksDir);
+    env = await createIsolatedTestEnv();
   });
 
-  afterEach(() => {
-    isInitSpy.mockRestore();
-    getTasksDirSpy.mockRestore();
-    fs.rmSync(tempDir, { recursive: true, force: true });
+  afterEach(async () => {
+    await env.cleanup();
   });
 
   it('验证 parentId - 父任务必须存在', async () => {
@@ -171,15 +160,15 @@ describe('validateRelationship', () => {
 
     // 创建父任务
     const parentTask = makeTask({ id: 'TASK-PARENT' });
-    writeTaskMeta(parentTask, tempDir);
+    writeTaskMeta(parentTask, env.tempDir);
 
     // 合法 parentId
-    const validResult = validateRelationship('TASK-CHILD', { parentId: 'TASK-PARENT' }, tempDir);
+    const validResult = validateRelationship('TASK-CHILD', { parentId: 'TASK-PARENT' }, env.tempDir);
     expect(validResult.valid).toBe(true);
     expect(validResult.errors).toEqual([]);
 
     // 不存在的父任务
-    const invalidResult = validateRelationship('TASK-CHILD', { parentId: 'TASK-NONEXIST' }, tempDir);
+    const invalidResult = validateRelationship('TASK-CHILD', { parentId: 'TASK-NONEXIST' }, env.tempDir);
     expect(invalidResult.valid).toBe(false);
     expect(invalidResult.errors.some(e => e.includes('不存在'))).toBe(true);
   });
@@ -187,7 +176,7 @@ describe('validateRelationship', () => {
   it('验证 parentId - 禁止自引用', async () => {
     const { validateRelationship } = await validationUtils();
 
-    const result = validateRelationship('TASK-001', { parentId: 'TASK-001' }, tempDir);
+    const result = validateRelationship('TASK-001', { parentId: 'TASK-001' }, env.tempDir);
     expect(result.valid).toBe(false);
     expect(result.errors.some(e => e.includes('自引用'))).toBe(true);
   });
@@ -201,12 +190,12 @@ describe('validateRelationship', () => {
     const taskB = makeTask({ id: 'TASK-B', parentId: 'TASK-A' });
     const taskC = makeTask({ id: 'TASK-C', parentId: 'TASK-B' });
 
-    writeTaskMeta(taskA, tempDir);
-    writeTaskMeta(taskB, tempDir);
-    writeTaskMeta(taskC, tempDir);
+    writeTaskMeta(taskA, env.tempDir);
+    writeTaskMeta(taskB, env.tempDir);
+    writeTaskMeta(taskC, env.tempDir);
 
     // 尝试将 A 的 parent 设为 C，形成循环: A -> B -> C -> A
-    const result = validateRelationship('TASK-A', { parentId: 'TASK-C' }, tempDir);
+    const result = validateRelationship('TASK-A', { parentId: 'TASK-C' }, env.tempDir);
     expect(result.valid).toBe(false);
     expect(result.errors.some(e => e.includes('循环'))).toBe(true);
   });
@@ -218,15 +207,15 @@ describe('validateRelationship', () => {
     // 创建子任务
     const subtask1 = makeTask({ id: 'TASK-SUB-1' });
     const subtask2 = makeTask({ id: 'TASK-SUB-2' });
-    writeTaskMeta(subtask1, tempDir);
-    writeTaskMeta(subtask2, tempDir);
+    writeTaskMeta(subtask1, env.tempDir);
+    writeTaskMeta(subtask2, env.tempDir);
 
     // 合法 subtaskIds
-    const validResult = validateRelationship('TASK-PARENT', { subtaskIds: ['TASK-SUB-1', 'TASK-SUB-2'] }, tempDir);
+    const validResult = validateRelationship('TASK-PARENT', { subtaskIds: ['TASK-SUB-1', 'TASK-SUB-2'] }, env.tempDir);
     expect(validResult.valid).toBe(true);
 
     // 包含不存在的子任务
-    const invalidResult = validateRelationship('TASK-PARENT', { subtaskIds: ['TASK-SUB-1', 'TASK-NONEXIST'] }, tempDir);
+    const invalidResult = validateRelationship('TASK-PARENT', { subtaskIds: ['TASK-SUB-1', 'TASK-NONEXIST'] }, env.tempDir);
     expect(invalidResult.valid).toBe(true); // 子任务不存在是警告不是错误
     expect(invalidResult.warnings.some(e => e.includes('不存在'))).toBe(true);
   });
@@ -234,7 +223,7 @@ describe('validateRelationship', () => {
   it('验证空 subtaskIds 不触发警告', async () => {
     const { validateRelationship } = await validationUtils();
 
-    const result = validateRelationship('TASK-001', { subtaskIds: [] }, tempDir);
+    const result = validateRelationship('TASK-001', { subtaskIds: [] }, env.tempDir);
     expect(result.valid).toBe(true);
     expect(result.warnings).toEqual([]);
   });
@@ -242,7 +231,7 @@ describe('validateRelationship', () => {
   it('验证 null parentId 不触发错误', async () => {
     const { validateRelationship } = await validationUtils();
 
-    const result = validateRelationship('TASK-001', { parentId: null }, tempDir);
+    const result = validateRelationship('TASK-001', { parentId: null }, env.tempDir);
     expect(result.valid).toBe(true);
     expect(result.errors).toEqual([]);
   });
@@ -253,24 +242,14 @@ describe('validateRelationship', () => {
 // ============================================================
 
 describe('validateTaskBeforeWrite', () => {
-  let tempDir: string;
-  let tasksDir: string;
-  let isInitSpy: ReturnType<typeof spyOn>;
-  let getTasksDirSpy: ReturnType<typeof spyOn>;
+  let env: IsolatedTestEnv;
 
   beforeEach(async () => {
-    tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'task-validation-test-'));
-    tasksDir = path.join(tempDir, 'tasks');
-
-    const pMod = await pathUtils();
-    isInitSpy = spyOn(pMod, 'isInitialized').mockReturnValue(true);
-    getTasksDirSpy = spyOn(pMod, 'getTasksDir').mockReturnValue(tasksDir);
+    env = await createIsolatedTestEnv();
   });
 
-  afterEach(() => {
-    isInitSpy.mockRestore();
-    getTasksDirSpy.mockRestore();
-    fs.rmSync(tempDir, { recursive: true, force: true });
+  afterEach(async () => {
+    await env.cleanup();
   });
 
   it('验证合法任务通过', async () => {
@@ -284,7 +263,7 @@ describe('validateTaskBeforeWrite', () => {
       description: 'Valid description',
     });
 
-    const result = validateTaskBeforeWrite(task, tempDir, null);
+    const result = validateTaskBeforeWrite(task, env.tempDir, null);
     expect(result.valid).toBe(true);
   });
 
@@ -298,7 +277,7 @@ describe('validateTaskBeforeWrite', () => {
       title: '',
     });
 
-    const result = validateTaskBeforeWrite(task, tempDir, null);
+    const result = validateTaskBeforeWrite(task, env.tempDir, null);
     expect(result.valid).toBe(false);
     expect(result.errors.length).toBeGreaterThan(0);
   });
@@ -309,7 +288,7 @@ describe('validateTaskBeforeWrite', () => {
     const oldTask = makeTask({ id: 'TASK-001', schemaVersion: 2 });
     const newTask = makeTask({ id: 'TASK-001', schemaVersion: 1 });
 
-    const result = validateTaskBeforeWrite(newTask, tempDir, oldTask);
+    const result = validateTaskBeforeWrite(newTask, env.tempDir, oldTask);
     expect(result.valid).toBe(false);
     expect(result.errors.some(e => e.includes('schemaVersion'))).toBe(true);
   });
@@ -323,7 +302,7 @@ describe('validateTaskBeforeWrite', () => {
       schemaVersion: CURRENT_TASK_SCHEMA_VERSION + 10,
     });
 
-    const result = validateTaskBeforeWrite(newTask, tempDir, oldTask);
+    const result = validateTaskBeforeWrite(newTask, env.tempDir, oldTask);
     expect(result.valid).toBe(false);
     expect(result.errors.some(e => e.includes('超过'))).toBe(true);
   });
@@ -334,7 +313,7 @@ describe('validateTaskBeforeWrite', () => {
     const task = makeTask({ id: 'TASK-001' });
     (task as unknown as Record<string, unknown>).dependencies = null;
 
-    const result = validateTaskBeforeWrite(task, tempDir, null);
+    const result = validateTaskBeforeWrite(task, env.tempDir, null);
     expect(result.valid).toBe(false);
     expect(result.errors.some(e => e.includes('dependencies'))).toBe(true);
   });
@@ -345,24 +324,14 @@ describe('validateTaskBeforeWrite', () => {
 // ============================================================
 
 describe('validatedWriteTaskMeta', () => {
-  let tempDir: string;
-  let tasksDir: string;
-  let isInitSpy: ReturnType<typeof spyOn>;
-  let getTasksDirSpy: ReturnType<typeof spyOn>;
+  let env: IsolatedTestEnv;
 
   beforeEach(async () => {
-    tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'task-validation-test-'));
-    tasksDir = path.join(tempDir, 'tasks');
-
-    const pMod = await pathUtils();
-    isInitSpy = spyOn(pMod, 'isInitialized').mockReturnValue(true);
-    getTasksDirSpy = spyOn(pMod, 'getTasksDir').mockReturnValue(tasksDir);
+    env = await createIsolatedTestEnv();
   });
 
-  afterEach(() => {
-    isInitSpy.mockRestore();
-    getTasksDirSpy.mockRestore();
-    fs.rmSync(tempDir, { recursive: true, force: true });
+  afterEach(async () => {
+    await env.cleanup();
   });
 
   it('带验证的任务写入成功', async () => {
@@ -370,11 +339,11 @@ describe('validatedWriteTaskMeta', () => {
     const { readTaskMeta } = await taskUtils();
 
     const task = makeTask({ id: 'TASK-001', title: 'Test' });
-    const result = validatedWriteTaskMeta(task, tempDir);
+    const result = validatedWriteTaskMeta(task, env.tempDir);
 
     expect(result.validation.valid).toBe(true);
 
-    const read = readTaskMeta('TASK-001', tempDir);
+    const read = readTaskMeta('TASK-001', env.tempDir);
     expect(read).not.toBeNull();
     expect(read!.title).toBe('Test');
   });
@@ -388,13 +357,13 @@ describe('validatedWriteTaskMeta', () => {
       type: 'invalid_type' as TaskMeta['type'],
     });
 
-    const result = validatedWriteTaskMeta(task, tempDir);
+    const result = validatedWriteTaskMeta(task, env.tempDir);
 
     expect(result.validation.valid).toBe(false);
     expect(result.validation.errors.length).toBeGreaterThan(0);
 
     // 验证失败的任务仍然被写入
-    const read = readTaskMeta('TASK-001', tempDir);
+    const read = readTaskMeta('TASK-001', env.tempDir);
     expect(read).not.toBeNull();
   });
 });

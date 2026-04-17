@@ -465,6 +465,7 @@ export const PIPELINE_INTERMEDIATE_STATUSES: TaskStatus[] = [
   'wait_review',
   'wait_qa',
   'wait_evaluation',
+  'needs_human',
 ];
 
 /**

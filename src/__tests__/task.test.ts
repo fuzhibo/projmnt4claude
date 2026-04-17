@@ -14,7 +14,10 @@
 import { describe, it, expect, beforeEach, afterEach, spyOn, mock } from 'bun:test';
 import * as fs from 'fs';
 import * as path from 'path';
-import * as os from 'os';
+import {
+  createIsolatedTestEnv,
+  type IsolatedTestEnv,
+} from '../utils/test-env.js';
 
 // ============== hasValidCheckpoints ==============
 
@@ -25,16 +28,16 @@ const taskModule = () => import('../commands/task.js');
 
 describe('hasValidCheckpoints', () => {
   let hasValidCheckpoints: typeof import('../commands/task.js')['hasValidCheckpoints'];
-  let tempDir: string;
+  let env: IsolatedTestEnv;
 
   beforeEach(async () => {
     const mod = await taskModule();
     hasValidCheckpoints = mod.hasValidCheckpoints;
-    tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'task-test-'));
+    env = await createIsolatedTestEnv();
   });
 
-  afterEach(() => {
-    fs.rmSync(tempDir, { recursive: true, force: true });
+  afterEach(async () => {
+    await env.cleanup();
   });
 
   // --- Content mode (isContent=true) ---
@@ -131,20 +134,20 @@ describe('hasValidCheckpoints', () => {
   // --- File mode (isContent=false) ---
 
   it('returns invalid when checkpoint file does not exist', async () => {
-    const result = hasValidCheckpoints(path.join(tempDir, 'nonexistent.md'), false);
+    const result = hasValidCheckpoints(path.join(env.tempDir, 'nonexistent.md'), false);
     expect(result.valid).toBe(false);
     expect(result.reason).toBe('checkpoint.md 文件不存在');
   });
 
   it('reads from file when isContent=false and file exists', async () => {
-    const cpPath = path.join(tempDir, 'checkpoint.md');
+    const cpPath = path.join(env.tempDir, 'checkpoint.md');
     fs.writeFileSync(cpPath, `# TASK-001 检查点\n- [ ] 验证功能A\n- [ ] 确认功能B正常`);
     const result = hasValidCheckpoints(cpPath, false);
     expect(result.valid).toBe(true);
   });
 
   it('reads from file and detects template content', async () => {
-    const cpPath = path.join(tempDir, 'checkpoint.md');
+    const cpPath = path.join(env.tempDir, 'checkpoint.md');
     fs.writeFileSync(cpPath, `# TASK-001 检查点\n- [ ] 检查点1\n- [ ] 检查点2`);
     const result = hasValidCheckpoints(cpPath, false);
     expect(result.valid).toBe(false);
@@ -237,9 +240,8 @@ describe('displayCheckpointCreationWarning', () => {
 
 describe('generateCheckpointTemplate', () => {
   let generateCheckpointTemplate: typeof import('../commands/task.js')['generateCheckpointTemplate'];
-  let tempDir: string;
+  let env: IsolatedTestEnv;
   let consoleSpy: ReturnType<typeof spyOn>;
-  let pathSpy: ReturnType<typeof spyOn>;
   let taskSpy: ReturnType<typeof spyOn>;
 
   const mockTask = {
@@ -258,28 +260,27 @@ describe('generateCheckpointTemplate', () => {
     const mod = await taskModule();
     generateCheckpointTemplate = mod.generateCheckpointTemplate;
 
-    tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'task-test-'));
-    const tasksDir = path.join(tempDir, '.projmnt4claude', 'tasks', 'TASK-feature-P2-test-20260411');
-    fs.mkdirSync(tasksDir, { recursive: true });
+    env = await createIsolatedTestEnv();
+
+    // Create task directory
+    const taskDir = path.join(env.tasksDir, 'TASK-feature-P2-test-20260411');
+    fs.mkdirSync(taskDir, { recursive: true });
 
     // Mock dependencies
-    const pathMod = await import('../utils/path.js');
-    pathSpy = spyOn(pathMod, 'isInitialized').mockReturnValue(true);
     const taskMod = await import('../utils/task.js');
     taskSpy = spyOn(taskMod, 'readTaskMeta').mockReturnValue({ ...mockTask });
 
     consoleSpy = spyOn(console, 'log');
   });
 
-  afterEach(() => {
+  afterEach(async () => {
     consoleSpy.mockRestore();
-    pathSpy.mockRestore();
     taskSpy.mockRestore();
-    fs.rmSync(tempDir, { recursive: true, force: true });
+    await env.cleanup();
   });
 
   it('exits if project not initialized', async () => {
-    pathSpy.mockReturnValue(false);
+    env.mocks.isInitialized.mockReturnValue(false);
     const exitSpy = spyOn(process, 'exit').mockImplementation(() => { throw new Error('exit'); });
     try {
       generateCheckpointTemplate('TASK-001');
@@ -351,42 +352,19 @@ describe('generateCheckpointTemplate', () => {
 
 describe('createTask', () => {
   let createTask: typeof import('../commands/task.js')['createTask'];
-  let tempDir: string;
-  let tasksDir: string;
+  let env: IsolatedTestEnv;
   let consoleSpy: ReturnType<typeof spyOn>;
   let consoleErrorSpy: ReturnType<typeof spyOn>;
-  let pathIsInitSpy: ReturnType<typeof spyOn>;
-  let pathGetTasksDirSpy: ReturnType<typeof spyOn>;
   let taskExistsSpy: ReturnType<typeof spyOn>;
   let generateNewTaskIdSpy: ReturnType<typeof spyOn>;
   let writeTaskMetaSpy: ReturnType<typeof spyOn>;
   let syncCheckpointsSpy: ReturnType<typeof spyOn>;
-  let fsWriteSpy: ReturnType<typeof spyOn>;
 
   beforeEach(async () => {
     const mod = await taskModule();
     createTask = mod.createTask;
 
-    tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'task-test-'));
-    tasksDir = path.join(tempDir, '.projmnt4claude', 'tasks');
-
-    // Mock fs.writeFileSync to auto-create parent dirs for checkpoint.md
-    fsWriteSpy = spyOn(fs, 'writeFileSync').mockImplementation((p: string, ...args: any[]) => {
-      const dir = path.dirname(p);
-      if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
-      // @ts-ignore
-      return fs.writeFileSync.__original?.(p, ...args) ?? (globalThis as any).__origWriteFileSync?.(p, ...args);
-    });
-    // Restore original for real writes
-    (fsWriteSpy as any).__original = fs.writeFileSync;
-    // Re-apply: we need a wrapper that ensures dirs exist
-    fsWriteSpy.mockRestore();
-    // Instead, just use a manual approach: let writeFileSync work but pre-create dirs
-
-    // Setup spies
-    const pathMod = await import('../utils/path.js');
-    pathIsInitSpy = spyOn(pathMod, 'isInitialized').mockReturnValue(true);
-    pathGetTasksDirSpy = spyOn(pathMod, 'getTasksDir').mockReturnValue(tasksDir);
+    env = await createIsolatedTestEnv();
 
     const taskMod = await import('../utils/task.js');
     taskExistsSpy = spyOn(taskMod, 'taskExists').mockReturnValue(false);
@@ -397,30 +375,28 @@ describe('createTask', () => {
     syncCheckpointsSpy = spyOn(cpMod, 'syncCheckpointsToMeta').mockImplementation(() => {});
 
     // Pre-create the task directory (normally writeTaskMeta creates it)
-    const defaultTaskDir = path.join(tasksDir, 'TASK-feature-P2-test-20260411');
+    const defaultTaskDir = path.join(env.tasksDir, 'TASK-feature-P2-test-20260411');
     fs.mkdirSync(defaultTaskDir, { recursive: true });
 
     consoleSpy = spyOn(console, 'log');
     consoleErrorSpy = spyOn(console, 'error');
   });
 
-  afterEach(() => {
+  afterEach(async () => {
     consoleSpy.mockRestore();
     consoleErrorSpy.mockRestore();
-    pathIsInitSpy.mockRestore();
-    pathGetTasksDirSpy.mockRestore();
     taskExistsSpy.mockRestore();
     generateNewTaskIdSpy.mockRestore();
     writeTaskMetaSpy.mockRestore();
     syncCheckpointsSpy.mockRestore();
-    fs.rmSync(tempDir, { recursive: true, force: true });
+    await env.cleanup();
   });
 
   it('exits if project not initialized', async () => {
-    pathIsInitSpy.mockReturnValue(false);
+    env.mocks.isInitialized.mockReturnValue(false);
     const exitSpy = spyOn(process, 'exit').mockImplementation(() => { throw new Error('exit'); });
     try {
-      await createTask({ title: 'Test', nonInteractive: true }, tempDir);
+      await createTask({ title: 'Test', nonInteractive: true }, env.tempDir);
     } catch (e) {
       expect((e as Error).message).toBe('exit');
     }
@@ -433,7 +409,7 @@ describe('createTask', () => {
       title: 'Add login feature',
       nonInteractive: true,
       skipValidation: true,
-    }, tempDir);
+    }, env.tempDir);
 
     expect(result.title).toBe('Add login feature');
     expect(result.status).toBe('open');
@@ -447,7 +423,7 @@ describe('createTask', () => {
       priority: 'P1',
       nonInteractive: true,
       skipValidation: true,
-    }, tempDir);
+    }, env.tempDir);
 
     expect(result.title).toBe('Fix login bug');
     expect(result.priority).toBe('P1');
@@ -455,13 +431,13 @@ describe('createTask', () => {
 
   it('creates task with custom ID when id option provided', async () => {
     // Pre-create directory for custom ID
-    fs.mkdirSync(path.join(tasksDir, 'TASK-custom-id'), { recursive: true });
+    fs.mkdirSync(path.join(env.tasksDir, 'TASK-custom-id'), { recursive: true });
     const result = await createTask({
       title: 'Test',
       id: 'TASK-custom-id',
       nonInteractive: true,
       skipValidation: true,
-    }, tempDir);
+    }, env.tempDir);
 
     expect(result.id).toBe('TASK-custom-id');
   });
@@ -473,7 +449,7 @@ describe('createTask', () => {
         title: 'Test',
         id: 'invalid id with spaces',
         nonInteractive: true,
-      }, tempDir);
+      }, env.tempDir);
     } catch (e) {
       expect((e as Error).message).toBe('exit');
     }
@@ -489,7 +465,7 @@ describe('createTask', () => {
         title: 'Test',
         id: 'TASK-existing',
         nonInteractive: true,
-      }, tempDir);
+      }, env.tempDir);
     } catch (e) {
       expect((e as Error).message).toBe('exit');
     }
@@ -504,9 +480,9 @@ describe('createTask', () => {
       nonInteractive: true,
       skipValidation: true,
       suggestedCheckpoints: ['验证功能A', '确认功能B'],
-    }, tempDir);
+    }, env.tempDir);
 
-    const cpPath = path.join(tasksDir, 'TASK-feature-P2-test-20260411', 'checkpoint.md');
+    const cpPath = path.join(env.tasksDir, 'TASK-feature-P2-test-20260411', 'checkpoint.md');
     expect(fs.existsSync(cpPath)).toBe(true);
     const content = fs.readFileSync(cpPath, 'utf-8');
     expect(content).toContain('验证功能A');
@@ -518,7 +494,7 @@ describe('createTask', () => {
       title: 'Test',
       nonInteractive: true,
       skipValidation: true,
-    }, tempDir);
+    }, env.tempDir);
 
     expect(result.history.length).toBeGreaterThan(0);
     const createEntry = result.history.find(h => h.action === '任务创建');
@@ -531,11 +507,9 @@ describe('createTask', () => {
 
 describe('updateTask', () => {
   let updateTask: typeof import('../commands/task.js')['updateTask'];
-  let tempDir: string;
+  let env: IsolatedTestEnv;
   let consoleSpy: ReturnType<typeof spyOn>;
   let consoleErrorSpy: ReturnType<typeof spyOn>;
-  let pathIsInitSpy: ReturnType<typeof spyOn>;
-  let pathGetTasksDirSpy: ReturnType<typeof spyOn>;
   let readTaskMetaSpy: ReturnType<typeof spyOn>;
   let writeTaskMetaSpy: ReturnType<typeof spyOn>;
 
@@ -554,14 +528,7 @@ describe('updateTask', () => {
   beforeEach(async () => {
     const mod = await taskModule();
     updateTask = mod.updateTask;
-    tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'task-test-'));
-
-    const pathMod = await import('../utils/path.js');
-    pathIsInitSpy = spyOn(pathMod, 'isInitialized').mockReturnValue(true);
-
-    const tasksDir = path.join(tempDir, 'tasks');
-    fs.mkdirSync(tasksDir, { recursive: true });
-    pathGetTasksDirSpy = spyOn(pathMod, 'getTasksDir').mockReturnValue(tasksDir);
+    env = await createIsolatedTestEnv();
 
     const taskMod = await import('../utils/task.js');
     readTaskMetaSpy = spyOn(taskMod, 'readTaskMeta');
@@ -571,21 +538,19 @@ describe('updateTask', () => {
     consoleErrorSpy = spyOn(console, 'error');
   });
 
-  afterEach(() => {
+  afterEach(async () => {
     consoleSpy.mockRestore();
     consoleErrorSpy.mockRestore();
-    pathIsInitSpy.mockRestore();
-    pathGetTasksDirSpy.mockRestore();
     readTaskMetaSpy.mockRestore();
     writeTaskMetaSpy.mockRestore();
-    fs.rmSync(tempDir, { recursive: true, force: true });
+    await env.cleanup();
   });
 
   it('exits if project not initialized', async () => {
-    pathIsInitSpy.mockReturnValue(false);
+    env.mocks.isInitialized.mockReturnValue(false);
     const exitSpy = spyOn(process, 'exit').mockImplementation(() => { throw new Error('exit'); });
     try {
-      await updateTask('TASK-001', { title: 'New Title' }, tempDir);
+      await updateTask('TASK-001', { title: 'New Title' }, env.tempDir);
     } catch (e) {
       expect((e as Error).message).toBe('exit');
     }
@@ -597,7 +562,7 @@ describe('updateTask', () => {
     readTaskMetaSpy.mockReturnValue(null);
     const exitSpy = spyOn(process, 'exit').mockImplementation(() => { throw new Error('exit'); });
     try {
-      await updateTask('TASK-NONEXIST', { title: 'New' }, tempDir);
+      await updateTask('TASK-NONEXIST', { title: 'New' }, env.tempDir);
     } catch (e) {
       expect((e as Error).message).toBe('exit');
     }
@@ -608,7 +573,7 @@ describe('updateTask', () => {
   it('updates task title', async () => {
     const task = baseTask();
     readTaskMetaSpy.mockReturnValue(task);
-    await updateTask(task.id, { title: 'Updated Title' }, tempDir);
+    await updateTask(task.id, { title: 'Updated Title' }, env.tempDir);
     expect(task.title).toBe('Updated Title');
     expect(writeTaskMetaSpy).toHaveBeenCalled();
   });
@@ -616,14 +581,14 @@ describe('updateTask', () => {
   it('updates task priority', async () => {
     const task = baseTask();
     readTaskMetaSpy.mockReturnValue(task);
-    await updateTask(task.id, { priority: 'P0' }, tempDir);
+    await updateTask(task.id, { priority: 'P0' }, env.tempDir);
     expect(task.priority).toBe('P0');
   });
 
   it('updates task status to in_progress', async () => {
     const task = baseTask();
     readTaskMetaSpy.mockReturnValue(task);
-    await updateTask(task.id, { status: 'in_progress' }, tempDir);
+    await updateTask(task.id, { status: 'in_progress' }, env.tempDir);
     expect(task.status).toBe('in_progress');
   });
 
@@ -631,7 +596,7 @@ describe('updateTask', () => {
     const task = baseTask();
     task.status = 'resolved';
     readTaskMetaSpy.mockReturnValue(task);
-    await updateTask(task.id, { status: 'reopened' }, tempDir);
+    await updateTask(task.id, { status: 'reopened' }, env.tempDir);
     expect(task.status).toBe('open');
     expect(task.reopenCount).toBe(1);
     // Should have transitionNotes
@@ -646,7 +611,7 @@ describe('updateTask', () => {
     task.status = 'resolved';
     task.reopenCount = 2;
     readTaskMetaSpy.mockReturnValue(task);
-    await updateTask(task.id, { status: 'reopened' }, tempDir);
+    await updateTask(task.id, { status: 'reopened' }, env.tempDir);
     expect(task.reopenCount).toBe(3);
   });
 
@@ -655,35 +620,35 @@ describe('updateTask', () => {
     task.status = 'failed';
     (task as any).failureReason = 'timeout';
     readTaskMetaSpy.mockReturnValue(task);
-    await updateTask(task.id, { status: 'reopened' }, tempDir);
+    await updateTask(task.id, { status: 'reopened' }, env.tempDir);
     expect((task as any).failureReason).toBeUndefined();
   });
 
   it('updates task description', async () => {
     const task = baseTask();
     readTaskMetaSpy.mockReturnValue(task);
-    await updateTask(task.id, { description: 'New description' }, tempDir);
+    await updateTask(task.id, { description: 'New description' }, env.tempDir);
     expect(task.description).toBe('New description');
   });
 
   it('updates recommended role', async () => {
     const task = baseTask();
     readTaskMetaSpy.mockReturnValue(task);
-    await updateTask(task.id, { role: 'executor' }, tempDir);
+    await updateTask(task.id, { role: 'executor' }, env.tempDir);
     expect(task.recommendedRole).toBe('executor');
   });
 
   it('updates branch', async () => {
     const task = baseTask();
     readTaskMetaSpy.mockReturnValue(task);
-    await updateTask(task.id, { branch: 'feature/login' }, tempDir);
+    await updateTask(task.id, { branch: 'feature/login' }, env.tempDir);
     expect(task.branch).toBe('feature/login');
   });
 
   it('shows "no updates" when no fields specified', async () => {
     const task = baseTask();
     readTaskMetaSpy.mockReturnValue(task);
-    await updateTask(task.id, {}, tempDir);
+    await updateTask(task.id, {}, env.tempDir);
     const output = consoleSpy.mock.calls.map((c: any[]) => c[0]).join('\n');
     expect(output).toContain('没有指定要更新的字段');
     expect(writeTaskMetaSpy).not.toHaveBeenCalled();
@@ -695,11 +660,11 @@ describe('updateTask', () => {
     readTaskMetaSpy.mockReturnValue(task);
 
     // Create checkpoint file at the mocked getTasksDir path
-    const cpDir = path.join(tempDir, 'tasks', task.id);
+    const cpDir = path.join(env.tasksDir, task.id);
     fs.mkdirSync(cpDir, { recursive: true });
     fs.writeFileSync(path.join(cpDir, 'checkpoint.md'), '- [ ] unchecked item');
 
-    await updateTask(task.id, { status: 'resolved' }, tempDir);
+    await updateTask(task.id, { status: 'resolved' }, env.tempDir);
     const output = consoleSpy.mock.calls.map((c: any[]) => c[0]).join('\n');
     expect(output).toContain('检查点确认提醒');
   });
@@ -710,7 +675,7 @@ describe('updateTask', () => {
     readTaskMetaSpy.mockReturnValue(task);
     // No checkpoint file created → should resolve directly
 
-    await updateTask(task.id, { status: 'resolved' }, tempDir);
+    await updateTask(task.id, { status: 'resolved' }, env.tempDir);
     expect(task.status).toBe('resolved');
     const output = consoleSpy.mock.calls.map((c: any[]) => c[0]).join('\n');
     expect(output).toContain('已更新为已解决状态');
@@ -723,13 +688,13 @@ describe('updateTask', () => {
     readTaskMetaSpy.mockReturnValue(task);
 
     // Create checkpoint with all checked items
-    const cpDir = path.join(tempDir, 'tasks', task.id);
+    const cpDir = path.join(env.tasksDir, task.id);
     fs.mkdirSync(cpDir, { recursive: true });
     fs.writeFileSync(path.join(cpDir, 'checkpoint.md'), '- [x] checked item');
 
     const exitSpy = spyOn(process, 'exit').mockImplementation(() => { throw new Error('exit'); });
     try {
-      await updateTask(task.id, { status: 'resolved', token: 'wrong-token' }, tempDir);
+      await updateTask(task.id, { status: 'resolved', token: 'wrong-token' }, env.tempDir);
     } catch (e) {
       expect((e as Error).message).toBe('exit');
     }
@@ -743,11 +708,11 @@ describe('updateTask', () => {
     task.checkpointConfirmationToken = 'valid-token';
     readTaskMetaSpy.mockReturnValue(task);
 
-    const cpDir = path.join(tempDir, 'tasks', task.id);
+    const cpDir = path.join(env.tasksDir, task.id);
     fs.mkdirSync(cpDir, { recursive: true });
     fs.writeFileSync(path.join(cpDir, 'checkpoint.md'), '- [x] checked item');
 
-    await updateTask(task.id, { status: 'resolved', token: 'valid-token' }, tempDir);
+    await updateTask(task.id, { status: 'resolved', token: 'valid-token' }, env.tempDir);
     expect(task.status).toBe('resolved');
     expect(task.checkpointConfirmationToken).toBeUndefined();
   });
@@ -757,11 +722,9 @@ describe('updateTask', () => {
 
 describe('completeTask', () => {
   let completeTask: typeof import('../commands/task.js')['completeTask'];
-  let tempDir: string;
+  let env: IsolatedTestEnv;
   let consoleSpy: ReturnType<typeof spyOn>;
   let consoleErrorSpy: ReturnType<typeof spyOn>;
-  let pathIsInitSpy: ReturnType<typeof spyOn>;
-  let pathGetTasksDirSpy: ReturnType<typeof spyOn>;
   let readTaskMetaSpy: ReturnType<typeof spyOn>;
   let writeTaskMetaSpy: ReturnType<typeof spyOn>;
 
@@ -780,14 +743,7 @@ describe('completeTask', () => {
   beforeEach(async () => {
     const mod = await taskModule();
     completeTask = mod.completeTask;
-    tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'task-test-'));
-
-    const pathMod = await import('../utils/path.js');
-    pathIsInitSpy = spyOn(pathMod, 'isInitialized').mockReturnValue(true);
-
-    const tasksDir = path.join(tempDir, 'tasks');
-    fs.mkdirSync(tasksDir, { recursive: true });
-    pathGetTasksDirSpy = spyOn(pathMod, 'getTasksDir').mockReturnValue(tasksDir);
+    env = await createIsolatedTestEnv();
 
     const taskMod = await import('../utils/task.js');
     readTaskMetaSpy = spyOn(taskMod, 'readTaskMeta');
@@ -797,21 +753,19 @@ describe('completeTask', () => {
     consoleErrorSpy = spyOn(console, 'error');
   });
 
-  afterEach(() => {
+  afterEach(async () => {
     consoleSpy.mockRestore();
     consoleErrorSpy.mockRestore();
-    pathIsInitSpy.mockRestore();
-    pathGetTasksDirSpy.mockRestore();
     readTaskMetaSpy.mockRestore();
     writeTaskMetaSpy.mockRestore();
-    fs.rmSync(tempDir, { recursive: true, force: true });
+    await env.cleanup();
   });
 
   it('exits if project not initialized', async () => {
-    pathIsInitSpy.mockReturnValue(false);
+    env.mocks.isInitialized.mockReturnValue(false);
     const exitSpy = spyOn(process, 'exit').mockImplementation(() => { throw new Error('exit'); });
     try {
-      await completeTask('TASK-001', {}, tempDir);
+      await completeTask('TASK-001', {}, env.tempDir);
     } catch (e) {
       expect((e as Error).message).toBe('exit');
     }
@@ -823,7 +777,7 @@ describe('completeTask', () => {
     readTaskMetaSpy.mockReturnValue(null);
     const exitSpy = spyOn(process, 'exit').mockImplementation(() => { throw new Error('exit'); });
     try {
-      await completeTask('TASK-NONEXIST', {}, tempDir);
+      await completeTask('TASK-NONEXIST', {}, env.tempDir);
     } catch (e) {
       expect((e as Error).message).toBe('exit');
     }
@@ -836,7 +790,7 @@ describe('completeTask', () => {
     readTaskMetaSpy.mockReturnValue(task);
 
     // No checkpoint file → no unchecked checkpoints
-    await completeTask(task.id, { yes: true }, tempDir);
+    await completeTask(task.id, { yes: true }, env.tempDir);
 
     expect(task.status).toBe('resolved');
     expect(writeTaskMetaSpy).toHaveBeenCalled();
@@ -849,12 +803,12 @@ describe('completeTask', () => {
     readTaskMetaSpy.mockReturnValue(task);
 
     // Create checkpoint file at the mocked getTasksDir path
-    const cpDir = path.join(tempDir, 'tasks', task.id);
+    const cpDir = path.join(env.tasksDir, task.id);
     fs.mkdirSync(cpDir, { recursive: true });
     const cpPath = path.join(cpDir, 'checkpoint.md');
     fs.writeFileSync(cpPath, '# Checkpoints\n- [ ] unchecked item 1\n- [ ] unchecked item 2\n');
 
-    await completeTask(task.id, { yes: true }, tempDir);
+    await completeTask(task.id, { yes: true }, env.tempDir);
 
     expect(task.status).toBe('resolved');
     // Verify writeFileSync was called with [x] content
@@ -867,7 +821,7 @@ describe('completeTask', () => {
     readTaskMetaSpy.mockReturnValue(task);
 
     // Create checkpoint file at the mocked getTasksDir path
-    const cpDir = path.join(tempDir, 'tasks', task.id);
+    const cpDir = path.join(env.tasksDir, task.id);
     fs.mkdirSync(cpDir, { recursive: true });
     fs.writeFileSync(path.join(cpDir, 'checkpoint.md'), '- [ ] unchecked item');
 
@@ -877,7 +831,7 @@ describe('completeTask', () => {
     const promptsSpy = spyOn(prompts, 'default')
       .mockResolvedValueOnce({ proceed: false });
 
-    await completeTask(task.id, { yes: false }, tempDir);
+    await completeTask(task.id, { yes: false }, env.tempDir);
 
     const output = consoleSpy.mock.calls.map((c: any[]) => c[0]).join('\n');
     expect(output).toContain('已取消');
@@ -889,7 +843,7 @@ describe('completeTask', () => {
     readTaskMetaSpy.mockReturnValue(task);
     // No checkpoint file created
 
-    await completeTask(task.id, { yes: true }, tempDir);
+    await completeTask(task.id, { yes: true }, env.tempDir);
 
     expect(task.status).toBe('resolved');
   });

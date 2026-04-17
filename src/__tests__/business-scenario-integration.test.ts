@@ -472,7 +472,7 @@ describe('Scenario 2: Harness Full Pipeline', () => {
   });
 
   test('S2.8: PIPELINE_INTERMEDIATE_STATUSES and migration map are consistent', () => {
-    expect(PIPELINE_INTERMEDIATE_STATUSES).toEqual(['wait_review', 'wait_qa', 'wait_evaluation']);
+    expect(PIPELINE_INTERMEDIATE_STATUSES).toEqual(['wait_review', 'wait_qa', 'wait_evaluation', 'needs_human']);
     // Migration map should map intermediate statuses to valid states
     for (const status of PIPELINE_INTERMEDIATE_STATUSES) {
       const mapped = PIPELINE_STATUS_MIGRATION_MAP[status];
@@ -515,7 +515,10 @@ describe('Scenario 3: Quality Gate Interception', () => {
   });
 
   test('S3.4: validateBasicFields fails for missing checkpoints', () => {
-    const task = createTestTask('TASK-feature-P2-nocheck-20260411');
+    // P0/P1 高优先级任务必须配置检查点
+    const task = createTestTask('TASK-feature-P0-nocheck-20260411');
+    task.priority = 'P0';
+    task.checkpointPolicy = 'required'; // P0/P1 任务检查点策略为 required
     task.description = 'A sufficiently long description for validation';
     task.checkpoints = [];
     const result = validateBasicFields(task);
@@ -559,7 +562,7 @@ describe('Scenario 4: State Recovery and Retry', () => {
     expect(loaded!.resumeFrom.get('TASK-1')).toBe('qa');
     expect(loaded!.reevaluateCounter.get('TASK-1')).toBe(1);
     expect(loaded!.phaseRetryCounters.get('TASK-1:development')).toBe(1);
-    expect(loaded!.stateFormatVersion).toBe(1);
+    expect(loaded!.stateFormatVersion).toBe(2);
   });
 
   test('S4.2: loadRuntimeState returns null for missing file', () => {
