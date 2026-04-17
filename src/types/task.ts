@@ -477,7 +477,6 @@ export const PIPELINE_STATUS_MIGRATION_MAP: Record<string, TaskStatus> = {
   'wait_review': 'in_progress',   // 等待代码审核 → 回到开发中
   'wait_qa': 'in_progress',       // 等待 QA → 回到开发中
   'wait_evaluation': 'wait_qa',   // 等待评估 → 回退到等待 QA（无评估报告时）
-  'wait_complete': 'wait_evaluation',  // 等待最终确认 → 映射到 wait_evaluation
 };
 
 /**
@@ -501,7 +500,6 @@ export function normalizeStatus(status: string): TaskStatus {
     'wait_review': 'wait_review',
     'wait_qa': 'wait_qa',
     'wait_evaluation': 'wait_evaluation',
-    'wait_complete': 'wait_evaluation',  // 已废弃状态 → 映射到 wait_evaluation
     'resolved': 'resolved',
     'closed': 'closed',
     'abandoned': 'abandoned',

@@ -98,10 +98,6 @@ describe('Pipeline Status Constants', () => {
     expect(PIPELINE_STATUS_MIGRATION_MAP['wait_qa']).toBe('in_progress');
   });
 
-  test('wait_complete should map to wait_evaluation', () => {
-    expect(PIPELINE_STATUS_MIGRATION_MAP['wait_complete']).toBe('wait_evaluation');
-  });
-
   test('wait_evaluation should map to wait_qa', () => {
     expect(PIPELINE_STATUS_MIGRATION_MAP['wait_evaluation']).toBe('wait_qa');
   });
@@ -289,20 +285,6 @@ describe('applySchemaMigrations', () => {
 
     expect(task.status).toBe('in_progress');
     expect(result.details).toContain('status: wait_qa → in_progress');
-  });
-
-  test('v2 migration should migrate wait_complete to wait_evaluation', () => {
-    const task = createTestTask({
-      status: 'wait_complete' as any,
-      reopenCount: 0,
-      requirementHistory: [],
-      schemaVersion: 1,
-    });
-
-    const result = applySchemaMigrations(task);
-
-    expect(task.status).toBe('wait_evaluation');
-    expect(result.details).toContain('status: wait_complete → wait_evaluation');
   });
 
   test('v2 migration should migrate needs_human to open', () => {

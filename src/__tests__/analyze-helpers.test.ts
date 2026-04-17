@@ -61,7 +61,7 @@ describe('normalizeStatus', () => {
     expect(normalizeStatus('in_progress')).toBe('in_progress');
     expect(normalizeStatus('wait_review')).toBe('wait_review');
     expect(normalizeStatus('wait_qa')).toBe('wait_qa');
-    expect(normalizeStatus('wait_complete')).toBe('wait_evaluation');
+    expect(normalizeStatus('wait_evaluation')).toBe('wait_evaluation');
     expect(normalizeStatus('resolved')).toBe('resolved');
     expect(normalizeStatus('closed')).toBe('closed');
     expect(normalizeStatus('abandoned')).toBe('abandoned');
