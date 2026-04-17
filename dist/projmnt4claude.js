@@ -33592,7 +33592,7 @@ function collectValues(value, previous) {
   return previous.concat(value);
 }
 var program2 = new Command;
-program2.name("projmnt4claude").description("Claude Code \u9879\u76EE\u7BA1\u7406 CLI \u5DE5\u5177").version("0.1.0").option("--ai", "AI \u6A21\u5F0F: \u81EA\u52A8\u542F\u7528 --json \u8F93\u51FA + \u975E\u4EA4\u4E92\u6A21\u5F0F + \u7CBE\u7B80\u65E5\u5FD7").option("--json", "JSON \u683C\u5F0F\u8F93\u51FA (\u5168\u5C40)").hook("preAction", (thisCommand) => {
+program2.name("projmnt4claude").description("Claude Code Project Management CLI Tool").version("0.1.0").option("--ai", "AI \u6A21\u5F0F: \u81EA\u52A8\u542F\u7528 --json \u8F93\u51FA + \u975E\u4EA4\u4E92\u6A21\u5F0F + \u7CBE\u7B80\u65E5\u5FD7").option("--json", "JSON \u683C\u5F0F\u8F93\u51FA (\u5168\u5C40)").hook("preAction", (thisCommand) => {
   const opts = thisCommand.opts();
   if (opts.ai) {
     process.env.PROJMNT4CLAUDE_AI_MODE = "true";
@@ -33602,10 +33602,10 @@ program2.name("projmnt4claude").description("Claude Code \u9879\u76EE\u7BA1\u740
     process.env.PROJMNT4CLAUDE_JSON_OUTPUT = "true";
   }
 });
-program2.command("setup").description("\u5728\u5F53\u524D\u9879\u76EE\u521D\u59CB\u5316\u9879\u76EE\u7BA1\u7406\u73AF\u5883\uFF0C\u652F\u6301\u8BED\u8A00\u9009\u62E9 (\u4E2D\u6587/English)").option("-y, --yes", "\u975E\u4EA4\u4E92\u6A21\u5F0F\uFF1A\u8DF3\u8FC7\u6240\u6709\u786E\u8BA4\uFF0C\u4F7F\u7528\u9ED8\u8BA4\u8BBE\u7F6E").option("-l, --language <language>", "\u6307\u5B9A\u8BED\u8A00 (zh/en)").option("-f, --force", "\u5F3A\u5236\u91CD\u65B0\u521D\u59CB\u5316\uFF08\u91CD\u65B0\u590D\u5236\u6280\u80FD\u6587\u4EF6\uFF09").action(async (options) => {
+program2.command("setup").description("Initialize project management environment in current project, with language selection (Chinese/English)").option("-y, --yes", "Non-interactive mode: skip all confirmations, use default settings").option("-l, --language <language>", "Specify language (zh/en)").option("-f, --force", "Force re-initialization (re-copy skill files)").action(async (options) => {
   await setup(process.cwd(), { nonInteractive: options.yes, language: options.language, force: options.force });
 });
-program2.command("config <action> [key] [value]").description("\u7BA1\u7406\u914D\u7F6E (list/get/set)").action((action, key, value) => {
+program2.command("config <action> [key] [value]").description("Manage configuration (list/get/set)").action((action, key, value) => {
   requireInit();
   switch (action) {
     case "list":
@@ -33613,14 +33613,14 @@ program2.command("config <action> [key] [value]").description("\u7BA1\u7406\u914
       break;
     case "get":
       if (!key) {
-        console.error("\u9519\u8BEF: get \u64CD\u4F5C\u9700\u8981\u6307\u5B9A key");
+        console.error("(X) Error: get operation requires key");
         process.exit(1);
       }
       getConfig(key);
       break;
     case "set":
       if (!key || value === undefined) {
-        console.error("\u9519\u8BEF: set \u64CD\u4F5C\u9700\u8981\u6307\u5B9A key \u548C value");
+        console.error("(X) Error: set operation requires key and value");
         process.exit(1);
       }
       setConfig(key, value);
@@ -33685,7 +33685,7 @@ rename format:
   task rename <oldTaskId> <newTaskId>
 
   Example:
-    task rename TASK-001 TASK-feature-new-name`).allowExcessArguments(true).option("-s, --status <status>", "\u6309\u72B6\u6001\u8FC7\u6EE4 (\u4EC5 list)").option("-p, --priority <priority>", "\u6309\u4F18\u5148\u7EA7\u8FC7\u6EE4 (\u4EC5 list)").option("-r, --role <role>", "\u6309\u63A8\u8350\u89D2\u8272\u8FC7\u6EE4 (\u4EC5 list)").option("--dep-id <depId>", "\u4F9D\u8D56\u4EFB\u52A1ID (\u4EC5 dependency)").option("--title <title>", "\u4EFB\u52A1\u6807\u9898 (\u4EC5 create/update)").option("--description <description>", "\u4EFB\u52A1\u63CF\u8FF0 (\u4EC5 create/update)").option("--type <type>", "\u4EFB\u52A1\u7C7B\u578B (create/count): bug/feature/research/docs/refactor/test").option("-y, --yes", "\u975E\u4EA4\u4E92\u6A21\u5F0F (\u4EC5 create/checkpoint/delete)").option("--token <n>", "\u4EE4\u724C\u6570\u4F30\u7B97").option("--sync-children", "\u540C\u6B65\u5B50\u4EFB\u52A1\u72B6\u6001 (\u4EC5 update resolved/closed)").option("--no-sync", "\u4E0D\u540C\u6B65\u5B50\u4EFB\u52A1\u72B6\u6001 (\u4EC5 update)").option("--topic <topic>", "\u8BA8\u8BBA\u4E3B\u9898 (\u4EC5 discuss)").option("-v, --verbose", "\u663E\u793A\u5B8C\u6574\u4FE1\u606F (\u4EC5 show)").option("--history", "\u4EC5\u663E\u793A\u53D8\u66F4\u5386\u53F2 (\u4EC5 show)").option("--json", "JSON \u683C\u5F0F\u8F93\u51FA (\u4EC5 show/get/list/status/count)").option("--compact", "\u7CBE\u7B80\u8F93\u51FA (\u4EC5 show)").option("--fields <fields>", "\u81EA\u5B9A\u4E49\u8F93\u51FA\u5B57\u6BB5 (\u4EC5 list)").option("--missing-verification", "\u7B5B\u9009\u7F3A\u5C11\u9A8C\u8BC1\u7684\u4EFB\u52A1 (\u4EC5 list)").option("-g, --group <field>", "\u5206\u7EC4\u663E\u793A (\u4EC5 list): status/priority/type/role").option("--checkpoints", "\u663E\u793A\u68C0\u67E5\u70B9\u8BE6\u60C5 (\u4EC5 show)").option("--format <format>", "\u8F93\u51FA\u683C\u5F0F (\u4EC5 show): panel/classic").option("--result <result>", "\u9A8C\u8BC1\u7ED3\u679C (\u4EC5 checkpoint complete)").option("--note <note>", "\u68C0\u67E5\u70B9\u5907\u6CE8 (\u4EC5 checkpoint note/fail)").option("--into <count>", "\u62C6\u5206\u6570\u91CF (\u4EC5 split)").option("--titles <titles>", "\u5B50\u4EFB\u52A1\u6807\u9898\u5217\u8868\uFF0C\u4EC5 split,").option("--skip-validation", "\u8DF3\u8FC7 checkpoints \u8D28\u91CF\u6821\u9A8C (\u4EC5 create)").option("-f, --force", "\u5F3A\u5236\u64CD\u4F5C").option("--file <path>", "\u4ECE\u6587\u4EF6\u8BFB\u53D6\u63CF\u8FF0 (\u4EC5 create, \u7528\u4E8E\u5305\u542B\u7279\u6B8A\u5B57\u7B26\u7684\u957F\u63CF\u8FF0)").option("--from-requirement", "\u4ECE\u9700\u6C42\u521B\u5EFA (\u4EC5 create)").option("--requirement-text <text>", "\u9700\u6C42\u6587\u672C (\u4EC5 create)").option("--branch <branch>", "\u5173\u8054\u5206\u652F (\u4EC5 create)").option("--from <id>", "\u4F9D\u8D56\u6765\u6E90 (\u4EC5 dependency)").option("--to <id>", "\u4F9D\u8D56\u76EE\u6807 (\u4EC5 dependency)").option("--remove", "\u79FB\u9664\u4F9D\u8D56 (\u4EC5 dependency)").option("--parts <n>", "\u62C6\u5206\u6570\u91CF (\u4EC5 split)").option("--strategy <strategy>", "\u62C6\u5206\u7B56\u7565 (\u4EC5 split)").option("--pass", "\u901A\u8FC7\u68C0\u67E5\u70B9 (\u4EC5 checkpoint)").option("--fail", "\u5931\u8D25\u68C0\u67E5\u70B9 (\u4EC5 checkpoint)").option("--all", "\u5305\u542B\u6240\u6709\u4EFB\u52A1\uFF0C\u5305\u62EC\u5DF2\u89E3\u51B3/\u5DF2\u5173\u95ED\u7684 (\u4EC5 batch-update)").option("--tasks <ids>", "\u6307\u5B9A\u4EFB\u52A1ID\u5217\u8868\uFF0C\u9017\u53F7\u5206\u9694 (\u4EC5 batch-update)", collectValues, []).option("--task-file <path>", "\u4ECE\u6587\u4EF6\u8BFB\u53D6\u4EFB\u52A1ID\u5217\u8868\uFF0C\u6BCF\u884C\u4E00\u4E2A\u6216\u9017\u53F7\u5206\u9694 (\u4EC5 batch-update)").option("--change-note <note>", "\u4FEE\u6539\u8BF4\u660E\uFF0C\u81F3\u5C1110\u4E2A\u5B57\u7B26\uFF0C\u8BB0\u5F55\u5230transitionNotes (\u4EC5 batch-update)").option("--source <source>", "\u8FC7\u6EE4\u65E5\u5FD7\u6765\u6E90 (\u4EC5 batch-update-logs): cli/ide/hook/script/unknown").option("--summary", "\u663E\u793A\u65E5\u5FD7\u7EDF\u8BA1\u6458\u8981 (\u4EC5 batch-update-logs)").action(async (action, id, options) => {
+    task rename TASK-001 TASK-feature-new-name`).allowExcessArguments(true).option("-s, --status <status>", "Filter by status (list only)").option("-p, --priority <priority>", "Filter by priority (list only)").option("-r, --role <role>", "Filter by recommended role (list only)").option("--dep-id <depId>", "Dependency task ID (dependency only)").option("--title <title>", "Task title (create/update only)").option("--description <description>", "Task description (create/update only)").option("--type <type>", "Task type (create/count): bug/feature/research/docs/refactor/test").option("-y, --yes", "Non-interactive mode (create/checkpoint/delete only)").option("--token <n>", "Token estimation").option("--sync-children", "Sync subtask status (update resolved/closed only)").option("--no-sync", "Do not sync subtask status (update only)").option("--topic <topic>", "Discussion topic (discuss only)").option("-v, --verbose", "\u663E\u793A\u5B8C\u6574\u4FE1\u606F (\u4EC5 show)").option("--history", "Show change history only (show only)").option("--json", "JSON format output (show/get/list/status/count only)").option("--compact", "Compact output (show only)").option("--fields <fields>", "Custom output fields (list only)").option("--missing-verification", "Filter tasks missing verification (list only)").option("-g, --group <field>", "Group display (list only): status/priority/type/role").option("--checkpoints", "Show checkpoint details (show only)").option("--format <format>", "Output format (show only): panel/classic").option("--result <result>", "Verification result (checkpoint complete only)").option("--note <note>", "Checkpoint note (checkpoint note/fail only)").option("--into <count>", "Split count (split only)").option("--titles <titles>", "Subtask title list (split only)").option("--skip-validation", "Skip checkpoint quality validation (create only)").option("-f, --force", "Force operation").option("--file <path>", "Read description from file (create only, for long descriptions with special characters)").option("--from-requirement", "Create from requirement (create only)").option("--requirement-text <text>", "Requirement text (create only)").option("--branch <branch>", "Associated branch (create only)").option("--from <id>", "Dependency source (dependency only)").option("--to <id>", "Dependency target (dependency only)").option("--remove", "Remove dependency (dependency only)").option("--parts <n>", "Split count (split only)").option("--strategy <strategy>", "Split strategy (split only)").option("--pass", "Pass checkpoint (checkpoint only)").option("--fail", "Fail checkpoint (checkpoint only)").option("--all", "Include all tasks including resolved/closed (batch-update only)").option("--tasks <ids>", "Specify task ID list, comma-separated (batch-update only)", collectValues, []).option("--task-file <path>", "Read task ID list from file, one per line or comma-separated (batch-update only)").option("--change-note <note>", "Change note, at least 10 characters, recorded in transitionNotes (batch-update only)").option("--source <source>", "Filter log source (batch-update-logs only): cli/ide/hook/script/unknown").option("--summary", "Show log statistics summary (batch-update-logs only)").action(async (action, id, options) => {
   requireInit();
   switch (action) {
     case "create": {
@@ -33758,7 +33758,7 @@ rename format:
       break;
     case "update":
       if (!id) {
-        console.error("\u9519\u8BEF: update \u64CD\u4F5C\u9700\u8981\u6307\u5B9A\u4EFB\u52A1ID");
+        console.error("(X) Error: update operation requires task ID");
         process.exit(1);
       }
       await updateTask(id, {
@@ -33774,7 +33774,7 @@ rename format:
       break;
     case "delete":
       if (!id) {
-        console.error("\u9519\u8BEF: delete \u64CD\u4F5C\u9700\u8981\u6307\u5B9A\u4EFB\u52A1ID");
+        console.error("(X) Error: delete operation requires task ID");
         process.exit(1);
       }
       await deleteTask(id, options.yes);
@@ -33787,7 +33787,7 @@ rename format:
       break;
     case "execute":
       if (!id) {
-        console.error("\u9519\u8BEF: execute \u64CD\u4F5C\u9700\u8981\u6307\u5B9A\u4EFB\u52A1ID");
+        console.error("(X) Error: execute operation requires task ID");
         process.exit(1);
       }
       await executeTask(id);
@@ -33797,21 +33797,21 @@ rename format:
       break;
     case "history":
       if (!id) {
-        console.error("\u9519\u8BEF: history \u64CD\u4F5C\u9700\u8981\u6307\u5B9A\u4EFB\u52A1ID");
+        console.error("(X) Error: history operation requires task ID");
         process.exit(1);
       }
       showTaskHistory(id);
       break;
     case "complete":
       if (!id) {
-        console.error("\u9519\u8BEF: complete \u64CD\u4F5C\u9700\u8981\u6307\u5B9A\u4EFB\u52A1ID");
+        console.error("(X) Error: complete operation requires task ID");
         process.exit(1);
       }
       await completeTask(id, { yes: options.yes });
       break;
     case "checkpoint":
       if (!id) {
-        console.error("\u9519\u8BEF: checkpoint \u64CD\u4F5C\u9700\u8981\u6307\u5B9A\u4EFB\u52A1ID");
+        console.error("(X) Error: checkpoint operation requires task ID");
         process.exit(1);
       }
       const checkpointIndex = process.argv.indexOf("checkpoint");
@@ -33841,28 +33841,28 @@ rename format:
       break;
     case "discuss":
       if (!id) {
-        console.error("\u9519\u8BEF: discuss \u64CD\u4F5C\u9700\u8981\u6307\u5B9A\u4EFB\u52A1ID");
+        console.error("(X) Error: discuss operation requires task ID");
         process.exit(1);
       }
-      console.log("\u63D0\u793A: \u8BF7\u4F7F\u7528 task update --needs-discussion \u6765\u6807\u8BB0\u4EFB\u52A1\u9700\u8981\u8BA8\u8BBA");
-      console.log('      \u4F7F\u7528 task update --topic "\u4E3B\u9898\u5185\u5BB9" \u6765\u6DFB\u52A0\u8BA8\u8BBA\u4E3B\u9898');
+      console.log("Hint: Use task update --needs-discussion to mark task for discussion");
+      console.log('      Use task update --topic "topic content" to add discussion topic');
       break;
     case "dependency": {
       const showDependencyHelp = () => {
         console.error("");
-        console.error("dependency \u5B50\u547D\u4EE4\u7528\u6CD5:");
+        console.error("dependency subcommand usage:");
         console.error("  task dependency add <taskId> --dep-id <depTaskId>");
         console.error("  task dependency remove <taskId> --dep-id <depTaskId>");
         console.error("");
-        console.error("\u793A\u4F8B:");
+        console.error("Examples:");
         console.error("  task dependency add TASK-001 --dep-id TASK-002");
         console.error("  task dependency remove TASK-001 --dep-id TASK-002");
         console.error("");
-        console.error("\u8BF4\u660E:");
-        console.error("  - add: \u6DFB\u52A0\u4F9D\u8D56\u5173\u7CFB\uFF0C\u8868\u793A taskId \u4F9D\u8D56\u4E8E depTaskId");
-        console.error("  - remove: \u79FB\u9664\u4F9D\u8D56\u5173\u7CFB");
-        console.error("  - taskId: \u8981\u6DFB\u52A0/\u79FB\u9664\u4F9D\u8D56\u7684\u4EFB\u52A1ID");
-        console.error("  - --dep-id: \u88AB\u4F9D\u8D56\u7684\u4EFB\u52A1ID");
+        console.error("Description:");
+        console.error("  - add: Add dependency, taskId depends on depTaskId");
+        console.error("  - remove: Remove dependency");
+        console.error("  - taskId: Task ID to add/remove dependency");
+        console.error("  - --dep-id: Dependency task ID");
       };
       if (!id) {
         console.error("(X) Error: dependency requires sub-action (add/remove)");
@@ -33905,7 +33905,7 @@ rename format:
     }
     case "add-subtask": {
       if (!id) {
-        console.error("\u9519\u8BEF: add-subtask \u64CD\u4F5C\u9700\u8981\u6307\u5B9A\u7236\u4EFB\u52A1ID");
+        console.error("(X) Error: add-subtask operation requires parent task ID");
         process.exit(1);
       }
       const title = process.argv.slice(5).join(" ");
@@ -33914,11 +33914,11 @@ rename format:
     }
     case "submit": {
       if (!id) {
-        console.error("\u9519\u8BEF: submit \u64CD\u4F5C\u9700\u8981\u6307\u5B9A\u4EFB\u52A1ID");
+        console.error("(X) Error: submit operation requires task ID");
         process.exit(1);
       }
-      console.warn("[\u6CE8\u610F]: task submit \u547D\u4EE4\u5DF2\u5E9F\u5F03");
-      console.warn("   \u5EFA\u8BAE\u6539\u7528: projmnt4claude task update <taskId> --status wait_evaluation");
+      console.warn("[Notice]: task submit command is deprecated");
+      console.warn("   Use: projmnt4claude task update <taskId> --status wait_evaluation");
       console.warn("");
       await submitTask(id, {
         note: options.note
@@ -33927,7 +33927,7 @@ rename format:
     }
     case "validate": {
       if (!id) {
-        console.error("\u9519\u8BEF: validate \u64CD\u4F5C\u9700\u8981\u6307\u5B9A\u4EFB\u52A1ID");
+        console.error("(X) Error: validate operation requires task ID");
         process.exit(1);
       }
       await validateTask(id, {
@@ -33938,7 +33938,7 @@ rename format:
     }
     case "sync-children": {
       if (!id) {
-        console.error("\u9519\u8BEF: sync-children \u64CD\u4F5C\u9700\u8981\u6307\u5B9A\u7236\u4EFB\u52A1ID");
+        console.error("(X) Error: sync-children operation requires parent task ID");
         process.exit(1);
       }
       await syncChildren(id, {
@@ -33948,7 +33948,7 @@ rename format:
     }
     case "split": {
       if (!id) {
-        console.error("\u9519\u8BEF: split \u64CD\u4F5C\u9700\u8981\u6307\u5B9A\u7236\u4EFB\u52A1ID");
+        console.error("(X) Error: split operation requires parent task ID");
         process.exit(1);
       }
       await splitTask(id, {
@@ -33960,7 +33960,7 @@ rename format:
     }
     case "search": {
       if (!id) {
-        console.error("\u9519\u8BEF: search \u64CD\u4F5C\u9700\u8981\u6307\u5B9A\u641C\u7D22\u5173\u952E\u8BCD");
+        console.error("(X) Error: search operation requires search keyword");
         process.exit(1);
       }
       searchTasks(id, {
@@ -34011,10 +34011,10 @@ rename format:
       const oldTaskId = renameIndex + 1 < process.argv.length ? process.argv[renameIndex + 1] : undefined;
       const newTaskId = renameIndex + 2 < process.argv.length ? process.argv[renameIndex + 2] : undefined;
       if (!oldTaskId || !newTaskId) {
-        console.error("\u9519\u8BEF: rename \u64CD\u4F5C\u9700\u8981\u6307\u5B9A\u65E7\u4EFB\u52A1ID\u548C\u65B0\u4EFB\u52A1ID");
+        console.error("(X) Error: rename operation requires old task ID and new task ID");
         console.error("");
-        console.error("\u7528\u6CD5: task rename <oldTaskId> <newTaskId>");
-        console.error("\u793A\u4F8B: task rename TASK-001 TASK-feature-new-name");
+        console.error("Usage: task rename <oldTaskId> <newTaskId>");
+        console.error("Example: task rename TASK-001 TASK-feature-new-name");
         process.exit(1);
       }
       renameTaskCommand(oldTaskId, newTaskId);
@@ -34037,14 +34037,14 @@ recommend \u5B50\u547D\u4EE4\u652F\u6301\u4E09\u5C42\u4F9D\u8D56\u63A8\u65AD:
       break;
     case "add":
       if (!id) {
-        console.error("\u9519\u8BEF: add \u64CD\u4F5C\u9700\u8981\u6307\u5B9A\u4EFB\u52A1ID");
+        console.error("(X) Error: add operation requires task ID");
         process.exit(1);
       }
       addTask(id, options.after);
       break;
     case "remove":
       if (!id) {
-        console.error("\u9519\u8BEF: remove \u64CD\u4F5C\u9700\u8981\u6307\u5B9A\u4EFB\u52A1ID");
+        console.error("(X) Error: remove operation requires task ID");
         process.exit(1);
       }
       removeTask(id);
@@ -34068,7 +34068,7 @@ recommend \u5B50\u547D\u4EE4\u652F\u6301\u4E09\u5C42\u4F9D\u8D56\u63A8\u65AD:
       process.exit(1);
   }
 });
-program2.command("status").description("\u663E\u793A\u9879\u76EE\u72B6\u6001\u6458\u8981").option("--archived", "\u663E\u793A\u5F52\u6863\u4EFB\u52A1\u7EDF\u8BA1").option("-a, --all", "\u663E\u793A\u6240\u6709\u4EFB\u52A1\uFF08\u5305\u62EC\u5F52\u6863\uFF09").option("-q, --quiet", "\u7CBE\u7B80\u8F93\u51FA\uFF1A\u4EC5\u663E\u793A\u5173\u952E\u6307\u6807").option("--json", "JSON \u683C\u5F0F\u8F93\u51FA").option("--compact", "\u4F7F\u7528\u7B80\u6D01\u5206\u9694\u7B26").action(async (options) => {
+program2.command("status").description("Show project status summary").option("--archived", "Show archived task statistics").option("-a, --all", "Show all tasks (including archived)").option("-q, --quiet", "Quiet output: only show key metrics").option("--json", "JSON format output").option("--compact", "Use compact separators").action(async (options) => {
   requireInit();
   await showStatus({
     includeArchived: options.archived || options.all,
@@ -34077,7 +34077,7 @@ program2.command("status").description("\u663E\u793A\u9879\u76EE\u72B6\u6001\u64
     compact: options.compact
   });
 });
-program2.command("analyze").description("\u5206\u6790\u9879\u76EE\u5065\u5EB7\u72B6\u6001").option("--fix", "\u81EA\u52A8\u4FEE\u590D\u6240\u6709\u53EF\u4FEE\u590D\u7684\u95EE\u9898").option("--fix-checkpoints", "\u667A\u80FD\u751F\u6210\u7F3A\u5931\u7684\u68C0\u67E5\u70B9").option("--quality-check", "\u68C0\u6D4B\u4EFB\u52A1\u5185\u5BB9\u8D28\u91CF\uFF08\u63CF\u8FF0\u5B8C\u6574\u5EA6\u3001\u68C0\u67E5\u70B9\u8D28\u91CF\u3001\u5173\u8054\u6587\u4EF6\u3001\u89E3\u51B3\u65B9\u6848\uFF09").option("--threshold <score>", "\u8D28\u91CF\u68C0\u6D4B\u9608\u503C\uFF0C\u4F4E\u4E8E\u6B64\u5206\u6570\u7684\u4EFB\u52A1\u5C06\u88AB\u6807\u8BB0 (\u9ED8\u8BA4: 60)", "60").option("-j, --json", "JSON \u683C\u5F0F\u8F93\u51FA (\u4EC5 --quality-check)").option("-y, --yes", "\u975E\u4EA4\u4E92\u6A21\u5F0F\uFF1A\u81EA\u52A8\u4FEE\u590D\u53EF\u4FEE\u590D\u7684\u95EE\u9898").option("--compact", "\u4F7F\u7528\u7B80\u6D01\u5206\u9694\u7B26").option("--task <taskId>", "\u6307\u5B9A\u4EFB\u52A1ID (\u4EC5 --fix-checkpoints)").option("--check-range <range>", "\u5206\u6790\u8303\u56F4: all(\u9ED8\u8BA4), tasks:ID1,ID2, keyword:pattern").option("--deep-analyze", "\u6DF1\u5EA6\u5206\u6790: \u542F\u7528 AI \u8BED\u4E49\u91CD\u590D\u68C0\u6D4B\u3001\u9648\u65E7\u8BC4\u4F30\u3001\u8BED\u4E49\u8D28\u91CF\u8BC4\u5206").option("--no-ai", "\u7981\u7528\u6240\u6709 AI \u529F\u80FD\uFF0C\u4EC5\u4F7F\u7528\u89C4\u5219\u5F15\u64CE\u5206\u6790").option("--rules-only", "\u4EC5\u6267\u884C\u89C4\u5219\u5206\u6790+\u4FEE\u590D (Stage 1,2), \u9700\u914D\u5408 --fix").option("--checkpoints-only", "\u4EC5\u6267\u884C\u68C0\u67E5\u70B9\u4FEE\u590D (Stage 4), \u9700\u914D\u5408 --fix").option("--quality-only", "\u4EC5\u6267\u884C\u8D28\u91CF\u62A5\u544A (Stage 5), \u9700\u914D\u5408 --fix").option("--bug-report <path>", "Bug Report \u5206\u6790\u6A21\u5F0F: \u5206\u6790\u6307\u5B9A\u7684 bug report \u6587\u4EF6\u6216\u76EE\u5F55").option("--export-training-data", "\u5BFC\u51FA\u8BAD\u7EC3\u6570\u636E\u4E3A JSONL \u683C\u5F0F (\u9700 --bug-report, \u9700 config training.exportEnabled)").action(async (options) => {
+program2.command("analyze").description("Analyze project health status").option("--fix", "Auto-fix all fixable issues").option("--fix-checkpoints", "Intelligently generate missing checkpoints").option("--quality-check", "Check task content quality (description completeness, checkpoint quality, related files, solution)").option("--threshold <score>", "Quality check threshold, tasks below this score will be flagged (default: 60)", "60").option("-j, --json", "JSON format output (quality-check only)").option("-y, --yes", "Non-interactive mode: auto-fix fixable issues").option("--compact", "Use compact separators").option("--task <taskId>", "Specify task ID (fix-checkpoints only)").option("--check-range <range>", "Analysis range: all(default), tasks:ID1,ID2, keyword:pattern").option("--deep-analyze", "Deep analysis: enable AI semantic duplicate detection, stale evaluation, semantic quality scoring").option("--no-ai", "Disable all AI features, use rule engine analysis only").option("--rules-only", "Execute rule analysis+fix only (Stage 1,2), requires --fix").option("--checkpoints-only", "Execute checkpoint fix only (Stage 4), requires --fix").option("--quality-only", "Execute quality report only (Stage 5), requires --fix").option("--bug-report <path>", "Bug Report analysis mode: analyze specified bug report file or directory").option("--export-training-data", "Export training data as JSONL format (requires --bug-report, requires config training.exportEnabled)").action(async (options) => {
   requireInit();
   const aiOptions = {
     deepAnalyze: !!options.deepAnalyze,
@@ -34191,7 +34191,7 @@ program2.command("init-requirement [description]").description(`\u4ECE\u81EA\u71
     decompose: options.decompose
   });
 });
-program2.command("doctor").description("\u8FD0\u884C\u73AF\u5883\u8BCA\u65AD\uFF0C\u68C0\u67E5\u5E76\u4FEE\u590D\u8BBE\u7F6E\u95EE\u9898").option("--fix", "\u81EA\u52A8\u4FEE\u590D\u68C0\u6D4B\u5230\u7684\u95EE\u9898").option("--deep", "\u6DF1\u5EA6\u65E5\u5FD7\u5206\u6790\uFF1A\u8FD0\u884C\u6240\u6709\u65E5\u5FD7\u5206\u6790\u5668\uFF08\u89C4\u5219 + AI \u6DF7\u5408\u7B56\u7565\uFF09").option("--bug-report", "\u751F\u6210 Bug \u62A5\u544A\uFF08\u542B\u65E5\u5FD7\u538B\u7F29\u9644\u4EF6\u3001AI \u6210\u672C\u6C47\u603B\u3001\u4F7F\u7528\u5206\u6790\uFF09").action(async (options) => {
+program2.command("doctor").description("Run environment diagnostics, check and fix setup issues").option("--fix", "Auto-fix detected issues").option("--deep", "Deep log analysis: run all log analyzers (rule + AI hybrid strategy)").option("--bug-report", "Generate Bug report (includes log compression attachment, AI cost summary, usage analysis)").action(async (options) => {
   if (options.bugReport) {
     await runBugReport();
   } else if (options.deep) {
@@ -34226,7 +34226,7 @@ Sub-command: cleanup
   --orphans-only             Clean only orphaned snapshots (process no longer exists)
 
 Deprecated Options:
-  ~~--skip-quality-gate~~    Deprecated, use --skip-harness-gate instead`).option("--plan <file>", "\u8BA1\u5212\u6587\u4EF6\u8DEF\u5F84 (\u53EF\u9009\uFF0C\u4E0D\u6307\u5B9A\u5219\u81EA\u52A8\u8BFB\u53D6/\u751F\u6210)").option("--max-retries <n>", "\u6700\u5927\u91CD\u8BD5\u6B21\u6570", "3").option("--timeout <seconds>", "\u5355\u4EFB\u52A1\u8D85\u65F6\u65F6\u95F4 (\u79D2)", "300").option("--parallel <n>", "\u5E76\u884C\u6267\u884C\u6570", "1").option("--dry-run", "\u8BD5\u8FD0\u884C\u6A21\u5F0F (\u4E0D\u5B9E\u9645\u6267\u884C)").option("--continue", "\u4ECE\u4E0A\u6B21\u4E2D\u65AD\u5904\u7EE7\u7EED\u6267\u884C").option("--json", "JSON \u683C\u5F0F\u8F93\u51FA").option("--api-retry-attempts <n>", "API \u8C03\u7528\u91CD\u8BD5\u6B21\u6570 (\u9488\u5BF9 429/500 \u9519\u8BEF)", "3").option("--api-retry-delay <seconds>", "API \u91CD\u8BD5\u57FA\u7840\u5EF6\u8FDF (\u79D2)", "60").option("--require-quality <n>", "\u8D28\u91CF\u95E8\u7981: \u6700\u4F4E\u8D28\u91CF\u5206\u9608\u503C (0-100, \u9ED8\u8BA4 60)", "60").option("--skip-harness-gate", "\u8DF3\u8FC7 Harness \u6267\u884C\u524D\u8D28\u91CF\u95E8\u7981\u68C0\u67E5 (\u4E0D\u63A8\u8350)").option("--skip-quality-gate", "[\u5DF2\u5F03\u7528] \u8BF7\u4F7F\u7528 --skip-harness-gate").option("--batch-git-commit", "\u6BCF\u4E2A\u6279\u6B21\u5B8C\u6210\u540E\u81EA\u52A8 git commit").option("--force", "\u5F3A\u5236\u6E05\u7406\u6240\u6709\u5FEB\u7167 (\u4EC5 cleanup \u5B50\u547D\u4EE4)").option("--orphans-only", "\u4EC5\u6E05\u7406\u5B64\u513F\u5FEB\u7167 (\u4EC5 cleanup \u5B50\u547D\u4EE4)").action(async (action, options) => {
+  ~~--skip-quality-gate~~    Deprecated, use --skip-harness-gate instead`).option("--plan <file>", "Plan file path (optional, auto-read/generate if not specified)").option("--max-retries <n>", "Max retry attempts", "3").option("--timeout <seconds>", "Per-task timeout (seconds)", "300").option("--parallel <n>", "Parallel execution count", "1").option("--dry-run", "Dry run mode (no actual execution)").option("--continue", "Continue from last interruption").option("--json", "JSON format output").option("--api-retry-attempts <n>", "API call retry attempts (for 429/500 errors)", "3").option("--api-retry-delay <seconds>", "API retry base delay (seconds)", "60").option("--require-quality <n>", "Quality gate: minimum quality score threshold (0-100, default 60)", "60").option("--skip-harness-gate", "Skip Harness pre-execution quality gate check (not recommended)").option("--skip-quality-gate", "[Deprecated] Use --skip-harness-gate instead").option("--batch-git-commit", "Auto git commit after each batch completes").option("--force", "Force cleanup all snapshots (cleanup subcommand only)").option("--orphans-only", "Clean only orphaned snapshots (cleanup subcommand only)").action(async (action, options) => {
   requireInit();
   if (action === "cleanup") {
     await cleanupHarnessSnapshots({
@@ -34262,10 +34262,10 @@ Deprecated Options:
     batchGitCommit: options.batchGitCommit
   });
 });
-program2.command("help [topic]").description(`\u663E\u793A\u5E2E\u52A9\u4FE1\u606F
-  - \u65E0\u53C2\u6570: \u663E\u793A\u6574\u4F53\u5E2E\u52A9\u6982\u89C8
-  - \u533D\u4EE4\u540D (\u5982 task/plan/config): \u663E\u793A\u8BE5\u547D\u4EE4\u8BE6\u7EC6\u5E2E\u52A9
-  - \u5176\u4ED6\u53C2\u6570: \u667A\u80FD\u56DE\u7B54\u76F8\u5173\u95EE\u9898`).action((topic) => {
+program2.command("help [topic]").description(`Show help information
+  - No args: Show overall help overview
+  - Command name (e.g., task/plan/config): Show detailed help for that command
+  - Other args: Answer related questions intelligently`).action((topic) => {
   showHelp(topic);
 });
 program2.on("command:*", (operands) => {

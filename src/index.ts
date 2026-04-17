@@ -84,7 +84,7 @@ const program = new Command();
 
 program
   .name('projmnt4claude')
-  .description('Claude Code 项目管理 CLI 工具')
+  .description('Claude Code Project Management CLI Tool')
   .version('0.1.0')
   .option('--ai', 'AI 模式: 自动启用 --json 输出 + 非交互模式 + 精简日志')
   .option('--json', 'JSON 格式输出 (全局)')
@@ -100,21 +100,21 @@ program
     }
   });
 
-// setup 命令
+// setup command
 program
   .command('setup')
-  .description('在当前项目初始化项目管理环境，支持语言选择 (中文/English)')
-  .option('-y, --yes', '非交互模式：跳过所有确认，使用默认设置')
-  .option('-l, --language <language>', '指定语言 (zh/en)')
-  .option('-f, --force', '强制重新初始化（重新复制技能文件）')
+  .description('Initialize project management environment in current project, with language selection (Chinese/English)')
+  .option('-y, --yes', 'Non-interactive mode: skip all confirmations, use default settings')
+  .option('-l, --language <language>', 'Specify language (zh/en)')
+  .option('-f, --force', 'Force re-initialization (re-copy skill files)')
   .action(async (options) => {
     await setup(process.cwd(), { nonInteractive: options.yes, language: options.language, force: options.force });
   });
 
-// config 命令组
+// config command group
 program
   .command('config <action> [key] [value]')
-  .description('管理配置 (list/get/set)')
+  .description('Manage configuration (list/get/set)')
   .action((action, key, value) => {
     requireInit();
     switch (action) {
@@ -123,14 +123,14 @@ program
         break;
       case 'get':
         if (!key) {
-          console.error('错误: get 操作需要指定 key');
+          console.error('(X) Error: get operation requires key');
           process.exit(1);
         }
         getConfig(key);
         break;
       case 'set':
         if (!key || value === undefined) {
-          console.error('错误: set 操作需要指定 key 和 value');
+          console.error('(X) Error: set operation requires key and value');
           process.exit(1);
         }
         setConfig(key, value);
@@ -141,56 +141,56 @@ program
     }
   });
 
-// task 命令组
+// task command group
 program
   .command('task <action> [id]')
   .description('Manage tasks\n\nBasic: create/list/show/get/update/delete/rename/purge/execute/checkpoint\nAdvanced: dependency/add-subtask/status-guide/complete/split/search/batch-update/batch-update-logs/count\n\n[Deprecated - will be removed]:\n  submit                 Use: task update <id> --status wait_evaluation\n\nGlobal Options:\n  --token <n>            Token estimation\n  -f, --force            Force operation\n\ncreate Options:\n  --into <id>            Create as subtask\n  --from-requirement     Create from requirement\n  --requirement-text <text>  Requirement text\n\nlist Options:\n  --status <status>      Filter by status\n  --priority <priority>  Filter by priority\n  --type <type>          Filter by type\n\nshow Options:\n  --json                 JSON output\n\nupdate Options:\n  --status <status>      Update status\n  --priority <priority>  Update priority\n  --sync-children        Sync subtask status\n\ndependency Options:\n  --from <id>            Dependency source\n  --to <id>              Dependency target\n  --remove               Remove dependency\n\nsplit Options:\n  --parts <n>            Split count\n  --strategy <strategy>  Split strategy\n\ncheckpoint Options:\n  --pass                 Pass checkpoint\n  --fail                 Fail checkpoint\n  --missing-verification Mark needs verification\n\n! dependency format (note argument order):\n  task dependency <add|remove> <taskId> --dep-id <depTaskId>\n\n  Examples:\n    task dependency add TASK-001 --dep-id TASK-002    # TASK-001 depends on TASK-002\n    task dependency remove TASK-001 --dep-id TASK-002 # Remove dependency\n\nrename format:\n  task rename <oldTaskId> <newTaskId>\n\n  Example:\n    task rename TASK-001 TASK-feature-new-name')
   .allowExcessArguments(true)
-  .option('-s, --status <status>', '按状态过滤 (仅 list)')
-  .option('-p, --priority <priority>', '按优先级过滤 (仅 list)')
-  .option('-r, --role <role>', '按推荐角色过滤 (仅 list)')
-  .option('--dep-id <depId>', '依赖任务ID (仅 dependency)')
-  .option('--title <title>', '任务标题 (仅 create/update)')
-  .option('--description <description>', '任务描述 (仅 create/update)')
-  .option('--type <type>', '任务类型 (create/count): bug/feature/research/docs/refactor/test')
-  .option('-y, --yes', '非交互模式 (仅 create/checkpoint/delete)')
-  .option('--token <n>', '令牌数估算')
-  .option('--sync-children', '同步子任务状态 (仅 update resolved/closed)')
-  .option('--no-sync', '不同步子任务状态 (仅 update)')
-  .option('--topic <topic>', '讨论主题 (仅 discuss)')
-  // 新增选项 (bug_report_4.md)
+  .option('-s, --status <status>', 'Filter by status (list only)')
+  .option('-p, --priority <priority>', 'Filter by priority (list only)')
+  .option('-r, --role <role>', 'Filter by recommended role (list only)')
+  .option('--dep-id <depId>', 'Dependency task ID (dependency only)')
+  .option('--title <title>', 'Task title (create/update only)')
+  .option('--description <description>', 'Task description (create/update only)')
+  .option('--type <type>', 'Task type (create/count): bug/feature/research/docs/refactor/test')
+  .option('-y, --yes', 'Non-interactive mode (create/checkpoint/delete only)')
+  .option('--token <n>', 'Token estimation')
+  .option('--sync-children', 'Sync subtask status (update resolved/closed only)')
+  .option('--no-sync', 'Do not sync subtask status (update only)')
+  .option('--topic <topic>', 'Discussion topic (discuss only)')
+  // New options (bug_report_4.md)
   .option('-v, --verbose', '显示完整信息 (仅 show)')
-  .option('--history', '仅显示变更历史 (仅 show)')
-  .option('--json', 'JSON 格式输出 (仅 show/get/list/status/count)')
-  .option('--compact', '精简输出 (仅 show)')
-  .option('--fields <fields>', '自定义输出字段 (仅 list)')
-  .option('--missing-verification', '筛选缺少验证的任务 (仅 list)')
-  .option('-g, --group <field>', '分组显示 (仅 list): status/priority/type/role')
-  .option('--checkpoints', '显示检查点详情 (仅 show)')
-  .option('--format <format>', '输出格式 (仅 show): panel/classic')
-  .option('--result <result>', '验证结果 (仅 checkpoint complete)')
-  .option('--note <note>', '检查点备注 (仅 checkpoint note/fail)')
-  .option('--into <count>', '拆分数量 (仅 split)')
-  .option('--titles <titles>', '子任务标题列表，仅 split,')
-  .option('--skip-validation', '跳过 checkpoints 质量校验 (仅 create)')
-  .option('-f, --force', '强制操作')
-  .option('--file <path>', '从文件读取描述 (仅 create, 用于包含特殊字符的长描述)')
-  .option('--from-requirement', '从需求创建 (仅 create)')
-  .option('--requirement-text <text>', '需求文本 (仅 create)')
-  .option('--branch <branch>', '关联分支 (仅 create)')
-  .option('--from <id>', '依赖来源 (仅 dependency)')
-  .option('--to <id>', '依赖目标 (仅 dependency)')
-  .option('--remove', '移除依赖 (仅 dependency)')
-  .option('--parts <n>', '拆分数量 (仅 split)')
-  .option('--strategy <strategy>', '拆分策略 (仅 split)')
-  .option('--pass', '通过检查点 (仅 checkpoint)')
-  .option('--fail', '失败检查点 (仅 checkpoint)')
-  .option('--all', '包含所有任务，包括已解决/已关闭的 (仅 batch-update)')
-  .option('--tasks <ids>', '指定任务ID列表，逗号分隔 (仅 batch-update)', collectValues, [])
-  .option('--task-file <path>', '从文件读取任务ID列表，每行一个或逗号分隔 (仅 batch-update)')
-  .option('--change-note <note>', '修改说明，至少10个字符，记录到transitionNotes (仅 batch-update)')
-  .option('--source <source>', '过滤日志来源 (仅 batch-update-logs): cli/ide/hook/script/unknown')
-  .option('--summary', '显示日志统计摘要 (仅 batch-update-logs)')
+  .option('--history', 'Show change history only (show only)')
+  .option('--json', 'JSON format output (show/get/list/status/count only)')
+  .option('--compact', 'Compact output (show only)')
+  .option('--fields <fields>', 'Custom output fields (list only)')
+  .option('--missing-verification', 'Filter tasks missing verification (list only)')
+  .option('-g, --group <field>', 'Group display (list only): status/priority/type/role')
+  .option('--checkpoints', 'Show checkpoint details (show only)')
+  .option('--format <format>', 'Output format (show only): panel/classic')
+  .option('--result <result>', 'Verification result (checkpoint complete only)')
+  .option('--note <note>', 'Checkpoint note (checkpoint note/fail only)')
+  .option('--into <count>', 'Split count (split only)')
+  .option('--titles <titles>', 'Subtask title list (split only)')
+  .option('--skip-validation', 'Skip checkpoint quality validation (create only)')
+  .option('-f, --force', 'Force operation')
+  .option('--file <path>', 'Read description from file (create only, for long descriptions with special characters)')
+  .option('--from-requirement', 'Create from requirement (create only)')
+  .option('--requirement-text <text>', 'Requirement text (create only)')
+  .option('--branch <branch>', 'Associated branch (create only)')
+  .option('--from <id>', 'Dependency source (dependency only)')
+  .option('--to <id>', 'Dependency target (dependency only)')
+  .option('--remove', 'Remove dependency (dependency only)')
+  .option('--parts <n>', 'Split count (split only)')
+  .option('--strategy <strategy>', 'Split strategy (split only)')
+  .option('--pass', 'Pass checkpoint (checkpoint only)')
+  .option('--fail', 'Fail checkpoint (checkpoint only)')
+  .option('--all', 'Include all tasks including resolved/closed (batch-update only)')
+  .option('--tasks <ids>', 'Specify task ID list, comma-separated (batch-update only)', collectValues, [])
+  .option('--task-file <path>', 'Read task ID list from file, one per line or comma-separated (batch-update only)')
+  .option('--change-note <note>', 'Change note, at least 10 characters, recorded in transitionNotes (batch-update only)')
+  .option('--source <source>', 'Filter log source (batch-update-logs only): cli/ide/hook/script/unknown')
+  .option('--summary', 'Show log statistics summary (batch-update-logs only)')
   .action(async (action, id, options) => {
     requireInit();
     switch (action) {
@@ -229,7 +229,7 @@ program
           type: options.type,
           nonInteractive: options.yes,
           skipValidation: options.skipValidation,
-          id: id,  // 传递用户指定的任务ID
+          id: id,  // Pass user-specified task ID
           branch: options.branch,
         });
         break;
@@ -262,7 +262,7 @@ program
         break;
       case 'update':
         if (!id) {
-          console.error('错误: update 操作需要指定任务ID');
+          console.error('(X) Error: update operation requires task ID');
           process.exit(1);
         }
         await updateTask(id, {
@@ -278,7 +278,7 @@ program
         break;
       case 'delete':
         if (!id) {
-          console.error('错误: delete 操作需要指定任务ID');
+          console.error('(X) Error: delete operation requires task ID');
           process.exit(1);
         }
         await deleteTask(id, options.yes);
@@ -291,7 +291,7 @@ program
         break;
       case 'execute':
         if (!id) {
-          console.error('错误: execute 操作需要指定任务ID');
+          console.error('(X) Error: execute operation requires task ID');
           process.exit(1);
         }
         await executeTask(id);
@@ -301,50 +301,50 @@ program
         break;
       case 'history':
         if (!id) {
-          console.error('错误: history 操作需要指定任务ID');
+          console.error('(X) Error: history operation requires task ID');
           process.exit(1);
         }
         showTaskHistory(id);
         break;
       case 'complete':
         if (!id) {
-          console.error('错误: complete 操作需要指定任务ID');
+          console.error('(X) Error: complete operation requires task ID');
           process.exit(1);
         }
         await completeTask(id, { yes: options.yes });
         break;
       case 'checkpoint':
         if (!id) {
-          console.error('错误: checkpoint 操作需要指定任务ID');
+          console.error('(X) Error: checkpoint operation requires task ID');
           process.exit(1);
         }
-        // 新增：支持多种 checkpoint 子命令
-        // 用法：
+        // New: Support multiple checkpoint subcommands
+        // Usage:
         //   task checkpoint <taskId> list
         //   task checkpoint <taskId> <checkpointId> complete --result "xxx"
         //   task checkpoint <taskId> <checkpointId> fail --note "xxx"
         //   task checkpoint <taskId> <checkpointId> note --note "xxx"
         //   task checkpoint <taskId> <checkpointId> show
-        //   task checkpoint <taskId> verify (原有功能)
+        //   task checkpoint <taskId> verify (original function)
 
-        // 找到 checkpoint 在 process.argv 中的位置
+        // Find checkpoint position in process.argv
         const checkpointIndex = process.argv.indexOf('checkpoint');
-        // checkpoint 后面是 taskId，再后面是子命令
+        // After checkpoint is taskId, then subcommand
         const afterTaskId = checkpointIndex + 2 < process.argv.length ? process.argv[checkpointIndex + 2] : undefined;
         const afterSubCommand = checkpointIndex + 3 < process.argv.length ? process.argv[checkpointIndex + 3] : undefined;
 
-        // id 是 taskId (从 commander 解析)
+        // id is taskId (parsed from commander)
         const checkpointSubCmd = afterTaskId;
         const checkpointAct = afterSubCommand;
 
         if (checkpointSubCmd === 'list') {
-          // 列出所有检查点
+          // List all checkpoints
           await listTaskCheckpoints(id, { json: options.json, compact: options.compact });
         } else if (checkpointSubCmd === 'verify') {
-          // 原有功能：验证检查点
+          // Original function: verify checkpoint
           await verifyCheckpoint(id);
         } else if (checkpointSubCmd && checkpointAct) {
-          // 检查点操作: task checkpoint <taskId> <checkpointId> <action>
+          // Checkpoint operation: task checkpoint <taskId> <checkpointId> <action>
           const validActions = ['complete', 'fail', 'note', 'show'];
           if (!validActions.includes(checkpointAct)) {
             console.error("(X) Error: Invalid action '" + checkpointAct + "'");
@@ -357,39 +357,39 @@ program
             yes: options.yes,
           });
         } else {
-          // 默认行为：完成检查点确认（保持向后兼容）
+          // Default behavior: complete checkpoint confirmation (backward compatible)
           await completeCheckpoint(id, { yes: options.yes });
         }
         break;
       case 'discuss':
         if (!id) {
-          console.error('错误: discuss 操作需要指定任务ID');
+          console.error('(X) Error: discuss operation requires task ID');
           process.exit(1);
         }
-        // discuss 功能已集成到 update 命令的 --needs-discussion 选项中
-        console.log('提示: 请使用 task update --needs-discussion 来标记任务需要讨论');
-        console.log('      使用 task update --topic "主题内容" 来添加讨论主题');
+        // discuss function integrated into update command --needs-discussion option
+        console.log('Hint: Use task update --needs-discussion to mark task for discussion');
+        console.log('      Use task update --topic "topic content" to add discussion topic');
         break;
       case 'dependency': {
-        // 用法: task dependency add <taskId> --dep-id <depId>
+        // Usage: task dependency add <taskId> --dep-id <depId>
         //       task dependency remove <taskId> --dep-id <depId>
 
-        // 显示帮助信息的辅助函数
+        // Helper function to show help info
         const showDependencyHelp = () => {
           console.error('');
-          console.error('dependency 子命令用法:');
+          console.error('dependency subcommand usage:');
           console.error('  task dependency add <taskId> --dep-id <depTaskId>');
           console.error('  task dependency remove <taskId> --dep-id <depTaskId>');
           console.error('');
-          console.error('示例:');
+          console.error('Examples:');
           console.error('  task dependency add TASK-001 --dep-id TASK-002');
           console.error('  task dependency remove TASK-001 --dep-id TASK-002');
           console.error('');
-          console.error('说明:');
-          console.error('  - add: 添加依赖关系，表示 taskId 依赖于 depTaskId');
-          console.error('  - remove: 移除依赖关系');
-          console.error('  - taskId: 要添加/移除依赖的任务ID');
-          console.error('  - --dep-id: 被依赖的任务ID');
+          console.error('Description:');
+          console.error('  - add: Add dependency, taskId depends on depTaskId');
+          console.error('  - remove: Remove dependency');
+          console.error('  - taskId: Task ID to add/remove dependency');
+          console.error('  - --dep-id: Dependency task ID');
         };
 
         if (!id) {
@@ -398,9 +398,9 @@ program
           process.exit(1);
         }
 
-        // id 应该是 'add' 或 'remove'
+        // id should be 'add' or 'remove'
         if (id !== 'add' && id !== 'remove') {
-          // 检测常见错误：用户可能把 taskId 放在了 add/remove 的位置
+          // Detect common error: user may put taskId in add/remove position
           if (id.startsWith('TASK-') || id.startsWith('task-')) {
             console.error("(X) Error: Wrong argument order");
             console.error('');
@@ -415,9 +415,9 @@ program
           process.exit(1);
         }
 
-        // 从 process.argv 获取 taskId (在 add/remove 之后)
+        // Get taskId from process.argv (after add/remove)
         const depIndex = process.argv.indexOf('dependency');
-        const taskId = process.argv[depIndex + 2]; // 跳过 'dependency' 和 'add/remove'
+        const taskId = process.argv[depIndex + 2]; // Skip 'dependency' and 'add/remove'
 
         if (!taskId || taskId.startsWith('-')) {
           console.error('(X) Error: Task ID required');
@@ -441,21 +441,21 @@ program
       }
       case 'add-subtask': {
         if (!id) {
-          console.error('错误: add-subtask 操作需要指定父任务ID');
+          console.error('(X) Error: add-subtask operation requires parent task ID');
           process.exit(1);
         }
-        // title 应该是 process.argv[5] 之后的参数
+        // title should be arguments after process.argv[5]
         const title = process.argv.slice(5).join(' ');
         await addSubtask(id, title);
         break;
       }
       case 'submit': {
         if (!id) {
-          console.error('错误: submit 操作需要指定任务ID');
+          console.error('(X) Error: submit operation requires task ID');
           process.exit(1);
         }
-        console.warn('[注意]: task submit 命令已废弃');
-        console.warn('   建议改用: projmnt4claude task update <taskId> --status wait_evaluation');
+        console.warn('[Notice]: task submit command is deprecated');
+        console.warn('   Use: projmnt4claude task update <taskId> --status wait_evaluation');
         console.warn('');
         await submitTask(id, {
           note: options.note,
@@ -464,7 +464,7 @@ program
       }
       case 'validate': {
         if (!id) {
-          console.error('错误: validate 操作需要指定任务ID');
+          console.error('(X) Error: validate operation requires task ID');
           process.exit(1);
         }
         await validateTask(id, {
@@ -475,7 +475,7 @@ program
       }
       case 'sync-children': {
         if (!id) {
-          console.error('错误: sync-children 操作需要指定父任务ID');
+          console.error('(X) Error: sync-children operation requires parent task ID');
           process.exit(1);
         }
         await syncChildren(id, {
@@ -485,7 +485,7 @@ program
       }
       case 'split': {
         if (!id) {
-          console.error('错误: split 操作需要指定父任务ID');
+          console.error('(X) Error: split operation requires parent task ID');
           process.exit(1);
         }
         await splitTask(id, {
@@ -497,7 +497,7 @@ program
       }
       case 'search': {
         if (!id) {
-          console.error('错误: search 操作需要指定搜索关键词');
+          console.error('(X) Error: search operation requires search keyword');
           process.exit(1);
         }
         searchTasks(id, {
@@ -551,10 +551,10 @@ program
         const newTaskId = renameIndex + 2 < process.argv.length ? process.argv[renameIndex + 2] : undefined;
 
         if (!oldTaskId || !newTaskId) {
-          console.error('错误: rename 操作需要指定旧任务ID和新任务ID');
+          console.error('(X) Error: rename operation requires old task ID and new task ID');
           console.error('');
-          console.error('用法: task rename <oldTaskId> <newTaskId>');
-          console.error('示例: task rename TASK-001 TASK-feature-new-name');
+          console.error('Usage: task rename <oldTaskId> <newTaskId>');
+          console.error('Example: task rename TASK-001 TASK-feature-new-name');
           process.exit(1);
         }
 
@@ -567,7 +567,7 @@ program
     }
   });
 
-// plan 命令组
+// plan command group
 program
   .command('plan <action> [id]')
   .description('管理执行计划 (show/add/remove/clear/recommend)\n\nrecommend 子命令支持三层依赖推断:\n  Layer1/2: 文件路径重叠 (默认)\n  Layer3: AI 语义推断 (--smart 激活)')
@@ -589,14 +589,14 @@ program
         break;
       case 'add':
         if (!id) {
-          console.error('错误: add 操作需要指定任务ID');
+          console.error('(X) Error: add operation requires task ID');
           process.exit(1);
         }
         addTask(id, options.after);
         break;
       case 'remove':
         if (!id) {
-          console.error('错误: remove 操作需要指定任务ID');
+          console.error('(X) Error: remove operation requires task ID');
           process.exit(1);
         }
         removeTask(id);
@@ -621,15 +621,15 @@ program
     }
   });
 
-// status 命令
+// status command
 program
   .command('status')
-  .description('显示项目状态摘要')
-  .option('--archived', '显示归档任务统计')
-  .option('-a, --all', '显示所有任务（包括归档）')
-  .option('-q, --quiet', '精简输出：仅显示关键指标')
-  .option('--json', 'JSON 格式输出')
-  .option('--compact', '使用简洁分隔符')
+  .description('Show project status summary')
+  .option('--archived', 'Show archived task statistics')
+  .option('-a, --all', 'Show all tasks (including archived)')
+  .option('-q, --quiet', 'Quiet output: only show key metrics')
+  .option('--json', 'JSON format output')
+  .option('--compact', 'Use compact separators')
   .action(async (options) => {
     requireInit();
     await showStatus({
@@ -640,26 +640,26 @@ program
     });
   });
 
-// analyze 命令
+// analyze command
 program
   .command('analyze')
-  .description('分析项目健康状态')
-  .option('--fix', '自动修复所有可修复的问题')
-  .option('--fix-checkpoints', '智能生成缺失的检查点')
-  .option('--quality-check', '检测任务内容质量（描述完整度、检查点质量、关联文件、解决方案）')
-  .option('--threshold <score>', '质量检测阈值，低于此分数的任务将被标记 (默认: 60)', '60')
-  .option('-j, --json', 'JSON 格式输出 (仅 --quality-check)')
-  .option('-y, --yes', '非交互模式：自动修复可修复的问题')
-  .option('--compact', '使用简洁分隔符')
-  .option('--task <taskId>', '指定任务ID (仅 --fix-checkpoints)')
-  .option('--check-range <range>', '分析范围: all(默认), tasks:ID1,ID2, keyword:pattern')
-  .option('--deep-analyze', '深度分析: 启用 AI 语义重复检测、陈旧评估、语义质量评分')
-  .option('--no-ai', '禁用所有 AI 功能，仅使用规则引擎分析')
-  .option('--rules-only', '仅执行规则分析+修复 (Stage 1,2), 需配合 --fix')
-  .option('--checkpoints-only', '仅执行检查点修复 (Stage 4), 需配合 --fix')
-  .option('--quality-only', '仅执行质量报告 (Stage 5), 需配合 --fix')
-  .option('--bug-report <path>', 'Bug Report 分析模式: 分析指定的 bug report 文件或目录')
-  .option('--export-training-data', '导出训练数据为 JSONL 格式 (需 --bug-report, 需 config training.exportEnabled)')
+  .description('Analyze project health status')
+  .option('--fix', 'Auto-fix all fixable issues')
+  .option('--fix-checkpoints', 'Intelligently generate missing checkpoints')
+  .option('--quality-check', 'Check task content quality (description completeness, checkpoint quality, related files, solution)')
+  .option('--threshold <score>', 'Quality check threshold, tasks below this score will be flagged (default: 60)', '60')
+  .option('-j, --json', 'JSON format output (quality-check only)')
+  .option('-y, --yes', 'Non-interactive mode: auto-fix fixable issues')
+  .option('--compact', 'Use compact separators')
+  .option('--task <taskId>', 'Specify task ID (fix-checkpoints only)')
+  .option('--check-range <range>', 'Analysis range: all(default), tasks:ID1,ID2, keyword:pattern')
+  .option('--deep-analyze', 'Deep analysis: enable AI semantic duplicate detection, stale evaluation, semantic quality scoring')
+  .option('--no-ai', 'Disable all AI features, use rule engine analysis only')
+  .option('--rules-only', 'Execute rule analysis+fix only (Stage 1,2), requires --fix')
+  .option('--checkpoints-only', 'Execute checkpoint fix only (Stage 4), requires --fix')
+  .option('--quality-only', 'Execute quality report only (Stage 5), requires --fix')
+  .option('--bug-report <path>', 'Bug Report analysis mode: analyze specified bug report file or directory')
+  .option('--export-training-data', 'Export training data as JSONL format (requires --bug-report, requires config training.exportEnabled)')
   .action(async (options) => {
     requireInit();
     const aiOptions = {
@@ -672,7 +672,7 @@ program
         noAi: !!options.noAi,
       });
     } else if (options.fix) {
-      // --fix 流水线模式: 支持 --no-ai, --rules-only, --checkpoints-only, --quality-only
+      // --fix pipeline mode: supports --no-ai, --rules-only, --checkpoints-only, --quality-only
       await fixPipeline(process.cwd(), {
         nonInteractive: options.yes,
         rulesOnly: !!options.rulesOnly,
@@ -699,7 +699,7 @@ program
     }
   });
 
-// init-requirement 命令
+// init-requirement command
 program
   .command('init-requirement [description]')
   .description('从自然语言需求描述创建任务，自动解析需求并生成任务结构\n\n' +
@@ -739,24 +739,24 @@ program
   .action(async (description, options) => {
     let finalDescription: string | undefined;
 
-    // 优先级: --file > 命令行参数
+    // Priority: --file > command line arguments
     if (options.file) {
       const filePath = path.resolve(options.file);
 
-      // 验证文件是否存在
+      // Validate file exists
       if (!fs.existsSync(filePath)) {
         console.error('(X) Error: Description file not found: ' + filePath);
         process.exit(1);
       }
 
-      // 验证是否为文件
+      // Validate is file
       const stat = fs.statSync(filePath);
       if (!stat.isFile()) {
         console.error('(X) Error: Path is not a file: ' + filePath);
         process.exit(1);
       }
 
-      // 验证文件大小（限制10MB防止内存问题）
+      // Validate file size (limit 10MB to prevent memory issues)
       const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10MB
       if (stat.size > MAX_FILE_SIZE) {
         console.error('(X) Error: File too large (' + (stat.size / 1024 / 1024).toFixed(2) + 'MB), max 10MB');
@@ -770,19 +770,19 @@ program
         process.exit(1);
       }
 
-      // 清理临时文件（如果是/tmp下的文件）
+      // Clean up temp file (if in /tmp)
       if (filePath.startsWith('/tmp/')) {
         try {
           fs.unlinkSync(filePath);
         } catch {
-          // 忽略删除失败
+          // Ignore delete failure
         }
       }
     } else if (description) {
       finalDescription = description;
     }
 
-    // 验证描述必须存在
+    // Validate description must exist
     if (!finalDescription || finalDescription.trim().length === 0) {
       console.error('(X) Error: Description or --file option required');
       console.error('');
@@ -807,13 +807,13 @@ program
     });
   });
 
-// doctor 命令
+// doctor command
 program
   .command('doctor')
-  .description('运行环境诊断，检查并修复设置问题')
-  .option('--fix', '自动修复检测到的问题')
-  .option('--deep', '深度日志分析：运行所有日志分析器（规则 + AI 混合策略）')
-  .option('--bug-report', '生成 Bug 报告（含日志压缩附件、AI 成本汇总、使用分析）')
+  .description('Run environment diagnostics, check and fix setup issues')
+  .option('--fix', 'Auto-fix detected issues')
+  .option('--deep', 'Deep log analysis: run all log analyzers (rule + AI hybrid strategy)')
+  .option('--bug-report', 'Generate Bug report (includes log compression attachment, AI cost summary, usage analysis)')
   .action(async (options) => {
     if (options.bugReport) {
       await runBugReport();
@@ -825,29 +825,29 @@ program
   });
 
 
-// headless-harness-design 命令
+// headless-harness-design command
 program
   .command('headless-harness-design [action]')
   .description('Execute task plan using Harness Design pattern (automated dev & review)\n\nMain Options:\n  --plan <file>              Plan file path (default: auto read/generate)\n  --max-retries <n>          Max retry attempts (default: 3)\n  --timeout <seconds>        Per-task timeout in seconds (default: 300)\n  --parallel <n>             Parallel execution count (default: 1)\n  --dry-run                  Dry run mode (no actual execution)\n  --continue                 Continue from last interruption\n  --json                     JSON format output\n  --batch-git-commit         Auto git commit after each batch\n\nQuality Gate Options:\n  --require-quality <n>      Quality score threshold (0-100, default: 60)\n  --skip-harness-gate        Skip harness quality gate check (not recommended)\n\nAPI Options:\n  --api-retry-attempts <n>   API retry attempts for 429/500 errors (default: 3)\n  --api-retry-delay <seconds>  API retry base delay in seconds (default: 60)\n\nSub-command: cleanup\n  cleanup                    Clean up orphaned snapshots\n  --force                    Force cleanup all snapshots (including active ones)\n  --orphans-only             Clean only orphaned snapshots (process no longer exists)\n\nDeprecated Options:\n  ~~--skip-quality-gate~~    Deprecated, use --skip-harness-gate instead')
-  .option('--plan <file>', '计划文件路径 (可选，不指定则自动读取/生成)')
-  .option('--max-retries <n>', '最大重试次数', '3')
-  .option('--timeout <seconds>', '单任务超时时间 (秒)', '300')
-  .option('--parallel <n>', '并行执行数', '1')
-  .option('--dry-run', '试运行模式 (不实际执行)')
-  .option('--continue', '从上次中断处继续执行')
-  .option('--json', 'JSON 格式输出')
-  .option('--api-retry-attempts <n>', 'API 调用重试次数 (针对 429/500 错误)', '3')
-  .option('--api-retry-delay <seconds>', 'API 重试基础延迟 (秒)', '60')
-  .option('--require-quality <n>', '质量门禁: 最低质量分阈值 (0-100, 默认 60)', '60')
-  .option('--skip-harness-gate', '跳过 Harness 执行前质量门禁检查 (不推荐)')
-  .option('--skip-quality-gate', '[已弃用] 请使用 --skip-harness-gate')
-  .option('--batch-git-commit', '每个批次完成后自动 git commit')
-  .option('--force', '强制清理所有快照 (仅 cleanup 子命令)')
-  .option('--orphans-only', '仅清理孤儿快照 (仅 cleanup 子命令)')
+  .option('--plan <file>', 'Plan file path (optional, auto-read/generate if not specified)')
+  .option('--max-retries <n>', 'Max retry attempts', '3')
+  .option('--timeout <seconds>', 'Per-task timeout (seconds)', '300')
+  .option('--parallel <n>', 'Parallel execution count', '1')
+  .option('--dry-run', 'Dry run mode (no actual execution)')
+  .option('--continue', 'Continue from last interruption')
+  .option('--json', 'JSON format output')
+  .option('--api-retry-attempts <n>', 'API call retry attempts (for 429/500 errors)', '3')
+  .option('--api-retry-delay <seconds>', 'API retry base delay (seconds)', '60')
+  .option('--require-quality <n>', 'Quality gate: minimum quality score threshold (0-100, default 60)', '60')
+  .option('--skip-harness-gate', 'Skip Harness pre-execution quality gate check (not recommended)')
+  .option('--skip-quality-gate', '[Deprecated] Use --skip-harness-gate instead')
+  .option('--batch-git-commit', 'Auto git commit after each batch completes')
+  .option('--force', 'Force cleanup all snapshots (cleanup subcommand only)')
+  .option('--orphans-only', 'Clean only orphaned snapshots (cleanup subcommand only)')
   .action(async (action, options) => {
     requireInit();
 
-    // 处理 cleanup 子命令
+    // Handle cleanup subcommand
     if (action === 'cleanup') {
       await cleanupHarnessSnapshots({
         force: options.force,
@@ -856,7 +856,7 @@ program
       return;
     }
 
-    // 如果有未知子命令，报错
+    // If unknown subcommand, report error
     if (action && action !== 'cleanup') {
       console.error("(X) Error: Unknown sub-command '" + action + "'");
       console.error('');
@@ -870,7 +870,7 @@ program
       process.exit(1);
     }
 
-    // 运行主命令
+    // Run main command
     await harnessCommand({
       plan: options.plan,
       maxRetries: options.maxRetries,
@@ -888,15 +888,15 @@ program
   });
 
 
-// help 命令
+// help command
 program
   .command('help [topic]')
-  .description('显示帮助信息\n  - 无参数: 显示整体帮助概览\n  - 匽令名 (如 task/plan/config): 显示该命令详细帮助\n  - 其他参数: 智能回答相关问题')
+  .description('Show help information\n  - No args: Show overall help overview\n  - Command name (e.g., task/plan/config): Show detailed help for that command\n  - Other args: Answer related questions intelligently')
   .action((topic) => {
     showHelp(topic);
   });
 
-// 改进未知命令错误提示
+// Improve unknown command error hint
 program.on('command:*', (operands) => {
   const unknownCmd = operands[0];
   const taskSubcommands = ['list', 'show', 'create', 'update', 'delete', 'execute', 'checkpoint', 'dependency', 'add-subtask'];
@@ -904,7 +904,7 @@ program.on('command:*', (operands) => {
   console.error("(X) Error: Unknown command '" + unknownCmd + "'");
   console.error('');
 
-  // 检测是否是 task 子命令被误用为顶层命令
+  // Detect if task subcommand is mistakenly used as top-level command
   if (taskSubcommands.includes(unknownCmd)) {
     console.error('[!] Hint: \'%s\' is a task sub-command, use:', unknownCmd);
     console.error('   projmnt4claude task %s [options]', unknownCmd);
