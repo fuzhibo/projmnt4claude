@@ -3,6 +3,8 @@ import {
   decomposeRequirement,
   shouldDecompose,
   formatDecomposition,
+  validateDecompositionItem,
+  validateDecompositionItems,
 } from '../requirement-decomposer';
 import type { RequirementDecomposition } from '../../types/decomposition';
 
@@ -107,6 +109,7 @@ Redis缓存没有正确设置过期时间，导致内存持续增长。
         useAI: false,
         minItems: 2,
         maxItems: 10,
+        validateQuality: false, // 禁用质量检查以测试模式匹配功能
       });
 
       expect(result.decomposable).toBe(true);
@@ -148,6 +151,7 @@ Redis缓存没有正确设置过期时间，导致内存持续增长。
         useAI: false,
         minItems: 2,
         maxItems: 10,
+        validateQuality: false, // 禁用质量检查以测试模式匹配功能
       });
 
       expect(result.decomposable).toBe(true);
@@ -199,6 +203,7 @@ Redis缓存没有正确设置过期时间，导致内存持续增长。
       const result = await decomposeRequirement(content, {
         useAI: false,
         minItems: 2,
+        validateQuality: false, // 禁用质量检查以测试类型推断
       });
 
       expect(result.decomposable).toBe(true);
@@ -226,6 +231,7 @@ Redis缓存没有正确设置过期时间，导致内存持续增长。
       const result = await decomposeRequirement(content, {
         useAI: false,
         minItems: 2,
+        validateQuality: false, // 禁用质量检查以测试优先级提取
       });
 
       expect(result.decomposable).toBe(true);
@@ -247,6 +253,7 @@ Redis缓存没有正确设置过期时间，导致内存持续增长。
         useAI: false,
         minItems: 2,
         maxItems: 5,
+        validateQuality: false, // 禁用质量检查以测试数量限制
       });
 
       expect(result.decomposable).toBe(true);
@@ -322,6 +329,7 @@ Redis缓存没有正确设置过期时间，导致内存持续增长。
       const result = await decomposeRequirement(content, {
         useAI: false,
         minItems: 2,
+        validateQuality: false, // 禁用质量检查以测试文件路径提取
       });
 
       expect(result.decomposable).toBe(true);
@@ -350,6 +358,7 @@ Redis缓存没有正确设置过期时间，导致内存持续增长。
       const result = await decomposeRequirement(content, {
         useAI: false,
         minItems: 2,
+        validateQuality: false, // 禁用质量检查以测试依赖关系
       });
 
       expect(result.decomposable).toBe(true);
@@ -378,6 +387,141 @@ Redis缓存没有正确设置过期时间，导致内存持续增长。
       });
 
       expect(result.decomposable).toBe(false);
+    });
+  });
+
+  describe('质量约束机制', () => {
+    test('validateDecompositionItem - 验证通过', () => {
+      const validItem = {
+        title: '修复登录按钮样式问题',
+        problem: '用户反馈登录按钮在移动端显示不正确，按钮宽度超出屏幕边界，文字被截断。这个问题影响了用户体验，需要尽快修复。',
+        solution: '调整CSS样式，使用媒体查询设置按钮宽度为100%，添加padding和box-sizing:border-box属性，确保在不同屏幕尺寸下正常显示。',
+        type: 'bug' as const,
+        priority: 'P1' as const,
+        checkpoints: ['修复CSS样式', '验证移动端显示'],
+        rootCause: '按钮使用了固定宽度，没有适配移动端屏幕',
+        estimatedMinutes: 30,
+      };
+
+      const result = validateDecompositionItem(validItem);
+      expect(result.valid).toBe(true);
+      expect(result.errors).toHaveLength(0);
+    });
+
+    test('validateDecompositionItem - 标题过短', () => {
+      const invalidItem = {
+        title: '修复bug',
+        problem: '用户反馈登录按钮在移动端显示不正确，按钮宽度超出屏幕边界，文字被截断。这个问题影响了用户体验。',
+        solution: '调整CSS样式，使用媒体查询设置按钮宽度为100%，确保在不同屏幕尺寸下正常显示。',
+        type: 'bug' as const,
+        priority: 'P1' as const,
+        checkpoints: ['修复CSS样式'],
+      };
+
+      const result = validateDecompositionItem(invalidItem);
+      expect(result.valid).toBe(false);
+      expect(result.errors.some(e => e.includes('标题'))).toBe(true);
+    });
+
+    test('validateDecompositionItem - 问题描述过短', () => {
+      const invalidItem = {
+        title: '修复登录按钮样式问题',
+        problem: '按钮显示不正确',
+        solution: '调整CSS样式，使用媒体查询设置按钮宽度为100%，确保在不同屏幕尺寸下正常显示。',
+        type: 'bug' as const,
+        priority: 'P1' as const,
+        checkpoints: ['修复CSS样式'],
+      };
+
+      const result = validateDecompositionItem(invalidItem);
+      expect(result.valid).toBe(false);
+      expect(result.errors.some(e => e.includes('问题描述'))).toBe(true);
+    });
+
+    test('validateDecompositionItem - 解决方案过短', () => {
+      const invalidItem = {
+        title: '修复登录按钮样式问题',
+        problem: '用户反馈登录按钮在移动端显示不正确，按钮宽度超出屏幕边界，文字被截断。这个问题影响了用户体验。',
+        solution: '修复CSS',
+        type: 'bug' as const,
+        priority: 'P1' as const,
+        checkpoints: ['修复CSS样式'],
+      };
+
+      const result = validateDecompositionItem(invalidItem);
+      expect(result.valid).toBe(false);
+      expect(result.errors.some(e => e.includes('解决方案'))).toBe(true);
+    });
+
+    test('validateDecompositionItem - 无效优先级', () => {
+      const invalidItem = {
+        title: '修复登录按钮样式问题',
+        problem: '用户反馈登录按钮在移动端显示不正确，按钮宽度超出屏幕边界，文字被截断。',
+        solution: '调整CSS样式，使用媒体查询设置按钮宽度为100%，确保在不同屏幕尺寸下正常显示。',
+        type: 'bug' as const,
+        priority: 'P5' as const,
+        checkpoints: ['修复CSS样式'],
+      };
+
+      const result = validateDecompositionItem(invalidItem);
+      expect(result.valid).toBe(false);
+      expect(result.errors.some(e => e.includes('优先级'))).toBe(true);
+    });
+
+    test('validateDecompositionItem - 缺少检查点', () => {
+      const invalidItem = {
+        title: '修复登录按钮样式问题',
+        problem: '用户反馈登录按钮在移动端显示不正确，按钮宽度超出屏幕边界，文字被截断。',
+        solution: '调整CSS样式，使用媒体查询设置按钮宽度为100%，确保在不同屏幕尺寸下正常显示。',
+        type: 'bug' as const,
+        priority: 'P1' as const,
+        checkpoints: [],
+      };
+
+      const result = validateDecompositionItem(invalidItem);
+      expect(result.valid).toBe(false);
+      expect(result.errors.some(e => e.includes('检查点'))).toBe(true);
+    });
+
+    test('validateDecompositionItem - 缺少根因分析产生警告', () => {
+      const itemWithoutRootCause = {
+        title: '修复登录按钮样式问题',
+        problem: '用户反馈登录按钮在移动端显示不正确，按钮宽度超出屏幕边界，文字被截断。',
+        solution: '调整CSS样式，使用媒体查询设置按钮宽度为100%，确保在不同屏幕尺寸下正常显示。',
+        type: 'bug' as const,
+        priority: 'P1' as const,
+        checkpoints: ['修复CSS样式'],
+      };
+
+      const result = validateDecompositionItem(itemWithoutRootCause);
+      expect(result.warnings).toBeDefined();
+      expect(result.warnings!.some(w => w.includes('根因分析'))).toBe(true);
+    });
+
+    test('validateDecompositionItems - 批量验证', () => {
+      const items = [
+        {
+          title: '修复登录按钮样式问题',
+          problem: '用户反馈登录按钮在移动端显示不正确，按钮宽度超出屏幕边界，文字被截断。这个问题严重影响了用户体验，需要尽快修复处理。',
+          solution: '调整CSS样式，使用媒体查询设置按钮宽度为100%，添加padding和box-sizing属性，确保在不同屏幕尺寸下都能正常显示。',
+          type: 'bug' as const,
+          priority: 'P1' as const,
+          checkpoints: ['修复CSS样式'],
+        },
+        {
+          title: '短',
+          problem: '问题描述太短',
+          solution: '解决方案也太短',
+          type: 'bug' as const,
+          priority: 'P5' as const,
+          checkpoints: [],
+        },
+      ];
+
+      const result = validateDecompositionItems(items);
+      expect(result.valid).toBe(false);
+      expect(result.validItems).toHaveLength(1);
+      expect(result.invalidItems).toHaveLength(1);
     });
   });
 });

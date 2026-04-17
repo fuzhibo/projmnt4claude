@@ -271,7 +271,7 @@ export async function decomposeRequirement(
     maxItems = 10,
     useAI = true,
     cwd = process.cwd(),
-    validateQuality = false,
+    validateQuality = true, // 默认启用质量检查
   } = options;
 
   // 清理输入内容
