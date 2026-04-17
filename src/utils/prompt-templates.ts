@@ -43,7 +43,8 @@ export type PromptTemplateName =
   | 'duplicates'
   | 'staleness'
   | 'bugReport'
-  | 'semanticDependency';
+  | 'semanticDependency'
+  | 'decomposition';
 
 /** 所有已知模板名称列表 */
 export const PROMPT_TEMPLATE_NAMES: PromptTemplateName[] = [
@@ -58,6 +59,7 @@ export const PROMPT_TEMPLATE_NAMES: PromptTemplateName[] = [
   'staleness',
   'bugReport',
   'semanticDependency',
+  'decomposition',
 ];
 
 // ============================================================
@@ -634,6 +636,46 @@ export const DEFAULT_STALENESS_TEMPLATE: PromptTemplate = `你是一个项目管
 - 只输出 JSON`;
 
 /**
+ * 需求分解默认模板
+ * @source ai-decomposition.ts buildDecompositionPrompt()
+ */
+export const DEFAULT_DECOMPOSITION_TEMPLATE: PromptTemplate = `你是一个专业的需求/问题分析专家。
+
+## 任务
+分析用户输入的内容，将其分解为独立的问题或需求列表。
+
+## 分解规则
+1. 如果是单个明确的需求，返回包含1个元素的列表
+2. 如果是调查报告格式（包含"问题 X"、"### 现象"等章节），提取所有问题
+3. 如果是复杂需求，拆分为可独立完成的子需求
+
+## 每个问题/需求必须包含的字段
+{
+  "title": "简洁标题（动词开头，10-50字符）",
+  "problem": "问题描述：现象、背景、影响（≥50字符）",
+  "rootCause": "根因分析：为什么会出现这个问题（≥30字符，可选）",
+  "solution": "解决方案：如何解决这个问题，具体步骤（≥50字符）",
+  "priority": "P0 | P1 | P2 | P3",
+  "type": "bug | feature | refactor | docs | test | research",
+  "checkpoints": ["验证步骤1", "验证步骤2"]
+}
+
+## 输出格式
+{
+  "decomposable": true | false,
+  "reason": "分解失败的原因",
+  "items": [{ /* 问题1 */ }, { /* 问题2 */ }]
+}
+
+## 约束
+- 如果内容无法分解为独立问题（如过于模糊、只有一句话），设置 decomposable 为 false
+- 每条 items 必须符合上述字段结构
+- priority 必须是 P0/P1/P2/P3 之一
+- type 必须是 bug/feature/refactor/docs/test/research 之一
+- title 必须以动词开头，10-50 字符
+- 只输出 JSON`;
+
+/**
  * Bug 报告默认模板
  * @source ai-metadata.ts buildBugReportPrompt()
  */
@@ -719,6 +761,7 @@ export const DEFAULT_TEMPLATES: Record<PromptTemplateName, PromptTemplate> = {
   staleness: DEFAULT_STALENESS_TEMPLATE,
   bugReport: DEFAULT_BUG_REPORT_TEMPLATE,
   semanticDependency: DEFAULT_SEMANTIC_DEPENDENCY_TEMPLATE,
+  decomposition: DEFAULT_DECOMPOSITION_TEMPLATE,
 };
 
 // ============================================================
