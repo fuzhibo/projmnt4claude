@@ -1992,6 +1992,9 @@ export async function updateTask(
  *
  * 将任务状态设置为 wait_evaluation，等待质量门禁验证
  * 等价于: projmnt4claude task update TASK-xxx --status wait_evaluation
+ *
+ * @deprecated 该函数已废弃，请使用 `projmnt4claude task update TASK-xxx --status wait_evaluation` 代替
+ *   功能与 harness 流水线阶段推进重复，将在未来版本中移除
  */
 export async function submitTask(
   taskId: string,
@@ -2000,6 +2003,12 @@ export async function submitTask(
   } = {},
   cwd: string = process.cwd()
 ): Promise<void> {
+  // 输出废弃警告
+  console.warn('');
+  console.warn('⚠️  警告: task submit 命令已废弃，将在未来版本中移除');
+  console.warn('   请使用替代命令: projmnt4claude task update <taskId> --status wait_evaluation');
+  console.warn('');
+
   if (!isInitialized(cwd)) {
     console.error('错误: 项目未初始化。请先运行 `projmnt4claude setup`');
     process.exit(1);
@@ -2091,8 +2100,8 @@ export async function validateTask(
   if (task.status !== 'wait_evaluation') {
     console.error(`错误: 任务状态为 '${task.status}'，只有 wait_evaluation 状态的任务可以验证`);
     console.log('');
-    console.log('提示: 先提交任务等待验证');
-    console.log(`      projmnt4claude task submit ${taskId}`);
+    console.log('提示: 将任务状态设置为 wait_evaluation');
+    console.log(`      projmnt4claude task update ${taskId} --status wait_evaluation`);
     process.exit(1);
   }
 

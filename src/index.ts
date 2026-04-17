@@ -149,6 +149,9 @@ program
 基本操作: create/list/show/get/update/delete/rename/purge/execute/checkpoint
 高级操作: dependency/add-subtask/status-guide/complete/split/search/batch-update/batch-update-logs/count
 
+[已废弃操作 - 即将移除]:
+  submit                 [已废弃] 请使用 'task update <id> --status wait_evaluation'
+
 全局选项:
   --token <n>            令牌数估算
   -f, --force            强制操作
@@ -196,7 +199,7 @@ rename 子命令格式:
   task rename <oldTaskId> <newTaskId>
 
   示例:
-    task rename TASK-001 TASK-feature-new-name`)
+    task rename TASK-001 TASK-feature-new-name')
   .allowExcessArguments(true)
   .option('-s, --status <status>', '按状态过滤 (仅 list)')
   .option('-p, --priority <priority>', '按优先级过滤 (仅 list)')
@@ -506,6 +509,9 @@ rename 子命令格式:
           console.error('错误: submit 操作需要指定任务ID');
           process.exit(1);
         }
+        console.warn('[注意]: task submit 命令已废弃');
+        console.warn('   建议改用: projmnt4claude task update <taskId> --status wait_evaluation');
+        console.warn('');
         await submitTask(id, {
           note: options.note,
         });

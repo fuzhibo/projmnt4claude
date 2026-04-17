@@ -473,9 +473,9 @@ export const PIPELINE_INTERMEDIATE_STATUSES: TaskStatus[] = [
  */
 export const PIPELINE_STATUS_MIGRATION_MAP: Record<string, TaskStatus> = {
   'reopened': 'open',             // 已重开 → 重新打开
-  'needs_human': 'needs_human',     // 需要人工介入 → 保持为 needs_human
+  'needs_human': 'open',          // 需要人工介入 → 回到待处理
   'wait_review': 'in_progress',   // 等待代码审核 → 回到开发中
-  'wait_qa': 'in_progress',      // 等待 QA → 回到开发中
+  'wait_qa': 'in_progress',       // 等待 QA → 回到开发中
   'wait_evaluation': 'wait_qa',   // 等待评估 → 回退到等待 QA（无评估报告时）
   'wait_complete': 'wait_evaluation',  // 等待最终确认 → 映射到 wait_evaluation
 };

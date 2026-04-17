@@ -37,12 +37,12 @@ function createTestTask(overrides: Partial<TaskMeta> = {}): TaskMeta {
 // ============== Schema Version Constants ==============
 
 describe('Schema Version Constants', () => {
-  test('CURRENT_TASK_SCHEMA_VERSION should be 5', () => {
-    expect(CURRENT_TASK_SCHEMA_VERSION).toBe(5);
+  test('CURRENT_TASK_SCHEMA_VERSION should be 6', () => {
+    expect(CURRENT_TASK_SCHEMA_VERSION).toBe(6);
   });
 
-  test('SCHEMA_MIGRATIONS should have 5 steps', () => {
-    expect(SCHEMA_MIGRATIONS).toHaveLength(5);
+  test('SCHEMA_MIGRATIONS should have 6 steps', () => {
+    expect(SCHEMA_MIGRATIONS).toHaveLength(6);
   });
 
   test('SCHEMA_MIGRATIONS versions should be sequential starting from 1', () => {
@@ -80,7 +80,7 @@ describe('Pipeline Status Constants', () => {
   });
 
   test('PIPELINE_STATUS_MIGRATION_MAP should map to valid target statuses', () => {
-    const validTargets = ['open', 'in_progress', 'wait_qa', 'resolved', 'closed', 'reopened', 'abandoned', 'failed'];
+    const validTargets = ['open', 'in_progress', 'wait_qa', 'wait_evaluation', 'resolved', 'closed', 'reopened', 'abandoned', 'failed'];
     for (const [, target] of Object.entries(PIPELINE_STATUS_MIGRATION_MAP)) {
       expect(validTargets).toContain(target);
     }
@@ -133,31 +133,34 @@ describe('VerdictAction Constants', () => {
 describe('getPendingMigrations', () => {
   test('from version 0 should return all migrations', () => {
     const pending = getPendingMigrations(0);
-    expect(pending).toHaveLength(5);
+    expect(pending).toHaveLength(6);
     expect(pending[0]!.version).toBe(1);
     expect(pending[1]!.version).toBe(2);
     expect(pending[2]!.version).toBe(3);
     expect(pending[3]!.version).toBe(4);
     expect(pending[4]!.version).toBe(5);
+    expect(pending[5]!.version).toBe(6);
   });
 
-  test('from version 1 should return v2, v3, v4, v5 migrations', () => {
+  test('from version 1 should return v2, v3, v4, v5, v6 migrations', () => {
     const pending = getPendingMigrations(1);
-    expect(pending).toHaveLength(4);
+    expect(pending).toHaveLength(5);
     expect(pending[0]!.version).toBe(2);
     expect(pending[0]!.name).toBe('pipeline_status_and_verdict_action');
     expect(pending[1]!.version).toBe(3);
     expect(pending[2]!.version).toBe(4);
     expect(pending[3]!.version).toBe(5);
+    expect(pending[4]!.version).toBe(6);
   });
 
-  test('from version 3 should return v4, v5 migrations', () => {
+  test('from version 3 should return v4, v5, v6 migrations', () => {
     const pending = getPendingMigrations(3);
-    expect(pending).toHaveLength(2);
+    expect(pending).toHaveLength(3);
     expect(pending[0]!.version).toBe(4);
     expect(pending[0]!.name).toBe('reopened_to_open_and_transition_notes');
     expect(pending[1]!.version).toBe(5);
     expect(pending[1]!.name).toBe('checkpoint_prefix_completion');
+    expect(pending[2]!.version).toBe(6);
   });
 
   test('from current version should return no migrations', () => {
