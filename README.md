@@ -239,28 +239,28 @@ Direct manipulation of tasks without the harness pipeline:
 
 ```bash
 # Create task manually
-projmnt4claude task create --title "Fix login bug" --priority P1 --type bugfix
+/projmnt4claude task create --title "Fix login bug" --priority P1 --type bugfix
 
 # List tasks with filters
-projmnt4claude task list --status open --priority P0,P1
-projmnt4claude task list --type feature --role executor
+/projmnt4claude task list --status open --priority P0,P1
+/projmnt4claude task list --type feature --role executor
 
 # Show task details
-projmnt4claude task show TASK-001
+/projmnt4claude task show TASK-001
 
 # Update task properties
-projmnt4claude task update TASK-001 --status in_progress --priority P0
+/projmnt4claude task update TASK-001 --status in_progress --priority P0
 
 # Delete task
-projmnt4claude task delete TASK-001
+/projmnt4claude task delete TASK-001
 
 # Manage subtasks
-projmnt4claude task add-subtask TASK-001 "Implement OAuth flow"
-projmnt4claude task split TASK-001 --parts 3
+/projmnt4claude task add-subtask TASK-001 "Implement OAuth flow"
+/projmnt4claude task split TASK-001 --parts 3
 
 # Manage dependencies
-projmnt4claude task dependency add --from TASK-001 --to TASK-002
-projmnt4claude task dependency remove --from TASK-001 --to TASK-002
+/projmnt4claude task dependency add --from TASK-001 --to TASK-002
+/projmnt4claude task dependency remove --from TASK-001 --to TASK-002
 ```
 
 ### Plan Management Commands
@@ -269,18 +269,18 @@ Manual plan creation and adjustment:
 
 ```bash
 # View current plan
-projmnt4claude plan show
+/projmnt4claude:plan show
 
 # Manually add/remove tasks
-projmnt4claude plan add TASK-001
-projmnt4claude plan add TASK-002 --after TASK-001
-projmnt4claude plan remove TASK-001
+/projmnt4claude:plan add TASK-001
+/projmnt4claude:plan add TASK-002 --after TASK-001
+/projmnt4claude:plan remove TASK-001
 
 # Clear plan
-projmnt4claude plan clear
+/projmnt4claude:plan clear
 
 # Smart recommendation with options
-projmnt4claude plan recommend --query "security" --all --smart
+/projmnt4claude:plan recommend --query "security" --all --smart
 ```
 
 ### Configuration Commands
@@ -289,15 +289,15 @@ Customize system behavior:
 
 ```bash
 # View current configuration
-projmnt4claude config list
+/projmnt4claude:config list
 
 # Update configuration
-projmnt4claude config set ai.model claude-sonnet-4-6
-projmnt4claude config set harness.maxRetries 5
-projmnt4claude config set harness.timeout 1800
+/projmnt4claude:config set ai.model claude-sonnet-4-6
+/projmnt4claude:config set harness.maxRetries 5
+/projmnt4claude:config set harness.timeout 1800
 
 # Reset to defaults
-projmnt4claude config reset
+/projmnt4claude:config reset
 ```
 
 **Configurable Areas:**
@@ -657,28 +657,28 @@ node $PLUGIN_DIR/skills/projmnt4claude/dist/projmnt4claude.js headless-harness-d
 
 ```bash
 # 手动创建任务
-projmnt4claude task create --title "修复登录bug" --priority P1 --type bugfix
+/projmnt4claude:task create --title "修复登录bug" --priority P1 --type bugfix
 
 # 带过滤列出任务
-projmnt4claude task list --status open --priority P0,P1
-projmnt4claude task list --type feature --role executor
+/projmnt4claude:task list --status open --priority P0,P1
+/projmnt4claude:task list --type feature --role executor
 
 # 显示任务详情
-projmnt4claude task show TASK-001
+/projmnt4claude:task show TASK-001
 
 # 更新任务属性
-projmnt4claude task update TASK-001 --status in_progress --priority P0
+/projmnt4claude:task update TASK-001 --status in_progress --priority P0
 
 # 删除任务
-projmnt4claude task delete TASK-001
+/projmnt4claude:task delete TASK-001
 
 # 管理子任务
-projmnt4claude task add-subtask TASK-001 "实现OAuth流程"
-projmnt4claude task split TASK-001 --parts 3
+/projmnt4claude:task add-subtask TASK-001 "实现OAuth流程"
+/projmnt4claude:task split TASK-001 --parts 3
 
 # 管理依赖
-projmnt4claude task dependency add --from TASK-001 --to TASK-002
-projmnt4claude task dependency remove --from TASK-001 --to TASK-002
+/projmnt4claude:task dependency add --from TASK-001 --to TASK-002
+/projmnt4claude:task dependency remove --from TASK-001 --to TASK-002
 ```
 
 ### 计划管理命令
@@ -687,18 +687,18 @@ projmnt4claude task dependency remove --from TASK-001 --to TASK-002
 
 ```bash
 # 查看当前计划
-projmnt4claude plan show
+/projmnt4claude:plan show
 
 # 手动添加/移除任务
-projmnt4claude plan add TASK-001
-projmnt4claude plan add TASK-002 --after TASK-001
-projmnt4claude plan remove TASK-001
+/projmnt4claude:plan add TASK-001
+/projmnt4claude:plan add TASK-002 --after TASK-001
+/projmnt4claude:plan remove TASK-001
 
 # 清空计划
-projmnt4claude plan clear
+/projmnt4claude:plan clear
 
 # 带选项的智能推荐
-projmnt4claude plan recommend --query "security" --all --smart
+/projmnt4claude:plan recommend --query "security" --all --smart
 ```
 
 ### 配置命令
@@ -707,15 +707,15 @@ projmnt4claude plan recommend --query "security" --all --smart
 
 ```bash
 # 查看当前配置
-projmnt4claude config list
+/projmnt4claude:config list
 
 # 更新配置
-projmnt4claude config set ai.model claude-sonnet-4-6
-projmnt4claude config set harness.maxRetries 5
-projmnt4claude config set harness.timeout 1800
+/projmnt4claude:config set ai.model claude-sonnet-4-6
+/projmnt4claude:config set harness.maxRetries 5
+/projmnt4claude:config set harness.timeout 1800
 
 # 重置为默认
-projmnt4claude config reset
+/projmnt4claude:config reset
 ```
 
 **可配置项：**

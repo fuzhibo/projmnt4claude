@@ -54,10 +54,11 @@ cd "$PROJECT_ROOT"
 CURRENT_VERSION=$(grep -o '"version": *"[^"]*"' .claude-plugin/plugin.json | sed 's/"version": *"\([^"]*\)"/\1/')
 echo "   当前版本: $CURRENT_VERSION"
 
-echo "🔨 构建项目..."
-bun run build
-
 echo "📦 同步到测试 marketplace..."
+
+# 创建 dist 目录并复制主文件（跳过构建，因为 bun 可以直接运行 TypeScript）
+mkdir -p dist
+cp src/index.ts dist/projmnt4claude.ts
 
 # 创建目录结构
 mkdir -p "$PLUGIN_DIR/skills/$PLUGIN_NAME/dist"
@@ -65,7 +66,7 @@ mkdir -p "$PLUGIN_DIR/commands"
 mkdir -p "$PLUGIN_DIR/.claude-plugin"
 
 # 复制文件
-cp dist/$PLUGIN_NAME.js "$PLUGIN_DIR/skills/$PLUGIN_NAME/dist/"
+cp dist/$PLUGIN_NAME.ts "$PLUGIN_DIR/skills/$PLUGIN_NAME/dist/"
 cp -r commands/* "$PLUGIN_DIR/commands/"
 cp skills/$PLUGIN_NAME/SKILL.md "$PLUGIN_DIR/skills/$PLUGIN_NAME/"
 cp README.md "$PLUGIN_DIR/"
