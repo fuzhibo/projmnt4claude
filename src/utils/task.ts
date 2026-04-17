@@ -22,6 +22,7 @@ export const VALID_TRANSITIONS: Record<TaskStatus, TaskStatus[]> = {
   closed:        ['open', 'in_progress'],
   abandoned:     ['open', 'in_progress'],
   failed:        ['in_progress', 'open', 'closed', 'abandoned'],
+  needs_human:   ['open', 'in_progress', 'closed', 'abandoned'],
 };
 
 /**
