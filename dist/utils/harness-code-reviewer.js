@@ -1,0 +1,231 @@
+/**
+ * HarnessCodeReviewer - 代码审核阶段处理器
+ *
+ * 负责执行代码审核检查点：
+ * - 检查代码质量
+ * - 运行 lint
+ * - 验证代码规范
+ * - 生成代码审核报告
+ */
+import * as path from 'path';
+import { saveReport, filterCheckpoints, parseVerdictResult, getReportPath, REVIEW_TIMEOUT_RATIO, } from './harness-helpers.js';
+import { getAgent, buildEffectiveTools } from './headless-agent.js';
+import { getCodeReviewRoleTemplate } from './role-prompts.js';
+import { detectContradiction } from './contradiction-detector.js';
+import { createSessionAwareEngine } from './feedback-constraint-engine.js';
+import { verdictResultMarker, verdictHasReason } from './validation-rules/verdict-rules.js';
+import { loadPromptTemplate, resolveTemplate } from './prompt-templates.js';
+export class HarnessCodeReviewer {
+    config;
+    constructor(config) {
+        this.config = config;
+    }
+    /**
+     * 执行代码审核
+     */
+    async review(task, devReport, retryContext) {
+        console.log(`\n🔍 代码审核阶段...`);
+        console.log(`   任务: ${task.title}`);
+        const verdict = {
+            taskId: task.id,
+            result: 'PASS',
+            reason: '',
+            codeQualityIssues: [],
+            failedCheckpoints: [],
+            reviewedAt: new Date().toISOString(),
+            reviewedBy: 'code_reviewer',
+        };
+        // 如果开发阶段失败，直接返回 NOPASS
+        if (devReport.status !== 'success') {
+            verdict.result = 'NOPASS';
+            verdict.reason = `开发阶段未成功完成: ${devReport.status}`;
+            if (devReport.error) {
+                verdict.reason += ` - ${devReport.error}`;
+            }
+            await this.saveReport(task.id, verdict);
+            return verdict;
+        }
+        try {
+            // 1. 获取代码审核类检查点
+            const codeReviewCheckpoints = this.getCodeReviewCheckpoints(task);
+            console.log(`   📋 代码审核检查点: ${codeReviewCheckpoints.length} 个`);
+            if (codeReviewCheckpoints.length === 0) {
+                verdict.result = 'PASS';
+                verdict.reason = '无代码审核检查点，自动通过';
+                console.log('   ✅ 无代码审核检查点，自动通过');
+            }
+            else {
+                // 2. 运行代码审核
+                const reviewResult = await this.runCodeReview(task, devReport, codeReviewCheckpoints, retryContext);
+                verdict.result = reviewResult.passed ? 'PASS' : 'NOPASS';
+                verdict.reason = reviewResult.reason;
+                verdict.codeQualityIssues = reviewResult.issues;
+                verdict.failedCheckpoints = reviewResult.failedCheckpoints;
+                verdict.details = reviewResult.details;
+                // IR-08-05: 矛盾检测 — 当结果标签与内容矛盾时自动修正
+                const contradiction = detectContradiction(verdict.result, verdict.reason || '');
+                if (contradiction.hasContradiction && contradiction.correctedResult) {
+                    console.log(`   ⚠️  矛盾检测: ${contradiction.reason}`);
+                    verdict.result = contradiction.correctedResult;
+                    verdict.reason += ` [矛盾修正: ${contradiction.reason}]`;
+                }
+                if (verdict.result === 'PASS') {
+                    console.log('\n   ✅ 代码审核通过');
+                }
+                else {
+                    console.log(`\n   ❌ 代码审核未通过: ${verdict.reason}`);
+                }
+            }
+        }
+        catch (error) {
+            verdict.result = 'NOPASS';
+            verdict.reason = `代码审核过程出错: ${error instanceof Error ? error.message : String(error)}`;
+            console.log(`\n   ❌ 代码审核出错: ${verdict.reason}`);
+        }
+        await this.saveReport(task.id, verdict);
+        return verdict;
+    }
+    /**
+     * 获取代码审核类检查点
+     */
+    getCodeReviewCheckpoints(task) {
+        return filterCheckpoints(task, cp => cp.category === 'code_review' ||
+            cp.verification?.method === 'code_review' ||
+            cp.verification?.method === 'lint' ||
+            cp.verification?.method === 'architect_review');
+    }
+    /**
+     * 运行代码审核
+     */
+    async runCodeReview(task, devReport, checkpoints, retryContext) {
+        const prompt = this.buildCodeReviewPrompt(task, devReport, checkpoints, retryContext);
+        console.log('\n   📝 代码审核提示词已生成');
+        console.log('\n   🤖 启动代码审核会话...');
+        const agent = getAgent(this.config.cwd);
+        const effectiveTools = buildEffectiveTools('codeReview', this.config.cwd, task);
+        const invokeOptions = {
+            allowedTools: effectiveTools.tools,
+            timeout: Math.floor(this.config.timeout / REVIEW_TIMEOUT_RATIO),
+            cwd: this.config.cwd,
+            maxRetries: this.config.apiRetryAttempts,
+            outputFormat: 'text',
+            dangerouslySkipPermissions: effectiveTools.skipPermissions,
+        };
+        const engine = createSessionAwareEngine('markdown', [verdictResultMarker, verdictHasReason], 1);
+        const engineResult = await engine.runWithFeedback(agent.invoke.bind(agent), prompt, invokeOptions);
+        if (engineResult.retries > 0) {
+            console.log(`   🔄 代码审核结果格式不匹配，已重试 ${engineResult.retries} 次`);
+        }
+        if (!engineResult.result.success) {
+            return {
+                passed: false,
+                reason: `代码审核会话失败: ${engineResult.result.error || '未知错误'}`,
+                issues: [],
+                failedCheckpoints: [],
+            };
+        }
+        return this.parseCodeReviewResult(engineResult.result.output || '');
+    }
+    /**
+     * 构建代码审核提示词
+     */
+    buildCodeReviewPrompt(task, devReport, checkpoints, retryContext) {
+        const roleTemplate = getCodeReviewRoleTemplate(task.recommendedRole);
+        // Build conditional sections
+        const retryContextSection = retryContext?.previousFailureReason
+            ? `## 前次审核失败原因\n\n上一次代码审核未通过，失败原因如下：\n\n> ${retryContext.previousFailureReason}\n\n请确保本次审核覆盖前次发现的问题是否已修复。`
+            : '';
+        const descriptionSection = task.description
+            ? `## 任务描述\n${task.description}`
+            : '';
+        const checkpointsList = checkpoints.map((cp, i) => {
+            let line = `${i + 1}. [${cp.id}] ${cp.description}`;
+            if (cp.verification?.commands) {
+                line += `\n   验证命令: ${cp.verification.commands.join(', ')}`;
+            }
+            return line;
+        }).join('\n');
+        const changesSection = devReport.changes.length > 0
+            ? `## 开发者声明的变更\n${devReport.changes.map(change => `- ${change}`).join('\n')}`
+            : '';
+        const evidenceSection = devReport.evidence.length > 0
+            ? `## 提交的证据\n${devReport.evidence.map(evidence => `- ${evidence}`).join('\n')}`
+            : '';
+        const reviewFocus = roleTemplate.reviewFocus.map((focus, i) => `${i + 1}. ${focus}`).join('\n');
+        const template = loadPromptTemplate('codeReview', this.config.cwd);
+        return resolveTemplate(template, {
+            roleDeclaration: roleTemplate.roleDeclaration,
+            taskId: task.id,
+            title: task.title,
+            descriptionSection,
+            checkpointsList,
+            changesSection,
+            evidenceSection,
+            reviewFocus,
+            retryContextSection,
+        }).replace(/\n{3,}/g, '\n\n');
+    }
+    /**
+     * 解析代码审核结果
+     */
+    parseCodeReviewResult(output) {
+        const parsed = parseVerdictResult(output, {
+            resultField: '审核结果',
+            reasonField: '原因',
+            listField: '代码质量问题',
+            checkpointField: '未通过的检查点',
+            detailsField: '详细反馈',
+        });
+        return {
+            passed: parsed.passed,
+            reason: parsed.reason,
+            issues: parsed.items,
+            failedCheckpoints: parsed.failedCheckpoints,
+            details: parsed.details,
+        };
+    }
+    /**
+     * 保存代码审核报告
+     */
+    async saveReport(taskId, verdict) {
+        const reportPath = getReportPath(taskId, 'code-review', this.config.cwd);
+        const content = this.formatReport(verdict);
+        await saveReport(reportPath, content);
+    }
+    /**
+     * 格式化报告
+     */
+    formatReport(verdict) {
+        const lines = [
+            `# 代码审核报告 - ${verdict.taskId}`,
+            '',
+            `**结果**: ${verdict.result === 'PASS' ? '✅ PASS' : '❌ NOPASS'}`,
+            `**审核时间**: ${verdict.reviewedAt}`,
+            `**审核者**: ${verdict.reviewedBy}`,
+            '',
+            '## 原因',
+            verdict.reason,
+            '',
+        ];
+        if (verdict.codeQualityIssues.length > 0) {
+            lines.push('## 代码质量问题');
+            verdict.codeQualityIssues.forEach(issue => {
+                lines.push(`- ${issue}`);
+            });
+            lines.push('');
+        }
+        if (verdict.failedCheckpoints.length > 0) {
+            lines.push('## 未通过的检查点');
+            verdict.failedCheckpoints.forEach(checkpoint => {
+                lines.push(`- ${checkpoint}`);
+            });
+            lines.push('');
+        }
+        if (verdict.details) {
+            lines.push('## 详细反馈');
+            lines.push(verdict.details);
+            lines.push('');
+        }
+        return lines.join('\n');
+    }
+}

@@ -61,12 +61,12 @@ import { isInitialized } from './utils/path';
  */
 function requireInit(): void {
   if (!isInitialized()) {
-    console.error('❌ 错误: 项目尚未初始化');
+    console.error('(X) Error: Project not initialized');
     console.error('');
-    console.error('请先运行以下命令初始化项目管理环境:');
+    console.error('Please run the following command to initialize:');
     console.error('  projmnt4claude setup');
     console.error('');
-    console.error('或者使用 slash command:');
+    console.error('Or use slash command:');
     console.error('  /projmnt4claude:setup');
     process.exit(1);
   }
@@ -136,7 +136,7 @@ program
         setConfig(key, value);
         break;
       default:
-        console.error(`错误: 未知操作 '${action}'。支持的操作: list, get, set`);
+        console.error('(X) Error: Unknown action \'' + action + '\'. Supported: list, get, set');
         process.exit(1);
     }
   });
@@ -144,62 +144,7 @@ program
 // task 命令组
 program
   .command('task <action> [id]')
-  .description(`管理任务
-
-基本操作: create/list/show/get/update/delete/rename/purge/execute/checkpoint
-高级操作: dependency/add-subtask/status-guide/complete/split/search/batch-update/batch-update-logs/count
-
-[已废弃操作 - 即将移除]:
-  submit                 [已废弃] 请使用 'task update <id> --status wait_evaluation'
-
-全局选项:
-  --token <n>            令牌数估算
-  -f, --force            强制操作
-
-create 子命令选项:
-  --into <id>            创建为子任务
-  --from-requirement     从需求创建
-  --requirement-text <text>  需求文本
-
-list 子命令选项:
-  --status <status>      过滤状态
-  --priority <priority>  过滤优先级
-  --type <type>          过滤类型
-
-show 子命令选项:
-  --json                 JSON格式输出
-
-update 子命令选项:
-  --status <status>      更新状态
-  --priority <priority>  更新优先级
-  --sync-children        同步子任务
-
-dependency 子命令选项:
-  --from <id>            依赖来源
-  --to <id>              依赖目标
-  --remove               移除依赖
-
-split 子命令选项:
-  --parts <n>            拆分数量
-  --strategy <strategy>  拆分策略
-
-checkpoint 子命令选项:
-  --pass                 通过检查点
-  --fail                 失败检查点
-  --missing-verification 标记待验证
-
-⚠️  dependency 子命令格式 (注意参数顺序):
-  task dependency <add|remove> <taskId> --dep-id <depTaskId>
-
-  示例:
-    task dependency add TASK-001 --dep-id TASK-002    # TASK-001 依赖 TASK-002
-    task dependency remove TASK-001 --dep-id TASK-002 # 移除依赖
-
-rename 子命令格式:
-  task rename <oldTaskId> <newTaskId>
-
-  示例:
-    task rename TASK-001 TASK-feature-new-name')
+  .description('Manage tasks\n\nBasic: create/list/show/get/update/delete/rename/purge/execute/checkpoint\nAdvanced: dependency/add-subtask/status-guide/complete/split/search/batch-update/batch-update-logs/count\n\n[Deprecated - will be removed]:\n  submit                 Use: task update <id> --status wait_evaluation\n\nGlobal Options:\n  --token <n>            Token estimation\n  -f, --force            Force operation\n\ncreate Options:\n  --into <id>            Create as subtask\n  --from-requirement     Create from requirement\n  --requirement-text <text>  Requirement text\n\nlist Options:\n  --status <status>      Filter by status\n  --priority <priority>  Filter by priority\n  --type <type>          Filter by type\n\nshow Options:\n  --json                 JSON output\n\nupdate Options:\n  --status <status>      Update status\n  --priority <priority>  Update priority\n  --sync-children        Sync subtask status\n\ndependency Options:\n  --from <id>            Dependency source\n  --to <id>              Dependency target\n  --remove               Remove dependency\n\nsplit Options:\n  --parts <n>            Split count\n  --strategy <strategy>  Split strategy\n\ncheckpoint Options:\n  --pass                 Pass checkpoint\n  --fail                 Fail checkpoint\n  --missing-verification Mark needs verification\n\n! dependency format (note argument order):\n  task dependency <add|remove> <taskId> --dep-id <depTaskId>\n\n  Examples:\n    task dependency add TASK-001 --dep-id TASK-002    # TASK-001 depends on TASK-002\n    task dependency remove TASK-001 --dep-id TASK-002 # Remove dependency\n\nrename format:\n  task rename <oldTaskId> <newTaskId>\n\n  Example:\n    task rename TASK-001 TASK-feature-new-name')
   .allowExcessArguments(true)
   .option('-s, --status <status>', '按状态过滤 (仅 list)')
   .option('-p, --priority <priority>', '按优先级过滤 (仅 list)')
@@ -254,23 +199,23 @@ rename 子命令格式:
         if (options.file) {
           const filePath = path.resolve(options.file);
           if (!fs.existsSync(filePath)) {
-            console.error(`❌ 错误: 描述文件不存在: ${filePath}`);
+            console.error('(X) Error: Description file not found: ' + filePath);
             process.exit(1);
           }
           const stat = fs.statSync(filePath);
           if (!stat.isFile()) {
-            console.error(`❌ 错误: 指定路径不是文件: ${filePath}`);
+            console.error('(X) Error: Path is not a file: ' + filePath);
             process.exit(1);
           }
           const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10MB
           if (stat.size > MAX_FILE_SIZE) {
-            console.error(`❌ 错误: 描述文件过大 (${(stat.size / 1024 / 1024).toFixed(2)}MB)，最大允许10MB`);
+            console.error('(X) Error: File too large (' + (stat.size / 1024 / 1024).toFixed(2) + 'MB), max 10MB');
             process.exit(1);
           }
           try {
             taskDescription = fs.readFileSync(filePath, 'utf-8');
           } catch (error: any) {
-            console.error(`❌ 错误: 无法读取描述文件: ${error.message}`);
+            console.error('(X) Error: Cannot read description file: ' + error.message);
             process.exit(1);
           }
           if (filePath.startsWith('/tmp/')) {
@@ -303,7 +248,7 @@ rename 子命令格式:
       case 'get':
       case 'show':
         if (!id) {
-          console.error(`错误: ${action} 操作需要指定任务ID`);
+          console.error('(X) Error: ' + action + ' requires task ID');
           process.exit(1);
         }
         showTask(id, {
@@ -402,8 +347,8 @@ rename 子命令格式:
           // 检查点操作: task checkpoint <taskId> <checkpointId> <action>
           const validActions = ['complete', 'fail', 'note', 'show'];
           if (!validActions.includes(checkpointAct)) {
-            console.error(`错误: 无效的操作 '${checkpointAct}'`);
-            console.error(`支持的操作: ${validActions.join(', ')}`);
+            console.error("(X) Error: Invalid action '" + checkpointAct + "'");
+            console.error("Supported: " + validActions.join(', '));
             process.exit(1);
           }
           await updateCheckpoint(id, checkpointSubCmd, checkpointAct as any, {
@@ -448,7 +393,7 @@ rename 子命令格式:
         };
 
         if (!id) {
-          console.error('❌ 错误: dependency 操作需要指定子操作 (add/remove)');
+          console.error('(X) Error: dependency requires sub-action (add/remove)');
           showDependencyHelp();
           process.exit(1);
         }
@@ -457,14 +402,14 @@ rename 子命令格式:
         if (id !== 'add' && id !== 'remove') {
           // 检测常见错误：用户可能把 taskId 放在了 add/remove 的位置
           if (id.startsWith('TASK-') || id.startsWith('task-')) {
-            console.error(`❌ 错误: 参数顺序错误`);
+            console.error("(X) Error: Wrong argument order");
             console.error('');
-            console.error(`您输入的是: task dependency ${id} ...`);
-            console.error(`正确格式应该是: task dependency <add|remove> ${id} --dep-id <depTaskId>`);
+            console.error('You entered: task dependency ' + id + ' ...');
+            console.error('Correct format: task dependency <add|remove> ' + id + ' --dep-id <depTaskId>');
             console.error('');
-            console.error(`提示: 子操作 (add/remove) 必须紧跟在 dependency 后面`);
+            console.error('Hint: Sub-action (add/remove) must follow dependency');
           } else {
-            console.error(`❌ 错误: 未知的子操作 '${id}'，支持: add, remove`);
+            console.error("(X) Error: Unknown sub-action '" + id + "', supported: add, remove");
           }
           showDependencyHelp();
           process.exit(1);
@@ -475,15 +420,15 @@ rename 子命令格式:
         const taskId = process.argv[depIndex + 2]; // 跳过 'dependency' 和 'add/remove'
 
         if (!taskId || taskId.startsWith('-')) {
-          console.error('❌ 错误: 需要指定任务ID');
+          console.error('(X) Error: Task ID required');
           showDependencyHelp();
           process.exit(1);
         }
 
         if (!options.depId) {
-          console.error('❌ 错误: 需要指定 --dep-id (被依赖的任务ID)');
+          console.error('(X) Error: --dep-id required (dependency task ID)');
           console.error('');
-          console.error(`示例: task dependency ${id} ${taskId} --dep-id TASK-xxx`);
+          console.error('Example: task dependency ' + id + ' ' + taskId + ' --dep-id TASK-xxx');
           process.exit(1);
         }
 
@@ -617,7 +562,7 @@ rename 子命令格式:
         break;
       }
       default:
-        console.error(`错误: 未知操作 '${action}'。支持的操作: create, list, show, update, delete, rename, purge, execute, checkpoint, dependency, discuss, add-subtask, sync-children, split, search, batch-update, batch-update-logs, submit, validate, history, status-guide, complete, count`);
+        console.error("(X) Error: Unknown action '" + action + "'. Supported: create, list, show, update, delete, rename, purge, execute, checkpoint, dependency, discuss, add-subtask, sync-children, split, search, batch-update, batch-update-logs, submit, validate, history, status-guide, complete, count");
         process.exit(1);
     }
   });
@@ -671,7 +616,7 @@ program
         });
         break;
       default:
-        console.error(`错误: 未知操作 '${action}'。支持的操作: show, add, remove, clear, recommend`);
+        console.error("(X) Error: Unknown action '" + action + "'. Supported: show, add, remove, clear, recommend");
         process.exit(1);
     }
   });
@@ -800,28 +745,28 @@ program
 
       // 验证文件是否存在
       if (!fs.existsSync(filePath)) {
-        console.error(`❌ 错误: 描述文件不存在: ${filePath}`);
+        console.error('(X) Error: Description file not found: ' + filePath);
         process.exit(1);
       }
 
       // 验证是否为文件
       const stat = fs.statSync(filePath);
       if (!stat.isFile()) {
-        console.error(`❌ 错误: 指定路径不是文件: ${filePath}`);
+        console.error('(X) Error: Path is not a file: ' + filePath);
         process.exit(1);
       }
 
       // 验证文件大小（限制10MB防止内存问题）
       const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10MB
       if (stat.size > MAX_FILE_SIZE) {
-        console.error(`❌ 错误: 描述文件过大 (${(stat.size / 1024 / 1024).toFixed(2)}MB)，最大允许10MB`);
+        console.error('(X) Error: File too large (' + (stat.size / 1024 / 1024).toFixed(2) + 'MB), max 10MB');
         process.exit(1);
       }
 
       try {
         finalDescription = fs.readFileSync(filePath, 'utf-8');
       } catch (error: any) {
-        console.error(`❌ 错误: 无法读取描述文件: ${error.message}`);
+        console.error('(X) Error: Cannot read description file: ' + error.message);
         process.exit(1);
       }
 
@@ -839,13 +784,13 @@ program
 
     // 验证描述必须存在
     if (!finalDescription || finalDescription.trim().length === 0) {
-      console.error('❌ 错误: 需要提供描述或使用 --file 选项');
+      console.error('(X) Error: Description or --file option required');
       console.error('');
-      console.error('用法:');
-      console.error('  projmnt4claude init-requirement "需求描述"');
+      console.error('Usage:');
+      console.error('  projmnt4claude init-requirement "description"');
       console.error('  projmnt4claude init-requirement --file ./description.md');
       console.error('');
-      console.error('提示: 当描述包含代码块或特殊字符时，推荐使用 --file 选项');
+      console.error('Hint: Use --file when description contains code blocks or special characters');
       process.exit(1);
     }
 
@@ -883,33 +828,7 @@ program
 // headless-harness-design 命令
 program
   .command('headless-harness-design [action]')
-  .description(`使用 Harness Design 模式执行任务计划 (自动化开发与审查)
-
-主命令选项:
-  --plan <file>              计划文件路径（默认：自动读取/生成）
-  --max-retries <n>          最大重试次数（默认：3）
-  --timeout <seconds>        单任务超时时间（默认：300秒）
-  --parallel <n>             并行执行数（默认：1）
-  --dry-run                  试运行模式（不实际执行）
-  --continue                 从上次中断处继续执行
-  --json                     JSON 格式输出
-  --batch-git-commit         每个批次完成后自动 git commit
-
-质量门禁选项:
-  --require-quality <n>      质量分阈值（0-100，默认：60）
-  --skip-harness-gate        跳过质量门禁检查（不推荐）
-
-API 选项:
-  --api-retry-attempts <n>   API 调用重试次数（默认：3）
-  --api-retry-delay <seconds>  API 重试基础延迟（默认：60秒）
-
-子命令: cleanup
-  cleanup                    清理残留的快照文件
-  --force                    强制清理所有快照（包括活跃进程的快照）
-  --orphans-only             仅清理孤儿快照（进程已不存在）
-
-Deprecated 选项:
-  ~~--skip-quality-gate~~    已弃用，请使用 --skip-harness-gate`)
+  .description('Execute task plan using Harness Design pattern (automated dev & review)\n\nMain Options:\n  --plan <file>              Plan file path (default: auto read/generate)\n  --max-retries <n>          Max retry attempts (default: 3)\n  --timeout <seconds>        Per-task timeout in seconds (default: 300)\n  --parallel <n>             Parallel execution count (default: 1)\n  --dry-run                  Dry run mode (no actual execution)\n  --continue                 Continue from last interruption\n  --json                     JSON format output\n  --batch-git-commit         Auto git commit after each batch\n\nQuality Gate Options:\n  --require-quality <n>      Quality score threshold (0-100, default: 60)\n  --skip-harness-gate        Skip harness quality gate check (not recommended)\n\nAPI Options:\n  --api-retry-attempts <n>   API retry attempts for 429/500 errors (default: 3)\n  --api-retry-delay <seconds>  API retry base delay in seconds (default: 60)\n\nSub-command: cleanup\n  cleanup                    Clean up orphaned snapshots\n  --force                    Force cleanup all snapshots (including active ones)\n  --orphans-only             Clean only orphaned snapshots (process no longer exists)\n\nDeprecated Options:\n  ~~--skip-quality-gate~~    Deprecated, use --skip-harness-gate instead')
   .option('--plan <file>', '计划文件路径 (可选，不指定则自动读取/生成)')
   .option('--max-retries <n>', '最大重试次数', '3')
   .option('--timeout <seconds>', '单任务超时时间 (秒)', '300')
@@ -939,15 +858,15 @@ Deprecated 选项:
 
     // 如果有未知子命令，报错
     if (action && action !== 'cleanup') {
-      console.error(`❌ 错误: 未知子命令 '${action}'`);
+      console.error("(X) Error: Unknown sub-command '" + action + "'");
       console.error('');
-      console.error('支持的子命令:');
-      console.error('  cleanup    清理残留的快照文件');
+      console.error('Supported sub-commands:');
+      console.error('  cleanup    Clean up orphaned snapshots');
       console.error('');
-      console.error('用法示例:');
-      console.error('  projmnt4claude headless-harness-design                    # 运行流水线');
-      console.error('  projmnt4claude headless-harness-design cleanup           # 清理孤儿快照');
-      console.error('  projmnt4claude headless-harness-design cleanup --force   # 强制清理所有快照');
+      console.error('Examples:');
+      console.error('  projmnt4claude headless-harness-design                    # Run pipeline');
+      console.error('  projmnt4claude headless-harness-design cleanup           # Clean orphans');
+      console.error('  projmnt4claude headless-harness-design cleanup --force   # Force cleanup');
       process.exit(1);
     }
 
@@ -982,20 +901,20 @@ program.on('command:*', (operands) => {
   const unknownCmd = operands[0];
   const taskSubcommands = ['list', 'show', 'create', 'update', 'delete', 'execute', 'checkpoint', 'dependency', 'add-subtask'];
 
-  console.error(`❌ 错误: 未知命令 '${unknownCmd}'`);
+  console.error("(X) Error: Unknown command '" + unknownCmd + "'");
   console.error('');
 
   // 检测是否是 task 子命令被误用为顶层命令
   if (taskSubcommands.includes(unknownCmd)) {
-    console.error('💡 提示: \'%s\' 是 task 子命令的操作，请使用:', unknownCmd);
+    console.error('[!] Hint: \'%s\' is a task sub-command, use:', unknownCmd);
     console.error('   projmnt4claude task %s [options]', unknownCmd);
   } else {
-    console.error('💡 可用命令:');
+    console.error('[!] Available commands:');
     console.error('   task, status, analyze, init-requirement, setup, doctor, help');
   }
 
   console.error('');
-  console.error('查看完整帮助: projmnt4claude help');
+  console.error('For full help: projmnt4claude help');
   process.exit(1);
 });
 
