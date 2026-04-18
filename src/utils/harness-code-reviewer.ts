@@ -59,7 +59,7 @@ export class HarnessCodeReviewer {
     // 如果开发阶段失败，直接返回 NOPASS
     if (devReport.status !== 'success') {
       verdict.result = 'NOPASS';
-      verdict.reason = `开发阶段未成功完成: ${devReport.status}`;
+      verdict.reason = `${texts.harness.logs.devPhaseNotComplete}: ${devReport.status}`;
       if (devReport.error) {
         verdict.reason += ` - ${devReport.error}`;
       }
@@ -138,10 +138,11 @@ export class HarnessCodeReviewer {
     failedCheckpoints: string[];
     details?: string;
   }> {
+    const texts = t(this.config.cwd);
     const prompt = this.buildCodeReviewPrompt(task, devReport, checkpoints, retryContext);
-    console.log('\n   📝 代码审核提示词已生成');
+    console.log(`\n   📝 ${texts.harness.logs.codeReviewPromptGenerated}`);
 
-    console.log('\n   🤖 启动代码审核会话...');
+    console.log(`\n   🤖 ${texts.harness.logs.startingCodeReviewSession}`);
     const agent = getAgent(this.config.cwd);
     const effectiveTools = buildEffectiveTools('codeReview', this.config.cwd, task);
     const invokeOptions = {
@@ -165,13 +166,13 @@ export class HarnessCodeReviewer {
     );
 
     if (engineResult.retries > 0) {
-      console.log(`   🔄 代码审核结果格式不匹配，已重试 ${engineResult.retries} 次`);
+      console.log(`   🔄 ${texts.harness.logs.codeReviewRetry.replace('{retries}', String(engineResult.retries))}`);
     }
 
     if (!engineResult.result.success) {
       return {
         passed: false,
-        reason: `代码审核会话失败: ${engineResult.result.error || '未知错误'}`,
+        reason: `${texts.harness.logs.codeReviewSessionFailed}: ${engineResult.result.error || 'unknown error'}`,
         issues: [],
         failedCheckpoints: [],
       };
@@ -272,20 +273,22 @@ export class HarnessCodeReviewer {
    * 格式化报告
    */
   private formatReport(verdict: CodeReviewVerdict): string {
+    const texts = t(this.config.cwd);
+
     const lines: string[] = [
-      `# 代码审核报告 - ${verdict.taskId}`,
+      `# ${texts.harness.reports.codeReviewReportTitle} - ${verdict.taskId}`,
       '',
-      `**结果**: ${verdict.result === 'PASS' ? '✅ PASS' : '❌ NOPASS'}`,
-      `**审核时间**: ${verdict.reviewedAt}`,
-      `**审核者**: ${verdict.reviewedBy}`,
+      `**${texts.harness.reports.resultLabel}**: ${verdict.result === 'PASS' ? '✅ PASS' : '❌ NOPASS'}`,
+      `**${texts.harness.reports.reviewedAtLabel}**: ${verdict.reviewedAt}`,
+      `**${texts.harness.reports.reviewedByLabel}**: ${verdict.reviewedBy}`,
       '',
-      '## 原因',
+      `## ${texts.harness.reports.reasonSection}`,
       verdict.reason,
       '',
     ];
 
     if (verdict.codeQualityIssues.length > 0) {
-      lines.push('## 代码质量问题');
+      lines.push(`## ${texts.harness.reports.codeQualityIssuesSection}`);
       verdict.codeQualityIssues.forEach(issue => {
         lines.push(`- ${issue}`);
       });
@@ -293,7 +296,7 @@ export class HarnessCodeReviewer {
     }
 
     if (verdict.failedCheckpoints.length > 0) {
-      lines.push('## 未通过的检查点');
+      lines.push(`## ${texts.harness.reports.failedCheckpointsSection}`);
       verdict.failedCheckpoints.forEach(checkpoint => {
         lines.push(`- ${checkpoint}`);
       });
@@ -301,7 +304,7 @@ export class HarnessCodeReviewer {
     }
 
     if (verdict.details) {
-      lines.push('## 详细反馈');
+      lines.push(`## ${texts.harness.reports.detailsSection}`);
       lines.push(verdict.details);
       lines.push('');
     }

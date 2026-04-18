@@ -209,7 +209,7 @@ function showSmartHelp(commandsDir: string, topic: string, cwd: string): void {
   matchedCommands = [...new Set(matchedCommands)].sort();
 
   if (matchedCommands.length > 0) {
-    console.log('💡 建议您使用以下命令:');
+    console.log(t.help.suggestedCommands);
     console.log('');
 
     for (const cmd of matchedCommands) {
@@ -221,13 +221,13 @@ function showSmartHelp(commandsDir: string, topic: string, cwd: string): void {
       console.log('');
     }
   } else {
-    console.log('😕 没有找到直接相关的命令。');
+    console.log(t.help.noRelatedCommands);
     console.log('');
-    console.log('以下是一些常用命令:');
-    console.log('  • task     - 管理项目任务');
-    console.log('  • status   - 查看项目状态');
-    console.log('  • plan     - 管理执行计划');
-    console.log('  • setup    - 初始化项目管理环境');
+    console.log(t.help.commonCommands);
+    console.log(`  • task     - ${t.help.cmdTask}`);
+    console.log(`  • status   - ${t.help.cmdStatus}`);
+    console.log(`  • plan     - ${t.help.cmdPlan}`);
+    console.log(`  • setup    - ${t.help.cmdSetup}`);
     console.log('');
   }
   console.log(t.help.tipUseHelp);
@@ -247,7 +247,7 @@ export function showHelp(topic?: string, cwd: string = process.cwd()): void {
   if (!fs.existsSync(commandsDir)) {
     const t = require('../i18n').getI18n(getLanguage(cwd));
     console.error(`${t.error}: ${t.help.commandNotFound}`);
-    console.error(`路径: ${commandsDir}`);
+    console.error(`${t.setupCmd.directory.replace('{path}', commandsDir)}`);
     process.exit(1);
   }
   // 无参数：显示整体帮助

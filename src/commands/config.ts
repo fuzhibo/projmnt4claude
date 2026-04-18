@@ -152,6 +152,7 @@ const CONFIG_SCHEMA: Record<string, ConfigKeySchema> = {
   'projectName': { type: 'string' },
   'branchPrefix': { type: 'string' },
   'defaultPriority': { type: 'string', enum: ['low', 'medium', 'high', 'urgent'] },
+  'language': { type: 'string', enum: ['zh', 'en'] },
   'logging.level': { type: 'string', enum: ['debug', 'info', 'warn', 'error'] },
   'logging.maxFiles': { type: 'number', min: 1 },
   'logging.recordInputs': { type: 'boolean' },
@@ -162,6 +163,7 @@ const CONFIG_SCHEMA: Record<string, ConfigKeySchema> = {
   'training.outputDir': { type: 'string' },
   'quality.minScore': { type: 'number', min: 0, max: 100 },
   'gitHook.enabled': { type: 'boolean' },
+  'prompts.language': { type: 'string', enum: ['zh', 'en'] },
 };
 
 /**
@@ -284,11 +286,28 @@ export function listConfig(cwd: string = process.cwd()): void {
 
   // Prompt templates
   console.log('## Prompt Templates');
-  const prompts = config.prompts as Record<string, string> | undefined;
+  const prompts = config.prompts as Record<string, unknown> | undefined;
+
+  // Show prompts.language if set
+  if (prompts?.language) {
+    console.log(`  language: ${prompts.language}`);
+  } else {
+    console.log(`  language: ${config.language || 'en'} (inherited from global)`);
+  }
+  console.log('');
+
+  // Show custom templates status
+  const customTemplates = prompts?.customTemplates as Record<string, string> | undefined;
+  console.log('  Custom Templates:');
   for (const name of PROMPT_TEMPLATE_NAMES) {
-    const hasCustom = prompts && typeof prompts[name] === 'string';
+    // Check new format first (customTemplates.{name})
+    const hasCustomNew = customTemplates && typeof customTemplates[name] === 'string';
+    // Check old format (prompts.{name})
+    const hasCustomOld = prompts && typeof prompts[name] === 'string';
+    const hasCustom = hasCustomNew || hasCustomOld;
     const label = hasCustom ? 'custom' : 'default';
-    console.log(`  ${name}: [${label}]`);
+    const format = hasCustomNew ? '(customTemplates)' : hasCustomOld ? '(legacy)' : '';
+    console.log(`    ${name}: [${label}] ${format}`);
   }
   console.log('');
 }
@@ -339,28 +358,65 @@ export function setConfig(key: string, value: string, cwd: string = process.cwd(
   }
 
   // 1. prompts.* special validation (template name + variable format)
+  //    prompts.customTemplates.* - new format for custom templates
+  //    prompts.language - language setting for prompts
+  //    prompts.{templateName} - legacy format for backward compatibility
   if (key.startsWith('prompts.')) {
-    const templateName = key.substring('prompts.'.length);
-    if (!PROMPT_TEMPLATE_NAMES.includes(templateName as any)) {
-      console.error(`Error: Unknown prompt template name '${templateName}'. Options: ${PROMPT_TEMPLATE_NAMES.join(', ')}`);
-      process.exit(1);
+    const subKey = key.substring('prompts.'.length);
+
+    // Handle prompts.language
+    if (subKey === 'language') {
+      if (!['zh', 'en'].includes(value)) {
+        console.error(`Error: prompts.language only allows: zh, en`);
+        process.exit(1);
+      }
     }
-    // Check template has valid {variable} placeholders
-    const variables = value.match(/\{(\w+)\}/g);
-    if (variables) {
-      const defaultTemplate = DEFAULT_TEMPLATES[templateName as keyof typeof DEFAULT_TEMPLATES];
-      if (defaultTemplate) {
-        // Check variables against both language versions
-        const zhVars = new Set((defaultTemplate.zh.match(/\{(\w+)\}/g) || []).map(v => v));
-        const enVars = new Set((defaultTemplate.en.match(/\{(\w+)\}/g) || []).map(v => v));
-        const customVars = new Set(variables);
-        // Check missing in zh (typically has more variables due to Chinese text)
-        const missingZh = [...zhVars].filter(v => !customVars.has(v));
-        if (missingZh.length > 0) {
-          console.warn(`Warning: Custom template missing variables from default: ${missingZh.join(', ')}`);
-          console.warn('Missing variables may cause unsubstituted placeholders in prompts.');
+    // Handle prompts.customTemplates.{templateName}
+    else if (subKey.startsWith('customTemplates.')) {
+      const templateName = subKey.substring('customTemplates.'.length);
+      if (!PROMPT_TEMPLATE_NAMES.includes(templateName as any)) {
+        console.error(`Error: Unknown prompt template name '${templateName}'. Options: ${PROMPT_TEMPLATE_NAMES.join(', ')}`);
+        process.exit(1);
+      }
+      // Check template has valid {variable} placeholders
+      const variables = value.match(/\{(\w+)\}/g);
+      if (variables) {
+        const defaultTemplate = DEFAULT_TEMPLATES[templateName as keyof typeof DEFAULT_TEMPLATES];
+        if (defaultTemplate) {
+          // Check variables against both language versions
+          const zhVars = new Set((defaultTemplate.zh.match(/\{(\w+)\}/g) || []).map(v => v));
+          const enVars = new Set((defaultTemplate.en.match(/\{(\w+)\}/g) || []).map(v => v));
+          const customVars = new Set(variables);
+          // Check missing in zh (typically has more variables due to Chinese text)
+          const missingZh = [...zhVars].filter(v => !customVars.has(v));
+          if (missingZh.length > 0) {
+            console.warn(`Warning: Custom template missing variables from default: ${missingZh.join(', ')}`);
+            console.warn('Missing variables may cause unsubstituted placeholders in prompts.');
+          }
         }
       }
+    }
+    // Handle prompts.{templateName} (legacy format, backward compatibility)
+    else if (PROMPT_TEMPLATE_NAMES.includes(subKey as any)) {
+      // Check template has valid {variable} placeholders
+      const variables = value.match(/\{(\w+)\}/g);
+      if (variables) {
+        const defaultTemplate = DEFAULT_TEMPLATES[subKey as keyof typeof DEFAULT_TEMPLATES];
+        if (defaultTemplate) {
+          const zhVars = new Set((defaultTemplate.zh.match(/\{(\w+)\}/g) || []).map(v => v));
+          const customVars = new Set(variables);
+          const missingZh = [...zhVars].filter(v => !customVars.has(v));
+          if (missingZh.length > 0) {
+            console.warn(`Warning: Custom template missing variables from default: ${missingZh.join(', ')}`);
+            console.warn('Missing variables may cause unsubstituted placeholders in prompts.');
+          }
+        }
+      }
+    }
+    else {
+      console.error(`Error: Unknown config key '${key}'`);
+      console.error(`Available keys: ${Object.keys(CONFIG_SCHEMA).join(', ')}, prompts.language, prompts.customTemplates.*, prompts.{${PROMPT_TEMPLATE_NAMES.join(', ')}}`);
+      process.exit(1);
     }
   } else if (key in CONFIG_SCHEMA) {
     // 2. Known config keys: validate type and constraints by schema
@@ -368,7 +424,7 @@ export function setConfig(key: string, value: string, cwd: string = process.cwd(
   } else {
     // 3. Unknown config keys: reject
     console.error(`Error: Unknown config key '${key}'`);
-    console.error(`Available keys: ${Object.keys(CONFIG_SCHEMA).join(', ')}, prompts.*`);
+    console.error(`Available keys: ${Object.keys(CONFIG_SCHEMA).join(', ')}, prompts.language, prompts.customTemplates.*, prompts.{${PROMPT_TEMPLATE_NAMES.join(', ')}}`);
     process.exit(1);
   }
 

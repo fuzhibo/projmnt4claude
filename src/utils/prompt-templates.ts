@@ -1363,13 +1363,13 @@ export const DEFAULT_TEMPLATES: Record<PromptTemplateName, PromptTemplate> = {
  *
  * Priority: User custom config > Built-in default templates.
  *
- * 1. Read user custom template from config.json prompts.{name}
+ * 1. Read user custom template from config.json prompts.customTemplates.{name} or prompts.{name} (backward compatibility)
  * 2. If exists, return user custom template
  * 3. Otherwise return built-in default template for the specified language
  *
  * @param name - Template name
  * @param cwd - Working directory (for locating config.json)
- * @param language - Language code ('zh' | 'en'), defaults to 'en' if not specified
+ * @param language - Language code ('zh' | 'en'), defaults to prompts.language or global language or 'en' if not specified
  * @returns Template string for the specified language
  *
  * @example
@@ -1387,13 +1387,24 @@ export function loadPromptTemplate(
   const config = cwd ? readConfig(cwd) : null;
   const prompts = config?.prompts as Record<string, unknown> | undefined;
 
-  // If user has custom template for this name, use it (for backward compatibility)
+  // Check for custom template (new format: prompts.customTemplates.{name})
+  if (prompts?.customTemplates && typeof prompts.customTemplates === 'object') {
+    const customTemplates = prompts.customTemplates as Record<string, string>;
+    if (typeof customTemplates[name] === 'string') {
+      // Determine language for custom template: parameter > prompts.language > global language > 'en'
+      const lang: Language = language || (prompts.language as Language) || (config?.language as Language) || 'en';
+      // Custom templates are language-agnostic, return as-is
+      return customTemplates[name]!;
+    }
+  }
+
+  // Check for custom template (backward compatibility: prompts.{name})
   if (prompts && typeof prompts[name] === 'string') {
     return prompts[name] as string;
   }
 
-  // Determine language: parameter > config > default 'en'
-  const lang: Language = language || (config?.language as Language) || 'en';
+  // Determine language: parameter > prompts.language > global language > 'en'
+  const lang: Language = language || (prompts?.language as Language) || (config?.language as Language) || 'en';
 
   // Return the template for the specified language
   const template = DEFAULT_TEMPLATES[name];

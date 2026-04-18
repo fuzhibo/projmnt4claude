@@ -42,6 +42,7 @@ import {
   VALID_CHECKPOINT_PREFIXES,
 } from '../utils/validation-rules/checkpoint-rules.js';
 import { syncCheckpointsToMeta } from '../utils/checkpoint.js';
+import { t } from '../i18n/index.js';
 
 import {
   applySchemaMigrations,
@@ -134,7 +135,7 @@ function setTaskStatusValidated(
 ): StatusTransitionResult {
   const result = validateStatusTransition(task.status, newStatus);
   if (!result.valid) {
-    console.warn(`  ⚠️  非标准状态转换 (${context}): ${task.status} → ${newStatus} — ${result.reason}`);
+    console.warn(`  ⚠️  ${t(cwd).analyzeFixPipeline.nonStandardTransition.replace('{context}', context).replace('{oldStatus}', task.status).replace('{newStatus}', newStatus)} — ${result.reason}`);
   }
   task.status = newStatus;
   return result;
@@ -174,26 +175,26 @@ export async function fixSingleIssue(
             timestamp: new Date().toISOString(),
             fromStatus: oldStatus as TaskStatus,
             toStatus: 'closed',
-            note: `analyze --fix: 非交互模式下自动关闭过期 ${staleDays} 天的任务 (>30天阈值)`,
+            note: t(cwd).analyzeFixPipeline.staleAutoCloseNote.replace('{days}', String(staleDays)),
             author: 'analyze-fix',
           });
           // writeTaskMeta 自动监听 status 字段变更并生成 history 记录
           validatedWriteTaskMeta(task, cwd);
-          console.log(`  ✅ 已自动关闭过期 ${staleDays} 天的任务 ${issue.taskId} (>30天阈值)`);
+          console.log('  ' + t(cwd).analyzeFixPipeline.autoClosingStale.replace('{days}', String(staleDays)).replace('{taskId}', issue.taskId));
           return 'fixed';
         }
-        console.log(`⏭️  跳过过期任务 ${issue.taskId} (${staleDays}天, 非交互模式下超过30天才自动关闭)`);
+        console.log(t(cwd).analyzeFixPipeline.skipStale.replace('{taskId}', issue.taskId).replace('{days}', String(staleDays)));
         return 'skipped';
       }
-      console.log(`检查过期任务 ${issue.taskId}...`);
+      console.log(t(cwd).analyzeFixPipeline.checkingStale.replace('{taskId}', issue.taskId));
       const response = await prompts({
         type: 'select',
         name: 'action',
-        message: `任务 ${issue.taskId} 已过期，如何处理?`,
+        message: t(cwd).analyzeFixPipeline.staleTaskPrompt.replace('{taskId}', issue.taskId),
         choices: [
-          { title: '标记为已关闭', value: 'close' },
-          { title: '标记为进行中', value: 'progress' },
-          { title: '跳过', value: 'skip' },
+          { title: t(cwd).analyzeFixPipeline.closingTask, value: 'close' },
+          { title: t(cwd).analyzeFixPipeline.markingInProgress, value: 'progress' },
+          { title: t(cwd).common.skip, value: 'skip' },
         ],
       });
 
@@ -205,11 +206,11 @@ export async function fixSingleIssue(
           timestamp: new Date().toISOString(),
           fromStatus: oldStatus as TaskStatus,
           toStatus: 'closed',
-          note: 'analyze --fix: 用户交互选择关闭过期任务',
+          note: t(cwd).analyzeFixPipeline.staleUserCloseNote,
           author: 'analyze-fix',
         });
         validatedWriteTaskMeta(task, cwd);
-        console.log(`  ✅ 已关闭任务 ${issue.taskId}`);
+        console.log('  ' + t(cwd).analyzeFixPipeline.closedTask.replace('{taskId}', issue.taskId));
         return 'fixed';
       } else if (response.action === 'progress') {
         const oldStatus = task.status;
@@ -219,11 +220,11 @@ export async function fixSingleIssue(
           timestamp: new Date().toISOString(),
           fromStatus: oldStatus as TaskStatus,
           toStatus: 'in_progress',
-          note: 'analyze --fix: 用户交互选择将过期任务标记为进行中',
+          note: t(cwd).analyzeFixPipeline.staleUserProgressNote,
           author: 'analyze-fix',
         });
         validatedWriteTaskMeta(task, cwd);
-        console.log(`  ✅ 已将任务 ${issue.taskId} 标记为进行中`);
+        console.log('  ' + t(cwd).analyzeFixPipeline.markedInProgress.replace('{taskId}', issue.taskId));
         return 'fixed';
       }
       return 'skipped';
@@ -231,27 +232,27 @@ export async function fixSingleIssue(
 
     case 'no_description': {
       if (nonInteractive) {
-        console.log(`⏭️  跳过无描述任务 ${issue.taskId} (非交互模式下需要手动处理)`);
+        console.log(t(cwd).analyzeFixPipeline.skipNoDescription.replace('{taskId}', issue.taskId));
         return 'skipped';
       }
-      console.log(`检查无描述任务 ${issue.taskId}...`);
+      console.log(t(cwd).analyzeFixPipeline.checkingNoDescription.replace('{taskId}', issue.taskId));
       const response = await prompts({
         type: 'text',
         name: 'description',
-        message: `为任务 ${issue.taskId} 添加描述 (留空跳过):`,
+        message: t(cwd).analyzeFixPipeline.descriptionPrompt.replace('{taskId}', issue.taskId),
       });
 
       if (response.description && response.description.trim()) {
         task.description = response.description.trim();
         validatedWriteTaskMeta(task, cwd);
-        console.log(`  ✅ 已为任务 ${issue.taskId} 添加描述`);
+        console.log('  ' + t(cwd).analyzeFixPipeline.addingDescription.replace('{taskId}', issue.taskId));
         return 'fixed';
       }
       return 'skipped';
     }
 
     case 'cycle': {
-      console.log(`🔄 分析任务 ${issue.taskId} 的循环依赖...`);
+      console.log(t(cwd).analyzeFixPipeline.analyzingCycle.replace('{taskId}', issue.taskId));
       // CP-1/CP-15: Use graph module to detect cycles and get auto-fix suggestions
       const allCycleTasks = getAllTaskIds(cwd).map(id => readTaskMeta(id, cwd)).filter((t): t is TaskMeta => t !== null);
       const cycleGraph = DependencyGraph.fromTasks(allCycleTasks);
@@ -260,7 +261,7 @@ export async function fixSingleIssue(
       // Find cycle anomalies involving this task
       const cycleAnomalies = anomalies.filter(a => a.type === 'cycle' && a.nodeIds.includes(issue.taskId));
       if (cycleAnomalies.length === 0) {
-        console.log(`   ⚠️  未找到涉及 ${issue.taskId} 的循环依赖（可能已修复）`);
+        console.log('   ' + t(cwd).analyzeFixPipeline.cycleNotFound.replace('{taskId}', issue.taskId));
         return 'skipped';
       }
 
@@ -268,42 +269,43 @@ export async function fixSingleIssue(
       let fixedAny = false;
       for (const anomaly of cycleAnomalies) {
         if (anomaly.autoFix) {
-          console.log(`   💡 ${anomaly.autoFix.description}`);
+          console.log('   ' + t(cwd).analyzeFixPipeline.autoFixDescription.replace('{description}', anomaly.autoFix.description));
           for (const change of anomaly.autoFix.edgeChanges) {
             if (change.action === 'remove') {
               const fromTask = readTaskMeta(change.from, cwd);
               if (fromTask && fromTask.dependencies.includes(change.to)) {
                 fromTask.dependencies = fromTask.dependencies.filter(d => d !== change.to);
                 validatedWriteTaskMeta(fromTask, cwd);
-                console.log(`  ✅ 已断开 ${change.from} → ${change.to} 的依赖以打破循环`);
+                console.log('  ' + t(cwd).analyzeFixPipeline.breakingCycle.replace('{from}', change.from).replace('{to}', change.to));
                 fixedAny = true;
               }
             }
           }
         } else {
-          console.log(`   ⚠️  循环 ${(anomaly.cyclePath || anomaly.nodeIds).join(' → ')} 中所有边均为显式依赖，需人工处理`);
+          const cycle = (anomaly.cyclePath || anomaly.nodeIds).join(' → ');
+          console.log('   ' + t(cwd).analyzeFixPipeline.cycleManualFix.replace('{cycle}', cycle));
         }
       }
 
       if (fixedAny) {
         return 'fixed';
       }
-      console.log(`   建议: 手动检查并调整循环依赖中任务的依赖关系`);
+      console.log('   ' + t(cwd).analyzeFixPipeline.manualCheckCycle);
       return 'unfixable';
     }
 
     case 'legacy_priority': {
-      console.log(`🔄 修复任务 ${issue.taskId} 的优先级格式...`);
+      console.log(t(cwd).analyzeFixPipeline.fixingPriority.replace('{taskId}', issue.taskId));
       const oldPriority = task.priority;
       const newPriority = normalizePriority(task.priority);
       task.priority = newPriority;
       validatedWriteTaskMeta(task, cwd);
-      console.log(`  ✅ 已将优先级从 ${oldPriority} 更新为 ${newPriority}`);
+      console.log('  ' + t(cwd).analyzeFixPipeline.priorityUpdated.replace('{old}', oldPriority).replace('{new}', newPriority));
       return 'fixed';
     }
 
     case 'legacy_status': {
-      console.log(`🔄 修复任务 ${issue.taskId} 的状态格式...`);
+      console.log(t(cwd).analyzeFixPipeline.fixingStatus.replace('{taskId}', issue.taskId));
       const oldStatus = task.status;
       const newStatus = normalizeStatus(task.status);
       setTaskStatusValidated(task, newStatus, 'legacy-status-fix');
@@ -312,23 +314,23 @@ export async function fixSingleIssue(
         timestamp: new Date().toISOString(),
         fromStatus: oldStatus as TaskStatus,
         toStatus: newStatus,
-        note: `analyze --fix: 修复无效状态格式 ${oldStatus} → ${newStatus}`,
+        note: t(cwd).analyzeFixPipeline.legacyStatusFixNote.replace('{oldStatus}', oldStatus).replace('{newStatus}', newStatus),
         author: 'analyze-fix',
       });
       validatedWriteTaskMeta(task, cwd);
-      console.log(`  ✅ 已将状态从 ${oldStatus} 更新为 ${newStatus}`);
+      console.log('  ' + t(cwd).analyzeFixPipeline.statusUpdated.replace('{old}', oldStatus).replace('{new}', newStatus));
       return 'fixed';
     }
 
     case 'legacy_schema': {
-      console.log(`🔄 修复任务 ${issue.taskId} 的规范字段...`);
+      console.log(t(cwd).analyzeFixPipeline.fixingSchema.replace('{taskId}', issue.taskId));
       if (task.reopenCount === undefined) {
         task.reopenCount = 0;
-        console.log(`  ✅ 已添加 reopenCount: 0`);
+        console.log('  ' + t(cwd).analyzeFixPipeline.reopenCountAdded);
       }
       if (task.requirementHistory === undefined) {
         task.requirementHistory = [];
-        console.log(`  ✅ 已添加 requirementHistory: []`);
+        console.log('  ' + t(cwd).analyzeFixPipeline.requirementHistoryAdded);
       }
       validatedWriteTaskMeta(task, cwd);
       return 'fixed';
@@ -337,7 +339,7 @@ export async function fixSingleIssue(
     case 'null_array_field': {
       const fields = (issue.details?.fields as string[]) ?? [];
       if (fields.length === 0) return 'skipped';
-      console.log(`🔄 修复任务 ${issue.taskId} 的空数组字段: ${fields.join(', ')}`);
+      console.log(t(cwd).analyzeFixPipeline.fixingEmptyArrays.replace('{taskId}', issue.taskId).replace('{fields}', fields.join(', ')));
       const FIELD_DEFAULTS: Record<string, unknown[]> = {
         dependencies: [],
         history: [],
@@ -351,7 +353,7 @@ export async function fixSingleIssue(
         const key = field as keyof TaskMeta;
         if (task[key] === null || task[key] === undefined) {
           (task as unknown as Record<string, unknown>)[key] = FIELD_DEFAULTS[field] ?? [];
-          console.log(`  ✅ 已初始化 ${field}: []`);
+          console.log('  ' + t(cwd).analyzeFixPipeline.arrayInitialized.replace('{field}', field));
         }
       }
       validatedWriteTaskMeta(task, cwd);
@@ -359,7 +361,7 @@ export async function fixSingleIssue(
     }
 
     case 'pipeline_status_migration': {
-      console.log(`🔄 迁移任务 ${issue.taskId} 的 pipeline 状态...`);
+      console.log(t(cwd).analyzeFixPipeline.migratingPipelineStatus.replace('{taskId}', issue.taskId));
       const oldStatus = task.status;
       const targetStatus = issue.details?.targetStatus as TaskStatus;
       if (targetStatus && PIPELINE_STATUS_MIGRATION_MAP[oldStatus]) {
@@ -369,20 +371,20 @@ export async function fixSingleIssue(
           timestamp: new Date().toISOString(),
           fromStatus: oldStatus as TaskStatus,
           toStatus: targetStatus,
-          note: `analyze --fix: pipeline 中间状态迁移 ${oldStatus} → ${targetStatus}`,
+          note: t(cwd).analyzeFixPipeline.pipelineStatusMigrationNote.replace('{oldStatus}', oldStatus).replace('{targetStatus}', targetStatus),
           author: 'analyze-fix',
         });
         // writeTaskMeta 自动监听 status 字段变更并生成 history 记录
         validatedWriteTaskMeta(task, cwd);
-        console.log(`  ✅ 状态已从 ${oldStatus} 迁移为 ${targetStatus}`);
+        console.log('  ' + t(cwd).analyzeFixPipeline.statusMigrated.replace('{old}', oldStatus).replace('{new}', targetStatus));
         return 'fixed';
       }
-      console.log(`  ⚠️ 无法确定迁移目标状态`);
+      console.log('  ' + t(cwd).analyzeFixPipeline.cannotDetermineTargetStatus);
       return 'unfixable';
     }
 
     case 'verdict_action_schema': {
-      console.log(`🔄 修复任务 ${issue.taskId} 的无效 VerdictAction 值...`);
+      console.log(t(cwd).analyzeFixPipeline.fixingVerdictAction.replace('{taskId}', issue.taskId));
       let fixedAny = false;
 
       // 修复 history 中的无效 verdict action
@@ -393,7 +395,7 @@ export async function fixSingleIssue(
           if (!VALID_VERDICT_ACTIONS.includes(entry.newValue as VerdictAction)) {
             const oldVal = entry.newValue;
             entry.newValue = `[migrated: invalid_verdict_action "${oldVal}" removed]`;
-            console.log(`  ✅ history[${i}]: 清除无效 verdict action "${oldVal}"`);
+            console.log('  ' + t(cwd).analyzeFixPipeline.verdictActionCleared.replace('{index}', String(i)).replace('{value}', oldVal));
             fixedAny = true;
           }
         }
@@ -406,7 +408,7 @@ export async function fixSingleIssue(
           if (!VALID_VERDICT_ACTIONS.includes(verification.verdictAction as VerdictAction)) {
             const oldVal = verification.verdictAction as string;
             delete verification.verdictAction;
-            console.log(`  ✅ verification: 清除无效 verdictAction "${oldVal}"`);
+            console.log('  ' + t(cwd).analyzeFixPipeline.verificationCleared.replace('{value}', oldVal));
             fixedAny = true;
           }
         }
@@ -420,12 +422,35 @@ export async function fixSingleIssue(
     }
 
     case 'schema_version_outdated': {
-      console.log(`🔄 迁移任务 ${issue.taskId} 的 schema 版本...`);
+      console.log(t(cwd).analyzeFixPipeline.migratingSchema.replace('{taskId}', issue.taskId));
       const migrationResult = applySchemaMigrations(task);
       if (migrationResult.changed) {
         validatedWriteTaskMeta(task, cwd);
         for (const detail of migrationResult.details) {
-          console.log(`  ✅ ${detail}`);
+          // Translate schema migration detail keys
+          let translatedDetail = detail;
+          if (detail === 'schemaMigrationReopenCount') {
+            translatedDetail = t(cwd).analyzeCmd.schemaMigrationReopenCount;
+          } else if (detail === 'schemaMigrationRequirementHistory') {
+            translatedDetail = t(cwd).analyzeCmd.schemaMigrationRequirementHistory;
+          } else if (detail === 'schemaMigrationCommitHistory') {
+            translatedDetail = t(cwd).analyzeCmd.schemaMigrationCommitHistory;
+          } else if (detail === 'schemaMigrationTransitionNotes') {
+            translatedDetail = t(cwd).analyzeCmd.schemaMigrationTransitionNotes;
+          } else if (detail.startsWith('schemaMigrationResumeAction:')) {
+            const status = detail.match(/status:(.+)/)?.[1] || '';
+            translatedDetail = t(cwd).analyzeCmd.schemaMigrationResumeAction.replace('{status}', status);
+          } else if (detail.startsWith('schemaMigrationCheckpointPrefix:')) {
+            const oldMatch = detail.match(/old:"([^"]+)"/)?.[1] || '';
+            const newMatch = detail.match(/new:"([^"]+)"/)?.[1] || '';
+            translatedDetail = t(cwd).analyzeCmd.schemaMigrationCheckpointPrefix.replace('{old}', oldMatch).replace('{new}', newMatch);
+          } else if (detail.startsWith('schemaMigrationCheckpointPolicy:')) {
+            const policy = detail.match(/policy:"([^"]+)"/)?.[1] || '';
+            const type = detail.match(/type:"([^"]+)"/)?.[1] || '';
+            const priority = detail.match(/priority:"([^"]+)"/)?.[1] || '';
+            translatedDetail = t(cwd).analyzeCmd.schemaMigrationCheckpointPolicy.replace('{policy}', policy).replace('{type}', type).replace('{priority}', priority);
+          }
+          console.log(`  ✅ ${translatedDetail}`);
         }
         return 'fixed';
       }
@@ -433,17 +458,17 @@ export async function fixSingleIssue(
     }
 
     case 'missing_createdBy': {
-      console.log(`🔄 修复任务 ${issue.taskId} 的 createdBy 字段...`);
+      console.log(t(cwd).analyzeFixPipeline.fixingCreatedBy.replace('{taskId}', issue.taskId));
       if (!task.createdBy) {
         task.createdBy = 'import';
-        console.log(`  ✅ 已添加 createdBy: import`);
+        console.log('  ' + t(cwd).analyzeFixPipeline.createdByAdded);
       }
       validatedWriteTaskMeta(task, cwd);
       return 'fixed';
     }
 
     case 'invalid_status_value': {
-      console.log(`🔄 修复任务 ${issue.taskId} 的无效状态值...`);
+      console.log(t(cwd).analyzeFixPipeline.fixingInvalidStatus.replace('{taskId}', issue.taskId));
       if (issue.details?.currentValue) {
         const oldStatus = task.status;
         setTaskStatusValidated(task, normalizeStatus(task.status), 'invalid-status-value-fix');
@@ -452,42 +477,42 @@ export async function fixSingleIssue(
           timestamp: new Date().toISOString(),
           fromStatus: oldStatus as TaskStatus,
           toStatus: task.status,
-          note: `analyze --fix: 修复无效状态值 ${oldStatus} → ${task.status}`,
+          note: t(cwd).analyzeFixPipeline.invalidStatusValueFixNote.replace('{oldStatus}', oldStatus).replace('{newStatus}', task.status),
           author: 'analyze-fix',
         });
         validatedWriteTaskMeta(task, cwd);
-        console.log(`  ✅ 已将状态从 ${oldStatus} 更新为 ${task.status}`);
+        console.log('  ' + t(cwd).analyzeFixPipeline.statusUpdated.replace('{old}', oldStatus).replace('{new}', task.status));
         return 'fixed';
       }
       return 'unfixable';
     }
 
     case 'invalid_type_value': {
-      console.log(`🔄 修复任务 ${issue.taskId} 的无效类型值...`);
+      console.log(t(cwd).analyzeFixPipeline.fixingInvalidType.replace('{taskId}', issue.taskId));
       if (issue.details?.currentValue) {
         const oldType = task.type;
         task.type = normalizeType(task.type) as TaskType;
         validatedWriteTaskMeta(task, cwd);
-        console.log(`  ✅ 已将类型从 ${oldType} 更新为 ${task.type}`);
+        console.log('  ' + t(cwd).analyzeFixPipeline.typeUpdated.replace('{old}', oldType).replace('{new}', task.type));
         return 'fixed';
       }
       return 'unfixable';
     }
 
     case 'invalid_priority_value': {
-      console.log(`🔄 修复任务 ${issue.taskId} 的无效优先级值...`);
+      console.log(t(cwd).analyzeFixPipeline.fixingInvalidPriority.replace('{taskId}', issue.taskId));
       if (issue.details?.currentValue) {
         const oldPriority = task.priority;
         task.priority = normalizePriority(task.priority);
         validatedWriteTaskMeta(task, cwd);
-        console.log(`  ✅ 已将优先级从 ${oldPriority} 更新为 ${task.priority}`);
+        console.log('  ' + t(cwd).analyzeFixPipeline.priorityUpdated.replace('{old}', oldPriority).replace('{new}', task.priority));
         return 'fixed';
       }
       return 'unfixable';
     }
 
     case 'status_reopen_mismatch': {
-      console.log(`🔄 修复任务 ${issue.taskId} 的 reopen 流转记录缺失...`);
+      console.log(t(cwd).analyzeFixPipeline.fixingReopenTransition.replace('{taskId}', issue.taskId));
       // 确保 transitionNotes 已初始化
       if (!task.transitionNotes) task.transitionNotes = [];
 
@@ -496,7 +521,7 @@ export async function fixSingleIssue(
         timestamp: new Date().toISOString(),
         fromStatus: 'resolved',
         toStatus: 'open',
-        note: `补录 reopen 流转记录 (reopenCount=${task.reopenCount})`,
+        note: t(cwd).analyzeFixPipeline.reopenMismatchFixNote.replace('{count}', String(task.reopenCount ?? 0)),
         author: 'analyze-fix',
       });
 
@@ -507,18 +532,18 @@ export async function fixSingleIssue(
           timestamp: new Date().toISOString(),
           fromStatus: 'reopened',
           toStatus: 'open',
-          note: 'analyze --fix: reopened 状态已废弃，迁移为 open',
+          note: t(cwd).analyzeFixPipeline.reopenedStatusMigrationNote,
           author: 'analyze-fix',
         });
       }
 
       validatedWriteTaskMeta(task, cwd);
-      console.log(`  ✅ 已补录 transitionNote，reopenCount=${task.reopenCount}`);
+      console.log('  ' + t(cwd).analyzeFixPipeline.transitionNoteAdded.replace('{count}', String(task.reopenCount ?? 0)));
       return 'fixed';
     }
 
     case 'inconsistent_status': {
-      console.log(`🔄 修复任务 ${issue.taskId} 的状态矛盾 (resolved + verification.failed)...`);
+      console.log(t(cwd).analyzeFixPipeline.fixingStatusContradiction.replace('{taskId}', issue.taskId));
       // 将状态改回 open，清除旧的 verification
       const oldStatus = task.status;
       setTaskStatusValidated(task, 'open', 'inconsistent-status-fix');
@@ -529,24 +554,24 @@ export async function fixSingleIssue(
         timestamp: new Date().toISOString(),
         fromStatus: oldStatus as TaskStatus,
         toStatus: 'open',
-        note: 'analyze --fix: 修复状态矛盾 (resolved + verification.failed)，重置为 open',
+        note: t(cwd).analyzeFixPipeline.inconsistentStatusFixNote,
         author: 'analyze-fix',
       });
       // writeTaskMeta 自动监听 status 字段变更并生成 history 记录
       validatedWriteTaskMeta(task, cwd);
-      console.log(`  ✅ 已将状态从 resolved 改为 open，清除旧 verification`);
+      console.log('  ' + t(cwd).analyzeFixPipeline.statusContradictionFixed);
       return 'fixed';
     }
 
     case 'invalid_timestamp_format': {
-      console.log(`🔄 修复任务 ${issue.taskId} 的时间戳格式...`);
+      console.log(t(cwd).analyzeFixPipeline.fixingTimestamp.replace('{taskId}', issue.taskId));
       if (issue.details?.field) {
         const field = issue.details.field as string;
         const now = new Date().toISOString();
         if (field === 'createdAt' || field === 'updatedAt') {
           (task as unknown as Record<string, unknown>)[field] = now;
           validatedWriteTaskMeta(task, cwd);
-          console.log(`  ✅ 已将 ${field} 更新为 ${now}`);
+          console.log('  ' + t(cwd).analyzeFixPipeline.timestampUpdated.replace('{field}', field).replace('{value}', now));
           return 'fixed';
         }
       }
@@ -554,20 +579,20 @@ export async function fixSingleIssue(
     }
 
     case 'invalid_parent_ref': {
-      console.log(`⚠️  任务 ${issue.taskId} 的父任务引用无效，无法自动修复`);
-      console.log(`   建议: 手动检查并删除无效的 parentId 或创建父任务`);
+      console.log(t(cwd).analyzeFixPipeline.invalidParent.replace('{taskId}', issue.taskId));
+      console.log('   ' + t(cwd).analyzeFixPipeline.manualFixInvalidParent);
       return 'unfixable';
     }
 
     case 'invalid_subtask_ref': {
-      console.log(`🔄 修复任务 ${issue.taskId} 的无效子任务引用...`);
+      console.log(t(cwd).analyzeFixPipeline.fixingSubtaskRef.replace('{taskId}', issue.taskId));
       if (task.subtaskIds && issue.details?.subtaskId) {
         const invalidId = issue.details.subtaskId as string;
         const oldLength = task.subtaskIds.length;
         task.subtaskIds = task.subtaskIds.filter(id => id !== invalidId);
         if (task.subtaskIds.length < oldLength) {
           validatedWriteTaskMeta(task, cwd);
-          console.log(`  ✅ 已从 subtaskIds 中移除无效引用 ${invalidId}`);
+          console.log('  ' + t(cwd).analyzeFixPipeline.subtaskRefRemoved.replace('{id}', invalidId));
           return 'fixed';
         }
       }
@@ -575,7 +600,7 @@ export async function fixSingleIssue(
     }
 
     case 'invalid_dependency_ref': {
-      console.log(`🔄 修复任务 ${issue.taskId} 的无效依赖引用...`);
+      console.log(t(cwd).analyzeFixPipeline.fixingDependencyRef.replace('{taskId}', issue.taskId));
       // CP-2: Use graph to validate all dependency references
       const allDepTasks = getAllTaskIds(cwd).map(id => readTaskMeta(id, cwd)).filter((t): t is TaskMeta => t !== null);
       const validTaskIds = new Set(allDepTasks.map(t => t.id));
@@ -591,7 +616,7 @@ export async function fixSingleIssue(
           if (removedAny) {
             validatedWriteTaskMeta(task, cwd);
             for (const invalidId of invalidRefs) {
-              console.log(`  ✅ 已从 dependencies 中移除无效引用 ${invalidId}`);
+              console.log('  ' + t(cwd).analyzeFixPipeline.dependencyRefRemoved.replace('{id}', invalidId));
             }
           }
         }
@@ -604,7 +629,7 @@ export async function fixSingleIssue(
         task.dependencies = task.dependencies.filter(id => id !== invalidId);
         if (task.dependencies.length < oldLength) {
           validatedWriteTaskMeta(task, cwd);
-          console.log(`  ✅ 已从 dependencies 中移除无效引用 ${invalidId}`);
+          console.log('  ' + t(cwd).analyzeFixPipeline.dependencyRefRemoved.replace('{id}', invalidId));
           removedAny = true;
         }
       }
@@ -613,7 +638,7 @@ export async function fixSingleIssue(
     }
 
     case 'missing_inferred_dependency': {
-      console.log(`🔄 修复任务 ${issue.taskId} 的推断依赖缺失...`);
+      console.log(t(cwd).analyzeFixPipeline.inferringDependencies.replace('{taskId}', issue.taskId));
       // CP-3: Use graph to compare inferred vs explicit dependencies
       const allInferredTasks = getAllTaskIds(cwd).map(id => readTaskMeta(id, cwd)).filter((t): t is TaskMeta => t !== null);
       const inferredGraph = DependencyGraph.fromTasks(allInferredTasks);
@@ -626,16 +651,16 @@ export async function fixSingleIssue(
             if (!task.dependencies.includes(inferred.depTaskId)) {
               // Use graph to verify target node exists
               if (!inferredGraph.hasNode(inferred.depTaskId)) {
-                console.log(`   ⚠️  推断依赖 ${inferred.depTaskId} 不存在，跳过`);
+                console.log('   ' + t(cwd).analyzeFixPipeline.inferredDepNotFound.replace('{id}', inferred.depTaskId));
                 continue;
               }
               // Use graph to check if adding this dep would create a cycle
               if (inferredGraph.wouldCreateCycle(issue.taskId, inferred.depTaskId)) {
-                console.log(`   ⚠️  添加推断依赖 ${inferred.depTaskId} 会形成循环，跳过 (GATE-DEP-002)`);
+                console.log('   ' + t(cwd).analyzeFixPipeline.inferredDepWouldCreateCycle.replace('{id}', inferred.depTaskId));
                 continue;
               }
               task.dependencies.push(inferred.depTaskId);
-              console.log(`  ✅ 已添加推断依赖 ${inferred.depTaskId}: ${inferred.reason}`);
+              console.log('  ' + t(cwd).analyzeFixPipeline.inferredDepAdded.replace('{id}', inferred.depTaskId).replace('{reason}', inferred.reason));
               addedAny = true;
             }
           }
@@ -649,7 +674,7 @@ export async function fixSingleIssue(
     }
 
     case 'subtask_not_in_parent': {
-      console.log(`🔄 修复子任务 ${issue.taskId} 在父任务中的引用...`);
+      console.log(t(cwd).analyzeFixPipeline.fixingParentRef.replace('{taskId}', issue.taskId));
       if (task.parentId) {
         const parentTask = readTaskMeta(task.parentId, cwd);
         if (parentTask) {
@@ -659,7 +684,7 @@ export async function fixSingleIssue(
           if (!parentTask.subtaskIds.includes(task.id)) {
             parentTask.subtaskIds.push(task.id);
             validatedWriteTaskMeta(parentTask, cwd);
-            console.log(`  ✅ 已将子任务添加到父任务的 subtaskIds 中`);
+            console.log('  ' + t(cwd).analyzeFixPipeline.parentRefAdded);
             return 'fixed';
           }
         }
@@ -668,14 +693,14 @@ export async function fixSingleIssue(
     }
 
     case 'parent_child_mismatch': {
-      console.log(`🔄 修复任务 ${issue.taskId} 的父子关系不一致...`);
+      console.log(t(cwd).analyzeFixPipeline.fixingParentChildRelation.replace('{taskId}', issue.taskId));
       if (issue.details?.subtaskId && issue.details?.expectedParentId) {
         const subtaskId = issue.details.subtaskId as string;
         const subtask = readTaskMeta(subtaskId, cwd);
         if (subtask) {
           subtask.parentId = issue.details.expectedParentId as string;
           validatedWriteTaskMeta(subtask, cwd);
-          console.log(`  ✅ 已将子任务 ${subtaskId} 的 parentId 更新为 ${subtask.parentId}`);
+          console.log('  ' + t(cwd).analyzeFixPipeline.parentChildRelationFixed.replace('{subtaskId}', subtaskId).replace('{parentId}', subtask.parentId));
           return 'fixed';
         }
       }
@@ -686,7 +711,7 @@ export async function fixSingleIssue(
       // 从 description/title 提取关键词生成新 ID
       const slug = extractSlugFromTask(task);
       if (!slug || isMeaninglessSlug(slug)) {
-        console.log(`⚠️  任务 ${issue.taskId} 无法提取有意义的关键词，跳过重命名`);
+        console.log(t(cwd).analyzeFixPipeline.cannotExtractKeywords.replace('{taskId}', issue.taskId));
         return 'unfixable';
       }
 
@@ -698,37 +723,37 @@ export async function fixSingleIssue(
       const newId = generateTaskId(taskType, taskPriority, slug, existingIds);
 
       if (newId === task.id) {
-        console.log(`  ⏭️  任务 ${issue.taskId} 生成的 ID 与当前相同，跳过`);
+        console.log('  ' + t(cwd).analyzeFixPipeline.generatedIdSame);
         return 'skipped';
       }
 
-      console.log(`🔄 重命名任务: ${task.id} → ${newId}`);
+      console.log(t(cwd).analyzeFixPipeline.renamingTask.replace('{old}', task.id).replace('{new}', newId));
       const result = renameTask(task.id, newId, cwd);
       if (result.success) {
-        console.log(`  ✅ 已重命名为 ${newId}`);
+        console.log('  ' + t(cwd).analyzeFixPipeline.taskRenamed.replace('{id}', newId));
         return 'fixed';
       }
-      console.log(`  ❌ 重命名失败: ${result.error}`);
+      console.log('  ' + t(cwd).analyzeFixPipeline.renameFailed.replace('{error}', result.error || ''));
       return 'unfixable';
     }
 
     case 'invalid_history_format':
     case 'invalid_requirement_history_format':
     case 'invalid_task_id_format': {
-      console.log(`⚠️  任务 ${issue.taskId} 的 ${issue.type} 问题无法自动修复`);
-      console.log(`   建议: ${issue.suggestion}`);
+      console.log(t(cwd).analyzeFixPipeline.cannotAutoFix.replace('{taskId}', issue.taskId).replace('{type}', issue.type));
+      console.log('   ' + t(cwd).analyzeFixPipeline.suggestion.replace('{suggestion}', issue.suggestion || ''));
       return 'unfixable';
     }
 
     case 'manual_verification': {
-      console.log(`🔄 修复任务 ${issue.taskId} 的 manual 验证方法...`);
+      console.log(t(cwd).analyzeFixPipeline.fixingManualVerification.replace('{taskId}', issue.taskId));
       if (task.checkpoints && issue.details?.checkpointIds) {
         let fixedCount_local = 0;
         for (const cpId of issue.details.checkpointIds as string[]) {
           const cp = task.checkpoints.find(c => c.id === cpId);
           if (cp && cp.verification && (cp.verification.method as string) === 'manual') {
             cp.verification.method = 'automated';
-            console.log(`  ✅ 检查点 ${cpId}: manual -> automated`);
+            console.log('  ' + t(cwd).analyzeFixPipeline.manualToAutomated.replace('{id}', cpId));
             fixedCount_local++;
           }
         }
@@ -741,13 +766,13 @@ export async function fixSingleIssue(
     }
 
     case 'missing_verification': {
-      console.log(`🔄 修复任务 ${issue.taskId} 的缺失 verification 字段...`);
+      console.log(t(cwd).analyzeFixPipeline.fixingMissingVerification.replace('{taskId}', issue.taskId));
       if (task.status === 'resolved' && !task.verification) {
         task.verification = buildTaskVerification(task);
         validatedWriteTaskMeta(task, cwd);
-        console.log(`  ✅ 已自动填充 verification 字段`);
-        console.log(`     结果: ${task.verification.result}`);
-        console.log(`     完成率: ${task.verification.checkpointCompletionRate}%`);
+        console.log('  ' + t(cwd).analyzeFixPipeline.verificationAutoFilled);
+        console.log('     ' + t(cwd).analyzeFixPipeline.result + ': ' + task.verification.result);
+        console.log('     ' + t(cwd).analyzeFixPipeline.checkpointCompletionRate.replace('{rate}', String(task.verification.checkpointCompletionRate)));
         return 'fixed';
       }
       return 'skipped';
@@ -765,18 +790,18 @@ export async function fixSingleIssue(
             fs.rmSync(dirPath, { recursive: true, force: true });
             deleted++;
           } catch {
-            console.error(`  ❌ 删除 ${taskId} 失败`);
+            console.error('  ' + t(cwd).analyzeFixPipeline.deleteFailed.replace('{taskId}', taskId));
           }
         }
-        console.log(`  ✅ 已清除 ${deleted} 个 abandoned 残留任务`);
+        console.log('  ' + t(cwd).analyzeFixPipeline.abandonedTaskDeleted.replace('{count}', String(deleted)));
         return deleted > 0 ? 'fixed' : 'skipped';
       } else {
-        console.log(`检查 abandoned 残留任务...`);
-        console.log(`  发现 ${tasksToDelete.length} 个: ${tasksToDelete.join(', ')}`);
+        console.log(t(cwd).analyzeFixPipeline.checkingAbandoned);
+        console.log('  ' + t(cwd).analyzeFixPipeline.abandonedFound.replace('{count}', String(tasksToDelete.length)).replace('{tasks}', tasksToDelete.join(', ')));
         const response = await prompts({
           type: 'confirm',
           name: 'confirm',
-          message: `是否清除这些 abandoned 残留任务?`,
+          message: t(cwd).analyzeFixPipeline.confirmCleanupAbandoned,
           initial: true,
         });
         if (response.confirm) {
@@ -787,10 +812,10 @@ export async function fixSingleIssue(
               fs.rmSync(dirPath, { recursive: true, force: true });
               deleted++;
             } catch {
-              console.error(`  ❌ 删除 ${taskId} 失败`);
+              console.error('  ' + t(cwd).analyzeFixPipeline.deleteFailed.replace('{taskId}', taskId));
             }
           }
-          console.log(`  ✅ 已清除 ${deleted} 个 abandoned 残留任务`);
+          console.log('  ' + t(cwd).analyzeFixPipeline.abandonedTaskDeleted.replace('{count}', String(deleted)));
           return deleted > 0 ? 'fixed' : 'skipped';
         }
         return 'skipped';
@@ -798,19 +823,19 @@ export async function fixSingleIssue(
     }
 
     case 'file_not_found': {
-      console.log(`⚠️  任务 ${issue.taskId} 引用了不存在的文件，无法自动修复`);
+      console.log(t(cwd).analyzeFixPipeline.missingFileRef.replace('{taskId}', issue.taskId));
       if (issue.details?.missingFiles) {
-        console.log(`   不存在的文件: ${(issue.details.missingFiles as string[]).join(', ')}`);
+        console.log('   ' + t(cwd).analyzeFixPipeline.missingFiles.replace('{files}', (issue.details.missingFiles as string[]).join(', ')));
       }
-      console.log(`   建议: ${issue.suggestion}`);
+      console.log('   ' + t(cwd).analyzeFixPipeline.suggestion.replace('{suggestion}', issue.suggestion || ''));
       return 'unfixable';
     }
 
     case 'missing_transition_note': {
-      console.log(`🔄 回填任务 ${issue.taskId} 的 transitionNote...`);
+      console.log(t(cwd).analyzeFixPipeline.fillingTransitionNote.replace('{taskId}', issue.taskId));
       const historyEntry = issue.details?.historyEntry as TaskHistoryEntry | undefined;
       if (!historyEntry) {
-        console.log(`  ⚠️  缺少历史条目详情，无法回填`);
+        console.log('  ' + t(cwd).analyzeFixPipeline.missingHistoryDetail);
         return 'unfixable';
       }
 
@@ -856,24 +881,24 @@ export async function fixSingleIssue(
         author,
       });
       validatedWriteTaskMeta(task, cwd);
-      console.log(`  ✅ 已回填 transitionNote: ${statusKey} (${author})`);
+      console.log('  ' + t(cwd).analyzeFixPipeline.transitionNoteFilled.replace('{status}', statusKey).replace('{author}', author));
       return 'fixed';
     }
 
     case 'interrupted_task': {
       const suggestedStatus = issue.details?.suggestedStatus as string | undefined;
       if (!suggestedStatus) {
-        console.log(`  ⚠️  缺少状态建议，无法自动修复`);
+        console.log('  ' + t(cwd).analyzeFixPipeline.missingSuggestion);
         return 'unfixable';
       }
 
-      console.log(`🔄 修复中断任务 ${issue.taskId}...`);
-      console.log(`   当前状态: ${task.status} → 建议状态: ${suggestedStatus}`);
-      console.log(`   原因: ${issue.details?.suggestionReason || issue.suggestion}`);
+      console.log(t(cwd).analyzeFixPipeline.fixingInterruptedTask.replace('{taskId}', issue.taskId));
+      console.log('   ' + t(cwd).analyzeFixPipeline.currentStatus.replace('{status}', task.status) + ' → ' + t(cwd).analyzeFixPipeline.suggestedStatus.replace('{status}', suggestedStatus));
+      console.log('   ' + t(cwd).analyzeFixPipeline.reason.replace('{reason}', (issue.details?.suggestionReason as string) || issue.suggestion || ''));
 
       // 如果建议保持 in_progress，跳过
       if (suggestedStatus === 'in_progress') {
-        console.log(`  ⏭️  建议保持 in_progress，跳过修复`);
+        console.log('  ' + t(cwd).analyzeFixPipeline.skipKeepInProgress);
         return 'skipped';
       }
 
@@ -891,12 +916,12 @@ export async function fixSingleIssue(
           timestamp: new Date().toISOString(),
           fromStatus: oldStatus as TaskStatus,
           toStatus: suggestedStatus as TaskStatus,
-          note: `中断任务自动修复: ${(issue.details?.interruptedDays as number) || 0} 天无活跃 Pipeline`,
+          note: t(cwd).analyzeFixPipeline.interruptedTaskAutoNote.replace('{days}', String((issue.details?.interruptedDays as number) || 0)),
           author: 'analyze',
         });
 
         validatedWriteTaskMeta(task, cwd);
-        console.log(`  ✅ 已将任务 ${issue.taskId} 状态从 ${oldStatus} 修改为 ${suggestedStatus}`);
+        console.log('  ' + t(cwd).analyzeFixPipeline.statusFixed.replace('{taskId}', issue.taskId).replace('{old}', oldStatus).replace('{new}', suggestedStatus));
         return 'fixed';
       }
 
@@ -904,7 +929,7 @@ export async function fixSingleIssue(
       const response = await prompts({
         type: 'confirm',
         name: 'apply',
-        message: `是否将任务 ${issue.taskId} 状态从 ${task.status} 修改为 ${suggestedStatus}?`,
+        message: t(cwd).analyzeFixPipeline.confirmStatusChange.replace('{taskId}', issue.taskId).replace('{oldStatus}', task.status).replace('{newStatus}', suggestedStatus),
         initial: true,
       });
 
@@ -920,19 +945,19 @@ export async function fixSingleIssue(
           timestamp: new Date().toISOString(),
           fromStatus: oldStatus as TaskStatus,
           toStatus: suggestedStatus as TaskStatus,
-          note: `中断任务手动确认修复: ${(issue.details?.interruptedDays as number) || 0} 天无活跃 Pipeline`,
+          note: t(cwd).analyzeFixPipeline.interruptedTaskManualNote.replace('{days}', String((issue.details?.interruptedDays as number) || 0)),
           author: 'analyze',
         });
 
         validatedWriteTaskMeta(task, cwd);
-        console.log(`  ✅ 已将任务 ${issue.taskId} 状态从 ${oldStatus} 修改为 ${suggestedStatus}`);
+        console.log('  ' + t(cwd).analyzeFixPipeline.statusFixed.replace('{taskId}', issue.taskId).replace('{old}', oldStatus).replace('{new}', suggestedStatus));
         return 'fixed';
       }
       return 'skipped';
     }
 
     case 'reopened_status': {
-      console.log(`🔄 迁移任务 ${issue.taskId} 的废弃 reopened 状态...`);
+      console.log(t(cwd).analyzeFixPipeline.migratingReopenedStatus.replace('{taskId}', issue.taskId));
       const oldStatus = task.status;
       setTaskStatusValidated(task, 'open', 'reopened-migration');
       if (!task.transitionNotes) task.transitionNotes = [];
@@ -940,17 +965,17 @@ export async function fixSingleIssue(
         timestamp: new Date().toISOString(),
         fromStatus: 'reopened',
         toStatus: 'open',
-        note: 'analyze --fix: reopened 状态已废弃，迁移为 open',
+        note: t(cwd).analyzeFixPipeline.reopenedStatusMigrationNote,
         author: 'analyze-fix',
       });
       // writeTaskMeta 自动监听 status 字段变更并生成 history 记录
       validatedWriteTaskMeta(task, cwd);
-      console.log(`  ✅ 状态已从 reopened 迁移为 open`);
+      console.log('  ' + t(cwd).analyzeFixPipeline.reopenedMigrated);
       return 'fixed';
     }
 
     case 'needs_human_status': {
-      console.log(`🔄 迁移任务 ${issue.taskId} 的废弃 needs_human 状态...`);
+      console.log(t(cwd).analyzeFixPipeline.migratingNeedsHumanStatus.replace('{taskId}', issue.taskId));
       const oldStatus = task.status;
       setTaskStatusValidated(task, 'open', 'needs-human-migration');
       if (!task.transitionNotes) task.transitionNotes = [];
@@ -958,41 +983,42 @@ export async function fixSingleIssue(
         timestamp: new Date().toISOString(),
         fromStatus: 'needs_human',
         toStatus: 'open',
-        note: 'analyze --fix: needs_human 状态已废弃，迁移为 open 以便重新处理',
+        note: t(cwd).analyzeFixPipeline.needsHumanStatusMigrationNote,
         author: 'analyze-fix',
       });
       // writeTaskMeta 自动监听 status 字段变更并生成 history 记录
       validatedWriteTaskMeta(task, cwd);
-      console.log(`  ✅ 状态已从 needs_human 迁移为 open`);
+      console.log('  ' + t(cwd).analyzeFixPipeline.needsHumanMigrated);
       return 'fixed';
     }
 
     case 'low_checkpoint_coverage': {
-      console.log(`⚠️  项目检查点覆盖率不足，需人工补充`);
+      console.log(t(cwd).analyzeFixPipeline.checkpointCoverageWarning);
       if (issue.details?.tasksWithoutCheckpoints) {
-        console.log(`   缺少检查点的任务数: ${issue.details.tasksWithoutCheckpoints}`);
+        console.log('   ' + t(cwd).analyzeFixPipeline.tasksWithoutCheckpoints.replace('{count}', String(issue.details.tasksWithoutCheckpoints)));
       }
       if (issue.details?.coverageRate != null) {
-        console.log(`   当前覆盖率: ${((issue.details.coverageRate as number) * 100).toFixed(1)}%`);
+        console.log('   ' + t(cwd).analyzeFixPipeline.currentCoverage.replace('{rate}', String(((issue.details.coverageRate as number) * 100).toFixed(1))));
       }
-      console.log(`   建议: 使用 --fix --checkpoints-only 自动生成检查点，或手动为任务添加验收标准`);
+      console.log('   ' + t(cwd).analyzeFixPipeline.suggestion.replace('{suggestion}', t(cwd).analyzeFixPipeline.lowQualitySuggestion));
       return 'unfixable';
     }
 
     case 'low_quality': {
-      console.log(`⚠️  任务 ${issue.taskId} 内容质量低 (${issue.details?.totalScore ?? '?'}分/100)`);
+      const score = issue.details?.totalScore ?? '?';
+      console.log(t(cwd).analyzeFixPipeline.lowQualityTask.replace('{taskId}', issue.taskId).replace('{score}', String(score)));
       const deductions = (issue.details?.deductions as Array<{ reason: string; suggestion?: string }> | undefined) ?? [];
       if (deductions.length > 0) {
         for (const d of deductions.slice(0, 3)) {
-          console.log(`   └─ ${d.reason}${d.suggestion ? ` (建议: ${d.suggestion})` : ''}`);
+          console.log(`   └─ ${d.reason}${d.suggestion ? ` (${t(cwd).analyzeFixPipeline.suggestion.replace('{suggestion}', d.suggestion)})` : ''}`);
         }
       }
-      console.log(`   建议: ${issue.suggestion}`);
+      console.log('   ' + t(cwd).analyzeFixPipeline.suggestion.replace('{suggestion}', issue.suggestion || ''));
       return 'unfixable';
     }
 
     case 'deprecated_status_reference': {
-      console.log(`🔄 清理任务 ${issue.taskId} 历史记录中的废弃状态引用...`);
+      console.log(t(cwd).analyzeFixPipeline.cleaningObsoleteStatus.replace('{taskId}', issue.taskId));
       let fixedAny = false;
       for (const entry of task.history || []) {
         if ((entry.oldValue as string) === 'reopened' || (entry.oldValue as string) === 'needs_human') {
@@ -1020,7 +1046,7 @@ export async function fixSingleIssue(
       }
       if (fixedAny) {
         validatedWriteTaskMeta(task, cwd);
-        console.log(`  ✅ 已清理历史记录中的废弃状态引用`);
+        console.log('  ' + t(cwd).analyzeFixPipeline.obsoleteStatusCleaned);
         return 'fixed';
       }
       return 'skipped';
@@ -1032,11 +1058,11 @@ export async function fixSingleIssue(
       // CP-6: update_status — 更新状态到推断值
       const impliedStatus = issue.details?.impliedStatus as TaskStatus | undefined;
       if (!impliedStatus) {
-        console.log(`  ⚠️  缺少推断状态信息，无法修复`);
+        console.log('  ' + t(cwd).analyzeFixPipeline.missingInferenceInfo);
         return 'unfixable';
       }
 
-      console.log(`🔄 修复任务 ${issue.taskId} 的报告-状态不一致...`);
+      console.log(t(cwd).analyzeFixPipeline.fixingReportStatusMismatch.replace('{taskId}', issue.taskId));
       const oldStatus = task.status;
       setTaskStatusValidated(task, impliedStatus, 'report-status-mismatch');
       task.updatedAt = new Date().toISOString();
@@ -1045,19 +1071,19 @@ export async function fixSingleIssue(
         timestamp: new Date().toISOString(),
         fromStatus: oldStatus as TaskStatus,
         toStatus: impliedStatus,
-        note: `analyze --fix: 报告-状态不一致，状态从 ${oldStatus} 更新为 ${impliedStatus} (${issue.details?.reportFile} PASS)`,
+        note: t(cwd).analyzeFixPipeline.reportStatusMismatchNote.replace('{oldStatus}', oldStatus).replace('{newStatus}', impliedStatus).replace('{reportFile}', String(issue.details?.reportFile)),
         author: 'analyze-fix',
       });
 
       // writeTaskMeta 自动监听 7 个字段(title/description/priority/status/recommendedRole/branch/dependencies)变更并生成 history 记录
       validatedWriteTaskMeta(task, cwd);
-      console.log(`  ✅ 状态已从 ${oldStatus} 更新为 ${impliedStatus} (${issue.details?.reportFile} PASS)`);
+      console.log('  ' + t(cwd).analyzeFixPipeline.reportStatusMismatchFixed.replace('{old}', oldStatus).replace('{new}', impliedStatus).replace('{report}', String(issue.details?.reportFile)));
       return 'fixed';
     }
 
     case 'checkpoint_status_mismatch': {
       // CP-7: complete_checkpoints — 自动完成 pending 检查点（旧版遗留）
-      console.log(`🔄 修复任务 ${issue.taskId} 的检查点-状态不一致 (resolved + 全 pending)...`);
+      console.log(t(cwd).analyzeFixPipeline.fixingCheckpointStatusMismatch.replace('{taskId}', issue.taskId));
       if (!task.checkpoints || task.checkpoints.length === 0) {
         return 'skipped';
       }
@@ -1081,7 +1107,7 @@ export async function fixSingleIssue(
         task.updatedAt = now;
         // writeTaskMeta 自动监听 7 个字段(title/description/priority/status/recommendedRole/branch/dependencies)变更并生成 history 记录
         validatedWriteTaskMeta(task, cwd);
-        console.log(`  ✅ 已自动完成 ${completedCount} 个 pending 检查点 (旧版遗留)`);
+        console.log('  ' + t(cwd).analyzeFixPipeline.checkpointStatusMismatchFixed.replace('{count}', String(completedCount)));
         return 'fixed';
       }
       return 'skipped';
@@ -1091,11 +1117,11 @@ export async function fixSingleIssue(
       // CP-1: reset_to_open — 缺少恢复证据，重置为 open
       const fixAction = issue.details?.fixAction as string | undefined;
       if (fixAction !== 'reset_to_open') {
-        console.log(`  ⚠️  未知的修复动作: ${fixAction}`);
+        console.log('  ' + t(cwd).analyzeFixPipeline.unknownFixAction.replace('{action}', fixAction || ''));
         return 'unfixable';
       }
 
-      console.log(`🔄 重置任务 ${issue.taskId} 到 open 状态 (缺少 pipeline 恢复证据)...`);
+      console.log(t(cwd).analyzeFixPipeline.resettingTask.replace('{taskId}', issue.taskId));
       const oldStatus = task.status;
       setTaskStatusValidated(task, 'open', 'missing-pipeline-evidence');
       task.updatedAt = new Date().toISOString();
@@ -1105,7 +1131,7 @@ export async function fixSingleIssue(
         timestamp: new Date().toISOString(),
         fromStatus: oldStatus as TaskStatus,
         toStatus: 'open',
-        note: `analyze --fix: 缺少 pipeline 恢复证据，从 ${oldStatus} 重置为 open`,
+        note: t(cwd).analyzeFixPipeline.missingPipelineEvidenceNote.replace('{oldStatus}', oldStatus),
         author: 'analyze-fix',
       });
 
@@ -1116,7 +1142,7 @@ export async function fixSingleIssue(
 
       // writeTaskMeta 自动监听 7 个字段(title/description/priority/status/recommendedRole/branch/dependencies)变更并生成 history 记录
       validatedWriteTaskMeta(task, cwd);
-      console.log(`  ✅ 已将任务从 ${oldStatus} 重置为 open (缺少恢复证据)`);
+      console.log('  ' + t(cwd).analyzeFixPipeline.taskReset.replace('{old}', oldStatus));
       return 'fixed';
     }
 
@@ -1126,14 +1152,14 @@ export async function fixSingleIssue(
 
       // 只处理 checkpoint-required-prefix 规则的错误
       if (ruleId !== 'checkpoint-required-prefix') {
-        console.log(`  ⚠️  不支持的检查点验证规则: ${ruleId}`);
+        console.log('  ' + t(cwd).analyzeFixPipeline.unsupportedRule.replace('{rule}', ruleId || ''));
         return 'unfixable';
       }
 
-      console.log(`🔄 修复任务 ${issue.taskId} 的检查点前缀...`);
+      console.log(t(cwd).analyzeFixPipeline.fixingCheckpointPrefix.replace('{taskId}', issue.taskId));
 
       if (!task.checkpoints || task.checkpoints.length === 0) {
-        console.log(`  ⚠️  任务没有检查点`);
+        console.log('  ' + t(cwd).analyzeFixPipeline.noCheckpoints);
         return 'skipped';
       }
 
@@ -1158,20 +1184,20 @@ export async function fixSingleIssue(
         task.updatedAt = now;
         // 同步检查点到 meta.json 和 checkpoint.md
         syncCheckpointsToMeta(task.id, task.checkpoints, cwd);
-        console.log(`  ✅ 已为 ${updatedCount} 个检查点添加前缀`);
+        console.log('  ' + t(cwd).analyzeFixPipeline.checkpointPrefixUpdated.replace('{count}', String(updatedCount)));
         return 'fixed';
       }
 
-      console.log(`  ℹ️  所有检查点已有有效前缀`);
+      console.log('  ' + t(cwd).analyzeFixPipeline.allCheckpointsHavePrefix);
       return 'skipped';
     }
 
     case 'missing_checkpoint_prefix': {
       // 专门的检查点前缀缺失修复 - 复用 checkpoint_validation_error 中的前缀修复逻辑
-      console.log(`🔄 修复任务 ${issue.taskId} 的检查点前缀...`);
+      console.log(t(cwd).analyzeFixPipeline.fixingCheckpointPrefix.replace('{taskId}', issue.taskId));
 
       if (!task.checkpoints || task.checkpoints.length === 0) {
-        console.log(`  ⚠️  任务没有检查点`);
+        console.log('  ' + t(cwd).analyzeFixPipeline.noCheckpoints);
         return 'skipped';
       }
 
@@ -1196,11 +1222,11 @@ export async function fixSingleIssue(
         task.updatedAt = now;
         // 同步检查点到 meta.json 和 checkpoint.md
         syncCheckpointsToMeta(task.id, task.checkpoints, cwd);
-        console.log(`  ✅ 已为 ${updatedCount} 个检查点添加前缀`);
+        console.log('  ' + t(cwd).analyzeFixPipeline.checkpointPrefixUpdated.replace('{count}', String(updatedCount)));
         return 'fixed';
       }
 
-      console.log(`  ℹ️  所有检查点已有有效前缀`);
+      console.log('  ' + t(cwd).analyzeFixPipeline.allCheckpointsHavePrefix);
       return 'skipped';
     }
 
@@ -1224,15 +1250,15 @@ export async function fixIssues(
   const result = existingResult ?? await analyzeProject(cwd);
 
   if (result.issues.length === 0) {
-    console.log('✅ 没有需要修复的问题');
+    console.log(t(cwd).analyzeFixPipeline.noIssuesFound);
     return { fixed: 0, skipped: 0, unfixable: 0 };
   }
 
   console.log('');
   console.log('━'.repeat(SEPARATOR_WIDTH));
-  console.log('🔧 自动修复问题');
+  console.log(t(cwd).analyzeFixPipeline.autoFixIssues);
   if (nonInteractive) {
-    console.log('   (非交互模式)');
+    console.log('   ' + t(cwd).analyzeFixPipeline.nonInteractiveMode);
   }
   console.log('━'.repeat(SEPARATOR_WIDTH));
   console.log('');
@@ -1246,7 +1272,8 @@ export async function fixIssues(
     try {
       fixResult = await fixSingleIssue(issue, cwd, nonInteractive);
     } catch (error) {
-      console.error(`❌ 修复 ${issue.taskId} (${issue.type}) 时出错: ${error instanceof Error ? error.message : String(error)}`);
+      const errorMsg = error instanceof Error ? error.message : String(error);
+      console.error(t(cwd).analyzeFixPipeline.fixError.replace('{taskId}', issue.taskId).replace('{type}', issue.type).replace('{error}', errorMsg));
       fixResult = 'skipped';
     }
     if (fixResult === 'fixed') {
@@ -1260,9 +1287,9 @@ export async function fixIssues(
 
   console.log('');
   console.log('━'.repeat(SEPARATOR_WIDTH));
-  console.log(`✅ 共修复 ${fixedCount} 个问题`);
-  if (skippedCount > 0) console.log(`⏭️  跳过 ${skippedCount} 个问题`);
-  if (unfixableCount > 0) console.log(`⚠️  ${unfixableCount} 个问题无法自动修复`);
+  console.log(t(cwd).analyzeFixPipeline.fixComplete.replace('{count}', String(fixedCount)));
+  if (skippedCount > 0) console.log(t(cwd).analyzeFixPipeline.fixSkipped.replace('{count}', String(skippedCount)));
+  if (unfixableCount > 0) console.log(t(cwd).analyzeFixPipeline.fixUnfixable.replace('{count}', String(unfixableCount)));
   console.log('━'.repeat(SEPARATOR_WIDTH));
 
   return { fixed: fixedCount, skipped: skippedCount, unfixable: unfixableCount };
@@ -1357,21 +1384,21 @@ export async function fixPipeline(
 
   console.log('');
   console.log('━'.repeat(SEPARATOR_WIDTH));
-  console.log('🔧 analyze --fix 流水线模式');
+  console.log(t(cwd).analyzeFixPipeline.fixPipelineMode);
   const stages: string[] = [];
   if (runStage1) stages.push('1');
   if (runStage2) stages.push('2');
   if (runStage3) stages.push('3');
   if (runStage4) stages.push('4');
   if (runStage5) stages.push('5');
-  console.log(`   执行阶段: ${stages.join(', ')} / 5`);
+  console.log('   ' + t(cwd).analyzeFixPipeline.executingStages + ': ' + stages.join(', ') + ' / 5');
   console.log('━'.repeat(SEPARATOR_WIDTH));
 
   // ===== Stage 1: 规则引擎分析 =====
   let stage1Result: StageResult;
   if (runStage1) {
     const start = Date.now();
-    console.log('\n📋 Stage 1: 规则引擎分析...');
+    console.log('\n' + t(cwd).analyzeFixPipeline.stage1Analysis);
     try {
       analysisResult = await analyzeProject(cwd, false, aiOptions);
       const issueCount = analysisResult.issues.length;
@@ -1380,29 +1407,30 @@ export async function fixPipeline(
         executed: true,
         skipped: false,
         duration,
-        summary: `发现 ${issueCount} 个问题`,
+        summary: t(cwd).analyzeFixPipeline.stage1Complete.replace('{count}', String(issueCount)).replace('{duration}', (duration / 1000).toFixed(1)),
       };
-      console.log(`   ✅ Stage 1 完成: 发现 ${issueCount} 个问题 (${(duration / 1000).toFixed(1)}s)`);
+      console.log('   ' + t(cwd).analyzeFixPipeline.stage1Complete.replace('{count}', String(issueCount)).replace('{duration}', (duration / 1000).toFixed(1)));
     } catch (error) {
       const duration = Date.now() - start;
+      const errorMsg = error instanceof Error ? error.message : String(error);
       stage1Result = {
         executed: true,
         skipped: false,
         duration,
-        summary: `分析失败: ${error instanceof Error ? error.message : String(error)}`,
+        summary: t(cwd).analyzeFixPipeline.stage1Failed.replace('{error}', errorMsg),
       };
-      console.error(`   ❌ Stage 1 失败: ${error instanceof Error ? error.message : String(error)}`);
+      console.error('   ' + t(cwd).analyzeFixPipeline.stage1Failed.replace('{error}', errorMsg));
     }
   } else {
-    stage1Result = emptyStageResult('跳过 (--checkpoints-only 或 --quality-only)');
-    console.log('   ⏭️  Stage 1: 跳过');
+    stage1Result = emptyStageResult(t(cwd).analyzeFixPipeline.stage1Skipped);
+    console.log('   ' + t(cwd).analyzeFixPipeline.stage1Skipped);
   }
 
   // ===== Stage 2: 规则修复 =====
   let stage2Result: StageResult;
   if (runStage2 && analysisResult) {
     const start = Date.now();
-    console.log('\n🔧 Stage 2: 规则修复...');
+    console.log('\n' + t(cwd).analyzeFixPipeline.stage2Fix);
     try {
       const fixResult = await fixIssues(cwd, { nonInteractive }, analysisResult);
       const duration = Date.now() - start;
@@ -1410,23 +1438,24 @@ export async function fixPipeline(
         executed: true,
         skipped: false,
         duration,
-        summary: `修复 ${fixResult.fixed} 个, 跳过 ${fixResult.skipped} 个, 不可修复 ${fixResult.unfixable} 个`,
+        summary: t(cwd).analyzeFixPipeline.stage2Complete.replace('{fixed}', String(fixResult.fixed)).replace('{skipped}', String(fixResult.skipped)).replace('{duration}', (duration / 1000).toFixed(1)),
       };
-      console.log(`   ✅ Stage 2 完成: ${fixResult.fixed} 修复, ${fixResult.skipped} 跳过 (${(duration / 1000).toFixed(1)}s)`);
+      console.log('   ' + t(cwd).analyzeFixPipeline.stage2Complete.replace('{fixed}', String(fixResult.fixed)).replace('{skipped}', String(fixResult.skipped)).replace('{duration}', (duration / 1000).toFixed(1)));
     } catch (error) {
       const duration = Date.now() - start;
+      const errorMsg = error instanceof Error ? error.message : String(error);
       stage2Result = {
         executed: true,
         skipped: false,
         duration,
-        summary: `修复失败: ${error instanceof Error ? error.message : String(error)}`,
+        summary: t(cwd).analyzeFixPipeline.stage2Failed.replace('{error}', errorMsg),
       };
-      console.error(`   ❌ Stage 2 失败: ${error instanceof Error ? error.message : String(error)}`);
+      console.error('   ' + t(cwd).analyzeFixPipeline.stage2Failed.replace('{error}', errorMsg));
     }
   } else if (runStage2 && !analysisResult) {
     // Stage 1 was skipped but we still need analysis for stage 2
     const start = Date.now();
-    console.log('\n🔧 Stage 2: 规则修复 (含分析)...');
+    console.log('\n' + t(cwd).analyzeFixPipeline.stage2FixWithAnalysis);
     try {
       const fixResult = await fixIssues(cwd, { nonInteractive });
       const duration = Date.now() - start;
@@ -1434,29 +1463,30 @@ export async function fixPipeline(
         executed: true,
         skipped: false,
         duration,
-        summary: `修复 ${fixResult.fixed} 个, 跳过 ${fixResult.skipped} 个, 不可修复 ${fixResult.unfixable} 个`,
+        summary: t(cwd).analyzeFixPipeline.stage2Complete.replace('{fixed}', String(fixResult.fixed)).replace('{skipped}', String(fixResult.skipped)).replace('{duration}', (duration / 1000).toFixed(1)),
       };
-      console.log(`   ✅ Stage 2 完成: ${fixResult.fixed} 修复, ${fixResult.skipped} 跳过 (${(duration / 1000).toFixed(1)}s)`);
+      console.log('   ' + t(cwd).analyzeFixPipeline.stage2Complete.replace('{fixed}', String(fixResult.fixed)).replace('{skipped}', String(fixResult.skipped)).replace('{duration}', (duration / 1000).toFixed(1)));
     } catch (error) {
       const duration = Date.now() - start;
+      const errorMsg = error instanceof Error ? error.message : String(error);
       stage2Result = {
         executed: true,
         skipped: false,
         duration,
-        summary: `修复失败: ${error instanceof Error ? error.message : String(error)}`,
+        summary: t(cwd).analyzeFixPipeline.stage2Failed.replace('{error}', errorMsg),
       };
-      console.error(`   ❌ Stage 2 失败: ${error instanceof Error ? error.message : String(error)}`);
+      console.error('   ' + t(cwd).analyzeFixPipeline.stage2Failed.replace('{error}', errorMsg));
     }
   } else {
-    stage2Result = emptyStageResult('跳过 (--rules-only 未设置但缺少分析结果, 或 --checkpoints-only/--quality-only)');
-    console.log('   ⏭️  Stage 2: 跳过');
+    stage2Result = emptyStageResult(t(cwd).analyzeFixPipeline.stage2Skipped);
+    console.log('   ' + t(cwd).analyzeFixPipeline.stage2Skipped);
   }
 
   // ===== Stage 3: AI 分析 =====
   let stage3Result: StageResult;
   if (runStage3) {
     const start = Date.now();
-    console.log('\n🤖 Stage 3: AI 深度分析...');
+    console.log('\n' + t(cwd).analyzeFixPipeline.stage3AI);
     // Stage 3 is a placeholder for AI per-task analysis.
     // Currently uses deepAnalyze option if provided.
     if (aiOptions.deepAnalyze && !aiOptions.noAi) {
@@ -1473,18 +1503,19 @@ export async function fixPipeline(
           executed: true,
           skipped: false,
           duration,
-          summary: `AI 发现 ${aiIssues.length} 个语义问题`,
+          summary: t(cwd).analyzeFixPipeline.stage3Complete.replace('{count}', String(aiIssues.length)).replace('{duration}', (duration / 1000).toFixed(1)),
         };
-        console.log(`   ✅ Stage 3 完成: AI 发现 ${aiIssues.length} 个语义问题 (${(duration / 1000).toFixed(1)}s)`);
+        console.log('   ' + t(cwd).analyzeFixPipeline.stage3Complete.replace('{count}', String(aiIssues.length)).replace('{duration}', (duration / 1000).toFixed(1)));
       } catch (error) {
         const duration = Date.now() - start;
+        const errorMsg = error instanceof Error ? error.message : String(error);
         stage3Result = {
           executed: true,
           skipped: false,
           duration,
-          summary: `AI 分析失败: ${error instanceof Error ? error.message : String(error)}`,
+          summary: t(cwd).analyzeFixPipeline.stage3Failed.replace('{error}', errorMsg),
         };
-        console.error(`   ❌ Stage 3 失败: ${error instanceof Error ? error.message : String(error)}`);
+        console.error('   ' + t(cwd).analyzeFixPipeline.stage3Failed.replace('{error}', errorMsg));
       }
     } else {
       const duration = Date.now() - start;
@@ -1492,20 +1523,21 @@ export async function fixPipeline(
         executed: true,
         skipped: false,
         duration,
-        summary: 'AI 深度分析未启用 (使用 --deep-analyze 激活)',
+        summary: t(cwd).analyzeFixPipeline.stage3NotEnabled,
       };
-      console.log('   ⏭️  Stage 3: AI 深度分析未启用 (使用 --deep-analyze 激活完整 AI 分析)');
+      console.log('   ' + t(cwd).analyzeFixPipeline.stage3NotEnabled);
     }
   } else {
-    stage3Result = emptyStageResult(noAi ? '跳过 (--no-ai)' : '跳过 (--rules-only/--checkpoints-only/--quality-only)');
-    console.log(`   ⏭️  Stage 3: 跳过 (${noAi ? '--no-ai' : '未选择'})`);
+    const skipReason = noAi ? '--no-ai' : '--rules-only/--checkpoints-only/--quality-only';
+    stage3Result = emptyStageResult(t(cwd).analyzeFixPipeline.stage3Skipped.replace('{reason}', skipReason));
+    console.log('   ' + t(cwd).analyzeFixPipeline.stage3Skipped.replace('{reason}', skipReason));
   }
 
   // ===== Stage 4: 检查点修复 =====
   let stage4Result: StageResult;
   if (runStage4) {
     const start = Date.now();
-    console.log('\n📌 Stage 4: 检查点修复...');
+    console.log('\n' + t(cwd).analyzeFixPipeline.stage4Checkpoint);
     try {
       await fixCheckpoints(cwd, { nonInteractive, taskId });
       const duration = Date.now() - start;
@@ -1513,29 +1545,30 @@ export async function fixPipeline(
         executed: true,
         skipped: false,
         duration,
-        summary: '检查点修复完成',
+        summary: t(cwd).analyzeFixPipeline.stage4Complete.replace('{duration}', (duration / 1000).toFixed(1)),
       };
-      console.log(`   ✅ Stage 4 完成: 检查点修复 (${(duration / 1000).toFixed(1)}s)`);
+      console.log('   ' + t(cwd).analyzeFixPipeline.stage4Complete.replace('{duration}', (duration / 1000).toFixed(1)));
     } catch (error) {
       const duration = Date.now() - start;
+      const errorMsg = error instanceof Error ? error.message : String(error);
       stage4Result = {
         executed: true,
         skipped: false,
         duration,
-        summary: `检查点修复失败: ${error instanceof Error ? error.message : String(error)}`,
+        summary: t(cwd).analyzeFixPipeline.stage4Failed.replace('{error}', errorMsg),
       };
-      console.error(`   ❌ Stage 4 失败: ${error instanceof Error ? error.message : String(error)}`);
+      console.error('   ' + t(cwd).analyzeFixPipeline.stage4Failed.replace('{error}', errorMsg));
     }
   } else {
-    stage4Result = emptyStageResult('跳过 (--rules-only 或 --quality-only)');
-    console.log('   ⏭️  Stage 4: 跳过');
+    stage4Result = emptyStageResult(t(cwd).analyzeFixPipeline.stage4Skipped);
+    console.log('   ' + t(cwd).analyzeFixPipeline.stage4Skipped);
   }
 
   // ===== Stage 5: 质量报告 =====
   let stage5Result: StageResult;
   if (runStage5) {
     const start = Date.now();
-    console.log('\n📊 Stage 5: 质量报告...');
+    console.log('\n' + t(cwd).analyzeFixPipeline.stage5Quality);
     try {
       const scores = await performQualityCheck(cwd, aiOptions);
       showQualityReport(scores, { compact, json, threshold });
@@ -1544,17 +1577,17 @@ export async function fixPipeline(
       // 将低质量任务生成为 issue 并通过 fixSingleIssue 报告
       let qualityReportedCount = 0;
       if (lowQualityCount > 0) {
-        console.log(`\n   🔍 检测到 ${lowQualityCount} 个低质量任务，生成修复建议...`);
+        console.log('\n   ' + t(cwd).analyzeFixPipeline.qualityIssuesFound.replace('{count}', String(lowQualityCount)));
         for (const [taskId, score] of scores) {
           if (score.totalScore < threshold) {
             const qualityIssue: Issue = {
               taskId,
               type: 'low_quality',
               severity: score.totalScore < 40 ? 'high' : 'medium',
-              message: `任务内容质量低 (${score.totalScore}/100)`,
+              message: t(cwd).analyzeFixPipeline.lowQualityTask.replace('{taskId}', taskId).replace('{score}', String(score.totalScore)),
               suggestion: score.deductions.length > 0 && score.deductions[0]?.suggestion
                 ? score.deductions[0].suggestion
-                : '改善任务描述、检查点、关联文件等质量',
+                : t(cwd).analyzeFixPipeline.lowQualitySuggestion,
               details: { totalScore: score.totalScore, deductions: score.deductions },
             };
             await fixSingleIssue(qualityIssue, cwd, nonInteractive);
@@ -1568,22 +1601,23 @@ export async function fixPipeline(
         executed: true,
         skipped: false,
         duration,
-        summary: `检测 ${scores.size} 个任务, ${lowQualityCount} 个低质量, ${qualityReportedCount} 个已生成改进建议`,
+        summary: t(cwd).analyzeFixPipeline.stage5Complete.replace('{count}', String(scores.size)).replace('{suggestions}', String(qualityReportedCount)).replace('{duration}', (duration / 1000).toFixed(1)),
       };
-      console.log(`   ✅ Stage 5 完成: 检测 ${scores.size} 个任务, ${qualityReportedCount} 个改进建议 (${(duration / 1000).toFixed(1)}s)`);
+      console.log('   ' + t(cwd).analyzeFixPipeline.stage5Complete.replace('{count}', String(scores.size)).replace('{suggestions}', String(qualityReportedCount)).replace('{duration}', (duration / 1000).toFixed(1)));
     } catch (error) {
       const duration = Date.now() - start;
+      const errorMsg = error instanceof Error ? error.message : String(error);
       stage5Result = {
         executed: true,
         skipped: false,
         duration,
-        summary: `质量报告失败: ${error instanceof Error ? error.message : String(error)}`,
+        summary: t(cwd).analyzeFixPipeline.stage5Failed.replace('{error}', errorMsg),
       };
-      console.error(`   ❌ Stage 5 失败: ${error instanceof Error ? error.message : String(error)}`);
+      console.error('   ' + t(cwd).analyzeFixPipeline.stage5Failed.replace('{error}', errorMsg));
     }
   } else {
-    stage5Result = emptyStageResult('跳过 (--rules-only 或 --checkpoints-only)');
-    console.log('   ⏭️  Stage 5: 跳过');
+    stage5Result = emptyStageResult(t(cwd).analyzeFixPipeline.stage5Skipped);
+    console.log('   ' + t(cwd).analyzeFixPipeline.stage5Skipped);
   }
 
   // ===== Pipeline Summary =====
@@ -1593,7 +1627,7 @@ export async function fixPipeline(
 
   console.log('');
   console.log('━'.repeat(SEPARATOR_WIDTH));
-  console.log(`✅ 流水线完成: ${executedStages}/5 阶段已执行 (${(totalTime / 1000).toFixed(1)}s)`);
+  console.log(t(cwd).analyzeFixPipeline.pipelineComplete.replace('{stages}', String(executedStages)).replace('{duration}', (totalTime / 1000).toFixed(1)));
   console.log('━'.repeat(SEPARATOR_WIDTH));
 
   return {
@@ -1659,8 +1693,8 @@ export async function applyStatusInferenceFix(
 
   console.log('');
   console.log('━'.repeat(SEPARATOR_WIDTH));
-  console.log('🔧 applyStatusInferenceFix — 状态推断统一修复管道');
-  console.log(`   检查任务数: ${tasks.length}`);
+  console.log(t(cwd).analyzeFixPipeline.fixPipelineMode);
+  console.log('   ' + t(cwd).analyzeFixPipeline.executingStages + ': ' + tasks.length);
   console.log('━'.repeat(SEPARATOR_WIDTH));
 
   for (const task of tasks) {
@@ -1726,7 +1760,7 @@ export async function applyStatusInferenceFix(
 
   console.log('');
   console.log('━'.repeat(SEPARATOR_WIDTH));
-  console.log(`✅ 状态推断修复完成: ${applied} 个已修复, ${skipped} 个跳过`);
+  console.log(t(cwd).analyzeFixPipeline.fixComplete.replace('{count}', String(applied)) + ', ' + t(cwd).analyzeFixPipeline.fixSkipped.replace('{count}', String(skipped)));
   console.log('━'.repeat(SEPARATOR_WIDTH));
 
   return results;

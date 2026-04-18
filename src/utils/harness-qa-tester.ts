@@ -71,7 +71,7 @@ export class HarnessQATester {
     // 如果代码审核未通过，直接返回 NOPASS
     if (codeReviewVerdict.result !== 'PASS') {
       verdict.result = 'NOPASS';
-      verdict.reason = `代码审核未通过，跳过 QA 验证: ${codeReviewVerdict.reason}`;
+      verdict.reason = `${texts.harness.logs.qaSkippedDueToCodeReview}: ${codeReviewVerdict.reason}`;
       await this.saveReport(task.id, verdict);
       return verdict;
     }
@@ -113,7 +113,7 @@ export class HarnessQATester {
           verdict.requiresHuman = true;
           // 注意: requiresHuman 仅作为信息标记，reason 不附加人工检查点信息
           // 人工检查点信息通过 requiresHuman + humanVerificationCheckpoints 字段传递
-          const deferredInfo = `${humanCheckpoints.length} 个检查点已延期（deferred），等待人工验证: ${humanCheckpoints.map(cp => cp.id).join(', ')}`;
+          const deferredInfo = `${texts.harness.logs.deferredCheckpointsInfo.replace('{count}', String(humanCheckpoints.length))}: ${humanCheckpoints.map(cp => cp.id).join(', ')}`;
           verdict.details = verdict.details ? `${verdict.details}\n${deferredInfo}` : deferredInfo;
           console.log(`\n   ⏳ ${deferredInfo}`);
         }
@@ -169,6 +169,7 @@ export class HarnessQATester {
     failedCheckpoints: string[];
     details?: string;
   }> {
+    const texts = t(this.config.cwd);
     // 分离自动化检查点和人工验证检查点
     const automatedCheckpoints = checkpoints.filter(cp => !cp.requiresHuman);
     const humanCheckpoints = checkpoints.filter(cp => cp.requiresHuman === true);
@@ -179,12 +180,12 @@ export class HarnessQATester {
       return !result.valid;
     });
     if (checkpointsWithoutCommands.length > 0) {
-      console.log(`\n   ⚠️  ${checkpointsWithoutCommands.length} 个自动化检查点缺少验证命令:`);
+      console.log(`\n   ⚠️  ${texts.harness.logs.checkpointWarning.replace('{count}', String(checkpointsWithoutCommands.length))}:`);
       for (const cp of checkpointsWithoutCommands) {
         const result = validateCheckpointVerification(cp);
-        console.log(`      - [${cp.id}] ${result.warning || '缺少 commands/steps'}`);
+        console.log(`      - [${cp.id}] ${result.warning || texts.harness.logs.checkpointWarningDetail}`);
       }
-      console.log('      这些检查点将依赖 AI 自由验证，可能影响验证质量。');
+      console.log(`      ${texts.harness.logs.checkpointWarningFallback}`);
     }
 
     if (automatedCheckpoints.length === 0) {
@@ -192,7 +193,7 @@ export class HarnessQATester {
       // BUG-014-2B: reason 不包含"需要人工验证"字样，避免误导下游评估者
       return {
         passed: true,
-        reason: '无自动化 QA 检查点，自动化验证自动通过',
+        reason: texts.harness.logs.noAutomatedQACheckpoints,
         failures: [],
         failedCheckpoints: [],
       };
@@ -200,10 +201,10 @@ export class HarnessQATester {
 
     // 构建验证提示词
     const prompt = this.buildQAPrompt(task, codeReviewVerdict, automatedCheckpoints, retryContext);
-    console.log('\n   📝 QA 验证提示词已生成');
+    console.log(`\n   📝 ${texts.harness.logs.qaPromptGenerated}`);
 
     // 运行独立验证会话
-    console.log('\n   🤖 启动 QA 验证会话...');
+    console.log(`\n   🤖 ${texts.harness.logs.startingQASession}`);
     const agent = getAgent(this.config.cwd);
     const effectiveTools = buildEffectiveTools('qaVerification', this.config.cwd, task);
     const invokeOptions = {
@@ -227,13 +228,13 @@ export class HarnessQATester {
     );
 
     if (engineResult.retries > 0) {
-      console.log(`   🔄 QA 验证结果格式不匹配，已重试 ${engineResult.retries} 次`);
+      console.log(`   🔄 ${texts.harness.logs.qaRetry.replace('{retries}', String(engineResult.retries))}`);
     }
 
     if (!engineResult.result.success) {
       return {
         passed: false,
-        reason: `QA 验证会话失败: ${engineResult.result.error || '未知错误'}`,
+        reason: `${texts.harness.logs.qaSessionFailed}: ${engineResult.result.error || 'unknown error'}`,
         failures: [],
         failedCheckpoints: [],
       };
@@ -244,19 +245,19 @@ export class HarnessQATester {
       const violationMessages = engineResult.violations
         .map((v: { ruleId: string; message: string }) => `${v.ruleId}: ${v.message}`)
         .join('; ');
-      console.log(`   ⚠️  QA 验证输出格式验证未通过: ${violationMessages}`);
+      console.log(`   ⚠️  ${texts.harness.logs.qaOutputValidationFailed}: ${violationMessages}`);
 
       // 尝试从原始输出中提取可用信息
       const rawOutput = engineResult.result.output || '';
       const parsed = this.parseQAResult(rawOutput);
       // 如果解析到了有效结果（非默认原因），使用解析结果
-      if (parsed.reason && parsed.reason !== '无法解析判定结果') {
+      if (parsed.reason && parsed.reason !== texts.harness.logs.cannotParseVerdict) {
         return parsed;
       }
 
       return {
         passed: false,
-        reason: `QA 验证输出格式不符合要求: ${violationMessages}`,
+        reason: `${texts.harness.logs.qaOutputValidationFailed}: ${violationMessages}`,
         failures: [],
         failedCheckpoints: [],
       };
@@ -381,21 +382,23 @@ export class HarnessQATester {
    * 格式化 QA 报告
    */
   private formatReport(verdict: QAVerdict): string {
+    const texts = t(this.config.cwd);
+
     const lines: string[] = [
-      `# QA 验证报告 - ${verdict.taskId}`,
+      `# ${texts.harness.reports.qaReportTitle} - ${verdict.taskId}`,
       '',
-      `**结果**: ${verdict.result === 'PASS' ? '✅ PASS' : '❌ NOPASS'}`,
-      `**验证时间**: ${verdict.verifiedAt}`,
-      `**验证者**: ${verdict.verifiedBy}`,
-      `**需要人工验证**: ${verdict.requiresHuman ? '是' : '否'}`,
+      `**${texts.harness.reports.resultLabel}**: ${verdict.result === 'PASS' ? '✅ PASS' : '❌ NOPASS'}`,
+      `**${texts.harness.reports.reviewedAtLabel}**: ${verdict.verifiedAt}`,
+      `**${texts.harness.reports.reviewedByLabel}**: ${verdict.verifiedBy}`,
+      `**${texts.harness.reports.requiresHumanLabel}**: ${verdict.requiresHuman ? texts.harness.reports.yes : texts.harness.reports.no}`,
       '',
-      '## 原因',
+      `## ${texts.harness.reports.reasonSection}`,
       verdict.reason,
       '',
     ];
 
     if (verdict.testFailures.length > 0) {
-      lines.push('## 测试失败');
+      lines.push(`## ${texts.harness.reports.testFailuresSection}`);
       verdict.testFailures.forEach(failure => {
         lines.push(`- ${failure}`);
       });
@@ -403,7 +406,7 @@ export class HarnessQATester {
     }
 
     if (verdict.failedCheckpoints.length > 0) {
-      lines.push('## 未通过的检查点');
+      lines.push(`## ${texts.harness.reports.failedCheckpointsSection}`);
       verdict.failedCheckpoints.forEach(checkpoint => {
         lines.push(`- ${checkpoint}`);
       });
@@ -411,8 +414,8 @@ export class HarnessQATester {
     }
 
     if (verdict.humanVerificationCheckpoints.length > 0) {
-      lines.push('## 已延期（deferred）的检查点 - 等待人工验证');
-      lines.push('*这些检查点不参与 PASS/NOPASS 判定，仅等待人工后处理*');
+      lines.push(`## ${texts.harness.reports.humanVerificationSection}`);
+      lines.push(`*${texts.harness.reports.humanVerificationNote}*`);
       verdict.humanVerificationCheckpoints.forEach(checkpoint => {
         lines.push(`- ${checkpoint} [deferred]`);
       });
@@ -420,7 +423,7 @@ export class HarnessQATester {
     }
 
     if (verdict.details) {
-      lines.push('## 详细反馈');
+      lines.push(`## ${texts.harness.reports.detailsSection}`);
       lines.push(verdict.details);
       lines.push('');
     }

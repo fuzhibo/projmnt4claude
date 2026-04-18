@@ -7078,16 +7078,16 @@ var require_prompts3 = __commonJS((exports, module) => {
 // src/utils/path.ts
 import * as path from "path";
 import * as fs from "fs";
-function getProjectDir(cwd = process.cwd()) {
-  return path.join(cwd, ".projmnt4claude");
+function getProjectDir(cwd2 = process.cwd()) {
+  return path.join(cwd2, ".projmnt4claude");
 }
 function ensureDir(dir) {
   if (!fs.existsSync(dir)) {
     fs.mkdirSync(dir, { recursive: true });
   }
 }
-function isInitialized(cwd = process.cwd()) {
-  const projectDir = getProjectDir(cwd);
+function isInitialized(cwd2 = process.cwd()) {
+  const projectDir = getProjectDir(cwd2);
   const configPath = path.join(projectDir, "config.json");
   if (fs.existsSync(configPath)) {
     return true;
@@ -7106,26 +7106,26 @@ function isInitialized(cwd = process.cwd()) {
   }
   return false;
 }
-function getConfigPath(cwd = process.cwd()) {
-  return path.join(getProjectDir(cwd), "config.json");
+function getConfigPath(cwd2 = process.cwd()) {
+  return path.join(getProjectDir(cwd2), "config.json");
 }
-function getTasksDir(cwd = process.cwd()) {
-  return path.join(getProjectDir(cwd), "tasks");
+function getTasksDir(cwd2 = process.cwd()) {
+  return path.join(getProjectDir(cwd2), "tasks");
 }
-function getArchiveDir(cwd = process.cwd()) {
-  return path.join(getProjectDir(cwd), "archive");
+function getArchiveDir(cwd2 = process.cwd()) {
+  return path.join(getProjectDir(cwd2), "archive");
 }
-function getToolboxDir(cwd = process.cwd()) {
-  return path.join(getProjectDir(cwd), "toolbox");
+function getToolboxDir(cwd2 = process.cwd()) {
+  return path.join(getProjectDir(cwd2), "toolbox");
 }
-function getBinDir(cwd = process.cwd()) {
-  return path.join(getProjectDir(cwd), "bin");
+function getBinDir(cwd2 = process.cwd()) {
+  return path.join(getProjectDir(cwd2), "bin");
 }
-function getReportsDir(cwd = process.cwd()) {
-  return path.join(getProjectDir(cwd), "reports");
+function getReportsDir(cwd2 = process.cwd()) {
+  return path.join(getProjectDir(cwd2), "reports");
 }
-function getLogsDir(cwd = process.cwd()) {
-  return path.join(getProjectDir(cwd), "logs");
+function getLogsDir(cwd2 = process.cwd()) {
+  return path.join(getProjectDir(cwd2), "logs");
 }
 var init_path = () => {};
 
@@ -7160,13 +7160,20 @@ function resolveTemplate(template, variables) {
     return String(value);
   });
 }
-function loadPromptTemplate(name, cwd, language) {
-  const config = cwd ? readConfig(cwd) : null;
+function loadPromptTemplate(name, cwd2, language) {
+  const config = cwd2 ? readConfig(cwd2) : null;
   const prompts2 = config?.prompts;
+  if (prompts2?.customTemplates && typeof prompts2.customTemplates === "object") {
+    const customTemplates = prompts2.customTemplates;
+    if (typeof customTemplates[name] === "string") {
+      const lang2 = language || prompts2.language || config?.language || "en";
+      return customTemplates[name];
+    }
+  }
   if (prompts2 && typeof prompts2[name] === "string") {
     return prompts2[name];
   }
-  const lang = language || config?.language || "en";
+  const lang = language || prompts2?.language || config?.language || "en";
   const template = DEFAULT_TEMPLATES[name];
   return template[lang] || template.en;
 }
@@ -8429,11 +8436,11 @@ function ensureConfigDefaults(config) {
   }
   return result;
 }
-function readConfig(cwd = process.cwd()) {
-  if (!isInitialized(cwd)) {
+function readConfig(cwd2 = process.cwd()) {
+  if (!isInitialized(cwd2)) {
     return null;
   }
-  const configPath = getConfigPath(cwd);
+  const configPath = getConfigPath(cwd2);
   try {
     const content = fs4.readFileSync(configPath, "utf-8");
     return JSON.parse(content);
@@ -8441,8 +8448,8 @@ function readConfig(cwd = process.cwd()) {
     return null;
   }
 }
-function writeConfig(config, cwd = process.cwd()) {
-  const configPath = getConfigPath(cwd);
+function writeConfig(config, cwd2 = process.cwd()) {
+  const configPath = getConfigPath(cwd2);
   fs4.writeFileSync(configPath, JSON.stringify(config, null, 2), "utf-8");
 }
 function getConfigValue(config, key) {
@@ -8507,12 +8514,12 @@ function validateConfigValue(key, value, schema) {
       break;
   }
 }
-function listConfig(cwd = process.cwd()) {
-  if (!isInitialized(cwd)) {
+function listConfig(cwd2 = process.cwd()) {
+  if (!isInitialized(cwd2)) {
     console.error("Error: Project not initialized. Please run `projmnt4claude setup` first");
     process.exit(1);
   }
-  const config = readConfig(cwd);
+  const config = readConfig(cwd2);
   if (!config) {
     console.error("Error: Cannot read configuration file");
     process.exit(1);
@@ -8571,19 +8578,30 @@ function listConfig(cwd = process.cwd()) {
   console.log("");
   console.log("## Prompt Templates");
   const prompts2 = config.prompts;
+  if (prompts2?.language) {
+    console.log(`  language: ${prompts2.language}`);
+  } else {
+    console.log(`  language: ${config.language || "en"} (inherited from global)`);
+  }
+  console.log("");
+  const customTemplates = prompts2?.customTemplates;
+  console.log("  Custom Templates:");
   for (const name of PROMPT_TEMPLATE_NAMES) {
-    const hasCustom = prompts2 && typeof prompts2[name] === "string";
+    const hasCustomNew = customTemplates && typeof customTemplates[name] === "string";
+    const hasCustomOld = prompts2 && typeof prompts2[name] === "string";
+    const hasCustom = hasCustomNew || hasCustomOld;
     const label = hasCustom ? "custom" : "default";
-    console.log(`  ${name}: [${label}]`);
+    const format = hasCustomNew ? "(customTemplates)" : hasCustomOld ? "(legacy)" : "";
+    console.log(`    ${name}: [${label}] ${format}`);
   }
   console.log("");
 }
-function getConfig(key, cwd = process.cwd()) {
-  if (!isInitialized(cwd)) {
+function getConfig(key, cwd2 = process.cwd()) {
+  if (!isInitialized(cwd2)) {
     console.error("Error: Project not initialized. Please run `projmnt4claude setup` first");
     process.exit(1);
   }
-  const config = readConfig(cwd);
+  const config = readConfig(cwd2);
   if (!config) {
     console.error("Error: Cannot read configuration file");
     process.exit(1);
@@ -8595,45 +8613,71 @@ function getConfig(key, cwd = process.cwd()) {
   }
   console.log(value);
 }
-function setConfig(key, value, cwd = process.cwd()) {
-  if (!isInitialized(cwd)) {
+function setConfig(key, value, cwd2 = process.cwd()) {
+  if (!isInitialized(cwd2)) {
     console.error("Error: Project not initialized. Please run `projmnt4claude setup` first");
     process.exit(1);
   }
-  const config = readConfig(cwd);
+  const config = readConfig(cwd2);
   if (!config) {
     console.error("Error: Cannot read configuration file");
     process.exit(1);
   }
   if (key.startsWith("prompts.")) {
-    const templateName = key.substring("prompts.".length);
-    if (!PROMPT_TEMPLATE_NAMES.includes(templateName)) {
-      console.error(`Error: Unknown prompt template name '${templateName}'. Options: ${PROMPT_TEMPLATE_NAMES.join(", ")}`);
-      process.exit(1);
-    }
-    const variables = value.match(/\{(\w+)\}/g);
-    if (variables) {
-      const defaultTemplate = DEFAULT_TEMPLATES[templateName];
-      if (defaultTemplate) {
-        const zhVars = new Set((defaultTemplate.zh.match(/\{(\w+)\}/g) || []).map((v) => v));
-        const enVars = new Set((defaultTemplate.en.match(/\{(\w+)\}/g) || []).map((v) => v));
-        const customVars = new Set(variables);
-        const missingZh = [...zhVars].filter((v) => !customVars.has(v));
-        if (missingZh.length > 0) {
-          console.warn(`Warning: Custom template missing variables from default: ${missingZh.join(", ")}`);
-          console.warn("Missing variables may cause unsubstituted placeholders in prompts.");
+    const subKey = key.substring("prompts.".length);
+    if (subKey === "language") {
+      if (!["zh", "en"].includes(value)) {
+        console.error(`Error: prompts.language only allows: zh, en`);
+        process.exit(1);
+      }
+    } else if (subKey.startsWith("customTemplates.")) {
+      const templateName = subKey.substring("customTemplates.".length);
+      if (!PROMPT_TEMPLATE_NAMES.includes(templateName)) {
+        console.error(`Error: Unknown prompt template name '${templateName}'. Options: ${PROMPT_TEMPLATE_NAMES.join(", ")}`);
+        process.exit(1);
+      }
+      const variables = value.match(/\{(\w+)\}/g);
+      if (variables) {
+        const defaultTemplate = DEFAULT_TEMPLATES[templateName];
+        if (defaultTemplate) {
+          const zhVars = new Set((defaultTemplate.zh.match(/\{(\w+)\}/g) || []).map((v) => v));
+          const enVars = new Set((defaultTemplate.en.match(/\{(\w+)\}/g) || []).map((v) => v));
+          const customVars = new Set(variables);
+          const missingZh = [...zhVars].filter((v) => !customVars.has(v));
+          if (missingZh.length > 0) {
+            console.warn(`Warning: Custom template missing variables from default: ${missingZh.join(", ")}`);
+            console.warn("Missing variables may cause unsubstituted placeholders in prompts.");
+          }
         }
       }
+    } else if (PROMPT_TEMPLATE_NAMES.includes(subKey)) {
+      const variables = value.match(/\{(\w+)\}/g);
+      if (variables) {
+        const defaultTemplate = DEFAULT_TEMPLATES[subKey];
+        if (defaultTemplate) {
+          const zhVars = new Set((defaultTemplate.zh.match(/\{(\w+)\}/g) || []).map((v) => v));
+          const customVars = new Set(variables);
+          const missingZh = [...zhVars].filter((v) => !customVars.has(v));
+          if (missingZh.length > 0) {
+            console.warn(`Warning: Custom template missing variables from default: ${missingZh.join(", ")}`);
+            console.warn("Missing variables may cause unsubstituted placeholders in prompts.");
+          }
+        }
+      }
+    } else {
+      console.error(`Error: Unknown config key '${key}'`);
+      console.error(`Available keys: ${Object.keys(CONFIG_SCHEMA).join(", ")}, prompts.language, prompts.customTemplates.*, prompts.{${PROMPT_TEMPLATE_NAMES.join(", ")}}`);
+      process.exit(1);
     }
   } else if (key in CONFIG_SCHEMA) {
     validateConfigValue(key, value, CONFIG_SCHEMA[key]);
   } else {
     console.error(`Error: Unknown config key '${key}'`);
-    console.error(`Available keys: ${Object.keys(CONFIG_SCHEMA).join(", ")}, prompts.*`);
+    console.error(`Available keys: ${Object.keys(CONFIG_SCHEMA).join(", ")}, prompts.language, prompts.customTemplates.*, prompts.{${PROMPT_TEMPLATE_NAMES.join(", ")}}`);
     process.exit(1);
   }
   const newConfig = setConfigValue(config, key, value);
-  writeConfig(newConfig, cwd);
+  writeConfig(newConfig, cwd2);
   console.log(`\u2713 Set ${key} = ${value}`);
 }
 var CONFIG_SCHEMA;
@@ -8645,6 +8689,7 @@ var init_config2 = __esm(() => {
     projectName: { type: "string" },
     branchPrefix: { type: "string" },
     defaultPriority: { type: "string", enum: ["low", "medium", "high", "urgent"] },
+    language: { type: "string", enum: ["zh", "en"] },
     "logging.level": { type: "string", enum: ["debug", "info", "warn", "error"] },
     "logging.maxFiles": { type: "number", min: 1 },
     "logging.recordInputs": { type: "boolean" },
@@ -8654,7 +8699,8 @@ var init_config2 = __esm(() => {
     "training.exportEnabled": { type: "boolean" },
     "training.outputDir": { type: "string" },
     "quality.minScore": { type: "number", min: 0, max: 100 },
-    "gitHook.enabled": { type: "boolean" }
+    "gitHook.enabled": { type: "boolean" },
+    "prompts.language": { type: "string", enum: ["zh", "en"] }
   };
 });
 
@@ -9006,17 +9052,17 @@ function validateStatusTransition(fromStatus, toStatus) {
   }
   return { valid: false, reason: `${fromStatus} \u2192 ${toStatus} \u4E0D\u5728\u5141\u8BB8\u7684\u8F6C\u6362\u8DEF\u5F84\u4E2D` };
 }
-function getTaskDir(taskId, cwd = process.cwd()) {
-  return path4.join(getTasksDir(cwd), taskId);
+function getTaskDir(taskId, cwd2 = process.cwd()) {
+  return path4.join(getTasksDir(cwd2), taskId);
 }
-function getTaskMetaPath(taskId, cwd = process.cwd()) {
-  return path4.join(getTaskDir(taskId, cwd), "meta.json");
+function getTaskMetaPath(taskId, cwd2 = process.cwd()) {
+  return path4.join(getTaskDir(taskId, cwd2), "meta.json");
 }
-function readTaskMeta(taskId, cwd = process.cwd()) {
-  if (!isInitialized(cwd)) {
+function readTaskMeta(taskId, cwd2 = process.cwd()) {
+  if (!isInitialized(cwd2)) {
     return null;
   }
-  const metaPath = getTaskMetaPath(taskId, cwd);
+  const metaPath = getTaskMetaPath(taskId, cwd2);
   try {
     if (!fs5.existsSync(metaPath)) {
       return null;
@@ -9038,13 +9084,13 @@ function readTaskMeta(taskId, cwd = process.cwd()) {
     return null;
   }
 }
-function writeTaskMeta(task, cwd = process.cwd()) {
-  const taskDir = getTaskDir(task.id, cwd);
-  const metaPath = getTaskMetaPath(task.id, cwd);
+function writeTaskMeta(task, cwd2 = process.cwd()) {
+  const taskDir = getTaskDir(task.id, cwd2);
+  const metaPath = getTaskMetaPath(task.id, cwd2);
   if (!fs5.existsSync(taskDir)) {
     fs5.mkdirSync(taskDir, { recursive: true });
   }
-  const oldTask = readTaskMeta(task.id, cwd);
+  const oldTask = readTaskMeta(task.id, cwd2);
   const historyEntries = [];
   if (oldTask) {
     const fields = ["title", "description", "priority", "status", "recommendedRole", "branch", "dependencies", "type", "subtaskIds", "parentId", "checkpoints", "schemaVersion"];
@@ -9125,11 +9171,11 @@ function writeTaskMeta(task, cwd = process.cwd()) {
   task.updatedAt = new Date().toISOString();
   fs5.writeFileSync(metaPath, JSON.stringify(task, null, 2), "utf-8");
 }
-function getAllTaskIds(cwd = process.cwd()) {
-  if (!isInitialized(cwd)) {
+function getAllTaskIds(cwd2 = process.cwd()) {
+  if (!isInitialized(cwd2)) {
     return [];
   }
-  const tasksDir = getTasksDir(cwd);
+  const tasksDir = getTasksDir(cwd2);
   if (!fs5.existsSync(tasksDir)) {
     return [];
   }
@@ -9139,11 +9185,11 @@ function getAllTaskIds(cwd = process.cwd()) {
     return fs5.statSync(taskDir).isDirectory() && fs5.existsSync(metaPath);
   });
 }
-function getAllTasks(cwd = process.cwd(), includeArchived = false) {
-  const taskIds = getAllTaskIds(cwd);
-  const tasks = taskIds.map((id) => readTaskMeta(id, cwd)).filter((task) => task !== null);
+function getAllTasks(cwd2 = process.cwd(), includeArchived = false) {
+  const taskIds = getAllTaskIds(cwd2);
+  const tasks = taskIds.map((id) => readTaskMeta(id, cwd2)).filter((task) => task !== null);
   if (includeArchived) {
-    const archiveDir = path4.join(getProjectDir(cwd), "archive");
+    const archiveDir = path4.join(getProjectDir(cwd2), "archive");
     if (fs5.existsSync(archiveDir)) {
       const archivedTaskDirs = fs5.readdirSync(archiveDir).filter((name) => fs5.statSync(path4.join(archiveDir, name)).isDirectory());
       for (const taskId of archivedTaskDirs) {
@@ -9160,15 +9206,15 @@ function getAllTasks(cwd = process.cwd(), includeArchived = false) {
   }
   return tasks;
 }
-function generateNewTaskId(cwd = process.cwd(), type = "feature", priority = "P2", title = "task") {
-  const existingIds = getAllTaskIds(cwd);
+function generateNewTaskId(cwd2 = process.cwd(), type = "feature", priority = "P2", title = "task") {
+  const existingIds = getAllTaskIds(cwd2);
   return generateTaskId(type, priority, title, existingIds);
 }
-function taskExists(taskId, cwd = process.cwd()) {
-  return readTaskMeta(taskId, cwd) !== null;
+function taskExists(taskId, cwd2 = process.cwd()) {
+  return readTaskMeta(taskId, cwd2) !== null;
 }
-function generateSubtaskId(parentId, cwd = process.cwd()) {
-  const parentTask = readTaskMeta(parentId, cwd);
+function generateSubtaskId(parentId, cwd2 = process.cwd()) {
+  const parentTask = readTaskMeta(parentId, cwd2);
   if (!parentTask) {
     throw new Error(`\u7236\u4EFB\u52A1 ${parentId} \u4E0D\u5B58\u5728`);
   }
@@ -9185,8 +9231,8 @@ function generateSubtaskId(parentId, cwd = process.cwd()) {
   }
   return `${parentId}-${maxNum + 1}`;
 }
-function addSubtaskToParent(parentId, subtaskId, cwd = process.cwd()) {
-  const parentTask = readTaskMeta(parentId, cwd);
+function addSubtaskToParent(parentId, subtaskId, cwd2 = process.cwd()) {
+  const parentTask = readTaskMeta(parentId, cwd2);
   if (!parentTask) {
     throw new Error(`\u7236\u4EFB\u52A1 ${parentId} \u4E0D\u5B58\u5728`);
   }
@@ -9207,17 +9253,17 @@ function addSubtaskToParent(parentId, subtaskId, cwd = process.cwd()) {
     field: "subtaskIds",
     newValue: subtaskId
   });
-  writeTaskMeta(parentTask, cwd);
+  writeTaskMeta(parentTask, cwd2);
 }
-function getSubtasks(parentId, cwd = process.cwd()) {
-  const parentTask = readTaskMeta(parentId, cwd);
+function getSubtasks(parentId, cwd2 = process.cwd()) {
+  const parentTask = readTaskMeta(parentId, cwd2);
   if (!parentTask) {
     return [];
   }
   const subtaskIds = parentTask.subtaskIds || [];
   const subtasks = [];
   for (const subtaskId of subtaskIds) {
-    const subtask = readTaskMeta(subtaskId, cwd);
+    const subtask = readTaskMeta(subtaskId, cwd2);
     if (subtask) {
       subtasks.push(subtask);
     }
@@ -9238,12 +9284,12 @@ function parseParentFromSubtaskId(subtaskId) {
 function isSubtask(taskId) {
   return parseParentFromSubtaskId(taskId) !== null;
 }
-function getParentTask(taskId, cwd = process.cwd()) {
-  const task = readTaskMeta(taskId, cwd);
+function getParentTask(taskId, cwd2 = process.cwd()) {
+  const task = readTaskMeta(taskId, cwd2);
   if (!task || !task.parentId) {
     return null;
   }
-  return readTaskMeta(task.parentId, cwd);
+  return readTaskMeta(task.parentId, cwd2);
 }
 function shouldRecordHistory(history, field, oldValue, newValue) {
   if (oldValue === newValue) {
@@ -9260,8 +9306,8 @@ function shouldRecordHistory(history, field, oldValue, newValue) {
   }
   return true;
 }
-function updateTaskStatus(taskId, status, cwd = process.cwd(), reason, transitionNote, options) {
-  const task = readTaskMeta(taskId, cwd);
+function updateTaskStatus(taskId, status, cwd2 = process.cwd(), reason, transitionNote, options) {
+  const task = readTaskMeta(taskId, cwd2);
   if (!task) {
     throw new Error(`\u4EFB\u52A1 '${taskId}' \u4E0D\u5B58\u5728`);
   }
@@ -9331,7 +9377,7 @@ function updateTaskStatus(taskId, status, cwd = process.cwd(), reason, transitio
       author: "system"
     });
   }
-  writeTaskMeta(task, cwd);
+  writeTaskMeta(task, cwd2);
 }
 function buildTaskVerification(task) {
   const now = new Date().toISOString();
@@ -9367,8 +9413,8 @@ function buildTaskVerification(task) {
     note: checkpoints.length === 0 ? "\u4EFB\u52A1\u65E0\u68C0\u67E5\u70B9\uFF0C\u81EA\u52A8\u901A\u8FC7\u9A8C\u8BC1" : `\u5B8C\u6210 ${completedCount}/${checkpoints.length} \u4E2A\u68C0\u67E5\u70B9`
   };
 }
-function assignRole(taskId, role, cwd = process.cwd()) {
-  const task = readTaskMeta(taskId, cwd);
+function assignRole(taskId, role, cwd2 = process.cwd()) {
+  const task = readTaskMeta(taskId, cwd2);
   if (!task) {
     throw new Error(`\u4EFB\u52A1 '${taskId}' \u4E0D\u5B58\u5728`);
   }
@@ -9383,10 +9429,10 @@ function assignRole(taskId, role, cwd = process.cwd()) {
     newValue: role,
     user: process.env.USER || undefined
   });
-  writeTaskMeta(task, cwd);
+  writeTaskMeta(task, cwd2);
 }
-function incrementReopenCount(taskId, reason, cwd = process.cwd()) {
-  const task = readTaskMeta(taskId, cwd);
+function incrementReopenCount(taskId, reason, cwd2 = process.cwd()) {
+  const task = readTaskMeta(taskId, cwd2);
   if (!task) {
     throw new Error(`\u4EFB\u52A1 '${taskId}' \u4E0D\u5B58\u5728`);
   }
@@ -9402,10 +9448,10 @@ function incrementReopenCount(taskId, reason, cwd = process.cwd()) {
     reason,
     user: process.env.USER || undefined
   });
-  writeTaskMeta(task, cwd);
+  writeTaskMeta(task, cwd2);
 }
-function recordExecutionStats(taskId, stats, cwd = process.cwd()) {
-  const task = readTaskMeta(taskId, cwd);
+function recordExecutionStats(taskId, stats, cwd2 = process.cwd()) {
+  const task = readTaskMeta(taskId, cwd2);
   if (!task) {
     throw new Error(`\u4EFB\u52A1 '${taskId}' \u4E0D\u5B58\u5728`);
   }
@@ -9423,17 +9469,17 @@ function recordExecutionStats(taskId, stats, cwd = process.cwd()) {
     newValue: JSON.stringify(stats),
     user: process.env.USER || undefined
   });
-  writeTaskMeta(task, cwd);
+  writeTaskMeta(task, cwd2);
 }
-function renameTask(oldTaskId, newTaskId, cwd = process.cwd()) {
-  const task = readTaskMeta(oldTaskId, cwd);
+function renameTask(oldTaskId, newTaskId, cwd2 = process.cwd()) {
+  const task = readTaskMeta(oldTaskId, cwd2);
   if (!task) {
     return { success: false, oldId: oldTaskId, newId: newTaskId, error: `\u4EFB\u52A1 '${oldTaskId}' \u4E0D\u5B58\u5728` };
   }
-  if (oldTaskId !== newTaskId && taskExists(newTaskId, cwd)) {
+  if (oldTaskId !== newTaskId && taskExists(newTaskId, cwd2)) {
     return { success: false, oldId: oldTaskId, newId: newTaskId, error: `\u76EE\u6807 ID '${newTaskId}' \u5DF2\u88AB\u5360\u7528` };
   }
-  const tasksDir = getTasksDir(cwd);
+  const tasksDir = getTasksDir(cwd2);
   const oldDir = path4.join(tasksDir, oldTaskId);
   const newDir = path4.join(tasksDir, newTaskId);
   task.id = newTaskId;
@@ -9466,19 +9512,19 @@ function renameTask(oldTaskId, newTaskId, cwd = process.cwd()) {
       fs5.rmSync(oldDir, { recursive: true, force: true });
     } catch {}
   } else {
-    writeTaskMeta(task, cwd);
+    writeTaskMeta(task, cwd2);
   }
-  updateTaskReferences(oldTaskId, newTaskId, cwd);
+  updateTaskReferences(oldTaskId, newTaskId, cwd2);
   return { success: true, oldId: oldTaskId, newId: newTaskId };
 }
-function updateTaskReferences(oldId, newId, cwd) {
+function updateTaskReferences(oldId, newId, cwd2) {
   if (oldId === newId)
     return;
-  const allIds = getAllTaskIds(cwd);
+  const allIds = getAllTaskIds(cwd2);
   for (const tid of allIds) {
     if (tid === oldId || tid === newId)
       continue;
-    const task = readTaskMeta(tid, cwd);
+    const task = readTaskMeta(tid, cwd2);
     if (!task)
       continue;
     let changed = false;
@@ -9510,7 +9556,7 @@ function updateTaskReferences(oldId, newId, cwd) {
         newValue: newId,
         user: process.env.USER || undefined
       });
-      writeTaskMeta(task, cwd);
+      writeTaskMeta(task, cwd2);
     }
   }
 }
@@ -10220,8 +10266,8 @@ function generateCheckpointId(taskId, index, description) {
   }
   return `CP-${String(index + 1).padStart(3, "0")}`;
 }
-function parseCheckpointsWithIds(taskId, cwd = process.cwd()) {
-  const checkpointPath = path5.join(getTasksDir(cwd), taskId, "checkpoint.md");
+function parseCheckpointsWithIds(taskId, cwd2 = process.cwd()) {
+  const checkpointPath = path5.join(getTasksDir(cwd2), taskId, "checkpoint.md");
   if (!fs6.existsSync(checkpointPath)) {
     return [];
   }
@@ -10243,7 +10289,7 @@ function parseCheckpointsWithIds(taskId, cwd = process.cwd()) {
       });
     }
   }
-  const task = readTaskMeta(taskId, cwd);
+  const task = readTaskMeta(taskId, cwd2);
   const existingCheckpoints = task?.checkpoints || [];
   checkpoints.forEach((cp, index) => {
     const existing = existingCheckpoints.find((ec) => ec.description === cp.text);
@@ -10352,19 +10398,19 @@ function inferCheckpointCategory(description) {
   return;
 }
 function syncCheckpointsToMeta(taskId, checkpointsOrCwd, maybeCwd) {
-  const cwd = typeof checkpointsOrCwd === "string" ? checkpointsOrCwd : maybeCwd ?? process.cwd();
+  const cwd2 = typeof checkpointsOrCwd === "string" ? checkpointsOrCwd : maybeCwd ?? process.cwd();
   const checkpoints = Array.isArray(checkpointsOrCwd) ? checkpointsOrCwd : undefined;
-  const task = readTaskMeta(taskId, cwd);
+  const task = readTaskMeta(taskId, cwd2);
   if (!task) {
     throw new Error(`\u4EFB\u52A1 '${taskId}' \u4E0D\u5B58\u5728`);
   }
   if (checkpoints && Array.isArray(checkpoints)) {
     task.checkpoints = checkpoints;
-    writeTaskMeta(task, cwd);
-    updateCheckpointMdFromArray(taskId, checkpoints, cwd);
+    writeTaskMeta(task, cwd2);
+    updateCheckpointMdFromArray(taskId, checkpoints, cwd2);
     return;
   }
-  const parsedCheckpoints = parseCheckpointsWithIds(taskId, cwd);
+  const parsedCheckpoints = parseCheckpointsWithIds(taskId, cwd2);
   const existingMeta = task.checkpoints || [];
   const now = new Date().toISOString();
   const checkpointTexts = parsedCheckpoints.map((cp) => cp.text);
@@ -10373,7 +10419,7 @@ function syncCheckpointsToMeta(taskId, checkpointsOrCwd, maybeCwd) {
   if (filteredCheckpoints.length === 0) {
     if (task.checkpoints && task.checkpoints.length > 0) {
       task.checkpoints = [];
-      writeTaskMeta(task, cwd);
+      writeTaskMeta(task, cwd2);
     }
     return;
   }
@@ -10422,16 +10468,16 @@ function syncCheckpointsToMeta(taskId, checkpointsOrCwd, maybeCwd) {
   const hasChanges = JSON.stringify(task.checkpoints) !== JSON.stringify(mergedCheckpoints);
   if (hasChanges) {
     task.checkpoints = mergedCheckpoints;
-    writeTaskMeta(task, cwd);
+    writeTaskMeta(task, cwd2);
   }
 }
-function updateCheckpointStatus(taskId, checkpointId, status, options = {}, cwd = process.cwd()) {
-  const task = readTaskMeta(taskId, cwd);
+function updateCheckpointStatus(taskId, checkpointId, status, options = {}, cwd2 = process.cwd()) {
+  const task = readTaskMeta(taskId, cwd2);
   if (!task) {
     throw new Error(`\u4EFB\u52A1 '${taskId}' \u4E0D\u5B58\u5728`);
   }
-  syncCheckpointsToMeta(taskId, cwd);
-  const updatedTask = readTaskMeta(taskId, cwd);
+  syncCheckpointsToMeta(taskId, cwd2);
+  const updatedTask = readTaskMeta(taskId, cwd2);
   if (!updatedTask) {
     throw new Error(`\u4EFB\u52A1 '${taskId}' \u4E0D\u5B58\u5728`);
   }
@@ -10454,11 +10500,11 @@ function updateCheckpointStatus(taskId, checkpointId, status, options = {}, cwd 
     checkpoint.verification.verifiedAt = new Date().toISOString();
     checkpoint.verification.verifiedBy = options.verifiedBy || process.env.USER || "unknown";
   }
-  updateCheckpointMd(taskId, checkpointId, status === "completed", updatedTask, cwd);
-  writeTaskMeta(updatedTask, cwd);
+  updateCheckpointMd(taskId, checkpointId, status === "completed", updatedTask, cwd2);
+  writeTaskMeta(updatedTask, cwd2);
 }
-function updateCheckpointMd(taskId, checkpointId, checked, task, cwd = process.cwd()) {
-  const checkpointPath = path5.join(getTasksDir(cwd), taskId, "checkpoint.md");
+function updateCheckpointMd(taskId, checkpointId, checked, task, cwd2 = process.cwd()) {
+  const checkpointPath = path5.join(getTasksDir(cwd2), taskId, "checkpoint.md");
   if (!fs6.existsSync(checkpointPath))
     return;
   const content = fs6.readFileSync(checkpointPath, "utf-8");
@@ -10477,18 +10523,18 @@ function updateCheckpointMd(taskId, checkpointId, checked, task, cwd = process.c
   fs6.writeFileSync(checkpointPath, lines.join(`
 `), "utf-8");
 }
-function getCheckpointDetail(taskId, checkpointId, cwd = process.cwd()) {
-  syncCheckpointsToMeta(taskId, cwd);
-  const task = readTaskMeta(taskId, cwd);
+function getCheckpointDetail(taskId, checkpointId, cwd2 = process.cwd()) {
+  syncCheckpointsToMeta(taskId, cwd2);
+  const task = readTaskMeta(taskId, cwd2);
   return task?.checkpoints?.find((cp) => cp.id === checkpointId) || null;
 }
-function listCheckpoints(taskId, cwd = process.cwd()) {
-  syncCheckpointsToMeta(taskId, cwd);
-  const task = readTaskMeta(taskId, cwd);
+function listCheckpoints(taskId, cwd2 = process.cwd()) {
+  syncCheckpointsToMeta(taskId, cwd2);
+  const task = readTaskMeta(taskId, cwd2);
   return task?.checkpoints || [];
 }
-function updateCheckpointMdFromArray(taskId, checkpoints, cwd = process.cwd()) {
-  const checkpointPath = path5.join(getTasksDir(cwd), taskId, "checkpoint.md");
+function updateCheckpointMdFromArray(taskId, checkpoints, cwd2 = process.cwd()) {
+  const checkpointPath = path5.join(getTasksDir(cwd2), taskId, "checkpoint.md");
   const content = `# ${taskId} \u68C0\u67E5\u70B9
 
 ` + checkpoints.map((cp) => `- [ ] ${cp.description}`).join(`
@@ -10554,8 +10600,8 @@ function convertParsedCheckpointsToMetadata(parsedCheckpoints, task) {
     };
   });
 }
-function syncTextCheckpointsToMeta(taskId, cwd = process.cwd()) {
-  const task = readTaskMeta(taskId, cwd);
+function syncTextCheckpointsToMeta(taskId, cwd2 = process.cwd()) {
+  const task = readTaskMeta(taskId, cwd2);
   if (!task) {
     throw new Error(`\u4EFB\u52A1 '${taskId}' \u4E0D\u5B58\u5728`);
   }
@@ -10568,8 +10614,8 @@ function syncTextCheckpointsToMeta(taskId, cwd = process.cwd()) {
   }
   const checkpointMetadata = convertParsedCheckpointsToMetadata(parsedCheckpoints, task);
   task.checkpoints = checkpointMetadata;
-  writeTaskMeta(task, cwd);
-  updateCheckpointMdFromArray(taskId, checkpointMetadata, cwd);
+  writeTaskMeta(task, cwd2);
+  updateCheckpointMdFromArray(taskId, checkpointMetadata, cwd2);
   return true;
 }
 var VERIFICATION_KEYWORDS;
@@ -11688,10 +11734,10 @@ function detectContradiction(resultLabel, content) {
 function qualityScoreToVerdict(score, minScore = 60) {
   return score >= minScore ? "PASS" : "NOPASS";
 }
-function getQualityMinScore(cwd) {
+function getQualityMinScore(cwd2) {
   try {
     const { readConfig: readConfig2 } = (init_config2(), __toCommonJS(exports_config));
-    const config = readConfig2(cwd);
+    const config = readConfig2(cwd2);
     if (config) {
       const quality = config.quality;
       if (quality && typeof quality.minScore === "number") {
@@ -11729,9 +11775,9 @@ var init_contradiction_detector = __esm(() => {
 import * as fs7 from "fs";
 import * as path6 from "path";
 import { execSync as execSync2 } from "child_process";
-function getLogFilePath(command, cwd = process.cwd()) {
+function getLogFilePath(command, cwd2 = process.cwd()) {
   const date = new Date().toISOString().slice(0, 10).replace(/-/g, "");
-  const logsDir = getLogsDir(cwd);
+  const logsDir = getLogsDir(cwd2);
   ensureDir(logsDir);
   return path6.join(logsDir, `${command}-${date}.log`);
 }
@@ -12095,8 +12141,8 @@ class Logger {
     };
   }
 }
-function createLogger(command, cwd) {
-  const logger = new Logger({ command, cwd });
+function createLogger(command, cwd2) {
+  const logger = new Logger({ command, cwd: cwd2 });
   logger.logCommandStart(command);
   return logger;
 }
@@ -12384,11 +12430,11 @@ function parseVerdictResult(output, options) {
   }
   return result;
 }
-function getReportDir(taskId, cwd) {
-  return path7.join(getProjectDir(cwd), "reports", "harness", taskId);
+function getReportDir(taskId, cwd2) {
+  return path7.join(getProjectDir(cwd2), "reports", "harness", taskId);
 }
-function getReportPath(taskId, reportType, cwd) {
-  return path7.join(getReportDir(taskId, cwd), `${reportType}-report.md`);
+function getReportPath(taskId, reportType, cwd2) {
+  return path7.join(getReportDir(taskId, cwd2), `${reportType}-report.md`);
 }
 var REVIEW_TIMEOUT_RATIO = 3;
 var init_harness_helpers = __esm(() => {
@@ -12397,12 +12443,12 @@ var init_harness_helpers = __esm(() => {
 
 // src/utils/headless-agent.ts
 import * as fs9 from "fs";
-function buildEffectiveTools(phase, cwd, task) {
+function buildEffectiveTools(phase, cwd2, task) {
   const codeDefaults = PHASE_DEFAULT_TOOLS[phase] || ["Read", "Bash", "Grep", "Glob"];
   const configKey = PHASE_CONFIG_KEY[phase];
   let phaseTools = codeDefaults;
   try {
-    const configPath = getConfigPath(cwd);
+    const configPath = getConfigPath(cwd2);
     if (fs9.existsSync(configPath)) {
       const config = JSON.parse(fs9.readFileSync(configPath, "utf-8"));
       const configPhaseTools = config?.harness?.perPhaseTools?.[configKey || phase];
@@ -12568,9 +12614,9 @@ function initializeProviders() {
     agentRegistry.register(new ClaudeCodeProvider);
   }
 }
-function loadAIConfig(cwd) {
+function loadAIConfig(cwd2) {
   try {
-    const configPath = getConfigPath(cwd);
+    const configPath = getConfigPath(cwd2);
     if (!fs9.existsSync(configPath)) {
       return DEFAULT_AI;
     }
@@ -12587,8 +12633,8 @@ function loadAIConfig(cwd) {
     return DEFAULT_AI;
   }
 }
-function getAgent(cwd) {
-  const aiConfig = loadAIConfig(cwd);
+function getAgent(cwd2) {
+  const aiConfig = loadAIConfig(cwd2);
   return agentRegistry.getProvider(aiConfig.provider);
 }
 async function invokeAgent(prompt, options) {
@@ -12626,6 +12672,10 @@ var init_zh = __esm(() => {
     error: "\u9519\u8BEF",
     success: "\u6210\u529F",
     cancel: "\u53D6\u6D88",
+    common: {
+      skip: "\u8DF3\u8FC7",
+      notSelected: "\u672A\u9009\u62E9"
+    },
     setup: {
       initializing: "\u6B63\u5728\u521D\u59CB\u5316\u9879\u76EE\u7BA1\u7406\u73AF\u5883...",
       createDir: "\u521B\u5EFA\u76EE\u5F55",
@@ -12685,7 +12735,14 @@ var init_zh = __esm(() => {
       commandNotFound: "\u672A\u627E\u5230\u547D\u4EE4",
       tipUseHelp: "\u4F7F\u7528 `projmnt4claude help <command>` \u67E5\u770B\u547D\u4EE4\u8BE6\u7EC6\u8BF4\u660E",
       usage: "\u4F7F\u7528\u65B9\u5F0F",
-      examples: "\u793A\u4F8B"
+      examples: "\u793A\u4F8B",
+      suggestedCommands: "\uD83D\uDCA1 \u5EFA\u8BAE\u60A8\u4F7F\u7528\u4EE5\u4E0B\u547D\u4EE4:",
+      noRelatedCommands: "\uD83D\uDE15 \u6CA1\u6709\u627E\u5230\u76F4\u63A5\u76F8\u5173\u7684\u547D\u4EE4\u3002",
+      commonCommands: "\u4EE5\u4E0B\u662F\u4E00\u4E9B\u5E38\u7528\u547D\u4EE4:",
+      cmdTask: "\u7BA1\u7406\u9879\u76EE\u4EFB\u52A1",
+      cmdStatus: "\u67E5\u770B\u9879\u76EE\u72B6\u6001",
+      cmdPlan: "\u7BA1\u7406\u6267\u884C\u8BA1\u5212",
+      cmdSetup: "\u521D\u59CB\u5316\u9879\u76EE\u7BA1\u7406\u73AF\u5883"
     },
     config: {
       listHeader: "\u914D\u7F6E\u5217\u8868",
@@ -12915,6 +12972,7 @@ var init_zh = __esm(() => {
       ]
     },
     analyzeFixPipeline: {
+      nonStandardTransition: "\u975E\u6807\u51C6\u72B6\u6001\u8F6C\u6362 ({context}): {oldStatus} \u2192 {newStatus}",
       fixPipelineMode: "\uD83D\uDD27 analyze --fix \u6D41\u6C34\u7EBF\u6A21\u5F0F",
       executingStages: "\u6267\u884C\u9636\u6BB5",
       stage1Analysis: "\uD83D\uDCCB Stage 1: \u89C4\u5219\u5F15\u64CE\u5206\u6790...",
@@ -13051,7 +13109,39 @@ var init_zh = __esm(() => {
       fixingCheckpointPrefix: "\uD83D\uDD04 \u4FEE\u590D\u4EFB\u52A1 {taskId} \u7684\u68C0\u67E5\u70B9\u524D\u7F00...",
       noCheckpoints: "\u26A0\uFE0F \u4EFB\u52A1\u6CA1\u6709\u68C0\u67E5\u70B9",
       checkpointPrefixUpdated: "\u2705 \u5DF2\u4E3A {count} \u4E2A\u68C0\u67E5\u70B9\u6DFB\u52A0\u524D\u7F00",
-      allCheckpointsHavePrefix: "\u2139\uFE0F \u6240\u6709\u68C0\u67E5\u70B9\u5DF2\u6709\u6709\u6548\u524D\u7F00"
+      allCheckpointsHavePrefix: "\u2139\uFE0F \u6240\u6709\u68C0\u67E5\u70B9\u5DF2\u6709\u6709\u6548\u524D\u7F00",
+      deleted: "\u2705 \u5DF2\u5220\u9664 {taskId}",
+      taskNotExpired: "\u23ED\uFE0F  \u4EFB\u52A1 {taskId} \u672A\u8FC7\u671F ({days}\u5929)",
+      closedTask: "\u2705 \u5DF2\u5173\u95ED\u4EFB\u52A1 {taskId}",
+      markedInProgress: "\u2705 \u5DF2\u5C06\u4EFB\u52A1 {taskId} \u6807\u8BB0\u4E3A\u8FDB\u884C\u4E2D",
+      staleTaskPrompt: "\u4EFB\u52A1 {taskId} \u5DF2\u8FC7\u671F\uFF0C\u5982\u4F55\u5904\u7406?",
+      descriptionPrompt: "\u4E3A\u4EFB\u52A1 {taskId} \u6DFB\u52A0\u63CF\u8FF0 (\u7559\u7A7A\u8DF3\u8FC7):",
+      confirmCleanupAbandoned: "\u662F\u5426\u6E05\u9664\u8FD9\u4E9B abandoned \u6B8B\u7559\u4EFB\u52A1?",
+      confirmStatusChange: "\u662F\u5426\u5C06\u4EFB\u52A1 {taskId} \u72B6\u6001\u4ECE {oldStatus} \u4FEE\u6539\u4E3A {newStatus}?",
+      staleAutoCloseNote: "analyze --fix: \u975E\u4EA4\u4E92\u6A21\u5F0F\u4E0B\u81EA\u52A8\u5173\u95ED\u8FC7\u671F {days} \u5929\u7684\u4EFB\u52A1 (>30\u5929\u9608\u503C)",
+      staleUserCloseNote: "analyze --fix: \u7528\u6237\u4EA4\u4E92\u9009\u62E9\u5173\u95ED\u8FC7\u671F\u4EFB\u52A1",
+      staleUserProgressNote: "analyze --fix: \u7528\u6237\u4EA4\u4E92\u9009\u62E9\u5C06\u8FC7\u671F\u4EFB\u52A1\u6807\u8BB0\u4E3A\u8FDB\u884C\u4E2D",
+      legacyStatusFixNote: "analyze --fix: \u4FEE\u590D\u65E0\u6548\u72B6\u6001\u683C\u5F0F {oldStatus} \u2192 {newStatus}",
+      pipelineStatusMigrationNote: "analyze --fix: pipeline \u4E2D\u95F4\u72B6\u6001\u8FC1\u79FB {oldStatus} \u2192 {targetStatus}",
+      verificationCleared: '\u2705 verification: \u6E05\u9664\u65E0\u6548 verdictAction "{value}"',
+      invalidStatusValueFixNote: "analyze --fix: \u4FEE\u590D\u65E0\u6548\u72B6\u6001\u503C {oldStatus} \u2192 {newStatus}",
+      reopenMismatchFixNote: "\u8865\u5F55 reopen \u6D41\u8F6C\u8BB0\u5F55 (reopenCount={count})",
+      reopenedStatusMigrationNote: "analyze --fix: reopened \u72B6\u6001\u5DF2\u5E9F\u5F03\uFF0C\u8FC1\u79FB\u4E3A open",
+      inconsistentStatusFixNote: "analyze --fix: \u4FEE\u590D\u72B6\u6001\u77DB\u76FE (resolved + verification.failed)\uFF0C\u91CD\u7F6E\u4E3A open",
+      interruptedTaskAutoNote: "\u4E2D\u65AD\u4EFB\u52A1\u81EA\u52A8\u4FEE\u590D: {days} \u5929\u65E0\u6D3B\u8DC3 Pipeline",
+      interruptedTaskManualNote: "\u4E2D\u65AD\u4EFB\u52A1\u624B\u52A8\u786E\u8BA4\u4FEE\u590D: {days} \u5929\u65E0\u6D3B\u8DC3 Pipeline",
+      needsHumanStatusMigrationNote: "analyze --fix: needs_human \u72B6\u6001\u5DF2\u5E9F\u5F03\uFF0C\u8FC1\u79FB\u4E3A open \u4EE5\u4FBF\u91CD\u65B0\u5904\u7406",
+      checkpointPrefixFixNote: "analyze --fix: \u68C0\u67E5\u70B9\u524D\u7F00\u4FEE\u590D",
+      reportStatusMismatchNote: "analyze --fix: \u62A5\u544A-\u72B6\u6001\u4E0D\u4E00\u81F4\uFF0C\u72B6\u6001\u4ECE {oldStatus} \u66F4\u65B0\u4E3A {newStatus} ({reportFile} PASS)",
+      missingPipelineEvidenceNote: "analyze --fix: \u7F3A\u5C11 pipeline \u6062\u590D\u8BC1\u636E\uFF0C\u4ECE {oldStatus} \u91CD\u7F6E\u4E3A open",
+      deleteFailed: "\u274C \u5220\u9664 {taskId} \u5931\u8D25",
+      autoFixDescription: "\uD83D\uDCA1 {description}",
+      manualCheckCycle: "\u5EFA\u8BAE: \u624B\u52A8\u68C0\u67E5\u5E76\u8C03\u6574\u5FAA\u73AF\u4F9D\u8D56\u4E2D\u4EFB\u52A1\u7684\u4F9D\u8D56\u5173\u7CFB",
+      manualFixInvalidParent: "\u5EFA\u8BAE: \u624B\u52A8\u68C0\u67E5\u5E76\u5220\u9664\u65E0\u6548\u7684 parentId \u6216\u521B\u5EFA\u7236\u4EFB\u52A1",
+      lowQualitySuggestion: "\u6539\u5584\u4EFB\u52A1\u63CF\u8FF0\u3001\u68C0\u67E5\u70B9\u3001\u5173\u8054\u6587\u4EF6\u7B49\u8D28\u91CF",
+      qualityIssuesFound: "\u53D1\u73B0 {count} \u4E2A\u8D28\u91CF\u95EE\u9898",
+      deleteTaskConfirm: "\u662F\u5426\u5220\u9664\u4EFB\u52A1 {taskId}?",
+      result: "\u7ED3\u679C"
     },
     taskCommand: {
       checkpointQualityReminder: "\u26A0\uFE0F Checkpoint \u8D28\u91CF\u63D0\u9192",
@@ -13091,6 +13181,117 @@ var init_zh = __esm(() => {
       qualityGateImprovement: "\uD83D\uDCA1 \u6539\u8FDB\u5EFA\u8BAE\uFF1A",
       action: "\u64CD\u4F5C: {action}"
     },
+    setupCmd: {
+      alreadyInitialized: "\u9879\u76EE\u7BA1\u7406\u73AF\u5883\u5DF2\u5B58\u5728\uFF0C\u8DF3\u8FC7\u521D\u59CB\u5316\u3002",
+      directory: "\u76EE\u5F55: {path}",
+      tipUseForce: "\u63D0\u793A: \u4F7F\u7528 --force \u9009\u9879\u5F3A\u5236\u91CD\u65B0\u521D\u59CB\u5316\uFF08\u91CD\u65B0\u590D\u5236\u6280\u80FD\u6587\u4EF6\uFF09",
+      forceMode: "\u26A0\uFE0F \u5F3A\u5236\u91CD\u65B0\u521D\u59CB\u5316\u6A21\u5F0F...",
+      gitHookCreated: "  \u2713 Git Hook \u521B\u5EFA\u5B8C\u6210 (pre-commit, prepublishOnly)",
+      gitHookFailed: "  \u26A0\uFE0F Git Hook \u521B\u5EFA\u5931\u8D25: {error}",
+      gitHookDisabled: "  \u23ED\uFE0F  Git Hook \u521B\u5EFA\u5DF2\u901A\u8FC7\u914D\u7F6E\u7981\u7528 (gitHook.enabled = false)",
+      copySkillFile: "  \u2713 \u590D\u5236 SKILL.md ({language})",
+      copyCommandDocs: "  \u2713 \u590D\u5236 {count} \u4E2A\u547D\u4EE4\u6587\u6863 ({language})",
+      copyDefault: "  \u2713 \u590D\u5236 SKILL.md (default)",
+      fileNotFound: "  \u26A0\uFE0F SKILL.md \u672A\u627E\u5230",
+      dirNotFound: "  \u26A0\uFE0F \u547D\u4EE4\u6587\u6863\u76EE\u5F55\u672A\u627E\u5230: {path}",
+      pluginRootNotSet: "  \u26A0\uFE0F CLAUDE_PLUGIN_ROOT \u73AF\u5883\u53D8\u91CF\u672A\u8BBE\u7F6E\uFF0C\u8DF3\u8FC7\u6280\u80FD\u6587\u4EF6\u590D\u5236"
+    },
+    harnessCmd: {
+      projectNotInitialized: "\u9519\u8BEF: \u9879\u76EE\u672A\u521D\u59CB\u5316\u3002\u8BF7\u5148\u8FD0\u884C `projmnt4claude setup`",
+      concurrentPipelineRunning: "\u274C \u9519\u8BEF: \u53E6\u4E00\u4E2A Harness \u6D41\u6C34\u7EBF\u6B63\u5728\u8FD0\u884C",
+      activePipelineInfo: "\u6D3B\u8DC3\u6D41\u6C34\u7EBF\u4FE1\u606F:",
+      snapshotId: "   \u5FEB\u7167 ID: {id}",
+      processId: "   \u8FDB\u7A0B ID: {pid}",
+      createdAt: "   \u521B\u5EFA\u4E8E: {timestamp}",
+      taskCount: "   \u4EFB\u52A1\u6570: {count}",
+      possibleCauses: "\u53EF\u80FD\u539F\u56E0:",
+      solutions: "\u89E3\u51B3\u65B9\u6848:",
+      invalidMaxRetries: "\u9519\u8BEF: --max-retries \u5FC5\u987B >= 0",
+      invalidTimeout: "\u9519\u8BEF: --timeout \u5FC5\u987B >= 10 \u79D2",
+      invalidParallel: "\u9519\u8BEF: --parallel \u5FC5\u987B >= 1",
+      noExecutableTasks: "\u9519\u8BEF: \u6CA1\u6709\u53EF\u6267\u884C\u7684\u4EFB\u52A1",
+      batchLabel: "\u6279\u6B21 {index}",
+      parallelTag: " [\u5E76\u884C]",
+      dryRunComplete: "\u2705 \u5E72\u8FD0\u884C\u5B8C\u6210\uFF08\u672A\u5B9E\u9645\u6267\u884C\uFF09",
+      qualityGateCheck: "\uD83D\uDEA6 \u8D28\u91CF\u95E8\u7981\u68C0\u67E5",
+      minQualityScoreThreshold: "\uD83D\uDCCA \u6700\u4F4E\u8D28\u91CF\u5206\u9608\u503C: {score}",
+      qualityGateFailed: "\u274C \u8D28\u91CF\u95E8\u7981\u68C0\u67E5\u5931\u8D25\uFF0C\u4EE5\u4E0B\u4EFB\u52A1\u9700\u8981\u6539\u8FDB:",
+      tasksNeedImprovement: "\u9700\u8981\u6539\u8FDB\u7684\u4EFB\u52A1:",
+      allTasksPassed: "\u2705 \u6240\u6709\u4EFB\u52A1\u901A\u8FC7\u8D28\u91CF\u95E8\u7981\u68C0\u67E5",
+      resumingFromInterruption: "\uD83D\uDCE6 \u4ECE\u65AD\u70B9\u6062\u590D\u6267\u884C (\u4EFB\u52A1 {current}/{total})",
+      noPreviousState: "\uD83D\uDCE6 \u672A\u627E\u5230\u4E4B\u524D\u7684\u6267\u884C\u72B6\u6001\uFF0C\u4ECE\u5934\u5F00\u59CB",
+      stateFileMigrated: "\uD83D\uDCE6 \u72B6\u6001\u6587\u4EF6\u81EA\u52A8\u4ECE v{from} \u8FC1\u79FB\u5230 v{to}",
+      loadingStateFailed: "\u52A0\u8F7D\u8FD0\u884C\u65F6\u72B6\u6001\u5931\u8D25\uFF0C\u91CD\u7F6E: {error}",
+      cleaningOrphanSnapshots: "\uD83E\uDDF9 \u6E05\u7406\u5B64\u7ACB\u5FEB\u7167: {id} (PID: {pid})",
+      cleanedSnapshots: "\u2705 \u603B\u5171\u6E05\u7406 {count} \u4E2A\u5FEB\u7167",
+      forceCleanedSnapshots: "  \u26A0\uFE0F  \u5F3A\u5236\u6E05\u7406\u6D3B\u8DC3\u5FEB\u7167: {id} (PID: {pid})",
+      noSnapshotsFound: "\u2705 \u672A\u627E\u5230\u5FEB\u7167"
+    },
+    analyzeCmd: {
+      projectNotInitialized: "\u9519\u8BEF: \u9879\u76EE\u672A\u521D\u59CB\u5316\u3002\u8BF7\u5148\u8FD0\u884C `projmnt4claude setup`",
+      analyzingProject: "\u6B63\u5728\u5206\u6790\u9879\u76EE\u5065\u5EB7\u72B6\u6001...",
+      analysisComplete: "\u5206\u6790\u5B8C\u6210",
+      issuesFound: "\u53D1\u73B0 {count} \u4E2A\u95EE\u9898",
+      noIssues: "\u672A\u53D1\u73B0\u95EE\u9898",
+      fixApplied: "\u5DF2\u4FEE\u590D {count} \u4E2A\u95EE\u9898",
+      taskIdEmpty: "\u4EFB\u52A1 ID \u4E3A\u7A7A\u6216\u65E0\u6548",
+      taskIdFormatInvalid: "\u4EFB\u52A1 ID \u683C\u5F0F\u4E0D\u7B26\u5408\u89C4\u8303",
+      historyEntryNotObject: "history[{index}] \u4E0D\u662F\u6709\u6548\u5BF9\u8C61",
+      timestampMissing: "history[{index}].timestamp \u7F3A\u5931\u6216\u683C\u5F0F\u9519\u8BEF",
+      timestampInvalid: "history[{index}].timestamp \u4E0D\u662F\u6709\u6548\u7684 ISO \u65F6\u95F4\u6233",
+      actionMissing: "history[{index}].action \u7F3A\u5931\u6216\u683C\u5F0F\u9519\u8BEF",
+      checkpointNotObject: "checkpoints[{index}] \u4E0D\u662F\u6709\u6548\u5BF9\u8C61",
+      checkpointIdMissing: "checkpoints[{index}].id \u7F3A\u5931\u6216\u683C\u5F0F\u9519\u8BEF",
+      checkpointStatusInvalid: "checkpoints[{index}].status \u4E0D\u662F\u6709\u6548\u7684\u72B6\u6001\u503C",
+      schemaMigrationReopenCount: "\u6DFB\u52A0 reopenCount: 0",
+      schemaMigrationRequirementHistory: "\u6DFB\u52A0 requirementHistory: []",
+      schemaMigrationCommitHistory: "\u6DFB\u52A0 executionStats.commitHistory: []",
+      schemaMigrationTransitionNotes: "\u6DFB\u52A0 transitionNotes: []",
+      schemaMigrationResumeAction: "\u6DFB\u52A0 resumeAction: resume_pipeline (status={status})",
+      schemaMigrationCheckpointPrefix: '\u68C0\u67E5\u70B9\u524D\u7F00\u8865\u5168: "{old}" \u2192 "{new}"',
+      schemaMigrationCheckpointPolicy: "\u6DFB\u52A0 checkpointPolicy: {policy} (\u57FA\u4E8E {type}/{priority} \u63A8\u65AD)",
+      aiPromptTaskInfo: "## \u4EFB\u52A1\u57FA\u672C\u4FE1\u606F",
+      aiPromptHistory: "## \u5386\u53F2\u8BB0\u5F55 ({count} \u6761)",
+      aiPromptTransitionHistory: "## \u72B6\u6001\u8F6C\u6362\u8BB0\u5F55 ({count} \u6761)",
+      aiPromptCheckpoints: "## \u68C0\u67E5\u70B9 ({count} \u4E2A)",
+      aiPromptVerification: "## \u9A8C\u8BC1\u4FE1\u606F",
+      aiPromptLayer1Results: "## Layer 1 \u68C0\u6D4B\u7ED3\u679C ({count} \u4E2A\u95EE\u9898)",
+      aiPromptNoHistory: "## \u5386\u53F2\u8BB0\u5F55: \u65E0",
+      aiPromptNoTransitionHistory: "## \u72B6\u6001\u8F6C\u6362\u8BB0\u5F55: \u65E0",
+      aiPromptNoCheckpoints: "## \u68C0\u67E5\u70B9: \u65E0",
+      aiPromptNoVerification: "## \u9A8C\u8BC1\u4FE1\u606F: \u65E0",
+      aiPromptNoLayer1Issues: "## Layer 1 \u68C0\u6D4B\u7ED3\u679C: \u65E0\u95EE\u9898",
+      aiPromptTaskAnalysisExpert: "\u4F60\u662F\u4E00\u4E2A\u4EFB\u52A1\u72B6\u6001\u5206\u6790\u4E13\u5BB6\u3002\u6839\u636E\u4EE5\u4E0B\u4EFB\u52A1\u4E0A\u4E0B\u6587\uFF0C\u63A8\u65AD\u4EFB\u52A1\u7684\u6B63\u786E\u72B6\u6001\u3002",
+      aiPromptAnalyzeContext: "\u8BF7\u5206\u6790\u4EFB\u52A1\u7684\u5386\u53F2\u8BB0\u5F55\u3001\u8F6C\u6362\u8BB0\u5F55\u548C\u5F53\u524D\u72B6\u6001\uFF0C\u63A8\u65AD\u4EFB\u52A1\u5F53\u524D\u5E94\u8BE5\u5904\u4E8E\u4EC0\u4E48\u72B6\u6001\u3002",
+      aiPromptJsonFormat: "\u4E25\u683C\u6309\u7167\u4EE5\u4E0B JSON \u683C\u5F0F\u8F93\u51FA\uFF08\u4E0D\u8981\u8F93\u51FA\u5176\u4ED6\u5185\u5BB9\uFF09:",
+      aiPromptInferredStatus: '"inferredStatus": "\u72B6\u6001\u503C\uFF0C\u5FC5\u987B\u662F: open, in_progress, wait_review, wait_qa, wait_evaluation, resolved, closed, abandoned, failed"',
+      aiPromptConfidence: '"confidence": 0.0\u52301.0\u4E4B\u95F4\u7684\u7F6E\u4FE1\u5EA6',
+      aiPromptReasoning: '"reasoning": "\u63A8\u65AD\u4F9D\u636E\u7684\u7B80\u77ED\u8BF4\u660E"',
+      aiPromptSuggestion: '"suggestion": "\u4FEE\u590D\u5EFA\u8BAE"',
+      issueMissingDescription: "\u4EFB\u52A1\u7F3A\u5C11\u63CF\u8FF0",
+      issueResolvedNoVerification: "\u4EFB\u52A1\u5DF2 resolved \u4F46\u7F3A\u5C11 verification \u5B57\u6BB5",
+      issueOldFormatId: "\u4EFB\u52A1\u4F7F\u7528\u65E7\u683C\u5F0F ID",
+      issueMissingSlug: "\u4EFB\u52A1 ID \u7F3A\u5C11\u6709\u610F\u4E49\u7684 slug",
+      transitionStartExecution: "\u5F00\u59CB\u6267\u884C\u4EFB\u52A1",
+      transitionSubmitReview: "\u63D0\u4EA4\u4EE3\u7801\u5BA1\u67E5",
+      transitionReviewPass: "\u5BA1\u67E5\u901A\u8FC7\uFF0C\u8FDB\u5165QA",
+      transitionEvalPass: "\u8BC4\u4F30\u901A\u8FC7\uFF0C\u4EFB\u52A1\u5B8C\u6210",
+      transitionCloseTask: "\u5173\u95ED\u4EFB\u52A1",
+      transitionDirectComplete: "\u76F4\u63A5\u6807\u8BB0\u5B8C\u6210",
+      transitionReopenTask: "\u91CD\u65B0\u6253\u5F00\u4EFB\u52A1",
+      transitionRestartExecution: "\u91CD\u65B0\u5F00\u59CB\u6267\u884C",
+      transitionAbandonTask: "\u653E\u5F03\u4EFB\u52A1",
+      transitionReturnTodo: "\u9000\u56DE\u5F85\u529E",
+      statusSuggestionCheckpointRate: "\u68C0\u67E5\u70B9\u5B8C\u6210\u7387 {rate}%\uFF0C\u5EFA\u8BAE\u8F6C\u4E3A wait_qa",
+      statusSuggestionKeepInProgress: "\u4E2D\u65AD\u65F6\u95F4\u77ED\u4E14\u65E0\u9700\u4EBA\u5DE5\u68C0\u67E5\u70B9\uFF0C\u5EFA\u8BAE\u4FDD\u6301 in_progress",
+      statusSuggestionResetOpen: "\u4EFB\u52A1\u4E2D\u65AD\u8F83\u4E45\uFF0C\u5EFA\u8BAE\u91CD\u7F6E\u4E3A open \u4EE5\u4FBF\u91CD\u65B0\u89C4\u5212",
+      depSuggestionCheckIndependence: "\u8BE5\u4EFB\u52A1\u53EF\u80FD\u6709\u9690\u542B\u7684\u4F9D\u8D56\u5173\u7CFB\uFF0C\u8BF7\u786E\u8BA4\u662F\u5426\u72EC\u7ACB",
+      depSuggestionIndependentModule: "\u8BE5\u4EFB\u52A1\u4E3A\u72EC\u7ACB\u6A21\u5757\uFF0C\u65E0\u9700\u5904\u7406",
+      unknown: "\u672A\u77E5",
+      none: "\u65E0",
+      reportResultPass: "**\u7ED3\u679C**: \u2705 PASS",
+      reportResultNopass: "**\u7ED3\u679C**: \u274C NOPASS"
+    },
     harness: {
       timeoutHeader: "\u8D85\u65F6\u9650\u5236",
       taskDescription: "\u4EFB\u52A1\u63CF\u8FF0",
@@ -13128,6 +13329,7 @@ var init_zh = __esm(() => {
         evidenceCollected: "\u6536\u96C6\u8BC1\u636E",
         checkpointsCompleted: "\u5B8C\u6210\u68C0\u67E5\u70B9",
         devPhaseError: "\u5F00\u53D1\u9636\u6BB5\u51FA\u9519",
+        devPhaseNotComplete: "\u5F00\u53D1\u9636\u6BB5\u672A\u6210\u529F\u5B8C\u6210",
         evalTaskLabel: "\u8BC4\u4F30\u4EFB\u52A1",
         devStatusLabel: "\u5F00\u53D1\u72B6\u6001",
         evalPromptGenerated: "\u8BC4\u4F30\u63D0\u793A\u8BCD\u5DF2\u751F\u6210",
@@ -13149,6 +13351,10 @@ var init_zh = __esm(() => {
         codeReviewPassed: "\u4EE3\u7801\u5BA1\u6838\u901A\u8FC7",
         codeReviewFailed: "\u4EE3\u7801\u5BA1\u6838\u672A\u901A\u8FC7",
         codeReviewError: "\u4EE3\u7801\u5BA1\u6838\u51FA\u9519",
+        codeReviewSessionFailed: "\u4EE3\u7801\u5BA1\u6838\u4F1A\u8BDD\u5931\u8D25",
+        codeReviewPromptGenerated: "\u4EE3\u7801\u5BA1\u6838\u63D0\u793A\u8BCD\u5DF2\u751F\u6210",
+        startingCodeReviewSession: "\u542F\u52A8\u4EE3\u7801\u5BA1\u6838\u4F1A\u8BDD...",
+        codeReviewRetry: "\u4EE3\u7801\u5BA1\u6838\u7ED3\u679C\u683C\u5F0F\u4E0D\u5339\u914D\uFF0C\u5DF2\u91CD\u8BD5 {retries} \u6B21",
         qaPhase: "QA \u9A8C\u8BC1\u9636\u6BB5...",
         qaCheckpoints: "QA \u9A8C\u8BC1\u68C0\u67E5\u70B9",
         noQACheckpoints: "\u65E0 QA \u9A8C\u8BC1\u68C0\u67E5\u70B9\uFF0C\u81EA\u52A8\u901A\u8FC7",
@@ -13158,9 +13364,26 @@ var init_zh = __esm(() => {
         qaPassedWithHuman: "\u81EA\u52A8\u5316\u9A8C\u8BC1\u901A\u8FC7\uFF0C\u7B49\u5F85\u4EBA\u5DE5\u9A8C\u8BC1",
         qaFailed: "QA \u9A8C\u8BC1\u672A\u901A\u8FC7",
         qaError: "QA \u9A8C\u8BC1\u51FA\u9519",
+        qaSkippedDueToCodeReview: "\u4EE3\u7801\u5BA1\u6838\u672A\u901A\u8FC7\uFF0C\u8DF3\u8FC7 QA \u9A8C\u8BC1",
         checkpointWarning: "\u4E2A\u81EA\u52A8\u5316\u68C0\u67E5\u70B9\u7F3A\u5C11\u9A8C\u8BC1\u547D\u4EE4",
         checkpointWarningDetail: "\u7F3A\u5C11 commands/steps",
         checkpointWarningFallback: "\u8FD9\u4E9B\u68C0\u67E5\u70B9\u5C06\u4F9D\u8D56 AI \u81EA\u7531\u9A8C\u8BC1\uFF0C\u53EF\u80FD\u5F71\u54CD\u9A8C\u8BC1\u8D28\u91CF\u3002",
+        noAutomatedQACheckpoints: "\u65E0\u81EA\u52A8\u5316 QA \u68C0\u67E5\u70B9\uFF0C\u81EA\u52A8\u5316\u9A8C\u8BC1\u81EA\u52A8\u901A\u8FC7",
+        qaPromptGenerated: "QA \u9A8C\u8BC1\u63D0\u793A\u8BCD\u5DF2\u751F\u6210",
+        startingQASession: "\u542F\u52A8 QA \u9A8C\u8BC1\u4F1A\u8BDD...",
+        qaRetry: "QA \u9A8C\u8BC1\u7ED3\u679C\u683C\u5F0F\u4E0D\u5339\u914D\uFF0C\u5DF2\u91CD\u8BD5 {retries} \u6B21",
+        qaSessionFailed: "QA \u9A8C\u8BC1\u4F1A\u8BDD\u5931\u8D25",
+        qaOutputValidationFailed: "QA \u9A8C\u8BC1\u8F93\u51FA\u683C\u5F0F\u9A8C\u8BC1\u672A\u901A\u8FC7",
+        cannotParseVerdict: "\u65E0\u6CD5\u89E3\u6790\u5224\u5B9A\u7ED3\u679C",
+        deferredCheckpointsInfo: "{count} \u4E2A\u68C0\u67E5\u70B9\u5DF2\u5EF6\u671F\uFF08deferred\uFF09\uFF0C\u7B49\u5F85\u4EBA\u5DE5\u9A8C\u8BC1",
+        phantomTaskViolation: "\u4E25\u91CD\u8FDD\u89C4\uFF1A\u5F00\u53D1\u8005\u5728\u6267\u884C\u671F\u95F4\u521B\u5EFA\u4E86 {count} \u4E2A\u989D\u5916\u4EFB\u52A1 ({tasks}). \u5F00\u53D1\u8005\u88AB\u4E25\u683C\u7981\u6B62\u521B\u5EFA\u65B0\u4EFB\u52A1\u3002",
+        phantomTaskCriteria: "\u7981\u6B62\u521B\u5EFA\u65B0\u4EFB\u52A1",
+        phantomTaskPrefix: "\u5E7D\u7075\u4EFB\u52A1",
+        phantomTaskDetails: "\u68C0\u6D4B\u5230\u5F00\u53D1\u8005\u521B\u5EFA\u4E86\u4E0D\u5C5E\u4E8E\u539F\u59CB\u8BA1\u5212\u7684\u989D\u5916\u4EFB\u52A1\u3002\u8FD9\u8FDD\u53CD\u4E86\u5F00\u53D1\u8005\u804C\u8D23\u8303\u56F4\u2014\u2014\u5F00\u53D1\u8005\u53EA\u5E94\u5B9E\u73B0\u88AB\u5206\u914D\u4EFB\u52A1\u7684\u4EE3\u7801\u53D8\u66F4\uFF0C\u800C\u975E\u521B\u5EFA\u65B0\u4EFB\u52A1\u3002",
+        emptyOutputError: "\u8BC4\u4F30\u4F1A\u8BDD\u8F93\u51FA\u4E3A\u7A7A\uFF1AClaude \u8FDB\u7A0B\u53EF\u80FD\u5F02\u5E38\u9000\u51FA",
+        evaluationOutputEmpty: "\u8BC4\u4F30\u8F93\u51FA\u4E3A\u7A7A\uFF0CClaude \u8FDB\u7A0B\u53EF\u80FD\u5F02\u5E38\u9000\u51FA",
+        contradictionFix: "\u77DB\u76FE\u4FEE\u6B63",
+        evalParseError: "\u65E0\u6CD5\u89E3\u6790\u8BC4\u4F30\u7ED3\u679C",
         phantomTaskDetected: "\u68C0\u6D4B\u5230 {count} \u4E2A\u5E7D\u7075\u4EFB\u52A1",
         phantomTaskAutoNopass: "\u68C0\u6D4B\u5230\u5E7D\u7075\u4EFB\u52A1\uFF0C\u81EA\u52A8 NOPASS",
         noPhantomTask: "\u672A\u68C0\u6D4B\u5230\u5E7D\u7075\u4EFB\u52A1",
@@ -13188,6 +13411,8 @@ var init_zh = __esm(() => {
         resultLabel: "\u7ED3\u679C",
         reviewedAtLabel: "\u5BA1\u67E5\u65F6\u95F4",
         reviewedByLabel: "\u5BA1\u67E5\u8005",
+        verifiedAtLabel: "\u9A8C\u8BC1\u65F6\u95F4",
+        verifiedByLabel: "\u9A8C\u8BC1\u8005",
         inferenceTypeLabel: "\u63A8\u65AD\u7C7B\u578B",
         reasonSection: "\u539F\u56E0",
         failedCriteriaSection: "\u672A\u6EE1\u8DB3\u7684\u9A8C\u6536\u6807\u51C6",
@@ -13223,6 +13448,10 @@ var init_en = __esm(() => {
     error: "Error",
     success: "Success",
     cancel: "Cancel",
+    common: {
+      skip: "Skip",
+      notSelected: "Not selected"
+    },
     setup: {
       initializing: "Initializing project management environment...",
       createDir: "Create directory",
@@ -13282,7 +13511,14 @@ var init_en = __esm(() => {
       commandNotFound: "Command not found",
       tipUseHelp: "Use `projmnt4claude help <command>` for detailed command usage",
       usage: "Usage",
-      examples: "Examples"
+      examples: "Examples",
+      suggestedCommands: "\uD83D\uDCA1 Suggested commands:",
+      noRelatedCommands: "\uD83D\uDE15 No directly related commands found.",
+      commonCommands: "Common commands:",
+      cmdTask: "Manage project tasks",
+      cmdStatus: "View project status",
+      cmdPlan: "Manage execution plan",
+      cmdSetup: "Initialize project environment"
     },
     config: {
       listHeader: "Config List",
@@ -13512,6 +13748,7 @@ var init_en = __esm(() => {
       ]
     },
     analyzeFixPipeline: {
+      nonStandardTransition: "Non-standard status transition ({context}): {oldStatus} \u2192 {newStatus}",
       fixPipelineMode: "\uD83D\uDD27 analyze --fix pipeline mode",
       executingStages: "Executing stages",
       stage1Analysis: "\uD83D\uDCCB Stage 1: Rule engine analysis...",
@@ -13648,7 +13885,39 @@ var init_en = __esm(() => {
       fixingCheckpointPrefix: "\uD83D\uDD04 Fixing checkpoint prefix for task {taskId}...",
       noCheckpoints: "\u26A0\uFE0F Task has no checkpoints",
       checkpointPrefixUpdated: "\u2705 Added prefix to {count} checkpoints",
-      allCheckpointsHavePrefix: "\u2139\uFE0F All checkpoints already have valid prefixes"
+      allCheckpointsHavePrefix: "\u2139\uFE0F All checkpoints already have valid prefixes",
+      deleted: "\u2705 Deleted {taskId}",
+      taskNotExpired: "\u23ED\uFE0F Task {taskId} not expired ({days} days)",
+      closedTask: "\u2705 Closed task {taskId}",
+      markedInProgress: "\u2705 Marked task {taskId} as in progress",
+      staleTaskPrompt: "Task {taskId} is stale. How to handle?",
+      descriptionPrompt: "Add description for task {taskId} (leave empty to skip):",
+      confirmCleanupAbandoned: "Clean up these abandoned residual tasks?",
+      confirmStatusChange: "Change task {taskId} status from {oldStatus} to {newStatus}?",
+      staleAutoCloseNote: "analyze --fix: Auto-closed stale task ({days} days, >30 day threshold) in non-interactive mode",
+      staleUserCloseNote: "analyze --fix: User chose to close stale task",
+      staleUserProgressNote: "analyze --fix: User chose to mark stale task as in progress",
+      legacyStatusFixNote: "analyze --fix: Fixed invalid status format {oldStatus} \u2192 {newStatus}",
+      pipelineStatusMigrationNote: "analyze --fix: Pipeline status migration {oldStatus} \u2192 {targetStatus}",
+      verificationCleared: '\u2705 verification: Cleared invalid verdictAction "{value}"',
+      invalidStatusValueFixNote: "analyze --fix: Fixed invalid status value {oldStatus} \u2192 {newStatus}",
+      reopenMismatchFixNote: "Recorded reopen transition (reopenCount={count})",
+      reopenedStatusMigrationNote: "analyze --fix: reopened status deprecated, migrated to open",
+      inconsistentStatusFixNote: "analyze --fix: Fixed status contradiction (resolved + verification.failed), reset to open",
+      interruptedTaskAutoNote: "Interrupted task auto-fix: {days} days without active Pipeline",
+      interruptedTaskManualNote: "Interrupted task manual fix: {days} days without active Pipeline",
+      needsHumanStatusMigrationNote: "analyze --fix: needs_human status deprecated, migrated to open for reprocessing",
+      checkpointPrefixFixNote: "analyze --fix: Checkpoint prefix fix",
+      reportStatusMismatchNote: "analyze --fix: Report-status mismatch, updated status from {oldStatus} to {newStatus} ({reportFile} PASS)",
+      missingPipelineEvidenceNote: "analyze --fix: Missing pipeline resume evidence, reset from {oldStatus} to open",
+      deleteFailed: "\u274C Failed to delete {taskId}",
+      autoFixDescription: "\uD83D\uDCA1 {description}",
+      manualCheckCycle: "Suggestion: Manually check and adjust dependencies in the cycle",
+      manualFixInvalidParent: "Suggestion: Manually check and remove invalid parentId or create parent task",
+      lowQualitySuggestion: "Improve task description, checkpoints, and related files quality",
+      qualityIssuesFound: "Found {count} quality issues",
+      deleteTaskConfirm: "Delete task {taskId}?",
+      result: "Result"
     },
     taskCommand: {
       checkpointQualityReminder: "\u26A0\uFE0F Checkpoint Quality Reminder",
@@ -13688,6 +13957,117 @@ var init_en = __esm(() => {
       qualityGateImprovement: "\uD83D\uDCA1 Improvement suggestions:",
       action: "Action: {action}"
     },
+    setupCmd: {
+      alreadyInitialized: "Project management environment already exists, skipping initialization.",
+      directory: "Directory: {path}",
+      tipUseForce: "Tip: Use --force option to force re-initialization (re-copy skill files)",
+      forceMode: "\u26A0\uFE0F Force re-initialization mode...",
+      gitHookCreated: "  \u2713 Git Hook created (pre-commit, prepublishOnly)",
+      gitHookFailed: "  \u26A0\uFE0F Git Hook creation failed: {error}",
+      gitHookDisabled: "  \u23ED\uFE0F  Git Hook creation disabled by config (gitHook.enabled = false)",
+      copySkillFile: "  \u2713 Copy SKILL.md ({language})",
+      copyCommandDocs: "  \u2713 Copy {count} command docs ({language})",
+      copyDefault: "  \u2713 Copy SKILL.md (default)",
+      fileNotFound: "  \u26A0\uFE0F SKILL.md not found",
+      dirNotFound: "  \u26A0\uFE0F Command docs directory not found: {path}",
+      pluginRootNotSet: "  \u26A0\uFE0F CLAUDE_PLUGIN_ROOT environment variable not set, skipping skill file copy"
+    },
+    harnessCmd: {
+      projectNotInitialized: "Error: Project not initialized. Please run `projmnt4claude setup` first",
+      concurrentPipelineRunning: "\u274C Error: Another Harness pipeline is already running",
+      activePipelineInfo: "Active pipeline info:",
+      snapshotId: "   Snapshot ID: {id}",
+      processId: "   Process ID: {pid}",
+      createdAt: "   Created at: {timestamp}",
+      taskCount: "   Task count: {count}",
+      possibleCauses: "Possible causes:",
+      solutions: "Solutions:",
+      invalidMaxRetries: "Error: --max-retries must be >= 0",
+      invalidTimeout: "Error: --timeout must be >= 10 seconds",
+      invalidParallel: "Error: --parallel must be >= 1",
+      noExecutableTasks: "Error: No executable tasks",
+      batchLabel: "Batch {index}",
+      parallelTag: " [Parallel]",
+      dryRunComplete: "\u2705 Dry run complete (no actual execution)",
+      qualityGateCheck: "\uD83D\uDEA6 Quality Gate Check",
+      minQualityScoreThreshold: "\uD83D\uDCCA Min quality score threshold: {score}",
+      qualityGateFailed: "\u274C Quality gate check failed, the following tasks need improvement:",
+      tasksNeedImprovement: "Tasks need improvement:",
+      allTasksPassed: "\u2705 All tasks passed quality gate check",
+      resumingFromInterruption: "\uD83D\uDCE6 Resuming from interruption (task {current}/{total})",
+      noPreviousState: "\uD83D\uDCE6 No previous execution state found, starting from beginning",
+      stateFileMigrated: "\uD83D\uDCE6 State file auto-migrated from v{from} to v{to}",
+      loadingStateFailed: "Failed to load runtime state, resetting: {error}",
+      cleaningOrphanSnapshots: "\uD83E\uDDF9 Cleaned orphan snapshot: {id} (PID: {pid})",
+      cleanedSnapshots: "\u2705 Cleaned {count} snapshots total",
+      forceCleanedSnapshots: "  \u26A0\uFE0F  Force cleaned active snapshot: {id} (PID: {pid})",
+      noSnapshotsFound: "\u2705 No snapshots found"
+    },
+    analyzeCmd: {
+      projectNotInitialized: "Error: Project not initialized. Please run `projmnt4claude setup` first",
+      analyzingProject: "Analyzing project health...",
+      analysisComplete: "Analysis complete",
+      issuesFound: "Found {count} issues",
+      noIssues: "No issues found",
+      fixApplied: "Fixed {count} issues",
+      taskIdEmpty: "Task ID is empty or invalid",
+      taskIdFormatInvalid: "Task ID format does not meet specification",
+      historyEntryNotObject: "history[{index}] is not a valid object",
+      timestampMissing: "history[{index}].timestamp missing or invalid",
+      timestampInvalid: "history[{index}].timestamp is not valid ISO timestamp",
+      actionMissing: "history[{index}].action missing or invalid",
+      checkpointNotObject: "checkpoints[{index}] is not a valid object",
+      checkpointIdMissing: "checkpoints[{index}].id missing or invalid",
+      checkpointStatusInvalid: "checkpoints[{index}].status is not valid status",
+      schemaMigrationReopenCount: "Added reopenCount: 0",
+      schemaMigrationRequirementHistory: "Added requirementHistory: []",
+      schemaMigrationCommitHistory: "Added executionStats.commitHistory: []",
+      schemaMigrationTransitionNotes: "Added transitionNotes: []",
+      schemaMigrationResumeAction: "Added resumeAction: resume_pipeline (status={status})",
+      schemaMigrationCheckpointPrefix: 'Checkpoint prefix completion: "{old}" \u2192 "{new}"',
+      schemaMigrationCheckpointPolicy: "Added checkpointPolicy: {policy} (inferred from {type}/{priority})",
+      aiPromptTaskInfo: "## Task Information",
+      aiPromptHistory: "## History ({count} entries)",
+      aiPromptTransitionHistory: "## Status Transition History ({count} entries)",
+      aiPromptCheckpoints: "## Checkpoints ({count})",
+      aiPromptVerification: "## Verification Info",
+      aiPromptLayer1Results: "## Layer 1 Detection Results ({count} issues)",
+      aiPromptNoHistory: "## History: None",
+      aiPromptNoTransitionHistory: "## Status Transition History: None",
+      aiPromptNoCheckpoints: "## Checkpoints: None",
+      aiPromptNoVerification: "## Verification Info: None",
+      aiPromptNoLayer1Issues: "## Layer 1 Detection Results: No issues",
+      aiPromptTaskAnalysisExpert: "You are a task status analysis expert. Infer the correct status based on the following task context.",
+      aiPromptAnalyzeContext: "Please analyze the task history, transition records, and current status to infer what status the task should be in.",
+      aiPromptJsonFormat: "Strictly output in the following JSON format (do not output other content):",
+      aiPromptInferredStatus: '"inferredStatus": "Status value, must be: open, in_progress, wait_review, wait_qa, wait_evaluation, resolved, closed, abandoned, failed"',
+      aiPromptConfidence: '"confidence": Confidence between 0.0-1.0',
+      aiPromptReasoning: '"reasoning": "Brief explanation of inference basis"',
+      aiPromptSuggestion: '"suggestion": "Fix suggestion"',
+      issueMissingDescription: "Task missing description",
+      issueResolvedNoVerification: "Task resolved but missing verification field",
+      issueOldFormatId: "Task uses old format ID",
+      issueMissingSlug: "Task ID missing meaningful slug",
+      transitionStartExecution: "Start executing task",
+      transitionSubmitReview: "Submit code review",
+      transitionReviewPass: "Review passed, enter QA",
+      transitionEvalPass: "Evaluation passed, task complete",
+      transitionCloseTask: "Close task",
+      transitionDirectComplete: "Mark as completed directly",
+      transitionReopenTask: "Reopen task",
+      transitionRestartExecution: "Restart execution",
+      transitionAbandonTask: "Abandon task",
+      transitionReturnTodo: "Return to todo",
+      statusSuggestionCheckpointRate: "Checkpoint completion rate {rate}%, suggest transition to wait_qa",
+      statusSuggestionKeepInProgress: "Short interruption and no manual checkpoints needed, suggest keeping in_progress",
+      statusSuggestionResetOpen: "Task interrupted for long time, suggest resetting to open for replanning",
+      depSuggestionCheckIndependence: "This task may have implicit dependencies, please confirm if it is independent",
+      depSuggestionIndependentModule: "This task is an independent module, no action needed",
+      unknown: "Unknown",
+      none: "None",
+      reportResultPass: "**Result**: \u2705 PASS",
+      reportResultNopass: "**Result**: \u274C NOPASS"
+    },
     harness: {
       timeoutHeader: "Timeout Limit",
       taskDescription: "Task Description",
@@ -13725,6 +14105,7 @@ var init_en = __esm(() => {
         evidenceCollected: "Evidence collected",
         checkpointsCompleted: "Checkpoints completed",
         devPhaseError: "Development phase error",
+        devPhaseNotComplete: "Development phase not completed successfully",
         evalTaskLabel: "Evaluating task",
         devStatusLabel: "Development status",
         evalPromptGenerated: "Evaluation prompt generated",
@@ -13746,6 +14127,10 @@ var init_en = __esm(() => {
         codeReviewPassed: "Code review passed",
         codeReviewFailed: "Code review failed",
         codeReviewError: "Code review error",
+        codeReviewSessionFailed: "Code review session failed",
+        codeReviewPromptGenerated: "Code review prompt generated",
+        startingCodeReviewSession: "Starting code review session...",
+        codeReviewRetry: "Code review result format mismatch, retried {retries} times",
         qaPhase: "QA verification phase...",
         qaCheckpoints: "QA verification checkpoints",
         noQACheckpoints: "No QA verification checkpoints, auto-pass",
@@ -13755,9 +14140,28 @@ var init_en = __esm(() => {
         qaPassedWithHuman: "Automated verification passed, waiting for human verification",
         qaFailed: "QA verification failed",
         qaError: "QA verification error",
+        qaSkippedDueToCodeReview: "Code review failed, skipping QA verification",
         checkpointWarning: "automated checkpoints missing verification commands",
         checkpointWarningDetail: "missing commands/steps",
         checkpointWarningFallback: "These checkpoints will rely on AI free-form verification, which may affect verification quality.",
+        noAutomatedQACheckpoints: "No automated QA checkpoints, automated verification auto-passed",
+        qaPromptGenerated: "QA verification prompt generated",
+        startingQASession: "Starting QA verification session...",
+        qaRetry: "QA verification result format mismatch, retried {retries} times",
+        qaSessionFailed: "QA verification session failed",
+        qaOutputValidationFailed: "QA verification output format validation failed",
+        cannotParseVerdict: "Cannot parse verdict result",
+        deferredCheckpointsInfo: "{count} checkpoints deferred, waiting for human verification",
+        checkpointWarningDetail: "missing commands/steps",
+        checkpointWarningFallback: "These checkpoints will rely on AI free-form verification, which may affect verification quality.",
+        phantomTaskViolation: "Serious violation: Developer created {count} additional tasks ({tasks}) during execution. Developers are strictly prohibited from creating new tasks.",
+        phantomTaskCriteria: "Creating new tasks is prohibited",
+        phantomTaskPrefix: "Phantom task",
+        phantomTaskDetails: "Detected that the developer created additional tasks not part of the original plan. This violates the developer scope - developers should only implement code changes for assigned tasks, not create new tasks.",
+        emptyOutputError: "Evaluation session output is empty: Claude process may have exited abnormally",
+        evaluationOutputEmpty: "Evaluation output is empty, Claude process may have exited abnormally",
+        contradictionFix: "Contradiction fix",
+        evalParseError: "Unable to parse evaluation result",
         phantomTaskDetected: "Detected {count} phantom task(s)",
         phantomTaskAutoNopass: "Phantom task detected, auto NOPASS",
         noPhantomTask: "No phantom tasks detected",
@@ -13821,8 +14225,8 @@ __export(exports_i18n, {
   getI18n: () => getI18n
 });
 import * as fs10 from "fs";
-function getLanguage(cwd = process.cwd()) {
-  const configPath = getConfigPath(cwd);
+function getLanguage(cwd2 = process.cwd()) {
+  const configPath = getConfigPath(cwd2);
   try {
     if (fs10.existsSync(configPath)) {
       const config = JSON.parse(fs10.readFileSync(configPath, "utf-8"));
@@ -13831,12 +14235,12 @@ function getLanguage(cwd = process.cwd()) {
   } catch (error) {}
   return "en";
 }
-function getI18n(language, cwd) {
-  const lang = language || getLanguage(cwd);
+function getI18n(language, cwd2) {
+  const lang = language || getLanguage(cwd2);
   return languagePacks[lang] || languagePacks.zh;
 }
-function t(cwd) {
-  return getI18n(undefined, cwd);
+function t(cwd2) {
+  return getI18n(undefined, cwd2);
 }
 var languagePacks;
 var init_i18n = __esm(() => {
@@ -15127,8 +15531,8 @@ function groupFilesByLayer(files) {
 
 class AIMetadataAssistant {
   logger;
-  constructor(cwd) {
-    this.logger = new Logger({ component: "ai-metadata", cwd });
+  constructor(cwd2) {
+    this.logger = new Logger({ component: "ai-metadata", cwd: cwd2 });
   }
   async enhanceRequirement(description, options) {
     const prompt = this.buildRequirementPrompt(description, undefined, options.cwd);
@@ -15309,38 +15713,38 @@ class AIMetadataAssistant {
     }
     return { dependencies: deps, aiUsed: true };
   }
-  buildSemanticDependencyPrompt(tasks, cwd) {
+  buildSemanticDependencyPrompt(tasks, cwd2) {
     const taskList = tasks.slice(0, 50).map((t2) => `ID: ${t2.id}
 \u6807\u9898: ${t2.title}
 \u63CF\u8FF0: ${(t2.description || "").substring(0, 150)}`).join(`
 ---
 `);
-    const template = loadPromptTemplate("semanticDependency", cwd);
+    const template = loadPromptTemplate("semanticDependency", cwd2);
     return resolveTemplate(template, { taskList });
   }
-  buildRequirementPrompt(description, errorFeedback, cwd) {
+  buildRequirementPrompt(description, errorFeedback, cwd2) {
     const errorFeedbackSection = errorFeedback ? `
 
 ## \u4E0A\u6B21\u8F93\u51FA\u9519\u8BEF
 ${errorFeedback}
 \u8BF7\u4FEE\u6B63\u4EE5\u4E0A\u9519\u8BEF\u5E76\u91CD\u65B0\u8F93\u51FA\u3002` : "";
-    const template = loadPromptTemplate("requirement", cwd);
+    const template = loadPromptTemplate("requirement", cwd2);
     return resolveTemplate(template, { description, errorFeedback: errorFeedbackSection });
   }
-  buildCheckpointsPrompt(description, type, existing, cwd) {
+  buildCheckpointsPrompt(description, type, existing, cwd2) {
     const existingCheckpointsSection = existing.length > 0 ? `
 
 ## \u5DF2\u6709\u68C0\u67E5\u70B9
 ${existing.map((c, i) => `${i + 1}. ${c}`).join(`
 `)}` : "";
-    const template = loadPromptTemplate("checkpoints", cwd);
+    const template = loadPromptTemplate("checkpoints", cwd2);
     return resolveTemplate(template, {
       description,
       type: type || "\u672A\u6307\u5B9A",
       existingCheckpointsSection
     });
   }
-  buildQualityPrompt(task, cwd) {
+  buildQualityPrompt(task, cwd2) {
     const taskData = JSON.stringify({
       id: task.id,
       title: task.title,
@@ -15351,20 +15755,20 @@ ${existing.map((c, i) => `${i + 1}. ${c}`).join(`
       checkpoints: task.checkpoints?.map((c) => c.description),
       dependencies: task.dependencies
     }, null, 2);
-    const template = loadPromptTemplate("quality", cwd);
+    const template = loadPromptTemplate("quality", cwd2);
     return resolveTemplate(template, { taskData });
   }
-  buildDuplicatesPrompt(tasks, cwd) {
+  buildDuplicatesPrompt(tasks, cwd2) {
     const taskList = tasks.slice(0, 50).map((t2) => `ID: ${t2.id}
 \u6807\u9898: ${t2.title}
 \u63CF\u8FF0: ${(t2.description || "").substring(0, 200)}
 \u7C7B\u578B: ${t2.type}`).join(`
 ---
 `);
-    const template = loadPromptTemplate("duplicates", cwd);
+    const template = loadPromptTemplate("duplicates", cwd2);
     return resolveTemplate(template, { taskList });
   }
-  buildStalenessPrompt(task, cwd) {
+  buildStalenessPrompt(task, cwd2) {
     const ageMs = Date.now() - new Date(task.updatedAt).getTime();
     const ageDays = Math.round(ageMs / (1000 * 60 * 60 * 24));
     const taskData = JSON.stringify({
@@ -15379,30 +15783,30 @@ ${existing.map((c, i) => `${i + 1}. ${c}`).join(`
       checkpointCount: task.checkpoints?.length ?? 0,
       completedCheckpoints: task.checkpoints?.filter((c) => c.status === "completed").length ?? 0
     }, null, 2);
-    const template = loadPromptTemplate("staleness", cwd);
+    const template = loadPromptTemplate("staleness", cwd2);
     return resolveTemplate(template, { taskData });
   }
-  buildBugReportPrompt(reportContent, logContext, cwd) {
+  buildBugReportPrompt(reportContent, logContext, cwd2) {
     const logContextSection = logContext ? `
 ## \u65E5\u5FD7\u4E0A\u4E0B\u6587
 ${logContext.substring(0, 2000)}` : "";
-    const template = loadPromptTemplate("bugReport", cwd);
+    const template = loadPromptTemplate("bugReport", cwd2);
     return resolveTemplate(template, {
       reportContent: reportContent.substring(0, 4000),
       logContextSection
     });
   }
   async invokeWithEngine(prompt, additionalRules, options) {
-    const { cwd, maxRetries, timeoutSeconds } = options;
+    const { cwd: cwd2, maxRetries, timeoutSeconds } = options;
     try {
-      const agent = getAgent(cwd);
+      const agent = getAgent(cwd2);
       const engine = createSessionAwareEngine("json", additionalRules, maxRetries);
       const invokeOptions = {
         timeout: timeoutSeconds,
         allowedTools: [],
         outputFormat: "json",
         maxRetries: 0,
-        cwd
+        cwd: cwd2
       };
       const engineResult = await engine.runWithFeedback(agent.invoke.bind(agent), prompt, invokeOptions);
       if (engineResult.retries > 0) {
@@ -15787,12 +16191,12 @@ function validateBasicFields(task) {
     missingFields
   };
 }
-function validateFilesExist(task, cwd = process.cwd()) {
+function validateFilesExist(task, cwd2 = process.cwd()) {
   const affectedFiles = extractAffectedFiles(task);
   const missingFiles = [];
   const existingFiles = [];
   for (const file of affectedFiles) {
-    const fullPath = path8.resolve(cwd, file);
+    const fullPath = path8.resolve(cwd2, file);
     if (fs11.existsSync(fullPath)) {
       existingFiles.push(file);
     } else {
@@ -15874,13 +16278,13 @@ function generateSuggestions(task, score, affectedFiles, changeSize, requiresCon
   }
   return suggestions;
 }
-async function checkQualityGate(taskId, config = DEFAULT_QUALITY_GATE_CONFIG, cwd = process.cwd()) {
-  const configuredMinScore = getQualityMinScore(cwd);
+async function checkQualityGate(taskId, config = DEFAULT_QUALITY_GATE_CONFIG, cwd2 = process.cwd()) {
+  const configuredMinScore = getQualityMinScore(cwd2);
   const effectiveConfig = {
     ...config,
     minQualityScore: config.minQualityScore === DEFAULT_QUALITY_GATE_CONFIG.minQualityScore ? configuredMinScore : config.minQualityScore
   };
-  const metaPath = getTaskMetaPath(taskId, cwd);
+  const metaPath = getTaskMetaPath(taskId, cwd2);
   let task = null;
   let metaViolations = null;
   if (fs11.existsSync(metaPath)) {
@@ -15931,7 +16335,7 @@ async function checkQualityGate(taskId, config = DEFAULT_QUALITY_GATE_CONFIG, cw
     };
   }
   const checkpointViolations = validateCheckpoints(task);
-  const score = await calculateContentQuality(task, undefined, cwd);
+  const score = await calculateContentQuality(task, undefined, cwd2);
   const affectedFiles = extractAffectedFiles(task);
   const changeSize = inferChangeSize(task, affectedFiles);
   const needsConfirmation = requiresSolutionConfirmation(task);
@@ -16265,7 +16669,7 @@ function evaluateLayerOrdering(checkpoints, description) {
   }
   return { score: Math.max(0, score), deductions };
 }
-async function calculateContentQuality(task, aiOptions, cwd) {
+async function calculateContentQuality(task, aiOptions, cwd2) {
   const deductions = [];
   let descriptionScore = 100;
   let checkpointScore = 100;
@@ -16290,8 +16694,8 @@ async function calculateContentQuality(task, aiOptions, cwd) {
   const structuralTotal = Math.round(descriptionScore * 0.35 + checkpointScore * 0.3 + relatedFilesScore * 0.15 + solutionScore * 0.2);
   let aiSemanticScore;
   const qualityResult = await withAIEnhancement({
-    enabled: !!(aiOptions?.deepAnalyze && !aiOptions?.noAi && cwd),
-    aiCall: () => new AIMetadataAssistant(cwd).analyzeTaskQuality(task, { cwd }),
+    enabled: !!(aiOptions?.deepAnalyze && !aiOptions?.noAi && cwd2),
+    aiCall: () => new AIMetadataAssistant(cwd2).analyzeTaskQuality(task, { cwd: cwd2 }),
     fallback: { score: 0, issues: [], suggestions: [], aiUsed: false },
     operationName: "\u8BED\u4E49\u8D28\u91CF\u8BC4\u4F30"
   });
@@ -16310,13 +16714,13 @@ async function calculateContentQuality(task, aiOptions, cwd) {
     ...aiSemanticScore !== undefined ? { aiSemanticScore } : {}
   };
 }
-async function batchCheckQualityGate(taskIds, config = DEFAULT_QUALITY_GATE_CONFIG, cwd = process.cwd()) {
+async function batchCheckQualityGate(taskIds, config = DEFAULT_QUALITY_GATE_CONFIG, cwd2 = process.cwd()) {
   const results = new Map;
   let passedCount = 0;
   let failedCount = 0;
   const blockedTasks = [];
   for (const taskId of taskIds) {
-    const result = await checkQualityGate(taskId, config, cwd);
+    const result = await checkQualityGate(taskId, config, cwd2);
     results.set(taskId, result);
     if (result.passed) {
       passedCount++;
@@ -16630,7 +17034,7 @@ var init_inference = __esm(() => {
 });
 
 // src/utils/dependency-graph/cascade.ts
-function executeFailureCascade(failedTaskId, graph, cwd, completedTaskIds) {
+function executeFailureCascade(failedTaskId, graph, cwd2, completedTaskIds) {
   const cascade = graph.computeCascadeImpact(failedTaskId);
   const affectedTasks = [];
   const skippedTasks = [];
@@ -17441,18 +17845,18 @@ __export(exports_validation, {
 import * as path10 from "path";
 import * as fs13 from "fs";
 import { execSync as execSync3 } from "child_process";
-function getEvidenceDir(taskId, cwd = process.cwd()) {
-  return path10.join(getProjectDir(cwd), "evidence", taskId);
+function getEvidenceDir(taskId, cwd2 = process.cwd()) {
+  return path10.join(getProjectDir(cwd2), "evidence", taskId);
 }
-function ensureEvidenceDir(taskId, cwd = process.cwd()) {
-  const evidenceDir = getEvidenceDir(taskId, cwd);
+function ensureEvidenceDir(taskId, cwd2 = process.cwd()) {
+  const evidenceDir = getEvidenceDir(taskId, cwd2);
   if (!fs13.existsSync(evidenceDir)) {
     fs13.mkdirSync(evidenceDir, { recursive: true });
   }
   return evidenceDir;
 }
-async function executeVerificationCommands(taskId, checkpointId, commands, cwd = process.cwd()) {
-  const evidenceDir = ensureEvidenceDir(taskId, cwd);
+async function executeVerificationCommands(taskId, checkpointId, commands, cwd2 = process.cwd()) {
+  const evidenceDir = ensureEvidenceDir(taskId, cwd2);
   const timestamp = new Date().toISOString().replace(/[:.]/g, "-");
   const evidenceFileName = `${checkpointId}-${timestamp}.log`;
   const evidencePath = path10.join(evidenceDir, evidenceFileName);
@@ -17471,7 +17875,7 @@ async function executeVerificationCommands(taskId, checkpointId, commands, cwd =
 `;
     try {
       const result = execSync3(cmd, {
-        cwd,
+        cwd: cwd2,
         encoding: "utf-8",
         timeout: 60000,
         stdio: ["pipe", "pipe", "pipe"],
@@ -17501,15 +17905,15 @@ async function executeVerificationCommands(taskId, checkpointId, commands, cwd =
   return {
     exitCode: lastExitCode,
     output: combinedOutput,
-    evidencePath: path10.relative(cwd, evidencePath)
+    evidencePath: path10.relative(cwd2, evidencePath)
   };
 }
-async function validateTaskCompletion(taskId, cwd = process.cwd(), options = {}) {
+async function validateTaskCompletion(taskId, cwd2 = process.cwd(), options = {}) {
   const errors = [];
   const warnings = [];
   const evidenceCollected = [];
   const { executeCommands = true, collectEvidence = true } = options;
-  const task = readTaskMeta(taskId, cwd);
+  const task = readTaskMeta(taskId, cwd2);
   if (!task) {
     errors.push({
       code: "TASK_NOT_FOUND",
@@ -17541,7 +17945,7 @@ async function validateTaskCompletion(taskId, cwd = process.cwd(), options = {})
       if (cp.verification?.method === "manual")
         continue;
       try {
-        const evidence = await executeVerificationCommands(taskId, cp.id, cp.verification.commands, cwd);
+        const evidence = await executeVerificationCommands(taskId, cp.id, cp.verification.commands, cwd2);
         if (evidence.exitCode !== 0) {
           errors.push({
             code: "VERIFICATION_COMMAND_FAILED",
@@ -17574,17 +17978,17 @@ async function validateTaskCompletion(taskId, cwd = process.cwd(), options = {})
     evidenceCollected
   };
 }
-function getTasksByStatus(status, cwd = process.cwd()) {
-  const tasks = getAllTasks(cwd, false);
+function getTasksByStatus(status, cwd2 = process.cwd()) {
+  const tasks = getAllTasks(cwd2, false);
   return tasks.filter((task) => task.status === status);
 }
-function getWaitEvaluationTasks(cwd = process.cwd()) {
-  return getTasksByStatus("wait_evaluation", cwd);
+function getWaitEvaluationTasks(cwd2 = process.cwd()) {
+  return getTasksByStatus("wait_evaluation", cwd2);
 }
-async function validateMultipleTasks(taskIds, cwd = process.cwd(), options) {
+async function validateMultipleTasks(taskIds, cwd2 = process.cwd(), options) {
   const results = new Map;
   for (const taskId of taskIds) {
-    const result = await validateTaskCompletion(taskId, cwd, options);
+    const result = await validateTaskCompletion(taskId, cwd2, options);
     results.set(taskId, result);
   }
   return results;
@@ -17593,8 +17997,8 @@ function hasManualVerification(task) {
   const checkpoints = task.checkpoints || [];
   return checkpoints.some((cp) => cp.verification?.method === "manual");
 }
-function getTasksWithManualVerification(cwd = process.cwd()) {
-  const tasks = getAllTasks(cwd, false);
+function getTasksWithManualVerification(cwd2 = process.cwd()) {
+  const tasks = getAllTasks(cwd2, false);
   return tasks.filter(hasManualVerification);
 }
 function generateValidationReport(taskId, result) {
@@ -17631,8 +18035,8 @@ function generateValidationReport(taskId, result) {
   return lines.join(`
 `);
 }
-function cleanupEvidence(taskId, maxAge = 30, cwd = process.cwd()) {
-  const evidenceBaseDir = path10.join(getProjectDir(cwd), "evidence");
+function cleanupEvidence(taskId, maxAge = 30, cwd2 = process.cwd()) {
+  const evidenceBaseDir = path10.join(getProjectDir(cwd2), "evidence");
   if (!fs13.existsSync(evidenceBaseDir)) {
     return { deletedCount: 0, freedBytes: 0 };
   }
@@ -17672,14 +18076,14 @@ function getStatusPriority(status) {
   const normalized = normalizeStatus(status);
   return EXECUTABLE_STATUS_PRIORITY[normalized] ?? 999;
 }
-function getPlanPath(cwd = process.cwd()) {
-  return path12.join(getProjectDir(cwd), "current-plan.json");
+function getPlanPath(cwd2 = process.cwd()) {
+  return path12.join(getProjectDir(cwd2), "current-plan.json");
 }
-function readPlan(cwd = process.cwd()) {
-  if (!isInitialized(cwd)) {
+function readPlan(cwd2 = process.cwd()) {
+  if (!isInitialized(cwd2)) {
     return null;
   }
-  const planPath = getPlanPath(cwd);
+  const planPath = getPlanPath(cwd2);
   try {
     if (!fs15.existsSync(planPath)) {
       return null;
@@ -17690,8 +18094,8 @@ function readPlan(cwd = process.cwd()) {
     return null;
   }
 }
-function writePlan(plan, cwd = process.cwd()) {
-  const planPath = getPlanPath(cwd);
+function writePlan(plan, cwd2 = process.cwd()) {
+  const planPath = getPlanPath(cwd2);
   plan.updatedAt = new Date().toISOString();
   fs15.writeFileSync(planPath, JSON.stringify(plan, null, 2), "utf-8");
 }
@@ -17703,15 +18107,15 @@ function createEmptyPlan() {
     updatedAt: now
   };
 }
-function getOrCreatePlan(cwd = process.cwd()) {
-  const plan = readPlan(cwd);
+function getOrCreatePlan(cwd2 = process.cwd()) {
+  const plan = readPlan(cwd2);
   if (plan) {
     return plan;
   }
   return createEmptyPlan();
 }
-function addTaskToPlan(taskId, afterId, cwd = process.cwd()) {
-  const plan = getOrCreatePlan(cwd);
+function addTaskToPlan(taskId, afterId, cwd2 = process.cwd()) {
+  const plan = getOrCreatePlan(cwd2);
   if (plan.tasks.includes(taskId)) {
     return false;
   }
@@ -17725,11 +18129,11 @@ function addTaskToPlan(taskId, afterId, cwd = process.cwd()) {
   } else {
     plan.tasks.push(taskId);
   }
-  writePlan(plan, cwd);
+  writePlan(plan, cwd2);
   return true;
 }
-function removeTaskFromPlan(taskId, cwd = process.cwd()) {
-  const plan = readPlan(cwd);
+function removeTaskFromPlan(taskId, cwd2 = process.cwd()) {
+  const plan = readPlan(cwd2);
   if (!plan) {
     return false;
   }
@@ -17738,20 +18142,20 @@ function removeTaskFromPlan(taskId, cwd = process.cwd()) {
     return false;
   }
   plan.tasks.splice(index, 1);
-  writePlan(plan, cwd);
+  writePlan(plan, cwd2);
   return true;
 }
-function clearPlan(cwd = process.cwd()) {
+function clearPlan(cwd2 = process.cwd()) {
   const plan = createEmptyPlan();
-  writePlan(plan, cwd);
+  writePlan(plan, cwd2);
 }
-function areDependenciesCompleted(taskId, cwd = process.cwd()) {
-  const task = readTaskMeta(taskId, cwd);
+function areDependenciesCompleted(taskId, cwd2 = process.cwd()) {
+  const task = readTaskMeta(taskId, cwd2);
   if (!task) {
     return false;
   }
   for (const depId of task.dependencies) {
-    const depTask = readTaskMeta(depId, cwd);
+    const depTask = readTaskMeta(depId, cwd2);
     if (!depTask) {
       return false;
     }
@@ -17762,20 +18166,20 @@ function areDependenciesCompleted(taskId, cwd = process.cwd()) {
   }
   return true;
 }
-function isParentTaskCompleted(taskId, cwd = process.cwd()) {
-  const task = readTaskMeta(taskId, cwd);
+function isParentTaskCompleted(taskId, cwd2 = process.cwd()) {
+  const task = readTaskMeta(taskId, cwd2);
   if (!task || !task.parentId) {
     return false;
   }
-  const parentTask = readTaskMeta(task.parentId, cwd);
+  const parentTask = readTaskMeta(task.parentId, cwd2);
   if (!parentTask) {
     return false;
   }
   const normalizedStatus = normalizeStatus(parentTask.status);
   return normalizedStatus === "resolved" || normalizedStatus === "closed";
 }
-function getExecutableTasks(cwd = process.cwd(), includeSubtasks = false) {
-  const tasks = getAllTasks(cwd);
+function getExecutableTasks(cwd2 = process.cwd(), includeSubtasks = false) {
+  const tasks = getAllTasks(cwd2);
   const skippedDueToParent = [];
   const executableTasks = tasks.filter((task) => {
     if (!includeSubtasks && (isSubtask(task.id) || !!task.parentId)) {
@@ -17784,11 +18188,11 @@ function getExecutableTasks(cwd = process.cwd(), includeSubtasks = false) {
     if (task.subtaskIds && task.subtaskIds.length > 0) {
       return false;
     }
-    if (task.parentId && isParentTaskCompleted(task.id, cwd)) {
+    if (task.parentId && isParentTaskCompleted(task.id, cwd2)) {
       skippedDueToParent.push(task.id);
       return false;
     }
-    return isExecutableStatus(task.status) && areDependenciesCompleted(task.id, cwd);
+    return isExecutableStatus(task.status) && areDependenciesCompleted(task.id, cwd2);
   });
   executableTasks.sort((a, b) => {
     const priorityA = getStatusPriority(a.status);
@@ -17808,8 +18212,8 @@ function getExecutableTasks(cwd = process.cwd(), includeSubtasks = false) {
   }
   return executableTasks.map((task) => task.id);
 }
-function detectMissingSubtasks(cwd = process.cwd()) {
-  const allTasks = getAllTasks(cwd);
+function detectMissingSubtasks(cwd2 = process.cwd()) {
+  const allTasks = getAllTasks(cwd2);
   const warnings = [];
   for (const task of allTasks) {
     if (!task.subtaskIds || task.subtaskIds.length === 0) {
@@ -17818,7 +18222,7 @@ function detectMissingSubtasks(cwd = process.cwd()) {
     const missingIds = [];
     let actualCount = 0;
     for (const subtaskId of task.subtaskIds) {
-      const subtask = readTaskMeta(subtaskId, cwd);
+      const subtask = readTaskMeta(subtaskId, cwd2);
       if (subtask) {
         actualCount++;
       } else {
@@ -18179,8 +18583,8 @@ var init_quality_gate_registry = __esm(() => {
 // src/utils/harness-snapshot.ts
 import * as fs16 from "fs";
 import * as path13 from "path";
-function getRunsDir(cwd) {
-  const runsDir = path13.join(getProjectDir(cwd), "runs");
+function getRunsDir(cwd2) {
+  const runsDir = path13.join(getProjectDir(cwd2), "runs");
   if (!fs16.existsSync(runsDir)) {
     fs16.mkdirSync(runsDir, { recursive: true });
   }
@@ -18189,15 +18593,15 @@ function getRunsDir(cwd) {
 function generateSnapshotFilename(pid, timestamp) {
   return `harness-plan-snapshot-${pid}-${timestamp}.json`;
 }
-function createPlanSnapshot(executionPlan, cwd = process.cwd(), batchAwareQueue) {
+function createPlanSnapshot(executionPlan, cwd2 = process.cwd(), batchAwareQueue) {
   const pid = process.pid;
   const timestamp = Date.now();
   const snapshotId = generateSnapshotFilename(pid, timestamp);
-  const runsDir = getRunsDir(cwd);
+  const runsDir = getRunsDir(cwd2);
   const snapshotPath = path13.join(runsDir, snapshotId);
   const taskStatusSnapshot = {};
   for (const taskId of executionPlan.tasks) {
-    const task = readTaskMeta(taskId, cwd);
+    const task = readTaskMeta(taskId, cwd2);
     if (task) {
       taskStatusSnapshot[taskId] = task.status;
     }
@@ -18212,18 +18616,18 @@ function createPlanSnapshot(executionPlan, cwd = process.cwd(), batchAwareQueue)
     batchBoundaries: batchAwareQueue?.batchBoundaries,
     batchLabels: batchAwareQueue?.batchLabels,
     batchParallelizable: batchAwareQueue?.batchParallelizable,
-    sourcePlanPath: path13.join(getProjectDir(cwd), "current-plan.json"),
+    sourcePlanPath: path13.join(getProjectDir(cwd2), "current-plan.json"),
     taskStatusSnapshot
   };
   fs16.writeFileSync(snapshotPath, JSON.stringify(snapshot, null, 2), "utf-8");
   return snapshot;
 }
-function readPlanSnapshot(snapshotIdOrPath, cwd = process.cwd()) {
+function readPlanSnapshot(snapshotIdOrPath, cwd2 = process.cwd()) {
   let snapshotPath;
   if (path13.isAbsolute(snapshotIdOrPath)) {
     snapshotPath = snapshotIdOrPath;
   } else {
-    const runsDir = getRunsDir(cwd);
+    const runsDir = getRunsDir(cwd2);
     snapshotPath = path13.join(runsDir, snapshotIdOrPath);
   }
   if (!fs16.existsSync(snapshotPath)) {
@@ -18240,8 +18644,8 @@ function readPlanSnapshot(snapshotIdOrPath, cwd = process.cwd()) {
     return null;
   }
 }
-function listSnapshots(cwd = process.cwd()) {
-  const runsDir = getRunsDir(cwd);
+function listSnapshots(cwd2 = process.cwd()) {
+  const runsDir = getRunsDir(cwd2);
   if (!fs16.existsSync(runsDir)) {
     return [];
   }
@@ -18251,19 +18655,19 @@ function listSnapshots(cwd = process.cwd()) {
     if (!file.startsWith("harness-plan-snapshot-") || !file.endsWith(".json")) {
       continue;
     }
-    const snapshot = readPlanSnapshot(file, cwd);
+    const snapshot = readPlanSnapshot(file, cwd2);
     if (snapshot) {
       snapshots.push(snapshot);
     }
   }
   return snapshots.sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
 }
-function cleanupSnapshot(snapshotIdOrPath, cwd = process.cwd()) {
+function cleanupSnapshot(snapshotIdOrPath, cwd2 = process.cwd()) {
   let snapshotPath;
   if (path13.isAbsolute(snapshotIdOrPath)) {
     snapshotPath = snapshotIdOrPath;
   } else {
-    const runsDir = getRunsDir(cwd);
+    const runsDir = getRunsDir(cwd2);
     snapshotPath = path13.join(runsDir, snapshotIdOrPath);
   }
   if (!fs16.existsSync(snapshotPath)) {
@@ -18276,10 +18680,10 @@ function cleanupSnapshot(snapshotIdOrPath, cwd = process.cwd()) {
     return false;
   }
 }
-function isSnapshotActive(snapshot, cwd = process.cwd()) {
+function isSnapshotActive(snapshot, cwd2 = process.cwd()) {
   let pid;
   if (typeof snapshot === "string") {
-    const snapshotData = readPlanSnapshot(snapshot, cwd);
+    const snapshotData = readPlanSnapshot(snapshot, cwd2);
     if (!snapshotData)
       return false;
     pid = snapshotData.pid;
@@ -18296,8 +18700,8 @@ function isProcessAlive(pid) {
     return false;
   }
 }
-function getLatestSnapshot(cwd = process.cwd(), maxAgeMs = 24 * 60 * 60 * 1000) {
-  const snapshots = listSnapshots(cwd);
+function getLatestSnapshot(cwd2 = process.cwd(), maxAgeMs = 24 * 60 * 60 * 1000) {
+  const snapshots = listSnapshots(cwd2);
   if (snapshots.length === 0) {
     return null;
   }
@@ -18308,10 +18712,10 @@ function getLatestSnapshot(cwd = process.cwd(), maxAgeMs = 24 * 60 * 60 * 1000) 
   }
   return latest;
 }
-function detectActiveSnapshot(cwd = process.cwd()) {
-  const snapshots = listSnapshots(cwd);
+function detectActiveSnapshot(cwd2 = process.cwd()) {
+  const snapshots = listSnapshots(cwd2);
   for (const snapshot of snapshots) {
-    if (isSnapshotActive(snapshot, cwd)) {
+    if (isSnapshotActive(snapshot, cwd2)) {
       return {
         hasActive: true,
         activeSnapshot: snapshot,
@@ -18453,7 +18857,7 @@ function inferArchitectureLayer(task) {
   const layers = ["Layer0", "Layer1", "Layer2", "Layer3"];
   return { layer: layers[minValue], layerValue: minValue };
 }
-function buildTaskChains(tasks, cwd, precomputedDeps) {
+function buildTaskChains(tasks, cwd2, precomputedDeps) {
   if (tasks.length === 0)
     return [];
   const taskMap = new Map;
@@ -18710,12 +19114,12 @@ function generateAIOutput(chains, originalCount, filteredCount, batches, query, 
     }
   };
 }
-function showPlan(json2 = false, cwd = process.cwd()) {
-  if (!isInitialized(cwd)) {
+function showPlan(json2 = false, cwd2 = process.cwd()) {
+  if (!isInitialized(cwd2)) {
     console.error("Error: Project not initialized. Please run `projmnt4claude setup` first");
     process.exit(1);
   }
-  const plan = readPlan(cwd);
+  const plan = readPlan(cwd2);
   if (!plan || plan.tasks.length === 0) {
     console.log("No execution plan");
     console.log("");
@@ -18724,7 +19128,7 @@ function showPlan(json2 = false, cwd = process.cwd()) {
   }
   if (json2) {
     const tasks = plan.tasks.map((taskId, index) => {
-      const task = readTaskMeta(taskId, cwd);
+      const task = readTaskMeta(taskId, cwd2);
       return {
         order: index + 1,
         id: taskId,
@@ -18742,7 +19146,7 @@ function showPlan(json2 = false, cwd = process.cwd()) {
   console.log("-----|-----------|------------------------------|------------");
   for (let i = 0;i < plan.tasks.length; i++) {
     const taskId = plan.tasks[i];
-    const task = readTaskMeta(taskId, cwd);
+    const task = readTaskMeta(taskId, cwd2);
     const order = String(i + 1).padEnd(4);
     const id = taskId.padEnd(9);
     const title = (task?.title || "(Unknown task)").substring(0, 28).padEnd(28);
@@ -18754,32 +19158,32 @@ function showPlan(json2 = false, cwd = process.cwd()) {
   console.log(`Created: ${plan.createdAt}`);
   console.log(`Updated: ${plan.updatedAt}`);
 }
-function addTask(taskId, afterId, cwd = process.cwd()) {
-  if (!isInitialized(cwd)) {
+function addTask(taskId, afterId, cwd2 = process.cwd()) {
+  if (!isInitialized(cwd2)) {
     console.error("Error: Project not initialized. Please run `projmnt4claude setup` first");
     process.exit(1);
   }
-  if (!taskExists(taskId, cwd)) {
+  if (!taskExists(taskId, cwd2)) {
     console.error(`Error: Task '${taskId}' does not exist`);
     process.exit(1);
   }
-  if (afterId && !taskExists(afterId, cwd)) {
+  if (afterId && !taskExists(afterId, cwd2)) {
     console.error(`Error: Reference task '${afterId}' does not exist`);
     process.exit(1);
   }
-  const success = addTaskToPlan(taskId, afterId, cwd);
+  const success = addTaskToPlan(taskId, afterId, cwd2);
   if (success) {
     console.log(`\u2705 Added task ${taskId} to execution plan${afterId ? ` (after ${afterId})` : ""}`);
   } else {
     console.log(`Task ${taskId} is already in the execution plan`);
   }
 }
-function removeTask(taskId, cwd = process.cwd()) {
-  if (!isInitialized(cwd)) {
+function removeTask(taskId, cwd2 = process.cwd()) {
+  if (!isInitialized(cwd2)) {
     console.error("Error: Project not initialized. Please run `projmnt4claude setup` first");
     process.exit(1);
   }
-  const allTasks = getAllTasks(cwd);
+  const allTasks = getAllTasks(cwd2);
   const depGraph = DependencyGraph.fromTasks(allTasks);
   const opValidation = validatePlanOperation("delete", [taskId], depGraph);
   if (opValidation.warnings.length > 0) {
@@ -18788,15 +19192,15 @@ function removeTask(taskId, cwd = process.cwd()) {
       console.log(`   \u26A0\uFE0F  ${w}`);
     }
   }
-  const success = removeTaskFromPlan(taskId, cwd);
+  const success = removeTaskFromPlan(taskId, cwd2);
   if (success) {
     console.log(`\u2705 Removed task ${taskId} from execution plan`);
   } else {
     console.log(`Task ${taskId} is not in the execution plan`);
   }
 }
-async function clearPlanCmd(force = false, cwd = process.cwd()) {
-  if (!isInitialized(cwd)) {
+async function clearPlanCmd(force = false, cwd2 = process.cwd()) {
+  if (!isInitialized(cwd2)) {
     console.error("Error: Project not initialized. Please run `projmnt4claude setup` first");
     process.exit(1);
   }
@@ -18812,15 +19216,15 @@ async function clearPlanCmd(force = false, cwd = process.cwd()) {
       return;
     }
   }
-  clearPlan(cwd);
+  clearPlan(cwd2);
   console.log("\u2705 Execution plan cleared");
 }
-async function recommendPlan(options = {}, cwd = process.cwd()) {
-  if (!isInitialized(cwd)) {
+async function recommendPlan(options = {}, cwd2 = process.cwd()) {
+  if (!isInitialized(cwd2)) {
     console.error("Error: Project not initialized. Please run `projmnt4claude setup` first");
     process.exit(1);
   }
-  const activeCheck = detectActiveSnapshot(cwd);
+  const activeCheck = detectActiveSnapshot(cwd2);
   if (activeCheck.hasActive) {
     console.error("\u274C Error: Active pipeline detected");
     console.error(`   ${activeCheck.message}`);
@@ -18830,12 +19234,12 @@ async function recommendPlan(options = {}, cwd = process.cwd()) {
   }
   console.log(`Analyzing project tasks...
 `);
-  const logger2 = createLogger("plan-recommend", cwd);
+  const logger2 = createLogger("plan-recommend", cwd2);
   const startTime = Date.now();
   const inputQuery = options.query || "";
   let recommendationAccepted = false;
   let suggestedOrder = [];
-  const allTasks = getAllTasks(cwd);
+  const allTasks = getAllTasks(cwd2);
   const failedTasks = allTasks.filter((t2) => normalizeStatus(t2.status) === "failed");
   if (failedTasks.length > 0) {
     console.log("\u26A0\uFE0F  Quality check: Found failed tasks:");
@@ -18869,7 +19273,7 @@ async function recommendPlan(options = {}, cwd = process.cwd()) {
     console.log("");
   }
   const chainEligibleTasks = activeTasks.filter((t2) => normalizeStatus(t2.status) !== "in_progress");
-  const missingSubtaskWarnings = detectMissingSubtasks(cwd);
+  const missingSubtaskWarnings = detectMissingSubtasks(cwd2);
   if (missingSubtaskWarnings.length > 0) {
     const label = options.strictSubtaskCoverage ? "\u274C ERR" : "\u26A0\uFE0F  WARN";
     console.log(`${label} Subtask missing detection (${missingSubtaskWarnings.length} parent tasks affected):`);
@@ -18899,7 +19303,7 @@ async function recommendPlan(options = {}, cwd = process.cwd()) {
 `);
   }
   if (!options.all) {
-    const executableIds = new Set(getExecutableTasks(cwd));
+    const executableIds = new Set(getExecutableTasks(cwd2));
     const beforeExecFilter = filteredTasks.length;
     filteredTasks = filteredTasks.filter((task) => executableIds.has(task.id));
     if (beforeExecFilter - filteredTasks.length > 0) {
@@ -18991,7 +19395,7 @@ async function recommendPlan(options = {}, cwd = process.cwd()) {
     console.log("Analyzing semantic dependencies via AI...");
     const semanticResult = await withAIEnhancement({
       enabled: true,
-      aiCall: () => new AIMetadataAssistant(cwd).inferSemanticDependencies(filteredTasks, { cwd }),
+      aiCall: () => new AIMetadataAssistant(cwd2).inferSemanticDependencies(filteredTasks, { cwd: cwd2 }),
       fallback: { dependencies: [], aiUsed: false },
       operationName: "Semantic dependency inference"
     });
@@ -19015,7 +19419,7 @@ async function recommendPlan(options = {}, cwd = process.cwd()) {
       console.log("  AI found no additional semantic dependencies");
     }
   }
-  const chains = buildTaskChains(filteredTasks, cwd, mergedDeps);
+  const chains = buildTaskChains(filteredTasks, cwd2, mergedDeps);
   const sortedChains = sortChains(chains);
   const cachedBatches = buildBatches(sortedChains);
   const keywordsForOutput = filter.type === "keywords" ? filter.keywords.length > 0 ? filter.keywords : undefined : [filter.pattern];
@@ -19097,10 +19501,10 @@ async function recommendPlan(options = {}, cwd = process.cwd()) {
   console.log("");
   const isNonInteractive = options.nonInteractive || !process.stdout.isTTY;
   if (isNonInteractive) {
-    const plan = getOrCreatePlan(cwd);
+    const plan = getOrCreatePlan(cwd2);
     plan.tasks = aiOutput.recommendation.suggestedOrder;
     plan.batches = aiOutput.batchOrder;
-    writePlan(plan, cwd);
+    writePlan(plan, cwd2);
     console.log("\u2705 Execution plan updated (non-interactive mode)");
     logger2.logInstrumentation({
       module: "plan-recommend",
@@ -19126,10 +19530,10 @@ async function recommendPlan(options = {}, cwd = process.cwd()) {
     initial: true
   });
   if (response.confirm) {
-    const plan = getOrCreatePlan(cwd);
+    const plan = getOrCreatePlan(cwd2);
     plan.tasks = aiOutput.recommendation.suggestedOrder;
     plan.batches = aiOutput.batchOrder;
-    writePlan(plan, cwd);
+    writePlan(plan, cwd2);
     console.log("\u2705 Execution plan updated");
     recommendationAccepted = true;
   } else {
@@ -19672,7 +20076,7 @@ function validateFieldUpdate(field, value) {
   }
   return { valid: errors.length === 0, errors, warnings };
 }
-function validateRelationship(taskId, updates, cwd) {
+function validateRelationship(taskId, updates, cwd2) {
   const errors = [];
   const warnings = [];
   if (updates.parentId !== undefined && updates.parentId !== null) {
@@ -19680,7 +20084,7 @@ function validateRelationship(taskId, updates, cwd) {
     if (parentId === taskId) {
       errors.push(`\u81EA\u5F15\u7528: \u4EFB\u52A1 ${taskId} \u4E0D\u80FD\u6210\u4E3A\u81EA\u8EAB\u7684\u7236\u4EFB\u52A1`);
     } else {
-      const parentTask = readTaskMeta(parentId, cwd);
+      const parentTask = readTaskMeta(parentId, cwd2);
       if (!parentTask) {
         errors.push(`\u7236\u4EFB\u52A1 "${parentId}" \u4E0D\u5B58\u5728`);
       } else {
@@ -19694,13 +20098,13 @@ function validateRelationship(taskId, updates, cwd) {
           visited.add(current.id);
           if (!current.parentId)
             break;
-          current = readTaskMeta(current.parentId, cwd);
+          current = readTaskMeta(current.parentId, cwd2);
         }
       }
     }
   }
   if (updates.subtaskIds !== undefined && updates.subtaskIds.length > 0) {
-    const allIds = new Set(getAllTaskIds(cwd));
+    const allIds = new Set(getAllTaskIds(cwd2));
     for (const subtaskId of updates.subtaskIds) {
       if (!allIds.has(subtaskId)) {
         warnings.push(`\u5B50\u4EFB\u52A1 "${subtaskId}" \u4E0D\u5B58\u5728`);
@@ -19709,7 +20113,7 @@ function validateRelationship(taskId, updates, cwd) {
   }
   return { valid: errors.length === 0, errors, warnings };
 }
-function validateTaskBeforeWrite(task, cwd, oldTask = null, options = {}) {
+function validateTaskBeforeWrite(task, cwd2, oldTask = null, options = {}) {
   const {
     validateSchema = true,
     validateCheckpoint = true,
@@ -19728,7 +20132,7 @@ function validateTaskBeforeWrite(task, cwd, oldTask = null, options = {}) {
     allErrors.push(...result.errors);
     allWarnings.push(...result.warnings);
   }
-  const relResult = validateRelationship(task.id, { parentId: task.parentId, subtaskIds: task.subtaskIds }, cwd);
+  const relResult = validateRelationship(task.id, { parentId: task.parentId, subtaskIds: task.subtaskIds }, cwd2);
   allErrors.push(...relResult.errors);
   allWarnings.push(...relResult.warnings);
   if (validateSchema) {
@@ -19748,15 +20152,15 @@ function validateTaskBeforeWrite(task, cwd, oldTask = null, options = {}) {
   }
   return { valid: allErrors.length === 0, errors: allErrors, warnings: allWarnings };
 }
-function validatedWriteTaskMeta(task, cwd, options = {}) {
+function validatedWriteTaskMeta(task, cwd2, options = {}) {
   const {
     strict = false,
     validateSchema = true,
     validateCheckpoint = true,
     validateBackfill = true
   } = options;
-  const oldTask = readTaskMeta(task.id, cwd);
-  const validation = validateTaskBeforeWrite(task, cwd, oldTask, {
+  const oldTask = readTaskMeta(task.id, cwd2);
+  const validation = validateTaskBeforeWrite(task, cwd2, oldTask, {
     validateSchema,
     validateCheckpoint,
     validateBackfill
@@ -19770,7 +20174,7 @@ function validatedWriteTaskMeta(task, cwd, options = {}) {
   for (const warning of validation.warnings) {
     console.warn(`  \u26A0\uFE0F  \u9A8C\u8BC1\u8B66\u544A (${task.id}): ${warning}`);
   }
-  writeTaskMeta(task, cwd);
+  writeTaskMeta(task, cwd2);
   return { validation };
 }
 var VALID_PRIORITIES2, VALID_TYPES2, TITLE_MAX_LENGTH = 200, DESCRIPTION_MAX_LENGTH = 1e4, SCHEMA_ARRAY_FIELD_DEFAULTS, VALID_CHECKPOINT_TRANSITIONS, VALID_VERIFICATION_RESULTS, VALID_VERIFICATION_METHODS, TaskValidationError;
@@ -19946,13 +20350,13 @@ function extractSlugFromTask(task) {
 function setTaskStatusValidated(task, newStatus, context) {
   const result = validateStatusTransition(task.status, newStatus);
   if (!result.valid) {
-    console.warn(`  \u26A0\uFE0F  \u975E\u6807\u51C6\u72B6\u6001\u8F6C\u6362 (${context}): ${task.status} \u2192 ${newStatus} \u2014 ${result.reason}`);
+    console.warn(`  \u26A0\uFE0F  ${t(cwd).analyzeFixPipeline.nonStandardTransition.replace("{context}", context).replace("{oldStatus}", task.status).replace("{newStatus}", newStatus)} \u2014 ${result.reason}`);
   }
   task.status = newStatus;
   return result;
 }
-async function fixSingleIssue(issue, cwd, nonInteractive) {
-  const task = readTaskMeta(issue.taskId, cwd);
+async function fixSingleIssue(issue, cwd2, nonInteractive) {
+  const task = readTaskMeta(issue.taskId, cwd2);
   if (!task)
     return "skipped";
   switch (issue.type) {
@@ -19969,25 +20373,25 @@ async function fixSingleIssue(issue, cwd, nonInteractive) {
             timestamp: new Date().toISOString(),
             fromStatus: oldStatus,
             toStatus: "closed",
-            note: `analyze --fix: \u975E\u4EA4\u4E92\u6A21\u5F0F\u4E0B\u81EA\u52A8\u5173\u95ED\u8FC7\u671F ${staleDays} \u5929\u7684\u4EFB\u52A1 (>30\u5929\u9608\u503C)`,
+            note: t(cwd2).analyzeFixPipeline.staleAutoCloseNote.replace("{days}", String(staleDays)),
             author: "analyze-fix"
           });
-          validatedWriteTaskMeta(task, cwd);
-          console.log(`  \u2705 \u5DF2\u81EA\u52A8\u5173\u95ED\u8FC7\u671F ${staleDays} \u5929\u7684\u4EFB\u52A1 ${issue.taskId} (>30\u5929\u9608\u503C)`);
+          validatedWriteTaskMeta(task, cwd2);
+          console.log("  " + t(cwd2).analyzeFixPipeline.autoClosingStale.replace("{days}", String(staleDays)).replace("{taskId}", issue.taskId));
           return "fixed";
         }
-        console.log(`\u23ED\uFE0F  \u8DF3\u8FC7\u8FC7\u671F\u4EFB\u52A1 ${issue.taskId} (${staleDays}\u5929, \u975E\u4EA4\u4E92\u6A21\u5F0F\u4E0B\u8D85\u8FC730\u5929\u624D\u81EA\u52A8\u5173\u95ED)`);
+        console.log(t(cwd2).analyzeFixPipeline.skipStale.replace("{taskId}", issue.taskId).replace("{days}", String(staleDays)));
         return "skipped";
       }
-      console.log(`\u68C0\u67E5\u8FC7\u671F\u4EFB\u52A1 ${issue.taskId}...`);
+      console.log(t(cwd2).analyzeFixPipeline.checkingStale.replace("{taskId}", issue.taskId));
       const response = await import_prompts4.default({
         type: "select",
         name: "action",
-        message: `\u4EFB\u52A1 ${issue.taskId} \u5DF2\u8FC7\u671F\uFF0C\u5982\u4F55\u5904\u7406?`,
+        message: t(cwd2).analyzeFixPipeline.staleTaskPrompt.replace("{taskId}", issue.taskId),
         choices: [
-          { title: "\u6807\u8BB0\u4E3A\u5DF2\u5173\u95ED", value: "close" },
-          { title: "\u6807\u8BB0\u4E3A\u8FDB\u884C\u4E2D", value: "progress" },
-          { title: "\u8DF3\u8FC7", value: "skip" }
+          { title: t(cwd2).analyzeFixPipeline.closingTask, value: "close" },
+          { title: t(cwd2).analyzeFixPipeline.markingInProgress, value: "progress" },
+          { title: t(cwd2).common.skip, value: "skip" }
         ]
       });
       if (response.action === "close") {
@@ -19999,11 +20403,11 @@ async function fixSingleIssue(issue, cwd, nonInteractive) {
           timestamp: new Date().toISOString(),
           fromStatus: oldStatus,
           toStatus: "closed",
-          note: "analyze --fix: \u7528\u6237\u4EA4\u4E92\u9009\u62E9\u5173\u95ED\u8FC7\u671F\u4EFB\u52A1",
+          note: t(cwd2).analyzeFixPipeline.staleUserCloseNote,
           author: "analyze-fix"
         });
-        validatedWriteTaskMeta(task, cwd);
-        console.log(`  \u2705 \u5DF2\u5173\u95ED\u4EFB\u52A1 ${issue.taskId}`);
+        validatedWriteTaskMeta(task, cwd2);
+        console.log("  " + t(cwd2).analyzeFixPipeline.closedTask.replace("{taskId}", issue.taskId));
         return "fixed";
       } else if (response.action === "progress") {
         const oldStatus = task.status;
@@ -20014,80 +20418,81 @@ async function fixSingleIssue(issue, cwd, nonInteractive) {
           timestamp: new Date().toISOString(),
           fromStatus: oldStatus,
           toStatus: "in_progress",
-          note: "analyze --fix: \u7528\u6237\u4EA4\u4E92\u9009\u62E9\u5C06\u8FC7\u671F\u4EFB\u52A1\u6807\u8BB0\u4E3A\u8FDB\u884C\u4E2D",
+          note: t(cwd2).analyzeFixPipeline.staleUserProgressNote,
           author: "analyze-fix"
         });
-        validatedWriteTaskMeta(task, cwd);
-        console.log(`  \u2705 \u5DF2\u5C06\u4EFB\u52A1 ${issue.taskId} \u6807\u8BB0\u4E3A\u8FDB\u884C\u4E2D`);
+        validatedWriteTaskMeta(task, cwd2);
+        console.log("  " + t(cwd2).analyzeFixPipeline.markedInProgress.replace("{taskId}", issue.taskId));
         return "fixed";
       }
       return "skipped";
     }
     case "no_description": {
       if (nonInteractive) {
-        console.log(`\u23ED\uFE0F  \u8DF3\u8FC7\u65E0\u63CF\u8FF0\u4EFB\u52A1 ${issue.taskId} (\u975E\u4EA4\u4E92\u6A21\u5F0F\u4E0B\u9700\u8981\u624B\u52A8\u5904\u7406)`);
+        console.log(t(cwd2).analyzeFixPipeline.skipNoDescription.replace("{taskId}", issue.taskId));
         return "skipped";
       }
-      console.log(`\u68C0\u67E5\u65E0\u63CF\u8FF0\u4EFB\u52A1 ${issue.taskId}...`);
+      console.log(t(cwd2).analyzeFixPipeline.checkingNoDescription.replace("{taskId}", issue.taskId));
       const response = await import_prompts4.default({
         type: "text",
         name: "description",
-        message: `\u4E3A\u4EFB\u52A1 ${issue.taskId} \u6DFB\u52A0\u63CF\u8FF0 (\u7559\u7A7A\u8DF3\u8FC7):`
+        message: t(cwd2).analyzeFixPipeline.descriptionPrompt.replace("{taskId}", issue.taskId)
       });
       if (response.description && response.description.trim()) {
         task.description = response.description.trim();
-        validatedWriteTaskMeta(task, cwd);
-        console.log(`  \u2705 \u5DF2\u4E3A\u4EFB\u52A1 ${issue.taskId} \u6DFB\u52A0\u63CF\u8FF0`);
+        validatedWriteTaskMeta(task, cwd2);
+        console.log("  " + t(cwd2).analyzeFixPipeline.addingDescription.replace("{taskId}", issue.taskId));
         return "fixed";
       }
       return "skipped";
     }
     case "cycle": {
-      console.log(`\uD83D\uDD04 \u5206\u6790\u4EFB\u52A1 ${issue.taskId} \u7684\u5FAA\u73AF\u4F9D\u8D56...`);
-      const allCycleTasks = getAllTaskIds(cwd).map((id) => readTaskMeta(id, cwd)).filter((t2) => t2 !== null);
+      console.log(t(cwd2).analyzeFixPipeline.analyzingCycle.replace("{taskId}", issue.taskId));
+      const allCycleTasks = getAllTaskIds(cwd2).map((id) => readTaskMeta(id, cwd2)).filter((t2) => t2 !== null);
       const cycleGraph = DependencyGraph.fromTasks(allCycleTasks);
       const anomalies = cycleGraph.detectAnomalies();
       const cycleAnomalies = anomalies.filter((a) => a.type === "cycle" && a.nodeIds.includes(issue.taskId));
       if (cycleAnomalies.length === 0) {
-        console.log(`   \u26A0\uFE0F  \u672A\u627E\u5230\u6D89\u53CA ${issue.taskId} \u7684\u5FAA\u73AF\u4F9D\u8D56\uFF08\u53EF\u80FD\u5DF2\u4FEE\u590D\uFF09`);
+        console.log("   " + t(cwd2).analyzeFixPipeline.cycleNotFound.replace("{taskId}", issue.taskId));
         return "skipped";
       }
       let fixedAny = false;
       for (const anomaly of cycleAnomalies) {
         if (anomaly.autoFix) {
-          console.log(`   \uD83D\uDCA1 ${anomaly.autoFix.description}`);
+          console.log("   " + t(cwd2).analyzeFixPipeline.autoFixDescription.replace("{description}", anomaly.autoFix.description));
           for (const change of anomaly.autoFix.edgeChanges) {
             if (change.action === "remove") {
-              const fromTask = readTaskMeta(change.from, cwd);
+              const fromTask = readTaskMeta(change.from, cwd2);
               if (fromTask && fromTask.dependencies.includes(change.to)) {
                 fromTask.dependencies = fromTask.dependencies.filter((d) => d !== change.to);
-                validatedWriteTaskMeta(fromTask, cwd);
-                console.log(`  \u2705 \u5DF2\u65AD\u5F00 ${change.from} \u2192 ${change.to} \u7684\u4F9D\u8D56\u4EE5\u6253\u7834\u5FAA\u73AF`);
+                validatedWriteTaskMeta(fromTask, cwd2);
+                console.log("  " + t(cwd2).analyzeFixPipeline.breakingCycle.replace("{from}", change.from).replace("{to}", change.to));
                 fixedAny = true;
               }
             }
           }
         } else {
-          console.log(`   \u26A0\uFE0F  \u5FAA\u73AF ${(anomaly.cyclePath || anomaly.nodeIds).join(" \u2192 ")} \u4E2D\u6240\u6709\u8FB9\u5747\u4E3A\u663E\u5F0F\u4F9D\u8D56\uFF0C\u9700\u4EBA\u5DE5\u5904\u7406`);
+          const cycle = (anomaly.cyclePath || anomaly.nodeIds).join(" \u2192 ");
+          console.log("   " + t(cwd2).analyzeFixPipeline.cycleManualFix.replace("{cycle}", cycle));
         }
       }
       if (fixedAny) {
         return "fixed";
       }
-      console.log(`   \u5EFA\u8BAE: \u624B\u52A8\u68C0\u67E5\u5E76\u8C03\u6574\u5FAA\u73AF\u4F9D\u8D56\u4E2D\u4EFB\u52A1\u7684\u4F9D\u8D56\u5173\u7CFB`);
+      console.log("   " + t(cwd2).analyzeFixPipeline.manualCheckCycle);
       return "unfixable";
     }
     case "legacy_priority": {
-      console.log(`\uD83D\uDD04 \u4FEE\u590D\u4EFB\u52A1 ${issue.taskId} \u7684\u4F18\u5148\u7EA7\u683C\u5F0F...`);
+      console.log(t(cwd2).analyzeFixPipeline.fixingPriority.replace("{taskId}", issue.taskId));
       const oldPriority = task.priority;
       const newPriority = normalizePriority(task.priority);
       task.priority = newPriority;
-      validatedWriteTaskMeta(task, cwd);
-      console.log(`  \u2705 \u5DF2\u5C06\u4F18\u5148\u7EA7\u4ECE ${oldPriority} \u66F4\u65B0\u4E3A ${newPriority}`);
+      validatedWriteTaskMeta(task, cwd2);
+      console.log("  " + t(cwd2).analyzeFixPipeline.priorityUpdated.replace("{old}", oldPriority).replace("{new}", newPriority));
       return "fixed";
     }
     case "legacy_status": {
-      console.log(`\uD83D\uDD04 \u4FEE\u590D\u4EFB\u52A1 ${issue.taskId} \u7684\u72B6\u6001\u683C\u5F0F...`);
+      console.log(t(cwd2).analyzeFixPipeline.fixingStatus.replace("{taskId}", issue.taskId));
       const oldStatus = task.status;
       const newStatus = normalizeStatus(task.status);
       setTaskStatusValidated(task, newStatus, "legacy-status-fix");
@@ -20097,31 +20502,31 @@ async function fixSingleIssue(issue, cwd, nonInteractive) {
         timestamp: new Date().toISOString(),
         fromStatus: oldStatus,
         toStatus: newStatus,
-        note: `analyze --fix: \u4FEE\u590D\u65E0\u6548\u72B6\u6001\u683C\u5F0F ${oldStatus} \u2192 ${newStatus}`,
+        note: t(cwd2).analyzeFixPipeline.legacyStatusFixNote.replace("{oldStatus}", oldStatus).replace("{newStatus}", newStatus),
         author: "analyze-fix"
       });
-      validatedWriteTaskMeta(task, cwd);
-      console.log(`  \u2705 \u5DF2\u5C06\u72B6\u6001\u4ECE ${oldStatus} \u66F4\u65B0\u4E3A ${newStatus}`);
+      validatedWriteTaskMeta(task, cwd2);
+      console.log("  " + t(cwd2).analyzeFixPipeline.statusUpdated.replace("{old}", oldStatus).replace("{new}", newStatus));
       return "fixed";
     }
     case "legacy_schema": {
-      console.log(`\uD83D\uDD04 \u4FEE\u590D\u4EFB\u52A1 ${issue.taskId} \u7684\u89C4\u8303\u5B57\u6BB5...`);
+      console.log(t(cwd2).analyzeFixPipeline.fixingSchema.replace("{taskId}", issue.taskId));
       if (task.reopenCount === undefined) {
         task.reopenCount = 0;
-        console.log(`  \u2705 \u5DF2\u6DFB\u52A0 reopenCount: 0`);
+        console.log("  " + t(cwd2).analyzeFixPipeline.reopenCountAdded);
       }
       if (task.requirementHistory === undefined) {
         task.requirementHistory = [];
-        console.log(`  \u2705 \u5DF2\u6DFB\u52A0 requirementHistory: []`);
+        console.log("  " + t(cwd2).analyzeFixPipeline.requirementHistoryAdded);
       }
-      validatedWriteTaskMeta(task, cwd);
+      validatedWriteTaskMeta(task, cwd2);
       return "fixed";
     }
     case "null_array_field": {
       const fields = issue.details?.fields ?? [];
       if (fields.length === 0)
         return "skipped";
-      console.log(`\uD83D\uDD04 \u4FEE\u590D\u4EFB\u52A1 ${issue.taskId} \u7684\u7A7A\u6570\u7EC4\u5B57\u6BB5: ${fields.join(", ")}`);
+      console.log(t(cwd2).analyzeFixPipeline.fixingEmptyArrays.replace("{taskId}", issue.taskId).replace("{fields}", fields.join(", ")));
       const FIELD_DEFAULTS = {
         dependencies: [],
         history: [],
@@ -20135,14 +20540,14 @@ async function fixSingleIssue(issue, cwd, nonInteractive) {
         const key = field;
         if (task[key] === null || task[key] === undefined) {
           task[key] = FIELD_DEFAULTS[field] ?? [];
-          console.log(`  \u2705 \u5DF2\u521D\u59CB\u5316 ${field}: []`);
+          console.log("  " + t(cwd2).analyzeFixPipeline.arrayInitialized.replace("{field}", field));
         }
       }
-      validatedWriteTaskMeta(task, cwd);
+      validatedWriteTaskMeta(task, cwd2);
       return "fixed";
     }
     case "pipeline_status_migration": {
-      console.log(`\uD83D\uDD04 \u8FC1\u79FB\u4EFB\u52A1 ${issue.taskId} \u7684 pipeline \u72B6\u6001...`);
+      console.log(t(cwd2).analyzeFixPipeline.migratingPipelineStatus.replace("{taskId}", issue.taskId));
       const oldStatus = task.status;
       const targetStatus = issue.details?.targetStatus;
       if (targetStatus && PIPELINE_STATUS_MIGRATION_MAP[oldStatus]) {
@@ -20153,18 +20558,18 @@ async function fixSingleIssue(issue, cwd, nonInteractive) {
           timestamp: new Date().toISOString(),
           fromStatus: oldStatus,
           toStatus: targetStatus,
-          note: `analyze --fix: pipeline \u4E2D\u95F4\u72B6\u6001\u8FC1\u79FB ${oldStatus} \u2192 ${targetStatus}`,
+          note: t(cwd2).analyzeFixPipeline.pipelineStatusMigrationNote.replace("{oldStatus}", oldStatus).replace("{targetStatus}", targetStatus),
           author: "analyze-fix"
         });
-        validatedWriteTaskMeta(task, cwd);
-        console.log(`  \u2705 \u72B6\u6001\u5DF2\u4ECE ${oldStatus} \u8FC1\u79FB\u4E3A ${targetStatus}`);
+        validatedWriteTaskMeta(task, cwd2);
+        console.log("  " + t(cwd2).analyzeFixPipeline.statusMigrated.replace("{old}", oldStatus).replace("{new}", targetStatus));
         return "fixed";
       }
-      console.log(`  \u26A0\uFE0F \u65E0\u6CD5\u786E\u5B9A\u8FC1\u79FB\u76EE\u6807\u72B6\u6001`);
+      console.log("  " + t(cwd2).analyzeFixPipeline.cannotDetermineTargetStatus);
       return "unfixable";
     }
     case "verdict_action_schema": {
-      console.log(`\uD83D\uDD04 \u4FEE\u590D\u4EFB\u52A1 ${issue.taskId} \u7684\u65E0\u6548 VerdictAction \u503C...`);
+      console.log(t(cwd2).analyzeFixPipeline.fixingVerdictAction.replace("{taskId}", issue.taskId));
       let fixedAny = false;
       if (!task.history)
         task.history = [];
@@ -20174,7 +20579,7 @@ async function fixSingleIssue(issue, cwd, nonInteractive) {
           if (!VALID_VERDICT_ACTIONS.includes(entry.newValue)) {
             const oldVal = entry.newValue;
             entry.newValue = `[migrated: invalid_verdict_action "${oldVal}" removed]`;
-            console.log(`  \u2705 history[${i}]: \u6E05\u9664\u65E0\u6548 verdict action "${oldVal}"`);
+            console.log("  " + t(cwd2).analyzeFixPipeline.verdictActionCleared.replace("{index}", String(i)).replace("{value}", oldVal));
             fixedAny = true;
           }
         }
@@ -20185,40 +20590,62 @@ async function fixSingleIssue(issue, cwd, nonInteractive) {
           if (!VALID_VERDICT_ACTIONS.includes(verification.verdictAction)) {
             const oldVal = verification.verdictAction;
             delete verification.verdictAction;
-            console.log(`  \u2705 verification: \u6E05\u9664\u65E0\u6548 verdictAction "${oldVal}"`);
+            console.log("  " + t(cwd2).analyzeFixPipeline.verificationCleared.replace("{value}", oldVal));
             fixedAny = true;
           }
         }
       }
       if (fixedAny) {
-        validatedWriteTaskMeta(task, cwd);
+        validatedWriteTaskMeta(task, cwd2);
         return "fixed";
       }
       return "skipped";
     }
     case "schema_version_outdated": {
-      console.log(`\uD83D\uDD04 \u8FC1\u79FB\u4EFB\u52A1 ${issue.taskId} \u7684 schema \u7248\u672C...`);
+      console.log(t(cwd2).analyzeFixPipeline.migratingSchema.replace("{taskId}", issue.taskId));
       const migrationResult = applySchemaMigrations(task);
       if (migrationResult.changed) {
-        validatedWriteTaskMeta(task, cwd);
+        validatedWriteTaskMeta(task, cwd2);
         for (const detail of migrationResult.details) {
-          console.log(`  \u2705 ${detail}`);
+          let translatedDetail = detail;
+          if (detail === "schemaMigrationReopenCount") {
+            translatedDetail = t(cwd2).analyzeCmd.schemaMigrationReopenCount;
+          } else if (detail === "schemaMigrationRequirementHistory") {
+            translatedDetail = t(cwd2).analyzeCmd.schemaMigrationRequirementHistory;
+          } else if (detail === "schemaMigrationCommitHistory") {
+            translatedDetail = t(cwd2).analyzeCmd.schemaMigrationCommitHistory;
+          } else if (detail === "schemaMigrationTransitionNotes") {
+            translatedDetail = t(cwd2).analyzeCmd.schemaMigrationTransitionNotes;
+          } else if (detail.startsWith("schemaMigrationResumeAction:")) {
+            const status = detail.match(/status:(.+)/)?.[1] || "";
+            translatedDetail = t(cwd2).analyzeCmd.schemaMigrationResumeAction.replace("{status}", status);
+          } else if (detail.startsWith("schemaMigrationCheckpointPrefix:")) {
+            const oldMatch = detail.match(/old:"([^"]+)"/)?.[1] || "";
+            const newMatch = detail.match(/new:"([^"]+)"/)?.[1] || "";
+            translatedDetail = t(cwd2).analyzeCmd.schemaMigrationCheckpointPrefix.replace("{old}", oldMatch).replace("{new}", newMatch);
+          } else if (detail.startsWith("schemaMigrationCheckpointPolicy:")) {
+            const policy = detail.match(/policy:"([^"]+)"/)?.[1] || "";
+            const type = detail.match(/type:"([^"]+)"/)?.[1] || "";
+            const priority = detail.match(/priority:"([^"]+)"/)?.[1] || "";
+            translatedDetail = t(cwd2).analyzeCmd.schemaMigrationCheckpointPolicy.replace("{policy}", policy).replace("{type}", type).replace("{priority}", priority);
+          }
+          console.log(`  \u2705 ${translatedDetail}`);
         }
         return "fixed";
       }
       return "skipped";
     }
     case "missing_createdBy": {
-      console.log(`\uD83D\uDD04 \u4FEE\u590D\u4EFB\u52A1 ${issue.taskId} \u7684 createdBy \u5B57\u6BB5...`);
+      console.log(t(cwd2).analyzeFixPipeline.fixingCreatedBy.replace("{taskId}", issue.taskId));
       if (!task.createdBy) {
         task.createdBy = "import";
-        console.log(`  \u2705 \u5DF2\u6DFB\u52A0 createdBy: import`);
+        console.log("  " + t(cwd2).analyzeFixPipeline.createdByAdded);
       }
-      validatedWriteTaskMeta(task, cwd);
+      validatedWriteTaskMeta(task, cwd2);
       return "fixed";
     }
     case "invalid_status_value": {
-      console.log(`\uD83D\uDD04 \u4FEE\u590D\u4EFB\u52A1 ${issue.taskId} \u7684\u65E0\u6548\u72B6\u6001\u503C...`);
+      console.log(t(cwd2).analyzeFixPipeline.fixingInvalidStatus.replace("{taskId}", issue.taskId));
       if (issue.details?.currentValue) {
         const oldStatus = task.status;
         setTaskStatusValidated(task, normalizeStatus(task.status), "invalid-status-value-fix");
@@ -20228,46 +20655,46 @@ async function fixSingleIssue(issue, cwd, nonInteractive) {
           timestamp: new Date().toISOString(),
           fromStatus: oldStatus,
           toStatus: task.status,
-          note: `analyze --fix: \u4FEE\u590D\u65E0\u6548\u72B6\u6001\u503C ${oldStatus} \u2192 ${task.status}`,
+          note: t(cwd2).analyzeFixPipeline.invalidStatusValueFixNote.replace("{oldStatus}", oldStatus).replace("{newStatus}", task.status),
           author: "analyze-fix"
         });
-        validatedWriteTaskMeta(task, cwd);
-        console.log(`  \u2705 \u5DF2\u5C06\u72B6\u6001\u4ECE ${oldStatus} \u66F4\u65B0\u4E3A ${task.status}`);
+        validatedWriteTaskMeta(task, cwd2);
+        console.log("  " + t(cwd2).analyzeFixPipeline.statusUpdated.replace("{old}", oldStatus).replace("{new}", task.status));
         return "fixed";
       }
       return "unfixable";
     }
     case "invalid_type_value": {
-      console.log(`\uD83D\uDD04 \u4FEE\u590D\u4EFB\u52A1 ${issue.taskId} \u7684\u65E0\u6548\u7C7B\u578B\u503C...`);
+      console.log(t(cwd2).analyzeFixPipeline.fixingInvalidType.replace("{taskId}", issue.taskId));
       if (issue.details?.currentValue) {
         const oldType = task.type;
         task.type = normalizeType(task.type);
-        validatedWriteTaskMeta(task, cwd);
-        console.log(`  \u2705 \u5DF2\u5C06\u7C7B\u578B\u4ECE ${oldType} \u66F4\u65B0\u4E3A ${task.type}`);
+        validatedWriteTaskMeta(task, cwd2);
+        console.log("  " + t(cwd2).analyzeFixPipeline.typeUpdated.replace("{old}", oldType).replace("{new}", task.type));
         return "fixed";
       }
       return "unfixable";
     }
     case "invalid_priority_value": {
-      console.log(`\uD83D\uDD04 \u4FEE\u590D\u4EFB\u52A1 ${issue.taskId} \u7684\u65E0\u6548\u4F18\u5148\u7EA7\u503C...`);
+      console.log(t(cwd2).analyzeFixPipeline.fixingInvalidPriority.replace("{taskId}", issue.taskId));
       if (issue.details?.currentValue) {
         const oldPriority = task.priority;
         task.priority = normalizePriority(task.priority);
-        validatedWriteTaskMeta(task, cwd);
-        console.log(`  \u2705 \u5DF2\u5C06\u4F18\u5148\u7EA7\u4ECE ${oldPriority} \u66F4\u65B0\u4E3A ${task.priority}`);
+        validatedWriteTaskMeta(task, cwd2);
+        console.log("  " + t(cwd2).analyzeFixPipeline.priorityUpdated.replace("{old}", oldPriority).replace("{new}", task.priority));
         return "fixed";
       }
       return "unfixable";
     }
     case "status_reopen_mismatch": {
-      console.log(`\uD83D\uDD04 \u4FEE\u590D\u4EFB\u52A1 ${issue.taskId} \u7684 reopen \u6D41\u8F6C\u8BB0\u5F55\u7F3A\u5931...`);
+      console.log(t(cwd2).analyzeFixPipeline.fixingReopenTransition.replace("{taskId}", issue.taskId));
       if (!task.transitionNotes)
         task.transitionNotes = [];
       task.transitionNotes.push({
         timestamp: new Date().toISOString(),
         fromStatus: "resolved",
         toStatus: "open",
-        note: `\u8865\u5F55 reopen \u6D41\u8F6C\u8BB0\u5F55 (reopenCount=${task.reopenCount})`,
+        note: t(cwd2).analyzeFixPipeline.reopenMismatchFixNote.replace("{count}", String(task.reopenCount ?? 0)),
         author: "analyze-fix"
       });
       if (task.status === "reopened") {
@@ -20276,16 +20703,16 @@ async function fixSingleIssue(issue, cwd, nonInteractive) {
           timestamp: new Date().toISOString(),
           fromStatus: "reopened",
           toStatus: "open",
-          note: "analyze --fix: reopened \u72B6\u6001\u5DF2\u5E9F\u5F03\uFF0C\u8FC1\u79FB\u4E3A open",
+          note: t(cwd2).analyzeFixPipeline.reopenedStatusMigrationNote,
           author: "analyze-fix"
         });
       }
-      validatedWriteTaskMeta(task, cwd);
-      console.log(`  \u2705 \u5DF2\u8865\u5F55 transitionNote\uFF0CreopenCount=${task.reopenCount}`);
+      validatedWriteTaskMeta(task, cwd2);
+      console.log("  " + t(cwd2).analyzeFixPipeline.transitionNoteAdded.replace("{count}", String(task.reopenCount ?? 0)));
       return "fixed";
     }
     case "inconsistent_status": {
-      console.log(`\uD83D\uDD04 \u4FEE\u590D\u4EFB\u52A1 ${issue.taskId} \u7684\u72B6\u6001\u77DB\u76FE (resolved + verification.failed)...`);
+      console.log(t(cwd2).analyzeFixPipeline.fixingStatusContradiction.replace("{taskId}", issue.taskId));
       const oldStatus = task.status;
       setTaskStatusValidated(task, "open", "inconsistent-status-fix");
       task.verification = undefined;
@@ -20296,49 +20723,49 @@ async function fixSingleIssue(issue, cwd, nonInteractive) {
         timestamp: new Date().toISOString(),
         fromStatus: oldStatus,
         toStatus: "open",
-        note: "analyze --fix: \u4FEE\u590D\u72B6\u6001\u77DB\u76FE (resolved + verification.failed)\uFF0C\u91CD\u7F6E\u4E3A open",
+        note: t(cwd2).analyzeFixPipeline.inconsistentStatusFixNote,
         author: "analyze-fix"
       });
-      validatedWriteTaskMeta(task, cwd);
-      console.log(`  \u2705 \u5DF2\u5C06\u72B6\u6001\u4ECE resolved \u6539\u4E3A open\uFF0C\u6E05\u9664\u65E7 verification`);
+      validatedWriteTaskMeta(task, cwd2);
+      console.log("  " + t(cwd2).analyzeFixPipeline.statusContradictionFixed);
       return "fixed";
     }
     case "invalid_timestamp_format": {
-      console.log(`\uD83D\uDD04 \u4FEE\u590D\u4EFB\u52A1 ${issue.taskId} \u7684\u65F6\u95F4\u6233\u683C\u5F0F...`);
+      console.log(t(cwd2).analyzeFixPipeline.fixingTimestamp.replace("{taskId}", issue.taskId));
       if (issue.details?.field) {
         const field = issue.details.field;
         const now = new Date().toISOString();
         if (field === "createdAt" || field === "updatedAt") {
           task[field] = now;
-          validatedWriteTaskMeta(task, cwd);
-          console.log(`  \u2705 \u5DF2\u5C06 ${field} \u66F4\u65B0\u4E3A ${now}`);
+          validatedWriteTaskMeta(task, cwd2);
+          console.log("  " + t(cwd2).analyzeFixPipeline.timestampUpdated.replace("{field}", field).replace("{value}", now));
           return "fixed";
         }
       }
       return "unfixable";
     }
     case "invalid_parent_ref": {
-      console.log(`\u26A0\uFE0F  \u4EFB\u52A1 ${issue.taskId} \u7684\u7236\u4EFB\u52A1\u5F15\u7528\u65E0\u6548\uFF0C\u65E0\u6CD5\u81EA\u52A8\u4FEE\u590D`);
-      console.log(`   \u5EFA\u8BAE: \u624B\u52A8\u68C0\u67E5\u5E76\u5220\u9664\u65E0\u6548\u7684 parentId \u6216\u521B\u5EFA\u7236\u4EFB\u52A1`);
+      console.log(t(cwd2).analyzeFixPipeline.invalidParent.replace("{taskId}", issue.taskId));
+      console.log("   " + t(cwd2).analyzeFixPipeline.manualFixInvalidParent);
       return "unfixable";
     }
     case "invalid_subtask_ref": {
-      console.log(`\uD83D\uDD04 \u4FEE\u590D\u4EFB\u52A1 ${issue.taskId} \u7684\u65E0\u6548\u5B50\u4EFB\u52A1\u5F15\u7528...`);
+      console.log(t(cwd2).analyzeFixPipeline.fixingSubtaskRef.replace("{taskId}", issue.taskId));
       if (task.subtaskIds && issue.details?.subtaskId) {
         const invalidId = issue.details.subtaskId;
         const oldLength = task.subtaskIds.length;
         task.subtaskIds = task.subtaskIds.filter((id) => id !== invalidId);
         if (task.subtaskIds.length < oldLength) {
-          validatedWriteTaskMeta(task, cwd);
-          console.log(`  \u2705 \u5DF2\u4ECE subtaskIds \u4E2D\u79FB\u9664\u65E0\u6548\u5F15\u7528 ${invalidId}`);
+          validatedWriteTaskMeta(task, cwd2);
+          console.log("  " + t(cwd2).analyzeFixPipeline.subtaskRefRemoved.replace("{id}", invalidId));
           return "fixed";
         }
       }
       return "skipped";
     }
     case "invalid_dependency_ref": {
-      console.log(`\uD83D\uDD04 \u4FEE\u590D\u4EFB\u52A1 ${issue.taskId} \u7684\u65E0\u6548\u4F9D\u8D56\u5F15\u7528...`);
-      const allDepTasks = getAllTaskIds(cwd).map((id) => readTaskMeta(id, cwd)).filter((t2) => t2 !== null);
+      console.log(t(cwd2).analyzeFixPipeline.fixingDependencyRef.replace("{taskId}", issue.taskId));
+      const allDepTasks = getAllTaskIds(cwd2).map((id) => readTaskMeta(id, cwd2)).filter((t2) => t2 !== null);
       const validTaskIds = new Set(allDepTasks.map((t2) => t2.id));
       let removedAny = false;
       if (task.dependencies) {
@@ -20348,9 +20775,9 @@ async function fixSingleIssue(issue, cwd, nonInteractive) {
           task.dependencies = task.dependencies.filter((depId) => validTaskIds.has(depId));
           removedAny = task.dependencies.length < oldLength;
           if (removedAny) {
-            validatedWriteTaskMeta(task, cwd);
+            validatedWriteTaskMeta(task, cwd2);
             for (const invalidId of invalidRefs) {
-              console.log(`  \u2705 \u5DF2\u4ECE dependencies \u4E2D\u79FB\u9664\u65E0\u6548\u5F15\u7528 ${invalidId}`);
+              console.log("  " + t(cwd2).analyzeFixPipeline.dependencyRefRemoved.replace("{id}", invalidId));
             }
           }
         }
@@ -20360,16 +20787,16 @@ async function fixSingleIssue(issue, cwd, nonInteractive) {
         const oldLength = task.dependencies.length;
         task.dependencies = task.dependencies.filter((id) => id !== invalidId);
         if (task.dependencies.length < oldLength) {
-          validatedWriteTaskMeta(task, cwd);
-          console.log(`  \u2705 \u5DF2\u4ECE dependencies \u4E2D\u79FB\u9664\u65E0\u6548\u5F15\u7528 ${invalidId}`);
+          validatedWriteTaskMeta(task, cwd2);
+          console.log("  " + t(cwd2).analyzeFixPipeline.dependencyRefRemoved.replace("{id}", invalidId));
           removedAny = true;
         }
       }
       return removedAny ? "fixed" : "skipped";
     }
     case "missing_inferred_dependency": {
-      console.log(`\uD83D\uDD04 \u4FEE\u590D\u4EFB\u52A1 ${issue.taskId} \u7684\u63A8\u65AD\u4F9D\u8D56\u7F3A\u5931...`);
-      const allInferredTasks = getAllTaskIds(cwd).map((id) => readTaskMeta(id, cwd)).filter((t2) => t2 !== null);
+      console.log(t(cwd2).analyzeFixPipeline.inferringDependencies.replace("{taskId}", issue.taskId));
+      const allInferredTasks = getAllTaskIds(cwd2).map((id) => readTaskMeta(id, cwd2)).filter((t2) => t2 !== null);
       const inferredGraph = DependencyGraph.fromTasks(allInferredTasks);
       if (issue.details?.inferredDependencies) {
         const inferredDeps = issue.details.inferredDependencies;
@@ -20378,20 +20805,20 @@ async function fixSingleIssue(issue, cwd, nonInteractive) {
           for (const inferred of inferredDeps) {
             if (!task.dependencies.includes(inferred.depTaskId)) {
               if (!inferredGraph.hasNode(inferred.depTaskId)) {
-                console.log(`   \u26A0\uFE0F  \u63A8\u65AD\u4F9D\u8D56 ${inferred.depTaskId} \u4E0D\u5B58\u5728\uFF0C\u8DF3\u8FC7`);
+                console.log("   " + t(cwd2).analyzeFixPipeline.inferredDepNotFound.replace("{id}", inferred.depTaskId));
                 continue;
               }
               if (inferredGraph.wouldCreateCycle(issue.taskId, inferred.depTaskId)) {
-                console.log(`   \u26A0\uFE0F  \u6DFB\u52A0\u63A8\u65AD\u4F9D\u8D56 ${inferred.depTaskId} \u4F1A\u5F62\u6210\u5FAA\u73AF\uFF0C\u8DF3\u8FC7 (GATE-DEP-002)`);
+                console.log("   " + t(cwd2).analyzeFixPipeline.inferredDepWouldCreateCycle.replace("{id}", inferred.depTaskId));
                 continue;
               }
               task.dependencies.push(inferred.depTaskId);
-              console.log(`  \u2705 \u5DF2\u6DFB\u52A0\u63A8\u65AD\u4F9D\u8D56 ${inferred.depTaskId}: ${inferred.reason}`);
+              console.log("  " + t(cwd2).analyzeFixPipeline.inferredDepAdded.replace("{id}", inferred.depTaskId).replace("{reason}", inferred.reason));
               addedAny = true;
             }
           }
           if (addedAny) {
-            validatedWriteTaskMeta(task, cwd);
+            validatedWriteTaskMeta(task, cwd2);
             return "fixed";
           }
         }
@@ -20399,17 +20826,17 @@ async function fixSingleIssue(issue, cwd, nonInteractive) {
       return "skipped";
     }
     case "subtask_not_in_parent": {
-      console.log(`\uD83D\uDD04 \u4FEE\u590D\u5B50\u4EFB\u52A1 ${issue.taskId} \u5728\u7236\u4EFB\u52A1\u4E2D\u7684\u5F15\u7528...`);
+      console.log(t(cwd2).analyzeFixPipeline.fixingParentRef.replace("{taskId}", issue.taskId));
       if (task.parentId) {
-        const parentTask = readTaskMeta(task.parentId, cwd);
+        const parentTask = readTaskMeta(task.parentId, cwd2);
         if (parentTask) {
           if (!parentTask.subtaskIds) {
             parentTask.subtaskIds = [];
           }
           if (!parentTask.subtaskIds.includes(task.id)) {
             parentTask.subtaskIds.push(task.id);
-            validatedWriteTaskMeta(parentTask, cwd);
-            console.log(`  \u2705 \u5DF2\u5C06\u5B50\u4EFB\u52A1\u6DFB\u52A0\u5230\u7236\u4EFB\u52A1\u7684 subtaskIds \u4E2D`);
+            validatedWriteTaskMeta(parentTask, cwd2);
+            console.log("  " + t(cwd2).analyzeFixPipeline.parentRefAdded);
             return "fixed";
           }
         }
@@ -20417,14 +20844,14 @@ async function fixSingleIssue(issue, cwd, nonInteractive) {
       return "skipped";
     }
     case "parent_child_mismatch": {
-      console.log(`\uD83D\uDD04 \u4FEE\u590D\u4EFB\u52A1 ${issue.taskId} \u7684\u7236\u5B50\u5173\u7CFB\u4E0D\u4E00\u81F4...`);
+      console.log(t(cwd2).analyzeFixPipeline.fixingParentChildRelation.replace("{taskId}", issue.taskId));
       if (issue.details?.subtaskId && issue.details?.expectedParentId) {
         const subtaskId = issue.details.subtaskId;
-        const subtask = readTaskMeta(subtaskId, cwd);
+        const subtask = readTaskMeta(subtaskId, cwd2);
         if (subtask) {
           subtask.parentId = issue.details.expectedParentId;
-          validatedWriteTaskMeta(subtask, cwd);
-          console.log(`  \u2705 \u5DF2\u5C06\u5B50\u4EFB\u52A1 ${subtaskId} \u7684 parentId \u66F4\u65B0\u4E3A ${subtask.parentId}`);
+          validatedWriteTaskMeta(subtask, cwd2);
+          console.log("  " + t(cwd2).analyzeFixPipeline.parentChildRelationFixed.replace("{subtaskId}", subtaskId).replace("{parentId}", subtask.parentId));
           return "fixed";
         }
       }
@@ -20433,67 +20860,67 @@ async function fixSingleIssue(issue, cwd, nonInteractive) {
     case "meaningless_id": {
       const slug = extractSlugFromTask(task);
       if (!slug || isMeaninglessSlug(slug)) {
-        console.log(`\u26A0\uFE0F  \u4EFB\u52A1 ${issue.taskId} \u65E0\u6CD5\u63D0\u53D6\u6709\u610F\u4E49\u7684\u5173\u952E\u8BCD\uFF0C\u8DF3\u8FC7\u91CD\u547D\u540D`);
+        console.log(t(cwd2).analyzeFixPipeline.cannotExtractKeywords.replace("{taskId}", issue.taskId));
         return "unfixable";
       }
       const idInfo = parseTaskId(task.id);
       const taskType = task.type || idInfo.type || "feature";
       const taskPriority = task.priority || idInfo.priority;
-      const existingIds = getAllTaskIds(cwd);
+      const existingIds = getAllTaskIds(cwd2);
       const newId = generateTaskId(taskType, taskPriority, slug, existingIds);
       if (newId === task.id) {
-        console.log(`  \u23ED\uFE0F  \u4EFB\u52A1 ${issue.taskId} \u751F\u6210\u7684 ID \u4E0E\u5F53\u524D\u76F8\u540C\uFF0C\u8DF3\u8FC7`);
+        console.log("  " + t(cwd2).analyzeFixPipeline.generatedIdSame);
         return "skipped";
       }
-      console.log(`\uD83D\uDD04 \u91CD\u547D\u540D\u4EFB\u52A1: ${task.id} \u2192 ${newId}`);
-      const result = renameTask(task.id, newId, cwd);
+      console.log(t(cwd2).analyzeFixPipeline.renamingTask.replace("{old}", task.id).replace("{new}", newId));
+      const result = renameTask(task.id, newId, cwd2);
       if (result.success) {
-        console.log(`  \u2705 \u5DF2\u91CD\u547D\u540D\u4E3A ${newId}`);
+        console.log("  " + t(cwd2).analyzeFixPipeline.taskRenamed.replace("{id}", newId));
         return "fixed";
       }
-      console.log(`  \u274C \u91CD\u547D\u540D\u5931\u8D25: ${result.error}`);
+      console.log("  " + t(cwd2).analyzeFixPipeline.renameFailed.replace("{error}", result.error || ""));
       return "unfixable";
     }
     case "invalid_history_format":
     case "invalid_requirement_history_format":
     case "invalid_task_id_format": {
-      console.log(`\u26A0\uFE0F  \u4EFB\u52A1 ${issue.taskId} \u7684 ${issue.type} \u95EE\u9898\u65E0\u6CD5\u81EA\u52A8\u4FEE\u590D`);
-      console.log(`   \u5EFA\u8BAE: ${issue.suggestion}`);
+      console.log(t(cwd2).analyzeFixPipeline.cannotAutoFix.replace("{taskId}", issue.taskId).replace("{type}", issue.type));
+      console.log("   " + t(cwd2).analyzeFixPipeline.suggestion.replace("{suggestion}", issue.suggestion || ""));
       return "unfixable";
     }
     case "manual_verification": {
-      console.log(`\uD83D\uDD04 \u4FEE\u590D\u4EFB\u52A1 ${issue.taskId} \u7684 manual \u9A8C\u8BC1\u65B9\u6CD5...`);
+      console.log(t(cwd2).analyzeFixPipeline.fixingManualVerification.replace("{taskId}", issue.taskId));
       if (task.checkpoints && issue.details?.checkpointIds) {
         let fixedCount_local = 0;
         for (const cpId of issue.details.checkpointIds) {
           const cp = task.checkpoints.find((c) => c.id === cpId);
           if (cp && cp.verification && cp.verification.method === "manual") {
             cp.verification.method = "automated";
-            console.log(`  \u2705 \u68C0\u67E5\u70B9 ${cpId}: manual -> automated`);
+            console.log("  " + t(cwd2).analyzeFixPipeline.manualToAutomated.replace("{id}", cpId));
             fixedCount_local++;
           }
         }
         if (fixedCount_local > 0) {
-          validatedWriteTaskMeta(task, cwd);
+          validatedWriteTaskMeta(task, cwd2);
           return "fixed";
         }
       }
       return "skipped";
     }
     case "missing_verification": {
-      console.log(`\uD83D\uDD04 \u4FEE\u590D\u4EFB\u52A1 ${issue.taskId} \u7684\u7F3A\u5931 verification \u5B57\u6BB5...`);
+      console.log(t(cwd2).analyzeFixPipeline.fixingMissingVerification.replace("{taskId}", issue.taskId));
       if (task.status === "resolved" && !task.verification) {
         task.verification = buildTaskVerification(task);
-        validatedWriteTaskMeta(task, cwd);
-        console.log(`  \u2705 \u5DF2\u81EA\u52A8\u586B\u5145 verification \u5B57\u6BB5`);
-        console.log(`     \u7ED3\u679C: ${task.verification.result}`);
-        console.log(`     \u5B8C\u6210\u7387: ${task.verification.checkpointCompletionRate}%`);
+        validatedWriteTaskMeta(task, cwd2);
+        console.log("  " + t(cwd2).analyzeFixPipeline.verificationAutoFilled);
+        console.log("     " + t(cwd2).analyzeFixPipeline.result + ": " + task.verification.result);
+        console.log("     " + t(cwd2).analyzeFixPipeline.checkpointCompletionRate.replace("{rate}", String(task.verification.checkpointCompletionRate)));
         return "fixed";
       }
       return "skipped";
     }
     case "abandoned_residual": {
-      const archiveDir = getArchiveDir(cwd);
+      const archiveDir = getArchiveDir(cwd2);
       const tasksToDelete = issue.details?.tasks || [];
       if (tasksToDelete.length === 0)
         return "skipped";
@@ -20505,18 +20932,18 @@ async function fixSingleIssue(issue, cwd, nonInteractive) {
             fs17.rmSync(dirPath, { recursive: true, force: true });
             deleted++;
           } catch {
-            console.error(`  \u274C \u5220\u9664 ${taskId} \u5931\u8D25`);
+            console.error("  " + t(cwd2).analyzeFixPipeline.deleteFailed.replace("{taskId}", taskId));
           }
         }
-        console.log(`  \u2705 \u5DF2\u6E05\u9664 ${deleted} \u4E2A abandoned \u6B8B\u7559\u4EFB\u52A1`);
+        console.log("  " + t(cwd2).analyzeFixPipeline.abandonedTaskDeleted.replace("{count}", String(deleted)));
         return deleted > 0 ? "fixed" : "skipped";
       } else {
-        console.log(`\u68C0\u67E5 abandoned \u6B8B\u7559\u4EFB\u52A1...`);
-        console.log(`  \u53D1\u73B0 ${tasksToDelete.length} \u4E2A: ${tasksToDelete.join(", ")}`);
+        console.log(t(cwd2).analyzeFixPipeline.checkingAbandoned);
+        console.log("  " + t(cwd2).analyzeFixPipeline.abandonedFound.replace("{count}", String(tasksToDelete.length)).replace("{tasks}", tasksToDelete.join(", ")));
         const response = await import_prompts4.default({
           type: "confirm",
           name: "confirm",
-          message: `\u662F\u5426\u6E05\u9664\u8FD9\u4E9B abandoned \u6B8B\u7559\u4EFB\u52A1?`,
+          message: t(cwd2).analyzeFixPipeline.confirmCleanupAbandoned,
           initial: true
         });
         if (response.confirm) {
@@ -20527,28 +20954,28 @@ async function fixSingleIssue(issue, cwd, nonInteractive) {
               fs17.rmSync(dirPath, { recursive: true, force: true });
               deleted++;
             } catch {
-              console.error(`  \u274C \u5220\u9664 ${taskId} \u5931\u8D25`);
+              console.error("  " + t(cwd2).analyzeFixPipeline.deleteFailed.replace("{taskId}", taskId));
             }
           }
-          console.log(`  \u2705 \u5DF2\u6E05\u9664 ${deleted} \u4E2A abandoned \u6B8B\u7559\u4EFB\u52A1`);
+          console.log("  " + t(cwd2).analyzeFixPipeline.abandonedTaskDeleted.replace("{count}", String(deleted)));
           return deleted > 0 ? "fixed" : "skipped";
         }
         return "skipped";
       }
     }
     case "file_not_found": {
-      console.log(`\u26A0\uFE0F  \u4EFB\u52A1 ${issue.taskId} \u5F15\u7528\u4E86\u4E0D\u5B58\u5728\u7684\u6587\u4EF6\uFF0C\u65E0\u6CD5\u81EA\u52A8\u4FEE\u590D`);
+      console.log(t(cwd2).analyzeFixPipeline.missingFileRef.replace("{taskId}", issue.taskId));
       if (issue.details?.missingFiles) {
-        console.log(`   \u4E0D\u5B58\u5728\u7684\u6587\u4EF6: ${issue.details.missingFiles.join(", ")}`);
+        console.log("   " + t(cwd2).analyzeFixPipeline.missingFiles.replace("{files}", issue.details.missingFiles.join(", ")));
       }
-      console.log(`   \u5EFA\u8BAE: ${issue.suggestion}`);
+      console.log("   " + t(cwd2).analyzeFixPipeline.suggestion.replace("{suggestion}", issue.suggestion || ""));
       return "unfixable";
     }
     case "missing_transition_note": {
-      console.log(`\uD83D\uDD04 \u56DE\u586B\u4EFB\u52A1 ${issue.taskId} \u7684 transitionNote...`);
+      console.log(t(cwd2).analyzeFixPipeline.fillingTransitionNote.replace("{taskId}", issue.taskId));
       const historyEntry = issue.details?.historyEntry;
       if (!historyEntry) {
-        console.log(`  \u26A0\uFE0F  \u7F3A\u5C11\u5386\u53F2\u6761\u76EE\u8BE6\u60C5\uFF0C\u65E0\u6CD5\u56DE\u586B`);
+        console.log("  " + t(cwd2).analyzeFixPipeline.missingHistoryDetail);
         return "unfixable";
       }
       const actionLower = (historyEntry.action || "").toLowerCase();
@@ -20586,21 +21013,21 @@ async function fixSingleIssue(issue, cwd, nonInteractive) {
         note,
         author
       });
-      validatedWriteTaskMeta(task, cwd);
-      console.log(`  \u2705 \u5DF2\u56DE\u586B transitionNote: ${statusKey} (${author})`);
+      validatedWriteTaskMeta(task, cwd2);
+      console.log("  " + t(cwd2).analyzeFixPipeline.transitionNoteFilled.replace("{status}", statusKey).replace("{author}", author));
       return "fixed";
     }
     case "interrupted_task": {
       const suggestedStatus = issue.details?.suggestedStatus;
       if (!suggestedStatus) {
-        console.log(`  \u26A0\uFE0F  \u7F3A\u5C11\u72B6\u6001\u5EFA\u8BAE\uFF0C\u65E0\u6CD5\u81EA\u52A8\u4FEE\u590D`);
+        console.log("  " + t(cwd2).analyzeFixPipeline.missingSuggestion);
         return "unfixable";
       }
-      console.log(`\uD83D\uDD04 \u4FEE\u590D\u4E2D\u65AD\u4EFB\u52A1 ${issue.taskId}...`);
-      console.log(`   \u5F53\u524D\u72B6\u6001: ${task.status} \u2192 \u5EFA\u8BAE\u72B6\u6001: ${suggestedStatus}`);
-      console.log(`   \u539F\u56E0: ${issue.details?.suggestionReason || issue.suggestion}`);
+      console.log(t(cwd2).analyzeFixPipeline.fixingInterruptedTask.replace("{taskId}", issue.taskId));
+      console.log("   " + t(cwd2).analyzeFixPipeline.currentStatus.replace("{status}", task.status) + " \u2192 " + t(cwd2).analyzeFixPipeline.suggestedStatus.replace("{status}", suggestedStatus));
+      console.log("   " + t(cwd2).analyzeFixPipeline.reason.replace("{reason}", issue.details?.suggestionReason || issue.suggestion || ""));
       if (suggestedStatus === "in_progress") {
-        console.log(`  \u23ED\uFE0F  \u5EFA\u8BAE\u4FDD\u6301 in_progress\uFF0C\u8DF3\u8FC7\u4FEE\u590D`);
+        console.log("  " + t(cwd2).analyzeFixPipeline.skipKeepInProgress);
         return "skipped";
       }
       if (nonInteractive || !process.stdin.isTTY) {
@@ -20613,17 +21040,17 @@ async function fixSingleIssue(issue, cwd, nonInteractive) {
           timestamp: new Date().toISOString(),
           fromStatus: oldStatus,
           toStatus: suggestedStatus,
-          note: `\u4E2D\u65AD\u4EFB\u52A1\u81EA\u52A8\u4FEE\u590D: ${issue.details?.interruptedDays || 0} \u5929\u65E0\u6D3B\u8DC3 Pipeline`,
+          note: t(cwd2).analyzeFixPipeline.interruptedTaskAutoNote.replace("{days}", String(issue.details?.interruptedDays || 0)),
           author: "analyze"
         });
-        validatedWriteTaskMeta(task, cwd);
-        console.log(`  \u2705 \u5DF2\u5C06\u4EFB\u52A1 ${issue.taskId} \u72B6\u6001\u4ECE ${oldStatus} \u4FEE\u6539\u4E3A ${suggestedStatus}`);
+        validatedWriteTaskMeta(task, cwd2);
+        console.log("  " + t(cwd2).analyzeFixPipeline.statusFixed.replace("{taskId}", issue.taskId).replace("{old}", oldStatus).replace("{new}", suggestedStatus));
         return "fixed";
       }
       const response = await import_prompts4.default({
         type: "confirm",
         name: "apply",
-        message: `\u662F\u5426\u5C06\u4EFB\u52A1 ${issue.taskId} \u72B6\u6001\u4ECE ${task.status} \u4FEE\u6539\u4E3A ${suggestedStatus}?`,
+        message: t(cwd2).analyzeFixPipeline.confirmStatusChange.replace("{taskId}", issue.taskId).replace("{oldStatus}", task.status).replace("{newStatus}", suggestedStatus),
         initial: true
       });
       if (response.apply) {
@@ -20636,17 +21063,17 @@ async function fixSingleIssue(issue, cwd, nonInteractive) {
           timestamp: new Date().toISOString(),
           fromStatus: oldStatus,
           toStatus: suggestedStatus,
-          note: `\u4E2D\u65AD\u4EFB\u52A1\u624B\u52A8\u786E\u8BA4\u4FEE\u590D: ${issue.details?.interruptedDays || 0} \u5929\u65E0\u6D3B\u8DC3 Pipeline`,
+          note: t(cwd2).analyzeFixPipeline.interruptedTaskManualNote.replace("{days}", String(issue.details?.interruptedDays || 0)),
           author: "analyze"
         });
-        validatedWriteTaskMeta(task, cwd);
-        console.log(`  \u2705 \u5DF2\u5C06\u4EFB\u52A1 ${issue.taskId} \u72B6\u6001\u4ECE ${oldStatus} \u4FEE\u6539\u4E3A ${suggestedStatus}`);
+        validatedWriteTaskMeta(task, cwd2);
+        console.log("  " + t(cwd2).analyzeFixPipeline.statusFixed.replace("{taskId}", issue.taskId).replace("{old}", oldStatus).replace("{new}", suggestedStatus));
         return "fixed";
       }
       return "skipped";
     }
     case "reopened_status": {
-      console.log(`\uD83D\uDD04 \u8FC1\u79FB\u4EFB\u52A1 ${issue.taskId} \u7684\u5E9F\u5F03 reopened \u72B6\u6001...`);
+      console.log(t(cwd2).analyzeFixPipeline.migratingReopenedStatus.replace("{taskId}", issue.taskId));
       const oldStatus = task.status;
       setTaskStatusValidated(task, "open", "reopened-migration");
       if (!task.transitionNotes)
@@ -20655,15 +21082,15 @@ async function fixSingleIssue(issue, cwd, nonInteractive) {
         timestamp: new Date().toISOString(),
         fromStatus: "reopened",
         toStatus: "open",
-        note: "analyze --fix: reopened \u72B6\u6001\u5DF2\u5E9F\u5F03\uFF0C\u8FC1\u79FB\u4E3A open",
+        note: t(cwd2).analyzeFixPipeline.reopenedStatusMigrationNote,
         author: "analyze-fix"
       });
-      validatedWriteTaskMeta(task, cwd);
-      console.log(`  \u2705 \u72B6\u6001\u5DF2\u4ECE reopened \u8FC1\u79FB\u4E3A open`);
+      validatedWriteTaskMeta(task, cwd2);
+      console.log("  " + t(cwd2).analyzeFixPipeline.reopenedMigrated);
       return "fixed";
     }
     case "needs_human_status": {
-      console.log(`\uD83D\uDD04 \u8FC1\u79FB\u4EFB\u52A1 ${issue.taskId} \u7684\u5E9F\u5F03 needs_human \u72B6\u6001...`);
+      console.log(t(cwd2).analyzeFixPipeline.migratingNeedsHumanStatus.replace("{taskId}", issue.taskId));
       const oldStatus = task.status;
       setTaskStatusValidated(task, "open", "needs-human-migration");
       if (!task.transitionNotes)
@@ -20672,37 +21099,38 @@ async function fixSingleIssue(issue, cwd, nonInteractive) {
         timestamp: new Date().toISOString(),
         fromStatus: "needs_human",
         toStatus: "open",
-        note: "analyze --fix: needs_human \u72B6\u6001\u5DF2\u5E9F\u5F03\uFF0C\u8FC1\u79FB\u4E3A open \u4EE5\u4FBF\u91CD\u65B0\u5904\u7406",
+        note: t(cwd2).analyzeFixPipeline.needsHumanStatusMigrationNote,
         author: "analyze-fix"
       });
-      validatedWriteTaskMeta(task, cwd);
-      console.log(`  \u2705 \u72B6\u6001\u5DF2\u4ECE needs_human \u8FC1\u79FB\u4E3A open`);
+      validatedWriteTaskMeta(task, cwd2);
+      console.log("  " + t(cwd2).analyzeFixPipeline.needsHumanMigrated);
       return "fixed";
     }
     case "low_checkpoint_coverage": {
-      console.log(`\u26A0\uFE0F  \u9879\u76EE\u68C0\u67E5\u70B9\u8986\u76D6\u7387\u4E0D\u8DB3\uFF0C\u9700\u4EBA\u5DE5\u8865\u5145`);
+      console.log(t(cwd2).analyzeFixPipeline.checkpointCoverageWarning);
       if (issue.details?.tasksWithoutCheckpoints) {
-        console.log(`   \u7F3A\u5C11\u68C0\u67E5\u70B9\u7684\u4EFB\u52A1\u6570: ${issue.details.tasksWithoutCheckpoints}`);
+        console.log("   " + t(cwd2).analyzeFixPipeline.tasksWithoutCheckpoints.replace("{count}", String(issue.details.tasksWithoutCheckpoints)));
       }
       if (issue.details?.coverageRate != null) {
-        console.log(`   \u5F53\u524D\u8986\u76D6\u7387: ${(issue.details.coverageRate * 100).toFixed(1)}%`);
+        console.log("   " + t(cwd2).analyzeFixPipeline.currentCoverage.replace("{rate}", String((issue.details.coverageRate * 100).toFixed(1))));
       }
-      console.log(`   \u5EFA\u8BAE: \u4F7F\u7528 --fix --checkpoints-only \u81EA\u52A8\u751F\u6210\u68C0\u67E5\u70B9\uFF0C\u6216\u624B\u52A8\u4E3A\u4EFB\u52A1\u6DFB\u52A0\u9A8C\u6536\u6807\u51C6`);
+      console.log("   " + t(cwd2).analyzeFixPipeline.suggestion.replace("{suggestion}", t(cwd2).analyzeFixPipeline.lowQualitySuggestion));
       return "unfixable";
     }
     case "low_quality": {
-      console.log(`\u26A0\uFE0F  \u4EFB\u52A1 ${issue.taskId} \u5185\u5BB9\u8D28\u91CF\u4F4E (${issue.details?.totalScore ?? "?"}\u5206/100)`);
+      const score = issue.details?.totalScore ?? "?";
+      console.log(t(cwd2).analyzeFixPipeline.lowQualityTask.replace("{taskId}", issue.taskId).replace("{score}", String(score)));
       const deductions = issue.details?.deductions ?? [];
       if (deductions.length > 0) {
         for (const d of deductions.slice(0, 3)) {
-          console.log(`   \u2514\u2500 ${d.reason}${d.suggestion ? ` (\u5EFA\u8BAE: ${d.suggestion})` : ""}`);
+          console.log(`   \u2514\u2500 ${d.reason}${d.suggestion ? ` (${t(cwd2).analyzeFixPipeline.suggestion.replace("{suggestion}", d.suggestion)})` : ""}`);
         }
       }
-      console.log(`   \u5EFA\u8BAE: ${issue.suggestion}`);
+      console.log("   " + t(cwd2).analyzeFixPipeline.suggestion.replace("{suggestion}", issue.suggestion || ""));
       return "unfixable";
     }
     case "deprecated_status_reference": {
-      console.log(`\uD83D\uDD04 \u6E05\u7406\u4EFB\u52A1 ${issue.taskId} \u5386\u53F2\u8BB0\u5F55\u4E2D\u7684\u5E9F\u5F03\u72B6\u6001\u5F15\u7528...`);
+      console.log(t(cwd2).analyzeFixPipeline.cleaningObsoleteStatus.replace("{taskId}", issue.taskId));
       let fixedAny = false;
       for (const entry of task.history || []) {
         if (entry.oldValue === "reopened" || entry.oldValue === "needs_human") {
@@ -20729,8 +21157,8 @@ async function fixSingleIssue(issue, cwd, nonInteractive) {
         }
       }
       if (fixedAny) {
-        validatedWriteTaskMeta(task, cwd);
-        console.log(`  \u2705 \u5DF2\u6E05\u7406\u5386\u53F2\u8BB0\u5F55\u4E2D\u7684\u5E9F\u5F03\u72B6\u6001\u5F15\u7528`);
+        validatedWriteTaskMeta(task, cwd2);
+        console.log("  " + t(cwd2).analyzeFixPipeline.obsoleteStatusCleaned);
         return "fixed";
       }
       return "skipped";
@@ -20738,10 +21166,10 @@ async function fixSingleIssue(issue, cwd, nonInteractive) {
     case "report_status_mismatch": {
       const impliedStatus = issue.details?.impliedStatus;
       if (!impliedStatus) {
-        console.log(`  \u26A0\uFE0F  \u7F3A\u5C11\u63A8\u65AD\u72B6\u6001\u4FE1\u606F\uFF0C\u65E0\u6CD5\u4FEE\u590D`);
+        console.log("  " + t(cwd2).analyzeFixPipeline.missingInferenceInfo);
         return "unfixable";
       }
-      console.log(`\uD83D\uDD04 \u4FEE\u590D\u4EFB\u52A1 ${issue.taskId} \u7684\u62A5\u544A-\u72B6\u6001\u4E0D\u4E00\u81F4...`);
+      console.log(t(cwd2).analyzeFixPipeline.fixingReportStatusMismatch.replace("{taskId}", issue.taskId));
       const oldStatus = task.status;
       setTaskStatusValidated(task, impliedStatus, "report-status-mismatch");
       task.updatedAt = new Date().toISOString();
@@ -20751,15 +21179,15 @@ async function fixSingleIssue(issue, cwd, nonInteractive) {
         timestamp: new Date().toISOString(),
         fromStatus: oldStatus,
         toStatus: impliedStatus,
-        note: `analyze --fix: \u62A5\u544A-\u72B6\u6001\u4E0D\u4E00\u81F4\uFF0C\u72B6\u6001\u4ECE ${oldStatus} \u66F4\u65B0\u4E3A ${impliedStatus} (${issue.details?.reportFile} PASS)`,
+        note: t(cwd2).analyzeFixPipeline.reportStatusMismatchNote.replace("{oldStatus}", oldStatus).replace("{newStatus}", impliedStatus).replace("{reportFile}", String(issue.details?.reportFile)),
         author: "analyze-fix"
       });
-      validatedWriteTaskMeta(task, cwd);
-      console.log(`  \u2705 \u72B6\u6001\u5DF2\u4ECE ${oldStatus} \u66F4\u65B0\u4E3A ${impliedStatus} (${issue.details?.reportFile} PASS)`);
+      validatedWriteTaskMeta(task, cwd2);
+      console.log("  " + t(cwd2).analyzeFixPipeline.reportStatusMismatchFixed.replace("{old}", oldStatus).replace("{new}", impliedStatus).replace("{report}", String(issue.details?.reportFile)));
       return "fixed";
     }
     case "checkpoint_status_mismatch": {
-      console.log(`\uD83D\uDD04 \u4FEE\u590D\u4EFB\u52A1 ${issue.taskId} \u7684\u68C0\u67E5\u70B9-\u72B6\u6001\u4E0D\u4E00\u81F4 (resolved + \u5168 pending)...`);
+      console.log(t(cwd2).analyzeFixPipeline.fixingCheckpointStatusMismatch.replace("{taskId}", issue.taskId));
       if (!task.checkpoints || task.checkpoints.length === 0) {
         return "skipped";
       }
@@ -20779,8 +21207,8 @@ async function fixSingleIssue(issue, cwd, nonInteractive) {
       }
       if (completedCount > 0) {
         task.updatedAt = now;
-        validatedWriteTaskMeta(task, cwd);
-        console.log(`  \u2705 \u5DF2\u81EA\u52A8\u5B8C\u6210 ${completedCount} \u4E2A pending \u68C0\u67E5\u70B9 (\u65E7\u7248\u9057\u7559)`);
+        validatedWriteTaskMeta(task, cwd2);
+        console.log("  " + t(cwd2).analyzeFixPipeline.checkpointStatusMismatchFixed.replace("{count}", String(completedCount)));
         return "fixed";
       }
       return "skipped";
@@ -20788,10 +21216,10 @@ async function fixSingleIssue(issue, cwd, nonInteractive) {
     case "missing_pipeline_evidence": {
       const fixAction = issue.details?.fixAction;
       if (fixAction !== "reset_to_open") {
-        console.log(`  \u26A0\uFE0F  \u672A\u77E5\u7684\u4FEE\u590D\u52A8\u4F5C: ${fixAction}`);
+        console.log("  " + t(cwd2).analyzeFixPipeline.unknownFixAction.replace("{action}", fixAction || ""));
         return "unfixable";
       }
-      console.log(`\uD83D\uDD04 \u91CD\u7F6E\u4EFB\u52A1 ${issue.taskId} \u5230 open \u72B6\u6001 (\u7F3A\u5C11 pipeline \u6062\u590D\u8BC1\u636E)...`);
+      console.log(t(cwd2).analyzeFixPipeline.resettingTask.replace("{taskId}", issue.taskId));
       const oldStatus = task.status;
       setTaskStatusValidated(task, "open", "missing-pipeline-evidence");
       task.updatedAt = new Date().toISOString();
@@ -20801,25 +21229,25 @@ async function fixSingleIssue(issue, cwd, nonInteractive) {
         timestamp: new Date().toISOString(),
         fromStatus: oldStatus,
         toStatus: "open",
-        note: `analyze --fix: \u7F3A\u5C11 pipeline \u6062\u590D\u8BC1\u636E\uFF0C\u4ECE ${oldStatus} \u91CD\u7F6E\u4E3A open`,
+        note: t(cwd2).analyzeFixPipeline.missingPipelineEvidenceNote.replace("{oldStatus}", oldStatus),
         author: "analyze-fix"
       });
       if (!task.resumeAction) {
         task.resumeAction = "reset_to_open";
       }
-      validatedWriteTaskMeta(task, cwd);
-      console.log(`  \u2705 \u5DF2\u5C06\u4EFB\u52A1\u4ECE ${oldStatus} \u91CD\u7F6E\u4E3A open (\u7F3A\u5C11\u6062\u590D\u8BC1\u636E)`);
+      validatedWriteTaskMeta(task, cwd2);
+      console.log("  " + t(cwd2).analyzeFixPipeline.taskReset.replace("{old}", oldStatus));
       return "fixed";
     }
     case "checkpoint_validation_error": {
       const ruleId = issue.details?.ruleId;
       if (ruleId !== "checkpoint-required-prefix") {
-        console.log(`  \u26A0\uFE0F  \u4E0D\u652F\u6301\u7684\u68C0\u67E5\u70B9\u9A8C\u8BC1\u89C4\u5219: ${ruleId}`);
+        console.log("  " + t(cwd2).analyzeFixPipeline.unsupportedRule.replace("{rule}", ruleId || ""));
         return "unfixable";
       }
-      console.log(`\uD83D\uDD04 \u4FEE\u590D\u4EFB\u52A1 ${issue.taskId} \u7684\u68C0\u67E5\u70B9\u524D\u7F00...`);
+      console.log(t(cwd2).analyzeFixPipeline.fixingCheckpointPrefix.replace("{taskId}", issue.taskId));
       if (!task.checkpoints || task.checkpoints.length === 0) {
-        console.log(`  \u26A0\uFE0F  \u4EFB\u52A1\u6CA1\u6709\u68C0\u67E5\u70B9`);
+        console.log("  " + t(cwd2).analyzeFixPipeline.noCheckpoints);
         return "skipped";
       }
       let updatedCount = 0;
@@ -20836,17 +21264,17 @@ async function fixSingleIssue(issue, cwd, nonInteractive) {
       }
       if (updatedCount > 0) {
         task.updatedAt = now;
-        syncCheckpointsToMeta(task.id, task.checkpoints, cwd);
-        console.log(`  \u2705 \u5DF2\u4E3A ${updatedCount} \u4E2A\u68C0\u67E5\u70B9\u6DFB\u52A0\u524D\u7F00`);
+        syncCheckpointsToMeta(task.id, task.checkpoints, cwd2);
+        console.log("  " + t(cwd2).analyzeFixPipeline.checkpointPrefixUpdated.replace("{count}", String(updatedCount)));
         return "fixed";
       }
-      console.log(`  \u2139\uFE0F  \u6240\u6709\u68C0\u67E5\u70B9\u5DF2\u6709\u6709\u6548\u524D\u7F00`);
+      console.log("  " + t(cwd2).analyzeFixPipeline.allCheckpointsHavePrefix);
       return "skipped";
     }
     case "missing_checkpoint_prefix": {
-      console.log(`\uD83D\uDD04 \u4FEE\u590D\u4EFB\u52A1 ${issue.taskId} \u7684\u68C0\u67E5\u70B9\u524D\u7F00...`);
+      console.log(t(cwd2).analyzeFixPipeline.fixingCheckpointPrefix.replace("{taskId}", issue.taskId));
       if (!task.checkpoints || task.checkpoints.length === 0) {
-        console.log(`  \u26A0\uFE0F  \u4EFB\u52A1\u6CA1\u6709\u68C0\u67E5\u70B9`);
+        console.log("  " + t(cwd2).analyzeFixPipeline.noCheckpoints);
         return "skipped";
       }
       let updatedCount = 0;
@@ -20863,29 +21291,29 @@ async function fixSingleIssue(issue, cwd, nonInteractive) {
       }
       if (updatedCount > 0) {
         task.updatedAt = now;
-        syncCheckpointsToMeta(task.id, task.checkpoints, cwd);
-        console.log(`  \u2705 \u5DF2\u4E3A ${updatedCount} \u4E2A\u68C0\u67E5\u70B9\u6DFB\u52A0\u524D\u7F00`);
+        syncCheckpointsToMeta(task.id, task.checkpoints, cwd2);
+        console.log("  " + t(cwd2).analyzeFixPipeline.checkpointPrefixUpdated.replace("{count}", String(updatedCount)));
         return "fixed";
       }
-      console.log(`  \u2139\uFE0F  \u6240\u6709\u68C0\u67E5\u70B9\u5DF2\u6709\u6709\u6548\u524D\u7F00`);
+      console.log("  " + t(cwd2).analyzeFixPipeline.allCheckpointsHavePrefix);
       return "skipped";
     }
     default:
       return "unfixable";
   }
 }
-async function fixIssues(cwd = process.cwd(), options = {}, existingResult) {
+async function fixIssues(cwd2 = process.cwd(), options = {}, existingResult) {
   const { nonInteractive = false } = options;
-  const result = existingResult ?? await analyzeProject(cwd);
+  const result = existingResult ?? await analyzeProject(cwd2);
   if (result.issues.length === 0) {
-    console.log("\u2705 \u6CA1\u6709\u9700\u8981\u4FEE\u590D\u7684\u95EE\u9898");
+    console.log(t(cwd2).analyzeFixPipeline.noIssuesFound);
     return { fixed: 0, skipped: 0, unfixable: 0 };
   }
   console.log("");
   console.log("\u2501".repeat(SEPARATOR_WIDTH));
-  console.log("\uD83D\uDD27 \u81EA\u52A8\u4FEE\u590D\u95EE\u9898");
+  console.log(t(cwd2).analyzeFixPipeline.autoFixIssues);
   if (nonInteractive) {
-    console.log("   (\u975E\u4EA4\u4E92\u6A21\u5F0F)");
+    console.log("   " + t(cwd2).analyzeFixPipeline.nonInteractiveMode);
   }
   console.log("\u2501".repeat(SEPARATOR_WIDTH));
   console.log("");
@@ -20895,9 +21323,10 @@ async function fixIssues(cwd = process.cwd(), options = {}, existingResult) {
   for (const issue of result.issues) {
     let fixResult;
     try {
-      fixResult = await fixSingleIssue(issue, cwd, nonInteractive);
+      fixResult = await fixSingleIssue(issue, cwd2, nonInteractive);
     } catch (error) {
-      console.error(`\u274C \u4FEE\u590D ${issue.taskId} (${issue.type}) \u65F6\u51FA\u9519: ${error instanceof Error ? error.message : String(error)}`);
+      const errorMsg = error instanceof Error ? error.message : String(error);
+      console.error(t(cwd2).analyzeFixPipeline.fixError.replace("{taskId}", issue.taskId).replace("{type}", issue.type).replace("{error}", errorMsg));
       fixResult = "skipped";
     }
     if (fixResult === "fixed") {
@@ -20910,18 +21339,18 @@ async function fixIssues(cwd = process.cwd(), options = {}, existingResult) {
   }
   console.log("");
   console.log("\u2501".repeat(SEPARATOR_WIDTH));
-  console.log(`\u2705 \u5171\u4FEE\u590D ${fixedCount} \u4E2A\u95EE\u9898`);
+  console.log(t(cwd2).analyzeFixPipeline.fixComplete.replace("{count}", String(fixedCount)));
   if (skippedCount > 0)
-    console.log(`\u23ED\uFE0F  \u8DF3\u8FC7 ${skippedCount} \u4E2A\u95EE\u9898`);
+    console.log(t(cwd2).analyzeFixPipeline.fixSkipped.replace("{count}", String(skippedCount)));
   if (unfixableCount > 0)
-    console.log(`\u26A0\uFE0F  ${unfixableCount} \u4E2A\u95EE\u9898\u65E0\u6CD5\u81EA\u52A8\u4FEE\u590D`);
+    console.log(t(cwd2).analyzeFixPipeline.fixUnfixable.replace("{count}", String(unfixableCount)));
   console.log("\u2501".repeat(SEPARATOR_WIDTH));
   return { fixed: fixedCount, skipped: skippedCount, unfixable: unfixableCount };
 }
 function emptyStageResult(summary) {
   return { executed: false, skipped: true, duration: 0, summary };
 }
-async function fixPipeline(cwd = process.cwd(), options = {}) {
+async function fixPipeline(cwd2 = process.cwd(), options = {}) {
   const pipelineStart = Date.now();
   const {
     nonInteractive = false,
@@ -20943,7 +21372,7 @@ async function fixPipeline(cwd = process.cwd(), options = {}) {
   let analysisResult;
   console.log("");
   console.log("\u2501".repeat(SEPARATOR_WIDTH));
-  console.log("\uD83D\uDD27 analyze --fix \u6D41\u6C34\u7EBF\u6A21\u5F0F");
+  console.log(t(cwd2).analyzeFixPipeline.fixPipelineMode);
   const stages = [];
   if (runStage1)
     stages.push("1");
@@ -20955,100 +21384,103 @@ async function fixPipeline(cwd = process.cwd(), options = {}) {
     stages.push("4");
   if (runStage5)
     stages.push("5");
-  console.log(`   \u6267\u884C\u9636\u6BB5: ${stages.join(", ")} / 5`);
+  console.log("   " + t(cwd2).analyzeFixPipeline.executingStages + ": " + stages.join(", ") + " / 5");
   console.log("\u2501".repeat(SEPARATOR_WIDTH));
   let stage1Result;
   if (runStage1) {
     const start = Date.now();
     console.log(`
-\uD83D\uDCCB Stage 1: \u89C4\u5219\u5F15\u64CE\u5206\u6790...`);
+` + t(cwd2).analyzeFixPipeline.stage1Analysis);
     try {
-      analysisResult = await analyzeProject(cwd, false, aiOptions);
+      analysisResult = await analyzeProject(cwd2, false, aiOptions);
       const issueCount = analysisResult.issues.length;
       const duration = Date.now() - start;
       stage1Result = {
         executed: true,
         skipped: false,
         duration,
-        summary: `\u53D1\u73B0 ${issueCount} \u4E2A\u95EE\u9898`
+        summary: t(cwd2).analyzeFixPipeline.stage1Complete.replace("{count}", String(issueCount)).replace("{duration}", (duration / 1000).toFixed(1))
       };
-      console.log(`   \u2705 Stage 1 \u5B8C\u6210: \u53D1\u73B0 ${issueCount} \u4E2A\u95EE\u9898 (${(duration / 1000).toFixed(1)}s)`);
+      console.log("   " + t(cwd2).analyzeFixPipeline.stage1Complete.replace("{count}", String(issueCount)).replace("{duration}", (duration / 1000).toFixed(1)));
     } catch (error) {
       const duration = Date.now() - start;
+      const errorMsg = error instanceof Error ? error.message : String(error);
       stage1Result = {
         executed: true,
         skipped: false,
         duration,
-        summary: `\u5206\u6790\u5931\u8D25: ${error instanceof Error ? error.message : String(error)}`
+        summary: t(cwd2).analyzeFixPipeline.stage1Failed.replace("{error}", errorMsg)
       };
-      console.error(`   \u274C Stage 1 \u5931\u8D25: ${error instanceof Error ? error.message : String(error)}`);
+      console.error("   " + t(cwd2).analyzeFixPipeline.stage1Failed.replace("{error}", errorMsg));
     }
   } else {
-    stage1Result = emptyStageResult("\u8DF3\u8FC7 (--checkpoints-only \u6216 --quality-only)");
-    console.log("   \u23ED\uFE0F  Stage 1: \u8DF3\u8FC7");
+    stage1Result = emptyStageResult(t(cwd2).analyzeFixPipeline.stage1Skipped);
+    console.log("   " + t(cwd2).analyzeFixPipeline.stage1Skipped);
   }
   let stage2Result;
   if (runStage2 && analysisResult) {
     const start = Date.now();
     console.log(`
-\uD83D\uDD27 Stage 2: \u89C4\u5219\u4FEE\u590D...`);
+` + t(cwd2).analyzeFixPipeline.stage2Fix);
     try {
-      const fixResult = await fixIssues(cwd, { nonInteractive }, analysisResult);
+      const fixResult = await fixIssues(cwd2, { nonInteractive }, analysisResult);
       const duration = Date.now() - start;
       stage2Result = {
         executed: true,
         skipped: false,
         duration,
-        summary: `\u4FEE\u590D ${fixResult.fixed} \u4E2A, \u8DF3\u8FC7 ${fixResult.skipped} \u4E2A, \u4E0D\u53EF\u4FEE\u590D ${fixResult.unfixable} \u4E2A`
+        summary: t(cwd2).analyzeFixPipeline.stage2Complete.replace("{fixed}", String(fixResult.fixed)).replace("{skipped}", String(fixResult.skipped)).replace("{duration}", (duration / 1000).toFixed(1))
       };
-      console.log(`   \u2705 Stage 2 \u5B8C\u6210: ${fixResult.fixed} \u4FEE\u590D, ${fixResult.skipped} \u8DF3\u8FC7 (${(duration / 1000).toFixed(1)}s)`);
+      console.log("   " + t(cwd2).analyzeFixPipeline.stage2Complete.replace("{fixed}", String(fixResult.fixed)).replace("{skipped}", String(fixResult.skipped)).replace("{duration}", (duration / 1000).toFixed(1)));
     } catch (error) {
       const duration = Date.now() - start;
+      const errorMsg = error instanceof Error ? error.message : String(error);
       stage2Result = {
         executed: true,
         skipped: false,
         duration,
-        summary: `\u4FEE\u590D\u5931\u8D25: ${error instanceof Error ? error.message : String(error)}`
+        summary: t(cwd2).analyzeFixPipeline.stage2Failed.replace("{error}", errorMsg)
       };
-      console.error(`   \u274C Stage 2 \u5931\u8D25: ${error instanceof Error ? error.message : String(error)}`);
+      console.error("   " + t(cwd2).analyzeFixPipeline.stage2Failed.replace("{error}", errorMsg));
     }
   } else if (runStage2 && !analysisResult) {
     const start = Date.now();
     console.log(`
-\uD83D\uDD27 Stage 2: \u89C4\u5219\u4FEE\u590D (\u542B\u5206\u6790)...`);
+` + t(cwd2).analyzeFixPipeline.stage2FixWithAnalysis);
     try {
-      const fixResult = await fixIssues(cwd, { nonInteractive });
+      const fixResult = await fixIssues(cwd2, { nonInteractive });
       const duration = Date.now() - start;
       stage2Result = {
         executed: true,
         skipped: false,
         duration,
-        summary: `\u4FEE\u590D ${fixResult.fixed} \u4E2A, \u8DF3\u8FC7 ${fixResult.skipped} \u4E2A, \u4E0D\u53EF\u4FEE\u590D ${fixResult.unfixable} \u4E2A`
+        summary: t(cwd2).analyzeFixPipeline.stage2Complete.replace("{fixed}", String(fixResult.fixed)).replace("{skipped}", String(fixResult.skipped)).replace("{duration}", (duration / 1000).toFixed(1))
       };
-      console.log(`   \u2705 Stage 2 \u5B8C\u6210: ${fixResult.fixed} \u4FEE\u590D, ${fixResult.skipped} \u8DF3\u8FC7 (${(duration / 1000).toFixed(1)}s)`);
+      console.log("   " + t(cwd2).analyzeFixPipeline.stage2Complete.replace("{fixed}", String(fixResult.fixed)).replace("{skipped}", String(fixResult.skipped)).replace("{duration}", (duration / 1000).toFixed(1)));
     } catch (error) {
       const duration = Date.now() - start;
+      const errorMsg = error instanceof Error ? error.message : String(error);
       stage2Result = {
         executed: true,
         skipped: false,
         duration,
-        summary: `\u4FEE\u590D\u5931\u8D25: ${error instanceof Error ? error.message : String(error)}`
+        summary: t(cwd2).analyzeFixPipeline.stage2Failed.replace("{error}", errorMsg)
       };
-      console.error(`   \u274C Stage 2 \u5931\u8D25: ${error instanceof Error ? error.message : String(error)}`);
+      console.error("   " + t(cwd2).analyzeFixPipeline.stage2Failed.replace("{error}", errorMsg));
     }
   } else {
-    stage2Result = emptyStageResult("\u8DF3\u8FC7 (--rules-only \u672A\u8BBE\u7F6E\u4F46\u7F3A\u5C11\u5206\u6790\u7ED3\u679C, \u6216 --checkpoints-only/--quality-only)");
-    console.log("   \u23ED\uFE0F  Stage 2: \u8DF3\u8FC7");
+    stage2Result = emptyStageResult(t(cwd2).analyzeFixPipeline.stage2Skipped);
+    console.log("   " + t(cwd2).analyzeFixPipeline.stage2Skipped);
   }
   let stage3Result;
   if (runStage3) {
     const start = Date.now();
     console.log(`
-\uD83E\uDD16 Stage 3: AI \u6DF1\u5EA6\u5206\u6790...`);
+` + t(cwd2).analyzeFixPipeline.stage3AI);
     if (aiOptions.deepAnalyze && !aiOptions.noAi) {
       try {
         if (!analysisResult) {
-          analysisResult = await analyzeProject(cwd, false, aiOptions);
+          analysisResult = await analyzeProject(cwd2, false, aiOptions);
         }
         const aiIssues = analysisResult.issues.filter((i) => i.type === "semantic_duplicate" || i.type === "missing_inferred_dependency");
         const duration = Date.now() - start;
@@ -21056,18 +21488,19 @@ async function fixPipeline(cwd = process.cwd(), options = {}) {
           executed: true,
           skipped: false,
           duration,
-          summary: `AI \u53D1\u73B0 ${aiIssues.length} \u4E2A\u8BED\u4E49\u95EE\u9898`
+          summary: t(cwd2).analyzeFixPipeline.stage3Complete.replace("{count}", String(aiIssues.length)).replace("{duration}", (duration / 1000).toFixed(1))
         };
-        console.log(`   \u2705 Stage 3 \u5B8C\u6210: AI \u53D1\u73B0 ${aiIssues.length} \u4E2A\u8BED\u4E49\u95EE\u9898 (${(duration / 1000).toFixed(1)}s)`);
+        console.log("   " + t(cwd2).analyzeFixPipeline.stage3Complete.replace("{count}", String(aiIssues.length)).replace("{duration}", (duration / 1000).toFixed(1)));
       } catch (error) {
         const duration = Date.now() - start;
+        const errorMsg = error instanceof Error ? error.message : String(error);
         stage3Result = {
           executed: true,
           skipped: false,
           duration,
-          summary: `AI \u5206\u6790\u5931\u8D25: ${error instanceof Error ? error.message : String(error)}`
+          summary: t(cwd2).analyzeFixPipeline.stage3Failed.replace("{error}", errorMsg)
         };
-        console.error(`   \u274C Stage 3 \u5931\u8D25: ${error instanceof Error ? error.message : String(error)}`);
+        console.error("   " + t(cwd2).analyzeFixPipeline.stage3Failed.replace("{error}", errorMsg));
       }
     } else {
       const duration = Date.now() - start;
@@ -21075,67 +21508,69 @@ async function fixPipeline(cwd = process.cwd(), options = {}) {
         executed: true,
         skipped: false,
         duration,
-        summary: "AI \u6DF1\u5EA6\u5206\u6790\u672A\u542F\u7528 (\u4F7F\u7528 --deep-analyze \u6FC0\u6D3B)"
+        summary: t(cwd2).analyzeFixPipeline.stage3NotEnabled
       };
-      console.log("   \u23ED\uFE0F  Stage 3: AI \u6DF1\u5EA6\u5206\u6790\u672A\u542F\u7528 (\u4F7F\u7528 --deep-analyze \u6FC0\u6D3B\u5B8C\u6574 AI \u5206\u6790)");
+      console.log("   " + t(cwd2).analyzeFixPipeline.stage3NotEnabled);
     }
   } else {
-    stage3Result = emptyStageResult(noAi ? "\u8DF3\u8FC7 (--no-ai)" : "\u8DF3\u8FC7 (--rules-only/--checkpoints-only/--quality-only)");
-    console.log(`   \u23ED\uFE0F  Stage 3: \u8DF3\u8FC7 (${noAi ? "--no-ai" : "\u672A\u9009\u62E9"})`);
+    const skipReason = noAi ? "--no-ai" : "--rules-only/--checkpoints-only/--quality-only";
+    stage3Result = emptyStageResult(t(cwd2).analyzeFixPipeline.stage3Skipped.replace("{reason}", skipReason));
+    console.log("   " + t(cwd2).analyzeFixPipeline.stage3Skipped.replace("{reason}", skipReason));
   }
   let stage4Result;
   if (runStage4) {
     const start = Date.now();
     console.log(`
-\uD83D\uDCCC Stage 4: \u68C0\u67E5\u70B9\u4FEE\u590D...`);
+` + t(cwd2).analyzeFixPipeline.stage4Checkpoint);
     try {
-      await fixCheckpoints(cwd, { nonInteractive, taskId });
+      await fixCheckpoints(cwd2, { nonInteractive, taskId });
       const duration = Date.now() - start;
       stage4Result = {
         executed: true,
         skipped: false,
         duration,
-        summary: "\u68C0\u67E5\u70B9\u4FEE\u590D\u5B8C\u6210"
+        summary: t(cwd2).analyzeFixPipeline.stage4Complete.replace("{duration}", (duration / 1000).toFixed(1))
       };
-      console.log(`   \u2705 Stage 4 \u5B8C\u6210: \u68C0\u67E5\u70B9\u4FEE\u590D (${(duration / 1000).toFixed(1)}s)`);
+      console.log("   " + t(cwd2).analyzeFixPipeline.stage4Complete.replace("{duration}", (duration / 1000).toFixed(1)));
     } catch (error) {
       const duration = Date.now() - start;
+      const errorMsg = error instanceof Error ? error.message : String(error);
       stage4Result = {
         executed: true,
         skipped: false,
         duration,
-        summary: `\u68C0\u67E5\u70B9\u4FEE\u590D\u5931\u8D25: ${error instanceof Error ? error.message : String(error)}`
+        summary: t(cwd2).analyzeFixPipeline.stage4Failed.replace("{error}", errorMsg)
       };
-      console.error(`   \u274C Stage 4 \u5931\u8D25: ${error instanceof Error ? error.message : String(error)}`);
+      console.error("   " + t(cwd2).analyzeFixPipeline.stage4Failed.replace("{error}", errorMsg));
     }
   } else {
-    stage4Result = emptyStageResult("\u8DF3\u8FC7 (--rules-only \u6216 --quality-only)");
-    console.log("   \u23ED\uFE0F  Stage 4: \u8DF3\u8FC7");
+    stage4Result = emptyStageResult(t(cwd2).analyzeFixPipeline.stage4Skipped);
+    console.log("   " + t(cwd2).analyzeFixPipeline.stage4Skipped);
   }
   let stage5Result;
   if (runStage5) {
     const start = Date.now();
     console.log(`
-\uD83D\uDCCA Stage 5: \u8D28\u91CF\u62A5\u544A...`);
+` + t(cwd2).analyzeFixPipeline.stage5Quality);
     try {
-      const scores = await performQualityCheck(cwd, aiOptions);
+      const scores = await performQualityCheck(cwd2, aiOptions);
       showQualityReport(scores, { compact, json: json2, threshold });
       const lowQualityCount = Array.from(scores.values()).filter((s) => s.totalScore < threshold).length;
       let qualityReportedCount = 0;
       if (lowQualityCount > 0) {
         console.log(`
-   \uD83D\uDD0D \u68C0\u6D4B\u5230 ${lowQualityCount} \u4E2A\u4F4E\u8D28\u91CF\u4EFB\u52A1\uFF0C\u751F\u6210\u4FEE\u590D\u5EFA\u8BAE...`);
+   ` + t(cwd2).analyzeFixPipeline.qualityIssuesFound.replace("{count}", String(lowQualityCount)));
         for (const [taskId2, score] of scores) {
           if (score.totalScore < threshold) {
             const qualityIssue = {
               taskId: taskId2,
               type: "low_quality",
               severity: score.totalScore < 40 ? "high" : "medium",
-              message: `\u4EFB\u52A1\u5185\u5BB9\u8D28\u91CF\u4F4E (${score.totalScore}/100)`,
-              suggestion: score.deductions.length > 0 && score.deductions[0]?.suggestion ? score.deductions[0].suggestion : "\u6539\u5584\u4EFB\u52A1\u63CF\u8FF0\u3001\u68C0\u67E5\u70B9\u3001\u5173\u8054\u6587\u4EF6\u7B49\u8D28\u91CF",
+              message: t(cwd2).analyzeFixPipeline.lowQualityTask.replace("{taskId}", taskId2).replace("{score}", String(score.totalScore)),
+              suggestion: score.deductions.length > 0 && score.deductions[0]?.suggestion ? score.deductions[0].suggestion : t(cwd2).analyzeFixPipeline.lowQualitySuggestion,
               details: { totalScore: score.totalScore, deductions: score.deductions }
             };
-            await fixSingleIssue(qualityIssue, cwd, nonInteractive);
+            await fixSingleIssue(qualityIssue, cwd2, nonInteractive);
             qualityReportedCount++;
           }
         }
@@ -21145,29 +21580,30 @@ async function fixPipeline(cwd = process.cwd(), options = {}) {
         executed: true,
         skipped: false,
         duration,
-        summary: `\u68C0\u6D4B ${scores.size} \u4E2A\u4EFB\u52A1, ${lowQualityCount} \u4E2A\u4F4E\u8D28\u91CF, ${qualityReportedCount} \u4E2A\u5DF2\u751F\u6210\u6539\u8FDB\u5EFA\u8BAE`
+        summary: t(cwd2).analyzeFixPipeline.stage5Complete.replace("{count}", String(scores.size)).replace("{suggestions}", String(qualityReportedCount)).replace("{duration}", (duration / 1000).toFixed(1))
       };
-      console.log(`   \u2705 Stage 5 \u5B8C\u6210: \u68C0\u6D4B ${scores.size} \u4E2A\u4EFB\u52A1, ${qualityReportedCount} \u4E2A\u6539\u8FDB\u5EFA\u8BAE (${(duration / 1000).toFixed(1)}s)`);
+      console.log("   " + t(cwd2).analyzeFixPipeline.stage5Complete.replace("{count}", String(scores.size)).replace("{suggestions}", String(qualityReportedCount)).replace("{duration}", (duration / 1000).toFixed(1)));
     } catch (error) {
       const duration = Date.now() - start;
+      const errorMsg = error instanceof Error ? error.message : String(error);
       stage5Result = {
         executed: true,
         skipped: false,
         duration,
-        summary: `\u8D28\u91CF\u62A5\u544A\u5931\u8D25: ${error instanceof Error ? error.message : String(error)}`
+        summary: t(cwd2).analyzeFixPipeline.stage5Failed.replace("{error}", errorMsg)
       };
-      console.error(`   \u274C Stage 5 \u5931\u8D25: ${error instanceof Error ? error.message : String(error)}`);
+      console.error("   " + t(cwd2).analyzeFixPipeline.stage5Failed.replace("{error}", errorMsg));
     }
   } else {
-    stage5Result = emptyStageResult("\u8DF3\u8FC7 (--rules-only \u6216 --checkpoints-only)");
-    console.log("   \u23ED\uFE0F  Stage 5: \u8DF3\u8FC7");
+    stage5Result = emptyStageResult(t(cwd2).analyzeFixPipeline.stage5Skipped);
+    console.log("   " + t(cwd2).analyzeFixPipeline.stage5Skipped);
   }
   const totalTime = Date.now() - pipelineStart;
   const allStages = [stage1Result, stage2Result, stage3Result, stage4Result, stage5Result];
   const executedStages = allStages.filter((s) => s.executed).length;
   console.log("");
   console.log("\u2501".repeat(SEPARATOR_WIDTH));
-  console.log(`\u2705 \u6D41\u6C34\u7EBF\u5B8C\u6210: ${executedStages}/5 \u9636\u6BB5\u5DF2\u6267\u884C (${(totalTime / 1000).toFixed(1)}s)`);
+  console.log(t(cwd2).analyzeFixPipeline.pipelineComplete.replace("{stages}", String(executedStages)).replace("{duration}", (totalTime / 1000).toFixed(1)));
   console.log("\u2501".repeat(SEPARATOR_WIDTH));
   return {
     stages: {
@@ -21190,6 +21626,7 @@ var init_analyze_fix_pipeline = __esm(() => {
   init_harness();
   init_checkpoint_rules();
   init_checkpoint();
+  init_i18n();
   init_analyze();
   import_prompts4 = __toESM(require_prompts3(), 1);
 });
@@ -21269,8 +21706,8 @@ function parseCheckRange(input) {
   }
   throw new AnalyzeError("UNKNOWN_RANGE_FORMAT", `\u65E0\u6CD5\u8BC6\u522B\u7684 check-range \u683C\u5F0F: "${sanitized.length > 50 ? sanitized.slice(0, 50) + "..." : sanitized}"`, "\u652F\u6301\u7684\u683C\u5F0F: all | tasks:ID1,ID2 | keyword:pattern");
 }
-function getTasksByRange(range, cwd = process.cwd()) {
-  const allTasks = getAllTasks(cwd);
+function getTasksByRange(range, cwd2 = process.cwd()) {
+  const allTasks = getAllTasks(cwd2);
   switch (range.type) {
     case "all": {
       return allTasks.filter((t2) => t2.status === "open" || t2.status === "in_progress" || t2.status === "wait_review" || t2.status === "wait_qa" || t2.status === "wait_evaluation");
@@ -21279,7 +21716,7 @@ function getTasksByRange(range, cwd = process.cwd()) {
       const ids = range.taskIds ?? [];
       const tasks = [];
       for (const id of ids) {
-        const task = readTaskMeta(id, cwd);
+        const task = readTaskMeta(id, cwd2);
         if (task) {
           tasks.push(task);
         }
@@ -21322,8 +21759,8 @@ var init_analyze_range_parser = __esm(() => {
 // src/commands/analyze.ts
 import * as path15 from "path";
 import * as fs18 from "fs";
-function readAnalyzeConfig(cwd = process.cwd()) {
-  const config = readConfig(cwd);
+function readAnalyzeConfig(cwd2 = process.cwd()) {
+  const config = readConfig(cwd2);
   if (!config)
     return { ...DEFAULT_ANALYZE_CONFIG };
   const analyzeRaw = config.analyze;
@@ -21417,10 +21854,11 @@ function validateRequirementHistoryEntry(entry, index) {
   }
   return { valid: errors.length === 0, errors };
 }
-function validateTaskIdFormat(id) {
+function validateTaskIdFormat(id, cwd2 = process.cwd()) {
   const errors = [];
+  const texts = t(cwd2);
   if (!id || typeof id !== "string") {
-    return { valid: false, format: "unknown", errors: ["\u4EFB\u52A1 ID \u4E3A\u7A7A\u6216\u683C\u5F0F\u9519\u8BEF"] };
+    return { valid: false, format: "unknown", errors: [texts.analyzeCmd.taskIdEmpty] };
   }
   if (/^TASK-\d{3,}$/.test(id)) {
     return { valid: true, format: "old", errors: [] };
@@ -21436,7 +21874,7 @@ function validateTaskIdFormat(id) {
   if (id.startsWith("TASK-") && id.length > 5 && /^[a-zA-Z0-9\-_]+$/.test(id)) {
     return { valid: true, format: "unknown", errors: [] };
   }
-  errors.push("\u4EFB\u52A1 ID \u683C\u5F0F\u4E0D\u7B26\u5408\u89C4\u8303");
+  errors.push(texts.analyzeCmd.taskIdFormatInvalid);
   return { valid: false, format: "unknown", errors };
 }
 function isValidStatusValue(status) {
@@ -21448,11 +21886,11 @@ function isValidTypeValue(type) {
 function isValidPriorityValue(priority) {
   return VALID_PRIORITIES3.includes(priority);
 }
-async function performQualityCheck(cwd = process.cwd(), aiOptions) {
-  const tasks = getAllTasks(cwd, false);
+async function performQualityCheck(cwd2 = process.cwd(), aiOptions) {
+  const tasks = getAllTasks(cwd2, false);
   const scores = new Map;
   for (const task of tasks) {
-    const score = await calculateContentQuality(task, aiOptions, cwd);
+    const score = await calculateContentQuality(task, aiOptions, cwd2);
     scores.set(task.id, score);
   }
   return scores;
@@ -21528,18 +21966,18 @@ function showQualityReport(scores, options = {}) {
   console.log(separator);
   console.log("");
 }
-async function detectSemanticDuplicates(tasks, cwd) {
+async function detectSemanticDuplicates(tasks, cwd2) {
   if (tasks.length < 2)
     return [];
-  const aiAssistant = new AIMetadataAssistant(cwd);
-  const analyzeLogger = createLogger("analyze", cwd);
+  const aiAssistant = new AIMetadataAssistant(cwd2);
+  const analyzeLogger = createLogger("analyze", cwd2);
   const batchSize = 10;
   const allIssues = [];
   for (let i = 0;i < tasks.length; i += batchSize) {
     const batch = tasks.slice(i, i + batchSize);
     const result = await withAIEnhancement({
       enabled: true,
-      aiCall: () => aiAssistant.detectDuplicates(batch, { cwd }),
+      aiCall: () => aiAssistant.detectDuplicates(batch, { cwd: cwd2 }),
       fallback: { duplicates: [], aiUsed: false },
       operationName: "Semantic duplicate detection",
       logger: analyzeLogger
@@ -21565,10 +22003,10 @@ async function detectSemanticDuplicates(tasks, cwd) {
   }
   return allIssues;
 }
-async function assessStalenessWithAI(task, cwd) {
+async function assessStalenessWithAI(task, cwd2) {
   const result = await withAIEnhancement({
     enabled: true,
-    aiCall: () => new AIMetadataAssistant(cwd).assessStaleness(task, { cwd }),
+    aiCall: () => new AIMetadataAssistant(cwd2).assessStaleness(task, { cwd: cwd2 }),
     fallback: { isStale: false, stalenessScore: 0, suggestedAction: "keep", reason: "", aiUsed: false },
     operationName: "\u9648\u65E7\u4EFB\u52A1\u8BC4\u4F30"
   });
@@ -21596,11 +22034,11 @@ function parseReportVerdict(reportPath) {
     return null;
   }
 }
-function getHarnessReportDir(taskId, cwd) {
-  return path15.join(getProjectDir(cwd), "reports", "harness", taskId);
+function getHarnessReportDir(taskId, cwd2) {
+  return path15.join(getProjectDir(cwd2), "reports", "harness", taskId);
 }
-function checkReportStatusConsistency(taskId, task, cwd) {
-  const reportDir = getHarnessReportDir(taskId, cwd);
+function checkReportStatusConsistency(taskId, task, cwd2) {
+  const reportDir = getHarnessReportDir(taskId, cwd2);
   if (!fs18.existsSync(reportDir))
     return null;
   const currentStatus = normalizeStatus(task.status);
@@ -21653,13 +22091,13 @@ function checkCheckpointConsistency(taskId, task) {
   }
   return null;
 }
-async function checkQualityGateIssues(taskId, task, cwd, config) {
+async function checkQualityGateIssues(taskId, task, cwd2, config) {
   const issues = [];
   const qualityConfig = {
     ...DEFAULT_QUALITY_GATE_CONFIG,
     ...config
   };
-  const result = await checkQualityGate(taskId, qualityConfig, cwd);
+  const result = await checkQualityGate(taskId, qualityConfig, cwd2);
   if (result.score.totalScore < qualityConfig.minQualityScore) {
     issues.push({
       taskId,
@@ -21710,7 +22148,7 @@ async function checkQualityGateIssues(taskId, task, cwd, config) {
       });
     }
   }
-  const filesResult = validateFilesExist(task, cwd);
+  const filesResult = validateFilesExist(task, cwd2);
   if (!filesResult.valid) {
     issues.push({
       taskId,
@@ -21735,9 +22173,9 @@ async function checkQualityGateIssues(taskId, task, cwd, config) {
   }
   return issues;
 }
-function checkMissingPipelineEvidence(taskId, task, cwd) {
+function checkMissingPipelineEvidence(taskId, task, cwd2) {
   const currentStatus = normalizeStatus(task.status);
-  const reportDir = getHarnessReportDir(taskId, cwd);
+  const reportDir = getHarnessReportDir(taskId, cwd2);
   const STATUS_REQUIRED_REPORTS = {
     wait_review: [
       { reportFile: "dev-report.md", phase: "development" }
@@ -21791,7 +22229,7 @@ function checkMissingPipelineEvidence(taskId, task, cwd) {
   }
   return null;
 }
-function shouldTriggerAIInference(task, layer1Issues, cwd) {
+function shouldTriggerAIInference(task, layer1Issues, cwd2) {
   const currentStatus = normalizeStatus(task.status);
   if (TERMINAL_STATUSES2.has(currentStatus))
     return false;
@@ -21799,7 +22237,7 @@ function shouldTriggerAIInference(task, layer1Issues, cwd) {
     return false;
   const historyCount = task.history?.length ?? 0;
   if (historyCount >= 3) {
-    const reportDir = getHarnessReportDir(task.id, cwd);
+    const reportDir = getHarnessReportDir(task.id, cwd2);
     if (!fs18.existsSync(reportDir))
       return true;
   }
@@ -21814,44 +22252,45 @@ function shouldTriggerAIInference(task, layer1Issues, cwd) {
   }
   return false;
 }
-function buildStatusInferencePrompt(task, layer1Findings) {
+function buildStatusInferencePrompt(task, layer1Findings, cwd2 = process.cwd()) {
+  const texts = t(cwd2);
   const currentStatus = normalizeStatus(task.status);
   const taskInfo = [
-    `## \u4EFB\u52A1\u57FA\u672C\u4FE1\u606F`,
+    texts.analyzeCmd.aiPromptTaskInfo,
     `- ID: ${task.id}`,
-    `- \u6807\u9898: ${task.title}`,
-    `- \u7C7B\u578B: ${task.type}`,
-    `- \u4F18\u5148\u7EA7: ${task.priority}`,
-    `- \u5F53\u524D\u72B6\u6001: ${currentStatus}`,
-    `- \u521B\u5EFA\u65F6\u95F4: ${task.createdAt || "\u672A\u77E5"}`,
-    `- \u66F4\u65B0\u65F6\u95F4: ${task.updatedAt || "\u672A\u77E5"}`,
-    `- \u63CF\u8FF0: ${task.description || "\u65E0"}`
+    `- ${texts.analyzeCmd.aiPromptTitleLabel || "\u6807\u9898"}: ${task.title}`,
+    `- ${texts.analyzeCmd.aiPromptTypeLabel || "\u7C7B\u578B"}: ${task.type}`,
+    `- ${texts.analyzeCmd.aiPromptPriorityLabel || "\u4F18\u5148\u7EA7"}: ${task.priority}`,
+    `- ${texts.analyzeCmd.aiPromptStatusLabel || "\u5F53\u524D\u72B6\u6001"}: ${currentStatus}`,
+    `- ${texts.analyzeCmd.aiPromptCreatedAtLabel || "\u521B\u5EFA\u65F6\u95F4"}: ${task.createdAt || texts.analyzeCmd.unknown}`,
+    `- ${texts.analyzeCmd.aiPromptUpdatedAtLabel || "\u66F4\u65B0\u65F6\u95F4"}: ${task.updatedAt || texts.analyzeCmd.unknown}`,
+    `- ${texts.analyzeCmd.aiPromptDescriptionLabel || "\u63CF\u8FF0"}: ${task.description || texts.analyzeCmd.none}`
   ].join(`
 `);
   const historySection = task.history && task.history.length > 0 ? [
-    `## \u5386\u53F2\u8BB0\u5F55 (${task.history.length} \u6761)`,
-    ...task.history.slice(-10).map((h, i) => `${i + 1}. [${h.timestamp}] ${h.action}${h.field ? ` (${h.field}: ${h.oldValue} \u2192 ${h.newValue})` : ""}${h.reason ? ` \u539F\u56E0: ${h.reason}` : ""}`)
+    texts.analyzeCmd.aiPromptHistory.replace("{count}", String(task.history.length)),
+    ...task.history.slice(-10).map((h, i) => `${i + 1}. [${h.timestamp}] ${h.action}${h.field ? ` (${h.field}: ${h.oldValue} \u2192 ${h.newValue})` : ""}${h.reason ? ` ${texts.analyzeCmd.aiPromptReasonLabel || "\u539F\u56E0"}: ${h.reason}` : ""}`)
   ].join(`
-`) : "## \u5386\u53F2\u8BB0\u5F55: \u65E0";
+`) : texts.analyzeCmd.aiPromptNoHistory;
   const transitionSection = task.transitionNotes && task.transitionNotes.length > 0 ? [
-    `## \u72B6\u6001\u8F6C\u6362\u8BB0\u5F55 (${task.transitionNotes.length} \u6761)`,
+    texts.analyzeCmd.aiPromptTransitionHistory.replace("{count}", String(task.transitionNotes.length)),
     ...task.transitionNotes.map((tn, i) => `${i + 1}. [${tn.timestamp}] ${tn.fromStatus} \u2192 ${tn.toStatus}: ${tn.note}${tn.author ? ` (by ${tn.author})` : ""}`)
   ].join(`
-`) : "## \u72B6\u6001\u8F6C\u6362\u8BB0\u5F55: \u65E0";
+`) : texts.analyzeCmd.aiPromptNoTransitionHistory;
   const checkpointSection = task.checkpoints && task.checkpoints.length > 0 ? [
-    `## \u68C0\u67E5\u70B9 (${task.checkpoints.length} \u4E2A)`,
+    texts.analyzeCmd.aiPromptCheckpoints.replace("{count}", String(task.checkpoints.length)),
     ...task.checkpoints.map((cp, i) => `${i + 1}. [${cp.status}] ${cp.description || cp.id}`)
   ].join(`
-`) : "## \u68C0\u67E5\u70B9: \u65E0";
-  const verificationSection = task.verification ? `## \u9A8C\u8BC1\u4FE1\u606F
-- \u65B9\u6CD5: ${task.verification.methods?.join(", ") || "\u672A\u77E5"}
-- \u7ED3\u679C: ${task.verification.result || "\u672A\u77E5"}` : "## \u9A8C\u8BC1\u4FE1\u606F: \u65E0";
+`) : texts.analyzeCmd.aiPromptNoCheckpoints;
+  const verificationSection = task.verification ? `${texts.analyzeCmd.aiPromptVerification}
+- ${texts.analyzeCmd.aiPromptMethodLabel || "\u65B9\u6CD5"}: ${task.verification.methods?.join(", ") || texts.analyzeCmd.unknown}
+- ${texts.analyzeCmd.aiPromptResultLabel || "\u7ED3\u679C"}: ${task.verification.result || texts.analyzeCmd.unknown}` : texts.analyzeCmd.aiPromptNoVerification;
   const layer1Section = layer1Findings.length > 0 ? [
-    `## Layer 1 \u68C0\u6D4B\u7ED3\u679C (${layer1Findings.length} \u4E2A\u95EE\u9898)`,
+    texts.analyzeCmd.aiPromptLayer1Results.replace("{count}", String(layer1Findings.length)),
     ...layer1Findings.map((issue) => `- [${issue.severity}] ${issue.type}: ${issue.message}`)
   ].join(`
-`) : "## Layer 1 \u68C0\u6D4B\u7ED3\u679C: \u65E0\u95EE\u9898";
-  return `\u4F60\u662F\u4E00\u4E2A\u4EFB\u52A1\u72B6\u6001\u5206\u6790\u4E13\u5BB6\u3002\u6839\u636E\u4EE5\u4E0B\u4EFB\u52A1\u4E0A\u4E0B\u6587\uFF0C\u63A8\u65AD\u4EFB\u52A1\u7684\u6B63\u786E\u72B6\u6001\u3002
+`) : texts.analyzeCmd.aiPromptNoLayer1Issues;
+  return `${texts.analyzeCmd.aiPromptTaskAnalysisExpert}
 
 ${taskInfo}
 
@@ -21865,24 +22304,24 @@ ${verificationSection}
 
 ${layer1Section}
 
-\u8BF7\u5206\u6790\u4EFB\u52A1\u7684\u5386\u53F2\u8BB0\u5F55\u3001\u8F6C\u6362\u8BB0\u5F55\u548C\u5F53\u524D\u72B6\u6001\uFF0C\u63A8\u65AD\u4EFB\u52A1\u5F53\u524D\u5E94\u8BE5\u5904\u4E8E\u4EC0\u4E48\u72B6\u6001\u3002
+${texts.analyzeCmd.aiPromptAnalyzeContext}
 
-\u4E25\u683C\u6309\u7167\u4EE5\u4E0B JSON \u683C\u5F0F\u8F93\u51FA\uFF08\u4E0D\u8981\u8F93\u51FA\u5176\u4ED6\u5185\u5BB9\uFF09:
+${texts.analyzeCmd.aiPromptJsonFormat}
 {
-  "inferredStatus": "\u72B6\u6001\u503C\uFF0C\u5FC5\u987B\u662F: open, in_progress, wait_review, wait_qa, wait_evaluation, resolved, closed, abandoned, failed",
-  "confidence": 0.0\u52301.0\u4E4B\u95F4\u7684\u7F6E\u4FE1\u5EA6,
-  "reasoning": "\u63A8\u65AD\u4F9D\u636E\u7684\u7B80\u77ED\u8BF4\u660E",
-  "suggestion": "\u4FEE\u590D\u5EFA\u8BAE"
+  ${texts.analyzeCmd.aiPromptInferredStatus},
+  ${texts.analyzeCmd.aiPromptConfidence},
+  ${texts.analyzeCmd.aiPromptReasoning},
+  ${texts.analyzeCmd.aiPromptSuggestion}
 }`;
 }
-async function runAIStatusInference(task, layer1Findings, cwd) {
-  const prompt = buildStatusInferencePrompt(task, layer1Findings);
+async function runAIStatusInference(task, layer1Findings, cwd2) {
+  const prompt = buildStatusInferencePrompt(task, layer1Findings, cwd2);
   const options = {
     timeout: 120,
     allowedTools: [],
     outputFormat: "text",
     maxRetries: 0,
-    cwd
+    cwd: cwd2
   };
   try {
     const result = await invokeAgent(prompt, options);
@@ -21921,25 +22360,25 @@ async function runAIStatusInference(task, layer1Findings, cwd) {
     return null;
   }
 }
-async function detectStatusInferenceIssues(task, cwd, aiOptions) {
+async function detectStatusInferenceIssues(task, cwd2, aiOptions) {
   const issues = [];
-  const reportIssue = checkReportStatusConsistency(task.id, task, cwd);
+  const reportIssue = checkReportStatusConsistency(task.id, task, cwd2);
   if (reportIssue)
     issues.push(reportIssue);
   const checkpointIssue = checkCheckpointConsistency(task.id, task);
   if (checkpointIssue)
     issues.push(checkpointIssue);
-  const qualityGateIssues = await checkQualityGateIssues(task.id, task, cwd);
+  const qualityGateIssues = await checkQualityGateIssues(task.id, task, cwd2);
   issues.push(...qualityGateIssues);
-  const evidenceIssue = checkMissingPipelineEvidence(task.id, task, cwd);
+  const evidenceIssue = checkMissingPipelineEvidence(task.id, task, cwd2);
   if (evidenceIssue)
     issues.push(evidenceIssue);
   const aiEnabled = aiOptions?.deepAnalyze && !aiOptions?.noAi;
   if (!aiEnabled)
     return issues;
-  if (!shouldTriggerAIInference(task, issues, cwd))
+  if (!shouldTriggerAIInference(task, issues, cwd2))
     return issues;
-  const aiResult = await runAIStatusInference(task, issues, cwd);
+  const aiResult = await runAIStatusInference(task, issues, cwd2);
   if (!aiResult)
     return issues;
   const currentStatus = normalizeStatus(task.status);
@@ -21962,14 +22401,15 @@ async function detectStatusInferenceIssues(task, cwd, aiOptions) {
   }
   return issues;
 }
-async function analyzeProject(cwd = process.cwd(), includeArchived = false, aiOptions) {
-  if (!isInitialized(cwd)) {
+async function analyzeProject(cwd2 = process.cwd(), includeArchived = false, aiOptions) {
+  if (!isInitialized(cwd2)) {
     console.error("Error: Project not initialized. Please run `projmnt4claude setup` first");
     process.exit(1);
   }
-  const tasks = getAllTasks(cwd, includeArchived);
+  const texts = t(cwd2);
+  const tasks = getAllTasks(cwd2, includeArchived);
   const issues = [];
-  const analyzeConfig = readAnalyzeConfig(cwd);
+  const analyzeConfig = readAnalyzeConfig(cwd2);
   const filteredTasks = analyzeConfig.ignorePatterns && analyzeConfig.ignorePatterns.length > 0 ? tasks.filter((task) => {
     if (matchesIgnorePattern(task.id, analyzeConfig.ignorePatterns)) {
       return false;
@@ -22041,7 +22481,7 @@ async function analyzeProject(cwd = process.cwd(), includeArchived = false, aiOp
       let shouldFlagStale = true;
       let aiAssessment = null;
       if (aiOptions?.deepAnalyze && !aiOptions?.noAi) {
-        aiAssessment = await assessStalenessWithAI(task, cwd);
+        aiAssessment = await assessStalenessWithAI(task, cwd2);
         if (aiAssessment !== null && !aiAssessment.stillStale) {
           shouldFlagStale = false;
         }
@@ -22068,13 +22508,13 @@ async function analyzeProject(cwd = process.cwd(), includeArchived = false, aiOp
         taskId: task.id,
         type: "no_description",
         severity: "low",
-        message: "\u4EFB\u52A1\u7F3A\u5C11\u63CF\u8FF0",
+        message: texts.analyzeCmd.issueMissingDescription,
         suggestion: "Add task description to provide more context"
       });
     }
     if (task.dependencies.length > 0) {
       const uncompletedDeps = task.dependencies.filter((depId) => {
-        const depTask = readTaskMeta(depId, cwd);
+        const depTask = readTaskMeta(depId, cwd2);
         if (!depTask)
           return true;
         const depStatus = normalizeStatus(depTask.status);
@@ -22209,7 +22649,7 @@ async function analyzeProject(cwd = process.cwd(), includeArchived = false, aiOp
         suggestion: "Set createdBy field to comply with latest specification (cli | init-requirement | harness-dev | harness-review | harness-qa | harness-eval | import)"
       });
     }
-    const idValidation = validateTaskIdFormat(task.id);
+    const idValidation = validateTaskIdFormat(task.id, cwd2);
     if (!idValidation.valid) {
       issues.push({
         taskId: task.id,
@@ -22373,7 +22813,7 @@ async function analyzeProject(cwd = process.cwd(), includeArchived = false, aiOp
         taskId: task.id,
         type: "missing_verification",
         severity: "medium",
-        message: "\u4EFB\u52A1\u5DF2 resolved \u4F46\u7F3A\u5C11 verification \u5B57\u6BB5",
+        message: texts.analyzeCmd.issueResolvedNoVerification,
         suggestion: "Run analyze --fix to auto-populate verification field",
         details: { status: task.status, hasCheckpoints: !!(task.checkpoints && task.checkpoints.length > 0) }
       });
@@ -22395,7 +22835,7 @@ async function analyzeProject(cwd = process.cwd(), includeArchived = false, aiOp
       });
     }
     if (task.parentId) {
-      if (!taskExists(task.parentId, cwd)) {
+      if (!taskExists(task.parentId, cwd2)) {
         issues.push({
           taskId: task.id,
           type: "invalid_parent_ref",
@@ -22405,7 +22845,7 @@ async function analyzeProject(cwd = process.cwd(), includeArchived = false, aiOp
           details: { parentId: task.parentId }
         });
       } else {
-        const parentTask = readTaskMeta(task.parentId, cwd);
+        const parentTask = readTaskMeta(task.parentId, cwd2);
         if (parentTask && parentTask.subtaskIds && !parentTask.subtaskIds.includes(task.id)) {
           issues.push({
             taskId: task.id,
@@ -22420,7 +22860,7 @@ async function analyzeProject(cwd = process.cwd(), includeArchived = false, aiOp
     }
     if (task.subtaskIds && task.subtaskIds.length > 0) {
       for (const subtaskId of task.subtaskIds) {
-        if (!taskExists(subtaskId, cwd)) {
+        if (!taskExists(subtaskId, cwd2)) {
           issues.push({
             taskId: task.id,
             type: "invalid_subtask_ref",
@@ -22430,7 +22870,7 @@ async function analyzeProject(cwd = process.cwd(), includeArchived = false, aiOp
             details: { subtaskId }
           });
         } else {
-          const subtask = readTaskMeta(subtaskId, cwd);
+          const subtask = readTaskMeta(subtaskId, cwd2);
           if (subtask && subtask.parentId !== task.id) {
             issues.push({
               taskId: task.id,
@@ -22497,17 +22937,17 @@ async function analyzeProject(cwd = process.cwd(), includeArchived = false, aiOp
           const actionLower = (entry.action || "").toLowerCase();
           const author = actionLower.includes("pipeline") || actionLower.includes("harness") ? "pipeline" : "user";
           const decisionMap = {
-            "open\u2192in_progress": "\u5F00\u59CB\u6267\u884C\u4EFB\u52A1",
-            "in_progress\u2192wait_review": "\u63D0\u4EA4\u4EE3\u7801\u5BA1\u67E5",
-            "wait_review\u2192wait_qa": "\u5BA1\u67E5\u901A\u8FC7\uFF0C\u8FDB\u5165QA",
-            "wait_qa\u2192wait_evaluation": "QA\u901A\u8FC7\uFF0C\u7B49\u5F85\u8BC4\u4F30",
-            "wait_evaluation\u2192resolved": "\u8BC4\u4F30\u901A\u8FC7\uFF0C\u4EFB\u52A1\u5B8C\u6210",
-            "open\u2192closed": "\u5173\u95ED\u4EFB\u52A1",
-            "in_progress\u2192resolved": "\u76F4\u63A5\u6807\u8BB0\u5B8C\u6210",
-            "resolved\u2192reopened": "\u91CD\u65B0\u6253\u5F00\u4EFB\u52A1",
-            "reopened\u2192in_progress": "\u91CD\u65B0\u5F00\u59CB\u6267\u884C",
-            "open\u2192abandoned": "\u653E\u5F03\u4EFB\u52A1",
-            "in_progress\u2192open": "\u9000\u56DE\u5F85\u529E"
+            "open\u2192in_progress": texts.analyzeCmd.transitionStartExecution,
+            "in_progress\u2192wait_review": texts.analyzeCmd.transitionSubmitReview,
+            "wait_review\u2192wait_qa": texts.analyzeCmd.transitionReviewPass,
+            "wait_qa\u2192wait_evaluation": texts.analyzeCmd.transitionQaPass || "QA\u901A\u8FC7\uFF0C\u7B49\u5F85\u8BC4\u4F30",
+            "wait_evaluation\u2192resolved": texts.analyzeCmd.transitionEvalPass,
+            "open\u2192closed": texts.analyzeCmd.transitionCloseTask,
+            "in_progress\u2192resolved": texts.analyzeCmd.transitionDirectComplete,
+            "resolved\u2192reopened": texts.analyzeCmd.transitionReopenTask,
+            "reopened\u2192in_progress": texts.analyzeCmd.transitionRestartExecution,
+            "open\u2192abandoned": texts.analyzeCmd.transitionAbandonTask,
+            "in_progress\u2192open": texts.analyzeCmd.transitionReturnTodo
           };
           const statusKey = `${entry.oldValue}\u2192${entry.newValue}`;
           const decision = decisionMap[statusKey] || `${entry.oldValue} \u2192 ${entry.newValue}`;
@@ -22537,7 +22977,7 @@ async function analyzeProject(cwd = process.cwd(), includeArchived = false, aiOp
       }
     }
     if (normalizedStatus === "in_progress") {
-      const omcStateDir = path15.resolve(cwd, ".omc/state");
+      const omcStateDir = path15.resolve(cwd2, ".omc/state");
       let hasActivePipeline = false;
       if (fs18.existsSync(omcStateDir)) {
         const pipelineStateFiles = fs18.readdirSync(omcStateDir).filter((f) => f.includes("pipeline") && f.endsWith(".json"));
@@ -22593,14 +23033,14 @@ async function analyzeProject(cwd = process.cwd(), includeArchived = false, aiOp
         });
       }
     }
-    const statusInferenceIssues = await detectStatusInferenceIssues(task, cwd, aiOptions);
+    const statusInferenceIssues = await detectStatusInferenceIssues(task, cwd2, aiOptions);
     if (statusInferenceIssues.length > 0) {
       issues.push(...statusInferenceIssues);
     }
     const taskText = `${task.description || ""}
 ${task.title || ""}`;
     const referencedFiles = extractFilePaths(taskText, { includeBareFilenames: false });
-    const missingRefs = referencedFiles.filter((fp) => !fs18.existsSync(path15.resolve(cwd, fp)));
+    const missingRefs = referencedFiles.filter((fp) => !fs18.existsSync(path15.resolve(cwd2, fp)));
     if (missingRefs.length > 0) {
       stats.fileNotFound++;
       issues.push({
@@ -22617,7 +23057,7 @@ ${task.title || ""}`;
   for (const task of filteredTasks) {
     if ((!task.checkpoints || task.checkpoints.length === 0) && task.description) {
       try {
-        const synced = syncTextCheckpointsToMeta(task.id, cwd);
+        const synced = syncTextCheckpointsToMeta(task.id, cwd2);
         if (synced) {
           syncedCheckpointCount++;
           issues.push({
@@ -22657,7 +23097,7 @@ ${task.title || ""}`;
   stats.subtaskCompletionRate = subtasks.length > 0 ? Math.round(completedSubtasks.length / subtasks.length * 100) : 0;
   for (const subtask of subtasks) {
     const parentId = subtask.parentId;
-    if (parentId && !taskExists(parentId, cwd)) {
+    if (parentId && !taskExists(parentId, cwd2)) {
       stats.orphanSubtasks++;
       issues.push({
         taskId: subtask.id,
@@ -22668,7 +23108,7 @@ ${task.title || ""}`;
       });
     }
   }
-  const archiveDir = getArchiveDir(cwd);
+  const archiveDir = getArchiveDir(cwd2);
   if (fs18.existsSync(archiveDir)) {
     const abandonedDirs = fs18.readdirSync(archiveDir).filter((name) => {
       const dirPath = path15.join(archiveDir, name);
@@ -22757,26 +23197,26 @@ ${task.title || ""}`;
     }
   }
   if (aiOptions?.deepAnalyze && !aiOptions?.noAi && filteredTasks.length >= 2) {
-    const semanticIssues = await detectSemanticDuplicates(filteredTasks, cwd);
+    const semanticIssues = await detectSemanticDuplicates(filteredTasks, cwd2);
     if (semanticIssues.length > 0) {
       issues.push(...semanticIssues);
     }
   }
   return { issues, stats };
 }
-async function showAnalysis(options = {}, cwd = process.cwd()) {
-  const logger2 = createLogger("analyze", cwd);
+async function showAnalysis(options = {}, cwd2 = process.cwd()) {
+  const logger2 = createLogger("analyze", cwd2);
   const startTime = Date.now();
   const aiOptions = {
     deepAnalyze: !!options.deepAnalyze,
     noAi: !!options.noAi
   };
-  let result = await analyzeProject(cwd, false, aiOptions);
+  let result = await analyzeProject(cwd2, false, aiOptions);
   if (options.checkRange) {
     try {
       const range = parseCheckRange(options.checkRange);
       if (range.type !== "all") {
-        const rangeTasks = getTasksByRange(range, cwd);
+        const rangeTasks = getTasksByRange(range, cwd2);
         const allowedIds = new Set(rangeTasks.map((t2) => t2.id));
         result = {
           ...result,
@@ -22878,14 +23318,14 @@ async function showAnalysis(options = {}, cwd = process.cwd()) {
   });
   logger2.flush();
 }
-async function showStatus(options = {}, cwd = process.cwd()) {
-  if (!isInitialized(cwd)) {
+async function showStatus(options = {}, cwd2 = process.cwd()) {
+  if (!isInitialized(cwd2)) {
     console.error("Error: Project not initialized. Please run `projmnt4claude setup` first");
     process.exit(1);
   }
   const includeArchived = options.includeArchived || false;
-  const tasks = getAllTasks(cwd, includeArchived);
-  const result = await analyzeProject(cwd, includeArchived);
+  const tasks = getAllTasks(cwd2, includeArchived);
+  const result = await analyzeProject(cwd2, includeArchived);
   const healthScore = calculateHealthScore(result);
   if (options.json) {
     console.log(JSON.stringify({
@@ -22945,7 +23385,7 @@ async function showStatus(options = {}, cwd = process.cwd()) {
     console.log("");
   }
   if (includeArchived) {
-    const archivedCount = countArchivedTasks(cwd);
+    const archivedCount = countArchivedTasks(cwd2);
     console.log("\uD83D\uDCE6 Archive Statistics:");
     console.log(`   Archived tasks: ${archivedCount}`);
     console.log("");
@@ -22992,8 +23432,8 @@ function calculateReopenStats(tasks) {
   reopenCounts.sort((a, b) => b.count - a.count);
   return { reopenCount, topReopened: reopenCounts };
 }
-function countArchivedTasks(cwd) {
-  const archiveDir = path15.join(getProjectDir(cwd), "archive");
+function countArchivedTasks(cwd2) {
+  const archiveDir = path15.join(getProjectDir(cwd2), "archive");
   if (!fs18.existsSync(archiveDir)) {
     return 0;
   }
@@ -23106,7 +23546,7 @@ function extractKeywordsFromCriteria(criteria) {
   }
   return [...new Set(keywords)];
 }
-function searchCodebaseForCriteria(criteria, cwd) {
+function searchCodebaseForCriteria(criteria, cwd2) {
   const results = [];
   const keywords = extractKeywordsFromCriteria(criteria);
   if (keywords.length === 0) {
@@ -23179,7 +23619,7 @@ function searchCodebaseForCriteria(criteria, cwd) {
               const matchDensity = lineNumbers.length / Math.max(lines.length, 1);
               const relevanceScore = (uniqueKeywordRatio * 0.7 + matchDensity * 0.3) * 100;
               results.push({
-                filePath: path15.relative(cwd, fullPath),
+                filePath: path15.relative(cwd2, fullPath),
                 lineNumbers: lineNumbers.slice(0, 10),
                 matchedKeywords,
                 relevanceScore: Math.round(relevanceScore)
@@ -23193,7 +23633,7 @@ function searchCodebaseForCriteria(criteria, cwd) {
   function escapeRegExp(string) {
     return string.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
   }
-  searchDirectory(cwd);
+  searchDirectory(cwd2);
   results.sort((a, b) => b.relevanceScore - a.relevanceScore);
   return results.slice(0, 10);
 }
@@ -23281,11 +23721,11 @@ function inferVerificationCommands(criteria, searchResults) {
   }
   return commands;
 }
-function getContractPath(taskId, cwd) {
-  return path15.join(getTasksDir(cwd), taskId, "contract.json");
+function getContractPath(taskId, cwd2) {
+  return path15.join(getTasksDir(cwd2), taskId, "contract.json");
 }
-function readContract(taskId, cwd) {
-  const contractPath = getContractPath(taskId, cwd);
+function readContract(taskId, cwd2) {
+  const contractPath = getContractPath(taskId, cwd2);
   if (!fs18.existsSync(contractPath)) {
     return null;
   }
@@ -23296,8 +23736,8 @@ function readContract(taskId, cwd) {
     return null;
   }
 }
-function saveContract(taskId, contract, cwd) {
-  const contractPath = getContractPath(taskId, cwd);
+function saveContract(taskId, contract, cwd2) {
+  const contractPath = getContractPath(taskId, cwd2);
   const dir = path15.dirname(contractPath);
   if (!fs18.existsSync(dir)) {
     fs18.mkdirSync(dir, { recursive: true });
@@ -23305,10 +23745,10 @@ function saveContract(taskId, contract, cwd) {
   contract.updatedAt = new Date().toISOString();
   fs18.writeFileSync(contractPath, JSON.stringify(contract, null, 2), "utf-8");
 }
-function generateCheckpointsFromCriteria(taskId, acceptanceCriteria, taskTitle, cwd = process.cwd(), taskDescription) {
+function generateCheckpointsFromCriteria(taskId, acceptanceCriteria, taskTitle, cwd2 = process.cwd(), taskDescription) {
   const checkpoints = [];
   const now = new Date().toISOString();
-  const analyzeConfig = readAnalyzeConfig(cwd);
+  const analyzeConfig = readAnalyzeConfig(cwd2);
   const useSimpleMode = analyzeConfig.checkpointGenerator === "rule-based";
   const criteriaList = acceptanceCriteria && acceptanceCriteria.length > 0 ? acceptanceCriteria : generateDefaultCheckpoints(taskTitle || taskId, taskDescription);
   for (let index = 0;index < criteriaList.length; index++) {
@@ -23325,7 +23765,7 @@ function generateCheckpointsFromCriteria(taskId, acceptanceCriteria, taskTitle, 
         updatedAt: now
       });
     } else {
-      const searchResults = searchCodebaseForCriteria(criteria, cwd);
+      const searchResults = searchCodebaseForCriteria(criteria, cwd2);
       const checkpoint = generateSmartCheckpoints(taskId, criteria, searchResults, index);
       checkpoint.createdAt = now;
       checkpoint.updatedAt = now;
@@ -23419,12 +23859,12 @@ function extractAcceptanceCriteriaFromDescription(description) {
   }
   return criteria;
 }
-function fixTaskCheckpoints(taskId, cwd) {
-  const task = readTaskMeta(taskId, cwd);
+function fixTaskCheckpoints(taskId, cwd2) {
+  const task = readTaskMeta(taskId, cwd2);
   if (!task) {
     return { fixed: false, reason: "\u4EFB\u52A1\u4E0D\u5B58\u5728" };
   }
-  let contract = readContract(taskId, cwd);
+  let contract = readContract(taskId, cwd2);
   if (!contract) {
     const now = new Date().toISOString();
     contract = {
@@ -23444,17 +23884,17 @@ function fixTaskCheckpoints(taskId, cwd) {
     acceptanceCriteria = extractAcceptanceCriteriaFromDescription(task.description);
     contract.acceptanceCriteria = acceptanceCriteria;
   }
-  const checkpoints = generateCheckpointsFromCriteria(taskId, acceptanceCriteria, task.title, cwd, task.description);
+  const checkpoints = generateCheckpointsFromCriteria(taskId, acceptanceCriteria, task.title, cwd2, task.description);
   if (checkpoints.length === 0) {
     return { fixed: false, reason: "\u65E0\u6CD5\u751F\u6210\u68C0\u67E5\u70B9" };
   }
   contract.checkpoints = checkpoints.map((cp) => cp.id);
-  syncCheckpointsToMeta(taskId, checkpoints, cwd);
-  saveContract(taskId, contract, cwd);
+  syncCheckpointsToMeta(taskId, checkpoints, cwd2);
+  saveContract(taskId, contract, cwd2);
   return { fixed: true, reason: `\u751F\u6210\u4E86 ${checkpoints.length} \u4E2A\u68C0\u67E5\u70B9` };
 }
-async function fixCheckpoints(cwd = process.cwd(), options = {}) {
-  const analyzeConfig = readAnalyzeConfig(cwd);
+async function fixCheckpoints(cwd2 = process.cwd(), options = {}) {
+  const analyzeConfig = readAnalyzeConfig(cwd2);
   if (analyzeConfig.autoGenerateCheckpoints === false) {
     console.log("");
     console.log("\u23ED\uFE0F  Auto-generate checkpoints disabled (analyze.autoGenerateCheckpoints = false)");
@@ -23470,18 +23910,18 @@ async function fixCheckpoints(cwd = process.cwd(), options = {}) {
   console.log("");
   let tasksToFix;
   if (options.taskId) {
-    const task = readTaskMeta(options.taskId, cwd);
+    const task = readTaskMeta(options.taskId, cwd2);
     if (!task) {
       console.error(`\u274C Task ${options.taskId} not found`);
       return;
     }
     tasksToFix = [task];
   } else {
-    tasksToFix = getAllTasks(cwd, false);
+    tasksToFix = getAllTasks(cwd2, false);
   }
   const tasksNeedingFix = [];
   for (const task of tasksToFix) {
-    const contract = readContract(task.id, cwd);
+    const contract = readContract(task.id, cwd2);
     if (!contract || !contract.checkpoints || contract.checkpoints.length === 0) {
       tasksNeedingFix.push(task);
     }
@@ -23516,7 +23956,7 @@ async function fixCheckpoints(cwd = process.cwd(), options = {}) {
   for (const task of tasksNeedingFix) {
     console.log(`
 Processing ${task.id}...`);
-    const result = fixTaskCheckpoints(task.id, cwd);
+    const result = fixTaskCheckpoints(task.id, cwd2);
     if (result.fixed) {
       console.log(`  \u2705 ${result.reason}`);
       fixedCount++;
@@ -23644,8 +24084,8 @@ function extractBugReportFields(markdown) {
   }
   return fields;
 }
-function loadLogContext(cwd, keywords) {
-  const logsDir = getLogsDir(cwd);
+function loadLogContext(cwd2, keywords) {
+  const logsDir = getLogsDir(cwd2);
   if (!fs18.existsSync(logsDir))
     return [];
   const contextLines = [];
@@ -23922,8 +24362,8 @@ function exportTrainingDataToJsonl(fields, analysis, exportPath) {
   fs18.appendFileSync(exportPath, line + `
 `, "utf-8");
 }
-async function analyzeBugReport(bugReportPath, cwd = process.cwd(), options = {}) {
-  const logger2 = createLogger("analyze-bug-report", cwd);
+async function analyzeBugReport(bugReportPath, cwd2 = process.cwd(), options = {}) {
+  const logger2 = createLogger("analyze-bug-report", cwd2);
   const startTime = Date.now();
   const resolvedPath = path15.resolve(bugReportPath);
   if (!fs18.existsSync(resolvedPath)) {
@@ -23968,7 +24408,7 @@ async function analyzeBugReport(bugReportPath, cwd = process.cwd(), options = {}
     ...fields.problem.split(/\s+/).filter((w) => w.length > 3).slice(0, 5),
     ...fields.errorMessage ? [fields.errorMessage.substring(0, 30)] : []
   ];
-  const logContext = loadLogContext(cwd, keywords);
+  const logContext = loadLogContext(cwd2, keywords);
   console.log(`    Related logs: ${logContext.length} entries`);
   console.log("");
   console.log("  \uD83D\uDD0D Performing classification and severity assessment...");
@@ -23979,7 +24419,7 @@ async function analyzeBugReport(bugReportPath, cwd = process.cwd(), options = {}
 `) : undefined;
   const aiResult = await withAIEnhancement({
     enabled: options.noAi !== true,
-    aiCall: () => new AIMetadataAssistant(cwd).analyzeBugReport(markdown, logContextStr, { cwd }),
+    aiCall: () => new AIMetadataAssistant(cwd2).analyzeBugReport(markdown, logContextStr, { cwd: cwd2 }),
     fallback: { title: null, description: null, type: null, priority: null, checkpoints: null, rootCause: null, impactScope: null, aiUsed: false },
     operationName: "Bug Report Analysis"
   });
@@ -24031,7 +24471,7 @@ async function analyzeBugReport(bugReportPath, cwd = process.cwd(), options = {}
   console.log("");
   const timestamp = new Date().toISOString().replace(/[:.]/g, "-").slice(0, 19);
   const reportMarkdown = generateBugAnalysisMarkdown(fields, logContext, analysis, timestamp);
-  const reportsDir = getReportsDir(cwd);
+  const reportsDir = getReportsDir(cwd2);
   ensureDir(reportsDir);
   const reportPath = path15.join(reportsDir, `bug-analysis-${timestamp}.md`);
   fs18.writeFileSync(reportPath, reportMarkdown, "utf-8");
@@ -24051,14 +24491,14 @@ async function analyzeBugReport(bugReportPath, cwd = process.cwd(), options = {}
     reportPath
   };
   if (options.exportTrainingData) {
-    const config = readConfig(cwd);
+    const config = readConfig(cwd2);
     const trainingConfig = config?.training;
     const trainingEnabled = trainingConfig?.exportEnabled === true;
     if (!trainingEnabled) {
       console.log("  \u26A0\uFE0F  Training data export not enabled. Please set training.exportEnabled: true in config.json");
     } else {
       const trainingDir = trainingConfig.outputDir || ".projmnt4claude/training-data/";
-      const resolvedTrainingDir = path15.isAbsolute(trainingDir) ? trainingDir : path15.join(getProjectDir(cwd), trainingDir);
+      const resolvedTrainingDir = path15.isAbsolute(trainingDir) ? trainingDir : path15.join(getProjectDir(cwd2), trainingDir);
       ensureDir(resolvedTrainingDir);
       const exportPath = path15.join(resolvedTrainingDir, "bug-analysis-training.jsonl");
       exportTrainingDataToJsonl(fields, result, exportPath);
@@ -24107,6 +24547,7 @@ var init_analyze = __esm(() => {
   init_config2();
   init_logger();
   init_ai_metadata();
+  init_i18n();
   init_headless_agent();
   init_analyze_range_parser();
   init_quality_gate();
@@ -24132,12 +24573,12 @@ var init_analyze = __esm(() => {
         let changed = false;
         if (task.reopenCount === undefined) {
           task.reopenCount = 0;
-          details.push("\u6DFB\u52A0 reopenCount: 0");
+          details.push("schemaMigrationReopenCount");
           changed = true;
         }
         if (task.requirementHistory === undefined) {
           task.requirementHistory = [];
-          details.push("\u6DFB\u52A0 requirementHistory: []");
+          details.push("schemaMigrationRequirementHistory");
           changed = true;
         }
         return { changed, details };
@@ -24204,7 +24645,7 @@ var init_analyze = __esm(() => {
         const details = [];
         if (task.executionStats && task.executionStats.commitHistory === undefined) {
           task.executionStats.commitHistory = [];
-          details.push("\u6DFB\u52A0 executionStats.commitHistory: []");
+          details.push("schemaMigrationCommitHistory");
           return { changed: true, details };
         }
         return { changed: false, details };
@@ -24219,7 +24660,7 @@ var init_analyze = __esm(() => {
         let changed = false;
         if (task.transitionNotes === undefined) {
           task.transitionNotes = [];
-          details.push("\u6DFB\u52A0 transitionNotes: []");
+          details.push("schemaMigrationTransitionNotes");
           changed = true;
         }
         if (task.status === "reopened") {
@@ -24238,7 +24679,7 @@ var init_analyze = __esm(() => {
         if (task.resumeAction === undefined) {
           if (PIPELINE_INTERMEDIATE_STATUSES.includes(task.status)) {
             task.resumeAction = "resume_pipeline";
-            details.push(`\u6DFB\u52A0 resumeAction: resume_pipeline (status=${task.status})`);
+            details.push(`schemaMigrationResumeAction:{status:${task.status}}`);
             changed = true;
           }
         }
@@ -24265,7 +24706,7 @@ var init_analyze = __esm(() => {
             const inferredPrefix = inferCheckpointPrefix2(desc);
             const newDesc = `${inferredPrefix} ${desc}`;
             updatedCheckpoints.push({ ...cp, description: newDesc });
-            details.push(`\u68C0\u67E5\u70B9\u524D\u7F00\u8865\u5168: "${desc}" \u2192 "${newDesc}"`);
+            details.push(`schemaMigrationCheckpointPrefix:{old:"${desc}",new:"${newDesc}"}`);
             changed = true;
           } else {
             updatedCheckpoints.push(cp);
@@ -24288,7 +24729,7 @@ var init_analyze = __esm(() => {
           const { inferCheckpointPolicy: inferCheckpointPolicy2 } = (init_task(), __toCommonJS(exports_task));
           const inferredPolicy = inferCheckpointPolicy2(task.type, task.priority);
           task.checkpointPolicy = inferredPolicy;
-          details.push(`\u6DFB\u52A0 checkpointPolicy: ${inferredPolicy} (\u57FA\u4E8E ${task.type}/${task.priority} \u63A8\u65AD)`);
+          details.push(`schemaMigrationCheckpointPolicy:{policy:"${inferredPolicy}",type:"${task.type}",priority:"${task.priority}"}`);
           changed = true;
         }
         return { changed, details };
@@ -24567,16 +25008,17 @@ var i18n = {
     skillsCopied: "Skill files copied"
   }
 };
-async function setup(cwd = process.cwd(), options = {}) {
-  const projectDir = getProjectDir(cwd);
-  if (isInitialized(cwd) && !options.force) {
-    console.log("\u9879\u76EE\u7BA1\u7406\u73AF\u5883\u5DF2\u5B58\u5728\uFF0C\u8DF3\u8FC7\u521D\u59CB\u5316\u3002");
-    console.log(`\u76EE\u5F55: ${projectDir}`);
-    console.log("\u63D0\u793A: \u4F7F\u7528 --force \u9009\u9879\u5F3A\u5236\u91CD\u65B0\u521D\u59CB\u5316\uFF08\u91CD\u65B0\u590D\u5236\u6280\u80FD\u6587\u4EF6\uFF09");
+async function setup(cwd2 = process.cwd(), options = {}) {
+  const projectDir = getProjectDir(cwd2);
+  const texts = t(cwd2);
+  if (isInitialized(cwd2) && !options.force) {
+    console.log(texts.setupCmd.alreadyInitialized);
+    console.log(texts.setupCmd.directory.replace("{path}", projectDir));
+    console.log(texts.setupCmd.tipUseForce);
     return;
   }
-  if (options.force && isInitialized(cwd)) {
-    console.log("\u26A0\uFE0F \u5F3A\u5236\u91CD\u65B0\u521D\u59CB\u5316\u6A21\u5F0F...");
+  if (options.force && isInitialized(cwd2)) {
+    console.log(texts.setupCmd.forceMode);
   }
   let language;
   if (options.language) {
@@ -24601,12 +25043,12 @@ async function setup(cwd = process.cwd(), options = {}) {
   ensureDir(projectDir);
   console.log(`\u2713 ${t.createDir}: ${projectDir}`);
   const subDirs = [
-    { dir: getTasksDir(cwd), name: "tasks" },
-    { dir: getArchiveDir(cwd), name: "archive" },
-    { dir: getToolboxDir(cwd), name: "toolbox" },
-    { dir: getBinDir(cwd), name: "bin" },
-    { dir: getReportsDir(cwd), name: "reports" },
-    { dir: getLogsDir(cwd), name: "logs" }
+    { dir: getTasksDir(cwd2), name: "tasks" },
+    { dir: getArchiveDir(cwd2), name: "archive" },
+    { dir: getToolboxDir(cwd2), name: "toolbox" },
+    { dir: getBinDir(cwd2), name: "bin" },
+    { dir: getReportsDir(cwd2), name: "reports" },
+    { dir: getLogsDir(cwd2), name: "logs" }
   ];
   for (const { dir, name } of subDirs) {
     ensureDir(dir);
@@ -24614,42 +25056,42 @@ async function setup(cwd = process.cwd(), options = {}) {
   }
   const config = {
     ...DEFAULT_CONFIG,
-    projectName: path3.basename(cwd),
+    projectName: path3.basename(cwd2),
     createdAt: new Date().toISOString(),
     language
   };
-  const configPath = getConfigPath(cwd);
+  const configPath = getConfigPath(cwd2);
   fs3.writeFileSync(configPath, JSON.stringify(config, null, 2), "utf-8");
   console.log(`\u2713 ${t.createConfig}`);
-  copySkillFiles(cwd, language, t);
+  copySkillFiles(cwd2, language, texts);
   const gitHookConfig = config.gitHook ?? DEFAULT_GIT_HOOK;
   if (gitHookConfig.enabled) {
-    const pre = new Pre(cwd);
+    const pre = new Pre(cwd2);
     if (fs3.existsSync(pre.gitDir)) {
       try {
         pre.installAll();
-        console.log("  \u2713 Git Hook \u521B\u5EFA\u5B8C\u6210 (pre-commit, prepublishOnly)");
+        console.log(texts.setupCmd.gitHookCreated);
       } catch (e) {
-        console.log(`  \u26A0\uFE0F Git Hook \u521B\u5EFA\u5931\u8D25: ${e.message}`);
+        console.log(texts.setupCmd.gitHookFailed.replace("{error}", e.message));
       }
     }
   } else {
-    console.log("  \u23ED\uFE0F  Git Hook \u521B\u5EFA\u5DF2\u901A\u8FC7\u914D\u7F6E\u7981\u7528 (gitHook.enabled = false)");
+    console.log(texts.setupCmd.gitHookDisabled);
   }
   console.log(`
 \u2705 ${t.setupComplete}`);
   console.log(`
 ${t.nextStep}`);
 }
-function copySkillFiles(cwd, language, t) {
+function copySkillFiles(cwd2, language, texts) {
   console.log(`
-\uD83D\uDCE6 ${t.copyingSkills}`);
+\uD83D\uDCE6 ${texts.setup.copyingSkills}`);
   const pluginRoot = process.env.CLAUDE_PLUGIN_ROOT;
   if (!pluginRoot) {
-    console.log("  \u26A0\uFE0F CLAUDE_PLUGIN_ROOT \u73AF\u5883\u53D8\u91CF\u672A\u8BBE\u7F6E\uFF0C\u8DF3\u8FC7\u6280\u80FD\u6587\u4EF6\u590D\u5236");
+    console.log(texts.setupCmd.pluginRootNotSet);
     return;
   }
-  const toolboxDir = getToolboxDir(cwd);
+  const toolboxDir = getToolboxDir(cwd2);
   const skillName = "projmnt4claude";
   const targetDir = path3.join(toolboxDir, skillName);
   ensureDir(targetDir);
@@ -24658,14 +25100,14 @@ function copySkillFiles(cwd, language, t) {
   const skillTarget = path3.join(targetDir, "SKILL.md");
   if (fs3.existsSync(skillSource)) {
     fs3.copyFileSync(skillSource, skillTarget);
-    console.log(`  \u2713 \u590D\u5236 SKILL.md (${language})`);
+    console.log(texts.setupCmd.copySkillFile.replace("{language}", language));
   } else {
     const defaultSource = path3.join(pluginRoot, "skills", "projmnt4claude", "SKILL.md");
     if (fs3.existsSync(defaultSource)) {
       fs3.copyFileSync(defaultSource, skillTarget);
-      console.log(`  \u2713 \u590D\u5236 SKILL.md (default)`);
+      console.log(texts.setupCmd.copyDefault);
     } else {
-      console.log(`  \u26A0\uFE0F SKILL.md \u672A\u627E\u5230`);
+      console.log(texts.setupCmd.fileNotFound);
     }
   }
   const commandsSourceDir = path3.join(pluginRoot, "locales", language, "commands");
@@ -24676,11 +25118,11 @@ function copySkillFiles(cwd, language, t) {
     for (const file of commandFiles) {
       fs3.copyFileSync(path3.join(commandsSourceDir, file), path3.join(commandsTargetDir, file));
     }
-    console.log(`  \u2713 \u590D\u5236 ${commandFiles.length} \u4E2A\u547D\u4EE4\u6587\u6863 (${language})`);
+    console.log(texts.setupCmd.copyCommandDocs.replace("{count}", String(commandFiles.length)).replace("{language}", language));
   } else {
-    console.log(`  \u26A0\uFE0F \u547D\u4EE4\u6587\u6863\u76EE\u5F55\u672A\u627E\u5230: ${commandsSourceDir}`);
+    console.log(texts.setupCmd.dirNotFound.replace("{path}", commandsSourceDir));
   }
-  console.log(`\u2705 ${t.skillsCopied}`);
+  console.log(`\u2705 ${texts.setup.skillsCopied}`);
 }
 
 // src/index.ts
@@ -24757,10 +25199,10 @@ function getCallStack() {
   } catch {}
   return stack;
 }
-function getExecutionContext(cwd = process.cwd()) {
+function getExecutionContext(cwd2 = process.cwd()) {
   const env = process.env;
   return {
-    cwd,
+    cwd: cwd2,
     user: env.USER || env.USERNAME,
     hostname: env.HOSTNAME || env.COMPUTERNAME,
     pid: process.pid,
@@ -24777,27 +25219,27 @@ function getExecutionContext(cwd = process.cwd()) {
     fullCommand: process.argv.join(" ")
   };
 }
-function getBatchUpdateLogPath(cwd = process.cwd()) {
-  const logsDir = getLogsDir(cwd);
+function getBatchUpdateLogPath(cwd2 = process.cwd()) {
+  const logsDir = getLogsDir(cwd2);
   const date = new Date().toISOString().split("T")[0];
   return path9.join(logsDir, `batch-update-${date}.log`);
 }
-function writeBatchUpdateLog(entry, cwd = process.cwd()) {
-  const logsDir = getLogsDir(cwd);
+function writeBatchUpdateLog(entry, cwd2 = process.cwd()) {
+  const logsDir = getLogsDir(cwd2);
   ensureDir(logsDir);
-  const logPath = getBatchUpdateLogPath(cwd);
+  const logPath = getBatchUpdateLogPath(cwd2);
   const fullEntry = {
     ...entry,
     timestamp: new Date().toISOString(),
     source: detectOperationSource(),
-    context: getExecutionContext(cwd)
+    context: getExecutionContext(cwd2)
   };
   const logLine = JSON.stringify(fullEntry) + `
 `;
   fs12.appendFileSync(logPath, logLine, "utf-8");
 }
-function queryBatchUpdateLogs(options = {}, cwd = process.cwd()) {
-  const logsDir = getLogsDir(cwd);
+function queryBatchUpdateLogs(options = {}, cwd2 = process.cwd()) {
+  const logsDir = getLogsDir(cwd2);
   if (!fs12.existsSync(logsDir)) {
     return [];
   }
@@ -24869,8 +25311,8 @@ function formatLogList(entries, verbose = false) {
   return lines.join(`
 `);
 }
-function showLogSummary(cwd = process.cwd()) {
-  const entries = queryBatchUpdateLogs({}, cwd);
+function showLogSummary(cwd2 = process.cwd()) {
+  const entries = queryBatchUpdateLogs({}, cwd2);
   if (entries.length === 0) {
     return "\u6682\u65E0 batch-update \u64CD\u4F5C\u65E5\u5FD7";
   }
@@ -24948,23 +25390,23 @@ function parseCheckpoints(checkpointPath) {
 function generateCheckpointToken() {
   return crypto.randomBytes(16).toString("hex");
 }
-function hasValidCheckpoints(checkpointPathOrContent, isContent = false, cwd) {
-  const texts2 = t(cwd);
+function hasValidCheckpoints(checkpointPathOrContent, isContent = false, cwd2) {
+  const texts = t(cwd2);
   let content;
   if (isContent && checkpointPathOrContent !== null) {
     content = checkpointPathOrContent;
   } else if (!isContent && checkpointPathOrContent) {
     if (!fs14.existsSync(checkpointPathOrContent)) {
-      return { valid: false, reason: texts2.taskCommand.checkpointFileNotExist };
+      return { valid: false, reason: texts.taskCommand.checkpointFileNotExist };
     }
     content = fs14.readFileSync(checkpointPathOrContent, "utf-8");
   } else {
-    return { valid: false, reason: texts2.taskCommand.validationError };
+    return { valid: false, reason: texts.taskCommand.validationError };
   }
   const lines = content.split(`
 `).filter((line) => line.trim().startsWith("- ["));
   if (lines.length === 0) {
-    return { valid: false, reason: texts2.taskCommand.noCheckpointItems };
+    return { valid: false, reason: texts.taskCommand.noCheckpointItems };
   }
   const templatePatterns = [
     /^Checkpoints\d+$/u,
@@ -24991,35 +25433,35 @@ function hasValidCheckpoints(checkpointPathOrContent, isContent = false, cwd) {
   if (templateCount > lines.length / 2) {
     return {
       valid: false,
-      reason: texts2.taskCommand.templateContentDetected.replace("{count}", String(templateCount)).replace("{total}", String(lines.length))
+      reason: texts.taskCommand.templateContentDetected.replace("{count}", String(templateCount)).replace("{total}", String(lines.length))
     };
   }
   return { valid: true, reason: "" };
 }
-function displayCheckpointCreationWarning(taskId, cwd) {
-  const texts2 = t(cwd);
+function displayCheckpointCreationWarning(taskId, cwd2) {
+  const texts = t(cwd2);
   console.log("");
   console.log("\u2501".repeat(SEPARATOR_WIDTH));
-  console.log(texts2.taskCommand.checkpointQualityReminder);
+  console.log(texts.taskCommand.checkpointQualityReminder);
   console.log("\u2501".repeat(SEPARATOR_WIDTH));
   console.log("");
-  console.log(texts2.taskCommand.taskCreatedButTemplate);
-  console.log("\uD83D\uDCCB " + texts2.taskCommand.highQualityCheckpointsEssential);
+  console.log(texts.taskCommand.taskCreatedButTemplate);
+  console.log("\uD83D\uDCCB " + texts.taskCommand.highQualityCheckpointsEssential);
   console.log("");
-  console.log("   1. " + texts2.taskCommand.editCheckpointMd);
-  console.log(`      ${texts2.taskCommand.filePath.replace("{path}", `.projmnt4claude/tasks/${taskId}/checkpoint.md`)}`);
+  console.log("   1. " + texts.taskCommand.editCheckpointMd);
+  console.log(`      ${texts.taskCommand.filePath.replace("{path}", `.projmnt4claude/tasks/${taskId}/checkpoint.md`)}`);
   console.log("");
-  console.log("   2. " + texts2.taskCommand.useAnalyzeCommand);
+  console.log("   2. " + texts.taskCommand.useAnalyzeCommand);
   console.log(`      projmnt4claude analyze --generate-checkpoints ${taskId}`);
   console.log("");
-  console.log("   3. " + texts2.taskCommand.useTemplateFeature);
+  console.log("   3. " + texts.taskCommand.useTemplateFeature);
   console.log(`      projmnt4claude task checkpoint template ${taskId} --apply`);
   console.log("");
-  console.log("\uD83D\uDCA1 " + texts2.taskCommand.tipStrictValidation);
+  console.log("\uD83D\uDCA1 " + texts.taskCommand.tipStrictValidation);
   console.log("\u2501".repeat(SEPARATOR_WIDTH));
 }
-function validateTaskCheckpointCommands(taskId, cwd) {
-  const task = readTaskMeta(taskId, cwd);
+function validateTaskCheckpointCommands(taskId, cwd2) {
+  const task = readTaskMeta(taskId, cwd2);
   if (!task?.checkpoints)
     return [];
   const warnings = [];
@@ -25031,21 +25473,21 @@ function validateTaskCheckpointCommands(taskId, cwd) {
   }
   return warnings;
 }
-function displayCheckpointVerificationWarnings(warnings, cwd) {
+function displayCheckpointVerificationWarnings(warnings, cwd2) {
   if (warnings.length === 0)
     return;
-  const texts2 = t(cwd);
+  const texts = t(cwd2);
   console.log("");
   console.log("\u2501".repeat(SEPARATOR_WIDTH));
-  console.log(texts2.taskCommand.missingCheckpointVerificationCommands);
+  console.log(texts.taskCommand.missingCheckpointVerificationCommands);
   console.log("\u2501".repeat(SEPARATOR_WIDTH));
   console.log("");
-  console.log(texts2.taskCommand.checkpointsMissingVerification.replace("{count}", String(warnings.length)));
+  console.log(texts.taskCommand.checkpointsMissingVerification.replace("{count}", String(warnings.length)));
   for (const w of warnings) {
     console.log(`   - ${w}`);
   }
   console.log("");
-  console.log("\uD83D\uDCA1 " + texts2.taskCommand.qaCannotAutoVerify);
+  console.log("\uD83D\uDCA1 " + texts.taskCommand.qaCannotAutoVerify);
   console.log("   Please add verification commands in checkpoint.md, or use init-requirement to regenerate.");
   console.log("\u2501".repeat(SEPARATOR_WIDTH));
 }
@@ -25072,24 +25514,24 @@ function extractFileReferencesFromText(text) {
   }
   return files;
 }
-function findMissingFiles(filePaths, cwd) {
+function findMissingFiles(filePaths, cwd2) {
   const missing = [];
   for (const fp of filePaths) {
-    const absolutePath = path11.resolve(cwd, fp);
+    const absolutePath = path11.resolve(cwd2, fp);
     if (!fs14.existsSync(absolutePath)) {
       missing.push(fp);
     }
   }
   return missing;
 }
-async function validateFileReferences(description, title, nonInteractive, cwd) {
+async function validateFileReferences(description, title, nonInteractive, cwd2) {
   const source = `${title || ""}
 ${description || ""}`;
   const fileRefs = extractFileReferencesFromText(source);
   if (fileRefs.length === 0) {
     return { proceed: true, missingFiles: [] };
   }
-  const missingFiles = findMissingFiles(fileRefs, cwd);
+  const missingFiles = findMissingFiles(fileRefs, cwd2);
   if (missingFiles.length === 0) {
     return { proceed: true, missingFiles: [] };
   }
@@ -25110,8 +25552,8 @@ ${description || ""}`;
   });
   return { proceed: response.proceed !== false, missingFiles };
 }
-async function createTask(options = {}, cwd = process.cwd()) {
-  if (!isInitialized(cwd)) {
+async function createTask(options = {}, cwd2 = process.cwd()) {
+  if (!isInitialized(cwd2)) {
     console.error("Error: Project not initialized. Please run `projmnt4claude setup` first");
     process.exit(1);
   }
@@ -25124,15 +25566,15 @@ async function createTask(options = {}, cwd = process.cwd()) {
         console.error(`Error: Invalid task ID format '${options.id}'`);
         process.exit(1);
       }
-      if (taskExists(options.id, cwd)) {
+      if (taskExists(options.id, cwd2)) {
         console.error(`Error: Task ID '${options.id}' already exists`);
         process.exit(1);
       }
       taskId2 = options.id;
     } else {
-      taskId2 = generateNewTaskId(cwd, taskType, taskPriority, options.title);
+      taskId2 = generateNewTaskId(cwd2, taskType, taskPriority, options.title);
     }
-    const fileValidation2 = await validateFileReferences(options.description, options.title, true, cwd);
+    const fileValidation2 = await validateFileReferences(options.description, options.title, true, cwd2);
     if (!fileValidation2.proceed) {
       console.log("Task creation cancelled");
       process.exit(0);
@@ -25184,7 +25626,7 @@ async function createTask(options = {}, cwd = process.cwd()) {
       newValue: "open"
     });
     if ((options.aiEnhancement || options.potentialDependencies) && options.description) {
-      const existingTasks = getAllTasks(cwd);
+      const existingTasks = getAllTasks(cwd2);
       const inferredDeps = inferDependencies(options.description, existingTasks, { keywordHints: options.potentialDependencies });
       if (inferredDeps.length > 0) {
         task2.dependencies = inferredDeps.map((d) => d.depTaskId);
@@ -25193,7 +25635,7 @@ async function createTask(options = {}, cwd = process.cwd()) {
     const referencedFiles = finalRelatedFiles.length > 0 ? finalRelatedFiles : extractFilePaths(task2.description || "", { includeBareFilenames: false });
     const fileWarnings = [];
     for (const file of referencedFiles) {
-      if (!fs14.existsSync(path11.join(cwd, file))) {
+      if (!fs14.existsSync(path11.join(cwd2, file))) {
         fileWarnings.push(file);
       }
     }
@@ -25210,8 +25652,8 @@ async function createTask(options = {}, cwd = process.cwd()) {
       }
       finalCheckpoints = filterResult.kept;
     }
-    writeTaskMeta(task2, cwd);
-    const taskDir2 = path11.join(getTasksDir(cwd), taskId2);
+    writeTaskMeta(task2, cwd2);
+    const taskDir2 = path11.join(getTasksDir(cwd2), taskId2);
     const checkpointPath2 = path11.join(taskDir2, "checkpoint.md");
     let checkpointContent;
     if (finalCheckpoints.length > 0) {
@@ -25239,13 +25681,13 @@ ${finalCheckpoints.map((cp) => `- [ ] ${cp}`).join(`
     if (!options.skipValidation) {
       const validation = hasValidCheckpoints(checkpointPath2, false);
       if (!validation.valid) {
-        displayCheckpointCreationWarning(taskId2, cwd);
+        displayCheckpointCreationWarning(taskId2, cwd2);
       }
     }
-    syncCheckpointsToMeta(taskId2, cwd);
-    const cpWarnings2 = validateTaskCheckpointCommands(taskId2, cwd);
+    syncCheckpointsToMeta(taskId2, cwd2);
+    const cpWarnings2 = validateTaskCheckpointCommands(taskId2, cwd2);
     displayCheckpointVerificationWarnings(cpWarnings2);
-    const allExistingTasks = getAllTasks(cwd);
+    const allExistingTasks = getAllTasks(cwd2);
     const depGraph = DependencyGraph.fromTasks(allExistingTasks);
     const depValidation = validateNewTaskDeps(taskId2, task2.dependencies || [], depGraph, allExistingTasks);
     if (depValidation.warnings.length > 0) {
@@ -25297,15 +25739,15 @@ ${finalCheckpoints.map((cp) => `- [ ] ${cp}`).join(`
       console.error(`Error: Invalid task ID format '${options.id}'`);
       process.exit(1);
     }
-    if (taskExists(options.id, cwd)) {
+    if (taskExists(options.id, cwd2)) {
       console.error(`Error: Task ID '${options.id}' already exists`);
       process.exit(1);
     }
     taskId = options.id;
   } else {
-    taskId = generateNewTaskId(cwd, "feature", response.priority, response.title);
+    taskId = generateNewTaskId(cwd2, "feature", response.priority, response.title);
   }
-  const fileValidation = await validateFileReferences(response.description, response.title, false, cwd);
+  const fileValidation = await validateFileReferences(response.description, response.title, false, cwd2);
   if (!fileValidation.proceed) {
     console.log("Task creation cancelled");
     process.exit(0);
@@ -25323,8 +25765,8 @@ ${finalCheckpoints.map((cp) => `- [ ] ${cp}`).join(`
   if (fileValidation.missingFiles.length > 0) {
     task.fileWarnings = fileValidation.missingFiles;
   }
-  writeTaskMeta(task, cwd);
-  const taskDir = path11.join(getTasksDir(cwd), taskId);
+  writeTaskMeta(task, cwd2);
+  const taskDir = path11.join(getTasksDir(cwd2), taskId);
   const checkpointPath = path11.join(taskDir, "checkpoint.md");
   fs14.writeFileSync(checkpointPath, defaultCheckpointContent, "utf-8");
   console.log(`
@@ -25335,20 +25777,20 @@ ${finalCheckpoints.map((cp) => `- [ ] ${cp}`).join(`
   if (!options.skipValidation) {
     const validation = hasValidCheckpoints(checkpointPath, false);
     if (!validation.valid) {
-      displayCheckpointCreationWarning(taskId, cwd);
+      displayCheckpointCreationWarning(taskId, cwd2);
     }
   }
-  syncCheckpointsToMeta(taskId, cwd);
-  const cpWarnings = validateTaskCheckpointCommands(taskId, cwd);
+  syncCheckpointsToMeta(taskId, cwd2);
+  const cpWarnings = validateTaskCheckpointCommands(taskId, cwd2);
   displayCheckpointVerificationWarnings(cpWarnings);
   return task;
 }
-function listTasks(options = {}, cwd = process.cwd()) {
-  if (!isInitialized(cwd)) {
+function listTasks(options = {}, cwd2 = process.cwd()) {
+  if (!isInitialized(cwd2)) {
     console.error("Error: Project not initialized. Please run `projmnt4claude setup` first");
     process.exit(1);
   }
-  let tasks = getAllTasks(cwd);
+  let tasks = getAllTasks(cwd2);
   if (options.status) {
     tasks = tasks.filter((t2) => t2.status === options.status);
   }
@@ -25561,8 +26003,8 @@ function formatRelativeTime(isoString) {
     return `${diffDays}\u5929\u524D`;
   return formatLocalTime(isoString);
 }
-function showTask(taskId, options = {}, cwd = process.cwd()) {
-  if (!isInitialized(cwd)) {
+function showTask(taskId, options = {}, cwd2 = process.cwd()) {
+  if (!isInitialized(cwd2)) {
     console.error("Error: Project not initialized. Please run `projmnt4claude setup` first");
     process.exit(1);
   }
@@ -25570,7 +26012,7 @@ function showTask(taskId, options = {}, cwd = process.cwd()) {
     console.error(`Error: Invalid task ID format '${taskId}'`);
     process.exit(1);
   }
-  const task = readTaskMeta(taskId, cwd);
+  const task = readTaskMeta(taskId, cwd2);
   if (!task) {
     console.error(`Error: Task '${taskId}' does not exist`);
     process.exit(1);
@@ -25580,20 +26022,20 @@ function showTask(taskId, options = {}, cwd = process.cwd()) {
     return;
   }
   if (options.history) {
-    showTaskHistory(taskId, cwd);
+    showTaskHistory(taskId, cwd2);
     return;
   }
   if (options.compact) {
-    showTaskCompact(task, cwd);
+    showTaskCompact(task, cwd2);
     return;
   }
   if (options.format !== "classic" && !options.verbose) {
-    showTaskPanel(task, options, cwd);
+    showTaskPanel(task, options, cwd2);
     return;
   }
-  showTaskClassic(task, options, cwd);
+  showTaskClassic(task, options, cwd2);
 }
-function showTaskCompact(task, cwd) {
+function showTaskCompact(task, cwd2) {
   const statusIcon = getStatusIcon(task.status);
   const typeMap = {
     bug: "\u7F3A\u9677",
@@ -25612,8 +26054,8 @@ function showTaskCompact(task, cwd) {
   if (task.dependencies.length > 0) {
     console.log(`   Dependencies: ${task.dependencies.join(", ")}`);
   }
-  if (cwd) {
-    const taskDir = path11.join(getTasksDir(cwd), task.id);
+  if (cwd2) {
+    const taskDir = path11.join(getTasksDir(cwd2), task.id);
     const checkpointPath = path11.join(taskDir, "checkpoint.md");
     if (fs14.existsSync(checkpointPath)) {
       const content = fs14.readFileSync(checkpointPath, "utf-8");
@@ -25686,7 +26128,7 @@ function padByDisplayWidth(str, targetWidth) {
   }
   return str + " ".repeat(targetWidth - currentWidth);
 }
-function showTaskPanel(task, options, cwd) {
+function showTaskPanel(task, options, cwd2) {
   const termWidth = process.stdout.columns || 80;
   const width = Math.min(Math.max(termWidth, 60), 100);
   const hLine = "\u2500".repeat(width - 2);
@@ -25736,11 +26178,11 @@ function showTaskPanel(task, options, cwd) {
       console.log(`\u2502 ${padByDisplayWidth(moreDesc, width - 3)}\u2502`);
     }
   }
-  const taskDir = path11.join(getTasksDir(cwd), task.id);
+  const taskDir = path11.join(getTasksDir(cwd2), task.id);
   const checkpointPath = path11.join(taskDir, "checkpoint.md");
   if (fs14.existsSync(checkpointPath)) {
     if (options.checkpoints) {
-      const checkpointsMeta = listCheckpoints(task.id, cwd);
+      const checkpointsMeta = listCheckpoints(task.id, cwd2);
       if (checkpointsMeta.length > 0) {
         console.log(`\u251C${hLine}\u2524`);
         const sectionTitle = "\uD83D\uDCCB Checkpoints";
@@ -25800,7 +26242,7 @@ function showTaskPanel(task, options, cwd) {
       let doneCount = 0;
       let activeCount = 0;
       for (const subId of task.subtaskIds) {
-        const sub = readTaskMeta(subId, cwd);
+        const sub = readTaskMeta(subId, cwd2);
         if (sub && (sub.status === "resolved" || sub.status === "closed"))
           doneCount++;
         else if (sub && (sub.status === "in_progress" || sub.status === "wait_review" || sub.status === "wait_qa" || sub.status === "wait_evaluation"))
@@ -25871,7 +26313,7 @@ function makeSectionHeader(title) {
   const dashes = "\u2500".repeat(Math.max(0, SEPARATOR_WIDTH - usedWidth));
   return `${prefix}${title}${suffix}${dashes}`;
 }
-function showTaskClassic(task, options, cwd) {
+function showTaskClassic(task, options, cwd2) {
   const line = "\u2501".repeat(SEPARATOR_WIDTH);
   const statusIcon = getStatusIcon(task.status);
   console.log("");
@@ -25905,7 +26347,7 @@ function showTaskClassic(task, options, cwd) {
     }
     if (task.subtaskIds && task.subtaskIds.length > 0) {
       const subtaskDisplays = task.subtaskIds.map((subId) => {
-        const sub = readTaskMeta(subId, cwd);
+        const sub = readTaskMeta(subId, cwd2);
         if (sub) {
           return `${getStatusIcon(sub.status)} ${subId}`;
         }
@@ -25961,11 +26403,11 @@ function showTaskClassic(task, options, cwd) {
       });
     }
   }
-  const taskDir = path11.join(getTasksDir(cwd), task.id);
+  const taskDir = path11.join(getTasksDir(cwd2), task.id);
   const checkpointPath = path11.join(taskDir, "checkpoint.md");
   console.log("");
   if (options.checkpoints || options.verbose) {
-    const checkpointsMeta = listCheckpoints(task.id, cwd);
+    const checkpointsMeta = listCheckpoints(task.id, cwd2);
     if (checkpointsMeta.length > 0) {
       console.log(makeSectionHeader("Checkpoints"));
       console.log("");
@@ -26074,23 +26516,23 @@ function wrapText(text, maxWidth) {
   }
   return lines;
 }
-async function updateTask(taskId, options, cwd = process.cwd()) {
-  if (!isInitialized(cwd)) {
+async function updateTask(taskId, options, cwd2 = process.cwd()) {
+  if (!isInitialized(cwd2)) {
     console.error("Error: Project not initialized. Please run `projmnt4claude setup` first");
     process.exit(1);
   }
-  const task = readTaskMeta(taskId, cwd);
+  const task = readTaskMeta(taskId, cwd2);
   if (!task) {
     console.error(`Error: Task '${taskId}' does not exist`);
     process.exit(1);
   }
   if (options.status === "resolved") {
-    const taskDir = path11.join(getTasksDir(cwd), taskId);
+    const taskDir = path11.join(getTasksDir(cwd2), taskId);
     const checkpointPath = path11.join(taskDir, "checkpoint.md");
     if (!options.token) {
       if (!fs14.existsSync(checkpointPath)) {
         task.status = options.status;
-        writeTaskMeta(task, cwd);
+        writeTaskMeta(task, cwd2);
         console.log(`\u2705 Task ${taskId} updated to resolved status`);
         return;
       }
@@ -26138,7 +26580,7 @@ async function updateTask(taskId, options, cwd = process.cwd()) {
       }
       task.status = options.status;
       task.checkpointConfirmationToken = undefined;
-      writeTaskMeta(task, cwd);
+      writeTaskMeta(task, cwd2);
       console.log(`\u2705 Task ${taskId} updated to resolved status`);
       return;
     }
@@ -26210,7 +26652,7 @@ async function updateTask(taskId, options, cwd = process.cwd()) {
     console.log("No fields specified for update");
     return;
   }
-  writeTaskMeta(task, cwd);
+  writeTaskMeta(task, cwd2);
   console.log(`\u2705 Task ${taskId} updated`);
   if (options.status || options.priority) {
     const commandArgs = process.argv.slice(2);
@@ -26235,7 +26677,7 @@ async function updateTask(taskId, options, cwd = process.cwd()) {
         updatedCount: 1,
         filteredCount: 0
       }
-    }, cwd);
+    }, cwd2);
   }
   if ((options.status === "resolved" || options.status === "closed") && !options.noSync) {
     const childTasks = task.subtaskIds || [];
@@ -26243,14 +26685,14 @@ async function updateTask(taskId, options, cwd = process.cwd()) {
       console.log("");
       console.log(`\u26A0\uFE0F  Detected ${childTasks.length} subtasks:`);
       for (const childId of childTasks) {
-        const childTask = readTaskMeta(childId, cwd);
+        const childTask = readTaskMeta(childId, cwd2);
         if (childTask) {
           console.log(`   - ${childId} (status: ${childTask.status})`);
         }
       }
       if (options.syncChildren) {
         for (const childId of childTasks) {
-          const childTask = readTaskMeta(childId, cwd);
+          const childTask = readTaskMeta(childId, cwd2);
           if (childTask && childTask.status !== "resolved" && childTask.status !== "closed") {
             childTask.status = options.status;
             if (!childTask.history) {
@@ -26264,7 +26706,7 @@ async function updateTask(taskId, options, cwd = process.cwd()) {
               newValue: options.status,
               reason: "Parent taskCompleted, Subtasks\u529F\u80FD\u5DF2\u5728Parent task\u4E2D\u5B9E\u73B0"
             });
-            writeTaskMeta(childTask, cwd);
+            writeTaskMeta(childTask, cwd2);
             console.log(`   \u2705 ${childId} synced to ${options.status}`);
           }
         }
@@ -26278,16 +26720,16 @@ async function updateTask(taskId, options, cwd = process.cwd()) {
     }
   }
 }
-async function submitTask(taskId, options = {}, cwd = process.cwd()) {
+async function submitTask(taskId, options = {}, cwd2 = process.cwd()) {
   console.warn("");
   console.warn("\u26A0\uFE0F Warning: task submit command is deprecated and will be removed in a future version");
   console.warn("   Please use alternative command: projmnt4claude task update <taskId> --status wait_evaluation");
   console.warn("");
-  if (!isInitialized(cwd)) {
+  if (!isInitialized(cwd2)) {
     console.error("Error: Project not initialized. Please run `projmnt4claude setup` first");
     process.exit(1);
   }
-  const task = readTaskMeta(taskId, cwd);
+  const task = readTaskMeta(taskId, cwd2);
   if (!task) {
     console.error(`Error: Task '${taskId}' does not exist`);
     process.exit(1);
@@ -26314,7 +26756,7 @@ async function submitTask(taskId, options = {}, cwd = process.cwd()) {
     task.history = [];
   }
   task.history.push(historyEntry);
-  writeTaskMeta(task, cwd);
+  writeTaskMeta(task, cwd2);
   console.log("");
   console.log("\u2501".repeat(SEPARATOR_WIDTH));
   console.log("\uD83D\uDCE4 Task submitted for verification");
@@ -26331,17 +26773,17 @@ async function submitTask(taskId, options = {}, cwd = process.cwd()) {
   console.log("After verification passes, task status will auto-update to resolved");
   console.log("");
 }
-async function validateTask(taskId, options = {}, cwd = process.cwd()) {
+async function validateTask(taskId, options = {}, cwd2 = process.cwd()) {
   const { validateTaskCompletion: validateTaskCompletion2, generateValidationReport: generateValidationReport2 } = await Promise.resolve().then(() => (init_validation(), exports_validation));
   console.warn("[Notice]: task validate command is deprecated");
   console.warn("   Use: projmnt4claude task update <taskId> --status wait_evaluation");
   console.warn("   Validation will be automatically executed by harness evaluation phase");
   console.warn("");
-  if (!isInitialized(cwd)) {
+  if (!isInitialized(cwd2)) {
     console.error("Error: Project not initialized. Please run `projmnt4claude setup` first");
     process.exit(1);
   }
-  const task = readTaskMeta(taskId, cwd);
+  const task = readTaskMeta(taskId, cwd2);
   if (!task) {
     console.error(`Error: Task '${taskId}' does not exist`);
     process.exit(1);
@@ -26358,7 +26800,7 @@ async function validateTask(taskId, options = {}, cwd = process.cwd()) {
   console.log("\uD83D\uDD0D Starting task verification");
   console.log("\u2501".repeat(SEPARATOR_WIDTH));
   console.log("");
-  const result = await validateTaskCompletion2(taskId, cwd, {
+  const result = await validateTaskCompletion2(taskId, cwd2, {
     executeCommands: options.executeCommands !== false,
     collectEvidence: true
   });
@@ -26379,7 +26821,7 @@ async function validateTask(taskId, options = {}, cwd = process.cwd()) {
         task.history = [];
       }
       task.history.push(historyEntry);
-      writeTaskMeta(task, cwd);
+      writeTaskMeta(task, cwd2);
       console.log("\u2705 Task status updated to resolved");
     } else {
       console.log("\u2705 Verification passed, can manually update status:");
@@ -26400,21 +26842,21 @@ async function validateTask(taskId, options = {}, cwd = process.cwd()) {
       task.history = [];
     }
     task.history.push(historyEntry);
-    writeTaskMeta(task, cwd);
+    writeTaskMeta(task, cwd2);
     console.log("\u274C Task returned to in_progress status, please fix issues and resubmit");
   }
 }
-async function deleteTask(taskId, force = false, cwd = process.cwd()) {
-  if (!isInitialized(cwd)) {
+async function deleteTask(taskId, force = false, cwd2 = process.cwd()) {
+  if (!isInitialized(cwd2)) {
     console.error("Error: Project not initialized. Please run `projmnt4claude setup` first");
     process.exit(1);
   }
-  const task = readTaskMeta(taskId, cwd);
+  const task = readTaskMeta(taskId, cwd2);
   if (!task) {
     console.error(`Error: Task '${taskId}' does not exist`);
     process.exit(1);
   }
-  const allTasks = getAllTasks(cwd);
+  const allTasks = getAllTasks(cwd2);
   const graph = DependencyGraph.fromTasks(allTasks);
   const downstream = graph.getDirectDownstream(taskId);
   const allDownstream = graph.getAllDownstream(taskId);
@@ -26422,7 +26864,7 @@ async function deleteTask(taskId, force = false, cwd = process.cwd()) {
     console.log("");
     console.log(`\u26A0\uFE0F  This task has ${downstream.length} direct dependents and ${allDownstream.length} transitive dependents:`);
     for (const depId of downstream.slice(0, 10)) {
-      const depTask = readTaskMeta(depId, cwd);
+      const depTask = readTaskMeta(depId, cwd2);
       const status = depTask ? formatStatus(depTask.status) : "\u2753";
       console.log(`   - ${depId} (${depTask?.title?.substring(0, 30) || "Unknown"} ${status})`);
     }
@@ -26445,24 +26887,24 @@ async function deleteTask(taskId, force = false, cwd = process.cwd()) {
       return;
     }
   }
-  const tasksDir = getTasksDir(cwd);
-  const archiveDir = getArchiveDir(cwd);
+  const tasksDir = getTasksDir(cwd2);
+  const archiveDir = getArchiveDir(cwd2);
   const taskPath = path11.join(tasksDir, taskId);
   const archivePath = path11.join(archiveDir, taskId);
   if (!fs14.existsSync(archiveDir)) {
     fs14.mkdirSync(archiveDir, { recursive: true });
   }
   task.status = "abandoned";
-  writeTaskMeta(task, cwd);
+  writeTaskMeta(task, cwd2);
   fs14.renameSync(taskPath, archivePath);
   console.log(`\u2705 Task ${taskId} Archived`);
 }
-function purgeTasks(options = {}, cwd = process.cwd()) {
-  if (!isInitialized(cwd)) {
+function purgeTasks(options = {}, cwd2 = process.cwd()) {
+  if (!isInitialized(cwd2)) {
     console.error("Error: Project not initialized. Please run `projmnt4claude setup` first");
     process.exit(1);
   }
-  const archiveDir = getArchiveDir(cwd);
+  const archiveDir = getArchiveDir(cwd2);
   if (!fs14.existsSync(archiveDir)) {
     const msg = "\u6CA1\u6709\u9700\u8981\u6E05\u9664\u7684 abandoned Task";
     if (options.json) {
@@ -26523,17 +26965,17 @@ Use  --force or -y to confirm deletion`);
     console.log(`\u2705 Purged ${purged}/${abandonedDirs.length}  abandoned Task`);
   }
 }
-function addDependency(taskId, depId, cwd = process.cwd()) {
-  if (!isInitialized(cwd)) {
+function addDependency(taskId, depId, cwd2 = process.cwd()) {
+  if (!isInitialized(cwd2)) {
     console.error("Error: Project not initialized. Please run `projmnt4claude setup` first");
     process.exit(1);
   }
-  const task = readTaskMeta(taskId, cwd);
+  const task = readTaskMeta(taskId, cwd2);
   if (!task) {
     console.error(`Error: Task '${taskId}' does not exist`);
     process.exit(1);
   }
-  const depTask = readTaskMeta(depId, cwd);
+  const depTask = readTaskMeta(depId, cwd2);
   if (!depTask) {
     console.error(`Error: Dependency Tasks '${depId}' does not exist`);
     process.exit(1);
@@ -26542,22 +26984,22 @@ function addDependency(taskId, depId, cwd = process.cwd()) {
     console.log(`Task ${taskId} already depends on ${depId}`);
     return;
   }
-  const allTasks = getAllTasks(cwd);
+  const allTasks = getAllTasks(cwd2);
   const graph = DependencyGraph.fromTasks(allTasks);
   if (!graph.addEdge(taskId, depId)) {
     console.error(`Error: Adding dependency ${depId} would create circular dependency (GATE-DEP-002)`);
     process.exit(1);
   }
   task.dependencies.push(depId);
-  writeTaskMeta(task, cwd);
+  writeTaskMeta(task, cwd2);
   console.log(`\u2705 Dependency added: ${taskId} -> ${depId}`);
 }
-function removeDependency(taskId, depId, cwd = process.cwd()) {
-  if (!isInitialized(cwd)) {
+function removeDependency(taskId, depId, cwd2 = process.cwd()) {
+  if (!isInitialized(cwd2)) {
     console.error("Error: Project not initialized. Please run `projmnt4claude setup` first");
     process.exit(1);
   }
-  const task = readTaskMeta(taskId, cwd);
+  const task = readTaskMeta(taskId, cwd2);
   if (!task) {
     console.error(`Error: Task '${taskId}' does not exist`);
     process.exit(1);
@@ -26567,11 +27009,11 @@ function removeDependency(taskId, depId, cwd = process.cwd()) {
     console.log(`Task ${taskId} does not depend on ${depId}`);
     return;
   }
-  const allTasks = getAllTasks(cwd);
+  const allTasks = getAllTasks(cwd2);
   const graph = DependencyGraph.fromTasks(allTasks);
   graph.removeEdge(taskId, depId);
   task.dependencies.splice(index, 1);
-  writeTaskMeta(task, cwd);
+  writeTaskMeta(task, cwd2);
   console.log(`\u2705 Dependency removed: ${taskId} -/-> ${depId}`);
   const remainingDeps = task.dependencies;
   if (remainingDeps.length === 0) {
@@ -26670,12 +27112,12 @@ function showStatusGuide() {
   console.log("");
   console.log("\u2501".repeat(SEPARATOR_WIDTH));
 }
-async function completeTask(taskId, options = {}, cwd = process.cwd()) {
-  if (!isInitialized(cwd)) {
+async function completeTask(taskId, options = {}, cwd2 = process.cwd()) {
+  if (!isInitialized(cwd2)) {
     console.error("Error: Project not initialized. Please run `projmnt4claude setup` first");
     process.exit(1);
   }
-  const task = readTaskMeta(taskId, cwd);
+  const task = readTaskMeta(taskId, cwd2);
   if (!task) {
     console.error(`Error: Task '${taskId}' does not exist`);
     process.exit(1);
@@ -26685,7 +27127,7 @@ async function completeTask(taskId, options = {}, cwd = process.cwd()) {
   console.log(`\uD83D\uDE80 One-click complete task: ${taskId}`);
   console.log("\u2501".repeat(SEPARATOR_WIDTH));
   console.log("");
-  const taskDir = path11.join(getTasksDir(cwd), taskId);
+  const taskDir = path11.join(getTasksDir(cwd2), taskId);
   const checkpointPath = path11.join(taskDir, "checkpoint.md");
   if (fs14.existsSync(checkpointPath)) {
     const content = fs14.readFileSync(checkpointPath, "utf-8");
@@ -26722,7 +27164,7 @@ async function completeTask(taskId, options = {}, cwd = process.cwd()) {
     }
   }
   task.status = "resolved";
-  writeTaskMeta(task, cwd);
+  writeTaskMeta(task, cwd2);
   console.log("");
   console.log("\u2501".repeat(SEPARATOR_WIDTH));
   console.log(`\uD83C\uDF89 Task ${taskId} Completed\uFF01`);
@@ -26758,7 +27200,7 @@ async function completeTask(taskId, options = {}, cwd = process.cwd()) {
           field: "completionNote",
           newValue: noteResponse.note
         });
-        const taskDir2 = path11.join(getTasksDir(cwd), taskId);
+        const taskDir2 = path11.join(getTasksDir(cwd2), taskId);
         const notesDir = path11.join(taskDir2, "notes");
         if (!fs14.existsSync(notesDir)) {
           fs14.mkdirSync(notesDir, { recursive: true });
@@ -26768,19 +27210,19 @@ async function completeTask(taskId, options = {}, cwd = process.cwd()) {
 
 ${noteResponse.note}
 `, "utf-8");
-        writeTaskMeta(task, cwd);
+        writeTaskMeta(task, cwd2);
         console.log("");
         console.log("\u2705 Completion note saved");
       }
     }
   }
 }
-function showTaskHistory(taskId, cwd = process.cwd()) {
-  if (!isInitialized(cwd)) {
+function showTaskHistory(taskId, cwd2 = process.cwd()) {
+  if (!isInitialized(cwd2)) {
     console.error("Error: Project not initialized. Please run `projmnt4claude setup` first");
     process.exit(1);
   }
-  const task = readTaskMeta(taskId, cwd);
+  const task = readTaskMeta(taskId, cwd2);
   if (!task) {
     console.error(`Error: Task '${taskId}' does not exist`);
     process.exit(1);
@@ -26838,8 +27280,8 @@ function showTaskHistory(taskId, cwd = process.cwd()) {
   console.log(`\uD83D\uDCCA Statistics: Total ${task.history.length}  history records, filtered ${meaningfulHistory.length} ${totalCount > MAX_HISTORY_DISPLAY ? `, showing last ${MAX_HISTORY_DISPLAY} ` : ""}`);
   console.log("");
 }
-function addHistoryEntry(taskId, entry, cwd = process.cwd()) {
-  const task = readTaskMeta(taskId, cwd);
+function addHistoryEntry(taskId, entry, cwd2 = process.cwd()) {
+  const task = readTaskMeta(taskId, cwd2);
   if (!task)
     return;
   if (!task.history) {
@@ -26855,10 +27297,10 @@ function addHistoryEntry(taskId, entry, cwd = process.cwd()) {
     relatedIssue: entry.relatedIssue,
     verificationDetails: entry.verificationDetails
   });
-  writeTaskMeta(task, cwd);
+  writeTaskMeta(task, cwd2);
 }
-async function executeTask(taskId, cwd = process.cwd()) {
-  if (!isInitialized(cwd)) {
+async function executeTask(taskId, cwd2 = process.cwd()) {
+  if (!isInitialized(cwd2)) {
     console.error("Error: Project not initialized. Please run `projmnt4claude setup` first");
     process.exit(1);
   }
@@ -26866,7 +27308,7 @@ async function executeTask(taskId, cwd = process.cwd()) {
     console.error(`Error: Invalid task ID format '${taskId}'`);
     process.exit(1);
   }
-  const task = readTaskMeta(taskId, cwd);
+  const task = readTaskMeta(taskId, cwd2);
   if (!task) {
     console.error(`Error: Task '${taskId}' does not exist`);
     process.exit(1);
@@ -26897,12 +27339,12 @@ async function executeTask(taskId, cwd = process.cwd()) {
   if (task.dependencies.length > 0) {
     console.log("");
     console.log("\uD83D\uDD17 Dependency Tasks:");
-    const allExTasks = getAllTasks(cwd);
+    const allExTasks = getAllTasks(cwd2);
     const exGraph = DependencyGraph.fromTasks(allExTasks);
     const upstreamIds = exGraph.getDirectUpstream(taskId);
     const terminalStatuses = new Set(["resolved", "closed"]);
     const depsStatus = task.dependencies.map((depId) => {
-      const depTask = readTaskMeta(depId, cwd);
+      const depTask = readTaskMeta(depId, cwd2);
       const status = depTask ? terminalStatuses.has(depTask.status) ? "\u2705" : "\u274C" : "\u2753";
       const upstreamValid = upstreamIds.includes(depId);
       const graphTag = upstreamValid ? "" : " (\u26A0\uFE0F in graphdoes not exist)";
@@ -26911,7 +27353,7 @@ async function executeTask(taskId, cwd = process.cwd()) {
     console.log(depsStatus.join(`
 `));
     const uncompletedDeps = task.dependencies.filter((depId) => {
-      const depTask = readTaskMeta(depId, cwd);
+      const depTask = readTaskMeta(depId, cwd2);
       return !depTask || !terminalStatuses.has(depTask.status);
     });
     if (uncompletedDeps.length > 0) {
@@ -26919,7 +27361,7 @@ async function executeTask(taskId, cwd = process.cwd()) {
       console.log("\u26A0\uFE0F Note: Incomplete dependencies exist, recommend completing them first.");
     }
   }
-  const taskDir = path11.join(getTasksDir(cwd), taskId);
+  const taskDir = path11.join(getTasksDir(cwd2), taskId);
   const checkpointPath = path11.join(taskDir, "checkpoint.md");
   console.log("");
   console.log("\u2501".repeat(SEPARATOR_WIDTH));
@@ -26953,22 +27395,22 @@ async function executeTask(taskId, cwd = process.cwd()) {
     });
     if (response.start) {
       task.status = "in_progress";
-      writeTaskMeta(task, cwd);
+      writeTaskMeta(task, cwd2);
       console.log(`\u2705 Task ${taskId} status updated to"In Progress"`);
     }
   }
 }
-async function completeCheckpoint(taskId, options = {}, cwd = process.cwd()) {
-  if (!isInitialized(cwd)) {
+async function completeCheckpoint(taskId, options = {}, cwd2 = process.cwd()) {
+  if (!isInitialized(cwd2)) {
     console.error("Error: Project not initialized. Please run `projmnt4claude setup` first");
     process.exit(1);
   }
-  const task = readTaskMeta(taskId, cwd);
+  const task = readTaskMeta(taskId, cwd2);
   if (!task) {
     console.error(`Error: Task '${taskId}' does not exist`);
     process.exit(1);
   }
-  const taskDir = path11.join(getTasksDir(cwd), taskId);
+  const taskDir = path11.join(getTasksDir(cwd2), taskId);
   const checkpointPath = path11.join(taskDir, "checkpoint.md");
   if (!fs14.existsSync(checkpointPath)) {
     console.log("No checkpoint file");
@@ -27028,7 +27470,7 @@ async function completeCheckpoint(taskId, options = {}, cwd = process.cwd()) {
     console.log(`   projmnt4claude task update ${taskId} --status resolved`);
     if (options.yes) {
       task.status = "resolved";
-      writeTaskMeta(task, cwd);
+      writeTaskMeta(task, cwd2);
       console.log(`\u2705 Task ${taskId} auto-marked as resolved`);
     } else {
       const response = await import_prompts2.default({
@@ -27039,7 +27481,7 @@ async function completeCheckpoint(taskId, options = {}, cwd = process.cwd()) {
       });
       if (response.complete) {
         task.status = "resolved";
-        writeTaskMeta(task, cwd);
+        writeTaskMeta(task, cwd2);
         console.log(`\u2705 Task ${taskId} marked as resolved`);
       }
     }
@@ -27047,17 +27489,17 @@ async function completeCheckpoint(taskId, options = {}, cwd = process.cwd()) {
     console.log("\u26A0\uFE0F Some checkpoints failed, please continue working");
   }
 }
-async function verifyCheckpoint(taskId, cwd = process.cwd()) {
-  if (!isInitialized(cwd)) {
+async function verifyCheckpoint(taskId, cwd2 = process.cwd()) {
+  if (!isInitialized(cwd2)) {
     console.error("Error: Project not initialized. Please run `projmnt4claude setup` first");
     process.exit(1);
   }
-  const task = readTaskMeta(taskId, cwd);
+  const task = readTaskMeta(taskId, cwd2);
   if (!task) {
     console.error(`Error: Task '${taskId}' does not exist`);
     process.exit(1);
   }
-  const taskDir = path11.join(getTasksDir(cwd), taskId);
+  const taskDir = path11.join(getTasksDir(cwd2), taskId);
   const checkpointPath = path11.join(taskDir, "checkpoint.md");
   const checkpoints = parseCheckpoints(checkpointPath);
   if (checkpoints.length === 0) {
@@ -27086,7 +27528,7 @@ async function verifyCheckpoint(taskId, cwd = process.cwd()) {
   }
   const token = generateCheckpointToken();
   task.checkpointConfirmationToken = token;
-  writeTaskMeta(task, cwd);
+  writeTaskMeta(task, cwd2);
   console.log("\u2501".repeat(SEPARATOR_WIDTH));
   console.log("\u2705 All checkpoints verified!");
   console.log("");
@@ -27097,30 +27539,30 @@ async function verifyCheckpoint(taskId, cwd = process.cwd()) {
   console.log(`   projmnt4claude task update ${taskId} --status resolved --token ${token}`);
   console.log("");
 }
-async function addSubtask(parentId, title, cwd = process.cwd()) {
-  if (!isInitialized(cwd)) {
+async function addSubtask(parentId, title, cwd2 = process.cwd()) {
+  if (!isInitialized(cwd2)) {
     console.error("Error: Project not initialized. Please run `projmnt4claude setup` first");
     process.exit(1);
   }
-  const parentTask = readTaskMeta(parentId, cwd);
+  const parentTask = readTaskMeta(parentId, cwd2);
   if (!parentTask) {
     console.error(`Error: Parent task ${parentId} does not exist`);
     process.exit(1);
   }
   const { generateSubtaskId: generateSubtaskId2, addSubtaskToParent: addSubtaskToParent2 } = await Promise.resolve().then(() => (init_task2(), exports_task2));
-  const subtaskId = generateSubtaskId2(parentId, cwd);
+  const subtaskId = generateSubtaskId2(parentId, cwd2);
   const subtask = createDefaultTaskMeta(subtaskId, title, parentTask.type, undefined, "cli");
   subtask.parentId = parentId;
   subtask.priority = parentTask.priority;
-  writeTaskMeta(subtask, cwd);
-  const taskDir = path11.join(getTasksDir(cwd), subtaskId);
+  writeTaskMeta(subtask, cwd2);
+  const taskDir = path11.join(getTasksDir(cwd2), subtaskId);
   const checkpointPath = path11.join(taskDir, "checkpoint.md");
   fs14.writeFileSync(checkpointPath, `# ${subtaskId} Checkpoints
 
 - [ ] Checkpoints1
 - [ ] Checkpoints2
 `, "utf-8");
-  addSubtaskToParent2(parentId, subtaskId, cwd);
+  addSubtaskToParent2(parentId, subtaskId, cwd2);
   console.log(`
 \u2705 Subtask created successfully!`);
   console.log(`   Subtasks ID: ${subtaskId}`);
@@ -27128,12 +27570,12 @@ async function addSubtask(parentId, title, cwd = process.cwd()) {
   console.log(`   Title: ${title}`);
   console.log(`   Priority: ${formatPriority(subtask.priority)}`);
 }
-async function syncChildren(parentTaskId, options = {}, cwd = process.cwd()) {
-  if (!isInitialized(cwd)) {
+async function syncChildren(parentTaskId, options = {}, cwd2 = process.cwd()) {
+  if (!isInitialized(cwd2)) {
     console.error("\u274C Error: Project not initialized");
     process.exit(1);
   }
-  const parentTask = readTaskMeta(parentTaskId, cwd);
+  const parentTask = readTaskMeta(parentTaskId, cwd2);
   if (!parentTask) {
     console.error(`\u274C Error: Task ${parentTaskId} does not exist`);
     process.exit(1);
@@ -27154,7 +27596,7 @@ async function syncChildren(parentTaskId, options = {}, cwd = process.cwd()) {
   let syncedCount = 0;
   let skippedCount = 0;
   for (const childId of childrenToSync) {
-    const childTask = readTaskMeta(childId, cwd);
+    const childTask = readTaskMeta(childId, cwd2);
     if (!childTask) {
       console.log(`   \u26A0\uFE0F  ${childId}: does not exist, skipped`);
       skippedCount++;
@@ -27180,31 +27622,31 @@ async function syncChildren(parentTaskId, options = {}, cwd = process.cwd()) {
       oldValue: oldStatus,
       newValue: targetStatus,
       reason: `Parent task ${parentTaskId} Status\u540C\u6B65`
-    }, cwd);
-    writeTaskMeta(childTask, cwd);
+    }, cwd2);
+    writeTaskMeta(childTask, cwd2);
     console.log(`   \u2705 ${childId}: ${oldStatus} \u2192 ${targetStatus}`);
     syncedCount++;
   }
   console.log("");
   console.log(`\u2705 Sync completed: ${syncedCount} subtasks updated, ${skippedCount} skipped`);
 }
-async function updateCheckpoint(taskId, checkpointId, action, options = {}, cwd = process.cwd()) {
-  if (!isInitialized(cwd)) {
+async function updateCheckpoint(taskId, checkpointId, action, options = {}, cwd2 = process.cwd()) {
+  if (!isInitialized(cwd2)) {
     console.error("Error: Project not initialized");
     process.exit(1);
   }
-  const task = readTaskMeta(taskId, cwd);
+  const task = readTaskMeta(taskId, cwd2);
   if (!task) {
     console.error(`Error: Task '${taskId}' does not exist`);
     process.exit(1);
   }
-  syncCheckpointsToMeta(taskId, cwd);
+  syncCheckpointsToMeta(taskId, cwd2);
   switch (action) {
     case "complete":
       updateCheckpointStatus(taskId, checkpointId, "completed", {
         result: options.result,
         note: options.note
-      }, cwd);
+      }, cwd2);
       console.log(`\u2705 Checkpoints ${checkpointId} marked as completed`);
       if (options.result) {
         console.log(`   Verification result: ${options.result}`);
@@ -27213,7 +27655,7 @@ async function updateCheckpoint(taskId, checkpointId, action, options = {}, cwd 
     case "fail":
       updateCheckpointStatus(taskId, checkpointId, "failed", {
         note: options.note
-      }, cwd);
+      }, cwd2);
       console.log(`\u274C Checkpoints ${checkpointId} marked as failed`);
       if (options.note) {
         console.log(`   Note: ${options.note}`);
@@ -27224,19 +27666,19 @@ async function updateCheckpoint(taskId, checkpointId, action, options = {}, cwd 
         console.error("Error: Using note action requires --note parameter");
         process.exit(1);
       }
-      const checkpoint = getCheckpointDetail(taskId, checkpointId, cwd);
+      const checkpoint = getCheckpointDetail(taskId, checkpointId, cwd2);
       if (!checkpoint) {
         console.error(`Error: Checkpoints '${checkpointId}' does not exist`);
         process.exit(1);
       }
       updateCheckpointStatus(taskId, checkpointId, checkpoint.status, {
         note: options.note
-      }, cwd);
+      }, cwd2);
       console.log(`\uD83D\uDCDD Checkpoints ${checkpointId} note updated`);
       console.log(`   Note: ${options.note}`);
       break;
     case "show":
-      const cpDetail = getCheckpointDetail(taskId, checkpointId, cwd);
+      const cpDetail = getCheckpointDetail(taskId, checkpointId, cwd2);
       if (!cpDetail) {
         console.error(`Error: Checkpoints '${checkpointId}' does not exist`);
         process.exit(1);
@@ -27248,17 +27690,17 @@ async function updateCheckpoint(taskId, checkpointId, action, options = {}, cwd 
       process.exit(1);
   }
 }
-async function listTaskCheckpoints(taskId, options = {}, cwd = process.cwd()) {
-  if (!isInitialized(cwd)) {
+async function listTaskCheckpoints(taskId, options = {}, cwd2 = process.cwd()) {
+  if (!isInitialized(cwd2)) {
     console.error("Error: Project not initialized");
     process.exit(1);
   }
-  const task = readTaskMeta(taskId, cwd);
+  const task = readTaskMeta(taskId, cwd2);
   if (!task) {
     console.error(`Error: Task '${taskId}' does not exist`);
     process.exit(1);
   }
-  const checkpoints = listCheckpoints(taskId, cwd);
+  const checkpoints = listCheckpoints(taskId, cwd2);
   if (options.json) {
     console.log(JSON.stringify(checkpoints, null, 2));
     return;
@@ -27294,12 +27736,12 @@ async function listTaskCheckpoints(taskId, options = {}, cwd = process.cwd()) {
     console.log(separator);
   }
 }
-async function splitTask(parentId, options = {}, cwd = process.cwd()) {
-  if (!isInitialized(cwd)) {
+async function splitTask(parentId, options = {}, cwd2 = process.cwd()) {
+  if (!isInitialized(cwd2)) {
     console.error("Error: Project not initialized. Please run `projmnt4claude setup` first");
     process.exit(1);
   }
-  const parentTask = readTaskMeta(parentId, cwd);
+  const parentTask = readTaskMeta(parentId, cwd2);
   if (!parentTask) {
     console.error(`Error: Parent task ${parentId} does not exist`);
     process.exit(1);
@@ -27376,29 +27818,29 @@ async function splitTask(parentId, options = {}, cwd = process.cwd()) {
   const createdSubtaskIds = [];
   for (let i = 0;i < subtaskTitles.length; i++) {
     const title = subtaskTitles[i];
-    const subtaskId = generateSubtaskId2(parentId, cwd);
+    const subtaskId = generateSubtaskId2(parentId, cwd2);
     const subtask = createDefaultTaskMeta(subtaskId, title, parentTask.type || "feature", undefined, "cli");
     subtask.parentId = parentId;
     subtask.priority = parentTask.priority;
     subtask.description = `\u4ECE ${parentId} \u62C6\u5206\u7684Subtasks`;
-    writeTaskMeta(subtask, cwd);
-    const taskDir = path11.join(getTasksDir(cwd), subtaskId);
+    writeTaskMeta(subtask, cwd2);
+    const taskDir = path11.join(getTasksDir(cwd2), subtaskId);
     const checkpointPath = path11.join(taskDir, "checkpoint.md");
     fs14.writeFileSync(checkpointPath, `# ${subtaskId} Checkpoints
 
 - [ ] \u5B8C\u6210Task
 `, "utf-8");
-    addSubtaskToParent2(parentId, subtaskId, cwd);
+    addSubtaskToParent2(parentId, subtaskId, cwd2);
     createdSubtaskIds.push(subtaskId);
     console.log(`   \u2705 CreatedSubtasks: ${subtaskId} - ${title}`);
   }
   for (let i = 1;i < createdSubtaskIds.length; i++) {
     const currentId = createdSubtaskIds[i];
     const prevId = createdSubtaskIds[i - 1];
-    const currentTask = readTaskMeta(currentId, cwd);
+    const currentTask = readTaskMeta(currentId, cwd2);
     if (currentTask) {
       currentTask.dependencies.push(prevId);
-      writeTaskMeta(currentTask, cwd);
+      writeTaskMeta(currentTask, cwd2);
       console.log(`   \uD83D\uDD17 Set dependency: ${currentId} Dependencies ${prevId}`);
     }
   }
@@ -27449,12 +27891,12 @@ function displayCheckpointDetail(checkpoint) {
   }
   console.log("");
 }
-function searchTasks(keyword, options = {}, cwd = process.cwd()) {
-  if (!isInitialized(cwd)) {
+function searchTasks(keyword, options = {}, cwd2 = process.cwd()) {
+  if (!isInitialized(cwd2)) {
     console.error("Error: Project not initialized. Please run `projmnt4claude setup` first");
     process.exit(1);
   }
-  const allTasks = getAllTasks(cwd);
+  const allTasks = getAllTasks(cwd2);
   const lowerKeyword = keyword.toLowerCase();
   const matchedTasks = allTasks.filter((task) => {
     if (options.status && task.status !== options.status) {
@@ -27488,12 +27930,12 @@ function searchTasks(keyword, options = {}, cwd = process.cwd()) {
     console.log("");
   });
 }
-function countTasks(options = {}, cwd = process.cwd()) {
-  if (!isInitialized(cwd)) {
+function countTasks(options = {}, cwd2 = process.cwd()) {
+  if (!isInitialized(cwd2)) {
     console.error("Error: Project not initialized. Please run `projmnt4claude setup` first");
     process.exit(1);
   }
-  let tasks = getAllTasks(cwd);
+  let tasks = getAllTasks(cwd2);
   if (options.status) {
     tasks = tasks.filter((t2) => t2.status === options.status);
   }
@@ -27649,10 +28091,10 @@ function countTasks(options = {}, cwd = process.cwd()) {
     console.log("");
   }
 }
-async function batchUpdateTasks(options = {}, cwd = process.cwd()) {
+async function batchUpdateTasks(options = {}, cwd2 = process.cwd()) {
   const operationStartTime = new Date().toISOString();
   const commandArgs = process.argv.slice(2);
-  if (!isInitialized(cwd)) {
+  if (!isInitialized(cwd2)) {
     console.error("Error: Project not initialized. Please run `projmnt4claude setup` first");
     process.exit(1);
   }
@@ -27665,10 +28107,10 @@ async function batchUpdateTasks(options = {}, cwd = process.cwd()) {
     console.error('Example: --change-note "Fixed XX issue, passed testing"');
     process.exit(1);
   }
-  const allTasks = getAllTasks(cwd);
+  const allTasks = getAllTasks(cwd2);
   let specifiedTaskIds = [];
   if (options.taskFile) {
-    const taskFilePath = path11.resolve(cwd, options.taskFile);
+    const taskFilePath = path11.resolve(cwd2, options.taskFile);
     if (!fs14.existsSync(taskFilePath)) {
       console.error(`Error: Task filedoes not exist: ${taskFilePath}`);
       process.exit(1);
@@ -27777,7 +28219,7 @@ async function batchUpdateTasks(options = {}, cwd = process.cwd()) {
             updatedCount: 0,
             filteredCount: filteredTasks.length
           }
-        }, cwd);
+        }, cwd2);
         console.log("Cancelled");
         return;
       }
@@ -27817,7 +28259,7 @@ async function batchUpdateTasks(options = {}, cwd = process.cwd()) {
           updatedCount: 0,
           filteredCount: filteredTasks.length
         }
-      }, cwd);
+      }, cwd2);
       console.log("Cancelled");
       return;
     }
@@ -27887,7 +28329,7 @@ async function batchUpdateTasks(options = {}, cwd = process.cwd()) {
     }
     if (updated) {
       task.updatedAt = new Date().toISOString();
-      writeTaskMeta(task, cwd);
+      writeTaskMeta(task, cwd2);
       updatedCount++;
       console.log(`   \u2705 ${task.id}`);
       taskChanges.push({
@@ -27915,25 +28357,25 @@ async function batchUpdateTasks(options = {}, cwd = process.cwd()) {
       updatedCount,
       filteredCount: filteredTasks.length
     }
-  }, cwd);
+  }, cwd2);
   console.log("");
   console.log(`\u2705 Batch update completed: ${updatedCount} tasksupdated`);
   console.log("");
   console.log(`\uD83D\uDCDD Operation logged to: .projmnt4claude/logs/batch-update-${operationStartTime.split("T")[0]}.log`);
 }
-function showBatchUpdateLogs(options = {}, cwd = process.cwd()) {
+function showBatchUpdateLogs(options = {}, cwd2 = process.cwd()) {
   if (options.summary) {
-    console.log(showLogSummary(cwd));
+    console.log(showLogSummary(cwd2));
     return;
   }
   const entries = queryBatchUpdateLogs({
     taskId: options.taskId,
     source: options.source
-  }, cwd);
+  }, cwd2);
   console.log(formatLogList(entries, options.verbose));
 }
-function renameTaskCommand(oldTaskId, newTaskId, cwd = process.cwd()) {
-  if (!isInitialized(cwd)) {
+function renameTaskCommand(oldTaskId, newTaskId, cwd2 = process.cwd()) {
+  if (!isInitialized(cwd2)) {
     console.error("Error: Project not initialized. Please run `projmnt4claude setup` first");
     process.exit(1);
   }
@@ -27949,7 +28391,7 @@ function renameTaskCommand(oldTaskId, newTaskId, cwd = process.cwd()) {
     console.error("Task ID must start with TASK-, followed by letters, numbers, hyphens or underscores");
     process.exit(1);
   }
-  const result = renameTask(oldTaskId, newTaskId, cwd);
+  const result = renameTask(oldTaskId, newTaskId, cwd2);
   if (result.success) {
     console.log("");
     console.log("\u2501".repeat(SEPARATOR_WIDTH));
@@ -28110,9 +28552,9 @@ function extractProblemsByPattern(content) {
   }
   return problems;
 }
-async function decomposeWithAI(content, cwd) {
+async function decomposeWithAI(content, cwd2) {
   try {
-    const assistant = new AIMetadataAssistant(cwd);
+    const assistant = new AIMetadataAssistant(cwd2);
     const prompt = `\u8BF7\u5C06\u4EE5\u4E0B\u9700\u6C42/\u62A5\u544A\u5206\u89E3\u4E3A\u591A\u4E2A\u72EC\u7ACB\u7684\u5F00\u53D1\u4EFB\u52A1\u3002
 
 \u8F93\u5165\u5185\u5BB9\uFF1A
@@ -28144,7 +28586,7 @@ ${content.substring(0, 4000)}
 5. estimatedMinutes \u9884\u4F30\u5B8C\u6210\u65F6\u95F4\uFF08\u5206\u949F\uFF09\uFF0C\u5EFA\u8BAE\u6BCF\u4E2A\u4EFB\u52A1\u63A7\u5236\u5728 15-30 \u5206\u949F
 6. dependsOn \u662F\u4F9D\u8D56\u9879\u7684\u7D22\u5F15\u6570\u7EC4\uFF08\u5982\uFF1A[0] \u8868\u793A\u4F9D\u8D56\u7B2C\u4E00\u4E2A\u4EFB\u52A1\uFF09
 7. \u5982\u679C\u65E0\u6CD5\u5206\u89E3\uFF08\u5982\u5185\u5BB9\u8FC7\u4E8E\u7B80\u5355\uFF09\uFF0C\u8FD4\u56DE {"decomposable": false, "reason": "\u539F\u56E0", "items": []}`;
-    const result = await assistant.invokeWithEngine(prompt, [], { cwd, maxRetries: 2, timeoutSeconds: 30 });
+    const result = await assistant.invokeWithEngine(prompt, [], { cwd: cwd2, maxRetries: 2, timeoutSeconds: 30 });
     if (!result.success) {
       return null;
     }
@@ -28176,7 +28618,7 @@ async function decomposeRequirement(content, options = {}) {
     minItems = 2,
     maxItems = 10,
     useAI = true,
-    cwd = process.cwd(),
+    cwd: cwd2 = process.cwd(),
     validateQuality = true
   } = options;
   const trimmedContent = content.trim();
@@ -28190,7 +28632,7 @@ async function decomposeRequirement(content, options = {}) {
   }
   const isReport = isInvestigationReport(trimmedContent);
   if (useAI) {
-    const aiResult = await decomposeWithAI(trimmedContent, cwd);
+    const aiResult = await decomposeWithAI(trimmedContent, cwd2);
     if (aiResult && aiResult.decomposable && aiResult.items.length >= minItems) {
       const result2 = {
         ...aiResult,
@@ -28507,9 +28949,9 @@ function mergeAnalysisResults(ruleBased, aiEnhanced) {
     aiUsed: true
   };
 }
-async function initRequirement(description, cwd = process.cwd(), options = {}) {
+async function initRequirement(description, cwd2 = process.cwd(), options = {}) {
   const { nonInteractive = false, noPlan = false, skipValidation = false, template = "simple", autoSplit = false, noAI = false, requireQuality, decompose: shouldDecomposeOption = true } = options;
-  const logger2 = createLogger("init-requirement", cwd);
+  const logger2 = createLogger("init-requirement", cwd2);
   const startTime = Date.now();
   const inputDescLength = description.length;
   let userEditCount = 0;
@@ -28533,7 +28975,7 @@ async function initRequirement(description, cwd = process.cwd(), options = {}) {
     console.error("");
     process.exit(1);
   }
-  if (!isInitialized(cwd)) {
+  if (!isInitialized(cwd2)) {
     console.error("");
     console.error("\u274C Project not initialized");
     console.error("");
@@ -28551,7 +28993,7 @@ async function initRequirement(description, cwd = process.cwd(), options = {}) {
     console.log("\u2501".repeat(SEPARATOR_WIDTH));
     console.log("");
     const decomposition = await decomposeRequirement(description, {
-      cwd,
+      cwd: cwd2,
       useAI: !noAI,
       minItems: 2,
       maxItems: 10
@@ -28576,7 +29018,7 @@ async function initRequirement(description, cwd = process.cwd(), options = {}) {
         confirmDecompose = result.confirm;
       }
       if (confirmDecompose) {
-        await initRequirementBatch(decomposition.items, cwd, options);
+        await initRequirementBatch(decomposition.items, cwd2, options);
         return;
       }
     }
@@ -28588,7 +29030,7 @@ async function initRequirement(description, cwd = process.cwd(), options = {}) {
   console.log("\uD83D\uDD0D Analyzing requirement...");
   console.log("\u2501".repeat(SEPARATOR_WIDTH));
   console.log("");
-  const ruleAnalysis = analyzeRequirement(description, cwd);
+  const ruleAnalysis = analyzeRequirement(description, cwd2);
   let analysis = {
     ...ruleAnalysis,
     aiEnhancedFields: [],
@@ -28599,7 +29041,7 @@ async function initRequirement(description, cwd = process.cwd(), options = {}) {
     const aiStartTime = Date.now();
     const aiResult = await withAIEnhancement({
       enabled: true,
-      aiCall: () => new AIMetadataAssistant(cwd).enhanceRequirement(description, { cwd }),
+      aiCall: () => new AIMetadataAssistant(cwd2).enhanceRequirement(description, { cwd: cwd2 }),
       fallback: { title: null, description: null, type: null, priority: null, recommendedRole: null, checkpoints: null, dependencies: null, aiUsed: false },
       operationName: "enhancement_call",
       logger: logger2
@@ -28849,7 +29291,7 @@ async function initRequirement(description, cwd = process.cwd(), options = {}) {
     potentialDependencies: analysis.potentialDependencies,
     recommendedRole: response.recommendedRole || analysis.recommendedRole,
     relatedFiles: allRelatedFiles
-  }, cwd);
+  }, cwd2);
   const taskId = task.id;
   if (checkpoints.length > 0) {
     const parsedCheckpoints = checkpoints.map((desc, index) => ({
@@ -28859,16 +29301,16 @@ async function initRequirement(description, cwd = process.cwd(), options = {}) {
       lineNumber: index
     }));
     const checkpointMetadata = convertParsedCheckpointsToMetadata(parsedCheckpoints, task);
-    const taskToUpdate = readTaskMeta(taskId, cwd);
+    const taskToUpdate = readTaskMeta(taskId, cwd2);
     if (taskToUpdate) {
       taskToUpdate.checkpoints = checkpointMetadata;
-      writeTaskMeta(taskToUpdate, cwd);
-      updateCheckpointMdFromArray(taskId, checkpointMetadata, cwd);
+      writeTaskMeta(taskToUpdate, cwd2);
+      updateCheckpointMdFromArray(taskId, checkpointMetadata, cwd2);
     }
   }
-  const taskDir = path16.join(getTasksDir(cwd), taskId);
+  const taskDir = path16.join(getTasksDir(cwd2), taskId);
   const checkpointPath = path16.join(taskDir, "checkpoint.md");
-  const updatedTask = readTaskMeta(taskId, cwd);
+  const updatedTask = readTaskMeta(taskId, cwd2);
   if (updatedTask?.checkpoints) {
     const checkpointsWithoutCommands = updatedTask.checkpoints.filter((cp) => {
       const result = validateCheckpointVerification(cp);
@@ -28894,7 +29336,7 @@ async function initRequirement(description, cwd = process.cwd(), options = {}) {
     }
   }
   if (updatedTask) {
-    const filesValidation = validateFilesExist(updatedTask, cwd);
+    const filesValidation = validateFilesExist(updatedTask, cwd2);
     if (!filesValidation.valid) {
       console.log(`
    \u26A0\uFE0F  ${filesValidation.missingFiles.length} referenced files do not exist:`);
@@ -28920,11 +29362,11 @@ async function initRequirement(description, cwd = process.cwd(), options = {}) {
     console.error("Error: --require-quality must be between 0-100");
     process.exit(1);
   }
-  const qualityResult = await checkQualityGate(taskId, qualityGateConfig, cwd);
-  const taskWithScore = readTaskMeta(taskId, cwd);
+  const qualityResult = await checkQualityGate(taskId, qualityGateConfig, cwd2);
+  const taskWithScore = readTaskMeta(taskId, cwd2);
   if (taskWithScore) {
     taskWithScore.initQualityScore = qualityResult.score.totalScore;
-    writeTaskMeta(taskWithScore, cwd);
+    writeTaskMeta(taskWithScore, cwd2);
   }
   const scoreIcon = qualityResult.score.totalScore >= 80 ? "\uD83D\uDFE2" : qualityResult.score.totalScore >= 60 ? "\uD83D\uDFE1" : "\uD83D\uDD34";
   console.log(`\uD83D\uDCCA Quality Score: ${scoreIcon} ${qualityResult.score.totalScore}/100`);
@@ -28933,7 +29375,7 @@ async function initRequirement(description, cwd = process.cwd(), options = {}) {
   console.log(`   Related Files: ${qualityResult.score.relatedFilesScore}%`);
   console.log(`   Solution: ${qualityResult.score.solutionScore}%`);
   console.log("");
-  const allExistingTasks = getAllTasks(cwd);
+  const allExistingTasks = getAllTasks(cwd2);
   const depGraph = DependencyGraph.fromTasks(allExistingTasks);
   const depValidation = validateNewTaskDeps(taskId, task.dependencies || [], depGraph, allExistingTasks);
   if (depValidation.warnings.length > 0) {
@@ -29042,7 +29484,7 @@ async function initRequirement(description, cwd = process.cwd(), options = {}) {
           continue;
         const subType = inferTaskType(sub.title);
         const subPriority = taskPriority;
-        const subId = generateNewTaskId(cwd, subType, subPriority, sub.title);
+        const subId = generateNewTaskId(cwd2, subType, subPriority, sub.title);
         subtaskIds.push(subId);
         const subTask = createDefaultTaskMeta(subId, sub.title, subType, undefined, "init-requirement");
         const subStructuredInfo = extractStructuredInfo(sub.description);
@@ -29065,11 +29507,11 @@ async function initRequirement(description, cwd = process.cwd(), options = {}) {
             subTask.dependencies = [depSubId];
           }
         }
-        writeTaskMeta(subTask, cwd);
+        writeTaskMeta(subTask, cwd2);
         const subCheckpointTexts = subInferredCheckpoints.length > 0 ? subInferredCheckpoints : [`\u5B8C\u6210 ${sub.title}`];
         const subFilterResult = filterLowQualityCheckpoints(subCheckpointTexts);
         const subFilteredCheckpoints = subFilterResult.kept;
-        const subTaskDir = path16.join(getTasksDir(cwd), subId);
+        const subTaskDir = path16.join(getTasksDir(cwd2), subId);
         const subCheckpointPath = path16.join(subTaskDir, "checkpoint.md");
         const subCheckpointContent = `# ${subId} \u68C0\u67E5\u70B9
 
@@ -29077,8 +29519,8 @@ ${subFilteredCheckpoints.map((cp) => `- [ ] ${cp}`).join(`
 `)}
 `;
         fs19.writeFileSync(subCheckpointPath, subCheckpointContent, "utf-8");
-        syncCheckpointsToMeta(subId, cwd);
-        addSubtaskToParent(taskId, subId, cwd);
+        syncCheckpointsToMeta(subId, cwd2);
+        addSubtaskToParent(taskId, subId, cwd2);
         console.log(`  ${i + 1}. ${subId}: ${sub.title}`);
         console.log(`     Files: ${sub.files.length > 0 ? sub.files.join(", ") : "TBD"}`);
         console.log(`     Estimated: ~${sub.estimatedMinutes} minutes`);
@@ -29087,10 +29529,10 @@ ${subFilteredCheckpoints.map((cp) => `- [ ] ${cp}`).join(`
         }
         console.log("");
       }
-      const allTasksForSubDeps = getAllTasks(cwd);
+      const allTasksForSubDeps = getAllTasks(cwd2);
       const subDepGraph = DependencyGraph.fromTasks(allTasksForSubDeps);
       for (const subId of subtaskIds) {
-        const subTaskMeta = readTaskMeta(subId, cwd);
+        const subTaskMeta = readTaskMeta(subId, cwd2);
         if (!subTaskMeta)
           continue;
         const subDeps = inferDependencies(subTaskMeta, allTasksForSubDeps, { strategy: "file-overlap" });
@@ -29099,7 +29541,7 @@ ${subFilteredCheckpoints.map((cp) => `- [ ] ${cp}`).join(`
           const safeNewDepIds = subDeps.map((d) => d.depTaskId).filter((id) => !existingDeps.includes(id) && !subDepGraph.wouldCreateCycle(subId, id));
           if (safeNewDepIds.length > 0) {
             subTaskMeta.dependencies = [...existingDeps, ...safeNewDepIds];
-            writeTaskMeta(subTaskMeta, cwd);
+            writeTaskMeta(subTaskMeta, cwd2);
             for (const newDepId of safeNewDepIds) {
               subDepGraph.addEdge(subId, newDepId);
             }
@@ -29128,16 +29570,16 @@ ${subFilteredCheckpoints.map((cp) => `- [ ] ${cp}`).join(`
         console.log(`   Cleaning up ${subtaskIds.length} created subtasks...`);
         for (const cleanupId of subtaskIds) {
           try {
-            const cleanupDir = path16.join(getTasksDir(cwd), cleanupId);
+            const cleanupDir = path16.join(getTasksDir(cwd2), cleanupId);
             if (fs19.existsSync(cleanupDir)) {
               fs19.rmSync(cleanupDir, { recursive: true, force: true });
             }
           } catch {}
         }
-        const parentMeta = readTaskMeta(taskId, cwd);
+        const parentMeta = readTaskMeta(taskId, cwd2);
         if (parentMeta) {
           parentMeta.subtaskIds = (parentMeta.subtaskIds || []).filter((id) => !subtaskIds.includes(id));
-          writeTaskMeta(parentMeta, cwd);
+          writeTaskMeta(parentMeta, cwd2);
         }
         console.log(`   Cleaned up. Parent task ${taskId} retained.`);
       }
@@ -29152,7 +29594,7 @@ ${subFilteredCheckpoints.map((cp) => `- [ ] ${cp}`).join(`
   if (!skipValidation) {
     const validation = hasValidCheckpoints(checkpointPath, false);
     if (!validation.valid) {
-      displayCheckpointCreationWarning(taskId, cwd);
+      displayCheckpointCreationWarning(taskId, cwd2);
     }
   }
   if (!noPlan && !nonInteractive) {
@@ -29434,9 +29876,9 @@ function generateSplitSuggestions(description, files, workItemCount, totalMinute
   }
   return finalSuggestions;
 }
-function detectRoleFromProject(cwd, description) {
+function detectRoleFromProject(cwd2, description) {
   const lowerDesc = description.toLowerCase();
-  const srcDir = path16.join(cwd, "src");
+  const srcDir = path16.join(cwd2, "src");
   let projectDirs = [];
   try {
     if (fs19.existsSync(srcDir)) {
@@ -29468,7 +29910,7 @@ function detectRoleFromProject(cwd, description) {
     return "architect";
   return "developer";
 }
-function analyzeRequirement(description, cwd) {
+function analyzeRequirement(description, cwd2) {
   const lowerDesc = description.toLowerCase();
   let priority = "P2";
   if (lowerDesc.includes("\u7D27\u6025") || lowerDesc.includes("urgent") || lowerDesc.includes("asap") || lowerDesc.includes("\u7ACB\u5373")) {
@@ -29478,7 +29920,7 @@ function analyzeRequirement(description, cwd) {
   } else if (lowerDesc.includes("\u4F4E\u4F18\u5148\u7EA7") || lowerDesc.includes("low priority") || lowerDesc.includes("\u53EF\u9009") || lowerDesc.includes("optional")) {
     priority = "P3";
   }
-  const recommendedRole = detectRoleFromProject(cwd, description);
+  const recommendedRole = detectRoleFromProject(cwd2, description);
   let estimatedComplexity = "medium";
   const complexityKeywords = {
     high: ["\u91CD\u6784", "refactor", "\u67B6\u6784", "architecture", "\u8FC1\u79FB", "migrate", "\u96C6\u6210", "integration", "\u7CFB\u7EDF"],
@@ -29508,7 +29950,7 @@ function analyzeRequirement(description, cwd) {
   const potentialDependencies = [];
   const currentFiles = extractFilePaths(description, { includeBareFilenames: false });
   if (currentFiles.length > 0) {
-    const existingTasks = getAllTasks(cwd);
+    const existingTasks = getAllTasks(cwd2);
     for (const existing of existingTasks) {
       if (existing.status === "resolved" || existing.status === "closed" || existing.status === "abandoned" || existing.status === "failed")
         continue;
@@ -29549,7 +29991,7 @@ function formatPriority2(priority) {
   };
   return map[priority] || `\u2753 ${priority}`;
 }
-async function initRequirementSingle(item, cwd, options) {
+async function initRequirementSingle(item, cwd2, options) {
   const { template = "simple", nonInteractive = true, skipValidation = true, requireQuality } = options;
   try {
     const structuredData = {
@@ -29571,18 +30013,18 @@ async function initRequirementSingle(item, cwd, options) {
       aiEnhancement: false,
       suggestedCheckpoints: item.suggestedCheckpoints,
       potentialDependencies: []
-    }, cwd);
+    }, cwd2);
     const taskId = task.id;
     if (requireQuality !== undefined) {
       const qualityGateConfig = {
         ...DEFAULT_QUALITY_GATE_CONFIG,
         minQualityScore: requireQuality
       };
-      const qualityResult = await checkQualityGate(taskId, qualityGateConfig, cwd);
-      const taskWithScore = readTaskMeta(taskId, cwd);
+      const qualityResult = await checkQualityGate(taskId, qualityGateConfig, cwd2);
+      const taskWithScore = readTaskMeta(taskId, cwd2);
       if (taskWithScore) {
         taskWithScore.initQualityScore = qualityResult.score.totalScore;
-        writeTaskMeta(taskWithScore, cwd);
+        writeTaskMeta(taskWithScore, cwd2);
       }
     }
     console.log(`  \u2705 ${taskId}: ${item.title}`);
@@ -29608,7 +30050,7 @@ function reportBatchResult(created, failed, totalCount) {
     failed.forEach((f) => console.log(`     - ${f.item.title}: ${f.reason}`));
   }
 }
-async function initRequirementBatch(items, cwd, options) {
+async function initRequirementBatch(items, cwd2, options) {
   const createdTaskIds = [];
   const failedTasks = [];
   const taskIdMap = new Map;
@@ -29633,7 +30075,7 @@ async function initRequirementBatch(items, cwd, options) {
       decompose: false
     };
     try {
-      const taskId = await initRequirementSingle(item, cwd, itemOptions);
+      const taskId = await initRequirementSingle(item, cwd2, itemOptions);
       if (taskId) {
         createdTaskIds.push(taskId);
         taskIdMap.set(i, taskId);
@@ -29659,7 +30101,7 @@ async function initRequirementBatch(items, cwd, options) {
       const taskId = taskIdMap.get(i);
       if (!taskId || item.dependsOn.length === 0)
         continue;
-      const task = readTaskMeta(taskId, cwd);
+      const task = readTaskMeta(taskId, cwd2);
       if (!task)
         continue;
       const deps = [];
@@ -29671,7 +30113,7 @@ async function initRequirementBatch(items, cwd, options) {
       }
       if (deps.length > 0) {
         task.dependencies = [...task.dependencies || [], ...deps];
-        writeTaskMeta(task, cwd);
+        writeTaskMeta(task, cwd2);
         console.log(`  ${taskId} dependencies: ${deps.join(", ")}`);
       }
     }
@@ -29708,8 +30150,8 @@ function parseCommandMetadata(filePath) {
     return null;
   }
 }
-function getCommandsDir(cwd) {
-  const language = getLanguage(cwd);
+function getCommandsDir(cwd2) {
+  const language = getLanguage(cwd2);
   const pluginRoot = process.env.CLAUDE_PLUGIN_ROOT;
   if (pluginRoot) {
     const localesDir = path17.join(pluginRoot, "locales", language, "commands");
@@ -29717,7 +30159,7 @@ function getCommandsDir(cwd) {
       return localesDir;
     }
   }
-  return path17.join(cwd, "commands");
+  return path17.join(cwd2, "commands");
 }
 function getAvailableCommands(commandsDir) {
   try {
@@ -29727,8 +30169,8 @@ function getAvailableCommands(commandsDir) {
     return [];
   }
 }
-function showOverview(commandsDir, cwd) {
-  const t2 = (init_i18n(), __toCommonJS(exports_i18n)).getI18n(getLanguage(cwd));
+function showOverview(commandsDir, cwd2) {
+  const t2 = (init_i18n(), __toCommonJS(exports_i18n)).getI18n(getLanguage(cwd2));
   const commands = getAvailableCommands(commandsDir);
   console.log("");
   console.log("\u2501".repeat(70));
@@ -29755,8 +30197,8 @@ function showOverview(commandsDir, cwd) {
   console.log(`      ${t2.help.examples}`);
   console.log("");
 }
-function showCommandHelp(commandsDir, commandName, cwd) {
-  const t2 = (init_i18n(), __toCommonJS(exports_i18n)).getI18n(getLanguage(cwd));
+function showCommandHelp(commandsDir, commandName, cwd2) {
+  const t2 = (init_i18n(), __toCommonJS(exports_i18n)).getI18n(getLanguage(cwd2));
   const commands = getAvailableCommands(commandsDir);
   const matchedCommand = commands.find((cmd) => cmd === commandName.toLowerCase());
   if (!matchedCommand) {
@@ -29780,8 +30222,8 @@ function showCommandHelp(commandsDir, commandName, cwd) {
   console.log("");
   console.log(cleanContent);
 }
-function showSmartHelp(commandsDir, topic, cwd) {
-  const t2 = (init_i18n(), __toCommonJS(exports_i18n)).getI18n(getLanguage(cwd));
+function showSmartHelp(commandsDir, topic, cwd2) {
+  const t2 = (init_i18n(), __toCommonJS(exports_i18n)).getI18n(getLanguage(cwd2));
   const commands = getAvailableCommands(commandsDir);
   const lowerTopic = topic.toLowerCase();
   console.log("");
@@ -29817,7 +30259,7 @@ function showSmartHelp(commandsDir, topic, cwd) {
   }
   matchedCommands = [...new Set(matchedCommands)].sort();
   if (matchedCommands.length > 0) {
-    console.log("\uD83D\uDCA1 \u5EFA\u8BAE\u60A8\u4F7F\u7528\u4EE5\u4E0B\u547D\u4EE4:");
+    console.log(t2.help.suggestedCommands);
     console.log("");
     for (const cmd of matchedCommands) {
       const metadata = parseCommandMetadata(path17.join(commandsDir, `${cmd}.md`));
@@ -29828,36 +30270,36 @@ function showSmartHelp(commandsDir, topic, cwd) {
       console.log("");
     }
   } else {
-    console.log("\uD83D\uDE15 \u6CA1\u6709\u627E\u5230\u76F4\u63A5\u76F8\u5173\u7684\u547D\u4EE4\u3002");
+    console.log(t2.help.noRelatedCommands);
     console.log("");
-    console.log("\u4EE5\u4E0B\u662F\u4E00\u4E9B\u5E38\u7528\u547D\u4EE4:");
-    console.log("  \u2022 task     - \u7BA1\u7406\u9879\u76EE\u4EFB\u52A1");
-    console.log("  \u2022 status   - \u67E5\u770B\u9879\u76EE\u72B6\u6001");
-    console.log("  \u2022 plan     - \u7BA1\u7406\u6267\u884C\u8BA1\u5212");
-    console.log("  \u2022 setup    - \u521D\u59CB\u5316\u9879\u76EE\u7BA1\u7406\u73AF\u5883");
+    console.log(t2.help.commonCommands);
+    console.log(`  \u2022 task     - ${t2.help.cmdTask}`);
+    console.log(`  \u2022 status   - ${t2.help.cmdStatus}`);
+    console.log(`  \u2022 plan     - ${t2.help.cmdPlan}`);
+    console.log(`  \u2022 setup    - ${t2.help.cmdSetup}`);
     console.log("");
   }
   console.log(t2.help.tipUseHelp);
   console.log("");
 }
-function showHelp(topic, cwd = process.cwd()) {
-  const commandsDir = getCommandsDir(cwd);
+function showHelp(topic, cwd2 = process.cwd()) {
+  const commandsDir = getCommandsDir(cwd2);
   if (!fs20.existsSync(commandsDir)) {
-    const t2 = (init_i18n(), __toCommonJS(exports_i18n)).getI18n(getLanguage(cwd));
+    const t2 = (init_i18n(), __toCommonJS(exports_i18n)).getI18n(getLanguage(cwd2));
     console.error(`${t2.error}: ${t2.help.commandNotFound}`);
-    console.error(`\u8DEF\u5F84: ${commandsDir}`);
+    console.error(`${t2.setupCmd.directory.replace("{path}", commandsDir)}`);
     process.exit(1);
   }
   if (!topic) {
-    showOverview(commandsDir, cwd);
+    showOverview(commandsDir, cwd2);
     return;
   }
   const commands = getAvailableCommands(commandsDir);
   const matchedCommand = commands.find((cmd) => cmd === topic.toLowerCase());
   if (matchedCommand) {
-    showCommandHelp(commandsDir, topic, cwd);
+    showCommandHelp(commandsDir, topic, cwd2);
   } else {
-    showSmartHelp(commandsDir, topic, cwd);
+    showSmartHelp(commandsDir, topic, cwd2);
   }
 }
 
@@ -29879,9 +30321,9 @@ import * as path18 from "path";
 class LogCollector {
   cwd;
   logger;
-  constructor(cwd = process.cwd()) {
-    this.cwd = cwd;
-    this.logger = new Logger({ component: "log-collector", cwd });
+  constructor(cwd2 = process.cwd()) {
+    this.cwd = cwd2;
+    this.logger = new Logger({ component: "log-collector", cwd: cwd2 });
   }
   collect(options = {}) {
     const {
@@ -29961,8 +30403,8 @@ class LogCollector {
 class LogAnalyzerRegistry {
   analyzers = new Map;
   logger;
-  constructor(cwd = process.cwd()) {
-    this.logger = new Logger({ component: "log-analyzer-registry", cwd });
+  constructor(cwd2 = process.cwd()) {
+    this.logger = new Logger({ component: "log-analyzer-registry", cwd: cwd2 });
   }
   register(analyzer) {
     if (this.analyzers.has(analyzer.name)) {
@@ -30459,23 +30901,23 @@ function getBuiltInAnalyzers() {
 // src/commands/doctor.ts
 init_config();
 var __dirname = "/home/fuzhibo/workerplace/git/projmnt4claude/src/commands";
-async function runDoctor(fix = false, cwd = process.cwd()) {
+async function runDoctor(fix = false, cwd2 = process.cwd()) {
   console.log("");
   console.log("\u2501".repeat(SEPARATOR_WIDTH));
   console.log("\uD83D\uDD0D Environment Diagnostics");
   console.log("\u2501".repeat(SEPARATOR_WIDTH));
   console.log("");
   const results = [];
-  results.push(checkProjectInit(cwd));
-  results.push(...checkPluginInstallationScope(cwd));
-  if (isInitialized(cwd)) {
+  results.push(checkProjectInit(cwd2));
+  results.push(...checkPluginInstallationScope(cwd2));
+  if (isInitialized(cwd2)) {
     results.push(checkPluginCache());
-    results.push(...checkSkillFiles(cwd));
-    results.push(...checkDirectoryStructure(cwd));
-    results.push(...checkLoggingModule(cwd));
-    results.push(...checkDeprecatedStatuses(cwd));
-    results.push(...checkGitHooks(cwd));
-    results.push(...checkDeprecatedHooks(cwd));
+    results.push(...checkSkillFiles(cwd2));
+    results.push(...checkDirectoryStructure(cwd2));
+    results.push(...checkLoggingModule(cwd2));
+    results.push(...checkDeprecatedStatuses(cwd2));
+    results.push(...checkGitHooks(cwd2));
+    results.push(...checkDeprecatedHooks(cwd2));
   }
   displayResults(results);
   const fixableIssues = results.filter((r) => r.status !== "ok" && r.fixable);
@@ -30485,19 +30927,19 @@ async function runDoctor(fix = false, cwd = process.cwd()) {
     console.log("\uD83D\uDD27 Auto Fix");
     console.log("\u2501".repeat(SEPARATOR_WIDTH));
     console.log("");
-    await fixIssues2(fixableIssues, cwd);
+    await fixIssues2(fixableIssues, cwd2);
     console.log("");
     console.log("\uD83D\uDD04 Re-checking...");
     console.log("");
-    await runDoctor(false, cwd);
+    await runDoctor(false, cwd2);
     return;
   } else if (fixableIssues.length > 0) {
     console.log("");
     console.log(`\uD83D\uDCA1 Use --fix to auto-fix ${fixableIssues.length} issue(s)`);
   }
 }
-function checkProjectInit(cwd) {
-  const projectDir = getProjectDir(cwd);
+function checkProjectInit(cwd2) {
+  const projectDir = getProjectDir(cwd2);
   const configPath = path19.join(projectDir, "config.json");
   if (!fs22.existsSync(configPath)) {
     return {
@@ -30582,9 +31024,9 @@ function checkPluginCache() {
     fixable: false
   };
 }
-function checkSkillFiles(cwd) {
+function checkSkillFiles(cwd2) {
   const results = [];
-  const toolboxDir = getToolboxDir(cwd);
+  const toolboxDir = getToolboxDir(cwd2);
   const skillDir = path19.join(toolboxDir, "projmnt4claude");
   const commandsDir = path19.join(skillDir, "commands");
   if (fs22.existsSync(commandsDir)) {
@@ -30607,12 +31049,12 @@ function checkSkillFiles(cwd) {
   }
   return results;
 }
-function checkDirectoryStructure(cwd) {
+function checkDirectoryStructure(cwd2) {
   const results = [];
-  const projectDir = getProjectDir(cwd);
+  const projectDir = getProjectDir(cwd2);
   const requiredDirs = [
-    { name: "tasks", path: getTasksDir(cwd) },
-    { name: "toolbox", path: getToolboxDir(cwd) }
+    { name: "tasks", path: getTasksDir(cwd2) },
+    { name: "toolbox", path: getToolboxDir(cwd2) }
   ];
   for (const dir of requiredDirs) {
     if (!fs22.existsSync(dir.path)) {
@@ -30633,9 +31075,9 @@ function checkDirectoryStructure(cwd) {
       });
     }
   }
-  const tasksDir = getTasksDir(cwd);
+  const tasksDir = getTasksDir(cwd2);
   if (fs22.existsSync(tasksDir)) {
-    const taskIds = getAllTaskIds(cwd);
+    const taskIds = getAllTaskIds(cwd2);
     const hasAbandonedTasks = taskIds.some((taskId) => {
       const metaPath = path19.join(tasksDir, taskId, "meta.json");
       try {
@@ -30660,7 +31102,7 @@ function checkDirectoryStructure(cwd) {
   }
   return results;
 }
-function checkPluginInstallationScope(cwd) {
+function checkPluginInstallationScope(cwd2) {
   const results = [];
   const homeDir = os.homedir();
   const installedPluginsPath = path19.join(homeDir, ".claude", "plugins", "installed_plugins.json");
@@ -30676,7 +31118,7 @@ function checkPluginInstallationScope(cwd) {
     if (projectScopedInstalls.length === 0) {
       return results;
     }
-    const normalizedCwd = path19.resolve(cwd);
+    const normalizedCwd = path19.resolve(cwd2);
     const mismatchedInstalls = projectScopedInstalls.filter((inst) => {
       if (!inst.projectPath)
         return true;
@@ -30728,9 +31170,9 @@ function checkPluginInstallationScope(cwd) {
   } catch {}
   return results;
 }
-function checkLoggingModule(cwd) {
+function checkLoggingModule(cwd2) {
   const results = [];
-  const logsDir = getLogsDir(cwd);
+  const logsDir = getLogsDir(cwd2);
   if (!fs22.existsSync(logsDir)) {
     results.push({
       name: "Log Directory",
@@ -30751,7 +31193,7 @@ function checkLoggingModule(cwd) {
     details: [`Location: ${logsDir}`],
     fixable: false
   });
-  const config = readConfig(cwd);
+  const config = readConfig(cwd2);
   if (config) {
     const loggingConfig = config.logging;
     const requiredKeys = {
@@ -30880,9 +31322,9 @@ function checkLoggingModule(cwd) {
   }
   return results;
 }
-function checkDeprecatedStatuses(cwd) {
+function checkDeprecatedStatuses(cwd2) {
   const results = [];
-  const tasksDir = getTasksDir(cwd);
+  const tasksDir = getTasksDir(cwd2);
   if (!fs22.existsSync(tasksDir)) {
     return [{
       name: "Deprecated Status Check",
@@ -30892,7 +31334,7 @@ function checkDeprecatedStatuses(cwd) {
       fixable: false
     }];
   }
-  const taskIds = getAllTaskIds(cwd);
+  const taskIds = getAllTaskIds(cwd2);
   const deprecatedStatuses = ["reopened", "needs_human"];
   const tasksWithDeprecatedStatus = [];
   for (const taskId of taskIds) {
@@ -30934,18 +31376,18 @@ function checkDeprecatedStatuses(cwd) {
   }
   return results;
 }
-function checkGitHooks(cwd) {
-  const config = readConfig(cwd);
+function checkGitHooks(cwd2) {
+  const config = readConfig(cwd2);
   const gitHookConfig = config?.gitHook ?? DEFAULT_GIT_HOOK;
   if (!gitHookConfig.enabled) {
     return [{ status: "ok", name: "Git Hooks", message: "Git Hook check disabled via config", fixable: false }];
   }
-  const gitDir = path19.join(cwd, ".git");
+  const gitDir = path19.join(cwd2, ".git");
   if (!fs22.existsSync(gitDir)) {
     return [{ status: "ok", name: "Git Hooks", message: "Not a git repository, skipping Git Hook check", fixable: false }];
   }
   try {
-    const pre = new Pre(cwd);
+    const pre = new Pre(cwd2);
     if (pre.isPreCommitInstalled()) {
       return [{
         name: "Git Hooks",
@@ -30974,11 +31416,11 @@ function checkGitHooks(cwd) {
   }
 }
 var DEPRECATED_HOOK_SCRIPTS = ["pre-complete.ts", "post-task.ts", "pre-task.ts", "plan-complete.ts", "config.json"];
-function checkDeprecatedHooks(cwd) {
+function checkDeprecatedHooks(cwd2) {
   const results = [];
   const deprecatedSettings = [];
   const deprecatedFiles = [];
-  const settingsPath = path19.join(cwd, ".claude", "settings.json");
+  const settingsPath = path19.join(cwd2, ".claude", "settings.json");
   if (fs22.existsSync(settingsPath)) {
     try {
       const settings = JSON.parse(fs22.readFileSync(settingsPath, "utf-8"));
@@ -31010,7 +31452,7 @@ function checkDeprecatedHooks(cwd) {
       }
     } catch {}
   }
-  const hooksDir = path19.join(cwd, ".projmnt4claude", "hooks");
+  const hooksDir = path19.join(cwd2, ".projmnt4claude", "hooks");
   if (fs22.existsSync(hooksDir)) {
     try {
       const files = fs22.readdirSync(hooksDir);
@@ -31107,14 +31549,14 @@ function resolvePluginRoot() {
   } catch {}
   return null;
 }
-async function fixIssues2(issues, cwd) {
-  const projectDir = getProjectDir(cwd);
+async function fixIssues2(issues, cwd2) {
+  const projectDir = getProjectDir(cwd2);
   const pluginRoot = resolvePluginRoot();
   for (const issue of issues) {
     console.log(`Fixing: ${issue.name}...`);
     if (issue.name === "Skill Files" || issue.name === "Command Docs") {
       if (pluginRoot) {
-        const toolboxDir = getToolboxDir(cwd);
+        const toolboxDir = getToolboxDir(cwd2);
         const skillDir = path19.join(toolboxDir, "projmnt4claude");
         if (!fs22.existsSync(skillDir)) {
           fs22.mkdirSync(skillDir, { recursive: true });
@@ -31151,8 +31593,8 @@ async function fixIssues2(issues, cwd) {
     } else if (issue.name.startsWith("Directory:")) {
       const dirName = issue.name.replace("Directory: ", "");
       const dirMap = {
-        tasks: getTasksDir(cwd),
-        toolbox: getToolboxDir(cwd),
+        tasks: getTasksDir(cwd2),
+        toolbox: getToolboxDir(cwd2),
         archive: path19.join(projectDir, "archive")
       };
       const dirPath = dirMap[dirName];
@@ -31161,23 +31603,23 @@ async function fixIssues2(issues, cwd) {
         console.log(`  \u2713 Created directory: ${dirName}/`);
       }
     } else if (issue.name === "Log Directory") {
-      const logsDir = getLogsDir(cwd);
+      const logsDir = getLogsDir(cwd2);
       if (!fs22.existsSync(logsDir)) {
         fs22.mkdirSync(logsDir, { recursive: true });
         console.log(`  \u2713 Created logs directory`);
       }
     } else if (issue.name === "Log Config Completeness" || issue.name === "AI Config Completeness" || issue.name === "Training Data Config Completeness") {
-      const config = readConfig(cwd);
+      const config = readConfig(cwd2);
       if (config) {
         const fixedConfig = ensureConfigDefaults(config);
-        writeConfig(fixedConfig, cwd);
+        writeConfig(fixedConfig, cwd2);
         console.log(`  \u2713 Auto-filled missing config items`);
       }
     } else if (issue.name === "Deprecated Status Check") {
-      const tasksDir = getTasksDir(cwd);
+      const tasksDir = getTasksDir(cwd2);
       const deprecatedMap = { reopened: "open", needs_human: "open" };
       let fixedCount = 0;
-      for (const taskId of getAllTaskIds(cwd)) {
+      for (const taskId of getAllTaskIds(cwd2)) {
         const metaPath = path19.join(tasksDir, taskId, "meta.json");
         if (fs22.existsSync(metaPath)) {
           try {
@@ -31205,7 +31647,7 @@ async function fixIssues2(issues, cwd) {
     } else if (issue.name === "Deprecated Hook Check") {
       let removedSettings = false;
       let removedFiles = false;
-      const settingsPath = path19.join(cwd, ".claude", "settings.json");
+      const settingsPath = path19.join(cwd2, ".claude", "settings.json");
       if (fs22.existsSync(settingsPath)) {
         try {
           const settings = JSON.parse(fs22.readFileSync(settingsPath, "utf-8"));
@@ -31254,7 +31696,7 @@ async function fixIssues2(issues, cwd) {
           }
         } catch {}
       }
-      const hooksDir = path19.join(cwd, ".projmnt4claude", "hooks");
+      const hooksDir = path19.join(cwd2, ".projmnt4claude", "hooks");
       if (fs22.existsSync(hooksDir)) {
         try {
           const files = fs22.readdirSync(hooksDir);
@@ -31285,18 +31727,18 @@ async function fixIssues2(issues, cwd) {
   console.log("");
   console.log("\u2705 Fix complete");
 }
-async function runBugReport(cwd = process.cwd()) {
+async function runBugReport(cwd2 = process.cwd()) {
   console.log("");
   console.log("\u2501".repeat(SEPARATOR_WIDTH));
   console.log("\uD83D\uDCCB Bug Report Generation");
   console.log("\u2501".repeat(SEPARATOR_WIDTH));
   console.log("");
-  if (!isInitialized(cwd)) {
+  if (!isInitialized(cwd2)) {
     console.error("\u274C Error: Project not initialized, cannot generate bug report");
     console.error("Run projmnt4claude setup to initialize the project first");
     process.exit(1);
   }
-  const logger2 = new Logger({ cwd });
+  const logger2 = new Logger({ cwd: cwd2 });
   try {
     const report = logger2.generateBugReport(100);
     console.log(report.markdown);
@@ -31353,23 +31795,23 @@ async function runBugReport(cwd = process.cwd()) {
     process.exit(1);
   }
 }
-async function runDoctorDeep(cwd = process.cwd()) {
+async function runDoctorDeep(cwd2 = process.cwd()) {
   console.log("");
   console.log("\u2501".repeat(SEPARATOR_WIDTH));
   console.log("\uD83D\uDD2C Deep Log Analysis (--deep)");
   console.log("\u2501".repeat(SEPARATOR_WIDTH));
   console.log("");
-  await runDoctor(false, cwd);
+  await runDoctor(false, cwd2);
   console.log("");
   console.log("\u2501".repeat(SEPARATOR_WIDTH));
   console.log("\uD83D\uDCCA Deep Log Analysis");
   console.log("\u2501".repeat(SEPARATOR_WIDTH));
   console.log("");
-  const collector = new LogCollector(cwd);
+  const collector = new LogCollector(cwd2);
   const stats = collector.getStats();
   if (stats.fileCount === 0) {
     console.log("\u2139\uFE0F  No log files found, skipping log analysis");
-    console.log(`   Log directory: ${getLogsDir(cwd)}`);
+    console.log(`   Log directory: ${getLogsDir(cwd2)}`);
     return;
   }
   console.log(`\uD83D\uDCC2 Log files: ${stats.fileCount} (${stats.totalSizeKB} KB)`);
@@ -31380,7 +31822,7 @@ async function runDoctorDeep(cwd = process.cwd()) {
     console.log("\u2139\uFE0F  No log entries in the last 24 hours");
     return;
   }
-  const registry = new LogAnalyzerRegistry(cwd);
+  const registry = new LogAnalyzerRegistry(cwd2);
   for (const analyzer of getBuiltInAnalyzers()) {
     registry.register(analyzer);
   }
@@ -31389,7 +31831,7 @@ async function runDoctorDeep(cwd = process.cwd()) {
     console.log(`   - ${analyzer.name} (${analyzer.category}) [${analyzer.supportedStrategies.join(", ")}]`);
   }
   console.log("");
-  const results = await registry.runAll(entries, "hybrid", { cwd, enableAI: true });
+  const results = await registry.runAll(entries, "hybrid", { cwd: cwd2, enableAI: true });
   const reporter = new AnalysisReporter;
   const report = reporter.buildReport(results, stats.fileCount, entries.length);
   console.log(reporter.formatText(report));
@@ -31412,6 +31854,7 @@ async function runDoctorDeep(cwd = process.cwd()) {
 // src/commands/harness.ts
 init_harness();
 init_path();
+init_i18n();
 import * as fs28 from "fs";
 import * as path25 from "path";
 
@@ -31491,19 +31934,19 @@ class HarnessExecutor {
     report.status = "running";
     const effectiveTimeout = timeoutOverride ?? this.config.timeout;
     const timeoutMinutes = Math.round(effectiveTimeout / 60);
-    const texts2 = t(this.config.cwd);
-    console.log(`   ${texts2.harness.logs.taskLabel}: ${task.title}`);
-    console.log(`   ${texts2.harness.logs.typeLabel}: ${task.type}`);
-    console.log(`   ${texts2.harness.logs.priorityLabel}: ${task.priority}`);
-    console.log(`   ${texts2.harness.logs.timeoutLabel}: ${timeoutMinutes} ${texts2.harness.logs.minutes} (${effectiveTimeout} ${texts2.harness.logs.seconds})`);
+    const texts = t(this.config.cwd);
+    console.log(`   ${texts.harness.logs.taskLabel}: ${task.title}`);
+    console.log(`   ${texts.harness.logs.typeLabel}: ${task.type}`);
+    console.log(`   ${texts.harness.logs.priorityLabel}: ${task.priority}`);
+    console.log(`   ${texts.harness.logs.timeoutLabel}: ${timeoutMinutes} ${texts.harness.logs.minutes} (${effectiveTimeout} ${texts.harness.logs.seconds})`);
     try {
       const sprintContract = await this.buildOrLoadContract(task);
       Object.assign(contract, sprintContract);
       const prompt = this.buildDevPrompt(task, sprintContract, timeoutMinutes, retryContext);
       console.log(`
-   \uD83D\uDCDD ${texts2.harness.logs.devPromptGenerated}`);
+   \uD83D\uDCDD ${texts.harness.logs.devPromptGenerated}`);
       console.log(`
-   \uD83E\uDD16 ${texts2.harness.logs.startingHeadlessClaude}`);
+   \uD83E\uDD16 ${texts.harness.logs.startingHeadlessClaude}`);
       const agent = getAgent(this.config.cwd);
       const effectiveTools = buildEffectiveTools("development", this.config.cwd, task);
       const invokeOptions = {
@@ -31517,7 +31960,7 @@ class HarnessExecutor {
       const engine = createSessionAwareEngine("markdown", [], 1);
       const engineResult = await engine.runWithFeedback(agent.invoke.bind(agent), prompt, invokeOptions);
       if (engineResult.retries > 0) {
-        console.log(`   \uD83D\uDD04 ${texts2.harness.logs.devOutputFormatRetry.replace("{retries}", String(engineResult.retries))}`);
+        console.log(`   \uD83D\uDD04 ${texts.harness.logs.devOutputFormatRetry.replace("{retries}", String(engineResult.retries))}`);
       }
       report.claudeOutput = engineResult.result.output;
       report.duration = engineResult.result.durationMs;
@@ -31525,27 +31968,27 @@ class HarnessExecutor {
         report.status = engineResult.result.exitCode === 124 ? "timeout" : "failed";
         report.error = engineResult.result.error || `\u9000\u51FA\u7801: ${engineResult.result.exitCode}`;
         console.log(`
-   \u274C ${texts2.harness.logs.devPhaseFailed}: ${report.error}`);
+   \u274C ${texts.harness.logs.devPhaseFailed}: ${report.error}`);
       } else if (!engineResult.passed) {
         const violationMessages = engineResult.violations.map((v) => `${v.ruleId}: ${v.message}`).join("; ");
         report.status = "failed";
         report.error = `\u5F00\u53D1\u8F93\u51FA\u683C\u5F0F\u9A8C\u8BC1\u672A\u901A\u8FC7: ${violationMessages}`;
         console.log(`
-   \u274C ${texts2.harness.logs.devOutputValidationFailed}: ${violationMessages}`);
+   \u274C ${texts.harness.logs.devOutputValidationFailed}: ${violationMessages}`);
       } else {
         report.status = "success";
         console.log(`
-   \u2705 ${texts2.harness.logs.devPhaseCompleted}`);
+   \u2705 ${texts.harness.logs.devPhaseCompleted}`);
         report.evidence = await this.collectEvidence(task.id);
-        console.log(`   \uD83D\uDCCE ${texts2.harness.logs.evidenceCollected}: ${report.evidence.length}`);
+        console.log(`   \uD83D\uDCCE ${texts.harness.logs.evidenceCollected}: ${report.evidence.length}`);
         report.checkpointsCompleted = await this.checkCompletedCheckpoints(task, sprintContract);
-        console.log(`   \u2713 ${texts2.harness.logs.checkpointsCompleted}: ${report.checkpointsCompleted.length}/${sprintContract.checkpoints.length}`);
+        console.log(`   \u2713 ${texts.harness.logs.checkpointsCompleted}: ${report.checkpointsCompleted.length}/${sprintContract.checkpoints.length}`);
       }
     } catch (error) {
       report.status = "failed";
       report.error = error instanceof Error ? error.message : String(error);
       console.log(`
-   \u274C ${texts2.harness.logs.devPhaseError}: ${report.error}`);
+   \u274C ${texts.harness.logs.devPhaseError}: ${report.error}`);
     }
     const endTime = new Date;
     report.endTime = endTime.toISOString();
@@ -31591,30 +32034,30 @@ class HarnessExecutor {
     return criteria;
   }
   buildDevPrompt(task, contract, timeoutMinutes, retryContext) {
-    const texts2 = t(this.config.cwd);
+    const texts = t(this.config.cwd);
     const roleTemplate = getDevRoleTemplate(task.recommendedRole);
-    const timeoutHeader = timeoutMinutes ? `## ${texts2.harness.timeoutHeader}: ${timeoutMinutes} \u5206\u949F
+    const timeoutHeader = timeoutMinutes ? `## ${texts.harness.timeoutHeader}: ${timeoutMinutes} \u5206\u949F
 ` : "";
-    const descriptionSection = task.description ? `## ${texts2.harness.taskDescription}
+    const descriptionSection = task.description ? `## ${texts.harness.taskDescription}
 ${task.description}
 ` : "";
-    const dependenciesSection = task.dependencies && task.dependencies.length > 0 ? `## ${texts2.harness.dependencies}
+    const dependenciesSection = task.dependencies && task.dependencies.length > 0 ? `## ${texts.harness.dependencies}
 ${task.dependencies.map((dep) => `- ${dep}`).join(`
 `)}
 ` : "";
-    const acceptanceCriteriaSection = contract.acceptanceCriteria.length > 0 ? `## ${texts2.harness.acceptanceCriteria}
-${texts2.harness.acceptanceCriteriaInstruction}
+    const acceptanceCriteriaSection = contract.acceptanceCriteria.length > 0 ? `## ${texts.harness.acceptanceCriteria}
+${texts.harness.acceptanceCriteriaInstruction}
 ${contract.acceptanceCriteria.map((criteria, i) => `${i + 1}. ${criteria}`).join(`
 `)}
 ` : "";
-    const checkpointsSection = contract.checkpoints.length > 0 ? `## ${texts2.harness.checkpoints}
-${texts2.harness.checkpointsInstruction}
+    const checkpointsSection = contract.checkpoints.length > 0 ? `## ${texts.harness.checkpoints}
+${texts.harness.checkpointsInstruction}
 ${contract.checkpoints.map((cp, i) => `${i + 1}. ${cp}`).join(`
 `)}
 ` : "";
-    const timeoutInstruction = timeoutMinutes ? texts2.harness.timeoutInstruction.replace("{timeout}", String(timeoutMinutes)) + `
+    const timeoutInstruction = timeoutMinutes ? texts.harness.timeoutInstruction.replace("{timeout}", String(timeoutMinutes)) + `
 ` : "";
-    const extraInstructionsSection = roleTemplate.extraInstructions.length > 0 ? `## ${texts2.harness.roleSpecificRequirements}
+    const extraInstructionsSection = roleTemplate.extraInstructions.length > 0 ? `## ${texts.harness.roleSpecificRequirements}
 ${roleTemplate.extraInstructions.map((inst, i) => `${i + 1}. ${inst}`).join(`
 `)}
 ` : "";
@@ -31645,30 +32088,30 @@ ${roleTemplate.extraInstructions.map((inst, i) => `${i + 1}. ${inst}`).join(`
   }
   buildRetryContextSection(retryContext) {
     const parts = [];
-    const texts2 = t(this.config.cwd);
+    const texts = t(this.config.cwd);
     const phaseLabel = {
-      development: texts2.harness.phaseLabels.development,
-      code_review: texts2.harness.phaseLabels.codeReview,
-      qa: texts2.harness.phaseLabels.qa,
-      evaluation: texts2.harness.phaseLabels.evaluation
+      development: texts.harness.phaseLabels.development,
+      code_review: texts.harness.phaseLabels.codeReview,
+      qa: texts.harness.phaseLabels.qa,
+      evaluation: texts.harness.phaseLabels.evaluation
     };
-    parts.push(`## ${texts2.harness.retryContext}`);
+    parts.push(`## ${texts.harness.retryContext}`);
     parts.push("");
     const phaseName = phaseLabel[retryContext.previousPhase || ""] || retryContext.previousPhase;
-    parts.push(texts2.harness.retryAttemptInfo.replace("{attempt}", String(retryContext.attemptNumber)).replace("{phase}", phaseName));
+    parts.push(texts.harness.retryAttemptInfo.replace("{attempt}", String(retryContext.attemptNumber)).replace("{phase}", phaseName));
     parts.push("");
-    parts.push(`**${texts2.harness.previousFailureReason}:**`);
+    parts.push(`**${texts.harness.previousFailureReason}:**`);
     parts.push(`> ${retryContext.previousFailureReason}`);
     parts.push("");
     if (retryContext.partialProgress?.completedCheckpoints?.length) {
-      parts.push(`**${texts2.harness.partialProgress}:**`);
+      parts.push(`**${texts.harness.partialProgress}:**`);
       for (const cp of retryContext.partialProgress.completedCheckpoints) {
         parts.push(`- \u2705 ${cp}`);
       }
       parts.push("");
     }
     if (retryContext.upstreamFailureInfo) {
-      parts.push(`**${texts2.harness.upstreamFailureInfo}:**`);
+      parts.push(`**${texts.harness.upstreamFailureInfo}:**`);
       parts.push(`- \u4E0A\u6E38\u4EFB\u52A1: ${retryContext.upstreamFailureInfo.taskId}`);
       parts.push(`- \u5931\u8D25\u539F\u56E0: ${retryContext.upstreamFailureInfo.reason}`);
       parts.push(`- \u5931\u8D25\u65F6\u95F4: ${retryContext.upstreamFailureInfo.failedAt}`);
@@ -31739,46 +32182,46 @@ ${roleTemplate.extraInstructions.map((inst, i) => `${i + 1}. ${inst}`).join(`
     fs23.writeFileSync(reportPath, content, "utf-8");
   }
   formatDevReport(report) {
-    const texts2 = t(this.config.cwd);
+    const texts = t(this.config.cwd);
     const lines = [
-      `# ${texts2.harness.reports.devReportTitle} - ${report.taskId}`,
+      `# ${texts.harness.reports.devReportTitle} - ${report.taskId}`,
       "",
-      `**${texts2.harness.reports.statusLabel}**: ${report.status}`,
-      `**${texts2.harness.reports.startTimeLabel}**: ${report.startTime}`,
-      `**${texts2.harness.reports.endTimeLabel}**: ${report.endTime}`,
-      `**${texts2.harness.reports.durationLabel}**: ${(report.duration / 1000).toFixed(1)}s`,
+      `**${texts.harness.reports.statusLabel}**: ${report.status}`,
+      `**${texts.harness.reports.startTimeLabel}**: ${report.startTime}`,
+      `**${texts.harness.reports.endTimeLabel}**: ${report.endTime}`,
+      `**${texts.harness.reports.durationLabel}**: ${(report.duration / 1000).toFixed(1)}s`,
       ""
     ];
     if (report.error) {
-      lines.push(`## ${texts2.harness.reports.errorInfoSection}`);
+      lines.push(`## ${texts.harness.reports.errorInfoSection}`);
       lines.push("```");
       lines.push(report.error);
       lines.push("```");
       lines.push("");
     }
     if (report.changes.length > 0) {
-      lines.push(`## ${texts2.harness.reports.codeChangesSection}`);
+      lines.push(`## ${texts.harness.reports.codeChangesSection}`);
       report.changes.forEach((change) => {
         lines.push(`- ${change}`);
       });
       lines.push("");
     }
     if (report.evidence.length > 0) {
-      lines.push(`## ${texts2.harness.reports.evidenceFilesSection}`);
+      lines.push(`## ${texts.harness.reports.evidenceFilesSection}`);
       report.evidence.forEach((evidence) => {
         lines.push(`- ${evidence}`);
       });
       lines.push("");
     }
     if (report.checkpointsCompleted.length > 0) {
-      lines.push(`## ${texts2.harness.reports.completedCheckpointsSection}`);
+      lines.push(`## ${texts.harness.reports.completedCheckpointsSection}`);
       report.checkpointsCompleted.forEach((cp) => {
         lines.push(`- ${cp}`);
       });
       lines.push("");
     }
     if (report.claudeOutput) {
-      lines.push(`## ${texts2.harness.reports.claudeOutputSection}`);
+      lines.push(`## ${texts.harness.reports.claudeOutputSection}`);
       lines.push("```");
       lines.push(report.claudeOutput.substring(0, 5000));
       lines.push("```");
@@ -31950,10 +32393,10 @@ class HarnessCodeReviewer {
     this.config = config;
   }
   async review(task, devReport, retryContext) {
-    const texts2 = t(this.config.cwd);
+    const texts = t(this.config.cwd);
     console.log(`
-\uD83D\uDD0D ${texts2.harness.logs.codeReviewPhase}`);
-    console.log(`   ${texts2.harness.logs.taskLabel}: ${task.title}`);
+\uD83D\uDD0D ${texts.harness.logs.codeReviewPhase}`);
+    console.log(`   ${texts.harness.logs.taskLabel}: ${task.title}`);
     const verdict = {
       taskId: task.id,
       result: "PASS",
@@ -31965,7 +32408,7 @@ class HarnessCodeReviewer {
     };
     if (devReport.status !== "success") {
       verdict.result = "NOPASS";
-      verdict.reason = `\u5F00\u53D1\u9636\u6BB5\u672A\u6210\u529F\u5B8C\u6210: ${devReport.status}`;
+      verdict.reason = `${texts.harness.logs.devPhaseNotComplete}: ${devReport.status}`;
       if (devReport.error) {
         verdict.reason += ` - ${devReport.error}`;
       }
@@ -31974,11 +32417,11 @@ class HarnessCodeReviewer {
     }
     try {
       const codeReviewCheckpoints = this.getCodeReviewCheckpoints(task);
-      console.log(`   \uD83D\uDCCB ${texts2.harness.logs.codeReviewCheckpoints}: ${codeReviewCheckpoints.length}`);
+      console.log(`   \uD83D\uDCCB ${texts.harness.logs.codeReviewCheckpoints}: ${codeReviewCheckpoints.length}`);
       if (codeReviewCheckpoints.length === 0) {
         verdict.result = "PASS";
-        verdict.reason = texts2.harness.logs.noCodeReviewCheckpoints;
-        console.log(`   \u2705 ${texts2.harness.logs.noCodeReviewCheckpoints}`);
+        verdict.reason = texts.harness.logs.noCodeReviewCheckpoints;
+        console.log(`   \u2705 ${texts.harness.logs.noCodeReviewCheckpoints}`);
       } else {
         const reviewResult = await this.runCodeReview(task, devReport, codeReviewCheckpoints, retryContext);
         verdict.result = reviewResult.passed ? "PASS" : "NOPASS";
@@ -31988,23 +32431,23 @@ class HarnessCodeReviewer {
         verdict.details = reviewResult.details;
         const contradiction = detectContradiction(verdict.result, verdict.reason || "");
         if (contradiction.hasContradiction && contradiction.correctedResult) {
-          console.log(`   \u26A0\uFE0F  ${texts2.harness.logs.contradictionDetected}: ${contradiction.reason}`);
+          console.log(`   \u26A0\uFE0F  ${texts.harness.logs.contradictionDetected}: ${contradiction.reason}`);
           verdict.result = contradiction.correctedResult;
-          verdict.reason += ` [${texts2.harness.logs.contradictionDetected}: ${contradiction.reason}]`;
+          verdict.reason += ` [${texts.harness.logs.contradictionDetected}: ${contradiction.reason}]`;
         }
         if (verdict.result === "PASS") {
           console.log(`
-   \u2705 ${texts2.harness.logs.codeReviewPassed}`);
+   \u2705 ${texts.harness.logs.codeReviewPassed}`);
         } else {
           console.log(`
-   \u274C ${texts2.harness.logs.codeReviewFailed}: ${verdict.reason}`);
+   \u274C ${texts.harness.logs.codeReviewFailed}: ${verdict.reason}`);
         }
       }
     } catch (error) {
       verdict.result = "NOPASS";
-      verdict.reason = `${texts2.harness.logs.codeReviewError}: ${error instanceof Error ? error.message : String(error)}`;
+      verdict.reason = `${texts.harness.logs.codeReviewError}: ${error instanceof Error ? error.message : String(error)}`;
       console.log(`
-   \u274C ${texts2.harness.logs.codeReviewError}: ${verdict.reason}`);
+   \u274C ${texts.harness.logs.codeReviewError}: ${verdict.reason}`);
     }
     await this.saveReport(task.id, verdict);
     return verdict;
@@ -32013,11 +32456,12 @@ class HarnessCodeReviewer {
     return filterCheckpoints(task, (cp) => cp.category === "code_review" || cp.verification?.method === "code_review" || cp.verification?.method === "lint" || cp.verification?.method === "architect_review");
   }
   async runCodeReview(task, devReport, checkpoints, retryContext) {
+    const texts = t(this.config.cwd);
     const prompt = this.buildCodeReviewPrompt(task, devReport, checkpoints, retryContext);
     console.log(`
-   \uD83D\uDCDD \u4EE3\u7801\u5BA1\u6838\u63D0\u793A\u8BCD\u5DF2\u751F\u6210`);
+   \uD83D\uDCDD ${texts.harness.logs.codeReviewPromptGenerated}`);
     console.log(`
-   \uD83E\uDD16 \u542F\u52A8\u4EE3\u7801\u5BA1\u6838\u4F1A\u8BDD...`);
+   \uD83E\uDD16 ${texts.harness.logs.startingCodeReviewSession}`);
     const agent = getAgent(this.config.cwd);
     const effectiveTools = buildEffectiveTools("codeReview", this.config.cwd, task);
     const invokeOptions = {
@@ -32031,12 +32475,12 @@ class HarnessCodeReviewer {
     const engine = createSessionAwareEngine("markdown", [verdictResultMarker, verdictHasReason], 1);
     const engineResult = await engine.runWithFeedback(agent.invoke.bind(agent), prompt, invokeOptions);
     if (engineResult.retries > 0) {
-      console.log(`   \uD83D\uDD04 \u4EE3\u7801\u5BA1\u6838\u7ED3\u679C\u683C\u5F0F\u4E0D\u5339\u914D\uFF0C\u5DF2\u91CD\u8BD5 ${engineResult.retries} \u6B21`);
+      console.log(`   \uD83D\uDD04 ${texts.harness.logs.codeReviewRetry.replace("{retries}", String(engineResult.retries))}`);
     }
     if (!engineResult.result.success) {
       return {
         passed: false,
-        reason: `\u4EE3\u7801\u5BA1\u6838\u4F1A\u8BDD\u5931\u8D25: ${engineResult.result.error || "\u672A\u77E5\u9519\u8BEF"}`,
+        reason: `${texts.harness.logs.codeReviewSessionFailed}: ${engineResult.result.error || "unknown error"}`,
         issues: [],
         failedCheckpoints: []
       };
@@ -32108,33 +32552,34 @@ ${devReport.evidence.map((evidence) => `- ${evidence}`).join(`
     await saveReport(reportPath, content);
   }
   formatReport(verdict) {
+    const texts = t(this.config.cwd);
     const lines = [
-      `# \u4EE3\u7801\u5BA1\u6838\u62A5\u544A - ${verdict.taskId}`,
+      `# ${texts.harness.reports.codeReviewReportTitle} - ${verdict.taskId}`,
       "",
-      `**\u7ED3\u679C**: ${verdict.result === "PASS" ? "\u2705 PASS" : "\u274C NOPASS"}`,
-      `**\u5BA1\u6838\u65F6\u95F4**: ${verdict.reviewedAt}`,
-      `**\u5BA1\u6838\u8005**: ${verdict.reviewedBy}`,
+      `**${texts.harness.reports.resultLabel}**: ${verdict.result === "PASS" ? "\u2705 PASS" : "\u274C NOPASS"}`,
+      `**${texts.harness.reports.reviewedAtLabel}**: ${verdict.reviewedAt}`,
+      `**${texts.harness.reports.reviewedByLabel}**: ${verdict.reviewedBy}`,
       "",
-      "## \u539F\u56E0",
+      `## ${texts.harness.reports.reasonSection}`,
       verdict.reason,
       ""
     ];
     if (verdict.codeQualityIssues.length > 0) {
-      lines.push("## \u4EE3\u7801\u8D28\u91CF\u95EE\u9898");
+      lines.push(`## ${texts.harness.reports.codeQualityIssuesSection}`);
       verdict.codeQualityIssues.forEach((issue) => {
         lines.push(`- ${issue}`);
       });
       lines.push("");
     }
     if (verdict.failedCheckpoints.length > 0) {
-      lines.push("## \u672A\u901A\u8FC7\u7684\u68C0\u67E5\u70B9");
+      lines.push(`## ${texts.harness.reports.failedCheckpointsSection}`);
       verdict.failedCheckpoints.forEach((checkpoint) => {
         lines.push(`- ${checkpoint}`);
       });
       lines.push("");
     }
     if (verdict.details) {
-      lines.push("## \u8BE6\u7EC6\u53CD\u9988");
+      lines.push(`## ${texts.harness.reports.detailsSection}`);
       lines.push(verdict.details);
       lines.push("");
     }
@@ -32158,10 +32603,10 @@ class HarnessQATester {
     this.config = config;
   }
   async verify(task, codeReviewVerdict, retryContext) {
-    const texts2 = t(this.config.cwd);
+    const texts = t(this.config.cwd);
     console.log(`
-\uD83E\uDDEA ${texts2.harness.logs.qaPhase}`);
-    console.log(`   ${texts2.harness.logs.taskLabel}: ${task.title}`);
+\uD83E\uDDEA ${texts.harness.logs.qaPhase}`);
+    console.log(`   ${texts.harness.logs.taskLabel}: ${task.title}`);
     const verdict = {
       taskId: task.id,
       result: "PASS",
@@ -32175,17 +32620,17 @@ class HarnessQATester {
     };
     if (codeReviewVerdict.result !== "PASS") {
       verdict.result = "NOPASS";
-      verdict.reason = `\u4EE3\u7801\u5BA1\u6838\u672A\u901A\u8FC7\uFF0C\u8DF3\u8FC7 QA \u9A8C\u8BC1: ${codeReviewVerdict.reason}`;
+      verdict.reason = `${texts.harness.logs.qaSkippedDueToCodeReview}: ${codeReviewVerdict.reason}`;
       await this.saveReport(task.id, verdict);
       return verdict;
     }
     try {
       const qaCheckpoints = this.getQACheckpoints(task);
-      console.log(`   \uD83D\uDCCB ${texts2.harness.logs.qaCheckpoints}: ${qaCheckpoints.length}`);
+      console.log(`   \uD83D\uDCCB ${texts.harness.logs.qaCheckpoints}: ${qaCheckpoints.length}`);
       if (qaCheckpoints.length === 0) {
         verdict.result = "PASS";
-        verdict.reason = texts2.harness.logs.noQACheckpoints;
-        console.log(`   \u2705 ${texts2.harness.logs.noQACheckpoints}`);
+        verdict.reason = texts.harness.logs.noQACheckpoints;
+        console.log(`   \u2705 ${texts.harness.logs.noQACheckpoints}`);
       } else {
         const humanCheckpoints = qaCheckpoints.filter((cp) => cp.requiresHuman === true);
         verdict.humanVerificationCheckpoints = humanCheckpoints.map((cp) => cp.id);
@@ -32197,13 +32642,13 @@ class HarnessQATester {
         verdict.details = qaResult.details;
         const contradiction = detectContradiction(verdict.result, verdict.reason || "");
         if (contradiction.hasContradiction && contradiction.correctedResult) {
-          console.log(`   \u26A0\uFE0F  ${texts2.harness.logs.contradictionDetected}: ${contradiction.reason}`);
+          console.log(`   \u26A0\uFE0F  ${texts.harness.logs.contradictionDetected}: ${contradiction.reason}`);
           verdict.result = contradiction.correctedResult;
-          verdict.reason += ` [${texts2.harness.logs.contradictionDetected}: ${contradiction.reason}]`;
+          verdict.reason += ` [${texts.harness.logs.contradictionDetected}: ${contradiction.reason}]`;
         }
         if (humanCheckpoints.length > 0) {
           verdict.requiresHuman = true;
-          const deferredInfo = `${humanCheckpoints.length} \u4E2A\u68C0\u67E5\u70B9\u5DF2\u5EF6\u671F\uFF08deferred\uFF09\uFF0C\u7B49\u5F85\u4EBA\u5DE5\u9A8C\u8BC1: ${humanCheckpoints.map((cp) => cp.id).join(", ")}`;
+          const deferredInfo = `${texts.harness.logs.deferredCheckpointsInfo.replace("{count}", String(humanCheckpoints.length))}: ${humanCheckpoints.map((cp) => cp.id).join(", ")}`;
           verdict.details = verdict.details ? `${verdict.details}
 ${deferredInfo}` : deferredInfo;
           console.log(`
@@ -32211,20 +32656,20 @@ ${deferredInfo}` : deferredInfo;
         }
         if (verdict.result === "PASS" && !verdict.requiresHuman) {
           console.log(`
-   \u2705 ${texts2.harness.logs.qaPassed}`);
+   \u2705 ${texts.harness.logs.qaPassed}`);
         } else if (verdict.result === "PASS" && verdict.requiresHuman) {
           console.log(`
-   \u23F3 ${texts2.harness.logs.qaPassedWithHuman}`);
+   \u23F3 ${texts.harness.logs.qaPassedWithHuman}`);
         } else {
           console.log(`
-   \u274C ${texts2.harness.logs.qaFailed}: ${verdict.reason}`);
+   \u274C ${texts.harness.logs.qaFailed}: ${verdict.reason}`);
         }
       }
     } catch (error) {
       verdict.result = "NOPASS";
-      verdict.reason = `${texts2.harness.logs.qaError}: ${error instanceof Error ? error.message : String(error)}`;
+      verdict.reason = `${texts.harness.logs.qaError}: ${error instanceof Error ? error.message : String(error)}`;
       console.log(`
-   \u274C ${texts2.harness.logs.qaError}: ${verdict.reason}`);
+   \u274C ${texts.harness.logs.qaError}: ${verdict.reason}`);
     }
     await this.saveReport(task.id, verdict);
     return verdict;
@@ -32233,6 +32678,7 @@ ${deferredInfo}` : deferredInfo;
     return filterCheckpoints(task, (cp) => cp.category === "qa_verification" || cp.verification?.method === "unit_test" || cp.verification?.method === "functional_test" || cp.verification?.method === "integration_test" || cp.verification?.method === "e2e_test" || cp.verification?.method === "automated" || cp.requiresHuman === true);
   }
   async runQAVerification(task, codeReviewVerdict, checkpoints, retryContext) {
+    const texts = t(this.config.cwd);
     const automatedCheckpoints = checkpoints.filter((cp) => !cp.requiresHuman);
     const humanCheckpoints = checkpoints.filter((cp) => cp.requiresHuman === true);
     const checkpointsWithoutCommands = automatedCheckpoints.filter((cp) => {
@@ -32241,26 +32687,26 @@ ${deferredInfo}` : deferredInfo;
     });
     if (checkpointsWithoutCommands.length > 0) {
       console.log(`
-   \u26A0\uFE0F  ${checkpointsWithoutCommands.length} \u4E2A\u81EA\u52A8\u5316\u68C0\u67E5\u70B9\u7F3A\u5C11\u9A8C\u8BC1\u547D\u4EE4:`);
+   \u26A0\uFE0F  ${texts.harness.logs.checkpointWarning.replace("{count}", String(checkpointsWithoutCommands.length))}:`);
       for (const cp of checkpointsWithoutCommands) {
         const result = validateCheckpointVerification(cp);
-        console.log(`      - [${cp.id}] ${result.warning || "\u7F3A\u5C11 commands/steps"}`);
+        console.log(`      - [${cp.id}] ${result.warning || texts.harness.logs.checkpointWarningDetail}`);
       }
-      console.log("      \u8FD9\u4E9B\u68C0\u67E5\u70B9\u5C06\u4F9D\u8D56 AI \u81EA\u7531\u9A8C\u8BC1\uFF0C\u53EF\u80FD\u5F71\u54CD\u9A8C\u8BC1\u8D28\u91CF\u3002");
+      console.log(`      ${texts.harness.logs.checkpointWarningFallback}`);
     }
     if (automatedCheckpoints.length === 0) {
       return {
         passed: true,
-        reason: "\u65E0\u81EA\u52A8\u5316 QA \u68C0\u67E5\u70B9\uFF0C\u81EA\u52A8\u5316\u9A8C\u8BC1\u81EA\u52A8\u901A\u8FC7",
+        reason: texts.harness.logs.noAutomatedQACheckpoints,
         failures: [],
         failedCheckpoints: []
       };
     }
     const prompt = this.buildQAPrompt(task, codeReviewVerdict, automatedCheckpoints, retryContext);
     console.log(`
-   \uD83D\uDCDD QA \u9A8C\u8BC1\u63D0\u793A\u8BCD\u5DF2\u751F\u6210`);
+   \uD83D\uDCDD ${texts.harness.logs.qaPromptGenerated}`);
     console.log(`
-   \uD83E\uDD16 \u542F\u52A8 QA \u9A8C\u8BC1\u4F1A\u8BDD...`);
+   \uD83E\uDD16 ${texts.harness.logs.startingQASession}`);
     const agent = getAgent(this.config.cwd);
     const effectiveTools = buildEffectiveTools("qaVerification", this.config.cwd, task);
     const invokeOptions = {
@@ -32274,27 +32720,27 @@ ${deferredInfo}` : deferredInfo;
     const engine = createSessionAwareEngine("markdown", [qaVerdictResultMarker, qaVerdictHasReason], 1);
     const engineResult = await engine.runWithFeedback(agent.invoke.bind(agent), prompt, invokeOptions);
     if (engineResult.retries > 0) {
-      console.log(`   \uD83D\uDD04 QA \u9A8C\u8BC1\u7ED3\u679C\u683C\u5F0F\u4E0D\u5339\u914D\uFF0C\u5DF2\u91CD\u8BD5 ${engineResult.retries} \u6B21`);
+      console.log(`   \uD83D\uDD04 ${texts.harness.logs.qaRetry.replace("{retries}", String(engineResult.retries))}`);
     }
     if (!engineResult.result.success) {
       return {
         passed: false,
-        reason: `QA \u9A8C\u8BC1\u4F1A\u8BDD\u5931\u8D25: ${engineResult.result.error || "\u672A\u77E5\u9519\u8BEF"}`,
+        reason: `${texts.harness.logs.qaSessionFailed}: ${engineResult.result.error || "unknown error"}`,
         failures: [],
         failedCheckpoints: []
       };
     }
     if (!engineResult.passed) {
       const violationMessages = engineResult.violations.map((v) => `${v.ruleId}: ${v.message}`).join("; ");
-      console.log(`   \u26A0\uFE0F  QA \u9A8C\u8BC1\u8F93\u51FA\u683C\u5F0F\u9A8C\u8BC1\u672A\u901A\u8FC7: ${violationMessages}`);
+      console.log(`   \u26A0\uFE0F  ${texts.harness.logs.qaOutputValidationFailed}: ${violationMessages}`);
       const rawOutput = engineResult.result.output || "";
       const parsed = this.parseQAResult(rawOutput);
-      if (parsed.reason && parsed.reason !== "\u65E0\u6CD5\u89E3\u6790\u5224\u5B9A\u7ED3\u679C") {
+      if (parsed.reason && parsed.reason !== texts.harness.logs.cannotParseVerdict) {
         return parsed;
       }
       return {
         passed: false,
-        reason: `QA \u9A8C\u8BC1\u8F93\u51FA\u683C\u5F0F\u4E0D\u7B26\u5408\u8981\u6C42: ${violationMessages}`,
+        reason: `${texts.harness.logs.qaOutputValidationFailed}: ${violationMessages}`,
         failures: [],
         failedCheckpoints: []
       };
@@ -32387,42 +32833,43 @@ ${task.description}` : "";
     await saveReport(reportPath, content);
   }
   formatReport(verdict) {
+    const texts = t(this.config.cwd);
     const lines = [
-      `# QA \u9A8C\u8BC1\u62A5\u544A - ${verdict.taskId}`,
+      `# ${texts.harness.reports.qaReportTitle} - ${verdict.taskId}`,
       "",
-      `**\u7ED3\u679C**: ${verdict.result === "PASS" ? "\u2705 PASS" : "\u274C NOPASS"}`,
-      `**\u9A8C\u8BC1\u65F6\u95F4**: ${verdict.verifiedAt}`,
-      `**\u9A8C\u8BC1\u8005**: ${verdict.verifiedBy}`,
-      `**\u9700\u8981\u4EBA\u5DE5\u9A8C\u8BC1**: ${verdict.requiresHuman ? "\u662F" : "\u5426"}`,
+      `**${texts.harness.reports.resultLabel}**: ${verdict.result === "PASS" ? "\u2705 PASS" : "\u274C NOPASS"}`,
+      `**${texts.harness.reports.reviewedAtLabel}**: ${verdict.verifiedAt}`,
+      `**${texts.harness.reports.reviewedByLabel}**: ${verdict.verifiedBy}`,
+      `**${texts.harness.reports.requiresHumanLabel}**: ${verdict.requiresHuman ? texts.harness.reports.yes : texts.harness.reports.no}`,
       "",
-      "## \u539F\u56E0",
+      `## ${texts.harness.reports.reasonSection}`,
       verdict.reason,
       ""
     ];
     if (verdict.testFailures.length > 0) {
-      lines.push("## \u6D4B\u8BD5\u5931\u8D25");
+      lines.push(`## ${texts.harness.reports.testFailuresSection}`);
       verdict.testFailures.forEach((failure) => {
         lines.push(`- ${failure}`);
       });
       lines.push("");
     }
     if (verdict.failedCheckpoints.length > 0) {
-      lines.push("## \u672A\u901A\u8FC7\u7684\u68C0\u67E5\u70B9");
+      lines.push(`## ${texts.harness.reports.failedCheckpointsSection}`);
       verdict.failedCheckpoints.forEach((checkpoint) => {
         lines.push(`- ${checkpoint}`);
       });
       lines.push("");
     }
     if (verdict.humanVerificationCheckpoints.length > 0) {
-      lines.push("## \u5DF2\u5EF6\u671F\uFF08deferred\uFF09\u7684\u68C0\u67E5\u70B9 - \u7B49\u5F85\u4EBA\u5DE5\u9A8C\u8BC1");
-      lines.push("*\u8FD9\u4E9B\u68C0\u67E5\u70B9\u4E0D\u53C2\u4E0E PASS/NOPASS \u5224\u5B9A\uFF0C\u4EC5\u7B49\u5F85\u4EBA\u5DE5\u540E\u5904\u7406*");
+      lines.push(`## ${texts.harness.reports.humanVerificationSection}`);
+      lines.push(`*${texts.harness.reports.humanVerificationNote}*`);
       verdict.humanVerificationCheckpoints.forEach((checkpoint) => {
         lines.push(`- ${checkpoint} [deferred]`);
       });
       lines.push("");
     }
     if (verdict.details) {
-      lines.push("## \u8BE6\u7EC6\u53CD\u9988");
+      lines.push(`## ${texts.harness.reports.detailsSection}`);
       lines.push(verdict.details);
       lines.push("");
     }
@@ -32450,9 +32897,9 @@ class HarnessEvaluator {
     this.config = config;
   }
   async evaluate(task, devReport, contract, retryContext) {
-    const texts2 = t(this.config.cwd);
-    console.log(`   ${texts2.harness.logs.evalTaskLabel}: ${task.title}`);
-    console.log(`   ${texts2.harness.logs.devStatusLabel}: ${devReport.status}`);
+    const texts = t(this.config.cwd);
+    console.log(`   ${texts.harness.logs.evalTaskLabel}: ${task.title}`);
+    console.log(`   ${texts.harness.logs.devStatusLabel}: ${devReport.status}`);
     const verdict = {
       taskId: task.id,
       result: "NOPASS",
@@ -32464,7 +32911,7 @@ class HarnessEvaluator {
     };
     if (devReport.status !== "success") {
       verdict.result = "NOPASS";
-      verdict.reason = `\u5F00\u53D1\u9636\u6BB5\u672A\u6210\u529F\u5B8C\u6210: ${devReport.status}`;
+      verdict.reason = `${texts.harness.logs.devPhaseNotComplete}: ${devReport.status}`;
       verdict.inferenceType = "explicit_match";
       if (devReport.error) {
         verdict.reason += ` - ${devReport.error}`;
@@ -32485,19 +32932,19 @@ class HarnessEvaluator {
       const phantomTasks = this.detectPhantomTasks(task.id, devReport);
       if (phantomTasks.length > 0) {
         verdict.result = "NOPASS";
-        verdict.reason = `\u4E25\u91CD\u8FDD\u89C4\uFF1A\u5F00\u53D1\u8005\u5728\u6267\u884C\u671F\u95F4\u521B\u5EFA\u4E86 ${phantomTasks.length} \u4E2A\u989D\u5916\u4EFB\u52A1 (${phantomTasks.join(", ")}). \u5F00\u53D1\u8005\u88AB\u4E25\u683C\u7981\u6B62\u521B\u5EFA\u65B0\u4EFB\u52A1\u3002`;
-        verdict.failedCriteria = ["\u7981\u6B62\u521B\u5EFA\u65B0\u4EFB\u52A1"];
-        verdict.failedCheckpoints = phantomTasks.map((tid) => `\u5E7D\u7075\u4EFB\u52A1: ${tid}`);
-        verdict.details = `\u68C0\u6D4B\u5230\u5F00\u53D1\u8005\u521B\u5EFA\u4E86\u4E0D\u5C5E\u4E8E\u539F\u59CB\u8BA1\u5212\u7684\u989D\u5916\u4EFB\u52A1\u3002\u8FD9\u8FDD\u53CD\u4E86\u5F00\u53D1\u8005\u804C\u8D23\u8303\u56F4\u2014\u2014\u5F00\u53D1\u8005\u53EA\u5E94\u5B9E\u73B0\u88AB\u5206\u914D\u4EFB\u52A1\u7684\u4EE3\u7801\u53D8\u66F4\uFF0C\u800C\u975E\u521B\u5EFA\u65B0\u4EFB\u52A1\u3002`;
+        verdict.reason = `${texts.harness.logs.phantomTaskViolation.replace("{count}", String(phantomTasks.length)).replace("{tasks}", phantomTasks.join(", "))}`;
+        verdict.failedCriteria = [texts.harness.logs.phantomTaskCriteria];
+        verdict.failedCheckpoints = phantomTasks.map((tid) => `${texts.harness.logs.phantomTaskPrefix}: ${tid}`);
+        verdict.details = texts.harness.logs.phantomTaskDetails;
         verdict.inferenceType = "explicit_match";
         console.log(`
-   \u274C ${texts2.harness.logs.phantomTaskAutoNopass}`);
+   \u274C ${texts.harness.logs.phantomTaskAutoNopass}`);
         await this.saveReviewReport(task.id, verdict, devReport);
         return verdict;
       }
       const prompt = this.buildEvaluationPrompt(task, devReport, contract, phantomTasks, retryContext);
       console.log(`
-   \uD83D\uDCDD ${texts2.harness.logs.evalPromptGenerated}`);
+   \uD83D\uDCDD ${texts.harness.logs.evalPromptGenerated}`);
       const agent = getAgent(this.config.cwd);
       const effectiveTools = buildEffectiveTools("evaluation", this.config.cwd, task);
       const invokeOptions = {
@@ -32509,33 +32956,33 @@ class HarnessEvaluator {
         dangerouslySkipPermissions: effectiveTools.skipPermissions
       };
       console.log(`
-   \uD83D\uDD0D ${texts2.harness.logs.startingEvalSession}`);
+   \uD83D\uDD0D ${texts.harness.logs.startingEvalSession}`);
       const engine = createSessionAwareEngine("markdown", [verdictResultMarker, verdictHasReason], 2);
       const engineResult = await engine.runWithFeedback(agent.invoke.bind(agent), prompt, invokeOptions);
       if (engineResult.retries > 0) {
-        console.log(`   \uD83D\uDD04 ${texts2.harness.logs.evalFormatRetry.replace("{retries}", String(engineResult.retries))}`);
+        console.log(`   \uD83D\uDD04 ${texts.harness.logs.evalFormatRetry.replace("{retries}", String(engineResult.retries))}`);
       }
       const lastRawOutput = engineResult.result.output ?? "";
       this.saveRawEvaluationOutput(task.id, engineResult.result.output, engineResult.result.stderr || "", engineResult.result.success);
       if (!engineResult.result.output || engineResult.result.output.trim().length === 0) {
         verdict.result = "NOPASS";
-        verdict.reason = `\u8BC4\u4F30\u4F1A\u8BDD\u8F93\u51FA\u4E3A\u7A7A\uFF1AClaude \u8FDB\u7A0B\u53EF\u80FD\u5F02\u5E38\u9000\u51FA${engineResult.result.stderr ? ` (stderr: ${engineResult.result.stderr.substring(0, 200)})` : ""}`;
+        verdict.reason = `${texts.harness.logs.emptyOutputError}${engineResult.result.stderr ? ` (stderr: ${engineResult.result.stderr.substring(0, 200)})` : ""}`;
         verdict.inferenceType = "empty_output";
         console.log(`
-   \u274C ${texts2.harness.logs.evalEmptyOutput}`);
+   \u274C ${texts.harness.logs.evalEmptyOutput}`);
         if (engineResult.result.stderr) {
-          console.log(`   \uD83D\uDCDD ${texts2.harness.logs.evalStderrPrefix}: ${engineResult.result.stderr.substring(0, 300)}`);
+          console.log(`   \uD83D\uDCDD ${texts.harness.logs.evalStderrPrefix}: ${engineResult.result.stderr.substring(0, 300)}`);
         }
         await this.saveReviewReport(task.id, verdict, devReport);
         return verdict;
       }
       let evaluation = this.parseEvaluationResult(engineResult.result.output);
       if (evaluation.inferenceType === "parse_failure_default") {
-        console.log(`   \u26A0\uFE0F ${texts2.harness.logs.evalParseFailureDefault}`);
+        console.log(`   \u26A0\uFE0F ${texts.harness.logs.evalParseFailureDefault}`);
         evaluation = {
           ...evaluation,
           passed: true,
-          reason: `\u91CD\u8BD5 ${engineResult.retries} \u6B21\u540E\u4ECD\u65E0\u6CD5\u89E3\u6790\u8BC4\u4F30\u7ED3\u679C\uFF0C\u91C7\u7528\u4FDD\u5B88\u7B56\u7565\u9ED8\u8BA4\u901A\u8FC7`
+          reason: texts.harness.logs.evalParseFailureDefaultReason.replace("{retries}", String(engineResult.retries))
         };
       }
       verdict.result = evaluation.passed ? "PASS" : "NOPASS";
@@ -32548,23 +32995,23 @@ class HarnessEvaluator {
       verdict.inferenceType = evaluation.inferenceType;
       const contradiction = detectContradiction(verdict.result, lastRawOutput || verdict.reason || "");
       if (contradiction.hasContradiction && contradiction.correctedResult) {
-        console.log(`   \u26A0\uFE0F  ${texts2.harness.logs.contradictionDetected}: ${contradiction.reason}`);
+        console.log(`   \u26A0\uFE0F  ${texts.harness.logs.contradictionDetected}: ${contradiction.reason}`);
         verdict.result = contradiction.correctedResult;
-        verdict.reason += ` [\u77DB\u76FE\u4FEE\u6B63: ${contradiction.reason}]`;
+        verdict.reason += ` [${texts.harness.logs.contradictionFix}: ${contradiction.reason}]`;
       }
       if (verdict.result === "PASS") {
         console.log(`
-   \u2705 ${texts2.harness.logs.evalPassed} [${texts2.harness.reports.inferenceTypeLabel}: ${verdict.inferenceType || "unknown"}]`);
+   \u2705 ${texts.harness.logs.evalPassed} [${texts.harness.reports.inferenceTypeLabel}: ${verdict.inferenceType || "unknown"}]`);
       } else {
         console.log(`
-   \u274C ${texts2.harness.logs.evalFailed} [${texts2.harness.reports.inferenceTypeLabel}: ${verdict.inferenceType || "unknown"}]: ${verdict.reason}`);
+   \u274C ${texts.harness.logs.evalFailed} [${texts.harness.reports.inferenceTypeLabel}: ${verdict.inferenceType || "unknown"}]: ${verdict.reason}`);
       }
     } catch (error) {
       verdict.result = "NOPASS";
-      verdict.reason = `\u8BC4\u4F30\u8FC7\u7A0B\u51FA\u9519: ${error instanceof Error ? error.message : String(error)}`;
+      verdict.reason = `${texts.harness.logs.evalProcessError}: ${error instanceof Error ? error.message : String(error)}`;
       verdict.inferenceType = "parse_failure_default";
       console.log(`
-   \u274C ${texts2.harness.logs.evalError}: ${verdict.reason}`);
+   \u274C ${texts.harness.logs.evalError}: ${verdict.reason}`);
     }
     await this.saveReviewReport(task.id, verdict, devReport);
     return verdict;
@@ -32780,6 +33227,7 @@ ${phantomTasks.map((tid) => `- ${tid}`).join(`
     return result;
   }
   detectPhantomTasks(currentTaskId, devReport) {
+    const texts = t(this.config.cwd);
     const phantomTasks = [];
     const output = devReport.claudeOutput || "";
     const taskCreatePatterns = [
@@ -32948,54 +33396,48 @@ ${phantomTasks.map((tid) => `- ${tid}`).join(`
     }
   }
   formatReviewReport(verdict, devReport) {
-    const INFERENCE_TYPE_LABELS = {
-      structured_match: "\u7ED3\u6784\u5316\u5339\u914D",
-      explicit_match: "\u660E\u786E\u5339\u914D",
-      content_inference: "\u5185\u5BB9\u63A8\u65AD",
-      prior_stage_inference: "\u524D\u7F6E\u9636\u6BB5\u63A8\u65AD",
-      parse_failure_default: "\u89E3\u6790\u5931\u8D25\u9ED8\u8BA4",
-      empty_output: "\u7A7A\u8F93\u51FA"
-    };
+    const texts = t(this.config.cwd);
     const lines = [
-      `# \u5BA1\u67E5\u62A5\u544A - ${verdict.taskId}`,
+      `# ${texts.harness.reports.reviewReportTitle} - ${verdict.taskId}`,
       "",
-      `**\u7ED3\u679C**: ${verdict.result === "PASS" ? "\u2705 PASS" : "\u274C NOPASS"}`,
-      `**\u5BA1\u67E5\u65F6\u95F4**: ${verdict.reviewedAt}`,
-      `**\u5BA1\u67E5\u8005**: ${verdict.reviewedBy}`
+      `**${texts.harness.reports.resultLabel}**: ${verdict.result === "PASS" ? "\u2705 PASS" : "\u274C NOPASS"}`,
+      `**${texts.harness.reports.reviewedAtLabel}**: ${verdict.reviewedAt}`,
+      `**${texts.harness.reports.reviewedByLabel}**: ${verdict.reviewedBy}`
     ];
     if (verdict.inferenceType) {
-      lines.push(`**\u63A8\u65AD\u7C7B\u578B**: ${INFERENCE_TYPE_LABELS[verdict.inferenceType] || verdict.inferenceType} (${verdict.inferenceType})`);
+      const inferenceTypeLabel = texts.harness.reports.inferenceTypes[verdict.inferenceType] || verdict.inferenceType;
+      lines.push(`**${texts.harness.reports.inferenceTypeLabel}**: ${inferenceTypeLabel} (${verdict.inferenceType})`);
     }
     lines.push("");
-    lines.push("## \u539F\u56E0");
+    lines.push(`## ${texts.harness.reports.reasonSection}`);
     lines.push(verdict.reason);
     lines.push("");
     if (verdict.failedCriteria.length > 0) {
-      lines.push("## \u672A\u6EE1\u8DB3\u7684\u9A8C\u6536\u6807\u51C6");
+      lines.push(`## ${texts.harness.reports.failedCriteriaSection}`);
       verdict.failedCriteria.forEach((criteria) => {
         lines.push(`- ${criteria}`);
       });
       lines.push("");
     }
     if (verdict.failedCheckpoints.length > 0) {
-      lines.push("## \u672A\u5B8C\u6210\u7684\u68C0\u67E5\u70B9");
+      lines.push(`## ${texts.harness.reports.failedCheckpointsSection}`);
       verdict.failedCheckpoints.forEach((checkpoint) => {
         lines.push(`- ${checkpoint}`);
       });
       lines.push("");
     }
     if (verdict.details) {
-      lines.push("## \u8BE6\u7EC6\u53CD\u9988");
+      lines.push(`## ${texts.harness.reports.detailsSection}`);
       lines.push(verdict.details);
       lines.push("");
     }
     const devEvidence = Array.isArray(devReport.evidence) ? devReport.evidence : [];
     const devCheckpointsCompleted = Array.isArray(devReport.checkpointsCompleted) ? devReport.checkpointsCompleted : [];
-    lines.push("## \u5F00\u53D1\u9636\u6BB5\u4FE1\u606F");
-    lines.push(`- \u72B6\u6001: ${devReport.status}`);
-    lines.push(`- \u8017\u65F6: ${(devReport.duration / 1000).toFixed(1)}s`);
-    lines.push(`- \u8BC1\u636E\u6570\u91CF: ${devEvidence.length}`);
-    lines.push(`- \u5B8C\u6210\u68C0\u67E5\u70B9: ${devCheckpointsCompleted.length}`);
+    lines.push(`## ${texts.harness.reports.devPhaseInfoSection}`);
+    lines.push(`- ${texts.harness.reports.statusLabel}: ${devReport.status}`);
+    lines.push(`- ${texts.harness.reports.durationLabel}: ${(devReport.duration / 1000).toFixed(1)}s`);
+    lines.push(`- ${texts.harness.reports.evidenceCountLabel}: ${devEvidence.length}`);
+    lines.push(`- ${texts.harness.reports.checkpointsCountLabel}: ${devCheckpointsCompleted.length}`);
     return lines.join(`
 `);
   }
@@ -33087,8 +33529,8 @@ class HarnessStatusReporter {
   sessionId;
   currentReport;
   lastBatchContext;
-  constructor(cwd, sessionId) {
-    this.statusPath = path22.join(getProjectDir(cwd), "harness-status.json");
+  constructor(cwd2, sessionId) {
+    this.statusPath = path22.join(getProjectDir(cwd2), "harness-status.json");
     this.sessionId = sessionId;
     this.currentReport = this.createInitialReport();
   }
@@ -34979,37 +35421,38 @@ function rebuildBatchesFromBoundaries(batchQueue) {
   }
   return batches;
 }
-async function cleanupHarnessSnapshots(options = {}, cwd = process.cwd()) {
-  if (!isInitialized(cwd)) {
-    console.error("Error: Project not initialized. Please run `projmnt4claude setup` first");
+async function cleanupHarnessSnapshots(options = {}, cwd2 = process.cwd()) {
+  const texts = t(cwd2);
+  if (!isInitialized(cwd2)) {
+    console.error(texts.harnessCmd.projectNotInitialized);
     process.exit(1);
   }
-  const snapshots = listSnapshots(cwd);
+  const snapshots = listSnapshots(cwd2);
   if (snapshots.length === 0) {
-    console.log("\u2705 No snapshots found");
+    console.log(texts.harnessCmd.noSnapshotsFound);
     return 0;
   }
   let cleaned = 0;
   const activeSnapshots = [];
   const orphanSnapshots = [];
   for (const snapshot of snapshots) {
-    if (isSnapshotActive(snapshot, cwd)) {
+    if (isSnapshotActive(snapshot, cwd2)) {
       activeSnapshots.push(snapshot);
     } else {
       orphanSnapshots.push(snapshot);
     }
   }
   for (const snapshot of orphanSnapshots) {
-    if (cleanupSnapshot(snapshot.snapshotId, cwd)) {
+    if (cleanupSnapshot(snapshot.snapshotId, cwd2)) {
       cleaned++;
-      console.log(`  \uD83E\uDDF9 Cleaned orphan snapshot: ${snapshot.snapshotId} (PID: ${snapshot.pid})`);
+      console.log(texts.harnessCmd.cleaningOrphanSnapshots.replace("{id}", snapshot.snapshotId).replace("{pid}", String(snapshot.pid)));
     }
   }
   if (options.force && !options.orphansOnly) {
     for (const snapshot of activeSnapshots) {
-      if (cleanupSnapshot(snapshot.snapshotId, cwd)) {
+      if (cleanupSnapshot(snapshot.snapshotId, cwd2)) {
         cleaned++;
-        console.log(`  \u26A0\uFE0F  Force cleaned active snapshot: ${snapshot.snapshotId} (PID: ${snapshot.pid})`);
+        console.log(texts.harnessCmd.forceCleanedSnapshots.replace("{id}", snapshot.snapshotId).replace("{pid}", String(snapshot.pid)));
       }
     }
   }
@@ -35022,27 +35465,27 @@ async function cleanupHarnessSnapshots(options = {}, cwd = process.cwd()) {
     console.log(`
 \uD83D\uDCA1 Use --force to clean all snapshots, or wait for active pipelines to complete`);
   }
-  console.log(`
-\u2705 Cleaned ${cleaned} snapshots total`);
+  console.log(texts.harnessCmd.cleanedSnapshots.replace("{count}", String(cleaned)));
   return cleaned;
 }
-function checkConcurrency(cwd) {
-  const detection = detectActiveSnapshot(cwd);
+function checkConcurrency(cwd2) {
+  const detection = detectActiveSnapshot(cwd2);
+  const texts = t(cwd2);
   if (detection.hasActive && detection.activeSnapshot) {
     console.error("");
-    console.error("\u274C Error: Another Harness pipeline is already running");
+    console.error(texts.harnessCmd.concurrentPipelineRunning);
     console.error("");
-    console.error("Active pipeline info:");
-    console.error(`   Snapshot ID: ${detection.activeSnapshot.snapshotId}`);
-    console.error(`   Process ID: ${detection.activeSnapshot.pid}`);
-    console.error(`   Created at: ${detection.activeSnapshot.timestamp}`);
-    console.error(`   Task count: ${detection.activeSnapshot.tasks.length}`);
+    console.error(texts.harnessCmd.activePipelineInfo);
+    console.error(texts.harnessCmd.snapshotId.replace("{id}", detection.activeSnapshot.snapshotId));
+    console.error(texts.harnessCmd.processId.replace("{pid}", String(detection.activeSnapshot.pid)));
+    console.error(texts.harnessCmd.createdAt.replace("{timestamp}", detection.activeSnapshot.timestamp));
+    console.error(texts.harnessCmd.taskCount.replace("{count}", String(detection.activeSnapshot.tasks.length)));
     console.error("");
-    console.error("Possible causes:");
+    console.error(texts.harnessCmd.possibleCauses);
     console.error("   1. Another Harness pipeline is running");
     console.error("   2. Previous pipeline exited abnormally, leaving snapshot behind");
     console.error("");
-    console.error("Solutions:");
+    console.error(texts.harnessCmd.solutions);
     console.error("   - If no other pipeline is running, clean up with:");
     console.error("     projmnt4claude headless-harness-design cleanup");
     console.error("   - Or force clean all residual snapshots:");
@@ -35052,12 +35495,13 @@ function checkConcurrency(cwd) {
   }
   return false;
 }
-async function harnessCommand(options, cwd = process.cwd()) {
-  if (!isInitialized(cwd)) {
-    console.error("Error: Project not initialized. Please run `projmnt4claude setup` first");
+async function harnessCommand(options, cwd2 = process.cwd()) {
+  const texts = t(cwd2);
+  if (!isInitialized(cwd2)) {
+    console.error(texts.harnessCmd.projectNotInitialized);
     process.exit(1);
   }
-  if (!options.continue && checkConcurrency(cwd)) {
+  if (!options.continue && checkConcurrency(cwd2)) {
     process.exit(1);
   }
   const qualityGateConfig = {
@@ -35081,21 +35525,21 @@ async function harnessCommand(options, cwd = process.cwd()) {
     apiRetryDelay: options.apiRetryDelay ? parseInt(options.apiRetryDelay, 10) : DEFAULT_HARNESS_CONFIG.apiRetryDelay,
     batchGitCommit: options.batchGitCommit ?? DEFAULT_HARNESS_CONFIG.batchGitCommit,
     forceContinue: options.forceContinue ?? DEFAULT_HARNESS_CONFIG.forceContinue,
-    cwd
+    cwd: cwd2
   };
   if (config.maxRetries < 0) {
-    console.error("Error: --max-retries must be >= 0");
+    console.error(texts.harnessCmd.invalidMaxRetries);
     process.exit(1);
   }
   if (config.timeout < 10) {
-    console.error("Error: --timeout must be >= 10 seconds");
+    console.error(texts.harnessCmd.invalidTimeout);
     process.exit(1);
   }
   if (config.parallel < 1) {
-    console.error("Error: --parallel must be >= 1");
+    console.error(texts.harnessCmd.invalidParallel);
     process.exit(1);
   }
-  const batchQueue = await loadTaskQueue(options, cwd);
+  const batchQueue = await loadTaskQueue(options, cwd2);
   if (batchQueue.taskQueue.length === 0) {
     console.error("Error: No executable tasks");
     process.exit(1);
@@ -35123,7 +35567,7 @@ async function harnessCommand(options, cwd = process.cwd()) {
       for (let b = 0;b < batchQueue.batchBoundaries.length; b++) {
         const start = batchQueue.batchBoundaries[b];
         const end = b + 1 < batchQueue.batchBoundaries.length ? batchQueue.batchBoundaries[b + 1] : batchQueue.taskQueue.length;
-        const label = batchQueue.batchLabels[b].replace("\u6279\u6B21", "Batch");
+        const label = texts.harnessCmd.batchLabel.replace("{index}", String(b + 1));
         const parallelTag = batchQueue.batchParallelizable[b] ? " [Parallel]" : "";
         console.log(`
    \uD83D\uDCE6 ${label}${parallelTag} (${end - start} tasks):`);
@@ -35137,21 +35581,21 @@ async function harnessCommand(options, cwd = process.cwd()) {
       });
     }
     console.log("");
-    console.log("\u2705 Dry run complete (no actual execution)");
+    console.log(texts.harnessCmd.dryRunComplete);
     return;
   }
   if (qualityGateConfig.enabled) {
     console.log("");
     console.log("\u2501".repeat(SEPARATOR_WIDTH));
-    console.log("\uD83D\uDEA6 Quality Gate Check");
+    console.log(texts.harnessCmd.qualityGateCheck);
     console.log("\u2501".repeat(SEPARATOR_WIDTH));
-    console.log(`\uD83D\uDCCA Min quality score threshold: ${qualityGateConfig.minQualityScore}`);
+    console.log(texts.harnessCmd.minQualityScoreThreshold.replace("{score}", String(qualityGateConfig.minQualityScore)));
     console.log("");
-    const batchResult = await batchCheckQualityGate(batchQueue.taskQueue, qualityGateConfig, cwd);
+    const batchResult = await batchCheckQualityGate(batchQueue.taskQueue, qualityGateConfig, cwd2);
     console.log(formatBatchQualityGateResult(batchResult, { compact: false, showDetails: true }));
     if (!batchResult.allPassed) {
       console.log("");
-      console.log("\u274C Quality gate check failed, the following tasks need improvement:");
+      console.log(texts.harnessCmd.qualityGateFailed);
       console.log("");
       for (const taskId of batchResult.blockedTasks) {
         const result = batchResult.results.get(taskId);
@@ -35169,7 +35613,7 @@ async function harnessCommand(options, cwd = process.cwd()) {
       console.log("");
       process.exit(1);
     }
-    console.log("\u2705 All tasks passed quality gate check");
+    console.log(texts.harnessCmd.allTasksPassed);
     console.log("");
   }
   const executionPlan = {
@@ -35178,7 +35622,7 @@ async function harnessCommand(options, cwd = process.cwd()) {
     createdAt: new Date().toISOString(),
     updatedAt: new Date().toISOString()
   };
-  const snapshot = createPlanSnapshot(executionPlan, cwd, {
+  const snapshot = createPlanSnapshot(executionPlan, cwd2, {
     batchBoundaries: batchQueue.batchBoundaries,
     batchLabels: batchQueue.batchLabels,
     batchParallelizable: batchQueue.batchParallelizable
@@ -35203,9 +35647,9 @@ async function harnessCommand(options, cwd = process.cwd()) {
   try {
     let state;
     if (config.continue) {
-      state = loadRuntimeState(cwd);
+      state = loadRuntimeState(cwd2);
       if (state) {
-        const latestSnapshot = getLatestSnapshot(cwd);
+        const latestSnapshot = getLatestSnapshot(cwd2);
         if (latestSnapshot) {
           console.log(`\uD83D\uDCE6 Resuming from interruption (task ${state.currentIndex + 1}/${state.taskQueue.length})`);
           console.log(`   \uD83D\uDCBE Using plan snapshot: ${latestSnapshot.snapshotId}`);
@@ -35247,10 +35691,10 @@ async function harnessCommand(options, cwd = process.cwd()) {
     process.exit(1);
   } finally {
     if (pipelineCompleted) {
-      clearRuntimeState(cwd);
+      clearRuntimeState(cwd2);
     }
     if (currentSnapshotId && pipelineCompleted) {
-      if (cleanupSnapshot(currentSnapshotId, cwd)) {
+      if (cleanupSnapshot(currentSnapshotId, cwd2)) {
         console.log(`   \uD83E\uDDF9 Plan snapshot cleaned: ${currentSnapshotId}`);
       }
       currentSnapshotId = null;
@@ -35261,11 +35705,11 @@ async function harnessCommand(options, cwd = process.cwd()) {
     process.removeListener("SIGTERM", gracefulShutdown);
   }
 }
-function getRuntimeStatePath(cwd) {
-  return path25.join(getProjectDir(cwd), "harness-state.json");
+function getRuntimeStatePath(cwd2) {
+  return path25.join(getProjectDir(cwd2), "harness-state.json");
 }
-function loadRuntimeState(cwd) {
-  const statePath = getRuntimeStatePath(cwd);
+function loadRuntimeState(cwd2) {
+  const statePath = getRuntimeStatePath(cwd2);
   if (!fs28.existsSync(statePath)) {
     return null;
   }
@@ -35277,9 +35721,10 @@ function loadRuntimeState(cwd) {
       console.warn(`State file version mismatch (v${version}), resetting runtime state`);
       return null;
     }
+    const texts = t(cwd2);
     if (version === 1) {
       data.stateFormatVersion = 2;
-      console.log("\uD83D\uDCE6 State file auto-migrated from v1 to v2");
+      console.log(texts.harnessCmd.stateFileMigrated.replace("{from}", "1").replace("{to}", "2"));
     }
     data.retryCounter = new Map(Object.entries(data.retryCounter || {}));
     data.taskResults = new Map(Object.entries(data.taskResults || {}));
@@ -35289,12 +35734,13 @@ function loadRuntimeState(cwd) {
     data.taskPhaseCheckpoints = new Map(Object.entries(data.taskPhaseCheckpoints || {}));
     return data;
   } catch (error) {
-    console.warn("Failed to load runtime state, resetting:", error);
+    const texts = t(cwd2);
+    console.warn(texts.harnessCmd.loadingStateFailed.replace("{error}", String(error)));
     return null;
   }
 }
-function saveRuntimeState(state, cwd) {
-  const statePath = getRuntimeStatePath(cwd);
+function saveRuntimeState(state, cwd2) {
+  const statePath = getRuntimeStatePath(cwd2);
   const data = {
     ...state,
     stateFormatVersion: 2,
@@ -35306,8 +35752,8 @@ function saveRuntimeState(state, cwd) {
   };
   fs28.writeFileSync(statePath, JSON.stringify(data, null, 2), "utf-8");
 }
-function clearRuntimeState(cwd) {
-  const statePath = getRuntimeStatePath(cwd);
+function clearRuntimeState(cwd2) {
+  const statePath = getRuntimeStatePath(cwd2);
   if (fs28.existsSync(statePath)) {
     fs28.unlinkSync(statePath);
   }
@@ -35334,9 +35780,9 @@ function summaryToJSON(summary) {
     ]))
   };
 }
-async function loadTaskQueue(options, cwd) {
+async function loadTaskQueue(options, cwd2) {
   if (options.plan) {
-    const planFile = path25.resolve(cwd, options.plan);
+    const planFile = path25.resolve(cwd2, options.plan);
     if (!fs28.existsSync(planFile)) {
       console.error(`Error: Plan file does not exist: ${planFile}`);
       process.exit(1);
@@ -35353,15 +35799,15 @@ async function loadTaskQueue(options, cwd) {
       const TERMINAL_STATUSES3 = new Set(["resolved", "closed", "abandoned", "failed"]);
       const originalCount = taskQueue.length;
       taskQueue = taskQueue.filter((id) => {
-        const task = readTaskMeta(id, cwd);
+        const task = readTaskMeta(id, cwd2);
         if (!task)
           return false;
         return !TERMINAL_STATUSES3.has(normalizeStatus(task.status));
       });
       if (originalCount - taskQueue.length > 0) {
-        console.log(`\uD83D\uDCCB Using plan file: ${options.plan} (filtered ${originalCount - taskQueue.length} terminal tasks)`);
+        console.log(`Using plan file: ${options.plan} (filtered ${originalCount - taskQueue.length} terminal tasks)`);
       } else {
-        console.log(`\uD83D\uDCCB Using plan file: ${options.plan}`);
+        console.log(`Using plan file: ${options.plan}`);
       }
       return buildBatchAwareQueue(taskQueue, batches);
     } catch (error) {
@@ -35370,9 +35816,9 @@ async function loadTaskQueue(options, cwd) {
       process.exit(1);
     }
   }
-  const executionPlan = readPlan(cwd);
+  const executionPlan = readPlan(cwd2);
   if (executionPlan && executionPlan.tasks.length > 0) {
-    const queue = filterExecutableFromPlan(executionPlan, cwd, "\uD83D\uDCCB Using project execution plan");
+    const queue = filterExecutableFromPlan(executionPlan, cwd2, "\uD83D\uDCCB Using project execution plan");
     if (queue.taskQueue.length > 0) {
       return queue;
     }
@@ -35380,10 +35826,10 @@ async function loadTaskQueue(options, cwd) {
   }
   console.log("\uD83D\uDD0D No execution plan found, auto-generating...");
   try {
-    await recommendPlan({ nonInteractive: true, json: false }, cwd);
-    const newPlan = readPlan(cwd);
+    await recommendPlan({ nonInteractive: true, json: false }, cwd2);
+    const newPlan = readPlan(cwd2);
     if (newPlan && newPlan.tasks.length > 0) {
-      const queue = filterExecutableFromPlan(newPlan, cwd, "\u2705 Execution plan auto-generated");
+      const queue = filterExecutableFromPlan(newPlan, cwd2, "\u2705 Execution plan auto-generated");
       if (queue.taskQueue.length > 0) {
         return queue;
       }
@@ -35395,10 +35841,10 @@ async function loadTaskQueue(options, cwd) {
   console.error("Hint: Please run `projmnt4claude plan recommend` to generate execution plan");
   process.exit(1);
 }
-function filterExecutableFromPlan(plan, cwd, logPrefix) {
+function filterExecutableFromPlan(plan, cwd2, logPrefix) {
   const TERMINAL_STATUSES3 = new Set(["resolved", "closed", "abandoned", "failed"]);
   const filteredTasks = plan.tasks.filter((taskId) => {
-    const task = readTaskMeta(taskId, cwd);
+    const task = readTaskMeta(taskId, cwd2);
     if (!task)
       return false;
     return !TERMINAL_STATUSES3.has(normalizeStatus(task.status));

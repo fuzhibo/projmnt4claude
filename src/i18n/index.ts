@@ -40,6 +40,10 @@ export interface I18nTexts {
   error: string;
   success: string;
   cancel: string;
+  common: {
+    skip: string;
+    notSelected: string;
+  };
   // setup 命令
   setup: {
     initializing: string;
@@ -187,6 +191,7 @@ export interface I18nTexts {
       evidenceCollected: string;
       checkpointsCompleted: string;
       devPhaseError: string;
+      devPhaseNotComplete: string;
       evalTaskLabel: string;
       devStatusLabel: string;
       evalPromptGenerated: string;
@@ -208,6 +213,10 @@ export interface I18nTexts {
       codeReviewPassed: string;
       codeReviewFailed: string;
       codeReviewError: string;
+      codeReviewSessionFailed: string;
+      codeReviewPromptGenerated: string;
+      startingCodeReviewSession: string;
+      codeReviewRetry: string;
       qaPhase: string;
       qaCheckpoints: string;
       noQACheckpoints: string;
@@ -217,9 +226,26 @@ export interface I18nTexts {
       qaPassedWithHuman: string;
       qaFailed: string;
       qaError: string;
+      qaSkippedDueToCodeReview: string;
       checkpointWarning: string;
       checkpointWarningDetail: string;
       checkpointWarningFallback: string;
+      noAutomatedQACheckpoints: string;
+      qaPromptGenerated: string;
+      startingQASession: string;
+      qaRetry: string;
+      qaSessionFailed: string;
+      qaOutputValidationFailed: string;
+      cannotParseVerdict: string;
+      deferredCheckpointsInfo: string;
+      phantomTaskViolation: string;
+      phantomTaskCriteria: string;
+      phantomTaskPrefix: string;
+      phantomTaskDetails: string;
+      emptyOutputError: string;
+      evaluationOutputEmpty: string;
+      contradictionFix: string;
+      evalParseError: string;
       phantomTaskDetected: string;
       phantomTaskAutoNopass: string;
       noPhantomTask: string;
@@ -454,6 +480,131 @@ export interface I18nTexts {
     qualityGateLowScore: string;
     qualityGateImprovement: string;
     action: string;
+  };
+
+  // setup command
+  setupCmd: {
+    alreadyInitialized: string;
+    directory: string;
+    tipUseForce: string;
+    forceMode: string;
+    gitHookCreated: string;
+    gitHookFailed: string;
+    gitHookDisabled: string;
+    copySkillFile: string;
+    copyCommandDocs: string;
+    copyDefault: string;
+    fileNotFound: string;
+    dirNotFound: string;
+    pluginRootNotSet: string;
+  };
+
+  // harness command
+  harnessCmd: {
+    projectNotInitialized: string;
+    concurrentPipelineRunning: string;
+    activePipelineInfo: string;
+    snapshotId: string;
+    processId: string;
+    createdAt: string;
+    taskCount: string;
+    possibleCauses: string;
+    solutions: string;
+    invalidMaxRetries: string;
+    invalidTimeout: string;
+    invalidParallel: string;
+    noExecutableTasks: string;
+    batchLabel: string;
+    parallelTag: string;
+    dryRunComplete: string;
+    qualityGateCheck: string;
+    minQualityScoreThreshold: string;
+    qualityGateFailed: string;
+    tasksNeedImprovement: string;
+    allTasksPassed: string;
+    resumingFromInterruption: string;
+    noPreviousState: string;
+    stateFileMigrated: string;
+    loadingStateFailed: string;
+    cleaningOrphanSnapshots: string;
+    cleanedSnapshots: string;
+    forceCleanedSnapshots: string;
+    noSnapshotsFound: string;
+  };
+
+  // analyze command
+  analyzeCmd: {
+    projectNotInitialized: string;
+    analyzingProject: string;
+    analysisComplete: string;
+    issuesFound: string;
+    noIssues: string;
+    fixApplied: string;
+    taskIdEmpty: string;
+    taskIdFormatInvalid: string;
+    historyEntryNotObject: string;
+    timestampMissing: string;
+    timestampInvalid: string;
+    actionMissing: string;
+    checkpointNotObject: string;
+    checkpointIdMissing: string;
+    checkpointStatusInvalid: string;
+    // Schema migration
+    schemaMigrationReopenCount: string;
+    schemaMigrationRequirementHistory: string;
+    schemaMigrationCommitHistory: string;
+    schemaMigrationTransitionNotes: string;
+    schemaMigrationResumeAction: string;
+    schemaMigrationCheckpointPrefix: string;
+    schemaMigrationCheckpointPolicy: string;
+    // AI prompt
+    aiPromptTaskInfo: string;
+    aiPromptHistory: string;
+    aiPromptTransitionHistory: string;
+    aiPromptCheckpoints: string;
+    aiPromptVerification: string;
+    aiPromptLayer1Results: string;
+    aiPromptNoHistory: string;
+    aiPromptNoTransitionHistory: string;
+    aiPromptNoCheckpoints: string;
+    aiPromptNoVerification: string;
+    aiPromptNoLayer1Issues: string;
+    aiPromptTaskAnalysisExpert: string;
+    aiPromptAnalyzeContext: string;
+    aiPromptJsonFormat: string;
+    aiPromptInferredStatus: string;
+    aiPromptConfidence: string;
+    aiPromptReasoning: string;
+    aiPromptSuggestion: string;
+    // Issue messages
+    issueMissingDescription: string;
+    issueResolvedNoVerification: string;
+    issueOldFormatId: string;
+    issueMissingSlug: string;
+    // Transition labels
+    transitionStartExecution: string;
+    transitionSubmitReview: string;
+    transitionReviewPass: string;
+    transitionEvalPass: string;
+    transitionCloseTask: string;
+    transitionDirectComplete: string;
+    transitionReopenTask: string;
+    transitionRestartExecution: string;
+    transitionAbandonTask: string;
+    transitionReturnTodo: string;
+    // Status suggestions
+    statusSuggestionCheckpointRate: string;
+    statusSuggestionKeepInProgress: string;
+    statusSuggestionResetOpen: string;
+    // Dependency suggestions
+    depSuggestionCheckIndependence: string;
+    depSuggestionIndependentModule: string;
+    // Common
+    unknown: string;
+    none: string;
+    // Report parsing
+    reportResultPass: string;
+    reportResultNopass: string;
   };
 }
 

@@ -33,6 +33,7 @@ import {
   createDefaultRuntimeState,
 } from '../types/harness.js';
 import { isInitialized, getProjectDir } from '../utils/path.js';
+import { t } from '../i18n/index.js';
 import { AssemblyLine } from '../utils/hd-assembly-line.js';
 import { HarnessReporter } from '../utils/harness-reporter.js';
 import { readPlan, type ExecutionPlan } from '../utils/plan.js';
@@ -183,15 +184,16 @@ export async function cleanupHarnessSnapshots(
   options: HarnessCleanupOptions = {},
   cwd: string = process.cwd()
 ): Promise<number> {
+  const texts = t(cwd);
   if (!isInitialized(cwd)) {
-    console.error('Error: Project not initialized. Please run `projmnt4claude setup` first');
+    console.error(texts.harnessCmd.projectNotInitialized);
     process.exit(1);
   }
 
   const snapshots = listSnapshots(cwd);
 
   if (snapshots.length === 0) {
-    console.log('✅ No snapshots found');
+    console.log(texts.harnessCmd.noSnapshotsFound);
     return 0;
   }
 
@@ -212,7 +214,7 @@ export async function cleanupHarnessSnapshots(
   for (const snapshot of orphanSnapshots) {
     if (cleanupSnapshot(snapshot.snapshotId, cwd)) {
       cleaned++;
-      console.log(`  🧹 Cleaned orphan snapshot: ${snapshot.snapshotId} (PID: ${snapshot.pid})`);
+      console.log(texts.harnessCmd.cleaningOrphanSnapshots.replace('{id}', snapshot.snapshotId).replace('{pid}', String(snapshot.pid)));
     }
   }
 
@@ -221,7 +223,7 @@ export async function cleanupHarnessSnapshots(
     for (const snapshot of activeSnapshots) {
       if (cleanupSnapshot(snapshot.snapshotId, cwd)) {
         cleaned++;
-        console.log(`  ⚠️  Force cleaned active snapshot: ${snapshot.snapshotId} (PID: ${snapshot.pid})`);
+        console.log(texts.harnessCmd.forceCleanedSnapshots.replace('{id}', snapshot.snapshotId).replace('{pid}', String(snapshot.pid)));
       }
     }
   }
@@ -235,7 +237,7 @@ export async function cleanupHarnessSnapshots(
     console.log('\n💡 Use --force to clean all snapshots, or wait for active pipelines to complete');
   }
 
-  console.log(`\n✅ Cleaned ${cleaned} snapshots total`);
+  console.log(texts.harnessCmd.cleanedSnapshots.replace('{count}', String(cleaned)));
   return cleaned;
 }
 
@@ -247,22 +249,23 @@ export async function cleanupHarnessSnapshots(
  */
 function checkConcurrency(cwd: string): boolean {
   const detection = detectActiveSnapshot(cwd);
+  const texts = t(cwd);
 
   if (detection.hasActive && detection.activeSnapshot) {
     console.error('');
-    console.error('❌ Error: Another Harness pipeline is already running');
+    console.error(texts.harnessCmd.concurrentPipelineRunning);
     console.error('');
-    console.error('Active pipeline info:');
-    console.error(`   Snapshot ID: ${detection.activeSnapshot.snapshotId}`);
-    console.error(`   Process ID: ${detection.activeSnapshot.pid}`);
-    console.error(`   Created at: ${detection.activeSnapshot.timestamp}`);
-    console.error(`   Task count: ${detection.activeSnapshot.tasks.length}`);
+    console.error(texts.harnessCmd.activePipelineInfo);
+    console.error(texts.harnessCmd.snapshotId.replace('{id}', detection.activeSnapshot.snapshotId));
+    console.error(texts.harnessCmd.processId.replace('{pid}', String(detection.activeSnapshot.pid)));
+    console.error(texts.harnessCmd.createdAt.replace('{timestamp}', detection.activeSnapshot.timestamp));
+    console.error(texts.harnessCmd.taskCount.replace('{count}', String(detection.activeSnapshot.tasks.length)));
     console.error('');
-    console.error('Possible causes:');
+    console.error(texts.harnessCmd.possibleCauses);
     console.error('   1. Another Harness pipeline is running');
     console.error('   2. Previous pipeline exited abnormally, leaving snapshot behind');
     console.error('');
-    console.error('Solutions:');
+    console.error(texts.harnessCmd.solutions);
     console.error('   - If no other pipeline is running, clean up with:');
     console.error('     projmnt4claude headless-harness-design cleanup');
     console.error('   - Or force clean all residual snapshots:');
@@ -281,9 +284,10 @@ export async function harnessCommand(
   options: HarnessCommandOptions,
   cwd: string = process.cwd()
 ): Promise<void> {
+  const texts = t(cwd);
   // Check project initialization
   if (!isInitialized(cwd)) {
-    console.error('Error: Project not initialized. Please run `projmnt4claude setup` first');
+    console.error(texts.harnessCmd.projectNotInitialized);
     process.exit(1);
   }
 
@@ -326,15 +330,15 @@ export async function harnessCommand(
 
   // Validate config
   if (config.maxRetries < 0) {
-    console.error('Error: --max-retries must be >= 0');
+    console.error(texts.harnessCmd.invalidMaxRetries);
     process.exit(1);
   }
   if (config.timeout < 10) {
-    console.error('Error: --timeout must be >= 10 seconds');
+    console.error(texts.harnessCmd.invalidTimeout);
     process.exit(1);
   }
   if (config.parallel < 1) {
-    console.error('Error: --parallel must be >= 1');
+    console.error(texts.harnessCmd.invalidParallel);
     process.exit(1);
   }
 
@@ -376,7 +380,7 @@ export async function harnessCommand(
         const end = b + 1 < batchQueue.batchBoundaries.length
           ? batchQueue.batchBoundaries[b + 1]!
           : batchQueue.taskQueue.length;
-        const label = batchQueue.batchLabels[b]!.replace('批次', 'Batch');
+        const label = texts.harnessCmd.batchLabel.replace('{index}', String(b + 1));
         const parallelTag = batchQueue.batchParallelizable[b!] ? ' [Parallel]' : '';
         console.log(`\n   📦 ${label}${parallelTag} (${end - start} tasks):`);
         for (let i = start; i < end; i++) {
@@ -389,7 +393,7 @@ export async function harnessCommand(
       });
     }
     console.log('');
-    console.log('✅ Dry run complete (no actual execution)');
+    console.log(texts.harnessCmd.dryRunComplete);
     return;
   }
 
@@ -397,9 +401,9 @@ export async function harnessCommand(
   if (qualityGateConfig.enabled) {
     console.log('');
     console.log('━'.repeat(SEPARATOR_WIDTH));
-    console.log('🚦 Quality Gate Check');
+    console.log(texts.harnessCmd.qualityGateCheck);
     console.log('━'.repeat(SEPARATOR_WIDTH));
-    console.log(`📊 Min quality score threshold: ${qualityGateConfig.minQualityScore}`);
+    console.log(texts.harnessCmd.minQualityScoreThreshold.replace('{score}', String(qualityGateConfig.minQualityScore)));
     console.log('');
 
     const batchResult = await batchCheckQualityGate(batchQueue.taskQueue, qualityGateConfig, cwd);
@@ -409,7 +413,7 @@ export async function harnessCommand(
 
     if (!batchResult.allPassed) {
       console.log('');
-      console.log('❌ Quality gate check failed, the following tasks need improvement:');
+      console.log(texts.harnessCmd.qualityGateFailed);
       console.log('');
 
       for (const taskId of batchResult.blockedTasks) {
@@ -430,7 +434,7 @@ export async function harnessCommand(
       process.exit(1);
     }
 
-    console.log('✅ All tasks passed quality gate check');
+    console.log(texts.harnessCmd.allTasksPassed);
     console.log('');
   }
 
@@ -573,12 +577,13 @@ export function loadRuntimeState(cwd: string): HarnessRuntimeState | null {
     }
 
     // v1 → v2 auto-migration
+    const texts = t(cwd);
     if (version === 1) {
       // v1 doesn't have evaluation phase retry count, fill with empty
       // resumeFrom may lack evaluation keys, no special handling needed
       // (Map deserialization treats missing evaluation key as unset, same as starting fresh)
       data.stateFormatVersion = 2;
-      console.log('📦 State file auto-migrated from v1 to v2');
+      console.log(texts.harnessCmd.stateFileMigrated.replace('{from}', '1').replace('{to}', '2'));
     }
 
     // Defensive programming: ensure all Map fields are properly initialized
@@ -594,7 +599,8 @@ export function loadRuntimeState(cwd: string): HarnessRuntimeState | null {
     return data;
   } catch (error) {
     // Degraded handling: log error but return null instead of throwing
-    console.warn('Failed to load runtime state, resetting:', error);
+    const texts = t(cwd);
+    console.warn(texts.harnessCmd.loadingStateFailed.replace('{error}', String(error)));
     return null;
   }
 }
@@ -693,9 +699,9 @@ async function loadTaskQueue(options: HarnessCommandOptions, cwd: string): Promi
         return !TERMINAL_STATUSES.has(normalizeStatus(task.status));
       });
       if (originalCount - taskQueue.length > 0) {
-        console.log(`📋 Using plan file: ${options.plan} (filtered ${originalCount - taskQueue.length} terminal tasks)`);
+        console.log(`Using plan file: ${options.plan} (filtered ${originalCount - taskQueue.length} terminal tasks)`);
       } else {
-        console.log(`📋 Using plan file: ${options.plan}`);
+        console.log(`Using plan file: ${options.plan}`);
       }
 
       return buildBatchAwareQueue(taskQueue, batches);

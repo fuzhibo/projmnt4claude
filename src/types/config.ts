@@ -38,11 +38,19 @@ export interface TrainingConfig {
 
 /**
  * 提示词模板配置
- * 键为模板名称（如 dev, codeReview, qa 等），值为自定义模板字符串
- * 未配置的模板使用内置默认值
+ *
+ * 支持以下配置项：
+ * - language: 提示词模板语言，可选，默认为全局 language 设置
+ * - customTemplates: 自定义模板，键为模板名称（如 dev, codeReview, qa 等），值为模板字符串
+ *   也可以直接以模板名称为键（向后兼容）
  */
 export interface PromptsConfig {
-  [templateName: string]: string;
+  /** 提示词模板语言，可选，默认为全局 language 设置 */
+  language?: 'zh' | 'en';
+  /** 自定义模板，键为模板名称，值为模板字符串 */
+  customTemplates?: Record<string, string>;
+  /** 向后兼容：直接以模板名称为键 */
+  [templateName: string]: string | 'zh' | 'en' | Record<string, string> | undefined;
 }
 
 /** Git Hook 配置 */

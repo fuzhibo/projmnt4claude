@@ -48,6 +48,7 @@ import { readConfig } from './config';
 import { createLogger, type InstrumentationRecord } from '../utils/logger';
 import { AIMetadataAssistant, type DuplicateGroup, sortFilesByLayer, type ArchitectureLayer, LAYER_DEFINITIONS } from '../utils/ai-metadata';
 import { withAIEnhancement } from '../utils/ai-helpers';
+import { t } from '../i18n/index';
 import { invokeAgent, type AgentInvokeOptions } from '../utils/headless-agent';
 import { parseCheckRange, getTasksByRange, AnalyzeError } from '../utils/analyze-range-parser';
 import {
@@ -236,12 +237,12 @@ export const SCHEMA_MIGRATIONS: SchemaMigrationStep[] = [
 
       if (task.reopenCount === undefined) {
         task.reopenCount = 0;
-        details.push('添加 reopenCount: 0');
+        details.push('schemaMigrationReopenCount');
         changed = true;
       }
       if (task.requirementHistory === undefined) {
         task.requirementHistory = [];
-        details.push('添加 requirementHistory: []');
+        details.push('schemaMigrationRequirementHistory');
         changed = true;
       }
 
@@ -317,7 +318,7 @@ export const SCHEMA_MIGRATIONS: SchemaMigrationStep[] = [
       // 幂等：仅当 executionStats 存在但缺少 commitHistory 时补空数组
       if (task.executionStats && task.executionStats.commitHistory === undefined) {
         task.executionStats.commitHistory = [];
-        details.push('添加 executionStats.commitHistory: []');
+        details.push('schemaMigrationCommitHistory');
         return { changed: true, details };
       }
       return { changed: false, details };
@@ -334,7 +335,7 @@ export const SCHEMA_MIGRATIONS: SchemaMigrationStep[] = [
       // 初始化 transitionNotes（必须在状态迁移之前，以便写入迁移记录）
       if (task.transitionNotes === undefined) {
         task.transitionNotes = [];
-        details.push('添加 transitionNotes: []');
+        details.push('schemaMigrationTransitionNotes');
         changed = true;
       }
 
@@ -357,7 +358,7 @@ export const SCHEMA_MIGRATIONS: SchemaMigrationStep[] = [
       if (task.resumeAction === undefined) {
         if (PIPELINE_INTERMEDIATE_STATUSES.includes(task.status)) {
           task.resumeAction = 'resume_pipeline';
-          details.push(`添加 resumeAction: resume_pipeline (status=${task.status})`);
+          details.push(`schemaMigrationResumeAction:{status:${task.status}}`);
           changed = true;
         }
       }
@@ -392,7 +393,7 @@ export const SCHEMA_MIGRATIONS: SchemaMigrationStep[] = [
           const inferredPrefix = inferCheckpointPrefix(desc);
           const newDesc = `${inferredPrefix} ${desc}`;
           updatedCheckpoints.push({ ...cp, description: newDesc });
-          details.push(`检查点前缀补全: "${desc}" → "${newDesc}"`);
+          details.push(`schemaMigrationCheckpointPrefix:{old:"${desc}",new:"${newDesc}"}`);
           changed = true;
         } else {
           updatedCheckpoints.push(cp);
@@ -419,7 +420,7 @@ export const SCHEMA_MIGRATIONS: SchemaMigrationStep[] = [
         const { inferCheckpointPolicy } = require('../types/task.js');
         const inferredPolicy = inferCheckpointPolicy(task.type, task.priority);
         task.checkpointPolicy = inferredPolicy;
-        details.push(`添加 checkpointPolicy: ${inferredPolicy} (基于 ${task.type}/${task.priority} 推断)`);
+        details.push(`schemaMigrationCheckpointPolicy:{policy:"${inferredPolicy}",type:"${task.type}",priority:"${task.priority}"}`);
         changed = true;
       }
 
@@ -504,11 +505,12 @@ export function validateRequirementHistoryEntry(entry: unknown, index: number): 
 /**
  * 验证任务 ID 格式
  */
-export function validateTaskIdFormat(id: string): { valid: boolean; format: 'new' | 'old' | 'unknown'; errors: string[] } {
+export function validateTaskIdFormat(id: string, cwd: string = process.cwd()): { valid: boolean; format: 'new' | 'old' | 'unknown'; errors: string[] } {
   const errors: string[] = [];
+  const texts = t(cwd);
 
   if (!id || typeof id !== 'string') {
-    return { valid: false, format: 'unknown', errors: ['任务 ID 为空或格式错误'] };
+    return { valid: false, format: 'unknown', errors: [texts.analyzeCmd.taskIdEmpty] };
   }
 
   // 旧格式: TASK-001
@@ -533,7 +535,7 @@ export function validateTaskIdFormat(id: string): { valid: boolean; format: 'new
     return { valid: true, format: 'unknown', errors: [] };
   }
 
-  errors.push('任务 ID 格式不符合规范');
+  errors.push(texts.analyzeCmd.taskIdFormatInvalid);
   return { valid: false, format: 'unknown', errors };
 }
 
@@ -1284,69 +1286,71 @@ export function shouldTriggerAIInference(
 export function buildStatusInferencePrompt(
   task: TaskMeta,
   layer1Findings: Issue[],
+  cwd: string = process.cwd(),
 ): string {
+  const texts = t(cwd);
   const currentStatus = normalizeStatus(task.status);
 
   // CP-7: 任务基本信息
   const taskInfo = [
-    `## 任务基本信息`,
+    texts.analyzeCmd.aiPromptTaskInfo,
     `- ID: ${task.id}`,
-    `- 标题: ${task.title}`,
-    `- 类型: ${task.type}`,
-    `- 优先级: ${task.priority}`,
-    `- 当前状态: ${currentStatus}`,
-    `- 创建时间: ${task.createdAt || '未知'}`,
-    `- 更新时间: ${task.updatedAt || '未知'}`,
-    `- 描述: ${task.description || '无'}`,
+    `- ${texts.analyzeCmd.aiPromptTitleLabel || '标题'}: ${task.title}`,
+    `- ${texts.analyzeCmd.aiPromptTypeLabel || '类型'}: ${task.type}`,
+    `- ${texts.analyzeCmd.aiPromptPriorityLabel || '优先级'}: ${task.priority}`,
+    `- ${texts.analyzeCmd.aiPromptStatusLabel || '当前状态'}: ${currentStatus}`,
+    `- ${texts.analyzeCmd.aiPromptCreatedAtLabel || '创建时间'}: ${task.createdAt || texts.analyzeCmd.unknown}`,
+    `- ${texts.analyzeCmd.aiPromptUpdatedAtLabel || '更新时间'}: ${task.updatedAt || texts.analyzeCmd.unknown}`,
+    `- ${texts.analyzeCmd.aiPromptDescriptionLabel || '描述'}: ${task.description || texts.analyzeCmd.none}`,
   ].join('\n');
 
   // 历史记录
   const historySection = task.history && task.history.length > 0
     ? [
-        `## 历史记录 (${task.history.length} 条)`,
+        texts.analyzeCmd.aiPromptHistory.replace('{count}', String(task.history.length)),
         ...task.history.slice(-10).map((h, i) =>
-          `${i + 1}. [${h.timestamp}] ${h.action}${h.field ? ` (${h.field}: ${h.oldValue} → ${h.newValue})` : ''}${h.reason ? ` 原因: ${h.reason}` : ''}`
+          `${i + 1}. [${h.timestamp}] ${h.action}${h.field ? ` (${h.field}: ${h.oldValue} → ${h.newValue})` : ''}${h.reason ? ` ${texts.analyzeCmd.aiPromptReasonLabel || '原因'}: ${h.reason}` : ''}`
         ),
       ].join('\n')
-    : '## 历史记录: 无';
+    : texts.analyzeCmd.aiPromptNoHistory;
 
   // 转换记录
   const transitionSection = task.transitionNotes && task.transitionNotes.length > 0
     ? [
-        `## 状态转换记录 (${task.transitionNotes.length} 条)`,
+        texts.analyzeCmd.aiPromptTransitionHistory.replace('{count}', String(task.transitionNotes.length)),
         ...task.transitionNotes.map((tn, i) =>
           `${i + 1}. [${tn.timestamp}] ${tn.fromStatus} → ${tn.toStatus}: ${tn.note}${tn.author ? ` (by ${tn.author})` : ''}`
         ),
       ].join('\n')
-    : '## 状态转换记录: 无';
+    : texts.analyzeCmd.aiPromptNoTransitionHistory;
 
   // 检查点
   const checkpointSection = task.checkpoints && task.checkpoints.length > 0
     ? [
-        `## 检查点 (${task.checkpoints.length} 个)`,
+        texts.analyzeCmd.aiPromptCheckpoints.replace('{count}', String(task.checkpoints.length)),
         ...task.checkpoints.map((cp, i) =>
           `${i + 1}. [${cp.status}] ${cp.description || cp.id}`
         ),
       ].join('\n')
-    : '## 检查点: 无';
+    : texts.analyzeCmd.aiPromptNoCheckpoints;
 
   // 验证信息
   const verificationSection = task.verification
-    ? `## 验证信息\n- 方法: ${task.verification.methods?.join(', ') || '未知'}\n- 结果: ${task.verification.result || '未知'}`
-    : '## 验证信息: 无';
+    ? `${texts.analyzeCmd.aiPromptVerification}\n- ${texts.analyzeCmd.aiPromptMethodLabel || '方法'}: ${task.verification.methods?.join(', ') || texts.analyzeCmd.unknown}\n- ${texts.analyzeCmd.aiPromptResultLabel || '结果'}: ${task.verification.result || texts.analyzeCmd.unknown}`
+    : texts.analyzeCmd.aiPromptNoVerification;
 
   // CP-8: Layer 1 检测结果
   const layer1Section = layer1Findings.length > 0
     ? [
-        `## Layer 1 检测结果 (${layer1Findings.length} 个问题)`,
+        texts.analyzeCmd.aiPromptLayer1Results.replace('{count}', String(layer1Findings.length)),
         ...layer1Findings.map(issue =>
           `- [${issue.severity}] ${issue.type}: ${issue.message}`
         ),
       ].join('\n')
-    : '## Layer 1 检测结果: 无问题';
+    : texts.analyzeCmd.aiPromptNoLayer1Issues;
 
   // CP-9: 结构化输出要求
-  return `你是一个任务状态分析专家。根据以下任务上下文，推断任务的正确状态。
+  return `${texts.analyzeCmd.aiPromptTaskAnalysisExpert}
 
 ${taskInfo}
 
@@ -1360,14 +1364,14 @@ ${verificationSection}
 
 ${layer1Section}
 
-请分析任务的历史记录、转换记录和当前状态，推断任务当前应该处于什么状态。
+${texts.analyzeCmd.aiPromptAnalyzeContext}
 
-严格按照以下 JSON 格式输出（不要输出其他内容）:
+${texts.analyzeCmd.aiPromptJsonFormat}
 {
-  "inferredStatus": "状态值，必须是: open, in_progress, wait_review, wait_qa, wait_evaluation, resolved, closed, abandoned, failed",
-  "confidence": 0.0到1.0之间的置信度,
-  "reasoning": "推断依据的简短说明",
-  "suggestion": "修复建议"
+  ${texts.analyzeCmd.aiPromptInferredStatus},
+  ${texts.analyzeCmd.aiPromptConfidence},
+  ${texts.analyzeCmd.aiPromptReasoning},
+  ${texts.analyzeCmd.aiPromptSuggestion}
 }`;
 }
 
@@ -1383,7 +1387,7 @@ export async function runAIStatusInference(
   layer1Findings: Issue[],
   cwd: string,
 ): Promise<AIInferenceResult | null> {
-  const prompt = buildStatusInferencePrompt(task, layer1Findings);
+  const prompt = buildStatusInferencePrompt(task, layer1Findings, cwd);
 
   const options: AgentInvokeOptions = {
     timeout: 120, // CP-12: 2 分钟超时
@@ -1521,6 +1525,7 @@ export async function analyzeProject(
     process.exit(1);
   }
 
+  const texts = t(cwd);
   const tasks = getAllTasks(cwd, includeArchived);
   const issues: Issue[] = [];
 
@@ -1650,7 +1655,7 @@ export async function analyzeProject(
         taskId: task.id,
         type: 'no_description',
         severity: 'low',
-        message: '任务缺少描述',
+        message: texts.analyzeCmd.issueMissingDescription,
         suggestion: 'Add task description to provide more context',
       });
     }
@@ -1818,7 +1823,7 @@ export async function analyzeProject(
     // ========== 新增：规范合规性检查 ==========
 
     // 1. 检测无效的任务 ID 格式
-    const idValidation = validateTaskIdFormat(task.id);
+    const idValidation = validateTaskIdFormat(task.id, cwd);
     if (!idValidation.valid) {
       issues.push({
         taskId: task.id,
@@ -2025,7 +2030,7 @@ export async function analyzeProject(
         taskId: task.id,
         type: 'missing_verification',
         severity: 'medium',
-        message: '任务已 resolved 但缺少 verification 字段',
+        message: texts.analyzeCmd.issueResolvedNoVerification,
         suggestion: 'Run analyze --fix to auto-populate verification field',
         details: { status: task.status, hasCheckpoints: !!(task.checkpoints && task.checkpoints.length > 0) },
       });
@@ -2176,17 +2181,17 @@ export async function analyzeProject(
 
           // 推断 decision 描述
           const decisionMap: Record<string, string> = {
-            'open→in_progress': '开始执行任务',
-            'in_progress→wait_review': '提交代码审查',
-            'wait_review→wait_qa': '审查通过，进入QA',
-            'wait_qa→wait_evaluation': 'QA通过，等待评估',
-            'wait_evaluation→resolved': '评估通过，任务完成',
-            'open→closed': '关闭任务',
-            'in_progress→resolved': '直接标记完成',
-            'resolved→reopened': '重新打开任务',
-            'reopened→in_progress': '重新开始执行',
-            'open→abandoned': '放弃任务',
-            'in_progress→open': '退回待办',
+            'open→in_progress': texts.analyzeCmd.transitionStartExecution,
+            'in_progress→wait_review': texts.analyzeCmd.transitionSubmitReview,
+            'wait_review→wait_qa': texts.analyzeCmd.transitionReviewPass,
+            'wait_qa→wait_evaluation': texts.analyzeCmd.transitionQaPass || 'QA通过，等待评估',
+            'wait_evaluation→resolved': texts.analyzeCmd.transitionEvalPass,
+            'open→closed': texts.analyzeCmd.transitionCloseTask,
+            'in_progress→resolved': texts.analyzeCmd.transitionDirectComplete,
+            'resolved→reopened': texts.analyzeCmd.transitionReopenTask,
+            'reopened→in_progress': texts.analyzeCmd.transitionRestartExecution,
+            'open→abandoned': texts.analyzeCmd.transitionAbandonTask,
+            'in_progress→open': texts.analyzeCmd.transitionReturnTodo,
           };
           const statusKey = `${entry.oldValue}→${entry.newValue}`;
           const decision = decisionMap[statusKey] || `${entry.oldValue} → ${entry.newValue}`;

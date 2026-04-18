@@ -15,6 +15,7 @@ import {
 } from '../utils/path';
 import { Pre } from '../utils/pre';
 import { DEFAULT_GIT_HOOK, type GitHookConfig } from '../types/config';
+import { t } from '../i18n';
 
 interface ProjectConfig {
   projectName: string;
@@ -84,17 +85,18 @@ export interface SetupOptions {
  */
 export async function setup(cwd: string = process.cwd(), options: SetupOptions = {}): Promise<void> {
   const projectDir = getProjectDir(cwd);
+  const texts = t(cwd);
 
   // 检查是否已初始化
   if (isInitialized(cwd) && !options.force) {
-    console.log('项目管理环境已存在，跳过初始化。');
-    console.log(`目录: ${projectDir}`);
-    console.log('提示: 使用 --force 选项强制重新初始化（重新复制技能文件）');
+    console.log(texts.setupCmd.alreadyInitialized);
+    console.log(texts.setupCmd.directory.replace('{path}', projectDir));
+    console.log(texts.setupCmd.tipUseForce);
     return;
   }
 
   if (options.force && isInitialized(cwd)) {
-    console.log('⚠️ 强制重新初始化模式...');
+    console.log(texts.setupCmd.forceMode);
   }
 
   // 语言选择
@@ -155,7 +157,7 @@ export async function setup(cwd: string = process.cwd(), options: SetupOptions =
   console.log(`✓ ${t.createConfig}`);
 
   // 复制技能文件到项目
-  copySkillFiles(cwd, language, t);
+  copySkillFiles(cwd, language, texts);
 
   // Git Hook 创建（配置驱动）
   const gitHookConfig = config.gitHook ?? DEFAULT_GIT_HOOK;
@@ -164,13 +166,13 @@ export async function setup(cwd: string = process.cwd(), options: SetupOptions =
     if (fs.existsSync(pre.gitDir)) {
       try {
         pre.installAll();
-        console.log('  ✓ Git Hook 创建完成 (pre-commit, prepublishOnly)');
+        console.log(texts.setupCmd.gitHookCreated);
       } catch (e) {
-        console.log(`  ⚠️ Git Hook 创建失败: ${(e as Error).message}`);
+        console.log(texts.setupCmd.gitHookFailed.replace('{error}', (e as Error).message));
       }
     }
   } else {
-    console.log('  ⏭️  Git Hook 创建已通过配置禁用 (gitHook.enabled = false)');
+    console.log(texts.setupCmd.gitHookDisabled);
   }
 
   console.log(`\n✅ ${t.setupComplete}`);
@@ -180,13 +182,13 @@ export async function setup(cwd: string = process.cwd(), options: SetupOptions =
 /**
  * 复制技能文件到项目
  */
-function copySkillFiles(cwd: string, language: 'zh' | 'en', t: typeof i18n.zh): void {
-  console.log(`\n📦 ${t.copyingSkills}`);
+function copySkillFiles(cwd: string, language: 'zh' | 'en', texts: ReturnType<typeof t>): void {
+  console.log(`\n📦 ${texts.setup.copyingSkills}`);
 
   // 获取插件根目录
   const pluginRoot = process.env.CLAUDE_PLUGIN_ROOT;
   if (!pluginRoot) {
-    console.log('  ⚠️ CLAUDE_PLUGIN_ROOT 环境变量未设置，跳过技能文件复制');
+    console.log(texts.setupCmd.pluginRootNotSet);
     return;
   }
 
@@ -204,15 +206,15 @@ function copySkillFiles(cwd: string, language: 'zh' | 'en', t: typeof i18n.zh): 
 
   if (fs.existsSync(skillSource)) {
     fs.copyFileSync(skillSource, skillTarget);
-    console.log(`  ✓ 复制 SKILL.md (${language})`);
+    console.log(texts.setupCmd.copySkillFile.replace('{language}', language));
   } else {
     // 回退到默认位置
     const defaultSource = path.join(pluginRoot, 'skills', 'projmnt4claude', 'SKILL.md');
     if (fs.existsSync(defaultSource)) {
       fs.copyFileSync(defaultSource, skillTarget);
-      console.log(`  ✓ 复制 SKILL.md (default)`);
+      console.log(texts.setupCmd.copyDefault);
     } else {
-      console.log(`  ⚠️ SKILL.md 未找到`);
+      console.log(texts.setupCmd.fileNotFound);
     }
   }
 
@@ -229,11 +231,11 @@ function copySkillFiles(cwd: string, language: 'zh' | 'en', t: typeof i18n.zh): 
         path.join(commandsTargetDir, file)
       );
     }
-    console.log(`  ✓ 复制 ${commandFiles.length} 个命令文档 (${language})`);
+    console.log(texts.setupCmd.copyCommandDocs.replace('{count}', String(commandFiles.length)).replace('{language}', language));
   } else {
-    console.log(`  ⚠️ 命令文档目录未找到: ${commandsSourceDir}`);
+    console.log(texts.setupCmd.dirNotFound.replace('{path}', commandsSourceDir));
   }
 
-  console.log(`✅ ${t.skillsCopied}`);
+  console.log(`✅ ${texts.setup.skillsCopied}`);
 }
 

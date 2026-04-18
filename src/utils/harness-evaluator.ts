@@ -65,7 +65,7 @@ export class HarnessEvaluator {
     // 如果开发阶段失败，直接返回 NOPASS
     if (devReport.status !== 'success') {
       verdict.result = 'NOPASS';
-      verdict.reason = `开发阶段未成功完成: ${devReport.status}`;
+      verdict.reason = `${texts.harness.logs.devPhaseNotComplete}: ${devReport.status}`;
       verdict.inferenceType = 'explicit_match'; // 开发阶段直接判定，非解析推断
       if (devReport.error) {
         verdict.reason += ` - ${devReport.error}`;
@@ -97,10 +97,10 @@ export class HarnessEvaluator {
       // 幽灵任务为严重违规，自动 NOPASS（无需运行评估会话）
       if (phantomTasks.length > 0) {
         verdict.result = 'NOPASS';
-        verdict.reason = `严重违规：开发者在执行期间创建了 ${phantomTasks.length} 个额外任务 (${phantomTasks.join(', ')}). 开发者被严格禁止创建新任务。`;
-        verdict.failedCriteria = ['禁止创建新任务'];
-        verdict.failedCheckpoints = phantomTasks.map(tid => `幽灵任务: ${tid}`);
-        verdict.details = `检测到开发者创建了不属于原始计划的额外任务。这违反了开发者职责范围——开发者只应实现被分配任务的代码变更，而非创建新任务。`;
+        verdict.reason = `${texts.harness.logs.phantomTaskViolation.replace('{count}', String(phantomTasks.length)).replace('{tasks}', phantomTasks.join(', '))}`;
+        verdict.failedCriteria = [texts.harness.logs.phantomTaskCriteria];
+        verdict.failedCheckpoints = phantomTasks.map(tid => `${texts.harness.logs.phantomTaskPrefix}: ${tid}`);
+        verdict.details = texts.harness.logs.phantomTaskDetails;
         verdict.inferenceType = 'explicit_match'; // 幽灵任务是确定性检测，非解析推断
         console.log(`\n   ❌ ${texts.harness.logs.phantomTaskAutoNopass}`);
 
@@ -149,7 +149,7 @@ export class HarnessEvaluator {
       // 4.6 检测空输出（Claude 进程异常退出）
       if (!engineResult.result.output || engineResult.result.output.trim().length === 0) {
         verdict.result = 'NOPASS';
-        verdict.reason = `评估会话输出为空：Claude 进程可能异常退出${engineResult.result.stderr ? ` (stderr: ${engineResult.result.stderr.substring(0, 200)})` : ''}`;
+        verdict.reason = `${texts.harness.logs.emptyOutputError}${engineResult.result.stderr ? ` (stderr: ${engineResult.result.stderr.substring(0, 200)})` : ''}`;
         verdict.inferenceType = 'empty_output';
         console.log(`\n   ❌ ${texts.harness.logs.evalEmptyOutput}`);
         if (engineResult.result.stderr) {
@@ -168,7 +168,7 @@ export class HarnessEvaluator {
         evaluation = {
           ...evaluation,
           passed: true,
-          reason: `重试 ${engineResult.retries} 次后仍无法解析评估结果，采用保守策略默认通过`,
+          reason: texts.harness.logs.evalParseFailureDefaultReason.replace('{retries}', String(engineResult.retries)),
         };
       }
 
@@ -186,7 +186,7 @@ export class HarnessEvaluator {
       if (contradiction.hasContradiction && contradiction.correctedResult) {
         console.log(`   ⚠️  ${texts.harness.logs.contradictionDetected}: ${contradiction.reason}`);
         verdict.result = contradiction.correctedResult;
-        verdict.reason += ` [矛盾修正: ${contradiction.reason}]`;
+        verdict.reason += ` [${texts.harness.logs.contradictionFix}: ${contradiction.reason}]`;
       }
 
       if (verdict.result === 'PASS') {
@@ -197,7 +197,7 @@ export class HarnessEvaluator {
 
     } catch (error) {
       verdict.result = 'NOPASS';
-      verdict.reason = `评估过程出错: ${error instanceof Error ? error.message : String(error)}`;
+      verdict.reason = `${texts.harness.logs.evalProcessError}: ${error instanceof Error ? error.message : String(error)}`;
       verdict.inferenceType = 'parse_failure_default';
       console.log(`\n   ❌ ${texts.harness.logs.evalError}: ${verdict.reason}`);
     }
@@ -482,6 +482,7 @@ export class HarnessEvaluator {
    * 合法任务被误判为幽灵任务（如 schema-checkpoint-validation 案例中 11 个钩子清理任务）。
    */
   private detectPhantomTasks(currentTaskId: string, devReport: DevReport): string[] {
+    const texts = t(this.config.cwd);
     const phantomTasks: string[] = [];
 
     // 1. 从 Claude 输出中检测 task create / init-requirement 命令
@@ -730,34 +731,28 @@ export class HarnessEvaluator {
    * 格式化审查报告
    */
   private formatReviewReport(verdict: ReviewVerdict, devReport: DevReport): string {
-    const INFERENCE_TYPE_LABELS: Record<string, string> = {
-      structured_match: '结构化匹配',
-      explicit_match: '明确匹配',
-      content_inference: '内容推断',
-      prior_stage_inference: '前置阶段推断',
-      parse_failure_default: '解析失败默认',
-      empty_output: '空输出',
-    };
+    const texts = t(this.config.cwd);
 
     const lines: string[] = [
-      `# 审查报告 - ${verdict.taskId}`,
+      `# ${texts.harness.reports.reviewReportTitle} - ${verdict.taskId}`,
       '',
-      `**结果**: ${verdict.result === 'PASS' ? '✅ PASS' : '❌ NOPASS'}`,
-      `**审查时间**: ${verdict.reviewedAt}`,
-      `**审查者**: ${verdict.reviewedBy}`,
+      `**${texts.harness.reports.resultLabel}**: ${verdict.result === 'PASS' ? '✅ PASS' : '❌ NOPASS'}`,
+      `**${texts.harness.reports.reviewedAtLabel}**: ${verdict.reviewedAt}`,
+      `**${texts.harness.reports.reviewedByLabel}**: ${verdict.reviewedBy}`,
     ];
 
     if (verdict.inferenceType) {
-      lines.push(`**推断类型**: ${INFERENCE_TYPE_LABELS[verdict.inferenceType] || verdict.inferenceType} (${verdict.inferenceType})`);
+      const inferenceTypeLabel = texts.harness.reports.inferenceTypes[verdict.inferenceType as keyof typeof texts.harness.reports.inferenceTypes] || verdict.inferenceType;
+      lines.push(`**${texts.harness.reports.inferenceTypeLabel}**: ${inferenceTypeLabel} (${verdict.inferenceType})`);
     }
 
     lines.push('');
-    lines.push('## 原因');
+    lines.push(`## ${texts.harness.reports.reasonSection}`);
     lines.push(verdict.reason);
     lines.push('');
 
     if (verdict.failedCriteria.length > 0) {
-      lines.push('## 未满足的验收标准');
+      lines.push(`## ${texts.harness.reports.failedCriteriaSection}`);
       verdict.failedCriteria.forEach(criteria => {
         lines.push(`- ${criteria}`);
       });
@@ -765,7 +760,7 @@ export class HarnessEvaluator {
     }
 
     if (verdict.failedCheckpoints.length > 0) {
-      lines.push('## 未完成的检查点');
+      lines.push(`## ${texts.harness.reports.failedCheckpointsSection}`);
       verdict.failedCheckpoints.forEach(checkpoint => {
         lines.push(`- ${checkpoint}`);
       });
@@ -773,7 +768,7 @@ export class HarnessEvaluator {
     }
 
     if (verdict.details) {
-      lines.push('## 详细反馈');
+      lines.push(`## ${texts.harness.reports.detailsSection}`);
       lines.push(verdict.details);
       lines.push('');
     }
@@ -782,11 +777,11 @@ export class HarnessEvaluator {
     const devEvidence = Array.isArray(devReport.evidence) ? devReport.evidence : [];
     const devCheckpointsCompleted = Array.isArray(devReport.checkpointsCompleted) ? devReport.checkpointsCompleted : [];
 
-    lines.push('## 开发阶段信息');
-    lines.push(`- 状态: ${devReport.status}`);
-    lines.push(`- 耗时: ${(devReport.duration / 1000).toFixed(1)}s`);
-    lines.push(`- 证据数量: ${devEvidence.length}`);
-    lines.push(`- 完成检查点: ${devCheckpointsCompleted.length}`);
+    lines.push(`## ${texts.harness.reports.devPhaseInfoSection}`);
+    lines.push(`- ${texts.harness.reports.statusLabel}: ${devReport.status}`);
+    lines.push(`- ${texts.harness.reports.durationLabel}: ${(devReport.duration / 1000).toFixed(1)}s`);
+    lines.push(`- ${texts.harness.reports.evidenceCountLabel}: ${devEvidence.length}`);
+    lines.push(`- ${texts.harness.reports.checkpointsCountLabel}: ${devCheckpointsCompleted.length}`);
 
     return lines.join('\n');
   }
