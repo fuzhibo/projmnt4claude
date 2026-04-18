@@ -31,6 +31,7 @@ import { detectContradiction } from './contradiction-detector.js';
 import { createSessionAwareEngine } from './feedback-constraint-engine.js';
 import { qaVerdictResultMarker, qaVerdictHasReason } from './validation-rules/verdict-rules.js';
 import { loadPromptTemplate, resolveTemplate } from './prompt-templates.js';
+import { t } from '../i18n/index.js';
 
 /**
  * 验证检查点的验证信息完整性
@@ -51,8 +52,9 @@ export class HarnessQATester {
    * 执行 QA 验证
    */
   async verify(task: TaskMeta, codeReviewVerdict: CodeReviewVerdict, retryContext?: RetryContext): Promise<QAVerdict> {
-    console.log(`\n🧪 QA 验证阶段...`);
-    console.log(`   任务: ${task.title}`);
+    const texts = t(this.config.cwd);
+    console.log(`\n🧪 ${texts.harness.logs.qaPhase}`);
+    console.log(`   ${texts.harness.logs.taskLabel}: ${task.title}`);
 
     const verdict: QAVerdict = {
       taskId: task.id,
@@ -77,13 +79,13 @@ export class HarnessQATester {
     try {
       // 1. 获取 QA 验证类检查点
       const qaCheckpoints = this.getQACheckpoints(task);
-      console.log(`   📋 QA 验证检查点: ${qaCheckpoints.length} 个`);
+      console.log(`   📋 ${texts.harness.logs.qaCheckpoints}: ${qaCheckpoints.length}`);
 
       if (qaCheckpoints.length === 0) {
         // 没有 QA 检查点，直接通过
         verdict.result = 'PASS';
-        verdict.reason = '无 QA 验证检查点，自动通过';
-        console.log('   ✅ 无 QA 验证检查点，自动通过');
+        verdict.reason = texts.harness.logs.noQACheckpoints;
+        console.log(`   ✅ ${texts.harness.logs.noQACheckpoints}`);
       } else {
         // 2. 检查是否有人工验证检查点
         const humanCheckpoints = qaCheckpoints.filter(cp => cp.requiresHuman === true);
@@ -101,9 +103,9 @@ export class HarnessQATester {
         // IR-08-05: 矛盾检测 — 当结果标签与内容矛盾时自动修正
         const contradiction = detectContradiction(verdict.result, verdict.reason || '');
         if (contradiction.hasContradiction && contradiction.correctedResult) {
-          console.log(`   ⚠️  矛盾检测: ${contradiction.reason}`);
+          console.log(`   ⚠️  ${texts.harness.logs.contradictionDetected}: ${contradiction.reason}`);
           verdict.result = contradiction.correctedResult;
-          verdict.reason += ` [矛盾修正: ${contradiction.reason}]`;
+          verdict.reason += ` [${texts.harness.logs.contradictionDetected}: ${contradiction.reason}]`;
         }
 
         // 4. 标记需要人工验证的检查点（仅信息标记，不影响 PASS/NOPASS 判定）
@@ -117,18 +119,18 @@ export class HarnessQATester {
         }
 
         if (verdict.result === 'PASS' && !verdict.requiresHuman) {
-          console.log('\n   ✅ QA 验证通过');
+          console.log(`\n   ✅ ${texts.harness.logs.qaPassed}`);
         } else if (verdict.result === 'PASS' && verdict.requiresHuman) {
-          console.log('\n   ⏳ 自动化验证通过，等待人工验证');
+          console.log(`\n   ⏳ ${texts.harness.logs.qaPassedWithHuman}`);
         } else {
-          console.log(`\n   ❌ QA 验证未通过: ${verdict.reason}`);
+          console.log(`\n   ❌ ${texts.harness.logs.qaFailed}: ${verdict.reason}`);
         }
       }
 
     } catch (error) {
       verdict.result = 'NOPASS';
-      verdict.reason = `QA 验证过程出错: ${error instanceof Error ? error.message : String(error)}`;
-      console.log(`\n   ❌ QA 验证出错: ${verdict.reason}`);
+      verdict.reason = `${texts.harness.logs.qaError}: ${error instanceof Error ? error.message : String(error)}`;
+      console.log(`\n   ❌ ${texts.harness.logs.qaError}: ${verdict.reason}`);
     }
 
     // 保存 QA 报告

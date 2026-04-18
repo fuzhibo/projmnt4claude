@@ -55,6 +55,7 @@ import {
   showLogSummary,
   type OperationSource,
 } from '../utils/batch-update-logger';
+import { t } from '../i18n';
 
 /** History记录最大显示数 */
 const MAX_HISTORY_DISPLAY = 20;
@@ -132,8 +133,10 @@ function generateCheckpointToken(): string {
  */
 export function hasValidCheckpoints(
   checkpointPathOrContent: string | null,
-  isContent: boolean = false
+  isContent: boolean = false,
+  cwd?: string
 ): { valid: boolean; reason: string } {
+  const texts = t(cwd);
   let content: string;
 
   if (isContent && checkpointPathOrContent !== null) {
@@ -142,18 +145,18 @@ export function hasValidCheckpoints(
   } else if (!isContent && checkpointPathOrContent) {
     // 从文件读取
     if (!fs.existsSync(checkpointPathOrContent)) {
-      return { valid: false, reason: 'checkpoint.md 文件does not exist' };
+      return { valid: false, reason: texts.taskCommand.checkpointFileNotExist };
     }
     content = fs.readFileSync(checkpointPathOrContent, 'utf-8');
   } else {
     // None内容
-    return { valid: false, reason: 'NoneCheckpoints内容' };
+    return { valid: false, reason: texts.taskCommand.validationError };
   }
 
   const lines = content.split('\n').filter(line => line.trim().startsWith('- ['));
 
   if (lines.length === 0) {
-    return { valid: false, reason: 'checkpoint.md 中没有Checkpoints项' };
+    return { valid: false, reason: texts.taskCommand.noCheckpointItems };
   }
 
   // 检测模板内容（None意义的默认Checkpoints）
@@ -186,7 +189,9 @@ export function hasValidCheckpoints(
   if (templateCount > lines.length / 2) {
     return {
       valid: false,
-      reason: `Detected ${templateCount}/${lines.length} checkpoints为模板内容（如"Checkpoints1", "完成Task"等）, 请添加具体的验收标准`
+      reason: texts.taskCommand.templateContentDetected
+        .replace('{count}', String(templateCount))
+        .replace('{total}', String(lines.length))
     };
   }
 
@@ -207,24 +212,25 @@ const DEFAULT_CHECKPOINT_CONTENT = `# {taskId} Checkpoints
  * 不阻止TaskCreated, 但提醒用户需要编辑 checkpoint.md
  */
 export function displayCheckpointCreationWarning(taskId: string, cwd: string): void {
+  const texts = t(cwd);
   console.log('');
   console.log('━'.repeat(SEPARATOR_WIDTH));
-  console.log('⚠️ Checkpoint Quality Reminder');
+  console.log(texts.taskCommand.checkpointQualityReminder);
   console.log('━'.repeat(SEPARATOR_WIDTH));
   console.log('');
-  console.log('Task created, but checkpoints are using default template.');
-  console.log('📋 High-quality checkpoints are essential for task acceptance. Recommendations:');
+  console.log(texts.taskCommand.taskCreatedButTemplate);
+  console.log('📋 ' + texts.taskCommand.highQualityCheckpointsEssential);
   console.log('');
-  console.log('   1. Edit checkpoint.md to add specific acceptance criteria:');
-  console.log(`      File path: .projmnt4claude/tasks/${taskId}/checkpoint.md`);
+  console.log('   1. ' + texts.taskCommand.editCheckpointMd);
+  console.log(`      ${texts.taskCommand.filePath.replace('{path}', `.projmnt4claude/tasks/${taskId}/checkpoint.md`)}`);
   console.log('');
-  console.log('   2. Use analyze command to auto-generate checkpoints (Recommended):');
+  console.log('   2. ' + texts.taskCommand.useAnalyzeCommand);
   console.log(`      projmnt4claude analyze --generate-checkpoints ${taskId}`);
   console.log('');
-  console.log('   3. Use checkpoint template feature:');
+  console.log('   3. ' + texts.taskCommand.useTemplateFeature);
   console.log(`      projmnt4claude task checkpoint template ${taskId} --apply`);
   console.log('');
-  console.log('💡 Tip: Strict validation during task execution/completion');
+  console.log('💡 ' + texts.taskCommand.tipStrictValidation);
   console.log('━'.repeat(SEPARATOR_WIDTH));
 }
 
@@ -250,20 +256,21 @@ function validateTaskCheckpointCommands(taskId: string, cwd: string): string[] {
  * 显示Checkpointsverification commands缺失的警告
  * (重uses validateCheckpointCommands from init-requirement.ts)
  */
-export function displayCheckpointVerificationWarnings(warnings: string[]): void {
+export function displayCheckpointVerificationWarnings(warnings: string[], cwd?: string): void {
   if (warnings.length === 0) return;
 
+  const texts = t(cwd);
   console.log('');
   console.log('━'.repeat(SEPARATOR_WIDTH));
-  console.log('⚠️ Missing Checkpoint Verification Commands');
+  console.log(texts.taskCommand.missingCheckpointVerificationCommands);
   console.log('━'.repeat(SEPARATOR_WIDTH));
   console.log('');
-  console.log(`Found ${warnings.length} checkpointsmissingautomatedverification commands: `);
+  console.log(texts.taskCommand.checkpointsMissingVerification.replace('{count}', String(warnings.length)));
   for (const w of warnings) {
     console.log(`   - ${w}`);
   }
   console.log('');
-  console.log('💡 Tip: QA phase cannot auto-verify these checkpoints.');
+  console.log('💡 ' + texts.taskCommand.qaCannotAutoVerify);
   console.log('   Please add verification commands in checkpoint.md, or use init-requirement to regenerate.');
   console.log('━'.repeat(SEPARATOR_WIDTH));
 }

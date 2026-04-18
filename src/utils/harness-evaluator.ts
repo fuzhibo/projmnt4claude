@@ -28,6 +28,7 @@ import { createSessionAwareEngine } from './feedback-constraint-engine.js';
 import { verdictResultMarker, verdictHasReason } from './validation-rules/verdict-rules.js';
 import { loadPromptTemplate, resolveTemplate } from './prompt-templates.js';
 import { getLatestSnapshot } from './harness-snapshot.js';
+import { t } from '../i18n/index.js';
 
 export class HarnessEvaluator {
   private config: HarnessConfig;
@@ -47,8 +48,9 @@ export class HarnessEvaluator {
     contract: SprintContract,
     retryContext?: RetryContext
   ): Promise<ReviewVerdict> {
-    console.log(`   评估任务: ${task.title}`);
-    console.log(`   开发状态: ${devReport.status}`);
+    const texts = t(this.config.cwd);
+    console.log(`   ${texts.harness.logs.evalTaskLabel}: ${task.title}`);
+    console.log(`   ${texts.harness.logs.devStatusLabel}: ${devReport.status}`);
 
     const verdict: ReviewVerdict = {
       taskId: task.id,
@@ -100,7 +102,7 @@ export class HarnessEvaluator {
         verdict.failedCheckpoints = phantomTasks.map(tid => `幽灵任务: ${tid}`);
         verdict.details = `检测到开发者创建了不属于原始计划的额外任务。这违反了开发者职责范围——开发者只应实现被分配任务的代码变更，而非创建新任务。`;
         verdict.inferenceType = 'explicit_match'; // 幽灵任务是确定性检测，非解析推断
-        console.log(`\n   ❌ 检测到幽灵任务，自动 NOPASS`);
+        console.log(`\n   ❌ ${texts.harness.logs.phantomTaskAutoNopass}`);
 
         await this.saveReviewReport(task.id, verdict, devReport);
         return verdict;
@@ -108,7 +110,7 @@ export class HarnessEvaluator {
 
       // 3. 构建评估提示词
       const prompt = this.buildEvaluationPrompt(task, devReport, contract, phantomTasks, retryContext);
-      console.log('\n   📝 评估提示词已生成');
+      console.log(`\n   📝 ${texts.harness.logs.evalPromptGenerated}`);
 
       // 4. 运行评估会话（使用 FeedbackConstraintEngine 带格式重试，最多 2 次）
       const agent = getAgent(this.config.cwd);
@@ -122,7 +124,7 @@ export class HarnessEvaluator {
         dangerouslySkipPermissions: effectiveTools.skipPermissions,
       };
 
-      console.log('\n   🔍 启动独立评估会话...');
+      console.log(`\n   🔍 ${texts.harness.logs.startingEvalSession}`);
 
       const engine = createSessionAwareEngine(
         'markdown',
@@ -136,7 +138,7 @@ export class HarnessEvaluator {
       );
 
       if (engineResult.retries > 0) {
-        console.log(`   🔄 评估结果格式不匹配，已重试 ${engineResult.retries} 次`);
+        console.log(`   🔄 ${texts.harness.logs.evalFormatRetry.replace('{retries}', String(engineResult.retries))}`);
       }
 
       const lastRawOutput = engineResult.result.output ?? '';
@@ -149,9 +151,9 @@ export class HarnessEvaluator {
         verdict.result = 'NOPASS';
         verdict.reason = `评估会话输出为空：Claude 进程可能异常退出${engineResult.result.stderr ? ` (stderr: ${engineResult.result.stderr.substring(0, 200)})` : ''}`;
         verdict.inferenceType = 'empty_output';
-        console.log('\n   ❌ 评估输出为空，Claude 进程可能异常退出');
+        console.log(`\n   ❌ ${texts.harness.logs.evalEmptyOutput}`);
         if (engineResult.result.stderr) {
-          console.log(`   📝 stderr: ${engineResult.result.stderr.substring(0, 300)}`);
+          console.log(`   📝 ${texts.harness.logs.evalStderrPrefix}: ${engineResult.result.stderr.substring(0, 300)}`);
         }
         await this.saveReviewReport(task.id, verdict, devReport);
         return verdict;
@@ -162,7 +164,7 @@ export class HarnessEvaluator {
 
       // CP-16: 重试后仍无法解析时，默认 PASS（保守策略）
       if (evaluation.inferenceType === 'parse_failure_default') {
-        console.log('   ⚠️ 重试后仍无法解析评估结果，默认 PASS（保守策略）');
+        console.log(`   ⚠️ ${texts.harness.logs.evalParseFailureDefault}`);
         evaluation = {
           ...evaluation,
           passed: true,
@@ -182,22 +184,22 @@ export class HarnessEvaluator {
       // IR-08-05: 矛盾检测 — 当结果标签与内容矛盾时自动修正
       const contradiction = detectContradiction(verdict.result, lastRawOutput || verdict.reason || '');
       if (contradiction.hasContradiction && contradiction.correctedResult) {
-        console.log(`   ⚠️  矛盾检测: ${contradiction.reason}`);
+        console.log(`   ⚠️  ${texts.harness.logs.contradictionDetected}: ${contradiction.reason}`);
         verdict.result = contradiction.correctedResult;
         verdict.reason += ` [矛盾修正: ${contradiction.reason}]`;
       }
 
       if (verdict.result === 'PASS') {
-        console.log(`\n   ✅ 审查通过 [推断类型: ${verdict.inferenceType || 'unknown'}]`);
+        console.log(`\n   ✅ ${texts.harness.logs.evalPassed} [${texts.harness.reports.inferenceTypeLabel}: ${verdict.inferenceType || 'unknown'}]`);
       } else {
-        console.log(`\n   ❌ 审查未通过 [推断类型: ${verdict.inferenceType || 'unknown'}]: ${verdict.reason}`);
+        console.log(`\n   ❌ ${texts.harness.logs.evalFailed} [${texts.harness.reports.inferenceTypeLabel}: ${verdict.inferenceType || 'unknown'}]: ${verdict.reason}`);
       }
 
     } catch (error) {
       verdict.result = 'NOPASS';
       verdict.reason = `评估过程出错: ${error instanceof Error ? error.message : String(error)}`;
       verdict.inferenceType = 'parse_failure_default';
-      console.log(`\n   ❌ 评估出错: ${verdict.reason}`);
+      console.log(`\n   ❌ ${texts.harness.logs.evalError}: ${verdict.reason}`);
     }
 
     // 保存审查报告
@@ -504,12 +506,12 @@ export class HarnessEvaluator {
         plannedTaskIds = new Set(snapshot.tasks);
         snapshotTaskCount = snapshot.tasks.length;
         usingSnapshot = true;
-        console.log(`   📋 幽灵任务检测使用计划快照: ${snapshot.snapshotId} (${snapshotTaskCount} 个计划任务)`);
+        console.log(`   📋 ${texts.harness.logs.snapshotMode}: ${snapshot.snapshotId} (${snapshotTaskCount})`);
       } else {
-        console.log(`   📋 幽灵任务检测: 未找到计划快照，使用时间窗口回退模式`);
+        console.log(`   📋 ${texts.harness.logs.fallbackMode}`);
       }
     } catch (error) {
-      console.log(`   ⚠️ 加载计划快照失败: ${error instanceof Error ? error.message : String(error)}，使用时间窗口回退模式`);
+      console.log(`   ⚠️ ${texts.harness.logs.fallbackMode}: ${error instanceof Error ? error.message : String(error)}`);
     }
 
     // 3. 检查文件系统中是否存在由开发者创建的额外任务

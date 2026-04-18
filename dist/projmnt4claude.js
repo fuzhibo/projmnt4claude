@@ -12913,6 +12913,305 @@ var init_zh = __esm(() => {
         "\u6240\u6709\u5FC5\u9700\u7684\u7AE0\u8282\u548C\u6807\u9898\u90FD\u5B58\u5728",
         "\u5185\u5BB9\u7ED3\u6784\u5B8C\u6574\u3001\u903B\u8F91\u6E05\u6670"
       ]
+    },
+    analyzeFixPipeline: {
+      fixPipelineMode: "\uD83D\uDD27 analyze --fix \u6D41\u6C34\u7EBF\u6A21\u5F0F",
+      executingStages: "\u6267\u884C\u9636\u6BB5",
+      stage1Analysis: "\uD83D\uDCCB Stage 1: \u89C4\u5219\u5F15\u64CE\u5206\u6790...",
+      stage1Complete: "\u2705 Stage 1 \u5B8C\u6210: \u53D1\u73B0 {count} \u4E2A\u95EE\u9898 ({duration}s)",
+      stage1Failed: "\u274C Stage 1 \u5931\u8D25: {error}",
+      stage1Skipped: "\u23ED\uFE0F Stage 1: \u8DF3\u8FC7",
+      stage2Fix: "\uD83D\uDD27 Stage 2: \u89C4\u5219\u4FEE\u590D...",
+      stage2FixWithAnalysis: "\uD83D\uDD27 Stage 2: \u89C4\u5219\u4FEE\u590D\uFF08\u542B\u5206\u6790\uFF09...",
+      stage2Complete: "\u2705 Stage 2 \u5B8C\u6210: {fixed} \u4FEE\u590D, {skipped} \u8DF3\u8FC7 ({duration}s)",
+      stage2Failed: "\u274C Stage 2 \u5931\u8D25: {error}",
+      stage2Skipped: "\u23ED\uFE0F Stage 2: \u8DF3\u8FC7",
+      stage3AI: "\uD83E\uDD16 Stage 3: AI \u6DF1\u5EA6\u5206\u6790...",
+      stage3Complete: "\u2705 Stage 3 \u5B8C\u6210: AI \u53D1\u73B0 {count} \u4E2A\u8BED\u4E49\u95EE\u9898 ({duration}s)",
+      stage3Failed: "\u274C Stage 3 \u5931\u8D25: {error}",
+      stage3Skipped: "\u23ED\uFE0F Stage 3: \u8DF3\u8FC7 ({reason})",
+      stage3NotEnabled: "Stage 3: AI \u6DF1\u5EA6\u5206\u6790\u672A\u542F\u7528\uFF08\u4F7F\u7528 --deep-analyze \u6FC0\u6D3B\u5B8C\u6574 AI \u5206\u6790\uFF09",
+      stage4Checkpoint: "\uD83D\uDCCC Stage 4: \u68C0\u67E5\u70B9\u4FEE\u590D...",
+      stage4Complete: "\u2705 Stage 4 \u5B8C\u6210: \u68C0\u67E5\u70B9\u4FEE\u590D ({duration}s)",
+      stage4Failed: "\u274C Stage 4 \u5931\u8D25: {error}",
+      stage4Skipped: "\u23ED\uFE0F Stage 4: \u8DF3\u8FC7",
+      stage5Quality: "\uD83D\uDCCA Stage 5: \u8D28\u91CF\u62A5\u544A...",
+      stage5Complete: "\u2705 Stage 5 \u5B8C\u6210: \u68C0\u6D4B {count} \u4E2A\u4EFB\u52A1, {suggestions} \u4E2A\u6539\u8FDB\u5EFA\u8BAE ({duration}s)",
+      stage5Failed: "\u274C Stage 5 \u5931\u8D25: {error}",
+      stage5Skipped: "\u23ED\uFE0F Stage 5: \u8DF3\u8FC7",
+      pipelineComplete: "\u2705 \u6D41\u6C34\u7EBF\u5B8C\u6210: {stages}/5 \u9636\u6BB5\u5DF2\u6267\u884C ({duration}s)",
+      noIssuesFound: "\u2705 \u6CA1\u6709\u9700\u8981\u4FEE\u590D\u7684\u95EE\u9898",
+      autoFixIssues: "\uD83D\uDD27 \u81EA\u52A8\u4FEE\u590D\u95EE\u9898",
+      nonInteractiveMode: "\uFF08\u975E\u4EA4\u4E92\u6A21\u5F0F\uFF09",
+      fixError: "\u274C \u4FEE\u590D {taskId} ({type}) \u65F6\u51FA\u9519: {error}",
+      fixComplete: "\u2705 \u5171\u4FEE\u590D {count} \u4E2A\u95EE\u9898",
+      fixSkipped: "\u23ED\uFE0F \u8DF3\u8FC7 {count} \u4E2A\u95EE\u9898",
+      fixUnfixable: "\u26A0\uFE0F {count} \u4E2A\u95EE\u9898\u65E0\u6CD5\u81EA\u52A8\u4FEE\u590D",
+      autoClosingStale: "\u2705 \u5DF2\u81EA\u52A8\u5173\u95ED\u8FC7\u671F {days} \u5929\u7684\u4EFB\u52A1 {taskId} (>30\u5929\u9608\u503C)",
+      skipStale: "\u23ED\uFE0F \u8DF3\u8FC7\u8FC7\u671F\u4EFB\u52A1 {taskId} ({days}\u5929, \u975E\u4EA4\u4E92\u6A21\u5F0F\u4E0B\u8D85\u8FC730\u5929\u624D\u81EA\u52A8\u5173\u95ED)",
+      checkingStale: "\u68C0\u67E5\u8FC7\u671F\u4EFB\u52A1 {taskId}...",
+      closingTask: "\u6807\u8BB0\u4E3A\u5DF2\u5173\u95ED",
+      markingInProgress: "\u6807\u8BB0\u4E3A\u8FDB\u884C\u4E2D",
+      skipNoDescription: "\u23ED\uFE0F \u8DF3\u8FC7\u65E0\u63CF\u8FF0\u4EFB\u52A1 {taskId} (\u975E\u4EA4\u4E92\u6A21\u5F0F\u4E0B\u9700\u8981\u624B\u52A8\u5904\u7406)",
+      checkingNoDescription: "\u68C0\u67E5\u65E0\u63CF\u8FF0\u4EFB\u52A1 {taskId}...",
+      addingDescription: "\u2705 \u5DF2\u4E3A\u4EFB\u52A1 {taskId} \u6DFB\u52A0\u63CF\u8FF0",
+      analyzingCycle: "\uD83D\uDD04 \u5206\u6790\u4EFB\u52A1 {taskId} \u7684\u5FAA\u73AF\u4F9D\u8D56...",
+      cycleNotFound: "\u26A0\uFE0F \u672A\u627E\u5230\u6D89\u53CA {taskId} \u7684\u5FAA\u73AF\u4F9D\u8D56\uFF08\u53EF\u80FD\u5DF2\u4FEE\u590D\uFF09",
+      breakingCycle: "\u2705 \u5DF2\u65AD\u5F00 {from} \u2192 {to} \u7684\u4F9D\u8D56\u4EE5\u6253\u7834\u5FAA\u73AF",
+      cycleManualFix: "\u26A0\uFE0F \u5FAA\u73AF {cycle} \u4E2D\u6240\u6709\u8FB9\u5747\u4E3A\u663E\u5F0F\u4F9D\u8D56\uFF0C\u9700\u4EBA\u5DE5\u5904\u7406",
+      fixingPriority: "\uD83D\uDD04 \u4FEE\u590D\u4EFB\u52A1 {taskId} \u7684\u4F18\u5148\u7EA7\u683C\u5F0F...",
+      priorityUpdated: "\u2705 \u5DF2\u5C06\u4F18\u5148\u7EA7\u4ECE {old} \u66F4\u65B0\u4E3A {new}",
+      fixingStatus: "\uD83D\uDD04 \u4FEE\u590D\u4EFB\u52A1 {taskId} \u7684\u72B6\u6001\u683C\u5F0F...",
+      statusUpdated: "\u2705 \u5DF2\u5C06\u72B6\u6001\u4ECE {old} \u66F4\u65B0\u4E3A {new}",
+      fixingSchema: "\uD83D\uDD04 \u4FEE\u590D\u4EFB\u52A1 {taskId} \u7684\u89C4\u8303\u5B57\u6BB5...",
+      reopenCountAdded: "\u2705 \u5DF2\u6DFB\u52A0 reopenCount: 0",
+      requirementHistoryAdded: "\u2705 \u5DF2\u6DFB\u52A0 requirementHistory: []",
+      fixingEmptyArrays: "\uD83D\uDD04 \u4FEE\u590D\u4EFB\u52A1 {taskId} \u7684\u7A7A\u6570\u7EC4\u5B57\u6BB5: {fields}",
+      arrayInitialized: "\u2705 \u5DF2\u521D\u59CB\u5316 {field}: []",
+      migratingPipelineStatus: "\uD83D\uDD04 \u8FC1\u79FB\u4EFB\u52A1 {taskId} \u7684 pipeline \u72B6\u6001...",
+      statusMigrated: "\u2705 \u72B6\u6001\u5DF2\u4ECE {old} \u8FC1\u79FB\u4E3A {new}",
+      cannotDetermineTargetStatus: "\u26A0\uFE0F \u65E0\u6CD5\u786E\u5B9A\u8FC1\u79FB\u76EE\u6807\u72B6\u6001",
+      fixingVerdictAction: "\uD83D\uDD04 \u4FEE\u590D\u4EFB\u52A1 {taskId} \u7684\u65E0\u6548 VerdictAction \u503C...",
+      verdictActionCleared: '\u2705 history[{index}]: \u6E05\u9664\u65E0\u6548 verdict action "{value}"',
+      migratingSchema: "\uD83D\uDD04 \u8FC1\u79FB\u4EFB\u52A1 {taskId} \u7684 schema \u7248\u672C...",
+      fixingCreatedBy: "\uD83D\uDD04 \u4FEE\u590D\u4EFB\u52A1 {taskId} \u7684 createdBy \u5B57\u6BB5...",
+      createdByAdded: "\u2705 \u5DF2\u6DFB\u52A0 createdBy: import",
+      fixingInvalidStatus: "\uD83D\uDD04 \u4FEE\u590D\u4EFB\u52A1 {taskId} \u7684\u65E0\u6548\u72B6\u6001\u503C...",
+      fixingInvalidType: "\uD83D\uDD04 \u4FEE\u590D\u4EFB\u52A1 {taskId} \u7684\u65E0\u6548\u7C7B\u578B\u503C...",
+      typeUpdated: "\u2705 \u5DF2\u5C06\u7C7B\u578B\u4ECE {old} \u66F4\u65B0\u4E3A {new}",
+      fixingInvalidPriority: "\uD83D\uDD04 \u4FEE\u590D\u4EFB\u52A1 {taskId} \u7684\u65E0\u6548\u4F18\u5148\u7EA7\u503C...",
+      fixingReopenTransition: "\uD83D\uDD04 \u4FEE\u590D\u4EFB\u52A1 {taskId} \u7684 reopen \u6D41\u8F6C\u8BB0\u5F55\u7F3A\u5931...",
+      transitionNoteAdded: "\u2705 \u5DF2\u8865\u5F55 transitionNote\uFF0CreopenCount={count}",
+      fixingStatusContradiction: "\uD83D\uDD04 \u4FEE\u590D\u4EFB\u52A1 {taskId} \u7684\u72B6\u6001\u77DB\u76FE (resolved + verification.failed)...",
+      statusContradictionFixed: "\u2705 \u5DF2\u5C06\u72B6\u6001\u4ECE resolved \u6539\u4E3A open\uFF0C\u6E05\u9664\u65E7 verification",
+      fixingTimestamp: "\uD83D\uDD04 \u4FEE\u590D\u4EFB\u52A1 {taskId} \u7684\u65F6\u95F4\u6233\u683C\u5F0F...",
+      timestampUpdated: "\u2705 \u5DF2\u5C06 {field} \u66F4\u65B0\u4E3A {value}",
+      invalidParent: "\u26A0\uFE0F \u4EFB\u52A1 {taskId} \u7684\u7236\u4EFB\u52A1\u5F15\u7528\u65E0\u6548\uFF0C\u65E0\u6CD5\u81EA\u52A8\u4FEE\u590D",
+      fixingSubtaskRef: "\uD83D\uDD04 \u4FEE\u590D\u4EFB\u52A1 {taskId} \u7684\u65E0\u6548\u5B50\u4EFB\u52A1\u5F15\u7528...",
+      subtaskRefRemoved: "\u2705 \u5DF2\u4ECE subtaskIds \u4E2D\u79FB\u9664\u65E0\u6548\u5F15\u7528 {id}",
+      fixingDependencyRef: "\uD83D\uDD04 \u4FEE\u590D\u4EFB\u52A1 {taskId} \u7684\u65E0\u6548\u4F9D\u8D56\u5F15\u7528...",
+      dependencyRefRemoved: "\u2705 \u5DF2\u4ECE dependencies \u4E2D\u79FB\u9664\u65E0\u6548\u5F15\u7528 {id}",
+      inferringDependencies: "\uD83D\uDD04 \u4FEE\u590D\u4EFB\u52A1 {taskId} \u7684\u63A8\u65AD\u4F9D\u8D56\u7F3A\u5931...",
+      inferredDepNotFound: "\u26A0\uFE0F \u63A8\u65AD\u4F9D\u8D56 {id} \u4E0D\u5B58\u5728\uFF0C\u8DF3\u8FC7",
+      inferredDepWouldCreateCycle: "\u26A0\uFE0F \u6DFB\u52A0\u63A8\u65AD\u4F9D\u8D56 {id} \u4F1A\u5F62\u6210\u5FAA\u73AF\uFF0C\u8DF3\u8FC7 (GATE-DEP-002)",
+      inferredDepAdded: "\u2705 \u5DF2\u6DFB\u52A0\u63A8\u65AD\u4F9D\u8D56 {id}: {reason}",
+      fixingParentRef: "\uD83D\uDD04 \u4FEE\u590D\u5B50\u4EFB\u52A1 {taskId} \u5728\u7236\u4EFB\u52A1\u4E2D\u7684\u5F15\u7528...",
+      parentRefAdded: "\u2705 \u5DF2\u5C06\u5B50\u4EFB\u52A1\u6DFB\u52A0\u5230\u7236\u4EFB\u52A1\u7684 subtaskIds \u4E2D",
+      fixingParentChildRelation: "\uD83D\uDD04 \u4FEE\u590D\u4EFB\u52A1 {taskId} \u7684\u7236\u5B50\u5173\u7CFB\u4E0D\u4E00\u81F4...",
+      parentChildRelationFixed: "\u2705 \u5DF2\u5C06\u5B50\u4EFB\u52A1 {subtaskId} \u7684 parentId \u66F4\u65B0\u4E3A {parentId}",
+      cannotExtractKeywords: "\u26A0\uFE0F \u4EFB\u52A1 {taskId} \u65E0\u6CD5\u63D0\u53D6\u6709\u610F\u4E49\u7684\u5173\u952E\u8BCD\uFF0C\u8DF3\u8FC7\u91CD\u547D\u540D",
+      generatedIdSame: "\u23ED\uFE0F \u4EFB\u52A1 {taskId} \u751F\u6210\u7684 ID \u4E0E\u5F53\u524D\u76F8\u540C\uFF0C\u8DF3\u8FC7",
+      renamingTask: "\uD83D\uDD04 \u91CD\u547D\u540D\u4EFB\u52A1: {old} \u2192 {new}",
+      taskRenamed: "\u2705 \u5DF2\u91CD\u547D\u540D\u4E3A {id}",
+      renameFailed: "\u274C \u91CD\u547D\u540D\u5931\u8D25: {error}",
+      cannotAutoFix: "\u26A0\uFE0F \u4EFB\u52A1 {taskId} \u7684 {type} \u95EE\u9898\u65E0\u6CD5\u81EA\u52A8\u4FEE\u590D",
+      suggestion: "\u5EFA\u8BAE: {suggestion}",
+      fixingManualVerification: "\uD83D\uDD04 \u4FEE\u590D\u4EFB\u52A1 {taskId} \u7684 manual \u9A8C\u8BC1\u65B9\u6CD5...",
+      manualToAutomated: "\u2705 \u68C0\u67E5\u70B9 {id}: manual -> automated",
+      fixingMissingVerification: "\uD83D\uDD04 \u4FEE\u590D\u4EFB\u52A1 {taskId} \u7684\u7F3A\u5931 verification \u5B57\u6BB5...",
+      verificationAutoFilled: "\u2705 \u5DF2\u81EA\u52A8\u586B\u5145 verification \u5B57\u6BB5",
+      checkpointCompletionRate: "\u5B8C\u6210\u7387: {rate}%",
+      cleaningAbandonedTasks: "\u68C0\u67E5 abandoned \u6B8B\u7559\u4EFB\u52A1...",
+      abandonedTaskDeleted: "\u2705 \u5DF2\u6E05\u9664 {count} \u4E2A abandoned \u6B8B\u7559\u4EFB\u52A1",
+      cleaningOrphanTasks: "\u68C0\u67E5 abandoned \u6B8B\u7559\u4EFB\u52A1...",
+      checkingAbandoned: "\u68C0\u67E5 abandoned \u6B8B\u7559\u4EFB\u52A1...",
+      abandonedFound: "\u53D1\u73B0 {count} \u4E2A: {tasks}",
+      missingFileRef: "\u26A0\uFE0F \u4EFB\u52A1 {taskId} \u5F15\u7528\u4E86\u4E0D\u5B58\u5728\u7684\u6587\u4EF6\uFF0C\u65E0\u6CD5\u81EA\u52A8\u4FEE\u590D",
+      missingFiles: "\u4E0D\u5B58\u5728\u7684\u6587\u4EF6: {files}",
+      fillingTransitionNote: "\uD83D\uDD04 \u56DE\u586B\u4EFB\u52A1 {taskId} \u7684 transitionNote...",
+      missingHistoryDetail: "\u26A0\uFE0F \u7F3A\u5C11\u5386\u53F2\u6761\u76EE\u8BE6\u60C5\uFF0C\u65E0\u6CD5\u56DE\u586B",
+      transitionNoteFilled: "\u2705 \u5DF2\u56DE\u586B transitionNote: {status} ({author})",
+      missingSuggestion: "\u26A0\uFE0F \u7F3A\u5C11\u72B6\u6001\u5EFA\u8BAE\uFF0C\u65E0\u6CD5\u81EA\u52A8\u4FEE\u590D",
+      fixingInterruptedTask: "\uD83D\uDD04 \u4FEE\u590D\u4E2D\u65AD\u4EFB\u52A1 {taskId}...",
+      currentStatus: "\u5F53\u524D\u72B6\u6001: {status}",
+      suggestedStatus: "\u5EFA\u8BAE\u72B6\u6001: {status}",
+      reason: "\u539F\u56E0: {reason}",
+      skipKeepInProgress: "\u23ED\uFE0F \u5EFA\u8BAE\u4FDD\u6301 in_progress\uFF0C\u8DF3\u8FC7\u4FEE\u590D",
+      statusFixed: "\u2705 \u5DF2\u5C06\u4EFB\u52A1 {taskId} \u72B6\u6001\u4ECE {old} \u4FEE\u6539\u4E3A {new}",
+      migratingReopenedStatus: "\uD83D\uDD04 \u8FC1\u79FB\u4EFB\u52A1 {taskId} \u7684\u5E9F\u5F03 reopened \u72B6\u6001...",
+      reopenedMigrated: "\u2705 \u72B6\u6001\u5DF2\u4ECE reopened \u8FC1\u79FB\u4E3A open",
+      migratingNeedsHumanStatus: "\uD83D\uDD04 \u8FC1\u79FB\u4EFB\u52A1 {taskId} \u7684\u5E9F\u5F03 needs_human \u72B6\u6001...",
+      needsHumanMigrated: "\u2705 \u72B6\u6001\u5DF2\u4ECE needs_human \u8FC1\u79FB\u4E3A open",
+      checkpointCoverageWarning: "\u26A0\uFE0F \u9879\u76EE\u68C0\u67E5\u70B9\u8986\u76D6\u7387\u4E0D\u8DB3\uFF0C\u9700\u4EBA\u5DE5\u8865\u5145",
+      tasksWithoutCheckpoints: "\u7F3A\u5C11\u68C0\u67E5\u70B9\u7684\u4EFB\u52A1\u6570: {count}",
+      currentCoverage: "\u5F53\u524D\u8986\u76D6\u7387: {rate}%",
+      lowQualityTask: "\u26A0\uFE0F \u4EFB\u52A1 {taskId} \u5185\u5BB9\u8D28\u91CF\u4F4E ({score}\u5206/100)",
+      score: "\u8BC4\u5206",
+      cleaningObsoleteStatus: "\uD83D\uDD04 \u6E05\u7406\u4EFB\u52A1 {taskId} \u5386\u53F2\u8BB0\u5F55\u4E2D\u7684\u5E9F\u5F03\u72B6\u6001\u5F15\u7528...",
+      obsoleteStatusCleaned: "\u2705 \u5DF2\u6E05\u7406\u5386\u53F2\u8BB0\u5F55\u4E2D\u7684\u5E9F\u5F03\u72B6\u6001\u5F15\u7528",
+      missingInferenceInfo: "\u26A0\uFE0F \u7F3A\u5C11\u63A8\u65AD\u72B6\u6001\u4FE1\u606F\uFF0C\u65E0\u6CD5\u4FEE\u590D",
+      fixingReportStatusMismatch: "\uD83D\uDD04 \u4FEE\u590D\u4EFB\u52A1 {taskId} \u7684\u62A5\u544A-\u72B6\u6001\u4E0D\u4E00\u81F4...",
+      reportStatusMismatchFixed: "\u2705 \u72B6\u6001\u5DF2\u4ECE {old} \u66F4\u65B0\u4E3A {new} ({report} PASS)",
+      fixingCheckpointStatusMismatch: "\uD83D\uDD04 \u4FEE\u590D\u4EFB\u52A1 {taskId} \u7684\u68C0\u67E5\u70B9-\u72B6\u6001\u4E0D\u4E00\u81F4 (resolved + \u5168 pending)...",
+      checkpointStatusMismatchFixed: "\u2705 \u5DF2\u81EA\u52A8\u5B8C\u6210 {count} \u4E2A pending \u68C0\u67E5\u70B9 (\u65E7\u7248\u9057\u7559)",
+      unknownFixAction: "\u26A0\uFE0F \u672A\u77E5\u7684\u4FEE\u590D\u52A8\u4F5C: {action}",
+      resettingTask: "\uD83D\uDD04 \u91CD\u7F6E\u4EFB\u52A1 {taskId} \u5230 open \u72B6\u6001 (\u7F3A\u5C11 pipeline \u6062\u590D\u8BC1\u636E)...",
+      taskReset: "\u2705 \u5DF2\u5C06\u4EFB\u52A1\u4ECE {old} \u91CD\u7F6E\u4E3A open (\u7F3A\u5C11\u6062\u590D\u8BC1\u636E)",
+      unsupportedRule: "\u26A0\uFE0F \u4E0D\u652F\u6301\u7684\u68C0\u67E5\u70B9\u9A8C\u8BC1\u89C4\u5219: {rule}",
+      fixingCheckpointPrefix: "\uD83D\uDD04 \u4FEE\u590D\u4EFB\u52A1 {taskId} \u7684\u68C0\u67E5\u70B9\u524D\u7F00...",
+      noCheckpoints: "\u26A0\uFE0F \u4EFB\u52A1\u6CA1\u6709\u68C0\u67E5\u70B9",
+      checkpointPrefixUpdated: "\u2705 \u5DF2\u4E3A {count} \u4E2A\u68C0\u67E5\u70B9\u6DFB\u52A0\u524D\u7F00",
+      allCheckpointsHavePrefix: "\u2139\uFE0F \u6240\u6709\u68C0\u67E5\u70B9\u5DF2\u6709\u6709\u6548\u524D\u7F00"
+    },
+    taskCommand: {
+      checkpointQualityReminder: "\u26A0\uFE0F Checkpoint \u8D28\u91CF\u63D0\u9192",
+      taskCreatedButTemplate: "Task \u5DF2\u521B\u5EFA\uFF0C\u4F46 checkpoints \u4F7F\u7528\u7684\u662F\u9ED8\u8BA4\u6A21\u677F\u3002",
+      highQualityCheckpointsEssential: "\u9AD8\u8D28\u91CF\u7684 checkpoints \u5BF9\u4EFB\u52A1\u9A8C\u6536\u81F3\u5173\u91CD\u8981\u3002\u5EFA\u8BAE\uFF1A",
+      editCheckpointMd: "\u7F16\u8F91 checkpoint.md \u6DFB\u52A0\u5177\u4F53\u7684\u9A8C\u6536\u6807\u51C6\uFF1A",
+      filePath: "\u6587\u4EF6\u8DEF\u5F84: {path}",
+      useAnalyzeCommand: "\u4F7F\u7528 analyze \u547D\u4EE4\u81EA\u52A8\u751F\u6210 checkpoints\uFF08\u63A8\u8350\uFF09\uFF1A",
+      useTemplateFeature: "\u4F7F\u7528 checkpoint \u6A21\u677F\u529F\u80FD\uFF1A",
+      tipStrictValidation: "\u63D0\u793A\uFF1A\u4EFB\u52A1\u6267\u884C/\u5B8C\u6210\u65F6\u4F1A\u8FDB\u884C\u4E25\u683C\u6821\u9A8C",
+      missingCheckpointVerificationCommands: "\u26A0\uFE0F \u4E2A checkpoints \u7F3A\u5C11\u81EA\u52A8\u5316\u9A8C\u8BC1\u547D\u4EE4",
+      checkpointsMissingVerification: "\u53D1\u73B0 {count} \u4E2A checkpoints \u7F3A\u5C11\u81EA\u52A8\u5316\u9A8C\u8BC1\u547D\u4EE4\uFF1A",
+      qaCannotAutoVerify: "\u63D0\u793A\uFF1AQA \u9636\u6BB5\u65E0\u6CD5\u81EA\u52A8\u9A8C\u8BC1\u8FD9\u4E9B checkpoints\u3002",
+      validationError: "\u9A8C\u8BC1\u9519\u8BEF",
+      checkpointFileNotExist: "checkpoint.md \u6587\u4EF6\u4E0D\u5B58\u5728",
+      noCheckpointItems: "checkpoint.md \u4E2D\u6CA1\u6709 checkpoints \u9879",
+      templateContentDetected: '\u68C0\u6D4B\u5230 {count}/{total} \u4E2A checkpoints \u4E3A\u6A21\u677F\u5185\u5BB9\uFF08\u5982"Checkpoint1"\u3001"\u5B8C\u6210 Task"\u7B49\uFF09\uFF0C\u8BF7\u6DFB\u52A0\u5177\u4F53\u7684\u9A8C\u6536\u6807\u51C6',
+      titleCannotBeEmpty: "Title \u4E0D\u80FD\u4E3A\u7A7A"
+    },
+    initRequirementCmd: {
+      complexityWarning: "\u26A0\uFE0F \u590D\u6742\u5EA6\u9884\u8B66",
+      complexityHigh: "\u6B64\u4EFB\u52A1\u9884\u4F30\u9700\u8981 {minutes} \u5206\u949F\uFF0C\u8D85\u8FC7\u9ED8\u8BA4 Harness \u8D85\u65F6\u9608\u503C\u3002",
+      exceedsTimeout: "\u5EFA\u8BAE\u5C06\u6B64\u4EFB\u52A1\u62C6\u5206\u4E3A\u66F4\u5C0F\u7684\u5B50\u4EFB\u52A1\uFF0C\u6BCF\u4E2A\u63A7\u5236\u5728 15 \u5206\u949F\u4EE5\u5185\u3002",
+      considerSplitting: "\u62C6\u5206\u5EFA\u8BAE\uFF1A",
+      splitSuggestions: "{index}. {title}{dependency}",
+      dependsOn: "\uFF08\u4F9D\u8D56\u4E8E\u5B50\u4EFB\u52A1 {index}\uFF09",
+      files: "\u6587\u4EF6: {files}",
+      estimated: "\u9884\u4F30: ~{minutes} \u5206\u949F",
+      qualityGateFailed: "\u274C \u8D28\u91CF\u95E8\u7981\u5931\u8D25\uFF1A\u53D1\u73B0 {count} \u4E2A\u9519\u8BEF\u7EA7\u8FDD\u89C4\u9879",
+      errorViolations: "\uD83D\uDEAB \u4EE5\u4E0B\u9519\u8BEF\u5FC5\u987B\u5728\u521B\u5EFA\u4EFB\u52A1\u524D\u4FEE\u590D\uFF1A",
+      followingErrorsMustFix: "\u4EE5\u4E0B\u9519\u8BEF\u5FC5\u987B\u5728\u521B\u5EFA\u4EFB\u52A1\u524D\u4FEE\u590D\uFF1A",
+      fixSuggestions: "\uD83D\uDCA1 \u4FEE\u590D\u5EFA\u8BAE\uFF1A",
+      checkpointPrefixTip: "Checkpoints \u5FC5\u987B\u4EE5\u6807\u51C6\u524D\u7F00\u5F00\u5934\uFF1A[implem]\u3001[test]\u3001[doc]\u3001[verify]",
+      metaJsonFormatTip: "meta.json \u5FC5\u987B\u662F\u6807\u51C6\u683C\u5F0F\uFF0C\u5305\u542B\u6240\u6709\u5FC5\u9700\u5B57\u6BB5",
+      skipQualityGateTip: "\u4F7F\u7528 --skip-quality-gate \u4E34\u65F6\u8DF3\u8FC7\uFF08\u4E0D\u63A8\u8350\u7528\u4E8E\u751F\u4EA7\u73AF\u5883\uFF09",
+      qualityGateLowScore: "\u274C \u8D28\u91CF\u95E8\u7981\u5931\u8D25\uFF1A{score} < {threshold}",
+      qualityGateImprovement: "\uD83D\uDCA1 \u6539\u8FDB\u5EFA\u8BAE\uFF1A",
+      action: "\u64CD\u4F5C: {action}"
+    },
+    harness: {
+      timeoutHeader: "\u8D85\u65F6\u9650\u5236",
+      taskDescription: "\u4EFB\u52A1\u63CF\u8FF0",
+      dependencies: "\u4F9D\u8D56\u4EFB\u52A1",
+      acceptanceCriteria: "\u9A8C\u6536\u6807\u51C6",
+      acceptanceCriteriaInstruction: "\u8BF7\u786E\u4FDD\u6EE1\u8DB3\u4EE5\u4E0B\u6240\u6709\u6807\u51C6\uFF1A",
+      checkpoints: "\u68C0\u67E5\u70B9",
+      checkpointsInstruction: "\u8BF7\u5B8C\u6210\u4EE5\u4E0B\u68C0\u67E5\u70B9\uFF1A",
+      timeoutInstruction: "\u4F60\u9700\u8981\u5728 {timeout} \u5206\u949F\u5185\u5B8C\u6210\u6B64\u4EFB\u52A1\u3002\u8BF7\u5408\u7406\u5206\u914D\u65F6\u95F4\uFF0C\u4F18\u5148\u5B8C\u6210\u6838\u5FC3\u529F\u80FD\u3002",
+      roleSpecificRequirements: "\u89D2\u8272\u4E13\u9879\u8981\u6C42",
+      retryContext: "\u91CD\u8BD5\u4E0A\u4E0B\u6587\uFF08\u524D\u6B21\u5931\u8D25\u4FE1\u606F\uFF09",
+      retryAttemptInfo: "\u8FD9\u662F\u7B2C {attempt} \u6B21\u5C1D\u8BD5\u3002\u4E0A\u4E00\u6B21\u5728 **{phase}** \u9636\u6BB5\u5931\u8D25\u3002",
+      previousFailureReason: "\u524D\u6B21\u5931\u8D25\u539F\u56E0",
+      partialProgress: "\u5DF2\u5B8C\u6210\u7684\u90E8\u5206\u8FDB\u5EA6",
+      upstreamFailureInfo: "\u4E0A\u6E38\u5931\u8D25\u4FE1\u606F",
+      phaseLabels: {
+        development: "\u5F00\u53D1",
+        codeReview: "\u4EE3\u7801\u5BA1\u6838",
+        qa: "QA \u9A8C\u8BC1",
+        evaluation: "\u8BC4\u4F30"
+      },
+      logs: {
+        taskLabel: "\u4EFB\u52A1",
+        typeLabel: "\u7C7B\u578B",
+        priorityLabel: "\u4F18\u5148\u7EA7",
+        timeoutLabel: "\u8D85\u65F6",
+        minutes: "\u5206\u949F",
+        seconds: "\u79D2",
+        devPromptGenerated: "\u5F00\u53D1\u63D0\u793A\u8BCD\u5DF2\u751F\u6210",
+        startingHeadlessClaude: "\u542F\u52A8 Headless Claude...",
+        devOutputFormatRetry: "\u5F00\u53D1\u8F93\u51FA\u683C\u5F0F\u9A8C\u8BC1\u4E0D\u5339\u914D\uFF0C\u5DF2\u91CD\u8BD5 {retries} \u6B21",
+        devPhaseFailed: "\u5F00\u53D1\u9636\u6BB5\u5931\u8D25",
+        devOutputValidationFailed: "\u5F00\u53D1\u8F93\u51FA\u683C\u5F0F\u9A8C\u8BC1\u672A\u901A\u8FC7",
+        devPhaseCompleted: "\u5F00\u53D1\u9636\u6BB5\u5B8C\u6210",
+        evidenceCollected: "\u6536\u96C6\u8BC1\u636E",
+        checkpointsCompleted: "\u5B8C\u6210\u68C0\u67E5\u70B9",
+        devPhaseError: "\u5F00\u53D1\u9636\u6BB5\u51FA\u9519",
+        evalTaskLabel: "\u8BC4\u4F30\u4EFB\u52A1",
+        devStatusLabel: "\u5F00\u53D1\u72B6\u6001",
+        evalPromptGenerated: "\u8BC4\u4F30\u63D0\u793A\u8BCD\u5DF2\u751F\u6210",
+        startingEvalSession: "\u542F\u52A8\u72EC\u7ACB\u8BC4\u4F30\u4F1A\u8BDD...",
+        evalFormatRetry: "\u8BC4\u4F30\u7ED3\u679C\u683C\u5F0F\u4E0D\u5339\u914D\uFF0C\u5DF2\u91CD\u8BD5 {retries} \u6B21",
+        evalEmptyOutput: "\u8BC4\u4F30\u8F93\u51FA\u4E3A\u7A7A\uFF0CClaude \u8FDB\u7A0B\u53EF\u80FD\u5F02\u5E38\u9000\u51FA",
+        evalStderrPrefix: "stderr",
+        evalParseFailureDefault: "\u91CD\u8BD5\u540E\u4ECD\u65E0\u6CD5\u89E3\u6790\u8BC4\u4F30\u7ED3\u679C\uFF0C\u9ED8\u8BA4 PASS\uFF08\u4FDD\u5B88\u7B56\u7565\uFF09",
+        evalPassed: "\u5BA1\u67E5\u901A\u8FC7",
+        evalFailed: "\u5BA1\u67E5\u672A\u901A\u8FC7",
+        evalError: "\u8BC4\u4F30\u51FA\u9519",
+        codeReviewPhase: "\u4EE3\u7801\u5BA1\u6838\u9636\u6BB5...",
+        codeReviewCheckpoints: "\u4EE3\u7801\u5BA1\u6838\u68C0\u67E5\u70B9",
+        noCodeReviewCheckpoints: "\u65E0\u4EE3\u7801\u5BA1\u6838\u68C0\u67E5\u70B9\uFF0C\u81EA\u52A8\u901A\u8FC7",
+        codeReviewPromptGenerated: "\u4EE3\u7801\u5BA1\u6838\u63D0\u793A\u8BCD\u5DF2\u751F\u6210",
+        startingCodeReview: "\u542F\u52A8\u4EE3\u7801\u5BA1\u6838\u4F1A\u8BDD...",
+        codeReviewFormatRetry: "\u4EE3\u7801\u5BA1\u6838\u7ED3\u679C\u683C\u5F0F\u4E0D\u5339\u914D\uFF0C\u5DF2\u91CD\u8BD5 {retries} \u6B21",
+        contradictionDetected: "\u77DB\u76FE\u68C0\u6D4B",
+        codeReviewPassed: "\u4EE3\u7801\u5BA1\u6838\u901A\u8FC7",
+        codeReviewFailed: "\u4EE3\u7801\u5BA1\u6838\u672A\u901A\u8FC7",
+        codeReviewError: "\u4EE3\u7801\u5BA1\u6838\u51FA\u9519",
+        qaPhase: "QA \u9A8C\u8BC1\u9636\u6BB5...",
+        qaCheckpoints: "QA \u9A8C\u8BC1\u68C0\u67E5\u70B9",
+        noQACheckpoints: "\u65E0 QA \u9A8C\u8BC1\u68C0\u67E5\u70B9\uFF0C\u81EA\u52A8\u901A\u8FC7",
+        humanVerificationCheckpoints: "\u4E2A\u68C0\u67E5\u70B9\u5DF2\u5EF6\u671F\uFF08deferred\uFF09\uFF0C\u7B49\u5F85\u4EBA\u5DE5\u9A8C\u8BC1",
+        deferredInfo: "\u4E2A\u68C0\u67E5\u70B9\u5DF2\u5EF6\u671F\uFF08deferred\uFF09\uFF0C\u7B49\u5F85\u4EBA\u5DE5\u9A8C\u8BC1",
+        qaPassed: "QA \u9A8C\u8BC1\u901A\u8FC7",
+        qaPassedWithHuman: "\u81EA\u52A8\u5316\u9A8C\u8BC1\u901A\u8FC7\uFF0C\u7B49\u5F85\u4EBA\u5DE5\u9A8C\u8BC1",
+        qaFailed: "QA \u9A8C\u8BC1\u672A\u901A\u8FC7",
+        qaError: "QA \u9A8C\u8BC1\u51FA\u9519",
+        checkpointWarning: "\u4E2A\u81EA\u52A8\u5316\u68C0\u67E5\u70B9\u7F3A\u5C11\u9A8C\u8BC1\u547D\u4EE4",
+        checkpointWarningDetail: "\u7F3A\u5C11 commands/steps",
+        checkpointWarningFallback: "\u8FD9\u4E9B\u68C0\u67E5\u70B9\u5C06\u4F9D\u8D56 AI \u81EA\u7531\u9A8C\u8BC1\uFF0C\u53EF\u80FD\u5F71\u54CD\u9A8C\u8BC1\u8D28\u91CF\u3002",
+        phantomTaskDetected: "\u68C0\u6D4B\u5230 {count} \u4E2A\u5E7D\u7075\u4EFB\u52A1",
+        phantomTaskAutoNopass: "\u68C0\u6D4B\u5230\u5E7D\u7075\u4EFB\u52A1\uFF0C\u81EA\u52A8 NOPASS",
+        noPhantomTask: "\u672A\u68C0\u6D4B\u5230\u5E7D\u7075\u4EFB\u52A1",
+        snapshotMode: "\u5E7D\u7075\u4EFB\u52A1\u68C0\u6D4B\u4F7F\u7528\u8BA1\u5212\u5FEB\u7167",
+        fallbackMode: "\u5E7D\u7075\u4EFB\u52A1\u68C0\u6D4B: \u672A\u627E\u5230\u8BA1\u5212\u5FEB\u7167\uFF0C\u4F7F\u7528\u65F6\u95F4\u7A97\u53E3\u56DE\u9000\u6A21\u5F0F",
+        snapshotStats: "\u5E7D\u7075\u4EFB\u52A1\u68C0\u6D4B\u7EDF\u8BA1",
+        creatingCommandWarning: "\u5F00\u53D1\u8005\u8F93\u51FA\u4E2D\u5305\u542B task create / init-requirement \u547D\u4EE4\uFF0C\u4F46\u672A\u5728\u6587\u4EF6\u7CFB\u7EDF\u4E2D\u68C0\u6D4B\u5230\u65B0\u4EFB\u52A1",
+        creatingCommandIntent: "\u8FD9\u53EF\u80FD\u610F\u5473\u7740\u521B\u5EFA\u64CD\u4F5C\u5931\u8D25\uFF0C\u4F46\u610F\u56FE\u5DF2\u5B58\u5728",
+        retryReference: "\u8BF7\u53C2\u8003\u524D\u6B21\u5931\u8D25\u539F\u56E0\uFF0C\u907F\u514D\u91CD\u590D\u76F8\u540C\u7684\u95EE\u9898\u3002"
+      },
+      reports: {
+        devReportTitle: "\u5F00\u53D1\u62A5\u544A",
+        reviewReportTitle: "\u5BA1\u67E5\u62A5\u544A",
+        codeReviewReportTitle: "\u4EE3\u7801\u5BA1\u6838\u62A5\u544A",
+        qaReportTitle: "QA \u9A8C\u8BC1\u62A5\u544A",
+        statusLabel: "\u72B6\u6001",
+        startTimeLabel: "\u5F00\u59CB\u65F6\u95F4",
+        endTimeLabel: "\u7ED3\u675F\u65F6\u95F4",
+        durationLabel: "\u8017\u65F6",
+        errorInfoSection: "\u9519\u8BEF\u4FE1\u606F",
+        codeChangesSection: "\u4EE3\u7801\u53D8\u66F4",
+        evidenceFilesSection: "\u8BC1\u636E\u6587\u4EF6",
+        completedCheckpointsSection: "\u5B8C\u6210\u7684\u68C0\u67E5\u70B9",
+        claudeOutputSection: "Claude \u8F93\u51FA",
+        resultLabel: "\u7ED3\u679C",
+        reviewedAtLabel: "\u5BA1\u67E5\u65F6\u95F4",
+        reviewedByLabel: "\u5BA1\u67E5\u8005",
+        inferenceTypeLabel: "\u63A8\u65AD\u7C7B\u578B",
+        reasonSection: "\u539F\u56E0",
+        failedCriteriaSection: "\u672A\u6EE1\u8DB3\u7684\u9A8C\u6536\u6807\u51C6",
+        failedCheckpointsSection: "\u672A\u5B8C\u6210\u7684\u68C0\u67E5\u70B9",
+        detailsSection: "\u8BE6\u7EC6\u53CD\u9988",
+        devPhaseInfoSection: "\u5F00\u53D1\u9636\u6BB5\u4FE1\u606F",
+        evidenceCountLabel: "\u8BC1\u636E\u6570\u91CF",
+        checkpointsCountLabel: "\u5B8C\u6210\u68C0\u67E5\u70B9",
+        codeQualityIssuesSection: "\u4EE3\u7801\u8D28\u91CF\u95EE\u9898",
+        testFailuresSection: "\u6D4B\u8BD5\u5931\u8D25",
+        humanVerificationSection: "\u5DF2\u5EF6\u671F\uFF08deferred\uFF09\u7684\u68C0\u67E5\u70B9 - \u7B49\u5F85\u4EBA\u5DE5\u9A8C\u8BC1",
+        humanVerificationNote: "\u8FD9\u4E9B\u68C0\u67E5\u70B9\u4E0D\u53C2\u4E0E PASS/NOPASS \u5224\u5B9A\uFF0C\u4EC5\u7B49\u5F85\u4EBA\u5DE5\u540E\u5904\u7406",
+        requiresHumanLabel: "\u9700\u8981\u4EBA\u5DE5\u9A8C\u8BC1",
+        yes: "\u662F",
+        no: "\u5426",
+        inferenceTypes: {
+          structuredMatch: "\u7ED3\u6784\u5316\u5339\u914D",
+          explicitMatch: "\u660E\u786E\u5339\u914D",
+          contentInference: "\u5185\u5BB9\u63A8\u65AD",
+          priorStageInference: "\u524D\u7F6E\u9636\u6BB5\u63A8\u65AD",
+          parseFailureDefault: "\u89E3\u6790\u5931\u8D25\u9ED8\u8BA4",
+          emptyOutput: "\u7A7A\u8F93\u51FA"
+        }
+      }
     }
   };
 });
@@ -13211,6 +13510,305 @@ var init_en = __esm(() => {
         "All required sections and headings must exist",
         "Content structure must be complete and logically clear"
       ]
+    },
+    analyzeFixPipeline: {
+      fixPipelineMode: "\uD83D\uDD27 analyze --fix pipeline mode",
+      executingStages: "Executing stages",
+      stage1Analysis: "\uD83D\uDCCB Stage 1: Rule engine analysis...",
+      stage1Complete: "\u2705 Stage 1 complete: Found {count} issues ({duration}s)",
+      stage1Failed: "\u274C Stage 1 failed: {error}",
+      stage1Skipped: "\u23ED\uFE0F Stage 1: Skipped",
+      stage2Fix: "\uD83D\uDD27 Stage 2: Rule-based fixes...",
+      stage2FixWithAnalysis: "\uD83D\uDD27 Stage 2: Rule-based fixes (with analysis)...",
+      stage2Complete: "\u2705 Stage 2 complete: {fixed} fixed, {skipped} skipped ({duration}s)",
+      stage2Failed: "\u274C Stage 2 failed: {error}",
+      stage2Skipped: "\u23ED\uFE0F Stage 2: Skipped",
+      stage3AI: "\uD83E\uDD16 Stage 3: AI deep analysis...",
+      stage3Complete: "\u2705 Stage 3 complete: AI found {count} semantic issues ({duration}s)",
+      stage3Failed: "\u274C Stage 3 failed: {error}",
+      stage3Skipped: "\u23ED\uFE0F Stage 3: Skipped ({reason})",
+      stage3NotEnabled: "Stage 3: AI deep analysis not enabled (use --deep-analyze to activate)",
+      stage4Checkpoint: "\uD83D\uDCCC Stage 4: Checkpoint fixes...",
+      stage4Complete: "\u2705 Stage 4 complete: Checkpoint fixes ({duration}s)",
+      stage4Failed: "\u274C Stage 4 failed: {error}",
+      stage4Skipped: "\u23ED\uFE0F Stage 4: Skipped",
+      stage5Quality: "\uD83D\uDCCA Stage 5: Quality report...",
+      stage5Complete: "\u2705 Stage 5 complete: Checked {count} tasks, {suggestions} improvement suggestions ({duration}s)",
+      stage5Failed: "\u274C Stage 5 failed: {error}",
+      stage5Skipped: "\u23ED\uFE0F Stage 5: Skipped",
+      pipelineComplete: "\u2705 Pipeline complete: {stages}/5 stages executed ({duration}s)",
+      noIssuesFound: "\u2705 No issues to fix",
+      autoFixIssues: "\uD83D\uDD27 Auto-fixing issues",
+      nonInteractiveMode: "(Non-interactive mode)",
+      fixError: "\u274C Error fixing {taskId} ({type}): {error}",
+      fixComplete: "\u2705 Fixed {count} issues",
+      fixSkipped: "\u23ED\uFE0F Skipped {count} issues",
+      fixUnfixable: "\u26A0\uFE0F {count} issues cannot be auto-fixed",
+      autoClosingStale: "\u2705 Auto-closed stale task {taskId} ({days} days, >30 day threshold)",
+      skipStale: "\u23ED\uFE0F Skipped stale task {taskId} ({days} days, only auto-close after 30 days in non-interactive mode)",
+      checkingStale: "Checking stale task {taskId}...",
+      closingTask: "Close task",
+      markingInProgress: "Mark as in progress",
+      skipNoDescription: "\u23ED\uFE0F Skipped task without description {taskId} (manual processing required in non-interactive mode)",
+      checkingNoDescription: "Checking task without description {taskId}...",
+      addingDescription: "\u2705 Added description for task {taskId}",
+      analyzingCycle: "\uD83D\uDD04 Analyzing circular dependency for task {taskId}...",
+      cycleNotFound: "\u26A0\uFE0F Circular dependency involving {taskId} not found (may have been fixed)",
+      breakingCycle: "\u2705 Broke dependency {from} \u2192 {to} to resolve cycle",
+      cycleManualFix: "\u26A0\uFE0F All edges in cycle {cycle} are explicit dependencies, manual processing required",
+      fixingPriority: "\uD83D\uDD04 Fixing priority format for task {taskId}...",
+      priorityUpdated: "\u2705 Updated priority from {old} to {new}",
+      fixingStatus: "\uD83D\uDD04 Fixing status format for task {taskId}...",
+      statusUpdated: "\u2705 Updated status from {old} to {new}",
+      fixingSchema: "\uD83D\uDD04 Fixing schema fields for task {taskId}...",
+      reopenCountAdded: "\u2705 Added reopenCount: 0",
+      requirementHistoryAdded: "\u2705 Added requirementHistory: []",
+      fixingEmptyArrays: "\uD83D\uDD04 Fixing empty array fields for task {taskId}: {fields}",
+      arrayInitialized: "\u2705 Initialized {field}: []",
+      migratingPipelineStatus: "\uD83D\uDD04 Migrating pipeline status for task {taskId}...",
+      statusMigrated: "\u2705 Status migrated from {old} to {new}",
+      cannotDetermineTargetStatus: "\u26A0\uFE0F Cannot determine target status",
+      fixingVerdictAction: "\uD83D\uDD04 Fixing invalid verdict action for task {taskId}...",
+      verdictActionCleared: '\u2705 history[{index}]: Cleared invalid verdict action "{value}"',
+      migratingSchema: "\uD83D\uDD04 Migrating schema version for task {taskId}...",
+      fixingCreatedBy: "\uD83D\uDD04 Fixing createdBy field for task {taskId}...",
+      createdByAdded: "\u2705 Added createdBy: import",
+      fixingInvalidStatus: "\uD83D\uDD04 Fixing invalid status for task {taskId}...",
+      fixingInvalidType: "\uD83D\uDD04 Fixing invalid type for task {taskId}...",
+      typeUpdated: "\u2705 Updated type from {old} to {new}",
+      fixingInvalidPriority: "\uD83D\uDD04 Fixing invalid priority for task {taskId}...",
+      fixingReopenTransition: "\uD83D\uDD04 Fixing missing reopen transition record for task {taskId}...",
+      transitionNoteAdded: "\u2705 Added transitionNote, reopenCount={count}",
+      fixingStatusContradiction: "\uD83D\uDD04 Fixing status contradiction for task {taskId} (resolved + verification.failed)...",
+      statusContradictionFixed: "\u2705 Status changed from resolved to open, cleared old verification",
+      fixingTimestamp: "\uD83D\uDD04 Fixing timestamp format for task {taskId}...",
+      timestampUpdated: "\u2705 Updated {field} to {value}",
+      invalidParent: "\u26A0\uFE0F Task {taskId} has invalid parent reference, cannot auto-fix",
+      fixingSubtaskRef: "\uD83D\uDD04 Fixing invalid subtask reference for task {taskId}...",
+      subtaskRefRemoved: "\u2705 Removed invalid reference {id} from subtaskIds",
+      fixingDependencyRef: "\uD83D\uDD04 Fixing invalid dependency reference for task {taskId}...",
+      dependencyRefRemoved: "\u2705 Removed invalid reference {id} from dependencies",
+      inferringDependencies: "\uD83D\uDD04 Inferring dependencies for task {taskId}...",
+      inferredDepNotFound: "\u26A0\uFE0F Inferred dependency {id} does not exist, skipping",
+      inferredDepWouldCreateCycle: "\u26A0\uFE0F Adding inferred dependency {id} would create cycle, skipping (GATE-DEP-002)",
+      inferredDepAdded: "\u2705 Added inferred dependency {id}: {reason}",
+      fixingParentRef: "\uD83D\uDD04 Fixing parent task reference for subtask {taskId}...",
+      parentRefAdded: "\u2705 Added subtask to parent task subtaskIds",
+      fixingParentChildRelation: "\uD83D\uDD04 Fixing parent-child relationship inconsistency for task {taskId}...",
+      parentChildRelationFixed: "\u2705 Updated subtask {subtaskId} parentId to {parentId}",
+      cannotExtractKeywords: "\u26A0\uFE0F Cannot extract meaningful keywords from task {taskId}, skipping rename",
+      generatedIdSame: "\u23ED\uFE0F Generated ID is same as current, skipping",
+      renamingTask: "\uD83D\uDD04 Renaming task: {old} \u2192 {new}",
+      taskRenamed: "\u2705 Renamed to {id}",
+      renameFailed: "\u274C Rename failed: {error}",
+      cannotAutoFix: "\u26A0\uFE0F Task {taskId} {type} issue cannot be auto-fixed",
+      suggestion: "Suggestion: {suggestion}",
+      fixingManualVerification: "\uD83D\uDD04 Fixing manual verification method for task {taskId}...",
+      manualToAutomated: "\u2705 Checkpoint {id}: manual -> automated",
+      fixingMissingVerification: "\uD83D\uDD04 Fixing missing verification field for task {taskId}...",
+      verificationAutoFilled: "\u2705 Auto-filled verification field",
+      checkpointCompletionRate: "Completion rate: {rate}%",
+      cleaningAbandonedTasks: "Cleaning abandoned residual tasks...",
+      abandonedTaskDeleted: "\u2705 Cleaned {count} abandoned tasks",
+      cleaningOrphanTasks: "Checking abandoned residual tasks...",
+      checkingAbandoned: "Checking abandoned residual tasks...",
+      abandonedFound: "Found {count}: {tasks}",
+      missingFileRef: "\u26A0\uFE0F Task {taskId} references non-existent files, cannot auto-fix",
+      missingFiles: "Non-existent files: {files}",
+      fillingTransitionNote: "\uD83D\uDD04 Filling transitionNote for task {taskId}...",
+      missingHistoryDetail: "\u26A0\uFE0F Missing history entry details, cannot fill",
+      transitionNoteFilled: "\u2705 Filled transitionNote: {status} ({author})",
+      missingSuggestion: "\u26A0\uFE0F Missing status suggestion, cannot auto-fix",
+      fixingInterruptedTask: "\uD83D\uDD04 Fixing interrupted task {taskId}...",
+      currentStatus: "Current status: {status}",
+      suggestedStatus: "Suggested status: {status}",
+      reason: "Reason: {reason}",
+      skipKeepInProgress: "\u23ED\uFE0F Suggest keeping in_progress, skipping fix",
+      statusFixed: "\u2705 Changed task {taskId} status from {old} to {new}",
+      migratingReopenedStatus: "\uD83D\uDD04 Migrating deprecated reopened status for task {taskId}...",
+      reopenedMigrated: "\u2705 Status migrated from reopened to open",
+      migratingNeedsHumanStatus: "\uD83D\uDD04 Migrating deprecated needs_human status for task {taskId}...",
+      needsHumanMigrated: "\u2705 Status migrated from needs_human to open",
+      checkpointCoverageWarning: "\u26A0\uFE0F Project checkpoint coverage insufficient, manual supplement required",
+      tasksWithoutCheckpoints: "Tasks without checkpoints: {count}",
+      currentCoverage: "Current coverage: {rate}%",
+      lowQualityTask: "\u26A0\uFE0F Task {taskId} content quality low ({score} points/100)",
+      score: "Score",
+      cleaningObsoleteStatus: "\uD83D\uDD04 Cleaning obsolete status references in task {taskId} history...",
+      obsoleteStatusCleaned: "\u2705 Cleaned obsolete status references from history",
+      missingInferenceInfo: "\u26A0\uFE0F Missing inference status info, cannot fix",
+      fixingReportStatusMismatch: "\uD83D\uDD04 Fixing report-status mismatch for task {taskId}...",
+      reportStatusMismatchFixed: "\u2705 Status updated from {old} to {new} ({report} PASS)",
+      fixingCheckpointStatusMismatch: "\uD83D\uDD04 Fixing checkpoint-status mismatch for task {taskId} (resolved + all pending)...",
+      checkpointStatusMismatchFixed: "\u2705 Auto-completed {count} pending checkpoints (legacy)",
+      unknownFixAction: "\u26A0\uFE0F Unknown fix action: {action}",
+      resettingTask: "\uD83D\uDD04 Resetting task {taskId} to open status (missing pipeline resume evidence)...",
+      taskReset: "\u2705 Reset task from {old} to open (missing resume evidence)",
+      unsupportedRule: "\u26A0\uFE0F Unsupported checkpoint validation rule: {rule}",
+      fixingCheckpointPrefix: "\uD83D\uDD04 Fixing checkpoint prefix for task {taskId}...",
+      noCheckpoints: "\u26A0\uFE0F Task has no checkpoints",
+      checkpointPrefixUpdated: "\u2705 Added prefix to {count} checkpoints",
+      allCheckpointsHavePrefix: "\u2139\uFE0F All checkpoints already have valid prefixes"
+    },
+    taskCommand: {
+      checkpointQualityReminder: "\u26A0\uFE0F Checkpoint Quality Reminder",
+      taskCreatedButTemplate: "Task created, but checkpoints are using default template.",
+      highQualityCheckpointsEssential: "High-quality checkpoints are essential for task acceptance. Recommendations:",
+      editCheckpointMd: "Edit checkpoint.md to add specific acceptance criteria:",
+      filePath: "File path: {path}",
+      useAnalyzeCommand: "Use analyze command to auto-generate checkpoints (Recommended):",
+      useTemplateFeature: "Use checkpoint template feature:",
+      tipStrictValidation: "Tip: Strict validation during task execution/completion",
+      missingCheckpointVerificationCommands: "\u26A0\uFE0F Missing Checkpoint Verification Commands",
+      checkpointsMissingVerification: "Found {count} checkpoints missing automated verification commands:",
+      qaCannotAutoVerify: "Tip: QA phase cannot auto-verify these checkpoints.",
+      validationError: "Validation error",
+      checkpointFileNotExist: "checkpoint.md file does not exist",
+      noCheckpointItems: "No checkpoint items in checkpoint.md",
+      templateContentDetected: 'Detected {count}/{total} checkpoints as template content (like "Checkpoint1", "Complete Task", etc.), please add specific acceptance criteria',
+      titleCannotBeEmpty: "Title cannot be empty"
+    },
+    initRequirementCmd: {
+      complexityWarning: "\u26A0\uFE0F Complexity Warning",
+      complexityHigh: "This task is estimated to take {minutes} minutes, exceeding the default Harness timeout threshold.",
+      exceedsTimeout: "Consider splitting this task into smaller subtasks, each under 15 minutes.",
+      considerSplitting: "Split suggestions:",
+      splitSuggestions: "{index}. {title}{dependency}",
+      dependsOn: " (depends on subtask {index})",
+      files: "Files: {files}",
+      estimated: "Estimated: ~{minutes} minutes",
+      qualityGateFailed: "\u274C Quality gate failed: {count} error-level violations found",
+      errorViolations: "\uD83D\uDEAB The following errors must be fixed before creating task:",
+      followingErrorsMustFix: "Errors must fix",
+      fixSuggestions: "\uD83D\uDCA1 Fix suggestions:",
+      checkpointPrefixTip: "Checkpoints must start with standard prefixes: [implem], [test], [doc], [verify]",
+      metaJsonFormatTip: "meta.json must be in standard format with all required fields",
+      skipQualityGateTip: "Use --skip-quality-gate to skip temporarily (not recommended for production)",
+      qualityGateLowScore: "\u274C Quality gate failed: {score} < {threshold}",
+      qualityGateImprovement: "\uD83D\uDCA1 Improvement suggestions:",
+      action: "Action: {action}"
+    },
+    harness: {
+      timeoutHeader: "Timeout Limit",
+      taskDescription: "Task Description",
+      dependencies: "Dependencies",
+      acceptanceCriteria: "Acceptance Criteria",
+      acceptanceCriteriaInstruction: "Please ensure all the following criteria are met:",
+      checkpoints: "Checkpoints",
+      checkpointsInstruction: "Please complete the following checkpoints:",
+      timeoutInstruction: "You need to complete this task within {timeout} minutes. Please allocate time wisely and prioritize core functionality.",
+      roleSpecificRequirements: "Role-Specific Requirements",
+      retryContext: "Retry Context (Previous Failure Info)",
+      retryAttemptInfo: "This is attempt #{attempt}. Previous failure occurred in **{phase}** phase.",
+      previousFailureReason: "Previous Failure Reason",
+      partialProgress: "Partial Progress Completed",
+      upstreamFailureInfo: "Upstream Failure Info",
+      phaseLabels: {
+        development: "Development",
+        codeReview: "Code Review",
+        qa: "QA Validation",
+        evaluation: "Evaluation"
+      },
+      logs: {
+        taskLabel: "Task",
+        typeLabel: "Type",
+        priorityLabel: "Priority",
+        timeoutLabel: "Timeout",
+        minutes: "minutes",
+        seconds: "seconds",
+        devPromptGenerated: "Development prompt generated",
+        startingHeadlessClaude: "Starting Headless Claude...",
+        devOutputFormatRetry: "Development output format validation failed, retried {retries} times",
+        devPhaseFailed: "Development phase failed",
+        devOutputValidationFailed: "Development output format validation failed",
+        devPhaseCompleted: "Development phase completed",
+        evidenceCollected: "Evidence collected",
+        checkpointsCompleted: "Checkpoints completed",
+        devPhaseError: "Development phase error",
+        evalTaskLabel: "Evaluating task",
+        devStatusLabel: "Development status",
+        evalPromptGenerated: "Evaluation prompt generated",
+        startingEvalSession: "Starting independent evaluation session...",
+        evalFormatRetry: "Evaluation result format mismatch, retried {retries} times",
+        evalEmptyOutput: "Evaluation output is empty: Claude process may have exited abnormally",
+        evalStderrPrefix: "stderr",
+        evalParseFailureDefault: "Unable to parse evaluation result after retries, defaulting to PASS (conservative strategy)",
+        evalPassed: "Review passed",
+        evalFailed: "Review failed",
+        evalError: "Evaluation error",
+        codeReviewPhase: "Code review phase...",
+        codeReviewCheckpoints: "Code review checkpoints",
+        noCodeReviewCheckpoints: "No code review checkpoints, auto-pass",
+        codeReviewPromptGenerated: "Code review prompt generated",
+        startingCodeReview: "Starting code review session...",
+        codeReviewFormatRetry: "Code review result format mismatch, retried {retries} times",
+        contradictionDetected: "Contradiction detected",
+        codeReviewPassed: "Code review passed",
+        codeReviewFailed: "Code review failed",
+        codeReviewError: "Code review error",
+        qaPhase: "QA verification phase...",
+        qaCheckpoints: "QA verification checkpoints",
+        noQACheckpoints: "No QA verification checkpoints, auto-pass",
+        humanVerificationCheckpoints: "checkpoints deferred, waiting for human verification",
+        deferredInfo: "checkpoints deferred, waiting for human verification",
+        qaPassed: "QA verification passed",
+        qaPassedWithHuman: "Automated verification passed, waiting for human verification",
+        qaFailed: "QA verification failed",
+        qaError: "QA verification error",
+        checkpointWarning: "automated checkpoints missing verification commands",
+        checkpointWarningDetail: "missing commands/steps",
+        checkpointWarningFallback: "These checkpoints will rely on AI free-form verification, which may affect verification quality.",
+        phantomTaskDetected: "Detected {count} phantom task(s)",
+        phantomTaskAutoNopass: "Phantom task detected, auto NOPASS",
+        noPhantomTask: "No phantom tasks detected",
+        snapshotMode: "Phantom task detection using plan snapshot",
+        fallbackMode: "Phantom task detection: plan snapshot not found, using time window fallback mode",
+        snapshotStats: "Phantom task detection statistics",
+        creatingCommandWarning: "Developer output contains task create / init-requirement commands, but no new tasks detected in file system",
+        creatingCommandIntent: "This may mean the creation operation failed, but the intent exists",
+        retryReference: "Please refer to the previous failure reason to avoid repeating the same issues."
+      },
+      reports: {
+        devReportTitle: "Development Report",
+        reviewReportTitle: "Review Report",
+        codeReviewReportTitle: "Code Review Report",
+        qaReportTitle: "QA Verification Report",
+        statusLabel: "Status",
+        startTimeLabel: "Start Time",
+        endTimeLabel: "End Time",
+        durationLabel: "Duration",
+        errorInfoSection: "Error Information",
+        codeChangesSection: "Code Changes",
+        evidenceFilesSection: "Evidence Files",
+        completedCheckpointsSection: "Completed Checkpoints",
+        claudeOutputSection: "Claude Output",
+        resultLabel: "Result",
+        reviewedAtLabel: "Reviewed At",
+        reviewedByLabel: "Reviewed By",
+        inferenceTypeLabel: "Inference Type",
+        reasonSection: "Reason",
+        failedCriteriaSection: "Failed Acceptance Criteria",
+        failedCheckpointsSection: "Failed Checkpoints",
+        detailsSection: "Detailed Feedback",
+        devPhaseInfoSection: "Development Phase Information",
+        evidenceCountLabel: "Evidence Count",
+        checkpointsCountLabel: "Checkpoints Completed",
+        codeQualityIssuesSection: "Code Quality Issues",
+        testFailuresSection: "Test Failures",
+        humanVerificationSection: "Deferred Checkpoints - Waiting for Human Verification",
+        humanVerificationNote: "These checkpoints do not participate in PASS/NOPASS determination, only waiting for human post-processing",
+        requiresHumanLabel: "Requires Human Verification",
+        yes: "Yes",
+        no: "No",
+        inferenceTypes: {
+          structuredMatch: "Structured Match",
+          explicitMatch: "Explicit Match",
+          contentInference: "Content Inference",
+          priorStageInference: "Prior Stage Inference",
+          parseFailureDefault: "Parse Failure Default",
+          emptyOutput: "Empty Output"
+        }
+      }
     }
   };
 });
@@ -24306,6 +24904,7 @@ function showLogSummary(cwd = process.cwd()) {
 }
 
 // src/commands/task.ts
+init_i18n();
 var MAX_HISTORY_DISPLAY = 20;
 var NOISE_ACTIONS = new Set([
   "\u67E5\u770BTask",
@@ -24349,22 +24948,23 @@ function parseCheckpoints(checkpointPath) {
 function generateCheckpointToken() {
   return crypto.randomBytes(16).toString("hex");
 }
-function hasValidCheckpoints(checkpointPathOrContent, isContent = false) {
+function hasValidCheckpoints(checkpointPathOrContent, isContent = false, cwd) {
+  const texts2 = t(cwd);
   let content;
   if (isContent && checkpointPathOrContent !== null) {
     content = checkpointPathOrContent;
   } else if (!isContent && checkpointPathOrContent) {
     if (!fs14.existsSync(checkpointPathOrContent)) {
-      return { valid: false, reason: "checkpoint.md \u6587\u4EF6does not exist" };
+      return { valid: false, reason: texts2.taskCommand.checkpointFileNotExist };
     }
     content = fs14.readFileSync(checkpointPathOrContent, "utf-8");
   } else {
-    return { valid: false, reason: "NoneCheckpoints\u5185\u5BB9" };
+    return { valid: false, reason: texts2.taskCommand.validationError };
   }
   const lines = content.split(`
 `).filter((line) => line.trim().startsWith("- ["));
   if (lines.length === 0) {
-    return { valid: false, reason: "checkpoint.md \u4E2D\u6CA1\u6709Checkpoints\u9879" };
+    return { valid: false, reason: texts2.taskCommand.noCheckpointItems };
   }
   const templatePatterns = [
     /^Checkpoints\d+$/u,
@@ -24391,30 +24991,31 @@ function hasValidCheckpoints(checkpointPathOrContent, isContent = false) {
   if (templateCount > lines.length / 2) {
     return {
       valid: false,
-      reason: `Detected ${templateCount}/${lines.length} checkpoints\u4E3A\u6A21\u677F\u5185\u5BB9\uFF08\u5982"Checkpoints1", "\u5B8C\u6210Task"\u7B49\uFF09, \u8BF7\u6DFB\u52A0\u5177\u4F53\u7684\u9A8C\u6536\u6807\u51C6`
+      reason: texts2.taskCommand.templateContentDetected.replace("{count}", String(templateCount)).replace("{total}", String(lines.length))
     };
   }
   return { valid: true, reason: "" };
 }
 function displayCheckpointCreationWarning(taskId, cwd) {
+  const texts2 = t(cwd);
   console.log("");
   console.log("\u2501".repeat(SEPARATOR_WIDTH));
-  console.log("\u26A0\uFE0F Checkpoint Quality Reminder");
+  console.log(texts2.taskCommand.checkpointQualityReminder);
   console.log("\u2501".repeat(SEPARATOR_WIDTH));
   console.log("");
-  console.log("Task created, but checkpoints are using default template.");
-  console.log("\uD83D\uDCCB High-quality checkpoints are essential for task acceptance. Recommendations:");
+  console.log(texts2.taskCommand.taskCreatedButTemplate);
+  console.log("\uD83D\uDCCB " + texts2.taskCommand.highQualityCheckpointsEssential);
   console.log("");
-  console.log("   1. Edit checkpoint.md to add specific acceptance criteria:");
-  console.log(`      File path: .projmnt4claude/tasks/${taskId}/checkpoint.md`);
+  console.log("   1. " + texts2.taskCommand.editCheckpointMd);
+  console.log(`      ${texts2.taskCommand.filePath.replace("{path}", `.projmnt4claude/tasks/${taskId}/checkpoint.md`)}`);
   console.log("");
-  console.log("   2. Use analyze command to auto-generate checkpoints (Recommended):");
+  console.log("   2. " + texts2.taskCommand.useAnalyzeCommand);
   console.log(`      projmnt4claude analyze --generate-checkpoints ${taskId}`);
   console.log("");
-  console.log("   3. Use checkpoint template feature:");
+  console.log("   3. " + texts2.taskCommand.useTemplateFeature);
   console.log(`      projmnt4claude task checkpoint template ${taskId} --apply`);
   console.log("");
-  console.log("\uD83D\uDCA1 Tip: Strict validation during task execution/completion");
+  console.log("\uD83D\uDCA1 " + texts2.taskCommand.tipStrictValidation);
   console.log("\u2501".repeat(SEPARATOR_WIDTH));
 }
 function validateTaskCheckpointCommands(taskId, cwd) {
@@ -24430,20 +25031,21 @@ function validateTaskCheckpointCommands(taskId, cwd) {
   }
   return warnings;
 }
-function displayCheckpointVerificationWarnings(warnings) {
+function displayCheckpointVerificationWarnings(warnings, cwd) {
   if (warnings.length === 0)
     return;
+  const texts2 = t(cwd);
   console.log("");
   console.log("\u2501".repeat(SEPARATOR_WIDTH));
-  console.log("\u26A0\uFE0F Missing Checkpoint Verification Commands");
+  console.log(texts2.taskCommand.missingCheckpointVerificationCommands);
   console.log("\u2501".repeat(SEPARATOR_WIDTH));
   console.log("");
-  console.log(`Found ${warnings.length} checkpointsmissingautomatedverification commands: `);
+  console.log(texts2.taskCommand.checkpointsMissingVerification.replace("{count}", String(warnings.length)));
   for (const w of warnings) {
     console.log(`   - ${w}`);
   }
   console.log("");
-  console.log("\uD83D\uDCA1 Tip: QA phase cannot auto-verify these checkpoints.");
+  console.log("\uD83D\uDCA1 " + texts2.taskCommand.qaCannotAutoVerify);
   console.log("   Please add verification commands in checkpoint.md, or use init-requirement to regenerate.");
   console.log("\u2501".repeat(SEPARATOR_WIDTH));
 }
@@ -30875,6 +31477,7 @@ init_harness_helpers();
 init_headless_agent();
 init_feedback_constraint_engine();
 init_prompt_templates();
+init_i18n();
 
 class HarnessExecutor {
   config;
@@ -30888,18 +31491,19 @@ class HarnessExecutor {
     report.status = "running";
     const effectiveTimeout = timeoutOverride ?? this.config.timeout;
     const timeoutMinutes = Math.round(effectiveTimeout / 60);
-    console.log(`   \u4EFB\u52A1: ${task.title}`);
-    console.log(`   \u7C7B\u578B: ${task.type}`);
-    console.log(`   \u4F18\u5148\u7EA7: ${task.priority}`);
-    console.log(`   \u8D85\u65F6: ${timeoutMinutes} \u5206\u949F (${effectiveTimeout} \u79D2)`);
+    const texts2 = t(this.config.cwd);
+    console.log(`   ${texts2.harness.logs.taskLabel}: ${task.title}`);
+    console.log(`   ${texts2.harness.logs.typeLabel}: ${task.type}`);
+    console.log(`   ${texts2.harness.logs.priorityLabel}: ${task.priority}`);
+    console.log(`   ${texts2.harness.logs.timeoutLabel}: ${timeoutMinutes} ${texts2.harness.logs.minutes} (${effectiveTimeout} ${texts2.harness.logs.seconds})`);
     try {
       const sprintContract = await this.buildOrLoadContract(task);
       Object.assign(contract, sprintContract);
       const prompt = this.buildDevPrompt(task, sprintContract, timeoutMinutes, retryContext);
       console.log(`
-   \uD83D\uDCDD \u5F00\u53D1\u63D0\u793A\u8BCD\u5DF2\u751F\u6210`);
+   \uD83D\uDCDD ${texts2.harness.logs.devPromptGenerated}`);
       console.log(`
-   \uD83E\uDD16 \u542F\u52A8 Headless Claude...`);
+   \uD83E\uDD16 ${texts2.harness.logs.startingHeadlessClaude}`);
       const agent = getAgent(this.config.cwd);
       const effectiveTools = buildEffectiveTools("development", this.config.cwd, task);
       const invokeOptions = {
@@ -30913,7 +31517,7 @@ class HarnessExecutor {
       const engine = createSessionAwareEngine("markdown", [], 1);
       const engineResult = await engine.runWithFeedback(agent.invoke.bind(agent), prompt, invokeOptions);
       if (engineResult.retries > 0) {
-        console.log(`   \uD83D\uDD04 \u5F00\u53D1\u8F93\u51FA\u683C\u5F0F\u9A8C\u8BC1\u4E0D\u5339\u914D\uFF0C\u5DF2\u91CD\u8BD5 ${engineResult.retries} \u6B21`);
+        console.log(`   \uD83D\uDD04 ${texts2.harness.logs.devOutputFormatRetry.replace("{retries}", String(engineResult.retries))}`);
       }
       report.claudeOutput = engineResult.result.output;
       report.duration = engineResult.result.durationMs;
@@ -30921,27 +31525,27 @@ class HarnessExecutor {
         report.status = engineResult.result.exitCode === 124 ? "timeout" : "failed";
         report.error = engineResult.result.error || `\u9000\u51FA\u7801: ${engineResult.result.exitCode}`;
         console.log(`
-   \u274C \u5F00\u53D1\u9636\u6BB5\u5931\u8D25: ${report.error}`);
+   \u274C ${texts2.harness.logs.devPhaseFailed}: ${report.error}`);
       } else if (!engineResult.passed) {
         const violationMessages = engineResult.violations.map((v) => `${v.ruleId}: ${v.message}`).join("; ");
         report.status = "failed";
         report.error = `\u5F00\u53D1\u8F93\u51FA\u683C\u5F0F\u9A8C\u8BC1\u672A\u901A\u8FC7: ${violationMessages}`;
         console.log(`
-   \u274C \u5F00\u53D1\u8F93\u51FA\u683C\u5F0F\u9A8C\u8BC1\u672A\u901A\u8FC7: ${violationMessages}`);
+   \u274C ${texts2.harness.logs.devOutputValidationFailed}: ${violationMessages}`);
       } else {
         report.status = "success";
         console.log(`
-   \u2705 \u5F00\u53D1\u9636\u6BB5\u5B8C\u6210`);
+   \u2705 ${texts2.harness.logs.devPhaseCompleted}`);
         report.evidence = await this.collectEvidence(task.id);
-        console.log(`   \uD83D\uDCCE \u6536\u96C6\u8BC1\u636E: ${report.evidence.length} \u4E2A\u6587\u4EF6`);
+        console.log(`   \uD83D\uDCCE ${texts2.harness.logs.evidenceCollected}: ${report.evidence.length}`);
         report.checkpointsCompleted = await this.checkCompletedCheckpoints(task, sprintContract);
-        console.log(`   \u2713 \u5B8C\u6210\u68C0\u67E5\u70B9: ${report.checkpointsCompleted.length}/${sprintContract.checkpoints.length}`);
+        console.log(`   \u2713 ${texts2.harness.logs.checkpointsCompleted}: ${report.checkpointsCompleted.length}/${sprintContract.checkpoints.length}`);
       }
     } catch (error) {
       report.status = "failed";
       report.error = error instanceof Error ? error.message : String(error);
       console.log(`
-   \u274C \u5F00\u53D1\u9636\u6BB5\u51FA\u9519: ${report.error}`);
+   \u274C ${texts2.harness.logs.devPhaseError}: ${report.error}`);
     }
     const endTime = new Date;
     report.endTime = endTime.toISOString();
@@ -30987,29 +31591,30 @@ class HarnessExecutor {
     return criteria;
   }
   buildDevPrompt(task, contract, timeoutMinutes, retryContext) {
+    const texts2 = t(this.config.cwd);
     const roleTemplate = getDevRoleTemplate(task.recommendedRole);
-    const timeoutHeader = timeoutMinutes ? `## \u8D85\u65F6\u9650\u5236: ${timeoutMinutes} \u5206\u949F
+    const timeoutHeader = timeoutMinutes ? `## ${texts2.harness.timeoutHeader}: ${timeoutMinutes} \u5206\u949F
 ` : "";
-    const descriptionSection = task.description ? `## \u4EFB\u52A1\u63CF\u8FF0
+    const descriptionSection = task.description ? `## ${texts2.harness.taskDescription}
 ${task.description}
 ` : "";
-    const dependenciesSection = task.dependencies && task.dependencies.length > 0 ? `## \u4F9D\u8D56\u4EFB\u52A1
+    const dependenciesSection = task.dependencies && task.dependencies.length > 0 ? `## ${texts2.harness.dependencies}
 ${task.dependencies.map((dep) => `- ${dep}`).join(`
 `)}
 ` : "";
-    const acceptanceCriteriaSection = contract.acceptanceCriteria.length > 0 ? `## \u9A8C\u6536\u6807\u51C6
-\u8BF7\u786E\u4FDD\u6EE1\u8DB3\u4EE5\u4E0B\u6240\u6709\u6807\u51C6:
+    const acceptanceCriteriaSection = contract.acceptanceCriteria.length > 0 ? `## ${texts2.harness.acceptanceCriteria}
+${texts2.harness.acceptanceCriteriaInstruction}
 ${contract.acceptanceCriteria.map((criteria, i) => `${i + 1}. ${criteria}`).join(`
 `)}
 ` : "";
-    const checkpointsSection = contract.checkpoints.length > 0 ? `## \u68C0\u67E5\u70B9
-\u8BF7\u5B8C\u6210\u4EE5\u4E0B\u68C0\u67E5\u70B9:
+    const checkpointsSection = contract.checkpoints.length > 0 ? `## ${texts2.harness.checkpoints}
+${texts2.harness.checkpointsInstruction}
 ${contract.checkpoints.map((cp, i) => `${i + 1}. ${cp}`).join(`
 `)}
 ` : "";
-    const timeoutInstruction = timeoutMinutes ? `\u4F60\u9700\u8981\u5728 ${timeoutMinutes} \u5206\u949F\u5185\u5B8C\u6210\u6B64\u4EFB\u52A1\u3002\u8BF7\u5408\u7406\u5206\u914D\u65F6\u95F4\uFF0C\u4F18\u5148\u5B8C\u6210\u6838\u5FC3\u529F\u80FD\u3002
+    const timeoutInstruction = timeoutMinutes ? texts2.harness.timeoutInstruction.replace("{timeout}", String(timeoutMinutes)) + `
 ` : "";
-    const extraInstructionsSection = roleTemplate.extraInstructions.length > 0 ? `## \u89D2\u8272\u4E13\u9879\u8981\u6C42
+    const extraInstructionsSection = roleTemplate.extraInstructions.length > 0 ? `## ${texts2.harness.roleSpecificRequirements}
 ${roleTemplate.extraInstructions.map((inst, i) => `${i + 1}. ${inst}`).join(`
 `)}
 ` : "";
@@ -31040,28 +31645,30 @@ ${roleTemplate.extraInstructions.map((inst, i) => `${i + 1}. ${inst}`).join(`
   }
   buildRetryContextSection(retryContext) {
     const parts = [];
+    const texts2 = t(this.config.cwd);
     const phaseLabel = {
-      development: "\u5F00\u53D1",
-      code_review: "\u4EE3\u7801\u5BA1\u6838",
-      qa: "QA \u9A8C\u8BC1",
-      evaluation: "\u8BC4\u4F30"
+      development: texts2.harness.phaseLabels.development,
+      code_review: texts2.harness.phaseLabels.codeReview,
+      qa: texts2.harness.phaseLabels.qa,
+      evaluation: texts2.harness.phaseLabels.evaluation
     };
-    parts.push("## \u91CD\u8BD5\u4E0A\u4E0B\u6587\uFF08\u524D\u6B21\u5931\u8D25\u4FE1\u606F\uFF09");
+    parts.push(`## ${texts2.harness.retryContext}`);
     parts.push("");
-    parts.push(`\u8FD9\u662F\u7B2C ${retryContext.attemptNumber} \u6B21\u5C1D\u8BD5\u3002\u4E0A\u4E00\u6B21\u5728 **${phaseLabel[retryContext.previousPhase || ""] || retryContext.previousPhase}** \u9636\u6BB5\u5931\u8D25\u3002`);
+    const phaseName = phaseLabel[retryContext.previousPhase || ""] || retryContext.previousPhase;
+    parts.push(texts2.harness.retryAttemptInfo.replace("{attempt}", String(retryContext.attemptNumber)).replace("{phase}", phaseName));
     parts.push("");
-    parts.push("**\u524D\u6B21\u5931\u8D25\u539F\u56E0:**");
+    parts.push(`**${texts2.harness.previousFailureReason}:**`);
     parts.push(`> ${retryContext.previousFailureReason}`);
     parts.push("");
     if (retryContext.partialProgress?.completedCheckpoints?.length) {
-      parts.push("**\u5DF2\u5B8C\u6210\u7684\u90E8\u5206\u8FDB\u5EA6:**");
+      parts.push(`**${texts2.harness.partialProgress}:**`);
       for (const cp of retryContext.partialProgress.completedCheckpoints) {
         parts.push(`- \u2705 ${cp}`);
       }
       parts.push("");
     }
     if (retryContext.upstreamFailureInfo) {
-      parts.push("**\u4E0A\u6E38\u5931\u8D25\u4FE1\u606F:**");
+      parts.push(`**${texts2.harness.upstreamFailureInfo}:**`);
       parts.push(`- \u4E0A\u6E38\u4EFB\u52A1: ${retryContext.upstreamFailureInfo.taskId}`);
       parts.push(`- \u5931\u8D25\u539F\u56E0: ${retryContext.upstreamFailureInfo.reason}`);
       parts.push(`- \u5931\u8D25\u65F6\u95F4: ${retryContext.upstreamFailureInfo.failedAt}`);
@@ -31132,45 +31739,46 @@ ${roleTemplate.extraInstructions.map((inst, i) => `${i + 1}. ${inst}`).join(`
     fs23.writeFileSync(reportPath, content, "utf-8");
   }
   formatDevReport(report) {
+    const texts2 = t(this.config.cwd);
     const lines = [
-      `# \u5F00\u53D1\u62A5\u544A - ${report.taskId}`,
+      `# ${texts2.harness.reports.devReportTitle} - ${report.taskId}`,
       "",
-      `**\u72B6\u6001**: ${report.status}`,
-      `**\u5F00\u59CB\u65F6\u95F4**: ${report.startTime}`,
-      `**\u7ED3\u675F\u65F6\u95F4**: ${report.endTime}`,
-      `**\u8017\u65F6**: ${(report.duration / 1000).toFixed(1)}s`,
+      `**${texts2.harness.reports.statusLabel}**: ${report.status}`,
+      `**${texts2.harness.reports.startTimeLabel}**: ${report.startTime}`,
+      `**${texts2.harness.reports.endTimeLabel}**: ${report.endTime}`,
+      `**${texts2.harness.reports.durationLabel}**: ${(report.duration / 1000).toFixed(1)}s`,
       ""
     ];
     if (report.error) {
-      lines.push("## \u9519\u8BEF\u4FE1\u606F");
+      lines.push(`## ${texts2.harness.reports.errorInfoSection}`);
       lines.push("```");
       lines.push(report.error);
       lines.push("```");
       lines.push("");
     }
     if (report.changes.length > 0) {
-      lines.push("## \u4EE3\u7801\u53D8\u66F4");
+      lines.push(`## ${texts2.harness.reports.codeChangesSection}`);
       report.changes.forEach((change) => {
         lines.push(`- ${change}`);
       });
       lines.push("");
     }
     if (report.evidence.length > 0) {
-      lines.push("## \u8BC1\u636E\u6587\u4EF6");
+      lines.push(`## ${texts2.harness.reports.evidenceFilesSection}`);
       report.evidence.forEach((evidence) => {
         lines.push(`- ${evidence}`);
       });
       lines.push("");
     }
     if (report.checkpointsCompleted.length > 0) {
-      lines.push("## \u5B8C\u6210\u7684\u68C0\u67E5\u70B9");
+      lines.push(`## ${texts2.harness.reports.completedCheckpointsSection}`);
       report.checkpointsCompleted.forEach((cp) => {
         lines.push(`- ${cp}`);
       });
       lines.push("");
     }
     if (report.claudeOutput) {
-      lines.push("## Claude \u8F93\u51FA");
+      lines.push(`## ${texts2.harness.reports.claudeOutputSection}`);
       lines.push("```");
       lines.push(report.claudeOutput.substring(0, 5000));
       lines.push("```");
@@ -31334,6 +31942,7 @@ var qaVerdictHasReason = {
 
 // src/utils/harness-code-reviewer.ts
 init_prompt_templates();
+init_i18n();
 
 class HarnessCodeReviewer {
   config;
@@ -31341,9 +31950,10 @@ class HarnessCodeReviewer {
     this.config = config;
   }
   async review(task, devReport, retryContext) {
+    const texts2 = t(this.config.cwd);
     console.log(`
-\uD83D\uDD0D \u4EE3\u7801\u5BA1\u6838\u9636\u6BB5...`);
-    console.log(`   \u4EFB\u52A1: ${task.title}`);
+\uD83D\uDD0D ${texts2.harness.logs.codeReviewPhase}`);
+    console.log(`   ${texts2.harness.logs.taskLabel}: ${task.title}`);
     const verdict = {
       taskId: task.id,
       result: "PASS",
@@ -31364,11 +31974,11 @@ class HarnessCodeReviewer {
     }
     try {
       const codeReviewCheckpoints = this.getCodeReviewCheckpoints(task);
-      console.log(`   \uD83D\uDCCB \u4EE3\u7801\u5BA1\u6838\u68C0\u67E5\u70B9: ${codeReviewCheckpoints.length} \u4E2A`);
+      console.log(`   \uD83D\uDCCB ${texts2.harness.logs.codeReviewCheckpoints}: ${codeReviewCheckpoints.length}`);
       if (codeReviewCheckpoints.length === 0) {
         verdict.result = "PASS";
-        verdict.reason = "\u65E0\u4EE3\u7801\u5BA1\u6838\u68C0\u67E5\u70B9\uFF0C\u81EA\u52A8\u901A\u8FC7";
-        console.log("   \u2705 \u65E0\u4EE3\u7801\u5BA1\u6838\u68C0\u67E5\u70B9\uFF0C\u81EA\u52A8\u901A\u8FC7");
+        verdict.reason = texts2.harness.logs.noCodeReviewCheckpoints;
+        console.log(`   \u2705 ${texts2.harness.logs.noCodeReviewCheckpoints}`);
       } else {
         const reviewResult = await this.runCodeReview(task, devReport, codeReviewCheckpoints, retryContext);
         verdict.result = reviewResult.passed ? "PASS" : "NOPASS";
@@ -31378,23 +31988,23 @@ class HarnessCodeReviewer {
         verdict.details = reviewResult.details;
         const contradiction = detectContradiction(verdict.result, verdict.reason || "");
         if (contradiction.hasContradiction && contradiction.correctedResult) {
-          console.log(`   \u26A0\uFE0F  \u77DB\u76FE\u68C0\u6D4B: ${contradiction.reason}`);
+          console.log(`   \u26A0\uFE0F  ${texts2.harness.logs.contradictionDetected}: ${contradiction.reason}`);
           verdict.result = contradiction.correctedResult;
-          verdict.reason += ` [\u77DB\u76FE\u4FEE\u6B63: ${contradiction.reason}]`;
+          verdict.reason += ` [${texts2.harness.logs.contradictionDetected}: ${contradiction.reason}]`;
         }
         if (verdict.result === "PASS") {
           console.log(`
-   \u2705 \u4EE3\u7801\u5BA1\u6838\u901A\u8FC7`);
+   \u2705 ${texts2.harness.logs.codeReviewPassed}`);
         } else {
           console.log(`
-   \u274C \u4EE3\u7801\u5BA1\u6838\u672A\u901A\u8FC7: ${verdict.reason}`);
+   \u274C ${texts2.harness.logs.codeReviewFailed}: ${verdict.reason}`);
         }
       }
     } catch (error) {
       verdict.result = "NOPASS";
-      verdict.reason = `\u4EE3\u7801\u5BA1\u6838\u8FC7\u7A0B\u51FA\u9519: ${error instanceof Error ? error.message : String(error)}`;
+      verdict.reason = `${texts2.harness.logs.codeReviewError}: ${error instanceof Error ? error.message : String(error)}`;
       console.log(`
-   \u274C \u4EE3\u7801\u5BA1\u6838\u51FA\u9519: ${verdict.reason}`);
+   \u274C ${texts2.harness.logs.codeReviewError}: ${verdict.reason}`);
     }
     await this.saveReport(task.id, verdict);
     return verdict;
@@ -31541,15 +32151,17 @@ init_checkpoint();
 init_contradiction_detector();
 init_feedback_constraint_engine();
 init_prompt_templates();
+init_i18n();
 class HarnessQATester {
   config;
   constructor(config) {
     this.config = config;
   }
   async verify(task, codeReviewVerdict, retryContext) {
+    const texts2 = t(this.config.cwd);
     console.log(`
-\uD83E\uDDEA QA \u9A8C\u8BC1\u9636\u6BB5...`);
-    console.log(`   \u4EFB\u52A1: ${task.title}`);
+\uD83E\uDDEA ${texts2.harness.logs.qaPhase}`);
+    console.log(`   ${texts2.harness.logs.taskLabel}: ${task.title}`);
     const verdict = {
       taskId: task.id,
       result: "PASS",
@@ -31569,11 +32181,11 @@ class HarnessQATester {
     }
     try {
       const qaCheckpoints = this.getQACheckpoints(task);
-      console.log(`   \uD83D\uDCCB QA \u9A8C\u8BC1\u68C0\u67E5\u70B9: ${qaCheckpoints.length} \u4E2A`);
+      console.log(`   \uD83D\uDCCB ${texts2.harness.logs.qaCheckpoints}: ${qaCheckpoints.length}`);
       if (qaCheckpoints.length === 0) {
         verdict.result = "PASS";
-        verdict.reason = "\u65E0 QA \u9A8C\u8BC1\u68C0\u67E5\u70B9\uFF0C\u81EA\u52A8\u901A\u8FC7";
-        console.log("   \u2705 \u65E0 QA \u9A8C\u8BC1\u68C0\u67E5\u70B9\uFF0C\u81EA\u52A8\u901A\u8FC7");
+        verdict.reason = texts2.harness.logs.noQACheckpoints;
+        console.log(`   \u2705 ${texts2.harness.logs.noQACheckpoints}`);
       } else {
         const humanCheckpoints = qaCheckpoints.filter((cp) => cp.requiresHuman === true);
         verdict.humanVerificationCheckpoints = humanCheckpoints.map((cp) => cp.id);
@@ -31585,9 +32197,9 @@ class HarnessQATester {
         verdict.details = qaResult.details;
         const contradiction = detectContradiction(verdict.result, verdict.reason || "");
         if (contradiction.hasContradiction && contradiction.correctedResult) {
-          console.log(`   \u26A0\uFE0F  \u77DB\u76FE\u68C0\u6D4B: ${contradiction.reason}`);
+          console.log(`   \u26A0\uFE0F  ${texts2.harness.logs.contradictionDetected}: ${contradiction.reason}`);
           verdict.result = contradiction.correctedResult;
-          verdict.reason += ` [\u77DB\u76FE\u4FEE\u6B63: ${contradiction.reason}]`;
+          verdict.reason += ` [${texts2.harness.logs.contradictionDetected}: ${contradiction.reason}]`;
         }
         if (humanCheckpoints.length > 0) {
           verdict.requiresHuman = true;
@@ -31599,20 +32211,20 @@ ${deferredInfo}` : deferredInfo;
         }
         if (verdict.result === "PASS" && !verdict.requiresHuman) {
           console.log(`
-   \u2705 QA \u9A8C\u8BC1\u901A\u8FC7`);
+   \u2705 ${texts2.harness.logs.qaPassed}`);
         } else if (verdict.result === "PASS" && verdict.requiresHuman) {
           console.log(`
-   \u23F3 \u81EA\u52A8\u5316\u9A8C\u8BC1\u901A\u8FC7\uFF0C\u7B49\u5F85\u4EBA\u5DE5\u9A8C\u8BC1`);
+   \u23F3 ${texts2.harness.logs.qaPassedWithHuman}`);
         } else {
           console.log(`
-   \u274C QA \u9A8C\u8BC1\u672A\u901A\u8FC7: ${verdict.reason}`);
+   \u274C ${texts2.harness.logs.qaFailed}: ${verdict.reason}`);
         }
       }
     } catch (error) {
       verdict.result = "NOPASS";
-      verdict.reason = `QA \u9A8C\u8BC1\u8FC7\u7A0B\u51FA\u9519: ${error instanceof Error ? error.message : String(error)}`;
+      verdict.reason = `${texts2.harness.logs.qaError}: ${error instanceof Error ? error.message : String(error)}`;
       console.log(`
-   \u274C QA \u9A8C\u8BC1\u51FA\u9519: ${verdict.reason}`);
+   \u274C ${texts2.harness.logs.qaError}: ${verdict.reason}`);
     }
     await this.saveReport(task.id, verdict);
     return verdict;
@@ -31830,6 +32442,7 @@ import * as fs24 from "fs";
 import * as path21 from "path";
 init_prompt_templates();
 init_harness_snapshot();
+init_i18n();
 
 class HarnessEvaluator {
   config;
@@ -31837,8 +32450,9 @@ class HarnessEvaluator {
     this.config = config;
   }
   async evaluate(task, devReport, contract, retryContext) {
-    console.log(`   \u8BC4\u4F30\u4EFB\u52A1: ${task.title}`);
-    console.log(`   \u5F00\u53D1\u72B6\u6001: ${devReport.status}`);
+    const texts2 = t(this.config.cwd);
+    console.log(`   ${texts2.harness.logs.evalTaskLabel}: ${task.title}`);
+    console.log(`   ${texts2.harness.logs.devStatusLabel}: ${devReport.status}`);
     const verdict = {
       taskId: task.id,
       result: "NOPASS",
@@ -31877,13 +32491,13 @@ class HarnessEvaluator {
         verdict.details = `\u68C0\u6D4B\u5230\u5F00\u53D1\u8005\u521B\u5EFA\u4E86\u4E0D\u5C5E\u4E8E\u539F\u59CB\u8BA1\u5212\u7684\u989D\u5916\u4EFB\u52A1\u3002\u8FD9\u8FDD\u53CD\u4E86\u5F00\u53D1\u8005\u804C\u8D23\u8303\u56F4\u2014\u2014\u5F00\u53D1\u8005\u53EA\u5E94\u5B9E\u73B0\u88AB\u5206\u914D\u4EFB\u52A1\u7684\u4EE3\u7801\u53D8\u66F4\uFF0C\u800C\u975E\u521B\u5EFA\u65B0\u4EFB\u52A1\u3002`;
         verdict.inferenceType = "explicit_match";
         console.log(`
-   \u274C \u68C0\u6D4B\u5230\u5E7D\u7075\u4EFB\u52A1\uFF0C\u81EA\u52A8 NOPASS`);
+   \u274C ${texts2.harness.logs.phantomTaskAutoNopass}`);
         await this.saveReviewReport(task.id, verdict, devReport);
         return verdict;
       }
       const prompt = this.buildEvaluationPrompt(task, devReport, contract, phantomTasks, retryContext);
       console.log(`
-   \uD83D\uDCDD \u8BC4\u4F30\u63D0\u793A\u8BCD\u5DF2\u751F\u6210`);
+   \uD83D\uDCDD ${texts2.harness.logs.evalPromptGenerated}`);
       const agent = getAgent(this.config.cwd);
       const effectiveTools = buildEffectiveTools("evaluation", this.config.cwd, task);
       const invokeOptions = {
@@ -31895,11 +32509,11 @@ class HarnessEvaluator {
         dangerouslySkipPermissions: effectiveTools.skipPermissions
       };
       console.log(`
-   \uD83D\uDD0D \u542F\u52A8\u72EC\u7ACB\u8BC4\u4F30\u4F1A\u8BDD...`);
+   \uD83D\uDD0D ${texts2.harness.logs.startingEvalSession}`);
       const engine = createSessionAwareEngine("markdown", [verdictResultMarker, verdictHasReason], 2);
       const engineResult = await engine.runWithFeedback(agent.invoke.bind(agent), prompt, invokeOptions);
       if (engineResult.retries > 0) {
-        console.log(`   \uD83D\uDD04 \u8BC4\u4F30\u7ED3\u679C\u683C\u5F0F\u4E0D\u5339\u914D\uFF0C\u5DF2\u91CD\u8BD5 ${engineResult.retries} \u6B21`);
+        console.log(`   \uD83D\uDD04 ${texts2.harness.logs.evalFormatRetry.replace("{retries}", String(engineResult.retries))}`);
       }
       const lastRawOutput = engineResult.result.output ?? "";
       this.saveRawEvaluationOutput(task.id, engineResult.result.output, engineResult.result.stderr || "", engineResult.result.success);
@@ -31908,16 +32522,16 @@ class HarnessEvaluator {
         verdict.reason = `\u8BC4\u4F30\u4F1A\u8BDD\u8F93\u51FA\u4E3A\u7A7A\uFF1AClaude \u8FDB\u7A0B\u53EF\u80FD\u5F02\u5E38\u9000\u51FA${engineResult.result.stderr ? ` (stderr: ${engineResult.result.stderr.substring(0, 200)})` : ""}`;
         verdict.inferenceType = "empty_output";
         console.log(`
-   \u274C \u8BC4\u4F30\u8F93\u51FA\u4E3A\u7A7A\uFF0CClaude \u8FDB\u7A0B\u53EF\u80FD\u5F02\u5E38\u9000\u51FA`);
+   \u274C ${texts2.harness.logs.evalEmptyOutput}`);
         if (engineResult.result.stderr) {
-          console.log(`   \uD83D\uDCDD stderr: ${engineResult.result.stderr.substring(0, 300)}`);
+          console.log(`   \uD83D\uDCDD ${texts2.harness.logs.evalStderrPrefix}: ${engineResult.result.stderr.substring(0, 300)}`);
         }
         await this.saveReviewReport(task.id, verdict, devReport);
         return verdict;
       }
       let evaluation = this.parseEvaluationResult(engineResult.result.output);
       if (evaluation.inferenceType === "parse_failure_default") {
-        console.log("   \u26A0\uFE0F \u91CD\u8BD5\u540E\u4ECD\u65E0\u6CD5\u89E3\u6790\u8BC4\u4F30\u7ED3\u679C\uFF0C\u9ED8\u8BA4 PASS\uFF08\u4FDD\u5B88\u7B56\u7565\uFF09");
+        console.log(`   \u26A0\uFE0F ${texts2.harness.logs.evalParseFailureDefault}`);
         evaluation = {
           ...evaluation,
           passed: true,
@@ -31934,23 +32548,23 @@ class HarnessEvaluator {
       verdict.inferenceType = evaluation.inferenceType;
       const contradiction = detectContradiction(verdict.result, lastRawOutput || verdict.reason || "");
       if (contradiction.hasContradiction && contradiction.correctedResult) {
-        console.log(`   \u26A0\uFE0F  \u77DB\u76FE\u68C0\u6D4B: ${contradiction.reason}`);
+        console.log(`   \u26A0\uFE0F  ${texts2.harness.logs.contradictionDetected}: ${contradiction.reason}`);
         verdict.result = contradiction.correctedResult;
         verdict.reason += ` [\u77DB\u76FE\u4FEE\u6B63: ${contradiction.reason}]`;
       }
       if (verdict.result === "PASS") {
         console.log(`
-   \u2705 \u5BA1\u67E5\u901A\u8FC7 [\u63A8\u65AD\u7C7B\u578B: ${verdict.inferenceType || "unknown"}]`);
+   \u2705 ${texts2.harness.logs.evalPassed} [${texts2.harness.reports.inferenceTypeLabel}: ${verdict.inferenceType || "unknown"}]`);
       } else {
         console.log(`
-   \u274C \u5BA1\u67E5\u672A\u901A\u8FC7 [\u63A8\u65AD\u7C7B\u578B: ${verdict.inferenceType || "unknown"}]: ${verdict.reason}`);
+   \u274C ${texts2.harness.logs.evalFailed} [${texts2.harness.reports.inferenceTypeLabel}: ${verdict.inferenceType || "unknown"}]: ${verdict.reason}`);
       }
     } catch (error) {
       verdict.result = "NOPASS";
       verdict.reason = `\u8BC4\u4F30\u8FC7\u7A0B\u51FA\u9519: ${error instanceof Error ? error.message : String(error)}`;
       verdict.inferenceType = "parse_failure_default";
       console.log(`
-   \u274C \u8BC4\u4F30\u51FA\u9519: ${verdict.reason}`);
+   \u274C ${texts2.harness.logs.evalError}: ${verdict.reason}`);
     }
     await this.saveReviewReport(task.id, verdict, devReport);
     return verdict;
@@ -32184,12 +32798,12 @@ ${phantomTasks.map((tid) => `- ${tid}`).join(`
         plannedTaskIds = new Set(snapshot.tasks);
         snapshotTaskCount = snapshot.tasks.length;
         usingSnapshot = true;
-        console.log(`   \uD83D\uDCCB \u5E7D\u7075\u4EFB\u52A1\u68C0\u6D4B\u4F7F\u7528\u8BA1\u5212\u5FEB\u7167: ${snapshot.snapshotId} (${snapshotTaskCount} \u4E2A\u8BA1\u5212\u4EFB\u52A1)`);
+        console.log(`   \uD83D\uDCCB ${texts.harness.logs.snapshotMode}: ${snapshot.snapshotId} (${snapshotTaskCount})`);
       } else {
-        console.log(`   \uD83D\uDCCB \u5E7D\u7075\u4EFB\u52A1\u68C0\u6D4B: \u672A\u627E\u5230\u8BA1\u5212\u5FEB\u7167\uFF0C\u4F7F\u7528\u65F6\u95F4\u7A97\u53E3\u56DE\u9000\u6A21\u5F0F`);
+        console.log(`   \uD83D\uDCCB ${texts.harness.logs.fallbackMode}`);
       }
     } catch (error) {
-      console.log(`   \u26A0\uFE0F \u52A0\u8F7D\u8BA1\u5212\u5FEB\u7167\u5931\u8D25: ${error instanceof Error ? error.message : String(error)}\uFF0C\u4F7F\u7528\u65F6\u95F4\u7A97\u53E3\u56DE\u9000\u6A21\u5F0F`);
+      console.log(`   \u26A0\uFE0F ${texts.harness.logs.fallbackMode}: ${error instanceof Error ? error.message : String(error)}`);
     }
     try {
       const allTaskIds = getAllTaskIds(this.config.cwd);

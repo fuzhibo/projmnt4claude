@@ -28,6 +28,7 @@ import { archiveReportIfExists } from './harness-helpers.js';
 import { getAgent, buildEffectiveTools } from './headless-agent.js';
 import { createSessionAwareEngine } from './feedback-constraint-engine.js';
 import { loadPromptTemplate, resolveTemplate } from './prompt-templates.js';
+import { t } from '../i18n/index.js';
 
 export class HarnessExecutor {
   private config: HarnessConfig;
@@ -51,10 +52,11 @@ export class HarnessExecutor {
     const effectiveTimeout = timeoutOverride ?? this.config.timeout;
     const timeoutMinutes = Math.round(effectiveTimeout / 60);
 
-    console.log(`   任务: ${task.title}`);
-    console.log(`   类型: ${task.type}`);
-    console.log(`   优先级: ${task.priority}`);
-    console.log(`   超时: ${timeoutMinutes} 分钟 (${effectiveTimeout} 秒)`);
+    const texts = t(this.config.cwd);
+    console.log(`   ${texts.harness.logs.taskLabel}: ${task.title}`);
+    console.log(`   ${texts.harness.logs.typeLabel}: ${task.type}`);
+    console.log(`   ${texts.harness.logs.priorityLabel}: ${task.priority}`);
+    console.log(`   ${texts.harness.logs.timeoutLabel}: ${timeoutMinutes} ${texts.harness.logs.minutes} (${effectiveTimeout} ${texts.harness.logs.seconds})`);
 
     try {
       // 1. 构建或加载 Sprint Contract
@@ -63,10 +65,10 @@ export class HarnessExecutor {
 
       // 2. 构建开发提示词（注入超时信息）
       const prompt = this.buildDevPrompt(task, sprintContract, timeoutMinutes, retryContext);
-      console.log('\n   📝 开发提示词已生成');
+      console.log(`\n   📝 ${texts.harness.logs.devPromptGenerated}`);
 
       // 3. 执行 headless Claude（通过 FeedbackConstraintEngine 进行输出格式验证和反馈重试）
-      console.log('\n   🤖 启动 Headless Claude...');
+      console.log(`\n   🤖 ${texts.harness.logs.startingHeadlessClaude}`);
       const agent = getAgent(this.config.cwd);
       const effectiveTools = buildEffectiveTools('development', this.config.cwd, task);
       const invokeOptions = {
@@ -90,7 +92,7 @@ export class HarnessExecutor {
       );
 
       if (engineResult.retries > 0) {
-        console.log(`   🔄 开发输出格式验证不匹配，已重试 ${engineResult.retries} 次`);
+        console.log(`   🔄 ${texts.harness.logs.devOutputFormatRetry.replace('{retries}', String(engineResult.retries))}`);
       }
 
       report.claudeOutput = engineResult.result.output;
@@ -100,7 +102,7 @@ export class HarnessExecutor {
         // Agent 调用本身失败（超时、进程异常等）
         report.status = engineResult.result.exitCode === 124 ? 'timeout' : 'failed';
         report.error = engineResult.result.error || `退出码: ${engineResult.result.exitCode}`;
-        console.log(`\n   ❌ 开发阶段失败: ${report.error}`);
+        console.log(`\n   ❌ ${texts.harness.logs.devPhaseFailed}: ${report.error}`);
       } else if (!engineResult.passed) {
         // 输出格式验证未通过（如空输出）
         const violationMessages = engineResult.violations
@@ -108,24 +110,24 @@ export class HarnessExecutor {
           .join('; ');
         report.status = 'failed';
         report.error = `开发输出格式验证未通过: ${violationMessages}`;
-        console.log(`\n   ❌ 开发输出格式验证未通过: ${violationMessages}`);
+        console.log(`\n   ❌ ${texts.harness.logs.devOutputValidationFailed}: ${violationMessages}`);
       } else {
         report.status = 'success';
-        console.log('\n   ✅ 开发阶段完成');
+        console.log(`\n   ✅ ${texts.harness.logs.devPhaseCompleted}`);
 
         // 4. 收集证据
         report.evidence = await this.collectEvidence(task.id);
-        console.log(`   📎 收集证据: ${report.evidence.length} 个文件`);
+        console.log(`   📎 ${texts.harness.logs.evidenceCollected}: ${report.evidence.length}`);
 
         // 5. 检查完成的检查点
         report.checkpointsCompleted = await this.checkCompletedCheckpoints(task, sprintContract);
-        console.log(`   ✓ 完成检查点: ${report.checkpointsCompleted.length}/${sprintContract.checkpoints.length}`);
+        console.log(`   ✓ ${texts.harness.logs.checkpointsCompleted}: ${report.checkpointsCompleted.length}/${sprintContract.checkpoints.length}`);
       }
 
     } catch (error) {
       report.status = 'failed';
       report.error = error instanceof Error ? error.message : String(error);
-      console.log(`\n   ❌ 开发阶段出错: ${report.error}`);
+      console.log(`\n   ❌ ${texts.harness.logs.devPhaseError}: ${report.error}`);
     }
 
     const endTime = new Date();
@@ -210,36 +212,39 @@ export class HarnessExecutor {
    * @param timeoutMinutes - 超时时间（分钟），注入到提示词中提醒开发者
    */
   private buildDevPrompt(task: TaskMeta, contract: SprintContract, timeoutMinutes?: number, retryContext?: RetryContext): string {
+    // 获取国际化文本
+    const texts = t(this.config.cwd);
+
     // 角色感知提示词
     const roleTemplate = getDevRoleTemplate(task.recommendedRole);
 
     // Build section variables (each non-empty section ends with \n for blank-line separation)
     const timeoutHeader = timeoutMinutes
-      ? `## 超时限制: ${timeoutMinutes} 分钟\n`
+      ? `## ${texts.harness.timeoutHeader}: ${timeoutMinutes} 分钟\n`
       : '';
 
     const descriptionSection = task.description
-      ? `## 任务描述\n${task.description}\n`
+      ? `## ${texts.harness.taskDescription}\n${task.description}\n`
       : '';
 
     const dependenciesSection = (task.dependencies && task.dependencies.length > 0)
-      ? `## 依赖任务\n${task.dependencies.map(dep => `- ${dep}`).join('\n')}\n`
+      ? `## ${texts.harness.dependencies}\n${task.dependencies.map(dep => `- ${dep}`).join('\n')}\n`
       : '';
 
     const acceptanceCriteriaSection = contract.acceptanceCriteria.length > 0
-      ? `## 验收标准\n请确保满足以下所有标准:\n${contract.acceptanceCriteria.map((criteria, i) => `${i + 1}. ${criteria}`).join('\n')}\n`
+      ? `## ${texts.harness.acceptanceCriteria}\n${texts.harness.acceptanceCriteriaInstruction}\n${contract.acceptanceCriteria.map((criteria, i) => `${i + 1}. ${criteria}`).join('\n')}\n`
       : '';
 
     const checkpointsSection = contract.checkpoints.length > 0
-      ? `## 检查点\n请完成以下检查点:\n${contract.checkpoints.map((cp, i) => `${i + 1}. ${cp}`).join('\n')}\n`
+      ? `## ${texts.harness.checkpoints}\n${texts.harness.checkpointsInstruction}\n${contract.checkpoints.map((cp, i) => `${i + 1}. ${cp}`).join('\n')}\n`
       : '';
 
     const timeoutInstruction = timeoutMinutes
-      ? `你需要在 ${timeoutMinutes} 分钟内完成此任务。请合理分配时间，优先完成核心功能。\n`
+      ? texts.harness.timeoutInstruction.replace('{timeout}', String(timeoutMinutes)) + '\n'
       : '';
 
     const extraInstructionsSection = roleTemplate.extraInstructions.length > 0
-      ? `## 角色专项要求\n${roleTemplate.extraInstructions.map((inst, i) => `${i + 1}. ${inst}`).join('\n')}\n`
+      ? `## ${texts.harness.roleSpecificRequirements}\n${roleTemplate.extraInstructions.map((inst, i) => `${i + 1}. ${inst}`).join('\n')}\n`
       : '';
 
     const template = loadPromptTemplate('dev', this.config.cwd);
@@ -273,23 +278,27 @@ export class HarnessExecutor {
    */
   private buildRetryContextSection(retryContext: RetryContext): string {
     const parts: string[] = [];
+    const texts = t(this.config.cwd);
     const phaseLabel: Record<string, string> = {
-      development: '开发',
-      code_review: '代码审核',
-      qa: 'QA 验证',
-      evaluation: '评估',
+      development: texts.harness.phaseLabels.development,
+      code_review: texts.harness.phaseLabels.codeReview,
+      qa: texts.harness.phaseLabels.qa,
+      evaluation: texts.harness.phaseLabels.evaluation,
     };
 
-    parts.push('## 重试上下文（前次失败信息）');
+    parts.push(`## ${texts.harness.retryContext}`);
     parts.push('');
-    parts.push(`这是第 ${retryContext.attemptNumber} 次尝试。上一次在 **${phaseLabel[retryContext.previousPhase || ''] || retryContext.previousPhase}** 阶段失败。`);
+    const phaseName = phaseLabel[retryContext.previousPhase || ''] || retryContext.previousPhase;
+    parts.push(texts.harness.retryAttemptInfo
+      .replace('{attempt}', String(retryContext.attemptNumber))
+      .replace('{phase}', phaseName));
     parts.push('');
-    parts.push('**前次失败原因:**');
+    parts.push(`**${texts.harness.previousFailureReason}:**`);
     parts.push(`> ${retryContext.previousFailureReason}`);
     parts.push('');
 
     if (retryContext.partialProgress?.completedCheckpoints?.length) {
-      parts.push('**已完成的部分进度:**');
+      parts.push(`**${texts.harness.partialProgress}:**`);
       for (const cp of retryContext.partialProgress.completedCheckpoints) {
         parts.push(`- ✅ ${cp}`);
       }
@@ -297,7 +306,7 @@ export class HarnessExecutor {
     }
 
     if (retryContext.upstreamFailureInfo) {
-      parts.push('**上游失败信息:**');
+      parts.push(`**${texts.harness.upstreamFailureInfo}:**`);
       parts.push(`- 上游任务: ${retryContext.upstreamFailureInfo.taskId}`);
       parts.push(`- 失败原因: ${retryContext.upstreamFailureInfo.reason}`);
       parts.push(`- 失败时间: ${retryContext.upstreamFailureInfo.failedAt}`);
@@ -414,18 +423,19 @@ export class HarnessExecutor {
    * 格式化开发报告
    */
   private formatDevReport(report: DevReport): string {
+    const texts = t(this.config.cwd);
     const lines: string[] = [
-      `# 开发报告 - ${report.taskId}`,
+      `# ${texts.harness.reports.devReportTitle} - ${report.taskId}`,
       '',
-      `**状态**: ${report.status}`,
-      `**开始时间**: ${report.startTime}`,
-      `**结束时间**: ${report.endTime}`,
-      `**耗时**: ${(report.duration / 1000).toFixed(1)}s`,
+      `**${texts.harness.reports.statusLabel}**: ${report.status}`,
+      `**${texts.harness.reports.startTimeLabel}**: ${report.startTime}`,
+      `**${texts.harness.reports.endTimeLabel}**: ${report.endTime}`,
+      `**${texts.harness.reports.durationLabel}**: ${(report.duration / 1000).toFixed(1)}s`,
       '',
     ];
 
     if (report.error) {
-      lines.push('## 错误信息');
+      lines.push(`## ${texts.harness.reports.errorInfoSection}`);
       lines.push('```');
       lines.push(report.error);
       lines.push('```');
@@ -433,7 +443,7 @@ export class HarnessExecutor {
     }
 
     if (report.changes.length > 0) {
-      lines.push('## 代码变更');
+      lines.push(`## ${texts.harness.reports.codeChangesSection}`);
       report.changes.forEach(change => {
         lines.push(`- ${change}`);
       });
@@ -441,7 +451,7 @@ export class HarnessExecutor {
     }
 
     if (report.evidence.length > 0) {
-      lines.push('## 证据文件');
+      lines.push(`## ${texts.harness.reports.evidenceFilesSection}`);
       report.evidence.forEach(evidence => {
         lines.push(`- ${evidence}`);
       });
@@ -449,7 +459,7 @@ export class HarnessExecutor {
     }
 
     if (report.checkpointsCompleted.length > 0) {
-      lines.push('## 完成的检查点');
+      lines.push(`## ${texts.harness.reports.completedCheckpointsSection}`);
       report.checkpointsCompleted.forEach(cp => {
         lines.push(`- ${cp}`);
       });
@@ -457,7 +467,7 @@ export class HarnessExecutor {
     }
 
     if (report.claudeOutput) {
-      lines.push('## Claude 输出');
+      lines.push(`## ${texts.harness.reports.claudeOutputSection}`);
       lines.push('```');
       lines.push(report.claudeOutput.substring(0, 5000)); // 限制长度
       lines.push('```');

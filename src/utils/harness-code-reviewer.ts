@@ -29,6 +29,7 @@ import { detectContradiction } from './contradiction-detector.js';
 import { createSessionAwareEngine } from './feedback-constraint-engine.js';
 import { verdictResultMarker, verdictHasReason } from './validation-rules/verdict-rules.js';
 import { loadPromptTemplate, resolveTemplate } from './prompt-templates.js';
+import { t } from '../i18n/index.js';
 
 export class HarnessCodeReviewer {
   private config: HarnessConfig;
@@ -41,8 +42,9 @@ export class HarnessCodeReviewer {
    * 执行代码审核
    */
   async review(task: TaskMeta, devReport: DevReport, retryContext?: RetryContext): Promise<CodeReviewVerdict> {
-    console.log(`\n🔍 代码审核阶段...`);
-    console.log(`   任务: ${task.title}`);
+    const texts = t(this.config.cwd);
+    console.log(`\n🔍 ${texts.harness.logs.codeReviewPhase}`);
+    console.log(`   ${texts.harness.logs.taskLabel}: ${task.title}`);
 
     const verdict: CodeReviewVerdict = {
       taskId: task.id,
@@ -68,12 +70,12 @@ export class HarnessCodeReviewer {
     try {
       // 1. 获取代码审核类检查点
       const codeReviewCheckpoints = this.getCodeReviewCheckpoints(task);
-      console.log(`   📋 代码审核检查点: ${codeReviewCheckpoints.length} 个`);
+      console.log(`   📋 ${texts.harness.logs.codeReviewCheckpoints}: ${codeReviewCheckpoints.length}`);
 
       if (codeReviewCheckpoints.length === 0) {
         verdict.result = 'PASS';
-        verdict.reason = '无代码审核检查点，自动通过';
-        console.log('   ✅ 无代码审核检查点，自动通过');
+        verdict.reason = texts.harness.logs.noCodeReviewCheckpoints;
+        console.log(`   ✅ ${texts.harness.logs.noCodeReviewCheckpoints}`);
       } else {
         // 2. 运行代码审核
         const reviewResult = await this.runCodeReview(task, devReport, codeReviewCheckpoints, retryContext);
@@ -87,22 +89,22 @@ export class HarnessCodeReviewer {
         // IR-08-05: 矛盾检测 — 当结果标签与内容矛盾时自动修正
         const contradiction = detectContradiction(verdict.result, verdict.reason || '');
         if (contradiction.hasContradiction && contradiction.correctedResult) {
-          console.log(`   ⚠️  矛盾检测: ${contradiction.reason}`);
+          console.log(`   ⚠️  ${texts.harness.logs.contradictionDetected}: ${contradiction.reason}`);
           verdict.result = contradiction.correctedResult;
-          verdict.reason += ` [矛盾修正: ${contradiction.reason}]`;
+          verdict.reason += ` [${texts.harness.logs.contradictionDetected}: ${contradiction.reason}]`;
         }
 
         if (verdict.result === 'PASS') {
-          console.log('\n   ✅ 代码审核通过');
+          console.log(`\n   ✅ ${texts.harness.logs.codeReviewPassed}`);
         } else {
-          console.log(`\n   ❌ 代码审核未通过: ${verdict.reason}`);
+          console.log(`\n   ❌ ${texts.harness.logs.codeReviewFailed}: ${verdict.reason}`);
         }
       }
 
     } catch (error) {
       verdict.result = 'NOPASS';
-      verdict.reason = `代码审核过程出错: ${error instanceof Error ? error.message : String(error)}`;
-      console.log(`\n   ❌ 代码审核出错: ${verdict.reason}`);
+      verdict.reason = `${texts.harness.logs.codeReviewError}: ${error instanceof Error ? error.message : String(error)}`;
+      console.log(`\n   ❌ ${texts.harness.logs.codeReviewError}: ${verdict.reason}`);
     }
 
     await this.saveReport(task.id, verdict);
