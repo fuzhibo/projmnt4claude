@@ -1,8 +1,8 @@
 import { describe, test, expect, mock, beforeEach, afterEach } from 'bun:test';
 import * as fs from 'fs';
 import * as path from 'path';
-import * as os from 'os';
 import { EventEmitter } from 'events';
+import { createIsolatedTestEnv, type IsolatedTestEnv } from '../utils/test-env.js';
 import {
   classifyExitResult,
   isRetryableError,
@@ -579,27 +579,27 @@ describe('sleep', () => {
 // ============================================================
 
 describe('archiveReportIfExists', () => {
-  let tmpDir: string;
+  let env: IsolatedTestEnv;
 
-  beforeEach(() => {
-    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'harness-archive-test-'));
+  beforeEach(async () => {
+    env = await createIsolatedTestEnv();
   });
 
   afterEach(() => {
-    fs.rmSync(tmpDir, { recursive: true, force: true });
+    env.cleanup();
   });
 
   test('does nothing when file does not exist', () => {
-    const reportPath = path.join(tmpDir, 'nonexistent.md');
+    const reportPath = path.join(env.tempDir, 'nonexistent.md');
     expect(() => archiveReportIfExists(reportPath)).not.toThrow();
-    expect(fs.existsSync(path.join(tmpDir, 'archive'))).toBe(false);
+    expect(fs.existsSync(path.join(env.tempDir, 'archive'))).toBe(false);
   });
 
   test('archives existing file to archive subdirectory', () => {
-    const reportPath = path.join(tmpDir, 'report.md');
+    const reportPath = path.join(env.tempDir, 'report.md');
     fs.writeFileSync(reportPath, 'original content');
     archiveReportIfExists(reportPath);
-    const archiveDir = path.join(tmpDir, 'archive');
+    const archiveDir = path.join(env.tempDir, 'archive');
     expect(fs.existsSync(archiveDir)).toBe(true);
     const files = fs.readdirSync(archiveDir);
     expect(files).toHaveLength(1);
@@ -607,26 +607,26 @@ describe('archiveReportIfExists', () => {
   });
 
   test('preserves original file content in archive', () => {
-    const reportPath = path.join(tmpDir, 'report.md');
+    const reportPath = path.join(env.tempDir, 'report.md');
     fs.writeFileSync(reportPath, 'my report content');
     archiveReportIfExists(reportPath);
-    const archiveDir = path.join(tmpDir, 'archive');
+    const archiveDir = path.join(env.tempDir, 'archive');
     const files = fs.readdirSync(archiveDir);
     const archivedContent = fs.readFileSync(path.join(archiveDir, files[0]!), 'utf-8');
     expect(archivedContent).toBe('my report content');
   });
 
   test('original file remains after archiving', () => {
-    const reportPath = path.join(tmpDir, 'report.md');
+    const reportPath = path.join(env.tempDir, 'report.md');
     fs.writeFileSync(reportPath, 'content');
     archiveReportIfExists(reportPath);
     expect(fs.existsSync(reportPath)).toBe(true);
   });
 
   test('handles archive directory already existing', () => {
-    const archiveDir = path.join(tmpDir, 'archive');
+    const archiveDir = path.join(env.tempDir, 'archive');
     fs.mkdirSync(archiveDir);
-    const reportPath = path.join(tmpDir, 'report.md');
+    const reportPath = path.join(env.tempDir, 'report.md');
     fs.writeFileSync(reportPath, 'content');
     archiveReportIfExists(reportPath);
     const files = fs.readdirSync(archiveDir);
@@ -639,32 +639,32 @@ describe('archiveReportIfExists', () => {
 // ============================================================
 
 describe('saveReport', () => {
-  let tmpDir: string;
+  let env: IsolatedTestEnv;
 
-  beforeEach(() => {
-    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'harness-save-test-'));
+  beforeEach(async () => {
+    env = await createIsolatedTestEnv();
   });
 
   afterEach(() => {
-    fs.rmSync(tmpDir, { recursive: true, force: true });
+    env.cleanup();
   });
 
   test('creates parent directories and writes file', async () => {
-    const reportPath = path.join(tmpDir, 'a', 'b', 'report.md');
+    const reportPath = path.join(env.tempDir, 'a', 'b', 'report.md');
     await saveReport(reportPath, '# Report');
     expect(fs.existsSync(reportPath)).toBe(true);
     expect(fs.readFileSync(reportPath, 'utf-8')).toBe('# Report');
   });
 
   test('overwrites existing content', async () => {
-    const reportPath = path.join(tmpDir, 'report.md');
+    const reportPath = path.join(env.tempDir, 'report.md');
     await saveReport(reportPath, 'v1');
     await saveReport(reportPath, 'v2');
     expect(fs.readFileSync(reportPath, 'utf-8')).toBe('v2');
   });
 
   test('throws on write failure', async () => {
-    const readOnlyDir = path.join(tmpDir, 'readonly');
+    const readOnlyDir = path.join(env.tempDir, 'readonly');
     fs.mkdirSync(readOnlyDir);
     fs.chmodSync(readOnlyDir, 0o444);
     const reportPath = path.join(readOnlyDir, 'sub', 'report.md');
@@ -683,6 +683,17 @@ describe('saveReport', () => {
 // ============================================================
 
 describe('runHeadlessClaude', () => {
+  let env: IsolatedTestEnv;
+
+  beforeEach(async () => {
+    env = await createIsolatedTestEnv();
+    spawnMock.mockClear();
+  });
+
+  afterEach(() => {
+    env.cleanup();
+  });
+
   function setupMockSpawn(options: {
     exitCode?: number | null;
     stdout?: string;
@@ -714,17 +725,13 @@ describe('runHeadlessClaude', () => {
     return child;
   }
 
-  beforeEach(() => {
-    spawnMock.mockClear();
-  });
-
   test('returns success on exit code 0', async () => {
     setupMockSpawn({ exitCode: 0, stdout: 'task output' });
     const result = await runHeadlessClaude({
       prompt: 'test prompt',
       allowedTools: ['Read', 'Write'],
       timeout: 30,
-      cwd: '/tmp',
+      cwd: env.tempDir,
     });
     expect(result.success).toBe(true);
     expect(result.output).toBe('task output');
@@ -736,7 +743,7 @@ describe('runHeadlessClaude', () => {
       prompt: 'test',
       allowedTools: ['Read'],
       timeout: 30,
-      cwd: '/tmp',
+      cwd: env.tempDir,
       dangerouslySkipPermissions: true,
       outputFormat: 'json',
     });
@@ -754,7 +761,7 @@ describe('runHeadlessClaude', () => {
       prompt: 'test',
       allowedTools: ['Read'],
       timeout: 30,
-      cwd: '/tmp',
+      cwd: env.tempDir,
       sessionId: 'sess-123',
       resumeSession: true,
       forkSession: true,
@@ -776,7 +783,7 @@ describe('runHeadlessClaude', () => {
       prompt: 'hello world',
       allowedTools: ['Read'],
       timeout: 30,
-      cwd: '/tmp',
+      cwd: env.tempDir,
     });
     expect(writes).toContain('hello world');
   });
@@ -787,7 +794,7 @@ describe('runHeadlessClaude', () => {
       prompt: 'test',
       allowedTools: ['Read'],
       timeout: 30,
-      cwd: '/tmp',
+      cwd: env.tempDir,
     });
     expect(result.success).toBe(false);
     expect(result.error).toContain('error occurred');
@@ -799,7 +806,7 @@ describe('runHeadlessClaude', () => {
       prompt: 'test',
       allowedTools: ['Read'],
       timeout: 30,
-      cwd: '/tmp',
+      cwd: env.tempDir,
     });
     expect(result.success).toBe(false);
     expect(result.error).toBe('command not found');
@@ -813,7 +820,7 @@ describe('runHeadlessClaude', () => {
       prompt: 'test',
       allowedTools: ['Read'],
       timeout: 30,
-      cwd: '/tmp',
+      cwd: env.tempDir,
     });
     expect(result.stderr).toBe('warning message');
   });
@@ -828,7 +835,7 @@ describe('runHeadlessClaude', () => {
       prompt: 'test',
       allowedTools: ['Read'],
       timeout: 30,
-      cwd: '/tmp',
+      cwd: env.tempDir,
     });
     expect(result.success).toBe(true);
     expect(result.hookWarning).toBeDefined();
@@ -842,7 +849,7 @@ describe('runHeadlessClaude', () => {
       prompt: 'test',
       allowedTools: ['Read'],
       timeout: 30,
-      cwd: '/tmp',
+      cwd: env.tempDir,
     });
     expect(result.success).toBe(false);
     expect(result.error).toBe('spawn crashed');
@@ -854,7 +861,7 @@ describe('runHeadlessClaude', () => {
       prompt: 'test',
       allowedTools: ['Read'],
       timeout: 30,
-      cwd: '/tmp',
+      cwd: env.tempDir,
     });
     const callArgs = spawnMock.mock.calls[0] as [string, string[], any];
     const args = callArgs[1];
@@ -869,6 +876,17 @@ describe('runHeadlessClaude', () => {
 // ============================================================
 
 describe('runHeadlessClaudeWithRetry', () => {
+  let env: IsolatedTestEnv;
+
+  beforeEach(async () => {
+    env = await createIsolatedTestEnv();
+    spawnMock.mockClear();
+  });
+
+  afterEach(() => {
+    env.cleanup();
+  });
+
   function setupMockSpawnSequence(results: Array<{
     exitCode?: number | null;
     stdout?: string;
@@ -891,14 +909,10 @@ describe('runHeadlessClaudeWithRetry', () => {
     });
   }
 
-  beforeEach(() => {
-    spawnMock.mockClear();
-  });
-
   test('returns success on first attempt', async () => {
     setupMockSpawnSequence([{ exitCode: 0, stdout: 'done' }]);
     const result = await runHeadlessClaudeWithRetry(
-      { prompt: 'test', allowedTools: ['Read'], timeout: 30, cwd: '/tmp' },
+      { prompt: 'test', allowedTools: ['Read'], timeout: 30, cwd: env.tempDir },
       { maxAttempts: 3, baseDelay: 0.01 },
     );
     expect(result.success).toBe(true);
@@ -911,7 +925,7 @@ describe('runHeadlessClaudeWithRetry', () => {
       { exitCode: 0, stdout: 'success', stderr: '' },
     ]);
     const result = await runHeadlessClaudeWithRetry(
-      { prompt: 'test', allowedTools: ['Read'], timeout: 30, cwd: '/tmp' },
+      { prompt: 'test', allowedTools: ['Read'], timeout: 30, cwd: env.tempDir },
       { maxAttempts: 3, baseDelay: 0.01 },
     );
     expect(result.success).toBe(true);
@@ -924,7 +938,7 @@ describe('runHeadlessClaudeWithRetry', () => {
       { exitCode: 0, stdout: 'recovered', stderr: '' },
     ]);
     const result = await runHeadlessClaudeWithRetry(
-      { prompt: 'test', allowedTools: ['Read'], timeout: 30, cwd: '/tmp' },
+      { prompt: 'test', allowedTools: ['Read'], timeout: 30, cwd: env.tempDir },
       { maxAttempts: 2, baseDelay: 0.01 },
     );
     expect(result.success).toBe(true);
@@ -935,7 +949,7 @@ describe('runHeadlessClaudeWithRetry', () => {
       { exitCode: 1, stdout: 'syntax error in code', stderr: '' },
     ]);
     const result = await runHeadlessClaudeWithRetry(
-      { prompt: 'test', allowedTools: ['Read'], timeout: 30, cwd: '/tmp' },
+      { prompt: 'test', allowedTools: ['Read'], timeout: 30, cwd: env.tempDir },
       { maxAttempts: 3, baseDelay: 0.01 },
     );
     expect(result.success).toBe(false);
@@ -949,7 +963,7 @@ describe('runHeadlessClaudeWithRetry', () => {
       { exitCode: 1, stdout: 'API Error: 500 final', stderr: '' },
     ]);
     const result = await runHeadlessClaudeWithRetry(
-      { prompt: 'test', allowedTools: ['Read'], timeout: 30, cwd: '/tmp' },
+      { prompt: 'test', allowedTools: ['Read'], timeout: 30, cwd: env.tempDir },
       { maxAttempts: 2, baseDelay: 0.01 }, // first + 2 retries = 3 total
     );
     expect(result.success).toBe(false);
@@ -963,7 +977,7 @@ describe('runHeadlessClaudeWithRetry', () => {
       { exitCode: 0, stdout: 'success', stderr: '' },
     ]);
     const result = await runHeadlessClaudeWithRetry(
-      { prompt: 'test', allowedTools: ['Read'], timeout: 30, cwd: '/tmp' },
+      { prompt: 'test', allowedTools: ['Read'], timeout: 30, cwd: env.tempDir },
       { maxAttempts: 3, baseDelay: 0.01 },
     );
     expect(result.success).toBe(true);
@@ -975,14 +989,14 @@ describe('runHeadlessClaudeWithRetry', () => {
 // ============================================================
 
 describe('parseDevReport', () => {
-  let tmpDir: string;
+  let env: IsolatedTestEnv;
 
-  beforeEach(() => {
-    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'parse-dev-report-'));
+  beforeEach(async () => {
+    env = await createIsolatedTestEnv();
   });
 
   afterEach(() => {
-    fs.rmSync(tmpDir, { recursive: true, force: true });
+    env.cleanup();
   });
 
   test('parses normal dev-report.md', () => {
@@ -1007,7 +1021,7 @@ describe('parseDevReport', () => {
       'done',
       '```',
     ].join('\n');
-    const filePath = path.join(tmpDir, 'dev-report.md');
+    const filePath = path.join(env.tempDir, 'dev-report.md');
     fs.writeFileSync(filePath, report);
     const result = parseDevReport(filePath);
     expect(result).not.toBeNull();
@@ -1033,7 +1047,7 @@ describe('parseDevReport', () => {
       '## 错误信息',
       'Build failed: TypeScript compilation error',
     ].join('\n');
-    const filePath = path.join(tmpDir, 'dev-report.md');
+    const filePath = path.join(env.tempDir, 'dev-report.md');
     fs.writeFileSync(filePath, report);
     const result = parseDevReport(filePath);
     expect(result).not.toBeNull();
@@ -1058,7 +1072,7 @@ describe('parseDevReport', () => {
       '## 证据文件',
       '无',
     ].join('\n');
-    const filePath = path.join(tmpDir, 'dev-report.md');
+    const filePath = path.join(env.tempDir, 'dev-report.md');
     fs.writeFileSync(filePath, report);
     const result = parseDevReport(filePath);
     expect(result).not.toBeNull();
@@ -1067,19 +1081,19 @@ describe('parseDevReport', () => {
   });
 
   test('returns null for non-existent file', () => {
-    const result = parseDevReport(path.join(tmpDir, 'nonexistent.md'));
+    const result = parseDevReport(path.join(env.tempDir, 'nonexistent.md'));
     expect(result).toBeNull();
   });
 
   test('returns null for empty file', () => {
-    const filePath = path.join(tmpDir, 'dev-report.md');
+    const filePath = path.join(env.tempDir, 'dev-report.md');
     fs.writeFileSync(filePath, '');
     const result = parseDevReport(filePath);
     expect(result).toBeNull();
   });
 
   test('returns null for whitespace-only file', () => {
-    const filePath = path.join(tmpDir, 'dev-report.md');
+    const filePath = path.join(env.tempDir, 'dev-report.md');
     fs.writeFileSync(filePath, '   \n\t\n   ');
     const result = parseDevReport(filePath);
     expect(result).toBeNull();
@@ -1091,14 +1105,14 @@ describe('parseDevReport', () => {
 // ============================================================
 
 describe('parseCodeReviewReport', () => {
-  let tmpDir: string;
+  let env: IsolatedTestEnv;
 
-  beforeEach(() => {
-    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'parse-cr-report-'));
+  beforeEach(async () => {
+    env = await createIsolatedTestEnv();
   });
 
   afterEach(() => {
-    fs.rmSync(tmpDir, { recursive: true, force: true });
+    env.cleanup();
   });
 
   test('parses PASS code review report', () => {
@@ -1118,7 +1132,7 @@ describe('parseCodeReviewReport', () => {
       '## 未通过的检查点',
       '- (无)',
     ].join('\n');
-    const filePath = path.join(tmpDir, 'code-review-report.md');
+    const filePath = path.join(env.tempDir, 'code-review-report.md');
     fs.writeFileSync(filePath, report);
     const result = parseCodeReviewReport(filePath);
     expect(result).not.toBeNull();
@@ -1146,7 +1160,7 @@ describe('parseCodeReviewReport', () => {
       '## 详细反馈',
       'Detailed feedback here.',
     ].join('\n');
-    const filePath = path.join(tmpDir, 'code-review-report.md');
+    const filePath = path.join(env.tempDir, 'code-review-report.md');
     fs.writeFileSync(filePath, report);
     const result = parseCodeReviewReport(filePath);
     expect(result).not.toBeNull();
@@ -1156,12 +1170,12 @@ describe('parseCodeReviewReport', () => {
   });
 
   test('returns null for non-existent file', () => {
-    const result = parseCodeReviewReport(path.join(tmpDir, 'nonexistent.md'));
+    const result = parseCodeReviewReport(path.join(env.tempDir, 'nonexistent.md'));
     expect(result).toBeNull();
   });
 
   test('returns null for empty file', () => {
-    const filePath = path.join(tmpDir, 'code-review-report.md');
+    const filePath = path.join(env.tempDir, 'code-review-report.md');
     fs.writeFileSync(filePath, '');
     const result = parseCodeReviewReport(filePath);
     expect(result).toBeNull();
@@ -1176,7 +1190,7 @@ describe('parseCodeReviewReport', () => {
       '## 原因',
       'Some reason',
     ].join('\n');
-    const filePath = path.join(tmpDir, 'code-review-report.md');
+    const filePath = path.join(env.tempDir, 'code-review-report.md');
     fs.writeFileSync(filePath, report);
     const result = parseCodeReviewReport(filePath);
     expect(result).toBeNull();
@@ -1188,14 +1202,14 @@ describe('parseCodeReviewReport', () => {
 // ============================================================
 
 describe('parseQAReport', () => {
-  let tmpDir: string;
+  let env: IsolatedTestEnv;
 
-  beforeEach(() => {
-    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'parse-qa-report-'));
+  beforeEach(async () => {
+    env = await createIsolatedTestEnv();
   });
 
   afterEach(() => {
-    fs.rmSync(tmpDir, { recursive: true, force: true });
+    env.cleanup();
   });
 
   test('parses PASS QA report', () => {
@@ -1216,7 +1230,7 @@ describe('parseQAReport', () => {
       '## 未通过的检查点',
       '- (无)',
     ].join('\n');
-    const filePath = path.join(tmpDir, 'qa-report.md');
+    const filePath = path.join(env.tempDir, 'qa-report.md');
     fs.writeFileSync(filePath, report);
     const result = parseQAReport(filePath);
     expect(result).not.toBeNull();
@@ -1244,7 +1258,7 @@ describe('parseQAReport', () => {
       '## 未通过的检查点',
       '- CP-QA-1',
     ].join('\n');
-    const filePath = path.join(tmpDir, 'qa-report.md');
+    const filePath = path.join(env.tempDir, 'qa-report.md');
     fs.writeFileSync(filePath, report);
     const result = parseQAReport(filePath);
     expect(result).not.toBeNull();
@@ -1253,12 +1267,12 @@ describe('parseQAReport', () => {
   });
 
   test('returns null for non-existent file', () => {
-    const result = parseQAReport(path.join(tmpDir, 'nonexistent.md'));
+    const result = parseQAReport(path.join(env.tempDir, 'nonexistent.md'));
     expect(result).toBeNull();
   });
 
   test('returns null for empty file', () => {
-    const filePath = path.join(tmpDir, 'qa-report.md');
+    const filePath = path.join(env.tempDir, 'qa-report.md');
     fs.writeFileSync(filePath, '');
     const result = parseQAReport(filePath);
     expect(result).toBeNull();
@@ -1270,17 +1284,17 @@ describe('parseQAReport', () => {
 // ============================================================
 
 describe('rebuildPrerequisiteData', () => {
-  let tmpDir: string;
+  let env: IsolatedTestEnv;
   let reportDir: string;
 
-  beforeEach(() => {
-    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'rebuild-prereq-'));
-    reportDir = path.join(tmpDir, '.projmnt4claude', 'reports', 'harness', 'TASK-test-001');
+  beforeEach(async () => {
+    env = await createIsolatedTestEnv();
+    reportDir = path.join(env.tempDir, '.projmnt4claude', 'reports', 'harness', 'TASK-test-001');
     fs.mkdirSync(reportDir, { recursive: true });
   });
 
   afterEach(() => {
-    fs.rmSync(tmpDir, { recursive: true, force: true });
+    env.cleanup();
   });
 
   function writeDevReport(): void {
@@ -1334,7 +1348,7 @@ describe('rebuildPrerequisiteData', () => {
   }
 
   test('development phase returns null prerequisites', () => {
-    const result = rebuildPrerequisiteData('TASK-test-001', 'development', tmpDir);
+    const result = rebuildPrerequisiteData('TASK-test-001', 'development', env.tempDir);
     expect(result).not.toBeNull();
     expect(result!.devReport).toBeNull();
     expect(result!.codeReviewVerdict).toBeNull();
@@ -1343,7 +1357,7 @@ describe('rebuildPrerequisiteData', () => {
 
   test('code_review phase requires only dev-report', () => {
     writeDevReport();
-    const result = rebuildPrerequisiteData('TASK-test-001', 'code_review', tmpDir);
+    const result = rebuildPrerequisiteData('TASK-test-001', 'code_review', env.tempDir);
     expect(result).not.toBeNull();
     expect(result!.devReport).not.toBeNull();
     expect(result!.devReport!.status).toBe('success');
@@ -1352,14 +1366,14 @@ describe('rebuildPrerequisiteData', () => {
   });
 
   test('code_review phase returns null when dev-report is missing', () => {
-    const result = rebuildPrerequisiteData('TASK-test-001', 'code_review', tmpDir);
+    const result = rebuildPrerequisiteData('TASK-test-001', 'code_review', env.tempDir);
     expect(result).toBeNull();
   });
 
   test('qa phase requires dev-report and code-review-report', () => {
     writeDevReport();
     writeCodeReviewReport();
-    const result = rebuildPrerequisiteData('TASK-test-001', 'qa', tmpDir);
+    const result = rebuildPrerequisiteData('TASK-test-001', 'qa', env.tempDir);
     expect(result).not.toBeNull();
     expect(result!.devReport).not.toBeNull();
     expect(result!.codeReviewVerdict).not.toBeNull();
@@ -1369,7 +1383,7 @@ describe('rebuildPrerequisiteData', () => {
 
   test('qa phase returns null when code-review-report is missing', () => {
     writeDevReport();
-    const result = rebuildPrerequisiteData('TASK-test-001', 'qa', tmpDir);
+    const result = rebuildPrerequisiteData('TASK-test-001', 'qa', env.tempDir);
     expect(result).toBeNull();
   });
 
@@ -1377,7 +1391,7 @@ describe('rebuildPrerequisiteData', () => {
     writeDevReport();
     writeCodeReviewReport();
     writeQAReport();
-    const result = rebuildPrerequisiteData('TASK-test-001', 'evaluation', tmpDir);
+    const result = rebuildPrerequisiteData('TASK-test-001', 'evaluation', env.tempDir);
     expect(result).not.toBeNull();
     expect(result!.devReport).not.toBeNull();
     expect(result!.codeReviewVerdict).not.toBeNull();
@@ -1388,26 +1402,26 @@ describe('rebuildPrerequisiteData', () => {
   test('evaluation phase returns null when qa-report is missing', () => {
     writeDevReport();
     writeCodeReviewReport();
-    const result = rebuildPrerequisiteData('TASK-test-001', 'evaluation', tmpDir);
+    const result = rebuildPrerequisiteData('TASK-test-001', 'evaluation', env.tempDir);
     expect(result).toBeNull();
   });
 
   test('unknown phase returns null', () => {
     writeDevReport();
-    const result = rebuildPrerequisiteData('TASK-test-001', 'unknown_phase', tmpDir);
+    const result = rebuildPrerequisiteData('TASK-test-001', 'unknown_phase', env.tempDir);
     expect(result).toBeNull();
   });
 
   test('qa_verification alias works like qa', () => {
     writeDevReport();
     writeCodeReviewReport();
-    const result = rebuildPrerequisiteData('TASK-test-001', 'qa_verification', tmpDir);
+    const result = rebuildPrerequisiteData('TASK-test-001', 'qa_verification', env.tempDir);
     expect(result).not.toBeNull();
     expect(result!.codeReviewVerdict).not.toBeNull();
   });
 
   test('non-existent task returns null', () => {
-    const result = rebuildPrerequisiteData('TASK-nonexistent-999', 'code_review', tmpDir);
+    const result = rebuildPrerequisiteData('TASK-nonexistent-999', 'code_review', env.tempDir);
     expect(result).toBeNull();
   });
 });

@@ -297,12 +297,15 @@ export async function runHeadlessClaudeWithRetry(
  */
 export function archiveReportIfExists(reportPath: string): void {
   try {
-    if (!fs.existsSync(reportPath)) {
+    // Resolve to absolute path to ensure correct behavior with relative paths
+    const absolutePath = path.resolve(reportPath);
+
+    if (!fs.existsSync(absolutePath)) {
       return;
     }
 
-    const dir = path.dirname(reportPath);
-    const filename = path.basename(reportPath);
+    const dir = path.dirname(absolutePath);
+    const filename = path.basename(absolutePath);
     const archiveDir = path.join(dir, 'archive');
 
     if (!fs.existsSync(archiveDir)) {
@@ -312,7 +315,7 @@ export function archiveReportIfExists(reportPath: string): void {
     const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
     const archivePath = path.join(archiveDir, `${timestamp}-${filename}`);
 
-    fs.copyFileSync(reportPath, archivePath);
+    fs.copyFileSync(absolutePath, archivePath);
     console.log(`   📦 已归档旧报告: archive/${timestamp}-${filename}`);
   } catch (error) {
     // 归档失败不阻断报告写入流程

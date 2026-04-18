@@ -28,6 +28,40 @@ import { topologicalSortDFS, findComponentsUnionFind, DependencyGraph, validateP
 // Re-export InferredDependency for backward compatibility
 export type { InferredDependency };
 
+// ============== Plan Quality Gate Types ==============
+
+/**
+ * Plan 质量门禁检查结果
+ */
+export interface PlanQualityGateCheckResult {
+  /** 是否通过所有检查 */
+  passed: boolean;
+  /** 总任务数 */
+  totalTasks: number;
+  /** 通过的任务数 */
+  passedCount: number;
+  /** 未通过的任务数 */
+  failedCount: number;
+  /** 未通过的任务ID列表 */
+  failedTasks: string[];
+  /** 详细验证结果 */
+  validationResults: QualityGateValidationResult[];
+  /** 验证时间戳 */
+  validatedAt: string;
+}
+
+/**
+ * Plan 质量门禁报告选项
+ */
+export interface PlanQualityGateReportOptions {
+  /** 是否紧凑输出 */
+  compact?: boolean;
+  /** 是否显示详细结果 */
+  showDetails?: boolean;
+  /** 验证阶段 */
+  phase?: string;
+}
+
 // ============== 任务链分析类型定义 ==============
 
 export interface TaskChain {
@@ -944,56 +978,29 @@ export async function recommendPlan(
     }
   }
 
-  // ========== 质量门禁检查 (plan_recommend 阶段) ==========
+  // ========== 质量门禁检查 (plan_recommend 阶段) - QG-PLAN-005 ==========
+  // CP-1: --all 模式也执行质量门禁检查
   if (options.requireQuality !== false && filteredTasks.length > 0) {
     console.log('正在执行质量门禁检查...');
-    const qualityGateResults: QualityGateValidationResult[] = [];
-    let passedCount = 0;
-    let failedCount = 0;
-    const failedTasks: string[] = [];
 
-    for (const task of filteredTasks) {
-      const result = runQualityGate(task, 'plan_recommend');
-      qualityGateResults.push(result);
-      if (result.passed) {
-        passedCount++;
-      } else {
-        failedCount++;
-        failedTasks.push(task.id);
-      }
-    }
+    // 使用新的 runPlanQualityGateCheck 函数执行质量门禁检查
+    const qualityGateResult = runPlanQualityGateCheck(filteredTasks, {
+      phase: 'plan_recommend',
+      includeWarnings: true,
+    });
 
-    // 显示质量门禁检查结果
-    if (failedCount > 0) {
-      console.log('');
-      console.log('━'.repeat(SEPARATOR_WIDTH));
-      console.log('🚦 质量门禁检查结果 (plan_recommend 阶段)');
-      console.log('━'.repeat(SEPARATOR_WIDTH));
-      console.log(`总任务: ${filteredTasks.length} | ✅ 通过: ${passedCount} | ❌ 未通过: ${failedCount}`);
-      console.log('');
-
-      // 显示未通过的任务及其违规信息
-      for (const result of qualityGateResults) {
-        if (!result.passed) {
-          console.log(`❌ ${result.taskId}:`);
-          for (const error of result.errors) {
-            console.log(`   • ${error.message}`);
-          }
-          if (result.warnings.length > 0) {
-            console.log(`   ⚠️ 警告:`);
-            for (const warning of result.warnings) {
-              console.log(`      • ${warning.message}`);
-            }
-          }
-        }
-      }
-      console.log('━'.repeat(SEPARATOR_WIDTH));
-      console.log('');
+    // 使用 formatPlanQualityGateReport 格式化输出报告
+    if (!qualityGateResult.passed) {
+      console.log(formatPlanQualityGateReport(qualityGateResult, {
+        compact: false,
+        showDetails: true,
+        phase: 'plan_recommend',
+      }));
 
       // 非交互模式下直接退出
       if (options.nonInteractive || !process.stdout.isTTY) {
         console.error('❌ 质量门禁检查未通过，中止计划推荐');
-        console.error(`   未通过任务: ${failedTasks.join(', ')}`);
+        console.error(`   未通过任务: ${qualityGateResult.failedTasks.join(', ')}`);
         console.error('   使用 --no-quality-gate 跳过质量检查（不推荐）');
         process.exit(1);
       }
@@ -1002,7 +1009,7 @@ export async function recommendPlan(
       const { continueAnyway } = await prompts({
         type: 'confirm',
         name: 'continueAnyway',
-        message: `${failedCount} 个任务未通过质量门禁，是否继续？`,
+        message: `${qualityGateResult.failedCount} 个任务未通过质量门禁，是否继续？`,
         initial: false,
       });
 
@@ -1012,7 +1019,8 @@ export async function recommendPlan(
       }
       console.log('');
     } else {
-      console.log(`✅ 质量门禁检查通过 (${passedCount}/${filteredTasks.length})`);
+      // 检查通过，显示简洁的成功消息
+      console.log(`✅ 质量门禁检查通过 (${qualityGateResult.passedCount}/${qualityGateResult.totalTasks})`);
       console.log('');
     }
   }
@@ -1351,4 +1359,204 @@ function formatStatus(status: string): string {
     failed: '❌ 已失败',
   };
   return map[normalized] || status;
+}
+
+// ============== Plan 质量门禁函数 (QG-PLAN-005) ==============
+
+/**
+ * 执行 Plan 质量门禁检查
+ *
+ * 对任务列表执行 plan_recommend 阶段的质量门禁验证，检查是否存在：
+ * - 循环依赖
+ * - 无效依赖
+ * - 孤儿子任务
+ * - 孤立任务（警告）
+ * - 被阻塞任务（警告）
+ * - 桥接节点（警告）
+ * - 仅推断依赖（警告）
+ *
+ * @param tasks - 要验证的任务列表
+ * @param options - 可选配置
+ * @returns 质量门禁检查结果
+ *
+ * @example
+ * ```typescript
+ * const tasks = getAllTasks(cwd);
+ * const result = runPlanQualityGateCheck(tasks);
+ * if (!result.passed) {
+ *   console.log('未通过任务:', result.failedTasks);
+ * }
+ * ```
+ */
+export function runPlanQualityGateCheck(
+  tasks: TaskMeta[],
+  options: {
+    /** 验证阶段，默认 'plan_recommend' */
+    phase?: 'plan_recommend' | 'initialization';
+    /** 是否包含警告级别问题 */
+    includeWarnings?: boolean;
+  } = {}
+): PlanQualityGateCheckResult {
+  const phase = options.phase || 'plan_recommend';
+  const includeWarnings = options.includeWarnings !== false;
+
+  const validationResults: QualityGateValidationResult[] = [];
+  let passedCount = 0;
+  let failedCount = 0;
+  const failedTasks: string[] = [];
+
+  // 执行质量门禁验证
+  for (const task of tasks) {
+    const result = runQualityGate(task, phase);
+    validationResults.push(result);
+
+    if (result.passed) {
+      passedCount++;
+    } else {
+      failedCount++;
+      failedTasks.push(task.id);
+    }
+  }
+
+  // 确定是否通过（错误级别必须全部通过，警告可选）
+  const hasBlockingErrors = validationResults.some(
+    r => !r.passed && r.errors.length > 0
+  );
+
+  // 如果需要检查警告，则任何警告也视为未通过
+  const passed = includeWarnings
+    ? failedCount === 0
+    : !hasBlockingErrors;
+
+  return {
+    passed,
+    totalTasks: tasks.length,
+    passedCount,
+    failedCount,
+    failedTasks,
+    validationResults,
+    validatedAt: new Date().toISOString(),
+  };
+}
+
+/**
+ * 格式化 Plan 质量门禁报告
+ *
+ * 将质量门禁检查结果格式化为可读的字符串报告，支持紧凑模式和详细模式。
+ *
+ * @param result - 质量门禁检查结果
+ * @param options - 报告选项
+ * @returns 格式化后的报告字符串
+ *
+ * @example
+ * ```typescript
+ * const result = runPlanQualityGateCheck(tasks);
+ * const report = formatPlanQualityGateReport(result, { showDetails: true });
+ * console.log(report);
+ * ```
+ */
+export function formatPlanQualityGateReport(
+  result: PlanQualityGateCheckResult,
+  options: PlanQualityGateReportOptions = {}
+): string {
+  const { compact = false, showDetails = true, phase = 'plan_recommend' } = options;
+  const lines: string[] = [];
+  const separator = compact ? '---' : '━'.repeat(SEPARATOR_WIDTH);
+
+  const statusIcon = result.passed ? '✅' : '❌';
+
+  lines.push('');
+  lines.push(separator);
+  lines.push(`${statusIcon} Plan 质量门禁检查报告 [${phase}]`);
+  lines.push(separator);
+  lines.push('');
+
+  // 统计摘要
+  lines.push('📊 统计摘要:');
+  lines.push(`   总任务数: ${result.totalTasks}`);
+  lines.push(`   ✅ 通过: ${result.passedCount}`);
+  lines.push(`   ❌ 未通过: ${result.failedCount}`);
+  lines.push('');
+
+  // 未通过的任务列表
+  if (result.failedTasks.length > 0) {
+    lines.push(separator);
+    lines.push(`❌ 未通过的任务 (${result.failedTasks.length}):`);
+    lines.push('');
+
+    if (showDetails) {
+      for (const taskResult of result.validationResults) {
+        if (!taskResult.passed) {
+          lines.push(`   ${taskResult.taskId}:`);
+
+          // 显示错误
+          if (taskResult.errors.length > 0) {
+            for (const error of taskResult.errors) {
+              lines.push(`      ❌ ${error.message}`);
+            }
+          }
+
+          // 显示警告
+          if (taskResult.warnings.length > 0) {
+            for (const warning of taskResult.warnings) {
+              lines.push(`      ⚠️  ${warning.message}`);
+            }
+          }
+          lines.push('');
+        }
+      }
+    } else {
+      // 简洁模式：只列出任务ID
+      for (const taskId of result.failedTasks) {
+        lines.push(`   - ${taskId}`);
+      }
+      lines.push('');
+    }
+  }
+
+  // 验证详情
+  if (showDetails && result.validationResults.length > 0) {
+    const hasViolations = result.validationResults.some(
+      r => r.violations.length > 0
+    );
+
+    if (hasViolations) {
+      lines.push(separator);
+      lines.push('📋 详细违规信息:');
+      lines.push('');
+
+      for (const taskResult of result.validationResults) {
+        if (taskResult.violations.length > 0) {
+          lines.push(`   ${taskResult.taskId}:`);
+          for (const violation of taskResult.violations) {
+            const icon = violation.severity === 'error' ? '❌' : '⚠️';
+            lines.push(`      ${icon} [${violation.ruleId}] ${violation.message}`);
+          }
+          lines.push('');
+        }
+      }
+    }
+  }
+
+  lines.push(separator);
+
+  // 结论
+  if (result.passed) {
+    lines.push('✅ 所有任务通过 Plan 质量门禁检查！');
+  } else {
+    lines.push(`⚠️  ${result.failedCount} 个任务未通过质量门禁，建议修复后再执行 plan recommend`);
+    lines.push('');
+    lines.push('💡 修复建议:');
+    lines.push('   • 检查循环依赖：确保任务依赖关系无循环');
+    lines.push('   • 检查无效依赖：确保依赖的任务ID存在且有效');
+    lines.push('   • 检查孤儿子任务：确保 parentId 指向的任务存在');
+    lines.push('   • 使用 `projmnt4claude analyze --fix` 自动修复部分问题');
+  }
+
+  lines.push('');
+  lines.push(`🕐 验证时间: ${result.validatedAt}`);
+  lines.push(separator);
+  lines.push('');
+
+  return lines.join('\n');
 }

@@ -1,8 +1,8 @@
 import { describe, test, expect, beforeEach, afterEach } from 'bun:test';
 import * as fs from 'fs';
 import * as path from 'path';
-import * as os from 'os';
 import { HarnessEvaluator } from '../utils/harness-evaluator.js';
+import { createIsolatedTestEnv, type IsolatedTestEnv } from '../utils/test-env.js';
 import type { SprintContract, DevReport, HarnessConfig } from '../types/harness.js';
 import { createDefaultSprintContract, createDefaultDevReport } from '../types/harness.js';
 import type { TaskMeta } from '../types/task.js';
@@ -42,20 +42,18 @@ function createTestConfig(cwd: string): HarnessConfig {
 // ============== loadContract validation = ==============
 
 describe('BUG-013-1: loadContract validation', () => {
-  let tmpDir: string;
+  let env: IsolatedTestEnv;
   let evaluator: HarnessEvaluator;
 
-  beforeEach(() => {
-    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'harness-eval-test-'));
-    const tasksDir = path.join(tmpDir, '.projmnt4claude', 'tasks');
-    fs.mkdirSync(tasksDir, { recursive: true });
-    evaluator = new HarnessEvaluator(createTestConfig(tmpDir));
+  beforeEach(async () => {
+    env = await createIsolatedTestEnv();
+    evaluator = new HarnessEvaluator(createTestConfig(env.tempDir));
   });
   afterEach(() => {
-    fs.rmSync(tmpDir, { recursive: true, force: true });
+    env.cleanup();
   });
   function writeContract(taskId: string, data: unknown) {
-    const taskDir = path.join(tmpDir, '.projmnt4claude', 'tasks', taskId);
+    const taskDir = path.join(env.tempDir, '.projmnt4claude', 'tasks', taskId);
     fs.mkdirSync(taskDir, { recursive: true });
     fs.writeFileSync(path.join(taskDir, 'contract.json'), JSON.stringify(data));
   }
@@ -121,7 +119,7 @@ describe('BUG-013-1: loadContract validation', () => {
     expect(result).toBeNull();
   });
   test('should return null for invalid JSON', () => {
-    const taskDir = path.join(tmpDir, '.projmnt4claude', 'tasks', 'TASK-bad-json');
+    const taskDir = path.join(env.tempDir, '.projmnt4claude', 'tasks', 'TASK-bad-json');
     fs.mkdirSync(taskDir, { recursive: true });
     fs.writeFileSync(path.join(taskDir, 'contract.json'), '{not valid json');
     const result = (evaluator as any).loadContract('TASK-bad-json');
@@ -176,15 +174,14 @@ describe('BUG-013-1: loadContract validation', () => {
 // ============== buildEvaluationPrompt defensive handling = ==============
 
 describe('BUG-013-1: buildEvaluationPrompt defensive array handling', () => {
-  let tmpDir: string;
+  let env: IsolatedTestEnv;
   let evaluator: HarnessEvaluator;
-  beforeEach(() => {
-    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'harness-eval-test-'));
-    fs.mkdirSync(path.join(tmpDir, '.projmnt4claude', 'tasks'), { recursive: true });
-    evaluator = new HarnessEvaluator(createTestConfig(tmpDir));
+  beforeEach(async () => {
+    env = await createIsolatedTestEnv();
+    evaluator = new HarnessEvaluator(createTestConfig(env.tempDir));
   });
   afterEach(() => {
-    fs.rmSync(tmpDir, { recursive: true, force: true });
+    env.cleanup();
   });
   test('should not crash when contract.checkpoints is undefined', () => {
     const task = createTestTask();
@@ -257,7 +254,8 @@ describe('BUG-013-1: buildEvaluationPrompt defensive array handling', () => {
     const prompt = (evaluator as any).buildEvaluationPrompt(task, devReport, contract);
     expect(typeof prompt).toBe('string');
     expect(prompt.length).toBeGreaterThan(0);
-    expect(prompt).toContain('架构评估任务');
+    // Just check for task-related content (template-independent)
+    expect(prompt).toContain(task.title);
   });
 });
 
@@ -278,12 +276,15 @@ describe('createDefaultSprintContract', () => {
 // ============== BUG-013-3: parseEvaluationResult inference type tracking = ==============
 
 describe('BUG-013-3: parseEvaluationResult inference type tracking', () => {
+  let env: IsolatedTestEnv;
   let evaluator: HarnessEvaluator;
 
-  beforeEach(() => {
-    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'harness-eval-inference-'));
-    fs.mkdirSync(path.join(tmpDir, '.projmnt4claude', 'tasks'), { recursive: true });
-    evaluator = new HarnessEvaluator(createTestConfig(tmpDir));
+  beforeEach(async () => {
+    env = await createIsolatedTestEnv();
+    evaluator = new HarnessEvaluator(createTestConfig(env.tempDir));
+  });
+  afterEach(() => {
+    env.cleanup();
   });
 
   function parse(output: string) {
@@ -442,16 +443,15 @@ describe('BUG-013-3: parseEvaluationResult inference type tracking', () => {
 // ============== BUG-013-3: formatReviewReport includes inference type = ==============
 
 describe('BUG-013-3: formatReviewReport inference type annotation', () => {
-  let tmpDir: string;
+  let env: IsolatedTestEnv;
   let evaluator: HarnessEvaluator;
 
-  beforeEach(() => {
-    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'harness-eval-report-'));
-    fs.mkdirSync(path.join(tmpDir, '.projmnt4claude', 'tasks'), { recursive: true });
-    evaluator = new HarnessEvaluator(createTestConfig(tmpDir));
+  beforeEach(async () => {
+    env = await createIsolatedTestEnv();
+    evaluator = new HarnessEvaluator(createTestConfig(env.tempDir));
   });
   afterEach(() => {
-    fs.rmSync(tmpDir, { recursive: true, force: true });
+    env.cleanup();
   });
 
   test('should include inference type in review report', () => {
@@ -527,15 +527,14 @@ describe('BUG-013-3: formatReviewReport inference type annotation', () => {
 // ============== BUG-013-1: formatReviewReport defensive array handling = ==============
 
 describe('BUG-013-1: formatReviewReport defensive array handling', () => {
-  let tmpDir: string;
+  let env: IsolatedTestEnv;
   let evaluator: HarnessEvaluator;
-  beforeEach(() => {
-    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'harness-eval-report-def-'));
-    fs.mkdirSync(path.join(tmpDir, '.projmnt4claude', 'tasks'), { recursive: true });
-    evaluator = new HarnessEvaluator(createTestConfig(tmpDir));
+  beforeEach(async () => {
+    env = await createIsolatedTestEnv();
+    evaluator = new HarnessEvaluator(createTestConfig(env.tempDir));
   });
   afterEach(() => {
-    fs.rmSync(tmpDir, { recursive: true, force: true });
+    env.cleanup();
   });
 
   function makeVerdict() {
@@ -591,17 +590,16 @@ describe('BUG-013-1: formatReviewReport defensive array handling', () => {
 // ============== BUG-017: 空输出检测 + 日志持久化 ==============
 
 describe('BUG-017: 空输出检测与日志持久化', () => {
-  let tmpDir: string;
+  let env: IsolatedTestEnv;
   let evaluator: HarnessEvaluator;
 
-  beforeEach(() => {
-    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'harness-eval-empty-'));
-    fs.mkdirSync(path.join(tmpDir, '.projmnt4claude', 'tasks'), { recursive: true });
-    evaluator = new HarnessEvaluator(createTestConfig(tmpDir));
+  beforeEach(async () => {
+    env = await createIsolatedTestEnv();
+    evaluator = new HarnessEvaluator(createTestConfig(env.tempDir));
   });
 
   afterEach(() => {
-    fs.rmSync(tmpDir, { recursive: true, force: true });
+    env.cleanup();
   });
 
   function parse(output: string) {
@@ -645,7 +643,7 @@ describe('BUG-017: 空输出检测与日志持久化', () => {
       true
     );
 
-    const reportsDir = path.join(tmpDir, '.projmnt4claude', 'reports', 'harness', 'TASK-test-raw');
+    const reportsDir = path.join(env.tempDir, '.projmnt4claude', 'reports', 'harness', 'TASK-test-raw');
     expect(fs.existsSync(reportsDir)).toBe(true);
 
     const files = fs.readdirSync(reportsDir).filter(f => f.startsWith('evaluation-raw-'));
@@ -666,7 +664,7 @@ describe('BUG-017: 空输出检测与日志持久化', () => {
       false
     );
 
-    const reportsDir = path.join(tmpDir, '.projmnt4claude', 'reports', 'harness', 'TASK-test-empty-raw');
+    const reportsDir = path.join(env.tempDir, '.projmnt4claude', 'reports', 'harness', 'TASK-test-empty-raw');
     const files = fs.readdirSync(reportsDir).filter(f => f.startsWith('evaluation-raw-'));
     expect(files.length).toBe(1);
 
@@ -696,24 +694,23 @@ describe('BUG-017: 空输出检测与日志持久化', () => {
 // ============== P-2: detectPhantomTasks with plan snapshot ==============
 
 describe('P-2: detectPhantomTasks with plan snapshot', () => {
-  let tmpDir: string;
+  let env: IsolatedTestEnv;
   let evaluator: HarnessEvaluator;
-  const runsDir = () => path.join(tmpDir, '.projmnt4claude', 'runs');
+  const runsDir = () => path.join(env.tempDir, '.projmnt4claude', 'runs');
 
-  beforeEach(() => {
-    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'harness-phantom-test-'));
-    fs.mkdirSync(path.join(tmpDir, '.projmnt4claude', 'tasks'), { recursive: true });
+  beforeEach(async () => {
+    env = await createIsolatedTestEnv();
     fs.mkdirSync(runsDir(), { recursive: true });
-    evaluator = new HarnessEvaluator(createTestConfig(tmpDir));
+    evaluator = new HarnessEvaluator(createTestConfig(env.tempDir));
   });
 
   afterEach(() => {
-    fs.rmSync(tmpDir, { recursive: true, force: true });
+    env.cleanup();
   });
 
   // Helper to create a task with specific createdAt
   function createTaskFile(taskId: string, createdAt: string, status: string = 'pending') {
-    const taskDir = path.join(tmpDir, '.projmnt4claude', 'tasks', taskId);
+    const taskDir = path.join(env.tempDir, '.projmnt4claude', 'tasks', taskId);
     fs.mkdirSync(taskDir, { recursive: true });
     const taskMeta = {
       id: taskId,
@@ -748,7 +745,7 @@ describe('P-2: detectPhantomTasks with plan snapshot', () => {
       batchBoundaries: tasks.length > 0 ? [0, tasks.length] : [0],
       batchLabels: ['Batch 1'],
       batchParallelizable: [false],
-      sourcePlanPath: path.join(tmpDir, '.projmnt4claude', 'current-plan.json'),
+      sourcePlanPath: path.join(env.tempDir, '.projmnt4claude', 'current-plan.json'),
       taskStatusSnapshot: tasks.reduce((acc, tid) => { acc[tid] = 'pending'; return acc; }, {} as Record<string, string>),
     };
 

@@ -11536,7 +11536,7 @@ function classifyExitResult(code, stderr, stdout) {
   };
 }
 async function runHeadlessClaude(options) {
-  return new Promise((resolve2) => {
+  return new Promise((resolve3) => {
     const args = [
       "--allowedTools",
       options.allowedTools.join(","),
@@ -11577,7 +11577,7 @@ async function runHeadlessClaude(options) {
       });
       child.on("close", (code) => {
         const classified = classifyExitResult(code, stderr, stdout);
-        resolve2({
+        resolve3({
           success: classified.success,
           output: stdout,
           error: classified.error,
@@ -11586,7 +11586,7 @@ async function runHeadlessClaude(options) {
         });
       });
       child.on("error", (error) => {
-        resolve2({
+        resolve3({
           success: false,
           output: "",
           error: error.message,
@@ -11594,7 +11594,7 @@ async function runHeadlessClaude(options) {
         });
       });
     } catch (error) {
-      resolve2({
+      resolve3({
         success: false,
         output: "",
         error: error instanceof Error ? error.message : String(error),
@@ -11621,7 +11621,7 @@ function isRetryableError(output, stderr) {
   return { retryable: false };
 }
 function sleep(seconds) {
-  return new Promise((resolve2) => setTimeout(resolve2, seconds * 1000));
+  return new Promise((resolve3) => setTimeout(resolve3, seconds * 1000));
 }
 async function runHeadlessClaudeWithRetry(options, retryConfig) {
   const maxAttempts = retryConfig.maxAttempts + 1;
@@ -11646,18 +11646,19 @@ async function runHeadlessClaudeWithRetry(options, retryConfig) {
 }
 function archiveReportIfExists(reportPath) {
   try {
-    if (!fs8.existsSync(reportPath)) {
+    const absolutePath = path7.resolve(reportPath);
+    if (!fs8.existsSync(absolutePath)) {
       return;
     }
-    const dir = path7.dirname(reportPath);
-    const filename = path7.basename(reportPath);
+    const dir = path7.dirname(absolutePath);
+    const filename = path7.basename(absolutePath);
     const archiveDir = path7.join(dir, "archive");
     if (!fs8.existsSync(archiveDir)) {
       fs8.mkdirSync(archiveDir, { recursive: true });
     }
     const timestamp = new Date().toISOString().replace(/[:.]/g, "-");
     const archivePath = path7.join(archiveDir, `${timestamp}-${filename}`);
-    fs8.copyFileSync(reportPath, archivePath);
+    fs8.copyFileSync(absolutePath, archivePath);
     console.log(`   \uD83D\uDCE6 \u5DF2\u5F52\u6863\u65E7\u62A5\u544A: archive/${timestamp}-${filename}`);
   } catch (error) {
     console.warn(`   \u26A0\uFE0F \u5F52\u6863\u62A5\u544A\u5931\u8D25: ${error instanceof Error ? error.message : String(error)}`);
@@ -16485,10 +16486,12 @@ var exports_plan = {};
 __export(exports_plan, {
   sortChains: () => sortChains,
   showPlan: () => showPlan,
+  runPlanQualityGateCheck: () => runPlanQualityGateCheck,
   removeTask: () => removeTask,
   recommendPlan: () => recommendPlan,
   inferDependenciesFromFiles: () => inferDependenciesFromFiles,
   inferArchitectureLayer: () => inferArchitectureLayer,
+  formatPlanQualityGateReport: () => formatPlanQualityGateReport,
   clearPlanCmd: () => clearPlanCmd,
   buildTaskChains: () => buildTaskChains,
   buildBatches: () => buildBatches,
@@ -17056,53 +17059,26 @@ async function recommendPlan(options = {}, cwd = process.cwd()) {
   }
   if (options.requireQuality !== false && filteredTasks.length > 0) {
     console.log("\u6B63\u5728\u6267\u884C\u8D28\u91CF\u95E8\u7981\u68C0\u67E5...");
-    const qualityGateResults = [];
-    let passedCount = 0;
-    let failedCount = 0;
-    const failedTasks2 = [];
-    for (const task of filteredTasks) {
-      const result = runQualityGate(task, "plan_recommend");
-      qualityGateResults.push(result);
-      if (result.passed) {
-        passedCount++;
-      } else {
-        failedCount++;
-        failedTasks2.push(task.id);
-      }
-    }
-    if (failedCount > 0) {
-      console.log("");
-      console.log("\u2501".repeat(SEPARATOR_WIDTH));
-      console.log("\uD83D\uDEA6 \u8D28\u91CF\u95E8\u7981\u68C0\u67E5\u7ED3\u679C (plan_recommend \u9636\u6BB5)");
-      console.log("\u2501".repeat(SEPARATOR_WIDTH));
-      console.log(`\u603B\u4EFB\u52A1: ${filteredTasks.length} | \u2705 \u901A\u8FC7: ${passedCount} | \u274C \u672A\u901A\u8FC7: ${failedCount}`);
-      console.log("");
-      for (const result of qualityGateResults) {
-        if (!result.passed) {
-          console.log(`\u274C ${result.taskId}:`);
-          for (const error of result.errors) {
-            console.log(`   \u2022 ${error.message}`);
-          }
-          if (result.warnings.length > 0) {
-            console.log(`   \u26A0\uFE0F \u8B66\u544A:`);
-            for (const warning of result.warnings) {
-              console.log(`      \u2022 ${warning.message}`);
-            }
-          }
-        }
-      }
-      console.log("\u2501".repeat(SEPARATOR_WIDTH));
-      console.log("");
+    const qualityGateResult = runPlanQualityGateCheck(filteredTasks, {
+      phase: "plan_recommend",
+      includeWarnings: true
+    });
+    if (!qualityGateResult.passed) {
+      console.log(formatPlanQualityGateReport(qualityGateResult, {
+        compact: false,
+        showDetails: true,
+        phase: "plan_recommend"
+      }));
       if (options.nonInteractive || !process.stdout.isTTY) {
         console.error("\u274C \u8D28\u91CF\u95E8\u7981\u68C0\u67E5\u672A\u901A\u8FC7\uFF0C\u4E2D\u6B62\u8BA1\u5212\u63A8\u8350");
-        console.error(`   \u672A\u901A\u8FC7\u4EFB\u52A1: ${failedTasks2.join(", ")}`);
+        console.error(`   \u672A\u901A\u8FC7\u4EFB\u52A1: ${qualityGateResult.failedTasks.join(", ")}`);
         console.error("   \u4F7F\u7528 --no-quality-gate \u8DF3\u8FC7\u8D28\u91CF\u68C0\u67E5\uFF08\u4E0D\u63A8\u8350\uFF09");
         process.exit(1);
       }
       const { continueAnyway } = await import_prompts3.default({
         type: "confirm",
         name: "continueAnyway",
-        message: `${failedCount} \u4E2A\u4EFB\u52A1\u672A\u901A\u8FC7\u8D28\u91CF\u95E8\u7981\uFF0C\u662F\u5426\u7EE7\u7EED\uFF1F`,
+        message: `${qualityGateResult.failedCount} \u4E2A\u4EFB\u52A1\u672A\u901A\u8FC7\u8D28\u91CF\u95E8\u7981\uFF0C\u662F\u5426\u7EE7\u7EED\uFF1F`,
         initial: false
       });
       if (!continueAnyway) {
@@ -17111,7 +17087,7 @@ async function recommendPlan(options = {}, cwd = process.cwd()) {
       }
       console.log("");
     } else {
-      console.log(`\u2705 \u8D28\u91CF\u95E8\u7981\u68C0\u67E5\u901A\u8FC7 (${passedCount}/${filteredTasks.length})`);
+      console.log(`\u2705 \u8D28\u91CF\u95E8\u7981\u68C0\u67E5\u901A\u8FC7 (${qualityGateResult.passedCount}/${qualityGateResult.totalTasks})`);
       console.log("");
     }
   }
@@ -17364,6 +17340,115 @@ function formatStatus2(status) {
     failed: "\u274C \u5DF2\u5931\u8D25"
   };
   return map[normalized] || status;
+}
+function runPlanQualityGateCheck(tasks, options = {}) {
+  const phase = options.phase || "plan_recommend";
+  const includeWarnings = options.includeWarnings !== false;
+  const validationResults = [];
+  let passedCount = 0;
+  let failedCount = 0;
+  const failedTasks = [];
+  for (const task of tasks) {
+    const result = runQualityGate(task, phase);
+    validationResults.push(result);
+    if (result.passed) {
+      passedCount++;
+    } else {
+      failedCount++;
+      failedTasks.push(task.id);
+    }
+  }
+  const hasBlockingErrors = validationResults.some((r) => !r.passed && r.errors.length > 0);
+  const passed = includeWarnings ? failedCount === 0 : !hasBlockingErrors;
+  return {
+    passed,
+    totalTasks: tasks.length,
+    passedCount,
+    failedCount,
+    failedTasks,
+    validationResults,
+    validatedAt: new Date().toISOString()
+  };
+}
+function formatPlanQualityGateReport(result, options = {}) {
+  const { compact = false, showDetails = true, phase = "plan_recommend" } = options;
+  const lines = [];
+  const separator = compact ? "---" : "\u2501".repeat(SEPARATOR_WIDTH);
+  const statusIcon = result.passed ? "\u2705" : "\u274C";
+  lines.push("");
+  lines.push(separator);
+  lines.push(`${statusIcon} Plan \u8D28\u91CF\u95E8\u7981\u68C0\u67E5\u62A5\u544A [${phase}]`);
+  lines.push(separator);
+  lines.push("");
+  lines.push("\uD83D\uDCCA \u7EDF\u8BA1\u6458\u8981:");
+  lines.push(`   \u603B\u4EFB\u52A1\u6570: ${result.totalTasks}`);
+  lines.push(`   \u2705 \u901A\u8FC7: ${result.passedCount}`);
+  lines.push(`   \u274C \u672A\u901A\u8FC7: ${result.failedCount}`);
+  lines.push("");
+  if (result.failedTasks.length > 0) {
+    lines.push(separator);
+    lines.push(`\u274C \u672A\u901A\u8FC7\u7684\u4EFB\u52A1 (${result.failedTasks.length}):`);
+    lines.push("");
+    if (showDetails) {
+      for (const taskResult of result.validationResults) {
+        if (!taskResult.passed) {
+          lines.push(`   ${taskResult.taskId}:`);
+          if (taskResult.errors.length > 0) {
+            for (const error of taskResult.errors) {
+              lines.push(`      \u274C ${error.message}`);
+            }
+          }
+          if (taskResult.warnings.length > 0) {
+            for (const warning of taskResult.warnings) {
+              lines.push(`      \u26A0\uFE0F  ${warning.message}`);
+            }
+          }
+          lines.push("");
+        }
+      }
+    } else {
+      for (const taskId of result.failedTasks) {
+        lines.push(`   - ${taskId}`);
+      }
+      lines.push("");
+    }
+  }
+  if (showDetails && result.validationResults.length > 0) {
+    const hasViolations = result.validationResults.some((r) => r.violations.length > 0);
+    if (hasViolations) {
+      lines.push(separator);
+      lines.push("\uD83D\uDCCB \u8BE6\u7EC6\u8FDD\u89C4\u4FE1\u606F:");
+      lines.push("");
+      for (const taskResult of result.validationResults) {
+        if (taskResult.violations.length > 0) {
+          lines.push(`   ${taskResult.taskId}:`);
+          for (const violation of taskResult.violations) {
+            const icon = violation.severity === "error" ? "\u274C" : "\u26A0\uFE0F";
+            lines.push(`      ${icon} [${violation.ruleId}] ${violation.message}`);
+          }
+          lines.push("");
+        }
+      }
+    }
+  }
+  lines.push(separator);
+  if (result.passed) {
+    lines.push("\u2705 \u6240\u6709\u4EFB\u52A1\u901A\u8FC7 Plan \u8D28\u91CF\u95E8\u7981\u68C0\u67E5\uFF01");
+  } else {
+    lines.push(`\u26A0\uFE0F  ${result.failedCount} \u4E2A\u4EFB\u52A1\u672A\u901A\u8FC7\u8D28\u91CF\u95E8\u7981\uFF0C\u5EFA\u8BAE\u4FEE\u590D\u540E\u518D\u6267\u884C plan recommend`);
+    lines.push("");
+    lines.push("\uD83D\uDCA1 \u4FEE\u590D\u5EFA\u8BAE:");
+    lines.push("   \u2022 \u68C0\u67E5\u5FAA\u73AF\u4F9D\u8D56\uFF1A\u786E\u4FDD\u4EFB\u52A1\u4F9D\u8D56\u5173\u7CFB\u65E0\u5FAA\u73AF");
+    lines.push("   \u2022 \u68C0\u67E5\u65E0\u6548\u4F9D\u8D56\uFF1A\u786E\u4FDD\u4F9D\u8D56\u7684\u4EFB\u52A1ID\u5B58\u5728\u4E14\u6709\u6548");
+    lines.push("   \u2022 \u68C0\u67E5\u5B64\u513F\u5B50\u4EFB\u52A1\uFF1A\u786E\u4FDD parentId \u6307\u5411\u7684\u4EFB\u52A1\u5B58\u5728");
+    lines.push("   \u2022 \u4F7F\u7528 `projmnt4claude analyze --fix` \u81EA\u52A8\u4FEE\u590D\u90E8\u5206\u95EE\u9898");
+  }
+  lines.push("");
+  lines.push(`\uD83D\uDD50 \u9A8C\u8BC1\u65F6\u95F4: ${result.validatedAt}`);
+  lines.push(separator);
+  lines.push("");
+  return lines.join(`
+`);
 }
 var import_prompts3, STOP_WORDS, inferDependenciesFromFiles;
 var init_plan2 = __esm(() => {
@@ -19536,46 +19621,46 @@ function showQualityReport(scores, options = {}) {
   const separator = compact ? "---" : "\u2501".repeat(SEPARATOR_WIDTH);
   console.log("");
   console.log(separator);
-  console.log("\uD83D\uDCCA \u5185\u5BB9\u8D28\u91CF\u68C0\u6D4B\u62A5\u544A");
+  console.log("\uD83D\uDCCA Content Quality Report");
   console.log(separator);
   console.log("");
   const sortedScores = Array.from(scores.entries()).sort((a, b) => a[1].totalScore - b[1].totalScore);
-  console.log(`\uD83D\uDCC8 \u603B\u4F53\u7EDF\u8BA1:`);
-  console.log(`   \u68C0\u6D4B\u4EFB\u52A1\u6570: ${scores.size}`);
+  console.log(`\uD83D\uDCC8 Overall Statistics:`);
+  console.log(`   Tasks analyzed: ${scores.size}`);
   if (sortedScores.length === 0) {
-    console.log("\u2705 \u6CA1\u6709\u4EFB\u52A1\u9700\u8981\u68C0\u6D4B");
+    console.log("\u2705 No tasks to analyze");
     console.log("");
     return;
   }
   const lowQualityTasks = sortedScores.filter(([_, s]) => s.totalScore < threshold);
   const avgScore = sortedScores.reduce((sum, [_, s]) => sum + s.totalScore, 0) / sortedScores.length;
-  console.log(`   \u5E73\u5747\u5206\u6570: ${avgScore.toFixed(1)}/100`);
-  console.log(`   \u4F4E\u8D28\u91CF\u4EFB\u52A1 (< ${threshold}\u5206): ${lowQualityTasks.length}`);
+  console.log(`   Average score: ${avgScore.toFixed(1)}/100`);
+  console.log(`   Low quality tasks (< ${threshold}): ${lowQualityTasks.length}`);
   console.log("");
   console.log(separator);
-  console.log("\uD83D\uDCCB \u4EFB\u52A1\u8D28\u91CF\u8BC4\u5206");
+  console.log("\uD83D\uDCCB Task Quality Scores");
   console.log(separator);
   console.log("");
   for (const [taskId, score] of sortedScores) {
     const icon = score.totalScore >= 80 ? "\uD83D\uDFE2" : score.totalScore >= 60 ? "\uD83D\uDFE1" : "\uD83D\uDD34";
     console.log(`${icon} ${taskId}: ${score.totalScore}/100`);
-    console.log(`   \u63CF\u8FF0\u5B8C\u6574\u5EA6: ${score.descriptionScore}%`);
-    console.log(`   \u68C0\u67E5\u70B9\u8D28\u91CF: ${score.checkpointScore}%`);
-    console.log(`   \u5173\u8054\u6587\u4EF6: ${score.relatedFilesScore}%`);
-    console.log(`   \u89E3\u51B3\u65B9\u6848: ${score.solutionScore}%`);
+    console.log(`   Description completeness: ${score.descriptionScore}%`);
+    console.log(`   Checkpoint quality: ${score.checkpointScore}%`);
+    console.log(`   Related files: ${score.relatedFilesScore}%`);
+    console.log(`   Solution: ${score.solutionScore}%`);
     if (score.aiSemanticScore !== undefined) {
-      console.log(`   AI \u8BED\u4E49\u8BC4\u5206: ${score.aiSemanticScore}% (\u7ED3\u6784 60% + AI 40%)`);
+      console.log(`   AI semantic score: ${score.aiSemanticScore}% (structure 60% + AI 40%)`);
     }
     if (score.deductions.length > 0) {
       for (const deduction of score.deductions) {
-        console.log(`   \u2514\u2500 ${deduction.reason} (${deduction.points}\u5206)`);
+        console.log(`   \u2514\u2500 ${deduction.reason} (${deduction.points}pts)`);
       }
     }
     console.log("");
   }
   if (lowQualityTasks.length > 0) {
     console.log(separator);
-    console.log("\uD83D\uDCA1 \u6539\u8FDB\u5EFA\u8BAE");
+    console.log("\uD83D\uDCA1 Improvement Suggestions");
     console.log(separator);
     console.log("");
     for (const [taskId, score] of lowQualityTasks.slice(0, 5)) {
@@ -19587,7 +19672,7 @@ function showQualityReport(scores, options = {}) {
       console.log("");
     }
     if (lowQualityTasks.length > 5) {
-      console.log(`   ... \u8FD8\u6709 ${lowQualityTasks.length - 5} \u4E2A\u4F4E\u8D28\u91CF\u4EFB\u52A1`);
+      console.log(`   ... and ${lowQualityTasks.length - 5} more low quality tasks`);
       console.log("");
     }
   }
@@ -19607,7 +19692,7 @@ async function detectSemanticDuplicates(tasks, cwd) {
       enabled: true,
       aiCall: () => aiAssistant.detectDuplicates(batch, { cwd }),
       fallback: { duplicates: [], aiUsed: false },
-      operationName: "\u8BED\u4E49\u91CD\u590D\u68C0\u6D4B",
+      operationName: "Semantic duplicate detection",
       logger: analyzeLogger
     });
     if (result.aiUsed && result.duplicates.length > 0) {
@@ -19616,8 +19701,8 @@ async function detectSemanticDuplicates(tasks, cwd) {
           taskId: group.taskIds[0] || "__semantic__",
           type: "semantic_duplicate",
           severity: "medium",
-          message: `\u8BED\u4E49\u91CD\u590D\u68C0\u6D4B: ${group.taskIds.join(", ")} \u76F8\u4F3C\u5EA6 ${(group.similarity * 100).toFixed(0)}%${group.reason ? ` - ${group.reason}` : ""}`,
-          suggestion: group.keepTaskId ? `\u5EFA\u8BAE\u4FDD\u7559 ${group.keepTaskId}\uFF0C\u5408\u5E76\u6216\u5173\u95ED\u5176\u4ED6\u91CD\u590D\u4EFB\u52A1` : "\u68C0\u67E5\u91CD\u590D\u4EFB\u52A1\uFF0C\u4FDD\u7559\u6700\u76F8\u5173\u7684\u4E00\u4E2A\uFF0C\u5173\u95ED\u6216\u5408\u5E76\u5176\u4F59\u4EFB\u52A1",
+          message: `Semantic duplicate detection: ${group.taskIds.join(", ")} similarity ${(group.similarity * 100).toFixed(0)}%${group.reason ? ` - ${group.reason}` : ""}`,
+          suggestion: group.keepTaskId ? `Keep ${group.keepTaskId}, merge or close other duplicate tasks` : "Check duplicate tasks, keep the most relevant one, close or merge the rest",
           details: {
             duplicateTaskIds: group.taskIds,
             similarity: group.similarity,
@@ -19680,8 +19765,8 @@ function checkReportStatusConsistency(taskId, task, cwd) {
         taskId,
         type: "report_status_mismatch",
         severity: "medium",
-        message: `\u62A5\u544A ${mapping.reportFile} \u663E\u793A PASS\uFF0C\u4F46\u4EFB\u52A1\u72B6\u6001\u4ECD\u4E3A ${currentStatus}\uFF0C\u5E94\u81F3\u5C11\u4E3A ${mapping.impliesStatus}`,
-        suggestion: `\u4F7F\u7528 --fix \u5C06\u72B6\u6001\u66F4\u65B0\u4E3A ${mapping.impliesStatus}`,
+        message: `Report ${mapping.reportFile} shows PASS, but task status is still ${currentStatus}, should be at least ${mapping.impliesStatus}`,
+        suggestion: `Use --fix to update status to ${mapping.impliesStatus}`,
         details: {
           currentStatus,
           impliedStatus: mapping.impliesStatus,
@@ -19707,8 +19792,8 @@ function checkCheckpointConsistency(taskId, task) {
       taskId,
       type: "checkpoint_status_mismatch",
       severity: "medium",
-      message: `\u4EFB\u52A1\u5DF2 resolved \u4F46\u5168\u90E8 ${totalCps} \u4E2A\u68C0\u67E5\u70B9\u4ECD\u4E3A pending (\u65E7\u7248\u9057\u7559)`,
-      suggestion: "\u4F7F\u7528 --fix \u81EA\u52A8\u5B8C\u6210\u6240\u6709\u68C0\u67E5\u70B9\uFF08\u65E7\u7248\u9057\u7559\u4EFB\u52A1\u65E0\u68C0\u67E5\u70B9\u72B6\u6001\u8FFD\u8E2A\uFF09",
+      message: `Task is resolved but all ${totalCps} checkpoints are still pending (legacy)`,
+      suggestion: "Use --fix to auto-complete all checkpoints (legacy tasks lack checkpoint status tracking)",
       details: {
         totalCheckpoints: totalCps,
         pendingCheckpoints: pendingCps,
@@ -19731,8 +19816,8 @@ async function checkQualityGateIssues(taskId, task, cwd, config) {
       taskId,
       type: "low_quality",
       severity: "medium",
-      message: `\u5185\u5BB9\u8D28\u91CF\u8BC4\u5206 ${result.score.totalScore}/100\uFF0C\u4F4E\u4E8E\u9608\u503C ${qualityConfig.minQualityScore}`,
-      suggestion: `\u5B8C\u5584\u4EFB\u52A1\u63CF\u8FF0\u3001\u68C0\u67E5\u70B9\u548C\u89E3\u51B3\u65B9\u6848\u4EE5\u63D0\u9AD8\u8D28\u91CF\u5206\u6570\u3002\u5F53\u524D\uFF1A\u63CF\u8FF0\u5B8C\u6574\u5EA6=${result.score.descriptionScore}\uFF0C\u68C0\u67E5\u70B9\u8D28\u91CF=${result.score.checkpointScore}\uFF0C\u89E3\u51B3\u65B9\u6848=${result.score.solutionScore}`,
+      message: `Content quality score ${result.score.totalScore}/100 is below threshold ${qualityConfig.minQualityScore}`,
+      suggestion: `Improve task description, checkpoints and solution to increase quality score. Current: description=${result.score.descriptionScore}, checkpoints=${result.score.checkpointScore}, solution=${result.score.solutionScore}`,
       details: {
         totalScore: result.score.totalScore,
         threshold: qualityConfig.minQualityScore,
@@ -19750,8 +19835,8 @@ async function checkQualityGateIssues(taskId, task, cwd, config) {
       taskId,
       type: field === "checkpoints" ? "low_checkpoint_coverage" : "low_quality",
       severity: field === "affected_files" ? "high" : "medium",
-      message: `\u8D28\u91CF\u95E8\u7981: \u7F3A\u5C11\u5FC5\u9700\u5B57\u6BB5 ${field}`,
-      suggestion: `\u8BF7\u8865\u5145 ${field} \u5B57\u6BB5\u4EE5\u901A\u8FC7\u8D28\u91CF\u95E8\u7981`,
+      message: `Quality gate: missing required field ${field}`,
+      suggestion: `Please add ${field} field to pass quality gate`,
       details: { missingField: field }
     });
   }
@@ -19762,7 +19847,7 @@ async function checkQualityGateIssues(taskId, task, cwd, config) {
         type: "missing_checkpoint_prefix",
         severity: violation.severity,
         message: violation.message,
-        suggestion: "\u8FD0\u884C analyze --fix \u81EA\u52A8\u4E3A\u68C0\u67E5\u70B9\u6DFB\u52A0\u524D\u7F00",
+        suggestion: "Run analyze --fix to auto-add prefixes to checkpoints",
         details: violation.details
       });
     } else {
@@ -19771,7 +19856,7 @@ async function checkQualityGateIssues(taskId, task, cwd, config) {
         type: "checkpoint_validation_error",
         severity: violation.severity,
         message: violation.message,
-        suggestion: violation.suggestion || "\u4FEE\u590D\u68C0\u67E5\u70B9\u914D\u7F6E\u4EE5\u6EE1\u8DB3\u9A8C\u8BC1\u8981\u6C42",
+        suggestion: violation.suggestion || "Fix checkpoint configuration to meet validation requirements",
         details: violation.details
       });
     }
@@ -19782,8 +19867,8 @@ async function checkQualityGateIssues(taskId, task, cwd, config) {
       taskId,
       type: "file_not_found",
       severity: "high",
-      message: `\u5F15\u7528\u7684\u6587\u4EF6\u4E0D\u5B58\u5728: ${filesResult.missingFiles.join(", ")}`,
-      suggestion: "\u68C0\u67E5\u6587\u4EF6\u8DEF\u5F84\u662F\u5426\u6B63\u786E\uFF0C\u6216\u79FB\u9664\u5BF9\u4E0D\u5B58\u5728\u6587\u4EF6\u7684\u5F15\u7528",
+      message: `Referenced files do not exist: ${filesResult.missingFiles.join(", ")}`,
+      suggestion: "Check file paths are correct, or remove references to non-existent files",
       details: { missingFiles: filesResult.missingFiles }
     });
   }
@@ -19793,7 +19878,7 @@ async function checkQualityGateIssues(taskId, task, cwd, config) {
         taskId,
         type: "low_quality",
         severity: "medium",
-        message: `\u8D28\u91CF\u5EFA\u8BAE: ${suggestion.message}`,
+        message: `Quality suggestion: ${suggestion.message}`,
         suggestion: suggestion.action,
         details: { category: suggestion.category, priority: suggestion.priority }
       });
@@ -19823,8 +19908,8 @@ function checkMissingPipelineEvidence(taskId, task, cwd) {
       taskId,
       type: "missing_pipeline_evidence",
       severity: "high",
-      message: `\u4EFB\u52A1\u5904\u4E8E ${currentStatus} \u4F46\u62A5\u544A\u76EE\u5F55\u4E0D\u5B58\u5728\uFF0C\u7F3A\u5C11\u524D\u7F6E pipeline \u8BC1\u636E`,
-      suggestion: "\u4F7F\u7528 --fix \u5C06\u4EFB\u52A1\u91CD\u7F6E\u4E3A open \u72B6\u6001\uFF08\u7F3A\u5C11\u6062\u590D\u8BC1\u636E\uFF09",
+      message: `Task is ${currentStatus} but report directory does not exist, missing pipeline evidence`,
+      suggestion: "Use --fix to reset task to open status (missing resume evidence)",
       details: {
         currentStatus,
         missingReports: required.map((r) => r.reportFile),
@@ -19845,8 +19930,8 @@ function checkMissingPipelineEvidence(taskId, task, cwd) {
       taskId,
       type: "missing_pipeline_evidence",
       severity: "high",
-      message: `\u4EFB\u52A1\u5904\u4E8E ${currentStatus} \u4F46\u7F3A\u5C11\u524D\u7F6E\u62A5\u544A: ${missingReports.map((r) => r.reportFile).join(", ")}`,
-      suggestion: "\u4F7F\u7528 --fix \u5C06\u4EFB\u52A1\u91CD\u7F6E\u4E3A open \u72B6\u6001\uFF08\u7F3A\u5C11\u6062\u590D\u8BC1\u636E\uFF09",
+      message: `Task is ${currentStatus} but missing prerequisite reports: ${missingReports.map((r) => r.reportFile).join(", ")}`,
+      suggestion: "Use --fix to reset task to open status (missing resume evidence)",
       details: {
         currentStatus,
         missingReports: missingReports.map((r) => r.reportFile),
@@ -20014,8 +20099,8 @@ async function detectStatusInferenceIssues(task, cwd, aiOptions) {
       taskId: task.id,
       type: "ai_status_inference",
       severity: aiResult.confidence >= 0.8 ? "high" : "medium",
-      message: `AI \u63A8\u65AD\u4EFB\u52A1\u72B6\u6001\u5E94\u4E3A ${aiResult.inferredStatus}\uFF08\u5F53\u524D: ${currentStatus}\uFF0C\u7F6E\u4FE1\u5EA6: ${(aiResult.confidence * 100).toFixed(0)}%\uFF09`,
-      suggestion: aiResult.suggestion || `\u8003\u8651\u5C06\u72B6\u6001\u66F4\u65B0\u4E3A ${aiResult.inferredStatus}`,
+      message: `AI infers task status should be ${aiResult.inferredStatus} (current: ${currentStatus}, confidence: ${(aiResult.confidence * 100).toFixed(0)}%)`,
+      suggestion: aiResult.suggestion || `Consider updating status to ${aiResult.inferredStatus}`,
       details: {
         layer: "L2",
         currentStatus,
@@ -20030,7 +20115,7 @@ async function detectStatusInferenceIssues(task, cwd, aiOptions) {
 }
 async function analyzeProject(cwd = process.cwd(), includeArchived = false, aiOptions) {
   if (!isInitialized(cwd)) {
-    console.error("\u9519\u8BEF: \u9879\u76EE\u672A\u521D\u59CB\u5316\u3002\u8BF7\u5148\u8FD0\u884C `projmnt4claude setup`");
+    console.error("Error: Project not initialized. Please run `projmnt4claude setup` first");
     process.exit(1);
   }
   const tasks = getAllTasks(cwd, includeArchived);
@@ -20118,7 +20203,7 @@ async function analyzeProject(cwd = process.cwd(), includeArchived = false, aiOp
           taskId: task.id,
           type: "stale",
           severity: "medium",
-          message: `\u4EFB\u52A1\u5DF2 ${Math.floor((now.getTime() - updatedAt.getTime()) / (24 * 60 * 60 * 1000))} \u5929\u672A\u66F4\u65B0`,
+          message: `Task has not been updated for ${Math.floor((now.getTime() - updatedAt.getTime()) / (24 * 60 * 60 * 1000))} days`,
           suggestion: aiAssessment?.stillStale && aiAssessment?.reason ? `AI \u786E\u8BA4\u4EFB\u52A1\u9648\u65E7: ${aiAssessment.reason}\uFF0C\u5EFA\u8BAE\u66F4\u65B0\u6216\u5173\u95ED` : "\u68C0\u67E5\u4EFB\u52A1\u662F\u5426\u4ECD\u7136\u76F8\u5173\uFF0C\u8003\u8651\u66F4\u65B0\u72B6\u6001\u6216\u5173\u95ED",
           details: {
             ...aiAssessment && {
@@ -20135,7 +20220,7 @@ async function analyzeProject(cwd = process.cwd(), includeArchived = false, aiOp
         type: "no_description",
         severity: "low",
         message: "\u4EFB\u52A1\u7F3A\u5C11\u63CF\u8FF0",
-        suggestion: "\u6DFB\u52A0\u4EFB\u52A1\u63CF\u8FF0\u4EE5\u63D0\u4F9B\u66F4\u591A\u4E0A\u4E0B\u6587"
+        suggestion: "Add task description to provide more context"
       });
     }
     if (task.dependencies.length > 0) {
@@ -20152,8 +20237,8 @@ async function analyzeProject(cwd = process.cwd(), includeArchived = false, aiOp
           taskId: task.id,
           type: "blocked",
           severity: "medium",
-          message: `\u4EFB\u52A1\u88AB ${uncompletedDeps.length} \u4E2A\u672A\u5B8C\u6210\u7684\u4F9D\u8D56\u963B\u585E`,
-          suggestion: `\u5148\u5B8C\u6210\u4F9D\u8D56\u4EFB\u52A1: ${uncompletedDeps.join(", ")}`
+          message: `Task is blocked by ${uncompletedDeps.length} uncompleted dependencies`,
+          suggestion: `Complete dependency tasks first: ${uncompletedDeps.join(", ")}`
         });
       }
     }
@@ -20162,8 +20247,8 @@ async function analyzeProject(cwd = process.cwd(), includeArchived = false, aiOp
         taskId: task.id,
         type: "legacy_priority",
         severity: "low",
-        message: `\u4EFB\u52A1\u4F7F\u7528\u65E7\u683C\u5F0F\u4F18\u5148\u7EA7: ${task.priority}`,
-        suggestion: `\u5C06\u4F18\u5148\u7EA7\u66F4\u65B0\u4E3A ${normalizePriority(task.priority)}`
+        message: `Task uses old format priority: ${task.priority}`,
+        suggestion: `Update priority to ${normalizePriority(task.priority)}`
       });
     }
     const legacyStatuses = ["pending", "completed", "reopen", "cancelled", "blocked"];
@@ -20172,8 +20257,8 @@ async function analyzeProject(cwd = process.cwd(), includeArchived = false, aiOp
         taskId: task.id,
         type: "legacy_status",
         severity: "low",
-        message: `\u4EFB\u52A1\u4F7F\u7528\u65E7\u683C\u5F0F\u72B6\u6001: ${task.status}`,
-        suggestion: `\u5C06\u72B6\u6001\u66F4\u65B0\u4E3A ${normalizeStatus(task.status)}`
+        message: `Task uses old format status: ${task.status}`,
+        suggestion: `Update status to ${normalizeStatus(task.status)}`
       });
     }
     if (task.reopenCount === undefined || task.requirementHistory === undefined) {
@@ -20181,8 +20266,8 @@ async function analyzeProject(cwd = process.cwd(), includeArchived = false, aiOp
         taskId: task.id,
         type: "legacy_schema",
         severity: "low",
-        message: "\u4EFB\u52A1 meta.json \u7F3A\u5C11\u65B0\u89C4\u8303\u5B57\u6BB5",
-        suggestion: "\u6DFB\u52A0 reopenCount \u548C requirementHistory \u5B57\u6BB5\u4EE5\u7B26\u5408\u6700\u65B0\u89C4\u8303"
+        message: "Task meta.json missing new specification fields",
+        suggestion: "Add reopenCount and requirementHistory fields to comply with latest specification"
       });
     }
     const ARRAY_FIELDS = [
@@ -20203,8 +20288,8 @@ async function analyzeProject(cwd = process.cwd(), includeArchived = false, aiOp
         taskId: task.id,
         type: "null_array_field",
         severity: "medium",
-        message: `\u4EFB\u52A1\u6570\u7EC4\u5B57\u6BB5\u4E3A null \u6216\u7F3A\u5931: ${nullArrayFields.join(", ")}`,
-        suggestion: `\u4F7F\u7528 --fix \u5C06\u7F3A\u5931\u7684\u6570\u7EC4\u5B57\u6BB5\u521D\u59CB\u5316\u4E3A\u7A7A\u6570\u7EC4`,
+        message: `Task array fields are null or missing: ${nullArrayFields.join(", ")}`,
+        suggestion: `Use --fix to initialize missing array fields to empty arrays`,
         details: { fields: nullArrayFields }
       });
     }
@@ -20214,8 +20299,8 @@ async function analyzeProject(cwd = process.cwd(), includeArchived = false, aiOp
         taskId: task.id,
         type: "pipeline_status_migration",
         severity: "medium",
-        message: `\u4EFB\u52A1\u4F7F\u7528 pipeline \u4E2D\u95F4\u72B6\u6001: ${task.status}\uFF0C\u5E94\u8FC1\u79FB\u4E3A ${targetStatus}`,
-        suggestion: `\u4F7F\u7528 --fix \u5C06\u72B6\u6001\u4ECE ${task.status} \u81EA\u52A8\u8FC1\u79FB\u4E3A ${targetStatus}`,
+        message: `Task uses pipeline intermediate state: ${task.status}, should migrate to ${targetStatus}`,
+        suggestion: `Use --fix to auto-migrate status from ${task.status} to ${targetStatus}`,
         details: {
           currentStatus: task.status,
           targetStatus,
@@ -20244,8 +20329,8 @@ async function analyzeProject(cwd = process.cwd(), includeArchived = false, aiOp
         taskId: task.id,
         type: "verdict_action_schema",
         severity: "medium",
-        message: `\u4EFB\u52A1\u5305\u542B\u65E0\u6548\u7684 VerdictAction \u503C: ${[...new Set(invalidVerdictActions)].join(", ")}`,
-        suggestion: `\u4F7F\u7528 --fix \u6E05\u9664\u65E0\u6548\u7684 VerdictAction \u503C\uFF0C\u6709\u6548\u503C\u4E3A: ${VALID_VERDICT_ACTIONS.join(", ")}`,
+        message: `Task contains invalid VerdictAction values: ${[...new Set(invalidVerdictActions)].join(", ")}`,
+        suggestion: `Use --fix to clear invalid VerdictAction values, valid values are: ${VALID_VERDICT_ACTIONS.join(", ")}`,
         details: { invalidActions: [...new Set(invalidVerdictActions)] }
       });
     }
@@ -20256,8 +20341,8 @@ async function analyzeProject(cwd = process.cwd(), includeArchived = false, aiOp
         taskId: task.id,
         type: "schema_version_outdated",
         severity: taskSchemaVersion === 0 ? "medium" : "low",
-        message: `\u4EFB\u52A1 schema \u7248\u672C\u8FC7\u65F6: v${taskSchemaVersion} \u2192 v${CURRENT_TASK_SCHEMA_VERSION}\uFF0C\u9700\u8FC1\u79FB ${pendingMigrations.map((m) => m.name).join(", ")}`,
-        suggestion: "\u4F7F\u7528 --fix \u4E00\u6B21\u6027\u5B8C\u6210\u6240\u6709\u7248\u672C\u8FC1\u79FB",
+        message: `Task schema version outdated: v${taskSchemaVersion} \u2192 v${CURRENT_TASK_SCHEMA_VERSION}, needs migration ${pendingMigrations.map((m) => m.name).join(", ")}`,
+        suggestion: "Use --fix to complete all version migrations at once",
         details: {
           currentVersion: taskSchemaVersion,
           targetVersion: CURRENT_TASK_SCHEMA_VERSION,
@@ -20271,8 +20356,8 @@ async function analyzeProject(cwd = process.cwd(), includeArchived = false, aiOp
         taskId: task.id,
         type: "missing_createdBy",
         severity: "low",
-        message: "\u4EFB\u52A1\u7F3A\u5C11 createdBy \u5B57\u6BB5\uFF0C\u65E0\u6CD5\u8FFD\u8E2A\u521B\u5EFA\u6765\u6E90",
-        suggestion: "\u8BBE\u7F6E createdBy \u5B57\u6BB5\u4EE5\u7B26\u5408\u6700\u65B0\u89C4\u8303\uFF08cli | init-requirement | harness-dev | harness-review | harness-qa | harness-eval | import\uFF09"
+        message: "Task missing createdBy field, cannot track creation source",
+        suggestion: "Set createdBy field to comply with latest specification (cli | init-requirement | harness-dev | harness-review | harness-qa | harness-eval | import)"
       });
     }
     const idValidation = validateTaskIdFormat(task.id);
@@ -20281,8 +20366,8 @@ async function analyzeProject(cwd = process.cwd(), includeArchived = false, aiOp
         taskId: task.id,
         type: "invalid_task_id_format",
         severity: "medium",
-        message: `\u4EFB\u52A1 ID \u683C\u5F0F\u4E0D\u7B26\u5408\u89C4\u8303: ${idValidation.errors.join(", ")}`,
-        suggestion: "\u4F7F\u7528\u683C\u5F0F TASK-{type}-{priority}-{slug}-{date}\uFF0C\u5982 TASK-feature-P1-user-auth-20260319",
+        message: `Task ID format does not meet specification: ${idValidation.errors.join(", ")}`,
+        suggestion: "Use format TASK-{type}-{priority}-{slug}-{date}, e.g., TASK-feature-P1-user-auth-20260319",
         details: { format: idValidation.format }
       });
     }
@@ -20301,8 +20386,8 @@ async function analyzeProject(cwd = process.cwd(), includeArchived = false, aiOp
             taskId: task.id,
             type: "meaningless_id",
             severity: "low",
-            message: `\u4EFB\u52A1 ID \u7684 slug \u65E0\u610F\u4E49: "${slugToCheck}"`,
-            suggestion: "\u4F7F\u7528 --fix \u81EA\u52A8\u4ECE\u63CF\u8FF0/\u6807\u9898\u63D0\u53D6\u5173\u952E\u8BCD\u91CD\u547D\u540D\uFF0C\u6216\u624B\u52A8\u91CD\u547D\u540D\u4EFB\u52A1\u76EE\u5F55",
+            message: `Task ID slug is meaningless: "${slugToCheck}"`,
+            suggestion: "Use --fix to auto-extract keywords from description/title for renaming, or manually rename task directory",
             details: { slug: slugToCheck, format: idInfo.format }
           });
         }
@@ -20313,7 +20398,7 @@ async function analyzeProject(cwd = process.cwd(), includeArchived = false, aiOp
           type: "meaningless_id",
           severity: "low",
           message: `${reason}: ${task.id}`,
-          suggestion: "\u4F7F\u7528 --fix \u81EA\u52A8\u4ECE\u63CF\u8FF0/\u6807\u9898\u63D0\u53D6\u5173\u952E\u8BCD\u91CD\u547D\u540D",
+          suggestion: "Use --fix to auto-extract keywords from description/title for renaming",
           details: { format: idInfo.format }
         });
       }
@@ -20323,8 +20408,8 @@ async function analyzeProject(cwd = process.cwd(), includeArchived = false, aiOp
         taskId: task.id,
         type: "invalid_status_value",
         severity: "high",
-        message: `\u4EFB\u52A1\u72B6\u6001\u503C\u65E0\u6548: ${task.status}`,
-        suggestion: `\u4F7F\u7528\u6709\u6548\u72B6\u6001: ${VALID_STATUSES.join(", ")}`,
+        message: `Task status value invalid: ${task.status}`,
+        suggestion: `Use valid status: ${VALID_STATUSES.join(", ")}`,
         details: { currentValue: task.status }
       });
     }
@@ -20333,8 +20418,8 @@ async function analyzeProject(cwd = process.cwd(), includeArchived = false, aiOp
         taskId: task.id,
         type: "reopened_status",
         severity: "high",
-        message: `\u4EFB\u52A1\u4F7F\u7528\u5DF2\u5E9F\u5F03\u7684 reopened \u72B6\u6001\uFF08v4 \u5DF2\u5E9F\u5F03\uFF0C\u5E94\u4F7F\u7528 open + reopenCount \u8FFD\u8E2A\uFF09`,
-        suggestion: "\u4F7F\u7528 --fix \u81EA\u52A8\u8FC1\u79FB: reopened \u2192 open\uFF0C\u5E76\u8BB0\u5F55 transitionNote",
+        message: `Task uses deprecated reopened status (deprecated in v4, use open + reopenCount instead)`,
+        suggestion: "Use --fix to auto-migrate: reopened \u2192 open, and record transitionNote",
         details: { currentValue: task.status, targetValue: "open" }
       });
     }
@@ -20343,8 +20428,8 @@ async function analyzeProject(cwd = process.cwd(), includeArchived = false, aiOp
         taskId: task.id,
         type: "needs_human_status",
         severity: "high",
-        message: `\u4EFB\u52A1\u4F7F\u7528\u5DF2\u5E9F\u5F03\u7684 needs_human \u72B6\u6001\uFF08v4 \u5DF2\u5E9F\u5F03\uFF0C\u5E94\u4F7F\u7528 open + resumeAction \u8FFD\u8E2A\uFF09`,
-        suggestion: "\u4F7F\u7528 --fix \u81EA\u52A8\u8FC1\u79FB: needs_human \u2192 open\uFF0C\u5E76\u8BBE\u7F6E resumeAction",
+        message: `Task uses deprecated needs_human status (deprecated in v4, use open + resumeAction instead)`,
+        suggestion: "Use --fix to auto-migrate: needs_human \u2192 open, and set resumeAction",
         details: { currentValue: task.status, targetValue: "open" }
       });
     }
@@ -20361,8 +20446,8 @@ async function analyzeProject(cwd = process.cwd(), includeArchived = false, aiOp
         taskId: task.id,
         type: "deprecated_status_reference",
         severity: "low",
-        message: `\u5386\u53F2\u8BB0\u5F55\u4E2D\u5F15\u7528\u4E86\u5E9F\u5F03\u72B6\u6001: ${uniqueRefs}`,
-        suggestion: "\u4F7F\u7528 --fix \u81EA\u52A8\u6E05\u7406\u5386\u53F2\u8BB0\u5F55\u4E2D\u7684\u5E9F\u5F03\u72B6\u6001\u5F15\u7528",
+        message: `History references deprecated status: ${uniqueRefs}`,
+        suggestion: "Use --fix to auto-clean deprecated status references from history",
         details: { deprecatedRefs: [...new Set(deprecatedStatusRefs)] }
       });
     }
@@ -20374,8 +20459,8 @@ async function analyzeProject(cwd = process.cwd(), includeArchived = false, aiOp
           taskId: task.id,
           type: "status_reopen_mismatch",
           severity: "medium",
-          message: `\u4EFB\u52A1 reopenCount=${task.reopenCount} \u4F46\u65E0\u5BF9\u5E94\u7684 reopen \u6D41\u8F6C\u8BB0\u5F55`,
-          suggestion: "\u786E\u4FDD reopen \u64CD\u4F5C\u6709\u5BF9\u5E94\u7684 transitionNote \u548C history \u8BB0\u5F55",
+          message: `Task reopenCount=${task.reopenCount} but no corresponding reopen transition record`,
+          suggestion: "Ensure reopen operation has corresponding transitionNote and history records",
           details: { reopenCount: task.reopenCount, status: task.status }
         });
       }
@@ -20385,8 +20470,8 @@ async function analyzeProject(cwd = process.cwd(), includeArchived = false, aiOp
         taskId: task.id,
         type: "invalid_type_value",
         severity: "high",
-        message: `\u4EFB\u52A1\u7C7B\u578B\u503C\u65E0\u6548: ${task.type}`,
-        suggestion: `\u4F7F\u7528\u6709\u6548\u7C7B\u578B: ${VALID_TYPES3.join(", ")}`,
+        message: `Task type value invalid: ${task.type}`,
+        suggestion: `Use valid type: ${VALID_TYPES3.join(", ")}`,
         details: { currentValue: task.type }
       });
     }
@@ -20395,8 +20480,8 @@ async function analyzeProject(cwd = process.cwd(), includeArchived = false, aiOp
         taskId: task.id,
         type: "invalid_priority_value",
         severity: "high",
-        message: `\u4EFB\u52A1\u4F18\u5148\u7EA7\u503C\u65E0\u6548: ${task.priority}`,
-        suggestion: `\u4F7F\u7528\u6709\u6548\u4F18\u5148\u7EA7: ${VALID_PRIORITIES3.join(", ")}`,
+        message: `Task priority value invalid: ${task.priority}`,
+        suggestion: `Use valid priority: ${VALID_PRIORITIES3.join(", ")}`,
         details: { currentValue: task.priority }
       });
     }
@@ -20406,7 +20491,7 @@ async function analyzeProject(cwd = process.cwd(), includeArchived = false, aiOp
         type: "invalid_timestamp_format",
         severity: "medium",
         message: "createdAt \u4E0D\u662F\u6709\u6548\u7684 ISO \u65F6\u95F4\u6233",
-        suggestion: "\u4F7F\u7528 ISO 8601 \u683C\u5F0F\uFF0C\u5982 2026-03-19T10:00:00.000Z",
+        suggestion: "Use ISO 8601 format, e.g., 2026-03-19T10:00:00.000Z",
         details: { field: "createdAt", value: task.createdAt }
       });
     }
@@ -20416,7 +20501,7 @@ async function analyzeProject(cwd = process.cwd(), includeArchived = false, aiOp
         type: "invalid_timestamp_format",
         severity: "medium",
         message: "updatedAt \u4E0D\u662F\u6709\u6548\u7684 ISO \u65F6\u95F4\u6233",
-        suggestion: "\u4F7F\u7528 ISO 8601 \u683C\u5F0F\uFF0C\u5982 2026-03-19T10:00:00.000Z",
+        suggestion: "Use ISO 8601 format, e.g., 2026-03-19T10:00:00.000Z",
         details: { field: "updatedAt", value: task.updatedAt }
       });
     }
@@ -20427,8 +20512,8 @@ async function analyzeProject(cwd = process.cwd(), includeArchived = false, aiOp
           taskId: task.id,
           type: "manual_verification",
           severity: "high",
-          message: `\u6709 ${manualCheckpoints.length} \u4E2A\u68C0\u67E5\u70B9\u4F7F\u7528\u4E86\u7981\u6B62\u7684 manual \u9A8C\u8BC1\u65B9\u6CD5`,
-          suggestion: "\u5C06 manual \u66FF\u6362\u4E3A code_review/lint/functional_test/e2e_test/architect_review/automated \u7B49\u5177\u4F53\u9A8C\u8BC1\u65B9\u6CD5",
+          message: `${manualCheckpoints.length} checkpoints use prohibited manual verification method`,
+          suggestion: "Replace manual with specific verification methods like code_review/lint/functional_test/e2e_test/architect_review/automated",
           details: { checkpointIds: manualCheckpoints.map((cp) => cp.id) }
         });
       }
@@ -20440,7 +20525,7 @@ async function analyzeProject(cwd = process.cwd(), includeArchived = false, aiOp
         type: "missing_verification",
         severity: "medium",
         message: "\u4EFB\u52A1\u5DF2 resolved \u4F46\u7F3A\u5C11 verification \u5B57\u6BB5",
-        suggestion: "\u8FD0\u884C analyze --fix \u81EA\u52A8\u56DE\u586B verification \u5B57\u6BB5",
+        suggestion: "Run analyze --fix to auto-populate verification field",
         details: { status: task.status, hasCheckpoints: !!(task.checkpoints && task.checkpoints.length > 0) }
       });
     }
@@ -20450,8 +20535,8 @@ async function analyzeProject(cwd = process.cwd(), includeArchived = false, aiOp
         taskId: task.id,
         type: "inconsistent_status",
         severity: "high",
-        message: `\u4EFB\u52A1\u72B6\u6001\u77DB\u76FE: status=resolved \u4F46 verification.result=failed, checkpointCompletionRate=${task.verification.checkpointCompletionRate ?? 0}`,
-        suggestion: "\u8FD0\u884C analyze --fix \u81EA\u52A8\u5C06\u72B6\u6001\u6539\u4E3A open\uFF0C\u6216\u624B\u52A8\u68C0\u67E5\u9A8C\u6536\u6807\u51C6",
+        message: `Task status conflict: status=resolved but verification.result=failed, checkpointCompletionRate=${task.verification.checkpointCompletionRate ?? 0}`,
+        suggestion: "Run analyze --fix to auto-change status to open, or manually check acceptance criteria",
         details: {
           status: task.status,
           verificationResult: task.verification.result,
@@ -20466,8 +20551,8 @@ async function analyzeProject(cwd = process.cwd(), includeArchived = false, aiOp
           taskId: task.id,
           type: "invalid_parent_ref",
           severity: "high",
-          message: `\u7236\u4EFB\u52A1 ${task.parentId} \u4E0D\u5B58\u5728`,
-          suggestion: "\u5220\u9664\u65E0\u6548\u7684 parentId \u6216\u521B\u5EFA\u7236\u4EFB\u52A1",
+          message: `Parent task ${task.parentId} does not exist`,
+          suggestion: "Delete invalid parentId or create parent task",
           details: { parentId: task.parentId }
         });
       } else {
@@ -20477,8 +20562,8 @@ async function analyzeProject(cwd = process.cwd(), includeArchived = false, aiOp
             taskId: task.id,
             type: "subtask_not_in_parent",
             severity: "medium",
-            message: `\u5B50\u4EFB\u52A1\u672A\u5728\u7236\u4EFB\u52A1 ${task.parentId} \u7684 subtaskIds \u4E2D`,
-            suggestion: "\u5C06\u5B50\u4EFB\u52A1 ID \u6DFB\u52A0\u5230\u7236\u4EFB\u52A1\u7684 subtaskIds \u6570\u7EC4",
+            message: `Subtask not in parent task ${task.parentId} subtaskIds`,
+            suggestion: "Add subtask ID to parent task subtaskIds array",
             details: { parentId: task.parentId }
           });
         }
@@ -20491,8 +20576,8 @@ async function analyzeProject(cwd = process.cwd(), includeArchived = false, aiOp
             taskId: task.id,
             type: "invalid_subtask_ref",
             severity: "medium",
-            message: `\u5B50\u4EFB\u52A1 ${subtaskId} \u4E0D\u5B58\u5728`,
-            suggestion: "\u4ECE subtaskIds \u4E2D\u79FB\u9664\u65E0\u6548\u5F15\u7528\u6216\u521B\u5EFA\u5B50\u4EFB\u52A1",
+            message: `Subtask ${subtaskId} does not exist`,
+            suggestion: "Remove invalid references from subtaskIds or create subtasks",
             details: { subtaskId }
           });
         } else {
@@ -20502,8 +20587,8 @@ async function analyzeProject(cwd = process.cwd(), includeArchived = false, aiOp
               taskId: task.id,
               type: "parent_child_mismatch",
               severity: "medium",
-              message: `\u5B50\u4EFB\u52A1 ${subtaskId} \u7684 parentId \u4E0D\u6307\u5411\u5F53\u524D\u4EFB\u52A1`,
-              suggestion: `\u5C06\u5B50\u4EFB\u52A1\u7684 parentId \u66F4\u65B0\u4E3A ${task.id}`,
+              message: `Subtask ${subtaskId} parentId does not point to current task`,
+              suggestion: `Update subtask parentId to ${task.id}`,
               details: { subtaskId, expectedParentId: task.id, actualParentId: subtask.parentId }
             });
           }
@@ -20517,8 +20602,8 @@ async function analyzeProject(cwd = process.cwd(), includeArchived = false, aiOp
             taskId: task.id,
             type: "invalid_dependency_ref",
             severity: "medium",
-            message: `\u4F9D\u8D56\u4EFB\u52A1 ${depId} \u4E0D\u5B58\u5728`,
-            suggestion: "\u4ECE dependencies \u4E2D\u79FB\u9664\u65E0\u6548\u5F15\u7528\u6216\u521B\u5EFA\u4F9D\u8D56\u4EFB\u52A1",
+            message: `Dependency task ${depId} does not exist`,
+            suggestion: "Remove invalid references from dependencies or create dependency tasks",
             details: { dependencyId: depId }
           });
         }
@@ -20532,8 +20617,8 @@ async function analyzeProject(cwd = process.cwd(), includeArchived = false, aiOp
             taskId: task.id,
             type: "invalid_history_format",
             severity: "low",
-            message: `history[${i}] \u683C\u5F0F\u4E0D\u6B63\u786E: ${entryValidation.errors.join(", ")}`,
-            suggestion: "\u786E\u4FDD\u6BCF\u4E2A\u5386\u53F2\u6761\u76EE\u5305\u542B timestamp (ISO\u683C\u5F0F) \u548C action \u5B57\u6BB5",
+            message: `history[${i}] format incorrect: ${entryValidation.errors.join(", ")}`,
+            suggestion: "Ensure each history entry contains timestamp (ISO format) and action fields",
             details: { index: i, errors: entryValidation.errors }
           });
         }
@@ -20547,8 +20632,8 @@ async function analyzeProject(cwd = process.cwd(), includeArchived = false, aiOp
             taskId: task.id,
             type: "invalid_requirement_history_format",
             severity: "low",
-            message: `requirementHistory[${i}] \u683C\u5F0F\u4E0D\u6B63\u786E: ${reqValidation.errors.join(", ")}`,
-            suggestion: "\u786E\u4FDD\u6BCF\u4E2A\u9700\u6C42\u53D8\u66F4\u6761\u76EE\u5305\u542B timestamp, version, newDescription, changeReason",
+            message: `requirementHistory[${i}] format incorrect: ${reqValidation.errors.join(", ")}`,
+            suggestion: "Ensure each requirement change entry contains timestamp, version, newDescription, changeReason",
             details: { index: i, errors: reqValidation.errors }
           });
         }
@@ -20581,8 +20666,8 @@ async function analyzeProject(cwd = process.cwd(), includeArchived = false, aiOp
             taskId: task.id,
             type: "missing_transition_note",
             severity: "low",
-            message: `\u5386\u53F2\u6D41\u8F6C ${statusKey} \u7F3A\u5C11 transitionNote \u8BB0\u5F55`,
-            suggestion: "\u4F7F\u7528 --fix \u81EA\u52A8\u4ECE\u5386\u53F2\u6761\u76EE\u56DE\u586B transitionNote",
+            message: `History transition ${statusKey} missing transitionNote record`,
+            suggestion: "Use --fix to auto-backfill transitionNote from history entries",
             details: {
               historyEntry: {
                 timestamp: entry.timestamp,
@@ -20644,8 +20729,8 @@ async function analyzeProject(cwd = process.cwd(), includeArchived = false, aiOp
           taskId: task.id,
           type: "interrupted_task",
           severity: "medium",
-          message: `in_progress \u4EFB\u52A1\u65E0\u6D3B\u8DC3 Pipeline\uFF0C\u5DF2\u4E2D\u65AD ${interruptedDays} \u5929`,
-          suggestion: `\u5EFA\u8BAE: ${suggestion_reason}\u3002\u4F7F\u7528 --fix \u81EA\u52A8\u5E94\u7528\u5EFA\u8BAE\u72B6\u6001`,
+          message: `in_progress task has no active pipeline, interrupted for ${interruptedDays} days`,
+          suggestion: `Suggestion: ${suggestion_reason}. Use --fix to auto-apply suggested status`,
           details: {
             currentStatus: task.status,
             interruptedDays,
@@ -20673,8 +20758,8 @@ ${task.title || ""}`;
         taskId: task.id,
         type: "file_not_found",
         severity: "high",
-        message: `\u4EFB\u52A1\u5F15\u7528\u4E86 ${missingRefs.length} \u4E2A\u4E0D\u5B58\u5728\u7684\u6587\u4EF6: ${missingRefs.join(", ")}`,
-        suggestion: "\u68C0\u67E5\u6587\u4EF6\u8DEF\u5F84\u662F\u5426\u6B63\u786E\uFF0C\u6216\u79FB\u9664\u5BF9\u4E0D\u5B58\u5728\u6587\u4EF6\u7684\u5F15\u7528",
+        message: `Task references ${missingRefs.length} non-existent files: ${missingRefs.join(", ")}`,
+        suggestion: "Check file paths are correct, or remove references to non-existent files",
         details: { missingFiles: missingRefs }
       });
     }
@@ -20690,8 +20775,8 @@ ${task.title || ""}`;
             taskId: task.id,
             type: "checkpoint_synced",
             severity: "low",
-            message: `\u4ECE\u4EFB\u52A1\u63CF\u8FF0\u4E2D\u81EA\u52A8\u540C\u6B65\u4E86\u68C0\u67E5\u70B9\u5230 meta.json`,
-            suggestion: "\u5DF2\u81EA\u52A8\u4FEE\u590D\uFF0C\u65E0\u9700\u624B\u52A8\u64CD\u4F5C"
+            message: `Auto-synced checkpoints from task description to meta.json`,
+            suggestion: "Auto-fixed, no manual action needed"
           });
         }
       } catch (e) {}
@@ -20705,8 +20790,8 @@ ${task.title || ""}`;
         taskId: "__global__",
         type: "low_checkpoint_coverage",
         severity: "medium",
-        message: `\u68C0\u67E5\u70B9\u8986\u76D6\u7387 ${(coverageRate * 100).toFixed(1)}% \u4F4E\u4E8E\u914D\u7F6E\u9608\u503C ${(analyzeConfig.minCheckpointCoverage * 100).toFixed(1)}%`,
-        suggestion: "\u4E3A\u7F3A\u5C11\u68C0\u67E5\u70B9\u7684\u4EFB\u52A1\u6DFB\u52A0\u9A8C\u6536\u6807\u51C6\uFF0C\u6216\u8FD0\u884C analyze --fix-checkpoints \u81EA\u52A8\u751F\u6210",
+        message: `Checkpoint coverage ${(coverageRate * 100).toFixed(1)}% is below configured threshold ${(analyzeConfig.minCheckpointCoverage * 100).toFixed(1)}%`,
+        suggestion: "Add acceptance criteria for tasks missing checkpoints, or run analyze --fix-checkpoints to auto-generate",
         details: {
           coverageRate: Math.round(coverageRate * 100) / 100,
           threshold: analyzeConfig.minCheckpointCoverage,
@@ -20729,8 +20814,8 @@ ${task.title || ""}`;
         taskId: subtask.id,
         type: "orphan",
         severity: "medium",
-        message: `\u5B50\u4EFB\u52A1\u7684\u7236\u4EFB\u52A1 ${parentId} \u4E0D\u5B58\u5728`,
-        suggestion: "\u5220\u9664\u5B64\u513F\u5B50\u4EFB\u52A1\u6216\u91CD\u65B0\u521B\u5EFA\u7236\u4EFB\u52A1"
+        message: `Subtask parent ${parentId} does not exist`,
+        suggestion: "Delete orphan subtasks or recreate parent task"
       });
     }
   }
@@ -20756,8 +20841,8 @@ ${task.title || ""}`;
         taskId: "__archive__",
         type: "abandoned_residual",
         severity: "low",
-        message: `\u5F52\u6863\u76EE\u5F55\u4E2D\u5B58\u5728 ${abandonedDirs.length} \u4E2A abandoned \u4EFB\u52A1\u6B8B\u7559`,
-        suggestion: "\u8FD0\u884C task purge -y \u6E05\u9664\u6B8B\u7559\u7684 abandoned \u4EFB\u52A1",
+        message: `Archive directory contains ${abandonedDirs.length} abandoned task residuals`,
+        suggestion: "Run task purge -y to clear residual abandoned tasks",
         details: { count: abandonedDirs.length, tasks: abandonedDirs }
       });
     }
@@ -20779,7 +20864,7 @@ ${task.title || ""}`;
       taskId: orphan.nodeId,
       type: "orphan",
       severity: orphan.isInboundBridgeTarget ? "medium" : "low",
-      message: `\u5B64\u7ACB\u4EFB\u52A1: ${orphan.node.title || orphan.nodeId}`,
+      message: `Orphan task: ${orphan.node.title || orphan.nodeId}`,
       suggestion: orphan.isInboundBridgeTarget ? "\u8BE5\u4EFB\u52A1\u53EF\u80FD\u6709\u9690\u542B\u7684\u4F9D\u8D56\u5173\u7CFB\uFF0C\u8BF7\u786E\u8BA4\u662F\u5426\u72EC\u7ACB" : "\u8BE5\u4EFB\u52A1\u4E3A\u72EC\u7ACB\u6A21\u5757\uFF0C\u65E0\u9700\u5904\u7406"
     });
   }
@@ -20789,7 +20874,7 @@ ${task.title || ""}`;
       type: "bridge_nodes",
       severity: "low",
       message: renderBridgeReport(graphBridges),
-      suggestion: "\u6865\u63A5\u8282\u70B9\u8FDE\u63A5\u591A\u4E2A\u4EFB\u52A1\u6811\uFF0C\u662F\u5173\u952E\u4F9D\u8D56\u8DEF\u5F84"
+      suggestion: "Bridge node connects multiple task trees, is critical dependency path"
     });
   }
   for (const rd of graphRedundantDeps) {
@@ -20797,8 +20882,8 @@ ${task.title || ""}`;
       taskId: rd.from,
       type: "redundant_dep",
       severity: "low",
-      message: `\u5197\u4F59\u4F9D\u8D56: ${rd.from} \u2192 ${rd.to} (\u53EF\u901A\u8FC7 ${rd.viaPath.join(" \u2192 ")} \u8FBE\u5230)`,
-      suggestion: `\u53EF\u79FB\u9664\u76F4\u63A5\u4F9D\u8D56 ${rd.from} \u2192 ${rd.to}`,
+      message: `Redundant dependency: ${rd.from} \u2192 ${rd.to} (can be reached via ${rd.viaPath.join(" \u2192 ")})`,
+      suggestion: `Can remove direct dependency ${rd.from} \u2192 ${rd.to}`,
       details: { from: rd.from, to: rd.to, viaPath: rd.viaPath }
     });
   }
@@ -20815,8 +20900,8 @@ ${task.title || ""}`;
           taskId,
           type: "missing_inferred_dependency",
           severity: "low",
-          message: `\u4E0E ${dep.depTaskId} \u5171\u4EAB\u6587\u4EF6\u4F46\u672A\u58F0\u660E\u4F9D\u8D56: ${dep.overlappingFiles.join(", ")}`,
-          suggestion: `\u8003\u8651\u5C06 ${dep.depTaskId} \u6DFB\u52A0\u4E3A\u663E\u5F0F\u4F9D\u8D56`,
+          message: `Shares files with ${dep.depTaskId} but dependency not declared: ${dep.overlappingFiles.join(", ")}`,
+          suggestion: `Consider adding ${dep.depTaskId} as explicit dependency`,
           details: { depTaskId: dep.depTaskId, overlappingFiles: dep.overlappingFiles }
         });
       }
@@ -20851,7 +20936,7 @@ async function showAnalysis(options = {}, cwd = process.cwd()) {
       }
     } catch (e) {
       if (e instanceof AnalyzeError) {
-        console.error(`\u274C check-range \u53C2\u6570\u9519\u8BEF: ${e.message}`);
+        console.error(`\u274C check-range parameter error: ${e.message}`);
         if (e.detail)
           console.error(`   ${e.detail}`);
         process.exit(1);
@@ -20862,19 +20947,19 @@ async function showAnalysis(options = {}, cwd = process.cwd()) {
   const separator = options.compact ? "---" : "\u2501".repeat(SEPARATOR_WIDTH);
   console.log("");
   console.log(separator);
-  console.log("\uD83D\uDD0D \u9879\u76EE\u95EE\u9898\u5206\u6790");
+  console.log("\uD83D\uDD0D Project Issue Analysis");
   console.log(separator);
   console.log("");
-  console.log("\u26A0\uFE0F  \u95EE\u9898\u6458\u8981:");
-  console.log(`   \u8FC7\u671F\u4EFB\u52A1: ${result.stats.stale}`);
-  console.log(`   \u88AB\u963B\u585E: ${result.stats.blocked}`);
-  console.log(`   \u5B64\u513F\u4EFB\u52A1: ${result.stats.orphan}`);
-  console.log(`   \u5FAA\u73AF\u4F9D\u8D56: ${result.stats.cycle}`);
-  console.log(`   Abandoned \u6B8B\u7559: ${result.stats.abandonedResidual}`);
+  console.log("\u26A0\uFE0F  Issue Summary:");
+  console.log(`   Stale tasks: ${result.stats.stale}`);
+  console.log(`   Blocked: ${result.stats.blocked}`);
+  console.log(`   Orphan tasks: ${result.stats.orphan}`);
+  console.log(`   Cyclic dependencies: ${result.stats.cycle}`);
+  console.log(`   Abandoned residual: ${result.stats.abandonedResidual}`);
   const graphAnomalyIssues = result.issues.filter((i) => ["cycle", "orphan", "bridge_nodes", "redundant_dep", "invalid_dependency_ref", "missing_inferred_dependency"].includes(i.type));
   if (graphAnomalyIssues.length > 0) {
     console.log("");
-    console.log("\uD83D\uDD17 \u4F9D\u8D56\u5173\u7CFB\u5206\u6790:");
+    console.log("\uD83D\uDD17 Dependency Analysis:");
     const anomalySummary = renderAnomalySummary(graphAnomalyIssues.map((i) => ({
       type: i.type,
       severity: i.severity,
@@ -20887,21 +20972,21 @@ async function showAnalysis(options = {}, cwd = process.cwd()) {
 `));
   }
   if (result.stats.resolvedWithoutVerification > 0) {
-    console.log(`   \u7F3A\u5C11 verification: ${result.stats.resolvedWithoutVerification}`);
+    console.log(`   Missing verification: ${result.stats.resolvedWithoutVerification}`);
   }
   if (result.stats.inconsistentStatus > 0) {
-    console.log(`   \u72B6\u6001\u77DB\u76FE (resolved+failed): ${result.stats.inconsistentStatus}`);
+    console.log(`   Status mismatch (resolved+failed): ${result.stats.inconsistentStatus}`);
   }
   if (result.stats.fileNotFound > 0) {
-    console.log(`   \u6587\u4EF6\u4E0D\u5B58\u5728\u5F15\u7528: ${result.stats.fileNotFound}`);
+    console.log(`   File not found references: ${result.stats.fileNotFound}`);
   }
   if (result.stats.ignored > 0) {
-    console.log(`   \u5DF2\u5FFD\u7565 (\u914D\u7F6E): ${result.stats.ignored}`);
+    console.log(`   Ignored (config): ${result.stats.ignored}`);
   }
   console.log("");
   if (result.issues.length > 0) {
     console.log(separator);
-    console.log("\uD83D\uDCCB \u8BE6\u7EC6\u95EE\u9898\u5217\u8868");
+    console.log("\uD83D\uDCCB Detailed Issue List");
     console.log(separator);
     console.log("");
     const sortedIssues = result.issues.sort((a, b) => {
@@ -20911,16 +20996,16 @@ async function showAnalysis(options = {}, cwd = process.cwd()) {
     for (const issue of sortedIssues) {
       const severityIcon = issue.severity === "high" ? "\uD83D\uDD34" : issue.severity === "medium" ? "\uD83D\uDFE0" : "\uD83D\uDFE1";
       console.log(`${severityIcon} [${issue.taskId}] ${issue.message}`);
-      console.log(`   \u7C7B\u578B: ${issue.type}`);
-      console.log(`   \u5EFA\u8BAE: ${issue.suggestion}`);
+      console.log(`   Type: ${issue.type}`);
+      console.log(`   Suggestion: ${issue.suggestion}`);
       console.log("");
     }
   } else {
-    console.log("\u2705 \u672A\u53D1\u73B0\u95EE\u9898\uFF0C\u9879\u76EE\u72B6\u6001\u826F\u597D\uFF01");
+    console.log("\u2705 No issues found, project status is healthy!");
   }
   console.log(separator);
   console.log("");
-  console.log("\uD83D\uDCA1 \u63D0\u793A: \u4F7F\u7528 `status` \u547D\u4EE4\u67E5\u770B\u5B8C\u6574\u7EDF\u8BA1\u4FE1\u606F");
+  console.log("\uD83D\uDCA1 Tip: Use the `status` command to view full statistics");
   console.log("");
   const issueDistribution = {};
   for (const issue of result.issues) {
@@ -20946,7 +21031,7 @@ async function showAnalysis(options = {}, cwd = process.cwd()) {
 }
 async function showStatus(options = {}, cwd = process.cwd()) {
   if (!isInitialized(cwd)) {
-    console.error("\u9519\u8BEF: \u9879\u76EE\u672A\u521D\u59CB\u5316\u3002\u8BF7\u5148\u8FD0\u884C `projmnt4claude setup`");
+    console.error("Error: Project not initialized. Please run `projmnt4claude setup` first");
     process.exit(1);
   }
   const includeArchived = options.includeArchived || false;
@@ -20984,50 +21069,50 @@ async function showStatus(options = {}, cwd = process.cwd()) {
   const separator = options.compact ? "---" : "\u2501".repeat(SEPARATOR_WIDTH);
   console.log("");
   console.log(separator);
-  console.log("\uD83D\uDCCB \u9879\u76EE\u72B6\u6001\u6458\u8981");
+  console.log("\uD83D\uDCCB Project Status Summary");
   console.log(separator);
   console.log("");
-  console.log("\uD83D\uDCCA \u4EFB\u52A1\u7EDF\u8BA1:");
-  console.log(`   \u603B\u6570: ${tasks.length}`);
+  console.log("\uD83D\uDCCA Task Statistics:");
+  console.log(`   Total: ${tasks.length}`);
   if (result.stats.subtasks > 0) {
-    console.log(`   \u251C\u2500\u2500 \u7236\u4EFB\u52A1: ${result.stats.parentTasks}`);
-    console.log(`   \u2514\u2500\u2500 \u5B50\u4EFB\u52A1: ${result.stats.subtasks} (\u5B8C\u6210\u7387: ${result.stats.subtaskCompletionRate}%)`);
+    console.log(`   \u251C\u2500\u2500 Parent tasks: ${result.stats.parentTasks}`);
+    console.log(`   \u2514\u2500\u2500 Subtasks: ${result.stats.subtasks} (completion: ${result.stats.subtaskCompletionRate}%)`);
   }
-  console.log(`   \u5F85\u5904\u7406: ${result.stats.byStatus.open}`);
-  console.log(`   \u8FDB\u884C\u4E2D: ${result.stats.byStatus.in_progress}`);
-  console.log(`   \u5DF2\u5B8C\u6210: ${result.stats.byStatus.resolved + result.stats.byStatus.closed}`);
+  console.log(`   Open: ${result.stats.byStatus.open}`);
+  console.log(`   In progress: ${result.stats.byStatus.in_progress}`);
+  console.log(`   Completed: ${result.stats.byStatus.resolved + result.stats.byStatus.closed}`);
   const reopenStats = calculateReopenStats(tasks);
-  console.log(`   \u5DF2\u91CD\u5F00: ${reopenStats.reopenCount}`);
-  console.log(`   \u5DF2\u653E\u5F03: ${result.stats.byStatus.abandoned}`);
+  console.log(`   Reopened: ${reopenStats.reopenCount}`);
+  console.log(`   Abandoned: ${result.stats.byStatus.abandoned}`);
   if (reopenStats.reopenCount > 0) {
-    console.log("\uD83D\uDD04 Reopen \u7EDF\u8BA1:");
-    console.log(`   \u5F53\u524D reopen \u4EFB\u52A1\u6570: ${reopenStats.reopenCount}`);
+    console.log("\uD83D\uDD04 Reopen Statistics:");
+    console.log(`   Current reopened tasks: ${reopenStats.reopenCount}`);
     if (reopenStats.topReopened.length > 0) {
       console.log(`   Reopen Top 10:`);
       reopenStats.topReopened.slice(0, 10).forEach((item, index) => {
-        console.log(`     ${index + 1}. ${item.taskId} (${item.count}\u6B21) - ${item.title}`);
+        console.log(`     ${index + 1}. ${item.taskId} (${item.count}x) - ${item.title}`);
       });
     }
     console.log("");
   }
   if (includeArchived) {
     const archivedCount = countArchivedTasks(cwd);
-    console.log("\uD83D\uDCE6 \u5F52\u6863\u7EDF\u8BA1:");
-    console.log(`   \u5DF2\u5F52\u6863\u4EFB\u52A1: ${archivedCount}`);
+    console.log("\uD83D\uDCE6 Archive Statistics:");
+    console.log(`   Archived tasks: ${archivedCount}`);
     console.log("");
   }
   const healthIcon = healthScore >= 80 ? "\uD83D\uDFE2" : healthScore >= 50 ? "\uD83D\uDFE1" : "\uD83D\uDD34";
-  console.log("\uD83D\uDC9A \u5065\u5EB7\u6307\u6807:");
-  console.log(`   \u5065\u5EB7\u5206\u6570: ${healthIcon} ${healthScore}/100`);
-  console.log(`   \u8FC7\u671F\u4EFB\u52A1: ${result.stats.stale}`);
-  console.log(`   \u88AB\u963B\u585E: ${result.stats.blocked}`);
-  console.log(`   \u5FAA\u73AF\u4F9D\u8D56: ${result.stats.cycle}`);
+  console.log("\uD83D\uDC9A Health Metrics:");
+  console.log(`   Health score: ${healthIcon} ${healthScore}/100`);
+  console.log(`   Stale tasks: ${result.stats.stale}`);
+  console.log(`   Blocked: ${result.stats.blocked}`);
+  console.log(`   Cyclic dependencies: ${result.stats.cycle}`);
   console.log("");
-  console.log("\uD83C\uDFAF \u4F18\u5148\u7EA7\u5206\u5E03:");
-  console.log(`   \uD83D\uDD34 P0 (\u7D27\u6025): ${result.stats.byPriority.P0}`);
-  console.log(`   \uD83D\uDFE0 P1 (\u9AD8): ${result.stats.byPriority.P1}`);
-  console.log(`   \uD83D\uDFE1 P2 (\u4E2D): ${result.stats.byPriority.P2}`);
-  console.log(`   \uD83D\uDFE2 P3 (\u4F4E): ${result.stats.byPriority.P3}`);
+  console.log("\uD83C\uDFAF Priority Distribution:");
+  console.log(`   \uD83D\uDD34 P0 (urgent): ${result.stats.byPriority.P0}`);
+  console.log(`   \uD83D\uDFE0 P1 (high): ${result.stats.byPriority.P1}`);
+  console.log(`   \uD83D\uDFE1 P2 (medium): ${result.stats.byPriority.P2}`);
+  console.log(`   \uD83D\uDFE2 P3 (low): ${result.stats.byPriority.P3}`);
   if (result.stats.byPriority.Q1 + result.stats.byPriority.Q2 + result.stats.byPriority.Q3 + result.stats.byPriority.Q4 > 0) {
     console.log(`   \uD83D\uDCCA Q1-Q4: ${result.stats.byPriority.Q1 + result.stats.byPriority.Q2 + result.stats.byPriority.Q3 + result.stats.byPriority.Q4}`);
   }
@@ -21523,22 +21608,22 @@ async function fixCheckpoints(cwd = process.cwd(), options = {}) {
   const analyzeConfig = readAnalyzeConfig(cwd);
   if (analyzeConfig.autoGenerateCheckpoints === false) {
     console.log("");
-    console.log("\u23ED\uFE0F  \u68C0\u67E5\u70B9\u81EA\u52A8\u751F\u6210\u5DF2\u7981\u7528 (analyze.autoGenerateCheckpoints = false)");
-    console.log("   \u63D0\u793A: \u5728 .projmnt4claude/config.json \u4E2D\u8BBE\u7F6E analyze.autoGenerateCheckpoints = true \u4EE5\u542F\u7528");
+    console.log("\u23ED\uFE0F  Auto-generate checkpoints disabled (analyze.autoGenerateCheckpoints = false)");
+    console.log("   Tip: Set analyze.autoGenerateCheckpoints = true in .projmnt4claude/config.json to enable");
     console.log("");
     return;
   }
-  const generatorLabel = analyzeConfig.checkpointGenerator === "rule-based" ? "\u89C4\u5219\u5F15\u64CE" : analyzeConfig.checkpointGenerator === "ai-powered" ? "AI \u9A71\u52A8" : "\u6DF7\u5408";
+  const generatorLabel = analyzeConfig.checkpointGenerator === "rule-based" ? "Rule Engine" : analyzeConfig.checkpointGenerator === "ai-powered" ? "AI Powered" : "Hybrid";
   console.log("");
   console.log("\u2501".repeat(SEPARATOR_WIDTH));
-  console.log(`\uD83D\uDD27 ${generatorLabel}\u751F\u6210\u68C0\u67E5\u70B9 (\u6A21\u5F0F: ${analyzeConfig.checkpointGenerator})`);
+  console.log(`\uD83D\uDD27 ${generatorLabel} Generating Checkpoints (mode: ${analyzeConfig.checkpointGenerator})`);
   console.log("\u2501".repeat(SEPARATOR_WIDTH));
   console.log("");
   let tasksToFix;
   if (options.taskId) {
     const task = readTaskMeta(options.taskId, cwd);
     if (!task) {
-      console.error(`\u274C \u4EFB\u52A1 ${options.taskId} \u4E0D\u5B58\u5728`);
+      console.error(`\u274C Task ${options.taskId} not found`);
       return;
     }
     tasksToFix = [task];
@@ -21553,27 +21638,27 @@ async function fixCheckpoints(cwd = process.cwd(), options = {}) {
     }
   }
   if (tasksNeedingFix.length === 0) {
-    console.log("\u2705 \u6240\u6709\u4EFB\u52A1\u7684\u68C0\u67E5\u70B9\u90FD\u5DF2\u914D\u7F6E");
+    console.log("\u2705 All tasks have checkpoints configured");
     return;
   }
-  console.log(`\uD83D\uDCCB \u53D1\u73B0 ${tasksNeedingFix.length} \u4E2A\u4EFB\u52A1\u9700\u8981\u751F\u6210\u68C0\u67E5\u70B9:
+  console.log(`\uD83D\uDCCB Found ${tasksNeedingFix.length} tasks needing checkpoints:
 `);
   tasksNeedingFix.slice(0, 10).forEach((task, index) => {
     console.log(`   ${index + 1}. ${task.id} - ${task.title}`);
   });
   if (tasksNeedingFix.length > 10) {
-    console.log(`   ... \u8FD8\u6709 ${tasksNeedingFix.length - 10} \u4E2A\u4EFB\u52A1`);
+    console.log(`   ... and ${tasksNeedingFix.length - 10} more tasks`);
   }
   console.log("");
   if (!options.nonInteractive) {
     const response = await import_prompts5.default({
       type: "confirm",
       name: "proceed",
-      message: `\u662F\u5426\u4E3A\u8FD9 ${tasksNeedingFix.length} \u4E2A\u4EFB\u52A1\u751F\u6210\u68C0\u67E5\u70B9?`,
+      message: `Generate checkpoints for these ${tasksNeedingFix.length} tasks?`,
       initial: true
     });
     if (!response.proceed) {
-      console.log("\u5DF2\u53D6\u6D88");
+      console.log("Cancelled");
       return;
     }
   }
@@ -21581,7 +21666,7 @@ async function fixCheckpoints(cwd = process.cwd(), options = {}) {
   let skippedCount = 0;
   for (const task of tasksNeedingFix) {
     console.log(`
-\u5904\u7406 ${task.id}...`);
+Processing ${task.id}...`);
     const result = fixTaskCheckpoints(task.id, cwd);
     if (result.fixed) {
       console.log(`  \u2705 ${result.reason}`);
@@ -21593,7 +21678,7 @@ async function fixCheckpoints(cwd = process.cwd(), options = {}) {
   }
   console.log("");
   console.log("\u2501".repeat(SEPARATOR_WIDTH));
-  console.log(`\u2705 \u5B8C\u6210: \u4FEE\u590D ${fixedCount} \u4E2A\uFF0C\u8DF3\u8FC7 ${skippedCount} \u4E2A`);
+  console.log(`\u2705 Done: Fixed ${fixedCount}, Skipped ${skippedCount}`);
   console.log("\u2501".repeat(SEPARATOR_WIDTH));
 }
 function extractBugReportFields(markdown) {
@@ -21798,22 +21883,22 @@ function classifyBug(fields) {
   }
   const suggestions = [];
   if (!fields.rootCause) {
-    suggestions.push({ priority: 1, suggestion: "\u8FDB\u884C\u6839\u56E0\u5206\u6790: \u4F7F\u7528 debugger \u6216\u65E5\u5FD7\u5B9A\u4F4D\u6839\u672C\u539F\u56E0" });
+    suggestions.push({ priority: 1, suggestion: "Perform root cause analysis: use debugger or logs to locate root cause" });
   }
   if (fields.reproductionSteps.length === 0) {
-    suggestions.push({ priority: 2, suggestion: "\u8865\u5145\u590D\u73B0\u6B65\u9AA4: \u63D0\u4F9B\u6700\u5C0F\u53EF\u590D\u73B0\u793A\u4F8B" });
+    suggestions.push({ priority: 2, suggestion: "Add reproduction steps: provide minimal reproducible example" });
   }
   if (fields.relatedFiles.length === 0) {
-    suggestions.push({ priority: 3, suggestion: "\u5B9A\u4F4D\u76F8\u5173\u6587\u4EF6: \u901A\u8FC7\u9519\u8BEF\u5806\u6808\u6216\u4EE3\u7801\u641C\u7D22\u7F29\u5C0F\u8303\u56F4" });
+    suggestions.push({ priority: 3, suggestion: "Locate related files: narrow down via error stack or code search" });
   }
   if (fields.suggestedFix) {
-    suggestions.push({ priority: 4, suggestion: `\u9A8C\u8BC1\u4FEE\u590D\u65B9\u6848: ${fields.suggestedFix.substring(0, 100)}` });
+    suggestions.push({ priority: 4, suggestion: `Verify fix: ${fields.suggestedFix.substring(0, 100)}` });
   } else {
-    suggestions.push({ priority: 4, suggestion: "\u5236\u5B9A\u4FEE\u590D\u65B9\u6848: \u57FA\u4E8E\u6839\u56E0\u5206\u6790\u63D0\u51FA\u81F3\u5C11\u4E00\u4E2A\u4FEE\u590D\u65B9\u6848" });
+    suggestions.push({ priority: 4, suggestion: "Develop fix: propose at least one fix based on root cause analysis" });
   }
-  suggestions.push({ priority: 5, suggestion: "\u6DFB\u52A0\u56DE\u5F52\u6D4B\u8BD5: \u7F16\u5199\u6D4B\u8BD5\u9632\u6B62\u95EE\u9898\u590D\u53D1" });
+  suggestions.push({ priority: 5, suggestion: "Add regression test: write tests to prevent issue recurrence" });
   if (severity === "critical" || severity === "high") {
-    suggestions.push({ priority: 6, suggestion: "\u66F4\u65B0\u6587\u6863: \u8BB0\u5F55\u5DF2\u77E5\u95EE\u9898\u548C\u89E3\u51B3\u65B9\u6848\u4F9B\u56E2\u961F\u53C2\u8003" });
+    suggestions.push({ priority: 6, suggestion: "Update documentation: record known issues and solutions for team reference" });
   }
   return { classification, severity, rootCauseVerification, impactAssessment, suggestions };
 }
@@ -21997,10 +22082,10 @@ async function analyzeBugReport(bugReportPath, cwd = process.cwd(), options = {}
   }
   console.log("");
   console.log("\u2501".repeat(SEPARATOR_WIDTH));
-  console.log("\uD83D\uDC1B Bug Report \u5206\u6790\u6A21\u5F0F");
+  console.log("\uD83D\uDC1B Bug Report Analysis Mode");
   console.log("\u2501".repeat(SEPARATOR_WIDTH));
   console.log("");
-  console.log(`  \u8F93\u5165: ${resolvedPath}`);
+  console.log(`  Input: ${resolvedPath}`);
   console.log("");
   let markdown;
   const stat = fs17.statSync(resolvedPath);
@@ -22011,33 +22096,33 @@ async function analyzeBugReport(bugReportPath, cwd = process.cwd(), options = {}
     }
     const sorted = mdFiles.map((f) => ({ name: f, path: path15.join(resolvedPath, f), mtime: fs17.statSync(path15.join(resolvedPath, f)).mtimeMs })).sort((a, b) => b.mtime - a.mtime);
     if (sorted.length > 1) {
-      console.log(`  \u26A0\uFE0F  \u76EE\u5F55\u4E2D\u6709 ${sorted.length} \u4E2A Markdown \u6587\u4EF6\uFF0C\u4EC5\u5206\u6790\u6700\u65B0\u7684: ${sorted[0].name}`);
-      console.log(`     \u5176\u4ED6\u6587\u4EF6: ${sorted.slice(1).map((f) => f.name).join(", ")}`);
+      console.log(`  \u26A0\uFE0F  Directory has ${sorted.length} Markdown files, analyzing latest: ${sorted[0].name}`);
+      console.log(`     Other files: ${sorted.slice(1).map((f) => f.name).join(", ")}`);
     }
     const latestFile = sorted[0];
     if (!latestFile) {
       throw new Error(`\u76EE\u5F55\u4E2D\u672A\u627E\u5230\u6709\u6548\u7684 Markdown \u6587\u4EF6: ${resolvedPath}`);
     }
     markdown = fs17.readFileSync(latestFile.path, "utf-8");
-    console.log(`  \u4F7F\u7528\u6587\u4EF6: ${latestFile.name}`);
+    console.log(`  Using file: ${latestFile.name}`);
   } else {
     markdown = fs17.readFileSync(resolvedPath, "utf-8");
   }
-  console.log("  \uD83D\uDCCB \u63D0\u53D6 Bug Report \u5B57\u6BB5...");
+  console.log("  \uD83D\uDCCB Extracting Bug Report fields...");
   const fields = extractBugReportFields(markdown);
-  console.log(`    \u95EE\u9898\u63CF\u8FF0: ${fields.problem.substring(0, 60)}...`);
-  console.log(`    \u590D\u73B0\u6B65\u9AA4: ${fields.reproductionSteps.length} \u9879`);
-  console.log(`    \u76F8\u5173\u6587\u4EF6: ${fields.relatedFiles.length} \u4E2A`);
+  console.log(`    Problem: ${fields.problem.substring(0, 60)}...`);
+  console.log(`    Reproduction steps: ${fields.reproductionSteps.length} items`);
+  console.log(`    Related files: ${fields.relatedFiles.length} files`);
   console.log("");
-  console.log("  \uD83D\uDCC2 \u52A0\u8F7D\u65E5\u5FD7\u4E0A\u4E0B\u6587...");
+  console.log("  \uD83D\uDCC2 Loading log context...");
   const keywords = [
     ...fields.problem.split(/\s+/).filter((w) => w.length > 3).slice(0, 5),
     ...fields.errorMessage ? [fields.errorMessage.substring(0, 30)] : []
   ];
   const logContext = loadLogContext(cwd, keywords);
-  console.log(`    \u76F8\u5173\u65E5\u5FD7: ${logContext.length} \u6761`);
+  console.log(`    Related logs: ${logContext.length} entries`);
   console.log("");
-  console.log("  \uD83D\uDD0D \u6267\u884C\u5206\u7C7B\u548C\u4E25\u91CD\u6027\u8BC4\u4F30...");
+  console.log("  \uD83D\uDD0D Performing classification and severity assessment...");
   const analysis = classifyBug(fields);
   let aiUsed = false;
   let aiEnhancedFields = [];
@@ -22047,7 +22132,7 @@ async function analyzeBugReport(bugReportPath, cwd = process.cwd(), options = {}
     enabled: options.noAi !== true,
     aiCall: () => new AIMetadataAssistant(cwd).analyzeBugReport(markdown, logContextStr, { cwd }),
     fallback: { title: null, description: null, type: null, priority: null, checkpoints: null, rootCause: null, impactScope: null, aiUsed: false },
-    operationName: "Bug \u62A5\u544A\u5206\u6790"
+    operationName: "Bug Report Analysis"
   });
   if (aiResult.aiUsed) {
     aiUsed = true;
@@ -22089,11 +22174,11 @@ async function analyzeBugReport(bugReportPath, cwd = process.cwd(), options = {}
       }
       aiEnhancedFields.push("suggestions");
     }
-    console.log(`    \u2705 AI \u5206\u6790\u5B8C\u6210\uFF0C\u589E\u5F3A\u4E86 ${aiEnhancedFields.length} \u4E2A\u5B57\u6BB5`);
+    console.log(`    \u2705 AI analysis complete, enhanced ${aiEnhancedFields.length} fields`);
   }
-  console.log(`    \u5206\u7C7B: ${analysis.classification.category}/${analysis.classification.subcategory}`);
-  console.log(`    \u4E25\u91CD\u6027: ${analysis.severity}`);
-  console.log(`    \u6839\u56E0\u9A8C\u8BC1: ${analysis.rootCauseVerification}`);
+  console.log(`    Classification: ${analysis.classification.category}/${analysis.classification.subcategory}`);
+  console.log(`    Severity: ${analysis.severity}`);
+  console.log(`    Root cause verification: ${analysis.rootCauseVerification}`);
   console.log("");
   const timestamp = new Date().toISOString().replace(/[:.]/g, "-").slice(0, 19);
   const reportMarkdown = generateBugAnalysisMarkdown(fields, logContext, analysis, timestamp);
@@ -22101,7 +22186,7 @@ async function analyzeBugReport(bugReportPath, cwd = process.cwd(), options = {}
   ensureDir(reportsDir);
   const reportPath = path15.join(reportsDir, `bug-analysis-${timestamp}.md`);
   fs17.writeFileSync(reportPath, reportMarkdown, "utf-8");
-  console.log(`  \uD83D\uDCC4 \u62A5\u544A\u5DF2\u5199\u5165: ${reportPath}`);
+  console.log(`  \uD83D\uDCC4 Report written to: ${reportPath}`);
   console.log("");
   const requirementDescription = generateRequirementFromAnalysis(fields, analysis);
   const result = {
@@ -22121,23 +22206,23 @@ async function analyzeBugReport(bugReportPath, cwd = process.cwd(), options = {}
     const trainingConfig = config?.training;
     const trainingEnabled = trainingConfig?.exportEnabled === true;
     if (!trainingEnabled) {
-      console.log("  \u26A0\uFE0F  \u8BAD\u7EC3\u6570\u636E\u5BFC\u51FA\u672A\u542F\u7528\u3002\u8BF7\u5728 config.json \u4E2D\u8BBE\u7F6E training.exportEnabled: true");
+      console.log("  \u26A0\uFE0F  Training data export not enabled. Please set training.exportEnabled: true in config.json");
     } else {
       const trainingDir = trainingConfig.outputDir || ".projmnt4claude/training-data/";
       const resolvedTrainingDir = path15.isAbsolute(trainingDir) ? trainingDir : path15.join(getProjectDir(cwd), trainingDir);
       ensureDir(resolvedTrainingDir);
       const exportPath = path15.join(resolvedTrainingDir, "bug-analysis-training.jsonl");
       exportTrainingDataToJsonl(fields, result, exportPath);
-      console.log(`  \uD83D\uDCCA \u8BAD\u7EC3\u6570\u636E\u5DF2\u8FFD\u52A0: ${exportPath}`);
+      console.log(`  \uD83D\uDCCA Training data appended: ${exportPath}`);
       console.log("");
     }
   }
   console.log("\u2501".repeat(SEPARATOR_WIDTH));
-  console.log("\uD83D\uDCA1 \u4E0B\u4E00\u6B65:");
-  console.log(`   \u5C06\u5206\u6790\u7ED3\u679C\u8F6C\u5316\u4E3A\u6539\u8FDB\u4EFB\u52A1:`);
+  console.log("\uD83D\uDCA1 Next Steps:");
+  console.log(`   Convert analysis results to improvement task:`);
   console.log(`   projmnt4claude init-requirement "${requirementDescription.replace(/"/g, "\\\"").substring(0, 200)}..." --template detailed`);
   console.log("");
-  console.log(`   \u6216\u76F4\u63A5\u4F7F\u7528\u62A5\u544A\u6587\u4EF6:`);
+  console.log(`   Or use the report file directly:`);
   console.log(`   projmnt4claude init-requirement "$(cat ${reportPath})" --template detailed`);
   console.log("\u2501".repeat(SEPARATOR_WIDTH));
   console.log("");
@@ -26800,31 +26885,31 @@ async function initRequirement(description, cwd = process.cwd(), options = {}) {
   const trimmedDesc = description?.trim() ?? "";
   if (trimmedDesc.length === 0) {
     console.error("");
-    console.error("\u274C \u9700\u6C42\u63CF\u8FF0\u4E0D\u80FD\u4E3A\u7A7A");
+    console.error("\u274C Requirement description cannot be empty");
     console.error("");
-    console.error("  \u8BF7\u63D0\u4F9B\u9700\u6C42\u63CF\u8FF0\uFF0C\u4F8B\u5982:");
-    console.error('    projmnt4claude init-requirement "\u4FEE\u590D\u767B\u5F55\u6309\u94AE\u7684\u6837\u5F0F\u95EE\u9898"');
-    console.error('    projmnt4claude init-requirement "\u6DFB\u52A0\u7528\u6237\u6CE8\u518C\u529F\u80FD\uFF0C\u5305\u542B\u8868\u5355\u9A8C\u8BC1"');
+    console.error("  Please provide a requirement description, for example:");
+    console.error('    projmnt4claude init-requirement "Fix login button styling issue"');
+    console.error('    projmnt4claude init-requirement "Add user registration feature with form validation"');
     console.error("");
     process.exit(1);
   }
   if (trimmedDesc.length < 2) {
     console.error("");
-    console.error("\u274C \u9700\u6C42\u63CF\u8FF0\u8FC7\u77ED");
+    console.error("\u274C Requirement description too short");
     console.error("");
-    console.error(`  \u5F53\u524D\u63CF\u8FF0: "${trimmedDesc}" (${trimmedDesc.length} \u4E2A\u5B57\u7B26)`);
-    console.error("  \u8BF7\u63D0\u4F9B\u66F4\u8BE6\u7EC6\u7684\u9700\u6C42\u63CF\u8FF0\uFF08\u81F3\u5C11 2 \u4E2A\u5B57\u7B26\uFF09\uFF0C\u8BF4\u660E\u8981\u505A\u4EC0\u4E48\u4EE5\u53CA\u4E3A\u4EC0\u4E48\u3002");
+    console.error(`  Current description: "${trimmedDesc}" (${trimmedDesc.length} characters)`);
+    console.error("  Please provide a more detailed requirement description (at least 2 characters).");
     console.error("");
     process.exit(1);
   }
   if (!isInitialized(cwd)) {
     console.error("");
-    console.error("\u274C \u9879\u76EE\u672A\u521D\u59CB\u5316");
+    console.error("\u274C Project not initialized");
     console.error("");
-    console.error("  \u8BF7\u5148\u8FD0\u884C\u4EE5\u4E0B\u547D\u4EE4\u521D\u59CB\u5316\u9879\u76EE\u7BA1\u7406\u73AF\u5883:");
+    console.error("  Please run the following command to initialize the project environment:");
     console.error("    projmnt4claude setup");
     console.error("");
-    console.error("  \u521D\u59CB\u5316\u540E\u5373\u53EF\u4F7F\u7528 init-requirement \u521B\u5EFA\u4EFB\u52A1\u3002");
+    console.error("  After initialization, you can use init-requirement to create tasks.");
     console.error("");
     process.exit(1);
   }
@@ -26869,7 +26954,7 @@ async function initRequirement(description, cwd = process.cwd(), options = {}) {
   }
   console.log("");
   console.log("\u2501".repeat(SEPARATOR_WIDTH));
-  console.log("\uD83D\uDD0D \u6B63\u5728\u5206\u6790\u9700\u6C42...");
+  console.log("\uD83D\uDD0D Analyzing requirement...");
   console.log("\u2501".repeat(SEPARATOR_WIDTH));
   console.log("");
   const ruleAnalysis = analyzeRequirement(description, cwd);
@@ -26903,50 +26988,50 @@ async function initRequirement(description, cwd = process.cwd(), options = {}) {
   }
   let complexity = assessComplexity(description, analysis);
   const aiTag = (field) => analysis.aiEnhancedFields.includes(field) ? " (AI enhanced)" : "";
-  console.log("\uD83D\uDCCB \u9700\u6C42\u5206\u6790\u7ED3\u679C:");
+  console.log("\uD83D\uDCCB Requirement Analysis Results:");
   console.log("");
-  console.log(`  \u6807\u9898: ${analysis.title}${aiTag("title")}`);
-  console.log(`  \u4F18\u5148\u7EA7: ${formatPriority2(analysis.priority)}${aiTag("priority")}`);
-  console.log(`  \u590D\u6742\u5EA6: ${formatComplexity(complexity)}`);
-  console.log(`  \u63A8\u8350\u89D2\u8272: ${analysis.recommendedRole}${aiTag("recommendedRole")}`);
-  console.log(`  \u6D89\u53CA\u6587\u4EF6: ${complexity.fileCount} \u4E2A`);
-  console.log(`  \u5DE5\u4F5C\u9879: ${complexity.workItemCount} \u9879`);
-  console.log(`  \u9884\u4F30\u8017\u65F6: ~${complexity.estimatedMinutes} \u5206\u949F`);
+  console.log(`  Title: ${analysis.title}${aiTag("title")}`);
+  console.log(`  Priority: ${formatPriority2(analysis.priority)}${aiTag("priority")}`);
+  console.log(`  Complexity: ${formatComplexity(complexity)}`);
+  console.log(`  Recommended Role: ${analysis.recommendedRole}${aiTag("recommendedRole")}`);
+  console.log(`  Files Involved: ${complexity.fileCount}`);
+  console.log(`  Work Items: ${complexity.workItemCount}`);
+  console.log(`  Estimated Time: ~${complexity.estimatedMinutes} minutes`);
   if (analysis.aiUsed) {
-    console.log(`  AI \u589E\u5F3A: ${analysis.aiEnhancedFields.join(", ")}`);
+    console.log(`  AI Enhanced: ${analysis.aiEnhancedFields.join(", ")}`);
   }
   console.log("");
   if (complexity.level === "high") {
     console.log("\u2501".repeat(SEPARATOR_WIDTH));
-    console.log("\u26A0\uFE0F  \u590D\u6742\u5EA6\u9884\u8B66");
+    console.log("\u26A0\uFE0F  Complexity Warning");
     console.log("\u2501".repeat(SEPARATOR_WIDTH));
     console.log("");
-    console.log(`  \u6B64\u4EFB\u52A1\u9884\u4F30\u8017\u65F6 ${complexity.estimatedMinutes} \u5206\u949F\uFF0C\u8D85\u8FC7 Harness \u9ED8\u8BA4\u8D85\u65F6\u9608\u503C\u3002`);
-    console.log("  \u5EFA\u8BAE\u5C06\u6B64\u4EFB\u52A1\u62C6\u5206\u4E3A\u591A\u4E2A\u5B50\u4EFB\u52A1\uFF0C\u6BCF\u4E2A\u5B50\u4EFB\u52A1\u63A7\u5236\u5728 15 \u5206\u949F\u4EE5\u5185\u3002");
+    console.log(`  This task is estimated to take ${complexity.estimatedMinutes} minutes, exceeding the default Harness timeout threshold.`);
+    console.log("  Consider splitting this task into smaller subtasks, each under 15 minutes.");
     console.log("");
     if (complexity.splitSuggestions.length > 0) {
-      console.log("  \u62C6\u5206\u5EFA\u8BAE:");
+      console.log("  Split suggestions:");
       for (let i = 0;i < complexity.splitSuggestions.length; i++) {
         const s = complexity.splitSuggestions[i];
         if (!s)
           continue;
-        const depLabel = s.dependsOn >= 0 ? ` (\u4F9D\u8D56\u5B50\u4EFB\u52A1 ${s.dependsOn + 1})` : "";
+        const depLabel = s.dependsOn >= 0 ? ` (depends on subtask ${s.dependsOn + 1})` : "";
         console.log(`    ${i + 1}. ${s.title}${depLabel}`);
-        console.log(`       \u6587\u4EF6: ${s.files.length > 0 ? s.files.join(", ") : "\u672A\u6307\u5B9A"}`);
-        console.log(`       \u9884\u4F30: ~${s.estimatedMinutes} \u5206\u949F`);
+        console.log(`       Files: ${s.files.length > 0 ? s.files.join(", ") : "not specified"}`);
+        console.log(`       Estimated: ~${s.estimatedMinutes} minutes`);
       }
       console.log("");
     }
   }
   if (analysis.suggestedCheckpoints.length > 0) {
-    console.log(`  \u5EFA\u8BAE\u68C0\u67E5\u70B9${aiTag("checkpoints")}:`);
+    console.log(`  Suggested checkpoints${aiTag("checkpoints")}:`);
     for (const cp of analysis.suggestedCheckpoints) {
       console.log(`    - ${cp}`);
     }
     console.log("");
   }
   if (analysis.potentialDependencies.length > 0) {
-    console.log(`  \u6F5C\u5728\u4F9D\u8D56${aiTag("dependencies")}:`);
+    console.log(`  Potential dependencies${aiTag("dependencies")}:`);
     for (const dep of analysis.potentialDependencies) {
       console.log(`    - ${dep}`);
     }
@@ -27160,7 +27245,7 @@ async function initRequirement(description, cwd = process.cwd(), options = {}) {
     });
     if (checkpointsWithoutCommands.length > 0) {
       console.log(`
-   \u26A0\uFE0F  ${checkpointsWithoutCommands.length} \u4E2A\u68C0\u67E5\u70B9\u9A8C\u8BC1\u547D\u4EE4\u7F3A\u5931:`);
+   \u26A0\uFE0F  ${checkpointsWithoutCommands.length} checkpoints missing verification commands:`);
       for (const cp of checkpointsWithoutCommands) {
         const result = validateCheckpointVerification(cp);
         console.log(`   - [${cp.id}] ${result.warning || cp.description}`);
@@ -27187,13 +27272,13 @@ async function initRequirement(description, cwd = process.cwd(), options = {}) {
       }
     }
   }
-  console.log(`\u2705 \u4EFB\u52A1\u521B\u5EFA\u6210\u529F!`);
+  console.log(`\u2705 Task created successfully!`);
   console.log(`   ID: ${taskId}`);
-  console.log(`   \u6807\u9898: ${task.title}`);
-  console.log(`   \u4F18\u5148\u7EA7: ${formatPriority2(task.priority)}`);
-  console.log(`   \u68C0\u67E5\u70B9: ${checkpoints.length} \u9879`);
+  console.log(`   Title: ${task.title}`);
+  console.log(`   Priority: ${formatPriority2(task.priority)}`);
+  console.log(`   Checkpoints: ${checkpoints.length} items`);
   if (task.dependencies && task.dependencies.length > 0) {
-    console.log(`   \u63A8\u65AD\u4F9D\u8D56: ${task.dependencies.join(", ")}`);
+    console.log(`   Inferred dependencies: ${task.dependencies.join(", ")}`);
   }
   console.log("");
   const qualityGateConfig = {
@@ -27211,23 +27296,23 @@ async function initRequirement(description, cwd = process.cwd(), options = {}) {
     writeTaskMeta(taskWithScore, cwd);
   }
   const scoreIcon = qualityResult.score.totalScore >= 80 ? "\uD83D\uDFE2" : qualityResult.score.totalScore >= 60 ? "\uD83D\uDFE1" : "\uD83D\uDD34";
-  console.log(`\uD83D\uDCCA \u8D28\u91CF\u8BC4\u5206: ${scoreIcon} ${qualityResult.score.totalScore}/100`);
-  console.log(`   \u63CF\u8FF0\u5B8C\u6574\u5EA6: ${qualityResult.score.descriptionScore}%`);
-  console.log(`   \u68C0\u67E5\u70B9\u8D28\u91CF: ${qualityResult.score.checkpointScore}%`);
-  console.log(`   \u5173\u8054\u6587\u4EF6: ${qualityResult.score.relatedFilesScore}%`);
-  console.log(`   \u89E3\u51B3\u65B9\u6848: ${qualityResult.score.solutionScore}%`);
+  console.log(`\uD83D\uDCCA Quality Score: ${scoreIcon} ${qualityResult.score.totalScore}/100`);
+  console.log(`   Description Completeness: ${qualityResult.score.descriptionScore}%`);
+  console.log(`   Checkpoint Quality: ${qualityResult.score.checkpointScore}%`);
+  console.log(`   Related Files: ${qualityResult.score.relatedFilesScore}%`);
+  console.log(`   Solution: ${qualityResult.score.solutionScore}%`);
   console.log("");
   const allExistingTasks = getAllTasks(cwd);
   const depGraph = DependencyGraph.fromTasks(allExistingTasks);
   const depValidation = validateNewTaskDeps(taskId, task.dependencies || [], depGraph, allExistingTasks);
   if (depValidation.warnings.length > 0) {
-    console.log("\uD83D\uDCCB \u4F9D\u8D56\u5173\u7CFB\u95E8\u7981:");
+    console.log("\uD83D\uDCCB Dependency Gate:");
     for (const w of depValidation.warnings) {
       console.log(`   \u26A0\uFE0F  ${w}`);
     }
   }
   if (depValidation.errors.length > 0) {
-    console.log("\uD83D\uDCCB \u4F9D\u8D56\u5173\u7CFB\u9519\u8BEF:");
+    console.log("\uD83D\uDCCB Dependency Errors:");
     for (const e of depValidation.errors) {
       console.log(`   \u274C ${e}`);
     }
@@ -27299,7 +27384,7 @@ async function initRequirement(description, cwd = process.cwd(), options = {}) {
     process.exit(1);
   }
   if (!qualityResult.passed) {
-    console.log("\u26A0\uFE0F  \u8D28\u91CF\u95E8\u7981\u8B66\u544A: \u4EFB\u52A1\u8D28\u91CF\u8BC4\u5206\u4F4E\u4E8E\u9ED8\u8BA4\u9608\u503C\uFF0C\u5EFA\u8BAE\u6539\u8FDB");
+    console.log("\u26A0\uFE0F  Quality Gate Warning: Task quality score below default threshold, improvements recommended");
     if (qualityResult.suggestions.length > 0) {
       const sorted = [...qualityResult.suggestions].sort((a, b) => {
         const order = { high: 0, medium: 1, low: 2 };
@@ -31481,7 +31566,7 @@ class RetryHandler {
     }
   }
   sleep(ms) {
-    return new Promise((resolve6) => setTimeout(resolve6, ms));
+    return new Promise((resolve7) => setTimeout(resolve7, ms));
   }
   getRetryRecommendation(verdict) {
     const suggestions = [];

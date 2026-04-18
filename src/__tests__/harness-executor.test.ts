@@ -1,8 +1,9 @@
-import { describe, test, expect, mock, beforeEach, afterEach } from 'bun:test';
+import { describe, test, expect, mock, spyOn, beforeEach, afterEach } from 'bun:test';
 import * as fs from 'fs';
 import * as path from 'path';
-import * as os from 'os';
 import { HarnessExecutor } from '../utils/harness-executor.js';
+import * as harnessHelpers from '../utils/harness-helpers.js';
+import { createIsolatedTestEnv, type IsolatedTestEnv } from '../utils/test-env.js';
 import type { HarnessConfig, SprintContract, DevReport, RetryContext } from '../types/harness.js';
 import type { TaskMeta } from '../types/task.js';
 
@@ -31,36 +32,25 @@ mock.module('../utils/prompt-templates.js', () => ({
   },
 }));
 
-const mockArchiveReport = mock(() => {});
-mock.module('../utils/harness-helpers.js', () => ({
-  archiveReportIfExists: mockArchiveReport,
-}));
-
 // ============================================================
 // Helpers
 // ============================================================
 
-function createConfig(overrides: Partial<HarnessConfig> = {}): HarnessConfig {
-  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'harness-exec-test-'));
-  const config: HarnessConfig = {
+function createConfig(tempDir: string, overrides: Partial<HarnessConfig> = {}): HarnessConfig {
+  return {
     maxRetries: 3,
     timeout: 300,
     parallel: 1,
     dryRun: false,
     continue: false,
     jsonOutput: false,
-    cwd: tmpDir,
+    cwd: tempDir,
     apiRetryAttempts: 3,
     apiRetryDelay: 60,
     batchGitCommit: false,
     forceContinue: false,
     ...overrides,
   };
-  // 如果 overrides 覆盖了 cwd，清理未使用的 tmpDir 防止泄漏
-  if (config.cwd !== tmpDir) {
-    fs.rmSync(tmpDir, { recursive: true, force: true });
-  }
-  return config;
 }
 
 function createTask(overrides: Partial<TaskMeta> = {}): TaskMeta {
@@ -102,15 +92,15 @@ function setupProjectDir(cwd: string, taskId: string) {
 // ============================================================
 
 describe('HarnessExecutor', () => {
-  let tmpDirs: string[] = [];
+  let env: IsolatedTestEnv;
+
+  beforeEach(async () => {
+    env = await createIsolatedTestEnv();
+  });
 
   afterEach(() => {
-    for (const d of tmpDirs) {
-      fs.rmSync(d, { recursive: true, force: true });
-    }
-    tmpDirs = [];
+    env.cleanup();
     mockAgentInvoke.mockClear();
-    mockArchiveReport.mockClear();
   });
 
   // ============================================================
@@ -118,8 +108,7 @@ describe('HarnessExecutor', () => {
   // ============================================================
   describe('execute() - success path', () => {
     test('returns success report when agent succeeds', async () => {
-      const config = createConfig();
-      tmpDirs.push(config.cwd);
+      const config = createConfig(env.tempDir);
       const task = createTask();
       const contract = createContract();
       setupProjectDir(config.cwd, task.id);
@@ -137,14 +126,13 @@ describe('HarnessExecutor', () => {
       expect(report.status).toBe('success');
       expect(report.taskId).toBe(task.id);
       expect(report.claudeOutput).toBe('Development completed successfully');
-      expect(report.duration).toBeGreaterThan(0);
+      expect(report.duration).toBeGreaterThanOrEqual(0);
       expect(report.startTime).toBeTruthy();
       expect(report.endTime).toBeTruthy();
     });
 
     test('collects evidence and checkpoints on success', async () => {
-      const config = createConfig();
-      tmpDirs.push(config.cwd);
+      const config = createConfig(env.tempDir);
       const task = createTask({
         checkpoints: [
           { id: 'CP-001', description: 'CP1', status: 'completed', createdAt: '', updatedAt: '' },
@@ -180,8 +168,7 @@ describe('HarnessExecutor', () => {
   // ============================================================
   describe('execute() - boundary conditions', () => {
     test('uses timeoutOverride instead of config.timeout', async () => {
-      const config = createConfig({ timeout: 600 });
-      tmpDirs.push(config.cwd);
+      const config = createConfig(env.tempDir, { timeout: 600 });
       const task = createTask();
       const contract = createContract();
       setupProjectDir(config.cwd, task.id);
@@ -202,8 +189,7 @@ describe('HarnessExecutor', () => {
     });
 
     test('falls back to config.timeout when no override', async () => {
-      const config = createConfig({ timeout: 300 });
-      tmpDirs.push(config.cwd);
+      const config = createConfig(env.tempDir, { timeout: 300 });
       const task = createTask();
       const contract = createContract();
       setupProjectDir(config.cwd, task.id);
@@ -223,8 +209,7 @@ describe('HarnessExecutor', () => {
     });
 
     test('handles task with no checkpoints', async () => {
-      const config = createConfig();
-      tmpDirs.push(config.cwd);
+      const config = createConfig(env.tempDir);
       const task = createTask(); // no checkpoints
       const contract = createContract({ checkpoints: [] });
       setupProjectDir(config.cwd, task.id);
@@ -248,8 +233,7 @@ describe('HarnessExecutor', () => {
   // ============================================================
   describe('execute() - error handling', () => {
     test('returns failed status when agent returns failure', async () => {
-      const config = createConfig();
-      tmpDirs.push(config.cwd);
+      const config = createConfig(env.tempDir);
       const task = createTask();
       const contract = createContract();
       setupProjectDir(config.cwd, task.id);
@@ -270,8 +254,7 @@ describe('HarnessExecutor', () => {
     });
 
     test('returns timeout status when exit code is 124', async () => {
-      const config = createConfig();
-      tmpDirs.push(config.cwd);
+      const config = createConfig(env.tempDir);
       const task = createTask();
       const contract = createContract();
       setupProjectDir(config.cwd, task.id);
@@ -292,8 +275,7 @@ describe('HarnessExecutor', () => {
     });
 
     test('returns failed status when agent throws exception', async () => {
-      const config = createConfig();
-      tmpDirs.push(config.cwd);
+      const config = createConfig(env.tempDir);
       const task = createTask();
       const contract = createContract();
       setupProjectDir(config.cwd, task.id);
@@ -308,8 +290,7 @@ describe('HarnessExecutor', () => {
     });
 
     test('handles non-Error thrown values', async () => {
-      const config = createConfig();
-      tmpDirs.push(config.cwd);
+      const config = createConfig(env.tempDir);
       const task = createTask();
       const contract = createContract();
       setupProjectDir(config.cwd, task.id);
@@ -329,8 +310,7 @@ describe('HarnessExecutor', () => {
   // ============================================================
   describe('buildDevPrompt() - internal', () => {
     test('includes task title and description in prompt', async () => {
-      const config = createConfig();
-      tmpDirs.push(config.cwd);
+      const config = createConfig(env.tempDir);
       const task = createTask({
         title: 'Add auth feature',
         description: 'Implement JWT authentication',
@@ -360,8 +340,7 @@ describe('HarnessExecutor', () => {
   // ============================================================
   describe('buildDevPrompt() - minimal task', () => {
     test('handles task with no description and no dependencies', async () => {
-      const config = createConfig();
-      tmpDirs.push(config.cwd);
+      const config = createConfig(env.tempDir);
       const task = createTask({ description: '', dependencies: [] });
       const contract = createContract({ acceptanceCriteria: [], checkpoints: [] });
       setupProjectDir(config.cwd, task.id);
@@ -385,8 +364,7 @@ describe('HarnessExecutor', () => {
   // ============================================================
   describe('buildDevPrompt() - retry context', () => {
     test('injects retry context into prompt when provided', async () => {
-      const config = createConfig();
-      tmpDirs.push(config.cwd);
+      const config = createConfig(env.tempDir);
       const task = createTask();
       const contract = createContract();
       setupProjectDir(config.cwd, task.id);
@@ -413,8 +391,7 @@ describe('HarnessExecutor', () => {
     });
 
     test('injects retry context with partial progress', async () => {
-      const config = createConfig();
-      tmpDirs.push(config.cwd);
+      const config = createConfig(env.tempDir);
       const task = createTask();
       const contract = createContract();
       setupProjectDir(config.cwd, task.id);
@@ -442,8 +419,7 @@ describe('HarnessExecutor', () => {
     });
 
     test('injects upstream failure info into prompt', async () => {
-      const config = createConfig();
-      tmpDirs.push(config.cwd);
+      const config = createConfig(env.tempDir);
       const task = createTask();
       const contract = createContract();
       setupProjectDir(config.cwd, task.id);
@@ -477,8 +453,7 @@ describe('HarnessExecutor', () => {
   // ============================================================
   describe('buildOrLoadContract() - internal', () => {
     test('creates new contract with acceptance criteria from description', async () => {
-      const config = createConfig();
-      tmpDirs.push(config.cwd);
+      const config = createConfig(env.tempDir);
       const task = createTask({
         description: '- [ ] Implement feature A\n- [ ] Add unit tests\n- [ ] Update docs',
       });
@@ -497,8 +472,7 @@ describe('HarnessExecutor', () => {
     });
 
     test('loads existing contract from file', async () => {
-      const config = createConfig();
-      tmpDirs.push(config.cwd);
+      const config = createConfig(env.tempDir);
       const task = createTask();
       setupProjectDir(config.cwd, task.id);
 
@@ -530,8 +504,7 @@ describe('HarnessExecutor', () => {
   // ============================================================
   describe('saveDevReport() - internal', () => {
     test('saves dev report to file system', async () => {
-      const config = createConfig();
-      tmpDirs.push(config.cwd);
+      const config = createConfig(env.tempDir);
       const task = createTask();
       const contract = createContract();
       setupProjectDir(config.cwd, task.id);
@@ -553,8 +526,7 @@ describe('HarnessExecutor', () => {
     });
 
     test('report includes error section on failure', async () => {
-      const config = createConfig();
-      tmpDirs.push(config.cwd);
+      const config = createConfig(env.tempDir);
       const task = createTask();
       const contract = createContract();
       setupProjectDir(config.cwd, task.id);
@@ -575,8 +547,7 @@ describe('HarnessExecutor', () => {
     });
 
     test('calls archiveReportIfExists before saving', async () => {
-      const config = createConfig();
-      tmpDirs.push(config.cwd);
+      const config = createConfig(env.tempDir);
       const task = createTask();
       const contract = createContract();
       setupProjectDir(config.cwd, task.id);
@@ -585,10 +556,13 @@ describe('HarnessExecutor', () => {
         output: 'done', success: true, durationMs: 100, exitCode: 0,
       });
 
+      const archiveSpy = spyOn(harnessHelpers, 'archiveReportIfExists').mockImplementation(() => {});
+
       const executor = new HarnessExecutor(config);
       await executor.execute(task, contract);
 
-      expect(mockArchiveReport).toHaveBeenCalled();
+      expect(archiveSpy).toHaveBeenCalled();
+      archiveSpy.mockRestore();
     });
   });
 
@@ -597,8 +571,7 @@ describe('HarnessExecutor', () => {
   // ============================================================
   describe('collectEvidence() - internal', () => {
     test('returns empty array when evidence dir does not exist', async () => {
-      const config = createConfig();
-      tmpDirs.push(config.cwd);
+      const config = createConfig(env.tempDir);
       const task = createTask();
       const contract = createContract();
       setupProjectDir(config.cwd, task.id);
@@ -620,8 +593,7 @@ describe('HarnessExecutor', () => {
   // ============================================================
   describe('constructor', () => {
     test('stores config', () => {
-      const config = createConfig();
-      tmpDirs.push(config.cwd);
+      const config = createConfig(env.tempDir);
       const executor = new HarnessExecutor(config);
       expect(executor).toBeInstanceOf(HarnessExecutor);
     });

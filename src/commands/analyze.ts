@@ -697,19 +697,19 @@ export function showQualityReport(
 
   console.log('');
   console.log(separator);
-  console.log('📊 内容质量检测报告');
+  console.log('📊 Content Quality Report');
   console.log(separator);
   console.log('');
 
   // 按总分排序
   const sortedScores = Array.from(scores.entries()).sort((a, b) => a[1].totalScore - b[1].totalScore);
 
-  console.log(`📈 总体统计:`);
-  console.log(`   检测任务数: ${scores.size}`);
+  console.log(`📈 Overall Statistics:`);
+  console.log(`   Tasks analyzed: ${scores.size}`);
 
   // 除零保护: 空数组时直接返回
   if (sortedScores.length === 0) {
-    console.log('✅ 没有任务需要检测');
+    console.log('✅ No tasks to analyze');
     console.log('');
     return;
   }
@@ -717,31 +717,31 @@ export function showQualityReport(
   // 统计（sortedScores.length > 0 保证安全）
   const lowQualityTasks = sortedScores.filter(([_, s]) => s.totalScore < threshold);
   const avgScore = sortedScores.reduce((sum, [_, s]) => sum + s.totalScore, 0) / sortedScores.length;
-  console.log(`   平均分数: ${avgScore.toFixed(1)}/100`);
-  console.log(`   低质量任务 (< ${threshold}分): ${lowQualityTasks.length}`);
+  console.log(`   Average score: ${avgScore.toFixed(1)}/100`);
+  console.log(`   Low quality tasks (< ${threshold}): ${lowQualityTasks.length}`);
   console.log('');
 
   // 显示详细评分
   console.log(separator);
-  console.log('📋 任务质量评分');
+  console.log('📋 Task Quality Scores');
   console.log(separator);
   console.log('');
 
   for (const [taskId, score] of sortedScores) {
     const icon = score.totalScore >= 80 ? '🟢' : score.totalScore >= 60 ? '🟡' : '🔴';
     console.log(`${icon} ${taskId}: ${score.totalScore}/100`);
-    console.log(`   描述完整度: ${score.descriptionScore}%`);
-    console.log(`   检查点质量: ${score.checkpointScore}%`);
-    console.log(`   关联文件: ${score.relatedFilesScore}%`);
-    console.log(`   解决方案: ${score.solutionScore}%`);
+    console.log(`   Description completeness: ${score.descriptionScore}%`);
+    console.log(`   Checkpoint quality: ${score.checkpointScore}%`);
+    console.log(`   Related files: ${score.relatedFilesScore}%`);
+    console.log(`   Solution: ${score.solutionScore}%`);
     if (score.aiSemanticScore !== undefined) {
-      console.log(`   AI 语义评分: ${score.aiSemanticScore}% (结构 60% + AI 40%)`);
+      console.log(`   AI semantic score: ${score.aiSemanticScore}% (structure 60% + AI 40%)`);
     }
 
     // 显示扣分项
     if (score.deductions.length > 0) {
       for (const deduction of score.deductions) {
-        console.log(`   └─ ${deduction.reason} (${deduction.points}分)`);
+        console.log(`   └─ ${deduction.reason} (${deduction.points}pts)`);
       }
     }
     console.log('');
@@ -750,7 +750,7 @@ export function showQualityReport(
   // 显示改进建议
   if (lowQualityTasks.length > 0) {
     console.log(separator);
-    console.log('💡 改进建议');
+    console.log('💡 Improvement Suggestions');
     console.log(separator);
     console.log('');
 
@@ -767,7 +767,7 @@ export function showQualityReport(
     }
 
     if (lowQualityTasks.length > 5) {
-      console.log(`   ... 还有 ${lowQualityTasks.length - 5} 个低质量任务`);
+      console.log(`   ... and ${lowQualityTasks.length - 5} more low quality tasks`);
       console.log('');
     }
   }
@@ -797,7 +797,7 @@ async function detectSemanticDuplicates(
       enabled: true,
       aiCall: () => aiAssistant.detectDuplicates(batch, { cwd }),
       fallback: { duplicates: [], aiUsed: false },
-      operationName: '语义重复检测',
+      operationName: 'Semantic duplicate detection',
       logger: analyzeLogger,
     });
     if (result.aiUsed && result.duplicates.length > 0) {
@@ -806,10 +806,10 @@ async function detectSemanticDuplicates(
           taskId: group.taskIds[0] || '__semantic__',
           type: 'semantic_duplicate',
           severity: 'medium',
-          message: `语义重复检测: ${group.taskIds.join(', ')} 相似度 ${(group.similarity * 100).toFixed(0)}%${group.reason ? ` - ${group.reason}` : ''}`,
+          message: `Semantic duplicate detection: ${group.taskIds.join(', ')} similarity ${(group.similarity * 100).toFixed(0)}%${group.reason ? ` - ${group.reason}` : ''}`,
           suggestion: group.keepTaskId
-            ? `建议保留 ${group.keepTaskId}，合并或关闭其他重复任务`
-            : '检查重复任务，保留最相关的一个，关闭或合并其余任务',
+            ? `Keep ${group.keepTaskId}, merge or close other duplicate tasks`
+            : 'Check duplicate tasks, keep the most relevant one, close or merge the rest',
           details: {
             duplicateTaskIds: group.taskIds,
             similarity: group.similarity,
@@ -937,8 +937,8 @@ export function checkReportStatusConsistency(
         taskId,
         type: 'report_status_mismatch',
         severity: 'medium',
-        message: `报告 ${mapping.reportFile} 显示 PASS，但任务状态仍为 ${currentStatus}，应至少为 ${mapping.impliesStatus}`,
-        suggestion: `使用 --fix 将状态更新为 ${mapping.impliesStatus}`,
+        message: `Report ${mapping.reportFile} shows PASS, but task status is still ${currentStatus}, should be at least ${mapping.impliesStatus}`,
+        suggestion: `Use --fix to update status to ${mapping.impliesStatus}`,
         details: {
           currentStatus,
           impliedStatus: mapping.impliesStatus,
@@ -974,8 +974,8 @@ export function checkCheckpointConsistency(
       taskId,
       type: 'checkpoint_status_mismatch',
       severity: 'medium',
-      message: `任务已 resolved 但全部 ${totalCps} 个检查点仍为 pending (旧版遗留)`,
-      suggestion: '使用 --fix 自动完成所有检查点（旧版遗留任务无检查点状态追踪）',
+      message: `Task is resolved but all ${totalCps} checkpoints are still pending (legacy)`,
+      suggestion: 'Use --fix to auto-complete all checkpoints (legacy tasks lack checkpoint status tracking)',
       details: {
         totalCheckpoints: totalCps,
         pendingCheckpoints: pendingCps,
@@ -1007,7 +1007,7 @@ export function checkCheckpointValidation(
         type: 'missing_checkpoint_prefix',
         severity: violation.severity,
         message: violation.message,
-        suggestion: '运行 analyze --fix 自动为检查点添加前缀',
+        suggestion: 'Run analyze --fix to auto-add prefixes to checkpoints',
         details: violation.details,
       });
     } else {
@@ -1016,7 +1016,7 @@ export function checkCheckpointValidation(
         type: 'checkpoint_validation_error',
         severity: violation.severity,
         message: violation.message,
-        suggestion: violation.suggestion || '修复检查点配置以满足验证要求',
+        suggestion: violation.suggestion || 'Fix checkpoint configuration to meet validation requirements',
         details: violation.details,
       });
     }
@@ -1058,8 +1058,8 @@ export async function checkQualityGateIssues(
       taskId,
       type: 'low_quality',
       severity: 'medium',
-      message: `内容质量评分 ${result.score.totalScore}/100，低于阈值 ${qualityConfig.minQualityScore}`,
-      suggestion: `完善任务描述、检查点和解决方案以提高质量分数。当前：描述完整度=${result.score.descriptionScore}，检查点质量=${result.score.checkpointScore}，解决方案=${result.score.solutionScore}`,
+      message: `Content quality score ${result.score.totalScore}/100 is below threshold ${qualityConfig.minQualityScore}`,
+      suggestion: `Improve task description, checkpoints and solution to increase quality score. Current: description=${result.score.descriptionScore}, checkpoints=${result.score.checkpointScore}, solution=${result.score.solutionScore}`,
       details: {
         totalScore: result.score.totalScore,
         threshold: qualityConfig.minQualityScore,
@@ -1079,8 +1079,8 @@ export async function checkQualityGateIssues(
       taskId,
       type: field === 'checkpoints' ? 'low_checkpoint_coverage' : 'low_quality',
       severity: field === 'affected_files' ? 'high' : 'medium',
-      message: `质量门禁: 缺少必需字段 ${field}`,
-      suggestion: `请补充 ${field} 字段以通过质量门禁`,
+      message: `Quality gate: missing required field ${field}`,
+      suggestion: `Please add ${field} field to pass quality gate`,
       details: { missingField: field },
     });
   }
@@ -1093,7 +1093,7 @@ export async function checkQualityGateIssues(
         type: 'missing_checkpoint_prefix',
         severity: violation.severity,
         message: violation.message,
-        suggestion: '运行 analyze --fix 自动为检查点添加前缀',
+        suggestion: 'Run analyze --fix to auto-add prefixes to checkpoints',
         details: violation.details,
       });
     } else {
@@ -1102,7 +1102,7 @@ export async function checkQualityGateIssues(
         type: 'checkpoint_validation_error',
         severity: violation.severity,
         message: violation.message,
-        suggestion: violation.suggestion || '修复检查点配置以满足验证要求',
+        suggestion: violation.suggestion || 'Fix checkpoint configuration to meet validation requirements',
         details: violation.details,
       });
     }
@@ -1115,8 +1115,8 @@ export async function checkQualityGateIssues(
       taskId,
       type: 'file_not_found',
       severity: 'high',
-      message: `引用的文件不存在: ${filesResult.missingFiles.join(', ')}`,
-      suggestion: '检查文件路径是否正确，或移除对不存在文件的引用',
+      message: `Referenced files do not exist: ${filesResult.missingFiles.join(', ')}`,
+      suggestion: 'Check file paths are correct, or remove references to non-existent files',
       details: { missingFiles: filesResult.missingFiles },
     });
   }
@@ -1128,7 +1128,7 @@ export async function checkQualityGateIssues(
         taskId,
         type: 'low_quality',
         severity: 'medium',
-        message: `质量建议: ${suggestion.message}`,
+        message: `Quality suggestion: ${suggestion.message}`,
         suggestion: suggestion.action,
         details: { category: suggestion.category, priority: suggestion.priority },
       });
@@ -1173,8 +1173,8 @@ export function checkMissingPipelineEvidence(
       taskId,
       type: 'missing_pipeline_evidence',
       severity: 'high',
-      message: `任务处于 ${currentStatus} 但报告目录不存在，缺少前置 pipeline 证据`,
-      suggestion: '使用 --fix 将任务重置为 open 状态（缺少恢复证据）',
+      message: `Task is ${currentStatus} but report directory does not exist, missing pipeline evidence`,
+      suggestion: 'Use --fix to reset task to open status (missing resume evidence)',
       details: {
         currentStatus,
         missingReports: required.map(r => r.reportFile),
@@ -1198,8 +1198,8 @@ export function checkMissingPipelineEvidence(
       taskId,
       type: 'missing_pipeline_evidence',
       severity: 'high',
-      message: `任务处于 ${currentStatus} 但缺少前置报告: ${missingReports.map(r => r.reportFile).join(', ')}`,
-      suggestion: '使用 --fix 将任务重置为 open 状态（缺少恢复证据）',
+      message: `Task is ${currentStatus} but missing prerequisite reports: ${missingReports.map(r => r.reportFile).join(', ')}`,
+      suggestion: 'Use --fix to reset task to open status (missing resume evidence)',
       details: {
         currentStatus,
         missingReports: missingReports.map(r => r.reportFile),
@@ -1486,8 +1486,8 @@ export async function detectStatusInferenceIssues(
       taskId: task.id,
       type: 'ai_status_inference',
       severity: aiResult.confidence >= 0.8 ? 'high' : 'medium',
-      message: `AI 推断任务状态应为 ${aiResult.inferredStatus}（当前: ${currentStatus}，置信度: ${(aiResult.confidence * 100).toFixed(0)}%）`,
-      suggestion: aiResult.suggestion || `考虑将状态更新为 ${aiResult.inferredStatus}`,
+      message: `AI infers task status should be ${aiResult.inferredStatus} (current: ${currentStatus}, confidence: ${(aiResult.confidence * 100).toFixed(0)}%)`,
+      suggestion: aiResult.suggestion || `Consider updating status to ${aiResult.inferredStatus}`,
       details: {
         layer: 'L2',
         currentStatus,
@@ -1517,7 +1517,7 @@ export async function analyzeProject(
   aiOptions?: AIAnalyzeOptions,
 ): Promise<AnalysisResult> {
   if (!isInitialized(cwd)) {
-    console.error('错误: 项目未初始化。请先运行 `projmnt4claude setup`');
+    console.error('Error: Project not initialized. Please run `projmnt4claude setup` first');
     process.exit(1);
   }
 
@@ -1630,7 +1630,7 @@ export async function analyzeProject(
           taskId: task.id,
           type: 'stale',
           severity: 'medium',
-          message: `任务已 ${Math.floor((now.getTime() - updatedAt.getTime()) / (24 * 60 * 60 * 1000))} 天未更新`,
+          message: `Task has not been updated for ${Math.floor((now.getTime() - updatedAt.getTime()) / (24 * 60 * 60 * 1000))} days`,
           suggestion: aiAssessment?.stillStale && aiAssessment?.reason
             ? `AI 确认任务陈旧: ${aiAssessment.reason}，建议更新或关闭`
             : '检查任务是否仍然相关，考虑更新状态或关闭',
@@ -1651,7 +1651,7 @@ export async function analyzeProject(
         type: 'no_description',
         severity: 'low',
         message: '任务缺少描述',
-        suggestion: '添加任务描述以提供更多上下文',
+        suggestion: 'Add task description to provide more context',
       });
     }
 
@@ -1670,8 +1670,8 @@ export async function analyzeProject(
           taskId: task.id,
           type: 'blocked',
           severity: 'medium',
-          message: `任务被 ${uncompletedDeps.length} 个未完成的依赖阻塞`,
-          suggestion: `先完成依赖任务: ${uncompletedDeps.join(', ')}`,
+          message: `Task is blocked by ${uncompletedDeps.length} uncompleted dependencies`,
+          suggestion: `Complete dependency tasks first: ${uncompletedDeps.join(', ')}`,
         });
       }
     }
@@ -1684,8 +1684,8 @@ export async function analyzeProject(
         taskId: task.id,
         type: 'legacy_priority',
         severity: 'low',
-        message: `任务使用旧格式优先级: ${task.priority}`,
-        suggestion: `将优先级更新为 ${normalizePriority(task.priority)}`,
+        message: `Task uses old format priority: ${task.priority}`,
+        suggestion: `Update priority to ${normalizePriority(task.priority)}`,
       });
     }
 
@@ -1696,8 +1696,8 @@ export async function analyzeProject(
         taskId: task.id,
         type: 'legacy_status',
         severity: 'low',
-        message: `任务使用旧格式状态: ${task.status}`,
-        suggestion: `将状态更新为 ${normalizeStatus(task.status)}`,
+        message: `Task uses old format status: ${task.status}`,
+        suggestion: `Update status to ${normalizeStatus(task.status)}`,
       });
     }
 
@@ -1707,8 +1707,8 @@ export async function analyzeProject(
         taskId: task.id,
         type: 'legacy_schema',
         severity: 'low',
-        message: '任务 meta.json 缺少新规范字段',
-        suggestion: '添加 reopenCount 和 requirementHistory 字段以符合最新规范',
+        message: 'Task meta.json missing new specification fields',
+        suggestion: 'Add reopenCount and requirementHistory fields to comply with latest specification',
       });
     }
 
@@ -1726,8 +1726,8 @@ export async function analyzeProject(
         taskId: task.id,
         type: 'null_array_field',
         severity: 'medium',
-        message: `任务数组字段为 null 或缺失: ${nullArrayFields.join(', ')}`,
-        suggestion: `使用 --fix 将缺失的数组字段初始化为空数组`,
+        message: `Task array fields are null or missing: ${nullArrayFields.join(', ')}`,
+        suggestion: `Use --fix to initialize missing array fields to empty arrays`,
         details: { fields: nullArrayFields },
       });
     }
@@ -1742,8 +1742,8 @@ export async function analyzeProject(
         taskId: task.id,
         type: 'pipeline_status_migration',
         severity: 'medium',
-        message: `任务使用 pipeline 中间状态: ${task.status}，应迁移为 ${targetStatus}`,
-        suggestion: `使用 --fix 将状态从 ${task.status} 自动迁移为 ${targetStatus}`,
+        message: `Task uses pipeline intermediate state: ${task.status}, should migrate to ${targetStatus}`,
+        suggestion: `Use --fix to auto-migrate status from ${task.status} to ${targetStatus}`,
         details: {
           currentStatus: task.status,
           targetStatus,
@@ -1779,8 +1779,8 @@ export async function analyzeProject(
         taskId: task.id,
         type: 'verdict_action_schema',
         severity: 'medium',
-        message: `任务包含无效的 VerdictAction 值: ${[...new Set(invalidVerdictActions)].join(', ')}`,
-        suggestion: `使用 --fix 清除无效的 VerdictAction 值，有效值为: ${VALID_VERDICT_ACTIONS.join(', ')}`,
+        message: `Task contains invalid VerdictAction values: ${[...new Set(invalidVerdictActions)].join(', ')}`,
+        suggestion: `Use --fix to clear invalid VerdictAction values, valid values are: ${VALID_VERDICT_ACTIONS.join(', ')}`,
         details: { invalidActions: [...new Set(invalidVerdictActions)] },
       });
     }
@@ -1793,8 +1793,8 @@ export async function analyzeProject(
         taskId: task.id,
         type: 'schema_version_outdated',
         severity: taskSchemaVersion === 0 ? 'medium' : 'low',
-        message: `任务 schema 版本过时: v${taskSchemaVersion} → v${CURRENT_TASK_SCHEMA_VERSION}，需迁移 ${pendingMigrations.map(m => m.name).join(', ')}`,
-        suggestion: '使用 --fix 一次性完成所有版本迁移',
+        message: `Task schema version outdated: v${taskSchemaVersion} → v${CURRENT_TASK_SCHEMA_VERSION}, needs migration ${pendingMigrations.map(m => m.name).join(', ')}`,
+        suggestion: 'Use --fix to complete all version migrations at once',
         details: {
           currentVersion: taskSchemaVersion,
           targetVersion: CURRENT_TASK_SCHEMA_VERSION,
@@ -1810,8 +1810,8 @@ export async function analyzeProject(
         taskId: task.id,
         type: 'missing_createdBy',
         severity: 'low',
-        message: '任务缺少 createdBy 字段，无法追踪创建来源',
-        suggestion: '设置 createdBy 字段以符合最新规范（cli | init-requirement | harness-dev | harness-review | harness-qa | harness-eval | import）',
+        message: 'Task missing createdBy field, cannot track creation source',
+        suggestion: 'Set createdBy field to comply with latest specification (cli | init-requirement | harness-dev | harness-review | harness-qa | harness-eval | import)',
       });
     }
 
@@ -1824,8 +1824,8 @@ export async function analyzeProject(
         taskId: task.id,
         type: 'invalid_task_id_format',
         severity: 'medium',
-        message: `任务 ID 格式不符合规范: ${idValidation.errors.join(', ')}`,
-        suggestion: '使用格式 TASK-{type}-{priority}-{slug}-{date}，如 TASK-feature-P1-user-auth-20260319',
+        message: `Task ID format does not meet specification: ${idValidation.errors.join(', ')}`,
+        suggestion: 'Use format TASK-{type}-{priority}-{slug}-{date}, e.g., TASK-feature-P1-user-auth-20260319',
         details: { format: idValidation.format },
       });
     }
@@ -1850,8 +1850,8 @@ export async function analyzeProject(
             taskId: task.id,
             type: 'meaningless_id',
             severity: 'low',
-            message: `任务 ID 的 slug 无意义: "${slugToCheck}"`,
-            suggestion: '使用 --fix 自动从描述/标题提取关键词重命名，或手动重命名任务目录',
+            message: `Task ID slug is meaningless: "${slugToCheck}"`,
+            suggestion: 'Use --fix to auto-extract keywords from description/title for renaming, or manually rename task directory',
             details: { slug: slugToCheck, format: idInfo.format },
           });
         }
@@ -1865,7 +1865,7 @@ export async function analyzeProject(
           type: 'meaningless_id',
           severity: 'low',
           message: `${reason}: ${task.id}`,
-          suggestion: '使用 --fix 自动从描述/标题提取关键词重命名',
+          suggestion: 'Use --fix to auto-extract keywords from description/title for renaming',
           details: { format: idInfo.format },
         });
       }
@@ -1877,8 +1877,8 @@ export async function analyzeProject(
         taskId: task.id,
         type: 'invalid_status_value',
         severity: 'high',
-        message: `任务状态值无效: ${task.status}`,
-        suggestion: `使用有效状态: ${VALID_STATUSES.join(', ')}`,
+        message: `Task status value invalid: ${task.status}`,
+        suggestion: `Use valid status: ${VALID_STATUSES.join(', ')}`,
         details: { currentValue: task.status },
       });
     }
@@ -1889,8 +1889,8 @@ export async function analyzeProject(
         taskId: task.id,
         type: 'reopened_status',
         severity: 'high',
-        message: `任务使用已废弃的 reopened 状态（v4 已废弃，应使用 open + reopenCount 追踪）`,
-        suggestion: '使用 --fix 自动迁移: reopened → open，并记录 transitionNote',
+        message: `Task uses deprecated reopened status (deprecated in v4, use open + reopenCount instead)`,
+        suggestion: 'Use --fix to auto-migrate: reopened → open, and record transitionNote',
         details: { currentValue: task.status, targetValue: 'open' },
       });
     }
@@ -1901,8 +1901,8 @@ export async function analyzeProject(
         taskId: task.id,
         type: 'needs_human_status',
         severity: 'high',
-        message: `任务使用已废弃的 needs_human 状态（v4 已废弃，应使用 open + resumeAction 追踪）`,
-        suggestion: '使用 --fix 自动迁移: needs_human → open，并设置 resumeAction',
+        message: `Task uses deprecated needs_human status (deprecated in v4, use open + resumeAction instead)`,
+        suggestion: 'Use --fix to auto-migrate: needs_human → open, and set resumeAction',
         details: { currentValue: task.status, targetValue: 'open' },
       });
     }
@@ -1924,8 +1924,8 @@ export async function analyzeProject(
         taskId: task.id,
         type: 'deprecated_status_reference',
         severity: 'low',
-        message: `历史记录中引用了废弃状态: ${uniqueRefs}`,
-        suggestion: '使用 --fix 自动清理历史记录中的废弃状态引用',
+        message: `History references deprecated status: ${uniqueRefs}`,
+        suggestion: 'Use --fix to auto-clean deprecated status references from history',
         details: { deprecatedRefs: [...new Set(deprecatedStatusRefs)] },
       });
     }
@@ -1947,8 +1947,8 @@ export async function analyzeProject(
           taskId: task.id,
           type: 'status_reopen_mismatch',
           severity: 'medium',
-          message: `任务 reopenCount=${task.reopenCount} 但无对应的 reopen 流转记录`,
-          suggestion: '确保 reopen 操作有对应的 transitionNote 和 history 记录',
+          message: `Task reopenCount=${task.reopenCount} but no corresponding reopen transition record`,
+          suggestion: 'Ensure reopen operation has corresponding transitionNote and history records',
           details: { reopenCount: task.reopenCount, status: task.status },
         });
       }
@@ -1960,8 +1960,8 @@ export async function analyzeProject(
         taskId: task.id,
         type: 'invalid_type_value',
         severity: 'high',
-        message: `任务类型值无效: ${task.type}`,
-        suggestion: `使用有效类型: ${VALID_TYPES.join(', ')}`,
+        message: `Task type value invalid: ${task.type}`,
+        suggestion: `Use valid type: ${VALID_TYPES.join(', ')}`,
         details: { currentValue: task.type },
       });
     }
@@ -1972,8 +1972,8 @@ export async function analyzeProject(
         taskId: task.id,
         type: 'invalid_priority_value',
         severity: 'high',
-        message: `任务优先级值无效: ${task.priority}`,
-        suggestion: `使用有效优先级: ${VALID_PRIORITIES.join(', ')}`,
+        message: `Task priority value invalid: ${task.priority}`,
+        suggestion: `Use valid priority: ${VALID_PRIORITIES.join(', ')}`,
         details: { currentValue: task.priority },
       });
     }
@@ -1985,7 +1985,7 @@ export async function analyzeProject(
         type: 'invalid_timestamp_format',
         severity: 'medium',
         message: 'createdAt 不是有效的 ISO 时间戳',
-        suggestion: '使用 ISO 8601 格式，如 2026-03-19T10:00:00.000Z',
+        suggestion: 'Use ISO 8601 format, e.g., 2026-03-19T10:00:00.000Z',
         details: { field: 'createdAt', value: task.createdAt },
       });
     }
@@ -1996,7 +1996,7 @@ export async function analyzeProject(
         type: 'invalid_timestamp_format',
         severity: 'medium',
         message: 'updatedAt 不是有效的 ISO 时间戳',
-        suggestion: '使用 ISO 8601 格式，如 2026-03-19T10:00:00.000Z',
+        suggestion: 'Use ISO 8601 format, e.g., 2026-03-19T10:00:00.000Z',
         details: { field: 'updatedAt', value: task.updatedAt },
       });
     }
@@ -2011,8 +2011,8 @@ export async function analyzeProject(
           taskId: task.id,
           type: 'manual_verification',
           severity: 'high',
-          message: `有 ${manualCheckpoints.length} 个检查点使用了禁止的 manual 验证方法`,
-          suggestion: '将 manual 替换为 code_review/lint/functional_test/e2e_test/architect_review/automated 等具体验证方法',
+          message: `${manualCheckpoints.length} checkpoints use prohibited manual verification method`,
+          suggestion: 'Replace manual with specific verification methods like code_review/lint/functional_test/e2e_test/architect_review/automated',
           details: { checkpointIds: manualCheckpoints.map(cp => cp.id) },
         });
       }
@@ -2026,7 +2026,7 @@ export async function analyzeProject(
         type: 'missing_verification',
         severity: 'medium',
         message: '任务已 resolved 但缺少 verification 字段',
-        suggestion: '运行 analyze --fix 自动回填 verification 字段',
+        suggestion: 'Run analyze --fix to auto-populate verification field',
         details: { status: task.status, hasCheckpoints: !!(task.checkpoints && task.checkpoints.length > 0) },
       });
     }
@@ -2038,8 +2038,8 @@ export async function analyzeProject(
         taskId: task.id,
         type: 'inconsistent_status',
         severity: 'high',
-        message: `任务状态矛盾: status=resolved 但 verification.result=failed, checkpointCompletionRate=${task.verification.checkpointCompletionRate ?? 0}`,
-        suggestion: '运行 analyze --fix 自动将状态改为 open，或手动检查验收标准',
+        message: `Task status conflict: status=resolved but verification.result=failed, checkpointCompletionRate=${task.verification.checkpointCompletionRate ?? 0}`,
+        suggestion: 'Run analyze --fix to auto-change status to open, or manually check acceptance criteria',
         details: {
           status: task.status,
           verificationResult: task.verification.result,
@@ -2056,8 +2056,8 @@ export async function analyzeProject(
           taskId: task.id,
           type: 'invalid_parent_ref',
           severity: 'high',
-          message: `父任务 ${task.parentId} 不存在`,
-          suggestion: '删除无效的 parentId 或创建父任务',
+          message: `Parent task ${task.parentId} does not exist`,
+          suggestion: 'Delete invalid parentId or create parent task',
           details: { parentId: task.parentId },
         });
       } else {
@@ -2068,8 +2068,8 @@ export async function analyzeProject(
             taskId: task.id,
             type: 'subtask_not_in_parent',
             severity: 'medium',
-            message: `子任务未在父任务 ${task.parentId} 的 subtaskIds 中`,
-            suggestion: '将子任务 ID 添加到父任务的 subtaskIds 数组',
+            message: `Subtask not in parent task ${task.parentId} subtaskIds`,
+            suggestion: 'Add subtask ID to parent task subtaskIds array',
             details: { parentId: task.parentId },
           });
         }
@@ -2084,8 +2084,8 @@ export async function analyzeProject(
             taskId: task.id,
             type: 'invalid_subtask_ref',
             severity: 'medium',
-            message: `子任务 ${subtaskId} 不存在`,
-            suggestion: '从 subtaskIds 中移除无效引用或创建子任务',
+            message: `Subtask ${subtaskId} does not exist`,
+            suggestion: 'Remove invalid references from subtaskIds or create subtasks',
             details: { subtaskId },
           });
         } else {
@@ -2096,8 +2096,8 @@ export async function analyzeProject(
               taskId: task.id,
               type: 'parent_child_mismatch',
               severity: 'medium',
-              message: `子任务 ${subtaskId} 的 parentId 不指向当前任务`,
-              suggestion: `将子任务的 parentId 更新为 ${task.id}`,
+              message: `Subtask ${subtaskId} parentId does not point to current task`,
+              suggestion: `Update subtask parentId to ${task.id}`,
               details: { subtaskId, expectedParentId: task.id, actualParentId: subtask.parentId },
             });
           }
@@ -2113,8 +2113,8 @@ export async function analyzeProject(
             taskId: task.id,
             type: 'invalid_dependency_ref',
             severity: 'medium',
-            message: `依赖任务 ${depId} 不存在`,
-            suggestion: '从 dependencies 中移除无效引用或创建依赖任务',
+            message: `Dependency task ${depId} does not exist`,
+            suggestion: 'Remove invalid references from dependencies or create dependency tasks',
             details: { dependencyId: depId },
           });
         }
@@ -2130,8 +2130,8 @@ export async function analyzeProject(
             taskId: task.id,
             type: 'invalid_history_format',
             severity: 'low',
-            message: `history[${i}] 格式不正确: ${entryValidation.errors.join(', ')}`,
-            suggestion: '确保每个历史条目包含 timestamp (ISO格式) 和 action 字段',
+            message: `history[${i}] format incorrect: ${entryValidation.errors.join(', ')}`,
+            suggestion: 'Ensure each history entry contains timestamp (ISO format) and action fields',
             details: { index: i, errors: entryValidation.errors },
           });
         }
@@ -2147,8 +2147,8 @@ export async function analyzeProject(
             taskId: task.id,
             type: 'invalid_requirement_history_format',
             severity: 'low',
-            message: `requirementHistory[${i}] 格式不正确: ${reqValidation.errors.join(', ')}`,
-            suggestion: '确保每个需求变更条目包含 timestamp, version, newDescription, changeReason',
+            message: `requirementHistory[${i}] format incorrect: ${reqValidation.errors.join(', ')}`,
+            suggestion: 'Ensure each requirement change entry contains timestamp, version, newDescription, changeReason',
             details: { index: i, errors: reqValidation.errors },
           });
         }
@@ -2195,8 +2195,8 @@ export async function analyzeProject(
             taskId: task.id,
             type: 'missing_transition_note',
             severity: 'low',
-            message: `历史流转 ${statusKey} 缺少 transitionNote 记录`,
-            suggestion: '使用 --fix 自动从历史条目回填 transitionNote',
+            message: `History transition ${statusKey} missing transitionNote record`,
+            suggestion: 'Use --fix to auto-backfill transitionNote from history entries',
             details: {
               historyEntry: {
                 timestamp: entry.timestamp,
@@ -2278,8 +2278,8 @@ export async function analyzeProject(
           taskId: task.id,
           type: 'interrupted_task',
           severity: 'medium',
-          message: `in_progress 任务无活跃 Pipeline，已中断 ${interruptedDays} 天`,
-          suggestion: `建议: ${suggestion_reason}。使用 --fix 自动应用建议状态`,
+          message: `in_progress task has no active pipeline, interrupted for ${interruptedDays} days`,
+          suggestion: `Suggestion: ${suggestion_reason}. Use --fix to auto-apply suggested status`,
           details: {
             currentStatus: task.status,
             interruptedDays,
@@ -2310,8 +2310,8 @@ export async function analyzeProject(
         taskId: task.id,
         type: 'file_not_found',
         severity: 'high',
-        message: `任务引用了 ${missingRefs.length} 个不存在的文件: ${missingRefs.join(', ')}`,
-        suggestion: '检查文件路径是否正确，或移除对不存在文件的引用',
+        message: `Task references ${missingRefs.length} non-existent files: ${missingRefs.join(', ')}`,
+        suggestion: 'Check file paths are correct, or remove references to non-existent files',
         details: { missingFiles: missingRefs },
       });
     }
@@ -2331,8 +2331,8 @@ export async function analyzeProject(
             taskId: task.id,
             type: 'checkpoint_synced',
             severity: 'low',
-            message: `从任务描述中自动同步了检查点到 meta.json`,
-            suggestion: '已自动修复，无需手动操作',
+            message: `Auto-synced checkpoints from task description to meta.json`,
+            suggestion: 'Auto-fixed, no manual action needed',
           });
         }
       } catch (e) {
@@ -2355,8 +2355,8 @@ export async function analyzeProject(
         taskId: '__global__',
         type: 'low_checkpoint_coverage',
         severity: 'medium',
-        message: `检查点覆盖率 ${(coverageRate * 100).toFixed(1)}% 低于配置阈值 ${(analyzeConfig.minCheckpointCoverage * 100).toFixed(1)}%`,
-        suggestion: '为缺少检查点的任务添加验收标准，或运行 analyze --fix-checkpoints 自动生成',
+        message: `Checkpoint coverage ${(coverageRate * 100).toFixed(1)}% is below configured threshold ${(analyzeConfig.minCheckpointCoverage * 100).toFixed(1)}%`,
+        suggestion: 'Add acceptance criteria for tasks missing checkpoints, or run analyze --fix-checkpoints to auto-generate',
         details: {
           coverageRate: Math.round(coverageRate * 100) / 100,
           threshold: analyzeConfig.minCheckpointCoverage,
@@ -2386,8 +2386,8 @@ export async function analyzeProject(
         taskId: subtask.id,
         type: 'orphan',
         severity: 'medium',
-        message: `子任务的父任务 ${parentId} 不存在`,
-        suggestion: '删除孤儿子任务或重新创建父任务',
+        message: `Subtask parent ${parentId} does not exist`,
+        suggestion: 'Delete orphan subtasks or recreate parent task',
       });
     }
   }
@@ -2415,8 +2415,8 @@ export async function analyzeProject(
         taskId: '__archive__',
         type: 'abandoned_residual',
         severity: 'low',
-        message: `归档目录中存在 ${abandonedDirs.length} 个 abandoned 任务残留`,
-        suggestion: '运行 task purge -y 清除残留的 abandoned 任务',
+        message: `Archive directory contains ${abandonedDirs.length} abandoned task residuals`,
+        suggestion: 'Run task purge -y to clear residual abandoned tasks',
         details: { count: abandonedDirs.length, tasks: abandonedDirs },
       });
     }
@@ -2444,7 +2444,7 @@ export async function analyzeProject(
       taskId: orphan.nodeId,
       type: 'orphan',
       severity: orphan.isInboundBridgeTarget ? 'medium' : 'low',
-      message: `孤立任务: ${orphan.node.title || orphan.nodeId}`,
+      message: `Orphan task: ${orphan.node.title || orphan.nodeId}`,
       suggestion: orphan.isInboundBridgeTarget
         ? '该任务可能有隐含的依赖关系，请确认是否独立'
         : '该任务为独立模块，无需处理',
@@ -2458,7 +2458,7 @@ export async function analyzeProject(
       type: 'bridge_nodes',
       severity: 'low',
       message: renderBridgeReport(graphBridges),
-      suggestion: '桥接节点连接多个任务树，是关键依赖路径',
+      suggestion: 'Bridge node connects multiple task trees, is critical dependency path',
     });
   }
 
@@ -2468,8 +2468,8 @@ export async function analyzeProject(
       taskId: rd.from,
       type: 'redundant_dep',
       severity: 'low',
-      message: `冗余依赖: ${rd.from} → ${rd.to} (可通过 ${rd.viaPath.join(' → ')} 达到)`,
-      suggestion: `可移除直接依赖 ${rd.from} → ${rd.to}`,
+      message: `Redundant dependency: ${rd.from} → ${rd.to} (can be reached via ${rd.viaPath.join(' → ')})`,
+      suggestion: `Can remove direct dependency ${rd.from} → ${rd.to}`,
       details: { from: rd.from, to: rd.to, viaPath: rd.viaPath },
     });
   }
@@ -2487,8 +2487,8 @@ export async function analyzeProject(
           taskId,
           type: 'missing_inferred_dependency',
           severity: 'low',
-          message: `与 ${dep.depTaskId} 共享文件但未声明依赖: ${dep.overlappingFiles.join(', ')}`,
-          suggestion: `考虑将 ${dep.depTaskId} 添加为显式依赖`,
+          message: `Shares files with ${dep.depTaskId} but dependency not declared: ${dep.overlappingFiles.join(', ')}`,
+          suggestion: `Consider adding ${dep.depTaskId} as explicit dependency`,
           details: { depTaskId: dep.depTaskId, overlappingFiles: dep.overlappingFiles },
         });
       }
@@ -2536,7 +2536,7 @@ export async function showAnalysis(options: { compact?: boolean; deepAnalyze?: b
       }
     } catch (e) {
       if (e instanceof AnalyzeError) {
-        console.error(`❌ check-range 参数错误: ${e.message}`);
+        console.error(`❌ check-range parameter error: ${e.message}`);
         if (e.detail) console.error(`   ${e.detail}`);
         process.exit(1);
       }
@@ -2548,17 +2548,17 @@ export async function showAnalysis(options: { compact?: boolean; deepAnalyze?: b
 
   console.log('');
   console.log(separator);
-  console.log('🔍 项目问题分析');
+  console.log('🔍 Project Issue Analysis');
   console.log(separator);
   console.log('');
 
   // 显示问题摘要
-  console.log('⚠️  问题摘要:');
-  console.log(`   过期任务: ${result.stats.stale}`);
-  console.log(`   被阻塞: ${result.stats.blocked}`);
-  console.log(`   孤儿任务: ${result.stats.orphan}`);
-  console.log(`   循环依赖: ${result.stats.cycle}`);
-  console.log(`   Abandoned 残留: ${result.stats.abandonedResidual}`);
+  console.log('⚠️  Issue Summary:');
+  console.log(`   Stale tasks: ${result.stats.stale}`);
+  console.log(`   Blocked: ${result.stats.blocked}`);
+  console.log(`   Orphan tasks: ${result.stats.orphan}`);
+  console.log(`   Cyclic dependencies: ${result.stats.cycle}`);
+  console.log(`   Abandoned residual: ${result.stats.abandonedResidual}`);
 
   // 依赖图异常摘要
   const graphAnomalyIssues = result.issues.filter(
@@ -2566,7 +2566,7 @@ export async function showAnalysis(options: { compact?: boolean; deepAnalyze?: b
   );
   if (graphAnomalyIssues.length > 0) {
     console.log('');
-    console.log('🔗 依赖关系分析:');
+    console.log('🔗 Dependency Analysis:');
     const anomalySummary = renderAnomalySummary(
       graphAnomalyIssues.map(i => ({
         type: i.type as any,
@@ -2579,23 +2579,23 @@ export async function showAnalysis(options: { compact?: boolean; deepAnalyze?: b
     console.log(anomalySummary.split('\n').map(l => `   ${l}`).join('\n'));
   }
   if (result.stats.resolvedWithoutVerification > 0) {
-    console.log(`   缺少 verification: ${result.stats.resolvedWithoutVerification}`);
+    console.log(`   Missing verification: ${result.stats.resolvedWithoutVerification}`);
   }
   if (result.stats.inconsistentStatus > 0) {
-    console.log(`   状态矛盾 (resolved+failed): ${result.stats.inconsistentStatus}`);
+    console.log(`   Status mismatch (resolved+failed): ${result.stats.inconsistentStatus}`);
   }
   if (result.stats.fileNotFound > 0) {
-    console.log(`   文件不存在引用: ${result.stats.fileNotFound}`);
+    console.log(`   File not found references: ${result.stats.fileNotFound}`);
   }
   if (result.stats.ignored > 0) {
-    console.log(`   已忽略 (配置): ${result.stats.ignored}`);
+    console.log(`   Ignored (config): ${result.stats.ignored}`);
   }
   console.log('');
 
   // 显示详细问题
   if (result.issues.length > 0) {
     console.log(separator);
-    console.log('📋 详细问题列表');
+    console.log('📋 Detailed Issue List');
     console.log(separator);
     console.log('');
 
@@ -2608,17 +2608,17 @@ export async function showAnalysis(options: { compact?: boolean; deepAnalyze?: b
     for (const issue of sortedIssues) {
       const severityIcon = issue.severity === 'high' ? '🔴' : issue.severity === 'medium' ? '🟠' : '🟡';
       console.log(`${severityIcon} [${issue.taskId}] ${issue.message}`);
-      console.log(`   类型: ${issue.type}`);
-      console.log(`   建议: ${issue.suggestion}`);
+      console.log(`   Type: ${issue.type}`);
+      console.log(`   Suggestion: ${issue.suggestion}`);
       console.log('');
     }
   } else {
-    console.log('✅ 未发现问题，项目状态良好！');
+    console.log('✅ No issues found, project status is healthy!');
   }
 
   console.log(separator);
   console.log('');
-  console.log('💡 提示: 使用 `status` 命令查看完整统计信息');
+  console.log('💡 Tip: Use the `status` command to view full statistics');
   console.log('');
 
   // CP-9: 记录 analyze 埋点（问题分布 + 耗时）
@@ -2660,7 +2660,7 @@ export async function showStatus(
   cwd: string = process.cwd()
 ): Promise<void> {
   if (!isInitialized(cwd)) {
-    console.error('错误: 项目未初始化。请先运行 `projmnt4claude setup`');
+    console.error('Error: Project not initialized. Please run `projmnt4claude setup` first');
     process.exit(1);
   }
 
@@ -2706,30 +2706,30 @@ export async function showStatus(
 
   console.log('');
   console.log(separator);
-  console.log('📋 项目状态摘要');
+  console.log('📋 Project Status Summary');
   console.log(separator);
   console.log('');
 
   // 基本统计
-  console.log('📊 任务统计:');
-  console.log(`   总数: ${tasks.length}`);
+  console.log('📊 Task Statistics:');
+  console.log(`   Total: ${tasks.length}`);
   if (result.stats.subtasks > 0) {
-    console.log(`   ├── 父任务: ${result.stats.parentTasks}`);
-    console.log(`   └── 子任务: ${result.stats.subtasks} (完成率: ${result.stats.subtaskCompletionRate}%)`);
+    console.log(`   ├── Parent tasks: ${result.stats.parentTasks}`);
+    console.log(`   └── Subtasks: ${result.stats.subtasks} (completion: ${result.stats.subtaskCompletionRate}%)`);
   }
-  console.log(`   待处理: ${result.stats.byStatus.open}`);
-  console.log(`   进行中: ${result.stats.byStatus.in_progress}`);
-  console.log(`   已完成: ${result.stats.byStatus.resolved + result.stats.byStatus.closed}`);
+  console.log(`   Open: ${result.stats.byStatus.open}`);
+  console.log(`   In progress: ${result.stats.byStatus.in_progress}`);
+  console.log(`   Completed: ${result.stats.byStatus.resolved + result.stats.byStatus.closed}`);
   const reopenStats = calculateReopenStats(tasks);
-  console.log(`   已重开: ${reopenStats.reopenCount}`);
-  console.log(`   已放弃: ${result.stats.byStatus.abandoned}`);
+  console.log(`   Reopened: ${reopenStats.reopenCount}`);
+  console.log(`   Abandoned: ${result.stats.byStatus.abandoned}`);
   if (reopenStats.reopenCount > 0) {
-    console.log('🔄 Reopen 统计:');
-    console.log(`   当前 reopen 任务数: ${reopenStats.reopenCount}`);
+    console.log('🔄 Reopen Statistics:');
+    console.log(`   Current reopened tasks: ${reopenStats.reopenCount}`);
     if (reopenStats.topReopened.length > 0) {
       console.log(`   Reopen Top 10:`);
       reopenStats.topReopened.slice(0, 10).forEach((item, index) => {
-        console.log(`     ${index + 1}. ${item.taskId} (${item.count}次) - ${item.title}`);
+        console.log(`     ${index + 1}. ${item.taskId} (${item.count}x) - ${item.title}`);
       });
     }
     console.log('');
@@ -2738,27 +2738,27 @@ export async function showStatus(
   // 归档统计
   if (includeArchived) {
     const archivedCount = countArchivedTasks(cwd);
-    console.log('📦 归档统计:');
-    console.log(`   已归档任务: ${archivedCount}`);
+    console.log('📦 Archive Statistics:');
+    console.log(`   Archived tasks: ${archivedCount}`);
     console.log('');
   }
 
   // 健康指标
   const healthIcon = healthScore >= 80 ? '🟢' : healthScore >= 50 ? '🟡' : '🔴';
 
-  console.log('💚 健康指标:');
-  console.log(`   健康分数: ${healthIcon} ${healthScore}/100`);
-  console.log(`   过期任务: ${result.stats.stale}`);
-  console.log(`   被阻塞: ${result.stats.blocked}`);
-  console.log(`   循环依赖: ${result.stats.cycle}`);
+  console.log('💚 Health Metrics:');
+  console.log(`   Health score: ${healthIcon} ${healthScore}/100`);
+  console.log(`   Stale tasks: ${result.stats.stale}`);
+  console.log(`   Blocked: ${result.stats.blocked}`);
+  console.log(`   Cyclic dependencies: ${result.stats.cycle}`);
   console.log('');
 
   // 优先级分布
-  console.log('🎯 优先级分布:');
-  console.log(`   🔴 P0 (紧急): ${result.stats.byPriority.P0}`);
-  console.log(`   🟠 P1 (高): ${result.stats.byPriority.P1}`);
-  console.log(`   🟡 P2 (中): ${result.stats.byPriority.P2}`);
-  console.log(`   🟢 P3 (低): ${result.stats.byPriority.P3}`);
+  console.log('🎯 Priority Distribution:');
+  console.log(`   🔴 P0 (urgent): ${result.stats.byPriority.P0}`);
+  console.log(`   🟠 P1 (high): ${result.stats.byPriority.P1}`);
+  console.log(`   🟡 P2 (medium): ${result.stats.byPriority.P2}`);
+  console.log(`   🟢 P3 (low): ${result.stats.byPriority.P3}`);
   if (result.stats.byPriority.Q1 + result.stats.byPriority.Q2 + result.stats.byPriority.Q3 + result.stats.byPriority.Q4 > 0) {
     console.log(`   📊 Q1-Q4: ${result.stats.byPriority.Q1 + result.stats.byPriority.Q2 + result.stats.byPriority.Q3 + result.stats.byPriority.Q4}`);
   }
@@ -3475,16 +3475,16 @@ export async function fixCheckpoints(
   const analyzeConfig = readAnalyzeConfig(cwd);
   if (analyzeConfig.autoGenerateCheckpoints === false) {
     console.log('');
-    console.log('⏭️  检查点自动生成已禁用 (analyze.autoGenerateCheckpoints = false)');
-    console.log('   提示: 在 .projmnt4claude/config.json 中设置 analyze.autoGenerateCheckpoints = true 以启用');
+    console.log('⏭️  Auto-generate checkpoints disabled (analyze.autoGenerateCheckpoints = false)');
+    console.log('   Tip: Set analyze.autoGenerateCheckpoints = true in .projmnt4claude/config.json to enable');
     console.log('');
     return;
   }
 
-  const generatorLabel = analyzeConfig.checkpointGenerator === 'rule-based' ? '规则引擎' : analyzeConfig.checkpointGenerator === 'ai-powered' ? 'AI 驱动' : '混合';
+  const generatorLabel = analyzeConfig.checkpointGenerator === 'rule-based' ? 'Rule Engine' : analyzeConfig.checkpointGenerator === 'ai-powered' ? 'AI Powered' : 'Hybrid';
   console.log('');
   console.log('━'.repeat(SEPARATOR_WIDTH));
-  console.log(`🔧 ${generatorLabel}生成检查点 (模式: ${analyzeConfig.checkpointGenerator})`);
+  console.log(`🔧 ${generatorLabel} Generating Checkpoints (mode: ${analyzeConfig.checkpointGenerator})`);
   console.log('━'.repeat(SEPARATOR_WIDTH));
   console.log('');
 
@@ -3494,7 +3494,7 @@ export async function fixCheckpoints(
     // 修复指定任务
     const task = readTaskMeta(options.taskId, cwd);
     if (!task) {
-      console.error(`❌ 任务 ${options.taskId} 不存在`);
+      console.error(`❌ Task ${options.taskId} not found`);
       return;
     }
     tasksToFix = [task];
@@ -3514,11 +3514,11 @@ export async function fixCheckpoints(
   }
 
   if (tasksNeedingFix.length === 0) {
-    console.log('✅ 所有任务的检查点都已配置');
+    console.log('✅ All tasks have checkpoints configured');
     return;
   }
 
-  console.log(`📋 发现 ${tasksNeedingFix.length} 个任务需要生成检查点:\n`);
+  console.log(`📋 Found ${tasksNeedingFix.length} tasks needing checkpoints:\n`);
 
   // 显示任务列表
   tasksNeedingFix.slice(0, 10).forEach((task, index) => {
@@ -3526,7 +3526,7 @@ export async function fixCheckpoints(
   });
 
   if (tasksNeedingFix.length > 10) {
-    console.log(`   ... 还有 ${tasksNeedingFix.length - 10} 个任务`);
+    console.log(`   ... and ${tasksNeedingFix.length - 10} more tasks`);
   }
   console.log('');
 
@@ -3535,12 +3535,12 @@ export async function fixCheckpoints(
     const response = await prompts({
       type: 'confirm',
       name: 'proceed',
-      message: `是否为这 ${tasksNeedingFix.length} 个任务生成检查点?`,
+      message: `Generate checkpoints for these ${tasksNeedingFix.length} tasks?`,
       initial: true,
     });
 
     if (!response.proceed) {
-      console.log('已取消');
+      console.log('Cancelled');
       return;
     }
   }
@@ -3550,7 +3550,7 @@ export async function fixCheckpoints(
   let skippedCount = 0;
 
   for (const task of tasksNeedingFix) {
-    console.log(`\n处理 ${task.id}...`);
+    console.log(`\nProcessing ${task.id}...`);
     const result = fixTaskCheckpoints(task.id, cwd);
 
     if (result.fixed) {
@@ -3564,7 +3564,7 @@ export async function fixCheckpoints(
 
   console.log('');
   console.log('━'.repeat(SEPARATOR_WIDTH));
-  console.log(`✅ 完成: 修复 ${fixedCount} 个，跳过 ${skippedCount} 个`);
+  console.log(`✅ Done: Fixed ${fixedCount}, Skipped ${skippedCount}`);
   console.log('━'.repeat(SEPARATOR_WIDTH));
 }
 
@@ -3914,22 +3914,22 @@ function classifyBug(fields: BugReportFields): {
   const suggestions: Array<{ priority: number; suggestion: string }> = [];
 
   if (!fields.rootCause) {
-    suggestions.push({ priority: 1, suggestion: '进行根因分析: 使用 debugger 或日志定位根本原因' });
+    suggestions.push({ priority: 1, suggestion: 'Perform root cause analysis: use debugger or logs to locate root cause' });
   }
   if (fields.reproductionSteps.length === 0) {
-    suggestions.push({ priority: 2, suggestion: '补充复现步骤: 提供最小可复现示例' });
+    suggestions.push({ priority: 2, suggestion: 'Add reproduction steps: provide minimal reproducible example' });
   }
   if (fields.relatedFiles.length === 0) {
-    suggestions.push({ priority: 3, suggestion: '定位相关文件: 通过错误堆栈或代码搜索缩小范围' });
+    suggestions.push({ priority: 3, suggestion: 'Locate related files: narrow down via error stack or code search' });
   }
   if (fields.suggestedFix) {
-    suggestions.push({ priority: 4, suggestion: `验证修复方案: ${fields.suggestedFix.substring(0, 100)}` });
+    suggestions.push({ priority: 4, suggestion: `Verify fix: ${fields.suggestedFix.substring(0, 100)}` });
   } else {
-    suggestions.push({ priority: 4, suggestion: '制定修复方案: 基于根因分析提出至少一个修复方案' });
+    suggestions.push({ priority: 4, suggestion: 'Develop fix: propose at least one fix based on root cause analysis' });
   }
-  suggestions.push({ priority: 5, suggestion: '添加回归测试: 编写测试防止问题复发' });
+  suggestions.push({ priority: 5, suggestion: 'Add regression test: write tests to prevent issue recurrence' });
   if (severity === 'critical' || severity === 'high') {
-    suggestions.push({ priority: 6, suggestion: '更新文档: 记录已知问题和解决方案供团队参考' });
+    suggestions.push({ priority: 6, suggestion: 'Update documentation: record known issues and solutions for team reference' });
   }
 
   return { classification, severity, rootCauseVerification, impactAssessment, suggestions };
@@ -4190,10 +4190,10 @@ export async function analyzeBugReport(
 
   console.log('');
   console.log('━'.repeat(SEPARATOR_WIDTH));
-  console.log('🐛 Bug Report 分析模式');
+  console.log('🐛 Bug Report Analysis Mode');
   console.log('━'.repeat(SEPARATOR_WIDTH));
   console.log('');
-  console.log(`  输入: ${resolvedPath}`);
+  console.log(`  Input: ${resolvedPath}`);
   console.log('');
 
   // 读取 bug report 内容
@@ -4211,39 +4211,39 @@ export async function analyzeBugReport(
       .map(f => ({ name: f, path: path.join(resolvedPath, f), mtime: fs.statSync(path.join(resolvedPath, f)).mtimeMs }))
       .sort((a, b) => b.mtime - a.mtime);
     if (sorted.length > 1) {
-      console.log(`  ⚠️  目录中有 ${sorted.length} 个 Markdown 文件，仅分析最新的: ${sorted[0]!.name}`);
-      console.log(`     其他文件: ${sorted.slice(1).map(f => f.name).join(', ')}`);
+      console.log(`  ⚠️  Directory has ${sorted.length} Markdown files, analyzing latest: ${sorted[0]!.name}`);
+      console.log(`     Other files: ${sorted.slice(1).map(f => f.name).join(', ')}`);
     }
     const latestFile = sorted[0];
     if (!latestFile) {
       throw new Error(`目录中未找到有效的 Markdown 文件: ${resolvedPath}`);
     }
     markdown = fs.readFileSync(latestFile.path, 'utf-8');
-    console.log(`  使用文件: ${latestFile.name}`);
+    console.log(`  Using file: ${latestFile.name}`);
   } else {
     markdown = fs.readFileSync(resolvedPath, 'utf-8');
   }
 
   // CP-6: 提取 bug report 字段
-  console.log('  📋 提取 Bug Report 字段...');
+  console.log('  📋 Extracting Bug Report fields...');
   const fields = extractBugReportFields(markdown);
-  console.log(`    问题描述: ${fields.problem.substring(0, 60)}...`);
-  console.log(`    复现步骤: ${fields.reproductionSteps.length} 项`);
-  console.log(`    相关文件: ${fields.relatedFiles.length} 个`);
+  console.log(`    Problem: ${fields.problem.substring(0, 60)}...`);
+  console.log(`    Reproduction steps: ${fields.reproductionSteps.length} items`);
+  console.log(`    Related files: ${fields.relatedFiles.length} files`);
   console.log('');
 
   // CP-7: 加载日志上下文
-  console.log('  📂 加载日志上下文...');
+  console.log('  📂 Loading log context...');
   const keywords = [
     ...fields.problem.split(/\s+/).filter(w => w.length > 3).slice(0, 5),
     ...(fields.errorMessage ? [fields.errorMessage.substring(0, 30)] : []),
   ];
   const logContext = loadLogContext(cwd, keywords);
-  console.log(`    相关日志: ${logContext.length} 条`);
+  console.log(`    Related logs: ${logContext.length} entries`);
   console.log('');
 
   // CP-8: 分类和严重性评估（规则引擎基础 + AI 增强）
-  console.log('  🔍 执行分类和严重性评估...');
+  console.log('  🔍 Performing classification and severity assessment...');
   const analysis = classifyBug(fields);
 
   // CP-8: AI 辅助深层分析 — 当未禁用 AI 时调用 AIMetadataAssistant 增强规则引擎结果
@@ -4254,7 +4254,7 @@ export async function analyzeBugReport(
     enabled: options.noAi !== true,
     aiCall: () => new AIMetadataAssistant(cwd).analyzeBugReport(markdown, logContextStr, { cwd }),
     fallback: { title: null, description: null, type: null, priority: null, checkpoints: null, rootCause: null, impactScope: null, aiUsed: false },
-    operationName: 'Bug 报告分析',
+    operationName: 'Bug Report Analysis',
   });
 
   if (aiResult.aiUsed) {
@@ -4307,12 +4307,12 @@ export async function analyzeBugReport(
       aiEnhancedFields.push('suggestions');
     }
 
-    console.log(`    ✅ AI 分析完成，增强了 ${aiEnhancedFields.length} 个字段`);
+    console.log(`    ✅ AI analysis complete, enhanced ${aiEnhancedFields.length} fields`);
   }
 
-  console.log(`    分类: ${analysis.classification.category}/${analysis.classification.subcategory}`);
-  console.log(`    严重性: ${analysis.severity}`);
-  console.log(`    根因验证: ${analysis.rootCauseVerification}`);
+  console.log(`    Classification: ${analysis.classification.category}/${analysis.classification.subcategory}`);
+  console.log(`    Severity: ${analysis.severity}`);
+  console.log(`    Root cause verification: ${analysis.rootCauseVerification}`);
   console.log('');
 
   // CP-9 & CP-10: 生成结构化 Markdown（与 init-requirement detailed template 对齐）
@@ -4324,7 +4324,7 @@ export async function analyzeBugReport(
   ensureDir(reportsDir);
   const reportPath = path.join(reportsDir, `bug-analysis-${timestamp}.md`);
   fs.writeFileSync(reportPath, reportMarkdown, 'utf-8');
-  console.log(`  📄 报告已写入: ${reportPath}`);
+  console.log(`  📄 Report written to: ${reportPath}`);
   console.log('');
 
   // 生成需求描述（可用于 init-requirement）
@@ -4349,25 +4349,25 @@ export async function analyzeBugReport(
     const trainingConfig = config?.training as Record<string, unknown> | undefined;
     const trainingEnabled = trainingConfig?.exportEnabled === true;
     if (!trainingEnabled) {
-      console.log('  ⚠️  训练数据导出未启用。请在 config.json 中设置 training.exportEnabled: true');
+      console.log('  ⚠️  Training data export not enabled. Please set training.exportEnabled: true in config.json');
     } else {
       const trainingDir = (trainingConfig.outputDir as string) || '.projmnt4claude/training-data/';
       const resolvedTrainingDir = path.isAbsolute(trainingDir) ? trainingDir : path.join(getProjectDir(cwd), trainingDir);
       ensureDir(resolvedTrainingDir);
       const exportPath = path.join(resolvedTrainingDir, 'bug-analysis-training.jsonl');
       exportTrainingDataToJsonl(fields, result, exportPath);
-      console.log(`  📊 训练数据已追加: ${exportPath}`);
+      console.log(`  📊 Training data appended: ${exportPath}`);
       console.log('');
     }
   }
 
   // CP-3: 自动流转提示
   console.log('━'.repeat(SEPARATOR_WIDTH));
-  console.log('💡 下一步:');
-  console.log(`   将分析结果转化为改进任务:`);
+  console.log('💡 Next Steps:');
+  console.log(`   Convert analysis results to improvement task:`);
   console.log(`   projmnt4claude init-requirement "${requirementDescription.replace(/"/g, '\\"').substring(0, 200)}..." --template detailed`);
   console.log('');
-  console.log(`   或直接使用报告文件:`);
+  console.log(`   Or use the report file directly:`);
   console.log(`   projmnt4claude init-requirement "$(cat ${reportPath})" --template detailed`);
   console.log('━'.repeat(SEPARATOR_WIDTH));
   console.log('');

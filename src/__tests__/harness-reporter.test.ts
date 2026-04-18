@@ -1,8 +1,8 @@
 import { describe, test, expect, beforeEach, afterEach } from 'bun:test';
 import * as fs from 'fs';
 import * as path from 'path';
-import * as os from 'os';
 import { HarnessReporter } from '../utils/harness-reporter.js';
+import { createIsolatedTestEnv, type IsolatedTestEnv } from '../utils/test-env.js';
 import { saveReport, archiveReportIfExists } from '../utils/harness-helpers.js';
 import type {
   HarnessConfig,
@@ -75,15 +75,15 @@ function createTestSummary(overrides: Partial<ExecutionSummary> = {}): Execution
 // ============== formatSummaryReport ==============
 
 describe('HarnessReporter: formatSummaryReport', () => {
-  let tmpDir: string;
+  let env: IsolatedTestEnv;
   let reporter: HarnessReporter;
 
-  beforeEach(() => {
-    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'harness-reporter-test-'));
-    reporter = new HarnessReporter(createTestConfig(tmpDir));
+  beforeEach(async () => {
+    env = await createIsolatedTestEnv();
+    reporter = new HarnessReporter(createTestConfig(env.tempDir));
   });
   afterEach(() => {
-    fs.rmSync(tmpDir, { recursive: true, force: true });
+    env.cleanup();
   });
 
   test('includes statistics overview with correct values', () => {
@@ -167,15 +167,15 @@ describe('HarnessReporter: formatSummaryReport', () => {
 // ============== formatTaskOverview ==============
 
 describe('HarnessReporter: formatTaskOverview', () => {
-  let tmpDir: string;
+  let env: IsolatedTestEnv;
   let reporter: HarnessReporter;
 
-  beforeEach(() => {
-    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'harness-task-overview-'));
-    reporter = new HarnessReporter(createTestConfig(tmpDir));
+  beforeEach(async () => {
+    env = await createIsolatedTestEnv();
+    reporter = new HarnessReporter(createTestConfig(env.tempDir));
   });
   afterEach(() => {
-    fs.rmSync(tmpDir, { recursive: true, force: true });
+    env.cleanup();
   });
 
   test('includes task metadata (title, type, priority, status)', () => {
@@ -240,15 +240,15 @@ describe('HarnessReporter: formatTaskOverview', () => {
 // ============== generateJSONSummary ==============
 
 describe('HarnessReporter: generateJSONSummary', () => {
-  let tmpDir: string;
+  let env: IsolatedTestEnv;
   let reporter: HarnessReporter;
 
-  beforeEach(() => {
-    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'harness-json-summary-'));
-    reporter = new HarnessReporter(createTestConfig(tmpDir));
+  beforeEach(async () => {
+    env = await createIsolatedTestEnv();
+    reporter = new HarnessReporter(createTestConfig(env.tempDir));
   });
   afterEach(() => {
-    fs.rmSync(tmpDir, { recursive: true, force: true });
+    env.cleanup();
   });
 
   test('produces valid JSON with correct fields', () => {
@@ -303,22 +303,22 @@ describe('HarnessReporter: generateJSONSummary', () => {
 // ============== generateSummaryReport (file write) ==============
 
 describe('HarnessReporter: generateSummaryReport', () => {
-  let tmpDir: string;
+  let env: IsolatedTestEnv;
   let reporter: HarnessReporter;
 
-  beforeEach(() => {
-    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'harness-summary-write-'));
-    reporter = new HarnessReporter(createTestConfig(tmpDir));
+  beforeEach(async () => {
+    env = await createIsolatedTestEnv();
+    reporter = new HarnessReporter(createTestConfig(env.tempDir));
   });
   afterEach(() => {
-    fs.rmSync(tmpDir, { recursive: true, force: true });
+    env.cleanup();
   });
 
   test('writes summary report file to disk', async () => {
     const summary = createTestSummary({ totalTasks: 1, passed: 1, failed: 0 });
     await reporter.generateSummaryReport(summary);
 
-    const reportsDir = path.join(tmpDir, '.projmnt4claude', 'reports', 'harness');
+    const reportsDir = path.join(env.tempDir, '.projmnt4claude', 'reports', 'harness');
     expect(fs.existsSync(reportsDir)).toBe(true);
 
     const files = fs.readdirSync(reportsDir).filter(f => f.startsWith('summary-') && f.endsWith('.md'));
@@ -333,22 +333,22 @@ describe('HarnessReporter: generateSummaryReport', () => {
 // ============== generateTaskReport (file write) ==============
 
 describe('HarnessReporter: generateTaskReport', () => {
-  let tmpDir: string;
+  let env: IsolatedTestEnv;
   let reporter: HarnessReporter;
 
-  beforeEach(() => {
-    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'harness-task-report-'));
-    reporter = new HarnessReporter(createTestConfig(tmpDir));
+  beforeEach(async () => {
+    env = await createIsolatedTestEnv();
+    reporter = new HarnessReporter(createTestConfig(env.tempDir));
   });
   afterEach(() => {
-    fs.rmSync(tmpDir, { recursive: true, force: true });
+    env.cleanup();
   });
 
   test('writes overview.md in task report directory', async () => {
     const record = createTestRecord();
     await reporter.generateTaskReport(record);
 
-    const taskDir = path.join(tmpDir, '.projmnt4claude', 'reports', 'harness', record.taskId);
+    const taskDir = path.join(env.tempDir, '.projmnt4claude', 'reports', 'harness', record.taskId);
     expect(fs.existsSync(taskDir)).toBe(true);
 
     const overviewPath = path.join(taskDir, 'overview.md');
@@ -363,17 +363,17 @@ describe('HarnessReporter: generateTaskReport', () => {
 // ============== saveReport (harness-helpers) ==============
 
 describe('saveReport (harness-helpers)', () => {
-  let tmpDir: string;
+  let env: IsolatedTestEnv;
 
-  beforeEach(() => {
-    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'harness-save-report-'));
+  beforeEach(async () => {
+    env = await createIsolatedTestEnv();
   });
   afterEach(() => {
-    fs.rmSync(tmpDir, { recursive: true, force: true });
+    env.cleanup();
   });
 
   test('creates directory and writes report file', async () => {
-    const reportPath = path.join(tmpDir, 'reports', 'test-report.md');
+    const reportPath = path.join(env.tempDir, 'reports', 'test-report.md');
     await saveReport(reportPath, '# Test Report\nHello world');
     expect(fs.existsSync(reportPath)).toBe(true);
     const content = fs.readFileSync(reportPath, 'utf-8');
@@ -381,7 +381,7 @@ describe('saveReport (harness-helpers)', () => {
   });
 
   test('overwrites existing report file', async () => {
-    const reportPath = path.join(tmpDir, 'report.md');
+    const reportPath = path.join(env.tempDir, 'report.md');
     await saveReport(reportPath, 'version 1');
     await saveReport(reportPath, 'version 2');
     const content = fs.readFileSync(reportPath, 'utf-8');
@@ -389,11 +389,11 @@ describe('saveReport (harness-helpers)', () => {
   });
 
   test('archives previous report when overwriting', async () => {
-    const reportPath = path.join(tmpDir, 'report.md');
+    const reportPath = path.join(env.tempDir, 'report.md');
     await saveReport(reportPath, 'original content');
     await saveReport(reportPath, 'new content');
 
-    const archiveDir = path.join(tmpDir, 'archive');
+    const archiveDir = path.join(env.tempDir, 'archive');
     expect(fs.existsSync(archiveDir)).toBe(true);
     const archivedFiles = fs.readdirSync(archiveDir);
     expect(archivedFiles.length).toBe(1);
@@ -404,7 +404,7 @@ describe('saveReport (harness-helpers)', () => {
   });
 
   test('creates nested directories as needed', async () => {
-    const reportPath = path.join(tmpDir, 'a', 'b', 'c', 'deep-report.md');
+    const reportPath = path.join(env.tempDir, 'a', 'b', 'c', 'deep-report.md');
     await saveReport(reportPath, 'deep content');
     expect(fs.existsSync(reportPath)).toBe(true);
   });

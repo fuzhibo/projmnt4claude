@@ -15,7 +15,7 @@ import { syncCheckpointsToMeta, filterLowQualityCheckpoints, convertParsedCheckp
 import { inferDependencies as inferDependenciesUnified, type InferredDependency } from '../utils/dependency-engine';
 import { DependencyGraph, validateNewTaskDeps } from '../utils/dependency-graph';
 import type { TaskMeta, TaskPriority, TaskStatus, TaskType } from '../types/task';
-import type { RequirementDecomposition, DecomposedTaskItem } from '../types/decomposition';
+import type { RequirementDecomposition, DecomposedTaskItem, DecomposedItem } from '../types/decomposition';
 import { createDefaultTaskMeta, inferTaskType, validateCheckpointVerification } from '../types/task';
 import { SEPARATOR_WIDTH } from '../utils/format';
 import { createLogger, type InstrumentationRecord, type AICostSummary } from '../utils/logger';
@@ -212,32 +212,32 @@ export async function initRequirement(
   const trimmedDesc = description?.trim() ?? '';
   if (trimmedDesc.length === 0) {
     console.error('');
-    console.error('❌ 需求描述不能为空');
+    console.error('❌ Requirement description cannot be empty');
     console.error('');
-    console.error('  请提供需求描述，例如:');
-    console.error('    projmnt4claude init-requirement "修复登录按钮的样式问题"');
-    console.error('    projmnt4claude init-requirement "添加用户注册功能，包含表单验证"');
+    console.error('  Please provide a requirement description, for example:');
+    console.error('    projmnt4claude init-requirement "Fix login button styling issue"');
+    console.error('    projmnt4claude init-requirement "Add user registration feature with form validation"');
     console.error('');
     process.exit(1);
   }
   if (trimmedDesc.length < 2) {
     console.error('');
-    console.error('❌ 需求描述过短');
+    console.error('❌ Requirement description too short');
     console.error('');
-    console.error(`  当前描述: "${trimmedDesc}" (${trimmedDesc.length} 个字符)`);
-    console.error('  请提供更详细的需求描述（至少 2 个字符），说明要做什么以及为什么。');
+    console.error(`  Current description: "${trimmedDesc}" (${trimmedDesc.length} characters)`);
+    console.error('  Please provide a more detailed requirement description (at least 2 characters).');
     console.error('');
     process.exit(1);
   }
 
   if (!isInitialized(cwd)) {
     console.error('');
-    console.error('❌ 项目未初始化');
+    console.error('❌ Project not initialized');
     console.error('');
-    console.error('  请先运行以下命令初始化项目管理环境:');
+    console.error('  Please run the following command to initialize the project environment:');
     console.error('    projmnt4claude setup');
     console.error('');
-    console.error('  初始化后即可使用 init-requirement 创建任务。');
+    console.error('  After initialization, you can use init-requirement to create tasks.');
     console.error('');
     process.exit(1);
   }
@@ -293,7 +293,7 @@ export async function initRequirement(
 
   console.log('');
   console.log('━'.repeat(SEPARATOR_WIDTH));
-  console.log('🔍 正在分析需求...');
+  console.log('🔍 Analyzing requirement...');
   console.log('━'.repeat(SEPARATOR_WIDTH));
   console.log('');
 
@@ -338,48 +338,48 @@ export async function initRequirement(
   // 执行复杂度评估
   let complexity = assessComplexity(description, analysis);
 
-  // 显示分析结果
+  // Display analysis results
   const aiTag = (field: string) => analysis.aiEnhancedFields.includes(field) ? ' (AI enhanced)' : '';
-  console.log('📋 需求分析结果:');
+  console.log('📋 Requirement Analysis Results:');
   console.log('');
-  console.log(`  标题: ${analysis.title}${aiTag('title')}`);
-  console.log(`  优先级: ${formatPriority(analysis.priority)}${aiTag('priority')}`);
-  console.log(`  复杂度: ${formatComplexity(complexity)}`);
-  console.log(`  推荐角色: ${analysis.recommendedRole}${aiTag('recommendedRole')}`);
-  console.log(`  涉及文件: ${complexity.fileCount} 个`);
-  console.log(`  工作项: ${complexity.workItemCount} 项`);
-  console.log(`  预估耗时: ~${complexity.estimatedMinutes} 分钟`);
+  console.log(`  Title: ${analysis.title}${aiTag('title')}`);
+  console.log(`  Priority: ${formatPriority(analysis.priority)}${aiTag('priority')}`);
+  console.log(`  Complexity: ${formatComplexity(complexity)}`);
+  console.log(`  Recommended Role: ${analysis.recommendedRole}${aiTag('recommendedRole')}`);
+  console.log(`  Files Involved: ${complexity.fileCount}`);
+  console.log(`  Work Items: ${complexity.workItemCount}`);
+  console.log(`  Estimated Time: ~${complexity.estimatedMinutes} minutes`);
   if (analysis.aiUsed) {
-    console.log(`  AI 增强: ${analysis.aiEnhancedFields.join(', ')}`);
+    console.log(`  AI Enhanced: ${analysis.aiEnhancedFields.join(', ')}`);
   }
   console.log('');
 
   // 复杂度预警
   if (complexity.level === 'high') {
     console.log('━'.repeat(SEPARATOR_WIDTH));
-    console.log('⚠️  复杂度预警');
+    console.log('⚠️  Complexity Warning');
     console.log('━'.repeat(SEPARATOR_WIDTH));
     console.log('');
-    console.log(`  此任务预估耗时 ${complexity.estimatedMinutes} 分钟，超过 Harness 默认超时阈值。`);
-    console.log('  建议将此任务拆分为多个子任务，每个子任务控制在 15 分钟以内。');
+    console.log(`  This task is estimated to take ${complexity.estimatedMinutes} minutes, exceeding the default Harness timeout threshold.`);
+    console.log('  Consider splitting this task into smaller subtasks, each under 15 minutes.');
     console.log('');
 
     if (complexity.splitSuggestions.length > 0) {
-      console.log('  拆分建议:');
+      console.log('  Split suggestions:');
       for (let i = 0; i < complexity.splitSuggestions.length; i++) {
         const s = complexity.splitSuggestions[i];
         if (!s) continue;
-        const depLabel = s.dependsOn >= 0 ? ` (依赖子任务 ${s.dependsOn + 1})` : '';
+        const depLabel = s.dependsOn >= 0 ? ` (depends on subtask ${s.dependsOn + 1})` : '';
         console.log(`    ${i + 1}. ${s.title}${depLabel}`);
-        console.log(`       文件: ${s.files.length > 0 ? s.files.join(', ') : '未指定'}`);
-        console.log(`       预估: ~${s.estimatedMinutes} 分钟`);
+        console.log(`       Files: ${s.files.length > 0 ? s.files.join(', ') : 'not specified'}`);
+        console.log(`       Estimated: ~${s.estimatedMinutes} minutes`);
       }
       console.log('');
     }
   }
 
   if (analysis.suggestedCheckpoints.length > 0) {
-    console.log(`  建议检查点${aiTag('checkpoints')}:`);
+    console.log(`  Suggested checkpoints${aiTag('checkpoints')}:`);
     for (const cp of analysis.suggestedCheckpoints) {
       console.log(`    - ${cp}`);
     }
@@ -387,7 +387,7 @@ export async function initRequirement(
   }
 
   if (analysis.potentialDependencies.length > 0) {
-    console.log(`  潜在依赖${aiTag('dependencies')}:`);
+    console.log(`  Potential dependencies${aiTag('dependencies')}:`);
     for (const dep of analysis.potentialDependencies) {
       console.log(`    - ${dep}`);
     }
@@ -635,7 +635,7 @@ export async function initRequirement(
       return !result.valid;
     });
     if (checkpointsWithoutCommands.length > 0) {
-      console.log(`\n   ⚠️  ${checkpointsWithoutCommands.length} 个检查点验证命令缺失:`);
+      console.log(`\n   ⚠️  ${checkpointsWithoutCommands.length} checkpoints missing verification commands:`);
       for (const cp of checkpointsWithoutCommands) {
         const result = validateCheckpointVerification(cp);
         console.log(`   - [${cp.id}] ${result.warning || cp.description}`);
@@ -665,13 +665,13 @@ export async function initRequirement(
     }
   }
 
-  console.log(`✅ 任务创建成功!`);
+  console.log(`✅ Task created successfully!`);
   console.log(`   ID: ${taskId}`);
-  console.log(`   标题: ${task.title}`);
-  console.log(`   优先级: ${formatPriority(task.priority)}`);
-  console.log(`   检查点: ${checkpoints.length} 项`);
+  console.log(`   Title: ${task.title}`);
+  console.log(`   Priority: ${formatPriority(task.priority)}`);
+  console.log(`   Checkpoints: ${checkpoints.length} items`);
   if (task.dependencies && task.dependencies.length > 0) {
-    console.log(`   推断依赖: ${task.dependencies.join(', ')}`);
+    console.log(`   Inferred dependencies: ${task.dependencies.join(', ')}`);
   }
   console.log('');
 
@@ -695,14 +695,14 @@ export async function initRequirement(
     writeTaskMeta(taskWithScore, cwd);
   }
 
-  // CP-6: 显示质量评分
+  // CP-6: Display quality score
   const scoreIcon = qualityResult.score.totalScore >= 80 ? '🟢' :
                     qualityResult.score.totalScore >= 60 ? '🟡' : '🔴';
-  console.log(`📊 质量评分: ${scoreIcon} ${qualityResult.score.totalScore}/100`);
-  console.log(`   描述完整度: ${qualityResult.score.descriptionScore}%`);
-  console.log(`   检查点质量: ${qualityResult.score.checkpointScore}%`);
-  console.log(`   关联文件: ${qualityResult.score.relatedFilesScore}%`);
-  console.log(`   解决方案: ${qualityResult.score.solutionScore}%`);
+  console.log(`📊 Quality Score: ${scoreIcon} ${qualityResult.score.totalScore}/100`);
+  console.log(`   Description Completeness: ${qualityResult.score.descriptionScore}%`);
+  console.log(`   Checkpoint Quality: ${qualityResult.score.checkpointScore}%`);
+  console.log(`   Related Files: ${qualityResult.score.relatedFilesScore}%`);
+  console.log(`   Solution: ${qualityResult.score.solutionScore}%`);
   console.log('');
 
   // CP-16: 依赖关系质量门禁 - 验证新任务的依赖完整性 (GATE-DEP-001/002/003)
@@ -710,13 +710,13 @@ export async function initRequirement(
   const depGraph = DependencyGraph.fromTasks(allExistingTasks);
   const depValidation = validateNewTaskDeps(taskId, task.dependencies || [], depGraph, allExistingTasks);
   if (depValidation.warnings.length > 0) {
-    console.log('📋 依赖关系门禁:');
+    console.log('📋 Dependency Gate:');
     for (const w of depValidation.warnings) {
       console.log(`   ⚠️  ${w}`);
     }
   }
   if (depValidation.errors.length > 0) {
-    console.log('📋 依赖关系错误:');
+    console.log('📋 Dependency Errors:');
     for (const e of depValidation.errors) {
       console.log(`   ❌ ${e}`);
     }
@@ -803,7 +803,7 @@ export async function initRequirement(
 
   // CP-2: 质量不达标时输出警告和改进建议（不阻断创建）
   if (!qualityResult.passed) {
-    console.log('⚠️  质量门禁警告: 任务质量评分低于默认阈值，建议改进');
+    console.log('⚠️  Quality Gate Warning: Task quality score below default threshold, improvements recommended');
     if (qualityResult.suggestions.length > 0) {
       const sorted = [...qualityResult.suggestions].sort((a, b) => {
         const order = { high: 0, medium: 1, low: 2 };
@@ -1605,14 +1605,31 @@ async function initRequirementSingle(
 
 /**
  * 格式化分解项为任务描述
+ * 支持 DecomposedTaskItem 和 DecomposedItem 两种类型
  */
-function formatItemDescription(item: DecomposedTaskItem): string {
+function formatItemDescription(item: DecomposedTaskItem | DecomposedItem): string {
   const sections: string[] = [];
-  sections.push(`## 问题描述\n${item.description}`);
-  sections.push(`## 解决方案\n实现 ${item.title}`);
-  if (item.suggestedCheckpoints.length > 0) {
-    sections.push(`## 检查点\n${item.suggestedCheckpoints.map(cp => `- ${cp}`).join('\n')}`);
+
+  // 判断是否为 DecomposedItem 类型（包含 problem 字段）
+  if ('problem' in item) {
+    // DecomposedItem 格式：包含 problem、rootCause、solution
+    sections.push(`## 问题描述\n${item.problem}`);
+    if (item.rootCause && item.rootCause.trim().length > 0) {
+      sections.push(`## 根因分析\n${item.rootCause}`);
+    }
+    sections.push(`## 解决方案\n${item.solution}`);
+    if (item.checkpoints.length > 0) {
+      sections.push(`## 检查点\n${item.checkpoints.map(cp => `- ${cp}`).join('\n')}`);
+    }
+  } else {
+    // DecomposedTaskItem 格式：包含 description
+    sections.push(`## 问题描述\n${item.description}`);
+    sections.push(`## 解决方案\n实现 ${item.title}`);
+    if (item.suggestedCheckpoints.length > 0) {
+      sections.push(`## 检查点\n${item.suggestedCheckpoints.map(cp => `- ${cp}`).join('\n')}`);
+    }
   }
+
   return sections.join('\n\n');
 }
 
