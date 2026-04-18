@@ -144,70 +144,86 @@ describe('loadPromptTemplate', () => {
   });
 
   describe('正常输入处理', () => {
-    it('应该返回默认开发模板', () => {
+    it('应该返回默认开发模板的英文版本', () => {
       readConfigSpy.mockReturnValue(null);
       const result = loadPromptTemplate('dev', '/test');
-      expect(result).toBe(DEFAULT_DEV_TEMPLATE);
+      expect(result).toBe(DEFAULT_DEV_TEMPLATE.en);
     });
 
-    it('应该返回默认 QA 模板', () => {
+    it('应该返回默认 QA 模板的英文版本', () => {
       readConfigSpy.mockReturnValue(null);
       const result = loadPromptTemplate('qa', '/test');
-      expect(result).toBe(DEFAULT_QA_TEMPLATE);
+      expect(result).toBe(DEFAULT_QA_TEMPLATE.en);
     });
 
-    it('应该返回默认代码审核模板', () => {
+    it('应该返回默认代码审核模板的英文版本', () => {
       readConfigSpy.mockReturnValue(null);
       const result = loadPromptTemplate('codeReview', '/test');
-      expect(result).toBe(DEFAULT_CODE_REVIEW_TEMPLATE);
+      expect(result).toBe(DEFAULT_CODE_REVIEW_TEMPLATE.en);
     });
 
-    it('应该返回默认评估模板', () => {
+    it('应该返回默认评估模板的英文版本', () => {
       readConfigSpy.mockReturnValue(null);
       const result = loadPromptTemplate('evaluation', '/test');
-      expect(result).toBe(DEFAULT_EVALUATION_TEMPLATE);
+      expect(result).toBe(DEFAULT_EVALUATION_TEMPLATE.en);
     });
 
-    it('应该返回默认需求模板', () => {
+    it('应该返回默认需求模板的英文版本', () => {
       readConfigSpy.mockReturnValue(null);
       const result = loadPromptTemplate('requirement', '/test');
-      expect(result).toBe(DEFAULT_REQUIREMENT_TEMPLATE);
+      expect(result).toBe(DEFAULT_REQUIREMENT_TEMPLATE.en);
     });
 
-    it('应该返回默认检查点模板', () => {
+    it('应该返回默认检查点模板的英文版本', () => {
       readConfigSpy.mockReturnValue(null);
       const result = loadPromptTemplate('checkpoints', '/test');
-      expect(result).toBe(DEFAULT_CHECKPOINTS_TEMPLATE);
+      expect(result).toBe(DEFAULT_CHECKPOINTS_TEMPLATE.en);
     });
 
-    it('应该返回默认质量模板', () => {
+    it('应该返回默认质量模板的英文版本', () => {
       readConfigSpy.mockReturnValue(null);
       const result = loadPromptTemplate('quality', '/test');
-      expect(result).toBe(DEFAULT_QUALITY_TEMPLATE);
+      expect(result).toBe(DEFAULT_QUALITY_TEMPLATE.en);
     });
 
-    it('应该返回默认重复检测模板', () => {
+    it('应该返回默认重复检测模板的英文版本', () => {
       readConfigSpy.mockReturnValue(null);
       const result = loadPromptTemplate('duplicates', '/test');
-      expect(result).toBe(DEFAULT_DUPLICATES_TEMPLATE);
+      expect(result).toBe(DEFAULT_DUPLICATES_TEMPLATE.en);
     });
 
-    it('应该返回默认过期评估模板', () => {
+    it('应该返回默认过期评估模板的英文版本', () => {
       readConfigSpy.mockReturnValue(null);
       const result = loadPromptTemplate('staleness', '/test');
-      expect(result).toBe(DEFAULT_STALENESS_TEMPLATE);
+      expect(result).toBe(DEFAULT_STALENESS_TEMPLATE.en);
     });
 
-    it('应该返回默认 Bug 报告模板', () => {
+    it('应该返回默认 Bug 报告模板的英文版本', () => {
       readConfigSpy.mockReturnValue(null);
       const result = loadPromptTemplate('bugReport', '/test');
-      expect(result).toBe(DEFAULT_BUG_REPORT_TEMPLATE);
+      expect(result).toBe(DEFAULT_BUG_REPORT_TEMPLATE.en);
     });
 
-    it('应该返回默认语义依赖模板', () => {
+    it('应该返回默认语义依赖模板的英文版本', () => {
       readConfigSpy.mockReturnValue(null);
       const result = loadPromptTemplate('semanticDependency', '/test');
-      expect(result).toBe(DEFAULT_SEMANTIC_DEPENDENCY_TEMPLATE);
+      expect(result).toBe(DEFAULT_SEMANTIC_DEPENDENCY_TEMPLATE.en);
+    });
+
+    it('当配置指定中文语言时应该返回中文模板', () => {
+      readConfigSpy.mockReturnValue({
+        language: 'zh',
+      });
+      const result = loadPromptTemplate('dev', '/test');
+      expect(result).toBe(DEFAULT_DEV_TEMPLATE.zh);
+    });
+
+    it('当配置指定英文语言时应该返回英文模板', () => {
+      readConfigSpy.mockReturnValue({
+        language: 'en',
+      });
+      const result = loadPromptTemplate('dev', '/test');
+      expect(result).toBe(DEFAULT_DEV_TEMPLATE.en);
     });
 
     it('当配置存在自定义模板时应该返回自定义模板', () => {
@@ -223,15 +239,15 @@ describe('loadPromptTemplate', () => {
   });
 
   describe('边界条件处理', () => {
-    it('当没有提供 cwd 时应该返回默认模板', () => {
+    it('当没有提供 cwd 时应该返回默认英文模板', () => {
       const result = loadPromptTemplate('dev');
-      expect(result).toBe(DEFAULT_DEV_TEMPLATE);
+      expect(result).toBe(DEFAULT_DEV_TEMPLATE.en);
     });
 
     it('当配置存在但没有 prompts 节时应该返回默认模板', () => {
       readConfigSpy.mockReturnValue({});
       const result = loadPromptTemplate('dev', '/test');
-      expect(result).toBe(DEFAULT_DEV_TEMPLATE);
+      expect(result).toBe(DEFAULT_DEV_TEMPLATE.en);
     });
 
     it('当 prompts 节存在但请求模板不存在时应该返回默认模板', () => {
@@ -241,7 +257,7 @@ describe('loadPromptTemplate', () => {
         },
       });
       const result = loadPromptTemplate('dev', '/test');
-      expect(result).toBe(DEFAULT_DEV_TEMPLATE);
+      expect(result).toBe(DEFAULT_DEV_TEMPLATE.en);
     });
 
     it('当自定义模板为空字符串时应该返回空字符串', () => {
@@ -253,12 +269,21 @@ describe('loadPromptTemplate', () => {
       const result = loadPromptTemplate('dev', '/test');
       expect(result).toBe('');
     });
+
+    it('应该支持通过参数指定语言', () => {
+      readConfigSpy.mockReturnValue(null);
+      const resultZh = loadPromptTemplate('dev', '/test', 'zh');
+      expect(resultZh).toBe(DEFAULT_DEV_TEMPLATE.zh);
+
+      const resultEn = loadPromptTemplate('dev', '/test', 'en');
+      expect(resultEn).toBe(DEFAULT_DEV_TEMPLATE.en);
+    });
   });
 });
 
 describe('DEFAULT_TEMPLATES 注册表', () => {
-  it('应该包含所有 11 个模板', () => {
-    expect(Object.keys(DEFAULT_TEMPLATES)).toHaveLength(11);
+  it('应该包含所有 12 个模板', () => {
+    expect(Object.keys(DEFAULT_TEMPLATES)).toHaveLength(12);
   });
 
   it('应该包含 dev 模板', () => {
@@ -304,11 +329,15 @@ describe('DEFAULT_TEMPLATES 注册表', () => {
   it('应该包含 semanticDependency 模板', () => {
     expect(DEFAULT_TEMPLATES.semanticDependency).toBe(DEFAULT_SEMANTIC_DEPENDENCY_TEMPLATE);
   });
+
+  it('应该包含 decomposition 模板', () => {
+    expect(DEFAULT_TEMPLATES.decomposition).toBeDefined();
+  });
 });
 
 describe('PROMPT_TEMPLATE_NAMES', () => {
-  it('应该包含所有 11 个模板名称', () => {
-    expect(PROMPT_TEMPLATE_NAMES).toHaveLength(11);
+  it('应该包含所有 12 个模板名称', () => {
+    expect(PROMPT_TEMPLATE_NAMES).toHaveLength(12);
   });
 
   it('应该包含所有预期的模板名称', () => {
@@ -324,6 +353,7 @@ describe('PROMPT_TEMPLATE_NAMES', () => {
       'staleness',
       'bugReport',
       'semanticDependency',
+      'decomposition',
     ];
     expect(PROMPT_TEMPLATE_NAMES).toEqual(expected);
   });
@@ -335,63 +365,89 @@ describe('PROMPT_TEMPLATE_NAMES', () => {
 });
 
 describe('默认模板内容验证', () => {
-  it('DEFAULT_DEV_TEMPLATE 应该包含关键占位符', () => {
-    expect(DEFAULT_DEV_TEMPLATE).toContain('{title}');
-    expect(DEFAULT_DEV_TEMPLATE).toContain('{taskId}');
-    expect(DEFAULT_DEV_TEMPLATE).toContain('{type}');
-    expect(DEFAULT_DEV_TEMPLATE).toContain('{priority}');
+  it('DEFAULT_DEV_TEMPLATE 应该包含中英文版本和关键占位符', () => {
+    expect(DEFAULT_DEV_TEMPLATE.zh).toContain('{title}');
+    expect(DEFAULT_DEV_TEMPLATE.zh).toContain('{taskId}');
+    expect(DEFAULT_DEV_TEMPLATE.zh).toContain('{type}');
+    expect(DEFAULT_DEV_TEMPLATE.zh).toContain('{priority}');
+    expect(DEFAULT_DEV_TEMPLATE.en).toContain('{title}');
+    expect(DEFAULT_DEV_TEMPLATE.en).toContain('{taskId}');
+    expect(DEFAULT_DEV_TEMPLATE.en).toContain('{type}');
+    expect(DEFAULT_DEV_TEMPLATE.en).toContain('{priority}');
   });
 
-  it('DEFAULT_QA_TEMPLATE 应该包含 VERDICT 标记', () => {
-    expect(DEFAULT_QA_TEMPLATE).toContain('VERDICT: PASS');
-    expect(DEFAULT_QA_TEMPLATE).toContain('VERDICT: NOPASS');
+  it('DEFAULT_QA_TEMPLATE 应该包含中英文版本和 VERDICT 标记', () => {
+    expect(DEFAULT_QA_TEMPLATE.zh).toContain('VERDICT: PASS');
+    expect(DEFAULT_QA_TEMPLATE.zh).toContain('VERDICT: NOPASS');
+    expect(DEFAULT_QA_TEMPLATE.en).toContain('VERDICT: PASS');
+    expect(DEFAULT_QA_TEMPLATE.en).toContain('VERDICT: NOPASS');
   });
 
-  it('DEFAULT_CODE_REVIEW_TEMPLATE 应该包含审核要求', () => {
-    expect(DEFAULT_CODE_REVIEW_TEMPLATE).toContain('代码审核');
-    expect(DEFAULT_CODE_REVIEW_TEMPLATE).toContain('VERDICT: PASS');
+  it('DEFAULT_CODE_REVIEW_TEMPLATE 应该包含中英文版本和审核要求', () => {
+    expect(DEFAULT_CODE_REVIEW_TEMPLATE.zh).toContain('代码审核');
+    expect(DEFAULT_CODE_REVIEW_TEMPLATE.zh).toContain('VERDICT: PASS');
+    expect(DEFAULT_CODE_REVIEW_TEMPLATE.en).toContain('Code Review');
+    expect(DEFAULT_CODE_REVIEW_TEMPLATE.en).toContain('VERDICT: PASS');
   });
 
-  it('DEFAULT_EVALUATION_TEMPLATE 应该包含评估格式要求', () => {
-    expect(DEFAULT_EVALUATION_TEMPLATE).toContain('EVALUATION_RESULT: PASS');
-    expect(DEFAULT_EVALUATION_TEMPLATE).toContain('EVALUATION_RESULT: NOPASS');
+  it('DEFAULT_EVALUATION_TEMPLATE 应该包含中英文版本和评估格式要求', () => {
+    expect(DEFAULT_EVALUATION_TEMPLATE.zh).toContain('EVALUATION_RESULT: PASS');
+    expect(DEFAULT_EVALUATION_TEMPLATE.zh).toContain('EVALUATION_RESULT: NOPASS');
+    expect(DEFAULT_EVALUATION_TEMPLATE.en).toContain('EVALUATION_RESULT: PASS');
+    expect(DEFAULT_EVALUATION_TEMPLATE.en).toContain('EVALUATION_RESULT: NOPASS');
   });
 
-  it('DEFAULT_REQUIREMENT_TEMPLATE 应该要求 JSON 输出', () => {
-    expect(DEFAULT_REQUIREMENT_TEMPLATE).toContain('JSON');
-    expect(DEFAULT_REQUIREMENT_TEMPLATE).toContain('title');
-    expect(DEFAULT_REQUIREMENT_TEMPLATE).toContain('description');
+  it('DEFAULT_REQUIREMENT_TEMPLATE 应该包含中英文版本和 JSON 输出要求', () => {
+    expect(DEFAULT_REQUIREMENT_TEMPLATE.zh).toContain('JSON');
+    expect(DEFAULT_REQUIREMENT_TEMPLATE.zh).toContain('title');
+    expect(DEFAULT_REQUIREMENT_TEMPLATE.zh).toContain('description');
+    expect(DEFAULT_REQUIREMENT_TEMPLATE.en).toContain('JSON');
+    expect(DEFAULT_REQUIREMENT_TEMPLATE.en).toContain('title');
+    expect(DEFAULT_REQUIREMENT_TEMPLATE.en).toContain('description');
   });
 
-  it('DEFAULT_CHECKPOINTS_TEMPLATE 应该要求动词开头', () => {
-    expect(DEFAULT_CHECKPOINTS_TEMPLATE).toContain('动词开头');
-    expect(DEFAULT_CHECKPOINTS_TEMPLATE).toContain('checkpoints');
+  it('DEFAULT_CHECKPOINTS_TEMPLATE 应该包含中英文版本和动词开头要求', () => {
+    expect(DEFAULT_CHECKPOINTS_TEMPLATE.zh).toContain('动词开头');
+    expect(DEFAULT_CHECKPOINTS_TEMPLATE.zh).toContain('checkpoints');
+    expect(DEFAULT_CHECKPOINTS_TEMPLATE.en).toContain('starting with verb');
+    expect(DEFAULT_CHECKPOINTS_TEMPLATE.en).toContain('checkpoints');
   });
 
-  it('DEFAULT_QUALITY_TEMPLATE 应该包含评分字段', () => {
-    expect(DEFAULT_QUALITY_TEMPLATE).toContain('score');
-    expect(DEFAULT_QUALITY_TEMPLATE).toContain('issues');
+  it('DEFAULT_QUALITY_TEMPLATE 应该包含中英文版本和评分字段', () => {
+    expect(DEFAULT_QUALITY_TEMPLATE.zh).toContain('score');
+    expect(DEFAULT_QUALITY_TEMPLATE.zh).toContain('issues');
+    expect(DEFAULT_QUALITY_TEMPLATE.en).toContain('score');
+    expect(DEFAULT_QUALITY_TEMPLATE.en).toContain('issues');
   });
 
-  it('DEFAULT_DUPLICATES_TEMPLATE 应该包含重复检测字段', () => {
-    expect(DEFAULT_DUPLICATES_TEMPLATE).toContain('duplicates');
-    expect(DEFAULT_DUPLICATES_TEMPLATE).toContain('similarity');
+  it('DEFAULT_DUPLICATES_TEMPLATE 应该包含中英文版本和重复检测字段', () => {
+    expect(DEFAULT_DUPLICATES_TEMPLATE.zh).toContain('duplicates');
+    expect(DEFAULT_DUPLICATES_TEMPLATE.zh).toContain('similarity');
+    expect(DEFAULT_DUPLICATES_TEMPLATE.en).toContain('duplicates');
+    expect(DEFAULT_DUPLICATES_TEMPLATE.en).toContain('similarity');
   });
 
-  it('DEFAULT_STALENESS_TEMPLATE 应该包含过期评估字段', () => {
-    expect(DEFAULT_STALENESS_TEMPLATE).toContain('isStale');
-    expect(DEFAULT_STALENESS_TEMPLATE).toContain('stalenessScore');
+  it('DEFAULT_STALENESS_TEMPLATE 应该包含中英文版本和过期评估字段', () => {
+    expect(DEFAULT_STALENESS_TEMPLATE.zh).toContain('isStale');
+    expect(DEFAULT_STALENESS_TEMPLATE.zh).toContain('stalenessScore');
+    expect(DEFAULT_STALENESS_TEMPLATE.en).toContain('isStale');
+    expect(DEFAULT_STALENESS_TEMPLATE.en).toContain('stalenessScore');
   });
 
-  it('DEFAULT_BUG_REPORT_TEMPLATE 应该包含 Bug 分析字段', () => {
-    expect(DEFAULT_BUG_REPORT_TEMPLATE).toContain('rootCause');
-    expect(DEFAULT_BUG_REPORT_TEMPLATE).toContain('impactScope');
+  it('DEFAULT_BUG_REPORT_TEMPLATE 应该包含中英文版本和 Bug 分析字段', () => {
+    expect(DEFAULT_BUG_REPORT_TEMPLATE.zh).toContain('rootCause');
+    expect(DEFAULT_BUG_REPORT_TEMPLATE.zh).toContain('impactScope');
+    expect(DEFAULT_BUG_REPORT_TEMPLATE.en).toContain('rootCause');
+    expect(DEFAULT_BUG_REPORT_TEMPLATE.en).toContain('impactScope');
   });
 
-  it('DEFAULT_SEMANTIC_DEPENDENCY_TEMPLATE 应该包含依赖字段', () => {
-    expect(DEFAULT_SEMANTIC_DEPENDENCY_TEMPLATE).toContain('dependencies');
-    expect(DEFAULT_SEMANTIC_DEPENDENCY_TEMPLATE).toContain('taskId');
-    expect(DEFAULT_SEMANTIC_DEPENDENCY_TEMPLATE).toContain('depTaskId');
+  it('DEFAULT_SEMANTIC_DEPENDENCY_TEMPLATE 应该包含中英文版本和依赖字段', () => {
+    expect(DEFAULT_SEMANTIC_DEPENDENCY_TEMPLATE.zh).toContain('dependencies');
+    expect(DEFAULT_SEMANTIC_DEPENDENCY_TEMPLATE.zh).toContain('taskId');
+    expect(DEFAULT_SEMANTIC_DEPENDENCY_TEMPLATE.zh).toContain('depTaskId');
+    expect(DEFAULT_SEMANTIC_DEPENDENCY_TEMPLATE.en).toContain('dependencies');
+    expect(DEFAULT_SEMANTIC_DEPENDENCY_TEMPLATE.en).toContain('taskId');
+    expect(DEFAULT_SEMANTIC_DEPENDENCY_TEMPLATE.en).toContain('depTaskId');
   });
 });
 
@@ -407,13 +463,17 @@ describe('TypeScript 类型', () => {
     expect(vars.undef).toBeUndefined();
   });
 
-  it('PromptTemplate 应该是字符串类型', () => {
-    const template: PromptTemplate = 'Test template';
-    expect(typeof template).toBe('string');
+  it('PromptTemplate 应该是 Record<Language, string> 类型', () => {
+    const template: PromptTemplate = {
+      zh: '中文模板',
+      en: 'English template',
+    };
+    expect(template.zh).toBe('中文模板');
+    expect(template.en).toBe('English template');
   });
 
   it('PromptTemplateName 应该接受所有有效值', () => {
     const names: PromptTemplateName[] = PROMPT_TEMPLATE_NAMES;
-    expect(names.length).toBe(11);
+    expect(names.length).toBe(12);
   });
 });

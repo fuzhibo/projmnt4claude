@@ -26,11 +26,11 @@ mock.module('../utils/path', () => ({
 mock.module('../utils/prompt-templates', () => ({
   PROMPT_TEMPLATE_NAMES: ['dev', 'codeReview', 'qa', 'evaluation', 'requirement'],
   DEFAULT_TEMPLATES: {
-    dev: 'Hello {name}, your task is {task}',
-    codeReview: 'Review: {code}',
-    qa: 'Verify: {task}',
-    evaluation: 'Eval: {score}',
-    requirement: 'Req: {text}',
+    dev: { zh: 'Hello {name}, your task is {task}', en: 'Hello {name}, your task is {task}' },
+    codeReview: { zh: 'Review: {code}', en: 'Review: {code}' },
+    qa: { zh: 'Verify: {task}', en: 'Verify: {task}' },
+    evaluation: { zh: 'Eval: {score}', en: 'Eval: {score}' },
+    requirement: { zh: 'Req: {text}', en: 'Req: {text}' },
   },
 }));
 
@@ -233,7 +233,7 @@ describe('listConfig', () => {
     console.log = origLog;
     const output = logs.join('\n');
     expect(output).toContain('test-project');
-    expect(output).toContain('## 日志');
+    expect(output).toContain('## Logging');
     expect(output).toContain('## AI');
   });
 });

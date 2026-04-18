@@ -7160,15 +7160,35 @@ function resolveTemplate(template, variables) {
     return String(value);
   });
 }
-function loadPromptTemplate(name, cwd) {
+function loadPromptTemplate(name, cwd, language) {
   const config = cwd ? readConfig(cwd) : null;
   const prompts2 = config?.prompts;
   if (prompts2 && typeof prompts2[name] === "string") {
     return prompts2[name];
   }
-  return DEFAULT_TEMPLATES[name];
+  const lang = language || config?.language || "en";
+  const template = DEFAULT_TEMPLATES[name];
+  return template[lang] || template.en;
 }
-var PROMPT_TEMPLATE_NAMES, DEFAULT_DEV_TEMPLATE = `# \u4EFB\u52A1: {title}
+var PROMPT_TEMPLATE_NAMES, DEFAULT_DEV_TEMPLATE, DEFAULT_CODE_REVIEW_TEMPLATE, DEFAULT_QA_TEMPLATE, DEFAULT_EVALUATION_TEMPLATE, DEFAULT_REQUIREMENT_TEMPLATE, DEFAULT_CHECKPOINTS_TEMPLATE, DEFAULT_QUALITY_TEMPLATE, DEFAULT_DUPLICATES_TEMPLATE, DEFAULT_STALENESS_TEMPLATE, DEFAULT_DECOMPOSITION_TEMPLATE, DEFAULT_BUG_REPORT_TEMPLATE, DEFAULT_SEMANTIC_DEPENDENCY_TEMPLATE, DEFAULT_TEMPLATES;
+var init_prompt_templates = __esm(() => {
+  init_config2();
+  PROMPT_TEMPLATE_NAMES = [
+    "dev",
+    "codeReview",
+    "qa",
+    "evaluation",
+    "requirement",
+    "checkpoints",
+    "quality",
+    "duplicates",
+    "staleness",
+    "bugReport",
+    "semanticDependency",
+    "decomposition"
+  ];
+  DEFAULT_DEV_TEMPLATE = {
+    zh: `# \u4EFB\u52A1: {title}
 
 ## \u4EFB\u52A1ID: {taskId}
 ## \u7C7B\u578B: {type}
@@ -7195,7 +7215,38 @@ var PROMPT_TEMPLATE_NAMES, DEFAULT_DEV_TEMPLATE = `# \u4EFB\u52A1: {title}
 3. **\u7981\u6B62\u521B\u5EFA\u5B50\u4EFB\u52A1** - \u4E0D\u8981\u5C06\u5F53\u524D\u4EFB\u52A1\u62C6\u5206\u4E3A\u591A\u4E2A\u5B50\u4EFB\u52A1\u5E76\u5C1D\u8BD5\u521B\u5EFA\u5B83\u4EEC
 
 \u5982\u679C\u4EFB\u52A1\u786E\u5B9E\u9700\u8981\u62C6\u5206\uFF0C\u8BF7\u5728\u5F00\u53D1\u62A5\u544A\u4E2D **\u5EFA\u8BAE** \u62C6\u5206\u65B9\u6848\uFF0C\u7531\u4EBA\u5DE5\u51B3\u5B9A\u662F\u5426\u521B\u5EFA\u65B0\u4EFB\u52A1\u3002
-\u8FDD\u53CD\u4EE5\u4E0A\u4EFB\u4F55\u7981\u4EE4\u5C06\u5BFC\u81F4\u8BC4\u4F30\u4E0D\u901A\u8FC7\u3002`, DEFAULT_CODE_REVIEW_TEMPLATE = `# \u4EE3\u7801\u5BA1\u6838\u4EFB\u52A1
+\u8FDD\u53CD\u4EE5\u4E0A\u4EFB\u4F55\u7981\u4EE4\u5C06\u5BFC\u81F4\u8BC4\u4F30\u4E0D\u901A\u8FC7\u3002`,
+    en: `# Task: {title}
+
+## Task ID: {taskId}
+## Type: {type}
+## Priority: {priority}
+{timeoutHeader}
+{descriptionSection}
+{dependenciesSection}
+{acceptanceCriteriaSection}
+{checkpointsSection}
+## Instructions
+{timeoutInstruction}
+1. Read the task description and acceptance criteria carefully
+2. Implement the required functionality or fix
+3. Ensure the code follows project standards
+4. Run necessary tests to verify the implementation
+5. Briefly summarize the changes made upon completion
+
+{extraInstructionsSection}
+## \u26D4 Prohibited Operations (Strictly Enforced)
+{roleDeclaration}The following operations are strictly prohibited:
+
+1. **Do NOT create new tasks** - Do not run \`task create\`, \`init-requirement\`, or any task creation commands
+2. **Do NOT modify task metadata** - Do not modify meta.json files under \`.projmnt4claude/tasks/\`
+3. **Do NOT create subtasks** - Do not split the current task into multiple subtasks and attempt to create them
+
+If the task truly needs to be split, **suggest** a split plan in the development report and let humans decide whether to create new tasks.
+Violating any of the above prohibitions will result in evaluation failure.`
+  };
+  DEFAULT_CODE_REVIEW_TEMPLATE = {
+    zh: `# \u4EE3\u7801\u5BA1\u6838\u4EFB\u52A1
 
 {roleDeclaration}\u4F60\u9700\u8981\u5BA1\u6838\u4E00\u4E2A\u4EFB\u52A1\u7684\u4EE3\u7801\u5B9E\u73B0\uFF0C\u786E\u4FDD\u4EE3\u7801\u8D28\u91CF\u7B26\u5408\u6807\u51C6\u3002
 
@@ -7224,7 +7275,40 @@ VERDICT: PASS \u6216 VERDICT: NOPASS
 
 **\u91CD\u8981**: \u5FC5\u987B\u8F93\u51FA VERDICT: PASS \u6216 VERDICT: NOPASS\uFF0C\u4E0D\u5F97\u4F7F\u7528"\u901A\u8FC7"\u3001"\u4E0D\u901A\u8FC7"\u7B49\u4E2D\u6587\u8BCD\u8BED\u3002
 
-\u73B0\u5728\u5F00\u59CB\u5BA1\u6838\u3002`, DEFAULT_QA_TEMPLATE = `# QA \u9A8C\u8BC1\u4EFB\u52A1
+\u73B0\u5728\u5F00\u59CB\u5BA1\u6838\u3002`,
+    en: `# Code Review Task
+
+{roleDeclaration}You need to review the code implementation of a task to ensure it meets quality standards.
+
+**Important**: You must review strictly and identify all code quality issues.
+
+{retryContextSection}## Task Information
+- ID: {taskId}
+- Title: {title}
+{descriptionSection}
+## Code Review Checkpoints
+{checkpointsList}
+{changesSection}
+{evidenceSection}
+## Review Requirements
+{reviewFocus}
+## Output Format
+Please output the review result in the following format:
+\`\`\`
+VERDICT: PASS or VERDICT: NOPASS
+## Review Result: PASS or NOPASS
+## Reason: [Brief explanation of why it passed or failed]
+## Code Quality Issues: [List of issues found, empty if none]
+## Failed Checkpoints: [List of checkpoint IDs that failed, empty if none]
+## Detailed Feedback: [Optional detailed feedback]
+\`\`\`
+
+**Important**: Must output VERDICT: PASS or VERDICT: NOPASS, do not use "passed", "failed", or other words.
+
+Begin review now.`
+  };
+  DEFAULT_QA_TEMPLATE = {
+    zh: `# QA \u9A8C\u8BC1\u4EFB\u52A1
 
 {roleDeclaration}\u4F60\u9700\u8981\u9A8C\u8BC1\u4E00\u4E2A\u4EFB\u52A1\u7684\u5B9E\u73B0\u662F\u5426\u6EE1\u8DB3\u529F\u80FD\u8981\u6C42\u3002
 
@@ -7358,7 +7442,124 @@ VERDICT: PASS \u2190 \u9519\u8BEF\uFF1A\u8BF4 PASS \u4F46\u672A\u901A\u8FC7\u768
 - CP-1-test
 \`\`\`
 
-\u73B0\u5728\u5F00\u59CB\u9A8C\u8BC1\u3002`, DEFAULT_EVALUATION_TEMPLATE = `# \u67B6\u6784\u8BC4\u4F30\u4EFB\u52A1
+\u73B0\u5728\u5F00\u59CB\u9A8C\u8BC1\u3002`,
+    en: `# QA Verification Task
+
+{roleDeclaration}You need to verify that a task implementation meets functional requirements.
+
+**Important**: You must verify strictly and ensure all functionality works correctly.
+
+## Verification Principles
+
+Please follow these principles during verification:
+
+1. **Functionality First**: The core of verification is whether functionality is correctly implemented, not the form of implementation.
+   - Inline functions and class methods should be considered equivalent if they have the same functionality. For example: if the task requires creating a class method, but the implementation uses an equivalent inline/exported function, it should pass as long as the functionality is correct.
+   - Do not mark as failed due to code organization (such as using standalone functions instead of class methods), unless the task explicitly requires a specific implementation structure.
+
+2. **Parsing Artifact Recognition**: Ignore structural requirements that arise from natural language descriptions of algorithm steps.
+   - Phrases like "create class" or "define interface" in task descriptions may be artifacts of algorithm description and do not constitute actual code structure requirements.
+   - If code achieves the same functionality through different structures (such as module-level functions instead of class methods), it should be considered as meeting the requirements.
+
+{retryContextSection}
+## Task Information
+- ID: {taskId}
+- Title: {title}
+{descriptionSection}
+## QA Verification Checkpoints
+{checkpointsList}
+## Code Review Result
+- Result: {codeReviewResult}
+- Reason: {codeReviewReason}
+
+## Verification Requirements
+{testStrategy}
+## Output Format
+Please output the verification result in the following format:
+
+\`\`\`
+VERDICT: PASS or VERDICT: NOPASS
+## Verification Result: PASS or NOPASS
+## Reason: [Brief explanation of why it passed or failed]
+## Test Failures: [List of failed tests, empty if none]
+## Failed Checkpoints: [List of checkpoint IDs that failed, empty if none]
+## Detailed Feedback: [Optional detailed feedback]
+\`\`\`
+
+**Important Format Requirements**:
+- Must output VERDICT: PASS or VERDICT: NOPASS marker line
+- Do not use "passed", "failed", or other Chinese words
+- Must output PASS when all checkpoints pass
+- Must output NOPASS when any checkpoint fails
+
+**VERDICT Rules**:
+- **PASS**: Must satisfy ALL of the following conditions:
+  1. All automated checkpoint verifications pass
+  2. No test failures
+  3. Functionality meets expectations
+  4. Code review result is PASS
+- **NOPASS**: Any of the following conditions will result in NOPASS:
+  1. Any test failures exist
+  2. Any checkpoint not passed
+  3. Functionality does not meet expectations
+  4. Code review result is NOPASS
+
+**Format Reference**:
+| Field | Description | Required |
+|-------|-------------|----------|
+| VERDICT: | Must be PASS or NOPASS | Yes |
+| ## Verification Result: | Consistent with VERDICT | Yes |
+| ## Reason: | Concise explanation (1-2 sentences) | Yes |
+| ## Test Failures: | List specific failed tests, empty or "none" when PASS | Yes |
+| ## Failed Checkpoints: | List failed checkpoint IDs, empty or "none" when PASS | Yes |
+| ## Detailed Feedback: | Optional supplementary notes | No |
+
+**Correct Example (Pass)**:
+\`\`\`
+VERDICT: PASS
+## Verification Result: PASS
+## Reason: All functional tests passed, checkpoint verification complete
+## Test Failures:
+## Failed Checkpoints:
+## Detailed Feedback: Implementation meets requirements, functionality correct.
+\`\`\`
+
+**Correct Example (Pass - Concise)**:
+\`\`\`
+VERDICT: PASS
+## Verification Result: PASS
+## Reason: All checkpoints verified, no test failures
+## Test Failures: none
+## Failed Checkpoints: none
+\`\`\`
+
+**Correct Example (Fail - Test Failure)**:
+\`\`\`
+VERDICT: NOPASS
+## Verification Result: NOPASS
+## Reason: Unit tests failed
+## Test Failures:
+- test_add_user: Expected 200 but got 404
+- test_delete_user: Timeout after 5000ms
+## Failed Checkpoints:
+- CP-2-unit-test
+## Detailed Feedback: Boundary condition handling incorrect, need to fix error handling in delete function.
+\`\`\`
+
+**Incorrect Example (Do NOT output like this)**:
+\`\`\`
+All functional tests have passed. \u2190 Error: Missing VERDICT marker
+VERDICT: passed \u2190 Error: Used "passed" instead of PASS
+VERDICT: failed \u2190 Error: Used "failed" instead of NOPASS
+VERDICT: PASS \u2190 Error: Says PASS but failed checkpoints is not empty
+## Failed Checkpoints:
+- CP-1-test
+\`\`\`
+
+Begin verification now.`
+  };
+  DEFAULT_EVALUATION_TEMPLATE = {
+    zh: `# \u67B6\u6784\u8BC4\u4F30\u4EFB\u52A1
 
 \u4F60\u662F\u4E00\u4F4D\u8D44\u6DF1\u67B6\u6784\u5E08\u3002\u4F60\u9700\u8981\u4ECE\u67B6\u6784\u89D2\u5EA6\u8BC4\u4F30\u4EFB\u52A1\u7684\u5B8C\u6210\u8D28\u91CF\uFF0C\u5224\u65AD\u662F\u5426\u6EE1\u8DB3\u9A8C\u6536\u6807\u51C6\uFF0C\u5E76\u7ED9\u51FA\u660E\u786E\u7684\u540E\u7EED\u52A8\u4F5C\u5EFA\u8BAE\u3002
 
@@ -7455,7 +7656,108 @@ EVALUATION_RESULT: \u4E0D\u901A\u8FC7  \u2190 \u9519\u8BEF\uFF1A\u4F7F\u7528\u4E
 - reevaluate: \u8BC4\u4F30\u4E0D\u660E\u786E\u9700\u8981\u66F4\u591A\u4FE1\u606F\uFF0C\u91CD\u65B0\u8BC4\u4F30
 - escalate_human: \u95EE\u9898\u8D85\u51FA\u81EA\u52A8\u5904\u7406\u8303\u56F4\uFF0C\u9700\u8981\u4EBA\u5DE5\u4ECB\u5165
 
-\u73B0\u5728\u5F00\u59CB\u8BC4\u4F30\u3002`, DEFAULT_REQUIREMENT_TEMPLATE = `\u4F60\u662F\u4E00\u4E2A\u9879\u76EE\u7BA1\u7406\u52A9\u624B\u3002\u6839\u636E\u4EE5\u4E0B\u9700\u6C42\u63CF\u8FF0\uFF0C\u63D0\u53D6\u7ED3\u6784\u5316\u5143\u6570\u636E\u3002
+\u73B0\u5728\u5F00\u59CB\u8BC4\u4F30\u3002`,
+    en: `# Architecture Evaluation Task
+
+You are a senior architect. You need to evaluate the quality of task completion from an architectural perspective, determine whether acceptance criteria are met, and provide clear follow-up action recommendations.
+
+**Important**: You must judge independently and do not give preferential treatment just because this is AI-completed work.
+
+## Task Information
+- ID: {taskId}
+- Title: {title}
+- Type: {type}
+{descriptionSection}
+## Acceptance Criteria
+{acceptanceCriteriaList}
+{verificationCommandsSection}
+{checkpointsSection}
+{humanCheckpointsSection}
+{evidenceSection}
+{completedCheckpointsSection}
+{phantomTasksSection}
+## Evaluation Requirements
+1. Read task description and acceptance criteria
+2. Check relevant code files
+3. Run verification commands (if any)
+4. Verify each acceptance criterion is satisfied
+5. Check code quality (readability, maintainability)
+6. Check if developer violated prohibited operations (especially creating extra tasks)
+
+## Output Format (Strictly Follow)
+
+**Mandatory**: Your output must start with these two marker lines:
+\`\`\`
+EVALUATION_RESULT: PASS
+EVALUATION_REASON: [Brief explanation of why it passed or failed]
+\`\`\`
+Or:
+\`\`\`
+EVALUATION_RESULT: NOPASS
+EVALUATION_REASON: [Brief explanation of why it passed or failed]
+\`\`\`
+
+Then output detailed evaluation in this Markdown format:
+\`\`\`
+## Evaluation Result: PASS or NOPASS
+## Reason: [Brief explanation of why it passed or failed]
+## Next Action: [resolve|redevelop|retest|reevaluate|escalate_human]
+## Failure Category: [acceptance_criteria|code_quality|test_failure|architecture|specification|phantom_task|incomplete|other]
+## Unmet Criteria: [List unmet acceptance criteria, empty if none]
+## Incomplete Checkpoints: [List incomplete checkpoints, empty if none]
+## Detailed Feedback: [Optional detailed feedback]
+\`\`\`
+
+**Important Format Requirements**:
+- You must strictly follow the above format, do not omit or modify it
+- Must output EVALUATION_RESULT: PASS or EVALUATION_RESULT: NOPASS marker line
+- If you think the task passed, must output PASS (not "passed", "satisfied", etc.)
+- If you think the task failed, must output NOPASS (not "failed", "not satisfied", etc.)
+
+**Correct Example (Pass)**:
+\`\`\`
+EVALUATION_RESULT: PASS
+EVALUATION_REASON: All acceptance criteria satisfied, good code quality
+## Evaluation Result: PASS
+## Reason: All acceptance criteria satisfied, good code quality
+## Next Action: resolve
+## Failure Category:
+## Unmet Criteria:
+## Incomplete Checkpoints:
+## Detailed Feedback: Implementation complete, code clear.
+\`\`\`
+
+**Correct Example (Fail)**:
+\`\`\`
+EVALUATION_RESULT: NOPASS
+EVALUATION_REASON: Missing unit tests, build failed
+## Evaluation Result: NOPASS
+## Reason: Missing unit tests, build failed
+## Next Action: redevelop
+## Failure Category: test_failure
+## Unmet Criteria: - All tests pass
+## Incomplete Checkpoints: - CP-bun-run-build-zero-errors
+## Detailed Feedback: Developer did not write any tests.
+\`\`\`
+
+**Incorrect Example (Do NOT output like this)**:
+\`\`\`
+All acceptance criteria satisfied, implementation clear.  \u2190 Error: Missing EVALUATION_RESULT marker
+EVALUATION_RESULT: passed  \u2190 Error: Used "passed" instead of PASS
+EVALUATION_RESULT: failed  \u2190 Error: Used "failed" instead of NOPASS
+\`\`\`
+
+**Action Descriptions (Required when evaluation is NOPASS)**:
+- resolve: Evaluation passed, task can be completed (only use when PASS)
+- redevelop: Serious implementation issues, need to restart from development phase
+- retest: Implementation basically OK but tests failed, retry from QA phase
+- reevaluate: Evaluation unclear needs more info, re-evaluate
+- escalate_human: Issue beyond automatic processing scope, needs human intervention
+
+Begin evaluation now.`
+  };
+  DEFAULT_REQUIREMENT_TEMPLATE = {
+    zh: `\u4F60\u662F\u4E00\u4E2A\u9879\u76EE\u7BA1\u7406\u52A9\u624B\u3002\u6839\u636E\u4EE5\u4E0B\u9700\u6C42\u63CF\u8FF0\uFF0C\u63D0\u53D6\u7ED3\u6784\u5316\u5143\u6570\u636E\u3002
 
 ## \u8F93\u5165
 \u9700\u6C42\u63CF\u8FF0:
@@ -7524,7 +7826,80 @@ EVALUATION_RESULT: \u4E0D\u901A\u8FC7  \u2190 \u9519\u8BEF\uFF1A\u4F7F\u7528\u4E
 5. \u4F9D\u8D56\u5173\u7CFB\u9075\u5FAA\u5E95\u5C42\u5148\u4E8E\u4E0A\u5C42\uFF08\u5148\u6539\u7C7B\u578B\uFF0C\u518D\u6539\u5DE5\u5177\uFF0C\u518D\u6539\u547D\u4EE4\uFF09
 6. \u5982\u679C\u9700\u6C42\u6D89\u53CA 3 \u4E2A\u4EE5\u4E0A\u6587\u4EF6\u6216\u8DE8 2 \u4E2A\u4EE5\u4E0A\u76EE\u5F55\uFF0C\u5E94\u751F\u6210\u7C92\u5EA6\u66F4\u7EC6\u7684\u68C0\u67E5\u70B9\uFF0C\u6697\u793A\u53EF\u62C6\u5206
 7. \u6839\u636E\u9A8C\u8BC1\u65B9\u5F0F\u9009\u62E9\u6B63\u786E\u7684\u524D\u7F00\u548C requiresHuman \u503C
-{errorFeedback}`, DEFAULT_CHECKPOINTS_TEMPLATE = `\u4F60\u662F\u4E00\u4E2A\u9879\u76EE\u7BA1\u7406\u52A9\u624B\u3002\u4E3A\u4EE5\u4E0B\u4EFB\u52A1\u751F\u6210\u68C0\u67E5\u70B9\u5217\u8868\u3002
+{errorFeedback}`,
+    en: `You are a project management assistant. Extract structured metadata from the following requirement description.
+
+## Input
+Requirement Description:
+{description}
+
+## Output Requirements
+Output pure JSON object, do not wrap in markdown code blocks.
+If a field cannot be determined, set it to null rather than guessing.
+
+## Output Format
+{
+  "title": "Concise title starting with verb, 10-50 characters",
+  "description": "Structured detailed description including background, goals, solution points",
+  "type": "bug | feature | research | docs | refactor | test | null",
+  "priority": "P0 | P1 | P2 | P3 | null",
+  "recommendedRole": "Recommended role or null",
+  "checkpoints": [
+    {
+      "description": "[ai review] Specific verification step starting with verb (e.g., user authentication logic implemented)",
+      "requiresHuman": false
+    },
+    {
+      "description": "[human qa] Subjective verification requiring human confirmation (e.g., confirm UI matches design)",
+      "requiresHuman": true
+    }
+  ],
+  "dependencies": ["List of dependency IDs or null"]
+}
+
+## Constraints
+- Title must start with a verb, length 10-50 characters
+- Each checkpoint description must start with [ai review]/[ai qa]/[human qa]/[script] prefix
+- Checkpoints cannot be generic phase names (like "development phase", "testing phase")
+- Priority must be P0/P1/P2/P3 or null
+- Output JSON only
+
+## Checkpoint Prefix Rules (Must Follow)
+
+Each checkpoint description must start with one of these prefixes to identify the verification category:
+
+| Prefix | Use Case | Verification Phase | requiresHuman |
+|--------|----------|-------------------|---------------|
+| [ai review] | Code review, structure check, code quality, logic correctness, refactoring, naming conventions | code_review | false |
+| [ai qa] | Testing, verification, coverage, automated checks, regression testing, type checking | qa_verification | false |
+| [script] | Script execution, build, command line operations, CI/CD, deployment, packaging | evaluation | false |
+
+## Prefix Selection Examples
+
+- "[ai review] login.ts has user authentication logic implemented"
+- "[ai review] Refactor duplicate code in userService.ts"
+- "[ai qa] Login module unit test coverage >= 80%"
+- "[ai qa] Run tsc --noEmit to confirm type check passes"
+- "[script] bun run build succeeds"
+- "[script] Run npm run lint code check passes"
+
+## requiresHuman Field Usage
+
+- requiresHuman: true - Indicates this checkpoint requires human verification
+- requiresHuman: false - Indicates this checkpoint can be automatically verified by AI or script (for [ai review], [ai qa], [script] prefixes)
+
+## Task Decomposition Best Practices (Affects checkpoint generation)
+1. Keep single task estimated time within 15 minutes
+2. Split by architecture layer priority: Layer0(types) \u2192 Layer1(utilities) \u2192 Layer2(core logic) \u2192 Layer3(command entry)
+3. Split by file directory boundaries, each subtask focuses on files in the same directory
+4. Checkpoints must be concrete and verifiable, format like "[ai review] implement XXX function", "[ai qa] run tsc --noEmit passes"
+5. Dependencies follow bottom-up order (types first, then utilities, then commands)
+6. If requirement involves 3+ files or spans 2+ directories, generate finer-grained checkpoints hinting at possible splitting
+7. Choose correct prefix and requiresHuman value based on verification method
+{errorFeedback}`
+  };
+  DEFAULT_CHECKPOINTS_TEMPLATE = {
+    zh: `\u4F60\u662F\u4E00\u4E2A\u9879\u76EE\u7BA1\u7406\u52A9\u624B\u3002\u4E3A\u4EE5\u4E0B\u4EFB\u52A1\u751F\u6210\u68C0\u67E5\u70B9\u5217\u8868\u3002
 
 ## \u4EFB\u52A1\u63CF\u8FF0
 {description}
@@ -7590,7 +7965,77 @@ EVALUATION_RESULT: \u4E0D\u901A\u8FC7  \u2190 \u9519\u8BEF\uFF1A\u4F7F\u7528\u4E
 4. \u6309\u67B6\u6784\u5C42\u7EA7\u6392\u5217\uFF1A\u5148\u7C7B\u578B\u5B9A\u4E49 \u2192 \u518D\u5DE5\u5177\u51FD\u6570 \u2192 \u518D\u6838\u5FC3\u903B\u8F91 \u2192 \u6700\u540E\u547D\u4EE4\u5165\u53E3
 5. \u4F9D\u8D56\u5E95\u5C42\u5B8C\u6210\u540E\u518D\u505A\u4E0A\u5C42\uFF0C\u4F8B\u5982\u5148"\u5B9A\u4E49 XXX \u63A5\u53E3"\u518D"\u5B9E\u73B0 XXX \u529F\u80FD"
 6. \u6BCF\u4E2A\u68C0\u67E5\u70B9\u9884\u4F30\u8017\u65F6\u4E0D\u8D85\u8FC7 15 \u5206\u949F\uFF0C\u8D85\u8FC7\u5219\u5E94\u62C6\u5206\u4E3A\u591A\u6761
-7. \u6839\u636E\u9A8C\u8BC1\u65B9\u5F0F\u9009\u62E9\u6B63\u786E\u7684\u524D\u7F00\u548C requiresHuman \u503C`, DEFAULT_QUALITY_TEMPLATE = `\u4F60\u662F\u4E00\u4E2A\u9879\u76EE\u8D28\u91CF\u5BA1\u67E5\u52A9\u624B\u3002\u8BC4\u4F30\u4EE5\u4E0B\u4EFB\u52A1\u7684\u8D28\u91CF\u3002
+7. \u6839\u636E\u9A8C\u8BC1\u65B9\u5F0F\u9009\u62E9\u6B63\u786E\u7684\u524D\u7F00\u548C requiresHuman \u503C`,
+    en: `You are a project management assistant. Generate a checkpoint list for the following task.
+
+## Task Description
+{description}
+
+## Task Type
+{type}
+{existingCheckpointsSection}
+## Output Requirements
+Output pure JSON object, do not wrap in markdown code blocks.
+
+## Output Format
+{
+  "checkpoints": [
+    {
+      "description": "[ai review] Specific verification step starting with verb (e.g., user authentication logic implemented)",
+      "requiresHuman": false
+    },
+    {
+      "description": "[ai qa] Verification step starting with verb (e.g., unit test coverage >= 80%)",
+      "requiresHuman": false
+    },
+    {
+      "description": "[script] Script or command verification (e.g., run bun run build succeeds)",
+      "requiresHuman": false
+    }
+  ]
+}
+
+## Checkpoint Prefix Rules (Must Follow)
+
+Each checkpoint description must start with one of these prefixes to identify verification category and phase:
+
+| Prefix | Use Case | Verification Phase |
+|--------|----------|-------------------|
+| [ai review] | Code review, structure check, code quality, logic correctness, refactoring, naming conventions | code_review |
+| [ai qa] | Testing, verification, coverage, automated checks, regression testing, type checking | qa_verification |
+| [script] | Script execution, build, command line operations, CI/CD, deployment, packaging | evaluation |
+
+## Prefix Selection Examples
+
+- "[ai review] login.ts has user authentication logic implemented"
+- "[ai review] Refactor duplicate code in userService.ts for better maintainability"
+- "[ai qa] Login module unit test coverage >= 80%"
+- "[ai qa] Run tsc --noEmit to confirm type check has no errors"
+- "[script] bun run build succeeds"
+- "[script] Run npm run lint code check passes"
+
+## requiresHuman Field Usage
+
+- requiresHuman: true - Indicates this checkpoint requires human verification
+- requiresHuman: false - Indicates this checkpoint can be automatically verified by AI or script (corresponds to [ai review], [ai qa], [script] prefixes)
+
+## Constraints
+- Each checkpoint description must start with [ai review]/[ai qa]/[human qa]/[script] prefix
+- Cannot be generic phase names (like "development phase", "testing phase")
+- Each description at least 10 characters (excluding prefix)
+- Output JSON only
+
+## Checkpoint Quality Standards
+1. Each must be an independently verifiable atomic operation, e.g., "implement parseConfig function" not "complete config parsing"
+2. Reference specific file paths or function names, e.g., "modify bar() function in src/utils/foo.ts"
+3. Verification checkpoints include executable commands, e.g., "run tsc --noEmit to confirm type check passes"
+4. Arrange by architecture layer: types first \u2192 then utilities \u2192 then core logic \u2192 finally command entry
+5. Dependencies first: e.g., define XXX interface before implementing XXX functionality
+6. Each checkpoint estimated time should not exceed 15 minutes, split into multiple if longer
+7. Choose correct prefix and requiresHuman value based on verification method`
+  };
+  DEFAULT_QUALITY_TEMPLATE = {
+    zh: `\u4F60\u662F\u4E00\u4E2A\u9879\u76EE\u8D28\u91CF\u5BA1\u67E5\u52A9\u624B\u3002\u8BC4\u4F30\u4EE5\u4E0B\u4EFB\u52A1\u7684\u8D28\u91CF\u3002
 
 ## \u4EFB\u52A1\u6570\u636E
 {taskData}
@@ -7615,7 +8060,36 @@ EVALUATION_RESULT: \u4E0D\u901A\u8FC7  \u2190 \u9519\u8BEF\uFF1A\u4F7F\u7528\u4E
 - \u4F9D\u8D56: \u662F\u5426\u9057\u6F0F\u5173\u952E\u4F9D\u8D56
 - \u4EFB\u52A1\u7C92\u5EA6: \u5355\u4E2A\u4EFB\u52A1\u662F\u5426\u63A7\u5236\u572815\u5206\u949F\u5185\u53EF\u5B8C\u6210
 - \u5C42\u7EA7\u62C6\u5206: \u6D89\u53CA\u591A\u6587\u4EF6\u65F6\u662F\u5426\u6309\u67B6\u6784\u5C42\u7EA7\uFF08\u7C7B\u578B\u2192\u5DE5\u5177\u2192\u6838\u5FC3\u2192\u547D\u4EE4\uFF09\u62C6\u5206\u68C0\u67E5\u70B9
-- \u53EA\u8F93\u51FA JSON`, DEFAULT_DUPLICATES_TEMPLATE = `\u4F60\u662F\u4E00\u4E2A\u9879\u76EE\u7BA1\u7406\u52A9\u624B\u3002\u68C0\u6D4B\u4EE5\u4E0B\u4EFB\u52A1\u5217\u8868\u4E2D\u7684\u8BED\u4E49\u91CD\u590D\u3002
+- \u53EA\u8F93\u51FA JSON`,
+    en: `You are a project quality review assistant. Evaluate the quality of the following task.
+
+## Task Data
+{taskData}
+
+## Output Requirements
+Output pure JSON object, do not wrap in markdown code blocks.
+
+## Output Format
+{
+  "score": 0-100,
+  "issues": [
+    {"field": "field name", "severity": "error|warning|info", "message": "issue description"}
+  ],
+  "suggestions": ["list of improvement suggestions"]
+}
+
+## Evaluation Dimensions
+- Title: Whether it starts with a verb, whether it's specific
+- Description: Whether it includes sufficient context and goals
+- Checkpoints: Whether they are concrete and verifiable (must reference specific file paths, function names, or executable commands)
+- Priority: Whether it's reasonable
+- Dependencies: Whether key dependencies are missing
+- Task Granularity: Whether single task can be completed within 15 minutes
+- Layer Split: Whether checkpoints are split by architecture layer (types \u2192 utilities \u2192 core \u2192 commands) when involving multiple files
+- Output JSON only`
+  };
+  DEFAULT_DUPLICATES_TEMPLATE = {
+    zh: `\u4F60\u662F\u4E00\u4E2A\u9879\u76EE\u7BA1\u7406\u52A9\u624B\u3002\u68C0\u6D4B\u4EE5\u4E0B\u4EFB\u52A1\u5217\u8868\u4E2D\u7684\u8BED\u4E49\u91CD\u590D\u3002
 
 ## \u4EFB\u52A1\u5217\u8868
 {taskList}
@@ -7637,7 +8111,33 @@ EVALUATION_RESULT: \u4E0D\u901A\u8FC7  \u2190 \u9519\u8BEF\uFF1A\u4F7F\u7528\u4E
 
 ## \u7EA6\u675F
 - \u53EA\u62A5\u544A\u76F8\u4F3C\u5EA6 >= 0.7 \u7684\u7EC4
-- \u53EA\u8F93\u51FA JSON`, DEFAULT_STALENESS_TEMPLATE = `\u4F60\u662F\u4E00\u4E2A\u9879\u76EE\u7BA1\u7406\u52A9\u624B\u3002\u8BC4\u4F30\u4EE5\u4E0B\u4EFB\u52A1\u662F\u5426\u9648\u65E7\u3002
+- \u53EA\u8F93\u51FA JSON`,
+    en: `You are a project management assistant. Detect semantic duplicates in the following task list.
+
+## Task List
+{taskList}
+
+## Output Requirements
+Output pure JSON object, do not wrap in markdown code blocks.
+
+## Output Format
+{
+  "duplicates": [
+    {
+      "taskIds": ["List of duplicate task IDs"],
+      "similarity": 0.0-1.0,
+      "keepTaskId": "Recommended task ID to keep or null",
+      "reason": "Reasoning or null"
+    }
+  ]
+}
+
+## Constraints
+- Only report groups with similarity >= 0.7
+- Output JSON only`
+  };
+  DEFAULT_STALENESS_TEMPLATE = {
+    zh: `\u4F60\u662F\u4E00\u4E2A\u9879\u76EE\u7BA1\u7406\u52A9\u624B\u3002\u8BC4\u4F30\u4EE5\u4E0B\u4EFB\u52A1\u662F\u5426\u9648\u65E7\u3002
 
 ## \u4EFB\u52A1\u6570\u636E
 {taskData}
@@ -7654,7 +8154,28 @@ EVALUATION_RESULT: \u4E0D\u901A\u8FC7  \u2190 \u9519\u8BEF\uFF1A\u4F7F\u7528\u4E
 }
 
 ## \u7EA6\u675F
-- \u53EA\u8F93\u51FA JSON`, DEFAULT_DECOMPOSITION_TEMPLATE = `\u4F60\u662F\u4E00\u4E2A\u4E13\u4E1A\u7684\u9700\u6C42/\u95EE\u9898\u5206\u6790\u4E13\u5BB6\u3002
+- \u53EA\u8F93\u51FA JSON`,
+    en: `You are a project management assistant. Evaluate whether the following task is stale.
+
+## Task Data
+{taskData}
+
+## Output Requirements
+Output pure JSON object, do not wrap in markdown code blocks.
+
+## Output Format
+{
+  "isStale": true/false,
+  "stalenessScore": 0.0-1.0,
+  "suggestedAction": "keep | close | update | split",
+  "reason": "Reasoning"
+}
+
+## Constraints
+- Output JSON only`
+  };
+  DEFAULT_DECOMPOSITION_TEMPLATE = {
+    zh: `\u4F60\u662F\u4E00\u4E2A\u4E13\u4E1A\u7684\u9700\u6C42/\u95EE\u9898\u5206\u6790\u4E13\u5BB6\u3002
 
 ## \u4EFB\u52A1
 \u5206\u6790\u7528\u6237\u8F93\u5165\u7684\u5185\u5BB9\uFF0C\u5C06\u5176\u5206\u89E3\u4E3A\u72EC\u7ACB\u7684\u95EE\u9898\u6216\u9700\u6C42\u5217\u8868\u3002
@@ -7688,7 +8209,45 @@ EVALUATION_RESULT: \u4E0D\u901A\u8FC7  \u2190 \u9519\u8BEF\uFF1A\u4F7F\u7528\u4E
 - priority \u5FC5\u987B\u662F P0/P1/P2/P3 \u4E4B\u4E00
 - type \u5FC5\u987B\u662F bug/feature/refactor/docs/test/research \u4E4B\u4E00
 - title \u5FC5\u987B\u4EE5\u52A8\u8BCD\u5F00\u5934\uFF0C10-50 \u5B57\u7B26
-- \u53EA\u8F93\u51FA JSON`, DEFAULT_BUG_REPORT_TEMPLATE = `\u4F60\u662F\u4E00\u4E2A Bug \u5206\u6790\u52A9\u624B\u3002\u5C06\u4EE5\u4E0B Bug \u62A5\u544A\u8F6C\u4E3A\u7ED3\u6784\u5316\u9700\u6C42\u6587\u6863\u3002
+- \u53EA\u8F93\u51FA JSON`,
+    en: `You are a professional requirements/problem analysis expert.
+
+## Task
+Analyze user input content and decompose it into a list of independent problems or requirements.
+
+## Decomposition Rules
+1. If it's a single clear requirement, return a list with 1 element
+2. If it's an investigation report format (containing "Problem X", "### Phenomenon" sections), extract all problems
+3. If it's a complex requirement, split into independently completable sub-requirements
+
+## Required Fields for Each Problem/Requirement
+{
+  "title": "Concise title (starts with verb, 10-50 characters)",
+  "problem": "Problem description: phenomenon, background, impact (\u226550 characters)",
+  "rootCause": "Root cause analysis: why this problem occurred (\u226530 characters, optional)",
+  "solution": "Solution: how to solve this problem, specific steps (\u226550 characters)",
+  "priority": "P0 | P1 | P2 | P3",
+  "type": "bug | feature | refactor | docs | test | research",
+  "checkpoints": ["Verification step 1", "Verification step 2"]
+}
+
+## Output Format
+{
+  "decomposable": true | false,
+  "reason": "Reason for decomposition failure",
+  "items": [{ /* Problem 1 */ }, { /* Problem 2 */ }]
+}
+
+## Constraints
+- If content cannot be decomposed into independent problems (too vague, only one sentence), set decomposable to false
+- Each items entry must conform to the field structure above
+- Priority must be one of P0/P1/P2/P3
+- Type must be one of bug/feature/refactor/docs/test/research
+- Title must start with a verb, 10-50 characters
+- Output JSON only`
+  };
+  DEFAULT_BUG_REPORT_TEMPLATE = {
+    zh: `\u4F60\u662F\u4E00\u4E2A Bug \u5206\u6790\u52A9\u624B\u3002\u5C06\u4EE5\u4E0B Bug \u62A5\u544A\u8F6C\u4E3A\u7ED3\u6784\u5316\u9700\u6C42\u6587\u6863\u3002
 
 ## Bug \u62A5\u544A
 {reportContent}
@@ -7711,7 +8270,34 @@ EVALUATION_RESULT: \u4E0D\u901A\u8FC7  \u2190 \u9519\u8BEF\uFF1A\u4F7F\u7528\u4E
 ## \u7EA6\u675F
 - title \u5FC5\u987B\u4EE5\u52A8\u8BCD\u5F00\u5934
 - checkpoints \u6BCF\u6761\u5FC5\u987B\u4EE5\u52A8\u8BCD\u5F00\u5934
-- \u53EA\u8F93\u51FA JSON`, DEFAULT_SEMANTIC_DEPENDENCY_TEMPLATE = `\u4F60\u662F\u4E00\u4E2A\u9879\u76EE\u7BA1\u7406\u52A9\u624B\u3002\u5206\u6790\u4EE5\u4E0B\u4EFB\u52A1\u5217\u8868\uFF0C\u63A8\u65AD\u4EFB\u52A1\u95F4\u7684\u8BED\u4E49\u4F9D\u8D56\u5173\u7CFB\u3002
+- \u53EA\u8F93\u51FA JSON`,
+    en: `You are a Bug analysis assistant. Convert the following Bug report into a structured requirement document.
+
+## Bug Report
+{reportContent}
+{logContextSection}
+## Output Requirements
+Output pure JSON object, do not wrap in markdown code blocks.
+If a field cannot be determined, set it to null rather than guessing.
+
+## Output Format
+{
+  "title": "Title starting with verb",
+  "description": "Structured description: background, reproduction steps, expected behavior, actual behavior",
+  "type": "bug | feature | null",
+  "priority": "P0 | P1 | P2 | P3 | null",
+  "checkpoints": ["List of verification steps or null"],
+  "rootCause": "Root cause analysis or null",
+  "impactScope": "Impact scope or null"
+}
+
+## Constraints
+- Title must start with a verb
+- Each checkpoint must start with a verb
+- Output JSON only`
+  };
+  DEFAULT_SEMANTIC_DEPENDENCY_TEMPLATE = {
+    zh: `\u4F60\u662F\u4E00\u4E2A\u9879\u76EE\u7BA1\u7406\u52A9\u624B\u3002\u5206\u6790\u4EE5\u4E0B\u4EFB\u52A1\u5217\u8868\uFF0C\u63A8\u65AD\u4EFB\u52A1\u95F4\u7684\u8BED\u4E49\u4F9D\u8D56\u5173\u7CFB\u3002
 
 ## \u4EFB\u52A1\u5217\u8868
 {taskList}
@@ -7742,23 +8328,40 @@ EVALUATION_RESULT: \u4E0D\u901A\u8FC7  \u2190 \u9519\u8BEF\uFF1A\u4F7F\u7528\u4E
 - taskId \u5FC5\u987B\u4F9D\u8D56 depTaskId\uFF08depTaskId \u5BF9\u5E94\u7684\u4EFB\u52A1\u5E94\u5148\u5B8C\u6210\uFF09
 - reason \u5FC5\u987B\u8BF4\u660E\u63A8\u65AD\u7684\u8BED\u4E49\u539F\u56E0
 - \u5982\u679C\u6CA1\u6709\u53D1\u73B0\u8BED\u4E49\u4F9D\u8D56\uFF0C\u8FD4\u56DE\u7A7A\u6570\u7EC4
-- \u53EA\u8F93\u51FA JSON`, DEFAULT_TEMPLATES;
-var init_prompt_templates = __esm(() => {
-  init_config2();
-  PROMPT_TEMPLATE_NAMES = [
-    "dev",
-    "codeReview",
-    "qa",
-    "evaluation",
-    "requirement",
-    "checkpoints",
-    "quality",
-    "duplicates",
-    "staleness",
-    "bugReport",
-    "semanticDependency",
-    "decomposition"
-  ];
+- \u53EA\u8F93\u51FA JSON`,
+    en: `You are a project management assistant. Analyze the following task list and infer semantic dependency relationships between tasks.
+
+## Task List
+{taskList}
+
+## Output Requirements
+Output pure JSON object, do not wrap in markdown code blocks.
+
+Analyze the functional semantics in each task's title and description to infer implicit dependency relationships between tasks.
+For example:
+- Login functionality depends on user model definition
+- API endpoints depend on database schema
+- Utility functions depend on type definitions
+- Test tasks depend on the implementation being tested
+
+## Output Format
+{
+  "dependencies": [
+    {
+      "taskId": "Dependent task ID",
+      "depTaskId": "Dependency task ID",
+      "reason": "Reason for inferred dependency"
+    }
+  ]
+}
+
+## Constraints
+- Only infer semantically reasonable dependencies, do not infer dependencies already detected through file overlap
+- taskId must depend on depTaskId (the task corresponding to depTaskId should be completed first)
+- reason must explain the semantic basis for the inference
+- If no semantic dependencies are found, return empty array
+- Output JSON only`
+  };
   DEFAULT_TEMPLATES = {
     dev: DEFAULT_DEV_TEMPLATE,
     codeReview: DEFAULT_CODE_REVIEW_TEMPLATE,
@@ -8012,11 +8615,12 @@ function setConfig(key, value, cwd = process.cwd()) {
     if (variables) {
       const defaultTemplate = DEFAULT_TEMPLATES[templateName];
       if (defaultTemplate) {
-        const defaultVars = new Set((defaultTemplate.match(/\{(\w+)\}/g) || []).map((v) => v));
+        const zhVars = new Set((defaultTemplate.zh.match(/\{(\w+)\}/g) || []).map((v) => v));
+        const enVars = new Set((defaultTemplate.en.match(/\{(\w+)\}/g) || []).map((v) => v));
         const customVars = new Set(variables);
-        const missing = [...defaultVars].filter((v) => !customVars.has(v));
-        if (missing.length > 0) {
-          console.warn(`Warning: Custom template missing variables from default: ${missing.join(", ")}`);
+        const missingZh = [...zhVars].filter((v) => !customVars.has(v));
+        if (missingZh.length > 0) {
+          console.warn(`Warning: Custom template missing variables from default: ${missingZh.join(", ")}`);
           console.warn("Missing variables may cause unsubstituted placeholders in prompts.");
         }
       }
@@ -12015,33 +12619,668 @@ var init_headless_agent = __esm(() => {
   initializeProviders();
 });
 
+// src/i18n/zh.ts
+var zhTexts;
+var init_zh = __esm(() => {
+  zhTexts = {
+    error: "\u9519\u8BEF",
+    success: "\u6210\u529F",
+    cancel: "\u53D6\u6D88",
+    setup: {
+      initializing: "\u6B63\u5728\u521D\u59CB\u5316\u9879\u76EE\u7BA1\u7406\u73AF\u5883...",
+      createDir: "\u521B\u5EFA\u76EE\u5F55",
+      createConfig: "\u521B\u5EFA\u914D\u7F6E: config.json",
+      setupComplete: "\u9879\u76EE\u7BA1\u7406\u73AF\u5883\u521D\u59CB\u5316\u5B8C\u6210\uFF01",
+      nextStep: "\u4F7F\u7528 'projmnt4claude task create' \u521B\u5EFA\u7B2C\u4E00\u4E2A\u4EFB\u52A1",
+      selectLanguage: "\u8BF7\u9009\u62E9\u8BED\u8A00:",
+      copyingSkills: "\u6B63\u5728\u590D\u5236\u6280\u80FD\u6587\u4EF6...",
+      skillsCopied: "\u6280\u80FD\u6587\u4EF6\u590D\u5236\u5B8C\u6210",
+      alreadyInitialized: "\u9879\u76EE\u7BA1\u7406\u73AF\u5883\u5DF2\u5B58\u5728\uFF0C\u8DF3\u8FC7\u521D\u59CB\u5316\u3002"
+    },
+    task: {
+      createTitle: "\u8BF7\u8F93\u5165\u4EFB\u52A1\u6807\u9898:",
+      createDescription: "\u8BF7\u8F93\u5165\u4EFB\u52A1\u63CF\u8FF0\uFF08\u53EF\u9009\uFF09:",
+      taskCreated: "\u4EFB\u52A1\u521B\u5EFA\u6210\u529F",
+      taskNotFound: "\u672A\u627E\u5230\u4EFB\u52A1",
+      taskUpdated: "\u4EFB\u52A1\u5DF2\u66F4\u65B0",
+      taskDeleted: "\u4EFB\u52A1\u5DF2\u5220\u9664",
+      listHeader: "\u4EFB\u52A1\u5217\u8868",
+      noTasks: "\u6682\u65E0\u4EFB\u52A1",
+      statusHeader: "\u72B6\u6001",
+      priorityHeader: "\u4F18\u5148\u7EA7",
+      roleHeader: "\u63A8\u8350\u89D2\u8272",
+      dependencyHeader: "\u4F9D\u8D56",
+      subtaskHeader: "\u5B50\u4EFB\u52A1"
+    },
+    plan: {
+      showHeader: "\u6267\u884C\u8BA1\u5212",
+      addHeader: "\u6DFB\u52A0\u4EFB\u52A1",
+      removeHeader: "\u79FB\u9664\u4EFB\u52A1",
+      clearHeader: "\u6E05\u7A7A\u8BA1\u5212",
+      recommendHeader: "\u667A\u80FD\u63A8\u8350",
+      noPlan: "\u6682\u65E0\u8BA1\u5212",
+      planCleared: "\u8BA1\u5212\u5DF2\u6E05\u7A7A",
+      taskAdded: "\u4EFB\u52A1\u5DF2\u6DFB\u52A0\u5230\u8BA1\u5212",
+      taskRemoved: "\u4EFB\u52A1\u5DF2\u4ECE\u8BA1\u5212\u79FB\u9664"
+    },
+    status: {
+      projectStatus: "\u9879\u76EE\u72B6\u6001",
+      totalTasks: "\u603B\u4EFB\u52A1\u6570",
+      completedTasks: "\u5DF2\u5B8C\u6210",
+      inProgressTasks: "\u8FDB\u884C\u4E2D",
+      pendingTasks: "\u5F85\u5904\u7406",
+      noTasks: "\u65E0\u4EFB\u52A1"
+    },
+    analyze: {
+      analyzing: "\u6B63\u5728\u5206\u6790\u9879\u76EE\u5065\u5EB7\u72B6\u6001...",
+      analysisComplete: "\u5206\u6790\u5B8C\u6210",
+      issuesFound: "\u53D1\u73B0 {count} \u4E2A\u95EE\u9898",
+      noIssues: "\u672A\u53D1\u73B0\u95EE\u9898",
+      fixApplied: "\u5DF2\u4FEE\u590D {count} \u4E2A\u95EE\u9898"
+    },
+    help: {
+      commandReference: "\u547D\u4EE4\u53C2\u8003",
+      availableCommands: "\u53EF\u7528\u547D\u4EE4",
+      noDescription: "\u6682\u65E0\u63CF\u8FF0",
+      commandNotFound: "\u672A\u627E\u5230\u547D\u4EE4",
+      tipUseHelp: "\u4F7F\u7528 `projmnt4claude help <command>` \u67E5\u770B\u547D\u4EE4\u8BE6\u7EC6\u8BF4\u660E",
+      usage: "\u4F7F\u7528\u65B9\u5F0F",
+      examples: "\u793A\u4F8B"
+    },
+    config: {
+      listHeader: "\u914D\u7F6E\u5217\u8868",
+      getHeader: "\u83B7\u53D6\u914D\u7F6E",
+      setHeader: "\u8BBE\u7F6E\u914D\u7F6E",
+      configUpdated: "\u914D\u7F6E\u5DF2\u66F4\u65B0",
+      keyNotFound: "\u914D\u7F6E\u9879\u4E0D\u5B58\u5728",
+      invalidAction: "\u672A\u77E5\u64CD\u4F5C"
+    },
+    tool: {
+      listHeader: "\u672C\u5730 skill \u5217\u8868",
+      createHeader: "\u521B\u5EFA skill",
+      installHeader: "\u5B89\u88C5 skill",
+      removeHeader: "\u5220\u9664 skill",
+      deployHeader: "\u90E8\u7F72 skill",
+      undeployHeader: "\u5378\u8F7D skill"
+    },
+    initRequirement: {
+      descriptionRequired: "\u8BF7\u8F93\u5165\u9700\u6C42\u63CF\u8FF0",
+      parsingDescription: "\u6B63\u5728\u89E3\u6790\u9700\u6C42...",
+      creatingTasks: "\u6B63\u5728\u521B\u5EFA\u4EFB\u52A1...",
+      tasksCreated: "\u5DF2\u521B\u5EFA {count} \u4E2A\u4EFB\u52A1"
+    },
+    rolePrompts: {
+      dev: {
+        frontend: {
+          roleDeclaration: "\u4F60\u662F\u4E00\u4E2A\u524D\u7AEF\u5F00\u53D1\u8005\uFF0C\u4E13\u6CE8\u4E8E\u7528\u6237\u754C\u9762\u548C\u4EA4\u4E92\u4F53\u9A8C\u3002",
+          extraInstructions: [
+            "\u786E\u4FDD\u7EC4\u4EF6\u53EF\u590D\u7528\u3001\u53EF\u8BBF\u95EE\u6027\uFF08WCAG 2.1\uFF09\u826F\u597D",
+            "\u5173\u6CE8\u54CD\u5E94\u5F0F\u5E03\u5C40\u548C\u8DE8\u6D4F\u89C8\u5668\u517C\u5BB9\u6027",
+            "\u9075\u5FAA\u9879\u76EE\u7684\u524D\u7AEF\u4EE3\u7801\u89C4\u8303\u548C\u8BBE\u8BA1\u7CFB\u7EDF"
+          ]
+        },
+        backend: {
+          roleDeclaration: "\u4F60\u662F\u4E00\u4E2A\u540E\u7AEF\u5F00\u53D1\u8005\uFF0C\u4E13\u6CE8\u4E8E\u670D\u52A1\u7AEF\u903B\u8F91\u548C\u6570\u636E\u5C42\u3002",
+          extraInstructions: [
+            "\u786E\u4FDD API \u63A5\u53E3\u8BBE\u8BA1\u9075\u5FAA RESTful \u6216\u9879\u76EE\u7EA6\u5B9A",
+            "\u5173\u6CE8\u9519\u8BEF\u5904\u7406\u3001\u8F93\u5165\u9A8C\u8BC1\u548C\u4E8B\u52A1\u4E00\u81F4\u6027",
+            "\u6CE8\u610F\u6570\u636E\u5E93\u67E5\u8BE2\u6027\u80FD\u548C\u7D22\u5F15\u4F7F\u7528"
+          ]
+        },
+        qa: {
+          roleDeclaration: "\u4F60\u662F\u4E00\u4E2A\u5177\u6709\u6D4B\u8BD5\u5F00\u53D1\u80FD\u529B\u7684\u5F00\u53D1\u8005\uFF0C\u64C5\u957F\u7F16\u5199\u53EF\u6D4B\u8BD5\u7684\u4EE3\u7801\u3002",
+          extraInstructions: [
+            "\u5B9E\u73B0\u65F6\u540C\u6B65\u7F16\u5199\u5FC5\u8981\u7684\u5355\u5143\u6D4B\u8BD5\u548C\u96C6\u6210\u6D4B\u8BD5",
+            "\u5173\u6CE8\u8FB9\u754C\u6761\u4EF6\u548C\u5F02\u5E38\u8DEF\u5F84\u7684\u8986\u76D6",
+            "\u786E\u4FDD\u4EE3\u7801\u53EF\u901A\u8FC7\u81EA\u52A8\u5316\u6D4B\u8BD5\u9A8C\u8BC1"
+          ]
+        },
+        architect: {
+          roleDeclaration: "\u4F60\u662F\u4E00\u4E2A\u67B6\u6784\u5E08\u89D2\u8272\u7684\u5F00\u53D1\u8005\uFF0C\u5173\u6CE8\u7CFB\u7EDF\u8BBE\u8BA1\u548C\u6A21\u5757\u8FB9\u754C\u3002",
+          extraInstructions: [
+            "\u786E\u4FDD\u5B9E\u73B0\u7B26\u5408\u73B0\u6709\u67B6\u6784\u7EA6\u675F\u548C\u6A21\u5757\u8FB9\u754C",
+            "\u5173\u6CE8\u63A5\u53E3\u8BBE\u8BA1\u548C\u6A21\u5757\u95F4\u89E3\u8026",
+            "\u8BC4\u4F30\u53D8\u66F4\u5BF9\u7CFB\u7EDF\u6574\u4F53\u67B6\u6784\u7684\u5F71\u54CD"
+          ]
+        },
+        security: {
+          roleDeclaration: "\u4F60\u662F\u4E00\u4E2A\u5B89\u5168\u5DE5\u7A0B\u5E08\u89D2\u8272\u7684\u5F00\u53D1\u8005\uFF0C\u4E13\u6CE8\u4E8E\u5B89\u5168\u76F8\u5173\u5B9E\u73B0\u3002",
+          extraInstructions: [
+            "\u4E25\u683C\u9075\u5FAA OWASP Top 10 \u5B89\u5168\u5B9E\u8DF5",
+            "\u9A8C\u8BC1\u6240\u6709\u5916\u90E8\u8F93\u5165\u3001\u9632\u6B62\u6CE8\u5165\u548C XSS",
+            "\u786E\u4FDD\u654F\u611F\u6570\u636E\u5904\u7406\u7B26\u5408\u5B89\u5168\u89C4\u8303"
+          ]
+        },
+        performance: {
+          roleDeclaration: "\u4F60\u662F\u4E00\u4E2A\u6027\u80FD\u4F18\u5316\u5DE5\u7A0B\u5E08\u89D2\u8272\u7684\u5F00\u53D1\u8005\uFF0C\u4E13\u6CE8\u4E8E\u6027\u80FD\u76F8\u5173\u5B9E\u73B0\u3002",
+          extraInstructions: [
+            "\u5173\u6CE8\u5173\u952E\u8DEF\u5F84\u7684\u6027\u80FD\u6307\u6807\uFF08\u5EF6\u8FDF\u3001\u541E\u5410\u91CF\u3001\u5185\u5B58\uFF09",
+            "\u907F\u514D\u4E0D\u5FC5\u8981\u7684\u540C\u6B65\u64CD\u4F5C\u548C\u91CD\u590D\u8BA1\u7B97",
+            "\u4F7F\u7528\u6027\u80FD\u5206\u6790\u5DE5\u5177\u9A8C\u8BC1\u4F18\u5316\u6548\u679C"
+          ]
+        }
+      },
+      codeReview: {
+        frontend: {
+          roleDeclaration: "\u4F60\u662F\u4E00\u4E2A\u4E13\u4E1A\u7684\u524D\u7AEF\u4EE3\u7801\u5BA1\u6838\u5458\u3002",
+          reviewFocus: [
+            "\u7EC4\u4EF6\u7ED3\u6784\u548C\u72B6\u6001\u7BA1\u7406\u662F\u5426\u5408\u7406",
+            "CSS/\u6837\u5F0F\u662F\u5426\u6709\u51B2\u7A81\u6216\u5197\u4F59",
+            "\u53EF\u8BBF\u95EE\u6027\uFF08a11y\uFF09\u662F\u5426\u7B26\u5408\u6807\u51C6",
+            "\u6D4F\u89C8\u5668\u517C\u5BB9\u6027\u548C\u54CD\u5E94\u5F0F\u8BBE\u8BA1"
+          ]
+        },
+        backend: {
+          roleDeclaration: "\u4F60\u662F\u4E00\u4E2A\u4E13\u4E1A\u7684\u540E\u7AEF\u4EE3\u7801\u5BA1\u6838\u5458\u3002",
+          reviewFocus: [
+            "API \u63A5\u53E3\u8BBE\u8BA1\u662F\u5426\u89C4\u8303\u3001\u5411\u540E\u517C\u5BB9",
+            "\u9519\u8BEF\u5904\u7406\u662F\u5426\u5B8C\u5584\u3001\u9519\u8BEF\u4FE1\u606F\u662F\u5426\u5B89\u5168",
+            "\u6570\u636E\u5E93\u64CD\u4F5C\u662F\u5426\u5B89\u5168\uFF08\u9632 SQL \u6CE8\u5165\uFF09",
+            "\u5E76\u53D1\u548C\u4E8B\u52A1\u5904\u7406\u662F\u5426\u6B63\u786E"
+          ]
+        },
+        qa: {
+          roleDeclaration: "\u4F60\u662F\u4E00\u4E2A\u4E13\u4E1A\u7684\u6D4B\u8BD5\u4EE3\u7801\u5BA1\u6838\u5458\u3002",
+          reviewFocus: [
+            "\u6D4B\u8BD5\u8986\u76D6\u662F\u5426\u5145\u5206\uFF08\u6B63\u5E38\u8DEF\u5F84 + \u8FB9\u754C\u6761\u4EF6\uFF09",
+            "\u6D4B\u8BD5\u662F\u5426\u72EC\u7ACB\u3001\u53EF\u91CD\u590D\u6267\u884C",
+            "Mock \u548C Stub \u4F7F\u7528\u662F\u5426\u5408\u7406",
+            "\u65AD\u8A00\u662F\u5426\u51C6\u786E\u9A8C\u8BC1\u4E86\u9884\u671F\u884C\u4E3A"
+          ]
+        },
+        architect: {
+          roleDeclaration: "\u4F60\u662F\u4E00\u4E2A\u67B6\u6784\u5BA1\u67E5\u5458\uFF0C\u8D1F\u8D23\u5BA1\u6838\u4EE3\u7801\u7684\u67B6\u6784\u5408\u7406\u6027\u3002",
+          reviewFocus: [
+            "\u6A21\u5757\u8FB9\u754C\u662F\u5426\u6E05\u6670\u3001\u804C\u8D23\u662F\u5426\u5355\u4E00",
+            "\u4F9D\u8D56\u5173\u7CFB\u662F\u5426\u5408\u7406\u3001\u662F\u5426\u5B58\u5728\u5FAA\u73AF\u4F9D\u8D56",
+            "\u63A5\u53E3\u62BD\u8C61\u5C42\u7EA7\u662F\u5426\u9002\u5F53",
+            "\u53D8\u66F4\u662F\u5426\u5F71\u54CD\u73B0\u6709\u67B6\u6784\u7684\u7A33\u5B9A\u6027"
+          ]
+        },
+        security: {
+          roleDeclaration: "\u4F60\u662F\u4E00\u4E2A\u5B89\u5168\u4EE3\u7801\u5BA1\u6838\u5458\uFF0C\u4E13\u6CE8\u4E8E\u5B89\u5168\u6F0F\u6D1E\u68C0\u6D4B\u3002",
+          reviewFocus: [
+            "\u8F93\u5165\u9A8C\u8BC1\u548C\u8F93\u51FA\u7F16\u7801\u662F\u5426\u5B8C\u5584",
+            "\u8BA4\u8BC1\u6388\u6743\u903B\u8F91\u662F\u5426\u6B63\u786E",
+            "\u654F\u611F\u6570\u636E\u662F\u5426\u5B89\u5168\u5B58\u50A8\u548C\u4F20\u8F93",
+            "\u662F\u5426\u5B58\u5728 OWASP Top 10 \u6F0F\u6D1E\u98CE\u9669"
+          ]
+        },
+        performance: {
+          roleDeclaration: "\u4F60\u662F\u4E00\u4E2A\u6027\u80FD\u4EE3\u7801\u5BA1\u6838\u5458\uFF0C\u4E13\u6CE8\u4E8E\u6027\u80FD\u74F6\u9888\u68C0\u6D4B\u3002",
+          reviewFocus: [
+            "\u662F\u5426\u5B58\u5728 O(n\xB2) \u6216\u66F4\u9AD8\u590D\u6742\u5EA6\u7684\u7B97\u6CD5",
+            "\u8D44\u6E90\uFF08\u5185\u5B58\u3001\u8FDE\u63A5\u3001\u6587\u4EF6\u53E5\u67C4\uFF09\u662F\u5426\u6B63\u786E\u91CA\u653E",
+            "\u662F\u5426\u6709\u4E0D\u5FC5\u8981\u7684\u540C\u6B65\u963B\u585E\u64CD\u4F5C",
+            "\u7F13\u5B58\u7B56\u7565\u662F\u5426\u5408\u7406"
+          ]
+        }
+      },
+      qa: {
+        frontend: {
+          roleDeclaration: "\u4F60\u662F\u4E00\u4E2A\u4E13\u4E1A\u7684\u524D\u7AEF QA \u6D4B\u8BD5\u5458\u3002",
+          testStrategy: [
+            "\u9A8C\u8BC1 UI \u6E32\u67D3\u5728\u4E0D\u540C\u5C4F\u5E55\u5C3A\u5BF8\u4E0B\u662F\u5426\u6B63\u786E",
+            "\u6D4B\u8BD5\u7528\u6237\u4EA4\u4E92\u6D41\u7A0B\uFF08\u70B9\u51FB\u3001\u8F93\u5165\u3001\u5BFC\u822A\uFF09",
+            "\u68C0\u67E5\u53EF\u8BBF\u95EE\u6027\u5DE5\u5177\u662F\u5426\u80FD\u6B63\u786E\u8BC6\u522B\u9875\u9762\u5143\u7D20",
+            "\u9A8C\u8BC1\u52A0\u8F7D\u72B6\u6001\u548C\u9519\u8BEF\u72B6\u6001\u7684\u5C55\u793A"
+          ]
+        },
+        backend: {
+          roleDeclaration: "\u4F60\u662F\u4E00\u4E2A\u4E13\u4E1A\u7684\u540E\u7AEF QA \u6D4B\u8BD5\u5458\u3002",
+          testStrategy: [
+            "\u9A8C\u8BC1 API \u63A5\u53E3\u5728\u5404\u79CD\u8F93\u5165\u4E0B\u7684\u54CD\u5E94",
+            "\u6D4B\u8BD5\u9519\u8BEF\u5904\u7406\u548C\u8FB9\u754C\u6761\u4EF6",
+            "\u68C0\u67E5\u5E76\u53D1\u8BF7\u6C42\u4E0B\u7684\u6570\u636E\u4E00\u81F4\u6027",
+            "\u9A8C\u8BC1\u6570\u636E\u5E93\u72B6\u6001\u53D8\u66F4\u662F\u5426\u7B26\u5408\u9884\u671F"
+          ]
+        },
+        qa: {
+          roleDeclaration: "\u4F60\u662F\u4E00\u4E2A\u4E13\u4E1A\u7684 QA \u6D4B\u8BD5\u5458\uFF0C\u64C5\u957F\u5168\u9762\u6D4B\u8BD5\u8986\u76D6\u3002",
+          testStrategy: [
+            "\u8FD0\u884C\u6240\u6709\u76F8\u5173\u5355\u5143\u6D4B\u8BD5\u548C\u96C6\u6210\u6D4B\u8BD5",
+            "\u9A8C\u8BC1\u529F\u80FD\u5728\u6B63\u5E38\u8DEF\u5F84\u548C\u5F02\u5E38\u8DEF\u5F84\u4E0B\u7684\u884C\u4E3A",
+            "\u68C0\u67E5\u6D4B\u8BD5\u8986\u76D6\u7387\u662F\u5426\u6EE1\u8DB3\u8981\u6C42",
+            "\u6536\u96C6\u5B8C\u6574\u7684\u6D4B\u8BD5\u8BC1\u636E"
+          ]
+        },
+        architect: {
+          roleDeclaration: "\u4F60\u662F\u4E00\u4E2A\u67B6\u6784\u9A8C\u8BC1\u6D4B\u8BD5\u5458\uFF0C\u8D1F\u8D23\u9A8C\u8BC1\u67B6\u6784\u7EA6\u675F\u3002",
+          testStrategy: [
+            "\u9A8C\u8BC1\u6A21\u5757\u95F4\u63A5\u53E3\u5951\u7EA6\u662F\u5426\u88AB\u9075\u5B88",
+            "\u68C0\u67E5\u65B0\u589E\u4F9D\u8D56\u662F\u5426\u5408\u7406",
+            "\u9A8C\u8BC1\u67B6\u6784\u5206\u5C42\u89C4\u5219\uFF08\u5982\u4E0D\u8DE8\u5C42\u76F4\u63A5\u8C03\u7528\uFF09",
+            "\u8BC4\u4F30\u53D8\u66F4\u5BF9\u6574\u4F53\u7CFB\u7EDF\u7684\u5F71\u54CD\u8303\u56F4"
+          ]
+        },
+        security: {
+          roleDeclaration: "\u4F60\u662F\u4E00\u4E2A\u5B89\u5168\u6D4B\u8BD5\u5458\uFF0C\u8D1F\u8D23\u9A8C\u8BC1\u5B89\u5168\u76F8\u5173\u5B9E\u73B0\u3002",
+          testStrategy: [
+            "\u9A8C\u8BC1\u8F93\u5165\u9A8C\u8BC1\u662F\u5426\u8986\u76D6\u6240\u6709\u5165\u53E3\u70B9",
+            "\u6D4B\u8BD5\u5E38\u89C1\u653B\u51FB\u5411\u91CF\uFF08XSS\u3001SQL \u6CE8\u5165\u3001CSRF\uFF09",
+            "\u68C0\u67E5\u8BA4\u8BC1\u6388\u6743\u6D41\u7A0B\u662F\u5426\u6B63\u786E",
+            "\u9A8C\u8BC1\u654F\u611F\u6570\u636E\u662F\u5426\u4E0D\u5728\u65E5\u5FD7\u6216\u54CD\u5E94\u4E2D\u6CC4\u9732"
+          ]
+        },
+        performance: {
+          roleDeclaration: "\u4F60\u662F\u4E00\u4E2A\u6027\u80FD\u6D4B\u8BD5\u5458\uFF0C\u8D1F\u8D23\u9A8C\u8BC1\u6027\u80FD\u6307\u6807\u3002",
+          testStrategy: [
+            "\u8FD0\u884C\u6027\u80FD\u57FA\u51C6\u6D4B\u8BD5\uFF08\u5982\u6709\u914D\u7F6E\uFF09",
+            "\u9A8C\u8BC1\u5173\u952E\u64CD\u4F5C\u7684\u54CD\u5E94\u65F6\u95F4\u662F\u5426\u5728\u9608\u503C\u5185",
+            "\u68C0\u67E5\u662F\u5426\u5B58\u5728\u5185\u5B58\u6CC4\u6F0F\u8FF9\u8C61",
+            "\u6D4B\u8BD5\u5728\u9AD8\u8D1F\u8F7D\u4E0B\u7684\u7CFB\u7EDF\u7A33\u5B9A\u6027"
+          ]
+        }
+      },
+      defaultDev: {
+        roleDeclaration: "\u4F60\u662F\u4E00\u4E2A\u5F00\u53D1\u8005\uFF0C\u4F60\u7684\u552F\u4E00\u804C\u8D23\u662F\u5B9E\u73B0\u88AB\u5206\u914D\u4EFB\u52A1\u7684\u4EE3\u7801\u53D8\u66F4\u3002",
+        extraInstructions: []
+      },
+      defaultCodeReview: {
+        roleDeclaration: "\u4F60\u662F\u4E00\u4E2A\u4E13\u4E1A\u7684\u4EE3\u7801\u5BA1\u6838\u5458\u3002\u4F60\u9700\u8981\u5BA1\u6838\u4E00\u4E2A\u4EFB\u52A1\u7684\u4EE3\u7801\u5B9E\u73B0\uFF0C\u786E\u4FDD\u4EE3\u7801\u8D28\u91CF\u7B26\u5408\u6807\u51C6\u3002",
+        reviewFocus: [
+          "\u68C0\u67E5\u4EE3\u7801\u8D28\u91CF\u548C\u53EF\u8BFB\u6027",
+          "\u68C0\u67E5\u4EE3\u7801\u89C4\u8303\u9075\u5B88\u60C5\u51B5",
+          "\u68C0\u67E5\u6F5C\u5728\u7684\u5B89\u5168\u95EE\u9898",
+          "\u68C0\u67E5\u9519\u8BEF\u5904\u7406\u662F\u5426\u5B8C\u5584"
+        ]
+      },
+      defaultQA: {
+        roleDeclaration: "\u4F60\u662F\u4E00\u4E2A\u4E13\u4E1A\u7684 QA \u6D4B\u8BD5\u5458\u3002\u4F60\u9700\u8981\u9A8C\u8BC1\u4E00\u4E2A\u4EFB\u52A1\u7684\u5B9E\u73B0\u662F\u5426\u6EE1\u8DB3\u529F\u80FD\u8981\u6C42\u3002",
+        testStrategy: [
+          "\u8FD0\u884C\u5355\u5143\u6D4B\u8BD5\uFF08\u5982\u6709\u914D\u7F6E\uFF09",
+          "\u8FD0\u884C\u529F\u80FD\u6D4B\u8BD5\uFF08\u5982\u6709\u914D\u7F6E\uFF09",
+          "\u9A8C\u8BC1\u529F\u80FD\u662F\u5426\u7B26\u5408\u9884\u671F",
+          "\u68C0\u67E5\u8FB9\u754C\u60C5\u51B5\u5904\u7406"
+        ]
+      }
+    },
+    feedback: {
+      jsonHeader: "\u4E0A\u4E00\u6B21\u8F93\u51FA\u7684 JSON \u5B58\u5728\u4EE5\u4E0B\u95EE\u9898\uFF0C\u8BF7\u4FEE\u6B63\u540E\u91CD\u65B0\u8F93\u51FA\u5B8C\u6574 JSON\uFF1A",
+      markdownHeader: "\u4E0A\u4E00\u6B21\u8F93\u51FA\u7684 Markdown \u5185\u5BB9\u5B58\u5728\u4EE5\u4E0B\u95EE\u9898\uFF0C\u8BF7\u4FEE\u6B63\u540E\u91CD\u65B0\u8F93\u51FA\uFF1A",
+      violationsTitle: "\u8FDD\u89C4\u9879",
+      fieldLabel: "\u5B57\u6BB5",
+      valueLabel: "\u503C",
+      originalOutputTitle: "\u539F\u59CB\u8F93\u51FA\uFF08\u4F9B\u53C2\u8003\uFF09",
+      truncated: "... (\u5DF2\u622A\u65AD)",
+      jsonRequirements: [
+        "\u8F93\u51FA\u662F\u5408\u6CD5\u7684 JSON",
+        "\u6240\u6709\u5FC5\u586B\u5B57\u6BB5\u90FD\u5B58\u5728\u4E14\u7C7B\u578B\u6B63\u786E",
+        "\u4E0D\u8981\u8F93\u51FA JSON \u4EE5\u5916\u7684\u5185\u5BB9"
+      ],
+      markdownRequirements: [
+        "\u8F93\u51FA\u683C\u5F0F\u7B26\u5408 Markdown \u89C4\u8303",
+        "\u6240\u6709\u5FC5\u9700\u7684\u7AE0\u8282\u548C\u6807\u9898\u90FD\u5B58\u5728",
+        "\u5185\u5BB9\u7ED3\u6784\u5B8C\u6574\u3001\u903B\u8F91\u6E05\u6670"
+      ]
+    }
+  };
+});
+
+// src/i18n/en.ts
+var enTexts;
+var init_en = __esm(() => {
+  enTexts = {
+    error: "Error",
+    success: "Success",
+    cancel: "Cancel",
+    setup: {
+      initializing: "Initializing project management environment...",
+      createDir: "Create directory",
+      createConfig: "Create config: config.json",
+      setupComplete: "Project management environment initialized!",
+      nextStep: "Use 'projmnt4claude task create' to create your first task",
+      selectLanguage: "Select language:",
+      copyingSkills: "Copying skill files...",
+      skillsCopied: "Skill files copied",
+      alreadyInitialized: "Project management environment already exists, skipping initialization."
+    },
+    task: {
+      createTitle: "Enter task title:",
+      createDescription: "Enter task description (optional):",
+      taskCreated: "Task created successfully",
+      taskNotFound: "Task not found",
+      taskUpdated: "Task updated",
+      taskDeleted: "Task deleted",
+      listHeader: "Task List",
+      noTasks: "No tasks",
+      statusHeader: "Status",
+      priorityHeader: "Priority",
+      roleHeader: "Role",
+      dependencyHeader: "Dependencies",
+      subtaskHeader: "Subtasks"
+    },
+    plan: {
+      showHeader: "Execution Plan",
+      addHeader: "Add task",
+      removeHeader: "Remove task",
+      clearHeader: "Clear plan",
+      recommendHeader: "Smart recommendation",
+      noPlan: "No plan",
+      planCleared: "Plan cleared",
+      taskAdded: "Task added to plan",
+      taskRemoved: "Task removed from plan"
+    },
+    status: {
+      projectStatus: "Project Status",
+      totalTasks: "Total Tasks",
+      completedTasks: "Completed",
+      inProgressTasks: "In Progress",
+      pendingTasks: "Pending",
+      noTasks: "No tasks"
+    },
+    analyze: {
+      analyzing: "Analyzing project health...",
+      analysisComplete: "Analysis complete",
+      issuesFound: "Found {count} issues",
+      noIssues: "No issues found",
+      fixApplied: "Fixed {count} issues"
+    },
+    help: {
+      commandReference: "Command Reference",
+      availableCommands: "Available Commands",
+      noDescription: "No description",
+      commandNotFound: "Command not found",
+      tipUseHelp: "Use `projmnt4claude help <command>` for detailed command usage",
+      usage: "Usage",
+      examples: "Examples"
+    },
+    config: {
+      listHeader: "Config List",
+      getHeader: "Get Config",
+      setHeader: "Set Config",
+      configUpdated: "Config updated",
+      keyNotFound: "Config key not found",
+      invalidAction: "Unknown action"
+    },
+    tool: {
+      listHeader: "Local Skill List",
+      createHeader: "Create Skill",
+      installHeader: "Install Skill",
+      removeHeader: "Remove Skill",
+      deployHeader: "Deploy Skill",
+      undeployHeader: "Undeploy Skill"
+    },
+    initRequirement: {
+      descriptionRequired: "Enter requirement description",
+      parsingDescription: "Parsing requirement...",
+      creatingTasks: "Creating tasks...",
+      tasksCreated: "Created {count} tasks"
+    },
+    rolePrompts: {
+      dev: {
+        frontend: {
+          roleDeclaration: "You are a frontend developer, focused on user interfaces and interaction experience.",
+          extraInstructions: [
+            "Ensure components are reusable and accessible (WCAG 2.1)",
+            "Focus on responsive layouts and cross-browser compatibility",
+            "Follow project frontend coding standards and design system"
+          ]
+        },
+        backend: {
+          roleDeclaration: "You are a backend developer, focused on server-side logic and data layers.",
+          extraInstructions: [
+            "Ensure API design follows RESTful or project conventions",
+            "Focus on error handling, input validation, and transaction consistency",
+            "Pay attention to database query performance and index usage"
+          ]
+        },
+        qa: {
+          roleDeclaration: "You are a developer with testing capabilities, skilled at writing testable code.",
+          extraInstructions: [
+            "Write necessary unit tests and integration tests alongside implementation",
+            "Focus on boundary conditions and exception path coverage",
+            "Ensure code can be validated through automated testing"
+          ]
+        },
+        architect: {
+          roleDeclaration: "You are a developer in an architect role, focusing on system design and module boundaries.",
+          extraInstructions: [
+            "Ensure implementation aligns with existing architecture constraints and module boundaries",
+            "Focus on interface design and decoupling between modules",
+            "Assess the impact of changes on overall system architecture"
+          ]
+        },
+        security: {
+          roleDeclaration: "You are a developer in a security engineer role, focused on security-related implementations.",
+          extraInstructions: [
+            "Strictly follow OWASP Top 10 security practices",
+            "Validate all external inputs, prevent injection and XSS",
+            "Ensure sensitive data handling complies with security standards"
+          ]
+        },
+        performance: {
+          roleDeclaration: "You are a developer in a performance engineer role, focused on performance-related implementations.",
+          extraInstructions: [
+            "Focus on critical path performance metrics (latency, throughput, memory)",
+            "Avoid unnecessary synchronous operations and redundant calculations",
+            "Use profiling tools to validate optimization results"
+          ]
+        }
+      },
+      codeReview: {
+        frontend: {
+          roleDeclaration: "You are a professional frontend code reviewer.",
+          reviewFocus: [
+            "Component structure and state management are sound",
+            "CSS/style conflicts or redundancy",
+            "Accessibility (a11y) compliance with standards",
+            "Browser compatibility and responsive design"
+          ]
+        },
+        backend: {
+          roleDeclaration: "You are a professional backend code reviewer.",
+          reviewFocus: [
+            "API interface design standards and backward compatibility",
+            "Error handling completeness and security of error messages",
+            "Database operation security (preventing SQL injection)",
+            "Concurrency and transaction handling correctness"
+          ]
+        },
+        qa: {
+          roleDeclaration: "You are a professional test code reviewer.",
+          reviewFocus: [
+            "Test coverage adequacy (normal paths + boundary conditions)",
+            "Tests are independent and repeatable",
+            "Mock and Stub usage is appropriate",
+            "Assertions accurately verify expected behavior"
+          ]
+        },
+        architect: {
+          roleDeclaration: "You are an architecture reviewer responsible for assessing code architecture soundness.",
+          reviewFocus: [
+            "Module boundaries are clear and responsibilities are single-purpose",
+            "Dependency relationships are reasonable and free of circular dependencies",
+            "Interface abstraction levels are appropriate",
+            "Changes do not affect existing architecture stability"
+          ]
+        },
+        security: {
+          roleDeclaration: "You are a security code reviewer focused on security vulnerability detection.",
+          reviewFocus: [
+            "Input validation and output encoding completeness",
+            "Authentication and authorization logic correctness",
+            "Sensitive data is stored and transmitted securely",
+            "Presence of OWASP Top 10 vulnerability risks"
+          ]
+        },
+        performance: {
+          roleDeclaration: "You are a performance code reviewer focused on performance bottleneck detection.",
+          reviewFocus: [
+            "Presence of O(n\xB2) or higher complexity algorithms",
+            "Resources (memory, connections, file handles) are properly released",
+            "Unnecessary synchronous blocking operations",
+            "Caching strategy is appropriate"
+          ]
+        }
+      },
+      qa: {
+        frontend: {
+          roleDeclaration: "You are a professional frontend QA tester.",
+          testStrategy: [
+            "Verify UI rendering correctness across different screen sizes",
+            "Test user interaction flows (clicks, inputs, navigation)",
+            "Check accessibility tools can correctly identify page elements",
+            "Verify loading and error state displays"
+          ]
+        },
+        backend: {
+          roleDeclaration: "You are a professional backend QA tester.",
+          testStrategy: [
+            "Verify API responses under various inputs",
+            "Test error handling and boundary conditions",
+            "Check data consistency under concurrent requests",
+            "Verify database state changes match expectations"
+          ]
+        },
+        qa: {
+          roleDeclaration: "You are a professional QA tester skilled in comprehensive test coverage.",
+          testStrategy: [
+            "Run all relevant unit tests and integration tests",
+            "Verify behavior under normal and exceptional paths",
+            "Check if test coverage meets requirements",
+            "Collect complete test evidence"
+          ]
+        },
+        architect: {
+          roleDeclaration: "You are an architecture validation tester responsible for verifying architecture constraints.",
+          testStrategy: [
+            "Verify module interface contracts are followed",
+            "Check if new dependencies are reasonable",
+            "Verify architecture layering rules (e.g., no cross-layer direct calls)",
+            "Assess the scope of impact of changes on the overall system"
+          ]
+        },
+        security: {
+          roleDeclaration: "You are a security tester responsible for verifying security-related implementations.",
+          testStrategy: [
+            "Verify input validation covers all entry points",
+            "Test common attack vectors (XSS, SQL injection, CSRF)",
+            "Check authentication and authorization flow correctness",
+            "Verify sensitive data is not leaked in logs or responses"
+          ]
+        },
+        performance: {
+          roleDeclaration: "You are a performance tester responsible for verifying performance metrics.",
+          testStrategy: [
+            "Run performance benchmark tests (if configured)",
+            "Verify critical operation response times are within thresholds",
+            "Check for signs of memory leaks",
+            "Test system stability under high load"
+          ]
+        }
+      },
+      defaultDev: {
+        roleDeclaration: "You are a developer whose sole responsibility is to implement assigned task code changes.",
+        extraInstructions: []
+      },
+      defaultCodeReview: {
+        roleDeclaration: "You are a professional code reviewer. You need to review task code implementations to ensure code quality meets standards.",
+        reviewFocus: [
+          "Check code quality and readability",
+          "Check code standard compliance",
+          "Check for potential security issues",
+          "Check error handling completeness"
+        ]
+      },
+      defaultQA: {
+        roleDeclaration: "You are a professional QA tester. You need to verify whether a task implementation meets functional requirements.",
+        testStrategy: [
+          "Run unit tests (if configured)",
+          "Run functional tests (if configured)",
+          "Verify functionality meets expectations",
+          "Check boundary case handling"
+        ]
+      }
+    },
+    feedback: {
+      jsonHeader: "The previous JSON output has the following issues, please fix and re-output the complete JSON:",
+      markdownHeader: "The previous Markdown output has the following issues, please fix and re-output:",
+      violationsTitle: "Violations",
+      fieldLabel: "Field",
+      valueLabel: "Value",
+      originalOutputTitle: "Original Output (for reference)",
+      truncated: "... (truncated)",
+      jsonRequirements: [
+        "Output must be valid JSON",
+        "All required fields must exist with correct types",
+        "Do not output content other than JSON"
+      ],
+      markdownRequirements: [
+        "Output format must comply with Markdown specifications",
+        "All required sections and headings must exist",
+        "Content structure must be complete and logically clear"
+      ]
+    }
+  };
+});
+
+// src/i18n/index.ts
+var exports_i18n = {};
+__export(exports_i18n, {
+  t: () => t,
+  getLanguage: () => getLanguage,
+  getI18n: () => getI18n
+});
+import * as fs10 from "fs";
+function getLanguage(cwd = process.cwd()) {
+  const configPath = getConfigPath(cwd);
+  try {
+    if (fs10.existsSync(configPath)) {
+      const config = JSON.parse(fs10.readFileSync(configPath, "utf-8"));
+      return config.language || "en";
+    }
+  } catch (error) {}
+  return "en";
+}
+function getI18n(language, cwd) {
+  const lang = language || getLanguage(cwd);
+  return languagePacks[lang] || languagePacks.zh;
+}
+function t(cwd) {
+  return getI18n(undefined, cwd);
+}
+var languagePacks;
+var init_i18n = __esm(() => {
+  init_path();
+  init_zh();
+  init_en();
+  languagePacks = {
+    zh: zhTexts,
+    en: enTexts
+  };
+});
+
 // src/utils/feedback-constraint-engine.ts
 class JsonFeedbackTemplate {
   truncationLimit;
-  constructor(truncationLimit = 4000) {
+  language;
+  constructor(truncationLimit = 4000, language = "zh") {
     this.truncationLimit = truncationLimit;
+    this.language = language;
   }
-  buildFeedbackPrompt(violations, originalOutput) {
+  buildFeedbackPrompt(violations, originalOutput, language) {
+    const lang = language || this.language;
+    const i18n2 = getI18n(lang);
     const violationLines = violations.map((v, i) => `${i + 1}. [${v.severity.toUpperCase()}] ${v.ruleId}: ${v.message}` + (v.field ? `
-   \u5B57\u6BB5: ${v.field}` : "") + (v.value ? `
-   \u503C: ${v.value}` : "")).join(`
+   ${i18n2.feedback.fieldLabel}: ${v.field}` : "") + (v.value ? `
+   ${i18n2.feedback.valueLabel}: ${v.value}` : "")).join(`
 `);
+    const requirements = i18n2.feedback.jsonRequirements.map((r) => `- ${r}`);
     return [
-      "\u4E0A\u4E00\u6B21\u8F93\u51FA\u7684 JSON \u5B58\u5728\u4EE5\u4E0B\u95EE\u9898\uFF0C\u8BF7\u4FEE\u6B63\u540E\u91CD\u65B0\u8F93\u51FA\u5B8C\u6574 JSON\uFF1A",
+      i18n2.feedback.jsonHeader,
       "",
-      "## \u8FDD\u89C4\u9879",
+      `## ${i18n2.feedback.violationsTitle}`,
       violationLines,
       "",
-      "## \u539F\u59CB\u8F93\u51FA\uFF08\u4F9B\u53C2\u8003\uFF09",
+      `## ${i18n2.feedback.originalOutputTitle}`,
       "```json",
       originalOutput.length > this.truncationLimit ? originalOutput.slice(0, this.truncationLimit) + `
-... (\u5DF2\u622A\u65AD)` : originalOutput,
+${i18n2.feedback.truncated}` : originalOutput,
       "```",
       "",
       "\u8BF7\u786E\u4FDD\uFF1A",
-      "- \u8F93\u51FA\u662F\u5408\u6CD5\u7684 JSON",
-      "- \u6240\u6709\u5FC5\u586B\u5B57\u6BB5\u90FD\u5B58\u5728\u4E14\u7C7B\u578B\u6B63\u786E",
-      "- \u4E0D\u8981\u8F93\u51FA JSON \u4EE5\u5916\u7684\u5185\u5BB9"
+      ...requirements
     ].join(`
 `);
   }
@@ -12049,28 +13288,31 @@ class JsonFeedbackTemplate {
 
 class MarkdownFeedbackTemplate {
   truncationLimit;
-  constructor(truncationLimit = 4000) {
+  language;
+  constructor(truncationLimit = 4000, language = "zh") {
     this.truncationLimit = truncationLimit;
+    this.language = language;
   }
-  buildFeedbackPrompt(violations, originalOutput) {
-    const violationLines = violations.map((v, i) => `${i + 1}. **[${v.severity.toUpperCase()}] ${v.ruleId}**: ${v.message}` + (v.field ? ` (\u5B57\u6BB5: \`${v.field}\`)` : "")).join(`
+  buildFeedbackPrompt(violations, originalOutput, language) {
+    const lang = language || this.language;
+    const i18n2 = getI18n(lang);
+    const violationLines = violations.map((v, i) => `${i + 1}. **[${v.severity.toUpperCase()}] ${v.ruleId}**: ${v.message}` + (v.field ? ` (${i18n2.feedback.fieldLabel}: \`${v.field}\`)` : "")).join(`
 `);
+    const requirements = i18n2.feedback.markdownRequirements.map((r) => `- ${r}`);
     return [
-      "\u4E0A\u4E00\u6B21\u8F93\u51FA\u7684 Markdown \u5185\u5BB9\u5B58\u5728\u4EE5\u4E0B\u95EE\u9898\uFF0C\u8BF7\u4FEE\u6B63\u540E\u91CD\u65B0\u8F93\u51FA\uFF1A",
+      i18n2.feedback.markdownHeader,
       "",
-      "### \u8FDD\u89C4\u9879",
+      `### ${i18n2.feedback.violationsTitle}`,
       violationLines,
       "",
-      "### \u539F\u59CB\u8F93\u51FA\uFF08\u4F9B\u53C2\u8003\uFF09",
+      `### ${i18n2.feedback.originalOutputTitle}`,
       "```markdown",
       originalOutput.length > this.truncationLimit ? originalOutput.slice(0, this.truncationLimit) + `
-... (\u5DF2\u622A\u65AD)` : originalOutput,
+${i18n2.feedback.truncated}` : originalOutput,
       "```",
       "",
       "\u8BF7\u786E\u4FDD\uFF1A",
-      "- \u8F93\u51FA\u683C\u5F0F\u7B26\u5408 Markdown \u89C4\u8303",
-      "- \u6240\u6709\u5FC5\u9700\u7684\u7AE0\u8282\u548C\u6807\u9898\u90FD\u5B58\u5728",
-      "- \u5185\u5BB9\u7ED3\u6784\u5B8C\u6574\u3001\u903B\u8F91\u6E05\u6670"
+      ...requirements
     ].join(`
 `);
   }
@@ -12080,8 +13322,17 @@ class FeedbackConstraintEngineImpl {
   ruleSets = [];
   template;
   retryCount = 0;
-  constructor(template) {
-    this.template = template ?? new JsonFeedbackTemplate;
+  language;
+  constructor(template, language = "zh") {
+    this.template = template ?? new JsonFeedbackTemplate(4000, language);
+    this.language = language;
+  }
+  setLanguage(language) {
+    this.language = language;
+    return this;
+  }
+  getLanguage() {
+    return this.language;
   }
   addRuleSet(ruleSet) {
     this.ruleSets.push(ruleSet);
@@ -12125,8 +13376,8 @@ class FeedbackConstraintEngineImpl {
     }
     return true;
   }
-  buildFeedback(violations, originalOutput) {
-    return this.template.buildFeedbackPrompt(violations, originalOutput);
+  buildFeedback(violations, originalOutput, language) {
+    return this.template.buildFeedbackPrompt(violations, originalOutput, language ?? this.language);
   }
   async runWithFeedback(invokeFn, prompt, options) {
     this.retryCount = 0;
@@ -12176,10 +13427,10 @@ class FeedbackConstraintEngineImpl {
     return this;
   }
 }
-function createSessionAwareEngine(outputType = "json", rules = [], maxRetriesOnError = 2) {
-  const template = outputType === "json" ? new JsonFeedbackTemplate : new MarkdownFeedbackTemplate;
+function createSessionAwareEngine(outputType = "json", rules = [], maxRetriesOnError = 2, language = "zh") {
+  const template = outputType === "json" ? new JsonFeedbackTemplate(4000, language) : new MarkdownFeedbackTemplate(4000, language);
   const baseRules = outputType === "json" ? [nonEmptyOutputRule, jsonParseableRule, ...rules] : [nonEmptyOutputRule, ...rules];
-  const engine = new FeedbackConstraintEngineImpl(template);
+  const engine = new FeedbackConstraintEngineImpl(template, language);
   engine.addRuleSet({
     name: `${outputType}-session-aware`,
     outputType,
@@ -12190,6 +13441,7 @@ function createSessionAwareEngine(outputType = "json", rules = [], maxRetriesOnE
 }
 var logger, jsonParseableRule, nonEmptyOutputRule;
 var init_feedback_constraint_engine = __esm(() => {
+  init_i18n();
   init_logger();
   logger = new Logger({ component: "feedback-constraint-engine" });
   jsonParseableRule = {
@@ -13062,7 +14314,7 @@ var init_plan_rules = __esm(() => {
     description: "\u68C0\u6D4B\u4EFB\u52A1\u4F9D\u8D56\u5173\u7CFB\u4E2D\u662F\u5426\u5B58\u5728\u5FAA\u73AF\u4F9D\u8D56",
     severity: "error",
     check: (task, context) => {
-      const t = task;
+      const t2 = task;
       const allTasks = context?.allTasks;
       if (!allTasks || allTasks.length === 0) {
         return null;
@@ -13084,14 +14336,14 @@ var init_plan_rules = __esm(() => {
     description: "\u68C0\u6D4B\u4EFB\u52A1\u4F9D\u8D56\u662F\u5426\u5F15\u7528\u4E0D\u5B58\u5728\u7684\u4EFB\u52A1",
     severity: "error",
     check: (task, context) => {
-      const t = task;
+      const t2 = task;
       const allTasks = context?.allTasks;
       if (!allTasks || allTasks.length === 0) {
         return null;
       }
       const validTaskIds = new Set(allTasks.map((task2) => task2.id));
       const invalidDeps = [];
-      for (const depId of t.dependencies) {
+      for (const depId of t2.dependencies) {
         if (!validTaskIds.has(depId)) {
           invalidDeps.push(depId);
         }
@@ -13100,7 +14352,7 @@ var init_plan_rules = __esm(() => {
         return {
           ruleId: "plan-invalid-dependency",
           severity: "error",
-          message: `\u4EFB\u52A1 ${t.id} \u5305\u542B\u65E0\u6548\u4F9D\u8D56: ${invalidDeps.join(", ")}\u3002\u8FD9\u4E9B\u4EFB\u52A1ID\u4E0D\u5B58\u5728`
+          message: `\u4EFB\u52A1 ${t2.id} \u5305\u542B\u65E0\u6548\u4F9D\u8D56: ${invalidDeps.join(", ")}\u3002\u8FD9\u4E9B\u4EFB\u52A1ID\u4E0D\u5B58\u5728`
         };
       }
       return null;
@@ -13111,20 +14363,20 @@ var init_plan_rules = __esm(() => {
     description: "\u68C0\u6D4B\u6709 parentId \u4F46\u7236\u4EFB\u52A1\u4E0D\u5B58\u5728\u7684\u5B64\u513F\u5B50\u4EFB\u52A1",
     severity: "error",
     check: (task, context) => {
-      const t = task;
+      const t2 = task;
       const allTasks = context?.allTasks;
       if (!allTasks || allTasks.length === 0) {
         return null;
       }
-      if (!t.parentId) {
+      if (!t2.parentId) {
         return null;
       }
       const validTaskIds = new Set(allTasks.map((task2) => task2.id));
-      if (!validTaskIds.has(t.parentId)) {
+      if (!validTaskIds.has(t2.parentId)) {
         return {
           ruleId: "plan-orphan-subtask",
           severity: "error",
-          message: `\u4EFB\u52A1 ${t.id} \u58F0\u660E\u4E86\u7236\u4EFB\u52A1 ${t.parentId}\uFF0C\u4F46\u8BE5\u7236\u4EFB\u52A1\u4E0D\u5B58\u5728\u3002\u8BF7\u68C0\u67E5 parentId \u6216\u521B\u5EFA\u7236\u4EFB\u52A1`
+          message: `\u4EFB\u52A1 ${t2.id} \u58F0\u660E\u4E86\u7236\u4EFB\u52A1 ${t2.parentId}\uFF0C\u4F46\u8BE5\u7236\u4EFB\u52A1\u4E0D\u5B58\u5728\u3002\u8BF7\u68C0\u67E5 parentId \u6216\u521B\u5EFA\u7236\u4EFB\u52A1`
         };
       }
       return null;
@@ -13135,20 +14387,20 @@ var init_plan_rules = __esm(() => {
     description: "\u68C0\u6D4B\u5B64\u7ACB\u4EFB\u52A1\uFF08\u65E0\u4F9D\u8D56\u4E14\u4E0D\u88AB\u4F9D\u8D56\u7684\u4EFB\u52A1\uFF09",
     severity: "warning",
     check: (task, context) => {
-      const t = task;
+      const t2 = task;
       const allTasks = context?.allTasks;
       if (!allTasks || allTasks.length === 0) {
         return null;
       }
-      if (t.dependencies.length > 0 || t.subtaskIds && t.subtaskIds.length > 0) {
+      if (t2.dependencies.length > 0 || t2.subtaskIds && t2.subtaskIds.length > 0) {
         return null;
       }
-      const isDependedOn = allTasks.some((otherTask) => otherTask.dependencies.includes(t.id));
+      const isDependedOn = allTasks.some((otherTask) => otherTask.dependencies.includes(t2.id));
       if (!isDependedOn) {
         return {
           ruleId: "plan-orphan-task",
           severity: "warning",
-          message: `\u4EFB\u52A1 ${t.id} \u662F\u5B64\u7ACB\u4EFB\u52A1\uFF1A\u6CA1\u6709\u4F9D\u8D56\u4E14\u4E0D\u88AB\u5176\u4ED6\u4EFB\u52A1\u4F9D\u8D56\u3002\u5EFA\u8BAE\u68C0\u67E5\u662F\u5426\u9057\u6F0F\u4F9D\u8D56\u5173\u7CFB\u6216\u5220\u9664\u65E0\u7528\u4EFB\u52A1`
+          message: `\u4EFB\u52A1 ${t2.id} \u662F\u5B64\u7ACB\u4EFB\u52A1\uFF1A\u6CA1\u6709\u4F9D\u8D56\u4E14\u4E0D\u88AB\u5176\u4ED6\u4EFB\u52A1\u4F9D\u8D56\u3002\u5EFA\u8BAE\u68C0\u67E5\u662F\u5426\u9057\u6F0F\u4F9D\u8D56\u5173\u7CFB\u6216\u5220\u9664\u65E0\u7528\u4EFB\u52A1`
         };
       }
       return null;
@@ -13159,19 +14411,19 @@ var init_plan_rules = __esm(() => {
     description: "\u68C0\u6D4B\u88AB\u963B\u585E\u7684\u4EFB\u52A1\uFF08\u6240\u6709\u4F9D\u8D56\u90FD\u672A\u5B8C\u6210\uFF09",
     severity: "warning",
     check: (task, context) => {
-      const t = task;
+      const t2 = task;
       const allTasks = context?.allTasks;
       if (!allTasks || allTasks.length === 0) {
         return null;
       }
-      if (t.dependencies.length === 0) {
+      if (t2.dependencies.length === 0) {
         return null;
       }
-      if (t.status === "resolved" || t.status === "closed") {
+      if (t2.status === "resolved" || t2.status === "closed") {
         return null;
       }
       const incompleteDeps = [];
-      for (const depId of t.dependencies) {
+      for (const depId of t2.dependencies) {
         const depTask = allTasks.find((task2) => task2.id === depId);
         if (depTask) {
           const isCompleted = depTask.status === "resolved" || depTask.status === "closed";
@@ -13180,11 +14432,11 @@ var init_plan_rules = __esm(() => {
           }
         }
       }
-      if (incompleteDeps.length === t.dependencies.length) {
+      if (incompleteDeps.length === t2.dependencies.length) {
         return {
           ruleId: "plan-blocked-task",
           severity: "warning",
-          message: `\u4EFB\u52A1 ${t.id} \u88AB\u963B\u585E\uFF1A\u6240\u6709 ${t.dependencies.length} \u4E2A\u4F9D\u8D56\u4EFB\u52A1\u90FD\u672A\u5B8C\u6210\u3002\u5EFA\u8BAE\u4F18\u5148\u5904\u7406\u4F9D\u8D56\u4EFB\u52A1\uFF1A${incompleteDeps.join(", ")}`
+          message: `\u4EFB\u52A1 ${t2.id} \u88AB\u963B\u585E\uFF1A\u6240\u6709 ${t2.dependencies.length} \u4E2A\u4F9D\u8D56\u4EFB\u52A1\u90FD\u672A\u5B8C\u6210\u3002\u5EFA\u8BAE\u4F18\u5148\u5904\u7406\u4F9D\u8D56\u4EFB\u52A1\uFF1A${incompleteDeps.join(", ")}`
         };
       }
       return null;
@@ -13195,20 +14447,20 @@ var init_plan_rules = __esm(() => {
     description: "\u68C0\u6D4B\u6865\u63A5\u8282\u70B9\u4EFB\u52A1\uFF08\u4F5C\u4E3A\u4F9D\u8D56\u6865\u6881\u4F46\u7F3A\u5C11\u68C0\u67E5\u70B9\uFF09",
     severity: "warning",
     check: (task, context) => {
-      const t = task;
+      const t2 = task;
       const allTasks = context?.allTasks;
       if (!allTasks || allTasks.length === 0) {
         return null;
       }
-      const dependentTasks = allTasks.filter((otherTask) => otherTask.dependencies.includes(t.id));
+      const dependentTasks = allTasks.filter((otherTask) => otherTask.dependencies.includes(t2.id));
       const hasManyDependents = dependentTasks.length >= 2;
-      const hasDependencies = t.dependencies.length > 0;
-      const hasMinimalCheckpoints = !t.checkpoints || t.checkpoints.length <= 1;
+      const hasDependencies = t2.dependencies.length > 0;
+      const hasMinimalCheckpoints = !t2.checkpoints || t2.checkpoints.length <= 1;
       if (hasManyDependents && hasDependencies && hasMinimalCheckpoints) {
         return {
           ruleId: "plan-bridge-node",
           severity: "warning",
-          message: `\u4EFB\u52A1 ${t.id} \u53EF\u80FD\u662F\u6865\u63A5\u8282\u70B9\uFF1A\u88AB ${dependentTasks.length} \u4E2A\u4EFB\u52A1\u4F9D\u8D56\u4E14\u6709 ${t.dependencies.length} \u4E2A\u4F9D\u8D56\uFF0C\u4F46\u68C0\u67E5\u70B9\u8FC7\u5C11\uFF08${t.checkpoints?.length || 0} \u4E2A\uFF09\u3002\u5EFA\u8BAE\u6DFB\u52A0\u66F4\u591A\u68C0\u67E5\u70B9\u786E\u4FDD\u8D28\u91CF`
+          message: `\u4EFB\u52A1 ${t2.id} \u53EF\u80FD\u662F\u6865\u63A5\u8282\u70B9\uFF1A\u88AB ${dependentTasks.length} \u4E2A\u4EFB\u52A1\u4F9D\u8D56\u4E14\u6709 ${t2.dependencies.length} \u4E2A\u4F9D\u8D56\uFF0C\u4F46\u68C0\u67E5\u70B9\u8FC7\u5C11\uFF08${t2.checkpoints?.length || 0} \u4E2A\uFF09\u3002\u5EFA\u8BAE\u6DFB\u52A0\u66F4\u591A\u68C0\u67E5\u70B9\u786E\u4FDD\u8D28\u91CF`
         };
       }
       return null;
@@ -13219,8 +14471,8 @@ var init_plan_rules = __esm(() => {
     description: "\u68C0\u6D4B\u53EA\u6709\u63A8\u65AD\u4F9D\u8D56\u7684\u4EFB\u52A1\uFF08\u5EFA\u8BAE\u663E\u5F0F\u58F0\u660E\u5173\u952E\u4F9D\u8D56\uFF09",
     severity: "warning",
     check: (task, context) => {
-      const t = task;
-      if (t.dependencies.length === 0) {
+      const t2 = task;
+      if (t2.dependencies.length === 0) {
         return null;
       }
       const hasExplicitDeps = context?.hasExplicitDeps;
@@ -13230,7 +14482,7 @@ var init_plan_rules = __esm(() => {
       return {
         ruleId: "plan-inferred-only-dependency",
         severity: "warning",
-        message: `\u4EFB\u52A1 ${t.id} \u53EA\u6709\u63A8\u65AD\u4F9D\u8D56\uFF08${t.dependencies.length} \u4E2A\uFF09\uFF0C\u6CA1\u6709\u663E\u5F0F\u58F0\u660E\u7684\u4F9D\u8D56\u3002\u5EFA\u8BAE\u663E\u5F0F\u58F0\u660E\u5173\u952E\u4F9D\u8D56\u4EE5\u63D0\u9AD8\u53EF\u7EF4\u62A4\u6027`
+        message: `\u4EFB\u52A1 ${t2.id} \u53EA\u6709\u63A8\u65AD\u4F9D\u8D56\uFF08${t2.dependencies.length} \u4E2A\uFF09\uFF0C\u6CA1\u6709\u663E\u5F0F\u58F0\u660E\u7684\u4F9D\u8D56\u3002\u5EFA\u8BAE\u663E\u5F0F\u58F0\u660E\u5173\u952E\u4F9D\u8D56\u4EE5\u63D0\u9AD8\u53EF\u7EF4\u62A4\u6027`
       };
     }
   };
@@ -13446,7 +14698,7 @@ class AIMetadataAssistant {
       this.logger.warn("AI \u8BED\u4E49\u4F9D\u8D56\u8F93\u51FA\u89E3\u6790\u5931\u8D25");
       return { dependencies: [], aiUsed: false };
     }
-    const validTaskIds = new Set(tasks.map((t) => t.id));
+    const validTaskIds = new Set(tasks.map((t2) => t2.id));
     const deps = [];
     for (const dep of parsed.dependencies) {
       if (typeof dep === "object" && dep !== null && typeof dep.taskId === "string" && typeof dep.depTaskId === "string" && typeof dep.reason === "string" && validTaskIds.has(dep.taskId) && validTaskIds.has(dep.depTaskId) && dep.taskId !== dep.depTaskId) {
@@ -13460,9 +14712,9 @@ class AIMetadataAssistant {
     return { dependencies: deps, aiUsed: true };
   }
   buildSemanticDependencyPrompt(tasks, cwd) {
-    const taskList = tasks.slice(0, 50).map((t) => `ID: ${t.id}
-\u6807\u9898: ${t.title}
-\u63CF\u8FF0: ${(t.description || "").substring(0, 150)}`).join(`
+    const taskList = tasks.slice(0, 50).map((t2) => `ID: ${t2.id}
+\u6807\u9898: ${t2.title}
+\u63CF\u8FF0: ${(t2.description || "").substring(0, 150)}`).join(`
 ---
 `);
     const template = loadPromptTemplate("semanticDependency", cwd);
@@ -13505,10 +14757,10 @@ ${existing.map((c, i) => `${i + 1}. ${c}`).join(`
     return resolveTemplate(template, { taskData });
   }
   buildDuplicatesPrompt(tasks, cwd) {
-    const taskList = tasks.slice(0, 50).map((t) => `ID: ${t.id}
-\u6807\u9898: ${t.title}
-\u63CF\u8FF0: ${(t.description || "").substring(0, 200)}
-\u7C7B\u578B: ${t.type}`).join(`
+    const taskList = tasks.slice(0, 50).map((t2) => `ID: ${t2.id}
+\u6807\u9898: ${t2.title}
+\u63CF\u8FF0: ${(t2.description || "").substring(0, 200)}
+\u7C7B\u578B: ${t2.type}`).join(`
 ---
 `);
     const template = loadPromptTemplate("duplicates", cwd);
@@ -13619,10 +14871,10 @@ ${logContext.substring(0, 2000)}` : "";
   sanitizeTitle(title) {
     if (typeof title !== "string" || !title.trim())
       return null;
-    let t = title.trim();
-    if (t.length > 50)
-      t = t.substring(0, 50);
-    return t.length >= 10 ? t : null;
+    let t2 = title.trim();
+    if (t2.length > 50)
+      t2 = t2.substring(0, 50);
+    return t2.length >= 10 ? t2 : null;
   }
   sanitizeCheckpoints(checkpoints) {
     if (!Array.isArray(checkpoints))
@@ -13641,7 +14893,7 @@ ${logContext.substring(0, 2000)}` : "";
     }));
   }
   sanitizeDuplicates(duplicates, tasks) {
-    const taskIds = new Set(tasks.map((t) => t.id));
+    const taskIds = new Set(tasks.map((t2) => t2.id));
     return duplicates.filter((d) => typeof d === "object" && d !== null).filter((d) => Array.isArray(d.taskIds) && d.taskIds.length >= 2).filter((d) => {
       const ids = d.taskIds.filter((id) => taskIds.has(id));
       return ids.length >= 2;
@@ -13814,7 +15066,7 @@ async function withAIEnhancement(options) {
 }
 
 // src/utils/quality-gate.ts
-import * as fs10 from "fs";
+import * as fs11 from "fs";
 import * as path8 from "path";
 function extractFilePaths(text, options) {
   const files = [];
@@ -13943,7 +15195,7 @@ function validateFilesExist(task, cwd = process.cwd()) {
   const existingFiles = [];
   for (const file of affectedFiles) {
     const fullPath = path8.resolve(cwd, file);
-    if (fs10.existsSync(fullPath)) {
+    if (fs11.existsSync(fullPath)) {
       existingFiles.push(file);
     } else {
       missingFiles.push(file);
@@ -14033,8 +15285,8 @@ async function checkQualityGate(taskId, config = DEFAULT_QUALITY_GATE_CONFIG, cw
   const metaPath = getTaskMetaPath(taskId, cwd);
   let task = null;
   let metaViolations = null;
-  if (fs10.existsSync(metaPath)) {
-    const rawContent = fs10.readFileSync(metaPath, "utf-8");
+  if (fs11.existsSync(metaPath)) {
+    const rawContent = fs11.readFileSync(metaPath, "utf-8");
     metaViolations = metaJsonValid.check(rawContent);
     try {
       task = JSON.parse(rawContent);
@@ -14675,10 +15927,10 @@ function inferDependencies(taskOrDescription, allTasks, options) {
     currentFiles = extractAffectedFiles(taskOrDescription);
   }
   const normalizedCurrent = new Set(currentFiles.map((f) => f.replace(/\/+$/, "").toLowerCase()));
-  const candidates = allTasks.filter((t) => {
-    if (currentTaskId && t.id === currentTaskId)
+  const candidates = allTasks.filter((t2) => {
+    if (currentTaskId && t2.id === currentTaskId)
       return false;
-    if (skipTerminal && TERMINAL_STATUSES.has(t.status))
+    if (skipTerminal && TERMINAL_STATUSES.has(t2.status))
       return false;
     return true;
   });
@@ -15589,15 +16841,15 @@ __export(exports_validation, {
   cleanupEvidence: () => cleanupEvidence
 });
 import * as path10 from "path";
-import * as fs12 from "fs";
+import * as fs13 from "fs";
 import { execSync as execSync3 } from "child_process";
 function getEvidenceDir(taskId, cwd = process.cwd()) {
   return path10.join(getProjectDir(cwd), "evidence", taskId);
 }
 function ensureEvidenceDir(taskId, cwd = process.cwd()) {
   const evidenceDir = getEvidenceDir(taskId, cwd);
-  if (!fs12.existsSync(evidenceDir)) {
-    fs12.mkdirSync(evidenceDir, { recursive: true });
+  if (!fs13.existsSync(evidenceDir)) {
+    fs13.mkdirSync(evidenceDir, { recursive: true });
   }
   return evidenceDir;
 }
@@ -15647,7 +16899,7 @@ async function executeVerificationCommands(taskId, checkpointId, commands, cwd =
 `;
     }
   }
-  fs12.writeFileSync(evidencePath, combinedOutput, "utf-8");
+  fs13.writeFileSync(evidencePath, combinedOutput, "utf-8");
   return {
     exitCode: lastExitCode,
     output: combinedOutput,
@@ -15783,23 +17035,23 @@ function generateValidationReport(taskId, result) {
 }
 function cleanupEvidence(taskId, maxAge = 30, cwd = process.cwd()) {
   const evidenceBaseDir = path10.join(getProjectDir(cwd), "evidence");
-  if (!fs12.existsSync(evidenceBaseDir)) {
+  if (!fs13.existsSync(evidenceBaseDir)) {
     return { deletedCount: 0, freedBytes: 0 };
   }
   let deletedCount = 0;
   let freedBytes = 0;
   const cutoffTime = Date.now() - maxAge * 24 * 60 * 60 * 1000;
-  const dirsToClean = taskId ? [path10.join(evidenceBaseDir, taskId)] : fs12.readdirSync(evidenceBaseDir).map((name) => path10.join(evidenceBaseDir, name));
+  const dirsToClean = taskId ? [path10.join(evidenceBaseDir, taskId)] : fs13.readdirSync(evidenceBaseDir).map((name) => path10.join(evidenceBaseDir, name));
   for (const dir of dirsToClean) {
-    if (!fs12.existsSync(dir) || !fs12.statSync(dir).isDirectory())
+    if (!fs13.existsSync(dir) || !fs13.statSync(dir).isDirectory())
       continue;
-    const files = fs12.readdirSync(dir);
+    const files = fs13.readdirSync(dir);
     for (const file of files) {
       const filePath = path10.join(dir, file);
-      const stat = fs12.statSync(filePath);
+      const stat = fs13.statSync(filePath);
       if (stat.mtime.getTime() < cutoffTime) {
         freedBytes += stat.size;
-        fs12.unlinkSync(filePath);
+        fs13.unlinkSync(filePath);
         deletedCount++;
       }
     }
@@ -15813,7 +17065,7 @@ var init_validation = __esm(() => {
 
 // src/utils/plan.ts
 import * as path12 from "path";
-import * as fs14 from "fs";
+import * as fs15 from "fs";
 function isExecutableStatus(status) {
   const normalized = normalizeStatus(status);
   return normalized in EXECUTABLE_STATUS_PRIORITY;
@@ -15831,10 +17083,10 @@ function readPlan(cwd = process.cwd()) {
   }
   const planPath = getPlanPath(cwd);
   try {
-    if (!fs14.existsSync(planPath)) {
+    if (!fs15.existsSync(planPath)) {
       return null;
     }
-    const content = fs14.readFileSync(planPath, "utf-8");
+    const content = fs15.readFileSync(planPath, "utf-8");
     return JSON.parse(content);
   } catch {
     return null;
@@ -15843,7 +17095,7 @@ function readPlan(cwd = process.cwd()) {
 function writePlan(plan, cwd = process.cwd()) {
   const planPath = getPlanPath(cwd);
   plan.updatedAt = new Date().toISOString();
-  fs14.writeFileSync(planPath, JSON.stringify(plan, null, 2), "utf-8");
+  fs15.writeFileSync(planPath, JSON.stringify(plan, null, 2), "utf-8");
 }
 function createEmptyPlan() {
   const now = new Date().toISOString();
@@ -15949,7 +17201,7 @@ function getExecutableTasks(cwd = process.cwd(), includeSubtasks = false) {
     console.log("");
     console.log("\u26A0\uFE0F  \u4EE5\u4E0B\u5B50\u4EFB\u52A1\u7684\u7236\u4EFB\u52A1\u5DF2\u5B8C\u6210\uFF0C\u8DF3\u8FC7\u63A8\u8350:");
     for (const taskId of skippedDueToParent) {
-      const task = tasks.find((t) => t.id === taskId);
+      const task = tasks.find((t2) => t2.id === taskId);
       if (task) {
         console.log(`   - ${taskId} (\u7236\u4EFB\u52A1 ${task.parentId} \u5DF2 resolved)`);
       }
@@ -16075,13 +17327,13 @@ var init_quality_gate_registry = __esm(() => {
         description: "P0/P1 \u4EFB\u52A1\u5FC5\u987B\u5305\u542B\u81F3\u5C11 2 \u4E2A\u7ED3\u6784\u5316\u68C0\u67E5\u70B9",
         severity: "error",
         check: (task) => {
-          const t = task;
-          if (!t.checkpoints || t.checkpoints.length === 0) {
-            if (t.priority === "P0" || t.priority === "P1") {
+          const t2 = task;
+          if (!t2.checkpoints || t2.checkpoints.length === 0) {
+            if (t2.priority === "P0" || t2.priority === "P1") {
               return {
                 ruleId: "checkpoint-array-not-empty",
                 severity: "error",
-                message: `${t.priority} \u4EFB\u52A1\u5FC5\u987B\u5305\u542B\u81F3\u5C11 2 \u4E2A\u7ED3\u6784\u5316\u68C0\u67E5\u70B9\uFF0C\u5F53\u524D: 0`
+                message: `${t2.priority} \u4EFB\u52A1\u5FC5\u987B\u5305\u542B\u81F3\u5C11 2 \u4E2A\u7ED3\u6784\u5316\u68C0\u67E5\u70B9\uFF0C\u5F53\u524D: 0`
               };
             }
           }
@@ -16156,8 +17408,8 @@ var init_quality_gate_registry = __esm(() => {
         description: "\u4EFB\u52A1\u57FA\u7840\u5B57\u6BB5\u5B8C\u6574\u6027\u9A8C\u8BC1",
         severity: "error",
         check: (task) => {
-          const t = task;
-          const result = validateBasicFields(t);
+          const t2 = task;
+          const result = validateBasicFields(t2);
           if (!result.valid) {
             return {
               ruleId: "basic-fields-valid",
@@ -16180,19 +17432,19 @@ var init_quality_gate_registry = __esm(() => {
         description: "\u72B6\u6001\u8F6C\u6362\u9A8C\u8BC1",
         severity: "error",
         check: (task, context) => {
-          const t = task;
+          const t2 = task;
           const expectedStatus = context?.expectedStatus;
           const phase = context?.phase;
           if (!expectedStatus)
             return null;
-          if (t.status !== expectedStatus) {
+          if (t2.status !== expectedStatus) {
             return {
               ruleId: "status-transition-valid",
               severity: "error",
-              message: `\u72B6\u6001\u4E0D\u5339\u914D: \u671F\u671B ${expectedStatus}, \u5B9E\u9645 ${t.status} (\u9636\u6BB5: ${phase || "unknown"})`
+              message: `\u72B6\u6001\u4E0D\u5339\u914D: \u671F\u671B ${expectedStatus}, \u5B9E\u9645 ${t2.status} (\u9636\u6BB5: ${phase || "unknown"})`
             };
           }
-          const notes = t.transitionNotes;
+          const notes = t2.transitionNotes;
           if (!notes || notes.length === 0) {
             return {
               ruleId: "status-transition-valid",
@@ -16327,12 +17579,12 @@ var init_quality_gate_registry = __esm(() => {
 });
 
 // src/utils/harness-snapshot.ts
-import * as fs15 from "fs";
+import * as fs16 from "fs";
 import * as path13 from "path";
 function getRunsDir(cwd) {
   const runsDir = path13.join(getProjectDir(cwd), "runs");
-  if (!fs15.existsSync(runsDir)) {
-    fs15.mkdirSync(runsDir, { recursive: true });
+  if (!fs16.existsSync(runsDir)) {
+    fs16.mkdirSync(runsDir, { recursive: true });
   }
   return runsDir;
 }
@@ -16365,7 +17617,7 @@ function createPlanSnapshot(executionPlan, cwd = process.cwd(), batchAwareQueue)
     sourcePlanPath: path13.join(getProjectDir(cwd), "current-plan.json"),
     taskStatusSnapshot
   };
-  fs15.writeFileSync(snapshotPath, JSON.stringify(snapshot, null, 2), "utf-8");
+  fs16.writeFileSync(snapshotPath, JSON.stringify(snapshot, null, 2), "utf-8");
   return snapshot;
 }
 function readPlanSnapshot(snapshotIdOrPath, cwd = process.cwd()) {
@@ -16376,11 +17628,11 @@ function readPlanSnapshot(snapshotIdOrPath, cwd = process.cwd()) {
     const runsDir = getRunsDir(cwd);
     snapshotPath = path13.join(runsDir, snapshotIdOrPath);
   }
-  if (!fs15.existsSync(snapshotPath)) {
+  if (!fs16.existsSync(snapshotPath)) {
     return null;
   }
   try {
-    const content = fs15.readFileSync(snapshotPath, "utf-8");
+    const content = fs16.readFileSync(snapshotPath, "utf-8");
     const snapshot = JSON.parse(content);
     if (!snapshot.snapshotId || !snapshot.tasks || !Array.isArray(snapshot.tasks)) {
       return null;
@@ -16392,10 +17644,10 @@ function readPlanSnapshot(snapshotIdOrPath, cwd = process.cwd()) {
 }
 function listSnapshots(cwd = process.cwd()) {
   const runsDir = getRunsDir(cwd);
-  if (!fs15.existsSync(runsDir)) {
+  if (!fs16.existsSync(runsDir)) {
     return [];
   }
-  const files = fs15.readdirSync(runsDir);
+  const files = fs16.readdirSync(runsDir);
   const snapshots = [];
   for (const file of files) {
     if (!file.startsWith("harness-plan-snapshot-") || !file.endsWith(".json")) {
@@ -16416,11 +17668,11 @@ function cleanupSnapshot(snapshotIdOrPath, cwd = process.cwd()) {
     const runsDir = getRunsDir(cwd);
     snapshotPath = path13.join(runsDir, snapshotIdOrPath);
   }
-  if (!fs15.existsSync(snapshotPath)) {
+  if (!fs16.existsSync(snapshotPath)) {
     return false;
   }
   try {
-    fs15.unlinkSync(snapshotPath);
+    fs16.unlinkSync(snapshotPath);
     return true;
   } catch {
     return false;
@@ -16611,7 +17863,7 @@ function buildTaskChains(tasks, cwd, precomputedDeps) {
     taskMap.set(task.id, task);
   }
   const inferredDeps = precomputedDeps || inferDependenciesBatch(tasks);
-  const taskIds = new Set(tasks.map((t) => t.id));
+  const taskIds = new Set(tasks.map((t2) => t2.id));
   const adjacency = new Map;
   const nodesMap = new Map;
   for (const task of tasks) {
@@ -16657,7 +17909,7 @@ function buildTaskChains(tasks, cwd, precomputedDeps) {
     }
     const topoResult = topologicalSortDFS(componentAdj, componentNodeIds);
     const chainTasks = topoResult.order.map((id) => taskMap.get(id)).filter(Boolean);
-    const totalReopenCount = chainTasks.reduce((sum, t) => sum + (t.reopenCount || 0), 0);
+    const totalReopenCount = chainTasks.reduce((sum, t2) => sum + (t2.reopenCount || 0), 0);
     const priorityOrder = {
       P0: 0,
       P1: 1,
@@ -16668,9 +17920,9 @@ function buildTaskChains(tasks, cwd, precomputedDeps) {
       Q3: 6,
       Q4: 7
     };
-    const maxPriority = Math.min(...chainTasks.map((t) => priorityOrder[t.priority] ?? 2));
-    const keywords = extractKeywords(chainTasks.map((t) => `${t.title} ${t.description || ""}`).join(" "));
-    const chainLayers = chainTasks.map((t) => inferArchitectureLayer(t));
+    const maxPriority = Math.min(...chainTasks.map((t2) => priorityOrder[t2.priority] ?? 2));
+    const keywords = extractKeywords(chainTasks.map((t2) => `${t2.title} ${t2.description || ""}`).join(" "));
+    const chainLayers = chainTasks.map((t2) => inferArchitectureLayer(t2));
     const minLayerValue = Math.min(...chainLayers.map((cl) => cl.layerValue));
     const layerOrder = ["Layer0", "Layer1", "Layer2", "Layer3"];
     const minLayer = layerOrder[minLayerValue];
@@ -16747,7 +17999,7 @@ function buildBatches(sortedChains) {
         const deps = inferredDeps.get(task.id);
         if (!deps)
           continue;
-        const myChainTaskIds = new Set(chain.tasks.map((t) => t.id));
+        const myChainTaskIds = new Set(chain.tasks.map((t2) => t2.id));
         for (const dep of deps) {
           if (bucketTaskIds.has(dep.depTaskId) && !myChainTaskIds.has(dep.depTaskId)) {
             hasCrossChainInferredDep = true;
@@ -16986,7 +18238,7 @@ async function recommendPlan(options = {}, cwd = process.cwd()) {
   let recommendationAccepted = false;
   let suggestedOrder = [];
   const allTasks = getAllTasks(cwd);
-  const failedTasks = allTasks.filter((t) => normalizeStatus(t.status) === "failed");
+  const failedTasks = allTasks.filter((t2) => normalizeStatus(t2.status) === "failed");
   if (failedTasks.length > 0) {
     console.log("\u26A0\uFE0F  Quality check: Found failed tasks:");
     for (const task of failedTasks) {
@@ -17003,9 +18255,9 @@ async function recommendPlan(options = {}, cwd = process.cwd()) {
       console.log("");
     }
   }
-  const inProgressTasks = allTasks.filter((t) => normalizeStatus(t.status) === "in_progress");
+  const inProgressTasks = allTasks.filter((t2) => normalizeStatus(t2.status) === "in_progress");
   const TERMINAL_STATUSES2 = new Set(["resolved", "closed", "abandoned", "failed"]);
-  const activeTasks = options.all ? allTasks.filter((t) => !TERMINAL_STATUSES2.has(normalizeStatus(t.status))) : allTasks.filter((t) => normalizeStatus(t.status) === "open");
+  const activeTasks = options.all ? allTasks.filter((t2) => !TERMINAL_STATUSES2.has(normalizeStatus(t2.status))) : allTasks.filter((t2) => normalizeStatus(t2.status) === "open");
   const excludedCount = allTasks.length - activeTasks.length;
   if (excludedCount > 0) {
     const reason = options.all ? "terminal (resolved/closed/abandoned)" : "non-open status";
@@ -17013,12 +18265,12 @@ async function recommendPlan(options = {}, cwd = process.cwd()) {
   }
   if (inProgressTasks.length > 0) {
     console.log("\uD83D\uDD35 In-progress tasks:");
-    for (const t of inProgressTasks) {
-      console.log(`   ${t.id}: ${t.title.substring(0, 60)}`);
+    for (const t2 of inProgressTasks) {
+      console.log(`   ${t2.id}: ${t2.title.substring(0, 60)}`);
     }
     console.log("");
   }
-  const chainEligibleTasks = activeTasks.filter((t) => normalizeStatus(t.status) !== "in_progress");
+  const chainEligibleTasks = activeTasks.filter((t2) => normalizeStatus(t2.status) !== "in_progress");
   const missingSubtaskWarnings = detectMissingSubtasks(cwd);
   if (missingSubtaskWarnings.length > 0) {
     const label = options.strictSubtaskCoverage ? "\u274C ERR" : "\u26A0\uFE0F  WARN";
@@ -17988,7 +19240,7 @@ var init_task_validation = __esm(() => {
 
 // src/commands/analyze-fix-pipeline.ts
 import * as path14 from "path";
-import * as fs16 from "fs";
+import * as fs17 from "fs";
 function normalizeType(type) {
   const typeMap = {
     bugfix: "bug",
@@ -18194,7 +19446,7 @@ async function fixSingleIssue(issue, cwd, nonInteractive) {
     }
     case "cycle": {
       console.log(`\uD83D\uDD04 \u5206\u6790\u4EFB\u52A1 ${issue.taskId} \u7684\u5FAA\u73AF\u4F9D\u8D56...`);
-      const allCycleTasks = getAllTaskIds(cwd).map((id) => readTaskMeta(id, cwd)).filter((t) => t !== null);
+      const allCycleTasks = getAllTaskIds(cwd).map((id) => readTaskMeta(id, cwd)).filter((t2) => t2 !== null);
       const cycleGraph = DependencyGraph.fromTasks(allCycleTasks);
       const anomalies = cycleGraph.detectAnomalies();
       const cycleAnomalies = anomalies.filter((a) => a.type === "cycle" && a.nodeIds.includes(issue.taskId));
@@ -18488,8 +19740,8 @@ async function fixSingleIssue(issue, cwd, nonInteractive) {
     }
     case "invalid_dependency_ref": {
       console.log(`\uD83D\uDD04 \u4FEE\u590D\u4EFB\u52A1 ${issue.taskId} \u7684\u65E0\u6548\u4F9D\u8D56\u5F15\u7528...`);
-      const allDepTasks = getAllTaskIds(cwd).map((id) => readTaskMeta(id, cwd)).filter((t) => t !== null);
-      const validTaskIds = new Set(allDepTasks.map((t) => t.id));
+      const allDepTasks = getAllTaskIds(cwd).map((id) => readTaskMeta(id, cwd)).filter((t2) => t2 !== null);
+      const validTaskIds = new Set(allDepTasks.map((t2) => t2.id));
       let removedAny = false;
       if (task.dependencies) {
         const invalidRefs = task.dependencies.filter((depId) => !validTaskIds.has(depId));
@@ -18519,7 +19771,7 @@ async function fixSingleIssue(issue, cwd, nonInteractive) {
     }
     case "missing_inferred_dependency": {
       console.log(`\uD83D\uDD04 \u4FEE\u590D\u4EFB\u52A1 ${issue.taskId} \u7684\u63A8\u65AD\u4F9D\u8D56\u7F3A\u5931...`);
-      const allInferredTasks = getAllTaskIds(cwd).map((id) => readTaskMeta(id, cwd)).filter((t) => t !== null);
+      const allInferredTasks = getAllTaskIds(cwd).map((id) => readTaskMeta(id, cwd)).filter((t2) => t2 !== null);
       const inferredGraph = DependencyGraph.fromTasks(allInferredTasks);
       if (issue.details?.inferredDependencies) {
         const inferredDeps = issue.details.inferredDependencies;
@@ -18652,7 +19904,7 @@ async function fixSingleIssue(issue, cwd, nonInteractive) {
         for (const taskId of tasksToDelete) {
           const dirPath = path14.join(archiveDir, taskId);
           try {
-            fs16.rmSync(dirPath, { recursive: true, force: true });
+            fs17.rmSync(dirPath, { recursive: true, force: true });
             deleted++;
           } catch {
             console.error(`  \u274C \u5220\u9664 ${taskId} \u5931\u8D25`);
@@ -18674,7 +19926,7 @@ async function fixSingleIssue(issue, cwd, nonInteractive) {
           for (const taskId of tasksToDelete) {
             const dirPath = path14.join(archiveDir, taskId);
             try {
-              fs16.rmSync(dirPath, { recursive: true, force: true });
+              fs17.rmSync(dirPath, { recursive: true, force: true });
               deleted++;
             } catch {
               console.error(`  \u274C \u5220\u9664 ${taskId} \u5931\u8D25`);
@@ -19423,7 +20675,7 @@ function getTasksByRange(range, cwd = process.cwd()) {
   const allTasks = getAllTasks(cwd);
   switch (range.type) {
     case "all": {
-      return allTasks.filter((t) => t.status === "open" || t.status === "in_progress" || t.status === "wait_review" || t.status === "wait_qa" || t.status === "wait_evaluation");
+      return allTasks.filter((t2) => t2.status === "open" || t2.status === "in_progress" || t2.status === "wait_review" || t2.status === "wait_qa" || t2.status === "wait_evaluation");
     }
     case "tasks": {
       const ids = range.taskIds ?? [];
@@ -19471,7 +20723,7 @@ var init_analyze_range_parser = __esm(() => {
 
 // src/commands/analyze.ts
 import * as path15 from "path";
-import * as fs17 from "fs";
+import * as fs18 from "fs";
 function readAnalyzeConfig(cwd = process.cwd()) {
   const config = readConfig(cwd);
   if (!config)
@@ -19731,10 +20983,10 @@ async function assessStalenessWithAI(task, cwd) {
   return null;
 }
 function parseReportVerdict(reportPath) {
-  if (!fs17.existsSync(reportPath))
+  if (!fs18.existsSync(reportPath))
     return null;
   try {
-    const content = fs17.readFileSync(reportPath, "utf-8");
+    const content = fs18.readFileSync(reportPath, "utf-8");
     const passMatch = content.match(/\*\*\u7ED3\u679C\*\*:\s*\u2705\s*PASS|Result:\s*PASS|\bPASS\b/i);
     const nopassMatch = content.match(/\*\*\u7ED3\u679C\*\*:\s*\u274C\s*NOPASS|Result:\s*NOPASS|\bNOPASS\b/i);
     if (nopassMatch)
@@ -19751,7 +21003,7 @@ function getHarnessReportDir(taskId, cwd) {
 }
 function checkReportStatusConsistency(taskId, task, cwd) {
   const reportDir = getHarnessReportDir(taskId, cwd);
-  if (!fs17.existsSync(reportDir))
+  if (!fs18.existsSync(reportDir))
     return null;
   const currentStatus = normalizeStatus(task.status);
   if (["resolved", "closed", "abandoned", "failed"].includes(currentStatus))
@@ -19902,7 +21154,7 @@ function checkMissingPipelineEvidence(taskId, task, cwd) {
   const required = STATUS_REQUIRED_REPORTS[currentStatus];
   if (!required)
     return null;
-  if (!fs17.existsSync(reportDir)) {
+  if (!fs18.existsSync(reportDir)) {
     return {
       taskId,
       type: "missing_pipeline_evidence",
@@ -19920,7 +21172,7 @@ function checkMissingPipelineEvidence(taskId, task, cwd) {
   const missingReports = [];
   for (const req of required) {
     const reportPath = path15.join(reportDir, req.reportFile);
-    if (!fs17.existsSync(reportPath)) {
+    if (!fs18.existsSync(reportPath)) {
       missingReports.push(req);
     }
   }
@@ -19950,7 +21202,7 @@ function shouldTriggerAIInference(task, layer1Issues, cwd) {
   const historyCount = task.history?.length ?? 0;
   if (historyCount >= 3) {
     const reportDir = getHarnessReportDir(task.id, cwd);
-    if (!fs17.existsSync(reportDir))
+    if (!fs18.existsSync(reportDir))
       return true;
   }
   if (currentStatus === "open" && task.transitionNotes && task.transitionNotes.length > 0) {
@@ -20689,11 +21941,11 @@ async function analyzeProject(cwd = process.cwd(), includeArchived = false, aiOp
     if (normalizedStatus === "in_progress") {
       const omcStateDir = path15.resolve(cwd, ".omc/state");
       let hasActivePipeline = false;
-      if (fs17.existsSync(omcStateDir)) {
-        const pipelineStateFiles = fs17.readdirSync(omcStateDir).filter((f) => f.includes("pipeline") && f.endsWith(".json"));
+      if (fs18.existsSync(omcStateDir)) {
+        const pipelineStateFiles = fs18.readdirSync(omcStateDir).filter((f) => f.includes("pipeline") && f.endsWith(".json"));
         for (const stateFile of pipelineStateFiles) {
           try {
-            const stateData = JSON.parse(fs17.readFileSync(path15.join(omcStateDir, stateFile), "utf-8"));
+            const stateData = JSON.parse(fs18.readFileSync(path15.join(omcStateDir, stateFile), "utf-8"));
             if (stateData.active === true) {
               const taskIds = stateData.taskIds || (stateData.taskDescription ? [task.id] : []);
               if (taskIds.length === 0 || taskIds.includes(task.id)) {
@@ -20750,7 +22002,7 @@ async function analyzeProject(cwd = process.cwd(), includeArchived = false, aiOp
     const taskText = `${task.description || ""}
 ${task.title || ""}`;
     const referencedFiles = extractFilePaths(taskText, { includeBareFilenames: false });
-    const missingRefs = referencedFiles.filter((fp) => !fs17.existsSync(path15.resolve(cwd, fp)));
+    const missingRefs = referencedFiles.filter((fp) => !fs18.existsSync(path15.resolve(cwd, fp)));
     if (missingRefs.length > 0) {
       stats.fileNotFound++;
       issues.push({
@@ -20782,7 +22034,7 @@ ${task.title || ""}`;
     }
   }
   if (analyzeConfig.minCheckpointCoverage && analyzeConfig.minCheckpointCoverage > 0) {
-    const tasksWithCheckpoints = filteredTasks.filter((t) => t.checkpoints && t.checkpoints.length > 0);
+    const tasksWithCheckpoints = filteredTasks.filter((t2) => t2.checkpoints && t2.checkpoints.length > 0);
     const coverageRate = filteredTasks.length > 0 ? tasksWithCheckpoints.length / filteredTasks.length : 0;
     if (coverageRate < analyzeConfig.minCheckpointCoverage) {
       issues.push({
@@ -20799,9 +22051,9 @@ ${task.title || ""}`;
       });
     }
   }
-  const parentTasks = filteredTasks.filter((t) => !isSubtask(t.id));
-  const subtasks = filteredTasks.filter((t) => isSubtask(t.id));
-  const completedSubtasks = subtasks.filter((t) => t.status === "resolved" || t.status === "closed");
+  const parentTasks = filteredTasks.filter((t2) => !isSubtask(t2.id));
+  const subtasks = filteredTasks.filter((t2) => isSubtask(t2.id));
+  const completedSubtasks = subtasks.filter((t2) => t2.status === "resolved" || t2.status === "closed");
   stats.parentTasks = parentTasks.length;
   stats.subtasks = subtasks.length;
   stats.subtaskCompletionRate = subtasks.length > 0 ? Math.round(completedSubtasks.length / subtasks.length * 100) : 0;
@@ -20819,16 +22071,16 @@ ${task.title || ""}`;
     }
   }
   const archiveDir = getArchiveDir(cwd);
-  if (fs17.existsSync(archiveDir)) {
-    const abandonedDirs = fs17.readdirSync(archiveDir).filter((name) => {
+  if (fs18.existsSync(archiveDir)) {
+    const abandonedDirs = fs18.readdirSync(archiveDir).filter((name) => {
       const dirPath = path15.join(archiveDir, name);
-      if (!fs17.statSync(dirPath).isDirectory())
+      if (!fs18.statSync(dirPath).isDirectory())
         return false;
       const metaPath = path15.join(dirPath, "meta.json");
-      if (!fs17.existsSync(metaPath))
+      if (!fs18.existsSync(metaPath))
         return false;
       try {
-        const meta = JSON.parse(fs17.readFileSync(metaPath, "utf-8"));
+        const meta = JSON.parse(fs18.readFileSync(metaPath, "utf-8"));
         return meta.status === "abandoned";
       } catch {
         return false;
@@ -20888,7 +22140,7 @@ ${task.title || ""}`;
   }
   const inferredDeps = inferDependenciesBatch(filteredTasks);
   for (const [taskId, deps] of inferredDeps) {
-    const task = filteredTasks.find((t) => t.id === taskId);
+    const task = filteredTasks.find((t2) => t2.id === taskId);
     if (!task)
       continue;
     const explicitDeps = new Set(task.dependencies);
@@ -20927,7 +22179,7 @@ async function showAnalysis(options = {}, cwd = process.cwd()) {
       const range = parseCheckRange(options.checkRange);
       if (range.type !== "all") {
         const rangeTasks = getTasksByRange(range, cwd);
-        const allowedIds = new Set(rangeTasks.map((t) => t.id));
+        const allowedIds = new Set(rangeTasks.map((t2) => t2.id));
         result = {
           ...result,
           issues: result.issues.filter((i) => allowedIds.has(i.taskId))
@@ -21119,7 +22371,7 @@ async function showStatus(options = {}, cwd = process.cwd()) {
   console.log(separator);
 }
 function calculateReopenStats(tasks) {
-  const reopenCount = tasks.filter((t) => (t.reopenCount ?? 0) > 0).length;
+  const reopenCount = tasks.filter((t2) => (t2.reopenCount ?? 0) > 0).length;
   const reopenCounts = [];
   for (const task of tasks) {
     if (task.reopenCount && task.reopenCount > 0) {
@@ -21144,10 +22396,10 @@ function calculateReopenStats(tasks) {
 }
 function countArchivedTasks(cwd) {
   const archiveDir = path15.join(getProjectDir(cwd), "archive");
-  if (!fs17.existsSync(archiveDir)) {
+  if (!fs18.existsSync(archiveDir)) {
     return 0;
   }
-  return fs17.readdirSync(archiveDir).filter((name) => fs17.statSync(path15.join(archiveDir, name)).isDirectory()).length;
+  return fs18.readdirSync(archiveDir).filter((name) => fs18.statSync(path15.join(archiveDir, name)).isDirectory()).length;
 }
 function calculateHealthScore(result) {
   if (result.stats.total === 0)
@@ -21290,7 +22542,7 @@ function searchCodebaseForCriteria(criteria, cwd) {
     if (depth > 10)
       return;
     try {
-      const entries = fs17.readdirSync(dir, { withFileTypes: true });
+      const entries = fs18.readdirSync(dir, { withFileTypes: true });
       for (const entry of entries) {
         const fullPath = path15.join(dir, entry.name);
         if (entry.isDirectory()) {
@@ -21304,7 +22556,7 @@ function searchCodebaseForCriteria(criteria, cwd) {
             continue;
           }
           try {
-            const content = fs17.readFileSync(fullPath, "utf-8");
+            const content = fs18.readFileSync(fullPath, "utf-8");
             const lines = content.split(`
 `);
             const matchedKeywords = [];
@@ -21436,11 +22688,11 @@ function getContractPath(taskId, cwd) {
 }
 function readContract(taskId, cwd) {
   const contractPath = getContractPath(taskId, cwd);
-  if (!fs17.existsSync(contractPath)) {
+  if (!fs18.existsSync(contractPath)) {
     return null;
   }
   try {
-    const content = fs17.readFileSync(contractPath, "utf-8");
+    const content = fs18.readFileSync(contractPath, "utf-8");
     return JSON.parse(content);
   } catch {
     return null;
@@ -21449,11 +22701,11 @@ function readContract(taskId, cwd) {
 function saveContract(taskId, contract, cwd) {
   const contractPath = getContractPath(taskId, cwd);
   const dir = path15.dirname(contractPath);
-  if (!fs17.existsSync(dir)) {
-    fs17.mkdirSync(dir, { recursive: true });
+  if (!fs18.existsSync(dir)) {
+    fs18.mkdirSync(dir, { recursive: true });
   }
   contract.updatedAt = new Date().toISOString();
-  fs17.writeFileSync(contractPath, JSON.stringify(contract, null, 2), "utf-8");
+  fs18.writeFileSync(contractPath, JSON.stringify(contract, null, 2), "utf-8");
 }
 function generateCheckpointsFromCriteria(taskId, acceptanceCriteria, taskTitle, cwd = process.cwd(), taskDescription) {
   const checkpoints = [];
@@ -21796,15 +23048,15 @@ function extractBugReportFields(markdown) {
 }
 function loadLogContext(cwd, keywords) {
   const logsDir = getLogsDir(cwd);
-  if (!fs17.existsSync(logsDir))
+  if (!fs18.existsSync(logsDir))
     return [];
   const contextLines = [];
   try {
-    const files = fs17.readdirSync(logsDir).filter((f) => f.endsWith(".log")).map((f) => ({ name: f, path: path15.join(logsDir, f), mtime: fs17.statSync(path15.join(logsDir, f)).mtimeMs })).sort((a, b) => b.mtime - a.mtime);
+    const files = fs18.readdirSync(logsDir).filter((f) => f.endsWith(".log")).map((f) => ({ name: f, path: path15.join(logsDir, f), mtime: fs18.statSync(path15.join(logsDir, f)).mtimeMs })).sort((a, b) => b.mtime - a.mtime);
     const recentFiles = files.slice(0, 3);
     for (const file of recentFiles) {
       try {
-        const content = fs17.readFileSync(file.path, "utf-8");
+        const content = fs18.readFileSync(file.path, "utf-8");
         const lines = content.trim().split(`
 `).filter(Boolean);
         for (const line of lines) {
@@ -22069,14 +23321,14 @@ function exportTrainingDataToJsonl(fields, analysis, exportPath) {
     }
   };
   const line = JSON.stringify(trainingEntry);
-  fs17.appendFileSync(exportPath, line + `
+  fs18.appendFileSync(exportPath, line + `
 `, "utf-8");
 }
 async function analyzeBugReport(bugReportPath, cwd = process.cwd(), options = {}) {
   const logger2 = createLogger("analyze-bug-report", cwd);
   const startTime = Date.now();
   const resolvedPath = path15.resolve(bugReportPath);
-  if (!fs17.existsSync(resolvedPath)) {
+  if (!fs18.existsSync(resolvedPath)) {
     throw new Error(`Bug report \u8DEF\u5F84\u4E0D\u5B58\u5728: ${resolvedPath}`);
   }
   console.log("");
@@ -22087,13 +23339,13 @@ async function analyzeBugReport(bugReportPath, cwd = process.cwd(), options = {}
   console.log(`  Input: ${resolvedPath}`);
   console.log("");
   let markdown;
-  const stat = fs17.statSync(resolvedPath);
+  const stat = fs18.statSync(resolvedPath);
   if (stat.isDirectory()) {
-    const mdFiles = fs17.readdirSync(resolvedPath).filter((f) => f.endsWith(".md") || f.endsWith(".markdown"));
+    const mdFiles = fs18.readdirSync(resolvedPath).filter((f) => f.endsWith(".md") || f.endsWith(".markdown"));
     if (mdFiles.length === 0) {
       throw new Error(`\u76EE\u5F55\u4E2D\u672A\u627E\u5230 Markdown \u6587\u4EF6: ${resolvedPath}`);
     }
-    const sorted = mdFiles.map((f) => ({ name: f, path: path15.join(resolvedPath, f), mtime: fs17.statSync(path15.join(resolvedPath, f)).mtimeMs })).sort((a, b) => b.mtime - a.mtime);
+    const sorted = mdFiles.map((f) => ({ name: f, path: path15.join(resolvedPath, f), mtime: fs18.statSync(path15.join(resolvedPath, f)).mtimeMs })).sort((a, b) => b.mtime - a.mtime);
     if (sorted.length > 1) {
       console.log(`  \u26A0\uFE0F  Directory has ${sorted.length} Markdown files, analyzing latest: ${sorted[0].name}`);
       console.log(`     Other files: ${sorted.slice(1).map((f) => f.name).join(", ")}`);
@@ -22102,10 +23354,10 @@ async function analyzeBugReport(bugReportPath, cwd = process.cwd(), options = {}
     if (!latestFile) {
       throw new Error(`\u76EE\u5F55\u4E2D\u672A\u627E\u5230\u6709\u6548\u7684 Markdown \u6587\u4EF6: ${resolvedPath}`);
     }
-    markdown = fs17.readFileSync(latestFile.path, "utf-8");
+    markdown = fs18.readFileSync(latestFile.path, "utf-8");
     console.log(`  Using file: ${latestFile.name}`);
   } else {
-    markdown = fs17.readFileSync(resolvedPath, "utf-8");
+    markdown = fs18.readFileSync(resolvedPath, "utf-8");
   }
   console.log("  \uD83D\uDCCB Extracting Bug Report fields...");
   const fields = extractBugReportFields(markdown);
@@ -22184,7 +23436,7 @@ async function analyzeBugReport(bugReportPath, cwd = process.cwd(), options = {}
   const reportsDir = getReportsDir(cwd);
   ensureDir(reportsDir);
   const reportPath = path15.join(reportsDir, `bug-analysis-${timestamp}.md`);
-  fs17.writeFileSync(reportPath, reportMarkdown, "utf-8");
+  fs18.writeFileSync(reportPath, reportMarkdown, "utf-8");
   console.log(`  \uD83D\uDCC4 Report written to: ${reportPath}`);
   console.log("");
   const requirementDescription = generateRequirementFromAnalysis(fields, analysis);
@@ -22472,228 +23724,6 @@ var init_analyze = __esm(() => {
     }
   ];
   TERMINAL_STATUSES2 = new Set(["resolved", "closed", "abandoned", "failed"]);
-});
-
-// src/i18n/zh.ts
-var zhTexts;
-var init_zh = __esm(() => {
-  zhTexts = {
-    error: "\u9519\u8BEF",
-    success: "\u6210\u529F",
-    cancel: "\u53D6\u6D88",
-    setup: {
-      initializing: "\u6B63\u5728\u521D\u59CB\u5316\u9879\u76EE\u7BA1\u7406\u73AF\u5883...",
-      createDir: "\u521B\u5EFA\u76EE\u5F55",
-      createConfig: "\u521B\u5EFA\u914D\u7F6E: config.json",
-      setupComplete: "\u9879\u76EE\u7BA1\u7406\u73AF\u5883\u521D\u59CB\u5316\u5B8C\u6210\uFF01",
-      nextStep: "\u4F7F\u7528 'projmnt4claude task create' \u521B\u5EFA\u7B2C\u4E00\u4E2A\u4EFB\u52A1",
-      selectLanguage: "\u8BF7\u9009\u62E9\u8BED\u8A00:",
-      copyingSkills: "\u6B63\u5728\u590D\u5236\u6280\u80FD\u6587\u4EF6...",
-      skillsCopied: "\u6280\u80FD\u6587\u4EF6\u590D\u5236\u5B8C\u6210",
-      alreadyInitialized: "\u9879\u76EE\u7BA1\u7406\u73AF\u5883\u5DF2\u5B58\u5728\uFF0C\u8DF3\u8FC7\u521D\u59CB\u5316\u3002"
-    },
-    task: {
-      createTitle: "\u8BF7\u8F93\u5165\u4EFB\u52A1\u6807\u9898:",
-      createDescription: "\u8BF7\u8F93\u5165\u4EFB\u52A1\u63CF\u8FF0\uFF08\u53EF\u9009\uFF09:",
-      taskCreated: "\u4EFB\u52A1\u521B\u5EFA\u6210\u529F",
-      taskNotFound: "\u672A\u627E\u5230\u4EFB\u52A1",
-      taskUpdated: "\u4EFB\u52A1\u5DF2\u66F4\u65B0",
-      taskDeleted: "\u4EFB\u52A1\u5DF2\u5220\u9664",
-      listHeader: "\u4EFB\u52A1\u5217\u8868",
-      noTasks: "\u6682\u65E0\u4EFB\u52A1",
-      statusHeader: "\u72B6\u6001",
-      priorityHeader: "\u4F18\u5148\u7EA7",
-      roleHeader: "\u63A8\u8350\u89D2\u8272",
-      dependencyHeader: "\u4F9D\u8D56",
-      subtaskHeader: "\u5B50\u4EFB\u52A1"
-    },
-    plan: {
-      showHeader: "\u6267\u884C\u8BA1\u5212",
-      addHeader: "\u6DFB\u52A0\u4EFB\u52A1",
-      removeHeader: "\u79FB\u9664\u4EFB\u52A1",
-      clearHeader: "\u6E05\u7A7A\u8BA1\u5212",
-      recommendHeader: "\u667A\u80FD\u63A8\u8350",
-      noPlan: "\u6682\u65E0\u8BA1\u5212",
-      planCleared: "\u8BA1\u5212\u5DF2\u6E05\u7A7A",
-      taskAdded: "\u4EFB\u52A1\u5DF2\u6DFB\u52A0\u5230\u8BA1\u5212",
-      taskRemoved: "\u4EFB\u52A1\u5DF2\u4ECE\u8BA1\u5212\u79FB\u9664"
-    },
-    status: {
-      projectStatus: "\u9879\u76EE\u72B6\u6001",
-      totalTasks: "\u603B\u4EFB\u52A1\u6570",
-      completedTasks: "\u5DF2\u5B8C\u6210",
-      inProgressTasks: "\u8FDB\u884C\u4E2D",
-      pendingTasks: "\u5F85\u5904\u7406",
-      noTasks: "\u65E0\u4EFB\u52A1"
-    },
-    analyze: {
-      analyzing: "\u6B63\u5728\u5206\u6790\u9879\u76EE\u5065\u5EB7\u72B6\u6001...",
-      analysisComplete: "\u5206\u6790\u5B8C\u6210",
-      issuesFound: "\u53D1\u73B0 {count} \u4E2A\u95EE\u9898",
-      noIssues: "\u672A\u53D1\u73B0\u95EE\u9898",
-      fixApplied: "\u5DF2\u4FEE\u590D {count} \u4E2A\u95EE\u9898"
-    },
-    help: {
-      commandReference: "\u547D\u4EE4\u53C2\u8003",
-      availableCommands: "\u53EF\u7528\u547D\u4EE4",
-      noDescription: "\u6682\u65E0\u63CF\u8FF0",
-      commandNotFound: "\u672A\u627E\u5230\u547D\u4EE4",
-      tipUseHelp: "\u4F7F\u7528 `projmnt4claude help <command>` \u67E5\u770B\u547D\u4EE4\u8BE6\u7EC6\u8BF4\u660E",
-      usage: "\u4F7F\u7528\u65B9\u5F0F",
-      examples: "\u793A\u4F8B"
-    },
-    config: {
-      listHeader: "\u914D\u7F6E\u5217\u8868",
-      getHeader: "\u83B7\u53D6\u914D\u7F6E",
-      setHeader: "\u8BBE\u7F6E\u914D\u7F6E",
-      configUpdated: "\u914D\u7F6E\u5DF2\u66F4\u65B0",
-      keyNotFound: "\u914D\u7F6E\u9879\u4E0D\u5B58\u5728",
-      invalidAction: "\u672A\u77E5\u64CD\u4F5C"
-    },
-    tool: {
-      listHeader: "\u672C\u5730 skill \u5217\u8868",
-      createHeader: "\u521B\u5EFA skill",
-      installHeader: "\u5B89\u88C5 skill",
-      removeHeader: "\u5220\u9664 skill",
-      deployHeader: "\u90E8\u7F72 skill",
-      undeployHeader: "\u5378\u8F7D skill"
-    },
-    initRequirement: {
-      descriptionRequired: "\u8BF7\u8F93\u5165\u9700\u6C42\u63CF\u8FF0",
-      parsingDescription: "\u6B63\u5728\u89E3\u6790\u9700\u6C42...",
-      creatingTasks: "\u6B63\u5728\u521B\u5EFA\u4EFB\u52A1...",
-      tasksCreated: "\u5DF2\u521B\u5EFA {count} \u4E2A\u4EFB\u52A1"
-    }
-  };
-});
-
-// src/i18n/en.ts
-var enTexts;
-var init_en = __esm(() => {
-  enTexts = {
-    error: "Error",
-    success: "Success",
-    cancel: "Cancel",
-    setup: {
-      initializing: "Initializing project management environment...",
-      createDir: "Create directory",
-      createConfig: "Create config: config.json",
-      setupComplete: "Project management environment initialized!",
-      nextStep: "Use 'projmnt4claude task create' to create your first task",
-      selectLanguage: "Select language:",
-      copyingSkills: "Copying skill files...",
-      skillsCopied: "Skill files copied",
-      alreadyInitialized: "Project management environment already exists, skipping initialization."
-    },
-    task: {
-      createTitle: "Enter task title:",
-      createDescription: "Enter task description (optional):",
-      taskCreated: "Task created successfully",
-      taskNotFound: "Task not found",
-      taskUpdated: "Task updated",
-      taskDeleted: "Task deleted",
-      listHeader: "Task List",
-      noTasks: "No tasks",
-      statusHeader: "Status",
-      priorityHeader: "Priority",
-      roleHeader: "Role",
-      dependencyHeader: "Dependencies",
-      subtaskHeader: "Subtasks"
-    },
-    plan: {
-      showHeader: "Execution Plan",
-      addHeader: "Add task",
-      removeHeader: "Remove task",
-      clearHeader: "Clear plan",
-      recommendHeader: "Smart recommendation",
-      noPlan: "No plan",
-      planCleared: "Plan cleared",
-      taskAdded: "Task added to plan",
-      taskRemoved: "Task removed from plan"
-    },
-    status: {
-      projectStatus: "Project Status",
-      totalTasks: "Total Tasks",
-      completedTasks: "Completed",
-      inProgressTasks: "In Progress",
-      pendingTasks: "Pending",
-      noTasks: "No tasks"
-    },
-    analyze: {
-      analyzing: "Analyzing project health...",
-      analysisComplete: "Analysis complete",
-      issuesFound: "Found {count} issues",
-      noIssues: "No issues found",
-      fixApplied: "Fixed {count} issues"
-    },
-    help: {
-      commandReference: "Command Reference",
-      availableCommands: "Available Commands",
-      noDescription: "No description",
-      commandNotFound: "Command not found",
-      tipUseHelp: "Use `projmnt4claude help <command>` for detailed command usage",
-      usage: "Usage",
-      examples: "Examples"
-    },
-    config: {
-      listHeader: "Config List",
-      getHeader: "Get Config",
-      setHeader: "Set Config",
-      configUpdated: "Config updated",
-      keyNotFound: "Config key not found",
-      invalidAction: "Unknown action"
-    },
-    tool: {
-      listHeader: "Local Skill List",
-      createHeader: "Create Skill",
-      installHeader: "Install Skill",
-      removeHeader: "Remove Skill",
-      deployHeader: "Deploy Skill",
-      undeployHeader: "Undeploy Skill"
-    },
-    initRequirement: {
-      descriptionRequired: "Enter requirement description",
-      parsingDescription: "Parsing requirement...",
-      creatingTasks: "Creating tasks...",
-      tasksCreated: "Created {count} tasks"
-    }
-  };
-});
-
-// src/i18n/index.ts
-var exports_i18n = {};
-__export(exports_i18n, {
-  t: () => t,
-  getLanguage: () => getLanguage,
-  getI18n: () => getI18n
-});
-import * as fs19 from "fs";
-function getLanguage(cwd = process.cwd()) {
-  const configPath = getConfigPath(cwd);
-  try {
-    if (fs19.existsSync(configPath)) {
-      const config = JSON.parse(fs19.readFileSync(configPath, "utf-8"));
-      return config.language || "en";
-    }
-  } catch (error) {}
-  return "en";
-}
-function getI18n(language, cwd) {
-  const lang = language || getLanguage(cwd);
-  return languagePacks[lang] || languagePacks.zh;
-}
-function t(cwd) {
-  return getI18n(undefined, cwd);
-}
-var languagePacks;
-var init_i18n = __esm(() => {
-  init_path();
-  init_zh();
-  init_en();
-  languagePacks = {
-    zh: zhTexts,
-    en: enTexts
-  };
 });
 
 // node_modules/commander/esm.mjs
@@ -23068,13 +24098,13 @@ init_dependency_engine();
 init_description_template();
 init_quality_gate();
 var import_prompts2 = __toESM(require_prompts3(), 1);
-import * as fs13 from "fs";
+import * as fs14 from "fs";
 import * as path11 from "path";
 import * as crypto from "crypto";
 
 // src/utils/batch-update-logger.ts
 init_path();
-import * as fs11 from "fs";
+import * as fs12 from "fs";
 import * as path9 from "path";
 function detectOperationSource() {
   const env = process.env;
@@ -23166,17 +24196,17 @@ function writeBatchUpdateLog(entry, cwd = process.cwd()) {
   };
   const logLine = JSON.stringify(fullEntry) + `
 `;
-  fs11.appendFileSync(logPath, logLine, "utf-8");
+  fs12.appendFileSync(logPath, logLine, "utf-8");
 }
 function queryBatchUpdateLogs(options = {}, cwd = process.cwd()) {
   const logsDir = getLogsDir(cwd);
-  if (!fs11.existsSync(logsDir)) {
+  if (!fs12.existsSync(logsDir)) {
     return [];
   }
-  const logFiles = fs11.readdirSync(logsDir).filter((f) => f.startsWith("batch-update-") && f.endsWith(".log")).map((f) => path9.join(logsDir, f));
+  const logFiles = fs12.readdirSync(logsDir).filter((f) => f.startsWith("batch-update-") && f.endsWith(".log")).map((f) => path9.join(logsDir, f));
   const allEntries = [];
   for (const logPath of logFiles) {
-    const content = fs11.readFileSync(logPath, "utf-8");
+    const content = fs12.readFileSync(logPath, "utf-8");
     const entries = content.split(`
 `).filter((line) => line.trim()).map((line) => JSON.parse(line));
     allEntries.push(...entries);
@@ -23192,7 +24222,7 @@ function queryBatchUpdateLogs(options = {}, cwd = process.cwd()) {
     if (options.source && entry.source !== options.source) {
       return false;
     }
-    if (options.taskId && !entry.tasks.some((t) => t.id === options.taskId)) {
+    if (options.taskId && !entry.tasks.some((t2) => t2.id === options.taskId)) {
       return false;
     }
     return true;
@@ -23302,7 +24332,7 @@ function filterMeaningfulHistory(history) {
   });
 }
 function parseCheckpoints(checkpointPath) {
-  const content = fs13.readFileSync(checkpointPath, "utf-8");
+  const content = fs14.readFileSync(checkpointPath, "utf-8");
   const lines = content.split(`
 `);
   const checkpoints = [];
@@ -23324,10 +24354,10 @@ function hasValidCheckpoints(checkpointPathOrContent, isContent = false) {
   if (isContent && checkpointPathOrContent !== null) {
     content = checkpointPathOrContent;
   } else if (!isContent && checkpointPathOrContent) {
-    if (!fs13.existsSync(checkpointPathOrContent)) {
+    if (!fs14.existsSync(checkpointPathOrContent)) {
       return { valid: false, reason: "checkpoint.md \u6587\u4EF6does not exist" };
     }
-    content = fs13.readFileSync(checkpointPathOrContent, "utf-8");
+    content = fs14.readFileSync(checkpointPathOrContent, "utf-8");
   } else {
     return { valid: false, reason: "NoneCheckpoints\u5185\u5BB9" };
   }
@@ -23444,7 +24474,7 @@ function findMissingFiles(filePaths, cwd) {
   const missing = [];
   for (const fp of filePaths) {
     const absolutePath = path11.resolve(cwd, fp);
-    if (!fs13.existsSync(absolutePath)) {
+    if (!fs14.existsSync(absolutePath)) {
       missing.push(fp);
     }
   }
@@ -23561,7 +24591,7 @@ async function createTask(options = {}, cwd = process.cwd()) {
     const referencedFiles = finalRelatedFiles.length > 0 ? finalRelatedFiles : extractFilePaths(task2.description || "", { includeBareFilenames: false });
     const fileWarnings = [];
     for (const file of referencedFiles) {
-      if (!fs13.existsSync(path11.join(cwd, file))) {
+      if (!fs14.existsSync(path11.join(cwd, file))) {
         fileWarnings.push(file);
       }
     }
@@ -23595,7 +24625,7 @@ ${finalCheckpoints.map((cp) => `- [ ] ${cp}`).join(`
 - [ ] Checkpoints2\uFF08\u8BF7\u66FF\u6362\u4E3A\u5177\u4F53\u9A8C\u6536\u6807\u51C6\uFF09
 `;
     }
-    fs13.writeFileSync(checkpointPath2, checkpointContent, "utf-8");
+    fs14.writeFileSync(checkpointPath2, checkpointContent, "utf-8");
     console.log(`
 \u2705 Task created successfully!`);
     console.log(`   ID: ${taskId2}`);
@@ -23694,7 +24724,7 @@ ${finalCheckpoints.map((cp) => `- [ ] ${cp}`).join(`
   writeTaskMeta(task, cwd);
   const taskDir = path11.join(getTasksDir(cwd), taskId);
   const checkpointPath = path11.join(taskDir, "checkpoint.md");
-  fs13.writeFileSync(checkpointPath, defaultCheckpointContent, "utf-8");
+  fs14.writeFileSync(checkpointPath, defaultCheckpointContent, "utf-8");
   console.log(`
 \u2705 Task created successfully!`);
   console.log(`   ID: ${taskId}`);
@@ -23718,19 +24748,19 @@ function listTasks(options = {}, cwd = process.cwd()) {
   }
   let tasks = getAllTasks(cwd);
   if (options.status) {
-    tasks = tasks.filter((t) => t.status === options.status);
+    tasks = tasks.filter((t2) => t2.status === options.status);
   }
   if (options.priority) {
-    tasks = tasks.filter((t) => t.priority === options.priority);
+    tasks = tasks.filter((t2) => t2.priority === options.priority);
   }
   if (options.role) {
-    tasks = tasks.filter((t) => t.recommendedRole === options.role);
+    tasks = tasks.filter((t2) => t2.recommendedRole === options.role);
   }
   if (options.needsDiscussion) {
-    tasks = tasks.filter((t) => t.needsDiscussion === true);
+    tasks = tasks.filter((t2) => t2.needsDiscussion === true);
   }
   if (options.missingVerification) {
-    tasks = tasks.filter((t) => (t.status === "resolved" || t.status === "closed") && !t.checkpointConfirmationToken);
+    tasks = tasks.filter((t2) => (t2.status === "resolved" || t2.status === "closed") && !t2.checkpointConfirmationToken);
   }
   if (tasks.length === 0) {
     if (options.format === "json") {
@@ -23740,7 +24770,7 @@ function listTasks(options = {}, cwd = process.cwd()) {
     }
     return;
   }
-  const parentTasks = tasks.filter((t) => !t.parentId);
+  const parentTasks = tasks.filter((t2) => !t2.parentId);
   const subtaskMap = new Map;
   for (const task of tasks) {
     if (task.parentId) {
@@ -23755,32 +24785,32 @@ function listTasks(options = {}, cwd = process.cwd()) {
     return;
   }
   if (options.format === "json") {
-    const output = tasks.map((t) => {
+    const output = tasks.map((t2) => {
       if (options.fields) {
         const fields = options.fields.split(",").map((f) => f.trim());
         const picked = {};
         for (const f of fields) {
-          if (f in t) {
-            picked[f] = t[f];
+          if (f in t2) {
+            picked[f] = t2[f];
           }
         }
         return picked;
       }
       return {
-        id: t.id,
-        title: t.title,
-        status: t.status,
-        priority: t.priority,
-        type: t.type,
-        description: t.description,
-        dependencies: t.dependencies,
-        recommendedRole: t.recommendedRole,
-        needsDiscussion: t.needsDiscussion,
-        discussionTopics: t.discussionTopics,
-        requirementHistoryCount: t.requirementHistory?.length || 0,
-        reopenCount: t.reopenCount || 0,
-        createdAt: t.createdAt,
-        updatedAt: t.updatedAt
+        id: t2.id,
+        title: t2.title,
+        status: t2.status,
+        priority: t2.priority,
+        type: t2.type,
+        description: t2.description,
+        dependencies: t2.dependencies,
+        recommendedRole: t2.recommendedRole,
+        needsDiscussion: t2.needsDiscussion,
+        discussionTopics: t2.discussionTopics,
+        requirementHistoryCount: t2.requirementHistory?.length || 0,
+        reopenCount: t2.reopenCount || 0,
+        createdAt: t2.createdAt,
+        updatedAt: t2.updatedAt
       };
     });
     console.log(JSON.stringify(output, null, 2));
@@ -23809,11 +24839,11 @@ function listTasks(options = {}, cwd = process.cwd()) {
     }
   }
   console.log("");
-  const totalSubtasks = tasks.filter((t) => t.parentId).length;
+  const totalSubtasks = tasks.filter((t2) => t2.parentId).length;
   console.log(`Total ${parentTasks.length} tasks${totalSubtasks > 0 ? `, ${totalSubtasks} subtasks` : ""}`);
 }
 function displayTasksGrouped(tasks, groupBy, subtaskMap) {
-  const parentTasks = tasks.filter((t) => !t.parentId);
+  const parentTasks = tasks.filter((t2) => !t2.parentId);
   const groups = new Map;
   for (const task of parentTasks) {
     let groupKey;
@@ -23898,7 +24928,7 @@ function displayTasksGrouped(tasks, groupBy, subtaskMap) {
     }
     console.log("");
   }
-  const totalSubtasks = tasks.filter((t) => t.parentId).length;
+  const totalSubtasks = tasks.filter((t2) => t2.parentId).length;
   console.log(`Total ${parentTasks.length} tasks${totalSubtasks > 0 ? `, ${totalSubtasks} subtasks` : ""}`);
   console.log(`Group: ${groupBy === "status" ? "status" : groupBy === "priority" ? "priority" : groupBy === "type" ? "type" : "role"}`);
 }
@@ -23983,8 +25013,8 @@ function showTaskCompact(task, cwd) {
   if (cwd) {
     const taskDir = path11.join(getTasksDir(cwd), task.id);
     const checkpointPath = path11.join(taskDir, "checkpoint.md");
-    if (fs13.existsSync(checkpointPath)) {
-      const content = fs13.readFileSync(checkpointPath, "utf-8");
+    if (fs14.existsSync(checkpointPath)) {
+      const content = fs14.readFileSync(checkpointPath, "utf-8");
       const cpLines = content.split(`
 `).filter((l) => l.trim().startsWith("- ["));
       if (cpLines.length > 0) {
@@ -24106,7 +25136,7 @@ function showTaskPanel(task, options, cwd) {
   }
   const taskDir = path11.join(getTasksDir(cwd), task.id);
   const checkpointPath = path11.join(taskDir, "checkpoint.md");
-  if (fs13.existsSync(checkpointPath)) {
+  if (fs14.existsSync(checkpointPath)) {
     if (options.checkpoints) {
       const checkpointsMeta = listCheckpoints(task.id, cwd);
       if (checkpointsMeta.length > 0) {
@@ -24129,7 +25159,7 @@ function showTaskPanel(task, options, cwd) {
         }
       }
     } else {
-      const content = fs13.readFileSync(checkpointPath, "utf-8");
+      const content = fs14.readFileSync(checkpointPath, "utf-8");
       const checkpointLines = content.split(`
 `).filter((l) => l.trim().startsWith("- ["));
       if (checkpointLines.length > 0) {
@@ -24354,10 +25384,10 @@ function showTaskClassic(task, options, cwd) {
         }
       });
     }
-  } else if (fs13.existsSync(checkpointPath)) {
+  } else if (fs14.existsSync(checkpointPath)) {
     console.log(makeSectionHeader("Checkpoints"));
     console.log("");
-    const content = fs13.readFileSync(checkpointPath, "utf-8");
+    const content = fs14.readFileSync(checkpointPath, "utf-8");
     const checkpointLines = content.split(`
 `).filter((l) => l.trim().startsWith("- ["));
     if (checkpointLines.length > 0) {
@@ -24456,7 +25486,7 @@ async function updateTask(taskId, options, cwd = process.cwd()) {
     const taskDir = path11.join(getTasksDir(cwd), taskId);
     const checkpointPath = path11.join(taskDir, "checkpoint.md");
     if (!options.token) {
-      if (!fs13.existsSync(checkpointPath)) {
+      if (!fs14.existsSync(checkpointPath)) {
         task.status = options.status;
         writeTaskMeta(task, cwd);
         console.log(`\u2705 Task ${taskId} updated to resolved status`);
@@ -24817,12 +25847,12 @@ async function deleteTask(taskId, force = false, cwd = process.cwd()) {
   const archiveDir = getArchiveDir(cwd);
   const taskPath = path11.join(tasksDir, taskId);
   const archivePath = path11.join(archiveDir, taskId);
-  if (!fs13.existsSync(archiveDir)) {
-    fs13.mkdirSync(archiveDir, { recursive: true });
+  if (!fs14.existsSync(archiveDir)) {
+    fs14.mkdirSync(archiveDir, { recursive: true });
   }
   task.status = "abandoned";
   writeTaskMeta(task, cwd);
-  fs13.renameSync(taskPath, archivePath);
+  fs14.renameSync(taskPath, archivePath);
   console.log(`\u2705 Task ${taskId} Archived`);
 }
 function purgeTasks(options = {}, cwd = process.cwd()) {
@@ -24831,7 +25861,7 @@ function purgeTasks(options = {}, cwd = process.cwd()) {
     process.exit(1);
   }
   const archiveDir = getArchiveDir(cwd);
-  if (!fs13.existsSync(archiveDir)) {
+  if (!fs14.existsSync(archiveDir)) {
     const msg = "\u6CA1\u6709\u9700\u8981\u6E05\u9664\u7684 abandoned Task";
     if (options.json) {
       console.log(JSON.stringify({ purged: 0, message: msg }));
@@ -24840,15 +25870,15 @@ function purgeTasks(options = {}, cwd = process.cwd()) {
     }
     return;
   }
-  const abandonedDirs = fs13.readdirSync(archiveDir).filter((name) => {
+  const abandonedDirs = fs14.readdirSync(archiveDir).filter((name) => {
     const dirPath = path11.join(archiveDir, name);
-    if (!fs13.statSync(dirPath).isDirectory())
+    if (!fs14.statSync(dirPath).isDirectory())
       return false;
     const metaPath = path11.join(dirPath, "meta.json");
-    if (!fs13.existsSync(metaPath))
+    if (!fs14.existsSync(metaPath))
       return false;
     try {
-      const meta = JSON.parse(fs13.readFileSync(metaPath, "utf-8"));
+      const meta = JSON.parse(fs14.readFileSync(metaPath, "utf-8"));
       return meta.status === "abandoned";
     } catch {
       return false;
@@ -24879,7 +25909,7 @@ Use  --force or -y to confirm deletion`);
   for (const dir of abandonedDirs) {
     const dirPath = path11.join(archiveDir, dir);
     try {
-      fs13.rmSync(dirPath, { recursive: true, force: true });
+      fs14.rmSync(dirPath, { recursive: true, force: true });
       purged++;
     } catch (e) {
       console.error(`Delete ${dir} failed: ${e}`);
@@ -25055,8 +26085,8 @@ async function completeTask(taskId, options = {}, cwd = process.cwd()) {
   console.log("");
   const taskDir = path11.join(getTasksDir(cwd), taskId);
   const checkpointPath = path11.join(taskDir, "checkpoint.md");
-  if (fs13.existsSync(checkpointPath)) {
-    const content = fs13.readFileSync(checkpointPath, "utf-8");
+  if (fs14.existsSync(checkpointPath)) {
+    const content = fs14.readFileSync(checkpointPath, "utf-8");
     const lines = content.split(`
 `).filter((line) => line.trim().startsWith("- ["));
     if (lines.length > 0) {
@@ -25084,7 +26114,7 @@ async function completeTask(taskId, options = {}, cwd = process.cwd()) {
         for (const line of unchecked) {
           newContent = newContent.replace(line, line.replace("[ ]", "[x]"));
         }
-        fs13.writeFileSync(checkpointPath, newContent, "utf-8");
+        fs14.writeFileSync(checkpointPath, newContent, "utf-8");
         console.log("\u2705 All checkpoints auto-marked as completed");
       }
     }
@@ -25128,11 +26158,11 @@ async function completeTask(taskId, options = {}, cwd = process.cwd()) {
         });
         const taskDir2 = path11.join(getTasksDir(cwd), taskId);
         const notesDir = path11.join(taskDir2, "notes");
-        if (!fs13.existsSync(notesDir)) {
-          fs13.mkdirSync(notesDir, { recursive: true });
+        if (!fs14.existsSync(notesDir)) {
+          fs14.mkdirSync(notesDir, { recursive: true });
         }
         const notePath = path11.join(notesDir, `completion-${new Date().toISOString().slice(0, 10)}.md`);
-        fs13.writeFileSync(notePath, `# \u5B8C\u6210Description
+        fs14.writeFileSync(notePath, `# \u5B8C\u6210Description
 
 ${noteResponse.note}
 `, "utf-8");
@@ -25293,8 +26323,8 @@ async function executeTask(taskId, cwd = process.cwd()) {
   console.log("\u2501".repeat(SEPARATOR_WIDTH));
   console.log("\u2705 Checkpoint List");
   console.log("\u2501".repeat(SEPARATOR_WIDTH));
-  if (fs13.existsSync(checkpointPath)) {
-    const content = fs13.readFileSync(checkpointPath, "utf-8");
+  if (fs14.existsSync(checkpointPath)) {
+    const content = fs14.readFileSync(checkpointPath, "utf-8");
     console.log(content);
   } else {
     console.log("No checkpoints");
@@ -25338,11 +26368,11 @@ async function completeCheckpoint(taskId, options = {}, cwd = process.cwd()) {
   }
   const taskDir = path11.join(getTasksDir(cwd), taskId);
   const checkpointPath = path11.join(taskDir, "checkpoint.md");
-  if (!fs13.existsSync(checkpointPath)) {
+  if (!fs14.existsSync(checkpointPath)) {
     console.log("No checkpoint file");
     return;
   }
-  const content = fs13.readFileSync(checkpointPath, "utf-8");
+  const content = fs14.readFileSync(checkpointPath, "utf-8");
   const lines = content.split(`
 `).filter((line) => line.trim().startsWith("- ["));
   if (lines.length === 0) {
@@ -25386,7 +26416,7 @@ async function completeCheckpoint(taskId, options = {}, cwd = process.cwd()) {
   for (let i = 0;i < lines.length; i++) {
     newContent = newContent.replace(lines[i], updatedLines[i]);
   }
-  fs13.writeFileSync(checkpointPath, newContent, "utf-8");
+  fs14.writeFileSync(checkpointPath, newContent, "utf-8");
   console.log("");
   console.log("\u2501".repeat(SEPARATOR_WIDTH));
   if (allPassed) {
@@ -25483,7 +26513,7 @@ async function addSubtask(parentId, title, cwd = process.cwd()) {
   writeTaskMeta(subtask, cwd);
   const taskDir = path11.join(getTasksDir(cwd), subtaskId);
   const checkpointPath = path11.join(taskDir, "checkpoint.md");
-  fs13.writeFileSync(checkpointPath, `# ${subtaskId} Checkpoints
+  fs14.writeFileSync(checkpointPath, `# ${subtaskId} Checkpoints
 
 - [ ] Checkpoints1
 - [ ] Checkpoints2
@@ -25674,7 +26704,7 @@ async function splitTask(parentId, options = {}, cwd = process.cwd()) {
   }
   let subtaskTitles = [];
   if (options.titles) {
-    subtaskTitles = options.titles.split(",").map((t) => t.trim()).filter((t) => t.length > 0);
+    subtaskTitles = options.titles.split(",").map((t2) => t2.trim()).filter((t2) => t2.length > 0);
   } else if (options.into && options.into > 0) {
     const count = options.into;
     for (let i = 1;i <= count; i++) {
@@ -25720,7 +26750,7 @@ async function splitTask(parentId, options = {}, cwd = process.cwd()) {
         name: "titles",
         message: "\u8F93\u5165SubtasksTitle (\u7528\u9017\u53F7\u5206\u9694):",
         validate: (value) => {
-          const titles = value.split(",").map((t) => t.trim()).filter((t) => t);
+          const titles = value.split(",").map((t2) => t2.trim()).filter((t2) => t2);
           return titles.length >= 2 ? true : "\u81F3\u5C11\u9700\u8981 2 subtasks";
         }
       });
@@ -25728,7 +26758,7 @@ async function splitTask(parentId, options = {}, cwd = process.cwd()) {
         console.log("Cancelled");
         return;
       }
-      subtaskTitles = titlesResponse.titles.split(",").map((t) => t.trim()).filter((t) => t);
+      subtaskTitles = titlesResponse.titles.split(",").map((t2) => t2.trim()).filter((t2) => t2);
     }
   }
   if (subtaskTitles.length < 2) {
@@ -25752,7 +26782,7 @@ async function splitTask(parentId, options = {}, cwd = process.cwd()) {
     writeTaskMeta(subtask, cwd);
     const taskDir = path11.join(getTasksDir(cwd), subtaskId);
     const checkpointPath = path11.join(taskDir, "checkpoint.md");
-    fs13.writeFileSync(checkpointPath, `# ${subtaskId} Checkpoints
+    fs14.writeFileSync(checkpointPath, `# ${subtaskId} Checkpoints
 
 - [ ] \u5B8C\u6210Task
 `, "utf-8");
@@ -25863,13 +26893,13 @@ function countTasks(options = {}, cwd = process.cwd()) {
   }
   let tasks = getAllTasks(cwd);
   if (options.status) {
-    tasks = tasks.filter((t) => t.status === options.status);
+    tasks = tasks.filter((t2) => t2.status === options.status);
   }
   if (options.priority) {
-    tasks = tasks.filter((t) => t.priority === options.priority);
+    tasks = tasks.filter((t2) => t2.priority === options.priority);
   }
   if (options.type) {
-    tasks = tasks.filter((t) => t.type === options.type);
+    tasks = tasks.filter((t2) => t2.type === options.type);
   }
   if (process.env.DEBUG_COUNT) {
     console.error("DEBUG options:", JSON.stringify(options));
@@ -26037,12 +27067,12 @@ async function batchUpdateTasks(options = {}, cwd = process.cwd()) {
   let specifiedTaskIds = [];
   if (options.taskFile) {
     const taskFilePath = path11.resolve(cwd, options.taskFile);
-    if (!fs13.existsSync(taskFilePath)) {
+    if (!fs14.existsSync(taskFilePath)) {
       console.error(`Error: Task filedoes not exist: ${taskFilePath}`);
       process.exit(1);
     }
     try {
-      const fileContent = fs13.readFileSync(taskFilePath, "utf-8");
+      const fileContent = fs14.readFileSync(taskFilePath, "utf-8");
       specifiedTaskIds = fileContent.split(/[\n,]/).map((id) => id.trim()).filter((id) => id.length > 0);
     } catch (error) {
       console.error(`Error: Cannot readTask file: ${error.message}`);
@@ -26050,26 +27080,26 @@ async function batchUpdateTasks(options = {}, cwd = process.cwd()) {
     }
   }
   if (options.tasks && options.tasks.length > 0) {
-    specifiedTaskIds = options.tasks.flatMap((t) => t.split(",")).map((id) => id.trim()).filter((id) => id.length > 0);
+    specifiedTaskIds = options.tasks.flatMap((t2) => t2.split(",")).map((id) => id.trim()).filter((id) => id.length > 0);
   }
   let tasksToUpdate;
   let filteredTasks;
   if (specifiedTaskIds.length > 0) {
     const taskIdSet = new Set(specifiedTaskIds);
-    tasksToUpdate = allTasks.filter((t) => taskIdSet.has(t.id));
-    const foundIds = new Set(tasksToUpdate.map((t) => t.id));
+    tasksToUpdate = allTasks.filter((t2) => taskIdSet.has(t2.id));
+    const foundIds = new Set(tasksToUpdate.map((t2) => t2.id));
     const notFoundIds = specifiedTaskIds.filter((id) => !foundIds.has(id));
     if (notFoundIds.length > 0) {
       console.error(`Error: The following tasksdoes not exist: ${notFoundIds.join(", ")}`);
       process.exit(1);
     }
-    filteredTasks = tasksToUpdate.filter((t) => t.status === "resolved" || t.status === "closed" || t.status === "abandoned" || t.status === "failed");
+    filteredTasks = tasksToUpdate.filter((t2) => t2.status === "resolved" || t2.status === "closed" || t2.status === "abandoned" || t2.status === "failed");
     if (!options.all) {
-      tasksToUpdate = tasksToUpdate.filter((t) => t.status !== "resolved" && t.status !== "closed" && t.status !== "abandoned" && t.status !== "failed");
+      tasksToUpdate = tasksToUpdate.filter((t2) => t2.status !== "resolved" && t2.status !== "closed" && t2.status !== "abandoned" && t2.status !== "failed");
     }
   } else {
-    tasksToUpdate = options.all ? allTasks : allTasks.filter((t) => t.status !== "resolved" && t.status !== "closed" && t.status !== "abandoned" && t.status !== "failed");
-    filteredTasks = options.all ? [] : allTasks.filter((t) => t.status === "resolved" || t.status === "closed" || t.status === "abandoned" || t.status === "failed");
+    tasksToUpdate = options.all ? allTasks : allTasks.filter((t2) => t2.status !== "resolved" && t2.status !== "closed" && t2.status !== "abandoned" && t2.status !== "failed");
+    filteredTasks = options.all ? [] : allTasks.filter((t2) => t2.status === "resolved" || t2.status === "closed" || t2.status === "abandoned" || t2.status === "failed");
   }
   if (tasksToUpdate.length === 0) {
     console.log("No tasks to update");
@@ -26087,7 +27117,7 @@ async function batchUpdateTasks(options = {}, cwd = process.cwd()) {
   }
   console.log("");
   const terminalStatuses = ["resolved", "closed", "abandoned"];
-  const reopeningTasks = tasksToUpdate.filter((t) => options.status === "open" && terminalStatuses.includes(t.status));
+  const reopeningTasks = tasksToUpdate.filter((t2) => options.status === "open" && terminalStatuses.includes(t2.status));
   const isUsingAllFlag = options.all === true;
   const highRiskCount = reopeningTasks.length;
   if (highRiskCount > 0) {
@@ -26345,7 +27375,7 @@ init_path();
 init_task2();
 init_quality_gate();
 var import_prompts6 = __toESM(require_prompts3(), 1);
-import * as fs18 from "fs";
+import * as fs19 from "fs";
 import * as path16 from "path";
 init_checkpoint();
 init_dependency_engine();
@@ -26459,7 +27489,7 @@ function extractProblemsByPattern(content) {
         "Introduction",
         "Appendix"
       ];
-      if (nonProblemTitles.some((t) => title.includes(t)))
+      if (nonProblemTitles.some((t2) => title.includes(t2)))
         continue;
       seen.add(title);
       const startIdx = match.index + match[0].length;
@@ -27444,7 +28474,7 @@ async function initRequirement(description, cwd = process.cwd(), options = {}) {
 ${subFilteredCheckpoints.map((cp) => `- [ ] ${cp}`).join(`
 `)}
 `;
-        fs18.writeFileSync(subCheckpointPath, subCheckpointContent, "utf-8");
+        fs19.writeFileSync(subCheckpointPath, subCheckpointContent, "utf-8");
         syncCheckpointsToMeta(subId, cwd);
         addSubtaskToParent(taskId, subId, cwd);
         console.log(`  ${i + 1}. ${subId}: ${sub.title}`);
@@ -27497,8 +28527,8 @@ ${subFilteredCheckpoints.map((cp) => `- [ ] ${cp}`).join(`
         for (const cleanupId of subtaskIds) {
           try {
             const cleanupDir = path16.join(getTasksDir(cwd), cleanupId);
-            if (fs18.existsSync(cleanupDir)) {
-              fs18.rmSync(cleanupDir, { recursive: true, force: true });
+            if (fs19.existsSync(cleanupDir)) {
+              fs19.rmSync(cleanupDir, { recursive: true, force: true });
             }
           } catch {}
         }
@@ -27807,8 +28837,8 @@ function detectRoleFromProject(cwd, description) {
   const srcDir = path16.join(cwd, "src");
   let projectDirs = [];
   try {
-    if (fs18.existsSync(srcDir)) {
-      projectDirs = fs18.readdirSync(srcDir, { withFileTypes: true }).filter((e) => e.isDirectory()).map((e) => e.name);
+    if (fs19.existsSync(srcDir)) {
+      projectDirs = fs19.readdirSync(srcDir, { withFileTypes: true }).filter((e) => e.isDirectory()).map((e) => e.name);
     }
   } catch {}
   const signals = {
@@ -29799,190 +30829,7 @@ import * as fs23 from "fs";
 import * as path20 from "path";
 
 // src/utils/role-prompts.ts
-var DEV_TEMPLATES = {
-  frontend: {
-    roleDeclaration: "\u4F60\u662F\u4E00\u4E2A\u524D\u7AEF\u5F00\u53D1\u8005\uFF0C\u4E13\u6CE8\u4E8E\u7528\u6237\u754C\u9762\u548C\u4EA4\u4E92\u4F53\u9A8C\u3002",
-    extraInstructions: [
-      "\u786E\u4FDD\u7EC4\u4EF6\u53EF\u590D\u7528\u3001\u53EF\u8BBF\u95EE\u6027\uFF08WCAG 2.1\uFF09\u826F\u597D",
-      "\u5173\u6CE8\u54CD\u5E94\u5F0F\u5E03\u5C40\u548C\u8DE8\u6D4F\u89C8\u5668\u517C\u5BB9\u6027",
-      "\u9075\u5FAA\u9879\u76EE\u7684\u524D\u7AEF\u4EE3\u7801\u89C4\u8303\u548C\u8BBE\u8BA1\u7CFB\u7EDF"
-    ]
-  },
-  backend: {
-    roleDeclaration: "\u4F60\u662F\u4E00\u4E2A\u540E\u7AEF\u5F00\u53D1\u8005\uFF0C\u4E13\u6CE8\u4E8E\u670D\u52A1\u7AEF\u903B\u8F91\u548C\u6570\u636E\u5C42\u3002",
-    extraInstructions: [
-      "\u786E\u4FDD API \u63A5\u53E3\u8BBE\u8BA1\u9075\u5FAA RESTful \u6216\u9879\u76EE\u7EA6\u5B9A",
-      "\u5173\u6CE8\u9519\u8BEF\u5904\u7406\u3001\u8F93\u5165\u9A8C\u8BC1\u548C\u4E8B\u52A1\u4E00\u81F4\u6027",
-      "\u6CE8\u610F\u6570\u636E\u5E93\u67E5\u8BE2\u6027\u80FD\u548C\u7D22\u5F15\u4F7F\u7528"
-    ]
-  },
-  qa: {
-    roleDeclaration: "\u4F60\u662F\u4E00\u4E2A\u5177\u6709\u6D4B\u8BD5\u5F00\u53D1\u80FD\u529B\u7684\u5F00\u53D1\u8005\uFF0C\u64C5\u957F\u7F16\u5199\u53EF\u6D4B\u8BD5\u7684\u4EE3\u7801\u3002",
-    extraInstructions: [
-      "\u5B9E\u73B0\u65F6\u540C\u6B65\u7F16\u5199\u5FC5\u8981\u7684\u5355\u5143\u6D4B\u8BD5\u548C\u96C6\u6210\u6D4B\u8BD5",
-      "\u5173\u6CE8\u8FB9\u754C\u6761\u4EF6\u548C\u5F02\u5E38\u8DEF\u5F84\u7684\u8986\u76D6",
-      "\u786E\u4FDD\u4EE3\u7801\u53EF\u901A\u8FC7\u81EA\u52A8\u5316\u6D4B\u8BD5\u9A8C\u8BC1"
-    ]
-  },
-  architect: {
-    roleDeclaration: "\u4F60\u662F\u4E00\u4E2A\u67B6\u6784\u5E08\u89D2\u8272\u7684\u5F00\u53D1\u8005\uFF0C\u5173\u6CE8\u7CFB\u7EDF\u8BBE\u8BA1\u548C\u6A21\u5757\u8FB9\u754C\u3002",
-    extraInstructions: [
-      "\u786E\u4FDD\u5B9E\u73B0\u7B26\u5408\u73B0\u6709\u67B6\u6784\u7EA6\u675F\u548C\u6A21\u5757\u8FB9\u754C",
-      "\u5173\u6CE8\u63A5\u53E3\u8BBE\u8BA1\u548C\u6A21\u5757\u95F4\u89E3\u8026",
-      "\u8BC4\u4F30\u53D8\u66F4\u5BF9\u7CFB\u7EDF\u6574\u4F53\u67B6\u6784\u7684\u5F71\u54CD"
-    ]
-  },
-  security: {
-    roleDeclaration: "\u4F60\u662F\u4E00\u4E2A\u5B89\u5168\u5DE5\u7A0B\u5E08\u89D2\u8272\u7684\u5F00\u53D1\u8005\uFF0C\u4E13\u6CE8\u4E8E\u5B89\u5168\u76F8\u5173\u5B9E\u73B0\u3002",
-    extraInstructions: [
-      "\u4E25\u683C\u9075\u5FAA OWASP Top 10 \u5B89\u5168\u5B9E\u8DF5",
-      "\u9A8C\u8BC1\u6240\u6709\u5916\u90E8\u8F93\u5165\u3001\u9632\u6B62\u6CE8\u5165\u548C XSS",
-      "\u786E\u4FDD\u654F\u611F\u6570\u636E\u5904\u7406\u7B26\u5408\u5B89\u5168\u89C4\u8303"
-    ]
-  },
-  performance: {
-    roleDeclaration: "\u4F60\u662F\u4E00\u4E2A\u6027\u80FD\u4F18\u5316\u5DE5\u7A0B\u5E08\u89D2\u8272\u7684\u5F00\u53D1\u8005\uFF0C\u4E13\u6CE8\u4E8E\u6027\u80FD\u76F8\u5173\u5B9E\u73B0\u3002",
-    extraInstructions: [
-      "\u5173\u6CE8\u5173\u952E\u8DEF\u5F84\u7684\u6027\u80FD\u6307\u6807\uFF08\u5EF6\u8FDF\u3001\u541E\u5410\u91CF\u3001\u5185\u5B58\uFF09",
-      "\u907F\u514D\u4E0D\u5FC5\u8981\u7684\u540C\u6B65\u64CD\u4F5C\u548C\u91CD\u590D\u8BA1\u7B97",
-      "\u4F7F\u7528\u6027\u80FD\u5206\u6790\u5DE5\u5177\u9A8C\u8BC1\u4F18\u5316\u6548\u679C"
-    ]
-  }
-};
-var CODE_REVIEW_TEMPLATES = {
-  frontend: {
-    roleDeclaration: "\u4F60\u662F\u4E00\u4E2A\u4E13\u4E1A\u7684\u524D\u7AEF\u4EE3\u7801\u5BA1\u6838\u5458\u3002",
-    reviewFocus: [
-      "\u7EC4\u4EF6\u7ED3\u6784\u548C\u72B6\u6001\u7BA1\u7406\u662F\u5426\u5408\u7406",
-      "CSS/\u6837\u5F0F\u662F\u5426\u6709\u51B2\u7A81\u6216\u5197\u4F59",
-      "\u53EF\u8BBF\u95EE\u6027\uFF08a11y\uFF09\u662F\u5426\u7B26\u5408\u6807\u51C6",
-      "\u6D4F\u89C8\u5668\u517C\u5BB9\u6027\u548C\u54CD\u5E94\u5F0F\u8BBE\u8BA1"
-    ]
-  },
-  backend: {
-    roleDeclaration: "\u4F60\u662F\u4E00\u4E2A\u4E13\u4E1A\u7684\u540E\u7AEF\u4EE3\u7801\u5BA1\u6838\u5458\u3002",
-    reviewFocus: [
-      "API \u63A5\u53E3\u8BBE\u8BA1\u662F\u5426\u89C4\u8303\u3001\u5411\u540E\u517C\u5BB9",
-      "\u9519\u8BEF\u5904\u7406\u662F\u5426\u5B8C\u5584\u3001\u9519\u8BEF\u4FE1\u606F\u662F\u5426\u5B89\u5168",
-      "\u6570\u636E\u5E93\u64CD\u4F5C\u662F\u5426\u5B89\u5168\uFF08\u9632 SQL \u6CE8\u5165\uFF09",
-      "\u5E76\u53D1\u548C\u4E8B\u52A1\u5904\u7406\u662F\u5426\u6B63\u786E"
-    ]
-  },
-  qa: {
-    roleDeclaration: "\u4F60\u662F\u4E00\u4E2A\u4E13\u4E1A\u7684\u6D4B\u8BD5\u4EE3\u7801\u5BA1\u6838\u5458\u3002",
-    reviewFocus: [
-      "\u6D4B\u8BD5\u8986\u76D6\u662F\u5426\u5145\u5206\uFF08\u6B63\u5E38\u8DEF\u5F84 + \u8FB9\u754C\u6761\u4EF6\uFF09",
-      "\u6D4B\u8BD5\u662F\u5426\u72EC\u7ACB\u3001\u53EF\u91CD\u590D\u6267\u884C",
-      "Mock \u548C Stub \u4F7F\u7528\u662F\u5426\u5408\u7406",
-      "\u65AD\u8A00\u662F\u5426\u51C6\u786E\u9A8C\u8BC1\u4E86\u9884\u671F\u884C\u4E3A"
-    ]
-  },
-  architect: {
-    roleDeclaration: "\u4F60\u662F\u4E00\u4E2A\u67B6\u6784\u5BA1\u67E5\u5458\uFF0C\u8D1F\u8D23\u5BA1\u6838\u4EE3\u7801\u7684\u67B6\u6784\u5408\u7406\u6027\u3002",
-    reviewFocus: [
-      "\u6A21\u5757\u8FB9\u754C\u662F\u5426\u6E05\u6670\u3001\u804C\u8D23\u662F\u5426\u5355\u4E00",
-      "\u4F9D\u8D56\u5173\u7CFB\u662F\u5426\u5408\u7406\u3001\u662F\u5426\u5B58\u5728\u5FAA\u73AF\u4F9D\u8D56",
-      "\u63A5\u53E3\u62BD\u8C61\u5C42\u7EA7\u662F\u5426\u9002\u5F53",
-      "\u53D8\u66F4\u662F\u5426\u5F71\u54CD\u73B0\u6709\u67B6\u6784\u7684\u7A33\u5B9A\u6027"
-    ]
-  },
-  security: {
-    roleDeclaration: "\u4F60\u662F\u4E00\u4E2A\u5B89\u5168\u4EE3\u7801\u5BA1\u6838\u5458\uFF0C\u4E13\u6CE8\u4E8E\u5B89\u5168\u6F0F\u6D1E\u68C0\u6D4B\u3002",
-    reviewFocus: [
-      "\u8F93\u5165\u9A8C\u8BC1\u548C\u8F93\u51FA\u7F16\u7801\u662F\u5426\u5B8C\u5584",
-      "\u8BA4\u8BC1\u6388\u6743\u903B\u8F91\u662F\u5426\u6B63\u786E",
-      "\u654F\u611F\u6570\u636E\u662F\u5426\u5B89\u5168\u5B58\u50A8\u548C\u4F20\u8F93",
-      "\u662F\u5426\u5B58\u5728 OWASP Top 10 \u6F0F\u6D1E\u98CE\u9669"
-    ]
-  },
-  performance: {
-    roleDeclaration: "\u4F60\u662F\u4E00\u4E2A\u6027\u80FD\u4EE3\u7801\u5BA1\u6838\u5458\uFF0C\u4E13\u6CE8\u4E8E\u6027\u80FD\u74F6\u9888\u68C0\u6D4B\u3002",
-    reviewFocus: [
-      "\u662F\u5426\u5B58\u5728 O(n\xB2) \u6216\u66F4\u9AD8\u590D\u6742\u5EA6\u7684\u7B97\u6CD5",
-      "\u8D44\u6E90\uFF08\u5185\u5B58\u3001\u8FDE\u63A5\u3001\u6587\u4EF6\u53E5\u67C4\uFF09\u662F\u5426\u6B63\u786E\u91CA\u653E",
-      "\u662F\u5426\u6709\u4E0D\u5FC5\u8981\u7684\u540C\u6B65\u963B\u585E\u64CD\u4F5C",
-      "\u7F13\u5B58\u7B56\u7565\u662F\u5426\u5408\u7406"
-    ]
-  }
-};
-var QA_TEMPLATES = {
-  frontend: {
-    roleDeclaration: "\u4F60\u662F\u4E00\u4E2A\u4E13\u4E1A\u7684\u524D\u7AEF QA \u6D4B\u8BD5\u5458\u3002",
-    testStrategy: [
-      "\u9A8C\u8BC1 UI \u6E32\u67D3\u5728\u4E0D\u540C\u5C4F\u5E55\u5C3A\u5BF8\u4E0B\u662F\u5426\u6B63\u786E",
-      "\u6D4B\u8BD5\u7528\u6237\u4EA4\u4E92\u6D41\u7A0B\uFF08\u70B9\u51FB\u3001\u8F93\u5165\u3001\u5BFC\u822A\uFF09",
-      "\u68C0\u67E5\u53EF\u8BBF\u95EE\u6027\u5DE5\u5177\u662F\u5426\u80FD\u6B63\u786E\u8BC6\u522B\u9875\u9762\u5143\u7D20",
-      "\u9A8C\u8BC1\u52A0\u8F7D\u72B6\u6001\u548C\u9519\u8BEF\u72B6\u6001\u7684\u5C55\u793A"
-    ]
-  },
-  backend: {
-    roleDeclaration: "\u4F60\u662F\u4E00\u4E2A\u4E13\u4E1A\u7684\u540E\u7AEF QA \u6D4B\u8BD5\u5458\u3002",
-    testStrategy: [
-      "\u9A8C\u8BC1 API \u63A5\u53E3\u5728\u5404\u79CD\u8F93\u5165\u4E0B\u7684\u54CD\u5E94",
-      "\u6D4B\u8BD5\u9519\u8BEF\u5904\u7406\u548C\u8FB9\u754C\u6761\u4EF6",
-      "\u68C0\u67E5\u5E76\u53D1\u8BF7\u6C42\u4E0B\u7684\u6570\u636E\u4E00\u81F4\u6027",
-      "\u9A8C\u8BC1\u6570\u636E\u5E93\u72B6\u6001\u53D8\u66F4\u662F\u5426\u7B26\u5408\u9884\u671F"
-    ]
-  },
-  qa: {
-    roleDeclaration: "\u4F60\u662F\u4E00\u4E2A\u4E13\u4E1A\u7684 QA \u6D4B\u8BD5\u5458\uFF0C\u64C5\u957F\u5168\u9762\u6D4B\u8BD5\u8986\u76D6\u3002",
-    testStrategy: [
-      "\u8FD0\u884C\u6240\u6709\u76F8\u5173\u5355\u5143\u6D4B\u8BD5\u548C\u96C6\u6210\u6D4B\u8BD5",
-      "\u9A8C\u8BC1\u529F\u80FD\u5728\u6B63\u5E38\u8DEF\u5F84\u548C\u5F02\u5E38\u8DEF\u5F84\u4E0B\u7684\u884C\u4E3A",
-      "\u68C0\u67E5\u6D4B\u8BD5\u8986\u76D6\u7387\u662F\u5426\u6EE1\u8DB3\u8981\u6C42",
-      "\u6536\u96C6\u5B8C\u6574\u7684\u6D4B\u8BD5\u8BC1\u636E"
-    ]
-  },
-  architect: {
-    roleDeclaration: "\u4F60\u662F\u4E00\u4E2A\u67B6\u6784\u9A8C\u8BC1\u6D4B\u8BD5\u5458\uFF0C\u8D1F\u8D23\u9A8C\u8BC1\u67B6\u6784\u7EA6\u675F\u3002",
-    testStrategy: [
-      "\u9A8C\u8BC1\u6A21\u5757\u95F4\u63A5\u53E3\u5951\u7EA6\u662F\u5426\u88AB\u9075\u5B88",
-      "\u68C0\u67E5\u65B0\u589E\u4F9D\u8D56\u662F\u5426\u5408\u7406",
-      "\u9A8C\u8BC1\u67B6\u6784\u5206\u5C42\u89C4\u5219\uFF08\u5982\u4E0D\u8DE8\u5C42\u76F4\u63A5\u8C03\u7528\uFF09",
-      "\u8BC4\u4F30\u53D8\u66F4\u5BF9\u6574\u4F53\u7CFB\u7EDF\u7684\u5F71\u54CD\u8303\u56F4"
-    ]
-  },
-  security: {
-    roleDeclaration: "\u4F60\u662F\u4E00\u4E2A\u5B89\u5168\u6D4B\u8BD5\u5458\uFF0C\u8D1F\u8D23\u9A8C\u8BC1\u5B89\u5168\u76F8\u5173\u5B9E\u73B0\u3002",
-    testStrategy: [
-      "\u9A8C\u8BC1\u8F93\u5165\u9A8C\u8BC1\u662F\u5426\u8986\u76D6\u6240\u6709\u5165\u53E3\u70B9",
-      "\u6D4B\u8BD5\u5E38\u89C1\u653B\u51FB\u5411\u91CF\uFF08XSS\u3001SQL \u6CE8\u5165\u3001CSRF\uFF09",
-      "\u68C0\u67E5\u8BA4\u8BC1\u6388\u6743\u6D41\u7A0B\u662F\u5426\u6B63\u786E",
-      "\u9A8C\u8BC1\u654F\u611F\u6570\u636E\u662F\u5426\u4E0D\u5728\u65E5\u5FD7\u6216\u54CD\u5E94\u4E2D\u6CC4\u9732"
-    ]
-  },
-  performance: {
-    roleDeclaration: "\u4F60\u662F\u4E00\u4E2A\u6027\u80FD\u6D4B\u8BD5\u5458\uFF0C\u8D1F\u8D23\u9A8C\u8BC1\u6027\u80FD\u6307\u6807\u3002",
-    testStrategy: [
-      "\u8FD0\u884C\u6027\u80FD\u57FA\u51C6\u6D4B\u8BD5\uFF08\u5982\u6709\u914D\u7F6E\uFF09",
-      "\u9A8C\u8BC1\u5173\u952E\u64CD\u4F5C\u7684\u54CD\u5E94\u65F6\u95F4\u662F\u5426\u5728\u9608\u503C\u5185",
-      "\u68C0\u67E5\u662F\u5426\u5B58\u5728\u5185\u5B58\u6CC4\u6F0F\u8FF9\u8C61",
-      "\u6D4B\u8BD5\u5728\u9AD8\u8D1F\u8F7D\u4E0B\u7684\u7CFB\u7EDF\u7A33\u5B9A\u6027"
-    ]
-  }
-};
-var DEFAULT_DEV = {
-  roleDeclaration: "\u4F60\u662F\u4E00\u4E2A\u5F00\u53D1\u8005\uFF0C\u4F60\u7684\u552F\u4E00\u804C\u8D23\u662F\u5B9E\u73B0\u88AB\u5206\u914D\u4EFB\u52A1\u7684\u4EE3\u7801\u53D8\u66F4\u3002",
-  extraInstructions: []
-};
-var DEFAULT_CODE_REVIEW = {
-  roleDeclaration: "\u4F60\u662F\u4E00\u4E2A\u4E13\u4E1A\u7684\u4EE3\u7801\u5BA1\u6838\u5458\u3002\u4F60\u9700\u8981\u5BA1\u6838\u4E00\u4E2A\u4EFB\u52A1\u7684\u4EE3\u7801\u5B9E\u73B0\uFF0C\u786E\u4FDD\u4EE3\u7801\u8D28\u91CF\u7B26\u5408\u6807\u51C6\u3002",
-  reviewFocus: [
-    "\u68C0\u67E5\u4EE3\u7801\u8D28\u91CF\u548C\u53EF\u8BFB\u6027",
-    "\u68C0\u67E5\u4EE3\u7801\u89C4\u8303\u9075\u5B88\u60C5\u51B5",
-    "\u68C0\u67E5\u6F5C\u5728\u7684\u5B89\u5168\u95EE\u9898",
-    "\u68C0\u67E5\u9519\u8BEF\u5904\u7406\u662F\u5426\u5B8C\u5584"
-  ]
-};
-var DEFAULT_QA = {
-  roleDeclaration: "\u4F60\u662F\u4E00\u4E2A\u4E13\u4E1A\u7684 QA \u6D4B\u8BD5\u5458\u3002\u4F60\u9700\u8981\u9A8C\u8BC1\u4E00\u4E2A\u4EFB\u52A1\u7684\u5B9E\u73B0\u662F\u5426\u6EE1\u8DB3\u529F\u80FD\u8981\u6C42\u3002",
-  testStrategy: [
-    "\u8FD0\u884C\u5355\u5143\u6D4B\u8BD5\uFF08\u5982\u6709\u914D\u7F6E\uFF09",
-    "\u8FD0\u884C\u529F\u80FD\u6D4B\u8BD5\uFF08\u5982\u6709\u914D\u7F6E\uFF09",
-    "\u9A8C\u8BC1\u529F\u80FD\u662F\u5426\u7B26\u5408\u9884\u671F",
-    "\u68C0\u67E5\u8FB9\u754C\u60C5\u51B5\u5904\u7406"
-  ]
-};
+init_i18n();
 function normalizeRole(role) {
   if (!role)
     return;
@@ -30007,17 +30854,20 @@ function normalizeRole(role) {
   };
   return mapping[lower];
 }
-function getDevRoleTemplate(role) {
+function getDevRoleTemplate(role, language) {
+  const i18n2 = getI18n(language);
   const normalized = normalizeRole(role);
-  return normalized ? DEV_TEMPLATES[normalized] : DEFAULT_DEV;
+  return normalized ? i18n2.rolePrompts.dev[normalized] : i18n2.rolePrompts.defaultDev;
 }
-function getCodeReviewRoleTemplate(role) {
+function getCodeReviewRoleTemplate(role, language) {
+  const i18n2 = getI18n(language);
   const normalized = normalizeRole(role);
-  return normalized ? CODE_REVIEW_TEMPLATES[normalized] : DEFAULT_CODE_REVIEW;
+  return normalized ? i18n2.rolePrompts.codeReview[normalized] : i18n2.rolePrompts.defaultCodeReview;
 }
-function getQARoleTemplate(role) {
+function getQARoleTemplate(role, language) {
+  const i18n2 = getI18n(language);
   const normalized = normalizeRole(role);
-  return normalized ? QA_TEMPLATES[normalized] : DEFAULT_QA;
+  return normalized ? i18n2.rolePrompts.qa[normalized] : i18n2.rolePrompts.defaultQA;
 }
 
 // src/utils/harness-executor.ts

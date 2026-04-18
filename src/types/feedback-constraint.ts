@@ -78,9 +78,14 @@ export interface FeedbackTemplate {
    * 构建反馈提示词
    * @param violations - 违规项列表
    * @param originalOutput - 原始输出内容
+   * @param language - 语言设置（'zh' 或 'en'）
    * @returns 反馈提示词字符串
    */
-  buildFeedbackPrompt(violations: ValidationViolation[], originalOutput: string): string;
+  buildFeedbackPrompt(
+    violations: ValidationViolation[],
+    originalOutput: string,
+    language?: 'zh' | 'en',
+  ): string;
 }
 
 /**

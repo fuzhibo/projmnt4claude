@@ -4,6 +4,37 @@ import { getConfigPath } from '../utils/path';
 
 export type Language = 'zh' | 'en';
 
+/** 角色类型 */
+export type RoleType = 'frontend' | 'backend' | 'qa' | 'architect' | 'security' | 'performance';
+
+/** 开发阶段角色模板 */
+export interface DevRoleTemplate {
+  roleDeclaration: string;
+  extraInstructions: string[];
+}
+
+/** 代码审核阶段角色模板 */
+export interface CodeReviewRoleTemplate {
+  roleDeclaration: string;
+  reviewFocus: string[];
+}
+
+/** QA 阶段角色模板 */
+export interface QARoleTemplate {
+  roleDeclaration: string;
+  testStrategy: string[];
+}
+
+/** 角色提示词配置 */
+export interface RolePrompts {
+  dev: Record<RoleType, DevRoleTemplate>;
+  codeReview: Record<RoleType, CodeReviewRoleTemplate>;
+  qa: Record<RoleType, QARoleTemplate>;
+  defaultDev: DevRoleTemplate;
+  defaultCodeReview: CodeReviewRoleTemplate;
+  defaultQA: QARoleTemplate;
+}
+
 export interface I18nTexts {
   // 通用
   error: string;
@@ -100,6 +131,21 @@ export interface I18nTexts {
     parsingDescription: string;
     creatingTasks: string;
     tasksCreated: string;
+  };
+  // role prompts
+  rolePrompts: RolePrompts;
+
+  // feedback constraint engine
+  feedback: {
+    jsonHeader: string;
+    markdownHeader: string;
+    violationsTitle: string;
+    fieldLabel: string;
+    valueLabel: string;
+    originalOutputTitle: string;
+    truncated: string;
+    jsonRequirements: string[];
+    markdownRequirements: string[];
   };
 }
 

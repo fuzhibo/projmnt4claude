@@ -15,6 +15,8 @@ import type {
   EngineResult,
 } from '../types/feedback-constraint.js';
 import type { AgentResult } from './headless-agent.js';
+import type { Language } from '../i18n/index.js';
+import { getI18n } from '../i18n/index.js';
 import { Logger } from './logger.js';
 
 const logger = new Logger({ component: 'feedback-constraint-engine' });
@@ -105,41 +107,48 @@ export const nonEmptyOutputRule: ValidationRule = {
  */
 export class JsonFeedbackTemplate implements FeedbackTemplate {
   private truncationLimit: number;
+  private language: Language;
 
-  constructor(truncationLimit: number = 4000) {
+  constructor(truncationLimit: number = 4000, language: Language = 'zh') {
     this.truncationLimit = truncationLimit;
+    this.language = language;
   }
 
   buildFeedbackPrompt(
     violations: ValidationViolation[],
     originalOutput: string,
+    language?: Language,
   ): string {
+    const lang = language || this.language;
+    const i18n = getI18n(lang);
+
     const violationLines = violations
       .map(
         (v, i) =>
           `${i + 1}. [${v.severity.toUpperCase()}] ${v.ruleId}: ${v.message}` +
-          (v.field ? `\n   字段: ${v.field}` : '') +
-          (v.value ? `\n   值: ${v.value}` : ''),
+          (v.field ? `\n   ${i18n.feedback.fieldLabel}: ${v.field}` : '') +
+          (v.value ? `\n   ${i18n.feedback.valueLabel}: ${v.value}` : ''),
       )
       .join('\n');
 
+    const requirements = i18n.feedback.jsonRequirements.map((r) => `- ${r}`);
+
     return [
-      '上一次输出的 JSON 存在以下问题，请修正后重新输出完整 JSON：',
+      i18n.feedback.jsonHeader,
       '',
-      '## 违规项',
+      `## ${i18n.feedback.violationsTitle}`,
       violationLines,
       '',
-      '## 原始输出（供参考）',
+      `## ${i18n.feedback.originalOutputTitle}`,
       '```json',
       originalOutput.length > this.truncationLimit
-        ? originalOutput.slice(0, this.truncationLimit) + '\n... (已截断)'
+        ? originalOutput.slice(0, this.truncationLimit) +
+          `\n${i18n.feedback.truncated}`
         : originalOutput,
       '```',
       '',
       '请确保：',
-      '- 输出是合法的 JSON',
-      '- 所有必填字段都存在且类型正确',
-      '- 不要输出 JSON 以外的内容',
+      ...requirements,
     ].join('\n');
   }
 }
@@ -150,40 +159,51 @@ export class JsonFeedbackTemplate implements FeedbackTemplate {
  */
 export class MarkdownFeedbackTemplate implements FeedbackTemplate {
   private truncationLimit: number;
+  private language: Language;
 
-  constructor(truncationLimit: number = 4000) {
+  constructor(truncationLimit: number = 4000, language: Language = 'zh') {
     this.truncationLimit = truncationLimit;
+    this.language = language;
   }
 
   buildFeedbackPrompt(
     violations: ValidationViolation[],
     originalOutput: string,
+    language?: Language,
   ): string {
+    const lang = language || this.language;
+    const i18n = getI18n(lang);
+
     const violationLines = violations
       .map(
         (v, i) =>
           `${i + 1}. **[${v.severity.toUpperCase()}] ${v.ruleId}**: ${v.message}` +
-          (v.field ? ` (字段: \`${v.field}\`)` : ''),
+          (v.field
+            ? ` (${i18n.feedback.fieldLabel}: \`${v.field}\`)`
+            : ''),
       )
       .join('\n');
 
+    const requirements = i18n.feedback.markdownRequirements.map(
+      (r) => `- ${r}`,
+    );
+
     return [
-      '上一次输出的 Markdown 内容存在以下问题，请修正后重新输出：',
+      i18n.feedback.markdownHeader,
       '',
-      '### 违规项',
+      `### ${i18n.feedback.violationsTitle}`,
       violationLines,
       '',
-      '### 原始输出（供参考）',
+      `### ${i18n.feedback.originalOutputTitle}`,
       '```markdown',
       originalOutput.length > this.truncationLimit
-        ? originalOutput.slice(0, this.truncationLimit) + '\n... (已截断)'
+        ? originalOutput.slice(0, this.truncationLimit) +
+          `\n${i18n.feedback.truncated}`
         : originalOutput,
       '```',
       '',
       '请确保：',
-      '- 输出格式符合 Markdown 规范',
-      '- 所有必需的章节和标题都存在',
-      '- 内容结构完整、逻辑清晰',
+      ...requirements,
     ].join('\n');
   }
 }
@@ -205,9 +225,26 @@ export class FeedbackConstraintEngineImpl implements FeedbackConstraintEngine {
   private ruleSets: ValidationRuleSet[] = [];
   private template: FeedbackTemplate;
   private retryCount = 0;
+  private language: Language;
 
-  constructor(template?: FeedbackTemplate) {
-    this.template = template ?? new JsonFeedbackTemplate();
+  constructor(template?: FeedbackTemplate, language: Language = 'zh') {
+    this.template = template ?? new JsonFeedbackTemplate(4000, language);
+    this.language = language;
+  }
+
+  /**
+   * 设置语言
+   */
+  setLanguage(language: Language): this {
+    this.language = language;
+    return this;
+  }
+
+  /**
+   * 获取当前语言
+   */
+  getLanguage(): Language {
+    return this.language;
   }
 
   /**
@@ -291,8 +328,13 @@ export class FeedbackConstraintEngineImpl implements FeedbackConstraintEngine {
   buildFeedback(
     violations: ValidationViolation[],
     originalOutput: string,
+    language?: Language,
   ): string {
-    return this.template.buildFeedbackPrompt(violations, originalOutput);
+    return this.template.buildFeedbackPrompt(
+      violations,
+      originalOutput,
+      language ?? this.language,
+    );
   }
 
   /**
@@ -398,8 +440,12 @@ export class FeedbackConstraintEngineImpl implements FeedbackConstraintEngine {
 export function createJsonFeedbackEngine(
   additionalRules: ValidationRule[] = [],
   maxRetriesOnError = 2,
+  language: Language = 'zh',
 ): FeedbackConstraintEngineImpl {
-  const engine = new FeedbackConstraintEngineImpl(new JsonFeedbackTemplate());
+  const engine = new FeedbackConstraintEngineImpl(
+    new JsonFeedbackTemplate(4000, language),
+    language,
+  );
   engine.addRuleSet({
     name: 'json-output',
     outputType: 'json',
@@ -415,9 +461,11 @@ export function createJsonFeedbackEngine(
 export function createMarkdownFeedbackEngine(
   rules: ValidationRule[] = [],
   maxRetriesOnError = 2,
+  language: Language = 'zh',
 ): FeedbackConstraintEngineImpl {
   const engine = new FeedbackConstraintEngineImpl(
-    new MarkdownFeedbackTemplate(),
+    new MarkdownFeedbackTemplate(4000, language),
+    language,
   );
   engine.addRuleSet({
     name: 'markdown-output',
@@ -438,20 +486,22 @@ export function createMarkdownFeedbackEngine(
  * @param outputType - 输出格式：json 或 markdown
  * @param rules - 额外验证规则
  * @param maxRetriesOnError - error 级违规最大重试次数
+ * @param language - 语言设置（'zh' 或 'en'）
  */
 export function createSessionAwareEngine(
   outputType: 'json' | 'markdown' = 'json',
   rules: ValidationRule[] = [],
   maxRetriesOnError = 2,
+  language: Language = 'zh',
 ): FeedbackConstraintEngineImpl {
   const template = outputType === 'json'
-    ? new JsonFeedbackTemplate()
-    : new MarkdownFeedbackTemplate();
+    ? new JsonFeedbackTemplate(4000, language)
+    : new MarkdownFeedbackTemplate(4000, language);
   const baseRules = outputType === 'json'
     ? [nonEmptyOutputRule, jsonParseableRule, ...rules]
     : [nonEmptyOutputRule, ...rules];
 
-  const engine = new FeedbackConstraintEngineImpl(template);
+  const engine = new FeedbackConstraintEngineImpl(template, language);
   engine.addRuleSet({
     name: `${outputType}-session-aware`,
     outputType,

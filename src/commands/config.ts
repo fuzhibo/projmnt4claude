@@ -350,11 +350,14 @@ export function setConfig(key: string, value: string, cwd: string = process.cwd(
     if (variables) {
       const defaultTemplate = DEFAULT_TEMPLATES[templateName as keyof typeof DEFAULT_TEMPLATES];
       if (defaultTemplate) {
-        const defaultVars = new Set((defaultTemplate.match(/\{(\w+)\}/g) || []).map(v => v));
+        // Check variables against both language versions
+        const zhVars = new Set((defaultTemplate.zh.match(/\{(\w+)\}/g) || []).map(v => v));
+        const enVars = new Set((defaultTemplate.en.match(/\{(\w+)\}/g) || []).map(v => v));
         const customVars = new Set(variables);
-        const missing = [...defaultVars].filter(v => !customVars.has(v));
-        if (missing.length > 0) {
-          console.warn(`Warning: Custom template missing variables from default: ${missing.join(', ')}`);
+        // Check missing in zh (typically has more variables due to Chinese text)
+        const missingZh = [...zhVars].filter(v => !customVars.has(v));
+        if (missingZh.length > 0) {
+          console.warn(`Warning: Custom template missing variables from default: ${missingZh.join(', ')}`);
           console.warn('Missing variables may cause unsubstituted placeholders in prompts.');
         }
       }
