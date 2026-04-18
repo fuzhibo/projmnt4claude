@@ -120,12 +120,12 @@ export function getLanguage(cwd: string = process.cwd()): Language {
   try {
     if (fs.existsSync(configPath)) {
       const config = JSON.parse(fs.readFileSync(configPath, 'utf-8'));
-      return config.language || 'zh';
+      return config.language || 'en';
     }
   } catch (error) {
     // 忽略错误，使用默认语言
   }
-  return 'zh';
+  return 'en';
 }
 
 /**

@@ -22673,10 +22673,10 @@ function getLanguage(cwd = process.cwd()) {
   try {
     if (fs19.existsSync(configPath)) {
       const config = JSON.parse(fs19.readFileSync(configPath, "utf-8"));
-      return config.language || "zh";
+      return config.language || "en";
     }
   } catch (error) {}
-  return "zh";
+  return "en";
 }
 function getI18n(language, cwd) {
   const lang = language || getLanguage(cwd);
