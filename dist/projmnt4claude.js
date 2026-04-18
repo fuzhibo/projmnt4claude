@@ -8088,7 +8088,7 @@ function validateCheckpointVerification(checkpoint) {
     if (!hasCommands && !hasSteps) {
       return {
         valid: false,
-        warning: `\u68C0\u67E5\u70B9 "${checkpoint.description}" \u7684\u9A8C\u8BC1\u65B9\u6CD5\u4E3A ${method}\uFF0C\u4F46\u7F3A\u5C11 commands \u6216 steps`
+        warning: `Checkpoint "${checkpoint.description}" has verification method ${method}, but is missing commands or steps`
       };
     }
   }
@@ -8096,7 +8096,6 @@ function validateCheckpointVerification(checkpoint) {
 }
 function normalizeStatus(status) {
   const statusMap = {
-    pending: "open",
     reopen: "open",
     reopened: "open",
     completed: "resolved",
@@ -17618,7 +17617,7 @@ function createDefaultStatusReport(sessionId) {
     totalTasks: 0,
     completedTasks: 0,
     progress: 0,
-    message: "\u6D41\u6C34\u7EBF\u5C31\u7EEA",
+    message: "Pipeline ready",
     timestamp: new Date().toISOString(),
     phaseHistory: [],
     passedTasks: [],
@@ -23279,14 +23278,14 @@ function showLogSummary(cwd = process.cwd()) {
 // src/commands/task.ts
 var MAX_HISTORY_DISPLAY = 20;
 var NOISE_ACTIONS = new Set([
-  "\u67E5\u770B\u4EFB\u52A1",
-  "\u540C\u6B65\u68C0\u67E5\u70B9",
-  "\u4EFB\u52A1\u4FE1\u606F",
-  "\u52A0\u8F7D\u4EFB\u52A1",
-  "\u521D\u59CB\u5316\u4EFB\u52A1",
-  "\u8BFB\u53D6\u4EFB\u52A1",
-  "\u68C0\u67E5\u72B6\u6001",
-  "\u540C\u6B65\u72B6\u6001"
+  "\u67E5\u770BTask",
+  "\u540C\u6B65Checkpoints",
+  "Task\u4FE1\u606F",
+  "\u52A0\u8F7DTask",
+  "\u521D\u59CB\u5316Task",
+  "\u8BFB\u53D6Task",
+  "\u68C0\u67E5Status",
+  "\u540C\u6B65Status"
 ]);
 function filterMeaningfulHistory(history) {
   return history.filter((entry) => {
@@ -23326,22 +23325,22 @@ function hasValidCheckpoints(checkpointPathOrContent, isContent = false) {
     content = checkpointPathOrContent;
   } else if (!isContent && checkpointPathOrContent) {
     if (!fs13.existsSync(checkpointPathOrContent)) {
-      return { valid: false, reason: "checkpoint.md \u6587\u4EF6\u4E0D\u5B58\u5728" };
+      return { valid: false, reason: "checkpoint.md \u6587\u4EF6does not exist" };
     }
     content = fs13.readFileSync(checkpointPathOrContent, "utf-8");
   } else {
-    return { valid: false, reason: "\u65E0\u68C0\u67E5\u70B9\u5185\u5BB9" };
+    return { valid: false, reason: "NoneCheckpoints\u5185\u5BB9" };
   }
   const lines = content.split(`
 `).filter((line) => line.trim().startsWith("- ["));
   if (lines.length === 0) {
-    return { valid: false, reason: "checkpoint.md \u4E2D\u6CA1\u6709\u68C0\u67E5\u70B9\u9879" };
+    return { valid: false, reason: "checkpoint.md \u4E2D\u6CA1\u6709Checkpoints\u9879" };
   }
   const templatePatterns = [
-    /^\u68C0\u67E5\u70B9\d+$/u,
-    /^\u68C0\u67E5\u70B9\d*[\uFF08(].*[)\uFF09]$/u,
+    /^Checkpoints\d+$/u,
+    /^Checkpoints\d*[\uFF08(].*[)\uFF09]$/u,
     /^checkpoint\s*\d+$/i,
-    /^\u5B8C\u6210\u4EFB\u52A1?$/u,
+    /^\u5B8C\u6210Task?$/u,
     /^\u5F85\u586B\u5199$/u,
     /^TODO$/i,
     /^\.{3,}$/,
@@ -23362,7 +23361,7 @@ function hasValidCheckpoints(checkpointPathOrContent, isContent = false) {
   if (templateCount > lines.length / 2) {
     return {
       valid: false,
-      reason: `\u68C0\u6D4B\u5230 ${templateCount}/${lines.length} \u4E2A\u68C0\u67E5\u70B9\u4E3A\u6A21\u677F\u5185\u5BB9\uFF08\u5982"\u68C0\u67E5\u70B91"\u3001"\u5B8C\u6210\u4EFB\u52A1"\u7B49\uFF09\uFF0C\u8BF7\u6DFB\u52A0\u5177\u4F53\u7684\u9A8C\u6536\u6807\u51C6`
+      reason: `Detected ${templateCount}/${lines.length} checkpoints\u4E3A\u6A21\u677F\u5185\u5BB9\uFF08\u5982"Checkpoints1", "\u5B8C\u6210Task"\u7B49\uFF09, \u8BF7\u6DFB\u52A0\u5177\u4F53\u7684\u9A8C\u6536\u6807\u51C6`
     };
   }
   return { valid: true, reason: "" };
@@ -23370,22 +23369,22 @@ function hasValidCheckpoints(checkpointPathOrContent, isContent = false) {
 function displayCheckpointCreationWarning(taskId, cwd) {
   console.log("");
   console.log("\u2501".repeat(SEPARATOR_WIDTH));
-  console.log("\u26A0\uFE0F  \u68C0\u67E5\u70B9\u8D28\u91CF\u63D0\u9192");
+  console.log("\u26A0\uFE0F Checkpoint Quality Reminder");
   console.log("\u2501".repeat(SEPARATOR_WIDTH));
   console.log("");
-  console.log("\u4EFB\u52A1\u5DF2\u521B\u5EFA\uFF0C\u4F46\u68C0\u67E5\u70B9\u76EE\u524D\u4F7F\u7528\u7684\u662F\u9ED8\u8BA4\u6A21\u677F\u3002");
-  console.log("\uD83D\uDCCB \u9AD8\u8D28\u91CF\u68C0\u67E5\u70B9\u5BF9\u4E8E\u4EFB\u52A1\u9A8C\u6536\u81F3\u5173\u91CD\u8981\u3002\u5EFA\u8BAE\u60A8\uFF1A");
+  console.log("Task created, but checkpoints are using default template.");
+  console.log("\uD83D\uDCCB High-quality checkpoints are essential for task acceptance. Recommendations:");
   console.log("");
-  console.log("   1. \u7F16\u8F91 checkpoint.md \u6587\u4EF6\uFF0C\u6DFB\u52A0\u5177\u4F53\u7684\u9A8C\u6536\u6807\u51C6\uFF1A");
-  console.log(`      \u6587\u4EF6\u8DEF\u5F84: .projmnt4claude/tasks/${taskId}/checkpoint.md`);
+  console.log("   1. Edit checkpoint.md to add specific acceptance criteria:");
+  console.log(`      File path: .projmnt4claude/tasks/${taskId}/checkpoint.md`);
   console.log("");
-  console.log("   2. \u4F7F\u7528 analyze \u547D\u4EE4\u81EA\u52A8\u751F\u6210\u68C0\u67E5\u70B9\uFF08\u63A8\u8350\uFF09\uFF1A");
+  console.log("   2. Use analyze command to auto-generate checkpoints (Recommended):");
   console.log(`      projmnt4claude analyze --generate-checkpoints ${taskId}`);
   console.log("");
-  console.log("   3. \u4F7F\u7528 checkpoint \u6A21\u677F\u529F\u80FD\uFF1A");
+  console.log("   3. Use checkpoint template feature:");
   console.log(`      projmnt4claude task checkpoint template ${taskId} --apply`);
   console.log("");
-  console.log("\uD83D\uDCA1 \u63D0\u793A: \u4EFB\u52A1\u6267\u884C/\u5B8C\u6210\u65F6\u4F1A\u8FDB\u884C\u4E25\u683C\u6821\u9A8C");
+  console.log("\uD83D\uDCA1 Tip: Strict validation during task execution/completion");
   console.log("\u2501".repeat(SEPARATOR_WIDTH));
 }
 function validateTaskCheckpointCommands(taskId, cwd) {
@@ -23406,16 +23405,16 @@ function displayCheckpointVerificationWarnings(warnings) {
     return;
   console.log("");
   console.log("\u2501".repeat(SEPARATOR_WIDTH));
-  console.log("\u26A0\uFE0F  \u68C0\u67E5\u70B9\u9A8C\u8BC1\u547D\u4EE4\u7F3A\u5931\u63D0\u9192");
+  console.log("\u26A0\uFE0F Missing Checkpoint Verification Commands");
   console.log("\u2501".repeat(SEPARATOR_WIDTH));
   console.log("");
-  console.log(`\u53D1\u73B0 ${warnings.length} \u4E2A\u68C0\u67E5\u70B9\u7F3A\u5C11\u81EA\u52A8\u5316\u9A8C\u8BC1\u547D\u4EE4\uFF1A`);
+  console.log(`Found ${warnings.length} checkpointsmissingautomatedverification commands: `);
   for (const w of warnings) {
     console.log(`   - ${w}`);
   }
   console.log("");
-  console.log("\uD83D\uDCA1 \u63D0\u793A: QA \u9636\u6BB5\u5C06\u65E0\u6CD5\u81EA\u52A8\u9A8C\u8BC1\u8FD9\u4E9B\u68C0\u67E5\u70B9\u3002");
-  console.log("   \u8BF7\u5728 checkpoint.md \u4E2D\u8865\u5145\u9A8C\u8BC1\u547D\u4EE4\uFF0C\u6216\u4F7F\u7528 init-requirement \u91CD\u65B0\u751F\u6210\u3002");
+  console.log("\uD83D\uDCA1 Tip: QA phase cannot auto-verify these checkpoints.");
+  console.log("   Please add verification commands in checkpoint.md, or use init-requirement to regenerate.");
   console.log("\u2501".repeat(SEPARATOR_WIDTH));
 }
 function extractFileReferencesFromText(text) {
@@ -23463,25 +23462,25 @@ ${description || ""}`;
     return { proceed: true, missingFiles: [] };
   }
   console.log("");
-  console.log(`\u26A0\uFE0F  \u68C0\u6D4B\u5230 ${missingFiles.length} \u4E2A\u5F15\u7528\u7684\u6587\u4EF6\u4E0D\u5B58\u5728\u4E8E\u9879\u76EE\u4E2D:`);
+  console.log(`\u26A0\uFE0F  Detected ${missingFiles.length} referenced filesdoes not exist in project:`);
   for (const fp of missingFiles) {
     console.log(`   - ${fp}`);
   }
   if (nonInteractive) {
-    console.log("   (\u975E\u4EA4\u4E92\u6A21\u5F0F\uFF0C\u8B66\u544A\u5DF2\u8BB0\u5F55\uFF0C\u7EE7\u7EED\u521B\u5EFA\u4EFB\u52A1)");
+    console.log("   (Non-interactive mode, warnings logged, continuing task creation)");
     return { proceed: true, missingFiles };
   }
   const response = await import_prompts2.default({
     type: "confirm",
     name: "proceed",
-    message: "\u4EE5\u4E0A\u6587\u4EF6\u4E0D\u5B58\u5728\uFF0C\u786E\u8BA4\u7EE7\u7EED\u521B\u5EFA\u4EFB\u52A1?",
+    message: "\u4EE5\u4E0A\u6587\u4EF6does not exist, \u786E\u8BA4\u7EE7\u7EEDCreatedTask?",
     initial: false
   });
   return { proceed: response.proceed !== false, missingFiles };
 }
 async function createTask(options = {}, cwd = process.cwd()) {
   if (!isInitialized(cwd)) {
-    console.error("\u9519\u8BEF: \u9879\u76EE\u672A\u521D\u59CB\u5316\u3002\u8BF7\u5148\u8FD0\u884C `projmnt4claude setup`");
+    console.error("Error: Project not initialized. Please run `projmnt4claude setup` first");
     process.exit(1);
   }
   if (options.nonInteractive && options.title) {
@@ -23490,11 +23489,11 @@ async function createTask(options = {}, cwd = process.cwd()) {
     let taskId2;
     if (options.id) {
       if (!isValidTaskId(options.id)) {
-        console.error(`\u9519\u8BEF: \u65E0\u6548\u7684\u4EFB\u52A1ID\u683C\u5F0F '${options.id}'`);
+        console.error(`Error: Invalid task ID format '${options.id}'`);
         process.exit(1);
       }
       if (taskExists(options.id, cwd)) {
-        console.error(`\u9519\u8BEF: \u4EFB\u52A1ID '${options.id}' \u5DF2\u5B58\u5728`);
+        console.error(`Error: Task ID '${options.id}' already exists`);
         process.exit(1);
       }
       taskId2 = options.id;
@@ -23503,7 +23502,7 @@ async function createTask(options = {}, cwd = process.cwd()) {
     }
     const fileValidation2 = await validateFileReferences(options.description, options.title, true, cwd);
     if (!fileValidation2.proceed) {
-      console.log("\u5DF2\u53D6\u6D88\u521B\u5EFA\u4EFB\u52A1");
+      console.log("Task creation cancelled");
       process.exit(0);
     }
     const task2 = createDefaultTaskMeta(taskId2, options.title, taskType, options.parentId, "cli");
@@ -23547,7 +23546,7 @@ async function createTask(options = {}, cwd = process.cwd()) {
     task2.history = task2.history || [];
     task2.history.push({
       timestamp: new Date().toISOString(),
-      action: "\u4EFB\u52A1\u521B\u5EFA",
+      action: "TaskCreated",
       field: "status",
       oldValue: "",
       newValue: "open"
@@ -23575,7 +23574,7 @@ async function createTask(options = {}, cwd = process.cwd()) {
     if (finalCheckpoints.length > 0) {
       const filterResult = filterLowQualityCheckpoints(finalCheckpoints);
       if (filterResult.removed.length > 0) {
-        console.log(`   \uD83D\uDD0D \u5DF2\u8FC7\u6EE4 ${filterResult.removed.length} \u4E2A\u4F4E\u8D28\u91CF\u68C0\u67E5\u70B9`);
+        console.log(`   \uD83D\uDD0D Filtered ${filterResult.removed.length} low-qualityCheckpoints`);
       }
       finalCheckpoints = filterResult.kept;
     }
@@ -23584,26 +23583,26 @@ async function createTask(options = {}, cwd = process.cwd()) {
     const checkpointPath2 = path11.join(taskDir2, "checkpoint.md");
     let checkpointContent;
     if (finalCheckpoints.length > 0) {
-      checkpointContent = `# ${taskId2} \u68C0\u67E5\u70B9
+      checkpointContent = `# ${taskId2} Checkpoints
 
 ${finalCheckpoints.map((cp) => `- [ ] ${cp}`).join(`
 `)}
 `;
     } else {
-      checkpointContent = `# ${taskId2} \u68C0\u67E5\u70B9
+      checkpointContent = `# ${taskId2} Checkpoints
 
-- [ ] \u68C0\u67E5\u70B91\uFF08\u8BF7\u66FF\u6362\u4E3A\u5177\u4F53\u9A8C\u6536\u6807\u51C6\uFF09
-- [ ] \u68C0\u67E5\u70B92\uFF08\u8BF7\u66FF\u6362\u4E3A\u5177\u4F53\u9A8C\u6536\u6807\u51C6\uFF09
+- [ ] Checkpoints1\uFF08\u8BF7\u66FF\u6362\u4E3A\u5177\u4F53\u9A8C\u6536\u6807\u51C6\uFF09
+- [ ] Checkpoints2\uFF08\u8BF7\u66FF\u6362\u4E3A\u5177\u4F53\u9A8C\u6536\u6807\u51C6\uFF09
 `;
     }
     fs13.writeFileSync(checkpointPath2, checkpointContent, "utf-8");
     console.log(`
-\u2705 \u4EFB\u52A1\u521B\u5EFA\u6210\u529F!`);
+\u2705 Task created successfully!`);
     console.log(`   ID: ${taskId2}`);
-    console.log(`   \u6807\u9898: ${task2.title}`);
-    console.log(`   \u4F18\u5148\u7EA7: ${formatPriority(task2.priority)}`);
+    console.log(`   Title: ${task2.title}`);
+    console.log(`   Priority: ${formatPriority(task2.priority)}`);
     if (task2.dependencies && task2.dependencies.length > 0) {
-      console.log(`   \u4F9D\u8D56: ${task2.dependencies.join(", ")}`);
+      console.log(`   Dependencies: ${task2.dependencies.join(", ")}`);
     }
     if (!options.skipValidation) {
       const validation = hasValidCheckpoints(checkpointPath2, false);
@@ -23618,13 +23617,13 @@ ${finalCheckpoints.map((cp) => `- [ ] ${cp}`).join(`
     const depGraph = DependencyGraph.fromTasks(allExistingTasks);
     const depValidation = validateNewTaskDeps(taskId2, task2.dependencies || [], depGraph, allExistingTasks);
     if (depValidation.warnings.length > 0) {
-      console.log("\uD83D\uDCCB \u4F9D\u8D56\u5173\u7CFB\u95E8\u7981:");
+      console.log("\uD83D\uDCCB Dependency Gate:");
       for (const w of depValidation.warnings) {
         console.log(`   \u26A0\uFE0F  ${w}`);
       }
     }
     if (depValidation.errors.length > 0) {
-      console.log("\uD83D\uDCCB \u4F9D\u8D56\u5173\u7CFB\u9519\u8BEF:");
+      console.log("\uD83D\uDCCB Dependency Error:");
       for (const e of depValidation.errors) {
         console.log(`   \u274C ${e}`);
       }
@@ -23635,18 +23634,18 @@ ${finalCheckpoints.map((cp) => `- [ ] ${cp}`).join(`
     {
       type: "text",
       name: "title",
-      message: "\u4EFB\u52A1\u6807\u9898",
-      validate: (value) => value.trim().length > 0 ? true : "\u6807\u9898\u4E0D\u80FD\u4E3A\u7A7A"
+      message: "TaskTitle",
+      validate: (value) => value.trim().length > 0 ? true : "Title\u4E0D\u80FD\u4E3A\u7A7A"
     },
     {
       type: "text",
       name: "description",
-      message: "\u4EFB\u52A1\u63CF\u8FF0 (\u53EF\u9009\uFF0C\u76F4\u63A5\u56DE\u8F66\u8DF3\u8FC7)"
+      message: "TaskDescription (\u53EF\u9009, \u76F4\u63A5\u56DE\u8F66skipped)"
     },
     {
       type: "select",
       name: "priority",
-      message: "\u4F18\u5148\u7EA7",
+      message: "priority",
       choices: [
         { title: "P3 \u4F4E", value: "P3" },
         { title: "P2 \u4E2D (\u9ED8\u8BA4)", value: "P2" },
@@ -23657,17 +23656,17 @@ ${finalCheckpoints.map((cp) => `- [ ] ${cp}`).join(`
     }
   ]);
   if (!response.title) {
-    console.log("\u5DF2\u53D6\u6D88\u521B\u5EFA\u4EFB\u52A1");
+    console.log("Task creation cancelled");
     process.exit(0);
   }
   let taskId;
   if (options.id) {
     if (!isValidTaskId(options.id)) {
-      console.error(`\u9519\u8BEF: \u65E0\u6548\u7684\u4EFB\u52A1ID\u683C\u5F0F '${options.id}'`);
+      console.error(`Error: Invalid task ID format '${options.id}'`);
       process.exit(1);
     }
     if (taskExists(options.id, cwd)) {
-      console.error(`\u9519\u8BEF: \u4EFB\u52A1ID '${options.id}' \u5DF2\u5B58\u5728`);
+      console.error(`Error: Task ID '${options.id}' already exists`);
       process.exit(1);
     }
     taskId = options.id;
@@ -23676,13 +23675,13 @@ ${finalCheckpoints.map((cp) => `- [ ] ${cp}`).join(`
   }
   const fileValidation = await validateFileReferences(response.description, response.title, false, cwd);
   if (!fileValidation.proceed) {
-    console.log("\u5DF2\u53D6\u6D88\u521B\u5EFA\u4EFB\u52A1");
+    console.log("Task creation cancelled");
     process.exit(0);
   }
-  const defaultCheckpointContent = `# ${taskId} \u68C0\u67E5\u70B9
+  const defaultCheckpointContent = `# ${taskId} Checkpoints
 
-- [ ] \u68C0\u67E5\u70B91\uFF08\u8BF7\u66FF\u6362\u4E3A\u5177\u4F53\u9A8C\u6536\u6807\u51C6\uFF09
-- [ ] \u68C0\u67E5\u70B92\uFF08\u8BF7\u66FF\u6362\u4E3A\u5177\u4F53\u9A8C\u6536\u6807\u51C6\uFF09
+- [ ] Checkpoints1\uFF08\u8BF7\u66FF\u6362\u4E3A\u5177\u4F53\u9A8C\u6536\u6807\u51C6\uFF09
+- [ ] Checkpoints2\uFF08\u8BF7\u66FF\u6362\u4E3A\u5177\u4F53\u9A8C\u6536\u6807\u51C6\uFF09
 `;
   const task = createDefaultTaskMeta(taskId, response.title, undefined, undefined, "cli");
   if (response.description) {
@@ -23697,10 +23696,10 @@ ${finalCheckpoints.map((cp) => `- [ ] ${cp}`).join(`
   const checkpointPath = path11.join(taskDir, "checkpoint.md");
   fs13.writeFileSync(checkpointPath, defaultCheckpointContent, "utf-8");
   console.log(`
-\u2705 \u4EFB\u52A1\u521B\u5EFA\u6210\u529F!`);
+\u2705 Task created successfully!`);
   console.log(`   ID: ${taskId}`);
-  console.log(`   \u6807\u9898: ${task.title}`);
-  console.log(`   \u4F18\u5148\u7EA7: ${formatPriority(task.priority)}`);
+  console.log(`   Title: ${task.title}`);
+  console.log(`   Priority: ${formatPriority(task.priority)}`);
   if (!options.skipValidation) {
     const validation = hasValidCheckpoints(checkpointPath, false);
     if (!validation.valid) {
@@ -23714,7 +23713,7 @@ ${finalCheckpoints.map((cp) => `- [ ] ${cp}`).join(`
 }
 function listTasks(options = {}, cwd = process.cwd()) {
   if (!isInitialized(cwd)) {
-    console.error("\u9519\u8BEF: \u9879\u76EE\u672A\u521D\u59CB\u5316\u3002\u8BF7\u5148\u8FD0\u884C `projmnt4claude setup`");
+    console.error("Error: Project not initialized. Please run `projmnt4claude setup` first");
     process.exit(1);
   }
   let tasks = getAllTasks(cwd);
@@ -23737,7 +23736,7 @@ function listTasks(options = {}, cwd = process.cwd()) {
     if (options.format === "json") {
       console.log("[]");
     } else {
-      console.log("\u6682\u65E0\u4EFB\u52A1");
+      console.log("No tasks");
     }
     return;
   }
@@ -23788,7 +23787,7 @@ function listTasks(options = {}, cwd = process.cwd()) {
     return;
   }
   console.log("");
-  console.log("ID          | \u6807\u9898                         | \u4F18\u5148\u7EA7   | \u72B6\u6001");
+  console.log("ID          | Title                         | Priority   | Status");
   console.log("------------|------------------------------|----------|------------");
   for (const task of parentTasks) {
     const id = task.id.padEnd(11);
@@ -23798,7 +23797,7 @@ function listTasks(options = {}, cwd = process.cwd()) {
     const discussionIcon = task.needsDiscussion ? " \uD83D\uDCAC" : "";
     const reqChangeIcon = task.requirementHistory && task.requirementHistory.length > 0 ? ` \uD83D\uDCDD${task.requirementHistory.length}` : "";
     const subtaskCount = task.subtaskIds?.length || subtaskMap.get(task.id)?.length || 0;
-    const subtaskIcon = subtaskCount > 0 ? ` [${subtaskCount}\u5B50\u4EFB\u52A1]` : "";
+    const subtaskIcon = subtaskCount > 0 ? ` [${subtaskCount}Subtasks]` : "";
     console.log(`${id} | ${title} | ${priority} | ${status}${discussionIcon}${reqChangeIcon}${subtaskIcon}`);
     const subtasks = subtaskMap.get(task.id) || [];
     for (const subtask of subtasks) {
@@ -23811,7 +23810,7 @@ function listTasks(options = {}, cwd = process.cwd()) {
   }
   console.log("");
   const totalSubtasks = tasks.filter((t) => t.parentId).length;
-  console.log(`\u5171 ${parentTasks.length} \u4E2A\u4EFB\u52A1${totalSubtasks > 0 ? `, ${totalSubtasks} \u4E2A\u5B50\u4EFB\u52A1` : ""}`);
+  console.log(`Total ${parentTasks.length} tasks${totalSubtasks > 0 ? `, ${totalSubtasks} subtasks` : ""}`);
 }
 function displayTasksGrouped(tasks, groupBy, subtaskMap) {
   const parentTasks = tasks.filter((t) => !t.parentId);
@@ -23864,7 +23863,7 @@ function displayTasksGrouped(tasks, groupBy, subtaskMap) {
       case "priority":
         return formatPriority(key);
       case "type":
-        return `\uD83D\uDCC1 \u7C7B\u578B: ${key}`;
+        return `\uD83D\uDCC1 Type: ${key}`;
       case "role":
         return `\uD83D\uDC64 \u89D2\u8272: ${key}`;
       default:
@@ -23877,7 +23876,7 @@ function displayTasksGrouped(tasks, groupBy, subtaskMap) {
     console.log("\u2501".repeat(SEPARATOR_WIDTH));
     console.log(`${getGroupHeader(groupKey)} (${groupTasks.length})`);
     console.log("\u2501".repeat(SEPARATOR_WIDTH));
-    console.log("ID          | \u6807\u9898                         | \u4F18\u5148\u7EA7   | \u72B6\u6001");
+    console.log("ID          | Title                         | Priority   | Status");
     console.log("------------|------------------------------|----------|------------");
     for (const task of groupTasks) {
       const id = task.id.padEnd(11);
@@ -23886,7 +23885,7 @@ function displayTasksGrouped(tasks, groupBy, subtaskMap) {
       const status = formatStatus(task.status);
       const discussionIcon = task.needsDiscussion ? " \uD83D\uDCAC" : "";
       const subtaskCount = task.subtaskIds?.length || subtaskMap.get(task.id)?.length || 0;
-      const subtaskIcon = subtaskCount > 0 ? ` [${subtaskCount}\u5B50\u4EFB\u52A1]` : "";
+      const subtaskIcon = subtaskCount > 0 ? ` [${subtaskCount}Subtasks]` : "";
       console.log(`${id} | ${title} | ${priority} | ${status}${discussionIcon}${subtaskIcon}`);
       const subtasks = subtaskMap.get(task.id) || [];
       for (const subtask of subtasks) {
@@ -23900,8 +23899,8 @@ function displayTasksGrouped(tasks, groupBy, subtaskMap) {
     console.log("");
   }
   const totalSubtasks = tasks.filter((t) => t.parentId).length;
-  console.log(`\u5171 ${parentTasks.length} \u4E2A\u4EFB\u52A1${totalSubtasks > 0 ? `, ${totalSubtasks} \u4E2A\u5B50\u4EFB\u52A1` : ""}`);
-  console.log(`\u5206\u7EC4: ${groupBy === "status" ? "\u72B6\u6001" : groupBy === "priority" ? "\u4F18\u5148\u7EA7" : groupBy === "type" ? "\u7C7B\u578B" : "\u89D2\u8272"}`);
+  console.log(`Total ${parentTasks.length} tasks${totalSubtasks > 0 ? `, ${totalSubtasks} subtasks` : ""}`);
+  console.log(`Group: ${groupBy === "status" ? "status" : groupBy === "priority" ? "priority" : groupBy === "type" ? "type" : "role"}`);
 }
 function formatLocalTime(isoString) {
   const date = new Date(isoString);
@@ -23932,16 +23931,16 @@ function formatRelativeTime(isoString) {
 }
 function showTask(taskId, options = {}, cwd = process.cwd()) {
   if (!isInitialized(cwd)) {
-    console.error("\u9519\u8BEF: \u9879\u76EE\u672A\u521D\u59CB\u5316\u3002\u8BF7\u5148\u8FD0\u884C `projmnt4claude setup`");
+    console.error("Error: Project not initialized. Please run `projmnt4claude setup` first");
     process.exit(1);
   }
   if (!isValidTaskId(taskId)) {
-    console.error(`\u9519\u8BEF: \u65E0\u6548\u7684\u4EFB\u52A1ID\u683C\u5F0F '${taskId}'`);
+    console.error(`Error: Invalid task ID format '${taskId}'`);
     process.exit(1);
   }
   const task = readTaskMeta(taskId, cwd);
   if (!task) {
-    console.error(`\u9519\u8BEF: \u4EFB\u52A1 '${taskId}' \u4E0D\u5B58\u5728`);
+    console.error(`Error: Task '${taskId}' does not exist`);
     process.exit(1);
   }
   if (options.json) {
@@ -23974,12 +23973,12 @@ function showTaskCompact(task, cwd) {
   };
   const typeText = typeMap[task.type] || task.type;
   console.log(`${statusIcon} ${task.id}: ${task.title}`);
-  console.log(`   \u72B6\u6001: ${formatStatus(task.status)} | \u4F18\u5148\u7EA7: ${formatPriority(task.priority)} | \u7C7B\u578B: ${typeText}`);
+  console.log(`   Status: ${formatStatus(task.status)} | Priority: ${formatPriority(task.priority)} | Type: ${typeText}`);
   if (task.description) {
-    console.log(`   \u63CF\u8FF0: ${task.description.substring(0, 120)}${task.description.length > 120 ? "..." : ""}`);
+    console.log(`   Description: ${task.description.substring(0, 120)}${task.description.length > 120 ? "..." : ""}`);
   }
   if (task.dependencies.length > 0) {
-    console.log(`   \u4F9D\u8D56: ${task.dependencies.join(", ")}`);
+    console.log(`   Dependencies: ${task.dependencies.join(", ")}`);
   }
   if (cwd) {
     const taskDir = path11.join(getTasksDir(cwd), task.id);
@@ -23994,18 +23993,18 @@ function showTaskCompact(task, cwd) {
         const pct = Math.round(done / total * 100);
         const barFilled = Math.round(done / total * 10);
         const bar = "\u2588".repeat(barFilled) + "\u2591".repeat(10 - barFilled);
-        console.log(`   \u68C0\u67E5\u70B9: [${bar}] ${done}/${total} (${pct}%)`);
+        console.log(`   Checkpoints: [${bar}] ${done}/${total} (${pct}%)`);
       }
     }
   }
   if (task.needsDiscussion) {
     const discussionCount = task.discussionTopics?.length || 0;
-    console.log(`   \uD83D\uDCAC \u5F85\u8BA8\u8BBA${discussionCount > 0 ? ` (${discussionCount}\u4E2A\u4E3B\u9898)` : ""}`);
+    console.log(`   \uD83D\uDCAC Pending Discussion${discussionCount > 0 ? ` (${discussionCount}topics)` : ""}`);
   }
   if (task.requirementHistory && task.requirementHistory.length > 0) {
-    console.log(`   \uD83D\uDCDD \u9700\u6C42\u53D8\u66F4: ${task.requirementHistory.length} \u6B21`);
+    console.log(`   \uD83D\uDCDD Requirement Changes: ${task.requirementHistory.length} times`);
   }
-  console.log(`   \u521B\u5EFA: ${formatRelativeTime(task.createdAt)} \xB7 \u66F4\u65B0: ${formatRelativeTime(task.updatedAt)}`);
+  console.log(`   Created: ${formatRelativeTime(task.createdAt)} \xB7 Updated: ${formatRelativeTime(task.updatedAt)}`);
 }
 function getStatusIcon(status) {
   const icons = {
@@ -24070,11 +24069,11 @@ function showTaskPanel(task, options, cwd) {
   console.log(`\u2502   ${padByDisplayWidth(truncatedTitle, width - 5)}\u2502`);
   console.log(`\u251C${hLine}\u2524`);
   const statusMap = {
-    open: "\u5F85\u5904\u7406",
-    in_progress: "\u8FDB\u884C\u4E2D",
-    resolved: "\u5DF2\u89E3\u51B3",
-    closed: "\u5DF2\u5173\u95ED",
-    abandoned: "\u5DF2\u653E\u5F03",
+    open: "Pending",
+    in_progress: "in_progress",
+    resolved: "resolved",
+    closed: "Closed",
+    abandoned: "Abandoned",
     wait_review: "\u5F85\u5BA1\u67E5",
     wait_qa: "\u5F85\u6D4B\u8BD5",
     wait_evaluation: "\u5F85\u8BC4\u4F30"
@@ -24091,8 +24090,8 @@ function showTaskPanel(task, options, cwd) {
   };
   const statusText = statusMap[task.status] || task.status;
   const priorityText = priorityMap[task.priority] || task.priority;
-  const typeText = task.type || "\u672A\u6307\u5B9A";
-  const statusLine = `\u72B6\u6001: ${statusText}  \xB7  \u4F18\u5148\u7EA7: ${priorityText}  \xB7  \u7C7B\u578B: ${typeText}`;
+  const typeText = task.type || "Not specified";
+  const statusLine = `Status: ${statusText}  \xB7  Priority: ${priorityText}  \xB7  Type: ${typeText}`;
   console.log(`\u2502 ${padByDisplayWidth(statusLine, width - 3)}\u2502`);
   if (task.description) {
     console.log(`\u251C${hLine}\u2524`);
@@ -24101,7 +24100,7 @@ function showTaskPanel(task, options, cwd) {
       console.log(`\u2502 ${padByDisplayWidth(line, width - 3)}\u2502`);
     }
     if (descLines.length > 3) {
-      const moreDesc = `... \u8FD8\u6709 ${descLines.length - 3} \u884C`;
+      const moreDesc = `... plus ${descLines.length - 3} \u884C`;
       console.log(`\u2502 ${padByDisplayWidth(moreDesc, width - 3)}\u2502`);
     }
   }
@@ -24112,7 +24111,7 @@ function showTaskPanel(task, options, cwd) {
       const checkpointsMeta = listCheckpoints(task.id, cwd);
       if (checkpointsMeta.length > 0) {
         console.log(`\u251C${hLine}\u2524`);
-        const sectionTitle = "\uD83D\uDCCB \u68C0\u67E5\u70B9";
+        const sectionTitle = "\uD83D\uDCCB Checkpoints";
         console.log(`\u2502 ${padByDisplayWidth(sectionTitle, width - 3)}\u2502`);
         const completedCount = checkpointsMeta.filter((cp) => cp.status === "completed").length;
         const totalCount = checkpointsMeta.length;
@@ -24135,7 +24134,7 @@ function showTaskPanel(task, options, cwd) {
 `).filter((l) => l.trim().startsWith("- ["));
       if (checkpointLines.length > 0) {
         console.log(`\u251C${hLine}\u2524`);
-        const sectionTitle = "\uD83D\uDCCB \u68C0\u67E5\u70B9";
+        const sectionTitle = "\uD83D\uDCCB Checkpoints";
         console.log(`\u2502 ${padByDisplayWidth(sectionTitle, width - 3)}\u2502`);
         const completedCount = checkpointLines.filter((l) => l.includes("[x]") || l.includes("[X]")).length;
         const totalCount = checkpointLines.length;
@@ -24154,7 +24153,7 @@ function showTaskPanel(task, options, cwd) {
       const deps = task.dependencies.join(", ");
       const maxLen = width - 10;
       const depsText = getDisplayWidth(deps) > maxLen ? truncateByDisplayWidth(deps, maxLen - 2) + ".." : deps;
-      const depsLine = `\uD83D\uDD17 \u4F9D\u8D56: ${depsText}`;
+      const depsLine = `\uD83D\uDD17 Dependencies: ${depsText}`;
       console.log(`\u2502 ${padByDisplayWidth(depsLine, width - 3)}\u2502`);
     }
     if (task.recommendedRole) {
@@ -24183,30 +24182,30 @@ function showTaskPanel(task, options, cwd) {
         parts.push(`\uD83D\uDD04 ${activeCount}`);
       if (pendingCount > 0)
         parts.push(`\u2B1C ${pendingCount}`);
-      const subtaskLine = parts.length > 0 ? `\uD83D\uDCCE \u5B50\u4EFB\u52A1: ${task.subtaskIds.length} \u4E2A (${parts.join(" ")})` : `\uD83D\uDCCE \u5B50\u4EFB\u52A1: ${task.subtaskIds.length} \u4E2A`;
+      const subtaskLine = parts.length > 0 ? `\uD83D\uDCCE Subtasks: ${task.subtaskIds.length}  (${parts.join(" ")})` : `\uD83D\uDCCE Subtasks: ${task.subtaskIds.length} `;
       console.log(`\u2502 ${padByDisplayWidth(subtaskLine, width - 3)}\u2502`);
     }
     if (task.parentId) {
-      const parentLine = `\u2B06\uFE0F \u7236\u4EFB\u52A1: ${task.parentId}`;
+      const parentLine = `\u2B06\uFE0F Parent task: ${task.parentId}`;
       console.log(`\u2502 ${padByDisplayWidth(parentLine, width - 3)}\u2502`);
     }
     if (task.needsDiscussion) {
       const discussionCount = task.discussionTopics?.length || 0;
-      const discussionLine = discussionCount > 0 ? `\uD83D\uDCAC \u5F85\u8BA8\u8BBA (${discussionCount}\u4E2A\u4E3B\u9898)` : `\uD83D\uDCAC \u5F85\u8BA8\u8BBA`;
+      const discussionLine = discussionCount > 0 ? `\uD83D\uDCAC Pending Discussion (${discussionCount}topics)` : `\uD83D\uDCAC Pending Discussion`;
       console.log(`\u2502 ${padByDisplayWidth(discussionLine, width - 3)}\u2502`);
     }
     if (task.requirementHistory && task.requirementHistory.length > 0) {
-      const reqLine = `\uD83D\uDCDD \u9700\u6C42\u53D8\u66F4: ${task.requirementHistory.length} \u6B21`;
+      const reqLine = `\uD83D\uDCDD Requirement Changes: ${task.requirementHistory.length} times`;
       console.log(`\u2502 ${padByDisplayWidth(reqLine, width - 3)}\u2502`);
     }
   }
   console.log(`\u251C${hLine}\u2524`);
   const createdTime = formatLocalTime(task.createdAt);
   const updatedTime = formatRelativeTime(task.updatedAt);
-  const timeLine = `\uD83D\uDCC5 \u521B\u5EFA: ${createdTime}  \xB7  \u66F4\u65B0: ${updatedTime}`;
+  const timeLine = `\uD83D\uDCC5 Created: ${createdTime}  \xB7  Updated: ${updatedTime}`;
   console.log(`\u2502 ${padByDisplayWidth(timeLine, width - 3)}\u2502`);
   if (task.reopenCount && task.reopenCount > 0) {
-    const reopenLine = `\uD83D\uDD01 \u91CD\u5F00: ${task.reopenCount} \u6B21`;
+    const reopenLine = `\uD83D\uDD01 Reopen: ${task.reopenCount} times`;
     console.log(`\u2502 ${padByDisplayWidth(reopenLine, width - 3)}\u2502`);
   }
   console.log(`\u2570${hLine}\u256F`);
@@ -24248,10 +24247,10 @@ function showTaskClassic(task, options, cwd) {
   console.log(line);
   console.log(`  ${task.title}`);
   console.log("");
-  console.log(`  \u72B6\u6001: ${formatStatus(task.status)}  \xB7  \u4F18\u5148\u7EA7: ${formatPriority(task.priority)}  \xB7  \u7C7B\u578B: ${task.type || "\u672A\u6307\u5B9A"}`);
+  console.log(`  Status: ${formatStatus(task.status)}  \xB7  Priority: ${formatPriority(task.priority)}  \xB7  Type: ${task.type || "Not specified"}`);
   if (task.description) {
     console.log("");
-    console.log("\uD83D\uDCDD \u63CF\u8FF0:");
+    console.log("\uD83D\uDCDD Description:");
     const descLines = task.description.split(`
 `);
     descLines.forEach((descLine) => {
@@ -24260,17 +24259,17 @@ function showTaskClassic(task, options, cwd) {
   }
   if (options.verbose) {
     console.log("");
-    console.log(makeSectionHeader("\u8BE6\u7EC6\u4FE1\u606F"));
+    console.log(makeSectionHeader("Details"));
     if (task.recommendedRole) {
-      console.log(`   \uD83D\uDC64 \u63A8\u8350\u89D2\u8272: ${task.recommendedRole}`);
+      console.log(`   \uD83D\uDC64 Recommended Role: ${task.recommendedRole}`);
     }
     if (task.branch) {
-      console.log(`   \uD83C\uDF3F \u5173\u8054\u5206\u652F: ${task.branch}`);
+      console.log(`   \uD83C\uDF3F Associated Branch: ${task.branch}`);
     }
     if (task.dependencies.length > 0) {
-      console.log(`   \uD83D\uDD17 \u4F9D\u8D56: ${task.dependencies.join(", ")}`);
+      console.log(`   \uD83D\uDD17 Dependencies: ${task.dependencies.join(", ")}`);
     } else {
-      console.log(`   \uD83D\uDD17 \u4F9D\u8D56: \u65E0`);
+      console.log(`   \uD83D\uDD17 Dependencies: None`);
     }
     if (task.subtaskIds && task.subtaskIds.length > 0) {
       const subtaskDisplays = task.subtaskIds.map((subId) => {
@@ -24280,52 +24279,52 @@ function showTaskClassic(task, options, cwd) {
         }
         return `\u2753 ${subId}`;
       });
-      console.log(`   \uD83D\uDCCE \u5B50\u4EFB\u52A1: ${subtaskDisplays.join("  ")}`);
+      console.log(`   \uD83D\uDCCE Subtasks: ${subtaskDisplays.join("  ")}`);
     }
     if (task.parentId) {
-      console.log(`   \u2B06\uFE0F  \u7236\u4EFB\u52A1: ${task.parentId}`);
+      console.log(`   \u2B06\uFE0F  Parent Task: ${task.parentId}`);
     }
     if (task.checkpointConfirmationToken) {
-      console.log(`   \uD83D\uDD10 \u9A8C\u8BC1\u4EE4\u724C: ${task.checkpointConfirmationToken}`);
+      console.log(`   \uD83D\uDD10 Verification Token: ${task.checkpointConfirmationToken}`);
     }
   } else {
     if (task.recommendedRole) {
-      console.log(`   \uD83D\uDC64 \u63A8\u8350\u89D2\u8272: ${task.recommendedRole}`);
+      console.log(`   \uD83D\uDC64 Recommended Role: ${task.recommendedRole}`);
     }
     if (task.branch) {
-      console.log(`   \uD83C\uDF3F \u5173\u8054\u5206\u652F: ${task.branch}`);
+      console.log(`   \uD83C\uDF3F Associated Branch: ${task.branch}`);
     }
     if (task.dependencies.length > 0) {
-      console.log(`   \uD83D\uDD17 \u4F9D\u8D56: ${task.dependencies.join(", ")}`);
+      console.log(`   \uD83D\uDD17 Dependencies: ${task.dependencies.join(", ")}`);
     }
   }
   console.log("");
-  console.log(`  \uD83D\uDCC5 \u521B\u5EFA: ${formatLocalTime(task.createdAt)} (${formatRelativeTime(task.createdAt)})`);
-  console.log(`     \u66F4\u65B0: ${formatLocalTime(task.updatedAt)} (${formatRelativeTime(task.updatedAt)})`);
+  console.log(`  \uD83D\uDCC5 Created: ${formatLocalTime(task.createdAt)} (${formatRelativeTime(task.createdAt)})`);
+  console.log(`     Updated: ${formatLocalTime(task.updatedAt)} (${formatRelativeTime(task.updatedAt)})`);
   if (task.reopenCount && task.reopenCount > 0) {
-    console.log(`   \u91CD\u5F00\u6B21\u6570: ${task.reopenCount}`);
+    console.log(`   Reopen Count: ${task.reopenCount}`);
   }
   if (task.needsDiscussion) {
     const discussionCount = task.discussionTopics?.length || 0;
-    console.log(`   \uD83D\uDCAC \u5F85\u8BA8\u8BBA${discussionCount > 0 ? ` (${discussionCount}\u4E2A\u4E3B\u9898)` : ""}`);
+    console.log(`   \uD83D\uDCAC Pending Discussion${discussionCount > 0 ? ` (${discussionCount}topics)` : ""}`);
   }
   if (task.requirementHistory && task.requirementHistory.length > 0) {
-    console.log(`   \u9700\u6C42\u53D8\u66F4: ${task.requirementHistory.length} \u6B21`);
+    console.log(`   Requirement Changes: ${task.requirementHistory.length} times`);
     if (options.verbose) {
       console.log("");
       console.log(line);
-      console.log("\uD83D\uDCDD \u9700\u6C42\u53D8\u66F4\u5386\u53F2:");
+      console.log("\uD83D\uDCDD Requirement Change History:");
       console.log(line);
       task.requirementHistory.forEach((entry) => {
         const timeStr = formatLocalTime(entry.timestamp);
         console.log(`
    [v${entry.version}] ${timeStr}`);
-        console.log(`      \u53D8\u66F4\u539F\u56E0: ${entry.changeReason}`);
+        console.log(`      Change reason: ${entry.changeReason}`);
         if (entry.impactAnalysis) {
-          console.log(`      \u5F71\u54CD\u5206\u6790: ${entry.impactAnalysis}`);
+          console.log(`      Impact Analysis: ${entry.impactAnalysis}`);
         }
         if (entry.relatedIssue) {
-          console.log(`      \u5173\u8054Issue: ${entry.relatedIssue}`);
+          console.log(`      Related Issue: ${entry.relatedIssue}`);
         }
       });
     }
@@ -24336,27 +24335,27 @@ function showTaskClassic(task, options, cwd) {
   if (options.checkpoints || options.verbose) {
     const checkpointsMeta = listCheckpoints(task.id, cwd);
     if (checkpointsMeta.length > 0) {
-      console.log(makeSectionHeader("\u68C0\u67E5\u70B9"));
+      console.log(makeSectionHeader("Checkpoints"));
       console.log("");
       const completedCount = checkpointsMeta.filter((cp) => cp.status === "completed").length;
       const percentage = Math.round(completedCount / checkpointsMeta.length * 100);
       const barFilled = Math.round(completedCount / checkpointsMeta.length * 20);
       const bar = "\u2588".repeat(barFilled) + "\u2591".repeat(20 - barFilled);
-      console.log(`   \u8FDB\u5EA6: [${bar}] ${completedCount}/${checkpointsMeta.length} (${percentage}%)`);
+      console.log(`   Progress: [${bar}] ${completedCount}/${checkpointsMeta.length} (${percentage}%)`);
       console.log("");
       checkpointsMeta.forEach((cp, index) => {
         const cpIcon = cp.status === "completed" ? "\u2705" : cp.status === "failed" ? "\u274C" : cp.status === "skipped" ? "\u23ED\uFE0F" : "\u2B1C";
         console.log(`   ${index + 1}. ${cpIcon} ${cp.description}`);
         if (cp.note) {
-          console.log(`      \u5907\u6CE8: ${cp.note}`);
+          console.log(`      Note: ${cp.note}`);
         }
         if (cp.verification?.result) {
-          console.log(`      \u9A8C\u8BC1: ${cp.verification.result}`);
+          console.log(`      Verification: ${cp.verification.result}`);
         }
       });
     }
   } else if (fs13.existsSync(checkpointPath)) {
-    console.log(makeSectionHeader("\u68C0\u67E5\u70B9"));
+    console.log(makeSectionHeader("Checkpoints"));
     console.log("");
     const content = fs13.readFileSync(checkpointPath, "utf-8");
     const checkpointLines = content.split(`
@@ -24366,7 +24365,7 @@ function showTaskClassic(task, options, cwd) {
       const percentage = Math.round(completedCount / checkpointLines.length * 100);
       const barFilled = Math.round(completedCount / checkpointLines.length * 20);
       const bar = "\u2588".repeat(barFilled) + "\u2591".repeat(20 - barFilled);
-      console.log(`   \u8FDB\u5EA6: [${bar}] ${completedCount}/${checkpointLines.length} (${percentage}%)`);
+      console.log(`   Progress: [${bar}] ${completedCount}/${checkpointLines.length} (${percentage}%)`);
       console.log("");
       checkpointLines.forEach((l, index) => {
         const isChecked = l.includes("[x]") || l.includes("[X]");
@@ -24375,32 +24374,32 @@ function showTaskClassic(task, options, cwd) {
         console.log(`   ${index + 1}. ${cpIcon} ${text}`);
       });
     } else {
-      console.log("   \u6682\u65E0\u68C0\u67E5\u70B9");
+      console.log("   No checkpoints");
     }
   }
   if (options.verbose && task.history && task.history.length > 0) {
     console.log("");
-    console.log(makeSectionHeader("\u53D8\u66F4\u5386\u53F2"));
+    console.log(makeSectionHeader("Change History"));
     console.log("");
     const meaningfulHistory = filterMeaningfulHistory(task.history);
     const statusChanges = meaningfulHistory.filter((e) => e.field === "status").length;
     const priorityChanges = meaningfulHistory.filter((e) => e.field === "priority").length;
     const otherChanges = meaningfulHistory.length - statusChanges - priorityChanges;
-    console.log(`   \uD83D\uDCCA \u6458\u8981: \u5171 ${meaningfulHistory.length} \u6761\u53D8\u66F4`);
-    console.log(`      - \u72B6\u6001\u53D8\u66F4: ${statusChanges} \u6B21`);
-    console.log(`      - \u4F18\u5148\u7EA7\u53D8\u66F4: ${priorityChanges} \u6B21`);
-    console.log(`      - \u5176\u4ED6\u53D8\u66F4: ${otherChanges} \u6B21`);
+    console.log(`   \uD83D\uDCCA Summary: Total ${meaningfulHistory.length} changes`);
+    console.log(`      - StatusChange: ${statusChanges} times`);
+    console.log(`      - PriorityChange: ${priorityChanges} times`);
+    console.log(`      - Other changes: ${otherChanges} times`);
     console.log("");
     const sortedHistory = [...meaningfulHistory].reverse();
     const groups = groupConsecutiveStatusChanges(sortedHistory);
     const maxGroups = 8;
     const displayGroups = groups.slice(0, maxGroups);
-    console.log("   \u6700\u8FD1\u53D8\u66F4:");
+    console.log("   Recent Changes:");
     for (const group of displayGroups) {
       if (group.type === "status-flow") {
         const timeStr = formatLocalTime(group.entries[0].timestamp);
         const flow = group.entries.map((e) => e.oldValue || "").filter((v, i, a) => a.indexOf(v) === i).concat(group.entries[group.entries.length - 1].newValue || "").join(" \u2192 ");
-        console.log(`   [${timeStr}] \u72B6\u6001\u6D41\u8F6C: ${flow}`);
+        console.log(`   [${timeStr}] Status flow: ${flow}`);
       } else {
         const entry = group.entries[0];
         const timeStr = formatLocalTime(entry.timestamp);
@@ -24412,8 +24411,8 @@ function showTaskClassic(task, options, cwd) {
     }
     if (groups.length > maxGroups) {
       console.log("");
-      console.log(`   ... \u8FD8\u6709 ${groups.length - maxGroups} \u6761\u53D8\u66F4\u8BB0\u5F55`);
-      console.log(`   \u4F7F\u7528 --history \u9009\u9879\u67E5\u770B\u5B8C\u6574\u5386\u53F2`);
+      console.log(`   ... plus ${groups.length - maxGroups} change records`);
+      console.log(`   Use --history option to view full history`);
     }
   }
   console.log("");
@@ -24445,12 +24444,12 @@ function wrapText(text, maxWidth) {
 }
 async function updateTask(taskId, options, cwd = process.cwd()) {
   if (!isInitialized(cwd)) {
-    console.error("\u9519\u8BEF: \u9879\u76EE\u672A\u521D\u59CB\u5316\u3002\u8BF7\u5148\u8FD0\u884C `projmnt4claude setup`");
+    console.error("Error: Project not initialized. Please run `projmnt4claude setup` first");
     process.exit(1);
   }
   const task = readTaskMeta(taskId, cwd);
   if (!task) {
-    console.error(`\u9519\u8BEF: \u4EFB\u52A1 '${taskId}' \u4E0D\u5B58\u5728`);
+    console.error(`Error: Task '${taskId}' does not exist`);
     process.exit(1);
   }
   if (options.status === "resolved") {
@@ -24460,7 +24459,7 @@ async function updateTask(taskId, options, cwd = process.cwd()) {
       if (!fs13.existsSync(checkpointPath)) {
         task.status = options.status;
         writeTaskMeta(task, cwd);
-        console.log(`\u2705 \u4EFB\u52A1 ${taskId} \u5DF2\u66F4\u65B0\u4E3A\u5DF2\u89E3\u51B3\u72B6\u6001`);
+        console.log(`\u2705 Task ${taskId} updated to resolved status`);
         return;
       }
       const checkpoints = parseCheckpoints(checkpointPath);
@@ -24468,47 +24467,47 @@ async function updateTask(taskId, options, cwd = process.cwd()) {
       if (uncheckedCheckpoints.length > 0) {
         console.log("");
         console.log("\u2501".repeat(SEPARATOR_WIDTH));
-        console.log("\u26A0\uFE0F  \u68C0\u67E5\u70B9\u786E\u8BA4\u63D0\u9192");
+        console.log("\u26A0\uFE0F Checkpoint Confirmation Reminder");
         console.log("\u2501".repeat(SEPARATOR_WIDTH));
         console.log("");
-        console.log("\u5728\u5C06\u4EFB\u52A1\u6807\u8BB0\u4E3A\u5DF2\u89E3\u51B3\u4E4B\u524D\uFF0C\u8BF7\u5148\u5B8C\u6210\u4EE5\u4E0B\u68C0\u67E5\u70B9:");
+        console.log("Before marking task as resolved, please complete the following checkpoints:");
         console.log("");
         uncheckedCheckpoints.forEach((cp, idx) => {
           console.log(`  ${idx + 1}. ${cp.text}`);
         });
         console.log("");
         console.log("\u2501".repeat(SEPARATOR_WIDTH));
-        console.log("\u5B8C\u6210\u68C0\u67E5\u70B9\u540E\uFF0C\u8BF7\u8FD0\u884C\u4EE5\u4E0B\u547D\u4EE4\u9A8C\u8BC1:");
+        console.log("After completing checkpoints, run the following command to verify:");
         console.log(`   projmnt4claude task checkpoint verify ${taskId}`);
         console.log("");
-        console.log("\u9A8C\u8BC1\u540E\u4F1A\u751F\u6210\u786E\u8BA4\u4EE4\u724C\uFF0C\u4F7F\u7528\u4EE4\u724C\u5B8C\u6210\u4EFB\u52A1\u66F4\u65B0:");
+        console.log("Verification will generate confirmation token, use it to complete task update:");
         console.log(`   projmnt4claude task update ${taskId} --status resolved --token <token>`);
         console.log("");
         return;
       }
       console.log("\u2501".repeat(SEPARATOR_WIDTH));
-      console.log("\u26A0\uFE0F  \u68C0\u67E5\u70B9\u786E\u8BA4\u63D0\u9192");
+      console.log("\u26A0\uFE0F Checkpoint Confirmation Reminder");
       console.log("\u2501".repeat(SEPARATOR_WIDTH));
       console.log("");
-      console.log("\u6240\u6709\u68C0\u67E5\u70B9\u5DF2\u5B8C\u6210\uFF0C\u4F46\u7F3A\u5C11\u786E\u8BA4\u4EE4\u724C\u3002");
+      console.log("All checkpoints completed but missing confirmation token.");
       console.log("");
-      console.log("\u8BF7\u5148\u8FD0\u884C\u4EE5\u4E0B\u547D\u4EE4\u9A8C\u8BC1\u68C0\u67E5\u70B9\u5E76\u83B7\u53D6\u4EE4\u724C:");
+      console.log("Please run the following command to verify checkpoints and get token:");
       console.log(`   projmnt4claude task checkpoint verify ${taskId}`);
       console.log("");
       return;
     }
     if (options.token) {
       if (task.checkpointConfirmationToken !== options.token) {
-        console.error("\u9519\u8BEF: \u65E0\u6548\u7684\u786E\u8BA4\u4EE4\u724C");
+        console.error("Error: Invalid confirmation token");
         console.log("");
-        console.log("\u8BF7\u8FD0\u884C\u4EE5\u4E0B\u547D\u4EE4\u91CD\u65B0\u83B7\u53D6\u4EE4\u724C:");
+        console.log("Please run the following command to get a new token:");
         console.log(`   projmnt4claude task checkpoint verify ${taskId}`);
         process.exit(1);
       }
       task.status = options.status;
       task.checkpointConfirmationToken = undefined;
       writeTaskMeta(task, cwd);
-      console.log(`\u2705 \u4EFB\u52A1 ${taskId} \u5DF2\u66F4\u65B0\u4E3A\u5DF2\u89E3\u51B3\u72B6\u6001`);
+      console.log(`\u2705 Task ${taskId} updated to resolved status`);
       return;
     }
   }
@@ -24538,7 +24537,7 @@ async function updateTask(taskId, options, cwd = process.cwd()) {
         timestamp: new Date().toISOString(),
         fromStatus: oldStatus,
         toStatus: "open",
-        note: `\u4EFB\u52A1\u4ECE ${oldStatus} \u91CD\u5F00\u4E3A open (reopenCount: ${task.reopenCount})`,
+        note: `Task\u4ECE ${oldStatus} Reopen\u4E3A open (reopenCount: ${task.reopenCount})`,
         author: process.env.USER || undefined
       });
       if (!task.history) {
@@ -24546,13 +24545,13 @@ async function updateTask(taskId, options, cwd = process.cwd()) {
       }
       task.history.push({
         timestamp: new Date().toISOString(),
-        action: `\u4EFB\u52A1\u91CD\u5F00: ${oldStatus} \u2192 open (reopenCount: ${task.reopenCount})`,
+        action: `TaskReopen: ${oldStatus} \u2192 open (reopenCount: ${task.reopenCount})`,
         field: "status",
         oldValue: oldStatus,
         newValue: "open",
-        reason: "\u7528\u6237\u53D1\u8D77\u91CD\u5F00\uFF0C\u72B6\u6001\u6620\u5C04\u4E3A open + reopenCount \u9012\u589E"
+        reason: "\u7528\u6237\u53D1\u8D77Reopen, Status\u6620\u5C04\u4E3A open + reopenCount \u9012\u589E"
       });
-      console.log(`\uD83D\uDD01 \u4EFB\u52A1\u5DF2\u91CD\u5F00 (\u7B2C ${task.reopenCount} \u6B21)`);
+      console.log(`\uD83D\uDD01 Task reopened (#${task.reopenCount} times)`);
       console.log(`   ${oldStatus} \u2192 open (reopenCount: ${task.reopenCount})`);
     } else {
       task.status = options.status;
@@ -24576,11 +24575,11 @@ async function updateTask(taskId, options, cwd = process.cwd()) {
     updated = true;
   }
   if (!updated) {
-    console.log("\u6CA1\u6709\u6307\u5B9A\u8981\u66F4\u65B0\u7684\u5B57\u6BB5");
+    console.log("No fields specified for update");
     return;
   }
   writeTaskMeta(task, cwd);
-  console.log(`\u2705 \u4EFB\u52A1 ${taskId} \u5DF2\u66F4\u65B0`);
+  console.log(`\u2705 Task ${taskId} updated`);
   if (options.status || options.priority) {
     const commandArgs = process.argv.slice(2);
     writeBatchUpdateLog({
@@ -24593,7 +24592,7 @@ async function updateTask(taskId, options, cwd = process.cwd()) {
       },
       tasks: [{
         id: task.id,
-        title: task.title || "(\u65E0\u6807\u9898)",
+        title: task.title || "(NoneTitle)",
         oldStatus: originalStatus,
         newStatus: task.status,
         oldPriority: originalPriority,
@@ -24610,7 +24609,7 @@ async function updateTask(taskId, options, cwd = process.cwd()) {
     const childTasks = task.subtaskIds || [];
     if (childTasks.length > 0) {
       console.log("");
-      console.log(`\u26A0\uFE0F  \u68C0\u6D4B\u5230 ${childTasks.length} \u4E2A\u5B50\u4EFB\u52A1:`);
+      console.log(`\u26A0\uFE0F  Detected ${childTasks.length} subtasks:`);
       for (const childId of childTasks) {
         const childTask = readTaskMeta(childId, cwd);
         if (childTask) {
@@ -24627,21 +24626,21 @@ async function updateTask(taskId, options, cwd = process.cwd()) {
             }
             childTask.history.push({
               timestamp: new Date().toISOString(),
-              action: `\u72B6\u6001\u540C\u6B65\u81EA\u7236\u4EFB\u52A1 ${taskId}`,
+              action: `Status\u540C\u6B65\u81EAParent task ${taskId}`,
               field: "status",
               oldValue: childTask.status,
               newValue: options.status,
-              reason: "\u7236\u4EFB\u52A1\u5DF2\u5B8C\u6210\uFF0C\u5B50\u4EFB\u52A1\u529F\u80FD\u5DF2\u5728\u7236\u4EFB\u52A1\u4E2D\u5B9E\u73B0"
+              reason: "Parent taskCompleted, Subtasks\u529F\u80FD\u5DF2\u5728Parent task\u4E2D\u5B9E\u73B0"
             });
             writeTaskMeta(childTask, cwd);
-            console.log(`   \u2705 ${childId} \u5DF2\u540C\u6B65\u4E3A ${options.status}`);
+            console.log(`   \u2705 ${childId} synced to ${options.status}`);
           }
         }
         console.log("");
-        console.log(`\u2705 \u5DF2\u540C\u6B65 ${childTasks.length} \u4E2A\u5B50\u4EFB\u52A1\u7684\u72B6\u6001`);
+        console.log(`\u2705 Synced ${childTasks.length} subtask statuses`);
       } else {
         console.log("");
-        console.log("\u63D0\u793A: \u4F7F\u7528 --sync-children \u53C2\u6570\u53EF\u81EA\u52A8\u540C\u6B65\u5B50\u4EFB\u52A1\u72B6\u6001");
+        console.log("Tip: Use --sync-children to auto-sync subtask statuses");
         console.log(`      projmnt4claude task update ${taskId} --status ${options.status} --sync-children`);
       }
     }
@@ -24649,28 +24648,28 @@ async function updateTask(taskId, options, cwd = process.cwd()) {
 }
 async function submitTask(taskId, options = {}, cwd = process.cwd()) {
   console.warn("");
-  console.warn("\u26A0\uFE0F  \u8B66\u544A: task submit \u547D\u4EE4\u5DF2\u5E9F\u5F03\uFF0C\u5C06\u5728\u672A\u6765\u7248\u672C\u4E2D\u79FB\u9664");
-  console.warn("   \u8BF7\u4F7F\u7528\u66FF\u4EE3\u547D\u4EE4: projmnt4claude task update <taskId> --status wait_evaluation");
+  console.warn("\u26A0\uFE0F Warning: task submit command is deprecated and will be removed in a future version");
+  console.warn("   Please use alternative command: projmnt4claude task update <taskId> --status wait_evaluation");
   console.warn("");
   if (!isInitialized(cwd)) {
-    console.error("\u9519\u8BEF: \u9879\u76EE\u672A\u521D\u59CB\u5316\u3002\u8BF7\u5148\u8FD0\u884C `projmnt4claude setup`");
+    console.error("Error: Project not initialized. Please run `projmnt4claude setup` first");
     process.exit(1);
   }
   const task = readTaskMeta(taskId, cwd);
   if (!task) {
-    console.error(`\u9519\u8BEF: \u4EFB\u52A1 '${taskId}' \u4E0D\u5B58\u5728`);
+    console.error(`Error: Task '${taskId}' does not exist`);
     process.exit(1);
   }
   const allowedStatuses = ["in_progress", "open"];
   if (!allowedStatuses.includes(task.status)) {
-    console.error(`\u9519\u8BEF: \u4EFB\u52A1\u5F53\u524D\u72B6\u6001\u4E3A '${task.status}'\uFF0C\u53EA\u6709 ${allowedStatuses.join(", ")} \u72B6\u6001\u7684\u4EFB\u52A1\u53EF\u4EE5\u63D0\u4EA4`);
+    console.error(`Error: Task current status is '${task.status}', only ${allowedStatuses.join(", ")} status tasks can be submitted`);
     process.exit(1);
   }
   const oldStatus = task.status;
   task.status = "wait_evaluation";
   const historyEntry = {
     timestamp: new Date().toISOString(),
-    action: `\u63D0\u4EA4\u7B49\u5F85\u9A8C\u8BC1: ${oldStatus} -> wait_evaluation`,
+    action: `\u63D0\u4EA4\u7B49\u5F85Verification: ${oldStatus} -> wait_evaluation`,
     field: "status",
     oldValue: oldStatus,
     newValue: "wait_evaluation",
@@ -24686,18 +24685,18 @@ async function submitTask(taskId, options = {}, cwd = process.cwd()) {
   writeTaskMeta(task, cwd);
   console.log("");
   console.log("\u2501".repeat(SEPARATOR_WIDTH));
-  console.log("\uD83D\uDCE4 \u4EFB\u52A1\u5DF2\u63D0\u4EA4\u7B49\u5F85\u9A8C\u8BC1");
+  console.log("\uD83D\uDCE4 Task submitted for verification");
   console.log("\u2501".repeat(SEPARATOR_WIDTH));
   console.log("");
-  console.log(`\u4EFB\u52A1ID: ${taskId}`);
-  console.log(`\u6807\u9898: ${task.title}`);
-  console.log(`\u72B6\u6001: ${oldStatus} \u2192 wait_evaluation`);
+  console.log(`Task ID: ${taskId}`);
+  console.log(`Title: ${task.title}`);
+  console.log(`Status: ${oldStatus} \u2192 wait_evaluation`);
   console.log("");
-  console.log("\u9A8C\u8BC1\u5C06\u901A\u8FC7\u4EE5\u4E0B\u65B9\u5F0F\u81EA\u52A8\u6267\u884C:");
-  console.log("  1. Claude Code hooks \u5728\u540E\u7EED\u64CD\u4F5C\u65F6\u89E6\u53D1");
-  console.log("  2. \u8FD0\u884C projmnt4claude task validate \u547D\u4EE4");
+  console.log("Verification will auto-execute via:");
+  console.log("  1. Claude Code hooks triggered on subsequent operations");
+  console.log("  2. Run projmnt4claude task validate command");
   console.log("");
-  console.log("\u9A8C\u8BC1\u901A\u8FC7\u540E\uFF0C\u4EFB\u52A1\u72B6\u6001\u5C06\u81EA\u52A8\u66F4\u65B0\u4E3A resolved");
+  console.log("After verification passes, task status will auto-update to resolved");
   console.log("");
 }
 async function validateTask(taskId, options = {}, cwd = process.cwd()) {
@@ -24707,24 +24706,24 @@ async function validateTask(taskId, options = {}, cwd = process.cwd()) {
   console.warn("   Validation will be automatically executed by harness evaluation phase");
   console.warn("");
   if (!isInitialized(cwd)) {
-    console.error("\u9519\u8BEF: \u9879\u76EE\u672A\u521D\u59CB\u5316\u3002\u8BF7\u5148\u8FD0\u884C `projmnt4claude setup`");
+    console.error("Error: Project not initialized. Please run `projmnt4claude setup` first");
     process.exit(1);
   }
   const task = readTaskMeta(taskId, cwd);
   if (!task) {
-    console.error(`\u9519\u8BEF: \u4EFB\u52A1 '${taskId}' \u4E0D\u5B58\u5728`);
+    console.error(`Error: Task '${taskId}' does not exist`);
     process.exit(1);
   }
   if (task.status !== "wait_evaluation") {
-    console.error(`\u9519\u8BEF: \u4EFB\u52A1\u72B6\u6001\u4E3A '${task.status}'\uFF0C\u53EA\u6709 wait_evaluation \u72B6\u6001\u7684\u4EFB\u52A1\u53EF\u4EE5\u9A8C\u8BC1`);
+    console.error(`Error: Task status is '${task.status}', only wait_evaluation status tasks can be verified`);
     console.log("");
-    console.log("\u63D0\u793A: \u5C06\u4EFB\u52A1\u72B6\u6001\u8BBE\u7F6E\u4E3A wait_evaluation");
+    console.log("Tip: Set task status to wait_evaluation");
     console.log(`      projmnt4claude task update ${taskId} --status wait_evaluation`);
     process.exit(1);
   }
   console.log("");
   console.log("\u2501".repeat(SEPARATOR_WIDTH));
-  console.log("\uD83D\uDD0D \u5F00\u59CB\u9A8C\u8BC1\u4EFB\u52A1");
+  console.log("\uD83D\uDD0D Starting task verification");
   console.log("\u2501".repeat(SEPARATOR_WIDTH));
   console.log("");
   const result = await validateTaskCompletion2(taskId, cwd, {
@@ -24738,7 +24737,7 @@ async function validateTask(taskId, options = {}, cwd = process.cwd()) {
       task.status = "resolved";
       const historyEntry = {
         timestamp: new Date().toISOString(),
-        action: "\u9A8C\u8BC1\u901A\u8FC7\uFF0C\u72B6\u6001\u66F4\u65B0\u4E3A resolved",
+        action: "Verification\u901A\u8FC7, StatusUpdated\u4E3A resolved",
         field: "status",
         oldValue: "wait_evaluation",
         newValue: "resolved",
@@ -24749,16 +24748,16 @@ async function validateTask(taskId, options = {}, cwd = process.cwd()) {
       }
       task.history.push(historyEntry);
       writeTaskMeta(task, cwd);
-      console.log("\u2705 \u4EFB\u52A1\u72B6\u6001\u5DF2\u66F4\u65B0\u4E3A resolved");
+      console.log("\u2705 Task status updated to resolved");
     } else {
-      console.log("\u2705 \u9A8C\u8BC1\u901A\u8FC7\uFF0C\u53EF\u624B\u52A8\u66F4\u65B0\u72B6\u6001:");
+      console.log("\u2705 Verification passed, can manually update status:");
       console.log(`   projmnt4claude task update ${taskId} --status resolved`);
     }
   } else {
     task.status = "in_progress";
     const historyEntry = {
       timestamp: new Date().toISOString(),
-      action: "\u9A8C\u8BC1\u5931\u8D25\uFF0C\u8FD4\u56DE\u5F00\u53D1\u72B6\u6001",
+      action: "Verification\u5931\u8D25, \u8FD4\u56DE\u5F00\u53D1Status",
       field: "status",
       oldValue: "wait_evaluation",
       newValue: "in_progress",
@@ -24770,17 +24769,17 @@ async function validateTask(taskId, options = {}, cwd = process.cwd()) {
     }
     task.history.push(historyEntry);
     writeTaskMeta(task, cwd);
-    console.log("\u274C \u4EFB\u52A1\u5DF2\u8FD4\u56DE in_progress \u72B6\u6001\uFF0C\u8BF7\u4FEE\u590D\u95EE\u9898\u540E\u91CD\u65B0\u63D0\u4EA4");
+    console.log("\u274C Task returned to in_progress status, please fix issues and resubmit");
   }
 }
 async function deleteTask(taskId, force = false, cwd = process.cwd()) {
   if (!isInitialized(cwd)) {
-    console.error("\u9519\u8BEF: \u9879\u76EE\u672A\u521D\u59CB\u5316\u3002\u8BF7\u5148\u8FD0\u884C `projmnt4claude setup`");
+    console.error("Error: Project not initialized. Please run `projmnt4claude setup` first");
     process.exit(1);
   }
   const task = readTaskMeta(taskId, cwd);
   if (!task) {
-    console.error(`\u9519\u8BEF: \u4EFB\u52A1 '${taskId}' \u4E0D\u5B58\u5728`);
+    console.error(`Error: Task '${taskId}' does not exist`);
     process.exit(1);
   }
   const allTasks = getAllTasks(cwd);
@@ -24789,28 +24788,28 @@ async function deleteTask(taskId, force = false, cwd = process.cwd()) {
   const allDownstream = graph.getAllDownstream(taskId);
   if (downstream.length > 0 || allDownstream.length > 0) {
     console.log("");
-    console.log(`\u26A0\uFE0F  \u6B64\u4EFB\u52A1\u6709 ${downstream.length} \u4E2A\u76F4\u63A5\u4F9D\u8D56\u8005\u548C ${allDownstream.length} \u4E2A\u4F20\u9012\u4F9D\u8D56\u8005:`);
+    console.log(`\u26A0\uFE0F  This task has ${downstream.length} direct dependents and ${allDownstream.length} transitive dependents:`);
     for (const depId of downstream.slice(0, 10)) {
       const depTask = readTaskMeta(depId, cwd);
       const status = depTask ? formatStatus(depTask.status) : "\u2753";
-      console.log(`   - ${depId} (${depTask?.title?.substring(0, 30) || "\u672A\u77E5"} ${status})`);
+      console.log(`   - ${depId} (${depTask?.title?.substring(0, 30) || "Unknown"} ${status})`);
     }
     if (downstream.length > 10) {
-      console.log(`   ... \u8FD8\u6709 ${downstream.length - 10} \u4E2A`);
+      console.log(`   ... plus ${downstream.length - 10} `);
     }
     console.log("");
-    console.log("   \u5220\u9664\u540E\uFF0C\u8FD9\u4E9B\u4EFB\u52A1\u7684\u4F9D\u8D56\u5F15\u7528\u5C06\u53D8\u4E3A\u65E0\u6548\u3002\u5EFA\u8BAE\u5148\u79FB\u9664\u76F8\u5173\u4F9D\u8D56\u3002");
+    console.log("  After deletion, these task dependency references will become invalid. Recommend removing related dependencies first.");
     console.log("");
   }
   if (!force) {
     const response = await import_prompts2.default({
       type: "confirm",
       name: "confirm",
-      message: `\u786E\u5B9A\u8981\u5220\u9664\u4EFB\u52A1 ${taskId} \u5417\uFF1F`,
+      message: `\u786E\u5B9A\u8981\u5220\u9664Task ${taskId} \u5417\uFF1F`,
       initial: false
     });
     if (!response.confirm) {
-      console.log("\u5DF2\u53D6\u6D88\u5220\u9664");
+      console.log("Deletion cancelled");
       return;
     }
   }
@@ -24824,16 +24823,16 @@ async function deleteTask(taskId, force = false, cwd = process.cwd()) {
   task.status = "abandoned";
   writeTaskMeta(task, cwd);
   fs13.renameSync(taskPath, archivePath);
-  console.log(`\u2705 \u4EFB\u52A1 ${taskId} \u5DF2\u5F52\u6863`);
+  console.log(`\u2705 Task ${taskId} Archived`);
 }
 function purgeTasks(options = {}, cwd = process.cwd()) {
   if (!isInitialized(cwd)) {
-    console.error("\u9519\u8BEF: \u9879\u76EE\u672A\u521D\u59CB\u5316\u3002\u8BF7\u5148\u8FD0\u884C `projmnt4claude setup`");
+    console.error("Error: Project not initialized. Please run `projmnt4claude setup` first");
     process.exit(1);
   }
   const archiveDir = getArchiveDir(cwd);
   if (!fs13.existsSync(archiveDir)) {
-    const msg = "\u6CA1\u6709\u9700\u8981\u6E05\u9664\u7684 abandoned \u4EFB\u52A1";
+    const msg = "\u6CA1\u6709\u9700\u8981\u6E05\u9664\u7684 abandoned Task";
     if (options.json) {
       console.log(JSON.stringify({ purged: 0, message: msg }));
     } else {
@@ -24856,7 +24855,7 @@ function purgeTasks(options = {}, cwd = process.cwd()) {
     }
   });
   if (abandonedDirs.length === 0) {
-    const msg = "\u6CA1\u6709\u9700\u8981\u6E05\u9664\u7684 abandoned \u4EFB\u52A1";
+    const msg = "\u6CA1\u6709\u9700\u8981\u6E05\u9664\u7684 abandoned Task";
     if (options.json) {
       console.log(JSON.stringify({ purged: 0, message: msg }));
     } else {
@@ -24865,13 +24864,13 @@ function purgeTasks(options = {}, cwd = process.cwd()) {
     return;
   }
   if (!options.force) {
-    console.log(`\u53D1\u73B0 ${abandonedDirs.length} \u4E2A abandoned \u4EFB\u52A1:`);
+    console.log(`Found ${abandonedDirs.length}  abandoned Task:`);
     for (const dir of abandonedDirs) {
       console.log(`  - ${dir}`);
     }
     if (!process.stdout.isTTY) {
       console.log(`
-\u4F7F\u7528 --force \u6216 -y \u786E\u8BA4\u5220\u9664`);
+Use  --force or -y to confirm deletion`);
       return;
     }
     return;
@@ -24883,57 +24882,57 @@ function purgeTasks(options = {}, cwd = process.cwd()) {
       fs13.rmSync(dirPath, { recursive: true, force: true });
       purged++;
     } catch (e) {
-      console.error(`\u5220\u9664 ${dir} \u5931\u8D25: ${e}`);
+      console.error(`Delete ${dir} failed: ${e}`);
     }
   }
   if (options.json) {
     console.log(JSON.stringify({ purged, total: abandonedDirs.length }));
   } else {
-    console.log(`\u2705 \u5DF2\u6E05\u9664 ${purged}/${abandonedDirs.length} \u4E2A abandoned \u4EFB\u52A1`);
+    console.log(`\u2705 Purged ${purged}/${abandonedDirs.length}  abandoned Task`);
   }
 }
 function addDependency(taskId, depId, cwd = process.cwd()) {
   if (!isInitialized(cwd)) {
-    console.error("\u9519\u8BEF: \u9879\u76EE\u672A\u521D\u59CB\u5316\u3002\u8BF7\u5148\u8FD0\u884C `projmnt4claude setup`");
+    console.error("Error: Project not initialized. Please run `projmnt4claude setup` first");
     process.exit(1);
   }
   const task = readTaskMeta(taskId, cwd);
   if (!task) {
-    console.error(`\u9519\u8BEF: \u4EFB\u52A1 '${taskId}' \u4E0D\u5B58\u5728`);
+    console.error(`Error: Task '${taskId}' does not exist`);
     process.exit(1);
   }
   const depTask = readTaskMeta(depId, cwd);
   if (!depTask) {
-    console.error(`\u9519\u8BEF: \u4F9D\u8D56\u4EFB\u52A1 '${depId}' \u4E0D\u5B58\u5728`);
+    console.error(`Error: Dependency Tasks '${depId}' does not exist`);
     process.exit(1);
   }
   if (task.dependencies.includes(depId)) {
-    console.log(`\u4EFB\u52A1 ${taskId} \u5DF2\u4F9D\u8D56 ${depId}`);
+    console.log(`Task ${taskId} already depends on ${depId}`);
     return;
   }
   const allTasks = getAllTasks(cwd);
   const graph = DependencyGraph.fromTasks(allTasks);
   if (!graph.addEdge(taskId, depId)) {
-    console.error(`\u9519\u8BEF: \u6DFB\u52A0\u4F9D\u8D56 ${depId} \u4F1A\u9020\u6210\u5FAA\u73AF\u4F9D\u8D56 (GATE-DEP-002)`);
+    console.error(`Error: Adding dependency ${depId} would create circular dependency (GATE-DEP-002)`);
     process.exit(1);
   }
   task.dependencies.push(depId);
   writeTaskMeta(task, cwd);
-  console.log(`\u2705 \u5DF2\u6DFB\u52A0\u4F9D\u8D56: ${taskId} -> ${depId}`);
+  console.log(`\u2705 Dependency added: ${taskId} -> ${depId}`);
 }
 function removeDependency(taskId, depId, cwd = process.cwd()) {
   if (!isInitialized(cwd)) {
-    console.error("\u9519\u8BEF: \u9879\u76EE\u672A\u521D\u59CB\u5316\u3002\u8BF7\u5148\u8FD0\u884C `projmnt4claude setup`");
+    console.error("Error: Project not initialized. Please run `projmnt4claude setup` first");
     process.exit(1);
   }
   const task = readTaskMeta(taskId, cwd);
   if (!task) {
-    console.error(`\u9519\u8BEF: \u4EFB\u52A1 '${taskId}' \u4E0D\u5B58\u5728`);
+    console.error(`Error: Task '${taskId}' does not exist`);
     process.exit(1);
   }
   const index = task.dependencies.indexOf(depId);
   if (index === -1) {
-    console.log(`\u4EFB\u52A1 ${taskId} \u4E0D\u4F9D\u8D56 ${depId}`);
+    console.log(`Task ${taskId} does not depend on ${depId}`);
     return;
   }
   const allTasks = getAllTasks(cwd);
@@ -24941,12 +24940,12 @@ function removeDependency(taskId, depId, cwd = process.cwd()) {
   graph.removeEdge(taskId, depId);
   task.dependencies.splice(index, 1);
   writeTaskMeta(task, cwd);
-  console.log(`\u2705 \u5DF2\u79FB\u9664\u4F9D\u8D56: ${taskId} -/-> ${depId}`);
+  console.log(`\u2705 Dependency removed: ${taskId} -/-> ${depId}`);
   const remainingDeps = task.dependencies;
   if (remainingDeps.length === 0) {
     const inferredDownstream = graph.getDirectUpstream(taskId);
     if (inferredDownstream.length > 0) {
-      console.log(`\uD83D\uDCA1 \u63D0\u793A: \u56FE\u4E2D\u68C0\u6D4B\u5230\u53EF\u80FD\u7684\u9690\u542B\u4F9D\u8D56: ${inferredDownstream.join(", ")}`);
+      console.log(`\uD83D\uDCA1 Tip: Possible implicit dependencies detected in graph: ${inferredDownstream.join(", ")}`);
     }
   }
 }
@@ -24969,89 +24968,89 @@ function formatPriority(priority) {
 }
 function formatStatus(status) {
   const map = {
-    open: "\u2B1C \u5F85\u5904\u7406",
-    in_progress: "\uD83D\uDD35 \u8FDB\u884C\u4E2D",
+    open: "\u2B1C Pending",
+    in_progress: "\uD83D\uDD35 In Progress",
     wait_review: "\uD83D\uDC40 \u5F85\u5BA1\u67E5",
     wait_qa: "\uD83E\uDDEA \u5F85\u6D4B\u8BD5",
     wait_evaluation: "\u23F3 \u5F85\u8BC4\u4F30",
-    resolved: "\u2705 \u5DF2\u89E3\u51B3",
-    closed: "\u26AB \u5DF2\u5173\u95ED",
-    abandoned: "\u274C \u5DF2\u653E\u5F03",
+    resolved: "\u2705 Resolved",
+    closed: "\u26AB Closed",
+    abandoned: "\u274C Abandoned",
     failed: "\u26D4 \u5DF2\u5931\u8D25",
-    pending: "\u2B1C \u5F85\u5904\u7406",
-    completed: "\u2705 \u5DF2\u5B8C\u6210",
-    cancelled: "\u274C \u5DF2\u53D6\u6D88"
+    pending: "\u2B1C Pending",
+    completed: "\u2705 Completed",
+    cancelled: "\u274C Cancelled"
   };
   return map[status] || `\u2753 ${status}`;
 }
 function showStatusGuide() {
   console.log("");
   console.log("\u2501".repeat(SEPARATOR_WIDTH));
-  console.log("\uD83D\uDCCB \u4EFB\u52A1\u72B6\u6001\u8F6C\u6362\u6307\u5357");
+  console.log("\uD83D\uDCCB Task Status Transition Guide");
   console.log("\u2501".repeat(SEPARATOR_WIDTH));
   console.log("");
-  console.log("\uD83D\uDCCA \u72B6\u6001\u8BF4\u660E:");
+  console.log("\uD83D\uDCCA Status Description:");
   console.log("");
-  console.log("  \u2B1C open        - \u5F85\u5904\u7406\uFF0C\u4EFB\u52A1\u5DF2\u521B\u5EFA\u7B49\u5F85\u5F00\u59CB");
-  console.log("  \uD83D\uDD35 in_progress - \u8FDB\u884C\u4E2D\uFF0C\u4EFB\u52A1\u6B63\u5728\u6267\u884C");
-  console.log("  \u2705 resolved    - \u5DF2\u89E3\u51B3\uFF0C\u4EFB\u52A1\u5B8C\u6210\u5E76\u901A\u8FC7\u9A8C\u8BC1");
-  console.log("  \u26AB closed      - \u5DF2\u5173\u95ED\uFF0C\u4EFB\u52A1\u6700\u7EC8\u786E\u8BA4\u5B8C\u6210");
-  console.log("  \u274C abandoned   - \u5DF2\u653E\u5F03\uFF0C\u4EFB\u52A1\u4E0D\u518D\u9700\u8981");
-  console.log("  \u26D4 failed      - \u5DF2\u5931\u8D25\uFF0C\u4EFB\u52A1\u6267\u884C\u5931\u8D25\uFF08\u8D85\u65F6/\u8D28\u91CF\u95E8\u7981/\u91CD\u8BD5\u8017\u5C3D\uFF09");
+  console.log("  \u2B1C open        - Pending, task created waiting to start");
+  console.log("  \uD83D\uDD35 in_progress - In Progress, task being executed");
+  console.log("  \u2705 resolved    - Resolved, task completed and verified");
+  console.log("  \u26AB closed      - Closed, task finally confirmed complete");
+  console.log("  \u274C abandoned   - Abandoned, task no longer needed");
+  console.log("  \u26D4 failed      - Failed, task execution failed (timeout/quality gate/retry exhausted)");
   console.log("");
-  console.log("  \uD83D\uDCA1 \u8BF4\u660E: resolved/closed \u72B6\u6001\u53EF\u901A\u8FC7 --status reopened \u91CD\u5F00\u4E3A open");
-  console.log("           \u7CFB\u7EDF\u4F1A\u81EA\u52A8\u9012\u589E reopenCount \u5E76\u8BB0\u5F55 transitionNote");
+  console.log("  \uD83D\uDCA1 Description: resolved/closed can be reopened to open via --status reopened");
+  console.log("           System will auto-increment reopenCount and log transitionNote");
   console.log("");
   console.log("\u2501".repeat(SEPARATOR_WIDTH));
-  console.log("\uD83D\uDD04 \u72B6\u6001\u8F6C\u6362\u77E9\u9635:");
+  console.log("\uD83D\uDD04 Status Transition Matrix:");
   console.log("");
   console.log("  open \u2192 in_progress");
-  console.log("       \u2514\u2500 \u547D\u4EE4: task update <id> --status in_progress");
-  console.log("       \u2514\u2500 \u8BF4\u660E: \u5F00\u59CB\u6267\u884C\u4EFB\u52A1");
+  console.log("       \u2514\u2500 Command: task update <id> --status in_progress");
+  console.log("       \u2514\u2500 Description: Start executing task");
   console.log("");
   console.log("  in_progress \u2192 resolved");
-  console.log("       \u2514\u2500 \u547D\u4EE4: task checkpoint <id> -y  \u6216");
+  console.log("       \u2514\u2500 Command: task checkpoint <id> -y  or");
   console.log("              task update <id> --status resolved --token <token>");
-  console.log("       \u2514\u2500 \u8BF4\u660E: \u5B8C\u6210\u6240\u6709\u68C0\u67E5\u70B9\u5E76\u9A8C\u8BC1");
+  console.log("       \u2514\u2500 Description: Complete all checkpoints and verify");
   console.log("");
   console.log("  resolved \u2192 closed");
-  console.log("       \u2514\u2500 \u547D\u4EE4: task update <id> --status closed");
-  console.log("       \u2514\u2500 \u8BF4\u660E: \u6700\u7EC8\u786E\u8BA4\u4EFB\u52A1\u5B8C\u6210");
+  console.log("       \u2514\u2500 Command: task update <id> --status closed");
+  console.log("       \u2514\u2500 Description: Finally confirm task completion");
   console.log("");
-  console.log("  resolved/closed \u2192 open (\u91CD\u5F00)");
-  console.log("       \u2514\u2500 \u547D\u4EE4: task update <id> --status reopened");
-  console.log("       \u2514\u2500 \u8BF4\u660E: \u53D1\u73B0\u95EE\u9898\u9700\u8981\u91CD\u65B0\u5904\u7406\uFF08\u81EA\u52A8\u6620\u5C04\u4E3A open + reopenCount \u9012\u589E\uFF09");
+  console.log("  resolved/closed \u2192 open (Reopen)");
+  console.log("       \u2514\u2500 Command: task update <id> --status reopened");
+  console.log("       \u2514\u2500 Description: Found issues need reprocessing(auto-mapped to open + reopenCount increment)");
   console.log("");
-  console.log("  \u4EFB\u610F\u72B6\u6001 \u2192 abandoned");
-  console.log("       \u2514\u2500 \u547D\u4EE4: task delete <id>");
-  console.log("       \u2514\u2500 \u8BF4\u660E: \u4EFB\u52A1\u4E0D\u518D\u9700\u8981");
+  console.log("  Any status \u2192 abandoned");
+  console.log("       \u2514\u2500 Command: task delete <id>");
+  console.log("       \u2514\u2500 Description: Task no longer needed");
   console.log("");
-  console.log("  failed \u2192 open (\u91CD\u5F00\u5931\u8D25\u4EFB\u52A1)");
-  console.log("       \u2514\u2500 \u547D\u4EE4: task update <id> --status reopened");
-  console.log("       \u2514\u2500 \u8BF4\u660E: \u91CD\u65B0\u5904\u7406\u5931\u8D25\u4EFB\u52A1\uFF08\u81EA\u52A8\u6620\u5C04\u4E3A open + reopenCount \u9012\u589E\uFF09");
+  console.log("  failed \u2192 open (Reopen failed task)");
+  console.log("       \u2514\u2500 Command: task update <id> --status reopened");
+  console.log("       \u2514\u2500 Description: Reprocess failed task(auto-mapped to open + reopenCount increment)");
   console.log("");
   console.log("\u2501".repeat(SEPARATOR_WIDTH));
-  console.log("\uD83D\uDCA1 \u5FEB\u6377\u547D\u4EE4:");
+  console.log("\uD83D\uDCA1 Quick Commands:");
   console.log("");
-  console.log("  task execute <id>     - \u5F00\u59CB\u6267\u884C\u4EFB\u52A1\uFF08\u81EA\u52A8\u8BBE\u4E3A in_progress\uFF09");
-  console.log("  task checkpoint <id>  - \u9A8C\u8BC1\u68C0\u67E5\u70B9\u5E76\u83B7\u53D6\u5B8C\u6210\u4EE4\u724C");
-  console.log("  task complete <id>    - \u4E00\u952E\u5B8C\u6210\u4EFB\u52A1\uFF08P2-005 \u65B0\u589E\uFF09");
+  console.log("  task execute <id>     - Start executing task (auto sets in_progress)");
+  console.log("  task checkpoint <id>  - Verify checkpoints and get completion token");
+  console.log("  task complete <id>    - One-click complete task (P2-005)");
   console.log("");
   console.log("\u2501".repeat(SEPARATOR_WIDTH));
 }
 async function completeTask(taskId, options = {}, cwd = process.cwd()) {
   if (!isInitialized(cwd)) {
-    console.error("\u9519\u8BEF: \u9879\u76EE\u672A\u521D\u59CB\u5316\u3002\u8BF7\u5148\u8FD0\u884C `projmnt4claude setup`");
+    console.error("Error: Project not initialized. Please run `projmnt4claude setup` first");
     process.exit(1);
   }
   const task = readTaskMeta(taskId, cwd);
   if (!task) {
-    console.error(`\u9519\u8BEF: \u4EFB\u52A1 '${taskId}' \u4E0D\u5B58\u5728`);
+    console.error(`Error: Task '${taskId}' does not exist`);
     process.exit(1);
   }
   console.log("");
   console.log("\u2501".repeat(SEPARATOR_WIDTH));
-  console.log(`\uD83D\uDE80 \u4E00\u952E\u5B8C\u6210\u4EFB\u52A1: ${taskId}`);
+  console.log(`\uD83D\uDE80 One-click complete task: ${taskId}`);
   console.log("\u2501".repeat(SEPARATOR_WIDTH));
   console.log("");
   const taskDir = path11.join(getTasksDir(cwd), taskId);
@@ -25063,7 +25062,7 @@ async function completeTask(taskId, options = {}, cwd = process.cwd()) {
     if (lines.length > 0) {
       const unchecked = lines.filter((line) => !line.includes("[x]") && !line.includes("[X]"));
       if (unchecked.length > 0) {
-        console.log("\u26A0\uFE0F  \u53D1\u73B0\u672A\u5B8C\u6210\u7684\u68C0\u67E5\u70B9:");
+        console.log("\u26A0\uFE0F  Found incomplete checkpoints:");
         unchecked.forEach((line, idx) => {
           const text = line.replace(/- \[[xX ]\] /, "").trim();
           console.log(`   ${idx + 1}. ${text}`);
@@ -25073,11 +25072,11 @@ async function completeTask(taskId, options = {}, cwd = process.cwd()) {
           const response = await import_prompts2.default({
             type: "confirm",
             name: "proceed",
-            message: "\u662F\u5426\u6807\u8BB0\u6240\u6709\u68C0\u67E5\u70B9\u4E3A\u5DF2\u5B8C\u6210\u5E76\u7EE7\u7EED?",
+            message: "\u662F\u5426\u6807\u8BB0\u6240\u6709Checkpoints\u4E3ACompleted\u5E76\u7EE7\u7EED?",
             initial: false
           });
           if (!response.proceed) {
-            console.log("\u5DF2\u53D6\u6D88\u3002\u8BF7\u5148\u5B8C\u6210\u68C0\u67E5\u70B9\u540E\u518D\u8BD5\u3002");
+            console.log("Cancelled. Please complete checkpoints before trying again.");
             return;
           }
         }
@@ -25086,7 +25085,7 @@ async function completeTask(taskId, options = {}, cwd = process.cwd()) {
           newContent = newContent.replace(line, line.replace("[ ]", "[x]"));
         }
         fs13.writeFileSync(checkpointPath, newContent, "utf-8");
-        console.log("\u2705 \u5DF2\u81EA\u52A8\u6807\u8BB0\u6240\u6709\u68C0\u67E5\u70B9\u4E3A\u5DF2\u5B8C\u6210");
+        console.log("\u2705 All checkpoints auto-marked as completed");
       }
     }
   }
@@ -25094,28 +25093,28 @@ async function completeTask(taskId, options = {}, cwd = process.cwd()) {
   writeTaskMeta(task, cwd);
   console.log("");
   console.log("\u2501".repeat(SEPARATOR_WIDTH));
-  console.log(`\uD83C\uDF89 \u4EFB\u52A1 ${taskId} \u5DF2\u5B8C\u6210\uFF01`);
+  console.log(`\uD83C\uDF89 Task ${taskId} Completed\uFF01`);
   console.log("");
-  console.log(`   \u6807\u9898: ${task.title}`);
-  console.log(`   \u72B6\u6001: \u2705 \u5DF2\u89E3\u51B3`);
+  console.log(`   Title: ${task.title}`);
+  console.log(`   Status: \u2705 Resolved`);
   console.log("");
   console.log("\u2501".repeat(SEPARATOR_WIDTH));
   if (!options.yes) {
     console.log("");
-    console.log("\uD83D\uDCA1 \u63D0\u793A: \u5EFA\u8BAE\u4E3A\u4EFB\u52A1\u6DFB\u52A0\u5B8C\u6210\u8BF4\u660E\uFF0C\u8BB0\u5F55\u89E3\u51B3\u65B9\u6848\u548C\u7ECF\u9A8C");
+    console.log("\uD83D\uDCA1 Tip: Recommend adding completion notes to record solution and experience");
     console.log("");
     const addNote = await import_prompts2.default({
       type: "confirm",
       name: "confirm",
-      message: "\u662F\u5426\u6DFB\u52A0\u5B8C\u6210\u8BF4\u660E?",
+      message: "\u662F\u5426\u6DFB\u52A0\u5B8C\u6210Description?",
       initial: true
     });
     if (addNote.confirm) {
       const noteResponse = await import_prompts2.default({
         type: "text",
         name: "note",
-        message: "\u8BF7\u8F93\u5165\u5B8C\u6210\u8BF4\u660E\uFF08\u89E3\u51B3\u65B9\u6848\u3001\u5173\u952E\u51B3\u7B56\u7B49\uFF09:",
-        validate: (value) => value.trim().length > 0 ? true : "\u8BF4\u660E\u4E0D\u80FD\u4E3A\u7A7A"
+        message: "\u8BF7\u8F93\u5165\u5B8C\u6210Description\uFF08\u89E3\u51B3\u65B9\u6848, \u5173\u952E\u51B3\u7B56\u7B49\uFF09:",
+        validate: (value) => value.trim().length > 0 ? true : "Description\u4E0D\u80FD\u4E3A\u7A7A"
       });
       if (noteResponse.note) {
         if (!task.history) {
@@ -25123,7 +25122,7 @@ async function completeTask(taskId, options = {}, cwd = process.cwd()) {
         }
         task.history.push({
           timestamp: new Date().toISOString(),
-          action: "\u6DFB\u52A0\u5B8C\u6210\u8BF4\u660E",
+          action: "\u6DFB\u52A0\u5B8C\u6210Description",
           field: "completionNote",
           newValue: noteResponse.note
         });
@@ -25133,42 +25132,42 @@ async function completeTask(taskId, options = {}, cwd = process.cwd()) {
           fs13.mkdirSync(notesDir, { recursive: true });
         }
         const notePath = path11.join(notesDir, `completion-${new Date().toISOString().slice(0, 10)}.md`);
-        fs13.writeFileSync(notePath, `# \u5B8C\u6210\u8BF4\u660E
+        fs13.writeFileSync(notePath, `# \u5B8C\u6210Description
 
 ${noteResponse.note}
 `, "utf-8");
         writeTaskMeta(task, cwd);
         console.log("");
-        console.log("\u2705 \u5B8C\u6210\u8BF4\u660E\u5DF2\u4FDD\u5B58");
+        console.log("\u2705 Completion note saved");
       }
     }
   }
 }
 function showTaskHistory(taskId, cwd = process.cwd()) {
   if (!isInitialized(cwd)) {
-    console.error("\u9519\u8BEF: \u9879\u76EE\u672A\u521D\u59CB\u5316\u3002\u8BF7\u5148\u8FD0\u884C `projmnt4claude setup`");
+    console.error("Error: Project not initialized. Please run `projmnt4claude setup` first");
     process.exit(1);
   }
   const task = readTaskMeta(taskId, cwd);
   if (!task) {
-    console.error(`\u9519\u8BEF: \u4EFB\u52A1 '${taskId}' \u4E0D\u5B58\u5728`);
+    console.error(`Error: Task '${taskId}' does not exist`);
     process.exit(1);
   }
   console.log("");
   console.log("\u2501".repeat(SEPARATOR_WIDTH));
-  console.log(`\uD83D\uDCDC \u4EFB\u52A1\u5386\u53F2: ${taskId}`);
+  console.log(`\uD83D\uDCDC Task History: ${taskId}`);
   console.log("\u2501".repeat(SEPARATOR_WIDTH));
   console.log("");
-  console.log(`\uD83D\uDCCC \u6807\u9898: ${task.title}`);
-  console.log(`\uD83D\uDCCA \u5F53\u524D\u72B6\u6001: ${formatStatus(task.status)}`);
+  console.log(`\uD83D\uDCCC Title: ${task.title}`);
+  console.log(`\uD83D\uDCCA Current Status: ${formatStatus(task.status)}`);
   console.log("");
   if (!task.history || task.history.length === 0) {
-    console.log("\u6682\u65E0\u5386\u53F2\u8BB0\u5F55");
+    console.log("No history records");
     console.log("");
     return;
   }
   console.log("\u2501".repeat(SEPARATOR_WIDTH));
-  console.log("\uD83D\uDCDD \u53D8\u66F4\u5386\u53F2:");
+  console.log("\uD83D\uDCDD Change History:");
   console.log("");
   const meaningfulHistory = filterMeaningfulHistory(task.history);
   const sortedHistory = [...meaningfulHistory].reverse();
@@ -25184,27 +25183,27 @@ function showTaskHistory(taskId, cwd = process.cwd()) {
     });
     console.log(`[${timeStr}] ${entry.action}`);
     if (entry.field && entry.oldValue !== undefined && entry.newValue !== undefined) {
-      console.log(`         \u5B57\u6BB5: ${entry.field}`);
-      console.log(`         \u65E7\u503C: ${entry.oldValue}`);
-      console.log(`         \u65B0\u503C: ${entry.newValue}`);
+      console.log(`         Field: ${entry.field}`);
+      console.log(`         Old Value: ${entry.oldValue}`);
+      console.log(`         New Value: ${entry.newValue}`);
     }
     if (entry.reason) {
-      console.log(`         \u539F\u56E0: ${entry.reason}`);
+      console.log(`         Reason: ${entry.reason}`);
     }
     if (entry.relatedIssue) {
-      console.log(`         \u5173\u8054: ${entry.relatedIssue}`);
+      console.log(`         Related: ${entry.relatedIssue}`);
     }
     if (entry.verificationDetails) {
-      console.log(`         \u8BE6\u60C5: ${entry.verificationDetails}`);
+      console.log(`         Details: ${entry.verificationDetails}`);
     }
     console.log("");
   }
   if (totalCount > MAX_HISTORY_DISPLAY) {
-    console.log(`   ... \u7701\u7565\u4E86 ${totalCount - MAX_HISTORY_DISPLAY} \u6761\u5386\u53F2\u8BB0\u5F55`);
+    console.log(`   ... omitted ${totalCount - MAX_HISTORY_DISPLAY}  history records`);
     console.log("");
   }
   console.log("\u2501".repeat(SEPARATOR_WIDTH));
-  console.log(`\uD83D\uDCCA \u7EDF\u8BA1: \u5171 ${task.history.length} \u6761\u5386\u53F2\u8BB0\u5F55\uFF0C\u8FC7\u6EE4\u540E ${meaningfulHistory.length} \u6761${totalCount > MAX_HISTORY_DISPLAY ? `\uFF0C\u663E\u793A\u6700\u8FD1 ${MAX_HISTORY_DISPLAY} \u6761` : ""}`);
+  console.log(`\uD83D\uDCCA Statistics: Total ${task.history.length}  history records, filtered ${meaningfulHistory.length} ${totalCount > MAX_HISTORY_DISPLAY ? `, showing last ${MAX_HISTORY_DISPLAY} ` : ""}`);
   console.log("");
 }
 function addHistoryEntry(taskId, entry, cwd = process.cwd()) {
@@ -25228,44 +25227,44 @@ function addHistoryEntry(taskId, entry, cwd = process.cwd()) {
 }
 async function executeTask(taskId, cwd = process.cwd()) {
   if (!isInitialized(cwd)) {
-    console.error("\u9519\u8BEF: \u9879\u76EE\u672A\u521D\u59CB\u5316\u3002\u8BF7\u5148\u8FD0\u884C `projmnt4claude setup`");
+    console.error("Error: Project not initialized. Please run `projmnt4claude setup` first");
     process.exit(1);
   }
   if (!isValidTaskId(taskId)) {
-    console.error(`\u9519\u8BEF: \u65E0\u6548\u7684\u4EFB\u52A1ID\u683C\u5F0F '${taskId}'`);
+    console.error(`Error: Invalid task ID format '${taskId}'`);
     process.exit(1);
   }
   const task = readTaskMeta(taskId, cwd);
   if (!task) {
-    console.error(`\u9519\u8BEF: \u4EFB\u52A1 '${taskId}' \u4E0D\u5B58\u5728`);
+    console.error(`Error: Task '${taskId}' does not exist`);
     process.exit(1);
   }
   console.log("");
   console.log("\u2501".repeat(SEPARATOR_WIDTH));
-  console.log(`\uD83D\uDCCB \u4EFB\u52A1\u6267\u884C\u5F15\u5BFC: ${task.id}`);
+  console.log(`\uD83D\uDCCB Task Execution Guide: ${task.id}`);
   console.log("\u2501".repeat(SEPARATOR_WIDTH));
   console.log("");
   if ((task.reopenCount || 0) > 0 && task.status === "open") {
-    console.log("\u26A0\uFE0F  \u6CE8\u610F: \u6B64\u4EFB\u52A1\u5DF2\u88AB\u91CD\u5F00\u8FC7\uFF01");
-    console.log(`   \u91CD\u5F00\u6B21\u6570: ${task.reopenCount}\uFF0C\u8BF7\u4ED4\u7EC6\u8C03\u67E5\u4EFB\u52A1\u5386\u53F2\u3002`);
-    console.log("   \u5EFA\u8BAE\u5148\u67E5\u770B\u4EFB\u52A1\u8BE6\u60C5\u548C\u68C0\u67E5\u70B9\u8BB0\u5F55\u3002");
+    console.log("\u26A0\uFE0F Note: This task has been reopened!");
+    console.log(`   Reopen Count: ${task.reopenCount}, Please investigate task history carefully\u3002`);
+    console.log("   Recommend checking task details and checkpoint records first\u3002");
     console.log("");
   }
-  console.log(`\uD83D\uDCCC \u6807\u9898: ${task.title}`);
-  console.log(`\uD83D\uDCCA \u72B6\u6001: ${formatStatus(task.status)}`);
-  console.log(`\uD83C\uDFAF \u4F18\u5148\u7EA7: ${formatPriority(task.priority)}`);
+  console.log(`\uD83D\uDCCC Title: ${task.title}`);
+  console.log(`\uD83D\uDCCA Status: ${formatStatus(task.status)}`);
+  console.log(`\uD83C\uDFAF Priority: ${formatPriority(task.priority)}`);
   if (task.description) {
-    console.log(`\uD83D\uDCDD \u63CF\u8FF0: ${task.description}`);
+    console.log(`\uD83D\uDCDD Description: ${task.description}`);
   }
   if (task.recommendedRole) {
-    console.log(`\uD83D\uDC64 \u63A8\u8350\u89D2\u8272: ${task.recommendedRole}`);
+    console.log(`\uD83D\uDC64 Recommended Role: ${task.recommendedRole}`);
   }
   if (task.branch) {
-    console.log(`\uD83C\uDF3F \u5173\u8054\u5206\u652F: ${task.branch}`);
+    console.log(`\uD83C\uDF3F Associated Branch: ${task.branch}`);
   }
   if (task.dependencies.length > 0) {
     console.log("");
-    console.log("\uD83D\uDD17 \u4F9D\u8D56\u4EFB\u52A1:");
+    console.log("\uD83D\uDD17 Dependency Tasks:");
     const allExTasks = getAllTasks(cwd);
     const exGraph = DependencyGraph.fromTasks(allExTasks);
     const upstreamIds = exGraph.getDirectUpstream(taskId);
@@ -25274,7 +25273,7 @@ async function executeTask(taskId, cwd = process.cwd()) {
       const depTask = readTaskMeta(depId, cwd);
       const status = depTask ? terminalStatuses.has(depTask.status) ? "\u2705" : "\u274C" : "\u2753";
       const upstreamValid = upstreamIds.includes(depId);
-      const graphTag = upstreamValid ? "" : " (\u26A0\uFE0F \u56FE\u4E2D\u4E0D\u5B58\u5728)";
+      const graphTag = upstreamValid ? "" : " (\u26A0\uFE0F in graphdoes not exist)";
       return `   ${status} ${depId}${graphTag}`;
     });
     console.log(depsStatus.join(`
@@ -25285,73 +25284,73 @@ async function executeTask(taskId, cwd = process.cwd()) {
     });
     if (uncompletedDeps.length > 0) {
       console.log("");
-      console.log("\u26A0\uFE0F  \u6CE8\u610F: \u5B58\u5728\u672A\u5B8C\u6210\u7684\u4F9D\u8D56\u4EFB\u52A1\uFF0C\u5EFA\u8BAE\u5148\u5B8C\u6210\u4F9D\u8D56\u9879\u3002");
+      console.log("\u26A0\uFE0F Note: Incomplete dependencies exist, recommend completing them first.");
     }
   }
   const taskDir = path11.join(getTasksDir(cwd), taskId);
   const checkpointPath = path11.join(taskDir, "checkpoint.md");
   console.log("");
   console.log("\u2501".repeat(SEPARATOR_WIDTH));
-  console.log("\u2705 \u68C0\u67E5\u70B9\u6E05\u5355");
+  console.log("\u2705 Checkpoint List");
   console.log("\u2501".repeat(SEPARATOR_WIDTH));
   if (fs13.existsSync(checkpointPath)) {
     const content = fs13.readFileSync(checkpointPath, "utf-8");
     console.log(content);
   } else {
-    console.log("\u6682\u65E0\u68C0\u67E5\u70B9");
+    console.log("No checkpoints");
   }
   console.log("");
   console.log("\u2501".repeat(SEPARATOR_WIDTH));
-  console.log("\uD83D\uDCA1 \u5DE5\u4F5C\u5EFA\u8BAE");
+  console.log("\uD83D\uDCA1 Work Recommendations");
   console.log("\u2501".repeat(SEPARATOR_WIDTH));
   console.log("");
-  console.log("1. \u4ED4\u7EC6\u9605\u8BFB\u4EFB\u52A1\u63CF\u8FF0\u548C\u68C0\u67E5\u70B9\u8981\u6C42");
-  console.log("2. \u6309\u7167\u68C0\u67E5\u70B9\u9010\u9879\u5B8C\u6210\u5DE5\u4F5C");
-  console.log("3. \u5B8C\u6210\u540E\u8FD0\u884C\u4EE5\u4E0B\u547D\u4EE4\u9A8C\u8BC1\u68C0\u67E5\u70B9:");
+  console.log("1. Read task description and checkpoint requirements carefully");
+  console.log("2. Complete work checkpoint by checkpoint");
+  console.log("3. After completion, run the following command to verify checkpoints:");
   console.log(`   projmnt4claude task checkpoint verify ${taskId}`);
-  console.log("4. \u9A8C\u8BC1\u540E\u4F1A\u751F\u6210\u786E\u8BA4\u4EE4\u724C\uFF0C\u590D\u5236\u4EE4\u724C");
-  console.log("5. \u4F7F\u7528\u4EE4\u724C\u5B8C\u6210\u4EFB\u52A1\u72B6\u6001\u66F4\u65B0:");
-  console.log(`   projmnt4claude task update ${taskId} --status resolved --token <\u4EE4\u724C>`);
+  console.log("4. Verification will generate confirmation token, copy the token");
+  console.log("5. Use token to complete task status update:");
+  console.log(`   projmnt4claude task update ${taskId} --status resolved --token <token>`);
   console.log("");
   if (task.status === "open") {
     const response = await import_prompts2.default({
       type: "confirm",
       name: "start",
-      message: '\u662F\u5426\u5C06\u4EFB\u52A1\u72B6\u6001\u66F4\u65B0\u4E3A"\u8FDB\u884C\u4E2D"?',
+      message: '\u662F\u5426\u5C06TaskStatusUpdated\u4E3A"In Progress"?',
       initial: true
     });
     if (response.start) {
       task.status = "in_progress";
       writeTaskMeta(task, cwd);
-      console.log(`\u2705 \u4EFB\u52A1 ${taskId} \u72B6\u6001\u5DF2\u66F4\u65B0\u4E3A"\u8FDB\u884C\u4E2D"`);
+      console.log(`\u2705 Task ${taskId} status updated to"In Progress"`);
     }
   }
 }
 async function completeCheckpoint(taskId, options = {}, cwd = process.cwd()) {
   if (!isInitialized(cwd)) {
-    console.error("\u9519\u8BEF: \u9879\u76EE\u672A\u521D\u59CB\u5316\u3002\u8BF7\u5148\u8FD0\u884C `projmnt4claude setup`");
+    console.error("Error: Project not initialized. Please run `projmnt4claude setup` first");
     process.exit(1);
   }
   const task = readTaskMeta(taskId, cwd);
   if (!task) {
-    console.error(`\u9519\u8BEF: \u4EFB\u52A1 '${taskId}' \u4E0D\u5B58\u5728`);
+    console.error(`Error: Task '${taskId}' does not exist`);
     process.exit(1);
   }
   const taskDir = path11.join(getTasksDir(cwd), taskId);
   const checkpointPath = path11.join(taskDir, "checkpoint.md");
   if (!fs13.existsSync(checkpointPath)) {
-    console.log("\u6682\u65E0\u68C0\u67E5\u70B9\u6587\u4EF6");
+    console.log("No checkpoint file");
     return;
   }
   const content = fs13.readFileSync(checkpointPath, "utf-8");
   const lines = content.split(`
 `).filter((line) => line.trim().startsWith("- ["));
   if (lines.length === 0) {
-    console.log("\u68C0\u67E5\u70B9\u6587\u4EF6\u4E2D\u6CA1\u6709\u627E\u5230\u68C0\u67E5\u9879");
+    console.log("No checkpoint items found in file");
     return;
   }
   console.log("");
-  console.log("\uD83D\uDCCB \u68C0\u67E5\u70B9\u786E\u8BA4");
+  console.log("\uD83D\uDCCB Checkpoint Confirmation");
   console.log("\u2501".repeat(SEPARATOR_WIDTH));
   console.log("");
   let allPassed = true;
@@ -25362,21 +25361,21 @@ async function completeCheckpoint(taskId, options = {}, cwd = process.cwd()) {
     if (!isChecked) {
       if (options.yes) {
         updatedLines.push(line.replace("[ ]", "[x]"));
-        console.log(`   \u2705 ${checkText} (\u81EA\u52A8\u786E\u8BA4)`);
+        console.log(`   \u2705 ${checkText} (auto-confirmed)`);
       } else {
         const response = await import_prompts2.default({
           type: "confirm",
           name: "passed",
-          message: `\u68C0\u67E5\u70B9: ${checkText}`,
+          message: `Checkpoints: ${checkText}`,
           initial: false
         });
         if (response.passed) {
           updatedLines.push(line.replace("[ ]", "[x]"));
-          console.log(`   \u2705 \u5DF2\u901A\u8FC7`);
+          console.log(`   \u2705 passed`);
         } else {
           updatedLines.push(line);
           allPassed = false;
-          console.log(`   \u274C \u672A\u901A\u8FC7`);
+          console.log(`   \u274C failed`);
         }
       }
     } else {
@@ -25391,89 +25390,89 @@ async function completeCheckpoint(taskId, options = {}, cwd = process.cwd()) {
   console.log("");
   console.log("\u2501".repeat(SEPARATOR_WIDTH));
   if (allPassed) {
-    console.log("\uD83C\uDF89 \u6240\u6709\u68C0\u67E5\u70B9\u5DF2\u901A\u8FC7\uFF01");
+    console.log("\uD83C\uDF89 All checkpoints passed!");
     console.log("");
-    console.log("\u5EFA\u8BAE\u8FD0\u884C\u4EE5\u4E0B\u547D\u4EE4\u5B8C\u6210\u4EFB\u52A1:");
+    console.log("Recommend running the following command to complete task:");
     console.log(`   projmnt4claude task update ${taskId} --status resolved`);
     if (options.yes) {
       task.status = "resolved";
       writeTaskMeta(task, cwd);
-      console.log(`\u2705 \u4EFB\u52A1 ${taskId} \u5DF2\u81EA\u52A8\u6807\u8BB0\u4E3A\u5DF2\u89E3\u51B3`);
+      console.log(`\u2705 Task ${taskId} auto-marked as resolved`);
     } else {
       const response = await import_prompts2.default({
         type: "confirm",
         name: "complete",
-        message: "\u662F\u5426\u7ACB\u5373\u5C06\u4EFB\u52A1\u6807\u8BB0\u4E3A\u5DF2\u89E3\u51B3?",
+        message: "\u662F\u5426\u7ACB\u5373\u5C06Task\u6807\u8BB0\u4E3AResolved?",
         initial: true
       });
       if (response.complete) {
         task.status = "resolved";
         writeTaskMeta(task, cwd);
-        console.log(`\u2705 \u4EFB\u52A1 ${taskId} \u5DF2\u6807\u8BB0\u4E3A\u5DF2\u89E3\u51B3`);
+        console.log(`\u2705 Task ${taskId} marked as resolved`);
       }
     }
   } else {
-    console.log("\u26A0\uFE0F  \u90E8\u5206\u68C0\u67E5\u70B9\u672A\u901A\u8FC7\uFF0C\u8BF7\u7EE7\u7EED\u5DE5\u4F5C");
+    console.log("\u26A0\uFE0F Some checkpoints failed, please continue working");
   }
 }
 async function verifyCheckpoint(taskId, cwd = process.cwd()) {
   if (!isInitialized(cwd)) {
-    console.error("\u9519\u8BEF: \u9879\u76EE\u672A\u521D\u59CB\u5316\u3002\u8BF7\u5148\u8FD0\u884C `projmnt4claude setup`");
+    console.error("Error: Project not initialized. Please run `projmnt4claude setup` first");
     process.exit(1);
   }
   const task = readTaskMeta(taskId, cwd);
   if (!task) {
-    console.error(`\u9519\u8BEF: \u4EFB\u52A1 '${taskId}' \u4E0D\u5B58\u5728`);
+    console.error(`Error: Task '${taskId}' does not exist`);
     process.exit(1);
   }
   const taskDir = path11.join(getTasksDir(cwd), taskId);
   const checkpointPath = path11.join(taskDir, "checkpoint.md");
   const checkpoints = parseCheckpoints(checkpointPath);
   if (checkpoints.length === 0) {
-    console.log("\u6682\u65E0\u68C0\u67E5\u70B9");
+    console.log("No checkpoints");
     return;
   }
   console.log("");
   console.log("\u2501".repeat(SEPARATOR_WIDTH));
-  console.log(`\uD83D\uDD0D \u68C0\u67E5\u70B9\u9A8C\u8BC1: ${taskId}`);
+  console.log(`\uD83D\uDD0D CheckpointsVerification: ${taskId}`);
   console.log("\u2501".repeat(SEPARATOR_WIDTH));
   console.log("");
   const uncheckedCheckpoints = checkpoints.filter((cp) => !cp.checked);
   const checkedCheckpoints = checkpoints.filter((cp) => cp.checked);
-  console.log(`\u603B\u8BA1: ${checkpoints.length} \u4E2A\u68C0\u67E5\u70B9`);
-  console.log(`\u2705 \u5DF2\u901A\u8FC7: ${checkedCheckpoints.length}`);
-  console.log(`\u23F3 \u5F85\u5B8C\u6210: ${uncheckedCheckpoints.length}`);
+  console.log(`Total: ${checkpoints.length} checkpoints`);
+  console.log(`\u2705 passed: ${checkedCheckpoints.length}`);
+  console.log(`\u23F3 pending: ${uncheckedCheckpoints.length}`);
   console.log("");
   if (uncheckedCheckpoints.length > 0) {
-    console.log("\u5F85\u5B8C\u6210\u7684\u68C0\u67E5\u70B9:");
+    console.log("Pending checkpoints:");
     uncheckedCheckpoints.forEach((cp, idx) => {
       console.log(`  ${idx + 1}. ${cp.text}`);
     });
     console.log("");
-    console.log("\u26A0\uFE0F  \u8BF7\u5148\u5B8C\u6210\u6240\u6709\u68C0\u67E5\u70B9\u540E\u518D\u9A8C\u8BC1");
+    console.log("\u26A0\uFE0F  Please complete all checkpoints before verification");
     return;
   }
   const token = generateCheckpointToken();
   task.checkpointConfirmationToken = token;
   writeTaskMeta(task, cwd);
   console.log("\u2501".repeat(SEPARATOR_WIDTH));
-  console.log("\u2705 \u6240\u6709\u68C0\u67E5\u70B9\u5DF2\u9A8C\u8BC1\u901A\u8FC7\uFF01");
+  console.log("\u2705 All checkpoints verified!");
   console.log("");
-  console.log("\uD83D\uDD10 \u68C0\u67E5\u70B9\u786E\u8BA4\u4EE4\u724C\u5DF2\u751F\u6210:");
+  console.log("\uD83D\uDD10 Checkpoint confirmation token generated:");
   console.log(`   ${token}`);
   console.log("");
-  console.log("\u8BF7\u4F7F\u7528\u4EE5\u4E0B\u547D\u4EE4\u5B8C\u6210\u4EFB\u52A1\u72B6\u6001\u66F4\u65B0:");
+  console.log("Please use the following command to complete task status update:");
   console.log(`   projmnt4claude task update ${taskId} --status resolved --token ${token}`);
   console.log("");
 }
 async function addSubtask(parentId, title, cwd = process.cwd()) {
   if (!isInitialized(cwd)) {
-    console.error("\u9519\u8BEF: \u9879\u76EE\u672A\u521D\u59CB\u5316\u3002\u8BF7\u5148\u8FD0\u884C `projmnt4claude setup`");
+    console.error("Error: Project not initialized. Please run `projmnt4claude setup` first");
     process.exit(1);
   }
   const parentTask = readTaskMeta(parentId, cwd);
   if (!parentTask) {
-    console.error(`\u9519\u8BEF: \u7236\u4EFB\u52A1 ${parentId} \u4E0D\u5B58\u5728`);
+    console.error(`Error: Parent task ${parentId} does not exist`);
     process.exit(1);
   }
   const { generateSubtaskId: generateSubtaskId2, addSubtaskToParent: addSubtaskToParent2 } = await Promise.resolve().then(() => (init_task2(), exports_task2));
@@ -25484,87 +25483,87 @@ async function addSubtask(parentId, title, cwd = process.cwd()) {
   writeTaskMeta(subtask, cwd);
   const taskDir = path11.join(getTasksDir(cwd), subtaskId);
   const checkpointPath = path11.join(taskDir, "checkpoint.md");
-  fs13.writeFileSync(checkpointPath, `# ${subtaskId} \u68C0\u67E5\u70B9
+  fs13.writeFileSync(checkpointPath, `# ${subtaskId} Checkpoints
 
-- [ ] \u68C0\u67E5\u70B91
-- [ ] \u68C0\u67E5\u70B92
+- [ ] Checkpoints1
+- [ ] Checkpoints2
 `, "utf-8");
   addSubtaskToParent2(parentId, subtaskId, cwd);
   console.log(`
-\u2705 \u5B50\u4EFB\u52A1\u521B\u5EFA\u6210\u529F!`);
-  console.log(`   \u5B50\u4EFB\u52A1 ID: ${subtaskId}`);
-  console.log(`   \u7236\u4EFB\u52A1 ID: ${parentId}`);
-  console.log(`   \u6807\u9898: ${title}`);
-  console.log(`   \u4F18\u5148\u7EA7: ${formatPriority(subtask.priority)}`);
+\u2705 Subtask created successfully!`);
+  console.log(`   Subtasks ID: ${subtaskId}`);
+  console.log(`   Parent task ID: ${parentId}`);
+  console.log(`   Title: ${title}`);
+  console.log(`   Priority: ${formatPriority(subtask.priority)}`);
 }
 async function syncChildren(parentTaskId, options = {}, cwd = process.cwd()) {
   if (!isInitialized(cwd)) {
-    console.error("\u274C \u9519\u8BEF: \u9879\u76EE\u5C1A\u672A\u521D\u59CB\u5316");
+    console.error("\u274C Error: Project not initialized");
     process.exit(1);
   }
   const parentTask = readTaskMeta(parentTaskId, cwd);
   if (!parentTask) {
-    console.error(`\u274C \u9519\u8BEF: \u4EFB\u52A1 ${parentTaskId} \u4E0D\u5B58\u5728`);
+    console.error(`\u274C Error: Task ${parentTaskId} does not exist`);
     process.exit(1);
   }
   const childrenToSync = options.children || parentTask.subtaskIds || [];
   if (childrenToSync.length === 0) {
     console.log(`
-\u26A0\uFE0F  \u4EFB\u52A1 ${parentTaskId} \u6CA1\u6709\u5B50\u4EFB\u52A1\uFF0C\u65E0\u9700\u540C\u6B65`);
+\u26A0\uFE0F  Task ${parentTaskId} has no subtasks, none need sync`);
     return;
   }
   const targetStatus = options.targetStatus || parentTask.status;
   console.log(`
-\uD83D\uDCCB \u540C\u6B65\u5B50\u4EFB\u52A1\u72B6\u6001`);
-  console.log(`   \u7236\u4EFB\u52A1: ${parentTaskId} (${parentTask.status})`);
-  console.log(`   \u76EE\u6807\u72B6\u6001: ${targetStatus}`);
-  console.log(`   \u5B50\u4EFB\u52A1\u6570\u91CF: ${childrenToSync.length}`);
+\uD83D\uDCCB Sync Subtask Status`);
+  console.log(`   Parent Task: ${parentTaskId} (${parentTask.status})`);
+  console.log(`   Target Status: ${targetStatus}`);
+  console.log(`   Subtask Count: ${childrenToSync.length}`);
   console.log("");
   let syncedCount = 0;
   let skippedCount = 0;
   for (const childId of childrenToSync) {
     const childTask = readTaskMeta(childId, cwd);
     if (!childTask) {
-      console.log(`   \u26A0\uFE0F  ${childId}: \u4E0D\u5B58\u5728\uFF0C\u8DF3\u8FC7`);
+      console.log(`   \u26A0\uFE0F  ${childId}: does not exist, skipped`);
       skippedCount++;
       continue;
     }
     const normalizedChildStatus = normalizeStatus(childTask.status);
     const normalizedTargetStatus = normalizeStatus(targetStatus);
     if (normalizedChildStatus === normalizedTargetStatus) {
-      console.log(`   \u23ED\uFE0F  ${childId}: \u5DF2\u7ECF\u662F ${childTask.status}\uFF0C\u8DF3\u8FC7`);
+      console.log(`   \u23ED\uFE0F  ${childId}: already is ${childTask.status}, skipped`);
       skippedCount++;
       continue;
     }
     if (normalizedChildStatus === "closed" || normalizedChildStatus === "abandoned") {
-      console.log(`   \u23ED\uFE0F  ${childId}: \u72B6\u6001\u4E3A ${childTask.status}\uFF0C\u8DF3\u8FC7`);
+      console.log(`   \u23ED\uFE0F  ${childId}: Status is ${childTask.status}, skipped`);
       skippedCount++;
       continue;
     }
     const oldStatus = childTask.status;
     childTask.status = targetStatus;
     addHistoryEntry(childId, {
-      action: `\u72B6\u6001\u4ECE ${oldStatus} \u540C\u6B65\u4E3A ${targetStatus}`,
+      action: `Status\u4ECE ${oldStatus} synced to ${targetStatus}`,
       field: "status",
       oldValue: oldStatus,
       newValue: targetStatus,
-      reason: `\u7236\u4EFB\u52A1 ${parentTaskId} \u72B6\u6001\u540C\u6B65`
+      reason: `Parent task ${parentTaskId} Status\u540C\u6B65`
     }, cwd);
     writeTaskMeta(childTask, cwd);
     console.log(`   \u2705 ${childId}: ${oldStatus} \u2192 ${targetStatus}`);
     syncedCount++;
   }
   console.log("");
-  console.log(`\u2705 \u540C\u6B65\u5B8C\u6210: ${syncedCount} \u4E2A\u5B50\u4EFB\u52A1\u5DF2\u66F4\u65B0, ${skippedCount} \u4E2A\u8DF3\u8FC7`);
+  console.log(`\u2705 Sync completed: ${syncedCount} subtasks updated, ${skippedCount} skipped`);
 }
 async function updateCheckpoint(taskId, checkpointId, action, options = {}, cwd = process.cwd()) {
   if (!isInitialized(cwd)) {
-    console.error("\u9519\u8BEF: \u9879\u76EE\u672A\u521D\u59CB\u5316");
+    console.error("Error: Project not initialized");
     process.exit(1);
   }
   const task = readTaskMeta(taskId, cwd);
   if (!task) {
-    console.error(`\u9519\u8BEF: \u4EFB\u52A1 '${taskId}' \u4E0D\u5B58\u5728`);
+    console.error(`Error: Task '${taskId}' does not exist`);
     process.exit(1);
   }
   syncCheckpointsToMeta(taskId, cwd);
@@ -25574,57 +25573,57 @@ async function updateCheckpoint(taskId, checkpointId, action, options = {}, cwd 
         result: options.result,
         note: options.note
       }, cwd);
-      console.log(`\u2705 \u68C0\u67E5\u70B9 ${checkpointId} \u5DF2\u6807\u8BB0\u4E3A\u5B8C\u6210`);
+      console.log(`\u2705 Checkpoints ${checkpointId} marked as completed`);
       if (options.result) {
-        console.log(`   \u9A8C\u8BC1\u7ED3\u679C: ${options.result}`);
+        console.log(`   Verification result: ${options.result}`);
       }
       break;
     case "fail":
       updateCheckpointStatus(taskId, checkpointId, "failed", {
         note: options.note
       }, cwd);
-      console.log(`\u274C \u68C0\u67E5\u70B9 ${checkpointId} \u5DF2\u6807\u8BB0\u4E3A\u5931\u8D25`);
+      console.log(`\u274C Checkpoints ${checkpointId} marked as failed`);
       if (options.note) {
-        console.log(`   \u5907\u6CE8: ${options.note}`);
+        console.log(`   Note: ${options.note}`);
       }
       break;
     case "note":
       if (!options.note) {
-        console.error("\u9519\u8BEF: \u4F7F\u7528 note \u64CD\u4F5C\u9700\u8981\u63D0\u4F9B --note \u53C2\u6570");
+        console.error("Error: Using note action requires --note parameter");
         process.exit(1);
       }
       const checkpoint = getCheckpointDetail(taskId, checkpointId, cwd);
       if (!checkpoint) {
-        console.error(`\u9519\u8BEF: \u68C0\u67E5\u70B9 '${checkpointId}' \u4E0D\u5B58\u5728`);
+        console.error(`Error: Checkpoints '${checkpointId}' does not exist`);
         process.exit(1);
       }
       updateCheckpointStatus(taskId, checkpointId, checkpoint.status, {
         note: options.note
       }, cwd);
-      console.log(`\uD83D\uDCDD \u68C0\u67E5\u70B9 ${checkpointId} \u5907\u6CE8\u5DF2\u66F4\u65B0`);
-      console.log(`   \u5907\u6CE8: ${options.note}`);
+      console.log(`\uD83D\uDCDD Checkpoints ${checkpointId} note updated`);
+      console.log(`   Note: ${options.note}`);
       break;
     case "show":
       const cpDetail = getCheckpointDetail(taskId, checkpointId, cwd);
       if (!cpDetail) {
-        console.error(`\u9519\u8BEF: \u68C0\u67E5\u70B9 '${checkpointId}' \u4E0D\u5B58\u5728`);
+        console.error(`Error: Checkpoints '${checkpointId}' does not exist`);
         process.exit(1);
       }
       displayCheckpointDetail(cpDetail);
       break;
     default:
-      console.error(`\u9519\u8BEF: \u672A\u77E5\u64CD\u4F5C '${action}'`);
+      console.error(`Error: Unknown operation '${action}'`);
       process.exit(1);
   }
 }
 async function listTaskCheckpoints(taskId, options = {}, cwd = process.cwd()) {
   if (!isInitialized(cwd)) {
-    console.error("\u9519\u8BEF: \u9879\u76EE\u672A\u521D\u59CB\u5316");
+    console.error("Error: Project not initialized");
     process.exit(1);
   }
   const task = readTaskMeta(taskId, cwd);
   if (!task) {
-    console.error(`\u9519\u8BEF: \u4EFB\u52A1 '${taskId}' \u4E0D\u5B58\u5728`);
+    console.error(`Error: Task '${taskId}' does not exist`);
     process.exit(1);
   }
   const checkpoints = listCheckpoints(taskId, cwd);
@@ -25633,13 +25632,13 @@ async function listTaskCheckpoints(taskId, options = {}, cwd = process.cwd()) {
     return;
   }
   if (checkpoints.length === 0) {
-    console.log("\u6682\u65E0\u68C0\u67E5\u70B9");
+    console.log("No checkpoints");
     return;
   }
   const separator = options.compact ? "" : "\u2501".repeat(SEPARATOR_WIDTH);
   if (!options.compact) {
     console.log("");
-    console.log(`\uD83D\uDCCB \u68C0\u67E5\u70B9\u5217\u8868 (${checkpoints.length} \u4E2A)`);
+    console.log(`\uD83D\uDCCB Checkpoint List (${checkpoints.length} )`);
     console.log(separator);
   }
   checkpoints.forEach((cp, index) => {
@@ -25648,13 +25647,13 @@ async function listTaskCheckpoints(taskId, options = {}, cwd = process.cwd()) {
       console.log(`${statusIcon} ${cp.id}: ${cp.description}`);
     } else {
       console.log(`${index + 1}. ${statusIcon} ${cp.id}`);
-      console.log(`   \u63CF\u8FF0: ${cp.description}`);
-      console.log(`   \u72B6\u6001: ${cp.status}`);
+      console.log(`   Description: ${cp.description}`);
+      console.log(`   Status: ${cp.status}`);
       if (cp.note) {
-        console.log(`   \u5907\u6CE8: ${cp.note}`);
+        console.log(`   Note: ${cp.note}`);
       }
       if (cp.verification?.result) {
-        console.log(`   \u9A8C\u8BC1\u7ED3\u679C: ${cp.verification.result}`);
+        console.log(`   Verification result: ${cp.verification.result}`);
       }
       console.log("");
     }
@@ -25665,12 +25664,12 @@ async function listTaskCheckpoints(taskId, options = {}, cwd = process.cwd()) {
 }
 async function splitTask(parentId, options = {}, cwd = process.cwd()) {
   if (!isInitialized(cwd)) {
-    console.error("\u9519\u8BEF: \u9879\u76EE\u672A\u521D\u59CB\u5316\u3002\u8BF7\u5148\u8FD0\u884C `projmnt4claude setup`");
+    console.error("Error: Project not initialized. Please run `projmnt4claude setup` first");
     process.exit(1);
   }
   const parentTask = readTaskMeta(parentId, cwd);
   if (!parentTask) {
-    console.error(`\u9519\u8BEF: \u7236\u4EFB\u52A1 ${parentId} \u4E0D\u5B58\u5728`);
+    console.error(`Error: Parent task ${parentId} does not exist`);
     process.exit(1);
   }
   let subtaskTitles = [];
@@ -25683,7 +25682,7 @@ async function splitTask(parentId, options = {}, cwd = process.cwd()) {
     }
   } else {
     if (options.nonInteractive) {
-      console.error("\u9519\u8BEF: \u975E\u4EA4\u4E92\u6A21\u5F0F\u9700\u8981\u6307\u5B9A --into \u6216 --titles");
+      console.error("Error: Non-interactive mode requires --into or --titles");
       process.exit(1);
     }
     const response = await import_prompts2.default({
@@ -25691,25 +25690,25 @@ async function splitTask(parentId, options = {}, cwd = process.cwd()) {
       name: "mode",
       message: "\u9009\u62E9\u62C6\u5206\u65B9\u5F0F:",
       choices: [
-        { title: "\u6309\u6570\u91CF\u62C6\u5206 (\u81EA\u52A8\u751F\u6210\u6807\u9898)", value: "count" },
-        { title: "\u624B\u52A8\u8F93\u5165\u5B50\u4EFB\u52A1\u6807\u9898", value: "titles" }
+        { title: "By \u6570\u91CF\u62C6\u5206 (\u81EA\u52A8\u751F\u6210Title)", value: "count" },
+        { title: "\u624B\u52A8\u8F93\u5165SubtasksTitle", value: "titles" }
       ]
     });
     if (!response.mode) {
-      console.log("\u5DF2\u53D6\u6D88");
+      console.log("Cancelled");
       return;
     }
     if (response.mode === "count") {
       const countResponse = await import_prompts2.default({
         type: "number",
         name: "count",
-        message: "\u62C6\u5206\u4E3A\u51E0\u4E2A\u5B50\u4EFB\u52A1?",
+        message: "\u62C6\u5206\u4E3A\u51E0subtasks?",
         initial: 2,
         min: 2,
         max: 10
       });
       if (!countResponse.count) {
-        console.log("\u5DF2\u53D6\u6D88");
+        console.log("Cancelled");
         return;
       }
       for (let i = 1;i <= countResponse.count; i++) {
@@ -25719,27 +25718,27 @@ async function splitTask(parentId, options = {}, cwd = process.cwd()) {
       const titlesResponse = await import_prompts2.default({
         type: "text",
         name: "titles",
-        message: "\u8F93\u5165\u5B50\u4EFB\u52A1\u6807\u9898 (\u7528\u9017\u53F7\u5206\u9694):",
+        message: "\u8F93\u5165SubtasksTitle (\u7528\u9017\u53F7\u5206\u9694):",
         validate: (value) => {
           const titles = value.split(",").map((t) => t.trim()).filter((t) => t);
-          return titles.length >= 2 ? true : "\u81F3\u5C11\u9700\u8981 2 \u4E2A\u5B50\u4EFB\u52A1";
+          return titles.length >= 2 ? true : "\u81F3\u5C11\u9700\u8981 2 subtasks";
         }
       });
       if (!titlesResponse.titles) {
-        console.log("\u5DF2\u53D6\u6D88");
+        console.log("Cancelled");
         return;
       }
       subtaskTitles = titlesResponse.titles.split(",").map((t) => t.trim()).filter((t) => t);
     }
   }
   if (subtaskTitles.length < 2) {
-    console.error("\u9519\u8BEF: \u81F3\u5C11\u9700\u8981\u62C6\u5206\u4E3A 2 \u4E2A\u5B50\u4EFB\u52A1");
+    console.error("Error: At leastneed to split into 2 subtasks");
     process.exit(1);
   }
   console.log("");
-  console.log(`\uD83D\uDCE6 \u51C6\u5907\u62C6\u5206\u4EFB\u52A1: ${parentId}`);
-  console.log(`   \u6807\u9898: ${parentTask.title}`);
-  console.log(`   \u5B50\u4EFB\u52A1\u6570\u91CF: ${subtaskTitles.length}`);
+  console.log(`\uD83D\uDCE6 Preparing to split task: ${parentId}`);
+  console.log(`   Title: ${parentTask.title}`);
+  console.log(`   Subtask Count: ${subtaskTitles.length}`);
   console.log("");
   const { generateSubtaskId: generateSubtaskId2, addSubtaskToParent: addSubtaskToParent2 } = await Promise.resolve().then(() => (init_task2(), exports_task2));
   const createdSubtaskIds = [];
@@ -25749,17 +25748,17 @@ async function splitTask(parentId, options = {}, cwd = process.cwd()) {
     const subtask = createDefaultTaskMeta(subtaskId, title, parentTask.type || "feature", undefined, "cli");
     subtask.parentId = parentId;
     subtask.priority = parentTask.priority;
-    subtask.description = `\u4ECE ${parentId} \u62C6\u5206\u7684\u5B50\u4EFB\u52A1`;
+    subtask.description = `\u4ECE ${parentId} \u62C6\u5206\u7684Subtasks`;
     writeTaskMeta(subtask, cwd);
     const taskDir = path11.join(getTasksDir(cwd), subtaskId);
     const checkpointPath = path11.join(taskDir, "checkpoint.md");
-    fs13.writeFileSync(checkpointPath, `# ${subtaskId} \u68C0\u67E5\u70B9
+    fs13.writeFileSync(checkpointPath, `# ${subtaskId} Checkpoints
 
-- [ ] \u5B8C\u6210\u4EFB\u52A1
+- [ ] \u5B8C\u6210Task
 `, "utf-8");
     addSubtaskToParent2(parentId, subtaskId, cwd);
     createdSubtaskIds.push(subtaskId);
-    console.log(`   \u2705 \u521B\u5EFA\u5B50\u4EFB\u52A1: ${subtaskId} - ${title}`);
+    console.log(`   \u2705 CreatedSubtasks: ${subtaskId} - ${title}`);
   }
   for (let i = 1;i < createdSubtaskIds.length; i++) {
     const currentId = createdSubtaskIds[i];
@@ -25768,59 +25767,59 @@ async function splitTask(parentId, options = {}, cwd = process.cwd()) {
     if (currentTask) {
       currentTask.dependencies.push(prevId);
       writeTaskMeta(currentTask, cwd);
-      console.log(`   \uD83D\uDD17 \u8BBE\u7F6E\u4F9D\u8D56: ${currentId} \u4F9D\u8D56 ${prevId}`);
+      console.log(`   \uD83D\uDD17 Set dependency: ${currentId} Dependencies ${prevId}`);
     }
   }
   console.log("");
-  console.log("\u2705 \u4EFB\u52A1\u62C6\u5206\u5B8C\u6210!");
+  console.log("\u2705 Task split completed!");
   console.log("");
-  console.log("\uD83D\uDCCB \u5B50\u4EFB\u52A1\u5217\u8868:");
+  console.log("\uD83D\uDCCB Subtask List:");
   createdSubtaskIds.forEach((id, index) => {
-    const depInfo = index > 0 ? ` (\u4F9D\u8D56: ${createdSubtaskIds[index - 1]})` : "";
+    const depInfo = index > 0 ? ` (Dependencies: ${createdSubtaskIds[index - 1]})` : "";
     console.log(`   ${index + 1}. ${id}${depInfo}`);
   });
   console.log("");
-  console.log("\uD83D\uDCA1 \u63D0\u793A: \u4F7F\u7528\u4EE5\u4E0B\u547D\u4EE4\u67E5\u770B\u5B50\u4EFB\u52A1:");
+  console.log("\uD83D\uDCA1 Tip: Use the following command to view subtasks:");
   console.log(`   projmnt4claude task show ${parentId} --checkpoints`);
 }
 function displayCheckpointDetail(checkpoint) {
   console.log("");
-  console.log(`\uD83D\uDCCB \u68C0\u67E5\u70B9\u8BE6\u60C5: ${checkpoint.id}`);
+  console.log(`\uD83D\uDCCB CheckpointsDetails: ${checkpoint.id}`);
   console.log("\u2501".repeat(SEPARATOR_WIDTH));
-  console.log(`\u63CF\u8FF0: ${checkpoint.description}`);
-  console.log(`\u72B6\u6001: ${checkpoint.status}`);
-  console.log(`\u521B\u5EFA\u65F6\u95F4: ${checkpoint.createdAt}`);
-  console.log(`\u66F4\u65B0\u65F6\u95F4: ${checkpoint.updatedAt}`);
+  console.log(`Description: ${checkpoint.description}`);
+  console.log(`Status: ${checkpoint.status}`);
+  console.log(`Created: ${checkpoint.createdAt}`);
+  console.log(`Updated: ${checkpoint.updatedAt}`);
   if (checkpoint.note) {
     console.log("");
-    console.log("\uD83D\uDCDD \u5907\u6CE8:");
+    console.log("\uD83D\uDCDD Note:");
     console.log(`   ${checkpoint.note}`);
   }
   if (checkpoint.verification) {
     console.log("");
-    console.log("\uD83D\uDD0D \u9A8C\u8BC1\u4FE1\u606F:");
-    console.log(`   \u65B9\u6CD5: ${checkpoint.verification.method}`);
+    console.log("\uD83D\uDD0D Verification Info:");
+    console.log(`   Method: ${checkpoint.verification.method}`);
     if (checkpoint.verification.commands && checkpoint.verification.commands.length > 0) {
-      console.log(`   \u547D\u4EE4: ${checkpoint.verification.commands.join(", ")}`);
+      console.log(`   Command: ${checkpoint.verification.commands.join(", ")}`);
     }
     if (checkpoint.verification.expected) {
-      console.log(`   \u671F\u671B\u7ED3\u679C: ${checkpoint.verification.expected}`);
+      console.log(`   Expected Result: ${checkpoint.verification.expected}`);
     }
     if (checkpoint.verification.result) {
-      console.log(`   \u5B9E\u9645\u7ED3\u679C: ${checkpoint.verification.result}`);
+      console.log(`   Actual Result: ${checkpoint.verification.result}`);
     }
     if (checkpoint.verification.verifiedBy) {
-      console.log(`   \u9A8C\u8BC1\u8005: ${checkpoint.verification.verifiedBy}`);
+      console.log(`   Verified By: ${checkpoint.verification.verifiedBy}`);
     }
     if (checkpoint.verification.verifiedAt) {
-      console.log(`   \u9A8C\u8BC1\u65F6\u95F4: ${checkpoint.verification.verifiedAt}`);
+      console.log(`   Verified At: ${checkpoint.verification.verifiedAt}`);
     }
   }
   console.log("");
 }
 function searchTasks(keyword, options = {}, cwd = process.cwd()) {
   if (!isInitialized(cwd)) {
-    console.error("\u9519\u8BEF: \u9879\u76EE\u672A\u521D\u59CB\u5316\u3002\u8BF7\u5148\u8FD0\u884C `projmnt4claude setup`");
+    console.error("Error: Project not initialized. Please run `projmnt4claude setup` first");
     process.exit(1);
   }
   const allTasks = getAllTasks(cwd);
@@ -25842,24 +25841,24 @@ function searchTasks(keyword, options = {}, cwd = process.cwd()) {
     return;
   }
   if (matchedTasks.length === 0) {
-    console.log(`\u672A\u627E\u5230\u5339\u914D "${keyword}" \u7684\u4EFB\u52A1`);
+    console.log(`No matches found for "${keyword}"  tasks`);
     return;
   }
   console.log("");
-  console.log(`\uD83D\uDD0D \u641C\u7D22\u7ED3\u679C: "${keyword}" (${matchedTasks.length} \u4E2A\u5339\u914D)`);
+  console.log(`\uD83D\uDD0D Search Results: "${keyword}" (${matchedTasks.length} matches)`);
   console.log("\u2501".repeat(SEPARATOR_WIDTH));
   console.log("");
   matchedTasks.forEach((task, index) => {
     const statusIcon = task.status === "resolved" || task.status === "closed" ? "\u2705" : task.status === "in_progress" ? "\uD83D\uDD04" : "\u23F3";
     console.log(`${index + 1}. ${statusIcon} ${task.id}`);
-    console.log(`   \u6807\u9898: ${task.title}`);
-    console.log(`   \u72B6\u6001: ${task.status} | \u4F18\u5148\u7EA7: ${task.priority}`);
+    console.log(`   Title: ${task.title}`);
+    console.log(`   Status: ${task.status} | Priority: ${task.priority}`);
     console.log("");
   });
 }
 function countTasks(options = {}, cwd = process.cwd()) {
   if (!isInitialized(cwd)) {
-    console.error("\u9519\u8BEF: \u9879\u76EE\u672A\u521D\u59CB\u5316\u3002\u8BF7\u5148\u8FD0\u884C `projmnt4claude setup`");
+    console.error("Error: Project not initialized. Please run `projmnt4claude setup` first");
     process.exit(1);
   }
   let tasks = getAllTasks(cwd);
@@ -25904,7 +25903,7 @@ function countTasks(options = {}, cwd = process.cwd()) {
     }
     console.log("");
     console.log("\u2501".repeat(SEPARATOR_WIDTH));
-    console.log(`\uD83D\uDCCA \u4EFB\u52A1\u7EDF\u8BA1 (\u6309${options.groupBy === "status" ? "\u72B6\u6001" : options.groupBy === "priority" ? "\u4F18\u5148\u7EA7" : options.groupBy === "type" ? "\u7C7B\u578B" : "\u89D2\u8272"}\u5206\u7EC4)`);
+    console.log(`\uD83D\uDCCA Task Statistics (By ${options.groupBy === "status" ? "status" : options.groupBy === "priority" ? "priority" : options.groupBy === "type" ? "type" : "role"}group)`);
     console.log("\u2501".repeat(SEPARATOR_WIDTH));
     console.log("");
     const statusOrder2 = ["open", "in_progress", "wait_evaluation", "resolved", "closed", "abandoned", "failed"];
@@ -25948,7 +25947,7 @@ function countTasks(options = {}, cwd = process.cwd()) {
       console.log(`  ${label.padEnd(20)} ${bar} ${count}`);
     }
     console.log("");
-    console.log(`\u603B\u8BA1: ${tasks.length} \u4E2A\u4EFB\u52A1`);
+    console.log(`Total: ${tasks.length} tasks`);
     console.log("");
     return;
   }
@@ -25974,10 +25973,10 @@ function countTasks(options = {}, cwd = process.cwd()) {
   }
   console.log("");
   console.log("\u2501".repeat(SEPARATOR_WIDTH));
-  console.log("\uD83D\uDCCA \u4EFB\u52A1\u7EDF\u8BA1");
+  console.log("\uD83D\uDCCA Task Statistics");
   console.log("\u2501".repeat(SEPARATOR_WIDTH));
   console.log("");
-  console.log("\uD83D\uDCCB \u6309\u72B6\u6001:");
+  console.log("\uD83D\uDCCB By Status:");
   const statusOrder = ["open", "in_progress", "wait_evaluation", "resolved", "closed", "abandoned", "failed"];
   for (const status of statusOrder) {
     const count = statusCounts.get(status) || 0;
@@ -25987,7 +25986,7 @@ function countTasks(options = {}, cwd = process.cwd()) {
     }
   }
   console.log("");
-  console.log("\uD83C\uDFAF \u6309\u4F18\u5148\u7EA7:");
+  console.log("\uD83C\uDFAF By Priority:");
   const priorityOrder = ["P0", "P1", "P2", "P3", "Q1", "Q2", "Q3", "Q4"];
   for (const priority of priorityOrder) {
     const count = priorityCounts.get(priority) || 0;
@@ -25998,7 +25997,7 @@ function countTasks(options = {}, cwd = process.cwd()) {
   }
   console.log("");
   if (typeCounts.size > 0) {
-    console.log("\uD83D\uDCC1 \u6309\u7C7B\u578B:");
+    console.log("\uD83D\uDCC1 By Type:");
     for (const [type, count] of typeCounts) {
       const bar = "\u2588".repeat(Math.min(count, 20));
       console.log(`  ${`\uD83D\uDCC1 ${type}`.padEnd(16)} ${bar} ${count}`);
@@ -26006,15 +26005,15 @@ function countTasks(options = {}, cwd = process.cwd()) {
     console.log("");
   }
   console.log("\u2501".repeat(SEPARATOR_WIDTH));
-  console.log(`\uD83D\uDCCC \u603B\u8BA1: ${tasks.length} \u4E2A\u4EFB\u52A1`);
+  console.log(`\uD83D\uDCCC Total: ${tasks.length} tasks`);
   console.log("");
   const completed = (statusCounts.get("resolved") || 0) + (statusCounts.get("closed") || 0);
   const inProgress = statusCounts.get("in_progress") || 0;
   const pending = statusCounts.get("open") || 0;
   if (tasks.length > 0) {
     const completionRate = (completed / tasks.length * 100).toFixed(1);
-    console.log(`\uD83D\uDCC8 \u5B8C\u6210\u7387: ${completionRate}% (${completed}/${tasks.length})`);
-    console.log(`\uD83D\uDD04 \u8FDB\u884C\u4E2D: ${inProgress} | \u23F3 \u5F85\u5904\u7406: ${pending}`);
+    console.log(`\uD83D\uDCC8 Completion rate: ${completionRate}% (${completed}/${tasks.length})`);
+    console.log(`\uD83D\uDD04 In Progress: ${inProgress} | \u23F3 Pending: ${pending}`);
     console.log("");
   }
 }
@@ -26022,16 +26021,16 @@ async function batchUpdateTasks(options = {}, cwd = process.cwd()) {
   const operationStartTime = new Date().toISOString();
   const commandArgs = process.argv.slice(2);
   if (!isInitialized(cwd)) {
-    console.error("\u9519\u8BEF: \u9879\u76EE\u672A\u521D\u59CB\u5316\u3002\u8BF7\u5148\u8FD0\u884C `projmnt4claude setup`");
+    console.error("Error: Project not initialized. Please run `projmnt4claude setup` first");
     process.exit(1);
   }
   if (!options.status && !options.priority) {
-    console.error("\u9519\u8BEF: \u6279\u91CF\u66F4\u65B0\u9700\u8981\u6307\u5B9A --status \u6216 --priority");
+    console.error("Error: Batch update requires --status or --priority");
     process.exit(1);
   }
   if (!options.changeNote || options.changeNote.trim().length < 10) {
-    console.error("\u9519\u8BEF: \u5FC5\u987B\u63D0\u4F9B --change-note \u53C2\u6570\u8BF4\u660E\u4FEE\u6539\u539F\u56E0\uFF0C\u81F3\u5C1110\u4E2A\u5B57\u7B26");
-    console.error('\u793A\u4F8B: --change-note "\u4FEE\u590D\u4E86XX\u95EE\u9898\uFF0C\u5DF2\u901A\u8FC7\u6D4B\u8BD5"');
+    console.error("Error: Must provide --change-note parameter with change description/reason, at least 10 characters");
+    console.error('Example: --change-note "Fixed XX issue, passed testing"');
     process.exit(1);
   }
   const allTasks = getAllTasks(cwd);
@@ -26039,14 +26038,14 @@ async function batchUpdateTasks(options = {}, cwd = process.cwd()) {
   if (options.taskFile) {
     const taskFilePath = path11.resolve(cwd, options.taskFile);
     if (!fs13.existsSync(taskFilePath)) {
-      console.error(`\u9519\u8BEF: \u4EFB\u52A1\u6587\u4EF6\u4E0D\u5B58\u5728: ${taskFilePath}`);
+      console.error(`Error: Task filedoes not exist: ${taskFilePath}`);
       process.exit(1);
     }
     try {
       const fileContent = fs13.readFileSync(taskFilePath, "utf-8");
       specifiedTaskIds = fileContent.split(/[\n,]/).map((id) => id.trim()).filter((id) => id.length > 0);
     } catch (error) {
-      console.error(`\u9519\u8BEF: \u65E0\u6CD5\u8BFB\u53D6\u4EFB\u52A1\u6587\u4EF6: ${error.message}`);
+      console.error(`Error: Cannot readTask file: ${error.message}`);
       process.exit(1);
     }
   }
@@ -26061,7 +26060,7 @@ async function batchUpdateTasks(options = {}, cwd = process.cwd()) {
     const foundIds = new Set(tasksToUpdate.map((t) => t.id));
     const notFoundIds = specifiedTaskIds.filter((id) => !foundIds.has(id));
     if (notFoundIds.length > 0) {
-      console.error(`\u9519\u8BEF: \u4EE5\u4E0B\u4EFB\u52A1\u4E0D\u5B58\u5728: ${notFoundIds.join(", ")}`);
+      console.error(`Error: The following tasksdoes not exist: ${notFoundIds.join(", ")}`);
       process.exit(1);
     }
     filteredTasks = tasksToUpdate.filter((t) => t.status === "resolved" || t.status === "closed" || t.status === "abandoned" || t.status === "failed");
@@ -26073,18 +26072,18 @@ async function batchUpdateTasks(options = {}, cwd = process.cwd()) {
     filteredTasks = options.all ? [] : allTasks.filter((t) => t.status === "resolved" || t.status === "closed" || t.status === "abandoned" || t.status === "failed");
   }
   if (tasksToUpdate.length === 0) {
-    console.log("\u6CA1\u6709\u9700\u8981\u66F4\u65B0\u7684\u4EFB\u52A1");
+    console.log("No tasks to update");
     return;
   }
   console.log("");
-  console.log(`\uD83D\uDCE6 \u6279\u91CF\u66F4\u65B0\u4EFB\u52A1`);
+  console.log(`\uD83D\uDCE6 Batch Update Tasks`);
   console.log("\u2501".repeat(SEPARATOR_WIDTH));
-  console.log(`   \u76EE\u6807\u4EFB\u52A1\u6570: ${tasksToUpdate.length}`);
+  console.log(`   Target task count: ${tasksToUpdate.length}`);
   if (options.status) {
-    console.log(`   \u65B0\u72B6\u6001: ${options.status}`);
+    console.log(`   New status: ${options.status}`);
   }
   if (options.priority) {
-    console.log(`   \u65B0\u4F18\u5148\u7EA7: ${options.priority}`);
+    console.log(`   New priority: ${options.priority}`);
   }
   console.log("");
   const terminalStatuses = ["resolved", "closed", "abandoned"];
@@ -26093,42 +26092,42 @@ async function batchUpdateTasks(options = {}, cwd = process.cwd()) {
   const highRiskCount = reopeningTasks.length;
   if (highRiskCount > 0) {
     console.log("");
-    console.log("\u26A0\uFE0F  \u9AD8\u98CE\u9669\u64CD\u4F5C\u8B66\u544A");
+    console.log("\u26A0\uFE0F High-Risk Operation Warning");
     console.log("\u2501".repeat(SEPARATOR_WIDTH));
-    console.log(`   \u60A8\u6B63\u5728\u5C06 ${highRiskCount} \u4E2A\u5DF2\u7ED3\u675F\u7684\u4EFB\u52A1\u91CD\u65B0\u6253\u5F00:`);
+    console.log(`   You are reopening ${highRiskCount} completed tasks being reopened:`);
     console.log("");
     for (const task of reopeningTasks.slice(0, 5)) {
       console.log(`     \u2022 ${task.id}: ${task.status} \u2192 open (${task.title.slice(0, 40)}${task.title.length > 40 ? "..." : ""})`);
     }
     if (reopeningTasks.length > 5) {
-      console.log(`     ... \u8FD8\u6709 ${reopeningTasks.length - 5} \u4E2A\u4EFB\u52A1`);
+      console.log(`     ... plus ${reopeningTasks.length - 5} tasks`);
     }
     console.log("");
     if (isUsingAllFlag) {
-      console.log("\uD83D\uDEA8 \u4F7F\u7528\u4E86 --all \u9009\u9879");
-      console.log("   \u8FD9\u4F1A\u5BFC\u81F4\u5305\u542B\u6240\u6709\u5DF2\u89E3\u51B3/\u5DF2\u5173\u95ED\u7684\u4EFB\u52A1");
+      console.log("\uD83D\uDEA8 Using --all option");
+      console.log("   This will include all resolved/closed tasks");
       console.log("");
     }
-    console.log("   \u8FD9\u901A\u5E38\u53D1\u751F\u5728\u4EE5\u4E0B\u60C5\u51B5:");
-    console.log("   \u2022 \u8BEF\u64CD\u4F5C\uFF1A\u4F7F\u7528 --yes \u53C2\u6570\u8DF3\u8FC7\u4E86\u786E\u8BA4");
-    console.log("   \u2022 \u81EA\u52A8\u5316\u811A\u672C\uFF1AIDE \u63D2\u4EF6\u6216\u94A9\u5B50\u610F\u5916\u89E6\u53D1");
-    console.log("   \u2022 \u5FEB\u6377\u952E\u51B2\u7A81\uFF1A\u7EC8\u7AEF\u5FEB\u6377\u952E\u8BEF\u89E6\u53D1");
-    console.log("   \u2022 \u4F7F\u7528\u4E86 --all \u9009\u9879\u4F46\u672A\u610F\u8BC6\u5230\u4F1A\u5305\u542B\u5DF2\u89E3\u51B3\u4EFB\u52A1");
+    console.log("   This typically happens when:");
+    console.log("   \u2022 Accidental operation: skipped confirmation with --yes");
+    console.log("   \u2022 Automation scripts: IDE plugin or hooks triggered unexpectedly");
+    console.log("   \u2022 Keyboard shortcut conflicts: Terminal shortcut mis-triggered");
+    console.log("   \u2022 Used --all option without realizing it includes resolved tasks");
     console.log("");
-    console.log("   \u64CD\u4F5C\u5C06\u88AB\u8BB0\u5F55\u5230 batch-update \u65E5\u5FD7\u4F9B\u5BA1\u8BA1");
+    console.log("   Operation will be logged to batch-update log for audit");
     console.log("");
     if (highRiskCount >= 5) {
-      console.log("\uD83D\uDEA8 \u4E25\u91CD\u8B66\u544A: \u5927\u91CF\u4EFB\u52A1\u5C06\u88AB\u91CD\u65B0\u6253\u5F00\uFF01");
-      console.log("   \u8BF7\u786E\u8BA4\u8FD9\u662F\u60A8\u671F\u671B\u7684\u64CD\u4F5C\u3002");
+      console.log("\uD83D\uDEA8 Critical Warning: Large number of tasks will be reopened!");
+      console.log("   Please confirm this is your intended operation.");
       console.log("");
     }
     if ((isUsingAllFlag || highRiskCount >= 5) && options.yes) {
-      console.log("\u26A0\uFE0F  \u5C3D\u7BA1\u4F7F\u7528\u4E86 --yes\uFF0C\u4F46\u6B64\u9AD8\u98CE\u9669\u64CD\u4F5C\u9700\u8981\u989D\u5916\u786E\u8BA4:");
+      console.log("\u26A0\uFE0F  Despite using --yes, this high-risk operation requires additional confirmation:");
       console.log("");
       const extraConfirm = await import_prompts2.default({
         type: "confirm",
         name: "confirmed",
-        message: `\u786E\u8BA4\u8981\u5C06 ${highRiskCount} \u4E2A\u5DF2\u7ED3\u675F\u7684\u4EFB\u52A1\u91CD\u65B0\u6253\u5F00\u5417\uFF1F`,
+        message: `\u786E\u8BA4\u8981\u5C06 ${highRiskCount} completed tasks being reopened\u5417\uFF1F`,
         initial: false
       });
       if (!extraConfirm.confirmed) {
@@ -26147,12 +26146,12 @@ async function batchUpdateTasks(options = {}, cwd = process.cwd()) {
             filteredCount: filteredTasks.length
           }
         }, cwd);
-        console.log("\u5DF2\u53D6\u6D88");
+        console.log("Cancelled");
         return;
       }
     }
   }
-  console.log("   \u5373\u5C06\u66F4\u65B0\u7684\u4EFB\u52A1:");
+  console.log("   Tasks to be updated:");
   for (const task of tasksToUpdate) {
     const changeInfo = [];
     if (options.status && task.status !== options.status) {
@@ -26161,14 +26160,14 @@ async function batchUpdateTasks(options = {}, cwd = process.cwd()) {
     if (options.priority && task.priority !== options.priority) {
       changeInfo.push(`priority: ${task.priority} \u2192 ${options.priority}`);
     }
-    console.log(`     \u2022 ${task.id}: ${changeInfo.join(", ") || "(\u65E0\u53D8\u5316)"}`);
+    console.log(`     \u2022 ${task.id}: ${changeInfo.join(", ") || "(no changes)"}`);
   }
   console.log("");
   if (!options.yes) {
     const response = await import_prompts2.default({
       type: "confirm",
       name: "confirm",
-      message: `\u786E\u8BA4\u66F4\u65B0 ${tasksToUpdate.length} \u4E2A\u4EFB\u52A1?`,
+      message: `\u786E\u8BA4Updated ${tasksToUpdate.length} tasks?`,
       initial: false
     });
     if (!response.confirm) {
@@ -26187,7 +26186,7 @@ async function batchUpdateTasks(options = {}, cwd = process.cwd()) {
           filteredCount: filteredTasks.length
         }
       }, cwd);
-      console.log("\u5DF2\u53D6\u6D88");
+      console.log("Cancelled");
       return;
     }
   }
@@ -26217,7 +26216,7 @@ async function batchUpdateTasks(options = {}, cwd = process.cwd()) {
       }
       task.history.push({
         timestamp: new Date().toISOString(),
-        action: `\u6279\u91CF\u66F4\u65B0: ${oldStatus} \u2192 ${newStatus}`,
+        action: `\u6279\u91CFUpdated: ${oldStatus} \u2192 ${newStatus}`,
         field: "status",
         oldValue: oldStatus,
         newValue: newStatus,
@@ -26234,7 +26233,7 @@ async function batchUpdateTasks(options = {}, cwd = process.cwd()) {
         }
         task.history.push({
           timestamp: new Date().toISOString(),
-          action: `\u6279\u91CF\u66F4\u65B0: \u4F18\u5148\u7EA7 ${oldPriority} \u2192 ${newPriority}`,
+          action: `\u6279\u91CFUpdated: Priority ${oldPriority} \u2192 ${newPriority}`,
           field: "priority",
           oldValue: oldPriority,
           newValue: newPriority,
@@ -26247,7 +26246,7 @@ async function batchUpdateTasks(options = {}, cwd = process.cwd()) {
           timestamp: new Date().toISOString(),
           fromStatus: task.status,
           toStatus: task.status,
-          note: `\u4F18\u5148\u7EA7\u53D8\u66F4: ${oldPriority} \u2192 ${newPriority} | ${options.changeNote}`,
+          note: `PriorityChange: ${oldPriority} \u2192 ${newPriority} | ${options.changeNote}`,
           author: process.env.USER || "batch-update"
         });
       }
@@ -26261,7 +26260,7 @@ async function batchUpdateTasks(options = {}, cwd = process.cwd()) {
       console.log(`   \u2705 ${task.id}`);
       taskChanges.push({
         id: task.id,
-        title: task.title || "(\u65E0\u6807\u9898)",
+        title: task.title || "(NoneTitle)",
         oldStatus,
         newStatus: task.status,
         oldPriority,
@@ -26286,9 +26285,9 @@ async function batchUpdateTasks(options = {}, cwd = process.cwd()) {
     }
   }, cwd);
   console.log("");
-  console.log(`\u2705 \u6279\u91CF\u66F4\u65B0\u5B8C\u6210: ${updatedCount} \u4E2A\u4EFB\u52A1\u5DF2\u66F4\u65B0`);
+  console.log(`\u2705 Batch update completed: ${updatedCount} tasksupdated`);
   console.log("");
-  console.log(`\uD83D\uDCDD \u64CD\u4F5C\u5DF2\u8BB0\u5F55\u5230: .projmnt4claude/logs/batch-update-${operationStartTime.split("T")[0]}.log`);
+  console.log(`\uD83D\uDCDD Operation logged to: .projmnt4claude/logs/batch-update-${operationStartTime.split("T")[0]}.log`);
 }
 function showBatchUpdateLogs(options = {}, cwd = process.cwd()) {
   if (options.summary) {
@@ -26303,35 +26302,35 @@ function showBatchUpdateLogs(options = {}, cwd = process.cwd()) {
 }
 function renameTaskCommand(oldTaskId, newTaskId, cwd = process.cwd()) {
   if (!isInitialized(cwd)) {
-    console.error("\u9519\u8BEF: \u9879\u76EE\u672A\u521D\u59CB\u5316\u3002\u8BF7\u5148\u8FD0\u884C `projmnt4claude setup`");
+    console.error("Error: Project not initialized. Please run `projmnt4claude setup` first");
     process.exit(1);
   }
   if (!oldTaskId || !newTaskId) {
-    console.error("\u9519\u8BEF: rename \u64CD\u4F5C\u9700\u8981\u6307\u5B9A\u65E7\u4EFB\u52A1ID\u548C\u65B0\u4EFB\u52A1ID");
+    console.error("Error: rename requires old task ID and new task ID");
     console.error("");
-    console.error("\u7528\u6CD5: task rename <oldTaskId> <newTaskId>");
-    console.error("\u793A\u4F8B: task rename TASK-001 TASK-feature-new-name");
+    console.error("Usage: task rename <oldTaskId> <newTaskId>");
+    console.error("Example: task rename TASK-001 TASK-feature-new-name");
     process.exit(1);
   }
   if (!isValidTaskId(newTaskId)) {
-    console.error(`\u9519\u8BEF: \u65E0\u6548\u7684\u4EFB\u52A1 ID \u683C\u5F0F '${newTaskId}'`);
-    console.error("\u4EFB\u52A1 ID \u5FC5\u987B\u4EE5 TASK- \u5F00\u5934\uFF0C\u540E\u8DDF\u5B57\u6BCD\u3001\u6570\u5B57\u3001\u8FDE\u5B57\u7B26\u6216\u4E0B\u5212\u7EBF");
+    console.error(`Error: Invalid task ID format '${newTaskId}'`);
+    console.error("Task ID must start with TASK-, followed by letters, numbers, hyphens or underscores");
     process.exit(1);
   }
   const result = renameTask(oldTaskId, newTaskId, cwd);
   if (result.success) {
     console.log("");
     console.log("\u2501".repeat(SEPARATOR_WIDTH));
-    console.log("\u2705 \u4EFB\u52A1\u91CD\u547D\u540D\u6210\u529F");
+    console.log("\u2705 Task renamed successfully");
     console.log("\u2501".repeat(SEPARATOR_WIDTH));
     console.log("");
-    console.log(`  \u65E7 ID: ${result.oldId}`);
-    console.log(`  \u65B0 ID: ${result.newId}`);
+    console.log(`  Old ID: ${result.oldId}`);
+    console.log(`  New ID: ${result.newId}`);
     console.log("");
-    console.log("\uD83D\uDCA1 \u63D0\u793A: \u5DF2\u81EA\u52A8\u66F4\u65B0\u5176\u4ED6\u4EFB\u52A1\u4E2D\u7684\u5F15\u7528");
+    console.log("\uD83D\uDCA1 Tip: References in other tasks auto-updated");
     console.log("");
   } else {
-    console.error(`\u274C \u91CD\u547D\u540D\u5931\u8D25: ${result.error}`);
+    console.error(`\u274C Rename failed: ${result.error}`);
     process.exit(1);
   }
 }
@@ -26916,7 +26915,7 @@ async function initRequirement(description, cwd = process.cwd(), options = {}) {
   if (shouldDecomposeOption && shouldDecompose(description)) {
     console.log("");
     console.log("\u2501".repeat(SEPARATOR_WIDTH));
-    console.log("\uD83D\uDD0D \u68C0\u6D4B\u5230\u53EF\u5206\u89E3\u5185\u5BB9\uFF0C\u6B63\u5728\u8FDB\u884C\u9700\u6C42\u5206\u89E3...");
+    console.log("\uD83D\uDD0D Decomposable content detected, analyzing requirement...");
     console.log("\u2501".repeat(SEPARATOR_WIDTH));
     console.log("");
     const decomposition = await decomposeRequirement(description, {
@@ -26933,12 +26932,12 @@ async function initRequirement(description, cwd = process.cwd(), options = {}) {
         const result = await import_prompts6.default({
           type: "confirm",
           name: "confirm",
-          message: `\u662F\u5426\u5C06\u9700\u6C42\u5206\u89E3\u4E3A ${decomposition.items.length} \u4E2A\u72EC\u7ACB\u4EFB\u52A1\u521B\u5EFA?`,
+          message: `Decompose requirement into ${decomposition.items.length} independent tasks?`,
           initial: true
         });
         if (result === undefined) {
           console.log("");
-          console.log("\u2139\uFE0F  \u5DF2\u53D6\u6D88\u4EFB\u52A1\u521B\u5EFA\u3002");
+          console.log("\u2139\uFE0F  Task creation cancelled.");
           console.log("");
           return;
         }
@@ -26949,7 +26948,7 @@ async function initRequirement(description, cwd = process.cwd(), options = {}) {
         return;
       }
     }
-    console.log("  \u8DF3\u8FC7\u5206\u89E3\uFF0C\u7EE7\u7EED\u521B\u5EFA\u5355\u4E2A\u4EFB\u52A1...");
+    console.log("  Skipping decomposition, continuing with single task creation...");
     console.log("");
   }
   console.log("");
@@ -26970,7 +26969,7 @@ async function initRequirement(description, cwd = process.cwd(), options = {}) {
       enabled: true,
       aiCall: () => new AIMetadataAssistant(cwd).enhanceRequirement(description, { cwd }),
       fallback: { title: null, description: null, type: null, priority: null, recommendedRole: null, checkpoints: null, dependencies: null, aiUsed: false },
-      operationName: "\u589E\u5F3A\u8C03\u7528",
+      operationName: "enhancement_call",
       logger: logger2
     });
     if (aiResult.aiUsed) {
@@ -27042,18 +27041,18 @@ async function initRequirement(description, cwd = process.cwd(), options = {}) {
     const result = await import_prompts6.default({
       type: "confirm",
       name: "confirm",
-      message: "\u662F\u5426\u57FA\u4E8E\u6B64\u5206\u6790\u521B\u5EFA\u4EFB\u52A1?",
+      message: "Create task based on this analysis?",
       initial: true
     });
     if (result === undefined) {
       console.log("");
-      console.log("\u2139\uFE0F  \u5DF2\u53D6\u6D88\u4EFB\u52A1\u521B\u5EFA\u3002");
+      console.log("\u2139\uFE0F  Task creation cancelled.");
       console.log("");
       logger2.logInstrumentation({
         module: "init-requirement",
         action: "cancel",
         input_summary: `desc_len=${inputDescLength}`,
-        output_summary: "Ctrl+C \u53D6\u6D88\u521B\u5EFA",
+        output_summary: "Ctrl+C cancelled creation",
         ai_used: analysis.aiUsed,
         ai_enhanced_fields: analysis.aiEnhancedFields,
         duration_ms: Date.now() - startTime,
@@ -27067,14 +27066,14 @@ async function initRequirement(description, cwd = process.cwd(), options = {}) {
   }
   if (!confirmCreate.confirm) {
     console.log("");
-    console.log("\u2139\uFE0F  \u5DF2\u53D6\u6D88\u4EFB\u52A1\u521B\u5EFA\u3002");
-    console.log("   \u5982\u9700\u91CD\u65B0\u521B\u5EFA\uFF0C\u8BF7\u518D\u6B21\u8FD0\u884C init-requirement \u547D\u4EE4\u3002");
+    console.log("\u2139\uFE0F  Task creation cancelled.");
+    console.log("   Run init-requirement again to recreate.");
     console.log("");
     logger2.logInstrumentation({
       module: "init-requirement",
       action: "cancel",
       input_summary: `desc_len=${inputDescLength}`,
-      output_summary: "\u7528\u6237\u53D6\u6D88\u521B\u5EFA",
+      output_summary: "User cancelled creation",
       ai_used: analysis.aiUsed,
       ai_enhanced_fields: analysis.aiEnhancedFields,
       duration_ms: Date.now() - startTime,
@@ -27097,43 +27096,43 @@ async function initRequirement(description, cwd = process.cwd(), options = {}) {
       {
         type: "text",
         name: "title",
-        message: "\u4EFB\u52A1\u6807\u9898",
+        message: "Task title",
         initial: analysis.title
       },
       {
         type: "text",
         name: "description",
-        message: "\u4EFB\u52A1\u63CF\u8FF0",
+        message: "Task description",
         initial: analysis.description
       },
       {
         type: "select",
         name: "priority",
-        message: "\u4F18\u5148\u7EA7",
+        message: "Priority",
         choices: [
-          { title: "P3 \u4F4E", value: "P3" },
-          { title: "P2 \u4E2D", value: "P2", selected: analysis.priority === "P2" },
-          { title: "P1 \u9AD8", value: "P1", selected: analysis.priority === "P1" },
-          { title: "P0 \u7D27\u6025", value: "P0", selected: analysis.priority === "P0" }
+          { title: "P3 Low", value: "P3" },
+          { title: "P2 Medium", value: "P2", selected: analysis.priority === "P2" },
+          { title: "P1 High", value: "P1", selected: analysis.priority === "P1" },
+          { title: "P0 Urgent", value: "P0", selected: analysis.priority === "P0" }
         ],
         initial: analysis.priority === "P3" ? 0 : analysis.priority === "P2" ? 1 : analysis.priority === "P1" ? 2 : 3
       },
       {
         type: "text",
         name: "recommendedRole",
-        message: "\u63A8\u8350\u89D2\u8272",
+        message: "Recommended role",
         initial: analysis.recommendedRole
       }
     ]);
     if (promptResponse === undefined) {
       console.log("");
-      console.log("\u2139\uFE0F  \u5DF2\u53D6\u6D88\u4EFB\u52A1\u521B\u5EFA\u3002");
+      console.log("\u2139\uFE0F  Task creation cancelled.");
       console.log("");
       logger2.logInstrumentation({
         module: "init-requirement",
         action: "cancel",
         input_summary: `desc_len=${inputDescLength}`,
-        output_summary: "Ctrl+C \u53D6\u6D88\u521B\u5EFA",
+        output_summary: "Ctrl+C cancelled creation",
         ai_used: analysis.aiUsed,
         ai_enhanced_fields: analysis.aiEnhancedFields,
         duration_ms: Date.now() - startTime,
@@ -27159,21 +27158,21 @@ async function initRequirement(description, cwd = process.cwd(), options = {}) {
       };
       const newComplexity = assessComplexity(response.description, newAnalysis);
       if (newComplexity.level !== complexity.level || newComplexity.estimatedMinutes !== complexity.estimatedMinutes) {
-        console.log(`   \uD83D\uDCCA \u590D\u6742\u5EA6\u5DF2\u91CD\u65B0\u8BC4\u4F30: ${formatComplexity(newComplexity)} (\u539F: ${formatComplexity(complexity)})`);
+        console.log(`   \uD83D\uDCCA Complexity reassessed: ${formatComplexity(newComplexity)} (was: ${formatComplexity(complexity)})`);
         complexity = newComplexity;
       }
     }
   }
   if (!response.title) {
     console.log("");
-    console.log("\u2139\uFE0F  \u5DF2\u53D6\u6D88\u4EFB\u52A1\u521B\u5EFA\uFF08\u6807\u9898\u4E0D\u80FD\u4E3A\u7A7A\uFF09\u3002");
-    console.log("   \u5982\u9700\u91CD\u65B0\u521B\u5EFA\uFF0C\u8BF7\u518D\u6B21\u8FD0\u884C init-requirement \u547D\u4EE4\u3002");
+    console.log("\u2139\uFE0F  Task creation cancelled (title cannot be empty).");
+    console.log("   Run init-requirement again to recreate.");
     console.log("");
     logger2.logInstrumentation({
       module: "init-requirement",
       action: "cancel",
       input_summary: `desc_len=${inputDescLength}`,
-      output_summary: "\u6807\u9898\u4E3A\u7A7A\uFF0C\u53D6\u6D88\u521B\u5EFA",
+      output_summary: "Empty title, cancelled creation",
       ai_used: analysis.aiUsed,
       ai_enhanced_fields: analysis.aiEnhancedFields,
       duration_ms: Date.now() - startTime,
@@ -27191,9 +27190,9 @@ async function initRequirement(description, cwd = process.cwd(), options = {}) {
   const allRelatedFiles = [...new Set([...structuredInfo.relatedFiles, ...inferredFiles])];
   const filterResult = filterLowQualityCheckpoints(allCheckpoints.length > 0 ? allCheckpoints : analysis.suggestedCheckpoints);
   if (filterResult.removed.length > 0) {
-    console.log(`   \uD83D\uDD0D \u5DF2\u8FC7\u6EE4 ${filterResult.removed.length} \u4E2A\u4F4E\u8D28\u91CF\u68C0\u67E5\u70B9:`);
+    console.log(`   \uD83D\uDD0D Filtered ${filterResult.removed.length} low-quality checkpoints:`);
     for (const removed of filterResult.removed) {
-      const reason = filterResult.reasons.get(removed) || "\u672A\u77E5\u539F\u56E0";
+      const reason = filterResult.reasons.get(removed) || "Unknown reason";
       console.log(`     - "${removed}" (${reason})`);
     }
   }
@@ -27256,7 +27255,7 @@ async function initRequirement(description, cwd = process.cwd(), options = {}) {
     const basicValidation = validateBasicFields(updatedTask);
     if (!basicValidation.valid) {
       console.log(`
-   \u26A0\uFE0F  \u57FA\u7840\u5B57\u6BB5\u9A8C\u8BC1\u672A\u901A\u8FC7:`);
+   \u26A0\uFE0F  Basic field validation failed:`);
       for (const err of basicValidation.errors) {
         console.log(`     - ${err}`);
       }
@@ -27266,7 +27265,7 @@ async function initRequirement(description, cwd = process.cwd(), options = {}) {
     const filesValidation = validateFilesExist(updatedTask, cwd);
     if (!filesValidation.valid) {
       console.log(`
-   \u26A0\uFE0F  ${filesValidation.missingFiles.length} \u4E2A\u5F15\u7528\u6587\u4EF6\u4E0D\u5B58\u5728:`);
+   \u26A0\uFE0F  ${filesValidation.missingFiles.length} referenced files do not exist:`);
       for (const f of filesValidation.missingFiles) {
         console.log(`     - ${f}`);
       }
@@ -27286,7 +27285,7 @@ async function initRequirement(description, cwd = process.cwd(), options = {}) {
     minQualityScore: requireQuality ?? DEFAULT_QUALITY_GATE_CONFIG.minQualityScore
   };
   if (qualityGateConfig.minQualityScore < 0 || qualityGateConfig.minQualityScore > 100) {
-    console.error("\u9519\u8BEF: --require-quality \u5FC5\u987B\u5728 0-100 \u4E4B\u95F4");
+    console.error("Error: --require-quality must be between 0-100");
     process.exit(1);
   }
   const qualityResult = await checkQualityGate(taskId, qualityGateConfig, cwd);
@@ -27320,21 +27319,21 @@ async function initRequirement(description, cwd = process.cwd(), options = {}) {
   console.log("");
   if (qualityResult.errorViolations.length > 0) {
     console.log("\u2501".repeat(SEPARATOR_WIDTH));
-    console.log(`\u274C \u8D28\u91CF\u95E8\u7981\u672A\u901A\u8FC7: \u53D1\u73B0 ${qualityResult.errorViolations.length} \u9879\u9519\u8BEF\u7EA7\u522B\u8FDD\u89C4`);
+    console.log(`\u274C Quality gate failed: ${qualityResult.errorViolations.length} error-level violations found`);
     console.log("\u2501".repeat(SEPARATOR_WIDTH));
     console.log("");
-    console.log("\uD83D\uDEAB \u4EE5\u4E0B\u9519\u8BEF\u5FC5\u987B\u4FEE\u590D\u540E\u624D\u80FD\u521B\u5EFA\u4EFB\u52A1:");
+    console.log("\uD83D\uDEAB The following errors must be fixed before creating task:");
     for (const violation of qualityResult.errorViolations) {
       console.log(`   \u274C [${violation.ruleId}] ${violation.message}`);
       if (violation.field) {
-        console.log(`      \u5B57\u6BB5: ${violation.field}`);
+        console.log(`      Field: ${violation.field}`);
       }
     }
     console.log("");
-    console.log("\uD83D\uDCA1 \u4FEE\u590D\u65B9\u6848:");
-    console.log("   1. \u68C0\u67E5\u70B9\u5FC5\u987B\u4EE5\u6807\u51C6\u524D\u7F00\u5F00\u5934: [implem]\u3001[test]\u3001[doc]\u3001[verify]");
-    console.log("   2. meta.json \u5FC5\u987B\u7B26\u5408\u89C4\u8303\u683C\u5F0F\uFF0C\u5305\u542B\u6240\u6709\u5FC5\u9700\u5B57\u6BB5");
-    console.log("   3. \u4F7F\u7528 --skip-quality-gate \u4E34\u65F6\u8DF3\u8FC7\uFF08\u4E0D\u63A8\u8350\u7528\u4E8E\u751F\u4EA7\u73AF\u5883\uFF09");
+    console.log("\uD83D\uDCA1 Fix suggestions:");
+    console.log("   1. Checkpoints must start with standard prefixes: [implem], [test], [doc], [verify]");
+    console.log("   2. meta.json must be in standard format with all required fields");
+    console.log("   3. Use --skip-quality-gate to skip temporarily (not recommended for production)");
     console.log("");
     logger2.logInstrumentation({
       module: "init-requirement",
@@ -27351,7 +27350,7 @@ async function initRequirement(description, cwd = process.cwd(), options = {}) {
   }
   if (requireQuality !== undefined && !qualityResult.passed) {
     console.log("\u2501".repeat(SEPARATOR_WIDTH));
-    console.log(`\u274C \u8D28\u91CF\u95E8\u7981\u672A\u901A\u8FC7: ${qualityResult.score.totalScore} < ${requireQuality}`);
+    console.log(`\u274C Quality gate failed: ${qualityResult.score.totalScore} < ${requireQuality}`);
     console.log("\u2501".repeat(SEPARATOR_WIDTH));
     console.log("");
     if (qualityResult.suggestions.length > 0) {
@@ -27359,7 +27358,7 @@ async function initRequirement(description, cwd = process.cwd(), options = {}) {
         const order = { high: 0, medium: 1, low: 2 };
         return order[a.priority] - order[b.priority];
       });
-      console.log("\uD83D\uDCA1 \u6539\u8FDB\u5EFA\u8BAE:");
+      console.log("\uD83D\uDCA1 Improvement suggestions:");
       for (const s of sorted.slice(0, 5)) {
         const icon = s.priority === "high" ? "\uD83D\uDD34" : s.priority === "medium" ? "\uD83D\uDFE0" : "\uD83D\uDFE1";
         console.log(`  ${icon} [${s.category}] ${s.message}`);
@@ -27367,8 +27366,8 @@ async function initRequirement(description, cwd = process.cwd(), options = {}) {
       }
       console.log("");
     }
-    console.log(`\u4EFB\u52A1 ${taskId} \u5DF2\u521B\u5EFA\u4F46\u672A\u901A\u8FC7\u8D28\u91CF\u95E8\u7981 (\u5206\u6570 ${qualityResult.score.totalScore} < \u9608\u503C ${requireQuality})\u3002`);
-    console.log("\u8BF7\u5B8C\u5584\u4EFB\u52A1\u63CF\u8FF0\u540E\u91CD\u65B0\u521B\u5EFA\uFF0C\u6216\u4F7F\u7528\u8F83\u4F4E\u7684 --require-quality \u9608\u503C\u3002");
+    console.log(`Task ${taskId} created but did not pass quality gate (score ${qualityResult.score.totalScore} < threshold ${requireQuality}).`);
+    console.log("Please improve the task description and recreate, or use a lower --require-quality threshold.");
     console.log("");
     logger2.logInstrumentation({
       module: "init-requirement",
@@ -27400,7 +27399,7 @@ async function initRequirement(description, cwd = process.cwd(), options = {}) {
   }
   if (autoSplit && complexity.level === "high" && complexity.splitSuggestions.length > 0) {
     console.log("\u2501".repeat(SEPARATOR_WIDTH));
-    console.log("\uD83D\uDD00 \u81EA\u52A8\u62C6\u5206\u590D\u6742\u4EFB\u52A1...");
+    console.log("\uD83D\uDD00 Auto-splitting complex task...");
     console.log("\u2501".repeat(SEPARATOR_WIDTH));
     console.log("");
     const subtaskIds = [];
@@ -27449,10 +27448,10 @@ ${subFilteredCheckpoints.map((cp) => `- [ ] ${cp}`).join(`
         syncCheckpointsToMeta(subId, cwd);
         addSubtaskToParent(taskId, subId, cwd);
         console.log(`  ${i + 1}. ${subId}: ${sub.title}`);
-        console.log(`     \u6587\u4EF6: ${sub.files.length > 0 ? sub.files.join(", ") : "\u5F85\u786E\u8BA4"}`);
-        console.log(`     \u9884\u4F30: ~${sub.estimatedMinutes} \u5206\u949F`);
+        console.log(`     Files: ${sub.files.length > 0 ? sub.files.join(", ") : "TBD"}`);
+        console.log(`     Estimated: ~${sub.estimatedMinutes} minutes`);
         if (subTask.dependencies && subTask.dependencies.length > 0) {
-          console.log(`     \u4F9D\u8D56: ${subTask.dependencies.join(", ")}`);
+          console.log(`     Dependencies: ${subTask.dependencies.join(", ")}`);
         }
         console.log("");
       }
@@ -27486,15 +27485,15 @@ ${subFilteredCheckpoints.map((cp) => `- [ ] ${cp}`).join(`
           }
           const skippedDeps = subDeps.filter((d) => !existingDeps.includes(d.depTaskId) && subDepGraph.wouldCreateCycle(subId, d.depTaskId));
           if (skippedDeps.length > 0) {
-            console.log(`   \u26A0\uFE0F  ${subId}: \u8DF3\u8FC7 ${skippedDeps.length} \u4E2A\u63A8\u65AD\u4F9D\u8D56\uFF08\u4F1A\u5F62\u6210\u73AF\uFF09`);
+            console.log(`   \u26A0\uFE0F  ${subId}: Skipped ${skippedDeps.length} inferred dependencies (would create cycle)`);
           }
         }
       }
     } catch (err) {
       console.error(`
-\u274C \u5B50\u4EFB\u52A1\u521B\u5EFA\u5931\u8D25: ${err instanceof Error ? err.message : String(err)}`);
+\u274C Subtask creation failed: ${err instanceof Error ? err.message : String(err)}`);
       if (subtaskIds.length > 0) {
-        console.log(`   \u6E05\u7406\u5DF2\u521B\u5EFA\u7684 ${subtaskIds.length} \u4E2A\u5B50\u4EFB\u52A1...`);
+        console.log(`   Cleaning up ${subtaskIds.length} created subtasks...`);
         for (const cleanupId of subtaskIds) {
           try {
             const cleanupDir = path16.join(getTasksDir(cwd), cleanupId);
@@ -27508,13 +27507,13 @@ ${subFilteredCheckpoints.map((cp) => `- [ ] ${cp}`).join(`
           parentMeta.subtaskIds = (parentMeta.subtaskIds || []).filter((id) => !subtaskIds.includes(id));
           writeTaskMeta(parentMeta, cwd);
         }
-        console.log(`   \u5DF2\u6E05\u7406\u3002\u7236\u4EFB\u52A1 ${taskId} \u4FDD\u7559\u3002`);
+        console.log(`   Cleaned up. Parent task ${taskId} retained.`);
       }
       console.log("");
     }
     if (subtaskIds.length > 0) {
-      console.log(`\u2705 \u5DF2\u62C6\u5206\u4E3A ${subtaskIds.length} \u4E2A\u5B50\u4EFB\u52A1`);
-      console.log(`   \u7236\u4EFB\u52A1: ${taskId}`);
+      console.log(`\u2705 Split into ${subtaskIds.length} subtasks`);
+      console.log(`   Parent task: ${taskId}`);
       console.log("");
     }
   }
@@ -27528,7 +27527,7 @@ ${subFilteredCheckpoints.map((cp) => `- [ ] ${cp}`).join(`
     const addToPlan = await import_prompts6.default({
       type: "confirm",
       name: "add",
-      message: "\u662F\u5426\u5C06\u6B64\u4EFB\u52A1\u6DFB\u52A0\u5230\u6267\u884C\u8BA1\u5212?",
+      message: "Add this task to execution plan?",
       initial: true
     });
     if (addToPlan === undefined) {} else if (addToPlan.add) {
@@ -27554,7 +27553,7 @@ function formatComplexity(assessment) {
     medium: "\uD83D\uDFE1 medium",
     high: "\uD83D\uDD34 high"
   };
-  return `${icons[assessment.level]} (\u8BC4\u5206: ${assessment.score}/100)`;
+  return `${icons[assessment.level]} (Score: ${assessment.score}/100)`;
 }
 function countWorkItems(description) {
   const actionPatterns = [
@@ -27598,35 +27597,35 @@ function assessComplexity(description, analysis) {
   signals.push({
     type: "file_count",
     weight: fileWeight,
-    description: `\u6D89\u53CA ${fileCount} \u4E2A\u6587\u4EF6`
+    description: `Involves ${fileCount} files`
   });
   const workItemCount = countWorkItems(description);
   const workItemWeight = Math.min(workItemCount * 5, 25);
   signals.push({
     type: "work_items",
     weight: workItemWeight,
-    description: `\u5305\u542B ${workItemCount} \u4E2A\u5DE5\u4F5C\u9879`
+    description: `Contains ${workItemCount} work items`
   });
   const crossModuleCount = countCrossModuleReferences(description);
   const crossModuleWeight = Math.min(crossModuleCount * 6, 20);
   signals.push({
     type: "cross_module",
     weight: crossModuleWeight,
-    description: `\u8DE8 ${crossModuleCount} \u4E2A\u6A21\u5757/\u7CFB\u7EDF`
+    description: `Crosses ${crossModuleCount} modules/systems`
   });
   const checkpointCount = analysis.suggestedCheckpoints.length;
   const checkpointWeight = Math.min(checkpointCount * 4, 15);
   signals.push({
     type: "checkpoint_count",
     weight: checkpointWeight,
-    description: `\u5305\u542B ${checkpointCount} \u4E2A\u68C0\u67E5\u70B9`
+    description: `Contains ${checkpointCount} checkpoints`
   });
   const descLength = description.length;
   const descWeight = descLength > 500 ? 10 : descLength > 200 ? 5 : 0;
   signals.push({
     type: "description_length",
     weight: descWeight,
-    description: `\u63CF\u8FF0\u957F\u5EA6 ${descLength} \u5B57\u7B26`
+    description: `Description length ${descLength} characters`
   });
   const actionVerbPattern = /(?:\u9A8C\u8BC1|\u4FEE\u590D|\u521B\u5EFA|\u4FEE\u6539|\u6DFB\u52A0|\u5B9E\u73B0|\u914D\u7F6E|\u90E8\u7F72|\u66F4\u65B0|\u589E\u5F3A|\u5B8C\u5584|\u91CD\u6784|\u7F16\u5199|\u5206\u6790|\u5904\u7406|\u96C6\u6210|\u8FC1\u79FB|\u652F\u6301|\u79FB\u9664|\u68C0\u67E5|\u6D4B\u8BD5)/g;
   const actionVerbMatches = description.match(actionVerbPattern);
@@ -27635,7 +27634,7 @@ function assessComplexity(description, analysis) {
   signals.push({
     type: "action_verb_density",
     weight: actionDensityWeight,
-    description: `\u5305\u542B ${actionVerbCount} \u4E2A\u52A8\u4F5C\u52A8\u8BCD`
+    description: `Contains ${actionVerbCount} action verbs`
   });
   const totalScore = Math.min(signals.reduce((sum, s) => sum + s.weight, 0), 100);
   let level;
@@ -27903,18 +27902,18 @@ function analyzeRequirement(description, cwd) {
 }
 function formatPriority2(priority) {
   const map = {
-    P0: "\uD83D\uDD34 P0 \u7D27\u6025",
-    P1: "\uD83D\uDFE0 P1 \u9AD8",
-    P2: "\uD83D\uDFE1 P2 \u4E2D",
-    P3: "\uD83D\uDFE2 P3 \u4F4E",
+    P0: "\uD83D\uDD34 P0 Urgent",
+    P1: "\uD83D\uDFE0 P1 High",
+    P2: "\uD83D\uDFE1 P2 Medium",
+    P3: "\uD83D\uDFE2 P3 Low",
     Q1: "\uD83D\uDCCA Q1",
     Q2: "\uD83D\uDCCA Q2",
     Q3: "\uD83D\uDCCA Q3",
     Q4: "\uD83D\uDCCA Q4",
-    low: "\uD83D\uDFE2 \u4F4E",
-    medium: "\uD83D\uDFE1 \u4E2D",
-    high: "\uD83D\uDFE0 \u9AD8",
-    urgent: "\uD83D\uDD34 \u7D27\u6025"
+    low: "\uD83D\uDFE2 Low",
+    medium: "\uD83D\uDFE1 Medium",
+    high: "\uD83D\uDFE0 High",
+    urgent: "\uD83D\uDD34 Urgent"
   };
   return map[priority] || `\u2753 ${priority}`;
 }
@@ -27957,7 +27956,7 @@ async function initRequirementSingle(item, cwd, options) {
     console.log(`  \u2705 ${taskId}: ${item.title}`);
     return taskId;
   } catch (error) {
-    console.error(`  \u274C \u521B\u5EFA\u4EFB\u52A1\u5931\u8D25: ${item.title}`);
+    console.error(`  \u274C Failed to create task: ${item.title}`);
     console.error(`     ${error instanceof Error ? error.message : String(error)}`);
     return null;
   }
@@ -27965,15 +27964,15 @@ async function initRequirementSingle(item, cwd, options) {
 function reportBatchResult(created, failed, totalCount) {
   console.log(`
 ` + "\u2501".repeat(50));
-  console.log("\uD83D\uDCCA \u6279\u91CF\u521B\u5EFA\u5B8C\u6210");
+  console.log("\uD83D\uDCCA Batch creation completed");
   console.log("\u2501".repeat(50));
-  console.log(`   \u6210\u529F: ${created.length}/${totalCount}`);
+  console.log(`   Success: ${created.length}/${totalCount}`);
   if (created.length > 0) {
-    console.log(`   \u4EFB\u52A1\u5217\u8868:`);
+    console.log(`   Task list:`);
     created.forEach((id) => console.log(`     - ${id}`));
   }
   if (failed.length > 0) {
-    console.log(`   \u5931\u8D25: ${failed.length}`);
+    console.log(`   Failed: ${failed.length}`);
     failed.forEach((f) => console.log(`     - ${f.item.title}: ${f.reason}`));
   }
 }
@@ -27983,19 +27982,19 @@ async function initRequirementBatch(items, cwd, options) {
   const taskIdMap = new Map;
   console.log("");
   console.log("\u2501".repeat(SEPARATOR_WIDTH));
-  console.log(`\uD83D\uDCDD \u5206\u89E3\u7ED3\u679C: ${items.length} \u4E2A\u4EFB\u52A1`);
+  console.log(`\uD83D\uDCDD Decomposition result: ${items.length} tasks`);
   items.forEach((item, i) => {
     console.log(`   ${i + 1}. [${item.priority}] ${item.title}`);
   });
   console.log("\u2501".repeat(SEPARATOR_WIDTH));
   console.log("");
   console.log("\u2501".repeat(SEPARATOR_WIDTH));
-  console.log("\uD83D\uDCDD \u6B63\u5728\u521B\u5EFA\u4EFB\u52A1...");
+  console.log("\uD83D\uDCDD Creating tasks...");
   console.log("\u2501".repeat(SEPARATOR_WIDTH));
   console.log("");
   for (let i = 0;i < items.length; i++) {
     const item = items[i];
-    console.log(`\u521B\u5EFA\u4EFB\u52A1 ${i + 1}/${items.length}...`);
+    console.log(`Creating task ${i + 1}/${items.length}...`);
     const itemOptions = {
       ...options,
       nonInteractive: true,
@@ -28008,19 +28007,19 @@ async function initRequirementBatch(items, cwd, options) {
         taskIdMap.set(i, taskId);
         console.log(`\u2705 ${taskId}`);
       } else {
-        failedTasks.push({ item, reason: "\u521B\u5EFA\u5931\u8D25\uFF08\u8FD4\u56DE null\uFF09" });
-        console.log(`\u274C \u5931\u8D25: \u8FD4\u56DE null`);
+        failedTasks.push({ item, reason: "Creation failed (returned null)" });
+        console.log(`\u274C Failed: returned null`);
       }
     } catch (error) {
       const reason = error instanceof Error ? error.message : String(error);
       failedTasks.push({ item, reason });
-      console.log(`\u274C \u5931\u8D25: ${reason}`);
+      console.log(`\u274C Failed: ${reason}`);
     }
   }
   if (createdTaskIds.length > 0) {
     console.log("");
     console.log("\u2501".repeat(SEPARATOR_WIDTH));
-    console.log("\uD83D\uDD17 \u6B63\u5728\u8BBE\u7F6E\u4EFB\u52A1\u4F9D\u8D56\u5173\u7CFB...");
+    console.log("\uD83D\uDD17 Setting up task dependencies...");
     console.log("\u2501".repeat(SEPARATOR_WIDTH));
     console.log("");
     for (let i = 0;i < items.length; i++) {
@@ -28041,7 +28040,7 @@ async function initRequirementBatch(items, cwd, options) {
       if (deps.length > 0) {
         task.dependencies = [...task.dependencies || [], ...deps];
         writeTaskMeta(task, cwd);
-        console.log(`  ${taskId} \u4F9D\u8D56: ${deps.join(", ")}`);
+        console.log(`  ${taskId} dependencies: ${deps.join(", ")}`);
       }
     }
   }

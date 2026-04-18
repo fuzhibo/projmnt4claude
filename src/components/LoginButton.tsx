@@ -1,32 +1,32 @@
 /**
- * 登录按钮组件
- * 修复移动端宽度超出容器的问题
+ * Login Button Component
+ * Fixes mobile width overflow issue
  *
  * @example
  * ```tsx
  * import { LoginButton, getLoginButtonStyles } from './LoginButton';
  *
- * // 获取按钮样式（包含移动端修复）
+ * // Get button styles (includes mobile fix)
  * const styles = getLoginButtonStyles({ disabled: false });
  *
- * // React 中使用
- * <button style={styles}>登录</button>
+ * // Use in React
+ * <button style={styles}>Login</button>
  * ```
  */
 
 export interface LoginButtonProps {
-  /** 点击回调函数 */
+  /** Click callback function */
   onClick?: () => void;
-  /** 是否禁用 */
+  /** Whether disabled */
   disabled?: boolean;
-  /** 按钮内容 */
+  /** Button content */
   children?: string;
-  /** 按钮类型 */
+  /** Button type */
   type?: 'button' | 'submit' | 'reset';
 }
 
 /**
- * 按钮尺寸枚举
+ * Button size enum
  */
 export enum ButtonSize {
   SMALL = 'small',
@@ -35,7 +35,7 @@ export enum ButtonSize {
 }
 
 /**
- * 按钮变体枚举
+ * Button variant enum
  */
 export enum ButtonVariant {
   PRIMARY = 'primary',
@@ -44,7 +44,7 @@ export enum ButtonVariant {
 }
 
 /**
- * 登录按钮状态接口
+ * Login button state interface
  */
 export interface LoginButtonState {
   isLoading: boolean;
@@ -52,7 +52,7 @@ export interface LoginButtonState {
 }
 
 /**
- * 默认按钮配置
+ * Default button configuration
  */
 export const defaultLoginButtonConfig = {
   type: 'submit' as const,
@@ -62,17 +62,17 @@ export const defaultLoginButtonConfig = {
 };
 
 /**
- * 获取登录按钮的 CSS-in-JS 样式对象
- * 修复移动端宽度超出容器的问题
+ * Get CSS-in-JS style object for login button
+ * Fixes mobile width overflow issue
  *
- * @param options - 样式选项
- * @returns CSS 样式对象
+ * @param options - Style options
+ * @returns CSS style object
  */
 export function getLoginButtonStyles(options: { disabled?: boolean } = {}): Record<string, string | number> {
   const { disabled = false } = options;
 
   return {
-    // 基础样式
+    // Base styles
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
@@ -86,12 +86,12 @@ export function getLoginButtonStyles(options: { disabled?: boolean } = {}): Reco
     cursor: disabled ? 'not-allowed' : 'pointer',
     transition: 'background-color 0.2s ease',
 
-    // 修复移动端宽度问题：使用 maxWidth 和 width 控制
+    // Fix mobile width issue: use maxWidth and width control
     width: '100%',
     maxWidth: '100%',
     boxSizing: 'border-box',
 
-    // 防止文本溢出
+    // Prevent text overflow
     whiteSpace: 'nowrap',
     overflow: 'hidden',
     textOverflow: 'ellipsis'
@@ -99,25 +99,25 @@ export function getLoginButtonStyles(options: { disabled?: boolean } = {}): Reco
 }
 
 /**
- * 获取移动端响应式样式
- * 针对不同屏幕尺寸的适配
+ * Get responsive styles for mobile
+ * Adaptation for different screen sizes
  */
 export function getResponsiveStyles(): Record<string, Record<string, string | number>> {
   return {
-    // 移动端样式 (< 768px)
+    // Mobile styles (< 768px)
     mobile: {
       width: '100%',
       maxWidth: '100%',
       padding: '12px 16px',
-      fontSize: '16px' // 防止 iOS 缩放
+      fontSize: '16px' // Prevent iOS zoom
     },
-    // 平板样式 (768px - 1024px)
+    // Tablet styles (768px - 1024px)
     tablet: {
       width: '100%',
       maxWidth: '400px',
       padding: '12px 24px'
     },
-    // 桌面端样式 (> 1024px)
+    // Desktop styles (> 1024px)
     desktop: {
       width: 'auto',
       minWidth: '200px',
@@ -128,18 +128,18 @@ export function getResponsiveStyles(): Record<string, Record<string, string | nu
 }
 
 /**
- * 创建登录按钮 HTML 元素
- * 用于非 React 环境
+ * Create login button HTML element
+ * For non-React environments
  */
 export function createLoginButtonElement(
-  text: string = '登录',
+  text: string = 'Login',
   options: { disabled?: boolean; onClick?: () => void } = {}
 ): HTMLButtonElement {
   const button = document.createElement('button');
   button.textContent = text;
   button.type = 'submit';
 
-  // 应用样式
+  // Apply styles
   const styles = getLoginButtonStyles(options);
   Object.assign(button.style, styles);
 
@@ -155,15 +155,15 @@ export function createLoginButtonElement(
 }
 
 /**
- * 获取 CSS 类名样式（用于传统 CSS 方案）
+ * Get CSS class names (for traditional CSS approach)
  */
 export function getLoginButtonClassNames(): string {
   return 'login-button login-button--responsive';
 }
 
 /**
- * 生成 CSS 字符串
- * 可用于注入到 <style> 标签
+ * Generate CSS string
+ * Can be injected into <style> tag
  */
 export function generateLoginButtonCSS(): string {
   return `
@@ -197,7 +197,7 @@ export function generateLoginButtonCSS(): string {
       cursor: not-allowed;
     }
 
-    /* 移动端响应式 */
+    /* Mobile responsive */
     @media (max-width: 767px) {
       .login-button {
         width: 100%;
@@ -206,7 +206,7 @@ export function generateLoginButtonCSS(): string {
       }
     }
 
-    /* 平板端 */
+    /* Tablet */
     @media (min-width: 768px) and (max-width: 1023px) {
       .login-button {
         width: 100%;
@@ -214,7 +214,7 @@ export function generateLoginButtonCSS(): string {
       }
     }
 
-    /* 桌面端 */
+    /* Desktop */
     @media (min-width: 1024px) {
       .login-button {
         width: auto;
@@ -224,7 +224,7 @@ export function generateLoginButtonCSS(): string {
   `;
 }
 
-// 默认导出
+// Default export
 export default {
   getLoginButtonStyles,
   getResponsiveStyles,

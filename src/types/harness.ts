@@ -1,48 +1,48 @@
 /**
- * Harness Design 模式相关类型定义
+ * Type definitions for Harness Design pattern
  *
- * 基于 Anthropic 的 Harness Design 模式：
- * - 三代理架构：Planner → Generator → Evaluator
- * - 上下文重置：开发者和评估者之间隔离上下文
- * - Sprint Contract：开发前定义"完成"标准
+ * Based on Anthropic's Harness Design pattern:
+ * - Three-agent architecture: Planner → Generator → Evaluator
+ * - Context reset: Isolate context between developer and evaluator
+ * - Sprint Contract: Define "done" criteria before development
  */
 
 import type { TaskMeta, TaskStatus, TaskRole, CheckpointCategory } from './task.js';
 
 /**
- * Harness 执行配置
+ * Harness execution configuration
  */
 export interface HarnessConfig {
-  /** 最大重试次数，默认 3 */
+  /** Maximum retry attempts, default 3 */
   maxRetries: number;
-  /** 单任务超时（秒），默认 300 */
+  /** Single task timeout (seconds), default 300 */
   timeout: number;
-  /** 并行执行数，默认 1（串行） */
+  /** Parallel execution count, default 1 (serial) */
   parallel: number;
-  /** 试运行模式，不实际执行 */
+  /** Dry run mode, do not actually execute */
   dryRun: boolean;
-  /** 计划文件路径 */
+  /** Plan file path */
   planFile?: string;
-  /** 从中断处继续 */
+  /** Resume from interruption */
   continue: boolean;
-  /** JSON 格式输出 */
+  /** JSON format output */
   jsonOutput: boolean;
-  /** 工作目录 */
+  /** Working directory */
   cwd: string;
-  /** API 调用重试次数（针对 429/500 等临时错误），默认 3 */
+  /** API call retry attempts (for temporary errors like 429/500), default 3 */
   apiRetryAttempts: number;
-  /** API 重试基础延迟（秒），默认 60，使用指数退避 */
+  /** API retry base delay (seconds), default 60, uses exponential backoff */
   apiRetryDelay: number;
-  /** 各阶段独立重试上限配置 */
+  /** Independent retry limit configuration for each phase */
   phaseRetryLimits?: PhaseRetryLimits;
-  /** 每个批次完成后自动 git commit */
+  /** Auto git commit after each batch completes */
   batchGitCommit: boolean;
-  /** 跳过基础字段验证失败时的流水线阻塞 (--force-continue) */
+  /** Skip pipeline blocking on basic field validation failure (--force-continue) */
   forceContinue: boolean;
 }
 
 /**
- * 默认配置
+ * Default configuration
  */
 export const DEFAULT_HARNESS_CONFIG: Omit<HarnessConfig, 'cwd'> = {
   maxRetries: 3,
@@ -58,75 +58,75 @@ export const DEFAULT_HARNESS_CONFIG: Omit<HarnessConfig, 'cwd'> = {
 };
 
 /**
- * Sprint Contract - 开发者和评估者之间的协议
- * 定义"完成"的标准
+ * Sprint Contract - Agreement between developer and evaluator
+ * Defines the "done" criteria
  */
 export interface SprintContract {
-  /** 任务ID */
+  /** Task ID */
   taskId: string;
-  /** 验收标准列表 */
+  /** List of acceptance criteria */
   acceptanceCriteria: string[];
-  /** 验证命令列表 */
+  /** List of verification commands */
   verificationCommands: string[];
-  /** 检查点ID列表 */
+  /** List of checkpoint IDs */
   checkpoints: string[];
-  /** 创建时间 */
+  /** Creation time */
   createdAt: string;
-  /** 最后更新时间 */
+  /** Last update time */
   updatedAt: string;
 }
 
 /**
- * 开发阶段状态
+ * Development phase status
  */
 export type DevPhaseStatus = 'pending' | 'running' | 'success' | 'failed' | 'timeout';
 
 /**
- * 开发阶段报告
+ * Development phase report
  */
 export interface DevReport {
-  /** 任务ID */
+  /** Task ID */
   taskId: string;
-  /** 执行状态 */
+  /** Execution status */
   status: DevPhaseStatus;
-  /** 代码变更列表 */
+  /** List of code changes */
   changes: string[];
-  /** 证据文件路径列表 */
+  /** List of evidence file paths */
   evidence: string[];
-  /** 完成的检查点ID列表 */
+  /** List of completed checkpoint IDs */
   checkpointsCompleted: string[];
-  /** 执行开始时间 */
+  /** Execution start time */
   startTime: string;
-  /** 执行结束时间 */
+  /** Execution end time */
   endTime: string;
-  /** 执行时长（毫秒） */
+  /** Execution duration (milliseconds) */
   duration: number;
-  /** 错误信息（如有） */
+  /** Error message (if any) */
   error?: string;
-  /** Claude 会话输出 */
+  /** Claude session output */
   claudeOutput?: string;
 }
 
 /**
- * 审查结果
+ * Review result
  */
 export type ReviewResult = 'PASS' | 'NOPASS';
 
 /**
- * 评估者建议的动作类型
- * 由 architect 角色评估者输出，驱动状态流转
+ * Action types recommended by evaluator
+ * Output by architect role evaluator, drives state transition
  */
 export type VerdictAction =
-  | 'resolve'         // 通过，标记为 resolved
-  | 'redevelop'       // 从开发阶段重试（消耗重试次数）
-  | 'minor_fix'       // 审核/QA 小问题修复（从开发阶段重试，消耗对应阶段重试次数）
-  | 'retest'          // 从 QA 阶段重试（消耗重试次数）
-  | 'reevaluate'      // 重新评估（不消耗重试次数，独立上限2次）
-  | 'escalate_human'; // 需要人工介入
+  | 'resolve'         // Pass, mark as resolved
+  | 'redevelop'       // Retry from development phase (consumes retry count)
+  | 'minor_fix'       // Minor fix for review/QA (retry from development, consumes phase retry)
+  | 'retest'          // Retry from QA phase (consumes retry count)
+  | 'reevaluate'      // Re-evaluate (no retry consumption, independent limit of 2)
+  | 'escalate_human'; // Requires human intervention
 
 /**
- * 所有有效的 VerdictAction 值
- * 用于 validate_task_data 检测旧任务中是否存在无效的 verdict action
+ * All valid VerdictAction values
+ * Used by validate_task_data to detect invalid verdict actions in old tasks
  */
 export const VALID_VERDICT_ACTIONS: VerdictAction[] = [
   'resolve',
@@ -138,47 +138,47 @@ export const VALID_VERDICT_ACTIONS: VerdictAction[] = [
 ];
 
 /**
- * 失败分类
+ * Failure category
  */
 export type FailureCategory =
-  | 'acceptance_criteria'  // 验收标准未满足
-  | 'code_quality'         // 代码质量问题
-  | 'test_failure'         // 测试失败
-  | 'architecture'         // 架构问题
-  | 'specification'        // 规格不符
-  | 'phantom_task'         // 幽灵任务违规
-  | 'incomplete'           // 实现不完整
-  | 'other';               // 其他
+  | 'acceptance_criteria'  // Acceptance criteria not met
+  | 'code_quality'         // Code quality issues
+  | 'test_failure'         // Test failure
+  | 'architecture'         // Architecture issues
+  | 'specification'        // Specification mismatch
+  | 'phantom_task'         // Phantom task violation
+  | 'incomplete'           // Incomplete implementation
+  | 'other';               // Other
 
 /**
- * 评估推断类型
- * 标注评估结果的解析方式，便于审计
+ * Evaluation inference type
+ * Annotates how evaluation results are parsed, for audit purposes
  */
 export type EvaluationInferenceType =
-  | 'structured_match'       // 结构化匹配 - EVALUATION_RESULT 行精确匹配
-  | 'explicit_match'         // 明确匹配 - Markdown标题/关键词匹配到 PASS/NOPASS
-  | 'content_inference'      // 内容推断 - 基于中文关键词推断（已弃用，保留兼容）
-  | 'prior_stage_inference'  // 前置阶段推断 - 矛盾检测修正（已弃用，保留兼容）
-  | 'parse_failure_default'  // 解析失败默认 - 无法解析，使用默认值
-  | 'empty_output';          // 空输出 - Claude 进程异常退出导致输出为空
+  | 'structured_match'       // Structured match - exact EVALUATION_RESULT line match
+  | 'explicit_match'         // Explicit match - Markdown heading/keyword matched PASS/NOPASS
+  | 'content_inference'      // Content inference - inferred from Chinese keywords (deprecated, kept for compatibility)
+  | 'prior_stage_inference'  // Prior stage inference - contradiction detection correction (deprecated, kept for compatibility)
+  | 'parse_failure_default'  // Parse failure default - unable to parse, using default value
+  | 'empty_output';          // Empty output - Claude process exited abnormally resulting in empty output
 
 /**
- * 全阶段重试上下文
- * 在各阶段失败后重试时传递前次失败信息，帮助 Claude 理解历史上下文
+ * Full-phase retry context
+ * Passes previous failure information when retrying after phase failures, helps Claude understand historical context
  */
 export interface RetryContext {
-  /** 前次失败原因 */
+  /** Previous failure reason */
   previousFailureReason?: string;
-  /** 前次失败的阶段 */
+  /** Phase of previous failure */
   previousPhase?: 'development' | 'code_review' | 'qa' | 'evaluation';
-  /** 当前尝试次数（含本次） */
+  /** Current attempt number (including this one) */
   attemptNumber: number;
-  /** 部分完成进度 */
+  /** Partial completion progress */
   partialProgress?: {
     completedCheckpoints?: string[];
     passedPhases?: string[];
   };
-  /** 上游失败信息（级联失败恢复时携带） */
+  /** Upstream failure info (carried during cascade failure recovery) */
   upstreamFailureInfo?: {
     taskId: string;
     reason: string;
@@ -187,20 +187,20 @@ export interface RetryContext {
 }
 
 /**
- * 各阶段独立重试上限配置
+ * Independent retry limit configuration for each phase
  */
 export interface PhaseRetryLimits {
-  /** 开发阶段重试上限，默认 3 */
+  /** Development phase retry limit, default 3 */
   development: number;
-  /** 代码审核阶段重试上限，默认 1 */
+  /** Code review phase retry limit, default 1 */
   code_review: number;
-  /** QA 验证阶段重试上限，默认 2 */
+  /** QA verification phase retry limit, default 2 */
   qa: number;
-  /** 评估阶段重试上限，默认 2 */
+  /** Evaluation phase retry limit, default 2 */
   evaluation: number;
 }
 
-/** 默认阶段重试上限 */
+/** Default phase retry limits */
 export const DEFAULT_PHASE_RETRY_LIMITS: PhaseRetryLimits = {
   development: 3,
   code_review: 1,
@@ -209,274 +209,274 @@ export const DEFAULT_PHASE_RETRY_LIMITS: PhaseRetryLimits = {
 };
 
 /**
- * 审查阶段报告
+ * Review phase report
  */
 export interface ReviewVerdict {
-  /** 任务ID */
+  /** Task ID */
   taskId: string;
-  /** 审查结果 */
+  /** Review result */
   result: ReviewResult;
-  /** 结果原因说明 */
+  /** Reason for result */
   reason: string;
-  /** 未通过的验收标准 */
+  /** Failed acceptance criteria */
   failedCriteria: string[];
-  /** 未通过的检查点 */
+  /** Failed checkpoints */
   failedCheckpoints: string[];
-  /** 审查时间 */
+  /** Review time */
   reviewedAt: string;
-  /** 审查者（通常是独立的 Claude 会话） */
+  /** Reviewer (usually an independent Claude session) */
   reviewedBy: string;
-  /** 详细反馈 */
+  /** Detailed feedback */
   details?: string;
-  /** 评估者建议的动作（NOPASS 时由 architect 输出） */
+  /** Action recommended by evaluator (output by architect on NOPASS) */
   action?: VerdictAction;
-  /** 失败分类（NOPASS 时由 architect 输出） */
+  /** Failure category (output by architect on NOPASS) */
   failureCategory?: FailureCategory;
-  /** 推断类型（审计用，标注评估结果的解析方式） */
+  /** Inference type (for audit, annotates how evaluation result was parsed) */
   inferenceType?: EvaluationInferenceType;
 }
 
 /**
- * 代码审核阶段结果
- * 由 HarnessCodeReviewer 生成
+ * Code review phase result
+ * Generated by HarnessCodeReviewer
  */
 export interface CodeReviewVerdict {
-  /** 任务ID */
+  /** Task ID */
   taskId: string;
-  /** 审核结果 */
+  /** Review result */
   result: ReviewResult;
-  /** 结果原因说明 */
+  /** Reason for result */
   reason: string;
-  /** 代码质量问题列表 */
+  /** List of code quality issues */
   codeQualityIssues: string[];
-  /** 未通过的代码审核检查点 */
+  /** Failed code review checkpoints */
   failedCheckpoints: string[];
-  /** 审核时间 */
+  /** Review time */
   reviewedAt: string;
-  /** 审核者角色 */
+  /** Reviewer role */
   reviewedBy: 'code_reviewer';
-  /** 详细反馈 */
+  /** Detailed feedback */
   details?: string;
 }
 
 /**
- * QA 验证阶段结果
- * 由 HarnessQATester 生成
+ * QA verification phase result
+ * Generated by HarnessQATester
  */
 export interface QAVerdict {
-  /** 任务ID */
+  /** Task ID */
   taskId: string;
-  /** 验证结果 */
+  /** Verification result */
   result: ReviewResult;
-  /** 结果原因说明 */
+  /** Reason for result */
   reason: string;
-  /** 测试失败列表 */
+  /** List of test failures */
   testFailures: string[];
-  /** 未通过的 QA 检查点 */
+  /** Failed QA checkpoints */
   failedCheckpoints: string[];
-  /** 是否需要人工验证 */
+  /** Whether human verification is required */
   requiresHuman: boolean;
-  /** 需要人工验证的检查点 */
+  /** Checkpoints requiring human verification */
   humanVerificationCheckpoints: string[];
-  /** 验证时间 */
+  /** Verification time */
   verifiedAt: string;
-  /** 验证者角色 */
+  /** Verifier role */
   verifiedBy: 'qa_tester';
-  /** 详细反馈 */
+  /** Detailed feedback */
   details?: string;
 }
 
 /**
- * 人工验证阶段结果
+ * Human verification phase result
  */
 export interface HumanVerdict {
-  /** 任务ID */
+  /** Task ID */
   taskId: string;
-  /** 验证结果 */
+  /** Verification result */
   result: ReviewResult;
-  /** 结果原因说明 */
+  /** Reason for result */
   reason: string;
-  /** 验证的检查点ID */
+  /** Checkpoint ID being verified */
   checkpointId: string;
-  /** 验证人（用户） */
+  /** Verifier (user) */
   verifiedBy: string;
-  /** 验证时间 */
+  /** Verification time */
   verifiedAt: string;
-  /** 用户反馈 */
+  /** User feedback */
   userFeedback?: string;
 }
 
 /**
- * 任务执行记录
+ * Task execution record
  */
 export interface TaskExecutionRecord {
-  /** 任务ID */
+  /** Task ID */
   taskId: string;
-  /** 任务元数据 */
+  /** Task metadata */
   task: TaskMeta;
   /** Sprint Contract */
   contract: SprintContract;
-  /** 开发报告 */
+  /** Development report */
   devReport: DevReport;
-  /** 代码审核结果 */
+  /** Code review result */
   codeReviewVerdict?: CodeReviewVerdict;
-  /** QA 验证结果 */
+  /** QA verification result */
   qaVerdict?: QAVerdict;
-  /** 人工验证结果列表 */
+  /** List of human verification results */
   humanVerdicts?: HumanVerdict[];
-  /** 审查结果 */
+  /** Review result */
   reviewVerdict?: ReviewVerdict;
-  /** 重试次数 */
+  /** Retry count */
   retryCount: number;
-  /** 最终状态 */
+  /** Final status */
   finalStatus: TaskStatus;
-  /** 执行时间线 */
+  /** Execution timeline */
   timeline: ExecutionTimelineEntry[];
 }
 
 /**
- * 执行时间线条目
+ * Execution timeline entry
  */
 export interface ExecutionTimelineEntry {
-  /** 时间 */
+  /** Timestamp */
   timestamp: string;
-  /** 事件类型 */
+  /** Event type */
   event: 'started' | 'skipped' | 'dev_started' | 'dev_completed' | 'code_review_started' | 'code_review_completed' | 'qa_started' | 'qa_completed' | 'review_started' | 'review_completed' | 'retry' | 'completed' | 'failed';
-  /** 描述 */
+  /** Description */
   description: string;
-  /** 附加数据 */
+  /** Additional data */
   data?: Record<string, unknown>;
 }
 
 /**
- * 执行摘要
+ * Execution summary
  */
 export interface ExecutionSummary {
-  /** 总任务数 */
+  /** Total number of tasks */
   totalTasks: number;
-  /** 通过数 */
+  /** Number passed */
   passed: number;
-  /** 失败数 */
+  /** Number failed */
   failed: number;
-  /** 重试总次数 */
+  /** Total retry count */
   totalRetries: number;
-  /** 总执行时长（毫秒） */
+  /** Total execution duration (milliseconds) */
   duration: number;
-  /** 开始时间 */
+  /** Start time */
   startTime: string;
-  /** 结束时间 */
+  /** End time */
   endTime: string;
-  /** 各任务结果 */
+  /** Task results */
   taskResults: Map<string, TaskExecutionRecord>;
-  /** 配置 */
+  /** Configuration */
   config: HarnessConfig;
 }
 
 /**
- * Harness 执行状态
+ * Harness execution state
  */
 export type HarnessState = 'idle' | 'running' | 'paused' | 'completed' | 'failed' | 'cancelled';
 
 /**
- * Harness 运行时状态（用于持久化和恢复）
+ * Harness runtime state (for persistence and recovery)
  */
 export interface HarnessRuntimeState {
-  /** 状态 */
+  /** State */
   state: HarnessState;
-  /** 配置 */
+  /** Configuration */
   config: HarnessConfig;
-  /** 任务队列 */
+  /** Task queue */
   taskQueue: string[];
-  /** 当前执行索引 */
+  /** Current execution index */
   currentIndex: number;
-  /** 执行记录 */
+  /** Execution records */
   records: TaskExecutionRecord[];
-  /** 开始时间 */
+  /** Start time */
   startTime: string;
-  /** 重试计数器 */
+  /** Retry counter */
   retryCounter: Map<string, number>;
-  /** 最后更新时间 */
+  /** Last update time */
   updatedAt: string;
   /**
-   * 重试时从哪个阶段恢复
-   * @deprecated 使用状态驱动的 determineResumePhase 替代。保留用于向后兼容序列化。
+   * Which phase to resume from on retry
+   * @deprecated Use state-driven determineResumePhase instead. Kept for backward compatibility serialization.
    */
   resumeFrom: Map<string, 'development' | 'code_review' | 'qa' | 'evaluation'>;
-  /** 重新评估次数计数器（独立于重试次数，上限2次） */
+  /** Re-evaluation counter (independent of retry count, max 2) */
   reevaluateCounter: Map<string, number>;
-  /** 各阶段独立重试计数器 - key format: `${taskId}:${phase}` */
+  /** Independent retry counter for each phase - key format: `${taskId}:${phase}` */
   phaseRetryCounters: Map<string, number>;
   /**
-   * 批次边界索引列表（来自 plan recommend 的批次分组数据）
-   * 例如 [0, 3, 7] 表示: 批次1=[0,3), 批次2=[3,7), 批次3=[7,...)
-   * 与 batchLabels 配合使用，为流水线提供批次感知能力
+   * Batch boundary index list (from plan recommend's batch grouping data)
+   * E.g., [0, 3, 7] means: batch1=[0,3), batch2=[3,7), batch3=[7,...)
+   * Used with batchLabels to provide batch awareness for pipeline
    */
   batchBoundaries?: number[];
   /**
-   * 批次标签列表（与 batchBoundaries 一一对应）
-   * 例如 ['P0 紧急', 'P1 高', 'P2 中']
+   * Batch label list (corresponds to batchBoundaries)
+   * E.g., ['P0 Urgent', 'P1 High', 'P2 Medium']
    */
   batchLabels?: string[];
   /**
-   * 批次内是否可并行标记（与 batchBoundaries 一一对应）
+   * Whether batch is parallelizable (corresponds to batchBoundaries)
    */
   batchParallelizable?: boolean[];
   /**
-   * 已通过的任务ID列表（任务级状态追踪）
+   * List of passed task IDs (task-level status tracking)
    */
   passedTasks?: string[];
   /**
-   * 已失败的任务ID列表（任务级状态追踪）
+   * List of failed task IDs (task-level status tracking)
    */
   failedTasks?: string[];
   /**
-   * 正在重试的任务ID列表（任务级状态追踪）
+   * List of retrying task IDs (task-level status tracking)
    */
   retryingTasks?: string[];
   /**
-   * 任务阶段检查点 - 记录每个任务已完成的最后一个阶段和时间戳
-   * 用于崩溃恢复时跳过已完成的阶段
+   * Task phase checkpoint - records the last completed phase and timestamp for each task
+   * Used to skip completed phases during crash recovery
    * key: taskId, value: { completedPhase, completedAt }
    */
   taskPhaseCheckpoints: Map<string, { completedPhase: 'development' | 'code_review' | 'qa' | 'evaluation'; completedAt: string }>;
 }
 
 /**
- * Headless Claude 执行选项
+ * Headless Claude execution options
  */
 export interface HeadlessClaudeOptions {
-  /** 任务描述/提示词 */
+  /** Task description/prompt */
   prompt: string;
-  /** 允许的工具列表 */
+  /** List of allowed tools */
   allowedTools: string[];
-  /** 超时时间（秒） */
+  /** Timeout (seconds) */
   timeout: number;
-  /** 工作目录 */
+  /** Working directory */
   cwd: string;
-  /** 输出格式 */
+  /** Output format */
   outputFormat: 'text' | 'json';
 }
 
 /**
- * Headless Claude 执行结果
+ * Headless Claude execution result
  */
 export interface HeadlessClaudeResult {
-  /** 是否成功 */
+  /** Whether successful */
   success: boolean;
-  /** 输出内容 */
+  /** Output content */
   output: string;
-  /** 退出码 */
+  /** Exit code */
   exitCode: number;
-  /** 执行时长（毫秒） */
+  /** Execution duration (milliseconds) */
   duration: number;
-  /** 错误信息 */
+  /** Error message */
   error?: string;
-  /** Hook 错误隔离警告 */
+  /** Hook error isolation warning */
   hookWarning?: string;
 }
 
 /**
- * 创建默认 Sprint Contract
+ * Create default Sprint Contract
  */
 export function createDefaultSprintContract(taskId: string): SprintContract {
   const now = new Date().toISOString();
@@ -491,7 +491,7 @@ export function createDefaultSprintContract(taskId: string): SprintContract {
 }
 
 /**
- * 创建默认开发报告
+ * Create default development report
  */
 export function createDefaultDevReport(taskId: string): DevReport {
   const now = new Date().toISOString();
@@ -508,7 +508,7 @@ export function createDefaultDevReport(taskId: string): DevReport {
 }
 
 /**
- * 创建默认执行记录
+ * Create default execution record
  */
 export function createDefaultExecutionRecord(task: TaskMeta): TaskExecutionRecord {
   return {
@@ -523,40 +523,40 @@ export function createDefaultExecutionRecord(task: TaskMeta): TaskExecutionRecor
 }
 
 /**
- * 计划快照 - 流水线运行时计划状态的不可变快照
+ * Plan snapshot - Immutable snapshot of plan state during pipeline execution
  *
- * 解决幽灵任务检测缺乏计划上下文的问题：
- * - 流水线启动时创建快照，记录当时的完整计划状态
- * - 全流程读取快照而非 current-plan.json
- * - 流水线退出时清理（正常清理，异常保留供诊断）
+ * Solves the phantom task detection's lack of plan context:
+ * - Create snapshot at pipeline start, recording complete plan state at that time
+ * - Read from snapshot throughout instead of current-plan.json
+ * - Clean up on pipeline exit (normal cleanup, keep on exception for diagnosis)
  */
 export interface PlanSnapshot {
-  /** 快照ID (format: harness-plan-snapshot-{pid}-{timestamp}) */
+  /** Snapshot ID (format: harness-plan-snapshot-{pid}-{timestamp}) */
   snapshotId: string;
-  /** 进程ID */
+  /** Process ID */
   pid: number;
-  /** 创建时间戳 */
+  /** Creation timestamp */
   timestamp: string;
-  /** 快照文件路径 */
+  /** Snapshot file path */
   path: string;
-  /** 计划任务ID列表（有序） */
+  /** Plan task ID list (ordered) */
   tasks: string[];
-  /** 批次分组 */
+  /** Batch groups */
   batches?: string[][];
-  /** 批次边界索引 */
+  /** Batch boundary indexes */
   batchBoundaries?: number[];
-  /** 批次标签 */
+  /** Batch labels */
   batchLabels?: string[];
-  /** 批次内是否可并行 */
+  /** Whether batch is parallelizable */
   batchParallelizable?: boolean[];
-  /** 原始计划文件路径 */
+  /** Original plan file path */
   sourcePlanPath: string;
-  /** 创建快照时的任务状态快照（taskId -> status） */
+  /** Task status snapshot at creation time (taskId -> status) */
   taskStatusSnapshot: Record<string, string>;
 }
 
 /**
- * 创建默认运行时状态
+ * Create default runtime state
  */
 export function createDefaultRuntimeState(config: HarnessConfig): HarnessRuntimeState {
   const now = new Date().toISOString();
@@ -583,124 +583,124 @@ export function createDefaultRuntimeState(config: HarnessConfig): HarnessRuntime
 }
 
 // ============================================================
-// 流水线状态报告类型（供 AI 读取）
+// Pipeline status report types (for AI consumption)
 // ============================================================
 
 /**
- * 流水线阶段
+ * Pipeline phase
  */
 export type HarnessReportPhase =
-  | 'idle'           // 空闲
-  | 'initialization' // 初始化
-  | 'development'    // 开发阶段
-  | 'code_review'    // 代码审核阶段
-  | 'qa_verification'// QA 验证阶段
-  | 'evaluation'     // 最终评估阶段
-  | 'completed'      // 完成
-  | 'failed';        // 失败
+  | 'idle'           // Idle
+  | 'initialization' // Initialization
+  | 'development'    // Development phase
+  | 'code_review'    // Code review phase
+  | 'qa_verification'// QA verification phase
+  | 'evaluation'     // Final evaluation phase
+  | 'completed'      // Completed
+  | 'failed';        // Failed
 
 /**
- * 阶段历史条目
+ * Phase history entry
  */
 export interface PhaseHistoryEntry {
-  /** 阶段 */
+  /** Phase */
   phase: HarnessReportPhase;
-  /** 任务ID */
+  /** Task ID */
   taskId?: string;
-  /** 状态 */
+  /** Status */
   status: 'started' | 'completed' | 'failed';
-  /** 时间戳 */
+  /** Timestamp */
   timestamp: string;
-  /** 消息 */
+  /** Message */
   message?: string;
-  /** 持续时间（毫秒） */
+  /** Duration (milliseconds) */
   duration?: number;
 }
 
 /**
- * 流水线状态报告
- * 存储位置：.projmnt4claude/harness-status.json
+ * Pipeline status report
+ * Storage location: .projmnt4claude/harness-status.json
  *
- * CP-23/24/25/26: 状态准确性修复
- * - state 仅表示进程级别状态 (running/completed/stopped)
- * - 个别任务失败不影响 state，仅记录在 failedTasks 数组中
- * - totalTasks 基于唯一任务ID，不因重试虚增
+ * CP-23/24/25/26: Status accuracy fixes
+ * - state only represents process-level status (running/completed/stopped)
+ * - Individual task failures don't affect state, only recorded in failedTasks array
+ * - totalTasks based on unique task IDs, not inflated by retries
  */
 export interface HarnessStatusReport {
-  /** 会话ID（关联到当前 AI 会话） */
+  /** Session ID (associated with current AI session) */
   sessionId?: string;
 
   /**
-   * 流水线状态（CP-23: 仅表示进程级别状态）
-   * - running: 流水线正在执行
-   * - completed: 流水线正常结束（即使有任务失败）
-   * - failed: 流水线异常中断（进程级错误）
-   * - idle/cancelled: 初始/取消状态
+   * Pipeline state (CP-23: only represents process-level status)
+   * - running: Pipeline is executing
+   * - completed: Pipeline ended normally (even with task failures)
+   * - failed: Pipeline interrupted abnormally (process-level error)
+   * - idle/cancelled: Initial/cancelled state
    */
   state: HarnessState;
 
-  /** 当前阶段 */
+  /** Current phase */
   currentPhase: HarnessReportPhase;
 
-  /** 当前任务ID */
+  /** Current task ID */
   currentTaskId?: string;
 
   /**
-   * 总任务数（CP-25: 基于唯一任务ID，不含重试虚增）
+   * Total number of tasks (CP-25: based on unique task IDs, not inflated by retries)
    */
   totalTasks: number;
 
-  /** 已完成任务数 */
+  /** Number of completed tasks */
   completedTasks: number;
 
-  /** 进度百分比 (0-100) */
+  /** Progress percentage (0-100) */
   progress: number;
 
-  /** 状态消息 */
+  /** Status message */
   message: string;
 
-  /** 时间戳 */
+  /** Timestamp */
   timestamp: string;
 
-  /** 阶段历史 */
+  /** Phase history */
   phaseHistory: PhaseHistoryEntry[];
 
-  /** 错误信息（如有） */
+  /** Error information (if any) */
   error?: {
     code: string;
     message: string;
     taskId?: string;
   };
 
-  // --- CP-24: 任务级别状态追踪 ---
+  // --- CP-24: Task-level status tracking ---
 
-  /** 已通过任务ID列表 */
+  /** List of passed task IDs */
   passedTasks?: string[];
 
-  /** 已失败任务详情列表 */
+  /** List of failed task details */
   failedTasks?: Array<{
     id: string;
     reason?: string;
     phase?: string;
   }>;
 
-  /** 正在重试的任务列表 */
+  /** List of retrying tasks */
   retryingTasks?: Array<{
     id: string;
     attempt: number;
     maxRetries: number;
-    /** 重试的阶段 */
+    /** Phase being retried */
     phase?: string;
-    /** 重试原因 */
+    /** Retry reason */
     reason?: string;
   }>;
 
-  // --- CP-26: 重试历史记录 ---
+  // --- CP-26: Retry history record ---
 
-  /** 总重试次数（唯一任务维度） */
+  /** Total retry count (unique task dimension) */
   retryCount?: number;
 
-  /** 重试历史详情 */
+  /** Retry history details */
   retryHistory?: Array<{
     taskId: string;
     attempt: number;
@@ -711,7 +711,7 @@ export interface HarnessStatusReport {
 }
 
 /**
- * 创建默认状态报告
+ * Create default status report
  */
 export function createDefaultStatusReport(sessionId?: string): HarnessStatusReport {
   return {
@@ -721,7 +721,7 @@ export function createDefaultStatusReport(sessionId?: string): HarnessStatusRepo
     totalTasks: 0,
     completedTasks: 0,
     progress: 0,
-    message: '流水线就绪',
+    message: 'Pipeline ready',
     timestamp: new Date().toISOString(),
     phaseHistory: [],
     passedTasks: [],

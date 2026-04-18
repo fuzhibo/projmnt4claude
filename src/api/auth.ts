@@ -1,4 +1,4 @@
-// API 认证模块 - 带超时处理的登录接口
+// API Authentication Module - Login interface with timeout handling
 
 export interface LoginRequest {
   username: string;
@@ -16,10 +16,10 @@ export interface ApiConfig {
   timeout: number;
 }
 
-const DEFAULT_TIMEOUT = 10000; // 10秒默认超时
+const DEFAULT_TIMEOUT = 10000; // 10 seconds default timeout
 
 /**
- * 带超时控制的 fetch 请求
+ * Fetch request with timeout control
  */
 async function fetchWithTimeout(
   url: string,
@@ -39,16 +39,16 @@ async function fetchWithTimeout(
   } catch (error) {
     clearTimeout(timeoutId);
     if (error instanceof Error && error.name === 'AbortError') {
-      throw new Error('请求超时，请稍后重试');
+      throw new Error('Request timeout, please try again later');
     }
     throw error;
   }
 }
 
 /**
- * 登录接口 - 带超时处理
- * @param request 登录请求参数
- * @param timeout 超时时间（毫秒），默认10秒
+ * Login interface - with timeout handling
+ * @param request Login request parameters
+ * @param timeout Timeout in milliseconds, default 10 seconds
  */
 export async function login(
   request: LoginRequest,
@@ -75,64 +75,64 @@ export async function login(
       if (response.status === 408 || response.status === 504) {
         return {
           success: false,
-          message: '服务器响应超时，请稍后重试',
+          message: 'Server response timeout, please try again later',
         };
       }
 
       if (response.status === 401) {
         return {
           success: false,
-          message: '用户名或密码错误',
+          message: 'Invalid username or password',
         };
       }
 
       return {
         success: false,
-        message: `登录失败: HTTP ${response.status}`,
+        message: `Login failed: HTTP ${response.status}`,
       };
     }
 
     const data = await response.json();
 
-    console.log(`[Auth] 登录成功，响应时间: ${responseTime}ms`);
+    console.log(`[Auth] Login successful, response time: ${responseTime}ms`);
 
     return {
       success: true,
       token: data.token,
-      message: '登录成功',
+      message: 'Login successful',
     };
   } catch (error) {
     const responseTime = Date.now() - startTime;
 
-    console.error(`[Auth] 登录失败，耗时: ${responseTime}ms`, error);
+    console.error(`[Auth] Login failed, elapsed time: ${responseTime}ms`, error);
 
-    if (error instanceof Error && error.message.includes('超时')) {
+    if (error instanceof Error && error.message.includes('timeout')) {
       return {
         success: false,
-        message: '请求超时，请检查网络连接后重试',
+        message: 'Request timeout, please check your network connection and try again',
       };
     }
 
     return {
       success: false,
-      message: '网络错误，请检查网络连接',
+      message: 'Network error, please check your network connection',
     };
   }
 }
 
 /**
- * 创建带超时配置的 API 客户端
+ * Create API client with timeout configuration
  */
 export function createAuthClient(config: ApiConfig) {
   return {
     /**
-     * 登录方法
+     * Login method
      */
     login: (request: LoginRequest): Promise<LoginResponse> =>
       login(request, config.timeout),
 
     /**
-     * 登出方法
+     * Logout method
      */
     logout: async (): Promise<void> => {
       try {
@@ -147,13 +147,13 @@ export function createAuthClient(config: ApiConfig) {
           config.timeout
         );
       } catch (error) {
-        console.error('[Auth] 登出失败', error);
+        console.error('[Auth] Logout failed', error);
       }
     },
   };
 }
 
-// 默认导出
+// Default export
 export default {
   login,
   createAuthClient,

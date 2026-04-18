@@ -208,7 +208,7 @@ export async function initRequirement(
   const inputDescLength = description.length;
   let userEditCount = 0;
 
-  // 输入验证
+  // Input validation
   const trimmedDesc = description?.trim() ?? '';
   if (trimmedDesc.length === 0) {
     console.error('');
@@ -242,11 +242,11 @@ export async function initRequirement(
     process.exit(1);
   }
 
-  // 阶段 1: 需求/问题分解（新增）
+  // Stage 1: Requirement/issue decomposition (new)
   if (shouldDecomposeOption && shouldDecompose(description)) {
     console.log('');
     console.log('━'.repeat(SEPARATOR_WIDTH));
-    console.log('🔍 检测到可分解内容，正在进行需求分解...');
+    console.log('🔍 Decomposable content detected, analyzing requirement...');
     console.log('━'.repeat(SEPARATOR_WIDTH));
     console.log('');
 
@@ -261,18 +261,18 @@ export async function initRequirement(
       console.log(formatDecomposition(decomposition));
       console.log('');
 
-      // 确认是否分解创建（非交互模式自动确认）
+      // Confirm decomposition creation (auto-confirm in non-interactive mode)
       let confirmDecompose = true;
       if (!nonInteractive) {
         const result = await prompts({
           type: 'confirm',
           name: 'confirm',
-          message: `是否将需求分解为 ${decomposition.items.length} 个独立任务创建?`,
+          message: `Decompose requirement into ${decomposition.items.length} independent tasks?`,
           initial: true,
         });
         if (result === undefined) {
           console.log('');
-          console.log('ℹ️  已取消任务创建。');
+          console.log('ℹ️  Task creation cancelled.');
           console.log('');
           return;
         }
@@ -286,8 +286,8 @@ export async function initRequirement(
       }
     }
 
-    // 分解失败或用户选择不分解，继续单任务流程
-    console.log('  跳过分解，继续创建单个任务...');
+    // Decomposition failed or user chose not to decompose, continue with single task flow
+    console.log('  Skipping decomposition, continuing with single task creation...');
     console.log('');
   }
 
@@ -314,7 +314,7 @@ export async function initRequirement(
       enabled: true,
       aiCall: () => new AIMetadataAssistant(cwd).enhanceRequirement(description, { cwd }),
       fallback: { title: null, description: null, type: null, priority: null, recommendedRole: null, checkpoints: null, dependencies: null, aiUsed: false },
-      operationName: '增强调用',
+      operationName: 'enhancement_call',
       logger,
     });
 
@@ -400,19 +400,19 @@ export async function initRequirement(
     const result = await prompts({
       type: 'confirm',
       name: 'confirm',
-      message: '是否基于此分析创建任务?',
+      message: 'Create task based on this analysis?',
       initial: true,
     });
     // IR-01-09: Ctrl+C safety — prompts returns undefined on SIGINT
     if (result === undefined) {
       console.log('');
-      console.log('ℹ️  已取消任务创建。');
+      console.log('ℹ️  Task creation cancelled.');
       console.log('');
       logger.logInstrumentation({
         module: 'init-requirement',
         action: 'cancel',
         input_summary: `desc_len=${inputDescLength}`,
-        output_summary: 'Ctrl+C 取消创建',
+        output_summary: 'Ctrl+C cancelled creation',
         ai_used: analysis.aiUsed,
         ai_enhanced_fields: analysis.aiEnhancedFields,
         duration_ms: Date.now() - startTime,
@@ -427,15 +427,15 @@ export async function initRequirement(
 
   if (!confirmCreate.confirm) {
     console.log('');
-    console.log('ℹ️  已取消任务创建。');
-    console.log('   如需重新创建，请再次运行 init-requirement 命令。');
+    console.log('ℹ️  Task creation cancelled.');
+    console.log('   Run init-requirement again to recreate.');
     console.log('');
-    // CP-8 埋点: 用户取消
+    // CP-8 instrumentation: user cancelled
     logger.logInstrumentation({
       module: 'init-requirement',
       action: 'cancel',
       input_summary: `desc_len=${inputDescLength}`,
-      output_summary: '用户取消创建',
+      output_summary: 'User cancelled creation',
       ai_used: analysis.aiUsed,
       ai_enhanced_fields: analysis.aiEnhancedFields,
       duration_ms: Date.now() - startTime,
@@ -446,7 +446,7 @@ export async function initRequirement(
     return;
   }
 
-  // 允许用户修改（非交互模式使用分析结果）
+  // Allow user to modify (non-interactive mode uses analysis results)
   let response: { title: string; description: string; priority: string; recommendedRole: string };
   if (nonInteractive) {
     response = {
@@ -460,31 +460,31 @@ export async function initRequirement(
       {
         type: 'text',
         name: 'title',
-        message: '任务标题',
+        message: 'Task title',
         initial: analysis.title,
       },
       {
         type: 'text',
         name: 'description',
-        message: '任务描述',
+        message: 'Task description',
         initial: analysis.description,
       },
       {
         type: 'select',
         name: 'priority',
-        message: '优先级',
+        message: 'Priority',
         choices: [
-          { title: 'P3 低', value: 'P3' },
-          { title: 'P2 中', value: 'P2', selected: analysis.priority === 'P2' },
-          { title: 'P1 高', value: 'P1', selected: analysis.priority === 'P1' },
-          { title: 'P0 紧急', value: 'P0', selected: analysis.priority === 'P0' },
+          { title: 'P3 Low', value: 'P3' },
+          { title: 'P2 Medium', value: 'P2', selected: analysis.priority === 'P2' },
+          { title: 'P1 High', value: 'P1', selected: analysis.priority === 'P1' },
+          { title: 'P0 Urgent', value: 'P0', selected: analysis.priority === 'P0' },
         ],
         initial: analysis.priority === 'P3' ? 0 : analysis.priority === 'P2' ? 1 : analysis.priority === 'P1' ? 2 : 3,
       },
       {
         type: 'text',
         name: 'recommendedRole',
-        message: '推荐角色',
+        message: 'Recommended role',
         initial: analysis.recommendedRole,
       },
     ]);
@@ -492,13 +492,13 @@ export async function initRequirement(
     // IR-01-09: Ctrl+C safety — prompts returns undefined on SIGINT
     if (promptResponse === undefined) {
       console.log('');
-      console.log('ℹ️  已取消任务创建。');
+      console.log('ℹ️  Task creation cancelled.');
       console.log('');
       logger.logInstrumentation({
         module: 'init-requirement',
         action: 'cancel',
         input_summary: `desc_len=${inputDescLength}`,
-        output_summary: 'Ctrl+C 取消创建',
+        output_summary: 'Ctrl+C cancelled creation',
         ai_used: analysis.aiUsed,
         ai_enhanced_fields: analysis.aiEnhancedFields,
         duration_ms: Date.now() - startTime,
@@ -525,7 +525,7 @@ export async function initRequirement(
       };
       const newComplexity = assessComplexity(response.description, newAnalysis);
       if (newComplexity.level !== complexity.level || newComplexity.estimatedMinutes !== complexity.estimatedMinutes) {
-        console.log(`   📊 复杂度已重新评估: ${formatComplexity(newComplexity)} (原: ${formatComplexity(complexity)})`);
+        console.log(`   📊 Complexity reassessed: ${formatComplexity(newComplexity)} (was: ${formatComplexity(complexity)})`);
         complexity = newComplexity;
       }
     }
@@ -533,14 +533,14 @@ export async function initRequirement(
 
   if (!response.title) {
     console.log('');
-    console.log('ℹ️  已取消任务创建（标题不能为空）。');
-    console.log('   如需重新创建，请再次运行 init-requirement 命令。');
+    console.log('ℹ️  Task creation cancelled (title cannot be empty).');
+    console.log('   Run init-requirement again to recreate.');
     console.log('');
     logger.logInstrumentation({
       module: 'init-requirement',
       action: 'cancel',
       input_summary: `desc_len=${inputDescLength}`,
-      output_summary: '标题为空，取消创建',
+      output_summary: 'Empty title, cancelled creation',
       ai_used: analysis.aiUsed,
       ai_enhanced_fields: analysis.aiEnhancedFields,
       duration_ms: Date.now() - startTime,
@@ -563,12 +563,12 @@ export async function initRequirement(
   const allCheckpoints = [...new Set([...structuredInfo.checkpoints, ...inferredCheckpoints, ...analysis.suggestedCheckpoints])];
   const allRelatedFiles = [...new Set([...structuredInfo.relatedFiles, ...inferredFiles])];
 
-  // 过滤低质量检查点（AI 解析伪影）
+  // Filter low-quality checkpoints (AI parsing artifacts)
   const filterResult = filterLowQualityCheckpoints(allCheckpoints.length > 0 ? allCheckpoints : analysis.suggestedCheckpoints);
   if (filterResult.removed.length > 0) {
-    console.log(`   🔍 已过滤 ${filterResult.removed.length} 个低质量检查点:`);
+    console.log(`   🔍 Filtered ${filterResult.removed.length} low-quality checkpoints:`);
     for (const removed of filterResult.removed) {
-      const reason = filterResult.reasons.get(removed) || '未知原因';
+      const reason = filterResult.reasons.get(removed) || 'Unknown reason';
       console.log(`     - "${removed}" (${reason})`);
     }
   }
@@ -590,8 +590,8 @@ export async function initRequirement(
     type: taskType,
     priority: taskPriority,
     nonInteractive: true,
-    skipValidation: true, // 我们在后面手动进行质量门禁检查
-    aiEnhancement: false, // 已经在上面手动完成了结构化处理
+    skipValidation: true, // Manual quality gate check later
+    aiEnhancement: false, // Structured processing completed above
     suggestedCheckpoints: checkpoints,
     potentialDependencies: analysis.potentialDependencies,
     recommendedRole: response.recommendedRole || analysis.recommendedRole,
@@ -627,7 +627,7 @@ export async function initRequirement(
   const taskDir = path.join(getTasksDir(cwd), taskId);
   const checkpointPath = path.join(taskDir, 'checkpoint.md');
 
-  // BUG-013-2: 验证检查点验证命令完整性
+  // BUG-013-2: Validate checkpoint verification command completeness
   const updatedTask = readTaskMeta(taskId, cwd);
   if (updatedTask?.checkpoints) {
     const checkpointsWithoutCommands = updatedTask.checkpoints.filter(cp => {
@@ -643,22 +643,22 @@ export async function initRequirement(
     }
   }
 
-  // 基础字段验证
+  // Basic field validation
   if (updatedTask) {
     const basicValidation = validateBasicFields(updatedTask);
     if (!basicValidation.valid) {
-      console.log(`\n   ⚠️  基础字段验证未通过:`);
+      console.log(`\n   ⚠️  Basic field validation failed:`);
       for (const err of basicValidation.errors) {
         console.log(`     - ${err}`);
       }
     }
   }
 
-  // 文件存在性验证
+  // File existence validation
   if (updatedTask) {
     const filesValidation = validateFilesExist(updatedTask, cwd);
     if (!filesValidation.valid) {
-      console.log(`\n   ⚠️  ${filesValidation.missingFiles.length} 个引用文件不存在:`);
+      console.log(`\n   ⚠️  ${filesValidation.missingFiles.length} referenced files do not exist:`);
       for (const f of filesValidation.missingFiles) {
         console.log(`     - ${f}`);
       }
@@ -675,14 +675,14 @@ export async function initRequirement(
   }
   console.log('');
 
-  // CP-1/CP-6: 质量门禁检查 - 任务创建后调用 checkQualityGate 并显示评分
+  // CP-1/CP-6: Quality gate check - call checkQualityGate after task creation and display score
   const qualityGateConfig: QualityGateConfig = {
     ...DEFAULT_QUALITY_GATE_CONFIG,
     minQualityScore: requireQuality ?? DEFAULT_QUALITY_GATE_CONFIG.minQualityScore,
   };
 
   if (qualityGateConfig.minQualityScore < 0 || qualityGateConfig.minQualityScore > 100) {
-    console.error('错误: --require-quality 必须在 0-100 之间');
+    console.error('Error: --require-quality must be between 0-100');
     process.exit(1);
   }
 
@@ -705,7 +705,7 @@ export async function initRequirement(
   console.log(`   Solution: ${qualityResult.score.solutionScore}%`);
   console.log('');
 
-  // CP-16: 依赖关系质量门禁 - 验证新任务的依赖完整性 (GATE-DEP-001/002/003)
+  // CP-16: Dependency quality gate - validate new task dependency integrity (GATE-DEP-001/002/003)
   const allExistingTasks = getAllTasks(cwd);
   const depGraph = DependencyGraph.fromTasks(allExistingTasks);
   const depValidation = validateNewTaskDeps(taskId, task.dependencies || [], depGraph, allExistingTasks);
@@ -723,29 +723,29 @@ export async function initRequirement(
   }
   console.log('');
 
-  // CP-quality-gate-error-list: Error 级别违规默认阻断任务创建
+  // CP-quality-gate-error-list: Error-level violations block task creation by default
   if (qualityResult.errorViolations.length > 0) {
     console.log('━'.repeat(SEPARATOR_WIDTH));
-    console.log(`❌ 质量门禁未通过: 发现 ${qualityResult.errorViolations.length} 项错误级别违规`);
+    console.log(`❌ Quality gate failed: ${qualityResult.errorViolations.length} error-level violations found`);
     console.log('━'.repeat(SEPARATOR_WIDTH));
     console.log('');
 
-    console.log('🚫 以下错误必须修复后才能创建任务:');
+    console.log('🚫 The following errors must be fixed before creating task:');
     for (const violation of qualityResult.errorViolations) {
       console.log(`   ❌ [${violation.ruleId}] ${violation.message}`);
       if (violation.field) {
-        console.log(`      字段: ${violation.field}`);
+        console.log(`      Field: ${violation.field}`);
       }
     }
     console.log('');
 
-    console.log('💡 修复方案:');
-    console.log('   1. 检查点必须以标准前缀开头: [implem]、[test]、[doc]、[verify]');
-    console.log('   2. meta.json 必须符合规范格式，包含所有必需字段');
-    console.log('   3. 使用 --skip-quality-gate 临时跳过（不推荐用于生产环境）');
+    console.log('💡 Fix suggestions:');
+    console.log('   1. Checkpoints must start with standard prefixes: [implem], [test], [doc], [verify]');
+    console.log('   2. meta.json must be in standard format with all required fields');
+    console.log('   3. Use --skip-quality-gate to skip temporarily (not recommended for production)');
     console.log('');
 
-    // 记录埋点
+    // Log instrumentation
     logger.logInstrumentation({
       module: 'init-requirement',
       action: 'quality_gate_error_blocked',
@@ -760,20 +760,20 @@ export async function initRequirement(
     process.exit(1);
   }
 
-  // CP-3/CP-7: --require-quality 阻止低质量任务创建
+  // CP-3/CP-7: --require-quality blocks low-quality task creation
   if (requireQuality !== undefined && !qualityResult.passed) {
     console.log('━'.repeat(SEPARATOR_WIDTH));
-    console.log(`❌ 质量门禁未通过: ${qualityResult.score.totalScore} < ${requireQuality}`);
+    console.log(`❌ Quality gate failed: ${qualityResult.score.totalScore} < ${requireQuality}`);
     console.log('━'.repeat(SEPARATOR_WIDTH));
     console.log('');
 
-    // 显示改进建议
+    // Display improvement suggestions
     if (qualityResult.suggestions.length > 0) {
       const sorted = [...qualityResult.suggestions].sort((a, b) => {
         const order = { high: 0, medium: 1, low: 2 };
         return order[a.priority] - order[b.priority];
       });
-      console.log('💡 改进建议:');
+      console.log('💡 Improvement suggestions:');
       for (const s of sorted.slice(0, 5)) {
         const icon = s.priority === 'high' ? '🔴' : s.priority === 'medium' ? '🟠' : '🟡';
         console.log(`  ${icon} [${s.category}] ${s.message}`);
@@ -782,11 +782,11 @@ export async function initRequirement(
       console.log('');
     }
 
-    console.log(`任务 ${taskId} 已创建但未通过质量门禁 (分数 ${qualityResult.score.totalScore} < 阈值 ${requireQuality})。`);
-    console.log('请完善任务描述后重新创建，或使用较低的 --require-quality 阈值。');
+    console.log(`Task ${taskId} created but did not pass quality gate (score ${qualityResult.score.totalScore} < threshold ${requireQuality}).`);
+    console.log('Please improve the task description and recreate, or use a lower --require-quality threshold.');
     console.log('');
 
-    // 记录埋点
+    // Log instrumentation
     logger.logInstrumentation({
       module: 'init-requirement',
       action: 'quality_gate_blocked',
@@ -801,7 +801,7 @@ export async function initRequirement(
     process.exit(1);
   }
 
-  // CP-2: 质量不达标时输出警告和改进建议（不阻断创建）
+  // CP-2: Output warnings and improvement suggestions when quality is below standard (non-blocking)
   if (!qualityResult.passed) {
     console.log('⚠️  Quality Gate Warning: Task quality score below default threshold, improvements recommended');
     if (qualityResult.suggestions.length > 0) {
@@ -818,10 +818,10 @@ export async function initRequirement(
     console.log('');
   }
 
-  // 自动拆分复杂任务
+  // Auto-split complex tasks
   if (autoSplit && complexity.level === 'high' && complexity.splitSuggestions.length > 0) {
     console.log('━'.repeat(SEPARATOR_WIDTH));
-    console.log('🔀 自动拆分复杂任务...');
+    console.log('🔀 Auto-splitting complex task...');
     console.log('━'.repeat(SEPARATOR_WIDTH));
     console.log('');
 
@@ -878,14 +878,14 @@ export async function initRequirement(
       fs.writeFileSync(subCheckpointPath, subCheckpointContent, 'utf-8');
       syncCheckpointsToMeta(subId, cwd);
 
-      // 关联到父任务（更新父任务 subtaskIds 和 history）
+      // Link to parent task (update parent subtaskIds and history)
       addSubtaskToParent(taskId, subId, cwd);
 
       console.log(`  ${i + 1}. ${subId}: ${sub.title}`);
-      console.log(`     文件: ${sub.files.length > 0 ? sub.files.join(', ') : '待确认'}`);
-      console.log(`     预估: ~${sub.estimatedMinutes} 分钟`);
+      console.log(`     Files: ${sub.files.length > 0 ? sub.files.join(', ') : 'TBD'}`);
+      console.log(`     Estimated: ~${sub.estimatedMinutes} minutes`);
       if (subTask.dependencies && subTask.dependencies.length > 0) {
-        console.log(`     依赖: ${subTask.dependencies.join(', ')}`);
+        console.log(`     Dependencies: ${subTask.dependencies.join(', ')}`);
       }
       console.log('');
     }
@@ -931,16 +931,16 @@ export async function initRequirement(
         const skippedDeps = subDeps
           .filter(d => !existingDeps.includes(d.depTaskId) && subDepGraph.wouldCreateCycle(subId, d.depTaskId));
         if (skippedDeps.length > 0) {
-          console.log(`   ⚠️  ${subId}: 跳过 ${skippedDeps.length} 个推断依赖（会形成环）`);
+          console.log(`   ⚠️  ${subId}: Skipped ${skippedDeps.length} inferred dependencies (would create cycle)`);
         }
       }
     }
 
     } catch (err) {
       // IR-01-13: Partial failure — clean up already-created subtasks
-      console.error(`\n❌ 子任务创建失败: ${err instanceof Error ? err.message : String(err)}`);
+      console.error(`\n❌ Subtask creation failed: ${err instanceof Error ? err.message : String(err)}`);
       if (subtaskIds.length > 0) {
-        console.log(`   清理已创建的 ${subtaskIds.length} 个子任务...`);
+        console.log(`   Cleaning up ${subtaskIds.length} created subtasks...`);
         for (const cleanupId of subtaskIds) {
           try {
             const cleanupDir = path.join(getTasksDir(cwd), cleanupId);
@@ -957,14 +957,14 @@ export async function initRequirement(
           parentMeta.subtaskIds = (parentMeta.subtaskIds || []).filter(id => !subtaskIds.includes(id));
           writeTaskMeta(parentMeta, cwd);
         }
-        console.log(`   已清理。父任务 ${taskId} 保留。`);
+        console.log(`   Cleaned up. Parent task ${taskId} retained.`);
       }
       console.log('');
     }
 
     if (subtaskIds.length > 0) {
-      console.log(`✅ 已拆分为 ${subtaskIds.length} 个子任务`);
-      console.log(`   父任务: ${taskId}`);
+      console.log(`✅ Split into ${subtaskIds.length} subtasks`);
+      console.log(`   Parent task: ${taskId}`);
       console.log('');
     }
   }
@@ -975,12 +975,12 @@ export async function initRequirement(
     }
   }
 
-  // 询问是否添加到执行计划（非交互模式或 noPlan 时跳过）
+  // Ask whether to add to execution plan (skip in non-interactive mode or when noPlan)
   if (!noPlan && !nonInteractive) {
     const addToPlan = await prompts({
       type: 'confirm',
       name: 'add',
-      message: '是否将此任务添加到执行计划?',
+      message: 'Add this task to execution plan?',
       initial: true,
     });
 
@@ -988,13 +988,13 @@ export async function initRequirement(
     if (addToPlan === undefined) {
       // Silently skip plan addition on Ctrl+C
     } else if (addToPlan.add) {
-      // 动态导入 plan 模块
+      // Dynamic import plan module
       const planModule = await import('./plan');
       planModule.addTask(taskId);
     }
   }
 
-  // CP-8: 记录 init-requirement 埋点
+  // CP-8: Log init-requirement instrumentation
   logger.logInstrumentation({
     module: 'init-requirement',
     action: 'create_task',
@@ -1009,7 +1009,7 @@ export async function initRequirement(
 }
 
 /**
- * 格式化复杂度显示
+ * Format complexity display
  */
 function formatComplexity(assessment: ComplexityAssessment): string {
   const icons: Record<string, string> = {
@@ -1017,7 +1017,7 @@ function formatComplexity(assessment: ComplexityAssessment): string {
     medium: '🟡 medium',
     high: '🔴 high',
   };
-  return `${icons[assessment.level]} (评分: ${assessment.score}/100)`;
+  return `${icons[assessment.level]} (Score: ${assessment.score}/100)`;
 }
 
 /**
@@ -1067,11 +1067,11 @@ function countCrossModuleReferences(description: string): number {
  * 评估任务复杂度
  *
  * 算法基于多维信号：
- * - 文件数量: 涉及文件越多越复杂
- * - 工作项数量: 独立动作越多越复杂
- * - 跨模块引用: 跨越多模块增加复杂度
- * - 检查点数量: 需要验证的点越多越复杂
- * - 描述长度: 过长的描述往往暗示范围不清晰
+ * - File count: more files = more complex
+ * - Work item count: more independent actions = more complex
+ * - Cross-module references: crossing modules increases complexity
+ * - Checkpoint count: more verification points = more complex
+ * - Description length: overly long descriptions often indicate unclear scope
  */
 export function assessComplexity(
   description: string,
@@ -1079,53 +1079,53 @@ export function assessComplexity(
 ): ComplexityAssessment {
   const signals: ComplexitySignal[] = [];
 
-  // 1. 文件数量信号
+  // 1. File count signal
   const files = extractFilePaths(description);
   const fileCount = files.length;
-  const fileWeight = Math.min(fileCount * 8, 30); // 每文件 8 分，上限 30
+  const fileWeight = Math.min(fileCount * 8, 30); // 8 points per file, max 30
   signals.push({
     type: 'file_count',
     weight: fileWeight,
-    description: `涉及 ${fileCount} 个文件`,
+    description: `Involves ${fileCount} files`,
   });
 
-  // 2. 工作项信号
+  // 2. Work item signal
   const workItemCount = countWorkItems(description);
-  const workItemWeight = Math.min(workItemCount * 5, 25); // 每项 5 分，上限 25
+  const workItemWeight = Math.min(workItemCount * 5, 25); // 5 points per item, max 25
   signals.push({
     type: 'work_items',
     weight: workItemWeight,
-    description: `包含 ${workItemCount} 个工作项`,
+    description: `Contains ${workItemCount} work items`,
   });
 
-  // 3. 跨模块信号
+  // 3. Cross-module signal
   const crossModuleCount = countCrossModuleReferences(description);
-  const crossModuleWeight = Math.min(crossModuleCount * 6, 20); // 每引用 6 分，上限 20
+  const crossModuleWeight = Math.min(crossModuleCount * 6, 20); // 6 points per reference, max 20
   signals.push({
     type: 'cross_module',
     weight: crossModuleWeight,
-    description: `跨 ${crossModuleCount} 个模块/系统`,
+    description: `Crosses ${crossModuleCount} modules/systems`,
   });
 
-  // 4. 检查点数量信号
+  // 4. Checkpoint count signal
   const checkpointCount = analysis.suggestedCheckpoints.length;
-  const checkpointWeight = Math.min(checkpointCount * 4, 15); // 每检查点 4 分，上限 15
+  const checkpointWeight = Math.min(checkpointCount * 4, 15); // 4 points per checkpoint, max 15
   signals.push({
     type: 'checkpoint_count',
     weight: checkpointWeight,
-    description: `包含 ${checkpointCount} 个检查点`,
+    description: `Contains ${checkpointCount} checkpoints`,
   });
 
-  // 5. 描述长度信号
+  // 5. Description length signal
   const descLength = description.length;
   const descWeight = descLength > 500 ? 10 : descLength > 200 ? 5 : 0;
   signals.push({
     type: 'description_length',
     weight: descWeight,
-    description: `描述长度 ${descLength} 字符`,
+    description: `Description length ${descLength} characters`,
   });
 
-  // 6. 动作密度信号 (动作动词数量 / 描述长度)
+  // 6. Action density signal (action verb count / description length)
   const actionVerbPattern = /(?:验证|修复|创建|修改|添加|实现|配置|部署|更新|增强|完善|重构|编写|分析|处理|集成|迁移|支持|移除|检查|测试)/g;
   const actionVerbMatches = description.match(actionVerbPattern);
   const actionVerbCount = actionVerbMatches ? actionVerbMatches.length : 0;
@@ -1133,16 +1133,16 @@ export function assessComplexity(
   signals.push({
     type: 'action_verb_density',
     weight: actionDensityWeight,
-    description: `包含 ${actionVerbCount} 个动作动词`,
+    description: `Contains ${actionVerbCount} action verbs`,
   });
 
-  // 计算总分
+  // Calculate total score
   const totalScore = Math.min(
     signals.reduce((sum, s) => sum + s.weight, 0),
     100
   );
 
-  // 确定等级
+  // Determine level
   let level: 'low' | 'medium' | 'high';
   if (totalScore >= 40) {
     level = 'high';
@@ -1152,14 +1152,14 @@ export function assessComplexity(
     level = 'low';
   }
 
-  // 预估耗时: 基于文件数和工作项数
-  // 经验值: 每文件 ~3分钟 + 每工作项 ~2分钟 + 基础 5 分钟
+  // Estimate time: based on file count and work item count
+  // Empirical values: ~3 min per file + ~2 min per work item + base 5 min
   const estimatedMinutes = Math.max(
     5 + fileCount * 3 + workItemCount * 2,
-    Math.ceil(descLength / 100) // 备选: 每百字 1 分钟
+    Math.ceil(descLength / 100) // Fallback: 1 min per 100 characters
   );
 
-  // 超过 15 分钟强制标记为 high
+  // Force high if over 15 minutes
   if (estimatedMinutes > 15 && level !== 'high') {
     level = 'high';
   }
@@ -1513,26 +1513,26 @@ function analyzeRequirement(description: string, cwd: string): RequirementAnalys
 export { inferDependencies } from '../utils/dependency-engine';
 
 /**
- * 格式化优先级
- * 支持两种格式: P0/P1/P2/P3/Q1-Q4 和 low/medium/high/urgent
+ * Format priority
+ * Supports two formats: P0/P1/P2/P3/Q1-Q4 and low/medium/high/urgent
  */
 function formatPriority(priority: TaskPriority | string): string {
   const map: Record<string, string> = {
-    // P0-P3 格式
-    P0: '🔴 P0 紧急',
-    P1: '🟠 P1 高',
-    P2: '🟡 P2 中',
-    P3: '🟢 P3 低',
-    // Q1-Q4 象限格式
+    // P0-P3 format
+    P0: '🔴 P0 Urgent',
+    P1: '🟠 P1 High',
+    P2: '🟡 P2 Medium',
+    P3: '🟢 P3 Low',
+    // Q1-Q4 quadrant format
     Q1: '📊 Q1',
     Q2: '📊 Q2',
     Q3: '📊 Q3',
     Q4: '📊 Q4',
-    // low-urgent 格式（兼容旧数据）
-    low: '🟢 低',
-    medium: '🟡 中',
-    high: '🟠 高',
-    urgent: '🔴 紧急',
+    // low-urgent format (backward compatibility)
+    low: '🟢 Low',
+    medium: '🟡 Medium',
+    high: '🟠 High',
+    urgent: '🔴 Urgent',
   };
   return map[priority] || `❓ ${priority}`;
 }
@@ -1597,7 +1597,7 @@ async function initRequirementSingle(
 
     return taskId;
   } catch (error) {
-    console.error(`  ❌ 创建任务失败: ${item.title}`);
+    console.error(`  ❌ Failed to create task: ${item.title}`);
     console.error(`     ${error instanceof Error ? error.message : String(error)}`);
     return null;
   }
@@ -1642,17 +1642,17 @@ function reportBatchResult(
   totalCount: number
 ): void {
   console.log('\n' + '━'.repeat(50));
-  console.log('📊 批量创建完成');
+  console.log('📊 Batch creation completed');
   console.log('━'.repeat(50));
-  console.log(`   成功: ${created.length}/${totalCount}`);
+  console.log(`   Success: ${created.length}/${totalCount}`);
 
   if (created.length > 0) {
-    console.log(`   任务列表:`);
+    console.log(`   Task list:`);
     created.forEach(id => console.log(`     - ${id}`));
   }
 
   if (failed.length > 0) {
-    console.log(`   失败: ${failed.length}`);
+    console.log(`   Failed: ${failed.length}`);
     failed.forEach(f => console.log(`     - ${f.item.title}: ${f.reason}`));
   }
 }
@@ -1672,22 +1672,22 @@ async function initRequirementBatch(
 
   console.log('');
   console.log('━'.repeat(SEPARATOR_WIDTH));
-  console.log(`📝 分解结果: ${items.length} 个任务`);
+  console.log(`📝 Decomposition result: ${items.length} tasks`);
   items.forEach((item, i) => {
     console.log(`   ${i + 1}. [${item.priority}] ${item.title}`);
   });
   console.log('━'.repeat(SEPARATOR_WIDTH));
   console.log('');
 
-  // 阶段 1: 批量创建任务
+  // Stage 1: Batch create tasks
   console.log('━'.repeat(SEPARATOR_WIDTH));
-  console.log('📝 正在创建任务...');
+  console.log('📝 Creating tasks...');
   console.log('━'.repeat(SEPARATOR_WIDTH));
   console.log('');
 
   for (let i = 0; i < items.length; i++) {
     const item = items[i]!;
-    console.log(`创建任务 ${i + 1}/${items.length}...`);
+    console.log(`Creating task ${i + 1}/${items.length}...`);
 
     const itemOptions: InitRequirementOptions = {
       ...options,
@@ -1702,21 +1702,21 @@ async function initRequirementBatch(
         taskIdMap.set(i, taskId);
         console.log(`✅ ${taskId}`);
       } else {
-        failedTasks.push({ item, reason: '创建失败（返回 null）' });
-        console.log(`❌ 失败: 返回 null`);
+        failedTasks.push({ item, reason: 'Creation failed (returned null)' });
+        console.log(`❌ Failed: returned null`);
       }
     } catch (error) {
       const reason = error instanceof Error ? error.message : String(error);
       failedTasks.push({ item, reason });
-      console.log(`❌ 失败: ${reason}`);
+      console.log(`❌ Failed: ${reason}`);
     }
   }
 
-  // 阶段 2: 更新依赖关系
+  // Stage 2: Update dependencies
   if (createdTaskIds.length > 0) {
     console.log('');
     console.log('━'.repeat(SEPARATOR_WIDTH));
-    console.log('🔗 正在设置任务依赖关系...');
+    console.log('🔗 Setting up task dependencies...');
     console.log('━'.repeat(SEPARATOR_WIDTH));
     console.log('');
 
@@ -1739,11 +1739,11 @@ async function initRequirementBatch(
       if (deps.length > 0) {
         task.dependencies = [...(task.dependencies || []), ...deps];
         writeTaskMeta(task, cwd);
-        console.log(`  ${taskId} 依赖: ${deps.join(', ')}`);
+        console.log(`  ${taskId} dependencies: ${deps.join(', ')}`);
       }
     }
   }
 
-  // 阶段 3: 报告批量创建结果
+  // Stage 3: Report batch creation results
   reportBatchResult(createdTaskIds, failedTasks, items.length);
 }

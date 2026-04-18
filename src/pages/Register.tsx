@@ -1,11 +1,11 @@
 /**
- * 用户注册页面组件
+ * User Registration Page Component
  *
- * 功能：
- * - 邮箱注册
- * - 密码设置
- * - 表单验证
- * - 错误提示
+ * Features:
+ * - Email registration
+ * - Password setup
+ * - Form validation
+ * - Error messages
  */
 
 import React, { useState, useCallback, useMemo } from 'react';
@@ -38,7 +38,7 @@ export interface RegisterProps {
 }
 
 /**
- * 注册页面组件
+ * Registration page component
  *
  * @example
  * ```tsx
@@ -55,31 +55,31 @@ export const Register: React.FC<RegisterProps> = ({
   onSuccess,
   loading: externalLoading = false,
 }) => {
-  // 表单状态
+  // Form state
   const [formData, setFormData] = useState<RegisterFormData>({
     email: '',
     password: '',
     confirmPassword: '',
   });
 
-  // 错误状态
+  // Error state
   const [errors, setErrors] = useState<RegisterFormErrors>({});
 
-  // 触摸状态（用于延迟显示错误）
+  // Touched state (for delayed error display)
   const [touched, setTouched] = useState<Record<string, boolean>>({});
 
-  // 提交状态
+  // Submit state
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   const loading = externalLoading || isSubmitting;
 
   /**
-   * 更新表单字段
+   * Update form field
    */
   const updateField = useCallback((field: keyof RegisterFormData, value: string) => {
     setFormData(prev => ({ ...prev, [field]: value }));
 
-    // 实时验证当前字段
+    // Real-time validation for current field
     let validationResult: ValidationResult;
 
     switch (field) {
@@ -88,7 +88,7 @@ export const Register: React.FC<RegisterProps> = ({
         break;
       case 'password':
         validationResult = validatePassword(value);
-        // 如果确认密码已填写，重新验证密码匹配
+        // If confirm password is filled, re-validate password match
         if (formData.confirmPassword) {
           const matchResult = validatePasswordMatch(value, formData.confirmPassword);
           setErrors(prev => ({
@@ -113,26 +113,26 @@ export const Register: React.FC<RegisterProps> = ({
   }, [formData.password, formData.confirmPassword]);
 
   /**
-   * 标记字段为已触摸
+   * Mark field as touched
    */
   const markTouched = useCallback((field: string) => {
     setTouched(prev => ({ ...prev, [field]: true }));
   }, []);
 
   /**
-   * 获取字段是否应显示错误
+   * Get whether field should show error
    */
   const shouldShowError = useCallback((field: string): boolean => {
     return touched[field] && !!errors[field as keyof RegisterFormErrors];
   }, [touched, errors]);
 
   /**
-   * 验证整个表单
+   * Validate entire form
    */
   const validateForm = useCallback((): boolean => {
     const result = validateRegistrationForm(formData);
     setErrors(result.errors);
-    // 标记所有字段为已触摸
+    // Mark all fields as touched
     setTouched({
       email: true,
       password: true,
@@ -142,7 +142,7 @@ export const Register: React.FC<RegisterProps> = ({
   }, [formData]);
 
   /**
-   * 处理表单提交
+   * Handle form submission
    */
   const handleSubmit = useCallback(async (e: React.FormEvent) => {
     e.preventDefault();
@@ -160,8 +160,8 @@ export const Register: React.FC<RegisterProps> = ({
       await onSubmit(formData);
       onSuccess?.();
     } catch (error) {
-      // 处理提交错误
-      const errorMessage = error instanceof Error ? error.message : '注册失败，请稍后重试';
+      // Handle submission error
+      const errorMessage = error instanceof Error ? error.message : 'Registration failed, please try again later';
       setErrors(prev => ({ ...prev, submit: errorMessage }));
     } finally {
       setIsSubmitting(false);
@@ -169,7 +169,7 @@ export const Register: React.FC<RegisterProps> = ({
   }, [formData, onSubmit, onSuccess, validateForm]);
 
   /**
-   * 密码强度
+   * Password strength
    */
   const passwordStrength = useMemo(() => {
     return getPasswordStrength(formData.password);
@@ -187,14 +187,14 @@ export const Register: React.FC<RegisterProps> = ({
   return (
     <div className="register-container">
       <div className="register-card">
-        <h1 className="register-title">用户注册</h1>
-        <p className="register-subtitle">创建您的新账户</p>
+        <h1 className="register-title">User Registration</h1>
+        <p className="register-subtitle">Create your new account</p>
 
         <form onSubmit={handleSubmit} className="register-form" noValidate>
-          {/* 邮箱字段 */}
+          {/* Email field */}
           <div className="form-field">
             <label htmlFor="email" className="form-label">
-              邮箱地址 <span className="required">*</span>
+              Email Address <span className="required">*</span>
             </label>
             <input
               id="email"
@@ -203,20 +203,20 @@ export const Register: React.FC<RegisterProps> = ({
               onChange={(e) => updateField('email', e.target.value)}
               onBlur={() => markTouched('email')}
               className={`form-input ${shouldShowError('email') ? 'error' : ''}`}
-              placeholder="请输入您的邮箱"
+              placeholder="Please enter your email"
               disabled={loading}
               autoComplete="email"
             />
             {shouldShowError('email') && (
               <span className="error-message">{errors.email}</span>
             )}
-            <span className="field-hint">我们将向此邮箱发送验证邮件</span>
+            <span className="field-hint">We will send a verification email to this address</span>
           </div>
 
-          {/* 密码字段 */}
+          {/* Password field */}
           <div className="form-field">
             <label htmlFor="password" className="form-label">
-              密码 <span className="required">*</span>
+              Password <span className="required">*</span>
             </label>
             <input
               id="password"
@@ -225,7 +225,7 @@ export const Register: React.FC<RegisterProps> = ({
               onChange={(e) => updateField('password', e.target.value)}
               onBlur={() => markTouched('password')}
               className={`form-input ${shouldShowError('password') ? 'error' : ''}`}
-              placeholder="请设置密码"
+              placeholder="Please set a password"
               disabled={loading}
               autoComplete="new-password"
             />
@@ -234,7 +234,7 @@ export const Register: React.FC<RegisterProps> = ({
             )}
             {formData.password && (
               <div className="password-strength">
-                <span className="strength-label">密码强度：</span>
+                <span className="strength-label">Password Strength:</span>
                 <div className="strength-bar">
                   {[0, 1, 2, 3].map((level) => (
                     <div
@@ -255,14 +255,14 @@ export const Register: React.FC<RegisterProps> = ({
               </div>
             )}
             <span className="field-hint">
-              密码需8位以上，包含大小写字母、数字和特殊字符中的至少3种
+              Password must be at least 8 characters, containing at least 3 of: uppercase, lowercase, numbers, and special characters
             </span>
           </div>
 
-          {/* 确认密码字段 */}
+          {/* Confirm password field */}
           <div className="form-field">
             <label htmlFor="confirmPassword" className="form-label">
-              确认密码 <span className="required">*</span>
+              Confirm Password <span className="required">*</span>
             </label>
             <input
               id="confirmPassword"
@@ -271,7 +271,7 @@ export const Register: React.FC<RegisterProps> = ({
               onChange={(e) => updateField('confirmPassword', e.target.value)}
               onBlur={() => markTouched('confirmPassword')}
               className={`form-input ${shouldShowError('confirmPassword') ? 'error' : ''}`}
-              placeholder="请再次输入密码"
+              placeholder="Please enter the password again"
               disabled={loading}
               autoComplete="new-password"
             />
@@ -280,25 +280,25 @@ export const Register: React.FC<RegisterProps> = ({
             )}
           </div>
 
-          {/* 提交错误 */}
+          {/* Submit error */}
           {errors.submit && (
             <div className="submit-error">
               {errors.submit}
             </div>
           )}
 
-          {/* 提交按钮 */}
+          {/* Submit button */}
           <button
             type="submit"
             className="submit-button"
             disabled={loading}
           >
-            {loading ? '注册中...' : '注册'}
+            {loading ? 'Registering...' : 'Register'}
           </button>
 
-          {/* 登录链接 */}
+          {/* Login link */}
           <div className="login-link">
-            已有账户？<a href="/login">立即登录</a>
+            Already have an account? <a href="/login">Login now</a>
           </div>
         </form>
       </div>

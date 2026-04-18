@@ -1,77 +1,77 @@
 /**
- * 需求/问题分解类型定义
+ * Requirement/problem decomposition type definitions
  *
- * 用于支持 init-requirement 将复杂需求或调查报告分解为多个独立任务
+ * Used to support init-requirement in decomposing complex requirements or investigation reports into multiple independent tasks
  */
 
 import type { TaskType, TaskPriority } from './task';
 
 /**
- * 分解后的子任务项
+ * Decomposed subtask item
  */
 export interface DecomposedTaskItem {
-  /** 子任务标题 */
+  /** Subtask title */
   title: string;
-  /** 子任务详细描述 */
+  /** Subtask detailed description */
   description: string;
-  /** 推断的任务类型 */
+  /** Inferred task type */
   type: TaskType;
-  /** 推断的优先级 */
+  /** Inferred priority */
   priority: TaskPriority;
-  /** 建议的检查点 */
+  /** Suggested checkpoints */
   suggestedCheckpoints: string[];
-  /** 涉及文件 */
+  /** Related files */
   relatedFiles: string[];
-  /** 预估耗时（分钟） */
+  /** Estimated time (minutes) */
   estimatedMinutes: number;
-  /** 依赖的子任务索引 (在 items 数组中的索引) */
+  /** Dependent subtask indexes (indexes in items array) */
   dependsOn: number[];
 }
 
 /**
- * 需求分解结果
+ * Requirement decomposition result
  */
 export interface RequirementDecomposition {
-  /** 是否可分解 */
+  /** Whether decomposable */
   decomposable: boolean;
-  /** 分解失败原因 */
+  /** Decomposition failure reason */
   reason?: string;
-  /** 分解后的子任务列表 */
+  /** List of decomposed subtasks */
   items: DecomposedTaskItem[];
-  /** 分解摘要 */
+  /** Decomposition summary */
   summary: string;
 }
 
 /**
- * 分解选项
+ * Decomposition options
  */
 export interface DecomposeOptions {
-  /** 最小分解阈值：如果子任务数量少于此值，则不分解 */
+  /** Minimum decomposition threshold: if subtask count is less than this, don't decompose */
   minItems?: number;
-  /** 最大分解数量限制 */
+  /** Maximum decomposition count limit */
   maxItems?: number;
-  /** 是否使用 AI 增强分解 */
+  /** Whether to use AI-enhanced decomposition */
   useAI?: boolean;
-  /** 工作目录 */
+  /** Working directory */
   cwd?: string;
-  /** 是否启用质量检查（默认 true） */
+  /** Whether to enable quality checks (default true) */
   validateQuality?: boolean;
 }
 
 /**
- * 问题检测模式（用于识别调查报告中的问题项）
+ * Problem detection pattern (for identifying problem items in investigation reports)
  */
 export interface ProblemPattern {
-  /** 模式名称 */
+  /** Pattern name */
   name: string;
-  /** 匹配正则 */
+  /** Matching regex */
   regex: RegExp;
-  /** 提取优先级 */
+  /** Priority extractor */
   priorityExtractor?: (match: RegExpMatchArray) => TaskPriority;
 }
 
 /**
- * 默认问题检测模式
+ * Default problem detection patterns
  */
 export const DEFAULT_PROBLEM_PATTERNS: ProblemPattern[] = [
   {
@@ -98,65 +98,65 @@ export const DEFAULT_PROBLEM_PATTERNS: ProblemPattern[] = [
 ];
 
 /**
- * 分解策略类型
+ * Decomposition strategy type
  */
 export type DecompositionStrategy =
-  | 'auto'      // 自动选择
-  | 'pattern'   // 基于模式匹配
-  | 'ai'        // 基于 AI 分析
-  | 'section';  // 基于章节分割
+  | 'auto'      // Auto-select
+  | 'pattern'   // Pattern-based matching
+  | 'ai'        // AI-based analysis
+  | 'section';  // Section-based splitting
 
 /**
- * 分解项（包含问题分析和解决方案）
- * 用于质量门禁验证的完整需求项
+ * Decomposed item (includes problem analysis and solution)
+ * Complete requirement item for quality gate validation
  */
 export interface DecomposedItem {
-  /** 标题 */
+  /** Title */
   title: string;
-  /** 问题描述（现象和背景） */
+  /** Problem description (symptoms and background) */
   problem: string;
-  /** 解决方案（具体解决步骤） */
+  /** Solution (specific resolution steps) */
   solution: string;
-  /** 根因分析 */
+  /** Root cause analysis */
   rootCause?: string;
-  /** 任务类型 */
+  /** Task type */
   type: TaskType;
-  /** 优先级 */
+  /** Priority */
   priority: TaskPriority;
-  /** 检查点 */
+  /** Checkpoints */
   checkpoints: string[];
-  /** 相关文件 */
+  /** Related files */
   relatedFiles?: string[];
-  /** 预估耗时（分钟） */
+  /** Estimated time (minutes) */
   estimatedMinutes?: number;
 }
 
 /**
- * 分解验证结果
+ * Decomposition validation result
  */
 export interface DecompositionValidation {
-  /** 验证是否通过 */
+  /** Whether validation passed */
   valid: boolean;
-  /** 错误信息列表 */
+  /** List of error messages */
   errors: string[];
-  /** 警告信息列表 */
+  /** List of warning messages */
   warnings?: string[];
 }
 
 /**
- * 最小字段长度约束
+ * Minimum field length constraints
  */
 export const DECOMPOSITION_CONSTRAINTS = {
-  /** 标题最小长度 */
+  /** Minimum title length */
   MIN_TITLE_LENGTH: 10,
-  /** 问题描述最小长度 */
+  /** Minimum problem description length */
   MIN_PROBLEM_LENGTH: 50,
-  /** 解决方案最小长度 */
+  /** Minimum solution length */
   MIN_SOLUTION_LENGTH: 50,
-  /** 根因分析最小长度 */
+  /** Minimum root cause length */
   MIN_ROOT_CAUSE_LENGTH: 20,
-  /** 最小检查点数量 */
+  /** Minimum checkpoint count */
   MIN_CHECKPOINTS: 1,
-  /** 有效优先级列表 */
+  /** Valid priority list */
   VALID_PRIORITIES: ['P0', 'P1', 'P2', 'P3'] as TaskPriority[],
 };

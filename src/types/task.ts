@@ -1,144 +1,144 @@
 /**
- * 任务类型
+ * Task type
  */
 export type TaskType = 'bug' | 'feature' | 'research' | 'docs' | 'refactor' | 'test';
 
 /**
- * 任务优先级
+ * Task priority
  */
 export type TaskPriority = 'P0' | 'P1' | 'P2' | 'P3' | 'Q1' | 'Q2' | 'Q3' | 'Q4';
 
 /**
- * 检查点策略
- * 用于明确声明任务是否需要检查点
+ * Checkpoint policy
+ * Used to explicitly declare whether a task needs checkpoints
  *
- * - 'required': 必须配置检查点（P0/P1 任务、bug/feature 类型）
- * - 'optional': 检查点可选（P2/P3 的 docs/refactor 类型任务）
- * - 'none': 无需检查点（简单文档修复、配置变更等）
+ * - 'required': Checkpoints required (P0/P1 tasks, bug/feature types)
+ * - 'optional': Checkpoints optional (P2/P3 docs/refactor type tasks)
+ * - 'none': No checkpoints needed (simple doc fixes, config changes, etc.)
  */
 export type CheckpointPolicy = 'required' | 'optional' | 'none';
 
 /**
- * 任务创建来源
- * 用于追踪任务是由哪个入口创建的
+ * Task creation source
+ * Used to track which entry point created the task
  */
 export type TaskCreatedBy =
-  | 'cli'              // 通过 task create 命令创建
-  | 'init-requirement' // 通过 init-requirement 命令创建
-  | 'harness-dev'      // 由 harness 开发阶段创建
-  | 'harness-review'   // 由 harness 代码审核阶段创建
-  | 'harness-qa'       // 由 harness QA 阶段创建
-  | 'harness-eval'     // 由 harness 评估阶段创建
-  | 'import';          // 通过导入/迁移创建
+  | 'cli'              // Created via task create command
+  | 'init-requirement' // Created via init-requirement command
+  | 'harness-dev'      // Created by harness development phase
+  | 'harness-review'   // Created by harness code review phase
+  | 'harness-qa'       // Created by harness QA phase
+  | 'harness-eval'     // Created by harness evaluation phase
+  | 'import';          // Created via import/migration
 
 /**
- * 任务状态
+ * Task status
  */
 export type TaskStatus =
-  | 'open'          // 待处理
-  | 'in_progress'   // 进行中（开发阶段）
-  | 'wait_review'   // 等待代码审核
-  | 'wait_qa'           // 等待 QA 验证（可以是 AI 或 Human）
-  | 'wait_evaluation'   // 等待评估（QA 通过后，等待最终评估）
-  | 'resolved'      // 已解决
-  | 'closed'        // 已关闭
-  | 'abandoned'     // 已放弃
-  | 'needs_human'   // 需要人工介入
-  | 'failed';       // 已失败
+  | 'open'          // Pending
+  | 'in_progress'   // In progress (development phase)
+  | 'wait_review'   // Waiting for code review
+  | 'wait_qa'           // Waiting for QA verification (AI or Human)
+  | 'wait_evaluation'   // Waiting for evaluation (after QA pass, waiting for final evaluation)
+  | 'resolved'      // Resolved
+  | 'closed'        // Closed
+  | 'abandoned'     // Abandoned
+  | 'needs_human'   // Needs human intervention
+  | 'failed';       // Failed
 
 /**
- * 任务失败原因
- * 用于区分任务进入 failed 状态的具体原因
+ * Task failure reason
+ * Used to distinguish specific reasons for task entering failed state
  */
 export type FailureReason =
-  | 'timeout'              // 开发/执行超时
-  | 'quality_gate'         // 质量门禁未通过
-  | 'code_error'           // 代码错误/构建失败
-  | 'evaluation_nopass'    // 评估阶段未通过（达到最大重试次数）
-  | 'max_retries_exceeded' // 超过最大重试次数
-  | 'upstream_failed';     // 上游依赖任务失败（级联失败）
+  | 'timeout'              // Development/execution timeout
+  | 'quality_gate'         // Quality gate not passed
+  | 'code_error'           // Code error/build failure
+  | 'evaluation_nopass'    // Evaluation phase not passed (max retries reached)
+  | 'max_retries_exceeded' // Max retries exceeded
+  | 'upstream_failed';     // Upstream dependency task failed (cascade failure)
 
 /**
- * 任务历史记录条目
+ * Task history entry
  */
 export interface TaskHistoryEntry {
-  timestamp: string;       // ISO时间
-  action: string;          // 操作描述
-  field?: string;          // 变更的字段名
-  oldValue?: string;       // 旧值
-  newValue?: string;       // 新值
-  user?: string;           // 操作用户（可选）
-  reason?: string;         // 状态变更原因（如reopen原因）
-  relatedIssue?: string;   // 关联的 issue/PR
-  verificationDetails?: string; // 验证失败详细信息
-  transitionNote?: TransitionNote; // 状态流转的结构化决策记录
+  timestamp: string;       // ISO time
+  action: string;          // Action description
+  field?: string;          // Changed field name
+  oldValue?: string;       // Old value
+  newValue?: string;       // New value
+  user?: string;           // User who performed action (optional)
+  reason?: string;         // Status change reason (e.g., reopen reason)
+  relatedIssue?: string;   // Related issue/PR
+  verificationDetails?: string; // Verification failure details
+  transitionNote?: TransitionNote; // Structured decision record for status transition
 }
 
 /**
- * 需求变更历史记录条目
- * 用于追踪任务描述/需求的变化过程
+ * Requirement change history entry
+ * Used to track changes in task description/requirements
  */
 export interface RequirementHistoryEntry {
-  timestamp: string;       // ISO时间
-  version: number;         // 需求版本号（从1开始）
-  previousDescription?: string;  // 之前的描述内容
-  newDescription: string;  // 新的描述内容
-  changeReason: string;    // 变更原因
-  impactAnalysis?: string; // 影响分析
-  changedBy?: string;      // 变更人
-  relatedIssue?: string;   // 关联的 issue/PR
-  affectedCheckpoints?: string[]; // 受影响的检查点ID列表
+  timestamp: string;       // ISO time
+  version: number;         // Requirement version number (starting from 1)
+  previousDescription?: string;  // Previous description content
+  newDescription: string;  // New description content
+  changeReason: string;    // Reason for change
+  impactAnalysis?: string; // Impact analysis
+  changedBy?: string;      // Changed by
+  relatedIssue?: string;   // Related issue/PR
+  affectedCheckpoints?: string[]; // List of affected checkpoint IDs
 }
 
 /**
- * 验证方法类型
- * 注意：已移除 'manual' 类型，强制使用具体验证方法
+ * Verification method type
+ * Note: 'manual' type has been removed, forced to use specific verification methods
  */
 export type VerificationMethod =
-  | 'code_review'       // 代码审查
-  | 'lint'              // 静态检查
-  | 'unit_test'         // 单元测试
-  | 'functional_test'   // 功能测试
-  | 'integration_test'  // 集成测试
-  | 'e2e_test'          // 端到端测试
-  | 'architect_review'  // 架构师审查
-  | 'automated';        // 自动化验证（通用）
+  | 'code_review'       // Code review
+  | 'lint'              // Static check
+  | 'unit_test'         // Unit test
+  | 'functional_test'   // Functional test
+  | 'integration_test'  // Integration test
+  | 'e2e_test'          // End-to-end test
+  | 'architect_review'  // Architect review
+  | 'automated';        // Automated verification (generic)
 
 /**
- * 任务角色类型
- * 用于标识任务当前的处理者角色
+ * Task role type
+ * Used to identify the current handler role of the task
  */
 export type TaskRole =
-  | 'executor'        // 执行者（开发）
-  | 'code_reviewer'   // 代码审核员
-  | 'qa_tester'       // QA 测试员（可以是 AI 或 Human）
-  | 'architect';      // 架构师
+  | 'executor'        // Executor (development)
+  | 'code_reviewer'   // Code reviewer
+  | 'qa_tester'       // QA tester (can be AI or Human)
+  | 'architect';      // Architect
 
 /**
- * 检查点类别
+ * Checkpoint category
  */
 export type CheckpointCategory =
-  | 'code_review'      // 代码审核类检查点
-  | 'qa_verification'; // QA 验证类检查点
+  | 'code_review'      // Code review checkpoint
+  | 'qa_verification'; // QA verification checkpoint
 
 /**
- * 检查点验证信息
+ * Checkpoint verification info
  */
 export interface CheckpointVerification {
-  method: VerificationMethod;  // 验证方法（禁止使用 'manual'）
-  commands?: string[];         // 验证命令列表
-  steps?: string[];            // 验证步骤描述（当无法用命令表达时使用）
-  expected?: string;           // 期望结果
-  result?: string;             // 实际验证结果
-  evidencePath?: string;       // 证据路径（相对路径）
-  exitCode?: number;           // 命令退出码
-  verifiedAt?: string;         // 验证时间
-  verifiedBy?: string;         // 验证者
+  method: VerificationMethod;  // Verification method ('manual' is prohibited)
+  commands?: string[];         // Verification command list
+  steps?: string[];            // Verification step descriptions (used when commands cannot express)
+  expected?: string;           // Expected result
+  result?: string;             // Actual verification result
+  evidencePath?: string;       // Evidence path (relative path)
+  exitCode?: number;           // Command exit code
+  verifiedAt?: string;         // Verification time
+  verifiedBy?: string;         // Verified by
 }
 
 /**
- * 需要验证命令的验证方法类型
- * functional_test 等自动化验证方法必须包含 commands 或 steps
+ * Verification method types that require commands
+ * Automated verification methods like functional_test must include commands or steps
  */
 const METHODS_REQUIRING_COMMANDS: VerificationMethod[] = [
   'functional_test',
@@ -150,9 +150,9 @@ const METHODS_REQUIRING_COMMANDS: VerificationMethod[] = [
 ];
 
 /**
- * 校验检查点的验证信息是否完整
- * - functional_test 等自动化方法必须有 commands 或 steps
- * - 返回校验结果和警告信息
+ * Validate checkpoint verification info completeness
+ * - Automated methods like functional_test must have commands or steps
+ * - Returns validation result and warning message
  */
 export function validateCheckpointVerification(
   checkpoint: { description: string; verification?: CheckpointVerification }
@@ -170,7 +170,7 @@ export function validateCheckpointVerification(
     if (!hasCommands && !hasSteps) {
       return {
         valid: false,
-        warning: `检查点 "${checkpoint.description}" 的验证方法为 ${method}，但缺少 commands 或 steps`,
+        warning: `Checkpoint "${checkpoint.description}" has verification method ${method}, but is missing commands or steps`,
       };
     }
   }
@@ -179,37 +179,37 @@ export function validateCheckpointVerification(
 }
 
 /**
- * 任务级验证信息
- * 当任务状态变为 resolved 时自动填充
+ * Task-level verification info
+ * Auto-populated when task status becomes resolved
  */
 export interface TaskVerification {
-  /** 验证时间 (resolved 时间) */
+  /** Verification time (resolved time) */
   verifiedAt: string;
-  /** 验证者 (system 或用户名) */
+  /** Verified by (system or username) */
   verifiedBy: string;
-  /** 验证方法汇总 (来自检查点) */
+  /** Verification methods summary (from checkpoints) */
   methods?: VerificationMethod[];
-  /** 检查点完成率 */
+  /** Checkpoint completion rate */
   checkpointCompletionRate?: number;
-  /** 验证结果: passed | partial | failed */
+  /** Verification result: passed | partial | failed */
   result: 'passed' | 'partial' | 'failed';
-  /** 备注 */
+  /** Note */
   note?: string;
 }
 
 /**
- * 任务级 Hook 类型
+ * Task-level Hook type
  */
 export type TaskHookType =
-  | 'preTaskCreate'     // 任务创建前
-  | 'postTaskCreate'    // 任务创建后
-  | 'preTaskUpdate'     // 任务更新前（关键！状态变更前）
-  | 'postTaskUpdate'    // 任务更新后
-  | 'preTaskComplete'   // 任务完成前（关键！验证检查点）
-  | 'postTaskComplete'; // 任务完成后
+  | 'preTaskCreate'     // Before task creation
+  | 'postTaskCreate'    // After task creation
+  | 'preTaskUpdate'     // Before task update (critical! before status change)
+  | 'postTaskUpdate'    // After task update
+  | 'preTaskComplete'   // Before task completion (critical! verify checkpoints)
+  | 'postTaskComplete'; // After task completion
 
 /**
- * 任务级 Hook 配置
+ * Task-level Hook configuration
  */
 export interface TaskHookConfig {
   enabled: boolean;
@@ -219,13 +219,13 @@ export interface TaskHookConfig {
     postTaskUpdate?: boolean;
     postTaskComplete?: boolean;
   };
-  scriptPath?: string;  // 自定义验证脚本路径
+  scriptPath?: string;  // Custom validation script path
   createdAt: string;
   updatedAt: string;
 }
 
 /**
- * Hook 执行上下文
+ * Hook execution context
  */
 export interface HookExecutionContext {
   hookType: TaskHookType;
@@ -237,17 +237,17 @@ export interface HookExecutionContext {
 }
 
 /**
- * Hook 执行结果
+ * Hook execution result
  */
 export interface HookResult {
   success: boolean;
   message?: string;
   details?: string[];
-  shouldBlock?: boolean;  // 是否阻止操作
+  shouldBlock?: boolean;  // Whether to block operation
 }
 
 /**
- * 验证错误
+ * Validation error
  */
 export interface ValidationError {
   code: string;
@@ -256,7 +256,7 @@ export interface ValidationError {
 }
 
 /**
- * 验证警告
+ * Validation warning
  */
 export interface ValidationWarning {
   code: string;
@@ -265,7 +265,7 @@ export interface ValidationWarning {
 }
 
 /**
- * 任务验证结果
+ * Task validation result
  */
 export interface TaskValidationResult {
   valid: boolean;
@@ -275,84 +275,84 @@ export interface TaskValidationResult {
 }
 
 /**
- * 检查点元数据
+ * Checkpoint metadata
  */
 export interface CheckpointMetadata {
-  id: string;                      // 检查点ID，如 CP-001 或 CP-check-screenshot
-  description: string;             // 描述（与 checkpoint.md 中的文本对应）
+  id: string;                      // Checkpoint ID, e.g., CP-001 or CP-check-screenshot
+  description: string;             // Description (corresponds to text in checkpoint.md)
   status: 'pending' | 'completed' | 'failed' | 'skipped';
-  category?: CheckpointCategory;   // 检查点类别（代码审核/QA验证）
-  requiredRole?: TaskRole;         // 执行此检查点所需角色
-  requiresHuman?: boolean;         // 是否需要人工验证
-  note?: string;                   // 备注
+  category?: CheckpointCategory;   // Checkpoint category (code review/QA verification)
+  requiredRole?: TaskRole;         // Role required to execute this checkpoint
+  requiresHuman?: boolean;         // Whether human verification is required
+  note?: string;                   // Note
   verification?: CheckpointVerification;
   createdAt: string;
   updatedAt: string;
 }
 
 /**
- * 批次提交历史条目
- * 用于追踪 harness pipeline 批次 git commit 与任务的关联
+ * Batch commit history entry
+ * Used to track association between harness pipeline batch git commits and tasks
  */
 export interface CommitHistoryEntry {
   /** Git commit SHA */
   sha: string;
-  /** 批次标签（如 "批次 1"） */
+  /** Batch label (e.g., "Batch 1") */
   batchLabel: string;
-  /** 提交时间 (ISO) */
+  /** Commit time (ISO) */
   timestamp: string;
 }
 
 /**
- * 执行统计信息
+ * Execution statistics
  */
 export interface ExecutionStats {
-  /** 执行耗时(毫秒) */
+  /** Execution duration (milliseconds) */
   duration: number;
-  /** 重试次数 */
+  /** Retry count */
   retryCount: number;
-  /** 执行完成时间 */
+  /** Execution completion time */
   completedAt: string;
-  /** 分支信息 */
+  /** Branch info */
   branch?: string;
-  /** 标签信息 */
+  /** Tags */
   tags?: string[];
-  /** 批次提交历史（harness pipeline 批次 git commit SHA 追踪） */
+  /** Batch commit history (harness pipeline batch git commit SHA tracking) */
   commitHistory?: CommitHistoryEntry[];
 }
 
 /**
- * 流转说明记录
- * 每次任务状态变更时自动追加，用于追踪流转上下文
+ * Transition note record
+ * Auto-appended on each task status change, used to track transition context
  */
 export interface TransitionNote {
-  /** 流转发生时间 (ISO) */
+  /** Transition occurrence time (ISO) */
   timestamp: string;
-  /** 源状态（允许已废弃状态字符串，如 'reopened'、'needs_human'） */
+  /** Source status (allows deprecated status strings like 'reopened', 'needs_human') */
   fromStatus: string;
-  /** 目标状态 */
+  /** Target status */
   toStatus: TaskStatus;
-  /** 流转说明（由操作者或系统自动填写） */
+  /** Transition note (filled by operator or system automatically) */
   note: string;
-  /** 操作者 */
+  /** Author */
   author?: string;
 }
 
 /**
- * Pipeline 恢复动作类型
- * 记录中断任务被恢复时应执行的动作
+ * Pipeline resume action type
+ * Records the action to be performed when an interrupted task is resumed
  */
 export type ResumeAction =
-  | 'resume_pipeline'    // 继续 pipeline 执行
-  | 'restart_stage'      // 重启当前阶段
-  | 'manual_review'      // 需要人工审核后决定
-  | 'reset_to_open'      // 重置为 open 状态
-  | 'retry'              // 重试当前阶段（从失败阶段重新开始）
-  | 'next';              // 跳到下一阶段
+  | 'resume_pipeline'    // Resume pipeline execution
+  | 'restart_stage'      // Restart current stage
+  | 'manual_review'      // Requires manual review before decision
+  | 'reset_to_open'      // Reset to open status
+  | 'retry'              // Retry current stage (restart from failed stage)
+  | 'next';              // Skip to next stage
 
 /**
- * Pipeline 阶段到角色的映射
- * 用于角色感知恢复逻辑，确定每个阶段对应的处理角色
+ * Pipeline phase to role mapping
+ * Used for role-aware recovery logic to determine the handler role for each phase
  */
 export const PHASE_ROLE_MAP: Record<string, TaskRole> = {
   development: 'executor',
@@ -363,56 +363,56 @@ export const PHASE_ROLE_MAP: Record<string, TaskRole> = {
 };
 
 /**
- * 阶段历史条目
- * 记录任务在每个 pipeline 阶段的执行情况，用于角色感知恢复
+ * Phase history entry
+ * Records task execution in each pipeline phase, used for role-aware recovery
  */
 export interface PhaseHistoryEntry {
-  /** 阶段名称 */
+  /** Phase name */
   phase: string;
-  /** 执行角色 */
+  /** Execution role */
   role: TaskRole;
-  /** 阶段结论 */
+  /** Phase verdict */
   verdict: 'PASS' | 'NOPASS';
-  /** 执行时间 (ISO) */
+  /** Execution time (ISO) */
   timestamp: string;
-  /** 分析说明 */
+  /** Analysis description */
   analysis?: string;
-  /** 恢复动作建议 */
+  /** Resume action recommendation */
   resumeAction?: 'retry' | 'next';
 }
 
 /**
- * Pipeline 类
- * 提供阶段流转和角色感知恢复的核心逻辑
+ * Pipeline class
+ * Provides core logic for phase transition and role-aware recovery
  */
 export class Pipeline {
-  /** 阶段到角色的映射 */
+  /** Phase to role mapping */
   static readonly PHASE_ROLE_MAP = PHASE_ROLE_MAP;
 
-  /** Pipeline 阶段顺序 */
+  /** Pipeline phase order */
   static readonly PHASE_ORDER = ['development', 'code_review', 'qa_verification', 'evaluation'];
 
   /**
-   * 根据阶段获取对应角色
+   * Get role for phase
    */
   static getRoleForPhase(phase: string): TaskRole {
     return Pipeline.PHASE_ROLE_MAP[phase] || 'executor';
   }
 
   /**
-   * 角色感知恢复逻辑
-   * 根据 resumeAction 和已完成的阶段确定恢复点（阶段+角色）
+   * Role-aware recovery logic
+   * Determines recovery point (phase+role) based on resumeAction and completed phases
    *
-   * @param phaseHistory - 已完成的阶段历史
-   * @param resumeAction - 恢复动作：retry=重试失败阶段，next=跳到下一阶段
-   * @returns 恢复点信息（阶段+角色），或 null 表示无法确定
+   * @param phaseHistory - Completed phase history
+   * @param resumeAction - Resume action: retry=retry failed phase, next=skip to next phase
+   * @returns Recovery point info (phase+role), or null if cannot determine
    */
   static determineResumePoint(
     phaseHistory: PhaseHistoryEntry[],
     resumeAction: 'retry' | 'next',
   ): { phase: string; role: TaskRole } | null {
     if (phaseHistory.length === 0) {
-      // 无历史记录，从开发阶段开始
+      // No history, start from development phase
       return { phase: 'development', role: 'executor' };
     }
 
@@ -420,16 +420,16 @@ export class Pipeline {
     const lastPhaseIndex = Pipeline.PHASE_ORDER.indexOf(lastEntry.phase);
 
     if (resumeAction === 'retry') {
-      // retry: 重试最后失败/执行的阶段
+      // retry: retry last failed/executed phase
       return {
         phase: lastEntry.phase,
         role: Pipeline.getRoleForPhase(lastEntry.phase),
       };
     }
 
-    // next: 跳到下一阶段
+    // next: skip to next phase
     if (lastPhaseIndex === -1 || lastPhaseIndex >= Pipeline.PHASE_ORDER.length - 1) {
-      // 已在最后阶段或未知阶段，从开发阶段重新开始
+      // Already at last phase or unknown phase, restart from development
       return { phase: 'development', role: 'executor' };
     }
 
@@ -442,24 +442,24 @@ export class Pipeline {
 }
 
 /**
- * 当前任务元数据 schema 版本
- * 每次规范变更时递增，analyze 命令据此进行增量迁移
+ * Current task metadata schema version
+ * Incremented on each spec change, analyze command uses this for incremental migration
  *
- * 版本历史:
- * - 0: 无 schemaVersion 字段（旧版任务）
- * - 1: 添加 reopenCount + requirementHistory（legacy_schema）
- * - 2: pipeline_status 规范化 + verdict_action_schema 验证
- * - 3: commitHistory 字段（harness 批次 git commit SHA 追踪）
- * - 4: reopened→open 迁移 + TransitionNote + resumeAction
- * - 5: 检查点前缀自动补全（为无前缀的检查点添加规范前缀）
- * - 6: 添加 checkpointPolicy 字段（自动推断检查点策略）
+ * Version history:
+ * - 0: No schemaVersion field (legacy tasks)
+ * - 1: Added reopenCount + requirementHistory (legacy_schema)
+ * - 2: pipeline_status normalization + verdict_action_schema validation
+ * - 3: commitHistory field (harness batch git commit SHA tracking)
+ * - 4: reopened→open migration + TransitionNote + resumeAction
+ * - 5: Auto-complete checkpoint prefix (add standard prefix to checkpoints without prefix)
+ * - 6: Added checkpointPolicy field (auto-inferred checkpoint policy)
  */
 export const CURRENT_TASK_SCHEMA_VERSION = 6;
 
 /**
- * 流水线中间状态列表
- * 这些状态仅用于 harness pipeline 执行期间，旧任务若停留在此状态
- * 表示 pipeline 中断或使用了旧版规范
+ * Pipeline intermediate status list
+ * These statuses are only used during harness pipeline execution, old tasks staying in these statuses
+ * indicate pipeline interruption or use of old spec
  */
 export const PIPELINE_INTERMEDIATE_STATUSES: TaskStatus[] = [
   'wait_review',
@@ -469,33 +469,32 @@ export const PIPELINE_INTERMEDIATE_STATUSES: TaskStatus[] = [
 ];
 
 /**
- * 流水线状态迁移映射
- * 旧版 pipeline 中间状态 → 最新规范状态
+ * Pipeline status migration mapping
+ * Legacy pipeline intermediate status → Latest spec status
  */
 export const PIPELINE_STATUS_MIGRATION_MAP: Record<string, TaskStatus> = {
-  'reopened': 'open',             // 已重开 → 重新打开
-  'needs_human': 'open',          // 需要人工介入 → 回到待处理
-  'wait_review': 'in_progress',   // 等待代码审核 → 回到开发中
-  'wait_qa': 'in_progress',       // 等待 QA → 回到开发中
-  'wait_evaluation': 'wait_qa',   // 等待评估 → 回退到等待 QA（无评估报告时）
+  'reopened': 'open',             // Reopened → Re-open
+  'needs_human': 'open',          // Needs human → Back to pending
+  'wait_review': 'in_progress',   // Waiting for review → Back to in progress
+  'wait_qa': 'in_progress',       // Waiting for QA → Back to in progress
+  'wait_evaluation': 'wait_qa',   // Waiting for evaluation → Revert to waiting for QA (when no evaluation report)
 };
 
 /**
- * 统一的状态规范化函数
- * 合并所有已知变体: pending→open, completed→resolved, cancelled→abandoned,
- * reopened→open, needs_human→open, blocked→open, reopen→open 等
+ * Unified status normalization function
+ * Merges all known variants: pending→open, completed→resolved, cancelled→abandoned,
+ * reopened→open, needs_human→open, blocked→open, reopen→open, etc.
  */
 export function normalizeStatus(status: string): TaskStatus {
   const statusMap: Record<string, TaskStatus> = {
-    // 旧格式映射
-    'pending': 'open',
+    // Legacy format mappings
     'reopen': 'open',
     'reopened': 'open',
     'completed': 'resolved',
     'cancelled': 'abandoned',
     'blocked': 'open',
     'needs_human': 'open',
-    // 标准格式直接返回
+    // Standard format, return directly
     'open': 'open',
     'in_progress': 'in_progress',
     'wait_review': 'wait_review',
@@ -510,8 +509,8 @@ export function normalizeStatus(status: string): TaskStatus {
 }
 
 /**
- * 统一的优先级规范化函数
- * 映射: urgent→P0, high→P1, medium→P2, low→P3 等
+ * Unified priority normalization function
+ * Maps: urgent→P0, high→P1, medium→P2, low→P3, etc.
  */
 export function normalizePriority(priority: string): TaskPriority {
   const priorityMap: Record<string, TaskPriority> = {
@@ -519,7 +518,7 @@ export function normalizePriority(priority: string): TaskPriority {
     'high': 'P1',
     'medium': 'P2',
     'low': 'P3',
-    // 已经是新格式的直接返回
+    // Already in new format, return directly
     'P0': 'P0',
     'P1': 'P1',
     'P2': 'P2',
@@ -533,54 +532,54 @@ export function normalizePriority(priority: string): TaskPriority {
 }
 
 /**
- * 任务元数据接口
+ * Task metadata interface
  */
 export interface TaskMeta {
-  id: string;              // 任务ID
-  title: string;           // 标题
-  description?: string;    // 描述（可选）
-  type: TaskType;          // 任务类型
-  priority: TaskPriority;  // 优先级
-  status: TaskStatus;      // 状态
-  dependencies: string[];  // 依赖的任务ID列表
-  recommendedRole?: string; // 推荐角色
-  branch?: string;         // 关联分支
-  needsDiscussion?: boolean; // 是否需要讨论
-  discussionTopics?: string[]; // 讨论主题列表
-  checkpointConfirmationToken?: string; // 检查点确认令牌
-  checkpoints?: CheckpointMetadata[];  // 检查点元数据
-  parentId?: string;       // 父任务ID（子任务时使用）
-  subtaskIds?: string[];   // 子任务ID列表（父任务时使用）
-  createdAt: string;       // ISO时间
-  updatedAt: string;       // ISO时间
-  history: TaskHistoryEntry[]; // 历史记录
-  reopenCount?: number;    // 重开次数（任务被重新打开的次数）
-  requirementHistory?: RequirementHistoryEntry[]; // 需求变更历史
-  verification?: TaskVerification; // 任务级验证信息（resolved时自动填充）
-  executionStats?: ExecutionStats; // 执行统计信息（流水线完成后记录）
-  transitionNotes?: TransitionNote[]; // 流转说明记录（状态变更时追加）
-  phaseHistory?: PhaseHistoryEntry[]; // 阶段历史记录（角色感知恢复用）
-  resumeAction?: ResumeAction;     // 中断任务恢复动作
-  fileWarnings?: string[];        // 创建时引用但不存在的文件路径
-  createdBy?: TaskCreatedBy;      // 任务创建来源
-  schemaVersion?: number;         // schema 版本号，用于增量迁移
-  estimatedMinutes?: number;      // AI 评估的预估耗时（分钟），用于自适应超时
-  failureReason?: FailureReason;  // 任务失败原因（status 为 failed 时记录具体原因）
-  allowedTools?: string[];        // 允许的工具列表（为空时使用默认 --dangerously-skip-permissions）
-  initQualityScore?: number;      // 任务创建时的质量评分（init-requirement 流程中写入）
+  id: string;              // Task ID
+  title: string;           // Title
+  description?: string;    // Description (optional)
+  type: TaskType;          // Task type
+  priority: TaskPriority;  // Priority
+  status: TaskStatus;      // Status
+  dependencies: string[];  // List of dependent task IDs
+  recommendedRole?: string; // Recommended role
+  branch?: string;         // Associated branch
+  needsDiscussion?: boolean; // Whether discussion is needed
+  discussionTopics?: string[]; // List of discussion topics
+  checkpointConfirmationToken?: string; // Checkpoint confirmation token
+  checkpoints?: CheckpointMetadata[];  // Checkpoint metadata
+  parentId?: string;       // Parent task ID (when used as subtask)
+  subtaskIds?: string[];   // List of subtask IDs (when used as parent task)
+  createdAt: string;       // ISO time
+  updatedAt: string;       // ISO time
+  history: TaskHistoryEntry[]; // History records
+  reopenCount?: number;    // Reopen count (times task was reopened)
+  requirementHistory?: RequirementHistoryEntry[]; // Requirement change history
+  verification?: TaskVerification; // Task-level verification info (auto-populated on resolved)
+  executionStats?: ExecutionStats; // Execution stats (recorded after pipeline completion)
+  transitionNotes?: TransitionNote[]; // Transition notes (appended on status change)
+  phaseHistory?: PhaseHistoryEntry[]; // Phase history (for role-aware recovery)
+  resumeAction?: ResumeAction;     // Resume action for interrupted task
+  fileWarnings?: string[];        // File paths referenced but not existing at creation
+  createdBy?: TaskCreatedBy;      // Task creation source
+  schemaVersion?: number;         // Schema version, for incremental migration
+  estimatedMinutes?: number;      // AI-estimated time (minutes), for adaptive timeout
+  failureReason?: FailureReason;  // Task failure reason (recorded when status is failed)
+  allowedTools?: string[];        // List of allowed tools (empty uses default --dangerously-skip-permissions)
+  initQualityScore?: number;      // Quality score at task creation (written in init-requirement flow)
   /**
-   * 检查点策略
-   * - 'required': 必须配置检查点（默认推断值）
-   * - 'optional': 检查点可选
-   * - 'none': 无需检查点
+   * Checkpoint policy
+   * - 'required': Checkpoints required (default inferred value)
+   * - 'optional': Checkpoints optional
+   * - 'none': No checkpoints needed
    *
-   * 若未指定，将根据任务类型和优先级自动推断
+   * If not specified, will be auto-inferred based on task type and priority
    */
   checkpointPolicy?: CheckpointPolicy;
 }
 
 /**
- * 任务ID解析结果
+ * Task ID parse result
  */
 export interface TaskIdInfo {
   valid: boolean;
@@ -593,47 +592,47 @@ export interface TaskIdInfo {
 }
 
 /**
- * 待人工验证条目
- * 用于在 headless 模式下收集需要人工验证的检查点
+ * Pending human verification entry
+ * Used to collect checkpoints requiring human verification in headless mode
  */
 export interface PendingVerification {
-  /** 任务ID */
+  /** Task ID */
   taskId: string;
-  /** 任务标题 */
+  /** Task title */
   taskTitle: string;
-  /** 检查点ID */
+  /** Checkpoint ID */
   checkpointId: string;
-  /** 检查点描述 */
+  /** Checkpoint description */
   checkpointDescription: string;
-  /** 验证步骤 */
+  /** Verification steps */
   verificationSteps?: string[];
-  /** 期望结果 */
+  /** Expected result */
   expectedResult?: string;
-  /** 入队时间 */
+  /** Enqueue time */
   enqueuedAt: string;
-  /** 验证状态: pending | approved | rejected */
+  /** Verification status: pending | approved | rejected */
   status: 'pending' | 'approved' | 'rejected';
-  /** 验证人 */
+  /** Verified by */
   verifiedBy?: string;
-  /** 验证时间 */
+  /** Verification time */
   verifiedAt?: string;
-  /** 验证反馈 */
+  /** Verification feedback */
   feedback?: string;
-  /** 关联的流水线会话ID */
+  /** Associated pipeline session ID */
   sessionId?: string;
 }
 
 /**
- * 待验证队列文件结构
+ * Pending verification queue file structure
  */
 
 /**
- * 创建默认任务元数据
+ * Create default task metadata
  *
- * 自动推断 checkpointPolicy 基于任务类型和优先级：
- * - P0/P1 优先级：'required'（必须配置检查点）
- * - bug/feature 类型：'required'（必须配置检查点）
- * - docs/refactor 类型：'optional'（检查点可选）
+ * Auto-infer checkpointPolicy based on task type and priority:
+ * - P0/P1 priority: 'required' (checkpoints required)
+ * - bug/feature type: 'required' (checkpoints required)
+ * - docs/refactor type: 'optional' (checkpoints optional)
  */
 export function createDefaultTaskMeta(
   id: string,
@@ -666,25 +665,25 @@ export function createDefaultTaskMeta(
 }
 
 /**
- * 验证任务ID格式
- * 支持多种格式:
- * - 新格式: TASK-{type}-{priority}-{slug}-{date}
- * - 旧格式: TASK-001
- * - 任意格式: 只要是非空字符串且包含字母、数字、连字符
+ * Validate task ID format
+ * Supports multiple formats:
+ * - New format: TASK-{type}-{priority}-{slug}-{date}
+ * - Old format: TASK-001
+ * - Any format: non-empty string containing letters, numbers, hyphens
  */
 export function isValidTaskId(id: string): boolean {
   if (!id || id.trim().length === 0) {
     return false;
   }
-  // 放宽验证：允许任何非空字符串作为任务ID
+  // Relaxed validation: allow any non-empty string as task ID
   return /^[a-zA-Z0-9\-_]+$/.test(id);
 }
 
 /**
- * 解析任务ID
+ * Parse task ID
  */
 export function parseTaskId(id: string): TaskIdInfo {
-  // 旧格式: TASK-001
+  // Old format: TASK-001
   if (/^TASK-\d{3,}$/.test(id)) {
     return {
       valid: true,
@@ -693,7 +692,7 @@ export function parseTaskId(id: string): TaskIdInfo {
     };
   }
 
-  // 新格式: TASK-{type}-{priority}-{slug}-{date}
+  // New format: TASK-{type}-{priority}-{slug}-{date}
   const newFormat = /^TASK-(bug|feature|research|docs|refactor|test)-([PQ]\d)-([a-z0-9\-]+)-(\d{8})(?:-\d+)?$/;
   const match = id.match(newFormat);
 
@@ -709,14 +708,14 @@ export function parseTaskId(id: string): TaskIdInfo {
     };
   }
 
-  // 兼容旧的新格式（没有type）: TASK-P1-user-auth-open-auth-20260306
+  // Legacy new format (no type): TASK-P1-user-auth-open-auth-20260306
   const legacyFormat = /^TASK-([PQ]\d)-([a-z0-9\-]+)-([a-z]+)-([a-z0-9]+)-(\d{8})(?:-\d+)?$/;
   const legacyMatch = id.match(legacyFormat);
 
   if (legacyMatch) {
     return {
       valid: true,
-      format: 'new', // 标记为新格式但缺少type
+      format: 'new', // Marked as new format but missing type
       priority: legacyMatch[1],
       slug: legacyMatch[2],
       date: legacyMatch[5],
@@ -724,7 +723,7 @@ export function parseTaskId(id: string): TaskIdInfo {
     };
   }
 
-  // 宽松格式：TASK-{任意内容}
+  // Loose format: TASK-{any content}
   if (id.startsWith('TASK-') && id.length > 5) {
     return {
       valid: true,
@@ -741,14 +740,14 @@ export function parseTaskId(id: string): TaskIdInfo {
 }
 
 /**
- * 检查是否为旧格式任务ID
+ * Check if task ID is in old format
  */
 export function isOldFormatTaskId(id: string): boolean {
   return /^TASK-\d{3,}$/.test(id);
 }
 
 /**
- * 检查是否需要转换（旧格式或缺少type的新格式）
+ * Check if conversion is needed (old format or new format missing type)
  */
 export function needsConversion(id: string): boolean {
   const info = parseTaskId(id);
@@ -756,9 +755,9 @@ export function needsConversion(id: string): boolean {
 }
 
 /**
- * 生成任务ID (新格式)
- * 格式: TASK-{type}-{priority}-{slug}-{date}
- * 例如: TASK-feature-P1-user-auth-20260306
+ * Generate task ID (new format)
+ * Format: TASK-{type}-{priority}-{slug}-{date}
+ * Example: TASK-feature-P1-user-auth-20260306
  */
 export function generateTaskId(
   type: TaskType,
@@ -766,19 +765,19 @@ export function generateTaskId(
   title: string,
   existingIds: string[] = []
 ): string {
-  // 从标题生成 slug
-  // 第一步：尝试提取 ASCII 单词和数字
+  // Generate slug from title
+  // Step 1: Try to extract ASCII words and numbers
   const asciiParts = title.match(/[a-zA-Z][a-zA-Z0-9]*|\d+/g);
   let slug: string;
 
   if (asciiParts && asciiParts.length > 0) {
-    // 标题包含英文/数字部分，直接使用
+    // Title contains English/number parts, use directly
     slug = asciiParts
       .join('-')
       .toLowerCase()
       .substring(0, 40);
   } else {
-    // 纯非ASCII标题（如中文），使用类型缩写+哈希生成有意义标识
+    // Pure non-ASCII title (e.g., Chinese), use type abbreviation + hash to generate meaningful identifier
     const typePrefix: Record<string, string> = {
       feature: 'feat',
       bugfix: 'fix',
@@ -795,13 +794,13 @@ export function generateTaskId(
     slug = `${prefix}-${Math.abs(hash).toString(36)}`;
   }
 
-  // 生成日期字符串
+  // Generate date string
   const date = new Date().toISOString().slice(0, 10).replace(/-/g, '');
 
-  // 生成新格式 ID
+  // Generate new format ID
   let newId = `TASK-${type}-${priority}-${slug}-${date}`;
 
-  // 检查是否已存在
+  // Check if already exists
   if (existingIds.includes(newId)) {
     let counter = 1;
     while (existingIds.includes(`${newId}-${counter}`)) {
@@ -814,7 +813,7 @@ export function generateTaskId(
 }
 
 /**
- * 转换旧格式任务ID为新格式
+ * Convert old format task ID to new format
  */
 export function convertTaskId(
   oldId: string,
@@ -823,53 +822,53 @@ export function convertTaskId(
   title: string,
   existingIds: string[] = []
 ): string {
-  // 如果已经是新格式且有type，直接返回
+  // If already in new format with type, return directly
   const info = parseTaskId(oldId);
   if (info.format === 'new' && info.type) {
     return oldId;
   }
 
-  // 生成新格式ID
+  // Generate new format ID
   return generateTaskId(type, priority, title, existingIds);
 }
 
 /**
- * 从标题推断任务类型
+ * Infer task type from title
  */
 export function inferTaskType(title: string): TaskType {
   const lowerTitle = title.toLowerCase();
 
-  // Bug 关键词
+  // Bug keywords
   if (/\b(fix|bug|error|issue|crash|broken|fail|problem|修复|错误|问题|故障)\b/.test(lowerTitle)) {
     return 'bug';
   }
 
-  // Research 关键词
+  // Research keywords
   if (/\b(research|investigate|analyze|study|explore|调研|研究|分析|探索)\b/.test(lowerTitle)) {
     return 'research';
   }
 
-  // Docs 关键词
+  // Docs keywords
   if (/\b(doc|document|readme|guide|manual|文档|说明|指南)\b/.test(lowerTitle)) {
     return 'docs';
   }
 
-  // Refactor 关键词
+  // Refactor keywords
   if (/\b(refactor|clean|improve|optimize|restructure|重构|优化|改进)\b/.test(lowerTitle)) {
     return 'refactor';
   }
 
-  // Test 关键词
+  // Test keywords
   if (/\b(test|spec|coverage|测试|单元测试|集成测试)\b/.test(lowerTitle)) {
     return 'test';
   }
 
-  // 默认为 feature
+  // Default to feature
   return 'feature';
 }
 
 /**
- * 从标题推断优先级
+ * Infer priority from title
  */
 export function inferTaskPriority(title: string): TaskPriority {
   const lowerTitle = title.toLowerCase();
@@ -890,16 +889,16 @@ export function inferTaskPriority(title: string): TaskPriority {
 }
 
 /**
- * 根据任务类型和优先级推断检查点策略
+ * Infer checkpoint policy based on task type and priority
  *
- * 推断规则：
- * - P0/P1 优先级：必须配置检查点 ('required')
- * - P2/P3 优先级：检查点可选 ('optional')
- * - Q1-Q4 优先级：检查点可选 ('optional')
+ * Inference rules:
+ * - P0/P1 priority: checkpoints required ('required')
+ * - P2/P3 priority: checkpoints optional ('optional')
+ * - Q1-Q4 priority: checkpoints optional ('optional')
  *
- * @param type - 任务类型
- * @param priority - 任务优先级
- * @returns CheckpointPolicy 推断的检查点策略
+ * @param type - Task type
+ * @param priority - Task priority
+ * @returns CheckpointPolicy Inferred checkpoint policy
  *
  * @example
  * ```typescript
@@ -912,17 +911,17 @@ export function inferCheckpointPolicy(
   type: TaskType,
   priority: TaskPriority
 ): CheckpointPolicy {
-  // P0/P1 高优先级任务必须配置检查点
+  // P0/P1 high priority tasks must have checkpoints
   if (priority === 'P0' || priority === 'P1') {
     return 'required';
   }
 
-  // P2/P3 及 Q1-Q4 优先级任务检查点可选
+  // P2/P3 and Q1-Q4 priority tasks have optional checkpoints
   return 'optional';
 }
 
 /**
- * 生成下一个任务ID (旧格式，保持兼容)
+ * Generate next task ID (old format, kept for compatibility)
  */
 export function generateNextTaskId(existingIds: string[]): string {
   if (existingIds.length === 0) {
