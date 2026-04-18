@@ -234,8 +234,8 @@ function parseQuery(query: string): QueryFilter {
       new RegExp(pattern, flags);
       return { type: 'regex', pattern, flags: flags || undefined };
     } catch (e) {
-      // 无效正则，回退到关键字匹配
-      console.warn(`⚠️  无效的正则表达式 "${pattern}"，回退到关键字匹配`);
+      // Invalid regex, fallback to keyword matching
+      console.warn(`⚠️  Invalid regex pattern "${pattern}", falling back to keyword matching`);
       const words = trimmed
         .toLowerCase()
         .replace(/[^\w\u4e00-\u9fa5\s]/g, ' ')
@@ -252,7 +252,7 @@ function parseQuery(query: string): QueryFilter {
     return { type: 'regex', pattern: trimmed };
   } catch (e) {
     // 无效正则，回退到关键字匹配
-    console.warn(`⚠️  无效的正则表达式 "${trimmed}"，回退到关键字匹配`);
+    console.warn(`⚠️  Invalid regex pattern "${trimmed}", falling back to keyword matching`);
     const words = trimmed
       .toLowerCase()
       .replace(/[^\w\u4e00-\u9fa5\s]/g, ' ')
@@ -294,8 +294,8 @@ function taskMatchesFilter(task: TaskMeta, filter: QueryFilter): boolean {
       const regex = new RegExp(filter.pattern, filter.flags || 'i');
       return regex.test(searchText);
     } catch (e) {
-      // 如果正则执行失败，打印警告但不崩溃
-      console.warn(`⚠️  正则执行失败: ${filter.pattern}，跳过此过滤`);
+      // If regex execution fails, print warning but don't crash
+      console.warn(`⚠️  Regex execution failed: ${filter.pattern}, skipping this filter`);
       return true; // 匹配所有（不过滤）
     }
   }
@@ -693,7 +693,7 @@ function generateAIOutput(
     }),
     batchOrder,
     recommendation: {
-      summary: `发现 ${chains.length} 个任务链，共 ${filteredCount} 个任务，分 ${batches.length} 个批次。三层依赖推断: Layer1/2 文件路径重叠 + ${genOptions?.smart ? 'Layer3 AI语义推断(已启用)' : 'Layer3 AI语义推断(未启用, --smart 激活)'}。同优先级内已按架构层级排序（Layer0→Layer3）`,
+      summary: `Found ${chains.length} task chains, ${filteredCount} tasks total, divided into ${batches.length} batches. Three-layer dependency inference: Layer1/2 file path overlap + ${genOptions?.smart ? 'Layer3 AI semantic inference (enabled)' : 'Layer3 AI semantic inference (disabled, use --smart to enable)'}。Sorted by architecture layer within same priority (Layer0→Layer3)`,
       topChains,
       suggestedOrder,
     },
@@ -705,16 +705,16 @@ function generateAIOutput(
  */
 export function showPlan(json: boolean = false, cwd: string = process.cwd()): void {
   if (!isInitialized(cwd)) {
-    console.error('错误: 项目未初始化。请先运行 `projmnt4claude setup`');
+    console.error('Error: Project not initialized. Please run `projmnt4claude setup` first');
     process.exit(1);
   }
 
   const plan = readPlan(cwd);
 
   if (!plan || plan.tasks.length === 0) {
-    console.log('暂无执行计划');
+    console.log('No execution plan');
     console.log('');
-    console.log('使用 `projmnt4claude plan recommend` 生成推荐计划');
+    console.log('Use `projmnt4claude plan recommend` to generate a recommended plan');
     return;
   }
 
@@ -725,7 +725,7 @@ export function showPlan(json: boolean = false, cwd: string = process.cwd()): vo
       return {
         order: index + 1,
         id: taskId,
-        title: task?.title || '(未知任务)',
+        title: task?.title || '(Unknown task)',
         status: task?.status || 'unknown',
       };
     });
@@ -734,11 +734,11 @@ export function showPlan(json: boolean = false, cwd: string = process.cwd()): vo
     return;
   }
 
-  // 表格格式输出
+  // Table format output
   console.log('');
-  console.log('执行计划:');
+  console.log('Execution Plan:');
   console.log('━'.repeat(SEPARATOR_WIDTH));
-  console.log('序号 | 任务ID    | 标题                         | 状态');
+  console.log('No.  | Task ID   | Title                        | Status');
   console.log('-----|-----------|------------------------------|------------');
 
   for (let i = 0; i < plan.tasks.length; i++) {
@@ -747,16 +747,16 @@ export function showPlan(json: boolean = false, cwd: string = process.cwd()): vo
 
     const order = String(i + 1).padEnd(4);
     const id = taskId.padEnd(9);
-    const title = (task?.title || '(未知任务)').substring(0, 28).padEnd(28);
-    const status = task ? formatStatus(task.status) : '❓ 未知';
+    const title = (task?.title || '(Unknown task)').substring(0, 28).padEnd(28);
+    const status = task ? formatStatus(task.status) : '❓ Unknown';
 
     console.log(`${order} | ${id} | ${title} | ${status}`);
   }
 
   console.log('');
-  console.log(`共 ${plan.tasks.length} 个任务`);
-  console.log(`创建时间: ${plan.createdAt}`);
-  console.log(`更新时间: ${plan.updatedAt}`);
+  console.log(`Total ${plan.tasks.length} tasks`);
+  console.log(`Created: ${plan.createdAt}`);
+  console.log(`Updated: ${plan.updatedAt}`);
 }
 
 /**
@@ -764,27 +764,27 @@ export function showPlan(json: boolean = false, cwd: string = process.cwd()): vo
  */
 export function addTask(taskId: string, afterId?: string, cwd: string = process.cwd()): void {
   if (!isInitialized(cwd)) {
-    console.error('错误: 项目未初始化。请先运行 `projmnt4claude setup`');
+    console.error('Error: Project not initialized. Please run `projmnt4claude setup` first');
     process.exit(1);
   }
 
-  // 检查任务是否存在
+  // Check if task exists
   if (!taskExists(taskId, cwd)) {
-    console.error(`错误: 任务 '${taskId}' 不存在`);
+    console.error(`Error: Task '${taskId}' does not exist`);
     process.exit(1);
   }
 
   if (afterId && !taskExists(afterId, cwd)) {
-    console.error(`错误: 参考任务 '${afterId}' 不存在`);
+    console.error(`Error: Reference task '${afterId}' does not exist`);
     process.exit(1);
   }
 
   const success = addTaskToPlan(taskId, afterId, cwd);
 
   if (success) {
-    console.log(`✅ 已添加任务 ${taskId} 到执行计划${afterId ? ` (在 ${afterId} 之后)` : ''}`);
+    console.log(`✅ Added task ${taskId} to execution plan${afterId ? ` (after ${afterId})` : ''}`);
   } else {
-    console.log(`任务 ${taskId} 已在执行计划中`);
+    console.log(`Task ${taskId} is already in the execution plan`);
   }
 }
 
@@ -793,16 +793,16 @@ export function addTask(taskId: string, afterId?: string, cwd: string = process.
  */
 export function removeTask(taskId: string, cwd: string = process.cwd()): void {
   if (!isInitialized(cwd)) {
-    console.error('错误: 项目未初始化。请先运行 `projmnt4claude setup`');
+    console.error('Error: Project not initialized. Please run `projmnt4claude setup` first');
     process.exit(1);
   }
 
-  // CP-16: 删除前依赖关系检查
+  // CP-16: Pre-delete dependency check
   const allTasks = getAllTasks(cwd);
   const depGraph = DependencyGraph.fromTasks(allTasks);
   const opValidation = validatePlanOperation('delete', [taskId], depGraph);
   if (opValidation.warnings.length > 0) {
-    console.log('📋 删除前依赖检查:');
+    console.log('📋 Pre-delete dependency check:');
     for (const w of opValidation.warnings) {
       console.log(`   ⚠️  ${w}`);
     }
@@ -811,9 +811,9 @@ export function removeTask(taskId: string, cwd: string = process.cwd()): void {
   const success = removeTaskFromPlan(taskId, cwd);
 
   if (success) {
-    console.log(`✅ 已从执行计划移除任务 ${taskId}`);
+    console.log(`✅ Removed task ${taskId} from execution plan`);
   } else {
-    console.log(`任务 ${taskId} 不在执行计划中`);
+    console.log(`Task ${taskId} is not in the execution plan`);
   }
 }
 
@@ -822,7 +822,7 @@ export function removeTask(taskId: string, cwd: string = process.cwd()): void {
  */
 export async function clearPlanCmd(force: boolean = false, cwd: string = process.cwd()): Promise<void> {
   if (!isInitialized(cwd)) {
-    console.error('错误: 项目未初始化。请先运行 `projmnt4claude setup`');
+    console.error('Error: Project not initialized. Please run `projmnt4claude setup` first');
     process.exit(1);
   }
 
@@ -830,18 +830,18 @@ export async function clearPlanCmd(force: boolean = false, cwd: string = process
     const response = await prompts({
       type: 'confirm',
       name: 'confirm',
-      message: '确定要清空执行计划吗？',
+      message: 'Are you sure you want to clear the execution plan?',
       initial: false,
     });
 
     if (!response.confirm) {
-      console.log('已取消');
+      console.log('Cancelled');
       return;
     }
   }
 
   clearPlan(cwd);
-  console.log('✅ 执行计划已清空');
+  console.log('✅ Execution plan cleared');
 }
 
 /**
@@ -857,58 +857,58 @@ export async function recommendPlan(
   cwd: string = process.cwd()
 ): Promise<void> {
   if (!isInitialized(cwd)) {
-    console.error('错误: 项目未初始化。请先运行 `projmnt4claude setup`');
+    console.error('Error: Project not initialized. Please run `projmnt4claude setup` first');
     process.exit(1);
   }
 
-  // CP-1: 检测活跃流水线，防止在流水线执行期间修改计划
+  // CP-1: Detect active pipeline to prevent plan modification during execution
   const activeCheck = detectActiveSnapshot(cwd);
   if (activeCheck.hasActive) {
-    console.error('❌ 错误: 检测到正在运行的流水线');
+    console.error('❌ Error: Active pipeline detected');
     console.error(`   ${activeCheck.message}`);
-    console.error('   请等待流水线完成或使用 `projmnt4claude harness --continue` 恢复');
-    console.error('   如需强制创建新计划，请先停止正在运行的流水线进程');
+    console.error('   Please wait for the pipeline to complete or use `projmnt4claude harness --continue` to resume');
+    console.error('   To force create a new plan, stop the running pipeline process first');
     process.exit(1);
   }
 
-  console.log('正在分析项目任务...\n');
+  console.log('Analyzing project tasks...\n');
 
-  // CP-4: 模块日志 + 埋点初始化
+  // CP-4: Module logging + instrumentation initialization
   const logger = createLogger('plan-recommend', cwd);
   const startTime = Date.now();
   const inputQuery = options.query || '';
   let recommendationAccepted = false;
   let suggestedOrder: string[] = [];
 
-  // 获取所有任务（不仅仅是可执行的，用于构建完整的依赖图）
+  // Get all tasks (not just executable, for building complete dependency graph)
   const allTasks = getAllTasks(cwd);
 
-  // CP-2: 质量检测规则 - failed 任务重试确认
+  // CP-2: Quality detection rules - failed task retry confirmation
   const failedTasks = allTasks.filter(t => normalizeStatus(t.status) === 'failed');
   if (failedTasks.length > 0) {
-    console.log('⚠️  质量检测: 发现以下 failed 状态任务:');
+    console.log('⚠️  Quality check: Found failed tasks:');
     for (const task of failedTasks) {
       console.log(`   ❌ ${task.id}: ${task.title.substring(0, 50)}`);
     }
     console.log('');
-    console.log('💡 约束提示:');
-    console.log('   • 如需重试 failed 任务，请先查看失败原因并修复');
-    console.log('   • 使用 `projmnt4claude task update <id> --status open` 重置状态后重试');
-    console.log('   • 或在 `plan recommend` 后手动将 failed 任务加入计划');
+    console.log('💡 Constraint hints:');
+    console.log('   • To retry failed tasks, check the failure reason and fix first');
+    console.log('   • Use `projmnt4claude task update <id> --status open` to reset status and retry');
+    console.log('   • Or manually add failed tasks to the plan after `plan recommend`');
     console.log('');
 
-    // 非交互模式下直接提示，但不阻止执行
+    // Non-interactive mode: show warning but don't block execution
     if (options.nonInteractive || !process.stdout.isTTY) {
-      console.log('   (非交互模式: 继续执行，但请注意上述 failed 任务)');
+      console.log('   (Non-interactive mode: continuing, but note the failed tasks above)');
       console.log('');
     }
   }
 
-  // CP-4: 分离 in_progress 任务，单独展示
+  // CP-4: Separate in_progress tasks for special display
   const inProgressTasks = allTasks.filter(t => normalizeStatus(t.status) === 'in_progress');
 
-  // 0. 过滤任务（默认只推荐 open 状态，--all 排除终态）
-  // CP-9: 使用 normalizeStatus 确保状态比较标准化
+  // 0. Filter tasks (default: only recommend open status, --all excludes terminal states)
+  // CP-9: Use normalizeStatus for standardized status comparison
   const TERMINAL_STATUSES = new Set(['resolved', 'closed', 'abandoned', 'failed']);
   const activeTasks = options.all
     ? allTasks.filter(t => !TERMINAL_STATUSES.has(normalizeStatus(t.status)))
@@ -916,42 +916,42 @@ export async function recommendPlan(
 
   const excludedCount = allTasks.length - activeTasks.length;
   if (excludedCount > 0) {
-    const reason = options.all ? '终态(resolved/closed/abandoned)' : '非 open 状态';
-    console.log(`已排除 ${excludedCount} 个${reason}任务`);
+    const reason = options.all ? 'terminal (resolved/closed/abandoned)' : 'non-open status';
+    console.log(`Excluded ${excludedCount} ${reason} tasks`);
   }
 
-  // CP-8: 展示进行中的任务（特殊标识）
+  // CP-8: Display in-progress tasks (special marker)
   if (inProgressTasks.length > 0) {
-    console.log('🔵 进行中的任务:');
+    console.log('🔵 In-progress tasks:');
     for (const t of inProgressTasks) {
       console.log(`   ${t.id}: ${t.title.substring(0, 60)}`);
     }
     console.log('');
   }
 
-  // 排除 in_progress 任务，避免放入依赖链中造成混淆
+  // Exclude in_progress tasks to avoid confusion in dependency chains
   const chainEligibleTasks = activeTasks.filter(t => normalizeStatus(t.status) !== 'in_progress');
 
-  // 子任务缺失检测（始终运行，--strict-subtask-coverage 时作为错误级别）
+  // Subtask missing detection (always run, --strict-subtask-coverage treats as error)
   const missingSubtaskWarnings = detectMissingSubtasks(cwd);
   if (missingSubtaskWarnings.length > 0) {
     const label = options.strictSubtaskCoverage ? '❌ ERR' : '⚠️  WARN';
-    console.log(`${label} 子任务缺失检测 (${missingSubtaskWarnings.length} 个父任务受影响):`);
+    console.log(`${label} Subtask missing detection (${missingSubtaskWarnings.length} parent tasks affected):`);
     for (const w of missingSubtaskWarnings) {
-      console.log(`   ${label} 父任务 ${w.parentTaskId} ("${w.parentTitle.substring(0, 30)}"): 缺失 ${w.missingSubtaskIds.length}/${w.expectedCount} 个子任务`);
+      console.log(`   ${label} Parent task ${w.parentTaskId} ("${w.parentTitle.substring(0, 30)}"): missing ${w.missingSubtaskIds.length}/${w.expectedCount} subtasks`);
       for (const missingId of w.missingSubtaskIds) {
-        console.log(`      - ${missingId} 不存在`);
+        console.log(`      - ${missingId} does not exist`);
       }
     }
     console.log('');
 
     if (options.strictSubtaskCoverage) {
-      console.error('❌ --strict-subtask-coverage: 检测到缺失子任务，中止推荐。请先创建缺失的子任务或清理无效的 subtaskIds。');
+      console.error('❌ --strict-subtask-coverage: Missing subtasks detected, aborting recommendation. Please create missing subtasks or clean up invalid subtaskIds.');
       process.exit(1);
     }
   }
 
-  // 1. 查询过滤（支持关键字和正则表达式）
+  // 1. Query filter (supports keywords and regex)
   let filter: QueryFilter = { type: 'keywords', keywords: [] };
   let filteredTasks = chainEligibleTasks;
 
@@ -959,37 +959,37 @@ export async function recommendPlan(
     filter = parseQuery(options.query);
 
     if (filter.type === 'regex') {
-      console.log(`正则模式: /${filter.pattern}/${filter.flags || ''}`);
+      console.log(`Regex mode: /${filter.pattern}/${filter.flags || ''}`);
     } else {
-      console.log(`关键字: ${filter.keywords.join(', ')}`);
+      console.log(`Keywords: ${filter.keywords.join(', ')}`);
     }
 
     filteredTasks = chainEligibleTasks.filter(task => taskMatchesFilter(task, filter));
-    console.log(`过滤结果: ${filteredTasks.length}/${chainEligibleTasks.length} 个任务匹配\n`);
+    console.log(`Filter result: ${filteredTasks.length}/${chainEligibleTasks.length} tasks match\n`);
   }
 
-  // Bug1 fix: --all 模式跳过依赖过滤，显示全部任务
+  // Bug1 fix: --all mode skips dependency filtering, shows all tasks
   if (!options.all) {
     const executableIds = new Set(getExecutableTasks(cwd));
     const beforeExecFilter = filteredTasks.length;
     filteredTasks = filteredTasks.filter(task => executableIds.has(task.id));
     if (beforeExecFilter - filteredTasks.length > 0) {
-      console.log(`已排除 ${beforeExecFilter - filteredTasks.length} 个依赖未完成或不可执行的任务`);
+      console.log(`Excluded ${beforeExecFilter - filteredTasks.length} tasks with incomplete dependencies or not executable`);
     }
   }
 
-  // ========== 质量门禁检查 (plan_recommend 阶段) - QG-PLAN-005 ==========
-  // CP-1: --all 模式也执行质量门禁检查
+  // ========== Quality Gate Check (plan_recommend phase) - QG-PLAN-005 ==========
+  // CP-1: --all mode also runs quality gate check
   if (options.requireQuality !== false && filteredTasks.length > 0) {
-    console.log('正在执行质量门禁检查...');
+    console.log('Running quality gate check...');
 
-    // 使用新的 runPlanQualityGateCheck 函数执行质量门禁检查
+    // Use new runPlanQualityGateCheck function for quality gate check
     const qualityGateResult = runPlanQualityGateCheck(filteredTasks, {
       phase: 'plan_recommend',
       includeWarnings: true,
     });
 
-    // 使用 formatPlanQualityGateReport 格式化输出报告
+    // Use formatPlanQualityGateReport to format output report
     if (!qualityGateResult.passed) {
       console.log(formatPlanQualityGateReport(qualityGateResult, {
         compact: false,
@@ -997,34 +997,34 @@ export async function recommendPlan(
         phase: 'plan_recommend',
       }));
 
-      // 非交互模式下直接退出
+      // Non-interactive mode: exit directly
       if (options.nonInteractive || !process.stdout.isTTY) {
-        console.error('❌ 质量门禁检查未通过，中止计划推荐');
-        console.error(`   未通过任务: ${qualityGateResult.failedTasks.join(', ')}`);
-        console.error('   使用 --no-quality-gate 跳过质量检查（不推荐）');
+        console.error('❌ Quality gate check failed, aborting plan recommendation');
+        console.error(`   Failed tasks: ${qualityGateResult.failedTasks.join(', ')}`);
+        console.error('   Use --no-quality-gate to skip quality check (not recommended)');
         process.exit(1);
       }
 
-      // 交互模式下询问用户
+      // Interactive mode: ask user
       const { continueAnyway } = await prompts({
         type: 'confirm',
         name: 'continueAnyway',
-        message: `${qualityGateResult.failedCount} 个任务未通过质量门禁，是否继续？`,
+        message: `${qualityGateResult.failedCount} tasks failed quality gate, continue?`,
         initial: false,
       });
 
       if (!continueAnyway) {
-        console.log('已取消');
+        console.log('Cancelled');
         return;
       }
       console.log('');
     } else {
-      // 检查通过，显示简洁的成功消息
-      console.log(`✅ 质量门禁检查通过 (${qualityGateResult.passedCount}/${qualityGateResult.totalTasks})`);
+      // Check passed, show concise success message
+      console.log(`✅ Quality gate check passed (${qualityGateResult.passedCount}/${qualityGateResult.totalTasks})`);
       console.log('');
     }
   }
-  // ========== 质量门禁检查结束 ==========
+  // ========== Quality Gate Check End ==========
 
   if (filteredTasks.length === 0) {
     const emptyResult = {
@@ -1040,7 +1040,7 @@ export async function recommendPlan(
       batches: [],
       batchOrder: [],
       recommendation: {
-        summary: '没有匹配的任务',
+        summary: 'No matching tasks',
         topChains: [],
         suggestedOrder: [],
       },
@@ -1049,11 +1049,11 @@ export async function recommendPlan(
     if (options.json) {
       console.log(JSON.stringify(emptyResult, null, 2));
     } else {
-      console.log('没有匹配的任务');
+      console.log('No matching tasks');
       if (options.query) {
-        console.log(`查询: "${options.query}"`);
+        console.log(`Query: "${options.query}"`);
         const displayKeywords = filter.type === 'keywords' ? filter.keywords : [filter.pattern];
-        console.log(`关键字: ${displayKeywords.join(', ')}`);
+        console.log(`Keywords: ${displayKeywords.join(', ')}`);
       }
     }
     // CP-10: 空结果埋点
@@ -1073,19 +1073,19 @@ export async function recommendPlan(
     return;
   }
 
-  // CP-1: 先推断依赖，再构建链（确保 AI 依赖影响链结构）
-  console.log('正在分析任务依赖关系...');
+  // CP-1: Infer dependencies first, then build chains (ensure AI deps affect chain structure)
+  console.log('Analyzing task dependencies...');
   const fileOverlapDeps = inferDependenciesBatch(filteredTasks);
 
-  // CP-6: --smart 时在链构建前运行 AI 语义推断，合并到依赖图
+  // CP-6: --smart runs AI semantic inference before chain building, merge into dep graph
   let mergedDeps = fileOverlapDeps;
   if (options.smart) {
-    console.log('正在通过 AI 分析语义依赖关系...');
+    console.log('Analyzing semantic dependencies via AI...');
     const semanticResult = await withAIEnhancement({
       enabled: true,
       aiCall: () => new AIMetadataAssistant(cwd).inferSemanticDependencies(filteredTasks, { cwd }),
       fallback: { dependencies: [], aiUsed: false },
-      operationName: '语义依赖推断',
+      operationName: 'Semantic dependency inference',
     });
 
     if (semanticResult.aiUsed && semanticResult.dependencies.length > 0) {
@@ -1103,22 +1103,22 @@ export async function recommendPlan(
           mergedDeps.set(aiDep.taskId, existing);
         }
       }
-      console.log(`  AI 发现 ${semanticResult.dependencies.length} 条语义依赖`);
+      console.log(`  AI found ${semanticResult.dependencies.length} semantic dependencies`);
     } else {
-      console.log('  AI 未发现额外语义依赖');
+      console.log('  AI found no additional semantic dependencies');
     }
   }
 
   // 构建任务链（使用合并后的依赖图）
   const chains = buildTaskChains(filteredTasks, cwd, mergedDeps);
 
-  // 2. 按优先级↑ 链长度↓ reopen↓ 排序
+  // 2. Sort by priority↑, chain length↓, reopen↓
   const sortedChains = sortChains(chains);
 
-  // CP-3/CP-7: buildBatches 仅调用一次，结果缓存复用
+  // CP-3/CP-7: buildBatches called once, result cached for reuse
   const cachedBatches = buildBatches(sortedChains);
 
-  // 3. 生成 AI 友好的输出（传入缓存批次）
+  // 3. Generate AI-friendly output (pass cached batches)
   const keywordsForOutput = filter.type === 'keywords'
     ? (filter.keywords.length > 0 ? filter.keywords : undefined)
     : [filter.pattern];
@@ -1133,7 +1133,7 @@ export async function recommendPlan(
     missingSubtaskWarnings
   );
 
-  // JSON 格式输出（AI 友好）
+  // JSON format output (AI-friendly)
   suggestedOrder = aiOutput.recommendation.suggestedOrder;
   if (options.json) {
     console.log(JSON.stringify(aiOutput, null, 2));
@@ -1156,50 +1156,50 @@ export async function recommendPlan(
     return;
   }
 
-  // 人类可读格式输出
+  // Human-readable format output
   console.log('━'.repeat(SEPARATOR_WIDTH));
-  console.log('📋 任务链分析结果（按批次分组）');
+  console.log('📋 Task chain analysis results (grouped by batch)');
   console.log('━'.repeat(SEPARATOR_WIDTH));
   console.log('');
 
-  // 统计摘要
-  console.log('📊 统计摘要:');
-  console.log(`   总任务数: ${aiOutput.filterStats.totalTasks}`);
-  console.log(`   匹配任务: ${aiOutput.filterStats.filteredTasks}`);
-  console.log(`   任务链数: ${aiOutput.filterStats.chainCount}`);
-  console.log(`   批次数: ${aiOutput.batches.length}`);
+  // Statistics summary
+  console.log('📊 Statistics summary:');
+  console.log(`   Total tasks: ${aiOutput.filterStats.totalTasks}`);
+  console.log(`   Matched tasks: ${aiOutput.filterStats.filteredTasks}`);
+  console.log(`   Task chains: ${aiOutput.filterStats.chainCount}`);
+  console.log(`   Batches: ${aiOutput.batches.length}`);
   console.log('');
 
-  // 按批次展示（使用缓存批次，不再重复计算）
+  // Display by batch (use cached batches, no recalculation)
   const batches = cachedBatches;
   for (let b = 0; b < batches.length; b++) {
     const batch = batches[b]!;
     const batchIcon = getPriorityIcon(batch.priorityValue);
     const parallelTag = batch.parallelizable
-      ? ' [可并行]'
+      ? ' [Parallel]'
       : batch.chains.length > 1
-        ? ' [不可并行: 推断依赖]'
+        ? ' [Not parallel: inferred deps]'
         : '';
 
-    console.log(`📦 批次 ${b + 1}/${batches.length} ${batchIcon} ${batch.priority}${parallelTag}`);
-    console.log(`   链数: ${batch.chains.length} | 任务数: ${batch.tasks.length}`);
+    console.log(`📦 Batch ${b + 1}/${batches.length} ${batchIcon} ${batch.priority}${parallelTag}`);
+    console.log(`   Chains: ${batch.chains.length} | Tasks: ${batch.tasks.length}`);
     console.log('');
 
-    // 显示批次内的链
+    // Display chains in batch
     const chainsInBatch = sortedChains.filter(c => batch.chains.includes(c.chainId));
     for (let i = 0; i < chainsInBatch.length; i++) {
       const chain = chainsInBatch[i]!;
-      const chainLabel = batch.parallelizable ? `[链${i + 1}]` : `[链]`;
+      const chainLabel = batch.parallelizable ? `[Chain${i + 1}]` : `[Chain]`;
 
-      console.log(`   ${chainLabel} ${chain.chainId} (${chain.minLayer} 长度:${chain.length} Reopen:${chain.totalReopenCount})`);
+      console.log(`   ${chainLabel} ${chain.chainId} (${chain.minLayer} Length:${chain.length} Reopen:${chain.totalReopenCount})`);
 
-      // 显示链中任务（拓扑序）
+      // Display tasks in chain (topological order)
       for (let j = 0; j < chain.tasks.length; j++) {
         const task = chain.tasks[j]!;
         const prefix = j === chain.tasks.length - 1 ? '      └─' : '      ├─';
         const statusIcon = getStatusIcon(task.status);
 
-        // 显示推断依赖标注
+        // Display inferred dependency annotations
         const inferredDeps = chain.inferredDependencies?.get(task.id);
         let inferredTag = '';
         if (inferredDeps && inferredDeps.length > 0) {
@@ -1208,11 +1208,11 @@ export async function recommendPlan(
 
           if (fileOverlapDeps.length > 0) {
             const files = [...new Set(fileOverlapDeps.flatMap(d => d.overlappingFiles))].slice(0, 2);
-            inferredTag = ` [推断:文件重叠] ${files.join(', ')}${fileOverlapDeps.flatMap(d => d.overlappingFiles).length > 2 ? '...' : ''}`;
+            inferredTag = ` [Inferred:file overlap] ${files.join(', ')}${fileOverlapDeps.flatMap(d => d.overlappingFiles).length > 2 ? '...' : ''}`;
           }
           if (aiSemanticDeps.length > 0) {
-            const reasons = aiSemanticDeps.map(d => d.reason || '语义关联').slice(0, 2);
-            inferredTag += ` [推断:AI语义] ${reasons.join('; ')}`;
+            const reasons = aiSemanticDeps.map(d => d.reason || 'Semantic relation').slice(0, 2);
+            inferredTag += ` [Inferred:AI semantic] ${reasons.join('; ')}`;
           }
         }
 
@@ -1227,14 +1227,14 @@ export async function recommendPlan(
     }
   }
 
-  // 推荐摘要
+  // Recommendation summary
   console.log('━'.repeat(SEPARATOR_WIDTH));
-  console.log('💡 推荐摘要:');
+  console.log('💡 Recommendation summary:');
   console.log(`   ${aiOutput.recommendation.summary}`);
-  console.log(`   优先任务链: ${aiOutput.recommendation.topChains.slice(0, 3).join(', ')}`);
+  console.log(`   Priority chains: ${aiOutput.recommendation.topChains.slice(0, 3).join(', ')}`);
   console.log('');
 
-  // 非交互模式或检测到非 TTY
+  // Non-interactive mode or non-TTY detected
   const isNonInteractive = options.nonInteractive || !process.stdout.isTTY;
 
   if (isNonInteractive) {
@@ -1242,7 +1242,7 @@ export async function recommendPlan(
     plan.tasks = aiOutput.recommendation.suggestedOrder;
     plan.batches = aiOutput.batchOrder;
     writePlan(plan, cwd);
-    console.log('✅ 执行计划已更新 (非交互模式)');
+    console.log('✅ Execution plan updated (non-interactive mode)');
     // CP-10: 非交互模式埋点
     logger.logInstrumentation({
       module: 'plan-recommend',
@@ -1262,11 +1262,11 @@ export async function recommendPlan(
     return;
   }
 
-  // 交互模式：询问用户确认
+  // Interactive mode: ask user for confirmation
   const response = await prompts({
     type: 'confirm',
     name: 'confirm',
-    message: '是否将推荐的任务顺序写入执行计划？',
+    message: 'Write the recommended task order to the execution plan?',
     initial: true,
   });
 
@@ -1275,10 +1275,10 @@ export async function recommendPlan(
     plan.tasks = aiOutput.recommendation.suggestedOrder;
     plan.batches = aiOutput.batchOrder;
     writePlan(plan, cwd);
-    console.log('✅ 执行计划已更新');
+    console.log('✅ Execution plan updated');
     recommendationAccepted = true;
   } else {
-    console.log('已取消');
+    console.log('Cancelled');
   }
 
   // CP-10: 交互模式埋点（推荐命中率 + 用户跳过率 + 排序偏差）
@@ -1302,7 +1302,7 @@ export async function recommendPlan(
 }
 
 /**
- * 获取优先级图标
+ * Get priority icon
  */
 function getPriorityIcon(priority: number): string {
   const icons: Record<number, string> = {
@@ -1313,7 +1313,7 @@ function getPriorityIcon(priority: number): string {
 }
 
 /**
- * 获取状态图标
+ * Get status icon
  */
 function getStatusIcon(status: string): string {
   const normalized = normalizeStatus(status);
@@ -1329,14 +1329,14 @@ function getStatusIcon(status: string): string {
 }
 
 /**
- * 格式化优先级
+ * Format priority
  */
 function formatPriority(priority: TaskPriority): string {
   const map: Record<TaskPriority, string> = {
-    P0: '🔴 P0紧急',
-    P1: '🟠 P1高',
-    P2: '🟡 P2中',
-    P3: '🟢 P3低',
+    P0: '🔴 P0 Urgent',
+    P1: '🟠 P1 High',
+    P2: '🟡 P2 Medium',
+    P3: '🟢 P3 Low',
     Q1: '📊 Q1',
     Q2: '📊 Q2',
     Q3: '📊 Q3',
@@ -1346,45 +1346,45 @@ function formatPriority(priority: TaskPriority): string {
 }
 
 /**
- * 格式化状态
+ * Format status
  */
 function formatStatus(status: string): string {
   const normalized = normalizeStatus(status);
   const map: Record<string, string> = {
-    open: '⬜ 待处理',
-    in_progress: '🔵 进行中',
-    resolved: '✅ 已解决',
-    closed: '⚫ 已关闭',
-    abandoned: '❌ 已放弃',
-    failed: '❌ 已失败',
+    open: '⬜ Open',
+    in_progress: '🔵 In Progress',
+    resolved: '✅ Resolved',
+    closed: '⚫ Closed',
+    abandoned: '❌ Abandoned',
+    failed: '❌ Failed',
   };
   return map[normalized] || status;
 }
 
-// ============== Plan 质量门禁函数 (QG-PLAN-005) ==============
+// ============== Plan Quality Gate Functions (QG-PLAN-005) ==============
 
 /**
- * 执行 Plan 质量门禁检查
+ * Execute Plan quality gate check
  *
- * 对任务列表执行 plan_recommend 阶段的质量门禁验证，检查是否存在：
- * - 循环依赖
- * - 无效依赖
- * - 孤儿子任务
- * - 孤立任务（警告）
- * - 被阻塞任务（警告）
- * - 桥接节点（警告）
- * - 仅推断依赖（警告）
+ * Performs quality gate validation for tasks at plan_recommend phase, checking for:
+ * - Circular dependencies
+ * - Invalid dependencies
+ * - Orphan subtasks
+ * - Isolated tasks (warning)
+ * - Blocked tasks (warning)
+ * - Bridge nodes (warning)
+ * - Inferred-only dependencies (warning)
  *
- * @param tasks - 要验证的任务列表
- * @param options - 可选配置
- * @returns 质量门禁检查结果
+ * @param tasks - Tasks to validate
+ * @param options - Optional configuration
+ * @returns Quality gate check result
  *
  * @example
  * ```typescript
  * const tasks = getAllTasks(cwd);
  * const result = runPlanQualityGateCheck(tasks);
  * if (!result.passed) {
- *   console.log('未通过任务:', result.failedTasks);
+ *   console.log('Failed tasks:', result.failedTasks);
  * }
  * ```
  */
@@ -1440,13 +1440,13 @@ export function runPlanQualityGateCheck(
 }
 
 /**
- * 格式化 Plan 质量门禁报告
+ * Format Plan quality gate report
  *
- * 将质量门禁检查结果格式化为可读的字符串报告，支持紧凑模式和详细模式。
+ * Formats quality gate check results into a readable string report, supporting compact and detailed modes.
  *
- * @param result - 质量门禁检查结果
- * @param options - 报告选项
- * @returns 格式化后的报告字符串
+ * @param result - Quality gate check result
+ * @param options - Report options
+ * @returns Formatted report string
  *
  * @example
  * ```typescript
@@ -1467,21 +1467,21 @@ export function formatPlanQualityGateReport(
 
   lines.push('');
   lines.push(separator);
-  lines.push(`${statusIcon} Plan 质量门禁检查报告 [${phase}]`);
+  lines.push(`${statusIcon} Plan Quality Gate Check Report [${phase}]`);
   lines.push(separator);
   lines.push('');
 
-  // 统计摘要
-  lines.push('📊 统计摘要:');
-  lines.push(`   总任务数: ${result.totalTasks}`);
-  lines.push(`   ✅ 通过: ${result.passedCount}`);
-  lines.push(`   ❌ 未通过: ${result.failedCount}`);
+  // Statistics summary
+  lines.push('📊 Statistics Summary:');
+  lines.push(`   Total tasks: ${result.totalTasks}`);
+  lines.push(`   ✅ Passed: ${result.passedCount}`);
+  lines.push(`   ❌ Failed: ${result.failedCount}`);
   lines.push('');
 
-  // 未通过的任务列表
+  // Failed tasks list
   if (result.failedTasks.length > 0) {
     lines.push(separator);
-    lines.push(`❌ 未通过的任务 (${result.failedTasks.length}):`);
+    lines.push(`❌ Failed Tasks (${result.failedTasks.length}):`);
     lines.push('');
 
     if (showDetails) {
@@ -1489,14 +1489,14 @@ export function formatPlanQualityGateReport(
         if (!taskResult.passed) {
           lines.push(`   ${taskResult.taskId}:`);
 
-          // 显示错误
+          // Show errors
           if (taskResult.errors.length > 0) {
             for (const error of taskResult.errors) {
               lines.push(`      ❌ ${error.message}`);
             }
           }
 
-          // 显示警告
+          // Show warnings
           if (taskResult.warnings.length > 0) {
             for (const warning of taskResult.warnings) {
               lines.push(`      ⚠️  ${warning.message}`);
@@ -1506,7 +1506,7 @@ export function formatPlanQualityGateReport(
         }
       }
     } else {
-      // 简洁模式：只列出任务ID
+      // Compact mode: only list task IDs
       for (const taskId of result.failedTasks) {
         lines.push(`   - ${taskId}`);
       }
@@ -1514,7 +1514,7 @@ export function formatPlanQualityGateReport(
     }
   }
 
-  // 验证详情
+  // Validation details
   if (showDetails && result.validationResults.length > 0) {
     const hasViolations = result.validationResults.some(
       r => r.violations.length > 0
@@ -1522,7 +1522,7 @@ export function formatPlanQualityGateReport(
 
     if (hasViolations) {
       lines.push(separator);
-      lines.push('📋 详细违规信息:');
+      lines.push('📋 Detailed Violation Info:');
       lines.push('');
 
       for (const taskResult of result.validationResults) {
@@ -1540,21 +1540,21 @@ export function formatPlanQualityGateReport(
 
   lines.push(separator);
 
-  // 结论
+  // Conclusion
   if (result.passed) {
-    lines.push('✅ 所有任务通过 Plan 质量门禁检查！');
+    lines.push('✅ All tasks passed Plan quality gate check!');
   } else {
-    lines.push(`⚠️  ${result.failedCount} 个任务未通过质量门禁，建议修复后再执行 plan recommend`);
+    lines.push(`⚠️  ${result.failedCount} tasks failed quality gate, recommend fixing before running plan recommend`);
     lines.push('');
-    lines.push('💡 修复建议:');
-    lines.push('   • 检查循环依赖：确保任务依赖关系无循环');
-    lines.push('   • 检查无效依赖：确保依赖的任务ID存在且有效');
-    lines.push('   • 检查孤儿子任务：确保 parentId 指向的任务存在');
-    lines.push('   • 使用 `projmnt4claude analyze --fix` 自动修复部分问题');
+    lines.push('💡 Fix Suggestions:');
+    lines.push('   • Check circular dependencies: ensure no cycles in task dependencies');
+    lines.push('   • Check invalid dependencies: ensure dependent task IDs exist and are valid');
+    lines.push('   • Check orphan subtasks: ensure parentId points to existing task');
+    lines.push('   • Use `projmnt4claude analyze --fix` to auto-fix some issues');
   }
 
   lines.push('');
-  lines.push(`🕐 验证时间: ${result.validatedAt}`);
+  lines.push(`🕐 Validated at: ${result.validatedAt}`);
   lines.push(separator);
   lines.push('');
 

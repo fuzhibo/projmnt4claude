@@ -14,13 +14,13 @@ import {
 } from '../types/config.js';
 
 /**
- * 确保配置文件包含所有默认配置项
- * 缺失的配置项自动写入默认值
+ * Ensure config file contains all default configuration items
+ * Missing items are auto-populated with defaults
  */
 export function ensureConfigDefaults(config: ProjectConfig): ProjectConfig {
   const result = { ...config };
 
-  // logging 配置完整性
+  // logging config completeness
   if (!result.logging) {
     result.logging = { ...DEFAULT_LOGGING };
   } else {
@@ -32,7 +32,7 @@ export function ensureConfigDefaults(config: ProjectConfig): ProjectConfig {
     };
   }
 
-  // ai 配置完整性
+  // ai config completeness
   if (!result.ai) {
     result.ai = { ...DEFAULT_AI };
   } else {
@@ -43,7 +43,7 @@ export function ensureConfigDefaults(config: ProjectConfig): ProjectConfig {
     };
   }
 
-  // training 配置完整性
+  // training config completeness
   if (!result.training) {
     result.training = { ...DEFAULT_TRAINING };
   } else {
@@ -53,7 +53,7 @@ export function ensureConfigDefaults(config: ProjectConfig): ProjectConfig {
     };
   }
 
-  // gitHook 配置完整性
+  // gitHook config completeness
   if (!result.gitHook) {
     result.gitHook = { ...DEFAULT_GIT_HOOK };
   } else {
@@ -66,7 +66,7 @@ export function ensureConfigDefaults(config: ProjectConfig): ProjectConfig {
 }
 
 /**
- * 读取配置文件
+ * Read configuration file
  */
 export function readConfig(cwd: string = process.cwd()): ProjectConfig | null {
   if (!isInitialized(cwd)) {
@@ -83,7 +83,7 @@ export function readConfig(cwd: string = process.cwd()): ProjectConfig | null {
 }
 
 /**
- * 写入配置文件
+ * Write configuration file
  */
 export function writeConfig(config: ProjectConfig, cwd: string = process.cwd()): void {
   const configPath = getConfigPath(cwd);
@@ -91,8 +91,8 @@ export function writeConfig(config: ProjectConfig, cwd: string = process.cwd()):
 }
 
 /**
- * 获取嵌套键的值
- * 支持点分隔符，如 "branchPrefix" 或 "nested.key"
+ * Get nested key value
+ * Supports dot notation, e.g. "branchPrefix" or "nested.key"
  */
 export function getConfigValue(config: ProjectConfig, key: string): unknown {
   const keys = key.split('.');
@@ -110,7 +110,7 @@ export function getConfigValue(config: ProjectConfig, key: string): unknown {
 }
 
 /**
- * 设置嵌套键的值
+ * Set nested key value
  */
 export function setConfigValue(config: ProjectConfig, key: string, value: string): ProjectConfig {
   const keys = key.split('.');
@@ -125,7 +125,7 @@ export function setConfigValue(config: ProjectConfig, key: string, value: string
     current = current[k] as Record<string, unknown>;
   }
 
-  // 尝试解析 JSON 值，如果失败则作为字符串
+  // Try to parse JSON value, fallback to string
   try {
     current[keys[keys.length - 1]!] = JSON.parse(value);
   } catch {
@@ -136,10 +136,10 @@ export function setConfigValue(config: ProjectConfig, key: string, value: string
 }
 
 // ============================================================
-// Config Schema 验证 (IR-05-05)
+// Config Schema Validation (IR-05-05)
 // ============================================================
 
-/** 配置键验证规则 */
+/** Config key validation rules */
 interface ConfigKeySchema {
   type: 'string' | 'number' | 'boolean';
   enum?: string[];
@@ -147,7 +147,7 @@ interface ConfigKeySchema {
   max?: number;
 }
 
-/** 已知配置项及其验证规则 */
+/** Known config keys and their validation rules */
 const CONFIG_SCHEMA: Record<string, ConfigKeySchema> = {
   'projectName': { type: 'string' },
   'branchPrefix': { type: 'string' },
@@ -165,35 +165,35 @@ const CONFIG_SCHEMA: Record<string, ConfigKeySchema> = {
 };
 
 /**
- * 验证配置值类型和约束
+ * Validate config value type and constraints
  */
 function validateConfigValue(key: string, value: string, schema: ConfigKeySchema): void {
   switch (schema.type) {
     case 'string':
       if (schema.enum && !schema.enum.includes(value)) {
-        console.error(`错误: ${key} 仅允许: ${schema.enum.join(', ')}`);
+        console.error(`Error: ${key} only allows: ${schema.enum.join(', ')}`);
         process.exit(1);
       }
       break;
     case 'number': {
       const num = Number(value);
       if (isNaN(num)) {
-        console.error(`错误: ${key} 需要数字值，得到 '${value}'`);
+        console.error(`Error: ${key} requires a number, got '${value}'`);
         process.exit(1);
       }
       if (schema.min !== undefined && num < schema.min) {
-        console.error(`错误: ${key} 最小值为 ${schema.min}`);
+        console.error(`Error: ${key} minimum value is ${schema.min}`);
         process.exit(1);
       }
       if (schema.max !== undefined && num > schema.max) {
-        console.error(`错误: ${key} 最大值为 ${schema.max}`);
+        console.error(`Error: ${key} maximum value is ${schema.max}`);
         process.exit(1);
       }
       break;
     }
     case 'boolean':
       if (value !== 'true' && value !== 'false') {
-        console.error(`错误: ${key} 仅允许: true, false`);
+        console.error(`Error: ${key} only allows: true, false`);
         process.exit(1);
       }
       break;
@@ -201,32 +201,32 @@ function validateConfigValue(key: string, value: string, schema: ConfigKeySchema
 }
 
 /**
- * 列出所有配置项（分类展示）
+ * List all config items (grouped by category)
  *
- * 按类别分组展示：基础、日志、AI、提示词
- * 提示词模板标注使用默认或自定义
+ * Groups by category: basic, logging, AI, prompts
+ * Prompt templates show whether using default or custom
  */
 export function listConfig(cwd: string = process.cwd()): void {
   if (!isInitialized(cwd)) {
-    console.error('错误: 项目未初始化。请先运行 `projmnt4claude setup`');
+    console.error('Error: Project not initialized. Please run `projmnt4claude setup` first');
     process.exit(1);
   }
 
   const config = readConfig(cwd);
   if (!config) {
-    console.error('错误: 无法读取配置文件');
+    console.error('Error: Cannot read configuration file');
     process.exit(1);
   }
 
-  // 基础配置
-  console.log('## 基础');
+  // Basic config
+  console.log('## Basic');
   console.log(`  projectName: ${config.projectName}`);
   console.log(`  branchPrefix: ${config.branchPrefix}`);
   console.log(`  defaultPriority: ${config.defaultPriority}`);
   console.log('');
 
-  // 日志配置
-  console.log('## 日志');
+  // Logging config
+  console.log('## Logging');
   const logging = config.logging;
   if (logging) {
     console.log(`  logging.level: ${logging.level}`);
@@ -234,11 +234,11 @@ export function listConfig(cwd: string = process.cwd()): void {
     console.log(`  logging.recordInputs: ${logging.recordInputs}`);
     console.log(`  logging.inputMaxLength: ${logging.inputMaxLength}`);
   } else {
-    console.log('  (使用默认值)');
+    console.log('  (using defaults)');
   }
   console.log('');
 
-  // AI 配置
+  // AI config
   console.log('## AI');
   const ai = config.ai;
   if (ai) {
@@ -247,70 +247,70 @@ export function listConfig(cwd: string = process.cwd()): void {
       console.log(`  ai.customEndpoint: ${ai.customEndpoint}`);
     }
   } else {
-    console.log('  (使用默认值)');
+    console.log('  (using defaults)');
   }
   console.log('');
 
-  // 训练数据配置
-  console.log('## 训练数据');
+  // Training data config
+  console.log('## Training');
   const training = config.training;
   if (training) {
     console.log(`  training.exportEnabled: ${training.exportEnabled}`);
     console.log(`  training.outputDir: ${training.outputDir}`);
   } else {
-    console.log('  (使用默认值)');
+    console.log('  (using defaults)');
   }
   console.log('');
 
-  // 质量配置
-  console.log('## 质量');
+  // Quality config
+  console.log('## Quality');
   const quality = config.quality;
   if (quality?.minScore !== undefined) {
     console.log(`  quality.minScore: ${quality.minScore}`);
   } else {
-    console.log('  (使用默认值)');
+    console.log('  (using defaults)');
   }
   console.log('');
 
-  // Git Hook 配置
+  // Git Hook config
   console.log('## Git Hook');
   const gitHook = config.gitHook;
   if (gitHook) {
     console.log(`  gitHook.enabled: ${gitHook.enabled}`);
   } else {
-    console.log('  (使用默认值)');
+    console.log('  (using defaults)');
   }
   console.log('');
 
-  // 提示词模板
-  console.log('## 提示词模板');
+  // Prompt templates
+  console.log('## Prompt Templates');
   const prompts = config.prompts as Record<string, string> | undefined;
   for (const name of PROMPT_TEMPLATE_NAMES) {
     const hasCustom = prompts && typeof prompts[name] === 'string';
-    const label = hasCustom ? '自定义' : '默认';
+    const label = hasCustom ? 'custom' : 'default';
     console.log(`  ${name}: [${label}]`);
   }
   console.log('');
 }
 
 /**
- * 获取指定配置值
+ * Get a specific config value
  */
 export function getConfig(key: string, cwd: string = process.cwd()): void {
   if (!isInitialized(cwd)) {
-    console.error('错误: 项目未初始化。请先运行 `projmnt4claude setup`');
+    console.error('Error: Project not initialized. Please run `projmnt4claude setup` first');
     process.exit(1);
   }
 
   const config = readConfig(cwd);
   if (!config) {
-    console.error('错误: 无法读取配置文件');
+    console.error('Error: Cannot read configuration file');
     process.exit(1);
   }
 
   const value = getConfigValue(config, key);
   if (value === undefined) {
-    console.error(`错误: 配置项 '${key}' 不存在`);
+    console.error(`Error: Config key '${key}' does not exist`);
     process.exit(1);
   }
 
@@ -318,31 +318,31 @@ export function getConfig(key: string, cwd: string = process.cwd()): void {
 }
 
 /**
- * 设置指定配置值（带 Schema 验证）
+ * Set a specific config value (with schema validation)
  *
- * 验证规则：
- * - 拒绝未知配置键
- * - logging.level: 仅允许 debug/info/warn/error
- * - prompts.*: 检查模板名称和变量格式
- * - 数值/布尔类型严格校验
+ * Validation rules:
+ * - Reject unknown config keys
+ * - logging.level: only allows debug/info/warn/error
+ * - prompts.*: check template name and variable format
+ * - strict validation for number/boolean types
  */
 export function setConfig(key: string, value: string, cwd: string = process.cwd()): void {
   if (!isInitialized(cwd)) {
-    console.error('错误: 项目未初始化。请先运行 `projmnt4claude setup`');
+    console.error('Error: Project not initialized. Please run `projmnt4claude setup` first');
     process.exit(1);
   }
 
   const config = readConfig(cwd);
   if (!config) {
-    console.error('错误: 无法读取配置文件');
+    console.error('Error: Cannot read configuration file');
     process.exit(1);
   }
 
-  // 1. prompts.* 特殊验证（模板名称 + 变量格式）
+  // 1. prompts.* special validation (template name + variable format)
   if (key.startsWith('prompts.')) {
     const templateName = key.substring('prompts.'.length);
     if (!PROMPT_TEMPLATE_NAMES.includes(templateName as any)) {
-      console.error(`错误: 未知提示词模板名称 '${templateName}'。可选: ${PROMPT_TEMPLATE_NAMES.join(', ')}`);
+      console.error(`Error: Unknown prompt template name '${templateName}'. Options: ${PROMPT_TEMPLATE_NAMES.join(', ')}`);
       process.exit(1);
     }
     // Check template has valid {variable} placeholders
@@ -354,23 +354,23 @@ export function setConfig(key: string, value: string, cwd: string = process.cwd(
         const customVars = new Set(variables);
         const missing = [...defaultVars].filter(v => !customVars.has(v));
         if (missing.length > 0) {
-          console.warn(`警告: 自定义模板缺少默认模板中的变量: ${missing.join(', ')}`);
-          console.warn('缺少变量可能导致提示词中出现未替换的占位符。');
+          console.warn(`Warning: Custom template missing variables from default: ${missing.join(', ')}`);
+          console.warn('Missing variables may cause unsubstituted placeholders in prompts.');
         }
       }
     }
   } else if (key in CONFIG_SCHEMA) {
-    // 2. 已知配置项：按 schema 验证类型和约束
+    // 2. Known config keys: validate type and constraints by schema
     validateConfigValue(key, value, CONFIG_SCHEMA[key]!);
   } else {
-    // 3. 未知配置键：拒绝
-    console.error(`错误: 未知配置项 '${key}'`);
-    console.error(`可设置的配置项: ${Object.keys(CONFIG_SCHEMA).join(', ')}, prompts.*`);
+    // 3. Unknown config keys: reject
+    console.error(`Error: Unknown config key '${key}'`);
+    console.error(`Available keys: ${Object.keys(CONFIG_SCHEMA).join(', ')}, prompts.*`);
     process.exit(1);
   }
 
   const newConfig = setConfigValue(config, key, value);
   writeConfig(newConfig, cwd);
 
-  console.log(`✓ 已设置 ${key} = ${value}`);
+  console.log(`✓ Set ${key} = ${value}`);
 }

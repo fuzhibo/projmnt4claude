@@ -7876,29 +7876,29 @@ function validateConfigValue(key, value, schema) {
   switch (schema.type) {
     case "string":
       if (schema.enum && !schema.enum.includes(value)) {
-        console.error(`\u9519\u8BEF: ${key} \u4EC5\u5141\u8BB8: ${schema.enum.join(", ")}`);
+        console.error(`Error: ${key} only allows: ${schema.enum.join(", ")}`);
         process.exit(1);
       }
       break;
     case "number": {
       const num = Number(value);
       if (isNaN(num)) {
-        console.error(`\u9519\u8BEF: ${key} \u9700\u8981\u6570\u5B57\u503C\uFF0C\u5F97\u5230 '${value}'`);
+        console.error(`Error: ${key} requires a number, got '${value}'`);
         process.exit(1);
       }
       if (schema.min !== undefined && num < schema.min) {
-        console.error(`\u9519\u8BEF: ${key} \u6700\u5C0F\u503C\u4E3A ${schema.min}`);
+        console.error(`Error: ${key} minimum value is ${schema.min}`);
         process.exit(1);
       }
       if (schema.max !== undefined && num > schema.max) {
-        console.error(`\u9519\u8BEF: ${key} \u6700\u5927\u503C\u4E3A ${schema.max}`);
+        console.error(`Error: ${key} maximum value is ${schema.max}`);
         process.exit(1);
       }
       break;
     }
     case "boolean":
       if (value !== "true" && value !== "false") {
-        console.error(`\u9519\u8BEF: ${key} \u4EC5\u5141\u8BB8: true, false`);
+        console.error(`Error: ${key} only allows: true, false`);
         process.exit(1);
       }
       break;
@@ -7906,20 +7906,20 @@ function validateConfigValue(key, value, schema) {
 }
 function listConfig(cwd = process.cwd()) {
   if (!isInitialized(cwd)) {
-    console.error("\u9519\u8BEF: \u9879\u76EE\u672A\u521D\u59CB\u5316\u3002\u8BF7\u5148\u8FD0\u884C `projmnt4claude setup`");
+    console.error("Error: Project not initialized. Please run `projmnt4claude setup` first");
     process.exit(1);
   }
   const config = readConfig(cwd);
   if (!config) {
-    console.error("\u9519\u8BEF: \u65E0\u6CD5\u8BFB\u53D6\u914D\u7F6E\u6587\u4EF6");
+    console.error("Error: Cannot read configuration file");
     process.exit(1);
   }
-  console.log("## \u57FA\u7840");
+  console.log("## Basic");
   console.log(`  projectName: ${config.projectName}`);
   console.log(`  branchPrefix: ${config.branchPrefix}`);
   console.log(`  defaultPriority: ${config.defaultPriority}`);
   console.log("");
-  console.log("## \u65E5\u5FD7");
+  console.log("## Logging");
   const logging = config.logging;
   if (logging) {
     console.log(`  logging.level: ${logging.level}`);
@@ -7927,7 +7927,7 @@ function listConfig(cwd = process.cwd()) {
     console.log(`  logging.recordInputs: ${logging.recordInputs}`);
     console.log(`  logging.inputMaxLength: ${logging.inputMaxLength}`);
   } else {
-    console.log("  (\u4F7F\u7528\u9ED8\u8BA4\u503C)");
+    console.log("  (using defaults)");
   }
   console.log("");
   console.log("## AI");
@@ -7938,24 +7938,24 @@ function listConfig(cwd = process.cwd()) {
       console.log(`  ai.customEndpoint: ${ai.customEndpoint}`);
     }
   } else {
-    console.log("  (\u4F7F\u7528\u9ED8\u8BA4\u503C)");
+    console.log("  (using defaults)");
   }
   console.log("");
-  console.log("## \u8BAD\u7EC3\u6570\u636E");
+  console.log("## Training");
   const training = config.training;
   if (training) {
     console.log(`  training.exportEnabled: ${training.exportEnabled}`);
     console.log(`  training.outputDir: ${training.outputDir}`);
   } else {
-    console.log("  (\u4F7F\u7528\u9ED8\u8BA4\u503C)");
+    console.log("  (using defaults)");
   }
   console.log("");
-  console.log("## \u8D28\u91CF");
+  console.log("## Quality");
   const quality = config.quality;
   if (quality?.minScore !== undefined) {
     console.log(`  quality.minScore: ${quality.minScore}`);
   } else {
-    console.log("  (\u4F7F\u7528\u9ED8\u8BA4\u503C)");
+    console.log("  (using defaults)");
   }
   console.log("");
   console.log("## Git Hook");
@@ -7963,49 +7963,49 @@ function listConfig(cwd = process.cwd()) {
   if (gitHook) {
     console.log(`  gitHook.enabled: ${gitHook.enabled}`);
   } else {
-    console.log("  (\u4F7F\u7528\u9ED8\u8BA4\u503C)");
+    console.log("  (using defaults)");
   }
   console.log("");
-  console.log("## \u63D0\u793A\u8BCD\u6A21\u677F");
+  console.log("## Prompt Templates");
   const prompts2 = config.prompts;
   for (const name of PROMPT_TEMPLATE_NAMES) {
     const hasCustom = prompts2 && typeof prompts2[name] === "string";
-    const label = hasCustom ? "\u81EA\u5B9A\u4E49" : "\u9ED8\u8BA4";
+    const label = hasCustom ? "custom" : "default";
     console.log(`  ${name}: [${label}]`);
   }
   console.log("");
 }
 function getConfig(key, cwd = process.cwd()) {
   if (!isInitialized(cwd)) {
-    console.error("\u9519\u8BEF: \u9879\u76EE\u672A\u521D\u59CB\u5316\u3002\u8BF7\u5148\u8FD0\u884C `projmnt4claude setup`");
+    console.error("Error: Project not initialized. Please run `projmnt4claude setup` first");
     process.exit(1);
   }
   const config = readConfig(cwd);
   if (!config) {
-    console.error("\u9519\u8BEF: \u65E0\u6CD5\u8BFB\u53D6\u914D\u7F6E\u6587\u4EF6");
+    console.error("Error: Cannot read configuration file");
     process.exit(1);
   }
   const value = getConfigValue(config, key);
   if (value === undefined) {
-    console.error(`\u9519\u8BEF: \u914D\u7F6E\u9879 '${key}' \u4E0D\u5B58\u5728`);
+    console.error(`Error: Config key '${key}' does not exist`);
     process.exit(1);
   }
   console.log(value);
 }
 function setConfig(key, value, cwd = process.cwd()) {
   if (!isInitialized(cwd)) {
-    console.error("\u9519\u8BEF: \u9879\u76EE\u672A\u521D\u59CB\u5316\u3002\u8BF7\u5148\u8FD0\u884C `projmnt4claude setup`");
+    console.error("Error: Project not initialized. Please run `projmnt4claude setup` first");
     process.exit(1);
   }
   const config = readConfig(cwd);
   if (!config) {
-    console.error("\u9519\u8BEF: \u65E0\u6CD5\u8BFB\u53D6\u914D\u7F6E\u6587\u4EF6");
+    console.error("Error: Cannot read configuration file");
     process.exit(1);
   }
   if (key.startsWith("prompts.")) {
     const templateName = key.substring("prompts.".length);
     if (!PROMPT_TEMPLATE_NAMES.includes(templateName)) {
-      console.error(`\u9519\u8BEF: \u672A\u77E5\u63D0\u793A\u8BCD\u6A21\u677F\u540D\u79F0 '${templateName}'\u3002\u53EF\u9009: ${PROMPT_TEMPLATE_NAMES.join(", ")}`);
+      console.error(`Error: Unknown prompt template name '${templateName}'. Options: ${PROMPT_TEMPLATE_NAMES.join(", ")}`);
       process.exit(1);
     }
     const variables = value.match(/\{(\w+)\}/g);
@@ -8016,21 +8016,21 @@ function setConfig(key, value, cwd = process.cwd()) {
         const customVars = new Set(variables);
         const missing = [...defaultVars].filter((v) => !customVars.has(v));
         if (missing.length > 0) {
-          console.warn(`\u8B66\u544A: \u81EA\u5B9A\u4E49\u6A21\u677F\u7F3A\u5C11\u9ED8\u8BA4\u6A21\u677F\u4E2D\u7684\u53D8\u91CF: ${missing.join(", ")}`);
-          console.warn("\u7F3A\u5C11\u53D8\u91CF\u53EF\u80FD\u5BFC\u81F4\u63D0\u793A\u8BCD\u4E2D\u51FA\u73B0\u672A\u66FF\u6362\u7684\u5360\u4F4D\u7B26\u3002");
+          console.warn(`Warning: Custom template missing variables from default: ${missing.join(", ")}`);
+          console.warn("Missing variables may cause unsubstituted placeholders in prompts.");
         }
       }
     }
   } else if (key in CONFIG_SCHEMA) {
     validateConfigValue(key, value, CONFIG_SCHEMA[key]);
   } else {
-    console.error(`\u9519\u8BEF: \u672A\u77E5\u914D\u7F6E\u9879 '${key}'`);
-    console.error(`\u53EF\u8BBE\u7F6E\u7684\u914D\u7F6E\u9879: ${Object.keys(CONFIG_SCHEMA).join(", ")}, prompts.*`);
+    console.error(`Error: Unknown config key '${key}'`);
+    console.error(`Available keys: ${Object.keys(CONFIG_SCHEMA).join(", ")}, prompts.*`);
     process.exit(1);
   }
   const newConfig = setConfigValue(config, key, value);
   writeConfig(newConfig, cwd);
-  console.log(`\u2713 \u5DF2\u8BBE\u7F6E ${key} = ${value}`);
+  console.log(`\u2713 Set ${key} = ${value}`);
 }
 var CONFIG_SCHEMA;
 var init_config2 = __esm(() => {
@@ -16531,7 +16531,7 @@ function parseQuery(query) {
       new RegExp(pattern, flags);
       return { type: "regex", pattern, flags: flags || undefined };
     } catch (e) {
-      console.warn(`\u26A0\uFE0F  \u65E0\u6548\u7684\u6B63\u5219\u8868\u8FBE\u5F0F "${pattern}"\uFF0C\u56DE\u9000\u5230\u5173\u952E\u5B57\u5339\u914D`);
+      console.warn(`\u26A0\uFE0F  Invalid regex pattern "${pattern}", falling back to keyword matching`);
       const words = trimmed.toLowerCase().replace(/[^\w\u4e00-\u9fa5\s]/g, " ").split(/\s+/).filter((w) => w.length > 1 && !STOP_WORDS.has(w));
       return { type: "keywords", keywords: [...new Set(words)] };
     }
@@ -16540,7 +16540,7 @@ function parseQuery(query) {
     new RegExp(trimmed);
     return { type: "regex", pattern: trimmed };
   } catch (e) {
-    console.warn(`\u26A0\uFE0F  \u65E0\u6548\u7684\u6B63\u5219\u8868\u8FBE\u5F0F "${trimmed}"\uFF0C\u56DE\u9000\u5230\u5173\u952E\u5B57\u5339\u914D`);
+    console.warn(`\u26A0\uFE0F  Invalid regex pattern "${trimmed}", falling back to keyword matching`);
     const words = trimmed.toLowerCase().replace(/[^\w\u4e00-\u9fa5\s]/g, " ").split(/\s+/).filter((w) => w.length > 1 && !STOP_WORDS.has(w));
     return { type: "keywords", keywords: [...new Set(words)] };
   }
@@ -16567,7 +16567,7 @@ function taskMatchesFilter(task, filter) {
       const regex = new RegExp(filter.pattern, filter.flags || "i");
       return regex.test(searchText);
     } catch (e) {
-      console.warn(`\u26A0\uFE0F  \u6B63\u5219\u6267\u884C\u5931\u8D25: ${filter.pattern}\uFF0C\u8DF3\u8FC7\u6B64\u8FC7\u6EE4`);
+      console.warn(`\u26A0\uFE0F  Regex execution failed: ${filter.pattern}, skipping this filter`);
       return true;
     }
   }
@@ -16855,7 +16855,7 @@ function generateAIOutput(chains, originalCount, filteredCount, batches, query, 
     }),
     batchOrder,
     recommendation: {
-      summary: `\u53D1\u73B0 ${chains.length} \u4E2A\u4EFB\u52A1\u94FE\uFF0C\u5171 ${filteredCount} \u4E2A\u4EFB\u52A1\uFF0C\u5206 ${batches.length} \u4E2A\u6279\u6B21\u3002\u4E09\u5C42\u4F9D\u8D56\u63A8\u65AD: Layer1/2 \u6587\u4EF6\u8DEF\u5F84\u91CD\u53E0 + ${genOptions?.smart ? "Layer3 AI\u8BED\u4E49\u63A8\u65AD(\u5DF2\u542F\u7528)" : "Layer3 AI\u8BED\u4E49\u63A8\u65AD(\u672A\u542F\u7528, --smart \u6FC0\u6D3B)"}\u3002\u540C\u4F18\u5148\u7EA7\u5185\u5DF2\u6309\u67B6\u6784\u5C42\u7EA7\u6392\u5E8F\uFF08Layer0\u2192Layer3\uFF09`,
+      summary: `Found ${chains.length} task chains, ${filteredCount} tasks total, divided into ${batches.length} batches. Three-layer dependency inference: Layer1/2 file path overlap + ${genOptions?.smart ? "Layer3 AI semantic inference (enabled)" : "Layer3 AI semantic inference (disabled, use --smart to enable)"}\u3002Sorted by architecture layer within same priority (Layer0\u2192Layer3)`,
       topChains,
       suggestedOrder
     }
@@ -16863,14 +16863,14 @@ function generateAIOutput(chains, originalCount, filteredCount, batches, query, 
 }
 function showPlan(json2 = false, cwd = process.cwd()) {
   if (!isInitialized(cwd)) {
-    console.error("\u9519\u8BEF: \u9879\u76EE\u672A\u521D\u59CB\u5316\u3002\u8BF7\u5148\u8FD0\u884C `projmnt4claude setup`");
+    console.error("Error: Project not initialized. Please run `projmnt4claude setup` first");
     process.exit(1);
   }
   const plan = readPlan(cwd);
   if (!plan || plan.tasks.length === 0) {
-    console.log("\u6682\u65E0\u6267\u884C\u8BA1\u5212");
+    console.log("No execution plan");
     console.log("");
-    console.log("\u4F7F\u7528 `projmnt4claude plan recommend` \u751F\u6210\u63A8\u8350\u8BA1\u5212");
+    console.log("Use `projmnt4claude plan recommend` to generate a recommended plan");
     return;
   }
   if (json2) {
@@ -16879,7 +16879,7 @@ function showPlan(json2 = false, cwd = process.cwd()) {
       return {
         order: index + 1,
         id: taskId,
-        title: task?.title || "(\u672A\u77E5\u4EFB\u52A1)",
+        title: task?.title || "(Unknown task)",
         status: task?.status || "unknown"
       };
     });
@@ -16887,99 +16887,99 @@ function showPlan(json2 = false, cwd = process.cwd()) {
     return;
   }
   console.log("");
-  console.log("\u6267\u884C\u8BA1\u5212:");
+  console.log("Execution Plan:");
   console.log("\u2501".repeat(SEPARATOR_WIDTH));
-  console.log("\u5E8F\u53F7 | \u4EFB\u52A1ID    | \u6807\u9898                         | \u72B6\u6001");
+  console.log("No.  | Task ID   | Title                        | Status");
   console.log("-----|-----------|------------------------------|------------");
   for (let i = 0;i < plan.tasks.length; i++) {
     const taskId = plan.tasks[i];
     const task = readTaskMeta(taskId, cwd);
     const order = String(i + 1).padEnd(4);
     const id = taskId.padEnd(9);
-    const title = (task?.title || "(\u672A\u77E5\u4EFB\u52A1)").substring(0, 28).padEnd(28);
-    const status = task ? formatStatus2(task.status) : "\u2753 \u672A\u77E5";
+    const title = (task?.title || "(Unknown task)").substring(0, 28).padEnd(28);
+    const status = task ? formatStatus2(task.status) : "\u2753 Unknown";
     console.log(`${order} | ${id} | ${title} | ${status}`);
   }
   console.log("");
-  console.log(`\u5171 ${plan.tasks.length} \u4E2A\u4EFB\u52A1`);
-  console.log(`\u521B\u5EFA\u65F6\u95F4: ${plan.createdAt}`);
-  console.log(`\u66F4\u65B0\u65F6\u95F4: ${plan.updatedAt}`);
+  console.log(`Total ${plan.tasks.length} tasks`);
+  console.log(`Created: ${plan.createdAt}`);
+  console.log(`Updated: ${plan.updatedAt}`);
 }
 function addTask(taskId, afterId, cwd = process.cwd()) {
   if (!isInitialized(cwd)) {
-    console.error("\u9519\u8BEF: \u9879\u76EE\u672A\u521D\u59CB\u5316\u3002\u8BF7\u5148\u8FD0\u884C `projmnt4claude setup`");
+    console.error("Error: Project not initialized. Please run `projmnt4claude setup` first");
     process.exit(1);
   }
   if (!taskExists(taskId, cwd)) {
-    console.error(`\u9519\u8BEF: \u4EFB\u52A1 '${taskId}' \u4E0D\u5B58\u5728`);
+    console.error(`Error: Task '${taskId}' does not exist`);
     process.exit(1);
   }
   if (afterId && !taskExists(afterId, cwd)) {
-    console.error(`\u9519\u8BEF: \u53C2\u8003\u4EFB\u52A1 '${afterId}' \u4E0D\u5B58\u5728`);
+    console.error(`Error: Reference task '${afterId}' does not exist`);
     process.exit(1);
   }
   const success = addTaskToPlan(taskId, afterId, cwd);
   if (success) {
-    console.log(`\u2705 \u5DF2\u6DFB\u52A0\u4EFB\u52A1 ${taskId} \u5230\u6267\u884C\u8BA1\u5212${afterId ? ` (\u5728 ${afterId} \u4E4B\u540E)` : ""}`);
+    console.log(`\u2705 Added task ${taskId} to execution plan${afterId ? ` (after ${afterId})` : ""}`);
   } else {
-    console.log(`\u4EFB\u52A1 ${taskId} \u5DF2\u5728\u6267\u884C\u8BA1\u5212\u4E2D`);
+    console.log(`Task ${taskId} is already in the execution plan`);
   }
 }
 function removeTask(taskId, cwd = process.cwd()) {
   if (!isInitialized(cwd)) {
-    console.error("\u9519\u8BEF: \u9879\u76EE\u672A\u521D\u59CB\u5316\u3002\u8BF7\u5148\u8FD0\u884C `projmnt4claude setup`");
+    console.error("Error: Project not initialized. Please run `projmnt4claude setup` first");
     process.exit(1);
   }
   const allTasks = getAllTasks(cwd);
   const depGraph = DependencyGraph.fromTasks(allTasks);
   const opValidation = validatePlanOperation("delete", [taskId], depGraph);
   if (opValidation.warnings.length > 0) {
-    console.log("\uD83D\uDCCB \u5220\u9664\u524D\u4F9D\u8D56\u68C0\u67E5:");
+    console.log("\uD83D\uDCCB Pre-delete dependency check:");
     for (const w of opValidation.warnings) {
       console.log(`   \u26A0\uFE0F  ${w}`);
     }
   }
   const success = removeTaskFromPlan(taskId, cwd);
   if (success) {
-    console.log(`\u2705 \u5DF2\u4ECE\u6267\u884C\u8BA1\u5212\u79FB\u9664\u4EFB\u52A1 ${taskId}`);
+    console.log(`\u2705 Removed task ${taskId} from execution plan`);
   } else {
-    console.log(`\u4EFB\u52A1 ${taskId} \u4E0D\u5728\u6267\u884C\u8BA1\u5212\u4E2D`);
+    console.log(`Task ${taskId} is not in the execution plan`);
   }
 }
 async function clearPlanCmd(force = false, cwd = process.cwd()) {
   if (!isInitialized(cwd)) {
-    console.error("\u9519\u8BEF: \u9879\u76EE\u672A\u521D\u59CB\u5316\u3002\u8BF7\u5148\u8FD0\u884C `projmnt4claude setup`");
+    console.error("Error: Project not initialized. Please run `projmnt4claude setup` first");
     process.exit(1);
   }
   if (!force) {
     const response = await import_prompts3.default({
       type: "confirm",
       name: "confirm",
-      message: "\u786E\u5B9A\u8981\u6E05\u7A7A\u6267\u884C\u8BA1\u5212\u5417\uFF1F",
+      message: "Are you sure you want to clear the execution plan?",
       initial: false
     });
     if (!response.confirm) {
-      console.log("\u5DF2\u53D6\u6D88");
+      console.log("Cancelled");
       return;
     }
   }
   clearPlan(cwd);
-  console.log("\u2705 \u6267\u884C\u8BA1\u5212\u5DF2\u6E05\u7A7A");
+  console.log("\u2705 Execution plan cleared");
 }
 async function recommendPlan(options = {}, cwd = process.cwd()) {
   if (!isInitialized(cwd)) {
-    console.error("\u9519\u8BEF: \u9879\u76EE\u672A\u521D\u59CB\u5316\u3002\u8BF7\u5148\u8FD0\u884C `projmnt4claude setup`");
+    console.error("Error: Project not initialized. Please run `projmnt4claude setup` first");
     process.exit(1);
   }
   const activeCheck = detectActiveSnapshot(cwd);
   if (activeCheck.hasActive) {
-    console.error("\u274C \u9519\u8BEF: \u68C0\u6D4B\u5230\u6B63\u5728\u8FD0\u884C\u7684\u6D41\u6C34\u7EBF");
+    console.error("\u274C Error: Active pipeline detected");
     console.error(`   ${activeCheck.message}`);
-    console.error("   \u8BF7\u7B49\u5F85\u6D41\u6C34\u7EBF\u5B8C\u6210\u6216\u4F7F\u7528 `projmnt4claude harness --continue` \u6062\u590D");
-    console.error("   \u5982\u9700\u5F3A\u5236\u521B\u5EFA\u65B0\u8BA1\u5212\uFF0C\u8BF7\u5148\u505C\u6B62\u6B63\u5728\u8FD0\u884C\u7684\u6D41\u6C34\u7EBF\u8FDB\u7A0B");
+    console.error("   Please wait for the pipeline to complete or use `projmnt4claude harness --continue` to resume");
+    console.error("   To force create a new plan, stop the running pipeline process first");
     process.exit(1);
   }
-  console.log(`\u6B63\u5728\u5206\u6790\u9879\u76EE\u4EFB\u52A1...
+  console.log(`Analyzing project tasks...
 `);
   const logger2 = createLogger("plan-recommend", cwd);
   const startTime = Date.now();
@@ -16989,18 +16989,18 @@ async function recommendPlan(options = {}, cwd = process.cwd()) {
   const allTasks = getAllTasks(cwd);
   const failedTasks = allTasks.filter((t) => normalizeStatus(t.status) === "failed");
   if (failedTasks.length > 0) {
-    console.log("\u26A0\uFE0F  \u8D28\u91CF\u68C0\u6D4B: \u53D1\u73B0\u4EE5\u4E0B failed \u72B6\u6001\u4EFB\u52A1:");
+    console.log("\u26A0\uFE0F  Quality check: Found failed tasks:");
     for (const task of failedTasks) {
       console.log(`   \u274C ${task.id}: ${task.title.substring(0, 50)}`);
     }
     console.log("");
-    console.log("\uD83D\uDCA1 \u7EA6\u675F\u63D0\u793A:");
-    console.log("   \u2022 \u5982\u9700\u91CD\u8BD5 failed \u4EFB\u52A1\uFF0C\u8BF7\u5148\u67E5\u770B\u5931\u8D25\u539F\u56E0\u5E76\u4FEE\u590D");
-    console.log("   \u2022 \u4F7F\u7528 `projmnt4claude task update <id> --status open` \u91CD\u7F6E\u72B6\u6001\u540E\u91CD\u8BD5");
-    console.log("   \u2022 \u6216\u5728 `plan recommend` \u540E\u624B\u52A8\u5C06 failed \u4EFB\u52A1\u52A0\u5165\u8BA1\u5212");
+    console.log("\uD83D\uDCA1 Constraint hints:");
+    console.log("   \u2022 To retry failed tasks, check the failure reason and fix first");
+    console.log("   \u2022 Use `projmnt4claude task update <id> --status open` to reset status and retry");
+    console.log("   \u2022 Or manually add failed tasks to the plan after `plan recommend`");
     console.log("");
     if (options.nonInteractive || !process.stdout.isTTY) {
-      console.log("   (\u975E\u4EA4\u4E92\u6A21\u5F0F: \u7EE7\u7EED\u6267\u884C\uFF0C\u4F46\u8BF7\u6CE8\u610F\u4E0A\u8FF0 failed \u4EFB\u52A1)");
+      console.log("   (Non-interactive mode: continuing, but note the failed tasks above)");
       console.log("");
     }
   }
@@ -17009,11 +17009,11 @@ async function recommendPlan(options = {}, cwd = process.cwd()) {
   const activeTasks = options.all ? allTasks.filter((t) => !TERMINAL_STATUSES2.has(normalizeStatus(t.status))) : allTasks.filter((t) => normalizeStatus(t.status) === "open");
   const excludedCount = allTasks.length - activeTasks.length;
   if (excludedCount > 0) {
-    const reason = options.all ? "\u7EC8\u6001(resolved/closed/abandoned)" : "\u975E open \u72B6\u6001";
-    console.log(`\u5DF2\u6392\u9664 ${excludedCount} \u4E2A${reason}\u4EFB\u52A1`);
+    const reason = options.all ? "terminal (resolved/closed/abandoned)" : "non-open status";
+    console.log(`Excluded ${excludedCount} ${reason} tasks`);
   }
   if (inProgressTasks.length > 0) {
-    console.log("\uD83D\uDD35 \u8FDB\u884C\u4E2D\u7684\u4EFB\u52A1:");
+    console.log("\uD83D\uDD35 In-progress tasks:");
     for (const t of inProgressTasks) {
       console.log(`   ${t.id}: ${t.title.substring(0, 60)}`);
     }
@@ -17023,16 +17023,16 @@ async function recommendPlan(options = {}, cwd = process.cwd()) {
   const missingSubtaskWarnings = detectMissingSubtasks(cwd);
   if (missingSubtaskWarnings.length > 0) {
     const label = options.strictSubtaskCoverage ? "\u274C ERR" : "\u26A0\uFE0F  WARN";
-    console.log(`${label} \u5B50\u4EFB\u52A1\u7F3A\u5931\u68C0\u6D4B (${missingSubtaskWarnings.length} \u4E2A\u7236\u4EFB\u52A1\u53D7\u5F71\u54CD):`);
+    console.log(`${label} Subtask missing detection (${missingSubtaskWarnings.length} parent tasks affected):`);
     for (const w of missingSubtaskWarnings) {
-      console.log(`   ${label} \u7236\u4EFB\u52A1 ${w.parentTaskId} ("${w.parentTitle.substring(0, 30)}"): \u7F3A\u5931 ${w.missingSubtaskIds.length}/${w.expectedCount} \u4E2A\u5B50\u4EFB\u52A1`);
+      console.log(`   ${label} Parent task ${w.parentTaskId} ("${w.parentTitle.substring(0, 30)}"): missing ${w.missingSubtaskIds.length}/${w.expectedCount} subtasks`);
       for (const missingId of w.missingSubtaskIds) {
-        console.log(`      - ${missingId} \u4E0D\u5B58\u5728`);
+        console.log(`      - ${missingId} does not exist`);
       }
     }
     console.log("");
     if (options.strictSubtaskCoverage) {
-      console.error("\u274C --strict-subtask-coverage: \u68C0\u6D4B\u5230\u7F3A\u5931\u5B50\u4EFB\u52A1\uFF0C\u4E2D\u6B62\u63A8\u8350\u3002\u8BF7\u5148\u521B\u5EFA\u7F3A\u5931\u7684\u5B50\u4EFB\u52A1\u6216\u6E05\u7406\u65E0\u6548\u7684 subtaskIds\u3002");
+      console.error("\u274C --strict-subtask-coverage: Missing subtasks detected, aborting recommendation. Please create missing subtasks or clean up invalid subtaskIds.");
       process.exit(1);
     }
   }
@@ -17041,12 +17041,12 @@ async function recommendPlan(options = {}, cwd = process.cwd()) {
   if (options.query) {
     filter = parseQuery(options.query);
     if (filter.type === "regex") {
-      console.log(`\u6B63\u5219\u6A21\u5F0F: /${filter.pattern}/${filter.flags || ""}`);
+      console.log(`Regex mode: /${filter.pattern}/${filter.flags || ""}`);
     } else {
-      console.log(`\u5173\u952E\u5B57: ${filter.keywords.join(", ")}`);
+      console.log(`Keywords: ${filter.keywords.join(", ")}`);
     }
     filteredTasks = chainEligibleTasks.filter((task) => taskMatchesFilter(task, filter));
-    console.log(`\u8FC7\u6EE4\u7ED3\u679C: ${filteredTasks.length}/${chainEligibleTasks.length} \u4E2A\u4EFB\u52A1\u5339\u914D
+    console.log(`Filter result: ${filteredTasks.length}/${chainEligibleTasks.length} tasks match
 `);
   }
   if (!options.all) {
@@ -17054,11 +17054,11 @@ async function recommendPlan(options = {}, cwd = process.cwd()) {
     const beforeExecFilter = filteredTasks.length;
     filteredTasks = filteredTasks.filter((task) => executableIds.has(task.id));
     if (beforeExecFilter - filteredTasks.length > 0) {
-      console.log(`\u5DF2\u6392\u9664 ${beforeExecFilter - filteredTasks.length} \u4E2A\u4F9D\u8D56\u672A\u5B8C\u6210\u6216\u4E0D\u53EF\u6267\u884C\u7684\u4EFB\u52A1`);
+      console.log(`Excluded ${beforeExecFilter - filteredTasks.length} tasks with incomplete dependencies or not executable`);
     }
   }
   if (options.requireQuality !== false && filteredTasks.length > 0) {
-    console.log("\u6B63\u5728\u6267\u884C\u8D28\u91CF\u95E8\u7981\u68C0\u67E5...");
+    console.log("Running quality gate check...");
     const qualityGateResult = runPlanQualityGateCheck(filteredTasks, {
       phase: "plan_recommend",
       includeWarnings: true
@@ -17070,24 +17070,24 @@ async function recommendPlan(options = {}, cwd = process.cwd()) {
         phase: "plan_recommend"
       }));
       if (options.nonInteractive || !process.stdout.isTTY) {
-        console.error("\u274C \u8D28\u91CF\u95E8\u7981\u68C0\u67E5\u672A\u901A\u8FC7\uFF0C\u4E2D\u6B62\u8BA1\u5212\u63A8\u8350");
-        console.error(`   \u672A\u901A\u8FC7\u4EFB\u52A1: ${qualityGateResult.failedTasks.join(", ")}`);
-        console.error("   \u4F7F\u7528 --no-quality-gate \u8DF3\u8FC7\u8D28\u91CF\u68C0\u67E5\uFF08\u4E0D\u63A8\u8350\uFF09");
+        console.error("\u274C Quality gate check failed, aborting plan recommendation");
+        console.error(`   Failed tasks: ${qualityGateResult.failedTasks.join(", ")}`);
+        console.error("   Use --no-quality-gate to skip quality check (not recommended)");
         process.exit(1);
       }
       const { continueAnyway } = await import_prompts3.default({
         type: "confirm",
         name: "continueAnyway",
-        message: `${qualityGateResult.failedCount} \u4E2A\u4EFB\u52A1\u672A\u901A\u8FC7\u8D28\u91CF\u95E8\u7981\uFF0C\u662F\u5426\u7EE7\u7EED\uFF1F`,
+        message: `${qualityGateResult.failedCount} tasks failed quality gate, continue?`,
         initial: false
       });
       if (!continueAnyway) {
-        console.log("\u5DF2\u53D6\u6D88");
+        console.log("Cancelled");
         return;
       }
       console.log("");
     } else {
-      console.log(`\u2705 \u8D28\u91CF\u95E8\u7981\u68C0\u67E5\u901A\u8FC7 (${qualityGateResult.passedCount}/${qualityGateResult.totalTasks})`);
+      console.log(`\u2705 Quality gate check passed (${qualityGateResult.passedCount}/${qualityGateResult.totalTasks})`);
       console.log("");
     }
   }
@@ -17105,7 +17105,7 @@ async function recommendPlan(options = {}, cwd = process.cwd()) {
       batches: [],
       batchOrder: [],
       recommendation: {
-        summary: "\u6CA1\u6709\u5339\u914D\u7684\u4EFB\u52A1",
+        summary: "No matching tasks",
         topChains: [],
         suggestedOrder: []
       }
@@ -17113,11 +17113,11 @@ async function recommendPlan(options = {}, cwd = process.cwd()) {
     if (options.json) {
       console.log(JSON.stringify(emptyResult, null, 2));
     } else {
-      console.log("\u6CA1\u6709\u5339\u914D\u7684\u4EFB\u52A1");
+      console.log("No matching tasks");
       if (options.query) {
-        console.log(`\u67E5\u8BE2: "${options.query}"`);
+        console.log(`Query: "${options.query}"`);
         const displayKeywords = filter.type === "keywords" ? filter.keywords : [filter.pattern];
-        console.log(`\u5173\u952E\u5B57: ${displayKeywords.join(", ")}`);
+        console.log(`Keywords: ${displayKeywords.join(", ")}`);
       }
     }
     const logKeywords = filter.type === "keywords" ? filter.keywords : [filter.pattern];
@@ -17135,16 +17135,16 @@ async function recommendPlan(options = {}, cwd = process.cwd()) {
     logger2.flush();
     return;
   }
-  console.log("\u6B63\u5728\u5206\u6790\u4EFB\u52A1\u4F9D\u8D56\u5173\u7CFB...");
+  console.log("Analyzing task dependencies...");
   const fileOverlapDeps = inferDependenciesBatch(filteredTasks);
   let mergedDeps = fileOverlapDeps;
   if (options.smart) {
-    console.log("\u6B63\u5728\u901A\u8FC7 AI \u5206\u6790\u8BED\u4E49\u4F9D\u8D56\u5173\u7CFB...");
+    console.log("Analyzing semantic dependencies via AI...");
     const semanticResult = await withAIEnhancement({
       enabled: true,
       aiCall: () => new AIMetadataAssistant(cwd).inferSemanticDependencies(filteredTasks, { cwd }),
       fallback: { dependencies: [], aiUsed: false },
-      operationName: "\u8BED\u4E49\u4F9D\u8D56\u63A8\u65AD"
+      operationName: "Semantic dependency inference"
     });
     if (semanticResult.aiUsed && semanticResult.dependencies.length > 0) {
       mergedDeps = new Map(fileOverlapDeps);
@@ -17161,9 +17161,9 @@ async function recommendPlan(options = {}, cwd = process.cwd()) {
           mergedDeps.set(aiDep.taskId, existing);
         }
       }
-      console.log(`  AI \u53D1\u73B0 ${semanticResult.dependencies.length} \u6761\u8BED\u4E49\u4F9D\u8D56`);
+      console.log(`  AI found ${semanticResult.dependencies.length} semantic dependencies`);
     } else {
-      console.log("  AI \u672A\u53D1\u73B0\u989D\u5916\u8BED\u4E49\u4F9D\u8D56");
+      console.log("  AI found no additional semantic dependencies");
     }
   }
   const chains = buildTaskChains(filteredTasks, cwd, mergedDeps);
@@ -17192,28 +17192,28 @@ async function recommendPlan(options = {}, cwd = process.cwd()) {
     return;
   }
   console.log("\u2501".repeat(SEPARATOR_WIDTH));
-  console.log("\uD83D\uDCCB \u4EFB\u52A1\u94FE\u5206\u6790\u7ED3\u679C\uFF08\u6309\u6279\u6B21\u5206\u7EC4\uFF09");
+  console.log("\uD83D\uDCCB Task chain analysis results (grouped by batch)");
   console.log("\u2501".repeat(SEPARATOR_WIDTH));
   console.log("");
-  console.log("\uD83D\uDCCA \u7EDF\u8BA1\u6458\u8981:");
-  console.log(`   \u603B\u4EFB\u52A1\u6570: ${aiOutput.filterStats.totalTasks}`);
-  console.log(`   \u5339\u914D\u4EFB\u52A1: ${aiOutput.filterStats.filteredTasks}`);
-  console.log(`   \u4EFB\u52A1\u94FE\u6570: ${aiOutput.filterStats.chainCount}`);
-  console.log(`   \u6279\u6B21\u6570: ${aiOutput.batches.length}`);
+  console.log("\uD83D\uDCCA Statistics summary:");
+  console.log(`   Total tasks: ${aiOutput.filterStats.totalTasks}`);
+  console.log(`   Matched tasks: ${aiOutput.filterStats.filteredTasks}`);
+  console.log(`   Task chains: ${aiOutput.filterStats.chainCount}`);
+  console.log(`   Batches: ${aiOutput.batches.length}`);
   console.log("");
   const batches = cachedBatches;
   for (let b = 0;b < batches.length; b++) {
     const batch = batches[b];
     const batchIcon = getPriorityIcon(batch.priorityValue);
-    const parallelTag = batch.parallelizable ? " [\u53EF\u5E76\u884C]" : batch.chains.length > 1 ? " [\u4E0D\u53EF\u5E76\u884C: \u63A8\u65AD\u4F9D\u8D56]" : "";
-    console.log(`\uD83D\uDCE6 \u6279\u6B21 ${b + 1}/${batches.length} ${batchIcon} ${batch.priority}${parallelTag}`);
-    console.log(`   \u94FE\u6570: ${batch.chains.length} | \u4EFB\u52A1\u6570: ${batch.tasks.length}`);
+    const parallelTag = batch.parallelizable ? " [Parallel]" : batch.chains.length > 1 ? " [Not parallel: inferred deps]" : "";
+    console.log(`\uD83D\uDCE6 Batch ${b + 1}/${batches.length} ${batchIcon} ${batch.priority}${parallelTag}`);
+    console.log(`   Chains: ${batch.chains.length} | Tasks: ${batch.tasks.length}`);
     console.log("");
     const chainsInBatch = sortedChains.filter((c) => batch.chains.includes(c.chainId));
     for (let i = 0;i < chainsInBatch.length; i++) {
       const chain = chainsInBatch[i];
-      const chainLabel = batch.parallelizable ? `[\u94FE${i + 1}]` : `[\u94FE]`;
-      console.log(`   ${chainLabel} ${chain.chainId} (${chain.minLayer} \u957F\u5EA6:${chain.length} Reopen:${chain.totalReopenCount})`);
+      const chainLabel = batch.parallelizable ? `[Chain${i + 1}]` : `[Chain]`;
+      console.log(`   ${chainLabel} ${chain.chainId} (${chain.minLayer} Length:${chain.length} Reopen:${chain.totalReopenCount})`);
       for (let j = 0;j < chain.tasks.length; j++) {
         const task = chain.tasks[j];
         const prefix = j === chain.tasks.length - 1 ? "      \u2514\u2500" : "      \u251C\u2500";
@@ -17225,11 +17225,11 @@ async function recommendPlan(options = {}, cwd = process.cwd()) {
           const aiSemanticDeps = inferredDeps.filter((d) => d.source === "ai-semantic");
           if (fileOverlapDeps2.length > 0) {
             const files = [...new Set(fileOverlapDeps2.flatMap((d) => d.overlappingFiles))].slice(0, 2);
-            inferredTag = ` [\u63A8\u65AD:\u6587\u4EF6\u91CD\u53E0] ${files.join(", ")}${fileOverlapDeps2.flatMap((d) => d.overlappingFiles).length > 2 ? "..." : ""}`;
+            inferredTag = ` [Inferred:file overlap] ${files.join(", ")}${fileOverlapDeps2.flatMap((d) => d.overlappingFiles).length > 2 ? "..." : ""}`;
           }
           if (aiSemanticDeps.length > 0) {
-            const reasons = aiSemanticDeps.map((d) => d.reason || "\u8BED\u4E49\u5173\u8054").slice(0, 2);
-            inferredTag += ` [\u63A8\u65AD:AI\u8BED\u4E49] ${reasons.join("; ")}`;
+            const reasons = aiSemanticDeps.map((d) => d.reason || "Semantic relation").slice(0, 2);
+            inferredTag += ` [Inferred:AI semantic] ${reasons.join("; ")}`;
           }
         }
         console.log(`${prefix} ${statusIcon} ${task.id}: ${task.title.substring(0, 40)}${inferredTag}`);
@@ -17242,9 +17242,9 @@ async function recommendPlan(options = {}, cwd = process.cwd()) {
     }
   }
   console.log("\u2501".repeat(SEPARATOR_WIDTH));
-  console.log("\uD83D\uDCA1 \u63A8\u8350\u6458\u8981:");
+  console.log("\uD83D\uDCA1 Recommendation summary:");
   console.log(`   ${aiOutput.recommendation.summary}`);
-  console.log(`   \u4F18\u5148\u4EFB\u52A1\u94FE: ${aiOutput.recommendation.topChains.slice(0, 3).join(", ")}`);
+  console.log(`   Priority chains: ${aiOutput.recommendation.topChains.slice(0, 3).join(", ")}`);
   console.log("");
   const isNonInteractive = options.nonInteractive || !process.stdout.isTTY;
   if (isNonInteractive) {
@@ -17252,7 +17252,7 @@ async function recommendPlan(options = {}, cwd = process.cwd()) {
     plan.tasks = aiOutput.recommendation.suggestedOrder;
     plan.batches = aiOutput.batchOrder;
     writePlan(plan, cwd);
-    console.log("\u2705 \u6267\u884C\u8BA1\u5212\u5DF2\u66F4\u65B0 (\u975E\u4EA4\u4E92\u6A21\u5F0F)");
+    console.log("\u2705 Execution plan updated (non-interactive mode)");
     logger2.logInstrumentation({
       module: "plan-recommend",
       action: "recommend_auto",
@@ -17273,7 +17273,7 @@ async function recommendPlan(options = {}, cwd = process.cwd()) {
   const response = await import_prompts3.default({
     type: "confirm",
     name: "confirm",
-    message: "\u662F\u5426\u5C06\u63A8\u8350\u7684\u4EFB\u52A1\u987A\u5E8F\u5199\u5165\u6267\u884C\u8BA1\u5212\uFF1F",
+    message: "Write the recommended task order to the execution plan?",
     initial: true
   });
   if (response.confirm) {
@@ -17281,10 +17281,10 @@ async function recommendPlan(options = {}, cwd = process.cwd()) {
     plan.tasks = aiOutput.recommendation.suggestedOrder;
     plan.batches = aiOutput.batchOrder;
     writePlan(plan, cwd);
-    console.log("\u2705 \u6267\u884C\u8BA1\u5212\u5DF2\u66F4\u65B0");
+    console.log("\u2705 Execution plan updated");
     recommendationAccepted = true;
   } else {
-    console.log("\u5DF2\u53D6\u6D88");
+    console.log("Cancelled");
   }
   logger2.logInstrumentation({
     module: "plan-recommend",
@@ -17332,12 +17332,12 @@ function getStatusIcon2(status) {
 function formatStatus2(status) {
   const normalized = normalizeStatus(status);
   const map = {
-    open: "\u2B1C \u5F85\u5904\u7406",
-    in_progress: "\uD83D\uDD35 \u8FDB\u884C\u4E2D",
-    resolved: "\u2705 \u5DF2\u89E3\u51B3",
-    closed: "\u26AB \u5DF2\u5173\u95ED",
-    abandoned: "\u274C \u5DF2\u653E\u5F03",
-    failed: "\u274C \u5DF2\u5931\u8D25"
+    open: "\u2B1C Open",
+    in_progress: "\uD83D\uDD35 In Progress",
+    resolved: "\u2705 Resolved",
+    closed: "\u26AB Closed",
+    abandoned: "\u274C Abandoned",
+    failed: "\u274C Failed"
   };
   return map[normalized] || status;
 }
@@ -17377,17 +17377,17 @@ function formatPlanQualityGateReport(result, options = {}) {
   const statusIcon = result.passed ? "\u2705" : "\u274C";
   lines.push("");
   lines.push(separator);
-  lines.push(`${statusIcon} Plan \u8D28\u91CF\u95E8\u7981\u68C0\u67E5\u62A5\u544A [${phase}]`);
+  lines.push(`${statusIcon} Plan Quality Gate Check Report [${phase}]`);
   lines.push(separator);
   lines.push("");
-  lines.push("\uD83D\uDCCA \u7EDF\u8BA1\u6458\u8981:");
-  lines.push(`   \u603B\u4EFB\u52A1\u6570: ${result.totalTasks}`);
-  lines.push(`   \u2705 \u901A\u8FC7: ${result.passedCount}`);
-  lines.push(`   \u274C \u672A\u901A\u8FC7: ${result.failedCount}`);
+  lines.push("\uD83D\uDCCA Statistics Summary:");
+  lines.push(`   Total tasks: ${result.totalTasks}`);
+  lines.push(`   \u2705 Passed: ${result.passedCount}`);
+  lines.push(`   \u274C Failed: ${result.failedCount}`);
   lines.push("");
   if (result.failedTasks.length > 0) {
     lines.push(separator);
-    lines.push(`\u274C \u672A\u901A\u8FC7\u7684\u4EFB\u52A1 (${result.failedTasks.length}):`);
+    lines.push(`\u274C Failed Tasks (${result.failedTasks.length}):`);
     lines.push("");
     if (showDetails) {
       for (const taskResult of result.validationResults) {
@@ -17417,7 +17417,7 @@ function formatPlanQualityGateReport(result, options = {}) {
     const hasViolations = result.validationResults.some((r) => r.violations.length > 0);
     if (hasViolations) {
       lines.push(separator);
-      lines.push("\uD83D\uDCCB \u8BE6\u7EC6\u8FDD\u89C4\u4FE1\u606F:");
+      lines.push("\uD83D\uDCCB Detailed Violation Info:");
       lines.push("");
       for (const taskResult of result.validationResults) {
         if (taskResult.violations.length > 0) {
@@ -17433,18 +17433,18 @@ function formatPlanQualityGateReport(result, options = {}) {
   }
   lines.push(separator);
   if (result.passed) {
-    lines.push("\u2705 \u6240\u6709\u4EFB\u52A1\u901A\u8FC7 Plan \u8D28\u91CF\u95E8\u7981\u68C0\u67E5\uFF01");
+    lines.push("\u2705 All tasks passed Plan quality gate check!");
   } else {
-    lines.push(`\u26A0\uFE0F  ${result.failedCount} \u4E2A\u4EFB\u52A1\u672A\u901A\u8FC7\u8D28\u91CF\u95E8\u7981\uFF0C\u5EFA\u8BAE\u4FEE\u590D\u540E\u518D\u6267\u884C plan recommend`);
+    lines.push(`\u26A0\uFE0F  ${result.failedCount} tasks failed quality gate, recommend fixing before running plan recommend`);
     lines.push("");
-    lines.push("\uD83D\uDCA1 \u4FEE\u590D\u5EFA\u8BAE:");
-    lines.push("   \u2022 \u68C0\u67E5\u5FAA\u73AF\u4F9D\u8D56\uFF1A\u786E\u4FDD\u4EFB\u52A1\u4F9D\u8D56\u5173\u7CFB\u65E0\u5FAA\u73AF");
-    lines.push("   \u2022 \u68C0\u67E5\u65E0\u6548\u4F9D\u8D56\uFF1A\u786E\u4FDD\u4F9D\u8D56\u7684\u4EFB\u52A1ID\u5B58\u5728\u4E14\u6709\u6548");
-    lines.push("   \u2022 \u68C0\u67E5\u5B64\u513F\u5B50\u4EFB\u52A1\uFF1A\u786E\u4FDD parentId \u6307\u5411\u7684\u4EFB\u52A1\u5B58\u5728");
-    lines.push("   \u2022 \u4F7F\u7528 `projmnt4claude analyze --fix` \u81EA\u52A8\u4FEE\u590D\u90E8\u5206\u95EE\u9898");
+    lines.push("\uD83D\uDCA1 Fix Suggestions:");
+    lines.push("   \u2022 Check circular dependencies: ensure no cycles in task dependencies");
+    lines.push("   \u2022 Check invalid dependencies: ensure dependent task IDs exist and are valid");
+    lines.push("   \u2022 Check orphan subtasks: ensure parentId points to existing task");
+    lines.push("   \u2022 Use `projmnt4claude analyze --fix` to auto-fix some issues");
   }
   lines.push("");
-  lines.push(`\uD83D\uDD50 \u9A8C\u8BC1\u65F6\u95F4: ${result.validatedAt}`);
+  lines.push(`\uD83D\uDD50 Validated at: ${result.validatedAt}`);
   lines.push(separator);
   lines.push("");
   return lines.join(`
@@ -28831,7 +28831,7 @@ var __dirname = "/home/fuzhibo/workerplace/git/projmnt4claude/src/commands";
 async function runDoctor(fix = false, cwd = process.cwd()) {
   console.log("");
   console.log("\u2501".repeat(SEPARATOR_WIDTH));
-  console.log("\uD83D\uDD0D \u73AF\u5883\u8BCA\u65AD");
+  console.log("\uD83D\uDD0D Environment Diagnostics");
   console.log("\u2501".repeat(SEPARATOR_WIDTH));
   console.log("");
   const results = [];
@@ -28851,18 +28851,18 @@ async function runDoctor(fix = false, cwd = process.cwd()) {
   if (fix && fixableIssues.length > 0) {
     console.log("");
     console.log("\u2501".repeat(SEPARATOR_WIDTH));
-    console.log("\uD83D\uDD27 \u81EA\u52A8\u4FEE\u590D");
+    console.log("\uD83D\uDD27 Auto Fix");
     console.log("\u2501".repeat(SEPARATOR_WIDTH));
     console.log("");
     await fixIssues2(fixableIssues, cwd);
     console.log("");
-    console.log("\uD83D\uDD04 \u91CD\u65B0\u68C0\u67E5...");
+    console.log("\uD83D\uDD04 Re-checking...");
     console.log("");
     await runDoctor(false, cwd);
     return;
   } else if (fixableIssues.length > 0) {
     console.log("");
-    console.log(`\uD83D\uDCA1 \u4F7F\u7528 --fix \u53C2\u6570\u81EA\u52A8\u4FEE\u590D ${fixableIssues.length} \u4E2A\u95EE\u9898`);
+    console.log(`\uD83D\uDCA1 Use --fix to auto-fix ${fixableIssues.length} issue(s)`);
   }
 }
 function checkProjectInit(cwd) {
@@ -28870,18 +28870,18 @@ function checkProjectInit(cwd) {
   const configPath = path19.join(projectDir, "config.json");
   if (!fs22.existsSync(configPath)) {
     return {
-      name: "\u9879\u76EE\u521D\u59CB\u5316",
+      name: "Project Initialization",
       status: "error",
-      message: "\u9879\u76EE\u672A\u521D\u59CB\u5316",
-      details: ["\u8BF7\u8FD0\u884C projmnt4claude setup \u521D\u59CB\u5316\u9879\u76EE"],
+      message: "Project not initialized",
+      details: ["Run projmnt4claude setup to initialize the project"],
       fixable: false
     };
   }
   return {
-    name: "\u9879\u76EE\u521D\u59CB\u5316",
+    name: "Project Initialization",
     status: "ok",
-    message: "\u9879\u76EE\u5DF2\u521D\u59CB\u5316",
-    details: [`\u914D\u7F6E\u6587\u4EF6: ${configPath}`],
+    message: "Project initialized",
+    details: [`Config file: ${configPath}`],
     fixable: false
   };
 }
@@ -28889,62 +28889,62 @@ function checkPluginCache() {
   const pluginRoot = process.env.CLAUDE_PLUGIN_ROOT;
   const details = [];
   let status = "ok";
-  let message = "\u63D2\u4EF6\u7F13\u5B58\u6B63\u5E38";
+  let message = "Plugin cache normal";
   if (!pluginRoot) {
     return {
-      name: "\u63D2\u4EF6\u7F13\u5B58",
+      name: "Plugin Cache",
       status: "ok",
-      message: "CLI \u6A21\u5F0F\u8FD0\u884C\uFF0C\u8DF3\u8FC7\u63D2\u4EF6\u7F13\u5B58\u68C0\u67E5",
-      details: ["CLAUDE_PLUGIN_ROOT \u672A\u8BBE\u7F6E\uFF08CLI \u6A21\u5F0F\u4E0B\u6B63\u5E38\uFF09"],
+      message: "Running in CLI mode, skipping plugin cache check",
+      details: ["CLAUDE_PLUGIN_ROOT not set (normal in CLI mode)"],
       fixable: false
     };
   }
-  details.push(`\u63D2\u4EF6\u6839\u76EE\u5F55: ${pluginRoot}`);
+  details.push(`Plugin root: ${pluginRoot}`);
   const mainFile = path19.join(pluginRoot, "dist", "projmnt4claude.js");
   if (!fs22.existsSync(mainFile)) {
     status = "error";
-    message = "\u4E3B\u7A0B\u5E8F\u6587\u4EF6\u7F3A\u5931";
-    details.push(`\u7F3A\u5931: ${mainFile}`);
+    message = "Main program file missing";
+    details.push(`Missing: ${mainFile}`);
   } else {
-    details.push(`\u2713 \u4E3B\u7A0B\u5E8F: ${mainFile}`);
+    details.push(`\u2713 Main program: ${mainFile}`);
   }
   const localesDir = path19.join(pluginRoot, "locales");
   if (!fs22.existsSync(localesDir)) {
     if (status !== "error") {
       status = "warning";
-      message = "locales \u76EE\u5F55\u7F3A\u5931";
+      message = "locales directory missing";
     }
-    details.push(`\u7F3A\u5931: ${localesDir}`);
+    details.push(`Missing: ${localesDir}`);
   } else {
     const zhDir = path19.join(localesDir, "zh");
     const enDir = path19.join(localesDir, "en");
     if (fs22.existsSync(zhDir)) {
-      details.push("\u2713 \u4E2D\u6587\u8BED\u8A00\u5305: locales/zh/");
+      details.push("\u2713 Chinese language pack: locales/zh/");
     }
     if (fs22.existsSync(enDir)) {
-      details.push("\u2713 \u82F1\u6587\u8BED\u8A00\u5305: locales/en/");
+      details.push("\u2713 English language pack: locales/en/");
     }
     if (!fs22.existsSync(zhDir) && !fs22.existsSync(enDir)) {
       if (status !== "error") {
         status = "warning";
-        message = "\u8BED\u8A00\u5305\u76EE\u5F55\u7F3A\u5931";
+        message = "Language pack directories missing";
       }
-      details.push("\u8B66\u544A: \u672A\u627E\u5230\u4EFB\u4F55\u8BED\u8A00\u5305\u76EE\u5F55");
+      details.push("Warning: No language pack directories found");
     }
   }
   const commandsDir = path19.join(pluginRoot, "commands");
   if (!fs22.existsSync(commandsDir)) {
     if (status !== "error") {
       status = "warning";
-      message = "commands \u76EE\u5F55\u7F3A\u5931\uFF08slash commands \u53EF\u80FD\u65E0\u6CD5\u5DE5\u4F5C\uFF09";
+      message = "commands directory missing (slash commands may not work)";
     }
-    details.push(`\u7F3A\u5931: ${commandsDir}`);
+    details.push(`Missing: ${commandsDir}`);
   } else {
     const commandFiles = fs22.readdirSync(commandsDir).filter((f) => f.endsWith(".md"));
-    details.push(`\u2713 Slash commands: ${commandFiles.length} \u4E2A`);
+    details.push(`\u2713 Slash commands: ${commandFiles.length}`);
   }
   return {
-    name: "\u63D2\u4EF6\u7F13\u5B58",
+    name: "Plugin Cache",
     status,
     message,
     details,
@@ -28959,18 +28959,18 @@ function checkSkillFiles(cwd) {
   if (fs22.existsSync(commandsDir)) {
     const commandFiles = fs22.readdirSync(commandsDir).filter((f) => f.endsWith(".md"));
     results.push({
-      name: "\u547D\u4EE4\u6587\u6863",
+      name: "Command Docs",
       status: "ok",
-      message: `${commandFiles.length} \u4E2A\u547D\u4EE4\u6587\u6863`,
-      details: [`\u4F4D\u7F6E: ${commandsDir}`],
+      message: `${commandFiles.length} command docs`,
+      details: [`Location: ${commandsDir}`],
       fixable: false
     });
   } else {
     results.push({
-      name: "\u547D\u4EE4\u6587\u6863",
+      name: "Command Docs",
       status: "warning",
-      message: "\u547D\u4EE4\u6587\u6863\u76EE\u5F55\u7F3A\u5931",
-      details: ["\u53EF\u80FD\u9700\u8981\u91CD\u65B0\u8FD0\u884C setup \u6765\u590D\u5236\u547D\u4EE4\u6587\u6863"],
+      message: "Command docs directory missing",
+      details: ["May need to re-run setup to copy command docs"],
       fixable: true
     });
   }
@@ -28986,17 +28986,17 @@ function checkDirectoryStructure(cwd) {
   for (const dir of requiredDirs) {
     if (!fs22.existsSync(dir.path)) {
       results.push({
-        name: `\u76EE\u5F55: ${dir.name}`,
+        name: `Directory: ${dir.name}`,
         status: "error",
-        message: "\u5FC5\u9700\u76EE\u5F55\u7F3A\u5931",
-        details: [`\u7F3A\u5931: ${dir.path}`],
+        message: "Required directory missing",
+        details: [`Missing: ${dir.path}`],
         fixable: true
       });
     } else {
       results.push({
-        name: `\u76EE\u5F55: ${dir.name}`,
+        name: `Directory: ${dir.name}`,
         status: "ok",
-        message: "\u5B58\u5728",
+        message: "Exists",
         details: [],
         fixable: false
       });
@@ -29018,10 +29018,10 @@ function checkDirectoryStructure(cwd) {
       const archiveDir = path19.join(projectDir, "archive");
       if (!fs22.existsSync(archiveDir)) {
         results.push({
-          name: "\u76EE\u5F55: archive",
+          name: "Directory: archive",
           status: "warning",
-          message: "\u5B58\u5728\u5DF2\u5E9F\u5F03\u4EFB\u52A1\u4F46 archive \u76EE\u5F55\u7F3A\u5931",
-          details: [`\u7F3A\u5931: ${archiveDir}`],
+          message: "Abandoned tasks exist but archive directory is missing",
+          details: [`Missing: ${archiveDir}`],
           fixable: true
         });
       }
@@ -29052,41 +29052,41 @@ function checkPluginInstallationScope(cwd) {
       return path19.resolve(inst.projectPath) !== normalizedCwd;
     });
     if (mismatchedInstalls.length > 0) {
-      const mismatchedList = mismatchedInstalls.map((inst) => `  - \u7248\u672C ${inst.version || "\u672A\u77E5"} \u7ED1\u5B9A\u5230: ${inst.projectPath || "\u672A\u77E5\u8DEF\u5F84"}`).join(`
+      const mismatchedList = mismatchedInstalls.map((inst) => `  - Version ${inst.version || "unknown"} bound to: ${inst.projectPath || "unknown path"}`).join(`
 `);
       results.push({
-        name: "\u63D2\u4EF6\u5B89\u88C5\u4F5C\u7528\u57DF",
+        name: "Plugin Installation Scope",
         status: "warning",
-        message: "\u68C0\u6D4B\u5230 project-scope \u5B89\u88C5\u53EF\u80FD\u5BFC\u81F4\u8DE8\u9879\u76EE\u66F4\u65B0\u95EE\u9898",
+        message: "Detected project-scope installation may cause cross-project update issues",
         details: [
-          "projmnt4claude \u4EE5 project-scope \u5B89\u88C5\u5728\u4EE5\u4E0B\u9879\u76EE:",
+          "projmnt4claude installed with project-scope in:",
           mismatchedList,
           "",
-          "\u26A0\uFE0F  \u95EE\u9898\u8BF4\u660E:",
-          "  Claude Code \u7684 project-scope \u63D2\u4EF6\u7ED1\u5B9A\u5230\u7279\u5B9A\u9879\u76EE\u8DEF\u5F84\u3002",
-          '  \u4ECE\u5176\u4ED6\u9879\u76EE\u5C1D\u8BD5\u66F4\u65B0\u65F6\u4F1A\u62A5\u9519: "Plugin is not installed at scope project"',
+          "\u26A0\uFE0F  Issue:",
+          "  Claude Code project-scope plugins are bound to specific project paths.",
+          '  Updating from other projects will fail: "Plugin is not installed at scope project"',
           "",
-          "\uD83D\uDCA1 \u5EFA\u8BAE\u89E3\u51B3\u65B9\u6848:",
-          "  1. \u5378\u8F7D\u73B0\u6709\u5B89\u88C5:",
+          "\uD83D\uDCA1 Recommended Solution:",
+          "  1. Uninstall existing installation:",
           "     claude plugins uninstall projmnt4claude@projmnt4claude",
           "",
-          "  2. \u4EE5 user-scope \u91CD\u65B0\u5B89\u88C5 (\u63A8\u8350):",
+          "  2. Re-install with user-scope (recommended):",
           "     claude plugins install projmnt4claude@projmnt4claude --scope user",
           "",
-          "  \u6216\u8005\u4ECE\u539F\u5B89\u88C5\u9879\u76EE\u66F4\u65B0:",
-          `     cd ${mismatchedInstalls[0].projectPath || "<\u539F\u9879\u76EE\u8DEF\u5F84>"}`,
+          "  Or update from the original project:",
+          `     cd ${mismatchedInstalls[0].projectPath || "<original-project-path>"}`,
           "     claude plugins update projmnt4claude@projmnt4claude"
         ],
         fixable: false
       });
     } else if (projectScopedInstalls.length > 0) {
       results.push({
-        name: "\u63D2\u4EF6\u5B89\u88C5\u4F5C\u7528\u57DF",
+        name: "Plugin Installation Scope",
         status: "warning",
-        message: "\u5EFA\u8BAE\u4F7F\u7528 user-scope \u5B89\u88C5\u4EE5\u4FBF\u8DE8\u9879\u76EE\u4F7F\u7528",
+        message: "Recommend user-scope installation for cross-project use",
         details: [
-          "\u5F53\u524D\u9879\u76EE\u5DF2\u6B63\u786E\u7ED1\u5B9A project-scope \u5B89\u88C5",
-          "\u4F46\u5EFA\u8BAE\u4F7F\u7528 user-scope \u4EE5\u4FBF\u5728\u6240\u6709\u9879\u76EE\u4E2D\u4F7F\u7528:",
+          "Current project is correctly bound to project-scope installation",
+          "But user-scope is recommended for use in all projects:",
           "",
           "  claude plugins uninstall projmnt4claude@projmnt4claude",
           "  claude plugins install projmnt4claude@projmnt4claude --scope user"
@@ -29102,22 +29102,22 @@ function checkLoggingModule(cwd) {
   const logsDir = getLogsDir(cwd);
   if (!fs22.existsSync(logsDir)) {
     results.push({
-      name: "\u65E5\u5FD7\u76EE\u5F55",
+      name: "Log Directory",
       status: "warning",
-      message: "logs \u76EE\u5F55\u4E0D\u5B58\u5728",
+      message: "logs directory does not exist",
       details: [
-        `\u7F3A\u5931: ${logsDir}`,
-        "\u8BF7\u8FD0\u884C projmnt4claude setup \u5347\u7EA7\u9879\u76EE\u7ED3\u6784"
+        `Missing: ${logsDir}`,
+        "Run projmnt4claude setup to upgrade project structure"
       ],
       fixable: true
     });
     return results;
   }
   results.push({
-    name: "\u65E5\u5FD7\u76EE\u5F55",
+    name: "Log Directory",
     status: "ok",
-    message: "\u5B58\u5728",
-    details: [`\u4F4D\u7F6E: ${logsDir}`],
+    message: "Exists",
+    details: [`Location: ${logsDir}`],
     fixable: false
   });
   const config = readConfig(cwd);
@@ -29132,27 +29132,27 @@ function checkLoggingModule(cwd) {
     const missingKeys = [];
     for (const [key, defaultValue] of Object.entries(requiredKeys)) {
       if (!loggingConfig || loggingConfig[key] === undefined) {
-        missingKeys.push(`logging.${key} (\u9ED8\u8BA4: ${JSON.stringify(defaultValue)})`);
+        missingKeys.push(`logging.${key} (default: ${JSON.stringify(defaultValue)})`);
       }
     }
     if (missingKeys.length > 0) {
       results.push({
-        name: "\u65E5\u5FD7\u914D\u7F6E\u5B8C\u6574\u6027",
+        name: "Log Config Completeness",
         status: "warning",
-        message: `${missingKeys.length} \u4E2A\u65E5\u5FD7\u914D\u7F6E\u9879\u7F3A\u5931`,
+        message: `${missingKeys.length} log config items missing`,
         details: [
-          "\u7F3A\u5931\u7684\u914D\u7F6E\u9879:",
+          "Missing config items:",
           ...missingKeys.map((k) => `  - ${k}`),
           "",
-          "\uD83D\uDCA1 \u8FD0\u884C projmnt4claude doctor --fix \u81EA\u52A8\u8865\u5168\u9ED8\u8BA4\u503C"
+          "\uD83D\uDCA1 Run projmnt4claude doctor --fix to auto-fill defaults"
         ],
         fixable: true
       });
     } else {
       results.push({
-        name: "\u65E5\u5FD7\u914D\u7F6E\u5B8C\u6574\u6027",
+        name: "Log Config Completeness",
         status: "ok",
-        message: "\u6240\u6709 logging.* \u914D\u7F6E\u9879\u5B8C\u6574",
+        message: "All logging.* config items present",
         details: [
           `level: ${loggingConfig.level}`,
           `maxFiles: ${loggingConfig.maxFiles}`,
@@ -29165,33 +29165,33 @@ function checkLoggingModule(cwd) {
     const aiConfig = config.ai;
     if (!aiConfig || aiConfig.provider === undefined) {
       results.push({
-        name: "AI \u914D\u7F6E\u5B8C\u6574\u6027",
+        name: "AI Config Completeness",
         status: "warning",
-        message: "ai.provider \u914D\u7F6E\u7F3A\u5931",
-        details: [`\u9ED8\u8BA4\u503C: claude-code`, "\uD83D\uDCA1 \u8FD0\u884C projmnt4claude doctor --fix \u81EA\u52A8\u8865\u5168"],
+        message: "ai.provider config missing",
+        details: [`Default: claude-code`, "\uD83D\uDCA1 Run projmnt4claude doctor --fix to auto-fill"],
         fixable: true
       });
     } else {
       results.push({
-        name: "AI \u914D\u7F6E\u5B8C\u6574\u6027",
+        name: "AI Config Completeness",
         status: "ok",
         message: `provider: ${aiConfig.provider}`,
-        details: aiConfig.customEndpoint ? [`\u81EA\u5B9A\u4E49\u7AEF\u70B9: ${aiConfig.customEndpoint}`] : [],
+        details: aiConfig.customEndpoint ? [`Custom endpoint: ${aiConfig.customEndpoint}`] : [],
         fixable: false
       });
     }
     const trainingConfig = config.training;
     if (!trainingConfig || trainingConfig.exportEnabled === undefined) {
       results.push({
-        name: "\u8BAD\u7EC3\u6570\u636E\u914D\u7F6E\u5B8C\u6574\u6027",
+        name: "Training Data Config Completeness",
         status: "warning",
-        message: "training.* \u914D\u7F6E\u7F3A\u5931",
-        details: ["\uD83D\uDCA1 \u8FD0\u884C projmnt4claude doctor --fix \u81EA\u52A8\u8865\u5168\u9ED8\u8BA4\u503C"],
+        message: "training.* config missing",
+        details: ["\uD83D\uDCA1 Run projmnt4claude doctor --fix to auto-fill defaults"],
         fixable: true
       });
     } else {
       results.push({
-        name: "\u8BAD\u7EC3\u6570\u636E\u914D\u7F6E\u5B8C\u6574\u6027",
+        name: "Training Data Config Completeness",
         status: "ok",
         message: `exportEnabled: ${trainingConfig.exportEnabled}`,
         details: [`outputDir: ${trainingConfig.outputDir}`],
@@ -29216,23 +29216,23 @@ function checkLoggingModule(cwd) {
     }
     const details = [];
     let status = "ok";
-    let message = `\u65E5\u5FD7\u5065\u5EB7 (${files.length} \u4E2A\u6587\u4EF6, ${totalSizeMB.toFixed(1)}MB)`;
+    let message = `Log health (${files.length} files, ${totalSizeMB.toFixed(1)}MB)`;
     if (oversizedFiles.length > 0) {
       status = "warning";
-      message = `${oversizedFiles.length} \u4E2A\u65E5\u5FD7\u6587\u4EF6\u8D85\u8FC7 10MB`;
-      details.push("\u8D85\u8FC7 10MB \u7684\u6587\u4EF6:");
+      message = `${oversizedFiles.length} log files exceed 10MB`;
+      details.push("Files over 10MB:");
       details.push(...oversizedFiles.slice(0, 5).map((f) => `  - ${f}`));
     }
     if (totalSizeMB > 100) {
       status = "warning";
-      message = `\u65E5\u5FD7\u76EE\u5F55\u603B\u5927\u5C0F\u8D85\u8FC7 100MB (${totalSizeMB.toFixed(1)}MB)`;
-      details.push(`\u5EFA\u8BAE\u6E05\u7406\u65E7\u65E5\u5FD7: projmnt4claude config set logging.maxFiles 15`);
+      message = `Log directory exceeds 100MB (${totalSizeMB.toFixed(1)}MB)`;
+      details.push(`Consider cleaning old logs: projmnt4claude config set logging.maxFiles 15`);
     }
     if (status === "ok") {
-      details.push(`\u603B\u5927\u5C0F: ${totalSizeMB.toFixed(1)}MB`);
+      details.push(`Total size: ${totalSizeMB.toFixed(1)}MB`);
     }
     results.push({
-      name: "\u65E5\u5FD7\u5065\u5EB7",
+      name: "Log Health",
       status,
       message,
       details,
@@ -29240,10 +29240,10 @@ function checkLoggingModule(cwd) {
     });
   } catch {
     results.push({
-      name: "\u65E5\u5FD7\u5065\u5EB7",
+      name: "Log Health",
       status: "warning",
-      message: "\u65E0\u6CD5\u8BFB\u53D6\u65E5\u5FD7\u76EE\u5F55",
-      details: [`\u8DEF\u5F84: ${logsDir}`],
+      message: "Cannot read log directory",
+      details: [`Path: ${logsDir}`],
       fixable: false
     });
   }
@@ -29254,9 +29254,9 @@ function checkDeprecatedStatuses(cwd) {
   const tasksDir = getTasksDir(cwd);
   if (!fs22.existsSync(tasksDir)) {
     return [{
-      name: "\u5E9F\u5F03\u72B6\u6001\u68C0\u6D4B",
+      name: "Deprecated Status Check",
       status: "ok",
-      message: "\u4EFB\u52A1\u76EE\u5F55\u4E0D\u5B58\u5728\uFF08\u65E0\u4EFB\u52A1\uFF09",
+      message: "Task directory does not exist (no tasks)",
       details: [],
       fixable: false
     }];
@@ -29277,26 +29277,26 @@ function checkDeprecatedStatuses(cwd) {
   }
   if (tasksWithDeprecatedStatus.length === 0) {
     results.push({
-      name: "\u5E9F\u5F03\u72B6\u6001\u68C0\u6D4B",
+      name: "Deprecated Status Check",
       status: "ok",
-      message: `\u6240\u6709 ${taskIds.length} \u4E2A\u4EFB\u52A1\u65E0\u5E9F\u5F03\u72B6\u6001\u6B8B\u7559`,
-      details: ["\u2713 \u65E0 reopened/needs_human \u72B6\u6001"],
+      message: `All ${taskIds.length} tasks have no deprecated status`,
+      details: ["\u2713 No reopened/needs_human status"],
       fixable: false
     });
   } else {
     results.push({
-      name: "\u5E9F\u5F03\u72B6\u6001\u68C0\u6D4B",
+      name: "Deprecated Status Check",
       status: "warning",
-      message: `${tasksWithDeprecatedStatus.length} \u4E2A\u4EFB\u52A1\u4F7F\u7528\u5E9F\u5F03\u72B6\u6001`,
+      message: `${tasksWithDeprecatedStatus.length} tasks using deprecated status`,
       details: [
-        "\u5E9F\u5F03\u72B6\u6001\u7684\u4EFB\u52A1:",
+        "Tasks with deprecated status:",
         ...tasksWithDeprecatedStatus.map((t2) => `  - ${t2.taskId}: status=${t2.status}`),
         "",
-        "\u26A0\uFE0F  \u5E9F\u5F03\u8BF4\u660E:",
-        "  - reopened (v4 \u5E9F\u5F03): \u5E94\u4F7F\u7528 open + reopenCount + transitionNote",
-        "  - needs_human (v4 \u5E9F\u5F03): \u5E94\u4F7F\u7528 open + resumeAction",
+        "\u26A0\uFE0F  Deprecation notice:",
+        "  - reopened (deprecated in v4): Use open + reopenCount + transitionNote",
+        "  - needs_human (deprecated in v4): Use open + resumeAction",
         "",
-        "\uD83D\uDCA1 \u8FD0\u884C projmnt4claude analyze --fix -y \u81EA\u52A8\u8FC1\u79FB"
+        "\uD83D\uDCA1 Run projmnt4claude analyze --fix -y to auto-migrate"
       ],
       fixable: true
     });
@@ -29307,11 +29307,11 @@ function checkGitHooks(cwd) {
   const config = readConfig(cwd);
   const gitHookConfig = config?.gitHook ?? DEFAULT_GIT_HOOK;
   if (!gitHookConfig.enabled) {
-    return [{ status: "ok", name: "Git Hooks", message: "Git Hook \u68C0\u6D4B\u5DF2\u901A\u8FC7\u914D\u7F6E\u7981\u7528", fixable: false }];
+    return [{ status: "ok", name: "Git Hooks", message: "Git Hook check disabled via config", fixable: false }];
   }
   const gitDir = path19.join(cwd, ".git");
   if (!fs22.existsSync(gitDir)) {
-    return [{ status: "ok", name: "Git Hooks", message: "\u975E git \u4ED3\u5E93\uFF0C\u8DF3\u8FC7 Git Hook \u68C0\u6D4B", fixable: false }];
+    return [{ status: "ok", name: "Git Hooks", message: "Not a git repository, skipping Git Hook check", fixable: false }];
   }
   try {
     const pre = new Pre(cwd);
@@ -29319,17 +29319,17 @@ function checkGitHooks(cwd) {
       return [{
         name: "Git Hooks",
         status: "ok",
-        message: "pre-commit hook \u5DF2\u5B89\u88C5",
+        message: "pre-commit hook installed",
         fixable: false
       }];
     }
     return [{
       name: "Git Hooks",
       status: "warning",
-      message: "pre-commit hook \u672A\u5B89\u88C5",
+      message: "pre-commit hook not installed",
       details: [
-        "\u5EFA\u8BAE\u5B89\u88C5 pre-commit hook \u4EE5\u5728\u63D0\u4EA4\u524D\u81EA\u52A8\u8FD0\u884C\u6D4B\u8BD5",
-        "\u8FD0\u884C projmnt4claude pre install \u5B89\u88C5"
+        "Recommended to install pre-commit hook to run tests before commits",
+        "Run: projmnt4claude pre install"
       ],
       fixable: false
     }];
@@ -29337,7 +29337,7 @@ function checkGitHooks(cwd) {
     return [{
       name: "Git Hooks",
       status: "warning",
-      message: "\u65E0\u6CD5\u68C0\u67E5 Git Hook \u72B6\u6001",
+      message: "Cannot check Git Hook status",
       fixable: false
     }];
   }
@@ -29393,38 +29393,38 @@ function checkDeprecatedHooks(cwd) {
   const hasSettingsIssue = deprecatedSettings.length > 0;
   const hasFilesIssue = deprecatedFiles.length > 0;
   if (hasSettingsIssue || hasFilesIssue) {
-    const details = ["\u53D1\u73B0\u5E9F\u5F03\u7684 Claude Code Hook \u914D\u7F6E\uFF0C\u5EFA\u8BAE\u8FD0\u884C doctor --fix \u6E05\u7406"];
+    const details = ["Deprecated Claude Code Hook config found, run doctor --fix to clean"];
     if (hasSettingsIssue) {
       details.push("");
-      details.push(".claude/settings.json \u4E2D\u7684\u5E9F\u5F03 hooks:");
+      details.push("Deprecated hooks in .claude/settings.json:");
       for (const setting of deprecatedSettings) {
         details.push(`  - ${setting}`);
       }
     }
     if (hasFilesIssue) {
       details.push("");
-      details.push(`.projmnt4claude/hooks/ \u76EE\u5F55\u4E2D\u7684\u5E9F\u5F03\u811A\u672C:`);
+      details.push(`Deprecated scripts in .projmnt4claude/hooks/:`);
       for (const file of deprecatedFiles) {
         details.push(`  - ${file}`);
       }
     }
     details.push("");
-    details.push("\u26A0\uFE0F  \u5E9F\u5F03\u8BF4\u660E:");
-    details.push("  Claude Code Hook \u529F\u80FD\u5DF2\u88AB\u79FB\u9664\uFF0C\u6B8B\u7559\u914D\u7F6E\u53EF\u80FD\u5BFC\u81F4\u95EE\u9898");
+    details.push("\u26A0\uFE0F  Deprecation notice:");
+    details.push("  Claude Code Hook feature has been removed, residual config may cause issues");
     details.push("");
-    details.push("\uD83D\uDCA1 \u8FD0\u884C projmnt4claude doctor --fix \u81EA\u52A8\u6E05\u7406");
+    details.push("\uD83D\uDCA1 Run projmnt4claude doctor --fix to auto-clean");
     results.push({
-      name: "\u5E9F\u5F03 Hook \u68C0\u6D4B",
+      name: "Deprecated Hook Check",
       status: "warning",
-      message: "\u53D1\u73B0\u5E9F\u5F03\u7684 Claude Code Hook \u914D\u7F6E",
+      message: "Deprecated Claude Code Hook config found",
       details,
       fixable: true
     });
   } else {
     results.push({
-      name: "\u5E9F\u5F03 Hook \u68C0\u6D4B",
+      name: "Deprecated Hook Check",
       status: "ok",
-      message: "\u672A\u53D1\u73B0\u5E9F\u5F03\u7684 Claude Code Hook \u914D\u7F6E",
+      message: "No deprecated Claude Code Hook config found",
       details: [],
       fixable: false
     });
@@ -29456,9 +29456,9 @@ function displayResults(results) {
   }
   console.log("");
   console.log("\u2501".repeat(SEPARATOR_WIDTH));
-  console.log(`\uD83D\uDCCA \u6C47\u603B: ${errorCount} \u9519\u8BEF, ${warningCount} \u8B66\u544A, ${okCount} \u6B63\u5E38`);
+  console.log(`\uD83D\uDCCA Summary: ${errorCount} errors, ${warningCount} warnings, ${okCount} ok`);
   if (errorCount === 0 && warningCount === 0) {
-    console.log("\u2705 \u6240\u6709\u68C0\u67E5\u901A\u8FC7\uFF01");
+    console.log("\u2705 All checks passed!");
   }
 }
 function resolvePluginRoot() {
@@ -29480,8 +29480,8 @@ async function fixIssues2(issues, cwd) {
   const projectDir = getProjectDir(cwd);
   const pluginRoot = resolvePluginRoot();
   for (const issue of issues) {
-    console.log(`\u4FEE\u590D: ${issue.name}...`);
-    if (issue.name === "\u6280\u80FD\u6587\u4EF6" || issue.name === "\u547D\u4EE4\u6587\u6863") {
+    console.log(`Fixing: ${issue.name}...`);
+    if (issue.name === "Skill Files" || issue.name === "Command Docs") {
       if (pluginRoot) {
         const toolboxDir = getToolboxDir(cwd);
         const skillDir = path19.join(toolboxDir, "projmnt4claude");
@@ -29500,7 +29500,7 @@ async function fixIssues2(issues, cwd) {
         const skillTarget = path19.join(skillDir, "SKILL.md");
         if (fs22.existsSync(skillSource)) {
           fs22.copyFileSync(skillSource, skillTarget);
-          console.log(`  \u2713 \u5DF2\u590D\u5236 SKILL.md`);
+          console.log(`  \u2713 Copied SKILL.md`);
         }
         const commandsSourceDir = path19.join(pluginRoot, "locales", language, "commands");
         const commandsTargetDir = path19.join(skillDir, "commands");
@@ -29512,13 +29512,13 @@ async function fixIssues2(issues, cwd) {
           for (const file of commandFiles) {
             fs22.copyFileSync(path19.join(commandsSourceDir, file), path19.join(commandsTargetDir, file));
           }
-          console.log(`  \u2713 \u5DF2\u590D\u5236 ${commandFiles.length} \u4E2A\u547D\u4EE4\u6587\u6863`);
+          console.log(`  \u2713 Copied ${commandFiles.length} command docs`);
         }
       } else {
-        console.log(`  \u2717 \u65E0\u6CD5\u4FEE\u590D: \u672A\u627E\u5230\u63D2\u4EF6\u6839\u76EE\u5F55\uFF08CLAUDE_PLUGIN_ROOT \u672A\u8BBE\u7F6E\u4E14\u65E0\u6CD5\u81EA\u52A8\u5B9A\u4F4D\uFF09`);
+        console.log(`  \u2717 Cannot fix: Plugin root not found (CLAUDE_PLUGIN_ROOT not set and cannot auto-locate)`);
       }
-    } else if (issue.name.startsWith("\u76EE\u5F55:")) {
-      const dirName = issue.name.replace("\u76EE\u5F55: ", "");
+    } else if (issue.name.startsWith("Directory:")) {
+      const dirName = issue.name.replace("Directory: ", "");
       const dirMap = {
         tasks: getTasksDir(cwd),
         toolbox: getToolboxDir(cwd),
@@ -29527,22 +29527,22 @@ async function fixIssues2(issues, cwd) {
       const dirPath = dirMap[dirName];
       if (dirPath && !fs22.existsSync(dirPath)) {
         fs22.mkdirSync(dirPath, { recursive: true });
-        console.log(`  \u2713 \u5DF2\u521B\u5EFA\u76EE\u5F55: ${dirName}/`);
+        console.log(`  \u2713 Created directory: ${dirName}/`);
       }
-    } else if (issue.name === "\u65E5\u5FD7\u76EE\u5F55") {
+    } else if (issue.name === "Log Directory") {
       const logsDir = getLogsDir(cwd);
       if (!fs22.existsSync(logsDir)) {
         fs22.mkdirSync(logsDir, { recursive: true });
-        console.log(`  \u2713 \u5DF2\u521B\u5EFA logs \u76EE\u5F55`);
+        console.log(`  \u2713 Created logs directory`);
       }
-    } else if (issue.name === "\u65E5\u5FD7\u914D\u7F6E\u5B8C\u6574\u6027" || issue.name === "AI \u914D\u7F6E\u5B8C\u6574\u6027" || issue.name === "\u8BAD\u7EC3\u6570\u636E\u914D\u7F6E\u5B8C\u6574\u6027") {
+    } else if (issue.name === "Log Config Completeness" || issue.name === "AI Config Completeness" || issue.name === "Training Data Config Completeness") {
       const config = readConfig(cwd);
       if (config) {
         const fixedConfig = ensureConfigDefaults(config);
         writeConfig(fixedConfig, cwd);
-        console.log(`  \u2713 \u5DF2\u81EA\u52A8\u8865\u5168\u7F3A\u5931\u7684\u914D\u7F6E\u9879`);
+        console.log(`  \u2713 Auto-filled missing config items`);
       }
-    } else if (issue.name === "\u5E9F\u5F03\u72B6\u6001\u68C0\u6D4B") {
+    } else if (issue.name === "Deprecated Status Check") {
       const tasksDir = getTasksDir(cwd);
       const deprecatedMap = { reopened: "open", needs_human: "open" };
       let fixedCount = 0;
@@ -29560,7 +29560,7 @@ async function fixIssues2(issues, cwd) {
                 timestamp: new Date().toISOString(),
                 fromStatus: oldStatus,
                 toStatus: meta.status,
-                note: `doctor --fix: ${oldStatus} \u72B6\u6001\u5DF2\u5E9F\u5F03\uFF08v4\uFF09\uFF0C\u8FC1\u79FB\u4E3A ${meta.status}`,
+                note: `doctor --fix: ${oldStatus} status deprecated (v4), migrated to ${meta.status}`,
                 author: "doctor-fix"
               });
               meta.updatedAt = new Date().toISOString();
@@ -29570,8 +29570,8 @@ async function fixIssues2(issues, cwd) {
           } catch {}
         }
       }
-      console.log(`  \u2713 \u5DF2\u8FC1\u79FB ${fixedCount} \u4E2A\u5E9F\u5F03\u72B6\u6001\u4EFB\u52A1`);
-    } else if (issue.name === "\u5E9F\u5F03 Hook \u68C0\u6D4B") {
+      console.log(`  \u2713 Migrated ${fixedCount} deprecated status tasks`);
+    } else if (issue.name === "Deprecated Hook Check") {
       let removedSettings = false;
       let removedFiles = false;
       const settingsPath = path19.join(cwd, ".claude", "settings.json");
@@ -29641,28 +29641,28 @@ async function fixIssues2(issues, cwd) {
         } catch {}
       }
       if (removedSettings || removedFiles) {
-        console.log(`  \u2713 \u5DF2\u6E05\u7406\u5E9F\u5F03\u7684 Claude Code Hook \u914D\u7F6E`);
+        console.log(`  \u2713 Cleaned up deprecated Claude Code Hook config`);
         if (removedSettings) {
-          console.log(`    - \u5DF2\u66F4\u65B0 .claude/settings.json`);
+          console.log(`    - Updated .claude/settings.json`);
         }
         if (removedFiles) {
-          console.log(`    - \u5DF2\u5220\u9664 .projmnt4claude/hooks/ \u4E2D\u7684\u5E9F\u5F03\u811A\u672C`);
+          console.log(`    - Deleted deprecated scripts from .projmnt4claude/hooks/`);
         }
       }
     }
   }
   console.log("");
-  console.log("\u2705 \u4FEE\u590D\u5B8C\u6210");
+  console.log("\u2705 Fix complete");
 }
 async function runBugReport(cwd = process.cwd()) {
   console.log("");
   console.log("\u2501".repeat(SEPARATOR_WIDTH));
-  console.log("\uD83D\uDCCB Bug \u62A5\u544A\u751F\u6210");
+  console.log("\uD83D\uDCCB Bug Report Generation");
   console.log("\u2501".repeat(SEPARATOR_WIDTH));
   console.log("");
   if (!isInitialized(cwd)) {
-    console.error("\u274C \u9519\u8BEF: \u9879\u76EE\u5C1A\u672A\u521D\u59CB\u5316\uFF0C\u65E0\u6CD5\u751F\u6210 Bug \u62A5\u544A");
-    console.error("\u8BF7\u5148\u8FD0\u884C projmnt4claude setup \u521D\u59CB\u5316\u9879\u76EE");
+    console.error("\u274C Error: Project not initialized, cannot generate bug report");
+    console.error("Run projmnt4claude setup to initialize the project first");
     process.exit(1);
   }
   const logger2 = new Logger({ cwd });
@@ -29673,87 +29673,87 @@ async function runBugReport(cwd = process.cwd()) {
     console.log("\u2501".repeat(SEPARATOR_WIDTH));
     console.log("");
     console.log("\u2501".repeat(SEPARATOR_WIDTH));
-    console.log("\uD83D\uDCB0 AI \u6210\u672C\u6C47\u603B");
+    console.log("\uD83D\uDCB0 AI Cost Summary");
     console.log("\u2501".repeat(SEPARATOR_WIDTH));
     console.log("");
     const costSummary = logger2.getCostSummary();
-    console.log(`\u603B AI \u8C03\u7528\u6B21\u6570: ${costSummary.totalCalls}`);
-    console.log(`\u603B\u8017\u65F6: ${(costSummary.totalDurationMs / 1000).toFixed(1)}s`);
-    console.log(`\u603B Tokens: ${costSummary.totalTokens} (\u8F93\u5165: ${costSummary.totalInputTokens}, \u8F93\u51FA: ${costSummary.totalOutputTokens})`);
+    console.log(`Total AI calls: ${costSummary.totalCalls}`);
+    console.log(`Total duration: ${(costSummary.totalDurationMs / 1000).toFixed(1)}s`);
+    console.log(`Total tokens: ${costSummary.totalTokens} (input: ${costSummary.totalInputTokens}, output: ${costSummary.totalOutputTokens})`);
     if (Object.keys(costSummary.byField).length > 0) {
       console.log("");
-      console.log("\u6309\u5B57\u6BB5\u5206\u7EC4:");
+      console.log("By field:");
       for (const [field, info] of Object.entries(costSummary.byField)) {
-        console.log(`  ${field}: ${info.calls} \u6B21\u8C03\u7528, ${(info.durationMs / 1000).toFixed(1)}s, ${info.totalTokens} tokens`);
+        console.log(`  ${field}: ${info.calls} calls, ${(info.durationMs / 1000).toFixed(1)}s, ${info.totalTokens} tokens`);
       }
     }
     console.log("");
     console.log("\u2501".repeat(SEPARATOR_WIDTH));
-    console.log("\uD83D\uDCCA \u4F7F\u7528\u5206\u6790");
+    console.log("\uD83D\uDCCA Usage Analysis");
     console.log("\u2501".repeat(SEPARATOR_WIDTH));
     console.log("");
     const usage = logger2.analyzeUsage();
-    console.log(`\u603B\u547D\u4EE4\u6267\u884C\u6B21\u6570: ${usage.totalCommands}`);
-    console.log(`\u5E73\u5747\u8017\u65F6: ${(usage.averageDurationMs / 1000).toFixed(1)}s`);
-    console.log(`AI \u4F7F\u7528\u7387: ${(usage.aiUsageRate * 100).toFixed(1)}%`);
-    console.log(`\u9519\u8BEF\u6570: ${usage.totalErrors}, \u8B66\u544A\u6570: ${usage.totalWarnings}`);
+    console.log(`Total command executions: ${usage.totalCommands}`);
+    console.log(`Average duration: ${(usage.averageDurationMs / 1000).toFixed(1)}s`);
+    console.log(`AI usage rate: ${(usage.aiUsageRate * 100).toFixed(1)}%`);
+    console.log(`Errors: ${usage.totalErrors}, Warnings: ${usage.totalWarnings}`);
     if (Object.keys(usage.commandFrequency).length > 0) {
       console.log("");
-      console.log("\u547D\u4EE4\u4F7F\u7528\u9891\u7387:");
+      console.log("Command frequency:");
       const sorted = Object.entries(usage.commandFrequency).sort((a, b) => b[1] - a[1]);
       for (const [cmd, count] of sorted) {
-        console.log(`  ${cmd}: ${count} \u6B21`);
+        console.log(`  ${cmd}: ${count}`);
       }
     }
     if (usage.commonErrors.length > 0) {
       console.log("");
-      console.log("\u5E38\u89C1\u9519\u8BEF:");
+      console.log("Common errors:");
       for (const err of usage.commonErrors.slice(0, 5)) {
         console.log(`  [${err.count}x] ${err.message}`);
       }
     }
     console.log("");
     console.log("\u2501".repeat(SEPARATOR_WIDTH));
-    console.log(`\u2705 Bug \u62A5\u544A\u5DF2\u751F\u6210`);
-    console.log(`\uD83D\uDCCE \u65E5\u5FD7\u538B\u7F29\u9644\u4EF6: ${report.archivePath}`);
+    console.log(`\u2705 Bug report generated`);
+    console.log(`\uD83D\uDCCE Log archive: ${report.archivePath}`);
   } catch (err) {
     console.error("");
-    console.error(`\u274C Bug \u62A5\u544A\u751F\u6210\u5931\u8D25: ${err instanceof Error ? err.message : String(err)}`);
+    console.error(`\u274C Bug report generation failed: ${err instanceof Error ? err.message : String(err)}`);
     process.exit(1);
   }
 }
 async function runDoctorDeep(cwd = process.cwd()) {
   console.log("");
   console.log("\u2501".repeat(SEPARATOR_WIDTH));
-  console.log("\uD83D\uDD2C \u6DF1\u5EA6\u65E5\u5FD7\u5206\u6790 (--deep)");
+  console.log("\uD83D\uDD2C Deep Log Analysis (--deep)");
   console.log("\u2501".repeat(SEPARATOR_WIDTH));
   console.log("");
   await runDoctor(false, cwd);
   console.log("");
   console.log("\u2501".repeat(SEPARATOR_WIDTH));
-  console.log("\uD83D\uDCCA \u65E5\u5FD7\u6DF1\u5EA6\u5206\u6790");
+  console.log("\uD83D\uDCCA Deep Log Analysis");
   console.log("\u2501".repeat(SEPARATOR_WIDTH));
   console.log("");
   const collector = new LogCollector(cwd);
   const stats = collector.getStats();
   if (stats.fileCount === 0) {
-    console.log("\u2139\uFE0F  \u672A\u627E\u5230\u65E5\u5FD7\u6587\u4EF6\uFF0C\u8DF3\u8FC7\u65E5\u5FD7\u5206\u6790");
-    console.log(`   \u65E5\u5FD7\u76EE\u5F55: ${getLogsDir(cwd)}`);
+    console.log("\u2139\uFE0F  No log files found, skipping log analysis");
+    console.log(`   Log directory: ${getLogsDir(cwd)}`);
     return;
   }
-  console.log(`\uD83D\uDCC2 \u65E5\u5FD7\u6587\u4EF6: ${stats.fileCount} \u4E2A (${stats.totalSizeKB} KB)`);
+  console.log(`\uD83D\uDCC2 Log files: ${stats.fileCount} (${stats.totalSizeKB} KB)`);
   const entries = collector.collectSince(24, { maxEntries: 1e4 });
-  console.log(`\uD83D\uDCCB \u65E5\u5FD7\u6761\u76EE: ${entries.length} \u6761 (\u6700\u8FD1 24 \u5C0F\u65F6)`);
+  console.log(`\uD83D\uDCCB Log entries: ${entries.length} (last 24 hours)`);
   console.log("");
   if (entries.length === 0) {
-    console.log("\u2139\uFE0F  \u6700\u8FD1 24 \u5C0F\u65F6\u65E0\u65E5\u5FD7\u6761\u76EE");
+    console.log("\u2139\uFE0F  No log entries in the last 24 hours");
     return;
   }
   const registry = new LogAnalyzerRegistry(cwd);
   for (const analyzer of getBuiltInAnalyzers()) {
     registry.register(analyzer);
   }
-  console.log(`\uD83D\uDD27 \u5DF2\u6CE8\u518C ${registry.size} \u4E2A\u5206\u6790\u5668:`);
+  console.log(`\uD83D\uDD27 Registered ${registry.size} analyzers:`);
   for (const analyzer of registry.getAll()) {
     console.log(`   - ${analyzer.name} (${analyzer.category}) [${analyzer.supportedStrategies.join(", ")}]`);
   }
@@ -29764,17 +29764,17 @@ async function runDoctorDeep(cwd = process.cwd()) {
   console.log(reporter.formatText(report));
   if (report.summary.totalFindings > 0) {
     console.log("\u2501".repeat(SEPARATOR_WIDTH));
-    console.log(`\uD83D\uDCCA \u53D1\u73B0 ${report.summary.totalFindings} \u4E2A\u95EE\u9898`);
+    console.log(`\uD83D\uDCCA Found ${report.summary.totalFindings} issues`);
     const critical = report.summary.bySeverity["critical"] || 0;
     const errors = report.summary.bySeverity["error"] || 0;
     if (critical > 0) {
-      console.log(`\uD83D\uDD34 ${critical} \u4E2A\u4E25\u91CD\u95EE\u9898\u9700\u8981\u7ACB\u5373\u5904\u7406`);
+      console.log(`\uD83D\uDD34 ${critical} critical issues require immediate attention`);
     }
     if (errors > 0) {
-      console.log(`\u274C ${errors} \u4E2A\u9519\u8BEF\u9700\u8981\u5173\u6CE8`);
+      console.log(`\u274C ${errors} errors need attention`);
     }
   } else {
-    console.log("\u2705 \u65E5\u5FD7\u6DF1\u5EA6\u5206\u6790\u5B8C\u6210\uFF0C\u672A\u53D1\u73B0\u5F02\u5E38");
+    console.log("\u2705 Deep log analysis complete, no anomalies found");
   }
 }
 
@@ -33497,7 +33497,7 @@ function buildBatchAwareQueue(taskQueue, batches) {
   for (let i = 0;i < batches.length; i++) {
     const batch = batches[i];
     batchBoundaries.push(offset);
-    batchLabels.push(`\u6279\u6B21 ${i + 1}`);
+    batchLabels.push(`Batch ${i + 1}`);
     batchParallelizable.push(batch.length > 1);
     offset += batch.length;
   }
@@ -33518,12 +33518,12 @@ function rebuildBatchesFromBoundaries(batchQueue) {
 }
 async function cleanupHarnessSnapshots(options = {}, cwd = process.cwd()) {
   if (!isInitialized(cwd)) {
-    console.error("\u9519\u8BEF: \u9879\u76EE\u672A\u521D\u59CB\u5316\u3002\u8BF7\u5148\u8FD0\u884C `projmnt4claude setup`");
+    console.error("Error: Project not initialized. Please run `projmnt4claude setup` first");
     process.exit(1);
   }
   const snapshots = listSnapshots(cwd);
   if (snapshots.length === 0) {
-    console.log("\u2705 \u6CA1\u6709\u627E\u5230\u4EFB\u4F55\u5FEB\u7167");
+    console.log("\u2705 No snapshots found");
     return 0;
   }
   let cleaned = 0;
@@ -33539,50 +33539,50 @@ async function cleanupHarnessSnapshots(options = {}, cwd = process.cwd()) {
   for (const snapshot of orphanSnapshots) {
     if (cleanupSnapshot(snapshot.snapshotId, cwd)) {
       cleaned++;
-      console.log(`  \uD83E\uDDF9 \u5DF2\u6E05\u7406\u5B64\u513F\u5FEB\u7167: ${snapshot.snapshotId} (PID: ${snapshot.pid})`);
+      console.log(`  \uD83E\uDDF9 Cleaned orphan snapshot: ${snapshot.snapshotId} (PID: ${snapshot.pid})`);
     }
   }
   if (options.force && !options.orphansOnly) {
     for (const snapshot of activeSnapshots) {
       if (cleanupSnapshot(snapshot.snapshotId, cwd)) {
         cleaned++;
-        console.log(`  \u26A0\uFE0F  \u5DF2\u5F3A\u5236\u6E05\u7406\u6D3B\u8DC3\u5FEB\u7167: ${snapshot.snapshotId} (PID: ${snapshot.pid})`);
+        console.log(`  \u26A0\uFE0F  Force cleaned active snapshot: ${snapshot.snapshotId} (PID: ${snapshot.pid})`);
       }
     }
   }
   if (activeSnapshots.length > 0 && !options.force) {
     console.log(`
-\u26A0\uFE0F  \u53D1\u73B0 ${activeSnapshots.length} \u4E2A\u6D3B\u8DC3\u6D41\u6C34\u7EBF\u5FEB\u7167\uFF08\u8FDB\u7A0B\u4ECD\u5728\u8FD0\u884C\uFF09:`);
+\u26A0\uFE0F  Found ${activeSnapshots.length} active pipeline snapshots (process still running):`);
     for (const snapshot of activeSnapshots) {
-      console.log(`   - ${snapshot.snapshotId} (PID: ${snapshot.pid}, \u521B\u5EFA\u4E8E ${snapshot.timestamp})`);
+      console.log(`   - ${snapshot.snapshotId} (PID: ${snapshot.pid}, created at ${snapshot.timestamp})`);
     }
     console.log(`
-\uD83D\uDCA1 \u4F7F\u7528 --force \u9009\u9879\u5F3A\u5236\u6E05\u7406\u6240\u6709\u5FEB\u7167\uFF0C\u6216\u7B49\u5F85\u6D3B\u8DC3\u6D41\u6C34\u7EBF\u5B8C\u6210`);
+\uD83D\uDCA1 Use --force to clean all snapshots, or wait for active pipelines to complete`);
   }
   console.log(`
-\u2705 \u5171\u6E05\u7406 ${cleaned} \u4E2A\u5FEB\u7167`);
+\u2705 Cleaned ${cleaned} snapshots total`);
   return cleaned;
 }
 function checkConcurrency(cwd) {
   const detection = detectActiveSnapshot(cwd);
   if (detection.hasActive && detection.activeSnapshot) {
     console.error("");
-    console.error("\u274C \u9519\u8BEF: \u68C0\u6D4B\u5230\u53E6\u4E00\u4E2A Harness \u6D41\u6C34\u7EBF\u6B63\u5728\u8FD0\u884C");
+    console.error("\u274C Error: Another Harness pipeline is already running");
     console.error("");
-    console.error("\u6D3B\u8DC3\u6D41\u6C34\u7EBF\u4FE1\u606F:");
-    console.error(`   \u5FEB\u7167ID: ${detection.activeSnapshot.snapshotId}`);
-    console.error(`   \u8FDB\u7A0BID: ${detection.activeSnapshot.pid}`);
-    console.error(`   \u521B\u5EFA\u65F6\u95F4: ${detection.activeSnapshot.timestamp}`);
-    console.error(`   \u4EFB\u52A1\u6570\u91CF: ${detection.activeSnapshot.tasks.length}`);
+    console.error("Active pipeline info:");
+    console.error(`   Snapshot ID: ${detection.activeSnapshot.snapshotId}`);
+    console.error(`   Process ID: ${detection.activeSnapshot.pid}`);
+    console.error(`   Created at: ${detection.activeSnapshot.timestamp}`);
+    console.error(`   Task count: ${detection.activeSnapshot.tasks.length}`);
     console.error("");
-    console.error("\u53EF\u80FD\u7684\u539F\u56E0:");
-    console.error("   1. \u53E6\u4E00\u4E2A Harness \u6D41\u6C34\u7EBF\u6B63\u5728\u8FD0\u884C");
-    console.error("   2. \u4E4B\u524D\u7684\u6D41\u6C34\u7EBF\u5F02\u5E38\u9000\u51FA\uFF0C\u6B8B\u7559\u4E86\u5FEB\u7167");
+    console.error("Possible causes:");
+    console.error("   1. Another Harness pipeline is running");
+    console.error("   2. Previous pipeline exited abnormally, leaving snapshot behind");
     console.error("");
-    console.error("\u89E3\u51B3\u65B9\u6848:");
-    console.error("   - \u5982\u679C\u786E\u5B9A\u6CA1\u6709\u5176\u4ED6\u6D41\u6C34\u7EBF\u5728\u8FD0\u884C\uFF0C\u4F7F\u7528\u4EE5\u4E0B\u547D\u4EE4\u6E05\u7406:");
+    console.error("Solutions:");
+    console.error("   - If no other pipeline is running, clean up with:");
     console.error("     projmnt4claude headless-harness-design cleanup");
-    console.error("   - \u6216\u5F3A\u5236\u6E05\u7406\u6240\u6709\u6B8B\u7559\u5FEB\u7167:");
+    console.error("   - Or force clean all residual snapshots:");
     console.error("     projmnt4claude headless-harness-design cleanup --force");
     console.error("");
     return true;
@@ -33591,7 +33591,7 @@ function checkConcurrency(cwd) {
 }
 async function harnessCommand(options, cwd = process.cwd()) {
   if (!isInitialized(cwd)) {
-    console.error("\u9519\u8BEF: \u9879\u76EE\u672A\u521D\u59CB\u5316\u3002\u8BF7\u5148\u8FD0\u884C `projmnt4claude setup`");
+    console.error("Error: Project not initialized. Please run `projmnt4claude setup` first");
     process.exit(1);
   }
   if (!options.continue && checkConcurrency(cwd)) {
@@ -33603,7 +33603,7 @@ async function harnessCommand(options, cwd = process.cwd()) {
     enabled: !(options.skipHarnessGate || options.skipQualityGate)
   };
   if (qualityGateConfig.minQualityScore < 0 || qualityGateConfig.minQualityScore > 100) {
-    console.error("\u9519\u8BEF: --require-quality \u5FC5\u987B\u5728 0-100 \u4E4B\u95F4");
+    console.error("Error: --require-quality must be between 0-100");
     process.exit(1);
   }
   const config = {
@@ -33621,49 +33621,49 @@ async function harnessCommand(options, cwd = process.cwd()) {
     cwd
   };
   if (config.maxRetries < 0) {
-    console.error("\u9519\u8BEF: --max-retries \u5FC5\u987B\u5927\u4E8E\u7B49\u4E8E 0");
+    console.error("Error: --max-retries must be >= 0");
     process.exit(1);
   }
   if (config.timeout < 10) {
-    console.error("\u9519\u8BEF: --timeout \u5FC5\u987B\u5927\u4E8E\u7B49\u4E8E 10 \u79D2");
+    console.error("Error: --timeout must be >= 10 seconds");
     process.exit(1);
   }
   if (config.parallel < 1) {
-    console.error("\u9519\u8BEF: --parallel \u5FC5\u987B\u5927\u4E8E\u7B49\u4E8E 1");
+    console.error("Error: --parallel must be >= 1");
     process.exit(1);
   }
   const batchQueue = await loadTaskQueue(options, cwd);
   if (batchQueue.taskQueue.length === 0) {
-    console.error("\u9519\u8BEF: \u6CA1\u6709\u53EF\u6267\u884C\u7684\u4EFB\u52A1");
+    console.error("Error: No executable tasks");
     process.exit(1);
   }
   const hasBatches = batchQueue.batchBoundaries.length > 0;
   if (!config.jsonOutput) {
     console.log("\u2501".repeat(SEPARATOR_WIDTH));
-    console.log("\uD83D\uDE80 Harness Design \u6267\u884C\u6A21\u5F0F");
+    console.log("\uD83D\uDE80 Harness Design Execution Mode");
     console.log("\u2501".repeat(SEPARATOR_WIDTH));
-    console.log(`\uD83D\uDCCB \u8BA1\u5212\u6587\u4EF6: ${options.plan}`);
-    console.log(`\uD83D\uDCCA \u4EFB\u52A1\u6570\u91CF: ${batchQueue.taskQueue.length}`);
+    console.log(`\uD83D\uDCCB Plan file: ${options.plan}`);
+    console.log(`\uD83D\uDCCA Task count: ${batchQueue.taskQueue.length}`);
     if (hasBatches) {
-      console.log(`\uD83D\uDCE6 \u6279\u6B21\u6570: ${batchQueue.batchBoundaries.length}`);
+      console.log(`\uD83D\uDCE6 Batch count: ${batchQueue.batchBoundaries.length}`);
     }
-    console.log(`\uD83D\uDD04 \u6700\u5927\u91CD\u8BD5: ${config.maxRetries}`);
-    console.log(`\u23F1\uFE0F  \u8D85\u65F6\u65F6\u95F4: ${config.timeout}s`);
-    console.log(`\uD83D\uDD00 \u5E76\u884C\u6570: ${config.parallel}`);
-    console.log(`\uD83E\uDDEA \u8BD5\u8FD0\u884C: ${config.dryRun ? "\u662F" : "\u5426"}`);
-    console.log(`\u25B6\uFE0F  \u7EE7\u7EED\u6267\u884C: ${config.continue ? "\u662F" : "\u5426"}`);
+    console.log(`\uD83D\uDD04 Max retries: ${config.maxRetries}`);
+    console.log(`\u23F1\uFE0F  Timeout: ${config.timeout}s`);
+    console.log(`\uD83D\uDD00 Parallel: ${config.parallel}`);
+    console.log(`\uD83E\uDDEA Dry run: ${config.dryRun ? "Yes" : "No"}`);
+    console.log(`\u25B6\uFE0F  Continue: ${config.continue ? "Yes" : "No"}`);
     console.log("");
   }
   if (config.dryRun) {
-    console.log("\uD83D\uDCDD \u8BD5\u8FD0\u884C\u6A21\u5F0F - \u4EE5\u4E0B\u662F\u5C06\u6267\u884C\u7684\u4EFB\u52A1\u987A\u5E8F:");
+    console.log("\uD83D\uDCDD Dry run mode - Tasks to be executed:");
     if (hasBatches) {
       for (let b = 0;b < batchQueue.batchBoundaries.length; b++) {
         const start = batchQueue.batchBoundaries[b];
         const end = b + 1 < batchQueue.batchBoundaries.length ? batchQueue.batchBoundaries[b + 1] : batchQueue.taskQueue.length;
-        const label = batchQueue.batchLabels[b];
-        const parallelTag = batchQueue.batchParallelizable[b] ? " [\u53EF\u5E76\u884C]" : "";
+        const label = batchQueue.batchLabels[b].replace("\u6279\u6B21", "Batch");
+        const parallelTag = batchQueue.batchParallelizable[b] ? " [Parallel]" : "";
         console.log(`
-   \uD83D\uDCE6 ${label}${parallelTag} (${end - start} \u4E2A\u4EFB\u52A1):`);
+   \uD83D\uDCE6 ${label}${parallelTag} (${end - start} tasks):`);
         for (let i = start;i < end; i++) {
           console.log(`      ${i + 1}. ${batchQueue.taskQueue[i]}`);
         }
@@ -33674,21 +33674,21 @@ async function harnessCommand(options, cwd = process.cwd()) {
       });
     }
     console.log("");
-    console.log("\u2705 \u8BD5\u8FD0\u884C\u5B8C\u6210\uFF08\u672A\u5B9E\u9645\u6267\u884C\uFF09");
+    console.log("\u2705 Dry run complete (no actual execution)");
     return;
   }
   if (qualityGateConfig.enabled) {
     console.log("");
     console.log("\u2501".repeat(SEPARATOR_WIDTH));
-    console.log("\uD83D\uDEA6 \u8D28\u91CF\u95E8\u7981\u68C0\u67E5");
+    console.log("\uD83D\uDEA6 Quality Gate Check");
     console.log("\u2501".repeat(SEPARATOR_WIDTH));
-    console.log(`\uD83D\uDCCA \u6700\u4F4E\u8D28\u91CF\u5206\u9608\u503C: ${qualityGateConfig.minQualityScore}`);
+    console.log(`\uD83D\uDCCA Min quality score threshold: ${qualityGateConfig.minQualityScore}`);
     console.log("");
     const batchResult = await batchCheckQualityGate(batchQueue.taskQueue, qualityGateConfig, cwd);
     console.log(formatBatchQualityGateResult(batchResult, { compact: false, showDetails: true }));
     if (!batchResult.allPassed) {
       console.log("");
-      console.log("\u274C \u8D28\u91CF\u95E8\u7981\u68C0\u67E5\u672A\u901A\u8FC7\uFF0C\u4EE5\u4E0B\u4EFB\u52A1\u9700\u8981\u5B8C\u5584:");
+      console.log("\u274C Quality gate check failed, the following tasks need improvement:");
       console.log("");
       for (const taskId of batchResult.blockedTasks) {
         const result = batchResult.results.get(taskId);
@@ -33697,16 +33697,16 @@ async function harnessCommand(options, cwd = process.cwd()) {
         }
       }
       console.log("");
-      console.log("\uD83D\uDCA1 \u63D0\u793A:");
-      console.log('   1. \u5B8C\u5584\u4EFB\u52A1\u63CF\u8FF0\uFF0C\u6DFB\u52A0 "## \u95EE\u9898\u63CF\u8FF0"\u3001"## \u6839\u56E0\u5206\u6790"\u3001"## \u89E3\u51B3\u65B9\u6848" \u90E8\u5206');
-      console.log('   2. \u5728 "## \u76F8\u5173\u6587\u4EF6" \u90E8\u5206\u5217\u51FA\u53D7\u5F71\u54CD\u7684\u6E90\u6587\u4EF6');
-      console.log('   3. \u4F7F\u7528\u66F4\u5177\u4F53\u7684\u68C0\u67E5\u70B9\u63CF\u8FF0\uFF0C\u907F\u514D\u6CDB\u5316\u63CF\u8FF0\u5982 "\u6838\u5FC3\u529F\u80FD\u5B9E\u73B0"');
-      console.log("   4. \u4F7F\u7528 --skip-harness-gate \u8DF3\u8FC7\u8D28\u91CF\u68C0\u67E5\uFF08\u4E0D\u63A8\u8350\uFF09");
-      console.log("   5. \u4F7F\u7528 --require-quality N \u8C03\u6574\u8D28\u91CF\u5206\u9608\u503C\uFF08\u9ED8\u8BA4 60\uFF09");
+      console.log("\uD83D\uDCA1 Tips:");
+      console.log('   1. Improve task description, add "## Problem", "## Root Cause", "## Solution" sections');
+      console.log('   2. List affected source files in "## Related Files" section');
+      console.log('   3. Use specific checkpoint descriptions, avoid generic ones like "core feature implementation"');
+      console.log("   4. Use --skip-harness-gate to skip quality check (not recommended)");
+      console.log("   5. Use --require-quality N to adjust quality threshold (default 60)");
       console.log("");
       process.exit(1);
     }
-    console.log("\u2705 \u6240\u6709\u4EFB\u52A1\u901A\u8FC7\u8D28\u91CF\u95E8\u7981\u68C0\u67E5");
+    console.log("\u2705 All tasks passed quality gate check");
     console.log("");
   }
   const executionPlan = {
@@ -33721,7 +33721,7 @@ async function harnessCommand(options, cwd = process.cwd()) {
     batchParallelizable: batchQueue.batchParallelizable
   });
   currentSnapshotId = snapshot.snapshotId;
-  console.log(`   \uD83D\uDCBE \u8BA1\u5212\u5FEB\u7167\u5DF2\u521B\u5EFA: ${snapshot.snapshotId} (${snapshot.tasks.length} \u4E2A\u4EFB\u52A1)`);
+  console.log(`   \uD83D\uDCBE Plan snapshot created: ${snapshot.snapshotId} (${snapshot.tasks.length} tasks)`);
   const assemblyLine = new AssemblyLine(config);
   const reporter = new HarnessReporter(config);
   let pipelineCompleted = false;
@@ -33731,8 +33731,8 @@ async function harnessCommand(options, cwd = process.cwd()) {
       return;
     shutdownInProgress = true;
     console.log(`
-\u26A0\uFE0F \u6536\u5230 ${signal}\uFF0C\u6B63\u5728\u4F18\u96C5\u5173\u95ED...`);
-    assemblyLine.forceFailStatus(new Error(`\u6536\u5230 ${signal}\uFF0C\u6D41\u6C34\u7EBF\u88AB\u4E2D\u65AD`));
+\u26A0\uFE0F  Received ${signal}, shutting down gracefully...`);
+    assemblyLine.forceFailStatus(new Error(`Received ${signal}, pipeline interrupted`));
     process.exit(signal === "SIGINT" ? 130 : 143);
   };
   process.on("SIGINT", gracefulShutdown);
@@ -33744,8 +33744,8 @@ async function harnessCommand(options, cwd = process.cwd()) {
       if (state) {
         const latestSnapshot = getLatestSnapshot(cwd);
         if (latestSnapshot) {
-          console.log(`\uD83D\uDCE6 \u4ECE\u4E2D\u65AD\u5904\u7EE7\u7EED (\u4EFB\u52A1 ${state.currentIndex + 1}/${state.taskQueue.length})`);
-          console.log(`   \uD83D\uDCBE \u4F7F\u7528\u8BA1\u5212\u5FEB\u7167: ${latestSnapshot.snapshotId}`);
+          console.log(`\uD83D\uDCE6 Resuming from interruption (task ${state.currentIndex + 1}/${state.taskQueue.length})`);
+          console.log(`   \uD83D\uDCBE Using plan snapshot: ${latestSnapshot.snapshotId}`);
           if (latestSnapshot.tasks.length > 0 && state.taskQueue.length === 0) {
             state.taskQueue = latestSnapshot.tasks;
             state.batchBoundaries = latestSnapshot.batchBoundaries || [];
@@ -33753,10 +33753,10 @@ async function harnessCommand(options, cwd = process.cwd()) {
             state.batchParallelizable = latestSnapshot.batchParallelizable || [];
           }
         } else {
-          console.log(`\uD83D\uDCE6 \u4ECE\u4E2D\u65AD\u5904\u7EE7\u7EED (\u4EFB\u52A1 ${state.currentIndex + 1}/${state.taskQueue.length})`);
+          console.log(`\uD83D\uDCE6 Resuming from interruption (task ${state.currentIndex + 1}/${state.taskQueue.length})`);
         }
       } else {
-        console.log("\uD83D\uDCE6 \u6CA1\u6709\u627E\u5230\u4E4B\u524D\u7684\u6267\u884C\u72B6\u6001\uFF0C\u4ECE\u5934\u5F00\u59CB");
+        console.log("\uD83D\uDCE6 No previous execution state found, starting from beginning");
         state = createDefaultRuntimeState(config);
         state.taskQueue = batchQueue.taskQueue;
         state.batchBoundaries = batchQueue.batchBoundaries;
@@ -33780,7 +33780,7 @@ async function harnessCommand(options, cwd = process.cwd()) {
     }
   } catch (error) {
     assemblyLine.forceFailStatus(error);
-    console.error("\u274C \u6267\u884C\u5931\u8D25:", error instanceof Error ? error.message : String(error));
+    console.error("\u274C Execution failed:", error instanceof Error ? error.message : String(error));
     process.exit(1);
   } finally {
     if (pipelineCompleted) {
@@ -33788,11 +33788,11 @@ async function harnessCommand(options, cwd = process.cwd()) {
     }
     if (currentSnapshotId && pipelineCompleted) {
       if (cleanupSnapshot(currentSnapshotId, cwd)) {
-        console.log(`   \uD83E\uDDF9 \u8BA1\u5212\u5FEB\u7167\u5DF2\u6E05\u7406: ${currentSnapshotId}`);
+        console.log(`   \uD83E\uDDF9 Plan snapshot cleaned: ${currentSnapshotId}`);
       }
       currentSnapshotId = null;
     } else if (currentSnapshotId) {
-      console.log(`   \uD83D\uDCBE \u8BA1\u5212\u5FEB\u7167\u4FDD\u7559\u4F9B\u8BCA\u65AD: .projmnt4claude/runs/${currentSnapshotId}`);
+      console.log(`   \uD83D\uDCBE Plan snapshot kept for diagnosis: .projmnt4claude/runs/${currentSnapshotId}`);
     }
     process.removeListener("SIGINT", gracefulShutdown);
     process.removeListener("SIGTERM", gracefulShutdown);
@@ -33811,12 +33811,12 @@ function loadRuntimeState(cwd) {
     const data = JSON.parse(content);
     const version = data.stateFormatVersion ?? 0;
     if (version < 1 || version > 2) {
-      console.warn(`\u72B6\u6001\u6587\u4EF6\u7248\u672C\u4E0D\u5339\u914D (v${version})\uFF0C\u91CD\u7F6E\u8FD0\u884C\u65F6\u72B6\u6001`);
+      console.warn(`State file version mismatch (v${version}), resetting runtime state`);
       return null;
     }
     if (version === 1) {
       data.stateFormatVersion = 2;
-      console.log("\uD83D\uDCE6 \u72B6\u6001\u6587\u4EF6\u4ECE v1 \u81EA\u52A8\u8FC1\u79FB\u5230 v2");
+      console.log("\uD83D\uDCE6 State file auto-migrated from v1 to v2");
     }
     data.retryCounter = new Map(Object.entries(data.retryCounter || {}));
     data.taskResults = new Map(Object.entries(data.taskResults || {}));
@@ -33826,7 +33826,7 @@ function loadRuntimeState(cwd) {
     data.taskPhaseCheckpoints = new Map(Object.entries(data.taskPhaseCheckpoints || {}));
     return data;
   } catch (error) {
-    console.warn("\u52A0\u8F7D\u8FD0\u884C\u65F6\u72B6\u6001\u5931\u8D25\uFF0C\u91CD\u7F6E\u72B6\u6001:", error);
+    console.warn("Failed to load runtime state, resetting:", error);
     return null;
   }
 }
@@ -33875,7 +33875,7 @@ async function loadTaskQueue(options, cwd) {
   if (options.plan) {
     const planFile = path25.resolve(cwd, options.plan);
     if (!fs28.existsSync(planFile)) {
-      console.error(`\u9519\u8BEF: \u8BA1\u5212\u6587\u4EF6\u4E0D\u5B58\u5728: ${planFile}`);
+      console.error(`Error: Plan file does not exist: ${planFile}`);
       process.exit(1);
     }
     try {
@@ -33884,7 +33884,7 @@ async function loadTaskQueue(options, cwd) {
       let taskQueue = planData.recommendation?.suggestedOrder || [];
       const batches = planData.batchOrder || planData.batches;
       if (taskQueue.length === 0) {
-        console.error("\u9519\u8BEF: \u8BA1\u5212\u6587\u4EF6\u4E2D\u6CA1\u6709\u4EFB\u52A1");
+        console.error("Error: No tasks in plan file");
         process.exit(1);
       }
       const TERMINAL_STATUSES3 = new Set(["resolved", "closed", "abandoned", "failed"]);
@@ -33896,40 +33896,40 @@ async function loadTaskQueue(options, cwd) {
         return !TERMINAL_STATUSES3.has(normalizeStatus(task.status));
       });
       if (originalCount - taskQueue.length > 0) {
-        console.log(`\uD83D\uDCCB \u4F7F\u7528\u8BA1\u5212\u6587\u4EF6: ${options.plan} (\u5DF2\u8FC7\u6EE4 ${originalCount - taskQueue.length} \u4E2A\u7EC8\u6001\u4EFB\u52A1)`);
+        console.log(`\uD83D\uDCCB Using plan file: ${options.plan} (filtered ${originalCount - taskQueue.length} terminal tasks)`);
       } else {
-        console.log(`\uD83D\uDCCB \u4F7F\u7528\u8BA1\u5212\u6587\u4EF6: ${options.plan}`);
+        console.log(`\uD83D\uDCCB Using plan file: ${options.plan}`);
       }
       return buildBatchAwareQueue(taskQueue, batches);
     } catch (error) {
-      console.error(`\u9519\u8BEF: \u65E0\u6CD5\u89E3\u6790\u8BA1\u5212\u6587\u4EF6: ${planFile}`);
+      console.error(`Error: Cannot parse plan file: ${planFile}`);
       console.error(error instanceof Error ? error.message : String(error));
       process.exit(1);
     }
   }
   const executionPlan = readPlan(cwd);
   if (executionPlan && executionPlan.tasks.length > 0) {
-    const queue = filterExecutableFromPlan(executionPlan, cwd, "\uD83D\uDCCB \u4F7F\u7528\u9879\u76EE\u6267\u884C\u8BA1\u5212");
+    const queue = filterExecutableFromPlan(executionPlan, cwd, "\uD83D\uDCCB Using project execution plan");
     if (queue.taskQueue.length > 0) {
       return queue;
     }
-    console.log("\u26A0\uFE0F  \u6267\u884C\u8BA1\u5212\u4E2D\u6240\u6709\u4EFB\u52A1\u5747\u5DF2\u5904\u4E8E\u7EC8\u6001");
+    console.log("\u26A0\uFE0F  All tasks in execution plan are in terminal state");
   }
-  console.log("\uD83D\uDD0D \u672A\u627E\u5230\u6267\u884C\u8BA1\u5212\uFF0C\u6B63\u5728\u81EA\u52A8\u751F\u6210...");
+  console.log("\uD83D\uDD0D No execution plan found, auto-generating...");
   try {
     await recommendPlan({ nonInteractive: true, json: false }, cwd);
     const newPlan = readPlan(cwd);
     if (newPlan && newPlan.tasks.length > 0) {
-      const queue = filterExecutableFromPlan(newPlan, cwd, "\u2705 \u5DF2\u81EA\u52A8\u751F\u6210\u6267\u884C\u8BA1\u5212");
+      const queue = filterExecutableFromPlan(newPlan, cwd, "\u2705 Execution plan auto-generated");
       if (queue.taskQueue.length > 0) {
         return queue;
       }
     }
   } catch (error) {
-    console.error("\u8B66\u544A: \u81EA\u52A8\u751F\u6210\u8BA1\u5212\u5931\u8D25:", error instanceof Error ? error.message : String(error));
+    console.error("Warning: Auto-generate plan failed:", error instanceof Error ? error.message : String(error));
   }
-  console.error("\u9519\u8BEF: \u65E0\u6CD5\u83B7\u53D6\u4EFB\u52A1\u5217\u8868");
-  console.error("\u63D0\u793A: \u8BF7\u5148\u8FD0\u884C `projmnt4claude plan recommend` \u751F\u6210\u6267\u884C\u8BA1\u5212");
+  console.error("Error: Cannot get task list");
+  console.error("Hint: Please run `projmnt4claude plan recommend` to generate execution plan");
   process.exit(1);
 }
 function filterExecutableFromPlan(plan, cwd, logPrefix) {
@@ -33942,7 +33942,7 @@ function filterExecutableFromPlan(plan, cwd, logPrefix) {
   });
   const filteredCount = plan.tasks.length - filteredTasks.length;
   if (filteredCount > 0) {
-    console.log(`${logPrefix} (\u5DF2\u8FC7\u6EE4 ${filteredCount} \u4E2A\u7EC8\u6001\u4EFB\u52A1)`);
+    console.log(`${logPrefix} (filtered ${filteredCount} terminal tasks)`);
   } else {
     console.log(logPrefix);
   }
@@ -33953,33 +33953,33 @@ function filterExecutableFromPlan(plan, cwd, logPrefix) {
 function printSummary(summary) {
   console.log("");
   console.log("\u2501".repeat(SEPARATOR_WIDTH));
-  console.log("\uD83D\uDCCA \u6267\u884C\u6458\u8981");
+  console.log("\uD83D\uDCCA Execution Summary");
   console.log("\u2501".repeat(SEPARATOR_WIDTH));
-  console.log(`   \u603B\u4EFB\u52A1\u6570: ${summary.totalTasks}`);
-  console.log(`   \u2705 \u901A\u8FC7: ${summary.passed}`);
-  console.log(`   \u274C \u5931\u8D25: ${summary.failed}`);
-  console.log(`   \uD83D\uDD04 \u91CD\u8BD5: ${summary.totalRetries}`);
-  console.log(`   \u23F1\uFE0F  \u8017\u65F6: ${(summary.duration / 1000).toFixed(1)}s`);
+  console.log(`   Total tasks: ${summary.totalTasks}`);
+  console.log(`   \u2705 Passed: ${summary.passed}`);
+  console.log(`   \u274C Failed: ${summary.failed}`);
+  console.log(`   \uD83D\uDD04 Retries: ${summary.totalRetries}`);
+  console.log(`   \u23F1\uFE0F  Duration: ${(summary.duration / 1000).toFixed(1)}s`);
   console.log("");
   if (summary.failed > 0) {
-    console.log("\u274C \u5931\u8D25\u7684\u4EFB\u52A1:");
+    console.log("\u274C Failed tasks:");
     for (const [taskId, record] of summary.taskResults) {
       if (record.reviewVerdict?.result === "NOPASS" || record.devReport.status === "failed") {
-        console.log(`   - ${taskId}: ${record.reviewVerdict?.reason || record.devReport.error || "\u672A\u77E5\u9519\u8BEF"}`);
+        console.log(`   - ${taskId}: ${record.reviewVerdict?.reason || record.devReport.error || "Unknown error"}`);
       }
     }
     console.log("");
   }
   console.log("\u2501".repeat(SEPARATOR_WIDTH));
   if (summary.failed === 0) {
-    console.log("\u2705 \u6240\u6709\u4EFB\u52A1\u6267\u884C\u6210\u529F\uFF01");
+    console.log("\u2705 All tasks executed successfully!");
   } else {
-    console.log(`\u26A0\uFE0F  \u90E8\u5206\u4EFB\u52A1\u5931\u8D25\uFF0C\u8BF7\u68C0\u67E5\u62A5\u544A\u83B7\u53D6\u8BE6\u60C5`);
+    console.log(`\u26A0\uFE0F  Some tasks failed, check reports for details`);
   }
   console.log("");
   console.log("\u2501".repeat(SEPARATOR_WIDTH));
-  console.log("\uD83D\uDCCA \u6D41\u6C34\u7EBF\u72B6\u6001\u5DF2\u4FDD\u5B58\u5230: .projmnt4claude/harness-status.json");
-  console.log("\uD83D\uDCA1 \u67E5\u8BE2\u8FDB\u5EA6: cat .projmnt4claude/harness-status.json");
+  console.log("\uD83D\uDCCA Pipeline status saved to: .projmnt4claude/harness-status.json");
+  console.log("\uD83D\uDCA1 Check progress: cat .projmnt4claude/harness-status.json");
   console.log("\u2501".repeat(SEPARATOR_WIDTH));
 }
 

@@ -18,7 +18,7 @@ import { Pre } from '../utils/pre';
 import { DEFAULT_GIT_HOOK } from '../types/config';
 
 /**
- * 检查结果接口
+ * Check result interface
  */
 interface CheckResult {
   name: string;
@@ -29,75 +29,75 @@ interface CheckResult {
 }
 
 /**
- * 运行环境诊断
+ * Run environment diagnostics
  */
 export async function runDoctor(fix: boolean = false, cwd: string = process.cwd()): Promise<void> {
   console.log('');
   console.log('━'.repeat(SEPARATOR_WIDTH));
-  console.log('🔍 环境诊断');
+  console.log('🔍 Environment Diagnostics');
   console.log('━'.repeat(SEPARATOR_WIDTH));
   console.log('');
 
   const results: CheckResult[] = [];
 
-  // 1. 检查项目初始化状态
+  // 1. Check project initialization status
   results.push(checkProjectInit(cwd));
 
-  // 2. 检查插件安装作用域（始终检查，不依赖项目初始化状态）
+  // 2. Check plugin installation scope (always check, doesn't depend on project init)
   results.push(...checkPluginInstallationScope(cwd));
 
-  // 只有项目已初始化才检查后续项
+  // Only check subsequent items if project is initialized
   if (isInitialized(cwd)) {
-    // 3. 检查插件缓存
+    // 3. Check plugin cache
     results.push(checkPluginCache());
 
-    // 4. 检查项目技能文件
+    // 4. Check project skill files
     results.push(...checkSkillFiles(cwd));
 
-    // 5. 检查目录结构完整性
+    // 5. Check directory structure integrity
     results.push(...checkDirectoryStructure(cwd));
 
-    // 6. 检查日志模块就绪性
+    // 6. Check logging module readiness
     results.push(...checkLoggingModule(cwd));
 
-    // 8. 检查废弃状态残留
+    // 8. Check deprecated status remnants
     results.push(...checkDeprecatedStatuses(cwd));
 
-    // 9. 检查 Git Hook 状态
+    // 9. Check Git Hook status
     results.push(...checkGitHooks(cwd));
 
-    // 10. 检查废弃的 Claude Code Hook 残留
+    // 10. Check deprecated Claude Code Hook remnants
     results.push(...checkDeprecatedHooks(cwd));
   }
 
-  // 显示结果
+  // Display results
   displayResults(results);
 
-  // 如果有可修复的问题且开启了 --fix
+  // If there are fixable issues and --fix is enabled
   const fixableIssues = results.filter(r => r.status !== 'ok' && r.fixable);
   if (fix && fixableIssues.length > 0) {
     console.log('');
     console.log('━'.repeat(SEPARATOR_WIDTH));
-    console.log('🔧 自动修复');
+    console.log('🔧 Auto Fix');
     console.log('━'.repeat(SEPARATOR_WIDTH));
     console.log('');
 
     await fixIssues(fixableIssues, cwd);
 
-    // 重新检查
+    // Re-checking
     console.log('');
-    console.log('🔄 重新检查...');
+    console.log('🔄 Re-checking...');
     console.log('');
     await runDoctor(false, cwd);
     return;
   } else if (fixableIssues.length > 0) {
     console.log('');
-    console.log(`💡 使用 --fix 参数自动修复 ${fixableIssues.length} 个问题`);
+    console.log(`💡 Use --fix to auto-fix ${fixableIssues.length} issue(s)`);
   }
 }
 
 /**
- * 检查项目初始化状态
+ * Check project initialization status
  */
 function checkProjectInit(cwd: string): CheckResult {
   const projectDir = getProjectDir(cwd);
@@ -105,98 +105,98 @@ function checkProjectInit(cwd: string): CheckResult {
 
   if (!fs.existsSync(configPath)) {
     return {
-      name: '项目初始化',
+      name: 'Project Initialization',
       status: 'error',
-      message: '项目未初始化',
-      details: ['请运行 projmnt4claude setup 初始化项目'],
+      message: 'Project not initialized',
+      details: ['Run projmnt4claude setup to initialize the project'],
       fixable: false,
     };
   }
 
   return {
-    name: '项目初始化',
+    name: 'Project Initialization',
     status: 'ok',
-    message: '项目已初始化',
-    details: [`配置文件: ${configPath}`],
+    message: 'Project initialized',
+    details: [`Config file: ${configPath}`],
     fixable: false,
   };
 }
 
 /**
- * 检查插件缓存
+ * Check plugin cache
  */
 function checkPluginCache(): CheckResult {
   const pluginRoot = process.env.CLAUDE_PLUGIN_ROOT;
   const details: string[] = [];
   let status: 'ok' | 'warning' | 'error' = 'ok';
-  let message = '插件缓存正常';
+  let message = 'Plugin cache normal';
 
   if (!pluginRoot) {
     return {
-      name: '插件缓存',
+      name: 'Plugin Cache',
       status: 'ok',
-      message: 'CLI 模式运行，跳过插件缓存检查',
-      details: ['CLAUDE_PLUGIN_ROOT 未设置（CLI 模式下正常）'],
+      message: 'Running in CLI mode, skipping plugin cache check',
+      details: ['CLAUDE_PLUGIN_ROOT not set (normal in CLI mode)'],
       fixable: false,
     };
   }
 
-  details.push(`插件根目录: ${pluginRoot}`);
+  details.push(`Plugin root: ${pluginRoot}`);
 
-  // 检查主文件
+  // Check main file
   const mainFile = path.join(pluginRoot, 'dist', 'projmnt4claude.js');
   if (!fs.existsSync(mainFile)) {
     status = 'error';
-    message = '主程序文件缺失';
-    details.push(`缺失: ${mainFile}`);
+    message = 'Main program file missing';
+    details.push(`Missing: ${mainFile}`);
   } else {
-    details.push(`✓ 主程序: ${mainFile}`);
+    details.push(`✓ Main program: ${mainFile}`);
   }
 
-  // 检查 locales 目录
+  // Check locales directory
   const localesDir = path.join(pluginRoot, 'locales');
   if (!fs.existsSync(localesDir)) {
     if (status !== 'error') {
       status = 'warning';
-      message = 'locales 目录缺失';
+      message = 'locales directory missing';
     }
-    details.push(`缺失: ${localesDir}`);
+    details.push(`Missing: ${localesDir}`);
   } else {
-    // 检查语言目录
+    // Check language directories
     const zhDir = path.join(localesDir, 'zh');
     const enDir = path.join(localesDir, 'en');
 
     if (fs.existsSync(zhDir)) {
-      details.push('✓ 中文语言包: locales/zh/');
+      details.push('✓ Chinese language pack: locales/zh/');
     }
     if (fs.existsSync(enDir)) {
-      details.push('✓ 英文语言包: locales/en/');
+      details.push('✓ English language pack: locales/en/');
     }
 
     if (!fs.existsSync(zhDir) && !fs.existsSync(enDir)) {
       if (status !== 'error') {
         status = 'warning';
-        message = '语言包目录缺失';
+        message = 'Language pack directories missing';
       }
-      details.push('警告: 未找到任何语言包目录');
+      details.push('Warning: No language pack directories found');
     }
   }
 
-  // 检查 commands 目录
+  // Check commands directory
   const commandsDir = path.join(pluginRoot, 'commands');
   if (!fs.existsSync(commandsDir)) {
     if (status !== 'error') {
       status = 'warning';
-      message = 'commands 目录缺失（slash commands 可能无法工作）';
+      message = 'commands directory missing (slash commands may not work)';
     }
-    details.push(`缺失: ${commandsDir}`);
+    details.push(`Missing: ${commandsDir}`);
   } else {
     const commandFiles = fs.readdirSync(commandsDir).filter(f => f.endsWith('.md'));
-    details.push(`✓ Slash commands: ${commandFiles.length} 个`);
+    details.push(`✓ Slash commands: ${commandFiles.length}`);
   }
 
   return {
-    name: '插件缓存',
+    name: 'Plugin Cache',
     status,
     message,
     details,
@@ -205,30 +205,30 @@ function checkPluginCache(): CheckResult {
 }
 
 /**
- * 检查项目技能文件
+ * Check project skill files
  */
 function checkSkillFiles(cwd: string): CheckResult[] {
   const results: CheckResult[] = [];
   const toolboxDir = getToolboxDir(cwd);
   const skillDir = path.join(toolboxDir, 'projmnt4claude');
 
-  // 检查 commands 目录
+  // Check commands directory
   const commandsDir = path.join(skillDir, 'commands');
   if (fs.existsSync(commandsDir)) {
     const commandFiles = fs.readdirSync(commandsDir).filter(f => f.endsWith('.md'));
     results.push({
-      name: '命令文档',
+      name: 'Command Docs',
       status: 'ok',
-      message: `${commandFiles.length} 个命令文档`,
-      details: [`位置: ${commandsDir}`],
+      message: `${commandFiles.length} command docs`,
+      details: [`Location: ${commandsDir}`],
       fixable: false,
     });
   } else {
     results.push({
-      name: '命令文档',
+      name: 'Command Docs',
       status: 'warning',
-      message: '命令文档目录缺失',
-      details: ['可能需要重新运行 setup 来复制命令文档'],
+      message: 'Command docs directory missing',
+      details: ['May need to re-run setup to copy command docs'],
       fixable: true,
     });
   }
@@ -237,7 +237,7 @@ function checkSkillFiles(cwd: string): CheckResult[] {
 }
 
 /**
- * 检查目录结构完整性
+ * Check directory structure integrity
  */
 function checkDirectoryStructure(cwd: string): CheckResult[] {
   const results: CheckResult[] = [];
@@ -248,28 +248,28 @@ function checkDirectoryStructure(cwd: string): CheckResult[] {
     { name: 'toolbox', path: getToolboxDir(cwd) },
   ];
 
-  // 检查必需目录
+  // Check required directories
   for (const dir of requiredDirs) {
     if (!fs.existsSync(dir.path)) {
       results.push({
-        name: `目录: ${dir.name}`,
+        name: `Directory: ${dir.name}`,
         status: 'error',
-        message: '必需目录缺失',
-        details: [`缺失: ${dir.path}`],
+        message: 'Required directory missing',
+        details: [`Missing: ${dir.path}`],
         fixable: true,
       });
     } else {
       results.push({
-        name: `目录: ${dir.name}`,
+        name: `Directory: ${dir.name}`,
         status: 'ok',
-        message: '存在',
+        message: 'Exists',
         details: [],
         fixable: false,
       });
     }
   }
 
-  // 检查 archive 目录 - 仅在存在 abandoned 任务时才有意义
+  // Check archive directory - only meaningful when abandoned tasks exist
   const tasksDir = getTasksDir(cwd);
   if (fs.existsSync(tasksDir)) {
     const taskIds = getAllTaskIds(cwd);
@@ -287,10 +287,10 @@ function checkDirectoryStructure(cwd: string): CheckResult[] {
       const archiveDir = path.join(projectDir, 'archive');
       if (!fs.existsSync(archiveDir)) {
         results.push({
-          name: '目录: archive',
+          name: 'Directory: archive',
           status: 'warning',
-          message: '存在已废弃任务但 archive 目录缺失',
-          details: [`缺失: ${archiveDir}`],
+          message: 'Abandoned tasks exist but archive directory is missing',
+          details: [`Missing: ${archiveDir}`],
           fixable: true,
         });
       }
@@ -301,8 +301,8 @@ function checkDirectoryStructure(cwd: string): CheckResult[] {
 }
 
 /**
- * 检查插件安装作用域问题
- * 检测 project-scope 安装可能导致的其他项目无法更新的问题
+ * Check plugin installation scope issues
+ * Detects project-scope installation issues that may prevent updates from other projects
  */
 function checkPluginInstallationScope(cwd: string): CheckResult[] {
   const results: CheckResult[] = [];
@@ -317,7 +317,7 @@ function checkPluginInstallationScope(cwd: string): CheckResult[] {
     const pluginsConfig = JSON.parse(fs.readFileSync(installedPluginsPath, 'utf-8'));
     const plugins = pluginsConfig.plugins || {};
 
-    // 查找所有 project-scope 安装的 projmnt4claude
+    // Find all project-scope installations of projmnt4claude
     const pluginKey = 'projmnt4claude@projmnt4claude';
     const installations = plugins[pluginKey] || [];
 
@@ -326,11 +326,11 @@ function checkPluginInstallationScope(cwd: string): CheckResult[] {
     );
 
     if (projectScopedInstalls.length === 0) {
-      // 没有发现 project-scope 安装，正常
+      // No project-scope installation found, normal
       return results;
     }
 
-    // 检查当前项目是否是安装项目
+    // Check if current project is the installation project
     const normalizedCwd = path.resolve(cwd);
     const mismatchedInstalls = projectScopedInstalls.filter(
       (inst: { scope: string; projectPath?: string }) => {
@@ -342,43 +342,43 @@ function checkPluginInstallationScope(cwd: string): CheckResult[] {
     if (mismatchedInstalls.length > 0) {
       const mismatchedList = mismatchedInstalls.map(
         (inst: { scope: string; projectPath?: string; version?: string }) =>
-          `  - 版本 ${inst.version || '未知'} 绑定到: ${inst.projectPath || '未知路径'}`
+          `  - Version ${inst.version || 'unknown'} bound to: ${inst.projectPath || 'unknown path'}`
       ).join('\n');
 
       results.push({
-        name: '插件安装作用域',
+        name: 'Plugin Installation Scope',
         status: 'warning',
-        message: '检测到 project-scope 安装可能导致跨项目更新问题',
+        message: 'Detected project-scope installation may cause cross-project update issues',
         details: [
-          'projmnt4claude 以 project-scope 安装在以下项目:',
+          'projmnt4claude installed with project-scope in:',
           mismatchedList,
           '',
-          '⚠️  问题说明:',
-          '  Claude Code 的 project-scope 插件绑定到特定项目路径。',
-          '  从其他项目尝试更新时会报错: "Plugin is not installed at scope project"',
+          '⚠️  Issue:',
+          '  Claude Code project-scope plugins are bound to specific project paths.',
+          '  Updating from other projects will fail: "Plugin is not installed at scope project"',
           '',
-          '💡 建议解决方案:',
-          '  1. 卸载现有安装:',
+          '💡 Recommended Solution:',
+          '  1. Uninstall existing installation:',
           '     claude plugins uninstall projmnt4claude@projmnt4claude',
           '',
-          '  2. 以 user-scope 重新安装 (推荐):',
+          '  2. Re-install with user-scope (recommended):',
           '     claude plugins install projmnt4claude@projmnt4claude --scope user',
           '',
-          '  或者从原安装项目更新:',
-          `     cd ${mismatchedInstalls[0].projectPath || '<原项目路径>'}`,
+          '  Or update from the original project:',
+          `     cd ${mismatchedInstalls[0].projectPath || '<original-project-path>'}`,
           '     claude plugins update projmnt4claude@projmnt4claude',
         ],
-        fixable: false, // 需要用户手动操作
+        fixable: false, // Requires manual user action
       });
     } else if (projectScopedInstalls.length > 0) {
-      // 当前项目匹配，但提醒 user-scope 更好
+      // Current project matches, but suggest user-scope
       results.push({
-        name: '插件安装作用域',
+        name: 'Plugin Installation Scope',
         status: 'warning',
-        message: '建议使用 user-scope 安装以便跨项目使用',
+        message: 'Recommend user-scope installation for cross-project use',
         details: [
-          '当前项目已正确绑定 project-scope 安装',
-          '但建议使用 user-scope 以便在所有项目中使用:',
+          'Current project is correctly bound to project-scope installation',
+          'But user-scope is recommended for use in all projects:',
           '',
           '  claude plugins uninstall projmnt4claude@projmnt4claude',
           '  claude plugins install projmnt4claude@projmnt4claude --scope user',
@@ -387,45 +387,45 @@ function checkPluginInstallationScope(cwd: string): CheckResult[] {
       });
     }
   } catch {
-    // 忽略解析错误
+    // Ignore parse errors
   }
 
   return results;
 }
 
 /**
- * 检查日志模块就绪性
- * 包含: logs 目录存在性、logging.* 配置完整性、日志文件健康检查
+ * Check logging module readiness
+ * Includes: logs directory existence, logging.* config completeness, log file health check
  */
 function checkLoggingModule(cwd: string): CheckResult[] {
   const results: CheckResult[] = [];
   const logsDir = getLogsDir(cwd);
 
-  // CP-12: logs 目录存在性检查
+  // CP-12: logs directory existence check
   if (!fs.existsSync(logsDir)) {
     results.push({
-      name: '日志目录',
+      name: 'Log Directory',
       status: 'warning',
-      message: 'logs 目录不存在',
+      message: 'logs directory does not exist',
       details: [
-        `缺失: ${logsDir}`,
-        '请运行 projmnt4claude setup 升级项目结构',
+        `Missing: ${logsDir}`,
+        'Run projmnt4claude setup to upgrade project structure',
       ],
       fixable: true,
     });
-    // 目录不存在时跳过后续日志健康检查
+    // Skip subsequent log health checks when directory doesn't exist
     return results;
   }
 
   results.push({
-    name: '日志目录',
+    name: 'Log Directory',
     status: 'ok',
-    message: '存在',
-    details: [`位置: ${logsDir}`],
+    message: 'Exists',
+    details: [`Location: ${logsDir}`],
     fixable: false,
   });
 
-  // CP-13: logging.* 配置完整性检查
+  // CP-13: logging.* config completeness check
   const config = readConfig(cwd);
   if (config) {
     const loggingConfig = config.logging as Record<string, unknown> | undefined;
@@ -439,28 +439,28 @@ function checkLoggingModule(cwd: string): CheckResult[] {
     const missingKeys: string[] = [];
     for (const [key, defaultValue] of Object.entries(requiredKeys)) {
       if (!loggingConfig || loggingConfig[key] === undefined) {
-        missingKeys.push(`logging.${key} (默认: ${JSON.stringify(defaultValue)})`);
+        missingKeys.push(`logging.${key} (default: ${JSON.stringify(defaultValue)})`);
       }
     }
 
     if (missingKeys.length > 0) {
       results.push({
-        name: '日志配置完整性',
+        name: 'Log Config Completeness',
         status: 'warning',
-        message: `${missingKeys.length} 个日志配置项缺失`,
+        message: `${missingKeys.length} log config items missing`,
         details: [
-          '缺失的配置项:',
+          'Missing config items:',
           ...missingKeys.map(k => `  - ${k}`),
           '',
-          '💡 运行 projmnt4claude doctor --fix 自动补全默认值',
+          '💡 Run projmnt4claude doctor --fix to auto-fill defaults',
         ],
         fixable: true,
       });
     } else {
       results.push({
-        name: '日志配置完整性',
+        name: 'Log Config Completeness',
         status: 'ok',
-        message: '所有 logging.* 配置项完整',
+        message: 'All logging.* config items present',
         details: [
           `level: ${loggingConfig!.level}`,
           `maxFiles: ${loggingConfig!.maxFiles}`,
@@ -471,22 +471,22 @@ function checkLoggingModule(cwd: string): CheckResult[] {
       });
     }
 
-    // 检查 ai 和 training 配置
+    // Check ai and training config
     const aiConfig = config.ai as Record<string, unknown> | undefined;
     if (!aiConfig || aiConfig.provider === undefined) {
       results.push({
-        name: 'AI 配置完整性',
+        name: 'AI Config Completeness',
         status: 'warning',
-        message: 'ai.provider 配置缺失',
-        details: [`默认值: claude-code`, '💡 运行 projmnt4claude doctor --fix 自动补全'],
+        message: 'ai.provider config missing',
+        details: [`Default: claude-code`, '💡 Run projmnt4claude doctor --fix to auto-fill'],
         fixable: true,
       });
     } else {
       results.push({
-        name: 'AI 配置完整性',
+        name: 'AI Config Completeness',
         status: 'ok',
         message: `provider: ${aiConfig.provider}`,
-        details: aiConfig.customEndpoint ? [`自定义端点: ${aiConfig.customEndpoint}`] : [],
+        details: aiConfig.customEndpoint ? [`Custom endpoint: ${aiConfig.customEndpoint}`] : [],
         fixable: false,
       });
     }
@@ -494,15 +494,15 @@ function checkLoggingModule(cwd: string): CheckResult[] {
     const trainingConfig = config.training as Record<string, unknown> | undefined;
     if (!trainingConfig || trainingConfig.exportEnabled === undefined) {
       results.push({
-        name: '训练数据配置完整性',
+        name: 'Training Data Config Completeness',
         status: 'warning',
-        message: 'training.* 配置缺失',
-        details: ['💡 运行 projmnt4claude doctor --fix 自动补全默认值'],
+        message: 'training.* config missing',
+        details: ['💡 Run projmnt4claude doctor --fix to auto-fill defaults'],
         fixable: true,
       });
     } else {
       results.push({
-        name: '训练数据配置完整性',
+        name: 'Training Data Config Completeness',
         status: 'ok',
         message: `exportEnabled: ${trainingConfig.exportEnabled}`,
         details: [`outputDir: ${trainingConfig.outputDir}`],
@@ -511,7 +511,7 @@ function checkLoggingModule(cwd: string): CheckResult[] {
     }
   }
 
-  // CP-14: 日志健康检查
+  // CP-14: Log health check
   const oversizedFiles: string[] = [];
   let totalSizeMB = 0;
 
@@ -527,33 +527,33 @@ function checkLoggingModule(cwd: string): CheckResult[] {
           oversizedFiles.push(`${file} (${sizeMB.toFixed(1)}MB)`);
         }
       } catch {
-        // 跳过无法读取的文件
+        // Skip unreadable files
       }
     }
 
     const details: string[] = [];
     let status: 'ok' | 'warning' = 'ok';
-    let message = `日志健康 (${files.length} 个文件, ${totalSizeMB.toFixed(1)}MB)`;
+    let message = `Log health (${files.length} files, ${totalSizeMB.toFixed(1)}MB)`;
 
     if (oversizedFiles.length > 0) {
       status = 'warning';
-      message = `${oversizedFiles.length} 个日志文件超过 10MB`;
-      details.push('超过 10MB 的文件:');
+      message = `${oversizedFiles.length} log files exceed 10MB`;
+      details.push('Files over 10MB:');
       details.push(...oversizedFiles.slice(0, 5).map(f => `  - ${f}`));
     }
 
     if (totalSizeMB > 100) {
       status = 'warning';
-      message = `日志目录总大小超过 100MB (${totalSizeMB.toFixed(1)}MB)`;
-      details.push(`建议清理旧日志: projmnt4claude config set logging.maxFiles 15`);
+      message = `Log directory exceeds 100MB (${totalSizeMB.toFixed(1)}MB)`;
+      details.push(`Consider cleaning old logs: projmnt4claude config set logging.maxFiles 15`);
     }
 
     if (status === 'ok') {
-      details.push(`总大小: ${totalSizeMB.toFixed(1)}MB`);
+      details.push(`Total size: ${totalSizeMB.toFixed(1)}MB`);
     }
 
     results.push({
-      name: '日志健康',
+      name: 'Log Health',
       status,
       message,
       details,
@@ -561,10 +561,10 @@ function checkLoggingModule(cwd: string): CheckResult[] {
     });
   } catch {
     results.push({
-      name: '日志健康',
+      name: 'Log Health',
       status: 'warning',
-      message: '无法读取日志目录',
-      details: [`路径: ${logsDir}`],
+      message: 'Cannot read log directory',
+      details: [`Path: ${logsDir}`],
       fixable: false,
     });
   }
@@ -573,8 +573,8 @@ function checkLoggingModule(cwd: string): CheckResult[] {
 }
 
 /**
- * 检查废弃状态残留
- * 检测任务 meta.json 中是否包含已废弃的 reopened/needs_human 状态
+ * Check deprecated status remnants
+ * Detects if task meta.json contains deprecated reopened/needs_human statuses
  */
 function checkDeprecatedStatuses(cwd: string): CheckResult[] {
   const results: CheckResult[] = [];
@@ -582,9 +582,9 @@ function checkDeprecatedStatuses(cwd: string): CheckResult[] {
 
   if (!fs.existsSync(tasksDir)) {
     return [{
-      name: '废弃状态检测',
+      name: 'Deprecated Status Check',
       status: 'ok',
-      message: '任务目录不存在（无任务）',
+      message: 'Task directory does not exist (no tasks)',
       details: [],
       fixable: false,
     }];
@@ -603,33 +603,33 @@ function checkDeprecatedStatuses(cwd: string): CheckResult[] {
           tasksWithDeprecatedStatus.push({ taskId, status: meta.status });
         }
       } catch {
-        // 忽略解析错误
+        // Ignore parse errors
       }
     }
   }
 
   if (tasksWithDeprecatedStatus.length === 0) {
     results.push({
-      name: '废弃状态检测',
+      name: 'Deprecated Status Check',
       status: 'ok',
-      message: `所有 ${taskIds.length} 个任务无废弃状态残留`,
-      details: ['✓ 无 reopened/needs_human 状态'],
+      message: `All ${taskIds.length} tasks have no deprecated status`,
+      details: ['✓ No reopened/needs_human status'],
       fixable: false,
     });
   } else {
     results.push({
-      name: '废弃状态检测',
+      name: 'Deprecated Status Check',
       status: 'warning',
-      message: `${tasksWithDeprecatedStatus.length} 个任务使用废弃状态`,
+      message: `${tasksWithDeprecatedStatus.length} tasks using deprecated status`,
       details: [
-        '废弃状态的任务:',
+        'Tasks with deprecated status:',
         ...tasksWithDeprecatedStatus.map(t => `  - ${t.taskId}: status=${t.status}`),
         '',
-        '⚠️  废弃说明:',
-        '  - reopened (v4 废弃): 应使用 open + reopenCount + transitionNote',
-        '  - needs_human (v4 废弃): 应使用 open + resumeAction',
+        '⚠️  Deprecation notice:',
+        '  - reopened (deprecated in v4): Use open + reopenCount + transitionNote',
+        '  - needs_human (deprecated in v4): Use open + resumeAction',
         '',
-        '💡 运行 projmnt4claude analyze --fix -y 自动迁移',
+        '💡 Run projmnt4claude analyze --fix -y to auto-migrate',
       ],
       fixable: true,
     });
@@ -639,26 +639,26 @@ function checkDeprecatedStatuses(cwd: string): CheckResult[] {
 }
 
 /**
- * 检查 Git Hook 状态
- * 读取 gitHook.enabled 配置决定是否检测
- * 配置禁用时跳过检测，非 git 仓库时自动降级
+ * Check Git Hook status
+ * Reads gitHook.enabled config to decide whether to check
+ * Skips check when disabled in config, auto-degrades when not a git repo
  */
 function checkGitHooks(cwd: string): CheckResult[] {
   const config = readConfig(cwd);
   const gitHookConfig = config?.gitHook ?? DEFAULT_GIT_HOOK;
 
-  // CP-2: 配置禁用时跳过
+  // CP-2: Skip if disabled in config
   if (!gitHookConfig.enabled) {
-    return [{ status: 'ok', name: 'Git Hooks', message: 'Git Hook 检测已通过配置禁用', fixable: false }];
+    return [{ status: 'ok', name: 'Git Hooks', message: 'Git Hook check disabled via config', fixable: false }];
   }
 
-  // CP-3: 非 git 仓库时自动降级
+  // CP-3: Auto-degrade if not a git repo
   const gitDir = path.join(cwd, '.git');
   if (!fs.existsSync(gitDir)) {
-    return [{ status: 'ok', name: 'Git Hooks', message: '非 git 仓库，跳过 Git Hook 检测', fixable: false }];
+    return [{ status: 'ok', name: 'Git Hooks', message: 'Not a git repository, skipping Git Hook check', fixable: false }];
   }
 
-  // CP-1: 正常检测 git hook 状态
+  // CP-1: Normal git hook status check
   try {
     const pre = new Pre(cwd);
 
@@ -666,7 +666,7 @@ function checkGitHooks(cwd: string): CheckResult[] {
       return [{
         name: 'Git Hooks',
         status: 'ok',
-        message: 'pre-commit hook 已安装',
+        message: 'pre-commit hook installed',
         fixable: false,
       }];
     }
@@ -674,10 +674,10 @@ function checkGitHooks(cwd: string): CheckResult[] {
     return [{
       name: 'Git Hooks',
       status: 'warning',
-      message: 'pre-commit hook 未安装',
+      message: 'pre-commit hook not installed',
       details: [
-        '建议安装 pre-commit hook 以在提交前自动运行测试',
-        '运行 projmnt4claude pre install 安装',
+        'Recommended to install pre-commit hook to run tests before commits',
+        'Run: projmnt4claude pre install',
       ],
       fixable: false,
     }];
@@ -685,42 +685,42 @@ function checkGitHooks(cwd: string): CheckResult[] {
     return [{
       name: 'Git Hooks',
       status: 'warning',
-      message: '无法检查 Git Hook 状态',
+      message: 'Cannot check Git Hook status',
       fixable: false,
     }];
   }
 }
 
 /**
- * 废弃的 hook 脚本文件名列表
+ * List of deprecated hook script file names
  */
 const DEPRECATED_HOOK_SCRIPTS = ['pre-complete.ts', 'post-task.ts', 'pre-task.ts', 'plan-complete.ts', 'config.json'];
 
 /**
- * 检查废弃的 Claude Code Hook 残留
- * 检测 .claude/settings.json 中的 hooks 字段和 .projmnt4claude/hooks/ 目录
+ * Check for deprecated Claude Code Hook remnants
+ * Detects hooks field in .claude/settings.json and .projmnt4claude/hooks/ directory
  */
 function checkDeprecatedHooks(cwd: string): CheckResult[] {
   const results: CheckResult[] = [];
   const deprecatedSettings: string[] = [];
   const deprecatedFiles: string[] = [];
 
-  // 1. 检查 .claude/settings.json 中的废弃 hooks
+  // 1. Check deprecated hooks in .claude/settings.json
   const settingsPath = path.join(cwd, '.claude', 'settings.json');
   if (fs.existsSync(settingsPath)) {
     try {
       const settings = JSON.parse(fs.readFileSync(settingsPath, 'utf-8'));
       const hooks = settings.hooks || {};
 
-      // 检查所有 hook 类型
+      // Check all hook types
       for (const [hookType, hookConfig] of Object.entries(hooks)) {
         if (typeof hookConfig === 'string') {
-          // 简单字符串格式
+          // Simple string format
           if (hookConfig.includes('projmnt4claude/hooks/')) {
             deprecatedSettings.push(`${hookType}: ${hookConfig}`);
           }
         } else if (Array.isArray(hookConfig)) {
-          // 数组格式
+          // Array format
           for (const item of hookConfig) {
             if (typeof item === 'string' && item.includes('projmnt4claude/hooks/')) {
               deprecatedSettings.push(`${hookType}[]: ${item}`);
@@ -733,7 +733,7 @@ function checkDeprecatedHooks(cwd: string): CheckResult[] {
             }
           }
         } else if (typeof hookConfig === 'object' && hookConfig !== null) {
-          // 对象格式
+          // Object format
           const hookObj = hookConfig as { command?: string; script?: string; run?: string };
           const hookValue = hookObj.command || hookObj.script || hookObj.run || '';
           if (hookValue.includes('projmnt4claude/hooks/')) {
@@ -742,11 +742,11 @@ function checkDeprecatedHooks(cwd: string): CheckResult[] {
         }
       }
     } catch {
-      // 忽略解析错误
+      // Ignore parse errors
     }
   }
 
-  // 2. 检查 .projmnt4claude/hooks/ 目录是否存在废弃脚本
+  // 2. Check .projmnt4claude/hooks/ directory for deprecated scripts
   const hooksDir = path.join(cwd, '.projmnt4claude', 'hooks');
   if (fs.existsSync(hooksDir)) {
     try {
@@ -757,20 +757,20 @@ function checkDeprecatedHooks(cwd: string): CheckResult[] {
         }
       }
     } catch {
-      // 忽略目录读取错误
+      // Ignore directory read errors
     }
   }
 
-  // 3. 生成检查结果
+  // 3. Generate check results
   const hasSettingsIssue = deprecatedSettings.length > 0;
   const hasFilesIssue = deprecatedFiles.length > 0;
 
   if (hasSettingsIssue || hasFilesIssue) {
-    const details: string[] = ['发现废弃的 Claude Code Hook 配置，建议运行 doctor --fix 清理'];
+    const details: string[] = ['Deprecated Claude Code Hook config found, run doctor --fix to clean'];
 
     if (hasSettingsIssue) {
       details.push('');
-      details.push('.claude/settings.json 中的废弃 hooks:');
+      details.push('Deprecated hooks in .claude/settings.json:');
       for (const setting of deprecatedSettings) {
         details.push(`  - ${setting}`);
       }
@@ -778,30 +778,30 @@ function checkDeprecatedHooks(cwd: string): CheckResult[] {
 
     if (hasFilesIssue) {
       details.push('');
-      details.push(`.projmnt4claude/hooks/ 目录中的废弃脚本:`);
+      details.push(`Deprecated scripts in .projmnt4claude/hooks/:`);
       for (const file of deprecatedFiles) {
         details.push(`  - ${file}`);
       }
     }
 
     details.push('');
-    details.push('⚠️  废弃说明:');
-    details.push('  Claude Code Hook 功能已被移除，残留配置可能导致问题');
+    details.push('⚠️  Deprecation notice:');
+    details.push('  Claude Code Hook feature has been removed, residual config may cause issues');
     details.push('');
-    details.push('💡 运行 projmnt4claude doctor --fix 自动清理');
+    details.push('💡 Run projmnt4claude doctor --fix to auto-clean');
 
     results.push({
-      name: '废弃 Hook 检测',
+      name: 'Deprecated Hook Check',
       status: 'warning',
-      message: '发现废弃的 Claude Code Hook 配置',
+      message: 'Deprecated Claude Code Hook config found',
       details,
       fixable: true,
     });
   } else {
     results.push({
-      name: '废弃 Hook 检测',
+      name: 'Deprecated Hook Check',
       status: 'ok',
-      message: '未发现废弃的 Claude Code Hook 配置',
+      message: 'No deprecated Claude Code Hook config found',
       details: [],
       fixable: false,
     });
@@ -811,10 +811,10 @@ function checkDeprecatedHooks(cwd: string): CheckResult[] {
 }
 
 /**
- * 显示检查结果
+ * Display check results
  */
 function displayResults(results: CheckResult[]): void {
-  // 按状态排序：error > warning > ok
+  // Sort by status: error > warning > ok
   const sorted = [...results].sort((a, b) => {
     const order = { error: 0, warning: 1, ok: 2 };
     return order[a.status] - order[b.status];
@@ -841,25 +841,25 @@ function displayResults(results: CheckResult[]): void {
 
   console.log('');
   console.log('━'.repeat(SEPARATOR_WIDTH));
-  console.log(`📊 汇总: ${errorCount} 错误, ${warningCount} 警告, ${okCount} 正常`);
+  console.log(`📊 Summary: ${errorCount} errors, ${warningCount} warnings, ${okCount} ok`);
 
   if (errorCount === 0 && warningCount === 0) {
-    console.log('✅ 所有检查通过！');
+    console.log('✅ All checks passed!');
   }
 }
 
 /**
- * 解析插件根目录
- * 优先使用 CLAUDE_PLUGIN_ROOT 环境变量（插件模式）
- * 回退到相对于当前文件的包根目录（CLI/开发模式）
+ * Resolve plugin root directory
+ * Priority: CLAUDE_PLUGIN_ROOT env var (plugin mode)
+ * Fallback: package root relative to current file (CLI/dev mode)
  */
 function resolvePluginRoot(): string | null {
-  // 1. 插件模式 - Claude Code 注入的环境变量
+  // 1. Plugin mode - env var injected by Claude Code
   if (process.env.CLAUDE_PLUGIN_ROOT) {
     return process.env.CLAUDE_PLUGIN_ROOT;
   }
 
-  // 2. CLI/开发模式 - 从当前文件位置向上查找包含 locales 的目录
+  // 2. CLI/dev mode - search upward from current file for directory containing locales
   try {
     let dir = __dirname;
     for (let i = 0; i < 3; i++) {
@@ -869,34 +869,34 @@ function resolvePluginRoot(): string | null {
       dir = path.dirname(dir);
     }
   } catch {
-    // 忽略路径解析错误
+    // Ignore path resolution errors
   }
 
   return null;
 }
 
 /**
- * 修复问题
+ * Fix issues
  */
 async function fixIssues(issues: CheckResult[], cwd: string): Promise<void> {
   const projectDir = getProjectDir(cwd);
   const pluginRoot = resolvePluginRoot();
 
   for (const issue of issues) {
-    console.log(`修复: ${issue.name}...`);
+    console.log(`Fixing: ${issue.name}...`);
 
-    if (issue.name === '技能文件' || issue.name === '命令文档') {
-      // 重新复制技能文件
+    if (issue.name === 'Skill Files' || issue.name === 'Command Docs') {
+      // Re-copy skill files
       if (pluginRoot) {
         const toolboxDir = getToolboxDir(cwd);
         const skillDir = path.join(toolboxDir, 'projmnt4claude');
 
-        // 创建目录
+        // Create directory
         if (!fs.existsSync(skillDir)) {
           fs.mkdirSync(skillDir, { recursive: true });
         }
 
-        // 读取项目配置获取语言
+        // Read project config for language
         const configPath = path.join(projectDir, 'config.json');
         let language: 'zh' | 'en' = 'zh';
         if (fs.existsSync(configPath)) {
@@ -904,19 +904,19 @@ async function fixIssues(issues: CheckResult[], cwd: string): Promise<void> {
             const config = JSON.parse(fs.readFileSync(configPath, 'utf-8'));
             language = config.language || 'zh';
           } catch {
-            // 使用默认语言
+            // Use default language
           }
         }
 
-        // 复制 SKILL.md
+        // Copy SKILL.md
         const skillSource = path.join(pluginRoot, 'locales', language, 'SKILL.md');
         const skillTarget = path.join(skillDir, 'SKILL.md');
         if (fs.existsSync(skillSource)) {
           fs.copyFileSync(skillSource, skillTarget);
-          console.log(`  ✓ 已复制 SKILL.md`);
+          console.log(`  ✓ Copied SKILL.md`);
         }
 
-        // 复制命令文档
+        // Copy command docs
         const commandsSourceDir = path.join(pluginRoot, 'locales', language, 'commands');
         const commandsTargetDir = path.join(skillDir, 'commands');
         if (fs.existsSync(commandsSourceDir)) {
@@ -930,14 +930,14 @@ async function fixIssues(issues: CheckResult[], cwd: string): Promise<void> {
               path.join(commandsTargetDir, file)
             );
           }
-          console.log(`  ✓ 已复制 ${commandFiles.length} 个命令文档`);
+          console.log(`  ✓ Copied ${commandFiles.length} command docs`);
         }
       } else {
-        console.log(`  ✗ 无法修复: 未找到插件根目录（CLAUDE_PLUGIN_ROOT 未设置且无法自动定位）`);
+        console.log(`  ✗ Cannot fix: Plugin root not found (CLAUDE_PLUGIN_ROOT not set and cannot auto-locate)`);
       }
-    } else if (issue.name.startsWith('目录:')) {
-      // 创建缺失的目录
-      const dirName = issue.name.replace('目录: ', '');
+    } else if (issue.name.startsWith('Directory:')) {
+      // Create missing directories
+      const dirName = issue.name.replace('Directory: ', '');
       const dirMap: Record<string, string> = {
         'tasks': getTasksDir(cwd),
         'toolbox': getToolboxDir(cwd),
@@ -947,25 +947,25 @@ async function fixIssues(issues: CheckResult[], cwd: string): Promise<void> {
       const dirPath = dirMap[dirName];
       if (dirPath && !fs.existsSync(dirPath)) {
         fs.mkdirSync(dirPath, { recursive: true });
-        console.log(`  ✓ 已创建目录: ${dirName}/`);
+        console.log(`  ✓ Created directory: ${dirName}/`);
       }
-    } else if (issue.name === '日志目录') {
-      // 创建 logs 目录
+    } else if (issue.name === 'Log Directory') {
+      // Create logs directory
       const logsDir = getLogsDir(cwd);
       if (!fs.existsSync(logsDir)) {
         fs.mkdirSync(logsDir, { recursive: true });
-        console.log(`  ✓ 已创建 logs 目录`);
+        console.log(`  ✓ Created logs directory`);
       }
-    } else if (issue.name === '日志配置完整性' || issue.name === 'AI 配置完整性' || issue.name === '训练数据配置完整性') {
-      // 自动补全缺失的配置项
+    } else if (issue.name === 'Log Config Completeness' || issue.name === 'AI Config Completeness' || issue.name === 'Training Data Config Completeness') {
+      // Auto-fill missing config items
       const config = readConfig(cwd);
       if (config) {
         const fixedConfig = ensureConfigDefaults(config);
         writeConfig(fixedConfig, cwd);
-        console.log(`  ✓ 已自动补全缺失的配置项`);
+        console.log(`  ✓ Auto-filled missing config items`);
       }
-    } else if (issue.name === '废弃状态检测') {
-      // 迁移废弃状态 reopened/needs_human → open
+    } else if (issue.name === 'Deprecated Status Check') {
+      // Migrate deprecated statuses reopened/needs_human → open
       const tasksDir = getTasksDir(cwd);
       const deprecatedMap: Record<string, string> = { 'reopened': 'open', 'needs_human': 'open' };
       let fixedCount = 0;
@@ -982,7 +982,7 @@ async function fixIssues(issues: CheckResult[], cwd: string): Promise<void> {
                 timestamp: new Date().toISOString(),
                 fromStatus: oldStatus,
                 toStatus: meta.status,
-                note: `doctor --fix: ${oldStatus} 状态已废弃（v4），迁移为 ${meta.status}`,
+                note: `doctor --fix: ${oldStatus} status deprecated (v4), migrated to ${meta.status}`,
                 author: 'doctor-fix',
               });
               meta.updatedAt = new Date().toISOString();
@@ -990,17 +990,17 @@ async function fixIssues(issues: CheckResult[], cwd: string): Promise<void> {
               fixedCount++;
             }
           } catch {
-            // 忽略解析错误
+            // Ignore parse errors
           }
         }
       }
-      console.log(`  ✓ 已迁移 ${fixedCount} 个废弃状态任务`);
-    } else if (issue.name === '废弃 Hook 检测') {
-      // 清理废弃的 Claude Code Hook 配置
+      console.log(`  ✓ Migrated ${fixedCount} deprecated status tasks`);
+    } else if (issue.name === 'Deprecated Hook Check') {
+      // Clean up deprecated Claude Code Hook config
       let removedSettings = false;
       let removedFiles = false;
 
-      // 1. 清理 .claude/settings.json 中的废弃 hooks
+      // 1. Clean deprecated hooks from .claude/settings.json
       const settingsPath = path.join(cwd, '.claude', 'settings.json');
       if (fs.existsSync(settingsPath)) {
         try {
@@ -1053,11 +1053,11 @@ async function fixIssues(issues: CheckResult[], cwd: string): Promise<void> {
             removedSettings = true;
           }
         } catch {
-          // 忽略解析错误
+          // Ignore parse errors
         }
       }
 
-      // 2. 清理 .projmnt4claude/hooks/ 目录中的废弃脚本
+      // 2. Clean deprecated scripts from .projmnt4claude/hooks/ directory
       const hooksDir = path.join(cwd, '.projmnt4claude', 'hooks');
       if (fs.existsSync(hooksDir)) {
         try {
@@ -1070,105 +1070,105 @@ async function fixIssues(issues: CheckResult[], cwd: string): Promise<void> {
             }
           }
 
-          // 如果目录为空，删除目录
+          // Delete directory if empty
           const remainingFiles = fs.readdirSync(hooksDir);
           if (remainingFiles.length === 0) {
             fs.rmdirSync(hooksDir);
           }
         } catch {
-          // 忽略文件操作错误
+          // Ignore file operation errors
         }
       }
 
       if (removedSettings || removedFiles) {
-        console.log(`  ✓ 已清理废弃的 Claude Code Hook 配置`);
+        console.log(`  ✓ Cleaned up deprecated Claude Code Hook config`);
         if (removedSettings) {
-          console.log(`    - 已更新 .claude/settings.json`);
+          console.log(`    - Updated .claude/settings.json`);
         }
         if (removedFiles) {
-          console.log(`    - 已删除 .projmnt4claude/hooks/ 中的废弃脚本`);
+          console.log(`    - Deleted deprecated scripts from .projmnt4claude/hooks/`);
         }
       }
     }
   }
 
   console.log('');
-  console.log('✅ 修复完成');
+  console.log('✅ Fix complete');
 }
 
 /**
- * 生成 Bug 报告
- * 调用 Logger 生成 Markdown 报告 + .tar.gz 日志压缩附件
+ * Generate Bug Report
+ * Calls Logger to generate Markdown report + .tar.gz log archive attachment
  */
 export async function runBugReport(cwd: string = process.cwd()): Promise<void> {
   console.log('');
   console.log('━'.repeat(SEPARATOR_WIDTH));
-  console.log('📋 Bug 报告生成');
+  console.log('📋 Bug Report Generation');
   console.log('━'.repeat(SEPARATOR_WIDTH));
   console.log('');
 
   if (!isInitialized(cwd)) {
-    console.error('❌ 错误: 项目尚未初始化，无法生成 Bug 报告');
-    console.error('请先运行 projmnt4claude setup 初始化项目');
+    console.error('❌ Error: Project not initialized, cannot generate bug report');
+    console.error('Run projmnt4claude setup to initialize the project first');
     process.exit(1);
   }
 
   const logger = new Logger({ cwd });
 
   try {
-    // 生成 Bug 报告
+    // Generate bug report
     const report = logger.generateBugReport(100);
 
-    // 输出报告
+    // Output report
     console.log(report.markdown);
     console.log('');
     console.log('━'.repeat(SEPARATOR_WIDTH));
 
-    // 输出成本汇总
+    // Output cost summary
     console.log('');
     console.log('━'.repeat(SEPARATOR_WIDTH));
-    console.log('💰 AI 成本汇总');
+    console.log('💰 AI Cost Summary');
     console.log('━'.repeat(SEPARATOR_WIDTH));
     console.log('');
 
     const costSummary = logger.getCostSummary();
-    console.log(`总 AI 调用次数: ${costSummary.totalCalls}`);
-    console.log(`总耗时: ${(costSummary.totalDurationMs / 1000).toFixed(1)}s`);
-    console.log(`总 Tokens: ${costSummary.totalTokens} (输入: ${costSummary.totalInputTokens}, 输出: ${costSummary.totalOutputTokens})`);
+    console.log(`Total AI calls: ${costSummary.totalCalls}`);
+    console.log(`Total duration: ${(costSummary.totalDurationMs / 1000).toFixed(1)}s`);
+    console.log(`Total tokens: ${costSummary.totalTokens} (input: ${costSummary.totalInputTokens}, output: ${costSummary.totalOutputTokens})`);
 
     if (Object.keys(costSummary.byField).length > 0) {
       console.log('');
-      console.log('按字段分组:');
+      console.log('By field:');
       for (const [field, info] of Object.entries(costSummary.byField)) {
-        console.log(`  ${field}: ${info.calls} 次调用, ${(info.durationMs / 1000).toFixed(1)}s, ${info.totalTokens} tokens`);
+        console.log(`  ${field}: ${info.calls} calls, ${(info.durationMs / 1000).toFixed(1)}s, ${info.totalTokens} tokens`);
       }
     }
 
-    // 输出使用分析
+    // Output usage analysis
     console.log('');
     console.log('━'.repeat(SEPARATOR_WIDTH));
-    console.log('📊 使用分析');
+    console.log('📊 Usage Analysis');
     console.log('━'.repeat(SEPARATOR_WIDTH));
     console.log('');
 
     const usage = logger.analyzeUsage();
-    console.log(`总命令执行次数: ${usage.totalCommands}`);
-    console.log(`平均耗时: ${(usage.averageDurationMs / 1000).toFixed(1)}s`);
-    console.log(`AI 使用率: ${(usage.aiUsageRate * 100).toFixed(1)}%`);
-    console.log(`错误数: ${usage.totalErrors}, 警告数: ${usage.totalWarnings}`);
+    console.log(`Total command executions: ${usage.totalCommands}`);
+    console.log(`Average duration: ${(usage.averageDurationMs / 1000).toFixed(1)}s`);
+    console.log(`AI usage rate: ${(usage.aiUsageRate * 100).toFixed(1)}%`);
+    console.log(`Errors: ${usage.totalErrors}, Warnings: ${usage.totalWarnings}`);
 
     if (Object.keys(usage.commandFrequency).length > 0) {
       console.log('');
-      console.log('命令使用频率:');
+      console.log('Command frequency:');
       const sorted = Object.entries(usage.commandFrequency).sort((a, b) => b[1] - a[1]);
       for (const [cmd, count] of sorted) {
-        console.log(`  ${cmd}: ${count} 次`);
+        console.log(`  ${cmd}: ${count}`);
       }
     }
 
     if (usage.commonErrors.length > 0) {
       console.log('');
-      console.log('常见错误:');
+      console.log('Common errors:');
       for (const err of usage.commonErrors.slice(0, 5)) {
         console.log(`  [${err.count}x] ${err.message}`);
       }
@@ -1176,94 +1176,94 @@ export async function runBugReport(cwd: string = process.cwd()): Promise<void> {
 
     console.log('');
     console.log('━'.repeat(SEPARATOR_WIDTH));
-    console.log(`✅ Bug 报告已生成`);
-    console.log(`📎 日志压缩附件: ${report.archivePath}`);
+    console.log(`✅ Bug report generated`);
+    console.log(`📎 Log archive: ${report.archivePath}`);
   } catch (err) {
     console.error('');
-    console.error(`❌ Bug 报告生成失败: ${err instanceof Error ? err.message : String(err)}`);
+    console.error(`❌ Bug report generation failed: ${err instanceof Error ? err.message : String(err)}`);
     process.exit(1);
   }
 }
 
 /**
- * 运行深度诊断（--deep 模式）
+ * Run deep diagnostics (--deep mode)
  *
- * 在规则快速分析基础上，运行所有日志分析器（规则 + AI 混合策略），
- * 提供更深入的问题检测和修复建议。
+ * On top of rule-based quick analysis, runs all log analyzers (rule + AI hybrid strategy),
+ * providing deeper problem detection and fix recommendations.
  */
 export async function runDoctorDeep(cwd: string = process.cwd()): Promise<void> {
   console.log('');
   console.log('━'.repeat(SEPARATOR_WIDTH));
-  console.log('🔬 深度日志分析 (--deep)');
+  console.log('🔬 Deep Log Analysis (--deep)');
   console.log('━'.repeat(SEPARATOR_WIDTH));
   console.log('');
 
-  // 1. 先运行常规 doctor 检查
+  // 1. Run regular doctor check first
   await runDoctor(false, cwd);
 
   console.log('');
   console.log('━'.repeat(SEPARATOR_WIDTH));
-  console.log('📊 日志深度分析');
+  console.log('📊 Deep Log Analysis');
   console.log('━'.repeat(SEPARATOR_WIDTH));
   console.log('');
 
-  // 2. 收集日志
+  // 2. Collect logs
   const collector = new LogCollector(cwd);
   const stats = collector.getStats();
 
   if (stats.fileCount === 0) {
-    console.log('ℹ️  未找到日志文件，跳过日志分析');
-    console.log(`   日志目录: ${getLogsDir(cwd)}`);
+    console.log('ℹ️  No log files found, skipping log analysis');
+    console.log(`   Log directory: ${getLogsDir(cwd)}`);
     return;
   }
 
-  console.log(`📂 日志文件: ${stats.fileCount} 个 (${stats.totalSizeKB} KB)`);
+  console.log(`📂 Log files: ${stats.fileCount} (${stats.totalSizeKB} KB)`);
 
-  // 收集最近 24 小时的日志
+  // Collect logs from last 24 hours
   const entries = collector.collectSince(24, { maxEntries: 10000 });
-  console.log(`📋 日志条目: ${entries.length} 条 (最近 24 小时)`);
+  console.log(`📋 Log entries: ${entries.length} (last 24 hours)`);
   console.log('');
 
   if (entries.length === 0) {
-    console.log('ℹ️  最近 24 小时无日志条目');
+    console.log('ℹ️  No log entries in the last 24 hours');
     return;
   }
 
-  // 3. 注册并运行所有分析器
+  // 3. Register and run all analyzers
   const registry = new LogAnalyzerRegistry(cwd);
   for (const analyzer of getBuiltInAnalyzers()) {
     registry.register(analyzer);
   }
 
-  console.log(`🔧 已注册 ${registry.size} 个分析器:`);
+  console.log(`🔧 Registered ${registry.size} analyzers:`);
   for (const analyzer of registry.getAll()) {
     console.log(`   - ${analyzer.name} (${analyzer.category}) [${analyzer.supportedStrategies.join(', ')}]`);
   }
   console.log('');
 
-  // 使用 hybrid 策略（规则 + AI）
+  // Use hybrid strategy (rules + AI)
   const results = await registry.runAll(entries, 'hybrid', { cwd, enableAI: true });
 
-  // 4. 生成报告
+  // 4. Generate report
   const reporter = new AnalysisReporter();
   const report = reporter.buildReport(results, stats.fileCount, entries.length);
 
   console.log(reporter.formatText(report));
 
-  // 5. 输出建议
+  // 5. Output recommendations
   if (report.summary.totalFindings > 0) {
     console.log('━'.repeat(SEPARATOR_WIDTH));
-    console.log(`📊 发现 ${report.summary.totalFindings} 个问题`);
+    console.log(`📊 Found ${report.summary.totalFindings} issues`);
 
     const critical = report.summary.bySeverity['critical'] || 0;
     const errors = report.summary.bySeverity['error'] || 0;
     if (critical > 0) {
-      console.log(`🔴 ${critical} 个严重问题需要立即处理`);
+      console.log(`🔴 ${critical} critical issues require immediate attention`);
     }
     if (errors > 0) {
-      console.log(`❌ ${errors} 个错误需要关注`);
+      console.log(`❌ ${errors} errors need attention`);
     }
   } else {
-    console.log('✅ 日志深度分析完成，未发现异常');
+    console.log('✅ Deep log analysis complete, no anomalies found');
   }
 }

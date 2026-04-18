@@ -105,7 +105,7 @@ export function buildBatchAwareQueue(
   for (let i = 0; i < batches.length; i++) {
     const batch = batches[i]!;
     batchBoundaries.push(offset);
-    batchLabels.push(`批次 ${i + 1}`);
+    batchLabels.push(`Batch ${i + 1}`);
     // 多个任务且超过1条链时标记为可并行
     batchParallelizable.push(batch.length > 1);
     offset += batch.length;
@@ -184,14 +184,14 @@ export async function cleanupHarnessSnapshots(
   cwd: string = process.cwd()
 ): Promise<number> {
   if (!isInitialized(cwd)) {
-    console.error('错误: 项目未初始化。请先运行 `projmnt4claude setup`');
+    console.error('Error: Project not initialized. Please run `projmnt4claude setup` first');
     process.exit(1);
   }
 
   const snapshots = listSnapshots(cwd);
 
   if (snapshots.length === 0) {
-    console.log('✅ 没有找到任何快照');
+    console.log('✅ No snapshots found');
     return 0;
   }
 
@@ -208,34 +208,34 @@ export async function cleanupHarnessSnapshots(
     }
   }
 
-  // 清理孤儿快照
+  // Clean up orphan snapshots
   for (const snapshot of orphanSnapshots) {
     if (cleanupSnapshot(snapshot.snapshotId, cwd)) {
       cleaned++;
-      console.log(`  🧹 已清理孤儿快照: ${snapshot.snapshotId} (PID: ${snapshot.pid})`);
+      console.log(`  🧹 Cleaned orphan snapshot: ${snapshot.snapshotId} (PID: ${snapshot.pid})`);
     }
   }
 
-  // 如果需要强制清理，也清理活跃快照
+  // Force clean active snapshots if requested
   if (options.force && !options.orphansOnly) {
     for (const snapshot of activeSnapshots) {
       if (cleanupSnapshot(snapshot.snapshotId, cwd)) {
         cleaned++;
-        console.log(`  ⚠️  已强制清理活跃快照: ${snapshot.snapshotId} (PID: ${snapshot.pid})`);
+        console.log(`  ⚠️  Force cleaned active snapshot: ${snapshot.snapshotId} (PID: ${snapshot.pid})`);
       }
     }
   }
 
-  // 输出活跃流水线信息
+  // Output active pipeline info
   if (activeSnapshots.length > 0 && !options.force) {
-    console.log(`\n⚠️  发现 ${activeSnapshots.length} 个活跃流水线快照（进程仍在运行）:`);
+    console.log(`\n⚠️  Found ${activeSnapshots.length} active pipeline snapshots (process still running):`);
     for (const snapshot of activeSnapshots) {
-      console.log(`   - ${snapshot.snapshotId} (PID: ${snapshot.pid}, 创建于 ${snapshot.timestamp})`);
+      console.log(`   - ${snapshot.snapshotId} (PID: ${snapshot.pid}, created at ${snapshot.timestamp})`);
     }
-    console.log('\n💡 使用 --force 选项强制清理所有快照，或等待活跃流水线完成');
+    console.log('\n💡 Use --force to clean all snapshots, or wait for active pipelines to complete');
   }
 
-  console.log(`\n✅ 共清理 ${cleaned} 个快照`);
+  console.log(`\n✅ Cleaned ${cleaned} snapshots total`);
   return cleaned;
 }
 
@@ -250,22 +250,22 @@ function checkConcurrency(cwd: string): boolean {
 
   if (detection.hasActive && detection.activeSnapshot) {
     console.error('');
-    console.error('❌ 错误: 检测到另一个 Harness 流水线正在运行');
+    console.error('❌ Error: Another Harness pipeline is already running');
     console.error('');
-    console.error('活跃流水线信息:');
-    console.error(`   快照ID: ${detection.activeSnapshot.snapshotId}`);
-    console.error(`   进程ID: ${detection.activeSnapshot.pid}`);
-    console.error(`   创建时间: ${detection.activeSnapshot.timestamp}`);
-    console.error(`   任务数量: ${detection.activeSnapshot.tasks.length}`);
+    console.error('Active pipeline info:');
+    console.error(`   Snapshot ID: ${detection.activeSnapshot.snapshotId}`);
+    console.error(`   Process ID: ${detection.activeSnapshot.pid}`);
+    console.error(`   Created at: ${detection.activeSnapshot.timestamp}`);
+    console.error(`   Task count: ${detection.activeSnapshot.tasks.length}`);
     console.error('');
-    console.error('可能的原因:');
-    console.error('   1. 另一个 Harness 流水线正在运行');
-    console.error('   2. 之前的流水线异常退出，残留了快照');
+    console.error('Possible causes:');
+    console.error('   1. Another Harness pipeline is running');
+    console.error('   2. Previous pipeline exited abnormally, leaving snapshot behind');
     console.error('');
-    console.error('解决方案:');
-    console.error('   - 如果确定没有其他流水线在运行，使用以下命令清理:');
+    console.error('Solutions:');
+    console.error('   - If no other pipeline is running, clean up with:');
     console.error('     projmnt4claude headless-harness-design cleanup');
-    console.error('   - 或强制清理所有残留快照:');
+    console.error('   - Or force clean all residual snapshots:');
     console.error('     projmnt4claude headless-harness-design cleanup --force');
     console.error('');
     return true;
@@ -281,9 +281,9 @@ export async function harnessCommand(
   options: HarnessCommandOptions,
   cwd: string = process.cwd()
 ): Promise<void> {
-  // 检查项目初始化
+  // Check project initialization
   if (!isInitialized(cwd)) {
-    console.error('错误: 项目未初始化。请先运行 `projmnt4claude setup`');
+    console.error('Error: Project not initialized. Please run `projmnt4claude setup` first');
     process.exit(1);
   }
 
@@ -302,9 +302,9 @@ export async function harnessCommand(
     enabled: !(options.skipHarnessGate || options.skipQualityGate),
   };
 
-  // 验证质量分阈值
+  // Validate quality score threshold
   if (qualityGateConfig.minQualityScore < 0 || qualityGateConfig.minQualityScore > 100) {
-    console.error('错误: --require-quality 必须在 0-100 之间');
+    console.error('Error: --require-quality must be between 0-100');
     process.exit(1);
   }
 
@@ -324,61 +324,61 @@ export async function harnessCommand(
     cwd,
   };
 
-  // 验证配置
+  // Validate config
   if (config.maxRetries < 0) {
-    console.error('错误: --max-retries 必须大于等于 0');
+    console.error('Error: --max-retries must be >= 0');
     process.exit(1);
   }
   if (config.timeout < 10) {
-    console.error('错误: --timeout 必须大于等于 10 秒');
+    console.error('Error: --timeout must be >= 10 seconds');
     process.exit(1);
   }
   if (config.parallel < 1) {
-    console.error('错误: --parallel 必须大于等于 1');
+    console.error('Error: --parallel must be >= 1');
     process.exit(1);
   }
 
-  // 加载任务列表 - 3级优先级
+  // Load task queue - 3-level priority
   const batchQueue = await loadTaskQueue(options, cwd);
 
   if (batchQueue.taskQueue.length === 0) {
-    console.error('错误: 没有可执行的任务');
+    console.error('Error: No executable tasks');
     process.exit(1);
   }
 
   const hasBatches = batchQueue.batchBoundaries.length > 0;
 
-  // 输出配置信息
+  // Output configuration info
   if (!config.jsonOutput) {
     console.log('━'.repeat(SEPARATOR_WIDTH));
-    console.log('🚀 Harness Design 执行模式');
+    console.log('🚀 Harness Design Execution Mode');
     console.log('━'.repeat(SEPARATOR_WIDTH));
-    console.log(`📋 计划文件: ${options.plan}`);
-    console.log(`📊 任务数量: ${batchQueue.taskQueue.length}`);
+    console.log(`📋 Plan file: ${options.plan}`);
+    console.log(`📊 Task count: ${batchQueue.taskQueue.length}`);
     if (hasBatches) {
-      console.log(`📦 批次数: ${batchQueue.batchBoundaries.length}`);
+      console.log(`📦 Batch count: ${batchQueue.batchBoundaries.length}`);
     }
-    console.log(`🔄 最大重试: ${config.maxRetries}`);
-    console.log(`⏱️  超时时间: ${config.timeout}s`);
-    console.log(`🔀 并行数: ${config.parallel}`);
-    console.log(`🧪 试运行: ${config.dryRun ? '是' : '否'}`);
-    console.log(`▶️  继续执行: ${config.continue ? '是' : '否'}`);
+    console.log(`🔄 Max retries: ${config.maxRetries}`);
+    console.log(`⏱️  Timeout: ${config.timeout}s`);
+    console.log(`🔀 Parallel: ${config.parallel}`);
+    console.log(`🧪 Dry run: ${config.dryRun ? 'Yes' : 'No'}`);
+    console.log(`▶️  Continue: ${config.continue ? 'Yes' : 'No'}`);
     console.log('');
   }
 
-  // 试运行模式
+  // Dry run mode
   if (config.dryRun) {
-    console.log('📝 试运行模式 - 以下是将执行的任务顺序:');
+    console.log('📝 Dry run mode - Tasks to be executed:');
     if (hasBatches) {
-      // 按批次分组展示
+      // Show grouped by batch
       for (let b = 0; b < batchQueue.batchBoundaries.length; b++) {
         const start = batchQueue.batchBoundaries[b]!;
         const end = b + 1 < batchQueue.batchBoundaries.length
           ? batchQueue.batchBoundaries[b + 1]!
           : batchQueue.taskQueue.length;
-        const label = batchQueue.batchLabels[b]!;
-        const parallelTag = batchQueue.batchParallelizable[b!] ? ' [可并行]' : '';
-        console.log(`\n   📦 ${label}${parallelTag} (${end - start} 个任务):`);
+        const label = batchQueue.batchLabels[b]!.replace('批次', 'Batch');
+        const parallelTag = batchQueue.batchParallelizable[b!] ? ' [Parallel]' : '';
+        console.log(`\n   📦 ${label}${parallelTag} (${end - start} tasks):`);
         for (let i = start; i < end; i++) {
           console.log(`      ${i + 1}. ${batchQueue.taskQueue[i]!}`);
         }
@@ -389,17 +389,17 @@ export async function harnessCommand(
       });
     }
     console.log('');
-    console.log('✅ 试运行完成（未实际执行）');
+    console.log('✅ Dry run complete (no actual execution)');
     return;
   }
 
-  // 质量门禁检查（BUG-011-5）
+  // Quality gate check (BUG-011-5)
   if (qualityGateConfig.enabled) {
     console.log('');
     console.log('━'.repeat(SEPARATOR_WIDTH));
-    console.log('🚦 质量门禁检查');
+    console.log('🚦 Quality Gate Check');
     console.log('━'.repeat(SEPARATOR_WIDTH));
-    console.log(`📊 最低质量分阈值: ${qualityGateConfig.minQualityScore}`);
+    console.log(`📊 Min quality score threshold: ${qualityGateConfig.minQualityScore}`);
     console.log('');
 
     const batchResult = await batchCheckQualityGate(batchQueue.taskQueue, qualityGateConfig, cwd);
@@ -409,7 +409,7 @@ export async function harnessCommand(
 
     if (!batchResult.allPassed) {
       console.log('');
-      console.log('❌ 质量门禁检查未通过，以下任务需要完善:');
+      console.log('❌ Quality gate check failed, the following tasks need improvement:');
       console.log('');
 
       for (const taskId of batchResult.blockedTasks) {
@@ -420,17 +420,17 @@ export async function harnessCommand(
       }
 
       console.log('');
-      console.log('💡 提示:');
-      console.log('   1. 完善任务描述，添加 "## 问题描述"、"## 根因分析"、"## 解决方案" 部分');
-      console.log('   2. 在 "## 相关文件" 部分列出受影响的源文件');
-      console.log('   3. 使用更具体的检查点描述，避免泛化描述如 "核心功能实现"');
-      console.log('   4. 使用 --skip-harness-gate 跳过质量检查（不推荐）');
-      console.log('   5. 使用 --require-quality N 调整质量分阈值（默认 60）');
+      console.log('💡 Tips:');
+      console.log('   1. Improve task description, add "## Problem", "## Root Cause", "## Solution" sections');
+      console.log('   2. List affected source files in "## Related Files" section');
+      console.log('   3. Use specific checkpoint descriptions, avoid generic ones like "core feature implementation"');
+      console.log('   4. Use --skip-harness-gate to skip quality check (not recommended)');
+      console.log('   5. Use --require-quality N to adjust quality threshold (default 60)');
       console.log('');
       process.exit(1);
     }
 
-    console.log('✅ 所有任务通过质量门禁检查');
+    console.log('✅ All tasks passed quality gate check');
     console.log('');
   }
 
@@ -447,7 +447,7 @@ export async function harnessCommand(
     batchParallelizable: batchQueue.batchParallelizable,
   });
   currentSnapshotId = snapshot.snapshotId;
-  console.log(`   💾 计划快照已创建: ${snapshot.snapshotId} (${snapshot.tasks.length} 个任务)`);
+  console.log(`   💾 Plan snapshot created: ${snapshot.snapshotId} (${snapshot.tasks.length} tasks)`);
 
   // 创建 AssemblyLine 并执行
   const assemblyLine = new AssemblyLine(config);
@@ -460,8 +460,8 @@ export async function harnessCommand(
   const gracefulShutdown = (signal: string) => {
     if (shutdownInProgress) return;
     shutdownInProgress = true;
-    console.log(`\n⚠️ 收到 ${signal}，正在优雅关闭...`);
-    assemblyLine.forceFailStatus(new Error(`收到 ${signal}，流水线被中断`));
+    console.log(`\n⚠️  Received ${signal}, shutting down gracefully...`);
+    assemblyLine.forceFailStatus(new Error(`Received ${signal}, pipeline interrupted`));
     process.exit(signal === 'SIGINT' ? 130 : 143);
   };
 
@@ -469,17 +469,17 @@ export async function harnessCommand(
   process.on('SIGTERM', gracefulShutdown);
 
   try {
-    // 加载或创建运行时状态
+    // Load or create runtime state
     let state: HarnessRuntimeState | null;
     if (config.continue) {
       state = loadRuntimeState(cwd);
       if (state) {
-        // CP-4: 尝试从快照恢复计划（确保使用创建时的计划版本）
+        // CP-4: Try to restore plan from snapshot (ensure using plan version at creation time)
         const latestSnapshot = getLatestSnapshot(cwd);
         if (latestSnapshot) {
-          console.log(`📦 从中断处继续 (任务 ${state.currentIndex + 1}/${state.taskQueue.length})`);
-          console.log(`   💾 使用计划快照: ${latestSnapshot.snapshotId}`);
-          // 从快照恢复计划数据（如果状态中的计划数据不完整）
+          console.log(`📦 Resuming from interruption (task ${state.currentIndex + 1}/${state.taskQueue.length})`);
+          console.log(`   💾 Using plan snapshot: ${latestSnapshot.snapshotId}`);
+          // Restore plan data from snapshot (if plan data in state is incomplete)
           if (latestSnapshot.tasks.length > 0 && state.taskQueue.length === 0) {
             state.taskQueue = latestSnapshot.tasks;
             state.batchBoundaries = latestSnapshot.batchBoundaries || [];
@@ -487,10 +487,10 @@ export async function harnessCommand(
             state.batchParallelizable = latestSnapshot.batchParallelizable || [];
           }
         } else {
-          console.log(`📦 从中断处继续 (任务 ${state.currentIndex + 1}/${state.taskQueue.length})`);
+          console.log(`📦 Resuming from interruption (task ${state.currentIndex + 1}/${state.taskQueue.length})`);
         }
       } else {
-        console.log('📦 没有找到之前的执行状态，从头开始');
+        console.log('📦 No previous execution state found, starting from beginning');
         state = createDefaultRuntimeState(config);
         state.taskQueue = batchQueue.taskQueue;
         state.batchBoundaries = batchQueue.batchBoundaries;
@@ -521,24 +521,24 @@ export async function harnessCommand(
 
   } catch (error) {
     assemblyLine.forceFailStatus(error);
-    console.error('❌ 执行失败:', error instanceof Error ? error.message : String(error));
+    console.error('❌ Execution failed:', error instanceof Error ? error.message : String(error));
     process.exit(1);
   } finally {
-    // 仅在流水线正常完成时清理运行时状态（保留 --continue 恢复能力）
+    // Only clean up runtime state when pipeline completes normally (preserve --continue recovery)
     if (pipelineCompleted) {
       clearRuntimeState(cwd);
     }
-    // CP-5: 流水线退出时清理快照（正常清理，异常保留供诊断）
+    // CP-5: Clean up snapshot on pipeline exit (clean on normal, keep on error for diagnosis)
     if (currentSnapshotId && pipelineCompleted) {
       if (cleanupSnapshot(currentSnapshotId, cwd)) {
-        console.log(`   🧹 计划快照已清理: ${currentSnapshotId}`);
+        console.log(`   🧹 Plan snapshot cleaned: ${currentSnapshotId}`);
       }
       currentSnapshotId = null;
     } else if (currentSnapshotId) {
-      // 异常退出时保留快照，但输出路径供诊断
-      console.log(`   💾 计划快照保留供诊断: .projmnt4claude/runs/${currentSnapshotId}`);
+      // Keep snapshot on abnormal exit, but output path for diagnosis
+      console.log(`   💾 Plan snapshot kept for diagnosis: .projmnt4claude/runs/${currentSnapshotId}`);
     }
-    // 移除信号处理
+    // Remove signal handlers
     process.removeListener('SIGINT', gracefulShutdown);
     process.removeListener('SIGTERM', gracefulShutdown);
   }
@@ -564,37 +564,37 @@ export function loadRuntimeState(cwd: string): HarnessRuntimeState | null {
     const content = fs.readFileSync(statePath, 'utf-8');
     const data = JSON.parse(content);
 
-    // 版本检查与自动迁移
-    // v1 → v2: wait_evaluation 状态支持（新增 evaluation 阶段）
+    // Version check and auto-migration
+    // v1 → v2: wait_evaluation state support (added evaluation phase)
     const version = data.stateFormatVersion ?? 0;
     if (version < 1 || version > 2) {
-      console.warn(`状态文件版本不匹配 (v${version})，重置运行时状态`);
+      console.warn(`State file version mismatch (v${version}), resetting runtime state`);
       return null;
     }
 
-    // v1 → v2 自动迁移
+    // v1 → v2 auto-migration
     if (version === 1) {
-      // v1 不含 evaluation 阶段的重试计数，补空
-      // resumeFrom 中可能缺少 evaluation 相关键值，无需特殊处理
-      // （Map 反序列化时 evaluation 键不存在即视为未设置，等同于从头开始）
+      // v1 doesn't have evaluation phase retry count, fill with empty
+      // resumeFrom may lack evaluation keys, no special handling needed
+      // (Map deserialization treats missing evaluation key as unset, same as starting fresh)
       data.stateFormatVersion = 2;
-      console.log('📦 状态文件从 v1 自动迁移到 v2');
+      console.log('📦 State file auto-migrated from v1 to v2');
     }
 
-    // 防御性编程：确保所有Map字段都被正确初始化
-    // 恢复 Map（修复：添加 phaseRetryCounters 恢复）
+    // Defensive programming: ensure all Map fields are properly initialized
+    // Restore Maps (fix: added phaseRetryCounters restore)
     data.retryCounter = new Map(Object.entries(data.retryCounter || {}));
     data.taskResults = new Map(Object.entries(data.taskResults || {}));
     data.resumeFrom = new Map(Object.entries(data.resumeFrom || {}));
     data.reevaluateCounter = new Map(Object.entries(data.reevaluateCounter || {}));
     data.phaseRetryCounters = new Map(Object.entries(data.phaseRetryCounters || {}));
-    // v1/v2 兼容：旧版不含 taskPhaseCheckpoints，补空 Map
+    // v1/v2 compatibility: old versions don't have taskPhaseCheckpoints, fill with empty Map
     data.taskPhaseCheckpoints = new Map(Object.entries(data.taskPhaseCheckpoints || {}));
 
     return data;
   } catch (error) {
-    // 降级处理：日志记录错误但返回null而非抛出异常
-    console.warn('加载运行时状态失败，重置状态:', error);
+    // Degraded handling: log error but return null instead of throwing
+    console.warn('Failed to load runtime state, resetting:', error);
     return null;
   }
 }
@@ -669,7 +669,7 @@ async function loadTaskQueue(options: HarnessCommandOptions, cwd: string): Promi
   if (options.plan) {
     const planFile = path.resolve(cwd, options.plan);
     if (!fs.existsSync(planFile)) {
-      console.error(`错误: 计划文件不存在: ${planFile}`);
+      console.error(`Error: Plan file does not exist: ${planFile}`);
       process.exit(1);
     }
 
@@ -680,11 +680,11 @@ async function loadTaskQueue(options: HarnessCommandOptions, cwd: string): Promi
       const batches: string[][] | undefined = planData.batchOrder || planData.batches;
 
       if (taskQueue.length === 0) {
-        console.error('错误: 计划文件中没有任务');
+        console.error('Error: No tasks in plan file');
         process.exit(1);
       }
 
-      // CP-19: 仅过滤终态任务，信任计划排序处理依赖关系
+      // CP-19: Only filter terminal state tasks, trust plan sorting for dependencies
       const TERMINAL_STATUSES = new Set(['resolved', 'closed', 'abandoned', 'failed']);
       const originalCount = taskQueue.length;
       taskQueue = taskQueue.filter((id: string) => {
@@ -693,48 +693,48 @@ async function loadTaskQueue(options: HarnessCommandOptions, cwd: string): Promi
         return !TERMINAL_STATUSES.has(normalizeStatus(task.status));
       });
       if (originalCount - taskQueue.length > 0) {
-        console.log(`📋 使用计划文件: ${options.plan} (已过滤 ${originalCount - taskQueue.length} 个终态任务)`);
+        console.log(`📋 Using plan file: ${options.plan} (filtered ${originalCount - taskQueue.length} terminal tasks)`);
       } else {
-        console.log(`📋 使用计划文件: ${options.plan}`);
+        console.log(`📋 Using plan file: ${options.plan}`);
       }
 
       return buildBatchAwareQueue(taskQueue, batches);
     } catch (error) {
-      console.error(`错误: 无法解析计划文件: ${planFile}`);
+      console.error(`Error: Cannot parse plan file: ${planFile}`);
       console.error(error instanceof Error ? error.message : String(error));
       process.exit(1);
     }
   }
 
-  // 优先级2: 读取项目计划
+  // Priority 2: Read project plan
   const executionPlan = readPlan(cwd);
   if (executionPlan && executionPlan.tasks.length > 0) {
-    const queue = filterExecutableFromPlan(executionPlan, cwd, '📋 使用项目执行计划');
+    const queue = filterExecutableFromPlan(executionPlan, cwd, '📋 Using project execution plan');
     if (queue.taskQueue.length > 0) {
       return queue;
     }
-    console.log('⚠️  执行计划中所有任务均已处于终态');
+    console.log('⚠️  All tasks in execution plan are in terminal state');
   }
 
-  // 优先级3: 自动生成
-  console.log('🔍 未找到执行计划，正在自动生成...');
+  // Priority 3: Auto-generate
+  console.log('🔍 No execution plan found, auto-generating...');
 
   try {
     await recommendPlan({ nonInteractive: true, json: false }, cwd);
 
     const newPlan = readPlan(cwd);
     if (newPlan && newPlan.tasks.length > 0) {
-      const queue = filterExecutableFromPlan(newPlan, cwd, '✅ 已自动生成执行计划');
+      const queue = filterExecutableFromPlan(newPlan, cwd, '✅ Execution plan auto-generated');
       if (queue.taskQueue.length > 0) {
         return queue;
       }
     }
   } catch (error) {
-    console.error('警告: 自动生成计划失败:', error instanceof Error ? error.message : String(error));
+    console.error('Warning: Auto-generate plan failed:', error instanceof Error ? error.message : String(error));
   }
 
-  console.error('错误: 无法获取任务列表');
-  console.error('提示: 请先运行 `projmnt4claude plan recommend` 生成执行计划');
+  console.error('Error: Cannot get task list');
+  console.error('Hint: Please run `projmnt4claude plan recommend` to generate execution plan');
   process.exit(1);
 }
 
@@ -765,7 +765,7 @@ function filterExecutableFromPlan(
 
   const filteredCount = plan.tasks.length - filteredTasks.length;
   if (filteredCount > 0) {
-    console.log(`${logPrefix} (已过滤 ${filteredCount} 个终态任务)`);
+    console.log(`${logPrefix} (filtered ${filteredCount} terminal tasks)`);
   } else {
     console.log(logPrefix);
   }
@@ -785,20 +785,20 @@ function filterExecutableFromPlan(
 function printSummary(summary: ExecutionSummary): void {
   console.log('');
   console.log('━'.repeat(SEPARATOR_WIDTH));
-  console.log('📊 执行摘要');
+  console.log('📊 Execution Summary');
   console.log('━'.repeat(SEPARATOR_WIDTH));
-  console.log(`   总任务数: ${summary.totalTasks}`);
-  console.log(`   ✅ 通过: ${summary.passed}`);
-  console.log(`   ❌ 失败: ${summary.failed}`);
-  console.log(`   🔄 重试: ${summary.totalRetries}`);
-  console.log(`   ⏱️  耗时: ${(summary.duration / 1000).toFixed(1)}s`);
+  console.log(`   Total tasks: ${summary.totalTasks}`);
+  console.log(`   ✅ Passed: ${summary.passed}`);
+  console.log(`   ❌ Failed: ${summary.failed}`);
+  console.log(`   🔄 Retries: ${summary.totalRetries}`);
+  console.log(`   ⏱️  Duration: ${(summary.duration / 1000).toFixed(1)}s`);
   console.log('');
 
   if (summary.failed > 0) {
-    console.log('❌ 失败的任务:');
+    console.log('❌ Failed tasks:');
     for (const [taskId, record] of summary.taskResults) {
       if (record.reviewVerdict?.result === 'NOPASS' || record.devReport.status === 'failed') {
-        console.log(`   - ${taskId}: ${record.reviewVerdict?.reason || record.devReport.error || '未知错误'}`);
+        console.log(`   - ${taskId}: ${record.reviewVerdict?.reason || record.devReport.error || 'Unknown error'}`);
       }
     }
     console.log('');
@@ -806,13 +806,13 @@ function printSummary(summary: ExecutionSummary): void {
 
   console.log('━'.repeat(SEPARATOR_WIDTH));
   if (summary.failed === 0) {
-    console.log('✅ 所有任务执行成功！');
+    console.log('✅ All tasks executed successfully!');
   } else {
-    console.log(`⚠️  部分任务失败，请检查报告获取详情`);
+    console.log(`⚠️  Some tasks failed, check reports for details`);
   }
   console.log('');
   console.log('━'.repeat(SEPARATOR_WIDTH));
-  console.log('📊 流水线状态已保存到: .projmnt4claude/harness-status.json');
-  console.log('💡 查询进度: cat .projmnt4claude/harness-status.json');
+  console.log('📊 Pipeline status saved to: .projmnt4claude/harness-status.json');
+  console.log('💡 Check progress: cat .projmnt4claude/harness-status.json');
   console.log('━'.repeat(SEPARATOR_WIDTH));
 }
