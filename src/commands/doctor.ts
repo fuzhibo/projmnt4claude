@@ -16,6 +16,7 @@ import { LogCollector, LogAnalyzerRegistry, AnalysisReporter } from '../utils/lo
 import { getBuiltInAnalyzers } from '../utils/log-analyzers';
 import { Pre } from '../utils/pre';
 import { DEFAULT_GIT_HOOK } from '../types/config';
+import { t } from '../i18n';
 
 /**
  * Check result interface
@@ -32,9 +33,10 @@ interface CheckResult {
  * Run environment diagnostics
  */
 export async function runDoctor(fix: boolean = false, cwd: string = process.cwd()): Promise<void> {
+  const texts = t(cwd).doctorCmd;
   console.log('');
   console.log('━'.repeat(SEPARATOR_WIDTH));
-  console.log('🔍 Environment Diagnostics');
+  console.log('🔍 ' + texts.environmentDiagnostics);
   console.log('━'.repeat(SEPARATOR_WIDTH));
   console.log('');
 
@@ -49,7 +51,7 @@ export async function runDoctor(fix: boolean = false, cwd: string = process.cwd(
   // Only check subsequent items if project is initialized
   if (isInitialized(cwd)) {
     // 3. Check plugin cache
-    results.push(checkPluginCache());
+    results.push(checkPluginCache(cwd));
 
     // 4. Check project skill files
     results.push(...checkSkillFiles(cwd));
@@ -71,14 +73,14 @@ export async function runDoctor(fix: boolean = false, cwd: string = process.cwd(
   }
 
   // Display results
-  displayResults(results);
+  displayResults(results, cwd);
 
   // If there are fixable issues and --fix is enabled
   const fixableIssues = results.filter(r => r.status !== 'ok' && r.fixable);
   if (fix && fixableIssues.length > 0) {
     console.log('');
     console.log('━'.repeat(SEPARATOR_WIDTH));
-    console.log('🔧 Auto Fix');
+    console.log('🔧 ' + texts.autoFix);
     console.log('━'.repeat(SEPARATOR_WIDTH));
     console.log('');
 
@@ -86,13 +88,13 @@ export async function runDoctor(fix: boolean = false, cwd: string = process.cwd(
 
     // Re-checking
     console.log('');
-    console.log('🔄 Re-checking...');
+    console.log('🔄 ' + texts.reChecking);
     console.log('');
     await runDoctor(false, cwd);
     return;
   } else if (fixableIssues.length > 0) {
     console.log('');
-    console.log(`💡 Use --fix to auto-fix ${fixableIssues.length} issue(s)`);
+    console.log(`💡 ${texts.useFixToAutoFix.replace('{count}', String(fixableIssues.length))}`);
   }
 }
 
@@ -100,23 +102,24 @@ export async function runDoctor(fix: boolean = false, cwd: string = process.cwd(
  * Check project initialization status
  */
 function checkProjectInit(cwd: string): CheckResult {
+  const texts = t(cwd).doctorCmd;
   const projectDir = getProjectDir(cwd);
   const configPath = path.join(projectDir, 'config.json');
 
   if (!fs.existsSync(configPath)) {
     return {
-      name: 'Project Initialization',
+      name: texts.checkProjectInit,
       status: 'error',
-      message: 'Project not initialized',
-      details: ['Run projmnt4claude setup to initialize the project'],
+      message: texts.checkProjectInitNotInitialized,
+      details: [texts.checkProjectInitRunSetup],
       fixable: false,
     };
   }
 
   return {
-    name: 'Project Initialization',
+    name: texts.checkProjectInit,
     status: 'ok',
-    message: 'Project initialized',
+    message: texts.checkProjectInitInitialized,
     details: [`Config file: ${configPath}`],
     fixable: false,
   };
@@ -125,17 +128,18 @@ function checkProjectInit(cwd: string): CheckResult {
 /**
  * Check plugin cache
  */
-function checkPluginCache(): CheckResult {
+function checkPluginCache(cwd: string): CheckResult {
+  const texts = t(cwd).doctorCmd;
   const pluginRoot = process.env.CLAUDE_PLUGIN_ROOT;
   const details: string[] = [];
   let status: 'ok' | 'warning' | 'error' = 'ok';
-  let message = 'Plugin cache normal';
+  let message = texts.checkPluginCacheNormal;
 
   if (!pluginRoot) {
     return {
-      name: 'Plugin Cache',
+      name: texts.checkPluginCache,
       status: 'ok',
-      message: 'Running in CLI mode, skipping plugin cache check',
+      message: texts.checkPluginCacheCliMode,
       details: ['CLAUDE_PLUGIN_ROOT not set (normal in CLI mode)'],
       fixable: false,
     };
@@ -147,7 +151,7 @@ function checkPluginCache(): CheckResult {
   const mainFile = path.join(pluginRoot, 'dist', 'projmnt4claude.js');
   if (!fs.existsSync(mainFile)) {
     status = 'error';
-    message = 'Main program file missing';
+    message = texts.checkPluginCacheMainFileMissing;
     details.push(`Missing: ${mainFile}`);
   } else {
     details.push(`✓ Main program: ${mainFile}`);
@@ -158,7 +162,7 @@ function checkPluginCache(): CheckResult {
   if (!fs.existsSync(localesDir)) {
     if (status !== 'error') {
       status = 'warning';
-      message = 'locales directory missing';
+      message = texts.checkPluginCacheLocalesMissing;
     }
     details.push(`Missing: ${localesDir}`);
   } else {
@@ -187,7 +191,7 @@ function checkPluginCache(): CheckResult {
   if (!fs.existsSync(commandsDir)) {
     if (status !== 'error') {
       status = 'warning';
-      message = 'commands directory missing (slash commands may not work)';
+      message = texts.checkPluginCacheCommandsMissing;
     }
     details.push(`Missing: ${commandsDir}`);
   } else {
@@ -196,7 +200,7 @@ function checkPluginCache(): CheckResult {
   }
 
   return {
-    name: 'Plugin Cache',
+    name: texts.checkPluginCache,
     status,
     message,
     details,
@@ -208,6 +212,7 @@ function checkPluginCache(): CheckResult {
  * Check project skill files
  */
 function checkSkillFiles(cwd: string): CheckResult[] {
+  const texts = t(cwd).doctorCmd;
   const results: CheckResult[] = [];
   const toolboxDir = getToolboxDir(cwd);
   const skillDir = path.join(toolboxDir, 'projmnt4claude');
@@ -217,18 +222,18 @@ function checkSkillFiles(cwd: string): CheckResult[] {
   if (fs.existsSync(commandsDir)) {
     const commandFiles = fs.readdirSync(commandsDir).filter(f => f.endsWith('.md'));
     results.push({
-      name: 'Command Docs',
+      name: texts.checkSkillFiles,
       status: 'ok',
-      message: `${commandFiles.length} command docs`,
+      message: texts.checkSkillFilesCount.replace('{count}', String(commandFiles.length)),
       details: [`Location: ${commandsDir}`],
       fixable: false,
     });
   } else {
     results.push({
-      name: 'Command Docs',
+      name: texts.checkSkillFiles,
       status: 'warning',
-      message: 'Command docs directory missing',
-      details: ['May need to re-run setup to copy command docs'],
+      message: texts.checkSkillFilesMissing,
+      details: [texts.checkSkillFilesReRunSetup],
       fixable: true,
     });
   }
@@ -240,6 +245,7 @@ function checkSkillFiles(cwd: string): CheckResult[] {
  * Check directory structure integrity
  */
 function checkDirectoryStructure(cwd: string): CheckResult[] {
+  const texts = t(cwd).doctorCmd;
   const results: CheckResult[] = [];
   const projectDir = getProjectDir(cwd);
 
@@ -252,17 +258,17 @@ function checkDirectoryStructure(cwd: string): CheckResult[] {
   for (const dir of requiredDirs) {
     if (!fs.existsSync(dir.path)) {
       results.push({
-        name: `Directory: ${dir.name}`,
+        name: texts.checkDirectoryStructure.replace('{name}', dir.name),
         status: 'error',
-        message: 'Required directory missing',
+        message: texts.checkDirectoryMissing,
         details: [`Missing: ${dir.path}`],
         fixable: true,
       });
     } else {
       results.push({
-        name: `Directory: ${dir.name}`,
+        name: texts.checkDirectoryStructure.replace('{name}', dir.name),
         status: 'ok',
-        message: 'Exists',
+        message: texts.checkDirectoryExists,
         details: [],
         fixable: false,
       });
@@ -287,9 +293,9 @@ function checkDirectoryStructure(cwd: string): CheckResult[] {
       const archiveDir = path.join(projectDir, 'archive');
       if (!fs.existsSync(archiveDir)) {
         results.push({
-          name: 'Directory: archive',
+          name: texts.checkDirectoryStructure.replace('{name}', 'archive'),
           status: 'warning',
-          message: 'Abandoned tasks exist but archive directory is missing',
+          message: texts.checkArchiveMissing,
           details: [`Missing: ${archiveDir}`],
           fixable: true,
         });
@@ -340,15 +346,16 @@ function checkPluginInstallationScope(cwd: string): CheckResult[] {
     );
 
     if (mismatchedInstalls.length > 0) {
+      const texts = t(cwd).doctorCmd;
       const mismatchedList = mismatchedInstalls.map(
         (inst: { scope: string; projectPath?: string; version?: string }) =>
           `  - Version ${inst.version || 'unknown'} bound to: ${inst.projectPath || 'unknown path'}`
       ).join('\n');
 
       results.push({
-        name: 'Plugin Installation Scope',
+        name: texts.checkPluginScope,
         status: 'warning',
-        message: 'Detected project-scope installation may cause cross-project update issues',
+        message: texts.checkPluginScopeWarning,
         details: [
           'projmnt4claude installed with project-scope in:',
           mismatchedList,
@@ -372,10 +379,11 @@ function checkPluginInstallationScope(cwd: string): CheckResult[] {
       });
     } else if (projectScopedInstalls.length > 0) {
       // Current project matches, but suggest user-scope
+      const texts = t(cwd).doctorCmd;
       results.push({
-        name: 'Plugin Installation Scope',
+        name: texts.checkPluginScope,
         status: 'warning',
-        message: 'Recommend user-scope installation for cross-project use',
+        message: texts.checkPluginScopeRecommendUserScope,
         details: [
           'Current project is correctly bound to project-scope installation',
           'But user-scope is recommended for use in all projects:',
@@ -398,15 +406,16 @@ function checkPluginInstallationScope(cwd: string): CheckResult[] {
  * Includes: logs directory existence, logging.* config completeness, log file health check
  */
 function checkLoggingModule(cwd: string): CheckResult[] {
+  const texts = t(cwd).doctorCmd;
   const results: CheckResult[] = [];
   const logsDir = getLogsDir(cwd);
 
   // CP-12: logs directory existence check
   if (!fs.existsSync(logsDir)) {
     results.push({
-      name: 'Log Directory',
+      name: texts.checkLogDirectory,
       status: 'warning',
-      message: 'logs directory does not exist',
+      message: texts.checkLogDirectoryMissing,
       details: [
         `Missing: ${logsDir}`,
         'Run projmnt4claude setup to upgrade project structure',
@@ -418,9 +427,9 @@ function checkLoggingModule(cwd: string): CheckResult[] {
   }
 
   results.push({
-    name: 'Log Directory',
+    name: texts.checkLogDirectory,
     status: 'ok',
-    message: 'Exists',
+    message: texts.checkLogDirectoryExists,
     details: [`Location: ${logsDir}`],
     fixable: false,
   });
@@ -445,9 +454,9 @@ function checkLoggingModule(cwd: string): CheckResult[] {
 
     if (missingKeys.length > 0) {
       results.push({
-        name: 'Log Config Completeness',
+        name: texts.checkLogConfigCompleteness,
         status: 'warning',
-        message: `${missingKeys.length} log config items missing`,
+        message: texts.checkLogConfigMissing.replace('{count}', String(missingKeys.length)),
         details: [
           'Missing config items:',
           ...missingKeys.map(k => `  - ${k}`),
@@ -458,9 +467,9 @@ function checkLoggingModule(cwd: string): CheckResult[] {
       });
     } else {
       results.push({
-        name: 'Log Config Completeness',
+        name: texts.checkLogConfigCompleteness,
         status: 'ok',
-        message: 'All logging.* config items present',
+        message: texts.checkLogConfigComplete,
         details: [
           `level: ${loggingConfig!.level}`,
           `maxFiles: ${loggingConfig!.maxFiles}`,
@@ -475,15 +484,15 @@ function checkLoggingModule(cwd: string): CheckResult[] {
     const aiConfig = config.ai as Record<string, unknown> | undefined;
     if (!aiConfig || aiConfig.provider === undefined) {
       results.push({
-        name: 'AI Config Completeness',
+        name: texts.checkAiConfigCompleteness,
         status: 'warning',
-        message: 'ai.provider config missing',
+        message: texts.checkAiConfigMissing,
         details: [`Default: claude-code`, '💡 Run projmnt4claude doctor --fix to auto-fill'],
         fixable: true,
       });
     } else {
       results.push({
-        name: 'AI Config Completeness',
+        name: texts.checkAiConfigCompleteness,
         status: 'ok',
         message: `provider: ${aiConfig.provider}`,
         details: aiConfig.customEndpoint ? [`Custom endpoint: ${aiConfig.customEndpoint}`] : [],
@@ -494,15 +503,15 @@ function checkLoggingModule(cwd: string): CheckResult[] {
     const trainingConfig = config.training as Record<string, unknown> | undefined;
     if (!trainingConfig || trainingConfig.exportEnabled === undefined) {
       results.push({
-        name: 'Training Data Config Completeness',
+        name: texts.checkTrainingConfigCompleteness,
         status: 'warning',
-        message: 'training.* config missing',
+        message: texts.checkTrainingConfigMissing,
         details: ['💡 Run projmnt4claude doctor --fix to auto-fill defaults'],
         fixable: true,
       });
     } else {
       results.push({
-        name: 'Training Data Config Completeness',
+        name: texts.checkTrainingConfigCompleteness,
         status: 'ok',
         message: `exportEnabled: ${trainingConfig.exportEnabled}`,
         details: [`outputDir: ${trainingConfig.outputDir}`],
@@ -537,14 +546,14 @@ function checkLoggingModule(cwd: string): CheckResult[] {
 
     if (oversizedFiles.length > 0) {
       status = 'warning';
-      message = `${oversizedFiles.length} log files exceed 10MB`;
+      message = texts.checkLogHealthOversized.replace('{count}', String(oversizedFiles.length));
       details.push('Files over 10MB:');
       details.push(...oversizedFiles.slice(0, 5).map(f => `  - ${f}`));
     }
 
     if (totalSizeMB > 100) {
       status = 'warning';
-      message = `Log directory exceeds 100MB (${totalSizeMB.toFixed(1)}MB)`;
+      message = texts.checkLogHealthTotalSize.replace('{size}', totalSizeMB.toFixed(1));
       details.push(`Consider cleaning old logs: projmnt4claude config set logging.maxFiles 15`);
     }
 
@@ -553,7 +562,7 @@ function checkLoggingModule(cwd: string): CheckResult[] {
     }
 
     results.push({
-      name: 'Log Health',
+      name: texts.checkLogHealth,
       status,
       message,
       details,
@@ -561,7 +570,7 @@ function checkLoggingModule(cwd: string): CheckResult[] {
     });
   } catch {
     results.push({
-      name: 'Log Health',
+      name: texts.checkLogHealth,
       status: 'warning',
       message: 'Cannot read log directory',
       details: [`Path: ${logsDir}`],
@@ -577,12 +586,13 @@ function checkLoggingModule(cwd: string): CheckResult[] {
  * Detects if task meta.json contains deprecated reopened/needs_human statuses
  */
 function checkDeprecatedStatuses(cwd: string): CheckResult[] {
+  const texts = t(cwd).doctorCmd;
   const results: CheckResult[] = [];
   const tasksDir = getTasksDir(cwd);
 
   if (!fs.existsSync(tasksDir)) {
     return [{
-      name: 'Deprecated Status Check',
+      name: texts.checkDeprecatedStatus,
       status: 'ok',
       message: 'Task directory does not exist (no tasks)',
       details: [],
@@ -610,17 +620,17 @@ function checkDeprecatedStatuses(cwd: string): CheckResult[] {
 
   if (tasksWithDeprecatedStatus.length === 0) {
     results.push({
-      name: 'Deprecated Status Check',
+      name: texts.checkDeprecatedStatus,
       status: 'ok',
-      message: `All ${taskIds.length} tasks have no deprecated status`,
+      message: texts.checkDeprecatedStatusOk.replace('{count}', String(taskIds.length)),
       details: ['✓ No reopened/needs_human status'],
       fixable: false,
     });
   } else {
     results.push({
-      name: 'Deprecated Status Check',
+      name: texts.checkDeprecatedStatus,
       status: 'warning',
-      message: `${tasksWithDeprecatedStatus.length} tasks using deprecated status`,
+      message: texts.checkDeprecatedStatusFound.replace('{count}', String(tasksWithDeprecatedStatus.length)),
       details: [
         'Tasks with deprecated status:',
         ...tasksWithDeprecatedStatus.map(t => `  - ${t.taskId}: status=${t.status}`),
@@ -644,18 +654,19 @@ function checkDeprecatedStatuses(cwd: string): CheckResult[] {
  * Skips check when disabled in config, auto-degrades when not a git repo
  */
 function checkGitHooks(cwd: string): CheckResult[] {
+  const texts = t(cwd).doctorCmd;
   const config = readConfig(cwd);
   const gitHookConfig = config?.gitHook ?? DEFAULT_GIT_HOOK;
 
   // CP-2: Skip if disabled in config
   if (!gitHookConfig.enabled) {
-    return [{ status: 'ok', name: 'Git Hooks', message: 'Git Hook check disabled via config', fixable: false }];
+    return [{ status: 'ok', name: texts.checkGitHooks, message: texts.checkGitHooksDisabled, fixable: false }];
   }
 
   // CP-3: Auto-degrade if not a git repo
   const gitDir = path.join(cwd, '.git');
   if (!fs.existsSync(gitDir)) {
-    return [{ status: 'ok', name: 'Git Hooks', message: 'Not a git repository, skipping Git Hook check', fixable: false }];
+    return [{ status: 'ok', name: texts.checkGitHooks, message: texts.checkGitHooksNotGitRepo, fixable: false }];
   }
 
   // CP-1: Normal git hook status check
@@ -664,17 +675,17 @@ function checkGitHooks(cwd: string): CheckResult[] {
 
     if (pre.isPreCommitInstalled()) {
       return [{
-        name: 'Git Hooks',
+        name: texts.checkGitHooks,
         status: 'ok',
-        message: 'pre-commit hook installed',
+        message: texts.checkGitHooksInstalled,
         fixable: false,
       }];
     }
 
     return [{
-      name: 'Git Hooks',
+      name: texts.checkGitHooks,
       status: 'warning',
-      message: 'pre-commit hook not installed',
+      message: texts.checkGitHooksNotInstalled,
       details: [
         'Recommended to install pre-commit hook to run tests before commits',
         'Run: projmnt4claude pre install',
@@ -683,7 +694,7 @@ function checkGitHooks(cwd: string): CheckResult[] {
     }];
   } catch {
     return [{
-      name: 'Git Hooks',
+      name: texts.checkGitHooks,
       status: 'warning',
       message: 'Cannot check Git Hook status',
       fixable: false,
@@ -762,6 +773,7 @@ function checkDeprecatedHooks(cwd: string): CheckResult[] {
   }
 
   // 3. Generate check results
+  const texts = t(cwd).doctorCmd;
   const hasSettingsIssue = deprecatedSettings.length > 0;
   const hasFilesIssue = deprecatedFiles.length > 0;
 
@@ -791,17 +803,17 @@ function checkDeprecatedHooks(cwd: string): CheckResult[] {
     details.push('💡 Run projmnt4claude doctor --fix to auto-clean');
 
     results.push({
-      name: 'Deprecated Hook Check',
+      name: texts.checkDeprecatedHooks,
       status: 'warning',
-      message: 'Deprecated Claude Code Hook config found',
+      message: texts.checkDeprecatedHooksFound,
       details,
       fixable: true,
     });
   } else {
     results.push({
-      name: 'Deprecated Hook Check',
+      name: texts.checkDeprecatedHooks,
       status: 'ok',
-      message: 'No deprecated Claude Code Hook config found',
+      message: texts.checkDeprecatedHooksOk,
       details: [],
       fixable: false,
     });
@@ -813,7 +825,8 @@ function checkDeprecatedHooks(cwd: string): CheckResult[] {
 /**
  * Display check results
  */
-function displayResults(results: CheckResult[]): void {
+function displayResults(results: CheckResult[], cwd: string = process.cwd()): void {
+  const texts = t(cwd).doctorCmd;
   // Sort by status: error > warning > ok
   const sorted = [...results].sort((a, b) => {
     const order = { error: 0, warning: 1, ok: 2 };
@@ -841,10 +854,10 @@ function displayResults(results: CheckResult[]): void {
 
   console.log('');
   console.log('━'.repeat(SEPARATOR_WIDTH));
-  console.log(`📊 Summary: ${errorCount} errors, ${warningCount} warnings, ${okCount} ok`);
+  console.log('📊 ' + texts.summary.replace('{errors}', String(errorCount)).replace('{warnings}', String(warningCount)).replace('{ok}', String(okCount)));
 
   if (errorCount === 0 && warningCount === 0) {
-    console.log('✅ All checks passed!');
+    console.log('✅ ' + texts.allChecksPassed);
   }
 }
 
@@ -879,11 +892,12 @@ function resolvePluginRoot(): string | null {
  * Fix issues
  */
 async function fixIssues(issues: CheckResult[], cwd: string): Promise<void> {
+  const texts = t(cwd).doctorCmd;
   const projectDir = getProjectDir(cwd);
   const pluginRoot = resolvePluginRoot();
 
   for (const issue of issues) {
-    console.log(`Fixing: ${issue.name}...`);
+    console.log(texts.fixing.replace('{name}', issue.name));
 
     if (issue.name === 'Skill Files' || issue.name === 'Command Docs') {
       // Re-copy skill files
@@ -913,7 +927,7 @@ async function fixIssues(issues: CheckResult[], cwd: string): Promise<void> {
         const skillTarget = path.join(skillDir, 'SKILL.md');
         if (fs.existsSync(skillSource)) {
           fs.copyFileSync(skillSource, skillTarget);
-          console.log(`  ✓ Copied SKILL.md`);
+          console.log(texts.copiedSkillMd);
         }
 
         // Copy command docs
@@ -930,10 +944,10 @@ async function fixIssues(issues: CheckResult[], cwd: string): Promise<void> {
               path.join(commandsTargetDir, file)
             );
           }
-          console.log(`  ✓ Copied ${commandFiles.length} command docs`);
+          console.log(texts.copiedCommandDocs.replace('{count}', String(commandFiles.length)));
         }
       } else {
-        console.log(`  ✗ Cannot fix: Plugin root not found (CLAUDE_PLUGIN_ROOT not set and cannot auto-locate)`);
+        console.log(texts.cannotFixPluginRootNotFound);
       }
     } else if (issue.name.startsWith('Directory:')) {
       // Create missing directories
@@ -947,24 +961,24 @@ async function fixIssues(issues: CheckResult[], cwd: string): Promise<void> {
       const dirPath = dirMap[dirName];
       if (dirPath && !fs.existsSync(dirPath)) {
         fs.mkdirSync(dirPath, { recursive: true });
-        console.log(`  ✓ Created directory: ${dirName}/`);
+        console.log(texts.createdDirectory.replace('{name}', dirName));
       }
-    } else if (issue.name === 'Log Directory') {
+    } else if (issue.name === texts.checkLogDirectory) {
       // Create logs directory
       const logsDir = getLogsDir(cwd);
       if (!fs.existsSync(logsDir)) {
         fs.mkdirSync(logsDir, { recursive: true });
-        console.log(`  ✓ Created logs directory`);
+        console.log(texts.createdLogsDirectory);
       }
-    } else if (issue.name === 'Log Config Completeness' || issue.name === 'AI Config Completeness' || issue.name === 'Training Data Config Completeness') {
+    } else if (issue.name === texts.checkLogConfigCompleteness || issue.name === texts.checkAiConfigCompleteness || issue.name === texts.checkTrainingConfigCompleteness) {
       // Auto-fill missing config items
       const config = readConfig(cwd);
       if (config) {
         const fixedConfig = ensureConfigDefaults(config);
         writeConfig(fixedConfig, cwd);
-        console.log(`  ✓ Auto-filled missing config items`);
+        console.log(texts.autoFilledMissingConfig);
       }
-    } else if (issue.name === 'Deprecated Status Check') {
+    } else if (issue.name === texts.checkDeprecatedStatus) {
       // Migrate deprecated statuses reopened/needs_human → open
       const tasksDir = getTasksDir(cwd);
       const deprecatedMap: Record<string, string> = { 'reopened': 'open', 'needs_human': 'open' };
@@ -994,8 +1008,8 @@ async function fixIssues(issues: CheckResult[], cwd: string): Promise<void> {
           }
         }
       }
-      console.log(`  ✓ Migrated ${fixedCount} deprecated status tasks`);
-    } else if (issue.name === 'Deprecated Hook Check') {
+      console.log(texts.migratedDeprecatedStatusTasks.replace('{count}', String(fixedCount)));
+    } else if (issue.name === texts.checkDeprecatedHooks) {
       // Clean up deprecated Claude Code Hook config
       let removedSettings = false;
       let removedFiles = false;
@@ -1081,19 +1095,19 @@ async function fixIssues(issues: CheckResult[], cwd: string): Promise<void> {
       }
 
       if (removedSettings || removedFiles) {
-        console.log(`  ✓ Cleaned up deprecated Claude Code Hook config`);
+        console.log(texts.cleanedDeprecatedHookConfig);
         if (removedSettings) {
-          console.log(`    - Updated .claude/settings.json`);
+          console.log(texts.updatedSettings);
         }
         if (removedFiles) {
-          console.log(`    - Deleted deprecated scripts from .projmnt4claude/hooks/`);
+          console.log(texts.deletedDeprecatedScripts);
         }
       }
     }
   }
 
   console.log('');
-  console.log('✅ Fix complete');
+  console.log('✅ ' + texts.fixComplete);
 }
 
 /**
@@ -1101,15 +1115,16 @@ async function fixIssues(issues: CheckResult[], cwd: string): Promise<void> {
  * Calls Logger to generate Markdown report + .tar.gz log archive attachment
  */
 export async function runBugReport(cwd: string = process.cwd()): Promise<void> {
+  const texts = t(cwd).doctorCmd;
   console.log('');
   console.log('━'.repeat(SEPARATOR_WIDTH));
-  console.log('📋 Bug Report Generation');
+  console.log('📋 ' + texts.bugReportGeneration);
   console.log('━'.repeat(SEPARATOR_WIDTH));
   console.log('');
 
   if (!isInitialized(cwd)) {
-    console.error('❌ Error: Project not initialized, cannot generate bug report');
-    console.error('Run projmnt4claude setup to initialize the project first');
+    console.error('❌ ' + texts.errorProjectNotInitialized);
+    console.error(texts.runSetupFirst);
     process.exit(1);
   }
 
@@ -1127,60 +1142,69 @@ export async function runBugReport(cwd: string = process.cwd()): Promise<void> {
     // Output cost summary
     console.log('');
     console.log('━'.repeat(SEPARATOR_WIDTH));
-    console.log('💰 AI Cost Summary');
+    console.log('💰 ' + texts.aiCostSummary);
     console.log('━'.repeat(SEPARATOR_WIDTH));
     console.log('');
 
     const costSummary = logger.getCostSummary();
-    console.log(`Total AI calls: ${costSummary.totalCalls}`);
-    console.log(`Total duration: ${(costSummary.totalDurationMs / 1000).toFixed(1)}s`);
-    console.log(`Total tokens: ${costSummary.totalTokens} (input: ${costSummary.totalInputTokens}, output: ${costSummary.totalOutputTokens})`);
+    console.log(texts.totalAiCalls.replace('{count}', String(costSummary.totalCalls)));
+    console.log(texts.totalDuration.replace('{duration}', (costSummary.totalDurationMs / 1000).toFixed(1)));
+    console.log(texts.totalTokens
+      .replace('{total}', String(costSummary.totalTokens))
+      .replace('{input}', String(costSummary.totalInputTokens))
+      .replace('{output}', String(costSummary.totalOutputTokens)));
 
     if (Object.keys(costSummary.byField).length > 0) {
       console.log('');
-      console.log('By field:');
+      console.log(texts.byField);
       for (const [field, info] of Object.entries(costSummary.byField)) {
-        console.log(`  ${field}: ${info.calls} calls, ${(info.durationMs / 1000).toFixed(1)}s, ${info.totalTokens} tokens`);
+        console.log(texts.fieldStats
+          .replace('{field}', field)
+          .replace('{calls}', String(info.calls))
+          .replace('{duration}', (info.durationMs / 1000).toFixed(1))
+          .replace('{tokens}', String(info.totalTokens)));
       }
     }
 
     // Output usage analysis
     console.log('');
     console.log('━'.repeat(SEPARATOR_WIDTH));
-    console.log('📊 Usage Analysis');
+    console.log('📊 ' + texts.usageAnalysis);
     console.log('━'.repeat(SEPARATOR_WIDTH));
     console.log('');
 
     const usage = logger.analyzeUsage();
-    console.log(`Total command executions: ${usage.totalCommands}`);
-    console.log(`Average duration: ${(usage.averageDurationMs / 1000).toFixed(1)}s`);
-    console.log(`AI usage rate: ${(usage.aiUsageRate * 100).toFixed(1)}%`);
-    console.log(`Errors: ${usage.totalErrors}, Warnings: ${usage.totalWarnings}`);
+    console.log(texts.totalCommandExecutions.replace('{count}', String(usage.totalCommands)));
+    console.log(texts.averageDuration.replace('{duration}', (usage.averageDurationMs / 1000).toFixed(1)));
+    console.log(texts.aiUsageRate.replace('{rate}', (usage.aiUsageRate * 100).toFixed(1)));
+    console.log(texts.errorsAndWarnings
+      .replace('{errors}', String(usage.totalErrors))
+      .replace('{warnings}', String(usage.totalWarnings)));
 
     if (Object.keys(usage.commandFrequency).length > 0) {
       console.log('');
-      console.log('Command frequency:');
+      console.log(texts.commandFrequency);
       const sorted = Object.entries(usage.commandFrequency).sort((a, b) => b[1] - a[1]);
       for (const [cmd, count] of sorted) {
-        console.log(`  ${cmd}: ${count}`);
+        console.log(texts.commandCount.replace('{cmd}', cmd).replace('{count}', String(count)));
       }
     }
 
     if (usage.commonErrors.length > 0) {
       console.log('');
-      console.log('Common errors:');
+      console.log(texts.commonErrors);
       for (const err of usage.commonErrors.slice(0, 5)) {
-        console.log(`  [${err.count}x] ${err.message}`);
+        console.log(texts.errorEntry.replace('{count}', String(err.count)).replace('{message}', err.message));
       }
     }
 
     console.log('');
     console.log('━'.repeat(SEPARATOR_WIDTH));
-    console.log(`✅ Bug report generated`);
-    console.log(`📎 Log archive: ${report.archivePath}`);
+    console.log('✅ ' + texts.bugReportGenerated);
+    console.log('📎 ' + texts.logArchive.replace('{path}', report.archivePath));
   } catch (err) {
     console.error('');
-    console.error(`❌ Bug report generation failed: ${err instanceof Error ? err.message : String(err)}`);
+    console.error('❌ ' + texts.bugReportFailed.replace('{error}', err instanceof Error ? err.message : String(err)));
     process.exit(1);
   }
 }
@@ -1192,9 +1216,10 @@ export async function runBugReport(cwd: string = process.cwd()): Promise<void> {
  * providing deeper problem detection and fix recommendations.
  */
 export async function runDoctorDeep(cwd: string = process.cwd()): Promise<void> {
+  const texts = t(cwd).doctorCmd;
   console.log('');
   console.log('━'.repeat(SEPARATOR_WIDTH));
-  console.log('🔬 Deep Log Analysis (--deep)');
+  console.log('🔬 ' + texts.deepLogAnalysis);
   console.log('━'.repeat(SEPARATOR_WIDTH));
   console.log('');
 
@@ -1203,7 +1228,7 @@ export async function runDoctorDeep(cwd: string = process.cwd()): Promise<void> 
 
   console.log('');
   console.log('━'.repeat(SEPARATOR_WIDTH));
-  console.log('📊 Deep Log Analysis');
+  console.log('📊 ' + texts.deepLogAnalysis.replace(' (--deep)', ''));
   console.log('━'.repeat(SEPARATOR_WIDTH));
   console.log('');
 
@@ -1212,20 +1237,20 @@ export async function runDoctorDeep(cwd: string = process.cwd()): Promise<void> 
   const stats = collector.getStats();
 
   if (stats.fileCount === 0) {
-    console.log('ℹ️  No log files found, skipping log analysis');
-    console.log(`   Log directory: ${getLogsDir(cwd)}`);
+    console.log('ℹ️  ' + texts.noLogFilesFound);
+    console.log(texts.logDirectory.replace('{path}', getLogsDir(cwd)));
     return;
   }
 
-  console.log(`📂 Log files: ${stats.fileCount} (${stats.totalSizeKB} KB)`);
+  console.log('📂 ' + texts.logFilesCount.replace('{count}', String(stats.fileCount)).replace('{size}', String(stats.totalSizeKB)));
 
   // Collect logs from last 24 hours
   const entries = collector.collectSince(24, { maxEntries: 10000 });
-  console.log(`📋 Log entries: ${entries.length} (last 24 hours)`);
+  console.log('📋 ' + texts.logEntriesCount.replace('{count}', String(entries.length)));
   console.log('');
 
   if (entries.length === 0) {
-    console.log('ℹ️  No log entries in the last 24 hours');
+    console.log('ℹ️  ' + texts.noLogEntriesInLast24Hours);
     return;
   }
 
@@ -1235,9 +1260,12 @@ export async function runDoctorDeep(cwd: string = process.cwd()): Promise<void> 
     registry.register(analyzer);
   }
 
-  console.log(`🔧 Registered ${registry.size} analyzers:`);
+  console.log('🔧 ' + texts.registeredAnalyzers.replace('{count}', String(registry.size)));
   for (const analyzer of registry.getAll()) {
-    console.log(`   - ${analyzer.name} (${analyzer.category}) [${analyzer.supportedStrategies.join(', ')}]`);
+    console.log('   ' + texts.analyzerEntry
+      .replace('{name}', analyzer.name)
+      .replace('{category}', analyzer.category)
+      .replace('{strategies}', analyzer.supportedStrategies.join(', ')));
   }
   console.log('');
 
@@ -1253,17 +1281,17 @@ export async function runDoctorDeep(cwd: string = process.cwd()): Promise<void> 
   // 5. Output recommendations
   if (report.summary.totalFindings > 0) {
     console.log('━'.repeat(SEPARATOR_WIDTH));
-    console.log(`📊 Found ${report.summary.totalFindings} issues`);
+    console.log('📊 ' + texts.foundIssues.replace('{count}', String(report.summary.totalFindings)));
 
     const critical = report.summary.bySeverity['critical'] || 0;
     const errors = report.summary.bySeverity['error'] || 0;
     if (critical > 0) {
-      console.log(`🔴 ${critical} critical issues require immediate attention`);
+      console.log('🔴 ' + texts.criticalIssuesRequireAttention.replace('{count}', String(critical)));
     }
     if (errors > 0) {
-      console.log(`❌ ${errors} errors need attention`);
+      console.log('❌ ' + texts.errorsNeedAttention.replace('{count}', String(errors)));
     }
   } else {
-    console.log('✅ Deep log analysis complete, no anomalies found');
+    console.log('✅ ' + texts.deepAnalysisComplete);
   }
 }

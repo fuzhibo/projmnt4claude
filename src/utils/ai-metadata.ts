@@ -13,20 +13,11 @@
  */
 
 import { Logger } from './logger.js';
-import { getAgent, type HeadlessAgent, type AgentResult, type AgentInvokeOptions } from './headless-agent.js';
+import { invokeAgent, type AgentInvokeOptions } from './headless-agent.js';
 import type { TaskMeta, TaskPriority, TaskType } from '../types/task';
 import { inferTaskType, inferTaskPriority } from '../types/task';
 import { loadPromptTemplate, resolveTemplate } from './prompt-templates.js';
-import { createSessionAwareEngine } from './feedback-constraint-engine.js';
-import type { ValidationRule } from '../types/feedback-constraint.js';
-import {
-  requirementOutputRules,
-  qualityOutputRules,
-  duplicatesOutputRules,
-  stalenessOutputRules,
-  bugReportOutputRules,
-} from './validation-rules/ai-metadata-rules.js';
-import { semanticDependencyOutputRules } from './validation-rules/plan-rules.js';
+import { buildAgentOptionsFromPreset } from '../types/config.js';
 
 // ============================================================
 // 架构层级分类 (Layer0-Layer3)
@@ -411,9 +402,131 @@ const VALID_SEVERITIES: string[] = ['error', 'warning', 'info'];
 
 export class AIMetadataAssistant {
   private logger: Logger;
+  private cwd: string;
+  private presets: {
+    metadataEnhancement: { timeout: number; maxRetries: number; allowedTools: string[]; outputFormat: 'text' | 'json' | 'markdown' };
+    checkpointEnhancement: { timeout: number; maxRetries: number; allowedTools: string[]; outputFormat: 'text' | 'json' | 'markdown' };
+    qualityAnalysis: { timeout: number; maxRetries: number; allowedTools: string[]; outputFormat: 'text' | 'json' | 'markdown' };
+    duplicateDetection: { timeout: number; maxRetries: number; allowedTools: string[]; outputFormat: 'text' | 'json' | 'markdown' };
+    stalenessAssessment: { timeout: number; maxRetries: number; allowedTools: string[]; outputFormat: 'text' | 'json' | 'markdown' };
+    bugAnalysis: { timeout: number; maxRetries: number; allowedTools: string[]; outputFormat: 'text' | 'json' | 'markdown' };
+  };
 
-  constructor(cwd?: string) {
+  /**
+   * 构造函数：初始化 preset 配置
+   * @param cwd - 工作目录
+   */
+  constructor(cwd: string = process.cwd()) {
+    this.cwd = cwd;
     this.logger = new Logger({ component: 'ai-metadata', cwd });
+
+    // 初始化各场景预设配置
+    this.presets = {
+      metadataEnhancement: buildAgentOptionsFromPreset('metadataEnhancement', cwd),
+      checkpointEnhancement: buildAgentOptionsFromPreset('checkpointEnhancement', cwd),
+      qualityAnalysis: buildAgentOptionsFromPreset('qualityAnalysis', cwd),
+      duplicateDetection: buildAgentOptionsFromPreset('duplicateDetection', cwd),
+      stalenessAssessment: buildAgentOptionsFromPreset('stalenessAssessment', cwd),
+      bugAnalysis: buildAgentOptionsFromPreset('bugAnalysis', cwd),
+    };
+
+    this.logger.info('AIMetadataAssistant 初始化完成', {
+      cwd,
+      presets: Object.keys(this.presets),
+    });
+  }
+
+  /**
+   * 私有方法：统一调用 AI
+   * 所有公共方法都通过此方法进行 AI 调用
+   *
+   * @param prompt - 提示词
+   * @param scenario - 场景名称
+   * @param operation - 操作名称（用于日志）
+   * @returns AI 调用结果
+   */
+  private async callAI<T>(
+    prompt: string,
+    scenario: 'metadataEnhancement' | 'checkpointEnhancement' | 'qualityAnalysis' | 'duplicateDetection' | 'stalenessAssessment' | 'bugAnalysis',
+    operation: string,
+  ): Promise<{ success: boolean; data?: T; error?: string; tokensUsed?: { input: number; output: number } }> {
+    const startTime = Date.now();
+
+    this.logger.info(`[${operation}] AI 调用开始`, {
+      scenario,
+      operation,
+      promptLength: prompt.length,
+    });
+
+    try {
+      const preset = this.presets[scenario];
+      const agentOptions: AgentInvokeOptions = {
+        timeout: preset.timeout,
+        allowedTools: preset.allowedTools,
+        outputFormat: preset.outputFormat,
+        maxRetries: preset.maxRetries,
+        cwd: this.cwd,
+        dangerouslySkipPermissions: true,
+      };
+
+      const agentResult = await invokeAgent(prompt, agentOptions);
+      const durationMs = Date.now() - startTime;
+
+      if (!agentResult.success) {
+        this.logger.warn(`[${operation}] AI 调用失败，返回回退结果`, {
+          error: agentResult.error,
+          durationMs,
+        });
+        return { success: false, error: agentResult.error || 'Agent invocation failed' };
+      }
+
+      const parsed = this.parseJSON(agentResult.output);
+      if (!parsed) {
+        this.logger.warn(`[${operation}] 解析 AI 响应失败`, {
+          output: agentResult.output?.slice(0, 200),
+          durationMs,
+        });
+        return { success: false, error: 'Failed to parse AI response as JSON' };
+      }
+
+      // 记录 Token 使用量
+      const inputTokens = agentResult.tokensUsed
+        ? Math.floor(agentResult.tokensUsed * 0.3)
+        : Math.floor(prompt.length / 4);
+      const outputTokens = agentResult.tokensUsed
+        ? Math.floor(agentResult.tokensUsed * 0.7)
+        : Math.floor(agentResult.output.length / 4);
+
+      this.logger.logAICost({
+        field: operation,
+        durationMs,
+        inputTokens,
+        outputTokens,
+        totalTokens: inputTokens + outputTokens,
+      });
+
+      this.logger.info(`[${operation}] AI 调用完成`, {
+        durationMs,
+        tokensUsed: inputTokens + outputTokens,
+        model: agentResult.model,
+      });
+
+      return {
+        success: true,
+        data: parsed as T,
+        tokensUsed: {
+          input: inputTokens,
+          output: outputTokens,
+        },
+      };
+    } catch (err: any) {
+      const durationMs = Date.now() - startTime;
+      this.logger.warn(`[${operation}] AI 调用异常，返回回退结果`, {
+        error: err.message,
+        durationMs,
+      });
+      return { success: false, error: err.message || String(err) };
+    }
   }
 
   // ----------------------------------------------------------
@@ -423,43 +536,55 @@ export class AIMetadataAssistant {
   /**
    * 增强需求描述，返回完整的元数据
    * 单次调用返回: title, description, type, priority, checkpoints, dependencies
+   * 使用 callAI 统一调用
    */
-  async enhanceRequirement(description: string, options: AIMetadataCallOptions): Promise<EnhancedRequirement> {
-    const prompt = this.buildRequirementPrompt(description, undefined, options.cwd);
+  async enhanceRequirement(description: string, options?: AIMetadataCallOptions): Promise<EnhancedRequirement> {
+    this.logger.info('enhanceRequirement 调用开始', { descriptionLength: description.length });
 
-    const result = await this.invokeWithEngine(prompt, requirementOutputRules, {
-      ...options,
-      maxRetries: options.maxRetries ?? 2,
-      timeoutSeconds: options.timeoutSeconds ?? 30,
-    });
+    const prompt = this.buildRequirementPrompt(description, undefined, options?.cwd ?? this.cwd);
 
-    if (!result.success) {
-      this.logger.warn('AI 需求增强失败，回退到规则引擎');
+    const result = await this.callAI<{
+      title: string;
+      description: string;
+      type: TaskType | null;
+      priority: TaskPriority | null;
+      recommendedRole: string;
+      checkpoints: string[];
+      dependencies: string[];
+    }>(prompt, 'metadataEnhancement', 'enhanceRequirement');
+
+    if (!result.success || !result.data) {
+      this.logger.warn('enhanceRequirement 失败，回退到规则引擎', { error: result.error });
       return this.fallbackEnhanceRequirement(description);
     }
 
-    const parsed = this.parseJSON(result.output);
-    if (!parsed) {
-      this.logger.warn('AI 输出 JSON 解析失败，回退到规则引擎');
-      return this.fallbackEnhanceRequirement(description);
-    }
+    const data = result.data;
+    const validPriorities: TaskPriority[] = ['P0', 'P1', 'P2', 'P3'];
+    const validComplexities = ['low', 'medium', 'high'];
+    const validRoles = ['developer', 'frontend', 'backend', 'qa', 'writer', 'security', 'performance', 'architect', 'devops'];
 
-    const validation = this.validateRequirement(parsed);
-    if (!validation.valid) {
-      this.logger.warn('AI 输出校验失败: ' + validation.errors.join(', '));
-      return this.fallbackEnhanceRequirement(description);
-    }
-
-    return {
-      title: this.sanitizeTitle(parsed.title),
-      description: typeof parsed.description === 'string' ? parsed.description : null,
-      type: VALID_TYPES.includes(parsed.type as TaskType | null) ? parsed.type as TaskType | null : null,
-      priority: VALID_PRIORITIES.includes(parsed.priority as TaskPriority | null) ? parsed.priority as TaskPriority | null : null,
-      recommendedRole: typeof parsed.recommendedRole === 'string' ? parsed.recommendedRole : null,
-      checkpoints: this.sanitizeCheckpoints(parsed.checkpoints),
-      dependencies: Array.isArray(parsed.dependencies) ? parsed.dependencies as string[] : null,
+    const enhanced: EnhancedRequirement = {
+      title: typeof data.title === 'string' ? data.title : this.sanitizeTitle(data.title) ?? '',
+      description: typeof data.description === 'string' ? data.description : null,
+      type: VALID_TYPES.includes(data.type as TaskType | null) ? data.type as TaskType | null : inferTaskType(description),
+      priority: validPriorities.includes(data.priority as TaskPriority) ? data.priority as TaskPriority : inferTaskPriority(description),
+      recommendedRole: typeof data.recommendedRole === 'string' ? data.recommendedRole : 'developer',
+      checkpoints: Array.isArray(data.checkpoints)
+        ? this.sanitizeCheckpoints(data.checkpoints) ?? []
+        : [],
+      dependencies: Array.isArray(data.dependencies)
+        ? data.dependencies.filter((d: any) => typeof d === 'string' && d.length > 3)
+        : [],
       aiUsed: true,
     };
+
+    this.logger.info('enhanceRequirement 完成', {
+      title: enhanced.title,
+      priority: enhanced.priority,
+      checkpointCount: enhanced.checkpoints.length,
+    });
+
+    return enhanced;
   }
 
   // ----------------------------------------------------------
@@ -471,36 +596,43 @@ export class AIMetadataAssistant {
    * @param description - 任务描述
    * @param type - 任务类型
    * @param existing - 已有检查点
+   * 使用 callAI 统一调用
    */
   async enhanceCheckpoints(
     description: string,
     type: TaskType | undefined,
     existing: string[],
-    options: AIMetadataCallOptions,
+    options?: AIMetadataCallOptions,
   ): Promise<EnhancedCheckpoints> {
-    const prompt = this.buildCheckpointsPrompt(description, type, existing, options.cwd);
-
-    const result = await this.invokeWithEngine(prompt, [], {
-      ...options,
-      maxRetries: options.maxRetries ?? 2,
-      timeoutSeconds: options.timeoutSeconds ?? 30,
+    this.logger.info('enhanceCheckpoints 调用开始', {
+      descriptionLength: description.length,
+      checkpointCount: existing.length,
+      taskType: type,
     });
 
-    if (!result.success) {
-      this.logger.warn('AI 检查点增强失败，回退到规则引擎');
+    const prompt = this.buildCheckpointsPrompt(description, type, existing, options?.cwd ?? this.cwd);
+
+    const result = await this.callAI<{
+      checkpoints: string[];
+    }>(prompt, 'checkpointEnhancement', 'enhanceCheckpoints');
+
+    if (!result.success || !result.data) {
+      this.logger.warn('enhanceCheckpoints 失败，回退到已有检查点', { error: result.error });
       return { checkpoints: existing, aiUsed: false };
     }
 
-    const parsed = this.parseJSON(result.output);
-    if (!parsed || !Array.isArray(parsed.checkpoints)) {
-      this.logger.warn('AI 检查点输出解析失败，回退到已有检查点');
-      return { checkpoints: existing, aiUsed: false };
-    }
-
-    return {
-      checkpoints: this.sanitizeCheckpoints(parsed.checkpoints) ?? existing,
+    const enhanced: EnhancedCheckpoints = {
+      checkpoints: Array.isArray(result.data.checkpoints)
+        ? this.sanitizeCheckpoints(result.data.checkpoints) ?? existing
+        : existing,
       aiUsed: true,
     };
+
+    this.logger.info('enhanceCheckpoints 完成', {
+      checkpointCount: enhanced.checkpoints.length,
+    });
+
+    return enhanced;
   }
 
   // ----------------------------------------------------------
@@ -510,32 +642,40 @@ export class AIMetadataAssistant {
   /**
    * 评估任务质量
    * @param task - 任务元数据
+   * 使用 callAI 统一调用
    */
-  async analyzeTaskQuality(task: TaskMeta, options: AIMetadataCallOptions): Promise<TaskQualityAssessment> {
-    const prompt = this.buildQualityPrompt(task, options.cwd);
-
-    const result = await this.invokeWithEngine(prompt, qualityOutputRules, {
-      ...options,
-      maxRetries: options.maxRetries ?? 2,
-      timeoutSeconds: options.timeoutSeconds ?? 30,
+  async analyzeTaskQuality(task: TaskMeta, options?: AIMetadataCallOptions): Promise<TaskQualityAssessment> {
+    this.logger.info('analyzeTaskQuality 调用开始', {
+      title: task.title,
+      descriptionLength: task.description?.length ?? 0,
     });
 
-    if (!result.success) {
-      this.logger.warn('AI 质量评估失败，回退到规则引擎');
+    const prompt = this.buildQualityPrompt(task, options?.cwd ?? this.cwd);
+
+    const result = await this.callAI<{
+      score: number;
+      issues: QualityIssue[];
+      suggestions: string[];
+    }>(prompt, 'qualityAnalysis', 'analyzeTaskQuality');
+
+    if (!result.success || !result.data) {
+      this.logger.warn('analyzeTaskQuality 失败，回退到规则引擎', { error: result.error });
       return this.fallbackAnalyzeQuality(task);
     }
 
-    const parsed = this.parseJSON(result.output);
-    if (!parsed) {
-      return this.fallbackAnalyzeQuality(task);
-    }
-
-    return {
-      score: typeof parsed.score === 'number' ? Math.max(0, Math.min(100, parsed.score)) : 50,
-      issues: this.sanitizeIssues(parsed.issues),
-      suggestions: Array.isArray(parsed.suggestions) ? parsed.suggestions : [],
+    const analysis: TaskQualityAssessment = {
+      score: typeof result.data.score === 'number' ? Math.max(0, Math.min(100, result.data.score)) : 50,
+      issues: this.sanitizeIssues(result.data.issues),
+      suggestions: Array.isArray(result.data.suggestions) ? result.data.suggestions : [],
       aiUsed: true,
     };
+
+    this.logger.info('analyzeTaskQuality 完成', {
+      score: analysis.score,
+      issueCount: analysis.issues.length,
+    });
+
+    return analysis;
   }
 
   // ----------------------------------------------------------
@@ -545,34 +685,38 @@ export class AIMetadataAssistant {
   /**
    * 检测任务列表中的语义重复
    * @param tasks - 任务元数据列表
+   * 使用 callAI 统一调用
    */
-  async detectDuplicates(tasks: TaskMeta[], options: AIMetadataCallOptions): Promise<DuplicateDetectionResult> {
+  async detectDuplicates(tasks: TaskMeta[], options?: AIMetadataCallOptions): Promise<DuplicateDetectionResult> {
+    this.logger.info('detectDuplicates 调用开始', {
+      taskCount: tasks.length,
+    });
+
     if (tasks.length < 2) {
       return { duplicates: [], aiUsed: false };
     }
 
-    const prompt = this.buildDuplicatesPrompt(tasks, options.cwd);
+    const prompt = this.buildDuplicatesPrompt(tasks, options?.cwd ?? this.cwd);
 
-    const result = await this.invokeWithEngine(prompt, duplicatesOutputRules, {
-      ...options,
-      maxRetries: options.maxRetries ?? 2,
-      timeoutSeconds: options.timeoutSeconds ?? 30,
-    });
+    const result = await this.callAI<{
+      duplicates: DuplicateGroup[];
+    }>(prompt, 'duplicateDetection', 'detectDuplicates');
 
-    if (!result.success) {
-      this.logger.warn('AI 重复检测失败，回退到规则引擎');
+    if (!result.success || !result.data) {
+      this.logger.warn('detectDuplicates 失败，回退到规则引擎', { error: result.error });
       return this.fallbackDetectDuplicates(tasks);
     }
 
-    const parsed = this.parseJSON(result.output);
-    if (!parsed || !Array.isArray(parsed.duplicates)) {
-      return this.fallbackDetectDuplicates(tasks);
-    }
-
-    return {
-      duplicates: this.sanitizeDuplicates(parsed.duplicates, tasks),
+    const detectionResult: DuplicateDetectionResult = {
+      duplicates: this.sanitizeDuplicates(result.data.duplicates, tasks),
       aiUsed: true,
     };
+
+    this.logger.info('detectDuplicates 完成', {
+      duplicateCount: detectionResult.duplicates.length,
+    });
+
+    return detectionResult;
   }
 
   // ----------------------------------------------------------
@@ -582,33 +726,43 @@ export class AIMetadataAssistant {
   /**
    * 评估任务是否陈旧以及建议动作
    * @param task - 任务元数据
+   * 使用 callAI 统一调用
    */
-  async assessStaleness(task: TaskMeta, options: AIMetadataCallOptions): Promise<StalenessAssessment> {
-    const prompt = this.buildStalenessPrompt(task, options.cwd);
-
-    const result = await this.invokeWithEngine(prompt, stalenessOutputRules, {
-      ...options,
-      maxRetries: options.maxRetries ?? 2,
-      timeoutSeconds: options.timeoutSeconds ?? 30,
+  async assessStaleness(task: TaskMeta, options?: AIMetadataCallOptions): Promise<StalenessAssessment> {
+    this.logger.info('assessStaleness 调用开始', {
+      taskId: task.id,
+      title: task.title,
+      status: task.status,
     });
 
-    if (!result.success) {
-      this.logger.warn('AI 陈旧评估失败，回退到规则引擎');
+    const prompt = this.buildStalenessPrompt(task, options?.cwd ?? this.cwd);
+
+    const result = await this.callAI<{
+      isStale: boolean;
+      stalenessScore: number;
+      suggestedAction: 'keep' | 'close' | 'update' | 'split';
+      reason: string;
+    }>(prompt, 'stalenessAssessment', 'assessStaleness');
+
+    if (!result.success || !result.data) {
+      this.logger.warn('assessStaleness 失败，回退到规则引擎', { error: result.error });
       return this.fallbackAssessStaleness(task);
     }
 
-    const parsed = this.parseJSON(result.output);
-    if (!parsed) {
-      return this.fallbackAssessStaleness(task);
-    }
-
-    return {
-      isStale: typeof parsed.isStale === 'boolean' ? parsed.isStale : false,
-      stalenessScore: typeof parsed.stalenessScore === 'number' ? Math.max(0, Math.min(1, parsed.stalenessScore)) : 0,
-      suggestedAction: VALID_ACTIONS.includes(parsed.suggestedAction as string) ? parsed.suggestedAction as StalenessAssessment['suggestedAction'] : 'keep',
-      reason: typeof parsed.reason === 'string' ? parsed.reason : '',
+    const assessment: StalenessAssessment = {
+      isStale: typeof result.data.isStale === 'boolean' ? result.data.isStale : false,
+      stalenessScore: typeof result.data.stalenessScore === 'number' ? Math.max(0, Math.min(1, result.data.stalenessScore)) : 0,
+      suggestedAction: VALID_ACTIONS.includes(result.data.suggestedAction as string) ? result.data.suggestedAction as StalenessAssessment['suggestedAction'] : 'keep',
+      reason: typeof result.data.reason === 'string' ? result.data.reason : '',
       aiUsed: true,
     };
+
+    this.logger.info('assessStaleness 完成', {
+      isStale: assessment.isStale,
+      suggestedAction: assessment.suggestedAction,
+    });
+
+    return assessment;
   }
 
   // ----------------------------------------------------------
@@ -619,40 +773,54 @@ export class AIMetadataAssistant {
    * 将 Bug 报告转为需求文档
    * @param reportContent - Bug 报告内容
    * @param logContext - 可选的日志上下文
+   * 使用 callAI 统一调用
    */
   async analyzeBugReport(
     reportContent: string,
     logContext: string | undefined,
-    options: AIMetadataCallOptions,
+    options?: AIMetadataCallOptions,
   ): Promise<BugReportAnalysis> {
-    const prompt = this.buildBugReportPrompt(reportContent, logContext, options.cwd);
-
-    const result = await this.invokeWithEngine(prompt, bugReportOutputRules, {
-      ...options,
-      maxRetries: options.maxRetries ?? 2,
-      timeoutSeconds: options.timeoutSeconds ?? 30,
+    this.logger.info('analyzeBugReport 调用开始', {
+      reportLength: reportContent.length,
+      hasLogContext: !!logContext,
     });
 
-    if (!result.success) {
-      this.logger.warn('AI Bug 报告分析失败，回退到规则引擎');
+    const prompt = this.buildBugReportPrompt(reportContent, logContext, options?.cwd ?? this.cwd);
+
+    const result = await this.callAI<{
+      title: string;
+      description: string;
+      type: TaskType | null;
+      priority: TaskPriority | null;
+      checkpoints: string[];
+      rootCause: string;
+      impactScope: string;
+    }>(prompt, 'bugAnalysis', 'analyzeBugReport');
+
+    if (!result.success || !result.data) {
+      this.logger.warn('analyzeBugReport 失败，回退到规则引擎', { error: result.error });
       return this.fallbackAnalyzeBugReport(reportContent);
     }
 
-    const parsed = this.parseJSON(result.output);
-    if (!parsed) {
-      return this.fallbackAnalyzeBugReport(reportContent);
-    }
-
-    return {
-      title: this.sanitizeTitle(parsed.title),
-      description: typeof parsed.description === 'string' ? parsed.description : null,
-      type: VALID_TYPES.includes(parsed.type as TaskType | null) ? parsed.type as TaskType | null : 'bug',
-      priority: VALID_PRIORITIES.includes(parsed.priority as TaskPriority | null) ? parsed.priority as TaskPriority | null : 'P2',
-      checkpoints: this.sanitizeCheckpoints(parsed.checkpoints),
-      rootCause: typeof parsed.rootCause === 'string' ? parsed.rootCause : null,
-      impactScope: typeof parsed.impactScope === 'string' ? parsed.impactScope : null,
+    const data = result.data;
+    const analysis: BugReportAnalysis = {
+      title: typeof data.title === 'string' ? data.title : this.sanitizeTitle(data.title) ?? null,
+      description: typeof data.description === 'string' ? data.description : null,
+      type: VALID_TYPES.includes(data.type as TaskType | null) ? data.type as TaskType | null : 'bug',
+      priority: VALID_PRIORITIES.includes(data.priority as TaskPriority | null) ? data.priority as TaskPriority | null : 'P2',
+      checkpoints: this.sanitizeCheckpoints(data.checkpoints),
+      rootCause: typeof data.rootCause === 'string' ? data.rootCause : null,
+      impactScope: typeof data.impactScope === 'string' ? data.impactScope : null,
       aiUsed: true,
     };
+
+    this.logger.info('analyzeBugReport 完成', {
+      title: analysis.title,
+      type: analysis.type,
+      priority: analysis.priority,
+    });
+
+    return analysis;
   }
 
   // ----------------------------------------------------------
@@ -665,28 +833,25 @@ export class AIMetadataAssistant {
    * @param tasks - 任务元数据列表
    * @param options - AI 调用选项
    * @returns 语义依赖推断结果
+   * 使用 callAI 统一调用
    */
-  async inferSemanticDependencies(tasks: TaskMeta[], options: AIMetadataCallOptions): Promise<SemanticDependencyResult> {
+  async inferSemanticDependencies(tasks: TaskMeta[], options?: AIMetadataCallOptions): Promise<SemanticDependencyResult> {
+    this.logger.info('inferSemanticDependencies 调用开始', {
+      taskCount: tasks.length,
+    });
+
     if (tasks.length < 2) {
       return { dependencies: [], aiUsed: false };
     }
 
-    const prompt = this.buildSemanticDependencyPrompt(tasks, options.cwd);
+    const prompt = this.buildSemanticDependencyPrompt(tasks, options?.cwd ?? this.cwd);
 
-    const result = await this.invokeWithEngine(prompt, semanticDependencyOutputRules, {
-      ...options,
-      maxRetries: options.maxRetries ?? 2,
-      timeoutSeconds: options.timeoutSeconds ?? 30,
-    });
+    const result = await this.callAI<{
+      dependencies: SemanticDependency[];
+    }>(prompt, 'metadataEnhancement', 'inferSemanticDependencies');
 
-    if (!result.success) {
-      this.logger.warn('AI 语义依赖推断失败');
-      return { dependencies: [], aiUsed: false };
-    }
-
-    const parsed = this.parseJSON(result.output);
-    if (!parsed || !Array.isArray(parsed.dependencies)) {
-      this.logger.warn('AI 语义依赖输出解析失败');
+    if (!result.success || !result.data) {
+      this.logger.warn('inferSemanticDependencies 失败', { error: result.error });
       return { dependencies: [], aiUsed: false };
     }
 
@@ -694,7 +859,7 @@ export class AIMetadataAssistant {
     const validTaskIds = new Set(tasks.map(t => t.id));
     const deps: SemanticDependency[] = [];
 
-    for (const dep of parsed.dependencies) {
+    for (const dep of result.data.dependencies || []) {
       if (
         typeof dep === 'object' && dep !== null &&
         typeof dep.taskId === 'string' &&
@@ -711,6 +876,10 @@ export class AIMetadataAssistant {
         });
       }
     }
+
+    this.logger.info('inferSemanticDependencies 完成', {
+      dependencyCount: deps.length,
+    });
 
     return { dependencies: deps, aiUsed: true };
   }
@@ -813,63 +982,12 @@ export class AIMetadataAssistant {
   // ============================================================
 
   /**
-   * 基于 FeedbackConstraintEngine 的 AI 调用
-   *
-   * 替代原先的手动重试循环，使用引擎进行：
-   * - JSON 可解析性验证
-   * - 非空输出检查
-   * - 方法级业务规则验证（additionalRules）
-   * - 结构化反馈生成与自动重试
-   *
-   * CP-3: 失败自动重试 (最多 maxRetries 次) + 错误反馈追加到 prompt
-   * CP-5: 超时 30 秒/次
-   *
-   * @internal 用于需求分解等内部功能
+   * 所有公共方法现在使用 callAI 统一调用 invokeAgent
+   * invokeWithEngine 已移除，统一使用 headless-agent 接口
+   * CP-1: 所有方法通过 callAI 调用
+   * CP-2: 调用时长和 token 使用量被记录
+   * CP-3: 失败时正确回退到规则引擎
    */
-  protected async invokeWithEngine(
-    prompt: string,
-    additionalRules: ValidationRule[],
-    options: AIMetadataCallOptions & { maxRetries: number; timeoutSeconds: number },
-  ): Promise<AgentResult> {
-    const { cwd, maxRetries, timeoutSeconds } = options;
-
-    try {
-      const agent = getAgent(cwd);
-      const engine = createSessionAwareEngine('json', additionalRules, maxRetries);
-
-      const invokeOptions: AgentInvokeOptions = {
-        timeout: timeoutSeconds,
-        allowedTools: [],
-        outputFormat: 'json',
-        maxRetries: 0,
-        cwd,
-      };
-
-      const engineResult = await engine.runWithFeedback(
-        agent.invoke.bind(agent),
-        prompt,
-        invokeOptions,
-      );
-
-      if (engineResult.retries > 0) {
-        this.logger.debug(`FeedbackConstraintEngine 重试 ${engineResult.retries} 次`);
-      }
-
-      return engineResult.result;
-    } catch (error) {
-      const errorMsg = error instanceof Error ? error.message : String(error);
-      this.logger.warn(`AI 调用异常: ${errorMsg}`);
-      return {
-        output: '',
-        success: false,
-        provider: 'none',
-        durationMs: 0,
-        tokensUsed: 0,
-        model: '',
-        error: errorMsg,
-      };
-    }
-  }
 
   // ============================================================
   // JSON 解析与校验

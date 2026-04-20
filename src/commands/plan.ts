@@ -701,7 +701,103 @@ function generateAIOutput(
 }
 
 /**
+ * 显示基本计划（扁平列表格式）
+ * 提取原有扁平列表显示逻辑，用于向后兼容
+ */
+function showBasicPlan(plan: import('../utils/plan').ExecutionPlan, cwd: string): void {
+  // Table format output
+  console.log('');
+  console.log('Execution Plan:');
+  console.log('━'.repeat(SEPARATOR_WIDTH));
+  console.log('No.  | Task ID   | Title                        | Status');
+  console.log('-----|-----------|------------------------------|------------');
+
+  for (let i = 0; i < plan.tasks.length; i++) {
+    const taskId = plan.tasks[i]!;
+    const task = readTaskMeta(taskId, cwd);
+
+    const order = String(i + 1).padEnd(4);
+    const id = taskId.padEnd(9);
+    const title = (task?.title || '(Unknown task)').substring(0, 28).padEnd(28);
+    const status = task ? formatStatus(task.status) : '❓ Unknown';
+
+    console.log(`${order} | ${id} | ${title} | ${status}`);
+  }
+
+  console.log('');
+  console.log(`Total ${plan.tasks.length} tasks`);
+  console.log(`Created: ${plan.createdAt}`);
+  console.log(`Updated: ${plan.updatedAt}`);
+}
+
+/**
+ * 显示带批次的计划（按批次分组显示）
+ */
+function showBatchedPlan(plan: import('../utils/plan').ExecutionPlan, cwd: string): void {
+  console.log('');
+  console.log('Execution Plan (Batched):');
+  console.log('━'.repeat(SEPARATOR_WIDTH));
+
+  const batches = plan.batches!;
+  let taskIndex = 0;
+
+  // 获取所有任务以计算推断依赖
+  const allTasks = getAllTasks(cwd);
+  const planTaskIds = new Set(plan.tasks);
+  const planTasks = allTasks.filter(t => planTaskIds.has(t.id));
+
+  // 计算推断依赖
+  const inferredDeps = inferDependenciesBatch(planTasks);
+
+  for (let batchIdx = 0; batchIdx < batches.length; batchIdx++) {
+    const batch = batches[batchIdx]!;
+    const batchNum = batchIdx + 1;
+
+    console.log('');
+    console.log(`📦 Batch ${batchNum}/${batches.length} (${batch.length} tasks)`);
+    console.log('─────┬───────────┬──────────────────────────────┬────────────');
+
+    for (let i = 0; i < batch.length; i++) {
+      const taskId = batch[i]!;
+      const task = readTaskMeta(taskId, cwd);
+
+      const order = String(taskIndex + 1).padEnd(4);
+      const id = taskId.padEnd(9);
+      const title = (task?.title || '(Unknown task)').substring(0, 28).padEnd(28);
+      const status = task ? formatStatus(task.status) : '❓ Unknown';
+
+      console.log(`${order} | ${id} | ${title} | ${status}`);
+
+      // 显示推断依赖标注
+      const taskInferredDeps = inferredDeps.get(taskId);
+      if (taskInferredDeps && taskInferredDeps.length > 0) {
+        const fileOverlapDeps = taskInferredDeps.filter(d => d.source !== 'ai-semantic');
+        const aiSemanticDeps = taskInferredDeps.filter(d => d.source === 'ai-semantic');
+
+        if (fileOverlapDeps.length > 0) {
+          const files = [...new Set(fileOverlapDeps.flatMap(d => d.overlappingFiles))].slice(0, 2);
+          const moreFiles = fileOverlapDeps.flatMap(d => d.overlappingFiles).length > 2 ? '...' : '';
+          console.log(`                    [Inferred:file overlap] ${files.join(', ')}${moreFiles}`);
+        }
+        if (aiSemanticDeps.length > 0) {
+          const reasons = aiSemanticDeps.map(d => d.reason || 'Semantic relation').slice(0, 2);
+          console.log(`                    [Inferred:AI semantic] ${reasons.join('; ')}`);
+        }
+      }
+
+      taskIndex++;
+    }
+  }
+
+  console.log('');
+  console.log(`Total ${plan.tasks.length} tasks in ${batches.length} batches`);
+  console.log(`Created: ${plan.createdAt}`);
+  console.log(`Updated: ${plan.updatedAt}`);
+}
+
+/**
  * 显示执行计划
+ * 支持向后兼容：旧版计划文件无 batches 字段时显示扁平列表
  */
 export function showPlan(json: boolean = false, cwd: string = process.cwd()): void {
   if (!isInitialized(cwd)) {
@@ -734,29 +830,17 @@ export function showPlan(json: boolean = false, cwd: string = process.cwd()): vo
     return;
   }
 
-  // Table format output
-  console.log('');
-  console.log('Execution Plan:');
-  console.log('━'.repeat(SEPARATOR_WIDTH));
-  console.log('No.  | Task ID   | Title                        | Status');
-  console.log('-----|-----------|------------------------------|------------');
+  // CP-1: 批次存在性检测
+  const hasBatches = Array.isArray(plan.batches) && plan.batches.length > 0;
 
-  for (let i = 0; i < plan.tasks.length; i++) {
-    const taskId = plan.tasks[i]!;
-    const task = readTaskMeta(taskId, cwd);
-
-    const order = String(i + 1).padEnd(4);
-    const id = taskId.padEnd(9);
-    const title = (task?.title || '(Unknown task)').substring(0, 28).padEnd(28);
-    const status = task ? formatStatus(task.status) : '❓ Unknown';
-
-    console.log(`${order} | ${id} | ${title} | ${status}`);
+  // CP-2: 根据是否存在批次选择显示方式
+  if (hasBatches) {
+    // 有批次信息，按批次分组显示
+    showBatchedPlan(plan, cwd);
+  } else {
+    // 无批次信息（旧版计划文件），显示扁平列表（与改造前完全一致）
+    showBasicPlan(plan, cwd);
   }
-
-  console.log('');
-  console.log(`Total ${plan.tasks.length} tasks`);
-  console.log(`Created: ${plan.createdAt}`);
-  console.log(`Updated: ${plan.updatedAt}`);
 }
 
 /**

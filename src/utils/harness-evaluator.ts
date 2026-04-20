@@ -197,7 +197,7 @@ export class HarnessEvaluator {
 
     } catch (error) {
       verdict.result = 'NOPASS';
-      verdict.reason = `${texts.harness.logs.evalProcessError}: ${error instanceof Error ? error.message : String(error)}`;
+      verdict.reason = `${texts.harness.logs.evalError}: ${error instanceof Error ? error.message : String(error)}`;
       verdict.inferenceType = 'parse_failure_default';
       console.log(`\n   ❌ ${texts.harness.logs.evalError}: ${verdict.reason}`);
     }
@@ -252,7 +252,7 @@ export class HarnessEvaluator {
       : `${texts.harness.logs.acceptanceCriteriaEmpty}\n`;
 
     const verificationCommandsSection = contractCommands.length > 0
-      ? `## 验证命令\n请运行以下命令验证实现:\n\`\`\`bash\n${contractCommands.join('\n')}\n\`\`\`\n`
+      ? `## ${texts.harness.logs.verificationCommands}\n${texts.harness.logs.runVerificationCommands}:\n\`\`\`bash\n${contractCommands.join('\n')}\n\`\`\`\n`
       : '';
 
     const checkpointsSection = filteredContractCheckpoints.length > 0
@@ -264,11 +264,11 @@ export class HarnessEvaluator {
       : '';
 
     const evidenceSection = devEvidence.length > 0
-      ? `## 提交的证据\n开发者提交了以下证据:\n${devEvidence.map(e => `- ${e}`).join('\n')}\n`
+      ? `## ${texts.harness.logs.submittedEvidenceTitle}\n${texts.harness.logs.developerSubmittedEvidence}:\n${devEvidence.map(e => `- ${e}`).join('\n')}\n`
       : '';
 
     const completedCheckpointsSection = filteredDevCheckpoints.length > 0
-      ? `## 开发者声明的完成检查点\n${filteredDevCheckpoints.map(cp => `- ${cp}`).join('\n')}\n`
+      ? `## ${texts.harness.logs.developerCompletedCheckpoints}\n${filteredDevCheckpoints.map(cp => `- ${cp}`).join('\n')}\n`
       : '';
 
     const phantomTasksSection = phantomTasks.length > 0
@@ -281,20 +281,22 @@ export class HarnessEvaluator {
     let retryContextSection = '';
     if (retryContext?.previousFailureReason) {
       const phaseLabel: Record<string, string> = {
-        development: '开发',
-        code_review: '代码审核',
-        qa: 'QA 验证',
-        evaluation: '评估',
+        development: texts.harness.phaseLabels.development,
+        code_review: texts.harness.phaseLabels.codeReview,
+        qa: texts.harness.phaseLabels.qa,
+        evaluation: texts.harness.phaseLabels.evaluation,
       };
       const lines: string[] = [
-        `## 重试上下文（前次评估失败信息）`,
+        `## ${texts.harness.logs.retryContextEval}`,
         ``,
-        `这是第 ${retryContext.attemptNumber} 次评估尝试。上一次在 **${phaseLabel[retryContext.previousPhase || ''] || retryContext.previousPhase}** 阶段失败。`,
+        texts.harness.logs.retryAttemptInfoEval
+          .replace('{attempt}', String(retryContext.attemptNumber))
+          .replace('{phase}', phaseLabel[retryContext.previousPhase || ''] || retryContext.previousPhase || ''),
         ``,
-        `**前次失败原因:**`,
+        texts.harness.logs.previousFailureReasonLabel,
         `> ${retryContext.previousFailureReason}`,
         ``,
-        `请参考前次失败原因，确保本次评估覆盖所有问题。`,
+        texts.harness.logs.retryReferenceHint,
         ``,
       ];
       retryContextSection = lines.join('\n');
@@ -345,7 +347,8 @@ export class HarnessEvaluator {
 
     // 空输出早期返回：Claude 进程异常退出导致 stdout 为空
     if (!output || output.trim().length === 0) {
-      result.reason = '评估输出为空，无法解析评估结果';
+      const texts = t(this.config.cwd);
+      result.reason = texts.harness.logs.evalOutputEmptyError;
       result.inferenceType = 'empty_output';
       return result;
     }
@@ -746,7 +749,9 @@ export class HarnessEvaluator {
     ];
 
     if (verdict.inferenceType) {
-      const inferenceTypeLabel = texts.harness.reports.inferenceTypes[verdict.inferenceType as keyof typeof texts.harness.reports.inferenceTypes] || verdict.inferenceType;
+      // Convert snake_case to camelCase for i18n lookup
+      const camelCaseType = verdict.inferenceType.replace(/_([a-z])/g, (_, letter) => letter.toUpperCase());
+      const inferenceTypeLabel = texts.harness.reports.inferenceTypes[camelCaseType as keyof typeof texts.harness.reports.inferenceTypes] || verdict.inferenceType;
       lines.push(`**${texts.harness.reports.inferenceTypeLabel}**: ${inferenceTypeLabel} (${verdict.inferenceType})`);
     }
 

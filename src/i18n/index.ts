@@ -345,6 +345,34 @@ export interface I18nTexts {
       maxRetriesReached: string;
       preparingRetry: string;
       waitingToRetry: string;
+      // Verification related
+      verificationCommands: string;
+      verificationSteps: string;
+      expectedResult: string;
+      suggestedVerificationSteps: string;
+      fallbackVerificationCommands: string;
+      runVerificationCommands: string;
+      // Retry context for code review
+      previousReviewFailureReason: string;
+      previousCodeReviewFailed: string;
+      ensureFixesCover: string;
+      // Developer changes and evidence
+      developerDeclaredChanges: string;
+      submittedEvidence: string;
+      submittedEvidenceTitle: string;
+      developerSubmittedEvidence: string;
+      developerCompletedCheckpoints: string;
+      // Retry context for QA
+      previousQAFailureReason: string;
+      previousQAVerificationFailed: string;
+      pleaseNote: string;
+      reviewPreviousFailure: string;
+      formalRequirementFix: string;
+      realIssuePersist: string;
+      // Upstream failure info
+      upstreamTask: string;
+      failureTime: string;
+      retryReferenceNote: string;
     };
     reports: {
       devReportTitle: string;
@@ -620,6 +648,107 @@ export interface I18nTexts {
     cleanedSnapshots: string;
     forceCleanedSnapshots: string;
     noSnapshotsFound: string;
+  };
+
+  // doctor command
+  doctorCmd: {
+    environmentDiagnostics: string;
+    autoFix: string;
+    reChecking: string;
+    useFixToAutoFix: string;
+    summary: string;
+    allChecksPassed: string;
+    fixing: string;
+    copiedSkillMd: string;
+    copiedCommandDocs: string;
+    cannotFixPluginRootNotFound: string;
+    createdDirectory: string;
+    createdLogsDirectory: string;
+    autoFilledMissingConfig: string;
+    migratedDeprecatedStatusTasks: string;
+    cleanedDeprecatedHookConfig: string;
+    updatedSettings: string;
+    deletedDeprecatedScripts: string;
+    fixComplete: string;
+    bugReportGeneration: string;
+    errorProjectNotInitialized: string;
+    runSetupFirst: string;
+    aiCostSummary: string;
+    totalAiCalls: string;
+    totalDuration: string;
+    totalTokens: string;
+    byField: string;
+    fieldStats: string;
+    usageAnalysis: string;
+    totalCommandExecutions: string;
+    averageDuration: string;
+    aiUsageRate: string;
+    errorsAndWarnings: string;
+    commandFrequency: string;
+    commandCount: string;
+    commonErrors: string;
+    errorEntry: string;
+    bugReportGenerated: string;
+    logArchive: string;
+    bugReportFailed: string;
+    deepLogAnalysis: string;
+    noLogFilesFound: string;
+    logDirectory: string;
+    logFilesCount: string;
+    logEntriesCount: string;
+    noLogEntriesInLast24Hours: string;
+    registeredAnalyzers: string;
+    analyzerEntry: string;
+    foundIssues: string;
+    criticalIssuesRequireAttention: string;
+    errorsNeedAttention: string;
+    deepAnalysisComplete: string;
+    // Check results
+    checkProjectInit: string;
+    checkProjectInitNotInitialized: string;
+    checkProjectInitRunSetup: string;
+    checkProjectInitInitialized: string;
+    checkPluginCache: string;
+    checkPluginCacheNormal: string;
+    checkPluginCacheCliMode: string;
+    checkPluginCacheMainFileMissing: string;
+    checkPluginCacheLocalesMissing: string;
+    checkPluginCacheCommandsMissing: string;
+    checkSkillFiles: string;
+    checkSkillFilesCount: string;
+    checkSkillFilesMissing: string;
+    checkSkillFilesReRunSetup: string;
+    checkDirectoryStructure: string;
+    checkDirectoryMissing: string;
+    checkDirectoryExists: string;
+    checkArchiveMissing: string;
+    checkPluginScope: string;
+    checkPluginScopeWarning: string;
+    checkPluginScopeRecommendUserScope: string;
+    checkLogDirectory: string;
+    checkLogDirectoryMissing: string;
+    checkLogDirectoryExists: string;
+    checkLogConfigCompleteness: string;
+    checkLogConfigMissing: string;
+    checkLogConfigComplete: string;
+    checkAiConfigCompleteness: string;
+    checkAiConfigMissing: string;
+    checkTrainingConfigCompleteness: string;
+    checkTrainingConfigMissing: string;
+    checkLogHealth: string;
+    checkLogHealthOversized: string;
+    checkLogHealthTotalSize: string;
+    checkDeprecatedStatus: string;
+    checkDeprecatedStatusOk: string;
+    checkDeprecatedStatusFound: string;
+    checkGitHooks: string;
+    checkGitHooksDisabled: string;
+    checkGitHooksNotGitRepo: string;
+    checkGitHooksInstalled: string;
+    checkGitHooksNotInstalled: string;
+    checkDeprecatedHooks: string;
+    checkDeprecatedHooksFound: string;
+    checkDeprecatedHooksOk: string;
   };
 
   // analyze command

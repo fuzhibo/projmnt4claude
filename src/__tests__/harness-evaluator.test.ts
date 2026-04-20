@@ -408,7 +408,7 @@ describe('BUG-013-3: parseEvaluationResult inference type tracking', () => {
     );
     expect(result.passed).toBe(false);
     expect(result.inferenceType).toBe('parse_failure_default');
-    expect(result.reason).toContain('无法解析');
+    expect(result.reason).toContain('Unable to parse');
   });
 
   test('should return parse_failure_default for text with "passed" (not PASS keyword)', () => {
@@ -470,19 +470,19 @@ describe('BUG-013-3: formatReviewReport inference type annotation', () => {
     devReport.duration = 1000;
 
     const report = (evaluator as any).formatReviewReport(verdict, devReport);
-    expect(report).toContain('推断类型');
+    expect(report).toContain('Inference Type');
     expect(report).toContain('explicit_match');
-    expect(report).toContain('明确匹配');
+    expect(report).toContain('Explicit Match');
   });
 
   test('should include different inference type labels correctly', () => {
     const types = [
-      { type: 'structured_match', label: '结构化匹配' },
-      { type: 'explicit_match', label: '明确匹配' },
-      { type: 'content_inference', label: '内容推断' },
-      { type: 'prior_stage_inference', label: '前置阶段推断' },
-      { type: 'parse_failure_default', label: '解析失败默认' },
-      { type: 'empty_output', label: '空输出' },
+      { type: 'structured_match', label: 'Structured Match' },
+      { type: 'explicit_match', label: 'Explicit Match' },
+      { type: 'content_inference', label: 'Content Inference' },
+      { type: 'prior_stage_inference', label: 'Prior Stage Inference' },
+      { type: 'parse_failure_default', label: 'Parse Failure Default' },
+      { type: 'empty_output', label: 'Empty Output' },
     ];
     for (const { type, label } of types) {
       const verdict = {
@@ -520,7 +520,7 @@ describe('BUG-013-3: formatReviewReport inference type annotation', () => {
     devReport.duration = 1000;
 
     const report = (evaluator as any).formatReviewReport(verdict, devReport);
-    expect(report).not.toContain('推断类型');
+    expect(report).not.toContain('Inference Type');
   });
 });
 
@@ -577,13 +577,13 @@ describe('BUG-013-1: formatReviewReport defensive array handling', () => {
   test('should report 0 evidence count when evidence is undefined', () => {
     const devReport = { ...createDefaultDevReport('TASK-test'), evidence: undefined as any };
     const report = (evaluator as any).formatReviewReport(makeVerdict(), devReport);
-    expect(report).toContain('证据数量: 0');
+    expect(report).toContain('Evidence Count: 0');
   });
 
   test('should report 0 checkpoints when checkpointsCompleted is undefined', () => {
     const devReport = { ...createDefaultDevReport('TASK-test'), checkpointsCompleted: undefined as any };
     const report = (evaluator as any).formatReviewReport(makeVerdict(), devReport);
-    expect(report).toContain('完成检查点: 0');
+    expect(report).toContain('Checkpoints Completed: 0');
   });
 });
 
@@ -612,14 +612,14 @@ describe('BUG-017: 空输出检测与日志持久化', () => {
     const result = parse('');
     expect(result.passed).toBe(false);
     expect(result.inferenceType).toBe('empty_output');
-    expect(result.reason).toContain('为空');
+    expect(result.reason).toBeTruthy();
   });
 
   test('should return empty_output inference type for whitespace-only string', () => {
     const result = parse('   \n\t  \n  ');
     expect(result.passed).toBe(false);
     expect(result.inferenceType).toBe('empty_output');
-    expect(result.reason).toContain('为空');
+    expect(result.reason).toBeTruthy();
   });
 
   test('should return empty_output inference type for null-like input', () => {

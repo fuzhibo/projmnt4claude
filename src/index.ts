@@ -31,6 +31,7 @@ import {
   purgeTasks,
   renameTaskCommand,
   showBatchUpdateLogs,
+  reopenTask,
 } from './commands/task';
 import {
   showPlan,
@@ -144,7 +145,7 @@ program
 // task command group
 program
   .command('task <action> [id]')
-  .description('Manage tasks\n\nBasic: create/list/show/get/update/delete/rename/purge/execute/checkpoint\nAdvanced: dependency/add-subtask/status-guide/complete/split/search/batch-update/batch-update-logs/count\n\n[Deprecated - will be removed]:\n  submit                 Use: task update <id> --status wait_evaluation\n  validate               Use: harness evaluation phase (auto-executed)\n\nGlobal Options:\n  --token <n>            Token estimation\n  -f, --force            Force operation\n\ncreate Options:\n  --into <id>            Create as subtask\n  --from-requirement     Create from requirement\n  --requirement-text <text>  Requirement text\n\nlist Options:\n  --status <status>      Filter by status\n  --priority <priority>  Filter by priority\n  --type <type>          Filter by type\n\nshow Options:\n  --json                 JSON output\n\nupdate Options:\n  --status <status>      Update status\n  --priority <priority>  Update priority\n  --sync-children        Sync subtask status\n\ndependency Options:\n  --from <id>            Dependency source\n  --to <id>              Dependency target\n  --remove               Remove dependency\n\nsplit Options:\n  --parts <n>            Split count\n  --strategy <strategy>  Split strategy\n\ncheckpoint Options:\n  --pass                 Pass checkpoint\n  --fail                 Fail checkpoint\n  --missing-verification Mark needs verification\n\n! dependency format (note argument order):\n  task dependency <add|remove> <taskId> --dep-id <depTaskId>\n\n  Examples:\n    task dependency add TASK-001 --dep-id TASK-002    # TASK-001 depends on TASK-002\n    task dependency remove TASK-001 --dep-id TASK-002 # Remove dependency\n\nrename format:\n  task rename <oldTaskId> <newTaskId>\n\n  Example:\n    task rename TASK-001 TASK-feature-new-name')
+  .description('Manage tasks\n\nBasic: create/list/show/get/update/delete/reopen/rename/purge/execute/checkpoint\nAdvanced: dependency/add-subtask/status-guide/complete/split/search/batch-update/batch-update-logs/count\n\n[Deprecated - will be removed]:\n  submit                 Use: task update <id> --status wait_evaluation\n  validate               Use: harness evaluation phase (auto-executed)\n\nGlobal Options:\n  --token <n>            Token estimation\n  -f, --force            Force operation\n\ncreate Options:\n  --into <id>            Create as subtask\n  --from-requirement     Create from requirement\n  --requirement-text <text>  Requirement text\n\nlist Options:\n  --status <status>      Filter by status\n  --priority <priority>  Filter by priority\n  --type <type>          Filter by type\n\nshow Options:\n  --json                 JSON output\n\nupdate Options:\n  --status <status>      Update status\n  --priority <priority>  Update priority\n  --sync-children        Sync subtask status\n\nreopen Options:\n  --enhancement          Mark as enhancement request\n  --failed-checkpoints <ids>  Failed checkpoint IDs (comma-separated)\n  --qa-feedback <text>   QA feedback\n\ndependency Options:\n  --from <id>            Dependency source\n  --to <id>              Dependency target\n  --remove               Remove dependency\n\nsplit Options:\n  --parts <n>            Split count\n  --strategy <strategy>  Split strategy\n\ncheckpoint Options:\n  --pass                 Pass checkpoint\n  --fail                 Fail checkpoint\n  --missing-verification Mark needs verification\n\n! dependency format (note argument order):\n  task dependency <add|remove> <taskId> --dep-id <depTaskId>\n\n  Examples:\n    task dependency add TASK-001 --dep-id TASK-002    # TASK-001 depends on TASK-002\n    task dependency remove TASK-001 --dep-id TASK-002 # Remove dependency\n\nrename format:\n  task rename <oldTaskId> <newTaskId>\n\n  Example:\n    task rename TASK-001 TASK-feature-new-name')
   .allowExcessArguments(true)
   .option('-s, --status <status>', 'Filter by status (list only)')
   .option('-p, --priority <priority>', 'Filter by priority (list only)')
@@ -278,6 +279,17 @@ program
           token: options.token,
           syncChildren: options.syncChildren,
           noSync: options.noSync,
+          enhancement: options.enhancement,
+          failedCheckpoints: options.failedCheckpoints,
+          qaFeedback: options.qaFeedback,
+        });
+        break;
+      case 'reopen':
+        if (!id) {
+          console.error('(X) Error: reopen operation requires task ID');
+          process.exit(1);
+        }
+        await reopenTask(id, {
           enhancement: options.enhancement,
           failedCheckpoints: options.failedCheckpoints,
           qaFeedback: options.qaFeedback,

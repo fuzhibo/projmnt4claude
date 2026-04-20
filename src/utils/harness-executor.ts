@@ -307,13 +307,13 @@ export class HarnessExecutor {
 
     if (retryContext.upstreamFailureInfo) {
       parts.push(`**${texts.harness.upstreamFailureInfo}:**`);
-      parts.push(`- 上游任务: ${retryContext.upstreamFailureInfo.taskId}`);
-      parts.push(`- 失败原因: ${retryContext.upstreamFailureInfo.reason}`);
-      parts.push(`- 失败时间: ${retryContext.upstreamFailureInfo.failedAt}`);
+      parts.push(`- ${texts.harness.logs.upstreamTask}: ${retryContext.upstreamFailureInfo.taskId}`);
+      parts.push(`- ${texts.harness.previousFailureReason}: ${retryContext.upstreamFailureInfo.reason}`);
+      parts.push(`- ${texts.harness.logs.failureTime}: ${retryContext.upstreamFailureInfo.failedAt}`);
       parts.push('');
     }
 
-    parts.push('请参考前次失败原因，避免重复相同的问题。');
+    parts.push(texts.harness.logs.retryReferenceNote);
     parts.push('');
 
     return parts.join('\n');

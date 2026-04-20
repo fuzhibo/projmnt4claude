@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'bun:test';
+import { describe, it, expect, beforeEach, afterEach } from 'bun:test';
 import {
   parsePlanOutput,
   extractTaskIdsFromPlan,
@@ -7,6 +7,26 @@ import {
 } from '../utils/plan';
 import type { ExecutionPlan, TaskRelation } from '../utils/plan';
 import type { TaskMeta } from '../types/task';
+
+// Mock for showPlan tests
+let consoleOutput: string[] = [];
+const originalLog = console.log;
+const originalError = console.error;
+
+function mockConsole() {
+  consoleOutput = [];
+  console.log = (...args: unknown[]) => {
+    consoleOutput.push(args.map(a => String(a)).join(' '));
+  };
+  console.error = (...args: unknown[]) => {
+    consoleOutput.push('ERROR: ' + args.map(a => String(a)).join(' '));
+  };
+}
+
+function restoreConsole() {
+  console.log = originalLog;
+  console.error = originalError;
+}
 
 // Helper: 创建最小 TaskMeta
 function makeTask(overrides: Partial<TaskMeta> & { id: string }): TaskMeta {
@@ -367,6 +387,75 @@ describe('detectTaskRelations', () => {
       ];
       const relations = detectTaskRelations(tasks);
       expect(relations).toEqual([]);
+    });
+  });
+});
+
+// ==================== showPlan Backward Compatibility Tests ====================
+
+describe('showPlan backward compatibility', () => {
+  describe('批次存在性检测 (CP-1)', () => {
+    it('应检测到有批次字段的计划', () => {
+      const plan: ExecutionPlan = {
+        tasks: ['TASK-1', 'TASK-2', 'TASK-3'],
+        batches: [['TASK-1'], ['TASK-2', 'TASK-3']],
+        createdAt: '2026-01-01T00:00:00Z',
+        updatedAt: '2026-01-01T00:00:00Z',
+      };
+
+      const hasBatches = Array.isArray(plan.batches) && plan.batches.length > 0;
+      expect(hasBatches).toBe(true);
+    });
+
+    it('应检测到无批次字段的旧版计划', () => {
+      const plan: ExecutionPlan = {
+        tasks: ['TASK-1', 'TASK-2'],
+        createdAt: '2026-01-01T00:00:00Z',
+        updatedAt: '2026-01-01T00:00:00Z',
+      };
+
+      const hasBatches = Array.isArray(plan.batches) && plan.batches.length > 0;
+      expect(hasBatches).toBe(false);
+    });
+
+    it('应处理 batches 为空数组的情况', () => {
+      const plan: ExecutionPlan = {
+        tasks: ['TASK-1', 'TASK-2'],
+        batches: [],
+        createdAt: '2026-01-01T00:00:00Z',
+        updatedAt: '2026-01-01T00:00:00Z',
+      };
+
+      const hasBatches = Array.isArray(plan.batches) && plan.batches.length > 0;
+      expect(hasBatches).toBe(false);
+    });
+  });
+
+  describe('批次数据结构验证', () => {
+    it('应正确处理多批次计划', () => {
+      const plan: ExecutionPlan = {
+        tasks: ['A', 'B', 'C', 'D'],
+        batches: [['A', 'B'], ['C'], ['D']],
+        createdAt: '2026-01-01T00:00:00Z',
+        updatedAt: '2026-01-01T00:00:00Z',
+      };
+
+      expect(plan.batches).toHaveLength(3);
+      expect(plan.batches![0]).toEqual(['A', 'B']);
+      expect(plan.batches![1]).toEqual(['C']);
+      expect(plan.batches![2]).toEqual(['D']);
+    });
+
+    it('应确保 tasks 和 batches 中任务数量一致', () => {
+      const plan: ExecutionPlan = {
+        tasks: ['A', 'B', 'C'],
+        batches: [['A', 'B', 'C']],
+        createdAt: '2026-01-01T00:00:00Z',
+        updatedAt: '2026-01-01T00:00:00Z',
+      };
+
+      const batchTaskCount = plan.batches!.flat().length;
+      expect(batchTaskCount).toBe(plan.tasks.length);
     });
   });
 });

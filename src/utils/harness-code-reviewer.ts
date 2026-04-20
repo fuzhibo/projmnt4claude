@@ -194,27 +194,27 @@ export class HarnessCodeReviewer {
 
     // Build conditional sections
     const retryContextSection = retryContext?.previousFailureReason
-      ? `## 前次审核失败原因\n\n上一次代码审核未通过，失败原因如下：\n\n> ${retryContext.previousFailureReason}\n\n请确保本次审核覆盖前次发现的问题是否已修复。`
+      ? `## ${texts.harness.logs.previousReviewFailureReason}\n\n${texts.harness.logs.previousCodeReviewFailed}:\n\n> ${retryContext.previousFailureReason}\n\n${texts.harness.logs.ensureFixesCover}.`
       : '';
 
     const descriptionSection = task.description
-      ? `## 任务描述\n${task.description}`
+      ? `## ${texts.harness.taskDescription}\n${task.description}`
       : '';
 
     const checkpointsList = checkpoints.map((cp, i) => {
       let line = `${i + 1}. [${cp.id}] ${cp.description}`;
       if (cp.verification?.commands) {
-        line += `\n   验证命令: ${cp.verification.commands.join(', ')}`;
+        line += `\n   ${texts.harness.logs.verificationCommands}: ${cp.verification.commands.join(', ')}`;
       }
       return line;
     }).join('\n');
 
     const changesSection = devReport.changes.length > 0
-      ? `## 开发者声明的变更\n${devReport.changes.map(change => `- ${change}`).join('\n')}`
+      ? `## ${texts.harness.logs.developerDeclaredChanges}\n${devReport.changes.map(change => `- ${change}`).join('\n')}`
       : '';
 
     const evidenceSection = devReport.evidence.length > 0
-      ? `## 提交的证据\n${devReport.evidence.map(evidence => `- ${evidence}`).join('\n')}`
+      ? `## ${texts.harness.logs.submittedEvidence}\n${devReport.evidence.map(evidence => `- ${evidence}`).join('\n')}`
       : '';
 
     const reviewFocus = roleTemplate.reviewFocus.map((focus, i) => `${i + 1}. ${focus}`).join('\n');

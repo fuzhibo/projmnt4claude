@@ -282,42 +282,42 @@ export class HarnessQATester {
     let retryContextSection = '';
     if (retryContext?.previousFailureReason) {
       retryContextSection = [
-        '## 前次验证失败原因',
+        `## ${texts.harness.logs.previousQAFailureReason}`,
         '',
-        '上一次 QA 验证未通过，失败原因如下：',
+        `${texts.harness.logs.previousQAVerificationFailed}:`,
         '',
         `> ${retryContext.previousFailureReason}`,
         '',
-        '请特别注意：',
-        '- 仔细审视前次失败原因是否构成真正的功能缺陷（参考上述验证原则）',
-        '- 如果前次判定是基于形式要求而非功能缺陷，本次应修正判定为 PASS',
-        '- 如果前次失败原因仍然存在且确属功能问题，继续保持 NOPASS',
+        `${texts.harness.logs.pleaseNote}:`,
+        `- ${texts.harness.logs.reviewPreviousFailure}`,
+        `- ${texts.harness.logs.formalRequirementFix}`,
+        `- ${texts.harness.logs.realIssuePersist}`,
         '',
       ].join('\n');
     }
 
     const descriptionSection = task.description
-      ? `## 任务描述\n${task.description}`
+      ? `## ${texts.harness.taskDescription}\n${task.description}`
       : '';
 
     // Build checkpoints list with verification details
     const checkpointsList = checkpoints.map((cp, i) => {
       const lines: string[] = [`${i + 1}. [${cp.id}] ${cp.description}`];
       if (cp.verification?.commands && cp.verification.commands.length > 0) {
-        lines.push(`   验证命令: ${cp.verification.commands.join(', ')}`);
+        lines.push(`   ${texts.harness.logs.verificationCommands}: ${cp.verification.commands.join(', ')}`);
       } else if (cp.verification?.steps && cp.verification.steps.length > 0) {
-        lines.push(`   验证步骤: ${cp.verification.steps.join('；')}`);
+        lines.push(`   ${texts.harness.logs.verificationSteps}: ${cp.verification.steps.join('；')}`);
       } else {
         const fallback = generateFallbackVerification(cp.description, task);
         if (fallback.steps && fallback.steps.length > 0) {
-          lines.push(`   建议验证步骤: ${fallback.steps.join('；')}`);
+          lines.push(`   ${texts.harness.logs.suggestedVerificationSteps}: ${fallback.steps.join('；')}`);
         }
         if (fallback.commands && fallback.commands.length > 0) {
-          lines.push(`   回退验证命令: ${fallback.commands.join(', ')}`);
+          lines.push(`   ${texts.harness.logs.fallbackVerificationCommands}: ${fallback.commands.join(', ')}`);
         }
       }
       if (cp.verification?.expected) {
-        lines.push(`   期望结果: ${cp.verification.expected}`);
+        lines.push(`   ${texts.harness.logs.expectedResult}: ${cp.verification.expected}`);
       }
       const cpValidation = validateCheckpointVerification(cp);
       if (!cpValidation.valid && cpValidation.warning) {

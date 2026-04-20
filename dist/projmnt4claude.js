@@ -7855,6 +7855,104 @@ var init_zh = __esm(() => {
       forceCleanedSnapshots: "  \u26A0\uFE0F  \u5F3A\u5236\u6E05\u7406\u6D3B\u8DC3\u5FEB\u7167: {id} (PID: {pid})",
       noSnapshotsFound: "\u2705 \u672A\u627E\u5230\u5FEB\u7167"
     },
+    doctorCmd: {
+      environmentDiagnostics: "\u73AF\u5883\u8BCA\u65AD",
+      autoFix: "\u81EA\u52A8\u4FEE\u590D",
+      reChecking: "\u91CD\u65B0\u68C0\u67E5\u4E2D...",
+      useFixToAutoFix: "\u4F7F\u7528 --fix \u81EA\u52A8\u4FEE\u590D {count} \u4E2A\u95EE\u9898",
+      summary: "\u6458\u8981: {errors} \u4E2A\u9519\u8BEF, {warnings} \u4E2A\u8B66\u544A, {ok} \u4E2A\u6B63\u5E38",
+      allChecksPassed: "\u2705 \u6240\u6709\u68C0\u67E5\u901A\u8FC7!",
+      fixing: "\u6B63\u5728\u4FEE\u590D: {name}...",
+      copiedSkillMd: "  \u2713 \u5DF2\u590D\u5236 SKILL.md",
+      copiedCommandDocs: "  \u2713 \u5DF2\u590D\u5236 {count} \u4E2A\u547D\u4EE4\u6587\u6863",
+      cannotFixPluginRootNotFound: "  \u2717 \u65E0\u6CD5\u4FEE\u590D: \u672A\u627E\u5230\u63D2\u4EF6\u6839\u76EE\u5F55 (CLAUDE_PLUGIN_ROOT \u672A\u8BBE\u7F6E\u4E14\u65E0\u6CD5\u81EA\u52A8\u5B9A\u4F4D)",
+      createdDirectory: "  \u2713 \u5DF2\u521B\u5EFA\u76EE\u5F55: {name}/",
+      createdLogsDirectory: "  \u2713 \u5DF2\u521B\u5EFA\u65E5\u5FD7\u76EE\u5F55",
+      autoFilledMissingConfig: "  \u2713 \u5DF2\u81EA\u52A8\u586B\u5145\u7F3A\u5931\u7684\u914D\u7F6E\u9879",
+      migratedDeprecatedStatusTasks: "  \u2713 \u5DF2\u8FC1\u79FB {count} \u4E2A\u5E9F\u5F03\u72B6\u6001\u4EFB\u52A1",
+      cleanedDeprecatedHookConfig: "  \u2713 \u5DF2\u6E05\u7406\u5E9F\u5F03\u7684 Claude Code Hook \u914D\u7F6E",
+      updatedSettings: "    - \u5DF2\u66F4\u65B0 .claude/settings.json",
+      deletedDeprecatedScripts: "    - \u5DF2\u4ECE .projmnt4claude/hooks/ \u5220\u9664\u5E9F\u5F03\u811A\u672C",
+      fixComplete: "\u4FEE\u590D\u5B8C\u6210",
+      bugReportGeneration: "Bug \u62A5\u544A\u751F\u6210",
+      errorProjectNotInitialized: "\u9519\u8BEF: \u9879\u76EE\u672A\u521D\u59CB\u5316,\u65E0\u6CD5\u751F\u6210 Bug \u62A5\u544A",
+      runSetupFirst: "\u8BF7\u5148\u8FD0\u884C projmnt4claude setup \u521D\u59CB\u5316\u9879\u76EE",
+      aiCostSummary: "AI \u6210\u672C\u6458\u8981",
+      totalAiCalls: "\u603B AI \u8C03\u7528\u6B21\u6570: {count}",
+      totalDuration: "\u603B\u8017\u65F6: {duration}\u79D2",
+      totalTokens: "\u603B Token \u6570: {total} (\u8F93\u5165: {input}, \u8F93\u51FA: {output})",
+      byField: "\u6309\u5B57\u6BB5\u7EDF\u8BA1:",
+      fieldStats: "  {field}: {calls} \u6B21\u8C03\u7528, {duration}\u79D2, {tokens} \u4E2A token",
+      usageAnalysis: "\u4F7F\u7528\u5206\u6790",
+      totalCommandExecutions: "\u603B\u547D\u4EE4\u6267\u884C\u6B21\u6570: {count}",
+      averageDuration: "\u5E73\u5747\u8017\u65F6: {duration}\u79D2",
+      aiUsageRate: "AI \u4F7F\u7528\u7387: {rate}%",
+      errorsAndWarnings: "\u9519\u8BEF: {errors}, \u8B66\u544A: {warnings}",
+      commandFrequency: "\u547D\u4EE4\u9891\u7387:",
+      commandCount: "  {cmd}: {count}",
+      commonErrors: "\u5E38\u89C1\u9519\u8BEF:",
+      errorEntry: "  [{count}\u6B21] {message}",
+      bugReportGenerated: "Bug \u62A5\u544A\u5DF2\u751F\u6210",
+      logArchive: "\u65E5\u5FD7\u5F52\u6863: {path}",
+      bugReportFailed: "Bug \u62A5\u544A\u751F\u6210\u5931\u8D25: {error}",
+      deepLogAnalysis: "\u6DF1\u5EA6\u65E5\u5FD7\u5206\u6790 (--deep)",
+      noLogFilesFound: "\u672A\u627E\u5230\u65E5\u5FD7\u6587\u4EF6,\u8DF3\u8FC7\u65E5\u5FD7\u5206\u6790",
+      logDirectory: "   \u65E5\u5FD7\u76EE\u5F55: {path}",
+      logFilesCount: "\u65E5\u5FD7\u6587\u4EF6: {count} ({size} KB)",
+      logEntriesCount: "\u65E5\u5FD7\u6761\u76EE: {count} (\u6700\u8FD124\u5C0F\u65F6)",
+      noLogEntriesInLast24Hours: "\u6700\u8FD124\u5C0F\u65F6\u5185\u6CA1\u6709\u65E5\u5FD7\u6761\u76EE",
+      registeredAnalyzers: "\u5DF2\u6CE8\u518C {count} \u4E2A\u5206\u6790\u5668:",
+      analyzerEntry: "   - {name} ({category}) [{strategies}]",
+      foundIssues: "\u53D1\u73B0 {count} \u4E2A\u95EE\u9898",
+      criticalIssuesRequireAttention: "{count} \u4E2A\u4E25\u91CD\u95EE\u9898\u9700\u8981\u7ACB\u5373\u5173\u6CE8",
+      errorsNeedAttention: "{count} \u4E2A\u9519\u8BEF\u9700\u8981\u5173\u6CE8",
+      deepAnalysisComplete: "\u6DF1\u5EA6\u65E5\u5FD7\u5206\u6790\u5B8C\u6210,\u672A\u53D1\u73B0\u5F02\u5E38",
+      checkProjectInit: "\u9879\u76EE\u521D\u59CB\u5316",
+      checkProjectInitNotInitialized: "\u9879\u76EE\u672A\u521D\u59CB\u5316",
+      checkProjectInitRunSetup: "\u8FD0\u884C projmnt4claude setup \u521D\u59CB\u5316\u9879\u76EE",
+      checkProjectInitInitialized: "\u9879\u76EE\u5DF2\u521D\u59CB\u5316",
+      checkPluginCache: "\u63D2\u4EF6\u7F13\u5B58",
+      checkPluginCacheNormal: "\u63D2\u4EF6\u7F13\u5B58\u6B63\u5E38",
+      checkPluginCacheCliMode: "CLI \u6A21\u5F0F\u4E0B\u8FD0\u884C,\u8DF3\u8FC7\u63D2\u4EF6\u7F13\u5B58\u68C0\u67E5",
+      checkPluginCacheMainFileMissing: "\u4E3B\u7A0B\u5E8F\u6587\u4EF6\u7F3A\u5931",
+      checkPluginCacheLocalesMissing: "locales \u76EE\u5F55\u7F3A\u5931",
+      checkPluginCacheCommandsMissing: "commands \u76EE\u5F55\u7F3A\u5931 (\u659C\u6760\u547D\u4EE4\u53EF\u80FD\u65E0\u6CD5\u5DE5\u4F5C)",
+      checkSkillFiles: "\u547D\u4EE4\u6587\u6863",
+      checkSkillFilesCount: "{count} \u4E2A\u547D\u4EE4\u6587\u6863",
+      checkSkillFilesMissing: "\u547D\u4EE4\u6587\u6863\u76EE\u5F55\u7F3A\u5931",
+      checkSkillFilesReRunSetup: "\u53EF\u80FD\u9700\u8981\u91CD\u65B0\u8FD0\u884C setup \u6765\u590D\u5236\u547D\u4EE4\u6587\u6863",
+      checkDirectoryStructure: "\u76EE\u5F55: {name}",
+      checkDirectoryMissing: "\u5FC5\u9700\u7684\u76EE\u5F55\u7F3A\u5931",
+      checkDirectoryExists: "\u5B58\u5728",
+      checkArchiveMissing: "\u5B58\u5728\u5E9F\u5F03\u4EFB\u52A1\u4F46 archive \u76EE\u5F55\u7F3A\u5931",
+      checkPluginScope: "\u63D2\u4EF6\u5B89\u88C5\u8303\u56F4",
+      checkPluginScopeWarning: "\u68C0\u6D4B\u5230\u9879\u76EE\u7EA7\u5B89\u88C5\u53EF\u80FD\u5BFC\u81F4\u8DE8\u9879\u76EE\u66F4\u65B0\u95EE\u9898",
+      checkPluginScopeRecommendUserScope: "\u5EFA\u8BAE\u4F7F\u7528\u7528\u6237\u7EA7\u5B89\u88C5\u4EE5\u8DE8\u9879\u76EE\u4F7F\u7528",
+      checkLogDirectory: "\u65E5\u5FD7\u76EE\u5F55",
+      checkLogDirectoryMissing: "\u65E5\u5FD7\u76EE\u5F55\u4E0D\u5B58\u5728",
+      checkLogDirectoryExists: "\u5B58\u5728",
+      checkLogConfigCompleteness: "\u65E5\u5FD7\u914D\u7F6E\u5B8C\u6574\u6027",
+      checkLogConfigMissing: "\u7F3A\u5C11 {count} \u4E2A\u65E5\u5FD7\u914D\u7F6E\u9879",
+      checkLogConfigComplete: "\u6240\u6709\u65E5\u5FD7\u914D\u7F6E\u9879\u5DF2\u5B58\u5728",
+      checkAiConfigCompleteness: "AI \u914D\u7F6E\u5B8C\u6574\u6027",
+      checkAiConfigMissing: "\u7F3A\u5C11 ai.provider \u914D\u7F6E",
+      checkTrainingConfigCompleteness: "\u8BAD\u7EC3\u6570\u636E\u914D\u7F6E\u5B8C\u6574\u6027",
+      checkTrainingConfigMissing: "\u7F3A\u5C11 training.* \u914D\u7F6E",
+      checkLogHealth: "\u65E5\u5FD7\u5065\u5EB7",
+      checkLogHealthOversized: "{count} \u4E2A\u65E5\u5FD7\u6587\u4EF6\u8D85\u8FC7 10MB",
+      checkLogHealthTotalSize: "\u65E5\u5FD7\u76EE\u5F55\u8D85\u8FC7 100MB ({size}MB)",
+      checkDeprecatedStatus: "\u5E9F\u5F03\u72B6\u6001\u68C0\u67E5",
+      checkDeprecatedStatusOk: "\u6240\u6709 {count} \u4E2A\u4EFB\u52A1\u5747\u65E0\u5E9F\u5F03\u72B6\u6001",
+      checkDeprecatedStatusFound: "{count} \u4E2A\u4EFB\u52A1\u4F7F\u7528\u4E86\u5E9F\u5F03\u72B6\u6001",
+      checkGitHooks: "Git Hooks",
+      checkGitHooksDisabled: "\u901A\u8FC7\u914D\u7F6E\u7981\u7528 Git Hook \u68C0\u67E5",
+      checkGitHooksNotGitRepo: "\u4E0D\u662F Git \u4ED3\u5E93,\u8DF3\u8FC7 Git Hook \u68C0\u67E5",
+      checkGitHooksInstalled: "pre-commit hook \u5DF2\u5B89\u88C5",
+      checkGitHooksNotInstalled: "pre-commit hook \u672A\u5B89\u88C5",
+      checkDeprecatedHooks: "\u5E9F\u5F03 Hook \u68C0\u67E5",
+      checkDeprecatedHooksFound: "\u53D1\u73B0\u5E9F\u5F03\u7684 Claude Code Hook \u914D\u7F6E",
+      checkDeprecatedHooksOk: "\u672A\u53D1\u73B0\u5E9F\u5F03\u7684 Claude Code Hook \u914D\u7F6E"
+    },
     analyzeCmd: {
       projectNotInitialized: "\u9519\u8BEF: \u9879\u76EE\u672A\u521D\u59CB\u5316\u3002\u8BF7\u5148\u8FD0\u884C `projmnt4claude setup`",
       analyzingProject: "\u6B63\u5728\u5206\u6790\u9879\u76EE\u5065\u5EB7\u72B6\u6001...",
@@ -8019,6 +8117,11 @@ var init_zh = __esm(() => {
         noPhantomTask: "\u672A\u68C0\u6D4B\u5230\u5E7D\u7075\u4EFB\u52A1",
         snapshotMode: "\u5E7D\u7075\u4EFB\u52A1\u68C0\u6D4B\u4F7F\u7528\u8BA1\u5212\u5FEB\u7167",
         fallbackMode: "\u5E7D\u7075\u4EFB\u52A1\u68C0\u6D4B: \u672A\u627E\u5230\u8BA1\u5212\u5FEB\u7167\uFF0C\u4F7F\u7528\u65F6\u95F4\u7A97\u53E3\u56DE\u9000\u6A21\u5F0F",
+        retryContextEval: "\u91CD\u8BD5\u4E0A\u4E0B\u6587\uFF08\u524D\u6B21\u8BC4\u4F30\u5931\u8D25\u4FE1\u606F\uFF09",
+        retryAttemptInfoEval: "\u8FD9\u662F\u7B2C {attempt} \u6B21\u8BC4\u4F30\u5C1D\u8BD5\u3002\u4E0A\u4E00\u6B21\u5728 **{phase}** \u9636\u6BB5\u5931\u8D25\u3002",
+        previousFailureReasonLabel: "**\u524D\u6B21\u5931\u8D25\u539F\u56E0:**",
+        retryReferenceHint: "\u8BF7\u53C2\u8003\u524D\u6B21\u5931\u8D25\u539F\u56E0\uFF0C\u786E\u4FDD\u672C\u6B21\u8BC4\u4F30\u8986\u76D6\u6240\u6709\u95EE\u9898\u3002",
+        evalOutputEmptyError: "\u8BC4\u4F30\u8F93\u51FA\u4E3A\u7A7A\uFF0C\u65E0\u6CD5\u89E3\u6790\u8BC4\u4F30\u7ED3\u679C",
         snapshotStats: "\u5E7D\u7075\u4EFB\u52A1\u68C0\u6D4B\u7EDF\u8BA1: \u603B\u4EFB\u52A1 {total}, \u8BA1\u5212\u5185\u6392\u9664 {excluded}, \u8BA1\u5212\u5916\u68C0\u6D4B\u4E2D {checking}",
         snapshotError: "\u5E7D\u7075\u4EFB\u52A1\u68C0\u6D4B\u51FA\u9519",
         snapshotExcludedInfo: "(\u8BA1\u5212\u5185\u6392\u9664 {count} \u4E2A\u4EFB\u52A1)",
@@ -8045,6 +8148,29 @@ var init_zh = __esm(() => {
         taskDescriptionSection: "\u4EFB\u52A1\u63CF\u8FF0",
         taskDescriptionEmpty: "",
         phantomTaskDetectedTitle: "\u26A0\uFE0F \u5E7D\u7075\u4EFB\u52A1\u68C0\u6D4B",
+        verificationCommands: "\u9A8C\u8BC1\u547D\u4EE4",
+        verificationSteps: "\u9A8C\u8BC1\u6B65\u9AA4",
+        expectedResult: "\u671F\u671B\u7ED3\u679C",
+        suggestedVerificationSteps: "\u5EFA\u8BAE\u9A8C\u8BC1\u6B65\u9AA4",
+        fallbackVerificationCommands: "\u56DE\u9000\u9A8C\u8BC1\u547D\u4EE4",
+        runVerificationCommands: "\u8BF7\u8FD0\u884C\u4EE5\u4E0B\u547D\u4EE4\u9A8C\u8BC1\u5B9E\u73B0",
+        previousReviewFailureReason: "\u524D\u6B21\u5BA1\u6838\u5931\u8D25\u539F\u56E0",
+        previousCodeReviewFailed: "\u4E0A\u4E00\u6B21\u4EE3\u7801\u5BA1\u6838\u672A\u901A\u8FC7\uFF0C\u5931\u8D25\u539F\u56E0\u5982\u4E0B",
+        ensureFixesCover: "\u8BF7\u786E\u4FDD\u672C\u6B21\u5BA1\u6838\u8986\u76D6\u524D\u6B21\u53D1\u73B0\u7684\u95EE\u9898\u662F\u5426\u5DF2\u4FEE\u590D",
+        developerDeclaredChanges: "\u5F00\u53D1\u8005\u58F0\u660E\u7684\u53D8\u66F4",
+        submittedEvidence: "\u63D0\u4EA4\u7684\u8BC1\u636E",
+        submittedEvidenceTitle: "\u63D0\u4EA4\u7684\u8BC1\u636E",
+        developerSubmittedEvidence: "\u5F00\u53D1\u8005\u63D0\u4EA4\u4E86\u4EE5\u4E0B\u8BC1\u636E",
+        developerCompletedCheckpoints: "\u5F00\u53D1\u8005\u58F0\u660E\u7684\u5B8C\u6210\u68C0\u67E5\u70B9",
+        previousQAFailureReason: "\u524D\u6B21\u9A8C\u8BC1\u5931\u8D25\u539F\u56E0",
+        previousQAVerificationFailed: "\u4E0A\u4E00\u6B21 QA \u9A8C\u8BC1\u672A\u901A\u8FC7\uFF0C\u5931\u8D25\u539F\u56E0\u5982\u4E0B",
+        pleaseNote: "\u8BF7\u7279\u522B\u6CE8\u610F",
+        reviewPreviousFailure: "\u4ED4\u7EC6\u5BA1\u89C6\u524D\u6B21\u5931\u8D25\u539F\u56E0\u662F\u5426\u6784\u6210\u771F\u6B63\u7684\u529F\u80FD\u7F3A\u9677\uFF08\u53C2\u8003\u4E0A\u8FF0\u9A8C\u8BC1\u539F\u5219\uFF09",
+        formalRequirementFix: "\u5982\u679C\u524D\u6B21\u5224\u5B9A\u662F\u57FA\u4E8E\u5F62\u5F0F\u8981\u6C42\u800C\u975E\u529F\u80FD\u7F3A\u9677\uFF0C\u672C\u6B21\u5E94\u4FEE\u6B63\u5224\u5B9A\u4E3A PASS",
+        realIssuePersist: "\u5982\u679C\u524D\u6B21\u5931\u8D25\u539F\u56E0\u4ECD\u7136\u5B58\u5728\u4E14\u786E\u5C5E\u529F\u80FD\u95EE\u9898\uFF0C\u7EE7\u7EED\u4FDD\u6301 NOPASS",
+        upstreamTask: "\u4E0A\u6E38\u4EFB\u52A1",
+        failureTime: "\u5931\u8D25\u65F6\u95F4",
+        retryReferenceNote: "\u8BF7\u53C2\u8003\u524D\u6B21\u5931\u8D25\u539F\u56E0\uFF0C\u907F\u514D\u91CD\u590D\u76F8\u540C\u7684\u95EE\u9898\u3002",
         phantomTaskProhibited: "\u5F00\u53D1\u8005\u88AB\u4E25\u683C\u7981\u6B62\u521B\u5EFA\u65B0\u4EFB\u52A1\u3002",
         phantomTaskNopassRequirement: "\u8FD9\u662F\u4E00\u4E2A\u81EA\u52A8 NOPASS \u7684\u4E25\u91CD\u8FDD\u89C4\u3002\u8BF7\u5728\u8BC4\u4F30\u7ED3\u679C\u4E2D\u660E\u786E\u6807\u6CE8\u6B64\u8FDD\u89C4\uFF0C\u5E76\u5C06\u7ED3\u679C\u8BBE\u4E3A NOPASS\u3002",
         contractDataInvalid: "contract.json \u5B58\u5728\u4F46\u6570\u636E\u65E0\u6548\uFF0C\u4F7F\u7528\u9ED8\u8BA4 Contract",
@@ -8723,6 +8849,104 @@ var init_en = __esm(() => {
       forceCleanedSnapshots: "  \u26A0\uFE0F  Force cleaned active snapshot: {id} (PID: {pid})",
       noSnapshotsFound: "\u2705 No snapshots found"
     },
+    doctorCmd: {
+      environmentDiagnostics: "Environment Diagnostics",
+      autoFix: "Auto Fix",
+      reChecking: "Re-checking...",
+      useFixToAutoFix: "Use --fix to auto-fix {count} issue(s)",
+      summary: "Summary: {errors} errors, {warnings} warnings, {ok} ok",
+      allChecksPassed: "All checks passed!",
+      fixing: "Fixing: {name}...",
+      copiedSkillMd: "  \u2713 Copied SKILL.md",
+      copiedCommandDocs: "  \u2713 Copied {count} command docs",
+      cannotFixPluginRootNotFound: "  \u2717 Cannot fix: Plugin root not found (CLAUDE_PLUGIN_ROOT not set and cannot auto-locate)",
+      createdDirectory: "  \u2713 Created directory: {name}/",
+      createdLogsDirectory: "  \u2713 Created logs directory",
+      autoFilledMissingConfig: "  \u2713 Auto-filled missing config items",
+      migratedDeprecatedStatusTasks: "  \u2713 Migrated {count} deprecated status tasks",
+      cleanedDeprecatedHookConfig: "  \u2713 Cleaned up deprecated Claude Code Hook config",
+      updatedSettings: "    - Updated .claude/settings.json",
+      deletedDeprecatedScripts: "    - Deleted deprecated scripts from .projmnt4claude/hooks/",
+      fixComplete: "Fix complete",
+      bugReportGeneration: "Bug Report Generation",
+      errorProjectNotInitialized: "Error: Project not initialized, cannot generate bug report",
+      runSetupFirst: "Run projmnt4claude setup to initialize the project first",
+      aiCostSummary: "AI Cost Summary",
+      totalAiCalls: "Total AI calls: {count}",
+      totalDuration: "Total duration: {duration}s",
+      totalTokens: "Total tokens: {total} (input: {input}, output: {output})",
+      byField: "By field:",
+      fieldStats: "  {field}: {calls} calls, {duration}s, {tokens} tokens",
+      usageAnalysis: "Usage Analysis",
+      totalCommandExecutions: "Total command executions: {count}",
+      averageDuration: "Average duration: {duration}s",
+      aiUsageRate: "AI usage rate: {rate}%",
+      errorsAndWarnings: "Errors: {errors}, Warnings: {warnings}",
+      commandFrequency: "Command frequency:",
+      commandCount: "  {cmd}: {count}",
+      commonErrors: "Common errors:",
+      errorEntry: "  [{count}x] {message}",
+      bugReportGenerated: "Bug report generated",
+      logArchive: "Log archive: {path}",
+      bugReportFailed: "Bug report generation failed: {error}",
+      deepLogAnalysis: "Deep Log Analysis (--deep)",
+      noLogFilesFound: "No log files found, skipping log analysis",
+      logDirectory: "   Log directory: {path}",
+      logFilesCount: "Log files: {count} ({size} KB)",
+      logEntriesCount: "Log entries: {count} (last 24 hours)",
+      noLogEntriesInLast24Hours: "No log entries in the last 24 hours",
+      registeredAnalyzers: "Registered {count} analyzers:",
+      analyzerEntry: "   - {name} ({category}) [{strategies}]",
+      foundIssues: "Found {count} issues",
+      criticalIssuesRequireAttention: "{count} critical issues require immediate attention",
+      errorsNeedAttention: "{count} errors need attention",
+      deepAnalysisComplete: "Deep log analysis complete, no anomalies found",
+      checkProjectInit: "Project Initialization",
+      checkProjectInitNotInitialized: "Project not initialized",
+      checkProjectInitRunSetup: "Run projmnt4claude setup to initialize the project",
+      checkProjectInitInitialized: "Project initialized",
+      checkPluginCache: "Plugin Cache",
+      checkPluginCacheNormal: "Plugin cache normal",
+      checkPluginCacheCliMode: "Running in CLI mode, skipping plugin cache check",
+      checkPluginCacheMainFileMissing: "Main program file missing",
+      checkPluginCacheLocalesMissing: "locales directory missing",
+      checkPluginCacheCommandsMissing: "commands directory missing (slash commands may not work)",
+      checkSkillFiles: "Command Docs",
+      checkSkillFilesCount: "{count} command docs",
+      checkSkillFilesMissing: "Command docs directory missing",
+      checkSkillFilesReRunSetup: "May need to re-run setup to copy command docs",
+      checkDirectoryStructure: "Directory: {name}",
+      checkDirectoryMissing: "Required directory missing",
+      checkDirectoryExists: "Exists",
+      checkArchiveMissing: "Abandoned tasks exist but archive directory is missing",
+      checkPluginScope: "Plugin Installation Scope",
+      checkPluginScopeWarning: "Detected project-scope installation may cause cross-project update issues",
+      checkPluginScopeRecommendUserScope: "Recommend user-scope installation for cross-project use",
+      checkLogDirectory: "Log Directory",
+      checkLogDirectoryMissing: "logs directory does not exist",
+      checkLogDirectoryExists: "Exists",
+      checkLogConfigCompleteness: "Log Config Completeness",
+      checkLogConfigMissing: "{count} log config items missing",
+      checkLogConfigComplete: "All logging.* config items present",
+      checkAiConfigCompleteness: "AI Config Completeness",
+      checkAiConfigMissing: "ai.provider config missing",
+      checkTrainingConfigCompleteness: "Training Data Config Completeness",
+      checkTrainingConfigMissing: "training.* config missing",
+      checkLogHealth: "Log Health",
+      checkLogHealthOversized: "{count} log files exceed 10MB",
+      checkLogHealthTotalSize: "Log directory exceeds 100MB ({size}MB)",
+      checkDeprecatedStatus: "Deprecated Status Check",
+      checkDeprecatedStatusOk: "All {count} tasks have no deprecated status",
+      checkDeprecatedStatusFound: "{count} tasks using deprecated status",
+      checkGitHooks: "Git Hooks",
+      checkGitHooksDisabled: "Git Hook check disabled via config",
+      checkGitHooksNotGitRepo: "Not a git repository, skipping Git Hook check",
+      checkGitHooksInstalled: "pre-commit hook installed",
+      checkGitHooksNotInstalled: "pre-commit hook not installed",
+      checkDeprecatedHooks: "Deprecated Hook Check",
+      checkDeprecatedHooksFound: "Deprecated Claude Code Hook config found",
+      checkDeprecatedHooksOk: "No deprecated Claude Code Hook config found"
+    },
     analyzeCmd: {
       projectNotInitialized: "Error: Project not initialized. Please run `projmnt4claude setup` first",
       analyzingProject: "Analyzing project health...",
@@ -8873,8 +9097,6 @@ var init_en = __esm(() => {
         qaOutputValidationFailed: "QA verification output format validation failed",
         cannotParseVerdict: "Cannot parse verdict result",
         deferredCheckpointsInfo: "{count} checkpoints deferred, waiting for human verification",
-        checkpointWarningDetail: "missing commands/steps",
-        checkpointWarningFallback: "These checkpoints will rely on AI free-form verification, which may affect verification quality.",
         phantomTaskViolation: "Serious violation: Developer created {count} additional tasks ({tasks}) during execution. Developers are strictly prohibited from creating new tasks.",
         phantomTaskCriteria: "Creating new tasks is prohibited",
         phantomTaskPrefix: "Phantom task",
@@ -8889,6 +9111,11 @@ var init_en = __esm(() => {
         noPhantomTask: "No phantom tasks detected",
         snapshotMode: "Phantom task detection using plan snapshot",
         fallbackMode: "Phantom task detection: plan snapshot not found, using time window fallback mode",
+        retryContextEval: "Retry Context (Previous Evaluation Failure Info)",
+        retryAttemptInfoEval: "This is attempt #{attempt}. Previous failure occurred in **{phase}** phase.",
+        previousFailureReasonLabel: "**Previous Failure Reason:**",
+        retryReferenceHint: "Please refer to the previous failure reason to ensure this evaluation covers all issues.",
+        evalOutputEmptyError: "Evaluation output is empty, cannot parse evaluation result",
         snapshotStats: "Phantom task detection stats: total {total}, planned excluded {excluded}, checking {checking}",
         snapshotError: "Phantom task detection error",
         snapshotExcludedInfo: "(excluded {count} planned tasks)",
@@ -8915,6 +9142,29 @@ var init_en = __esm(() => {
         taskDescriptionSection: "Task Description",
         taskDescriptionEmpty: "",
         phantomTaskDetectedTitle: "\u26A0\uFE0F Phantom Task Detection",
+        verificationCommands: "Verification Commands",
+        verificationSteps: "Verification Steps",
+        expectedResult: "Expected Result",
+        suggestedVerificationSteps: "Suggested Verification Steps",
+        fallbackVerificationCommands: "Fallback Verification Commands",
+        runVerificationCommands: "Please run the following commands to verify implementation",
+        previousReviewFailureReason: "Previous Review Failure Reason",
+        previousCodeReviewFailed: "Previous code review failed, failure reason",
+        ensureFixesCover: "Please ensure this review covers whether previous issues have been fixed",
+        developerDeclaredChanges: "Developer Declared Changes",
+        submittedEvidence: "Submitted Evidence",
+        submittedEvidenceTitle: "Submitted Evidence",
+        developerSubmittedEvidence: "Developer submitted the following evidence",
+        developerCompletedCheckpoints: "Developer Declared Completed Checkpoints",
+        previousQAFailureReason: "Previous QA Failure Reason",
+        previousQAVerificationFailed: "Previous QA verification failed, failure reason",
+        pleaseNote: "Please Note",
+        reviewPreviousFailure: "Carefully review if previous failure constitutes real functional defects (refer to verification principles)",
+        formalRequirementFix: "If previous judgment was based on formal requirements rather than functional defects, this review should correct to PASS",
+        realIssuePersist: "If previous failure reason still exists and is indeed a functional issue, continue with NOPASS",
+        upstreamTask: "Upstream Task",
+        failureTime: "Failure Time",
+        retryReferenceNote: "Please refer to the previous failure reason to avoid repeating the same issues.",
         phantomTaskProhibited: "Developers are strictly prohibited from creating new tasks.",
         phantomTaskNopassRequirement: "This is a serious violation that automatically results in NOPASS. Please clearly mark this violation in the evaluation result and set the result to NOPASS.",
         contractDataInvalid: "contract.json exists but data invalid, using default Contract",
@@ -14147,12 +14397,12 @@ function sleep(seconds) {
   return new Promise((resolve3) => setTimeout(resolve3, seconds * 1000));
 }
 async function runHeadlessClaudeWithRetry(options, retryConfig, cwd2) {
-  const texts = t(cwd2);
+  const texts2 = t(cwd2);
   const maxAttempts = retryConfig.maxAttempts + 1;
   let lastResult = null;
   for (let attempt = 1;attempt <= maxAttempts; attempt++) {
     if (attempt > 1) {
-      console.log(`   \uD83D\uDD04 ${texts.harness.logs.apiRetry.replace("{current}", String(attempt - 1)).replace("{max}", String(retryConfig.maxAttempts))}...`);
+      console.log(`   \uD83D\uDD04 ${texts2.harness.logs.apiRetry.replace("{current}", String(attempt - 1)).replace("{max}", String(retryConfig.maxAttempts))}...`);
     }
     lastResult = await runHeadlessClaude(options);
     if (lastResult.success) {
@@ -14163,13 +14413,13 @@ async function runHeadlessClaudeWithRetry(options, retryConfig, cwd2) {
       return lastResult;
     }
     const delay = Math.min(errorInfo.waitSeconds || retryConfig.baseDelay, retryConfig.baseDelay * Math.pow(2, attempt - 1));
-    console.log(`   \u23F3 ${texts.harness.logs.retryingInSeconds.replace("{reason}", errorInfo.reason).replace("{seconds}", String(delay))}...`);
+    console.log(`   \u23F3 ${texts2.harness.logs.retryingInSeconds.replace("{reason}", errorInfo.reason).replace("{seconds}", String(delay))}...`);
     await sleep(delay);
   }
   return lastResult;
 }
 function archiveReportIfExists(reportPath, cwd2) {
-  const texts = t(cwd2);
+  const texts2 = t(cwd2);
   try {
     const absolutePath = path7.resolve(reportPath);
     if (!fs9.existsSync(absolutePath)) {
@@ -14184,9 +14434,9 @@ function archiveReportIfExists(reportPath, cwd2) {
     const timestamp = new Date().toISOString().replace(/[:.]/g, "-");
     const archivePath = path7.join(archiveDir, `${timestamp}-${filename}`);
     fs9.copyFileSync(absolutePath, archivePath);
-    console.log(`   \uD83D\uDCE6 ${texts.harness.logs.archivedReport.replace("{filename}", `${timestamp}-${filename}`)}`);
+    console.log(`   \uD83D\uDCE6 ${texts2.harness.logs.archivedReport.replace("{filename}", `${timestamp}-${filename}`)}`);
   } catch (error) {
-    console.warn(`   \u26A0\uFE0F ${texts.harness.logs.archiveFailed}: ${error instanceof Error ? error.message : String(error)}`);
+    console.warn(`   \u26A0\uFE0F ${texts2.harness.logs.archiveFailed}: ${error instanceof Error ? error.message : String(error)}`);
   }
 }
 async function saveReport(reportPath, content) {
@@ -14542,1243 +14792,6 @@ var init_headless_agent = __esm(() => {
   initializeProviders();
 });
 
-// src/utils/feedback-constraint-engine.ts
-class JsonFeedbackTemplate {
-  truncationLimit;
-  language;
-  constructor(truncationLimit = 4000, language = "zh") {
-    this.truncationLimit = truncationLimit;
-    this.language = language;
-  }
-  buildFeedbackPrompt(violations, originalOutput, language) {
-    const lang = language || this.language;
-    const i18n = getI18n(lang);
-    const violationLines = violations.map((v, i) => `${i + 1}. [${v.severity.toUpperCase()}] ${v.ruleId}: ${v.message}` + (v.field ? `
-   ${i18n.feedback.fieldLabel}: ${v.field}` : "") + (v.value ? `
-   ${i18n.feedback.valueLabel}: ${v.value}` : "")).join(`
-`);
-    const requirements = i18n.feedback.jsonRequirements.map((r) => `- ${r}`);
-    return [
-      i18n.feedback.jsonHeader,
-      "",
-      `## ${i18n.feedback.violationsTitle}`,
-      violationLines,
-      "",
-      `## ${i18n.feedback.originalOutputTitle}`,
-      "```json",
-      originalOutput.length > this.truncationLimit ? originalOutput.slice(0, this.truncationLimit) + `
-${i18n.feedback.truncated}` : originalOutput,
-      "```",
-      "",
-      "\u8BF7\u786E\u4FDD\uFF1A",
-      ...requirements
-    ].join(`
-`);
-  }
-}
-
-class MarkdownFeedbackTemplate {
-  truncationLimit;
-  language;
-  constructor(truncationLimit = 4000, language = "zh") {
-    this.truncationLimit = truncationLimit;
-    this.language = language;
-  }
-  buildFeedbackPrompt(violations, originalOutput, language) {
-    const lang = language || this.language;
-    const i18n = getI18n(lang);
-    const violationLines = violations.map((v, i) => `${i + 1}. **[${v.severity.toUpperCase()}] ${v.ruleId}**: ${v.message}` + (v.field ? ` (${i18n.feedback.fieldLabel}: \`${v.field}\`)` : "")).join(`
-`);
-    const requirements = i18n.feedback.markdownRequirements.map((r) => `- ${r}`);
-    return [
-      i18n.feedback.markdownHeader,
-      "",
-      `### ${i18n.feedback.violationsTitle}`,
-      violationLines,
-      "",
-      `### ${i18n.feedback.originalOutputTitle}`,
-      "```markdown",
-      originalOutput.length > this.truncationLimit ? originalOutput.slice(0, this.truncationLimit) + `
-${i18n.feedback.truncated}` : originalOutput,
-      "```",
-      "",
-      "\u8BF7\u786E\u4FDD\uFF1A",
-      ...requirements
-    ].join(`
-`);
-  }
-}
-
-class FeedbackConstraintEngineImpl {
-  ruleSets = [];
-  template;
-  retryCount = 0;
-  language;
-  constructor(template, language = "zh") {
-    this.template = template ?? new JsonFeedbackTemplate(4000, language);
-    this.language = language;
-  }
-  setLanguage(language) {
-    this.language = language;
-    return this;
-  }
-  getLanguage() {
-    return this.language;
-  }
-  addRuleSet(ruleSet) {
-    this.ruleSets.push(ruleSet);
-    return this;
-  }
-  setTemplate(template) {
-    this.template = template;
-    return this;
-  }
-  validate(output) {
-    const violations = [];
-    for (const ruleSet of this.ruleSets) {
-      for (const rule of ruleSet.rules) {
-        const violation = rule.check(output);
-        if (violation !== null) {
-          if (!violation.severity) {
-            violation.severity = rule.severity;
-          }
-          violations.push(violation);
-        }
-      }
-    }
-    if (violations.length > 0) {
-      logger.debug(`[FeedbackConstraintEngine] \u9A8C\u8BC1\u53D1\u73B0 ${violations.length} \u4E2A\u8FDD\u89C4\u9879`);
-    }
-    return violations;
-  }
-  shouldRetry(violations) {
-    const hasErrors = violations.some((v) => v.severity === "error");
-    if (!hasErrors) {
-      return false;
-    }
-    for (const ruleSet of this.ruleSets) {
-      const errorViolationsInSet = violations.filter((v) => v.severity === "error" && ruleSet.rules.some((r) => r.id === v.ruleId));
-      if (errorViolationsInSet.length > 0) {
-        if (this.retryCount >= ruleSet.maxRetriesOnError) {
-          logger.debug(`[FeedbackConstraintEngine] \u89C4\u5219\u96C6 "${ruleSet.name}" \u5DF2\u8FBE\u5230\u6700\u5927\u91CD\u8BD5\u6B21\u6570 (${ruleSet.maxRetriesOnError})`);
-          return false;
-        }
-      }
-    }
-    return true;
-  }
-  buildFeedback(violations, originalOutput, language) {
-    return this.template.buildFeedbackPrompt(violations, originalOutput, language ?? this.language);
-  }
-  async runWithFeedback(invokeFn, prompt, options) {
-    this.retryCount = 0;
-    let currentPrompt = prompt;
-    let lastResult;
-    let currentOptions = { ...options };
-    while (true) {
-      lastResult = await invokeFn(currentPrompt, currentOptions);
-      const output = lastResult.output;
-      const violations = this.validate(output);
-      if (violations.length === 0) {
-        logger.debug(`[FeedbackConstraintEngine] \u9A8C\u8BC1\u901A\u8FC7 (\u91CD\u8BD5 ${this.retryCount} \u6B21)`);
-        return {
-          result: lastResult,
-          violations: [],
-          retries: this.retryCount,
-          passed: true,
-          sessionContinuity: {
-            used: false
-          }
-        };
-      }
-      if (!this.shouldRetry(violations)) {
-        const hasErrors = violations.some((v) => v.severity === "error");
-        logger.debug(`[FeedbackConstraintEngine] \u9A8C\u8BC1\u672A\u901A\u8FC7\uFF0C\u4E0D\u518D\u91CD\u8BD5 (\u9519\u8BEF: ${hasErrors}, \u91CD\u8BD5: ${this.retryCount})`);
-        return {
-          result: lastResult,
-          violations,
-          retries: this.retryCount,
-          passed: !hasErrors,
-          sessionContinuity: {
-            used: false
-          }
-        };
-      }
-      this.retryCount++;
-      currentPrompt = this.buildFeedback(violations, output);
-      currentOptions = { ...options };
-      logger.debug(`[FeedbackConstraintEngine] \u51C6\u5907\u7B2C ${this.retryCount} \u6B21\u91CD\u8BD5\uFF0C\u8FDD\u89C4\u9879: ${violations.map((v) => v.ruleId).join(", ")}`);
-    }
-  }
-  getRetryCount() {
-    return this.retryCount;
-  }
-  reset() {
-    this.retryCount = 0;
-    return this;
-  }
-}
-function createSessionAwareEngine(outputType = "json", rules = [], maxRetriesOnError = 2, language = "zh") {
-  const template = outputType === "json" ? new JsonFeedbackTemplate(4000, language) : new MarkdownFeedbackTemplate(4000, language);
-  const baseRules = outputType === "json" ? [nonEmptyOutputRule, jsonParseableRule, ...rules] : [nonEmptyOutputRule, ...rules];
-  const engine = new FeedbackConstraintEngineImpl(template, language);
-  engine.addRuleSet({
-    name: `${outputType}-session-aware`,
-    outputType,
-    rules: baseRules,
-    maxRetriesOnError
-  });
-  return engine;
-}
-var logger, jsonParseableRule, nonEmptyOutputRule;
-var init_feedback_constraint_engine = __esm(() => {
-  init_i18n();
-  init_logger();
-  logger = new Logger({ component: "feedback-constraint-engine" });
-  jsonParseableRule = {
-    id: "json-parseable",
-    description: "\u8F93\u51FA\u5FC5\u987B\u662F\u5408\u6CD5\u7684 JSON \u5B57\u7B26\u4E32",
-    severity: "error",
-    check: (output) => {
-      if (typeof output !== "string") {
-        return {
-          ruleId: "json-parseable",
-          severity: "error",
-          message: "\u8F93\u51FA\u4E0D\u662F\u5B57\u7B26\u4E32\u7C7B\u578B\uFF0C\u65E0\u6CD5\u89E3\u6790\u4E3A JSON",
-          value: typeof output
-        };
-      }
-      const trimmed = output.trim();
-      if (trimmed.length === 0) {
-        return {
-          ruleId: "json-parseable",
-          severity: "error",
-          message: "\u8F93\u51FA\u4E3A\u7A7A\u5B57\u7B26\u4E32\uFF0C\u65E0\u6CD5\u89E3\u6790\u4E3A JSON"
-        };
-      }
-      try {
-        JSON.parse(trimmed);
-        return null;
-      } catch (err) {
-        const msg = err instanceof Error ? err.message : String(err);
-        return {
-          ruleId: "json-parseable",
-          severity: "error",
-          message: `JSON \u89E3\u6790\u5931\u8D25: ${msg}`,
-          value: trimmed.slice(0, 100)
-        };
-      }
-    }
-  };
-  nonEmptyOutputRule = {
-    id: "non-empty-output",
-    description: "\u8F93\u51FA\u4E0D\u80FD\u4E3A\u7A7A",
-    severity: "error",
-    check: (output) => {
-      if (output === null || output === undefined) {
-        return {
-          ruleId: "non-empty-output",
-          severity: "error",
-          message: "\u8F93\u51FA\u4E3A null \u6216 undefined",
-          value: String(output)
-        };
-      }
-      if (typeof output === "string" && output.trim().length === 0) {
-        return {
-          ruleId: "non-empty-output",
-          severity: "error",
-          message: "\u8F93\u51FA\u4E3A\u7A7A\u5B57\u7B26\u4E32\u6216\u7EAF\u7A7A\u767D\u5B57\u7B26"
-        };
-      }
-      return null;
-    }
-  };
-});
-
-// src/utils/validation-rules/ai-metadata-rules.ts
-function safeParseJson(output) {
-  if (typeof output !== "string")
-    return null;
-  try {
-    let text = output.trim();
-    const match = text.match(/^```(?:json)?\s*\n?([\s\S]*?)\n?\s*```$/);
-    if (match)
-      text = match[1].trim();
-    return JSON.parse(text);
-  } catch {
-    return null;
-  }
-}
-function checkRequiredFields(output, ruleId, contextName, fields) {
-  const parsed = safeParseJson(output);
-  if (!parsed)
-    return null;
-  const missing = fields.filter((f) => !(f in parsed));
-  if (missing.length > 0) {
-    return {
-      ruleId,
-      severity: "error",
-      message: `${contextName}\u7F3A\u5C11\u5FC5\u9700\u5B57\u6BB5: ${missing.join(", ")}`
-    };
-  }
-  return null;
-}
-var requirementRequiredFields, requirementTitleRange, requirementTypeEnum, requirementPriorityEnum, requirementCheckpointsArray, qualityRequiredFields, qualityScoreRange, qualityIssuesArrayType, qualityIssuesItemStructure, qualitySuggestionsArrayType, duplicatesRequiredFields, duplicatesItemRequiredFields, duplicatesTaskIdsValidation, duplicatesSimilarityRange, stalenessRequiredFields, stalenessIsStaleType, stalenessScoreRange, stalenessActionEnum, stalenessReasonType, bugReportRequiredFields, bugReportTypeEnum, bugReportPriorityEnum, bugReportCheckpointsType, bugReportRootCauseType, bugReportImpactScopeType, requirementOutputRules, qualityOutputRules, duplicatesOutputRules, stalenessOutputRules, bugReportOutputRules;
-var init_ai_metadata_rules = __esm(() => {
-  init_checkpoint_rules();
-  requirementRequiredFields = {
-    id: "requirement-required-fields",
-    description: "\u9700\u6C42\u589E\u5F3A\u8F93\u51FA\u5FC5\u987B\u5305\u542B title, type, priority, checkpoints \u5B57\u6BB5",
-    severity: "error",
-    check: (output) => {
-      return checkRequiredFields(output, "requirement-required-fields", "\u9700\u6C42\u8F93\u51FA", ["title", "type", "priority", "checkpoints"]);
-    }
-  };
-  requirementTitleRange = {
-    id: "requirement-title-range",
-    description: "title \u957F\u5EA6\u5FC5\u987B\u5728 10-50 \u5B57\u7B26\u8303\u56F4\u5185",
-    severity: "warning",
-    check: (output) => {
-      const parsed = safeParseJson(output);
-      if (!parsed || !("title" in parsed))
-        return null;
-      const title = parsed.title;
-      if (title === null || title === undefined)
-        return null;
-      if (typeof title !== "string")
-        return null;
-      if (title.length < 10 || title.length > 50) {
-        return {
-          ruleId: "requirement-title-range",
-          severity: "warning",
-          message: `title \u957F\u5EA6 ${title.length} \u4E0D\u5728 10-50 \u8303\u56F4\u5185`,
-          value: title
-        };
-      }
-      return null;
-    }
-  };
-  requirementTypeEnum = {
-    id: "requirement-type-enum",
-    description: "type \u5FC5\u987B\u662F bug/feature/research/docs/refactor/test/null \u4E4B\u4E00",
-    severity: "warning",
-    check: (output) => {
-      const parsed = safeParseJson(output);
-      if (!parsed || !("type" in parsed))
-        return null;
-      const validTypes = ["bug", "feature", "research", "docs", "refactor", "test", null];
-      if (!validTypes.includes(parsed.type)) {
-        return {
-          ruleId: "requirement-type-enum",
-          severity: "warning",
-          message: `type \u503C "${parsed.type}" \u4E0D\u662F\u6709\u6548\u679A\u4E3E\u503C`,
-          value: String(parsed.type)
-        };
-      }
-      return null;
-    }
-  };
-  requirementPriorityEnum = {
-    id: "requirement-priority-enum",
-    description: "priority \u5FC5\u987B\u662F P0/P1/P2/P3/null \u4E4B\u4E00",
-    severity: "warning",
-    check: (output) => {
-      const parsed = safeParseJson(output);
-      if (!parsed || !("priority" in parsed))
-        return null;
-      const validPriorities = ["P0", "P1", "P2", "P3", null];
-      if (!validPriorities.includes(parsed.priority)) {
-        return {
-          ruleId: "requirement-priority-enum",
-          severity: "warning",
-          message: `priority \u503C "${parsed.priority}" \u4E0D\u662F\u6709\u6548\u679A\u4E3E\u503C`,
-          value: String(parsed.priority)
-        };
-      }
-      return null;
-    }
-  };
-  requirementCheckpointsArray = {
-    id: "requirement-checkpoints-array",
-    description: "checkpoints \u5FC5\u987B\u662F\u6570\u7EC4\u7C7B\u578B",
-    severity: "warning",
-    check: (output) => {
-      const parsed = safeParseJson(output);
-      if (!parsed || !("checkpoints" in parsed))
-        return null;
-      if (parsed.checkpoints !== null && !Array.isArray(parsed.checkpoints)) {
-        return {
-          ruleId: "requirement-checkpoints-array",
-          severity: "warning",
-          message: `checkpoints \u4E0D\u662F\u6570\u7EC4\u7C7B\u578B\uFF0C\u5B9E\u9645\u7C7B\u578B: ${typeof parsed.checkpoints}`,
-          value: String(parsed.checkpoints)
-        };
-      }
-      return null;
-    }
-  };
-  qualityRequiredFields = {
-    id: "quality-required-fields",
-    description: "\u8D28\u91CF\u8BC4\u4F30\u8F93\u51FA\u5FC5\u987B\u5305\u542B score, issues, suggestions \u5B57\u6BB5",
-    severity: "error",
-    check: (output) => {
-      return checkRequiredFields(output, "quality-required-fields", "\u8D28\u91CF\u8BC4\u4F30\u8F93\u51FA", ["score", "issues", "suggestions"]);
-    }
-  };
-  qualityScoreRange = {
-    id: "quality-score-range",
-    description: "score \u5FC5\u987B\u662F 0-100 \u8303\u56F4\u5185\u7684\u6570\u5B57",
-    severity: "warning",
-    check: (output) => {
-      const parsed = safeParseJson(output);
-      if (!parsed || !("score" in parsed))
-        return null;
-      const score = parsed.score;
-      if (typeof score !== "number" || score < 0 || score > 100) {
-        return {
-          ruleId: "quality-score-range",
-          severity: "warning",
-          message: `score \u503C "${score}" \u4E0D\u5728 0-100 \u8303\u56F4\u5185`,
-          value: String(score)
-        };
-      }
-      return null;
-    }
-  };
-  qualityIssuesArrayType = {
-    id: "quality-issues-array-type",
-    description: "issues \u5FC5\u987B\u662F\u6570\u7EC4\u7C7B\u578B",
-    severity: "warning",
-    check: (output) => {
-      const parsed = safeParseJson(output);
-      if (!parsed || !("issues" in parsed))
-        return null;
-      if (parsed.issues !== null && !Array.isArray(parsed.issues)) {
-        return {
-          ruleId: "quality-issues-array-type",
-          severity: "warning",
-          message: `issues \u4E0D\u662F\u6570\u7EC4\u7C7B\u578B\uFF0C\u5B9E\u9645\u7C7B\u578B: ${typeof parsed.issues}`,
-          value: String(parsed.issues)
-        };
-      }
-      return null;
-    }
-  };
-  qualityIssuesItemStructure = {
-    id: "quality-issues-item-structure",
-    description: "issues \u4E2D\u6BCF\u4E2A\u5143\u7D20\u5FC5\u987B\u5305\u542B field, severity, message \u4E14 severity \u4E3A error/warning/info \u4E4B\u4E00",
-    severity: "warning",
-    check: (output) => {
-      const parsed = safeParseJson(output);
-      if (!parsed || !("issues" in parsed) || !Array.isArray(parsed.issues))
-        return null;
-      const validSeverities = ["error", "warning", "info"];
-      for (let i = 0;i < parsed.issues.length; i++) {
-        const item = parsed.issues[i];
-        if (!item || typeof item !== "object") {
-          return {
-            ruleId: "quality-issues-item-structure",
-            severity: "warning",
-            message: `issues[${i}] \u4E0D\u662F\u5BF9\u8C61\u7C7B\u578B`,
-            value: String(item)
-          };
-        }
-        const missing = ["field", "severity", "message"].filter((f) => !(f in item));
-        if (missing.length > 0) {
-          return {
-            ruleId: "quality-issues-item-structure",
-            severity: "warning",
-            message: `issues[${i}] \u7F3A\u5C11\u5FC5\u9700\u5B57\u6BB5: ${missing.join(", ")}`
-          };
-        }
-        if (typeof item.severity === "string" && !validSeverities.includes(item.severity)) {
-          return {
-            ruleId: "quality-issues-item-structure",
-            severity: "warning",
-            message: `issues[${i}].severity \u503C "${item.severity}" \u4E0D\u662F\u6709\u6548\u679A\u4E3E\u503C (error/warning/info)`,
-            value: String(item.severity)
-          };
-        }
-      }
-      return null;
-    }
-  };
-  qualitySuggestionsArrayType = {
-    id: "quality-suggestions-array-type",
-    description: "suggestions \u5FC5\u987B\u662F\u5B57\u7B26\u4E32\u6570\u7EC4\u7C7B\u578B",
-    severity: "warning",
-    check: (output) => {
-      const parsed = safeParseJson(output);
-      if (!parsed || !("suggestions" in parsed))
-        return null;
-      if (parsed.suggestions !== null && !Array.isArray(parsed.suggestions)) {
-        return {
-          ruleId: "quality-suggestions-array-type",
-          severity: "warning",
-          message: `suggestions \u4E0D\u662F\u6570\u7EC4\u7C7B\u578B\uFF0C\u5B9E\u9645\u7C7B\u578B: ${typeof parsed.suggestions}`,
-          value: String(parsed.suggestions)
-        };
-      }
-      if (Array.isArray(parsed.suggestions)) {
-        for (let i = 0;i < parsed.suggestions.length; i++) {
-          if (typeof parsed.suggestions[i] !== "string") {
-            return {
-              ruleId: "quality-suggestions-array-type",
-              severity: "warning",
-              message: `suggestions[${i}] \u4E0D\u662F\u5B57\u7B26\u4E32\u7C7B\u578B\uFF0C\u5B9E\u9645\u7C7B\u578B: ${typeof parsed.suggestions[i]}`,
-              value: String(parsed.suggestions[i])
-            };
-          }
-        }
-      }
-      return null;
-    }
-  };
-  duplicatesRequiredFields = {
-    id: "duplicates-required-fields",
-    description: "\u91CD\u590D\u68C0\u6D4B\u8F93\u51FA\u5FC5\u987B\u5305\u542B duplicates \u6570\u7EC4\u5B57\u6BB5",
-    severity: "error",
-    check: (output) => {
-      const parsed = safeParseJson(output);
-      if (!parsed)
-        return null;
-      if (!("duplicates" in parsed) || !Array.isArray(parsed.duplicates)) {
-        return {
-          ruleId: "duplicates-required-fields",
-          severity: "error",
-          message: "\u91CD\u590D\u68C0\u6D4B\u8F93\u51FA\u7F3A\u5C11 duplicates \u6570\u7EC4\u5B57\u6BB5"
-        };
-      }
-      return null;
-    }
-  };
-  duplicatesItemRequiredFields = {
-    id: "duplicates-item-required-fields",
-    description: "duplicates \u4E2D\u6BCF\u4E2A\u5143\u7D20\u5FC5\u987B\u5305\u542B taskIds \u548C similarity \u5B57\u6BB5",
-    severity: "warning",
-    check: (output) => {
-      const parsed = safeParseJson(output);
-      if (!parsed || !("duplicates" in parsed) || !Array.isArray(parsed.duplicates))
-        return null;
-      for (let i = 0;i < parsed.duplicates.length; i++) {
-        const item = parsed.duplicates[i];
-        if (!item || typeof item !== "object") {
-          return {
-            ruleId: "duplicates-item-required-fields",
-            severity: "warning",
-            message: `duplicates[${i}] \u4E0D\u662F\u5BF9\u8C61\u7C7B\u578B`,
-            value: String(item)
-          };
-        }
-        const missing = ["taskIds", "similarity"].filter((f) => !(f in item));
-        if (missing.length > 0) {
-          return {
-            ruleId: "duplicates-item-required-fields",
-            severity: "warning",
-            message: `duplicates[${i}] \u7F3A\u5C11\u5FC5\u9700\u5B57\u6BB5: ${missing.join(", ")}`
-          };
-        }
-      }
-      return null;
-    }
-  };
-  duplicatesTaskIdsValidation = {
-    id: "duplicates-taskids-validation",
-    description: "taskIds \u5FC5\u987B\u662F\u5305\u542B\u81F3\u5C11 2 \u4E2A\u5B57\u7B26\u4E32\u7684\u6570\u7EC4",
-    severity: "warning",
-    check: (output) => {
-      const parsed = safeParseJson(output);
-      if (!parsed || !("duplicates" in parsed) || !Array.isArray(parsed.duplicates))
-        return null;
-      for (let i = 0;i < parsed.duplicates.length; i++) {
-        const item = parsed.duplicates[i];
-        if (!item || !("taskIds" in item))
-          continue;
-        const taskIds = item.taskIds;
-        if (!Array.isArray(taskIds)) {
-          return {
-            ruleId: "duplicates-taskids-validation",
-            severity: "warning",
-            message: `duplicates[${i}].taskIds \u4E0D\u662F\u6570\u7EC4\u7C7B\u578B\uFF0C\u5B9E\u9645\u7C7B\u578B: ${typeof taskIds}`,
-            value: String(taskIds)
-          };
-        }
-        if (taskIds.length < 2) {
-          return {
-            ruleId: "duplicates-taskids-validation",
-            severity: "warning",
-            message: `duplicates[${i}].taskIds \u957F\u5EA6 ${taskIds.length} \u5C0F\u4E8E\u6700\u5C0F\u503C 2`,
-            value: JSON.stringify(taskIds)
-          };
-        }
-        for (let j = 0;j < taskIds.length; j++) {
-          if (typeof taskIds[j] !== "string") {
-            return {
-              ruleId: "duplicates-taskids-validation",
-              severity: "warning",
-              message: `duplicates[${i}].taskIds[${j}] \u4E0D\u662F\u5B57\u7B26\u4E32\u7C7B\u578B`,
-              value: String(taskIds[j])
-            };
-          }
-        }
-      }
-      return null;
-    }
-  };
-  duplicatesSimilarityRange = {
-    id: "duplicates-similarity-range",
-    description: "similarity \u5FC5\u987B\u662F 0-1 \u8303\u56F4\u5185\u7684\u6570\u5B57",
-    severity: "warning",
-    check: (output) => {
-      const parsed = safeParseJson(output);
-      if (!parsed || !("duplicates" in parsed) || !Array.isArray(parsed.duplicates))
-        return null;
-      for (let i = 0;i < parsed.duplicates.length; i++) {
-        const item = parsed.duplicates[i];
-        if (!item || !("similarity" in item))
-          continue;
-        const sim = item.similarity;
-        if (typeof sim !== "number" || sim < 0 || sim > 1) {
-          return {
-            ruleId: "duplicates-similarity-range",
-            severity: "warning",
-            message: `duplicates[${i}].similarity \u503C "${sim}" \u4E0D\u5728 0-1 \u8303\u56F4\u5185`,
-            value: String(sim)
-          };
-        }
-      }
-      return null;
-    }
-  };
-  stalenessRequiredFields = {
-    id: "staleness-required-fields",
-    description: "\u9648\u65E7\u8BC4\u4F30\u8F93\u51FA\u5FC5\u987B\u5305\u542B isStale, stalenessScore, suggestedAction, reason \u5B57\u6BB5",
-    severity: "error",
-    check: (output) => {
-      return checkRequiredFields(output, "staleness-required-fields", "\u9648\u65E7\u8BC4\u4F30\u8F93\u51FA", ["isStale", "stalenessScore", "suggestedAction", "reason"]);
-    }
-  };
-  stalenessIsStaleType = {
-    id: "staleness-is-stale-type",
-    description: "isStale \u5FC5\u987B\u662F\u5E03\u5C14\u7C7B\u578B",
-    severity: "warning",
-    check: (output) => {
-      const parsed = safeParseJson(output);
-      if (!parsed || !("isStale" in parsed))
-        return null;
-      if (typeof parsed.isStale !== "boolean") {
-        return {
-          ruleId: "staleness-is-stale-type",
-          severity: "warning",
-          message: `isStale \u4E0D\u662F\u5E03\u5C14\u7C7B\u578B\uFF0C\u5B9E\u9645\u7C7B\u578B: ${typeof parsed.isStale}`,
-          value: String(parsed.isStale)
-        };
-      }
-      return null;
-    }
-  };
-  stalenessScoreRange = {
-    id: "staleness-score-range",
-    description: "stalenessScore \u5FC5\u987B\u662F 0-1 \u8303\u56F4\u5185\u7684\u6570\u5B57",
-    severity: "warning",
-    check: (output) => {
-      const parsed = safeParseJson(output);
-      if (!parsed || !("stalenessScore" in parsed))
-        return null;
-      const score = parsed.stalenessScore;
-      if (typeof score !== "number" || score < 0 || score > 1) {
-        return {
-          ruleId: "staleness-score-range",
-          severity: "warning",
-          message: `stalenessScore \u503C "${score}" \u4E0D\u5728 0-1 \u8303\u56F4\u5185`,
-          value: String(score)
-        };
-      }
-      return null;
-    }
-  };
-  stalenessActionEnum = {
-    id: "staleness-action-enum",
-    description: "suggestedAction \u5FC5\u987B\u662F keep/close/update/split \u4E4B\u4E00",
-    severity: "warning",
-    check: (output) => {
-      const parsed = safeParseJson(output);
-      if (!parsed || !("suggestedAction" in parsed))
-        return null;
-      const validActions = ["keep", "close", "update", "split"];
-      if (!validActions.includes(parsed.suggestedAction)) {
-        return {
-          ruleId: "staleness-action-enum",
-          severity: "warning",
-          message: `suggestedAction \u503C "${parsed.suggestedAction}" \u4E0D\u662F\u6709\u6548\u679A\u4E3E\u503C (keep/close/update/split)`,
-          value: String(parsed.suggestedAction)
-        };
-      }
-      return null;
-    }
-  };
-  stalenessReasonType = {
-    id: "staleness-reason-type",
-    description: "reason \u5FC5\u987B\u662F\u5B57\u7B26\u4E32\u7C7B\u578B",
-    severity: "warning",
-    check: (output) => {
-      const parsed = safeParseJson(output);
-      if (!parsed || !("reason" in parsed))
-        return null;
-      if (typeof parsed.reason !== "string") {
-        return {
-          ruleId: "staleness-reason-type",
-          severity: "warning",
-          message: `reason \u4E0D\u662F\u5B57\u7B26\u4E32\u7C7B\u578B\uFF0C\u5B9E\u9645\u7C7B\u578B: ${typeof parsed.reason}`,
-          value: String(parsed.reason)
-        };
-      }
-      return null;
-    }
-  };
-  bugReportRequiredFields = {
-    id: "bug-report-required-fields",
-    description: "Bug \u62A5\u544A\u5206\u6790\u8F93\u51FA\u5FC5\u987B\u5305\u542B title, description, checkpoints \u5B57\u6BB5",
-    severity: "error",
-    check: (output) => {
-      return checkRequiredFields(output, "bug-report-required-fields", "Bug \u62A5\u544A\u5206\u6790\u8F93\u51FA", ["title", "description", "checkpoints"]);
-    }
-  };
-  bugReportTypeEnum = {
-    id: "bug-report-type-enum",
-    description: "type \u5FC5\u987B\u662F bug/feature/research/docs/refactor/test/null \u4E4B\u4E00",
-    severity: "warning",
-    check: (output) => {
-      const parsed = safeParseJson(output);
-      if (!parsed || !("type" in parsed))
-        return null;
-      const validTypes = ["bug", "feature", "research", "docs", "refactor", "test", null];
-      if (!validTypes.includes(parsed.type)) {
-        return {
-          ruleId: "bug-report-type-enum",
-          severity: "warning",
-          message: `type \u503C "${parsed.type}" \u4E0D\u662F\u6709\u6548\u679A\u4E3E\u503C`,
-          value: String(parsed.type)
-        };
-      }
-      return null;
-    }
-  };
-  bugReportPriorityEnum = {
-    id: "bug-report-priority-enum",
-    description: "priority \u5FC5\u987B\u662F P0/P1/P2/P3/null \u4E4B\u4E00",
-    severity: "warning",
-    check: (output) => {
-      const parsed = safeParseJson(output);
-      if (!parsed || !("priority" in parsed))
-        return null;
-      const validPriorities = ["P0", "P1", "P2", "P3", null];
-      if (!validPriorities.includes(parsed.priority)) {
-        return {
-          ruleId: "bug-report-priority-enum",
-          severity: "warning",
-          message: `priority \u503C "${parsed.priority}" \u4E0D\u662F\u6709\u6548\u679A\u4E3E\u503C`,
-          value: String(parsed.priority)
-        };
-      }
-      return null;
-    }
-  };
-  bugReportCheckpointsType = {
-    id: "bug-report-checkpoints-type",
-    description: "checkpoints \u5FC5\u987B\u662F\u6570\u7EC4\u6216 null \u7C7B\u578B",
-    severity: "warning",
-    check: (output) => {
-      const parsed = safeParseJson(output);
-      if (!parsed || !("checkpoints" in parsed))
-        return null;
-      const cp = parsed.checkpoints;
-      if (cp !== null && !Array.isArray(cp)) {
-        return {
-          ruleId: "bug-report-checkpoints-type",
-          severity: "warning",
-          message: `checkpoints \u4E0D\u662F\u6570\u7EC4\u6216 null \u7C7B\u578B\uFF0C\u5B9E\u9645\u7C7B\u578B: ${typeof cp}`,
-          value: String(cp)
-        };
-      }
-      return null;
-    }
-  };
-  bugReportRootCauseType = {
-    id: "bug-report-root-cause-type",
-    description: "rootCause \u5FC5\u987B\u662F\u5B57\u7B26\u4E32\u6216 null \u7C7B\u578B",
-    severity: "warning",
-    check: (output) => {
-      const parsed = safeParseJson(output);
-      if (!parsed || !("rootCause" in parsed))
-        return null;
-      const rc = parsed.rootCause;
-      if (rc !== null && typeof rc !== "string") {
-        return {
-          ruleId: "bug-report-root-cause-type",
-          severity: "warning",
-          message: `rootCause \u4E0D\u662F\u5B57\u7B26\u4E32\u6216 null \u7C7B\u578B\uFF0C\u5B9E\u9645\u7C7B\u578B: ${typeof rc}`,
-          value: String(rc)
-        };
-      }
-      return null;
-    }
-  };
-  bugReportImpactScopeType = {
-    id: "bug-report-impact-scope-type",
-    description: "impactScope \u5FC5\u987B\u662F\u5B57\u7B26\u4E32\u6216 null \u7C7B\u578B",
-    severity: "warning",
-    check: (output) => {
-      const parsed = safeParseJson(output);
-      if (!parsed || !("impactScope" in parsed))
-        return null;
-      const is = parsed.impactScope;
-      if (is !== null && typeof is !== "string") {
-        return {
-          ruleId: "bug-report-impact-scope-type",
-          severity: "warning",
-          message: `impactScope \u4E0D\u662F\u5B57\u7B26\u4E32\u6216 null \u7C7B\u578B\uFF0C\u5B9E\u9645\u7C7B\u578B: ${typeof is}`,
-          value: String(is)
-        };
-      }
-      return null;
-    }
-  };
-  requirementOutputRules = [
-    requirementRequiredFields,
-    requirementTitleRange,
-    requirementTypeEnum,
-    requirementPriorityEnum,
-    requirementCheckpointsArray,
-    ...checkpointValidationRules
-  ];
-  qualityOutputRules = [
-    qualityRequiredFields,
-    qualityScoreRange,
-    qualityIssuesArrayType,
-    qualityIssuesItemStructure,
-    qualitySuggestionsArrayType
-  ];
-  duplicatesOutputRules = [
-    duplicatesRequiredFields,
-    duplicatesItemRequiredFields,
-    duplicatesTaskIdsValidation,
-    duplicatesSimilarityRange
-  ];
-  stalenessOutputRules = [
-    stalenessRequiredFields,
-    stalenessIsStaleType,
-    stalenessScoreRange,
-    stalenessActionEnum,
-    stalenessReasonType
-  ];
-  bugReportOutputRules = [
-    bugReportRequiredFields,
-    bugReportTypeEnum,
-    bugReportPriorityEnum,
-    bugReportCheckpointsType,
-    bugReportRootCauseType,
-    bugReportImpactScopeType
-  ];
-});
-
-// src/utils/validation-rules/plan-rules.ts
-function safeParseJson2(output) {
-  if (typeof output !== "string")
-    return null;
-  try {
-    let text = output.trim();
-    const match = text.match(/^```(?:json)?\s*\n?([\s\S]*?)\n?\s*```$/);
-    if (match)
-      text = match[1].trim();
-    return JSON.parse(text);
-  } catch {
-    return null;
-  }
-}
-function detectTaskCycles(tasks) {
-  const adjacency = new Map;
-  for (const task of tasks) {
-    if (!adjacency.has(task.id)) {
-      adjacency.set(task.id, new Set);
-    }
-    for (const depId of task.dependencies) {
-      adjacency.get(task.id).add(depId);
-    }
-  }
-  const cycles = [];
-  const visited = new Set;
-  const onStack = new Set;
-  const path8 = [];
-  function dfs(node) {
-    if (onStack.has(node)) {
-      const cycleStart = path8.indexOf(node);
-      if (cycleStart !== -1) {
-        cycles.push([...path8.slice(cycleStart), node]);
-      }
-      return;
-    }
-    if (visited.has(node))
-      return;
-    visited.add(node);
-    onStack.add(node);
-    path8.push(node);
-    const neighbors = adjacency.get(node);
-    if (neighbors) {
-      for (const neighbor of neighbors) {
-        dfs(neighbor);
-      }
-    }
-    path8.pop();
-    onStack.delete(node);
-  }
-  for (const taskId of adjacency.keys()) {
-    if (!visited.has(taskId)) {
-      dfs(taskId);
-    }
-  }
-  return {
-    hasCycle: cycles.length > 0,
-    cycles,
-    taskId: cycles.length > 0 ? cycles[0][0] : ""
-  };
-}
-var semanticDepsRequiredFields, semanticDepsArrayType, semanticDepsItemStructure, semanticDepsNoSelfRef, semanticDepsCountControl, semanticDepsReasonMinLength, semanticDependencyOutputRules, planCycleDetection, planInvalidDependency, planOrphanSubtask, planOrphanTask, planBlockedTask, planBridgeNode, planInferredOnlyDependency;
-var init_plan_rules = __esm(() => {
-  semanticDepsRequiredFields = {
-    id: "semantic-deps-required-fields",
-    description: "\u8BED\u4E49\u4F9D\u8D56\u8F93\u51FA\u5FC5\u987B\u5305\u542B dependencies \u6570\u7EC4\u5B57\u6BB5",
-    severity: "error",
-    check: (output) => {
-      const parsed = safeParseJson2(output);
-      if (!parsed)
-        return null;
-      if (!("dependencies" in parsed)) {
-        return {
-          ruleId: "semantic-deps-required-fields",
-          severity: "error",
-          message: "\u8BED\u4E49\u4F9D\u8D56\u8F93\u51FA\u7F3A\u5C11 dependencies \u5B57\u6BB5"
-        };
-      }
-      return null;
-    }
-  };
-  semanticDepsArrayType = {
-    id: "semantic-deps-array-type",
-    description: "dependencies \u5FC5\u987B\u662F\u6570\u7EC4\u7C7B\u578B",
-    severity: "warning",
-    check: (output) => {
-      const parsed = safeParseJson2(output);
-      if (!parsed || !("dependencies" in parsed))
-        return null;
-      if (!Array.isArray(parsed.dependencies)) {
-        return {
-          ruleId: "semantic-deps-array-type",
-          severity: "warning",
-          message: `dependencies \u4E0D\u662F\u6570\u7EC4\u7C7B\u578B\uFF0C\u5B9E\u9645\u7C7B\u578B: ${typeof parsed.dependencies}`,
-          value: String(parsed.dependencies)
-        };
-      }
-      return null;
-    }
-  };
-  semanticDepsItemStructure = {
-    id: "semantic-deps-item-structure",
-    description: "dependencies \u4E2D\u6BCF\u4E2A\u5143\u7D20\u5FC5\u987B\u5305\u542B taskId, depTaskId, reason \u5B57\u6BB5\u4E14\u5747\u4E3A\u5B57\u7B26\u4E32",
-    severity: "warning",
-    check: (output) => {
-      const parsed = safeParseJson2(output);
-      if (!parsed || !("dependencies" in parsed) || !Array.isArray(parsed.dependencies))
-        return null;
-      for (let i = 0;i < parsed.dependencies.length; i++) {
-        const item = parsed.dependencies[i];
-        if (!item || typeof item !== "object") {
-          return {
-            ruleId: "semantic-deps-item-structure",
-            severity: "warning",
-            message: `dependencies[${i}] \u4E0D\u662F\u5BF9\u8C61\u7C7B\u578B`,
-            value: String(item)
-          };
-        }
-        const missing = ["taskId", "depTaskId", "reason"].filter((f) => !(f in item));
-        if (missing.length > 0) {
-          return {
-            ruleId: "semantic-deps-item-structure",
-            severity: "warning",
-            message: `dependencies[${i}] \u7F3A\u5C11\u5FC5\u9700\u5B57\u6BB5: ${missing.join(", ")}`
-          };
-        }
-        for (const field of ["taskId", "depTaskId", "reason"]) {
-          if (typeof item[field] !== "string") {
-            return {
-              ruleId: "semantic-deps-item-structure",
-              severity: "warning",
-              message: `dependencies[${i}].${field} \u4E0D\u662F\u5B57\u7B26\u4E32\u7C7B\u578B\uFF0C\u5B9E\u9645\u7C7B\u578B: ${typeof item[field]}`,
-              field,
-              value: String(item[field])
-            };
-          }
-        }
-      }
-      return null;
-    }
-  };
-  semanticDepsNoSelfRef = {
-    id: "semantic-deps-no-self-ref",
-    description: "dependencies \u4E2D taskId \u4E0E depTaskId \u4E0D\u5E94\u76F8\u540C",
-    severity: "warning",
-    check: (output) => {
-      const parsed = safeParseJson2(output);
-      if (!parsed || !("dependencies" in parsed) || !Array.isArray(parsed.dependencies))
-        return null;
-      for (let i = 0;i < parsed.dependencies.length; i++) {
-        const item = parsed.dependencies[i];
-        if (!item || typeof item !== "object")
-          continue;
-        if (item.taskId === item.depTaskId && typeof item.taskId === "string") {
-          return {
-            ruleId: "semantic-deps-no-self-ref",
-            severity: "warning",
-            message: `dependencies[${i}] \u5B58\u5728\u81EA\u4F9D\u8D56: taskId="${item.taskId}"`,
-            value: String(item.taskId)
-          };
-        }
-      }
-      return null;
-    }
-  };
-  semanticDepsCountControl = {
-    id: "semantic-deps-count-control",
-    description: "\u4F9D\u8D56\u6570\u91CF\u8D85\u8FC7 8 \u6761\u65F6\u89E6\u53D1 warning",
-    severity: "warning",
-    check: (output) => {
-      const parsed = safeParseJson2(output);
-      if (!parsed || !("dependencies" in parsed) || !Array.isArray(parsed.dependencies))
-        return null;
-      const count = parsed.dependencies.length;
-      if (count > 8) {
-        return {
-          ruleId: "semantic-deps-count-control",
-          severity: "warning",
-          message: `\u4F9D\u8D56\u6570\u91CF ${count} \u6761\uFF0C\u8D85\u8FC7 8 \u6761\u5EFA\u8BAE\u4E0A\u9650`,
-          value: String(count)
-        };
-      }
-      return null;
-    }
-  };
-  semanticDepsReasonMinLength = {
-    id: "semantic-deps-reason-min-length",
-    description: "\u6BCF\u6761\u4F9D\u8D56\u7684 reason \u6700\u5C11 10 \u4E2A\u5B57\u7B26",
-    severity: "error",
-    check: (output) => {
-      const parsed = safeParseJson2(output);
-      if (!parsed || !("dependencies" in parsed) || !Array.isArray(parsed.dependencies))
-        return null;
-      for (let i = 0;i < parsed.dependencies.length; i++) {
-        const item = parsed.dependencies[i];
-        if (!item || typeof item !== "object")
-          continue;
-        if (typeof item.reason === "string" && item.reason.trim().length < 10) {
-          return {
-            ruleId: "semantic-deps-reason-min-length",
-            severity: "error",
-            message: `dependencies[${i}].reason \u957F\u5EA6 ${item.reason.trim().length} \u4E0D\u8DB3 10 \u5B57\u7B26`,
-            field: "reason",
-            value: item.reason
-          };
-        }
-      }
-      return null;
-    }
-  };
-  semanticDependencyOutputRules = [
-    semanticDepsRequiredFields,
-    semanticDepsArrayType,
-    semanticDepsItemStructure,
-    semanticDepsNoSelfRef,
-    semanticDepsCountControl,
-    semanticDepsReasonMinLength
-  ];
-  planCycleDetection = {
-    id: "plan-cycle-detection",
-    description: "\u68C0\u6D4B\u4EFB\u52A1\u4F9D\u8D56\u5173\u7CFB\u4E2D\u662F\u5426\u5B58\u5728\u5FAA\u73AF\u4F9D\u8D56",
-    severity: "error",
-    check: (task, context) => {
-      const t2 = task;
-      const allTasks = context?.allTasks;
-      if (!allTasks || allTasks.length === 0) {
-        return null;
-      }
-      const result = detectTaskCycles(allTasks);
-      if (result.hasCycle) {
-        const cycleStr = result.cycles.map((c) => c.join(" \u2192 ")).join("; ");
-        return {
-          ruleId: "plan-cycle-detection",
-          severity: "error",
-          message: `\u68C0\u6D4B\u5230\u5FAA\u73AF\u4F9D\u8D56: ${cycleStr}\u3002\u8BF7\u68C0\u67E5\u4EFB\u52A1\u4F9D\u8D56\u5173\u7CFB\uFF0C\u79FB\u9664\u5FAA\u73AF\u5F15\u7528`
-        };
-      }
-      return null;
-    }
-  };
-  planInvalidDependency = {
-    id: "plan-invalid-dependency",
-    description: "\u68C0\u6D4B\u4EFB\u52A1\u4F9D\u8D56\u662F\u5426\u5F15\u7528\u4E0D\u5B58\u5728\u7684\u4EFB\u52A1",
-    severity: "error",
-    check: (task, context) => {
-      const t2 = task;
-      const allTasks = context?.allTasks;
-      if (!allTasks || allTasks.length === 0) {
-        return null;
-      }
-      const validTaskIds = new Set(allTasks.map((task2) => task2.id));
-      const invalidDeps = [];
-      for (const depId of t2.dependencies) {
-        if (!validTaskIds.has(depId)) {
-          invalidDeps.push(depId);
-        }
-      }
-      if (invalidDeps.length > 0) {
-        return {
-          ruleId: "plan-invalid-dependency",
-          severity: "error",
-          message: `\u4EFB\u52A1 ${t2.id} \u5305\u542B\u65E0\u6548\u4F9D\u8D56: ${invalidDeps.join(", ")}\u3002\u8FD9\u4E9B\u4EFB\u52A1ID\u4E0D\u5B58\u5728`
-        };
-      }
-      return null;
-    }
-  };
-  planOrphanSubtask = {
-    id: "plan-orphan-subtask",
-    description: "\u68C0\u6D4B\u6709 parentId \u4F46\u7236\u4EFB\u52A1\u4E0D\u5B58\u5728\u7684\u5B64\u513F\u5B50\u4EFB\u52A1",
-    severity: "error",
-    check: (task, context) => {
-      const t2 = task;
-      const allTasks = context?.allTasks;
-      if (!allTasks || allTasks.length === 0) {
-        return null;
-      }
-      if (!t2.parentId) {
-        return null;
-      }
-      const validTaskIds = new Set(allTasks.map((task2) => task2.id));
-      if (!validTaskIds.has(t2.parentId)) {
-        return {
-          ruleId: "plan-orphan-subtask",
-          severity: "error",
-          message: `\u4EFB\u52A1 ${t2.id} \u58F0\u660E\u4E86\u7236\u4EFB\u52A1 ${t2.parentId}\uFF0C\u4F46\u8BE5\u7236\u4EFB\u52A1\u4E0D\u5B58\u5728\u3002\u8BF7\u68C0\u67E5 parentId \u6216\u521B\u5EFA\u7236\u4EFB\u52A1`
-        };
-      }
-      return null;
-    }
-  };
-  planOrphanTask = {
-    id: "plan-orphan-task",
-    description: "\u68C0\u6D4B\u5B64\u7ACB\u4EFB\u52A1\uFF08\u65E0\u4F9D\u8D56\u4E14\u4E0D\u88AB\u4F9D\u8D56\u7684\u4EFB\u52A1\uFF09",
-    severity: "warning",
-    check: (task, context) => {
-      const t2 = task;
-      const allTasks = context?.allTasks;
-      if (!allTasks || allTasks.length === 0) {
-        return null;
-      }
-      if (t2.dependencies.length > 0 || t2.subtaskIds && t2.subtaskIds.length > 0) {
-        return null;
-      }
-      const isDependedOn = allTasks.some((otherTask) => otherTask.dependencies.includes(t2.id));
-      if (!isDependedOn) {
-        return {
-          ruleId: "plan-orphan-task",
-          severity: "warning",
-          message: `\u4EFB\u52A1 ${t2.id} \u662F\u5B64\u7ACB\u4EFB\u52A1\uFF1A\u6CA1\u6709\u4F9D\u8D56\u4E14\u4E0D\u88AB\u5176\u4ED6\u4EFB\u52A1\u4F9D\u8D56\u3002\u5EFA\u8BAE\u68C0\u67E5\u662F\u5426\u9057\u6F0F\u4F9D\u8D56\u5173\u7CFB\u6216\u5220\u9664\u65E0\u7528\u4EFB\u52A1`
-        };
-      }
-      return null;
-    }
-  };
-  planBlockedTask = {
-    id: "plan-blocked-task",
-    description: "\u68C0\u6D4B\u88AB\u963B\u585E\u7684\u4EFB\u52A1\uFF08\u6240\u6709\u4F9D\u8D56\u90FD\u672A\u5B8C\u6210\uFF09",
-    severity: "warning",
-    check: (task, context) => {
-      const t2 = task;
-      const allTasks = context?.allTasks;
-      if (!allTasks || allTasks.length === 0) {
-        return null;
-      }
-      if (t2.dependencies.length === 0) {
-        return null;
-      }
-      if (t2.status === "resolved" || t2.status === "closed") {
-        return null;
-      }
-      const incompleteDeps = [];
-      for (const depId of t2.dependencies) {
-        const depTask = allTasks.find((task2) => task2.id === depId);
-        if (depTask) {
-          const isCompleted = depTask.status === "resolved" || depTask.status === "closed";
-          if (!isCompleted) {
-            incompleteDeps.push(depId);
-          }
-        }
-      }
-      if (incompleteDeps.length === t2.dependencies.length) {
-        return {
-          ruleId: "plan-blocked-task",
-          severity: "warning",
-          message: `\u4EFB\u52A1 ${t2.id} \u88AB\u963B\u585E\uFF1A\u6240\u6709 ${t2.dependencies.length} \u4E2A\u4F9D\u8D56\u4EFB\u52A1\u90FD\u672A\u5B8C\u6210\u3002\u5EFA\u8BAE\u4F18\u5148\u5904\u7406\u4F9D\u8D56\u4EFB\u52A1\uFF1A${incompleteDeps.join(", ")}`
-        };
-      }
-      return null;
-    }
-  };
-  planBridgeNode = {
-    id: "plan-bridge-node",
-    description: "\u68C0\u6D4B\u6865\u63A5\u8282\u70B9\u4EFB\u52A1\uFF08\u4F5C\u4E3A\u4F9D\u8D56\u6865\u6881\u4F46\u7F3A\u5C11\u68C0\u67E5\u70B9\uFF09",
-    severity: "warning",
-    check: (task, context) => {
-      const t2 = task;
-      const allTasks = context?.allTasks;
-      if (!allTasks || allTasks.length === 0) {
-        return null;
-      }
-      const dependentTasks = allTasks.filter((otherTask) => otherTask.dependencies.includes(t2.id));
-      const hasManyDependents = dependentTasks.length >= 2;
-      const hasDependencies = t2.dependencies.length > 0;
-      const hasMinimalCheckpoints = !t2.checkpoints || t2.checkpoints.length <= 1;
-      if (hasManyDependents && hasDependencies && hasMinimalCheckpoints) {
-        return {
-          ruleId: "plan-bridge-node",
-          severity: "warning",
-          message: `\u4EFB\u52A1 ${t2.id} \u53EF\u80FD\u662F\u6865\u63A5\u8282\u70B9\uFF1A\u88AB ${dependentTasks.length} \u4E2A\u4EFB\u52A1\u4F9D\u8D56\u4E14\u6709 ${t2.dependencies.length} \u4E2A\u4F9D\u8D56\uFF0C\u4F46\u68C0\u67E5\u70B9\u8FC7\u5C11\uFF08${t2.checkpoints?.length || 0} \u4E2A\uFF09\u3002\u5EFA\u8BAE\u6DFB\u52A0\u66F4\u591A\u68C0\u67E5\u70B9\u786E\u4FDD\u8D28\u91CF`
-        };
-      }
-      return null;
-    }
-  };
-  planInferredOnlyDependency = {
-    id: "plan-inferred-only-dependency",
-    description: "\u68C0\u6D4B\u53EA\u6709\u63A8\u65AD\u4F9D\u8D56\u7684\u4EFB\u52A1\uFF08\u5EFA\u8BAE\u663E\u5F0F\u58F0\u660E\u5173\u952E\u4F9D\u8D56\uFF09",
-    severity: "warning",
-    check: (task, context) => {
-      const t2 = task;
-      if (t2.dependencies.length === 0) {
-        return null;
-      }
-      const hasExplicitDeps = context?.hasExplicitDeps;
-      if (hasExplicitDeps !== false) {
-        return null;
-      }
-      return {
-        ruleId: "plan-inferred-only-dependency",
-        severity: "warning",
-        message: `\u4EFB\u52A1 ${t2.id} \u53EA\u6709\u63A8\u65AD\u4F9D\u8D56\uFF08${t2.dependencies.length} \u4E2A\uFF09\uFF0C\u6CA1\u6709\u663E\u5F0F\u58F0\u660E\u7684\u4F9D\u8D56\u3002\u5EFA\u8BAE\u663E\u5F0F\u58F0\u660E\u5173\u952E\u4F9D\u8D56\u4EE5\u63D0\u9AD8\u53EF\u7EF4\u62A4\u6027`
-      };
-    }
-  };
-});
-
 // src/utils/ai-metadata.ts
 function classifyFileToLayer(filePath) {
   const normalized = filePath.replace(/\\/g, "/");
@@ -15820,178 +14833,254 @@ function groupFilesByLayer(files) {
 
 class AIMetadataAssistant {
   logger;
-  constructor(cwd2) {
+  cwd;
+  presets;
+  constructor(cwd2 = process.cwd()) {
+    this.cwd = cwd2;
     this.logger = new Logger({ component: "ai-metadata", cwd: cwd2 });
+    this.presets = {
+      metadataEnhancement: buildAgentOptionsFromPreset("metadataEnhancement", cwd2),
+      checkpointEnhancement: buildAgentOptionsFromPreset("checkpointEnhancement", cwd2),
+      qualityAnalysis: buildAgentOptionsFromPreset("qualityAnalysis", cwd2),
+      duplicateDetection: buildAgentOptionsFromPreset("duplicateDetection", cwd2),
+      stalenessAssessment: buildAgentOptionsFromPreset("stalenessAssessment", cwd2),
+      bugAnalysis: buildAgentOptionsFromPreset("bugAnalysis", cwd2)
+    };
+    this.logger.info("AIMetadataAssistant \u521D\u59CB\u5316\u5B8C\u6210", {
+      cwd: cwd2,
+      presets: Object.keys(this.presets)
+    });
+  }
+  async callAI(prompt, scenario, operation) {
+    const startTime = Date.now();
+    this.logger.info(`[${operation}] AI \u8C03\u7528\u5F00\u59CB`, {
+      scenario,
+      operation,
+      promptLength: prompt.length
+    });
+    try {
+      const preset = this.presets[scenario];
+      const agentOptions = {
+        timeout: preset.timeout,
+        allowedTools: preset.allowedTools,
+        outputFormat: preset.outputFormat,
+        maxRetries: preset.maxRetries,
+        cwd: this.cwd,
+        dangerouslySkipPermissions: true
+      };
+      const agentResult = await invokeAgent(prompt, agentOptions);
+      const durationMs = Date.now() - startTime;
+      if (!agentResult.success) {
+        this.logger.warn(`[${operation}] AI \u8C03\u7528\u5931\u8D25\uFF0C\u8FD4\u56DE\u56DE\u9000\u7ED3\u679C`, {
+          error: agentResult.error,
+          durationMs
+        });
+        return { success: false, error: agentResult.error || "Agent invocation failed" };
+      }
+      const parsed = this.parseJSON(agentResult.output);
+      if (!parsed) {
+        this.logger.warn(`[${operation}] \u89E3\u6790 AI \u54CD\u5E94\u5931\u8D25`, {
+          output: agentResult.output?.slice(0, 200),
+          durationMs
+        });
+        return { success: false, error: "Failed to parse AI response as JSON" };
+      }
+      const inputTokens = agentResult.tokensUsed ? Math.floor(agentResult.tokensUsed * 0.3) : Math.floor(prompt.length / 4);
+      const outputTokens = agentResult.tokensUsed ? Math.floor(agentResult.tokensUsed * 0.7) : Math.floor(agentResult.output.length / 4);
+      this.logger.logAICost({
+        field: operation,
+        durationMs,
+        inputTokens,
+        outputTokens,
+        totalTokens: inputTokens + outputTokens
+      });
+      this.logger.info(`[${operation}] AI \u8C03\u7528\u5B8C\u6210`, {
+        durationMs,
+        tokensUsed: inputTokens + outputTokens,
+        model: agentResult.model
+      });
+      return {
+        success: true,
+        data: parsed,
+        tokensUsed: {
+          input: inputTokens,
+          output: outputTokens
+        }
+      };
+    } catch (err) {
+      const durationMs = Date.now() - startTime;
+      this.logger.warn(`[${operation}] AI \u8C03\u7528\u5F02\u5E38\uFF0C\u8FD4\u56DE\u56DE\u9000\u7ED3\u679C`, {
+        error: err.message,
+        durationMs
+      });
+      return { success: false, error: err.message || String(err) };
+    }
   }
   async enhanceRequirement(description, options) {
-    const prompt = this.buildRequirementPrompt(description, undefined, options.cwd);
-    const result = await this.invokeWithEngine(prompt, requirementOutputRules, {
-      ...options,
-      maxRetries: options.maxRetries ?? 2,
-      timeoutSeconds: options.timeoutSeconds ?? 30
-    });
-    if (!result.success) {
-      this.logger.warn("AI \u9700\u6C42\u589E\u5F3A\u5931\u8D25\uFF0C\u56DE\u9000\u5230\u89C4\u5219\u5F15\u64CE");
+    this.logger.info("enhanceRequirement \u8C03\u7528\u5F00\u59CB", { descriptionLength: description.length });
+    const prompt = this.buildRequirementPrompt(description, undefined, options?.cwd ?? this.cwd);
+    const result = await this.callAI(prompt, "metadataEnhancement", "enhanceRequirement");
+    if (!result.success || !result.data) {
+      this.logger.warn("enhanceRequirement \u5931\u8D25\uFF0C\u56DE\u9000\u5230\u89C4\u5219\u5F15\u64CE", { error: result.error });
       return this.fallbackEnhanceRequirement(description);
     }
-    const parsed = this.parseJSON(result.output);
-    if (!parsed) {
-      this.logger.warn("AI \u8F93\u51FA JSON \u89E3\u6790\u5931\u8D25\uFF0C\u56DE\u9000\u5230\u89C4\u5219\u5F15\u64CE");
-      return this.fallbackEnhanceRequirement(description);
-    }
-    const validation = this.validateRequirement(parsed);
-    if (!validation.valid) {
-      this.logger.warn("AI \u8F93\u51FA\u6821\u9A8C\u5931\u8D25: " + validation.errors.join(", "));
-      return this.fallbackEnhanceRequirement(description);
-    }
-    return {
-      title: this.sanitizeTitle(parsed.title),
-      description: typeof parsed.description === "string" ? parsed.description : null,
-      type: VALID_TYPES.includes(parsed.type) ? parsed.type : null,
-      priority: VALID_PRIORITIES.includes(parsed.priority) ? parsed.priority : null,
-      recommendedRole: typeof parsed.recommendedRole === "string" ? parsed.recommendedRole : null,
-      checkpoints: this.sanitizeCheckpoints(parsed.checkpoints),
-      dependencies: Array.isArray(parsed.dependencies) ? parsed.dependencies : null,
+    const data = result.data;
+    const validPriorities = ["P0", "P1", "P2", "P3"];
+    const validComplexities = ["low", "medium", "high"];
+    const validRoles = ["developer", "frontend", "backend", "qa", "writer", "security", "performance", "architect", "devops"];
+    const enhanced = {
+      title: typeof data.title === "string" ? data.title : this.sanitizeTitle(data.title) ?? "",
+      description: typeof data.description === "string" ? data.description : null,
+      type: VALID_TYPES.includes(data.type) ? data.type : inferTaskType(description),
+      priority: validPriorities.includes(data.priority) ? data.priority : inferTaskPriority(description),
+      recommendedRole: typeof data.recommendedRole === "string" ? data.recommendedRole : "developer",
+      checkpoints: Array.isArray(data.checkpoints) ? this.sanitizeCheckpoints(data.checkpoints) ?? [] : [],
+      dependencies: Array.isArray(data.dependencies) ? data.dependencies.filter((d) => typeof d === "string" && d.length > 3) : [],
       aiUsed: true
     };
+    this.logger.info("enhanceRequirement \u5B8C\u6210", {
+      title: enhanced.title,
+      priority: enhanced.priority,
+      checkpointCount: enhanced.checkpoints.length
+    });
+    return enhanced;
   }
   async enhanceCheckpoints(description, type, existing, options) {
-    const prompt = this.buildCheckpointsPrompt(description, type, existing, options.cwd);
-    const result = await this.invokeWithEngine(prompt, [], {
-      ...options,
-      maxRetries: options.maxRetries ?? 2,
-      timeoutSeconds: options.timeoutSeconds ?? 30
+    this.logger.info("enhanceCheckpoints \u8C03\u7528\u5F00\u59CB", {
+      descriptionLength: description.length,
+      checkpointCount: existing.length,
+      taskType: type
     });
-    if (!result.success) {
-      this.logger.warn("AI \u68C0\u67E5\u70B9\u589E\u5F3A\u5931\u8D25\uFF0C\u56DE\u9000\u5230\u89C4\u5219\u5F15\u64CE");
+    const prompt = this.buildCheckpointsPrompt(description, type, existing, options?.cwd ?? this.cwd);
+    const result = await this.callAI(prompt, "checkpointEnhancement", "enhanceCheckpoints");
+    if (!result.success || !result.data) {
+      this.logger.warn("enhanceCheckpoints \u5931\u8D25\uFF0C\u56DE\u9000\u5230\u5DF2\u6709\u68C0\u67E5\u70B9", { error: result.error });
       return { checkpoints: existing, aiUsed: false };
     }
-    const parsed = this.parseJSON(result.output);
-    if (!parsed || !Array.isArray(parsed.checkpoints)) {
-      this.logger.warn("AI \u68C0\u67E5\u70B9\u8F93\u51FA\u89E3\u6790\u5931\u8D25\uFF0C\u56DE\u9000\u5230\u5DF2\u6709\u68C0\u67E5\u70B9");
-      return { checkpoints: existing, aiUsed: false };
-    }
-    return {
-      checkpoints: this.sanitizeCheckpoints(parsed.checkpoints) ?? existing,
+    const enhanced = {
+      checkpoints: Array.isArray(result.data.checkpoints) ? this.sanitizeCheckpoints(result.data.checkpoints) ?? existing : existing,
       aiUsed: true
     };
+    this.logger.info("enhanceCheckpoints \u5B8C\u6210", {
+      checkpointCount: enhanced.checkpoints.length
+    });
+    return enhanced;
   }
   async analyzeTaskQuality(task, options) {
-    const prompt = this.buildQualityPrompt(task, options.cwd);
-    const result = await this.invokeWithEngine(prompt, qualityOutputRules, {
-      ...options,
-      maxRetries: options.maxRetries ?? 2,
-      timeoutSeconds: options.timeoutSeconds ?? 30
+    this.logger.info("analyzeTaskQuality \u8C03\u7528\u5F00\u59CB", {
+      title: task.title,
+      descriptionLength: task.description?.length ?? 0
     });
-    if (!result.success) {
-      this.logger.warn("AI \u8D28\u91CF\u8BC4\u4F30\u5931\u8D25\uFF0C\u56DE\u9000\u5230\u89C4\u5219\u5F15\u64CE");
+    const prompt = this.buildQualityPrompt(task, options?.cwd ?? this.cwd);
+    const result = await this.callAI(prompt, "qualityAnalysis", "analyzeTaskQuality");
+    if (!result.success || !result.data) {
+      this.logger.warn("analyzeTaskQuality \u5931\u8D25\uFF0C\u56DE\u9000\u5230\u89C4\u5219\u5F15\u64CE", { error: result.error });
       return this.fallbackAnalyzeQuality(task);
     }
-    const parsed = this.parseJSON(result.output);
-    if (!parsed) {
-      return this.fallbackAnalyzeQuality(task);
-    }
-    return {
-      score: typeof parsed.score === "number" ? Math.max(0, Math.min(100, parsed.score)) : 50,
-      issues: this.sanitizeIssues(parsed.issues),
-      suggestions: Array.isArray(parsed.suggestions) ? parsed.suggestions : [],
+    const analysis = {
+      score: typeof result.data.score === "number" ? Math.max(0, Math.min(100, result.data.score)) : 50,
+      issues: this.sanitizeIssues(result.data.issues),
+      suggestions: Array.isArray(result.data.suggestions) ? result.data.suggestions : [],
       aiUsed: true
     };
+    this.logger.info("analyzeTaskQuality \u5B8C\u6210", {
+      score: analysis.score,
+      issueCount: analysis.issues.length
+    });
+    return analysis;
   }
   async detectDuplicates(tasks, options) {
+    this.logger.info("detectDuplicates \u8C03\u7528\u5F00\u59CB", {
+      taskCount: tasks.length
+    });
     if (tasks.length < 2) {
       return { duplicates: [], aiUsed: false };
     }
-    const prompt = this.buildDuplicatesPrompt(tasks, options.cwd);
-    const result = await this.invokeWithEngine(prompt, duplicatesOutputRules, {
-      ...options,
-      maxRetries: options.maxRetries ?? 2,
-      timeoutSeconds: options.timeoutSeconds ?? 30
-    });
-    if (!result.success) {
-      this.logger.warn("AI \u91CD\u590D\u68C0\u6D4B\u5931\u8D25\uFF0C\u56DE\u9000\u5230\u89C4\u5219\u5F15\u64CE");
+    const prompt = this.buildDuplicatesPrompt(tasks, options?.cwd ?? this.cwd);
+    const result = await this.callAI(prompt, "duplicateDetection", "detectDuplicates");
+    if (!result.success || !result.data) {
+      this.logger.warn("detectDuplicates \u5931\u8D25\uFF0C\u56DE\u9000\u5230\u89C4\u5219\u5F15\u64CE", { error: result.error });
       return this.fallbackDetectDuplicates(tasks);
     }
-    const parsed = this.parseJSON(result.output);
-    if (!parsed || !Array.isArray(parsed.duplicates)) {
-      return this.fallbackDetectDuplicates(tasks);
-    }
-    return {
-      duplicates: this.sanitizeDuplicates(parsed.duplicates, tasks),
+    const detectionResult = {
+      duplicates: this.sanitizeDuplicates(result.data.duplicates, tasks),
       aiUsed: true
     };
+    this.logger.info("detectDuplicates \u5B8C\u6210", {
+      duplicateCount: detectionResult.duplicates.length
+    });
+    return detectionResult;
   }
   async assessStaleness(task, options) {
-    const prompt = this.buildStalenessPrompt(task, options.cwd);
-    const result = await this.invokeWithEngine(prompt, stalenessOutputRules, {
-      ...options,
-      maxRetries: options.maxRetries ?? 2,
-      timeoutSeconds: options.timeoutSeconds ?? 30
+    this.logger.info("assessStaleness \u8C03\u7528\u5F00\u59CB", {
+      taskId: task.id,
+      title: task.title,
+      status: task.status
     });
-    if (!result.success) {
-      this.logger.warn("AI \u9648\u65E7\u8BC4\u4F30\u5931\u8D25\uFF0C\u56DE\u9000\u5230\u89C4\u5219\u5F15\u64CE");
+    const prompt = this.buildStalenessPrompt(task, options?.cwd ?? this.cwd);
+    const result = await this.callAI(prompt, "stalenessAssessment", "assessStaleness");
+    if (!result.success || !result.data) {
+      this.logger.warn("assessStaleness \u5931\u8D25\uFF0C\u56DE\u9000\u5230\u89C4\u5219\u5F15\u64CE", { error: result.error });
       return this.fallbackAssessStaleness(task);
     }
-    const parsed = this.parseJSON(result.output);
-    if (!parsed) {
-      return this.fallbackAssessStaleness(task);
-    }
-    return {
-      isStale: typeof parsed.isStale === "boolean" ? parsed.isStale : false,
-      stalenessScore: typeof parsed.stalenessScore === "number" ? Math.max(0, Math.min(1, parsed.stalenessScore)) : 0,
-      suggestedAction: VALID_ACTIONS.includes(parsed.suggestedAction) ? parsed.suggestedAction : "keep",
-      reason: typeof parsed.reason === "string" ? parsed.reason : "",
+    const assessment = {
+      isStale: typeof result.data.isStale === "boolean" ? result.data.isStale : false,
+      stalenessScore: typeof result.data.stalenessScore === "number" ? Math.max(0, Math.min(1, result.data.stalenessScore)) : 0,
+      suggestedAction: VALID_ACTIONS.includes(result.data.suggestedAction) ? result.data.suggestedAction : "keep",
+      reason: typeof result.data.reason === "string" ? result.data.reason : "",
       aiUsed: true
     };
+    this.logger.info("assessStaleness \u5B8C\u6210", {
+      isStale: assessment.isStale,
+      suggestedAction: assessment.suggestedAction
+    });
+    return assessment;
   }
   async analyzeBugReport(reportContent, logContext, options) {
-    const prompt = this.buildBugReportPrompt(reportContent, logContext, options.cwd);
-    const result = await this.invokeWithEngine(prompt, bugReportOutputRules, {
-      ...options,
-      maxRetries: options.maxRetries ?? 2,
-      timeoutSeconds: options.timeoutSeconds ?? 30
+    this.logger.info("analyzeBugReport \u8C03\u7528\u5F00\u59CB", {
+      reportLength: reportContent.length,
+      hasLogContext: !!logContext
     });
-    if (!result.success) {
-      this.logger.warn("AI Bug \u62A5\u544A\u5206\u6790\u5931\u8D25\uFF0C\u56DE\u9000\u5230\u89C4\u5219\u5F15\u64CE");
+    const prompt = this.buildBugReportPrompt(reportContent, logContext, options?.cwd ?? this.cwd);
+    const result = await this.callAI(prompt, "bugAnalysis", "analyzeBugReport");
+    if (!result.success || !result.data) {
+      this.logger.warn("analyzeBugReport \u5931\u8D25\uFF0C\u56DE\u9000\u5230\u89C4\u5219\u5F15\u64CE", { error: result.error });
       return this.fallbackAnalyzeBugReport(reportContent);
     }
-    const parsed = this.parseJSON(result.output);
-    if (!parsed) {
-      return this.fallbackAnalyzeBugReport(reportContent);
-    }
-    return {
-      title: this.sanitizeTitle(parsed.title),
-      description: typeof parsed.description === "string" ? parsed.description : null,
-      type: VALID_TYPES.includes(parsed.type) ? parsed.type : "bug",
-      priority: VALID_PRIORITIES.includes(parsed.priority) ? parsed.priority : "P2",
-      checkpoints: this.sanitizeCheckpoints(parsed.checkpoints),
-      rootCause: typeof parsed.rootCause === "string" ? parsed.rootCause : null,
-      impactScope: typeof parsed.impactScope === "string" ? parsed.impactScope : null,
+    const data = result.data;
+    const analysis = {
+      title: typeof data.title === "string" ? data.title : this.sanitizeTitle(data.title) ?? null,
+      description: typeof data.description === "string" ? data.description : null,
+      type: VALID_TYPES.includes(data.type) ? data.type : "bug",
+      priority: VALID_PRIORITIES.includes(data.priority) ? data.priority : "P2",
+      checkpoints: this.sanitizeCheckpoints(data.checkpoints),
+      rootCause: typeof data.rootCause === "string" ? data.rootCause : null,
+      impactScope: typeof data.impactScope === "string" ? data.impactScope : null,
       aiUsed: true
     };
+    this.logger.info("analyzeBugReport \u5B8C\u6210", {
+      title: analysis.title,
+      type: analysis.type,
+      priority: analysis.priority
+    });
+    return analysis;
   }
   async inferSemanticDependencies(tasks, options) {
+    this.logger.info("inferSemanticDependencies \u8C03\u7528\u5F00\u59CB", {
+      taskCount: tasks.length
+    });
     if (tasks.length < 2) {
       return { dependencies: [], aiUsed: false };
     }
-    const prompt = this.buildSemanticDependencyPrompt(tasks, options.cwd);
-    const result = await this.invokeWithEngine(prompt, semanticDependencyOutputRules, {
-      ...options,
-      maxRetries: options.maxRetries ?? 2,
-      timeoutSeconds: options.timeoutSeconds ?? 30
-    });
-    if (!result.success) {
-      this.logger.warn("AI \u8BED\u4E49\u4F9D\u8D56\u63A8\u65AD\u5931\u8D25");
-      return { dependencies: [], aiUsed: false };
-    }
-    const parsed = this.parseJSON(result.output);
-    if (!parsed || !Array.isArray(parsed.dependencies)) {
-      this.logger.warn("AI \u8BED\u4E49\u4F9D\u8D56\u8F93\u51FA\u89E3\u6790\u5931\u8D25");
+    const prompt = this.buildSemanticDependencyPrompt(tasks, options?.cwd ?? this.cwd);
+    const result = await this.callAI(prompt, "metadataEnhancement", "inferSemanticDependencies");
+    if (!result.success || !result.data) {
+      this.logger.warn("inferSemanticDependencies \u5931\u8D25", { error: result.error });
       return { dependencies: [], aiUsed: false };
     }
     const validTaskIds = new Set(tasks.map((t2) => t2.id));
     const deps = [];
-    for (const dep of parsed.dependencies) {
+    for (const dep of result.data.dependencies || []) {
       if (typeof dep === "object" && dep !== null && typeof dep.taskId === "string" && typeof dep.depTaskId === "string" && typeof dep.reason === "string" && validTaskIds.has(dep.taskId) && validTaskIds.has(dep.depTaskId) && dep.taskId !== dep.depTaskId) {
         deps.push({
           taskId: dep.taskId,
@@ -16000,6 +15089,9 @@ class AIMetadataAssistant {
         });
       }
     }
+    this.logger.info("inferSemanticDependencies \u5B8C\u6210", {
+      dependencyCount: deps.length
+    });
     return { dependencies: deps, aiUsed: true };
   }
   buildSemanticDependencyPrompt(tasks, cwd2) {
@@ -16084,37 +15176,6 @@ ${logContext.substring(0, 2000)}` : "";
       reportContent: reportContent.substring(0, 4000),
       logContextSection
     });
-  }
-  async invokeWithEngine(prompt, additionalRules, options) {
-    const { cwd: cwd2, maxRetries, timeoutSeconds } = options;
-    try {
-      const agent = getAgent(cwd2);
-      const engine = createSessionAwareEngine("json", additionalRules, maxRetries);
-      const invokeOptions = {
-        timeout: timeoutSeconds,
-        allowedTools: [],
-        outputFormat: "json",
-        maxRetries: 0,
-        cwd: cwd2
-      };
-      const engineResult = await engine.runWithFeedback(agent.invoke.bind(agent), prompt, invokeOptions);
-      if (engineResult.retries > 0) {
-        this.logger.debug(`FeedbackConstraintEngine \u91CD\u8BD5 ${engineResult.retries} \u6B21`);
-      }
-      return engineResult.result;
-    } catch (error) {
-      const errorMsg = error instanceof Error ? error.message : String(error);
-      this.logger.warn(`AI \u8C03\u7528\u5F02\u5E38: ${errorMsg}`);
-      return {
-        output: "",
-        success: false,
-        provider: "none",
-        durationMs: 0,
-        tokensUsed: 0,
-        model: "",
-        error: errorMsg
-      };
-    }
   }
   parseJSON(output) {
     if (!output || !output.trim())
@@ -16311,9 +15372,7 @@ var init_ai_metadata = __esm(() => {
   init_headless_agent();
   init_task();
   init_prompt_templates();
-  init_feedback_constraint_engine();
-  init_ai_metadata_rules();
-  init_plan_rules();
+  init_config();
   LAYER_DEFINITIONS = {
     Layer0: {
       label: "\u7C7B\u578B\u5B9A\u4E49\u5C42",
@@ -18546,6 +17605,235 @@ var init_plan = __esm(() => {
   };
 });
 
+// src/utils/validation-rules/plan-rules.ts
+function detectTaskCycles(tasks) {
+  const adjacency = new Map;
+  for (const task of tasks) {
+    if (!adjacency.has(task.id)) {
+      adjacency.set(task.id, new Set);
+    }
+    for (const depId of task.dependencies) {
+      adjacency.get(task.id).add(depId);
+    }
+  }
+  const cycles = [];
+  const visited = new Set;
+  const onStack = new Set;
+  const path13 = [];
+  function dfs(node) {
+    if (onStack.has(node)) {
+      const cycleStart = path13.indexOf(node);
+      if (cycleStart !== -1) {
+        cycles.push([...path13.slice(cycleStart), node]);
+      }
+      return;
+    }
+    if (visited.has(node))
+      return;
+    visited.add(node);
+    onStack.add(node);
+    path13.push(node);
+    const neighbors = adjacency.get(node);
+    if (neighbors) {
+      for (const neighbor of neighbors) {
+        dfs(neighbor);
+      }
+    }
+    path13.pop();
+    onStack.delete(node);
+  }
+  for (const taskId of adjacency.keys()) {
+    if (!visited.has(taskId)) {
+      dfs(taskId);
+    }
+  }
+  return {
+    hasCycle: cycles.length > 0,
+    cycles,
+    taskId: cycles.length > 0 ? cycles[0][0] : ""
+  };
+}
+var planCycleDetection, planInvalidDependency, planOrphanSubtask, planOrphanTask, planBlockedTask, planBridgeNode, planInferredOnlyDependency;
+var init_plan_rules = __esm(() => {
+  planCycleDetection = {
+    id: "plan-cycle-detection",
+    description: "\u68C0\u6D4B\u4EFB\u52A1\u4F9D\u8D56\u5173\u7CFB\u4E2D\u662F\u5426\u5B58\u5728\u5FAA\u73AF\u4F9D\u8D56",
+    severity: "error",
+    check: (task, context) => {
+      const t2 = task;
+      const allTasks = context?.allTasks;
+      if (!allTasks || allTasks.length === 0) {
+        return null;
+      }
+      const result = detectTaskCycles(allTasks);
+      if (result.hasCycle) {
+        const cycleStr = result.cycles.map((c) => c.join(" \u2192 ")).join("; ");
+        return {
+          ruleId: "plan-cycle-detection",
+          severity: "error",
+          message: `\u68C0\u6D4B\u5230\u5FAA\u73AF\u4F9D\u8D56: ${cycleStr}\u3002\u8BF7\u68C0\u67E5\u4EFB\u52A1\u4F9D\u8D56\u5173\u7CFB\uFF0C\u79FB\u9664\u5FAA\u73AF\u5F15\u7528`
+        };
+      }
+      return null;
+    }
+  };
+  planInvalidDependency = {
+    id: "plan-invalid-dependency",
+    description: "\u68C0\u6D4B\u4EFB\u52A1\u4F9D\u8D56\u662F\u5426\u5F15\u7528\u4E0D\u5B58\u5728\u7684\u4EFB\u52A1",
+    severity: "error",
+    check: (task, context) => {
+      const t2 = task;
+      const allTasks = context?.allTasks;
+      if (!allTasks || allTasks.length === 0) {
+        return null;
+      }
+      const validTaskIds = new Set(allTasks.map((task2) => task2.id));
+      const invalidDeps = [];
+      for (const depId of t2.dependencies) {
+        if (!validTaskIds.has(depId)) {
+          invalidDeps.push(depId);
+        }
+      }
+      if (invalidDeps.length > 0) {
+        return {
+          ruleId: "plan-invalid-dependency",
+          severity: "error",
+          message: `\u4EFB\u52A1 ${t2.id} \u5305\u542B\u65E0\u6548\u4F9D\u8D56: ${invalidDeps.join(", ")}\u3002\u8FD9\u4E9B\u4EFB\u52A1ID\u4E0D\u5B58\u5728`
+        };
+      }
+      return null;
+    }
+  };
+  planOrphanSubtask = {
+    id: "plan-orphan-subtask",
+    description: "\u68C0\u6D4B\u6709 parentId \u4F46\u7236\u4EFB\u52A1\u4E0D\u5B58\u5728\u7684\u5B64\u513F\u5B50\u4EFB\u52A1",
+    severity: "error",
+    check: (task, context) => {
+      const t2 = task;
+      const allTasks = context?.allTasks;
+      if (!allTasks || allTasks.length === 0) {
+        return null;
+      }
+      if (!t2.parentId) {
+        return null;
+      }
+      const validTaskIds = new Set(allTasks.map((task2) => task2.id));
+      if (!validTaskIds.has(t2.parentId)) {
+        return {
+          ruleId: "plan-orphan-subtask",
+          severity: "error",
+          message: `\u4EFB\u52A1 ${t2.id} \u58F0\u660E\u4E86\u7236\u4EFB\u52A1 ${t2.parentId}\uFF0C\u4F46\u8BE5\u7236\u4EFB\u52A1\u4E0D\u5B58\u5728\u3002\u8BF7\u68C0\u67E5 parentId \u6216\u521B\u5EFA\u7236\u4EFB\u52A1`
+        };
+      }
+      return null;
+    }
+  };
+  planOrphanTask = {
+    id: "plan-orphan-task",
+    description: "\u68C0\u6D4B\u5B64\u7ACB\u4EFB\u52A1\uFF08\u65E0\u4F9D\u8D56\u4E14\u4E0D\u88AB\u4F9D\u8D56\u7684\u4EFB\u52A1\uFF09",
+    severity: "warning",
+    check: (task, context) => {
+      const t2 = task;
+      const allTasks = context?.allTasks;
+      if (!allTasks || allTasks.length === 0) {
+        return null;
+      }
+      if (t2.dependencies.length > 0 || t2.subtaskIds && t2.subtaskIds.length > 0) {
+        return null;
+      }
+      const isDependedOn = allTasks.some((otherTask) => otherTask.dependencies.includes(t2.id));
+      if (!isDependedOn) {
+        return {
+          ruleId: "plan-orphan-task",
+          severity: "warning",
+          message: `\u4EFB\u52A1 ${t2.id} \u662F\u5B64\u7ACB\u4EFB\u52A1\uFF1A\u6CA1\u6709\u4F9D\u8D56\u4E14\u4E0D\u88AB\u5176\u4ED6\u4EFB\u52A1\u4F9D\u8D56\u3002\u5EFA\u8BAE\u68C0\u67E5\u662F\u5426\u9057\u6F0F\u4F9D\u8D56\u5173\u7CFB\u6216\u5220\u9664\u65E0\u7528\u4EFB\u52A1`
+        };
+      }
+      return null;
+    }
+  };
+  planBlockedTask = {
+    id: "plan-blocked-task",
+    description: "\u68C0\u6D4B\u88AB\u963B\u585E\u7684\u4EFB\u52A1\uFF08\u6240\u6709\u4F9D\u8D56\u90FD\u672A\u5B8C\u6210\uFF09",
+    severity: "warning",
+    check: (task, context) => {
+      const t2 = task;
+      const allTasks = context?.allTasks;
+      if (!allTasks || allTasks.length === 0) {
+        return null;
+      }
+      if (t2.dependencies.length === 0) {
+        return null;
+      }
+      if (t2.status === "resolved" || t2.status === "closed") {
+        return null;
+      }
+      const incompleteDeps = [];
+      for (const depId of t2.dependencies) {
+        const depTask = allTasks.find((task2) => task2.id === depId);
+        if (depTask) {
+          const isCompleted = depTask.status === "resolved" || depTask.status === "closed";
+          if (!isCompleted) {
+            incompleteDeps.push(depId);
+          }
+        }
+      }
+      if (incompleteDeps.length === t2.dependencies.length) {
+        return {
+          ruleId: "plan-blocked-task",
+          severity: "warning",
+          message: `\u4EFB\u52A1 ${t2.id} \u88AB\u963B\u585E\uFF1A\u6240\u6709 ${t2.dependencies.length} \u4E2A\u4F9D\u8D56\u4EFB\u52A1\u90FD\u672A\u5B8C\u6210\u3002\u5EFA\u8BAE\u4F18\u5148\u5904\u7406\u4F9D\u8D56\u4EFB\u52A1\uFF1A${incompleteDeps.join(", ")}`
+        };
+      }
+      return null;
+    }
+  };
+  planBridgeNode = {
+    id: "plan-bridge-node",
+    description: "\u68C0\u6D4B\u6865\u63A5\u8282\u70B9\u4EFB\u52A1\uFF08\u4F5C\u4E3A\u4F9D\u8D56\u6865\u6881\u4F46\u7F3A\u5C11\u68C0\u67E5\u70B9\uFF09",
+    severity: "warning",
+    check: (task, context) => {
+      const t2 = task;
+      const allTasks = context?.allTasks;
+      if (!allTasks || allTasks.length === 0) {
+        return null;
+      }
+      const dependentTasks = allTasks.filter((otherTask) => otherTask.dependencies.includes(t2.id));
+      const hasManyDependents = dependentTasks.length >= 2;
+      const hasDependencies = t2.dependencies.length > 0;
+      const hasMinimalCheckpoints = !t2.checkpoints || t2.checkpoints.length <= 1;
+      if (hasManyDependents && hasDependencies && hasMinimalCheckpoints) {
+        return {
+          ruleId: "plan-bridge-node",
+          severity: "warning",
+          message: `\u4EFB\u52A1 ${t2.id} \u53EF\u80FD\u662F\u6865\u63A5\u8282\u70B9\uFF1A\u88AB ${dependentTasks.length} \u4E2A\u4EFB\u52A1\u4F9D\u8D56\u4E14\u6709 ${t2.dependencies.length} \u4E2A\u4F9D\u8D56\uFF0C\u4F46\u68C0\u67E5\u70B9\u8FC7\u5C11\uFF08${t2.checkpoints?.length || 0} \u4E2A\uFF09\u3002\u5EFA\u8BAE\u6DFB\u52A0\u66F4\u591A\u68C0\u67E5\u70B9\u786E\u4FDD\u8D28\u91CF`
+        };
+      }
+      return null;
+    }
+  };
+  planInferredOnlyDependency = {
+    id: "plan-inferred-only-dependency",
+    description: "\u68C0\u6D4B\u53EA\u6709\u63A8\u65AD\u4F9D\u8D56\u7684\u4EFB\u52A1\uFF08\u5EFA\u8BAE\u663E\u5F0F\u58F0\u660E\u5173\u952E\u4F9D\u8D56\uFF09",
+    severity: "warning",
+    check: (task, context) => {
+      const t2 = task;
+      if (t2.dependencies.length === 0) {
+        return null;
+      }
+      const hasExplicitDeps = context?.hasExplicitDeps;
+      if (hasExplicitDeps !== false) {
+        return null;
+      }
+      return {
+        ruleId: "plan-inferred-only-dependency",
+        severity: "warning",
+        message: `\u4EFB\u52A1 ${t2.id} \u53EA\u6709\u63A8\u65AD\u4F9D\u8D56\uFF08${t2.dependencies.length} \u4E2A\uFF09\uFF0C\u6CA1\u6709\u663E\u5F0F\u58F0\u660E\u7684\u4F9D\u8D56\u3002\u5EFA\u8BAE\u663E\u5F0F\u58F0\u660E\u5173\u952E\u4F9D\u8D56\u4EE5\u63D0\u9AD8\u53EF\u7EF4\u62A4\u6027`
+      };
+    }
+  };
+});
+
 // src/utils/quality-gate-registry.ts
 function runQualityGate(task, phase, context) {
   const violations = [];
@@ -19408,6 +18696,72 @@ function generateAIOutput(chains, originalCount, filteredCount, batches, query, 
     }
   };
 }
+function showBasicPlan(plan, cwd2) {
+  console.log("");
+  console.log("Execution Plan:");
+  console.log("\u2501".repeat(SEPARATOR_WIDTH));
+  console.log("No.  | Task ID   | Title                        | Status");
+  console.log("-----|-----------|------------------------------|------------");
+  for (let i = 0;i < plan.tasks.length; i++) {
+    const taskId = plan.tasks[i];
+    const task = readTaskMeta(taskId, cwd2);
+    const order = String(i + 1).padEnd(4);
+    const id = taskId.padEnd(9);
+    const title = (task?.title || "(Unknown task)").substring(0, 28).padEnd(28);
+    const status = task ? formatStatus2(task.status) : "\u2753 Unknown";
+    console.log(`${order} | ${id} | ${title} | ${status}`);
+  }
+  console.log("");
+  console.log(`Total ${plan.tasks.length} tasks`);
+  console.log(`Created: ${plan.createdAt}`);
+  console.log(`Updated: ${plan.updatedAt}`);
+}
+function showBatchedPlan(plan, cwd2) {
+  console.log("");
+  console.log("Execution Plan (Batched):");
+  console.log("\u2501".repeat(SEPARATOR_WIDTH));
+  const batches = plan.batches;
+  let taskIndex = 0;
+  const allTasks = getAllTasks(cwd2);
+  const planTaskIds = new Set(plan.tasks);
+  const planTasks = allTasks.filter((t2) => planTaskIds.has(t2.id));
+  const inferredDeps = inferDependenciesBatch(planTasks);
+  for (let batchIdx = 0;batchIdx < batches.length; batchIdx++) {
+    const batch = batches[batchIdx];
+    const batchNum = batchIdx + 1;
+    console.log("");
+    console.log(`\uD83D\uDCE6 Batch ${batchNum}/${batches.length} (${batch.length} tasks)`);
+    console.log("\u2500\u2500\u2500\u2500\u2500\u252C\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u252C\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u252C\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500");
+    for (let i = 0;i < batch.length; i++) {
+      const taskId = batch[i];
+      const task = readTaskMeta(taskId, cwd2);
+      const order = String(taskIndex + 1).padEnd(4);
+      const id = taskId.padEnd(9);
+      const title = (task?.title || "(Unknown task)").substring(0, 28).padEnd(28);
+      const status = task ? formatStatus2(task.status) : "\u2753 Unknown";
+      console.log(`${order} | ${id} | ${title} | ${status}`);
+      const taskInferredDeps = inferredDeps.get(taskId);
+      if (taskInferredDeps && taskInferredDeps.length > 0) {
+        const fileOverlapDeps = taskInferredDeps.filter((d) => d.source !== "ai-semantic");
+        const aiSemanticDeps = taskInferredDeps.filter((d) => d.source === "ai-semantic");
+        if (fileOverlapDeps.length > 0) {
+          const files = [...new Set(fileOverlapDeps.flatMap((d) => d.overlappingFiles))].slice(0, 2);
+          const moreFiles = fileOverlapDeps.flatMap((d) => d.overlappingFiles).length > 2 ? "..." : "";
+          console.log(`                    [Inferred:file overlap] ${files.join(", ")}${moreFiles}`);
+        }
+        if (aiSemanticDeps.length > 0) {
+          const reasons = aiSemanticDeps.map((d) => d.reason || "Semantic relation").slice(0, 2);
+          console.log(`                    [Inferred:AI semantic] ${reasons.join("; ")}`);
+        }
+      }
+      taskIndex++;
+    }
+  }
+  console.log("");
+  console.log(`Total ${plan.tasks.length} tasks in ${batches.length} batches`);
+  console.log(`Created: ${plan.createdAt}`);
+  console.log(`Updated: ${plan.updatedAt}`);
+}
 function showPlan(json2 = false, cwd2 = process.cwd()) {
   if (!isInitialized(cwd2)) {
     console.error("Error: Project not initialized. Please run `projmnt4claude setup` first");
@@ -19433,24 +18787,12 @@ function showPlan(json2 = false, cwd2 = process.cwd()) {
     console.log(JSON.stringify({ ...plan, taskDetails: tasks }, null, 2));
     return;
   }
-  console.log("");
-  console.log("Execution Plan:");
-  console.log("\u2501".repeat(SEPARATOR_WIDTH));
-  console.log("No.  | Task ID   | Title                        | Status");
-  console.log("-----|-----------|------------------------------|------------");
-  for (let i = 0;i < plan.tasks.length; i++) {
-    const taskId = plan.tasks[i];
-    const task = readTaskMeta(taskId, cwd2);
-    const order = String(i + 1).padEnd(4);
-    const id = taskId.padEnd(9);
-    const title = (task?.title || "(Unknown task)").substring(0, 28).padEnd(28);
-    const status = task ? formatStatus2(task.status) : "\u2753 Unknown";
-    console.log(`${order} | ${id} | ${title} | ${status}`);
+  const hasBatches = Array.isArray(plan.batches) && plan.batches.length > 0;
+  if (hasBatches) {
+    showBatchedPlan(plan, cwd2);
+  } else {
+    showBasicPlan(plan, cwd2);
   }
-  console.log("");
-  console.log(`Total ${plan.tasks.length} tasks`);
-  console.log(`Created: ${plan.createdAt}`);
-  console.log(`Updated: ${plan.updatedAt}`);
 }
 function addTask(taskId, afterId, cwd2 = process.cwd()) {
   if (!isInitialized(cwd2)) {
@@ -19528,7 +18870,7 @@ async function recommendPlan(options = {}, cwd2 = process.cwd()) {
   }
   console.log(`Analyzing project tasks...
 `);
-  const logger2 = createLogger("plan-recommend", cwd2);
+  const logger = createLogger("plan-recommend", cwd2);
   const startTime = Date.now();
   const inputQuery = options.query || "";
   let recommendationAccepted = false;
@@ -19674,7 +19016,7 @@ async function recommendPlan(options = {}, cwd2 = process.cwd()) {
       }
     }
     const logKeywords = filter.type === "keywords" ? filter.keywords : [filter.pattern];
-    logger2.logInstrumentation({
+    logger.logInstrumentation({
       module: "plan-recommend",
       action: "recommend_empty",
       input_summary: `query="${inputQuery}", all=${options.all || false}`,
@@ -19685,7 +19027,7 @@ async function recommendPlan(options = {}, cwd2 = process.cwd()) {
       user_edit_count: 0,
       module_data: { keywords: logKeywords, excluded: excludedCount }
     });
-    logger2.flush();
+    logger.flush();
     return;
   }
   console.log("Analyzing task dependencies...");
@@ -19727,7 +19069,7 @@ async function recommendPlan(options = {}, cwd2 = process.cwd()) {
   suggestedOrder = aiOutput.recommendation.suggestedOrder;
   if (options.json) {
     console.log(JSON.stringify(aiOutput, null, 2));
-    logger2.logInstrumentation({
+    logger.logInstrumentation({
       module: "plan-recommend",
       action: "recommend_json",
       input_summary: `query="${inputQuery}", all=${options.all || false}`,
@@ -19741,7 +19083,7 @@ async function recommendPlan(options = {}, cwd2 = process.cwd()) {
         suggested_order: suggestedOrder.slice(0, 5)
       }
     });
-    logger2.flush();
+    logger.flush();
     return;
   }
   console.log("\u2501".repeat(SEPARATOR_WIDTH));
@@ -19806,7 +19148,7 @@ async function recommendPlan(options = {}, cwd2 = process.cwd()) {
     plan.batches = aiOutput.batchOrder;
     writePlan(plan, cwd2);
     console.log("\u2705 Execution plan updated (non-interactive mode)");
-    logger2.logInstrumentation({
+    logger.logInstrumentation({
       module: "plan-recommend",
       action: "recommend_auto",
       input_summary: `query="${inputQuery}", all=${options.all || false}`,
@@ -19820,7 +19162,7 @@ async function recommendPlan(options = {}, cwd2 = process.cwd()) {
         suggested_order: aiOutput.recommendation.suggestedOrder.slice(0, 5)
       }
     });
-    logger2.flush();
+    logger.flush();
     return;
   }
   const response = await import_prompts3.default({
@@ -19839,7 +19181,7 @@ async function recommendPlan(options = {}, cwd2 = process.cwd()) {
   } else {
     console.log("Cancelled");
   }
-  logger2.logInstrumentation({
+  logger.logInstrumentation({
     module: "plan-recommend",
     action: response.confirm ? "recommend_accept" : "recommend_skip",
     input_summary: `query="${inputQuery}", all=${options.all || false}`,
@@ -19855,7 +19197,7 @@ async function recommendPlan(options = {}, cwd2 = process.cwd()) {
       accepted: recommendationAccepted
     }
   });
-  logger2.flush();
+  logger.flush();
 }
 function getPriorityIcon(priority) {
   const icons = {
@@ -21282,19 +20624,19 @@ async function fixSingleIssue(issue, cwd2, nonInteractive) {
       const author = actionLower.includes("pipeline") || actionLower.includes("harness") ? "pipeline" : "user";
       const analysis = historyEntry.reason || "";
       const evidence = historyEntry.verificationDetails || "";
-      const texts = t(cwd2).analyzeCmd;
+      const texts2 = t(cwd2).analyzeCmd;
       const decisionMap = {
-        "open\u2192in_progress": texts.transitionStartExecution,
-        "in_progress\u2192wait_review": texts.transitionSubmitReview,
-        "wait_review\u2192wait_qa": texts.transitionReviewPass,
-        "wait_qa\u2192wait_evaluation": texts.transitionQaPass,
-        "wait_evaluation\u2192resolved": texts.transitionEvalPass,
-        "open\u2192closed": texts.transitionCloseTask,
-        "in_progress\u2192resolved": texts.transitionDirectComplete,
-        "resolved\u2192reopened": texts.transitionReopenTask,
-        "reopened\u2192in_progress": texts.transitionRestartExecution,
-        "open\u2192abandoned": texts.transitionAbandonTask,
-        "in_progress\u2192open": texts.transitionReturnTodo
+        "open\u2192in_progress": texts2.transitionStartExecution,
+        "in_progress\u2192wait_review": texts2.transitionSubmitReview,
+        "wait_review\u2192wait_qa": texts2.transitionReviewPass,
+        "wait_qa\u2192wait_evaluation": texts2.transitionQaPass,
+        "wait_evaluation\u2192resolved": texts2.transitionEvalPass,
+        "open\u2192closed": texts2.transitionCloseTask,
+        "in_progress\u2192resolved": texts2.transitionDirectComplete,
+        "resolved\u2192reopened": texts2.transitionReopenTask,
+        "reopened\u2192in_progress": texts2.transitionRestartExecution,
+        "open\u2192abandoned": texts2.transitionAbandonTask,
+        "in_progress\u2192open": texts2.transitionReturnTodo
       };
       const statusKey = `${historyEntry.oldValue}\u2192${historyEntry.newValue}`;
       const decision = decisionMap[statusKey] || `${historyEntry.oldValue} \u2192 ${historyEntry.newValue}`;
@@ -22157,9 +21499,9 @@ function validateRequirementHistoryEntry(entry, index) {
 }
 function validateTaskIdFormat(id, cwd2 = process.cwd()) {
   const errors = [];
-  const texts = t(cwd2);
+  const texts2 = t(cwd2);
   if (!id || typeof id !== "string") {
-    return { valid: false, format: "unknown", errors: [texts.analyzeCmd.taskIdEmpty] };
+    return { valid: false, format: "unknown", errors: [texts2.analyzeCmd.taskIdEmpty] };
   }
   if (/^TASK-\d{3,}$/.test(id)) {
     return { valid: true, format: "old", errors: [] };
@@ -22175,7 +21517,7 @@ function validateTaskIdFormat(id, cwd2 = process.cwd()) {
   if (id.startsWith("TASK-") && id.length > 5 && /^[a-zA-Z0-9\-_]+$/.test(id)) {
     return { valid: true, format: "unknown", errors: [] };
   }
-  errors.push(texts.analyzeCmd.taskIdFormatInvalid);
+  errors.push(texts2.analyzeCmd.taskIdFormatInvalid);
   return { valid: false, format: "unknown", errors };
 }
 function isValidStatusValue(status) {
@@ -22554,44 +21896,44 @@ function shouldTriggerAIInference(task, layer1Issues, cwd2) {
   return false;
 }
 function buildStatusInferencePrompt(task, layer1Findings, cwd2 = process.cwd()) {
-  const texts = t(cwd2);
+  const texts2 = t(cwd2);
   const currentStatus = normalizeStatus(task.status);
   const taskInfo = [
-    texts.analyzeCmd.aiPromptTaskInfo,
+    texts2.analyzeCmd.aiPromptTaskInfo,
     `- ID: ${task.id}`,
-    `- ${texts.analyzeCmd.aiPromptTitleLabel || "\u6807\u9898"}: ${task.title}`,
-    `- ${texts.analyzeCmd.aiPromptTypeLabel || "\u7C7B\u578B"}: ${task.type}`,
-    `- ${texts.analyzeCmd.aiPromptPriorityLabel || "\u4F18\u5148\u7EA7"}: ${task.priority}`,
-    `- ${texts.analyzeCmd.aiPromptStatusLabel || "\u5F53\u524D\u72B6\u6001"}: ${currentStatus}`,
-    `- ${texts.analyzeCmd.aiPromptCreatedAtLabel || "\u521B\u5EFA\u65F6\u95F4"}: ${task.createdAt || texts.analyzeCmd.unknown}`,
-    `- ${texts.analyzeCmd.aiPromptUpdatedAtLabel || "\u66F4\u65B0\u65F6\u95F4"}: ${task.updatedAt || texts.analyzeCmd.unknown}`,
-    `- ${texts.analyzeCmd.aiPromptDescriptionLabel || "\u63CF\u8FF0"}: ${task.description || texts.analyzeCmd.none}`
+    `- ${texts2.analyzeCmd.aiPromptTitleLabel || "\u6807\u9898"}: ${task.title}`,
+    `- ${texts2.analyzeCmd.aiPromptTypeLabel || "\u7C7B\u578B"}: ${task.type}`,
+    `- ${texts2.analyzeCmd.aiPromptPriorityLabel || "\u4F18\u5148\u7EA7"}: ${task.priority}`,
+    `- ${texts2.analyzeCmd.aiPromptStatusLabel || "\u5F53\u524D\u72B6\u6001"}: ${currentStatus}`,
+    `- ${texts2.analyzeCmd.aiPromptCreatedAtLabel || "\u521B\u5EFA\u65F6\u95F4"}: ${task.createdAt || texts2.analyzeCmd.unknown}`,
+    `- ${texts2.analyzeCmd.aiPromptUpdatedAtLabel || "\u66F4\u65B0\u65F6\u95F4"}: ${task.updatedAt || texts2.analyzeCmd.unknown}`,
+    `- ${texts2.analyzeCmd.aiPromptDescriptionLabel || "\u63CF\u8FF0"}: ${task.description || texts2.analyzeCmd.none}`
   ].join(`
 `);
   const historySection = task.history && task.history.length > 0 ? [
-    texts.analyzeCmd.aiPromptHistory.replace("{count}", String(task.history.length)),
-    ...task.history.slice(-10).map((h, i) => `${i + 1}. [${h.timestamp}] ${h.action}${h.field ? ` (${h.field}: ${h.oldValue} \u2192 ${h.newValue})` : ""}${h.reason ? ` ${texts.analyzeCmd.aiPromptReasonLabel || "\u539F\u56E0"}: ${h.reason}` : ""}`)
+    texts2.analyzeCmd.aiPromptHistory.replace("{count}", String(task.history.length)),
+    ...task.history.slice(-10).map((h, i) => `${i + 1}. [${h.timestamp}] ${h.action}${h.field ? ` (${h.field}: ${h.oldValue} \u2192 ${h.newValue})` : ""}${h.reason ? ` ${texts2.analyzeCmd.aiPromptReasonLabel || "\u539F\u56E0"}: ${h.reason}` : ""}`)
   ].join(`
-`) : texts.analyzeCmd.aiPromptNoHistory;
+`) : texts2.analyzeCmd.aiPromptNoHistory;
   const transitionSection = task.transitionNotes && task.transitionNotes.length > 0 ? [
-    texts.analyzeCmd.aiPromptTransitionHistory.replace("{count}", String(task.transitionNotes.length)),
+    texts2.analyzeCmd.aiPromptTransitionHistory.replace("{count}", String(task.transitionNotes.length)),
     ...task.transitionNotes.map((tn, i) => `${i + 1}. [${tn.timestamp}] ${tn.fromStatus} \u2192 ${tn.toStatus}: ${tn.note}${tn.author ? ` (by ${tn.author})` : ""}`)
   ].join(`
-`) : texts.analyzeCmd.aiPromptNoTransitionHistory;
+`) : texts2.analyzeCmd.aiPromptNoTransitionHistory;
   const checkpointSection = task.checkpoints && task.checkpoints.length > 0 ? [
-    texts.analyzeCmd.aiPromptCheckpoints.replace("{count}", String(task.checkpoints.length)),
+    texts2.analyzeCmd.aiPromptCheckpoints.replace("{count}", String(task.checkpoints.length)),
     ...task.checkpoints.map((cp, i) => `${i + 1}. [${cp.status}] ${cp.description || cp.id}`)
   ].join(`
-`) : texts.analyzeCmd.aiPromptNoCheckpoints;
-  const verificationSection = task.verification ? `${texts.analyzeCmd.aiPromptVerification}
-- ${texts.analyzeCmd.aiPromptMethodLabel || "\u65B9\u6CD5"}: ${task.verification.methods?.join(", ") || texts.analyzeCmd.unknown}
-- ${texts.analyzeCmd.aiPromptResultLabel || "\u7ED3\u679C"}: ${task.verification.result || texts.analyzeCmd.unknown}` : texts.analyzeCmd.aiPromptNoVerification;
+`) : texts2.analyzeCmd.aiPromptNoCheckpoints;
+  const verificationSection = task.verification ? `${texts2.analyzeCmd.aiPromptVerification}
+- ${texts2.analyzeCmd.aiPromptMethodLabel || "\u65B9\u6CD5"}: ${task.verification.methods?.join(", ") || texts2.analyzeCmd.unknown}
+- ${texts2.analyzeCmd.aiPromptResultLabel || "\u7ED3\u679C"}: ${task.verification.result || texts2.analyzeCmd.unknown}` : texts2.analyzeCmd.aiPromptNoVerification;
   const layer1Section = layer1Findings.length > 0 ? [
-    texts.analyzeCmd.aiPromptLayer1Results.replace("{count}", String(layer1Findings.length)),
+    texts2.analyzeCmd.aiPromptLayer1Results.replace("{count}", String(layer1Findings.length)),
     ...layer1Findings.map((issue) => `- [${issue.severity}] ${issue.type}: ${issue.message}`)
   ].join(`
-`) : texts.analyzeCmd.aiPromptNoLayer1Issues;
-  return `${texts.analyzeCmd.aiPromptTaskAnalysisExpert}
+`) : texts2.analyzeCmd.aiPromptNoLayer1Issues;
+  return `${texts2.analyzeCmd.aiPromptTaskAnalysisExpert}
 
 ${taskInfo}
 
@@ -22605,14 +21947,14 @@ ${verificationSection}
 
 ${layer1Section}
 
-${texts.analyzeCmd.aiPromptAnalyzeContext}
+${texts2.analyzeCmd.aiPromptAnalyzeContext}
 
-${texts.analyzeCmd.aiPromptJsonFormat}
+${texts2.analyzeCmd.aiPromptJsonFormat}
 {
-  ${texts.analyzeCmd.aiPromptInferredStatus},
-  ${texts.analyzeCmd.aiPromptConfidence},
-  ${texts.analyzeCmd.aiPromptReasoning},
-  ${texts.analyzeCmd.aiPromptSuggestion}
+  ${texts2.analyzeCmd.aiPromptInferredStatus},
+  ${texts2.analyzeCmd.aiPromptConfidence},
+  ${texts2.analyzeCmd.aiPromptReasoning},
+  ${texts2.analyzeCmd.aiPromptSuggestion}
 }`;
 }
 async function runAIStatusInference(task, layer1Findings, cwd2) {
@@ -22707,7 +22049,7 @@ async function analyzeProject(cwd2 = process.cwd(), includeArchived = false, aiO
     console.error("Error: Project not initialized. Please run `projmnt4claude setup` first");
     process.exit(1);
   }
-  const texts = t(cwd2);
+  const texts2 = t(cwd2);
   const tasks = getAllTasks(cwd2, includeArchived);
   const issues = [];
   const analyzeConfig = readAnalyzeConfig(cwd2);
@@ -22809,7 +22151,7 @@ async function analyzeProject(cwd2 = process.cwd(), includeArchived = false, aiO
         taskId: task.id,
         type: "no_description",
         severity: "low",
-        message: texts.analyzeCmd.issueMissingDescription,
+        message: texts2.analyzeCmd.issueMissingDescription,
         suggestion: "Add task description to provide more context"
       });
     }
@@ -23114,7 +22456,7 @@ async function analyzeProject(cwd2 = process.cwd(), includeArchived = false, aiO
         taskId: task.id,
         type: "missing_verification",
         severity: "medium",
-        message: texts.analyzeCmd.issueResolvedNoVerification,
+        message: texts2.analyzeCmd.issueResolvedNoVerification,
         suggestion: "Run analyze --fix to auto-populate verification field",
         details: { status: task.status, hasCheckpoints: !!(task.checkpoints && task.checkpoints.length > 0) }
       });
@@ -23238,17 +22580,17 @@ async function analyzeProject(cwd2 = process.cwd(), includeArchived = false, aiO
           const actionLower = (entry.action || "").toLowerCase();
           const author = actionLower.includes("pipeline") || actionLower.includes("harness") ? "pipeline" : "user";
           const decisionMap = {
-            "open\u2192in_progress": texts.analyzeCmd.transitionStartExecution,
-            "in_progress\u2192wait_review": texts.analyzeCmd.transitionSubmitReview,
-            "wait_review\u2192wait_qa": texts.analyzeCmd.transitionReviewPass,
-            "wait_qa\u2192wait_evaluation": texts.analyzeCmd.transitionQaPass || "QA\u901A\u8FC7\uFF0C\u7B49\u5F85\u8BC4\u4F30",
-            "wait_evaluation\u2192resolved": texts.analyzeCmd.transitionEvalPass,
-            "open\u2192closed": texts.analyzeCmd.transitionCloseTask,
-            "in_progress\u2192resolved": texts.analyzeCmd.transitionDirectComplete,
-            "resolved\u2192reopened": texts.analyzeCmd.transitionReopenTask,
-            "reopened\u2192in_progress": texts.analyzeCmd.transitionRestartExecution,
-            "open\u2192abandoned": texts.analyzeCmd.transitionAbandonTask,
-            "in_progress\u2192open": texts.analyzeCmd.transitionReturnTodo
+            "open\u2192in_progress": texts2.analyzeCmd.transitionStartExecution,
+            "in_progress\u2192wait_review": texts2.analyzeCmd.transitionSubmitReview,
+            "wait_review\u2192wait_qa": texts2.analyzeCmd.transitionReviewPass,
+            "wait_qa\u2192wait_evaluation": texts2.analyzeCmd.transitionQaPass || "QA\u901A\u8FC7\uFF0C\u7B49\u5F85\u8BC4\u4F30",
+            "wait_evaluation\u2192resolved": texts2.analyzeCmd.transitionEvalPass,
+            "open\u2192closed": texts2.analyzeCmd.transitionCloseTask,
+            "in_progress\u2192resolved": texts2.analyzeCmd.transitionDirectComplete,
+            "resolved\u2192reopened": texts2.analyzeCmd.transitionReopenTask,
+            "reopened\u2192in_progress": texts2.analyzeCmd.transitionRestartExecution,
+            "open\u2192abandoned": texts2.analyzeCmd.transitionAbandonTask,
+            "in_progress\u2192open": texts2.analyzeCmd.transitionReturnTodo
           };
           const statusKey = `${entry.oldValue}\u2192${entry.newValue}`;
           const decision = decisionMap[statusKey] || `${entry.oldValue} \u2192 ${entry.newValue}`;
@@ -23506,7 +22848,7 @@ ${task.title || ""}`;
   return { issues, stats };
 }
 async function showAnalysis(options = {}, cwd2 = process.cwd()) {
-  const logger2 = createLogger("analyze", cwd2);
+  const logger = createLogger("analyze", cwd2);
   const startTime = Date.now();
   const aiOptions = {
     deepAnalyze: !!options.deepAnalyze,
@@ -23601,7 +22943,7 @@ async function showAnalysis(options = {}, cwd2 = process.cwd()) {
   for (const issue of result.issues) {
     issueDistribution[issue.type] = (issueDistribution[issue.type] || 0) + 1;
   }
-  logger2.logInstrumentation({
+  logger.logInstrumentation({
     module: "analyze",
     action: "show_analysis",
     input_summary: `total_tasks=${result.stats.total}, include_archived=false`,
@@ -23617,7 +22959,7 @@ async function showAnalysis(options = {}, cwd2 = process.cwd()) {
       by_priority: result.stats.byPriority
     }
   });
-  logger2.flush();
+  logger.flush();
 }
 async function showStatus(options = {}, cwd2 = process.cwd()) {
   if (!isInitialized(cwd2)) {
@@ -24664,7 +24006,7 @@ function exportTrainingDataToJsonl(fields, analysis, exportPath) {
 `, "utf-8");
 }
 async function analyzeBugReport(bugReportPath, cwd2 = process.cwd(), options = {}) {
-  const logger2 = createLogger("analyze-bug-report", cwd2);
+  const logger = createLogger("analyze-bug-report", cwd2);
   const startTime = Date.now();
   const resolvedPath = path15.resolve(bugReportPath);
   if (!fs18.existsSync(resolvedPath)) {
@@ -24816,7 +24158,7 @@ async function analyzeBugReport(bugReportPath, cwd2 = process.cwd(), options = {
   console.log(`   projmnt4claude init-requirement "$(cat ${reportPath})" --template detailed`);
   console.log("\u2501".repeat(SEPARATOR_WIDTH));
   console.log("");
-  logger2.logInstrumentation({
+  logger.logInstrumentation({
     module: "analyze-bug-report",
     action: "analyze",
     input_summary: `path=${resolvedPath}, size=${markdown.length}`,
@@ -24832,7 +24174,7 @@ async function analyzeBugReport(bugReportPath, cwd2 = process.cwd(), options = {
       suggestions: analysis.suggestions.length
     }
   });
-  logger2.flush();
+  logger.flush();
   return result;
 }
 var import_prompts5, DEFAULT_ANALYZE_CONFIG, VALID_STATUSES, VALID_TYPES3, VALID_PRIORITIES3, SCHEMA_MIGRATIONS, REPORT_PHASE_STATUS_MAP, TERMINAL_STATUSES_SET2;
@@ -25286,15 +24628,15 @@ var DEFAULT_CONFIG = {
 };
 async function setup(cwd2 = process.cwd(), options = {}) {
   const projectDir = getProjectDir(cwd2);
-  const texts = t(cwd2);
+  const texts2 = t(cwd2);
   if (isInitialized(cwd2) && !options.force) {
-    console.log(texts.setupCmd.alreadyInitialized);
-    console.log(texts.setupCmd.directory.replace("{path}", projectDir));
-    console.log(texts.setupCmd.tipUseForce);
+    console.log(texts2.setupCmd.alreadyInitialized);
+    console.log(texts2.setupCmd.directory.replace("{path}", projectDir));
+    console.log(texts2.setupCmd.tipUseForce);
     return;
   }
   if (options.force && isInitialized(cwd2)) {
-    console.log(texts.setupCmd.forceMode);
+    console.log(texts2.setupCmd.forceMode);
   }
   let language;
   if (options.language) {
@@ -25305,18 +24647,18 @@ async function setup(cwd2 = process.cwd(), options = {}) {
     const langResponse = await import_prompts.default({
       type: "select",
       name: "language",
-      message: texts.setup.selectLanguage,
+      message: texts2.setup.selectLanguage,
       choices: [
-        { title: texts.setup.chinese, value: "zh" },
-        { title: texts.setup.english, value: "en" }
+        { title: texts2.setup.chinese, value: "zh" },
+        { title: texts2.setup.english, value: "en" }
       ],
       initial: 0
     });
     language = langResponse.language || "zh";
   }
-  console.log(texts.setup.initializing);
+  console.log(texts2.setup.initializing);
   ensureDir(projectDir);
-  console.log(`\u2713 ${texts.setup.createDir}: ${projectDir}`);
+  console.log(`\u2713 ${texts2.setup.createDir}: ${projectDir}`);
   const subDirs = [
     { dir: getTasksDir(cwd2), name: "tasks" },
     { dir: getArchiveDir(cwd2), name: "archive" },
@@ -25327,7 +24669,7 @@ async function setup(cwd2 = process.cwd(), options = {}) {
   ];
   for (const { dir, name } of subDirs) {
     ensureDir(dir);
-    console.log(`\u2713 ${texts.setup.createDir}: ${name}/`);
+    console.log(`\u2713 ${texts2.setup.createDir}: ${name}/`);
   }
   const config = {
     ...DEFAULT_CONFIG,
@@ -25337,33 +24679,33 @@ async function setup(cwd2 = process.cwd(), options = {}) {
   };
   const configPath = getConfigPath(cwd2);
   fs4.writeFileSync(configPath, JSON.stringify(config, null, 2), "utf-8");
-  console.log(`\u2713 ${texts.setup.createConfig}`);
-  copySkillFiles(cwd2, language, texts);
+  console.log(`\u2713 ${texts2.setup.createConfig}`);
+  copySkillFiles(cwd2, language, texts2);
   const gitHookConfig = config.gitHook ?? DEFAULT_GIT_HOOK;
   if (gitHookConfig.enabled) {
     const pre = new Pre(cwd2);
     if (fs4.existsSync(pre.gitDir)) {
       try {
         pre.installAll();
-        console.log(texts.setupCmd.gitHookCreated);
+        console.log(texts2.setupCmd.gitHookCreated);
       } catch (e) {
-        console.log(texts.setupCmd.gitHookFailed.replace("{error}", e.message));
+        console.log(texts2.setupCmd.gitHookFailed.replace("{error}", e.message));
       }
     }
   } else {
-    console.log(texts.setupCmd.gitHookDisabled);
+    console.log(texts2.setupCmd.gitHookDisabled);
   }
   console.log(`
-\u2705 ${texts.setup.setupComplete}`);
+\u2705 ${texts2.setup.setupComplete}`);
   console.log(`
-${texts.setup.nextStep}`);
+${texts2.setup.nextStep}`);
 }
-function copySkillFiles(cwd2, language, texts) {
+function copySkillFiles(cwd2, language, texts2) {
   console.log(`
-\uD83D\uDCE6 ${texts.setup.copyingSkills}`);
+\uD83D\uDCE6 ${texts2.setup.copyingSkills}`);
   const pluginRoot = process.env.CLAUDE_PLUGIN_ROOT;
   if (!pluginRoot) {
-    console.log(texts.setupCmd.pluginRootNotSet);
+    console.log(texts2.setupCmd.pluginRootNotSet);
     return;
   }
   const toolboxDir = getToolboxDir(cwd2);
@@ -25375,14 +24717,14 @@ function copySkillFiles(cwd2, language, texts) {
   const skillTarget = path3.join(targetDir, "SKILL.md");
   if (fs4.existsSync(skillSource)) {
     fs4.copyFileSync(skillSource, skillTarget);
-    console.log(texts.setupCmd.copySkillFile.replace("{language}", language));
+    console.log(texts2.setupCmd.copySkillFile.replace("{language}", language));
   } else {
     const defaultSource = path3.join(pluginRoot, "skills", "projmnt4claude", "SKILL.md");
     if (fs4.existsSync(defaultSource)) {
       fs4.copyFileSync(defaultSource, skillTarget);
-      console.log(texts.setupCmd.copyDefault);
+      console.log(texts2.setupCmd.copyDefault);
     } else {
-      console.log(texts.setupCmd.fileNotFound);
+      console.log(texts2.setupCmd.fileNotFound);
     }
   }
   const commandsSourceDir = path3.join(pluginRoot, "locales", language, "commands");
@@ -25393,11 +24735,11 @@ function copySkillFiles(cwd2, language, texts) {
     for (const file of commandFiles) {
       fs4.copyFileSync(path3.join(commandsSourceDir, file), path3.join(commandsTargetDir, file));
     }
-    console.log(texts.setupCmd.copyCommandDocs.replace("{count}", String(commandFiles.length)).replace("{language}", language));
+    console.log(texts2.setupCmd.copyCommandDocs.replace("{count}", String(commandFiles.length)).replace("{language}", language));
   } else {
-    console.log(texts.setupCmd.dirNotFound.replace("{path}", commandsSourceDir));
+    console.log(texts2.setupCmd.dirNotFound.replace("{path}", commandsSourceDir));
   }
-  console.log(`\u2705 ${texts.setup.skillsCopied}`);
+  console.log(`\u2705 ${texts2.setup.skillsCopied}`);
 }
 
 // src/index.ts
@@ -25666,22 +25008,22 @@ function generateCheckpointToken() {
   return crypto.randomBytes(16).toString("hex");
 }
 function hasValidCheckpoints(checkpointPathOrContent, isContent = false, cwd2) {
-  const texts = t(cwd2);
+  const texts2 = t(cwd2);
   let content;
   if (isContent && checkpointPathOrContent !== null) {
     content = checkpointPathOrContent;
   } else if (!isContent && checkpointPathOrContent) {
     if (!fs14.existsSync(checkpointPathOrContent)) {
-      return { valid: false, reason: texts.taskCommand.checkpointFileNotExist };
+      return { valid: false, reason: texts2.taskCommand.checkpointFileNotExist };
     }
     content = fs14.readFileSync(checkpointPathOrContent, "utf-8");
   } else {
-    return { valid: false, reason: texts.taskCommand.validationError };
+    return { valid: false, reason: texts2.taskCommand.validationError };
   }
   const lines = content.split(`
 `).filter((line) => line.trim().startsWith("- ["));
   if (lines.length === 0) {
-    return { valid: false, reason: texts.taskCommand.noCheckpointItems };
+    return { valid: false, reason: texts2.taskCommand.noCheckpointItems };
   }
   const templatePatterns = [
     /^Checkpoints\d+$/u,
@@ -25708,31 +25050,31 @@ function hasValidCheckpoints(checkpointPathOrContent, isContent = false, cwd2) {
   if (templateCount > lines.length / 2) {
     return {
       valid: false,
-      reason: texts.taskCommand.templateContentDetected.replace("{count}", String(templateCount)).replace("{total}", String(lines.length))
+      reason: texts2.taskCommand.templateContentDetected.replace("{count}", String(templateCount)).replace("{total}", String(lines.length))
     };
   }
   return { valid: true, reason: "" };
 }
 function displayCheckpointCreationWarning(taskId, cwd2) {
-  const texts = t(cwd2);
+  const texts2 = t(cwd2);
   console.log("");
   console.log("\u2501".repeat(SEPARATOR_WIDTH));
-  console.log(texts.taskCommand.checkpointQualityReminder);
+  console.log(texts2.taskCommand.checkpointQualityReminder);
   console.log("\u2501".repeat(SEPARATOR_WIDTH));
   console.log("");
-  console.log(texts.taskCommand.taskCreatedButTemplate);
-  console.log("\uD83D\uDCCB " + texts.taskCommand.highQualityCheckpointsEssential);
+  console.log(texts2.taskCommand.taskCreatedButTemplate);
+  console.log("\uD83D\uDCCB " + texts2.taskCommand.highQualityCheckpointsEssential);
   console.log("");
-  console.log("   1. " + texts.taskCommand.editCheckpointMd);
-  console.log(`      ${texts.taskCommand.filePath.replace("{path}", `.projmnt4claude/tasks/${taskId}/checkpoint.md`)}`);
+  console.log("   1. " + texts2.taskCommand.editCheckpointMd);
+  console.log(`      ${texts2.taskCommand.filePath.replace("{path}", `.projmnt4claude/tasks/${taskId}/checkpoint.md`)}`);
   console.log("");
-  console.log("   2. " + texts.taskCommand.useAnalyzeCommand);
+  console.log("   2. " + texts2.taskCommand.useAnalyzeCommand);
   console.log(`      projmnt4claude analyze --generate-checkpoints ${taskId}`);
   console.log("");
-  console.log("   3. " + texts.taskCommand.useTemplateFeature);
+  console.log("   3. " + texts2.taskCommand.useTemplateFeature);
   console.log(`      projmnt4claude task checkpoint template ${taskId} --apply`);
   console.log("");
-  console.log("\uD83D\uDCA1 " + texts.taskCommand.tipStrictValidation);
+  console.log("\uD83D\uDCA1 " + texts2.taskCommand.tipStrictValidation);
   console.log("\u2501".repeat(SEPARATOR_WIDTH));
 }
 function validateTaskCheckpointCommands(taskId, cwd2) {
@@ -25751,18 +25093,18 @@ function validateTaskCheckpointCommands(taskId, cwd2) {
 function displayCheckpointVerificationWarnings(warnings, cwd2) {
   if (warnings.length === 0)
     return;
-  const texts = t(cwd2);
+  const texts2 = t(cwd2);
   console.log("");
   console.log("\u2501".repeat(SEPARATOR_WIDTH));
-  console.log(texts.taskCommand.missingCheckpointVerificationCommands);
+  console.log(texts2.taskCommand.missingCheckpointVerificationCommands);
   console.log("\u2501".repeat(SEPARATOR_WIDTH));
   console.log("");
-  console.log(texts.taskCommand.checkpointsMissingVerification.replace("{count}", String(warnings.length)));
+  console.log(texts2.taskCommand.checkpointsMissingVerification.replace("{count}", String(warnings.length)));
   for (const w of warnings) {
     console.log(`   - ${w}`);
   }
   console.log("");
-  console.log("\uD83D\uDCA1 " + texts.taskCommand.qaCannotAutoVerify);
+  console.log("\uD83D\uDCA1 " + texts2.taskCommand.qaCannotAutoVerify);
   console.log("   Please add verification commands in checkpoint.md, or use init-requirement to regenerate.");
   console.log("\u2501".repeat(SEPARATOR_WIDTH));
 }
@@ -26061,9 +25403,9 @@ ${finalCheckpoints.map((cp) => `- [ ] ${cp}`).join(`
   return task;
 }
 function listTasks(options = {}, cwd2 = process.cwd()) {
-  const texts = t(cwd2);
+  const texts2 = t(cwd2);
   if (!isInitialized(cwd2)) {
-    console.error(texts.task.projectNotInitialized);
+    console.error(texts2.task.projectNotInitialized);
     process.exit(1);
   }
   let tasks = getAllTasks(cwd2);
@@ -26147,7 +25489,7 @@ function listTasks(options = {}, cwd2 = process.cwd()) {
     const discussionIcon = task.needsDiscussion ? " \uD83D\uDCAC" : "";
     const reqChangeIcon = task.requirementHistory && task.requirementHistory.length > 0 ? ` \uD83D\uDCDD${task.requirementHistory.length}` : "";
     const subtaskCount = task.subtaskIds?.length || subtaskMap.get(task.id)?.length || 0;
-    const subtaskIcon = subtaskCount > 0 ? ` [${subtaskCount}${texts.task.subtasksLabel}]` : "";
+    const subtaskIcon = subtaskCount > 0 ? ` [${subtaskCount}${texts2.task.subtasksLabel}]` : "";
     console.log(`${id} | ${title} | ${priority} | ${status}${discussionIcon}${reqChangeIcon}${subtaskIcon}`);
     const subtasks = subtaskMap.get(task.id) || [];
     for (const subtask of subtasks) {
@@ -26160,8 +25502,8 @@ function listTasks(options = {}, cwd2 = process.cwd()) {
   }
   console.log("");
   const totalSubtasks = tasks.filter((t2) => t2.parentId).length;
-  const totalTasksText = texts.task.totalTasks.replace("{count}", String(parentTasks.length));
-  const totalSubtasksText = totalSubtasks > 0 ? `, ${texts.task.totalSubtasks.replace("{count}", String(totalSubtasks))}` : "";
+  const totalTasksText = texts2.task.totalTasks.replace("{count}", String(parentTasks.length));
+  const totalSubtasksText = totalSubtasks > 0 ? `, ${texts2.task.totalSubtasks.replace("{count}", String(totalSubtasks))}` : "";
   console.log(`${totalTasksText}${totalSubtasksText}`);
 }
 function displayTasksGrouped(tasks, groupBy, subtaskMap) {
@@ -26265,7 +25607,7 @@ function formatLocalTime(isoString) {
   });
 }
 function formatRelativeTime(isoString, cwd2) {
-  const texts = t(cwd2);
+  const texts2 = t(cwd2);
   const date = new Date(isoString);
   const now = new Date;
   const diffMs = now.getTime() - date.getTime();
@@ -26273,13 +25615,13 @@ function formatRelativeTime(isoString, cwd2) {
   const diffHours = Math.floor(diffMs / 3600000);
   const diffDays = Math.floor(diffMs / 86400000);
   if (diffMins < 1)
-    return texts.task.timeJustNow;
+    return texts2.task.timeJustNow;
   if (diffMins < 60)
-    return texts.task.timeMinutesAgo.replace("{minutes}", String(diffMins));
+    return texts2.task.timeMinutesAgo.replace("{minutes}", String(diffMins));
   if (diffHours < 24)
-    return texts.task.timeHoursAgo.replace("{hours}", String(diffHours));
+    return texts2.task.timeHoursAgo.replace("{hours}", String(diffHours));
   if (diffDays < 7)
-    return texts.task.timeDaysAgo.replace("{days}", String(diffDays));
+    return texts2.task.timeDaysAgo.replace("{days}", String(diffDays));
   return formatLocalTime(isoString);
 }
 function showTask(taskId, options = {}, cwd2 = process.cwd()) {
@@ -26315,15 +25657,15 @@ function showTask(taskId, options = {}, cwd2 = process.cwd()) {
   showTaskClassic(task, options, cwd2);
 }
 function showTaskCompact(task, cwd2) {
-  const texts = t(cwd2);
+  const texts2 = t(cwd2);
   const statusIcon = getStatusIcon(task.status);
   const typeMap = {
-    bug: texts.task.typeBug,
-    feature: texts.task.typeFeature,
-    research: texts.task.typeResearch,
-    docs: texts.task.typeDocs,
-    refactor: texts.task.typeRefactor,
-    test: texts.task.typeTest
+    bug: texts2.task.typeBug,
+    feature: texts2.task.typeFeature,
+    research: texts2.task.typeResearch,
+    docs: texts2.task.typeDocs,
+    refactor: texts2.task.typeRefactor,
+    test: texts2.task.typeTest
   };
   const typeText = typeMap[task.type] || task.type;
   console.log(`${statusIcon} ${task.id}: ${task.title}`);
@@ -26353,12 +25695,12 @@ function showTaskCompact(task, cwd2) {
   }
   if (task.needsDiscussion) {
     const discussionCount = task.discussionTopics?.length || 0;
-    console.log(`   \uD83D\uDCAC ${texts.task.discussionLabel}${discussionCount > 0 ? ` (${discussionCount})` : ""}`);
+    console.log(`   \uD83D\uDCAC ${texts2.task.discussionLabel}${discussionCount > 0 ? ` (${discussionCount})` : ""}`);
   }
   if (task.requirementHistory && task.requirementHistory.length > 0) {
-    console.log(`   \uD83D\uDCDD ${texts.task.requirementChanges}: ${task.requirementHistory.length}`);
+    console.log(`   \uD83D\uDCDD ${texts2.task.requirementChanges}: ${task.requirementHistory.length}`);
   }
-  console.log(`   ${texts.task.createdAt}: ${formatRelativeTime(task.createdAt, cwd2)} \xB7 ${texts.task.updatedAt}: ${formatRelativeTime(task.updatedAt, cwd2)}`);
+  console.log(`   ${texts2.task.createdAt}: ${formatRelativeTime(task.createdAt, cwd2)} \xB7 ${texts2.task.updatedAt}: ${formatRelativeTime(task.updatedAt, cwd2)}`);
 }
 function getStatusIcon(status) {
   const icons = {
@@ -26409,7 +25751,7 @@ function padByDisplayWidth(str, targetWidth) {
   return str + " ".repeat(targetWidth - currentWidth);
 }
 function showTaskPanel(task, options, cwd2) {
-  const texts = t(cwd2);
+  const texts2 = t(cwd2);
   const termWidth = process.stdout.columns || 80;
   const width = Math.min(Math.max(termWidth, 60), 100);
   const hLine = "\u2500".repeat(width - 2);
@@ -26424,20 +25766,20 @@ function showTaskPanel(task, options, cwd2) {
   console.log(`\u2502   ${padByDisplayWidth(truncatedTitle, width - 5)}\u2502`);
   console.log(`\u251C${hLine}\u2524`);
   const statusMap = {
-    open: texts.task.statusOpen,
-    in_progress: texts.task.statusInProgress,
-    resolved: texts.task.statusResolved,
-    closed: texts.task.statusClosed,
-    abandoned: texts.task.statusAbandoned,
-    wait_review: texts.task.statusWaitReview,
-    wait_qa: texts.task.statusWaitQa,
-    wait_evaluation: texts.task.statusWaitEvaluation
+    open: texts2.task.statusOpen,
+    in_progress: texts2.task.statusInProgress,
+    resolved: texts2.task.statusResolved,
+    closed: texts2.task.statusClosed,
+    abandoned: texts2.task.statusAbandoned,
+    wait_review: texts2.task.statusWaitReview,
+    wait_qa: texts2.task.statusWaitQa,
+    wait_evaluation: texts2.task.statusWaitEvaluation
   };
   const priorityMap = {
-    P0: texts.task.priorityP0,
-    P1: texts.task.priorityP1,
-    P2: texts.task.priorityP2,
-    P3: texts.task.priorityP3,
+    P0: texts2.task.priorityP0,
+    P1: texts2.task.priorityP1,
+    P2: texts2.task.priorityP2,
+    P3: texts2.task.priorityP3,
     Q1: "Q1",
     Q2: "Q2",
     Q3: "Q3",
@@ -26445,8 +25787,8 @@ function showTaskPanel(task, options, cwd2) {
   };
   const statusText = statusMap[task.status] || task.status;
   const priorityText = priorityMap[task.priority] || task.priority;
-  const typeText = task.type || texts.task.typeNotSpecified;
-  const statusLine = `${texts.task.statusHeader}: ${statusText}  \xB7  ${texts.task.priorityHeader}: ${priorityText}  \xB7  ${texts.task.typeHeader}: ${typeText}`;
+  const typeText = task.type || texts2.task.typeNotSpecified;
+  const statusLine = `${texts2.task.statusHeader}: ${statusText}  \xB7  ${texts2.task.priorityHeader}: ${priorityText}  \xB7  ${texts2.task.typeHeader}: ${typeText}`;
   console.log(`\u2502 ${padByDisplayWidth(statusLine, width - 3)}\u2502`);
   if (task.description) {
     console.log(`\u251C${hLine}\u2524`);
@@ -26512,11 +25854,11 @@ function showTaskPanel(task, options, cwd2) {
       console.log(`\u2502 ${padByDisplayWidth(depsLine, width - 3)}\u2502`);
     }
     if (task.recommendedRole) {
-      const roleLine = `\uD83D\uDC64 ${texts.task.roleLabel}: ${task.recommendedRole}`;
+      const roleLine = `\uD83D\uDC64 ${texts2.task.roleLabel}: ${task.recommendedRole}`;
       console.log(`\u2502 ${padByDisplayWidth(roleLine, width - 3)}\u2502`);
     }
     if (task.branch) {
-      const branchLine = `\uD83C\uDF3F ${texts.task.branchLabel}: ${task.branch}`;
+      const branchLine = `\uD83C\uDF3F ${texts2.task.branchLabel}: ${task.branch}`;
       console.log(`\u2502 ${padByDisplayWidth(branchLine, width - 3)}\u2502`);
     }
     if (task.subtaskIds && task.subtaskIds.length > 0) {
@@ -26537,30 +25879,30 @@ function showTaskPanel(task, options, cwd2) {
         parts.push(`\uD83D\uDD04 ${activeCount}`);
       if (pendingCount > 0)
         parts.push(`\u2B1C ${pendingCount}`);
-      const subtaskLine = parts.length > 0 ? `\uD83D\uDCCE ${texts.task.subtasksLabel}: ${task.subtaskIds.length}  (${parts.join(" ")})` : `\uD83D\uDCCE ${texts.task.subtasksLabel}: ${task.subtaskIds.length} `;
+      const subtaskLine = parts.length > 0 ? `\uD83D\uDCCE ${texts2.task.subtasksLabel}: ${task.subtaskIds.length}  (${parts.join(" ")})` : `\uD83D\uDCCE ${texts2.task.subtasksLabel}: ${task.subtaskIds.length} `;
       console.log(`\u2502 ${padByDisplayWidth(subtaskLine, width - 3)}\u2502`);
     }
     if (task.parentId) {
-      const parentLine = `\u2B06\uFE0F ${texts.task.parentTaskLabel}: ${task.parentId}`;
+      const parentLine = `\u2B06\uFE0F ${texts2.task.parentTaskLabel}: ${task.parentId}`;
       console.log(`\u2502 ${padByDisplayWidth(parentLine, width - 3)}\u2502`);
     }
     if (task.needsDiscussion) {
       const discussionCount = task.discussionTopics?.length || 0;
-      const discussionLine = discussionCount > 0 ? `\uD83D\uDCAC ${texts.task.discussionLabel} (${discussionCount})` : `\uD83D\uDCAC ${texts.task.discussionLabel}`;
+      const discussionLine = discussionCount > 0 ? `\uD83D\uDCAC ${texts2.task.discussionLabel} (${discussionCount})` : `\uD83D\uDCAC ${texts2.task.discussionLabel}`;
       console.log(`\u2502 ${padByDisplayWidth(discussionLine, width - 3)}\u2502`);
     }
     if (task.requirementHistory && task.requirementHistory.length > 0) {
-      const reqLine = `\uD83D\uDCDD ${texts.task.requirementChanges}: ${task.requirementHistory.length}`;
+      const reqLine = `\uD83D\uDCDD ${texts2.task.requirementChanges}: ${task.requirementHistory.length}`;
       console.log(`\u2502 ${padByDisplayWidth(reqLine, width - 3)}\u2502`);
     }
   }
   console.log(`\u251C${hLine}\u2524`);
   const createdTime = formatLocalTime(task.createdAt);
   const updatedTime = formatRelativeTime(task.updatedAt, cwd2);
-  const timeLine = `\uD83D\uDCC5 ${texts.task.createdAt}: ${createdTime}  \xB7  ${texts.task.updatedAt}: ${updatedTime}`;
+  const timeLine = `\uD83D\uDCC5 ${texts2.task.createdAt}: ${createdTime}  \xB7  ${texts2.task.updatedAt}: ${updatedTime}`;
   console.log(`\u2502 ${padByDisplayWidth(timeLine, width - 3)}\u2502`);
   if (task.reopenCount && task.reopenCount > 0) {
-    const reopenLine = `\uD83D\uDD01 ${texts.task.reopened}: ${texts.task.reopenCount.replace("{count}", String(task.reopenCount))}`;
+    const reopenLine = `\uD83D\uDD01 ${texts2.task.reopened}: ${texts2.task.reopenCount.replace("{count}", String(task.reopenCount))}`;
     console.log(`\u2502 ${padByDisplayWidth(reopenLine, width - 3)}\u2502`);
   }
   console.log(`\u2570${hLine}\u256F`);
@@ -27030,6 +26372,84 @@ async function updateTask(taskId, options, cwd2 = process.cwd()) {
     }
   }
 }
+async function reopenTask(taskId, options, cwd2 = process.cwd()) {
+  if (!isInitialized(cwd2)) {
+    console.error("Error: Project not initialized. Please run `projmnt4claude setup` first");
+    process.exit(1);
+  }
+  const task = readTaskMeta(taskId, cwd2);
+  if (!task) {
+    console.error(`Error: Task '${taskId}' does not exist`);
+    process.exit(1);
+  }
+  const reopenableStatuses = ["resolved", "closed", "failed", "abandoned"];
+  if (!reopenableStatuses.includes(task.status)) {
+    console.error(`Error: Task current status is '${task.status}', only ${reopenableStatuses.join(", ")} status tasks can be reopened`);
+    console.error(`       Use 'task update ${taskId} --status open' to change status directly`);
+    process.exit(1);
+  }
+  const oldStatus = task.status;
+  if (oldStatus === "failed") {
+    delete task.failureReason;
+  }
+  task.status = "open";
+  task.reopenCount = (task.reopenCount || 0) + 1;
+  const failedCheckpointIds = options.failedCheckpoints ? options.failedCheckpoints.split(",").map((id) => id.trim()).filter(Boolean) : undefined;
+  const reopenRecord = {
+    timestamp: new Date().toISOString(),
+    reason: options.reason || options.qaFeedback || "\u7528\u6237\u53D1\u8D77 Reopen",
+    reopenedBy: process.env.USER || "system",
+    enhancementRequest: options.enhancement || false,
+    failedCheckpoints: failedCheckpointIds,
+    qaFeedback: options.qaFeedback
+  };
+  if (!task.reopenRecords) {
+    task.reopenRecords = [];
+  }
+  task.reopenRecords.push(reopenRecord);
+  if (!task.transitionNotes) {
+    task.transitionNotes = [];
+  }
+  let transitionNoteText = `Task\u4ECE ${oldStatus} Reopen\u4E3A open (reopenCount: ${task.reopenCount})`;
+  if (options.enhancement) {
+    transitionNoteText += " [Enhancement]";
+  }
+  if (failedCheckpointIds && failedCheckpointIds.length > 0) {
+    transitionNoteText += ` [Failed CPs: ${failedCheckpointIds.join(", ")}]`;
+  }
+  task.transitionNotes.push({
+    timestamp: new Date().toISOString(),
+    fromStatus: oldStatus,
+    toStatus: "open",
+    note: transitionNoteText,
+    author: process.env.USER || undefined
+  });
+  if (!task.history) {
+    task.history = [];
+  }
+  task.history.push({
+    timestamp: new Date().toISOString(),
+    action: `TaskReopen: ${oldStatus} \u2192 open (reopenCount: ${task.reopenCount})`,
+    field: "status",
+    oldValue: oldStatus,
+    newValue: "open",
+    reason: options.reason || options.qaFeedback || "\u7528\u6237\u53D1\u8D77 Reopen, Status\u6620\u5C04\u4E3A open + reopenCount \u9012\u589E"
+  });
+  task.updatedAt = new Date().toISOString();
+  writeTaskMeta(task, cwd2);
+  console.log(`\uD83D\uDD01 Task reopened (#${task.reopenCount} times)`);
+  console.log(`   ${oldStatus} \u2192 open (reopenCount: ${task.reopenCount})`);
+  if (options.enhancement) {
+    console.log("   \uD83D\uDCCC Marked as enhancement request");
+  }
+  if (failedCheckpointIds && failedCheckpointIds.length > 0) {
+    console.log(`   \uD83D\uDCCB Failed checkpoints: ${failedCheckpointIds.join(", ")}`);
+  }
+  if (options.qaFeedback) {
+    console.log(`   \uD83D\uDCAC QA feedback: ${options.qaFeedback.substring(0, 100)}${options.qaFeedback.length > 100 ? "..." : ""}`);
+  }
+  console.log(`\u2705 Task ${taskId} reopened successfully`);
+}
 async function submitTask(taskId, options = {}, cwd2 = process.cwd()) {
   console.warn("");
   console.warn("\u26A0\uFE0F Warning: task submit command is deprecated and will be removed in a future version");
@@ -27334,38 +26754,38 @@ function removeDependency(taskId, depId, cwd2 = process.cwd()) {
   }
 }
 function formatPriority(priority, cwd2) {
-  const texts = t(cwd2);
+  const texts2 = t(cwd2);
   const map = {
-    P0: `\uD83D\uDD34 ${texts.task.priorityP0}`,
-    P1: `\uD83D\uDFE0 ${texts.task.priorityP1}`,
-    P2: `\uD83D\uDFE1 ${texts.task.priorityP2}`,
-    P3: `\uD83D\uDFE2 ${texts.task.priorityP3}`,
+    P0: `\uD83D\uDD34 ${texts2.task.priorityP0}`,
+    P1: `\uD83D\uDFE0 ${texts2.task.priorityP1}`,
+    P2: `\uD83D\uDFE1 ${texts2.task.priorityP2}`,
+    P3: `\uD83D\uDFE2 ${texts2.task.priorityP3}`,
     Q1: "\uD83D\uDCCA Q1",
     Q2: "\uD83D\uDCCA Q2",
     Q3: "\uD83D\uDCCA Q3",
     Q4: "\uD83D\uDCCA Q4",
-    low: `\uD83D\uDFE2 ${texts.task.priorityP3}`,
-    medium: `\uD83D\uDFE1 ${texts.task.priorityP2}`,
-    high: `\uD83D\uDFE0 ${texts.task.priorityP1}`,
-    urgent: `\uD83D\uDD34 ${texts.task.priorityP0}`
+    low: `\uD83D\uDFE2 ${texts2.task.priorityP3}`,
+    medium: `\uD83D\uDFE1 ${texts2.task.priorityP2}`,
+    high: `\uD83D\uDFE0 ${texts2.task.priorityP1}`,
+    urgent: `\uD83D\uDD34 ${texts2.task.priorityP0}`
   };
   return map[priority] || `\u2753 ${priority}`;
 }
 function formatStatus(status, cwd2) {
-  const texts = t(cwd2);
+  const texts2 = t(cwd2);
   const map = {
-    open: `\u2B1C ${texts.task.statusOpen}`,
-    in_progress: `\uD83D\uDD35 ${texts.task.statusInProgress}`,
-    wait_review: `\uD83D\uDC40 ${texts.task.statusWaitReview}`,
-    wait_qa: `\uD83E\uDDEA ${texts.task.statusWaitQa}`,
-    wait_evaluation: `\u23F3 ${texts.task.statusWaitEvaluation}`,
-    resolved: `\u2705 ${texts.task.statusResolved}`,
-    closed: `\u26AB ${texts.task.statusClosed}`,
-    abandoned: `\u274C ${texts.task.statusAbandoned}`,
-    failed: `\u26D4 ${texts.task.statusFailed}`,
-    pending: `\u2B1C ${texts.task.statusOpen}`,
-    completed: `\u2705 ${texts.task.statusResolved}`,
-    cancelled: `\u274C ${texts.task.statusAbandoned}`
+    open: `\u2B1C ${texts2.task.statusOpen}`,
+    in_progress: `\uD83D\uDD35 ${texts2.task.statusInProgress}`,
+    wait_review: `\uD83D\uDC40 ${texts2.task.statusWaitReview}`,
+    wait_qa: `\uD83E\uDDEA ${texts2.task.statusWaitQa}`,
+    wait_evaluation: `\u23F3 ${texts2.task.statusWaitEvaluation}`,
+    resolved: `\u2705 ${texts2.task.statusResolved}`,
+    closed: `\u26AB ${texts2.task.statusClosed}`,
+    abandoned: `\u274C ${texts2.task.statusAbandoned}`,
+    failed: `\u26D4 ${texts2.task.statusFailed}`,
+    pending: `\u2B1C ${texts2.task.statusOpen}`,
+    completed: `\u2705 ${texts2.task.statusResolved}`,
+    cancelled: `\u274C ${texts2.task.statusAbandoned}`
   };
   return map[status] || `\u2753 ${status}`;
 }
@@ -29274,7 +28694,7 @@ function mergeAnalysisResults(ruleBased, aiEnhanced) {
 }
 async function initRequirement(description, cwd2 = process.cwd(), options = {}) {
   const { nonInteractive = false, noPlan = false, skipValidation = false, template = "simple", autoSplit = false, noAI = false, requireQuality, decompose: shouldDecomposeOption = true } = options;
-  const logger2 = createLogger("init-requirement", cwd2);
+  const logger = createLogger("init-requirement", cwd2);
   const startTime = Date.now();
   const inputDescLength = description.length;
   let userEditCount = 0;
@@ -29367,7 +28787,7 @@ async function initRequirement(description, cwd2 = process.cwd(), options = {}) 
       aiCall: () => new AIMetadataAssistant(cwd2).enhanceRequirement(description, { cwd: cwd2 }),
       fallback: { title: null, description: null, type: null, priority: null, recommendedRole: null, checkpoints: null, dependencies: null, aiUsed: false },
       operationName: "enhancement_call",
-      logger: logger2
+      logger
     });
     if (aiResult.aiUsed) {
       analysis = mergeAnalysisResults(ruleAnalysis, aiResult);
@@ -29379,7 +28799,7 @@ async function initRequirement(description, cwd2 = process.cwd(), options = {}) 
         outputTokens: 0,
         totalTokens: 0
       };
-      logger2.logAICost(aiCost);
+      logger.logAICost(aiCost);
     }
   }
   let complexity = assessComplexity(description, analysis);
@@ -29445,7 +28865,7 @@ async function initRequirement(description, cwd2 = process.cwd(), options = {}) 
       console.log("");
       console.log("\u2139\uFE0F  Task creation cancelled.");
       console.log("");
-      logger2.logInstrumentation({
+      logger.logInstrumentation({
         module: "init-requirement",
         action: "cancel",
         input_summary: `desc_len=${inputDescLength}`,
@@ -29456,7 +28876,7 @@ async function initRequirement(description, cwd2 = process.cwd(), options = {}) 
         user_edit_count: 0,
         module_data: { cancel_reason: "sigint" }
       });
-      logger2.flush();
+      logger.flush();
       return;
     }
     confirmCreate = result;
@@ -29466,7 +28886,7 @@ async function initRequirement(description, cwd2 = process.cwd(), options = {}) 
     console.log("\u2139\uFE0F  Task creation cancelled.");
     console.log("   Run init-requirement again to recreate.");
     console.log("");
-    logger2.logInstrumentation({
+    logger.logInstrumentation({
       module: "init-requirement",
       action: "cancel",
       input_summary: `desc_len=${inputDescLength}`,
@@ -29477,7 +28897,7 @@ async function initRequirement(description, cwd2 = process.cwd(), options = {}) 
       user_edit_count: 0,
       module_data: { cancel_reason: "user_rejected_confirm" }
     });
-    logger2.flush();
+    logger.flush();
     return;
   }
   let response;
@@ -29525,7 +28945,7 @@ async function initRequirement(description, cwd2 = process.cwd(), options = {}) 
       console.log("");
       console.log("\u2139\uFE0F  Task creation cancelled.");
       console.log("");
-      logger2.logInstrumentation({
+      logger.logInstrumentation({
         module: "init-requirement",
         action: "cancel",
         input_summary: `desc_len=${inputDescLength}`,
@@ -29535,7 +28955,7 @@ async function initRequirement(description, cwd2 = process.cwd(), options = {}) 
         duration_ms: Date.now() - startTime,
         user_edit_count: userEditCount
       });
-      logger2.flush();
+      logger.flush();
       return;
     }
     response = promptResponse;
@@ -29565,7 +28985,7 @@ async function initRequirement(description, cwd2 = process.cwd(), options = {}) 
     console.log("\u2139\uFE0F  Task creation cancelled (title cannot be empty).");
     console.log("   Run init-requirement again to recreate.");
     console.log("");
-    logger2.logInstrumentation({
+    logger.logInstrumentation({
       module: "init-requirement",
       action: "cancel",
       input_summary: `desc_len=${inputDescLength}`,
@@ -29575,7 +28995,7 @@ async function initRequirement(description, cwd2 = process.cwd(), options = {}) 
       duration_ms: Date.now() - startTime,
       user_edit_count: userEditCount
     });
-    logger2.flush();
+    logger.flush();
     return;
   }
   const taskType = inferTaskType(response.title);
@@ -29732,7 +29152,7 @@ async function initRequirement(description, cwd2 = process.cwd(), options = {}) 
     console.log("   2. meta.json must be in standard format with all required fields");
     console.log("   3. Use --skip-quality-gate to skip temporarily (not recommended for production)");
     console.log("");
-    logger2.logInstrumentation({
+    logger.logInstrumentation({
       module: "init-requirement",
       action: "quality_gate_error_blocked",
       input_summary: `desc_len=${inputDescLength}, error_count=${qualityResult.errorViolations.length}`,
@@ -29742,7 +29162,7 @@ async function initRequirement(description, cwd2 = process.cwd(), options = {}) 
       duration_ms: Date.now() - startTime,
       user_edit_count: userEditCount
     });
-    logger2.flush();
+    logger.flush();
     process.exit(1);
   }
   if (requireQuality !== undefined && !qualityResult.passed) {
@@ -29766,7 +29186,7 @@ async function initRequirement(description, cwd2 = process.cwd(), options = {}) 
     console.log(`Task ${taskId} created but did not pass quality gate (score ${qualityResult.score.totalScore} < threshold ${requireQuality}).`);
     console.log("Please improve the task description and recreate, or use a lower --require-quality threshold.");
     console.log("");
-    logger2.logInstrumentation({
+    logger.logInstrumentation({
       module: "init-requirement",
       action: "quality_gate_blocked",
       input_summary: `desc_len=${inputDescLength}, require_quality=${requireQuality}`,
@@ -29776,7 +29196,7 @@ async function initRequirement(description, cwd2 = process.cwd(), options = {}) 
       duration_ms: Date.now() - startTime,
       user_edit_count: userEditCount
     });
-    logger2.flush();
+    logger.flush();
     process.exit(1);
   }
   if (!qualityResult.passed) {
@@ -29932,7 +29352,7 @@ ${subFilteredCheckpoints.map((cp) => `- [ ] ${cp}`).join(`
       planModule.addTask(taskId);
     }
   }
-  logger2.logInstrumentation({
+  logger.logInstrumentation({
     module: "init-requirement",
     action: "create_task",
     input_summary: `desc_len=${inputDescLength}, non_interactive=${nonInteractive}`,
@@ -29942,7 +29362,7 @@ ${subFilteredCheckpoints.map((cp) => `- [ ] ${cp}`).join(`
     duration_ms: Date.now() - startTime,
     user_edit_count: userEditCount
   });
-  logger2.flush();
+  logger.flush();
 }
 function formatComplexity(assessment) {
   const icons = {
@@ -31223,18 +30643,20 @@ function getBuiltInAnalyzers() {
 
 // src/commands/doctor.ts
 init_config();
+init_i18n();
 var __dirname = "/home/fuzhibo/workerplace/git/projmnt4claude/src/commands";
 async function runDoctor(fix = false, cwd2 = process.cwd()) {
+  const texts2 = t(cwd2).doctorCmd;
   console.log("");
   console.log("\u2501".repeat(SEPARATOR_WIDTH));
-  console.log("\uD83D\uDD0D Environment Diagnostics");
+  console.log("\uD83D\uDD0D " + texts2.environmentDiagnostics);
   console.log("\u2501".repeat(SEPARATOR_WIDTH));
   console.log("");
   const results = [];
   results.push(checkProjectInit(cwd2));
   results.push(...checkPluginInstallationScope(cwd2));
   if (isInitialized(cwd2)) {
-    results.push(checkPluginCache());
+    results.push(checkPluginCache(cwd2));
     results.push(...checkSkillFiles(cwd2));
     results.push(...checkDirectoryStructure(cwd2));
     results.push(...checkLoggingModule(cwd2));
@@ -31242,55 +30664,57 @@ async function runDoctor(fix = false, cwd2 = process.cwd()) {
     results.push(...checkGitHooks(cwd2));
     results.push(...checkDeprecatedHooks(cwd2));
   }
-  displayResults(results);
+  displayResults(results, cwd2);
   const fixableIssues = results.filter((r) => r.status !== "ok" && r.fixable);
   if (fix && fixableIssues.length > 0) {
     console.log("");
     console.log("\u2501".repeat(SEPARATOR_WIDTH));
-    console.log("\uD83D\uDD27 Auto Fix");
+    console.log("\uD83D\uDD27 " + texts2.autoFix);
     console.log("\u2501".repeat(SEPARATOR_WIDTH));
     console.log("");
     await fixIssues2(fixableIssues, cwd2);
     console.log("");
-    console.log("\uD83D\uDD04 Re-checking...");
+    console.log("\uD83D\uDD04 " + texts2.reChecking);
     console.log("");
     await runDoctor(false, cwd2);
     return;
   } else if (fixableIssues.length > 0) {
     console.log("");
-    console.log(`\uD83D\uDCA1 Use --fix to auto-fix ${fixableIssues.length} issue(s)`);
+    console.log(`\uD83D\uDCA1 ${texts2.useFixToAutoFix.replace("{count}", String(fixableIssues.length))}`);
   }
 }
 function checkProjectInit(cwd2) {
+  const texts2 = t(cwd2).doctorCmd;
   const projectDir = getProjectDir(cwd2);
   const configPath = path19.join(projectDir, "config.json");
   if (!fs22.existsSync(configPath)) {
     return {
-      name: "Project Initialization",
+      name: texts2.checkProjectInit,
       status: "error",
-      message: "Project not initialized",
-      details: ["Run projmnt4claude setup to initialize the project"],
+      message: texts2.checkProjectInitNotInitialized,
+      details: [texts2.checkProjectInitRunSetup],
       fixable: false
     };
   }
   return {
-    name: "Project Initialization",
+    name: texts2.checkProjectInit,
     status: "ok",
-    message: "Project initialized",
+    message: texts2.checkProjectInitInitialized,
     details: [`Config file: ${configPath}`],
     fixable: false
   };
 }
-function checkPluginCache() {
+function checkPluginCache(cwd2) {
+  const texts2 = t(cwd2).doctorCmd;
   const pluginRoot = process.env.CLAUDE_PLUGIN_ROOT;
   const details = [];
   let status = "ok";
-  let message = "Plugin cache normal";
+  let message = texts2.checkPluginCacheNormal;
   if (!pluginRoot) {
     return {
-      name: "Plugin Cache",
+      name: texts2.checkPluginCache,
       status: "ok",
-      message: "Running in CLI mode, skipping plugin cache check",
+      message: texts2.checkPluginCacheCliMode,
       details: ["CLAUDE_PLUGIN_ROOT not set (normal in CLI mode)"],
       fixable: false
     };
@@ -31299,7 +30723,7 @@ function checkPluginCache() {
   const mainFile = path19.join(pluginRoot, "dist", "projmnt4claude.js");
   if (!fs22.existsSync(mainFile)) {
     status = "error";
-    message = "Main program file missing";
+    message = texts2.checkPluginCacheMainFileMissing;
     details.push(`Missing: ${mainFile}`);
   } else {
     details.push(`\u2713 Main program: ${mainFile}`);
@@ -31308,7 +30732,7 @@ function checkPluginCache() {
   if (!fs22.existsSync(localesDir)) {
     if (status !== "error") {
       status = "warning";
-      message = "locales directory missing";
+      message = texts2.checkPluginCacheLocalesMissing;
     }
     details.push(`Missing: ${localesDir}`);
   } else {
@@ -31332,7 +30756,7 @@ function checkPluginCache() {
   if (!fs22.existsSync(commandsDir)) {
     if (status !== "error") {
       status = "warning";
-      message = "commands directory missing (slash commands may not work)";
+      message = texts2.checkPluginCacheCommandsMissing;
     }
     details.push(`Missing: ${commandsDir}`);
   } else {
@@ -31340,7 +30764,7 @@ function checkPluginCache() {
     details.push(`\u2713 Slash commands: ${commandFiles.length}`);
   }
   return {
-    name: "Plugin Cache",
+    name: texts2.checkPluginCache,
     status,
     message,
     details,
@@ -31348,6 +30772,7 @@ function checkPluginCache() {
   };
 }
 function checkSkillFiles(cwd2) {
+  const texts2 = t(cwd2).doctorCmd;
   const results = [];
   const toolboxDir = getToolboxDir(cwd2);
   const skillDir = path19.join(toolboxDir, "projmnt4claude");
@@ -31355,24 +30780,25 @@ function checkSkillFiles(cwd2) {
   if (fs22.existsSync(commandsDir)) {
     const commandFiles = fs22.readdirSync(commandsDir).filter((f) => f.endsWith(".md"));
     results.push({
-      name: "Command Docs",
+      name: texts2.checkSkillFiles,
       status: "ok",
-      message: `${commandFiles.length} command docs`,
+      message: texts2.checkSkillFilesCount.replace("{count}", String(commandFiles.length)),
       details: [`Location: ${commandsDir}`],
       fixable: false
     });
   } else {
     results.push({
-      name: "Command Docs",
+      name: texts2.checkSkillFiles,
       status: "warning",
-      message: "Command docs directory missing",
-      details: ["May need to re-run setup to copy command docs"],
+      message: texts2.checkSkillFilesMissing,
+      details: [texts2.checkSkillFilesReRunSetup],
       fixable: true
     });
   }
   return results;
 }
 function checkDirectoryStructure(cwd2) {
+  const texts2 = t(cwd2).doctorCmd;
   const results = [];
   const projectDir = getProjectDir(cwd2);
   const requiredDirs = [
@@ -31382,17 +30808,17 @@ function checkDirectoryStructure(cwd2) {
   for (const dir of requiredDirs) {
     if (!fs22.existsSync(dir.path)) {
       results.push({
-        name: `Directory: ${dir.name}`,
+        name: texts2.checkDirectoryStructure.replace("{name}", dir.name),
         status: "error",
-        message: "Required directory missing",
+        message: texts2.checkDirectoryMissing,
         details: [`Missing: ${dir.path}`],
         fixable: true
       });
     } else {
       results.push({
-        name: `Directory: ${dir.name}`,
+        name: texts2.checkDirectoryStructure.replace("{name}", dir.name),
         status: "ok",
-        message: "Exists",
+        message: texts2.checkDirectoryExists,
         details: [],
         fixable: false
       });
@@ -31414,9 +30840,9 @@ function checkDirectoryStructure(cwd2) {
       const archiveDir = path19.join(projectDir, "archive");
       if (!fs22.existsSync(archiveDir)) {
         results.push({
-          name: "Directory: archive",
+          name: texts2.checkDirectoryStructure.replace("{name}", "archive"),
           status: "warning",
-          message: "Abandoned tasks exist but archive directory is missing",
+          message: texts2.checkArchiveMissing,
           details: [`Missing: ${archiveDir}`],
           fixable: true
         });
@@ -31448,12 +30874,13 @@ function checkPluginInstallationScope(cwd2) {
       return path19.resolve(inst.projectPath) !== normalizedCwd;
     });
     if (mismatchedInstalls.length > 0) {
+      const texts2 = t(cwd2).doctorCmd;
       const mismatchedList = mismatchedInstalls.map((inst) => `  - Version ${inst.version || "unknown"} bound to: ${inst.projectPath || "unknown path"}`).join(`
 `);
       results.push({
-        name: "Plugin Installation Scope",
+        name: texts2.checkPluginScope,
         status: "warning",
-        message: "Detected project-scope installation may cause cross-project update issues",
+        message: texts2.checkPluginScopeWarning,
         details: [
           "projmnt4claude installed with project-scope in:",
           mismatchedList,
@@ -31476,10 +30903,11 @@ function checkPluginInstallationScope(cwd2) {
         fixable: false
       });
     } else if (projectScopedInstalls.length > 0) {
+      const texts2 = t(cwd2).doctorCmd;
       results.push({
-        name: "Plugin Installation Scope",
+        name: texts2.checkPluginScope,
         status: "warning",
-        message: "Recommend user-scope installation for cross-project use",
+        message: texts2.checkPluginScopeRecommendUserScope,
         details: [
           "Current project is correctly bound to project-scope installation",
           "But user-scope is recommended for use in all projects:",
@@ -31494,13 +30922,14 @@ function checkPluginInstallationScope(cwd2) {
   return results;
 }
 function checkLoggingModule(cwd2) {
+  const texts2 = t(cwd2).doctorCmd;
   const results = [];
   const logsDir = getLogsDir(cwd2);
   if (!fs22.existsSync(logsDir)) {
     results.push({
-      name: "Log Directory",
+      name: texts2.checkLogDirectory,
       status: "warning",
-      message: "logs directory does not exist",
+      message: texts2.checkLogDirectoryMissing,
       details: [
         `Missing: ${logsDir}`,
         "Run projmnt4claude setup to upgrade project structure"
@@ -31510,9 +30939,9 @@ function checkLoggingModule(cwd2) {
     return results;
   }
   results.push({
-    name: "Log Directory",
+    name: texts2.checkLogDirectory,
     status: "ok",
-    message: "Exists",
+    message: texts2.checkLogDirectoryExists,
     details: [`Location: ${logsDir}`],
     fixable: false
   });
@@ -31533,9 +30962,9 @@ function checkLoggingModule(cwd2) {
     }
     if (missingKeys.length > 0) {
       results.push({
-        name: "Log Config Completeness",
+        name: texts2.checkLogConfigCompleteness,
         status: "warning",
-        message: `${missingKeys.length} log config items missing`,
+        message: texts2.checkLogConfigMissing.replace("{count}", String(missingKeys.length)),
         details: [
           "Missing config items:",
           ...missingKeys.map((k) => `  - ${k}`),
@@ -31546,9 +30975,9 @@ function checkLoggingModule(cwd2) {
       });
     } else {
       results.push({
-        name: "Log Config Completeness",
+        name: texts2.checkLogConfigCompleteness,
         status: "ok",
-        message: "All logging.* config items present",
+        message: texts2.checkLogConfigComplete,
         details: [
           `level: ${loggingConfig.level}`,
           `maxFiles: ${loggingConfig.maxFiles}`,
@@ -31561,15 +30990,15 @@ function checkLoggingModule(cwd2) {
     const aiConfig = config.ai;
     if (!aiConfig || aiConfig.provider === undefined) {
       results.push({
-        name: "AI Config Completeness",
+        name: texts2.checkAiConfigCompleteness,
         status: "warning",
-        message: "ai.provider config missing",
+        message: texts2.checkAiConfigMissing,
         details: [`Default: claude-code`, "\uD83D\uDCA1 Run projmnt4claude doctor --fix to auto-fill"],
         fixable: true
       });
     } else {
       results.push({
-        name: "AI Config Completeness",
+        name: texts2.checkAiConfigCompleteness,
         status: "ok",
         message: `provider: ${aiConfig.provider}`,
         details: aiConfig.customEndpoint ? [`Custom endpoint: ${aiConfig.customEndpoint}`] : [],
@@ -31579,15 +31008,15 @@ function checkLoggingModule(cwd2) {
     const trainingConfig = config.training;
     if (!trainingConfig || trainingConfig.exportEnabled === undefined) {
       results.push({
-        name: "Training Data Config Completeness",
+        name: texts2.checkTrainingConfigCompleteness,
         status: "warning",
-        message: "training.* config missing",
+        message: texts2.checkTrainingConfigMissing,
         details: ["\uD83D\uDCA1 Run projmnt4claude doctor --fix to auto-fill defaults"],
         fixable: true
       });
     } else {
       results.push({
-        name: "Training Data Config Completeness",
+        name: texts2.checkTrainingConfigCompleteness,
         status: "ok",
         message: `exportEnabled: ${trainingConfig.exportEnabled}`,
         details: [`outputDir: ${trainingConfig.outputDir}`],
@@ -31615,20 +31044,20 @@ function checkLoggingModule(cwd2) {
     let message = `Log health (${files.length} files, ${totalSizeMB.toFixed(1)}MB)`;
     if (oversizedFiles.length > 0) {
       status = "warning";
-      message = `${oversizedFiles.length} log files exceed 10MB`;
+      message = texts2.checkLogHealthOversized.replace("{count}", String(oversizedFiles.length));
       details.push("Files over 10MB:");
       details.push(...oversizedFiles.slice(0, 5).map((f) => `  - ${f}`));
     }
     if (totalSizeMB > 100) {
       status = "warning";
-      message = `Log directory exceeds 100MB (${totalSizeMB.toFixed(1)}MB)`;
+      message = texts2.checkLogHealthTotalSize.replace("{size}", totalSizeMB.toFixed(1));
       details.push(`Consider cleaning old logs: projmnt4claude config set logging.maxFiles 15`);
     }
     if (status === "ok") {
       details.push(`Total size: ${totalSizeMB.toFixed(1)}MB`);
     }
     results.push({
-      name: "Log Health",
+      name: texts2.checkLogHealth,
       status,
       message,
       details,
@@ -31636,7 +31065,7 @@ function checkLoggingModule(cwd2) {
     });
   } catch {
     results.push({
-      name: "Log Health",
+      name: texts2.checkLogHealth,
       status: "warning",
       message: "Cannot read log directory",
       details: [`Path: ${logsDir}`],
@@ -31646,11 +31075,12 @@ function checkLoggingModule(cwd2) {
   return results;
 }
 function checkDeprecatedStatuses(cwd2) {
+  const texts2 = t(cwd2).doctorCmd;
   const results = [];
   const tasksDir = getTasksDir(cwd2);
   if (!fs22.existsSync(tasksDir)) {
     return [{
-      name: "Deprecated Status Check",
+      name: texts2.checkDeprecatedStatus,
       status: "ok",
       message: "Task directory does not exist (no tasks)",
       details: [],
@@ -31673,17 +31103,17 @@ function checkDeprecatedStatuses(cwd2) {
   }
   if (tasksWithDeprecatedStatus.length === 0) {
     results.push({
-      name: "Deprecated Status Check",
+      name: texts2.checkDeprecatedStatus,
       status: "ok",
-      message: `All ${taskIds.length} tasks have no deprecated status`,
+      message: texts2.checkDeprecatedStatusOk.replace("{count}", String(taskIds.length)),
       details: ["\u2713 No reopened/needs_human status"],
       fixable: false
     });
   } else {
     results.push({
-      name: "Deprecated Status Check",
+      name: texts2.checkDeprecatedStatus,
       status: "warning",
-      message: `${tasksWithDeprecatedStatus.length} tasks using deprecated status`,
+      message: texts2.checkDeprecatedStatusFound.replace("{count}", String(tasksWithDeprecatedStatus.length)),
       details: [
         "Tasks with deprecated status:",
         ...tasksWithDeprecatedStatus.map((t2) => `  - ${t2.taskId}: status=${t2.status}`),
@@ -31700,29 +31130,30 @@ function checkDeprecatedStatuses(cwd2) {
   return results;
 }
 function checkGitHooks(cwd2) {
+  const texts2 = t(cwd2).doctorCmd;
   const config = readConfig(cwd2);
   const gitHookConfig = config?.gitHook ?? DEFAULT_GIT_HOOK;
   if (!gitHookConfig.enabled) {
-    return [{ status: "ok", name: "Git Hooks", message: "Git Hook check disabled via config", fixable: false }];
+    return [{ status: "ok", name: texts2.checkGitHooks, message: texts2.checkGitHooksDisabled, fixable: false }];
   }
   const gitDir = path19.join(cwd2, ".git");
   if (!fs22.existsSync(gitDir)) {
-    return [{ status: "ok", name: "Git Hooks", message: "Not a git repository, skipping Git Hook check", fixable: false }];
+    return [{ status: "ok", name: texts2.checkGitHooks, message: texts2.checkGitHooksNotGitRepo, fixable: false }];
   }
   try {
     const pre = new Pre(cwd2);
     if (pre.isPreCommitInstalled()) {
       return [{
-        name: "Git Hooks",
+        name: texts2.checkGitHooks,
         status: "ok",
-        message: "pre-commit hook installed",
+        message: texts2.checkGitHooksInstalled,
         fixable: false
       }];
     }
     return [{
-      name: "Git Hooks",
+      name: texts2.checkGitHooks,
       status: "warning",
-      message: "pre-commit hook not installed",
+      message: texts2.checkGitHooksNotInstalled,
       details: [
         "Recommended to install pre-commit hook to run tests before commits",
         "Run: projmnt4claude pre install"
@@ -31731,7 +31162,7 @@ function checkGitHooks(cwd2) {
     }];
   } catch {
     return [{
-      name: "Git Hooks",
+      name: texts2.checkGitHooks,
       status: "warning",
       message: "Cannot check Git Hook status",
       fixable: false
@@ -31786,6 +31217,7 @@ function checkDeprecatedHooks(cwd2) {
       }
     } catch {}
   }
+  const texts2 = t(cwd2).doctorCmd;
   const hasSettingsIssue = deprecatedSettings.length > 0;
   const hasFilesIssue = deprecatedFiles.length > 0;
   if (hasSettingsIssue || hasFilesIssue) {
@@ -31810,24 +31242,25 @@ function checkDeprecatedHooks(cwd2) {
     details.push("");
     details.push("\uD83D\uDCA1 Run projmnt4claude doctor --fix to auto-clean");
     results.push({
-      name: "Deprecated Hook Check",
+      name: texts2.checkDeprecatedHooks,
       status: "warning",
-      message: "Deprecated Claude Code Hook config found",
+      message: texts2.checkDeprecatedHooksFound,
       details,
       fixable: true
     });
   } else {
     results.push({
-      name: "Deprecated Hook Check",
+      name: texts2.checkDeprecatedHooks,
       status: "ok",
-      message: "No deprecated Claude Code Hook config found",
+      message: texts2.checkDeprecatedHooksOk,
       details: [],
       fixable: false
     });
   }
   return results;
 }
-function displayResults(results) {
+function displayResults(results, cwd2 = process.cwd()) {
+  const texts2 = t(cwd2).doctorCmd;
   const sorted = [...results].sort((a, b) => {
     const order = { error: 0, warning: 1, ok: 2 };
     return order[a.status] - order[b.status];
@@ -31852,9 +31285,9 @@ function displayResults(results) {
   }
   console.log("");
   console.log("\u2501".repeat(SEPARATOR_WIDTH));
-  console.log(`\uD83D\uDCCA Summary: ${errorCount} errors, ${warningCount} warnings, ${okCount} ok`);
+  console.log("\uD83D\uDCCA " + texts2.summary.replace("{errors}", String(errorCount)).replace("{warnings}", String(warningCount)).replace("{ok}", String(okCount)));
   if (errorCount === 0 && warningCount === 0) {
-    console.log("\u2705 All checks passed!");
+    console.log("\u2705 " + texts2.allChecksPassed);
   }
 }
 function resolvePluginRoot() {
@@ -31873,10 +31306,11 @@ function resolvePluginRoot() {
   return null;
 }
 async function fixIssues2(issues, cwd2) {
+  const texts2 = t(cwd2).doctorCmd;
   const projectDir = getProjectDir(cwd2);
   const pluginRoot = resolvePluginRoot();
   for (const issue of issues) {
-    console.log(`Fixing: ${issue.name}...`);
+    console.log(texts2.fixing.replace("{name}", issue.name));
     if (issue.name === "Skill Files" || issue.name === "Command Docs") {
       if (pluginRoot) {
         const toolboxDir = getToolboxDir(cwd2);
@@ -31896,7 +31330,7 @@ async function fixIssues2(issues, cwd2) {
         const skillTarget = path19.join(skillDir, "SKILL.md");
         if (fs22.existsSync(skillSource)) {
           fs22.copyFileSync(skillSource, skillTarget);
-          console.log(`  \u2713 Copied SKILL.md`);
+          console.log(texts2.copiedSkillMd);
         }
         const commandsSourceDir = path19.join(pluginRoot, "locales", language, "commands");
         const commandsTargetDir = path19.join(skillDir, "commands");
@@ -31908,10 +31342,10 @@ async function fixIssues2(issues, cwd2) {
           for (const file of commandFiles) {
             fs22.copyFileSync(path19.join(commandsSourceDir, file), path19.join(commandsTargetDir, file));
           }
-          console.log(`  \u2713 Copied ${commandFiles.length} command docs`);
+          console.log(texts2.copiedCommandDocs.replace("{count}", String(commandFiles.length)));
         }
       } else {
-        console.log(`  \u2717 Cannot fix: Plugin root not found (CLAUDE_PLUGIN_ROOT not set and cannot auto-locate)`);
+        console.log(texts2.cannotFixPluginRootNotFound);
       }
     } else if (issue.name.startsWith("Directory:")) {
       const dirName = issue.name.replace("Directory: ", "");
@@ -31923,22 +31357,22 @@ async function fixIssues2(issues, cwd2) {
       const dirPath = dirMap[dirName];
       if (dirPath && !fs22.existsSync(dirPath)) {
         fs22.mkdirSync(dirPath, { recursive: true });
-        console.log(`  \u2713 Created directory: ${dirName}/`);
+        console.log(texts2.createdDirectory.replace("{name}", dirName));
       }
-    } else if (issue.name === "Log Directory") {
+    } else if (issue.name === texts2.checkLogDirectory) {
       const logsDir = getLogsDir(cwd2);
       if (!fs22.existsSync(logsDir)) {
         fs22.mkdirSync(logsDir, { recursive: true });
-        console.log(`  \u2713 Created logs directory`);
+        console.log(texts2.createdLogsDirectory);
       }
-    } else if (issue.name === "Log Config Completeness" || issue.name === "AI Config Completeness" || issue.name === "Training Data Config Completeness") {
+    } else if (issue.name === texts2.checkLogConfigCompleteness || issue.name === texts2.checkAiConfigCompleteness || issue.name === texts2.checkTrainingConfigCompleteness) {
       const config = readConfig(cwd2);
       if (config) {
         const fixedConfig = ensureConfigDefaults(config);
         writeConfig(fixedConfig, cwd2);
-        console.log(`  \u2713 Auto-filled missing config items`);
+        console.log(texts2.autoFilledMissingConfig);
       }
-    } else if (issue.name === "Deprecated Status Check") {
+    } else if (issue.name === texts2.checkDeprecatedStatus) {
       const tasksDir = getTasksDir(cwd2);
       const deprecatedMap = { reopened: "open", needs_human: "open" };
       let fixedCount = 0;
@@ -31966,8 +31400,8 @@ async function fixIssues2(issues, cwd2) {
           } catch {}
         }
       }
-      console.log(`  \u2713 Migrated ${fixedCount} deprecated status tasks`);
-    } else if (issue.name === "Deprecated Hook Check") {
+      console.log(texts2.migratedDeprecatedStatusTasks.replace("{count}", String(fixedCount)));
+    } else if (issue.name === texts2.checkDeprecatedHooks) {
       let removedSettings = false;
       let removedFiles = false;
       const settingsPath = path19.join(cwd2, ".claude", "settings.json");
@@ -32037,121 +31471,123 @@ async function fixIssues2(issues, cwd2) {
         } catch {}
       }
       if (removedSettings || removedFiles) {
-        console.log(`  \u2713 Cleaned up deprecated Claude Code Hook config`);
+        console.log(texts2.cleanedDeprecatedHookConfig);
         if (removedSettings) {
-          console.log(`    - Updated .claude/settings.json`);
+          console.log(texts2.updatedSettings);
         }
         if (removedFiles) {
-          console.log(`    - Deleted deprecated scripts from .projmnt4claude/hooks/`);
+          console.log(texts2.deletedDeprecatedScripts);
         }
       }
     }
   }
   console.log("");
-  console.log("\u2705 Fix complete");
+  console.log("\u2705 " + texts2.fixComplete);
 }
 async function runBugReport(cwd2 = process.cwd()) {
+  const texts2 = t(cwd2).doctorCmd;
   console.log("");
   console.log("\u2501".repeat(SEPARATOR_WIDTH));
-  console.log("\uD83D\uDCCB Bug Report Generation");
+  console.log("\uD83D\uDCCB " + texts2.bugReportGeneration);
   console.log("\u2501".repeat(SEPARATOR_WIDTH));
   console.log("");
   if (!isInitialized(cwd2)) {
-    console.error("\u274C Error: Project not initialized, cannot generate bug report");
-    console.error("Run projmnt4claude setup to initialize the project first");
+    console.error("\u274C " + texts2.errorProjectNotInitialized);
+    console.error(texts2.runSetupFirst);
     process.exit(1);
   }
-  const logger2 = new Logger({ cwd: cwd2 });
+  const logger = new Logger({ cwd: cwd2 });
   try {
-    const report = logger2.generateBugReport(100);
+    const report = logger.generateBugReport(100);
     console.log(report.markdown);
     console.log("");
     console.log("\u2501".repeat(SEPARATOR_WIDTH));
     console.log("");
     console.log("\u2501".repeat(SEPARATOR_WIDTH));
-    console.log("\uD83D\uDCB0 AI Cost Summary");
+    console.log("\uD83D\uDCB0 " + texts2.aiCostSummary);
     console.log("\u2501".repeat(SEPARATOR_WIDTH));
     console.log("");
-    const costSummary = logger2.getCostSummary();
-    console.log(`Total AI calls: ${costSummary.totalCalls}`);
-    console.log(`Total duration: ${(costSummary.totalDurationMs / 1000).toFixed(1)}s`);
-    console.log(`Total tokens: ${costSummary.totalTokens} (input: ${costSummary.totalInputTokens}, output: ${costSummary.totalOutputTokens})`);
+    const costSummary = logger.getCostSummary();
+    console.log(texts2.totalAiCalls.replace("{count}", String(costSummary.totalCalls)));
+    console.log(texts2.totalDuration.replace("{duration}", (costSummary.totalDurationMs / 1000).toFixed(1)));
+    console.log(texts2.totalTokens.replace("{total}", String(costSummary.totalTokens)).replace("{input}", String(costSummary.totalInputTokens)).replace("{output}", String(costSummary.totalOutputTokens)));
     if (Object.keys(costSummary.byField).length > 0) {
       console.log("");
-      console.log("By field:");
+      console.log(texts2.byField);
       for (const [field, info] of Object.entries(costSummary.byField)) {
-        console.log(`  ${field}: ${info.calls} calls, ${(info.durationMs / 1000).toFixed(1)}s, ${info.totalTokens} tokens`);
+        console.log(texts2.fieldStats.replace("{field}", field).replace("{calls}", String(info.calls)).replace("{duration}", (info.durationMs / 1000).toFixed(1)).replace("{tokens}", String(info.totalTokens)));
       }
     }
     console.log("");
     console.log("\u2501".repeat(SEPARATOR_WIDTH));
-    console.log("\uD83D\uDCCA Usage Analysis");
+    console.log("\uD83D\uDCCA " + texts2.usageAnalysis);
     console.log("\u2501".repeat(SEPARATOR_WIDTH));
     console.log("");
-    const usage = logger2.analyzeUsage();
-    console.log(`Total command executions: ${usage.totalCommands}`);
-    console.log(`Average duration: ${(usage.averageDurationMs / 1000).toFixed(1)}s`);
-    console.log(`AI usage rate: ${(usage.aiUsageRate * 100).toFixed(1)}%`);
-    console.log(`Errors: ${usage.totalErrors}, Warnings: ${usage.totalWarnings}`);
+    const usage = logger.analyzeUsage();
+    console.log(texts2.totalCommandExecutions.replace("{count}", String(usage.totalCommands)));
+    console.log(texts2.averageDuration.replace("{duration}", (usage.averageDurationMs / 1000).toFixed(1)));
+    console.log(texts2.aiUsageRate.replace("{rate}", (usage.aiUsageRate * 100).toFixed(1)));
+    console.log(texts2.errorsAndWarnings.replace("{errors}", String(usage.totalErrors)).replace("{warnings}", String(usage.totalWarnings)));
     if (Object.keys(usage.commandFrequency).length > 0) {
       console.log("");
-      console.log("Command frequency:");
+      console.log(texts2.commandFrequency);
       const sorted = Object.entries(usage.commandFrequency).sort((a, b) => b[1] - a[1]);
       for (const [cmd, count] of sorted) {
-        console.log(`  ${cmd}: ${count}`);
+        console.log(texts2.commandCount.replace("{cmd}", cmd).replace("{count}", String(count)));
       }
     }
     if (usage.commonErrors.length > 0) {
       console.log("");
-      console.log("Common errors:");
+      console.log(texts2.commonErrors);
       for (const err of usage.commonErrors.slice(0, 5)) {
-        console.log(`  [${err.count}x] ${err.message}`);
+        console.log(texts2.errorEntry.replace("{count}", String(err.count)).replace("{message}", err.message));
       }
     }
     console.log("");
     console.log("\u2501".repeat(SEPARATOR_WIDTH));
-    console.log(`\u2705 Bug report generated`);
-    console.log(`\uD83D\uDCCE Log archive: ${report.archivePath}`);
+    console.log("\u2705 " + texts2.bugReportGenerated);
+    console.log("\uD83D\uDCCE " + texts2.logArchive.replace("{path}", report.archivePath));
   } catch (err) {
     console.error("");
-    console.error(`\u274C Bug report generation failed: ${err instanceof Error ? err.message : String(err)}`);
+    console.error("\u274C " + texts2.bugReportFailed.replace("{error}", err instanceof Error ? err.message : String(err)));
     process.exit(1);
   }
 }
 async function runDoctorDeep(cwd2 = process.cwd()) {
+  const texts2 = t(cwd2).doctorCmd;
   console.log("");
   console.log("\u2501".repeat(SEPARATOR_WIDTH));
-  console.log("\uD83D\uDD2C Deep Log Analysis (--deep)");
+  console.log("\uD83D\uDD2C " + texts2.deepLogAnalysis);
   console.log("\u2501".repeat(SEPARATOR_WIDTH));
   console.log("");
   await runDoctor(false, cwd2);
   console.log("");
   console.log("\u2501".repeat(SEPARATOR_WIDTH));
-  console.log("\uD83D\uDCCA Deep Log Analysis");
+  console.log("\uD83D\uDCCA " + texts2.deepLogAnalysis.replace(" (--deep)", ""));
   console.log("\u2501".repeat(SEPARATOR_WIDTH));
   console.log("");
   const collector = new LogCollector(cwd2);
   const stats = collector.getStats();
   if (stats.fileCount === 0) {
-    console.log("\u2139\uFE0F  No log files found, skipping log analysis");
-    console.log(`   Log directory: ${getLogsDir(cwd2)}`);
+    console.log("\u2139\uFE0F  " + texts2.noLogFilesFound);
+    console.log(texts2.logDirectory.replace("{path}", getLogsDir(cwd2)));
     return;
   }
-  console.log(`\uD83D\uDCC2 Log files: ${stats.fileCount} (${stats.totalSizeKB} KB)`);
+  console.log("\uD83D\uDCC2 " + texts2.logFilesCount.replace("{count}", String(stats.fileCount)).replace("{size}", String(stats.totalSizeKB)));
   const entries = collector.collectSince(24, { maxEntries: 1e4 });
-  console.log(`\uD83D\uDCCB Log entries: ${entries.length} (last 24 hours)`);
+  console.log("\uD83D\uDCCB " + texts2.logEntriesCount.replace("{count}", String(entries.length)));
   console.log("");
   if (entries.length === 0) {
-    console.log("\u2139\uFE0F  No log entries in the last 24 hours");
+    console.log("\u2139\uFE0F  " + texts2.noLogEntriesInLast24Hours);
     return;
   }
   const registry = new LogAnalyzerRegistry(cwd2);
   for (const analyzer of getBuiltInAnalyzers()) {
     registry.register(analyzer);
   }
-  console.log(`\uD83D\uDD27 Registered ${registry.size} analyzers:`);
+  console.log("\uD83D\uDD27 " + texts2.registeredAnalyzers.replace("{count}", String(registry.size)));
   for (const analyzer of registry.getAll()) {
-    console.log(`   - ${analyzer.name} (${analyzer.category}) [${analyzer.supportedStrategies.join(", ")}]`);
+    console.log("   " + texts2.analyzerEntry.replace("{name}", analyzer.name).replace("{category}", analyzer.category).replace("{strategies}", analyzer.supportedStrategies.join(", ")));
   }
   console.log("");
   const results = await registry.runAll(entries, "hybrid", { cwd: cwd2, enableAI: true });
@@ -32160,17 +31596,17 @@ async function runDoctorDeep(cwd2 = process.cwd()) {
   console.log(reporter.formatText(report));
   if (report.summary.totalFindings > 0) {
     console.log("\u2501".repeat(SEPARATOR_WIDTH));
-    console.log(`\uD83D\uDCCA Found ${report.summary.totalFindings} issues`);
+    console.log("\uD83D\uDCCA " + texts2.foundIssues.replace("{count}", String(report.summary.totalFindings)));
     const critical = report.summary.bySeverity["critical"] || 0;
     const errors = report.summary.bySeverity["error"] || 0;
     if (critical > 0) {
-      console.log(`\uD83D\uDD34 ${critical} critical issues require immediate attention`);
+      console.log("\uD83D\uDD34 " + texts2.criticalIssuesRequireAttention.replace("{count}", String(critical)));
     }
     if (errors > 0) {
-      console.log(`\u274C ${errors} errors need attention`);
+      console.log("\u274C " + texts2.errorsNeedAttention.replace("{count}", String(errors)));
     }
   } else {
-    console.log("\u2705 Deep log analysis complete, no anomalies found");
+    console.log("\u2705 " + texts2.deepAnalysisComplete);
   }
 }
 
@@ -32241,7 +31677,259 @@ function getQARoleTemplate(role, language) {
 // src/utils/harness-executor.ts
 init_harness_helpers();
 init_headless_agent();
-init_feedback_constraint_engine();
+
+// src/utils/feedback-constraint-engine.ts
+init_i18n();
+init_logger();
+var logger = new Logger({ component: "feedback-constraint-engine" });
+var jsonParseableRule = {
+  id: "json-parseable",
+  description: "\u8F93\u51FA\u5FC5\u987B\u662F\u5408\u6CD5\u7684 JSON \u5B57\u7B26\u4E32",
+  severity: "error",
+  check: (output) => {
+    if (typeof output !== "string") {
+      return {
+        ruleId: "json-parseable",
+        severity: "error",
+        message: "\u8F93\u51FA\u4E0D\u662F\u5B57\u7B26\u4E32\u7C7B\u578B\uFF0C\u65E0\u6CD5\u89E3\u6790\u4E3A JSON",
+        value: typeof output
+      };
+    }
+    const trimmed = output.trim();
+    if (trimmed.length === 0) {
+      return {
+        ruleId: "json-parseable",
+        severity: "error",
+        message: "\u8F93\u51FA\u4E3A\u7A7A\u5B57\u7B26\u4E32\uFF0C\u65E0\u6CD5\u89E3\u6790\u4E3A JSON"
+      };
+    }
+    try {
+      JSON.parse(trimmed);
+      return null;
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      return {
+        ruleId: "json-parseable",
+        severity: "error",
+        message: `JSON \u89E3\u6790\u5931\u8D25: ${msg}`,
+        value: trimmed.slice(0, 100)
+      };
+    }
+  }
+};
+var nonEmptyOutputRule = {
+  id: "non-empty-output",
+  description: "\u8F93\u51FA\u4E0D\u80FD\u4E3A\u7A7A",
+  severity: "error",
+  check: (output) => {
+    if (output === null || output === undefined) {
+      return {
+        ruleId: "non-empty-output",
+        severity: "error",
+        message: "\u8F93\u51FA\u4E3A null \u6216 undefined",
+        value: String(output)
+      };
+    }
+    if (typeof output === "string" && output.trim().length === 0) {
+      return {
+        ruleId: "non-empty-output",
+        severity: "error",
+        message: "\u8F93\u51FA\u4E3A\u7A7A\u5B57\u7B26\u4E32\u6216\u7EAF\u7A7A\u767D\u5B57\u7B26"
+      };
+    }
+    return null;
+  }
+};
+
+class JsonFeedbackTemplate {
+  truncationLimit;
+  language;
+  constructor(truncationLimit = 4000, language = "zh") {
+    this.truncationLimit = truncationLimit;
+    this.language = language;
+  }
+  buildFeedbackPrompt(violations, originalOutput, language) {
+    const lang = language || this.language;
+    const i18n = getI18n(lang);
+    const violationLines = violations.map((v, i) => `${i + 1}. [${v.severity.toUpperCase()}] ${v.ruleId}: ${v.message}` + (v.field ? `
+   ${i18n.feedback.fieldLabel}: ${v.field}` : "") + (v.value ? `
+   ${i18n.feedback.valueLabel}: ${v.value}` : "")).join(`
+`);
+    const requirements = i18n.feedback.jsonRequirements.map((r) => `- ${r}`);
+    return [
+      i18n.feedback.jsonHeader,
+      "",
+      `## ${i18n.feedback.violationsTitle}`,
+      violationLines,
+      "",
+      `## ${i18n.feedback.originalOutputTitle}`,
+      "```json",
+      originalOutput.length > this.truncationLimit ? originalOutput.slice(0, this.truncationLimit) + `
+${i18n.feedback.truncated}` : originalOutput,
+      "```",
+      "",
+      "\u8BF7\u786E\u4FDD\uFF1A",
+      ...requirements
+    ].join(`
+`);
+  }
+}
+
+class MarkdownFeedbackTemplate {
+  truncationLimit;
+  language;
+  constructor(truncationLimit = 4000, language = "zh") {
+    this.truncationLimit = truncationLimit;
+    this.language = language;
+  }
+  buildFeedbackPrompt(violations, originalOutput, language) {
+    const lang = language || this.language;
+    const i18n = getI18n(lang);
+    const violationLines = violations.map((v, i) => `${i + 1}. **[${v.severity.toUpperCase()}] ${v.ruleId}**: ${v.message}` + (v.field ? ` (${i18n.feedback.fieldLabel}: \`${v.field}\`)` : "")).join(`
+`);
+    const requirements = i18n.feedback.markdownRequirements.map((r) => `- ${r}`);
+    return [
+      i18n.feedback.markdownHeader,
+      "",
+      `### ${i18n.feedback.violationsTitle}`,
+      violationLines,
+      "",
+      `### ${i18n.feedback.originalOutputTitle}`,
+      "```markdown",
+      originalOutput.length > this.truncationLimit ? originalOutput.slice(0, this.truncationLimit) + `
+${i18n.feedback.truncated}` : originalOutput,
+      "```",
+      "",
+      "\u8BF7\u786E\u4FDD\uFF1A",
+      ...requirements
+    ].join(`
+`);
+  }
+}
+
+class FeedbackConstraintEngineImpl {
+  ruleSets = [];
+  template;
+  retryCount = 0;
+  language;
+  constructor(template, language = "zh") {
+    this.template = template ?? new JsonFeedbackTemplate(4000, language);
+    this.language = language;
+  }
+  setLanguage(language) {
+    this.language = language;
+    return this;
+  }
+  getLanguage() {
+    return this.language;
+  }
+  addRuleSet(ruleSet) {
+    this.ruleSets.push(ruleSet);
+    return this;
+  }
+  setTemplate(template) {
+    this.template = template;
+    return this;
+  }
+  validate(output) {
+    const violations = [];
+    for (const ruleSet of this.ruleSets) {
+      for (const rule of ruleSet.rules) {
+        const violation = rule.check(output);
+        if (violation !== null) {
+          if (!violation.severity) {
+            violation.severity = rule.severity;
+          }
+          violations.push(violation);
+        }
+      }
+    }
+    if (violations.length > 0) {
+      logger.debug(`[FeedbackConstraintEngine] \u9A8C\u8BC1\u53D1\u73B0 ${violations.length} \u4E2A\u8FDD\u89C4\u9879`);
+    }
+    return violations;
+  }
+  shouldRetry(violations) {
+    const hasErrors = violations.some((v) => v.severity === "error");
+    if (!hasErrors) {
+      return false;
+    }
+    for (const ruleSet of this.ruleSets) {
+      const errorViolationsInSet = violations.filter((v) => v.severity === "error" && ruleSet.rules.some((r) => r.id === v.ruleId));
+      if (errorViolationsInSet.length > 0) {
+        if (this.retryCount >= ruleSet.maxRetriesOnError) {
+          logger.debug(`[FeedbackConstraintEngine] \u89C4\u5219\u96C6 "${ruleSet.name}" \u5DF2\u8FBE\u5230\u6700\u5927\u91CD\u8BD5\u6B21\u6570 (${ruleSet.maxRetriesOnError})`);
+          return false;
+        }
+      }
+    }
+    return true;
+  }
+  buildFeedback(violations, originalOutput, language) {
+    return this.template.buildFeedbackPrompt(violations, originalOutput, language ?? this.language);
+  }
+  async runWithFeedback(invokeFn, prompt, options) {
+    this.retryCount = 0;
+    let currentPrompt = prompt;
+    let lastResult;
+    let currentOptions = { ...options };
+    while (true) {
+      lastResult = await invokeFn(currentPrompt, currentOptions);
+      const output = lastResult.output;
+      const violations = this.validate(output);
+      if (violations.length === 0) {
+        logger.debug(`[FeedbackConstraintEngine] \u9A8C\u8BC1\u901A\u8FC7 (\u91CD\u8BD5 ${this.retryCount} \u6B21)`);
+        return {
+          result: lastResult,
+          violations: [],
+          retries: this.retryCount,
+          passed: true,
+          sessionContinuity: {
+            used: false
+          }
+        };
+      }
+      if (!this.shouldRetry(violations)) {
+        const hasErrors = violations.some((v) => v.severity === "error");
+        logger.debug(`[FeedbackConstraintEngine] \u9A8C\u8BC1\u672A\u901A\u8FC7\uFF0C\u4E0D\u518D\u91CD\u8BD5 (\u9519\u8BEF: ${hasErrors}, \u91CD\u8BD5: ${this.retryCount})`);
+        return {
+          result: lastResult,
+          violations,
+          retries: this.retryCount,
+          passed: !hasErrors,
+          sessionContinuity: {
+            used: false
+          }
+        };
+      }
+      this.retryCount++;
+      currentPrompt = this.buildFeedback(violations, output);
+      currentOptions = { ...options };
+      logger.debug(`[FeedbackConstraintEngine] \u51C6\u5907\u7B2C ${this.retryCount} \u6B21\u91CD\u8BD5\uFF0C\u8FDD\u89C4\u9879: ${violations.map((v) => v.ruleId).join(", ")}`);
+    }
+  }
+  getRetryCount() {
+    return this.retryCount;
+  }
+  reset() {
+    this.retryCount = 0;
+    return this;
+  }
+}
+function createSessionAwareEngine(outputType = "json", rules = [], maxRetriesOnError = 2, language = "zh") {
+  const template = outputType === "json" ? new JsonFeedbackTemplate(4000, language) : new MarkdownFeedbackTemplate(4000, language);
+  const baseRules = outputType === "json" ? [nonEmptyOutputRule, jsonParseableRule, ...rules] : [nonEmptyOutputRule, ...rules];
+  const engine = new FeedbackConstraintEngineImpl(template, language);
+  engine.addRuleSet({
+    name: `${outputType}-session-aware`,
+    outputType,
+    rules: baseRules,
+    maxRetriesOnError
+  });
+  return engine;
+}
+
+// src/utils/harness-executor.ts
 init_prompt_templates();
 init_i18n();
 
@@ -32257,19 +31945,19 @@ class HarnessExecutor {
     report.status = "running";
     const effectiveTimeout = timeoutOverride ?? this.config.timeout;
     const timeoutMinutes = Math.round(effectiveTimeout / 60);
-    const texts = t(this.config.cwd);
-    console.log(`   ${texts.harness.logs.taskLabel}: ${task.title}`);
-    console.log(`   ${texts.harness.logs.typeLabel}: ${task.type}`);
-    console.log(`   ${texts.harness.logs.priorityLabel}: ${task.priority}`);
-    console.log(`   ${texts.harness.logs.timeoutLabel}: ${timeoutMinutes} ${texts.harness.logs.minutes} (${effectiveTimeout} ${texts.harness.logs.seconds})`);
+    const texts2 = t(this.config.cwd);
+    console.log(`   ${texts2.harness.logs.taskLabel}: ${task.title}`);
+    console.log(`   ${texts2.harness.logs.typeLabel}: ${task.type}`);
+    console.log(`   ${texts2.harness.logs.priorityLabel}: ${task.priority}`);
+    console.log(`   ${texts2.harness.logs.timeoutLabel}: ${timeoutMinutes} ${texts2.harness.logs.minutes} (${effectiveTimeout} ${texts2.harness.logs.seconds})`);
     try {
       const sprintContract = await this.buildOrLoadContract(task);
       Object.assign(contract, sprintContract);
       const prompt = this.buildDevPrompt(task, sprintContract, timeoutMinutes, retryContext);
       console.log(`
-   \uD83D\uDCDD ${texts.harness.logs.devPromptGenerated}`);
+   \uD83D\uDCDD ${texts2.harness.logs.devPromptGenerated}`);
       console.log(`
-   \uD83E\uDD16 ${texts.harness.logs.startingHeadlessClaude}`);
+   \uD83E\uDD16 ${texts2.harness.logs.startingHeadlessClaude}`);
       const agent = getAgent(this.config.cwd);
       const effectiveTools = buildEffectiveTools("development", this.config.cwd, task);
       const invokeOptions = {
@@ -32283,35 +31971,35 @@ class HarnessExecutor {
       const engine = createSessionAwareEngine("markdown", [], 1);
       const engineResult = await engine.runWithFeedback(agent.invoke.bind(agent), prompt, invokeOptions);
       if (engineResult.retries > 0) {
-        console.log(`   \uD83D\uDD04 ${texts.harness.logs.devOutputFormatRetry.replace("{retries}", String(engineResult.retries))}`);
+        console.log(`   \uD83D\uDD04 ${texts2.harness.logs.devOutputFormatRetry.replace("{retries}", String(engineResult.retries))}`);
       }
       report.claudeOutput = engineResult.result.output;
       report.duration = engineResult.result.durationMs;
       if (!engineResult.result.success) {
         report.status = engineResult.result.exitCode === 124 ? "timeout" : "failed";
-        report.error = engineResult.result.error || `${texts.harness.logs.exitCode}: ${engineResult.result.exitCode}`;
+        report.error = engineResult.result.error || `${texts2.harness.logs.exitCode}: ${engineResult.result.exitCode}`;
         console.log(`
-   \u274C ${texts.harness.logs.devPhaseFailed}: ${report.error}`);
+   \u274C ${texts2.harness.logs.devPhaseFailed}: ${report.error}`);
       } else if (!engineResult.passed) {
         const violationMessages = engineResult.violations.map((v) => `${v.ruleId}: ${v.message}`).join("; ");
         report.status = "failed";
-        report.error = `${texts.harness.logs.devOutputValidationFailedError}: ${violationMessages}`;
+        report.error = `${texts2.harness.logs.devOutputValidationFailedError}: ${violationMessages}`;
         console.log(`
-   \u274C ${texts.harness.logs.devOutputValidationFailed}: ${violationMessages}`);
+   \u274C ${texts2.harness.logs.devOutputValidationFailed}: ${violationMessages}`);
       } else {
         report.status = "success";
         console.log(`
-   \u2705 ${texts.harness.logs.devPhaseCompleted}`);
+   \u2705 ${texts2.harness.logs.devPhaseCompleted}`);
         report.evidence = await this.collectEvidence(task.id);
-        console.log(`   \uD83D\uDCCE ${texts.harness.logs.evidenceCollected}: ${report.evidence.length}`);
+        console.log(`   \uD83D\uDCCE ${texts2.harness.logs.evidenceCollected}: ${report.evidence.length}`);
         report.checkpointsCompleted = await this.checkCompletedCheckpoints(task, sprintContract);
-        console.log(`   \u2713 ${texts.harness.logs.checkpointsCompleted}: ${report.checkpointsCompleted.length}/${sprintContract.checkpoints.length}`);
+        console.log(`   \u2713 ${texts2.harness.logs.checkpointsCompleted}: ${report.checkpointsCompleted.length}/${sprintContract.checkpoints.length}`);
       }
     } catch (error) {
       report.status = "failed";
       report.error = error instanceof Error ? error.message : String(error);
       console.log(`
-   \u274C ${texts.harness.logs.devPhaseError}: ${report.error}`);
+   \u274C ${texts2.harness.logs.devPhaseError}: ${report.error}`);
     }
     const endTime = new Date;
     report.endTime = endTime.toISOString();
@@ -32357,30 +32045,30 @@ class HarnessExecutor {
     return criteria;
   }
   buildDevPrompt(task, contract, timeoutMinutes, retryContext) {
-    const texts = t(this.config.cwd);
+    const texts2 = t(this.config.cwd);
     const roleTemplate = getDevRoleTemplate(task.recommendedRole);
-    const timeoutHeader = timeoutMinutes ? `## ${texts.harness.timeoutHeader}: ${timeoutMinutes} \u5206\u949F
+    const timeoutHeader = timeoutMinutes ? `## ${texts2.harness.timeoutHeader}: ${timeoutMinutes} \u5206\u949F
 ` : "";
-    const descriptionSection = task.description ? `## ${texts.harness.taskDescription}
+    const descriptionSection = task.description ? `## ${texts2.harness.taskDescription}
 ${task.description}
 ` : "";
-    const dependenciesSection = task.dependencies && task.dependencies.length > 0 ? `## ${texts.harness.dependencies}
+    const dependenciesSection = task.dependencies && task.dependencies.length > 0 ? `## ${texts2.harness.dependencies}
 ${task.dependencies.map((dep) => `- ${dep}`).join(`
 `)}
 ` : "";
-    const acceptanceCriteriaSection = contract.acceptanceCriteria.length > 0 ? `## ${texts.harness.acceptanceCriteria}
-${texts.harness.acceptanceCriteriaInstruction}
+    const acceptanceCriteriaSection = contract.acceptanceCriteria.length > 0 ? `## ${texts2.harness.acceptanceCriteria}
+${texts2.harness.acceptanceCriteriaInstruction}
 ${contract.acceptanceCriteria.map((criteria, i) => `${i + 1}. ${criteria}`).join(`
 `)}
 ` : "";
-    const checkpointsSection = contract.checkpoints.length > 0 ? `## ${texts.harness.checkpoints}
-${texts.harness.checkpointsInstruction}
+    const checkpointsSection = contract.checkpoints.length > 0 ? `## ${texts2.harness.checkpoints}
+${texts2.harness.checkpointsInstruction}
 ${contract.checkpoints.map((cp, i) => `${i + 1}. ${cp}`).join(`
 `)}
 ` : "";
-    const timeoutInstruction = timeoutMinutes ? texts.harness.timeoutInstruction.replace("{timeout}", String(timeoutMinutes)) + `
+    const timeoutInstruction = timeoutMinutes ? texts2.harness.timeoutInstruction.replace("{timeout}", String(timeoutMinutes)) + `
 ` : "";
-    const extraInstructionsSection = roleTemplate.extraInstructions.length > 0 ? `## ${texts.harness.roleSpecificRequirements}
+    const extraInstructionsSection = roleTemplate.extraInstructions.length > 0 ? `## ${texts2.harness.roleSpecificRequirements}
 ${roleTemplate.extraInstructions.map((inst, i) => `${i + 1}. ${inst}`).join(`
 `)}
 ` : "";
@@ -32411,36 +32099,36 @@ ${roleTemplate.extraInstructions.map((inst, i) => `${i + 1}. ${inst}`).join(`
   }
   buildRetryContextSection(retryContext) {
     const parts = [];
-    const texts = t(this.config.cwd);
+    const texts2 = t(this.config.cwd);
     const phaseLabel = {
-      development: texts.harness.phaseLabels.development,
-      code_review: texts.harness.phaseLabels.codeReview,
-      qa: texts.harness.phaseLabels.qa,
-      evaluation: texts.harness.phaseLabels.evaluation
+      development: texts2.harness.phaseLabels.development,
+      code_review: texts2.harness.phaseLabels.codeReview,
+      qa: texts2.harness.phaseLabels.qa,
+      evaluation: texts2.harness.phaseLabels.evaluation
     };
-    parts.push(`## ${texts.harness.retryContext}`);
+    parts.push(`## ${texts2.harness.retryContext}`);
     parts.push("");
     const phaseName = phaseLabel[retryContext.previousPhase || ""] || retryContext.previousPhase;
-    parts.push(texts.harness.retryAttemptInfo.replace("{attempt}", String(retryContext.attemptNumber)).replace("{phase}", phaseName));
+    parts.push(texts2.harness.retryAttemptInfo.replace("{attempt}", String(retryContext.attemptNumber)).replace("{phase}", phaseName));
     parts.push("");
-    parts.push(`**${texts.harness.previousFailureReason}:**`);
+    parts.push(`**${texts2.harness.previousFailureReason}:**`);
     parts.push(`> ${retryContext.previousFailureReason}`);
     parts.push("");
     if (retryContext.partialProgress?.completedCheckpoints?.length) {
-      parts.push(`**${texts.harness.partialProgress}:**`);
+      parts.push(`**${texts2.harness.partialProgress}:**`);
       for (const cp of retryContext.partialProgress.completedCheckpoints) {
         parts.push(`- \u2705 ${cp}`);
       }
       parts.push("");
     }
     if (retryContext.upstreamFailureInfo) {
-      parts.push(`**${texts.harness.upstreamFailureInfo}:**`);
-      parts.push(`- \u4E0A\u6E38\u4EFB\u52A1: ${retryContext.upstreamFailureInfo.taskId}`);
-      parts.push(`- \u5931\u8D25\u539F\u56E0: ${retryContext.upstreamFailureInfo.reason}`);
-      parts.push(`- \u5931\u8D25\u65F6\u95F4: ${retryContext.upstreamFailureInfo.failedAt}`);
+      parts.push(`**${texts2.harness.upstreamFailureInfo}:**`);
+      parts.push(`- ${texts2.harness.logs.upstreamTask}: ${retryContext.upstreamFailureInfo.taskId}`);
+      parts.push(`- ${texts2.harness.previousFailureReason}: ${retryContext.upstreamFailureInfo.reason}`);
+      parts.push(`- ${texts2.harness.logs.failureTime}: ${retryContext.upstreamFailureInfo.failedAt}`);
       parts.push("");
     }
-    parts.push("\u8BF7\u53C2\u8003\u524D\u6B21\u5931\u8D25\u539F\u56E0\uFF0C\u907F\u514D\u91CD\u590D\u76F8\u540C\u7684\u95EE\u9898\u3002");
+    parts.push(texts2.harness.logs.retryReferenceNote);
     parts.push("");
     return parts.join(`
 `);
@@ -32505,46 +32193,46 @@ ${roleTemplate.extraInstructions.map((inst, i) => `${i + 1}. ${inst}`).join(`
     fs23.writeFileSync(reportPath, content, "utf-8");
   }
   formatDevReport(report) {
-    const texts = t(this.config.cwd);
+    const texts2 = t(this.config.cwd);
     const lines = [
-      `# ${texts.harness.reports.devReportTitle} - ${report.taskId}`,
+      `# ${texts2.harness.reports.devReportTitle} - ${report.taskId}`,
       "",
-      `**${texts.harness.reports.statusLabel}**: ${report.status}`,
-      `**${texts.harness.reports.startTimeLabel}**: ${report.startTime}`,
-      `**${texts.harness.reports.endTimeLabel}**: ${report.endTime}`,
-      `**${texts.harness.reports.durationLabel}**: ${(report.duration / 1000).toFixed(1)}s`,
+      `**${texts2.harness.reports.statusLabel}**: ${report.status}`,
+      `**${texts2.harness.reports.startTimeLabel}**: ${report.startTime}`,
+      `**${texts2.harness.reports.endTimeLabel}**: ${report.endTime}`,
+      `**${texts2.harness.reports.durationLabel}**: ${(report.duration / 1000).toFixed(1)}s`,
       ""
     ];
     if (report.error) {
-      lines.push(`## ${texts.harness.reports.errorInfoSection}`);
+      lines.push(`## ${texts2.harness.reports.errorInfoSection}`);
       lines.push("```");
       lines.push(report.error);
       lines.push("```");
       lines.push("");
     }
     if (report.changes.length > 0) {
-      lines.push(`## ${texts.harness.reports.codeChangesSection}`);
+      lines.push(`## ${texts2.harness.reports.codeChangesSection}`);
       report.changes.forEach((change) => {
         lines.push(`- ${change}`);
       });
       lines.push("");
     }
     if (report.evidence.length > 0) {
-      lines.push(`## ${texts.harness.reports.evidenceFilesSection}`);
+      lines.push(`## ${texts2.harness.reports.evidenceFilesSection}`);
       report.evidence.forEach((evidence) => {
         lines.push(`- ${evidence}`);
       });
       lines.push("");
     }
     if (report.checkpointsCompleted.length > 0) {
-      lines.push(`## ${texts.harness.reports.completedCheckpointsSection}`);
+      lines.push(`## ${texts2.harness.reports.completedCheckpointsSection}`);
       report.checkpointsCompleted.forEach((cp) => {
         lines.push(`- ${cp}`);
       });
       lines.push("");
     }
     if (report.claudeOutput) {
-      lines.push(`## ${texts.harness.reports.claudeOutputSection}`);
+      lines.push(`## ${texts2.harness.reports.claudeOutputSection}`);
       lines.push("```");
       lines.push(report.claudeOutput.substring(0, 5000));
       lines.push("```");
@@ -32558,7 +32246,6 @@ ${roleTemplate.extraInstructions.map((inst, i) => `${i + 1}. ${inst}`).join(`
 init_harness_helpers();
 init_headless_agent();
 init_contradiction_detector();
-init_feedback_constraint_engine();
 
 // src/utils/validation-rules/verdict-rules.ts
 var verdictResultMarker = {
@@ -32716,10 +32403,10 @@ class HarnessCodeReviewer {
     this.config = config;
   }
   async review(task, devReport, retryContext) {
-    const texts = t(this.config.cwd);
+    const texts2 = t(this.config.cwd);
     console.log(`
-\uD83D\uDD0D ${texts.harness.logs.codeReviewPhase}`);
-    console.log(`   ${texts.harness.logs.taskLabel}: ${task.title}`);
+\uD83D\uDD0D ${texts2.harness.logs.codeReviewPhase}`);
+    console.log(`   ${texts2.harness.logs.taskLabel}: ${task.title}`);
     const verdict = {
       taskId: task.id,
       result: "PASS",
@@ -32731,7 +32418,7 @@ class HarnessCodeReviewer {
     };
     if (devReport.status !== "success") {
       verdict.result = "NOPASS";
-      verdict.reason = `${texts.harness.logs.devPhaseNotComplete}: ${devReport.status}`;
+      verdict.reason = `${texts2.harness.logs.devPhaseNotComplete}: ${devReport.status}`;
       if (devReport.error) {
         verdict.reason += ` - ${devReport.error}`;
       }
@@ -32740,11 +32427,11 @@ class HarnessCodeReviewer {
     }
     try {
       const codeReviewCheckpoints = this.getCodeReviewCheckpoints(task);
-      console.log(`   \uD83D\uDCCB ${texts.harness.logs.codeReviewCheckpoints}: ${codeReviewCheckpoints.length}`);
+      console.log(`   \uD83D\uDCCB ${texts2.harness.logs.codeReviewCheckpoints}: ${codeReviewCheckpoints.length}`);
       if (codeReviewCheckpoints.length === 0) {
         verdict.result = "PASS";
-        verdict.reason = texts.harness.logs.noCodeReviewCheckpoints;
-        console.log(`   \u2705 ${texts.harness.logs.noCodeReviewCheckpoints}`);
+        verdict.reason = texts2.harness.logs.noCodeReviewCheckpoints;
+        console.log(`   \u2705 ${texts2.harness.logs.noCodeReviewCheckpoints}`);
       } else {
         const reviewResult = await this.runCodeReview(task, devReport, codeReviewCheckpoints, retryContext);
         verdict.result = reviewResult.passed ? "PASS" : "NOPASS";
@@ -32754,23 +32441,23 @@ class HarnessCodeReviewer {
         verdict.details = reviewResult.details;
         const contradiction = detectContradiction(verdict.result, verdict.reason || "");
         if (contradiction.hasContradiction && contradiction.correctedResult) {
-          console.log(`   \u26A0\uFE0F  ${texts.harness.logs.contradictionDetected}: ${contradiction.reason}`);
+          console.log(`   \u26A0\uFE0F  ${texts2.harness.logs.contradictionDetected}: ${contradiction.reason}`);
           verdict.result = contradiction.correctedResult;
-          verdict.reason += ` [${texts.harness.logs.contradictionDetected}: ${contradiction.reason}]`;
+          verdict.reason += ` [${texts2.harness.logs.contradictionDetected}: ${contradiction.reason}]`;
         }
         if (verdict.result === "PASS") {
           console.log(`
-   \u2705 ${texts.harness.logs.codeReviewPassed}`);
+   \u2705 ${texts2.harness.logs.codeReviewPassed}`);
         } else {
           console.log(`
-   \u274C ${texts.harness.logs.codeReviewFailed}: ${verdict.reason}`);
+   \u274C ${texts2.harness.logs.codeReviewFailed}: ${verdict.reason}`);
         }
       }
     } catch (error) {
       verdict.result = "NOPASS";
-      verdict.reason = `${texts.harness.logs.codeReviewError}: ${error instanceof Error ? error.message : String(error)}`;
+      verdict.reason = `${texts2.harness.logs.codeReviewError}: ${error instanceof Error ? error.message : String(error)}`;
       console.log(`
-   \u274C ${texts.harness.logs.codeReviewError}: ${verdict.reason}`);
+   \u274C ${texts2.harness.logs.codeReviewError}: ${verdict.reason}`);
     }
     await this.saveReport(task.id, verdict);
     return verdict;
@@ -32779,12 +32466,12 @@ class HarnessCodeReviewer {
     return filterCheckpoints(task, (cp) => cp.category === "code_review" || cp.verification?.method === "code_review" || cp.verification?.method === "lint" || cp.verification?.method === "architect_review");
   }
   async runCodeReview(task, devReport, checkpoints, retryContext) {
-    const texts = t(this.config.cwd);
+    const texts2 = t(this.config.cwd);
     const prompt = this.buildCodeReviewPrompt(task, devReport, checkpoints, retryContext);
     console.log(`
-   \uD83D\uDCDD ${texts.harness.logs.codeReviewPromptGenerated}`);
+   \uD83D\uDCDD ${texts2.harness.logs.codeReviewPromptGenerated}`);
     console.log(`
-   \uD83E\uDD16 ${texts.harness.logs.startingCodeReviewSession}`);
+   \uD83E\uDD16 ${texts2.harness.logs.startingCodeReviewSession}`);
     const agent = getAgent(this.config.cwd);
     const effectiveTools = buildEffectiveTools("codeReview", this.config.cwd, task);
     const invokeOptions = {
@@ -32798,12 +32485,12 @@ class HarnessCodeReviewer {
     const engine = createSessionAwareEngine("markdown", [verdictResultMarker, verdictHasReason], 1);
     const engineResult = await engine.runWithFeedback(agent.invoke.bind(agent), prompt, invokeOptions);
     if (engineResult.retries > 0) {
-      console.log(`   \uD83D\uDD04 ${texts.harness.logs.codeReviewRetry.replace("{retries}", String(engineResult.retries))}`);
+      console.log(`   \uD83D\uDD04 ${texts2.harness.logs.codeReviewRetry.replace("{retries}", String(engineResult.retries))}`);
     }
     if (!engineResult.result.success) {
       return {
         passed: false,
-        reason: `${texts.harness.logs.codeReviewSessionFailed}: ${engineResult.result.error || "unknown error"}`,
+        reason: `${texts2.harness.logs.codeReviewSessionFailed}: ${engineResult.result.error || "unknown error"}`,
         issues: [],
         failedCheckpoints: []
       };
@@ -32812,28 +32499,28 @@ class HarnessCodeReviewer {
   }
   buildCodeReviewPrompt(task, devReport, checkpoints, retryContext) {
     const roleTemplate = getCodeReviewRoleTemplate(task.recommendedRole);
-    const retryContextSection = retryContext?.previousFailureReason ? `## \u524D\u6B21\u5BA1\u6838\u5931\u8D25\u539F\u56E0
+    const retryContextSection = retryContext?.previousFailureReason ? `## ${texts.harness.logs.previousReviewFailureReason}
 
-\u4E0A\u4E00\u6B21\u4EE3\u7801\u5BA1\u6838\u672A\u901A\u8FC7\uFF0C\u5931\u8D25\u539F\u56E0\u5982\u4E0B\uFF1A
+${texts.harness.logs.previousCodeReviewFailed}:
 
 > ${retryContext.previousFailureReason}
 
-\u8BF7\u786E\u4FDD\u672C\u6B21\u5BA1\u6838\u8986\u76D6\u524D\u6B21\u53D1\u73B0\u7684\u95EE\u9898\u662F\u5426\u5DF2\u4FEE\u590D\u3002` : "";
-    const descriptionSection = task.description ? `## \u4EFB\u52A1\u63CF\u8FF0
+${texts.harness.logs.ensureFixesCover}.` : "";
+    const descriptionSection = task.description ? `## ${texts.harness.taskDescription}
 ${task.description}` : "";
     const checkpointsList = checkpoints.map((cp, i) => {
       let line = `${i + 1}. [${cp.id}] ${cp.description}`;
       if (cp.verification?.commands) {
         line += `
-   \u9A8C\u8BC1\u547D\u4EE4: ${cp.verification.commands.join(", ")}`;
+   ${texts.harness.logs.verificationCommands}: ${cp.verification.commands.join(", ")}`;
       }
       return line;
     }).join(`
 `);
-    const changesSection = devReport.changes.length > 0 ? `## \u5F00\u53D1\u8005\u58F0\u660E\u7684\u53D8\u66F4
+    const changesSection = devReport.changes.length > 0 ? `## ${texts.harness.logs.developerDeclaredChanges}
 ${devReport.changes.map((change) => `- ${change}`).join(`
 `)}` : "";
-    const evidenceSection = devReport.evidence.length > 0 ? `## \u63D0\u4EA4\u7684\u8BC1\u636E
+    const evidenceSection = devReport.evidence.length > 0 ? `## ${texts.harness.logs.submittedEvidence}
 ${devReport.evidence.map((evidence) => `- ${evidence}`).join(`
 `)}` : "";
     const reviewFocus = roleTemplate.reviewFocus.map((focus, i) => `${i + 1}. ${focus}`).join(`
@@ -32875,34 +32562,34 @@ ${devReport.evidence.map((evidence) => `- ${evidence}`).join(`
     await saveReport(reportPath, content);
   }
   formatReport(verdict) {
-    const texts = t(this.config.cwd);
+    const texts2 = t(this.config.cwd);
     const lines = [
-      `# ${texts.harness.reports.codeReviewReportTitle} - ${verdict.taskId}`,
+      `# ${texts2.harness.reports.codeReviewReportTitle} - ${verdict.taskId}`,
       "",
-      `**${texts.harness.reports.resultLabel}**: ${verdict.result === "PASS" ? "\u2705 PASS" : "\u274C NOPASS"}`,
-      `**${texts.harness.reports.reviewedAtLabel}**: ${verdict.reviewedAt}`,
-      `**${texts.harness.reports.reviewedByLabel}**: ${verdict.reviewedBy}`,
+      `**${texts2.harness.reports.resultLabel}**: ${verdict.result === "PASS" ? "\u2705 PASS" : "\u274C NOPASS"}`,
+      `**${texts2.harness.reports.reviewedAtLabel}**: ${verdict.reviewedAt}`,
+      `**${texts2.harness.reports.reviewedByLabel}**: ${verdict.reviewedBy}`,
       "",
-      `## ${texts.harness.reports.reasonSection}`,
+      `## ${texts2.harness.reports.reasonSection}`,
       verdict.reason,
       ""
     ];
     if (verdict.codeQualityIssues.length > 0) {
-      lines.push(`## ${texts.harness.reports.codeQualityIssuesSection}`);
+      lines.push(`## ${texts2.harness.reports.codeQualityIssuesSection}`);
       verdict.codeQualityIssues.forEach((issue) => {
         lines.push(`- ${issue}`);
       });
       lines.push("");
     }
     if (verdict.failedCheckpoints.length > 0) {
-      lines.push(`## ${texts.harness.reports.failedCheckpointsSection}`);
+      lines.push(`## ${texts2.harness.reports.failedCheckpointsSection}`);
       verdict.failedCheckpoints.forEach((checkpoint) => {
         lines.push(`- ${checkpoint}`);
       });
       lines.push("");
     }
     if (verdict.details) {
-      lines.push(`## ${texts.harness.reports.detailsSection}`);
+      lines.push(`## ${texts2.harness.reports.detailsSection}`);
       lines.push(verdict.details);
       lines.push("");
     }
@@ -32917,7 +32604,6 @@ init_harness_helpers();
 init_headless_agent();
 init_checkpoint();
 init_contradiction_detector();
-init_feedback_constraint_engine();
 init_prompt_templates();
 init_i18n();
 class HarnessQATester {
@@ -32926,10 +32612,10 @@ class HarnessQATester {
     this.config = config;
   }
   async verify(task, codeReviewVerdict, retryContext) {
-    const texts = t(this.config.cwd);
+    const texts2 = t(this.config.cwd);
     console.log(`
-\uD83E\uDDEA ${texts.harness.logs.qaPhase}`);
-    console.log(`   ${texts.harness.logs.taskLabel}: ${task.title}`);
+\uD83E\uDDEA ${texts2.harness.logs.qaPhase}`);
+    console.log(`   ${texts2.harness.logs.taskLabel}: ${task.title}`);
     const verdict = {
       taskId: task.id,
       result: "PASS",
@@ -32943,17 +32629,17 @@ class HarnessQATester {
     };
     if (codeReviewVerdict.result !== "PASS") {
       verdict.result = "NOPASS";
-      verdict.reason = `${texts.harness.logs.qaSkippedDueToCodeReview}: ${codeReviewVerdict.reason}`;
+      verdict.reason = `${texts2.harness.logs.qaSkippedDueToCodeReview}: ${codeReviewVerdict.reason}`;
       await this.saveReport(task.id, verdict);
       return verdict;
     }
     try {
       const qaCheckpoints = this.getQACheckpoints(task);
-      console.log(`   \uD83D\uDCCB ${texts.harness.logs.qaCheckpoints}: ${qaCheckpoints.length}`);
+      console.log(`   \uD83D\uDCCB ${texts2.harness.logs.qaCheckpoints}: ${qaCheckpoints.length}`);
       if (qaCheckpoints.length === 0) {
         verdict.result = "PASS";
-        verdict.reason = texts.harness.logs.noQACheckpoints;
-        console.log(`   \u2705 ${texts.harness.logs.noQACheckpoints}`);
+        verdict.reason = texts2.harness.logs.noQACheckpoints;
+        console.log(`   \u2705 ${texts2.harness.logs.noQACheckpoints}`);
       } else {
         const humanCheckpoints = qaCheckpoints.filter((cp) => cp.requiresHuman === true);
         verdict.humanVerificationCheckpoints = humanCheckpoints.map((cp) => cp.id);
@@ -32965,13 +32651,13 @@ class HarnessQATester {
         verdict.details = qaResult.details;
         const contradiction = detectContradiction(verdict.result, verdict.reason || "");
         if (contradiction.hasContradiction && contradiction.correctedResult) {
-          console.log(`   \u26A0\uFE0F  ${texts.harness.logs.contradictionDetected}: ${contradiction.reason}`);
+          console.log(`   \u26A0\uFE0F  ${texts2.harness.logs.contradictionDetected}: ${contradiction.reason}`);
           verdict.result = contradiction.correctedResult;
-          verdict.reason += ` [${texts.harness.logs.contradictionDetected}: ${contradiction.reason}]`;
+          verdict.reason += ` [${texts2.harness.logs.contradictionDetected}: ${contradiction.reason}]`;
         }
         if (humanCheckpoints.length > 0) {
           verdict.requiresHuman = true;
-          const deferredInfo = `${texts.harness.logs.deferredCheckpointsInfo.replace("{count}", String(humanCheckpoints.length))}: ${humanCheckpoints.map((cp) => cp.id).join(", ")}`;
+          const deferredInfo = `${texts2.harness.logs.deferredCheckpointsInfo.replace("{count}", String(humanCheckpoints.length))}: ${humanCheckpoints.map((cp) => cp.id).join(", ")}`;
           verdict.details = verdict.details ? `${verdict.details}
 ${deferredInfo}` : deferredInfo;
           console.log(`
@@ -32979,20 +32665,20 @@ ${deferredInfo}` : deferredInfo;
         }
         if (verdict.result === "PASS" && !verdict.requiresHuman) {
           console.log(`
-   \u2705 ${texts.harness.logs.qaPassed}`);
+   \u2705 ${texts2.harness.logs.qaPassed}`);
         } else if (verdict.result === "PASS" && verdict.requiresHuman) {
           console.log(`
-   \u23F3 ${texts.harness.logs.qaPassedWithHuman}`);
+   \u23F3 ${texts2.harness.logs.qaPassedWithHuman}`);
         } else {
           console.log(`
-   \u274C ${texts.harness.logs.qaFailed}: ${verdict.reason}`);
+   \u274C ${texts2.harness.logs.qaFailed}: ${verdict.reason}`);
         }
       }
     } catch (error) {
       verdict.result = "NOPASS";
-      verdict.reason = `${texts.harness.logs.qaError}: ${error instanceof Error ? error.message : String(error)}`;
+      verdict.reason = `${texts2.harness.logs.qaError}: ${error instanceof Error ? error.message : String(error)}`;
       console.log(`
-   \u274C ${texts.harness.logs.qaError}: ${verdict.reason}`);
+   \u274C ${texts2.harness.logs.qaError}: ${verdict.reason}`);
     }
     await this.saveReport(task.id, verdict);
     return verdict;
@@ -33001,7 +32687,7 @@ ${deferredInfo}` : deferredInfo;
     return filterCheckpoints(task, (cp) => cp.category === "qa_verification" || cp.verification?.method === "unit_test" || cp.verification?.method === "functional_test" || cp.verification?.method === "integration_test" || cp.verification?.method === "e2e_test" || cp.verification?.method === "automated" || cp.requiresHuman === true);
   }
   async runQAVerification(task, codeReviewVerdict, checkpoints, retryContext) {
-    const texts = t(this.config.cwd);
+    const texts2 = t(this.config.cwd);
     const automatedCheckpoints = checkpoints.filter((cp) => !cp.requiresHuman);
     const humanCheckpoints = checkpoints.filter((cp) => cp.requiresHuman === true);
     const checkpointsWithoutCommands = automatedCheckpoints.filter((cp) => {
@@ -33010,26 +32696,26 @@ ${deferredInfo}` : deferredInfo;
     });
     if (checkpointsWithoutCommands.length > 0) {
       console.log(`
-   \u26A0\uFE0F  ${texts.harness.logs.checkpointWarning.replace("{count}", String(checkpointsWithoutCommands.length))}:`);
+   \u26A0\uFE0F  ${texts2.harness.logs.checkpointWarning.replace("{count}", String(checkpointsWithoutCommands.length))}:`);
       for (const cp of checkpointsWithoutCommands) {
         const result = validateCheckpointVerification(cp);
-        console.log(`      - [${cp.id}] ${result.warning || texts.harness.logs.checkpointWarningDetail}`);
+        console.log(`      - [${cp.id}] ${result.warning || texts2.harness.logs.checkpointWarningDetail}`);
       }
-      console.log(`      ${texts.harness.logs.checkpointWarningFallback}`);
+      console.log(`      ${texts2.harness.logs.checkpointWarningFallback}`);
     }
     if (automatedCheckpoints.length === 0) {
       return {
         passed: true,
-        reason: texts.harness.logs.noAutomatedQACheckpoints,
+        reason: texts2.harness.logs.noAutomatedQACheckpoints,
         failures: [],
         failedCheckpoints: []
       };
     }
     const prompt = this.buildQAPrompt(task, codeReviewVerdict, automatedCheckpoints, retryContext);
     console.log(`
-   \uD83D\uDCDD ${texts.harness.logs.qaPromptGenerated}`);
+   \uD83D\uDCDD ${texts2.harness.logs.qaPromptGenerated}`);
     console.log(`
-   \uD83E\uDD16 ${texts.harness.logs.startingQASession}`);
+   \uD83E\uDD16 ${texts2.harness.logs.startingQASession}`);
     const agent = getAgent(this.config.cwd);
     const effectiveTools = buildEffectiveTools("qaVerification", this.config.cwd, task);
     const invokeOptions = {
@@ -33043,27 +32729,27 @@ ${deferredInfo}` : deferredInfo;
     const engine = createSessionAwareEngine("markdown", [qaVerdictResultMarker, qaVerdictHasReason], 1);
     const engineResult = await engine.runWithFeedback(agent.invoke.bind(agent), prompt, invokeOptions);
     if (engineResult.retries > 0) {
-      console.log(`   \uD83D\uDD04 ${texts.harness.logs.qaRetry.replace("{retries}", String(engineResult.retries))}`);
+      console.log(`   \uD83D\uDD04 ${texts2.harness.logs.qaRetry.replace("{retries}", String(engineResult.retries))}`);
     }
     if (!engineResult.result.success) {
       return {
         passed: false,
-        reason: `${texts.harness.logs.qaSessionFailed}: ${engineResult.result.error || "unknown error"}`,
+        reason: `${texts2.harness.logs.qaSessionFailed}: ${engineResult.result.error || "unknown error"}`,
         failures: [],
         failedCheckpoints: []
       };
     }
     if (!engineResult.passed) {
       const violationMessages = engineResult.violations.map((v) => `${v.ruleId}: ${v.message}`).join("; ");
-      console.log(`   \u26A0\uFE0F  ${texts.harness.logs.qaOutputValidationFailed}: ${violationMessages}`);
+      console.log(`   \u26A0\uFE0F  ${texts2.harness.logs.qaOutputValidationFailed}: ${violationMessages}`);
       const rawOutput = engineResult.result.output || "";
       const parsed = this.parseQAResult(rawOutput);
-      if (parsed.reason && parsed.reason !== texts.harness.logs.cannotParseVerdict) {
+      if (parsed.reason && parsed.reason !== texts2.harness.logs.cannotParseVerdict) {
         return parsed;
       }
       return {
         passed: false,
-        reason: `${texts.harness.logs.qaOutputValidationFailed}: ${violationMessages}`,
+        reason: `${texts2.harness.logs.qaOutputValidationFailed}: ${violationMessages}`,
         failures: [],
         failedCheckpoints: []
       };
@@ -33075,39 +32761,39 @@ ${deferredInfo}` : deferredInfo;
     let retryContextSection = "";
     if (retryContext?.previousFailureReason) {
       retryContextSection = [
-        "## \u524D\u6B21\u9A8C\u8BC1\u5931\u8D25\u539F\u56E0",
+        `## ${texts.harness.logs.previousQAFailureReason}`,
         "",
-        "\u4E0A\u4E00\u6B21 QA \u9A8C\u8BC1\u672A\u901A\u8FC7\uFF0C\u5931\u8D25\u539F\u56E0\u5982\u4E0B\uFF1A",
+        `${texts.harness.logs.previousQAVerificationFailed}:`,
         "",
         `> ${retryContext.previousFailureReason}`,
         "",
-        "\u8BF7\u7279\u522B\u6CE8\u610F\uFF1A",
-        "- \u4ED4\u7EC6\u5BA1\u89C6\u524D\u6B21\u5931\u8D25\u539F\u56E0\u662F\u5426\u6784\u6210\u771F\u6B63\u7684\u529F\u80FD\u7F3A\u9677\uFF08\u53C2\u8003\u4E0A\u8FF0\u9A8C\u8BC1\u539F\u5219\uFF09",
-        "- \u5982\u679C\u524D\u6B21\u5224\u5B9A\u662F\u57FA\u4E8E\u5F62\u5F0F\u8981\u6C42\u800C\u975E\u529F\u80FD\u7F3A\u9677\uFF0C\u672C\u6B21\u5E94\u4FEE\u6B63\u5224\u5B9A\u4E3A PASS",
-        "- \u5982\u679C\u524D\u6B21\u5931\u8D25\u539F\u56E0\u4ECD\u7136\u5B58\u5728\u4E14\u786E\u5C5E\u529F\u80FD\u95EE\u9898\uFF0C\u7EE7\u7EED\u4FDD\u6301 NOPASS",
+        `${texts.harness.logs.pleaseNote}:`,
+        `- ${texts.harness.logs.reviewPreviousFailure}`,
+        `- ${texts.harness.logs.formalRequirementFix}`,
+        `- ${texts.harness.logs.realIssuePersist}`,
         ""
       ].join(`
 `);
     }
-    const descriptionSection = task.description ? `## \u4EFB\u52A1\u63CF\u8FF0
+    const descriptionSection = task.description ? `## ${texts.harness.taskDescription}
 ${task.description}` : "";
     const checkpointsList = checkpoints.map((cp, i) => {
       const lines = [`${i + 1}. [${cp.id}] ${cp.description}`];
       if (cp.verification?.commands && cp.verification.commands.length > 0) {
-        lines.push(`   \u9A8C\u8BC1\u547D\u4EE4: ${cp.verification.commands.join(", ")}`);
+        lines.push(`   ${texts.harness.logs.verificationCommands}: ${cp.verification.commands.join(", ")}`);
       } else if (cp.verification?.steps && cp.verification.steps.length > 0) {
-        lines.push(`   \u9A8C\u8BC1\u6B65\u9AA4: ${cp.verification.steps.join("\uFF1B")}`);
+        lines.push(`   ${texts.harness.logs.verificationSteps}: ${cp.verification.steps.join("\uFF1B")}`);
       } else {
         const fallback = generateFallbackVerification(cp.description, task);
         if (fallback.steps && fallback.steps.length > 0) {
-          lines.push(`   \u5EFA\u8BAE\u9A8C\u8BC1\u6B65\u9AA4: ${fallback.steps.join("\uFF1B")}`);
+          lines.push(`   ${texts.harness.logs.suggestedVerificationSteps}: ${fallback.steps.join("\uFF1B")}`);
         }
         if (fallback.commands && fallback.commands.length > 0) {
-          lines.push(`   \u56DE\u9000\u9A8C\u8BC1\u547D\u4EE4: ${fallback.commands.join(", ")}`);
+          lines.push(`   ${texts.harness.logs.fallbackVerificationCommands}: ${fallback.commands.join(", ")}`);
         }
       }
       if (cp.verification?.expected) {
-        lines.push(`   \u671F\u671B\u7ED3\u679C: ${cp.verification.expected}`);
+        lines.push(`   ${texts.harness.logs.expectedResult}: ${cp.verification.expected}`);
       }
       const cpValidation = validateCheckpointVerification(cp);
       if (!cpValidation.valid && cpValidation.warning) {
@@ -33156,43 +32842,43 @@ ${task.description}` : "";
     await saveReport(reportPath, content);
   }
   formatReport(verdict) {
-    const texts = t(this.config.cwd);
+    const texts2 = t(this.config.cwd);
     const lines = [
-      `# ${texts.harness.reports.qaReportTitle} - ${verdict.taskId}`,
+      `# ${texts2.harness.reports.qaReportTitle} - ${verdict.taskId}`,
       "",
-      `**${texts.harness.reports.resultLabel}**: ${verdict.result === "PASS" ? "\u2705 PASS" : "\u274C NOPASS"}`,
-      `**${texts.harness.reports.reviewedAtLabel}**: ${verdict.verifiedAt}`,
-      `**${texts.harness.reports.reviewedByLabel}**: ${verdict.verifiedBy}`,
-      `**${texts.harness.reports.requiresHumanLabel}**: ${verdict.requiresHuman ? texts.harness.reports.yes : texts.harness.reports.no}`,
+      `**${texts2.harness.reports.resultLabel}**: ${verdict.result === "PASS" ? "\u2705 PASS" : "\u274C NOPASS"}`,
+      `**${texts2.harness.reports.reviewedAtLabel}**: ${verdict.verifiedAt}`,
+      `**${texts2.harness.reports.reviewedByLabel}**: ${verdict.verifiedBy}`,
+      `**${texts2.harness.reports.requiresHumanLabel}**: ${verdict.requiresHuman ? texts2.harness.reports.yes : texts2.harness.reports.no}`,
       "",
-      `## ${texts.harness.reports.reasonSection}`,
+      `## ${texts2.harness.reports.reasonSection}`,
       verdict.reason,
       ""
     ];
     if (verdict.testFailures.length > 0) {
-      lines.push(`## ${texts.harness.reports.testFailuresSection}`);
+      lines.push(`## ${texts2.harness.reports.testFailuresSection}`);
       verdict.testFailures.forEach((failure) => {
         lines.push(`- ${failure}`);
       });
       lines.push("");
     }
     if (verdict.failedCheckpoints.length > 0) {
-      lines.push(`## ${texts.harness.reports.failedCheckpointsSection}`);
+      lines.push(`## ${texts2.harness.reports.failedCheckpointsSection}`);
       verdict.failedCheckpoints.forEach((checkpoint) => {
         lines.push(`- ${checkpoint}`);
       });
       lines.push("");
     }
     if (verdict.humanVerificationCheckpoints.length > 0) {
-      lines.push(`## ${texts.harness.reports.humanVerificationSection}`);
-      lines.push(`*${texts.harness.reports.humanVerificationNote}*`);
+      lines.push(`## ${texts2.harness.reports.humanVerificationSection}`);
+      lines.push(`*${texts2.harness.reports.humanVerificationNote}*`);
       verdict.humanVerificationCheckpoints.forEach((checkpoint) => {
         lines.push(`- ${checkpoint} [deferred]`);
       });
       lines.push("");
     }
     if (verdict.details) {
-      lines.push(`## ${texts.harness.reports.detailsSection}`);
+      lines.push(`## ${texts2.harness.reports.detailsSection}`);
       lines.push(verdict.details);
       lines.push("");
     }
@@ -33207,7 +32893,6 @@ init_task2();
 init_harness_helpers();
 init_headless_agent();
 init_contradiction_detector();
-init_feedback_constraint_engine();
 import * as fs24 from "fs";
 import * as path21 from "path";
 init_prompt_templates();
@@ -33220,9 +32905,9 @@ class HarnessEvaluator {
     this.config = config;
   }
   async evaluate(task, devReport, contract, retryContext) {
-    const texts = t(this.config.cwd);
-    console.log(`   ${texts.harness.logs.evalTaskLabel}: ${task.title}`);
-    console.log(`   ${texts.harness.logs.devStatusLabel}: ${devReport.status}`);
+    const texts2 = t(this.config.cwd);
+    console.log(`   ${texts2.harness.logs.evalTaskLabel}: ${task.title}`);
+    console.log(`   ${texts2.harness.logs.devStatusLabel}: ${devReport.status}`);
     const verdict = {
       taskId: task.id,
       result: "NOPASS",
@@ -33234,7 +32919,7 @@ class HarnessEvaluator {
     };
     if (devReport.status !== "success") {
       verdict.result = "NOPASS";
-      verdict.reason = `${texts.harness.logs.devPhaseNotComplete}: ${devReport.status}`;
+      verdict.reason = `${texts2.harness.logs.devPhaseNotComplete}: ${devReport.status}`;
       verdict.inferenceType = "explicit_match";
       if (devReport.error) {
         verdict.reason += ` - ${devReport.error}`;
@@ -33255,19 +32940,19 @@ class HarnessEvaluator {
       const phantomTasks = this.detectPhantomTasks(task.id, devReport);
       if (phantomTasks.length > 0) {
         verdict.result = "NOPASS";
-        verdict.reason = `${texts.harness.logs.phantomTaskViolation.replace("{count}", String(phantomTasks.length)).replace("{tasks}", phantomTasks.join(", "))}`;
-        verdict.failedCriteria = [texts.harness.logs.phantomTaskCriteria];
-        verdict.failedCheckpoints = phantomTasks.map((tid) => `${texts.harness.logs.phantomTaskPrefix}: ${tid}`);
-        verdict.details = texts.harness.logs.phantomTaskDetails;
+        verdict.reason = `${texts2.harness.logs.phantomTaskViolation.replace("{count}", String(phantomTasks.length)).replace("{tasks}", phantomTasks.join(", "))}`;
+        verdict.failedCriteria = [texts2.harness.logs.phantomTaskCriteria];
+        verdict.failedCheckpoints = phantomTasks.map((tid) => `${texts2.harness.logs.phantomTaskPrefix}: ${tid}`);
+        verdict.details = texts2.harness.logs.phantomTaskDetails;
         verdict.inferenceType = "explicit_match";
         console.log(`
-   \u274C ${texts.harness.logs.phantomTaskAutoNopass}`);
+   \u274C ${texts2.harness.logs.phantomTaskAutoNopass}`);
         await this.saveReviewReport(task.id, verdict, devReport);
         return verdict;
       }
       const prompt = this.buildEvaluationPrompt(task, devReport, contract, phantomTasks, retryContext);
       console.log(`
-   \uD83D\uDCDD ${texts.harness.logs.evalPromptGenerated}`);
+   \uD83D\uDCDD ${texts2.harness.logs.evalPromptGenerated}`);
       const agent = getAgent(this.config.cwd);
       const effectiveTools = buildEffectiveTools("evaluation", this.config.cwd, task);
       const invokeOptions = {
@@ -33279,33 +32964,33 @@ class HarnessEvaluator {
         dangerouslySkipPermissions: effectiveTools.skipPermissions
       };
       console.log(`
-   \uD83D\uDD0D ${texts.harness.logs.startingEvalSession}`);
+   \uD83D\uDD0D ${texts2.harness.logs.startingEvalSession}`);
       const engine = createSessionAwareEngine("markdown", [verdictResultMarker, verdictHasReason], 2);
       const engineResult = await engine.runWithFeedback(agent.invoke.bind(agent), prompt, invokeOptions);
       if (engineResult.retries > 0) {
-        console.log(`   \uD83D\uDD04 ${texts.harness.logs.evalFormatRetry.replace("{retries}", String(engineResult.retries))}`);
+        console.log(`   \uD83D\uDD04 ${texts2.harness.logs.evalFormatRetry.replace("{retries}", String(engineResult.retries))}`);
       }
       const lastRawOutput = engineResult.result.output ?? "";
       this.saveRawEvaluationOutput(task.id, engineResult.result.output, engineResult.result.stderr || "", engineResult.result.success);
       if (!engineResult.result.output || engineResult.result.output.trim().length === 0) {
         verdict.result = "NOPASS";
-        verdict.reason = `${texts.harness.logs.emptyOutputError}${engineResult.result.stderr ? ` (stderr: ${engineResult.result.stderr.substring(0, 200)})` : ""}`;
+        verdict.reason = `${texts2.harness.logs.emptyOutputError}${engineResult.result.stderr ? ` (stderr: ${engineResult.result.stderr.substring(0, 200)})` : ""}`;
         verdict.inferenceType = "empty_output";
         console.log(`
-   \u274C ${texts.harness.logs.evalEmptyOutput}`);
+   \u274C ${texts2.harness.logs.evalEmptyOutput}`);
         if (engineResult.result.stderr) {
-          console.log(`   \uD83D\uDCDD ${texts.harness.logs.evalStderrPrefix}: ${engineResult.result.stderr.substring(0, 300)}`);
+          console.log(`   \uD83D\uDCDD ${texts2.harness.logs.evalStderrPrefix}: ${engineResult.result.stderr.substring(0, 300)}`);
         }
         await this.saveReviewReport(task.id, verdict, devReport);
         return verdict;
       }
       let evaluation = this.parseEvaluationResult(engineResult.result.output);
       if (evaluation.inferenceType === "parse_failure_default") {
-        console.log(`   \u26A0\uFE0F ${texts.harness.logs.evalParseFailureDefault}`);
+        console.log(`   \u26A0\uFE0F ${texts2.harness.logs.evalParseFailureDefault}`);
         evaluation = {
           ...evaluation,
           passed: true,
-          reason: texts.harness.logs.evalParseFailureDefaultReason.replace("{retries}", String(engineResult.retries))
+          reason: texts2.harness.logs.evalParseFailureDefaultReason.replace("{retries}", String(engineResult.retries))
         };
       }
       verdict.result = evaluation.passed ? "PASS" : "NOPASS";
@@ -33318,29 +33003,29 @@ class HarnessEvaluator {
       verdict.inferenceType = evaluation.inferenceType;
       const contradiction = detectContradiction(verdict.result, lastRawOutput || verdict.reason || "");
       if (contradiction.hasContradiction && contradiction.correctedResult) {
-        console.log(`   \u26A0\uFE0F  ${texts.harness.logs.contradictionDetected}: ${contradiction.reason}`);
+        console.log(`   \u26A0\uFE0F  ${texts2.harness.logs.contradictionDetected}: ${contradiction.reason}`);
         verdict.result = contradiction.correctedResult;
-        verdict.reason += ` [${texts.harness.logs.contradictionFix}: ${contradiction.reason}]`;
+        verdict.reason += ` [${texts2.harness.logs.contradictionFix}: ${contradiction.reason}]`;
       }
       if (verdict.result === "PASS") {
         console.log(`
-   \u2705 ${texts.harness.logs.evalPassed} [${texts.harness.reports.inferenceTypeLabel}: ${verdict.inferenceType || "unknown"}]`);
+   \u2705 ${texts2.harness.logs.evalPassed} [${texts2.harness.reports.inferenceTypeLabel}: ${verdict.inferenceType || "unknown"}]`);
       } else {
         console.log(`
-   \u274C ${texts.harness.logs.evalFailed} [${texts.harness.reports.inferenceTypeLabel}: ${verdict.inferenceType || "unknown"}]: ${verdict.reason}`);
+   \u274C ${texts2.harness.logs.evalFailed} [${texts2.harness.reports.inferenceTypeLabel}: ${verdict.inferenceType || "unknown"}]: ${verdict.reason}`);
       }
     } catch (error) {
       verdict.result = "NOPASS";
-      verdict.reason = `${texts.harness.logs.evalProcessError}: ${error instanceof Error ? error.message : String(error)}`;
+      verdict.reason = `${texts2.harness.logs.evalError}: ${error instanceof Error ? error.message : String(error)}`;
       verdict.inferenceType = "parse_failure_default";
       console.log(`
-   \u274C ${texts.harness.logs.evalError}: ${verdict.reason}`);
+   \u274C ${texts2.harness.logs.evalError}: ${verdict.reason}`);
     }
     await this.saveReviewReport(task.id, verdict, devReport);
     return verdict;
   }
   buildEvaluationPrompt(task, devReport, contract, phantomTasks = [], retryContext) {
-    const texts = t(this.config.cwd);
+    const texts2 = t(this.config.cwd);
     const contractCheckpoints = Array.isArray(contract.checkpoints) ? contract.checkpoints : [];
     const contractCriteria = Array.isArray(contract.acceptanceCriteria) ? contract.acceptanceCriteria : [];
     const contractCommands = Array.isArray(contract.verificationCommands) ? contract.verificationCommands : [];
@@ -33359,65 +33044,65 @@ class HarnessEvaluator {
     const isHumanCheckpoint = (cp) => humanCheckpointIds.has(cp) || humanCheckpointDescs.has(cp);
     const filteredContractCheckpoints = contractCheckpoints.filter((cp) => !isHumanCheckpoint(cp));
     const filteredDevCheckpoints = devCheckpointsCompleted.filter((cp) => !isHumanCheckpoint(cp));
-    const descriptionSection = task.description ? `## ${texts.harness.logs.taskDescriptionSection}
+    const descriptionSection = task.description ? `## ${texts2.harness.logs.taskDescriptionSection}
 ${task.description}
-` : `## ${texts.harness.logs.taskDescriptionSection}
-${texts.harness.logs.taskDescriptionEmpty}
+` : `## ${texts2.harness.logs.taskDescriptionSection}
+${texts2.harness.logs.taskDescriptionEmpty}
 `;
     const acceptanceCriteriaList = contractCriteria.length > 0 ? `${contractCriteria.map((criteria, i) => `${i + 1}. ${criteria}`).join(`
 `)}
-` : `${texts.harness.logs.acceptanceCriteriaEmpty}
+` : `${texts2.harness.logs.acceptanceCriteriaEmpty}
 `;
-    const verificationCommandsSection = contractCommands.length > 0 ? `## \u9A8C\u8BC1\u547D\u4EE4
-\u8BF7\u8FD0\u884C\u4EE5\u4E0B\u547D\u4EE4\u9A8C\u8BC1\u5B9E\u73B0:
+    const verificationCommandsSection = contractCommands.length > 0 ? `## ${texts2.harness.logs.verificationCommands}
+${texts2.harness.logs.runVerificationCommands}:
 \`\`\`bash
 ${contractCommands.join(`
 `)}
 \`\`\`
 ` : "";
-    const checkpointsSection = filteredContractCheckpoints.length > 0 ? `## ${texts.harness.logs.checkpointSectionTitle}
-${texts.harness.logs.checkpointSectionConfirm}${filteredContractCheckpoints.map((cp, i) => `${i + 1}. ${cp}`).join(`
+    const checkpointsSection = filteredContractCheckpoints.length > 0 ? `## ${texts2.harness.logs.checkpointSectionTitle}
+${texts2.harness.logs.checkpointSectionConfirm}${filteredContractCheckpoints.map((cp, i) => `${i + 1}. ${cp}`).join(`
 `)}
 ` : "";
-    const humanCheckpointsSection = humanCheckpointIds.size > 0 ? `## ${texts.harness.logs.aboutHumanVerification}
-${texts.harness.logs.humanVerificationNote.replace("{count}", String(humanCheckpointIds.size)).replace("{examples}", Array.from(humanCheckpointIds).slice(0, 3).join(", "))}
-${texts.harness.logs.humanVerificationExcluded}
+    const humanCheckpointsSection = humanCheckpointIds.size > 0 ? `## ${texts2.harness.logs.aboutHumanVerification}
+${texts2.harness.logs.humanVerificationNote.replace("{count}", String(humanCheckpointIds.size)).replace("{examples}", Array.from(humanCheckpointIds).slice(0, 3).join(", "))}
+${texts2.harness.logs.humanVerificationExcluded}
 ` : "";
-    const evidenceSection = devEvidence.length > 0 ? `## \u63D0\u4EA4\u7684\u8BC1\u636E
-\u5F00\u53D1\u8005\u63D0\u4EA4\u4E86\u4EE5\u4E0B\u8BC1\u636E:
+    const evidenceSection = devEvidence.length > 0 ? `## ${texts2.harness.logs.submittedEvidenceTitle}
+${texts2.harness.logs.developerSubmittedEvidence}:
 ${devEvidence.map((e) => `- ${e}`).join(`
 `)}
 ` : "";
-    const completedCheckpointsSection = filteredDevCheckpoints.length > 0 ? `## \u5F00\u53D1\u8005\u58F0\u660E\u7684\u5B8C\u6210\u68C0\u67E5\u70B9
+    const completedCheckpointsSection = filteredDevCheckpoints.length > 0 ? `## ${texts2.harness.logs.developerCompletedCheckpoints}
 ${filteredDevCheckpoints.map((cp) => `- ${cp}`).join(`
 `)}
 ` : "";
-    const phantomTasksSection = phantomTasks.length > 0 ? `## ${texts.harness.logs.phantomTaskDetectedTitle}
-${texts.harness.logs.phantomTaskViolation.replace("{count}", String(phantomTasks.length))}
+    const phantomTasksSection = phantomTasks.length > 0 ? `## ${texts2.harness.logs.phantomTaskDetectedTitle}
+${texts2.harness.logs.phantomTaskViolation.replace("{count}", String(phantomTasks.length))}
 ${phantomTasks.map((tid) => `- ${tid}`).join(`
 `)}
 
-${texts.harness.logs.phantomTaskProhibited}
-${texts.harness.logs.phantomTaskNopassRequirement}
+${texts2.harness.logs.phantomTaskProhibited}
+${texts2.harness.logs.phantomTaskNopassRequirement}
 ` : "";
     const template = loadPromptTemplate("evaluation", this.config.cwd);
     let retryContextSection = "";
     if (retryContext?.previousFailureReason) {
       const phaseLabel = {
-        development: "\u5F00\u53D1",
-        code_review: "\u4EE3\u7801\u5BA1\u6838",
-        qa: "QA \u9A8C\u8BC1",
-        evaluation: "\u8BC4\u4F30"
+        development: texts2.harness.phaseLabels.development,
+        code_review: texts2.harness.phaseLabels.codeReview,
+        qa: texts2.harness.phaseLabels.qa,
+        evaluation: texts2.harness.phaseLabels.evaluation
       };
       const lines = [
-        `## \u91CD\u8BD5\u4E0A\u4E0B\u6587\uFF08\u524D\u6B21\u8BC4\u4F30\u5931\u8D25\u4FE1\u606F\uFF09`,
+        `## ${texts2.harness.logs.retryContextEval}`,
         ``,
-        `\u8FD9\u662F\u7B2C ${retryContext.attemptNumber} \u6B21\u8BC4\u4F30\u5C1D\u8BD5\u3002\u4E0A\u4E00\u6B21\u5728 **${phaseLabel[retryContext.previousPhase || ""] || retryContext.previousPhase}** \u9636\u6BB5\u5931\u8D25\u3002`,
+        texts2.harness.logs.retryAttemptInfoEval.replace("{attempt}", String(retryContext.attemptNumber)).replace("{phase}", phaseLabel[retryContext.previousPhase || ""] || retryContext.previousPhase || ""),
         ``,
-        `**\u524D\u6B21\u5931\u8D25\u539F\u56E0:**`,
+        texts2.harness.logs.previousFailureReasonLabel,
         `> ${retryContext.previousFailureReason}`,
         ``,
-        `\u8BF7\u53C2\u8003\u524D\u6B21\u5931\u8D25\u539F\u56E0\uFF0C\u786E\u4FDD\u672C\u6B21\u8BC4\u4F30\u8986\u76D6\u6240\u6709\u95EE\u9898\u3002`,
+        texts2.harness.logs.retryReferenceHint,
         ``
       ];
       retryContextSection = lines.join(`
@@ -33453,7 +33138,8 @@ ${texts.harness.logs.phantomTaskNopassRequirement}
       inferenceType: "parse_failure_default"
     };
     if (!output || output.trim().length === 0) {
-      result.reason = "\u8BC4\u4F30\u8F93\u51FA\u4E3A\u7A7A\uFF0C\u65E0\u6CD5\u89E3\u6790\u8BC4\u4F30\u7ED3\u679C";
+      const texts3 = t(this.config.cwd);
+      result.reason = texts3.harness.logs.evalOutputEmptyError;
       result.inferenceType = "empty_output";
       return result;
     }
@@ -33537,23 +33223,23 @@ ${texts.harness.logs.phantomTaskNopassRequirement}
         break;
       }
     }
-    const texts = t(this.config.cwd);
+    const texts2 = t(this.config.cwd);
     if (!result.reason) {
       if (result.passed) {
-        result.reason = texts.harness.logs.structuredMatchPassed;
+        result.reason = texts2.harness.logs.structuredMatchPassed;
       } else if (structured.passed !== null) {
-        result.reason = texts.harness.logs.structuredMatchFailed;
+        result.reason = texts2.harness.logs.structuredMatchFailed;
       } else {
-        result.reason = texts.harness.logs.cannotParseResult;
+        result.reason = texts2.harness.logs.cannotParseResult;
         result.inferenceType = "parse_failure_default";
-        console.log(`   \u26A0\uFE0F  ${texts.harness.logs.parseErrorWarning.replace("{limit}", "500")}:`);
+        console.log(`   \u26A0\uFE0F  ${texts2.harness.logs.parseErrorWarning.replace("{limit}", "500")}:`);
         console.log(output.substring(0, 500));
       }
     }
     return result;
   }
   detectPhantomTasks(currentTaskId, devReport) {
-    const texts = t(this.config.cwd);
+    const texts2 = t(this.config.cwd);
     const phantomTasks = [];
     const output = devReport.claudeOutput || "";
     const taskCreatePatterns = [
@@ -33572,12 +33258,12 @@ ${texts.harness.logs.phantomTaskNopassRequirement}
         plannedTaskIds = new Set(snapshot.tasks);
         snapshotTaskCount = snapshot.tasks.length;
         usingSnapshot = true;
-        console.log(`   \uD83D\uDCCB ${texts.harness.logs.snapshotMode}: ${snapshot.snapshotId} (${snapshotTaskCount})`);
+        console.log(`   \uD83D\uDCCB ${texts2.harness.logs.snapshotMode}: ${snapshot.snapshotId} (${snapshotTaskCount})`);
       } else {
-        console.log(`   \uD83D\uDCCB ${texts.harness.logs.fallbackMode}`);
+        console.log(`   \uD83D\uDCCB ${texts2.harness.logs.fallbackMode}`);
       }
     } catch (error) {
-      console.log(`   \u26A0\uFE0F ${texts.harness.logs.fallbackMode}: ${error instanceof Error ? error.message : String(error)}`);
+      console.log(`   \u26A0\uFE0F ${texts2.harness.logs.fallbackMode}: ${error instanceof Error ? error.message : String(error)}`);
     }
     try {
       const allTaskIds = getAllTaskIds(this.config.cwd);
@@ -33605,26 +33291,26 @@ ${texts.harness.logs.phantomTaskNopassRequirement}
         }
       }
       if (usingSnapshot) {
-        console.log(`   \uD83D\uDCCA ${texts.harness.logs.snapshotStats.replace("{total}", String(allTaskIds.length)).replace("{excluded}", String(excludedCount)).replace("{checking}", String(allTaskIds.length - excludedCount - 1))}`);
+        console.log(`   \uD83D\uDCCA ${texts2.harness.logs.snapshotStats.replace("{total}", String(allTaskIds.length)).replace("{excluded}", String(excludedCount)).replace("{checking}", String(allTaskIds.length - excludedCount - 1))}`);
       }
     } catch (error) {
-      console.log(`   \u26A0\uFE0F ${texts.harness.logs.snapshotError}: ${error instanceof Error ? error.message : String(error)}`);
+      console.log(`   \u26A0\uFE0F ${texts2.harness.logs.snapshotError}: ${error instanceof Error ? error.message : String(error)}`);
     }
     if (hasCreateCommand && phantomTasks.length === 0) {
-      console.log(`   \u26A0\uFE0F  ${texts.harness.logs.creatingCommandWarning}`);
-      console.log(`   \u26A0\uFE0F  ${texts.harness.logs.creatingCommandIntent}`);
+      console.log(`   \u26A0\uFE0F  ${texts2.harness.logs.creatingCommandWarning}`);
+      console.log(`   \u26A0\uFE0F  ${texts2.harness.logs.creatingCommandIntent}`);
     }
     if (phantomTasks.length > 0) {
-      console.log(`   \u26A0\uFE0F  ${texts.harness.logs.phantomTaskDetected.replace("{count}", String(phantomTasks.length))}: ${phantomTasks.join(", ")}`);
+      console.log(`   \u26A0\uFE0F  ${texts2.harness.logs.phantomTaskDetected.replace("{count}", String(phantomTasks.length))}: ${phantomTasks.join(", ")}`);
       if (usingSnapshot) {
-        console.log(`   \u2139\uFE0F  ${texts.harness.logs.snapshotMode} ${texts.harness.logs.snapshotExcludedInfo?.replace("{count}", String(snapshotTaskCount)) || `(excluded ${snapshotTaskCount} planned tasks)`}`);
+        console.log(`   \u2139\uFE0F  ${texts2.harness.logs.snapshotMode} ${texts2.harness.logs.snapshotExcludedInfo?.replace("{count}", String(snapshotTaskCount)) || `(excluded ${snapshotTaskCount} planned tasks)`}`);
       } else {
-        console.log(`   \u2139\uFE0F  ${texts.harness.logs.fallbackMode}`);
+        console.log(`   \u2139\uFE0F  ${texts2.harness.logs.fallbackMode}`);
       }
     } else {
-      console.log(`   \u2705 ${texts.harness.logs.noPhantomTask}`);
+      console.log(`   \u2705 ${texts2.harness.logs.noPhantomTask}`);
       if (usingSnapshot) {
-        console.log(`   \u2139\uFE0F  ${texts.harness.logs.snapshotBasedOnInfo?.replace("{count}", String(snapshotTaskCount)) || `excluded ${snapshotTaskCount} planned tasks based on snapshot`}`);
+        console.log(`   \u2139\uFE0F  ${texts2.harness.logs.snapshotBasedOnInfo?.replace("{count}", String(snapshotTaskCount)) || `excluded ${snapshotTaskCount} planned tasks based on snapshot`}`);
       }
     }
     return phantomTasks;
@@ -33656,7 +33342,7 @@ ${texts.harness.logs.phantomTaskNopassRequirement}
     };
   }
   loadContract(taskId) {
-    const texts = t(this.config.cwd);
+    const texts2 = t(this.config.cwd);
     const contractPath = this.getContractPath(taskId);
     if (!fs24.existsSync(contractPath)) {
       return null;
@@ -33666,11 +33352,11 @@ ${texts.harness.logs.phantomTaskNopassRequirement}
       const parsed = JSON.parse(content);
       const validated = this.validateSprintContract(parsed, taskId);
       if (!validated) {
-        console.warn(`   \u26A0\uFE0F  ${texts.harness.logs.contractDataInvalid}`);
+        console.warn(`   \u26A0\uFE0F  ${texts2.harness.logs.contractDataInvalid}`);
       }
       return validated;
     } catch (error) {
-      console.warn(`   \u26A0\uFE0F  ${texts.harness.logs.contractParseFailed}: ${error instanceof Error ? error.message : String(error)}`);
+      console.warn(`   \u26A0\uFE0F  ${texts2.harness.logs.contractParseFailed}: ${error instanceof Error ? error.message : String(error)}`);
       return null;
     }
   }
@@ -33693,7 +33379,7 @@ ${texts.harness.logs.phantomTaskNopassRequirement}
     fs24.writeFileSync(reportPath, content, "utf-8");
   }
   saveRawEvaluationOutput(taskId, output, stderr, success) {
-    const texts = t(this.config.cwd);
+    const texts2 = t(this.config.cwd);
     try {
       const projectDir = getProjectDir(this.config.cwd);
       const dir = path21.join(projectDir, "reports", "harness", taskId);
@@ -33703,7 +33389,7 @@ ${texts.harness.logs.phantomTaskNopassRequirement}
       const timestamp = new Date().toISOString().replace(/[:.]/g, "-");
       const rawPath = path21.join(dir, `evaluation-raw-${timestamp}.log`);
       const lines = [
-        `# ${texts.harness.logs.rawEvaluationOutputTitle || "Raw Evaluation Output"}`,
+        `# ${texts2.harness.logs.rawEvaluationOutputTitle || "Raw Evaluation Output"}`,
         `Task: ${taskId}`,
         `Time: ${new Date().toISOString()}`,
         `Success: ${success}`,
@@ -33718,54 +33404,55 @@ ${texts.harness.logs.phantomTaskNopassRequirement}
       ];
       fs24.writeFileSync(rawPath, lines.join(`
 `), "utf-8");
-      console.log(`   \uD83D\uDCC4 ${texts.harness.logs.rawOutputSaved.replace("{filename}", `evaluation-raw-${timestamp}.log`)}`);
+      console.log(`   \uD83D\uDCC4 ${texts2.harness.logs.rawOutputSaved.replace("{filename}", `evaluation-raw-${timestamp}.log`)}`);
     } catch (error) {
-      console.warn(`   \u26A0\uFE0F ${texts.harness.logs.saveRawOutputFailed}: ${error instanceof Error ? error.message : String(error)}`);
+      console.warn(`   \u26A0\uFE0F ${texts2.harness.logs.saveRawOutputFailed}: ${error instanceof Error ? error.message : String(error)}`);
     }
   }
   formatReviewReport(verdict, devReport) {
-    const texts = t(this.config.cwd);
+    const texts2 = t(this.config.cwd);
     const lines = [
-      `# ${texts.harness.reports.reviewReportTitle} - ${verdict.taskId}`,
+      `# ${texts2.harness.reports.reviewReportTitle} - ${verdict.taskId}`,
       "",
-      `**${texts.harness.reports.resultLabel}**: ${verdict.result === "PASS" ? "\u2705 PASS" : "\u274C NOPASS"}`,
-      `**${texts.harness.reports.reviewedAtLabel}**: ${verdict.reviewedAt}`,
-      `**${texts.harness.reports.reviewedByLabel}**: ${verdict.reviewedBy}`
+      `**${texts2.harness.reports.resultLabel}**: ${verdict.result === "PASS" ? "\u2705 PASS" : "\u274C NOPASS"}`,
+      `**${texts2.harness.reports.reviewedAtLabel}**: ${verdict.reviewedAt}`,
+      `**${texts2.harness.reports.reviewedByLabel}**: ${verdict.reviewedBy}`
     ];
     if (verdict.inferenceType) {
-      const inferenceTypeLabel = texts.harness.reports.inferenceTypes[verdict.inferenceType] || verdict.inferenceType;
-      lines.push(`**${texts.harness.reports.inferenceTypeLabel}**: ${inferenceTypeLabel} (${verdict.inferenceType})`);
+      const camelCaseType = verdict.inferenceType.replace(/_([a-z])/g, (_, letter) => letter.toUpperCase());
+      const inferenceTypeLabel = texts2.harness.reports.inferenceTypes[camelCaseType] || verdict.inferenceType;
+      lines.push(`**${texts2.harness.reports.inferenceTypeLabel}**: ${inferenceTypeLabel} (${verdict.inferenceType})`);
     }
     lines.push("");
-    lines.push(`## ${texts.harness.reports.reasonSection}`);
+    lines.push(`## ${texts2.harness.reports.reasonSection}`);
     lines.push(verdict.reason);
     lines.push("");
     if (verdict.failedCriteria.length > 0) {
-      lines.push(`## ${texts.harness.reports.failedCriteriaSection}`);
+      lines.push(`## ${texts2.harness.reports.failedCriteriaSection}`);
       verdict.failedCriteria.forEach((criteria) => {
         lines.push(`- ${criteria}`);
       });
       lines.push("");
     }
     if (verdict.failedCheckpoints.length > 0) {
-      lines.push(`## ${texts.harness.reports.failedCheckpointsSection}`);
+      lines.push(`## ${texts2.harness.reports.failedCheckpointsSection}`);
       verdict.failedCheckpoints.forEach((checkpoint) => {
         lines.push(`- ${checkpoint}`);
       });
       lines.push("");
     }
     if (verdict.details) {
-      lines.push(`## ${texts.harness.reports.detailsSection}`);
+      lines.push(`## ${texts2.harness.reports.detailsSection}`);
       lines.push(verdict.details);
       lines.push("");
     }
     const devEvidence = Array.isArray(devReport.evidence) ? devReport.evidence : [];
     const devCheckpointsCompleted = Array.isArray(devReport.checkpointsCompleted) ? devReport.checkpointsCompleted : [];
-    lines.push(`## ${texts.harness.reports.devPhaseInfoSection}`);
-    lines.push(`- ${texts.harness.reports.statusLabel}: ${devReport.status}`);
-    lines.push(`- ${texts.harness.reports.durationLabel}: ${(devReport.duration / 1000).toFixed(1)}s`);
-    lines.push(`- ${texts.harness.reports.evidenceCountLabel}: ${devEvidence.length}`);
-    lines.push(`- ${texts.harness.reports.checkpointsCountLabel}: ${devCheckpointsCompleted.length}`);
+    lines.push(`## ${texts2.harness.reports.devPhaseInfoSection}`);
+    lines.push(`- ${texts2.harness.reports.statusLabel}: ${devReport.status}`);
+    lines.push(`- ${texts2.harness.reports.durationLabel}: ${(devReport.duration / 1000).toFixed(1)}s`);
+    lines.push(`- ${texts2.harness.reports.evidenceCountLabel}: ${devEvidence.length}`);
+    lines.push(`- ${texts2.harness.reports.checkpointsCountLabel}: ${devCheckpointsCompleted.length}`);
     return lines.join(`
 `);
   }
@@ -33781,23 +33468,23 @@ class RetryHandler {
     this.config = config;
   }
   async shouldRetry(taskId, retryCounter) {
-    const texts = t(this.config.cwd);
+    const texts2 = t(this.config.cwd);
     const currentAttempts = retryCounter.get(taskId) || 0;
     if (currentAttempts >= this.config.maxRetries) {
-      console.log(`   \u26A0\uFE0F  ${texts.harness.logs.maxRetriesReached.replace("{count}", String(this.config.maxRetries))}`);
+      console.log(`   \u26A0\uFE0F  ${texts2.harness.logs.maxRetriesReached.replace("{count}", String(this.config.maxRetries))}`);
       return false;
     }
-    console.log(`   \uD83D\uDD04 ${texts.harness.logs.preparingRetry.replace("{current}", String(currentAttempts + 1)).replace("{max}", String(this.config.maxRetries))}`);
+    console.log(`   \uD83D\uDD04 ${texts2.harness.logs.preparingRetry.replace("{current}", String(currentAttempts + 1)).replace("{max}", String(this.config.maxRetries))}`);
     await this.applyBackoff(currentAttempts);
     return true;
   }
   async applyBackoff(attemptNumber) {
-    const texts = t(this.config.cwd);
+    const texts2 = t(this.config.cwd);
     const baseDelay = 2000;
     const maxDelay = 30000;
     const delay = Math.min(baseDelay * Math.pow(2, attemptNumber), maxDelay);
     if (delay > 0) {
-      console.log(`   \u23F3 ${texts.harness.logs.waitingToRetry.replace("{seconds}", (delay / 1000).toFixed(1))}...`);
+      console.log(`   \u23F3 ${texts2.harness.logs.waitingToRetry.replace("{seconds}", (delay / 1000).toFixed(1))}...`);
       await this.sleep(delay);
     }
   }
@@ -35753,14 +35440,14 @@ function rebuildBatchesFromBoundaries(batchQueue) {
   return batches;
 }
 async function cleanupHarnessSnapshots(options = {}, cwd2 = process.cwd()) {
-  const texts = t(cwd2);
+  const texts2 = t(cwd2);
   if (!isInitialized(cwd2)) {
-    console.error(texts.harnessCmd.projectNotInitialized);
+    console.error(texts2.harnessCmd.projectNotInitialized);
     process.exit(1);
   }
   const snapshots = listSnapshots(cwd2);
   if (snapshots.length === 0) {
-    console.log(texts.harnessCmd.noSnapshotsFound);
+    console.log(texts2.harnessCmd.noSnapshotsFound);
     return 0;
   }
   let cleaned = 0;
@@ -35776,14 +35463,14 @@ async function cleanupHarnessSnapshots(options = {}, cwd2 = process.cwd()) {
   for (const snapshot of orphanSnapshots) {
     if (cleanupSnapshot(snapshot.snapshotId, cwd2)) {
       cleaned++;
-      console.log(texts.harnessCmd.cleaningOrphanSnapshots.replace("{id}", snapshot.snapshotId).replace("{pid}", String(snapshot.pid)));
+      console.log(texts2.harnessCmd.cleaningOrphanSnapshots.replace("{id}", snapshot.snapshotId).replace("{pid}", String(snapshot.pid)));
     }
   }
   if (options.force && !options.orphansOnly) {
     for (const snapshot of activeSnapshots) {
       if (cleanupSnapshot(snapshot.snapshotId, cwd2)) {
         cleaned++;
-        console.log(texts.harnessCmd.forceCleanedSnapshots.replace("{id}", snapshot.snapshotId).replace("{pid}", String(snapshot.pid)));
+        console.log(texts2.harnessCmd.forceCleanedSnapshots.replace("{id}", snapshot.snapshotId).replace("{pid}", String(snapshot.pid)));
       }
     }
   }
@@ -35796,27 +35483,27 @@ async function cleanupHarnessSnapshots(options = {}, cwd2 = process.cwd()) {
     console.log(`
 \uD83D\uDCA1 Use --force to clean all snapshots, or wait for active pipelines to complete`);
   }
-  console.log(texts.harnessCmd.cleanedSnapshots.replace("{count}", String(cleaned)));
+  console.log(texts2.harnessCmd.cleanedSnapshots.replace("{count}", String(cleaned)));
   return cleaned;
 }
 function checkConcurrency(cwd2) {
   const detection = detectActiveSnapshot(cwd2);
-  const texts = t(cwd2);
+  const texts2 = t(cwd2);
   if (detection.hasActive && detection.activeSnapshot) {
     console.error("");
-    console.error(texts.harnessCmd.concurrentPipelineRunning);
+    console.error(texts2.harnessCmd.concurrentPipelineRunning);
     console.error("");
-    console.error(texts.harnessCmd.activePipelineInfo);
-    console.error(texts.harnessCmd.snapshotId.replace("{id}", detection.activeSnapshot.snapshotId));
-    console.error(texts.harnessCmd.processId.replace("{pid}", String(detection.activeSnapshot.pid)));
-    console.error(texts.harnessCmd.createdAt.replace("{timestamp}", detection.activeSnapshot.timestamp));
-    console.error(texts.harnessCmd.taskCount.replace("{count}", String(detection.activeSnapshot.tasks.length)));
+    console.error(texts2.harnessCmd.activePipelineInfo);
+    console.error(texts2.harnessCmd.snapshotId.replace("{id}", detection.activeSnapshot.snapshotId));
+    console.error(texts2.harnessCmd.processId.replace("{pid}", String(detection.activeSnapshot.pid)));
+    console.error(texts2.harnessCmd.createdAt.replace("{timestamp}", detection.activeSnapshot.timestamp));
+    console.error(texts2.harnessCmd.taskCount.replace("{count}", String(detection.activeSnapshot.tasks.length)));
     console.error("");
-    console.error(texts.harnessCmd.possibleCauses);
+    console.error(texts2.harnessCmd.possibleCauses);
     console.error("   1. Another Harness pipeline is running");
     console.error("   2. Previous pipeline exited abnormally, leaving snapshot behind");
     console.error("");
-    console.error(texts.harnessCmd.solutions);
+    console.error(texts2.harnessCmd.solutions);
     console.error("   - If no other pipeline is running, clean up with:");
     console.error("     projmnt4claude headless-harness-design cleanup");
     console.error("   - Or force clean all residual snapshots:");
@@ -35827,9 +35514,9 @@ function checkConcurrency(cwd2) {
   return false;
 }
 async function harnessCommand(options, cwd2 = process.cwd()) {
-  const texts = t(cwd2);
+  const texts2 = t(cwd2);
   if (!isInitialized(cwd2)) {
-    console.error(texts.harnessCmd.projectNotInitialized);
+    console.error(texts2.harnessCmd.projectNotInitialized);
     process.exit(1);
   }
   if (!options.continue && checkConcurrency(cwd2)) {
@@ -35859,15 +35546,15 @@ async function harnessCommand(options, cwd2 = process.cwd()) {
     cwd: cwd2
   };
   if (config.maxRetries < 0) {
-    console.error(texts.harnessCmd.invalidMaxRetries);
+    console.error(texts2.harnessCmd.invalidMaxRetries);
     process.exit(1);
   }
   if (config.timeout < 10) {
-    console.error(texts.harnessCmd.invalidTimeout);
+    console.error(texts2.harnessCmd.invalidTimeout);
     process.exit(1);
   }
   if (config.parallel < 1) {
-    console.error(texts.harnessCmd.invalidParallel);
+    console.error(texts2.harnessCmd.invalidParallel);
     process.exit(1);
   }
   const batchQueue = await loadTaskQueue(options, cwd2);
@@ -35898,7 +35585,7 @@ async function harnessCommand(options, cwd2 = process.cwd()) {
       for (let b = 0;b < batchQueue.batchBoundaries.length; b++) {
         const start = batchQueue.batchBoundaries[b];
         const end = b + 1 < batchQueue.batchBoundaries.length ? batchQueue.batchBoundaries[b + 1] : batchQueue.taskQueue.length;
-        const label = texts.harnessCmd.batchLabel.replace("{index}", String(b + 1));
+        const label = texts2.harnessCmd.batchLabel.replace("{index}", String(b + 1));
         const parallelTag = batchQueue.batchParallelizable[b] ? " [Parallel]" : "";
         console.log(`
    \uD83D\uDCE6 ${label}${parallelTag} (${end - start} tasks):`);
@@ -35912,21 +35599,21 @@ async function harnessCommand(options, cwd2 = process.cwd()) {
       });
     }
     console.log("");
-    console.log(texts.harnessCmd.dryRunComplete);
+    console.log(texts2.harnessCmd.dryRunComplete);
     return;
   }
   if (qualityGateConfig.enabled) {
     console.log("");
     console.log("\u2501".repeat(SEPARATOR_WIDTH));
-    console.log(texts.harnessCmd.qualityGateCheck);
+    console.log(texts2.harnessCmd.qualityGateCheck);
     console.log("\u2501".repeat(SEPARATOR_WIDTH));
-    console.log(texts.harnessCmd.minQualityScoreThreshold.replace("{score}", String(qualityGateConfig.minQualityScore)));
+    console.log(texts2.harnessCmd.minQualityScoreThreshold.replace("{score}", String(qualityGateConfig.minQualityScore)));
     console.log("");
     const batchResult = await batchCheckQualityGate(batchQueue.taskQueue, qualityGateConfig, cwd2);
     console.log(formatBatchQualityGateResult(batchResult, { compact: false, showDetails: true }));
     if (!batchResult.allPassed) {
       console.log("");
-      console.log(texts.harnessCmd.qualityGateFailed);
+      console.log(texts2.harnessCmd.qualityGateFailed);
       console.log("");
       for (const taskId of batchResult.blockedTasks) {
         const result = batchResult.results.get(taskId);
@@ -35944,7 +35631,7 @@ async function harnessCommand(options, cwd2 = process.cwd()) {
       console.log("");
       process.exit(1);
     }
-    console.log(texts.harnessCmd.allTasksPassed);
+    console.log(texts2.harnessCmd.allTasksPassed);
     console.log("");
   }
   const executionPlan = {
@@ -36052,10 +35739,10 @@ function loadRuntimeState(cwd2) {
       console.warn(`State file version mismatch (v${version}), resetting runtime state`);
       return null;
     }
-    const texts = t(cwd2);
+    const texts2 = t(cwd2);
     if (version === 1) {
       data.stateFormatVersion = 2;
-      console.log(texts.harnessCmd.stateFileMigrated.replace("{from}", "1").replace("{to}", "2"));
+      console.log(texts2.harnessCmd.stateFileMigrated.replace("{from}", "1").replace("{to}", "2"));
     }
     data.retryCounter = new Map(Object.entries(data.retryCounter || {}));
     data.taskResults = new Map(Object.entries(data.taskResults || {}));
@@ -36065,8 +35752,8 @@ function loadRuntimeState(cwd2) {
     data.taskPhaseCheckpoints = new Map(Object.entries(data.taskPhaseCheckpoints || {}));
     return data;
   } catch (error) {
-    const texts = t(cwd2);
-    console.warn(texts.harnessCmd.loadingStateFailed.replace("{error}", String(error)));
+    const texts2 = t(cwd2);
+    console.warn(texts2.harnessCmd.loadingStateFailed.replace("{error}", String(error)));
     return null;
   }
 }
@@ -36281,7 +35968,7 @@ program2.command("config <action> [key] [value]").description("Manage configurat
 });
 program2.command("task <action> [id]").description(`Manage tasks
 
-Basic: create/list/show/get/update/delete/rename/purge/execute/checkpoint
+Basic: create/list/show/get/update/delete/reopen/rename/purge/execute/checkpoint
 Advanced: dependency/add-subtask/status-guide/complete/split/search/batch-update/batch-update-logs/count
 
 [Deprecated - will be removed]:
@@ -36309,6 +35996,11 @@ update Options:
   --status <status>      Update status
   --priority <priority>  Update priority
   --sync-children        Sync subtask status
+
+reopen Options:
+  --enhancement          Mark as enhancement request
+  --failed-checkpoints <ids>  Failed checkpoint IDs (comma-separated)
+  --qa-feedback <text>   QA feedback
 
 dependency Options:
   --from <id>            Dependency source
@@ -36420,6 +36112,17 @@ rename format:
         token: options.token,
         syncChildren: options.syncChildren,
         noSync: options.noSync,
+        enhancement: options.enhancement,
+        failedCheckpoints: options.failedCheckpoints,
+        qaFeedback: options.qaFeedback
+      });
+      break;
+    case "reopen":
+      if (!id) {
+        console.error("(X) Error: reopen operation requires task ID");
+        process.exit(1);
+      }
+      await reopenTask(id, {
         enhancement: options.enhancement,
         failedCheckpoints: options.failedCheckpoints,
         qaFeedback: options.qaFeedback

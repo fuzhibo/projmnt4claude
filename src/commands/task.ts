@@ -2046,6 +2046,128 @@ export async function updateTask(
 }
 
 /**
+ * Reopen a task
+ *
+ * Reopens a resolved/closed/failed task back to open status with detailed tracking.
+ * Supports enhancement requests, failed checkpoint tracking, and QA feedback.
+ *
+ * @param taskId - Task ID to reopen
+ * @param options - Reopen options
+ * @param cwd - Working directory
+ */
+export async function reopenTask(
+  taskId: string,
+  options: {
+    enhancement?: boolean;
+    failedCheckpoints?: string;
+    qaFeedback?: string;
+    reason?: string;
+  },
+  cwd: string = process.cwd()
+): Promise<void> {
+  if (!isInitialized(cwd)) {
+    console.error('Error: Project not initialized. Please run `projmnt4claude setup` first');
+    process.exit(1);
+  }
+
+  const task = readTaskMeta(taskId, cwd);
+  if (!task) {
+    console.error(`Error: Task '${taskId}' does not exist`);
+    process.exit(1);
+  }
+
+  // 检查当前状态是否允许 reopen
+  const reopenableStatuses: TaskStatus[] = ['resolved', 'closed', 'failed', 'abandoned'];
+  if (!reopenableStatuses.includes(task.status)) {
+    console.error(`Error: Task current status is '${task.status}', only ${reopenableStatuses.join(', ')} status tasks can be reopened`);
+    console.error(`       Use 'task update ${taskId} --status open' to change status directly`);
+    process.exit(1);
+  }
+
+  const oldStatus = task.status;
+
+  // 清除失败原因（从 failed 状态 reopen 时）
+  if (oldStatus === 'failed') {
+    delete task.failureReason;
+  }
+
+  // 更新状态为 open
+  task.status = 'open';
+  task.reopenCount = (task.reopenCount || 0) + 1;
+
+  // 解析 failedCheckpoints
+  const failedCheckpointIds = options.failedCheckpoints
+    ? options.failedCheckpoints.split(',').map(id => id.trim()).filter(Boolean)
+    : undefined;
+
+  // 创建详细 reopen 记录
+  const reopenRecord: ReopenRecord = {
+    timestamp: new Date().toISOString(),
+    reason: options.reason || options.qaFeedback || '用户发起 Reopen',
+    reopenedBy: process.env.USER || 'system',
+    enhancementRequest: options.enhancement || false,
+    failedCheckpoints: failedCheckpointIds,
+    qaFeedback: options.qaFeedback,
+  };
+
+  // 添加到 reopenRecords
+  if (!task.reopenRecords) {
+    task.reopenRecords = [];
+  }
+  task.reopenRecords.push(reopenRecord);
+
+  // 添加 transitionNote
+  if (!task.transitionNotes) {
+    task.transitionNotes = [];
+  }
+  let transitionNoteText = `Task从 ${oldStatus} Reopen为 open (reopenCount: ${task.reopenCount})`;
+  if (options.enhancement) {
+    transitionNoteText += ' [Enhancement]';
+  }
+  if (failedCheckpointIds && failedCheckpointIds.length > 0) {
+    transitionNoteText += ` [Failed CPs: ${failedCheckpointIds.join(', ')}]`;
+  }
+  task.transitionNotes.push({
+    timestamp: new Date().toISOString(),
+    fromStatus: oldStatus,
+    toStatus: 'open',
+    note: transitionNoteText,
+    author: process.env.USER || undefined,
+  });
+
+  // 添加 History 记录
+  if (!task.history) {
+    task.history = [];
+  }
+  task.history.push({
+    timestamp: new Date().toISOString(),
+    action: `TaskReopen: ${oldStatus} → open (reopenCount: ${task.reopenCount})`,
+    field: 'status',
+    oldValue: oldStatus,
+    newValue: 'open',
+    reason: options.reason || options.qaFeedback || '用户发起 Reopen, Status映射为 open + reopenCount 递增',
+  });
+
+  // 更新时间戳
+  task.updatedAt = new Date().toISOString();
+
+  writeTaskMeta(task, cwd);
+
+  console.log(`🔁 Task reopened (#${task.reopenCount} times)`);
+  console.log(`   ${oldStatus} → open (reopenCount: ${task.reopenCount})`);
+  if (options.enhancement) {
+    console.log('   📌 Marked as enhancement request');
+  }
+  if (failedCheckpointIds && failedCheckpointIds.length > 0) {
+    console.log(`   📋 Failed checkpoints: ${failedCheckpointIds.join(', ')}`);
+  }
+  if (options.qaFeedback) {
+    console.log(`   💬 QA feedback: ${options.qaFeedback.substring(0, 100)}${options.qaFeedback.length > 100 ? '...' : ''}`);
+  }
+  console.log(`✅ Task ${taskId} reopened successfully`);
+}
+
+/**
  * 提交Task等待Verification
  *
  * Set task status to wait_evaluation, 等待质量门禁Verification

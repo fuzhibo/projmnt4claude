@@ -718,6 +718,135 @@ describe('updateTask', () => {
   });
 });
 
+// ============== reopenTask ==============
+
+describe('reopenTask', () => {
+  let reopenTask: typeof import('../commands/task.js')['reopenTask'];
+  let env: IsolatedTestEnv;
+  let consoleSpy: ReturnType<typeof spyOn>;
+  let readTaskMetaSpy: ReturnType<typeof spyOn>;
+  let writeTaskMetaSpy: ReturnType<typeof spyOn>;
+
+  const baseTask = (): import('../types/task').TaskMeta => ({
+    id: 'TASK-feature-P2-test-20260411',
+    title: 'Test Task',
+    type: 'feature',
+    priority: 'P2',
+    status: 'open',
+    dependencies: [],
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
+    history: [],
+  });
+
+  beforeEach(async () => {
+    env = await createIsolatedTestEnv();
+    const mod = await import('../commands/task.js');
+    reopenTask = mod.reopenTask;
+    consoleSpy = spyOn(console, 'log').mockImplementation(() => {});
+    readTaskMetaSpy = spyOn(await import('../utils/task.js'), 'readTaskMeta');
+    writeTaskMetaSpy = spyOn(await import('../utils/task.js'), 'writeTaskMeta').mockImplementation(() => {});
+  });
+
+  afterEach(async () => {
+    await env.cleanup();
+    consoleSpy.mockRestore();
+    readTaskMetaSpy.mockRestore();
+    writeTaskMetaSpy.mockRestore();
+  });
+
+  it('reopens resolved task with all options', async () => {
+    const task = baseTask();
+    task.status = 'resolved';
+    task.reopenCount = 0;
+    readTaskMetaSpy.mockReturnValue(task);
+
+    await reopenTask(task.id, {
+      enhancement: true,
+      failedCheckpoints: 'CP-1,CP-2',
+      qaFeedback: 'QA found issues',
+    }, env.tempDir);
+
+    expect(task.status).toBe('open');
+    expect(task.reopenCount).toBe(1);
+    expect(task.reopenRecords).toHaveLength(1);
+    expect(task.reopenRecords![0].enhancementRequest).toBe(true);
+    expect(task.reopenRecords![0].failedCheckpoints).toEqual(['CP-1', 'CP-2']);
+    expect(task.reopenRecords![0].qaFeedback).toBe('QA found issues');
+    expect(task.transitionNotes).toHaveLength(1);
+    expect(task.transitionNotes![0].note).toContain('[Enhancement]');
+    expect(task.transitionNotes![0].note).toContain('[Failed CPs: CP-1, CP-2]');
+  });
+
+  it('reopens closed task without options', async () => {
+    const task = baseTask();
+    task.status = 'closed';
+    readTaskMetaSpy.mockReturnValue(task);
+
+    await reopenTask(task.id, {}, env.tempDir);
+
+    expect(task.status).toBe('open');
+    expect(task.reopenCount).toBe(1);
+    expect(task.reopenRecords).toHaveLength(1);
+    expect(task.reopenRecords![0].enhancementRequest).toBe(false);
+  });
+
+  it('reopens failed task and clears failureReason', async () => {
+    const task = baseTask();
+    task.status = 'failed';
+    (task as any).failureReason = 'timeout';
+    readTaskMetaSpy.mockReturnValue(task);
+
+    await reopenTask(task.id, {}, env.tempDir);
+
+    expect(task.status).toBe('open');
+    expect((task as any).failureReason).toBeUndefined();
+  });
+
+  it('increments reopenCount on multiple reopens', async () => {
+    const task = baseTask();
+    task.status = 'resolved';
+    task.reopenCount = 2;
+    task.reopenRecords = [{ timestamp: '2024-01-01', reason: 'First reopen' }];
+    readTaskMetaSpy.mockReturnValue(task);
+
+    await reopenTask(task.id, {}, env.tempDir);
+
+    expect(task.reopenCount).toBe(3);
+    expect(task.reopenRecords).toHaveLength(2);
+  });
+
+  it('exits if task does not exist', async () => {
+    readTaskMetaSpy.mockReturnValue(null);
+    const exitSpy = spyOn(process, 'exit').mockImplementation(() => { throw new Error('exit'); });
+
+    try {
+      await reopenTask('NON-EXISTENT', {}, env.tempDir);
+    } catch (e) {
+      expect((e as Error).message).toBe('exit');
+    }
+
+    expect(exitSpy).toHaveBeenCalledWith(1);
+    exitSpy.mockRestore();
+  });
+
+  it('exits if task status is not reopenable', async () => {
+    const task = baseTask();
+    task.status = 'open';
+    readTaskMetaSpy.mockReturnValue(task);
+    const exitSpy = spyOn(process, 'exit').mockImplementation(() => { throw new Error('exit'); });
+
+    try {
+      await reopenTask(task.id, {}, env.tempDir);
+    } catch (e) {
+      expect((e as Error).message).toBe('exit');
+    }
+
+    expect(exitSpy).toHaveBeenCalledWith(1);
+    exitSpy.mockRestore();
+  });
+});
+
 // ============== completeTask ==============
 
 describe('completeTask', () => {

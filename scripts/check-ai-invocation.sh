@@ -162,18 +162,28 @@ echo "📋 Check 3: withAIEnhancement call completeness"
 echo "-----------------------------------------------"
 
 # 查找 withAIEnhancement 调用并检查是否包含所有必需字段
-INCOMPLETE_CALLS=""
+INCOMPLETE_COUNT=0
 
 while IFS= read -r file; do
   [ -z "$file" ] && continue
 
-  # 提取 withAIEnhancement 调用的行号
+  # 提取实际的 withAIEnhancement 调用（排除导入、注释、函数定义）
   grep -n "withAIEnhancement" "$file" 2>/dev/null | while IFS= read -r match; do
     lineno=$(echo "$match" | cut -d':' -f1)
+    line=$(echo "$match" | cut -d':' -f2-)
+
+    # 跳过导入语句
+    echo "$line" | grep -q "import.*withAIEnhancement" && continue
+    # 跳过注释行
+    echo "$line" | grep -q "^\s*//" && continue
+    echo "$line" | grep -q "^\s*\*" && continue
+    # 跳过函数定义
+    echo "$line" | grep -q "export.*function withAIEnhancement" && continue
+    echo "$line" | grep -q "async function withAIEnhancement" && continue
 
     # 读取调用块（多行）
     start=$((lineno))
-    end=$((lineno + 10))
+    end=$((lineno + 15))
     block=$(sed -n "${start},${end}p" "$file" 2>/dev/null || true)
 
     # 检查必需字段
@@ -193,13 +203,13 @@ while IFS= read -r file; do
 
     if [ -n "$missing" ]; then
       echo "   $file:$lineno - Missing:$missing"
-      INCOMPLETE_CALLS="yes"
+      INCOMPLETE_COUNT=$((INCOMPLETE_COUNT + 1))
     fi
   done
 done < <(find "$SRC_DIR" -name "*.ts" -o -name "*.js" 2>/dev/null | grep -v "__tests__" | grep -v ".test.ts")
 
-if [ -n "$INCOMPLETE_CALLS" ]; then
-  echo -e "${RED}❌ Found incomplete withAIEnhancement calls:${NC}"
+if [ $INCOMPLETE_COUNT -gt 0 ]; then
+  echo -e "${RED}❌ Found $INCOMPLETE_COUNT incomplete withAIEnhancement call(s)${NC}"
   echo ""
   echo -e "${YELLOW}⚠️  withAIEnhancement requires: enabled, aiCall, fallback, operationName${NC}"
   echo "   See: docs/ai-invocation-guidelines.md"
