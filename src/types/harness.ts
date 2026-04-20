@@ -157,7 +157,7 @@ export type FailureCategory =
 export type EvaluationInferenceType =
   | 'structured_match'       // Structured match - exact EVALUATION_RESULT line match
   | 'explicit_match'         // Explicit match - Markdown heading/keyword matched PASS/NOPASS
-  | 'content_inference'      // Content inference - inferred from Chinese keywords (deprecated, kept for compatibility)
+  | 'content_inference'      // Content inference - inferred from legacy Chinese keyword matching (deprecated, kept for compatibility)
   | 'prior_stage_inference'  // Prior stage inference - contradiction detection correction (deprecated, kept for compatibility)
   | 'parse_failure_default'  // Parse failure default - unable to parse, using default value
   | 'empty_output';          // Empty output - Claude process exited abnormally resulting in empty output

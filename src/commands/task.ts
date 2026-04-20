@@ -744,8 +744,9 @@ export function listTasks(
   } = {},
   cwd: string = process.cwd()
 ): void {
+  const texts = t(cwd);
   if (!isInitialized(cwd)) {
-    console.error('Error: Project not initialized. Please run `projmnt4claude setup` first');
+    console.error(texts.task.projectNotInitialized);
     process.exit(1);
   }
 
@@ -841,12 +842,12 @@ export function listTasks(
   for (const task of parentTasks) {
     const id = task.id.padEnd(11);
     const title = task.title.substring(0, 28).padEnd(28);
-    const priority = formatPriority(task.priority).padEnd(8);
-    const status = formatStatus(task.status);
+    const priority = formatPriority(task.priority, cwd).padEnd(8);
+    const status = formatStatus(task.status, cwd);
     const discussionIcon = task.needsDiscussion ? ' 💬' : '';
     const reqChangeIcon = (task.requirementHistory && task.requirementHistory.length > 0) ? ` 📝${task.requirementHistory.length}` : '';
     const subtaskCount = (task.subtaskIds?.length || subtaskMap.get(task.id)?.length || 0);
-    const subtaskIcon = subtaskCount > 0 ? ` [${subtaskCount}Subtasks]` : '';
+    const subtaskIcon = subtaskCount > 0 ? ` [${subtaskCount}${texts.task.subtasksLabel}]` : '';
     console.log(`${id} | ${title} | ${priority} | ${status}${discussionIcon}${reqChangeIcon}${subtaskIcon}`);
 
     // 显示Subtasks
@@ -854,15 +855,17 @@ export function listTasks(
     for (const subtask of subtasks) {
       const subId = `  └─ ${subtask.id}`.substring(0, 11).padEnd(11);
       const subTitle = subtask.title.substring(0, 26).padEnd(26);
-      const subPriority = formatPriority(subtask.priority).padEnd(8);
-      const subStatus = formatStatus(subtask.status);
+      const subPriority = formatPriority(subtask.priority, cwd).padEnd(8);
+      const subStatus = formatStatus(subtask.status, cwd);
       console.log(`${subId} | ${subTitle} | ${subPriority} | ${subStatus}`);
     }
   }
 
   console.log('');
   const totalSubtasks = tasks.filter(t => t.parentId).length;
-  console.log(`Total ${parentTasks.length} tasks${totalSubtasks > 0 ? `, ${totalSubtasks} subtasks` : ''}`);
+  const totalTasksText = texts.task.totalTasks.replace('{count}', String(parentTasks.length));
+  const totalSubtasksText = totalSubtasks > 0 ? `, ${texts.task.totalSubtasks.replace('{count}', String(totalSubtasks))}` : '';
+  console.log(`${totalTasksText}${totalSubtasksText}`);
 }
 
 /**
@@ -1006,7 +1009,8 @@ function formatLocalTime(isoString: string): string {
 /**
  * 格式化相对时间
  */
-function formatRelativeTime(isoString: string): string {
+function formatRelativeTime(isoString: string, cwd?: string): string {
+  const texts = t(cwd);
   const date = new Date(isoString);
   const now = new Date();
   const diffMs = now.getTime() - date.getTime();
@@ -1014,10 +1018,10 @@ function formatRelativeTime(isoString: string): string {
   const diffHours = Math.floor(diffMs / 3600000);
   const diffDays = Math.floor(diffMs / 86400000);
 
-  if (diffMins < 1) return '刚刚';
-  if (diffMins < 60) return `${diffMins}分钟前`;
-  if (diffHours < 24) return `${diffHours}小时前`;
-  if (diffDays < 7) return `${diffDays}天前`;
+  if (diffMins < 1) return texts.task.timeJustNow;
+  if (diffMins < 60) return texts.task.timeMinutesAgo.replace('{minutes}', String(diffMins));
+  if (diffHours < 24) return texts.task.timeHoursAgo.replace('{hours}', String(diffHours));
+  if (diffDays < 7) return texts.task.timeDaysAgo.replace('{days}', String(diffDays));
 
   return formatLocalTime(isoString);
 }
@@ -1086,13 +1090,19 @@ export function showTask(
  * 精简输出格式
  */
 function showTaskCompact(task: TaskMeta, cwd?: string): void {
+  const texts = t(cwd);
   const statusIcon = getStatusIcon(task.status);
   const typeMap: Record<string, string> = {
-    bug: '缺陷', feature: '功能', research: '调研', docs: '文档', refactor: '重构', test: '测试',
+    bug: texts.task.typeBug,
+    feature: texts.task.typeFeature,
+    research: texts.task.typeResearch,
+    docs: texts.task.typeDocs,
+    refactor: texts.task.typeRefactor,
+    test: texts.task.typeTest,
   };
   const typeText = typeMap[task.type] || task.type;
   console.log(`${statusIcon} ${task.id}: ${task.title}`);
-  console.log(`   Status: ${formatStatus(task.status)} | Priority: ${formatPriority(task.priority)} | Type: ${typeText}`);
+  console.log(`   Status: ${formatStatus(task.status, cwd)} | Priority: ${formatPriority(task.priority, cwd)} | Type: ${typeText}`);
   if (task.description) {
     console.log(`   Description: ${task.description.substring(0, 120)}${task.description.length > 120 ? '...' : ''}`);
   }
@@ -1121,15 +1131,15 @@ function showTaskCompact(task: TaskMeta, cwd?: string): void {
   // 待讨论Tip
   if (task.needsDiscussion) {
     const discussionCount = task.discussionTopics?.length || 0;
-    console.log(`   💬 Pending Discussion${discussionCount > 0 ? ` (${discussionCount}topics)` : ''}`);
+    console.log(`   💬 ${texts.task.discussionLabel}${discussionCount > 0 ? ` (${discussionCount})` : ''}`);
   }
 
   // Requirement Change History计数
   if (task.requirementHistory && task.requirementHistory.length > 0) {
-    console.log(`   📝 Requirement Changes: ${task.requirementHistory.length} times`);
+    console.log(`   📝 ${texts.task.requirementChanges}: ${task.requirementHistory.length}`);
   }
 
-  console.log(`   Created: ${formatRelativeTime(task.createdAt)} · Updated: ${formatRelativeTime(task.updatedAt)}`);
+  console.log(`   ${texts.task.createdAt}: ${formatRelativeTime(task.createdAt, cwd)} · ${texts.task.updatedAt}: ${formatRelativeTime(task.updatedAt, cwd)}`);
 }
 
 /**
@@ -1206,6 +1216,7 @@ function showTaskPanel(
   options: { checkpoints?: boolean; verbose?: boolean },
   cwd: string
 ): void {
+  const texts = t(cwd);
   // 动态宽度: 基 in 终端列数, 范围 60-100
   const termWidth = process.stdout.columns || 80;
   const width = Math.min(Math.max(termWidth, 60), 100);
@@ -1229,20 +1240,20 @@ function showTaskPanel(
 
   // Status行: Use 简洁格式, 一行显示Status, Priority, Type
   const statusMap: Record<string, string> = {
-    open: 'Pending',
-    in_progress: 'in_progress',
-    resolved: 'resolved',
-    closed: 'Closed',
-    abandoned: 'Abandoned',
-    wait_review: '待审查',
-    wait_qa: '待测试',
-    wait_evaluation: '待评估',
+    open: texts.task.statusOpen,
+    in_progress: texts.task.statusInProgress,
+    resolved: texts.task.statusResolved,
+    closed: texts.task.statusClosed,
+    abandoned: texts.task.statusAbandoned,
+    wait_review: texts.task.statusWaitReview,
+    wait_qa: texts.task.statusWaitQa,
+    wait_evaluation: texts.task.statusWaitEvaluation,
   };
   const priorityMap: Record<string, string> = {
-    P0: 'P0紧急',
-    P1: 'P1高',
-    P2: 'P2中',
-    P3: 'P3低',
+    P0: texts.task.priorityP0,
+    P1: texts.task.priorityP1,
+    P2: texts.task.priorityP2,
+    P3: texts.task.priorityP3,
     Q1: 'Q1',
     Q2: 'Q2',
     Q3: 'Q3',
@@ -1250,8 +1261,8 @@ function showTaskPanel(
   };
   const statusText = statusMap[task.status] || task.status;
   const priorityText = priorityMap[task.priority] || task.priority;
-  const typeText = task.type || 'Not specified';
-  const statusLine = `Status: ${statusText}  ·  Priority: ${priorityText}  ·  Type: ${typeText}`;
+  const typeText = task.type || texts.task.typeNotSpecified;
+  const statusLine = `${texts.task.statusHeader}: ${statusText}  ·  ${texts.task.priorityHeader}: ${priorityText}  ·  ${texts.task.typeHeader}: ${typeText}`;
   console.log(`│ ${padByDisplayWidth(statusLine, width - 3)}│`);
 
   // Description（如果有）
@@ -1262,7 +1273,7 @@ function showTaskPanel(
       console.log(`│ ${padByDisplayWidth(line, width - 3)}│`);
     }
     if (descLines.length > 3) {
-      const moreDesc = `... plus ${descLines.length - 3} 行`;
+      const moreDesc = `... ${descLines.length - 3} more lines`;
       console.log(`│ ${padByDisplayWidth(moreDesc, width - 3)}│`);
     }
   }
@@ -1341,12 +1352,12 @@ function showTaskPanel(
     }
 
     if (task.recommendedRole) {
-      const roleLine = `👤 角色: ${task.recommendedRole}`;
+      const roleLine = `👤 ${texts.task.roleLabel}: ${task.recommendedRole}`;
       console.log(`│ ${padByDisplayWidth(roleLine, width - 3)}│`);
     }
 
     if (task.branch) {
-      const branchLine = `🌿 分支: ${task.branch}`;
+      const branchLine = `🌿 ${texts.task.branchLabel}: ${task.branch}`;
       console.log(`│ ${padByDisplayWidth(branchLine, width - 3)}│`);
     }
 
@@ -1365,13 +1376,13 @@ function showTaskPanel(
       if (activeCount > 0) parts.push(`🔄 ${activeCount}`);
       if (pendingCount > 0) parts.push(`⬜ ${pendingCount}`);
       const subtaskLine = parts.length > 0
-        ? `📎 Subtasks: ${task.subtaskIds.length}  (${parts.join(' ')})`
-        : `📎 Subtasks: ${task.subtaskIds.length} `;
+        ? `📎 ${texts.task.subtasksLabel}: ${task.subtaskIds.length}  (${parts.join(' ')})`
+        : `📎 ${texts.task.subtasksLabel}: ${task.subtaskIds.length} `;
       console.log(`│ ${padByDisplayWidth(subtaskLine, width - 3)}│`);
     }
 
     if (task.parentId) {
-      const parentLine = `⬆️ Parent task: ${task.parentId}`;
+      const parentLine = `⬆️ ${texts.task.parentTaskLabel}: ${task.parentId}`;
       console.log(`│ ${padByDisplayWidth(parentLine, width - 3)}│`);
     }
 
@@ -1379,14 +1390,14 @@ function showTaskPanel(
     if (task.needsDiscussion) {
       const discussionCount = task.discussionTopics?.length || 0;
       const discussionLine = discussionCount > 0
-        ? `💬 Pending Discussion (${discussionCount}topics)`
-        : `💬 Pending Discussion`;
+        ? `💬 ${texts.task.discussionLabel} (${discussionCount})`
+        : `💬 ${texts.task.discussionLabel}`;
       console.log(`│ ${padByDisplayWidth(discussionLine, width - 3)}│`);
     }
 
     // Requirement Change History计数
     if (task.requirementHistory && task.requirementHistory.length > 0) {
-      const reqLine = `📝 Requirement Changes: ${task.requirementHistory.length} times`;
+      const reqLine = `📝 ${texts.task.requirementChanges}: ${task.requirementHistory.length}`;
       console.log(`│ ${padByDisplayWidth(reqLine, width - 3)}│`);
     }
   }
@@ -1394,11 +1405,11 @@ function showTaskPanel(
   // 时间行 - Created/Updated分离, Reopen Count独立行
   console.log(`├${hLine}┤`);
   const createdTime = formatLocalTime(task.createdAt);
-  const updatedTime = formatRelativeTime(task.updatedAt);
-  const timeLine = `📅 Created: ${createdTime}  ·  Updated: ${updatedTime}`;
+  const updatedTime = formatRelativeTime(task.updatedAt, cwd);
+  const timeLine = `📅 ${texts.task.createdAt}: ${createdTime}  ·  ${texts.task.updatedAt}: ${updatedTime}`;
   console.log(`│ ${padByDisplayWidth(timeLine, width - 3)}│`);
   if (task.reopenCount && task.reopenCount > 0) {
-    const reopenLine = `🔁 Reopen: ${task.reopenCount} times`;
+    const reopenLine = `🔁 ${texts.task.reopened}: ${texts.task.reopenCount.replace('{count}', String(task.reopenCount))}`;
     console.log(`│ ${padByDisplayWidth(reopenLine, width - 3)}│`);
   }
 
@@ -1739,6 +1750,9 @@ export async function updateTask(
     token?: string;
     syncChildren?: boolean;
     noSync?: boolean;
+    enhancement?: boolean;
+    failedCheckpoints?: string;
+    qaFeedback?: string;
   },
   cwd: string = process.cwd()
 ): Promise<void> {
@@ -1857,15 +1871,43 @@ export async function updateTask(
         delete task.failureReason;
       }
 
+      // 解析 failedCheckpoints
+      const failedCheckpointIds = options.failedCheckpoints
+        ? options.failedCheckpoints.split(',').map(id => id.trim()).filter(Boolean)
+        : undefined;
+
+      // 创建详细 reopen 记录
+      const reopenRecord: import('../types/task').ReopenRecord = {
+        timestamp: new Date().toISOString(),
+        reason: options.qaFeedback || '用户发起Reopen',
+        reopenedBy: process.env.USER || 'system',
+        enhancementRequest: options.enhancement || false,
+        failedCheckpoints: failedCheckpointIds,
+        qaFeedback: options.qaFeedback,
+      };
+
+      // 添加到 reopenRecords
+      if (!task.reopenRecords) {
+        task.reopenRecords = [];
+      }
+      task.reopenRecords.push(reopenRecord);
+
       // 添加 transitionNote
       if (!task.transitionNotes) {
         task.transitionNotes = [];
+      }
+      let transitionNoteText = `Task从 ${oldStatus} Reopen为 open (reopenCount: ${task.reopenCount})`;
+      if (options.enhancement) {
+        transitionNoteText += ' [Enhancement]';
+      }
+      if (failedCheckpointIds && failedCheckpointIds.length > 0) {
+        transitionNoteText += ` [Failed CPs: ${failedCheckpointIds.join(', ')}]`;
       }
       task.transitionNotes.push({
         timestamp: new Date().toISOString(),
         fromStatus: oldStatus as TaskStatus,
         toStatus: 'open',
-        note: `Task从 ${oldStatus} Reopen为 open (reopenCount: ${task.reopenCount})`,
+        note: transitionNoteText,
         author: process.env.USER || undefined,
       });
 
@@ -1879,11 +1921,20 @@ export async function updateTask(
         field: 'status',
         oldValue: oldStatus,
         newValue: 'open',
-        reason: '用户发起Reopen, Status映射为 open + reopenCount 递增',
+        reason: options.qaFeedback || '用户发起Reopen, Status映射为 open + reopenCount 递增',
       });
 
       console.log(`🔁 Task reopened (#${task.reopenCount} times)`);
       console.log(`   ${oldStatus} → open (reopenCount: ${task.reopenCount})`);
+      if (options.enhancement) {
+        console.log('   📌 Marked as enhancement request');
+      }
+      if (failedCheckpointIds && failedCheckpointIds.length > 0) {
+        console.log(`   📋 Failed checkpoints: ${failedCheckpointIds.join(', ')}`);
+      }
+      if (options.qaFeedback) {
+        console.log(`   💬 QA feedback: ${options.qaFeedback.substring(0, 100)}${options.qaFeedback.length > 100 ? '...' : ''}`);
+      }
     } else {
       task.status = options.status as TaskStatus;
     }
@@ -2436,23 +2487,24 @@ function wouldCreateCycle(taskId: string, depId: string, cwd: string): boolean {
  * 格式化Priority
  * 支持两种格式: P0/P1/P2/P3/Q1-Q4 和 low/medium/high/urgent
  */
-function formatPriority(priority: TaskPriority | string): string {
+function formatPriority(priority: TaskPriority | string, cwd?: string): string {
+  const texts = t(cwd);
   const map: Record<string, string> = {
     // P0-P3 格式
-    P0: '🔴 P0 紧急',
-    P1: '🟠 P1 高',
-    P2: '🟡 P2 中',
-    P3: '🟢 P3 低',
+    P0: `🔴 ${texts.task.priorityP0}`,
+    P1: `🟠 ${texts.task.priorityP1}`,
+    P2: `🟡 ${texts.task.priorityP2}`,
+    P3: `🟢 ${texts.task.priorityP3}`,
     // Q1-Q4 象限格式
     Q1: '📊 Q1',
     Q2: '📊 Q2',
     Q3: '📊 Q3',
     Q4: '📊 Q4',
     // low-urgent 格式（兼容旧数据）
-    low: '🟢 低',
-    medium: '🟡 中',
-    high: '🟠 高',
-    urgent: '🔴 紧急',
+    low: `🟢 ${texts.task.priorityP3}`,
+    medium: `🟡 ${texts.task.priorityP2}`,
+    high: `🟠 ${texts.task.priorityP1}`,
+    urgent: `🔴 ${texts.task.priorityP0}`,
   };
   return map[priority] || `❓ ${priority}`;
 }
@@ -2461,21 +2513,22 @@ function formatPriority(priority: TaskPriority | string): string {
  * 格式化Status
  * 支持所有Status格式
  */
-function formatStatus(status: TaskStatus | string): string {
+function formatStatus(status: TaskStatus | string, cwd?: string): string {
+  const texts = t(cwd);
   const map: Record<string, string> = {
-    open: '⬜ Pending',
-    in_progress: '🔵 In Progress',
-    wait_review: '👀 待审查',
-    wait_qa: '🧪 待测试',
-    wait_evaluation: '⏳ 待评估',
-    resolved: '✅ Resolved',
-    closed: '⚫ Closed',
-    abandoned: '❌ Abandoned',
-    failed: '⛔ 已失败',
+    open: `⬜ ${texts.task.statusOpen}`,
+    in_progress: `🔵 ${texts.task.statusInProgress}`,
+    wait_review: `👀 ${texts.task.statusWaitReview}`,
+    wait_qa: `🧪 ${texts.task.statusWaitQa}`,
+    wait_evaluation: `⏳ ${texts.task.statusWaitEvaluation}`,
+    resolved: `✅ ${texts.task.statusResolved}`,
+    closed: `⚫ ${texts.task.statusClosed}`,
+    abandoned: `❌ ${texts.task.statusAbandoned}`,
+    failed: `⛔ ${texts.task.statusFailed}`,
     // 兼容旧Status（reopened/reopen 已废弃, 自动映射为 open + reopenCount 递增）
-    pending: '⬜ Pending',
-    completed: '✅ Completed',
-    cancelled: '❌ Cancelled',
+    pending: `⬜ ${texts.task.statusOpen}`,
+    completed: `✅ ${texts.task.statusResolved}`,
+    cancelled: `❌ ${texts.task.statusAbandoned}`,
   };
   return map[status] || `❓ ${status}`;
 }

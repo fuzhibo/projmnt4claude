@@ -17,7 +17,8 @@ import { DECOMPOSITION_CONSTRAINTS } from '../types/decomposition';
 import type { TaskType, TaskPriority } from '../types/task';
 import { inferTaskType, inferTaskPriority } from '../types/task';
 import { extractFilePaths } from './quality-gate';
-import { AIMetadataAssistant } from './ai-metadata';
+import { getAIPreset, buildAgentOptionsFromPreset } from '../types/config';
+import { invokeAgent } from './headless-agent.js';
 
 /**
  * 判断内容是否为调查报告格式
@@ -171,8 +172,6 @@ async function decomposeWithAI(
   cwd: string
 ): Promise<RequirementDecomposition | null> {
   try {
-    const assistant = new AIMetadataAssistant(cwd);
-
     const prompt = `请将以下需求/报告分解为多个独立的开发任务。
 
 输入内容：
@@ -205,26 +204,30 @@ ${content.substring(0, 4000)}
 6. dependsOn 是依赖项的索引数组（如：[0] 表示依赖第一个任务）
 7. 如果无法分解（如内容过于简单），返回 {"decomposable": false, "reason": "原因", "items": []}`;
 
-    // 使用类型安全的方式访问 protected 方法
-    const result = await (assistant as unknown as {
-      invokeWithEngine: (
-        prompt: string,
-        additionalRules: unknown[],
-        options: { cwd: string; maxRetries: number; timeoutSeconds: number }
-      ) => Promise<{ success: boolean; output: string }>
-    }).invokeWithEngine(
-      prompt,
-      [],
-      { cwd, maxRetries: 2, timeoutSeconds: 30 }
-    );
+    // 使用集中配置获取 decomposition 场景预设并调用 Agent
+    const agentOptions = buildAgentOptionsFromPreset('decomposition', cwd);
+    const result = await invokeAgent(prompt, agentOptions);
 
     if (!result.success) {
       return null;
     }
 
-    const parsed = (assistant as unknown as {
-      parseJSON: (output: string) => Record<string, unknown> | null
-    }).parseJSON(result.output);
+    // 解析 JSON 响应
+    let parsed: Record<string, unknown> | null = null;
+    try {
+      parsed = JSON.parse(result.output);
+    } catch {
+      // 尝试从 markdown code block 中提取
+      const jsonMatch = result.output.match(/```(?:json)?\s*\n?([\s\S]*?)\n?```/);
+      if (jsonMatch?.[1]) {
+        try {
+          parsed = JSON.parse(jsonMatch[1]);
+        } catch {
+          // fall through
+        }
+      }
+    }
+
     if (!parsed || !parsed.items || !Array.isArray(parsed.items)) {
       return null;
     }

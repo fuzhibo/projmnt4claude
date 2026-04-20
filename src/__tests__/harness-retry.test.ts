@@ -1,5 +1,6 @@
-import { describe, test, expect, beforeEach, spyOn } from 'bun:test';
+import { describe, test, expect, beforeEach, afterEach, spyOn } from 'bun:test';
 import { RetryHandler } from '../utils/harness-retry.js';
+import { createIsolatedTestEnv, type IsolatedTestEnv } from '../utils/test-env.js';
 import type { HarnessConfig, ReviewVerdict } from '../types/harness.js';
 
 function createTestConfig(cwd: string, maxRetries = 3): HarnessConfig {
@@ -33,10 +34,16 @@ function createReviewVerdict(overrides: Partial<ReviewVerdict> = {}): ReviewVerd
 // ============== shouldRetry ==============
 
 describe('RetryHandler: shouldRetry', () => {
+  let env: IsolatedTestEnv;
   let handler: RetryHandler;
 
-  beforeEach(() => {
-    handler = new RetryHandler(createTestConfig('/tmp', 3));
+  beforeEach(async () => {
+    env = await createIsolatedTestEnv();
+    handler = new RetryHandler(createTestConfig(env.tempDir, 3));
+  });
+
+  afterEach(() => {
+    env.cleanup();
   });
 
   test('returns true when task has 0 attempts (not in counter)', async () => {
@@ -75,10 +82,16 @@ describe('RetryHandler: shouldRetry', () => {
 // ============== formatRetryStatus ==============
 
 describe('RetryHandler: formatRetryStatus', () => {
+  let env: IsolatedTestEnv;
   let handler: RetryHandler;
 
-  beforeEach(() => {
-    handler = new RetryHandler(createTestConfig('/tmp', 3));
+  beforeEach(async () => {
+    env = await createIsolatedTestEnv();
+    handler = new RetryHandler(createTestConfig(env.tempDir, 3));
+  });
+
+  afterEach(() => {
+    env.cleanup();
   });
 
   test('shows remaining retries when attempts < maxRetries', () => {
@@ -115,10 +128,16 @@ describe('RetryHandler: formatRetryStatus', () => {
 // ============== getNextRetryDelay ==============
 
 describe('RetryHandler: getNextRetryDelay', () => {
+  let env: IsolatedTestEnv;
   let handler: RetryHandler;
 
-  beforeEach(() => {
-    handler = new RetryHandler(createTestConfig('/tmp'));
+  beforeEach(async () => {
+    env = await createIsolatedTestEnv();
+    handler = new RetryHandler(createTestConfig(env.tempDir));
+  });
+
+  afterEach(() => {
+    env.cleanup();
   });
 
   test('returns baseDelay for attempt 0', () => {
@@ -141,10 +160,16 @@ describe('RetryHandler: getNextRetryDelay', () => {
 // ============== getRetryRecommendation ==============
 
 describe('RetryHandler: getRetryRecommendation', () => {
+  let env: IsolatedTestEnv;
   let handler: RetryHandler;
 
-  beforeEach(() => {
-    handler = new RetryHandler(createTestConfig('/tmp'));
+  beforeEach(async () => {
+    env = await createIsolatedTestEnv();
+    handler = new RetryHandler(createTestConfig(env.tempDir));
+  });
+
+  afterEach(() => {
+    env.cleanup();
   });
 
   test('recommends retry for transient API errors (429)', () => {

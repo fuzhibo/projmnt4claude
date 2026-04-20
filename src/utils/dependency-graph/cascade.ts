@@ -6,6 +6,7 @@
  */
 import type { NodeId, CascadeResult } from './types.js';
 import type { DependencyGraph } from './graph.js';
+import { TERMINAL_STATUSES } from '../../types/task.js';
 
 /**
  * 计算上游失败的影响范围
@@ -46,7 +47,7 @@ export function executeFailureCascade(
 
     const node = graph.getNode(taskId);
     if (node) {
-      const terminalStatuses = new Set(['resolved', 'closed', 'abandoned']);
+      const terminalStatuses = new Set(TERMINAL_STATUSES);
       if (terminalStatuses.has(node.status)) {
         skippedTasks.push(taskId);
         continue;
@@ -74,7 +75,7 @@ export function computeUnblockingImpact(
   const unblockedTasks: NodeId[] = [];
   const stillBlocked = new Map<NodeId, NodeId[]>();
 
-  const terminalStatuses = new Set(['resolved', 'closed', 'abandoned']);
+  const terminalStatuses = new Set(TERMINAL_STATUSES);
 
   for (const depId of downstream) {
     // Check if ALL upstream deps of depId are now terminal

@@ -848,18 +848,19 @@ export async function fixSingleIssue(
       const evidence = historyEntry.verificationDetails || '';
 
       // 构建 decision 描述
+      const texts = t(cwd).analyzeCmd;
       const decisionMap: Record<string, string> = {
-        'open→in_progress': '开始执行任务',
-        'in_progress→wait_review': '提交代码审查',
-        'wait_review→wait_qa': '审查通过，进入QA',
-        'wait_qa→wait_evaluation': 'QA通过，等待评估',
-        'wait_evaluation→resolved': '评估通过，任务完成',
-        'open→closed': '关闭任务',
-        'in_progress→resolved': '直接标记完成',
-        'resolved→reopened': '重新打开任务',
-        'reopened→in_progress': '重新开始执行',
-        'open→abandoned': '放弃任务',
-        'in_progress→open': '退回待办',
+        'open→in_progress': texts.transitionStartExecution,
+        'in_progress→wait_review': texts.transitionSubmitReview,
+        'wait_review→wait_qa': texts.transitionReviewPass,
+        'wait_qa→wait_evaluation': texts.transitionQaPass,
+        'wait_evaluation→resolved': texts.transitionEvalPass,
+        'open→closed': texts.transitionCloseTask,
+        'in_progress→resolved': texts.transitionDirectComplete,
+        'resolved→reopened': texts.transitionReopenTask,
+        'reopened→in_progress': texts.transitionRestartExecution,
+        'open→abandoned': texts.transitionAbandonTask,
+        'in_progress→open': texts.transitionReturnTodo,
       };
       const statusKey = `${historyEntry.oldValue}→${historyEntry.newValue}`;
       const decision = decisionMap[statusKey] || `${historyEntry.oldValue} → ${historyEntry.newValue}`;

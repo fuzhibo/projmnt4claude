@@ -43,33 +43,7 @@ const DEFAULT_CONFIG: ProjectConfig = {
   ai: { provider: 'claude-code' },
 };
 
-// 国际化文本
-const i18n = {
-  zh: {
-    initializing: '正在初始化项目管理环境...',
-    createDir: '创建目录',
-    createConfig: '创建配置: config.json',
-    setupComplete: '项目管理环境初始化完成！',
-    nextStep: '使用 \'projmnt4claude task create\' 创建第一个任务',
-    selectLanguage: '请选择语言:',
-    chinese: '中文',
-    english: 'English',
-    copyingSkills: '正在复制技能文件...',
-    skillsCopied: '技能文件复制完成',
-  },
-  en: {
-    initializing: 'Initializing project management environment...',
-    createDir: 'Create directory',
-    createConfig: 'Create config: config.json',
-    setupComplete: 'Project management environment initialized!',
-    nextStep: 'Use \'projmnt4claude task create\' to create your first task',
-    selectLanguage: 'Select language:',
-    chinese: '中文',
-    english: 'English',
-    copyingSkills: 'Copying skill files...',
-    skillsCopied: 'Skill files copied',
-  },
-};
+// 使用全局 i18n 系统，不再使用本地 i18n 对象
 
 /**
  * 初始化选项接口
@@ -112,22 +86,21 @@ export async function setup(cwd: string = process.cwd(), options: SetupOptions =
     const langResponse = await prompts({
       type: 'select',
       name: 'language',
-      message: i18n.zh.selectLanguage + ' / ' + i18n.en.selectLanguage,
+      message: texts.setup.selectLanguage,
       choices: [
-        { title: i18n.zh.chinese, value: 'zh' },
-        { title: i18n.en.english, value: 'en' },
+        { title: texts.setup.chinese, value: 'zh' },
+        { title: texts.setup.english, value: 'en' },
       ],
       initial: 0,
     });
     language = langResponse.language || 'zh';
   }
-  const t = i18n[language];
 
-  console.log(t.initializing);
+  console.log(texts.setup.initializing);
 
   // 创建主目录
   ensureDir(projectDir);
-  console.log(`✓ ${t.createDir}: ${projectDir}`);
+  console.log(`✓ ${texts.setup.createDir}: ${projectDir}`);
 
   // 创建子目录
   const subDirs = [
@@ -141,7 +114,7 @@ export async function setup(cwd: string = process.cwd(), options: SetupOptions =
 
   for (const { dir, name } of subDirs) {
     ensureDir(dir);
-    console.log(`✓ ${t.createDir}: ${name}/`);
+    console.log(`✓ ${texts.setup.createDir}: ${name}/`);
   }
 
   // 创建默认配置文件
@@ -154,7 +127,7 @@ export async function setup(cwd: string = process.cwd(), options: SetupOptions =
 
   const configPath = getConfigPath(cwd);
   fs.writeFileSync(configPath, JSON.stringify(config, null, 2), 'utf-8');
-  console.log(`✓ ${t.createConfig}`);
+  console.log(`✓ ${texts.setup.createConfig}`);
 
   // 复制技能文件到项目
   copySkillFiles(cwd, language, texts);
@@ -175,8 +148,8 @@ export async function setup(cwd: string = process.cwd(), options: SetupOptions =
     console.log(texts.setupCmd.gitHookDisabled);
   }
 
-  console.log(`\n✅ ${t.setupComplete}`);
-  console.log(`\n${t.nextStep}`);
+  console.log(`\n✅ ${texts.setup.setupComplete}`);
+  console.log(`\n${texts.setup.nextStep}`);
 }
 
 /**

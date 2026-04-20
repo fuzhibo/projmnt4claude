@@ -101,7 +101,7 @@ export class HarnessExecutor {
       if (!engineResult.result.success) {
         // Agent 调用本身失败（超时、进程异常等）
         report.status = engineResult.result.exitCode === 124 ? 'timeout' : 'failed';
-        report.error = engineResult.result.error || `退出码: ${engineResult.result.exitCode}`;
+        report.error = engineResult.result.error || `${texts.harness.logs.exitCode}: ${engineResult.result.exitCode}`;
         console.log(`\n   ❌ ${texts.harness.logs.devPhaseFailed}: ${report.error}`);
       } else if (!engineResult.passed) {
         // 输出格式验证未通过（如空输出）
@@ -109,7 +109,7 @@ export class HarnessExecutor {
           .map(v => `${v.ruleId}: ${v.message}`)
           .join('; ');
         report.status = 'failed';
-        report.error = `开发输出格式验证未通过: ${violationMessages}`;
+        report.error = `${texts.harness.logs.devOutputValidationFailedError}: ${violationMessages}`;
         console.log(`\n   ❌ ${texts.harness.logs.devOutputValidationFailed}: ${violationMessages}`);
       } else {
         report.status = 'success';

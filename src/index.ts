@@ -191,6 +191,10 @@ program
   .option('--change-note <note>', 'Change note, at least 10 characters, recorded in transitionNotes (batch-update only)')
   .option('--source <source>', 'Filter log source (batch-update-logs only): cli/ide/hook/script/unknown')
   .option('--summary', 'Show log statistics summary (batch-update-logs only)')
+  // Reopen options (P2-feature)
+  .option('--enhancement', 'Mark reopen as enhancement request (reopen only)')
+  .option('--failed-checkpoints <ids>', 'Failed checkpoint IDs, comma-separated (reopen only)')
+  .option('--qa-feedback <text>', 'QA feedback for reopen (reopen only)')
   .action(async (action, id, options) => {
     requireInit();
     switch (action) {
@@ -274,6 +278,9 @@ program
           token: options.token,
           syncChildren: options.syncChildren,
           noSync: options.noSync,
+          enhancement: options.enhancement,
+          failedCheckpoints: options.failedCheckpoints,
+          qaFeedback: options.qaFeedback,
         });
         break;
       case 'delete':
@@ -579,8 +586,9 @@ program
   .option('--smart', '启用 AI 语义依赖推断 (仅 recommend, Layer3 增强)')
   .option('--all', '显示全部状态任务，默认仅推荐 open (仅 recommend)')
   .option('--strict-subtask-coverage', '严格子任务覆盖检测：发现缺失子任务时中止推荐 (仅 recommend)')
-  .option('--require-quality', '启用质量门禁检查，过滤低质量任务 (仅 recommend)')
-  .option('--no-quality-gate', '禁用质量门禁检查 (仅 recommend)')
+  .option('--strict-quality-gate', '严格质量门禁检查：质量检查失败时中止推荐 (仅 recommend)')
+  .option('--quality-threshold <score>', '质量门禁阈值 (0-100)，低于此分数的任务将被标记 (仅 recommend)', '60')
+  .option('--skip-quality-gate', '跳过质量门禁检查 (仅 recommend)')
   .action(async (action, id, options) => {
     requireInit();
     switch (action) {
@@ -612,7 +620,9 @@ program
           all: options.all,
           smart: options.smart,
           strictSubtaskCoverage: options.strictSubtaskCoverage,
-          requireQuality: options.qualityGate === false ? false : options.requireQuality || true,
+          strictQualityGate: options.strictQualityGate,
+          qualityThreshold: parseInt(options.qualityThreshold, 10) || 60,
+          skipQualityGate: options.skipQualityGate,
         });
         break;
       default:

@@ -218,6 +218,7 @@ export class HarnessEvaluator {
     phantomTasks: string[] = [],
     retryContext?: RetryContext
   ): string {
+    const texts = t(this.config.cwd);
     // BUG-014-2A: 过滤掉 requiresHuman 检查点，仅评估自动化检查点
     // BUG-013-1: 防御性处理，确保数组字段始终为有效数组
     const contractCheckpoints = Array.isArray(contract.checkpoints) ? contract.checkpoints : [];
@@ -243,23 +244,23 @@ export class HarnessEvaluator {
 
     // Build section variables (each non-empty section ends with \n for blank-line separation)
     const descriptionSection = task.description
-      ? `## 任务描述\n${task.description}\n`
-      : '';
+      ? `## ${texts.harness.logs.taskDescriptionSection}\n${task.description}\n`
+      : `## ${texts.harness.logs.taskDescriptionSection}\n${texts.harness.logs.taskDescriptionEmpty}\n`;
 
     const acceptanceCriteriaList = contractCriteria.length > 0
       ? `${contractCriteria.map((criteria, i) => `${i + 1}. ${criteria}`).join('\n')}\n`
-      : '（未定义具体验收标准，请根据任务描述判断）\n';
+      : `${texts.harness.logs.acceptanceCriteriaEmpty}\n`;
 
     const verificationCommandsSection = contractCommands.length > 0
       ? `## 验证命令\n请运行以下命令验证实现:\n\`\`\`bash\n${contractCommands.join('\n')}\n\`\`\`\n`
       : '';
 
     const checkpointsSection = filteredContractCheckpoints.length > 0
-      ? `## 检查点\n请确认以下检查点是否完成:\n${filteredContractCheckpoints.map((cp, i) => `${i + 1}. ${cp}`).join('\n')}\n`
+      ? `## ${texts.harness.logs.checkpointSectionTitle}\n${texts.harness.logs.checkpointSectionConfirm}${filteredContractCheckpoints.map((cp, i) => `${i + 1}. ${cp}`).join('\n')}\n`
       : '';
 
     const humanCheckpointsSection = humanCheckpointIds.size > 0
-      ? `## 关于人工验证检查点\n本任务有 ${humanCheckpointIds.size} 个需要人工验证的检查点（如 ${Array.from(humanCheckpointIds).slice(0, 3).join(', ')}）。\n这些检查点由后处理流程单独管理，不在本评估范围内。请仅基于上方的自动化检查点进行判断。\n`
+      ? `## ${texts.harness.logs.aboutHumanVerification}\n${texts.harness.logs.humanVerificationNote.replace('{count}', String(humanCheckpointIds.size)).replace('{examples}', Array.from(humanCheckpointIds).slice(0, 3).join(', '))}\n${texts.harness.logs.humanVerificationExcluded}\n`
       : '';
 
     const evidenceSection = devEvidence.length > 0
@@ -271,7 +272,7 @@ export class HarnessEvaluator {
       : '';
 
     const phantomTasksSection = phantomTasks.length > 0
-      ? `## ⚠️ 幽灵任务检测\n**严重违规**: 开发者在执行任务期间创建了 ${phantomTasks.length} 个额外任务:\n${phantomTasks.map(tid => `- ${tid}`).join('\n')}\n\n开发者被严格禁止创建新任务。这是一个自动 NOPASS 的严重违规。\n请在评估结果中明确标注此违规，并将结果设为 NOPASS。\n`
+      ? `## ${texts.harness.logs.phantomTaskDetectedTitle}\n${texts.harness.logs.phantomTaskViolation.replace('{count}', String(phantomTasks.length))}\n${phantomTasks.map(tid => `- ${tid}`).join('\n')}\n\n${texts.harness.logs.phantomTaskProhibited}\n${texts.harness.logs.phantomTaskNopassRequirement}\n`
       : '';
 
     const template = loadPromptTemplate('evaluation', this.config.cwd);
@@ -446,15 +447,16 @@ export class HarnessEvaluator {
     }
 
     // 如果没有提取到原因，设置默认值
+    const texts = t(this.config.cwd);
     if (!result.reason) {
       if (result.passed) {
-        result.reason = '基于结构化关键词匹配：评估通过';
+        result.reason = texts.harness.logs.structuredMatchPassed;
       } else if (structured.passed !== null) {
-        result.reason = '基于结构化关键词匹配：评估未通过';
+        result.reason = texts.harness.logs.structuredMatchFailed;
       } else {
-        result.reason = '无法解析评估结果';
+        result.reason = texts.harness.logs.cannotParseResult;
         result.inferenceType = 'parse_failure_default';
-        console.log('   ⚠️  解析失败，原始输出前500字符:');
+        console.log(`   ⚠️  ${texts.harness.logs.parseErrorWarning.replace('{limit}', '500')}:`);
         console.log(output.substring(0, 500));
       }
     }
@@ -552,29 +554,29 @@ export class HarnessEvaluator {
       }
 
       if (usingSnapshot) {
-        console.log(`   📊 幽灵任务检测统计: 总任务 ${allTaskIds.length}, 计划内排除 ${excludedCount}, 计划外检测中 ${allTaskIds.length - excludedCount - 1}`);
+        console.log(`   📊 ${texts.harness.logs.snapshotStats.replace('{total}', String(allTaskIds.length)).replace('{excluded}', String(excludedCount)).replace('{checking}', String(allTaskIds.length - excludedCount - 1))}`);
       }
     } catch (error) {
-      console.log(`   ⚠️ 幽灵任务检测出错: ${error instanceof Error ? error.message : String(error)}`);
+      console.log(`   ⚠️ ${texts.harness.logs.snapshotError}: ${error instanceof Error ? error.message : String(error)}`);
     }
 
     // 4. 如果 Claude 输出中包含创建命令但文件系统中未检测到，也记录警告
     if (hasCreateCommand && phantomTasks.length === 0) {
-      console.log('   ⚠️ 开发者输出中包含 task create / init-requirement 命令，但未在文件系统中检测到新任务');
-      console.log('   ⚠️ 这可能意味着创建操作失败，但意图已存在');
+      console.log(`   ⚠️  ${texts.harness.logs.creatingCommandWarning}`);
+      console.log(`   ⚠️  ${texts.harness.logs.creatingCommandIntent}`);
     }
 
     if (phantomTasks.length > 0) {
-      console.log(`   ⚠️ 检测到 ${phantomTasks.length} 个幽灵任务: ${phantomTasks.join(', ')}`);
+      console.log(`   ⚠️  ${texts.harness.logs.phantomTaskDetected.replace('{count}', String(phantomTasks.length))}: ${phantomTasks.join(', ')}`);
       if (usingSnapshot) {
-        console.log(`   ℹ️  检测模式: 基于计划快照（已排除 ${snapshotTaskCount} 个计划内任务）`);
+        console.log(`   ℹ️  ${texts.harness.logs.snapshotMode} ${texts.harness.logs.snapshotExcludedInfo?.replace('{count}', String(snapshotTaskCount)) || `(excluded ${snapshotTaskCount} planned tasks)`}`);
       } else {
-        console.log(`   ℹ️  检测模式: 时间窗口回退（建议启用计划快照以提高准确性）`);
+        console.log(`   ℹ️  ${texts.harness.logs.fallbackMode}`);
       }
     } else {
-      console.log(`   ✅ 未检测到幽灵任务`);
+      console.log(`   ✅ ${texts.harness.logs.noPhantomTask}`);
       if (usingSnapshot) {
-        console.log(`   ℹ️  已基于计划快照排除 ${snapshotTaskCount} 个计划内任务`);
+        console.log(`   ℹ️  ${texts.harness.logs.snapshotBasedOnInfo?.replace('{count}', String(snapshotTaskCount)) || `excluded ${snapshotTaskCount} planned tasks based on snapshot`}`);
       }
     }
 
@@ -624,6 +626,7 @@ export class HarnessEvaluator {
    * 加载 Contract
    */
   private loadContract(taskId: string): SprintContract | null {
+    const texts = t(this.config.cwd);
     const contractPath = this.getContractPath(taskId);
 
     if (!fs.existsSync(contractPath)) {
@@ -635,11 +638,11 @@ export class HarnessEvaluator {
       const parsed = JSON.parse(content);
       const validated = this.validateSprintContract(parsed, taskId);
       if (!validated) {
-        console.warn(`   ⚠️ contract.json 存在但数据无效，使用默认 Contract`);
+        console.warn(`   ⚠️  ${texts.harness.logs.contractDataInvalid}`);
       }
       return validated;
     } catch (error) {
-      console.warn(`   ⚠️ contract.json 解析失败: ${error instanceof Error ? error.message : String(error)}`);
+      console.warn(`   ⚠️  ${texts.harness.logs.contractParseFailed}: ${error instanceof Error ? error.message : String(error)}`);
       return null;
     }
   }
@@ -694,6 +697,7 @@ export class HarnessEvaluator {
     stderr: string,
     success: boolean
   ): void {
+    const texts = t(this.config.cwd);
     try {
       const projectDir = getProjectDir(this.config.cwd);
       const dir = path.join(projectDir, 'reports', 'harness', taskId);
@@ -705,7 +709,7 @@ export class HarnessEvaluator {
       const rawPath = path.join(dir, `evaluation-raw-${timestamp}.log`);
 
       const lines = [
-        `# 评估会话原始输出`,
+        `# ${texts.harness.logs.rawEvaluationOutputTitle || 'Raw Evaluation Output'}`,
         `Task: ${taskId}`,
         `Time: ${new Date().toISOString()}`,
         `Success: ${success}`,
@@ -720,10 +724,10 @@ export class HarnessEvaluator {
       ];
 
       fs.writeFileSync(rawPath, lines.join('\n'), 'utf-8');
-      console.log(`   📄 原始评估输出已保存: evaluation-raw-${timestamp}.log`);
+      console.log(`   📄 ${texts.harness.logs.rawOutputSaved.replace('{filename}', `evaluation-raw-${timestamp}.log`)}`);
     } catch (error) {
       // 日志保存失败不中断主流程
-      console.warn(`   ⚠️ 保存原始评估输出失败: ${error instanceof Error ? error.message : String(error)}`);
+      console.warn(`   ⚠️ ${texts.harness.logs.saveRawOutputFailed}: ${error instanceof Error ? error.message : String(error)}`);
     }
   }
 

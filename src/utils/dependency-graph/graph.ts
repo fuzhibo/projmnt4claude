@@ -5,6 +5,7 @@
  * 替代分散在 plan.ts、analyze.ts、task.ts 中的图操作逻辑。
  */
 import type { TaskMeta } from '../../types/task.js';
+import { TERMINAL_STATUSES } from '../../types/task.js';
 import type {
   NodeId,
   EdgeSource,
@@ -71,7 +72,7 @@ export class DependencyGraph {
     const graph = new DependencyGraph(options);
     const sources = options?.sources;
     const excludeTerminal = options?.excludeTerminal;
-    const terminalStatuses = new Set(['resolved', 'closed', 'abandoned']);
+    const terminalStatuses = new Set(TERMINAL_STATUSES);
 
     // Add all nodes first
     for (const task of tasks) {

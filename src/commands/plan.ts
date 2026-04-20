@@ -13,7 +13,7 @@ import {
 } from '../utils/plan';
 import { isInitialized, getProjectDir } from '../utils/path';
 import { readTaskMeta, getAllTasks, taskExists, getSubtasks } from '../utils/task';
-import { normalizeStatus } from '../types/task';
+import { normalizeStatus, TERMINAL_STATUSES } from '../types/task';
 import type { TaskMeta, TaskPriority } from '../types/task';
 import { SEPARATOR_WIDTH } from '../utils/format';
 import { createLogger, type InstrumentationRecord } from '../utils/logger';
@@ -853,7 +853,17 @@ export async function clearPlanCmd(force: boolean = false, cwd: string = process
  * @param options.json - JSON 格式输出
  */
 export async function recommendPlan(
-  options: { query?: string; nonInteractive?: boolean; json?: boolean; all?: boolean; smart?: boolean; strictSubtaskCoverage?: boolean; requireQuality?: boolean } = {},
+  options: {
+    query?: string;
+    nonInteractive?: boolean;
+    json?: boolean;
+    all?: boolean;
+    smart?: boolean;
+    strictSubtaskCoverage?: boolean;
+    strictQualityGate?: boolean;
+    qualityThreshold?: number;
+    skipQualityGate?: boolean;
+  } = {},
   cwd: string = process.cwd()
 ): Promise<void> {
   if (!isInitialized(cwd)) {
@@ -909,9 +919,9 @@ export async function recommendPlan(
 
   // 0. Filter tasks (default: only recommend open status, --all excludes terminal states)
   // CP-9: Use normalizeStatus for standardized status comparison
-  const TERMINAL_STATUSES = new Set(['resolved', 'closed', 'abandoned', 'failed']);
+  const TERMINAL_STATUSES_SET = new Set(TERMINAL_STATUSES);
   const activeTasks = options.all
-    ? allTasks.filter(t => !TERMINAL_STATUSES.has(normalizeStatus(t.status)))
+    ? allTasks.filter(t => !TERMINAL_STATUSES_SET.has(normalizeStatus(t.status)))
     : allTasks.filter(t => normalizeStatus(t.status) === 'open');
 
   const excludedCount = allTasks.length - activeTasks.length;
@@ -980,7 +990,8 @@ export async function recommendPlan(
 
   // ========== Quality Gate Check (plan_recommend phase) - QG-PLAN-005 ==========
   // CP-1: --all mode also runs quality gate check
-  if (options.requireQuality !== false && filteredTasks.length > 0) {
+  // CP-2: --skip-quality-gate skips quality gate check
+  if (!options.skipQualityGate && filteredTasks.length > 0) {
     console.log('Running quality gate check...');
 
     // Use new runPlanQualityGateCheck function for quality gate check
@@ -997,11 +1008,19 @@ export async function recommendPlan(
         phase: 'plan_recommend',
       }));
 
+      // CP-3: --strict-quality-gate aborts on failure (both interactive and non-interactive)
+      if (options.strictQualityGate) {
+        console.error('❌ Quality gate check failed (--strict-quality-gate mode), aborting plan recommendation');
+        console.error(`   Failed tasks: ${qualityGateResult.failedTasks.join(', ')}`);
+        console.error('   Fix the issues or use --skip-quality-gate to skip quality check (not recommended)');
+        process.exit(1);
+      }
+
       // Non-interactive mode: exit directly
       if (options.nonInteractive || !process.stdout.isTTY) {
         console.error('❌ Quality gate check failed, aborting plan recommendation');
         console.error(`   Failed tasks: ${qualityGateResult.failedTasks.join(', ')}`);
-        console.error('   Use --no-quality-gate to skip quality check (not recommended)');
+        console.error('   Use --skip-quality-gate to skip quality check (not recommended)');
         process.exit(1);
       }
 

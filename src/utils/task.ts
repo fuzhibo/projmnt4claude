@@ -1,7 +1,7 @@
 import * as path from 'path';
 import * as fs from 'fs';
 import { getTasksDir, isInitialized, getProjectDir } from './path';
-import type { TaskMeta, TaskHistoryEntry, TaskStatus, TaskRole, TaskVerification, VerificationMethod, TaskType, TaskPriority, ExecutionStats } from '../types/task';
+import type { TaskMeta, TaskHistoryEntry, TaskStatus, TaskRole, TaskVerification, VerificationMethod, TaskType, TaskPriority, ExecutionStats, ReopenRecord } from '../types/task';
 import { createDefaultTaskMeta, isValidTaskId, generateNextTaskId, generateTaskId, parseTaskId } from '../types/task';
 
 // ============================================================
@@ -694,11 +694,14 @@ export function assignRole(
 /**
  * 程序化递增重开次数
  * 直接修改 meta.json，不依赖 AI 上下文
+ *
+ * @param record - 可选的详细 reopen 记录，包含 enhancementRequest、failedCheckpoints 等字段
  */
 export function incrementReopenCount(
   taskId: string,
   reason: string,
-  cwd: string = process.cwd()
+  cwd: string = process.cwd(),
+  record?: Partial<Omit<ReopenRecord, 'timestamp' | 'reason' | 'reopenedBy'>>
 ): void {
   const task = readTaskMeta(taskId, cwd);
   if (!task) {
@@ -708,6 +711,19 @@ export function incrementReopenCount(
   const oldCount = task.reopenCount || 0;
   task.reopenCount = oldCount + 1;
   task.updatedAt = new Date().toISOString();
+
+  // 添加详细 reopen 记录
+  const reopenRecord: ReopenRecord = {
+    timestamp: new Date().toISOString(),
+    reason,
+    reopenedBy: process.env.USER || 'system',
+    ...record,
+  };
+
+  if (!task.reopenRecords) {
+    task.reopenRecords = [];
+  }
+  task.reopenRecords.push(reopenRecord);
 
   // 添加历史记录（仅记录 reopenCount 变更，调用方负责设置目标状态）
   task.history.push({

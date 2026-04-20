@@ -7,6 +7,7 @@
  */
 
 import type { TaskMeta } from '../types/task.js';
+import { TERMINAL_STATUSES } from '../types/task.js';
 import { extractAffectedFiles, extractFilePaths } from './quality-gate.js';
 
 // ============== 类型定义 ==============
@@ -44,7 +45,7 @@ export interface InferDependenciesOptions {
 
 // ============== 终态集合 ==============
 
-const TERMINAL_STATUSES = new Set(['resolved', 'closed', 'abandoned', 'failed']);
+const TERMINAL_STATUSES_SET = new Set(TERMINAL_STATUSES);
 
 // ============== 单任务推断 ==============
 
@@ -90,7 +91,7 @@ export function inferDependencies(
   // 过滤候选任务
   const candidates = allTasks.filter(t => {
     if (currentTaskId && t.id === currentTaskId) return false;
-    if (skipTerminal && TERMINAL_STATUSES.has(t.status)) return false;
+    if (skipTerminal && TERMINAL_STATUSES_SET.has(t.status)) return false;
     return true;
   });
 

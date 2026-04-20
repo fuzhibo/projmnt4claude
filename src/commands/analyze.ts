@@ -26,6 +26,7 @@ import {
   generateTaskId,
   inferTaskType,
   CURRENT_TASK_SCHEMA_VERSION,
+  TERMINAL_STATUSES,
   PIPELINE_INTERMEDIATE_STATUSES,
   PIPELINE_STATUS_MIGRATION_MAP,
   normalizeStatus,
@@ -1229,7 +1230,7 @@ interface AIInferenceResult {
 }
 
 /** 终态集合 */
-const TERMINAL_STATUSES: ReadonlySet<string> = new Set(['resolved', 'closed', 'abandoned', 'failed']);
+const TERMINAL_STATUSES_SET: ReadonlySet<string> = new Set(TERMINAL_STATUSES);
 
 /**
  * CP-1: shouldTriggerAIInference - 判断是否需要 AI 分析
@@ -1248,7 +1249,7 @@ export function shouldTriggerAIInference(
   const currentStatus = normalizeStatus(task.status);
 
   // CP-2: 终态任务不需要 AI 推断
-  if (TERMINAL_STATUSES.has(currentStatus)) return false;
+  if (TERMINAL_STATUSES_SET.has(currentStatus)) return false;
 
   // 如果 Layer 1 已经发现问题，不需要 Layer 2（确定性规则已足够）
   if (layer1Issues.length > 0) return false;

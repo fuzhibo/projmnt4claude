@@ -91,6 +91,29 @@ export interface RequirementHistoryEntry {
 }
 
 /**
+ * Reopen record entry
+ * Used to track detailed information when a task is reopened
+ */
+export interface ReopenRecord {
+  /** Reopen timestamp (ISO) */
+  timestamp: string;
+  /** Reopen reason */
+  reason: string;
+  /** Whether this is an enhancement request */
+  enhancementRequest?: boolean;
+  /** List of failed checkpoint IDs that caused the reopen */
+  failedCheckpoints?: string[];
+  /** Previous task scope/description */
+  previousScope?: string;
+  /** New task scope/description after reopen */
+  newScope?: string;
+  /** QA feedback that led to the reopen */
+  qaFeedback?: string;
+  /** Reopened by (user or system) */
+  reopenedBy?: string;
+}
+
+/**
  * Verification method type
  * Note: 'manual' type has been removed, forced to use specific verification methods
  */
@@ -457,6 +480,12 @@ export class Pipeline {
 export const CURRENT_TASK_SCHEMA_VERSION = 6;
 
 /**
+ * Terminal statuses - tasks in these statuses are considered complete
+ * and will not be processed further by the task management system
+ */
+export const TERMINAL_STATUSES: TaskStatus[] = ['resolved', 'closed', 'abandoned', 'failed'];
+
+/**
  * Pipeline intermediate status list
  * These statuses are only used during harness pipeline execution, old tasks staying in these statuses
  * indicate pipeline interruption or use of old spec
@@ -554,6 +583,7 @@ export interface TaskMeta {
   updatedAt: string;       // ISO time
   history: TaskHistoryEntry[]; // History records
   reopenCount?: number;    // Reopen count (times task was reopened)
+  reopenRecords?: ReopenRecord[]; // Detailed reopen records
   requirementHistory?: RequirementHistoryEntry[]; // Requirement change history
   verification?: TaskVerification; // Task-level verification info (auto-populated on resolved)
   executionStats?: ExecutionStats; // Execution stats (recorded after pipeline completion)
@@ -838,27 +868,27 @@ export function convertTaskId(
 export function inferTaskType(title: string): TaskType {
   const lowerTitle = title.toLowerCase();
 
-  // Bug keywords
+  // Bug keywords (including Chinese equivalents)
   if (/\b(fix|bug|error|issue|crash|broken|fail|problem|修复|错误|问题|故障)\b/.test(lowerTitle)) {
     return 'bug';
   }
 
-  // Research keywords
+  // Research keywords (including Chinese equivalents)
   if (/\b(research|investigate|analyze|study|explore|调研|研究|分析|探索)\b/.test(lowerTitle)) {
     return 'research';
   }
 
-  // Docs keywords
+  // Docs keywords (including Chinese equivalents)
   if (/\b(doc|document|readme|guide|manual|文档|说明|指南)\b/.test(lowerTitle)) {
     return 'docs';
   }
 
-  // Refactor keywords
+  // Refactor keywords (including Chinese equivalents)
   if (/\b(refactor|clean|improve|optimize|restructure|重构|优化|改进)\b/.test(lowerTitle)) {
     return 'refactor';
   }
 
-  // Test keywords
+  // Test keywords (including Chinese equivalents)
   if (/\b(test|spec|coverage|测试|单元测试|集成测试)\b/.test(lowerTitle)) {
     return 'test';
   }
@@ -873,14 +903,17 @@ export function inferTaskType(title: string): TaskType {
 export function inferTaskPriority(title: string): TaskPriority {
   const lowerTitle = title.toLowerCase();
 
+  // Urgent priority (including Chinese equivalents)
   if (/\b(urgent|critical|asap|紧急|严重|立即)\b/.test(lowerTitle)) {
     return 'P0';
   }
 
+  // High priority (including Chinese equivalents)
   if (/\b(important|high|优先|重要)\b/.test(lowerTitle)) {
     return 'P1';
   }
 
+  // Low priority (including Chinese equivalents)
   if (/\b(low|optional|可选|低)\b/.test(lowerTitle)) {
     return 'P3';
   }

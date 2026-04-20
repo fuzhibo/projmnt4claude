@@ -7130,6 +7130,27 @@ function getLogsDir(cwd2 = process.cwd()) {
 var init_path = () => {};
 
 // src/types/config.ts
+function getAIPreset(scenario, overrides) {
+  const preset = DEFAULT_AI.presets?.[scenario];
+  if (!preset) {
+    throw new Error(`\u672A\u77E5\u7684 AI \u573A\u666F\u9884\u8BBE: ${String(scenario)}`);
+  }
+  return {
+    ...preset,
+    ...overrides
+  };
+}
+function buildAgentOptionsFromPreset(scenario, cwd2, overrides) {
+  const preset = getAIPreset(scenario, overrides);
+  return {
+    timeout: preset.timeout,
+    allowedTools: preset.allowedTools,
+    outputFormat: preset.outputFormat,
+    maxRetries: preset.maxRetries,
+    cwd: cwd2,
+    dangerouslySkipPermissions: true
+  };
+}
 var DEFAULT_LOGGING, DEFAULT_AI, DEFAULT_TRAINING, DEFAULT_GIT_HOOK;
 var init_config = __esm(() => {
   DEFAULT_LOGGING = {
@@ -7139,7 +7160,75 @@ var init_config = __esm(() => {
     inputMaxLength: 500
   };
   DEFAULT_AI = {
-    provider: "claude-code"
+    provider: "claude-code",
+    timeout: 60,
+    maxRetries: 1,
+    presets: {
+      metadataEnhancement: {
+        name: "metadataEnhancement",
+        timeout: 60,
+        maxRetries: 1,
+        allowedTools: [],
+        outputFormat: "text",
+        description: "\u5143\u6570\u636E\u589E\u5F3A\uFF1A\u5206\u6790\u9700\u6C42\u5E76\u8FD4\u56DE\u589E\u5F3A\u540E\u7684\u4EFB\u52A1\u5143\u6570\u636E"
+      },
+      decomposition: {
+        name: "decomposition",
+        timeout: 90,
+        maxRetries: 2,
+        allowedTools: ["Read", "Glob", "Grep"],
+        outputFormat: "text",
+        description: "\u9700\u6C42\u5206\u89E3\uFF1A\u5C06\u590D\u6742\u9700\u6C42\u5206\u89E3\u4E3A\u591A\u4E2A\u5B50\u4EFB\u52A1"
+      },
+      codeReview: {
+        name: "codeReview",
+        timeout: 120,
+        maxRetries: 1,
+        allowedTools: ["Read", "Bash", "Grep", "Glob"],
+        outputFormat: "text",
+        description: "\u4EE3\u7801\u5BA1\u67E5\uFF1A\u5206\u6790\u4EE3\u7801\u5E76\u63D0\u4F9B\u5BA1\u67E5\u610F\u89C1"
+      },
+      qualityAnalysis: {
+        name: "qualityAnalysis",
+        timeout: 60,
+        maxRetries: 1,
+        allowedTools: [],
+        outputFormat: "text",
+        description: "\u8D28\u91CF\u5206\u6790\uFF1A\u8BC4\u4F30\u4EFB\u52A1\u63CF\u8FF0\u7684\u6E05\u6670\u5EA6\u548C\u5B8C\u6574\u6027"
+      },
+      duplicateDetection: {
+        name: "duplicateDetection",
+        timeout: 90,
+        maxRetries: 1,
+        allowedTools: [],
+        outputFormat: "text",
+        description: "\u91CD\u590D\u68C0\u6D4B\uFF1A\u68C0\u6D4B\u4EFB\u52A1\u662F\u5426\u4E0E\u5176\u4ED6\u4EFB\u52A1\u91CD\u590D"
+      },
+      stalenessAssessment: {
+        name: "stalenessAssessment",
+        timeout: 60,
+        maxRetries: 1,
+        allowedTools: [],
+        outputFormat: "text",
+        description: "\u8FC7\u65F6\u8BC4\u4F30\uFF1A\u8BC4\u4F30\u4EFB\u52A1\u662F\u5426\u5DF2\u8FC7\u65F6"
+      },
+      bugAnalysis: {
+        name: "bugAnalysis",
+        timeout: 60,
+        maxRetries: 1,
+        allowedTools: [],
+        outputFormat: "text",
+        description: "Bug\u5206\u6790\uFF1A\u4ECEBug\u62A5\u544A\u4E2D\u63D0\u53D6\u7ED3\u6784\u5316\u4FE1\u606F"
+      },
+      checkpointEnhancement: {
+        name: "checkpointEnhancement",
+        timeout: 60,
+        maxRetries: 1,
+        allowedTools: [],
+        outputFormat: "text",
+        description: "\u68C0\u67E5\u70B9\u589E\u5F3A\uFF1A\u4F18\u5316\u68C0\u67E5\u70B9\u4F7F\u5176\u66F4\u5177\u4F53\u53EF\u9A8C\u8BC1"
+      }
+    }
   };
   DEFAULT_TRAINING = {
     exportEnabled: false,
@@ -7147,6 +7236,1778 @@ var init_config = __esm(() => {
   };
   DEFAULT_GIT_HOOK = {
     enabled: true
+  };
+});
+
+// src/i18n/zh.ts
+var zhTexts;
+var init_zh = __esm(() => {
+  zhTexts = {
+    error: "\u9519\u8BEF",
+    success: "\u6210\u529F",
+    cancel: "\u53D6\u6D88",
+    common: {
+      skip: "\u8DF3\u8FC7",
+      notSelected: "\u672A\u9009\u62E9"
+    },
+    setup: {
+      initializing: "\u6B63\u5728\u521D\u59CB\u5316\u9879\u76EE\u7BA1\u7406\u73AF\u5883...",
+      createDir: "\u521B\u5EFA\u76EE\u5F55",
+      createConfig: "\u521B\u5EFA\u914D\u7F6E: config.json",
+      setupComplete: "\u9879\u76EE\u7BA1\u7406\u73AF\u5883\u521D\u59CB\u5316\u5B8C\u6210\uFF01",
+      nextStep: "\u4F7F\u7528 'projmnt4claude task create' \u521B\u5EFA\u7B2C\u4E00\u4E2A\u4EFB\u52A1",
+      selectLanguage: "\u8BF7\u9009\u62E9\u8BED\u8A00:",
+      chinese: "\u4E2D\u6587",
+      english: "English",
+      copyingSkills: "\u6B63\u5728\u590D\u5236\u6280\u80FD\u6587\u4EF6...",
+      skillsCopied: "\u6280\u80FD\u6587\u4EF6\u590D\u5236\u5B8C\u6210",
+      alreadyInitialized: "\u9879\u76EE\u7BA1\u7406\u73AF\u5883\u5DF2\u5B58\u5728\uFF0C\u8DF3\u8FC7\u521D\u59CB\u5316\u3002"
+    },
+    task: {
+      createTitle: "\u8BF7\u8F93\u5165\u4EFB\u52A1\u6807\u9898:",
+      createDescription: "\u8BF7\u8F93\u5165\u4EFB\u52A1\u63CF\u8FF0\uFF08\u53EF\u9009\uFF09:",
+      taskCreated: "\u4EFB\u52A1\u521B\u5EFA\u6210\u529F",
+      taskNotFound: "\u672A\u627E\u5230\u4EFB\u52A1",
+      taskUpdated: "\u4EFB\u52A1\u5DF2\u66F4\u65B0",
+      taskDeleted: "\u4EFB\u52A1\u5DF2\u5220\u9664",
+      listHeader: "\u4EFB\u52A1\u5217\u8868",
+      noTasks: "\u6682\u65E0\u4EFB\u52A1",
+      statusHeader: "\u72B6\u6001",
+      priorityHeader: "\u4F18\u5148\u7EA7",
+      roleHeader: "\u63A8\u8350\u89D2\u8272",
+      dependencyHeader: "\u4F9D\u8D56",
+      subtaskHeader: "\u5B50\u4EFB\u52A1",
+      idHeader: "ID",
+      titleHeader: "\u6807\u9898",
+      typeHeader: "\u7C7B\u578B",
+      statusOpen: "\u5F85\u5904\u7406",
+      statusInProgress: "\u8FDB\u884C\u4E2D",
+      statusWaitReview: "\u5F85\u5BA1\u67E5",
+      statusWaitQa: "\u5F85\u6D4B\u8BD5",
+      statusWaitEvaluation: "\u5F85\u8BC4\u4F30",
+      statusResolved: "\u5DF2\u5B8C\u6210",
+      statusClosed: "\u5DF2\u5173\u95ED",
+      statusAbandoned: "\u5DF2\u653E\u5F03",
+      statusFailed: "\u5931\u8D25",
+      priorityP0: "P0\u7D27\u6025",
+      priorityP1: "P1\u9AD8",
+      priorityP2: "P2\u4E2D",
+      priorityP3: "P3\u4F4E",
+      typeBug: "\u7F3A\u9677",
+      typeFeature: "\u529F\u80FD",
+      typeResearch: "\u8C03\u7814",
+      typeDocs: "\u6587\u6863",
+      typeRefactor: "\u91CD\u6784",
+      typeTest: "\u6D4B\u8BD5",
+      typeNotSpecified: "\u672A\u6307\u5B9A",
+      timeJustNow: "\u521A\u521A",
+      timeMinutesAgo: "{minutes}\u5206\u949F\u524D",
+      timeHoursAgo: "{hours}\u5C0F\u65F6\u524D",
+      timeDaysAgo: "{days}\u5929\u524D",
+      totalTasks: "\u5171{count}\u4E2A\u4EFB\u52A1",
+      totalSubtasks: "\u5171{count}\u4E2A\u5B50\u4EFB\u52A1",
+      subtasksLabel: "\u5B50\u4EFB\u52A1",
+      parentTaskLabel: "\u7236\u4EFB\u52A1",
+      dependenciesLabel: "\u4F9D\u8D56",
+      roleLabel: "\u89D2\u8272",
+      branchLabel: "\u5206\u652F",
+      createdAt: "\u521B\u5EFA\u4E8E",
+      updatedAt: "\u66F4\u65B0\u4E8E",
+      reopened: "\u91CD\u5F00",
+      reopenCount: "{count}\u6B21",
+      discussionLabel: "\u5F85\u8BA8\u8BBA",
+      requirementChanges: "\u9700\u6C42\u53D8\u66F4",
+      listTableHeader: "ID          | \u6807\u9898                           | \u4F18\u5148\u7EA7   | \u72B6\u6001",
+      listTableSeparator: "------------|------------------------------|----------|------------",
+      checkpointsSection: "\u68C0\u67E5\u70B9",
+      noCheckpoints: "\u65E0\u68C0\u67E5\u70B9",
+      checkpointProgress: "\u8FDB\u5EA6",
+      dependencyGate: "\u4F9D\u8D56\u95E8\u7981",
+      dependencyError: "\u4F9D\u8D56\u9519\u8BEF",
+      taskCreationCancelled: "\u4EFB\u52A1\u521B\u5EFA\u5DF2\u53D6\u6D88",
+      invalidTaskIdFormat: "\u9519\u8BEF: \u65E0\u6548\u7684\u4EFB\u52A1ID\u683C\u5F0F",
+      taskIdAlreadyExists: "\u9519\u8BEF: \u4EFB\u52A1ID\u5DF2\u5B58\u5728",
+      filteredLowQualityCheckpoints: "\u5DF2\u8FC7\u6EE4{count}\u4E2A\u4F4E\u8D28\u91CF\u68C0\u67E5\u70B9",
+      projectNotInitialized: "\u9519\u8BEF: \u9879\u76EE\u672A\u521D\u59CB\u5316\u3002\u8BF7\u5148\u8FD0\u884C `projmnt4claude setup`"
+    },
+    plan: {
+      showHeader: "\u6267\u884C\u8BA1\u5212",
+      addHeader: "\u6DFB\u52A0\u4EFB\u52A1",
+      removeHeader: "\u79FB\u9664\u4EFB\u52A1",
+      clearHeader: "\u6E05\u7A7A\u8BA1\u5212",
+      recommendHeader: "\u667A\u80FD\u63A8\u8350",
+      noPlan: "\u6682\u65E0\u8BA1\u5212",
+      planCleared: "\u8BA1\u5212\u5DF2\u6E05\u7A7A",
+      taskAdded: "\u4EFB\u52A1\u5DF2\u6DFB\u52A0\u5230\u8BA1\u5212",
+      taskRemoved: "\u4EFB\u52A1\u5DF2\u4ECE\u8BA1\u5212\u79FB\u9664"
+    },
+    status: {
+      projectStatus: "\u9879\u76EE\u72B6\u6001",
+      totalTasks: "\u603B\u4EFB\u52A1\u6570",
+      completedTasks: "\u5DF2\u5B8C\u6210",
+      inProgressTasks: "\u8FDB\u884C\u4E2D",
+      pendingTasks: "\u5F85\u5904\u7406",
+      noTasks: "\u65E0\u4EFB\u52A1"
+    },
+    analyze: {
+      analyzing: "\u6B63\u5728\u5206\u6790\u9879\u76EE\u5065\u5EB7\u72B6\u6001...",
+      analysisComplete: "\u5206\u6790\u5B8C\u6210",
+      issuesFound: "\u53D1\u73B0 {count} \u4E2A\u95EE\u9898",
+      noIssues: "\u672A\u53D1\u73B0\u95EE\u9898",
+      fixApplied: "\u5DF2\u4FEE\u590D {count} \u4E2A\u95EE\u9898"
+    },
+    help: {
+      commandReference: "\u547D\u4EE4\u53C2\u8003",
+      availableCommands: "\u53EF\u7528\u547D\u4EE4",
+      noDescription: "\u6682\u65E0\u63CF\u8FF0",
+      commandNotFound: "\u672A\u627E\u5230\u547D\u4EE4",
+      tipUseHelp: "\u4F7F\u7528 `projmnt4claude help <command>` \u67E5\u770B\u547D\u4EE4\u8BE6\u7EC6\u8BF4\u660E",
+      usage: "\u4F7F\u7528\u65B9\u5F0F",
+      examples: "\u793A\u4F8B",
+      suggestedCommands: "\uD83D\uDCA1 \u5EFA\u8BAE\u60A8\u4F7F\u7528\u4EE5\u4E0B\u547D\u4EE4:",
+      noRelatedCommands: "\uD83D\uDE15 \u6CA1\u6709\u627E\u5230\u76F4\u63A5\u76F8\u5173\u7684\u547D\u4EE4\u3002",
+      commonCommands: "\u4EE5\u4E0B\u662F\u4E00\u4E9B\u5E38\u7528\u547D\u4EE4:",
+      cmdTask: "\u7BA1\u7406\u9879\u76EE\u4EFB\u52A1",
+      cmdStatus: "\u67E5\u770B\u9879\u76EE\u72B6\u6001",
+      cmdPlan: "\u7BA1\u7406\u6267\u884C\u8BA1\u5212",
+      cmdSetup: "\u521D\u59CB\u5316\u9879\u76EE\u7BA1\u7406\u73AF\u5883"
+    },
+    config: {
+      listHeader: "\u914D\u7F6E\u5217\u8868",
+      getHeader: "\u83B7\u53D6\u914D\u7F6E",
+      setHeader: "\u8BBE\u7F6E\u914D\u7F6E",
+      configUpdated: "\u914D\u7F6E\u5DF2\u66F4\u65B0",
+      keyNotFound: "\u914D\u7F6E\u9879\u4E0D\u5B58\u5728",
+      invalidAction: "\u672A\u77E5\u64CD\u4F5C"
+    },
+    tool: {
+      listHeader: "\u672C\u5730 skill \u5217\u8868",
+      createHeader: "\u521B\u5EFA skill",
+      installHeader: "\u5B89\u88C5 skill",
+      removeHeader: "\u5220\u9664 skill",
+      deployHeader: "\u90E8\u7F72 skill",
+      undeployHeader: "\u5378\u8F7D skill"
+    },
+    initRequirement: {
+      descriptionRequired: "\u8BF7\u8F93\u5165\u9700\u6C42\u63CF\u8FF0",
+      parsingDescription: "\u6B63\u5728\u89E3\u6790\u9700\u6C42...",
+      creatingTasks: "\u6B63\u5728\u521B\u5EFA\u4EFB\u52A1...",
+      tasksCreated: "\u5DF2\u521B\u5EFA {count} \u4E2A\u4EFB\u52A1"
+    },
+    rolePrompts: {
+      dev: {
+        frontend: {
+          roleDeclaration: "\u4F60\u662F\u4E00\u4E2A\u524D\u7AEF\u5F00\u53D1\u8005\uFF0C\u4E13\u6CE8\u4E8E\u7528\u6237\u754C\u9762\u548C\u4EA4\u4E92\u4F53\u9A8C\u3002",
+          extraInstructions: [
+            "\u786E\u4FDD\u7EC4\u4EF6\u53EF\u590D\u7528\u3001\u53EF\u8BBF\u95EE\u6027\uFF08WCAG 2.1\uFF09\u826F\u597D",
+            "\u5173\u6CE8\u54CD\u5E94\u5F0F\u5E03\u5C40\u548C\u8DE8\u6D4F\u89C8\u5668\u517C\u5BB9\u6027",
+            "\u9075\u5FAA\u9879\u76EE\u7684\u524D\u7AEF\u4EE3\u7801\u89C4\u8303\u548C\u8BBE\u8BA1\u7CFB\u7EDF"
+          ]
+        },
+        backend: {
+          roleDeclaration: "\u4F60\u662F\u4E00\u4E2A\u540E\u7AEF\u5F00\u53D1\u8005\uFF0C\u4E13\u6CE8\u4E8E\u670D\u52A1\u7AEF\u903B\u8F91\u548C\u6570\u636E\u5C42\u3002",
+          extraInstructions: [
+            "\u786E\u4FDD API \u63A5\u53E3\u8BBE\u8BA1\u9075\u5FAA RESTful \u6216\u9879\u76EE\u7EA6\u5B9A",
+            "\u5173\u6CE8\u9519\u8BEF\u5904\u7406\u3001\u8F93\u5165\u9A8C\u8BC1\u548C\u4E8B\u52A1\u4E00\u81F4\u6027",
+            "\u6CE8\u610F\u6570\u636E\u5E93\u67E5\u8BE2\u6027\u80FD\u548C\u7D22\u5F15\u4F7F\u7528"
+          ]
+        },
+        qa: {
+          roleDeclaration: "\u4F60\u662F\u4E00\u4E2A\u5177\u6709\u6D4B\u8BD5\u5F00\u53D1\u80FD\u529B\u7684\u5F00\u53D1\u8005\uFF0C\u64C5\u957F\u7F16\u5199\u53EF\u6D4B\u8BD5\u7684\u4EE3\u7801\u3002",
+          extraInstructions: [
+            "\u5B9E\u73B0\u65F6\u540C\u6B65\u7F16\u5199\u5FC5\u8981\u7684\u5355\u5143\u6D4B\u8BD5\u548C\u96C6\u6210\u6D4B\u8BD5",
+            "\u5173\u6CE8\u8FB9\u754C\u6761\u4EF6\u548C\u5F02\u5E38\u8DEF\u5F84\u7684\u8986\u76D6",
+            "\u786E\u4FDD\u4EE3\u7801\u53EF\u901A\u8FC7\u81EA\u52A8\u5316\u6D4B\u8BD5\u9A8C\u8BC1"
+          ]
+        },
+        architect: {
+          roleDeclaration: "\u4F60\u662F\u4E00\u4E2A\u67B6\u6784\u5E08\u89D2\u8272\u7684\u5F00\u53D1\u8005\uFF0C\u5173\u6CE8\u7CFB\u7EDF\u8BBE\u8BA1\u548C\u6A21\u5757\u8FB9\u754C\u3002",
+          extraInstructions: [
+            "\u786E\u4FDD\u5B9E\u73B0\u7B26\u5408\u73B0\u6709\u67B6\u6784\u7EA6\u675F\u548C\u6A21\u5757\u8FB9\u754C",
+            "\u5173\u6CE8\u63A5\u53E3\u8BBE\u8BA1\u548C\u6A21\u5757\u95F4\u89E3\u8026",
+            "\u8BC4\u4F30\u53D8\u66F4\u5BF9\u7CFB\u7EDF\u6574\u4F53\u67B6\u6784\u7684\u5F71\u54CD"
+          ]
+        },
+        security: {
+          roleDeclaration: "\u4F60\u662F\u4E00\u4E2A\u5B89\u5168\u5DE5\u7A0B\u5E08\u89D2\u8272\u7684\u5F00\u53D1\u8005\uFF0C\u4E13\u6CE8\u4E8E\u5B89\u5168\u76F8\u5173\u5B9E\u73B0\u3002",
+          extraInstructions: [
+            "\u4E25\u683C\u9075\u5FAA OWASP Top 10 \u5B89\u5168\u5B9E\u8DF5",
+            "\u9A8C\u8BC1\u6240\u6709\u5916\u90E8\u8F93\u5165\u3001\u9632\u6B62\u6CE8\u5165\u548C XSS",
+            "\u786E\u4FDD\u654F\u611F\u6570\u636E\u5904\u7406\u7B26\u5408\u5B89\u5168\u89C4\u8303"
+          ]
+        },
+        performance: {
+          roleDeclaration: "\u4F60\u662F\u4E00\u4E2A\u6027\u80FD\u4F18\u5316\u5DE5\u7A0B\u5E08\u89D2\u8272\u7684\u5F00\u53D1\u8005\uFF0C\u4E13\u6CE8\u4E8E\u6027\u80FD\u76F8\u5173\u5B9E\u73B0\u3002",
+          extraInstructions: [
+            "\u5173\u6CE8\u5173\u952E\u8DEF\u5F84\u7684\u6027\u80FD\u6307\u6807\uFF08\u5EF6\u8FDF\u3001\u541E\u5410\u91CF\u3001\u5185\u5B58\uFF09",
+            "\u907F\u514D\u4E0D\u5FC5\u8981\u7684\u540C\u6B65\u64CD\u4F5C\u548C\u91CD\u590D\u8BA1\u7B97",
+            "\u4F7F\u7528\u6027\u80FD\u5206\u6790\u5DE5\u5177\u9A8C\u8BC1\u4F18\u5316\u6548\u679C"
+          ]
+        }
+      },
+      codeReview: {
+        frontend: {
+          roleDeclaration: "\u4F60\u662F\u4E00\u4E2A\u4E13\u4E1A\u7684\u524D\u7AEF\u4EE3\u7801\u5BA1\u6838\u5458\u3002",
+          reviewFocus: [
+            "\u7EC4\u4EF6\u7ED3\u6784\u548C\u72B6\u6001\u7BA1\u7406\u662F\u5426\u5408\u7406",
+            "CSS/\u6837\u5F0F\u662F\u5426\u6709\u51B2\u7A81\u6216\u5197\u4F59",
+            "\u53EF\u8BBF\u95EE\u6027\uFF08a11y\uFF09\u662F\u5426\u7B26\u5408\u6807\u51C6",
+            "\u6D4F\u89C8\u5668\u517C\u5BB9\u6027\u548C\u54CD\u5E94\u5F0F\u8BBE\u8BA1"
+          ]
+        },
+        backend: {
+          roleDeclaration: "\u4F60\u662F\u4E00\u4E2A\u4E13\u4E1A\u7684\u540E\u7AEF\u4EE3\u7801\u5BA1\u6838\u5458\u3002",
+          reviewFocus: [
+            "API \u63A5\u53E3\u8BBE\u8BA1\u662F\u5426\u89C4\u8303\u3001\u5411\u540E\u517C\u5BB9",
+            "\u9519\u8BEF\u5904\u7406\u662F\u5426\u5B8C\u5584\u3001\u9519\u8BEF\u4FE1\u606F\u662F\u5426\u5B89\u5168",
+            "\u6570\u636E\u5E93\u64CD\u4F5C\u662F\u5426\u5B89\u5168\uFF08\u9632 SQL \u6CE8\u5165\uFF09",
+            "\u5E76\u53D1\u548C\u4E8B\u52A1\u5904\u7406\u662F\u5426\u6B63\u786E"
+          ]
+        },
+        qa: {
+          roleDeclaration: "\u4F60\u662F\u4E00\u4E2A\u4E13\u4E1A\u7684\u6D4B\u8BD5\u4EE3\u7801\u5BA1\u6838\u5458\u3002",
+          reviewFocus: [
+            "\u6D4B\u8BD5\u8986\u76D6\u662F\u5426\u5145\u5206\uFF08\u6B63\u5E38\u8DEF\u5F84 + \u8FB9\u754C\u6761\u4EF6\uFF09",
+            "\u6D4B\u8BD5\u662F\u5426\u72EC\u7ACB\u3001\u53EF\u91CD\u590D\u6267\u884C",
+            "Mock \u548C Stub \u4F7F\u7528\u662F\u5426\u5408\u7406",
+            "\u65AD\u8A00\u662F\u5426\u51C6\u786E\u9A8C\u8BC1\u4E86\u9884\u671F\u884C\u4E3A"
+          ]
+        },
+        architect: {
+          roleDeclaration: "\u4F60\u662F\u4E00\u4E2A\u67B6\u6784\u5BA1\u67E5\u5458\uFF0C\u8D1F\u8D23\u5BA1\u6838\u4EE3\u7801\u7684\u67B6\u6784\u5408\u7406\u6027\u3002",
+          reviewFocus: [
+            "\u6A21\u5757\u8FB9\u754C\u662F\u5426\u6E05\u6670\u3001\u804C\u8D23\u662F\u5426\u5355\u4E00",
+            "\u4F9D\u8D56\u5173\u7CFB\u662F\u5426\u5408\u7406\u3001\u662F\u5426\u5B58\u5728\u5FAA\u73AF\u4F9D\u8D56",
+            "\u63A5\u53E3\u62BD\u8C61\u5C42\u7EA7\u662F\u5426\u9002\u5F53",
+            "\u53D8\u66F4\u662F\u5426\u5F71\u54CD\u73B0\u6709\u67B6\u6784\u7684\u7A33\u5B9A\u6027"
+          ]
+        },
+        security: {
+          roleDeclaration: "\u4F60\u662F\u4E00\u4E2A\u5B89\u5168\u4EE3\u7801\u5BA1\u6838\u5458\uFF0C\u4E13\u6CE8\u4E8E\u5B89\u5168\u6F0F\u6D1E\u68C0\u6D4B\u3002",
+          reviewFocus: [
+            "\u8F93\u5165\u9A8C\u8BC1\u548C\u8F93\u51FA\u7F16\u7801\u662F\u5426\u5B8C\u5584",
+            "\u8BA4\u8BC1\u6388\u6743\u903B\u8F91\u662F\u5426\u6B63\u786E",
+            "\u654F\u611F\u6570\u636E\u662F\u5426\u5B89\u5168\u5B58\u50A8\u548C\u4F20\u8F93",
+            "\u662F\u5426\u5B58\u5728 OWASP Top 10 \u6F0F\u6D1E\u98CE\u9669"
+          ]
+        },
+        performance: {
+          roleDeclaration: "\u4F60\u662F\u4E00\u4E2A\u6027\u80FD\u4EE3\u7801\u5BA1\u6838\u5458\uFF0C\u4E13\u6CE8\u4E8E\u6027\u80FD\u74F6\u9888\u68C0\u6D4B\u3002",
+          reviewFocus: [
+            "\u662F\u5426\u5B58\u5728 O(n\xB2) \u6216\u66F4\u9AD8\u590D\u6742\u5EA6\u7684\u7B97\u6CD5",
+            "\u8D44\u6E90\uFF08\u5185\u5B58\u3001\u8FDE\u63A5\u3001\u6587\u4EF6\u53E5\u67C4\uFF09\u662F\u5426\u6B63\u786E\u91CA\u653E",
+            "\u662F\u5426\u6709\u4E0D\u5FC5\u8981\u7684\u540C\u6B65\u963B\u585E\u64CD\u4F5C",
+            "\u7F13\u5B58\u7B56\u7565\u662F\u5426\u5408\u7406"
+          ]
+        }
+      },
+      qa: {
+        frontend: {
+          roleDeclaration: "\u4F60\u662F\u4E00\u4E2A\u4E13\u4E1A\u7684\u524D\u7AEF QA \u6D4B\u8BD5\u5458\u3002",
+          testStrategy: [
+            "\u9A8C\u8BC1 UI \u6E32\u67D3\u5728\u4E0D\u540C\u5C4F\u5E55\u5C3A\u5BF8\u4E0B\u662F\u5426\u6B63\u786E",
+            "\u6D4B\u8BD5\u7528\u6237\u4EA4\u4E92\u6D41\u7A0B\uFF08\u70B9\u51FB\u3001\u8F93\u5165\u3001\u5BFC\u822A\uFF09",
+            "\u68C0\u67E5\u53EF\u8BBF\u95EE\u6027\u5DE5\u5177\u662F\u5426\u80FD\u6B63\u786E\u8BC6\u522B\u9875\u9762\u5143\u7D20",
+            "\u9A8C\u8BC1\u52A0\u8F7D\u72B6\u6001\u548C\u9519\u8BEF\u72B6\u6001\u7684\u5C55\u793A"
+          ]
+        },
+        backend: {
+          roleDeclaration: "\u4F60\u662F\u4E00\u4E2A\u4E13\u4E1A\u7684\u540E\u7AEF QA \u6D4B\u8BD5\u5458\u3002",
+          testStrategy: [
+            "\u9A8C\u8BC1 API \u63A5\u53E3\u5728\u5404\u79CD\u8F93\u5165\u4E0B\u7684\u54CD\u5E94",
+            "\u6D4B\u8BD5\u9519\u8BEF\u5904\u7406\u548C\u8FB9\u754C\u6761\u4EF6",
+            "\u68C0\u67E5\u5E76\u53D1\u8BF7\u6C42\u4E0B\u7684\u6570\u636E\u4E00\u81F4\u6027",
+            "\u9A8C\u8BC1\u6570\u636E\u5E93\u72B6\u6001\u53D8\u66F4\u662F\u5426\u7B26\u5408\u9884\u671F"
+          ]
+        },
+        qa: {
+          roleDeclaration: "\u4F60\u662F\u4E00\u4E2A\u4E13\u4E1A\u7684 QA \u6D4B\u8BD5\u5458\uFF0C\u64C5\u957F\u5168\u9762\u6D4B\u8BD5\u8986\u76D6\u3002",
+          testStrategy: [
+            "\u8FD0\u884C\u6240\u6709\u76F8\u5173\u5355\u5143\u6D4B\u8BD5\u548C\u96C6\u6210\u6D4B\u8BD5",
+            "\u9A8C\u8BC1\u529F\u80FD\u5728\u6B63\u5E38\u8DEF\u5F84\u548C\u5F02\u5E38\u8DEF\u5F84\u4E0B\u7684\u884C\u4E3A",
+            "\u68C0\u67E5\u6D4B\u8BD5\u8986\u76D6\u7387\u662F\u5426\u6EE1\u8DB3\u8981\u6C42",
+            "\u6536\u96C6\u5B8C\u6574\u7684\u6D4B\u8BD5\u8BC1\u636E"
+          ]
+        },
+        architect: {
+          roleDeclaration: "\u4F60\u662F\u4E00\u4E2A\u67B6\u6784\u9A8C\u8BC1\u6D4B\u8BD5\u5458\uFF0C\u8D1F\u8D23\u9A8C\u8BC1\u67B6\u6784\u7EA6\u675F\u3002",
+          testStrategy: [
+            "\u9A8C\u8BC1\u6A21\u5757\u95F4\u63A5\u53E3\u5951\u7EA6\u662F\u5426\u88AB\u9075\u5B88",
+            "\u68C0\u67E5\u65B0\u589E\u4F9D\u8D56\u662F\u5426\u5408\u7406",
+            "\u9A8C\u8BC1\u67B6\u6784\u5206\u5C42\u89C4\u5219\uFF08\u5982\u4E0D\u8DE8\u5C42\u76F4\u63A5\u8C03\u7528\uFF09",
+            "\u8BC4\u4F30\u53D8\u66F4\u5BF9\u6574\u4F53\u7CFB\u7EDF\u7684\u5F71\u54CD\u8303\u56F4"
+          ]
+        },
+        security: {
+          roleDeclaration: "\u4F60\u662F\u4E00\u4E2A\u5B89\u5168\u6D4B\u8BD5\u5458\uFF0C\u8D1F\u8D23\u9A8C\u8BC1\u5B89\u5168\u76F8\u5173\u5B9E\u73B0\u3002",
+          testStrategy: [
+            "\u9A8C\u8BC1\u8F93\u5165\u9A8C\u8BC1\u662F\u5426\u8986\u76D6\u6240\u6709\u5165\u53E3\u70B9",
+            "\u6D4B\u8BD5\u5E38\u89C1\u653B\u51FB\u5411\u91CF\uFF08XSS\u3001SQL \u6CE8\u5165\u3001CSRF\uFF09",
+            "\u68C0\u67E5\u8BA4\u8BC1\u6388\u6743\u6D41\u7A0B\u662F\u5426\u6B63\u786E",
+            "\u9A8C\u8BC1\u654F\u611F\u6570\u636E\u662F\u5426\u4E0D\u5728\u65E5\u5FD7\u6216\u54CD\u5E94\u4E2D\u6CC4\u9732"
+          ]
+        },
+        performance: {
+          roleDeclaration: "\u4F60\u662F\u4E00\u4E2A\u6027\u80FD\u6D4B\u8BD5\u5458\uFF0C\u8D1F\u8D23\u9A8C\u8BC1\u6027\u80FD\u6307\u6807\u3002",
+          testStrategy: [
+            "\u8FD0\u884C\u6027\u80FD\u57FA\u51C6\u6D4B\u8BD5\uFF08\u5982\u6709\u914D\u7F6E\uFF09",
+            "\u9A8C\u8BC1\u5173\u952E\u64CD\u4F5C\u7684\u54CD\u5E94\u65F6\u95F4\u662F\u5426\u5728\u9608\u503C\u5185",
+            "\u68C0\u67E5\u662F\u5426\u5B58\u5728\u5185\u5B58\u6CC4\u6F0F\u8FF9\u8C61",
+            "\u6D4B\u8BD5\u5728\u9AD8\u8D1F\u8F7D\u4E0B\u7684\u7CFB\u7EDF\u7A33\u5B9A\u6027"
+          ]
+        }
+      },
+      defaultDev: {
+        roleDeclaration: "\u4F60\u662F\u4E00\u4E2A\u5F00\u53D1\u8005\uFF0C\u4F60\u7684\u552F\u4E00\u804C\u8D23\u662F\u5B9E\u73B0\u88AB\u5206\u914D\u4EFB\u52A1\u7684\u4EE3\u7801\u53D8\u66F4\u3002",
+        extraInstructions: []
+      },
+      defaultCodeReview: {
+        roleDeclaration: "\u4F60\u662F\u4E00\u4E2A\u4E13\u4E1A\u7684\u4EE3\u7801\u5BA1\u6838\u5458\u3002\u4F60\u9700\u8981\u5BA1\u6838\u4E00\u4E2A\u4EFB\u52A1\u7684\u4EE3\u7801\u5B9E\u73B0\uFF0C\u786E\u4FDD\u4EE3\u7801\u8D28\u91CF\u7B26\u5408\u6807\u51C6\u3002",
+        reviewFocus: [
+          "\u68C0\u67E5\u4EE3\u7801\u8D28\u91CF\u548C\u53EF\u8BFB\u6027",
+          "\u68C0\u67E5\u4EE3\u7801\u89C4\u8303\u9075\u5B88\u60C5\u51B5",
+          "\u68C0\u67E5\u6F5C\u5728\u7684\u5B89\u5168\u95EE\u9898",
+          "\u68C0\u67E5\u9519\u8BEF\u5904\u7406\u662F\u5426\u5B8C\u5584"
+        ]
+      },
+      defaultQA: {
+        roleDeclaration: "\u4F60\u662F\u4E00\u4E2A\u4E13\u4E1A\u7684 QA \u6D4B\u8BD5\u5458\u3002\u4F60\u9700\u8981\u9A8C\u8BC1\u4E00\u4E2A\u4EFB\u52A1\u7684\u5B9E\u73B0\u662F\u5426\u6EE1\u8DB3\u529F\u80FD\u8981\u6C42\u3002",
+        testStrategy: [
+          "\u8FD0\u884C\u5355\u5143\u6D4B\u8BD5\uFF08\u5982\u6709\u914D\u7F6E\uFF09",
+          "\u8FD0\u884C\u529F\u80FD\u6D4B\u8BD5\uFF08\u5982\u6709\u914D\u7F6E\uFF09",
+          "\u9A8C\u8BC1\u529F\u80FD\u662F\u5426\u7B26\u5408\u9884\u671F",
+          "\u68C0\u67E5\u8FB9\u754C\u60C5\u51B5\u5904\u7406"
+        ]
+      }
+    },
+    feedback: {
+      jsonHeader: "\u4E0A\u4E00\u6B21\u8F93\u51FA\u7684 JSON \u5B58\u5728\u4EE5\u4E0B\u95EE\u9898\uFF0C\u8BF7\u4FEE\u6B63\u540E\u91CD\u65B0\u8F93\u51FA\u5B8C\u6574 JSON\uFF1A",
+      markdownHeader: "\u4E0A\u4E00\u6B21\u8F93\u51FA\u7684 Markdown \u5185\u5BB9\u5B58\u5728\u4EE5\u4E0B\u95EE\u9898\uFF0C\u8BF7\u4FEE\u6B63\u540E\u91CD\u65B0\u8F93\u51FA\uFF1A",
+      violationsTitle: "\u8FDD\u89C4\u9879",
+      fieldLabel: "\u5B57\u6BB5",
+      valueLabel: "\u503C",
+      originalOutputTitle: "\u539F\u59CB\u8F93\u51FA\uFF08\u4F9B\u53C2\u8003\uFF09",
+      truncated: "... (\u5DF2\u622A\u65AD)",
+      jsonRequirements: [
+        "\u8F93\u51FA\u662F\u5408\u6CD5\u7684 JSON",
+        "\u6240\u6709\u5FC5\u586B\u5B57\u6BB5\u90FD\u5B58\u5728\u4E14\u7C7B\u578B\u6B63\u786E",
+        "\u4E0D\u8981\u8F93\u51FA JSON \u4EE5\u5916\u7684\u5185\u5BB9"
+      ],
+      markdownRequirements: [
+        "\u8F93\u51FA\u683C\u5F0F\u7B26\u5408 Markdown \u89C4\u8303",
+        "\u6240\u6709\u5FC5\u9700\u7684\u7AE0\u8282\u548C\u6807\u9898\u90FD\u5B58\u5728",
+        "\u5185\u5BB9\u7ED3\u6784\u5B8C\u6574\u3001\u903B\u8F91\u6E05\u6670"
+      ]
+    },
+    analyzeFixPipeline: {
+      nonStandardTransition: "\u975E\u6807\u51C6\u72B6\u6001\u8F6C\u6362 ({context}): {oldStatus} \u2192 {newStatus}",
+      fixPipelineMode: "\uD83D\uDD27 analyze --fix \u6D41\u6C34\u7EBF\u6A21\u5F0F",
+      executingStages: "\u6267\u884C\u9636\u6BB5",
+      stage1Analysis: "\uD83D\uDCCB Stage 1: \u89C4\u5219\u5F15\u64CE\u5206\u6790...",
+      stage1Complete: "\u2705 Stage 1 \u5B8C\u6210: \u53D1\u73B0 {count} \u4E2A\u95EE\u9898 ({duration}s)",
+      stage1Failed: "\u274C Stage 1 \u5931\u8D25: {error}",
+      stage1Skipped: "\u23ED\uFE0F Stage 1: \u8DF3\u8FC7",
+      stage2Fix: "\uD83D\uDD27 Stage 2: \u89C4\u5219\u4FEE\u590D...",
+      stage2FixWithAnalysis: "\uD83D\uDD27 Stage 2: \u89C4\u5219\u4FEE\u590D\uFF08\u542B\u5206\u6790\uFF09...",
+      stage2Complete: "\u2705 Stage 2 \u5B8C\u6210: {fixed} \u4FEE\u590D, {skipped} \u8DF3\u8FC7 ({duration}s)",
+      stage2Failed: "\u274C Stage 2 \u5931\u8D25: {error}",
+      stage2Skipped: "\u23ED\uFE0F Stage 2: \u8DF3\u8FC7",
+      stage3AI: "\uD83E\uDD16 Stage 3: AI \u6DF1\u5EA6\u5206\u6790...",
+      stage3Complete: "\u2705 Stage 3 \u5B8C\u6210: AI \u53D1\u73B0 {count} \u4E2A\u8BED\u4E49\u95EE\u9898 ({duration}s)",
+      stage3Failed: "\u274C Stage 3 \u5931\u8D25: {error}",
+      stage3Skipped: "\u23ED\uFE0F Stage 3: \u8DF3\u8FC7 ({reason})",
+      stage3NotEnabled: "Stage 3: AI \u6DF1\u5EA6\u5206\u6790\u672A\u542F\u7528\uFF08\u4F7F\u7528 --deep-analyze \u6FC0\u6D3B\u5B8C\u6574 AI \u5206\u6790\uFF09",
+      stage4Checkpoint: "\uD83D\uDCCC Stage 4: \u68C0\u67E5\u70B9\u4FEE\u590D...",
+      stage4Complete: "\u2705 Stage 4 \u5B8C\u6210: \u68C0\u67E5\u70B9\u4FEE\u590D ({duration}s)",
+      stage4Failed: "\u274C Stage 4 \u5931\u8D25: {error}",
+      stage4Skipped: "\u23ED\uFE0F Stage 4: \u8DF3\u8FC7",
+      stage5Quality: "\uD83D\uDCCA Stage 5: \u8D28\u91CF\u62A5\u544A...",
+      stage5Complete: "\u2705 Stage 5 \u5B8C\u6210: \u68C0\u6D4B {count} \u4E2A\u4EFB\u52A1, {suggestions} \u4E2A\u6539\u8FDB\u5EFA\u8BAE ({duration}s)",
+      stage5Failed: "\u274C Stage 5 \u5931\u8D25: {error}",
+      stage5Skipped: "\u23ED\uFE0F Stage 5: \u8DF3\u8FC7",
+      pipelineComplete: "\u2705 \u6D41\u6C34\u7EBF\u5B8C\u6210: {stages}/5 \u9636\u6BB5\u5DF2\u6267\u884C ({duration}s)",
+      noIssuesFound: "\u2705 \u6CA1\u6709\u9700\u8981\u4FEE\u590D\u7684\u95EE\u9898",
+      autoFixIssues: "\uD83D\uDD27 \u81EA\u52A8\u4FEE\u590D\u95EE\u9898",
+      nonInteractiveMode: "\uFF08\u975E\u4EA4\u4E92\u6A21\u5F0F\uFF09",
+      fixError: "\u274C \u4FEE\u590D {taskId} ({type}) \u65F6\u51FA\u9519: {error}",
+      fixComplete: "\u2705 \u5171\u4FEE\u590D {count} \u4E2A\u95EE\u9898",
+      fixSkipped: "\u23ED\uFE0F \u8DF3\u8FC7 {count} \u4E2A\u95EE\u9898",
+      fixUnfixable: "\u26A0\uFE0F {count} \u4E2A\u95EE\u9898\u65E0\u6CD5\u81EA\u52A8\u4FEE\u590D",
+      autoClosingStale: "\u2705 \u5DF2\u81EA\u52A8\u5173\u95ED\u8FC7\u671F {days} \u5929\u7684\u4EFB\u52A1 {taskId} (>30\u5929\u9608\u503C)",
+      skipStale: "\u23ED\uFE0F \u8DF3\u8FC7\u8FC7\u671F\u4EFB\u52A1 {taskId} ({days}\u5929, \u975E\u4EA4\u4E92\u6A21\u5F0F\u4E0B\u8D85\u8FC730\u5929\u624D\u81EA\u52A8\u5173\u95ED)",
+      checkingStale: "\u68C0\u67E5\u8FC7\u671F\u4EFB\u52A1 {taskId}...",
+      closingTask: "\u6807\u8BB0\u4E3A\u5DF2\u5173\u95ED",
+      markingInProgress: "\u6807\u8BB0\u4E3A\u8FDB\u884C\u4E2D",
+      skipNoDescription: "\u23ED\uFE0F \u8DF3\u8FC7\u65E0\u63CF\u8FF0\u4EFB\u52A1 {taskId} (\u975E\u4EA4\u4E92\u6A21\u5F0F\u4E0B\u9700\u8981\u624B\u52A8\u5904\u7406)",
+      checkingNoDescription: "\u68C0\u67E5\u65E0\u63CF\u8FF0\u4EFB\u52A1 {taskId}...",
+      addingDescription: "\u2705 \u5DF2\u4E3A\u4EFB\u52A1 {taskId} \u6DFB\u52A0\u63CF\u8FF0",
+      analyzingCycle: "\uD83D\uDD04 \u5206\u6790\u4EFB\u52A1 {taskId} \u7684\u5FAA\u73AF\u4F9D\u8D56...",
+      cycleNotFound: "\u26A0\uFE0F \u672A\u627E\u5230\u6D89\u53CA {taskId} \u7684\u5FAA\u73AF\u4F9D\u8D56\uFF08\u53EF\u80FD\u5DF2\u4FEE\u590D\uFF09",
+      breakingCycle: "\u2705 \u5DF2\u65AD\u5F00 {from} \u2192 {to} \u7684\u4F9D\u8D56\u4EE5\u6253\u7834\u5FAA\u73AF",
+      cycleManualFix: "\u26A0\uFE0F \u5FAA\u73AF {cycle} \u4E2D\u6240\u6709\u8FB9\u5747\u4E3A\u663E\u5F0F\u4F9D\u8D56\uFF0C\u9700\u4EBA\u5DE5\u5904\u7406",
+      fixingPriority: "\uD83D\uDD04 \u4FEE\u590D\u4EFB\u52A1 {taskId} \u7684\u4F18\u5148\u7EA7\u683C\u5F0F...",
+      priorityUpdated: "\u2705 \u5DF2\u5C06\u4F18\u5148\u7EA7\u4ECE {old} \u66F4\u65B0\u4E3A {new}",
+      fixingStatus: "\uD83D\uDD04 \u4FEE\u590D\u4EFB\u52A1 {taskId} \u7684\u72B6\u6001\u683C\u5F0F...",
+      statusUpdated: "\u2705 \u5DF2\u5C06\u72B6\u6001\u4ECE {old} \u66F4\u65B0\u4E3A {new}",
+      fixingSchema: "\uD83D\uDD04 \u4FEE\u590D\u4EFB\u52A1 {taskId} \u7684\u89C4\u8303\u5B57\u6BB5...",
+      reopenCountAdded: "\u2705 \u5DF2\u6DFB\u52A0 reopenCount: 0",
+      requirementHistoryAdded: "\u2705 \u5DF2\u6DFB\u52A0 requirementHistory: []",
+      fixingEmptyArrays: "\uD83D\uDD04 \u4FEE\u590D\u4EFB\u52A1 {taskId} \u7684\u7A7A\u6570\u7EC4\u5B57\u6BB5: {fields}",
+      arrayInitialized: "\u2705 \u5DF2\u521D\u59CB\u5316 {field}: []",
+      migratingPipelineStatus: "\uD83D\uDD04 \u8FC1\u79FB\u4EFB\u52A1 {taskId} \u7684 pipeline \u72B6\u6001...",
+      statusMigrated: "\u2705 \u72B6\u6001\u5DF2\u4ECE {old} \u8FC1\u79FB\u4E3A {new}",
+      cannotDetermineTargetStatus: "\u26A0\uFE0F \u65E0\u6CD5\u786E\u5B9A\u8FC1\u79FB\u76EE\u6807\u72B6\u6001",
+      fixingVerdictAction: "\uD83D\uDD04 \u4FEE\u590D\u4EFB\u52A1 {taskId} \u7684\u65E0\u6548 VerdictAction \u503C...",
+      verdictActionCleared: '\u2705 history[{index}]: \u6E05\u9664\u65E0\u6548 verdict action "{value}"',
+      migratingSchema: "\uD83D\uDD04 \u8FC1\u79FB\u4EFB\u52A1 {taskId} \u7684 schema \u7248\u672C...",
+      fixingCreatedBy: "\uD83D\uDD04 \u4FEE\u590D\u4EFB\u52A1 {taskId} \u7684 createdBy \u5B57\u6BB5...",
+      createdByAdded: "\u2705 \u5DF2\u6DFB\u52A0 createdBy: import",
+      fixingInvalidStatus: "\uD83D\uDD04 \u4FEE\u590D\u4EFB\u52A1 {taskId} \u7684\u65E0\u6548\u72B6\u6001\u503C...",
+      fixingInvalidType: "\uD83D\uDD04 \u4FEE\u590D\u4EFB\u52A1 {taskId} \u7684\u65E0\u6548\u7C7B\u578B\u503C...",
+      typeUpdated: "\u2705 \u5DF2\u5C06\u7C7B\u578B\u4ECE {old} \u66F4\u65B0\u4E3A {new}",
+      fixingInvalidPriority: "\uD83D\uDD04 \u4FEE\u590D\u4EFB\u52A1 {taskId} \u7684\u65E0\u6548\u4F18\u5148\u7EA7\u503C...",
+      fixingReopenTransition: "\uD83D\uDD04 \u4FEE\u590D\u4EFB\u52A1 {taskId} \u7684 reopen \u6D41\u8F6C\u8BB0\u5F55\u7F3A\u5931...",
+      transitionNoteAdded: "\u2705 \u5DF2\u8865\u5F55 transitionNote\uFF0CreopenCount={count}",
+      fixingStatusContradiction: "\uD83D\uDD04 \u4FEE\u590D\u4EFB\u52A1 {taskId} \u7684\u72B6\u6001\u77DB\u76FE (resolved + verification.failed)...",
+      statusContradictionFixed: "\u2705 \u5DF2\u5C06\u72B6\u6001\u4ECE resolved \u6539\u4E3A open\uFF0C\u6E05\u9664\u65E7 verification",
+      fixingTimestamp: "\uD83D\uDD04 \u4FEE\u590D\u4EFB\u52A1 {taskId} \u7684\u65F6\u95F4\u6233\u683C\u5F0F...",
+      timestampUpdated: "\u2705 \u5DF2\u5C06 {field} \u66F4\u65B0\u4E3A {value}",
+      invalidParent: "\u26A0\uFE0F \u4EFB\u52A1 {taskId} \u7684\u7236\u4EFB\u52A1\u5F15\u7528\u65E0\u6548\uFF0C\u65E0\u6CD5\u81EA\u52A8\u4FEE\u590D",
+      fixingSubtaskRef: "\uD83D\uDD04 \u4FEE\u590D\u4EFB\u52A1 {taskId} \u7684\u65E0\u6548\u5B50\u4EFB\u52A1\u5F15\u7528...",
+      subtaskRefRemoved: "\u2705 \u5DF2\u4ECE subtaskIds \u4E2D\u79FB\u9664\u65E0\u6548\u5F15\u7528 {id}",
+      fixingDependencyRef: "\uD83D\uDD04 \u4FEE\u590D\u4EFB\u52A1 {taskId} \u7684\u65E0\u6548\u4F9D\u8D56\u5F15\u7528...",
+      dependencyRefRemoved: "\u2705 \u5DF2\u4ECE dependencies \u4E2D\u79FB\u9664\u65E0\u6548\u5F15\u7528 {id}",
+      inferringDependencies: "\uD83D\uDD04 \u4FEE\u590D\u4EFB\u52A1 {taskId} \u7684\u63A8\u65AD\u4F9D\u8D56\u7F3A\u5931...",
+      inferredDepNotFound: "\u26A0\uFE0F \u63A8\u65AD\u4F9D\u8D56 {id} \u4E0D\u5B58\u5728\uFF0C\u8DF3\u8FC7",
+      inferredDepWouldCreateCycle: "\u26A0\uFE0F \u6DFB\u52A0\u63A8\u65AD\u4F9D\u8D56 {id} \u4F1A\u5F62\u6210\u5FAA\u73AF\uFF0C\u8DF3\u8FC7 (GATE-DEP-002)",
+      inferredDepAdded: "\u2705 \u5DF2\u6DFB\u52A0\u63A8\u65AD\u4F9D\u8D56 {id}: {reason}",
+      fixingParentRef: "\uD83D\uDD04 \u4FEE\u590D\u5B50\u4EFB\u52A1 {taskId} \u5728\u7236\u4EFB\u52A1\u4E2D\u7684\u5F15\u7528...",
+      parentRefAdded: "\u2705 \u5DF2\u5C06\u5B50\u4EFB\u52A1\u6DFB\u52A0\u5230\u7236\u4EFB\u52A1\u7684 subtaskIds \u4E2D",
+      fixingParentChildRelation: "\uD83D\uDD04 \u4FEE\u590D\u4EFB\u52A1 {taskId} \u7684\u7236\u5B50\u5173\u7CFB\u4E0D\u4E00\u81F4...",
+      parentChildRelationFixed: "\u2705 \u5DF2\u5C06\u5B50\u4EFB\u52A1 {subtaskId} \u7684 parentId \u66F4\u65B0\u4E3A {parentId}",
+      cannotExtractKeywords: "\u26A0\uFE0F \u4EFB\u52A1 {taskId} \u65E0\u6CD5\u63D0\u53D6\u6709\u610F\u4E49\u7684\u5173\u952E\u8BCD\uFF0C\u8DF3\u8FC7\u91CD\u547D\u540D",
+      generatedIdSame: "\u23ED\uFE0F \u4EFB\u52A1 {taskId} \u751F\u6210\u7684 ID \u4E0E\u5F53\u524D\u76F8\u540C\uFF0C\u8DF3\u8FC7",
+      renamingTask: "\uD83D\uDD04 \u91CD\u547D\u540D\u4EFB\u52A1: {old} \u2192 {new}",
+      taskRenamed: "\u2705 \u5DF2\u91CD\u547D\u540D\u4E3A {id}",
+      renameFailed: "\u274C \u91CD\u547D\u540D\u5931\u8D25: {error}",
+      cannotAutoFix: "\u26A0\uFE0F \u4EFB\u52A1 {taskId} \u7684 {type} \u95EE\u9898\u65E0\u6CD5\u81EA\u52A8\u4FEE\u590D",
+      suggestion: "\u5EFA\u8BAE: {suggestion}",
+      fixingManualVerification: "\uD83D\uDD04 \u4FEE\u590D\u4EFB\u52A1 {taskId} \u7684 manual \u9A8C\u8BC1\u65B9\u6CD5...",
+      manualToAutomated: "\u2705 \u68C0\u67E5\u70B9 {id}: manual -> automated",
+      fixingMissingVerification: "\uD83D\uDD04 \u4FEE\u590D\u4EFB\u52A1 {taskId} \u7684\u7F3A\u5931 verification \u5B57\u6BB5...",
+      verificationAutoFilled: "\u2705 \u5DF2\u81EA\u52A8\u586B\u5145 verification \u5B57\u6BB5",
+      checkpointCompletionRate: "\u5B8C\u6210\u7387: {rate}%",
+      cleaningAbandonedTasks: "\u68C0\u67E5 abandoned \u6B8B\u7559\u4EFB\u52A1...",
+      abandonedTaskDeleted: "\u2705 \u5DF2\u6E05\u9664 {count} \u4E2A abandoned \u6B8B\u7559\u4EFB\u52A1",
+      cleaningOrphanTasks: "\u68C0\u67E5 abandoned \u6B8B\u7559\u4EFB\u52A1...",
+      checkingAbandoned: "\u68C0\u67E5 abandoned \u6B8B\u7559\u4EFB\u52A1...",
+      abandonedFound: "\u53D1\u73B0 {count} \u4E2A: {tasks}",
+      missingFileRef: "\u26A0\uFE0F \u4EFB\u52A1 {taskId} \u5F15\u7528\u4E86\u4E0D\u5B58\u5728\u7684\u6587\u4EF6\uFF0C\u65E0\u6CD5\u81EA\u52A8\u4FEE\u590D",
+      missingFiles: "\u4E0D\u5B58\u5728\u7684\u6587\u4EF6: {files}",
+      fillingTransitionNote: "\uD83D\uDD04 \u56DE\u586B\u4EFB\u52A1 {taskId} \u7684 transitionNote...",
+      missingHistoryDetail: "\u26A0\uFE0F \u7F3A\u5C11\u5386\u53F2\u6761\u76EE\u8BE6\u60C5\uFF0C\u65E0\u6CD5\u56DE\u586B",
+      transitionNoteFilled: "\u2705 \u5DF2\u56DE\u586B transitionNote: {status} ({author})",
+      missingSuggestion: "\u26A0\uFE0F \u7F3A\u5C11\u72B6\u6001\u5EFA\u8BAE\uFF0C\u65E0\u6CD5\u81EA\u52A8\u4FEE\u590D",
+      fixingInterruptedTask: "\uD83D\uDD04 \u4FEE\u590D\u4E2D\u65AD\u4EFB\u52A1 {taskId}...",
+      currentStatus: "\u5F53\u524D\u72B6\u6001: {status}",
+      suggestedStatus: "\u5EFA\u8BAE\u72B6\u6001: {status}",
+      reason: "\u539F\u56E0: {reason}",
+      skipKeepInProgress: "\u23ED\uFE0F \u5EFA\u8BAE\u4FDD\u6301 in_progress\uFF0C\u8DF3\u8FC7\u4FEE\u590D",
+      statusFixed: "\u2705 \u5DF2\u5C06\u4EFB\u52A1 {taskId} \u72B6\u6001\u4ECE {old} \u4FEE\u6539\u4E3A {new}",
+      migratingReopenedStatus: "\uD83D\uDD04 \u8FC1\u79FB\u4EFB\u52A1 {taskId} \u7684\u5E9F\u5F03 reopened \u72B6\u6001...",
+      reopenedMigrated: "\u2705 \u72B6\u6001\u5DF2\u4ECE reopened \u8FC1\u79FB\u4E3A open",
+      migratingNeedsHumanStatus: "\uD83D\uDD04 \u8FC1\u79FB\u4EFB\u52A1 {taskId} \u7684\u5E9F\u5F03 needs_human \u72B6\u6001...",
+      needsHumanMigrated: "\u2705 \u72B6\u6001\u5DF2\u4ECE needs_human \u8FC1\u79FB\u4E3A open",
+      checkpointCoverageWarning: "\u26A0\uFE0F \u9879\u76EE\u68C0\u67E5\u70B9\u8986\u76D6\u7387\u4E0D\u8DB3\uFF0C\u9700\u4EBA\u5DE5\u8865\u5145",
+      tasksWithoutCheckpoints: "\u7F3A\u5C11\u68C0\u67E5\u70B9\u7684\u4EFB\u52A1\u6570: {count}",
+      currentCoverage: "\u5F53\u524D\u8986\u76D6\u7387: {rate}%",
+      lowQualityTask: "\u26A0\uFE0F \u4EFB\u52A1 {taskId} \u5185\u5BB9\u8D28\u91CF\u4F4E ({score}\u5206/100)",
+      score: "\u8BC4\u5206",
+      cleaningObsoleteStatus: "\uD83D\uDD04 \u6E05\u7406\u4EFB\u52A1 {taskId} \u5386\u53F2\u8BB0\u5F55\u4E2D\u7684\u5E9F\u5F03\u72B6\u6001\u5F15\u7528...",
+      obsoleteStatusCleaned: "\u2705 \u5DF2\u6E05\u7406\u5386\u53F2\u8BB0\u5F55\u4E2D\u7684\u5E9F\u5F03\u72B6\u6001\u5F15\u7528",
+      missingInferenceInfo: "\u26A0\uFE0F \u7F3A\u5C11\u63A8\u65AD\u72B6\u6001\u4FE1\u606F\uFF0C\u65E0\u6CD5\u4FEE\u590D",
+      fixingReportStatusMismatch: "\uD83D\uDD04 \u4FEE\u590D\u4EFB\u52A1 {taskId} \u7684\u62A5\u544A-\u72B6\u6001\u4E0D\u4E00\u81F4...",
+      reportStatusMismatchFixed: "\u2705 \u72B6\u6001\u5DF2\u4ECE {old} \u66F4\u65B0\u4E3A {new} ({report} PASS)",
+      fixingCheckpointStatusMismatch: "\uD83D\uDD04 \u4FEE\u590D\u4EFB\u52A1 {taskId} \u7684\u68C0\u67E5\u70B9-\u72B6\u6001\u4E0D\u4E00\u81F4 (resolved + \u5168 pending)...",
+      checkpointStatusMismatchFixed: "\u2705 \u5DF2\u81EA\u52A8\u5B8C\u6210 {count} \u4E2A pending \u68C0\u67E5\u70B9 (\u65E7\u7248\u9057\u7559)",
+      unknownFixAction: "\u26A0\uFE0F \u672A\u77E5\u7684\u4FEE\u590D\u52A8\u4F5C: {action}",
+      resettingTask: "\uD83D\uDD04 \u91CD\u7F6E\u4EFB\u52A1 {taskId} \u5230 open \u72B6\u6001 (\u7F3A\u5C11 pipeline \u6062\u590D\u8BC1\u636E)...",
+      taskReset: "\u2705 \u5DF2\u5C06\u4EFB\u52A1\u4ECE {old} \u91CD\u7F6E\u4E3A open (\u7F3A\u5C11\u6062\u590D\u8BC1\u636E)",
+      unsupportedRule: "\u26A0\uFE0F \u4E0D\u652F\u6301\u7684\u68C0\u67E5\u70B9\u9A8C\u8BC1\u89C4\u5219: {rule}",
+      fixingCheckpointPrefix: "\uD83D\uDD04 \u4FEE\u590D\u4EFB\u52A1 {taskId} \u7684\u68C0\u67E5\u70B9\u524D\u7F00...",
+      noCheckpoints: "\u26A0\uFE0F \u4EFB\u52A1\u6CA1\u6709\u68C0\u67E5\u70B9",
+      checkpointPrefixUpdated: "\u2705 \u5DF2\u4E3A {count} \u4E2A\u68C0\u67E5\u70B9\u6DFB\u52A0\u524D\u7F00",
+      allCheckpointsHavePrefix: "\u2139\uFE0F \u6240\u6709\u68C0\u67E5\u70B9\u5DF2\u6709\u6709\u6548\u524D\u7F00",
+      deleted: "\u2705 \u5DF2\u5220\u9664 {taskId}",
+      taskNotExpired: "\u23ED\uFE0F  \u4EFB\u52A1 {taskId} \u672A\u8FC7\u671F ({days}\u5929)",
+      closedTask: "\u2705 \u5DF2\u5173\u95ED\u4EFB\u52A1 {taskId}",
+      markedInProgress: "\u2705 \u5DF2\u5C06\u4EFB\u52A1 {taskId} \u6807\u8BB0\u4E3A\u8FDB\u884C\u4E2D",
+      staleTaskPrompt: "\u4EFB\u52A1 {taskId} \u5DF2\u8FC7\u671F\uFF0C\u5982\u4F55\u5904\u7406?",
+      descriptionPrompt: "\u4E3A\u4EFB\u52A1 {taskId} \u6DFB\u52A0\u63CF\u8FF0 (\u7559\u7A7A\u8DF3\u8FC7):",
+      confirmCleanupAbandoned: "\u662F\u5426\u6E05\u9664\u8FD9\u4E9B abandoned \u6B8B\u7559\u4EFB\u52A1?",
+      confirmStatusChange: "\u662F\u5426\u5C06\u4EFB\u52A1 {taskId} \u72B6\u6001\u4ECE {oldStatus} \u4FEE\u6539\u4E3A {newStatus}?",
+      staleAutoCloseNote: "analyze --fix: \u975E\u4EA4\u4E92\u6A21\u5F0F\u4E0B\u81EA\u52A8\u5173\u95ED\u8FC7\u671F {days} \u5929\u7684\u4EFB\u52A1 (>30\u5929\u9608\u503C)",
+      staleUserCloseNote: "analyze --fix: \u7528\u6237\u4EA4\u4E92\u9009\u62E9\u5173\u95ED\u8FC7\u671F\u4EFB\u52A1",
+      staleUserProgressNote: "analyze --fix: \u7528\u6237\u4EA4\u4E92\u9009\u62E9\u5C06\u8FC7\u671F\u4EFB\u52A1\u6807\u8BB0\u4E3A\u8FDB\u884C\u4E2D",
+      legacyStatusFixNote: "analyze --fix: \u4FEE\u590D\u65E0\u6548\u72B6\u6001\u683C\u5F0F {oldStatus} \u2192 {newStatus}",
+      pipelineStatusMigrationNote: "analyze --fix: pipeline \u4E2D\u95F4\u72B6\u6001\u8FC1\u79FB {oldStatus} \u2192 {targetStatus}",
+      verificationCleared: '\u2705 verification: \u6E05\u9664\u65E0\u6548 verdictAction "{value}"',
+      invalidStatusValueFixNote: "analyze --fix: \u4FEE\u590D\u65E0\u6548\u72B6\u6001\u503C {oldStatus} \u2192 {newStatus}",
+      reopenMismatchFixNote: "\u8865\u5F55 reopen \u6D41\u8F6C\u8BB0\u5F55 (reopenCount={count})",
+      reopenedStatusMigrationNote: "analyze --fix: reopened \u72B6\u6001\u5DF2\u5E9F\u5F03\uFF0C\u8FC1\u79FB\u4E3A open",
+      inconsistentStatusFixNote: "analyze --fix: \u4FEE\u590D\u72B6\u6001\u77DB\u76FE (resolved + verification.failed)\uFF0C\u91CD\u7F6E\u4E3A open",
+      interruptedTaskAutoNote: "\u4E2D\u65AD\u4EFB\u52A1\u81EA\u52A8\u4FEE\u590D: {days} \u5929\u65E0\u6D3B\u8DC3 Pipeline",
+      interruptedTaskManualNote: "\u4E2D\u65AD\u4EFB\u52A1\u624B\u52A8\u786E\u8BA4\u4FEE\u590D: {days} \u5929\u65E0\u6D3B\u8DC3 Pipeline",
+      needsHumanStatusMigrationNote: "analyze --fix: needs_human \u72B6\u6001\u5DF2\u5E9F\u5F03\uFF0C\u8FC1\u79FB\u4E3A open \u4EE5\u4FBF\u91CD\u65B0\u5904\u7406",
+      checkpointPrefixFixNote: "analyze --fix: \u68C0\u67E5\u70B9\u524D\u7F00\u4FEE\u590D",
+      reportStatusMismatchNote: "analyze --fix: \u62A5\u544A-\u72B6\u6001\u4E0D\u4E00\u81F4\uFF0C\u72B6\u6001\u4ECE {oldStatus} \u66F4\u65B0\u4E3A {newStatus} ({reportFile} PASS)",
+      missingPipelineEvidenceNote: "analyze --fix: \u7F3A\u5C11 pipeline \u6062\u590D\u8BC1\u636E\uFF0C\u4ECE {oldStatus} \u91CD\u7F6E\u4E3A open",
+      deleteFailed: "\u274C \u5220\u9664 {taskId} \u5931\u8D25",
+      autoFixDescription: "\uD83D\uDCA1 {description}",
+      manualCheckCycle: "\u5EFA\u8BAE: \u624B\u52A8\u68C0\u67E5\u5E76\u8C03\u6574\u5FAA\u73AF\u4F9D\u8D56\u4E2D\u4EFB\u52A1\u7684\u4F9D\u8D56\u5173\u7CFB",
+      manualFixInvalidParent: "\u5EFA\u8BAE: \u624B\u52A8\u68C0\u67E5\u5E76\u5220\u9664\u65E0\u6548\u7684 parentId \u6216\u521B\u5EFA\u7236\u4EFB\u52A1",
+      lowQualitySuggestion: "\u6539\u5584\u4EFB\u52A1\u63CF\u8FF0\u3001\u68C0\u67E5\u70B9\u3001\u5173\u8054\u6587\u4EF6\u7B49\u8D28\u91CF",
+      qualityIssuesFound: "\u53D1\u73B0 {count} \u4E2A\u8D28\u91CF\u95EE\u9898",
+      deleteTaskConfirm: "\u662F\u5426\u5220\u9664\u4EFB\u52A1 {taskId}?",
+      result: "\u7ED3\u679C"
+    },
+    taskCommand: {
+      checkpointQualityReminder: "\u26A0\uFE0F Checkpoint \u8D28\u91CF\u63D0\u9192",
+      taskCreatedButTemplate: "Task \u5DF2\u521B\u5EFA\uFF0C\u4F46 checkpoints \u4F7F\u7528\u7684\u662F\u9ED8\u8BA4\u6A21\u677F\u3002",
+      highQualityCheckpointsEssential: "\u9AD8\u8D28\u91CF\u7684 checkpoints \u5BF9\u4EFB\u52A1\u9A8C\u6536\u81F3\u5173\u91CD\u8981\u3002\u5EFA\u8BAE\uFF1A",
+      editCheckpointMd: "\u7F16\u8F91 checkpoint.md \u6DFB\u52A0\u5177\u4F53\u7684\u9A8C\u6536\u6807\u51C6\uFF1A",
+      filePath: "\u6587\u4EF6\u8DEF\u5F84: {path}",
+      useAnalyzeCommand: "\u4F7F\u7528 analyze \u547D\u4EE4\u81EA\u52A8\u751F\u6210 checkpoints\uFF08\u63A8\u8350\uFF09\uFF1A",
+      useTemplateFeature: "\u4F7F\u7528 checkpoint \u6A21\u677F\u529F\u80FD\uFF1A",
+      tipStrictValidation: "\u63D0\u793A\uFF1A\u4EFB\u52A1\u6267\u884C/\u5B8C\u6210\u65F6\u4F1A\u8FDB\u884C\u4E25\u683C\u6821\u9A8C",
+      missingCheckpointVerificationCommands: "\u26A0\uFE0F \u4E2A checkpoints \u7F3A\u5C11\u81EA\u52A8\u5316\u9A8C\u8BC1\u547D\u4EE4",
+      checkpointsMissingVerification: "\u53D1\u73B0 {count} \u4E2A checkpoints \u7F3A\u5C11\u81EA\u52A8\u5316\u9A8C\u8BC1\u547D\u4EE4\uFF1A",
+      qaCannotAutoVerify: "\u63D0\u793A\uFF1AQA \u9636\u6BB5\u65E0\u6CD5\u81EA\u52A8\u9A8C\u8BC1\u8FD9\u4E9B checkpoints\u3002",
+      validationError: "\u9A8C\u8BC1\u9519\u8BEF",
+      checkpointFileNotExist: "checkpoint.md \u6587\u4EF6\u4E0D\u5B58\u5728",
+      noCheckpointItems: "checkpoint.md \u4E2D\u6CA1\u6709 checkpoints \u9879",
+      templateContentDetected: '\u68C0\u6D4B\u5230 {count}/{total} \u4E2A checkpoints \u4E3A\u6A21\u677F\u5185\u5BB9\uFF08\u5982"Checkpoint1"\u3001"\u5B8C\u6210 Task"\u7B49\uFF09\uFF0C\u8BF7\u6DFB\u52A0\u5177\u4F53\u7684\u9A8C\u6536\u6807\u51C6',
+      titleCannotBeEmpty: "Title \u4E0D\u80FD\u4E3A\u7A7A"
+    },
+    initRequirementCmd: {
+      complexityWarning: "\u26A0\uFE0F \u590D\u6742\u5EA6\u9884\u8B66",
+      complexityHigh: "\u6B64\u4EFB\u52A1\u9884\u4F30\u9700\u8981 {minutes} \u5206\u949F\uFF0C\u8D85\u8FC7\u9ED8\u8BA4 Harness \u8D85\u65F6\u9608\u503C\u3002",
+      exceedsTimeout: "\u5EFA\u8BAE\u5C06\u6B64\u4EFB\u52A1\u62C6\u5206\u4E3A\u66F4\u5C0F\u7684\u5B50\u4EFB\u52A1\uFF0C\u6BCF\u4E2A\u63A7\u5236\u5728 15 \u5206\u949F\u4EE5\u5185\u3002",
+      considerSplitting: "\u62C6\u5206\u5EFA\u8BAE\uFF1A",
+      splitSuggestions: "{index}. {title}{dependency}",
+      dependsOn: "\uFF08\u4F9D\u8D56\u4E8E\u5B50\u4EFB\u52A1 {index}\uFF09",
+      files: "\u6587\u4EF6: {files}",
+      estimated: "\u9884\u4F30: ~{minutes} \u5206\u949F",
+      qualityGateFailed: "\u274C \u8D28\u91CF\u95E8\u7981\u5931\u8D25\uFF1A\u53D1\u73B0 {count} \u4E2A\u9519\u8BEF\u7EA7\u8FDD\u89C4\u9879",
+      errorViolations: "\uD83D\uDEAB \u4EE5\u4E0B\u9519\u8BEF\u5FC5\u987B\u5728\u521B\u5EFA\u4EFB\u52A1\u524D\u4FEE\u590D\uFF1A",
+      followingErrorsMustFix: "\u4EE5\u4E0B\u9519\u8BEF\u5FC5\u987B\u5728\u521B\u5EFA\u4EFB\u52A1\u524D\u4FEE\u590D\uFF1A",
+      fixSuggestions: "\uD83D\uDCA1 \u4FEE\u590D\u5EFA\u8BAE\uFF1A",
+      checkpointPrefixTip: "Checkpoints \u5FC5\u987B\u4EE5\u6807\u51C6\u524D\u7F00\u5F00\u5934\uFF1A[implem]\u3001[test]\u3001[doc]\u3001[verify]",
+      metaJsonFormatTip: "meta.json \u5FC5\u987B\u662F\u6807\u51C6\u683C\u5F0F\uFF0C\u5305\u542B\u6240\u6709\u5FC5\u9700\u5B57\u6BB5",
+      skipQualityGateTip: "\u4F7F\u7528 --skip-quality-gate \u4E34\u65F6\u8DF3\u8FC7\uFF08\u4E0D\u63A8\u8350\u7528\u4E8E\u751F\u4EA7\u73AF\u5883\uFF09",
+      qualityGateLowScore: "\u274C \u8D28\u91CF\u95E8\u7981\u5931\u8D25\uFF1A{score} < {threshold}",
+      qualityGateImprovement: "\uD83D\uDCA1 \u6539\u8FDB\u5EFA\u8BAE\uFF1A",
+      action: "\u64CD\u4F5C: {action}"
+    },
+    setupCmd: {
+      alreadyInitialized: "\u9879\u76EE\u7BA1\u7406\u73AF\u5883\u5DF2\u5B58\u5728\uFF0C\u8DF3\u8FC7\u521D\u59CB\u5316\u3002",
+      directory: "\u76EE\u5F55: {path}",
+      tipUseForce: "\u63D0\u793A: \u4F7F\u7528 --force \u9009\u9879\u5F3A\u5236\u91CD\u65B0\u521D\u59CB\u5316\uFF08\u91CD\u65B0\u590D\u5236\u6280\u80FD\u6587\u4EF6\uFF09",
+      forceMode: "\u26A0\uFE0F \u5F3A\u5236\u91CD\u65B0\u521D\u59CB\u5316\u6A21\u5F0F...",
+      gitHookCreated: "  \u2713 Git Hook \u521B\u5EFA\u5B8C\u6210 (pre-commit, prepublishOnly)",
+      gitHookFailed: "  \u26A0\uFE0F Git Hook \u521B\u5EFA\u5931\u8D25: {error}",
+      gitHookDisabled: "  \u23ED\uFE0F  Git Hook \u521B\u5EFA\u5DF2\u901A\u8FC7\u914D\u7F6E\u7981\u7528 (gitHook.enabled = false)",
+      copySkillFile: "  \u2713 \u590D\u5236 SKILL.md ({language})",
+      copyCommandDocs: "  \u2713 \u590D\u5236 {count} \u4E2A\u547D\u4EE4\u6587\u6863 ({language})",
+      copyDefault: "  \u2713 \u590D\u5236 SKILL.md (default)",
+      fileNotFound: "  \u26A0\uFE0F SKILL.md \u672A\u627E\u5230",
+      dirNotFound: "  \u26A0\uFE0F \u547D\u4EE4\u6587\u6863\u76EE\u5F55\u672A\u627E\u5230: {path}",
+      pluginRootNotSet: "  \u26A0\uFE0F CLAUDE_PLUGIN_ROOT \u73AF\u5883\u53D8\u91CF\u672A\u8BBE\u7F6E\uFF0C\u8DF3\u8FC7\u6280\u80FD\u6587\u4EF6\u590D\u5236"
+    },
+    harnessCmd: {
+      projectNotInitialized: "\u9519\u8BEF: \u9879\u76EE\u672A\u521D\u59CB\u5316\u3002\u8BF7\u5148\u8FD0\u884C `projmnt4claude setup`",
+      concurrentPipelineRunning: "\u274C \u9519\u8BEF: \u53E6\u4E00\u4E2A Harness \u6D41\u6C34\u7EBF\u6B63\u5728\u8FD0\u884C",
+      activePipelineInfo: "\u6D3B\u8DC3\u6D41\u6C34\u7EBF\u4FE1\u606F:",
+      snapshotId: "   \u5FEB\u7167 ID: {id}",
+      processId: "   \u8FDB\u7A0B ID: {pid}",
+      createdAt: "   \u521B\u5EFA\u4E8E: {timestamp}",
+      taskCount: "   \u4EFB\u52A1\u6570: {count}",
+      possibleCauses: "\u53EF\u80FD\u539F\u56E0:",
+      solutions: "\u89E3\u51B3\u65B9\u6848:",
+      invalidMaxRetries: "\u9519\u8BEF: --max-retries \u5FC5\u987B >= 0",
+      invalidTimeout: "\u9519\u8BEF: --timeout \u5FC5\u987B >= 10 \u79D2",
+      invalidParallel: "\u9519\u8BEF: --parallel \u5FC5\u987B >= 1",
+      noExecutableTasks: "\u9519\u8BEF: \u6CA1\u6709\u53EF\u6267\u884C\u7684\u4EFB\u52A1",
+      batchLabel: "\u6279\u6B21 {index}",
+      parallelTag: " [\u5E76\u884C]",
+      dryRunComplete: "\u2705 \u5E72\u8FD0\u884C\u5B8C\u6210\uFF08\u672A\u5B9E\u9645\u6267\u884C\uFF09",
+      qualityGateCheck: "\uD83D\uDEA6 \u8D28\u91CF\u95E8\u7981\u68C0\u67E5",
+      minQualityScoreThreshold: "\uD83D\uDCCA \u6700\u4F4E\u8D28\u91CF\u5206\u9608\u503C: {score}",
+      qualityGateFailed: "\u274C \u8D28\u91CF\u95E8\u7981\u68C0\u67E5\u5931\u8D25\uFF0C\u4EE5\u4E0B\u4EFB\u52A1\u9700\u8981\u6539\u8FDB:",
+      tasksNeedImprovement: "\u9700\u8981\u6539\u8FDB\u7684\u4EFB\u52A1:",
+      allTasksPassed: "\u2705 \u6240\u6709\u4EFB\u52A1\u901A\u8FC7\u8D28\u91CF\u95E8\u7981\u68C0\u67E5",
+      resumingFromInterruption: "\uD83D\uDCE6 \u4ECE\u65AD\u70B9\u6062\u590D\u6267\u884C (\u4EFB\u52A1 {current}/{total})",
+      noPreviousState: "\uD83D\uDCE6 \u672A\u627E\u5230\u4E4B\u524D\u7684\u6267\u884C\u72B6\u6001\uFF0C\u4ECE\u5934\u5F00\u59CB",
+      stateFileMigrated: "\uD83D\uDCE6 \u72B6\u6001\u6587\u4EF6\u81EA\u52A8\u4ECE v{from} \u8FC1\u79FB\u5230 v{to}",
+      loadingStateFailed: "\u52A0\u8F7D\u8FD0\u884C\u65F6\u72B6\u6001\u5931\u8D25\uFF0C\u91CD\u7F6E: {error}",
+      cleaningOrphanSnapshots: "\uD83E\uDDF9 \u6E05\u7406\u5B64\u7ACB\u5FEB\u7167: {id} (PID: {pid})",
+      cleanedSnapshots: "\u2705 \u603B\u5171\u6E05\u7406 {count} \u4E2A\u5FEB\u7167",
+      forceCleanedSnapshots: "  \u26A0\uFE0F  \u5F3A\u5236\u6E05\u7406\u6D3B\u8DC3\u5FEB\u7167: {id} (PID: {pid})",
+      noSnapshotsFound: "\u2705 \u672A\u627E\u5230\u5FEB\u7167"
+    },
+    analyzeCmd: {
+      projectNotInitialized: "\u9519\u8BEF: \u9879\u76EE\u672A\u521D\u59CB\u5316\u3002\u8BF7\u5148\u8FD0\u884C `projmnt4claude setup`",
+      analyzingProject: "\u6B63\u5728\u5206\u6790\u9879\u76EE\u5065\u5EB7\u72B6\u6001...",
+      analysisComplete: "\u5206\u6790\u5B8C\u6210",
+      issuesFound: "\u53D1\u73B0 {count} \u4E2A\u95EE\u9898",
+      noIssues: "\u672A\u53D1\u73B0\u95EE\u9898",
+      fixApplied: "\u5DF2\u4FEE\u590D {count} \u4E2A\u95EE\u9898",
+      taskIdEmpty: "\u4EFB\u52A1 ID \u4E3A\u7A7A\u6216\u65E0\u6548",
+      taskIdFormatInvalid: "\u4EFB\u52A1 ID \u683C\u5F0F\u4E0D\u7B26\u5408\u89C4\u8303",
+      historyEntryNotObject: "history[{index}] \u4E0D\u662F\u6709\u6548\u5BF9\u8C61",
+      timestampMissing: "history[{index}].timestamp \u7F3A\u5931\u6216\u683C\u5F0F\u9519\u8BEF",
+      timestampInvalid: "history[{index}].timestamp \u4E0D\u662F\u6709\u6548\u7684 ISO \u65F6\u95F4\u6233",
+      actionMissing: "history[{index}].action \u7F3A\u5931\u6216\u683C\u5F0F\u9519\u8BEF",
+      checkpointNotObject: "checkpoints[{index}] \u4E0D\u662F\u6709\u6548\u5BF9\u8C61",
+      checkpointIdMissing: "checkpoints[{index}].id \u7F3A\u5931\u6216\u683C\u5F0F\u9519\u8BEF",
+      checkpointStatusInvalid: "checkpoints[{index}].status \u4E0D\u662F\u6709\u6548\u7684\u72B6\u6001\u503C",
+      schemaMigrationReopenCount: "\u6DFB\u52A0 reopenCount: 0",
+      schemaMigrationRequirementHistory: "\u6DFB\u52A0 requirementHistory: []",
+      schemaMigrationCommitHistory: "\u6DFB\u52A0 executionStats.commitHistory: []",
+      schemaMigrationTransitionNotes: "\u6DFB\u52A0 transitionNotes: []",
+      schemaMigrationResumeAction: "\u6DFB\u52A0 resumeAction: resume_pipeline (status={status})",
+      schemaMigrationCheckpointPrefix: '\u68C0\u67E5\u70B9\u524D\u7F00\u8865\u5168: "{old}" \u2192 "{new}"',
+      schemaMigrationCheckpointPolicy: "\u6DFB\u52A0 checkpointPolicy: {policy} (\u57FA\u4E8E {type}/{priority} \u63A8\u65AD)",
+      aiPromptTaskInfo: "## \u4EFB\u52A1\u57FA\u672C\u4FE1\u606F",
+      aiPromptHistory: "## \u5386\u53F2\u8BB0\u5F55 ({count} \u6761)",
+      aiPromptTransitionHistory: "## \u72B6\u6001\u8F6C\u6362\u8BB0\u5F55 ({count} \u6761)",
+      aiPromptCheckpoints: "## \u68C0\u67E5\u70B9 ({count} \u4E2A)",
+      aiPromptVerification: "## \u9A8C\u8BC1\u4FE1\u606F",
+      aiPromptLayer1Results: "## Layer 1 \u68C0\u6D4B\u7ED3\u679C ({count} \u4E2A\u95EE\u9898)",
+      aiPromptNoHistory: "## \u5386\u53F2\u8BB0\u5F55: \u65E0",
+      aiPromptNoTransitionHistory: "## \u72B6\u6001\u8F6C\u6362\u8BB0\u5F55: \u65E0",
+      aiPromptNoCheckpoints: "## \u68C0\u67E5\u70B9: \u65E0",
+      aiPromptNoVerification: "## \u9A8C\u8BC1\u4FE1\u606F: \u65E0",
+      aiPromptNoLayer1Issues: "## Layer 1 \u68C0\u6D4B\u7ED3\u679C: \u65E0\u95EE\u9898",
+      aiPromptTaskAnalysisExpert: "\u4F60\u662F\u4E00\u4E2A\u4EFB\u52A1\u72B6\u6001\u5206\u6790\u4E13\u5BB6\u3002\u6839\u636E\u4EE5\u4E0B\u4EFB\u52A1\u4E0A\u4E0B\u6587\uFF0C\u63A8\u65AD\u4EFB\u52A1\u7684\u6B63\u786E\u72B6\u6001\u3002",
+      aiPromptAnalyzeContext: "\u8BF7\u5206\u6790\u4EFB\u52A1\u7684\u5386\u53F2\u8BB0\u5F55\u3001\u8F6C\u6362\u8BB0\u5F55\u548C\u5F53\u524D\u72B6\u6001\uFF0C\u63A8\u65AD\u4EFB\u52A1\u5F53\u524D\u5E94\u8BE5\u5904\u4E8E\u4EC0\u4E48\u72B6\u6001\u3002",
+      aiPromptJsonFormat: "\u4E25\u683C\u6309\u7167\u4EE5\u4E0B JSON \u683C\u5F0F\u8F93\u51FA\uFF08\u4E0D\u8981\u8F93\u51FA\u5176\u4ED6\u5185\u5BB9\uFF09:",
+      aiPromptInferredStatus: '"inferredStatus": "\u72B6\u6001\u503C\uFF0C\u5FC5\u987B\u662F: open, in_progress, wait_review, wait_qa, wait_evaluation, resolved, closed, abandoned, failed"',
+      aiPromptConfidence: '"confidence": 0.0\u52301.0\u4E4B\u95F4\u7684\u7F6E\u4FE1\u5EA6',
+      aiPromptReasoning: '"reasoning": "\u63A8\u65AD\u4F9D\u636E\u7684\u7B80\u77ED\u8BF4\u660E"',
+      aiPromptSuggestion: '"suggestion": "\u4FEE\u590D\u5EFA\u8BAE"',
+      issueMissingDescription: "\u4EFB\u52A1\u7F3A\u5C11\u63CF\u8FF0",
+      issueResolvedNoVerification: "\u4EFB\u52A1\u5DF2 resolved \u4F46\u7F3A\u5C11 verification \u5B57\u6BB5",
+      issueOldFormatId: "\u4EFB\u52A1\u4F7F\u7528\u65E7\u683C\u5F0F ID",
+      issueMissingSlug: "\u4EFB\u52A1 ID \u7F3A\u5C11\u6709\u610F\u4E49\u7684 slug",
+      transitionStartExecution: "\u5F00\u59CB\u6267\u884C\u4EFB\u52A1",
+      transitionSubmitReview: "\u63D0\u4EA4\u4EE3\u7801\u5BA1\u67E5",
+      transitionReviewPass: "\u5BA1\u67E5\u901A\u8FC7\uFF0C\u8FDB\u5165QA",
+      transitionQaPass: "QA\u901A\u8FC7\uFF0C\u7B49\u5F85\u8BC4\u4F30",
+      transitionEvalPass: "\u8BC4\u4F30\u901A\u8FC7\uFF0C\u4EFB\u52A1\u5B8C\u6210",
+      transitionCloseTask: "\u5173\u95ED\u4EFB\u52A1",
+      transitionDirectComplete: "\u76F4\u63A5\u6807\u8BB0\u5B8C\u6210",
+      transitionReopenTask: "\u91CD\u65B0\u6253\u5F00\u4EFB\u52A1",
+      transitionRestartExecution: "\u91CD\u65B0\u5F00\u59CB\u6267\u884C",
+      transitionAbandonTask: "\u653E\u5F03\u4EFB\u52A1",
+      transitionReturnTodo: "\u9000\u56DE\u5F85\u529E",
+      statusSuggestionCheckpointRate: "\u68C0\u67E5\u70B9\u5B8C\u6210\u7387 {rate}%\uFF0C\u5EFA\u8BAE\u8F6C\u4E3A wait_qa",
+      statusSuggestionKeepInProgress: "\u4E2D\u65AD\u65F6\u95F4\u77ED\u4E14\u65E0\u9700\u4EBA\u5DE5\u68C0\u67E5\u70B9\uFF0C\u5EFA\u8BAE\u4FDD\u6301 in_progress",
+      statusSuggestionResetOpen: "\u4EFB\u52A1\u4E2D\u65AD\u8F83\u4E45\uFF0C\u5EFA\u8BAE\u91CD\u7F6E\u4E3A open \u4EE5\u4FBF\u91CD\u65B0\u89C4\u5212",
+      depSuggestionCheckIndependence: "\u8BE5\u4EFB\u52A1\u53EF\u80FD\u6709\u9690\u542B\u7684\u4F9D\u8D56\u5173\u7CFB\uFF0C\u8BF7\u786E\u8BA4\u662F\u5426\u72EC\u7ACB",
+      depSuggestionIndependentModule: "\u8BE5\u4EFB\u52A1\u4E3A\u72EC\u7ACB\u6A21\u5757\uFF0C\u65E0\u9700\u5904\u7406",
+      unknown: "\u672A\u77E5",
+      none: "\u65E0",
+      reportResultPass: "**\u7ED3\u679C**: \u2705 PASS",
+      reportResultNopass: "**\u7ED3\u679C**: \u274C NOPASS"
+    },
+    harness: {
+      timeoutHeader: "\u8D85\u65F6\u9650\u5236",
+      taskDescription: "\u4EFB\u52A1\u63CF\u8FF0",
+      dependencies: "\u4F9D\u8D56\u4EFB\u52A1",
+      acceptanceCriteria: "\u9A8C\u6536\u6807\u51C6",
+      acceptanceCriteriaInstruction: "\u8BF7\u786E\u4FDD\u6EE1\u8DB3\u4EE5\u4E0B\u6240\u6709\u6807\u51C6\uFF1A",
+      checkpoints: "\u68C0\u67E5\u70B9",
+      checkpointsInstruction: "\u8BF7\u5B8C\u6210\u4EE5\u4E0B\u68C0\u67E5\u70B9\uFF1A",
+      timeoutInstruction: "\u4F60\u9700\u8981\u5728 {timeout} \u5206\u949F\u5185\u5B8C\u6210\u6B64\u4EFB\u52A1\u3002\u8BF7\u5408\u7406\u5206\u914D\u65F6\u95F4\uFF0C\u4F18\u5148\u5B8C\u6210\u6838\u5FC3\u529F\u80FD\u3002",
+      roleSpecificRequirements: "\u89D2\u8272\u4E13\u9879\u8981\u6C42",
+      retryContext: "\u91CD\u8BD5\u4E0A\u4E0B\u6587\uFF08\u524D\u6B21\u5931\u8D25\u4FE1\u606F\uFF09",
+      retryAttemptInfo: "\u8FD9\u662F\u7B2C {attempt} \u6B21\u5C1D\u8BD5\u3002\u4E0A\u4E00\u6B21\u5728 **{phase}** \u9636\u6BB5\u5931\u8D25\u3002",
+      previousFailureReason: "\u524D\u6B21\u5931\u8D25\u539F\u56E0",
+      partialProgress: "\u5DF2\u5B8C\u6210\u7684\u90E8\u5206\u8FDB\u5EA6",
+      upstreamFailureInfo: "\u4E0A\u6E38\u5931\u8D25\u4FE1\u606F",
+      phaseLabels: {
+        development: "\u5F00\u53D1",
+        codeReview: "\u4EE3\u7801\u5BA1\u6838",
+        qa: "QA \u9A8C\u8BC1",
+        evaluation: "\u8BC4\u4F30"
+      },
+      logs: {
+        taskLabel: "\u4EFB\u52A1",
+        typeLabel: "\u7C7B\u578B",
+        priorityLabel: "\u4F18\u5148\u7EA7",
+        timeoutLabel: "\u8D85\u65F6",
+        minutes: "\u5206\u949F",
+        seconds: "\u79D2",
+        devPromptGenerated: "\u5F00\u53D1\u63D0\u793A\u8BCD\u5DF2\u751F\u6210",
+        startingHeadlessClaude: "\u542F\u52A8 Headless Claude...",
+        devOutputFormatRetry: "\u5F00\u53D1\u8F93\u51FA\u683C\u5F0F\u9A8C\u8BC1\u4E0D\u5339\u914D\uFF0C\u5DF2\u91CD\u8BD5 {retries} \u6B21",
+        devPhaseFailed: "\u5F00\u53D1\u9636\u6BB5\u5931\u8D25",
+        devOutputValidationFailed: "\u5F00\u53D1\u8F93\u51FA\u683C\u5F0F\u9A8C\u8BC1\u672A\u901A\u8FC7",
+        devPhaseCompleted: "\u5F00\u53D1\u9636\u6BB5\u5B8C\u6210",
+        evidenceCollected: "\u6536\u96C6\u8BC1\u636E",
+        checkpointsCompleted: "\u5B8C\u6210\u68C0\u67E5\u70B9",
+        devPhaseError: "\u5F00\u53D1\u9636\u6BB5\u51FA\u9519",
+        devPhaseNotComplete: "\u5F00\u53D1\u9636\u6BB5\u672A\u6210\u529F\u5B8C\u6210",
+        evalTaskLabel: "\u8BC4\u4F30\u4EFB\u52A1",
+        devStatusLabel: "\u5F00\u53D1\u72B6\u6001",
+        evalPromptGenerated: "\u8BC4\u4F30\u63D0\u793A\u8BCD\u5DF2\u751F\u6210",
+        startingEvalSession: "\u542F\u52A8\u72EC\u7ACB\u8BC4\u4F30\u4F1A\u8BDD...",
+        evalFormatRetry: "\u8BC4\u4F30\u7ED3\u679C\u683C\u5F0F\u4E0D\u5339\u914D\uFF0C\u5DF2\u91CD\u8BD5 {retries} \u6B21",
+        evalEmptyOutput: "\u8BC4\u4F30\u8F93\u51FA\u4E3A\u7A7A\uFF0CClaude \u8FDB\u7A0B\u53EF\u80FD\u5F02\u5E38\u9000\u51FA",
+        evalStderrPrefix: "stderr",
+        evalParseFailureDefault: "\u91CD\u8BD5\u540E\u4ECD\u65E0\u6CD5\u89E3\u6790\u8BC4\u4F30\u7ED3\u679C\uFF0C\u9ED8\u8BA4 PASS\uFF08\u4FDD\u5B88\u7B56\u7565\uFF09",
+        evalPassed: "\u5BA1\u67E5\u901A\u8FC7",
+        evalFailed: "\u5BA1\u67E5\u672A\u901A\u8FC7",
+        evalError: "\u8BC4\u4F30\u51FA\u9519",
+        codeReviewPhase: "\u4EE3\u7801\u5BA1\u6838\u9636\u6BB5...",
+        codeReviewCheckpoints: "\u4EE3\u7801\u5BA1\u6838\u68C0\u67E5\u70B9",
+        noCodeReviewCheckpoints: "\u65E0\u4EE3\u7801\u5BA1\u6838\u68C0\u67E5\u70B9\uFF0C\u81EA\u52A8\u901A\u8FC7",
+        codeReviewPromptGenerated: "\u4EE3\u7801\u5BA1\u6838\u63D0\u793A\u8BCD\u5DF2\u751F\u6210",
+        startingCodeReview: "\u542F\u52A8\u4EE3\u7801\u5BA1\u6838\u4F1A\u8BDD...",
+        codeReviewFormatRetry: "\u4EE3\u7801\u5BA1\u6838\u7ED3\u679C\u683C\u5F0F\u4E0D\u5339\u914D\uFF0C\u5DF2\u91CD\u8BD5 {retries} \u6B21",
+        contradictionDetected: "\u77DB\u76FE\u68C0\u6D4B",
+        codeReviewPassed: "\u4EE3\u7801\u5BA1\u6838\u901A\u8FC7",
+        codeReviewFailed: "\u4EE3\u7801\u5BA1\u6838\u672A\u901A\u8FC7",
+        codeReviewError: "\u4EE3\u7801\u5BA1\u6838\u51FA\u9519",
+        codeReviewSessionFailed: "\u4EE3\u7801\u5BA1\u6838\u4F1A\u8BDD\u5931\u8D25",
+        codeReviewPromptGenerated: "\u4EE3\u7801\u5BA1\u6838\u63D0\u793A\u8BCD\u5DF2\u751F\u6210",
+        startingCodeReviewSession: "\u542F\u52A8\u4EE3\u7801\u5BA1\u6838\u4F1A\u8BDD...",
+        codeReviewRetry: "\u4EE3\u7801\u5BA1\u6838\u7ED3\u679C\u683C\u5F0F\u4E0D\u5339\u914D\uFF0C\u5DF2\u91CD\u8BD5 {retries} \u6B21",
+        qaPhase: "QA \u9A8C\u8BC1\u9636\u6BB5...",
+        qaCheckpoints: "QA \u9A8C\u8BC1\u68C0\u67E5\u70B9",
+        noQACheckpoints: "\u65E0 QA \u9A8C\u8BC1\u68C0\u67E5\u70B9\uFF0C\u81EA\u52A8\u901A\u8FC7",
+        humanVerificationCheckpoints: "\u4E2A\u68C0\u67E5\u70B9\u5DF2\u5EF6\u671F\uFF08deferred\uFF09\uFF0C\u7B49\u5F85\u4EBA\u5DE5\u9A8C\u8BC1",
+        deferredInfo: "\u4E2A\u68C0\u67E5\u70B9\u5DF2\u5EF6\u671F\uFF08deferred\uFF09\uFF0C\u7B49\u5F85\u4EBA\u5DE5\u9A8C\u8BC1",
+        qaPassed: "QA \u9A8C\u8BC1\u901A\u8FC7",
+        qaPassedWithHuman: "\u81EA\u52A8\u5316\u9A8C\u8BC1\u901A\u8FC7\uFF0C\u7B49\u5F85\u4EBA\u5DE5\u9A8C\u8BC1",
+        qaFailed: "QA \u9A8C\u8BC1\u672A\u901A\u8FC7",
+        qaError: "QA \u9A8C\u8BC1\u51FA\u9519",
+        qaSkippedDueToCodeReview: "\u4EE3\u7801\u5BA1\u6838\u672A\u901A\u8FC7\uFF0C\u8DF3\u8FC7 QA \u9A8C\u8BC1",
+        checkpointWarning: "\u4E2A\u81EA\u52A8\u5316\u68C0\u67E5\u70B9\u7F3A\u5C11\u9A8C\u8BC1\u547D\u4EE4",
+        checkpointWarningDetail: "\u7F3A\u5C11 commands/steps",
+        checkpointWarningFallback: "\u8FD9\u4E9B\u68C0\u67E5\u70B9\u5C06\u4F9D\u8D56 AI \u81EA\u7531\u9A8C\u8BC1\uFF0C\u53EF\u80FD\u5F71\u54CD\u9A8C\u8BC1\u8D28\u91CF\u3002",
+        noAutomatedQACheckpoints: "\u65E0\u81EA\u52A8\u5316 QA \u68C0\u67E5\u70B9\uFF0C\u81EA\u52A8\u5316\u9A8C\u8BC1\u81EA\u52A8\u901A\u8FC7",
+        qaPromptGenerated: "QA \u9A8C\u8BC1\u63D0\u793A\u8BCD\u5DF2\u751F\u6210",
+        startingQASession: "\u542F\u52A8 QA \u9A8C\u8BC1\u4F1A\u8BDD...",
+        qaRetry: "QA \u9A8C\u8BC1\u7ED3\u679C\u683C\u5F0F\u4E0D\u5339\u914D\uFF0C\u5DF2\u91CD\u8BD5 {retries} \u6B21",
+        qaSessionFailed: "QA \u9A8C\u8BC1\u4F1A\u8BDD\u5931\u8D25",
+        qaOutputValidationFailed: "QA \u9A8C\u8BC1\u8F93\u51FA\u683C\u5F0F\u9A8C\u8BC1\u672A\u901A\u8FC7",
+        cannotParseVerdict: "\u65E0\u6CD5\u89E3\u6790\u5224\u5B9A\u7ED3\u679C",
+        deferredCheckpointsInfo: "{count} \u4E2A\u68C0\u67E5\u70B9\u5DF2\u5EF6\u671F\uFF08deferred\uFF09\uFF0C\u7B49\u5F85\u4EBA\u5DE5\u9A8C\u8BC1",
+        phantomTaskViolation: "\u4E25\u91CD\u8FDD\u89C4\uFF1A\u5F00\u53D1\u8005\u5728\u6267\u884C\u671F\u95F4\u521B\u5EFA\u4E86 {count} \u4E2A\u989D\u5916\u4EFB\u52A1 ({tasks}). \u5F00\u53D1\u8005\u88AB\u4E25\u683C\u7981\u6B62\u521B\u5EFA\u65B0\u4EFB\u52A1\u3002",
+        phantomTaskCriteria: "\u7981\u6B62\u521B\u5EFA\u65B0\u4EFB\u52A1",
+        phantomTaskPrefix: "\u5E7D\u7075\u4EFB\u52A1",
+        phantomTaskDetails: "\u68C0\u6D4B\u5230\u5F00\u53D1\u8005\u521B\u5EFA\u4E86\u4E0D\u5C5E\u4E8E\u539F\u59CB\u8BA1\u5212\u7684\u989D\u5916\u4EFB\u52A1\u3002\u8FD9\u8FDD\u53CD\u4E86\u5F00\u53D1\u8005\u804C\u8D23\u8303\u56F4\u2014\u2014\u5F00\u53D1\u8005\u53EA\u5E94\u5B9E\u73B0\u88AB\u5206\u914D\u4EFB\u52A1\u7684\u4EE3\u7801\u53D8\u66F4\uFF0C\u800C\u975E\u521B\u5EFA\u65B0\u4EFB\u52A1\u3002",
+        emptyOutputError: "\u8BC4\u4F30\u4F1A\u8BDD\u8F93\u51FA\u4E3A\u7A7A\uFF1AClaude \u8FDB\u7A0B\u53EF\u80FD\u5F02\u5E38\u9000\u51FA",
+        evaluationOutputEmpty: "\u8BC4\u4F30\u8F93\u51FA\u4E3A\u7A7A\uFF0CClaude \u8FDB\u7A0B\u53EF\u80FD\u5F02\u5E38\u9000\u51FA",
+        contradictionFix: "\u77DB\u76FE\u4FEE\u6B63",
+        evalParseError: "\u65E0\u6CD5\u89E3\u6790\u8BC4\u4F30\u7ED3\u679C",
+        evalParseFailureDefaultReason: "\u57FA\u4E8E\u7ED3\u6784\u5316\u5173\u952E\u8BCD\u5339\u914D\uFF1A\u8BC4\u4F30\u901A\u8FC7\uFF08\u91CD\u8BD5{retries}\u6B21\u540E\u65E0\u6CD5\u89E3\u6790\uFF0C\u9ED8\u8BA4PASS\uFF09",
+        phantomTaskDetected: "\u68C0\u6D4B\u5230 {count} \u4E2A\u5E7D\u7075\u4EFB\u52A1",
+        phantomTaskAutoNopass: "\u68C0\u6D4B\u5230\u5E7D\u7075\u4EFB\u52A1\uFF0C\u81EA\u52A8 NOPASS",
+        noPhantomTask: "\u672A\u68C0\u6D4B\u5230\u5E7D\u7075\u4EFB\u52A1",
+        snapshotMode: "\u5E7D\u7075\u4EFB\u52A1\u68C0\u6D4B\u4F7F\u7528\u8BA1\u5212\u5FEB\u7167",
+        fallbackMode: "\u5E7D\u7075\u4EFB\u52A1\u68C0\u6D4B: \u672A\u627E\u5230\u8BA1\u5212\u5FEB\u7167\uFF0C\u4F7F\u7528\u65F6\u95F4\u7A97\u53E3\u56DE\u9000\u6A21\u5F0F",
+        snapshotStats: "\u5E7D\u7075\u4EFB\u52A1\u68C0\u6D4B\u7EDF\u8BA1: \u603B\u4EFB\u52A1 {total}, \u8BA1\u5212\u5185\u6392\u9664 {excluded}, \u8BA1\u5212\u5916\u68C0\u6D4B\u4E2D {checking}",
+        snapshotError: "\u5E7D\u7075\u4EFB\u52A1\u68C0\u6D4B\u51FA\u9519",
+        snapshotExcludedInfo: "(\u8BA1\u5212\u5185\u6392\u9664 {count} \u4E2A\u4EFB\u52A1)",
+        snapshotBasedOnInfo: "\u57FA\u4E8E\u5FEB\u7167\u6392\u9664\u4E86 {count} \u4E2A\u8BA1\u5212\u5185\u4EFB\u52A1",
+        hookWarningIgnored: "Hook \u9519\u8BEF\u5DF2\u5FFD\u7565",
+        hookErrorNoOutput: "Hook \u9519\u8BEF\u5BFC\u81F4\u65E0\u8F93\u51FA",
+        processExitCode: "\u8FDB\u7A0B\u9000\u51FA\u7801",
+        creatingCommandWarning: "\u5F00\u53D1\u8005\u8F93\u51FA\u4E2D\u5305\u542B task create / init-requirement \u547D\u4EE4\uFF0C\u4F46\u672A\u5728\u6587\u4EF6\u7CFB\u7EDF\u4E2D\u68C0\u6D4B\u5230\u65B0\u4EFB\u52A1",
+        creatingCommandIntent: "\u8FD9\u53EF\u80FD\u610F\u5473\u7740\u521B\u5EFA\u64CD\u4F5C\u5931\u8D25\uFF0C\u4F46\u610F\u56FE\u5DF2\u5B58\u5728",
+        parseErrorWarning: "\u89E3\u6790\u5931\u8D25\uFF0C\u539F\u59CB\u8F93\u51FA\u524D{limit}\u5B57\u7B26",
+        rawOutputSaved: "\u539F\u59CB\u8BC4\u4F30\u8F93\u51FA\u5DF2\u4FDD\u5B58: {filename}",
+        saveRawOutputFailed: "\u4FDD\u5B58\u539F\u59CB\u8BC4\u4F30\u8F93\u51FA\u5931\u8D25",
+        rawEvaluationOutputTitle: "\u8BC4\u4F30\u4F1A\u8BDD\u539F\u59CB\u8F93\u51FA",
+        structuredMatchPassed: "\u57FA\u4E8E\u7ED3\u6784\u5316\u5173\u952E\u8BCD\u5339\u914D\uFF1A\u8BC4\u4F30\u901A\u8FC7",
+        structuredMatchFailed: "\u57FA\u4E8E\u7ED3\u6784\u5316\u5173\u952E\u8BCD\u5339\u914D\uFF1A\u8BC4\u4F30\u672A\u901A\u8FC7",
+        cannotParseResult: "\u65E0\u6CD5\u89E3\u6790\u8BC4\u4F30\u7ED3\u679C",
+        acceptanceCriteriaEmpty: "\uFF08\u672A\u5B9A\u4E49\u5177\u4F53\u9A8C\u6536\u6807\u51C6\uFF0C\u8BF7\u6839\u636E\u4EFB\u52A1\u63CF\u8FF0\u5224\u65AD\uFF09",
+        checkpointSectionTitle: "\u68C0\u67E5\u70B9",
+        checkpointSectionConfirm: `\u8BF7\u786E\u8BA4\u4EE5\u4E0B\u68C0\u67E5\u70B9\u662F\u5426\u5B8C\u6210:
+`,
+        aboutHumanVerification: "\u5173\u4E8E\u4EBA\u5DE5\u9A8C\u8BC1\u68C0\u67E5\u70B9",
+        humanVerificationNote: "\u672C\u4EFB\u52A1\u6709 {count} \u4E2A\u9700\u8981\u4EBA\u5DE5\u9A8C\u8BC1\u7684\u68C0\u67E5\u70B9\uFF08\u5982 {examples}\uFF09\u3002",
+        humanVerificationExcluded: "\u8FD9\u4E9B\u68C0\u67E5\u70B9\u7531\u540E\u5904\u7406\u6D41\u7A0B\u5355\u72EC\u7BA1\u7406\uFF0C\u4E0D\u5728\u672C\u8BC4\u4F30\u8303\u56F4\u5185\u3002\u8BF7\u4EC5\u57FA\u4E8E\u4E0A\u65B9\u7684\u81EA\u52A8\u5316\u68C0\u67E5\u70B9\u8FDB\u884C\u5224\u65AD\u3002",
+        taskDescriptionSection: "\u4EFB\u52A1\u63CF\u8FF0",
+        taskDescriptionEmpty: "",
+        phantomTaskDetectedTitle: "\u26A0\uFE0F \u5E7D\u7075\u4EFB\u52A1\u68C0\u6D4B",
+        phantomTaskProhibited: "\u5F00\u53D1\u8005\u88AB\u4E25\u683C\u7981\u6B62\u521B\u5EFA\u65B0\u4EFB\u52A1\u3002",
+        phantomTaskNopassRequirement: "\u8FD9\u662F\u4E00\u4E2A\u81EA\u52A8 NOPASS \u7684\u4E25\u91CD\u8FDD\u89C4\u3002\u8BF7\u5728\u8BC4\u4F30\u7ED3\u679C\u4E2D\u660E\u786E\u6807\u6CE8\u6B64\u8FDD\u89C4\uFF0C\u5E76\u5C06\u7ED3\u679C\u8BBE\u4E3A NOPASS\u3002",
+        contractDataInvalid: "contract.json \u5B58\u5728\u4F46\u6570\u636E\u65E0\u6548\uFF0C\u4F7F\u7528\u9ED8\u8BA4 Contract",
+        contractParseFailed: "contract.json \u89E3\u6790\u5931\u8D25",
+        exitCode: "\u9000\u51FA\u7801",
+        devOutputValidationFailedError: "\u5F00\u53D1\u8F93\u51FA\u683C\u5F0F\u9A8C\u8BC1\u672A\u901A\u8FC7",
+        retryReference: "\u8BF7\u53C2\u8003\u524D\u6B21\u5931\u8D25\u539F\u56E0\uFF0C\u907F\u514D\u91CD\u590D\u76F8\u540C\u7684\u95EE\u9898\u3002",
+        apiRetry: "API \u8C03\u7528\u91CD\u8BD5 ({current}/{max})...",
+        retryingInSeconds: "{reason}\uFF0C{seconds} \u79D2\u540E\u91CD\u8BD5...",
+        archivedReport: "\u5DF2\u5F52\u6863\u65E7\u62A5\u544A: archive/{filename}",
+        archiveFailed: "\u5F52\u6863\u62A5\u544A\u5931\u8D25",
+        maxRetriesReached: "\u5DF2\u8FBE\u5230\u6700\u5927\u91CD\u8BD5\u6B21\u6570 ({count})",
+        preparingRetry: "\u51C6\u5907\u91CD\u8BD5 (\u7B2C {current}/{max} \u6B21)",
+        waitingToRetry: "\u7B49\u5F85 {seconds}s \u540E\u91CD\u8BD5..."
+      },
+      reports: {
+        devReportTitle: "\u5F00\u53D1\u62A5\u544A",
+        reviewReportTitle: "\u5BA1\u67E5\u62A5\u544A",
+        codeReviewReportTitle: "\u4EE3\u7801\u5BA1\u6838\u62A5\u544A",
+        qaReportTitle: "QA \u9A8C\u8BC1\u62A5\u544A",
+        statusLabel: "\u72B6\u6001",
+        startTimeLabel: "\u5F00\u59CB\u65F6\u95F4",
+        endTimeLabel: "\u7ED3\u675F\u65F6\u95F4",
+        durationLabel: "\u8017\u65F6",
+        errorInfoSection: "\u9519\u8BEF\u4FE1\u606F",
+        codeChangesSection: "\u4EE3\u7801\u53D8\u66F4",
+        evidenceFilesSection: "\u8BC1\u636E\u6587\u4EF6",
+        completedCheckpointsSection: "\u5B8C\u6210\u7684\u68C0\u67E5\u70B9",
+        claudeOutputSection: "Claude \u8F93\u51FA",
+        resultLabel: "\u7ED3\u679C",
+        reviewedAtLabel: "\u5BA1\u67E5\u65F6\u95F4",
+        reviewedByLabel: "\u5BA1\u67E5\u8005",
+        verifiedAtLabel: "\u9A8C\u8BC1\u65F6\u95F4",
+        verifiedByLabel: "\u9A8C\u8BC1\u8005",
+        inferenceTypeLabel: "\u63A8\u65AD\u7C7B\u578B",
+        reasonSection: "\u539F\u56E0",
+        failedCriteriaSection: "\u672A\u6EE1\u8DB3\u7684\u9A8C\u6536\u6807\u51C6",
+        failedCheckpointsSection: "\u672A\u5B8C\u6210\u7684\u68C0\u67E5\u70B9",
+        detailsSection: "\u8BE6\u7EC6\u53CD\u9988",
+        devPhaseInfoSection: "\u5F00\u53D1\u9636\u6BB5\u4FE1\u606F",
+        evidenceCountLabel: "\u8BC1\u636E\u6570\u91CF",
+        checkpointsCountLabel: "\u5B8C\u6210\u68C0\u67E5\u70B9",
+        codeQualityIssuesSection: "\u4EE3\u7801\u8D28\u91CF\u95EE\u9898",
+        testFailuresSection: "\u6D4B\u8BD5\u5931\u8D25",
+        humanVerificationSection: "\u5DF2\u5EF6\u671F\uFF08deferred\uFF09\u7684\u68C0\u67E5\u70B9 - \u7B49\u5F85\u4EBA\u5DE5\u9A8C\u8BC1",
+        humanVerificationNote: "\u8FD9\u4E9B\u68C0\u67E5\u70B9\u4E0D\u53C2\u4E0E PASS/NOPASS \u5224\u5B9A\uFF0C\u4EC5\u7B49\u5F85\u4EBA\u5DE5\u540E\u5904\u7406",
+        requiresHumanLabel: "\u9700\u8981\u4EBA\u5DE5\u9A8C\u8BC1",
+        yes: "\u662F",
+        no: "\u5426",
+        inferenceTypes: {
+          structuredMatch: "\u7ED3\u6784\u5316\u5339\u914D",
+          explicitMatch: "\u660E\u786E\u5339\u914D",
+          contentInference: "\u5185\u5BB9\u63A8\u65AD",
+          priorStageInference: "\u524D\u7F6E\u9636\u6BB5\u63A8\u65AD",
+          parseFailureDefault: "\u89E3\u6790\u5931\u8D25\u9ED8\u8BA4",
+          emptyOutput: "\u7A7A\u8F93\u51FA"
+        }
+      }
+    }
+  };
+});
+
+// src/i18n/en.ts
+var enTexts;
+var init_en = __esm(() => {
+  enTexts = {
+    error: "Error",
+    success: "Success",
+    cancel: "Cancel",
+    common: {
+      skip: "Skip",
+      notSelected: "Not selected"
+    },
+    setup: {
+      initializing: "Initializing project management environment...",
+      createDir: "Create directory",
+      createConfig: "Create config: config.json",
+      setupComplete: "Project management environment initialized!",
+      nextStep: "Use 'projmnt4claude task create' to create your first task",
+      selectLanguage: "Select language:",
+      chinese: "\u4E2D\u6587",
+      english: "English",
+      copyingSkills: "Copying skill files...",
+      skillsCopied: "Skill files copied",
+      alreadyInitialized: "Project management environment already exists, skipping initialization."
+    },
+    task: {
+      createTitle: "Enter task title:",
+      createDescription: "Enter task description (optional):",
+      taskCreated: "Task created successfully",
+      taskNotFound: "Task not found",
+      taskUpdated: "Task updated",
+      taskDeleted: "Task deleted",
+      listHeader: "Task List",
+      noTasks: "No tasks",
+      statusHeader: "Status",
+      priorityHeader: "Priority",
+      roleHeader: "Role",
+      dependencyHeader: "Dependencies",
+      subtaskHeader: "Subtasks",
+      idHeader: "ID",
+      titleHeader: "Title",
+      typeHeader: "Type",
+      statusOpen: "Open",
+      statusInProgress: "In Progress",
+      statusWaitReview: "Wait Review",
+      statusWaitQa: "Wait QA",
+      statusWaitEvaluation: "Wait Evaluation",
+      statusResolved: "Resolved",
+      statusClosed: "Closed",
+      statusAbandoned: "Abandoned",
+      statusFailed: "Failed",
+      priorityP0: "P0 Critical",
+      priorityP1: "P1 High",
+      priorityP2: "P2 Medium",
+      priorityP3: "P3 Low",
+      typeBug: "Bug",
+      typeFeature: "Feature",
+      typeResearch: "Research",
+      typeDocs: "Docs",
+      typeRefactor: "Refactor",
+      typeTest: "Test",
+      typeNotSpecified: "Not specified",
+      timeJustNow: "Just now",
+      timeMinutesAgo: "{minutes} minutes ago",
+      timeHoursAgo: "{hours} hours ago",
+      timeDaysAgo: "{days} days ago",
+      totalTasks: "Total {count} tasks",
+      totalSubtasks: "Total {count} subtasks",
+      subtasksLabel: "Subtasks",
+      parentTaskLabel: "Parent Task",
+      dependenciesLabel: "Dependencies",
+      roleLabel: "Role",
+      branchLabel: "Branch",
+      createdAt: "Created",
+      updatedAt: "Updated",
+      reopened: "Reopened",
+      reopenCount: "{count} times",
+      discussionLabel: "Pending Discussion",
+      requirementChanges: "Requirement Changes",
+      listTableHeader: "ID          | Title                         | Priority   | Status",
+      listTableSeparator: "------------|------------------------------|----------|------------",
+      checkpointsSection: "Checkpoints",
+      noCheckpoints: "No checkpoints",
+      checkpointProgress: "Progress",
+      dependencyGate: "Dependency Gate",
+      dependencyError: "Dependency Error",
+      taskCreationCancelled: "Task creation cancelled",
+      invalidTaskIdFormat: "Error: Invalid task ID format",
+      taskIdAlreadyExists: "Error: Task ID already exists",
+      filteredLowQualityCheckpoints: "Filtered {count} low-quality checkpoints",
+      projectNotInitialized: "Error: Project not initialized. Please run `projmnt4claude setup` first"
+    },
+    plan: {
+      showHeader: "Execution Plan",
+      addHeader: "Add task",
+      removeHeader: "Remove task",
+      clearHeader: "Clear plan",
+      recommendHeader: "Smart recommendation",
+      noPlan: "No plan",
+      planCleared: "Plan cleared",
+      taskAdded: "Task added to plan",
+      taskRemoved: "Task removed from plan"
+    },
+    status: {
+      projectStatus: "Project Status",
+      totalTasks: "Total Tasks",
+      completedTasks: "Completed",
+      inProgressTasks: "In Progress",
+      pendingTasks: "Pending",
+      noTasks: "No tasks"
+    },
+    analyze: {
+      analyzing: "Analyzing project health...",
+      analysisComplete: "Analysis complete",
+      issuesFound: "Found {count} issues",
+      noIssues: "No issues found",
+      fixApplied: "Fixed {count} issues"
+    },
+    help: {
+      commandReference: "Command Reference",
+      availableCommands: "Available Commands",
+      noDescription: "No description",
+      commandNotFound: "Command not found",
+      tipUseHelp: "Use `projmnt4claude help <command>` for detailed command usage",
+      usage: "Usage",
+      examples: "Examples",
+      suggestedCommands: "\uD83D\uDCA1 Suggested commands:",
+      noRelatedCommands: "\uD83D\uDE15 No directly related commands found.",
+      commonCommands: "Common commands:",
+      cmdTask: "Manage project tasks",
+      cmdStatus: "View project status",
+      cmdPlan: "Manage execution plan",
+      cmdSetup: "Initialize project environment"
+    },
+    config: {
+      listHeader: "Config List",
+      getHeader: "Get Config",
+      setHeader: "Set Config",
+      configUpdated: "Config updated",
+      keyNotFound: "Config key not found",
+      invalidAction: "Unknown action"
+    },
+    tool: {
+      listHeader: "Local Skill List",
+      createHeader: "Create Skill",
+      installHeader: "Install Skill",
+      removeHeader: "Remove Skill",
+      deployHeader: "Deploy Skill",
+      undeployHeader: "Undeploy Skill"
+    },
+    initRequirement: {
+      descriptionRequired: "Enter requirement description",
+      parsingDescription: "Parsing requirement...",
+      creatingTasks: "Creating tasks...",
+      tasksCreated: "Created {count} tasks"
+    },
+    rolePrompts: {
+      dev: {
+        frontend: {
+          roleDeclaration: "You are a frontend developer, focused on user interfaces and interaction experience.",
+          extraInstructions: [
+            "Ensure components are reusable and accessible (WCAG 2.1)",
+            "Focus on responsive layouts and cross-browser compatibility",
+            "Follow project frontend coding standards and design system"
+          ]
+        },
+        backend: {
+          roleDeclaration: "You are a backend developer, focused on server-side logic and data layers.",
+          extraInstructions: [
+            "Ensure API design follows RESTful or project conventions",
+            "Focus on error handling, input validation, and transaction consistency",
+            "Pay attention to database query performance and index usage"
+          ]
+        },
+        qa: {
+          roleDeclaration: "You are a developer with testing capabilities, skilled at writing testable code.",
+          extraInstructions: [
+            "Write necessary unit tests and integration tests alongside implementation",
+            "Focus on boundary conditions and exception path coverage",
+            "Ensure code can be validated through automated testing"
+          ]
+        },
+        architect: {
+          roleDeclaration: "You are a developer in an architect role, focusing on system design and module boundaries.",
+          extraInstructions: [
+            "Ensure implementation aligns with existing architecture constraints and module boundaries",
+            "Focus on interface design and decoupling between modules",
+            "Assess the impact of changes on overall system architecture"
+          ]
+        },
+        security: {
+          roleDeclaration: "You are a developer in a security engineer role, focused on security-related implementations.",
+          extraInstructions: [
+            "Strictly follow OWASP Top 10 security practices",
+            "Validate all external inputs, prevent injection and XSS",
+            "Ensure sensitive data handling complies with security standards"
+          ]
+        },
+        performance: {
+          roleDeclaration: "You are a developer in a performance engineer role, focused on performance-related implementations.",
+          extraInstructions: [
+            "Focus on critical path performance metrics (latency, throughput, memory)",
+            "Avoid unnecessary synchronous operations and redundant calculations",
+            "Use profiling tools to validate optimization results"
+          ]
+        }
+      },
+      codeReview: {
+        frontend: {
+          roleDeclaration: "You are a professional frontend code reviewer.",
+          reviewFocus: [
+            "Component structure and state management are sound",
+            "CSS/style conflicts or redundancy",
+            "Accessibility (a11y) compliance with standards",
+            "Browser compatibility and responsive design"
+          ]
+        },
+        backend: {
+          roleDeclaration: "You are a professional backend code reviewer.",
+          reviewFocus: [
+            "API interface design standards and backward compatibility",
+            "Error handling completeness and security of error messages",
+            "Database operation security (preventing SQL injection)",
+            "Concurrency and transaction handling correctness"
+          ]
+        },
+        qa: {
+          roleDeclaration: "You are a professional test code reviewer.",
+          reviewFocus: [
+            "Test coverage adequacy (normal paths + boundary conditions)",
+            "Tests are independent and repeatable",
+            "Mock and Stub usage is appropriate",
+            "Assertions accurately verify expected behavior"
+          ]
+        },
+        architect: {
+          roleDeclaration: "You are an architecture reviewer responsible for assessing code architecture soundness.",
+          reviewFocus: [
+            "Module boundaries are clear and responsibilities are single-purpose",
+            "Dependency relationships are reasonable and free of circular dependencies",
+            "Interface abstraction levels are appropriate",
+            "Changes do not affect existing architecture stability"
+          ]
+        },
+        security: {
+          roleDeclaration: "You are a security code reviewer focused on security vulnerability detection.",
+          reviewFocus: [
+            "Input validation and output encoding completeness",
+            "Authentication and authorization logic correctness",
+            "Sensitive data is stored and transmitted securely",
+            "Presence of OWASP Top 10 vulnerability risks"
+          ]
+        },
+        performance: {
+          roleDeclaration: "You are a performance code reviewer focused on performance bottleneck detection.",
+          reviewFocus: [
+            "Presence of O(n\xB2) or higher complexity algorithms",
+            "Resources (memory, connections, file handles) are properly released",
+            "Unnecessary synchronous blocking operations",
+            "Caching strategy is appropriate"
+          ]
+        }
+      },
+      qa: {
+        frontend: {
+          roleDeclaration: "You are a professional frontend QA tester.",
+          testStrategy: [
+            "Verify UI rendering correctness across different screen sizes",
+            "Test user interaction flows (clicks, inputs, navigation)",
+            "Check accessibility tools can correctly identify page elements",
+            "Verify loading and error state displays"
+          ]
+        },
+        backend: {
+          roleDeclaration: "You are a professional backend QA tester.",
+          testStrategy: [
+            "Verify API responses under various inputs",
+            "Test error handling and boundary conditions",
+            "Check data consistency under concurrent requests",
+            "Verify database state changes match expectations"
+          ]
+        },
+        qa: {
+          roleDeclaration: "You are a professional QA tester skilled in comprehensive test coverage.",
+          testStrategy: [
+            "Run all relevant unit tests and integration tests",
+            "Verify behavior under normal and exceptional paths",
+            "Check if test coverage meets requirements",
+            "Collect complete test evidence"
+          ]
+        },
+        architect: {
+          roleDeclaration: "You are an architecture validation tester responsible for verifying architecture constraints.",
+          testStrategy: [
+            "Verify module interface contracts are followed",
+            "Check if new dependencies are reasonable",
+            "Verify architecture layering rules (e.g., no cross-layer direct calls)",
+            "Assess the scope of impact of changes on the overall system"
+          ]
+        },
+        security: {
+          roleDeclaration: "You are a security tester responsible for verifying security-related implementations.",
+          testStrategy: [
+            "Verify input validation covers all entry points",
+            "Test common attack vectors (XSS, SQL injection, CSRF)",
+            "Check authentication and authorization flow correctness",
+            "Verify sensitive data is not leaked in logs or responses"
+          ]
+        },
+        performance: {
+          roleDeclaration: "You are a performance tester responsible for verifying performance metrics.",
+          testStrategy: [
+            "Run performance benchmark tests (if configured)",
+            "Verify critical operation response times are within thresholds",
+            "Check for signs of memory leaks",
+            "Test system stability under high load"
+          ]
+        }
+      },
+      defaultDev: {
+        roleDeclaration: "You are a developer whose sole responsibility is to implement assigned task code changes.",
+        extraInstructions: []
+      },
+      defaultCodeReview: {
+        roleDeclaration: "You are a professional code reviewer. You need to review task code implementations to ensure code quality meets standards.",
+        reviewFocus: [
+          "Check code quality and readability",
+          "Check code standard compliance",
+          "Check for potential security issues",
+          "Check error handling completeness"
+        ]
+      },
+      defaultQA: {
+        roleDeclaration: "You are a professional QA tester. You need to verify whether a task implementation meets functional requirements.",
+        testStrategy: [
+          "Run unit tests (if configured)",
+          "Run functional tests (if configured)",
+          "Verify functionality meets expectations",
+          "Check boundary case handling"
+        ]
+      }
+    },
+    feedback: {
+      jsonHeader: "The previous JSON output has the following issues, please fix and re-output the complete JSON:",
+      markdownHeader: "The previous Markdown output has the following issues, please fix and re-output:",
+      violationsTitle: "Violations",
+      fieldLabel: "Field",
+      valueLabel: "Value",
+      originalOutputTitle: "Original Output (for reference)",
+      truncated: "... (truncated)",
+      jsonRequirements: [
+        "Output must be valid JSON",
+        "All required fields must exist with correct types",
+        "Do not output content other than JSON"
+      ],
+      markdownRequirements: [
+        "Output format must comply with Markdown specifications",
+        "All required sections and headings must exist",
+        "Content structure must be complete and logically clear"
+      ]
+    },
+    analyzeFixPipeline: {
+      nonStandardTransition: "Non-standard status transition ({context}): {oldStatus} \u2192 {newStatus}",
+      fixPipelineMode: "\uD83D\uDD27 analyze --fix pipeline mode",
+      executingStages: "Executing stages",
+      stage1Analysis: "\uD83D\uDCCB Stage 1: Rule engine analysis...",
+      stage1Complete: "\u2705 Stage 1 complete: Found {count} issues ({duration}s)",
+      stage1Failed: "\u274C Stage 1 failed: {error}",
+      stage1Skipped: "\u23ED\uFE0F Stage 1: Skipped",
+      stage2Fix: "\uD83D\uDD27 Stage 2: Rule-based fixes...",
+      stage2FixWithAnalysis: "\uD83D\uDD27 Stage 2: Rule-based fixes (with analysis)...",
+      stage2Complete: "\u2705 Stage 2 complete: {fixed} fixed, {skipped} skipped ({duration}s)",
+      stage2Failed: "\u274C Stage 2 failed: {error}",
+      stage2Skipped: "\u23ED\uFE0F Stage 2: Skipped",
+      stage3AI: "\uD83E\uDD16 Stage 3: AI deep analysis...",
+      stage3Complete: "\u2705 Stage 3 complete: AI found {count} semantic issues ({duration}s)",
+      stage3Failed: "\u274C Stage 3 failed: {error}",
+      stage3Skipped: "\u23ED\uFE0F Stage 3: Skipped ({reason})",
+      stage3NotEnabled: "Stage 3: AI deep analysis not enabled (use --deep-analyze to activate)",
+      stage4Checkpoint: "\uD83D\uDCCC Stage 4: Checkpoint fixes...",
+      stage4Complete: "\u2705 Stage 4 complete: Checkpoint fixes ({duration}s)",
+      stage4Failed: "\u274C Stage 4 failed: {error}",
+      stage4Skipped: "\u23ED\uFE0F Stage 4: Skipped",
+      stage5Quality: "\uD83D\uDCCA Stage 5: Quality report...",
+      stage5Complete: "\u2705 Stage 5 complete: Checked {count} tasks, {suggestions} improvement suggestions ({duration}s)",
+      stage5Failed: "\u274C Stage 5 failed: {error}",
+      stage5Skipped: "\u23ED\uFE0F Stage 5: Skipped",
+      pipelineComplete: "\u2705 Pipeline complete: {stages}/5 stages executed ({duration}s)",
+      noIssuesFound: "\u2705 No issues to fix",
+      autoFixIssues: "\uD83D\uDD27 Auto-fixing issues",
+      nonInteractiveMode: "(Non-interactive mode)",
+      fixError: "\u274C Error fixing {taskId} ({type}): {error}",
+      fixComplete: "\u2705 Fixed {count} issues",
+      fixSkipped: "\u23ED\uFE0F Skipped {count} issues",
+      fixUnfixable: "\u26A0\uFE0F {count} issues cannot be auto-fixed",
+      autoClosingStale: "\u2705 Auto-closed stale task {taskId} ({days} days, >30 day threshold)",
+      skipStale: "\u23ED\uFE0F Skipped stale task {taskId} ({days} days, only auto-close after 30 days in non-interactive mode)",
+      checkingStale: "Checking stale task {taskId}...",
+      closingTask: "Close task",
+      markingInProgress: "Mark as in progress",
+      skipNoDescription: "\u23ED\uFE0F Skipped task without description {taskId} (manual processing required in non-interactive mode)",
+      checkingNoDescription: "Checking task without description {taskId}...",
+      addingDescription: "\u2705 Added description for task {taskId}",
+      analyzingCycle: "\uD83D\uDD04 Analyzing circular dependency for task {taskId}...",
+      cycleNotFound: "\u26A0\uFE0F Circular dependency involving {taskId} not found (may have been fixed)",
+      breakingCycle: "\u2705 Broke dependency {from} \u2192 {to} to resolve cycle",
+      cycleManualFix: "\u26A0\uFE0F All edges in cycle {cycle} are explicit dependencies, manual processing required",
+      fixingPriority: "\uD83D\uDD04 Fixing priority format for task {taskId}...",
+      priorityUpdated: "\u2705 Updated priority from {old} to {new}",
+      fixingStatus: "\uD83D\uDD04 Fixing status format for task {taskId}...",
+      statusUpdated: "\u2705 Updated status from {old} to {new}",
+      fixingSchema: "\uD83D\uDD04 Fixing schema fields for task {taskId}...",
+      reopenCountAdded: "\u2705 Added reopenCount: 0",
+      requirementHistoryAdded: "\u2705 Added requirementHistory: []",
+      fixingEmptyArrays: "\uD83D\uDD04 Fixing empty array fields for task {taskId}: {fields}",
+      arrayInitialized: "\u2705 Initialized {field}: []",
+      migratingPipelineStatus: "\uD83D\uDD04 Migrating pipeline status for task {taskId}...",
+      statusMigrated: "\u2705 Status migrated from {old} to {new}",
+      cannotDetermineTargetStatus: "\u26A0\uFE0F Cannot determine target status",
+      fixingVerdictAction: "\uD83D\uDD04 Fixing invalid verdict action for task {taskId}...",
+      verdictActionCleared: '\u2705 history[{index}]: Cleared invalid verdict action "{value}"',
+      migratingSchema: "\uD83D\uDD04 Migrating schema version for task {taskId}...",
+      fixingCreatedBy: "\uD83D\uDD04 Fixing createdBy field for task {taskId}...",
+      createdByAdded: "\u2705 Added createdBy: import",
+      fixingInvalidStatus: "\uD83D\uDD04 Fixing invalid status for task {taskId}...",
+      fixingInvalidType: "\uD83D\uDD04 Fixing invalid type for task {taskId}...",
+      typeUpdated: "\u2705 Updated type from {old} to {new}",
+      fixingInvalidPriority: "\uD83D\uDD04 Fixing invalid priority for task {taskId}...",
+      fixingReopenTransition: "\uD83D\uDD04 Fixing missing reopen transition record for task {taskId}...",
+      transitionNoteAdded: "\u2705 Added transitionNote, reopenCount={count}",
+      fixingStatusContradiction: "\uD83D\uDD04 Fixing status contradiction for task {taskId} (resolved + verification.failed)...",
+      statusContradictionFixed: "\u2705 Status changed from resolved to open, cleared old verification",
+      fixingTimestamp: "\uD83D\uDD04 Fixing timestamp format for task {taskId}...",
+      timestampUpdated: "\u2705 Updated {field} to {value}",
+      invalidParent: "\u26A0\uFE0F Task {taskId} has invalid parent reference, cannot auto-fix",
+      fixingSubtaskRef: "\uD83D\uDD04 Fixing invalid subtask reference for task {taskId}...",
+      subtaskRefRemoved: "\u2705 Removed invalid reference {id} from subtaskIds",
+      fixingDependencyRef: "\uD83D\uDD04 Fixing invalid dependency reference for task {taskId}...",
+      dependencyRefRemoved: "\u2705 Removed invalid reference {id} from dependencies",
+      inferringDependencies: "\uD83D\uDD04 Inferring dependencies for task {taskId}...",
+      inferredDepNotFound: "\u26A0\uFE0F Inferred dependency {id} does not exist, skipping",
+      inferredDepWouldCreateCycle: "\u26A0\uFE0F Adding inferred dependency {id} would create cycle, skipping (GATE-DEP-002)",
+      inferredDepAdded: "\u2705 Added inferred dependency {id}: {reason}",
+      fixingParentRef: "\uD83D\uDD04 Fixing parent task reference for subtask {taskId}...",
+      parentRefAdded: "\u2705 Added subtask to parent task subtaskIds",
+      fixingParentChildRelation: "\uD83D\uDD04 Fixing parent-child relationship inconsistency for task {taskId}...",
+      parentChildRelationFixed: "\u2705 Updated subtask {subtaskId} parentId to {parentId}",
+      cannotExtractKeywords: "\u26A0\uFE0F Cannot extract meaningful keywords from task {taskId}, skipping rename",
+      generatedIdSame: "\u23ED\uFE0F Generated ID is same as current, skipping",
+      renamingTask: "\uD83D\uDD04 Renaming task: {old} \u2192 {new}",
+      taskRenamed: "\u2705 Renamed to {id}",
+      renameFailed: "\u274C Rename failed: {error}",
+      cannotAutoFix: "\u26A0\uFE0F Task {taskId} {type} issue cannot be auto-fixed",
+      suggestion: "Suggestion: {suggestion}",
+      fixingManualVerification: "\uD83D\uDD04 Fixing manual verification method for task {taskId}...",
+      manualToAutomated: "\u2705 Checkpoint {id}: manual -> automated",
+      fixingMissingVerification: "\uD83D\uDD04 Fixing missing verification field for task {taskId}...",
+      verificationAutoFilled: "\u2705 Auto-filled verification field",
+      checkpointCompletionRate: "Completion rate: {rate}%",
+      cleaningAbandonedTasks: "Cleaning abandoned residual tasks...",
+      abandonedTaskDeleted: "\u2705 Cleaned {count} abandoned tasks",
+      cleaningOrphanTasks: "Checking abandoned residual tasks...",
+      checkingAbandoned: "Checking abandoned residual tasks...",
+      abandonedFound: "Found {count}: {tasks}",
+      missingFileRef: "\u26A0\uFE0F Task {taskId} references non-existent files, cannot auto-fix",
+      missingFiles: "Non-existent files: {files}",
+      fillingTransitionNote: "\uD83D\uDD04 Filling transitionNote for task {taskId}...",
+      missingHistoryDetail: "\u26A0\uFE0F Missing history entry details, cannot fill",
+      transitionNoteFilled: "\u2705 Filled transitionNote: {status} ({author})",
+      missingSuggestion: "\u26A0\uFE0F Missing status suggestion, cannot auto-fix",
+      fixingInterruptedTask: "\uD83D\uDD04 Fixing interrupted task {taskId}...",
+      currentStatus: "Current status: {status}",
+      suggestedStatus: "Suggested status: {status}",
+      reason: "Reason: {reason}",
+      skipKeepInProgress: "\u23ED\uFE0F Suggest keeping in_progress, skipping fix",
+      statusFixed: "\u2705 Changed task {taskId} status from {old} to {new}",
+      migratingReopenedStatus: "\uD83D\uDD04 Migrating deprecated reopened status for task {taskId}...",
+      reopenedMigrated: "\u2705 Status migrated from reopened to open",
+      migratingNeedsHumanStatus: "\uD83D\uDD04 Migrating deprecated needs_human status for task {taskId}...",
+      needsHumanMigrated: "\u2705 Status migrated from needs_human to open",
+      checkpointCoverageWarning: "\u26A0\uFE0F Project checkpoint coverage insufficient, manual supplement required",
+      tasksWithoutCheckpoints: "Tasks without checkpoints: {count}",
+      currentCoverage: "Current coverage: {rate}%",
+      lowQualityTask: "\u26A0\uFE0F Task {taskId} content quality low ({score} points/100)",
+      score: "Score",
+      cleaningObsoleteStatus: "\uD83D\uDD04 Cleaning obsolete status references in task {taskId} history...",
+      obsoleteStatusCleaned: "\u2705 Cleaned obsolete status references from history",
+      missingInferenceInfo: "\u26A0\uFE0F Missing inference status info, cannot fix",
+      fixingReportStatusMismatch: "\uD83D\uDD04 Fixing report-status mismatch for task {taskId}...",
+      reportStatusMismatchFixed: "\u2705 Status updated from {old} to {new} ({report} PASS)",
+      fixingCheckpointStatusMismatch: "\uD83D\uDD04 Fixing checkpoint-status mismatch for task {taskId} (resolved + all pending)...",
+      checkpointStatusMismatchFixed: "\u2705 Auto-completed {count} pending checkpoints (legacy)",
+      unknownFixAction: "\u26A0\uFE0F Unknown fix action: {action}",
+      resettingTask: "\uD83D\uDD04 Resetting task {taskId} to open status (missing pipeline resume evidence)...",
+      taskReset: "\u2705 Reset task from {old} to open (missing resume evidence)",
+      unsupportedRule: "\u26A0\uFE0F Unsupported checkpoint validation rule: {rule}",
+      fixingCheckpointPrefix: "\uD83D\uDD04 Fixing checkpoint prefix for task {taskId}...",
+      noCheckpoints: "\u26A0\uFE0F Task has no checkpoints",
+      checkpointPrefixUpdated: "\u2705 Added prefix to {count} checkpoints",
+      allCheckpointsHavePrefix: "\u2139\uFE0F All checkpoints already have valid prefixes",
+      deleted: "\u2705 Deleted {taskId}",
+      taskNotExpired: "\u23ED\uFE0F Task {taskId} not expired ({days} days)",
+      closedTask: "\u2705 Closed task {taskId}",
+      markedInProgress: "\u2705 Marked task {taskId} as in progress",
+      staleTaskPrompt: "Task {taskId} is stale. How to handle?",
+      descriptionPrompt: "Add description for task {taskId} (leave empty to skip):",
+      confirmCleanupAbandoned: "Clean up these abandoned residual tasks?",
+      confirmStatusChange: "Change task {taskId} status from {oldStatus} to {newStatus}?",
+      staleAutoCloseNote: "analyze --fix: Auto-closed stale task ({days} days, >30 day threshold) in non-interactive mode",
+      staleUserCloseNote: "analyze --fix: User chose to close stale task",
+      staleUserProgressNote: "analyze --fix: User chose to mark stale task as in progress",
+      legacyStatusFixNote: "analyze --fix: Fixed invalid status format {oldStatus} \u2192 {newStatus}",
+      pipelineStatusMigrationNote: "analyze --fix: Pipeline status migration {oldStatus} \u2192 {targetStatus}",
+      verificationCleared: '\u2705 verification: Cleared invalid verdictAction "{value}"',
+      invalidStatusValueFixNote: "analyze --fix: Fixed invalid status value {oldStatus} \u2192 {newStatus}",
+      reopenMismatchFixNote: "Recorded reopen transition (reopenCount={count})",
+      reopenedStatusMigrationNote: "analyze --fix: reopened status deprecated, migrated to open",
+      inconsistentStatusFixNote: "analyze --fix: Fixed status contradiction (resolved + verification.failed), reset to open",
+      interruptedTaskAutoNote: "Interrupted task auto-fix: {days} days without active Pipeline",
+      interruptedTaskManualNote: "Interrupted task manual fix: {days} days without active Pipeline",
+      needsHumanStatusMigrationNote: "analyze --fix: needs_human status deprecated, migrated to open for reprocessing",
+      checkpointPrefixFixNote: "analyze --fix: Checkpoint prefix fix",
+      reportStatusMismatchNote: "analyze --fix: Report-status mismatch, updated status from {oldStatus} to {newStatus} ({reportFile} PASS)",
+      missingPipelineEvidenceNote: "analyze --fix: Missing pipeline resume evidence, reset from {oldStatus} to open",
+      deleteFailed: "\u274C Failed to delete {taskId}",
+      autoFixDescription: "\uD83D\uDCA1 {description}",
+      manualCheckCycle: "Suggestion: Manually check and adjust dependencies in the cycle",
+      manualFixInvalidParent: "Suggestion: Manually check and remove invalid parentId or create parent task",
+      lowQualitySuggestion: "Improve task description, checkpoints, and related files quality",
+      qualityIssuesFound: "Found {count} quality issues",
+      deleteTaskConfirm: "Delete task {taskId}?",
+      result: "Result"
+    },
+    taskCommand: {
+      checkpointQualityReminder: "\u26A0\uFE0F Checkpoint Quality Reminder",
+      taskCreatedButTemplate: "Task created, but checkpoints are using default template.",
+      highQualityCheckpointsEssential: "High-quality checkpoints are essential for task acceptance. Recommendations:",
+      editCheckpointMd: "Edit checkpoint.md to add specific acceptance criteria:",
+      filePath: "File path: {path}",
+      useAnalyzeCommand: "Use analyze command to auto-generate checkpoints (Recommended):",
+      useTemplateFeature: "Use checkpoint template feature:",
+      tipStrictValidation: "Tip: Strict validation during task execution/completion",
+      missingCheckpointVerificationCommands: "\u26A0\uFE0F Missing Checkpoint Verification Commands",
+      checkpointsMissingVerification: "Found {count} checkpoints missing automated verification commands:",
+      qaCannotAutoVerify: "Tip: QA phase cannot auto-verify these checkpoints.",
+      validationError: "Validation error",
+      checkpointFileNotExist: "checkpoint.md file does not exist",
+      noCheckpointItems: "No checkpoint items in checkpoint.md",
+      templateContentDetected: 'Detected {count}/{total} checkpoints as template content (like "Checkpoint1", "Complete Task", etc.), please add specific acceptance criteria',
+      titleCannotBeEmpty: "Title cannot be empty"
+    },
+    initRequirementCmd: {
+      complexityWarning: "\u26A0\uFE0F Complexity Warning",
+      complexityHigh: "This task is estimated to take {minutes} minutes, exceeding the default Harness timeout threshold.",
+      exceedsTimeout: "Consider splitting this task into smaller subtasks, each under 15 minutes.",
+      considerSplitting: "Split suggestions:",
+      splitSuggestions: "{index}. {title}{dependency}",
+      dependsOn: " (depends on subtask {index})",
+      files: "Files: {files}",
+      estimated: "Estimated: ~{minutes} minutes",
+      qualityGateFailed: "\u274C Quality gate failed: {count} error-level violations found",
+      errorViolations: "\uD83D\uDEAB The following errors must be fixed before creating task:",
+      followingErrorsMustFix: "Errors must fix",
+      fixSuggestions: "\uD83D\uDCA1 Fix suggestions:",
+      checkpointPrefixTip: "Checkpoints must start with standard prefixes: [implem], [test], [doc], [verify]",
+      metaJsonFormatTip: "meta.json must be in standard format with all required fields",
+      skipQualityGateTip: "Use --skip-quality-gate to skip temporarily (not recommended for production)",
+      qualityGateLowScore: "\u274C Quality gate failed: {score} < {threshold}",
+      qualityGateImprovement: "\uD83D\uDCA1 Improvement suggestions:",
+      action: "Action: {action}"
+    },
+    setupCmd: {
+      alreadyInitialized: "Project management environment already exists, skipping initialization.",
+      directory: "Directory: {path}",
+      tipUseForce: "Tip: Use --force option to force re-initialization (re-copy skill files)",
+      forceMode: "\u26A0\uFE0F Force re-initialization mode...",
+      gitHookCreated: "  \u2713 Git Hook created (pre-commit, prepublishOnly)",
+      gitHookFailed: "  \u26A0\uFE0F Git Hook creation failed: {error}",
+      gitHookDisabled: "  \u23ED\uFE0F  Git Hook creation disabled by config (gitHook.enabled = false)",
+      copySkillFile: "  \u2713 Copy SKILL.md ({language})",
+      copyCommandDocs: "  \u2713 Copy {count} command docs ({language})",
+      copyDefault: "  \u2713 Copy SKILL.md (default)",
+      fileNotFound: "  \u26A0\uFE0F SKILL.md not found",
+      dirNotFound: "  \u26A0\uFE0F Command docs directory not found: {path}",
+      pluginRootNotSet: "  \u26A0\uFE0F CLAUDE_PLUGIN_ROOT environment variable not set, skipping skill file copy"
+    },
+    harnessCmd: {
+      projectNotInitialized: "Error: Project not initialized. Please run `projmnt4claude setup` first",
+      concurrentPipelineRunning: "\u274C Error: Another Harness pipeline is already running",
+      activePipelineInfo: "Active pipeline info:",
+      snapshotId: "   Snapshot ID: {id}",
+      processId: "   Process ID: {pid}",
+      createdAt: "   Created at: {timestamp}",
+      taskCount: "   Task count: {count}",
+      possibleCauses: "Possible causes:",
+      solutions: "Solutions:",
+      invalidMaxRetries: "Error: --max-retries must be >= 0",
+      invalidTimeout: "Error: --timeout must be >= 10 seconds",
+      invalidParallel: "Error: --parallel must be >= 1",
+      noExecutableTasks: "Error: No executable tasks",
+      batchLabel: "Batch {index}",
+      parallelTag: " [Parallel]",
+      dryRunComplete: "\u2705 Dry run complete (no actual execution)",
+      qualityGateCheck: "\uD83D\uDEA6 Quality Gate Check",
+      minQualityScoreThreshold: "\uD83D\uDCCA Min quality score threshold: {score}",
+      qualityGateFailed: "\u274C Quality gate check failed, the following tasks need improvement:",
+      tasksNeedImprovement: "Tasks need improvement:",
+      allTasksPassed: "\u2705 All tasks passed quality gate check",
+      resumingFromInterruption: "\uD83D\uDCE6 Resuming from interruption (task {current}/{total})",
+      noPreviousState: "\uD83D\uDCE6 No previous execution state found, starting from beginning",
+      stateFileMigrated: "\uD83D\uDCE6 State file auto-migrated from v{from} to v{to}",
+      loadingStateFailed: "Failed to load runtime state, resetting: {error}",
+      cleaningOrphanSnapshots: "\uD83E\uDDF9 Cleaned orphan snapshot: {id} (PID: {pid})",
+      cleanedSnapshots: "\u2705 Cleaned {count} snapshots total",
+      forceCleanedSnapshots: "  \u26A0\uFE0F  Force cleaned active snapshot: {id} (PID: {pid})",
+      noSnapshotsFound: "\u2705 No snapshots found"
+    },
+    analyzeCmd: {
+      projectNotInitialized: "Error: Project not initialized. Please run `projmnt4claude setup` first",
+      analyzingProject: "Analyzing project health...",
+      analysisComplete: "Analysis complete",
+      issuesFound: "Found {count} issues",
+      noIssues: "No issues found",
+      fixApplied: "Fixed {count} issues",
+      taskIdEmpty: "Task ID is empty or invalid",
+      taskIdFormatInvalid: "Task ID format does not meet specification",
+      historyEntryNotObject: "history[{index}] is not a valid object",
+      timestampMissing: "history[{index}].timestamp missing or invalid",
+      timestampInvalid: "history[{index}].timestamp is not valid ISO timestamp",
+      actionMissing: "history[{index}].action missing or invalid",
+      checkpointNotObject: "checkpoints[{index}] is not a valid object",
+      checkpointIdMissing: "checkpoints[{index}].id missing or invalid",
+      checkpointStatusInvalid: "checkpoints[{index}].status is not valid status",
+      schemaMigrationReopenCount: "Added reopenCount: 0",
+      schemaMigrationRequirementHistory: "Added requirementHistory: []",
+      schemaMigrationCommitHistory: "Added executionStats.commitHistory: []",
+      schemaMigrationTransitionNotes: "Added transitionNotes: []",
+      schemaMigrationResumeAction: "Added resumeAction: resume_pipeline (status={status})",
+      schemaMigrationCheckpointPrefix: 'Checkpoint prefix completion: "{old}" \u2192 "{new}"',
+      schemaMigrationCheckpointPolicy: "Added checkpointPolicy: {policy} (inferred from {type}/{priority})",
+      aiPromptTaskInfo: "## Task Information",
+      aiPromptHistory: "## History ({count} entries)",
+      aiPromptTransitionHistory: "## Status Transition History ({count} entries)",
+      aiPromptCheckpoints: "## Checkpoints ({count})",
+      aiPromptVerification: "## Verification Info",
+      aiPromptLayer1Results: "## Layer 1 Detection Results ({count} issues)",
+      aiPromptNoHistory: "## History: None",
+      aiPromptNoTransitionHistory: "## Status Transition History: None",
+      aiPromptNoCheckpoints: "## Checkpoints: None",
+      aiPromptNoVerification: "## Verification Info: None",
+      aiPromptNoLayer1Issues: "## Layer 1 Detection Results: No issues",
+      aiPromptTaskAnalysisExpert: "You are a task status analysis expert. Infer the correct status based on the following task context.",
+      aiPromptAnalyzeContext: "Please analyze the task history, transition records, and current status to infer what status the task should be in.",
+      aiPromptJsonFormat: "Strictly output in the following JSON format (do not output other content):",
+      aiPromptInferredStatus: '"inferredStatus": "Status value, must be: open, in_progress, wait_review, wait_qa, wait_evaluation, resolved, closed, abandoned, failed"',
+      aiPromptConfidence: '"confidence": Confidence between 0.0-1.0',
+      aiPromptReasoning: '"reasoning": "Brief explanation of inference basis"',
+      aiPromptSuggestion: '"suggestion": "Fix suggestion"',
+      issueMissingDescription: "Task missing description",
+      issueResolvedNoVerification: "Task resolved but missing verification field",
+      issueOldFormatId: "Task uses old format ID",
+      issueMissingSlug: "Task ID missing meaningful slug",
+      transitionStartExecution: "Start executing task",
+      transitionSubmitReview: "Submit code review",
+      transitionReviewPass: "Review passed, enter QA",
+      transitionQaPass: "QA passed, waiting for evaluation",
+      transitionEvalPass: "Evaluation passed, task complete",
+      transitionCloseTask: "Close task",
+      transitionDirectComplete: "Mark as completed directly",
+      transitionReopenTask: "Reopen task",
+      transitionRestartExecution: "Restart execution",
+      transitionAbandonTask: "Abandon task",
+      transitionReturnTodo: "Return to todo",
+      statusSuggestionCheckpointRate: "Checkpoint completion rate {rate}%, suggest transition to wait_qa",
+      statusSuggestionKeepInProgress: "Short interruption and no manual checkpoints needed, suggest keeping in_progress",
+      statusSuggestionResetOpen: "Task interrupted for long time, suggest resetting to open for replanning",
+      depSuggestionCheckIndependence: "This task may have implicit dependencies, please confirm if it is independent",
+      depSuggestionIndependentModule: "This task is an independent module, no action needed",
+      unknown: "Unknown",
+      none: "None",
+      reportResultPass: "**Result**: \u2705 PASS",
+      reportResultNopass: "**Result**: \u274C NOPASS"
+    },
+    harness: {
+      timeoutHeader: "Timeout Limit",
+      taskDescription: "Task Description",
+      dependencies: "Dependencies",
+      acceptanceCriteria: "Acceptance Criteria",
+      acceptanceCriteriaInstruction: "Please ensure all the following criteria are met:",
+      checkpoints: "Checkpoints",
+      checkpointsInstruction: "Please complete the following checkpoints:",
+      timeoutInstruction: "You need to complete this task within {timeout} minutes. Please allocate time wisely and prioritize core functionality.",
+      roleSpecificRequirements: "Role-Specific Requirements",
+      retryContext: "Retry Context (Previous Failure Info)",
+      retryAttemptInfo: "This is attempt #{attempt}. Previous failure occurred in **{phase}** phase.",
+      previousFailureReason: "Previous Failure Reason",
+      partialProgress: "Partial Progress Completed",
+      upstreamFailureInfo: "Upstream Failure Info",
+      phaseLabels: {
+        development: "Development",
+        codeReview: "Code Review",
+        qa: "QA Validation",
+        evaluation: "Evaluation"
+      },
+      logs: {
+        taskLabel: "Task",
+        typeLabel: "Type",
+        priorityLabel: "Priority",
+        timeoutLabel: "Timeout",
+        minutes: "minutes",
+        seconds: "seconds",
+        devPromptGenerated: "Development prompt generated",
+        startingHeadlessClaude: "Starting Headless Claude...",
+        devOutputFormatRetry: "Development output format validation failed, retried {retries} times",
+        devPhaseFailed: "Development phase failed",
+        devOutputValidationFailed: "Development output format validation failed",
+        devPhaseCompleted: "Development phase completed",
+        evidenceCollected: "Evidence collected",
+        checkpointsCompleted: "Checkpoints completed",
+        devPhaseError: "Development phase error",
+        devPhaseNotComplete: "Development phase not completed successfully",
+        evalTaskLabel: "Evaluating task",
+        devStatusLabel: "Development status",
+        evalPromptGenerated: "Evaluation prompt generated",
+        startingEvalSession: "Starting independent evaluation session...",
+        evalFormatRetry: "Evaluation result format mismatch, retried {retries} times",
+        evalEmptyOutput: "Evaluation output is empty: Claude process may have exited abnormally",
+        evalStderrPrefix: "stderr",
+        evalParseFailureDefault: "Unable to parse evaluation result after retries, defaulting to PASS (conservative strategy)",
+        evalPassed: "Review passed",
+        evalFailed: "Review failed",
+        evalError: "Evaluation error",
+        codeReviewPhase: "Code review phase...",
+        codeReviewCheckpoints: "Code review checkpoints",
+        noCodeReviewCheckpoints: "No code review checkpoints, auto-pass",
+        codeReviewPromptGenerated: "Code review prompt generated",
+        startingCodeReview: "Starting code review session...",
+        codeReviewFormatRetry: "Code review result format mismatch, retried {retries} times",
+        contradictionDetected: "Contradiction detected",
+        codeReviewPassed: "Code review passed",
+        codeReviewFailed: "Code review failed",
+        codeReviewError: "Code review error",
+        codeReviewSessionFailed: "Code review session failed",
+        codeReviewPromptGenerated: "Code review prompt generated",
+        startingCodeReviewSession: "Starting code review session...",
+        codeReviewRetry: "Code review result format mismatch, retried {retries} times",
+        qaPhase: "QA verification phase...",
+        qaCheckpoints: "QA verification checkpoints",
+        noQACheckpoints: "No QA verification checkpoints, auto-pass",
+        humanVerificationCheckpoints: "checkpoints deferred, waiting for human verification",
+        deferredInfo: "checkpoints deferred, waiting for human verification",
+        qaPassed: "QA verification passed",
+        qaPassedWithHuman: "Automated verification passed, waiting for human verification",
+        qaFailed: "QA verification failed",
+        qaError: "QA verification error",
+        qaSkippedDueToCodeReview: "Code review failed, skipping QA verification",
+        checkpointWarning: "automated checkpoints missing verification commands",
+        checkpointWarningDetail: "missing commands/steps",
+        checkpointWarningFallback: "These checkpoints will rely on AI free-form verification, which may affect verification quality.",
+        noAutomatedQACheckpoints: "No automated QA checkpoints, automated verification auto-passed",
+        qaPromptGenerated: "QA verification prompt generated",
+        startingQASession: "Starting QA verification session...",
+        qaRetry: "QA verification result format mismatch, retried {retries} times",
+        qaSessionFailed: "QA verification session failed",
+        qaOutputValidationFailed: "QA verification output format validation failed",
+        cannotParseVerdict: "Cannot parse verdict result",
+        deferredCheckpointsInfo: "{count} checkpoints deferred, waiting for human verification",
+        checkpointWarningDetail: "missing commands/steps",
+        checkpointWarningFallback: "These checkpoints will rely on AI free-form verification, which may affect verification quality.",
+        phantomTaskViolation: "Serious violation: Developer created {count} additional tasks ({tasks}) during execution. Developers are strictly prohibited from creating new tasks.",
+        phantomTaskCriteria: "Creating new tasks is prohibited",
+        phantomTaskPrefix: "Phantom task",
+        phantomTaskDetails: "Detected that the developer created additional tasks not part of the original plan. This violates the developer scope - developers should only implement code changes for assigned tasks, not create new tasks.",
+        emptyOutputError: "Evaluation session output is empty: Claude process may have exited abnormally",
+        evaluationOutputEmpty: "Evaluation output is empty, Claude process may have exited abnormally",
+        contradictionFix: "Contradiction fix",
+        evalParseError: "Unable to parse evaluation result",
+        evalParseFailureDefaultReason: "Structured keyword match: evaluation passed (default PASS after {retries} retries)",
+        phantomTaskDetected: "Detected {count} phantom task(s)",
+        phantomTaskAutoNopass: "Phantom task detected, auto NOPASS",
+        noPhantomTask: "No phantom tasks detected",
+        snapshotMode: "Phantom task detection using plan snapshot",
+        fallbackMode: "Phantom task detection: plan snapshot not found, using time window fallback mode",
+        snapshotStats: "Phantom task detection stats: total {total}, planned excluded {excluded}, checking {checking}",
+        snapshotError: "Phantom task detection error",
+        snapshotExcludedInfo: "(excluded {count} planned tasks)",
+        snapshotBasedOnInfo: "excluded {count} planned tasks based on snapshot",
+        hookWarningIgnored: "Hook error ignored",
+        hookErrorNoOutput: "Hook error caused no output",
+        processExitCode: "Process exit code",
+        creatingCommandWarning: "Developer output contains task create / init-requirement commands, but no new tasks detected in file system",
+        creatingCommandIntent: "This may mean the creation operation failed, but the intent exists",
+        parseErrorWarning: "Parse failed, raw output first {limit} chars",
+        rawOutputSaved: "Raw evaluation output saved: {filename}",
+        saveRawOutputFailed: "Failed to save raw evaluation output",
+        rawEvaluationOutputTitle: "Raw Evaluation Output",
+        structuredMatchPassed: "Structured keyword match: evaluation passed",
+        structuredMatchFailed: "Structured keyword match: evaluation failed",
+        cannotParseResult: "Unable to parse evaluation result",
+        acceptanceCriteriaEmpty: "(No specific acceptance criteria defined, please judge based on task description)",
+        checkpointSectionTitle: "Checkpoints",
+        checkpointSectionConfirm: `Please confirm the following checkpoints are completed:
+`,
+        aboutHumanVerification: "About Human Verification Checkpoints",
+        humanVerificationNote: "This task has {count} checkpoints requiring human verification (e.g., {examples}).",
+        humanVerificationExcluded: "These checkpoints are managed separately by post-processing and are not within the scope of this evaluation. Please judge based only on the automated checkpoints above.",
+        taskDescriptionSection: "Task Description",
+        taskDescriptionEmpty: "",
+        phantomTaskDetectedTitle: "\u26A0\uFE0F Phantom Task Detection",
+        phantomTaskProhibited: "Developers are strictly prohibited from creating new tasks.",
+        phantomTaskNopassRequirement: "This is a serious violation that automatically results in NOPASS. Please clearly mark this violation in the evaluation result and set the result to NOPASS.",
+        contractDataInvalid: "contract.json exists but data invalid, using default Contract",
+        contractParseFailed: "contract.json parse failed",
+        exitCode: "Exit code",
+        devOutputValidationFailedError: "Development output format validation failed",
+        retryReference: "Please refer to the previous failure reason to avoid repeating the same issues.",
+        apiRetry: "API call retry ({current}/{max})...",
+        retryingInSeconds: "{reason}, retrying in {seconds}s...",
+        archivedReport: "Archived old report: archive/{filename}",
+        archiveFailed: "Failed to archive report",
+        maxRetriesReached: "Maximum retry attempts reached ({count})",
+        preparingRetry: "Preparing retry (attempt {current}/{max})",
+        waitingToRetry: "Waiting {seconds}s before retry..."
+      },
+      reports: {
+        devReportTitle: "Development Report",
+        reviewReportTitle: "Review Report",
+        codeReviewReportTitle: "Code Review Report",
+        qaReportTitle: "QA Verification Report",
+        statusLabel: "Status",
+        startTimeLabel: "Start Time",
+        endTimeLabel: "End Time",
+        durationLabel: "Duration",
+        errorInfoSection: "Error Information",
+        codeChangesSection: "Code Changes",
+        evidenceFilesSection: "Evidence Files",
+        completedCheckpointsSection: "Completed Checkpoints",
+        claudeOutputSection: "Claude Output",
+        resultLabel: "Result",
+        reviewedAtLabel: "Reviewed At",
+        reviewedByLabel: "Reviewed By",
+        inferenceTypeLabel: "Inference Type",
+        reasonSection: "Reason",
+        failedCriteriaSection: "Failed Acceptance Criteria",
+        failedCheckpointsSection: "Failed Checkpoints",
+        detailsSection: "Detailed Feedback",
+        devPhaseInfoSection: "Development Phase Information",
+        evidenceCountLabel: "Evidence Count",
+        checkpointsCountLabel: "Checkpoints Completed",
+        codeQualityIssuesSection: "Code Quality Issues",
+        testFailuresSection: "Test Failures",
+        humanVerificationSection: "Deferred Checkpoints - Waiting for Human Verification",
+        humanVerificationNote: "These checkpoints do not participate in PASS/NOPASS determination, only waiting for human post-processing",
+        requiresHumanLabel: "Requires Human Verification",
+        yes: "Yes",
+        no: "No",
+        inferenceTypes: {
+          structuredMatch: "Structured Match",
+          explicitMatch: "Explicit Match",
+          contentInference: "Content Inference",
+          priorStageInference: "Prior Stage Inference",
+          parseFailureDefault: "Parse Failure Default",
+          emptyOutput: "Empty Output"
+        }
+      }
+    }
+  };
+});
+
+// src/i18n/index.ts
+var exports_i18n = {};
+__export(exports_i18n, {
+  t: () => t,
+  getLanguage: () => getLanguage,
+  getI18n: () => getI18n
+});
+import * as fs3 from "fs";
+function getLanguage(cwd2 = process.cwd()) {
+  const configPath = getConfigPath(cwd2);
+  try {
+    if (fs3.existsSync(configPath)) {
+      const config = JSON.parse(fs3.readFileSync(configPath, "utf-8"));
+      return config.language || "en";
+    }
+  } catch (error) {}
+  return "en";
+}
+function getI18n(language, cwd2) {
+  const lang = language || getLanguage(cwd2);
+  return languagePacks[lang] || languagePacks.zh;
+}
+function t(cwd2) {
+  return getI18n(undefined, cwd2);
+}
+var languagePacks;
+var init_i18n = __esm(() => {
+  init_path();
+  init_zh();
+  init_en();
+  languagePacks = {
+    zh: zhTexts,
+    en: enTexts
   };
 });
 
@@ -8397,7 +10258,7 @@ __export(exports_config, {
   getConfig: () => getConfig,
   ensureConfigDefaults: () => ensureConfigDefaults
 });
-import * as fs4 from "fs";
+import * as fs5 from "fs";
 function ensureConfigDefaults(config) {
   const result = { ...config };
   if (!result.logging) {
@@ -8442,7 +10303,7 @@ function readConfig(cwd2 = process.cwd()) {
   }
   const configPath = getConfigPath(cwd2);
   try {
-    const content = fs4.readFileSync(configPath, "utf-8");
+    const content = fs5.readFileSync(configPath, "utf-8");
     return JSON.parse(content);
   } catch {
     return null;
@@ -8450,7 +10311,7 @@ function readConfig(cwd2 = process.cwd()) {
 }
 function writeConfig(config, cwd2 = process.cwd()) {
   const configPath = getConfigPath(cwd2);
-  fs4.writeFileSync(configPath, JSON.stringify(config, null, 2), "utf-8");
+  fs5.writeFileSync(configPath, JSON.stringify(config, null, 2), "utf-8");
 }
 function getConfigValue(config, key) {
   const keys = key.split(".");
@@ -8721,6 +10582,7 @@ __export(exports_task, {
   generateNextTaskId: () => generateNextTaskId,
   createDefaultTaskMeta: () => createDefaultTaskMeta,
   convertTaskId: () => convertTaskId,
+  TERMINAL_STATUSES: () => TERMINAL_STATUSES,
   Pipeline: () => Pipeline,
   PIPELINE_STATUS_MIGRATION_MAP: () => PIPELINE_STATUS_MIGRATION_MAP,
   PIPELINE_INTERMEDIATE_STATUSES: () => PIPELINE_INTERMEDIATE_STATUSES,
@@ -8950,7 +10812,7 @@ function generateNextTaskId(existingIds) {
   const maxNumber = Math.max(...numbers, 0);
   return `TASK-${String(maxNumber + 1).padStart(3, "0")}`;
 }
-var METHODS_REQUIRING_COMMANDS, PHASE_ROLE_MAP, Pipeline, CURRENT_TASK_SCHEMA_VERSION = 6, PIPELINE_INTERMEDIATE_STATUSES, PIPELINE_STATUS_MIGRATION_MAP;
+var METHODS_REQUIRING_COMMANDS, PHASE_ROLE_MAP, Pipeline, CURRENT_TASK_SCHEMA_VERSION = 6, TERMINAL_STATUSES, PIPELINE_INTERMEDIATE_STATUSES, PIPELINE_STATUS_MIGRATION_MAP;
 var init_task = __esm(() => {
   METHODS_REQUIRING_COMMANDS = [
     "functional_test",
@@ -8995,6 +10857,7 @@ var init_task = __esm(() => {
       };
     }
   };
+  TERMINAL_STATUSES = ["resolved", "closed", "abandoned", "failed"];
   PIPELINE_INTERMEDIATE_STATUSES = [
     "wait_review",
     "wait_qa",
@@ -9038,7 +10901,7 @@ __export(exports_task2, {
   StatusTransitionError: () => StatusTransitionError
 });
 import * as path4 from "path";
-import * as fs5 from "fs";
+import * as fs6 from "fs";
 function validateStatusTransition(fromStatus, toStatus) {
   if (fromStatus === toStatus) {
     return { valid: true };
@@ -9064,10 +10927,10 @@ function readTaskMeta(taskId, cwd2 = process.cwd()) {
   }
   const metaPath = getTaskMetaPath(taskId, cwd2);
   try {
-    if (!fs5.existsSync(metaPath)) {
+    if (!fs6.existsSync(metaPath)) {
       return null;
     }
-    const content = fs5.readFileSync(metaPath, "utf-8");
+    const content = fs6.readFileSync(metaPath, "utf-8");
     const parsed = JSON.parse(content);
     parsed.dependencies = parsed.dependencies ?? [];
     parsed.history = parsed.history ?? [];
@@ -9087,8 +10950,8 @@ function readTaskMeta(taskId, cwd2 = process.cwd()) {
 function writeTaskMeta(task, cwd2 = process.cwd()) {
   const taskDir = getTaskDir(task.id, cwd2);
   const metaPath = getTaskMetaPath(task.id, cwd2);
-  if (!fs5.existsSync(taskDir)) {
-    fs5.mkdirSync(taskDir, { recursive: true });
+  if (!fs6.existsSync(taskDir)) {
+    fs6.mkdirSync(taskDir, { recursive: true });
   }
   const oldTask = readTaskMeta(task.id, cwd2);
   const historyEntries = [];
@@ -9169,20 +11032,20 @@ function writeTaskMeta(task, cwd2 = process.cwd()) {
     task.history = [...task.history || [], ...historyEntries];
   }
   task.updatedAt = new Date().toISOString();
-  fs5.writeFileSync(metaPath, JSON.stringify(task, null, 2), "utf-8");
+  fs6.writeFileSync(metaPath, JSON.stringify(task, null, 2), "utf-8");
 }
 function getAllTaskIds(cwd2 = process.cwd()) {
   if (!isInitialized(cwd2)) {
     return [];
   }
   const tasksDir = getTasksDir(cwd2);
-  if (!fs5.existsSync(tasksDir)) {
+  if (!fs6.existsSync(tasksDir)) {
     return [];
   }
-  return fs5.readdirSync(tasksDir).filter((name) => {
+  return fs6.readdirSync(tasksDir).filter((name) => {
     const taskDir = path4.join(tasksDir, name);
     const metaPath = path4.join(taskDir, "meta.json");
-    return fs5.statSync(taskDir).isDirectory() && fs5.existsSync(metaPath);
+    return fs6.statSync(taskDir).isDirectory() && fs6.existsSync(metaPath);
   });
 }
 function getAllTasks(cwd2 = process.cwd(), includeArchived = false) {
@@ -9190,13 +11053,13 @@ function getAllTasks(cwd2 = process.cwd(), includeArchived = false) {
   const tasks = taskIds.map((id) => readTaskMeta(id, cwd2)).filter((task) => task !== null);
   if (includeArchived) {
     const archiveDir = path4.join(getProjectDir(cwd2), "archive");
-    if (fs5.existsSync(archiveDir)) {
-      const archivedTaskDirs = fs5.readdirSync(archiveDir).filter((name) => fs5.statSync(path4.join(archiveDir, name)).isDirectory());
+    if (fs6.existsSync(archiveDir)) {
+      const archivedTaskDirs = fs6.readdirSync(archiveDir).filter((name) => fs6.statSync(path4.join(archiveDir, name)).isDirectory());
       for (const taskId of archivedTaskDirs) {
         const metaPath = path4.join(archiveDir, taskId, "meta.json");
-        if (fs5.existsSync(metaPath)) {
+        if (fs6.existsSync(metaPath)) {
           try {
-            const content = fs5.readFileSync(metaPath, "utf-8");
+            const content = fs6.readFileSync(metaPath, "utf-8");
             const task = JSON.parse(content);
             tasks.push(task);
           } catch (e) {}
@@ -9431,7 +11294,7 @@ function assignRole(taskId, role, cwd2 = process.cwd()) {
   });
   writeTaskMeta(task, cwd2);
 }
-function incrementReopenCount(taskId, reason, cwd2 = process.cwd()) {
+function incrementReopenCount(taskId, reason, cwd2 = process.cwd(), record) {
   const task = readTaskMeta(taskId, cwd2);
   if (!task) {
     throw new Error(`\u4EFB\u52A1 '${taskId}' \u4E0D\u5B58\u5728`);
@@ -9439,6 +11302,16 @@ function incrementReopenCount(taskId, reason, cwd2 = process.cwd()) {
   const oldCount = task.reopenCount || 0;
   task.reopenCount = oldCount + 1;
   task.updatedAt = new Date().toISOString();
+  const reopenRecord = {
+    timestamp: new Date().toISOString(),
+    reason,
+    reopenedBy: process.env.USER || "system",
+    ...record
+  };
+  if (!task.reopenRecords) {
+    task.reopenRecords = [];
+  }
+  task.reopenRecords.push(reopenRecord);
   task.history.push({
     timestamp: new Date().toISOString(),
     action: `\u4EFB\u52A1\u91CD\u5F00\u8BA1\u6570\u9012\u589E (\u7B2C ${task.reopenCount} \u6B21)`,
@@ -9493,23 +11366,23 @@ function renameTask(oldTaskId, newTaskId, cwd2 = process.cwd()) {
     user: process.env.USER || undefined
   });
   if (oldTaskId !== newTaskId) {
-    if (!fs5.existsSync(newDir)) {
-      fs5.mkdirSync(newDir, { recursive: true });
+    if (!fs6.existsSync(newDir)) {
+      fs6.mkdirSync(newDir, { recursive: true });
     }
     const newMetaPath = path4.join(newDir, "meta.json");
-    fs5.writeFileSync(newMetaPath, JSON.stringify(task, null, 2), "utf-8");
-    const oldFiles = fs5.readdirSync(oldDir);
+    fs6.writeFileSync(newMetaPath, JSON.stringify(task, null, 2), "utf-8");
+    const oldFiles = fs6.readdirSync(oldDir);
     for (const file of oldFiles) {
       if (file === "meta.json")
         continue;
       const srcPath = path4.join(oldDir, file);
       const dstPath = path4.join(newDir, file);
-      if (!fs5.existsSync(dstPath)) {
-        fs5.copyFileSync(srcPath, dstPath);
+      if (!fs6.existsSync(dstPath)) {
+        fs6.copyFileSync(srcPath, dstPath);
       }
     }
     try {
-      fs5.rmSync(oldDir, { recursive: true, force: true });
+      fs6.rmSync(oldDir, { recursive: true, force: true });
     } catch {}
   } else {
     writeTaskMeta(task, cwd2);
@@ -10219,7 +12092,7 @@ var init_checkpoint_rules = __esm(() => {
 });
 
 // src/utils/checkpoint.ts
-import * as fs6 from "fs";
+import * as fs7 from "fs";
 import * as path5 from "path";
 function filterLowQualityCheckpoints(checkpoints) {
   const kept = [];
@@ -10268,10 +12141,10 @@ function generateCheckpointId(taskId, index, description) {
 }
 function parseCheckpointsWithIds(taskId, cwd2 = process.cwd()) {
   const checkpointPath = path5.join(getTasksDir(cwd2), taskId, "checkpoint.md");
-  if (!fs6.existsSync(checkpointPath)) {
+  if (!fs7.existsSync(checkpointPath)) {
     return [];
   }
-  const content = fs6.readFileSync(checkpointPath, "utf-8");
+  const content = fs7.readFileSync(checkpointPath, "utf-8");
   const lines = content.split(`
 `);
   const checkpoints = [];
@@ -10505,9 +12378,9 @@ function updateCheckpointStatus(taskId, checkpointId, status, options = {}, cwd2
 }
 function updateCheckpointMd(taskId, checkpointId, checked, task, cwd2 = process.cwd()) {
   const checkpointPath = path5.join(getTasksDir(cwd2), taskId, "checkpoint.md");
-  if (!fs6.existsSync(checkpointPath))
+  if (!fs7.existsSync(checkpointPath))
     return;
-  const content = fs6.readFileSync(checkpointPath, "utf-8");
+  const content = fs7.readFileSync(checkpointPath, "utf-8");
   const lines = content.split(`
 `);
   const checkpoint = task.checkpoints?.find((cp) => cp.id === checkpointId);
@@ -10520,7 +12393,7 @@ function updateCheckpointMd(taskId, checkpointId, checked, task, cwd2 = process.
       break;
     }
   }
-  fs6.writeFileSync(checkpointPath, lines.join(`
+  fs7.writeFileSync(checkpointPath, lines.join(`
 `), "utf-8");
 }
 function getCheckpointDetail(taskId, checkpointId, cwd2 = process.cwd()) {
@@ -10540,7 +12413,7 @@ function updateCheckpointMdFromArray(taskId, checkpoints, cwd2 = process.cwd()) 
 ` + checkpoints.map((cp) => `- [ ] ${cp.description}`).join(`
 `) + `
 `;
-  fs6.writeFileSync(checkpointPath, content, "utf-8");
+  fs7.writeFileSync(checkpointPath, content, "utf-8");
 }
 function parseTextCheckpoints(description) {
   if (!description || description.trim().length === 0) {
@@ -11103,7 +12976,7 @@ class DependencyGraph {
     const graph = new DependencyGraph(options);
     const sources = options?.sources;
     const excludeTerminal = options?.excludeTerminal;
-    const terminalStatuses = new Set(["resolved", "closed", "abandoned"]);
+    const terminalStatuses = new Set(TERMINAL_STATUSES);
     for (const task of tasks) {
       if (excludeTerminal && terminalStatuses.has(task.status))
         continue;
@@ -11686,6 +13559,7 @@ class DependencyGraph {
 }
 var DEFAULT_EDGE_META;
 var init_graph = __esm(() => {
+  init_task();
   DEFAULT_EDGE_META = {
     source: "explicit",
     confidence: 1
@@ -11772,7 +13646,7 @@ var init_contradiction_detector = __esm(() => {
 });
 
 // src/utils/logger.ts
-import * as fs7 from "fs";
+import * as fs8 from "fs";
 import * as path6 from "path";
 import { execSync as execSync2 } from "child_process";
 function getLogFilePath(command, cwd2 = process.cwd()) {
@@ -11804,8 +13678,8 @@ class Logger {
     }
     try {
       const configPath = getConfigPath(this.cwd);
-      if (fs7.existsSync(configPath)) {
-        const raw = fs7.readFileSync(configPath, "utf-8");
+      if (fs8.existsSync(configPath)) {
+        const raw = fs8.readFileSync(configPath, "utf-8");
         const config = JSON.parse(raw);
         const configLevel = config?.logging?.level;
         if (configLevel && configLevel in LEVEL_PRIORITY) {
@@ -11845,7 +13719,7 @@ class Logger {
   writeEntry(entry) {
     try {
       const filePath = getLogFilePath(this.command, this.cwd);
-      fs7.appendFileSync(filePath, JSON.stringify(entry) + `
+      fs8.appendFileSync(filePath, JSON.stringify(entry) + `
 `, "utf-8");
     } catch {}
   }
@@ -11907,16 +13781,16 @@ class Logger {
   }
   readRecentLogEntries(recentCount = 50) {
     const logsDir = getLogsDir(this.cwd);
-    if (!fs7.existsSync(logsDir))
+    if (!fs8.existsSync(logsDir))
       return [];
     try {
-      const files = fs7.readdirSync(logsDir).filter((f) => f.endsWith(".log")).map((f) => ({ name: f, mtime: fs7.statSync(path6.join(logsDir, f)).mtimeMs })).sort((a, b) => b.mtime - a.mtime);
+      const files = fs8.readdirSync(logsDir).filter((f) => f.endsWith(".log")).map((f) => ({ name: f, mtime: fs8.statSync(path6.join(logsDir, f)).mtimeMs })).sort((a, b) => b.mtime - a.mtime);
       const allEntries = [];
       for (const file of files) {
         if (allEntries.length >= recentCount)
           break;
         try {
-          const content = fs7.readFileSync(path6.join(logsDir, file.name), "utf-8");
+          const content = fs8.readFileSync(path6.join(logsDir, file.name), "utf-8");
           const lines = content.trim().split(`
 `).filter(Boolean);
           for (const line of lines) {
@@ -11934,14 +13808,14 @@ class Logger {
   }
   readAllLogEntries() {
     const logsDir = getLogsDir(this.cwd);
-    if (!fs7.existsSync(logsDir))
+    if (!fs8.existsSync(logsDir))
       return [];
     try {
-      const files = fs7.readdirSync(logsDir).filter((f) => f.endsWith(".log"));
+      const files = fs8.readdirSync(logsDir).filter((f) => f.endsWith(".log"));
       const allEntries = [];
       for (const file of files) {
         try {
-          const content = fs7.readFileSync(path6.join(logsDir, file), "utf-8");
+          const content = fs8.readFileSync(path6.join(logsDir, file), "utf-8");
           const lines = content.trim().split(`
 `).filter(Boolean);
           for (const line of lines) {
@@ -12005,7 +13879,7 @@ class Logger {
   }
   compressLogs(outputPath) {
     const logsDir = getLogsDir(this.cwd);
-    if (!fs7.existsSync(logsDir)) {
+    if (!fs8.existsSync(logsDir)) {
       throw new Error(`\u65E5\u5FD7\u76EE\u5F55\u4E0D\u5B58\u5728: ${logsDir}`);
     }
     const archivePath = outputPath || path6.join(path6.dirname(logsDir), "logs-archive.tar.gz");
@@ -12023,20 +13897,20 @@ class Logger {
   }
   cleanupOldLogs(maxAgeDays = 30) {
     const logsDir = getLogsDir(this.cwd);
-    if (!fs7.existsSync(logsDir))
+    if (!fs8.existsSync(logsDir))
       return 0;
     const cutoff = Date.now() - maxAgeDays * 24 * 60 * 60 * 1000;
     let deletedCount = 0;
     try {
-      const files = fs7.readdirSync(logsDir);
+      const files = fs8.readdirSync(logsDir);
       for (const file of files) {
         if (!file.endsWith(".log"))
           continue;
         const filePath = path6.join(logsDir, file);
         try {
-          const stat = fs7.statSync(filePath);
+          const stat = fs8.statSync(filePath);
           if (stat.mtimeMs < cutoff) {
-            fs7.unlinkSync(filePath);
+            fs8.unlinkSync(filePath);
             deletedCount++;
           }
         } catch {}
@@ -12158,7 +14032,7 @@ var init_logger = __esm(() => {
 });
 
 // src/utils/harness-helpers.ts
-import * as fs8 from "fs";
+import * as fs9 from "fs";
 import * as path7 from "path";
 import { spawn } from "child_process";
 function classifyExitResult(code, stderr, stdout) {
@@ -12170,18 +14044,18 @@ function classifyExitResult(code, stderr, stdout) {
   if (isHookError && hasOutput) {
     return {
       success: true,
-      hookWarning: `Hook \u9519\u8BEF\u5DF2\u5FFD\u7565: ${stderr.substring(0, 200)}`
+      hookWarning: `Hook error ignored: ${stderr.substring(0, 200)}`
     };
   }
   if (isHookError && !hasOutput) {
     return {
       success: false,
-      error: `Hook \u9519\u8BEF\u5BFC\u81F4\u65E0\u8F93\u51FA: ${stderr.substring(0, 200)}`
+      error: `Hook error caused no output: ${stderr.substring(0, 200)}`
     };
   }
   return {
     success: false,
-    error: stderr || `\u8FDB\u7A0B\u9000\u51FA\u7801: ${code}`
+    error: stderr || `Process exit code: ${code}`
   };
 }
 async function runHeadlessClaude(options) {
@@ -12272,12 +14146,13 @@ function isRetryableError(output, stderr) {
 function sleep(seconds) {
   return new Promise((resolve3) => setTimeout(resolve3, seconds * 1000));
 }
-async function runHeadlessClaudeWithRetry(options, retryConfig) {
+async function runHeadlessClaudeWithRetry(options, retryConfig, cwd2) {
+  const texts = t(cwd2);
   const maxAttempts = retryConfig.maxAttempts + 1;
   let lastResult = null;
   for (let attempt = 1;attempt <= maxAttempts; attempt++) {
     if (attempt > 1) {
-      console.log(`   \uD83D\uDD04 API \u8C03\u7528\u91CD\u8BD5 (${attempt - 1}/${retryConfig.maxAttempts})...`);
+      console.log(`   \uD83D\uDD04 ${texts.harness.logs.apiRetry.replace("{current}", String(attempt - 1)).replace("{max}", String(retryConfig.maxAttempts))}...`);
     }
     lastResult = await runHeadlessClaude(options);
     if (lastResult.success) {
@@ -12288,39 +14163,40 @@ async function runHeadlessClaudeWithRetry(options, retryConfig) {
       return lastResult;
     }
     const delay = Math.min(errorInfo.waitSeconds || retryConfig.baseDelay, retryConfig.baseDelay * Math.pow(2, attempt - 1));
-    console.log(`   \u23F3 ${errorInfo.reason}\uFF0C${delay} \u79D2\u540E\u91CD\u8BD5...`);
+    console.log(`   \u23F3 ${texts.harness.logs.retryingInSeconds.replace("{reason}", errorInfo.reason).replace("{seconds}", String(delay))}...`);
     await sleep(delay);
   }
   return lastResult;
 }
-function archiveReportIfExists(reportPath) {
+function archiveReportIfExists(reportPath, cwd2) {
+  const texts = t(cwd2);
   try {
     const absolutePath = path7.resolve(reportPath);
-    if (!fs8.existsSync(absolutePath)) {
+    if (!fs9.existsSync(absolutePath)) {
       return;
     }
     const dir = path7.dirname(absolutePath);
     const filename = path7.basename(absolutePath);
     const archiveDir = path7.join(dir, "archive");
-    if (!fs8.existsSync(archiveDir)) {
-      fs8.mkdirSync(archiveDir, { recursive: true });
+    if (!fs9.existsSync(archiveDir)) {
+      fs9.mkdirSync(archiveDir, { recursive: true });
     }
     const timestamp = new Date().toISOString().replace(/[:.]/g, "-");
     const archivePath = path7.join(archiveDir, `${timestamp}-${filename}`);
-    fs8.copyFileSync(absolutePath, archivePath);
-    console.log(`   \uD83D\uDCE6 \u5DF2\u5F52\u6863\u65E7\u62A5\u544A: archive/${timestamp}-${filename}`);
+    fs9.copyFileSync(absolutePath, archivePath);
+    console.log(`   \uD83D\uDCE6 ${texts.harness.logs.archivedReport.replace("{filename}", `${timestamp}-${filename}`)}`);
   } catch (error) {
-    console.warn(`   \u26A0\uFE0F \u5F52\u6863\u62A5\u544A\u5931\u8D25: ${error instanceof Error ? error.message : String(error)}`);
+    console.warn(`   \u26A0\uFE0F ${texts.harness.logs.archiveFailed}: ${error instanceof Error ? error.message : String(error)}`);
   }
 }
 async function saveReport(reportPath, content) {
   const dir = path7.dirname(reportPath);
   try {
-    if (!fs8.existsSync(dir)) {
-      fs8.mkdirSync(dir, { recursive: true });
+    if (!fs9.existsSync(dir)) {
+      fs9.mkdirSync(dir, { recursive: true });
     }
     archiveReportIfExists(reportPath);
-    fs8.writeFileSync(reportPath, content, "utf-8");
+    fs9.writeFileSync(reportPath, content, "utf-8");
   } catch (error) {
     throw new Error(`\u4FDD\u5B58\u62A5\u544A\u5931\u8D25: ${error instanceof Error ? error.message : String(error)}`);
   }
@@ -12439,18 +14315,19 @@ function getReportPath(taskId, reportType, cwd2) {
 var REVIEW_TIMEOUT_RATIO = 3;
 var init_harness_helpers = __esm(() => {
   init_path();
+  init_i18n();
 });
 
 // src/utils/headless-agent.ts
-import * as fs9 from "fs";
+import * as fs10 from "fs";
 function buildEffectiveTools(phase, cwd2, task) {
   const codeDefaults = PHASE_DEFAULT_TOOLS[phase] || ["Read", "Bash", "Grep", "Glob"];
   const configKey = PHASE_CONFIG_KEY[phase];
   let phaseTools = codeDefaults;
   try {
     const configPath = getConfigPath(cwd2);
-    if (fs9.existsSync(configPath)) {
-      const config = JSON.parse(fs9.readFileSync(configPath, "utf-8"));
+    if (fs10.existsSync(configPath)) {
+      const config = JSON.parse(fs10.readFileSync(configPath, "utf-8"));
       const configPhaseTools = config?.harness?.perPhaseTools?.[configKey || phase];
       if (Array.isArray(configPhaseTools) && configPhaseTools.length > 0) {
         phaseTools = configPhaseTools;
@@ -12459,7 +14336,7 @@ function buildEffectiveTools(phase, cwd2, task) {
   } catch {}
   if (task?.allowedTools && task.allowedTools.length > 0) {
     const taskToolSet = new Set(task.allowedTools);
-    const effectiveTools = phaseTools.filter((t) => taskToolSet.has(t));
+    const effectiveTools = phaseTools.filter((t2) => taskToolSet.has(t2));
     return { tools: effectiveTools, skipPermissions: false };
   }
   return { tools: phaseTools, skipPermissions: true };
@@ -12617,10 +14494,10 @@ function initializeProviders() {
 function loadAIConfig(cwd2) {
   try {
     const configPath = getConfigPath(cwd2);
-    if (!fs9.existsSync(configPath)) {
+    if (!fs10.existsSync(configPath)) {
       return DEFAULT_AI;
     }
-    const config = JSON.parse(fs9.readFileSync(configPath, "utf-8"));
+    const config = JSON.parse(fs10.readFileSync(configPath, "utf-8"));
     if (!config.ai) {
       return DEFAULT_AI;
     }
@@ -12665,1594 +14542,6 @@ var init_headless_agent = __esm(() => {
   initializeProviders();
 });
 
-// src/i18n/zh.ts
-var zhTexts;
-var init_zh = __esm(() => {
-  zhTexts = {
-    error: "\u9519\u8BEF",
-    success: "\u6210\u529F",
-    cancel: "\u53D6\u6D88",
-    common: {
-      skip: "\u8DF3\u8FC7",
-      notSelected: "\u672A\u9009\u62E9"
-    },
-    setup: {
-      initializing: "\u6B63\u5728\u521D\u59CB\u5316\u9879\u76EE\u7BA1\u7406\u73AF\u5883...",
-      createDir: "\u521B\u5EFA\u76EE\u5F55",
-      createConfig: "\u521B\u5EFA\u914D\u7F6E: config.json",
-      setupComplete: "\u9879\u76EE\u7BA1\u7406\u73AF\u5883\u521D\u59CB\u5316\u5B8C\u6210\uFF01",
-      nextStep: "\u4F7F\u7528 'projmnt4claude task create' \u521B\u5EFA\u7B2C\u4E00\u4E2A\u4EFB\u52A1",
-      selectLanguage: "\u8BF7\u9009\u62E9\u8BED\u8A00:",
-      copyingSkills: "\u6B63\u5728\u590D\u5236\u6280\u80FD\u6587\u4EF6...",
-      skillsCopied: "\u6280\u80FD\u6587\u4EF6\u590D\u5236\u5B8C\u6210",
-      alreadyInitialized: "\u9879\u76EE\u7BA1\u7406\u73AF\u5883\u5DF2\u5B58\u5728\uFF0C\u8DF3\u8FC7\u521D\u59CB\u5316\u3002"
-    },
-    task: {
-      createTitle: "\u8BF7\u8F93\u5165\u4EFB\u52A1\u6807\u9898:",
-      createDescription: "\u8BF7\u8F93\u5165\u4EFB\u52A1\u63CF\u8FF0\uFF08\u53EF\u9009\uFF09:",
-      taskCreated: "\u4EFB\u52A1\u521B\u5EFA\u6210\u529F",
-      taskNotFound: "\u672A\u627E\u5230\u4EFB\u52A1",
-      taskUpdated: "\u4EFB\u52A1\u5DF2\u66F4\u65B0",
-      taskDeleted: "\u4EFB\u52A1\u5DF2\u5220\u9664",
-      listHeader: "\u4EFB\u52A1\u5217\u8868",
-      noTasks: "\u6682\u65E0\u4EFB\u52A1",
-      statusHeader: "\u72B6\u6001",
-      priorityHeader: "\u4F18\u5148\u7EA7",
-      roleHeader: "\u63A8\u8350\u89D2\u8272",
-      dependencyHeader: "\u4F9D\u8D56",
-      subtaskHeader: "\u5B50\u4EFB\u52A1"
-    },
-    plan: {
-      showHeader: "\u6267\u884C\u8BA1\u5212",
-      addHeader: "\u6DFB\u52A0\u4EFB\u52A1",
-      removeHeader: "\u79FB\u9664\u4EFB\u52A1",
-      clearHeader: "\u6E05\u7A7A\u8BA1\u5212",
-      recommendHeader: "\u667A\u80FD\u63A8\u8350",
-      noPlan: "\u6682\u65E0\u8BA1\u5212",
-      planCleared: "\u8BA1\u5212\u5DF2\u6E05\u7A7A",
-      taskAdded: "\u4EFB\u52A1\u5DF2\u6DFB\u52A0\u5230\u8BA1\u5212",
-      taskRemoved: "\u4EFB\u52A1\u5DF2\u4ECE\u8BA1\u5212\u79FB\u9664"
-    },
-    status: {
-      projectStatus: "\u9879\u76EE\u72B6\u6001",
-      totalTasks: "\u603B\u4EFB\u52A1\u6570",
-      completedTasks: "\u5DF2\u5B8C\u6210",
-      inProgressTasks: "\u8FDB\u884C\u4E2D",
-      pendingTasks: "\u5F85\u5904\u7406",
-      noTasks: "\u65E0\u4EFB\u52A1"
-    },
-    analyze: {
-      analyzing: "\u6B63\u5728\u5206\u6790\u9879\u76EE\u5065\u5EB7\u72B6\u6001...",
-      analysisComplete: "\u5206\u6790\u5B8C\u6210",
-      issuesFound: "\u53D1\u73B0 {count} \u4E2A\u95EE\u9898",
-      noIssues: "\u672A\u53D1\u73B0\u95EE\u9898",
-      fixApplied: "\u5DF2\u4FEE\u590D {count} \u4E2A\u95EE\u9898"
-    },
-    help: {
-      commandReference: "\u547D\u4EE4\u53C2\u8003",
-      availableCommands: "\u53EF\u7528\u547D\u4EE4",
-      noDescription: "\u6682\u65E0\u63CF\u8FF0",
-      commandNotFound: "\u672A\u627E\u5230\u547D\u4EE4",
-      tipUseHelp: "\u4F7F\u7528 `projmnt4claude help <command>` \u67E5\u770B\u547D\u4EE4\u8BE6\u7EC6\u8BF4\u660E",
-      usage: "\u4F7F\u7528\u65B9\u5F0F",
-      examples: "\u793A\u4F8B",
-      suggestedCommands: "\uD83D\uDCA1 \u5EFA\u8BAE\u60A8\u4F7F\u7528\u4EE5\u4E0B\u547D\u4EE4:",
-      noRelatedCommands: "\uD83D\uDE15 \u6CA1\u6709\u627E\u5230\u76F4\u63A5\u76F8\u5173\u7684\u547D\u4EE4\u3002",
-      commonCommands: "\u4EE5\u4E0B\u662F\u4E00\u4E9B\u5E38\u7528\u547D\u4EE4:",
-      cmdTask: "\u7BA1\u7406\u9879\u76EE\u4EFB\u52A1",
-      cmdStatus: "\u67E5\u770B\u9879\u76EE\u72B6\u6001",
-      cmdPlan: "\u7BA1\u7406\u6267\u884C\u8BA1\u5212",
-      cmdSetup: "\u521D\u59CB\u5316\u9879\u76EE\u7BA1\u7406\u73AF\u5883"
-    },
-    config: {
-      listHeader: "\u914D\u7F6E\u5217\u8868",
-      getHeader: "\u83B7\u53D6\u914D\u7F6E",
-      setHeader: "\u8BBE\u7F6E\u914D\u7F6E",
-      configUpdated: "\u914D\u7F6E\u5DF2\u66F4\u65B0",
-      keyNotFound: "\u914D\u7F6E\u9879\u4E0D\u5B58\u5728",
-      invalidAction: "\u672A\u77E5\u64CD\u4F5C"
-    },
-    tool: {
-      listHeader: "\u672C\u5730 skill \u5217\u8868",
-      createHeader: "\u521B\u5EFA skill",
-      installHeader: "\u5B89\u88C5 skill",
-      removeHeader: "\u5220\u9664 skill",
-      deployHeader: "\u90E8\u7F72 skill",
-      undeployHeader: "\u5378\u8F7D skill"
-    },
-    initRequirement: {
-      descriptionRequired: "\u8BF7\u8F93\u5165\u9700\u6C42\u63CF\u8FF0",
-      parsingDescription: "\u6B63\u5728\u89E3\u6790\u9700\u6C42...",
-      creatingTasks: "\u6B63\u5728\u521B\u5EFA\u4EFB\u52A1...",
-      tasksCreated: "\u5DF2\u521B\u5EFA {count} \u4E2A\u4EFB\u52A1"
-    },
-    rolePrompts: {
-      dev: {
-        frontend: {
-          roleDeclaration: "\u4F60\u662F\u4E00\u4E2A\u524D\u7AEF\u5F00\u53D1\u8005\uFF0C\u4E13\u6CE8\u4E8E\u7528\u6237\u754C\u9762\u548C\u4EA4\u4E92\u4F53\u9A8C\u3002",
-          extraInstructions: [
-            "\u786E\u4FDD\u7EC4\u4EF6\u53EF\u590D\u7528\u3001\u53EF\u8BBF\u95EE\u6027\uFF08WCAG 2.1\uFF09\u826F\u597D",
-            "\u5173\u6CE8\u54CD\u5E94\u5F0F\u5E03\u5C40\u548C\u8DE8\u6D4F\u89C8\u5668\u517C\u5BB9\u6027",
-            "\u9075\u5FAA\u9879\u76EE\u7684\u524D\u7AEF\u4EE3\u7801\u89C4\u8303\u548C\u8BBE\u8BA1\u7CFB\u7EDF"
-          ]
-        },
-        backend: {
-          roleDeclaration: "\u4F60\u662F\u4E00\u4E2A\u540E\u7AEF\u5F00\u53D1\u8005\uFF0C\u4E13\u6CE8\u4E8E\u670D\u52A1\u7AEF\u903B\u8F91\u548C\u6570\u636E\u5C42\u3002",
-          extraInstructions: [
-            "\u786E\u4FDD API \u63A5\u53E3\u8BBE\u8BA1\u9075\u5FAA RESTful \u6216\u9879\u76EE\u7EA6\u5B9A",
-            "\u5173\u6CE8\u9519\u8BEF\u5904\u7406\u3001\u8F93\u5165\u9A8C\u8BC1\u548C\u4E8B\u52A1\u4E00\u81F4\u6027",
-            "\u6CE8\u610F\u6570\u636E\u5E93\u67E5\u8BE2\u6027\u80FD\u548C\u7D22\u5F15\u4F7F\u7528"
-          ]
-        },
-        qa: {
-          roleDeclaration: "\u4F60\u662F\u4E00\u4E2A\u5177\u6709\u6D4B\u8BD5\u5F00\u53D1\u80FD\u529B\u7684\u5F00\u53D1\u8005\uFF0C\u64C5\u957F\u7F16\u5199\u53EF\u6D4B\u8BD5\u7684\u4EE3\u7801\u3002",
-          extraInstructions: [
-            "\u5B9E\u73B0\u65F6\u540C\u6B65\u7F16\u5199\u5FC5\u8981\u7684\u5355\u5143\u6D4B\u8BD5\u548C\u96C6\u6210\u6D4B\u8BD5",
-            "\u5173\u6CE8\u8FB9\u754C\u6761\u4EF6\u548C\u5F02\u5E38\u8DEF\u5F84\u7684\u8986\u76D6",
-            "\u786E\u4FDD\u4EE3\u7801\u53EF\u901A\u8FC7\u81EA\u52A8\u5316\u6D4B\u8BD5\u9A8C\u8BC1"
-          ]
-        },
-        architect: {
-          roleDeclaration: "\u4F60\u662F\u4E00\u4E2A\u67B6\u6784\u5E08\u89D2\u8272\u7684\u5F00\u53D1\u8005\uFF0C\u5173\u6CE8\u7CFB\u7EDF\u8BBE\u8BA1\u548C\u6A21\u5757\u8FB9\u754C\u3002",
-          extraInstructions: [
-            "\u786E\u4FDD\u5B9E\u73B0\u7B26\u5408\u73B0\u6709\u67B6\u6784\u7EA6\u675F\u548C\u6A21\u5757\u8FB9\u754C",
-            "\u5173\u6CE8\u63A5\u53E3\u8BBE\u8BA1\u548C\u6A21\u5757\u95F4\u89E3\u8026",
-            "\u8BC4\u4F30\u53D8\u66F4\u5BF9\u7CFB\u7EDF\u6574\u4F53\u67B6\u6784\u7684\u5F71\u54CD"
-          ]
-        },
-        security: {
-          roleDeclaration: "\u4F60\u662F\u4E00\u4E2A\u5B89\u5168\u5DE5\u7A0B\u5E08\u89D2\u8272\u7684\u5F00\u53D1\u8005\uFF0C\u4E13\u6CE8\u4E8E\u5B89\u5168\u76F8\u5173\u5B9E\u73B0\u3002",
-          extraInstructions: [
-            "\u4E25\u683C\u9075\u5FAA OWASP Top 10 \u5B89\u5168\u5B9E\u8DF5",
-            "\u9A8C\u8BC1\u6240\u6709\u5916\u90E8\u8F93\u5165\u3001\u9632\u6B62\u6CE8\u5165\u548C XSS",
-            "\u786E\u4FDD\u654F\u611F\u6570\u636E\u5904\u7406\u7B26\u5408\u5B89\u5168\u89C4\u8303"
-          ]
-        },
-        performance: {
-          roleDeclaration: "\u4F60\u662F\u4E00\u4E2A\u6027\u80FD\u4F18\u5316\u5DE5\u7A0B\u5E08\u89D2\u8272\u7684\u5F00\u53D1\u8005\uFF0C\u4E13\u6CE8\u4E8E\u6027\u80FD\u76F8\u5173\u5B9E\u73B0\u3002",
-          extraInstructions: [
-            "\u5173\u6CE8\u5173\u952E\u8DEF\u5F84\u7684\u6027\u80FD\u6307\u6807\uFF08\u5EF6\u8FDF\u3001\u541E\u5410\u91CF\u3001\u5185\u5B58\uFF09",
-            "\u907F\u514D\u4E0D\u5FC5\u8981\u7684\u540C\u6B65\u64CD\u4F5C\u548C\u91CD\u590D\u8BA1\u7B97",
-            "\u4F7F\u7528\u6027\u80FD\u5206\u6790\u5DE5\u5177\u9A8C\u8BC1\u4F18\u5316\u6548\u679C"
-          ]
-        }
-      },
-      codeReview: {
-        frontend: {
-          roleDeclaration: "\u4F60\u662F\u4E00\u4E2A\u4E13\u4E1A\u7684\u524D\u7AEF\u4EE3\u7801\u5BA1\u6838\u5458\u3002",
-          reviewFocus: [
-            "\u7EC4\u4EF6\u7ED3\u6784\u548C\u72B6\u6001\u7BA1\u7406\u662F\u5426\u5408\u7406",
-            "CSS/\u6837\u5F0F\u662F\u5426\u6709\u51B2\u7A81\u6216\u5197\u4F59",
-            "\u53EF\u8BBF\u95EE\u6027\uFF08a11y\uFF09\u662F\u5426\u7B26\u5408\u6807\u51C6",
-            "\u6D4F\u89C8\u5668\u517C\u5BB9\u6027\u548C\u54CD\u5E94\u5F0F\u8BBE\u8BA1"
-          ]
-        },
-        backend: {
-          roleDeclaration: "\u4F60\u662F\u4E00\u4E2A\u4E13\u4E1A\u7684\u540E\u7AEF\u4EE3\u7801\u5BA1\u6838\u5458\u3002",
-          reviewFocus: [
-            "API \u63A5\u53E3\u8BBE\u8BA1\u662F\u5426\u89C4\u8303\u3001\u5411\u540E\u517C\u5BB9",
-            "\u9519\u8BEF\u5904\u7406\u662F\u5426\u5B8C\u5584\u3001\u9519\u8BEF\u4FE1\u606F\u662F\u5426\u5B89\u5168",
-            "\u6570\u636E\u5E93\u64CD\u4F5C\u662F\u5426\u5B89\u5168\uFF08\u9632 SQL \u6CE8\u5165\uFF09",
-            "\u5E76\u53D1\u548C\u4E8B\u52A1\u5904\u7406\u662F\u5426\u6B63\u786E"
-          ]
-        },
-        qa: {
-          roleDeclaration: "\u4F60\u662F\u4E00\u4E2A\u4E13\u4E1A\u7684\u6D4B\u8BD5\u4EE3\u7801\u5BA1\u6838\u5458\u3002",
-          reviewFocus: [
-            "\u6D4B\u8BD5\u8986\u76D6\u662F\u5426\u5145\u5206\uFF08\u6B63\u5E38\u8DEF\u5F84 + \u8FB9\u754C\u6761\u4EF6\uFF09",
-            "\u6D4B\u8BD5\u662F\u5426\u72EC\u7ACB\u3001\u53EF\u91CD\u590D\u6267\u884C",
-            "Mock \u548C Stub \u4F7F\u7528\u662F\u5426\u5408\u7406",
-            "\u65AD\u8A00\u662F\u5426\u51C6\u786E\u9A8C\u8BC1\u4E86\u9884\u671F\u884C\u4E3A"
-          ]
-        },
-        architect: {
-          roleDeclaration: "\u4F60\u662F\u4E00\u4E2A\u67B6\u6784\u5BA1\u67E5\u5458\uFF0C\u8D1F\u8D23\u5BA1\u6838\u4EE3\u7801\u7684\u67B6\u6784\u5408\u7406\u6027\u3002",
-          reviewFocus: [
-            "\u6A21\u5757\u8FB9\u754C\u662F\u5426\u6E05\u6670\u3001\u804C\u8D23\u662F\u5426\u5355\u4E00",
-            "\u4F9D\u8D56\u5173\u7CFB\u662F\u5426\u5408\u7406\u3001\u662F\u5426\u5B58\u5728\u5FAA\u73AF\u4F9D\u8D56",
-            "\u63A5\u53E3\u62BD\u8C61\u5C42\u7EA7\u662F\u5426\u9002\u5F53",
-            "\u53D8\u66F4\u662F\u5426\u5F71\u54CD\u73B0\u6709\u67B6\u6784\u7684\u7A33\u5B9A\u6027"
-          ]
-        },
-        security: {
-          roleDeclaration: "\u4F60\u662F\u4E00\u4E2A\u5B89\u5168\u4EE3\u7801\u5BA1\u6838\u5458\uFF0C\u4E13\u6CE8\u4E8E\u5B89\u5168\u6F0F\u6D1E\u68C0\u6D4B\u3002",
-          reviewFocus: [
-            "\u8F93\u5165\u9A8C\u8BC1\u548C\u8F93\u51FA\u7F16\u7801\u662F\u5426\u5B8C\u5584",
-            "\u8BA4\u8BC1\u6388\u6743\u903B\u8F91\u662F\u5426\u6B63\u786E",
-            "\u654F\u611F\u6570\u636E\u662F\u5426\u5B89\u5168\u5B58\u50A8\u548C\u4F20\u8F93",
-            "\u662F\u5426\u5B58\u5728 OWASP Top 10 \u6F0F\u6D1E\u98CE\u9669"
-          ]
-        },
-        performance: {
-          roleDeclaration: "\u4F60\u662F\u4E00\u4E2A\u6027\u80FD\u4EE3\u7801\u5BA1\u6838\u5458\uFF0C\u4E13\u6CE8\u4E8E\u6027\u80FD\u74F6\u9888\u68C0\u6D4B\u3002",
-          reviewFocus: [
-            "\u662F\u5426\u5B58\u5728 O(n\xB2) \u6216\u66F4\u9AD8\u590D\u6742\u5EA6\u7684\u7B97\u6CD5",
-            "\u8D44\u6E90\uFF08\u5185\u5B58\u3001\u8FDE\u63A5\u3001\u6587\u4EF6\u53E5\u67C4\uFF09\u662F\u5426\u6B63\u786E\u91CA\u653E",
-            "\u662F\u5426\u6709\u4E0D\u5FC5\u8981\u7684\u540C\u6B65\u963B\u585E\u64CD\u4F5C",
-            "\u7F13\u5B58\u7B56\u7565\u662F\u5426\u5408\u7406"
-          ]
-        }
-      },
-      qa: {
-        frontend: {
-          roleDeclaration: "\u4F60\u662F\u4E00\u4E2A\u4E13\u4E1A\u7684\u524D\u7AEF QA \u6D4B\u8BD5\u5458\u3002",
-          testStrategy: [
-            "\u9A8C\u8BC1 UI \u6E32\u67D3\u5728\u4E0D\u540C\u5C4F\u5E55\u5C3A\u5BF8\u4E0B\u662F\u5426\u6B63\u786E",
-            "\u6D4B\u8BD5\u7528\u6237\u4EA4\u4E92\u6D41\u7A0B\uFF08\u70B9\u51FB\u3001\u8F93\u5165\u3001\u5BFC\u822A\uFF09",
-            "\u68C0\u67E5\u53EF\u8BBF\u95EE\u6027\u5DE5\u5177\u662F\u5426\u80FD\u6B63\u786E\u8BC6\u522B\u9875\u9762\u5143\u7D20",
-            "\u9A8C\u8BC1\u52A0\u8F7D\u72B6\u6001\u548C\u9519\u8BEF\u72B6\u6001\u7684\u5C55\u793A"
-          ]
-        },
-        backend: {
-          roleDeclaration: "\u4F60\u662F\u4E00\u4E2A\u4E13\u4E1A\u7684\u540E\u7AEF QA \u6D4B\u8BD5\u5458\u3002",
-          testStrategy: [
-            "\u9A8C\u8BC1 API \u63A5\u53E3\u5728\u5404\u79CD\u8F93\u5165\u4E0B\u7684\u54CD\u5E94",
-            "\u6D4B\u8BD5\u9519\u8BEF\u5904\u7406\u548C\u8FB9\u754C\u6761\u4EF6",
-            "\u68C0\u67E5\u5E76\u53D1\u8BF7\u6C42\u4E0B\u7684\u6570\u636E\u4E00\u81F4\u6027",
-            "\u9A8C\u8BC1\u6570\u636E\u5E93\u72B6\u6001\u53D8\u66F4\u662F\u5426\u7B26\u5408\u9884\u671F"
-          ]
-        },
-        qa: {
-          roleDeclaration: "\u4F60\u662F\u4E00\u4E2A\u4E13\u4E1A\u7684 QA \u6D4B\u8BD5\u5458\uFF0C\u64C5\u957F\u5168\u9762\u6D4B\u8BD5\u8986\u76D6\u3002",
-          testStrategy: [
-            "\u8FD0\u884C\u6240\u6709\u76F8\u5173\u5355\u5143\u6D4B\u8BD5\u548C\u96C6\u6210\u6D4B\u8BD5",
-            "\u9A8C\u8BC1\u529F\u80FD\u5728\u6B63\u5E38\u8DEF\u5F84\u548C\u5F02\u5E38\u8DEF\u5F84\u4E0B\u7684\u884C\u4E3A",
-            "\u68C0\u67E5\u6D4B\u8BD5\u8986\u76D6\u7387\u662F\u5426\u6EE1\u8DB3\u8981\u6C42",
-            "\u6536\u96C6\u5B8C\u6574\u7684\u6D4B\u8BD5\u8BC1\u636E"
-          ]
-        },
-        architect: {
-          roleDeclaration: "\u4F60\u662F\u4E00\u4E2A\u67B6\u6784\u9A8C\u8BC1\u6D4B\u8BD5\u5458\uFF0C\u8D1F\u8D23\u9A8C\u8BC1\u67B6\u6784\u7EA6\u675F\u3002",
-          testStrategy: [
-            "\u9A8C\u8BC1\u6A21\u5757\u95F4\u63A5\u53E3\u5951\u7EA6\u662F\u5426\u88AB\u9075\u5B88",
-            "\u68C0\u67E5\u65B0\u589E\u4F9D\u8D56\u662F\u5426\u5408\u7406",
-            "\u9A8C\u8BC1\u67B6\u6784\u5206\u5C42\u89C4\u5219\uFF08\u5982\u4E0D\u8DE8\u5C42\u76F4\u63A5\u8C03\u7528\uFF09",
-            "\u8BC4\u4F30\u53D8\u66F4\u5BF9\u6574\u4F53\u7CFB\u7EDF\u7684\u5F71\u54CD\u8303\u56F4"
-          ]
-        },
-        security: {
-          roleDeclaration: "\u4F60\u662F\u4E00\u4E2A\u5B89\u5168\u6D4B\u8BD5\u5458\uFF0C\u8D1F\u8D23\u9A8C\u8BC1\u5B89\u5168\u76F8\u5173\u5B9E\u73B0\u3002",
-          testStrategy: [
-            "\u9A8C\u8BC1\u8F93\u5165\u9A8C\u8BC1\u662F\u5426\u8986\u76D6\u6240\u6709\u5165\u53E3\u70B9",
-            "\u6D4B\u8BD5\u5E38\u89C1\u653B\u51FB\u5411\u91CF\uFF08XSS\u3001SQL \u6CE8\u5165\u3001CSRF\uFF09",
-            "\u68C0\u67E5\u8BA4\u8BC1\u6388\u6743\u6D41\u7A0B\u662F\u5426\u6B63\u786E",
-            "\u9A8C\u8BC1\u654F\u611F\u6570\u636E\u662F\u5426\u4E0D\u5728\u65E5\u5FD7\u6216\u54CD\u5E94\u4E2D\u6CC4\u9732"
-          ]
-        },
-        performance: {
-          roleDeclaration: "\u4F60\u662F\u4E00\u4E2A\u6027\u80FD\u6D4B\u8BD5\u5458\uFF0C\u8D1F\u8D23\u9A8C\u8BC1\u6027\u80FD\u6307\u6807\u3002",
-          testStrategy: [
-            "\u8FD0\u884C\u6027\u80FD\u57FA\u51C6\u6D4B\u8BD5\uFF08\u5982\u6709\u914D\u7F6E\uFF09",
-            "\u9A8C\u8BC1\u5173\u952E\u64CD\u4F5C\u7684\u54CD\u5E94\u65F6\u95F4\u662F\u5426\u5728\u9608\u503C\u5185",
-            "\u68C0\u67E5\u662F\u5426\u5B58\u5728\u5185\u5B58\u6CC4\u6F0F\u8FF9\u8C61",
-            "\u6D4B\u8BD5\u5728\u9AD8\u8D1F\u8F7D\u4E0B\u7684\u7CFB\u7EDF\u7A33\u5B9A\u6027"
-          ]
-        }
-      },
-      defaultDev: {
-        roleDeclaration: "\u4F60\u662F\u4E00\u4E2A\u5F00\u53D1\u8005\uFF0C\u4F60\u7684\u552F\u4E00\u804C\u8D23\u662F\u5B9E\u73B0\u88AB\u5206\u914D\u4EFB\u52A1\u7684\u4EE3\u7801\u53D8\u66F4\u3002",
-        extraInstructions: []
-      },
-      defaultCodeReview: {
-        roleDeclaration: "\u4F60\u662F\u4E00\u4E2A\u4E13\u4E1A\u7684\u4EE3\u7801\u5BA1\u6838\u5458\u3002\u4F60\u9700\u8981\u5BA1\u6838\u4E00\u4E2A\u4EFB\u52A1\u7684\u4EE3\u7801\u5B9E\u73B0\uFF0C\u786E\u4FDD\u4EE3\u7801\u8D28\u91CF\u7B26\u5408\u6807\u51C6\u3002",
-        reviewFocus: [
-          "\u68C0\u67E5\u4EE3\u7801\u8D28\u91CF\u548C\u53EF\u8BFB\u6027",
-          "\u68C0\u67E5\u4EE3\u7801\u89C4\u8303\u9075\u5B88\u60C5\u51B5",
-          "\u68C0\u67E5\u6F5C\u5728\u7684\u5B89\u5168\u95EE\u9898",
-          "\u68C0\u67E5\u9519\u8BEF\u5904\u7406\u662F\u5426\u5B8C\u5584"
-        ]
-      },
-      defaultQA: {
-        roleDeclaration: "\u4F60\u662F\u4E00\u4E2A\u4E13\u4E1A\u7684 QA \u6D4B\u8BD5\u5458\u3002\u4F60\u9700\u8981\u9A8C\u8BC1\u4E00\u4E2A\u4EFB\u52A1\u7684\u5B9E\u73B0\u662F\u5426\u6EE1\u8DB3\u529F\u80FD\u8981\u6C42\u3002",
-        testStrategy: [
-          "\u8FD0\u884C\u5355\u5143\u6D4B\u8BD5\uFF08\u5982\u6709\u914D\u7F6E\uFF09",
-          "\u8FD0\u884C\u529F\u80FD\u6D4B\u8BD5\uFF08\u5982\u6709\u914D\u7F6E\uFF09",
-          "\u9A8C\u8BC1\u529F\u80FD\u662F\u5426\u7B26\u5408\u9884\u671F",
-          "\u68C0\u67E5\u8FB9\u754C\u60C5\u51B5\u5904\u7406"
-        ]
-      }
-    },
-    feedback: {
-      jsonHeader: "\u4E0A\u4E00\u6B21\u8F93\u51FA\u7684 JSON \u5B58\u5728\u4EE5\u4E0B\u95EE\u9898\uFF0C\u8BF7\u4FEE\u6B63\u540E\u91CD\u65B0\u8F93\u51FA\u5B8C\u6574 JSON\uFF1A",
-      markdownHeader: "\u4E0A\u4E00\u6B21\u8F93\u51FA\u7684 Markdown \u5185\u5BB9\u5B58\u5728\u4EE5\u4E0B\u95EE\u9898\uFF0C\u8BF7\u4FEE\u6B63\u540E\u91CD\u65B0\u8F93\u51FA\uFF1A",
-      violationsTitle: "\u8FDD\u89C4\u9879",
-      fieldLabel: "\u5B57\u6BB5",
-      valueLabel: "\u503C",
-      originalOutputTitle: "\u539F\u59CB\u8F93\u51FA\uFF08\u4F9B\u53C2\u8003\uFF09",
-      truncated: "... (\u5DF2\u622A\u65AD)",
-      jsonRequirements: [
-        "\u8F93\u51FA\u662F\u5408\u6CD5\u7684 JSON",
-        "\u6240\u6709\u5FC5\u586B\u5B57\u6BB5\u90FD\u5B58\u5728\u4E14\u7C7B\u578B\u6B63\u786E",
-        "\u4E0D\u8981\u8F93\u51FA JSON \u4EE5\u5916\u7684\u5185\u5BB9"
-      ],
-      markdownRequirements: [
-        "\u8F93\u51FA\u683C\u5F0F\u7B26\u5408 Markdown \u89C4\u8303",
-        "\u6240\u6709\u5FC5\u9700\u7684\u7AE0\u8282\u548C\u6807\u9898\u90FD\u5B58\u5728",
-        "\u5185\u5BB9\u7ED3\u6784\u5B8C\u6574\u3001\u903B\u8F91\u6E05\u6670"
-      ]
-    },
-    analyzeFixPipeline: {
-      nonStandardTransition: "\u975E\u6807\u51C6\u72B6\u6001\u8F6C\u6362 ({context}): {oldStatus} \u2192 {newStatus}",
-      fixPipelineMode: "\uD83D\uDD27 analyze --fix \u6D41\u6C34\u7EBF\u6A21\u5F0F",
-      executingStages: "\u6267\u884C\u9636\u6BB5",
-      stage1Analysis: "\uD83D\uDCCB Stage 1: \u89C4\u5219\u5F15\u64CE\u5206\u6790...",
-      stage1Complete: "\u2705 Stage 1 \u5B8C\u6210: \u53D1\u73B0 {count} \u4E2A\u95EE\u9898 ({duration}s)",
-      stage1Failed: "\u274C Stage 1 \u5931\u8D25: {error}",
-      stage1Skipped: "\u23ED\uFE0F Stage 1: \u8DF3\u8FC7",
-      stage2Fix: "\uD83D\uDD27 Stage 2: \u89C4\u5219\u4FEE\u590D...",
-      stage2FixWithAnalysis: "\uD83D\uDD27 Stage 2: \u89C4\u5219\u4FEE\u590D\uFF08\u542B\u5206\u6790\uFF09...",
-      stage2Complete: "\u2705 Stage 2 \u5B8C\u6210: {fixed} \u4FEE\u590D, {skipped} \u8DF3\u8FC7 ({duration}s)",
-      stage2Failed: "\u274C Stage 2 \u5931\u8D25: {error}",
-      stage2Skipped: "\u23ED\uFE0F Stage 2: \u8DF3\u8FC7",
-      stage3AI: "\uD83E\uDD16 Stage 3: AI \u6DF1\u5EA6\u5206\u6790...",
-      stage3Complete: "\u2705 Stage 3 \u5B8C\u6210: AI \u53D1\u73B0 {count} \u4E2A\u8BED\u4E49\u95EE\u9898 ({duration}s)",
-      stage3Failed: "\u274C Stage 3 \u5931\u8D25: {error}",
-      stage3Skipped: "\u23ED\uFE0F Stage 3: \u8DF3\u8FC7 ({reason})",
-      stage3NotEnabled: "Stage 3: AI \u6DF1\u5EA6\u5206\u6790\u672A\u542F\u7528\uFF08\u4F7F\u7528 --deep-analyze \u6FC0\u6D3B\u5B8C\u6574 AI \u5206\u6790\uFF09",
-      stage4Checkpoint: "\uD83D\uDCCC Stage 4: \u68C0\u67E5\u70B9\u4FEE\u590D...",
-      stage4Complete: "\u2705 Stage 4 \u5B8C\u6210: \u68C0\u67E5\u70B9\u4FEE\u590D ({duration}s)",
-      stage4Failed: "\u274C Stage 4 \u5931\u8D25: {error}",
-      stage4Skipped: "\u23ED\uFE0F Stage 4: \u8DF3\u8FC7",
-      stage5Quality: "\uD83D\uDCCA Stage 5: \u8D28\u91CF\u62A5\u544A...",
-      stage5Complete: "\u2705 Stage 5 \u5B8C\u6210: \u68C0\u6D4B {count} \u4E2A\u4EFB\u52A1, {suggestions} \u4E2A\u6539\u8FDB\u5EFA\u8BAE ({duration}s)",
-      stage5Failed: "\u274C Stage 5 \u5931\u8D25: {error}",
-      stage5Skipped: "\u23ED\uFE0F Stage 5: \u8DF3\u8FC7",
-      pipelineComplete: "\u2705 \u6D41\u6C34\u7EBF\u5B8C\u6210: {stages}/5 \u9636\u6BB5\u5DF2\u6267\u884C ({duration}s)",
-      noIssuesFound: "\u2705 \u6CA1\u6709\u9700\u8981\u4FEE\u590D\u7684\u95EE\u9898",
-      autoFixIssues: "\uD83D\uDD27 \u81EA\u52A8\u4FEE\u590D\u95EE\u9898",
-      nonInteractiveMode: "\uFF08\u975E\u4EA4\u4E92\u6A21\u5F0F\uFF09",
-      fixError: "\u274C \u4FEE\u590D {taskId} ({type}) \u65F6\u51FA\u9519: {error}",
-      fixComplete: "\u2705 \u5171\u4FEE\u590D {count} \u4E2A\u95EE\u9898",
-      fixSkipped: "\u23ED\uFE0F \u8DF3\u8FC7 {count} \u4E2A\u95EE\u9898",
-      fixUnfixable: "\u26A0\uFE0F {count} \u4E2A\u95EE\u9898\u65E0\u6CD5\u81EA\u52A8\u4FEE\u590D",
-      autoClosingStale: "\u2705 \u5DF2\u81EA\u52A8\u5173\u95ED\u8FC7\u671F {days} \u5929\u7684\u4EFB\u52A1 {taskId} (>30\u5929\u9608\u503C)",
-      skipStale: "\u23ED\uFE0F \u8DF3\u8FC7\u8FC7\u671F\u4EFB\u52A1 {taskId} ({days}\u5929, \u975E\u4EA4\u4E92\u6A21\u5F0F\u4E0B\u8D85\u8FC730\u5929\u624D\u81EA\u52A8\u5173\u95ED)",
-      checkingStale: "\u68C0\u67E5\u8FC7\u671F\u4EFB\u52A1 {taskId}...",
-      closingTask: "\u6807\u8BB0\u4E3A\u5DF2\u5173\u95ED",
-      markingInProgress: "\u6807\u8BB0\u4E3A\u8FDB\u884C\u4E2D",
-      skipNoDescription: "\u23ED\uFE0F \u8DF3\u8FC7\u65E0\u63CF\u8FF0\u4EFB\u52A1 {taskId} (\u975E\u4EA4\u4E92\u6A21\u5F0F\u4E0B\u9700\u8981\u624B\u52A8\u5904\u7406)",
-      checkingNoDescription: "\u68C0\u67E5\u65E0\u63CF\u8FF0\u4EFB\u52A1 {taskId}...",
-      addingDescription: "\u2705 \u5DF2\u4E3A\u4EFB\u52A1 {taskId} \u6DFB\u52A0\u63CF\u8FF0",
-      analyzingCycle: "\uD83D\uDD04 \u5206\u6790\u4EFB\u52A1 {taskId} \u7684\u5FAA\u73AF\u4F9D\u8D56...",
-      cycleNotFound: "\u26A0\uFE0F \u672A\u627E\u5230\u6D89\u53CA {taskId} \u7684\u5FAA\u73AF\u4F9D\u8D56\uFF08\u53EF\u80FD\u5DF2\u4FEE\u590D\uFF09",
-      breakingCycle: "\u2705 \u5DF2\u65AD\u5F00 {from} \u2192 {to} \u7684\u4F9D\u8D56\u4EE5\u6253\u7834\u5FAA\u73AF",
-      cycleManualFix: "\u26A0\uFE0F \u5FAA\u73AF {cycle} \u4E2D\u6240\u6709\u8FB9\u5747\u4E3A\u663E\u5F0F\u4F9D\u8D56\uFF0C\u9700\u4EBA\u5DE5\u5904\u7406",
-      fixingPriority: "\uD83D\uDD04 \u4FEE\u590D\u4EFB\u52A1 {taskId} \u7684\u4F18\u5148\u7EA7\u683C\u5F0F...",
-      priorityUpdated: "\u2705 \u5DF2\u5C06\u4F18\u5148\u7EA7\u4ECE {old} \u66F4\u65B0\u4E3A {new}",
-      fixingStatus: "\uD83D\uDD04 \u4FEE\u590D\u4EFB\u52A1 {taskId} \u7684\u72B6\u6001\u683C\u5F0F...",
-      statusUpdated: "\u2705 \u5DF2\u5C06\u72B6\u6001\u4ECE {old} \u66F4\u65B0\u4E3A {new}",
-      fixingSchema: "\uD83D\uDD04 \u4FEE\u590D\u4EFB\u52A1 {taskId} \u7684\u89C4\u8303\u5B57\u6BB5...",
-      reopenCountAdded: "\u2705 \u5DF2\u6DFB\u52A0 reopenCount: 0",
-      requirementHistoryAdded: "\u2705 \u5DF2\u6DFB\u52A0 requirementHistory: []",
-      fixingEmptyArrays: "\uD83D\uDD04 \u4FEE\u590D\u4EFB\u52A1 {taskId} \u7684\u7A7A\u6570\u7EC4\u5B57\u6BB5: {fields}",
-      arrayInitialized: "\u2705 \u5DF2\u521D\u59CB\u5316 {field}: []",
-      migratingPipelineStatus: "\uD83D\uDD04 \u8FC1\u79FB\u4EFB\u52A1 {taskId} \u7684 pipeline \u72B6\u6001...",
-      statusMigrated: "\u2705 \u72B6\u6001\u5DF2\u4ECE {old} \u8FC1\u79FB\u4E3A {new}",
-      cannotDetermineTargetStatus: "\u26A0\uFE0F \u65E0\u6CD5\u786E\u5B9A\u8FC1\u79FB\u76EE\u6807\u72B6\u6001",
-      fixingVerdictAction: "\uD83D\uDD04 \u4FEE\u590D\u4EFB\u52A1 {taskId} \u7684\u65E0\u6548 VerdictAction \u503C...",
-      verdictActionCleared: '\u2705 history[{index}]: \u6E05\u9664\u65E0\u6548 verdict action "{value}"',
-      migratingSchema: "\uD83D\uDD04 \u8FC1\u79FB\u4EFB\u52A1 {taskId} \u7684 schema \u7248\u672C...",
-      fixingCreatedBy: "\uD83D\uDD04 \u4FEE\u590D\u4EFB\u52A1 {taskId} \u7684 createdBy \u5B57\u6BB5...",
-      createdByAdded: "\u2705 \u5DF2\u6DFB\u52A0 createdBy: import",
-      fixingInvalidStatus: "\uD83D\uDD04 \u4FEE\u590D\u4EFB\u52A1 {taskId} \u7684\u65E0\u6548\u72B6\u6001\u503C...",
-      fixingInvalidType: "\uD83D\uDD04 \u4FEE\u590D\u4EFB\u52A1 {taskId} \u7684\u65E0\u6548\u7C7B\u578B\u503C...",
-      typeUpdated: "\u2705 \u5DF2\u5C06\u7C7B\u578B\u4ECE {old} \u66F4\u65B0\u4E3A {new}",
-      fixingInvalidPriority: "\uD83D\uDD04 \u4FEE\u590D\u4EFB\u52A1 {taskId} \u7684\u65E0\u6548\u4F18\u5148\u7EA7\u503C...",
-      fixingReopenTransition: "\uD83D\uDD04 \u4FEE\u590D\u4EFB\u52A1 {taskId} \u7684 reopen \u6D41\u8F6C\u8BB0\u5F55\u7F3A\u5931...",
-      transitionNoteAdded: "\u2705 \u5DF2\u8865\u5F55 transitionNote\uFF0CreopenCount={count}",
-      fixingStatusContradiction: "\uD83D\uDD04 \u4FEE\u590D\u4EFB\u52A1 {taskId} \u7684\u72B6\u6001\u77DB\u76FE (resolved + verification.failed)...",
-      statusContradictionFixed: "\u2705 \u5DF2\u5C06\u72B6\u6001\u4ECE resolved \u6539\u4E3A open\uFF0C\u6E05\u9664\u65E7 verification",
-      fixingTimestamp: "\uD83D\uDD04 \u4FEE\u590D\u4EFB\u52A1 {taskId} \u7684\u65F6\u95F4\u6233\u683C\u5F0F...",
-      timestampUpdated: "\u2705 \u5DF2\u5C06 {field} \u66F4\u65B0\u4E3A {value}",
-      invalidParent: "\u26A0\uFE0F \u4EFB\u52A1 {taskId} \u7684\u7236\u4EFB\u52A1\u5F15\u7528\u65E0\u6548\uFF0C\u65E0\u6CD5\u81EA\u52A8\u4FEE\u590D",
-      fixingSubtaskRef: "\uD83D\uDD04 \u4FEE\u590D\u4EFB\u52A1 {taskId} \u7684\u65E0\u6548\u5B50\u4EFB\u52A1\u5F15\u7528...",
-      subtaskRefRemoved: "\u2705 \u5DF2\u4ECE subtaskIds \u4E2D\u79FB\u9664\u65E0\u6548\u5F15\u7528 {id}",
-      fixingDependencyRef: "\uD83D\uDD04 \u4FEE\u590D\u4EFB\u52A1 {taskId} \u7684\u65E0\u6548\u4F9D\u8D56\u5F15\u7528...",
-      dependencyRefRemoved: "\u2705 \u5DF2\u4ECE dependencies \u4E2D\u79FB\u9664\u65E0\u6548\u5F15\u7528 {id}",
-      inferringDependencies: "\uD83D\uDD04 \u4FEE\u590D\u4EFB\u52A1 {taskId} \u7684\u63A8\u65AD\u4F9D\u8D56\u7F3A\u5931...",
-      inferredDepNotFound: "\u26A0\uFE0F \u63A8\u65AD\u4F9D\u8D56 {id} \u4E0D\u5B58\u5728\uFF0C\u8DF3\u8FC7",
-      inferredDepWouldCreateCycle: "\u26A0\uFE0F \u6DFB\u52A0\u63A8\u65AD\u4F9D\u8D56 {id} \u4F1A\u5F62\u6210\u5FAA\u73AF\uFF0C\u8DF3\u8FC7 (GATE-DEP-002)",
-      inferredDepAdded: "\u2705 \u5DF2\u6DFB\u52A0\u63A8\u65AD\u4F9D\u8D56 {id}: {reason}",
-      fixingParentRef: "\uD83D\uDD04 \u4FEE\u590D\u5B50\u4EFB\u52A1 {taskId} \u5728\u7236\u4EFB\u52A1\u4E2D\u7684\u5F15\u7528...",
-      parentRefAdded: "\u2705 \u5DF2\u5C06\u5B50\u4EFB\u52A1\u6DFB\u52A0\u5230\u7236\u4EFB\u52A1\u7684 subtaskIds \u4E2D",
-      fixingParentChildRelation: "\uD83D\uDD04 \u4FEE\u590D\u4EFB\u52A1 {taskId} \u7684\u7236\u5B50\u5173\u7CFB\u4E0D\u4E00\u81F4...",
-      parentChildRelationFixed: "\u2705 \u5DF2\u5C06\u5B50\u4EFB\u52A1 {subtaskId} \u7684 parentId \u66F4\u65B0\u4E3A {parentId}",
-      cannotExtractKeywords: "\u26A0\uFE0F \u4EFB\u52A1 {taskId} \u65E0\u6CD5\u63D0\u53D6\u6709\u610F\u4E49\u7684\u5173\u952E\u8BCD\uFF0C\u8DF3\u8FC7\u91CD\u547D\u540D",
-      generatedIdSame: "\u23ED\uFE0F \u4EFB\u52A1 {taskId} \u751F\u6210\u7684 ID \u4E0E\u5F53\u524D\u76F8\u540C\uFF0C\u8DF3\u8FC7",
-      renamingTask: "\uD83D\uDD04 \u91CD\u547D\u540D\u4EFB\u52A1: {old} \u2192 {new}",
-      taskRenamed: "\u2705 \u5DF2\u91CD\u547D\u540D\u4E3A {id}",
-      renameFailed: "\u274C \u91CD\u547D\u540D\u5931\u8D25: {error}",
-      cannotAutoFix: "\u26A0\uFE0F \u4EFB\u52A1 {taskId} \u7684 {type} \u95EE\u9898\u65E0\u6CD5\u81EA\u52A8\u4FEE\u590D",
-      suggestion: "\u5EFA\u8BAE: {suggestion}",
-      fixingManualVerification: "\uD83D\uDD04 \u4FEE\u590D\u4EFB\u52A1 {taskId} \u7684 manual \u9A8C\u8BC1\u65B9\u6CD5...",
-      manualToAutomated: "\u2705 \u68C0\u67E5\u70B9 {id}: manual -> automated",
-      fixingMissingVerification: "\uD83D\uDD04 \u4FEE\u590D\u4EFB\u52A1 {taskId} \u7684\u7F3A\u5931 verification \u5B57\u6BB5...",
-      verificationAutoFilled: "\u2705 \u5DF2\u81EA\u52A8\u586B\u5145 verification \u5B57\u6BB5",
-      checkpointCompletionRate: "\u5B8C\u6210\u7387: {rate}%",
-      cleaningAbandonedTasks: "\u68C0\u67E5 abandoned \u6B8B\u7559\u4EFB\u52A1...",
-      abandonedTaskDeleted: "\u2705 \u5DF2\u6E05\u9664 {count} \u4E2A abandoned \u6B8B\u7559\u4EFB\u52A1",
-      cleaningOrphanTasks: "\u68C0\u67E5 abandoned \u6B8B\u7559\u4EFB\u52A1...",
-      checkingAbandoned: "\u68C0\u67E5 abandoned \u6B8B\u7559\u4EFB\u52A1...",
-      abandonedFound: "\u53D1\u73B0 {count} \u4E2A: {tasks}",
-      missingFileRef: "\u26A0\uFE0F \u4EFB\u52A1 {taskId} \u5F15\u7528\u4E86\u4E0D\u5B58\u5728\u7684\u6587\u4EF6\uFF0C\u65E0\u6CD5\u81EA\u52A8\u4FEE\u590D",
-      missingFiles: "\u4E0D\u5B58\u5728\u7684\u6587\u4EF6: {files}",
-      fillingTransitionNote: "\uD83D\uDD04 \u56DE\u586B\u4EFB\u52A1 {taskId} \u7684 transitionNote...",
-      missingHistoryDetail: "\u26A0\uFE0F \u7F3A\u5C11\u5386\u53F2\u6761\u76EE\u8BE6\u60C5\uFF0C\u65E0\u6CD5\u56DE\u586B",
-      transitionNoteFilled: "\u2705 \u5DF2\u56DE\u586B transitionNote: {status} ({author})",
-      missingSuggestion: "\u26A0\uFE0F \u7F3A\u5C11\u72B6\u6001\u5EFA\u8BAE\uFF0C\u65E0\u6CD5\u81EA\u52A8\u4FEE\u590D",
-      fixingInterruptedTask: "\uD83D\uDD04 \u4FEE\u590D\u4E2D\u65AD\u4EFB\u52A1 {taskId}...",
-      currentStatus: "\u5F53\u524D\u72B6\u6001: {status}",
-      suggestedStatus: "\u5EFA\u8BAE\u72B6\u6001: {status}",
-      reason: "\u539F\u56E0: {reason}",
-      skipKeepInProgress: "\u23ED\uFE0F \u5EFA\u8BAE\u4FDD\u6301 in_progress\uFF0C\u8DF3\u8FC7\u4FEE\u590D",
-      statusFixed: "\u2705 \u5DF2\u5C06\u4EFB\u52A1 {taskId} \u72B6\u6001\u4ECE {old} \u4FEE\u6539\u4E3A {new}",
-      migratingReopenedStatus: "\uD83D\uDD04 \u8FC1\u79FB\u4EFB\u52A1 {taskId} \u7684\u5E9F\u5F03 reopened \u72B6\u6001...",
-      reopenedMigrated: "\u2705 \u72B6\u6001\u5DF2\u4ECE reopened \u8FC1\u79FB\u4E3A open",
-      migratingNeedsHumanStatus: "\uD83D\uDD04 \u8FC1\u79FB\u4EFB\u52A1 {taskId} \u7684\u5E9F\u5F03 needs_human \u72B6\u6001...",
-      needsHumanMigrated: "\u2705 \u72B6\u6001\u5DF2\u4ECE needs_human \u8FC1\u79FB\u4E3A open",
-      checkpointCoverageWarning: "\u26A0\uFE0F \u9879\u76EE\u68C0\u67E5\u70B9\u8986\u76D6\u7387\u4E0D\u8DB3\uFF0C\u9700\u4EBA\u5DE5\u8865\u5145",
-      tasksWithoutCheckpoints: "\u7F3A\u5C11\u68C0\u67E5\u70B9\u7684\u4EFB\u52A1\u6570: {count}",
-      currentCoverage: "\u5F53\u524D\u8986\u76D6\u7387: {rate}%",
-      lowQualityTask: "\u26A0\uFE0F \u4EFB\u52A1 {taskId} \u5185\u5BB9\u8D28\u91CF\u4F4E ({score}\u5206/100)",
-      score: "\u8BC4\u5206",
-      cleaningObsoleteStatus: "\uD83D\uDD04 \u6E05\u7406\u4EFB\u52A1 {taskId} \u5386\u53F2\u8BB0\u5F55\u4E2D\u7684\u5E9F\u5F03\u72B6\u6001\u5F15\u7528...",
-      obsoleteStatusCleaned: "\u2705 \u5DF2\u6E05\u7406\u5386\u53F2\u8BB0\u5F55\u4E2D\u7684\u5E9F\u5F03\u72B6\u6001\u5F15\u7528",
-      missingInferenceInfo: "\u26A0\uFE0F \u7F3A\u5C11\u63A8\u65AD\u72B6\u6001\u4FE1\u606F\uFF0C\u65E0\u6CD5\u4FEE\u590D",
-      fixingReportStatusMismatch: "\uD83D\uDD04 \u4FEE\u590D\u4EFB\u52A1 {taskId} \u7684\u62A5\u544A-\u72B6\u6001\u4E0D\u4E00\u81F4...",
-      reportStatusMismatchFixed: "\u2705 \u72B6\u6001\u5DF2\u4ECE {old} \u66F4\u65B0\u4E3A {new} ({report} PASS)",
-      fixingCheckpointStatusMismatch: "\uD83D\uDD04 \u4FEE\u590D\u4EFB\u52A1 {taskId} \u7684\u68C0\u67E5\u70B9-\u72B6\u6001\u4E0D\u4E00\u81F4 (resolved + \u5168 pending)...",
-      checkpointStatusMismatchFixed: "\u2705 \u5DF2\u81EA\u52A8\u5B8C\u6210 {count} \u4E2A pending \u68C0\u67E5\u70B9 (\u65E7\u7248\u9057\u7559)",
-      unknownFixAction: "\u26A0\uFE0F \u672A\u77E5\u7684\u4FEE\u590D\u52A8\u4F5C: {action}",
-      resettingTask: "\uD83D\uDD04 \u91CD\u7F6E\u4EFB\u52A1 {taskId} \u5230 open \u72B6\u6001 (\u7F3A\u5C11 pipeline \u6062\u590D\u8BC1\u636E)...",
-      taskReset: "\u2705 \u5DF2\u5C06\u4EFB\u52A1\u4ECE {old} \u91CD\u7F6E\u4E3A open (\u7F3A\u5C11\u6062\u590D\u8BC1\u636E)",
-      unsupportedRule: "\u26A0\uFE0F \u4E0D\u652F\u6301\u7684\u68C0\u67E5\u70B9\u9A8C\u8BC1\u89C4\u5219: {rule}",
-      fixingCheckpointPrefix: "\uD83D\uDD04 \u4FEE\u590D\u4EFB\u52A1 {taskId} \u7684\u68C0\u67E5\u70B9\u524D\u7F00...",
-      noCheckpoints: "\u26A0\uFE0F \u4EFB\u52A1\u6CA1\u6709\u68C0\u67E5\u70B9",
-      checkpointPrefixUpdated: "\u2705 \u5DF2\u4E3A {count} \u4E2A\u68C0\u67E5\u70B9\u6DFB\u52A0\u524D\u7F00",
-      allCheckpointsHavePrefix: "\u2139\uFE0F \u6240\u6709\u68C0\u67E5\u70B9\u5DF2\u6709\u6709\u6548\u524D\u7F00",
-      deleted: "\u2705 \u5DF2\u5220\u9664 {taskId}",
-      taskNotExpired: "\u23ED\uFE0F  \u4EFB\u52A1 {taskId} \u672A\u8FC7\u671F ({days}\u5929)",
-      closedTask: "\u2705 \u5DF2\u5173\u95ED\u4EFB\u52A1 {taskId}",
-      markedInProgress: "\u2705 \u5DF2\u5C06\u4EFB\u52A1 {taskId} \u6807\u8BB0\u4E3A\u8FDB\u884C\u4E2D",
-      staleTaskPrompt: "\u4EFB\u52A1 {taskId} \u5DF2\u8FC7\u671F\uFF0C\u5982\u4F55\u5904\u7406?",
-      descriptionPrompt: "\u4E3A\u4EFB\u52A1 {taskId} \u6DFB\u52A0\u63CF\u8FF0 (\u7559\u7A7A\u8DF3\u8FC7):",
-      confirmCleanupAbandoned: "\u662F\u5426\u6E05\u9664\u8FD9\u4E9B abandoned \u6B8B\u7559\u4EFB\u52A1?",
-      confirmStatusChange: "\u662F\u5426\u5C06\u4EFB\u52A1 {taskId} \u72B6\u6001\u4ECE {oldStatus} \u4FEE\u6539\u4E3A {newStatus}?",
-      staleAutoCloseNote: "analyze --fix: \u975E\u4EA4\u4E92\u6A21\u5F0F\u4E0B\u81EA\u52A8\u5173\u95ED\u8FC7\u671F {days} \u5929\u7684\u4EFB\u52A1 (>30\u5929\u9608\u503C)",
-      staleUserCloseNote: "analyze --fix: \u7528\u6237\u4EA4\u4E92\u9009\u62E9\u5173\u95ED\u8FC7\u671F\u4EFB\u52A1",
-      staleUserProgressNote: "analyze --fix: \u7528\u6237\u4EA4\u4E92\u9009\u62E9\u5C06\u8FC7\u671F\u4EFB\u52A1\u6807\u8BB0\u4E3A\u8FDB\u884C\u4E2D",
-      legacyStatusFixNote: "analyze --fix: \u4FEE\u590D\u65E0\u6548\u72B6\u6001\u683C\u5F0F {oldStatus} \u2192 {newStatus}",
-      pipelineStatusMigrationNote: "analyze --fix: pipeline \u4E2D\u95F4\u72B6\u6001\u8FC1\u79FB {oldStatus} \u2192 {targetStatus}",
-      verificationCleared: '\u2705 verification: \u6E05\u9664\u65E0\u6548 verdictAction "{value}"',
-      invalidStatusValueFixNote: "analyze --fix: \u4FEE\u590D\u65E0\u6548\u72B6\u6001\u503C {oldStatus} \u2192 {newStatus}",
-      reopenMismatchFixNote: "\u8865\u5F55 reopen \u6D41\u8F6C\u8BB0\u5F55 (reopenCount={count})",
-      reopenedStatusMigrationNote: "analyze --fix: reopened \u72B6\u6001\u5DF2\u5E9F\u5F03\uFF0C\u8FC1\u79FB\u4E3A open",
-      inconsistentStatusFixNote: "analyze --fix: \u4FEE\u590D\u72B6\u6001\u77DB\u76FE (resolved + verification.failed)\uFF0C\u91CD\u7F6E\u4E3A open",
-      interruptedTaskAutoNote: "\u4E2D\u65AD\u4EFB\u52A1\u81EA\u52A8\u4FEE\u590D: {days} \u5929\u65E0\u6D3B\u8DC3 Pipeline",
-      interruptedTaskManualNote: "\u4E2D\u65AD\u4EFB\u52A1\u624B\u52A8\u786E\u8BA4\u4FEE\u590D: {days} \u5929\u65E0\u6D3B\u8DC3 Pipeline",
-      needsHumanStatusMigrationNote: "analyze --fix: needs_human \u72B6\u6001\u5DF2\u5E9F\u5F03\uFF0C\u8FC1\u79FB\u4E3A open \u4EE5\u4FBF\u91CD\u65B0\u5904\u7406",
-      checkpointPrefixFixNote: "analyze --fix: \u68C0\u67E5\u70B9\u524D\u7F00\u4FEE\u590D",
-      reportStatusMismatchNote: "analyze --fix: \u62A5\u544A-\u72B6\u6001\u4E0D\u4E00\u81F4\uFF0C\u72B6\u6001\u4ECE {oldStatus} \u66F4\u65B0\u4E3A {newStatus} ({reportFile} PASS)",
-      missingPipelineEvidenceNote: "analyze --fix: \u7F3A\u5C11 pipeline \u6062\u590D\u8BC1\u636E\uFF0C\u4ECE {oldStatus} \u91CD\u7F6E\u4E3A open",
-      deleteFailed: "\u274C \u5220\u9664 {taskId} \u5931\u8D25",
-      autoFixDescription: "\uD83D\uDCA1 {description}",
-      manualCheckCycle: "\u5EFA\u8BAE: \u624B\u52A8\u68C0\u67E5\u5E76\u8C03\u6574\u5FAA\u73AF\u4F9D\u8D56\u4E2D\u4EFB\u52A1\u7684\u4F9D\u8D56\u5173\u7CFB",
-      manualFixInvalidParent: "\u5EFA\u8BAE: \u624B\u52A8\u68C0\u67E5\u5E76\u5220\u9664\u65E0\u6548\u7684 parentId \u6216\u521B\u5EFA\u7236\u4EFB\u52A1",
-      lowQualitySuggestion: "\u6539\u5584\u4EFB\u52A1\u63CF\u8FF0\u3001\u68C0\u67E5\u70B9\u3001\u5173\u8054\u6587\u4EF6\u7B49\u8D28\u91CF",
-      qualityIssuesFound: "\u53D1\u73B0 {count} \u4E2A\u8D28\u91CF\u95EE\u9898",
-      deleteTaskConfirm: "\u662F\u5426\u5220\u9664\u4EFB\u52A1 {taskId}?",
-      result: "\u7ED3\u679C"
-    },
-    taskCommand: {
-      checkpointQualityReminder: "\u26A0\uFE0F Checkpoint \u8D28\u91CF\u63D0\u9192",
-      taskCreatedButTemplate: "Task \u5DF2\u521B\u5EFA\uFF0C\u4F46 checkpoints \u4F7F\u7528\u7684\u662F\u9ED8\u8BA4\u6A21\u677F\u3002",
-      highQualityCheckpointsEssential: "\u9AD8\u8D28\u91CF\u7684 checkpoints \u5BF9\u4EFB\u52A1\u9A8C\u6536\u81F3\u5173\u91CD\u8981\u3002\u5EFA\u8BAE\uFF1A",
-      editCheckpointMd: "\u7F16\u8F91 checkpoint.md \u6DFB\u52A0\u5177\u4F53\u7684\u9A8C\u6536\u6807\u51C6\uFF1A",
-      filePath: "\u6587\u4EF6\u8DEF\u5F84: {path}",
-      useAnalyzeCommand: "\u4F7F\u7528 analyze \u547D\u4EE4\u81EA\u52A8\u751F\u6210 checkpoints\uFF08\u63A8\u8350\uFF09\uFF1A",
-      useTemplateFeature: "\u4F7F\u7528 checkpoint \u6A21\u677F\u529F\u80FD\uFF1A",
-      tipStrictValidation: "\u63D0\u793A\uFF1A\u4EFB\u52A1\u6267\u884C/\u5B8C\u6210\u65F6\u4F1A\u8FDB\u884C\u4E25\u683C\u6821\u9A8C",
-      missingCheckpointVerificationCommands: "\u26A0\uFE0F \u4E2A checkpoints \u7F3A\u5C11\u81EA\u52A8\u5316\u9A8C\u8BC1\u547D\u4EE4",
-      checkpointsMissingVerification: "\u53D1\u73B0 {count} \u4E2A checkpoints \u7F3A\u5C11\u81EA\u52A8\u5316\u9A8C\u8BC1\u547D\u4EE4\uFF1A",
-      qaCannotAutoVerify: "\u63D0\u793A\uFF1AQA \u9636\u6BB5\u65E0\u6CD5\u81EA\u52A8\u9A8C\u8BC1\u8FD9\u4E9B checkpoints\u3002",
-      validationError: "\u9A8C\u8BC1\u9519\u8BEF",
-      checkpointFileNotExist: "checkpoint.md \u6587\u4EF6\u4E0D\u5B58\u5728",
-      noCheckpointItems: "checkpoint.md \u4E2D\u6CA1\u6709 checkpoints \u9879",
-      templateContentDetected: '\u68C0\u6D4B\u5230 {count}/{total} \u4E2A checkpoints \u4E3A\u6A21\u677F\u5185\u5BB9\uFF08\u5982"Checkpoint1"\u3001"\u5B8C\u6210 Task"\u7B49\uFF09\uFF0C\u8BF7\u6DFB\u52A0\u5177\u4F53\u7684\u9A8C\u6536\u6807\u51C6',
-      titleCannotBeEmpty: "Title \u4E0D\u80FD\u4E3A\u7A7A"
-    },
-    initRequirementCmd: {
-      complexityWarning: "\u26A0\uFE0F \u590D\u6742\u5EA6\u9884\u8B66",
-      complexityHigh: "\u6B64\u4EFB\u52A1\u9884\u4F30\u9700\u8981 {minutes} \u5206\u949F\uFF0C\u8D85\u8FC7\u9ED8\u8BA4 Harness \u8D85\u65F6\u9608\u503C\u3002",
-      exceedsTimeout: "\u5EFA\u8BAE\u5C06\u6B64\u4EFB\u52A1\u62C6\u5206\u4E3A\u66F4\u5C0F\u7684\u5B50\u4EFB\u52A1\uFF0C\u6BCF\u4E2A\u63A7\u5236\u5728 15 \u5206\u949F\u4EE5\u5185\u3002",
-      considerSplitting: "\u62C6\u5206\u5EFA\u8BAE\uFF1A",
-      splitSuggestions: "{index}. {title}{dependency}",
-      dependsOn: "\uFF08\u4F9D\u8D56\u4E8E\u5B50\u4EFB\u52A1 {index}\uFF09",
-      files: "\u6587\u4EF6: {files}",
-      estimated: "\u9884\u4F30: ~{minutes} \u5206\u949F",
-      qualityGateFailed: "\u274C \u8D28\u91CF\u95E8\u7981\u5931\u8D25\uFF1A\u53D1\u73B0 {count} \u4E2A\u9519\u8BEF\u7EA7\u8FDD\u89C4\u9879",
-      errorViolations: "\uD83D\uDEAB \u4EE5\u4E0B\u9519\u8BEF\u5FC5\u987B\u5728\u521B\u5EFA\u4EFB\u52A1\u524D\u4FEE\u590D\uFF1A",
-      followingErrorsMustFix: "\u4EE5\u4E0B\u9519\u8BEF\u5FC5\u987B\u5728\u521B\u5EFA\u4EFB\u52A1\u524D\u4FEE\u590D\uFF1A",
-      fixSuggestions: "\uD83D\uDCA1 \u4FEE\u590D\u5EFA\u8BAE\uFF1A",
-      checkpointPrefixTip: "Checkpoints \u5FC5\u987B\u4EE5\u6807\u51C6\u524D\u7F00\u5F00\u5934\uFF1A[implem]\u3001[test]\u3001[doc]\u3001[verify]",
-      metaJsonFormatTip: "meta.json \u5FC5\u987B\u662F\u6807\u51C6\u683C\u5F0F\uFF0C\u5305\u542B\u6240\u6709\u5FC5\u9700\u5B57\u6BB5",
-      skipQualityGateTip: "\u4F7F\u7528 --skip-quality-gate \u4E34\u65F6\u8DF3\u8FC7\uFF08\u4E0D\u63A8\u8350\u7528\u4E8E\u751F\u4EA7\u73AF\u5883\uFF09",
-      qualityGateLowScore: "\u274C \u8D28\u91CF\u95E8\u7981\u5931\u8D25\uFF1A{score} < {threshold}",
-      qualityGateImprovement: "\uD83D\uDCA1 \u6539\u8FDB\u5EFA\u8BAE\uFF1A",
-      action: "\u64CD\u4F5C: {action}"
-    },
-    setupCmd: {
-      alreadyInitialized: "\u9879\u76EE\u7BA1\u7406\u73AF\u5883\u5DF2\u5B58\u5728\uFF0C\u8DF3\u8FC7\u521D\u59CB\u5316\u3002",
-      directory: "\u76EE\u5F55: {path}",
-      tipUseForce: "\u63D0\u793A: \u4F7F\u7528 --force \u9009\u9879\u5F3A\u5236\u91CD\u65B0\u521D\u59CB\u5316\uFF08\u91CD\u65B0\u590D\u5236\u6280\u80FD\u6587\u4EF6\uFF09",
-      forceMode: "\u26A0\uFE0F \u5F3A\u5236\u91CD\u65B0\u521D\u59CB\u5316\u6A21\u5F0F...",
-      gitHookCreated: "  \u2713 Git Hook \u521B\u5EFA\u5B8C\u6210 (pre-commit, prepublishOnly)",
-      gitHookFailed: "  \u26A0\uFE0F Git Hook \u521B\u5EFA\u5931\u8D25: {error}",
-      gitHookDisabled: "  \u23ED\uFE0F  Git Hook \u521B\u5EFA\u5DF2\u901A\u8FC7\u914D\u7F6E\u7981\u7528 (gitHook.enabled = false)",
-      copySkillFile: "  \u2713 \u590D\u5236 SKILL.md ({language})",
-      copyCommandDocs: "  \u2713 \u590D\u5236 {count} \u4E2A\u547D\u4EE4\u6587\u6863 ({language})",
-      copyDefault: "  \u2713 \u590D\u5236 SKILL.md (default)",
-      fileNotFound: "  \u26A0\uFE0F SKILL.md \u672A\u627E\u5230",
-      dirNotFound: "  \u26A0\uFE0F \u547D\u4EE4\u6587\u6863\u76EE\u5F55\u672A\u627E\u5230: {path}",
-      pluginRootNotSet: "  \u26A0\uFE0F CLAUDE_PLUGIN_ROOT \u73AF\u5883\u53D8\u91CF\u672A\u8BBE\u7F6E\uFF0C\u8DF3\u8FC7\u6280\u80FD\u6587\u4EF6\u590D\u5236"
-    },
-    harnessCmd: {
-      projectNotInitialized: "\u9519\u8BEF: \u9879\u76EE\u672A\u521D\u59CB\u5316\u3002\u8BF7\u5148\u8FD0\u884C `projmnt4claude setup`",
-      concurrentPipelineRunning: "\u274C \u9519\u8BEF: \u53E6\u4E00\u4E2A Harness \u6D41\u6C34\u7EBF\u6B63\u5728\u8FD0\u884C",
-      activePipelineInfo: "\u6D3B\u8DC3\u6D41\u6C34\u7EBF\u4FE1\u606F:",
-      snapshotId: "   \u5FEB\u7167 ID: {id}",
-      processId: "   \u8FDB\u7A0B ID: {pid}",
-      createdAt: "   \u521B\u5EFA\u4E8E: {timestamp}",
-      taskCount: "   \u4EFB\u52A1\u6570: {count}",
-      possibleCauses: "\u53EF\u80FD\u539F\u56E0:",
-      solutions: "\u89E3\u51B3\u65B9\u6848:",
-      invalidMaxRetries: "\u9519\u8BEF: --max-retries \u5FC5\u987B >= 0",
-      invalidTimeout: "\u9519\u8BEF: --timeout \u5FC5\u987B >= 10 \u79D2",
-      invalidParallel: "\u9519\u8BEF: --parallel \u5FC5\u987B >= 1",
-      noExecutableTasks: "\u9519\u8BEF: \u6CA1\u6709\u53EF\u6267\u884C\u7684\u4EFB\u52A1",
-      batchLabel: "\u6279\u6B21 {index}",
-      parallelTag: " [\u5E76\u884C]",
-      dryRunComplete: "\u2705 \u5E72\u8FD0\u884C\u5B8C\u6210\uFF08\u672A\u5B9E\u9645\u6267\u884C\uFF09",
-      qualityGateCheck: "\uD83D\uDEA6 \u8D28\u91CF\u95E8\u7981\u68C0\u67E5",
-      minQualityScoreThreshold: "\uD83D\uDCCA \u6700\u4F4E\u8D28\u91CF\u5206\u9608\u503C: {score}",
-      qualityGateFailed: "\u274C \u8D28\u91CF\u95E8\u7981\u68C0\u67E5\u5931\u8D25\uFF0C\u4EE5\u4E0B\u4EFB\u52A1\u9700\u8981\u6539\u8FDB:",
-      tasksNeedImprovement: "\u9700\u8981\u6539\u8FDB\u7684\u4EFB\u52A1:",
-      allTasksPassed: "\u2705 \u6240\u6709\u4EFB\u52A1\u901A\u8FC7\u8D28\u91CF\u95E8\u7981\u68C0\u67E5",
-      resumingFromInterruption: "\uD83D\uDCE6 \u4ECE\u65AD\u70B9\u6062\u590D\u6267\u884C (\u4EFB\u52A1 {current}/{total})",
-      noPreviousState: "\uD83D\uDCE6 \u672A\u627E\u5230\u4E4B\u524D\u7684\u6267\u884C\u72B6\u6001\uFF0C\u4ECE\u5934\u5F00\u59CB",
-      stateFileMigrated: "\uD83D\uDCE6 \u72B6\u6001\u6587\u4EF6\u81EA\u52A8\u4ECE v{from} \u8FC1\u79FB\u5230 v{to}",
-      loadingStateFailed: "\u52A0\u8F7D\u8FD0\u884C\u65F6\u72B6\u6001\u5931\u8D25\uFF0C\u91CD\u7F6E: {error}",
-      cleaningOrphanSnapshots: "\uD83E\uDDF9 \u6E05\u7406\u5B64\u7ACB\u5FEB\u7167: {id} (PID: {pid})",
-      cleanedSnapshots: "\u2705 \u603B\u5171\u6E05\u7406 {count} \u4E2A\u5FEB\u7167",
-      forceCleanedSnapshots: "  \u26A0\uFE0F  \u5F3A\u5236\u6E05\u7406\u6D3B\u8DC3\u5FEB\u7167: {id} (PID: {pid})",
-      noSnapshotsFound: "\u2705 \u672A\u627E\u5230\u5FEB\u7167"
-    },
-    analyzeCmd: {
-      projectNotInitialized: "\u9519\u8BEF: \u9879\u76EE\u672A\u521D\u59CB\u5316\u3002\u8BF7\u5148\u8FD0\u884C `projmnt4claude setup`",
-      analyzingProject: "\u6B63\u5728\u5206\u6790\u9879\u76EE\u5065\u5EB7\u72B6\u6001...",
-      analysisComplete: "\u5206\u6790\u5B8C\u6210",
-      issuesFound: "\u53D1\u73B0 {count} \u4E2A\u95EE\u9898",
-      noIssues: "\u672A\u53D1\u73B0\u95EE\u9898",
-      fixApplied: "\u5DF2\u4FEE\u590D {count} \u4E2A\u95EE\u9898",
-      taskIdEmpty: "\u4EFB\u52A1 ID \u4E3A\u7A7A\u6216\u65E0\u6548",
-      taskIdFormatInvalid: "\u4EFB\u52A1 ID \u683C\u5F0F\u4E0D\u7B26\u5408\u89C4\u8303",
-      historyEntryNotObject: "history[{index}] \u4E0D\u662F\u6709\u6548\u5BF9\u8C61",
-      timestampMissing: "history[{index}].timestamp \u7F3A\u5931\u6216\u683C\u5F0F\u9519\u8BEF",
-      timestampInvalid: "history[{index}].timestamp \u4E0D\u662F\u6709\u6548\u7684 ISO \u65F6\u95F4\u6233",
-      actionMissing: "history[{index}].action \u7F3A\u5931\u6216\u683C\u5F0F\u9519\u8BEF",
-      checkpointNotObject: "checkpoints[{index}] \u4E0D\u662F\u6709\u6548\u5BF9\u8C61",
-      checkpointIdMissing: "checkpoints[{index}].id \u7F3A\u5931\u6216\u683C\u5F0F\u9519\u8BEF",
-      checkpointStatusInvalid: "checkpoints[{index}].status \u4E0D\u662F\u6709\u6548\u7684\u72B6\u6001\u503C",
-      schemaMigrationReopenCount: "\u6DFB\u52A0 reopenCount: 0",
-      schemaMigrationRequirementHistory: "\u6DFB\u52A0 requirementHistory: []",
-      schemaMigrationCommitHistory: "\u6DFB\u52A0 executionStats.commitHistory: []",
-      schemaMigrationTransitionNotes: "\u6DFB\u52A0 transitionNotes: []",
-      schemaMigrationResumeAction: "\u6DFB\u52A0 resumeAction: resume_pipeline (status={status})",
-      schemaMigrationCheckpointPrefix: '\u68C0\u67E5\u70B9\u524D\u7F00\u8865\u5168: "{old}" \u2192 "{new}"',
-      schemaMigrationCheckpointPolicy: "\u6DFB\u52A0 checkpointPolicy: {policy} (\u57FA\u4E8E {type}/{priority} \u63A8\u65AD)",
-      aiPromptTaskInfo: "## \u4EFB\u52A1\u57FA\u672C\u4FE1\u606F",
-      aiPromptHistory: "## \u5386\u53F2\u8BB0\u5F55 ({count} \u6761)",
-      aiPromptTransitionHistory: "## \u72B6\u6001\u8F6C\u6362\u8BB0\u5F55 ({count} \u6761)",
-      aiPromptCheckpoints: "## \u68C0\u67E5\u70B9 ({count} \u4E2A)",
-      aiPromptVerification: "## \u9A8C\u8BC1\u4FE1\u606F",
-      aiPromptLayer1Results: "## Layer 1 \u68C0\u6D4B\u7ED3\u679C ({count} \u4E2A\u95EE\u9898)",
-      aiPromptNoHistory: "## \u5386\u53F2\u8BB0\u5F55: \u65E0",
-      aiPromptNoTransitionHistory: "## \u72B6\u6001\u8F6C\u6362\u8BB0\u5F55: \u65E0",
-      aiPromptNoCheckpoints: "## \u68C0\u67E5\u70B9: \u65E0",
-      aiPromptNoVerification: "## \u9A8C\u8BC1\u4FE1\u606F: \u65E0",
-      aiPromptNoLayer1Issues: "## Layer 1 \u68C0\u6D4B\u7ED3\u679C: \u65E0\u95EE\u9898",
-      aiPromptTaskAnalysisExpert: "\u4F60\u662F\u4E00\u4E2A\u4EFB\u52A1\u72B6\u6001\u5206\u6790\u4E13\u5BB6\u3002\u6839\u636E\u4EE5\u4E0B\u4EFB\u52A1\u4E0A\u4E0B\u6587\uFF0C\u63A8\u65AD\u4EFB\u52A1\u7684\u6B63\u786E\u72B6\u6001\u3002",
-      aiPromptAnalyzeContext: "\u8BF7\u5206\u6790\u4EFB\u52A1\u7684\u5386\u53F2\u8BB0\u5F55\u3001\u8F6C\u6362\u8BB0\u5F55\u548C\u5F53\u524D\u72B6\u6001\uFF0C\u63A8\u65AD\u4EFB\u52A1\u5F53\u524D\u5E94\u8BE5\u5904\u4E8E\u4EC0\u4E48\u72B6\u6001\u3002",
-      aiPromptJsonFormat: "\u4E25\u683C\u6309\u7167\u4EE5\u4E0B JSON \u683C\u5F0F\u8F93\u51FA\uFF08\u4E0D\u8981\u8F93\u51FA\u5176\u4ED6\u5185\u5BB9\uFF09:",
-      aiPromptInferredStatus: '"inferredStatus": "\u72B6\u6001\u503C\uFF0C\u5FC5\u987B\u662F: open, in_progress, wait_review, wait_qa, wait_evaluation, resolved, closed, abandoned, failed"',
-      aiPromptConfidence: '"confidence": 0.0\u52301.0\u4E4B\u95F4\u7684\u7F6E\u4FE1\u5EA6',
-      aiPromptReasoning: '"reasoning": "\u63A8\u65AD\u4F9D\u636E\u7684\u7B80\u77ED\u8BF4\u660E"',
-      aiPromptSuggestion: '"suggestion": "\u4FEE\u590D\u5EFA\u8BAE"',
-      issueMissingDescription: "\u4EFB\u52A1\u7F3A\u5C11\u63CF\u8FF0",
-      issueResolvedNoVerification: "\u4EFB\u52A1\u5DF2 resolved \u4F46\u7F3A\u5C11 verification \u5B57\u6BB5",
-      issueOldFormatId: "\u4EFB\u52A1\u4F7F\u7528\u65E7\u683C\u5F0F ID",
-      issueMissingSlug: "\u4EFB\u52A1 ID \u7F3A\u5C11\u6709\u610F\u4E49\u7684 slug",
-      transitionStartExecution: "\u5F00\u59CB\u6267\u884C\u4EFB\u52A1",
-      transitionSubmitReview: "\u63D0\u4EA4\u4EE3\u7801\u5BA1\u67E5",
-      transitionReviewPass: "\u5BA1\u67E5\u901A\u8FC7\uFF0C\u8FDB\u5165QA",
-      transitionEvalPass: "\u8BC4\u4F30\u901A\u8FC7\uFF0C\u4EFB\u52A1\u5B8C\u6210",
-      transitionCloseTask: "\u5173\u95ED\u4EFB\u52A1",
-      transitionDirectComplete: "\u76F4\u63A5\u6807\u8BB0\u5B8C\u6210",
-      transitionReopenTask: "\u91CD\u65B0\u6253\u5F00\u4EFB\u52A1",
-      transitionRestartExecution: "\u91CD\u65B0\u5F00\u59CB\u6267\u884C",
-      transitionAbandonTask: "\u653E\u5F03\u4EFB\u52A1",
-      transitionReturnTodo: "\u9000\u56DE\u5F85\u529E",
-      statusSuggestionCheckpointRate: "\u68C0\u67E5\u70B9\u5B8C\u6210\u7387 {rate}%\uFF0C\u5EFA\u8BAE\u8F6C\u4E3A wait_qa",
-      statusSuggestionKeepInProgress: "\u4E2D\u65AD\u65F6\u95F4\u77ED\u4E14\u65E0\u9700\u4EBA\u5DE5\u68C0\u67E5\u70B9\uFF0C\u5EFA\u8BAE\u4FDD\u6301 in_progress",
-      statusSuggestionResetOpen: "\u4EFB\u52A1\u4E2D\u65AD\u8F83\u4E45\uFF0C\u5EFA\u8BAE\u91CD\u7F6E\u4E3A open \u4EE5\u4FBF\u91CD\u65B0\u89C4\u5212",
-      depSuggestionCheckIndependence: "\u8BE5\u4EFB\u52A1\u53EF\u80FD\u6709\u9690\u542B\u7684\u4F9D\u8D56\u5173\u7CFB\uFF0C\u8BF7\u786E\u8BA4\u662F\u5426\u72EC\u7ACB",
-      depSuggestionIndependentModule: "\u8BE5\u4EFB\u52A1\u4E3A\u72EC\u7ACB\u6A21\u5757\uFF0C\u65E0\u9700\u5904\u7406",
-      unknown: "\u672A\u77E5",
-      none: "\u65E0",
-      reportResultPass: "**\u7ED3\u679C**: \u2705 PASS",
-      reportResultNopass: "**\u7ED3\u679C**: \u274C NOPASS"
-    },
-    harness: {
-      timeoutHeader: "\u8D85\u65F6\u9650\u5236",
-      taskDescription: "\u4EFB\u52A1\u63CF\u8FF0",
-      dependencies: "\u4F9D\u8D56\u4EFB\u52A1",
-      acceptanceCriteria: "\u9A8C\u6536\u6807\u51C6",
-      acceptanceCriteriaInstruction: "\u8BF7\u786E\u4FDD\u6EE1\u8DB3\u4EE5\u4E0B\u6240\u6709\u6807\u51C6\uFF1A",
-      checkpoints: "\u68C0\u67E5\u70B9",
-      checkpointsInstruction: "\u8BF7\u5B8C\u6210\u4EE5\u4E0B\u68C0\u67E5\u70B9\uFF1A",
-      timeoutInstruction: "\u4F60\u9700\u8981\u5728 {timeout} \u5206\u949F\u5185\u5B8C\u6210\u6B64\u4EFB\u52A1\u3002\u8BF7\u5408\u7406\u5206\u914D\u65F6\u95F4\uFF0C\u4F18\u5148\u5B8C\u6210\u6838\u5FC3\u529F\u80FD\u3002",
-      roleSpecificRequirements: "\u89D2\u8272\u4E13\u9879\u8981\u6C42",
-      retryContext: "\u91CD\u8BD5\u4E0A\u4E0B\u6587\uFF08\u524D\u6B21\u5931\u8D25\u4FE1\u606F\uFF09",
-      retryAttemptInfo: "\u8FD9\u662F\u7B2C {attempt} \u6B21\u5C1D\u8BD5\u3002\u4E0A\u4E00\u6B21\u5728 **{phase}** \u9636\u6BB5\u5931\u8D25\u3002",
-      previousFailureReason: "\u524D\u6B21\u5931\u8D25\u539F\u56E0",
-      partialProgress: "\u5DF2\u5B8C\u6210\u7684\u90E8\u5206\u8FDB\u5EA6",
-      upstreamFailureInfo: "\u4E0A\u6E38\u5931\u8D25\u4FE1\u606F",
-      phaseLabels: {
-        development: "\u5F00\u53D1",
-        codeReview: "\u4EE3\u7801\u5BA1\u6838",
-        qa: "QA \u9A8C\u8BC1",
-        evaluation: "\u8BC4\u4F30"
-      },
-      logs: {
-        taskLabel: "\u4EFB\u52A1",
-        typeLabel: "\u7C7B\u578B",
-        priorityLabel: "\u4F18\u5148\u7EA7",
-        timeoutLabel: "\u8D85\u65F6",
-        minutes: "\u5206\u949F",
-        seconds: "\u79D2",
-        devPromptGenerated: "\u5F00\u53D1\u63D0\u793A\u8BCD\u5DF2\u751F\u6210",
-        startingHeadlessClaude: "\u542F\u52A8 Headless Claude...",
-        devOutputFormatRetry: "\u5F00\u53D1\u8F93\u51FA\u683C\u5F0F\u9A8C\u8BC1\u4E0D\u5339\u914D\uFF0C\u5DF2\u91CD\u8BD5 {retries} \u6B21",
-        devPhaseFailed: "\u5F00\u53D1\u9636\u6BB5\u5931\u8D25",
-        devOutputValidationFailed: "\u5F00\u53D1\u8F93\u51FA\u683C\u5F0F\u9A8C\u8BC1\u672A\u901A\u8FC7",
-        devPhaseCompleted: "\u5F00\u53D1\u9636\u6BB5\u5B8C\u6210",
-        evidenceCollected: "\u6536\u96C6\u8BC1\u636E",
-        checkpointsCompleted: "\u5B8C\u6210\u68C0\u67E5\u70B9",
-        devPhaseError: "\u5F00\u53D1\u9636\u6BB5\u51FA\u9519",
-        devPhaseNotComplete: "\u5F00\u53D1\u9636\u6BB5\u672A\u6210\u529F\u5B8C\u6210",
-        evalTaskLabel: "\u8BC4\u4F30\u4EFB\u52A1",
-        devStatusLabel: "\u5F00\u53D1\u72B6\u6001",
-        evalPromptGenerated: "\u8BC4\u4F30\u63D0\u793A\u8BCD\u5DF2\u751F\u6210",
-        startingEvalSession: "\u542F\u52A8\u72EC\u7ACB\u8BC4\u4F30\u4F1A\u8BDD...",
-        evalFormatRetry: "\u8BC4\u4F30\u7ED3\u679C\u683C\u5F0F\u4E0D\u5339\u914D\uFF0C\u5DF2\u91CD\u8BD5 {retries} \u6B21",
-        evalEmptyOutput: "\u8BC4\u4F30\u8F93\u51FA\u4E3A\u7A7A\uFF0CClaude \u8FDB\u7A0B\u53EF\u80FD\u5F02\u5E38\u9000\u51FA",
-        evalStderrPrefix: "stderr",
-        evalParseFailureDefault: "\u91CD\u8BD5\u540E\u4ECD\u65E0\u6CD5\u89E3\u6790\u8BC4\u4F30\u7ED3\u679C\uFF0C\u9ED8\u8BA4 PASS\uFF08\u4FDD\u5B88\u7B56\u7565\uFF09",
-        evalPassed: "\u5BA1\u67E5\u901A\u8FC7",
-        evalFailed: "\u5BA1\u67E5\u672A\u901A\u8FC7",
-        evalError: "\u8BC4\u4F30\u51FA\u9519",
-        codeReviewPhase: "\u4EE3\u7801\u5BA1\u6838\u9636\u6BB5...",
-        codeReviewCheckpoints: "\u4EE3\u7801\u5BA1\u6838\u68C0\u67E5\u70B9",
-        noCodeReviewCheckpoints: "\u65E0\u4EE3\u7801\u5BA1\u6838\u68C0\u67E5\u70B9\uFF0C\u81EA\u52A8\u901A\u8FC7",
-        codeReviewPromptGenerated: "\u4EE3\u7801\u5BA1\u6838\u63D0\u793A\u8BCD\u5DF2\u751F\u6210",
-        startingCodeReview: "\u542F\u52A8\u4EE3\u7801\u5BA1\u6838\u4F1A\u8BDD...",
-        codeReviewFormatRetry: "\u4EE3\u7801\u5BA1\u6838\u7ED3\u679C\u683C\u5F0F\u4E0D\u5339\u914D\uFF0C\u5DF2\u91CD\u8BD5 {retries} \u6B21",
-        contradictionDetected: "\u77DB\u76FE\u68C0\u6D4B",
-        codeReviewPassed: "\u4EE3\u7801\u5BA1\u6838\u901A\u8FC7",
-        codeReviewFailed: "\u4EE3\u7801\u5BA1\u6838\u672A\u901A\u8FC7",
-        codeReviewError: "\u4EE3\u7801\u5BA1\u6838\u51FA\u9519",
-        codeReviewSessionFailed: "\u4EE3\u7801\u5BA1\u6838\u4F1A\u8BDD\u5931\u8D25",
-        codeReviewPromptGenerated: "\u4EE3\u7801\u5BA1\u6838\u63D0\u793A\u8BCD\u5DF2\u751F\u6210",
-        startingCodeReviewSession: "\u542F\u52A8\u4EE3\u7801\u5BA1\u6838\u4F1A\u8BDD...",
-        codeReviewRetry: "\u4EE3\u7801\u5BA1\u6838\u7ED3\u679C\u683C\u5F0F\u4E0D\u5339\u914D\uFF0C\u5DF2\u91CD\u8BD5 {retries} \u6B21",
-        qaPhase: "QA \u9A8C\u8BC1\u9636\u6BB5...",
-        qaCheckpoints: "QA \u9A8C\u8BC1\u68C0\u67E5\u70B9",
-        noQACheckpoints: "\u65E0 QA \u9A8C\u8BC1\u68C0\u67E5\u70B9\uFF0C\u81EA\u52A8\u901A\u8FC7",
-        humanVerificationCheckpoints: "\u4E2A\u68C0\u67E5\u70B9\u5DF2\u5EF6\u671F\uFF08deferred\uFF09\uFF0C\u7B49\u5F85\u4EBA\u5DE5\u9A8C\u8BC1",
-        deferredInfo: "\u4E2A\u68C0\u67E5\u70B9\u5DF2\u5EF6\u671F\uFF08deferred\uFF09\uFF0C\u7B49\u5F85\u4EBA\u5DE5\u9A8C\u8BC1",
-        qaPassed: "QA \u9A8C\u8BC1\u901A\u8FC7",
-        qaPassedWithHuman: "\u81EA\u52A8\u5316\u9A8C\u8BC1\u901A\u8FC7\uFF0C\u7B49\u5F85\u4EBA\u5DE5\u9A8C\u8BC1",
-        qaFailed: "QA \u9A8C\u8BC1\u672A\u901A\u8FC7",
-        qaError: "QA \u9A8C\u8BC1\u51FA\u9519",
-        qaSkippedDueToCodeReview: "\u4EE3\u7801\u5BA1\u6838\u672A\u901A\u8FC7\uFF0C\u8DF3\u8FC7 QA \u9A8C\u8BC1",
-        checkpointWarning: "\u4E2A\u81EA\u52A8\u5316\u68C0\u67E5\u70B9\u7F3A\u5C11\u9A8C\u8BC1\u547D\u4EE4",
-        checkpointWarningDetail: "\u7F3A\u5C11 commands/steps",
-        checkpointWarningFallback: "\u8FD9\u4E9B\u68C0\u67E5\u70B9\u5C06\u4F9D\u8D56 AI \u81EA\u7531\u9A8C\u8BC1\uFF0C\u53EF\u80FD\u5F71\u54CD\u9A8C\u8BC1\u8D28\u91CF\u3002",
-        noAutomatedQACheckpoints: "\u65E0\u81EA\u52A8\u5316 QA \u68C0\u67E5\u70B9\uFF0C\u81EA\u52A8\u5316\u9A8C\u8BC1\u81EA\u52A8\u901A\u8FC7",
-        qaPromptGenerated: "QA \u9A8C\u8BC1\u63D0\u793A\u8BCD\u5DF2\u751F\u6210",
-        startingQASession: "\u542F\u52A8 QA \u9A8C\u8BC1\u4F1A\u8BDD...",
-        qaRetry: "QA \u9A8C\u8BC1\u7ED3\u679C\u683C\u5F0F\u4E0D\u5339\u914D\uFF0C\u5DF2\u91CD\u8BD5 {retries} \u6B21",
-        qaSessionFailed: "QA \u9A8C\u8BC1\u4F1A\u8BDD\u5931\u8D25",
-        qaOutputValidationFailed: "QA \u9A8C\u8BC1\u8F93\u51FA\u683C\u5F0F\u9A8C\u8BC1\u672A\u901A\u8FC7",
-        cannotParseVerdict: "\u65E0\u6CD5\u89E3\u6790\u5224\u5B9A\u7ED3\u679C",
-        deferredCheckpointsInfo: "{count} \u4E2A\u68C0\u67E5\u70B9\u5DF2\u5EF6\u671F\uFF08deferred\uFF09\uFF0C\u7B49\u5F85\u4EBA\u5DE5\u9A8C\u8BC1",
-        phantomTaskViolation: "\u4E25\u91CD\u8FDD\u89C4\uFF1A\u5F00\u53D1\u8005\u5728\u6267\u884C\u671F\u95F4\u521B\u5EFA\u4E86 {count} \u4E2A\u989D\u5916\u4EFB\u52A1 ({tasks}). \u5F00\u53D1\u8005\u88AB\u4E25\u683C\u7981\u6B62\u521B\u5EFA\u65B0\u4EFB\u52A1\u3002",
-        phantomTaskCriteria: "\u7981\u6B62\u521B\u5EFA\u65B0\u4EFB\u52A1",
-        phantomTaskPrefix: "\u5E7D\u7075\u4EFB\u52A1",
-        phantomTaskDetails: "\u68C0\u6D4B\u5230\u5F00\u53D1\u8005\u521B\u5EFA\u4E86\u4E0D\u5C5E\u4E8E\u539F\u59CB\u8BA1\u5212\u7684\u989D\u5916\u4EFB\u52A1\u3002\u8FD9\u8FDD\u53CD\u4E86\u5F00\u53D1\u8005\u804C\u8D23\u8303\u56F4\u2014\u2014\u5F00\u53D1\u8005\u53EA\u5E94\u5B9E\u73B0\u88AB\u5206\u914D\u4EFB\u52A1\u7684\u4EE3\u7801\u53D8\u66F4\uFF0C\u800C\u975E\u521B\u5EFA\u65B0\u4EFB\u52A1\u3002",
-        emptyOutputError: "\u8BC4\u4F30\u4F1A\u8BDD\u8F93\u51FA\u4E3A\u7A7A\uFF1AClaude \u8FDB\u7A0B\u53EF\u80FD\u5F02\u5E38\u9000\u51FA",
-        evaluationOutputEmpty: "\u8BC4\u4F30\u8F93\u51FA\u4E3A\u7A7A\uFF0CClaude \u8FDB\u7A0B\u53EF\u80FD\u5F02\u5E38\u9000\u51FA",
-        contradictionFix: "\u77DB\u76FE\u4FEE\u6B63",
-        evalParseError: "\u65E0\u6CD5\u89E3\u6790\u8BC4\u4F30\u7ED3\u679C",
-        phantomTaskDetected: "\u68C0\u6D4B\u5230 {count} \u4E2A\u5E7D\u7075\u4EFB\u52A1",
-        phantomTaskAutoNopass: "\u68C0\u6D4B\u5230\u5E7D\u7075\u4EFB\u52A1\uFF0C\u81EA\u52A8 NOPASS",
-        noPhantomTask: "\u672A\u68C0\u6D4B\u5230\u5E7D\u7075\u4EFB\u52A1",
-        snapshotMode: "\u5E7D\u7075\u4EFB\u52A1\u68C0\u6D4B\u4F7F\u7528\u8BA1\u5212\u5FEB\u7167",
-        fallbackMode: "\u5E7D\u7075\u4EFB\u52A1\u68C0\u6D4B: \u672A\u627E\u5230\u8BA1\u5212\u5FEB\u7167\uFF0C\u4F7F\u7528\u65F6\u95F4\u7A97\u53E3\u56DE\u9000\u6A21\u5F0F",
-        snapshotStats: "\u5E7D\u7075\u4EFB\u52A1\u68C0\u6D4B\u7EDF\u8BA1",
-        creatingCommandWarning: "\u5F00\u53D1\u8005\u8F93\u51FA\u4E2D\u5305\u542B task create / init-requirement \u547D\u4EE4\uFF0C\u4F46\u672A\u5728\u6587\u4EF6\u7CFB\u7EDF\u4E2D\u68C0\u6D4B\u5230\u65B0\u4EFB\u52A1",
-        creatingCommandIntent: "\u8FD9\u53EF\u80FD\u610F\u5473\u7740\u521B\u5EFA\u64CD\u4F5C\u5931\u8D25\uFF0C\u4F46\u610F\u56FE\u5DF2\u5B58\u5728",
-        retryReference: "\u8BF7\u53C2\u8003\u524D\u6B21\u5931\u8D25\u539F\u56E0\uFF0C\u907F\u514D\u91CD\u590D\u76F8\u540C\u7684\u95EE\u9898\u3002"
-      },
-      reports: {
-        devReportTitle: "\u5F00\u53D1\u62A5\u544A",
-        reviewReportTitle: "\u5BA1\u67E5\u62A5\u544A",
-        codeReviewReportTitle: "\u4EE3\u7801\u5BA1\u6838\u62A5\u544A",
-        qaReportTitle: "QA \u9A8C\u8BC1\u62A5\u544A",
-        statusLabel: "\u72B6\u6001",
-        startTimeLabel: "\u5F00\u59CB\u65F6\u95F4",
-        endTimeLabel: "\u7ED3\u675F\u65F6\u95F4",
-        durationLabel: "\u8017\u65F6",
-        errorInfoSection: "\u9519\u8BEF\u4FE1\u606F",
-        codeChangesSection: "\u4EE3\u7801\u53D8\u66F4",
-        evidenceFilesSection: "\u8BC1\u636E\u6587\u4EF6",
-        completedCheckpointsSection: "\u5B8C\u6210\u7684\u68C0\u67E5\u70B9",
-        claudeOutputSection: "Claude \u8F93\u51FA",
-        resultLabel: "\u7ED3\u679C",
-        reviewedAtLabel: "\u5BA1\u67E5\u65F6\u95F4",
-        reviewedByLabel: "\u5BA1\u67E5\u8005",
-        verifiedAtLabel: "\u9A8C\u8BC1\u65F6\u95F4",
-        verifiedByLabel: "\u9A8C\u8BC1\u8005",
-        inferenceTypeLabel: "\u63A8\u65AD\u7C7B\u578B",
-        reasonSection: "\u539F\u56E0",
-        failedCriteriaSection: "\u672A\u6EE1\u8DB3\u7684\u9A8C\u6536\u6807\u51C6",
-        failedCheckpointsSection: "\u672A\u5B8C\u6210\u7684\u68C0\u67E5\u70B9",
-        detailsSection: "\u8BE6\u7EC6\u53CD\u9988",
-        devPhaseInfoSection: "\u5F00\u53D1\u9636\u6BB5\u4FE1\u606F",
-        evidenceCountLabel: "\u8BC1\u636E\u6570\u91CF",
-        checkpointsCountLabel: "\u5B8C\u6210\u68C0\u67E5\u70B9",
-        codeQualityIssuesSection: "\u4EE3\u7801\u8D28\u91CF\u95EE\u9898",
-        testFailuresSection: "\u6D4B\u8BD5\u5931\u8D25",
-        humanVerificationSection: "\u5DF2\u5EF6\u671F\uFF08deferred\uFF09\u7684\u68C0\u67E5\u70B9 - \u7B49\u5F85\u4EBA\u5DE5\u9A8C\u8BC1",
-        humanVerificationNote: "\u8FD9\u4E9B\u68C0\u67E5\u70B9\u4E0D\u53C2\u4E0E PASS/NOPASS \u5224\u5B9A\uFF0C\u4EC5\u7B49\u5F85\u4EBA\u5DE5\u540E\u5904\u7406",
-        requiresHumanLabel: "\u9700\u8981\u4EBA\u5DE5\u9A8C\u8BC1",
-        yes: "\u662F",
-        no: "\u5426",
-        inferenceTypes: {
-          structuredMatch: "\u7ED3\u6784\u5316\u5339\u914D",
-          explicitMatch: "\u660E\u786E\u5339\u914D",
-          contentInference: "\u5185\u5BB9\u63A8\u65AD",
-          priorStageInference: "\u524D\u7F6E\u9636\u6BB5\u63A8\u65AD",
-          parseFailureDefault: "\u89E3\u6790\u5931\u8D25\u9ED8\u8BA4",
-          emptyOutput: "\u7A7A\u8F93\u51FA"
-        }
-      }
-    }
-  };
-});
-
-// src/i18n/en.ts
-var enTexts;
-var init_en = __esm(() => {
-  enTexts = {
-    error: "Error",
-    success: "Success",
-    cancel: "Cancel",
-    common: {
-      skip: "Skip",
-      notSelected: "Not selected"
-    },
-    setup: {
-      initializing: "Initializing project management environment...",
-      createDir: "Create directory",
-      createConfig: "Create config: config.json",
-      setupComplete: "Project management environment initialized!",
-      nextStep: "Use 'projmnt4claude task create' to create your first task",
-      selectLanguage: "Select language:",
-      copyingSkills: "Copying skill files...",
-      skillsCopied: "Skill files copied",
-      alreadyInitialized: "Project management environment already exists, skipping initialization."
-    },
-    task: {
-      createTitle: "Enter task title:",
-      createDescription: "Enter task description (optional):",
-      taskCreated: "Task created successfully",
-      taskNotFound: "Task not found",
-      taskUpdated: "Task updated",
-      taskDeleted: "Task deleted",
-      listHeader: "Task List",
-      noTasks: "No tasks",
-      statusHeader: "Status",
-      priorityHeader: "Priority",
-      roleHeader: "Role",
-      dependencyHeader: "Dependencies",
-      subtaskHeader: "Subtasks"
-    },
-    plan: {
-      showHeader: "Execution Plan",
-      addHeader: "Add task",
-      removeHeader: "Remove task",
-      clearHeader: "Clear plan",
-      recommendHeader: "Smart recommendation",
-      noPlan: "No plan",
-      planCleared: "Plan cleared",
-      taskAdded: "Task added to plan",
-      taskRemoved: "Task removed from plan"
-    },
-    status: {
-      projectStatus: "Project Status",
-      totalTasks: "Total Tasks",
-      completedTasks: "Completed",
-      inProgressTasks: "In Progress",
-      pendingTasks: "Pending",
-      noTasks: "No tasks"
-    },
-    analyze: {
-      analyzing: "Analyzing project health...",
-      analysisComplete: "Analysis complete",
-      issuesFound: "Found {count} issues",
-      noIssues: "No issues found",
-      fixApplied: "Fixed {count} issues"
-    },
-    help: {
-      commandReference: "Command Reference",
-      availableCommands: "Available Commands",
-      noDescription: "No description",
-      commandNotFound: "Command not found",
-      tipUseHelp: "Use `projmnt4claude help <command>` for detailed command usage",
-      usage: "Usage",
-      examples: "Examples",
-      suggestedCommands: "\uD83D\uDCA1 Suggested commands:",
-      noRelatedCommands: "\uD83D\uDE15 No directly related commands found.",
-      commonCommands: "Common commands:",
-      cmdTask: "Manage project tasks",
-      cmdStatus: "View project status",
-      cmdPlan: "Manage execution plan",
-      cmdSetup: "Initialize project environment"
-    },
-    config: {
-      listHeader: "Config List",
-      getHeader: "Get Config",
-      setHeader: "Set Config",
-      configUpdated: "Config updated",
-      keyNotFound: "Config key not found",
-      invalidAction: "Unknown action"
-    },
-    tool: {
-      listHeader: "Local Skill List",
-      createHeader: "Create Skill",
-      installHeader: "Install Skill",
-      removeHeader: "Remove Skill",
-      deployHeader: "Deploy Skill",
-      undeployHeader: "Undeploy Skill"
-    },
-    initRequirement: {
-      descriptionRequired: "Enter requirement description",
-      parsingDescription: "Parsing requirement...",
-      creatingTasks: "Creating tasks...",
-      tasksCreated: "Created {count} tasks"
-    },
-    rolePrompts: {
-      dev: {
-        frontend: {
-          roleDeclaration: "You are a frontend developer, focused on user interfaces and interaction experience.",
-          extraInstructions: [
-            "Ensure components are reusable and accessible (WCAG 2.1)",
-            "Focus on responsive layouts and cross-browser compatibility",
-            "Follow project frontend coding standards and design system"
-          ]
-        },
-        backend: {
-          roleDeclaration: "You are a backend developer, focused on server-side logic and data layers.",
-          extraInstructions: [
-            "Ensure API design follows RESTful or project conventions",
-            "Focus on error handling, input validation, and transaction consistency",
-            "Pay attention to database query performance and index usage"
-          ]
-        },
-        qa: {
-          roleDeclaration: "You are a developer with testing capabilities, skilled at writing testable code.",
-          extraInstructions: [
-            "Write necessary unit tests and integration tests alongside implementation",
-            "Focus on boundary conditions and exception path coverage",
-            "Ensure code can be validated through automated testing"
-          ]
-        },
-        architect: {
-          roleDeclaration: "You are a developer in an architect role, focusing on system design and module boundaries.",
-          extraInstructions: [
-            "Ensure implementation aligns with existing architecture constraints and module boundaries",
-            "Focus on interface design and decoupling between modules",
-            "Assess the impact of changes on overall system architecture"
-          ]
-        },
-        security: {
-          roleDeclaration: "You are a developer in a security engineer role, focused on security-related implementations.",
-          extraInstructions: [
-            "Strictly follow OWASP Top 10 security practices",
-            "Validate all external inputs, prevent injection and XSS",
-            "Ensure sensitive data handling complies with security standards"
-          ]
-        },
-        performance: {
-          roleDeclaration: "You are a developer in a performance engineer role, focused on performance-related implementations.",
-          extraInstructions: [
-            "Focus on critical path performance metrics (latency, throughput, memory)",
-            "Avoid unnecessary synchronous operations and redundant calculations",
-            "Use profiling tools to validate optimization results"
-          ]
-        }
-      },
-      codeReview: {
-        frontend: {
-          roleDeclaration: "You are a professional frontend code reviewer.",
-          reviewFocus: [
-            "Component structure and state management are sound",
-            "CSS/style conflicts or redundancy",
-            "Accessibility (a11y) compliance with standards",
-            "Browser compatibility and responsive design"
-          ]
-        },
-        backend: {
-          roleDeclaration: "You are a professional backend code reviewer.",
-          reviewFocus: [
-            "API interface design standards and backward compatibility",
-            "Error handling completeness and security of error messages",
-            "Database operation security (preventing SQL injection)",
-            "Concurrency and transaction handling correctness"
-          ]
-        },
-        qa: {
-          roleDeclaration: "You are a professional test code reviewer.",
-          reviewFocus: [
-            "Test coverage adequacy (normal paths + boundary conditions)",
-            "Tests are independent and repeatable",
-            "Mock and Stub usage is appropriate",
-            "Assertions accurately verify expected behavior"
-          ]
-        },
-        architect: {
-          roleDeclaration: "You are an architecture reviewer responsible for assessing code architecture soundness.",
-          reviewFocus: [
-            "Module boundaries are clear and responsibilities are single-purpose",
-            "Dependency relationships are reasonable and free of circular dependencies",
-            "Interface abstraction levels are appropriate",
-            "Changes do not affect existing architecture stability"
-          ]
-        },
-        security: {
-          roleDeclaration: "You are a security code reviewer focused on security vulnerability detection.",
-          reviewFocus: [
-            "Input validation and output encoding completeness",
-            "Authentication and authorization logic correctness",
-            "Sensitive data is stored and transmitted securely",
-            "Presence of OWASP Top 10 vulnerability risks"
-          ]
-        },
-        performance: {
-          roleDeclaration: "You are a performance code reviewer focused on performance bottleneck detection.",
-          reviewFocus: [
-            "Presence of O(n\xB2) or higher complexity algorithms",
-            "Resources (memory, connections, file handles) are properly released",
-            "Unnecessary synchronous blocking operations",
-            "Caching strategy is appropriate"
-          ]
-        }
-      },
-      qa: {
-        frontend: {
-          roleDeclaration: "You are a professional frontend QA tester.",
-          testStrategy: [
-            "Verify UI rendering correctness across different screen sizes",
-            "Test user interaction flows (clicks, inputs, navigation)",
-            "Check accessibility tools can correctly identify page elements",
-            "Verify loading and error state displays"
-          ]
-        },
-        backend: {
-          roleDeclaration: "You are a professional backend QA tester.",
-          testStrategy: [
-            "Verify API responses under various inputs",
-            "Test error handling and boundary conditions",
-            "Check data consistency under concurrent requests",
-            "Verify database state changes match expectations"
-          ]
-        },
-        qa: {
-          roleDeclaration: "You are a professional QA tester skilled in comprehensive test coverage.",
-          testStrategy: [
-            "Run all relevant unit tests and integration tests",
-            "Verify behavior under normal and exceptional paths",
-            "Check if test coverage meets requirements",
-            "Collect complete test evidence"
-          ]
-        },
-        architect: {
-          roleDeclaration: "You are an architecture validation tester responsible for verifying architecture constraints.",
-          testStrategy: [
-            "Verify module interface contracts are followed",
-            "Check if new dependencies are reasonable",
-            "Verify architecture layering rules (e.g., no cross-layer direct calls)",
-            "Assess the scope of impact of changes on the overall system"
-          ]
-        },
-        security: {
-          roleDeclaration: "You are a security tester responsible for verifying security-related implementations.",
-          testStrategy: [
-            "Verify input validation covers all entry points",
-            "Test common attack vectors (XSS, SQL injection, CSRF)",
-            "Check authentication and authorization flow correctness",
-            "Verify sensitive data is not leaked in logs or responses"
-          ]
-        },
-        performance: {
-          roleDeclaration: "You are a performance tester responsible for verifying performance metrics.",
-          testStrategy: [
-            "Run performance benchmark tests (if configured)",
-            "Verify critical operation response times are within thresholds",
-            "Check for signs of memory leaks",
-            "Test system stability under high load"
-          ]
-        }
-      },
-      defaultDev: {
-        roleDeclaration: "You are a developer whose sole responsibility is to implement assigned task code changes.",
-        extraInstructions: []
-      },
-      defaultCodeReview: {
-        roleDeclaration: "You are a professional code reviewer. You need to review task code implementations to ensure code quality meets standards.",
-        reviewFocus: [
-          "Check code quality and readability",
-          "Check code standard compliance",
-          "Check for potential security issues",
-          "Check error handling completeness"
-        ]
-      },
-      defaultQA: {
-        roleDeclaration: "You are a professional QA tester. You need to verify whether a task implementation meets functional requirements.",
-        testStrategy: [
-          "Run unit tests (if configured)",
-          "Run functional tests (if configured)",
-          "Verify functionality meets expectations",
-          "Check boundary case handling"
-        ]
-      }
-    },
-    feedback: {
-      jsonHeader: "The previous JSON output has the following issues, please fix and re-output the complete JSON:",
-      markdownHeader: "The previous Markdown output has the following issues, please fix and re-output:",
-      violationsTitle: "Violations",
-      fieldLabel: "Field",
-      valueLabel: "Value",
-      originalOutputTitle: "Original Output (for reference)",
-      truncated: "... (truncated)",
-      jsonRequirements: [
-        "Output must be valid JSON",
-        "All required fields must exist with correct types",
-        "Do not output content other than JSON"
-      ],
-      markdownRequirements: [
-        "Output format must comply with Markdown specifications",
-        "All required sections and headings must exist",
-        "Content structure must be complete and logically clear"
-      ]
-    },
-    analyzeFixPipeline: {
-      nonStandardTransition: "Non-standard status transition ({context}): {oldStatus} \u2192 {newStatus}",
-      fixPipelineMode: "\uD83D\uDD27 analyze --fix pipeline mode",
-      executingStages: "Executing stages",
-      stage1Analysis: "\uD83D\uDCCB Stage 1: Rule engine analysis...",
-      stage1Complete: "\u2705 Stage 1 complete: Found {count} issues ({duration}s)",
-      stage1Failed: "\u274C Stage 1 failed: {error}",
-      stage1Skipped: "\u23ED\uFE0F Stage 1: Skipped",
-      stage2Fix: "\uD83D\uDD27 Stage 2: Rule-based fixes...",
-      stage2FixWithAnalysis: "\uD83D\uDD27 Stage 2: Rule-based fixes (with analysis)...",
-      stage2Complete: "\u2705 Stage 2 complete: {fixed} fixed, {skipped} skipped ({duration}s)",
-      stage2Failed: "\u274C Stage 2 failed: {error}",
-      stage2Skipped: "\u23ED\uFE0F Stage 2: Skipped",
-      stage3AI: "\uD83E\uDD16 Stage 3: AI deep analysis...",
-      stage3Complete: "\u2705 Stage 3 complete: AI found {count} semantic issues ({duration}s)",
-      stage3Failed: "\u274C Stage 3 failed: {error}",
-      stage3Skipped: "\u23ED\uFE0F Stage 3: Skipped ({reason})",
-      stage3NotEnabled: "Stage 3: AI deep analysis not enabled (use --deep-analyze to activate)",
-      stage4Checkpoint: "\uD83D\uDCCC Stage 4: Checkpoint fixes...",
-      stage4Complete: "\u2705 Stage 4 complete: Checkpoint fixes ({duration}s)",
-      stage4Failed: "\u274C Stage 4 failed: {error}",
-      stage4Skipped: "\u23ED\uFE0F Stage 4: Skipped",
-      stage5Quality: "\uD83D\uDCCA Stage 5: Quality report...",
-      stage5Complete: "\u2705 Stage 5 complete: Checked {count} tasks, {suggestions} improvement suggestions ({duration}s)",
-      stage5Failed: "\u274C Stage 5 failed: {error}",
-      stage5Skipped: "\u23ED\uFE0F Stage 5: Skipped",
-      pipelineComplete: "\u2705 Pipeline complete: {stages}/5 stages executed ({duration}s)",
-      noIssuesFound: "\u2705 No issues to fix",
-      autoFixIssues: "\uD83D\uDD27 Auto-fixing issues",
-      nonInteractiveMode: "(Non-interactive mode)",
-      fixError: "\u274C Error fixing {taskId} ({type}): {error}",
-      fixComplete: "\u2705 Fixed {count} issues",
-      fixSkipped: "\u23ED\uFE0F Skipped {count} issues",
-      fixUnfixable: "\u26A0\uFE0F {count} issues cannot be auto-fixed",
-      autoClosingStale: "\u2705 Auto-closed stale task {taskId} ({days} days, >30 day threshold)",
-      skipStale: "\u23ED\uFE0F Skipped stale task {taskId} ({days} days, only auto-close after 30 days in non-interactive mode)",
-      checkingStale: "Checking stale task {taskId}...",
-      closingTask: "Close task",
-      markingInProgress: "Mark as in progress",
-      skipNoDescription: "\u23ED\uFE0F Skipped task without description {taskId} (manual processing required in non-interactive mode)",
-      checkingNoDescription: "Checking task without description {taskId}...",
-      addingDescription: "\u2705 Added description for task {taskId}",
-      analyzingCycle: "\uD83D\uDD04 Analyzing circular dependency for task {taskId}...",
-      cycleNotFound: "\u26A0\uFE0F Circular dependency involving {taskId} not found (may have been fixed)",
-      breakingCycle: "\u2705 Broke dependency {from} \u2192 {to} to resolve cycle",
-      cycleManualFix: "\u26A0\uFE0F All edges in cycle {cycle} are explicit dependencies, manual processing required",
-      fixingPriority: "\uD83D\uDD04 Fixing priority format for task {taskId}...",
-      priorityUpdated: "\u2705 Updated priority from {old} to {new}",
-      fixingStatus: "\uD83D\uDD04 Fixing status format for task {taskId}...",
-      statusUpdated: "\u2705 Updated status from {old} to {new}",
-      fixingSchema: "\uD83D\uDD04 Fixing schema fields for task {taskId}...",
-      reopenCountAdded: "\u2705 Added reopenCount: 0",
-      requirementHistoryAdded: "\u2705 Added requirementHistory: []",
-      fixingEmptyArrays: "\uD83D\uDD04 Fixing empty array fields for task {taskId}: {fields}",
-      arrayInitialized: "\u2705 Initialized {field}: []",
-      migratingPipelineStatus: "\uD83D\uDD04 Migrating pipeline status for task {taskId}...",
-      statusMigrated: "\u2705 Status migrated from {old} to {new}",
-      cannotDetermineTargetStatus: "\u26A0\uFE0F Cannot determine target status",
-      fixingVerdictAction: "\uD83D\uDD04 Fixing invalid verdict action for task {taskId}...",
-      verdictActionCleared: '\u2705 history[{index}]: Cleared invalid verdict action "{value}"',
-      migratingSchema: "\uD83D\uDD04 Migrating schema version for task {taskId}...",
-      fixingCreatedBy: "\uD83D\uDD04 Fixing createdBy field for task {taskId}...",
-      createdByAdded: "\u2705 Added createdBy: import",
-      fixingInvalidStatus: "\uD83D\uDD04 Fixing invalid status for task {taskId}...",
-      fixingInvalidType: "\uD83D\uDD04 Fixing invalid type for task {taskId}...",
-      typeUpdated: "\u2705 Updated type from {old} to {new}",
-      fixingInvalidPriority: "\uD83D\uDD04 Fixing invalid priority for task {taskId}...",
-      fixingReopenTransition: "\uD83D\uDD04 Fixing missing reopen transition record for task {taskId}...",
-      transitionNoteAdded: "\u2705 Added transitionNote, reopenCount={count}",
-      fixingStatusContradiction: "\uD83D\uDD04 Fixing status contradiction for task {taskId} (resolved + verification.failed)...",
-      statusContradictionFixed: "\u2705 Status changed from resolved to open, cleared old verification",
-      fixingTimestamp: "\uD83D\uDD04 Fixing timestamp format for task {taskId}...",
-      timestampUpdated: "\u2705 Updated {field} to {value}",
-      invalidParent: "\u26A0\uFE0F Task {taskId} has invalid parent reference, cannot auto-fix",
-      fixingSubtaskRef: "\uD83D\uDD04 Fixing invalid subtask reference for task {taskId}...",
-      subtaskRefRemoved: "\u2705 Removed invalid reference {id} from subtaskIds",
-      fixingDependencyRef: "\uD83D\uDD04 Fixing invalid dependency reference for task {taskId}...",
-      dependencyRefRemoved: "\u2705 Removed invalid reference {id} from dependencies",
-      inferringDependencies: "\uD83D\uDD04 Inferring dependencies for task {taskId}...",
-      inferredDepNotFound: "\u26A0\uFE0F Inferred dependency {id} does not exist, skipping",
-      inferredDepWouldCreateCycle: "\u26A0\uFE0F Adding inferred dependency {id} would create cycle, skipping (GATE-DEP-002)",
-      inferredDepAdded: "\u2705 Added inferred dependency {id}: {reason}",
-      fixingParentRef: "\uD83D\uDD04 Fixing parent task reference for subtask {taskId}...",
-      parentRefAdded: "\u2705 Added subtask to parent task subtaskIds",
-      fixingParentChildRelation: "\uD83D\uDD04 Fixing parent-child relationship inconsistency for task {taskId}...",
-      parentChildRelationFixed: "\u2705 Updated subtask {subtaskId} parentId to {parentId}",
-      cannotExtractKeywords: "\u26A0\uFE0F Cannot extract meaningful keywords from task {taskId}, skipping rename",
-      generatedIdSame: "\u23ED\uFE0F Generated ID is same as current, skipping",
-      renamingTask: "\uD83D\uDD04 Renaming task: {old} \u2192 {new}",
-      taskRenamed: "\u2705 Renamed to {id}",
-      renameFailed: "\u274C Rename failed: {error}",
-      cannotAutoFix: "\u26A0\uFE0F Task {taskId} {type} issue cannot be auto-fixed",
-      suggestion: "Suggestion: {suggestion}",
-      fixingManualVerification: "\uD83D\uDD04 Fixing manual verification method for task {taskId}...",
-      manualToAutomated: "\u2705 Checkpoint {id}: manual -> automated",
-      fixingMissingVerification: "\uD83D\uDD04 Fixing missing verification field for task {taskId}...",
-      verificationAutoFilled: "\u2705 Auto-filled verification field",
-      checkpointCompletionRate: "Completion rate: {rate}%",
-      cleaningAbandonedTasks: "Cleaning abandoned residual tasks...",
-      abandonedTaskDeleted: "\u2705 Cleaned {count} abandoned tasks",
-      cleaningOrphanTasks: "Checking abandoned residual tasks...",
-      checkingAbandoned: "Checking abandoned residual tasks...",
-      abandonedFound: "Found {count}: {tasks}",
-      missingFileRef: "\u26A0\uFE0F Task {taskId} references non-existent files, cannot auto-fix",
-      missingFiles: "Non-existent files: {files}",
-      fillingTransitionNote: "\uD83D\uDD04 Filling transitionNote for task {taskId}...",
-      missingHistoryDetail: "\u26A0\uFE0F Missing history entry details, cannot fill",
-      transitionNoteFilled: "\u2705 Filled transitionNote: {status} ({author})",
-      missingSuggestion: "\u26A0\uFE0F Missing status suggestion, cannot auto-fix",
-      fixingInterruptedTask: "\uD83D\uDD04 Fixing interrupted task {taskId}...",
-      currentStatus: "Current status: {status}",
-      suggestedStatus: "Suggested status: {status}",
-      reason: "Reason: {reason}",
-      skipKeepInProgress: "\u23ED\uFE0F Suggest keeping in_progress, skipping fix",
-      statusFixed: "\u2705 Changed task {taskId} status from {old} to {new}",
-      migratingReopenedStatus: "\uD83D\uDD04 Migrating deprecated reopened status for task {taskId}...",
-      reopenedMigrated: "\u2705 Status migrated from reopened to open",
-      migratingNeedsHumanStatus: "\uD83D\uDD04 Migrating deprecated needs_human status for task {taskId}...",
-      needsHumanMigrated: "\u2705 Status migrated from needs_human to open",
-      checkpointCoverageWarning: "\u26A0\uFE0F Project checkpoint coverage insufficient, manual supplement required",
-      tasksWithoutCheckpoints: "Tasks without checkpoints: {count}",
-      currentCoverage: "Current coverage: {rate}%",
-      lowQualityTask: "\u26A0\uFE0F Task {taskId} content quality low ({score} points/100)",
-      score: "Score",
-      cleaningObsoleteStatus: "\uD83D\uDD04 Cleaning obsolete status references in task {taskId} history...",
-      obsoleteStatusCleaned: "\u2705 Cleaned obsolete status references from history",
-      missingInferenceInfo: "\u26A0\uFE0F Missing inference status info, cannot fix",
-      fixingReportStatusMismatch: "\uD83D\uDD04 Fixing report-status mismatch for task {taskId}...",
-      reportStatusMismatchFixed: "\u2705 Status updated from {old} to {new} ({report} PASS)",
-      fixingCheckpointStatusMismatch: "\uD83D\uDD04 Fixing checkpoint-status mismatch for task {taskId} (resolved + all pending)...",
-      checkpointStatusMismatchFixed: "\u2705 Auto-completed {count} pending checkpoints (legacy)",
-      unknownFixAction: "\u26A0\uFE0F Unknown fix action: {action}",
-      resettingTask: "\uD83D\uDD04 Resetting task {taskId} to open status (missing pipeline resume evidence)...",
-      taskReset: "\u2705 Reset task from {old} to open (missing resume evidence)",
-      unsupportedRule: "\u26A0\uFE0F Unsupported checkpoint validation rule: {rule}",
-      fixingCheckpointPrefix: "\uD83D\uDD04 Fixing checkpoint prefix for task {taskId}...",
-      noCheckpoints: "\u26A0\uFE0F Task has no checkpoints",
-      checkpointPrefixUpdated: "\u2705 Added prefix to {count} checkpoints",
-      allCheckpointsHavePrefix: "\u2139\uFE0F All checkpoints already have valid prefixes",
-      deleted: "\u2705 Deleted {taskId}",
-      taskNotExpired: "\u23ED\uFE0F Task {taskId} not expired ({days} days)",
-      closedTask: "\u2705 Closed task {taskId}",
-      markedInProgress: "\u2705 Marked task {taskId} as in progress",
-      staleTaskPrompt: "Task {taskId} is stale. How to handle?",
-      descriptionPrompt: "Add description for task {taskId} (leave empty to skip):",
-      confirmCleanupAbandoned: "Clean up these abandoned residual tasks?",
-      confirmStatusChange: "Change task {taskId} status from {oldStatus} to {newStatus}?",
-      staleAutoCloseNote: "analyze --fix: Auto-closed stale task ({days} days, >30 day threshold) in non-interactive mode",
-      staleUserCloseNote: "analyze --fix: User chose to close stale task",
-      staleUserProgressNote: "analyze --fix: User chose to mark stale task as in progress",
-      legacyStatusFixNote: "analyze --fix: Fixed invalid status format {oldStatus} \u2192 {newStatus}",
-      pipelineStatusMigrationNote: "analyze --fix: Pipeline status migration {oldStatus} \u2192 {targetStatus}",
-      verificationCleared: '\u2705 verification: Cleared invalid verdictAction "{value}"',
-      invalidStatusValueFixNote: "analyze --fix: Fixed invalid status value {oldStatus} \u2192 {newStatus}",
-      reopenMismatchFixNote: "Recorded reopen transition (reopenCount={count})",
-      reopenedStatusMigrationNote: "analyze --fix: reopened status deprecated, migrated to open",
-      inconsistentStatusFixNote: "analyze --fix: Fixed status contradiction (resolved + verification.failed), reset to open",
-      interruptedTaskAutoNote: "Interrupted task auto-fix: {days} days without active Pipeline",
-      interruptedTaskManualNote: "Interrupted task manual fix: {days} days without active Pipeline",
-      needsHumanStatusMigrationNote: "analyze --fix: needs_human status deprecated, migrated to open for reprocessing",
-      checkpointPrefixFixNote: "analyze --fix: Checkpoint prefix fix",
-      reportStatusMismatchNote: "analyze --fix: Report-status mismatch, updated status from {oldStatus} to {newStatus} ({reportFile} PASS)",
-      missingPipelineEvidenceNote: "analyze --fix: Missing pipeline resume evidence, reset from {oldStatus} to open",
-      deleteFailed: "\u274C Failed to delete {taskId}",
-      autoFixDescription: "\uD83D\uDCA1 {description}",
-      manualCheckCycle: "Suggestion: Manually check and adjust dependencies in the cycle",
-      manualFixInvalidParent: "Suggestion: Manually check and remove invalid parentId or create parent task",
-      lowQualitySuggestion: "Improve task description, checkpoints, and related files quality",
-      qualityIssuesFound: "Found {count} quality issues",
-      deleteTaskConfirm: "Delete task {taskId}?",
-      result: "Result"
-    },
-    taskCommand: {
-      checkpointQualityReminder: "\u26A0\uFE0F Checkpoint Quality Reminder",
-      taskCreatedButTemplate: "Task created, but checkpoints are using default template.",
-      highQualityCheckpointsEssential: "High-quality checkpoints are essential for task acceptance. Recommendations:",
-      editCheckpointMd: "Edit checkpoint.md to add specific acceptance criteria:",
-      filePath: "File path: {path}",
-      useAnalyzeCommand: "Use analyze command to auto-generate checkpoints (Recommended):",
-      useTemplateFeature: "Use checkpoint template feature:",
-      tipStrictValidation: "Tip: Strict validation during task execution/completion",
-      missingCheckpointVerificationCommands: "\u26A0\uFE0F Missing Checkpoint Verification Commands",
-      checkpointsMissingVerification: "Found {count} checkpoints missing automated verification commands:",
-      qaCannotAutoVerify: "Tip: QA phase cannot auto-verify these checkpoints.",
-      validationError: "Validation error",
-      checkpointFileNotExist: "checkpoint.md file does not exist",
-      noCheckpointItems: "No checkpoint items in checkpoint.md",
-      templateContentDetected: 'Detected {count}/{total} checkpoints as template content (like "Checkpoint1", "Complete Task", etc.), please add specific acceptance criteria',
-      titleCannotBeEmpty: "Title cannot be empty"
-    },
-    initRequirementCmd: {
-      complexityWarning: "\u26A0\uFE0F Complexity Warning",
-      complexityHigh: "This task is estimated to take {minutes} minutes, exceeding the default Harness timeout threshold.",
-      exceedsTimeout: "Consider splitting this task into smaller subtasks, each under 15 minutes.",
-      considerSplitting: "Split suggestions:",
-      splitSuggestions: "{index}. {title}{dependency}",
-      dependsOn: " (depends on subtask {index})",
-      files: "Files: {files}",
-      estimated: "Estimated: ~{minutes} minutes",
-      qualityGateFailed: "\u274C Quality gate failed: {count} error-level violations found",
-      errorViolations: "\uD83D\uDEAB The following errors must be fixed before creating task:",
-      followingErrorsMustFix: "Errors must fix",
-      fixSuggestions: "\uD83D\uDCA1 Fix suggestions:",
-      checkpointPrefixTip: "Checkpoints must start with standard prefixes: [implem], [test], [doc], [verify]",
-      metaJsonFormatTip: "meta.json must be in standard format with all required fields",
-      skipQualityGateTip: "Use --skip-quality-gate to skip temporarily (not recommended for production)",
-      qualityGateLowScore: "\u274C Quality gate failed: {score} < {threshold}",
-      qualityGateImprovement: "\uD83D\uDCA1 Improvement suggestions:",
-      action: "Action: {action}"
-    },
-    setupCmd: {
-      alreadyInitialized: "Project management environment already exists, skipping initialization.",
-      directory: "Directory: {path}",
-      tipUseForce: "Tip: Use --force option to force re-initialization (re-copy skill files)",
-      forceMode: "\u26A0\uFE0F Force re-initialization mode...",
-      gitHookCreated: "  \u2713 Git Hook created (pre-commit, prepublishOnly)",
-      gitHookFailed: "  \u26A0\uFE0F Git Hook creation failed: {error}",
-      gitHookDisabled: "  \u23ED\uFE0F  Git Hook creation disabled by config (gitHook.enabled = false)",
-      copySkillFile: "  \u2713 Copy SKILL.md ({language})",
-      copyCommandDocs: "  \u2713 Copy {count} command docs ({language})",
-      copyDefault: "  \u2713 Copy SKILL.md (default)",
-      fileNotFound: "  \u26A0\uFE0F SKILL.md not found",
-      dirNotFound: "  \u26A0\uFE0F Command docs directory not found: {path}",
-      pluginRootNotSet: "  \u26A0\uFE0F CLAUDE_PLUGIN_ROOT environment variable not set, skipping skill file copy"
-    },
-    harnessCmd: {
-      projectNotInitialized: "Error: Project not initialized. Please run `projmnt4claude setup` first",
-      concurrentPipelineRunning: "\u274C Error: Another Harness pipeline is already running",
-      activePipelineInfo: "Active pipeline info:",
-      snapshotId: "   Snapshot ID: {id}",
-      processId: "   Process ID: {pid}",
-      createdAt: "   Created at: {timestamp}",
-      taskCount: "   Task count: {count}",
-      possibleCauses: "Possible causes:",
-      solutions: "Solutions:",
-      invalidMaxRetries: "Error: --max-retries must be >= 0",
-      invalidTimeout: "Error: --timeout must be >= 10 seconds",
-      invalidParallel: "Error: --parallel must be >= 1",
-      noExecutableTasks: "Error: No executable tasks",
-      batchLabel: "Batch {index}",
-      parallelTag: " [Parallel]",
-      dryRunComplete: "\u2705 Dry run complete (no actual execution)",
-      qualityGateCheck: "\uD83D\uDEA6 Quality Gate Check",
-      minQualityScoreThreshold: "\uD83D\uDCCA Min quality score threshold: {score}",
-      qualityGateFailed: "\u274C Quality gate check failed, the following tasks need improvement:",
-      tasksNeedImprovement: "Tasks need improvement:",
-      allTasksPassed: "\u2705 All tasks passed quality gate check",
-      resumingFromInterruption: "\uD83D\uDCE6 Resuming from interruption (task {current}/{total})",
-      noPreviousState: "\uD83D\uDCE6 No previous execution state found, starting from beginning",
-      stateFileMigrated: "\uD83D\uDCE6 State file auto-migrated from v{from} to v{to}",
-      loadingStateFailed: "Failed to load runtime state, resetting: {error}",
-      cleaningOrphanSnapshots: "\uD83E\uDDF9 Cleaned orphan snapshot: {id} (PID: {pid})",
-      cleanedSnapshots: "\u2705 Cleaned {count} snapshots total",
-      forceCleanedSnapshots: "  \u26A0\uFE0F  Force cleaned active snapshot: {id} (PID: {pid})",
-      noSnapshotsFound: "\u2705 No snapshots found"
-    },
-    analyzeCmd: {
-      projectNotInitialized: "Error: Project not initialized. Please run `projmnt4claude setup` first",
-      analyzingProject: "Analyzing project health...",
-      analysisComplete: "Analysis complete",
-      issuesFound: "Found {count} issues",
-      noIssues: "No issues found",
-      fixApplied: "Fixed {count} issues",
-      taskIdEmpty: "Task ID is empty or invalid",
-      taskIdFormatInvalid: "Task ID format does not meet specification",
-      historyEntryNotObject: "history[{index}] is not a valid object",
-      timestampMissing: "history[{index}].timestamp missing or invalid",
-      timestampInvalid: "history[{index}].timestamp is not valid ISO timestamp",
-      actionMissing: "history[{index}].action missing or invalid",
-      checkpointNotObject: "checkpoints[{index}] is not a valid object",
-      checkpointIdMissing: "checkpoints[{index}].id missing or invalid",
-      checkpointStatusInvalid: "checkpoints[{index}].status is not valid status",
-      schemaMigrationReopenCount: "Added reopenCount: 0",
-      schemaMigrationRequirementHistory: "Added requirementHistory: []",
-      schemaMigrationCommitHistory: "Added executionStats.commitHistory: []",
-      schemaMigrationTransitionNotes: "Added transitionNotes: []",
-      schemaMigrationResumeAction: "Added resumeAction: resume_pipeline (status={status})",
-      schemaMigrationCheckpointPrefix: 'Checkpoint prefix completion: "{old}" \u2192 "{new}"',
-      schemaMigrationCheckpointPolicy: "Added checkpointPolicy: {policy} (inferred from {type}/{priority})",
-      aiPromptTaskInfo: "## Task Information",
-      aiPromptHistory: "## History ({count} entries)",
-      aiPromptTransitionHistory: "## Status Transition History ({count} entries)",
-      aiPromptCheckpoints: "## Checkpoints ({count})",
-      aiPromptVerification: "## Verification Info",
-      aiPromptLayer1Results: "## Layer 1 Detection Results ({count} issues)",
-      aiPromptNoHistory: "## History: None",
-      aiPromptNoTransitionHistory: "## Status Transition History: None",
-      aiPromptNoCheckpoints: "## Checkpoints: None",
-      aiPromptNoVerification: "## Verification Info: None",
-      aiPromptNoLayer1Issues: "## Layer 1 Detection Results: No issues",
-      aiPromptTaskAnalysisExpert: "You are a task status analysis expert. Infer the correct status based on the following task context.",
-      aiPromptAnalyzeContext: "Please analyze the task history, transition records, and current status to infer what status the task should be in.",
-      aiPromptJsonFormat: "Strictly output in the following JSON format (do not output other content):",
-      aiPromptInferredStatus: '"inferredStatus": "Status value, must be: open, in_progress, wait_review, wait_qa, wait_evaluation, resolved, closed, abandoned, failed"',
-      aiPromptConfidence: '"confidence": Confidence between 0.0-1.0',
-      aiPromptReasoning: '"reasoning": "Brief explanation of inference basis"',
-      aiPromptSuggestion: '"suggestion": "Fix suggestion"',
-      issueMissingDescription: "Task missing description",
-      issueResolvedNoVerification: "Task resolved but missing verification field",
-      issueOldFormatId: "Task uses old format ID",
-      issueMissingSlug: "Task ID missing meaningful slug",
-      transitionStartExecution: "Start executing task",
-      transitionSubmitReview: "Submit code review",
-      transitionReviewPass: "Review passed, enter QA",
-      transitionEvalPass: "Evaluation passed, task complete",
-      transitionCloseTask: "Close task",
-      transitionDirectComplete: "Mark as completed directly",
-      transitionReopenTask: "Reopen task",
-      transitionRestartExecution: "Restart execution",
-      transitionAbandonTask: "Abandon task",
-      transitionReturnTodo: "Return to todo",
-      statusSuggestionCheckpointRate: "Checkpoint completion rate {rate}%, suggest transition to wait_qa",
-      statusSuggestionKeepInProgress: "Short interruption and no manual checkpoints needed, suggest keeping in_progress",
-      statusSuggestionResetOpen: "Task interrupted for long time, suggest resetting to open for replanning",
-      depSuggestionCheckIndependence: "This task may have implicit dependencies, please confirm if it is independent",
-      depSuggestionIndependentModule: "This task is an independent module, no action needed",
-      unknown: "Unknown",
-      none: "None",
-      reportResultPass: "**Result**: \u2705 PASS",
-      reportResultNopass: "**Result**: \u274C NOPASS"
-    },
-    harness: {
-      timeoutHeader: "Timeout Limit",
-      taskDescription: "Task Description",
-      dependencies: "Dependencies",
-      acceptanceCriteria: "Acceptance Criteria",
-      acceptanceCriteriaInstruction: "Please ensure all the following criteria are met:",
-      checkpoints: "Checkpoints",
-      checkpointsInstruction: "Please complete the following checkpoints:",
-      timeoutInstruction: "You need to complete this task within {timeout} minutes. Please allocate time wisely and prioritize core functionality.",
-      roleSpecificRequirements: "Role-Specific Requirements",
-      retryContext: "Retry Context (Previous Failure Info)",
-      retryAttemptInfo: "This is attempt #{attempt}. Previous failure occurred in **{phase}** phase.",
-      previousFailureReason: "Previous Failure Reason",
-      partialProgress: "Partial Progress Completed",
-      upstreamFailureInfo: "Upstream Failure Info",
-      phaseLabels: {
-        development: "Development",
-        codeReview: "Code Review",
-        qa: "QA Validation",
-        evaluation: "Evaluation"
-      },
-      logs: {
-        taskLabel: "Task",
-        typeLabel: "Type",
-        priorityLabel: "Priority",
-        timeoutLabel: "Timeout",
-        minutes: "minutes",
-        seconds: "seconds",
-        devPromptGenerated: "Development prompt generated",
-        startingHeadlessClaude: "Starting Headless Claude...",
-        devOutputFormatRetry: "Development output format validation failed, retried {retries} times",
-        devPhaseFailed: "Development phase failed",
-        devOutputValidationFailed: "Development output format validation failed",
-        devPhaseCompleted: "Development phase completed",
-        evidenceCollected: "Evidence collected",
-        checkpointsCompleted: "Checkpoints completed",
-        devPhaseError: "Development phase error",
-        devPhaseNotComplete: "Development phase not completed successfully",
-        evalTaskLabel: "Evaluating task",
-        devStatusLabel: "Development status",
-        evalPromptGenerated: "Evaluation prompt generated",
-        startingEvalSession: "Starting independent evaluation session...",
-        evalFormatRetry: "Evaluation result format mismatch, retried {retries} times",
-        evalEmptyOutput: "Evaluation output is empty: Claude process may have exited abnormally",
-        evalStderrPrefix: "stderr",
-        evalParseFailureDefault: "Unable to parse evaluation result after retries, defaulting to PASS (conservative strategy)",
-        evalPassed: "Review passed",
-        evalFailed: "Review failed",
-        evalError: "Evaluation error",
-        codeReviewPhase: "Code review phase...",
-        codeReviewCheckpoints: "Code review checkpoints",
-        noCodeReviewCheckpoints: "No code review checkpoints, auto-pass",
-        codeReviewPromptGenerated: "Code review prompt generated",
-        startingCodeReview: "Starting code review session...",
-        codeReviewFormatRetry: "Code review result format mismatch, retried {retries} times",
-        contradictionDetected: "Contradiction detected",
-        codeReviewPassed: "Code review passed",
-        codeReviewFailed: "Code review failed",
-        codeReviewError: "Code review error",
-        codeReviewSessionFailed: "Code review session failed",
-        codeReviewPromptGenerated: "Code review prompt generated",
-        startingCodeReviewSession: "Starting code review session...",
-        codeReviewRetry: "Code review result format mismatch, retried {retries} times",
-        qaPhase: "QA verification phase...",
-        qaCheckpoints: "QA verification checkpoints",
-        noQACheckpoints: "No QA verification checkpoints, auto-pass",
-        humanVerificationCheckpoints: "checkpoints deferred, waiting for human verification",
-        deferredInfo: "checkpoints deferred, waiting for human verification",
-        qaPassed: "QA verification passed",
-        qaPassedWithHuman: "Automated verification passed, waiting for human verification",
-        qaFailed: "QA verification failed",
-        qaError: "QA verification error",
-        qaSkippedDueToCodeReview: "Code review failed, skipping QA verification",
-        checkpointWarning: "automated checkpoints missing verification commands",
-        checkpointWarningDetail: "missing commands/steps",
-        checkpointWarningFallback: "These checkpoints will rely on AI free-form verification, which may affect verification quality.",
-        noAutomatedQACheckpoints: "No automated QA checkpoints, automated verification auto-passed",
-        qaPromptGenerated: "QA verification prompt generated",
-        startingQASession: "Starting QA verification session...",
-        qaRetry: "QA verification result format mismatch, retried {retries} times",
-        qaSessionFailed: "QA verification session failed",
-        qaOutputValidationFailed: "QA verification output format validation failed",
-        cannotParseVerdict: "Cannot parse verdict result",
-        deferredCheckpointsInfo: "{count} checkpoints deferred, waiting for human verification",
-        checkpointWarningDetail: "missing commands/steps",
-        checkpointWarningFallback: "These checkpoints will rely on AI free-form verification, which may affect verification quality.",
-        phantomTaskViolation: "Serious violation: Developer created {count} additional tasks ({tasks}) during execution. Developers are strictly prohibited from creating new tasks.",
-        phantomTaskCriteria: "Creating new tasks is prohibited",
-        phantomTaskPrefix: "Phantom task",
-        phantomTaskDetails: "Detected that the developer created additional tasks not part of the original plan. This violates the developer scope - developers should only implement code changes for assigned tasks, not create new tasks.",
-        emptyOutputError: "Evaluation session output is empty: Claude process may have exited abnormally",
-        evaluationOutputEmpty: "Evaluation output is empty, Claude process may have exited abnormally",
-        contradictionFix: "Contradiction fix",
-        evalParseError: "Unable to parse evaluation result",
-        phantomTaskDetected: "Detected {count} phantom task(s)",
-        phantomTaskAutoNopass: "Phantom task detected, auto NOPASS",
-        noPhantomTask: "No phantom tasks detected",
-        snapshotMode: "Phantom task detection using plan snapshot",
-        fallbackMode: "Phantom task detection: plan snapshot not found, using time window fallback mode",
-        snapshotStats: "Phantom task detection statistics",
-        creatingCommandWarning: "Developer output contains task create / init-requirement commands, but no new tasks detected in file system",
-        creatingCommandIntent: "This may mean the creation operation failed, but the intent exists",
-        retryReference: "Please refer to the previous failure reason to avoid repeating the same issues."
-      },
-      reports: {
-        devReportTitle: "Development Report",
-        reviewReportTitle: "Review Report",
-        codeReviewReportTitle: "Code Review Report",
-        qaReportTitle: "QA Verification Report",
-        statusLabel: "Status",
-        startTimeLabel: "Start Time",
-        endTimeLabel: "End Time",
-        durationLabel: "Duration",
-        errorInfoSection: "Error Information",
-        codeChangesSection: "Code Changes",
-        evidenceFilesSection: "Evidence Files",
-        completedCheckpointsSection: "Completed Checkpoints",
-        claudeOutputSection: "Claude Output",
-        resultLabel: "Result",
-        reviewedAtLabel: "Reviewed At",
-        reviewedByLabel: "Reviewed By",
-        inferenceTypeLabel: "Inference Type",
-        reasonSection: "Reason",
-        failedCriteriaSection: "Failed Acceptance Criteria",
-        failedCheckpointsSection: "Failed Checkpoints",
-        detailsSection: "Detailed Feedback",
-        devPhaseInfoSection: "Development Phase Information",
-        evidenceCountLabel: "Evidence Count",
-        checkpointsCountLabel: "Checkpoints Completed",
-        codeQualityIssuesSection: "Code Quality Issues",
-        testFailuresSection: "Test Failures",
-        humanVerificationSection: "Deferred Checkpoints - Waiting for Human Verification",
-        humanVerificationNote: "These checkpoints do not participate in PASS/NOPASS determination, only waiting for human post-processing",
-        requiresHumanLabel: "Requires Human Verification",
-        yes: "Yes",
-        no: "No",
-        inferenceTypes: {
-          structuredMatch: "Structured Match",
-          explicitMatch: "Explicit Match",
-          contentInference: "Content Inference",
-          priorStageInference: "Prior Stage Inference",
-          parseFailureDefault: "Parse Failure Default",
-          emptyOutput: "Empty Output"
-        }
-      }
-    }
-  };
-});
-
-// src/i18n/index.ts
-var exports_i18n = {};
-__export(exports_i18n, {
-  t: () => t,
-  getLanguage: () => getLanguage,
-  getI18n: () => getI18n
-});
-import * as fs10 from "fs";
-function getLanguage(cwd2 = process.cwd()) {
-  const configPath = getConfigPath(cwd2);
-  try {
-    if (fs10.existsSync(configPath)) {
-      const config = JSON.parse(fs10.readFileSync(configPath, "utf-8"));
-      return config.language || "en";
-    }
-  } catch (error) {}
-  return "en";
-}
-function getI18n(language, cwd2) {
-  const lang = language || getLanguage(cwd2);
-  return languagePacks[lang] || languagePacks.zh;
-}
-function t(cwd2) {
-  return getI18n(undefined, cwd2);
-}
-var languagePacks;
-var init_i18n = __esm(() => {
-  init_path();
-  init_zh();
-  init_en();
-  languagePacks = {
-    zh: zhTexts,
-    en: enTexts
-  };
-});
-
 // src/utils/feedback-constraint-engine.ts
 class JsonFeedbackTemplate {
   truncationLimit;
@@ -14263,22 +14552,22 @@ class JsonFeedbackTemplate {
   }
   buildFeedbackPrompt(violations, originalOutput, language) {
     const lang = language || this.language;
-    const i18n2 = getI18n(lang);
+    const i18n = getI18n(lang);
     const violationLines = violations.map((v, i) => `${i + 1}. [${v.severity.toUpperCase()}] ${v.ruleId}: ${v.message}` + (v.field ? `
-   ${i18n2.feedback.fieldLabel}: ${v.field}` : "") + (v.value ? `
-   ${i18n2.feedback.valueLabel}: ${v.value}` : "")).join(`
+   ${i18n.feedback.fieldLabel}: ${v.field}` : "") + (v.value ? `
+   ${i18n.feedback.valueLabel}: ${v.value}` : "")).join(`
 `);
-    const requirements = i18n2.feedback.jsonRequirements.map((r) => `- ${r}`);
+    const requirements = i18n.feedback.jsonRequirements.map((r) => `- ${r}`);
     return [
-      i18n2.feedback.jsonHeader,
+      i18n.feedback.jsonHeader,
       "",
-      `## ${i18n2.feedback.violationsTitle}`,
+      `## ${i18n.feedback.violationsTitle}`,
       violationLines,
       "",
-      `## ${i18n2.feedback.originalOutputTitle}`,
+      `## ${i18n.feedback.originalOutputTitle}`,
       "```json",
       originalOutput.length > this.truncationLimit ? originalOutput.slice(0, this.truncationLimit) + `
-${i18n2.feedback.truncated}` : originalOutput,
+${i18n.feedback.truncated}` : originalOutput,
       "```",
       "",
       "\u8BF7\u786E\u4FDD\uFF1A",
@@ -14297,20 +14586,20 @@ class MarkdownFeedbackTemplate {
   }
   buildFeedbackPrompt(violations, originalOutput, language) {
     const lang = language || this.language;
-    const i18n2 = getI18n(lang);
-    const violationLines = violations.map((v, i) => `${i + 1}. **[${v.severity.toUpperCase()}] ${v.ruleId}**: ${v.message}` + (v.field ? ` (${i18n2.feedback.fieldLabel}: \`${v.field}\`)` : "")).join(`
+    const i18n = getI18n(lang);
+    const violationLines = violations.map((v, i) => `${i + 1}. **[${v.severity.toUpperCase()}] ${v.ruleId}**: ${v.message}` + (v.field ? ` (${i18n.feedback.fieldLabel}: \`${v.field}\`)` : "")).join(`
 `);
-    const requirements = i18n2.feedback.markdownRequirements.map((r) => `- ${r}`);
+    const requirements = i18n.feedback.markdownRequirements.map((r) => `- ${r}`);
     return [
-      i18n2.feedback.markdownHeader,
+      i18n.feedback.markdownHeader,
       "",
-      `### ${i18n2.feedback.violationsTitle}`,
+      `### ${i18n.feedback.violationsTitle}`,
       violationLines,
       "",
-      `### ${i18n2.feedback.originalOutputTitle}`,
+      `### ${i18n.feedback.originalOutputTitle}`,
       "```markdown",
       originalOutput.length > this.truncationLimit ? originalOutput.slice(0, this.truncationLimit) + `
-${i18n2.feedback.truncated}` : originalOutput,
+${i18n.feedback.truncated}` : originalOutput,
       "```",
       "",
       "\u8BF7\u786E\u4FDD\uFF1A",
@@ -16932,7 +17221,7 @@ function inferDependencies(taskOrDescription, allTasks, options) {
   const candidates = allTasks.filter((t2) => {
     if (currentTaskId && t2.id === currentTaskId)
       return false;
-    if (skipTerminal && TERMINAL_STATUSES.has(t2.status))
+    if (skipTerminal && TERMINAL_STATUSES_SET.has(t2.status))
       return false;
     return true;
   });
@@ -17022,10 +17311,11 @@ function inferDependenciesBatch(tasks) {
   }
   return resultMap;
 }
-var TERMINAL_STATUSES;
+var TERMINAL_STATUSES_SET;
 var init_dependency_engine = __esm(() => {
+  init_task();
   init_quality_gate();
-  TERMINAL_STATUSES = new Set(["resolved", "closed", "abandoned", "failed"]);
+  TERMINAL_STATUSES_SET = new Set(TERMINAL_STATUSES);
 });
 
 // src/utils/dependency-graph/inference.ts
@@ -17045,7 +17335,7 @@ function executeFailureCascade(failedTaskId, graph, cwd2, completedTaskIds) {
     }
     const node = graph.getNode(taskId);
     if (node) {
-      const terminalStatuses = new Set(["resolved", "closed", "abandoned"]);
+      const terminalStatuses = new Set(TERMINAL_STATUSES);
       if (terminalStatuses.has(node.status)) {
         skippedTasks.push(taskId);
         continue;
@@ -17055,6 +17345,9 @@ function executeFailureCascade(failedTaskId, graph, cwd2, completedTaskIds) {
   }
   return { affectedTasks, skippedTasks };
 }
+var init_cascade = __esm(() => {
+  init_task();
+});
 
 // src/utils/dependency-graph/validators.ts
 function validateNewTaskDeps(taskId, dependencies, graph, _allTasks) {
@@ -17220,6 +17513,7 @@ function renderAnomalySummary(anomalies) {
 var init_dependency_graph = __esm(() => {
   init_graph();
   init_inference();
+  init_cascade();
   init_validators();
 });
 
@@ -19258,8 +19552,8 @@ async function recommendPlan(options = {}, cwd2 = process.cwd()) {
     }
   }
   const inProgressTasks = allTasks.filter((t2) => normalizeStatus(t2.status) === "in_progress");
-  const TERMINAL_STATUSES2 = new Set(["resolved", "closed", "abandoned", "failed"]);
-  const activeTasks = options.all ? allTasks.filter((t2) => !TERMINAL_STATUSES2.has(normalizeStatus(t2.status))) : allTasks.filter((t2) => normalizeStatus(t2.status) === "open");
+  const TERMINAL_STATUSES_SET2 = new Set(TERMINAL_STATUSES);
+  const activeTasks = options.all ? allTasks.filter((t2) => !TERMINAL_STATUSES_SET2.has(normalizeStatus(t2.status))) : allTasks.filter((t2) => normalizeStatus(t2.status) === "open");
   const excludedCount = allTasks.length - activeTasks.length;
   if (excludedCount > 0) {
     const reason = options.all ? "terminal (resolved/closed/abandoned)" : "non-open status";
@@ -19310,7 +19604,7 @@ async function recommendPlan(options = {}, cwd2 = process.cwd()) {
       console.log(`Excluded ${beforeExecFilter - filteredTasks.length} tasks with incomplete dependencies or not executable`);
     }
   }
-  if (options.requireQuality !== false && filteredTasks.length > 0) {
+  if (!options.skipQualityGate && filteredTasks.length > 0) {
     console.log("Running quality gate check...");
     const qualityGateResult = runPlanQualityGateCheck(filteredTasks, {
       phase: "plan_recommend",
@@ -19322,10 +19616,16 @@ async function recommendPlan(options = {}, cwd2 = process.cwd()) {
         showDetails: true,
         phase: "plan_recommend"
       }));
+      if (options.strictQualityGate) {
+        console.error("\u274C Quality gate check failed (--strict-quality-gate mode), aborting plan recommendation");
+        console.error(`   Failed tasks: ${qualityGateResult.failedTasks.join(", ")}`);
+        console.error("   Fix the issues or use --skip-quality-gate to skip quality check (not recommended)");
+        process.exit(1);
+      }
       if (options.nonInteractive || !process.stdout.isTTY) {
         console.error("\u274C Quality gate check failed, aborting plan recommendation");
         console.error(`   Failed tasks: ${qualityGateResult.failedTasks.join(", ")}`);
-        console.error("   Use --no-quality-gate to skip quality check (not recommended)");
+        console.error("   Use --skip-quality-gate to skip quality check (not recommended)");
         process.exit(1);
       }
       const { continueAnyway } = await import_prompts3.default({
@@ -20982,18 +21282,19 @@ async function fixSingleIssue(issue, cwd2, nonInteractive) {
       const author = actionLower.includes("pipeline") || actionLower.includes("harness") ? "pipeline" : "user";
       const analysis = historyEntry.reason || "";
       const evidence = historyEntry.verificationDetails || "";
+      const texts = t(cwd2).analyzeCmd;
       const decisionMap = {
-        "open\u2192in_progress": "\u5F00\u59CB\u6267\u884C\u4EFB\u52A1",
-        "in_progress\u2192wait_review": "\u63D0\u4EA4\u4EE3\u7801\u5BA1\u67E5",
-        "wait_review\u2192wait_qa": "\u5BA1\u67E5\u901A\u8FC7\uFF0C\u8FDB\u5165QA",
-        "wait_qa\u2192wait_evaluation": "QA\u901A\u8FC7\uFF0C\u7B49\u5F85\u8BC4\u4F30",
-        "wait_evaluation\u2192resolved": "\u8BC4\u4F30\u901A\u8FC7\uFF0C\u4EFB\u52A1\u5B8C\u6210",
-        "open\u2192closed": "\u5173\u95ED\u4EFB\u52A1",
-        "in_progress\u2192resolved": "\u76F4\u63A5\u6807\u8BB0\u5B8C\u6210",
-        "resolved\u2192reopened": "\u91CD\u65B0\u6253\u5F00\u4EFB\u52A1",
-        "reopened\u2192in_progress": "\u91CD\u65B0\u5F00\u59CB\u6267\u884C",
-        "open\u2192abandoned": "\u653E\u5F03\u4EFB\u52A1",
-        "in_progress\u2192open": "\u9000\u56DE\u5F85\u529E"
+        "open\u2192in_progress": texts.transitionStartExecution,
+        "in_progress\u2192wait_review": texts.transitionSubmitReview,
+        "wait_review\u2192wait_qa": texts.transitionReviewPass,
+        "wait_qa\u2192wait_evaluation": texts.transitionQaPass,
+        "wait_evaluation\u2192resolved": texts.transitionEvalPass,
+        "open\u2192closed": texts.transitionCloseTask,
+        "in_progress\u2192resolved": texts.transitionDirectComplete,
+        "resolved\u2192reopened": texts.transitionReopenTask,
+        "reopened\u2192in_progress": texts.transitionRestartExecution,
+        "open\u2192abandoned": texts.transitionAbandonTask,
+        "in_progress\u2192open": texts.transitionReturnTodo
       };
       const statusKey = `${historyEntry.oldValue}\u2192${historyEntry.newValue}`;
       const decision = decisionMap[statusKey] || `${historyEntry.oldValue} \u2192 ${historyEntry.newValue}`;
@@ -22231,7 +22532,7 @@ function checkMissingPipelineEvidence(taskId, task, cwd2) {
 }
 function shouldTriggerAIInference(task, layer1Issues, cwd2) {
   const currentStatus = normalizeStatus(task.status);
-  if (TERMINAL_STATUSES2.has(currentStatus))
+  if (TERMINAL_STATUSES_SET2.has(currentStatus))
     return false;
   if (layer1Issues.length > 0)
     return false;
@@ -24534,7 +24835,7 @@ async function analyzeBugReport(bugReportPath, cwd2 = process.cwd(), options = {
   logger2.flush();
   return result;
 }
-var import_prompts5, DEFAULT_ANALYZE_CONFIG, VALID_STATUSES, VALID_TYPES3, VALID_PRIORITIES3, SCHEMA_MIGRATIONS, REPORT_PHASE_STATUS_MAP, TERMINAL_STATUSES2;
+var import_prompts5, DEFAULT_ANALYZE_CONFIG, VALID_STATUSES, VALID_TYPES3, VALID_PRIORITIES3, SCHEMA_MIGRATIONS, REPORT_PHASE_STATUS_MAP, TERMINAL_STATUSES_SET2;
 var init_analyze = __esm(() => {
   init_path();
   init_task2();
@@ -24762,7 +25063,7 @@ var init_analyze = __esm(() => {
       prerequisiteStatuses: ["wait_qa", "wait_evaluation"]
     }
   ];
-  TERMINAL_STATUSES2 = new Set(["resolved", "closed", "abandoned", "failed"]);
+  TERMINAL_STATUSES_SET2 = new Set(TERMINAL_STATUSES);
 });
 
 // node_modules/commander/esm.mjs
@@ -24788,7 +25089,7 @@ import * as path26 from "path";
 // src/commands/setup.ts
 init_path();
 var import_prompts = __toESM(require_prompts3(), 1);
-import * as fs3 from "fs";
+import * as fs4 from "fs";
 import * as path3 from "path";
 
 // src/utils/pre.ts
@@ -24974,6 +25275,7 @@ Coverage: ${coveragePercent}% (threshold: ${threshold * 100}%)`,
 
 // src/commands/setup.ts
 init_config();
+init_i18n();
 var DEFAULT_CONFIG = {
   projectName: "",
   createdAt: "",
@@ -24981,32 +25283,6 @@ var DEFAULT_CONFIG = {
   defaultPriority: "medium",
   language: "zh",
   ai: { provider: "claude-code" }
-};
-var i18n = {
-  zh: {
-    initializing: "\u6B63\u5728\u521D\u59CB\u5316\u9879\u76EE\u7BA1\u7406\u73AF\u5883...",
-    createDir: "\u521B\u5EFA\u76EE\u5F55",
-    createConfig: "\u521B\u5EFA\u914D\u7F6E: config.json",
-    setupComplete: "\u9879\u76EE\u7BA1\u7406\u73AF\u5883\u521D\u59CB\u5316\u5B8C\u6210\uFF01",
-    nextStep: "\u4F7F\u7528 'projmnt4claude task create' \u521B\u5EFA\u7B2C\u4E00\u4E2A\u4EFB\u52A1",
-    selectLanguage: "\u8BF7\u9009\u62E9\u8BED\u8A00:",
-    chinese: "\u4E2D\u6587",
-    english: "English",
-    copyingSkills: "\u6B63\u5728\u590D\u5236\u6280\u80FD\u6587\u4EF6...",
-    skillsCopied: "\u6280\u80FD\u6587\u4EF6\u590D\u5236\u5B8C\u6210"
-  },
-  en: {
-    initializing: "Initializing project management environment...",
-    createDir: "Create directory",
-    createConfig: "Create config: config.json",
-    setupComplete: "Project management environment initialized!",
-    nextStep: "Use 'projmnt4claude task create' to create your first task",
-    selectLanguage: "Select language:",
-    chinese: "\u4E2D\u6587",
-    english: "English",
-    copyingSkills: "Copying skill files...",
-    skillsCopied: "Skill files copied"
-  }
 };
 async function setup(cwd2 = process.cwd(), options = {}) {
   const projectDir = getProjectDir(cwd2);
@@ -25029,19 +25305,18 @@ async function setup(cwd2 = process.cwd(), options = {}) {
     const langResponse = await import_prompts.default({
       type: "select",
       name: "language",
-      message: i18n.zh.selectLanguage + " / " + i18n.en.selectLanguage,
+      message: texts.setup.selectLanguage,
       choices: [
-        { title: i18n.zh.chinese, value: "zh" },
-        { title: i18n.en.english, value: "en" }
+        { title: texts.setup.chinese, value: "zh" },
+        { title: texts.setup.english, value: "en" }
       ],
       initial: 0
     });
     language = langResponse.language || "zh";
   }
-  const t = i18n[language];
-  console.log(t.initializing);
+  console.log(texts.setup.initializing);
   ensureDir(projectDir);
-  console.log(`\u2713 ${t.createDir}: ${projectDir}`);
+  console.log(`\u2713 ${texts.setup.createDir}: ${projectDir}`);
   const subDirs = [
     { dir: getTasksDir(cwd2), name: "tasks" },
     { dir: getArchiveDir(cwd2), name: "archive" },
@@ -25052,7 +25327,7 @@ async function setup(cwd2 = process.cwd(), options = {}) {
   ];
   for (const { dir, name } of subDirs) {
     ensureDir(dir);
-    console.log(`\u2713 ${t.createDir}: ${name}/`);
+    console.log(`\u2713 ${texts.setup.createDir}: ${name}/`);
   }
   const config = {
     ...DEFAULT_CONFIG,
@@ -25061,13 +25336,13 @@ async function setup(cwd2 = process.cwd(), options = {}) {
     language
   };
   const configPath = getConfigPath(cwd2);
-  fs3.writeFileSync(configPath, JSON.stringify(config, null, 2), "utf-8");
-  console.log(`\u2713 ${t.createConfig}`);
+  fs4.writeFileSync(configPath, JSON.stringify(config, null, 2), "utf-8");
+  console.log(`\u2713 ${texts.setup.createConfig}`);
   copySkillFiles(cwd2, language, texts);
   const gitHookConfig = config.gitHook ?? DEFAULT_GIT_HOOK;
   if (gitHookConfig.enabled) {
     const pre = new Pre(cwd2);
-    if (fs3.existsSync(pre.gitDir)) {
+    if (fs4.existsSync(pre.gitDir)) {
       try {
         pre.installAll();
         console.log(texts.setupCmd.gitHookCreated);
@@ -25079,9 +25354,9 @@ async function setup(cwd2 = process.cwd(), options = {}) {
     console.log(texts.setupCmd.gitHookDisabled);
   }
   console.log(`
-\u2705 ${t.setupComplete}`);
+\u2705 ${texts.setup.setupComplete}`);
   console.log(`
-${t.nextStep}`);
+${texts.setup.nextStep}`);
 }
 function copySkillFiles(cwd2, language, texts) {
   console.log(`
@@ -25098,13 +25373,13 @@ function copySkillFiles(cwd2, language, texts) {
   ensureDir(path3.join(targetDir, "skills"));
   const skillSource = path3.join(pluginRoot, "locales", language, "SKILL.md");
   const skillTarget = path3.join(targetDir, "SKILL.md");
-  if (fs3.existsSync(skillSource)) {
-    fs3.copyFileSync(skillSource, skillTarget);
+  if (fs4.existsSync(skillSource)) {
+    fs4.copyFileSync(skillSource, skillTarget);
     console.log(texts.setupCmd.copySkillFile.replace("{language}", language));
   } else {
     const defaultSource = path3.join(pluginRoot, "skills", "projmnt4claude", "SKILL.md");
-    if (fs3.existsSync(defaultSource)) {
-      fs3.copyFileSync(defaultSource, skillTarget);
+    if (fs4.existsSync(defaultSource)) {
+      fs4.copyFileSync(defaultSource, skillTarget);
       console.log(texts.setupCmd.copyDefault);
     } else {
       console.log(texts.setupCmd.fileNotFound);
@@ -25113,10 +25388,10 @@ function copySkillFiles(cwd2, language, texts) {
   const commandsSourceDir = path3.join(pluginRoot, "locales", language, "commands");
   const commandsTargetDir = path3.join(targetDir, "commands");
   ensureDir(commandsTargetDir);
-  if (fs3.existsSync(commandsSourceDir)) {
-    const commandFiles = fs3.readdirSync(commandsSourceDir).filter((f) => f.endsWith(".md"));
+  if (fs4.existsSync(commandsSourceDir)) {
+    const commandFiles = fs4.readdirSync(commandsSourceDir).filter((f) => f.endsWith(".md"));
     for (const file of commandFiles) {
-      fs3.copyFileSync(path3.join(commandsSourceDir, file), path3.join(commandsTargetDir, file));
+      fs4.copyFileSync(path3.join(commandsSourceDir, file), path3.join(commandsTargetDir, file));
     }
     console.log(texts.setupCmd.copyCommandDocs.replace("{count}", String(commandFiles.length)).replace("{language}", language));
   } else {
@@ -25786,8 +26061,9 @@ ${finalCheckpoints.map((cp) => `- [ ] ${cp}`).join(`
   return task;
 }
 function listTasks(options = {}, cwd2 = process.cwd()) {
+  const texts = t(cwd2);
   if (!isInitialized(cwd2)) {
-    console.error("Error: Project not initialized. Please run `projmnt4claude setup` first");
+    console.error(texts.task.projectNotInitialized);
     process.exit(1);
   }
   let tasks = getAllTasks(cwd2);
@@ -25866,25 +26142,27 @@ function listTasks(options = {}, cwd2 = process.cwd()) {
   for (const task of parentTasks) {
     const id = task.id.padEnd(11);
     const title = task.title.substring(0, 28).padEnd(28);
-    const priority = formatPriority(task.priority).padEnd(8);
-    const status = formatStatus(task.status);
+    const priority = formatPriority(task.priority, cwd2).padEnd(8);
+    const status = formatStatus(task.status, cwd2);
     const discussionIcon = task.needsDiscussion ? " \uD83D\uDCAC" : "";
     const reqChangeIcon = task.requirementHistory && task.requirementHistory.length > 0 ? ` \uD83D\uDCDD${task.requirementHistory.length}` : "";
     const subtaskCount = task.subtaskIds?.length || subtaskMap.get(task.id)?.length || 0;
-    const subtaskIcon = subtaskCount > 0 ? ` [${subtaskCount}Subtasks]` : "";
+    const subtaskIcon = subtaskCount > 0 ? ` [${subtaskCount}${texts.task.subtasksLabel}]` : "";
     console.log(`${id} | ${title} | ${priority} | ${status}${discussionIcon}${reqChangeIcon}${subtaskIcon}`);
     const subtasks = subtaskMap.get(task.id) || [];
     for (const subtask of subtasks) {
       const subId = `  \u2514\u2500 ${subtask.id}`.substring(0, 11).padEnd(11);
       const subTitle = subtask.title.substring(0, 26).padEnd(26);
-      const subPriority = formatPriority(subtask.priority).padEnd(8);
-      const subStatus = formatStatus(subtask.status);
+      const subPriority = formatPriority(subtask.priority, cwd2).padEnd(8);
+      const subStatus = formatStatus(subtask.status, cwd2);
       console.log(`${subId} | ${subTitle} | ${subPriority} | ${subStatus}`);
     }
   }
   console.log("");
   const totalSubtasks = tasks.filter((t2) => t2.parentId).length;
-  console.log(`Total ${parentTasks.length} tasks${totalSubtasks > 0 ? `, ${totalSubtasks} subtasks` : ""}`);
+  const totalTasksText = texts.task.totalTasks.replace("{count}", String(parentTasks.length));
+  const totalSubtasksText = totalSubtasks > 0 ? `, ${texts.task.totalSubtasks.replace("{count}", String(totalSubtasks))}` : "";
+  console.log(`${totalTasksText}${totalSubtasksText}`);
 }
 function displayTasksGrouped(tasks, groupBy, subtaskMap) {
   const parentTasks = tasks.filter((t2) => !t2.parentId);
@@ -25986,7 +26264,8 @@ function formatLocalTime(isoString) {
     minute: "2-digit"
   });
 }
-function formatRelativeTime(isoString) {
+function formatRelativeTime(isoString, cwd2) {
+  const texts = t(cwd2);
   const date = new Date(isoString);
   const now = new Date;
   const diffMs = now.getTime() - date.getTime();
@@ -25994,13 +26273,13 @@ function formatRelativeTime(isoString) {
   const diffHours = Math.floor(diffMs / 3600000);
   const diffDays = Math.floor(diffMs / 86400000);
   if (diffMins < 1)
-    return "\u521A\u521A";
+    return texts.task.timeJustNow;
   if (diffMins < 60)
-    return `${diffMins}\u5206\u949F\u524D`;
+    return texts.task.timeMinutesAgo.replace("{minutes}", String(diffMins));
   if (diffHours < 24)
-    return `${diffHours}\u5C0F\u65F6\u524D`;
+    return texts.task.timeHoursAgo.replace("{hours}", String(diffHours));
   if (diffDays < 7)
-    return `${diffDays}\u5929\u524D`;
+    return texts.task.timeDaysAgo.replace("{days}", String(diffDays));
   return formatLocalTime(isoString);
 }
 function showTask(taskId, options = {}, cwd2 = process.cwd()) {
@@ -26036,18 +26315,19 @@ function showTask(taskId, options = {}, cwd2 = process.cwd()) {
   showTaskClassic(task, options, cwd2);
 }
 function showTaskCompact(task, cwd2) {
+  const texts = t(cwd2);
   const statusIcon = getStatusIcon(task.status);
   const typeMap = {
-    bug: "\u7F3A\u9677",
-    feature: "\u529F\u80FD",
-    research: "\u8C03\u7814",
-    docs: "\u6587\u6863",
-    refactor: "\u91CD\u6784",
-    test: "\u6D4B\u8BD5"
+    bug: texts.task.typeBug,
+    feature: texts.task.typeFeature,
+    research: texts.task.typeResearch,
+    docs: texts.task.typeDocs,
+    refactor: texts.task.typeRefactor,
+    test: texts.task.typeTest
   };
   const typeText = typeMap[task.type] || task.type;
   console.log(`${statusIcon} ${task.id}: ${task.title}`);
-  console.log(`   Status: ${formatStatus(task.status)} | Priority: ${formatPriority(task.priority)} | Type: ${typeText}`);
+  console.log(`   Status: ${formatStatus(task.status, cwd2)} | Priority: ${formatPriority(task.priority, cwd2)} | Type: ${typeText}`);
   if (task.description) {
     console.log(`   Description: ${task.description.substring(0, 120)}${task.description.length > 120 ? "..." : ""}`);
   }
@@ -26073,12 +26353,12 @@ function showTaskCompact(task, cwd2) {
   }
   if (task.needsDiscussion) {
     const discussionCount = task.discussionTopics?.length || 0;
-    console.log(`   \uD83D\uDCAC Pending Discussion${discussionCount > 0 ? ` (${discussionCount}topics)` : ""}`);
+    console.log(`   \uD83D\uDCAC ${texts.task.discussionLabel}${discussionCount > 0 ? ` (${discussionCount})` : ""}`);
   }
   if (task.requirementHistory && task.requirementHistory.length > 0) {
-    console.log(`   \uD83D\uDCDD Requirement Changes: ${task.requirementHistory.length} times`);
+    console.log(`   \uD83D\uDCDD ${texts.task.requirementChanges}: ${task.requirementHistory.length}`);
   }
-  console.log(`   Created: ${formatRelativeTime(task.createdAt)} \xB7 Updated: ${formatRelativeTime(task.updatedAt)}`);
+  console.log(`   ${texts.task.createdAt}: ${formatRelativeTime(task.createdAt, cwd2)} \xB7 ${texts.task.updatedAt}: ${formatRelativeTime(task.updatedAt, cwd2)}`);
 }
 function getStatusIcon(status) {
   const icons = {
@@ -26129,6 +26409,7 @@ function padByDisplayWidth(str, targetWidth) {
   return str + " ".repeat(targetWidth - currentWidth);
 }
 function showTaskPanel(task, options, cwd2) {
+  const texts = t(cwd2);
   const termWidth = process.stdout.columns || 80;
   const width = Math.min(Math.max(termWidth, 60), 100);
   const hLine = "\u2500".repeat(width - 2);
@@ -26143,20 +26424,20 @@ function showTaskPanel(task, options, cwd2) {
   console.log(`\u2502   ${padByDisplayWidth(truncatedTitle, width - 5)}\u2502`);
   console.log(`\u251C${hLine}\u2524`);
   const statusMap = {
-    open: "Pending",
-    in_progress: "in_progress",
-    resolved: "resolved",
-    closed: "Closed",
-    abandoned: "Abandoned",
-    wait_review: "\u5F85\u5BA1\u67E5",
-    wait_qa: "\u5F85\u6D4B\u8BD5",
-    wait_evaluation: "\u5F85\u8BC4\u4F30"
+    open: texts.task.statusOpen,
+    in_progress: texts.task.statusInProgress,
+    resolved: texts.task.statusResolved,
+    closed: texts.task.statusClosed,
+    abandoned: texts.task.statusAbandoned,
+    wait_review: texts.task.statusWaitReview,
+    wait_qa: texts.task.statusWaitQa,
+    wait_evaluation: texts.task.statusWaitEvaluation
   };
   const priorityMap = {
-    P0: "P0\u7D27\u6025",
-    P1: "P1\u9AD8",
-    P2: "P2\u4E2D",
-    P3: "P3\u4F4E",
+    P0: texts.task.priorityP0,
+    P1: texts.task.priorityP1,
+    P2: texts.task.priorityP2,
+    P3: texts.task.priorityP3,
     Q1: "Q1",
     Q2: "Q2",
     Q3: "Q3",
@@ -26164,8 +26445,8 @@ function showTaskPanel(task, options, cwd2) {
   };
   const statusText = statusMap[task.status] || task.status;
   const priorityText = priorityMap[task.priority] || task.priority;
-  const typeText = task.type || "Not specified";
-  const statusLine = `Status: ${statusText}  \xB7  Priority: ${priorityText}  \xB7  Type: ${typeText}`;
+  const typeText = task.type || texts.task.typeNotSpecified;
+  const statusLine = `${texts.task.statusHeader}: ${statusText}  \xB7  ${texts.task.priorityHeader}: ${priorityText}  \xB7  ${texts.task.typeHeader}: ${typeText}`;
   console.log(`\u2502 ${padByDisplayWidth(statusLine, width - 3)}\u2502`);
   if (task.description) {
     console.log(`\u251C${hLine}\u2524`);
@@ -26174,7 +26455,7 @@ function showTaskPanel(task, options, cwd2) {
       console.log(`\u2502 ${padByDisplayWidth(line, width - 3)}\u2502`);
     }
     if (descLines.length > 3) {
-      const moreDesc = `... plus ${descLines.length - 3} \u884C`;
+      const moreDesc = `... ${descLines.length - 3} more lines`;
       console.log(`\u2502 ${padByDisplayWidth(moreDesc, width - 3)}\u2502`);
     }
   }
@@ -26231,11 +26512,11 @@ function showTaskPanel(task, options, cwd2) {
       console.log(`\u2502 ${padByDisplayWidth(depsLine, width - 3)}\u2502`);
     }
     if (task.recommendedRole) {
-      const roleLine = `\uD83D\uDC64 \u89D2\u8272: ${task.recommendedRole}`;
+      const roleLine = `\uD83D\uDC64 ${texts.task.roleLabel}: ${task.recommendedRole}`;
       console.log(`\u2502 ${padByDisplayWidth(roleLine, width - 3)}\u2502`);
     }
     if (task.branch) {
-      const branchLine = `\uD83C\uDF3F \u5206\u652F: ${task.branch}`;
+      const branchLine = `\uD83C\uDF3F ${texts.task.branchLabel}: ${task.branch}`;
       console.log(`\u2502 ${padByDisplayWidth(branchLine, width - 3)}\u2502`);
     }
     if (task.subtaskIds && task.subtaskIds.length > 0) {
@@ -26256,30 +26537,30 @@ function showTaskPanel(task, options, cwd2) {
         parts.push(`\uD83D\uDD04 ${activeCount}`);
       if (pendingCount > 0)
         parts.push(`\u2B1C ${pendingCount}`);
-      const subtaskLine = parts.length > 0 ? `\uD83D\uDCCE Subtasks: ${task.subtaskIds.length}  (${parts.join(" ")})` : `\uD83D\uDCCE Subtasks: ${task.subtaskIds.length} `;
+      const subtaskLine = parts.length > 0 ? `\uD83D\uDCCE ${texts.task.subtasksLabel}: ${task.subtaskIds.length}  (${parts.join(" ")})` : `\uD83D\uDCCE ${texts.task.subtasksLabel}: ${task.subtaskIds.length} `;
       console.log(`\u2502 ${padByDisplayWidth(subtaskLine, width - 3)}\u2502`);
     }
     if (task.parentId) {
-      const parentLine = `\u2B06\uFE0F Parent task: ${task.parentId}`;
+      const parentLine = `\u2B06\uFE0F ${texts.task.parentTaskLabel}: ${task.parentId}`;
       console.log(`\u2502 ${padByDisplayWidth(parentLine, width - 3)}\u2502`);
     }
     if (task.needsDiscussion) {
       const discussionCount = task.discussionTopics?.length || 0;
-      const discussionLine = discussionCount > 0 ? `\uD83D\uDCAC Pending Discussion (${discussionCount}topics)` : `\uD83D\uDCAC Pending Discussion`;
+      const discussionLine = discussionCount > 0 ? `\uD83D\uDCAC ${texts.task.discussionLabel} (${discussionCount})` : `\uD83D\uDCAC ${texts.task.discussionLabel}`;
       console.log(`\u2502 ${padByDisplayWidth(discussionLine, width - 3)}\u2502`);
     }
     if (task.requirementHistory && task.requirementHistory.length > 0) {
-      const reqLine = `\uD83D\uDCDD Requirement Changes: ${task.requirementHistory.length} times`;
+      const reqLine = `\uD83D\uDCDD ${texts.task.requirementChanges}: ${task.requirementHistory.length}`;
       console.log(`\u2502 ${padByDisplayWidth(reqLine, width - 3)}\u2502`);
     }
   }
   console.log(`\u251C${hLine}\u2524`);
   const createdTime = formatLocalTime(task.createdAt);
-  const updatedTime = formatRelativeTime(task.updatedAt);
-  const timeLine = `\uD83D\uDCC5 Created: ${createdTime}  \xB7  Updated: ${updatedTime}`;
+  const updatedTime = formatRelativeTime(task.updatedAt, cwd2);
+  const timeLine = `\uD83D\uDCC5 ${texts.task.createdAt}: ${createdTime}  \xB7  ${texts.task.updatedAt}: ${updatedTime}`;
   console.log(`\u2502 ${padByDisplayWidth(timeLine, width - 3)}\u2502`);
   if (task.reopenCount && task.reopenCount > 0) {
-    const reopenLine = `\uD83D\uDD01 Reopen: ${task.reopenCount} times`;
+    const reopenLine = `\uD83D\uDD01 ${texts.task.reopened}: ${texts.task.reopenCount.replace("{count}", String(task.reopenCount))}`;
     console.log(`\u2502 ${padByDisplayWidth(reopenLine, width - 3)}\u2502`);
   }
   console.log(`\u2570${hLine}\u256F`);
@@ -26604,14 +26885,34 @@ async function updateTask(taskId, options, cwd2 = process.cwd()) {
       if (oldStatus === "failed") {
         delete task.failureReason;
       }
+      const failedCheckpointIds = options.failedCheckpoints ? options.failedCheckpoints.split(",").map((id) => id.trim()).filter(Boolean) : undefined;
+      const reopenRecord = {
+        timestamp: new Date().toISOString(),
+        reason: options.qaFeedback || "\u7528\u6237\u53D1\u8D77Reopen",
+        reopenedBy: process.env.USER || "system",
+        enhancementRequest: options.enhancement || false,
+        failedCheckpoints: failedCheckpointIds,
+        qaFeedback: options.qaFeedback
+      };
+      if (!task.reopenRecords) {
+        task.reopenRecords = [];
+      }
+      task.reopenRecords.push(reopenRecord);
       if (!task.transitionNotes) {
         task.transitionNotes = [];
+      }
+      let transitionNoteText = `Task\u4ECE ${oldStatus} Reopen\u4E3A open (reopenCount: ${task.reopenCount})`;
+      if (options.enhancement) {
+        transitionNoteText += " [Enhancement]";
+      }
+      if (failedCheckpointIds && failedCheckpointIds.length > 0) {
+        transitionNoteText += ` [Failed CPs: ${failedCheckpointIds.join(", ")}]`;
       }
       task.transitionNotes.push({
         timestamp: new Date().toISOString(),
         fromStatus: oldStatus,
         toStatus: "open",
-        note: `Task\u4ECE ${oldStatus} Reopen\u4E3A open (reopenCount: ${task.reopenCount})`,
+        note: transitionNoteText,
         author: process.env.USER || undefined
       });
       if (!task.history) {
@@ -26623,10 +26924,19 @@ async function updateTask(taskId, options, cwd2 = process.cwd()) {
         field: "status",
         oldValue: oldStatus,
         newValue: "open",
-        reason: "\u7528\u6237\u53D1\u8D77Reopen, Status\u6620\u5C04\u4E3A open + reopenCount \u9012\u589E"
+        reason: options.qaFeedback || "\u7528\u6237\u53D1\u8D77Reopen, Status\u6620\u5C04\u4E3A open + reopenCount \u9012\u589E"
       });
       console.log(`\uD83D\uDD01 Task reopened (#${task.reopenCount} times)`);
       console.log(`   ${oldStatus} \u2192 open (reopenCount: ${task.reopenCount})`);
+      if (options.enhancement) {
+        console.log("   \uD83D\uDCCC Marked as enhancement request");
+      }
+      if (failedCheckpointIds && failedCheckpointIds.length > 0) {
+        console.log(`   \uD83D\uDCCB Failed checkpoints: ${failedCheckpointIds.join(", ")}`);
+      }
+      if (options.qaFeedback) {
+        console.log(`   \uD83D\uDCAC QA feedback: ${options.qaFeedback.substring(0, 100)}${options.qaFeedback.length > 100 ? "..." : ""}`);
+      }
     } else {
       task.status = options.status;
     }
@@ -27023,37 +27333,39 @@ function removeDependency(taskId, depId, cwd2 = process.cwd()) {
     }
   }
 }
-function formatPriority(priority) {
+function formatPriority(priority, cwd2) {
+  const texts = t(cwd2);
   const map = {
-    P0: "\uD83D\uDD34 P0 \u7D27\u6025",
-    P1: "\uD83D\uDFE0 P1 \u9AD8",
-    P2: "\uD83D\uDFE1 P2 \u4E2D",
-    P3: "\uD83D\uDFE2 P3 \u4F4E",
+    P0: `\uD83D\uDD34 ${texts.task.priorityP0}`,
+    P1: `\uD83D\uDFE0 ${texts.task.priorityP1}`,
+    P2: `\uD83D\uDFE1 ${texts.task.priorityP2}`,
+    P3: `\uD83D\uDFE2 ${texts.task.priorityP3}`,
     Q1: "\uD83D\uDCCA Q1",
     Q2: "\uD83D\uDCCA Q2",
     Q3: "\uD83D\uDCCA Q3",
     Q4: "\uD83D\uDCCA Q4",
-    low: "\uD83D\uDFE2 \u4F4E",
-    medium: "\uD83D\uDFE1 \u4E2D",
-    high: "\uD83D\uDFE0 \u9AD8",
-    urgent: "\uD83D\uDD34 \u7D27\u6025"
+    low: `\uD83D\uDFE2 ${texts.task.priorityP3}`,
+    medium: `\uD83D\uDFE1 ${texts.task.priorityP2}`,
+    high: `\uD83D\uDFE0 ${texts.task.priorityP1}`,
+    urgent: `\uD83D\uDD34 ${texts.task.priorityP0}`
   };
   return map[priority] || `\u2753 ${priority}`;
 }
-function formatStatus(status) {
+function formatStatus(status, cwd2) {
+  const texts = t(cwd2);
   const map = {
-    open: "\u2B1C Pending",
-    in_progress: "\uD83D\uDD35 In Progress",
-    wait_review: "\uD83D\uDC40 \u5F85\u5BA1\u67E5",
-    wait_qa: "\uD83E\uDDEA \u5F85\u6D4B\u8BD5",
-    wait_evaluation: "\u23F3 \u5F85\u8BC4\u4F30",
-    resolved: "\u2705 Resolved",
-    closed: "\u26AB Closed",
-    abandoned: "\u274C Abandoned",
-    failed: "\u26D4 \u5DF2\u5931\u8D25",
-    pending: "\u2B1C Pending",
-    completed: "\u2705 Completed",
-    cancelled: "\u274C Cancelled"
+    open: `\u2B1C ${texts.task.statusOpen}`,
+    in_progress: `\uD83D\uDD35 ${texts.task.statusInProgress}`,
+    wait_review: `\uD83D\uDC40 ${texts.task.statusWaitReview}`,
+    wait_qa: `\uD83E\uDDEA ${texts.task.statusWaitQa}`,
+    wait_evaluation: `\u23F3 ${texts.task.statusWaitEvaluation}`,
+    resolved: `\u2705 ${texts.task.statusResolved}`,
+    closed: `\u26AB ${texts.task.statusClosed}`,
+    abandoned: `\u274C ${texts.task.statusAbandoned}`,
+    failed: `\u26D4 ${texts.task.statusFailed}`,
+    pending: `\u2B1C ${texts.task.statusOpen}`,
+    completed: `\u2705 ${texts.task.statusResolved}`,
+    cancelled: `\u274C ${texts.task.statusAbandoned}`
   };
   return map[status] || `\u2753 ${status}`;
 }
@@ -28441,7 +28753,8 @@ var DECOMPOSITION_CONSTRAINTS = {
 // src/utils/requirement-decomposer.ts
 init_task();
 init_quality_gate();
-init_ai_metadata();
+init_config();
+init_headless_agent();
 function isInvestigationReport(content) {
   const problemKeywords = ["\u95EE\u9898", "Issue", "Bug", "\u7F3A\u9677", "\u53D1\u73B0"];
   let problemCount = 0;
@@ -28554,7 +28867,6 @@ function extractProblemsByPattern(content) {
 }
 async function decomposeWithAI(content, cwd2) {
   try {
-    const assistant = new AIMetadataAssistant(cwd2);
     const prompt = `\u8BF7\u5C06\u4EE5\u4E0B\u9700\u6C42/\u62A5\u544A\u5206\u89E3\u4E3A\u591A\u4E2A\u72EC\u7ACB\u7684\u5F00\u53D1\u4EFB\u52A1\u3002
 
 \u8F93\u5165\u5185\u5BB9\uFF1A
@@ -28586,11 +28898,22 @@ ${content.substring(0, 4000)}
 5. estimatedMinutes \u9884\u4F30\u5B8C\u6210\u65F6\u95F4\uFF08\u5206\u949F\uFF09\uFF0C\u5EFA\u8BAE\u6BCF\u4E2A\u4EFB\u52A1\u63A7\u5236\u5728 15-30 \u5206\u949F
 6. dependsOn \u662F\u4F9D\u8D56\u9879\u7684\u7D22\u5F15\u6570\u7EC4\uFF08\u5982\uFF1A[0] \u8868\u793A\u4F9D\u8D56\u7B2C\u4E00\u4E2A\u4EFB\u52A1\uFF09
 7. \u5982\u679C\u65E0\u6CD5\u5206\u89E3\uFF08\u5982\u5185\u5BB9\u8FC7\u4E8E\u7B80\u5355\uFF09\uFF0C\u8FD4\u56DE {"decomposable": false, "reason": "\u539F\u56E0", "items": []}`;
-    const result = await assistant.invokeWithEngine(prompt, [], { cwd: cwd2, maxRetries: 2, timeoutSeconds: 30 });
+    const agentOptions = buildAgentOptionsFromPreset("decomposition", cwd2);
+    const result = await invokeAgent(prompt, agentOptions);
     if (!result.success) {
       return null;
     }
-    const parsed = assistant.parseJSON(result.output);
+    let parsed = null;
+    try {
+      parsed = JSON.parse(result.output);
+    } catch {
+      const jsonMatch = result.output.match(/```(?:json)?\s*\n?([\s\S]*?)\n?```/);
+      if (jsonMatch?.[1]) {
+        try {
+          parsed = JSON.parse(jsonMatch[1]);
+        } catch {}
+      }
+    }
     if (!parsed || !parsed.items || !Array.isArray(parsed.items)) {
       return null;
     }
@@ -31900,19 +32223,19 @@ function normalizeRole(role) {
   return mapping[lower];
 }
 function getDevRoleTemplate(role, language) {
-  const i18n2 = getI18n(language);
+  const i18n = getI18n(language);
   const normalized = normalizeRole(role);
-  return normalized ? i18n2.rolePrompts.dev[normalized] : i18n2.rolePrompts.defaultDev;
+  return normalized ? i18n.rolePrompts.dev[normalized] : i18n.rolePrompts.defaultDev;
 }
 function getCodeReviewRoleTemplate(role, language) {
-  const i18n2 = getI18n(language);
+  const i18n = getI18n(language);
   const normalized = normalizeRole(role);
-  return normalized ? i18n2.rolePrompts.codeReview[normalized] : i18n2.rolePrompts.defaultCodeReview;
+  return normalized ? i18n.rolePrompts.codeReview[normalized] : i18n.rolePrompts.defaultCodeReview;
 }
 function getQARoleTemplate(role, language) {
-  const i18n2 = getI18n(language);
+  const i18n = getI18n(language);
   const normalized = normalizeRole(role);
-  return normalized ? i18n2.rolePrompts.qa[normalized] : i18n2.rolePrompts.defaultQA;
+  return normalized ? i18n.rolePrompts.qa[normalized] : i18n.rolePrompts.defaultQA;
 }
 
 // src/utils/harness-executor.ts
@@ -31966,13 +32289,13 @@ class HarnessExecutor {
       report.duration = engineResult.result.durationMs;
       if (!engineResult.result.success) {
         report.status = engineResult.result.exitCode === 124 ? "timeout" : "failed";
-        report.error = engineResult.result.error || `\u9000\u51FA\u7801: ${engineResult.result.exitCode}`;
+        report.error = engineResult.result.error || `${texts.harness.logs.exitCode}: ${engineResult.result.exitCode}`;
         console.log(`
    \u274C ${texts.harness.logs.devPhaseFailed}: ${report.error}`);
       } else if (!engineResult.passed) {
         const violationMessages = engineResult.violations.map((v) => `${v.ruleId}: ${v.message}`).join("; ");
         report.status = "failed";
-        report.error = `\u5F00\u53D1\u8F93\u51FA\u683C\u5F0F\u9A8C\u8BC1\u672A\u901A\u8FC7: ${violationMessages}`;
+        report.error = `${texts.harness.logs.devOutputValidationFailedError}: ${violationMessages}`;
         console.log(`
    \u274C ${texts.harness.logs.devOutputValidationFailed}: ${violationMessages}`);
       } else {
@@ -33017,6 +33340,7 @@ class HarnessEvaluator {
     return verdict;
   }
   buildEvaluationPrompt(task, devReport, contract, phantomTasks = [], retryContext) {
+    const texts = t(this.config.cwd);
     const contractCheckpoints = Array.isArray(contract.checkpoints) ? contract.checkpoints : [];
     const contractCriteria = Array.isArray(contract.acceptanceCriteria) ? contract.acceptanceCriteria : [];
     const contractCommands = Array.isArray(contract.verificationCommands) ? contract.verificationCommands : [];
@@ -33035,12 +33359,14 @@ class HarnessEvaluator {
     const isHumanCheckpoint = (cp) => humanCheckpointIds.has(cp) || humanCheckpointDescs.has(cp);
     const filteredContractCheckpoints = contractCheckpoints.filter((cp) => !isHumanCheckpoint(cp));
     const filteredDevCheckpoints = devCheckpointsCompleted.filter((cp) => !isHumanCheckpoint(cp));
-    const descriptionSection = task.description ? `## \u4EFB\u52A1\u63CF\u8FF0
+    const descriptionSection = task.description ? `## ${texts.harness.logs.taskDescriptionSection}
 ${task.description}
-` : "";
+` : `## ${texts.harness.logs.taskDescriptionSection}
+${texts.harness.logs.taskDescriptionEmpty}
+`;
     const acceptanceCriteriaList = contractCriteria.length > 0 ? `${contractCriteria.map((criteria, i) => `${i + 1}. ${criteria}`).join(`
 `)}
-` : `\uFF08\u672A\u5B9A\u4E49\u5177\u4F53\u9A8C\u6536\u6807\u51C6\uFF0C\u8BF7\u6839\u636E\u4EFB\u52A1\u63CF\u8FF0\u5224\u65AD\uFF09
+` : `${texts.harness.logs.acceptanceCriteriaEmpty}
 `;
     const verificationCommandsSection = contractCommands.length > 0 ? `## \u9A8C\u8BC1\u547D\u4EE4
 \u8BF7\u8FD0\u884C\u4EE5\u4E0B\u547D\u4EE4\u9A8C\u8BC1\u5B9E\u73B0:
@@ -33049,14 +33375,13 @@ ${contractCommands.join(`
 `)}
 \`\`\`
 ` : "";
-    const checkpointsSection = filteredContractCheckpoints.length > 0 ? `## \u68C0\u67E5\u70B9
-\u8BF7\u786E\u8BA4\u4EE5\u4E0B\u68C0\u67E5\u70B9\u662F\u5426\u5B8C\u6210:
-${filteredContractCheckpoints.map((cp, i) => `${i + 1}. ${cp}`).join(`
+    const checkpointsSection = filteredContractCheckpoints.length > 0 ? `## ${texts.harness.logs.checkpointSectionTitle}
+${texts.harness.logs.checkpointSectionConfirm}${filteredContractCheckpoints.map((cp, i) => `${i + 1}. ${cp}`).join(`
 `)}
 ` : "";
-    const humanCheckpointsSection = humanCheckpointIds.size > 0 ? `## \u5173\u4E8E\u4EBA\u5DE5\u9A8C\u8BC1\u68C0\u67E5\u70B9
-\u672C\u4EFB\u52A1\u6709 ${humanCheckpointIds.size} \u4E2A\u9700\u8981\u4EBA\u5DE5\u9A8C\u8BC1\u7684\u68C0\u67E5\u70B9\uFF08\u5982 ${Array.from(humanCheckpointIds).slice(0, 3).join(", ")}\uFF09\u3002
-\u8FD9\u4E9B\u68C0\u67E5\u70B9\u7531\u540E\u5904\u7406\u6D41\u7A0B\u5355\u72EC\u7BA1\u7406\uFF0C\u4E0D\u5728\u672C\u8BC4\u4F30\u8303\u56F4\u5185\u3002\u8BF7\u4EC5\u57FA\u4E8E\u4E0A\u65B9\u7684\u81EA\u52A8\u5316\u68C0\u67E5\u70B9\u8FDB\u884C\u5224\u65AD\u3002
+    const humanCheckpointsSection = humanCheckpointIds.size > 0 ? `## ${texts.harness.logs.aboutHumanVerification}
+${texts.harness.logs.humanVerificationNote.replace("{count}", String(humanCheckpointIds.size)).replace("{examples}", Array.from(humanCheckpointIds).slice(0, 3).join(", "))}
+${texts.harness.logs.humanVerificationExcluded}
 ` : "";
     const evidenceSection = devEvidence.length > 0 ? `## \u63D0\u4EA4\u7684\u8BC1\u636E
 \u5F00\u53D1\u8005\u63D0\u4EA4\u4E86\u4EE5\u4E0B\u8BC1\u636E:
@@ -33067,13 +33392,13 @@ ${devEvidence.map((e) => `- ${e}`).join(`
 ${filteredDevCheckpoints.map((cp) => `- ${cp}`).join(`
 `)}
 ` : "";
-    const phantomTasksSection = phantomTasks.length > 0 ? `## \u26A0\uFE0F \u5E7D\u7075\u4EFB\u52A1\u68C0\u6D4B
-**\u4E25\u91CD\u8FDD\u89C4**: \u5F00\u53D1\u8005\u5728\u6267\u884C\u4EFB\u52A1\u671F\u95F4\u521B\u5EFA\u4E86 ${phantomTasks.length} \u4E2A\u989D\u5916\u4EFB\u52A1:
+    const phantomTasksSection = phantomTasks.length > 0 ? `## ${texts.harness.logs.phantomTaskDetectedTitle}
+${texts.harness.logs.phantomTaskViolation.replace("{count}", String(phantomTasks.length))}
 ${phantomTasks.map((tid) => `- ${tid}`).join(`
 `)}
 
-\u5F00\u53D1\u8005\u88AB\u4E25\u683C\u7981\u6B62\u521B\u5EFA\u65B0\u4EFB\u52A1\u3002\u8FD9\u662F\u4E00\u4E2A\u81EA\u52A8 NOPASS \u7684\u4E25\u91CD\u8FDD\u89C4\u3002
-\u8BF7\u5728\u8BC4\u4F30\u7ED3\u679C\u4E2D\u660E\u786E\u6807\u6CE8\u6B64\u8FDD\u89C4\uFF0C\u5E76\u5C06\u7ED3\u679C\u8BBE\u4E3A NOPASS\u3002
+${texts.harness.logs.phantomTaskProhibited}
+${texts.harness.logs.phantomTaskNopassRequirement}
 ` : "";
     const template = loadPromptTemplate("evaluation", this.config.cwd);
     let retryContextSection = "";
@@ -33212,15 +33537,16 @@ ${phantomTasks.map((tid) => `- ${tid}`).join(`
         break;
       }
     }
+    const texts = t(this.config.cwd);
     if (!result.reason) {
       if (result.passed) {
-        result.reason = "\u57FA\u4E8E\u7ED3\u6784\u5316\u5173\u952E\u8BCD\u5339\u914D\uFF1A\u8BC4\u4F30\u901A\u8FC7";
+        result.reason = texts.harness.logs.structuredMatchPassed;
       } else if (structured.passed !== null) {
-        result.reason = "\u57FA\u4E8E\u7ED3\u6784\u5316\u5173\u952E\u8BCD\u5339\u914D\uFF1A\u8BC4\u4F30\u672A\u901A\u8FC7";
+        result.reason = texts.harness.logs.structuredMatchFailed;
       } else {
-        result.reason = "\u65E0\u6CD5\u89E3\u6790\u8BC4\u4F30\u7ED3\u679C";
+        result.reason = texts.harness.logs.cannotParseResult;
         result.inferenceType = "parse_failure_default";
-        console.log("   \u26A0\uFE0F  \u89E3\u6790\u5931\u8D25\uFF0C\u539F\u59CB\u8F93\u51FA\u524D500\u5B57\u7B26:");
+        console.log(`   \u26A0\uFE0F  ${texts.harness.logs.parseErrorWarning.replace("{limit}", "500")}:`);
         console.log(output.substring(0, 500));
       }
     }
@@ -33279,26 +33605,26 @@ ${phantomTasks.map((tid) => `- ${tid}`).join(`
         }
       }
       if (usingSnapshot) {
-        console.log(`   \uD83D\uDCCA \u5E7D\u7075\u4EFB\u52A1\u68C0\u6D4B\u7EDF\u8BA1: \u603B\u4EFB\u52A1 ${allTaskIds.length}, \u8BA1\u5212\u5185\u6392\u9664 ${excludedCount}, \u8BA1\u5212\u5916\u68C0\u6D4B\u4E2D ${allTaskIds.length - excludedCount - 1}`);
+        console.log(`   \uD83D\uDCCA ${texts.harness.logs.snapshotStats.replace("{total}", String(allTaskIds.length)).replace("{excluded}", String(excludedCount)).replace("{checking}", String(allTaskIds.length - excludedCount - 1))}`);
       }
     } catch (error) {
-      console.log(`   \u26A0\uFE0F \u5E7D\u7075\u4EFB\u52A1\u68C0\u6D4B\u51FA\u9519: ${error instanceof Error ? error.message : String(error)}`);
+      console.log(`   \u26A0\uFE0F ${texts.harness.logs.snapshotError}: ${error instanceof Error ? error.message : String(error)}`);
     }
     if (hasCreateCommand && phantomTasks.length === 0) {
-      console.log("   \u26A0\uFE0F \u5F00\u53D1\u8005\u8F93\u51FA\u4E2D\u5305\u542B task create / init-requirement \u547D\u4EE4\uFF0C\u4F46\u672A\u5728\u6587\u4EF6\u7CFB\u7EDF\u4E2D\u68C0\u6D4B\u5230\u65B0\u4EFB\u52A1");
-      console.log("   \u26A0\uFE0F \u8FD9\u53EF\u80FD\u610F\u5473\u7740\u521B\u5EFA\u64CD\u4F5C\u5931\u8D25\uFF0C\u4F46\u610F\u56FE\u5DF2\u5B58\u5728");
+      console.log(`   \u26A0\uFE0F  ${texts.harness.logs.creatingCommandWarning}`);
+      console.log(`   \u26A0\uFE0F  ${texts.harness.logs.creatingCommandIntent}`);
     }
     if (phantomTasks.length > 0) {
-      console.log(`   \u26A0\uFE0F \u68C0\u6D4B\u5230 ${phantomTasks.length} \u4E2A\u5E7D\u7075\u4EFB\u52A1: ${phantomTasks.join(", ")}`);
+      console.log(`   \u26A0\uFE0F  ${texts.harness.logs.phantomTaskDetected.replace("{count}", String(phantomTasks.length))}: ${phantomTasks.join(", ")}`);
       if (usingSnapshot) {
-        console.log(`   \u2139\uFE0F  \u68C0\u6D4B\u6A21\u5F0F: \u57FA\u4E8E\u8BA1\u5212\u5FEB\u7167\uFF08\u5DF2\u6392\u9664 ${snapshotTaskCount} \u4E2A\u8BA1\u5212\u5185\u4EFB\u52A1\uFF09`);
+        console.log(`   \u2139\uFE0F  ${texts.harness.logs.snapshotMode} ${texts.harness.logs.snapshotExcludedInfo?.replace("{count}", String(snapshotTaskCount)) || `(excluded ${snapshotTaskCount} planned tasks)`}`);
       } else {
-        console.log(`   \u2139\uFE0F  \u68C0\u6D4B\u6A21\u5F0F: \u65F6\u95F4\u7A97\u53E3\u56DE\u9000\uFF08\u5EFA\u8BAE\u542F\u7528\u8BA1\u5212\u5FEB\u7167\u4EE5\u63D0\u9AD8\u51C6\u786E\u6027\uFF09`);
+        console.log(`   \u2139\uFE0F  ${texts.harness.logs.fallbackMode}`);
       }
     } else {
-      console.log(`   \u2705 \u672A\u68C0\u6D4B\u5230\u5E7D\u7075\u4EFB\u52A1`);
+      console.log(`   \u2705 ${texts.harness.logs.noPhantomTask}`);
       if (usingSnapshot) {
-        console.log(`   \u2139\uFE0F  \u5DF2\u57FA\u4E8E\u8BA1\u5212\u5FEB\u7167\u6392\u9664 ${snapshotTaskCount} \u4E2A\u8BA1\u5212\u5185\u4EFB\u52A1`);
+        console.log(`   \u2139\uFE0F  ${texts.harness.logs.snapshotBasedOnInfo?.replace("{count}", String(snapshotTaskCount)) || `excluded ${snapshotTaskCount} planned tasks based on snapshot`}`);
       }
     }
     return phantomTasks;
@@ -33330,6 +33656,7 @@ ${phantomTasks.map((tid) => `- ${tid}`).join(`
     };
   }
   loadContract(taskId) {
+    const texts = t(this.config.cwd);
     const contractPath = this.getContractPath(taskId);
     if (!fs24.existsSync(contractPath)) {
       return null;
@@ -33339,11 +33666,11 @@ ${phantomTasks.map((tid) => `- ${tid}`).join(`
       const parsed = JSON.parse(content);
       const validated = this.validateSprintContract(parsed, taskId);
       if (!validated) {
-        console.warn(`   \u26A0\uFE0F contract.json \u5B58\u5728\u4F46\u6570\u636E\u65E0\u6548\uFF0C\u4F7F\u7528\u9ED8\u8BA4 Contract`);
+        console.warn(`   \u26A0\uFE0F  ${texts.harness.logs.contractDataInvalid}`);
       }
       return validated;
     } catch (error) {
-      console.warn(`   \u26A0\uFE0F contract.json \u89E3\u6790\u5931\u8D25: ${error instanceof Error ? error.message : String(error)}`);
+      console.warn(`   \u26A0\uFE0F  ${texts.harness.logs.contractParseFailed}: ${error instanceof Error ? error.message : String(error)}`);
       return null;
     }
   }
@@ -33366,6 +33693,7 @@ ${phantomTasks.map((tid) => `- ${tid}`).join(`
     fs24.writeFileSync(reportPath, content, "utf-8");
   }
   saveRawEvaluationOutput(taskId, output, stderr, success) {
+    const texts = t(this.config.cwd);
     try {
       const projectDir = getProjectDir(this.config.cwd);
       const dir = path21.join(projectDir, "reports", "harness", taskId);
@@ -33375,7 +33703,7 @@ ${phantomTasks.map((tid) => `- ${tid}`).join(`
       const timestamp = new Date().toISOString().replace(/[:.]/g, "-");
       const rawPath = path21.join(dir, `evaluation-raw-${timestamp}.log`);
       const lines = [
-        `# \u8BC4\u4F30\u4F1A\u8BDD\u539F\u59CB\u8F93\u51FA`,
+        `# ${texts.harness.logs.rawEvaluationOutputTitle || "Raw Evaluation Output"}`,
         `Task: ${taskId}`,
         `Time: ${new Date().toISOString()}`,
         `Success: ${success}`,
@@ -33390,9 +33718,9 @@ ${phantomTasks.map((tid) => `- ${tid}`).join(`
       ];
       fs24.writeFileSync(rawPath, lines.join(`
 `), "utf-8");
-      console.log(`   \uD83D\uDCC4 \u539F\u59CB\u8BC4\u4F30\u8F93\u51FA\u5DF2\u4FDD\u5B58: evaluation-raw-${timestamp}.log`);
+      console.log(`   \uD83D\uDCC4 ${texts.harness.logs.rawOutputSaved.replace("{filename}", `evaluation-raw-${timestamp}.log`)}`);
     } catch (error) {
-      console.warn(`   \u26A0\uFE0F \u4FDD\u5B58\u539F\u59CB\u8BC4\u4F30\u8F93\u51FA\u5931\u8D25: ${error instanceof Error ? error.message : String(error)}`);
+      console.warn(`   \u26A0\uFE0F ${texts.harness.logs.saveRawOutputFailed}: ${error instanceof Error ? error.message : String(error)}`);
     }
   }
   formatReviewReport(verdict, devReport) {
@@ -33445,6 +33773,7 @@ ${phantomTasks.map((tid) => `- ${tid}`).join(`
 
 // src/utils/harness-retry.ts
 init_harness_helpers();
+init_i18n();
 
 class RetryHandler {
   config;
@@ -33452,21 +33781,23 @@ class RetryHandler {
     this.config = config;
   }
   async shouldRetry(taskId, retryCounter) {
+    const texts = t(this.config.cwd);
     const currentAttempts = retryCounter.get(taskId) || 0;
     if (currentAttempts >= this.config.maxRetries) {
-      console.log(`   \u26A0\uFE0F  \u5DF2\u8FBE\u5230\u6700\u5927\u91CD\u8BD5\u6B21\u6570 (${this.config.maxRetries})`);
+      console.log(`   \u26A0\uFE0F  ${texts.harness.logs.maxRetriesReached.replace("{count}", String(this.config.maxRetries))}`);
       return false;
     }
-    console.log(`   \uD83D\uDD04 \u51C6\u5907\u91CD\u8BD5 (\u7B2C ${currentAttempts + 1}/${this.config.maxRetries} \u6B21)`);
+    console.log(`   \uD83D\uDD04 ${texts.harness.logs.preparingRetry.replace("{current}", String(currentAttempts + 1)).replace("{max}", String(this.config.maxRetries))}`);
     await this.applyBackoff(currentAttempts);
     return true;
   }
   async applyBackoff(attemptNumber) {
+    const texts = t(this.config.cwd);
     const baseDelay = 2000;
     const maxDelay = 30000;
     const delay = Math.min(baseDelay * Math.pow(2, attemptNumber), maxDelay);
     if (delay > 0) {
-      console.log(`   \u23F3 \u7B49\u5F85 ${(delay / 1000).toFixed(1)}s \u540E\u91CD\u8BD5...`);
+      console.log(`   \u23F3 ${texts.harness.logs.waitingToRetry.replace("{seconds}", (delay / 1000).toFixed(1))}...`);
       await this.sleep(delay);
     }
   }
@@ -35796,13 +36127,13 @@ async function loadTaskQueue(options, cwd2) {
         console.error("Error: No tasks in plan file");
         process.exit(1);
       }
-      const TERMINAL_STATUSES3 = new Set(["resolved", "closed", "abandoned", "failed"]);
+      const TERMINAL_STATUSES_SET3 = new Set(TERMINAL_STATUSES);
       const originalCount = taskQueue.length;
       taskQueue = taskQueue.filter((id) => {
         const task = readTaskMeta(id, cwd2);
         if (!task)
           return false;
-        return !TERMINAL_STATUSES3.has(normalizeStatus(task.status));
+        return !TERMINAL_STATUSES_SET3.has(normalizeStatus(task.status));
       });
       if (originalCount - taskQueue.length > 0) {
         console.log(`Using plan file: ${options.plan} (filtered ${originalCount - taskQueue.length} terminal tasks)`);
@@ -35842,12 +36173,12 @@ async function loadTaskQueue(options, cwd2) {
   process.exit(1);
 }
 function filterExecutableFromPlan(plan, cwd2, logPrefix) {
-  const TERMINAL_STATUSES3 = new Set(["resolved", "closed", "abandoned", "failed"]);
+  const TERMINAL_STATUSES_SET3 = new Set(TERMINAL_STATUSES);
   const filteredTasks = plan.tasks.filter((taskId) => {
     const task = readTaskMeta(taskId, cwd2);
     if (!task)
       return false;
-    return !TERMINAL_STATUSES3.has(normalizeStatus(task.status));
+    return !TERMINAL_STATUSES_SET3.has(normalizeStatus(task.status));
   });
   const filteredCount = plan.tasks.length - filteredTasks.length;
   if (filteredCount > 0) {
@@ -36004,7 +36335,7 @@ rename format:
   task rename <oldTaskId> <newTaskId>
 
   Example:
-    task rename TASK-001 TASK-feature-new-name`).allowExcessArguments(true).option("-s, --status <status>", "Filter by status (list only)").option("-p, --priority <priority>", "Filter by priority (list only)").option("-r, --role <role>", "Filter by recommended role (list only)").option("--dep-id <depId>", "Dependency task ID (dependency only)").option("--title <title>", "Task title (create/update only)").option("--description <description>", "Task description (create/update only)").option("--type <type>", "Task type (create/count): bug/feature/research/docs/refactor/test").option("-y, --yes", "Non-interactive mode (create/checkpoint/delete only)").option("--token <n>", "Token estimation").option("--sync-children", "Sync subtask status (update resolved/closed only)").option("--no-sync", "Do not sync subtask status (update only)").option("--topic <topic>", "Discussion topic (discuss only)").option("-v, --verbose", "\u663E\u793A\u5B8C\u6574\u4FE1\u606F (\u4EC5 show)").option("--history", "Show change history only (show only)").option("--json", "JSON format output (show/get/list/status/count only)").option("--compact", "Compact output (show only)").option("--fields <fields>", "Custom output fields (list only)").option("--missing-verification", "Filter tasks missing verification (list only)").option("-g, --group <field>", "Group display (list only): status/priority/type/role").option("--checkpoints", "Show checkpoint details (show only)").option("--format <format>", "Output format (show only): panel/classic").option("--result <result>", "Verification result (checkpoint complete only)").option("--note <note>", "Checkpoint note (checkpoint note/fail only)").option("--into <count>", "Split count (split only)").option("--titles <titles>", "Subtask title list (split only)").option("--skip-validation", "Skip checkpoint quality validation (create only)").option("-f, --force", "Force operation").option("--file <path>", "Read description from file (create only, for long descriptions with special characters)").option("--from-requirement", "Create from requirement (create only)").option("--requirement-text <text>", "Requirement text (create only)").option("--branch <branch>", "Associated branch (create only)").option("--from <id>", "Dependency source (dependency only)").option("--to <id>", "Dependency target (dependency only)").option("--remove", "Remove dependency (dependency only)").option("--parts <n>", "Split count (split only)").option("--strategy <strategy>", "Split strategy (split only)").option("--pass", "Pass checkpoint (checkpoint only)").option("--fail", "Fail checkpoint (checkpoint only)").option("--all", "Include all tasks including resolved/closed (batch-update only)").option("--tasks <ids>", "Specify task ID list, comma-separated (batch-update only)", collectValues, []).option("--task-file <path>", "Read task ID list from file, one per line or comma-separated (batch-update only)").option("--change-note <note>", "Change note, at least 10 characters, recorded in transitionNotes (batch-update only)").option("--source <source>", "Filter log source (batch-update-logs only): cli/ide/hook/script/unknown").option("--summary", "Show log statistics summary (batch-update-logs only)").action(async (action, id, options) => {
+    task rename TASK-001 TASK-feature-new-name`).allowExcessArguments(true).option("-s, --status <status>", "Filter by status (list only)").option("-p, --priority <priority>", "Filter by priority (list only)").option("-r, --role <role>", "Filter by recommended role (list only)").option("--dep-id <depId>", "Dependency task ID (dependency only)").option("--title <title>", "Task title (create/update only)").option("--description <description>", "Task description (create/update only)").option("--type <type>", "Task type (create/count): bug/feature/research/docs/refactor/test").option("-y, --yes", "Non-interactive mode (create/checkpoint/delete only)").option("--token <n>", "Token estimation").option("--sync-children", "Sync subtask status (update resolved/closed only)").option("--no-sync", "Do not sync subtask status (update only)").option("--topic <topic>", "Discussion topic (discuss only)").option("-v, --verbose", "\u663E\u793A\u5B8C\u6574\u4FE1\u606F (\u4EC5 show)").option("--history", "Show change history only (show only)").option("--json", "JSON format output (show/get/list/status/count only)").option("--compact", "Compact output (show only)").option("--fields <fields>", "Custom output fields (list only)").option("--missing-verification", "Filter tasks missing verification (list only)").option("-g, --group <field>", "Group display (list only): status/priority/type/role").option("--checkpoints", "Show checkpoint details (show only)").option("--format <format>", "Output format (show only): panel/classic").option("--result <result>", "Verification result (checkpoint complete only)").option("--note <note>", "Checkpoint note (checkpoint note/fail only)").option("--into <count>", "Split count (split only)").option("--titles <titles>", "Subtask title list (split only)").option("--skip-validation", "Skip checkpoint quality validation (create only)").option("-f, --force", "Force operation").option("--file <path>", "Read description from file (create only, for long descriptions with special characters)").option("--from-requirement", "Create from requirement (create only)").option("--requirement-text <text>", "Requirement text (create only)").option("--branch <branch>", "Associated branch (create only)").option("--from <id>", "Dependency source (dependency only)").option("--to <id>", "Dependency target (dependency only)").option("--remove", "Remove dependency (dependency only)").option("--parts <n>", "Split count (split only)").option("--strategy <strategy>", "Split strategy (split only)").option("--pass", "Pass checkpoint (checkpoint only)").option("--fail", "Fail checkpoint (checkpoint only)").option("--all", "Include all tasks including resolved/closed (batch-update only)").option("--tasks <ids>", "Specify task ID list, comma-separated (batch-update only)", collectValues, []).option("--task-file <path>", "Read task ID list from file, one per line or comma-separated (batch-update only)").option("--change-note <note>", "Change note, at least 10 characters, recorded in transitionNotes (batch-update only)").option("--source <source>", "Filter log source (batch-update-logs only): cli/ide/hook/script/unknown").option("--summary", "Show log statistics summary (batch-update-logs only)").option("--enhancement", "Mark reopen as enhancement request (reopen only)").option("--failed-checkpoints <ids>", "Failed checkpoint IDs, comma-separated (reopen only)").option("--qa-feedback <text>", "QA feedback for reopen (reopen only)").action(async (action, id, options) => {
   requireInit();
   switch (action) {
     case "create": {
@@ -36088,7 +36419,10 @@ rename format:
         role: options.role,
         token: options.token,
         syncChildren: options.syncChildren,
-        noSync: options.noSync
+        noSync: options.noSync,
+        enhancement: options.enhancement,
+        failedCheckpoints: options.failedCheckpoints,
+        qaFeedback: options.qaFeedback
       });
       break;
     case "delete":
@@ -36348,7 +36682,7 @@ program2.command("plan <action> [id]").description(`\u7BA1\u7406\u6267\u884C\u8B
 
 recommend \u5B50\u547D\u4EE4\u652F\u6301\u4E09\u5C42\u4F9D\u8D56\u63A8\u65AD:
   Layer1/2: \u6587\u4EF6\u8DEF\u5F84\u91CD\u53E0 (\u9ED8\u8BA4)
-  Layer3: AI \u8BED\u4E49\u63A8\u65AD (--smart \u6FC0\u6D3B)`).option("-j, --json", "\u4EE5 JSON \u683C\u5F0F\u8F93\u51FA (\u4EC5 show/recommend)").option("-f, --force", "\u5F3A\u5236\u6267\u884C\uFF0C\u8DF3\u8FC7\u786E\u8BA4 (\u4EC5 clear)").option("-a, --after <taskId>", "\u5728\u6307\u5B9A\u4EFB\u52A1\u4E4B\u540E\u6DFB\u52A0 (\u4EC5 add)").option("-y, --yes", "\u975E\u4EA4\u4E92\u6A21\u5F0F\uFF0C\u81EA\u52A8\u5E94\u7528\u63A8\u8350 (\u4EC5 recommend)").option("-q, --query <query>", "\u7528\u6237\u63CF\u8FF0/\u5173\u952E\u5B57\u8FC7\u6EE4 (\u4EC5 recommend)").option("--smart", "\u542F\u7528 AI \u8BED\u4E49\u4F9D\u8D56\u63A8\u65AD (\u4EC5 recommend, Layer3 \u589E\u5F3A)").option("--all", "\u663E\u793A\u5168\u90E8\u72B6\u6001\u4EFB\u52A1\uFF0C\u9ED8\u8BA4\u4EC5\u63A8\u8350 open (\u4EC5 recommend)").option("--strict-subtask-coverage", "\u4E25\u683C\u5B50\u4EFB\u52A1\u8986\u76D6\u68C0\u6D4B\uFF1A\u53D1\u73B0\u7F3A\u5931\u5B50\u4EFB\u52A1\u65F6\u4E2D\u6B62\u63A8\u8350 (\u4EC5 recommend)").option("--require-quality", "\u542F\u7528\u8D28\u91CF\u95E8\u7981\u68C0\u67E5\uFF0C\u8FC7\u6EE4\u4F4E\u8D28\u91CF\u4EFB\u52A1 (\u4EC5 recommend)").option("--no-quality-gate", "\u7981\u7528\u8D28\u91CF\u95E8\u7981\u68C0\u67E5 (\u4EC5 recommend)").action(async (action, id, options) => {
+  Layer3: AI \u8BED\u4E49\u63A8\u65AD (--smart \u6FC0\u6D3B)`).option("-j, --json", "\u4EE5 JSON \u683C\u5F0F\u8F93\u51FA (\u4EC5 show/recommend)").option("-f, --force", "\u5F3A\u5236\u6267\u884C\uFF0C\u8DF3\u8FC7\u786E\u8BA4 (\u4EC5 clear)").option("-a, --after <taskId>", "\u5728\u6307\u5B9A\u4EFB\u52A1\u4E4B\u540E\u6DFB\u52A0 (\u4EC5 add)").option("-y, --yes", "\u975E\u4EA4\u4E92\u6A21\u5F0F\uFF0C\u81EA\u52A8\u5E94\u7528\u63A8\u8350 (\u4EC5 recommend)").option("-q, --query <query>", "\u7528\u6237\u63CF\u8FF0/\u5173\u952E\u5B57\u8FC7\u6EE4 (\u4EC5 recommend)").option("--smart", "\u542F\u7528 AI \u8BED\u4E49\u4F9D\u8D56\u63A8\u65AD (\u4EC5 recommend, Layer3 \u589E\u5F3A)").option("--all", "\u663E\u793A\u5168\u90E8\u72B6\u6001\u4EFB\u52A1\uFF0C\u9ED8\u8BA4\u4EC5\u63A8\u8350 open (\u4EC5 recommend)").option("--strict-subtask-coverage", "\u4E25\u683C\u5B50\u4EFB\u52A1\u8986\u76D6\u68C0\u6D4B\uFF1A\u53D1\u73B0\u7F3A\u5931\u5B50\u4EFB\u52A1\u65F6\u4E2D\u6B62\u63A8\u8350 (\u4EC5 recommend)").option("--strict-quality-gate", "\u4E25\u683C\u8D28\u91CF\u95E8\u7981\u68C0\u67E5\uFF1A\u8D28\u91CF\u68C0\u67E5\u5931\u8D25\u65F6\u4E2D\u6B62\u63A8\u8350 (\u4EC5 recommend)").option("--quality-threshold <score>", "\u8D28\u91CF\u95E8\u7981\u9608\u503C (0-100)\uFF0C\u4F4E\u4E8E\u6B64\u5206\u6570\u7684\u4EFB\u52A1\u5C06\u88AB\u6807\u8BB0 (\u4EC5 recommend)", "60").option("--skip-quality-gate", "\u8DF3\u8FC7\u8D28\u91CF\u95E8\u7981\u68C0\u67E5 (\u4EC5 recommend)").action(async (action, id, options) => {
   requireInit();
   switch (action) {
     case "show":
@@ -36379,7 +36713,9 @@ recommend \u5B50\u547D\u4EE4\u652F\u6301\u4E09\u5C42\u4F9D\u8D56\u63A8\u65AD:
         all: options.all,
         smart: options.smart,
         strictSubtaskCoverage: options.strictSubtaskCoverage,
-        requireQuality: options.qualityGate === false ? false : options.requireQuality || true
+        strictQualityGate: options.strictQualityGate,
+        qualityThreshold: parseInt(options.qualityThreshold, 10) || 60,
+        skipQualityGate: options.skipQualityGate
       });
       break;
     default:

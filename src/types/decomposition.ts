@@ -76,17 +76,19 @@ export interface ProblemPattern {
 export const DEFAULT_PROBLEM_PATTERNS: ProblemPattern[] = [
   {
     name: 'numbered_problem',
+    // Matches: "问题1: xxx" or "缺陷1: xxx" (Chinese "问题" = Issue, "缺陷" = Defect)
     regex: /(?:^|\n)\s*(?:问题|Issue|Bug|缺陷)\s*(\d+)[.:\-]\s*([^\n]+)/gi,
     priorityExtractor: () => 'P2',
   },
   {
     name: 'bullet_problem',
+    // Matches: "- [P0] xxx" or "- [紧急] xxx" (Chinese "紧急" = Urgent, "高" = High, "中" = Medium, "低" = Low)
     regex: /(?:^|\n)\s*[-*]\s*(?:\[?(P\d|紧急|高|中|低)\]?)?\s*([^\n]{10,200})/gi,
     priorityExtractor: (match) => {
       const priority = match[1];
-      if (priority?.includes('P0') || priority?.includes('紧急')) return 'P0';
-      if (priority?.includes('P1') || priority?.includes('高')) return 'P1';
-      if (priority?.includes('P3') || priority?.includes('低')) return 'P3';
+      if (priority?.includes('P0') || priority?.includes('紧急')) return 'P0';  // 紧急 = Urgent
+      if (priority?.includes('P1') || priority?.includes('高')) return 'P1';   // 高 = High
+      if (priority?.includes('P3') || priority?.includes('低')) return 'P3';   // 低 = Low
       return 'P2';
     },
   },

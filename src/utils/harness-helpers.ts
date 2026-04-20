@@ -9,6 +9,7 @@ import * as path from 'path';
 import { spawn } from 'child_process';
 import type { TaskMeta, CheckpointMetadata } from '../types/task.js';
 import { getProjectDir } from './path.js';
+import { t } from '../i18n/index.js';
 
 // ============================================================
 // 常量定义
@@ -75,20 +76,20 @@ export function classifyExitResult(
   if (isHookError && hasOutput) {
     return {
       success: true,
-      hookWarning: `Hook 错误已忽略: ${stderr.substring(0, 200)}`,
+      hookWarning: `Hook error ignored: ${stderr.substring(0, 200)}`,
     };
   }
 
   if (isHookError && !hasOutput) {
     return {
       success: false,
-      error: `Hook 错误导致无输出: ${stderr.substring(0, 200)}`,
+      error: `Hook error caused no output: ${stderr.substring(0, 200)}`,
     };
   }
 
   return {
     success: false,
-    error: stderr || `进程退出码: ${code}`,
+    error: stderr || `Process exit code: ${code}`,
   };
 }
 
@@ -255,13 +256,15 @@ export interface RetryConfig {
 export async function runHeadlessClaudeWithRetry(
   options: HeadlessClaudeOptions,
   retryConfig: RetryConfig,
+  cwd?: string,
 ): Promise<HeadlessClaudeResult> {
+  const texts = t(cwd);
   const maxAttempts = retryConfig.maxAttempts + 1; // +1 因为第一次不算重试
   let lastResult: HeadlessClaudeResult | null = null;
 
   for (let attempt = 1; attempt <= maxAttempts; attempt++) {
     if (attempt > 1) {
-      console.log(`   🔄 API 调用重试 (${attempt - 1}/${retryConfig.maxAttempts})...`);
+      console.log(`   🔄 ${texts.harness.logs.apiRetry.replace('{current}', String(attempt - 1)).replace('{max}', String(retryConfig.maxAttempts))}...`);
     }
 
     lastResult = await runHeadlessClaude(options);
@@ -279,7 +282,7 @@ export async function runHeadlessClaudeWithRetry(
 
     // 计算退避延迟（指数退避）
     const delay = Math.min(errorInfo.waitSeconds || retryConfig.baseDelay, retryConfig.baseDelay * Math.pow(2, attempt - 1));
-    console.log(`   ⏳ ${errorInfo.reason}，${delay} 秒后重试...`);
+    console.log(`   ⏳ ${texts.harness.logs.retryingInSeconds.replace('{reason}', errorInfo.reason).replace('{seconds}', String(delay))}...`);
 
     await sleep(delay);
   }
@@ -295,7 +298,8 @@ export async function runHeadlessClaudeWithRetry(
  *
  * 归档路径格式: {报告目录}/archive/{ISO-timestamp}-{原始文件名}
  */
-export function archiveReportIfExists(reportPath: string): void {
+export function archiveReportIfExists(reportPath: string, cwd?: string): void {
+  const texts = t(cwd);
   try {
     // Resolve to absolute path to ensure correct behavior with relative paths
     const absolutePath = path.resolve(reportPath);
@@ -316,10 +320,10 @@ export function archiveReportIfExists(reportPath: string): void {
     const archivePath = path.join(archiveDir, `${timestamp}-${filename}`);
 
     fs.copyFileSync(absolutePath, archivePath);
-    console.log(`   📦 已归档旧报告: archive/${timestamp}-${filename}`);
+    console.log(`   📦 ${texts.harness.logs.archivedReport.replace('{filename}', `${timestamp}-${filename}`)}`);
   } catch (error) {
     // 归档失败不阻断报告写入流程
-    console.warn(`   ⚠️ 归档报告失败: ${error instanceof Error ? error.message : String(error)}`);
+    console.warn(`   ⚠️ ${texts.harness.logs.archiveFailed}: ${error instanceof Error ? error.message : String(error)}`);
   }
 }
 

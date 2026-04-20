@@ -52,6 +52,8 @@ export interface I18nTexts {
     setupComplete: string;
     nextStep: string;
     selectLanguage: string;
+    chinese: string;
+    english: string;
     copyingSkills: string;
     skillsCopied: string;
     alreadyInitialized: string;
@@ -69,8 +71,71 @@ export interface I18nTexts {
     statusHeader: string;
     priorityHeader: string;
     roleHeader: string;
-  dependencyHeader: string;
+    dependencyHeader: string;
     subtaskHeader: string;
+    // List headers
+    idHeader: string;
+    titleHeader: string;
+    typeHeader: string;
+    // Status display
+    statusOpen: string;
+    statusInProgress: string;
+    statusWaitReview: string;
+    statusWaitQa: string;
+    statusWaitEvaluation: string;
+    statusResolved: string;
+    statusClosed: string;
+    statusAbandoned: string;
+    statusFailed: string;
+    // Priority display
+    priorityP0: string;
+    priorityP1: string;
+    priorityP2: string;
+    priorityP3: string;
+    // Task types
+    typeBug: string;
+    typeFeature: string;
+    typeResearch: string;
+    typeDocs: string;
+    typeRefactor: string;
+    typeTest: string;
+    typeNotSpecified: string;
+    // Time display
+    timeJustNow: string;
+    timeMinutesAgo: string;
+    timeHoursAgo: string;
+    timeDaysAgo: string;
+    // Statistics
+    totalTasks: string;
+    totalSubtasks: string;
+    subtasksLabel: string;
+    parentTaskLabel: string;
+    // Others
+    dependenciesLabel: string;
+    roleLabel: string;
+    branchLabel: string;
+    createdAt: string;
+    updatedAt: string;
+    reopened: string;
+    reopenCount: string;
+    discussionLabel: string;
+    requirementChanges: string;
+    // Table headers
+    listTableHeader: string;
+    listTableSeparator: string;
+    // Checkpoint related
+    checkpointsSection: string;
+    noCheckpoints: string;
+    checkpointProgress: string;
+    // Dependencies display
+    dependencyGate: string;
+    dependencyError: string;
+    // Task creation
+    taskCreationCancelled: string;
+    invalidTaskIdFormat: string;
+    taskIdAlreadyExists: string;
+    filteredLowQualityCheckpoints: string;
+    projectNotInitialized: string;
   };
   // plan 命令
   plan: {
@@ -246,15 +311,40 @@ export interface I18nTexts {
       evaluationOutputEmpty: string;
       contradictionFix: string;
       evalParseError: string;
+      evalParseFailureDefaultReason: string;
       phantomTaskDetected: string;
       phantomTaskAutoNopass: string;
       noPhantomTask: string;
       snapshotMode: string;
       fallbackMode: string;
       snapshotStats: string;
+      snapshotError: string;
+      snapshotExcludedInfo: string;
+      snapshotBasedOnInfo: string;
+      hookWarningIgnored: string;
+      hookErrorNoOutput: string;
+      processExitCode: string;
       creatingCommandWarning: string;
       creatingCommandIntent: string;
+      parseErrorWarning: string;
+      rawOutputSaved: string;
+      saveRawOutputFailed: string;
+      rawEvaluationOutputTitle: string;
+      structuredMatchPassed: string;
+      structuredMatchFailed: string;
+      cannotParseResult: string;
+      contractDataInvalid: string;
+      contractParseFailed: string;
+      exitCode: string;
+      devOutputValidationFailedError: string;
       retryReference: string;
+      apiRetry: string;
+      retryingInSeconds: string;
+      archivedReport: string;
+      archiveFailed: string;
+      maxRetriesReached: string;
+      preparingRetry: string;
+      waitingToRetry: string;
     };
     reports: {
       devReportTitle: string;
@@ -585,6 +675,7 @@ export interface I18nTexts {
     transitionStartExecution: string;
     transitionSubmitReview: string;
     transitionReviewPass: string;
+    transitionQaPass: string;
     transitionEvalPass: string;
     transitionCloseTask: string;
     transitionDirectComplete: string;

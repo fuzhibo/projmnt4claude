@@ -38,7 +38,7 @@ import { AssemblyLine } from '../utils/hd-assembly-line.js';
 import { HarnessReporter } from '../utils/harness-reporter.js';
 import { readPlan, type ExecutionPlan } from '../utils/plan.js';
 import { readTaskMeta } from '../utils/task.js';
-import { normalizeStatus } from '../types/task.js';
+import { normalizeStatus, TERMINAL_STATUSES } from '../types/task.js';
 import { SEPARATOR_WIDTH } from '../utils/format';
 import { recommendPlan } from './plan.js';
 import {
@@ -691,12 +691,12 @@ async function loadTaskQueue(options: HarnessCommandOptions, cwd: string): Promi
       }
 
       // CP-19: Only filter terminal state tasks, trust plan sorting for dependencies
-      const TERMINAL_STATUSES = new Set(['resolved', 'closed', 'abandoned', 'failed']);
+      const TERMINAL_STATUSES_SET = new Set(TERMINAL_STATUSES);
       const originalCount = taskQueue.length;
       taskQueue = taskQueue.filter((id: string) => {
         const task = readTaskMeta(id, cwd);
         if (!task) return false;
-        return !TERMINAL_STATUSES.has(normalizeStatus(task.status));
+        return !TERMINAL_STATUSES_SET.has(normalizeStatus(task.status));
       });
       if (originalCount - taskQueue.length > 0) {
         console.log(`Using plan file: ${options.plan} (filtered ${originalCount - taskQueue.length} terminal tasks)`);
@@ -759,14 +759,14 @@ function filterExecutableFromPlan(
   logPrefix: string
 ): BatchAwareQueue {
   // 终态集合：已完成/失败/放弃的任务不再执行
-  const TERMINAL_STATUSES = new Set(['resolved', 'closed', 'abandoned', 'failed']);
+  const TERMINAL_STATUSES_SET = new Set(TERMINAL_STATUSES);
 
   // 仅过滤终态任务，信任计划排序处理依赖关系
   // CP-9: 使用 normalizeStatus 确保状态比较标准化
   const filteredTasks = plan.tasks.filter(taskId => {
     const task = readTaskMeta(taskId, cwd);
     if (!task) return false;
-    return !TERMINAL_STATUSES.has(normalizeStatus(task.status));
+    return !TERMINAL_STATUSES_SET.has(normalizeStatus(task.status));
   });
 
   const filteredCount = plan.tasks.length - filteredTasks.length;
