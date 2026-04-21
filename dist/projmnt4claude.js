@@ -28169,12 +28169,124 @@ var DECOMPOSITION_CONSTRAINTS = {
   MIN_CHECKPOINTS: 1,
   VALID_PRIORITIES: ["P0", "P1", "P2", "P3"]
 };
+var VALID_TASK_TYPES = ["bug", "feature", "research", "docs", "refactor", "test"];
+var VALID_TASK_PRIORITIES = ["P0", "P1", "P2", "P3"];
+function isValidTaskType(value) {
+  return typeof value === "string" && VALID_TASK_TYPES.includes(value);
+}
+function isValidTaskPriority(value) {
+  return typeof value === "string" && VALID_TASK_PRIORITIES.includes(value);
+}
+function isValidDecomposedTaskItem(item) {
+  if (typeof item !== "object" || item === null) {
+    return false;
+  }
+  const obj = item;
+  if (typeof obj.title !== "string" || obj.title.trim().length === 0) {
+    return false;
+  }
+  if (typeof obj.description !== "string") {
+    return false;
+  }
+  if (!isValidTaskType(obj.type)) {
+    return false;
+  }
+  if (!isValidTaskPriority(obj.priority)) {
+    return false;
+  }
+  if (!Array.isArray(obj.suggestedCheckpoints)) {
+    return false;
+  }
+  for (const checkpoint of obj.suggestedCheckpoints) {
+    if (typeof checkpoint !== "string") {
+      return false;
+    }
+  }
+  if (!Array.isArray(obj.relatedFiles)) {
+    return false;
+  }
+  for (const file of obj.relatedFiles) {
+    if (typeof file !== "string") {
+      return false;
+    }
+  }
+  if (typeof obj.estimatedMinutes !== "number" || obj.estimatedMinutes < 0) {
+    return false;
+  }
+  if (!Array.isArray(obj.dependsOn)) {
+    return false;
+  }
+  for (const dep of obj.dependsOn) {
+    if (typeof dep !== "number") {
+      return false;
+    }
+  }
+  return true;
+}
+function isValidRequirementDecomposition(result) {
+  if (typeof result !== "object" || result === null) {
+    return false;
+  }
+  const obj = result;
+  if (typeof obj.decomposable !== "boolean") {
+    return false;
+  }
+  if (!Array.isArray(obj.items)) {
+    return false;
+  }
+  for (const item of obj.items) {
+    if (!isValidDecomposedTaskItem(item)) {
+      return false;
+    }
+  }
+  if (typeof obj.summary !== "string") {
+    return false;
+  }
+  if (obj.reason !== undefined && typeof obj.reason !== "string") {
+    return false;
+  }
+  return true;
+}
 
 // src/utils/requirement-decomposer.ts
 init_task();
 init_quality_gate();
 init_config();
 init_headless_agent();
+var SECURITY_CONFIG = {
+  MAX_INPUT_LENGTH: 50000,
+  MAX_AI_RESPONSE_LENGTH: 1e5,
+  DANGEROUS_PATTERNS: [
+    /<script\b[^>]*>/i,
+    /javascript:/i,
+    /on\w+\s*=/i,
+    /eval\s*\(/i,
+    /Function\s*\(/i,
+    /new\s+Function/i,
+    /setTimeout\s*\(\s*['"`]/i,
+    /setInterval\s*\(\s*['"`]/i,
+    /__proto__/,
+    /constructor\s*\[/,
+    /\[\s*['"]constructor['"]\s*\]/
+  ]
+};
+function validateInputSecurity(content) {
+  if (content.length > SECURITY_CONFIG.MAX_INPUT_LENGTH) {
+    return {
+      valid: false,
+      error: `\u8F93\u5165\u5185\u5BB9\u8FC7\u957F\uFF08\u5F53\u524D ${content.length} \u5B57\u7B26\uFF09\uFF0C\u8D85\u8FC7\u6700\u5927\u9650\u5236 ${SECURITY_CONFIG.MAX_INPUT_LENGTH} \u5B57\u7B26`
+    };
+  }
+  for (const pattern of SECURITY_CONFIG.DANGEROUS_PATTERNS) {
+    if (pattern.test(content)) {
+      return {
+        valid: false,
+        error: "\u68C0\u6D4B\u5230\u6F5C\u5728\u7684\u5371\u9669\u5185\u5BB9\u6A21\u5F0F\uFF0C\u8F93\u5165\u88AB\u62D2\u7EDD"
+      };
+    }
+  }
+  return { valid: true };
+}
 function isInvestigationReport(content) {
   const problemKeywords = ["\u95EE\u9898", "Issue", "Bug", "\u7F3A\u9677", "\u53D1\u73B0"];
   let problemCount = 0;
@@ -28194,7 +28306,7 @@ function isInvestigationReport(content) {
 function extractProblemsByPattern(content) {
   const problems = [];
   const seen = new Set;
-  const problemRegex = /(?:^|\n)(?:#{1,3}\s+)?(?:\u95EE\u9898|Issue|Bug|\u7F3A\u9677)\s*(?:[#]?\s*)?(\d+[A-Z]?)[.:\-]?\s*([^\n]+)(?:\n([^]*?))?(?=\n(?:\u95EE\u9898|Issue|Bug|\u7F3A\u9677)\s*[#]?\s*\d+|\n#{1,3}\s|$)/gi;
+  const problemRegex = /(?:^|\n)(?:#{1,3}\s+)?(?:\u95EE\u9898|Issue|Bug|\u7F3A\u9677)\s*(?:#\s*)?(\d+[A-Z]?)[.:\-]?\s*([^\n]{1,200})(?:\n([^]{0,2000}))?(?=\n(?:\u95EE\u9898|Issue|Bug|\u7F3A\u9677)\s*#?\s*\d+|\n#{1,3}\s|$)/gi;
   let match;
   while ((match = problemRegex.exec(content)) !== null) {
     const problemId = match[1]?.trim() || "";
@@ -28285,12 +28397,53 @@ function extractProblemsByPattern(content) {
   }
   return problems;
 }
+function validateAIResponse(parsed) {
+  if (!parsed || typeof parsed !== "object") {
+    return null;
+  }
+  if (!("items" in parsed) || !Array.isArray(parsed.items)) {
+    return null;
+  }
+  const decomposable = parsed.decomposable === true;
+  const reason = typeof parsed.reason === "string" ? parsed.reason : undefined;
+  const summary = typeof parsed.summary === "string" ? parsed.summary : undefined;
+  const items = [];
+  for (const rawItem of parsed.items) {
+    if (!rawItem || typeof rawItem !== "object") {
+      continue;
+    }
+    const item = rawItem;
+    if (!("title" in item) || typeof item.title !== "string" || item.title.trim().length === 0) {
+      continue;
+    }
+    if ("suggestedCheckpoints" in item && !Array.isArray(item.suggestedCheckpoints)) {
+      continue;
+    }
+    if ("relatedFiles" in item && !Array.isArray(item.relatedFiles)) {
+      continue;
+    }
+    if ("dependsOn" in item && !Array.isArray(item.dependsOn)) {
+      continue;
+    }
+    items.push(item);
+  }
+  return {
+    decomposable,
+    reason,
+    summary,
+    items
+  };
+}
 async function decomposeWithAI(content, cwd2) {
+  if (content.length > SECURITY_CONFIG.MAX_INPUT_LENGTH) {
+    console.warn(`AI \u5206\u89E3\u8B66\u544A\uFF1A\u8F93\u5165\u5185\u5BB9\u8FC7\u957F(${content.length}\u5B57\u7B26)\uFF0C\u5DF2\u622A\u65AD\u5904\u7406`);
+  }
   try {
+    const safeContent = content.substring(0, Math.min(content.length, SECURITY_CONFIG.MAX_INPUT_LENGTH));
     const prompt = `\u8BF7\u5C06\u4EE5\u4E0B\u9700\u6C42/\u62A5\u544A\u5206\u89E3\u4E3A\u591A\u4E2A\u72EC\u7ACB\u7684\u5F00\u53D1\u4EFB\u52A1\u3002
 
 \u8F93\u5165\u5185\u5BB9\uFF1A
-${content.substring(0, 4000)}
+${safeContent.substring(0, 4000)}
 
 \u8BF7\u5206\u6790\u8F93\u5165\u5185\u5BB9\uFF0C\u8BC6\u522B\u51FA\u5176\u4E2D\u5305\u542B\u7684\u72EC\u7ACB\u95EE\u9898\u6216\u9700\u6C42\u9879\uFF0C\u5E76\u8FD4\u56DE JSON \u683C\u5F0F\u7684\u5206\u89E3\u7ED3\u679C\uFF1A
 {
@@ -28334,25 +28487,57 @@ ${content.substring(0, 4000)}
         } catch {}
       }
     }
-    if (!parsed || !parsed.items || !Array.isArray(parsed.items)) {
+    const validated = validateAIResponse(parsed);
+    if (!validated) {
       return null;
     }
-    return {
-      decomposable: parsed.decomposable === true,
-      reason: typeof parsed.reason === "string" ? parsed.reason : undefined,
-      summary: typeof parsed.summary === "string" ? parsed.summary : `\u5206\u89E3\u4E3A ${parsed.items.length} \u4E2A\u5B50\u4EFB\u52A1`,
-      items: parsed.items.map((item, index) => ({
+    const responseLength = JSON.stringify(parsed).length;
+    if (responseLength > SECURITY_CONFIG.MAX_AI_RESPONSE_LENGTH) {
+      console.warn(`AI \u54CD\u5E94\u8FC7\u957F(${responseLength}\u5B57\u7B26)\uFF0C\u53EF\u80FD\u5B58\u5728\u5F02\u5E38`);
+      validated.items = validated.items.slice(0, 10);
+    }
+    const candidateResult = {
+      decomposable: validated.decomposable,
+      reason: validated.reason,
+      summary: validated.summary || `\u5206\u89E3\u4E3A ${validated.items.length} \u4E2A\u5B50\u4EFB\u52A1`,
+      items: validated.items.map((item, index) => ({
         title: String(item.title || `\u4EFB\u52A1 ${index + 1}`),
         description: String(item.description || item.title || ""),
         type: item.type || inferTaskType(String(item.title)),
         priority: item.priority || "P2",
         suggestedCheckpoints: Array.isArray(item.suggestedCheckpoints) ? item.suggestedCheckpoints.filter((c) => typeof c === "string") : [],
         relatedFiles: Array.isArray(item.relatedFiles) ? item.relatedFiles.filter((f) => typeof f === "string") : extractFilePaths(String(item.description || "")),
-        estimatedMinutes: typeof item.estimatedMinutes === "number" ? item.estimatedMinutes : 15,
-        dependsOn: Array.isArray(item.dependsOn) ? item.dependsOn.filter((d) => typeof d === "number") : []
+        estimatedMinutes: typeof item.estimatedMinutes === "number" && item.estimatedMinutes > 0 ? item.estimatedMinutes : 15,
+        dependsOn: Array.isArray(item.dependsOn) ? item.dependsOn.filter((d) => typeof d === "number" && Number.isInteger(d) && d >= 0) : []
       }))
     };
-  } catch {
+    if (!isValidRequirementDecomposition(candidateResult)) {
+      const validItems = candidateResult.items.filter((item, idx) => {
+        const isValid = isValidDecomposedTaskItem(item);
+        if (!isValid) {
+          console.warn(`[decomposeWithAI] \u7B2C ${idx + 1} \u4E2A\u5B50\u4EFB\u52A1\u9A8C\u8BC1\u5931\u8D25\uFF0C\u5DF2\u8DF3\u8FC7`);
+        }
+        return isValid;
+      });
+      if (validItems.length === 0) {
+        console.error("[decomposeWithAI] AI \u8FD4\u56DE\u7684\u6570\u636E\u9A8C\u8BC1\u5931\u8D25\uFF0C\u65E0\u6709\u6548\u5B50\u4EFB\u52A1");
+        return null;
+      }
+      const filteredResult = {
+        ...candidateResult,
+        items: validItems
+      };
+      if (!isValidRequirementDecomposition(filteredResult)) {
+        console.error("[decomposeWithAI] \u8FC7\u6EE4\u540E\u7684\u6570\u636E\u4ECD\u9A8C\u8BC1\u5931\u8D25");
+        return null;
+      }
+      return filteredResult;
+    }
+    return candidateResult;
+  } catch (error) {
+    if (process.env.DEBUG === "true") {
+      console.error("AI \u5206\u89E3\u8FC7\u7A0B\u4E2D\u53D1\u751F\u9519\u8BEF:", error);
+    }
     return null;
   }
 }
@@ -28371,6 +28556,23 @@ async function decomposeRequirement(content, options = {}) {
       reason: "\u5185\u5BB9\u8FC7\u77ED\uFF0C\u65E0\u9700\u5206\u89E3",
       items: [],
       summary: "\u5355\u4EFB\u52A1"
+    };
+  }
+  if (trimmedContent.length > SECURITY_CONFIG.MAX_INPUT_LENGTH) {
+    return {
+      decomposable: false,
+      reason: `\u8F93\u5165\u5185\u5BB9\u8FC7\u957F\uFF08\u5F53\u524D ${trimmedContent.length} \u5B57\u7B26\uFF09\uFF0C\u8D85\u8FC7\u6700\u5927\u9650\u5236 ${SECURITY_CONFIG.MAX_INPUT_LENGTH} \u5B57\u7B26\u3002\u8BF7\u5206\u6279\u6B21\u63D0\u4EA4\u6216\u7CBE\u7B80\u5185\u5BB9\u3002`,
+      items: [],
+      summary: "\u5185\u5BB9\u8D85\u51FA\u9650\u5236"
+    };
+  }
+  const securityCheck = validateInputSecurity(trimmedContent);
+  if (!securityCheck.valid) {
+    return {
+      decomposable: false,
+      reason: securityCheck.error || "\u5185\u5BB9\u5B89\u5168\u68C0\u67E5\u672A\u901A\u8FC7",
+      items: [],
+      summary: "\u5B89\u5168\u68C0\u67E5\u5931\u8D25"
     };
   }
   const isReport = isInvestigationReport(trimmedContent);
@@ -29849,8 +30051,20 @@ async function initRequirementBatch(items, cwd2, options) {
         continue;
       const deps = [];
       for (const depIndex of item.dependsOn) {
+        if (!Number.isInteger(depIndex)) {
+          console.warn(`  Warning: Invalid dependency index (not an integer) for task ${taskId}: ${depIndex}`);
+          continue;
+        }
+        if (depIndex < 0 || depIndex >= items.length) {
+          console.warn(`  Warning: Dependency index out of range for task ${taskId}: ${depIndex} (valid range: 0-${items.length - 1})`);
+          continue;
+        }
         const depId = taskIdMap.get(depIndex);
-        if (depId && !deps.includes(depId)) {
+        if (!depId) {
+          console.warn(`  Warning: No task ID found for dependency index ${depIndex} of task ${taskId}`);
+          continue;
+        }
+        if (!deps.includes(depId)) {
           deps.push(depId);
         }
       }

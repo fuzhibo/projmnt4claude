@@ -162,3 +162,139 @@ export const DECOMPOSITION_CONSTRAINTS = {
   /** Valid priority list */
   VALID_PRIORITIES: ['P0', 'P1', 'P2', 'P3'] as TaskPriority[],
 };
+
+/**
+ * Valid task types for decomposition
+ */
+const VALID_TASK_TYPES: TaskType[] = ['bug', 'feature', 'research', 'docs', 'refactor', 'test'];
+
+/**
+ * Valid task priorities for decomposition
+ */
+const VALID_TASK_PRIORITIES: TaskPriority[] = ['P0', 'P1', 'P2', 'P3'];
+
+/**
+ * Validate that a value is a valid TaskType
+ */
+function isValidTaskType(value: unknown): value is TaskType {
+  return typeof value === 'string' && VALID_TASK_TYPES.includes(value as TaskType);
+}
+
+/**
+ * Validate that a value is a valid TaskPriority
+ */
+function isValidTaskPriority(value: unknown): value is TaskPriority {
+  return typeof value === 'string' && VALID_TASK_PRIORITIES.includes(value as TaskPriority);
+}
+
+/**
+ * Validate DecomposedTaskItem
+ * Checks all required fields and their types
+ */
+export function isValidDecomposedTaskItem(item: unknown): item is DecomposedTaskItem {
+  // Check if item is an object
+  if (typeof item !== 'object' || item === null) {
+    return false;
+  }
+
+  const obj = item as Record<string, unknown>;
+
+  // Check title: must be a non-empty string
+  if (typeof obj.title !== 'string' || obj.title.trim().length === 0) {
+    return false;
+  }
+
+  // Check description: must be a string
+  if (typeof obj.description !== 'string') {
+    return false;
+  }
+
+  // Check type: must be a valid TaskType
+  if (!isValidTaskType(obj.type)) {
+    return false;
+  }
+
+  // Check priority: must be a valid TaskPriority
+  if (!isValidTaskPriority(obj.priority)) {
+    return false;
+  }
+
+  // Check suggestedCheckpoints: must be an array of strings
+  if (!Array.isArray(obj.suggestedCheckpoints)) {
+    return false;
+  }
+  for (const checkpoint of obj.suggestedCheckpoints) {
+    if (typeof checkpoint !== 'string') {
+      return false;
+    }
+  }
+
+  // Check relatedFiles: must be an array of strings
+  if (!Array.isArray(obj.relatedFiles)) {
+    return false;
+  }
+  for (const file of obj.relatedFiles) {
+    if (typeof file !== 'string') {
+      return false;
+    }
+  }
+
+  // Check estimatedMinutes: must be a number
+  if (typeof obj.estimatedMinutes !== 'number' || obj.estimatedMinutes < 0) {
+    return false;
+  }
+
+  // Check dependsOn: must be an array of numbers
+  if (!Array.isArray(obj.dependsOn)) {
+    return false;
+  }
+  for (const dep of obj.dependsOn) {
+    if (typeof dep !== 'number') {
+      return false;
+    }
+  }
+
+  return true;
+}
+
+/**
+ * Validate RequirementDecomposition
+ * Checks all required fields and validates each item
+ */
+export function isValidRequirementDecomposition(result: unknown): result is RequirementDecomposition {
+  // Check if result is an object
+  if (typeof result !== 'object' || result === null) {
+    return false;
+  }
+
+  const obj = result as Record<string, unknown>;
+
+  // Check decomposable: must be a boolean
+  if (typeof obj.decomposable !== 'boolean') {
+    return false;
+  }
+
+  // Check items: must be an array
+  if (!Array.isArray(obj.items)) {
+    return false;
+  }
+
+  // Validate each item in the array
+  for (const item of obj.items) {
+    if (!isValidDecomposedTaskItem(item)) {
+      return false;
+    }
+  }
+
+  // Check summary: must be a string
+  if (typeof obj.summary !== 'string') {
+    return false;
+  }
+
+  // Check reason: if present, must be a string
+  if (obj.reason !== undefined && typeof obj.reason !== 'string') {
+    return false;
+  }
+
+  return true;
+}

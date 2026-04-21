@@ -13,12 +13,68 @@ import type {
   DecomposedItem,
   DecompositionValidation,
 } from '../types/decomposition';
-import { DECOMPOSITION_CONSTRAINTS } from '../types/decomposition';
+import {
+  DECOMPOSITION_CONSTRAINTS,
+  isValidDecomposedTaskItem,
+  isValidRequirementDecomposition,
+} from '../types/decomposition';
 import type { TaskType, TaskPriority } from '../types/task';
 import { inferTaskType, inferTaskPriority } from '../types/task';
 import { extractFilePaths } from './quality-gate';
 import { getAIPreset, buildAgentOptionsFromPreset } from '../types/config';
 import { invokeAgent } from './headless-agent.js';
+
+// 安全常量配置
+const SECURITY_CONFIG = {
+  MAX_INPUT_LENGTH: 50000,
+  MAX_AI_RESPONSE_LENGTH: 100000,
+  DANGEROUS_PATTERNS: [
+    /<script\b[^>]*>/i,
+    /javascript:/i,
+    /on\w+\s*=/i,
+    /eval\s*\(/i,
+    /Function\s*\(/i,
+    /new\s+Function/i,
+    /setTimeout\s*\(\s*['"`]/i,
+    /setInterval\s*\(\s*['"`]/i,
+    /__proto__/,
+    /constructor\s*\[/,
+    /\[\s*['"]constructor['"]\s*\]/,
+  ],
+} as const;
+
+/**
+ * 验证输入内容的安全性
+ * - 检查内容长度是否在安全范围内
+ * - 检测潜在的危险字符/模式，防止注入攻击
+ *
+ * @param content 输入内容
+ * @returns 安全验证结果
+ */
+function validateInputSecurity(content: string): {
+  valid: boolean;
+  error?: string;
+} {
+  // 检查最大长度限制
+  if (content.length > SECURITY_CONFIG.MAX_INPUT_LENGTH) {
+    return {
+      valid: false,
+      error: `输入内容过长（当前 ${content.length} 字符），超过最大限制 ${SECURITY_CONFIG.MAX_INPUT_LENGTH} 字符`,
+    };
+  }
+
+  // 检测危险模式（防止注入攻击）
+  for (const pattern of SECURITY_CONFIG.DANGEROUS_PATTERNS) {
+    if (pattern.test(content)) {
+      return {
+        valid: false,
+        error: '检测到潜在的危险内容模式，输入被拒绝',
+      };
+    }
+  }
+
+  return { valid: true };
+}
 
 /**
  * 判断内容是否为调查报告格式
@@ -71,7 +127,8 @@ function extractProblemsByPattern(content: string): Array<{
   const seen = new Set<string>();
 
   // 模式1: 标准问题格式 "问题 X:" 或 "Issue X:"
-  const problemRegex = /(?:^|\n)(?:#{1,3}\s+)?(?:问题|Issue|Bug|缺陷)\s*(?:[#]?\s*)?(\d+[A-Z]?)[.:\-]?\s*([^\n]+)(?:\n([^]*?))?(?=\n(?:问题|Issue|Bug|缺陷)\s*[#]?\s*\d+|\n#{1,3}\s|$)/gi;
+  // 使用原子组和非捕获组优化，避免回溯导致的 ReDoS 风险
+  const problemRegex = /(?:^|\n)(?:#{1,3}\s+)?(?:问题|Issue|Bug|缺陷)\s*(?:#\s*)?(\d+[A-Z]?)[.:\-]?\s*([^\n]{1,200})(?:\n([^]{0,2000}))?(?=\n(?:问题|Issue|Bug|缺陷)\s*#?\s*\d+|\n#{1,3}\s|$)/gi;
 
   let match;
   while ((match = problemRegex.exec(content)) !== null) {
@@ -165,17 +222,91 @@ function extractProblemsByPattern(content: string): Array<{
 }
 
 /**
+ * 验证 AI 响应数据的结构完整性
+ *
+ * @param parsed 解析后的数据
+ * @returns 验证后的数据对象或 null
+ */
+function validateAIResponse(parsed: Record<string, unknown>): {
+  decomposable: boolean;
+  reason?: string;
+  summary?: string;
+  items: Array<Record<string, unknown>>;
+} | null {
+  // 基本结构验证
+  if (!parsed || typeof parsed !== 'object') {
+    return null;
+  }
+
+  // 验证 items 字段必须是数组
+  if (!('items' in parsed) || !Array.isArray(parsed.items)) {
+    return null;
+  }
+
+  // 验证 decomposable 字段
+  const decomposable = parsed.decomposable === true;
+
+  // 验证 reason 字段（如果存在，必须是字符串）
+  const reason = typeof parsed.reason === 'string' ? parsed.reason : undefined;
+
+  // 验证 summary 字段（如果存在，必须是字符串）
+  const summary = typeof parsed.summary === 'string' ? parsed.summary : undefined;
+
+  // 验证每个 item 的结构
+  const items: Array<Record<string, unknown>> = [];
+  for (const rawItem of parsed.items) {
+    if (!rawItem || typeof rawItem !== 'object') {
+      continue;
+    }
+    const item = rawItem as Record<string, unknown>;
+
+    // 验证 title 字段（必需）
+    if (!('title' in item) || typeof item.title !== 'string' || item.title.trim().length === 0) {
+      continue;
+    }
+
+    // 验证数组字段类型
+    if ('suggestedCheckpoints' in item && !Array.isArray(item.suggestedCheckpoints)) {
+      continue;
+    }
+    if ('relatedFiles' in item && !Array.isArray(item.relatedFiles)) {
+      continue;
+    }
+    if ('dependsOn' in item && !Array.isArray(item.dependsOn)) {
+      continue;
+    }
+
+    items.push(item);
+  }
+
+  return {
+    decomposable,
+    reason,
+    summary,
+    items,
+  };
+}
+
+/**
  * 使用 AI 增强分解
  */
 async function decomposeWithAI(
   content: string,
   cwd: string
 ): Promise<RequirementDecomposition | null> {
+  // 输入长度安全检查
+  if (content.length > SECURITY_CONFIG.MAX_INPUT_LENGTH) {
+    console.warn(`AI 分解警告：输入内容过长(${content.length}字符)，已截断处理`);
+  }
+
   try {
+    // 限制输入内容长度，防止过大的请求
+    const safeContent = content.substring(0, Math.min(content.length, SECURITY_CONFIG.MAX_INPUT_LENGTH));
+
     const prompt = `请将以下需求/报告分解为多个独立的开发任务。
 
 输入内容：
-${content.substring(0, 4000)}
+${safeContent.substring(0, 4000)}
 
 请分析输入内容，识别出其中包含的独立问题或需求项，并返回 JSON 格式的分解结果：
 {
@@ -228,34 +359,84 @@ ${content.substring(0, 4000)}
       }
     }
 
-    if (!parsed || !parsed.items || !Array.isArray(parsed.items)) {
+    // 使用结构化验证函数验证 AI 响应
+    const validated = validateAIResponse(parsed);
+    if (!validated) {
       return null;
     }
 
-    return {
-      decomposable: parsed.decomposable === true,
-      reason: typeof parsed.reason === 'string' ? parsed.reason : undefined,
-      summary: typeof parsed.summary === 'string' ? parsed.summary : `分解为 ${parsed.items.length} 个子任务`,
-      items: parsed.items.map((item: Record<string, unknown>, index: number) => ({
+    // 验证响应长度（防止超大响应导致内存问题）
+    const responseLength = JSON.stringify(parsed).length;
+    if (responseLength > SECURITY_CONFIG.MAX_AI_RESPONSE_LENGTH) {
+      console.warn(`AI 响应过长(${responseLength}字符)，可能存在异常`);
+      // 截断处理：只保留前10个items
+      validated.items = validated.items.slice(0, 10);
+    }
+
+    // 构建候选结果
+    const candidateResult: RequirementDecomposition = {
+      decomposable: validated.decomposable,
+      reason: validated.reason,
+      summary: validated.summary || `分解为 ${validated.items.length} 个子任务`,
+      items: validated.items.map((item: Record<string, unknown>, index: number) => ({
         title: String(item.title || `任务 ${index + 1}`),
         description: String(item.description || item.title || ''),
         type: (item.type as TaskType) || inferTaskType(String(item.title)),
         priority: (item.priority as TaskPriority) || 'P2',
+        // 确保数组字段类型正确
         suggestedCheckpoints: Array.isArray(item.suggestedCheckpoints)
           ? item.suggestedCheckpoints.filter((c): c is string => typeof c === 'string')
           : [],
         relatedFiles: Array.isArray(item.relatedFiles)
           ? item.relatedFiles.filter((f): f is string => typeof f === 'string')
           : extractFilePaths(String(item.description || '')),
-        estimatedMinutes: typeof item.estimatedMinutes === 'number'
+        estimatedMinutes: typeof item.estimatedMinutes === 'number' && item.estimatedMinutes > 0
           ? item.estimatedMinutes
           : 15,
+        // 确保 dependsOn 是数字数组
         dependsOn: Array.isArray(item.dependsOn)
-          ? item.dependsOn.filter((d): d is number => typeof d === 'number')
+          ? item.dependsOn.filter((d): d is number => typeof d === 'number' && Number.isInteger(d) && d >= 0)
           : [],
       })),
     };
-  } catch {
+
+    // 使用运行时验证函数验证 AI 返回的数据（CP-2 安全修复）
+    if (!isValidRequirementDecomposition(candidateResult)) {
+      // 尝试过滤掉无效的 items 并重新验证
+      const validItems = candidateResult.items.filter((item, idx) => {
+        const isValid = isValidDecomposedTaskItem(item);
+        if (!isValid) {
+          console.warn(`[decomposeWithAI] 第 ${idx + 1} 个子任务验证失败，已跳过`);
+        }
+        return isValid;
+      });
+
+      if (validItems.length === 0) {
+        console.error('[decomposeWithAI] AI 返回的数据验证失败，无有效子任务');
+        return null;
+      }
+
+      // 使用有效 items 重建结果
+      const filteredResult: RequirementDecomposition = {
+        ...candidateResult,
+        items: validItems,
+      };
+
+      // 再次验证过滤后的结果
+      if (!isValidRequirementDecomposition(filteredResult)) {
+        console.error('[decomposeWithAI] 过滤后的数据仍验证失败');
+        return null;
+      }
+
+      return filteredResult;
+    }
+
+    return candidateResult;
+  } catch (error) {
+    // 记录详细错误信息（在调试模式下）
+    if (process.env.DEBUG === 'true') {
+      console.error('AI 分解过程中发生错误:', error);
+    }
     return null;
   }
 }
@@ -279,12 +460,35 @@ export async function decomposeRequirement(
 
   // 清理输入内容
   const trimmedContent = content.trim();
+
+  // 最小长度检查
   if (trimmedContent.length < 100) {
     return {
       decomposable: false,
       reason: '内容过短，无需分解',
       items: [],
       summary: '单任务',
+    };
+  }
+
+  // 最大长度检查（安全限制）
+  if (trimmedContent.length > SECURITY_CONFIG.MAX_INPUT_LENGTH) {
+    return {
+      decomposable: false,
+      reason: `输入内容过长（当前 ${trimmedContent.length} 字符），超过最大限制 ${SECURITY_CONFIG.MAX_INPUT_LENGTH} 字符。请分批次提交或精简内容。`,
+      items: [],
+      summary: '内容超出限制',
+    };
+  }
+
+  // 内容安全检查（防止注入攻击）
+  const securityCheck = validateInputSecurity(trimmedContent);
+  if (!securityCheck.valid) {
+    return {
+      decomposable: false,
+      reason: securityCheck.error || '内容安全检查未通过',
+      items: [],
+      summary: '安全检查失败',
     };
   }
 

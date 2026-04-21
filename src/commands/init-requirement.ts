@@ -1730,8 +1730,21 @@ async function initRequirementBatch(
 
       const deps: string[] = [];
       for (const depIndex of item.dependsOn) {
+        // CP-3: Validate dependency index before use
+        if (!Number.isInteger(depIndex)) {
+          console.warn(`  Warning: Invalid dependency index (not an integer) for task ${taskId}: ${depIndex}`);
+          continue;
+        }
+        if (depIndex < 0 || depIndex >= items.length) {
+          console.warn(`  Warning: Dependency index out of range for task ${taskId}: ${depIndex} (valid range: 0-${items.length - 1})`);
+          continue;
+        }
         const depId = taskIdMap.get(depIndex);
-        if (depId && !deps.includes(depId)) {
+        if (!depId) {
+          console.warn(`  Warning: No task ID found for dependency index ${depIndex} of task ${taskId}`);
+          continue;
+        }
+        if (!deps.includes(depId)) {
           deps.push(depId);
         }
       }
