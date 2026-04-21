@@ -749,6 +749,25 @@ export interface I18nTexts {
     checkDeprecatedHooksOk: string;
   };
 
+  // decomposition
+  decomposition: {
+    contentTooShort: string;
+    singleTask: string;
+    notDecomposable: string;
+    unknownReason: string;
+    decomposedToNTasks: string;
+    typeBug: string;
+    typeFeature: string;
+    typeRefactor: string;
+    typeDocs: string;
+    typeTest: string;
+    priorityP0: string;
+    priorityP1: string;
+    priorityP2: string;
+    priorityP3: string;
+    dependsOn: string;
+  };
+
   // analyze command
   analyzeCmd: {
     projectNotInitialized: string;

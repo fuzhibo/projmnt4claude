@@ -8018,6 +8018,23 @@ var init_zh = __esm(() => {
       reportResultPass: "**结果**: ✅ PASS",
       reportResultNopass: "**结果**: ❌ NOPASS"
     },
+    decomposition: {
+      contentTooShort: "内容过短，无需分解",
+      singleTask: "单任务",
+      notDecomposable: "不可分解",
+      unknownReason: "未知原因",
+      decomposedToNTasks: "分解为 {count} 个子任务",
+      typeBug: "\uD83D\uDC1B",
+      typeFeature: "✨",
+      typeRefactor: "♻️",
+      typeDocs: "\uD83D\uDCDA",
+      typeTest: "\uD83E\uDDEA",
+      priorityP0: "\uD83D\uDD34",
+      priorityP1: "\uD83D\uDFE0",
+      priorityP2: "\uD83D\uDFE1",
+      priorityP3: "\uD83D\uDFE2",
+      dependsOn: "依赖"
+    },
     harness: {
       timeoutHeader: "超时限制",
       taskDescription: "任务描述",
@@ -9009,6 +9026,23 @@ var init_en = __esm(() => {
       none: "None",
       reportResultPass: "**Result**: ✅ PASS",
       reportResultNopass: "**Result**: ❌ NOPASS"
+    },
+    decomposition: {
+      contentTooShort: "Content too short, no decomposition needed",
+      singleTask: "Single task",
+      notDecomposable: "Not decomposable",
+      unknownReason: "Unknown reason",
+      decomposedToNTasks: "Decomposed into {count} subtasks",
+      typeBug: "\uD83D\uDC1B",
+      typeFeature: "✨",
+      typeRefactor: "♻️",
+      typeDocs: "\uD83D\uDCDA",
+      typeTest: "\uD83E\uDDEA",
+      priorityP0: "\uD83D\uDD34",
+      priorityP1: "\uD83D\uDFE0",
+      priorityP2: "\uD83D\uDFE1",
+      priorityP3: "\uD83D\uDFE2",
+      dependsOn: "Depends on"
     },
     harness: {
       timeoutHeader: "Timeout Limit",
@@ -17636,8 +17670,10 @@ function detectTaskCycles(tasks) {
     taskId: cycles.length > 0 ? cycles[0][0] : ""
   };
 }
-var planCycleDetection, planInvalidDependency, planOrphanSubtask, planOrphanTask, planBlockedTask, planBridgeNode, planInferredOnlyDependency;
+var TERMINAL_STATUSES_SET3, planCycleDetection, planInvalidDependency, planOrphanSubtask, planOrphanTask, planBlockedTask, planBridgeNode, planInferredOnlyDependency;
 var init_plan_rules = __esm(() => {
+  init_task();
+  TERMINAL_STATUSES_SET3 = new Set(TERMINAL_STATUSES);
   planCycleDetection = {
     id: "plan-cycle-detection",
     description: "检测任务依赖关系中是否存在循环依赖",
@@ -17748,14 +17784,14 @@ var init_plan_rules = __esm(() => {
       if (t2.dependencies.length === 0) {
         return null;
       }
-      if (t2.status === "resolved" || t2.status === "closed") {
+      if (TERMINAL_STATUSES_SET3.has(normalizeStatus(t2.status))) {
         return null;
       }
       const incompleteDeps = [];
       for (const depId of t2.dependencies) {
         const depTask = allTasks.find((task2) => task2.id === depId);
         if (depTask) {
-          const isCompleted = depTask.status === "resolved" || depTask.status === "closed";
+          const isCompleted = TERMINAL_STATUSES_SET3.has(normalizeStatus(depTask.status));
           if (!isCompleted) {
             incompleteDeps.push(depId);
           }
@@ -19335,7 +19371,7 @@ function checkMissingPipelineEvidence(taskId, task, cwd2) {
 }
 function shouldTriggerAIInference(task, layer1Issues, cwd2) {
   const currentStatus = normalizeStatus(task.status);
-  if (TERMINAL_STATUSES_SET3.has(currentStatus))
+  if (TERMINAL_STATUSES_SET4.has(currentStatus))
     return false;
   if (layer1Issues.length > 0)
     return false;
@@ -20826,7 +20862,7 @@ Processing ${task.id}...`);
   console.log(`✅ Done: Fixed ${fixedCount}, Skipped ${skippedCount}`);
   console.log("━".repeat(SEPARATOR_WIDTH));
 }
-var import_prompts4, DEFAULT_ANALYZE_CONFIG, VALID_STATUSES, VALID_TYPES3, VALID_PRIORITIES3, SCHEMA_MIGRATIONS, REPORT_PHASE_STATUS_MAP, TERMINAL_STATUSES_SET3;
+var import_prompts4, DEFAULT_ANALYZE_CONFIG, VALID_STATUSES, VALID_TYPES3, VALID_PRIORITIES3, SCHEMA_MIGRATIONS, REPORT_PHASE_STATUS_MAP, TERMINAL_STATUSES_SET4;
 var init_analyze = __esm(() => {
   init_path();
   init_task2();
@@ -21054,7 +21090,7 @@ var init_analyze = __esm(() => {
       prerequisiteStatuses: ["wait_qa", "wait_evaluation"]
     }
   ];
-  TERMINAL_STATUSES_SET3 = new Set(TERMINAL_STATUSES);
+  TERMINAL_STATUSES_SET4 = new Set(TERMINAL_STATUSES);
 });
 
 // src/commands/analyze-fix-pipeline.ts
@@ -21080,6 +21116,908 @@ var init_analyze_fix_pipeline = __esm(() => {
   init_i18n();
   init_analyze();
   import_prompts5 = __toESM(require_prompts3(), 1);
+});
+
+// src/types/decomposition.ts
+function isValidTaskType(value) {
+  return typeof value === "string" && VALID_TASK_TYPES.includes(value);
+}
+function isValidTaskPriority(value) {
+  return typeof value === "string" && VALID_TASK_PRIORITIES.includes(value);
+}
+function isValidDecomposedTaskItem(item) {
+  if (typeof item !== "object" || item === null) {
+    return false;
+  }
+  const obj = item;
+  if (typeof obj.title !== "string" || obj.title.trim().length === 0) {
+    return false;
+  }
+  if (typeof obj.description !== "string") {
+    return false;
+  }
+  if (!isValidTaskType(obj.type)) {
+    return false;
+  }
+  if (!isValidTaskPriority(obj.priority)) {
+    return false;
+  }
+  if (!Array.isArray(obj.suggestedCheckpoints)) {
+    return false;
+  }
+  for (const checkpoint of obj.suggestedCheckpoints) {
+    if (typeof checkpoint !== "string") {
+      return false;
+    }
+  }
+  if (!Array.isArray(obj.relatedFiles)) {
+    return false;
+  }
+  for (const file of obj.relatedFiles) {
+    if (typeof file !== "string") {
+      return false;
+    }
+  }
+  if (typeof obj.estimatedMinutes !== "number" || obj.estimatedMinutes < 0) {
+    return false;
+  }
+  if (!Array.isArray(obj.dependsOn)) {
+    return false;
+  }
+  for (const dep of obj.dependsOn) {
+    if (typeof dep !== "number") {
+      return false;
+    }
+  }
+  return true;
+}
+function isValidRequirementDecomposition(result) {
+  if (typeof result !== "object" || result === null) {
+    return false;
+  }
+  const obj = result;
+  if (typeof obj.decomposable !== "boolean") {
+    return false;
+  }
+  if (!Array.isArray(obj.items)) {
+    return false;
+  }
+  for (const item of obj.items) {
+    if (!isValidDecomposedTaskItem(item)) {
+      return false;
+    }
+  }
+  if (typeof obj.summary !== "string") {
+    return false;
+  }
+  if (obj.reason !== undefined && typeof obj.reason !== "string") {
+    return false;
+  }
+  return true;
+}
+var DECOMPOSITION_CONSTRAINTS, VALID_TASK_TYPES, VALID_TASK_PRIORITIES;
+var init_decomposition = __esm(() => {
+  DECOMPOSITION_CONSTRAINTS = {
+    MIN_TITLE_LENGTH: 10,
+    MIN_PROBLEM_LENGTH: 50,
+    MIN_SOLUTION_LENGTH: 50,
+    MIN_ROOT_CAUSE_LENGTH: 20,
+    MIN_CHECKPOINTS: 1,
+    VALID_PRIORITIES: ["P0", "P1", "P2", "P3"]
+  };
+  VALID_TASK_TYPES = ["bug", "feature", "research", "docs", "refactor", "test"];
+  VALID_TASK_PRIORITIES = ["P0", "P1", "P2", "P3"];
+});
+
+// src/utils/requirement-decomposer.ts
+var exports_requirement_decomposer = {};
+__export(exports_requirement_decomposer, {
+  validateDecompositionItems: () => validateDecompositionItems,
+  validateDecompositionItem: () => validateDecompositionItem,
+  validateDecomposition: () => validateDecomposition,
+  shouldDecompose: () => shouldDecompose,
+  reportDecompositionFailure: () => reportDecompositionFailure,
+  formatDecomposition: () => formatDecomposition,
+  decomposeRequirement: () => decomposeRequirement,
+  decomposeRecursively: () => decomposeRecursively,
+  convertToDecomposedItem: () => convertToDecomposedItem,
+  DEFAULT_RECURSIVE_CONFIG: () => DEFAULT_RECURSIVE_CONFIG
+});
+function validateInputSecurity(content) {
+  if (content.length > SECURITY_CONFIG.MAX_INPUT_LENGTH) {
+    return {
+      valid: false,
+      error: `输入内容过长（当前 ${content.length} 字符），超过最大限制 ${SECURITY_CONFIG.MAX_INPUT_LENGTH} 字符`
+    };
+  }
+  for (const pattern of SECURITY_CONFIG.DANGEROUS_PATTERNS) {
+    if (pattern.test(content)) {
+      return {
+        valid: false,
+        error: "检测到潜在的危险内容模式，输入被拒绝"
+      };
+    }
+  }
+  return { valid: true };
+}
+function isInvestigationReport(content) {
+  const problemKeywords = ["问题", "Issue", "Bug", "缺陷", "发现"];
+  let problemCount = 0;
+  for (const keyword of problemKeywords) {
+    const regex = new RegExp(keyword, "gi");
+    const matches = content.match(regex);
+    if (matches) {
+      problemCount += matches.length;
+    }
+  }
+  const numberedItems = content.match(/(?:^|\n)\s*\d+[.:\-]\s+/g);
+  const bulletItems = content.match(/(?:^|\n)\s*[-*]\s+/g);
+  const headers = content.match(/(?:^|\n)#{1,3}\s+[^\n]+/g);
+  const hasListStructure = !!numberedItems && numberedItems.length >= 2 || !!bulletItems && bulletItems.length >= 2 || !!headers && headers.length >= 2;
+  return problemCount >= 2 || hasListStructure && content.length > 300;
+}
+function extractProblemsByPattern(content) {
+  const problems = [];
+  const seen = new Set;
+  const problemPositions = [];
+  const problemRegex = /(?:^|\n)(?:#{1,3}\s+)?(?:问题|Issue|Bug|缺陷)\s*(?:#\s*)?(\d+[A-Z]?)\s*(?:\((P\d|urgent|high|medium|low|[紧急高种低])\))?\s*[.:\-]?\s*([^\n]{10,200})/gi;
+  let match;
+  while ((match = problemRegex.exec(content)) !== null) {
+    const problemId = match[1]?.trim() || "";
+    const priorityFromParen = match[2]?.trim() || "";
+    const title = match[3]?.trim() || "";
+    if (!title || seen.has(title))
+      continue;
+    seen.add(title);
+    problemPositions.push({
+      index: match.index,
+      length: match[0].length,
+      id: problemId,
+      priorityFromParen,
+      title
+    });
+  }
+  for (let i = 0;i < problemPositions.length; i++) {
+    const current = problemPositions[i];
+    const next = problemPositions[i + 1];
+    const startIdx = current.index + current.length;
+    const endIdx = next ? next.index : content.length;
+    const body = content.substring(startIdx, endIdx).trim();
+    let priority = "P2";
+    if (current.priorityFromParen) {
+      const p = current.priorityFromParen.toUpperCase();
+      if (p === "P0" || p.includes("紧急") || p.includes("URGENT"))
+        priority = "P0";
+      else if (p === "P1" || p.includes("高") || p.includes("HIGH"))
+        priority = "P1";
+      else if (p === "P3" || p.includes("低") || p.includes("LOW"))
+        priority = "P3";
+    } else {
+      const priorityMatch = content.substring(Math.max(0, current.index - 100), current.index).match(/(P\d|紧急|urgent|高|high|中|medium|低|low)/i);
+      if (priorityMatch && priorityMatch[1]) {
+        const p = priorityMatch[1].toUpperCase();
+        if (p === "P0" || p.includes("紧急") || p.includes("URGENT"))
+          priority = "P0";
+        else if (p === "P1" || p.includes("高") || p.includes("HIGH"))
+          priority = "P1";
+        else if (p === "P3" || p.includes("低") || p.includes("LOW"))
+          priority = "P3";
+      }
+    }
+    problems.push({
+      title: current.title.length > 100 ? current.title.substring(0, 97) + "..." : current.title,
+      description: body || current.title,
+      priority
+    });
+  }
+  if (problems.length < 2) {
+    const numberedRegex = /(?:^|\n)\s*(\d+)[.:\-]\s*([^\n]{10,200})/g;
+    while ((match = numberedRegex.exec(content)) !== null) {
+      const title = match[2]?.trim() || "";
+      if (!title || seen.has(title))
+        continue;
+      const hasActionVerb = /(?:修复|解决|实现|添加|创建|修改|更新|验证|分析|优化|重构|删除|移除|调整|配置|部署)/.test(title);
+      if (!hasActionVerb && title.length < 20)
+        continue;
+      seen.add(title);
+      const startIdx = match.index + match[0].length;
+      const nextMatch = numberedRegex.exec(content);
+      numberedRegex.lastIndex = startIdx;
+      const endIdx = nextMatch ? nextMatch.index : content.length;
+      const body = content.substring(startIdx, endIdx).trim();
+      problems.push({
+        title: title.length > 100 ? title.substring(0, 97) + "..." : title,
+        description: body || title,
+        priority: "P2"
+      });
+      if (problems.length >= 10)
+        break;
+    }
+  }
+  if (problems.length < 2) {
+    const headerRegex = /(?:^|\n)(#{1,3}\s+)([^\n]{5,100})/g;
+    while ((match = headerRegex.exec(content)) !== null) {
+      const title = match[2]?.trim() || "";
+      if (!title || seen.has(title))
+        continue;
+      const nonProblemTitles = [
+        "概述",
+        "总结",
+        "结论",
+        "背景",
+        "目标",
+        "介绍",
+        "前言",
+        "附录",
+        "Summary",
+        "Conclusion",
+        "Background",
+        "Overview",
+        "Introduction",
+        "Appendix"
+      ];
+      if (nonProblemTitles.some((t2) => title.includes(t2)))
+        continue;
+      seen.add(title);
+      const startIdx = match.index + match[0].length;
+      const nextMatch = headerRegex.exec(content);
+      headerRegex.lastIndex = startIdx;
+      const endIdx = nextMatch ? nextMatch.index : content.length;
+      const body = content.substring(startIdx, endIdx).trim();
+      problems.push({
+        title: title.length > 100 ? title.substring(0, 97) + "..." : title,
+        description: body || title,
+        priority: "P2"
+      });
+      if (problems.length >= 10)
+        break;
+    }
+  }
+  return problems;
+}
+function validateAIResponse(parsed) {
+  if (!parsed || typeof parsed !== "object") {
+    return null;
+  }
+  if (!("items" in parsed) || !Array.isArray(parsed.items)) {
+    return null;
+  }
+  const decomposable = parsed.decomposable === true;
+  const reason = typeof parsed.reason === "string" ? parsed.reason : undefined;
+  const summary = typeof parsed.summary === "string" ? parsed.summary : undefined;
+  const items = [];
+  for (const rawItem of parsed.items) {
+    if (!rawItem || typeof rawItem !== "object") {
+      continue;
+    }
+    const item = rawItem;
+    if (!("title" in item) || typeof item.title !== "string" || item.title.trim().length === 0) {
+      continue;
+    }
+    if ("suggestedCheckpoints" in item && !Array.isArray(item.suggestedCheckpoints)) {
+      continue;
+    }
+    if ("relatedFiles" in item && !Array.isArray(item.relatedFiles)) {
+      continue;
+    }
+    if ("dependsOn" in item && !Array.isArray(item.dependsOn)) {
+      continue;
+    }
+    items.push(item);
+  }
+  return {
+    decomposable,
+    reason,
+    summary,
+    items
+  };
+}
+async function decomposeWithAI(content, cwd2) {
+  if (content.length > SECURITY_CONFIG.MAX_INPUT_LENGTH) {
+    console.warn(`AI 分解警告：输入内容过长(${content.length}字符)，已截断处理`);
+  }
+  try {
+    const safeContent = content.substring(0, Math.min(content.length, SECURITY_CONFIG.MAX_INPUT_LENGTH));
+    const prompt = `请将以下需求/报告分解为多个独立的开发任务。
+
+输入内容：
+${safeContent.substring(0, 4000)}
+
+请分析输入内容，识别出其中包含的独立问题或需求项，并返回 JSON 格式的分解结果：
+{
+  "decomposable": true,
+  "summary": "分解摘要",
+  "items": [
+    {
+      "title": "任务标题（动词开头，简洁明确）",
+      "description": "任务详细描述",
+      "type": "bug|feature|research|docs|refactor|test",
+      "priority": "P0|P1|P2|P3",
+      "suggestedCheckpoints": ["检查点1", "检查点2"],
+      "relatedFiles": ["文件路径1", "文件路径2"],
+      "estimatedMinutes": 15,
+      "dependsOn": []
+    }
+  ]
+}
+
+规则：
+1. 每个 item 应该是一个独立的、可执行的任务
+2. title 必须以动词开头（如：修复、实现、添加、更新等）
+3. priority 根据紧急程度判断：P0=紧急/阻塞，P1=高优先级，P2=中等，P3=低优先级
+4. type 根据内容推断：bug=修复问题，feature=新功能，refactor=重构，docs=文档，test=测试
+5. estimatedMinutes 预估完成时间（分钟），建议每个任务控制在 15-30 分钟
+6. dependsOn 是依赖项的索引数组（如：[0] 表示依赖第一个任务）
+7. 如果无法分解（如内容过于简单），返回 {"decomposable": false, "reason": "原因", "items": []}`;
+    const agentOptions = buildAgentOptionsFromPreset("decomposition", cwd2);
+    const result = await invokeAgent(prompt, agentOptions);
+    if (!result.success) {
+      return null;
+    }
+    let parsed = null;
+    try {
+      parsed = JSON.parse(result.output);
+    } catch {
+      const jsonMatch = result.output.match(/```(?:json)?\s*\n?([\s\S]*?)\n?```/);
+      if (jsonMatch?.[1]) {
+        try {
+          parsed = JSON.parse(jsonMatch[1]);
+        } catch {}
+      }
+    }
+    const validated = validateAIResponse(parsed);
+    if (!validated) {
+      return null;
+    }
+    const responseLength = JSON.stringify(parsed).length;
+    if (responseLength > SECURITY_CONFIG.MAX_AI_RESPONSE_LENGTH) {
+      console.warn(`AI 响应过长(${responseLength}字符)，可能存在异常`);
+      validated.items = validated.items.slice(0, 10);
+    }
+    const candidateResult = {
+      decomposable: validated.decomposable,
+      reason: validated.reason,
+      summary: validated.summary || `分解为 ${validated.items.length} 个子任务`,
+      items: validated.items.map((item, index) => ({
+        title: String(item.title || `任务 ${index + 1}`),
+        description: String(item.description || item.title || ""),
+        type: item.type || inferTaskType(String(item.title)),
+        priority: item.priority || "P2",
+        suggestedCheckpoints: Array.isArray(item.suggestedCheckpoints) ? item.suggestedCheckpoints.filter((c) => typeof c === "string") : [],
+        relatedFiles: Array.isArray(item.relatedFiles) ? item.relatedFiles.filter((f) => typeof f === "string") : extractFilePaths(String(item.description || "")),
+        estimatedMinutes: typeof item.estimatedMinutes === "number" && item.estimatedMinutes > 0 ? item.estimatedMinutes : 15,
+        dependsOn: Array.isArray(item.dependsOn) ? item.dependsOn.filter((d) => typeof d === "number" && Number.isInteger(d) && d >= 0) : []
+      }))
+    };
+    if (!isValidRequirementDecomposition(candidateResult)) {
+      const validItems = candidateResult.items.filter((item, idx) => {
+        const isValid = isValidDecomposedTaskItem(item);
+        if (!isValid) {
+          console.warn(`[decomposeWithAI] 第 ${idx + 1} 个子任务验证失败，已跳过`);
+        }
+        return isValid;
+      });
+      if (validItems.length === 0) {
+        console.error("[decomposeWithAI] AI 返回的数据验证失败，无有效子任务");
+        return null;
+      }
+      const filteredResult = {
+        ...candidateResult,
+        items: validItems
+      };
+      if (!isValidRequirementDecomposition(filteredResult)) {
+        console.error("[decomposeWithAI] 过滤后的数据仍验证失败");
+        return null;
+      }
+      return filteredResult;
+    }
+    return candidateResult;
+  } catch (error) {
+    if (process.env.DEBUG === "true") {
+      console.error("AI 分解过程中发生错误:", error);
+    }
+    return null;
+  }
+}
+async function shouldDecomposeFurther(item, depth, config, cwd2) {
+  if (depth >= config.maxDepth) {
+    return { needsDecomposition: false, reason: "达到最大递归深度限制" };
+  }
+  if (item.estimatedMinutes < config.complexityThreshold) {
+    return { needsDecomposition: false, reason: "预估耗时低于复杂度阈值" };
+  }
+  if (item.description.length < 100) {
+    return { needsDecomposition: false, reason: "描述过短，无法进一步分解" };
+  }
+  try {
+    const prompt = `请分析以下子任务是否需要进一步分解为更小的子任务。
+
+子任务信息：
+- 标题：${item.title}
+- 描述：${item.description}
+- 类型：${item.type}
+- 优先级：${item.priority}
+- 预估耗时：${item.estimatedMinutes} 分钟
+- 当前递归深度：${depth}
+- 复杂度阈值：${config.complexityThreshold} 分钟
+
+请分析：
+1. 这个子任务是否包含多个独立的实现步骤？
+2. 预估耗时 ${item.estimatedMinutes} 分钟是否合理？
+3. 是否可以拆分为多个预估耗时小于 ${config.complexityThreshold} 分钟的更小任务？
+4. 拆分后是否能产生至少 ${config.minSubtaskCount} 个独立的子任务？
+
+返回 JSON 格式：
+{
+  "needsDecomposition": true | false,
+  "reason": "判断原因，说明为什么需要或不需要进一步分解",
+  "suggestedSubtaskCount": 预估可分解的子任务数量（数字）
+}
+
+注意：
+- 如果子任务包含明显的多步骤（如"实现功能A，然后实现功能B"），应返回 true
+- 如果预估耗时远大于复杂度阈值（如 2 倍以上），应返回 true
+- 如果描述范围明确且单一，即使耗时较长也应返回 false
+- 只输出 JSON，不要输出其他内容`;
+    const agentOptions = buildAgentOptionsFromPreset("decomposition", cwd2);
+    const result = await invokeAgent(prompt, agentOptions);
+    if (!result.success) {
+      return { needsDecomposition: false, reason: "AI 调用失败" };
+    }
+    let parsed = null;
+    try {
+      parsed = JSON.parse(result.output);
+    } catch {
+      const jsonMatch = result.output.match(/```(?:json)?\s*\n?([\s\S]*?)\n?```/);
+      if (jsonMatch?.[1]) {
+        try {
+          parsed = JSON.parse(jsonMatch[1]);
+        } catch {}
+      }
+    }
+    if (!parsed || typeof parsed.needsDecomposition !== "boolean") {
+      return { needsDecomposition: false, reason: "AI 响应格式无效" };
+    }
+    if (parsed.needsDecomposition && typeof parsed.suggestedSubtaskCount === "number" && parsed.suggestedSubtaskCount < config.minSubtaskCount) {
+      return {
+        needsDecomposition: false,
+        reason: `建议的子任务数(${parsed.suggestedSubtaskCount})少于最小要求(${config.minSubtaskCount})`
+      };
+    }
+    return {
+      needsDecomposition: parsed.needsDecomposition,
+      reason: parsed.reason || (parsed.needsDecomposition ? "AI 判定需要进一步分解" : "AI 判定无需进一步分解")
+    };
+  } catch (error) {
+    if (process.env.DEBUG === "true") {
+      console.error("[shouldDecomposeFurther] 分析过程中发生错误:", error);
+    }
+    return { needsDecomposition: false, reason: "分析过程出错" };
+  }
+}
+async function decomposeRecursively(items, options, config, depth = 0) {
+  if (!config.enabled || depth >= config.maxDepth) {
+    return items;
+  }
+  const cwd2 = options.cwd || process.cwd();
+  const result = [];
+  let totalSubtaskCount = 0;
+  for (const item of items) {
+    if (totalSubtaskCount >= config.maxSubtaskCount) {
+      result.push(item);
+      continue;
+    }
+    const decompositionCheck = await shouldDecomposeFurther(item, depth, config, cwd2);
+    if (!decompositionCheck.needsDecomposition) {
+      result.push(item);
+      totalSubtaskCount++;
+      continue;
+    }
+    if (process.env.DEBUG === "true") {
+      console.log(`[decomposeRecursively] 深度 ${depth}，正在分解：${item.title}`);
+      console.log(`  原因：${decompositionCheck.reason}`);
+    }
+    const detailedDescription = `## 任务标题
+${item.title}
+
+## 任务描述
+${item.description}
+
+## 检查点
+${item.suggestedCheckpoints.map((cp) => `- ${cp}`).join(`
+`)}
+
+## 相关文件
+${item.relatedFiles.join(", ")}`;
+    const subDecomposition = await decomposeRequirement(detailedDescription, {
+      ...options,
+      minItems: config.minSubtaskCount,
+      maxItems: Math.min(5, config.maxSubtaskCount - totalSubtaskCount)
+    });
+    if (subDecomposition.decomposable && subDecomposition.items.length >= config.minSubtaskCount) {
+      const recursivelyDecomposed = await decomposeRecursively(subDecomposition.items, options, config, depth + 1);
+      const baseIndex = result.length;
+      for (let i = 0;i < recursivelyDecomposed.length; i++) {
+        const subItem = recursivelyDecomposed[i];
+        if (i > 0 && subItem.dependsOn.length === 0) {
+          subItem.dependsOn = [baseIndex + i - 1];
+        }
+      }
+      result.push(...recursivelyDecomposed);
+      totalSubtaskCount += recursivelyDecomposed.length;
+      if (process.env.DEBUG === "true") {
+        console.log(`  分解完成：${recursivelyDecomposed.length} 个子任务`);
+      }
+    } else {
+      result.push(item);
+      totalSubtaskCount++;
+    }
+  }
+  return result;
+}
+async function decomposeRequirement(content, options = {}) {
+  const {
+    minItems = 2,
+    maxItems = 10,
+    useAI = true,
+    cwd: cwd2 = process.cwd(),
+    validateQuality = true
+  } = options;
+  const trimmedContent = content.trim();
+  if (trimmedContent.length < 100) {
+    const texts = t(cwd2).decomposition;
+    return {
+      decomposable: false,
+      reason: texts.contentTooShort,
+      items: [],
+      summary: texts.singleTask
+    };
+  }
+  if (trimmedContent.length > SECURITY_CONFIG.MAX_INPUT_LENGTH) {
+    return {
+      decomposable: false,
+      reason: `输入内容过长（当前 ${trimmedContent.length} 字符），超过最大限制 ${SECURITY_CONFIG.MAX_INPUT_LENGTH} 字符。请分批次提交或精简内容。`,
+      items: [],
+      summary: "内容超出限制"
+    };
+  }
+  const securityCheck = validateInputSecurity(trimmedContent);
+  if (!securityCheck.valid) {
+    return {
+      decomposable: false,
+      reason: securityCheck.error || "内容安全检查未通过",
+      items: [],
+      summary: "安全检查失败"
+    };
+  }
+  const isReport = isInvestigationReport(trimmedContent);
+  if (useAI) {
+    const aiResult = await decomposeWithAI(trimmedContent, cwd2);
+    if (aiResult && aiResult.decomposable && aiResult.items.length >= minItems) {
+      const result2 = {
+        ...aiResult,
+        items: aiResult.items.slice(0, maxItems)
+      };
+      if (validateQuality) {
+        const validation = validateDecomposition(result2);
+        if (!validation.valid) {
+          reportDecompositionFailure("AI 分解结果未通过质量检查", validation.errors, "AI 分解任务");
+          return {
+            decomposable: false,
+            reason: `质量检查失败: ${validation.errors.join("; ")}`,
+            items: [],
+            summary: "分解质量检查未通过"
+          };
+        }
+      }
+      return result2;
+    }
+  }
+  const problems = extractProblemsByPattern(trimmedContent);
+  if (problems.length < minItems) {
+    const texts = t(cwd2).decomposition;
+    return {
+      decomposable: false,
+      reason: `仅识别到 ${problems.length} 个问题项，少于阈值 ${minItems}`,
+      items: [],
+      summary: texts.singleTask
+    };
+  }
+  const items = problems.slice(0, maxItems).map((problem, index) => {
+    const title = problem.title;
+    const description = problem.description;
+    const type = inferTaskType(title);
+    const priority = problem.priority || inferTaskPriority(title);
+    const relatedFiles = extractFilePaths(description);
+    const suggestedCheckpoints = generateCheckpoints(type, title, description);
+    const estimatedMinutes = Math.max(10, Math.min(60, 10 + relatedFiles.length * 5));
+    return {
+      title,
+      description,
+      type,
+      priority,
+      suggestedCheckpoints,
+      relatedFiles,
+      estimatedMinutes,
+      dependsOn: index > 0 ? [index - 1] : []
+    };
+  });
+  const result = {
+    decomposable: true,
+    items,
+    summary: `基于模式匹配分解为 ${items.length} 个子任务`
+  };
+  if (validateQuality) {
+    const validation = validateDecomposition(result);
+    if (!validation.valid) {
+      reportDecompositionFailure("模式匹配分解结果未通过质量检查", validation.errors, "模式匹配分解任务");
+      return {
+        decomposable: false,
+        reason: `质量检查失败: ${validation.errors.join("; ")}`,
+        items: [],
+        summary: "分解质量检查未通过"
+      };
+    }
+  }
+  return result;
+}
+function generateCheckpoints(type, title, description) {
+  const checkpoints = [];
+  switch (type) {
+    case "bug":
+      checkpoints.push("[implem] 定位并修复问题根因");
+      checkpoints.push("[test] 验证修复后问题不再复现");
+      break;
+    case "feature":
+      checkpoints.push("[implem] 实现核心功能逻辑");
+      checkpoints.push("[test] 功能测试通过");
+      break;
+    case "refactor":
+      checkpoints.push("[implem] 完成代码重构");
+      checkpoints.push("[test] 回归测试通过");
+      break;
+    case "docs":
+      checkpoints.push("[implem] 完成文档编写");
+      checkpoints.push("[verify] 文档内容审核通过");
+      break;
+    case "test":
+      checkpoints.push("[implem] 编写测试用例");
+      checkpoints.push("[verify] 测试覆盖率达标");
+      break;
+    default:
+      checkpoints.push("[implem] 完成功能实现");
+      checkpoints.push("[verify] 验证功能正确性");
+  }
+  const files = extractFilePaths(description);
+  if (files.length > 0) {
+    checkpoints.push(`[verify] 确认修改文件: ${files.slice(0, 3).join(", ")}${files.length > 3 ? " 等" : ""}`);
+  }
+  return checkpoints;
+}
+function shouldDecompose(content) {
+  if (content.length < 200)
+    return false;
+  const problemCount = (content.match(/(?:^|\n)(?:问题|Issue|Bug|缺陷)\s*\d+/gi) || []).length;
+  const numberedCount = (content.match(/(?:^|\n)\s*\d+[.:\-]\s+/g) || []).length;
+  const headerCount = (content.match(/(?:^|\n)#{1,3}\s+/g) || []).length;
+  return problemCount >= 2 || numberedCount >= 3 || headerCount >= 3;
+}
+function formatDecomposition(decomposition, cwd2) {
+  const texts = t(cwd2).decomposition;
+  if (!decomposition.decomposable) {
+    return `${texts.notDecomposable}: ${decomposition.reason || texts.unknownReason}`;
+  }
+  const lines = [
+    `\uD83D\uDCCB ${decomposition.summary}`,
+    ""
+  ];
+  for (let i = 0;i < decomposition.items.length; i++) {
+    const item = decomposition.items[i];
+    const priorityIcon = item.priority === "P0" ? texts.priorityP0 : item.priority === "P1" ? texts.priorityP1 : item.priority === "P2" ? texts.priorityP2 : texts.priorityP3;
+    const typeIcon = item.type === "bug" ? texts.typeBug : item.type === "feature" ? texts.typeFeature : item.type === "refactor" ? texts.typeRefactor : item.type === "docs" ? texts.typeDocs : item.type === "test" ? texts.typeTest : "\uD83D\uDCDD";
+    lines.push(`  ${i + 1}. ${typeIcon} ${priorityIcon} ${item.title}`);
+    lines.push(`     类型: ${item.type} | 优先级: ${item.priority} | 预估: ${item.estimatedMinutes}分钟`);
+    if (item.dependsOn.length > 0) {
+      lines.push(`     ${texts.dependsOn}: ${item.dependsOn.map((d) => `#${d + 1}`).join(", ")}`);
+    }
+  }
+  return lines.join(`
+`);
+}
+function validateDecompositionItem(item) {
+  const errors = [];
+  const warnings = [];
+  const {
+    MIN_TITLE_LENGTH,
+    MIN_PROBLEM_LENGTH,
+    MIN_SOLUTION_LENGTH,
+    MIN_CHECKPOINTS,
+    VALID_PRIORITIES: VALID_PRIORITIES5
+  } = DECOMPOSITION_CONSTRAINTS;
+  if (!item.title || item.title.trim().length === 0) {
+    errors.push("标题不能为空");
+  } else if (item.title.trim().length < MIN_TITLE_LENGTH) {
+    errors.push(`标题过短，需要至少 ${MIN_TITLE_LENGTH} 个字符（当前 ${item.title.trim().length} 个）`);
+  }
+  const isLegacyFormat = item.problem === item.solution;
+  if (isLegacyFormat) {
+    const totalLength = (item.problem || "").trim().length;
+    if (totalLength === 0) {
+      errors.push("描述不能为空");
+    } else if (totalLength < MIN_PROBLEM_LENGTH) {
+      errors.push(`描述过短，需要至少 ${MIN_PROBLEM_LENGTH} 个字符（当前 ${totalLength} 个）。建议提供详细的问题描述和解决方案`);
+    }
+  } else {
+    if (!item.problem || item.problem.trim().length === 0) {
+      errors.push("问题描述不能为空");
+    } else if (item.problem.trim().length < MIN_PROBLEM_LENGTH) {
+      errors.push(`问题描述过短或不完整，需要至少 ${MIN_PROBLEM_LENGTH} 个字符描述现象和背景（当前 ${item.problem.trim().length} 个）`);
+    }
+    if (!item.solution || item.solution.trim().length === 0) {
+      errors.push("解决方案不能为空");
+    } else if (item.solution.trim().length < MIN_SOLUTION_LENGTH) {
+      errors.push(`解决方案过短或不完整，需要至少 ${MIN_SOLUTION_LENGTH} 个字符描述具体解决步骤（当前 ${item.solution.trim().length} 个）`);
+    }
+  }
+  if (!item.priority) {
+    errors.push("优先级不能为空");
+  } else if (!VALID_PRIORITIES5.includes(item.priority)) {
+    errors.push(`优先级无效，必须是 ${VALID_PRIORITIES5.join("/")} 之一`);
+  }
+  if (!item.checkpoints || item.checkpoints.length === 0) {
+    errors.push(`缺少检查点，需要至少 ${MIN_CHECKPOINTS} 个验证步骤`);
+  } else if (item.checkpoints.length < MIN_CHECKPOINTS) {
+    errors.push(`检查点数量不足，需要至少 ${MIN_CHECKPOINTS} 个`);
+  }
+  if (!item.rootCause || item.rootCause.trim().length < 20) {
+    warnings.push("建议提供根因分析（至少20个字符），以便更好地理解问题本质");
+  }
+  if (!item.estimatedMinutes || item.estimatedMinutes <= 0) {
+    warnings.push("建议提供预估耗时（分钟），以便合理安排开发计划");
+  }
+  return {
+    valid: errors.length === 0,
+    errors,
+    warnings
+  };
+}
+function validateDecompositionItems(items) {
+  const validItems = [];
+  const invalidItems = [];
+  const allErrors = [];
+  for (let i = 0;i < items.length; i++) {
+    const item = items[i];
+    const validation = validateDecompositionItem(item);
+    if (validation.valid) {
+      validItems.push(item);
+    } else {
+      invalidItems.push({ item, errors: validation.errors });
+      allErrors.push(`
+[项 ${i + 1}: "${item.title}"]`);
+      for (const error of validation.errors) {
+        allErrors.push(`  - ${error}`);
+      }
+    }
+  }
+  return {
+    valid: invalidItems.length === 0,
+    validItems,
+    invalidItems,
+    allErrors
+  };
+}
+function reportDecompositionFailure(reason, errors, itemTitle) {
+  console.error("❌ 分解失败");
+  if (itemTitle) {
+    console.error(`任务: ${itemTitle}`);
+  }
+  console.error(`原因: ${reason}`);
+  if (errors && errors.length > 0) {
+    console.error(`
+具体问题:`);
+    for (const error of errors) {
+      console.error(`  - ${error}`);
+    }
+  }
+  console.error(`
+\uD83D\uDCA1 建议:`);
+  console.error("  1. 提供详细的问题描述（现象、背景、影响）");
+  console.error("  2. 提供根因分析，解释为什么会出现这个问题");
+  console.error("  3. 提供具体的解决方案步骤，包括实现思路");
+  console.error("  4. 参考格式：问题描述 → 根因分析 → 解决方案");
+  console.error("  5. 确保问题描述和解决方案各至少50个字符");
+  console.error("  6. 提供至少1个检查点用于验证完成情况");
+}
+function convertToDecomposedItem(item) {
+  return {
+    title: item.title,
+    problem: item.description,
+    solution: item.description,
+    type: item.type,
+    priority: item.priority,
+    checkpoints: item.suggestedCheckpoints,
+    relatedFiles: item.relatedFiles,
+    estimatedMinutes: item.estimatedMinutes
+  };
+}
+function validateDecomposition(decomposition) {
+  if (!decomposition.decomposable || decomposition.items.length === 0) {
+    return { valid: true, errors: [] };
+  }
+  const allErrors = [];
+  const warnings = [];
+  const itemsWithIssues = [];
+  for (let i = 0;i < decomposition.items.length; i++) {
+    const item = decomposition.items[i];
+    const decomposedItem = convertToDecomposedItem(item);
+    const validation = validateDecompositionItem(decomposedItem);
+    if (!validation.valid) {
+      const itemErrors = validation.errors;
+      itemsWithIssues.push({ index: i, title: item.title, errors: itemErrors });
+      allErrors.push(`
+[子任务 ${i + 1}: "${item.title}"]`);
+      for (const error of itemErrors) {
+        allErrors.push(`  - ${error}`);
+      }
+    }
+    if (validation.warnings && validation.warnings.length > 0) {
+      for (const warning of validation.warnings) {
+        warnings.push(`[${item.title}] ${warning}`);
+      }
+    }
+  }
+  if (itemsWithIssues.length === decomposition.items.length) {
+    const summary = `所有 ${decomposition.items.length} 个子任务均未通过质量检查`;
+    return {
+      valid: false,
+      errors: [summary, ...allErrors],
+      warnings,
+      itemsWithIssues
+    };
+  }
+  if (itemsWithIssues.length > 0) {
+    const summary = `${itemsWithIssues.length}/${decomposition.items.length} 个子任务未通过质量检查`;
+    return {
+      valid: false,
+      errors: [summary, ...allErrors],
+      warnings,
+      itemsWithIssues
+    };
+  }
+  return { valid: true, errors: [], warnings };
+}
+var SECURITY_CONFIG, DEFAULT_RECURSIVE_CONFIG;
+var init_requirement_decomposer = __esm(() => {
+  init_decomposition();
+  init_task();
+  init_quality_gate();
+  init_config();
+  init_headless_agent();
+  init_i18n();
+  SECURITY_CONFIG = {
+    MAX_INPUT_LENGTH: 50000,
+    MAX_AI_RESPONSE_LENGTH: 1e5,
+    DANGEROUS_PATTERNS: [
+      /<script\b[^>]*>/i,
+      /javascript:/i,
+      /on\w+\s*=/i,
+      /eval\s*\(/i,
+      /Function\s*\(/i,
+      /new\s+Function/i,
+      /setTimeout\s*\(\s*['"`]/i,
+      /setInterval\s*\(\s*['"`]/i,
+      /__proto__/,
+      /constructor\s*\[/,
+      /\[\s*['"]constructor['"]\s*\]/
+    ]
+  };
+  DEFAULT_RECURSIVE_CONFIG = {
+    enabled: true,
+    maxDepth: 2,
+    complexityThreshold: 15,
+    minSubtaskCount: 2,
+    maxSubtaskCount: 20
+  };
 });
 
 // src/commands/plan.ts
@@ -21660,8 +22598,8 @@ async function recommendPlan2(options = {}, cwd2 = process.cwd()) {
     }
   }
   const inProgressTasks = allTasks.filter((t2) => normalizeStatus(t2.status) === "in_progress");
-  const TERMINAL_STATUSES_SET6 = new Set(TERMINAL_STATUSES);
-  const activeTasks = options.all ? allTasks.filter((t2) => !TERMINAL_STATUSES_SET6.has(normalizeStatus(t2.status))) : allTasks.filter((t2) => normalizeStatus(t2.status) === "open");
+  const TERMINAL_STATUSES_SET7 = new Set(TERMINAL_STATUSES);
+  const activeTasks = options.all ? allTasks.filter((t2) => !TERMINAL_STATUSES_SET7.has(normalizeStatus(t2.status))) : allTasks.filter((t2) => normalizeStatus(t2.status) === "open");
   const excludedCount = allTasks.length - activeTasks.length;
   if (excludedCount > 0) {
     const reason = options.all ? "terminal (resolved/closed/abandoned)" : "non-open status";
@@ -23491,7 +24429,7 @@ function listTasks(options = {}, cwd2 = process.cwd()) {
     tasks = tasks.filter((t2) => t2.needsDiscussion === true);
   }
   if (options.missingVerification) {
-    tasks = tasks.filter((t2) => (t2.status === "resolved" || t2.status === "closed") && !t2.checkpointConfirmationToken);
+    tasks = tasks.filter((t2) => TERMINAL_STATUSES_SET2.has(normalizeStatus(t2.status)) && !t2.checkpointConfirmationToken);
   }
   if (tasks.length === 0) {
     if (options.format === "json") {
@@ -23935,7 +24873,7 @@ function showTaskPanel(task, options, cwd2) {
       let activeCount = 0;
       for (const subId of task.subtaskIds) {
         const sub = readTaskMeta(subId, cwd2);
-        if (sub && (sub.status === "resolved" || sub.status === "closed"))
+        if (sub && TERMINAL_STATUSES_SET2.has(normalizeStatus(sub.status)))
           doneCount++;
         else if (sub && (sub.status === "in_progress" || sub.status === "wait_review" || sub.status === "wait_qa" || sub.status === "wait_evaluation"))
           activeCount++;
@@ -26868,8 +27806,8 @@ async function recommendPlan(options = {}, cwd2 = process.cwd()) {
     }
   }
   const inProgressTasks = allTasks.filter((t2) => normalizeStatus(t2.status) === "in_progress");
-  const TERMINAL_STATUSES_SET3 = new Set(TERMINAL_STATUSES);
-  const activeTasks = options.all ? allTasks.filter((t2) => !TERMINAL_STATUSES_SET3.has(normalizeStatus(t2.status))) : allTasks.filter((t2) => normalizeStatus(t2.status) === "open");
+  const TERMINAL_STATUSES_SET4 = new Set(TERMINAL_STATUSES);
+  const activeTasks = options.all ? allTasks.filter((t2) => !TERMINAL_STATUSES_SET4.has(normalizeStatus(t2.status))) : allTasks.filter((t2) => normalizeStatus(t2.status) === "open");
   const excludedCount = allTasks.length - activeTasks.length;
   if (excludedCount > 0) {
     const reason = options.all ? "terminal (resolved/closed/abandoned)" : "non-open status";
@@ -27997,10 +28935,10 @@ function checkMissingPipelineEvidence2(taskId, task, cwd2) {
   }
   return null;
 }
-var TERMINAL_STATUSES_SET4 = new Set(TERMINAL_STATUSES);
+var TERMINAL_STATUSES_SET5 = new Set(TERMINAL_STATUSES);
 function shouldTriggerAIInference2(task, layer1Issues, cwd2) {
   const currentStatus = normalizeStatus(task.status);
-  if (TERMINAL_STATUSES_SET4.has(currentStatus))
+  if (TERMINAL_STATUSES_SET5.has(currentStatus))
     return false;
   if (layer1Issues.length > 0)
     return false;
@@ -31714,7 +32652,7 @@ init_dependency_engine();
 init_description_template();
 init_quality_gate();
 init_i18n();
-var TERMINAL_STATUSES_SET5 = new Set(TERMINAL_STATUSES);
+var TERMINAL_STATUSES_SET6 = new Set(TERMINAL_STATUSES);
 var NOISE_ACTIONS2 = new Set([
   "查看Task",
   "同步Checkpoints",
@@ -32145,720 +33083,10 @@ init_dependency_graph();
 init_task();
 init_logger();
 init_ai_metadata();
-
-// src/types/decomposition.ts
-var DECOMPOSITION_CONSTRAINTS = {
-  MIN_TITLE_LENGTH: 10,
-  MIN_PROBLEM_LENGTH: 50,
-  MIN_SOLUTION_LENGTH: 50,
-  MIN_ROOT_CAUSE_LENGTH: 20,
-  MIN_CHECKPOINTS: 1,
-  VALID_PRIORITIES: ["P0", "P1", "P2", "P3"]
-};
-var VALID_TASK_TYPES = ["bug", "feature", "research", "docs", "refactor", "test"];
-var VALID_TASK_PRIORITIES = ["P0", "P1", "P2", "P3"];
-function isValidTaskType(value) {
-  return typeof value === "string" && VALID_TASK_TYPES.includes(value);
-}
-function isValidTaskPriority(value) {
-  return typeof value === "string" && VALID_TASK_PRIORITIES.includes(value);
-}
-function isValidDecomposedTaskItem(item) {
-  if (typeof item !== "object" || item === null) {
-    return false;
-  }
-  const obj = item;
-  if (typeof obj.title !== "string" || obj.title.trim().length === 0) {
-    return false;
-  }
-  if (typeof obj.description !== "string") {
-    return false;
-  }
-  if (!isValidTaskType(obj.type)) {
-    return false;
-  }
-  if (!isValidTaskPriority(obj.priority)) {
-    return false;
-  }
-  if (!Array.isArray(obj.suggestedCheckpoints)) {
-    return false;
-  }
-  for (const checkpoint of obj.suggestedCheckpoints) {
-    if (typeof checkpoint !== "string") {
-      return false;
-    }
-  }
-  if (!Array.isArray(obj.relatedFiles)) {
-    return false;
-  }
-  for (const file of obj.relatedFiles) {
-    if (typeof file !== "string") {
-      return false;
-    }
-  }
-  if (typeof obj.estimatedMinutes !== "number" || obj.estimatedMinutes < 0) {
-    return false;
-  }
-  if (!Array.isArray(obj.dependsOn)) {
-    return false;
-  }
-  for (const dep of obj.dependsOn) {
-    if (typeof dep !== "number") {
-      return false;
-    }
-  }
-  return true;
-}
-function isValidRequirementDecomposition(result) {
-  if (typeof result !== "object" || result === null) {
-    return false;
-  }
-  const obj = result;
-  if (typeof obj.decomposable !== "boolean") {
-    return false;
-  }
-  if (!Array.isArray(obj.items)) {
-    return false;
-  }
-  for (const item of obj.items) {
-    if (!isValidDecomposedTaskItem(item)) {
-      return false;
-    }
-  }
-  if (typeof obj.summary !== "string") {
-    return false;
-  }
-  if (obj.reason !== undefined && typeof obj.reason !== "string") {
-    return false;
-  }
-  return true;
-}
-
-// src/utils/requirement-decomposer.ts
-init_task();
-init_quality_gate();
-init_config();
-init_headless_agent();
-var SECURITY_CONFIG = {
-  MAX_INPUT_LENGTH: 50000,
-  MAX_AI_RESPONSE_LENGTH: 1e5,
-  DANGEROUS_PATTERNS: [
-    /<script\b[^>]*>/i,
-    /javascript:/i,
-    /on\w+\s*=/i,
-    /eval\s*\(/i,
-    /Function\s*\(/i,
-    /new\s+Function/i,
-    /setTimeout\s*\(\s*['"`]/i,
-    /setInterval\s*\(\s*['"`]/i,
-    /__proto__/,
-    /constructor\s*\[/,
-    /\[\s*['"]constructor['"]\s*\]/
-  ]
-};
-function validateInputSecurity(content) {
-  if (content.length > SECURITY_CONFIG.MAX_INPUT_LENGTH) {
-    return {
-      valid: false,
-      error: `输入内容过长（当前 ${content.length} 字符），超过最大限制 ${SECURITY_CONFIG.MAX_INPUT_LENGTH} 字符`
-    };
-  }
-  for (const pattern of SECURITY_CONFIG.DANGEROUS_PATTERNS) {
-    if (pattern.test(content)) {
-      return {
-        valid: false,
-        error: "检测到潜在的危险内容模式，输入被拒绝"
-      };
-    }
-  }
-  return { valid: true };
-}
-function isInvestigationReport(content) {
-  const problemKeywords = ["问题", "Issue", "Bug", "缺陷", "发现"];
-  let problemCount = 0;
-  for (const keyword of problemKeywords) {
-    const regex = new RegExp(keyword, "gi");
-    const matches = content.match(regex);
-    if (matches) {
-      problemCount += matches.length;
-    }
-  }
-  const numberedItems = content.match(/(?:^|\n)\s*\d+[.:\-]\s+/g);
-  const bulletItems = content.match(/(?:^|\n)\s*[-*]\s+/g);
-  const headers = content.match(/(?:^|\n)#{1,3}\s+[^\n]+/g);
-  const hasListStructure = !!numberedItems && numberedItems.length >= 2 || !!bulletItems && bulletItems.length >= 2 || !!headers && headers.length >= 2;
-  return problemCount >= 2 || hasListStructure && content.length > 300;
-}
-function extractProblemsByPattern(content) {
-  const problems = [];
-  const seen = new Set;
-  const problemPositions = [];
-  const problemRegex = /(?:^|\n)(?:#{1,3}\s+)?(?:问题|Issue|Bug|缺陷)\s*(?:#\s*)?(\d+[A-Z]?)\s*(?:\((P\d|urgent|high|medium|low|[紧急高种低])\))?\s*[.:\-]?\s*([^\n]{10,200})/gi;
-  let match;
-  while ((match = problemRegex.exec(content)) !== null) {
-    const problemId = match[1]?.trim() || "";
-    const priorityFromParen = match[2]?.trim() || "";
-    const title = match[3]?.trim() || "";
-    if (!title || seen.has(title))
-      continue;
-    seen.add(title);
-    problemPositions.push({
-      index: match.index,
-      length: match[0].length,
-      id: problemId,
-      priorityFromParen,
-      title
-    });
-  }
-  for (let i = 0;i < problemPositions.length; i++) {
-    const current = problemPositions[i];
-    const next = problemPositions[i + 1];
-    const startIdx = current.index + current.length;
-    const endIdx = next ? next.index : content.length;
-    const body = content.substring(startIdx, endIdx).trim();
-    let priority = "P2";
-    if (current.priorityFromParen) {
-      const p = current.priorityFromParen.toUpperCase();
-      if (p === "P0" || p.includes("紧急") || p.includes("URGENT"))
-        priority = "P0";
-      else if (p === "P1" || p.includes("高") || p.includes("HIGH"))
-        priority = "P1";
-      else if (p === "P3" || p.includes("低") || p.includes("LOW"))
-        priority = "P3";
-    } else {
-      const priorityMatch = content.substring(Math.max(0, current.index - 100), current.index).match(/(P\d|紧急|urgent|高|high|中|medium|低|low)/i);
-      if (priorityMatch && priorityMatch[1]) {
-        const p = priorityMatch[1].toUpperCase();
-        if (p === "P0" || p.includes("紧急") || p.includes("URGENT"))
-          priority = "P0";
-        else if (p === "P1" || p.includes("高") || p.includes("HIGH"))
-          priority = "P1";
-        else if (p === "P3" || p.includes("低") || p.includes("LOW"))
-          priority = "P3";
-      }
-    }
-    problems.push({
-      title: current.title.length > 100 ? current.title.substring(0, 97) + "..." : current.title,
-      description: body || current.title,
-      priority
-    });
-  }
-  if (problems.length < 2) {
-    const numberedRegex = /(?:^|\n)\s*(\d+)[.:\-]\s*([^\n]{10,200})/g;
-    while ((match = numberedRegex.exec(content)) !== null) {
-      const title = match[2]?.trim() || "";
-      if (!title || seen.has(title))
-        continue;
-      const hasActionVerb = /(?:修复|解决|实现|添加|创建|修改|更新|验证|分析|优化|重构|删除|移除|调整|配置|部署)/.test(title);
-      if (!hasActionVerb && title.length < 20)
-        continue;
-      seen.add(title);
-      const startIdx = match.index + match[0].length;
-      const nextMatch = numberedRegex.exec(content);
-      numberedRegex.lastIndex = startIdx;
-      const endIdx = nextMatch ? nextMatch.index : content.length;
-      const body = content.substring(startIdx, endIdx).trim();
-      problems.push({
-        title: title.length > 100 ? title.substring(0, 97) + "..." : title,
-        description: body || title,
-        priority: "P2"
-      });
-      if (problems.length >= 10)
-        break;
-    }
-  }
-  if (problems.length < 2) {
-    const headerRegex = /(?:^|\n)(#{1,3}\s+)([^\n]{5,100})/g;
-    while ((match = headerRegex.exec(content)) !== null) {
-      const title = match[2]?.trim() || "";
-      if (!title || seen.has(title))
-        continue;
-      const nonProblemTitles = [
-        "概述",
-        "总结",
-        "结论",
-        "背景",
-        "目标",
-        "介绍",
-        "前言",
-        "附录",
-        "Summary",
-        "Conclusion",
-        "Background",
-        "Overview",
-        "Introduction",
-        "Appendix"
-      ];
-      if (nonProblemTitles.some((t2) => title.includes(t2)))
-        continue;
-      seen.add(title);
-      const startIdx = match.index + match[0].length;
-      const nextMatch = headerRegex.exec(content);
-      headerRegex.lastIndex = startIdx;
-      const endIdx = nextMatch ? nextMatch.index : content.length;
-      const body = content.substring(startIdx, endIdx).trim();
-      problems.push({
-        title: title.length > 100 ? title.substring(0, 97) + "..." : title,
-        description: body || title,
-        priority: "P2"
-      });
-      if (problems.length >= 10)
-        break;
-    }
-  }
-  return problems;
-}
-function validateAIResponse(parsed) {
-  if (!parsed || typeof parsed !== "object") {
-    return null;
-  }
-  if (!("items" in parsed) || !Array.isArray(parsed.items)) {
-    return null;
-  }
-  const decomposable = parsed.decomposable === true;
-  const reason = typeof parsed.reason === "string" ? parsed.reason : undefined;
-  const summary = typeof parsed.summary === "string" ? parsed.summary : undefined;
-  const items = [];
-  for (const rawItem of parsed.items) {
-    if (!rawItem || typeof rawItem !== "object") {
-      continue;
-    }
-    const item = rawItem;
-    if (!("title" in item) || typeof item.title !== "string" || item.title.trim().length === 0) {
-      continue;
-    }
-    if ("suggestedCheckpoints" in item && !Array.isArray(item.suggestedCheckpoints)) {
-      continue;
-    }
-    if ("relatedFiles" in item && !Array.isArray(item.relatedFiles)) {
-      continue;
-    }
-    if ("dependsOn" in item && !Array.isArray(item.dependsOn)) {
-      continue;
-    }
-    items.push(item);
-  }
-  return {
-    decomposable,
-    reason,
-    summary,
-    items
-  };
-}
-async function decomposeWithAI(content, cwd2) {
-  if (content.length > SECURITY_CONFIG.MAX_INPUT_LENGTH) {
-    console.warn(`AI 分解警告：输入内容过长(${content.length}字符)，已截断处理`);
-  }
-  try {
-    const safeContent = content.substring(0, Math.min(content.length, SECURITY_CONFIG.MAX_INPUT_LENGTH));
-    const prompt = `请将以下需求/报告分解为多个独立的开发任务。
-
-输入内容：
-${safeContent.substring(0, 4000)}
-
-请分析输入内容，识别出其中包含的独立问题或需求项，并返回 JSON 格式的分解结果：
-{
-  "decomposable": true,
-  "summary": "分解摘要",
-  "items": [
-    {
-      "title": "任务标题（动词开头，简洁明确）",
-      "description": "任务详细描述",
-      "type": "bug|feature|research|docs|refactor|test",
-      "priority": "P0|P1|P2|P3",
-      "suggestedCheckpoints": ["检查点1", "检查点2"],
-      "relatedFiles": ["文件路径1", "文件路径2"],
-      "estimatedMinutes": 15,
-      "dependsOn": []
-    }
-  ]
-}
-
-规则：
-1. 每个 item 应该是一个独立的、可执行的任务
-2. title 必须以动词开头（如：修复、实现、添加、更新等）
-3. priority 根据紧急程度判断：P0=紧急/阻塞，P1=高优先级，P2=中等，P3=低优先级
-4. type 根据内容推断：bug=修复问题，feature=新功能，refactor=重构，docs=文档，test=测试
-5. estimatedMinutes 预估完成时间（分钟），建议每个任务控制在 15-30 分钟
-6. dependsOn 是依赖项的索引数组（如：[0] 表示依赖第一个任务）
-7. 如果无法分解（如内容过于简单），返回 {"decomposable": false, "reason": "原因", "items": []}`;
-    const agentOptions = buildAgentOptionsFromPreset("decomposition", cwd2);
-    const result = await invokeAgent(prompt, agentOptions);
-    if (!result.success) {
-      return null;
-    }
-    let parsed = null;
-    try {
-      parsed = JSON.parse(result.output);
-    } catch {
-      const jsonMatch = result.output.match(/```(?:json)?\s*\n?([\s\S]*?)\n?```/);
-      if (jsonMatch?.[1]) {
-        try {
-          parsed = JSON.parse(jsonMatch[1]);
-        } catch {}
-      }
-    }
-    const validated = validateAIResponse(parsed);
-    if (!validated) {
-      return null;
-    }
-    const responseLength = JSON.stringify(parsed).length;
-    if (responseLength > SECURITY_CONFIG.MAX_AI_RESPONSE_LENGTH) {
-      console.warn(`AI 响应过长(${responseLength}字符)，可能存在异常`);
-      validated.items = validated.items.slice(0, 10);
-    }
-    const candidateResult = {
-      decomposable: validated.decomposable,
-      reason: validated.reason,
-      summary: validated.summary || `分解为 ${validated.items.length} 个子任务`,
-      items: validated.items.map((item, index) => ({
-        title: String(item.title || `任务 ${index + 1}`),
-        description: String(item.description || item.title || ""),
-        type: item.type || inferTaskType(String(item.title)),
-        priority: item.priority || "P2",
-        suggestedCheckpoints: Array.isArray(item.suggestedCheckpoints) ? item.suggestedCheckpoints.filter((c) => typeof c === "string") : [],
-        relatedFiles: Array.isArray(item.relatedFiles) ? item.relatedFiles.filter((f) => typeof f === "string") : extractFilePaths(String(item.description || "")),
-        estimatedMinutes: typeof item.estimatedMinutes === "number" && item.estimatedMinutes > 0 ? item.estimatedMinutes : 15,
-        dependsOn: Array.isArray(item.dependsOn) ? item.dependsOn.filter((d) => typeof d === "number" && Number.isInteger(d) && d >= 0) : []
-      }))
-    };
-    if (!isValidRequirementDecomposition(candidateResult)) {
-      const validItems = candidateResult.items.filter((item, idx) => {
-        const isValid = isValidDecomposedTaskItem(item);
-        if (!isValid) {
-          console.warn(`[decomposeWithAI] 第 ${idx + 1} 个子任务验证失败，已跳过`);
-        }
-        return isValid;
-      });
-      if (validItems.length === 0) {
-        console.error("[decomposeWithAI] AI 返回的数据验证失败，无有效子任务");
-        return null;
-      }
-      const filteredResult = {
-        ...candidateResult,
-        items: validItems
-      };
-      if (!isValidRequirementDecomposition(filteredResult)) {
-        console.error("[decomposeWithAI] 过滤后的数据仍验证失败");
-        return null;
-      }
-      return filteredResult;
-    }
-    return candidateResult;
-  } catch (error) {
-    if (process.env.DEBUG === "true") {
-      console.error("AI 分解过程中发生错误:", error);
-    }
-    return null;
-  }
-}
-async function decomposeRequirement(content, options = {}) {
-  const {
-    minItems = 2,
-    maxItems = 10,
-    useAI = true,
-    cwd: cwd2 = process.cwd(),
-    validateQuality = true
-  } = options;
-  const trimmedContent = content.trim();
-  if (trimmedContent.length < 100) {
-    return {
-      decomposable: false,
-      reason: "内容过短，无需分解",
-      items: [],
-      summary: "单任务"
-    };
-  }
-  if (trimmedContent.length > SECURITY_CONFIG.MAX_INPUT_LENGTH) {
-    return {
-      decomposable: false,
-      reason: `输入内容过长（当前 ${trimmedContent.length} 字符），超过最大限制 ${SECURITY_CONFIG.MAX_INPUT_LENGTH} 字符。请分批次提交或精简内容。`,
-      items: [],
-      summary: "内容超出限制"
-    };
-  }
-  const securityCheck = validateInputSecurity(trimmedContent);
-  if (!securityCheck.valid) {
-    return {
-      decomposable: false,
-      reason: securityCheck.error || "内容安全检查未通过",
-      items: [],
-      summary: "安全检查失败"
-    };
-  }
-  const isReport = isInvestigationReport(trimmedContent);
-  if (useAI) {
-    const aiResult = await decomposeWithAI(trimmedContent, cwd2);
-    if (aiResult && aiResult.decomposable && aiResult.items.length >= minItems) {
-      const result2 = {
-        ...aiResult,
-        items: aiResult.items.slice(0, maxItems)
-      };
-      if (validateQuality) {
-        const validation = validateDecomposition(result2);
-        if (!validation.valid) {
-          reportDecompositionFailure("AI 分解结果未通过质量检查", validation.errors, "AI 分解任务");
-          return {
-            decomposable: false,
-            reason: `质量检查失败: ${validation.errors.join("; ")}`,
-            items: [],
-            summary: "分解质量检查未通过"
-          };
-        }
-      }
-      return result2;
-    }
-  }
-  const problems = extractProblemsByPattern(trimmedContent);
-  if (problems.length < minItems) {
-    return {
-      decomposable: false,
-      reason: `仅识别到 ${problems.length} 个问题项，少于阈值 ${minItems}`,
-      items: [],
-      summary: "单任务"
-    };
-  }
-  const items = problems.slice(0, maxItems).map((problem, index) => {
-    const title = problem.title;
-    const description = problem.description;
-    const type = inferTaskType(title);
-    const priority = problem.priority || inferTaskPriority(title);
-    const relatedFiles = extractFilePaths(description);
-    const suggestedCheckpoints = generateCheckpoints(type, title, description);
-    const estimatedMinutes = Math.max(10, Math.min(60, 10 + relatedFiles.length * 5));
-    return {
-      title,
-      description,
-      type,
-      priority,
-      suggestedCheckpoints,
-      relatedFiles,
-      estimatedMinutes,
-      dependsOn: index > 0 ? [index - 1] : []
-    };
-  });
-  const result = {
-    decomposable: true,
-    items,
-    summary: `基于模式匹配分解为 ${items.length} 个子任务`
-  };
-  if (validateQuality) {
-    const validation = validateDecomposition(result);
-    if (!validation.valid) {
-      reportDecompositionFailure("模式匹配分解结果未通过质量检查", validation.errors, "模式匹配分解任务");
-      return {
-        decomposable: false,
-        reason: `质量检查失败: ${validation.errors.join("; ")}`,
-        items: [],
-        summary: "分解质量检查未通过"
-      };
-    }
-  }
-  return result;
-}
-function generateCheckpoints(type, title, description) {
-  const checkpoints = [];
-  switch (type) {
-    case "bug":
-      checkpoints.push("[implem] 定位并修复问题根因");
-      checkpoints.push("[test] 验证修复后问题不再复现");
-      break;
-    case "feature":
-      checkpoints.push("[implem] 实现核心功能逻辑");
-      checkpoints.push("[test] 功能测试通过");
-      break;
-    case "refactor":
-      checkpoints.push("[implem] 完成代码重构");
-      checkpoints.push("[test] 回归测试通过");
-      break;
-    case "docs":
-      checkpoints.push("[implem] 完成文档编写");
-      checkpoints.push("[verify] 文档内容审核通过");
-      break;
-    case "test":
-      checkpoints.push("[implem] 编写测试用例");
-      checkpoints.push("[verify] 测试覆盖率达标");
-      break;
-    default:
-      checkpoints.push("[implem] 完成功能实现");
-      checkpoints.push("[verify] 验证功能正确性");
-  }
-  const files = extractFilePaths(description);
-  if (files.length > 0) {
-    checkpoints.push(`[verify] 确认修改文件: ${files.slice(0, 3).join(", ")}${files.length > 3 ? " 等" : ""}`);
-  }
-  return checkpoints;
-}
-function shouldDecompose(content) {
-  if (content.length < 200)
-    return false;
-  const problemCount = (content.match(/(?:^|\n)(?:问题|Issue|Bug|缺陷)\s*\d+/gi) || []).length;
-  const numberedCount = (content.match(/(?:^|\n)\s*\d+[.:\-]\s+/g) || []).length;
-  const headerCount = (content.match(/(?:^|\n)#{1,3}\s+/g) || []).length;
-  return problemCount >= 2 || numberedCount >= 3 || headerCount >= 3;
-}
-function formatDecomposition(decomposition) {
-  if (!decomposition.decomposable) {
-    return `不可分解: ${decomposition.reason || "未知原因"}`;
-  }
-  const lines = [
-    `\uD83D\uDCCB ${decomposition.summary}`,
-    ""
-  ];
-  for (let i = 0;i < decomposition.items.length; i++) {
-    const item = decomposition.items[i];
-    const priorityIcon = item.priority === "P0" ? "\uD83D\uDD34" : item.priority === "P1" ? "\uD83D\uDFE0" : item.priority === "P2" ? "\uD83D\uDFE1" : "\uD83D\uDFE2";
-    const typeIcon = item.type === "bug" ? "\uD83D\uDC1B" : item.type === "feature" ? "✨" : item.type === "refactor" ? "♻️" : item.type === "docs" ? "\uD83D\uDCDA" : item.type === "test" ? "\uD83E\uDDEA" : "\uD83D\uDCDD";
-    lines.push(`  ${i + 1}. ${typeIcon} ${priorityIcon} ${item.title}`);
-    lines.push(`     类型: ${item.type} | 优先级: ${item.priority} | 预估: ${item.estimatedMinutes}分钟`);
-    if (item.dependsOn.length > 0) {
-      lines.push(`     依赖: ${item.dependsOn.map((d) => `#${d + 1}`).join(", ")}`);
-    }
-  }
-  return lines.join(`
-`);
-}
-function validateDecompositionItem(item) {
-  const errors = [];
-  const warnings = [];
-  const {
-    MIN_TITLE_LENGTH,
-    MIN_PROBLEM_LENGTH,
-    MIN_SOLUTION_LENGTH,
-    MIN_CHECKPOINTS,
-    VALID_PRIORITIES: VALID_PRIORITIES5
-  } = DECOMPOSITION_CONSTRAINTS;
-  if (!item.title || item.title.trim().length === 0) {
-    errors.push("标题不能为空");
-  } else if (item.title.trim().length < MIN_TITLE_LENGTH) {
-    errors.push(`标题过短，需要至少 ${MIN_TITLE_LENGTH} 个字符（当前 ${item.title.trim().length} 个）`);
-  }
-  const isLegacyFormat = item.problem === item.solution;
-  if (isLegacyFormat) {
-    const totalLength = (item.problem || "").trim().length;
-    if (totalLength === 0) {
-      errors.push("描述不能为空");
-    } else if (totalLength < MIN_PROBLEM_LENGTH) {
-      errors.push(`描述过短，需要至少 ${MIN_PROBLEM_LENGTH} 个字符（当前 ${totalLength} 个）。建议提供详细的问题描述和解决方案`);
-    }
-  } else {
-    if (!item.problem || item.problem.trim().length === 0) {
-      errors.push("问题描述不能为空");
-    } else if (item.problem.trim().length < MIN_PROBLEM_LENGTH) {
-      errors.push(`问题描述过短或不完整，需要至少 ${MIN_PROBLEM_LENGTH} 个字符描述现象和背景（当前 ${item.problem.trim().length} 个）`);
-    }
-    if (!item.solution || item.solution.trim().length === 0) {
-      errors.push("解决方案不能为空");
-    } else if (item.solution.trim().length < MIN_SOLUTION_LENGTH) {
-      errors.push(`解决方案过短或不完整，需要至少 ${MIN_SOLUTION_LENGTH} 个字符描述具体解决步骤（当前 ${item.solution.trim().length} 个）`);
-    }
-  }
-  if (!item.priority) {
-    errors.push("优先级不能为空");
-  } else if (!VALID_PRIORITIES5.includes(item.priority)) {
-    errors.push(`优先级无效，必须是 ${VALID_PRIORITIES5.join("/")} 之一`);
-  }
-  if (!item.checkpoints || item.checkpoints.length === 0) {
-    errors.push(`缺少检查点，需要至少 ${MIN_CHECKPOINTS} 个验证步骤`);
-  } else if (item.checkpoints.length < MIN_CHECKPOINTS) {
-    errors.push(`检查点数量不足，需要至少 ${MIN_CHECKPOINTS} 个`);
-  }
-  if (!item.rootCause || item.rootCause.trim().length < 20) {
-    warnings.push("建议提供根因分析（至少20个字符），以便更好地理解问题本质");
-  }
-  if (!item.estimatedMinutes || item.estimatedMinutes <= 0) {
-    warnings.push("建议提供预估耗时（分钟），以便合理安排开发计划");
-  }
-  return {
-    valid: errors.length === 0,
-    errors,
-    warnings
-  };
-}
-function reportDecompositionFailure(reason, errors, itemTitle) {
-  console.error("❌ 分解失败");
-  if (itemTitle) {
-    console.error(`任务: ${itemTitle}`);
-  }
-  console.error(`原因: ${reason}`);
-  if (errors && errors.length > 0) {
-    console.error(`
-具体问题:`);
-    for (const error of errors) {
-      console.error(`  - ${error}`);
-    }
-  }
-  console.error(`
-\uD83D\uDCA1 建议:`);
-  console.error("  1. 提供详细的问题描述（现象、背景、影响）");
-  console.error("  2. 提供根因分析，解释为什么会出现这个问题");
-  console.error("  3. 提供具体的解决方案步骤，包括实现思路");
-  console.error("  4. 参考格式：问题描述 → 根因分析 → 解决方案");
-  console.error("  5. 确保问题描述和解决方案各至少50个字符");
-  console.error("  6. 提供至少1个检查点用于验证完成情况");
-}
-function convertToDecomposedItem(item) {
-  return {
-    title: item.title,
-    problem: item.description,
-    solution: item.description,
-    type: item.type,
-    priority: item.priority,
-    checkpoints: item.suggestedCheckpoints,
-    relatedFiles: item.relatedFiles,
-    estimatedMinutes: item.estimatedMinutes
-  };
-}
-function validateDecomposition(decomposition) {
-  if (!decomposition.decomposable || decomposition.items.length === 0) {
-    return { valid: true, errors: [] };
-  }
-  const allErrors = [];
-  const warnings = [];
-  const itemsWithIssues = [];
-  for (let i = 0;i < decomposition.items.length; i++) {
-    const item = decomposition.items[i];
-    const decomposedItem = convertToDecomposedItem(item);
-    const validation = validateDecompositionItem(decomposedItem);
-    if (!validation.valid) {
-      const itemErrors = validation.errors;
-      itemsWithIssues.push({ index: i, title: item.title, errors: itemErrors });
-      allErrors.push(`
-[子任务 ${i + 1}: "${item.title}"]`);
-      for (const error of itemErrors) {
-        allErrors.push(`  - ${error}`);
-      }
-    }
-    if (validation.warnings && validation.warnings.length > 0) {
-      for (const warning of validation.warnings) {
-        warnings.push(`[${item.title}] ${warning}`);
-      }
-    }
-  }
-  if (itemsWithIssues.length === decomposition.items.length) {
-    const summary = `所有 ${decomposition.items.length} 个子任务均未通过质量检查`;
-    return {
-      valid: false,
-      errors: [summary, ...allErrors],
-      warnings,
-      itemsWithIssues
-    };
-  }
-  if (itemsWithIssues.length > 0) {
-    const summary = `${itemsWithIssues.length}/${decomposition.items.length} 个子任务未通过质量检查`;
-    return {
-      valid: false,
-      errors: [summary, ...allErrors],
-      warnings,
-      itemsWithIssues
-    };
-  }
-  return { valid: true, errors: [], warnings };
-}
-
-// src/commands/init-requirement.ts
+init_requirement_decomposer();
 init_description_template();
 init_dependency_engine();
+var TERMINAL_STATUSES_SET7 = new Set(TERMINAL_STATUSES);
 function mergeAnalysisResults(ruleBased, aiEnhanced) {
   const aiEnhancedFields = [];
   let title = ruleBased.title;
@@ -32955,7 +33183,7 @@ async function initRequirement(description, cwd2 = process.cwd(), options = {}) 
       maxItems: 10
     });
     if (decomposition.decomposable && decomposition.items.length >= 2) {
-      console.log(formatDecomposition(decomposition));
+      console.log(formatDecomposition(decomposition, cwd2));
       console.log("");
       let confirmDecompose = true;
       if (!nonInteractive) {
@@ -33631,7 +33859,7 @@ function analyzeRequirement(description, cwd2) {
   if (currentFiles.length > 0) {
     const existingTasks = getAllTasks(cwd2);
     for (const existing of existingTasks) {
-      if (existing.status === "resolved" || existing.status === "closed" || existing.status === "abandoned" || existing.status === "failed")
+      if (TERMINAL_STATUSES_SET7.has(normalizeStatus(existing.status)))
         continue;
       const existingFiles = extractAffectedFiles(existing);
       const overlap = currentFiles.filter((f) => existingFiles.includes(f));
@@ -33733,10 +33961,42 @@ async function initRequirementBatch(items, cwd2, options) {
   const createdTaskIds = [];
   const failedTasks = [];
   const taskIdMap = new Map;
+  let processedItems = items;
+  if (options.recursiveDecompose !== false && !options.noAI) {
+    const recursiveConfig = typeof options.recursiveDecompose === "object" ? { ...DEFAULT_RECURSIVE_CONFIG, ...options.recursiveDecompose } : DEFAULT_RECURSIVE_CONFIG;
+    if (recursiveConfig.enabled) {
+      console.log("");
+      console.log("━".repeat(SEPARATOR_WIDTH));
+      console.log("\uD83D\uDD04 Recursive decomposition: Checking if subtasks need further decomposition...");
+      console.log("━".repeat(SEPARATOR_WIDTH));
+      console.log("");
+      try {
+        const { decomposeRecursively: decomposeRecursively3 } = await Promise.resolve().then(() => (init_requirement_decomposer(), exports_requirement_decomposer));
+        processedItems = await decomposeRecursively3(items, {
+          cwd: cwd2,
+          useAI: !options.noAI,
+          minItems: 2,
+          maxItems: 10
+        }, recursiveConfig);
+        if (processedItems.length > items.length) {
+          console.log(`   \uD83D\uDCCA Recursively decomposed: ${items.length} → ${processedItems.length} tasks`);
+          console.log("");
+        } else {
+          console.log("   ℹ️ No further decomposition needed");
+          console.log("");
+        }
+      } catch (error) {
+        console.warn("   ⚠️ Recursive decomposition failed:", error instanceof Error ? error.message : String(error));
+        console.log("   Continuing with original tasks...");
+        console.log("");
+        processedItems = items;
+      }
+    }
+  }
   console.log("");
   console.log("━".repeat(SEPARATOR_WIDTH));
-  console.log(`\uD83D\uDCDD Decomposition result: ${items.length} tasks`);
-  items.forEach((item, i) => {
+  console.log(`\uD83D\uDCDD Decomposition result: ${processedItems.length} tasks`);
+  processedItems.forEach((item, i) => {
     console.log(`   ${i + 1}. [${item.priority}] ${item.title}`);
   });
   console.log("━".repeat(SEPARATOR_WIDTH));
@@ -33745,9 +34005,9 @@ async function initRequirementBatch(items, cwd2, options) {
   console.log("\uD83D\uDCDD Creating tasks...");
   console.log("━".repeat(SEPARATOR_WIDTH));
   console.log("");
-  for (let i = 0;i < items.length; i++) {
-    const item = items[i];
-    console.log(`Creating task ${i + 1}/${items.length}...`);
+  for (let i = 0;i < processedItems.length; i++) {
+    const item = processedItems[i];
+    console.log(`Creating task ${i + 1}/${processedItems.length}...`);
     const itemOptions = {
       ...options,
       nonInteractive: true,
@@ -33775,8 +34035,8 @@ async function initRequirementBatch(items, cwd2, options) {
     console.log("\uD83D\uDD17 Setting up task dependencies...");
     console.log("━".repeat(SEPARATOR_WIDTH));
     console.log("");
-    for (let i = 0;i < items.length; i++) {
-      const item = items[i];
+    for (let i = 0;i < processedItems.length; i++) {
+      const item = processedItems[i];
       const taskId = taskIdMap.get(i);
       if (!taskId || item.dependsOn.length === 0)
         continue;
@@ -33789,8 +34049,8 @@ async function initRequirementBatch(items, cwd2, options) {
           console.warn(`  Warning: Invalid dependency index (not an integer) for task ${taskId}: ${depIndex}`);
           continue;
         }
-        if (depIndex < 0 || depIndex >= items.length) {
-          console.warn(`  Warning: Dependency index out of range for task ${taskId}: ${depIndex} (valid range: 0-${items.length - 1})`);
+        if (depIndex < 0 || depIndex >= processedItems.length) {
+          console.warn(`  Warning: Dependency index out of range for task ${taskId}: ${depIndex} (valid range: 0-${processedItems.length - 1})`);
           continue;
         }
         const depId = taskIdMap.get(depIndex);
@@ -33809,7 +34069,7 @@ async function initRequirementBatch(items, cwd2, options) {
       }
     }
   }
-  reportBatchResult(createdTaskIds, failedTasks, items.length);
+  reportBatchResult(createdTaskIds, failedTasks, processedItems.length);
 }
 
 // src/commands/help.ts
@@ -39892,13 +40152,13 @@ async function loadTaskQueue(options, cwd2) {
         console.error("Error: No tasks in plan file");
         process.exit(1);
       }
-      const TERMINAL_STATUSES_SET6 = new Set(TERMINAL_STATUSES);
+      const TERMINAL_STATUSES_SET8 = new Set(TERMINAL_STATUSES);
       const originalCount = taskQueue.length;
       taskQueue = taskQueue.filter((id) => {
         const task = readTaskMeta(id, cwd2);
         if (!task)
           return false;
-        return !TERMINAL_STATUSES_SET6.has(normalizeStatus(task.status));
+        return !TERMINAL_STATUSES_SET8.has(normalizeStatus(task.status));
       });
       if (originalCount - taskQueue.length > 0) {
         console.log(`Using plan file: ${options.plan} (filtered ${originalCount - taskQueue.length} terminal tasks)`);
@@ -39938,12 +40198,12 @@ async function loadTaskQueue(options, cwd2) {
   process.exit(1);
 }
 function filterExecutableFromPlan(plan, cwd2, logPrefix) {
-  const TERMINAL_STATUSES_SET6 = new Set(TERMINAL_STATUSES);
+  const TERMINAL_STATUSES_SET8 = new Set(TERMINAL_STATUSES);
   const filteredTasks = plan.tasks.filter((taskId) => {
     const task = readTaskMeta(taskId, cwd2);
     if (!task)
       return false;
-    return !TERMINAL_STATUSES_SET6.has(normalizeStatus(task.status));
+    return !TERMINAL_STATUSES_SET8.has(normalizeStatus(task.status));
   });
   const filteredCount = plan.tasks.length - filteredTasks.length;
   if (filteredCount > 0) {

@@ -18,6 +18,10 @@ import type {
   ValidationViolation,
 } from '../../types/feedback-constraint.js';
 import type { TaskMeta } from '../../types/task.js';
+import { TERMINAL_STATUSES, normalizeStatus } from '../../types/task.js';
+
+/** 终态任务状态集合，用于高效查询 */
+const TERMINAL_STATUSES_SET = new Set(TERMINAL_STATUSES);
 
 // ============================================================
 // 辅助函数
@@ -455,7 +459,7 @@ export const planBlockedTask: ValidationRule = {
     }
 
     // 任务已完成则不再被阻塞
-    if (t.status === 'resolved' || t.status === 'closed') {
+    if (TERMINAL_STATUSES_SET.has(normalizeStatus(t.status))) {
       return null;
     }
 
@@ -464,7 +468,7 @@ export const planBlockedTask: ValidationRule = {
     for (const depId of t.dependencies) {
       const depTask = allTasks.find(task => task.id === depId);
       if (depTask) {
-        const isCompleted = depTask.status === 'resolved' || depTask.status === 'closed';
+        const isCompleted = TERMINAL_STATUSES_SET.has(normalizeStatus(depTask.status));
         if (!isCompleted) {
           incompleteDeps.push(depId);
         }

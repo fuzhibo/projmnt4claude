@@ -16,12 +16,15 @@ import { inferDependencies as inferDependenciesUnified, type InferredDependency 
 import { DependencyGraph, validateNewTaskDeps } from '../utils/dependency-graph';
 import type { TaskMeta, TaskPriority, TaskStatus, TaskType } from '../types/task';
 import type { RequirementDecomposition, DecomposedTaskItem, DecomposedItem } from '../types/decomposition';
-import { createDefaultTaskMeta, inferTaskType, validateCheckpointVerification } from '../types/task';
+import { createDefaultTaskMeta, inferTaskType, validateCheckpointVerification, TERMINAL_STATUSES, normalizeStatus } from '../types/task';
 import { SEPARATOR_WIDTH } from '../utils/format';
 import { createLogger, type InstrumentationRecord, type AICostSummary } from '../utils/logger';
 import { withAIEnhancement } from '../utils/ai-helpers';
 import { AIMetadataAssistant, type EnhancedRequirement, classifyFileToLayer, groupFilesByLayer, sortFilesByLayer, type ArchitectureLayer, LAYER_DEFINITIONS } from '../utils/ai-metadata';
-import { decomposeRequirement, shouldDecompose, formatDecomposition } from '../utils/requirement-decomposer';
+import { decomposeRequirement, shouldDecompose, formatDecomposition, decomposeRecursively, DEFAULT_RECURSIVE_CONFIG, type RecursiveDecomposeConfig } from '../utils/requirement-decomposer';
+
+/** 终态任务状态集合，用于高效查询 */
+const TERMINAL_STATUSES_SET = new Set(TERMINAL_STATUSES);
 
 /**
  * 复杂度评估结果
@@ -86,6 +89,8 @@ export interface InitRequirementOptions {
   decompose?: boolean;
   /** 从文件读取需求 */
   file?: string;
+  /** 递归分解配置：启用AI判断子任务是否需要进一步分解 */
+  recursiveDecompose?: boolean | RecursiveDecomposeConfig;
 }
 
 /**
@@ -239,7 +244,7 @@ export async function initRequirement(
     });
 
     if (decomposition.decomposable && decomposition.items.length >= 2) {
-      console.log(formatDecomposition(decomposition));
+      console.log(formatDecomposition(decomposition, cwd));
       console.log('');
 
       // Confirm decomposition creation (auto-confirm in non-interactive mode)
@@ -1106,7 +1111,7 @@ function analyzeRequirement(description: string, cwd: string): RequirementAnalys
   if (currentFiles.length > 0) {
     const existingTasks = getAllTasks(cwd);
     for (const existing of existingTasks) {
-      if (existing.status === 'resolved' || existing.status === 'closed' || existing.status === 'abandoned' || existing.status === 'failed') continue;
+      if (TERMINAL_STATUSES_SET.has(normalizeStatus(existing.status))) continue;
       const existingFiles = extractAffectedFiles(existing);
       const overlap = currentFiles.filter(f => existingFiles.includes(f));
       if (overlap.length > 0) {
@@ -1286,6 +1291,7 @@ function reportBatchResult(
 /**
  * 批量创建任务
  * 用于分解流程中批量创建多个子任务
+ * 支持递归分解：使用AI判断子任务是否需要进一步分解
  */
 async function initRequirementBatch(
   items: DecomposedTaskItem[],
@@ -1296,10 +1302,49 @@ async function initRequirementBatch(
   const failedTasks: { item: DecomposedTaskItem; reason: string }[] = [];
   const taskIdMap = new Map<number, string>(); // 索引 -> 任务ID 映射
 
+  // CP-5: 递归分解支持 - 使用AI判断子任务是否需要进一步分解
+  let processedItems = items;
+  if (options.recursiveDecompose !== false && !options.noAI) {
+    const recursiveConfig = typeof options.recursiveDecompose === 'object'
+      ? { ...DEFAULT_RECURSIVE_CONFIG, ...options.recursiveDecompose }
+      : DEFAULT_RECURSIVE_CONFIG;
+
+    if (recursiveConfig.enabled) {
+      console.log('');
+      console.log('━'.repeat(SEPARATOR_WIDTH));
+      console.log('🔄 Recursive decomposition: Checking if subtasks need further decomposition...');
+      console.log('━'.repeat(SEPARATOR_WIDTH));
+      console.log('');
+
+      try {
+        const { decomposeRecursively } = await import('../utils/requirement-decomposer');
+        processedItems = await decomposeRecursively(items, {
+          cwd,
+          useAI: !options.noAI,
+          minItems: 2,
+          maxItems: 10,
+        }, recursiveConfig);
+
+        if (processedItems.length > items.length) {
+          console.log(`   📊 Recursively decomposed: ${items.length} → ${processedItems.length} tasks`);
+          console.log('');
+        } else {
+          console.log('   ℹ️ No further decomposition needed');
+          console.log('');
+        }
+      } catch (error) {
+        console.warn('   ⚠️ Recursive decomposition failed:', error instanceof Error ? error.message : String(error));
+        console.log('   Continuing with original tasks...');
+        console.log('');
+        processedItems = items;
+      }
+    }
+  }
+
   console.log('');
   console.log('━'.repeat(SEPARATOR_WIDTH));
-  console.log(`📝 Decomposition result: ${items.length} tasks`);
-  items.forEach((item, i) => {
+  console.log(`📝 Decomposition result: ${processedItems.length} tasks`);
+  processedItems.forEach((item, i) => {
     console.log(`   ${i + 1}. [${item.priority}] ${item.title}`);
   });
   console.log('━'.repeat(SEPARATOR_WIDTH));
@@ -1311,14 +1356,14 @@ async function initRequirementBatch(
   console.log('━'.repeat(SEPARATOR_WIDTH));
   console.log('');
 
-  for (let i = 0; i < items.length; i++) {
-    const item = items[i]!;
-    console.log(`Creating task ${i + 1}/${items.length}...`);
+  for (let i = 0; i < processedItems.length; i++) {
+    const item = processedItems[i]!;
+    console.log(`Creating task ${i + 1}/${processedItems.length}...`);
 
     const itemOptions: InitRequirementOptions = {
       ...options,
       nonInteractive: true, // 子任务使用非交互模式
-      decompose: false, // 防止递归分解
+      decompose: false, // 防止递归分解 - CP-5: 递归分解已在上方处理，此处禁用防止无限循环
     };
 
     try {
@@ -1346,8 +1391,8 @@ async function initRequirementBatch(
     console.log('━'.repeat(SEPARATOR_WIDTH));
     console.log('');
 
-    for (let i = 0; i < items.length; i++) {
-      const item = items[i]!;
+    for (let i = 0; i < processedItems.length; i++) {
+      const item = processedItems[i]!;
       const taskId = taskIdMap.get(i);
       if (!taskId || item.dependsOn.length === 0) continue;
 
@@ -1361,8 +1406,8 @@ async function initRequirementBatch(
           console.warn(`  Warning: Invalid dependency index (not an integer) for task ${taskId}: ${depIndex}`);
           continue;
         }
-        if (depIndex < 0 || depIndex >= items.length) {
-          console.warn(`  Warning: Dependency index out of range for task ${taskId}: ${depIndex} (valid range: 0-${items.length - 1})`);
+        if (depIndex < 0 || depIndex >= processedItems.length) {
+          console.warn(`  Warning: Dependency index out of range for task ${taskId}: ${depIndex} (valid range: 0-${processedItems.length - 1})`);
           continue;
         }
         const depId = taskIdMap.get(depIndex);
@@ -1384,5 +1429,5 @@ async function initRequirementBatch(
   }
 
   // Stage 3: Report batch creation results
-  reportBatchResult(createdTaskIds, failedTasks, items.length);
+  reportBatchResult(createdTaskIds, failedTasks, processedItems.length);
 }

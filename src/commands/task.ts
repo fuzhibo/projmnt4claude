@@ -772,7 +772,7 @@ export function listTasks(
   // 新增: 筛选missingVerification tasks
   if (options.missingVerification) {
     tasks = tasks.filter(t =>
-      (t.status === 'resolved' || t.status === 'closed') && !t.checkpointConfirmationToken
+      TERMINAL_STATUSES_SET.has(normalizeStatus(t.status)) && !t.checkpointConfirmationToken
     );
   }
 
@@ -1371,7 +1371,7 @@ function showTaskPanel(
       let activeCount = 0;
       for (const subId of task.subtaskIds) {
         const sub = readTaskMeta(subId, cwd);
-        if (sub && (sub.status === 'resolved' || sub.status === 'closed')) doneCount++;
+        if (sub && TERMINAL_STATUSES_SET.has(normalizeStatus(sub.status))) doneCount++;
         else if (sub && (sub.status === 'in_progress' || sub.status === 'wait_review' || sub.status === 'wait_qa' || sub.status === 'wait_evaluation')) activeCount++;
       }
       const pendingCount = task.subtaskIds.length - doneCount - activeCount;

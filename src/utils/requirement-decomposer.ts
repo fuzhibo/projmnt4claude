@@ -23,6 +23,7 @@ import { inferTaskType, inferTaskPriority } from '../types/task';
 import { extractFilePaths } from './quality-gate';
 import { getAIPreset, buildAgentOptionsFromPreset } from '../types/config';
 import { invokeAgent } from './headless-agent.js';
+import { t } from '../i18n/index.js';
 
 // 安全常量配置
 const SECURITY_CONFIG = {
@@ -476,9 +477,244 @@ ${safeContent.substring(0, 4000)}
 }
 
 /**
+ * 递归分解配置
+ */
+export interface RecursiveDecomposeConfig {
+  /** 是否启用递归分解 */
+  enabled: boolean;
+  /** 最大递归深度 */
+  maxDepth: number;
+  /** 复杂度阈值：预估耗时超过此值（分钟）的子任务会被考虑进一步分解 */
+  complexityThreshold: number;
+  /** 最小子任务数：如果分解后的子任务数少于此值，则不分解 */
+  minSubtaskCount: number;
+  /** 最大子任务数：限制递归分解产生的子任务总数 */
+  maxSubtaskCount: number;
+}
+
+/**
+ * 默认递归分解配置
+ */
+export const DEFAULT_RECURSIVE_CONFIG: RecursiveDecomposeConfig = {
+  enabled: true,
+  maxDepth: 2,
+  complexityThreshold: 15,
+  minSubtaskCount: 2,
+  maxSubtaskCount: 20,
+};
+
+/**
+ * 判断子任务是否需要进一步分解
+ *
+ * 使用 AI 分析子任务的复杂度和可分解性
+ *
+ * @param item 子任务项
+ * @param depth 当前递归深度
+ * @param config 递归分解配置
+ * @param cwd 工作目录
+ * @returns 是否需要进一步分解
+ */
+async function shouldDecomposeFurther(
+  item: DecomposedTaskItem,
+  depth: number,
+  config: RecursiveDecomposeConfig,
+  cwd: string
+): Promise<{ needsDecomposition: boolean; reason?: string }> {
+  // 检查递归深度限制
+  if (depth >= config.maxDepth) {
+    return { needsDecomposition: false, reason: '达到最大递归深度限制' };
+  }
+
+  // 检查预估耗时阈值
+  if (item.estimatedMinutes < config.complexityThreshold) {
+    return { needsDecomposition: false, reason: '预估耗时低于复杂度阈值' };
+  }
+
+  // 检查描述长度：太短的内容可能无法分解
+  if (item.description.length < 100) {
+    return { needsDecomposition: false, reason: '描述过短，无法进一步分解' };
+  }
+
+  try {
+    const prompt = `请分析以下子任务是否需要进一步分解为更小的子任务。
+
+子任务信息：
+- 标题：${item.title}
+- 描述：${item.description}
+- 类型：${item.type}
+- 优先级：${item.priority}
+- 预估耗时：${item.estimatedMinutes} 分钟
+- 当前递归深度：${depth}
+- 复杂度阈值：${config.complexityThreshold} 分钟
+
+请分析：
+1. 这个子任务是否包含多个独立的实现步骤？
+2. 预估耗时 ${item.estimatedMinutes} 分钟是否合理？
+3. 是否可以拆分为多个预估耗时小于 ${config.complexityThreshold} 分钟的更小任务？
+4. 拆分后是否能产生至少 ${config.minSubtaskCount} 个独立的子任务？
+
+返回 JSON 格式：
+{
+  "needsDecomposition": true | false,
+  "reason": "判断原因，说明为什么需要或不需要进一步分解",
+  "suggestedSubtaskCount": 预估可分解的子任务数量（数字）
+}
+
+注意：
+- 如果子任务包含明显的多步骤（如"实现功能A，然后实现功能B"），应返回 true
+- 如果预估耗时远大于复杂度阈值（如 2 倍以上），应返回 true
+- 如果描述范围明确且单一，即使耗时较长也应返回 false
+- 只输出 JSON，不要输出其他内容`;
+
+    const agentOptions = buildAgentOptionsFromPreset('decomposition', cwd);
+    const result = await invokeAgent(prompt, agentOptions);
+
+    if (!result.success) {
+      return { needsDecomposition: false, reason: 'AI 调用失败' };
+    }
+
+    // 解析 JSON 响应
+    let parsed: { needsDecomposition?: boolean; reason?: string; suggestedSubtaskCount?: number } | null = null;
+    try {
+      parsed = JSON.parse(result.output);
+    } catch {
+      // 尝试从 markdown code block 中提取
+      const jsonMatch = result.output.match(/```(?:json)?\s*\n?([\s\S]*?)\n?```/);
+      if (jsonMatch?.[1]) {
+        try {
+          parsed = JSON.parse(jsonMatch[1]);
+        } catch {
+          // fall through
+        }
+      }
+    }
+
+    if (!parsed || typeof parsed.needsDecomposition !== 'boolean') {
+      return { needsDecomposition: false, reason: 'AI 响应格式无效' };
+    }
+
+    // 验证建议的子任务数是否满足最小要求
+    if (parsed.needsDecomposition &&
+        typeof parsed.suggestedSubtaskCount === 'number' &&
+        parsed.suggestedSubtaskCount < config.minSubtaskCount) {
+      return {
+        needsDecomposition: false,
+        reason: `建议的子任务数(${parsed.suggestedSubtaskCount})少于最小要求(${config.minSubtaskCount})`,
+      };
+    }
+
+    return {
+      needsDecomposition: parsed.needsDecomposition,
+      reason: parsed.reason || (parsed.needsDecomposition ? 'AI 判定需要进一步分解' : 'AI 判定无需进一步分解'),
+    };
+  } catch (error) {
+    // 出错时保守处理：不进行递归分解
+    if (process.env.DEBUG === 'true') {
+      console.error('[shouldDecomposeFurther] 分析过程中发生错误:', error);
+    }
+    return { needsDecomposition: false, reason: '分析过程出错' };
+  }
+}
+
+/**
+ * 递归分解子任务
+ *
+ * 对需要进一步分解的子任务进行递归分解
+ *
+ * @param items 初始分解的任务列表
+ * @param options 分解选项
+ * @param config 递归分解配置
+ * @param depth 当前递归深度
+ * @returns 递归分解后的任务列表（树形结构，通过 dependsOn 表达依赖）
+ */
+export async function decomposeRecursively(
+  items: DecomposedTaskItem[],
+  options: DecomposeOptions,
+  config: RecursiveDecomposeConfig,
+  depth: number = 0
+): Promise<DecomposedTaskItem[]> {
+  if (!config.enabled || depth >= config.maxDepth) {
+    return items;
+  }
+
+  const cwd = options.cwd || process.cwd();
+  const result: DecomposedTaskItem[] = [];
+  let totalSubtaskCount = 0;
+
+  for (const item of items) {
+    // 检查总子任务数限制
+    if (totalSubtaskCount >= config.maxSubtaskCount) {
+      result.push(item);
+      continue;
+    }
+
+    // 判断是否需要进一步分解
+    const decompositionCheck = await shouldDecomposeFurther(item, depth, config, cwd);
+
+    if (!decompositionCheck.needsDecomposition) {
+      // 不需要进一步分解，直接添加
+      result.push(item);
+      totalSubtaskCount++;
+      continue;
+    }
+
+    // 需要进一步分解
+    if (process.env.DEBUG === 'true') {
+      console.log(`[decomposeRecursively] 深度 ${depth}，正在分解：${item.title}`);
+      console.log(`  原因：${decompositionCheck.reason}`);
+    }
+
+    // 构造更详细的分解请求
+    const detailedDescription = `## 任务标题\n${item.title}\n\n## 任务描述\n${item.description}\n\n## 检查点\n${item.suggestedCheckpoints.map(cp => `- ${cp}`).join('\n')}\n\n## 相关文件\n${item.relatedFiles.join(', ')}`;
+
+    const subDecomposition = await decomposeRequirement(detailedDescription, {
+      ...options,
+      minItems: config.minSubtaskCount,
+      maxItems: Math.min(5, config.maxSubtaskCount - totalSubtaskCount), // 限制每个任务的子任务数
+    });
+
+    if (subDecomposition.decomposable && subDecomposition.items.length >= config.minSubtaskCount) {
+      // 递归分解子任务
+      const recursivelyDecomposed = await decomposeRecursively(
+        subDecomposition.items,
+        options,
+        config,
+        depth + 1
+      );
+
+      // 调整依赖索引：子任务的依赖指向同组内的其他子任务
+      // 原始依赖是基于子分解内部的索引，需要保持不变
+      // 但子任务应该依赖于父任务之前的任务
+      const baseIndex = result.length;
+      for (let i = 0; i < recursivelyDecomposed.length; i++) {
+        const subItem = recursivelyDecomposed[i]!;
+        // 添加对前面任务的依赖（如果不是第一个）
+        if (i > 0 && subItem.dependsOn.length === 0) {
+          subItem.dependsOn = [baseIndex + i - 1];
+        }
+      }
+
+      result.push(...recursivelyDecomposed);
+      totalSubtaskCount += recursivelyDecomposed.length;
+
+      if (process.env.DEBUG === 'true') {
+        console.log(`  分解完成：${recursivelyDecomposed.length} 个子任务`);
+      }
+    } else {
+      // 分解失败或产生的子任务太少，保留原任务
+      result.push(item);
+      totalSubtaskCount++;
+    }
+  }
+
+  return result;
+}
+
+/**
  * 分解需求/问题报告
  *
  * 主入口函数，根据内容自动选择合适的分解策略
+ * 支持递归分解：使用 AI 判断子任务是否需要进一步分解
  */
 export async function decomposeRequirement(
   content: string,
@@ -497,11 +733,12 @@ export async function decomposeRequirement(
 
   // 最小长度检查
   if (trimmedContent.length < 100) {
+    const texts = t(cwd).decomposition;
     return {
       decomposable: false,
-      reason: '内容过短，无需分解',
+      reason: texts.contentTooShort,
       items: [],
-      summary: '单任务',
+      summary: texts.singleTask,
     };
   }
 
@@ -565,11 +802,12 @@ export async function decomposeRequirement(
   const problems = extractProblemsByPattern(trimmedContent);
 
   if (problems.length < minItems) {
+    const texts = t(cwd).decomposition;
     return {
       decomposable: false,
       reason: `仅识别到 ${problems.length} 个问题项，少于阈值 ${minItems}`,
       items: [],
-      summary: '单任务',
+      summary: texts.singleTask,
     };
   }
 
@@ -698,9 +936,11 @@ export function shouldDecompose(content: string): boolean {
 /**
  * 格式化分解结果供显示
  */
-export function formatDecomposition(decomposition: RequirementDecomposition): string {
+export function formatDecomposition(decomposition: RequirementDecomposition, cwd?: string): string {
+  const texts = t(cwd).decomposition;
+
   if (!decomposition.decomposable) {
-    return `不可分解: ${decomposition.reason || '未知原因'}`;
+    return `${texts.notDecomposable}: ${decomposition.reason || texts.unknownReason}`;
   }
 
   const lines: string[] = [
@@ -710,19 +950,19 @@ export function formatDecomposition(decomposition: RequirementDecomposition): st
 
   for (let i = 0; i < decomposition.items.length; i++) {
     const item = decomposition.items[i]!;
-    const priorityIcon = item.priority === 'P0' ? '🔴' :
-                         item.priority === 'P1' ? '🟠' :
-                         item.priority === 'P2' ? '🟡' : '🟢';
-    const typeIcon = item.type === 'bug' ? '🐛' :
-                     item.type === 'feature' ? '✨' :
-                     item.type === 'refactor' ? '♻️' :
-                     item.type === 'docs' ? '📚' :
-                     item.type === 'test' ? '🧪' : '📝';
+    const priorityIcon = item.priority === 'P0' ? texts.priorityP0 :
+                         item.priority === 'P1' ? texts.priorityP1 :
+                         item.priority === 'P2' ? texts.priorityP2 : texts.priorityP3;
+    const typeIcon = item.type === 'bug' ? texts.typeBug :
+                     item.type === 'feature' ? texts.typeFeature :
+                     item.type === 'refactor' ? texts.typeRefactor :
+                     item.type === 'docs' ? texts.typeDocs :
+                     item.type === 'test' ? texts.typeTest : '📝';
 
     lines.push(`  ${i + 1}. ${typeIcon} ${priorityIcon} ${item.title}`);
     lines.push(`     类型: ${item.type} | 优先级: ${item.priority} | 预估: ${item.estimatedMinutes}分钟`);
     if (item.dependsOn.length > 0) {
-      lines.push(`     依赖: ${item.dependsOn.map(d => `#${d + 1}`).join(', ')}`);
+      lines.push(`     ${texts.dependsOn}: ${item.dependsOn.map(d => `#${d + 1}`).join(', ')}`);
     }
   }
 

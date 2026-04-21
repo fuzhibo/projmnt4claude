@@ -814,6 +814,24 @@ export const zhTexts: I18nTexts = {
     reportResultNopass: '**结果**: ❌ NOPASS',
   },
 
+  decomposition: {
+    contentTooShort: '内容过短，无需分解',
+    singleTask: '单任务',
+    notDecomposable: '不可分解',
+    unknownReason: '未知原因',
+    decomposedToNTasks: '分解为 {count} 个子任务',
+    typeBug: '🐛',
+    typeFeature: '✨',
+    typeRefactor: '♻️',
+    typeDocs: '📚',
+    typeTest: '🧪',
+    priorityP0: '🔴',
+    priorityP1: '🟠',
+    priorityP2: '🟡',
+    priorityP3: '🟢',
+    dependsOn: '依赖',
+  },
+
   harness: {
     timeoutHeader: '超时限制',
     taskDescription: '任务描述',

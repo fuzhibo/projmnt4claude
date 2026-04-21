@@ -814,6 +814,24 @@ export const enTexts: I18nTexts = {
     reportResultNopass: '**Result**: ❌ NOPASS',
   },
 
+  decomposition: {
+    contentTooShort: 'Content too short, no decomposition needed',
+    singleTask: 'Single task',
+    notDecomposable: 'Not decomposable',
+    unknownReason: 'Unknown reason',
+    decomposedToNTasks: 'Decomposed into {count} subtasks',
+    typeBug: '🐛',
+    typeFeature: '✨',
+    typeRefactor: '♻️',
+    typeDocs: '📚',
+    typeTest: '🧪',
+    priorityP0: '🔴',
+    priorityP1: '🟠',
+    priorityP2: '🟡',
+    priorityP3: '🟢',
+    dependsOn: 'Depends on',
+  },
+
   harness: {
     timeoutHeader: 'Timeout Limit',
     taskDescription: 'Task Description',

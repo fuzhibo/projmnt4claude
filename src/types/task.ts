@@ -579,6 +579,7 @@ export interface TaskMeta {
   checkpoints?: CheckpointMetadata[];  // Checkpoint metadata
   parentId?: string;       // Parent task ID (when used as subtask)
   subtaskIds?: string[];   // List of subtask IDs (when used as parent task)
+  hierarchyLevel?: number; // Hierarchy level (0 for root task)
   createdAt: string;       // ISO time
   updatedAt: string;       // ISO time
   history: TaskHistoryEntry[]; // History records
