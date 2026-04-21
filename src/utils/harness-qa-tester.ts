@@ -290,6 +290,14 @@ export class HarnessQATester {
     checkpoints: CheckpointMetadata[],
     retryContext?: RetryContext
   ): string {
+    // 防御性编程：确保 texts 始终有值，防止 "texts is not defined" 错误
+    let texts: ReturnType<typeof t>;
+    try {
+      texts = t(this.config.cwd);
+    } catch {
+      // 如果 t() 抛出错误，使用默认的中文文本
+      texts = getI18n('zh');
+    }
     const roleTemplate = getQARoleTemplate(task.recommendedRole);
 
     // Build retry context section

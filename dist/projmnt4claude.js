@@ -7793,8 +7793,6 @@ var init_zh = __esm(() => {
       complexityWarning: "\u26A0\uFE0F \u590D\u6742\u5EA6\u9884\u8B66",
       complexityHigh: "\u6B64\u4EFB\u52A1\u9884\u4F30\u9700\u8981 {minutes} \u5206\u949F\uFF0C\u8D85\u8FC7\u9ED8\u8BA4 Harness \u8D85\u65F6\u9608\u503C\u3002",
       exceedsTimeout: "\u5EFA\u8BAE\u5C06\u6B64\u4EFB\u52A1\u62C6\u5206\u4E3A\u66F4\u5C0F\u7684\u5B50\u4EFB\u52A1\uFF0C\u6BCF\u4E2A\u63A7\u5236\u5728 15 \u5206\u949F\u4EE5\u5185\u3002",
-      considerSplitting: "\u62C6\u5206\u5EFA\u8BAE\uFF1A",
-      splitSuggestions: "{index}. {title}{dependency}",
       dependsOn: "\uFF08\u4F9D\u8D56\u4E8E\u5B50\u4EFB\u52A1 {index}\uFF09",
       files: "\u6587\u4EF6: {files}",
       estimated: "\u9884\u4F30: ~{minutes} \u5206\u949F",
@@ -8787,8 +8785,6 @@ var init_en = __esm(() => {
       complexityWarning: "\u26A0\uFE0F Complexity Warning",
       complexityHigh: "This task is estimated to take {minutes} minutes, exceeding the default Harness timeout threshold.",
       exceedsTimeout: "Consider splitting this task into smaller subtasks, each under 15 minutes.",
-      considerSplitting: "Split suggestions:",
-      splitSuggestions: "{index}. {title}{dependency}",
       dependsOn: " (depends on subtask {index})",
       files: "Files: {files}",
       estimated: "Estimated: ~{minutes} minutes",
@@ -14397,12 +14393,18 @@ function sleep(seconds) {
   return new Promise((resolve3) => setTimeout(resolve3, seconds * 1000));
 }
 async function runHeadlessClaudeWithRetry(options, retryConfig, cwd2) {
-  const texts2 = t(cwd2);
+  let texts;
+  try {
+    texts = t(cwd2);
+  } catch {
+    const { getI18n: getI18n2 } = await Promise.resolve().then(() => (init_i18n(), exports_i18n));
+    texts = getI18n2("zh");
+  }
   const maxAttempts = retryConfig.maxAttempts + 1;
   let lastResult = null;
   for (let attempt = 1;attempt <= maxAttempts; attempt++) {
     if (attempt > 1) {
-      console.log(`   \uD83D\uDD04 ${texts2.harness.logs.apiRetry.replace("{current}", String(attempt - 1)).replace("{max}", String(retryConfig.maxAttempts))}...`);
+      console.log(`   \uD83D\uDD04 ${texts.harness.logs.apiRetry.replace("{current}", String(attempt - 1)).replace("{max}", String(retryConfig.maxAttempts))}...`);
     }
     lastResult = await runHeadlessClaude(options);
     if (lastResult.success) {
@@ -14413,13 +14415,19 @@ async function runHeadlessClaudeWithRetry(options, retryConfig, cwd2) {
       return lastResult;
     }
     const delay = Math.min(errorInfo.waitSeconds || retryConfig.baseDelay, retryConfig.baseDelay * Math.pow(2, attempt - 1));
-    console.log(`   \u23F3 ${texts2.harness.logs.retryingInSeconds.replace("{reason}", errorInfo.reason).replace("{seconds}", String(delay))}...`);
+    console.log(`   \u23F3 ${texts.harness.logs.retryingInSeconds.replace("{reason}", errorInfo.reason).replace("{seconds}", String(delay))}...`);
     await sleep(delay);
   }
   return lastResult;
 }
 function archiveReportIfExists(reportPath, cwd2) {
-  const texts2 = t(cwd2);
+  let texts;
+  try {
+    texts = t(cwd2);
+  } catch {
+    const { getI18n: getI18n2 } = (init_i18n(), __toCommonJS(exports_i18n));
+    texts = getI18n2("zh");
+  }
   try {
     const absolutePath = path7.resolve(reportPath);
     if (!fs9.existsSync(absolutePath)) {
@@ -14434,9 +14442,9 @@ function archiveReportIfExists(reportPath, cwd2) {
     const timestamp = new Date().toISOString().replace(/[:.]/g, "-");
     const archivePath = path7.join(archiveDir, `${timestamp}-${filename}`);
     fs9.copyFileSync(absolutePath, archivePath);
-    console.log(`   \uD83D\uDCE6 ${texts2.harness.logs.archivedReport.replace("{filename}", `${timestamp}-${filename}`)}`);
+    console.log(`   \uD83D\uDCE6 ${texts.harness.logs.archivedReport.replace("{filename}", `${timestamp}-${filename}`)}`);
   } catch (error) {
-    console.warn(`   \u26A0\uFE0F ${texts2.harness.logs.archiveFailed}: ${error instanceof Error ? error.message : String(error)}`);
+    console.warn(`   \u26A0\uFE0F ${texts.harness.logs.archiveFailed}: ${error instanceof Error ? error.message : String(error)}`);
   }
 }
 async function saveReport(reportPath, content) {
@@ -14808,10 +14816,6 @@ function classifyFileToLayer(filePath) {
     return "Layer0";
   }
   return "Layer1";
-}
-function sortFilesByLayer(files) {
-  const layerOrder = { Layer0: 0, Layer1: 1, Layer2: 2, Layer3: 3 };
-  return [...files].sort((a, b) => layerOrder[classifyFileToLayer(a)] - layerOrder[classifyFileToLayer(b)]);
 }
 function groupFilesByLayer(files) {
   const groups = new Map;
@@ -15366,35 +15370,13 @@ ${logContext.substring(0, 2000)}` : "";
     };
   }
 }
-var LAYER_DEFINITIONS, VALID_TYPES, VALID_PRIORITIES, VALID_ACTIONS, VALID_SEVERITIES;
+var VALID_TYPES, VALID_PRIORITIES, VALID_ACTIONS, VALID_SEVERITIES;
 var init_ai_metadata = __esm(() => {
   init_logger();
   init_headless_agent();
   init_task();
   init_prompt_templates();
   init_config();
-  LAYER_DEFINITIONS = {
-    Layer0: {
-      label: "\u7C7B\u578B\u5B9A\u4E49\u5C42",
-      description: "\u57FA\u7840\u7C7B\u578B\u3001\u63A5\u53E3\u3001\u679A\u4E3E\u5B9A\u4E49\uFF0C\u88AB\u6240\u6709\u4E0A\u5C42\u6A21\u5757\u4F9D\u8D56",
-      pathPatterns: ["src/types/", "src/interfaces/", "src/schemas/"]
-    },
-    Layer1: {
-      label: "\u5DE5\u5177\u51FD\u6570\u5C42",
-      description: "\u7EAF\u51FD\u6570\u5DE5\u5177\u3001\u8F85\u52A9\u6A21\u5757\uFF0C\u4F9D\u8D56\u7C7B\u578B\u5C42\u4F46\u4E0D\u4F9D\u8D56\u547D\u4EE4\u5C42",
-      pathPatterns: ["src/utils/", "src/helpers/", "src/lib/"]
-    },
-    Layer2: {
-      label: "\u6838\u5FC3\u903B\u8F91\u5C42",
-      description: "\u6838\u5FC3\u4E1A\u52A1\u903B\u8F91\u3001\u6570\u636E\u5904\u7406\uFF0C\u4F9D\u8D56\u5DE5\u5177\u5C42\u548C\u7C7B\u578B\u5C42",
-      pathPatterns: ["src/core/", "src/services/", "src/processors/"]
-    },
-    Layer3: {
-      label: "\u547D\u4EE4/\u5165\u53E3\u5C42",
-      description: "CLI \u547D\u4EE4\u3001\u5165\u53E3\u6587\u4EF6\uFF0C\u4F9D\u8D56\u6240\u6709\u4E0B\u5C42\u6A21\u5757",
-      pathPatterns: ["src/commands/", "src/index.ts", "src/cli/"]
-    }
-  };
   VALID_TYPES = ["bug", "feature", "research", "docs", "refactor", "test", null];
   VALID_PRIORITIES = ["P0", "P1", "P2", "P3", null];
   VALID_ACTIONS = ["keep", "close", "update", "split"];
@@ -16280,7 +16262,7 @@ function inferDependencies(taskOrDescription, allTasks, options) {
   const candidates = allTasks.filter((t2) => {
     if (currentTaskId && t2.id === currentTaskId)
       return false;
-    if (skipTerminal && TERMINAL_STATUSES_SET.has(t2.status))
+    if (skipTerminal && TERMINAL_STATUSES_SET.has(normalizeStatus(t2.status)))
       return false;
     return true;
   });
@@ -18894,8 +18876,8 @@ async function recommendPlan(options = {}, cwd2 = process.cwd()) {
     }
   }
   const inProgressTasks = allTasks.filter((t2) => normalizeStatus(t2.status) === "in_progress");
-  const TERMINAL_STATUSES_SET2 = new Set(TERMINAL_STATUSES);
-  const activeTasks = options.all ? allTasks.filter((t2) => !TERMINAL_STATUSES_SET2.has(normalizeStatus(t2.status))) : allTasks.filter((t2) => normalizeStatus(t2.status) === "open");
+  const TERMINAL_STATUSES_SET3 = new Set(TERMINAL_STATUSES);
+  const activeTasks = options.all ? allTasks.filter((t2) => !TERMINAL_STATUSES_SET3.has(normalizeStatus(t2.status))) : allTasks.filter((t2) => normalizeStatus(t2.status) === "open");
   const excludedCount = allTasks.length - activeTasks.length;
   if (excludedCount > 0) {
     const reason = options.all ? "terminal (resolved/closed/abandoned)" : "non-open status";
@@ -20624,19 +20606,19 @@ async function fixSingleIssue(issue, cwd2, nonInteractive) {
       const author = actionLower.includes("pipeline") || actionLower.includes("harness") ? "pipeline" : "user";
       const analysis = historyEntry.reason || "";
       const evidence = historyEntry.verificationDetails || "";
-      const texts2 = t(cwd2).analyzeCmd;
+      const texts = t(cwd2).analyzeCmd;
       const decisionMap = {
-        "open\u2192in_progress": texts2.transitionStartExecution,
-        "in_progress\u2192wait_review": texts2.transitionSubmitReview,
-        "wait_review\u2192wait_qa": texts2.transitionReviewPass,
-        "wait_qa\u2192wait_evaluation": texts2.transitionQaPass,
-        "wait_evaluation\u2192resolved": texts2.transitionEvalPass,
-        "open\u2192closed": texts2.transitionCloseTask,
-        "in_progress\u2192resolved": texts2.transitionDirectComplete,
-        "resolved\u2192reopened": texts2.transitionReopenTask,
-        "reopened\u2192in_progress": texts2.transitionRestartExecution,
-        "open\u2192abandoned": texts2.transitionAbandonTask,
-        "in_progress\u2192open": texts2.transitionReturnTodo
+        "open\u2192in_progress": texts.transitionStartExecution,
+        "in_progress\u2192wait_review": texts.transitionSubmitReview,
+        "wait_review\u2192wait_qa": texts.transitionReviewPass,
+        "wait_qa\u2192wait_evaluation": texts.transitionQaPass,
+        "wait_evaluation\u2192resolved": texts.transitionEvalPass,
+        "open\u2192closed": texts.transitionCloseTask,
+        "in_progress\u2192resolved": texts.transitionDirectComplete,
+        "resolved\u2192reopened": texts.transitionReopenTask,
+        "reopened\u2192in_progress": texts.transitionRestartExecution,
+        "open\u2192abandoned": texts.transitionAbandonTask,
+        "in_progress\u2192open": texts.transitionReturnTodo
       };
       const statusKey = `${historyEntry.oldValue}\u2192${historyEntry.newValue}`;
       const decision = decisionMap[statusKey] || `${historyEntry.oldValue} \u2192 ${historyEntry.newValue}`;
@@ -21499,9 +21481,9 @@ function validateRequirementHistoryEntry(entry, index) {
 }
 function validateTaskIdFormat(id, cwd2 = process.cwd()) {
   const errors = [];
-  const texts2 = t(cwd2);
+  const texts = t(cwd2);
   if (!id || typeof id !== "string") {
-    return { valid: false, format: "unknown", errors: [texts2.analyzeCmd.taskIdEmpty] };
+    return { valid: false, format: "unknown", errors: [texts.analyzeCmd.taskIdEmpty] };
   }
   if (/^TASK-\d{3,}$/.test(id)) {
     return { valid: true, format: "old", errors: [] };
@@ -21517,7 +21499,7 @@ function validateTaskIdFormat(id, cwd2 = process.cwd()) {
   if (id.startsWith("TASK-") && id.length > 5 && /^[a-zA-Z0-9\-_]+$/.test(id)) {
     return { valid: true, format: "unknown", errors: [] };
   }
-  errors.push(texts2.analyzeCmd.taskIdFormatInvalid);
+  errors.push(texts.analyzeCmd.taskIdFormatInvalid);
   return { valid: false, format: "unknown", errors };
 }
 function isValidStatusValue(status) {
@@ -21874,7 +21856,7 @@ function checkMissingPipelineEvidence(taskId, task, cwd2) {
 }
 function shouldTriggerAIInference(task, layer1Issues, cwd2) {
   const currentStatus = normalizeStatus(task.status);
-  if (TERMINAL_STATUSES_SET2.has(currentStatus))
+  if (TERMINAL_STATUSES_SET3.has(currentStatus))
     return false;
   if (layer1Issues.length > 0)
     return false;
@@ -21896,44 +21878,44 @@ function shouldTriggerAIInference(task, layer1Issues, cwd2) {
   return false;
 }
 function buildStatusInferencePrompt(task, layer1Findings, cwd2 = process.cwd()) {
-  const texts2 = t(cwd2);
+  const texts = t(cwd2);
   const currentStatus = normalizeStatus(task.status);
   const taskInfo = [
-    texts2.analyzeCmd.aiPromptTaskInfo,
+    texts.analyzeCmd.aiPromptTaskInfo,
     `- ID: ${task.id}`,
-    `- ${texts2.analyzeCmd.aiPromptTitleLabel || "\u6807\u9898"}: ${task.title}`,
-    `- ${texts2.analyzeCmd.aiPromptTypeLabel || "\u7C7B\u578B"}: ${task.type}`,
-    `- ${texts2.analyzeCmd.aiPromptPriorityLabel || "\u4F18\u5148\u7EA7"}: ${task.priority}`,
-    `- ${texts2.analyzeCmd.aiPromptStatusLabel || "\u5F53\u524D\u72B6\u6001"}: ${currentStatus}`,
-    `- ${texts2.analyzeCmd.aiPromptCreatedAtLabel || "\u521B\u5EFA\u65F6\u95F4"}: ${task.createdAt || texts2.analyzeCmd.unknown}`,
-    `- ${texts2.analyzeCmd.aiPromptUpdatedAtLabel || "\u66F4\u65B0\u65F6\u95F4"}: ${task.updatedAt || texts2.analyzeCmd.unknown}`,
-    `- ${texts2.analyzeCmd.aiPromptDescriptionLabel || "\u63CF\u8FF0"}: ${task.description || texts2.analyzeCmd.none}`
+    `- ${texts.analyzeCmd.aiPromptTitleLabel || "\u6807\u9898"}: ${task.title}`,
+    `- ${texts.analyzeCmd.aiPromptTypeLabel || "\u7C7B\u578B"}: ${task.type}`,
+    `- ${texts.analyzeCmd.aiPromptPriorityLabel || "\u4F18\u5148\u7EA7"}: ${task.priority}`,
+    `- ${texts.analyzeCmd.aiPromptStatusLabel || "\u5F53\u524D\u72B6\u6001"}: ${currentStatus}`,
+    `- ${texts.analyzeCmd.aiPromptCreatedAtLabel || "\u521B\u5EFA\u65F6\u95F4"}: ${task.createdAt || texts.analyzeCmd.unknown}`,
+    `- ${texts.analyzeCmd.aiPromptUpdatedAtLabel || "\u66F4\u65B0\u65F6\u95F4"}: ${task.updatedAt || texts.analyzeCmd.unknown}`,
+    `- ${texts.analyzeCmd.aiPromptDescriptionLabel || "\u63CF\u8FF0"}: ${task.description || texts.analyzeCmd.none}`
   ].join(`
 `);
   const historySection = task.history && task.history.length > 0 ? [
-    texts2.analyzeCmd.aiPromptHistory.replace("{count}", String(task.history.length)),
-    ...task.history.slice(-10).map((h, i) => `${i + 1}. [${h.timestamp}] ${h.action}${h.field ? ` (${h.field}: ${h.oldValue} \u2192 ${h.newValue})` : ""}${h.reason ? ` ${texts2.analyzeCmd.aiPromptReasonLabel || "\u539F\u56E0"}: ${h.reason}` : ""}`)
+    texts.analyzeCmd.aiPromptHistory.replace("{count}", String(task.history.length)),
+    ...task.history.slice(-10).map((h, i) => `${i + 1}. [${h.timestamp}] ${h.action}${h.field ? ` (${h.field}: ${h.oldValue} \u2192 ${h.newValue})` : ""}${h.reason ? ` ${texts.analyzeCmd.aiPromptReasonLabel || "\u539F\u56E0"}: ${h.reason}` : ""}`)
   ].join(`
-`) : texts2.analyzeCmd.aiPromptNoHistory;
+`) : texts.analyzeCmd.aiPromptNoHistory;
   const transitionSection = task.transitionNotes && task.transitionNotes.length > 0 ? [
-    texts2.analyzeCmd.aiPromptTransitionHistory.replace("{count}", String(task.transitionNotes.length)),
+    texts.analyzeCmd.aiPromptTransitionHistory.replace("{count}", String(task.transitionNotes.length)),
     ...task.transitionNotes.map((tn, i) => `${i + 1}. [${tn.timestamp}] ${tn.fromStatus} \u2192 ${tn.toStatus}: ${tn.note}${tn.author ? ` (by ${tn.author})` : ""}`)
   ].join(`
-`) : texts2.analyzeCmd.aiPromptNoTransitionHistory;
+`) : texts.analyzeCmd.aiPromptNoTransitionHistory;
   const checkpointSection = task.checkpoints && task.checkpoints.length > 0 ? [
-    texts2.analyzeCmd.aiPromptCheckpoints.replace("{count}", String(task.checkpoints.length)),
+    texts.analyzeCmd.aiPromptCheckpoints.replace("{count}", String(task.checkpoints.length)),
     ...task.checkpoints.map((cp, i) => `${i + 1}. [${cp.status}] ${cp.description || cp.id}`)
   ].join(`
-`) : texts2.analyzeCmd.aiPromptNoCheckpoints;
-  const verificationSection = task.verification ? `${texts2.analyzeCmd.aiPromptVerification}
-- ${texts2.analyzeCmd.aiPromptMethodLabel || "\u65B9\u6CD5"}: ${task.verification.methods?.join(", ") || texts2.analyzeCmd.unknown}
-- ${texts2.analyzeCmd.aiPromptResultLabel || "\u7ED3\u679C"}: ${task.verification.result || texts2.analyzeCmd.unknown}` : texts2.analyzeCmd.aiPromptNoVerification;
+`) : texts.analyzeCmd.aiPromptNoCheckpoints;
+  const verificationSection = task.verification ? `${texts.analyzeCmd.aiPromptVerification}
+- ${texts.analyzeCmd.aiPromptMethodLabel || "\u65B9\u6CD5"}: ${task.verification.methods?.join(", ") || texts.analyzeCmd.unknown}
+- ${texts.analyzeCmd.aiPromptResultLabel || "\u7ED3\u679C"}: ${task.verification.result || texts.analyzeCmd.unknown}` : texts.analyzeCmd.aiPromptNoVerification;
   const layer1Section = layer1Findings.length > 0 ? [
-    texts2.analyzeCmd.aiPromptLayer1Results.replace("{count}", String(layer1Findings.length)),
+    texts.analyzeCmd.aiPromptLayer1Results.replace("{count}", String(layer1Findings.length)),
     ...layer1Findings.map((issue) => `- [${issue.severity}] ${issue.type}: ${issue.message}`)
   ].join(`
-`) : texts2.analyzeCmd.aiPromptNoLayer1Issues;
-  return `${texts2.analyzeCmd.aiPromptTaskAnalysisExpert}
+`) : texts.analyzeCmd.aiPromptNoLayer1Issues;
+  return `${texts.analyzeCmd.aiPromptTaskAnalysisExpert}
 
 ${taskInfo}
 
@@ -21947,14 +21929,14 @@ ${verificationSection}
 
 ${layer1Section}
 
-${texts2.analyzeCmd.aiPromptAnalyzeContext}
+${texts.analyzeCmd.aiPromptAnalyzeContext}
 
-${texts2.analyzeCmd.aiPromptJsonFormat}
+${texts.analyzeCmd.aiPromptJsonFormat}
 {
-  ${texts2.analyzeCmd.aiPromptInferredStatus},
-  ${texts2.analyzeCmd.aiPromptConfidence},
-  ${texts2.analyzeCmd.aiPromptReasoning},
-  ${texts2.analyzeCmd.aiPromptSuggestion}
+  ${texts.analyzeCmd.aiPromptInferredStatus},
+  ${texts.analyzeCmd.aiPromptConfidence},
+  ${texts.analyzeCmd.aiPromptReasoning},
+  ${texts.analyzeCmd.aiPromptSuggestion}
 }`;
 }
 async function runAIStatusInference(task, layer1Findings, cwd2) {
@@ -22049,7 +22031,7 @@ async function analyzeProject(cwd2 = process.cwd(), includeArchived = false, aiO
     console.error("Error: Project not initialized. Please run `projmnt4claude setup` first");
     process.exit(1);
   }
-  const texts2 = t(cwd2);
+  const texts = t(cwd2);
   const tasks = getAllTasks(cwd2, includeArchived);
   const issues = [];
   const analyzeConfig = readAnalyzeConfig(cwd2);
@@ -22151,7 +22133,7 @@ async function analyzeProject(cwd2 = process.cwd(), includeArchived = false, aiO
         taskId: task.id,
         type: "no_description",
         severity: "low",
-        message: texts2.analyzeCmd.issueMissingDescription,
+        message: texts.analyzeCmd.issueMissingDescription,
         suggestion: "Add task description to provide more context"
       });
     }
@@ -22456,7 +22438,7 @@ async function analyzeProject(cwd2 = process.cwd(), includeArchived = false, aiO
         taskId: task.id,
         type: "missing_verification",
         severity: "medium",
-        message: texts2.analyzeCmd.issueResolvedNoVerification,
+        message: texts.analyzeCmd.issueResolvedNoVerification,
         suggestion: "Run analyze --fix to auto-populate verification field",
         details: { status: task.status, hasCheckpoints: !!(task.checkpoints && task.checkpoints.length > 0) }
       });
@@ -22580,17 +22562,17 @@ async function analyzeProject(cwd2 = process.cwd(), includeArchived = false, aiO
           const actionLower = (entry.action || "").toLowerCase();
           const author = actionLower.includes("pipeline") || actionLower.includes("harness") ? "pipeline" : "user";
           const decisionMap = {
-            "open\u2192in_progress": texts2.analyzeCmd.transitionStartExecution,
-            "in_progress\u2192wait_review": texts2.analyzeCmd.transitionSubmitReview,
-            "wait_review\u2192wait_qa": texts2.analyzeCmd.transitionReviewPass,
-            "wait_qa\u2192wait_evaluation": texts2.analyzeCmd.transitionQaPass || "QA\u901A\u8FC7\uFF0C\u7B49\u5F85\u8BC4\u4F30",
-            "wait_evaluation\u2192resolved": texts2.analyzeCmd.transitionEvalPass,
-            "open\u2192closed": texts2.analyzeCmd.transitionCloseTask,
-            "in_progress\u2192resolved": texts2.analyzeCmd.transitionDirectComplete,
-            "resolved\u2192reopened": texts2.analyzeCmd.transitionReopenTask,
-            "reopened\u2192in_progress": texts2.analyzeCmd.transitionRestartExecution,
-            "open\u2192abandoned": texts2.analyzeCmd.transitionAbandonTask,
-            "in_progress\u2192open": texts2.analyzeCmd.transitionReturnTodo
+            "open\u2192in_progress": texts.analyzeCmd.transitionStartExecution,
+            "in_progress\u2192wait_review": texts.analyzeCmd.transitionSubmitReview,
+            "wait_review\u2192wait_qa": texts.analyzeCmd.transitionReviewPass,
+            "wait_qa\u2192wait_evaluation": texts.analyzeCmd.transitionQaPass || "QA\u901A\u8FC7\uFF0C\u7B49\u5F85\u8BC4\u4F30",
+            "wait_evaluation\u2192resolved": texts.analyzeCmd.transitionEvalPass,
+            "open\u2192closed": texts.analyzeCmd.transitionCloseTask,
+            "in_progress\u2192resolved": texts.analyzeCmd.transitionDirectComplete,
+            "resolved\u2192reopened": texts.analyzeCmd.transitionReopenTask,
+            "reopened\u2192in_progress": texts.analyzeCmd.transitionRestartExecution,
+            "open\u2192abandoned": texts.analyzeCmd.transitionAbandonTask,
+            "in_progress\u2192open": texts.analyzeCmd.transitionReturnTodo
           };
           const statusKey = `${entry.oldValue}\u2192${entry.newValue}`;
           const decision = decisionMap[statusKey] || `${entry.oldValue} \u2192 ${entry.newValue}`;
@@ -24177,7 +24159,7 @@ async function analyzeBugReport(bugReportPath, cwd2 = process.cwd(), options = {
   logger.flush();
   return result;
 }
-var import_prompts5, DEFAULT_ANALYZE_CONFIG, VALID_STATUSES, VALID_TYPES3, VALID_PRIORITIES3, SCHEMA_MIGRATIONS, REPORT_PHASE_STATUS_MAP, TERMINAL_STATUSES_SET2;
+var import_prompts5, DEFAULT_ANALYZE_CONFIG, VALID_STATUSES, VALID_TYPES3, VALID_PRIORITIES3, SCHEMA_MIGRATIONS, REPORT_PHASE_STATUS_MAP, TERMINAL_STATUSES_SET3;
 var init_analyze = __esm(() => {
   init_path();
   init_task2();
@@ -24405,7 +24387,7 @@ var init_analyze = __esm(() => {
       prerequisiteStatuses: ["wait_qa", "wait_evaluation"]
     }
   ];
-  TERMINAL_STATUSES_SET2 = new Set(TERMINAL_STATUSES);
+  TERMINAL_STATUSES_SET3 = new Set(TERMINAL_STATUSES);
 });
 
 // node_modules/commander/esm.mjs
@@ -24628,15 +24610,15 @@ var DEFAULT_CONFIG = {
 };
 async function setup(cwd2 = process.cwd(), options = {}) {
   const projectDir = getProjectDir(cwd2);
-  const texts2 = t(cwd2);
+  const texts = t(cwd2);
   if (isInitialized(cwd2) && !options.force) {
-    console.log(texts2.setupCmd.alreadyInitialized);
-    console.log(texts2.setupCmd.directory.replace("{path}", projectDir));
-    console.log(texts2.setupCmd.tipUseForce);
+    console.log(texts.setupCmd.alreadyInitialized);
+    console.log(texts.setupCmd.directory.replace("{path}", projectDir));
+    console.log(texts.setupCmd.tipUseForce);
     return;
   }
   if (options.force && isInitialized(cwd2)) {
-    console.log(texts2.setupCmd.forceMode);
+    console.log(texts.setupCmd.forceMode);
   }
   let language;
   if (options.language) {
@@ -24647,18 +24629,18 @@ async function setup(cwd2 = process.cwd(), options = {}) {
     const langResponse = await import_prompts.default({
       type: "select",
       name: "language",
-      message: texts2.setup.selectLanguage,
+      message: texts.setup.selectLanguage,
       choices: [
-        { title: texts2.setup.chinese, value: "zh" },
-        { title: texts2.setup.english, value: "en" }
+        { title: texts.setup.chinese, value: "zh" },
+        { title: texts.setup.english, value: "en" }
       ],
       initial: 0
     });
     language = langResponse.language || "zh";
   }
-  console.log(texts2.setup.initializing);
+  console.log(texts.setup.initializing);
   ensureDir(projectDir);
-  console.log(`\u2713 ${texts2.setup.createDir}: ${projectDir}`);
+  console.log(`\u2713 ${texts.setup.createDir}: ${projectDir}`);
   const subDirs = [
     { dir: getTasksDir(cwd2), name: "tasks" },
     { dir: getArchiveDir(cwd2), name: "archive" },
@@ -24669,7 +24651,7 @@ async function setup(cwd2 = process.cwd(), options = {}) {
   ];
   for (const { dir, name } of subDirs) {
     ensureDir(dir);
-    console.log(`\u2713 ${texts2.setup.createDir}: ${name}/`);
+    console.log(`\u2713 ${texts.setup.createDir}: ${name}/`);
   }
   const config = {
     ...DEFAULT_CONFIG,
@@ -24679,33 +24661,33 @@ async function setup(cwd2 = process.cwd(), options = {}) {
   };
   const configPath = getConfigPath(cwd2);
   fs4.writeFileSync(configPath, JSON.stringify(config, null, 2), "utf-8");
-  console.log(`\u2713 ${texts2.setup.createConfig}`);
-  copySkillFiles(cwd2, language, texts2);
+  console.log(`\u2713 ${texts.setup.createConfig}`);
+  copySkillFiles(cwd2, language, texts);
   const gitHookConfig = config.gitHook ?? DEFAULT_GIT_HOOK;
   if (gitHookConfig.enabled) {
     const pre = new Pre(cwd2);
     if (fs4.existsSync(pre.gitDir)) {
       try {
         pre.installAll();
-        console.log(texts2.setupCmd.gitHookCreated);
+        console.log(texts.setupCmd.gitHookCreated);
       } catch (e) {
-        console.log(texts2.setupCmd.gitHookFailed.replace("{error}", e.message));
+        console.log(texts.setupCmd.gitHookFailed.replace("{error}", e.message));
       }
     }
   } else {
-    console.log(texts2.setupCmd.gitHookDisabled);
+    console.log(texts.setupCmd.gitHookDisabled);
   }
   console.log(`
-\u2705 ${texts2.setup.setupComplete}`);
+\u2705 ${texts.setup.setupComplete}`);
   console.log(`
-${texts2.setup.nextStep}`);
+${texts.setup.nextStep}`);
 }
-function copySkillFiles(cwd2, language, texts2) {
+function copySkillFiles(cwd2, language, texts) {
   console.log(`
-\uD83D\uDCE6 ${texts2.setup.copyingSkills}`);
+\uD83D\uDCE6 ${texts.setup.copyingSkills}`);
   const pluginRoot = process.env.CLAUDE_PLUGIN_ROOT;
   if (!pluginRoot) {
-    console.log(texts2.setupCmd.pluginRootNotSet);
+    console.log(texts.setupCmd.pluginRootNotSet);
     return;
   }
   const toolboxDir = getToolboxDir(cwd2);
@@ -24717,14 +24699,14 @@ function copySkillFiles(cwd2, language, texts2) {
   const skillTarget = path3.join(targetDir, "SKILL.md");
   if (fs4.existsSync(skillSource)) {
     fs4.copyFileSync(skillSource, skillTarget);
-    console.log(texts2.setupCmd.copySkillFile.replace("{language}", language));
+    console.log(texts.setupCmd.copySkillFile.replace("{language}", language));
   } else {
     const defaultSource = path3.join(pluginRoot, "skills", "projmnt4claude", "SKILL.md");
     if (fs4.existsSync(defaultSource)) {
       fs4.copyFileSync(defaultSource, skillTarget);
-      console.log(texts2.setupCmd.copyDefault);
+      console.log(texts.setupCmd.copyDefault);
     } else {
-      console.log(texts2.setupCmd.fileNotFound);
+      console.log(texts.setupCmd.fileNotFound);
     }
   }
   const commandsSourceDir = path3.join(pluginRoot, "locales", language, "commands");
@@ -24735,11 +24717,11 @@ function copySkillFiles(cwd2, language, texts2) {
     for (const file of commandFiles) {
       fs4.copyFileSync(path3.join(commandsSourceDir, file), path3.join(commandsTargetDir, file));
     }
-    console.log(texts2.setupCmd.copyCommandDocs.replace("{count}", String(commandFiles.length)).replace("{language}", language));
+    console.log(texts.setupCmd.copyCommandDocs.replace("{count}", String(commandFiles.length)).replace("{language}", language));
   } else {
-    console.log(texts2.setupCmd.dirNotFound.replace("{path}", commandsSourceDir));
+    console.log(texts.setupCmd.dirNotFound.replace("{path}", commandsSourceDir));
   }
-  console.log(`\u2705 ${texts2.setup.skillsCopied}`);
+  console.log(`\u2705 ${texts.setup.skillsCopied}`);
 }
 
 // src/index.ts
@@ -24965,6 +24947,7 @@ function showLogSummary(cwd2 = process.cwd()) {
 // src/commands/task.ts
 init_i18n();
 var MAX_HISTORY_DISPLAY = 20;
+var TERMINAL_STATUSES_SET2 = new Set(TERMINAL_STATUSES);
 var NOISE_ACTIONS = new Set([
   "\u67E5\u770BTask",
   "\u540C\u6B65Checkpoints",
@@ -25008,22 +24991,22 @@ function generateCheckpointToken() {
   return crypto.randomBytes(16).toString("hex");
 }
 function hasValidCheckpoints(checkpointPathOrContent, isContent = false, cwd2) {
-  const texts2 = t(cwd2);
+  const texts = t(cwd2);
   let content;
   if (isContent && checkpointPathOrContent !== null) {
     content = checkpointPathOrContent;
   } else if (!isContent && checkpointPathOrContent) {
     if (!fs14.existsSync(checkpointPathOrContent)) {
-      return { valid: false, reason: texts2.taskCommand.checkpointFileNotExist };
+      return { valid: false, reason: texts.taskCommand.checkpointFileNotExist };
     }
     content = fs14.readFileSync(checkpointPathOrContent, "utf-8");
   } else {
-    return { valid: false, reason: texts2.taskCommand.validationError };
+    return { valid: false, reason: texts.taskCommand.validationError };
   }
   const lines = content.split(`
 `).filter((line) => line.trim().startsWith("- ["));
   if (lines.length === 0) {
-    return { valid: false, reason: texts2.taskCommand.noCheckpointItems };
+    return { valid: false, reason: texts.taskCommand.noCheckpointItems };
   }
   const templatePatterns = [
     /^Checkpoints\d+$/u,
@@ -25050,31 +25033,31 @@ function hasValidCheckpoints(checkpointPathOrContent, isContent = false, cwd2) {
   if (templateCount > lines.length / 2) {
     return {
       valid: false,
-      reason: texts2.taskCommand.templateContentDetected.replace("{count}", String(templateCount)).replace("{total}", String(lines.length))
+      reason: texts.taskCommand.templateContentDetected.replace("{count}", String(templateCount)).replace("{total}", String(lines.length))
     };
   }
   return { valid: true, reason: "" };
 }
 function displayCheckpointCreationWarning(taskId, cwd2) {
-  const texts2 = t(cwd2);
+  const texts = t(cwd2);
   console.log("");
   console.log("\u2501".repeat(SEPARATOR_WIDTH));
-  console.log(texts2.taskCommand.checkpointQualityReminder);
+  console.log(texts.taskCommand.checkpointQualityReminder);
   console.log("\u2501".repeat(SEPARATOR_WIDTH));
   console.log("");
-  console.log(texts2.taskCommand.taskCreatedButTemplate);
-  console.log("\uD83D\uDCCB " + texts2.taskCommand.highQualityCheckpointsEssential);
+  console.log(texts.taskCommand.taskCreatedButTemplate);
+  console.log("\uD83D\uDCCB " + texts.taskCommand.highQualityCheckpointsEssential);
   console.log("");
-  console.log("   1. " + texts2.taskCommand.editCheckpointMd);
-  console.log(`      ${texts2.taskCommand.filePath.replace("{path}", `.projmnt4claude/tasks/${taskId}/checkpoint.md`)}`);
+  console.log("   1. " + texts.taskCommand.editCheckpointMd);
+  console.log(`      ${texts.taskCommand.filePath.replace("{path}", `.projmnt4claude/tasks/${taskId}/checkpoint.md`)}`);
   console.log("");
-  console.log("   2. " + texts2.taskCommand.useAnalyzeCommand);
+  console.log("   2. " + texts.taskCommand.useAnalyzeCommand);
   console.log(`      projmnt4claude analyze --generate-checkpoints ${taskId}`);
   console.log("");
-  console.log("   3. " + texts2.taskCommand.useTemplateFeature);
+  console.log("   3. " + texts.taskCommand.useTemplateFeature);
   console.log(`      projmnt4claude task checkpoint template ${taskId} --apply`);
   console.log("");
-  console.log("\uD83D\uDCA1 " + texts2.taskCommand.tipStrictValidation);
+  console.log("\uD83D\uDCA1 " + texts.taskCommand.tipStrictValidation);
   console.log("\u2501".repeat(SEPARATOR_WIDTH));
 }
 function validateTaskCheckpointCommands(taskId, cwd2) {
@@ -25093,18 +25076,18 @@ function validateTaskCheckpointCommands(taskId, cwd2) {
 function displayCheckpointVerificationWarnings(warnings, cwd2) {
   if (warnings.length === 0)
     return;
-  const texts2 = t(cwd2);
+  const texts = t(cwd2);
   console.log("");
   console.log("\u2501".repeat(SEPARATOR_WIDTH));
-  console.log(texts2.taskCommand.missingCheckpointVerificationCommands);
+  console.log(texts.taskCommand.missingCheckpointVerificationCommands);
   console.log("\u2501".repeat(SEPARATOR_WIDTH));
   console.log("");
-  console.log(texts2.taskCommand.checkpointsMissingVerification.replace("{count}", String(warnings.length)));
+  console.log(texts.taskCommand.checkpointsMissingVerification.replace("{count}", String(warnings.length)));
   for (const w of warnings) {
     console.log(`   - ${w}`);
   }
   console.log("");
-  console.log("\uD83D\uDCA1 " + texts2.taskCommand.qaCannotAutoVerify);
+  console.log("\uD83D\uDCA1 " + texts.taskCommand.qaCannotAutoVerify);
   console.log("   Please add verification commands in checkpoint.md, or use init-requirement to regenerate.");
   console.log("\u2501".repeat(SEPARATOR_WIDTH));
 }
@@ -25403,9 +25386,9 @@ ${finalCheckpoints.map((cp) => `- [ ] ${cp}`).join(`
   return task;
 }
 function listTasks(options = {}, cwd2 = process.cwd()) {
-  const texts2 = t(cwd2);
+  const texts = t(cwd2);
   if (!isInitialized(cwd2)) {
-    console.error(texts2.task.projectNotInitialized);
+    console.error(texts.task.projectNotInitialized);
     process.exit(1);
   }
   let tasks = getAllTasks(cwd2);
@@ -25489,7 +25472,7 @@ function listTasks(options = {}, cwd2 = process.cwd()) {
     const discussionIcon = task.needsDiscussion ? " \uD83D\uDCAC" : "";
     const reqChangeIcon = task.requirementHistory && task.requirementHistory.length > 0 ? ` \uD83D\uDCDD${task.requirementHistory.length}` : "";
     const subtaskCount = task.subtaskIds?.length || subtaskMap.get(task.id)?.length || 0;
-    const subtaskIcon = subtaskCount > 0 ? ` [${subtaskCount}${texts2.task.subtasksLabel}]` : "";
+    const subtaskIcon = subtaskCount > 0 ? ` [${subtaskCount}${texts.task.subtasksLabel}]` : "";
     console.log(`${id} | ${title} | ${priority} | ${status}${discussionIcon}${reqChangeIcon}${subtaskIcon}`);
     const subtasks = subtaskMap.get(task.id) || [];
     for (const subtask of subtasks) {
@@ -25502,8 +25485,8 @@ function listTasks(options = {}, cwd2 = process.cwd()) {
   }
   console.log("");
   const totalSubtasks = tasks.filter((t2) => t2.parentId).length;
-  const totalTasksText = texts2.task.totalTasks.replace("{count}", String(parentTasks.length));
-  const totalSubtasksText = totalSubtasks > 0 ? `, ${texts2.task.totalSubtasks.replace("{count}", String(totalSubtasks))}` : "";
+  const totalTasksText = texts.task.totalTasks.replace("{count}", String(parentTasks.length));
+  const totalSubtasksText = totalSubtasks > 0 ? `, ${texts.task.totalSubtasks.replace("{count}", String(totalSubtasks))}` : "";
   console.log(`${totalTasksText}${totalSubtasksText}`);
 }
 function displayTasksGrouped(tasks, groupBy, subtaskMap) {
@@ -25607,7 +25590,7 @@ function formatLocalTime(isoString) {
   });
 }
 function formatRelativeTime(isoString, cwd2) {
-  const texts2 = t(cwd2);
+  const texts = t(cwd2);
   const date = new Date(isoString);
   const now = new Date;
   const diffMs = now.getTime() - date.getTime();
@@ -25615,13 +25598,13 @@ function formatRelativeTime(isoString, cwd2) {
   const diffHours = Math.floor(diffMs / 3600000);
   const diffDays = Math.floor(diffMs / 86400000);
   if (diffMins < 1)
-    return texts2.task.timeJustNow;
+    return texts.task.timeJustNow;
   if (diffMins < 60)
-    return texts2.task.timeMinutesAgo.replace("{minutes}", String(diffMins));
+    return texts.task.timeMinutesAgo.replace("{minutes}", String(diffMins));
   if (diffHours < 24)
-    return texts2.task.timeHoursAgo.replace("{hours}", String(diffHours));
+    return texts.task.timeHoursAgo.replace("{hours}", String(diffHours));
   if (diffDays < 7)
-    return texts2.task.timeDaysAgo.replace("{days}", String(diffDays));
+    return texts.task.timeDaysAgo.replace("{days}", String(diffDays));
   return formatLocalTime(isoString);
 }
 function showTask(taskId, options = {}, cwd2 = process.cwd()) {
@@ -25657,15 +25640,15 @@ function showTask(taskId, options = {}, cwd2 = process.cwd()) {
   showTaskClassic(task, options, cwd2);
 }
 function showTaskCompact(task, cwd2) {
-  const texts2 = t(cwd2);
+  const texts = t(cwd2);
   const statusIcon = getStatusIcon(task.status);
   const typeMap = {
-    bug: texts2.task.typeBug,
-    feature: texts2.task.typeFeature,
-    research: texts2.task.typeResearch,
-    docs: texts2.task.typeDocs,
-    refactor: texts2.task.typeRefactor,
-    test: texts2.task.typeTest
+    bug: texts.task.typeBug,
+    feature: texts.task.typeFeature,
+    research: texts.task.typeResearch,
+    docs: texts.task.typeDocs,
+    refactor: texts.task.typeRefactor,
+    test: texts.task.typeTest
   };
   const typeText = typeMap[task.type] || task.type;
   console.log(`${statusIcon} ${task.id}: ${task.title}`);
@@ -25695,12 +25678,12 @@ function showTaskCompact(task, cwd2) {
   }
   if (task.needsDiscussion) {
     const discussionCount = task.discussionTopics?.length || 0;
-    console.log(`   \uD83D\uDCAC ${texts2.task.discussionLabel}${discussionCount > 0 ? ` (${discussionCount})` : ""}`);
+    console.log(`   \uD83D\uDCAC ${texts.task.discussionLabel}${discussionCount > 0 ? ` (${discussionCount})` : ""}`);
   }
   if (task.requirementHistory && task.requirementHistory.length > 0) {
-    console.log(`   \uD83D\uDCDD ${texts2.task.requirementChanges}: ${task.requirementHistory.length}`);
+    console.log(`   \uD83D\uDCDD ${texts.task.requirementChanges}: ${task.requirementHistory.length}`);
   }
-  console.log(`   ${texts2.task.createdAt}: ${formatRelativeTime(task.createdAt, cwd2)} \xB7 ${texts2.task.updatedAt}: ${formatRelativeTime(task.updatedAt, cwd2)}`);
+  console.log(`   ${texts.task.createdAt}: ${formatRelativeTime(task.createdAt, cwd2)} \xB7 ${texts.task.updatedAt}: ${formatRelativeTime(task.updatedAt, cwd2)}`);
 }
 function getStatusIcon(status) {
   const icons = {
@@ -25751,7 +25734,7 @@ function padByDisplayWidth(str, targetWidth) {
   return str + " ".repeat(targetWidth - currentWidth);
 }
 function showTaskPanel(task, options, cwd2) {
-  const texts2 = t(cwd2);
+  const texts = t(cwd2);
   const termWidth = process.stdout.columns || 80;
   const width = Math.min(Math.max(termWidth, 60), 100);
   const hLine = "\u2500".repeat(width - 2);
@@ -25766,20 +25749,20 @@ function showTaskPanel(task, options, cwd2) {
   console.log(`\u2502   ${padByDisplayWidth(truncatedTitle, width - 5)}\u2502`);
   console.log(`\u251C${hLine}\u2524`);
   const statusMap = {
-    open: texts2.task.statusOpen,
-    in_progress: texts2.task.statusInProgress,
-    resolved: texts2.task.statusResolved,
-    closed: texts2.task.statusClosed,
-    abandoned: texts2.task.statusAbandoned,
-    wait_review: texts2.task.statusWaitReview,
-    wait_qa: texts2.task.statusWaitQa,
-    wait_evaluation: texts2.task.statusWaitEvaluation
+    open: texts.task.statusOpen,
+    in_progress: texts.task.statusInProgress,
+    resolved: texts.task.statusResolved,
+    closed: texts.task.statusClosed,
+    abandoned: texts.task.statusAbandoned,
+    wait_review: texts.task.statusWaitReview,
+    wait_qa: texts.task.statusWaitQa,
+    wait_evaluation: texts.task.statusWaitEvaluation
   };
   const priorityMap = {
-    P0: texts2.task.priorityP0,
-    P1: texts2.task.priorityP1,
-    P2: texts2.task.priorityP2,
-    P3: texts2.task.priorityP3,
+    P0: texts.task.priorityP0,
+    P1: texts.task.priorityP1,
+    P2: texts.task.priorityP2,
+    P3: texts.task.priorityP3,
     Q1: "Q1",
     Q2: "Q2",
     Q3: "Q3",
@@ -25787,8 +25770,8 @@ function showTaskPanel(task, options, cwd2) {
   };
   const statusText = statusMap[task.status] || task.status;
   const priorityText = priorityMap[task.priority] || task.priority;
-  const typeText = task.type || texts2.task.typeNotSpecified;
-  const statusLine = `${texts2.task.statusHeader}: ${statusText}  \xB7  ${texts2.task.priorityHeader}: ${priorityText}  \xB7  ${texts2.task.typeHeader}: ${typeText}`;
+  const typeText = task.type || texts.task.typeNotSpecified;
+  const statusLine = `${texts.task.statusHeader}: ${statusText}  \xB7  ${texts.task.priorityHeader}: ${priorityText}  \xB7  ${texts.task.typeHeader}: ${typeText}`;
   console.log(`\u2502 ${padByDisplayWidth(statusLine, width - 3)}\u2502`);
   if (task.description) {
     console.log(`\u251C${hLine}\u2524`);
@@ -25854,11 +25837,11 @@ function showTaskPanel(task, options, cwd2) {
       console.log(`\u2502 ${padByDisplayWidth(depsLine, width - 3)}\u2502`);
     }
     if (task.recommendedRole) {
-      const roleLine = `\uD83D\uDC64 ${texts2.task.roleLabel}: ${task.recommendedRole}`;
+      const roleLine = `\uD83D\uDC64 ${texts.task.roleLabel}: ${task.recommendedRole}`;
       console.log(`\u2502 ${padByDisplayWidth(roleLine, width - 3)}\u2502`);
     }
     if (task.branch) {
-      const branchLine = `\uD83C\uDF3F ${texts2.task.branchLabel}: ${task.branch}`;
+      const branchLine = `\uD83C\uDF3F ${texts.task.branchLabel}: ${task.branch}`;
       console.log(`\u2502 ${padByDisplayWidth(branchLine, width - 3)}\u2502`);
     }
     if (task.subtaskIds && task.subtaskIds.length > 0) {
@@ -25879,30 +25862,30 @@ function showTaskPanel(task, options, cwd2) {
         parts.push(`\uD83D\uDD04 ${activeCount}`);
       if (pendingCount > 0)
         parts.push(`\u2B1C ${pendingCount}`);
-      const subtaskLine = parts.length > 0 ? `\uD83D\uDCCE ${texts2.task.subtasksLabel}: ${task.subtaskIds.length}  (${parts.join(" ")})` : `\uD83D\uDCCE ${texts2.task.subtasksLabel}: ${task.subtaskIds.length} `;
+      const subtaskLine = parts.length > 0 ? `\uD83D\uDCCE ${texts.task.subtasksLabel}: ${task.subtaskIds.length}  (${parts.join(" ")})` : `\uD83D\uDCCE ${texts.task.subtasksLabel}: ${task.subtaskIds.length} `;
       console.log(`\u2502 ${padByDisplayWidth(subtaskLine, width - 3)}\u2502`);
     }
     if (task.parentId) {
-      const parentLine = `\u2B06\uFE0F ${texts2.task.parentTaskLabel}: ${task.parentId}`;
+      const parentLine = `\u2B06\uFE0F ${texts.task.parentTaskLabel}: ${task.parentId}`;
       console.log(`\u2502 ${padByDisplayWidth(parentLine, width - 3)}\u2502`);
     }
     if (task.needsDiscussion) {
       const discussionCount = task.discussionTopics?.length || 0;
-      const discussionLine = discussionCount > 0 ? `\uD83D\uDCAC ${texts2.task.discussionLabel} (${discussionCount})` : `\uD83D\uDCAC ${texts2.task.discussionLabel}`;
+      const discussionLine = discussionCount > 0 ? `\uD83D\uDCAC ${texts.task.discussionLabel} (${discussionCount})` : `\uD83D\uDCAC ${texts.task.discussionLabel}`;
       console.log(`\u2502 ${padByDisplayWidth(discussionLine, width - 3)}\u2502`);
     }
     if (task.requirementHistory && task.requirementHistory.length > 0) {
-      const reqLine = `\uD83D\uDCDD ${texts2.task.requirementChanges}: ${task.requirementHistory.length}`;
+      const reqLine = `\uD83D\uDCDD ${texts.task.requirementChanges}: ${task.requirementHistory.length}`;
       console.log(`\u2502 ${padByDisplayWidth(reqLine, width - 3)}\u2502`);
     }
   }
   console.log(`\u251C${hLine}\u2524`);
   const createdTime = formatLocalTime(task.createdAt);
   const updatedTime = formatRelativeTime(task.updatedAt, cwd2);
-  const timeLine = `\uD83D\uDCC5 ${texts2.task.createdAt}: ${createdTime}  \xB7  ${texts2.task.updatedAt}: ${updatedTime}`;
+  const timeLine = `\uD83D\uDCC5 ${texts.task.createdAt}: ${createdTime}  \xB7  ${texts.task.updatedAt}: ${updatedTime}`;
   console.log(`\u2502 ${padByDisplayWidth(timeLine, width - 3)}\u2502`);
   if (task.reopenCount && task.reopenCount > 0) {
-    const reopenLine = `\uD83D\uDD01 ${texts2.task.reopened}: ${texts2.task.reopenCount.replace("{count}", String(task.reopenCount))}`;
+    const reopenLine = `\uD83D\uDD01 ${texts.task.reopened}: ${texts.task.reopenCount.replace("{count}", String(task.reopenCount))}`;
     console.log(`\u2502 ${padByDisplayWidth(reopenLine, width - 3)}\u2502`);
   }
   console.log(`\u2570${hLine}\u256F`);
@@ -26754,38 +26737,38 @@ function removeDependency(taskId, depId, cwd2 = process.cwd()) {
   }
 }
 function formatPriority(priority, cwd2) {
-  const texts2 = t(cwd2);
+  const texts = t(cwd2);
   const map = {
-    P0: `\uD83D\uDD34 ${texts2.task.priorityP0}`,
-    P1: `\uD83D\uDFE0 ${texts2.task.priorityP1}`,
-    P2: `\uD83D\uDFE1 ${texts2.task.priorityP2}`,
-    P3: `\uD83D\uDFE2 ${texts2.task.priorityP3}`,
+    P0: `\uD83D\uDD34 ${texts.task.priorityP0}`,
+    P1: `\uD83D\uDFE0 ${texts.task.priorityP1}`,
+    P2: `\uD83D\uDFE1 ${texts.task.priorityP2}`,
+    P3: `\uD83D\uDFE2 ${texts.task.priorityP3}`,
     Q1: "\uD83D\uDCCA Q1",
     Q2: "\uD83D\uDCCA Q2",
     Q3: "\uD83D\uDCCA Q3",
     Q4: "\uD83D\uDCCA Q4",
-    low: `\uD83D\uDFE2 ${texts2.task.priorityP3}`,
-    medium: `\uD83D\uDFE1 ${texts2.task.priorityP2}`,
-    high: `\uD83D\uDFE0 ${texts2.task.priorityP1}`,
-    urgent: `\uD83D\uDD34 ${texts2.task.priorityP0}`
+    low: `\uD83D\uDFE2 ${texts.task.priorityP3}`,
+    medium: `\uD83D\uDFE1 ${texts.task.priorityP2}`,
+    high: `\uD83D\uDFE0 ${texts.task.priorityP1}`,
+    urgent: `\uD83D\uDD34 ${texts.task.priorityP0}`
   };
   return map[priority] || `\u2753 ${priority}`;
 }
 function formatStatus(status, cwd2) {
-  const texts2 = t(cwd2);
+  const texts = t(cwd2);
   const map = {
-    open: `\u2B1C ${texts2.task.statusOpen}`,
-    in_progress: `\uD83D\uDD35 ${texts2.task.statusInProgress}`,
-    wait_review: `\uD83D\uDC40 ${texts2.task.statusWaitReview}`,
-    wait_qa: `\uD83E\uDDEA ${texts2.task.statusWaitQa}`,
-    wait_evaluation: `\u23F3 ${texts2.task.statusWaitEvaluation}`,
-    resolved: `\u2705 ${texts2.task.statusResolved}`,
-    closed: `\u26AB ${texts2.task.statusClosed}`,
-    abandoned: `\u274C ${texts2.task.statusAbandoned}`,
-    failed: `\u26D4 ${texts2.task.statusFailed}`,
-    pending: `\u2B1C ${texts2.task.statusOpen}`,
-    completed: `\u2705 ${texts2.task.statusResolved}`,
-    cancelled: `\u274C ${texts2.task.statusAbandoned}`
+    open: `\u2B1C ${texts.task.statusOpen}`,
+    in_progress: `\uD83D\uDD35 ${texts.task.statusInProgress}`,
+    wait_review: `\uD83D\uDC40 ${texts.task.statusWaitReview}`,
+    wait_qa: `\uD83E\uDDEA ${texts.task.statusWaitQa}`,
+    wait_evaluation: `\u23F3 ${texts.task.statusWaitEvaluation}`,
+    resolved: `\u2705 ${texts.task.statusResolved}`,
+    closed: `\u26AB ${texts.task.statusClosed}`,
+    abandoned: `\u274C ${texts.task.statusAbandoned}`,
+    failed: `\u26D4 ${texts.task.statusFailed}`,
+    pending: `\u2B1C ${texts.task.statusOpen}`,
+    completed: `\u2705 ${texts.task.statusResolved}`,
+    cancelled: `\u274C ${texts.task.statusAbandoned}`
   };
   return map[status] || `\u2753 ${status}`;
 }
@@ -27869,13 +27852,13 @@ async function batchUpdateTasks(options = {}, cwd2 = process.cwd()) {
       console.error(`Error: The following tasksdoes not exist: ${notFoundIds.join(", ")}`);
       process.exit(1);
     }
-    filteredTasks = tasksToUpdate.filter((t2) => t2.status === "resolved" || t2.status === "closed" || t2.status === "abandoned" || t2.status === "failed");
+    filteredTasks = tasksToUpdate.filter((t2) => TERMINAL_STATUSES_SET2.has(normalizeStatus(t2.status)));
     if (!options.all) {
-      tasksToUpdate = tasksToUpdate.filter((t2) => t2.status !== "resolved" && t2.status !== "closed" && t2.status !== "abandoned" && t2.status !== "failed");
+      tasksToUpdate = tasksToUpdate.filter((t2) => !TERMINAL_STATUSES_SET2.has(normalizeStatus(t2.status)));
     }
   } else {
-    tasksToUpdate = options.all ? allTasks : allTasks.filter((t2) => t2.status !== "resolved" && t2.status !== "closed" && t2.status !== "abandoned" && t2.status !== "failed");
-    filteredTasks = options.all ? [] : allTasks.filter((t2) => t2.status === "resolved" || t2.status === "closed" || t2.status === "abandoned" || t2.status === "failed");
+    tasksToUpdate = options.all ? allTasks : allTasks.filter((t2) => !TERMINAL_STATUSES_SET2.has(normalizeStatus(t2.status)));
+    filteredTasks = options.all ? [] : allTasks.filter((t2) => TERMINAL_STATUSES_SET2.has(normalizeStatus(t2.status)));
   }
   if (tasksToUpdate.length === 0) {
     console.log("No tasks to update");
@@ -27892,8 +27875,7 @@ async function batchUpdateTasks(options = {}, cwd2 = process.cwd()) {
     console.log(`   New priority: ${options.priority}`);
   }
   console.log("");
-  const terminalStatuses = ["resolved", "closed", "abandoned"];
-  const reopeningTasks = tasksToUpdate.filter((t2) => options.status === "open" && terminalStatuses.includes(t2.status));
+  const reopeningTasks = tasksToUpdate.filter((t2) => options.status === "open" && TERMINAL_STATUSES_SET2.has(normalizeStatus(t2.status)));
   const isUsingAllFlag = options.all === true;
   const highRiskCount = reopeningTasks.length;
   if (highRiskCount > 0) {
@@ -28154,7 +28136,6 @@ var import_prompts6 = __toESM(require_prompts3(), 1);
 import * as fs19 from "fs";
 import * as path16 from "path";
 init_checkpoint();
-init_dependency_engine();
 init_dependency_graph();
 init_task();
 init_logger();
@@ -28306,29 +28287,54 @@ function isInvestigationReport(content) {
 function extractProblemsByPattern(content) {
   const problems = [];
   const seen = new Set;
-  const problemRegex = /(?:^|\n)(?:#{1,3}\s+)?(?:\u95EE\u9898|Issue|Bug|\u7F3A\u9677)\s*(?:#\s*)?(\d+[A-Z]?)[.:\-]?\s*([^\n]{1,200})(?:\n([^]{0,2000}))?(?=\n(?:\u95EE\u9898|Issue|Bug|\u7F3A\u9677)\s*#?\s*\d+|\n#{1,3}\s|$)/gi;
+  const problemPositions = [];
+  const problemRegex = /(?:^|\n)(?:#{1,3}\s+)?(?:\u95EE\u9898|Issue|Bug|\u7F3A\u9677)\s*(?:#\s*)?(\d+[A-Z]?)\s*(?:\((P\d|urgent|high|medium|low|[\u7D27\u6025\u9AD8\u79CD\u4F4E])\))?\s*[.:\-]?\s*([^\n]{10,200})/gi;
   let match;
   while ((match = problemRegex.exec(content)) !== null) {
     const problemId = match[1]?.trim() || "";
-    const title = match[2]?.trim() || "";
-    const body = match[3]?.trim() || "";
+    const priorityFromParen = match[2]?.trim() || "";
+    const title = match[3]?.trim() || "";
     if (!title || seen.has(title))
       continue;
     seen.add(title);
+    problemPositions.push({
+      index: match.index,
+      length: match[0].length,
+      id: problemId,
+      priorityFromParen,
+      title
+    });
+  }
+  for (let i = 0;i < problemPositions.length; i++) {
+    const current = problemPositions[i];
+    const next = problemPositions[i + 1];
+    const startIdx = current.index + current.length;
+    const endIdx = next ? next.index : content.length;
+    const body = content.substring(startIdx, endIdx).trim();
     let priority = "P2";
-    const priorityMatch = content.substring(Math.max(0, match.index - 100), match.index).match(/(P\d|\u7D27\u6025|urgent|\u9AD8|high|\u4E2D|medium|\u4F4E|low)/i);
-    if (priorityMatch && priorityMatch[1]) {
-      const p = priorityMatch[1].toUpperCase();
+    if (current.priorityFromParen) {
+      const p = current.priorityFromParen.toUpperCase();
       if (p === "P0" || p.includes("\u7D27\u6025") || p.includes("URGENT"))
         priority = "P0";
       else if (p === "P1" || p.includes("\u9AD8") || p.includes("HIGH"))
         priority = "P1";
       else if (p === "P3" || p.includes("\u4F4E") || p.includes("LOW"))
         priority = "P3";
+    } else {
+      const priorityMatch = content.substring(Math.max(0, current.index - 100), current.index).match(/(P\d|\u7D27\u6025|urgent|\u9AD8|high|\u4E2D|medium|\u4F4E|low)/i);
+      if (priorityMatch && priorityMatch[1]) {
+        const p = priorityMatch[1].toUpperCase();
+        if (p === "P0" || p.includes("\u7D27\u6025") || p.includes("URGENT"))
+          priority = "P0";
+        else if (p === "P1" || p.includes("\u9AD8") || p.includes("HIGH"))
+          priority = "P1";
+        else if (p === "P3" || p.includes("\u4F4E") || p.includes("LOW"))
+          priority = "P3";
+      }
     }
     problems.push({
-      title: title.length > 100 ? title.substring(0, 97) + "..." : title,
-      description: body || title,
+      title: current.title.length > 100 ? current.title.substring(0, 97) + "..." : current.title,
+      description: body || current.title,
       priority
     });
   }
@@ -28895,7 +28901,7 @@ function mergeAnalysisResults(ruleBased, aiEnhanced) {
   };
 }
 async function initRequirement(description, cwd2 = process.cwd(), options = {}) {
-  const { nonInteractive = false, noPlan = false, skipValidation = false, template = "simple", autoSplit = false, noAI = false, requireQuality, decompose: shouldDecomposeOption = true } = options;
+  const { nonInteractive = false, noPlan = false, skipValidation = false, template = "simple", noAI = false, requireQuality, decompose: shouldDecomposeOption = true } = options;
   const logger = createLogger("init-requirement", cwd2);
   const startTime = Date.now();
   const inputDescLength = description.length;
@@ -29027,19 +29033,6 @@ async function initRequirement(description, cwd2 = process.cwd(), options = {}) 
     console.log(`  This task is estimated to take ${complexity.estimatedMinutes} minutes, exceeding the default Harness timeout threshold.`);
     console.log("  Consider splitting this task into smaller subtasks, each under 15 minutes.");
     console.log("");
-    if (complexity.splitSuggestions.length > 0) {
-      console.log("  Split suggestions:");
-      for (let i = 0;i < complexity.splitSuggestions.length; i++) {
-        const s = complexity.splitSuggestions[i];
-        if (!s)
-          continue;
-        const depLabel = s.dependsOn >= 0 ? ` (depends on subtask ${s.dependsOn + 1})` : "";
-        console.log(`    ${i + 1}. ${s.title}${depLabel}`);
-        console.log(`       Files: ${s.files.length > 0 ? s.files.join(", ") : "not specified"}`);
-        console.log(`       Estimated: ~${s.estimatedMinutes} minutes`);
-      }
-      console.log("");
-    }
   }
   if (analysis.suggestedCheckpoints.length > 0) {
     console.log(`  Suggested checkpoints${aiTag("checkpoints")}:`);
@@ -29416,126 +29409,6 @@ async function initRequirement(description, cwd2 = process.cwd(), options = {}) 
     }
     console.log("");
   }
-  if (autoSplit && complexity.level === "high" && complexity.splitSuggestions.length > 0) {
-    console.log("\u2501".repeat(SEPARATOR_WIDTH));
-    console.log("\uD83D\uDD00 Auto-splitting complex task...");
-    console.log("\u2501".repeat(SEPARATOR_WIDTH));
-    console.log("");
-    const subtaskIds = [];
-    try {
-      for (let i = 0;i < complexity.splitSuggestions.length; i++) {
-        const sub = complexity.splitSuggestions[i];
-        if (!sub)
-          continue;
-        const subType = inferTaskType(sub.title);
-        const subPriority = taskPriority;
-        const subId = generateNewTaskId(cwd2, subType, subPriority, sub.title);
-        subtaskIds.push(subId);
-        const subTask = createDefaultTaskMeta(subId, sub.title, subType, undefined, "init-requirement");
-        const subStructuredInfo = extractStructuredInfo(sub.description);
-        const subInferredCheckpoints = inferCheckpointsFromDescription(sub.description, subType);
-        const subStructuredData = {
-          problem: subStructuredInfo.problem || sub.description,
-          rootCause: subStructuredInfo.rootCause,
-          solution: subStructuredInfo.solution,
-          checkpoints: [...new Set([...subStructuredInfo.checkpoints, ...subInferredCheckpoints])],
-          relatedFiles: sub.files.length > 0 ? sub.files : subStructuredInfo.relatedFiles,
-          notes: subStructuredInfo.notes
-        };
-        subTask.description = generateStructuredDescription(subStructuredData, template);
-        subTask.priority = taskPriority;
-        subTask.recommendedRole = analysis.recommendedRole;
-        subTask.parentId = taskId;
-        if (sub.dependsOn >= 0 && sub.dependsOn < i) {
-          const depSubId = subtaskIds[sub.dependsOn];
-          if (depSubId) {
-            subTask.dependencies = [depSubId];
-          }
-        }
-        writeTaskMeta(subTask, cwd2);
-        const subCheckpointTexts = subInferredCheckpoints.length > 0 ? subInferredCheckpoints : [`\u5B8C\u6210 ${sub.title}`];
-        const subFilterResult = filterLowQualityCheckpoints(subCheckpointTexts);
-        const subFilteredCheckpoints = subFilterResult.kept;
-        const subTaskDir = path16.join(getTasksDir(cwd2), subId);
-        const subCheckpointPath = path16.join(subTaskDir, "checkpoint.md");
-        const subCheckpointContent = `# ${subId} \u68C0\u67E5\u70B9
-
-${subFilteredCheckpoints.map((cp) => `- [ ] ${cp}`).join(`
-`)}
-`;
-        fs19.writeFileSync(subCheckpointPath, subCheckpointContent, "utf-8");
-        syncCheckpointsToMeta(subId, cwd2);
-        addSubtaskToParent(taskId, subId, cwd2);
-        console.log(`  ${i + 1}. ${subId}: ${sub.title}`);
-        console.log(`     Files: ${sub.files.length > 0 ? sub.files.join(", ") : "TBD"}`);
-        console.log(`     Estimated: ~${sub.estimatedMinutes} minutes`);
-        if (subTask.dependencies && subTask.dependencies.length > 0) {
-          console.log(`     Dependencies: ${subTask.dependencies.join(", ")}`);
-        }
-        console.log("");
-      }
-      const allTasksForSubDeps = getAllTasks(cwd2);
-      const subDepGraph = DependencyGraph.fromTasks(allTasksForSubDeps);
-      for (const subId of subtaskIds) {
-        const subTaskMeta = readTaskMeta(subId, cwd2);
-        if (!subTaskMeta)
-          continue;
-        const subDeps = inferDependencies(subTaskMeta, allTasksForSubDeps, { strategy: "file-overlap" });
-        if (subDeps.length > 0) {
-          const existingDeps = subTaskMeta.dependencies || [];
-          const safeNewDepIds = subDeps.map((d) => d.depTaskId).filter((id) => !existingDeps.includes(id) && !subDepGraph.wouldCreateCycle(subId, id));
-          if (safeNewDepIds.length > 0) {
-            subTaskMeta.dependencies = [...existingDeps, ...safeNewDepIds];
-            writeTaskMeta(subTaskMeta, cwd2);
-            for (const newDepId of safeNewDepIds) {
-              subDepGraph.addEdge(subId, newDepId);
-            }
-          }
-          const subValidation = validateNewTaskDeps(subId, subTaskMeta.dependencies || [], subDepGraph, allTasksForSubDeps);
-          if (subValidation.warnings.length > 0) {
-            for (const w of subValidation.warnings) {
-              console.log(`   \u26A0\uFE0F  ${subId}: ${w}`);
-            }
-          }
-          if (subValidation.errors.length > 0) {
-            for (const e of subValidation.errors) {
-              console.log(`   \u274C ${subId}: ${e}`);
-            }
-          }
-          const skippedDeps = subDeps.filter((d) => !existingDeps.includes(d.depTaskId) && subDepGraph.wouldCreateCycle(subId, d.depTaskId));
-          if (skippedDeps.length > 0) {
-            console.log(`   \u26A0\uFE0F  ${subId}: Skipped ${skippedDeps.length} inferred dependencies (would create cycle)`);
-          }
-        }
-      }
-    } catch (err) {
-      console.error(`
-\u274C Subtask creation failed: ${err instanceof Error ? err.message : String(err)}`);
-      if (subtaskIds.length > 0) {
-        console.log(`   Cleaning up ${subtaskIds.length} created subtasks...`);
-        for (const cleanupId of subtaskIds) {
-          try {
-            const cleanupDir = path16.join(getTasksDir(cwd2), cleanupId);
-            if (fs19.existsSync(cleanupDir)) {
-              fs19.rmSync(cleanupDir, { recursive: true, force: true });
-            }
-          } catch {}
-        }
-        const parentMeta = readTaskMeta(taskId, cwd2);
-        if (parentMeta) {
-          parentMeta.subtaskIds = (parentMeta.subtaskIds || []).filter((id) => !subtaskIds.includes(id));
-          writeTaskMeta(parentMeta, cwd2);
-        }
-        console.log(`   Cleaned up. Parent task ${taskId} retained.`);
-      }
-      console.log("");
-    }
-    if (subtaskIds.length > 0) {
-      console.log(`\u2705 Split into ${subtaskIds.length} subtasks`);
-      console.log(`   Parent task: ${taskId}`);
-      console.log("");
-    }
-  }
   if (!skipValidation) {
     const validation = hasValidCheckpoints(checkpointPath, false);
     if (!validation.valid) {
@@ -29668,158 +29541,14 @@ function assessComplexity(description, analysis) {
   if (estimatedMinutes > 15 && level !== "high") {
     level = "high";
   }
-  const splitSuggestions = generateSplitSuggestions(description, files, workItemCount, estimatedMinutes, analysis);
   return {
     level,
     score: totalScore,
     fileCount,
     workItemCount,
     estimatedMinutes,
-    splitSuggestions,
     signals
   };
-}
-function generateSplitSuggestions(description, files, workItemCount, totalMinutes, analysis) {
-  if (totalMinutes <= 15)
-    return [];
-  const suggestions = [];
-  const layerGroups = groupFilesByLayer(files);
-  if (layerGroups.size >= 2 && files.length >= 2) {
-    const layerOrder = ["Layer0", "Layer1", "Layer2", "Layer3"];
-    let prevIdx = -1;
-    for (const layer of layerOrder) {
-      const layerFiles = layerGroups.get(layer);
-      if (!layerFiles || layerFiles.length === 0)
-        continue;
-      const layerDef = LAYER_DEFINITIONS[layer];
-      const estMinutes = Math.max(5, Math.ceil(layerFiles.length * 3 + 2));
-      suggestions.push({
-        title: `${analysis.title} - ${layerDef.label}`,
-        description: `\u4FEE\u6539${layerDef.description}\u5C42\u6587\u4EF6: ${layerFiles.join(", ")}`,
-        files: layerFiles,
-        estimatedMinutes: estMinutes,
-        dependsOn: prevIdx
-      });
-      prevIdx = suggestions.length - 1;
-    }
-    if (suggestions.length <= 1) {
-      suggestions.length = 0;
-    }
-  }
-  if (suggestions.length === 0 && files.length >= 3) {
-    const fileGroups = new Map;
-    for (const file of files) {
-      const parts = file.split("/");
-      const dir = parts.length > 1 ? parts.slice(0, -1).join("/") : "root";
-      if (!fileGroups.has(dir))
-        fileGroups.set(dir, []);
-      fileGroups.get(dir).push(file);
-    }
-    if (fileGroups.size <= 1 && files.length >= 3) {
-      const sortedFiles = sortFilesByLayer(files);
-      const mid = Math.ceil(sortedFiles.length / 2);
-      const firstHalf = sortedFiles.slice(0, mid);
-      const secondHalf = sortedFiles.slice(mid);
-      suggestions.push({
-        title: `${analysis.title} - \u57FA\u7840\u5B9E\u73B0`,
-        description: `\u5B8C\u6210\u6838\u5FC3\u529F\u80FD\u5B9E\u73B0\uFF08\u5E95\u5C42\u4F9D\u8D56\uFF09\uFF0C\u6D89\u53CA\u6587\u4EF6: ${firstHalf.join(", ")}`,
-        files: firstHalf,
-        estimatedMinutes: Math.ceil(totalMinutes * 0.6),
-        dependsOn: -1
-      });
-      suggestions.push({
-        title: `${analysis.title} - \u5B8C\u5584\u4E0E\u6D4B\u8BD5`,
-        description: `\u5B8C\u6210\u5269\u4F59\u4FEE\u6539\u548C\u9A8C\u8BC1\uFF08\u4E0A\u5C42\u903B\u8F91\uFF09\uFF0C\u6D89\u53CA\u6587\u4EF6: ${secondHalf.join(", ")}`,
-        files: secondHalf,
-        estimatedMinutes: Math.ceil(totalMinutes * 0.4),
-        dependsOn: 0
-      });
-    } else {
-      const groups = Array.from(fileGroups.entries());
-      for (let i = 0;i < groups.length; i++) {
-        const group = groups[i];
-        if (!group)
-          continue;
-        const [dir, groupFiles] = group;
-        const isFirst = i === 0;
-        suggestions.push({
-          title: `${analysis.title} - ${dir} \u6A21\u5757`,
-          description: `\u4FEE\u6539 ${dir} \u76EE\u5F55\u4E0B\u6587\u4EF6: ${groupFiles.join(", ")}`,
-          files: groupFiles,
-          estimatedMinutes: Math.max(5, Math.ceil(groupFiles.length * 3 + 2)),
-          dependsOn: isFirst ? -1 : i - 1
-        });
-      }
-    }
-  }
-  if (suggestions.length === 0 && workItemCount >= 4) {
-    suggestions.push({
-      title: `${analysis.title} - \u6838\u5FC3\u4FEE\u6539`,
-      description: `\u5B8C\u6210\u6838\u5FC3\u4EE3\u7801\u4FEE\u6539\u548C\u529F\u80FD\u5B9E\u73B0`,
-      files: files.slice(0, Math.ceil(files.length / 2)),
-      estimatedMinutes: Math.ceil(totalMinutes * 0.5),
-      dependsOn: -1
-    });
-    suggestions.push({
-      title: `${analysis.title} - \u914D\u7F6E\u4E0E\u96C6\u6210`,
-      description: `\u5B8C\u6210\u914D\u7F6E\u4FEE\u6539\u548C\u6A21\u5757\u96C6\u6210`,
-      files: files.slice(Math.ceil(files.length / 2)),
-      estimatedMinutes: Math.ceil(totalMinutes * 0.3),
-      dependsOn: 0
-    });
-    suggestions.push({
-      title: `${analysis.title} - \u9A8C\u8BC1\u4E0E\u6D4B\u8BD5`,
-      description: `\u9A8C\u8BC1\u4FEE\u6539\u6B63\u786E\u6027\uFF0C\u8FD0\u884C\u6D4B\u8BD5\u5E76\u786E\u4FDD\u65E0\u56DE\u5F52`,
-      files: [],
-      estimatedMinutes: Math.ceil(totalMinutes * 0.2),
-      dependsOn: 1
-    });
-  }
-  if (suggestions.length === 0) {
-    suggestions.push({
-      title: `${analysis.title} (\u5EFA\u8BAE\u62C6\u5206)`,
-      description: `\u6B64\u4EFB\u52A1\u9884\u4F30 ${totalMinutes} \u5206\u949F\uFF0C\u5EFA\u8BAE\u6309\u67B6\u6784\u5C42\u7EA7\uFF08\u7C7B\u578B\u2192\u5DE5\u5177\u2192\u6838\u5FC3\u2192\u547D\u4EE4\uFF09\u624B\u52A8\u62C6\u5206\u4E3A\u66F4\u5C0F\u7684\u5B50\u4EFB\u52A1`,
-      files,
-      estimatedMinutes: totalMinutes,
-      dependsOn: -1
-    });
-  }
-  const finalSuggestions = [];
-  const indexMap = new Map;
-  for (let si = 0;si < suggestions.length; si++) {
-    const s = suggestions[si];
-    if (!s)
-      continue;
-    const remappedDependsOn = s.dependsOn >= 0 && indexMap.has(s.dependsOn) ? indexMap.get(s.dependsOn) : s.dependsOn;
-    if (s.estimatedMinutes <= 15) {
-      indexMap.set(si, finalSuggestions.length);
-      finalSuggestions.push({ ...s, dependsOn: remappedDependsOn });
-    } else {
-      const sortedFiles = sortFilesByLayer(s.files);
-      const half = Math.ceil(sortedFiles.length / 2);
-      if (half > 0 && sortedFiles.length > 1) {
-        indexMap.set(si, finalSuggestions.length);
-        finalSuggestions.push({
-          ...s,
-          title: `${s.title} (\u524D\u534A)`,
-          files: sortedFiles.slice(0, half),
-          estimatedMinutes: Math.ceil(s.estimatedMinutes / 2),
-          dependsOn: remappedDependsOn
-        });
-        finalSuggestions.push({
-          ...s,
-          title: `${s.title} (\u540E\u534A)`,
-          files: sortedFiles.slice(half),
-          estimatedMinutes: Math.ceil(s.estimatedMinutes / 2),
-          dependsOn: finalSuggestions.length - 1
-        });
-      } else {
-        indexMap.set(si, finalSuggestions.length);
-        finalSuggestions.push({ ...s, dependsOn: remappedDependsOn });
-      }
-    }
-  }
-  return finalSuggestions;
 }
 function detectRoleFromProject(cwd2, description) {
   const lowerDesc = description.toLowerCase();
@@ -30860,10 +30589,10 @@ init_config();
 init_i18n();
 var __dirname = "/home/fuzhibo/workerplace/git/projmnt4claude/src/commands";
 async function runDoctor(fix = false, cwd2 = process.cwd()) {
-  const texts2 = t(cwd2).doctorCmd;
+  const texts = t(cwd2).doctorCmd;
   console.log("");
   console.log("\u2501".repeat(SEPARATOR_WIDTH));
-  console.log("\uD83D\uDD0D " + texts2.environmentDiagnostics);
+  console.log("\uD83D\uDD0D " + texts.environmentDiagnostics);
   console.log("\u2501".repeat(SEPARATOR_WIDTH));
   console.log("");
   const results = [];
@@ -30883,52 +30612,52 @@ async function runDoctor(fix = false, cwd2 = process.cwd()) {
   if (fix && fixableIssues.length > 0) {
     console.log("");
     console.log("\u2501".repeat(SEPARATOR_WIDTH));
-    console.log("\uD83D\uDD27 " + texts2.autoFix);
+    console.log("\uD83D\uDD27 " + texts.autoFix);
     console.log("\u2501".repeat(SEPARATOR_WIDTH));
     console.log("");
     await fixIssues2(fixableIssues, cwd2);
     console.log("");
-    console.log("\uD83D\uDD04 " + texts2.reChecking);
+    console.log("\uD83D\uDD04 " + texts.reChecking);
     console.log("");
     await runDoctor(false, cwd2);
     return;
   } else if (fixableIssues.length > 0) {
     console.log("");
-    console.log(`\uD83D\uDCA1 ${texts2.useFixToAutoFix.replace("{count}", String(fixableIssues.length))}`);
+    console.log(`\uD83D\uDCA1 ${texts.useFixToAutoFix.replace("{count}", String(fixableIssues.length))}`);
   }
 }
 function checkProjectInit(cwd2) {
-  const texts2 = t(cwd2).doctorCmd;
+  const texts = t(cwd2).doctorCmd;
   const projectDir = getProjectDir(cwd2);
   const configPath = path19.join(projectDir, "config.json");
   if (!fs22.existsSync(configPath)) {
     return {
-      name: texts2.checkProjectInit,
+      name: texts.checkProjectInit,
       status: "error",
-      message: texts2.checkProjectInitNotInitialized,
-      details: [texts2.checkProjectInitRunSetup],
+      message: texts.checkProjectInitNotInitialized,
+      details: [texts.checkProjectInitRunSetup],
       fixable: false
     };
   }
   return {
-    name: texts2.checkProjectInit,
+    name: texts.checkProjectInit,
     status: "ok",
-    message: texts2.checkProjectInitInitialized,
+    message: texts.checkProjectInitInitialized,
     details: [`Config file: ${configPath}`],
     fixable: false
   };
 }
 function checkPluginCache(cwd2) {
-  const texts2 = t(cwd2).doctorCmd;
+  const texts = t(cwd2).doctorCmd;
   const pluginRoot = process.env.CLAUDE_PLUGIN_ROOT;
   const details = [];
   let status = "ok";
-  let message = texts2.checkPluginCacheNormal;
+  let message = texts.checkPluginCacheNormal;
   if (!pluginRoot) {
     return {
-      name: texts2.checkPluginCache,
+      name: texts.checkPluginCache,
       status: "ok",
-      message: texts2.checkPluginCacheCliMode,
+      message: texts.checkPluginCacheCliMode,
       details: ["CLAUDE_PLUGIN_ROOT not set (normal in CLI mode)"],
       fixable: false
     };
@@ -30937,7 +30666,7 @@ function checkPluginCache(cwd2) {
   const mainFile = path19.join(pluginRoot, "dist", "projmnt4claude.js");
   if (!fs22.existsSync(mainFile)) {
     status = "error";
-    message = texts2.checkPluginCacheMainFileMissing;
+    message = texts.checkPluginCacheMainFileMissing;
     details.push(`Missing: ${mainFile}`);
   } else {
     details.push(`\u2713 Main program: ${mainFile}`);
@@ -30946,7 +30675,7 @@ function checkPluginCache(cwd2) {
   if (!fs22.existsSync(localesDir)) {
     if (status !== "error") {
       status = "warning";
-      message = texts2.checkPluginCacheLocalesMissing;
+      message = texts.checkPluginCacheLocalesMissing;
     }
     details.push(`Missing: ${localesDir}`);
   } else {
@@ -30970,7 +30699,7 @@ function checkPluginCache(cwd2) {
   if (!fs22.existsSync(commandsDir)) {
     if (status !== "error") {
       status = "warning";
-      message = texts2.checkPluginCacheCommandsMissing;
+      message = texts.checkPluginCacheCommandsMissing;
     }
     details.push(`Missing: ${commandsDir}`);
   } else {
@@ -30978,7 +30707,7 @@ function checkPluginCache(cwd2) {
     details.push(`\u2713 Slash commands: ${commandFiles.length}`);
   }
   return {
-    name: texts2.checkPluginCache,
+    name: texts.checkPluginCache,
     status,
     message,
     details,
@@ -30986,7 +30715,7 @@ function checkPluginCache(cwd2) {
   };
 }
 function checkSkillFiles(cwd2) {
-  const texts2 = t(cwd2).doctorCmd;
+  const texts = t(cwd2).doctorCmd;
   const results = [];
   const toolboxDir = getToolboxDir(cwd2);
   const skillDir = path19.join(toolboxDir, "projmnt4claude");
@@ -30994,25 +30723,25 @@ function checkSkillFiles(cwd2) {
   if (fs22.existsSync(commandsDir)) {
     const commandFiles = fs22.readdirSync(commandsDir).filter((f) => f.endsWith(".md"));
     results.push({
-      name: texts2.checkSkillFiles,
+      name: texts.checkSkillFiles,
       status: "ok",
-      message: texts2.checkSkillFilesCount.replace("{count}", String(commandFiles.length)),
+      message: texts.checkSkillFilesCount.replace("{count}", String(commandFiles.length)),
       details: [`Location: ${commandsDir}`],
       fixable: false
     });
   } else {
     results.push({
-      name: texts2.checkSkillFiles,
+      name: texts.checkSkillFiles,
       status: "warning",
-      message: texts2.checkSkillFilesMissing,
-      details: [texts2.checkSkillFilesReRunSetup],
+      message: texts.checkSkillFilesMissing,
+      details: [texts.checkSkillFilesReRunSetup],
       fixable: true
     });
   }
   return results;
 }
 function checkDirectoryStructure(cwd2) {
-  const texts2 = t(cwd2).doctorCmd;
+  const texts = t(cwd2).doctorCmd;
   const results = [];
   const projectDir = getProjectDir(cwd2);
   const requiredDirs = [
@@ -31022,17 +30751,17 @@ function checkDirectoryStructure(cwd2) {
   for (const dir of requiredDirs) {
     if (!fs22.existsSync(dir.path)) {
       results.push({
-        name: texts2.checkDirectoryStructure.replace("{name}", dir.name),
+        name: texts.checkDirectoryStructure.replace("{name}", dir.name),
         status: "error",
-        message: texts2.checkDirectoryMissing,
+        message: texts.checkDirectoryMissing,
         details: [`Missing: ${dir.path}`],
         fixable: true
       });
     } else {
       results.push({
-        name: texts2.checkDirectoryStructure.replace("{name}", dir.name),
+        name: texts.checkDirectoryStructure.replace("{name}", dir.name),
         status: "ok",
-        message: texts2.checkDirectoryExists,
+        message: texts.checkDirectoryExists,
         details: [],
         fixable: false
       });
@@ -31054,9 +30783,9 @@ function checkDirectoryStructure(cwd2) {
       const archiveDir = path19.join(projectDir, "archive");
       if (!fs22.existsSync(archiveDir)) {
         results.push({
-          name: texts2.checkDirectoryStructure.replace("{name}", "archive"),
+          name: texts.checkDirectoryStructure.replace("{name}", "archive"),
           status: "warning",
-          message: texts2.checkArchiveMissing,
+          message: texts.checkArchiveMissing,
           details: [`Missing: ${archiveDir}`],
           fixable: true
         });
@@ -31088,13 +30817,13 @@ function checkPluginInstallationScope(cwd2) {
       return path19.resolve(inst.projectPath) !== normalizedCwd;
     });
     if (mismatchedInstalls.length > 0) {
-      const texts2 = t(cwd2).doctorCmd;
+      const texts = t(cwd2).doctorCmd;
       const mismatchedList = mismatchedInstalls.map((inst) => `  - Version ${inst.version || "unknown"} bound to: ${inst.projectPath || "unknown path"}`).join(`
 `);
       results.push({
-        name: texts2.checkPluginScope,
+        name: texts.checkPluginScope,
         status: "warning",
-        message: texts2.checkPluginScopeWarning,
+        message: texts.checkPluginScopeWarning,
         details: [
           "projmnt4claude installed with project-scope in:",
           mismatchedList,
@@ -31117,11 +30846,11 @@ function checkPluginInstallationScope(cwd2) {
         fixable: false
       });
     } else if (projectScopedInstalls.length > 0) {
-      const texts2 = t(cwd2).doctorCmd;
+      const texts = t(cwd2).doctorCmd;
       results.push({
-        name: texts2.checkPluginScope,
+        name: texts.checkPluginScope,
         status: "warning",
-        message: texts2.checkPluginScopeRecommendUserScope,
+        message: texts.checkPluginScopeRecommendUserScope,
         details: [
           "Current project is correctly bound to project-scope installation",
           "But user-scope is recommended for use in all projects:",
@@ -31136,14 +30865,14 @@ function checkPluginInstallationScope(cwd2) {
   return results;
 }
 function checkLoggingModule(cwd2) {
-  const texts2 = t(cwd2).doctorCmd;
+  const texts = t(cwd2).doctorCmd;
   const results = [];
   const logsDir = getLogsDir(cwd2);
   if (!fs22.existsSync(logsDir)) {
     results.push({
-      name: texts2.checkLogDirectory,
+      name: texts.checkLogDirectory,
       status: "warning",
-      message: texts2.checkLogDirectoryMissing,
+      message: texts.checkLogDirectoryMissing,
       details: [
         `Missing: ${logsDir}`,
         "Run projmnt4claude setup to upgrade project structure"
@@ -31153,9 +30882,9 @@ function checkLoggingModule(cwd2) {
     return results;
   }
   results.push({
-    name: texts2.checkLogDirectory,
+    name: texts.checkLogDirectory,
     status: "ok",
-    message: texts2.checkLogDirectoryExists,
+    message: texts.checkLogDirectoryExists,
     details: [`Location: ${logsDir}`],
     fixable: false
   });
@@ -31176,9 +30905,9 @@ function checkLoggingModule(cwd2) {
     }
     if (missingKeys.length > 0) {
       results.push({
-        name: texts2.checkLogConfigCompleteness,
+        name: texts.checkLogConfigCompleteness,
         status: "warning",
-        message: texts2.checkLogConfigMissing.replace("{count}", String(missingKeys.length)),
+        message: texts.checkLogConfigMissing.replace("{count}", String(missingKeys.length)),
         details: [
           "Missing config items:",
           ...missingKeys.map((k) => `  - ${k}`),
@@ -31189,9 +30918,9 @@ function checkLoggingModule(cwd2) {
       });
     } else {
       results.push({
-        name: texts2.checkLogConfigCompleteness,
+        name: texts.checkLogConfigCompleteness,
         status: "ok",
-        message: texts2.checkLogConfigComplete,
+        message: texts.checkLogConfigComplete,
         details: [
           `level: ${loggingConfig.level}`,
           `maxFiles: ${loggingConfig.maxFiles}`,
@@ -31204,15 +30933,15 @@ function checkLoggingModule(cwd2) {
     const aiConfig = config.ai;
     if (!aiConfig || aiConfig.provider === undefined) {
       results.push({
-        name: texts2.checkAiConfigCompleteness,
+        name: texts.checkAiConfigCompleteness,
         status: "warning",
-        message: texts2.checkAiConfigMissing,
+        message: texts.checkAiConfigMissing,
         details: [`Default: claude-code`, "\uD83D\uDCA1 Run projmnt4claude doctor --fix to auto-fill"],
         fixable: true
       });
     } else {
       results.push({
-        name: texts2.checkAiConfigCompleteness,
+        name: texts.checkAiConfigCompleteness,
         status: "ok",
         message: `provider: ${aiConfig.provider}`,
         details: aiConfig.customEndpoint ? [`Custom endpoint: ${aiConfig.customEndpoint}`] : [],
@@ -31222,15 +30951,15 @@ function checkLoggingModule(cwd2) {
     const trainingConfig = config.training;
     if (!trainingConfig || trainingConfig.exportEnabled === undefined) {
       results.push({
-        name: texts2.checkTrainingConfigCompleteness,
+        name: texts.checkTrainingConfigCompleteness,
         status: "warning",
-        message: texts2.checkTrainingConfigMissing,
+        message: texts.checkTrainingConfigMissing,
         details: ["\uD83D\uDCA1 Run projmnt4claude doctor --fix to auto-fill defaults"],
         fixable: true
       });
     } else {
       results.push({
-        name: texts2.checkTrainingConfigCompleteness,
+        name: texts.checkTrainingConfigCompleteness,
         status: "ok",
         message: `exportEnabled: ${trainingConfig.exportEnabled}`,
         details: [`outputDir: ${trainingConfig.outputDir}`],
@@ -31258,20 +30987,20 @@ function checkLoggingModule(cwd2) {
     let message = `Log health (${files.length} files, ${totalSizeMB.toFixed(1)}MB)`;
     if (oversizedFiles.length > 0) {
       status = "warning";
-      message = texts2.checkLogHealthOversized.replace("{count}", String(oversizedFiles.length));
+      message = texts.checkLogHealthOversized.replace("{count}", String(oversizedFiles.length));
       details.push("Files over 10MB:");
       details.push(...oversizedFiles.slice(0, 5).map((f) => `  - ${f}`));
     }
     if (totalSizeMB > 100) {
       status = "warning";
-      message = texts2.checkLogHealthTotalSize.replace("{size}", totalSizeMB.toFixed(1));
+      message = texts.checkLogHealthTotalSize.replace("{size}", totalSizeMB.toFixed(1));
       details.push(`Consider cleaning old logs: projmnt4claude config set logging.maxFiles 15`);
     }
     if (status === "ok") {
       details.push(`Total size: ${totalSizeMB.toFixed(1)}MB`);
     }
     results.push({
-      name: texts2.checkLogHealth,
+      name: texts.checkLogHealth,
       status,
       message,
       details,
@@ -31279,7 +31008,7 @@ function checkLoggingModule(cwd2) {
     });
   } catch {
     results.push({
-      name: texts2.checkLogHealth,
+      name: texts.checkLogHealth,
       status: "warning",
       message: "Cannot read log directory",
       details: [`Path: ${logsDir}`],
@@ -31289,12 +31018,12 @@ function checkLoggingModule(cwd2) {
   return results;
 }
 function checkDeprecatedStatuses(cwd2) {
-  const texts2 = t(cwd2).doctorCmd;
+  const texts = t(cwd2).doctorCmd;
   const results = [];
   const tasksDir = getTasksDir(cwd2);
   if (!fs22.existsSync(tasksDir)) {
     return [{
-      name: texts2.checkDeprecatedStatus,
+      name: texts.checkDeprecatedStatus,
       status: "ok",
       message: "Task directory does not exist (no tasks)",
       details: [],
@@ -31317,17 +31046,17 @@ function checkDeprecatedStatuses(cwd2) {
   }
   if (tasksWithDeprecatedStatus.length === 0) {
     results.push({
-      name: texts2.checkDeprecatedStatus,
+      name: texts.checkDeprecatedStatus,
       status: "ok",
-      message: texts2.checkDeprecatedStatusOk.replace("{count}", String(taskIds.length)),
+      message: texts.checkDeprecatedStatusOk.replace("{count}", String(taskIds.length)),
       details: ["\u2713 No reopened/needs_human status"],
       fixable: false
     });
   } else {
     results.push({
-      name: texts2.checkDeprecatedStatus,
+      name: texts.checkDeprecatedStatus,
       status: "warning",
-      message: texts2.checkDeprecatedStatusFound.replace("{count}", String(tasksWithDeprecatedStatus.length)),
+      message: texts.checkDeprecatedStatusFound.replace("{count}", String(tasksWithDeprecatedStatus.length)),
       details: [
         "Tasks with deprecated status:",
         ...tasksWithDeprecatedStatus.map((t2) => `  - ${t2.taskId}: status=${t2.status}`),
@@ -31344,30 +31073,30 @@ function checkDeprecatedStatuses(cwd2) {
   return results;
 }
 function checkGitHooks(cwd2) {
-  const texts2 = t(cwd2).doctorCmd;
+  const texts = t(cwd2).doctorCmd;
   const config = readConfig(cwd2);
   const gitHookConfig = config?.gitHook ?? DEFAULT_GIT_HOOK;
   if (!gitHookConfig.enabled) {
-    return [{ status: "ok", name: texts2.checkGitHooks, message: texts2.checkGitHooksDisabled, fixable: false }];
+    return [{ status: "ok", name: texts.checkGitHooks, message: texts.checkGitHooksDisabled, fixable: false }];
   }
   const gitDir = path19.join(cwd2, ".git");
   if (!fs22.existsSync(gitDir)) {
-    return [{ status: "ok", name: texts2.checkGitHooks, message: texts2.checkGitHooksNotGitRepo, fixable: false }];
+    return [{ status: "ok", name: texts.checkGitHooks, message: texts.checkGitHooksNotGitRepo, fixable: false }];
   }
   try {
     const pre = new Pre(cwd2);
     if (pre.isPreCommitInstalled()) {
       return [{
-        name: texts2.checkGitHooks,
+        name: texts.checkGitHooks,
         status: "ok",
-        message: texts2.checkGitHooksInstalled,
+        message: texts.checkGitHooksInstalled,
         fixable: false
       }];
     }
     return [{
-      name: texts2.checkGitHooks,
+      name: texts.checkGitHooks,
       status: "warning",
-      message: texts2.checkGitHooksNotInstalled,
+      message: texts.checkGitHooksNotInstalled,
       details: [
         "Recommended to install pre-commit hook to run tests before commits",
         "Run: projmnt4claude pre install"
@@ -31376,7 +31105,7 @@ function checkGitHooks(cwd2) {
     }];
   } catch {
     return [{
-      name: texts2.checkGitHooks,
+      name: texts.checkGitHooks,
       status: "warning",
       message: "Cannot check Git Hook status",
       fixable: false
@@ -31431,7 +31160,7 @@ function checkDeprecatedHooks(cwd2) {
       }
     } catch {}
   }
-  const texts2 = t(cwd2).doctorCmd;
+  const texts = t(cwd2).doctorCmd;
   const hasSettingsIssue = deprecatedSettings.length > 0;
   const hasFilesIssue = deprecatedFiles.length > 0;
   if (hasSettingsIssue || hasFilesIssue) {
@@ -31456,17 +31185,17 @@ function checkDeprecatedHooks(cwd2) {
     details.push("");
     details.push("\uD83D\uDCA1 Run projmnt4claude doctor --fix to auto-clean");
     results.push({
-      name: texts2.checkDeprecatedHooks,
+      name: texts.checkDeprecatedHooks,
       status: "warning",
-      message: texts2.checkDeprecatedHooksFound,
+      message: texts.checkDeprecatedHooksFound,
       details,
       fixable: true
     });
   } else {
     results.push({
-      name: texts2.checkDeprecatedHooks,
+      name: texts.checkDeprecatedHooks,
       status: "ok",
-      message: texts2.checkDeprecatedHooksOk,
+      message: texts.checkDeprecatedHooksOk,
       details: [],
       fixable: false
     });
@@ -31474,7 +31203,7 @@ function checkDeprecatedHooks(cwd2) {
   return results;
 }
 function displayResults(results, cwd2 = process.cwd()) {
-  const texts2 = t(cwd2).doctorCmd;
+  const texts = t(cwd2).doctorCmd;
   const sorted = [...results].sort((a, b) => {
     const order = { error: 0, warning: 1, ok: 2 };
     return order[a.status] - order[b.status];
@@ -31499,9 +31228,9 @@ function displayResults(results, cwd2 = process.cwd()) {
   }
   console.log("");
   console.log("\u2501".repeat(SEPARATOR_WIDTH));
-  console.log("\uD83D\uDCCA " + texts2.summary.replace("{errors}", String(errorCount)).replace("{warnings}", String(warningCount)).replace("{ok}", String(okCount)));
+  console.log("\uD83D\uDCCA " + texts.summary.replace("{errors}", String(errorCount)).replace("{warnings}", String(warningCount)).replace("{ok}", String(okCount)));
   if (errorCount === 0 && warningCount === 0) {
-    console.log("\u2705 " + texts2.allChecksPassed);
+    console.log("\u2705 " + texts.allChecksPassed);
   }
 }
 function resolvePluginRoot() {
@@ -31520,11 +31249,11 @@ function resolvePluginRoot() {
   return null;
 }
 async function fixIssues2(issues, cwd2) {
-  const texts2 = t(cwd2).doctorCmd;
+  const texts = t(cwd2).doctorCmd;
   const projectDir = getProjectDir(cwd2);
   const pluginRoot = resolvePluginRoot();
   for (const issue of issues) {
-    console.log(texts2.fixing.replace("{name}", issue.name));
+    console.log(texts.fixing.replace("{name}", issue.name));
     if (issue.name === "Skill Files" || issue.name === "Command Docs") {
       if (pluginRoot) {
         const toolboxDir = getToolboxDir(cwd2);
@@ -31544,7 +31273,7 @@ async function fixIssues2(issues, cwd2) {
         const skillTarget = path19.join(skillDir, "SKILL.md");
         if (fs22.existsSync(skillSource)) {
           fs22.copyFileSync(skillSource, skillTarget);
-          console.log(texts2.copiedSkillMd);
+          console.log(texts.copiedSkillMd);
         }
         const commandsSourceDir = path19.join(pluginRoot, "locales", language, "commands");
         const commandsTargetDir = path19.join(skillDir, "commands");
@@ -31556,10 +31285,10 @@ async function fixIssues2(issues, cwd2) {
           for (const file of commandFiles) {
             fs22.copyFileSync(path19.join(commandsSourceDir, file), path19.join(commandsTargetDir, file));
           }
-          console.log(texts2.copiedCommandDocs.replace("{count}", String(commandFiles.length)));
+          console.log(texts.copiedCommandDocs.replace("{count}", String(commandFiles.length)));
         }
       } else {
-        console.log(texts2.cannotFixPluginRootNotFound);
+        console.log(texts.cannotFixPluginRootNotFound);
       }
     } else if (issue.name.startsWith("Directory:")) {
       const dirName = issue.name.replace("Directory: ", "");
@@ -31571,22 +31300,22 @@ async function fixIssues2(issues, cwd2) {
       const dirPath = dirMap[dirName];
       if (dirPath && !fs22.existsSync(dirPath)) {
         fs22.mkdirSync(dirPath, { recursive: true });
-        console.log(texts2.createdDirectory.replace("{name}", dirName));
+        console.log(texts.createdDirectory.replace("{name}", dirName));
       }
-    } else if (issue.name === texts2.checkLogDirectory) {
+    } else if (issue.name === texts.checkLogDirectory) {
       const logsDir = getLogsDir(cwd2);
       if (!fs22.existsSync(logsDir)) {
         fs22.mkdirSync(logsDir, { recursive: true });
-        console.log(texts2.createdLogsDirectory);
+        console.log(texts.createdLogsDirectory);
       }
-    } else if (issue.name === texts2.checkLogConfigCompleteness || issue.name === texts2.checkAiConfigCompleteness || issue.name === texts2.checkTrainingConfigCompleteness) {
+    } else if (issue.name === texts.checkLogConfigCompleteness || issue.name === texts.checkAiConfigCompleteness || issue.name === texts.checkTrainingConfigCompleteness) {
       const config = readConfig(cwd2);
       if (config) {
         const fixedConfig = ensureConfigDefaults(config);
         writeConfig(fixedConfig, cwd2);
-        console.log(texts2.autoFilledMissingConfig);
+        console.log(texts.autoFilledMissingConfig);
       }
-    } else if (issue.name === texts2.checkDeprecatedStatus) {
+    } else if (issue.name === texts.checkDeprecatedStatus) {
       const tasksDir = getTasksDir(cwd2);
       const deprecatedMap = { reopened: "open", needs_human: "open" };
       let fixedCount = 0;
@@ -31614,8 +31343,8 @@ async function fixIssues2(issues, cwd2) {
           } catch {}
         }
       }
-      console.log(texts2.migratedDeprecatedStatusTasks.replace("{count}", String(fixedCount)));
-    } else if (issue.name === texts2.checkDeprecatedHooks) {
+      console.log(texts.migratedDeprecatedStatusTasks.replace("{count}", String(fixedCount)));
+    } else if (issue.name === texts.checkDeprecatedHooks) {
       let removedSettings = false;
       let removedFiles = false;
       const settingsPath = path19.join(cwd2, ".claude", "settings.json");
@@ -31685,29 +31414,29 @@ async function fixIssues2(issues, cwd2) {
         } catch {}
       }
       if (removedSettings || removedFiles) {
-        console.log(texts2.cleanedDeprecatedHookConfig);
+        console.log(texts.cleanedDeprecatedHookConfig);
         if (removedSettings) {
-          console.log(texts2.updatedSettings);
+          console.log(texts.updatedSettings);
         }
         if (removedFiles) {
-          console.log(texts2.deletedDeprecatedScripts);
+          console.log(texts.deletedDeprecatedScripts);
         }
       }
     }
   }
   console.log("");
-  console.log("\u2705 " + texts2.fixComplete);
+  console.log("\u2705 " + texts.fixComplete);
 }
 async function runBugReport(cwd2 = process.cwd()) {
-  const texts2 = t(cwd2).doctorCmd;
+  const texts = t(cwd2).doctorCmd;
   console.log("");
   console.log("\u2501".repeat(SEPARATOR_WIDTH));
-  console.log("\uD83D\uDCCB " + texts2.bugReportGeneration);
+  console.log("\uD83D\uDCCB " + texts.bugReportGeneration);
   console.log("\u2501".repeat(SEPARATOR_WIDTH));
   console.log("");
   if (!isInitialized(cwd2)) {
-    console.error("\u274C " + texts2.errorProjectNotInitialized);
-    console.error(texts2.runSetupFirst);
+    console.error("\u274C " + texts.errorProjectNotInitialized);
+    console.error(texts.runSetupFirst);
     process.exit(1);
   }
   const logger = new Logger({ cwd: cwd2 });
@@ -31718,90 +31447,90 @@ async function runBugReport(cwd2 = process.cwd()) {
     console.log("\u2501".repeat(SEPARATOR_WIDTH));
     console.log("");
     console.log("\u2501".repeat(SEPARATOR_WIDTH));
-    console.log("\uD83D\uDCB0 " + texts2.aiCostSummary);
+    console.log("\uD83D\uDCB0 " + texts.aiCostSummary);
     console.log("\u2501".repeat(SEPARATOR_WIDTH));
     console.log("");
     const costSummary = logger.getCostSummary();
-    console.log(texts2.totalAiCalls.replace("{count}", String(costSummary.totalCalls)));
-    console.log(texts2.totalDuration.replace("{duration}", (costSummary.totalDurationMs / 1000).toFixed(1)));
-    console.log(texts2.totalTokens.replace("{total}", String(costSummary.totalTokens)).replace("{input}", String(costSummary.totalInputTokens)).replace("{output}", String(costSummary.totalOutputTokens)));
+    console.log(texts.totalAiCalls.replace("{count}", String(costSummary.totalCalls)));
+    console.log(texts.totalDuration.replace("{duration}", (costSummary.totalDurationMs / 1000).toFixed(1)));
+    console.log(texts.totalTokens.replace("{total}", String(costSummary.totalTokens)).replace("{input}", String(costSummary.totalInputTokens)).replace("{output}", String(costSummary.totalOutputTokens)));
     if (Object.keys(costSummary.byField).length > 0) {
       console.log("");
-      console.log(texts2.byField);
+      console.log(texts.byField);
       for (const [field, info] of Object.entries(costSummary.byField)) {
-        console.log(texts2.fieldStats.replace("{field}", field).replace("{calls}", String(info.calls)).replace("{duration}", (info.durationMs / 1000).toFixed(1)).replace("{tokens}", String(info.totalTokens)));
+        console.log(texts.fieldStats.replace("{field}", field).replace("{calls}", String(info.calls)).replace("{duration}", (info.durationMs / 1000).toFixed(1)).replace("{tokens}", String(info.totalTokens)));
       }
     }
     console.log("");
     console.log("\u2501".repeat(SEPARATOR_WIDTH));
-    console.log("\uD83D\uDCCA " + texts2.usageAnalysis);
+    console.log("\uD83D\uDCCA " + texts.usageAnalysis);
     console.log("\u2501".repeat(SEPARATOR_WIDTH));
     console.log("");
     const usage = logger.analyzeUsage();
-    console.log(texts2.totalCommandExecutions.replace("{count}", String(usage.totalCommands)));
-    console.log(texts2.averageDuration.replace("{duration}", (usage.averageDurationMs / 1000).toFixed(1)));
-    console.log(texts2.aiUsageRate.replace("{rate}", (usage.aiUsageRate * 100).toFixed(1)));
-    console.log(texts2.errorsAndWarnings.replace("{errors}", String(usage.totalErrors)).replace("{warnings}", String(usage.totalWarnings)));
+    console.log(texts.totalCommandExecutions.replace("{count}", String(usage.totalCommands)));
+    console.log(texts.averageDuration.replace("{duration}", (usage.averageDurationMs / 1000).toFixed(1)));
+    console.log(texts.aiUsageRate.replace("{rate}", (usage.aiUsageRate * 100).toFixed(1)));
+    console.log(texts.errorsAndWarnings.replace("{errors}", String(usage.totalErrors)).replace("{warnings}", String(usage.totalWarnings)));
     if (Object.keys(usage.commandFrequency).length > 0) {
       console.log("");
-      console.log(texts2.commandFrequency);
+      console.log(texts.commandFrequency);
       const sorted = Object.entries(usage.commandFrequency).sort((a, b) => b[1] - a[1]);
       for (const [cmd, count] of sorted) {
-        console.log(texts2.commandCount.replace("{cmd}", cmd).replace("{count}", String(count)));
+        console.log(texts.commandCount.replace("{cmd}", cmd).replace("{count}", String(count)));
       }
     }
     if (usage.commonErrors.length > 0) {
       console.log("");
-      console.log(texts2.commonErrors);
+      console.log(texts.commonErrors);
       for (const err of usage.commonErrors.slice(0, 5)) {
-        console.log(texts2.errorEntry.replace("{count}", String(err.count)).replace("{message}", err.message));
+        console.log(texts.errorEntry.replace("{count}", String(err.count)).replace("{message}", err.message));
       }
     }
     console.log("");
     console.log("\u2501".repeat(SEPARATOR_WIDTH));
-    console.log("\u2705 " + texts2.bugReportGenerated);
-    console.log("\uD83D\uDCCE " + texts2.logArchive.replace("{path}", report.archivePath));
+    console.log("\u2705 " + texts.bugReportGenerated);
+    console.log("\uD83D\uDCCE " + texts.logArchive.replace("{path}", report.archivePath));
   } catch (err) {
     console.error("");
-    console.error("\u274C " + texts2.bugReportFailed.replace("{error}", err instanceof Error ? err.message : String(err)));
+    console.error("\u274C " + texts.bugReportFailed.replace("{error}", err instanceof Error ? err.message : String(err)));
     process.exit(1);
   }
 }
 async function runDoctorDeep(cwd2 = process.cwd()) {
-  const texts2 = t(cwd2).doctorCmd;
+  const texts = t(cwd2).doctorCmd;
   console.log("");
   console.log("\u2501".repeat(SEPARATOR_WIDTH));
-  console.log("\uD83D\uDD2C " + texts2.deepLogAnalysis);
+  console.log("\uD83D\uDD2C " + texts.deepLogAnalysis);
   console.log("\u2501".repeat(SEPARATOR_WIDTH));
   console.log("");
   await runDoctor(false, cwd2);
   console.log("");
   console.log("\u2501".repeat(SEPARATOR_WIDTH));
-  console.log("\uD83D\uDCCA " + texts2.deepLogAnalysis.replace(" (--deep)", ""));
+  console.log("\uD83D\uDCCA " + texts.deepLogAnalysis.replace(" (--deep)", ""));
   console.log("\u2501".repeat(SEPARATOR_WIDTH));
   console.log("");
   const collector = new LogCollector(cwd2);
   const stats = collector.getStats();
   if (stats.fileCount === 0) {
-    console.log("\u2139\uFE0F  " + texts2.noLogFilesFound);
-    console.log(texts2.logDirectory.replace("{path}", getLogsDir(cwd2)));
+    console.log("\u2139\uFE0F  " + texts.noLogFilesFound);
+    console.log(texts.logDirectory.replace("{path}", getLogsDir(cwd2)));
     return;
   }
-  console.log("\uD83D\uDCC2 " + texts2.logFilesCount.replace("{count}", String(stats.fileCount)).replace("{size}", String(stats.totalSizeKB)));
+  console.log("\uD83D\uDCC2 " + texts.logFilesCount.replace("{count}", String(stats.fileCount)).replace("{size}", String(stats.totalSizeKB)));
   const entries = collector.collectSince(24, { maxEntries: 1e4 });
-  console.log("\uD83D\uDCCB " + texts2.logEntriesCount.replace("{count}", String(entries.length)));
+  console.log("\uD83D\uDCCB " + texts.logEntriesCount.replace("{count}", String(entries.length)));
   console.log("");
   if (entries.length === 0) {
-    console.log("\u2139\uFE0F  " + texts2.noLogEntriesInLast24Hours);
+    console.log("\u2139\uFE0F  " + texts.noLogEntriesInLast24Hours);
     return;
   }
   const registry = new LogAnalyzerRegistry(cwd2);
   for (const analyzer of getBuiltInAnalyzers()) {
     registry.register(analyzer);
   }
-  console.log("\uD83D\uDD27 " + texts2.registeredAnalyzers.replace("{count}", String(registry.size)));
+  console.log("\uD83D\uDD27 " + texts.registeredAnalyzers.replace("{count}", String(registry.size)));
   for (const analyzer of registry.getAll()) {
-    console.log("   " + texts2.analyzerEntry.replace("{name}", analyzer.name).replace("{category}", analyzer.category).replace("{strategies}", analyzer.supportedStrategies.join(", ")));
+    console.log("   " + texts.analyzerEntry.replace("{name}", analyzer.name).replace("{category}", analyzer.category).replace("{strategies}", analyzer.supportedStrategies.join(", ")));
   }
   console.log("");
   const results = await registry.runAll(entries, "hybrid", { cwd: cwd2, enableAI: true });
@@ -31810,17 +31539,17 @@ async function runDoctorDeep(cwd2 = process.cwd()) {
   console.log(reporter.formatText(report));
   if (report.summary.totalFindings > 0) {
     console.log("\u2501".repeat(SEPARATOR_WIDTH));
-    console.log("\uD83D\uDCCA " + texts2.foundIssues.replace("{count}", String(report.summary.totalFindings)));
+    console.log("\uD83D\uDCCA " + texts.foundIssues.replace("{count}", String(report.summary.totalFindings)));
     const critical = report.summary.bySeverity["critical"] || 0;
     const errors = report.summary.bySeverity["error"] || 0;
     if (critical > 0) {
-      console.log("\uD83D\uDD34 " + texts2.criticalIssuesRequireAttention.replace("{count}", String(critical)));
+      console.log("\uD83D\uDD34 " + texts.criticalIssuesRequireAttention.replace("{count}", String(critical)));
     }
     if (errors > 0) {
-      console.log("\u274C " + texts2.errorsNeedAttention.replace("{count}", String(errors)));
+      console.log("\u274C " + texts.errorsNeedAttention.replace("{count}", String(errors)));
     }
   } else {
-    console.log("\u2705 " + texts2.deepAnalysisComplete);
+    console.log("\u2705 " + texts.deepAnalysisComplete);
   }
 }
 
@@ -32159,19 +31888,24 @@ class HarnessExecutor {
     report.status = "running";
     const effectiveTimeout = timeoutOverride ?? this.config.timeout;
     const timeoutMinutes = Math.round(effectiveTimeout / 60);
-    const texts2 = t(this.config.cwd);
-    console.log(`   ${texts2.harness.logs.taskLabel}: ${task.title}`);
-    console.log(`   ${texts2.harness.logs.typeLabel}: ${task.type}`);
-    console.log(`   ${texts2.harness.logs.priorityLabel}: ${task.priority}`);
-    console.log(`   ${texts2.harness.logs.timeoutLabel}: ${timeoutMinutes} ${texts2.harness.logs.minutes} (${effectiveTimeout} ${texts2.harness.logs.seconds})`);
+    let texts;
+    try {
+      texts = t(this.config.cwd);
+    } catch {
+      texts = getI18n("zh");
+    }
+    console.log(`   ${texts.harness.logs.taskLabel}: ${task.title}`);
+    console.log(`   ${texts.harness.logs.typeLabel}: ${task.type}`);
+    console.log(`   ${texts.harness.logs.priorityLabel}: ${task.priority}`);
+    console.log(`   ${texts.harness.logs.timeoutLabel}: ${timeoutMinutes} ${texts.harness.logs.minutes} (${effectiveTimeout} ${texts.harness.logs.seconds})`);
     try {
       const sprintContract = await this.buildOrLoadContract(task);
       Object.assign(contract, sprintContract);
       const prompt = this.buildDevPrompt(task, sprintContract, timeoutMinutes, retryContext);
       console.log(`
-   \uD83D\uDCDD ${texts2.harness.logs.devPromptGenerated}`);
+   \uD83D\uDCDD ${texts.harness.logs.devPromptGenerated}`);
       console.log(`
-   \uD83E\uDD16 ${texts2.harness.logs.startingHeadlessClaude}`);
+   \uD83E\uDD16 ${texts.harness.logs.startingHeadlessClaude}`);
       const agent = getAgent(this.config.cwd);
       const effectiveTools = buildEffectiveTools("development", this.config.cwd, task);
       const invokeOptions = {
@@ -32185,35 +31919,35 @@ class HarnessExecutor {
       const engine = createSessionAwareEngine("markdown", [], 1);
       const engineResult = await engine.runWithFeedback(agent.invoke.bind(agent), prompt, invokeOptions);
       if (engineResult.retries > 0) {
-        console.log(`   \uD83D\uDD04 ${texts2.harness.logs.devOutputFormatRetry.replace("{retries}", String(engineResult.retries))}`);
+        console.log(`   \uD83D\uDD04 ${texts.harness.logs.devOutputFormatRetry.replace("{retries}", String(engineResult.retries))}`);
       }
       report.claudeOutput = engineResult.result.output;
       report.duration = engineResult.result.durationMs;
       if (!engineResult.result.success) {
         report.status = engineResult.result.exitCode === 124 ? "timeout" : "failed";
-        report.error = engineResult.result.error || `${texts2.harness.logs.exitCode}: ${engineResult.result.exitCode}`;
+        report.error = engineResult.result.error || `${texts.harness.logs.exitCode}: ${engineResult.result.exitCode}`;
         console.log(`
-   \u274C ${texts2.harness.logs.devPhaseFailed}: ${report.error}`);
+   \u274C ${texts.harness.logs.devPhaseFailed}: ${report.error}`);
       } else if (!engineResult.passed) {
         const violationMessages = engineResult.violations.map((v) => `${v.ruleId}: ${v.message}`).join("; ");
         report.status = "failed";
-        report.error = `${texts2.harness.logs.devOutputValidationFailedError}: ${violationMessages}`;
+        report.error = `${texts.harness.logs.devOutputValidationFailedError}: ${violationMessages}`;
         console.log(`
-   \u274C ${texts2.harness.logs.devOutputValidationFailed}: ${violationMessages}`);
+   \u274C ${texts.harness.logs.devOutputValidationFailed}: ${violationMessages}`);
       } else {
         report.status = "success";
         console.log(`
-   \u2705 ${texts2.harness.logs.devPhaseCompleted}`);
+   \u2705 ${texts.harness.logs.devPhaseCompleted}`);
         report.evidence = await this.collectEvidence(task.id);
-        console.log(`   \uD83D\uDCCE ${texts2.harness.logs.evidenceCollected}: ${report.evidence.length}`);
+        console.log(`   \uD83D\uDCCE ${texts.harness.logs.evidenceCollected}: ${report.evidence.length}`);
         report.checkpointsCompleted = await this.checkCompletedCheckpoints(task, sprintContract);
-        console.log(`   \u2713 ${texts2.harness.logs.checkpointsCompleted}: ${report.checkpointsCompleted.length}/${sprintContract.checkpoints.length}`);
+        console.log(`   \u2713 ${texts.harness.logs.checkpointsCompleted}: ${report.checkpointsCompleted.length}/${sprintContract.checkpoints.length}`);
       }
     } catch (error) {
       report.status = "failed";
       report.error = error instanceof Error ? error.message : String(error);
       console.log(`
-   \u274C ${texts2.harness.logs.devPhaseError}: ${report.error}`);
+   \u274C ${texts.harness.logs.devPhaseError}: ${report.error}`);
     }
     const endTime = new Date;
     report.endTime = endTime.toISOString();
@@ -32259,30 +31993,35 @@ class HarnessExecutor {
     return criteria;
   }
   buildDevPrompt(task, contract, timeoutMinutes, retryContext) {
-    const texts2 = t(this.config.cwd);
+    let texts;
+    try {
+      texts = t(this.config.cwd);
+    } catch {
+      texts = getI18n("zh");
+    }
     const roleTemplate = getDevRoleTemplate(task.recommendedRole);
-    const timeoutHeader = timeoutMinutes ? `## ${texts2.harness.timeoutHeader}: ${timeoutMinutes} \u5206\u949F
+    const timeoutHeader = timeoutMinutes ? `## ${texts.harness.timeoutHeader}: ${timeoutMinutes} \u5206\u949F
 ` : "";
-    const descriptionSection = task.description ? `## ${texts2.harness.taskDescription}
+    const descriptionSection = task.description ? `## ${texts.harness.taskDescription}
 ${task.description}
 ` : "";
-    const dependenciesSection = task.dependencies && task.dependencies.length > 0 ? `## ${texts2.harness.dependencies}
+    const dependenciesSection = task.dependencies && task.dependencies.length > 0 ? `## ${texts.harness.dependencies}
 ${task.dependencies.map((dep) => `- ${dep}`).join(`
 `)}
 ` : "";
-    const acceptanceCriteriaSection = contract.acceptanceCriteria.length > 0 ? `## ${texts2.harness.acceptanceCriteria}
-${texts2.harness.acceptanceCriteriaInstruction}
+    const acceptanceCriteriaSection = contract.acceptanceCriteria.length > 0 ? `## ${texts.harness.acceptanceCriteria}
+${texts.harness.acceptanceCriteriaInstruction}
 ${contract.acceptanceCriteria.map((criteria, i) => `${i + 1}. ${criteria}`).join(`
 `)}
 ` : "";
-    const checkpointsSection = contract.checkpoints.length > 0 ? `## ${texts2.harness.checkpoints}
-${texts2.harness.checkpointsInstruction}
+    const checkpointsSection = contract.checkpoints.length > 0 ? `## ${texts.harness.checkpoints}
+${texts.harness.checkpointsInstruction}
 ${contract.checkpoints.map((cp, i) => `${i + 1}. ${cp}`).join(`
 `)}
 ` : "";
-    const timeoutInstruction = timeoutMinutes ? texts2.harness.timeoutInstruction.replace("{timeout}", String(timeoutMinutes)) + `
+    const timeoutInstruction = timeoutMinutes ? texts.harness.timeoutInstruction.replace("{timeout}", String(timeoutMinutes)) + `
 ` : "";
-    const extraInstructionsSection = roleTemplate.extraInstructions.length > 0 ? `## ${texts2.harness.roleSpecificRequirements}
+    const extraInstructionsSection = roleTemplate.extraInstructions.length > 0 ? `## ${texts.harness.roleSpecificRequirements}
 ${roleTemplate.extraInstructions.map((inst, i) => `${i + 1}. ${inst}`).join(`
 `)}
 ` : "";
@@ -32313,36 +32052,41 @@ ${roleTemplate.extraInstructions.map((inst, i) => `${i + 1}. ${inst}`).join(`
   }
   buildRetryContextSection(retryContext) {
     const parts = [];
-    const texts2 = t(this.config.cwd);
+    let texts;
+    try {
+      texts = t(this.config.cwd);
+    } catch {
+      texts = getI18n("zh");
+    }
     const phaseLabel = {
-      development: texts2.harness.phaseLabels.development,
-      code_review: texts2.harness.phaseLabels.codeReview,
-      qa: texts2.harness.phaseLabels.qa,
-      evaluation: texts2.harness.phaseLabels.evaluation
+      development: texts.harness.phaseLabels.development,
+      code_review: texts.harness.phaseLabels.codeReview,
+      qa: texts.harness.phaseLabels.qa,
+      evaluation: texts.harness.phaseLabels.evaluation
     };
-    parts.push(`## ${texts2.harness.retryContext}`);
+    parts.push(`## ${texts.harness.retryContext}`);
     parts.push("");
     const phaseName = phaseLabel[retryContext.previousPhase || ""] || retryContext.previousPhase;
-    parts.push(texts2.harness.retryAttemptInfo.replace("{attempt}", String(retryContext.attemptNumber)).replace("{phase}", phaseName));
+    parts.push(texts.harness.retryAttemptInfo.replace("{attempt}", String(retryContext.attemptNumber)).replace("{phase}", phaseName));
     parts.push("");
-    parts.push(`**${texts2.harness.previousFailureReason}:**`);
+    parts.push(`**${texts.harness.previousFailureReason}:**`);
     parts.push(`> ${retryContext.previousFailureReason}`);
     parts.push("");
     if (retryContext.partialProgress?.completedCheckpoints?.length) {
-      parts.push(`**${texts2.harness.partialProgress}:**`);
+      parts.push(`**${texts.harness.partialProgress}:**`);
       for (const cp of retryContext.partialProgress.completedCheckpoints) {
         parts.push(`- \u2705 ${cp}`);
       }
       parts.push("");
     }
     if (retryContext.upstreamFailureInfo) {
-      parts.push(`**${texts2.harness.upstreamFailureInfo}:**`);
-      parts.push(`- ${texts2.harness.logs.upstreamTask}: ${retryContext.upstreamFailureInfo.taskId}`);
-      parts.push(`- ${texts2.harness.previousFailureReason}: ${retryContext.upstreamFailureInfo.reason}`);
-      parts.push(`- ${texts2.harness.logs.failureTime}: ${retryContext.upstreamFailureInfo.failedAt}`);
+      parts.push(`**${texts.harness.upstreamFailureInfo}:**`);
+      parts.push(`- ${texts.harness.logs.upstreamTask}: ${retryContext.upstreamFailureInfo.taskId}`);
+      parts.push(`- ${texts.harness.previousFailureReason}: ${retryContext.upstreamFailureInfo.reason}`);
+      parts.push(`- ${texts.harness.logs.failureTime}: ${retryContext.upstreamFailureInfo.failedAt}`);
       parts.push("");
     }
-    parts.push(texts2.harness.logs.retryReferenceNote);
+    parts.push(texts.harness.logs.retryReferenceNote);
     parts.push("");
     return parts.join(`
 `);
@@ -32407,46 +32151,51 @@ ${roleTemplate.extraInstructions.map((inst, i) => `${i + 1}. ${inst}`).join(`
     fs23.writeFileSync(reportPath, content, "utf-8");
   }
   formatDevReport(report) {
-    const texts2 = t(this.config.cwd);
+    let texts;
+    try {
+      texts = t(this.config.cwd);
+    } catch {
+      texts = getI18n("zh");
+    }
     const lines = [
-      `# ${texts2.harness.reports.devReportTitle} - ${report.taskId}`,
+      `# ${texts.harness.reports.devReportTitle} - ${report.taskId}`,
       "",
-      `**${texts2.harness.reports.statusLabel}**: ${report.status}`,
-      `**${texts2.harness.reports.startTimeLabel}**: ${report.startTime}`,
-      `**${texts2.harness.reports.endTimeLabel}**: ${report.endTime}`,
-      `**${texts2.harness.reports.durationLabel}**: ${(report.duration / 1000).toFixed(1)}s`,
+      `**${texts.harness.reports.statusLabel}**: ${report.status}`,
+      `**${texts.harness.reports.startTimeLabel}**: ${report.startTime}`,
+      `**${texts.harness.reports.endTimeLabel}**: ${report.endTime}`,
+      `**${texts.harness.reports.durationLabel}**: ${(report.duration / 1000).toFixed(1)}s`,
       ""
     ];
     if (report.error) {
-      lines.push(`## ${texts2.harness.reports.errorInfoSection}`);
+      lines.push(`## ${texts.harness.reports.errorInfoSection}`);
       lines.push("```");
       lines.push(report.error);
       lines.push("```");
       lines.push("");
     }
     if (report.changes.length > 0) {
-      lines.push(`## ${texts2.harness.reports.codeChangesSection}`);
+      lines.push(`## ${texts.harness.reports.codeChangesSection}`);
       report.changes.forEach((change) => {
         lines.push(`- ${change}`);
       });
       lines.push("");
     }
     if (report.evidence.length > 0) {
-      lines.push(`## ${texts2.harness.reports.evidenceFilesSection}`);
+      lines.push(`## ${texts.harness.reports.evidenceFilesSection}`);
       report.evidence.forEach((evidence) => {
         lines.push(`- ${evidence}`);
       });
       lines.push("");
     }
     if (report.checkpointsCompleted.length > 0) {
-      lines.push(`## ${texts2.harness.reports.completedCheckpointsSection}`);
+      lines.push(`## ${texts.harness.reports.completedCheckpointsSection}`);
       report.checkpointsCompleted.forEach((cp) => {
         lines.push(`- ${cp}`);
       });
       lines.push("");
     }
     if (report.claudeOutput) {
-      lines.push(`## ${texts2.harness.reports.claudeOutputSection}`);
+      lines.push(`## ${texts.harness.reports.claudeOutputSection}`);
       lines.push("```");
       lines.push(report.claudeOutput.substring(0, 5000));
       lines.push("```");
@@ -32617,10 +32366,15 @@ class HarnessCodeReviewer {
     this.config = config;
   }
   async review(task, devReport, retryContext) {
-    const texts2 = t(this.config.cwd);
+    let texts;
+    try {
+      texts = t(this.config.cwd);
+    } catch {
+      texts = getI18n("zh");
+    }
     console.log(`
-\uD83D\uDD0D ${texts2.harness.logs.codeReviewPhase}`);
-    console.log(`   ${texts2.harness.logs.taskLabel}: ${task.title}`);
+\uD83D\uDD0D ${texts.harness.logs.codeReviewPhase}`);
+    console.log(`   ${texts.harness.logs.taskLabel}: ${task.title}`);
     const verdict = {
       taskId: task.id,
       result: "PASS",
@@ -32632,7 +32386,7 @@ class HarnessCodeReviewer {
     };
     if (devReport.status !== "success") {
       verdict.result = "NOPASS";
-      verdict.reason = `${texts2.harness.logs.devPhaseNotComplete}: ${devReport.status}`;
+      verdict.reason = `${texts.harness.logs.devPhaseNotComplete}: ${devReport.status}`;
       if (devReport.error) {
         verdict.reason += ` - ${devReport.error}`;
       }
@@ -32641,11 +32395,11 @@ class HarnessCodeReviewer {
     }
     try {
       const codeReviewCheckpoints = this.getCodeReviewCheckpoints(task);
-      console.log(`   \uD83D\uDCCB ${texts2.harness.logs.codeReviewCheckpoints}: ${codeReviewCheckpoints.length}`);
+      console.log(`   \uD83D\uDCCB ${texts.harness.logs.codeReviewCheckpoints}: ${codeReviewCheckpoints.length}`);
       if (codeReviewCheckpoints.length === 0) {
         verdict.result = "PASS";
-        verdict.reason = texts2.harness.logs.noCodeReviewCheckpoints;
-        console.log(`   \u2705 ${texts2.harness.logs.noCodeReviewCheckpoints}`);
+        verdict.reason = texts.harness.logs.noCodeReviewCheckpoints;
+        console.log(`   \u2705 ${texts.harness.logs.noCodeReviewCheckpoints}`);
       } else {
         const reviewResult = await this.runCodeReview(task, devReport, codeReviewCheckpoints, retryContext);
         verdict.result = reviewResult.passed ? "PASS" : "NOPASS";
@@ -32655,23 +32409,23 @@ class HarnessCodeReviewer {
         verdict.details = reviewResult.details;
         const contradiction = detectContradiction(verdict.result, verdict.reason || "");
         if (contradiction.hasContradiction && contradiction.correctedResult) {
-          console.log(`   \u26A0\uFE0F  ${texts2.harness.logs.contradictionDetected}: ${contradiction.reason}`);
+          console.log(`   \u26A0\uFE0F  ${texts.harness.logs.contradictionDetected}: ${contradiction.reason}`);
           verdict.result = contradiction.correctedResult;
-          verdict.reason += ` [${texts2.harness.logs.contradictionDetected}: ${contradiction.reason}]`;
+          verdict.reason += ` [${texts.harness.logs.contradictionDetected}: ${contradiction.reason}]`;
         }
         if (verdict.result === "PASS") {
           console.log(`
-   \u2705 ${texts2.harness.logs.codeReviewPassed}`);
+   \u2705 ${texts.harness.logs.codeReviewPassed}`);
         } else {
           console.log(`
-   \u274C ${texts2.harness.logs.codeReviewFailed}: ${verdict.reason}`);
+   \u274C ${texts.harness.logs.codeReviewFailed}: ${verdict.reason}`);
         }
       }
     } catch (error) {
       verdict.result = "NOPASS";
-      verdict.reason = `${texts2.harness.logs.codeReviewError}: ${error instanceof Error ? error.message : String(error)}`;
+      verdict.reason = `${texts.harness.logs.codeReviewError}: ${error instanceof Error ? error.message : String(error)}`;
       console.log(`
-   \u274C ${texts2.harness.logs.codeReviewError}: ${verdict.reason}`);
+   \u274C ${texts.harness.logs.codeReviewError}: ${verdict.reason}`);
     }
     await this.saveReport(task.id, verdict);
     return verdict;
@@ -32680,12 +32434,17 @@ class HarnessCodeReviewer {
     return filterCheckpoints(task, (cp) => cp.category === "code_review" || cp.verification?.method === "code_review" || cp.verification?.method === "lint" || cp.verification?.method === "architect_review");
   }
   async runCodeReview(task, devReport, checkpoints, retryContext) {
-    const texts2 = t(this.config.cwd);
+    let texts;
+    try {
+      texts = t(this.config.cwd);
+    } catch {
+      texts = getI18n("zh");
+    }
     const prompt = this.buildCodeReviewPrompt(task, devReport, checkpoints, retryContext);
     console.log(`
-   \uD83D\uDCDD ${texts2.harness.logs.codeReviewPromptGenerated}`);
+   \uD83D\uDCDD ${texts.harness.logs.codeReviewPromptGenerated}`);
     console.log(`
-   \uD83E\uDD16 ${texts2.harness.logs.startingCodeReviewSession}`);
+   \uD83E\uDD16 ${texts.harness.logs.startingCodeReviewSession}`);
     const agent = getAgent(this.config.cwd);
     const effectiveTools = buildEffectiveTools("codeReview", this.config.cwd, task);
     const invokeOptions = {
@@ -32699,12 +32458,12 @@ class HarnessCodeReviewer {
     const engine = createSessionAwareEngine("markdown", [verdictResultMarker, verdictHasReason], 1);
     const engineResult = await engine.runWithFeedback(agent.invoke.bind(agent), prompt, invokeOptions);
     if (engineResult.retries > 0) {
-      console.log(`   \uD83D\uDD04 ${texts2.harness.logs.codeReviewRetry.replace("{retries}", String(engineResult.retries))}`);
+      console.log(`   \uD83D\uDD04 ${texts.harness.logs.codeReviewRetry.replace("{retries}", String(engineResult.retries))}`);
     }
     if (!engineResult.result.success) {
       return {
         passed: false,
-        reason: `${texts2.harness.logs.codeReviewSessionFailed}: ${engineResult.result.error || "unknown error"}`,
+        reason: `${texts.harness.logs.codeReviewSessionFailed}: ${engineResult.result.error || "unknown error"}`,
         issues: [],
         failedCheckpoints: []
       };
@@ -32712,6 +32471,12 @@ class HarnessCodeReviewer {
     return this.parseCodeReviewResult(engineResult.result.output || "");
   }
   buildCodeReviewPrompt(task, devReport, checkpoints, retryContext) {
+    let texts;
+    try {
+      texts = t(this.config.cwd);
+    } catch {
+      texts = getI18n("zh");
+    }
     const roleTemplate = getCodeReviewRoleTemplate(task.recommendedRole);
     const retryContextSection = retryContext?.previousFailureReason ? `## ${texts.harness.logs.previousReviewFailureReason}
 
@@ -32776,34 +32541,39 @@ ${devReport.evidence.map((evidence) => `- ${evidence}`).join(`
     await saveReport(reportPath, content);
   }
   formatReport(verdict) {
-    const texts2 = t(this.config.cwd);
+    let texts;
+    try {
+      texts = t(this.config.cwd);
+    } catch {
+      texts = getI18n("zh");
+    }
     const lines = [
-      `# ${texts2.harness.reports.codeReviewReportTitle} - ${verdict.taskId}`,
+      `# ${texts.harness.reports.codeReviewReportTitle} - ${verdict.taskId}`,
       "",
-      `**${texts2.harness.reports.resultLabel}**: ${verdict.result === "PASS" ? "\u2705 PASS" : "\u274C NOPASS"}`,
-      `**${texts2.harness.reports.reviewedAtLabel}**: ${verdict.reviewedAt}`,
-      `**${texts2.harness.reports.reviewedByLabel}**: ${verdict.reviewedBy}`,
+      `**${texts.harness.reports.resultLabel}**: ${verdict.result === "PASS" ? "\u2705 PASS" : "\u274C NOPASS"}`,
+      `**${texts.harness.reports.reviewedAtLabel}**: ${verdict.reviewedAt}`,
+      `**${texts.harness.reports.reviewedByLabel}**: ${verdict.reviewedBy}`,
       "",
-      `## ${texts2.harness.reports.reasonSection}`,
+      `## ${texts.harness.reports.reasonSection}`,
       verdict.reason,
       ""
     ];
     if (verdict.codeQualityIssues.length > 0) {
-      lines.push(`## ${texts2.harness.reports.codeQualityIssuesSection}`);
+      lines.push(`## ${texts.harness.reports.codeQualityIssuesSection}`);
       verdict.codeQualityIssues.forEach((issue) => {
         lines.push(`- ${issue}`);
       });
       lines.push("");
     }
     if (verdict.failedCheckpoints.length > 0) {
-      lines.push(`## ${texts2.harness.reports.failedCheckpointsSection}`);
+      lines.push(`## ${texts.harness.reports.failedCheckpointsSection}`);
       verdict.failedCheckpoints.forEach((checkpoint) => {
         lines.push(`- ${checkpoint}`);
       });
       lines.push("");
     }
     if (verdict.details) {
-      lines.push(`## ${texts2.harness.reports.detailsSection}`);
+      lines.push(`## ${texts.harness.reports.detailsSection}`);
       lines.push(verdict.details);
       lines.push("");
     }
@@ -32826,10 +32596,15 @@ class HarnessQATester {
     this.config = config;
   }
   async verify(task, codeReviewVerdict, retryContext) {
-    const texts2 = t(this.config.cwd);
+    let texts;
+    try {
+      texts = t(this.config.cwd);
+    } catch {
+      texts = getI18n("zh");
+    }
     console.log(`
-\uD83E\uDDEA ${texts2.harness.logs.qaPhase}`);
-    console.log(`   ${texts2.harness.logs.taskLabel}: ${task.title}`);
+\uD83E\uDDEA ${texts.harness.logs.qaPhase}`);
+    console.log(`   ${texts.harness.logs.taskLabel}: ${task.title}`);
     const verdict = {
       taskId: task.id,
       result: "PASS",
@@ -32843,17 +32618,17 @@ class HarnessQATester {
     };
     if (codeReviewVerdict.result !== "PASS") {
       verdict.result = "NOPASS";
-      verdict.reason = `${texts2.harness.logs.qaSkippedDueToCodeReview}: ${codeReviewVerdict.reason}`;
+      verdict.reason = `${texts.harness.logs.qaSkippedDueToCodeReview}: ${codeReviewVerdict.reason}`;
       await this.saveReport(task.id, verdict);
       return verdict;
     }
     try {
       const qaCheckpoints = this.getQACheckpoints(task);
-      console.log(`   \uD83D\uDCCB ${texts2.harness.logs.qaCheckpoints}: ${qaCheckpoints.length}`);
+      console.log(`   \uD83D\uDCCB ${texts.harness.logs.qaCheckpoints}: ${qaCheckpoints.length}`);
       if (qaCheckpoints.length === 0) {
         verdict.result = "PASS";
-        verdict.reason = texts2.harness.logs.noQACheckpoints;
-        console.log(`   \u2705 ${texts2.harness.logs.noQACheckpoints}`);
+        verdict.reason = texts.harness.logs.noQACheckpoints;
+        console.log(`   \u2705 ${texts.harness.logs.noQACheckpoints}`);
       } else {
         const humanCheckpoints = qaCheckpoints.filter((cp) => cp.requiresHuman === true);
         verdict.humanVerificationCheckpoints = humanCheckpoints.map((cp) => cp.id);
@@ -32865,13 +32640,13 @@ class HarnessQATester {
         verdict.details = qaResult.details;
         const contradiction = detectContradiction(verdict.result, verdict.reason || "");
         if (contradiction.hasContradiction && contradiction.correctedResult) {
-          console.log(`   \u26A0\uFE0F  ${texts2.harness.logs.contradictionDetected}: ${contradiction.reason}`);
+          console.log(`   \u26A0\uFE0F  ${texts.harness.logs.contradictionDetected}: ${contradiction.reason}`);
           verdict.result = contradiction.correctedResult;
-          verdict.reason += ` [${texts2.harness.logs.contradictionDetected}: ${contradiction.reason}]`;
+          verdict.reason += ` [${texts.harness.logs.contradictionDetected}: ${contradiction.reason}]`;
         }
         if (humanCheckpoints.length > 0) {
           verdict.requiresHuman = true;
-          const deferredInfo = `${texts2.harness.logs.deferredCheckpointsInfo.replace("{count}", String(humanCheckpoints.length))}: ${humanCheckpoints.map((cp) => cp.id).join(", ")}`;
+          const deferredInfo = `${texts.harness.logs.deferredCheckpointsInfo.replace("{count}", String(humanCheckpoints.length))}: ${humanCheckpoints.map((cp) => cp.id).join(", ")}`;
           verdict.details = verdict.details ? `${verdict.details}
 ${deferredInfo}` : deferredInfo;
           console.log(`
@@ -32879,20 +32654,20 @@ ${deferredInfo}` : deferredInfo;
         }
         if (verdict.result === "PASS" && !verdict.requiresHuman) {
           console.log(`
-   \u2705 ${texts2.harness.logs.qaPassed}`);
+   \u2705 ${texts.harness.logs.qaPassed}`);
         } else if (verdict.result === "PASS" && verdict.requiresHuman) {
           console.log(`
-   \u23F3 ${texts2.harness.logs.qaPassedWithHuman}`);
+   \u23F3 ${texts.harness.logs.qaPassedWithHuman}`);
         } else {
           console.log(`
-   \u274C ${texts2.harness.logs.qaFailed}: ${verdict.reason}`);
+   \u274C ${texts.harness.logs.qaFailed}: ${verdict.reason}`);
         }
       }
     } catch (error) {
       verdict.result = "NOPASS";
-      verdict.reason = `${texts2.harness.logs.qaError}: ${error instanceof Error ? error.message : String(error)}`;
+      verdict.reason = `${texts.harness.logs.qaError}: ${error instanceof Error ? error.message : String(error)}`;
       console.log(`
-   \u274C ${texts2.harness.logs.qaError}: ${verdict.reason}`);
+   \u274C ${texts.harness.logs.qaError}: ${verdict.reason}`);
     }
     await this.saveReport(task.id, verdict);
     return verdict;
@@ -32901,7 +32676,12 @@ ${deferredInfo}` : deferredInfo;
     return filterCheckpoints(task, (cp) => cp.category === "qa_verification" || cp.verification?.method === "unit_test" || cp.verification?.method === "functional_test" || cp.verification?.method === "integration_test" || cp.verification?.method === "e2e_test" || cp.verification?.method === "automated" || cp.requiresHuman === true);
   }
   async runQAVerification(task, codeReviewVerdict, checkpoints, retryContext) {
-    const texts2 = t(this.config.cwd);
+    let texts;
+    try {
+      texts = t(this.config.cwd);
+    } catch {
+      texts = getI18n("zh");
+    }
     const automatedCheckpoints = checkpoints.filter((cp) => !cp.requiresHuman);
     const humanCheckpoints = checkpoints.filter((cp) => cp.requiresHuman === true);
     const checkpointsWithoutCommands = automatedCheckpoints.filter((cp) => {
@@ -32910,26 +32690,26 @@ ${deferredInfo}` : deferredInfo;
     });
     if (checkpointsWithoutCommands.length > 0) {
       console.log(`
-   \u26A0\uFE0F  ${texts2.harness.logs.checkpointWarning.replace("{count}", String(checkpointsWithoutCommands.length))}:`);
+   \u26A0\uFE0F  ${texts.harness.logs.checkpointWarning.replace("{count}", String(checkpointsWithoutCommands.length))}:`);
       for (const cp of checkpointsWithoutCommands) {
         const result = validateCheckpointVerification(cp);
-        console.log(`      - [${cp.id}] ${result.warning || texts2.harness.logs.checkpointWarningDetail}`);
+        console.log(`      - [${cp.id}] ${result.warning || texts.harness.logs.checkpointWarningDetail}`);
       }
-      console.log(`      ${texts2.harness.logs.checkpointWarningFallback}`);
+      console.log(`      ${texts.harness.logs.checkpointWarningFallback}`);
     }
     if (automatedCheckpoints.length === 0) {
       return {
         passed: true,
-        reason: texts2.harness.logs.noAutomatedQACheckpoints,
+        reason: texts.harness.logs.noAutomatedQACheckpoints,
         failures: [],
         failedCheckpoints: []
       };
     }
     const prompt = this.buildQAPrompt(task, codeReviewVerdict, automatedCheckpoints, retryContext);
     console.log(`
-   \uD83D\uDCDD ${texts2.harness.logs.qaPromptGenerated}`);
+   \uD83D\uDCDD ${texts.harness.logs.qaPromptGenerated}`);
     console.log(`
-   \uD83E\uDD16 ${texts2.harness.logs.startingQASession}`);
+   \uD83E\uDD16 ${texts.harness.logs.startingQASession}`);
     const agent = getAgent(this.config.cwd);
     const effectiveTools = buildEffectiveTools("qaVerification", this.config.cwd, task);
     const invokeOptions = {
@@ -32943,27 +32723,27 @@ ${deferredInfo}` : deferredInfo;
     const engine = createSessionAwareEngine("markdown", [qaVerdictResultMarker, qaVerdictHasReason], 1);
     const engineResult = await engine.runWithFeedback(agent.invoke.bind(agent), prompt, invokeOptions);
     if (engineResult.retries > 0) {
-      console.log(`   \uD83D\uDD04 ${texts2.harness.logs.qaRetry.replace("{retries}", String(engineResult.retries))}`);
+      console.log(`   \uD83D\uDD04 ${texts.harness.logs.qaRetry.replace("{retries}", String(engineResult.retries))}`);
     }
     if (!engineResult.result.success) {
       return {
         passed: false,
-        reason: `${texts2.harness.logs.qaSessionFailed}: ${engineResult.result.error || "unknown error"}`,
+        reason: `${texts.harness.logs.qaSessionFailed}: ${engineResult.result.error || "unknown error"}`,
         failures: [],
         failedCheckpoints: []
       };
     }
     if (!engineResult.passed) {
       const violationMessages = engineResult.violations.map((v) => `${v.ruleId}: ${v.message}`).join("; ");
-      console.log(`   \u26A0\uFE0F  ${texts2.harness.logs.qaOutputValidationFailed}: ${violationMessages}`);
+      console.log(`   \u26A0\uFE0F  ${texts.harness.logs.qaOutputValidationFailed}: ${violationMessages}`);
       const rawOutput = engineResult.result.output || "";
       const parsed = this.parseQAResult(rawOutput);
-      if (parsed.reason && parsed.reason !== texts2.harness.logs.cannotParseVerdict) {
+      if (parsed.reason && parsed.reason !== texts.harness.logs.cannotParseVerdict) {
         return parsed;
       }
       return {
         passed: false,
-        reason: `${texts2.harness.logs.qaOutputValidationFailed}: ${violationMessages}`,
+        reason: `${texts.harness.logs.qaOutputValidationFailed}: ${violationMessages}`,
         failures: [],
         failedCheckpoints: []
       };
@@ -32971,6 +32751,12 @@ ${deferredInfo}` : deferredInfo;
     return this.parseQAResult(engineResult.result.output || "");
   }
   buildQAPrompt(task, codeReviewVerdict, checkpoints, retryContext) {
+    let texts;
+    try {
+      texts = t(this.config.cwd);
+    } catch {
+      texts = getI18n("zh");
+    }
     const roleTemplate = getQARoleTemplate(task.recommendedRole);
     let retryContextSection = "";
     if (retryContext?.previousFailureReason) {
@@ -33056,43 +32842,48 @@ ${task.description}` : "";
     await saveReport(reportPath, content);
   }
   formatReport(verdict) {
-    const texts2 = t(this.config.cwd);
+    let texts;
+    try {
+      texts = t(this.config.cwd);
+    } catch {
+      texts = getI18n("zh");
+    }
     const lines = [
-      `# ${texts2.harness.reports.qaReportTitle} - ${verdict.taskId}`,
+      `# ${texts.harness.reports.qaReportTitle} - ${verdict.taskId}`,
       "",
-      `**${texts2.harness.reports.resultLabel}**: ${verdict.result === "PASS" ? "\u2705 PASS" : "\u274C NOPASS"}`,
-      `**${texts2.harness.reports.reviewedAtLabel}**: ${verdict.verifiedAt}`,
-      `**${texts2.harness.reports.reviewedByLabel}**: ${verdict.verifiedBy}`,
-      `**${texts2.harness.reports.requiresHumanLabel}**: ${verdict.requiresHuman ? texts2.harness.reports.yes : texts2.harness.reports.no}`,
+      `**${texts.harness.reports.resultLabel}**: ${verdict.result === "PASS" ? "\u2705 PASS" : "\u274C NOPASS"}`,
+      `**${texts.harness.reports.reviewedAtLabel}**: ${verdict.verifiedAt}`,
+      `**${texts.harness.reports.reviewedByLabel}**: ${verdict.verifiedBy}`,
+      `**${texts.harness.reports.requiresHumanLabel}**: ${verdict.requiresHuman ? texts.harness.reports.yes : texts.harness.reports.no}`,
       "",
-      `## ${texts2.harness.reports.reasonSection}`,
+      `## ${texts.harness.reports.reasonSection}`,
       verdict.reason,
       ""
     ];
     if (verdict.testFailures.length > 0) {
-      lines.push(`## ${texts2.harness.reports.testFailuresSection}`);
+      lines.push(`## ${texts.harness.reports.testFailuresSection}`);
       verdict.testFailures.forEach((failure) => {
         lines.push(`- ${failure}`);
       });
       lines.push("");
     }
     if (verdict.failedCheckpoints.length > 0) {
-      lines.push(`## ${texts2.harness.reports.failedCheckpointsSection}`);
+      lines.push(`## ${texts.harness.reports.failedCheckpointsSection}`);
       verdict.failedCheckpoints.forEach((checkpoint) => {
         lines.push(`- ${checkpoint}`);
       });
       lines.push("");
     }
     if (verdict.humanVerificationCheckpoints.length > 0) {
-      lines.push(`## ${texts2.harness.reports.humanVerificationSection}`);
-      lines.push(`*${texts2.harness.reports.humanVerificationNote}*`);
+      lines.push(`## ${texts.harness.reports.humanVerificationSection}`);
+      lines.push(`*${texts.harness.reports.humanVerificationNote}*`);
       verdict.humanVerificationCheckpoints.forEach((checkpoint) => {
         lines.push(`- ${checkpoint} [deferred]`);
       });
       lines.push("");
     }
     if (verdict.details) {
-      lines.push(`## ${texts2.harness.reports.detailsSection}`);
+      lines.push(`## ${texts.harness.reports.detailsSection}`);
       lines.push(verdict.details);
       lines.push("");
     }
@@ -33119,9 +32910,14 @@ class HarnessEvaluator {
     this.config = config;
   }
   async evaluate(task, devReport, contract, retryContext) {
-    const texts2 = t(this.config.cwd);
-    console.log(`   ${texts2.harness.logs.evalTaskLabel}: ${task.title}`);
-    console.log(`   ${texts2.harness.logs.devStatusLabel}: ${devReport.status}`);
+    let texts;
+    try {
+      texts = t(this.config.cwd);
+    } catch {
+      texts = getI18n("zh");
+    }
+    console.log(`   ${texts.harness.logs.evalTaskLabel}: ${task.title}`);
+    console.log(`   ${texts.harness.logs.devStatusLabel}: ${devReport.status}`);
     const verdict = {
       taskId: task.id,
       result: "NOPASS",
@@ -33133,7 +32929,7 @@ class HarnessEvaluator {
     };
     if (devReport.status !== "success") {
       verdict.result = "NOPASS";
-      verdict.reason = `${texts2.harness.logs.devPhaseNotComplete}: ${devReport.status}`;
+      verdict.reason = `${texts.harness.logs.devPhaseNotComplete}: ${devReport.status}`;
       verdict.inferenceType = "explicit_match";
       if (devReport.error) {
         verdict.reason += ` - ${devReport.error}`;
@@ -33154,19 +32950,19 @@ class HarnessEvaluator {
       const phantomTasks = this.detectPhantomTasks(task.id, devReport);
       if (phantomTasks.length > 0) {
         verdict.result = "NOPASS";
-        verdict.reason = `${texts2.harness.logs.phantomTaskViolation.replace("{count}", String(phantomTasks.length)).replace("{tasks}", phantomTasks.join(", "))}`;
-        verdict.failedCriteria = [texts2.harness.logs.phantomTaskCriteria];
-        verdict.failedCheckpoints = phantomTasks.map((tid) => `${texts2.harness.logs.phantomTaskPrefix}: ${tid}`);
-        verdict.details = texts2.harness.logs.phantomTaskDetails;
+        verdict.reason = `${texts.harness.logs.phantomTaskViolation.replace("{count}", String(phantomTasks.length)).replace("{tasks}", phantomTasks.join(", "))}`;
+        verdict.failedCriteria = [texts.harness.logs.phantomTaskCriteria];
+        verdict.failedCheckpoints = phantomTasks.map((tid) => `${texts.harness.logs.phantomTaskPrefix}: ${tid}`);
+        verdict.details = texts.harness.logs.phantomTaskDetails;
         verdict.inferenceType = "explicit_match";
         console.log(`
-   \u274C ${texts2.harness.logs.phantomTaskAutoNopass}`);
+   \u274C ${texts.harness.logs.phantomTaskAutoNopass}`);
         await this.saveReviewReport(task.id, verdict, devReport);
         return verdict;
       }
       const prompt = this.buildEvaluationPrompt(task, devReport, contract, phantomTasks, retryContext);
       console.log(`
-   \uD83D\uDCDD ${texts2.harness.logs.evalPromptGenerated}`);
+   \uD83D\uDCDD ${texts.harness.logs.evalPromptGenerated}`);
       const agent = getAgent(this.config.cwd);
       const effectiveTools = buildEffectiveTools("evaluation", this.config.cwd, task);
       const invokeOptions = {
@@ -33178,33 +32974,33 @@ class HarnessEvaluator {
         dangerouslySkipPermissions: effectiveTools.skipPermissions
       };
       console.log(`
-   \uD83D\uDD0D ${texts2.harness.logs.startingEvalSession}`);
+   \uD83D\uDD0D ${texts.harness.logs.startingEvalSession}`);
       const engine = createSessionAwareEngine("markdown", [verdictResultMarker, verdictHasReason], 2);
       const engineResult = await engine.runWithFeedback(agent.invoke.bind(agent), prompt, invokeOptions);
       if (engineResult.retries > 0) {
-        console.log(`   \uD83D\uDD04 ${texts2.harness.logs.evalFormatRetry.replace("{retries}", String(engineResult.retries))}`);
+        console.log(`   \uD83D\uDD04 ${texts.harness.logs.evalFormatRetry.replace("{retries}", String(engineResult.retries))}`);
       }
       const lastRawOutput = engineResult.result.output ?? "";
       this.saveRawEvaluationOutput(task.id, engineResult.result.output, engineResult.result.stderr || "", engineResult.result.success);
       if (!engineResult.result.output || engineResult.result.output.trim().length === 0) {
         verdict.result = "NOPASS";
-        verdict.reason = `${texts2.harness.logs.emptyOutputError}${engineResult.result.stderr ? ` (stderr: ${engineResult.result.stderr.substring(0, 200)})` : ""}`;
+        verdict.reason = `${texts.harness.logs.emptyOutputError}${engineResult.result.stderr ? ` (stderr: ${engineResult.result.stderr.substring(0, 200)})` : ""}`;
         verdict.inferenceType = "empty_output";
         console.log(`
-   \u274C ${texts2.harness.logs.evalEmptyOutput}`);
+   \u274C ${texts.harness.logs.evalEmptyOutput}`);
         if (engineResult.result.stderr) {
-          console.log(`   \uD83D\uDCDD ${texts2.harness.logs.evalStderrPrefix}: ${engineResult.result.stderr.substring(0, 300)}`);
+          console.log(`   \uD83D\uDCDD ${texts.harness.logs.evalStderrPrefix}: ${engineResult.result.stderr.substring(0, 300)}`);
         }
         await this.saveReviewReport(task.id, verdict, devReport);
         return verdict;
       }
       let evaluation = this.parseEvaluationResult(engineResult.result.output);
       if (evaluation.inferenceType === "parse_failure_default") {
-        console.log(`   \u26A0\uFE0F ${texts2.harness.logs.evalParseFailureDefault}`);
+        console.log(`   \u26A0\uFE0F ${texts.harness.logs.evalParseFailureDefault}`);
         evaluation = {
           ...evaluation,
           passed: true,
-          reason: texts2.harness.logs.evalParseFailureDefaultReason.replace("{retries}", String(engineResult.retries))
+          reason: texts.harness.logs.evalParseFailureDefaultReason.replace("{retries}", String(engineResult.retries))
         };
       }
       verdict.result = evaluation.passed ? "PASS" : "NOPASS";
@@ -33217,29 +33013,34 @@ class HarnessEvaluator {
       verdict.inferenceType = evaluation.inferenceType;
       const contradiction = detectContradiction(verdict.result, lastRawOutput || verdict.reason || "");
       if (contradiction.hasContradiction && contradiction.correctedResult) {
-        console.log(`   \u26A0\uFE0F  ${texts2.harness.logs.contradictionDetected}: ${contradiction.reason}`);
+        console.log(`   \u26A0\uFE0F  ${texts.harness.logs.contradictionDetected}: ${contradiction.reason}`);
         verdict.result = contradiction.correctedResult;
-        verdict.reason += ` [${texts2.harness.logs.contradictionFix}: ${contradiction.reason}]`;
+        verdict.reason += ` [${texts.harness.logs.contradictionFix}: ${contradiction.reason}]`;
       }
       if (verdict.result === "PASS") {
         console.log(`
-   \u2705 ${texts2.harness.logs.evalPassed} [${texts2.harness.reports.inferenceTypeLabel}: ${verdict.inferenceType || "unknown"}]`);
+   \u2705 ${texts.harness.logs.evalPassed} [${texts.harness.reports.inferenceTypeLabel}: ${verdict.inferenceType || "unknown"}]`);
       } else {
         console.log(`
-   \u274C ${texts2.harness.logs.evalFailed} [${texts2.harness.reports.inferenceTypeLabel}: ${verdict.inferenceType || "unknown"}]: ${verdict.reason}`);
+   \u274C ${texts.harness.logs.evalFailed} [${texts.harness.reports.inferenceTypeLabel}: ${verdict.inferenceType || "unknown"}]: ${verdict.reason}`);
       }
     } catch (error) {
       verdict.result = "NOPASS";
-      verdict.reason = `${texts2.harness.logs.evalError}: ${error instanceof Error ? error.message : String(error)}`;
+      verdict.reason = `${texts.harness.logs.evalError}: ${error instanceof Error ? error.message : String(error)}`;
       verdict.inferenceType = "parse_failure_default";
       console.log(`
-   \u274C ${texts2.harness.logs.evalError}: ${verdict.reason}`);
+   \u274C ${texts.harness.logs.evalError}: ${verdict.reason}`);
     }
     await this.saveReviewReport(task.id, verdict, devReport);
     return verdict;
   }
   buildEvaluationPrompt(task, devReport, contract, phantomTasks = [], retryContext) {
-    const texts2 = t(this.config.cwd);
+    let texts;
+    try {
+      texts = t(this.config.cwd);
+    } catch {
+      texts = getI18n("zh");
+    }
     const contractCheckpoints = Array.isArray(contract.checkpoints) ? contract.checkpoints : [];
     const contractCriteria = Array.isArray(contract.acceptanceCriteria) ? contract.acceptanceCriteria : [];
     const contractCommands = Array.isArray(contract.verificationCommands) ? contract.verificationCommands : [];
@@ -33258,65 +33059,65 @@ class HarnessEvaluator {
     const isHumanCheckpoint = (cp) => humanCheckpointIds.has(cp) || humanCheckpointDescs.has(cp);
     const filteredContractCheckpoints = contractCheckpoints.filter((cp) => !isHumanCheckpoint(cp));
     const filteredDevCheckpoints = devCheckpointsCompleted.filter((cp) => !isHumanCheckpoint(cp));
-    const descriptionSection = task.description ? `## ${texts2.harness.logs.taskDescriptionSection}
+    const descriptionSection = task.description ? `## ${texts.harness.logs.taskDescriptionSection}
 ${task.description}
-` : `## ${texts2.harness.logs.taskDescriptionSection}
-${texts2.harness.logs.taskDescriptionEmpty}
+` : `## ${texts.harness.logs.taskDescriptionSection}
+${texts.harness.logs.taskDescriptionEmpty}
 `;
     const acceptanceCriteriaList = contractCriteria.length > 0 ? `${contractCriteria.map((criteria, i) => `${i + 1}. ${criteria}`).join(`
 `)}
-` : `${texts2.harness.logs.acceptanceCriteriaEmpty}
+` : `${texts.harness.logs.acceptanceCriteriaEmpty}
 `;
-    const verificationCommandsSection = contractCommands.length > 0 ? `## ${texts2.harness.logs.verificationCommands}
-${texts2.harness.logs.runVerificationCommands}:
+    const verificationCommandsSection = contractCommands.length > 0 ? `## ${texts.harness.logs.verificationCommands}
+${texts.harness.logs.runVerificationCommands}:
 \`\`\`bash
 ${contractCommands.join(`
 `)}
 \`\`\`
 ` : "";
-    const checkpointsSection = filteredContractCheckpoints.length > 0 ? `## ${texts2.harness.logs.checkpointSectionTitle}
-${texts2.harness.logs.checkpointSectionConfirm}${filteredContractCheckpoints.map((cp, i) => `${i + 1}. ${cp}`).join(`
+    const checkpointsSection = filteredContractCheckpoints.length > 0 ? `## ${texts.harness.logs.checkpointSectionTitle}
+${texts.harness.logs.checkpointSectionConfirm}${filteredContractCheckpoints.map((cp, i) => `${i + 1}. ${cp}`).join(`
 `)}
 ` : "";
-    const humanCheckpointsSection = humanCheckpointIds.size > 0 ? `## ${texts2.harness.logs.aboutHumanVerification}
-${texts2.harness.logs.humanVerificationNote.replace("{count}", String(humanCheckpointIds.size)).replace("{examples}", Array.from(humanCheckpointIds).slice(0, 3).join(", "))}
-${texts2.harness.logs.humanVerificationExcluded}
+    const humanCheckpointsSection = humanCheckpointIds.size > 0 ? `## ${texts.harness.logs.aboutHumanVerification}
+${texts.harness.logs.humanVerificationNote.replace("{count}", String(humanCheckpointIds.size)).replace("{examples}", Array.from(humanCheckpointIds).slice(0, 3).join(", "))}
+${texts.harness.logs.humanVerificationExcluded}
 ` : "";
-    const evidenceSection = devEvidence.length > 0 ? `## ${texts2.harness.logs.submittedEvidenceTitle}
-${texts2.harness.logs.developerSubmittedEvidence}:
+    const evidenceSection = devEvidence.length > 0 ? `## ${texts.harness.logs.submittedEvidenceTitle}
+${texts.harness.logs.developerSubmittedEvidence}:
 ${devEvidence.map((e) => `- ${e}`).join(`
 `)}
 ` : "";
-    const completedCheckpointsSection = filteredDevCheckpoints.length > 0 ? `## ${texts2.harness.logs.developerCompletedCheckpoints}
+    const completedCheckpointsSection = filteredDevCheckpoints.length > 0 ? `## ${texts.harness.logs.developerCompletedCheckpoints}
 ${filteredDevCheckpoints.map((cp) => `- ${cp}`).join(`
 `)}
 ` : "";
-    const phantomTasksSection = phantomTasks.length > 0 ? `## ${texts2.harness.logs.phantomTaskDetectedTitle}
-${texts2.harness.logs.phantomTaskViolation.replace("{count}", String(phantomTasks.length))}
+    const phantomTasksSection = phantomTasks.length > 0 ? `## ${texts.harness.logs.phantomTaskDetectedTitle}
+${texts.harness.logs.phantomTaskViolation.replace("{count}", String(phantomTasks.length))}
 ${phantomTasks.map((tid) => `- ${tid}`).join(`
 `)}
 
-${texts2.harness.logs.phantomTaskProhibited}
-${texts2.harness.logs.phantomTaskNopassRequirement}
+${texts.harness.logs.phantomTaskProhibited}
+${texts.harness.logs.phantomTaskNopassRequirement}
 ` : "";
     const template = loadPromptTemplate("evaluation", this.config.cwd);
     let retryContextSection = "";
     if (retryContext?.previousFailureReason) {
       const phaseLabel = {
-        development: texts2.harness.phaseLabels.development,
-        code_review: texts2.harness.phaseLabels.codeReview,
-        qa: texts2.harness.phaseLabels.qa,
-        evaluation: texts2.harness.phaseLabels.evaluation
+        development: texts.harness.phaseLabels.development,
+        code_review: texts.harness.phaseLabels.codeReview,
+        qa: texts.harness.phaseLabels.qa,
+        evaluation: texts.harness.phaseLabels.evaluation
       };
       const lines = [
-        `## ${texts2.harness.logs.retryContextEval}`,
+        `## ${texts.harness.logs.retryContextEval}`,
         ``,
-        texts2.harness.logs.retryAttemptInfoEval.replace("{attempt}", String(retryContext.attemptNumber)).replace("{phase}", phaseLabel[retryContext.previousPhase || ""] || retryContext.previousPhase || ""),
+        texts.harness.logs.retryAttemptInfoEval.replace("{attempt}", String(retryContext.attemptNumber)).replace("{phase}", phaseLabel[retryContext.previousPhase || ""] || retryContext.previousPhase || ""),
         ``,
-        texts2.harness.logs.previousFailureReasonLabel,
+        texts.harness.logs.previousFailureReasonLabel,
         `> ${retryContext.previousFailureReason}`,
         ``,
-        texts2.harness.logs.retryReferenceHint,
+        texts.harness.logs.retryReferenceHint,
         ``
       ];
       retryContextSection = lines.join(`
@@ -33352,8 +33153,13 @@ ${texts2.harness.logs.phantomTaskNopassRequirement}
       inferenceType: "parse_failure_default"
     };
     if (!output || output.trim().length === 0) {
-      const texts3 = t(this.config.cwd);
-      result.reason = texts3.harness.logs.evalOutputEmptyError;
+      let texts2;
+      try {
+        texts2 = t(this.config.cwd);
+      } catch {
+        texts2 = getI18n("zh");
+      }
+      result.reason = texts2.harness.logs.evalOutputEmptyError;
       result.inferenceType = "empty_output";
       return result;
     }
@@ -33437,23 +33243,33 @@ ${texts2.harness.logs.phantomTaskNopassRequirement}
         break;
       }
     }
-    const texts2 = t(this.config.cwd);
+    let texts;
+    try {
+      texts = t(this.config.cwd);
+    } catch {
+      texts = getI18n("zh");
+    }
     if (!result.reason) {
       if (result.passed) {
-        result.reason = texts2.harness.logs.structuredMatchPassed;
+        result.reason = texts.harness.logs.structuredMatchPassed;
       } else if (structured.passed !== null) {
-        result.reason = texts2.harness.logs.structuredMatchFailed;
+        result.reason = texts.harness.logs.structuredMatchFailed;
       } else {
-        result.reason = texts2.harness.logs.cannotParseResult;
+        result.reason = texts.harness.logs.cannotParseResult;
         result.inferenceType = "parse_failure_default";
-        console.log(`   \u26A0\uFE0F  ${texts2.harness.logs.parseErrorWarning.replace("{limit}", "500")}:`);
+        console.log(`   \u26A0\uFE0F  ${texts.harness.logs.parseErrorWarning.replace("{limit}", "500")}:`);
         console.log(output.substring(0, 500));
       }
     }
     return result;
   }
   detectPhantomTasks(currentTaskId, devReport) {
-    const texts2 = t(this.config.cwd);
+    let texts;
+    try {
+      texts = t(this.config.cwd);
+    } catch {
+      texts = getI18n("zh");
+    }
     const phantomTasks = [];
     const output = devReport.claudeOutput || "";
     const taskCreatePatterns = [
@@ -33472,12 +33288,12 @@ ${texts2.harness.logs.phantomTaskNopassRequirement}
         plannedTaskIds = new Set(snapshot.tasks);
         snapshotTaskCount = snapshot.tasks.length;
         usingSnapshot = true;
-        console.log(`   \uD83D\uDCCB ${texts2.harness.logs.snapshotMode}: ${snapshot.snapshotId} (${snapshotTaskCount})`);
+        console.log(`   \uD83D\uDCCB ${texts.harness.logs.snapshotMode}: ${snapshot.snapshotId} (${snapshotTaskCount})`);
       } else {
-        console.log(`   \uD83D\uDCCB ${texts2.harness.logs.fallbackMode}`);
+        console.log(`   \uD83D\uDCCB ${texts.harness.logs.fallbackMode}`);
       }
     } catch (error) {
-      console.log(`   \u26A0\uFE0F ${texts2.harness.logs.fallbackMode}: ${error instanceof Error ? error.message : String(error)}`);
+      console.log(`   \u26A0\uFE0F ${texts.harness.logs.fallbackMode}: ${error instanceof Error ? error.message : String(error)}`);
     }
     try {
       const allTaskIds = getAllTaskIds(this.config.cwd);
@@ -33505,26 +33321,26 @@ ${texts2.harness.logs.phantomTaskNopassRequirement}
         }
       }
       if (usingSnapshot) {
-        console.log(`   \uD83D\uDCCA ${texts2.harness.logs.snapshotStats.replace("{total}", String(allTaskIds.length)).replace("{excluded}", String(excludedCount)).replace("{checking}", String(allTaskIds.length - excludedCount - 1))}`);
+        console.log(`   \uD83D\uDCCA ${texts.harness.logs.snapshotStats.replace("{total}", String(allTaskIds.length)).replace("{excluded}", String(excludedCount)).replace("{checking}", String(allTaskIds.length - excludedCount - 1))}`);
       }
     } catch (error) {
-      console.log(`   \u26A0\uFE0F ${texts2.harness.logs.snapshotError}: ${error instanceof Error ? error.message : String(error)}`);
+      console.log(`   \u26A0\uFE0F ${texts.harness.logs.snapshotError}: ${error instanceof Error ? error.message : String(error)}`);
     }
     if (hasCreateCommand && phantomTasks.length === 0) {
-      console.log(`   \u26A0\uFE0F  ${texts2.harness.logs.creatingCommandWarning}`);
-      console.log(`   \u26A0\uFE0F  ${texts2.harness.logs.creatingCommandIntent}`);
+      console.log(`   \u26A0\uFE0F  ${texts.harness.logs.creatingCommandWarning}`);
+      console.log(`   \u26A0\uFE0F  ${texts.harness.logs.creatingCommandIntent}`);
     }
     if (phantomTasks.length > 0) {
-      console.log(`   \u26A0\uFE0F  ${texts2.harness.logs.phantomTaskDetected.replace("{count}", String(phantomTasks.length))}: ${phantomTasks.join(", ")}`);
+      console.log(`   \u26A0\uFE0F  ${texts.harness.logs.phantomTaskDetected.replace("{count}", String(phantomTasks.length))}: ${phantomTasks.join(", ")}`);
       if (usingSnapshot) {
-        console.log(`   \u2139\uFE0F  ${texts2.harness.logs.snapshotMode} ${texts2.harness.logs.snapshotExcludedInfo?.replace("{count}", String(snapshotTaskCount)) || `(excluded ${snapshotTaskCount} planned tasks)`}`);
+        console.log(`   \u2139\uFE0F  ${texts.harness.logs.snapshotMode} ${texts.harness.logs.snapshotExcludedInfo?.replace("{count}", String(snapshotTaskCount)) || `(excluded ${snapshotTaskCount} planned tasks)`}`);
       } else {
-        console.log(`   \u2139\uFE0F  ${texts2.harness.logs.fallbackMode}`);
+        console.log(`   \u2139\uFE0F  ${texts.harness.logs.fallbackMode}`);
       }
     } else {
-      console.log(`   \u2705 ${texts2.harness.logs.noPhantomTask}`);
+      console.log(`   \u2705 ${texts.harness.logs.noPhantomTask}`);
       if (usingSnapshot) {
-        console.log(`   \u2139\uFE0F  ${texts2.harness.logs.snapshotBasedOnInfo?.replace("{count}", String(snapshotTaskCount)) || `excluded ${snapshotTaskCount} planned tasks based on snapshot`}`);
+        console.log(`   \u2139\uFE0F  ${texts.harness.logs.snapshotBasedOnInfo?.replace("{count}", String(snapshotTaskCount)) || `excluded ${snapshotTaskCount} planned tasks based on snapshot`}`);
       }
     }
     return phantomTasks;
@@ -33556,7 +33372,12 @@ ${texts2.harness.logs.phantomTaskNopassRequirement}
     };
   }
   loadContract(taskId) {
-    const texts2 = t(this.config.cwd);
+    let texts;
+    try {
+      texts = t(this.config.cwd);
+    } catch {
+      texts = getI18n("zh");
+    }
     const contractPath = this.getContractPath(taskId);
     if (!fs24.existsSync(contractPath)) {
       return null;
@@ -33566,11 +33387,11 @@ ${texts2.harness.logs.phantomTaskNopassRequirement}
       const parsed = JSON.parse(content);
       const validated = this.validateSprintContract(parsed, taskId);
       if (!validated) {
-        console.warn(`   \u26A0\uFE0F  ${texts2.harness.logs.contractDataInvalid}`);
+        console.warn(`   \u26A0\uFE0F  ${texts.harness.logs.contractDataInvalid}`);
       }
       return validated;
     } catch (error) {
-      console.warn(`   \u26A0\uFE0F  ${texts2.harness.logs.contractParseFailed}: ${error instanceof Error ? error.message : String(error)}`);
+      console.warn(`   \u26A0\uFE0F  ${texts.harness.logs.contractParseFailed}: ${error instanceof Error ? error.message : String(error)}`);
       return null;
     }
   }
@@ -33593,7 +33414,12 @@ ${texts2.harness.logs.phantomTaskNopassRequirement}
     fs24.writeFileSync(reportPath, content, "utf-8");
   }
   saveRawEvaluationOutput(taskId, output, stderr, success) {
-    const texts2 = t(this.config.cwd);
+    let texts;
+    try {
+      texts = t(this.config.cwd);
+    } catch {
+      texts = getI18n("zh");
+    }
     try {
       const projectDir = getProjectDir(this.config.cwd);
       const dir = path21.join(projectDir, "reports", "harness", taskId);
@@ -33603,7 +33429,7 @@ ${texts2.harness.logs.phantomTaskNopassRequirement}
       const timestamp = new Date().toISOString().replace(/[:.]/g, "-");
       const rawPath = path21.join(dir, `evaluation-raw-${timestamp}.log`);
       const lines = [
-        `# ${texts2.harness.logs.rawEvaluationOutputTitle || "Raw Evaluation Output"}`,
+        `# ${texts.harness.logs.rawEvaluationOutputTitle || "Raw Evaluation Output"}`,
         `Task: ${taskId}`,
         `Time: ${new Date().toISOString()}`,
         `Success: ${success}`,
@@ -33618,55 +33444,60 @@ ${texts2.harness.logs.phantomTaskNopassRequirement}
       ];
       fs24.writeFileSync(rawPath, lines.join(`
 `), "utf-8");
-      console.log(`   \uD83D\uDCC4 ${texts2.harness.logs.rawOutputSaved.replace("{filename}", `evaluation-raw-${timestamp}.log`)}`);
+      console.log(`   \uD83D\uDCC4 ${texts.harness.logs.rawOutputSaved.replace("{filename}", `evaluation-raw-${timestamp}.log`)}`);
     } catch (error) {
-      console.warn(`   \u26A0\uFE0F ${texts2.harness.logs.saveRawOutputFailed}: ${error instanceof Error ? error.message : String(error)}`);
+      console.warn(`   \u26A0\uFE0F ${texts.harness.logs.saveRawOutputFailed}: ${error instanceof Error ? error.message : String(error)}`);
     }
   }
   formatReviewReport(verdict, devReport) {
-    const texts2 = t(this.config.cwd);
+    let texts;
+    try {
+      texts = t(this.config.cwd);
+    } catch {
+      texts = getI18n("zh");
+    }
     const lines = [
-      `# ${texts2.harness.reports.reviewReportTitle} - ${verdict.taskId}`,
+      `# ${texts.harness.reports.reviewReportTitle} - ${verdict.taskId}`,
       "",
-      `**${texts2.harness.reports.resultLabel}**: ${verdict.result === "PASS" ? "\u2705 PASS" : "\u274C NOPASS"}`,
-      `**${texts2.harness.reports.reviewedAtLabel}**: ${verdict.reviewedAt}`,
-      `**${texts2.harness.reports.reviewedByLabel}**: ${verdict.reviewedBy}`
+      `**${texts.harness.reports.resultLabel}**: ${verdict.result === "PASS" ? "\u2705 PASS" : "\u274C NOPASS"}`,
+      `**${texts.harness.reports.reviewedAtLabel}**: ${verdict.reviewedAt}`,
+      `**${texts.harness.reports.reviewedByLabel}**: ${verdict.reviewedBy}`
     ];
     if (verdict.inferenceType) {
       const camelCaseType = verdict.inferenceType.replace(/_([a-z])/g, (_, letter) => letter.toUpperCase());
-      const inferenceTypeLabel = texts2.harness.reports.inferenceTypes[camelCaseType] || verdict.inferenceType;
-      lines.push(`**${texts2.harness.reports.inferenceTypeLabel}**: ${inferenceTypeLabel} (${verdict.inferenceType})`);
+      const inferenceTypeLabel = texts.harness.reports.inferenceTypes[camelCaseType] || verdict.inferenceType;
+      lines.push(`**${texts.harness.reports.inferenceTypeLabel}**: ${inferenceTypeLabel} (${verdict.inferenceType})`);
     }
     lines.push("");
-    lines.push(`## ${texts2.harness.reports.reasonSection}`);
+    lines.push(`## ${texts.harness.reports.reasonSection}`);
     lines.push(verdict.reason);
     lines.push("");
     if (verdict.failedCriteria.length > 0) {
-      lines.push(`## ${texts2.harness.reports.failedCriteriaSection}`);
+      lines.push(`## ${texts.harness.reports.failedCriteriaSection}`);
       verdict.failedCriteria.forEach((criteria) => {
         lines.push(`- ${criteria}`);
       });
       lines.push("");
     }
     if (verdict.failedCheckpoints.length > 0) {
-      lines.push(`## ${texts2.harness.reports.failedCheckpointsSection}`);
+      lines.push(`## ${texts.harness.reports.failedCheckpointsSection}`);
       verdict.failedCheckpoints.forEach((checkpoint) => {
         lines.push(`- ${checkpoint}`);
       });
       lines.push("");
     }
     if (verdict.details) {
-      lines.push(`## ${texts2.harness.reports.detailsSection}`);
+      lines.push(`## ${texts.harness.reports.detailsSection}`);
       lines.push(verdict.details);
       lines.push("");
     }
     const devEvidence = Array.isArray(devReport.evidence) ? devReport.evidence : [];
     const devCheckpointsCompleted = Array.isArray(devReport.checkpointsCompleted) ? devReport.checkpointsCompleted : [];
-    lines.push(`## ${texts2.harness.reports.devPhaseInfoSection}`);
-    lines.push(`- ${texts2.harness.reports.statusLabel}: ${devReport.status}`);
-    lines.push(`- ${texts2.harness.reports.durationLabel}: ${(devReport.duration / 1000).toFixed(1)}s`);
-    lines.push(`- ${texts2.harness.reports.evidenceCountLabel}: ${devEvidence.length}`);
-    lines.push(`- ${texts2.harness.reports.checkpointsCountLabel}: ${devCheckpointsCompleted.length}`);
+    lines.push(`## ${texts.harness.reports.devPhaseInfoSection}`);
+    lines.push(`- ${texts.harness.reports.statusLabel}: ${devReport.status}`);
+    lines.push(`- ${texts.harness.reports.durationLabel}: ${(devReport.duration / 1000).toFixed(1)}s`);
+    lines.push(`- ${texts.harness.reports.evidenceCountLabel}: ${devEvidence.length}`);
+    lines.push(`- ${texts.harness.reports.checkpointsCountLabel}: ${devCheckpointsCompleted.length}`);
     return lines.join(`
 `);
   }
@@ -33682,23 +33513,33 @@ class RetryHandler {
     this.config = config;
   }
   async shouldRetry(taskId, retryCounter) {
-    const texts2 = t(this.config.cwd);
+    let texts;
+    try {
+      texts = t(this.config.cwd);
+    } catch {
+      texts = getI18n("zh");
+    }
     const currentAttempts = retryCounter.get(taskId) || 0;
     if (currentAttempts >= this.config.maxRetries) {
-      console.log(`   \u26A0\uFE0F  ${texts2.harness.logs.maxRetriesReached.replace("{count}", String(this.config.maxRetries))}`);
+      console.log(`   \u26A0\uFE0F  ${texts.harness.logs.maxRetriesReached.replace("{count}", String(this.config.maxRetries))}`);
       return false;
     }
-    console.log(`   \uD83D\uDD04 ${texts2.harness.logs.preparingRetry.replace("{current}", String(currentAttempts + 1)).replace("{max}", String(this.config.maxRetries))}`);
+    console.log(`   \uD83D\uDD04 ${texts.harness.logs.preparingRetry.replace("{current}", String(currentAttempts + 1)).replace("{max}", String(this.config.maxRetries))}`);
     await this.applyBackoff(currentAttempts);
     return true;
   }
   async applyBackoff(attemptNumber) {
-    const texts2 = t(this.config.cwd);
+    let texts;
+    try {
+      texts = t(this.config.cwd);
+    } catch {
+      texts = getI18n("zh");
+    }
     const baseDelay = 2000;
     const maxDelay = 30000;
     const delay = Math.min(baseDelay * Math.pow(2, attemptNumber), maxDelay);
     if (delay > 0) {
-      console.log(`   \u23F3 ${texts2.harness.logs.waitingToRetry.replace("{seconds}", (delay / 1000).toFixed(1))}...`);
+      console.log(`   \u23F3 ${texts.harness.logs.waitingToRetry.replace("{seconds}", (delay / 1000).toFixed(1))}...`);
       await this.sleep(delay);
     }
   }
@@ -34211,7 +34052,7 @@ ${"\u2501".repeat(SEPARATOR_WIDTH)}`);
 \uD83D\uDD28 \u5F00\u53D1\u9636\u6BB5...`);
           const adaptiveTimeout = this.computeAdaptiveTimeout(task);
           if ((task.estimatedMinutes ?? 0) > 15) {
-            console.log(`   \uD83D\uDCA1 \u63D0\u793A: \u6B64\u4EFB\u52A1\u9884\u4F30\u8017\u65F6 ${task.estimatedMinutes} \u5206\u949F\uFF0C\u5EFA\u8BAE\u4F7F\u7528 --auto-split \u62C6\u5206\u4E3A\u5B50\u4EFB\u52A1`);
+            console.log(`   \uD83D\uDCA1 \u63D0\u793A: \u6B64\u4EFB\u52A1\u9884\u4F30\u8017\u65F6 ${task.estimatedMinutes} \u5206\u949F\uFF0C\u5EFA\u8BAE\u4F7F\u7528 task split \u547D\u4EE4\u62C6\u5206\u4E3A\u5B50\u4EFB\u52A1`);
           }
           try {
             const devRetryContext = this.buildRetryContextForPhase(taskId, "development", state);
@@ -35654,14 +35495,14 @@ function rebuildBatchesFromBoundaries(batchQueue) {
   return batches;
 }
 async function cleanupHarnessSnapshots(options = {}, cwd2 = process.cwd()) {
-  const texts2 = t(cwd2);
+  const texts = t(cwd2);
   if (!isInitialized(cwd2)) {
-    console.error(texts2.harnessCmd.projectNotInitialized);
+    console.error(texts.harnessCmd.projectNotInitialized);
     process.exit(1);
   }
   const snapshots = listSnapshots(cwd2);
   if (snapshots.length === 0) {
-    console.log(texts2.harnessCmd.noSnapshotsFound);
+    console.log(texts.harnessCmd.noSnapshotsFound);
     return 0;
   }
   let cleaned = 0;
@@ -35677,14 +35518,14 @@ async function cleanupHarnessSnapshots(options = {}, cwd2 = process.cwd()) {
   for (const snapshot of orphanSnapshots) {
     if (cleanupSnapshot(snapshot.snapshotId, cwd2)) {
       cleaned++;
-      console.log(texts2.harnessCmd.cleaningOrphanSnapshots.replace("{id}", snapshot.snapshotId).replace("{pid}", String(snapshot.pid)));
+      console.log(texts.harnessCmd.cleaningOrphanSnapshots.replace("{id}", snapshot.snapshotId).replace("{pid}", String(snapshot.pid)));
     }
   }
   if (options.force && !options.orphansOnly) {
     for (const snapshot of activeSnapshots) {
       if (cleanupSnapshot(snapshot.snapshotId, cwd2)) {
         cleaned++;
-        console.log(texts2.harnessCmd.forceCleanedSnapshots.replace("{id}", snapshot.snapshotId).replace("{pid}", String(snapshot.pid)));
+        console.log(texts.harnessCmd.forceCleanedSnapshots.replace("{id}", snapshot.snapshotId).replace("{pid}", String(snapshot.pid)));
       }
     }
   }
@@ -35697,27 +35538,27 @@ async function cleanupHarnessSnapshots(options = {}, cwd2 = process.cwd()) {
     console.log(`
 \uD83D\uDCA1 Use --force to clean all snapshots, or wait for active pipelines to complete`);
   }
-  console.log(texts2.harnessCmd.cleanedSnapshots.replace("{count}", String(cleaned)));
+  console.log(texts.harnessCmd.cleanedSnapshots.replace("{count}", String(cleaned)));
   return cleaned;
 }
 function checkConcurrency(cwd2) {
   const detection = detectActiveSnapshot(cwd2);
-  const texts2 = t(cwd2);
+  const texts = t(cwd2);
   if (detection.hasActive && detection.activeSnapshot) {
     console.error("");
-    console.error(texts2.harnessCmd.concurrentPipelineRunning);
+    console.error(texts.harnessCmd.concurrentPipelineRunning);
     console.error("");
-    console.error(texts2.harnessCmd.activePipelineInfo);
-    console.error(texts2.harnessCmd.snapshotId.replace("{id}", detection.activeSnapshot.snapshotId));
-    console.error(texts2.harnessCmd.processId.replace("{pid}", String(detection.activeSnapshot.pid)));
-    console.error(texts2.harnessCmd.createdAt.replace("{timestamp}", detection.activeSnapshot.timestamp));
-    console.error(texts2.harnessCmd.taskCount.replace("{count}", String(detection.activeSnapshot.tasks.length)));
+    console.error(texts.harnessCmd.activePipelineInfo);
+    console.error(texts.harnessCmd.snapshotId.replace("{id}", detection.activeSnapshot.snapshotId));
+    console.error(texts.harnessCmd.processId.replace("{pid}", String(detection.activeSnapshot.pid)));
+    console.error(texts.harnessCmd.createdAt.replace("{timestamp}", detection.activeSnapshot.timestamp));
+    console.error(texts.harnessCmd.taskCount.replace("{count}", String(detection.activeSnapshot.tasks.length)));
     console.error("");
-    console.error(texts2.harnessCmd.possibleCauses);
+    console.error(texts.harnessCmd.possibleCauses);
     console.error("   1. Another Harness pipeline is running");
     console.error("   2. Previous pipeline exited abnormally, leaving snapshot behind");
     console.error("");
-    console.error(texts2.harnessCmd.solutions);
+    console.error(texts.harnessCmd.solutions);
     console.error("   - If no other pipeline is running, clean up with:");
     console.error("     projmnt4claude headless-harness-design cleanup");
     console.error("   - Or force clean all residual snapshots:");
@@ -35728,9 +35569,9 @@ function checkConcurrency(cwd2) {
   return false;
 }
 async function harnessCommand(options, cwd2 = process.cwd()) {
-  const texts2 = t(cwd2);
+  const texts = t(cwd2);
   if (!isInitialized(cwd2)) {
-    console.error(texts2.harnessCmd.projectNotInitialized);
+    console.error(texts.harnessCmd.projectNotInitialized);
     process.exit(1);
   }
   if (!options.continue && checkConcurrency(cwd2)) {
@@ -35760,15 +35601,15 @@ async function harnessCommand(options, cwd2 = process.cwd()) {
     cwd: cwd2
   };
   if (config.maxRetries < 0) {
-    console.error(texts2.harnessCmd.invalidMaxRetries);
+    console.error(texts.harnessCmd.invalidMaxRetries);
     process.exit(1);
   }
   if (config.timeout < 10) {
-    console.error(texts2.harnessCmd.invalidTimeout);
+    console.error(texts.harnessCmd.invalidTimeout);
     process.exit(1);
   }
   if (config.parallel < 1) {
-    console.error(texts2.harnessCmd.invalidParallel);
+    console.error(texts.harnessCmd.invalidParallel);
     process.exit(1);
   }
   const batchQueue = await loadTaskQueue(options, cwd2);
@@ -35799,7 +35640,7 @@ async function harnessCommand(options, cwd2 = process.cwd()) {
       for (let b = 0;b < batchQueue.batchBoundaries.length; b++) {
         const start = batchQueue.batchBoundaries[b];
         const end = b + 1 < batchQueue.batchBoundaries.length ? batchQueue.batchBoundaries[b + 1] : batchQueue.taskQueue.length;
-        const label = texts2.harnessCmd.batchLabel.replace("{index}", String(b + 1));
+        const label = texts.harnessCmd.batchLabel.replace("{index}", String(b + 1));
         const parallelTag = batchQueue.batchParallelizable[b] ? " [Parallel]" : "";
         console.log(`
    \uD83D\uDCE6 ${label}${parallelTag} (${end - start} tasks):`);
@@ -35813,21 +35654,21 @@ async function harnessCommand(options, cwd2 = process.cwd()) {
       });
     }
     console.log("");
-    console.log(texts2.harnessCmd.dryRunComplete);
+    console.log(texts.harnessCmd.dryRunComplete);
     return;
   }
   if (qualityGateConfig.enabled) {
     console.log("");
     console.log("\u2501".repeat(SEPARATOR_WIDTH));
-    console.log(texts2.harnessCmd.qualityGateCheck);
+    console.log(texts.harnessCmd.qualityGateCheck);
     console.log("\u2501".repeat(SEPARATOR_WIDTH));
-    console.log(texts2.harnessCmd.minQualityScoreThreshold.replace("{score}", String(qualityGateConfig.minQualityScore)));
+    console.log(texts.harnessCmd.minQualityScoreThreshold.replace("{score}", String(qualityGateConfig.minQualityScore)));
     console.log("");
     const batchResult = await batchCheckQualityGate(batchQueue.taskQueue, qualityGateConfig, cwd2);
     console.log(formatBatchQualityGateResult(batchResult, { compact: false, showDetails: true }));
     if (!batchResult.allPassed) {
       console.log("");
-      console.log(texts2.harnessCmd.qualityGateFailed);
+      console.log(texts.harnessCmd.qualityGateFailed);
       console.log("");
       for (const taskId of batchResult.blockedTasks) {
         const result = batchResult.results.get(taskId);
@@ -35845,7 +35686,7 @@ async function harnessCommand(options, cwd2 = process.cwd()) {
       console.log("");
       process.exit(1);
     }
-    console.log(texts2.harnessCmd.allTasksPassed);
+    console.log(texts.harnessCmd.allTasksPassed);
     console.log("");
   }
   const executionPlan = {
@@ -35953,10 +35794,10 @@ function loadRuntimeState(cwd2) {
       console.warn(`State file version mismatch (v${version}), resetting runtime state`);
       return null;
     }
-    const texts2 = t(cwd2);
+    const texts = t(cwd2);
     if (version === 1) {
       data.stateFormatVersion = 2;
-      console.log(texts2.harnessCmd.stateFileMigrated.replace("{from}", "1").replace("{to}", "2"));
+      console.log(texts.harnessCmd.stateFileMigrated.replace("{from}", "1").replace("{to}", "2"));
     }
     data.retryCounter = new Map(Object.entries(data.retryCounter || {}));
     data.taskResults = new Map(Object.entries(data.taskResults || {}));
@@ -35966,8 +35807,8 @@ function loadRuntimeState(cwd2) {
     data.taskPhaseCheckpoints = new Map(Object.entries(data.taskPhaseCheckpoints || {}));
     return data;
   } catch (error) {
-    const texts2 = t(cwd2);
-    console.warn(texts2.harnessCmd.loadingStateFailed.replace("{error}", String(error)));
+    const texts = t(cwd2);
+    console.warn(texts.harnessCmd.loadingStateFailed.replace("{error}", String(error)));
     return null;
   }
 }
@@ -36028,13 +35869,13 @@ async function loadTaskQueue(options, cwd2) {
         console.error("Error: No tasks in plan file");
         process.exit(1);
       }
-      const TERMINAL_STATUSES_SET3 = new Set(TERMINAL_STATUSES);
+      const TERMINAL_STATUSES_SET4 = new Set(TERMINAL_STATUSES);
       const originalCount = taskQueue.length;
       taskQueue = taskQueue.filter((id) => {
         const task = readTaskMeta(id, cwd2);
         if (!task)
           return false;
-        return !TERMINAL_STATUSES_SET3.has(normalizeStatus(task.status));
+        return !TERMINAL_STATUSES_SET4.has(normalizeStatus(task.status));
       });
       if (originalCount - taskQueue.length > 0) {
         console.log(`Using plan file: ${options.plan} (filtered ${originalCount - taskQueue.length} terminal tasks)`);
@@ -36074,12 +35915,12 @@ async function loadTaskQueue(options, cwd2) {
   process.exit(1);
 }
 function filterExecutableFromPlan(plan, cwd2, logPrefix) {
-  const TERMINAL_STATUSES_SET3 = new Set(TERMINAL_STATUSES);
+  const TERMINAL_STATUSES_SET4 = new Set(TERMINAL_STATUSES);
   const filteredTasks = plan.tasks.filter((taskId) => {
     const task = readTaskMeta(taskId, cwd2);
     if (!task)
       return false;
-    return !TERMINAL_STATUSES_SET3.has(normalizeStatus(task.status));
+    return !TERMINAL_STATUSES_SET4.has(normalizeStatus(task.status));
   });
   const filteredCount = plan.tasks.length - filteredTasks.length;
   if (filteredCount > 0) {
@@ -36701,7 +36542,6 @@ program2.command("init-requirement [description]").description(`\u4ECE\u81EA\u71
 ` + `  --no-plan                \u521B\u5EFA\u4EFB\u52A1\u540E\u4E0D\u8BE2\u95EE\u662F\u5426\u6DFB\u52A0\u5230\u6267\u884C\u8BA1\u5212
 ` + `  --skip-validation        \u8DF3\u8FC7\u521D\u59CB\u5316\u9A8C\u8BC1
 ` + `  --template <file>        \u4F7F\u7528\u9700\u6C42\u6A21\u677F\u6587\u4EF6
-` + `  --auto-split             \u81EA\u52A8\u62C6\u5206\u4E3A\u5B50\u4EFB\u52A1
 ` + `  --no-ai                  \u7981\u7528 AI \u8F85\u52A9
 ` + `  --require-quality <n>    \u8D28\u91CF\u95E8\u7981\u9608\u503C
 ` + `  -f, --force              \u5F3A\u5236\u8986\u76D6
@@ -36709,7 +36549,7 @@ program2.command("init-requirement [description]").description(`\u4ECE\u81EA\u71
 ` + `  --accept-audit           \u63A5\u53D7\u5BA1\u8BA1
 ` + `  --accept-eval            \u63A5\u53D7\u8BC4\u4F30
 
-` + "\u524D\u63D0: \u9700\u5148\u8FD0\u884C projmnt4claude setup \u521D\u59CB\u5316\u9879\u76EE").option("-y, --yes", "\u975E\u4EA4\u4E92\u6A21\u5F0F\uFF1A\u8DF3\u8FC7\u6240\u6709\u786E\u8BA4\uFF0C\u76F4\u63A5\u4F7F\u7528\u5206\u6790\u7ED3\u679C\u521B\u5EFA\u4EFB\u52A1").option("--no-plan", "\u521B\u5EFA\u4EFB\u52A1\u540E\u4E0D\u8BE2\u95EE\u662F\u5426\u6DFB\u52A0\u5230\u6267\u884C\u8BA1\u5212").option("--skip-validation", "\u8DF3\u8FC7\u521D\u59CB\u5316\u9A8C\u8BC1").option("--template <file>", "\u4F7F\u7528\u9700\u6C42\u6A21\u677F\u6587\u4EF6", "simple").option("--auto-split", "\u81EA\u52A8\u62C6\u5206\u4E3A\u5B50\u4EFB\u52A1").option("--no-ai", "\u7981\u7528 AI \u8F85\u52A9").option("--require-quality <n>", "\u8D28\u91CF\u95E8\u7981\u9608\u503C").option("-f, --force", "\u5F3A\u5236\u8986\u76D6").option("--file <path>", "\u4ECE\u6587\u4EF6\u8BFB\u53D6\u63CF\u8FF0\uFF08\u7528\u4E8E\u5305\u542B\u7279\u6B8A\u5B57\u7B26\u7684\u957F\u63CF\u8FF0\uFF09").option("--decompose", "\u81EA\u52A8\u5206\u89E3\u591A\u95EE\u9898\u9700\u6C42/\u62A5\u544A\uFF08\u9ED8\u8BA4\u542F\u7528\uFF09", true).option("--no-decompose", "\u7981\u7528\u9700\u6C42\u5206\u89E3\uFF0C\u5F3A\u5236\u521B\u5EFA\u5355\u4E2A\u4EFB\u52A1").option("--accept-draft", "\u63A5\u53D7\u8349\u7A3F").option("--accept-audit", "\u63A5\u53D7\u5BA1\u8BA1").option("--accept-eval", "\u63A5\u53D7\u8BC4\u4F30").action(async (description, options) => {
+` + "\u524D\u63D0: \u9700\u5148\u8FD0\u884C projmnt4claude setup \u521D\u59CB\u5316\u9879\u76EE").option("-y, --yes", "\u975E\u4EA4\u4E92\u6A21\u5F0F\uFF1A\u8DF3\u8FC7\u6240\u6709\u786E\u8BA4\uFF0C\u76F4\u63A5\u4F7F\u7528\u5206\u6790\u7ED3\u679C\u521B\u5EFA\u4EFB\u52A1").option("--no-plan", "\u521B\u5EFA\u4EFB\u52A1\u540E\u4E0D\u8BE2\u95EE\u662F\u5426\u6DFB\u52A0\u5230\u6267\u884C\u8BA1\u5212").option("--skip-validation", "\u8DF3\u8FC7\u521D\u59CB\u5316\u9A8C\u8BC1").option("--template <file>", "\u4F7F\u7528\u9700\u6C42\u6A21\u677F\u6587\u4EF6", "simple").option("--no-ai", "\u7981\u7528 AI \u8F85\u52A9").option("--require-quality <n>", "\u8D28\u91CF\u95E8\u7981\u9608\u503C").option("-f, --force", "\u5F3A\u5236\u8986\u76D6").option("--file <path>", "\u4ECE\u6587\u4EF6\u8BFB\u53D6\u63CF\u8FF0\uFF08\u7528\u4E8E\u5305\u542B\u7279\u6B8A\u5B57\u7B26\u7684\u957F\u63CF\u8FF0\uFF09").option("--decompose", "\u81EA\u52A8\u5206\u89E3\u591A\u95EE\u9898\u9700\u6C42/\u62A5\u544A\uFF08\u9ED8\u8BA4\u542F\u7528\uFF09", true).option("--no-decompose", "\u7981\u7528\u9700\u6C42\u5206\u89E3\uFF0C\u5F3A\u5236\u521B\u5EFA\u5355\u4E2A\u4EFB\u52A1").option("--accept-draft", "\u63A5\u53D7\u8349\u7A3F").option("--accept-audit", "\u63A5\u53D7\u5BA1\u8BA1").option("--accept-eval", "\u63A5\u53D7\u8BC4\u4F30").action(async (description, options) => {
   let finalDescription;
   if (options.file) {
     const filePath = path26.resolve(options.file);
@@ -36757,7 +36597,6 @@ program2.command("init-requirement [description]").description(`\u4ECE\u81EA\u71
     noPlan: options.noPlan,
     skipValidation: options.skipValidation,
     template: options.template,
-    autoSplit: options.autoSplit,
     noAI: options.noAi,
     requireQuality: options.requireQuality ? parseInt(options.requireQuality, 10) : undefined,
     decompose: options.decompose
