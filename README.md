@@ -109,7 +109,7 @@ Transform a problem description or requirement document into structured tasks:
 - Auto-extracts keywords and analyzes complexity
 - Suggests priority (P0-P3) and recommended role
 - Generates checkpoints with verification methods
-- Optionally auto-splits complex tasks into subtasks
+- Decomposes multi-problem requirements into separate tasks
 
 ### 3. Recommend Execution Plan
 

@@ -28,7 +28,7 @@ import { createSessionAwareEngine } from './feedback-constraint-engine.js';
 import { verdictResultMarker, verdictHasReason } from './validation-rules/verdict-rules.js';
 import { loadPromptTemplate, resolveTemplate } from './prompt-templates.js';
 import { getLatestSnapshot } from './harness-snapshot.js';
-import { t } from '../i18n/index.js';
+import { t, getI18n } from '../i18n/index.js';
 
 export class HarnessEvaluator {
   private config: HarnessConfig;
@@ -48,7 +48,12 @@ export class HarnessEvaluator {
     contract: SprintContract,
     retryContext?: RetryContext
   ): Promise<ReviewVerdict> {
-    const texts = t(this.config.cwd);
+    let texts: ReturnType<typeof t>;
+    try {
+      texts = t(this.config.cwd);
+    } catch {
+      texts = getI18n('zh');
+    }
     console.log(`   ${texts.harness.logs.evalTaskLabel}: ${task.title}`);
     console.log(`   ${texts.harness.logs.devStatusLabel}: ${devReport.status}`);
 
@@ -218,7 +223,12 @@ export class HarnessEvaluator {
     phantomTasks: string[] = [],
     retryContext?: RetryContext
   ): string {
-    const texts = t(this.config.cwd);
+    let texts: ReturnType<typeof t>;
+    try {
+      texts = t(this.config.cwd);
+    } catch {
+      texts = getI18n('zh');
+    }
     // BUG-014-2A: 过滤掉 requiresHuman 检查点，仅评估自动化检查点
     // BUG-013-1: 防御性处理，确保数组字段始终为有效数组
     const contractCheckpoints = Array.isArray(contract.checkpoints) ? contract.checkpoints : [];
@@ -347,7 +357,12 @@ export class HarnessEvaluator {
 
     // 空输出早期返回：Claude 进程异常退出导致 stdout 为空
     if (!output || output.trim().length === 0) {
-      const texts = t(this.config.cwd);
+      let texts: ReturnType<typeof t>;
+      try {
+        texts = t(this.config.cwd);
+      } catch {
+        texts = getI18n('zh');
+      }
       result.reason = texts.harness.logs.evalOutputEmptyError;
       result.inferenceType = 'empty_output';
       return result;
@@ -450,7 +465,12 @@ export class HarnessEvaluator {
     }
 
     // 如果没有提取到原因，设置默认值
-    const texts = t(this.config.cwd);
+    let texts: ReturnType<typeof t>;
+    try {
+      texts = t(this.config.cwd);
+    } catch {
+      texts = getI18n('zh');
+    }
     if (!result.reason) {
       if (result.passed) {
         result.reason = texts.harness.logs.structuredMatchPassed;
@@ -478,8 +498,8 @@ export class HarnessEvaluator {
    * 快照不可用时回退到时间窗口检测（向后兼容）
    *
    * @regression BUG-012-2 (2026-04-01)
-   * 回归测试案例：2026-04-01 Harness 运行中，BUG-011-1 开发者为演示 auto-split 功能
-   * 创建了 ModeRegistry 和 Channel 两个子任务；BUG-011-3 开发者创建了 6 个认证系统测试任务。
+   * 回归测试案例：2026-04-01 Harness 运行中，BUG-011-1 开发者创建了 ModeRegistry 和 Channel
+   * 两个子任务；BUG-011-3 开发者创建了 6 个认证系统测试任务。
    * 这些"幽灵任务"引用不存在的文件，导致后续重试浪费 3600s 执行时间和 API 配额。
    *
    * @fix P-2 (2026-04-13)
@@ -487,7 +507,12 @@ export class HarnessEvaluator {
    * 合法任务被误判为幽灵任务（如 schema-checkpoint-validation 案例中 11 个钩子清理任务）。
    */
   private detectPhantomTasks(currentTaskId: string, devReport: DevReport): string[] {
-    const texts = t(this.config.cwd);
+    let texts: ReturnType<typeof t>;
+    try {
+      texts = t(this.config.cwd);
+    } catch {
+      texts = getI18n('zh');
+    }
     const phantomTasks: string[] = [];
 
     // 1. 从 Claude 输出中检测 task create / init-requirement 命令
@@ -629,7 +654,12 @@ export class HarnessEvaluator {
    * 加载 Contract
    */
   private loadContract(taskId: string): SprintContract | null {
-    const texts = t(this.config.cwd);
+    let texts: ReturnType<typeof t>;
+    try {
+      texts = t(this.config.cwd);
+    } catch {
+      texts = getI18n('zh');
+    }
     const contractPath = this.getContractPath(taskId);
 
     if (!fs.existsSync(contractPath)) {
@@ -700,7 +730,12 @@ export class HarnessEvaluator {
     stderr: string,
     success: boolean
   ): void {
-    const texts = t(this.config.cwd);
+    let texts: ReturnType<typeof t>;
+    try {
+      texts = t(this.config.cwd);
+    } catch {
+      texts = getI18n('zh');
+    }
     try {
       const projectDir = getProjectDir(this.config.cwd);
       const dir = path.join(projectDir, 'reports', 'harness', taskId);
@@ -738,7 +773,12 @@ export class HarnessEvaluator {
    * 格式化审查报告
    */
   private formatReviewReport(verdict: ReviewVerdict, devReport: DevReport): string {
-    const texts = t(this.config.cwd);
+    let texts: ReturnType<typeof t>;
+    try {
+      texts = t(this.config.cwd);
+    } catch {
+      texts = getI18n('zh');
+    }
 
     const lines: string[] = [
       `# ${texts.harness.reports.reviewReportTitle} - ${verdict.taskId}`,

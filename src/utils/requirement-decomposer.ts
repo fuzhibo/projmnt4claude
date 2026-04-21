@@ -125,34 +125,68 @@ function extractProblemsByPattern(content: string): Array<{
   }> = [];
 
   const seen = new Set<string>();
+  const problemPositions: Array<{
+    index: number;
+    length: number;
+    id: string;
+    priorityFromParen: string;
+    title: string;
+  }> = [];
 
-  // 模式1: 标准问题格式 "问题 X:" 或 "Issue X:"
-  // 使用原子组和非捕获组优化，避免回溯导致的 ReDoS 风险
-  const problemRegex = /(?:^|\n)(?:#{1,3}\s+)?(?:问题|Issue|Bug|缺陷)\s*(?:#\s*)?(\d+[A-Z]?)[.:\-]?\s*([^\n]{1,200})(?:\n([^]{0,2000}))?(?=\n(?:问题|Issue|Bug|缺陷)\s*#?\s*\d+|\n#{1,3}\s|$)/gi;
+  // 模式1: 标准问题格式 "问题 X:" 或 "Issue X:" 或 "问题 X (P0):"
+  // 简化正则，只匹配标题行，避免复杂的回溯问题
+  const problemRegex = /(?:^|\n)(?:#{1,3}\s+)?(?:问题|Issue|Bug|缺陷)\s*(?:#\s*)?(\d+[A-Z]?)\s*(?:\((P\d|urgent|high|medium|low|[紧急高种低])\))?\s*[.:\-]?\s*([^\n]{10,200})/gi;
 
   let match;
   while ((match = problemRegex.exec(content)) !== null) {
     const problemId = match[1]?.trim() || '';
-    const title = match[2]?.trim() || '';
-    const body = match[3]?.trim() || '';
+    const priorityFromParen = match[2]?.trim() || '';
+    const title = match[3]?.trim() || '';
 
     if (!title || seen.has(title)) continue;
     seen.add(title);
 
-    // 提取优先级
+    problemPositions.push({
+      index: match.index,
+      length: match[0].length,
+      id: problemId,
+      priorityFromParen,
+      title,
+    });
+  }
+
+  // 为每个匹配提取正文内容（到下一个匹配或结束）
+  for (let i = 0; i < problemPositions.length; i++) {
+    const current = problemPositions[i]!;
+    const next = problemPositions[i + 1];
+
+    const startIdx = current.index + current.length;
+    const endIdx = next ? next.index : content.length;
+    const body = content.substring(startIdx, endIdx).trim();
+
+    // 提取优先级（优先使用括号中的优先级，其次在问题前查找）
     let priority: TaskPriority = 'P2';
-    const priorityMatch = content.substring(Math.max(0, match.index - 100), match.index)
-      .match(/(P\d|紧急|urgent|高|high|中|medium|低|low)/i);
-    if (priorityMatch && priorityMatch[1]) {
-      const p = priorityMatch[1].toUpperCase();
+    if (current.priorityFromParen) {
+      // 从括号中提取优先级
+      const p = current.priorityFromParen.toUpperCase();
       if (p === 'P0' || p.includes('紧急') || p.includes('URGENT')) priority = 'P0';
       else if (p === 'P1' || p.includes('高') || p.includes('HIGH')) priority = 'P1';
       else if (p === 'P3' || p.includes('低') || p.includes('LOW')) priority = 'P3';
+    } else {
+      // 在问题前查找优先级
+      const priorityMatch = content.substring(Math.max(0, current.index - 100), current.index)
+        .match(/(P\d|紧急|urgent|高|high|中|medium|低|low)/i);
+      if (priorityMatch && priorityMatch[1]) {
+        const p = priorityMatch[1].toUpperCase();
+        if (p === 'P0' || p.includes('紧急') || p.includes('URGENT')) priority = 'P0';
+        else if (p === 'P1' || p.includes('高') || p.includes('HIGH')) priority = 'P1';
+        else if (p === 'P3' || p.includes('低') || p.includes('LOW')) priority = 'P3';
+      }
     }
 
     problems.push({
-      title: title.length > 100 ? title.substring(0, 97) + '...' : title,
-      description: body || title,
+      title: current.title.length > 100 ? current.title.substring(0, 97) + '...' : current.title,
+      description: body || current.title,
       priority,
     });
   }

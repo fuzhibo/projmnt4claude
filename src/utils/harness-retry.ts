@@ -11,7 +11,7 @@
 import type { HarnessConfig, ReviewVerdict } from '../types/harness.js';
 import type { TaskMeta } from '../types/task.js';
 import { isRetryableError } from './harness-helpers.js';
-import { t } from '../i18n/index.js';
+import { t, getI18n } from '../i18n/index.js';
 
 export class RetryHandler {
   private config: HarnessConfig;
@@ -27,7 +27,12 @@ export class RetryHandler {
     taskId: string,
     retryCounter: Map<string, number>
   ): Promise<boolean> {
-    const texts = t(this.config.cwd);
+    let texts: ReturnType<typeof t>;
+    try {
+      texts = t(this.config.cwd);
+    } catch {
+      texts = getI18n('zh');
+    }
     const currentAttempts = retryCounter.get(taskId) || 0;
 
     // 检查是否超过最大重试次数
@@ -48,7 +53,12 @@ export class RetryHandler {
    * 应用指数退避
    */
   private async applyBackoff(attemptNumber: number): Promise<void> {
-    const texts = t(this.config.cwd);
+    let texts: ReturnType<typeof t>;
+    try {
+      texts = t(this.config.cwd);
+    } catch {
+      texts = getI18n('zh');
+    }
     // 基础延迟 2 秒，指数增长，最大 30 秒
     const baseDelay = 2000;
     const maxDelay = 30000;

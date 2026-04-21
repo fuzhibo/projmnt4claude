@@ -736,7 +736,6 @@ program
     '  --no-plan                创建任务后不询问是否添加到执行计划\n' +
     '  --skip-validation        跳过初始化验证\n' +
     '  --template <file>        使用需求模板文件\n' +
-    '  --auto-split             自动拆分为子任务\n' +
     '  --no-ai                  禁用 AI 辅助\n' +
     '  --require-quality <n>    质量门禁阈值\n' +
     '  -f, --force              强制覆盖\n' +
@@ -748,7 +747,6 @@ program
   .option('--no-plan', '创建任务后不询问是否添加到执行计划')
   .option('--skip-validation', '跳过初始化验证')
   .option('--template <file>', '使用需求模板文件', 'simple')
-  .option('--auto-split', '自动拆分为子任务')
   .option('--no-ai', '禁用 AI 辅助')
   .option('--require-quality <n>', '质量门禁阈值')
   .option('-f, --force', '强制覆盖')
@@ -822,7 +820,6 @@ program
       noPlan: options.noPlan,
       skipValidation: options.skipValidation,
       template: options.template,
-      autoSplit: options.autoSplit,
       noAI: options.noAi,
       requireQuality: options.requireQuality ? parseInt(options.requireQuality, 10) : undefined,
       decompose: options.decompose,

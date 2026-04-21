@@ -1040,21 +1040,4 @@ describe('Complexity Assessment Integration', () => {
     expect(signalTypes).toContain('action_verb_density');
   });
 
-  test('C4: splitSuggestions generated for high complexity tasks', () => {
-    const desc = '重构认证模块 src/auth/oauth.ts src/auth/jwt.ts src/auth/session.ts src/middleware/auth.ts，验证所有接口';
-    const analysis = {
-      title: 'Refactor auth',
-      description: desc,
-      priority: 'P1' as const,
-      recommendedRole: 'architect',
-      estimatedComplexity: 'high' as const,
-      suggestedCheckpoints: ['CP-1', 'CP-2', 'CP-3'],
-      potentialDependencies: [],
-    };
-    const result = assessComplexity(desc, analysis);
-    if (result.level === 'high') {
-      // High complexity should have split suggestions (may be 1 if no clear split strategy)
-      expect(result.splitSuggestions.length).toBeGreaterThanOrEqual(1);
-    }
-  });
 });

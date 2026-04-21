@@ -37,8 +37,6 @@ export interface ComplexityAssessment {
   workItemCount: number;
   /** 预估耗时（分钟） */
   estimatedMinutes: number;
-  /** 拆分建议 */
-  splitSuggestions: SplitSuggestion[];
   /** 评估信号 */
   signals: ComplexitySignal[];
 }
@@ -50,22 +48,6 @@ interface ComplexitySignal {
   type: 'file_count' | 'work_items' | 'cross_module' | 'checkpoint_count' | 'description_length' | 'action_verb_density';
   weight: number;
   description: string;
-}
-
-/**
- * 拆分建议
- */
-export interface SplitSuggestion {
-  /** 子任务标题 */
-  title: string;
-  /** 子任务描述 */
-  description: string;
-  /** 涉及文件 */
-  files: string[];
-  /** 预估耗时（分钟） */
-  estimatedMinutes: number;
-  /** 依赖的子任务索引 (0-based, -1 表示无依赖) */
-  dependsOn: number;
 }
 import {
   generateStructuredDescription,
@@ -97,7 +79,6 @@ export interface InitRequirementOptions {
   noPlan?: boolean;          // 不询问添加到计划
   skipValidation?: boolean;  // 跳过 checkpoints 质量校验
   template?: DescriptionTemplateType;  // 描述模板类型：simple | detailed
-  autoSplit?: boolean;       // 自动拆分复杂任务为子任务
   noAI?: boolean;            // 禁用 AI 增强，仅使用规则引擎
   /** 质量门禁: 低于此阈值时阻止创建 (0-100) */
   requireQuality?: number;
@@ -200,7 +181,7 @@ export async function initRequirement(
   cwd: string = process.cwd(),
   options: InitRequirementOptions = {}
 ): Promise<void> {
-  const { nonInteractive = false, noPlan = false, skipValidation = false, template = 'simple', autoSplit = false, noAI = false, requireQuality, decompose: shouldDecomposeOption = true } = options;
+  const { nonInteractive = false, noPlan = false, skipValidation = false, template = 'simple', noAI = false, requireQuality, decompose: shouldDecomposeOption = true } = options;
 
   // CP-2: 模块日志 + 埋点初始化
   const logger = createLogger('init-requirement', cwd);
@@ -363,19 +344,6 @@ export async function initRequirement(
     console.log(`  This task is estimated to take ${complexity.estimatedMinutes} minutes, exceeding the default Harness timeout threshold.`);
     console.log('  Consider splitting this task into smaller subtasks, each under 15 minutes.');
     console.log('');
-
-    if (complexity.splitSuggestions.length > 0) {
-      console.log('  Split suggestions:');
-      for (let i = 0; i < complexity.splitSuggestions.length; i++) {
-        const s = complexity.splitSuggestions[i];
-        if (!s) continue;
-        const depLabel = s.dependsOn >= 0 ? ` (depends on subtask ${s.dependsOn + 1})` : '';
-        console.log(`    ${i + 1}. ${s.title}${depLabel}`);
-        console.log(`       Files: ${s.files.length > 0 ? s.files.join(', ') : 'not specified'}`);
-        console.log(`       Estimated: ~${s.estimatedMinutes} minutes`);
-      }
-      console.log('');
-    }
   }
 
   if (analysis.suggestedCheckpoints.length > 0) {
@@ -818,156 +786,6 @@ export async function initRequirement(
     console.log('');
   }
 
-  // Auto-split complex tasks
-  if (autoSplit && complexity.level === 'high' && complexity.splitSuggestions.length > 0) {
-    console.log('━'.repeat(SEPARATOR_WIDTH));
-    console.log('🔀 Auto-splitting complex task...');
-    console.log('━'.repeat(SEPARATOR_WIDTH));
-    console.log('');
-
-    const subtaskIds: string[] = [];
-
-    try {
-    for (let i = 0; i < complexity.splitSuggestions.length; i++) {
-      const sub = complexity.splitSuggestions[i];
-      if (!sub) continue;
-      const subType = inferTaskType(sub.title);
-      const subPriority = taskPriority;
-      const subId = generateNewTaskId(cwd, subType, subPriority, sub.title);
-      subtaskIds.push(subId);
-      const subTask = createDefaultTaskMeta(subId, sub.title, subType, undefined, 'init-requirement');
-
-      // CP-3 (IR-01-06): 使用结构化描述替代原始文本
-      const subStructuredInfo = extractStructuredInfo(sub.description);
-      const subInferredCheckpoints = inferCheckpointsFromDescription(sub.description, subType);
-      const subStructuredData: StructuredDescription = {
-        problem: subStructuredInfo.problem || sub.description,
-        rootCause: subStructuredInfo.rootCause,
-        solution: subStructuredInfo.solution,
-        checkpoints: [...new Set([...subStructuredInfo.checkpoints, ...subInferredCheckpoints])],
-        relatedFiles: sub.files.length > 0 ? sub.files : subStructuredInfo.relatedFiles,
-        notes: subStructuredInfo.notes,
-      };
-      subTask.description = generateStructuredDescription(subStructuredData, template as DescriptionTemplateType);
-
-      subTask.priority = taskPriority;
-      subTask.recommendedRole = analysis.recommendedRole;
-
-      // 设置父子关系
-      subTask.parentId = taskId;
-
-      // 设置依赖关系（使用已创建的子任务ID，避免重新生成不匹配的ID）
-      if (sub.dependsOn >= 0 && sub.dependsOn < i) {
-        const depSubId = subtaskIds[sub.dependsOn];
-        if (depSubId) {
-          subTask.dependencies = [depSubId];
-        }
-      }
-
-      writeTaskMeta(subTask, cwd);
-
-      // CP-1 (IR-01-04): 使用 inferCheckpointsFromDescription 替代硬编码检查点
-      const subCheckpointTexts = subInferredCheckpoints.length > 0
-        ? subInferredCheckpoints
-        : [`完成 ${sub.title}`];
-      const subFilterResult = filterLowQualityCheckpoints(subCheckpointTexts);
-      const subFilteredCheckpoints = subFilterResult.kept;
-      const subTaskDir = path.join(getTasksDir(cwd), subId);
-      const subCheckpointPath = path.join(subTaskDir, 'checkpoint.md');
-      const subCheckpointContent = `# ${subId} 检查点\n\n${subFilteredCheckpoints.map((cp: string) => `- [ ] ${cp}`).join('\n')}\n`;
-      fs.writeFileSync(subCheckpointPath, subCheckpointContent, 'utf-8');
-      syncCheckpointsToMeta(subId, cwd);
-
-      // Link to parent task (update parent subtaskIds and history)
-      addSubtaskToParent(taskId, subId, cwd);
-
-      console.log(`  ${i + 1}. ${subId}: ${sub.title}`);
-      console.log(`     Files: ${sub.files.length > 0 ? sub.files.join(', ') : 'TBD'}`);
-      console.log(`     Estimated: ~${sub.estimatedMinutes} minutes`);
-      if (subTask.dependencies && subTask.dependencies.length > 0) {
-        console.log(`     Dependencies: ${subTask.dependencies.join(', ')}`);
-      }
-      console.log('');
-    }
-
-    // CP-4/CP-2 (IR-01-05): Use graph module for dependency inference with cycle validation
-    const allTasksForSubDeps = getAllTasks(cwd);
-    const subDepGraph = DependencyGraph.fromTasks(allTasksForSubDeps);
-    for (const subId of subtaskIds) {
-      const subTaskMeta = readTaskMeta(subId, cwd);
-      if (!subTaskMeta) continue;
-
-      const subDeps = inferDependenciesUnified(subTaskMeta, allTasksForSubDeps, { strategy: 'file-overlap' });
-      if (subDeps.length > 0) {
-        const existingDeps = subTaskMeta.dependencies || [];
-        // Filter inferred deps: only add if they don't create cycles (GATE-DEP-002)
-        const safeNewDepIds = subDeps
-          .map(d => d.depTaskId)
-          .filter(id => !existingDeps.includes(id) && !subDepGraph.wouldCreateCycle(subId, id));
-
-        if (safeNewDepIds.length > 0) {
-          subTaskMeta.dependencies = [...existingDeps, ...safeNewDepIds];
-          writeTaskMeta(subTaskMeta, cwd);
-          // Update graph to reflect new edges
-          for (const newDepId of safeNewDepIds) {
-            subDepGraph.addEdge(subId, newDepId);
-          }
-        }
-
-        // CP-4: Validate subtask dependencies with GATE-DEP-001/002/003
-        const subValidation = validateNewTaskDeps(subId, subTaskMeta.dependencies || [], subDepGraph, allTasksForSubDeps);
-        if (subValidation.warnings.length > 0) {
-          for (const w of subValidation.warnings) {
-            console.log(`   ⚠️  ${subId}: ${w}`);
-          }
-        }
-        if (subValidation.errors.length > 0) {
-          for (const e of subValidation.errors) {
-            console.log(`   ❌ ${subId}: ${e}`);
-          }
-        }
-
-        // Report skipped deps due to cycle detection
-        const skippedDeps = subDeps
-          .filter(d => !existingDeps.includes(d.depTaskId) && subDepGraph.wouldCreateCycle(subId, d.depTaskId));
-        if (skippedDeps.length > 0) {
-          console.log(`   ⚠️  ${subId}: Skipped ${skippedDeps.length} inferred dependencies (would create cycle)`);
-        }
-      }
-    }
-
-    } catch (err) {
-      // IR-01-13: Partial failure — clean up already-created subtasks
-      console.error(`\n❌ Subtask creation failed: ${err instanceof Error ? err.message : String(err)}`);
-      if (subtaskIds.length > 0) {
-        console.log(`   Cleaning up ${subtaskIds.length} created subtasks...`);
-        for (const cleanupId of subtaskIds) {
-          try {
-            const cleanupDir = path.join(getTasksDir(cwd), cleanupId);
-            if (fs.existsSync(cleanupDir)) {
-              fs.rmSync(cleanupDir, { recursive: true, force: true });
-            }
-          } catch {
-            // Best-effort cleanup
-          }
-        }
-        // Remove subtaskIds from parent
-        const parentMeta = readTaskMeta(taskId, cwd);
-        if (parentMeta) {
-          parentMeta.subtaskIds = (parentMeta.subtaskIds || []).filter(id => !subtaskIds.includes(id));
-          writeTaskMeta(parentMeta, cwd);
-        }
-        console.log(`   Cleaned up. Parent task ${taskId} retained.`);
-      }
-      console.log('');
-    }
-
-    if (subtaskIds.length > 0) {
-      console.log(`✅ Split into ${subtaskIds.length} subtasks`);
-      console.log(`   Parent task: ${taskId}`);
-      console.log('');
-    }
-  }
   if (!skipValidation) {
     const validation = hasValidCheckpoints(checkpointPath, false);
     if (!validation.valid) {
@@ -1164,206 +982,14 @@ export function assessComplexity(
     level = 'high';
   }
 
-  // 生成拆分建议
-  const splitSuggestions = generateSplitSuggestions(
-    description,
-    files,
-    workItemCount,
-    estimatedMinutes,
-    analysis
-  );
-
   return {
     level,
     score: totalScore,
     fileCount,
     workItemCount,
     estimatedMinutes,
-    splitSuggestions,
     signals,
   };
-}
-
-/**
- * 生成任务拆分建议
- *
- * 策略（按优先级）：
- * 1. 按架构层级拆分（Layer0类型 → Layer1工具 → Layer2核心 → Layer3命令）
- * 2. 按文件目录边界拆分
- * 3. 按工作项数量拆分
- * - 每个子任务控制在 15 分钟以内
- * - 依赖关系遵循底层先于上层
- */
-function generateSplitSuggestions(
-  description: string,
-  files: string[],
-  workItemCount: number,
-  totalMinutes: number,
-  analysis: RequirementAnalysis
-): SplitSuggestion[] {
-  // 只有复杂任务才需要拆分建议
-  if (totalMinutes <= 15) return [];
-
-  const suggestions: SplitSuggestion[] = [];
-
-  // 策略1: 按架构层级拆分（优先策略）
-  const layerGroups = groupFilesByLayer(files);
-  if (layerGroups.size >= 2 && files.length >= 2) {
-    const layerOrder: ArchitectureLayer[] = ['Layer0', 'Layer1', 'Layer2', 'Layer3'];
-    let prevIdx = -1;
-
-    for (const layer of layerOrder) {
-      const layerFiles = layerGroups.get(layer);
-      if (!layerFiles || layerFiles.length === 0) continue;
-
-      const layerDef = LAYER_DEFINITIONS[layer];
-      const estMinutes = Math.max(5, Math.ceil(layerFiles.length * 3 + 2));
-
-      suggestions.push({
-        title: `${analysis.title} - ${layerDef.label}`,
-        description: `修改${layerDef.description}层文件: ${layerFiles.join(', ')}`,
-        files: layerFiles,
-        estimatedMinutes: estMinutes,
-        dependsOn: prevIdx,
-      });
-      prevIdx = suggestions.length - 1;
-    }
-
-    // 如果没有按层级成功拆分（所有文件都在同一层），回退到目录拆分
-    if (suggestions.length <= 1) {
-      suggestions.length = 0; // 清空，走下面的策略
-    }
-  }
-
-  // 策略2: 按文件目录边界拆分（当策略1不适用时）
-  if (suggestions.length === 0 && files.length >= 3) {
-    const fileGroups = new Map<string, string[]>();
-    for (const file of files) {
-      const parts = file.split('/');
-      const dir = parts.length > 1 ? parts.slice(0, -1).join('/') : 'root';
-      if (!fileGroups.has(dir)) fileGroups.set(dir, []);
-      fileGroups.get(dir)!.push(file);
-    }
-
-    if (fileGroups.size <= 1 && files.length >= 3) {
-      const sortedFiles = sortFilesByLayer(files);
-      const mid = Math.ceil(sortedFiles.length / 2);
-      const firstHalf = sortedFiles.slice(0, mid);
-      const secondHalf = sortedFiles.slice(mid);
-
-      suggestions.push({
-        title: `${analysis.title} - 基础实现`,
-        description: `完成核心功能实现（底层依赖），涉及文件: ${firstHalf.join(', ')}`,
-        files: firstHalf,
-        estimatedMinutes: Math.ceil(totalMinutes * 0.6),
-        dependsOn: -1,
-      });
-      suggestions.push({
-        title: `${analysis.title} - 完善与测试`,
-        description: `完成剩余修改和验证（上层逻辑），涉及文件: ${secondHalf.join(', ')}`,
-        files: secondHalf,
-        estimatedMinutes: Math.ceil(totalMinutes * 0.4),
-        dependsOn: 0,
-      });
-    } else {
-      const groups = Array.from(fileGroups.entries());
-      for (let i = 0; i < groups.length; i++) {
-        const group = groups[i];
-        if (!group) continue;
-        const [dir, groupFiles] = group;
-        const isFirst = i === 0;
-        suggestions.push({
-          title: `${analysis.title} - ${dir} 模块`,
-          description: `修改 ${dir} 目录下文件: ${groupFiles.join(', ')}`,
-          files: groupFiles,
-          estimatedMinutes: Math.max(5, Math.ceil(groupFiles.length * 3 + 2)),
-          dependsOn: isFirst ? -1 : i - 1,
-        });
-      }
-    }
-  }
-
-  // 策略3: 按工作项数量拆分
-  if (suggestions.length === 0 && workItemCount >= 4) {
-    suggestions.push({
-      title: `${analysis.title} - 核心修改`,
-      description: `完成核心代码修改和功能实现`,
-      files: files.slice(0, Math.ceil(files.length / 2)),
-      estimatedMinutes: Math.ceil(totalMinutes * 0.5),
-      dependsOn: -1,
-    });
-    suggestions.push({
-      title: `${analysis.title} - 配置与集成`,
-      description: `完成配置修改和模块集成`,
-      files: files.slice(Math.ceil(files.length / 2)),
-      estimatedMinutes: Math.ceil(totalMinutes * 0.3),
-      dependsOn: 0,
-    });
-    suggestions.push({
-      title: `${analysis.title} - 验证与测试`,
-      description: `验证修改正确性，运行测试并确保无回归`,
-      files: [],
-      estimatedMinutes: Math.ceil(totalMinutes * 0.2),
-      dependsOn: 1,
-    });
-  }
-
-  // 兜底: 无法智能拆分
-  if (suggestions.length === 0) {
-    suggestions.push({
-      title: `${analysis.title} (建议拆分)`,
-      description: `此任务预估 ${totalMinutes} 分钟，建议按架构层级（类型→工具→核心→命令）手动拆分为更小的子任务`,
-      files,
-      estimatedMinutes: totalMinutes,
-      dependsOn: -1,
-    });
-  }
-
-  // 确保每个子任务不超过 15 分钟
-  // IR-01-11: Remap dependsOn indices from `suggestions` to `finalSuggestions`
-  const finalSuggestions: SplitSuggestion[] = [];
-  const indexMap = new Map<number, number>(); // old suggestions index → new finalSuggestions index
-
-  for (let si = 0; si < suggestions.length; si++) {
-    const s = suggestions[si];
-    if (!s) continue;
-
-    // Remap dependsOn from original suggestions index to finalSuggestions index
-    const remappedDependsOn = s.dependsOn >= 0 && indexMap.has(s.dependsOn)
-      ? indexMap.get(s.dependsOn)!
-      : s.dependsOn;
-
-    if (s.estimatedMinutes <= 15) {
-      indexMap.set(si, finalSuggestions.length);
-      finalSuggestions.push({ ...s, dependsOn: remappedDependsOn });
-    } else {
-      // 子任务仍然太大，按层级排序后拆分
-      const sortedFiles = sortFilesByLayer(s.files);
-      const half = Math.ceil(sortedFiles.length / 2);
-      if (half > 0 && sortedFiles.length > 1) {
-        indexMap.set(si, finalSuggestions.length);
-        finalSuggestions.push({
-          ...s,
-          title: `${s.title} (前半)`,
-          files: sortedFiles.slice(0, half),
-          estimatedMinutes: Math.ceil(s.estimatedMinutes / 2),
-          dependsOn: remappedDependsOn,
-        });
-        finalSuggestions.push({
-          ...s,
-          title: `${s.title} (后半)`,
-          files: sortedFiles.slice(half),
-          estimatedMinutes: Math.ceil(s.estimatedMinutes / 2),
-          dependsOn: finalSuggestions.length - 1,
-        });
-      } else {
-        indexMap.set(si, finalSuggestions.length);
-        finalSuggestions.push({ ...s, dependsOn: remappedDependsOn });
-      }
-    }
-  }
-
-  return finalSuggestions;
 }
 
 /**

@@ -28,7 +28,7 @@ import { archiveReportIfExists } from './harness-helpers.js';
 import { getAgent, buildEffectiveTools } from './headless-agent.js';
 import { createSessionAwareEngine } from './feedback-constraint-engine.js';
 import { loadPromptTemplate, resolveTemplate } from './prompt-templates.js';
-import { t } from '../i18n/index.js';
+import { t, getI18n } from '../i18n/index.js';
 
 export class HarnessExecutor {
   private config: HarnessConfig;
@@ -52,7 +52,12 @@ export class HarnessExecutor {
     const effectiveTimeout = timeoutOverride ?? this.config.timeout;
     const timeoutMinutes = Math.round(effectiveTimeout / 60);
 
-    const texts = t(this.config.cwd);
+    let texts: ReturnType<typeof t>;
+    try {
+      texts = t(this.config.cwd);
+    } catch {
+      texts = getI18n('zh');
+    }
     console.log(`   ${texts.harness.logs.taskLabel}: ${task.title}`);
     console.log(`   ${texts.harness.logs.typeLabel}: ${task.type}`);
     console.log(`   ${texts.harness.logs.priorityLabel}: ${task.priority}`);
@@ -213,7 +218,12 @@ export class HarnessExecutor {
    */
   private buildDevPrompt(task: TaskMeta, contract: SprintContract, timeoutMinutes?: number, retryContext?: RetryContext): string {
     // 获取国际化文本
-    const texts = t(this.config.cwd);
+    let texts: ReturnType<typeof t>;
+    try {
+      texts = t(this.config.cwd);
+    } catch {
+      texts = getI18n('zh');
+    }
 
     // 角色感知提示词
     const roleTemplate = getDevRoleTemplate(task.recommendedRole);
@@ -278,7 +288,12 @@ export class HarnessExecutor {
    */
   private buildRetryContextSection(retryContext: RetryContext): string {
     const parts: string[] = [];
-    const texts = t(this.config.cwd);
+    let texts: ReturnType<typeof t>;
+    try {
+      texts = t(this.config.cwd);
+    } catch {
+      texts = getI18n('zh');
+    }
     const phaseLabel: Record<string, string> = {
       development: texts.harness.phaseLabels.development,
       code_review: texts.harness.phaseLabels.codeReview,
@@ -423,7 +438,12 @@ export class HarnessExecutor {
    * 格式化开发报告
    */
   private formatDevReport(report: DevReport): string {
-    const texts = t(this.config.cwd);
+    let texts: ReturnType<typeof t>;
+    try {
+      texts = t(this.config.cwd);
+    } catch {
+      texts = getI18n('zh');
+    }
     const lines: string[] = [
       `# ${texts.harness.reports.devReportTitle} - ${report.taskId}`,
       '',

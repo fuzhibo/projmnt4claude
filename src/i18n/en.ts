@@ -576,8 +576,6 @@ export const enTexts: I18nTexts = {
     complexityWarning: '⚠️ Complexity Warning',
     complexityHigh: 'This task is estimated to take {minutes} minutes, exceeding the default Harness timeout threshold.',
     exceedsTimeout: 'Consider splitting this task into smaller subtasks, each under 15 minutes.',
-    considerSplitting: 'Split suggestions:',
-    splitSuggestions: '{index}. {title}{dependency}',
     dependsOn: ' (depends on subtask {index})',
     files: 'Files: {files}',
     estimated: 'Estimated: ~{minutes} minutes',

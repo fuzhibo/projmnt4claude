@@ -60,7 +60,6 @@ node ${CLAUDE_PLUGIN_ROOT}/skills/projmnt4claude/dist/projmnt4claude.js init-req
 | `--no-plan` | 创建任务后不询问是否添加到执行计划 |
 | `--skip-validation` | 跳过 checkpoint 质量校验（不推荐） |
 | `--template <type>` | 描述模板类型: simple (默认) 或 detailed (详细结构化) |
-| `--auto-split` | 自动拆分复杂任务为子任务（复杂度评估为 high 时生效） |
 | `--no-ai` | 禁用 AI 增强，仅使用规则引擎分析 |
 
 ## AI 增强行为

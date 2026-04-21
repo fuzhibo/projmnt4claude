@@ -33,6 +33,7 @@ import {
   normalizeStatus,
   normalizePriority,
   inferTaskType,
+  TERMINAL_STATUSES,
 } from '../types/task';
 import * as crypto from 'crypto';
 import { SEPARATOR_WIDTH } from '../utils/format';
@@ -59,6 +60,9 @@ import { t } from '../i18n';
 
 /** History记录最大显示数 */
 const MAX_HISTORY_DISPLAY = 20;
+
+/** 终态任务状态集合，用于高效查询 */
+const TERMINAL_STATUSES_SET = new Set(TERMINAL_STATUSES);
 
 /**
  * 过滤None意义的History记录
@@ -4241,24 +4245,24 @@ export async function batchUpdateTasks(
 
     // 记录被skipped的ResolvedTask（用 in 审计Tip）
     filteredTasks = tasksToUpdate.filter(t =>
-      t.status === 'resolved' || t.status === 'closed' || t.status === 'abandoned' || t.status === 'failed'
+      TERMINAL_STATUSES_SET.has(normalizeStatus(t.status))
     );
 
     // 当指定Task列表时, 默认只Updated非终态Task, 除非Use  --all
     if (!options.all) {
       tasksToUpdate = tasksToUpdate.filter(t =>
-        t.status !== 'resolved' && t.status !== 'closed' && t.status !== 'abandoned' && t.status !== 'failed'
+        !TERMINAL_STATUSES_SET.has(normalizeStatus(t.status))
       );
     }
   } else {
     // Not specifiedTask列表, Use 原有逻辑
     tasksToUpdate = options.all
       ? allTasks
-      : allTasks.filter(t => t.status !== 'resolved' && t.status !== 'closed' && t.status !== 'abandoned' && t.status !== 'failed');
+      : allTasks.filter(t => !TERMINAL_STATUSES_SET.has(normalizeStatus(t.status)));
 
     filteredTasks = options.all
       ? []
-      : allTasks.filter(t => t.status === 'resolved' || t.status === 'closed' || t.status === 'abandoned' || t.status === 'failed');
+      : allTasks.filter(t => TERMINAL_STATUSES_SET.has(normalizeStatus(t.status)));
   }
 
   if (tasksToUpdate.length === 0) {
@@ -4279,9 +4283,8 @@ export async function batchUpdateTasks(
   console.log('');
 
   // 检测高风险操作: 从 resolved/closed 变为 open
-  const terminalStatuses = ['resolved', 'closed', 'abandoned'];
   const reopeningTasks = tasksToUpdate.filter(t =>
-    options.status === 'open' && terminalStatuses.includes(t.status)
+    options.status === 'open' && TERMINAL_STATUSES_SET.has(normalizeStatus(t.status))
   );
 
   // 检测是否Use 了 --all 选项（这会导致包含Resolved tasks）

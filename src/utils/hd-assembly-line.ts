@@ -332,7 +332,7 @@ export class AssemblyLine {
 
           // 超时提示：当预估耗时 > 15 分钟时建议拆分
           if ((task.estimatedMinutes ?? 0) > 15) {
-            console.log(`   💡 提示: 此任务预估耗时 ${task.estimatedMinutes} 分钟，建议使用 --auto-split 拆分为子任务`);
+            console.log(`   💡 提示: 此任务预估耗时 ${task.estimatedMinutes} 分钟，建议使用 task split 命令拆分为子任务`);
           }
 
           try {

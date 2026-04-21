@@ -45,6 +45,8 @@ export interface BatchUpdateLogEntry {
     updatedCount: number;
     filteredCount: number;
   };
+  /** 变更说明 (change-note) */
+  changeNote?: string;
   /** 执行上下文信息 */
   context: {
     /** 工作目录 */

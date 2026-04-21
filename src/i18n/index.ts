@@ -583,8 +583,6 @@ export interface I18nTexts {
     complexityWarning: string;
     complexityHigh: string;
     exceedsTimeout: string;
-    considerSplitting: string;
-    splitSuggestions: string;
     dependsOn: string;
     files: string;
     estimated: string;

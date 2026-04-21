@@ -249,10 +249,6 @@ describe('assessComplexity', () => {
     expect(sig!.weight).toBe(Math.min(5 * 4, 15)); // 15 (capped)
   });
 
-  test('简单任务不生成拆分建议', () => {
-    const result = assessComplexity('修复 src/button.ts 中的拼写错误', makeAnalysis());
-    expect(result.splitSuggestions).toHaveLength(0);
-  });
 
   test('评分不超过100', () => {
     const desc = [
@@ -411,23 +407,4 @@ describe('initRequirement', () => {
     expect(exitCode).toBeNull();
   });
 
-  test('自动拆分: 高复杂度任务触发子任务创建', async () => {
-    const desc = [
-      '大规模重构:',
-      'src/types/auth.ts src/utils/auth.ts src/commands/login.ts',
-      'src/commands/logout.ts src/middleware/auth-check.ts src/services/token-service.ts',
-      '需要修改所有模块、系统和服务组件',
-    ].join('\n');
-    await initRequirement(desc, '/test', {
-      nonInteractive: true,
-      noAI: true,
-      noPlan: true,
-      skipValidation: true,
-      autoSplit: true,
-    });
-    // createTask called for the parent task at minimum
-    expect(mockCreateTask).toHaveBeenCalled();
-    // If complexity is high enough, writeTaskMeta is also called for subtasks
-    // The exact number depends on the split suggestions generated
-  });
 });

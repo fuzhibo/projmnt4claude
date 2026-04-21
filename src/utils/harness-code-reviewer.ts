@@ -29,7 +29,7 @@ import { detectContradiction } from './contradiction-detector.js';
 import { createSessionAwareEngine } from './feedback-constraint-engine.js';
 import { verdictResultMarker, verdictHasReason } from './validation-rules/verdict-rules.js';
 import { loadPromptTemplate, resolveTemplate } from './prompt-templates.js';
-import { t } from '../i18n/index.js';
+import { t, getI18n } from '../i18n/index.js';
 
 export class HarnessCodeReviewer {
   private config: HarnessConfig;
@@ -42,7 +42,14 @@ export class HarnessCodeReviewer {
    * 执行代码审核
    */
   async review(task: TaskMeta, devReport: DevReport, retryContext?: RetryContext): Promise<CodeReviewVerdict> {
-    const texts = t(this.config.cwd);
+    // 防御性编程：确保 texts 始终有值，防止 "texts is not defined" 错误
+    let texts: ReturnType<typeof t>;
+    try {
+      texts = t(this.config.cwd);
+    } catch {
+      // 如果 t() 抛出错误，使用默认的中文文本
+      texts = getI18n('zh');
+    }
     console.log(`\n🔍 ${texts.harness.logs.codeReviewPhase}`);
     console.log(`   ${texts.harness.logs.taskLabel}: ${task.title}`);
 
@@ -138,7 +145,14 @@ export class HarnessCodeReviewer {
     failedCheckpoints: string[];
     details?: string;
   }> {
-    const texts = t(this.config.cwd);
+    // 防御性编程：确保 texts 始终有值，防止 "texts is not defined" 错误
+    let texts: ReturnType<typeof t>;
+    try {
+      texts = t(this.config.cwd);
+    } catch {
+      // 如果 t() 抛出错误，使用默认的中文文本
+      texts = getI18n('zh');
+    }
     const prompt = this.buildCodeReviewPrompt(task, devReport, checkpoints, retryContext);
     console.log(`\n   📝 ${texts.harness.logs.codeReviewPromptGenerated}`);
 
@@ -190,6 +204,14 @@ export class HarnessCodeReviewer {
     checkpoints: CheckpointMetadata[],
     retryContext?: RetryContext
   ): string {
+    // 防御性编程：确保 texts 始终有值，防止 "texts is not defined" 错误
+    let texts: ReturnType<typeof t>;
+    try {
+      texts = t(this.config.cwd);
+    } catch {
+      // 如果 t() 抛出错误，使用默认的中文文本
+      texts = getI18n('zh');
+    }
     const roleTemplate = getCodeReviewRoleTemplate(task.recommendedRole);
 
     // Build conditional sections
@@ -273,7 +295,14 @@ export class HarnessCodeReviewer {
    * 格式化报告
    */
   private formatReport(verdict: CodeReviewVerdict): string {
-    const texts = t(this.config.cwd);
+    // 防御性编程：确保 texts 始终有值，防止 "texts is not defined" 错误
+    let texts: ReturnType<typeof t>;
+    try {
+      texts = t(this.config.cwd);
+    } catch {
+      // 如果 t() 抛出错误，使用默认的中文文本
+      texts = getI18n('zh');
+    }
 
     const lines: string[] = [
       `# ${texts.harness.reports.codeReviewReportTitle} - ${verdict.taskId}`,

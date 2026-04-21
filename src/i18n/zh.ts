@@ -576,8 +576,6 @@ export const zhTexts: I18nTexts = {
     complexityWarning: '⚠️ 复杂度预警',
     complexityHigh: '此任务预估需要 {minutes} 分钟，超过默认 Harness 超时阈值。',
     exceedsTimeout: '建议将此任务拆分为更小的子任务，每个控制在 15 分钟以内。',
-    considerSplitting: '拆分建议：',
-    splitSuggestions: '{index}. {title}{dependency}',
     dependsOn: '（依赖于子任务 {index}）',
     files: '文件: {files}',
     estimated: '预估: ~{minutes} 分钟',

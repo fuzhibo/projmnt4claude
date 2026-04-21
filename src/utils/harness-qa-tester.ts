@@ -31,7 +31,7 @@ import { detectContradiction } from './contradiction-detector.js';
 import { createSessionAwareEngine } from './feedback-constraint-engine.js';
 import { qaVerdictResultMarker, qaVerdictHasReason } from './validation-rules/verdict-rules.js';
 import { loadPromptTemplate, resolveTemplate } from './prompt-templates.js';
-import { t } from '../i18n/index.js';
+import { t, getI18n } from '../i18n/index.js';
 
 /**
  * 验证检查点的验证信息完整性
@@ -52,7 +52,14 @@ export class HarnessQATester {
    * 执行 QA 验证
    */
   async verify(task: TaskMeta, codeReviewVerdict: CodeReviewVerdict, retryContext?: RetryContext): Promise<QAVerdict> {
-    const texts = t(this.config.cwd);
+    // 防御性编程：确保 texts 始终有值，防止 "texts is not defined" 错误
+    let texts: ReturnType<typeof t>;
+    try {
+      texts = t(this.config.cwd);
+    } catch {
+      // 如果 t() 抛出错误，使用默认的中文文本
+      texts = getI18n('zh');
+    }
     console.log(`\n🧪 ${texts.harness.logs.qaPhase}`);
     console.log(`   ${texts.harness.logs.taskLabel}: ${task.title}`);
 
@@ -169,7 +176,14 @@ export class HarnessQATester {
     failedCheckpoints: string[];
     details?: string;
   }> {
-    const texts = t(this.config.cwd);
+    // 防御性编程：确保 texts 始终有值，防止 "texts is not defined" 错误
+    let texts: ReturnType<typeof t>;
+    try {
+      texts = t(this.config.cwd);
+    } catch {
+      // 如果 t() 抛出错误，使用默认的中文文本
+      texts = getI18n('zh');
+    }
     // 分离自动化检查点和人工验证检查点
     const automatedCheckpoints = checkpoints.filter(cp => !cp.requiresHuman);
     const humanCheckpoints = checkpoints.filter(cp => cp.requiresHuman === true);
@@ -382,7 +396,14 @@ export class HarnessQATester {
    * 格式化 QA 报告
    */
   private formatReport(verdict: QAVerdict): string {
-    const texts = t(this.config.cwd);
+    // 防御性编程：确保 texts 始终有值，防止 "texts is not defined" 错误
+    let texts: ReturnType<typeof t>;
+    try {
+      texts = t(this.config.cwd);
+    } catch {
+      // 如果 t() 抛出错误，使用默认的中文文本
+      texts = getI18n('zh');
+    }
 
     const lines: string[] = [
       `# ${texts.harness.reports.qaReportTitle} - ${verdict.taskId}`,

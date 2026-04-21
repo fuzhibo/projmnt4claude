@@ -258,7 +258,15 @@ export async function runHeadlessClaudeWithRetry(
   retryConfig: RetryConfig,
   cwd?: string,
 ): Promise<HeadlessClaudeResult> {
-  const texts = t(cwd);
+  // 防御性编程：确保 texts 始终有值，防止 "texts is not defined" 错误
+  let texts: ReturnType<typeof t>;
+  try {
+    texts = t(cwd);
+  } catch {
+    // 如果 t() 抛出错误，使用默认的中文文本
+    const { getI18n } = await import('../i18n/index.js');
+    texts = getI18n('zh');
+  }
   const maxAttempts = retryConfig.maxAttempts + 1; // +1 因为第一次不算重试
   let lastResult: HeadlessClaudeResult | null = null;
 
@@ -299,7 +307,14 @@ export async function runHeadlessClaudeWithRetry(
  * 归档路径格式: {报告目录}/archive/{ISO-timestamp}-{原始文件名}
  */
 export function archiveReportIfExists(reportPath: string, cwd?: string): void {
-  const texts = t(cwd);
+  // 防御性编程：确保 texts 始终有值，防止 "texts is not defined" 错误
+  let texts: ReturnType<typeof t>;
+  try {
+    texts = t(cwd);
+  } catch {
+    const { getI18n } = require('../i18n/index.js');
+    texts = getI18n('zh');
+  }
   try {
     // Resolve to absolute path to ensure correct behavior with relative paths
     const absolutePath = path.resolve(reportPath);
