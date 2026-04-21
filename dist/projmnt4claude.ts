@@ -31,6 +31,7 @@ import {
   purgeTasks,
   renameTaskCommand,
   showBatchUpdateLogs,
+  reopenTask,
 } from './commands/task';
 import {
   showPlan,
@@ -144,7 +145,7 @@ program
 // task command group
 program
   .command('task <action> [id]')
-  .description('Manage tasks\n\nBasic: create/list/show/get/update/delete/rename/purge/execute/checkpoint\nAdvanced: dependency/add-subtask/status-guide/complete/split/search/batch-update/batch-update-logs/count\n\n[Deprecated - will be removed]:\n  submit                 Use: task update <id> --status wait_evaluation\n  validate               Use: harness evaluation phase (auto-executed)\n\nGlobal Options:\n  --token <n>            Token estimation\n  -f, --force            Force operation\n\ncreate Options:\n  --into <id>            Create as subtask\n  --from-requirement     Create from requirement\n  --requirement-text <text>  Requirement text\n\nlist Options:\n  --status <status>      Filter by status\n  --priority <priority>  Filter by priority\n  --type <type>          Filter by type\n\nshow Options:\n  --json                 JSON output\n\nupdate Options:\n  --status <status>      Update status\n  --priority <priority>  Update priority\n  --sync-children        Sync subtask status\n\ndependency Options:\n  --from <id>            Dependency source\n  --to <id>              Dependency target\n  --remove               Remove dependency\n\nsplit Options:\n  --parts <n>            Split count\n  --strategy <strategy>  Split strategy\n\ncheckpoint Options:\n  --pass                 Pass checkpoint\n  --fail                 Fail checkpoint\n  --missing-verification Mark needs verification\n\n! dependency format (note argument order):\n  task dependency <add|remove> <taskId> --dep-id <depTaskId>\n\n  Examples:\n    task dependency add TASK-001 --dep-id TASK-002    # TASK-001 depends on TASK-002\n    task dependency remove TASK-001 --dep-id TASK-002 # Remove dependency\n\nrename format:\n  task rename <oldTaskId> <newTaskId>\n\n  Example:\n    task rename TASK-001 TASK-feature-new-name')
+  .description('Manage tasks\n\nBasic: create/list/show/get/update/delete/reopen/rename/purge/execute/checkpoint\nAdvanced: dependency/add-subtask/status-guide/complete/split/search/batch-update/batch-update-logs/count\n\n[Deprecated - will be removed]:\n  submit                 Use: task update <id> --status wait_evaluation\n  validate               Use: harness evaluation phase (auto-executed)\n\nGlobal Options:\n  --token <n>            Token estimation\n  -f, --force            Force operation\n\ncreate Options:\n  --into <id>            Create as subtask\n  --from-requirement     Create from requirement\n  --requirement-text <text>  Requirement text\n\nlist Options:\n  --status <status>      Filter by status\n  --priority <priority>  Filter by priority\n  --type <type>          Filter by type\n\nshow Options:\n  --json                 JSON output\n\nupdate Options:\n  --status <status>      Update status\n  --priority <priority>  Update priority\n  --sync-children        Sync subtask status\n\nreopen Options:\n  --enhancement          Mark as enhancement request\n  --failed-checkpoints <ids>  Failed checkpoint IDs (comma-separated)\n  --qa-feedback <text>   QA feedback\n\ndependency Options:\n  --from <id>            Dependency source\n  --to <id>              Dependency target\n  --remove               Remove dependency\n\nsplit Options:\n  --parts <n>            Split count\n  --strategy <strategy>  Split strategy\n\ncheckpoint Options:\n  --pass                 Pass checkpoint\n  --fail                 Fail checkpoint\n  --missing-verification Mark needs verification\n\n! dependency format (note argument order):\n  task dependency <add|remove> <taskId> --dep-id <depTaskId>\n\n  Examples:\n    task dependency add TASK-001 --dep-id TASK-002    # TASK-001 depends on TASK-002\n    task dependency remove TASK-001 --dep-id TASK-002 # Remove dependency\n\nrename format:\n  task rename <oldTaskId> <newTaskId>\n\n  Example:\n    task rename TASK-001 TASK-feature-new-name')
   .allowExcessArguments(true)
   .option('-s, --status <status>', 'Filter by status (list only)')
   .option('-p, --priority <priority>', 'Filter by priority (list only)')
@@ -191,6 +192,10 @@ program
   .option('--change-note <note>', 'Change note, at least 10 characters, recorded in transitionNotes (batch-update only)')
   .option('--source <source>', 'Filter log source (batch-update-logs only): cli/ide/hook/script/unknown')
   .option('--summary', 'Show log statistics summary (batch-update-logs only)')
+  // Reopen options (P2-feature)
+  .option('--enhancement', 'Mark reopen as enhancement request (reopen only)')
+  .option('--failed-checkpoints <ids>', 'Failed checkpoint IDs, comma-separated (reopen only)')
+  .option('--qa-feedback <text>', 'QA feedback for reopen (reopen only)')
   .action(async (action, id, options) => {
     requireInit();
     switch (action) {
@@ -274,6 +279,20 @@ program
           token: options.token,
           syncChildren: options.syncChildren,
           noSync: options.noSync,
+          enhancement: options.enhancement,
+          failedCheckpoints: options.failedCheckpoints,
+          qaFeedback: options.qaFeedback,
+        });
+        break;
+      case 'reopen':
+        if (!id) {
+          console.error('(X) Error: reopen operation requires task ID');
+          process.exit(1);
+        }
+        await reopenTask(id, {
+          enhancement: options.enhancement,
+          failedCheckpoints: options.failedCheckpoints,
+          qaFeedback: options.qaFeedback,
         });
         break;
       case 'delete':
@@ -579,8 +598,9 @@ program
   .option('--smart', '启用 AI 语义依赖推断 (仅 recommend, Layer3 增强)')
   .option('--all', '显示全部状态任务，默认仅推荐 open (仅 recommend)')
   .option('--strict-subtask-coverage', '严格子任务覆盖检测：发现缺失子任务时中止推荐 (仅 recommend)')
-  .option('--require-quality', '启用质量门禁检查，过滤低质量任务 (仅 recommend)')
-  .option('--no-quality-gate', '禁用质量门禁检查 (仅 recommend)')
+  .option('--strict-quality-gate', '严格质量门禁检查：质量检查失败时中止推荐 (仅 recommend)')
+  .option('--quality-threshold <score>', '质量门禁阈值 (0-100)，低于此分数的任务将被标记 (仅 recommend)', '60')
+  .option('--skip-quality-gate', '跳过质量门禁检查 (仅 recommend)')
   .action(async (action, id, options) => {
     requireInit();
     switch (action) {
@@ -612,7 +632,9 @@ program
           all: options.all,
           smart: options.smart,
           strictSubtaskCoverage: options.strictSubtaskCoverage,
-          requireQuality: options.qualityGate === false ? false : options.requireQuality || true,
+          strictQualityGate: options.strictQualityGate,
+          qualityThreshold: parseInt(options.qualityThreshold, 10) || 60,
+          skipQualityGate: options.skipQualityGate,
         });
         break;
       default:
@@ -714,7 +736,6 @@ program
     '  --no-plan                创建任务后不询问是否添加到执行计划\n' +
     '  --skip-validation        跳过初始化验证\n' +
     '  --template <file>        使用需求模板文件\n' +
-    '  --auto-split             自动拆分为子任务\n' +
     '  --no-ai                  禁用 AI 辅助\n' +
     '  --require-quality <n>    质量门禁阈值\n' +
     '  -f, --force              强制覆盖\n' +
@@ -726,7 +747,6 @@ program
   .option('--no-plan', '创建任务后不询问是否添加到执行计划')
   .option('--skip-validation', '跳过初始化验证')
   .option('--template <file>', '使用需求模板文件', 'simple')
-  .option('--auto-split', '自动拆分为子任务')
   .option('--no-ai', '禁用 AI 辅助')
   .option('--require-quality <n>', '质量门禁阈值')
   .option('-f, --force', '强制覆盖')
@@ -800,7 +820,6 @@ program
       noPlan: options.noPlan,
       skipValidation: options.skipValidation,
       template: options.template,
-      autoSplit: options.autoSplit,
       noAI: options.noAi,
       requireQuality: options.requireQuality ? parseInt(options.requireQuality, 10) : undefined,
       decompose: options.decompose,
