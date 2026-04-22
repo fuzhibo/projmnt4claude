@@ -607,6 +607,11 @@ export interface TaskMeta {
    * If not specified, will be auto-inferred based on task type and priority
    */
   checkpointPolicy?: CheckpointPolicy;
+  /**
+   * Related file paths for this task
+   * Used by QA phase to verify file coverage and file existence
+   */
+  files?: string[];
 }
 
 /**
@@ -684,6 +689,9 @@ export function createDefaultTaskMeta(
     priority,
     status: 'open',
     dependencies: [],
+    parentId: undefined,
+    subtaskIds: undefined,
+    hierarchyLevel: undefined,
     createdAt: now,
     updatedAt: now,
     history: [],

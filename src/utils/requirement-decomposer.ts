@@ -23,7 +23,7 @@ import { inferTaskType, inferTaskPriority } from '../types/task';
 import { extractFilePaths } from './quality-gate';
 import { getAIPreset, buildAgentOptionsFromPreset } from '../types/config';
 import { invokeAgent } from './headless-agent.js';
-import { t } from '../i18n/index.js';
+import { t, getDecompositionTemplate } from '../i18n/index.js';
 
 // 安全常量配置
 const SECURITY_CONFIG = {
@@ -338,37 +338,9 @@ async function decomposeWithAI(
     // 限制输入内容长度，防止过大的请求
     const safeContent = content.substring(0, Math.min(content.length, SECURITY_CONFIG.MAX_INPUT_LENGTH));
 
-    const prompt = `请将以下需求/报告分解为多个独立的开发任务。
-
-输入内容：
-${safeContent.substring(0, 4000)}
-
-请分析输入内容，识别出其中包含的独立问题或需求项，并返回 JSON 格式的分解结果：
-{
-  "decomposable": true,
-  "summary": "分解摘要",
-  "items": [
-    {
-      "title": "任务标题（动词开头，简洁明确）",
-      "description": "任务详细描述",
-      "type": "bug|feature|research|docs|refactor|test",
-      "priority": "P0|P1|P2|P3",
-      "suggestedCheckpoints": ["检查点1", "检查点2"],
-      "relatedFiles": ["文件路径1", "文件路径2"],
-      "estimatedMinutes": 15,
-      "dependsOn": []
-    }
-  ]
-}
-
-规则：
-1. 每个 item 应该是一个独立的、可执行的任务
-2. title 必须以动词开头（如：修复、实现、添加、更新等）
-3. priority 根据紧急程度判断：P0=紧急/阻塞，P1=高优先级，P2=中等，P3=低优先级
-4. type 根据内容推断：bug=修复问题，feature=新功能，refactor=重构，docs=文档，test=测试
-5. estimatedMinutes 预估完成时间（分钟），建议每个任务控制在 15-30 分钟
-6. dependsOn 是依赖项的索引数组（如：[0] 表示依赖第一个任务）
-7. 如果无法分解（如内容过于简单），返回 {"decomposable": false, "reason": "原因", "items": []}`;
+    // 使用 i18n 模板生成分解提示词
+    const template = getDecompositionTemplate(cwd);
+    const prompt = template.replace('${safeContent}', safeContent.substring(0, 4000));
 
     // 使用集中配置获取 decomposition 场景预设并调用 Agent
     const agentOptions = buildAgentOptionsFromPreset('decomposition', cwd);
@@ -504,7 +476,109 @@ export const DEFAULT_RECURSIVE_CONFIG: RecursiveDecomposeConfig = {
 };
 
 /**
- * 判断子任务是否需要进一步分解
+ * 使用AI判断子任务是否需要进一步分解
+ *
+ * 对外暴露的统一接口，使用 headless-agent.ts 调用AI进行判断
+ *
+ * @param item 子任务项
+ * @param currentLevel 当前层级
+ * @param maxHierarchyLevel 最大层级限制
+ * @param cwd 工作目录
+ * @returns 是否需要进一步分解及原因
+ */
+export async function aiShouldDecomposeFurther(
+  item: DecomposedTaskItem,
+  currentLevel: number,
+  maxHierarchyLevel: number,
+  cwd: string
+): Promise<{ needsDecomposition: boolean; reason?: string }> {
+  // 检查层级限制
+  if (currentLevel >= maxHierarchyLevel) {
+    return { needsDecomposition: false, reason: '达到最大层级限制' };
+  }
+
+  // 检查预估耗时：简单任务不需要递归
+  if (item.estimatedMinutes < 15) {
+    return { needsDecomposition: false, reason: '预估耗时较短，无需进一步分解' };
+  }
+
+  // 检查描述长度：太短的内容可能无法分解
+  if (item.description.length < 100) {
+    return { needsDecomposition: false, reason: '描述过短，无法进一步分解' };
+  }
+
+  try {
+    const prompt = `请分析以下子任务是否需要进一步分解为更小的子任务。
+
+子任务信息：
+- 标题：${item.title}
+- 描述：${item.description}
+- 类型：${item.type}
+- 优先级：${item.priority}
+- 预估耗时：${item.estimatedMinutes} 分钟
+- 当前层级：${currentLevel}
+- 最大层级：${maxHierarchyLevel}
+
+请分析：
+1. 这个子任务是否包含多个独立的实现步骤？
+2. 预估耗时 ${item.estimatedMinutes} 分钟是否合理？
+3. 是否可以拆分为多个预估耗时小于15分钟的更小任务？
+4. 拆分后是否能产生至少2个独立的子任务？
+
+返回 JSON 格式：
+{
+  "needsDecomposition": true | false,
+  "reason": "判断原因，说明为什么需要或不需要进一步分解"
+}
+
+注意：
+- 如果子任务包含明显的多步骤，应返回 true
+- 如果预估耗时较长且可以拆分，应返回 true
+- 如果描述范围明确且单一，即使耗时较长也应返回 false
+- 只输出 JSON，不要输出其他内容`;
+
+    const agentOptions = buildAgentOptionsFromPreset('decomposition', cwd);
+    const result = await invokeAgent(prompt, agentOptions);
+
+    if (!result.success) {
+      return { needsDecomposition: false, reason: 'AI 调用失败' };
+    }
+
+    // 解析 JSON 响应
+    let parsed: { needsDecomposition?: boolean; reason?: string } | null = null;
+    try {
+      parsed = JSON.parse(result.output);
+    } catch {
+      // 尝试从 markdown code block 中提取
+      const jsonMatch = result.output.match(/```(?:json)?\s*\n?([\s\S]*?)\n?```/);
+      if (jsonMatch?.[1]) {
+        try {
+          parsed = JSON.parse(jsonMatch[1]);
+        } catch {
+          // fall through
+        }
+      }
+    }
+
+    if (!parsed || typeof parsed.needsDecomposition !== 'boolean') {
+      return { needsDecomposition: false, reason: 'AI 响应格式无效' };
+    }
+
+    return {
+      needsDecomposition: parsed.needsDecomposition,
+      reason: parsed.reason || (parsed.needsDecomposition ? 'AI 判定需要进一步分解' : 'AI 判定无需进一步分解'),
+    };
+  } catch (error) {
+    // 出错时保守处理：不进行递归分解
+    if (process.env.DEBUG === 'true') {
+      console.error('[aiShouldDecomposeFurther] 分析过程中发生错误:', error);
+    }
+    return { needsDecomposition: false, reason: '分析过程出错' };
+  }
+}
+
+/**
+ * 判断子任务是否需要进一步分解（内部使用）
  *
  * 使用 AI 分析子任务的复杂度和可分解性
  *
@@ -692,6 +766,8 @@ export async function decomposeRecursively(
         if (i > 0 && subItem.dependsOn.length === 0) {
           subItem.dependsOn = [baseIndex + i - 1];
         }
+        // 设置 parentId 为父任务的 title（在创建时会转换为实际 task ID）
+        subItem.parentId = item.title;
       }
 
       result.push(...recursivelyDecomposed);
@@ -726,6 +802,10 @@ export async function decomposeRequirement(
     useAI = true,
     cwd = process.cwd(),
     validateQuality = true, // 默认启用质量检查
+    currentLevel = 0,
+    enableRecursive = false,
+    maxHierarchyLevel = 3,
+    parentTaskId,
   } = options;
 
   // 清理输入内容
@@ -792,6 +872,21 @@ export async function decomposeRequirement(
             summary: '分解质量检查未通过',
           };
         }
+      }
+
+      // 递归分解（如果启用）
+      if (enableRecursive && currentLevel < maxHierarchyLevel) {
+        const recursivelyDecomposed = await decomposeRecursivelyWithAI(
+          result.items,
+          options,
+          currentLevel,
+          maxHierarchyLevel
+        );
+        return {
+          ...result,
+          items: recursivelyDecomposed,
+          summary: `递归分解为 ${recursivelyDecomposed.length} 个子任务（层级: ${currentLevel + 1}/${maxHierarchyLevel}）`,
+        };
       }
 
       return result;
@@ -865,6 +960,106 @@ export async function decomposeRequirement(
         items: [],
         summary: '分解质量检查未通过',
       };
+    }
+  }
+
+  // 递归分解（如果启用）
+  if (enableRecursive && currentLevel < maxHierarchyLevel) {
+    const recursivelyDecomposed = await decomposeRecursivelyWithAI(
+      result.items,
+      options,
+      currentLevel,
+      maxHierarchyLevel
+    );
+    return {
+      ...result,
+      items: recursivelyDecomposed,
+      summary: `递归分解为 ${recursivelyDecomposed.length} 个子任务（层级: ${currentLevel + 1}/${maxHierarchyLevel}）`,
+    };
+  }
+
+  return result;
+}
+
+/**
+ * 使用AI进行递归分解
+ *
+ * 对每个子任务判断是否需要进行进一步分解，如果需要则递归调用decomposeRequirement
+ *
+ * @param items 子任务列表
+ * @param options 分解选项
+ * @param currentLevel 当前层级
+ * @param maxHierarchyLevel 最大层级
+ * @returns 递归分解后的子任务列表
+ */
+async function decomposeRecursivelyWithAI(
+  items: DecomposedTaskItem[],
+  options: DecomposeOptions,
+  currentLevel: number,
+  maxHierarchyLevel: number
+): Promise<DecomposedTaskItem[]> {
+  const { cwd = process.cwd() } = options;
+  const result: DecomposedTaskItem[] = [];
+
+  for (const item of items) {
+    // 使用AI判断是否需要进一步分解
+    const decompositionCheck = await aiShouldDecomposeFurther(
+      item,
+      currentLevel,
+      maxHierarchyLevel,
+      cwd
+    );
+
+    if (!decompositionCheck.needsDecomposition) {
+      // 不需要进一步分解，直接添加
+      result.push(item);
+      continue;
+    }
+
+    // 需要进一步分解
+    if (process.env.DEBUG === 'true') {
+      console.log(`[decomposeRecursivelyWithAI] 层级 ${currentLevel}，正在分解：${item.title}`);
+      console.log(`  原因：${decompositionCheck.reason}`);
+    }
+
+    // 构造更详细的分解请求
+    const detailedDescription = `## 任务标题\n${item.title}\n\n## 任务描述\n${item.description}\n\n## 检查点\n${item.suggestedCheckpoints.map(cp => `- ${cp}`).join('\n')}\n\n## 相关文件\n${item.relatedFiles.join(', ')}`;
+
+    const subDecomposition = await decomposeRequirement(detailedDescription, {
+      ...options,
+      currentLevel: currentLevel + 1,
+      enableRecursive: true, // 继续递归
+      maxHierarchyLevel,
+      minItems: 2,
+      maxItems: 5,
+    });
+
+    if (subDecomposition.decomposable && subDecomposition.items.length >= 2) {
+      // 递归分解成功，添加子任务
+      // 添加对父任务的依赖（第一个子任务依赖于父任务之前的任务）
+      const baseIndex = result.length;
+      for (let i = 0; i < subDecomposition.items.length; i++) {
+        const subItem = subDecomposition.items[i]!;
+        // 调整依赖索引
+        if (subItem.dependsOn.length > 0) {
+          subItem.dependsOn = subItem.dependsOn.map(dep => baseIndex + dep);
+        }
+        // 如果不是第一个子任务，添加对前一个子任务的依赖
+        if (i > 0 && subItem.dependsOn.length === 0) {
+          subItem.dependsOn = [baseIndex + i - 1];
+        }
+        // 设置 parentId 为父任务的 title（在创建时会转换为实际 task ID）
+        subItem.parentId = item.title;
+      }
+
+      result.push(...subDecomposition.items);
+
+      if (process.env.DEBUG === 'true') {
+        console.log(`  分解完成：${subDecomposition.items.length} 个子任务`);
+      }
+    } else {
+      // 分解失败或产生的子任务太少，保留原任务
+      result.push(item);
     }
   }
 

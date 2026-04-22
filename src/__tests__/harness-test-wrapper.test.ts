@@ -49,7 +49,8 @@ describe('createHarnessTestContext', () => {
     expect(ctx.runtimeState).toBeDefined();
     expect(ctx.runtimeState.state).toBe('idle');
     expect(ctx.runtimeState.taskQueue).toEqual([]);
-    expect(ctx.runtimeState.records).toEqual([]);
+    // PROBLEM-2: records field removed from HarnessRuntimeState
+    expect('records' in ctx.runtimeState).toBe(false);
   });
 
   // ============================================================

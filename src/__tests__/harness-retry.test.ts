@@ -12,8 +12,6 @@ function createTestConfig(cwd: string, maxRetries = 3): HarnessConfig {
     continue: false,
     jsonOutput: false,
     cwd,
-    apiRetryAttempts: 0,
-    apiRetryDelay: 10,
     batchGitCommit: false,
   };
 }

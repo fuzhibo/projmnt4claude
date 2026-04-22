@@ -9,6 +9,7 @@
  */
 
 import * as path from 'path';
+import * as fs from 'fs';
 import type {
   HarnessConfig,
   CodeReviewVerdict,
@@ -162,6 +163,83 @@ export class HarnessQATester {
   }
 
   /**
+   * 验证文件覆盖完整性
+   * 基于 task.files 遍历所有相关文件，检查文件是否存在
+   * @returns 文件覆盖验证结果
+   */
+  private verifyFileCoverage(task: TaskMeta): {
+    covered: boolean;
+    existingFiles: string[];
+    missingFiles: string[];
+    totalCount: number;
+    coverage: number;
+    details: string;
+  } {
+    // 防御性编程：确保 texts 始终有值
+    let texts: ReturnType<typeof t>;
+    try {
+      texts = t(this.config.cwd);
+    } catch {
+      texts = getI18n('zh');
+    }
+
+    // 如果没有 files 字段，视为通过（向后兼容）
+    if (!task.files || task.files.length === 0) {
+      return {
+        covered: true,
+        existingFiles: [],
+        missingFiles: [],
+        totalCount: 0,
+        coverage: 100,
+        details: texts.harness.logs.noFilesToVerify || 'No files specified for verification',
+      };
+    }
+
+    const existingFiles: string[] = [];
+    const missingFiles: string[] = [];
+
+    // 遍历 task.files 检查文件存在性
+    for (const filePath of task.files) {
+      const fullPath = path.isAbsolute(filePath)
+        ? filePath
+        : path.join(this.config.cwd, filePath);
+
+      if (fs.existsSync(fullPath)) {
+        existingFiles.push(filePath);
+      } else {
+        missingFiles.push(filePath);
+      }
+    }
+
+    const totalCount = task.files.length;
+    const coverage = totalCount > 0 ? (existingFiles.length / totalCount) * 100 : 100;
+    const covered = missingFiles.length === 0;
+
+    // 构建详细信息
+    const lines: string[] = [];
+    lines.push(`${texts.harness.logs.fileCoverageSummary || 'File Coverage'}: ${existingFiles.length}/${totalCount} (${coverage.toFixed(1)}%)`);
+
+    if (missingFiles.length > 0) {
+      lines.push(`\n${texts.harness.logs.missingFiles || 'Missing Files'}:`);
+      missingFiles.forEach(f => lines.push(`  - ${f}`));
+    }
+
+    if (existingFiles.length > 0) {
+      lines.push(`\n${texts.harness.logs.existingFiles || 'Existing Files'}:`);
+      existingFiles.forEach(f => lines.push(`  - ${f}`));
+    }
+
+    return {
+      covered,
+      existingFiles,
+      missingFiles,
+      totalCount,
+      coverage,
+      details: lines.join('\n'),
+    };
+  }
+
+  /**
    * 运行 QA 验证
    */
   private async runQAVerification(
@@ -184,6 +262,17 @@ export class HarnessQATester {
       // 如果 t() 抛出错误，使用默认的中文文本
       texts = getI18n('zh');
     }
+
+    // 验证文件覆盖完整性 - 基于 task.files 遍历所有相关文件
+    const fileCoverage = this.verifyFileCoverage(task);
+    if (task.files && task.files.length > 0) {
+      console.log(`\n   📁 ${texts.harness.logs.fileCoverageCheck || 'File Coverage Check'}:`);
+      console.log(`      ${fileCoverage.details.split('\n')[0]}`);
+      if (!fileCoverage.covered) {
+        console.log(`   ❌ ${texts.harness.logs.fileCoverageFailed || 'File coverage check failed'}`);
+      }
+    }
+
     // 分离自动化检查点和人工验证检查点
     const automatedCheckpoints = checkpoints.filter(cp => !cp.requiresHuman);
     const humanCheckpoints = checkpoints.filter(cp => cp.requiresHuman === true);
@@ -225,7 +314,6 @@ export class HarnessQATester {
       allowedTools: effectiveTools.tools,
       timeout: Math.floor(this.config.timeout / REVIEW_TIMEOUT_RATIO),
       cwd: this.config.cwd,
-      maxRetries: this.config.apiRetryAttempts,
       outputFormat: 'text',
       dangerouslySkipPermissions: effectiveTools.skipPermissions,
     };
@@ -278,7 +366,24 @@ export class HarnessQATester {
     }
 
     // 解析验证结果
-    return this.parseQAResult(engineResult.result.output || '');
+    const result = this.parseQAResult(engineResult.result.output || '');
+
+    // 合并文件覆盖信息到结果详情中
+    if (task.files && task.files.length > 0) {
+      const fileCoverageSection = `\n\n## ${texts.harness.logs.fileCoverageSection || 'File Coverage'}\n${fileCoverage.details}`;
+      result.details = result.details ? `${result.details}${fileCoverageSection}` : fileCoverageSection;
+
+      // 如果有文件缺失，将结果标记为失败
+      if (!fileCoverage.covered) {
+        result.passed = false;
+        result.failures = [...result.failures, ...fileCoverage.missingFiles.map(f => `Missing file: ${f}`)];
+        if (!result.reason.includes(texts.harness.logs.fileCoverageFailed || 'File coverage failed')) {
+          result.reason = `${texts.harness.logs.fileCoverageFailed || 'File coverage check failed'}: ${fileCoverage.missingFiles.length} file(s) missing`;
+        }
+      }
+    }
+
+    return result;
   }
 
   /**

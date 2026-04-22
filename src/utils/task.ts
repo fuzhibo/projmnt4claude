@@ -742,21 +742,35 @@ export function incrementReopenCount(
 /**
  * 程序化记录执行统计信息
  * 直接修改 meta.json，不依赖 AI 上下文
+ *
+ * CP-7 修复: 在写入前重新读取任务状态，防止与 ensureTransition 形成读写冲突
+ * 避免竞态条件: recordExecutionStats 读取任务 -> ensureTransition 更新状态 ->
+ *             recordExecutionStats 写入 stale 数据（覆盖状态）
  */
 export function recordExecutionStats(
   taskId: string,
   stats: ExecutionStats,
   cwd: string = process.cwd()
 ): void {
-  const task = readTaskMeta(taskId, cwd);
-  if (!task) {
+  // 首次读取用于验证任务存在并获取 commitHistory
+  const taskInitial = readTaskMeta(taskId, cwd);
+  if (!taskInitial) {
     throw new Error(`任务 '${taskId}' 不存在`);
   }
 
   // 保留已有的 commitHistory（由 commitBatchChanges 写入），防止被覆盖
-  const existingCommitHistory = task.executionStats?.commitHistory;
+  const existingCommitHistory = taskInitial.executionStats?.commitHistory;
   if (existingCommitHistory && !stats.commitHistory) {
     stats.commitHistory = existingCommitHistory;
+  }
+
+  // 记录旧值用于历史记录
+  const oldValue = taskInitial.executionStats ? JSON.stringify(taskInitial.executionStats) : '无';
+
+  // CP-7: 在写入前重新读取任务，获取最新状态，避免覆盖 concurrent 更新
+  const task = readTaskMeta(taskId, cwd);
+  if (!task) {
+    throw new Error(`任务 '${taskId}' 在重新读取时消失`);
   }
 
   task.executionStats = stats;
@@ -767,7 +781,7 @@ export function recordExecutionStats(
     timestamp: new Date().toISOString(),
     action: `记录执行统计: 耗时 ${stats.duration}ms, 重试 ${stats.retryCount} 次`,
     field: 'executionStats',
-    oldValue: task.executionStats ? JSON.stringify(task.executionStats) : '无',
+    oldValue,
     newValue: JSON.stringify(stats),
     user: process.env.USER || undefined,
   });

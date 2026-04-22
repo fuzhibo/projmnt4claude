@@ -12,13 +12,14 @@
  * 5. 错误处理场景
  */
 
-import { describe, test, expect, beforeEach, afterEach } from 'bun:test';
+import { describe, test, expect, beforeEach, afterEach, beforeAll, afterAll } from 'bun:test';
 import * as fs from 'fs';
 import * as path from 'path';
 
 // 隔离测试环境工具
 import {
   createIsolatedTestEnv,
+  createSharedTestEnv,
   createTaskDir,
   readTaskMeta,
   writeTaskMeta,
@@ -30,6 +31,7 @@ import {
   createTestLifecycle,
   resetTestEnv,
   type IsolatedTestEnv,
+  type SharedTestEnv,
 } from '../utils/test-env.js';
 
 // 类型定义
@@ -604,5 +606,155 @@ describe('场景 10: resetTestEnv 错误处理', () => {
     // 验证目录结构保留
     expect(fs.existsSync(env.tempDir)).toBe(true);
     expect(fs.existsSync(env.tasksDir)).toBe(true);
+  });
+});
+
+// ============================================================
+// 场景 11: Phase 2 共享根目录机制
+// ============================================================
+
+describe('场景 11: 共享根目录机制 (Phase 2)', () => {
+  let sharedEnv: SharedTestEnv;
+  let env1: IsolatedTestEnv;
+  let env2: IsolatedTestEnv;
+
+  beforeAll(async () => {
+    sharedEnv = await createSharedTestEnv({ prefix: 'scenario-suite-' });
+    env1 = await sharedEnv.createIsolatedEnv();
+    env2 = await sharedEnv.createIsolatedEnv();
+  });
+
+  afterAll(() => {
+    sharedEnv.cleanupAll();
+  });
+
+  test('S11.1: createSharedTestEnv 创建共享根目录', () => {
+    expect(fs.existsSync(sharedEnv.sharedRoot)).toBe(true);
+    expect(path.basename(sharedEnv.sharedRoot)).toContain('scenario-suite-');
+  });
+
+  test('S11.2: 子环境在共享根目录下创建', () => {
+    expect(env1.tempDir).toContain(sharedEnv.sharedRoot);
+    expect(env2.tempDir).toContain(sharedEnv.sharedRoot);
+  });
+
+  test('S11.3: 子环境相互隔离', () => {
+    createTaskDir(env1.tasksDir, 'ENV1-TASK');
+    createTaskDir(env2.tasksDir, 'ENV2-TASK');
+
+    // 每个环境只能看到自己的任务
+    expect(getAllTaskIds(env1.tasksDir)).toEqual(['ENV1-TASK']);
+    expect(getAllTaskIds(env2.tasksDir)).toEqual(['ENV2-TASK']);
+  });
+
+  test('S11.4: 共享根目录包含所有子环境', () => {
+    const entries = fs.readdirSync(sharedEnv.sharedRoot);
+    // 应该有两个子目录
+    expect(entries).toHaveLength(2);
+  });
+
+  test('S11.5: cleanupAll 统一清理所有子环境', async () => {
+    // 创建新的共享环境用于此测试
+    const testSharedEnv = await createSharedTestEnv({ prefix: 'cleanup-test-' });
+    const testEnv1 = await testSharedEnv.createIsolatedEnv();
+    const testEnv2 = await testSharedEnv.createIsolatedEnv();
+
+    // 验证目录存在
+    expect(fs.existsSync(testSharedEnv.sharedRoot)).toBe(true);
+    expect(fs.existsSync(testEnv1.tempDir)).toBe(true);
+    expect(fs.existsSync(testEnv2.tempDir)).toBe(true);
+
+    // 统一清理
+    testSharedEnv.cleanupAll();
+
+    // 验证整个共享根目录被删除
+    expect(fs.existsSync(testSharedEnv.sharedRoot)).toBe(false);
+  });
+
+  test('S11.6: 多个子环境可以同时创建和使用', async () => {
+    const testSharedEnv = await createSharedTestEnv({ prefix: 'multi-env-test-' });
+
+    // 创建多个子环境
+    const envs: IsolatedTestEnv[] = [];
+    for (let i = 0; i < 5; i++) {
+      const env = await testSharedEnv.createIsolatedEnv();
+      envs.push(env);
+      createTaskDir(env.tasksDir, `TASK-${i + 1}`);
+    }
+
+    // 验证所有环境都在共享根目录下
+    for (const env of envs) {
+      expect(env.tempDir).toContain(testSharedEnv.sharedRoot);
+    }
+
+    // 验证每个环境独立
+    for (let i = 0; i < 5; i++) {
+      expect(getAllTaskIds(envs[i].tasksDir)).toEqual([`TASK-${i + 1}`]);
+    }
+
+    testSharedEnv.cleanupAll();
+  });
+});
+
+// ============================================================
+// 场景 12: 共享根目录与现有测试模式集成
+// ============================================================
+
+describe('场景 12: 共享根目录与现有模式集成', () => {
+  test('S12.1: 共享根目录支持 createTasksDir: false 选项', async () => {
+    const sharedEnv = await createSharedTestEnv({ prefix: 'skip-tasks-test-' });
+    const env = await sharedEnv.createIsolatedEnv({ createTasksDir: false });
+
+    expect(fs.existsSync(env.tempDir)).toBe(true);
+    expect(fs.existsSync(env.tasksDir)).toBe(false);
+
+    sharedEnv.cleanupAll();
+  });
+
+  test('S12.2: 共享根目录支持自定义前缀', async () => {
+    const sharedEnv = await createSharedTestEnv({ prefix: 'custom-prefix-' });
+    const env = await sharedEnv.createIsolatedEnv({ prefix: 'child-' });
+
+    // 子目录使用自定义前缀
+    expect(path.basename(env.tempDir)).toContain('child-');
+
+    sharedEnv.cleanupAll();
+  });
+
+  test('S12.3: 混合使用共享根目录和独立隔离环境', async () => {
+    // 创建共享环境
+    const sharedEnv = await createSharedTestEnv({ prefix: 'mixed-test-' });
+    const sharedChildEnv = await sharedEnv.createIsolatedEnv();
+
+    // 创建独立隔离环境
+    const isolatedEnv = await createIsolatedTestEnv({ prefix: 'independent-' });
+
+    // 两者都正常工作
+    createTaskDir(sharedChildEnv.tasksDir, 'SHARED-TASK');
+    createTaskDir(isolatedEnv.tasksDir, 'ISOLATED-TASK');
+
+    expect(getAllTaskIds(sharedChildEnv.tasksDir)).toEqual(['SHARED-TASK']);
+    expect(getAllTaskIds(isolatedEnv.tasksDir)).toEqual(['ISOLATED-TASK']);
+
+    // 清理
+    sharedEnv.cleanupAll();
+    isolatedEnv.cleanup();
+  });
+
+  test('S12.4: 共享环境子目录可以使用 reset 方法', async () => {
+    const sharedEnv = await createSharedTestEnv({ prefix: 'reset-test-' });
+    const env = await sharedEnv.createIsolatedEnv();
+
+    createTaskDir(env.tasksDir, 'TASK-001');
+    expect(getAllTaskIds(env.tasksDir)).toHaveLength(1);
+
+    // 重置单个环境
+    env.reset();
+
+    // 任务被清除但目录保留
+    expect(getAllTaskIds(env.tasksDir)).toHaveLength(0);
+    expect(fs.existsSync(env.tempDir)).toBe(true);
+
+    sharedEnv.cleanupAll();
   });
 });

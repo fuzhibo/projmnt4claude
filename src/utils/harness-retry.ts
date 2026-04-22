@@ -10,7 +10,6 @@
 
 import type { HarnessConfig, ReviewVerdict } from '../types/harness.js';
 import type { TaskMeta } from '../types/task.js';
-import { isRetryableError } from './harness-helpers.js';
 import { t, getI18n } from '../i18n/index.js';
 
 export class RetryHandler {
@@ -97,16 +96,7 @@ export class RetryHandler {
     }
 
     // 判断是否值得重试
-    const isTransientError = isRetryableError(verdict.reason, '').retryable;
     const hasFixableIssues = verdict.failedCriteria.length > 0 || verdict.failedCheckpoints.length > 0;
-
-    if (isTransientError) {
-      return {
-        shouldRetry: true,
-        reason: '检测到临时性错误，重试可能成功',
-        suggestions: [...suggestions, '等待系统恢复后重试'],
-      };
-    }
 
     if (hasFixableIssues) {
       return {

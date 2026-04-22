@@ -8033,7 +8033,61 @@ var init_zh = __esm(() => {
       priorityP1: "\uD83D\uDFE0",
       priorityP2: "\uD83D\uDFE1",
       priorityP3: "\uD83D\uDFE2",
-      dependsOn: "依赖"
+      dependsOn: "依赖",
+      template: {
+        intro: "请分析输入内容，识别出其中包含的独立问题或需求项，并返回 JSON 格式的分解结果：",
+        fieldDescription: "字段说明",
+        rules: "规则",
+        note: "注意"
+      },
+      aiPromptTemplate: {
+        instruction: "请将以下需求/报告分解为多个独立的开发任务。",
+        inputLabel: "输入内容",
+        jsonFormat: `{
+  "decomposable": true,
+  "summary": "分解摘要",
+  "items": [
+    {
+      "title": "任务标题（动词开头，简洁明确）",
+      "description": "任务详细描述",
+      "type": "bug|feature|research|docs|refactor|test",
+      "priority": "P0|P1|P2|P3",
+      "suggestedCheckpoints": ["检查点1", "检查点2"],
+      "relatedFiles": ["文件路径1", "文件路径2"],
+      "estimatedMinutes": 15,
+      "dependsOn": []
+    }
+  ]
+}`,
+        fields: {
+          title: "任务标题（动词开头，简洁明确）",
+          description: "任务详细描述",
+          type: "任务类型：bug=修复问题，feature=新功能，refactor=重构，docs=文档，test=测试",
+          priority: "优先级：P0=紧急/阻塞，P1=高优先级，P2=中等，P3=低优先级",
+          suggestedCheckpoints: "建议的检查点列表",
+          relatedFiles: "相关文件路径列表",
+          estimatedMinutes: "预估完成时间（分钟），建议每个任务控制在15-30分钟",
+          dependsOn: "依赖项的索引数组（如：[0] 表示依赖第一个任务）"
+        },
+        rules: [
+          "每个item应该是一个独立的、可执行的任务",
+          "title必须以动词开头（如：修复、实现、添加、更新等）",
+          "priority根据紧急程度判断：P0=紧急/阻塞，P1=高优先级，P2=中等，P3=低优先级",
+          "type根据内容推断：bug=修复问题，feature=新功能，refactor=重构，docs=文档，test=测试",
+          "estimatedMinutes预估完成时间（分钟），建议每个任务控制在15-30分钟",
+          "dependsOn是依赖项的索引数组（如：[0] 表示依赖第一个任务）"
+        ],
+        hierarchyGuidance: {
+          title: "层级分解指导",
+          levels: [
+            "层级1：顶层需求分解（最大层级3）",
+            "层级2：子任务进一步分解为可执行单元",
+            "层级3：最小可执行单元（不可再分解）"
+          ],
+          note: "如果任务包含多个独立步骤或预估耗时超过15分钟，应考虑进一步分解。分解时应保持任务的独立性和可执行性。"
+        },
+        nonDecomposable: '如果无法分解（如内容过于简单），返回 {"decomposable": false, "reason": "原因", "items": []}'
+      }
     },
     harness: {
       timeoutHeader: "超时限制",
@@ -8194,13 +8248,19 @@ var init_zh = __esm(() => {
         exitCode: "退出码",
         devOutputValidationFailedError: "开发输出格式验证未通过",
         retryReference: "请参考前次失败原因，避免重复相同的问题。",
-        apiRetry: "API 调用重试 ({current}/{max})...",
         retryingInSeconds: "{reason}，{seconds} 秒后重试...",
         archivedReport: "已归档旧报告: archive/{filename}",
         archiveFailed: "归档报告失败",
         maxRetriesReached: "已达到最大重试次数 ({count})",
         preparingRetry: "准备重试 (第 {current}/{max} 次)",
-        waitingToRetry: "等待 {seconds}s 后重试..."
+        waitingToRetry: "等待 {seconds}s 后重试...",
+        fileCoverageCheck: "文件覆盖检查",
+        fileCoverageSummary: "文件覆盖率",
+        fileCoverageFailed: "文件覆盖检查失败",
+        fileCoverageSection: "文件覆盖",
+        missingFiles: "缺失文件",
+        existingFiles: "已存在文件",
+        noFilesToVerify: "没有指定要验证的文件"
       },
       reports: {
         devReportTitle: "开发报告",
@@ -9042,7 +9102,61 @@ var init_en = __esm(() => {
       priorityP1: "\uD83D\uDFE0",
       priorityP2: "\uD83D\uDFE1",
       priorityP3: "\uD83D\uDFE2",
-      dependsOn: "Depends on"
+      dependsOn: "Depends on",
+      template: {
+        intro: "Please analyze the input content, identify independent problems or requirements, and return JSON format decomposition result:",
+        fieldDescription: "Field Description",
+        rules: "Rules",
+        note: "Note"
+      },
+      aiPromptTemplate: {
+        instruction: "Please decompose the following requirement/report into multiple independent development tasks.",
+        inputLabel: "Input content",
+        jsonFormat: `{
+  "decomposable": true,
+  "summary": "Decomposition summary",
+  "items": [
+    {
+      "title": "Task title (start with verb, concise and clear)",
+      "description": "Detailed task description",
+      "type": "bug|feature|research|docs|refactor|test",
+      "priority": "P0|P1|P2|P3",
+      "suggestedCheckpoints": ["Checkpoint 1", "Checkpoint 2"],
+      "relatedFiles": ["file/path/1", "file/path/2"],
+      "estimatedMinutes": 15,
+      "dependsOn": []
+    }
+  ]
+}`,
+        fields: {
+          title: "Task title (start with verb, concise and clear)",
+          description: "Detailed task description",
+          type: "Task type: bug=fix issue, feature=new feature, refactor=refactoring, docs=documentation, test=testing",
+          priority: "Priority: P0=urgent/blocking, P1=high priority, P2=medium, P3=low",
+          suggestedCheckpoints: "List of suggested checkpoints",
+          relatedFiles: "List of related file paths",
+          estimatedMinutes: "Estimated completion time (minutes), suggest 15-30 minutes per task",
+          dependsOn: "Array of dependency indices (e.g., [0] means depends on first task)"
+        },
+        rules: [
+          "Each item should be an independent, executable task",
+          "Title must start with a verb (e.g., fix, implement, add, update)",
+          "Priority based on urgency: P0=urgent/blocking, P1=high, P2=medium, P3=low",
+          "Type inferred from content: bug=fix issue, feature=new feature, refactor=refactoring, docs=documentation, test=testing",
+          "Estimated minutes should be 15-30 minutes per task",
+          "dependsOn is an array of indices (e.g., [0] means depends on first task)"
+        ],
+        hierarchyGuidance: {
+          title: "Hierarchy Decomposition Guidance",
+          levels: [
+            "Level 1: Top-level requirement decomposition (max level 3)",
+            "Level 2: Subtasks further decomposed into executable units",
+            "Level 3: Minimum executable units (cannot be further decomposed)"
+          ],
+          note: "If a task contains multiple independent steps or estimated time exceeds 15 minutes, consider further decomposition. Maintain task independence and executability when decomposing."
+        },
+        nonDecomposable: 'If cannot decompose (e.g., content too simple), return {"decomposable": false, "reason": "reason", "items": []}'
+      }
     },
     harness: {
       timeoutHeader: "Timeout Limit",
@@ -9203,13 +9317,19 @@ var init_en = __esm(() => {
         exitCode: "Exit code",
         devOutputValidationFailedError: "Development output format validation failed",
         retryReference: "Please refer to the previous failure reason to avoid repeating the same issues.",
-        apiRetry: "API call retry ({current}/{max})...",
         retryingInSeconds: "{reason}, retrying in {seconds}s...",
         archivedReport: "Archived old report: archive/{filename}",
         archiveFailed: "Failed to archive report",
         maxRetriesReached: "Maximum retry attempts reached ({count})",
         preparingRetry: "Preparing retry (attempt {current}/{max})",
-        waitingToRetry: "Waiting {seconds}s before retry..."
+        waitingToRetry: "Waiting {seconds}s before retry...",
+        fileCoverageCheck: "File Coverage Check",
+        fileCoverageSummary: "File Coverage",
+        fileCoverageFailed: "File coverage check failed",
+        fileCoverageSection: "File Coverage",
+        missingFiles: "Missing Files",
+        existingFiles: "Existing Files",
+        noFilesToVerify: "No files specified for verification"
       },
       reports: {
         devReportTitle: "Development Report",
@@ -9261,7 +9381,8 @@ var exports_i18n = {};
 __export(exports_i18n, {
   t: () => t,
   getLanguage: () => getLanguage,
-  getI18n: () => getI18n
+  getI18n: () => getI18n,
+  getDecompositionTemplate: () => getDecompositionTemplate
 });
 import * as fs3 from "fs";
 function getLanguage(cwd2 = process.cwd()) {
@@ -9280,6 +9401,43 @@ function getI18n(language, cwd2) {
 }
 function t(cwd2) {
   return getI18n(undefined, cwd2);
+}
+function getDecompositionTemplate(cwd2) {
+  const texts = t(cwd2).decomposition;
+  const aiTemplate = texts.aiPromptTemplate;
+  const rulesText = aiTemplate.rules.map((rule, i) => `${i + 1}. ${rule}`).join(`
+`);
+  const levelsText = aiTemplate.hierarchyGuidance.levels.map((level, i) => `   ${i + 1}. ${level}`).join(`
+`);
+  return `${aiTemplate.instruction}
+
+${aiTemplate.inputLabel}:
+\${safeContent}
+
+${texts.template.intro}
+\`\`\`json
+${aiTemplate.jsonFormat}
+\`\`\`
+
+${texts.template.fieldDescription}:
+- title: ${aiTemplate.fields.title}
+- description: ${aiTemplate.fields.description}
+- type: ${aiTemplate.fields.type}
+- priority: ${aiTemplate.fields.priority}
+- suggestedCheckpoints: ${aiTemplate.fields.suggestedCheckpoints}
+- relatedFiles: ${aiTemplate.fields.relatedFiles}
+- estimatedMinutes: ${aiTemplate.fields.estimatedMinutes}
+- dependsOn: ${aiTemplate.fields.dependsOn}
+
+${texts.template.rules}:
+${rulesText}
+
+${aiTemplate.hierarchyGuidance.title}:
+${levelsText}
+
+${texts.template.note}: ${aiTemplate.hierarchyGuidance.note}
+
+${aiTemplate.nonDecomposable}`;
 }
 var languagePacks;
 var init_i18n = __esm(() => {
@@ -10936,6 +11094,9 @@ function createDefaultTaskMeta(id, title, type = "feature", description, created
     priority,
     status: "open",
     dependencies: [],
+    parentId: undefined,
+    subtaskIds: undefined,
+    hierarchyLevel: undefined,
     createdAt: now,
     updatedAt: now,
     history: [],
@@ -11605,13 +11766,18 @@ function incrementReopenCount(taskId, reason, cwd2 = process.cwd(), record) {
   writeTaskMeta(task, cwd2);
 }
 function recordExecutionStats(taskId, stats, cwd2 = process.cwd()) {
-  const task = readTaskMeta(taskId, cwd2);
-  if (!task) {
+  const taskInitial = readTaskMeta(taskId, cwd2);
+  if (!taskInitial) {
     throw new Error(`任务 '${taskId}' 不存在`);
   }
-  const existingCommitHistory = task.executionStats?.commitHistory;
+  const existingCommitHistory = taskInitial.executionStats?.commitHistory;
   if (existingCommitHistory && !stats.commitHistory) {
     stats.commitHistory = existingCommitHistory;
+  }
+  const oldValue = taskInitial.executionStats ? JSON.stringify(taskInitial.executionStats) : "无";
+  const task = readTaskMeta(taskId, cwd2);
+  if (!task) {
+    throw new Error(`任务 '${taskId}' 在重新读取时消失`);
   }
   task.executionStats = stats;
   task.updatedAt = new Date().toISOString();
@@ -11619,7 +11785,7 @@ function recordExecutionStats(taskId, stats, cwd2 = process.cwd()) {
     timestamp: new Date().toISOString(),
     action: `记录执行统计: 耗时 ${stats.duration}ms, 重试 ${stats.retryCount} 次`,
     field: "executionStats",
-    oldValue: task.executionStats ? JSON.stringify(task.executionStats) : "无",
+    oldValue,
     newValue: JSON.stringify(stats),
     user: process.env.USER || undefined
   });
@@ -14316,7 +14482,13 @@ var init_logger = __esm(() => {
 import * as fs10 from "fs";
 import * as path7 from "path";
 import { spawn } from "child_process";
-function classifyExitResult(code, stderr, stdout) {
+function classifyExitResult(code, stderr, stdout, cwd2) {
+  let texts;
+  try {
+    texts = t(cwd2 || process.cwd());
+  } catch {
+    texts = t();
+  }
   if (code === 0) {
     return { success: true };
   }
@@ -14325,18 +14497,18 @@ function classifyExitResult(code, stderr, stdout) {
   if (isHookError && hasOutput) {
     return {
       success: true,
-      hookWarning: `Hook error ignored: ${stderr.substring(0, 200)}`
+      hookWarning: `${texts.harness.logs.hookWarningIgnored}: ${stderr.substring(0, 200)}`
     };
   }
   if (isHookError && !hasOutput) {
     return {
       success: false,
-      error: `Hook error caused no output: ${stderr.substring(0, 200)}`
+      error: `${texts.harness.logs.hookErrorNoOutput}: ${stderr.substring(0, 200)}`
     };
   }
   return {
     success: false,
-    error: stderr || `Process exit code: ${code}`
+    error: stderr || `${texts.harness.logs.processExitCode}: ${code}`
   };
 }
 async function runHeadlessClaude(options) {
@@ -14406,54 +14578,6 @@ async function runHeadlessClaude(options) {
       });
     }
   });
-}
-function isRetryableError(output, stderr) {
-  const combinedOutput = `${output} ${stderr}`;
-  const rateLimitMatch = combinedOutput.match(/API Error:\s*429.*?(\d{4}-\d{2}-\d{2}\s+\d{2}:\d{2}:\d{2})/);
-  if (rateLimitMatch) {
-    const resetTime = new Date(rateLimitMatch[1]);
-    const now = new Date;
-    const waitSeconds = Math.max(60, Math.ceil((resetTime.getTime() - now.getTime()) / 1000));
-    return { retryable: true, waitSeconds, reason: "API 速率限制 (429)" };
-  }
-  if (combinedOutput.includes("API Error: 500") || combinedOutput.includes('"code":"500"')) {
-    return { retryable: true, waitSeconds: 30, reason: "API 服务器错误 (500)" };
-  }
-  if (combinedOutput.includes("ECONNRESET") || combinedOutput.includes("ETIMEDOUT") || combinedOutput.includes("ENOTFOUND") || combinedOutput.includes("network error")) {
-    return { retryable: true, waitSeconds: 10, reason: "网络连接错误" };
-  }
-  return { retryable: false };
-}
-function sleep(seconds) {
-  return new Promise((resolve3) => setTimeout(resolve3, seconds * 1000));
-}
-async function runHeadlessClaudeWithRetry(options, retryConfig, cwd2) {
-  let texts;
-  try {
-    texts = t(cwd2);
-  } catch {
-    const { getI18n: getI18n2 } = await Promise.resolve().then(() => (init_i18n(), exports_i18n));
-    texts = getI18n2("zh");
-  }
-  const maxAttempts = retryConfig.maxAttempts + 1;
-  let lastResult = null;
-  for (let attempt = 1;attempt <= maxAttempts; attempt++) {
-    if (attempt > 1) {
-      console.log(`   \uD83D\uDD04 ${texts.harness.logs.apiRetry.replace("{current}", String(attempt - 1)).replace("{max}", String(retryConfig.maxAttempts))}...`);
-    }
-    lastResult = await runHeadlessClaude(options);
-    if (lastResult.success) {
-      return lastResult;
-    }
-    const errorInfo = isRetryableError(lastResult.output, lastResult.error || "");
-    if (!errorInfo.retryable || attempt >= maxAttempts) {
-      return lastResult;
-    }
-    const delay = Math.min(errorInfo.waitSeconds || retryConfig.baseDelay, retryConfig.baseDelay * Math.pow(2, attempt - 1));
-    console.log(`   ⏳ ${texts.harness.logs.retryingInSeconds.replace("{reason}", errorInfo.reason).replace("{seconds}", String(delay))}...`);
-    await sleep(delay);
-  }
-  return lastResult;
 }
 function archiveReportIfExists(reportPath, cwd2) {
   let texts;
@@ -14701,15 +14825,7 @@ class ClaudeCodeProvider {
       resumeSession: options.resumeSession,
       forkSession: options.forkSession
     };
-    let result;
-    if (options.maxRetries > 0) {
-      result = await runHeadlessClaudeWithRetry(claudeOptions, {
-        maxAttempts: options.maxRetries,
-        baseDelay: 60
-      });
-    } else {
-      result = await runHeadlessClaude(claudeOptions);
-    }
+    const result = await runHeadlessClaude(claudeOptions);
     const durationMs = Date.now() - startTime;
     const tokensUsed = this.extractTokens(result.output);
     const model = this.extractModel(result.output);
@@ -18378,7 +18494,6 @@ function createDefaultRuntimeState(config) {
     config,
     taskQueue: [],
     currentIndex: 0,
-    records: [],
     startTime: now,
     retryCounter: new Map,
     updatedAt: now,
@@ -18421,8 +18536,6 @@ var init_harness = __esm(() => {
     dryRun: false,
     continue: false,
     jsonOutput: false,
-    apiRetryAttempts: 3,
-    apiRetryDelay: 60,
     batchGitCommit: false,
     forceContinue: false
   };
@@ -21221,6 +21334,7 @@ __export(exports_requirement_decomposer, {
   decomposeRequirement: () => decomposeRequirement,
   decomposeRecursively: () => decomposeRecursively,
   convertToDecomposedItem: () => convertToDecomposedItem,
+  aiShouldDecomposeFurther: () => aiShouldDecomposeFurther,
   DEFAULT_RECURSIVE_CONFIG: () => DEFAULT_RECURSIVE_CONFIG
 });
 function validateInputSecurity(content) {
@@ -21418,37 +21532,8 @@ async function decomposeWithAI(content, cwd2) {
   }
   try {
     const safeContent = content.substring(0, Math.min(content.length, SECURITY_CONFIG.MAX_INPUT_LENGTH));
-    const prompt = `请将以下需求/报告分解为多个独立的开发任务。
-
-输入内容：
-${safeContent.substring(0, 4000)}
-
-请分析输入内容，识别出其中包含的独立问题或需求项，并返回 JSON 格式的分解结果：
-{
-  "decomposable": true,
-  "summary": "分解摘要",
-  "items": [
-    {
-      "title": "任务标题（动词开头，简洁明确）",
-      "description": "任务详细描述",
-      "type": "bug|feature|research|docs|refactor|test",
-      "priority": "P0|P1|P2|P3",
-      "suggestedCheckpoints": ["检查点1", "检查点2"],
-      "relatedFiles": ["文件路径1", "文件路径2"],
-      "estimatedMinutes": 15,
-      "dependsOn": []
-    }
-  ]
-}
-
-规则：
-1. 每个 item 应该是一个独立的、可执行的任务
-2. title 必须以动词开头（如：修复、实现、添加、更新等）
-3. priority 根据紧急程度判断：P0=紧急/阻塞，P1=高优先级，P2=中等，P3=低优先级
-4. type 根据内容推断：bug=修复问题，feature=新功能，refactor=重构，docs=文档，test=测试
-5. estimatedMinutes 预估完成时间（分钟），建议每个任务控制在 15-30 分钟
-6. dependsOn 是依赖项的索引数组（如：[0] 表示依赖第一个任务）
-7. 如果无法分解（如内容过于简单），返回 {"decomposable": false, "reason": "原因", "items": []}`;
+    const template = getDecompositionTemplate(cwd2);
+    const prompt = template.replace("${safeContent}", safeContent.substring(0, 4000));
     const agentOptions = buildAgentOptionsFromPreset("decomposition", cwd2);
     const result = await invokeAgent(prompt, agentOptions);
     if (!result.success) {
@@ -21517,6 +21602,75 @@ ${safeContent.substring(0, 4000)}
       console.error("AI 分解过程中发生错误:", error);
     }
     return null;
+  }
+}
+async function aiShouldDecomposeFurther(item, currentLevel, maxHierarchyLevel, cwd2) {
+  if (currentLevel >= maxHierarchyLevel) {
+    return { needsDecomposition: false, reason: "达到最大层级限制" };
+  }
+  if (item.estimatedMinutes < 15) {
+    return { needsDecomposition: false, reason: "预估耗时较短，无需进一步分解" };
+  }
+  if (item.description.length < 100) {
+    return { needsDecomposition: false, reason: "描述过短，无法进一步分解" };
+  }
+  try {
+    const prompt = `请分析以下子任务是否需要进一步分解为更小的子任务。
+
+子任务信息：
+- 标题：${item.title}
+- 描述：${item.description}
+- 类型：${item.type}
+- 优先级：${item.priority}
+- 预估耗时：${item.estimatedMinutes} 分钟
+- 当前层级：${currentLevel}
+- 最大层级：${maxHierarchyLevel}
+
+请分析：
+1. 这个子任务是否包含多个独立的实现步骤？
+2. 预估耗时 ${item.estimatedMinutes} 分钟是否合理？
+3. 是否可以拆分为多个预估耗时小于15分钟的更小任务？
+4. 拆分后是否能产生至少2个独立的子任务？
+
+返回 JSON 格式：
+{
+  "needsDecomposition": true | false,
+  "reason": "判断原因，说明为什么需要或不需要进一步分解"
+}
+
+注意：
+- 如果子任务包含明显的多步骤，应返回 true
+- 如果预估耗时较长且可以拆分，应返回 true
+- 如果描述范围明确且单一，即使耗时较长也应返回 false
+- 只输出 JSON，不要输出其他内容`;
+    const agentOptions = buildAgentOptionsFromPreset("decomposition", cwd2);
+    const result = await invokeAgent(prompt, agentOptions);
+    if (!result.success) {
+      return { needsDecomposition: false, reason: "AI 调用失败" };
+    }
+    let parsed = null;
+    try {
+      parsed = JSON.parse(result.output);
+    } catch {
+      const jsonMatch = result.output.match(/```(?:json)?\s*\n?([\s\S]*?)\n?```/);
+      if (jsonMatch?.[1]) {
+        try {
+          parsed = JSON.parse(jsonMatch[1]);
+        } catch {}
+      }
+    }
+    if (!parsed || typeof parsed.needsDecomposition !== "boolean") {
+      return { needsDecomposition: false, reason: "AI 响应格式无效" };
+    }
+    return {
+      needsDecomposition: parsed.needsDecomposition,
+      reason: parsed.reason || (parsed.needsDecomposition ? "AI 判定需要进一步分解" : "AI 判定无需进一步分解")
+    };
+  } catch (error) {
+    if (process.env.DEBUG === "true") {
+      console.error("[aiShouldDecomposeFurther] 分析过程中发生错误:", error);
+    }
+    return { needsDecomposition: false, reason: "分析过程出错" };
   }
 }
 async function shouldDecomposeFurther(item, depth, config, cwd2) {
@@ -21642,6 +21796,7 @@ ${item.relatedFiles.join(", ")}`;
         if (i > 0 && subItem.dependsOn.length === 0) {
           subItem.dependsOn = [baseIndex + i - 1];
         }
+        subItem.parentId = item.title;
       }
       result.push(...recursivelyDecomposed);
       totalSubtaskCount += recursivelyDecomposed.length;
@@ -21661,7 +21816,11 @@ async function decomposeRequirement(content, options = {}) {
     maxItems = 10,
     useAI = true,
     cwd: cwd2 = process.cwd(),
-    validateQuality = true
+    validateQuality = true,
+    currentLevel = 0,
+    enableRecursive = false,
+    maxHierarchyLevel = 3,
+    parentTaskId
   } = options;
   const trimmedContent = content.trim();
   if (trimmedContent.length < 100) {
@@ -21710,6 +21869,14 @@ async function decomposeRequirement(content, options = {}) {
           };
         }
       }
+      if (enableRecursive && currentLevel < maxHierarchyLevel) {
+        const recursivelyDecomposed = await decomposeRecursivelyWithAI(result2.items, options, currentLevel, maxHierarchyLevel);
+        return {
+          ...result2,
+          items: recursivelyDecomposed,
+          summary: `递归分解为 ${recursivelyDecomposed.length} 个子任务（层级: ${currentLevel + 1}/${maxHierarchyLevel}）`
+        };
+      }
       return result2;
     }
   }
@@ -21757,6 +21924,69 @@ async function decomposeRequirement(content, options = {}) {
         items: [],
         summary: "分解质量检查未通过"
       };
+    }
+  }
+  if (enableRecursive && currentLevel < maxHierarchyLevel) {
+    const recursivelyDecomposed = await decomposeRecursivelyWithAI(result.items, options, currentLevel, maxHierarchyLevel);
+    return {
+      ...result,
+      items: recursivelyDecomposed,
+      summary: `递归分解为 ${recursivelyDecomposed.length} 个子任务（层级: ${currentLevel + 1}/${maxHierarchyLevel}）`
+    };
+  }
+  return result;
+}
+async function decomposeRecursivelyWithAI(items, options, currentLevel, maxHierarchyLevel) {
+  const { cwd: cwd2 = process.cwd() } = options;
+  const result = [];
+  for (const item of items) {
+    const decompositionCheck = await aiShouldDecomposeFurther(item, currentLevel, maxHierarchyLevel, cwd2);
+    if (!decompositionCheck.needsDecomposition) {
+      result.push(item);
+      continue;
+    }
+    if (process.env.DEBUG === "true") {
+      console.log(`[decomposeRecursivelyWithAI] 层级 ${currentLevel}，正在分解：${item.title}`);
+      console.log(`  原因：${decompositionCheck.reason}`);
+    }
+    const detailedDescription = `## 任务标题
+${item.title}
+
+## 任务描述
+${item.description}
+
+## 检查点
+${item.suggestedCheckpoints.map((cp) => `- ${cp}`).join(`
+`)}
+
+## 相关文件
+${item.relatedFiles.join(", ")}`;
+    const subDecomposition = await decomposeRequirement(detailedDescription, {
+      ...options,
+      currentLevel: currentLevel + 1,
+      enableRecursive: true,
+      maxHierarchyLevel,
+      minItems: 2,
+      maxItems: 5
+    });
+    if (subDecomposition.decomposable && subDecomposition.items.length >= 2) {
+      const baseIndex = result.length;
+      for (let i = 0;i < subDecomposition.items.length; i++) {
+        const subItem = subDecomposition.items[i];
+        if (subItem.dependsOn.length > 0) {
+          subItem.dependsOn = subItem.dependsOn.map((dep) => baseIndex + dep);
+        }
+        if (i > 0 && subItem.dependsOn.length === 0) {
+          subItem.dependsOn = [baseIndex + i - 1];
+        }
+        subItem.parentId = item.title;
+      }
+      result.push(...subDecomposition.items);
+      if (process.env.DEBUG === "true") {
+        console.log(`  分解完成：${subDecomposition.items.length} 个子任务`);
+      }
+    } else {
+      result.push(item);
     }
   }
   return result;
@@ -23167,8 +23397,8 @@ var {
 } = import__.default;
 
 // src/index.ts
-import * as fs34 from "fs";
-import * as path30 from "path";
+import * as fs35 from "fs";
+import * as path31 from "path";
 
 // src/commands/setup.ts
 init_path();
@@ -35822,16 +36052,16 @@ async function runDoctorDeep(cwd2 = process.cwd()) {
 init_harness();
 init_path();
 init_i18n();
-import * as fs32 from "fs";
-import * as path28 from "path";
+import * as fs33 from "fs";
+import * as path29 from "path";
 
 // src/utils/hd-assembly-line.ts
 init_harness();
 init_task();
 init_task2();
 init_path();
-import * as path27 from "path";
-import * as fs31 from "fs";
+import * as path28 from "path";
+import * as fs32 from "fs";
 import { execSync as execSync4 } from "child_process";
 
 // src/utils/harness-executor.ts
@@ -36177,7 +36407,6 @@ class HarnessExecutor {
         timeout: effectiveTimeout,
         allowedTools: effectiveTools.tools,
         outputFormat: "text",
-        maxRetries: this.config.apiRetryAttempts,
         cwd: this.config.cwd,
         dangerouslySkipPermissions: effectiveTools.skipPermissions
       };
@@ -36716,7 +36945,6 @@ class HarnessCodeReviewer {
       allowedTools: effectiveTools.tools,
       timeout: Math.floor(this.config.timeout / REVIEW_TIMEOUT_RATIO),
       cwd: this.config.cwd,
-      maxRetries: this.config.apiRetryAttempts,
       outputFormat: "text",
       dangerouslySkipPermissions: effectiveTools.skipPermissions
     };
@@ -36851,6 +37079,8 @@ ${devReport.evidence.map((evidence) => `- ${evidence}`).join(`
 init_task();
 init_harness_helpers();
 init_headless_agent();
+import * as path23 from "path";
+import * as fs27 from "fs";
 init_checkpoint();
 init_contradiction_detector();
 init_prompt_templates();
@@ -36940,6 +37170,58 @@ ${deferredInfo}` : deferredInfo;
   getQACheckpoints(task) {
     return filterCheckpoints(task, (cp) => cp.category === "qa_verification" || cp.verification?.method === "unit_test" || cp.verification?.method === "functional_test" || cp.verification?.method === "integration_test" || cp.verification?.method === "e2e_test" || cp.verification?.method === "automated" || cp.requiresHuman === true);
   }
+  verifyFileCoverage(task) {
+    let texts;
+    try {
+      texts = t(this.config.cwd);
+    } catch {
+      texts = getI18n("zh");
+    }
+    if (!task.files || task.files.length === 0) {
+      return {
+        covered: true,
+        existingFiles: [],
+        missingFiles: [],
+        totalCount: 0,
+        coverage: 100,
+        details: texts.harness.logs.noFilesToVerify || "No files specified for verification"
+      };
+    }
+    const existingFiles = [];
+    const missingFiles = [];
+    for (const filePath of task.files) {
+      const fullPath = path23.isAbsolute(filePath) ? filePath : path23.join(this.config.cwd, filePath);
+      if (fs27.existsSync(fullPath)) {
+        existingFiles.push(filePath);
+      } else {
+        missingFiles.push(filePath);
+      }
+    }
+    const totalCount = task.files.length;
+    const coverage = totalCount > 0 ? existingFiles.length / totalCount * 100 : 100;
+    const covered = missingFiles.length === 0;
+    const lines = [];
+    lines.push(`${texts.harness.logs.fileCoverageSummary || "File Coverage"}: ${existingFiles.length}/${totalCount} (${coverage.toFixed(1)}%)`);
+    if (missingFiles.length > 0) {
+      lines.push(`
+${texts.harness.logs.missingFiles || "Missing Files"}:`);
+      missingFiles.forEach((f) => lines.push(`  - ${f}`));
+    }
+    if (existingFiles.length > 0) {
+      lines.push(`
+${texts.harness.logs.existingFiles || "Existing Files"}:`);
+      existingFiles.forEach((f) => lines.push(`  - ${f}`));
+    }
+    return {
+      covered,
+      existingFiles,
+      missingFiles,
+      totalCount,
+      coverage,
+      details: lines.join(`
+`)
+    };
+  }
   async runQAVerification(task, codeReviewVerdict, checkpoints, retryContext) {
     let texts;
     try {
@@ -36947,18 +37229,28 @@ ${deferredInfo}` : deferredInfo;
     } catch {
       texts = getI18n("zh");
     }
+    const fileCoverage = this.verifyFileCoverage(task);
+    if (task.files && task.files.length > 0) {
+      console.log(`
+   \uD83D\uDCC1 ${texts.harness.logs.fileCoverageCheck || "File Coverage Check"}:`);
+      console.log(`      ${fileCoverage.details.split(`
+`)[0]}`);
+      if (!fileCoverage.covered) {
+        console.log(`   ❌ ${texts.harness.logs.fileCoverageFailed || "File coverage check failed"}`);
+      }
+    }
     const automatedCheckpoints = checkpoints.filter((cp) => !cp.requiresHuman);
     const humanCheckpoints = checkpoints.filter((cp) => cp.requiresHuman === true);
     const checkpointsWithoutCommands = automatedCheckpoints.filter((cp) => {
-      const result = validateCheckpointVerification(cp);
-      return !result.valid;
+      const result2 = validateCheckpointVerification(cp);
+      return !result2.valid;
     });
     if (checkpointsWithoutCommands.length > 0) {
       console.log(`
    ⚠️  ${texts.harness.logs.checkpointWarning.replace("{count}", String(checkpointsWithoutCommands.length))}:`);
       for (const cp of checkpointsWithoutCommands) {
-        const result = validateCheckpointVerification(cp);
-        console.log(`      - [${cp.id}] ${result.warning || texts.harness.logs.checkpointWarningDetail}`);
+        const result2 = validateCheckpointVerification(cp);
+        console.log(`      - [${cp.id}] ${result2.warning || texts.harness.logs.checkpointWarningDetail}`);
       }
       console.log(`      ${texts.harness.logs.checkpointWarningFallback}`);
     }
@@ -36981,7 +37273,6 @@ ${deferredInfo}` : deferredInfo;
       allowedTools: effectiveTools.tools,
       timeout: Math.floor(this.config.timeout / REVIEW_TIMEOUT_RATIO),
       cwd: this.config.cwd,
-      maxRetries: this.config.apiRetryAttempts,
       outputFormat: "text",
       dangerouslySkipPermissions: effectiveTools.skipPermissions
     };
@@ -37013,7 +37304,22 @@ ${deferredInfo}` : deferredInfo;
         failedCheckpoints: []
       };
     }
-    return this.parseQAResult(engineResult.result.output || "");
+    const result = this.parseQAResult(engineResult.result.output || "");
+    if (task.files && task.files.length > 0) {
+      const fileCoverageSection = `
+
+## ${texts.harness.logs.fileCoverageSection || "File Coverage"}
+${fileCoverage.details}`;
+      result.details = result.details ? `${result.details}${fileCoverageSection}` : fileCoverageSection;
+      if (!fileCoverage.covered) {
+        result.passed = false;
+        result.failures = [...result.failures, ...fileCoverage.missingFiles.map((f) => `Missing file: ${f}`)];
+        if (!result.reason.includes(texts.harness.logs.fileCoverageFailed || "File coverage failed")) {
+          result.reason = `${texts.harness.logs.fileCoverageFailed || "File coverage check failed"}: ${fileCoverage.missingFiles.length} file(s) missing`;
+        }
+      }
+    }
+    return result;
   }
   buildQAPrompt(task, codeReviewVerdict, checkpoints, retryContext) {
     let texts;
@@ -37163,8 +37469,8 @@ init_task2();
 init_harness_helpers();
 init_headless_agent();
 init_contradiction_detector();
-import * as fs27 from "fs";
-import * as path23 from "path";
+import * as fs28 from "fs";
+import * as path24 from "path";
 init_prompt_templates();
 init_harness_snapshot();
 init_i18n();
@@ -37234,7 +37540,6 @@ class HarnessEvaluator {
         allowedTools: effectiveTools.tools,
         timeout: Math.floor(this.config.timeout / 2),
         outputFormat: "text",
-        maxRetries: this.config.apiRetryAttempts,
         cwd: this.config.cwd,
         dangerouslySkipPermissions: effectiveTools.skipPermissions
       };
@@ -37644,11 +37949,11 @@ ${texts.harness.logs.phantomTaskNopassRequirement}
       texts = getI18n("zh");
     }
     const contractPath = this.getContractPath(taskId);
-    if (!fs27.existsSync(contractPath)) {
+    if (!fs28.existsSync(contractPath)) {
       return null;
     }
     try {
-      const content = fs27.readFileSync(contractPath, "utf-8");
+      const content = fs28.readFileSync(contractPath, "utf-8");
       const parsed = JSON.parse(content);
       const validated = this.validateSprintContract(parsed, taskId);
       if (!validated) {
@@ -37662,21 +37967,21 @@ ${texts.harness.logs.phantomTaskNopassRequirement}
   }
   getContractPath(taskId) {
     const projectDir = getProjectDir(this.config.cwd);
-    return path23.join(projectDir, "tasks", taskId, "contract.json");
+    return path24.join(projectDir, "tasks", taskId, "contract.json");
   }
   getReviewReportPath(taskId) {
     const projectDir = getProjectDir(this.config.cwd);
-    return path23.join(projectDir, "reports", "harness", taskId, "review-report.md");
+    return path24.join(projectDir, "reports", "harness", taskId, "review-report.md");
   }
   async saveReviewReport(taskId, verdict, devReport) {
     const reportPath = this.getReviewReportPath(taskId);
-    const dir = path23.dirname(reportPath);
-    if (!fs27.existsSync(dir)) {
-      fs27.mkdirSync(dir, { recursive: true });
+    const dir = path24.dirname(reportPath);
+    if (!fs28.existsSync(dir)) {
+      fs28.mkdirSync(dir, { recursive: true });
     }
     archiveReportIfExists(reportPath);
     const content = this.formatReviewReport(verdict, devReport);
-    fs27.writeFileSync(reportPath, content, "utf-8");
+    fs28.writeFileSync(reportPath, content, "utf-8");
   }
   saveRawEvaluationOutput(taskId, output, stderr, success) {
     let texts;
@@ -37687,12 +37992,12 @@ ${texts.harness.logs.phantomTaskNopassRequirement}
     }
     try {
       const projectDir = getProjectDir(this.config.cwd);
-      const dir = path23.join(projectDir, "reports", "harness", taskId);
-      if (!fs27.existsSync(dir)) {
-        fs27.mkdirSync(dir, { recursive: true });
+      const dir = path24.join(projectDir, "reports", "harness", taskId);
+      if (!fs28.existsSync(dir)) {
+        fs28.mkdirSync(dir, { recursive: true });
       }
       const timestamp = new Date().toISOString().replace(/[:.]/g, "-");
-      const rawPath = path23.join(dir, `evaluation-raw-${timestamp}.log`);
+      const rawPath = path24.join(dir, `evaluation-raw-${timestamp}.log`);
       const lines = [
         `# ${texts.harness.logs.rawEvaluationOutputTitle || "Raw Evaluation Output"}`,
         `Task: ${taskId}`,
@@ -37707,7 +38012,7 @@ ${texts.harness.logs.phantomTaskNopassRequirement}
         "--- STDERR ---",
         stderr || "(empty)"
       ];
-      fs27.writeFileSync(rawPath, lines.join(`
+      fs28.writeFileSync(rawPath, lines.join(`
 `), "utf-8");
       console.log(`   \uD83D\uDCC4 ${texts.harness.logs.rawOutputSaved.replace("{filename}", `evaluation-raw-${timestamp}.log`)}`);
     } catch (error) {
@@ -37769,7 +38074,6 @@ ${texts.harness.logs.phantomTaskNopassRequirement}
 }
 
 // src/utils/harness-retry.ts
-init_harness_helpers();
 init_i18n();
 
 class RetryHandler {
@@ -37819,15 +38123,7 @@ class RetryHandler {
     if (verdict.failedCheckpoints.length > 0) {
       suggestions.push("验证检查点配置是否正确");
     }
-    const isTransientError = isRetryableError(verdict.reason, "").retryable;
     const hasFixableIssues = verdict.failedCriteria.length > 0 || verdict.failedCheckpoints.length > 0;
-    if (isTransientError) {
-      return {
-        shouldRetry: true,
-        reason: "检测到临时性错误，重试可能成功",
-        suggestions: [...suggestions, "等待系统恢复后重试"]
-      };
-    }
     if (hasFixableIssues) {
       return {
         shouldRetry: true,
@@ -37859,8 +38155,8 @@ class RetryHandler {
 // src/utils/harness-status-reporter.ts
 init_harness();
 init_path();
-import * as fs28 from "fs";
-import * as path24 from "path";
+import * as fs29 from "fs";
+import * as path25 from "path";
 
 class HarnessStatusReporter {
   statusPath;
@@ -37868,7 +38164,7 @@ class HarnessStatusReporter {
   currentReport;
   lastBatchContext;
   constructor(cwd2, sessionId) {
-    this.statusPath = path24.join(getProjectDir(cwd2), "harness-status.json");
+    this.statusPath = path25.join(getProjectDir(cwd2), "harness-status.json");
     this.sessionId = sessionId;
     this.currentReport = this.createInitialReport();
   }
@@ -38069,9 +38365,9 @@ class HarnessStatusReporter {
   }
   checkStaleStatus() {
     try {
-      if (!fs28.existsSync(this.statusPath))
+      if (!fs29.existsSync(this.statusPath))
         return;
-      const raw = fs28.readFileSync(this.statusPath, "utf-8");
+      const raw = fs29.readFileSync(this.statusPath, "utf-8");
       const existing = JSON.parse(raw);
       if (existing.state !== "running")
         return;
@@ -38082,11 +38378,11 @@ class HarnessStatusReporter {
     } catch {}
   }
   writeStatus() {
-    const dir = path24.dirname(this.statusPath);
-    if (!fs28.existsSync(dir)) {
-      fs28.mkdirSync(dir, { recursive: true });
+    const dir = path25.dirname(this.statusPath);
+    if (!fs29.existsSync(dir)) {
+      fs29.mkdirSync(dir, { recursive: true });
     }
-    fs28.writeFileSync(this.statusPath, JSON.stringify(this.currentReport, null, 2), "utf-8");
+    fs29.writeFileSync(this.statusPath, JSON.stringify(this.currentReport, null, 2), "utf-8");
   }
   logToConsole(phase, status, message) {
     const progress = `${this.currentReport.completedTasks}/${this.currentReport.totalTasks}`;
@@ -38116,13 +38412,13 @@ class HarnessStatusReporter {
 init_harness();
 init_path();
 init_i18n();
-import * as fs30 from "fs";
-import * as path26 from "path";
+import * as fs31 from "fs";
+import * as path27 from "path";
 
 // src/utils/harness-reporter.ts
 init_path();
-import * as fs29 from "fs";
-import * as path25 from "path";
+import * as fs30 from "fs";
+import * as path26 from "path";
 
 class HarnessReporter {
   config;
@@ -38131,12 +38427,12 @@ class HarnessReporter {
   }
   async generateSummaryReport(summary) {
     const reportPath = this.getSummaryReportPath();
-    const dir = path25.dirname(reportPath);
-    if (!fs29.existsSync(dir)) {
-      fs29.mkdirSync(dir, { recursive: true });
+    const dir = path26.dirname(reportPath);
+    if (!fs30.existsSync(dir)) {
+      fs30.mkdirSync(dir, { recursive: true });
     }
     const content = this.formatSummaryReport(summary);
-    fs29.writeFileSync(reportPath, content, "utf-8");
+    fs30.writeFileSync(reportPath, content, "utf-8");
     console.log(`
 \uD83D\uDCC4 执行摘要已保存: ${reportPath}`);
   }
@@ -38226,16 +38522,16 @@ class HarnessReporter {
   getSummaryReportPath() {
     const projectDir = getProjectDir(this.config.cwd);
     const timestamp = new Date().toISOString().replace(/[:.]/g, "-").substring(0, 19);
-    return path25.join(projectDir, "reports", "harness", `summary-${timestamp}.md`);
+    return path26.join(projectDir, "reports", "harness", `summary-${timestamp}.md`);
   }
   async generateTaskReport(record) {
     const taskDir = this.getTaskReportDir(record.taskId);
-    if (!fs29.existsSync(taskDir)) {
-      fs29.mkdirSync(taskDir, { recursive: true });
+    if (!fs30.existsSync(taskDir)) {
+      fs30.mkdirSync(taskDir, { recursive: true });
     }
-    const overviewPath = path25.join(taskDir, "overview.md");
+    const overviewPath = path26.join(taskDir, "overview.md");
     const overviewContent = this.formatTaskOverview(record);
-    fs29.writeFileSync(overviewPath, overviewContent, "utf-8");
+    fs30.writeFileSync(overviewPath, overviewContent, "utf-8");
   }
   formatTaskOverview(record) {
     const lines = [];
@@ -38305,7 +38601,7 @@ class HarnessReporter {
   }
   getTaskReportDir(taskId) {
     const projectDir = getProjectDir(this.config.cwd);
-    return path25.join(projectDir, "reports", "harness", taskId);
+    return path26.join(projectDir, "reports", "harness", taskId);
   }
   generateJSONSummary(summary) {
     const data = {
@@ -38342,7 +38638,7 @@ init_plan2();
 init_quality_gate();
 init_harness_snapshot();
 function getRuntimeStatePath(cwd2) {
-  return path26.join(getProjectDir(cwd2), "harness-state.json");
+  return path27.join(getProjectDir(cwd2), "harness-state.json");
 }
 function saveRuntimeState(state, cwd2) {
   const statePath = getRuntimeStatePath(cwd2);
@@ -38355,7 +38651,7 @@ function saveRuntimeState(state, cwd2) {
     phaseRetryCounters: Object.fromEntries(state.phaseRetryCounters || []),
     taskPhaseCheckpoints: Object.fromEntries(state.taskPhaseCheckpoints || [])
   };
-  fs30.writeFileSync(statePath, JSON.stringify(data, null, 2), "utf-8");
+  fs31.writeFileSync(statePath, JSON.stringify(data, null, 2), "utf-8");
 }
 
 // src/utils/hd-assembly-line.ts
@@ -38373,6 +38669,7 @@ class AssemblyLine {
   statusReporter;
   sessionId;
   taskRetryContexts = new Map;
+  executionRecords = new Map;
   constructor(config, sessionId) {
     this.config = config;
     this.sessionId = sessionId;
@@ -38414,7 +38711,7 @@ ${"━".repeat(SEPARATOR_WIDTH)}`);
       console.log("━".repeat(SEPARATOR_WIDTH));
       try {
         const record = await this.executeTask(taskId, state);
-        state.records.push(record);
+        this.executionRecords.set(taskId, record);
         if (!state.passedTasks)
           state.passedTasks = [];
         if (!state.failedTasks)
@@ -38461,7 +38758,7 @@ ${"━".repeat(SEPARATOR_WIDTH)}`);
             event: "failed",
             description: `执行出错: ${error instanceof Error ? error.message : String(error)}`
           });
-          state.records.push(record);
+          this.executionRecords.set(taskId, record);
           if (!state.failedTasks)
             state.failedTasks = [];
           state.failedTasks.push(taskId);
@@ -38485,15 +38782,16 @@ ${"━".repeat(SEPARATOR_WIDTH)}`);
     const endTime = new Date().toISOString();
     const duration = new Date(endTime).getTime() - new Date(startTime).getTime();
     const uniqueTaskCount = uniqueTaskIds.size;
+    const records = Array.from(this.executionRecords.values());
     const summary = {
       totalTasks: uniqueTaskCount,
-      passed: state.records.filter((r) => r.reviewVerdict?.result === "PASS").length,
-      failed: state.records.filter((r) => r.reviewVerdict?.result === "NOPASS" || r.devReport.status === "failed").length,
+      passed: records.filter((r) => r.reviewVerdict?.result === "PASS").length,
+      failed: records.filter((r) => r.reviewVerdict?.result === "NOPASS" || r.devReport.status === "failed").length,
       totalRetries: Array.from(state.retryCounter.values()).reduce((sum, count) => sum + count, 0),
       duration,
       startTime,
       endTime,
-      taskResults: new Map(state.records.map((r) => [r.taskId, r])),
+      taskResults: new Map(records.map((r) => [r.taskId, r])),
       config: this.config
     };
     state.state = "completed";
@@ -38519,7 +38817,7 @@ ${"━".repeat(SEPARATOR_WIDTH)}`);
       });
     };
     addTimeline("started", `开始执行任务: ${task.title}`);
-    if (!await this.checkDependencies(task, state)) {
+    if (!await this.checkDependencies(task)) {
       console.log(`⚠️  依赖未完成，延后处理`);
       addTimeline("failed", "依赖未完成");
       record.finalStatus = "needs_human";
@@ -38542,7 +38840,7 @@ ${"━".repeat(SEPARATOR_WIDTH)}`);
       return record;
     }
     let resumeIndex = phases.indexOf(resumePhase);
-    const prevRecord = [...state.records].reverse().find((r) => r.taskId === taskId);
+    const prevRecord = this.executionRecords.get(taskId);
     if (resumeIndex > 0 && !prevRecord) {
       console.log(`   ⚠️ 未找到前次执行记录，从开发阶段重新开始`);
     }
@@ -38937,27 +39235,45 @@ ${"━".repeat(SEPARATOR_WIDTH)}`);
       console.error(`   ⚠️ 评估通过后同步检查点状态失败: ${error instanceof Error ? error.message : String(error)}`);
     }
   }
-  async checkDependencies(task, state) {
+  async checkDependencies(task) {
     if (!task.dependencies || task.dependencies.length === 0) {
       return true;
     }
-    for (const depId of task.dependencies) {
-      const depRecord = state.records.find((r) => r.taskId === depId);
-      if (depRecord && depRecord.finalStatus === "resolved") {
-        continue;
+    const POLLING_INTERVAL_MS = 5000;
+    const TIMEOUT_MS = 30 * 60 * 1000;
+    const startTime = Date.now();
+    while (Date.now() - startTime < TIMEOUT_MS) {
+      let allDependenciesCompleted = true;
+      let hasFailedDependency = false;
+      for (const depId of task.dependencies) {
+        const depTask = readTaskMeta(depId, this.config.cwd);
+        if (!depTask) {
+          console.log(`⚠️  依赖任务 ${depId} 不存在`);
+          continue;
+        }
+        const normalizedStatus = normalizeStatus(depTask.status);
+        if (normalizedStatus === "resolved" || normalizedStatus === "closed") {
+          continue;
+        }
+        if (normalizedStatus === "failed" || normalizedStatus === "abandoned") {
+          console.log(`⚠️  依赖任务 ${depId} 已失败 (状态: ${depTask.status})`);
+          hasFailedDependency = true;
+          break;
+        }
+        allDependenciesCompleted = false;
+        console.log(`⏳ 等待依赖任务 ${depId} 完成 (状态: ${depTask.status})...`);
       }
-      const depTask = readTaskMeta(depId, this.config.cwd);
-      if (!depTask) {
-        console.log(`⚠️  依赖任务 ${depId} 不存在`);
-        continue;
-      }
-      const normalizedStatus = normalizeStatus(depTask.status);
-      if (normalizedStatus !== "resolved" && normalizedStatus !== "closed") {
-        console.log(`⚠️  依赖任务 ${depId} 未完成 (状态: ${depTask.status})`);
+      if (hasFailedDependency) {
         return false;
       }
+      if (allDependenciesCompleted) {
+        return true;
+      }
+      console.log(`   ⏱️  轮询等待中... (${Math.round((Date.now() - startTime) / 1000)}s / ${TIMEOUT_MS / 1000}s)`);
+      await new Promise((resolve10) => setTimeout(resolve10, POLLING_INTERVAL_MS));
     }
-    return true;
+    console.log(`⚠️  依赖检查超时 (${TIMEOUT_MS / 1000 / 60} 分钟)`);
+    return false;
   }
   async updateTaskStatus(taskId, status, reason) {
     try {
@@ -38991,7 +39307,7 @@ ${"━".repeat(SEPARATOR_WIDTH)}`);
     if (remainingMeta.size === 0)
       return;
     const graph = DependencyGraph.fromTasks([...remainingMeta.values()]);
-    const completedTaskIds = new Set(state.records.filter((r) => r.finalStatus === "resolved").map((r) => r.taskId));
+    const completedTaskIds = new Set(Array.from(this.executionRecords.values()).filter((r) => r.finalStatus === "resolved").map((r) => r.taskId));
     const { affectedTasks } = executeFailureCascade(failedTaskId, graph, this.config.cwd, completedTaskIds);
     if (affectedTasks.length === 0)
       return;
@@ -39033,7 +39349,7 @@ ${"━".repeat(SEPARATOR_WIDTH)}`);
         description: `上游任务 ${failedTaskId} 失败，级联跳过`,
         data: { upstreamTaskId: failedTaskId, failureReason: "upstream_failed" }
       });
-      state.records.push(cascadeRecord);
+      this.executionRecords.set(downstreamId, cascadeRecord);
       if (!state.failedTasks)
         state.failedTasks = [];
       state.failedTasks.push(downstreamId);
@@ -39369,9 +39685,9 @@ ${"━".repeat(SEPARATOR_WIDTH)}`);
     }
     if (status === "wait_qa") {
       const projectDir = getProjectDir(this.config.cwd);
-      const qaReportPath = path27.join(projectDir, "reports", "harness", taskId, "qa-report.md");
-      if (fs31.existsSync(qaReportPath)) {
-        const content = fs31.readFileSync(qaReportPath, "utf-8");
+      const qaReportPath = path28.join(projectDir, "reports", "harness", taskId, "qa-report.md");
+      if (fs32.existsSync(qaReportPath)) {
+        const content = fs32.readFileSync(qaReportPath, "utf-8");
         if (content.trim().length > 0) {
           console.log(`   \uD83D\uDCCB 检测到 wait_qa 但 qa-report.md 已存在，自动迁移为 wait_evaluation`);
           return "evaluation";
@@ -39398,14 +39714,14 @@ ${"━".repeat(SEPARATOR_WIDTH)}`);
       return true;
     }
     const projectDir = getProjectDir(this.config.cwd);
-    const reportDir = path27.join(projectDir, "reports", "harness", taskId);
+    const reportDir = path28.join(projectDir, "reports", "harness", taskId);
     for (const reportFile of required) {
-      const filePath = path27.join(reportDir, reportFile);
-      if (!fs31.existsSync(filePath)) {
+      const filePath = path28.join(reportDir, reportFile);
+      if (!fs32.existsSync(filePath)) {
         return false;
       }
       try {
-        const content = fs31.readFileSync(filePath, "utf-8");
+        const content = fs32.readFileSync(filePath, "utf-8");
         if (content.trim().length === 0) {
           return false;
         }
@@ -39445,7 +39761,7 @@ ${"━".repeat(SEPARATOR_WIDTH)}`);
   storeFailureContext(taskId, phase, reason, state) {
     const existing = this.taskRetryContexts.get(taskId);
     const phaseRetryCount = this.getPhaseRetryCount(taskId, phase, state);
-    const prevRecord = [...state.records].reverse().find((r) => r.taskId === taskId);
+    const prevRecord = this.executionRecords.get(taskId);
     const partialProgress = {};
     if (prevRecord) {
       const completedCheckpoints = [];
@@ -39516,31 +39832,31 @@ ${"━".repeat(SEPARATOR_WIDTH)}`);
     if (!resumePhase)
       return true;
     const projectDir = getProjectDir(this.config.cwd);
-    const reportDir = path27.join(projectDir, "reports", "harness", taskId);
+    const reportDir = path28.join(projectDir, "reports", "harness", taskId);
     const checks = [];
     switch (resumePhase) {
       case "qa":
-        checks.push({ file: path27.join(reportDir, "dev-report.md"), label: "开发报告" });
-        checks.push({ file: path27.join(reportDir, "code-review-report.md"), label: "代码审核报告" });
+        checks.push({ file: path28.join(reportDir, "dev-report.md"), label: "开发报告" });
+        checks.push({ file: path28.join(reportDir, "code-review-report.md"), label: "代码审核报告" });
         break;
       case "evaluation":
-        checks.push({ file: path27.join(reportDir, "dev-report.md"), label: "开发报告" });
-        checks.push({ file: path27.join(reportDir, "code-review-report.md"), label: "代码审核报告" });
-        checks.push({ file: path27.join(reportDir, "qa-report.md"), label: "QA报告" });
+        checks.push({ file: path28.join(reportDir, "dev-report.md"), label: "开发报告" });
+        checks.push({ file: path28.join(reportDir, "code-review-report.md"), label: "代码审核报告" });
+        checks.push({ file: path28.join(reportDir, "qa-report.md"), label: "QA报告" });
         break;
       case "code_review":
-        checks.push({ file: path27.join(reportDir, "dev-report.md"), label: "开发报告" });
+        checks.push({ file: path28.join(reportDir, "dev-report.md"), label: "开发报告" });
         break;
       case "development":
         return true;
     }
     for (const check of checks) {
-      if (!fs31.existsSync(check.file)) {
+      if (!fs32.existsSync(check.file)) {
         console.log(`   ⚠️ 缺少${check.label}: ${check.file}`);
         return false;
       }
       try {
-        const content = fs31.readFileSync(check.file, "utf-8");
+        const content = fs32.readFileSync(check.file, "utf-8");
         if (content.trim().length === 0) {
           console.log(`   ⚠️ ${check.label}为空: ${check.file}`);
           return false;
@@ -39591,17 +39907,11 @@ ${"━".repeat(SEPARATOR_WIDTH)}`);
     const batchEnd = batchIndex + 1 < boundaries.length ? boundaries[batchIndex + 1] : state.taskQueue.length;
     const batchSize = batchEnd - batchStart;
     const batchTaskIds = state.taskQueue.slice(batchStart, batchEnd);
-    const lastRecordByTask = new Map;
-    for (const record of state.records) {
-      if (batchTaskIds.includes(record.taskId)) {
-        lastRecordByTask.set(record.taskId, record);
-      }
-    }
     let passed = 0;
     let failed = 0;
     let skipped = 0;
     for (const taskId of batchTaskIds) {
-      const record = lastRecordByTask.get(taskId);
+      const record = this.executionRecords.get(taskId);
       if (!record) {
         skipped++;
       } else if (record.finalStatus === "resolved" || record.finalStatus === "closed") {
@@ -39626,16 +39936,10 @@ ${"━".repeat(SEPARATOR_WIDTH)}`);
     const batchStart = boundaries[batchIndex];
     const batchEnd = batchIndex + 1 < boundaries.length ? boundaries[batchIndex + 1] : state.taskQueue.length;
     const batchTaskIds = new Set(state.taskQueue.slice(batchStart, batchEnd));
-    const lastRecordByTask = new Map;
-    for (const record of state.records) {
-      if (batchTaskIds.has(record.taskId)) {
-        lastRecordByTask.set(record.taskId, record);
-      }
-    }
     let passed = 0;
     let failed = 0;
     for (const taskId of batchTaskIds) {
-      const record = lastRecordByTask.get(taskId);
+      const record = this.executionRecords.get(taskId);
       if (record && (record.finalStatus === "resolved" || record.finalStatus === "closed")) {
         passed++;
       } else if (record && (record.finalStatus === "abandoned" || record.finalStatus === "failed")) {
@@ -39890,8 +40194,6 @@ async function harnessCommand(options, cwd2 = process.cwd()) {
     dryRun: options.dryRun ?? DEFAULT_HARNESS_CONFIG.dryRun,
     continue: options.continue ?? DEFAULT_HARNESS_CONFIG.continue,
     jsonOutput: options.json ?? DEFAULT_HARNESS_CONFIG.jsonOutput,
-    apiRetryAttempts: options.apiRetryAttempts ? parseInt(options.apiRetryAttempts, 10) : DEFAULT_HARNESS_CONFIG.apiRetryAttempts,
-    apiRetryDelay: options.apiRetryDelay ? parseInt(options.apiRetryDelay, 10) : DEFAULT_HARNESS_CONFIG.apiRetryDelay,
     batchGitCommit: options.batchGitCommit ?? DEFAULT_HARNESS_CONFIG.batchGitCommit,
     forceContinue: options.forceContinue ?? DEFAULT_HARNESS_CONFIG.forceContinue,
     cwd: cwd2
@@ -40075,15 +40377,15 @@ async function harnessCommand(options, cwd2 = process.cwd()) {
   }
 }
 function getRuntimeStatePath2(cwd2) {
-  return path28.join(getProjectDir(cwd2), "harness-state.json");
+  return path29.join(getProjectDir(cwd2), "harness-state.json");
 }
 function loadRuntimeState(cwd2) {
   const statePath = getRuntimeStatePath2(cwd2);
-  if (!fs32.existsSync(statePath)) {
+  if (!fs33.existsSync(statePath)) {
     return null;
   }
   try {
-    const content = fs32.readFileSync(statePath, "utf-8");
+    const content = fs33.readFileSync(statePath, "utf-8");
     const data = JSON.parse(content);
     const version = data.stateFormatVersion ?? 0;
     if (version < 1 || version > 2) {
@@ -40110,8 +40412,8 @@ function loadRuntimeState(cwd2) {
 }
 function clearRuntimeState(cwd2) {
   const statePath = getRuntimeStatePath2(cwd2);
-  if (fs32.existsSync(statePath)) {
-    fs32.unlinkSync(statePath);
+  if (fs33.existsSync(statePath)) {
+    fs33.unlinkSync(statePath);
   }
 }
 function summaryToJSON(summary) {
@@ -40138,13 +40440,13 @@ function summaryToJSON(summary) {
 }
 async function loadTaskQueue(options, cwd2) {
   if (options.plan) {
-    const planFile = path28.resolve(cwd2, options.plan);
-    if (!fs32.existsSync(planFile)) {
+    const planFile = path29.resolve(cwd2, options.plan);
+    if (!fs33.existsSync(planFile)) {
       console.error(`Error: Plan file does not exist: ${planFile}`);
       process.exit(1);
     }
     try {
-      const planContent = fs32.readFileSync(planFile, "utf-8");
+      const planContent = fs33.readFileSync(planFile, "utf-8");
       const planData = JSON.parse(planContent);
       let taskQueue = planData.recommendation?.suggestedOrder || [];
       const batches = planData.batchOrder || planData.batches;
@@ -40249,24 +40551,24 @@ function printSummary(summary) {
 }
 
 // src/utils/path.ts
-import * as path29 from "path";
-import * as fs33 from "fs";
+import * as path30 from "path";
+import * as fs34 from "fs";
 function getProjectDir5(cwd2 = process.cwd()) {
-  return path29.join(cwd2, ".projmnt4claude");
+  return path30.join(cwd2, ".projmnt4claude");
 }
 function isInitialized2(cwd2 = process.cwd()) {
   const projectDir = getProjectDir5(cwd2);
-  const configPath = path29.join(projectDir, "config.json");
-  if (fs33.existsSync(configPath)) {
+  const configPath = path30.join(projectDir, "config.json");
+  if (fs34.existsSync(configPath)) {
     return true;
   }
-  const tasksDir = path29.join(projectDir, "tasks");
-  if (fs33.existsSync(tasksDir)) {
+  const tasksDir = path30.join(projectDir, "tasks");
+  if (fs34.existsSync(tasksDir)) {
     try {
-      const taskDirs = fs33.readdirSync(tasksDir);
+      const taskDirs = fs34.readdirSync(tasksDir);
       return taskDirs.some((taskDir) => {
-        const metaPath = path29.join(tasksDir, taskDir, "meta.json");
-        return fs33.existsSync(metaPath);
+        const metaPath = path30.join(tasksDir, taskDir, "meta.json");
+        return fs34.existsSync(metaPath);
       });
     } catch {
       return false;
@@ -40397,12 +40699,12 @@ rename format:
     case "create": {
       let taskDescription = options.description;
       if (options.file) {
-        const filePath = path30.resolve(options.file);
-        if (!fs34.existsSync(filePath)) {
+        const filePath = path31.resolve(options.file);
+        if (!fs35.existsSync(filePath)) {
           console.error("(X) Error: Description file not found: " + filePath);
           process.exit(1);
         }
-        const stat = fs34.statSync(filePath);
+        const stat = fs35.statSync(filePath);
         if (!stat.isFile()) {
           console.error("(X) Error: Path is not a file: " + filePath);
           process.exit(1);
@@ -40413,14 +40715,14 @@ rename format:
           process.exit(1);
         }
         try {
-          taskDescription = fs34.readFileSync(filePath, "utf-8");
+          taskDescription = fs35.readFileSync(filePath, "utf-8");
         } catch (error) {
           console.error("(X) Error: Cannot read description file: " + error.message);
           process.exit(1);
         }
         if (filePath.startsWith("/tmp/")) {
           try {
-            fs34.unlinkSync(filePath);
+            fs35.unlinkSync(filePath);
           } catch {}
         }
       }
@@ -40861,12 +41163,12 @@ program2.command("init-requirement [description]").description(`\u4ECE\u81EA\u71
 ` + "\u524D\u63D0: \u9700\u5148\u8FD0\u884C projmnt4claude setup \u521D\u59CB\u5316\u9879\u76EE").option("-y, --yes", "\u975E\u4EA4\u4E92\u6A21\u5F0F\uFF1A\u8DF3\u8FC7\u6240\u6709\u786E\u8BA4\uFF0C\u76F4\u63A5\u4F7F\u7528\u5206\u6790\u7ED3\u679C\u521B\u5EFA\u4EFB\u52A1").option("--no-plan", "\u521B\u5EFA\u4EFB\u52A1\u540E\u4E0D\u8BE2\u95EE\u662F\u5426\u6DFB\u52A0\u5230\u6267\u884C\u8BA1\u5212").option("--skip-validation", "\u8DF3\u8FC7\u521D\u59CB\u5316\u9A8C\u8BC1").option("--template <file>", "\u4F7F\u7528\u9700\u6C42\u6A21\u677F\u6587\u4EF6", "simple").option("--no-ai", "\u7981\u7528 AI \u8F85\u52A9").option("--require-quality <n>", "\u8D28\u91CF\u95E8\u7981\u9608\u503C").option("-f, --force", "\u5F3A\u5236\u8986\u76D6").option("--file <path>", "\u4ECE\u6587\u4EF6\u8BFB\u53D6\u63CF\u8FF0\uFF08\u7528\u4E8E\u5305\u542B\u7279\u6B8A\u5B57\u7B26\u7684\u957F\u63CF\u8FF0\uFF09").option("--decompose", "\u81EA\u52A8\u5206\u89E3\u591A\u95EE\u9898\u9700\u6C42/\u62A5\u544A\uFF08\u9ED8\u8BA4\u542F\u7528\uFF09", true).option("--no-decompose", "\u7981\u7528\u9700\u6C42\u5206\u89E3\uFF0C\u5F3A\u5236\u521B\u5EFA\u5355\u4E2A\u4EFB\u52A1").option("--accept-draft", "\u63A5\u53D7\u8349\u7A3F").option("--accept-audit", "\u63A5\u53D7\u5BA1\u8BA1").option("--accept-eval", "\u63A5\u53D7\u8BC4\u4F30").action(async (description, options) => {
   let finalDescription;
   if (options.file) {
-    const filePath = path30.resolve(options.file);
-    if (!fs34.existsSync(filePath)) {
+    const filePath = path31.resolve(options.file);
+    if (!fs35.existsSync(filePath)) {
       console.error("(X) Error: Description file not found: " + filePath);
       process.exit(1);
     }
-    const stat = fs34.statSync(filePath);
+    const stat = fs35.statSync(filePath);
     if (!stat.isFile()) {
       console.error("(X) Error: Path is not a file: " + filePath);
       process.exit(1);
@@ -40877,14 +41179,14 @@ program2.command("init-requirement [description]").description(`\u4ECE\u81EA\u71
       process.exit(1);
     }
     try {
-      finalDescription = fs34.readFileSync(filePath, "utf-8");
+      finalDescription = fs35.readFileSync(filePath, "utf-8");
     } catch (error) {
       console.error("(X) Error: Cannot read description file: " + error.message);
       process.exit(1);
     }
     if (filePath.startsWith("/tmp/")) {
       try {
-        fs34.unlinkSync(filePath);
+        fs35.unlinkSync(filePath);
       } catch {}
     }
   } else if (description) {
@@ -40936,17 +41238,13 @@ Quality Gate Options:
   --require-quality <n>      Quality score threshold (0-100, default: 60)
   --skip-harness-gate        Skip harness quality gate check (not recommended)
 
-API Options:
-  --api-retry-attempts <n>   API retry attempts for 429/500 errors (default: 3)
-  --api-retry-delay <seconds>  API retry base delay in seconds (default: 60)
-
 Sub-command: cleanup
   cleanup                    Clean up orphaned snapshots
   --force                    Force cleanup all snapshots (including active ones)
   --orphans-only             Clean only orphaned snapshots (process no longer exists)
 
 Deprecated Options:
-  ~~--skip-quality-gate~~    Deprecated, use --skip-harness-gate instead`).option("--plan <file>", "Plan file path (optional, auto-read/generate if not specified)").option("--max-retries <n>", "Max retry attempts", "3").option("--timeout <seconds>", "Per-task timeout (seconds)", "300").option("--parallel <n>", "Parallel execution count", "1").option("--dry-run", "Dry run mode (no actual execution)").option("--continue", "Continue from last interruption").option("--json", "JSON format output").option("--api-retry-attempts <n>", "API call retry attempts (for 429/500 errors)", "3").option("--api-retry-delay <seconds>", "API retry base delay (seconds)", "60").option("--require-quality <n>", "Quality gate: minimum quality score threshold (0-100, default 60)", "60").option("--skip-harness-gate", "Skip Harness pre-execution quality gate check (not recommended)").option("--skip-quality-gate", "[Deprecated] Use --skip-harness-gate instead").option("--batch-git-commit", "Auto git commit after each batch completes").option("--force", "Force cleanup all snapshots (cleanup subcommand only)").option("--orphans-only", "Clean only orphaned snapshots (cleanup subcommand only)").action(async (action, options) => {
+  ~~--skip-quality-gate~~    Deprecated, use --skip-harness-gate instead`).option("--plan <file>", "Plan file path (optional, auto-read/generate if not specified)").option("--max-retries <n>", "Max retry attempts", "3").option("--timeout <seconds>", "Per-task timeout (seconds)", "300").option("--parallel <n>", "Parallel execution count", "1").option("--dry-run", "Dry run mode (no actual execution)").option("--continue", "Continue from last interruption").option("--json", "JSON format output").option("--require-quality <n>", "Quality gate: minimum quality score threshold (0-100, default 60)", "60").option("--skip-harness-gate", "Skip Harness pre-execution quality gate check (not recommended)").option("--skip-quality-gate", "[Deprecated] Use --skip-harness-gate instead").option("--batch-git-commit", "Auto git commit after each batch completes").option("--force", "Force cleanup all snapshots (cleanup subcommand only)").option("--orphans-only", "Clean only orphaned snapshots (cleanup subcommand only)").action(async (action, options) => {
   requireInit();
   if (action === "cleanup") {
     await cleanupHarnessSnapshots({
@@ -40975,8 +41273,6 @@ Deprecated Options:
     dryRun: options.dryRun,
     continue: options.continue,
     json: options.json,
-    apiRetryAttempts: options.apiRetryAttempts,
-    apiRetryDelay: options.apiRetryDelay,
     requireQuality: options.requireQuality,
     skipHarnessGate: options.skipHarnessGate || options.skipQualityGate,
     batchGitCommit: options.batchGitCommit

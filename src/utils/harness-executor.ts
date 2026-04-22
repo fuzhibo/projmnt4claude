@@ -80,7 +80,6 @@ export class HarnessExecutor {
         timeout: effectiveTimeout,
         allowedTools: effectiveTools.tools,
         outputFormat: 'text' as const,
-        maxRetries: this.config.apiRetryAttempts,
         cwd: this.config.cwd,
         dangerouslySkipPermissions: effectiveTools.skipPermissions,
       };

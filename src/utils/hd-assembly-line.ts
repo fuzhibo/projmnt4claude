@@ -62,6 +62,8 @@ export class AssemblyLine {
   private sessionId?: string;
   /** 各任务的重试上下文，存储前次失败信息供重试时传递给 Claude */
   private taskRetryContexts: Map<string, RetryContext> = new Map();
+  /** 执行记录存储（替代 state.records，避免双层状态架构） */
+  private executionRecords: Map<string, TaskExecutionRecord> = new Map();
 
   constructor(config: HarnessConfig, sessionId?: string) {
     this.config = config;
@@ -121,7 +123,7 @@ export class AssemblyLine {
         const record = await this.executeTask(taskId, state);
 
         // 记录结果
-        state.records.push(record);
+        this.executionRecords.set(taskId, record);
 
         // 任务级状态追踪
         if (!state.passedTasks) state.passedTasks = [];
@@ -182,7 +184,7 @@ export class AssemblyLine {
             event: 'failed',
             description: `执行出错: ${error instanceof Error ? error.message : String(error)}`,
           });
-          state.records.push(record);
+          this.executionRecords.set(taskId, record);
 
           // 任务级状态追踪
           if (!state.failedTasks) state.failedTasks = [];
@@ -218,15 +220,16 @@ export class AssemblyLine {
 
     // CP-25: totalTasks 使用唯一任务ID数，不因重试虚增
     const uniqueTaskCount = uniqueTaskIds.size;
+    const records = Array.from(this.executionRecords.values());
     const summary: ExecutionSummary = {
       totalTasks: uniqueTaskCount,
-      passed: state.records.filter(r => r.reviewVerdict?.result === 'PASS').length,
-      failed: state.records.filter(r => r.reviewVerdict?.result === 'NOPASS' || r.devReport.status === 'failed').length,
+      passed: records.filter(r => r.reviewVerdict?.result === 'PASS').length,
+      failed: records.filter(r => r.reviewVerdict?.result === 'NOPASS' || r.devReport.status === 'failed').length,
       totalRetries: Array.from(state.retryCounter.values()).reduce((sum, count) => sum + count, 0),
       duration,
       startTime,
       endTime,
-      taskResults: new Map(state.records.map(r => [r.taskId, r])),
+      taskResults: new Map(records.map(r => [r.taskId, r])),
       config: this.config,
     };
 
@@ -272,7 +275,7 @@ export class AssemblyLine {
     addTimeline('started', `开始执行任务: ${task.title}`);
 
     // 1. 检查依赖
-    if (!await this.checkDependencies(task, state)) {
+    if (!await this.checkDependencies(task)) {
       console.log(`⚠️  依赖未完成，延后处理`);
       addTimeline('failed', '依赖未完成');
       record.finalStatus = 'needs_human';
@@ -302,7 +305,7 @@ export class AssemblyLine {
     let resumeIndex = phases.indexOf(resumePhase);
 
     // Find previous record for rebuilding prerequisite data when skipping phases
-    const prevRecord = [...state.records].reverse().find(r => r.taskId === taskId);
+    const prevRecord = this.executionRecords.get(taskId);
     if (resumeIndex > 0 && !prevRecord) {
       console.log(`   ⚠️ 未找到前次执行记录，从开发阶段重新开始`);
     }
@@ -849,34 +852,77 @@ export class AssemblyLine {
 
   /**
    * 检查依赖是否完成
+   *
+   * 支持轮询等待 in_progress 状态的依赖任务：
+   * - 轮询间隔：5 秒
+   * - 超时时间：30 分钟（1800 秒）
+   * - 如果依赖完成（resolved/closed），返回 true
+   * - 如果依赖失败（failed/abandoned），返回 false
+   * - 如果超时，返回 false
+   *
+   * 简化实现：直接从 task.meta.json 读取依赖任务状态，
+   * 不再使用 state.records 内存缓存层。
+   * 在单进程串行执行模式下，文件读取性能足够且避免状态不一致风险。
    */
-  private async checkDependencies(task: TaskMeta, state: HarnessRuntimeState): Promise<boolean> {
+  private async checkDependencies(task: TaskMeta): Promise<boolean> {
     if (!task.dependencies || task.dependencies.length === 0) {
       return true;
     }
 
-    for (const depId of task.dependencies) {
-      // 检查是否在当前执行记录中已完成
-      const depRecord = state.records.find(r => r.taskId === depId);
-      if (depRecord && depRecord.finalStatus === 'resolved') {
-        continue;
+    const POLLING_INTERVAL_MS = 5000; // 5 秒轮询间隔
+    const TIMEOUT_MS = 30 * 60 * 1000; // 30 分钟超时
+    const startTime = Date.now();
+
+    // 轮询循环，直到所有依赖完成或超时
+    while (Date.now() - startTime < TIMEOUT_MS) {
+      let allDependenciesCompleted = true;
+      let hasFailedDependency = false;
+
+      for (const depId of task.dependencies) {
+        // 直接从文件读取依赖任务状态
+        const depTask = readTaskMeta(depId, this.config.cwd);
+        if (!depTask) {
+          console.log(`⚠️  依赖任务 ${depId} 不存在`);
+          continue;
+        }
+
+        const normalizedStatus = normalizeStatus(depTask.status);
+
+        // 检查依赖是否已完成
+        if (normalizedStatus === 'resolved' || normalizedStatus === 'closed') {
+          continue; // 依赖已完成，继续检查下一个
+        }
+
+        // 检查依赖是否已失败
+        if (normalizedStatus === 'failed' || normalizedStatus === 'abandoned') {
+          console.log(`⚠️  依赖任务 ${depId} 已失败 (状态: ${depTask.status})`);
+          hasFailedDependency = true;
+          break;
+        }
+
+        // 依赖仍在进行中（in_progress 或其他中间状态）
+        allDependenciesCompleted = false;
+        console.log(`⏳ 等待依赖任务 ${depId} 完成 (状态: ${depTask.status})...`);
       }
 
-      // 检查任务状态
-      const depTask = readTaskMeta(depId, this.config.cwd);
-      if (!depTask) {
-        console.log(`⚠️  依赖任务 ${depId} 不存在`);
-        continue;
-      }
-
-      const normalizedStatus = normalizeStatus(depTask.status);
-      if (normalizedStatus !== 'resolved' && normalizedStatus !== 'closed') {
-        console.log(`⚠️  依赖任务 ${depId} 未完成 (状态: ${depTask.status})`);
+      // 如果发现有失败的依赖，立即返回 false
+      if (hasFailedDependency) {
         return false;
       }
+
+      // 如果所有依赖都已完成，返回 true
+      if (allDependenciesCompleted) {
+        return true;
+      }
+
+      // 等待轮询间隔后再次检查
+      console.log(`   ⏱️  轮询等待中... (${Math.round((Date.now() - startTime) / 1000)}s / ${TIMEOUT_MS / 1000}s)`);
+      await new Promise(resolve => setTimeout(resolve, POLLING_INTERVAL_MS));
     }
 
-    return true;
+    // 超时
+    console.log(`⚠️  依赖检查超时 (${TIMEOUT_MS / 1000 / 60} 分钟)`);
+    return false;
   }
 
   /**
@@ -928,7 +974,7 @@ export class AssemblyLine {
     // 通过依赖图模块计算级联影响（支持多级传递）
     const graph = DependencyGraph.fromTasks([...remainingMeta.values()]);
     const completedTaskIds = new Set(
-      state.records
+      Array.from(this.executionRecords.values())
         .filter(r => r.finalStatus === 'resolved')
         .map(r => r.taskId)
     );
@@ -982,7 +1028,7 @@ export class AssemblyLine {
         description: `上游任务 ${failedTaskId} 失败，级联跳过`,
         data: { upstreamTaskId: failedTaskId, failureReason: 'upstream_failed' },
       });
-      state.records.push(cascadeRecord);
+      this.executionRecords.set(downstreamId, cascadeRecord);
 
       if (!state.failedTasks) state.failedTasks = [];
       state.failedTasks.push(downstreamId);
@@ -1672,7 +1718,7 @@ export class AssemblyLine {
     const phaseRetryCount = this.getPhaseRetryCount(taskId, phase, state);
 
     // Collect partial progress from previous record
-    const prevRecord = [...state.records].reverse().find(r => r.taskId === taskId);
+    const prevRecord = this.executionRecords.get(taskId);
     const partialProgress: RetryContext['partialProgress'] = {};
     if (prevRecord) {
       const completedCheckpoints: string[] = [];
@@ -1884,18 +1930,12 @@ export class AssemblyLine {
     const batchTaskIds = state.taskQueue.slice(batchStart, batchEnd);
 
     // 使用每个任务的最新记录（处理重试情况）
-    const lastRecordByTask = new Map<string, TaskExecutionRecord>();
-    for (const record of state.records) {
-      if (batchTaskIds.includes(record.taskId)) {
-        lastRecordByTask.set(record.taskId, record);
-      }
-    }
-
+    // this.executionRecords 已存储每个任务的最新记录
     let passed = 0;
     let failed = 0;
     let skipped = 0;
     for (const taskId of batchTaskIds) {
-      const record = lastRecordByTask.get(taskId);
+      const record = this.executionRecords.get(taskId);
       if (!record) {
         skipped++;
       } else if (record.finalStatus === 'resolved' || record.finalStatus === 'closed') {
@@ -1936,17 +1976,10 @@ export class AssemblyLine {
       : state.taskQueue.length;
     const batchTaskIds = new Set(state.taskQueue.slice(batchStart, batchEnd));
 
-    const lastRecordByTask = new Map<string, TaskExecutionRecord>();
-    for (const record of state.records) {
-      if (batchTaskIds.has(record.taskId)) {
-        lastRecordByTask.set(record.taskId, record);
-      }
-    }
-
     let passed = 0;
     let failed = 0;
     for (const taskId of batchTaskIds) {
-      const record = lastRecordByTask.get(taskId);
+      const record = this.executionRecords.get(taskId);
       if (record && (record.finalStatus === 'resolved' || record.finalStatus === 'closed')) {
         passed++;
       } else if (record && (record.finalStatus === 'abandoned' || record.finalStatus === 'failed')) {

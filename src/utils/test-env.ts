@@ -53,6 +53,20 @@ export interface TestEnvOptions {
   createTasksDir?: boolean;
   /** 是否创建项目配置目录 */
   createProjectDir?: boolean;
+  /** 共享根目录路径 - 如果提供，测试将在此目录下创建子目录 */
+  sharedRoot?: string;
+}
+
+/**
+ * 共享测试环境上下文（用于 beforeAll/afterAll 模式）
+ */
+export interface SharedTestEnv {
+  /** 共享根目录路径 */
+  readonly sharedRoot: string;
+  /** 创建新的隔离测试环境（在共享根目录下） */
+  createIsolatedEnv: (options?: Omit<TestEnvOptions, 'sharedRoot'>) => Promise<IsolatedTestEnv>;
+  /** 完全清理共享目录和所有子环境 */
+  cleanupAll: () => void;
 }
 
 /**
@@ -75,6 +89,7 @@ const DEFAULT_OPTIONS: Required<TestEnvOptions> = {
   prefix: 'projmnt-test-',
   createTasksDir: true,
   createProjectDir: true,
+  sharedRoot: '',
 };
 
 // ============================================================
@@ -140,7 +155,10 @@ async function createPathMocks(state: TestEnvState): Promise<MockHandles> {
  */
 function initState(options: TestEnvOptions = {}): TestEnvState {
   const mergedOptions = { ...DEFAULT_OPTIONS, ...options };
-  const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), mergedOptions.prefix));
+
+  // 如果提供了 sharedRoot，在该目录下创建子目录
+  const baseDir = mergedOptions.sharedRoot || os.tmpdir();
+  const tempDir = fs.mkdtempSync(path.join(baseDir, mergedOptions.prefix));
   const projectDir = path.join(tempDir, '.projmnt4claude');
   const tasksDir = path.join(projectDir, 'tasks');
 
@@ -285,6 +303,87 @@ export function resetTestEnv(env: IsolatedTestEnv): void {
 
   // 执行重置
   env.reset();
+}
+
+// ============================================================
+// 共享根目录机制（Phase 2）
+// ============================================================
+
+/**
+ * 创建共享测试环境
+ *
+ * 为整个测试套件创建一个共享根目录，所有子测试在其中创建独立子目录。
+ * 适用于 beforeAll/afterAll 模式，实现统一清理。
+ *
+ * @param options - 配置选项
+ * @returns 共享测试环境上下文
+ *
+ * @example
+ * ```typescript
+ * describe('场景测试', () => {
+ *   let sharedEnv: SharedTestEnv;
+ *   let env1: IsolatedTestEnv;
+ *   let env2: IsolatedTestEnv;
+ *
+ *   beforeAll(async () => {
+ *     sharedEnv = await createSharedTestEnv({ prefix: 'scenario-suite-' });
+ *     env1 = await sharedEnv.createIsolatedEnv();
+ *     env2 = await sharedEnv.createIsolatedEnv();
+ *   });
+ *
+ *   afterAll(() => {
+ *     sharedEnv.cleanupAll();
+ *   });
+ *
+ *   test('测试1', () => {
+ *     createTaskDir(env1.tasksDir, 'TASK-001');
+ *     expect(taskExists(env1.tasksDir, 'TASK-001')).toBe(true);
+ *   });
+ * });
+ * ```
+ */
+export async function createSharedTestEnv(
+  options: Omit<TestEnvOptions, 'sharedRoot'> = {}
+): Promise<SharedTestEnv> {
+  const mergedOptions = { ...DEFAULT_OPTIONS, ...options };
+  const timestamp = Date.now();
+  const random = Math.random().toString(36).substring(2, 8);
+  const sharedRoot = path.join(os.tmpdir(), `${mergedOptions.prefix}suite-${timestamp}-${random}`);
+
+  // 创建共享根目录
+  ensureDir(sharedRoot);
+
+  // 跟踪创建的子环境以便可选的单独清理
+  const childEnvs: IsolatedTestEnv[] = [];
+
+  return {
+    get sharedRoot() { return sharedRoot; },
+
+    createIsolatedEnv: async (childOptions?: Omit<TestEnvOptions, 'sharedRoot'>): Promise<IsolatedTestEnv> => {
+      const env = await createIsolatedTestEnv({
+        ...mergedOptions,
+        ...childOptions,
+        sharedRoot,
+      });
+      childEnvs.push(env);
+      return env;
+    },
+
+    cleanupAll: (): void => {
+      // 先清理所有子环境的 mocks
+      for (const env of childEnvs) {
+        try {
+          env.mocks?.restore();
+        } catch {
+          // 忽略已清理的 mock
+        }
+      }
+      childEnvs.length = 0;
+
+      // 删除整个共享根目录
+      safeRemoveDir(sharedRoot);
+    },
+  };
 }
 
 // ============================================================

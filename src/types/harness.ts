@@ -29,10 +29,6 @@ export interface HarnessConfig {
   jsonOutput: boolean;
   /** Working directory */
   cwd: string;
-  /** API call retry attempts (for temporary errors like 429/500), default 3 */
-  apiRetryAttempts: number;
-  /** API retry base delay (seconds), default 60, uses exponential backoff */
-  apiRetryDelay: number;
   /** Independent retry limit configuration for each phase */
   phaseRetryLimits?: PhaseRetryLimits;
   /** Auto git commit after each batch completes */
@@ -51,8 +47,6 @@ export const DEFAULT_HARNESS_CONFIG: Omit<HarnessConfig, 'cwd'> = {
   dryRun: false,
   continue: false,
   jsonOutput: false,
-  apiRetryAttempts: 3,
-  apiRetryDelay: 60,
   batchGitCommit: false,
   forceContinue: false,
 };
@@ -389,8 +383,6 @@ export interface HarnessRuntimeState {
   taskQueue: string[];
   /** Current execution index */
   currentIndex: number;
-  /** Execution records */
-  records: TaskExecutionRecord[];
   /** Start time */
   startTime: string;
   /** Retry counter */
@@ -565,7 +557,6 @@ export function createDefaultRuntimeState(config: HarnessConfig): HarnessRuntime
     config,
     taskQueue: [],
     currentIndex: 0,
-    records: [],
     startTime: now,
     retryCounter: new Map(),
     updatedAt: now,

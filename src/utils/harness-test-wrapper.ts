@@ -93,8 +93,6 @@ const DEFAULT_HARNESS_CONFIG: HarnessConfig = {
   dryRun: false,
   continue: false,
   jsonOutput: false,
-  apiRetryAttempts: 3,
-  apiRetryDelay: 60,
   batchGitCommit: false,
   forceContinue: false,
   cwd: process.cwd(),

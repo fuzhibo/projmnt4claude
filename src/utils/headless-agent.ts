@@ -13,7 +13,7 @@
  */
 
 import { Logger } from './logger.js';
-import { runHeadlessClaude, runHeadlessClaudeWithRetry, isRetryableError } from './harness-helpers.js';
+import { runHeadlessClaude } from './harness-helpers.js';
 import { type AIConfig, DEFAULT_AI, type HarnessToolsConfig } from '../types/config.js';
 import type { TaskMeta } from '../types/task.js';
 
@@ -32,8 +32,6 @@ export interface AgentInvokeOptions {
   allowedTools: string[];
   /** 输出格式 */
   outputFormat: AgentOutputFormat;
-  /** 最大重试次数（不含首次调用） */
-  maxRetries: number;
   /** 期望输出的 JSON Schema（用于结构化输出） */
   schema?: Record<string, unknown>;
   /** 工作目录 */
@@ -286,15 +284,7 @@ export class ClaudeCodeProvider implements HeadlessAgent {
       forkSession: options.forkSession,
     };
 
-    let result;
-    if (options.maxRetries > 0) {
-      result = await runHeadlessClaudeWithRetry(claudeOptions, {
-        maxAttempts: options.maxRetries,
-        baseDelay: 60,
-      });
-    } else {
-      result = await runHeadlessClaude(claudeOptions);
-    }
+    const result = await runHeadlessClaude(claudeOptions);
 
     const durationMs = Date.now() - startTime;
 

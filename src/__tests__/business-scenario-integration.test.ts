@@ -92,8 +92,6 @@ function createTestConfig(overrides?: Partial<HarnessConfig>): HarnessConfig {
     continue: false,
     jsonOutput: false,
     cwd: tmpDir,
-    apiRetryAttempts: 0,
-    apiRetryDelay: 10,
     batchGitCommit: false,
     forceContinue: false,
     ...overrides,
@@ -406,7 +404,8 @@ describe('Scenario 2: Harness Full Pipeline', () => {
     expect(state.state).toBe('idle');
     expect(state.taskQueue).toEqual([]);
     expect(state.currentIndex).toBe(0);
-    expect(state.records).toEqual([]);
+    // PROBLEM-2: records field removed from HarnessRuntimeState
+    expect('records' in state).toBe(false);
     expect(state.retryCounter.size).toBe(0);
     expect(state.resumeFrom.size).toBe(0);
     expect(state.reevaluateCounter.size).toBe(0);

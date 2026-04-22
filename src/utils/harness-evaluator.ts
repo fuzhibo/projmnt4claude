@@ -124,7 +124,6 @@ export class HarnessEvaluator {
         allowedTools: effectiveTools.tools,
         timeout: Math.floor(this.config.timeout / 2), // 审查时间较短
         outputFormat: 'text',
-        maxRetries: this.config.apiRetryAttempts,
         cwd: this.config.cwd,
         dangerouslySkipPermissions: effectiveTools.skipPermissions,
       };

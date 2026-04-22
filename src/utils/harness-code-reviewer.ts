@@ -163,7 +163,6 @@ export class HarnessCodeReviewer {
       allowedTools: effectiveTools.tools,
       timeout: Math.floor(this.config.timeout / REVIEW_TIMEOUT_RATIO),
       cwd: this.config.cwd,
-      maxRetries: this.config.apiRetryAttempts,
       outputFormat: 'text',
       dangerouslySkipPermissions: effectiveTools.skipPermissions,
     };

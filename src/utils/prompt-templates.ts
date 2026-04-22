@@ -1410,3 +1410,4 @@ export function loadPromptTemplate(
   const template = DEFAULT_TEMPLATES[name];
   return template[lang] || template.en;
 }
+

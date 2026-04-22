@@ -45,8 +45,6 @@ function createConfig(tempDir: string, overrides: Partial<HarnessConfig> = {}): 
     continue: false,
     jsonOutput: false,
     cwd: tempDir,
-    apiRetryAttempts: 3,
-    apiRetryDelay: 60,
     batchGitCommit: false,
     forceContinue: false,
     ...overrides,

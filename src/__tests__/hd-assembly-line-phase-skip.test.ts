@@ -38,8 +38,6 @@ function createTestConfig(cwd: string): HarnessConfig {
     forceContinue: false,
     jsonOutput: false,
     cwd,
-    apiRetryAttempts: 0,
-    apiRetryDelay: 10,
     batchGitCommit: false,
   };
 }
@@ -713,65 +711,9 @@ describe('CP-5: prerequisite data rebuild from prevRecord', () => {
     expect(sourceCode).toContain('record.qaVerdict = qaVerdict');
   });
 
-  test('prevRecord lookup finds latest record for task', () => {
-    const config = createTestConfig(tmpDir);
-    const state = createDefaultRuntimeState(config);
-
-    const task1 = createMockTask({ id: taskId });
-    const record1 = createDefaultExecutionRecord(task1);
-    record1.devReport = { ...record1.devReport, status: 'success', changes: ['file1.ts'] };
-    record1.codeReviewVerdict = {
-      taskId, result: 'PASS', reason: 'OK', codeQualityIssues: [],
-      failedCheckpoints: [], reviewedAt: new Date().toISOString(), reviewedBy: 'code_reviewer' as const,
-    };
-    record1.qaVerdict = {
-      taskId, result: 'PASS', reason: 'OK', testFailures: [],
-      failedCheckpoints: [], requiresHuman: false, humanVerificationCheckpoints: [],
-      verifiedAt: new Date().toISOString(), verifiedBy: 'qa_tester' as const,
-    };
-
-    // Add another task's record first
-    const otherTask = createMockTask({ id: 'OTHER-TASK' });
-    const otherRecord = createDefaultExecutionRecord(otherTask);
-    state.records.push(otherRecord);
-    state.records.push(record1);
-
-    // Verify lookup: [...state.records].reverse().find(r => r.taskId === taskId)
-    const prevRecord = [...state.records].reverse().find(r => r.taskId === taskId);
-    expect(prevRecord).toBeDefined();
-    expect(prevRecord!.taskId).toBe(taskId);
-    expect(prevRecord!.devReport.status).toBe('success');
-    expect(prevRecord!.codeReviewVerdict).toBeDefined();
-    expect(prevRecord!.codeReviewVerdict!.result).toBe('PASS');
-    expect(prevRecord!.qaVerdict).toBeDefined();
-    expect(prevRecord!.qaVerdict!.result).toBe('PASS');
-  });
-
-  test('prevRecord lookup returns undefined when no prior record exists', () => {
-    const config = createTestConfig(tmpDir);
-    const state = createDefaultRuntimeState(config);
-    const prevRecord = [...state.records].reverse().find(r => r.taskId === taskId);
-    expect(prevRecord).toBeUndefined();
-  });
-
-  test('prevRecord lookup finds latest record when multiple exist for same task', () => {
-    const config = createTestConfig(tmpDir);
-    const state = createDefaultRuntimeState(config);
-
-    const task1 = createMockTask({ id: taskId });
-    const record1 = createDefaultExecutionRecord(task1);
-    record1.devReport = { ...record1.devReport, status: 'failed' };
-
-    const record2 = createDefaultExecutionRecord(task1);
-    record2.devReport = { ...record2.devReport, status: 'success' };
-
-    state.records.push(record1);
-    state.records.push(record2);
-
-    const prevRecord = [...state.records].reverse().find(r => r.taskId === taskId);
-    expect(prevRecord).toBeDefined();
-    expect(prevRecord!.devReport.status).toBe('success');
-  });
+  // PROBLEM-2: records field removed from HarnessRuntimeState
+  // Execution records are now stored in AssemblyLine.executionRecords (private Map)
+  // These tests were testing internal implementation details that no longer exist
 
   test('implementation warns when prevRecord missing for skipped phases', () => {
     const sourceCode = fs.readFileSync(

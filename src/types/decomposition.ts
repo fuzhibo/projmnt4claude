@@ -26,6 +26,8 @@ export interface DecomposedTaskItem {
   estimatedMinutes: number;
   /** Dependent subtask indexes (indexes in items array) */
   dependsOn: number[];
+  /** Parent task ID for hierarchical relationship */
+  parentId?: string;
 }
 
 /**
@@ -56,6 +58,14 @@ export interface DecomposeOptions {
   cwd?: string;
   /** Whether to enable quality checks (default true) */
   validateQuality?: boolean;
+  /** Current recursion level (internal use) */
+  currentLevel?: number;
+  /** Whether to enable recursive decomposition (default false) */
+  enableRecursive?: boolean;
+  /** Maximum hierarchy level for recursive decomposition (default 3) */
+  maxHierarchyLevel?: number;
+  /** Parent task ID for establishing hierarchy */
+  parentTaskId?: string;
 }
 
 /**

@@ -5,7 +5,6 @@ import { EventEmitter } from 'events';
 import { createIsolatedTestEnv, type IsolatedTestEnv } from '../utils/test-env.js';
 import {
   classifyExitResult,
-  isRetryableError,
   parseStructuredResult,
   parseVerdictResult,
   filterCheckpoints,
@@ -15,7 +14,6 @@ import {
   archiveReportIfExists,
   saveReport,
   runHeadlessClaude,
-  runHeadlessClaudeWithRetry,
   DEFAULT_TIMEOUT_SECONDS,
   REVIEW_TIMEOUT_RATIO,
   parseDevReport,
@@ -143,79 +141,6 @@ describe('classifyExitResult', () => {
     const result = classifyExitResult(1, `Hook cancelled: ${longStderr}`, '');
     expect(result.success).toBe(false);
     expect(result.error!.length).toBeLessThan(300);
-  });
-});
-
-// ============================================================
-// isRetryableError
-// ============================================================
-
-describe('isRetryableError', () => {
-  test('detects 429 rate limit with future reset time', () => {
-    const futureTime = '2099-12-31 23:59:59';
-    const output = `API Error: 429 Too Many Requests. Retry after ${futureTime}`;
-    const result = isRetryableError(output, '');
-    expect(result.retryable).toBe(true);
-    expect(result.reason).toContain('429');
-    expect(result.waitSeconds).toBeGreaterThanOrEqual(60);
-  });
-
-  test('detects 429 rate limit in stderr', () => {
-    const futureTime = '2099-06-15 12:00:00';
-    const result = isRetryableError('', `API Error: 429 rate limited ${futureTime}`);
-    expect(result.retryable).toBe(true);
-    expect(result.reason).toContain('429');
-  });
-
-  test('429 with past reset time still returns retryable with minimum 60s', () => {
-    const pastTime = '2020-01-01 00:00:00';
-    const result = isRetryableError(`API Error: 429 ${pastTime}`, '');
-    expect(result.retryable).toBe(true);
-    expect(result.waitSeconds).toBeGreaterThanOrEqual(60);
-  });
-
-  test('detects 500 API error', () => {
-    const result = isRetryableError('API Error: 500 Internal Server Error', '');
-    expect(result.retryable).toBe(true);
-    expect(result.waitSeconds).toBe(30);
-    expect(result.reason).toContain('500');
-  });
-
-  test('detects 500 in JSON code field', () => {
-    const result = isRetryableError('{"code":"500","message":"error"}', '');
-    expect(result.retryable).toBe(true);
-  });
-
-  test('detects ECONNRESET', () => {
-    const result = isRetryableError('Error: ECONNRESET connection reset', '');
-    expect(result.retryable).toBe(true);
-    expect(result.reason).toContain('网络连接错误');
-  });
-
-  test('detects ETIMEDOUT', () => {
-    const result = isRetryableError('', 'Error: ETIMEDOUT timeout');
-    expect(result.retryable).toBe(true);
-    expect(result.waitSeconds).toBe(10);
-  });
-
-  test('detects ENOTFOUND', () => {
-    const result = isRetryableError('Error: ENOTFOUND dns failure', '');
-    expect(result.retryable).toBe(true);
-  });
-
-  test('detects "network error"', () => {
-    const result = isRetryableError('Fatal: network error occurred', '');
-    expect(result.retryable).toBe(true);
-  });
-
-  test('returns non-retryable for normal output', () => {
-    const result = isRetryableError('Task completed successfully', '');
-    expect(result.retryable).toBe(false);
-  });
-
-  test('returns non-retryable for empty strings', () => {
-    const result = isRetryableError('', '');
-    expect(result.retryable).toBe(false);
   });
 });
 
@@ -868,119 +793,6 @@ describe('runHeadlessClaude', () => {
     expect(args).not.toContain('--session-id');
     expect(args).not.toContain('--resume');
     expect(args).not.toContain('--fork-session');
-  });
-});
-
-// ============================================================
-// runHeadlessClaudeWithRetry
-// ============================================================
-
-describe('runHeadlessClaudeWithRetry', () => {
-  let env: IsolatedTestEnv;
-
-  beforeEach(async () => {
-    env = await createIsolatedTestEnv();
-    spawnMock.mockClear();
-  });
-
-  afterEach(() => {
-    env.cleanup();
-  });
-
-  function setupMockSpawnSequence(results: Array<{
-    exitCode?: number | null;
-    stdout?: string;
-    stderr?: string;
-  }>) {
-    let callIndex = 0;
-    spawnMock.mockImplementation(() => {
-      const opts = results[Math.min(callIndex, results.length - 1)];
-      callIndex++;
-      const child = new EventEmitter() as any;
-      child.stdin = { write: (..._args: any[]) => {}, end: () => {} };
-      child.stdout = new EventEmitter();
-      child.stderr = new EventEmitter();
-      setTimeout(() => {
-        if (opts.stdout) child.stdout.emit('data', Buffer.from(opts.stdout));
-        if (opts.stderr) child.stderr.emit('data', Buffer.from(opts.stderr));
-        child.emit('close', opts.exitCode ?? 0);
-      }, 5);
-      return child;
-    });
-  }
-
-  test('returns success on first attempt', async () => {
-    setupMockSpawnSequence([{ exitCode: 0, stdout: 'done' }]);
-    const result = await runHeadlessClaudeWithRetry(
-      { prompt: 'test', allowedTools: ['Read'], timeout: 30, cwd: env.tempDir },
-      { maxAttempts: 3, baseDelay: 0.01 },
-    );
-    expect(result.success).toBe(true);
-    expect(result.output).toBe('done');
-  });
-
-  test('retries on 500 error and succeeds', async () => {
-    setupMockSpawnSequence([
-      { exitCode: 1, stdout: 'API Error: 500 server error', stderr: '' },
-      { exitCode: 0, stdout: 'success', stderr: '' },
-    ]);
-    const result = await runHeadlessClaudeWithRetry(
-      { prompt: 'test', allowedTools: ['Read'], timeout: 30, cwd: env.tempDir },
-      { maxAttempts: 3, baseDelay: 0.01 },
-    );
-    expect(result.success).toBe(true);
-    expect(spawnMock).toHaveBeenCalledTimes(2);
-  });
-
-  test('retries on network error and succeeds', async () => {
-    setupMockSpawnSequence([
-      { exitCode: 1, stdout: 'ECONNRESET connection lost', stderr: '' },
-      { exitCode: 0, stdout: 'recovered', stderr: '' },
-    ]);
-    const result = await runHeadlessClaudeWithRetry(
-      { prompt: 'test', allowedTools: ['Read'], timeout: 30, cwd: env.tempDir },
-      { maxAttempts: 2, baseDelay: 0.01 },
-    );
-    expect(result.success).toBe(true);
-  });
-
-  test('stops retrying on non-retryable error', async () => {
-    setupMockSpawnSequence([
-      { exitCode: 1, stdout: 'syntax error in code', stderr: '' },
-    ]);
-    const result = await runHeadlessClaudeWithRetry(
-      { prompt: 'test', allowedTools: ['Read'], timeout: 30, cwd: env.tempDir },
-      { maxAttempts: 3, baseDelay: 0.01 },
-    );
-    expect(result.success).toBe(false);
-    expect(spawnMock).toHaveBeenCalledTimes(1);
-  });
-
-  test('returns last failure after max attempts exhausted', async () => {
-    setupMockSpawnSequence([
-      { exitCode: 1, stdout: 'API Error: 500 first', stderr: '' },
-      { exitCode: 1, stdout: 'API Error: 500 second', stderr: '' },
-      { exitCode: 1, stdout: 'API Error: 500 final', stderr: '' },
-    ]);
-    const result = await runHeadlessClaudeWithRetry(
-      { prompt: 'test', allowedTools: ['Read'], timeout: 30, cwd: env.tempDir },
-      { maxAttempts: 2, baseDelay: 0.01 }, // first + 2 retries = 3 total
-    );
-    expect(result.success).toBe(false);
-    expect(spawnMock).toHaveBeenCalledTimes(3);
-  });
-
-  test('retries on 429 rate limit', async () => {
-    const futureTime = '2099-12-31 23:59:59';
-    setupMockSpawnSequence([
-      { exitCode: 1, stdout: `API Error: 429 ${futureTime}`, stderr: '' },
-      { exitCode: 0, stdout: 'success', stderr: '' },
-    ]);
-    const result = await runHeadlessClaudeWithRetry(
-      { prompt: 'test', allowedTools: ['Read'], timeout: 30, cwd: env.tempDir },
-      { maxAttempts: 3, baseDelay: 0.01 },
-    );
-    expect(result.success).toBe(true);
   });
 });
 

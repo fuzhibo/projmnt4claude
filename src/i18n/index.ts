@@ -338,7 +338,6 @@ export interface I18nTexts {
       exitCode: string;
       devOutputValidationFailedError: string;
       retryReference: string;
-      apiRetry: string;
       retryingInSeconds: string;
       archivedReport: string;
       archiveFailed: string;
@@ -373,6 +372,16 @@ export interface I18nTexts {
       upstreamTask: string;
       failureTime: string;
       retryReferenceNote: string;
+      phantomTaskProhibited: string;
+      phantomTaskNopassRequirement: string;
+      // File coverage related
+      fileCoverageCheck: string;
+      fileCoverageSummary: string;
+      fileCoverageFailed: string;
+      fileCoverageSection: string;
+      missingFiles: string;
+      existingFiles: string;
+      noFilesToVerify: string;
     };
     reports: {
       devReportTitle: string;
@@ -766,6 +775,43 @@ export interface I18nTexts {
     priorityP2: string;
     priorityP3: string;
     dependsOn: string;
+    /** Template formatting texts */
+    template: {
+      intro: string;
+      fieldDescription: string;
+      rules: string;
+      note: string;
+    };
+    /** AI decomposition prompt template */
+    aiPromptTemplate: {
+      /** Main instruction for decomposition */
+      instruction: string;
+      /** Input content label */
+      inputLabel: string;
+      /** JSON format example */
+      jsonFormat: string;
+      /** Task item fields description */
+      fields: {
+        title: string;
+        description: string;
+        type: string;
+        priority: string;
+        suggestedCheckpoints: string;
+        relatedFiles: string;
+        estimatedMinutes: string;
+        dependsOn: string;
+      };
+      /** Rules section */
+      rules: string[];
+      /** Hierarchy guidance for recursive decomposition */
+      hierarchyGuidance: {
+        title: string;
+        levels: string[];
+        note: string;
+      };
+      /** Non-decomposable response */
+      nonDecomposable: string;
+    };
   };
 
   // analyze command
@@ -883,4 +929,51 @@ export function getI18n(language?: Language, cwd?: string): I18nTexts {
  */
 export function t(cwd?: string): I18nTexts {
   return getI18n(undefined, cwd);
+}
+
+/**
+ * 获取分解提示词模板
+ *
+ * 根据当前语言设置返回完整的 AI 分解提示词模板，
+ * 包含层级分解指导和规则说明
+ *
+ * @param cwd 工作目录
+ * @returns 格式化的分解提示词模板
+ */
+export function getDecompositionTemplate(cwd?: string): string {
+  const texts = t(cwd).decomposition;
+  const aiTemplate = texts.aiPromptTemplate;
+
+  const rulesText = aiTemplate.rules.map((rule, i) => `${i + 1}. ${rule}`).join('\n');
+  const levelsText = aiTemplate.hierarchyGuidance.levels.map((level, i) => `   ${i + 1}. ${level}`).join('\n');
+
+  return `${aiTemplate.instruction}
+
+${aiTemplate.inputLabel}:
+\${safeContent}
+
+${texts.template.intro}
+\`\`\`json
+${aiTemplate.jsonFormat}
+\`\`\`
+
+${texts.template.fieldDescription}:
+- title: ${aiTemplate.fields.title}
+- description: ${aiTemplate.fields.description}
+- type: ${aiTemplate.fields.type}
+- priority: ${aiTemplate.fields.priority}
+- suggestedCheckpoints: ${aiTemplate.fields.suggestedCheckpoints}
+- relatedFiles: ${aiTemplate.fields.relatedFiles}
+- estimatedMinutes: ${aiTemplate.fields.estimatedMinutes}
+- dependsOn: ${aiTemplate.fields.dependsOn}
+
+${texts.template.rules}:
+${rulesText}
+
+${aiTemplate.hierarchyGuidance.title}:
+${levelsText}
+
+${texts.template.note}: ${aiTemplate.hierarchyGuidance.note}
+
+${aiTemplate.nonDecomposable}`;
 }
