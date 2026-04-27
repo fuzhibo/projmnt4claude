@@ -58,8 +58,8 @@ export class PrecheckOrchestrator {
           enabled: true,
           order: 1,
           stopOnFailure: true,
-          timeout: 10000,
-          checks: ['builtin:environment', 'builtin:resource'],
+          timeout: 15000,
+          checks: ['builtin:environment', 'builtin:resource', 'builtin:git', 'builtin:disk-space', 'builtin:permissions'],
         },
         {
           name: 'metadata',
@@ -67,8 +67,8 @@ export class PrecheckOrchestrator {
           enabled: true,
           order: 2,
           stopOnFailure: true,
-          timeout: 10000,
-          checks: ['builtin:metadata'],
+          timeout: 15000,
+          checks: ['builtin:metadata', 'builtin:config', 'builtin:task-contract'],
         },
         {
           name: 'dependency',
@@ -86,7 +86,7 @@ export class PrecheckOrchestrator {
           order: 4,
           stopOnFailure: false,
           timeout: 20000,
-          checks: ['builtin:quality-gate'],
+          checks: ['builtin:quality-gate', 'builtin:requirement'],
         },
       ],
       output: {

@@ -131,11 +131,20 @@ export class CheckRegistry {
    * CP-CR-6: 内置检查项注册
    */
   registerBuiltInChecks(): void {
+    // 现有检查器
     this.register(new EnvironmentCheck());
     this.register(new MetadataCheck());
     this.register(new DependencyCheck());
     this.register(new ResourceCheck());
     this.register(new QualityGateCheck());
+
+    // 新增检查器
+    this.register(new GitCheck());
+    this.register(new ConfigCheck());
+    this.register(new TaskContractCheck());
+    this.register(new DiskSpaceCheck());
+    this.register(new PermissionsCheck());
+    this.register(new RequirementChecker());
   }
 
   /**
@@ -446,6 +455,581 @@ export class QualityGateCheck implements CheckItem {
       passed: true,
       message: 'Quality gate check passed',
       details,
+      duration: Date.now() - startTime,
+      timestamp: new Date().toISOString(),
+    };
+  }
+}
+
+/**
+ * GitCheck - Git 仓库状态检查器
+ * 检查 Git 仓库状态、分支、未提交更改等
+ */
+export class GitCheck implements CheckItem {
+  id = 'builtin:git';
+  name = 'Git Check';
+  description = 'Check Git repository status, branch, and uncommitted changes';
+  category: CheckCategory = 'environment';
+  priority = 6;
+  dependencies = ['builtin:environment'];
+
+  async execute(context: CheckContext): Promise<CheckResult> {
+    const startTime = Date.now();
+    const issues: string[] = [];
+    const details: Record<string, unknown> = {};
+
+    try {
+      const { execSync } = await import('node:child_process');
+      const fs = await import('node:fs');
+      const path = await import('node:path');
+
+      // 1. 检查是否是 Git 仓库
+      const gitDir = path.join(context.cwd, '.git');
+      if (!fs.existsSync(gitDir)) {
+        issues.push('Not a Git repository (.git directory not found)');
+        details.isGitRepo = false;
+      } else {
+        details.isGitRepo = true;
+
+        // 2. 获取当前分支
+        try {
+          const branch = execSync('git branch --show-current', {
+            cwd: context.cwd,
+            encoding: 'utf-8',
+            timeout: 5000,
+          }).trim();
+          details.currentBranch = branch;
+
+          // 检查是否在主分支上
+          if (branch === 'main' || branch === 'master') {
+            details.onMainBranch = true;
+          } else {
+            details.onMainBranch = false;
+          }
+        } catch {
+          issues.push('Failed to get current branch');
+          details.currentBranch = 'unknown';
+        }
+
+        // 3. 检查是否有未提交的更改
+        try {
+          const status = execSync('git status --porcelain', {
+            cwd: context.cwd,
+            encoding: 'utf-8',
+            timeout: 5000,
+          }).trim();
+
+          if (status) {
+            const lines = status.split('\n').filter(line => line.trim());
+            details.uncommittedChanges = lines.length;
+            issues.push(`${lines.length} uncommitted change(s) found`);
+          } else {
+            details.uncommittedChanges = 0;
+          }
+        } catch {
+          issues.push('Failed to check uncommitted changes');
+        }
+
+        // 4. 检查远程仓库
+        try {
+          const remotes = execSync('git remote -v', {
+            cwd: context.cwd,
+            encoding: 'utf-8',
+            timeout: 5000,
+          }).trim();
+          details.hasRemote = remotes.length > 0;
+
+          if (!remotes) {
+            issues.push('No remote repository configured');
+          }
+        } catch {
+          issues.push('Failed to check remote repository');
+          details.hasRemote = false;
+        }
+
+        // 5. 检查本地分支是否落后于远程
+        try {
+          execSync('git fetch --dry-run', {
+            cwd: context.cwd,
+            encoding: 'utf-8',
+            timeout: 10000,
+            stdio: 'pipe',
+          });
+          details.behindRemote = false;
+        } catch (error) {
+          // git fetch 返回非零退出码表示有更新
+          details.behindRemote = true;
+          issues.push('Local branch may be behind remote');
+        }
+      }
+    } catch (error) {
+      issues.push(`Git check failed: ${error instanceof Error ? error.message : String(error)}`);
+    }
+
+    const passed = issues.length === 0;
+
+    return {
+      checkId: this.id,
+      passed,
+      message: passed
+        ? 'Git repository check passed'
+        : `Git issues found: ${issues.join('; ')}`,
+      details,
+      suggestions: issues.length > 0
+        ? ['Commit or stash uncommitted changes', 'Ensure Git repository is properly initialized', 'Check remote repository configuration']
+        : undefined,
+      duration: Date.now() - startTime,
+      timestamp: new Date().toISOString(),
+    };
+  }
+}
+
+// ============== 新增检查器实现 ==============
+
+/**
+ * ConfigCheck - 项目配置检查器
+ * 验证 .projmnt4claude/config.json 的完整性和格式
+ */
+export class ConfigCheck implements CheckItem {
+  id = 'builtin:config';
+  name = 'Config Check';
+  description = 'Validate project configuration file integrity and format';
+  category: CheckCategory = 'metadata';
+  priority = 7;
+  dependencies = ['builtin:metadata'];
+
+  async execute(context: CheckContext): Promise<CheckResult> {
+    const startTime = Date.now();
+    const issues: string[] = [];
+    const details: Record<string, unknown> = {};
+
+    const fs = await import('node:fs');
+    const path = await import('node:path');
+
+    // 1. 检查 config.json 文件是否存在
+    const configPath = path.join(context.cwd, '.projmnt4claude', 'config.json');
+
+    if (!fs.existsSync(configPath)) {
+      issues.push('Config file not found: .projmnt4claude/config.json');
+      details.configExists = false;
+    } else {
+      details.configExists = true;
+
+      // 2. 读取并解析配置文件
+      try {
+        const configContent = fs.readFileSync(configPath, 'utf-8');
+        details.configSize = configContent.length;
+
+        // 3. 验证 JSON 格式
+        let config: Record<string, unknown>;
+        try {
+          config = JSON.parse(configContent);
+          details.validJson = true;
+        } catch (parseError) {
+          issues.push(`Invalid JSON format: ${parseError instanceof Error ? parseError.message : String(parseError)}`);
+          details.validJson = false;
+          return {
+            checkId: this.id,
+            passed: false,
+            message: issues.join('; '),
+            details,
+            suggestions: ['Fix JSON syntax errors in config.json'],
+            duration: Date.now() - startTime,
+            timestamp: new Date().toISOString(),
+          };
+        }
+
+        // 4. 验证必填字段
+        const requiredFields = ['version', 'projectName'];
+        for (const field of requiredFields) {
+          if (!(field in config)) {
+            issues.push(`Missing required field: ${field}`);
+          } else {
+            details[field] = config[field];
+          }
+        }
+
+        // 5. 验证字段类型
+        if (config.version && typeof config.version !== 'string') {
+          issues.push('Field "version" must be a string');
+        }
+        if (config.projectName && typeof config.projectName !== 'string') {
+          issues.push('Field "projectName" must be a string');
+        }
+
+        // 6. 验证可选配置项
+        if (config.checkpoints) {
+          if (typeof config.checkpoints !== 'object') {
+            issues.push('Field "checkpoints" must be an object');
+          }
+        }
+
+        if (config.notifications) {
+          if (!Array.isArray(config.notifications)) {
+            issues.push('Field "notifications" must be an array');
+          }
+        }
+
+      } catch (readError) {
+        issues.push(`Failed to read config file: ${readError instanceof Error ? readError.message : String(readError)}`);
+      }
+    }
+
+    const passed = issues.length === 0;
+
+    return {
+      checkId: this.id,
+      passed,
+      message: passed
+        ? 'Config check passed - configuration file is valid'
+        : `Config issues found: ${issues.join('; ')}`,
+      details,
+      suggestions: issues.length > 0
+        ? ['Ensure config.json exists and is valid JSON', 'Check all required fields are present', 'Verify field types are correct']
+        : undefined,
+      duration: Date.now() - startTime,
+      timestamp: new Date().toISOString(),
+    };
+  }
+}
+
+/**
+ * TaskContractCheck - 任务契约检查器
+ * 验证任务契约文件结构和必填字段
+ */
+export class TaskContractCheck implements CheckItem {
+  id = 'builtin:task-contract';
+  name = 'Task Contract Check';
+  description = 'Validate task contract file structure and required fields';
+  category: CheckCategory = 'metadata';
+  priority = 8;
+  dependencies = ['builtin:config'];
+
+  async execute(context: CheckContext): Promise<CheckResult> {
+    const startTime = Date.now();
+    const issues: string[] = [];
+    const details: Record<string, unknown> = {};
+
+    const fs = await import('node:fs');
+    const path = await import('node:path');
+
+    // 1. 检查契约文件是否存在
+    const contractPath = path.join(context.cwd, '.projmnt4claude', 'tasks', context.taskId, 'contract.json');
+
+    if (!fs.existsSync(contractPath)) {
+      issues.push(`Task contract file not found: ${contractPath}`);
+      details.contractExists = false;
+    } else {
+      details.contractExists = true;
+
+      try {
+        const contractContent = fs.readFileSync(contractPath, 'utf-8');
+
+        // 2. 验证 JSON 格式
+        let contract: Record<string, unknown>;
+        try {
+          contract = JSON.parse(contractContent);
+          details.validJson = true;
+        } catch (parseError) {
+          issues.push(`Invalid JSON format: ${parseError instanceof Error ? parseError.message : String(parseError)}`);
+          details.validJson = false;
+          return {
+            checkId: this.id,
+            passed: false,
+            message: issues.join('; '),
+            details,
+            suggestions: ['Fix JSON syntax errors in contract.json'],
+            duration: Date.now() - startTime,
+            timestamp: new Date().toISOString(),
+          };
+        }
+
+        // 3. 验证必填字段
+        const requiredFields = ['taskId', 'type', 'priority', 'title', 'description'];
+        for (const field of requiredFields) {
+          if (!(field in contract)) {
+            issues.push(`Missing required field: ${field}`);
+          }
+        }
+
+        // 4. 验证 taskId 格式
+        if (contract.taskId) {
+          if (typeof contract.taskId !== 'string') {
+            issues.push('Field "taskId" must be a string');
+          } else if (!contract.taskId.startsWith('TASK-')) {
+            issues.push('Field "taskId" must start with "TASK-"');
+          } else {
+            details.taskId = contract.taskId;
+          }
+        }
+
+        // 5. 验证验收标准
+        if (!contract.acceptanceCriteria) {
+          issues.push('Missing acceptanceCriteria - required for task completion verification');
+        } else if (!Array.isArray(contract.acceptanceCriteria) || contract.acceptanceCriteria.length === 0) {
+          issues.push('acceptanceCriteria must be a non-empty array');
+        } else {
+          details.acceptanceCriteriaCount = (contract.acceptanceCriteria as unknown[]).length;
+        }
+
+        // 6. 验证验证命令
+        if (!contract.verificationCommands) {
+          issues.push('Missing verificationCommands - required for automated verification');
+        } else if (!Array.isArray(contract.verificationCommands)) {
+          issues.push('verificationCommands must be an array');
+        } else {
+          details.verificationCommandsCount = (contract.verificationCommands as unknown[]).length;
+        }
+
+        // 7. 检查依赖任务是否存在
+        if (contract.dependencies && Array.isArray(contract.dependencies)) {
+          const deps = contract.dependencies as string[];
+          details.dependencyCount = deps.length;
+          const missingDeps: string[] = [];
+
+          for (const depId of deps) {
+            const depPath = path.join(context.cwd, '.projmnt4claude', 'tasks', depId, 'meta.json');
+            if (!fs.existsSync(depPath)) {
+              missingDeps.push(depId);
+            }
+          }
+
+          if (missingDeps.length > 0) {
+            issues.push(`Dependency tasks not found: ${missingDeps.join(', ')}`);
+            details.missingDependencies = missingDeps;
+          }
+        }
+
+      } catch (readError) {
+        issues.push(`Failed to read contract file: ${readError instanceof Error ? readError.message : String(readError)}`);
+      }
+    }
+
+    const passed = issues.length === 0;
+
+    return {
+      checkId: this.id,
+      passed,
+      message: passed
+        ? 'Task contract check passed - contract is valid'
+        : `Task contract issues found: ${issues.join('; ')}`,
+      details,
+      suggestions: issues.length > 0
+        ? ['Ensure contract.json exists and is valid JSON', 'Add all required fields', 'Define acceptance criteria', 'Add verification commands']
+        : undefined,
+      duration: Date.now() - startTime,
+      timestamp: new Date().toISOString(),
+    };
+  }
+}
+
+/**
+ * DiskSpaceCheck - 磁盘空间检查器
+ * 检查磁盘空间是否满足任务执行要求
+ */
+export class DiskSpaceCheck implements CheckItem {
+  id = 'builtin:disk-space';
+  name = 'Disk Space Check';
+  description = 'Check available disk space meets task requirements';
+  category: CheckCategory = 'resource';
+  priority = 9;
+  dependencies = ['builtin:resource'];
+
+  // 默认最小空间要求 (1GB)
+  private readonly minSpaceBytes = 1 * 1024 * 1024 * 1024;
+
+  async execute(context: CheckContext): Promise<CheckResult> {
+    const startTime = Date.now();
+    const issues: string[] = [];
+    const details: Record<string, unknown> = {};
+
+    try {
+      // 获取文件系统信息 (Node.js 18.17+ 支持 statfs)
+      const fs = await import('node:fs');
+      const os = await import('node:os');
+      const path = await import('node:path');
+
+      // 1. 检查工作目录所在分区
+      try {
+        const workDirStats = fs.statfsSync(context.cwd);
+        const workDirAvailable = workDirStats.bavail * workDirStats.bsize;
+        const workDirTotal = workDirStats.blocks * workDirStats.bsize;
+
+        details.workDir = {
+          available: this.formatBytes(workDirAvailable),
+          availableBytes: workDirAvailable,
+          total: this.formatBytes(workDirTotal),
+          totalBytes: workDirTotal,
+          usagePercent: Math.round(((workDirTotal - workDirAvailable) / workDirTotal) * 100),
+        };
+
+        if (workDirAvailable < this.minSpaceBytes) {
+          issues.push(`Work directory has insufficient space: ${this.formatBytes(workDirAvailable)} available, ${this.formatBytes(this.minSpaceBytes)} required`);
+        }
+      } catch {
+        issues.push('Failed to check work directory disk space');
+      }
+
+      // 2. 检查临时目录空间
+      try {
+        const tmpDir = os.tmpdir();
+        const tmpDirStats = fs.statfsSync(tmpDir);
+        const tmpDirAvailable = tmpDirStats.bavail * tmpDirStats.bsize;
+
+        details.tmpDir = {
+          path: tmpDir,
+          available: this.formatBytes(tmpDirAvailable),
+          availableBytes: tmpDirAvailable,
+        };
+
+        if (tmpDirAvailable < this.minSpaceBytes) {
+          issues.push(`Temp directory has insufficient space: ${this.formatBytes(tmpDirAvailable)} available`);
+        }
+      } catch {
+        issues.push('Failed to check temp directory disk space');
+      }
+
+      // 3. 检查 .projmnt4claude 目录空间
+      const projDir = path.join(context.cwd, '.projmnt4claude');
+      try {
+        const projStats = fs.statfsSync(projDir);
+        const projAvailable = projStats.bavail * projStats.bsize;
+
+        details.projDir = {
+          available: this.formatBytes(projAvailable),
+          availableBytes: projAvailable,
+        };
+      } catch {
+        // .projmnt4claude 目录可能不存在，忽略
+        details.projDir = { exists: false };
+      }
+
+    } catch (error) {
+      issues.push(`Disk space check failed: ${error instanceof Error ? error.message : String(error)}`);
+    }
+
+    const passed = issues.length === 0;
+
+    return {
+      checkId: this.id,
+      passed,
+      message: passed
+        ? 'Disk space check passed - sufficient space available'
+        : `Disk space issues found: ${issues.join('; ')}`,
+      details,
+      suggestions: issues.length > 0
+        ? ['Free up disk space', 'Clean up temporary files', 'Remove unused dependencies or build artifacts']
+        : undefined,
+      duration: Date.now() - startTime,
+      timestamp: new Date().toISOString(),
+    };
+  }
+
+  private formatBytes(bytes: number): string {
+    const units = ['B', 'KB', 'MB', 'GB', 'TB'];
+    let size = bytes;
+    let unitIndex = 0;
+
+    while (size >= 1024 && unitIndex < units.length - 1) {
+      size /= 1024;
+      unitIndex++;
+    }
+
+    return `${size.toFixed(2)} ${units[unitIndex]}`;
+  }
+}
+
+/**
+ * PermissionsCheck - 权限检查器
+ * 验证文件系统权限和目录可写性
+ */
+export class PermissionsCheck implements CheckItem {
+  id = 'builtin:permissions';
+  name = 'Permissions Check';
+  description = 'Verify file system permissions and directory writability';
+  category: CheckCategory = 'resource';
+  priority = 10;
+  dependencies = ['builtin:disk-space'];
+
+  async execute(context: CheckContext): Promise<CheckResult> {
+    const startTime = Date.now();
+    const issues: string[] = [];
+    const details: Record<string, unknown> = {};
+    const writableDirs: string[] = [];
+    const nonWritableDirs: string[] = [];
+
+    const fs = await import('node:fs');
+    const path = await import('node:path');
+    const os = await import('node:os');
+
+    // 定义需要检查可写性的目录
+    const dirsToCheck = [
+      { path: context.cwd, name: 'work directory' },
+      { path: path.join(context.cwd, '.projmnt4claude'), name: 'project config directory' },
+      { path: path.join(context.cwd, '.projmnt4claude', 'tasks'), name: 'tasks directory' },
+      { path: path.join(context.cwd, '.projmnt4claude', 'reports'), name: 'reports directory' },
+    ];
+
+    // 1. 检查每个目录的可写性
+    for (const dir of dirsToCheck) {
+      try {
+        // 检查目录是否存在
+        if (!fs.existsSync(dir.path)) {
+          // 尝试创建目录
+          fs.mkdirSync(dir.path, { recursive: true });
+        }
+
+        // 检查是否是目录
+        const stats = fs.statSync(dir.path);
+        if (!stats.isDirectory()) {
+          issues.push(`${dir.name} is not a directory: ${dir.path}`);
+          nonWritableDirs.push(dir.name);
+          continue;
+        }
+
+        // 尝试写入测试文件
+        const testFile = path.join(dir.path, `.write-test-${Date.now()}`);
+        try {
+          fs.writeFileSync(testFile, 'test');
+          fs.unlinkSync(testFile);
+          writableDirs.push(dir.name);
+        } catch {
+          issues.push(`${dir.name} is not writable: ${dir.path}`);
+          nonWritableDirs.push(dir.name);
+        }
+      } catch (error) {
+        issues.push(`Failed to check ${dir.name}: ${error instanceof Error ? error.message : String(error)}`);
+        nonWritableDirs.push(dir.name);
+      }
+    }
+
+    // 2. 检查临时目录可写性
+    try {
+      const tmpDir = os.tmpdir();
+      const testFile = path.join(tmpDir, `.write-test-${Date.now()}`);
+      fs.writeFileSync(testFile, 'test');
+      fs.unlinkSync(testFile);
+      details.tmpDirWritable = true;
+    } catch {
+      issues.push('Temp directory is not writable');
+      details.tmpDirWritable = false;
+    }
+
+    details.writableDirectories = writableDirs;
+    details.nonWritableDirectories = nonWritableDirs;
+
+    const passed = issues.length === 0;
+
+    return {
+      checkId: this.id,
+      passed,
+      message: passed
+        ? `Permissions check passed - ${writableDirs.length} directories writable`
+        : `Permission issues found: ${issues.join('; ')}`,
+      details,
+      suggestions: issues.length > 0
+        ? ['Check directory ownership and permissions', 'Ensure the current user has write access', 'Create required directories with proper permissions']
+        : undefined,
       duration: Date.now() - startTime,
       timestamp: new Date().toISOString(),
     };
