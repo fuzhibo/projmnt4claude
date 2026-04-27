@@ -369,7 +369,7 @@ export interface ExecutionSummary {
 /**
  * Harness execution state
  */
-export type HarnessState = 'idle' | 'running' | 'paused' | 'completed' | 'failed' | 'cancelled';
+export type HarnessState = 'idle' | 'running' | 'pre_checking' | 'executing' | 'paused' | 'completed' | 'failed' | 'cancelled';
 
 /**
  * Harness runtime state (for persistence and recovery)
@@ -431,6 +431,53 @@ export interface HarnessRuntimeState {
    * key: taskId, value: { completedPhase, completedAt }
    */
   taskPhaseCheckpoints: Map<string, { completedPhase: 'development' | 'code_review' | 'qa' | 'evaluation'; completedAt: string }>;
+
+  // ============================================================
+  // Two-Loop Architecture: Pre-check Loop (P1-PROB1)
+  // ============================================================
+
+  /**
+   * 【第一轮】预检测通过的任务列表
+   * 第二轮执行循环使用此列表
+   */
+  readyTasks?: string[];
+
+  /**
+   * 【P7】预检测质量门禁失败的任务
+   * 任一失败则退出流水线，修复后重新检测
+   */
+  preCheckFailedTasks?: Array<{
+    taskId: string;
+    failedAt: string;
+    errors: string[];
+    detectedAt: string;
+  }>;
+
+  /**
+   * 【P8】开发阶段前质量门禁失败的任务
+   * 任一失败则退出流水线，修复后重新执行P8检测
+   */
+  devFailedTasks?: Array<{
+    taskId: string;
+    failedAt: 'pre_development';
+    reason: string;
+    detectedAt: string;
+  }>;
+
+  /**
+   * 预检测阶段延后的任务（依赖未就绪）
+   */
+  pendingPreCheckTasks?: string[];
+
+  /**
+   * 执行阶段延后的任务
+   */
+  pendingExecutionTasks?: string[];
+
+  /**
+   * 预检测完成标记
+   */
+  preCheckCompleted?: boolean;
 }
 
 /**
@@ -570,6 +617,12 @@ export function createDefaultRuntimeState(config: HarnessConfig): HarnessRuntime
     failedTasks: [],
     retryingTasks: [],
     taskPhaseCheckpoints: new Map(),
+    // Two-Loop Architecture: Pre-check Loop (P1-PROB1)
+    readyTasks: [],
+    preCheckFailedTasks: [],
+    preCheckCompleted: false,
+    pendingPreCheckTasks: [],
+    pendingExecutionTasks: [],
   };
 }
 

@@ -18506,7 +18506,12 @@ function createDefaultRuntimeState(config) {
     passedTasks: [],
     failedTasks: [],
     retryingTasks: [],
-    taskPhaseCheckpoints: new Map
+    taskPhaseCheckpoints: new Map,
+    readyTasks: [],
+    preCheckFailedTasks: [],
+    preCheckCompleted: false,
+    pendingPreCheckTasks: [],
+    pendingExecutionTasks: []
   };
 }
 function createDefaultStatusReport(sessionId) {
@@ -36056,13 +36061,187 @@ import * as fs33 from "fs";
 import * as path29 from "path";
 
 // src/utils/hd-assembly-line.ts
+import * as path28 from "path";
+import * as fs32 from "fs";
+import { execSync as execSync4 } from "child_process";
+
+// src/utils/harness-prevalidation.ts
+init_task();
+init_task2();
+init_quality_gate();
+
+class HarnessPreValidator {
+  cwd;
+  constructor(cwd2) {
+    this.cwd = cwd2;
+  }
+  async runPreCheckLoop(taskIds) {
+    const startTime = new Date().toISOString();
+    console.log(`
+\uD83D\uDD0D 开始预检测循环...
+`);
+    const results = [];
+    const readyTasks = [];
+    const pendingTasks = [];
+    const failedTasks = [];
+    for (let i = 0;i < taskIds.length; i++) {
+      const taskId = taskIds[i];
+      console.log(`  [${i + 1}/${taskIds.length}] 预检测: ${taskId}`);
+      const result = await this.preCheckTask(taskId);
+      results.push(result);
+      if (result.passed) {
+        readyTasks.push(taskId);
+        console.log(`    ✅ 通过`);
+      } else {
+        const task = readTaskMeta(taskId, this.cwd);
+        if (task?.dependencies && task.dependencies.length > 0) {
+          const depCheck = this.checkDependencies(task);
+          if (!depCheck.satisfied) {
+            pendingTasks.push(taskId);
+            console.log(`    ⏳ 依赖未满足 (${depCheck.unsatisfiedDeps.length}个)`);
+            continue;
+          }
+        }
+        failedTasks.push(taskId);
+        console.log(`    ❌ 失败: ${result.reason}`);
+      }
+    }
+    const stats = {
+      total: taskIds.length,
+      passed: readyTasks.length,
+      failed: failedTasks.length,
+      pendingDeps: pendingTasks.length,
+      checkedAt: startTime
+    };
+    console.log(`
+\uD83D\uDCCA 预检测完成: ${stats.passed} 通过, ${stats.pendingDeps} 依赖未满足, ${stats.failed} 失败`);
+    return {
+      results,
+      readyTasks,
+      pendingTasks,
+      failedTasks,
+      stats
+    };
+  }
+  async preCheckTask(taskId) {
+    const errors = [];
+    const checkedAt = new Date().toISOString();
+    const task = readTaskMeta(taskId, this.cwd);
+    if (!task) {
+      return {
+        passed: false,
+        reason: "任务不存在",
+        errors: [`Task ${taskId} not found`],
+        taskId,
+        checkedAt
+      };
+    }
+    const basicValidation = validateBasicFields(task);
+    if (!basicValidation.valid) {
+      errors.push(...basicValidation.errors);
+    }
+    const checkpointViolations = validateCheckpoints(task);
+    if (checkpointViolations.length > 0) {
+      for (const violation of checkpointViolations) {
+        errors.push(`[${violation.severity}] ${violation.message}`);
+      }
+    }
+    if (task.dependencies && task.dependencies.length > 0) {
+      const depCheck = this.checkDependencies(task);
+      if (!depCheck.satisfied) {
+        if (depCheck.failedDeps.length > 0) {
+          errors.push(`依赖任务失败: ${depCheck.failedDeps.join(", ")}`);
+        }
+        if (depCheck.unsatisfiedDeps.length > 0) {
+          errors.push(`依赖未完成: ${depCheck.unsatisfiedDeps.join(", ")}`);
+        }
+      }
+    }
+    const normalizedStatus = normalizeStatus(task.status);
+    if (normalizedStatus === "failed" || normalizedStatus === "abandoned") {
+      errors.push(`任务状态为 ${task.status}，无法执行`);
+    }
+    if (errors.length > 0) {
+      return {
+        passed: false,
+        reason: errors[0],
+        errors,
+        taskId,
+        checkedAt
+      };
+    }
+    return {
+      passed: true,
+      errors: [],
+      taskId,
+      checkedAt
+    };
+  }
+  checkDependencies(task) {
+    const result = {
+      satisfied: true,
+      unsatisfiedDeps: [],
+      failedDeps: [],
+      inProgressDeps: []
+    };
+    if (!task.dependencies || task.dependencies.length === 0) {
+      return result;
+    }
+    for (const depId of task.dependencies) {
+      const depTask = readTaskMeta(depId, this.cwd);
+      if (!depTask) {
+        result.unsatisfiedDeps.push(depId);
+        result.satisfied = false;
+        continue;
+      }
+      const normalizedStatus = normalizeStatus(depTask.status);
+      if (normalizedStatus === "resolved" || normalizedStatus === "closed") {
+        continue;
+      }
+      if (normalizedStatus === "failed" || normalizedStatus === "abandoned") {
+        result.failedDeps.push(depId);
+        result.satisfied = false;
+        continue;
+      }
+      result.inProgressDeps.push(depId);
+      result.unsatisfiedDeps.push(depId);
+      result.satisfied = false;
+    }
+    return result;
+  }
+  isTaskReady(taskId, readyTaskIds) {
+    const task = readTaskMeta(taskId, this.cwd);
+    if (!task)
+      return false;
+    if (!task.dependencies || task.dependencies.length === 0) {
+      return true;
+    }
+    return task.dependencies.every((depId) => readyTaskIds.has(depId));
+  }
+  checkBatchDependencies(taskIds) {
+    const results = new Map;
+    for (const taskId of taskIds) {
+      const task = readTaskMeta(taskId, this.cwd);
+      if (!task) {
+        results.set(taskId, {
+          satisfied: false,
+          unsatisfiedDeps: [],
+          failedDeps: [taskId],
+          inProgressDeps: []
+        });
+        continue;
+      }
+      results.set(taskId, this.checkDependencies(task));
+    }
+    return results;
+  }
+}
+
+// src/utils/hd-assembly-line.ts
 init_harness();
 init_task();
 init_task2();
 init_path();
-import * as path28 from "path";
-import * as fs32 from "fs";
-import { execSync as execSync4 } from "child_process";
 
 // src/utils/harness-executor.ts
 init_harness();
@@ -38667,6 +38846,7 @@ class AssemblyLine {
   evaluator;
   retryHandler;
   statusReporter;
+  preValidator;
   sessionId;
   taskRetryContexts = new Map;
   executionRecords = new Map;
@@ -38680,6 +38860,7 @@ class AssemblyLine {
     this.evaluator = new HarnessEvaluator(config);
     this.retryHandler = new RetryHandler(config);
     this.statusReporter = new HarnessStatusReporter(config.cwd, sessionId);
+    this.preValidator = new HarnessPreValidator(config.cwd);
   }
   async run(state) {
     const startTime = new Date().toISOString();
@@ -38692,8 +38873,54 @@ class AssemblyLine {
     console.log(`
 \uD83D\uDE80 开始执行流水线，共 ${uniqueTaskIds.size} 个唯一任务 (队列长度 ${state.taskQueue.length})${batchInfo}
 `);
-    while (state.currentIndex < state.taskQueue.length) {
-      const taskId = state.taskQueue[state.currentIndex];
+    if (!state.preCheckCompleted) {
+      console.log(`
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`);
+      console.log("\uD83D\uDD0D 第一轮：预检测循环");
+      console.log(`━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+`);
+      state.state = "pre_checking";
+      state.readyTasks = [];
+      state.preCheckFailedTasks = [];
+      state.pendingPreCheckTasks = [];
+      const uniqueTaskIdsList = [...uniqueTaskIds];
+      const preCheckResult = await this.preValidator.runPreCheckLoop(uniqueTaskIdsList);
+      console.log(`
+\uD83D\uDCCA 预检测完成: ${preCheckResult.stats.passed} 通过, ${preCheckResult.stats.pendingDeps} 依赖未满足, ${preCheckResult.stats.failed} 失败`);
+      if (preCheckResult.failedTasks.length > 0) {
+        console.log(`
+⚠️  ${preCheckResult.failedTasks.length} 个任务预检测失败，将被跳过`);
+        for (const failedTaskId of preCheckResult.failedTasks) {
+          const result = preCheckResult.results.find((r) => r.taskId === failedTaskId);
+          state.preCheckFailedTasks?.push({
+            taskId: failedTaskId,
+            failedAt: "pre_check",
+            errors: result?.errors || ["预检测失败"],
+            detectedAt: new Date().toISOString()
+          });
+        }
+      }
+      if (preCheckResult.pendingTasks.length > 0) {
+        console.log(`
+⏳ ${preCheckResult.pendingTasks.length} 个任务依赖未满足，将延后处理`);
+        state.pendingPreCheckTasks = preCheckResult.pendingTasks;
+      }
+      state.readyTasks = preCheckResult.readyTasks;
+      state.preCheckCompleted = true;
+      console.log(`
+✅ ${state.readyTasks.length} 个任务通过预检测，进入执行阶段`);
+      saveRuntimeState(state, this.config.cwd);
+    }
+    console.log(`
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`);
+    console.log("\uD83D\uDE80 第二轮：执行循环");
+    console.log(`━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+`);
+    state.state = "executing";
+    const executionQueue = state.readyTasks && state.readyTasks.length > 0 ? state.readyTasks : state.taskQueue;
+    const initialQueueLength = executionQueue.length;
+    while (state.currentIndex < executionQueue.length) {
+      const taskId = executionQueue[state.currentIndex];
       if (!taskId) {
         state.currentIndex++;
         continue;

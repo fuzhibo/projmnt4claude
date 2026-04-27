@@ -29,6 +29,7 @@ import type {
   RetryContext,
   PhaseRetryLimits,
 } from '../types/harness.js';
+import { HarnessPreValidator } from './harness-prevalidation.js';
 import {
   createDefaultExecutionRecord,
   DEFAULT_PHASE_RETRY_LIMITS,
@@ -59,6 +60,7 @@ export class AssemblyLine {
   private evaluator: HarnessEvaluator;
   private retryHandler: RetryHandler;
   private statusReporter: HarnessStatusReporter;
+  private preValidator: HarnessPreValidator;
   private sessionId?: string;
   /** 各任务的重试上下文，存储前次失败信息供重试时传递给 Claude */
   private taskRetryContexts: Map<string, RetryContext> = new Map();
@@ -75,6 +77,7 @@ export class AssemblyLine {
     this.evaluator = new HarnessEvaluator(config);
     this.retryHandler = new RetryHandler(config);
     this.statusReporter = new HarnessStatusReporter(config.cwd, sessionId);
+    this.preValidator = new HarnessPreValidator(config.cwd);
   }
 
   /**
@@ -97,8 +100,79 @@ export class AssemblyLine {
       : '';
     console.log(`\n🚀 开始执行流水线，共 ${uniqueTaskIds.size} 个唯一任务 (队列长度 ${state.taskQueue.length})${batchInfo}\n`);
 
-    while (state.currentIndex < state.taskQueue.length) {
-      const taskId = state.taskQueue[state.currentIndex];
+    // ============================================================
+    // 【第一轮】预检测循环 (P1-PROB1)
+    // ============================================================
+    if (!state.preCheckCompleted) {
+      console.log('\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+      console.log('🔍 第一轮：预检测循环');
+      console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n');
+
+      state.state = 'pre_checking';
+
+      // CP-P1-1: 初始化两轮循环数据结构
+      state.readyTasks = [];
+      state.preCheckFailedTasks = [];
+      state.pendingPreCheckTasks = [];
+
+      // 获取唯一任务ID列表（去重）
+      const uniqueTaskIdsList = [...uniqueTaskIds];
+
+      // 第一轮循环：循环检测所有任务
+      const preCheckResult = await this.preValidator.runPreCheckLoop(uniqueTaskIdsList);
+
+      // CP-P1-2: 检查第一轮完成状态
+      console.log(`\n📊 预检测完成: ${preCheckResult.stats.passed} 通过, ${preCheckResult.stats.pendingDeps} 依赖未满足, ${preCheckResult.stats.failed} 失败`);
+
+      // 如果有质量门禁失败，记录但不退出（允许继续执行已就绪的任务）
+      if (preCheckResult.failedTasks.length > 0) {
+        console.log(`\n⚠️  ${preCheckResult.failedTasks.length} 个任务预检测失败，将被跳过`);
+        for (const failedTaskId of preCheckResult.failedTasks) {
+          const result = preCheckResult.results.find(r => r.taskId === failedTaskId);
+          state.preCheckFailedTasks?.push({
+            taskId: failedTaskId,
+            failedAt: 'pre_check',
+            errors: result?.errors || ['预检测失败'],
+            detectedAt: new Date().toISOString(),
+          });
+        }
+      }
+
+      // 处理依赖未满足的任务（延后处理）
+      if (preCheckResult.pendingTasks.length > 0) {
+        console.log(`\n⏳ ${preCheckResult.pendingTasks.length} 个任务依赖未满足，将延后处理`);
+        state.pendingPreCheckTasks = preCheckResult.pendingTasks;
+      }
+
+      // 所有通过预检测的任务进入 readyTasks
+      state.readyTasks = preCheckResult.readyTasks;
+      state.preCheckCompleted = true;
+
+      console.log(`\n✅ ${state.readyTasks.length} 个任务通过预检测，进入执行阶段`);
+
+      // 保存状态
+      saveRuntimeState(state, this.config.cwd);
+    }
+
+    // ============================================================
+    // 【第二轮】执行循环
+    // ============================================================
+    console.log('\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+    console.log('🚀 第二轮：执行循环');
+    console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n');
+
+    state.state = 'executing';
+
+    // CP-P1-3: 使用 readyTasks 进行第二轮执行
+    // 如果没有预检测过，使用原始队列
+    const executionQueue = state.readyTasks && state.readyTasks.length > 0
+      ? state.readyTasks
+      : state.taskQueue;
+
+    const initialQueueLength = executionQueue.length;
+
+    while (state.currentIndex < executionQueue.length) {
+      const taskId = executionQueue[state.currentIndex];
 
       if (!taskId) {
         state.currentIndex++;
