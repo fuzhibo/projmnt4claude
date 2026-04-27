@@ -191,7 +191,7 @@ export class EnvironmentCheck implements CheckItem {
 export class MetadataCheck implements CheckItem {
   id = 'builtin:metadata';
   name = 'Metadata Check';
-  description = 'Validate task metadata structure';
+  description = 'Validate task metadata structure and content';
   category: CheckCategory = 'metadata';
   priority = 2;
 
@@ -200,7 +200,7 @@ export class MetadataCheck implements CheckItem {
     const issues: string[] = [];
     const details: Record<string, unknown> = {};
 
-    // Validate task metadata
+    // 1. 检查基本上下文
     if (!context.taskId) {
       issues.push('Task ID is missing');
     } else {
@@ -213,12 +213,76 @@ export class MetadataCheck implements CheckItem {
       details.cwd = context.cwd;
     }
 
+    // 2. 验证任务元数据文件存在性
+    const fs = await import('node:fs');
+    const path = await import('node:path');
+    const metaPath = path.join(context.cwd, '.projmnt4claude', 'tasks', context.taskId, 'meta.json');
+
+    if (!fs.existsSync(metaPath)) {
+      issues.push(`Task metadata file not found: ${metaPath}`);
+    } else {
+      try {
+        const metaContent = fs.readFileSync(metaPath, 'utf-8');
+        const meta = JSON.parse(metaContent);
+
+        // 3. 验证必需字段
+        const requiredFields = ['id', 'title', 'type', 'priority', 'status'];
+        for (const field of requiredFields) {
+          if (!meta[field]) {
+            issues.push(`Missing required field: ${field}`);
+          }
+        }
+
+        // 4. 验证字段类型
+        if (meta.id && typeof meta.id !== 'string') {
+          issues.push('Field "id" must be a string');
+        }
+        if (meta.priority && !['P0', 'P1', 'P2', 'P3'].includes(meta.priority)) {
+          issues.push(`Invalid priority: ${meta.priority}`);
+        }
+        if (meta.status && !['open', 'in_progress', 'wait_review', 'wait_qa', 'wait_evaluation', 'resolved', 'failed', 'closed'].includes(meta.status)) {
+          issues.push(`Invalid status: ${meta.status}`);
+        }
+
+        // 5. 验证检查点
+        if (!meta.checkpoints || !Array.isArray(meta.checkpoints) || meta.checkpoints.length === 0) {
+          issues.push('Task has no checkpoints defined');
+        } else {
+          details.checkpointCount = meta.checkpoints.length;
+
+          // 验证检查点结构
+          const invalidCheckpoints = meta.checkpoints.filter((cp: { id?: string; description?: string }) => !cp.id || !cp.description);
+          if (invalidCheckpoints.length > 0) {
+            issues.push(`${invalidCheckpoints.length} checkpoints missing id or description`);
+          }
+        }
+
+        // 6. 验证依赖任务
+        if (meta.dependencies && Array.isArray(meta.dependencies)) {
+          details.dependencyCount = meta.dependencies.length;
+
+          for (const depId of meta.dependencies) {
+            const depPath = path.join(context.cwd, '.projmnt4claude', 'tasks', depId, 'meta.json');
+            if (!fs.existsSync(depPath)) {
+              issues.push(`Dependency task not found: ${depId}`);
+            }
+          }
+        }
+
+        details.metaValidated = true;
+      } catch (error) {
+        issues.push(`Failed to parse metadata: ${error instanceof Error ? error.message : String(error)}`);
+      }
+    }
+
     return {
       checkId: this.id,
       passed: issues.length === 0,
-      message: issues.length > 0 ? issues.join('; ') : 'Metadata check passed',
+      message: issues.length > 0 ? issues.join('; ') : 'Metadata check passed - all fields validated',
       details,
-      suggestions: issues.length > 0 ? ['Ensure task ID and working directory are provided'] : undefined,
+      suggestions: issues.length > 0
+        ? ['Ensure task metadata is valid JSON', 'Check all required fields are present', 'Verify checkpoint definitions']
+        : undefined,
       duration: Date.now() - startTime,
       timestamp: new Date().toISOString(),
     };
@@ -228,15 +292,36 @@ export class MetadataCheck implements CheckItem {
 export class DependencyCheck implements CheckItem {
   id = 'builtin:dependency';
   name = 'Dependency Check';
-  description = 'Check task dependencies status';
+  description = 'Check task dependencies status and completion';
   category: CheckCategory = 'dependency';
   priority = 3;
 
   async execute(context: CheckContext): Promise<CheckResult> {
     const startTime = Date.now();
+    const issues: string[] = [];
+    const details: Record<string, unknown> = {};
+    const completedDeps: string[] = [];
+    const incompleteDeps: string[] = [];
 
-    // Get dependency info from shared data
-    const dependencies = context.sharedData.get('dependencies') as string[] | undefined;
+    // 1. 从共享数据获取依赖列表
+    let dependencies = context.sharedData.get('dependencies') as string[] | undefined;
+
+    // 2. 如果没有从共享数据获取，尝试从当前任务的 meta.json 读取
+    if (!dependencies || dependencies.length === 0) {
+      try {
+        const fs = await import('node:fs');
+        const path = await import('node:path');
+        const metaPath = path.join(context.cwd, '.projmnt4claude', 'tasks', context.taskId, 'meta.json');
+
+        if (fs.existsSync(metaPath)) {
+          const metaContent = fs.readFileSync(metaPath, 'utf-8');
+          const meta = JSON.parse(metaContent);
+          dependencies = meta.dependencies || [];
+        }
+      } catch {
+        // 忽略读取错误
+      }
+    }
 
     if (!dependencies || dependencies.length === 0) {
       return {
@@ -249,11 +334,62 @@ export class DependencyCheck implements CheckItem {
       };
     }
 
+    details.dependencyCount = dependencies.length;
+    details.dependencies = dependencies;
+
+    // 3. 检查每个依赖任务的状态
+    const fs = await import('node:fs');
+    const path = await import('node:path');
+
+    for (const depId of dependencies) {
+      const depMetaPath = path.join(context.cwd, '.projmnt4claude', 'tasks', depId, 'meta.json');
+
+      if (!fs.existsSync(depMetaPath)) {
+        issues.push(`Dependency task '${depId}' not found`);
+        incompleteDeps.push(depId);
+        continue;
+      }
+
+      try {
+        const depContent = fs.readFileSync(depMetaPath, 'utf-8');
+        const depMeta = JSON.parse(depContent);
+
+        // 检查依赖任务状态
+        const resolvedStatuses = ['resolved', 'closed'];
+        const failedStatuses = ['failed', 'abandoned'];
+
+        if (resolvedStatuses.includes(depMeta.status)) {
+          completedDeps.push(depId);
+        } else if (failedStatuses.includes(depMeta.status)) {
+          issues.push(`Dependency '${depId}' is in failed/abandoned status: ${depMeta.status}`);
+          incompleteDeps.push(depId);
+        } else {
+          issues.push(`Dependency '${depId}' is not completed. Current status: ${depMeta.status}`);
+          incompleteDeps.push(depId);
+        }
+      } catch (error) {
+        issues.push(`Failed to check dependency '${depId}': ${error instanceof Error ? error.message : String(error)}`);
+        incompleteDeps.push(depId);
+      }
+    }
+
+    details.completedDependencies = completedDeps;
+    details.incompleteDependencies = incompleteDeps;
+    details.completedCount = completedDeps.length;
+    details.incompleteCount = incompleteDeps.length;
+
+    const passed = issues.length === 0 && completedDeps.length === dependencies.length;
+
     return {
       checkId: this.id,
-      passed: true,
-      message: `Checked ${dependencies.length} dependencies`,
-      details: { dependencyCount: dependencies.length, dependencies },
+      passed,
+      message: passed
+        ? `All ${dependencies.length} dependencies completed`
+        : `${completedDeps.length}/${dependencies.length} dependencies completed. Issues: ${issues.join('; ')}`,
+      details,
+      suggestions: issues.length > 0
+        ? ['Ensure all dependency tasks are resolved or closed', 'Check dependency task statuses', 'Fix failed dependencies before proceeding']
+        : undefined,
       duration: Date.now() - startTime,
       timestamp: new Date().toISOString(),
     };
@@ -310,6 +446,130 @@ export class QualityGateCheck implements CheckItem {
       passed: true,
       message: 'Quality gate check passed',
       details,
+      duration: Date.now() - startTime,
+      timestamp: new Date().toISOString(),
+    };
+  }
+}
+
+/**
+ * RequirementChecker - 需求检查器
+ * 检查任务需求定义的完整性
+ */
+export class RequirementChecker implements CheckItem {
+  id = 'builtin:requirement';
+  name = 'Requirement Check';
+  description = 'Validate task requirement completeness';
+  category: CheckCategory = 'quality';
+  priority = 6;
+
+  async execute(context: CheckContext): Promise<CheckResult> {
+    const startTime = Date.now();
+    const issues: string[] = [];
+    const details: Record<string, unknown> = {};
+
+    const fs = await import('node:fs');
+    const path = await import('node:path');
+
+    // 1. 检查需求文档存在性
+    const reqPaths = [
+      path.join(context.cwd, '.projmnt4claude', 'tasks', context.taskId, 'requirement.md'),
+      path.join(context.cwd, '.projmnt4claude', 'tasks', context.taskId, 'contract.json'),
+    ];
+
+    let reqFound = false;
+    let reqContent = '';
+
+    for (const reqPath of reqPaths) {
+      if (fs.existsSync(reqPath)) {
+        reqFound = true;
+        details.requirementPath = reqPath;
+        try {
+          reqContent = fs.readFileSync(reqPath, 'utf-8');
+        } catch {
+          // ignore read error
+        }
+        break;
+      }
+    }
+
+    if (!reqFound) {
+      issues.push('No requirement document found (expected requirement.md or contract.json)');
+    }
+
+    // 2. 从 meta.json 检查需求相关字段
+    const metaPath = path.join(context.cwd, '.projmnt4claude', 'tasks', context.taskId, 'meta.json');
+    if (fs.existsSync(metaPath)) {
+      try {
+        const metaContent = fs.readFileSync(metaPath, 'utf-8');
+        const meta = JSON.parse(metaContent);
+
+        // 检查描述
+        if (!meta.description || meta.description.length < 50) {
+          issues.push('Task description is too short or missing (minimum 50 characters)');
+        } else {
+          details.descriptionLength = meta.description.length;
+        }
+
+        // 检查验收标准
+        if (!meta.checkpoints || meta.checkpoints.length === 0) {
+          issues.push('No checkpoints defined (acceptance criteria missing)');
+        } else {
+          details.checkpointCount = meta.checkpoints.length;
+        }
+
+        // 检查关联文件
+        if (!meta.affected_files || meta.affected_files.length === 0) {
+          if (!meta.description?.includes('相关文件') && !meta.description?.includes('Related Files')) {
+            issues.push('No affected files specified');
+          }
+        } else {
+          details.affectedFileCount = meta.affected_files.length;
+        }
+
+        // 检查目标是否明确
+        const hasGoal = meta.description?.includes('目标') ||
+                        meta.description?.includes('Goal') ||
+                        meta.description?.includes('## 解决方案') ||
+                        meta.description?.includes('## Solution');
+        if (!hasGoal) {
+          issues.push('Task goal is not clearly defined');
+        }
+
+      } catch (error) {
+        issues.push(`Failed to parse metadata: ${error instanceof Error ? error.message : String(error)}`);
+      }
+    }
+
+    // 3. 验证需求内容质量
+    if (reqContent) {
+      // 检查是否有过短的描述
+      if (reqContent.length < 100) {
+        issues.push('Requirement document is too short');
+      }
+      details.requirementLength = reqContent.length;
+
+      // 检查是否包含关键部分
+      const hasAcceptanceCriteria = reqContent.toLowerCase().includes('acceptance') ||
+                                     reqContent.toLowerCase().includes('criteria') ||
+                                     reqContent.includes('验收标准');
+      if (!hasAcceptanceCriteria) {
+        issues.push('Missing acceptance criteria in requirement');
+      }
+    }
+
+    const passed = issues.length === 0;
+
+    return {
+      checkId: this.id,
+      passed,
+      message: passed
+        ? 'Requirement check passed - all requirements are well defined'
+        : `Requirement issues found: ${issues.join('; ')}`,
+      details,
+      suggestions: issues.length > 0
+        ? ['Add clear acceptance criteria', 'Define affected files', 'Write detailed task description', 'Create requirement.md or contract.json']
+        : undefined,
       duration: Date.now() - startTime,
       timestamp: new Date().toISOString(),
     };
