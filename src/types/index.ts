@@ -22,3 +22,27 @@ export type {
   ProblemPattern,
   DecompositionStrategy,
 } from './decomposition.js';
+
+// 阶段前门禁类型
+export type {
+  ExecutionPhase,
+  PrePhaseGateConfig,
+  PhaseGateConfig,
+  PhaseGateRule,
+  PhaseGateRuleType,
+  PhaseGateCheckResult,
+  PrePhaseGateResult,
+  PrePhaseGateContext,
+  PrePhaseGateReport,
+  PhaseGateDecision,
+  PhaseGateRuleHandler,
+  PhaseEntryValidation,
+} from './pre-phase-gate.js';
+
+export {
+  createDefaultPhaseGateConfig,
+  DEFAULT_DEV_PHASE_RULES,
+  DEFAULT_CR_PHASE_RULES,
+  DEFAULT_QA_PHASE_RULES,
+  DEFAULT_EVAL_PHASE_RULES,
+} from './pre-phase-gate.js';
