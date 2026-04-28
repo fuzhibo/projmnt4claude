@@ -156,16 +156,40 @@ export type EvaluationInferenceType =
   | 'empty_output';          // Empty output - Claude process exited abnormally resulting in empty output
 
 /**
- * Full-phase retry context
+ * Failure record for retry history tracking
+ */
+export interface FailureRecord {
+  /** Attempt number */
+  attempt: number;
+  /** Timestamp of failure */
+  timestamp: string;
+  /** Phase where failure occurred */
+  phase: 'development' | 'code_review' | 'qa' | 'evaluation';
+  /** Error message */
+  error: string;
+  /** Extracted insights from this failure */
+  insights?: string[];
+  /** Failure category */
+  errorType?: string;
+}
+
+/**
+ * Full-phase retry context (P6 enhanced version)
  * Passes previous failure information when retrying after phase failures, helps Claude understand historical context
+ *
+ * CP-P6-1: previousErrors - complete error history
+ * CP-P6-2: accumulatedInsights - extracted learning from failures
+ * CP-P6-3: suggestedFixes - generated repair suggestions
  */
 export interface RetryContext {
-  /** Previous failure reason */
+  /** CP-P6-1: Previous failure reason (legacy, kept for backward compatibility) */
   previousFailureReason?: string;
   /** Phase of previous failure */
   previousPhase?: 'development' | 'code_review' | 'qa' | 'evaluation';
   /** Current attempt number (including this one) */
   attemptNumber: number;
+  /** Maximum retry attempts allowed */
+  maxRetries: number;
   /** Partial completion progress */
   partialProgress?: {
     completedCheckpoints?: string[];
@@ -177,6 +201,22 @@ export interface RetryContext {
     reason: string;
     failedAt: string;
   };
+
+  // ============================================================
+  // P6 Enhanced Retry Context Fields
+  // ============================================================
+
+  /** CP-P6-1: List of all previous errors in this phase */
+  previousErrors: string[];
+
+  /** CP-P6-2: Accumulated insights from failure analysis */
+  accumulatedInsights: string[];
+
+  /** CP-P6-3: Suggested fixes based on error patterns */
+  suggestedFixes: string[];
+
+  /** Complete failure history for this task:phase */
+  failureHistory?: FailureRecord[];
 }
 
 /**
@@ -477,6 +517,19 @@ export interface HarnessRuntimeState {
    * 预检测完成标记
    */
   preCheckCompleted?: boolean;
+
+  // ============================================================
+  // P6 Enhanced: Failure History for Retry Context
+  // ============================================================
+
+  /**
+   * Failure history for retry context building
+   * key: `${taskId}:${phase}`
+   * value: List of failure records for this task:phase combination
+   *
+   * CP-P6: Stores complete failure history to enable intelligent retry context
+   */
+  failureHistory?: Map<string, FailureRecord[]>;
 }
 
 /**

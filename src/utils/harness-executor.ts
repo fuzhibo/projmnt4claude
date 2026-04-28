@@ -284,6 +284,8 @@ export class HarnessExecutor {
 
   /**
    * 构建重试上下文章节（注入到开发提示词中）
+   *
+   * P6 Enhanced: 展示完整的重试上下文，包括失败历史、洞察和建议
    */
   private buildRetryContextSection(retryContext: RetryContext): string {
     const parts: string[] = [];
@@ -307,9 +309,38 @@ export class HarnessExecutor {
       .replace('{attempt}', String(retryContext.attemptNumber))
       .replace('{phase}', phaseName));
     parts.push('');
-    parts.push(`**${texts.harness.previousFailureReason}:**`);
-    parts.push(`> ${retryContext.previousFailureReason}`);
-    parts.push('');
+
+    // CP-P6-1: 显示失败历史
+    if (retryContext.previousErrors?.length) {
+      parts.push('**📋 之前失败的错误 (Previous Errors):**');
+      retryContext.previousErrors.forEach((error, index) => {
+        parts.push(`${index + 1}. ${error.substring(0, 200)}${error.length > 200 ? '...' : ''}`);
+      });
+      parts.push('');
+    } else if (retryContext.previousFailureReason) {
+      // 向后兼容：如果没有 previousErrors，显示之前的单个错误
+      parts.push(`**${texts.harness.previousFailureReason}:**`);
+      parts.push(`> ${retryContext.previousFailureReason}`);
+      parts.push('');
+    }
+
+    // CP-P6-2: 显示累积洞察
+    if (retryContext.accumulatedInsights?.length) {
+      parts.push('**💡 洞察 (Insights):**');
+      retryContext.accumulatedInsights.forEach(insight => {
+        parts.push(`- ${insight}`);
+      });
+      parts.push('');
+    }
+
+    // CP-P6-3: 显示修复建议
+    if (retryContext.suggestedFixes?.length) {
+      parts.push('**🔧 建议修复方案 (Suggested Fixes):**');
+      retryContext.suggestedFixes.forEach(fix => {
+        parts.push(`- ${fix}`);
+      });
+      parts.push('');
+    }
 
     if (retryContext.partialProgress?.completedCheckpoints?.length) {
       parts.push(`**${texts.harness.partialProgress}:**`);
@@ -324,6 +355,17 @@ export class HarnessExecutor {
       parts.push(`- ${texts.harness.logs.upstreamTask}: ${retryContext.upstreamFailureInfo.taskId}`);
       parts.push(`- ${texts.harness.previousFailureReason}: ${retryContext.upstreamFailureInfo.reason}`);
       parts.push(`- ${texts.harness.logs.failureTime}: ${retryContext.upstreamFailureInfo.failedAt}`);
+      parts.push('');
+    }
+
+    // 添加重试策略提示
+    if ((retryContext.attemptNumber ?? 1) >= 2) {
+      parts.push('**🔄 重试策略提示:**');
+      parts.push('- 这是第 ' + retryContext.attemptNumber + ' 次尝试，请特别注意之前失败的错误');
+      if (retryContext.maxRetries) {
+        parts.push(`- 剩余重试次数: ${retryContext.maxRetries - (retryContext.attemptNumber ?? 1)}`);
+      }
+      parts.push('- 参考上面的洞察和建议，避免重复同样的错误');
       parts.push('');
     }
 

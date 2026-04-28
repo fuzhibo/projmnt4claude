@@ -175,6 +175,13 @@ export interface I18nTexts {
     tipUseHelp: string;
     usage: string;
     examples: string;
+    suggestedCommands: string;
+    noRelatedCommands: string;
+    commonCommands: string;
+    cmdTask: string;
+    cmdStatus: string;
+    cmdPlan: string;
+    cmdSetup: string;
   };
   // config 命令
   config: {
@@ -279,7 +286,6 @@ export interface I18nTexts {
       codeReviewFailed: string;
       codeReviewError: string;
       codeReviewSessionFailed: string;
-      codeReviewPromptGenerated: string;
       startingCodeReviewSession: string;
       codeReviewRetry: string;
       qaPhase: string;
@@ -382,6 +388,7 @@ export interface I18nTexts {
       missingFiles: string;
       existingFiles: string;
       noFilesToVerify: string;
+      retryContextEval: string;
     };
     reports: {
       devReportTitle: string;
@@ -413,6 +420,7 @@ export interface I18nTexts {
       humanVerificationSection: string;
       humanVerificationNote: string;
       requiresHumanLabel: string;
+      verifiedAtLabel: string;
       yes: string;
       no: string;
       inferenceTypes: {
@@ -756,6 +764,7 @@ export interface I18nTexts {
     checkDeprecatedHooks: string;
     checkDeprecatedHooksFound: string;
     checkDeprecatedHooksOk: string;
+    nonStandardTransition: string;
   };
 
   // decomposition

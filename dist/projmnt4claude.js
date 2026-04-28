@@ -8149,9 +8149,6 @@ var init_zh = __esm(() => {
         codeReviewFailed: "代码审核未通过",
         codeReviewError: "代码审核出错",
         codeReviewSessionFailed: "代码审核会话失败",
-        codeReviewPromptGenerated: "代码审核提示词已生成",
-        startingCodeReviewSession: "启动代码审核会话...",
-        codeReviewRetry: "代码审核结果格式不匹配，已重试 {retries} 次",
         qaPhase: "QA 验证阶段...",
         qaCheckpoints: "QA 验证检查点",
         noQACheckpoints: "无 QA 验证检查点，自动通过",
@@ -9218,9 +9215,6 @@ var init_en = __esm(() => {
         codeReviewFailed: "Code review failed",
         codeReviewError: "Code review error",
         codeReviewSessionFailed: "Code review session failed",
-        codeReviewPromptGenerated: "Code review prompt generated",
-        startingCodeReviewSession: "Starting code review session...",
-        codeReviewRetry: "Code review result format mismatch, retried {retries} times",
         qaPhase: "QA verification phase...",
         qaCheckpoints: "QA verification checkpoints",
         noQACheckpoints: "No QA verification checkpoints, auto-pass",
@@ -9348,6 +9342,7 @@ var init_en = __esm(() => {
         resultLabel: "Result",
         reviewedAtLabel: "Reviewed At",
         reviewedByLabel: "Reviewed By",
+        verifiedAtLabel: "Verified At",
         inferenceTypeLabel: "Inference Type",
         reasonSection: "Reason",
         failedCriteriaSection: "Failed Acceptance Criteria",
@@ -36739,9 +36734,31 @@ ${roleTemplate.extraInstructions.map((inst, i) => `${i + 1}. ${inst}`).join(`
     const phaseName = phaseLabel[retryContext.previousPhase || ""] || retryContext.previousPhase;
     parts.push(texts.harness.retryAttemptInfo.replace("{attempt}", String(retryContext.attemptNumber)).replace("{phase}", phaseName));
     parts.push("");
-    parts.push(`**${texts.harness.previousFailureReason}:**`);
-    parts.push(`> ${retryContext.previousFailureReason}`);
-    parts.push("");
+    if (retryContext.previousErrors?.length) {
+      parts.push("**\uD83D\uDCCB 之前失败的错误 (Previous Errors):**");
+      retryContext.previousErrors.forEach((error, index) => {
+        parts.push(`${index + 1}. ${error.substring(0, 200)}${error.length > 200 ? "..." : ""}`);
+      });
+      parts.push("");
+    } else if (retryContext.previousFailureReason) {
+      parts.push(`**${texts.harness.previousFailureReason}:**`);
+      parts.push(`> ${retryContext.previousFailureReason}`);
+      parts.push("");
+    }
+    if (retryContext.accumulatedInsights?.length) {
+      parts.push("**\uD83D\uDCA1 洞察 (Insights):**");
+      retryContext.accumulatedInsights.forEach((insight) => {
+        parts.push(`- ${insight}`);
+      });
+      parts.push("");
+    }
+    if (retryContext.suggestedFixes?.length) {
+      parts.push("**\uD83D\uDD27 建议修复方案 (Suggested Fixes):**");
+      retryContext.suggestedFixes.forEach((fix) => {
+        parts.push(`- ${fix}`);
+      });
+      parts.push("");
+    }
     if (retryContext.partialProgress?.completedCheckpoints?.length) {
       parts.push(`**${texts.harness.partialProgress}:**`);
       for (const cp of retryContext.partialProgress.completedCheckpoints) {
@@ -36754,6 +36771,15 @@ ${roleTemplate.extraInstructions.map((inst, i) => `${i + 1}. ${inst}`).join(`
       parts.push(`- ${texts.harness.logs.upstreamTask}: ${retryContext.upstreamFailureInfo.taskId}`);
       parts.push(`- ${texts.harness.previousFailureReason}: ${retryContext.upstreamFailureInfo.reason}`);
       parts.push(`- ${texts.harness.logs.failureTime}: ${retryContext.upstreamFailureInfo.failedAt}`);
+      parts.push("");
+    }
+    if ((retryContext.attemptNumber ?? 1) >= 2) {
+      parts.push("**\uD83D\uDD04 重试策略提示:**");
+      parts.push("- 这是第 " + retryContext.attemptNumber + " 次尝试，请特别注意之前失败的错误");
+      if (retryContext.maxRetries) {
+        parts.push(`- 剩余重试次数: ${retryContext.maxRetries - (retryContext.attemptNumber ?? 1)}`);
+      }
+      parts.push("- 参考上面的洞察和建议，避免重复同样的错误");
       parts.push("");
     }
     parts.push(texts.harness.logs.retryReferenceNote);
@@ -40035,13 +40061,26 @@ ${"━".repeat(SEPARATOR_WIDTH)}`);
   }
   buildRetryContextForPhase(taskId, phase, state) {
     const stored = this.taskRetryContexts.get(taskId);
-    if (!stored)
-      return;
+    const phaseKey = `${taskId}:${phase}`;
     const attemptNumber = this.getPhaseRetryCount(taskId, phase, state) + 1;
+    const maxRetries = this.getPhaseRetryLimit(phase);
+    const failureHistory = state.failureHistory?.get(phaseKey) || [];
+    const previousErrors = failureHistory.map((f) => f.error);
+    const accumulatedInsights = this.extractInsights(failureHistory);
+    const suggestedFixes = this.generateSuggestedFixes(failureHistory);
+    if (!stored && failureHistory.length === 0)
+      return;
     return {
-      ...stored,
+      previousFailureReason: stored?.previousFailureReason ?? (failureHistory.length > 0 ? failureHistory[failureHistory.length - 1].error : undefined),
+      previousPhase: stored?.previousPhase ?? phase,
       attemptNumber,
-      previousPhase: stored.previousPhase ?? phase
+      maxRetries,
+      partialProgress: stored?.partialProgress,
+      upstreamFailureInfo: stored?.upstreamFailureInfo,
+      previousErrors,
+      accumulatedInsights,
+      suggestedFixes,
+      failureHistory
     };
   }
   storeFailureContext(taskId, phase, reason, state) {
@@ -40068,9 +40107,165 @@ ${"━".repeat(SEPARATOR_WIDTH)}`);
       previousFailureReason: reason,
       previousPhase: phase,
       attemptNumber: phaseRetryCount + 1,
+      maxRetries: this.getPhaseRetryLimit(phase),
       partialProgress: Object.keys(partialProgress).length > 0 ? partialProgress : existing?.partialProgress,
-      upstreamFailureInfo: existing?.upstreamFailureInfo
+      upstreamFailureInfo: existing?.upstreamFailureInfo,
+      previousErrors: [],
+      accumulatedInsights: [],
+      suggestedFixes: []
     });
+    this.recordFailure(taskId, phase, phaseRetryCount + 1, reason, state);
+  }
+  recordFailure(taskId, phase, attempt, error, state) {
+    const phaseKey = `${taskId}:${phase}`;
+    if (!state.failureHistory) {
+      state.failureHistory = new Map;
+    }
+    const history = state.failureHistory.get(phaseKey) || [];
+    const errorType = this.classifyError(error);
+    const insights = this.extractInsights([...history, { attempt, timestamp: "", phase, error, errorType }]);
+    const record = {
+      attempt,
+      timestamp: new Date().toISOString(),
+      phase,
+      error,
+      errorType,
+      insights
+    };
+    history.push(record);
+    state.failureHistory.set(phaseKey, history);
+  }
+  classifyError(error) {
+    const lowerError = error.toLowerCase();
+    if (lowerError.includes("syntax") || lowerError.includes("syntaxerror") || lowerError.includes("unexpected token")) {
+      return "syntax";
+    }
+    if (lowerError.includes("import") || lowerError.includes("require") || lowerError.includes("module") || lowerError.includes("cannot find")) {
+      return "import";
+    }
+    if (lowerError.includes("test") || lowerError.includes("assert") || lowerError.includes("expect") || lowerError.includes("spec")) {
+      return "test";
+    }
+    if (lowerError.includes("type") || lowerError.includes("typescript") || lowerError.includes("typeerror") || lowerError.includes("is not assignable")) {
+      return "type";
+    }
+    if (lowerError.includes("lint") || lowerError.includes("eslint") || lowerError.includes("prettier") || lowerError.includes("style")) {
+      return "lint";
+    }
+    if (lowerError.includes("timeout") || lowerError.includes("timed out")) {
+      return "timeout";
+    }
+    if (lowerError.includes("api") || lowerError.includes("rate limit") || lowerError.includes("429") || lowerError.includes("5")) {
+      return "api";
+    }
+    return "other";
+  }
+  extractInsights(failureHistory) {
+    const insights = [];
+    if (failureHistory.length === 0) {
+      return insights;
+    }
+    const errorTypes = new Map;
+    for (const record of failureHistory) {
+      const errorType = record.errorType || this.classifyError(record.error);
+      errorTypes.set(errorType, (errorTypes.get(errorType) || 0) + 1);
+    }
+    for (const [errorType, count] of errorTypes) {
+      if (count > 1) {
+        insights.push(`重复错误: ${errorType} 出现了 ${count} 次`);
+      }
+    }
+    const lastFailure = failureHistory[failureHistory.length - 1];
+    if (!lastFailure)
+      return insights;
+    const lastError = lastFailure.error.toLowerCase();
+    if (lastError.includes("syntax") || lastError.includes("unexpected token")) {
+      insights.push("语法错误模式: 需要更仔细的代码生成，检查括号、引号、分号匹配");
+    }
+    if (lastError.includes("test") || lastError.includes("assert") || lastError.includes("expect")) {
+      insights.push("测试失败模式: 需要更全面的测试覆盖和边界条件处理");
+    }
+    if (lastError.includes("import") || lastError.includes("require") || lastError.includes("module")) {
+      insights.push("导入错误模式: 需要检查模块依赖和导入路径");
+    }
+    if (lastError.includes("type") || lastError.includes("typescript") || lastError.includes("is not assignable")) {
+      insights.push("类型错误模式: 需要更严格的类型检查和类型定义");
+    }
+    if (lastError.includes("timeout") || lastError.includes("timed out")) {
+      insights.push("超时模式: 任务可能过于复杂，考虑拆分或优化实现");
+    }
+    if (failureHistory.length >= 2) {
+      insights.push("多次失败: 建议尝试不同的实现方法");
+    }
+    if (failureHistory.length >= 3) {
+      insights.push("持续失败: 考虑简化实现方案或检查外部依赖");
+    }
+    return insights;
+  }
+  generateSuggestedFixes(failureHistory) {
+    const fixes = [];
+    if (failureHistory.length === 0) {
+      return fixes;
+    }
+    const lastFailure = failureHistory[failureHistory.length - 1];
+    if (!lastFailure)
+      return fixes;
+    const error = lastFailure.error.toLowerCase();
+    const errorType = lastFailure.errorType || this.classifyError(lastFailure.error);
+    switch (errorType) {
+      case "syntax":
+        fixes.push("使用代码检查工具验证语法: npx tsc --noEmit");
+        fixes.push("检查括号、引号是否匹配");
+        fixes.push("检查分号使用是否一致");
+        fixes.push("检查代码缩进和格式");
+        break;
+      case "import":
+        fixes.push("检查导入路径是否正确");
+        fixes.push("确认依赖包已安装: npm install 或 bun install");
+        fixes.push("检查模块导出/导入语法 (ESM vs CommonJS)");
+        fixes.push("检查 tsconfig.json 的 paths 配置");
+        break;
+      case "test":
+        fixes.push("运行测试查看详细错误: npm test");
+        fixes.push("检查测试数据和预期结果");
+        fixes.push("确认测试环境配置正确");
+        fixes.push("检查异步测试是否正确等待");
+        break;
+      case "type":
+        fixes.push("运行类型检查: npx tsc --noEmit");
+        fixes.push("检查类型定义文件 (.d.ts)");
+        fixes.push("确认泛型参数正确");
+        fixes.push("检查接口和类型别名定义");
+        break;
+      case "lint":
+        fixes.push("运行代码格式化: npx prettier --write");
+        fixes.push("运行 ESLint 自动修复: npx eslint --fix");
+        fixes.push("检查项目代码规范配置");
+        break;
+      case "timeout":
+        fixes.push("考虑将任务拆分为更小的子任务");
+        fixes.push("检查是否有无限循环或阻塞操作");
+        fixes.push("优化算法复杂度");
+        break;
+      case "api":
+        fixes.push("检查 API 限流情况，稍后重试");
+        fixes.push("检查 API 认证和权限");
+        fixes.push("查看 API 服务状态页面");
+        break;
+      default:
+        fixes.push("仔细查看错误日志，定位问题根源");
+        fixes.push("检查相关文件是否存在语法或逻辑错误");
+    }
+    if (failureHistory.length >= 2) {
+      fixes.push("尝试不同的实现方法，避免重复同样错误");
+      fixes.push("回顾之前的失败，分析共同模式");
+    }
+    if (failureHistory.length >= 3) {
+      fixes.push("考虑简化实现方案，先实现核心功能");
+      fixes.push("检查是否有外部依赖或环境问题");
+      fixes.push("可能需要人工介入分析");
+    }
+    return fixes;
   }
   detectFalseFailure(phase, record) {
     if (phase === "code_review") {

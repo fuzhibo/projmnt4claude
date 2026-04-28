@@ -28,6 +28,7 @@ import type {
   VerdictAction,
   RetryContext,
   PhaseRetryLimits,
+  FailureRecord,
 } from '../types/harness.js';
 import { HarnessPreValidator } from './harness-prevalidation.js';
 import {
@@ -1858,6 +1859,11 @@ export class AssemblyLine {
 
   /**
    * 构建指定阶段的重试上下文（供 Claude 会话使用）
+   *
+   * P6 Enhanced: 构建完整的重试上下文，包含失败历史、洞察和建议
+   * - CP-P6-1: 包含 previousErrors
+   * - CP-P6-2: 包含 accumulatedInsights
+   * - CP-P6-3: 包含 suggestedFixes
    */
   private buildRetryContextForPhase(
     taskId: string,
@@ -1865,18 +1871,46 @@ export class AssemblyLine {
     state: HarnessRuntimeState,
   ): RetryContext | undefined {
     const stored = this.taskRetryContexts.get(taskId);
-    if (!stored) return undefined;
-
+    const phaseKey = `${taskId}:${phase}`;
     const attemptNumber = this.getPhaseRetryCount(taskId, phase, state) + 1;
+    const maxRetries = this.getPhaseRetryLimit(phase);
+
+    // P6: 从 failureHistory 获取完整的失败历史
+    const failureHistory = state.failureHistory?.get(phaseKey) || [];
+
+    // CP-P6-1: 构建 previousErrors
+    const previousErrors = failureHistory.map(f => f.error);
+
+    // CP-P6-2: 提取 accumulatedInsights
+    const accumulatedInsights = this.extractInsights(failureHistory);
+
+    // CP-P6-3: 生成 suggestedFixes
+    const suggestedFixes = this.generateSuggestedFixes(failureHistory);
+
+    // 如果没有存储的上下文且没有失败历史，返回 undefined
+    if (!stored && failureHistory.length === 0) return undefined;
+
     return {
-      ...stored,
+      // 保留原有字段
+      previousFailureReason: stored?.previousFailureReason ?? (failureHistory.length > 0 ? failureHistory[failureHistory.length - 1]!.error : undefined),
+      previousPhase: stored?.previousPhase ?? phase,
       attemptNumber,
-      previousPhase: stored.previousPhase ?? phase,
+      maxRetries,
+      partialProgress: stored?.partialProgress,
+      upstreamFailureInfo: stored?.upstreamFailureInfo,
+
+      // P6 增强字段
+      previousErrors,
+      accumulatedInsights,
+      suggestedFixes,
+      failureHistory,
     };
   }
 
   /**
    * 存储失败上下文供重试时使用
+   *
+   * P6 Enhanced: 同时记录到 failureHistory 以支持完整的重试上下文
    */
   private storeFailureContext(
     taskId: string,
@@ -1902,13 +1936,248 @@ export class AssemblyLine {
       if (passedPhases.length > 0) partialProgress.passedPhases = passedPhases;
     }
 
+    // 更新 taskRetryContexts（向后兼容）
     this.taskRetryContexts.set(taskId, {
       previousFailureReason: reason,
       previousPhase: phase,
       attemptNumber: phaseRetryCount + 1,
+      maxRetries: this.getPhaseRetryLimit(phase),
       partialProgress: Object.keys(partialProgress).length > 0 ? partialProgress : existing?.partialProgress,
-      upstreamFailureInfo: existing?.upstreamFailureInfo, // preserve upstream info if present
+      upstreamFailureInfo: existing?.upstreamFailureInfo,
+      // P6 字段
+      previousErrors: [],
+      accumulatedInsights: [],
+      suggestedFixes: [],
     });
+
+    // P6: 记录到 failureHistory
+    this.recordFailure(taskId, phase, phaseRetryCount + 1, reason, state);
+  }
+
+  // ============================================================
+  // P6 Enhanced: 重试上下文智能分析
+  // ============================================================
+
+  /**
+   * 记录失败到 failureHistory
+   *
+   * CP-P6: 存储完整的失败历史供重试时分析
+   */
+  private recordFailure(
+    taskId: string,
+    phase: 'development' | 'code_review' | 'qa' | 'evaluation',
+    attempt: number,
+    error: string,
+    state: HarnessRuntimeState,
+  ): void {
+    const phaseKey = `${taskId}:${phase}`;
+
+    if (!state.failureHistory) {
+      state.failureHistory = new Map();
+    }
+
+    const history = state.failureHistory.get(phaseKey) || [];
+
+    // 错误分类
+    const errorType = this.classifyError(error);
+
+    // 提取洞察（基于历史 + 当前）
+    const insights = this.extractInsights([...history, { attempt, timestamp: '', phase, error, errorType }]);
+
+    const record = {
+      attempt,
+      timestamp: new Date().toISOString(),
+      phase,
+      error,
+      errorType,
+      insights,
+    };
+
+    history.push(record);
+    state.failureHistory.set(phaseKey, history);
+  }
+
+  /**
+   * 错误分类
+   *
+   * 根据错误内容分类为：syntax, import, test, type, lint, other
+   */
+  private classifyError(error: string): string {
+    const lowerError = error.toLowerCase();
+
+    if (lowerError.includes('syntax') || lowerError.includes('syntaxerror') || lowerError.includes('unexpected token')) {
+      return 'syntax';
+    }
+    if (lowerError.includes('import') || lowerError.includes('require') || lowerError.includes('module') || lowerError.includes('cannot find')) {
+      return 'import';
+    }
+    if (lowerError.includes('test') || lowerError.includes('assert') || lowerError.includes('expect') || lowerError.includes('spec')) {
+      return 'test';
+    }
+    if (lowerError.includes('type') || lowerError.includes('typescript') || lowerError.includes('typeerror') || lowerError.includes('is not assignable')) {
+      return 'type';
+    }
+    if (lowerError.includes('lint') || lowerError.includes('eslint') || lowerError.includes('prettier') || lowerError.includes('style')) {
+      return 'lint';
+    }
+    if (lowerError.includes('timeout') || lowerError.includes('timed out')) {
+      return 'timeout';
+    }
+    if (lowerError.includes('api') || lowerError.includes('rate limit') || lowerError.includes('429') || lowerError.includes('5')) {
+      return 'api';
+    }
+    return 'other';
+  }
+
+  /**
+   * 提取洞察（CP-P6-2）
+   *
+   * 从失败历史中提取模式和洞察
+   */
+  private extractInsights(failureHistory: { attempt: number; error: string; errorType?: string }[]): string[] {
+    const insights: string[] = [];
+
+    if (failureHistory.length === 0) {
+      return insights;
+    }
+
+    // 分析错误模式
+    const errorTypes = new Map<string, number>();
+
+    for (const record of failureHistory) {
+      const errorType = record.errorType || this.classifyError(record.error);
+      errorTypes.set(errorType, (errorTypes.get(errorType) || 0) + 1);
+    }
+
+    // 生成洞察
+    for (const [errorType, count] of errorTypes) {
+      if (count > 1) {
+        insights.push(`重复错误: ${errorType} 出现了 ${count} 次`);
+      }
+    }
+
+    // 分析最后一次失败的特殊洞察
+    const lastFailure = failureHistory[failureHistory.length - 1];
+    if (!lastFailure) return insights;
+
+    const lastError = lastFailure.error.toLowerCase();
+
+    if (lastError.includes('syntax') || lastError.includes('unexpected token')) {
+      insights.push('语法错误模式: 需要更仔细的代码生成，检查括号、引号、分号匹配');
+    }
+
+    if (lastError.includes('test') || lastError.includes('assert') || lastError.includes('expect')) {
+      insights.push('测试失败模式: 需要更全面的测试覆盖和边界条件处理');
+    }
+
+    if (lastError.includes('import') || lastError.includes('require') || lastError.includes('module')) {
+      insights.push('导入错误模式: 需要检查模块依赖和导入路径');
+    }
+
+    if (lastError.includes('type') || lastError.includes('typescript') || lastError.includes('is not assignable')) {
+      insights.push('类型错误模式: 需要更严格的类型检查和类型定义');
+    }
+
+    if (lastError.includes('timeout') || lastError.includes('timed out')) {
+      insights.push('超时模式: 任务可能过于复杂，考虑拆分或优化实现');
+    }
+
+    // 根据重试次数添加洞察
+    if (failureHistory.length >= 2) {
+      insights.push('多次失败: 建议尝试不同的实现方法');
+    }
+
+    if (failureHistory.length >= 3) {
+      insights.push('持续失败: 考虑简化实现方案或检查外部依赖');
+    }
+
+    return insights;
+  }
+
+  /**
+   * 生成修复建议（CP-P6-3）
+   *
+   * 根据错误类型和重试历史生成具体的修复建议
+   */
+  private generateSuggestedFixes(failureHistory: { attempt: number; error: string; errorType?: string }[]): string[] {
+    const fixes: string[] = [];
+
+    if (failureHistory.length === 0) {
+      return fixes;
+    }
+
+    const lastFailure = failureHistory[failureHistory.length - 1];
+    if (!lastFailure) return fixes;
+
+    const error = lastFailure.error.toLowerCase();
+    const errorType = lastFailure.errorType || this.classifyError(lastFailure.error);
+
+    // 根据错误类型生成建议
+    switch (errorType) {
+      case 'syntax':
+        fixes.push('使用代码检查工具验证语法: npx tsc --noEmit');
+        fixes.push('检查括号、引号是否匹配');
+        fixes.push('检查分号使用是否一致');
+        fixes.push('检查代码缩进和格式');
+        break;
+
+      case 'import':
+        fixes.push('检查导入路径是否正确');
+        fixes.push('确认依赖包已安装: npm install 或 bun install');
+        fixes.push('检查模块导出/导入语法 (ESM vs CommonJS)');
+        fixes.push('检查 tsconfig.json 的 paths 配置');
+        break;
+
+      case 'test':
+        fixes.push('运行测试查看详细错误: npm test');
+        fixes.push('检查测试数据和预期结果');
+        fixes.push('确认测试环境配置正确');
+        fixes.push('检查异步测试是否正确等待');
+        break;
+
+      case 'type':
+        fixes.push('运行类型检查: npx tsc --noEmit');
+        fixes.push('检查类型定义文件 (.d.ts)');
+        fixes.push('确认泛型参数正确');
+        fixes.push('检查接口和类型别名定义');
+        break;
+
+      case 'lint':
+        fixes.push('运行代码格式化: npx prettier --write');
+        fixes.push('运行 ESLint 自动修复: npx eslint --fix');
+        fixes.push('检查项目代码规范配置');
+        break;
+
+      case 'timeout':
+        fixes.push('考虑将任务拆分为更小的子任务');
+        fixes.push('检查是否有无限循环或阻塞操作');
+        fixes.push('优化算法复杂度');
+        break;
+
+      case 'api':
+        fixes.push('检查 API 限流情况，稍后重试');
+        fixes.push('检查 API 认证和权限');
+        fixes.push('查看 API 服务状态页面');
+        break;
+
+      default:
+        fixes.push('仔细查看错误日志，定位问题根源');
+        fixes.push('检查相关文件是否存在语法或逻辑错误');
+    }
+
+    // 根据重试次数调整策略
+    if (failureHistory.length >= 2) {
+      fixes.push('尝试不同的实现方法，避免重复同样错误');
+      fixes.push('回顾之前的失败，分析共同模式');
+    }
+
+    if (failureHistory.length >= 3) {
+      fixes.push('考虑简化实现方案，先实现核心功能');
+      fixes.push('检查是否有外部依赖或环境问题');
+      fixes.push('可能需要人工介入分析');
+    }
+
+    return fixes;
   }
 
   /**
