@@ -18547,9 +18547,6 @@ var init_harness = __esm(() => {
   VALID_VERDICT_ACTIONS = [
     "resolve",
     "redevelop",
-    "minor_fix",
-    "retest",
-    "reevaluate",
     "escalate_human"
   ];
   DEFAULT_PHASE_RETRY_LIMITS = {
@@ -38296,6 +38293,25 @@ class RetryHandler {
   }
   getRetryRecommendation(verdict) {
     const suggestions = [];
+    const reason = verdict.reason || "";
+    const transientErrorPatterns = [
+      /API Error:\s*429/i,
+      /rate limit/i,
+      /API Error:\s*5\d\d/i,
+      /server error/i,
+      /timeout/i,
+      /temporarily unavailable/i,
+      /connection reset/i,
+      /ECONNREFUSED/i
+    ];
+    const isTransientError = transientErrorPatterns.some((pattern) => pattern.test(reason));
+    if (isTransientError) {
+      return {
+        shouldRetry: true,
+        reason: "临时性错误，重试可能成功",
+        suggestions: ["等待片刻后重试", "检查 API 状态"]
+      };
+    }
     if (verdict.failedCriteria.length > 0) {
       suggestions.push("检查未满足的验收标准，确保完全理解需求");
     }
@@ -38836,7 +38852,6 @@ function saveRuntimeState(state, cwd2) {
 // src/utils/hd-assembly-line.ts
 init_quality_gate();
 init_dependency_graph();
-var MAX_REEVALUATE_ATTEMPTS = 2;
 
 class AssemblyLine {
   config;
@@ -39190,9 +39205,7 @@ ${"━".repeat(SEPARATOR_WIDTH)}`);
             }
             this.storeFailureContext(taskId, "code_review", codeReviewVerdict.reason || "代码审核未通过", state);
             this.statusReporter.failPhase("code_review", new Error(codeReviewVerdict.reason || "代码审核未通过"), taskId);
-            const crSeverity = this.classifyFailureSeverity("code_review", record);
-            const crAction = crSeverity === "minor" ? "minor_fix" : "redevelop";
-            return this.handleVerdictBasedTransition(taskId, record, state, addTimeline, "code_review", crAction);
+            return this.handleVerdictBasedTransition(taskId, record, state, addTimeline, "code_review", "redevelop");
           }
           this.syncCheckpointStatus(taskId, "code_review", { codeReviewVerdict });
           await this.ensureTransition(taskId, "wait_qa", "代码审核通过，等待QA验证");
@@ -39260,9 +39273,7 @@ ${"━".repeat(SEPARATOR_WIDTH)}`);
             }
             this.storeFailureContext(taskId, "qa", qaVerdict.reason || "QA 验证未通过", state);
             this.statusReporter.failPhase("qa_verification", new Error(qaVerdict.reason || "QA 验证未通过"), taskId);
-            const qaSeverity = this.classifyFailureSeverity("qa", record);
-            const qaAction = qaSeverity === "minor" ? "minor_fix" : "redevelop";
-            return this.handleVerdictBasedTransition(taskId, record, state, addTimeline, "qa", qaAction);
+            return this.handleVerdictBasedTransition(taskId, record, state, addTimeline, "qa", "redevelop");
           }
           this.syncCheckpointStatus(taskId, "qa", { qaVerdict });
           await this.ensureTransition(taskId, "wait_evaluation", "QA验证通过");
@@ -39756,65 +39767,6 @@ ${"━".repeat(SEPARATOR_WIDTH)}`);
         record.retryCount = devRetryCount + 1;
         return record;
       }
-      case "minor_fix": {
-        const phaseLimit = this.getPhaseRetryLimit(phase === "evaluation" ? "evaluation" : phase === "qa" ? "qa" : "code_review");
-        const phaseRetryCount = this.getPhaseRetryCount(taskId, phase, state);
-        if (phaseRetryCount >= phaseLimit) {
-          console.log(`⚠️  ${phase} 阶段重试次数已达上限 (${phaseLimit})，转为完整重开发`);
-          return this.handleVerdictBasedTransition(taskId, record, state, addTimeline, phase, "redevelop");
-        }
-        this.incrementTaskReopenCount(taskId, `${phase} 阶段小问题，从开发阶段修复`);
-        await this.ensureTransition(taskId, "in_progress", `${phase} 阶段小问题，从开发阶段修复 (minor_fix)`);
-        await this.setTaskResumeAction(taskId, "retry", "development");
-        await this.assignTaskRole(taskId, "executor");
-        this.appendPhaseHistory(taskId, { phase, role: "executor", verdict: "NOPASS", timestamp: new Date().toISOString(), analysis: `${phase} 阶段小问题，minor_fix from development`, resumeAction: "retry" });
-        this.incrementPhaseRetryCount(taskId, phase, state);
-        state.retryCounter.set(taskId, (state.retryCounter.get(taskId) || 0) + 1);
-        addTimeline("retry", `任务将从开发阶段修复小问题 (${phase} 第 ${phaseRetryCount + 1}/${phaseLimit} 次)`, { action, phase });
-        console.log(`\uD83D\uDD27 任务将从开发阶段修复小问题 (${phase} 第 ${phaseRetryCount + 1}/${phaseLimit} 次)`);
-        this.statusReporter.recordTaskRetrying(taskId, phaseRetryCount + 1, phaseLimit, phase, `${phase} 阶段小问题，minor_fix`);
-        record.finalStatus = "in_progress";
-        record.retryCount = phaseRetryCount + 1;
-        return record;
-      }
-      case "retest": {
-        const qaPhaseLimit = this.getPhaseRetryLimit("qa");
-        const qaRetryCount = this.getPhaseRetryCount(taskId, "qa", state);
-        if (qaRetryCount >= qaPhaseLimit) {
-          console.log(`⚠️  QA 阶段重试次数已达上限 (${qaPhaseLimit})，转为从开发阶段重试`);
-          return this.handleVerdictBasedTransition(taskId, record, state, addTimeline, phase, "redevelop");
-        }
-        this.incrementTaskReopenCount(taskId, `${phase} 阶段失败，从 QA 阶段重试`);
-        await this.ensureTransition(taskId, "wait_qa", `${phase} 阶段失败，从 QA 阶段重试`);
-        await this.setTaskResumeAction(taskId, "retry", "qa");
-        await this.assignTaskRole(taskId, "qa_tester");
-        this.appendPhaseHistory(taskId, { phase: "qa_verification", role: "qa_tester", verdict: "NOPASS", timestamp: new Date().toISOString(), analysis: `${phase} 阶段失败，retry from qa`, resumeAction: "retry" });
-        this.incrementPhaseRetryCount(taskId, "qa", state);
-        state.retryCounter.set(taskId, (state.retryCounter.get(taskId) || 0) + 1);
-        addTimeline("retry", `任务将从 QA 阶段重试 (第 ${qaRetryCount + 1}/${qaPhaseLimit} 次)`, { action, phase });
-        console.log(`⚠️  任务将从 QA 阶段重试 (第 ${qaRetryCount + 1}/${qaPhaseLimit} 次)`);
-        this.statusReporter.recordTaskRetrying(taskId, qaRetryCount + 1, qaPhaseLimit, "qa", `${phase} 阶段失败，从 QA 阶段重试`);
-        record.finalStatus = "wait_qa";
-        record.retryCount = qaRetryCount + 1;
-        return record;
-      }
-      case "reevaluate": {
-        const reevalCount = state.reevaluateCounter?.get(taskId) || 0;
-        if (reevalCount >= MAX_REEVALUATE_ATTEMPTS) {
-          console.log(`⚠️  重新评估次数已达上限 (${MAX_REEVALUATE_ATTEMPTS})，转为从开发阶段重试`);
-          return this.handleVerdictBasedTransition(taskId, record, state, addTimeline, phase, "redevelop");
-        }
-        await this.ensureTransition(taskId, "wait_evaluation", `评估不明确，重新评估 (${reevalCount + 1}/${MAX_REEVALUATE_ATTEMPTS})`);
-        await this.setTaskResumeAction(taskId, "retry", "evaluation");
-        await this.assignTaskRole(taskId, "architect");
-        this.appendPhaseHistory(taskId, { phase: "evaluation", role: "architect", verdict: "NOPASS", timestamp: new Date().toISOString(), analysis: `评估不明确，重新评估 (${reevalCount + 1}/${MAX_REEVALUATE_ATTEMPTS})`, resumeAction: "retry" });
-        state.reevaluateCounter.set(taskId, reevalCount + 1);
-        addTimeline("retry", `任务将重新评估 (${reevalCount + 1}/${MAX_REEVALUATE_ATTEMPTS})`, { action, reevalCount: reevalCount + 1 });
-        console.log(`\uD83D\uDD04  任务将重新评估 (${reevalCount + 1}/${MAX_REEVALUATE_ATTEMPTS})`);
-        this.statusReporter.recordTaskRetrying(taskId, reevalCount + 1, MAX_REEVALUATE_ATTEMPTS, "evaluation", `评估不明确，重新评估`);
-        record.finalStatus = "wait_evaluation";
-        return record;
-      }
       case "escalate_human": {
         await this.ensureTransition(taskId, "needs_human", `architect 建议人工介入 (action: escalate_human)`);
         record.finalStatus = "needs_human";
@@ -39823,6 +39775,7 @@ ${"━".repeat(SEPARATOR_WIDTH)}`);
         return record;
       }
       default: {
+        console.log(`⚠️  未知的 verdict action: ${action}，回退到 redevelop`);
         return this.handleVerdictBasedTransition(taskId, record, state, addTimeline, phase, "redevelop");
       }
     }
@@ -40118,27 +40071,6 @@ ${"━".repeat(SEPARATOR_WIDTH)}`);
       partialProgress: Object.keys(partialProgress).length > 0 ? partialProgress : existing?.partialProgress,
       upstreamFailureInfo: existing?.upstreamFailureInfo
     });
-  }
-  classifyFailureSeverity(phase, record) {
-    if (phase === "code_review") {
-      const verdict = record.codeReviewVerdict;
-      if (!verdict)
-        return "major";
-      const hasFewIssues = verdict.codeQualityIssues.length <= 2;
-      const noFailedCheckpoints = verdict.failedCheckpoints.length === 0;
-      const reason = verdict.reason || "";
-      const isMinorContent = /(?:命名|格式|注释|import|类型|风格|naming|format|comment|style|lint|typo|typo|拼写|缩进|indent)/i.test(reason);
-      return hasFewIssues && noFailedCheckpoints && isMinorContent ? "minor" : "major";
-    }
-    if (phase === "qa") {
-      const verdict = record.qaVerdict;
-      if (!verdict)
-        return "major";
-      const hasFewFailures = verdict.testFailures.length <= 1;
-      const hasFewCheckpoints = verdict.failedCheckpoints.length <= 1;
-      return hasFewFailures && hasFewCheckpoints ? "minor" : "major";
-    }
-    return "major";
   }
   detectFalseFailure(phase, record) {
     if (phase === "code_review") {

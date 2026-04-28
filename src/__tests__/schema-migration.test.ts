@@ -107,14 +107,12 @@ describe('Pipeline Status Constants', () => {
 // ============== VerdictAction Constants ==============
 
 describe('VerdictAction Constants', () => {
-  test('VALID_VERDICT_ACTIONS should contain all valid actions', () => {
+  test('VALID_VERDICT_ACTIONS should contain all valid actions (P5 simplified)', () => {
+    // P5: 简化后的 verdict actions，移除了 minor_fix, retest, reevaluate
     expect(VALID_VERDICT_ACTIONS).toContain('resolve');
     expect(VALID_VERDICT_ACTIONS).toContain('redevelop');
-    expect(VALID_VERDICT_ACTIONS).toContain('minor_fix');
-    expect(VALID_VERDICT_ACTIONS).toContain('retest');
-    expect(VALID_VERDICT_ACTIONS).toContain('reevaluate');
     expect(VALID_VERDICT_ACTIONS).toContain('escalate_human');
-    expect(VALID_VERDICT_ACTIONS).toHaveLength(6);
+    expect(VALID_VERDICT_ACTIONS).toHaveLength(3);
   });
 
   test('VALID_VERDICT_ACTIONS should not contain invalid actions', () => {
@@ -481,7 +479,7 @@ describe('applySchemaMigrations', () => {
     const result = applySchemaMigrations(task);
 
     expect(task.transitionNotes).toEqual([]);
-    expect(result.details).toContain('添加 transitionNotes: []');
+    expect(result.details).toContain('schemaMigrationTransitionNotes');
   });
 
   test('v4 migration should not overwrite existing transitionNotes', () => {
@@ -747,7 +745,7 @@ describe('Individual Migration Steps', () => {
     const v1 = SCHEMA_MIGRATIONS.find(m => m.version === 1)!;
     const result = v1.migrate(task);
     expect(result.changed).toBe(true);
-    expect(result.details).toContain('添加 reopenCount: 0');
+    expect(result.details).toContain('schemaMigrationReopenCount');
   });
 
   test('v1 migration: should detect change for missing requirementHistory', () => {
@@ -755,7 +753,7 @@ describe('Individual Migration Steps', () => {
     const v1 = SCHEMA_MIGRATIONS.find(m => m.version === 1)!;
     const result = v1.migrate(task);
     expect(result.changed).toBe(true);
-    expect(result.details).toContain('添加 requirementHistory: []');
+    expect(result.details).toContain('schemaMigrationRequirementHistory');
   });
 
   test('v1 migration: should return unchanged when fields already present', () => {
@@ -799,7 +797,7 @@ describe('Individual Migration Steps', () => {
     const result = v3.migrate(task);
     expect(result.changed).toBe(true);
     expect(task.executionStats!.commitHistory).toEqual([]);
-    expect(result.details).toContain('添加 executionStats.commitHistory: []');
+    expect(result.details).toContain('schemaMigrationCommitHistory');
   });
 
   test('v3 migration: should not change task without executionStats', () => {
@@ -841,7 +839,7 @@ describe('Individual Migration Steps', () => {
     const v4 = SCHEMA_MIGRATIONS.find(m => m.version === 4)!;
     const result = v4.migrate(task);
     expect(task.transitionNotes).toEqual([]);
-    expect(result.details).toContain('添加 transitionNotes: []');
+    expect(result.details).toContain('schemaMigrationTransitionNotes');
   });
 
   test('v4 migration: should set resumeAction for wait_review', () => {

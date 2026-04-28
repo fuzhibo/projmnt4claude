@@ -85,6 +85,28 @@ export class RetryHandler {
     suggestions: string[];
   } {
     const suggestions: string[] = [];
+    const reason = verdict.reason || '';
+
+    // P5: 检测临时性错误（API 限流、服务器错误等）
+    const transientErrorPatterns = [
+      /API Error:\s*429/i,
+      /rate limit/i,
+      /API Error:\s*5\d\d/i,
+      /server error/i,
+      /timeout/i,
+      /temporarily unavailable/i,
+      /connection reset/i,
+      /ECONNREFUSED/i,
+    ];
+    const isTransientError = transientErrorPatterns.some(pattern => pattern.test(reason));
+
+    if (isTransientError) {
+      return {
+        shouldRetry: true,
+        reason: '临时性错误，重试可能成功',
+        suggestions: ['等待片刻后重试', '检查 API 状态'],
+      };
+    }
 
     // 分析失败原因
     if (verdict.failedCriteria.length > 0) {

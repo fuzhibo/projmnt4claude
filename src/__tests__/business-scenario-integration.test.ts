@@ -722,15 +722,13 @@ describe('Scenario 5: AI Enhanced Flow - FeedbackConstraintEngine', () => {
 // ============================================================
 
 describe('Scenario 6: Verdict Routing', () => {
-  test('S6.1: VALID_VERDICT_ACTIONS contains all expected actions', async () => {
+  test('S6.1: VALID_VERDICT_ACTIONS contains all expected actions (P5 simplified)', async () => {
     const { VALID_VERDICT_ACTIONS } = await import('../types/harness.js');
+    // P5: 简化后的 verdict actions，移除了 minor_fix, retest, reevaluate
     expect(VALID_VERDICT_ACTIONS).toContain('resolve');
     expect(VALID_VERDICT_ACTIONS).toContain('redevelop');
-    expect(VALID_VERDICT_ACTIONS).toContain('minor_fix');
-    expect(VALID_VERDICT_ACTIONS).toContain('retest');
-    expect(VALID_VERDICT_ACTIONS).toContain('reevaluate');
     expect(VALID_VERDICT_ACTIONS).toContain('escalate_human');
-    expect(VALID_VERDICT_ACTIONS.length).toBe(6);
+    expect(VALID_VERDICT_ACTIONS.length).toBe(3);
   });
 
   test('S6.2: ReviewVerdict with action=redevelop signals development retry', () => {
@@ -741,20 +739,22 @@ describe('Scenario 6: Verdict Routing', () => {
     expect(verdict.failedCriteria.length).toBeGreaterThan(0);
   });
 
-  test('S6.3: ReviewVerdict with action=retest signals QA retry', () => {
-    const verdict = createFailedVerdict('TASK-001', 'retest');
-    expect(verdict.action).toBe('retest');
-    // resumeFrom should be set to 'qa' when retest is processed
+  // P5: retest action removed - simplified to redevelop only
+  test('S6.3: ReviewVerdict with action=redevelop signals development retry', () => {
+    const verdict = createFailedVerdict('TASK-001', 'redevelop');
+    expect(verdict.action).toBe('redevelop');
+    // resumeFrom should be set to 'development' when redevelop is processed
   });
 
-  test('S6.4: ReviewVerdict with action=reevaluate uses independent counter', () => {
+  // P5: reevaluate action removed - simplified to redevelop only
+  test('S6.4: ReviewVerdict with action=redevelop uses phase retry counter', () => {
     const config = createTestConfig();
     const state = createDefaultRuntimeState(config);
-    // reevaluateCounter is independent from retryCounter
-    expect(state.reevaluateCounter.size).toBe(0);
-    state.reevaluateCounter.set('TASK-001', 1);
-    expect(state.reevaluateCounter.get('TASK-001')).toBe(1);
-    // MAX_REEVALUATE_ATTEMPTS is 2 (internal constant)
+    // P5: Uses phaseRetryCounters instead of reevaluateCounter
+    expect(state.phaseRetryCounters.size).toBe(0);
+    state.phaseRetryCounters.set('TASK-001:evaluation', 1);
+    expect(state.phaseRetryCounters.get('TASK-001:evaluation')).toBe(1);
+    // Phase retry limit is defined in DEFAULT_PHASE_RETRY_LIMITS
   });
 
   test('S6.5: ReviewVerdict with action=escalate_human sets status to open', () => {

@@ -49,9 +49,6 @@ import { validateBasicFields, validateCheckpoints } from './quality-gate.js';
 import { DependencyGraph, executeFailureCascade } from './dependency-graph/index.js';
 import { SEPARATOR_WIDTH } from './format';
 
-/** 重新评估最大次数（独立于重试次数） */
-const MAX_REEVALUATE_ATTEMPTS = 2;
-
 /** 阶段类型定义 (P4: 阶段内重试) */
 type Phase = 'development' | 'code_review' | 'qa' | 'evaluation';
 
@@ -552,10 +549,8 @@ export class AssemblyLine {
             // 存储失败原因到重试上下文
             this.storeFailureContext(taskId, 'code_review', codeReviewVerdict.reason || '代码审核未通过', state);
             this.statusReporter.failPhase('code_review', new Error(codeReviewVerdict.reason || '代码审核未通过'), taskId);
-            // 分类失败严重程度，决定 minor_fix 或 redevelop
-            const crSeverity = this.classifyFailureSeverity('code_review', record);
-            const crAction: VerdictAction = crSeverity === 'minor' ? 'minor_fix' : 'redevelop';
-            return this.handleVerdictBasedTransition(taskId, record, state, addTimeline, 'code_review', crAction);
+            // P5: 统一使用 redevelop，移除 minor_fix 复杂分支
+            return this.handleVerdictBasedTransition(taskId, record, state, addTimeline, 'code_review', 'redevelop');
           }
 
           // 6.5 同步检查点状态（代码审核通过后）
@@ -638,10 +633,8 @@ export class AssemblyLine {
             // 存储失败原因到重试上下文
             this.storeFailureContext(taskId, 'qa', qaVerdict.reason || 'QA 验证未通过', state);
             this.statusReporter.failPhase('qa_verification', new Error(qaVerdict.reason || 'QA 验证未通过'), taskId);
-            // 分类失败严重程度，决定 minor_fix 或 redevelop
-            const qaSeverity = this.classifyFailureSeverity('qa', record);
-            const qaAction: VerdictAction = qaSeverity === 'minor' ? 'minor_fix' : 'redevelop';
-            return this.handleVerdictBasedTransition(taskId, record, state, addTimeline, 'qa', qaAction);
+            // P5: 统一使用 redevelop，移除 minor_fix 复杂分支
+            return this.handleVerdictBasedTransition(taskId, record, state, addTimeline, 'qa', 'redevelop');
           }
 
           // 8.4 同步检查点状态（QA 通过后）
@@ -1337,14 +1330,15 @@ export class AssemblyLine {
   }
 
   /**
-   * 基于评估者动作的状态路由
+   * P5: 基于评估者动作的状态路由（简化版）
    *
    * 根据 architect 评估者输出的 action 关键字驱动不同的状态流转：
    * - resolve: 直接标记为 resolved（评估通过）
-   * - redevelop: 从开发阶段重试（消耗重试次数）
-   * - retest: 从 QA 阶段重试（消耗重试次数）
-   * - reevaluate: 重新评估（不消耗重试次数，独立上限 MAX_REEVALUATE_ATTEMPTS 次）
+   * - redevelop: 从开发阶段重试（消耗重试次数，统一使用阶段内重试）
    * - escalate_human: 转为 needs_human 状态
+   *
+   * P5 变更：移除 minor_fix, retest, reevaluate 复杂分支
+   * 所有重试统一通过 executePhaseLifecycle 的阶段内重试处理
    */
   private async handleVerdictBasedTransition(
     taskId: string,
@@ -1380,7 +1374,7 @@ export class AssemblyLine {
           return record;
         }
 
-        // CP-P4: 消耗重试次数，从开发阶段重试（阶段内重试，不再重新入队）
+        // P5: 统一使用阶段内重试，消耗重试次数，从开发阶段重试
         this.incrementTaskReopenCount(taskId, `${phase} 阶段失败，从开发阶段重试`);
         await this.ensureTransition(taskId, 'in_progress', `${phase} 阶段失败，从开发阶段重试`);
         // 设置 resumeAction 和角色感知恢复
@@ -1390,95 +1384,13 @@ export class AssemblyLine {
         this.appendPhaseHistory(taskId, { phase: 'development', role: 'executor', verdict: 'NOPASS', timestamp: new Date().toISOString(), analysis: `${phase} 阶段失败，retry from development`, resumeAction: 'retry' });
         this.incrementPhaseRetryCount(taskId, 'development', state);
         state.retryCounter.set(taskId, (state.retryCounter.get(taskId) || 0) + 1);
-        // CP-P4: 移除 state.taskQueue.push(taskId)，重试在阶段内完成
 
         addTimeline('retry', `任务将从开发阶段重试 (第 ${devRetryCount + 1}/${devPhaseLimit} 次)`, { action, phase });
         console.log(`⚠️  任务将从开发阶段重试 (第 ${devRetryCount + 1}/${devPhaseLimit} 次)`);
         this.statusReporter.recordTaskRetrying(taskId, devRetryCount + 1, devPhaseLimit, 'development', `${phase} 阶段失败，从开发阶段重试`);
         record.finalStatus = 'in_progress';
         record.retryCount = devRetryCount + 1;
-        // CP-P4: 返回记录，由 executeTask 的阶段循环处理重试
-        return record;
-      }
-
-      case 'minor_fix': {
-        // minor_fix: 小问题修复，从开发阶段重试但消耗对应阶段的重试次数
-        const phaseLimit = this.getPhaseRetryLimit(phase === 'evaluation' ? 'evaluation' : phase === 'qa' ? 'qa' : 'code_review');
-        const phaseRetryCount = this.getPhaseRetryCount(taskId, phase, state);
-        if (phaseRetryCount >= phaseLimit) {
-          console.log(`⚠️  ${phase} 阶段重试次数已达上限 (${phaseLimit})，转为完整重开发`);
-          return this.handleVerdictBasedTransition(taskId, record, state, addTimeline, phase, 'redevelop');
-        }
-
-        // CP-P4: 消耗对应阶段的重试次数，从开发阶段重试（minor fix 模式，阶段内重试）
-        this.incrementTaskReopenCount(taskId, `${phase} 阶段小问题，从开发阶段修复`);
-        await this.ensureTransition(taskId, 'in_progress', `${phase} 阶段小问题，从开发阶段修复 (minor_fix)`);
-        await this.setTaskResumeAction(taskId, 'retry', 'development');
-        await this.assignTaskRole(taskId, 'executor');
-        this.appendPhaseHistory(taskId, { phase, role: 'executor', verdict: 'NOPASS', timestamp: new Date().toISOString(), analysis: `${phase} 阶段小问题，minor_fix from development`, resumeAction: 'retry' });
-        this.incrementPhaseRetryCount(taskId, phase, state);
-        state.retryCounter.set(taskId, (state.retryCounter.get(taskId) || 0) + 1);
-        // CP-P4: 移除 state.taskQueue.push(taskId)，重试在阶段内完成
-
-        addTimeline('retry', `任务将从开发阶段修复小问题 (${phase} 第 ${phaseRetryCount + 1}/${phaseLimit} 次)`, { action, phase });
-        console.log(`🔧 任务将从开发阶段修复小问题 (${phase} 第 ${phaseRetryCount + 1}/${phaseLimit} 次)`);
-        this.statusReporter.recordTaskRetrying(taskId, phaseRetryCount + 1, phaseLimit, phase, `${phase} 阶段小问题，minor_fix`);
-        record.finalStatus = 'in_progress';
-        record.retryCount = phaseRetryCount + 1;
-        return record;
-      }
-
-      case 'retest': {
-        const qaPhaseLimit = this.getPhaseRetryLimit('qa');
-        const qaRetryCount = this.getPhaseRetryCount(taskId, 'qa', state);
-        if (qaRetryCount >= qaPhaseLimit) {
-          // QA 重试次数已达上限，回退到 redevelop
-          console.log(`⚠️  QA 阶段重试次数已达上限 (${qaPhaseLimit})，转为从开发阶段重试`);
-          return this.handleVerdictBasedTransition(taskId, record, state, addTimeline, phase, 'redevelop');
-        }
-
-        // CP-P4: 消耗重试次数，从 QA 阶段重试（状态驱动，阶段内重试）
-        this.incrementTaskReopenCount(taskId, `${phase} 阶段失败，从 QA 阶段重试`);
-        await this.ensureTransition(taskId, 'wait_qa', `${phase} 阶段失败，从 QA 阶段重试`);
-        // 设置 resumeAction 和角色感知恢复
-        await this.setTaskResumeAction(taskId, 'retry', 'qa');
-        await this.assignTaskRole(taskId, 'qa_tester');
-        // 记录阶段历史
-        this.appendPhaseHistory(taskId, { phase: 'qa_verification', role: 'qa_tester', verdict: 'NOPASS', timestamp: new Date().toISOString(), analysis: `${phase} 阶段失败，retry from qa`, resumeAction: 'retry' });
-        this.incrementPhaseRetryCount(taskId, 'qa', state);
-        state.retryCounter.set(taskId, (state.retryCounter.get(taskId) || 0) + 1);
-        // CP-P4: 移除 state.taskQueue.push(taskId)，重试在阶段内完成
-
-        addTimeline('retry', `任务将从 QA 阶段重试 (第 ${qaRetryCount + 1}/${qaPhaseLimit} 次)`, { action, phase });
-        console.log(`⚠️  任务将从 QA 阶段重试 (第 ${qaRetryCount + 1}/${qaPhaseLimit} 次)`);
-        this.statusReporter.recordTaskRetrying(taskId, qaRetryCount + 1, qaPhaseLimit, 'qa', `${phase} 阶段失败，从 QA 阶段重试`);
-        record.finalStatus = 'wait_qa';
-        record.retryCount = qaRetryCount + 1;
-        return record;
-      }
-
-      case 'reevaluate': {
-        const reevalCount = state.reevaluateCounter?.get(taskId) || 0;
-        if (reevalCount >= MAX_REEVALUATE_ATTEMPTS) {
-          // 重新评估次数已达上限，回退到 redevelop
-          console.log(`⚠️  重新评估次数已达上限 (${MAX_REEVALUATE_ATTEMPTS})，转为从开发阶段重试`);
-          return this.handleVerdictBasedTransition(taskId, record, state, addTimeline, phase, 'redevelop');
-        }
-
-        // CP-P4: 不消耗重试次数，使用独立的 reevaluateCounter（状态驱动，阶段内重试）
-        await this.ensureTransition(taskId, 'wait_evaluation', `评估不明确，重新评估 (${reevalCount + 1}/${MAX_REEVALUATE_ATTEMPTS})`);
-        // 设置 resumeAction 和角色感知恢复
-        await this.setTaskResumeAction(taskId, 'retry', 'evaluation');
-        await this.assignTaskRole(taskId, 'architect');
-        // 记录阶段历史
-        this.appendPhaseHistory(taskId, { phase: 'evaluation', role: 'architect', verdict: 'NOPASS', timestamp: new Date().toISOString(), analysis: `评估不明确，重新评估 (${reevalCount + 1}/${MAX_REEVALUATE_ATTEMPTS})`, resumeAction: 'retry' });
-        state.reevaluateCounter.set(taskId, reevalCount + 1);
-        // CP-P4: 移除 state.taskQueue.push(taskId)，重试在阶段内完成
-
-        addTimeline('retry', `任务将重新评估 (${reevalCount + 1}/${MAX_REEVALUATE_ATTEMPTS})`, { action, reevalCount: reevalCount + 1 });
-        console.log(`🔄  任务将重新评估 (${reevalCount + 1}/${MAX_REEVALUATE_ATTEMPTS})`);
-        this.statusReporter.recordTaskRetrying(taskId, reevalCount + 1, MAX_REEVALUATE_ATTEMPTS, 'evaluation', `评估不明确，重新评估`);
-        record.finalStatus = 'wait_evaluation';
+        // P5: 返回记录，由 executeTask 的阶段循环处理重试
         return record;
       }
 
@@ -1491,7 +1403,8 @@ export class AssemblyLine {
       }
 
       default: {
-        // 未知 action，安全回退到 redevelop
+        // P5: 未知 action，安全回退到 redevelop（简化后的唯一重试路径）
+        console.log(`⚠️  未知的 verdict action: ${action}，回退到 redevelop`);
         return this.handleVerdictBasedTransition(taskId, record, state, addTimeline, phase, 'redevelop');
       }
     }
@@ -1996,37 +1909,6 @@ export class AssemblyLine {
       partialProgress: Object.keys(partialProgress).length > 0 ? partialProgress : existing?.partialProgress,
       upstreamFailureInfo: existing?.upstreamFailureInfo, // preserve upstream info if present
     });
-  }
-
-  /**
-   * 分类失败严重程度：minor（小问题）或 major（大问题）
-   *
-   * 判定标准：
-   * - code_review minor: 仅 1-2 个质量问题和 0 个失败检查点，且原因为代码风格/命名等
-   * - qa minor: 仅 1 个测试失败或 1 个失败检查点
-   * - 其余均为 major
-   */
-  private classifyFailureSeverity(
-    phase: 'code_review' | 'qa',
-    record: TaskExecutionRecord,
-  ): 'minor' | 'major' {
-    if (phase === 'code_review') {
-      const verdict = record.codeReviewVerdict;
-      if (!verdict) return 'major';
-      const hasFewIssues = verdict.codeQualityIssues.length <= 2;
-      const noFailedCheckpoints = verdict.failedCheckpoints.length === 0;
-      const reason = verdict.reason || '';
-      const isMinorContent = /(?:命名|格式|注释|import|类型|风格|naming|format|comment|style|lint|typo|typo|拼写|缩进|indent)/i.test(reason);
-      return (hasFewIssues && noFailedCheckpoints && isMinorContent) ? 'minor' : 'major';
-    }
-    if (phase === 'qa') {
-      const verdict = record.qaVerdict;
-      if (!verdict) return 'major';
-      const hasFewFailures = verdict.testFailures.length <= 1;
-      const hasFewCheckpoints = verdict.failedCheckpoints.length <= 1;
-      return (hasFewFailures && hasFewCheckpoints) ? 'minor' : 'major';
-    }
-    return 'major';
   }
 
   /**

@@ -107,15 +107,17 @@ export interface DevReport {
 export type ReviewResult = 'PASS' | 'NOPASS';
 
 /**
- * Action types recommended by evaluator
+ * Action types recommended by evaluator (P5: 简化后的 verdict action)
  * Output by architect role evaluator, drives state transition
+ *
+ * P5 变更：移除 minor_fix, retest, reevaluate 复杂分支
+ * - resolve: 评估通过，标记为 resolved
+ * - redevelop: 评估未通过，从开发阶段重试（消耗重试次数）
+ * - escalate_human: 需要人工介入
  */
 export type VerdictAction =
   | 'resolve'         // Pass, mark as resolved
   | 'redevelop'       // Retry from development phase (consumes retry count)
-  | 'minor_fix'       // Minor fix for review/QA (retry from development, consumes phase retry)
-  | 'retest'          // Retry from QA phase (consumes retry count)
-  | 'reevaluate'      // Re-evaluate (no retry consumption, independent limit of 2)
   | 'escalate_human'; // Requires human intervention
 
 /**
@@ -125,9 +127,6 @@ export type VerdictAction =
 export const VALID_VERDICT_ACTIONS: VerdictAction[] = [
   'resolve',
   'redevelop',
-  'minor_fix',
-  'retest',
-  'reevaluate',
   'escalate_human',
 ];
 
