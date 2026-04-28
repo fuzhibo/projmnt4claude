@@ -547,19 +547,50 @@ export class GitCheck implements CheckItem {
           details.hasRemote = false;
         }
 
-        // 5. 检查本地分支是否落后于远程
+        // 5. 检查本地分支是否落后于远程（使用本地 rev-list，避免网络操作）
         try {
-          execSync('git fetch --dry-run', {
+          // 获取本地和远程分支的提交差异（无需网络）
+          const localCommits = execSync('git rev-list --count HEAD 2>/dev/null || echo "0"', {
             cwd: context.cwd,
             encoding: 'utf-8',
-            timeout: 10000,
-            stdio: 'pipe',
-          });
+            timeout: 3000,
+          }).trim();
+
+          // 检查是否有远程跟踪分支
+          const upstream = execSync('git rev-parse --abbrev-ref --symbolic-full-name @{upstream} 2>/dev/null || echo ""', {
+            cwd: context.cwd,
+            encoding: 'utf-8',
+            timeout: 3000,
+          }).trim();
+
+          details.hasUpstream = upstream.length > 0;
+          details.localCommits = parseInt(localCommits, 10) || 0;
+
+          if (upstream) {
+            // 只检查本地记录的远程分支差异，不进行网络获取
+            try {
+              const aheadBehind = execSync(`git rev-list --left-right --count ${upstream}...HEAD 2>/dev/null || echo "0\t0"`, {
+                cwd: context.cwd,
+                encoding: 'utf-8',
+                timeout: 3000,
+              }).trim();
+              const [behind, ahead] = aheadBehind.split('\t').map(n => parseInt(n, 10) || 0);
+              details.commitsBehind = behind;
+              details.commitsAhead = ahead;
+              details.behindRemote = behind > 0;
+
+              if (behind > 0) {
+                issues.push(`Local branch is ${behind} commit(s) behind remote`);
+              }
+            } catch {
+              details.behindRemote = false;
+            }
+          } else {
+            details.behindRemote = false;
+          }
+        } catch {
           details.behindRemote = false;
-        } catch (error) {
-          // git fetch 返回非零退出码表示有更新
-          details.behindRemote = true;
-          issues.push('Local branch may be behind remote');
+          details.hasUpstream = false;
         }
       }
     } catch (error) {
