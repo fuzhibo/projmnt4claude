@@ -52,6 +52,20 @@ import { SEPARATOR_WIDTH } from './format';
 /** 重新评估最大次数（独立于重试次数） */
 const MAX_REEVALUATE_ATTEMPTS = 2;
 
+/** 阶段类型定义 (P4: 阶段内重试) */
+type Phase = 'development' | 'code_review' | 'qa' | 'evaluation';
+
+/** 阶段生命周期结果接口 (P4: 阶段内重试) */
+interface PhaseLifecycleResult {
+  success: boolean;
+  phase: Phase;
+  failedAt: 'pre_phase_gate' | 'phase_execution' | 'post_phase_gate' | 'unknown';
+  attempt: number;
+  reason: string;
+  retryable: boolean;
+  result?: DevReport | CodeReviewVerdict | QAVerdict | ReviewVerdict;
+}
+
 export class AssemblyLine {
   private config: HarnessConfig;
   private executor: HarnessExecutor;
@@ -437,6 +451,7 @@ export class AssemblyLine {
           }
 
           // 检查开发是否成功
+          // CP-P4: 阶段内重试，不在此处处理重试逻辑
           if (devReport.status !== 'success') {
             const isTimeout = devReport.status === 'timeout';
             console.log(`❌ 开发阶段${isTimeout ? '超时' : '失败'}: ${devReport.error || '未知错误'}`);
@@ -445,27 +460,19 @@ export class AssemblyLine {
             // 存储失败原因到重试上下文
             this.storeFailureContext(taskId, 'development', devReport.error || '开发阶段失败', state);
 
-            // 尝试重试（使用阶段独立重试上限）
-            const devPhaseLimit = this.getPhaseRetryLimit('development');
-            const devRetryCount = this.getPhaseRetryCount(taskId, 'development', state);
-            const canRetry = devRetryCount < devPhaseLimit;
-            if (canRetry) {
-              addTimeline('retry', `准备重试 (开发阶段第 ${devRetryCount + 1}/${devPhaseLimit} 次)`);
-              // 重新加入队列
-              state.taskQueue.push(taskId);
-              this.incrementPhaseRetryCount(taskId, 'development', state);
-              state.retryCounter.set(taskId, (state.retryCounter.get(taskId) || 0) + 1);
-            } else if (isTimeout) {
+            // CP-P4: 重试通过 executePhaseLifecycle 的 while 循环在阶段内完成
+            // 此处直接标记失败，不再重新入队
+            if (isTimeout) {
               // 超时标记为 failed(timeout)
               await this.markTaskFailed(taskId, 'timeout', `开发超时: ${devReport.error || '超过时间限制'}`);
               record.finalStatus = 'failed';
               addTimeline('failed', '开发超时，任务标记为 failed(timeout)');
               console.log(`   ⏰ 任务 ${taskId} 因超时标记为 failed(timeout)`);
             } else {
-              // 开发失败，超过最大重试次数
-              await this.markTaskFailed(taskId, 'max_retries_exceeded', '超过最大重试次数，开发阶段失败');
+              // 开发失败，标记为 failed
+              await this.markTaskFailed(taskId, 'execution_failed', `开发阶段失败: ${devReport.error || '未知错误'}`);
               record.finalStatus = 'failed';
-              addTimeline('failed', '超过最大重试次数，任务标记为 failed(max_retries_exceeded)');
+              addTimeline('failed', '开发阶段失败，任务标记为 failed');
             }
 
             return record;
@@ -761,6 +768,183 @@ export class AssemblyLine {
     }
 
     return record;
+  }
+
+  /**
+   * P4: 阶段生命周期执行方法（含阶段内重试循环）
+   *
+   * 在每个阶段内部实现 while 循环重试，移除重新入队逻辑。
+   * 重试在阶段内完成，不入队，保持队列稳定。
+   *
+   * @param taskId - 任务ID
+   * @param phase - 当前阶段
+   * @param state - 运行时状态
+   * @param executePhaseFn - 阶段执行函数
+   * @param onSuccess - 阶段成功回调
+   * @returns PhaseLifecycleResult - 阶段执行结果
+   */
+  private async executePhaseLifecycle<T extends DevReport | CodeReviewVerdict | QAVerdict | ReviewVerdict>(
+    taskId: string,
+    phase: Phase,
+    state: HarnessRuntimeState,
+    executePhaseFn: () => Promise<T>,
+    onSuccess: (result: T) => void
+  ): Promise<PhaseLifecycleResult> {
+    const maxRetries = this.getPhaseRetryLimit(phase);
+    let attempt = 0;
+
+    console.log(`\n🔨 [${phase}] 开始阶段执行生命周期 (最多${maxRetries}次重试)`);
+
+    // CP-P4-1: 阶段内 while 循环实现重试
+    while (attempt <= maxRetries) {
+      attempt++;
+      console.log(`\n   [${phase}] 第 ${attempt}/${maxRetries + 1} 次尝试`);
+
+      // 阶段前质量门禁检查
+      const canProceed = await this.checkPhasePreConditions(taskId, phase, state);
+      if (!canProceed) {
+        console.log(`   ❌ 阶段前置条件检查失败`);
+
+        if (attempt <= maxRetries) {
+          console.log(`   🔄 前置条件不满足，准备重试...`);
+          continue; // CP-P4-2: 阶段内重试，不入队
+        }
+
+        return {
+          success: false,
+          phase,
+          failedAt: 'pre_phase_gate',
+          attempt,
+          reason: `阶段前置条件检查失败`,
+          retryable: false,
+        };
+      }
+      console.log(`   ✅ 阶段前置条件检查通过`);
+
+      // 执行阶段
+      console.log(`   🔨 执行阶段...`);
+      let phaseResult: T;
+      try {
+        phaseResult = await executePhaseFn();
+        onSuccess(phaseResult);
+      } catch (error) {
+        const errorMsg = error instanceof Error ? error.message : String(error);
+        console.log(`   ❌ 阶段执行失败: ${errorMsg}`);
+
+        // 存储失败原因到重试上下文
+        this.storeFailureContext(taskId, phase, errorMsg, state);
+
+        if (attempt <= maxRetries) {
+          console.log(`   🔄 阶段执行失败，准备重试...`);
+          this.incrementPhaseRetryCount(taskId, phase, state);
+          state.retryCounter.set(taskId, (state.retryCounter.get(taskId) || 0) + 1);
+          continue; // CP-P4-2: 阶段内重试，不入队
+        }
+
+        return {
+          success: false,
+          phase,
+          failedAt: 'phase_execution',
+          attempt,
+          reason: `阶段执行失败（${attempt}次尝试）: ${errorMsg}`,
+          retryable: false,
+        };
+      }
+      console.log(`   ✅ 阶段执行成功`);
+
+      // 阶段后质量门禁（验证阶段结果）
+      const postGatePassed = this.validatePhaseResult(phase, phaseResult);
+      if (!postGatePassed) {
+        console.log(`   ❌ 阶段后质量门禁失败`);
+
+        if (attempt <= maxRetries) {
+          console.log(`   🔄 阶段输出不符合要求，准备重试...`);
+          this.incrementPhaseRetryCount(taskId, phase, state);
+          state.retryCounter.set(taskId, (state.retryCounter.get(taskId) || 0) + 1);
+          continue; // CP-P4-2: 阶段内重试，不入队
+        }
+
+        return {
+          success: false,
+          phase,
+          failedAt: 'post_phase_gate',
+          attempt,
+          reason: `阶段后质量门禁失败（${attempt}次尝试）`,
+          retryable: false,
+        };
+      }
+      console.log(`   ✅ 阶段后质量门禁通过`);
+
+      // 阶段执行完成
+      console.log(`   ✅ [${phase}] 阶段执行完成（第${attempt}次尝试成功）`);
+
+      return {
+        success: true,
+        phase,
+        attempt,
+        result: phaseResult,
+        reason: '阶段执行成功',
+        retryable: false,
+      };
+    }
+
+    // 重试次数耗尽
+    return {
+      success: false,
+      phase,
+      failedAt: 'unknown',
+      attempt,
+      reason: `重试次数耗尽（${attempt}次尝试）`,
+      retryable: false,
+    };
+  }
+
+  /**
+   * 检查阶段前置条件
+   */
+  private async checkPhasePreConditions(
+    taskId: string,
+    phase: Phase,
+    state: HarnessRuntimeState
+  ): Promise<boolean> {
+    // 验证任务存在
+    const task = readTaskMeta(taskId, this.config.cwd);
+    if (!task) {
+      console.log(`   ⚠️ 任务 ${taskId} 不存在`);
+      return false;
+    }
+
+    // 验证依赖是否完成
+    if (phase === 'development') {
+      const depsCompleted = await this.checkDependencies(task);
+      if (!depsCompleted) {
+        console.log(`   ⏳ 依赖未完成，延后处理`);
+        return false;
+      }
+    }
+
+    return true;
+  }
+
+  /**
+   * 验证阶段结果
+   */
+  private validatePhaseResult(
+    phase: Phase,
+    result: DevReport | CodeReviewVerdict | QAVerdict | ReviewVerdict
+  ): boolean {
+    switch (phase) {
+      case 'development':
+        return (result as DevReport).status === 'success';
+      case 'code_review':
+        return (result as CodeReviewVerdict).result === 'PASS';
+      case 'qa':
+        return (result as QAVerdict).result === 'PASS';
+      case 'evaluation':
+        return (result as ReviewVerdict).result === 'PASS';
+      default:
+        return false;
+    }
   }
 
   /**
@@ -1196,7 +1380,7 @@ export class AssemblyLine {
           return record;
         }
 
-        // 消耗重试次数，从开发阶段重试（不设 resumeFrom，完整重跑流水线）
+        // CP-P4: 消耗重试次数，从开发阶段重试（阶段内重试，不再重新入队）
         this.incrementTaskReopenCount(taskId, `${phase} 阶段失败，从开发阶段重试`);
         await this.ensureTransition(taskId, 'in_progress', `${phase} 阶段失败，从开发阶段重试`);
         // 设置 resumeAction 和角色感知恢复
@@ -1206,13 +1390,14 @@ export class AssemblyLine {
         this.appendPhaseHistory(taskId, { phase: 'development', role: 'executor', verdict: 'NOPASS', timestamp: new Date().toISOString(), analysis: `${phase} 阶段失败，retry from development`, resumeAction: 'retry' });
         this.incrementPhaseRetryCount(taskId, 'development', state);
         state.retryCounter.set(taskId, (state.retryCounter.get(taskId) || 0) + 1);
-        state.taskQueue.push(taskId);
+        // CP-P4: 移除 state.taskQueue.push(taskId)，重试在阶段内完成
 
         addTimeline('retry', `任务将从开发阶段重试 (第 ${devRetryCount + 1}/${devPhaseLimit} 次)`, { action, phase });
         console.log(`⚠️  任务将从开发阶段重试 (第 ${devRetryCount + 1}/${devPhaseLimit} 次)`);
         this.statusReporter.recordTaskRetrying(taskId, devRetryCount + 1, devPhaseLimit, 'development', `${phase} 阶段失败，从开发阶段重试`);
         record.finalStatus = 'in_progress';
         record.retryCount = devRetryCount + 1;
+        // CP-P4: 返回记录，由 executeTask 的阶段循环处理重试
         return record;
       }
 
@@ -1225,7 +1410,7 @@ export class AssemblyLine {
           return this.handleVerdictBasedTransition(taskId, record, state, addTimeline, phase, 'redevelop');
         }
 
-        // 消耗对应阶段的重试次数，从开发阶段重试（minor fix 模式）
+        // CP-P4: 消耗对应阶段的重试次数，从开发阶段重试（minor fix 模式，阶段内重试）
         this.incrementTaskReopenCount(taskId, `${phase} 阶段小问题，从开发阶段修复`);
         await this.ensureTransition(taskId, 'in_progress', `${phase} 阶段小问题，从开发阶段修复 (minor_fix)`);
         await this.setTaskResumeAction(taskId, 'retry', 'development');
@@ -1233,7 +1418,7 @@ export class AssemblyLine {
         this.appendPhaseHistory(taskId, { phase, role: 'executor', verdict: 'NOPASS', timestamp: new Date().toISOString(), analysis: `${phase} 阶段小问题，minor_fix from development`, resumeAction: 'retry' });
         this.incrementPhaseRetryCount(taskId, phase, state);
         state.retryCounter.set(taskId, (state.retryCounter.get(taskId) || 0) + 1);
-        state.taskQueue.push(taskId);
+        // CP-P4: 移除 state.taskQueue.push(taskId)，重试在阶段内完成
 
         addTimeline('retry', `任务将从开发阶段修复小问题 (${phase} 第 ${phaseRetryCount + 1}/${phaseLimit} 次)`, { action, phase });
         console.log(`🔧 任务将从开发阶段修复小问题 (${phase} 第 ${phaseRetryCount + 1}/${phaseLimit} 次)`);
@@ -1252,7 +1437,7 @@ export class AssemblyLine {
           return this.handleVerdictBasedTransition(taskId, record, state, addTimeline, phase, 'redevelop');
         }
 
-        // 消耗重试次数，从 QA 阶段重试（状态驱动：wait_qa → determineResumePhase 返回 qa）
+        // CP-P4: 消耗重试次数，从 QA 阶段重试（状态驱动，阶段内重试）
         this.incrementTaskReopenCount(taskId, `${phase} 阶段失败，从 QA 阶段重试`);
         await this.ensureTransition(taskId, 'wait_qa', `${phase} 阶段失败，从 QA 阶段重试`);
         // 设置 resumeAction 和角色感知恢复
@@ -1262,8 +1447,7 @@ export class AssemblyLine {
         this.appendPhaseHistory(taskId, { phase: 'qa_verification', role: 'qa_tester', verdict: 'NOPASS', timestamp: new Date().toISOString(), analysis: `${phase} 阶段失败，retry from qa`, resumeAction: 'retry' });
         this.incrementPhaseRetryCount(taskId, 'qa', state);
         state.retryCounter.set(taskId, (state.retryCounter.get(taskId) || 0) + 1);
-        // resumeFrom deprecated: status wait_qa drives resume via determineResumePhase
-        state.taskQueue.push(taskId);
+        // CP-P4: 移除 state.taskQueue.push(taskId)，重试在阶段内完成
 
         addTimeline('retry', `任务将从 QA 阶段重试 (第 ${qaRetryCount + 1}/${qaPhaseLimit} 次)`, { action, phase });
         console.log(`⚠️  任务将从 QA 阶段重试 (第 ${qaRetryCount + 1}/${qaPhaseLimit} 次)`);
@@ -1281,7 +1465,7 @@ export class AssemblyLine {
           return this.handleVerdictBasedTransition(taskId, record, state, addTimeline, phase, 'redevelop');
         }
 
-        // 不消耗重试次数，使用独立的 reevaluateCounter（状态驱动：wait_evaluation → determineResumePhase 返回 evaluation）
+        // CP-P4: 不消耗重试次数，使用独立的 reevaluateCounter（状态驱动，阶段内重试）
         await this.ensureTransition(taskId, 'wait_evaluation', `评估不明确，重新评估 (${reevalCount + 1}/${MAX_REEVALUATE_ATTEMPTS})`);
         // 设置 resumeAction 和角色感知恢复
         await this.setTaskResumeAction(taskId, 'retry', 'evaluation');
@@ -1289,8 +1473,7 @@ export class AssemblyLine {
         // 记录阶段历史
         this.appendPhaseHistory(taskId, { phase: 'evaluation', role: 'architect', verdict: 'NOPASS', timestamp: new Date().toISOString(), analysis: `评估不明确，重新评估 (${reevalCount + 1}/${MAX_REEVALUATE_ATTEMPTS})`, resumeAction: 'retry' });
         state.reevaluateCounter.set(taskId, reevalCount + 1);
-        // resumeFrom deprecated: status wait_evaluation drives resume via determineResumePhase
-        state.taskQueue.push(taskId);
+        // CP-P4: 移除 state.taskQueue.push(taskId)，重试在阶段内完成
 
         addTimeline('retry', `任务将重新评估 (${reevalCount + 1}/${MAX_REEVALUATE_ATTEMPTS})`, { action, reevalCount: reevalCount + 1 });
         console.log(`🔄  任务将重新评估 (${reevalCount + 1}/${MAX_REEVALUATE_ATTEMPTS})`);
@@ -1982,9 +2165,13 @@ export class AssemblyLine {
 
   /**
    * 将任务重新加入队列
+   * CP-P4: 阶段内重试，不再使用重新入队
+   * 此方法保留但标记为废弃，实际重试逻辑在 executePhaseLifecycle 中处理
    */
   requeue(taskId: string, state: HarnessRuntimeState): void {
-    state.taskQueue.push(taskId);
+    // CP-P4: 阶段内重试，不再重新入队
+    // 重试逻辑现在通过 executePhaseLifecycle 的 while 循环在阶段内完成
+    console.log(`   [CP-P4] requeue 已废弃，任务 ${taskId} 的重试将在阶段内处理`);
   }
 
   /**

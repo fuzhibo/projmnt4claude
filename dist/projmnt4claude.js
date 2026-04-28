@@ -39117,23 +39117,15 @@ ${"━".repeat(SEPARATOR_WIDTH)}`);
             console.log(`❌ 开发阶段${isTimeout ? "超时" : "失败"}: ${devReport.error || "未知错误"}`);
             this.statusReporter.failPhase("development", new Error(devReport.error || "开发阶段失败"), taskId);
             this.storeFailureContext(taskId, "development", devReport.error || "开发阶段失败", state);
-            const devPhaseLimit = this.getPhaseRetryLimit("development");
-            const devRetryCount = this.getPhaseRetryCount(taskId, "development", state);
-            const canRetry = devRetryCount < devPhaseLimit;
-            if (canRetry) {
-              addTimeline("retry", `准备重试 (开发阶段第 ${devRetryCount + 1}/${devPhaseLimit} 次)`);
-              state.taskQueue.push(taskId);
-              this.incrementPhaseRetryCount(taskId, "development", state);
-              state.retryCounter.set(taskId, (state.retryCounter.get(taskId) || 0) + 1);
-            } else if (isTimeout) {
+            if (isTimeout) {
               await this.markTaskFailed(taskId, "timeout", `开发超时: ${devReport.error || "超过时间限制"}`);
               record.finalStatus = "failed";
               addTimeline("failed", "开发超时，任务标记为 failed(timeout)");
               console.log(`   ⏰ 任务 ${taskId} 因超时标记为 failed(timeout)`);
             } else {
-              await this.markTaskFailed(taskId, "max_retries_exceeded", "超过最大重试次数，开发阶段失败");
+              await this.markTaskFailed(taskId, "execution_failed", `开发阶段失败: ${devReport.error || "未知错误"}`);
               record.finalStatus = "failed";
-              addTimeline("failed", "超过最大重试次数，任务标记为 failed(max_retries_exceeded)");
+              addTimeline("failed", "开发阶段失败，任务标记为 failed");
             }
             return record;
           }
@@ -39367,6 +39359,124 @@ ${"━".repeat(SEPARATOR_WIDTH)}`);
       currentPhaseIndex++;
     }
     return record;
+  }
+  async executePhaseLifecycle(taskId, phase, state, executePhaseFn, onSuccess) {
+    const maxRetries = this.getPhaseRetryLimit(phase);
+    let attempt = 0;
+    console.log(`
+\uD83D\uDD28 [${phase}] 开始阶段执行生命周期 (最多${maxRetries}次重试)`);
+    while (attempt <= maxRetries) {
+      attempt++;
+      console.log(`
+   [${phase}] 第 ${attempt}/${maxRetries + 1} 次尝试`);
+      const canProceed = await this.checkPhasePreConditions(taskId, phase, state);
+      if (!canProceed) {
+        console.log(`   ❌ 阶段前置条件检查失败`);
+        if (attempt <= maxRetries) {
+          console.log(`   \uD83D\uDD04 前置条件不满足，准备重试...`);
+          continue;
+        }
+        return {
+          success: false,
+          phase,
+          failedAt: "pre_phase_gate",
+          attempt,
+          reason: `阶段前置条件检查失败`,
+          retryable: false
+        };
+      }
+      console.log(`   ✅ 阶段前置条件检查通过`);
+      console.log(`   \uD83D\uDD28 执行阶段...`);
+      let phaseResult;
+      try {
+        phaseResult = await executePhaseFn();
+        onSuccess(phaseResult);
+      } catch (error) {
+        const errorMsg = error instanceof Error ? error.message : String(error);
+        console.log(`   ❌ 阶段执行失败: ${errorMsg}`);
+        this.storeFailureContext(taskId, phase, errorMsg, state);
+        if (attempt <= maxRetries) {
+          console.log(`   \uD83D\uDD04 阶段执行失败，准备重试...`);
+          this.incrementPhaseRetryCount(taskId, phase, state);
+          state.retryCounter.set(taskId, (state.retryCounter.get(taskId) || 0) + 1);
+          continue;
+        }
+        return {
+          success: false,
+          phase,
+          failedAt: "phase_execution",
+          attempt,
+          reason: `阶段执行失败（${attempt}次尝试）: ${errorMsg}`,
+          retryable: false
+        };
+      }
+      console.log(`   ✅ 阶段执行成功`);
+      const postGatePassed = this.validatePhaseResult(phase, phaseResult);
+      if (!postGatePassed) {
+        console.log(`   ❌ 阶段后质量门禁失败`);
+        if (attempt <= maxRetries) {
+          console.log(`   \uD83D\uDD04 阶段输出不符合要求，准备重试...`);
+          this.incrementPhaseRetryCount(taskId, phase, state);
+          state.retryCounter.set(taskId, (state.retryCounter.get(taskId) || 0) + 1);
+          continue;
+        }
+        return {
+          success: false,
+          phase,
+          failedAt: "post_phase_gate",
+          attempt,
+          reason: `阶段后质量门禁失败（${attempt}次尝试）`,
+          retryable: false
+        };
+      }
+      console.log(`   ✅ 阶段后质量门禁通过`);
+      console.log(`   ✅ [${phase}] 阶段执行完成（第${attempt}次尝试成功）`);
+      return {
+        success: true,
+        phase,
+        attempt,
+        result: phaseResult,
+        reason: "阶段执行成功",
+        retryable: false
+      };
+    }
+    return {
+      success: false,
+      phase,
+      failedAt: "unknown",
+      attempt,
+      reason: `重试次数耗尽（${attempt}次尝试）`,
+      retryable: false
+    };
+  }
+  async checkPhasePreConditions(taskId, phase, state) {
+    const task = readTaskMeta(taskId, this.config.cwd);
+    if (!task) {
+      console.log(`   ⚠️ 任务 ${taskId} 不存在`);
+      return false;
+    }
+    if (phase === "development") {
+      const depsCompleted = await this.checkDependencies(task);
+      if (!depsCompleted) {
+        console.log(`   ⏳ 依赖未完成，延后处理`);
+        return false;
+      }
+    }
+    return true;
+  }
+  validatePhaseResult(phase, result) {
+    switch (phase) {
+      case "development":
+        return result.status === "success";
+      case "code_review":
+        return result.result === "PASS";
+      case "qa":
+        return result.result === "PASS";
+      case "evaluation":
+        return result.result === "PASS";
+      default:
+        return false;
+    }
   }
   savePhaseCheckpoint(taskId, completedPhase, state) {
     state.taskPhaseCheckpoints.set(taskId, {
@@ -39639,7 +39749,6 @@ ${"━".repeat(SEPARATOR_WIDTH)}`);
         this.appendPhaseHistory(taskId, { phase: "development", role: "executor", verdict: "NOPASS", timestamp: new Date().toISOString(), analysis: `${phase} 阶段失败，retry from development`, resumeAction: "retry" });
         this.incrementPhaseRetryCount(taskId, "development", state);
         state.retryCounter.set(taskId, (state.retryCounter.get(taskId) || 0) + 1);
-        state.taskQueue.push(taskId);
         addTimeline("retry", `任务将从开发阶段重试 (第 ${devRetryCount + 1}/${devPhaseLimit} 次)`, { action, phase });
         console.log(`⚠️  任务将从开发阶段重试 (第 ${devRetryCount + 1}/${devPhaseLimit} 次)`);
         this.statusReporter.recordTaskRetrying(taskId, devRetryCount + 1, devPhaseLimit, "development", `${phase} 阶段失败，从开发阶段重试`);
@@ -39661,7 +39770,6 @@ ${"━".repeat(SEPARATOR_WIDTH)}`);
         this.appendPhaseHistory(taskId, { phase, role: "executor", verdict: "NOPASS", timestamp: new Date().toISOString(), analysis: `${phase} 阶段小问题，minor_fix from development`, resumeAction: "retry" });
         this.incrementPhaseRetryCount(taskId, phase, state);
         state.retryCounter.set(taskId, (state.retryCounter.get(taskId) || 0) + 1);
-        state.taskQueue.push(taskId);
         addTimeline("retry", `任务将从开发阶段修复小问题 (${phase} 第 ${phaseRetryCount + 1}/${phaseLimit} 次)`, { action, phase });
         console.log(`\uD83D\uDD27 任务将从开发阶段修复小问题 (${phase} 第 ${phaseRetryCount + 1}/${phaseLimit} 次)`);
         this.statusReporter.recordTaskRetrying(taskId, phaseRetryCount + 1, phaseLimit, phase, `${phase} 阶段小问题，minor_fix`);
@@ -39683,7 +39791,6 @@ ${"━".repeat(SEPARATOR_WIDTH)}`);
         this.appendPhaseHistory(taskId, { phase: "qa_verification", role: "qa_tester", verdict: "NOPASS", timestamp: new Date().toISOString(), analysis: `${phase} 阶段失败，retry from qa`, resumeAction: "retry" });
         this.incrementPhaseRetryCount(taskId, "qa", state);
         state.retryCounter.set(taskId, (state.retryCounter.get(taskId) || 0) + 1);
-        state.taskQueue.push(taskId);
         addTimeline("retry", `任务将从 QA 阶段重试 (第 ${qaRetryCount + 1}/${qaPhaseLimit} 次)`, { action, phase });
         console.log(`⚠️  任务将从 QA 阶段重试 (第 ${qaRetryCount + 1}/${qaPhaseLimit} 次)`);
         this.statusReporter.recordTaskRetrying(taskId, qaRetryCount + 1, qaPhaseLimit, "qa", `${phase} 阶段失败，从 QA 阶段重试`);
@@ -39702,7 +39809,6 @@ ${"━".repeat(SEPARATOR_WIDTH)}`);
         await this.assignTaskRole(taskId, "architect");
         this.appendPhaseHistory(taskId, { phase: "evaluation", role: "architect", verdict: "NOPASS", timestamp: new Date().toISOString(), analysis: `评估不明确，重新评估 (${reevalCount + 1}/${MAX_REEVALUATE_ATTEMPTS})`, resumeAction: "retry" });
         state.reevaluateCounter.set(taskId, reevalCount + 1);
-        state.taskQueue.push(taskId);
         addTimeline("retry", `任务将重新评估 (${reevalCount + 1}/${MAX_REEVALUATE_ATTEMPTS})`, { action, reevalCount: reevalCount + 1 });
         console.log(`\uD83D\uDD04  任务将重新评估 (${reevalCount + 1}/${MAX_REEVALUATE_ATTEMPTS})`);
         this.statusReporter.recordTaskRetrying(taskId, reevalCount + 1, MAX_REEVALUATE_ATTEMPTS, "evaluation", `评估不明确，重新评估`);
@@ -40125,7 +40231,7 @@ ${"━".repeat(SEPARATOR_WIDTH)}`);
     this.statusReporter.forceFailStatus("failed", message);
   }
   requeue(taskId, state) {
-    state.taskQueue.push(taskId);
+    console.log(`   [CP-P4] requeue 已废弃，任务 ${taskId} 的重试将在阶段内处理`);
   }
   outputBatchSummary(state, batchIndex) {
     const boundaries = state.batchBoundaries;
