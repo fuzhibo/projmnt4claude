@@ -482,21 +482,6 @@ describe('handleVerdictBasedTransition status transitions', () => {
     expect(result.finalStatus).toBe('in_progress');
   });
 
-  // Boundary: redevelop requeues task and increments counters
-  test('boundary: redevelop requeues task and increments counters', async () => {
-    const task = createMockTask({ id: taskId, status: 'wait_qa' });
-    const record = createDefaultExecutionRecord(task);
-    const state = createDefaultRuntimeState(createTestConfig(tmpDir));
-
-    const addTimeline = () => {};
-    await (assemblyLine as any).handleVerdictBasedTransition(
-      taskId, record, state, addTimeline, 'qa', 'redevelop',
-    );
-
-    expect(state.taskQueue).toContain(taskId);
-    expect(state.retryCounter.get(taskId)).toBe(1);
-    expect(state.phaseRetryCounters.get(`${taskId}:development`)).toBe(1);
-  });
 
   // Boundary: reevaluate increments reevaluateCounter but not retryCounter
   test('boundary: reevaluate increments reevaluateCounter not retryCounter', async () => {
@@ -517,7 +502,8 @@ describe('handleVerdictBasedTransition status transitions', () => {
     expect(state.reevaluateCounter.get(taskId)).toBe(1);
     // reevaluate does NOT consume retry counter
     expect(state.retryCounter.get(taskId) || 0).toBe(0);
-    expect(state.taskQueue).toContain(taskId);
+    // CP-P4: 阶段内重试，不再重新入队
+    expect(state.taskQueue).not.toContain(taskId);
   });
 });
 

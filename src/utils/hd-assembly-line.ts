@@ -2164,17 +2164,6 @@ export class AssemblyLine {
   }
 
   /**
-   * 将任务重新加入队列
-   * CP-P4: 阶段内重试，不再使用重新入队
-   * 此方法保留但标记为废弃，实际重试逻辑在 executePhaseLifecycle 中处理
-   */
-  requeue(taskId: string, state: HarnessRuntimeState): void {
-    // CP-P4: 阶段内重试，不再重新入队
-    // 重试逻辑现在通过 executePhaseLifecycle 的 while 循环在阶段内完成
-    console.log(`   [CP-P4] requeue 已废弃，任务 ${taskId} 的重试将在阶段内处理`);
-  }
-
-  /**
    * 输出批次级摘要
    *
    * 当完成一个批次的所有任务后，统计该批次的通过/失败/跳过情况

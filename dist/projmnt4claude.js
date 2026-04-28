@@ -40230,9 +40230,6 @@ ${"━".repeat(SEPARATOR_WIDTH)}`);
     const message = error instanceof Error ? error.message : String(error);
     this.statusReporter.forceFailStatus("failed", message);
   }
-  requeue(taskId, state) {
-    console.log(`   [CP-P4] requeue 已废弃，任务 ${taskId} 的重试将在阶段内处理`);
-  }
   outputBatchSummary(state, batchIndex) {
     const boundaries = state.batchBoundaries;
     const labels = state.batchLabels;
