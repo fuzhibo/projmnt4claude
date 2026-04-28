@@ -46,3 +46,28 @@ export {
   DEFAULT_QA_PHASE_RULES,
   DEFAULT_EVAL_PHASE_RULES,
 } from './pre-phase-gate.js';
+
+// 阶段后门禁类型
+export type {
+  ExecutionPhase as PostPhaseExecutionPhase,
+  PostPhaseGateConfig,
+  PostPhaseGateConfigEntry,
+  PostPhaseGateRule,
+  PostPhaseGateRuleType,
+  PostPhaseGateCheckResult,
+  PostPhaseGateResult,
+  PostPhaseGateContext,
+  PostPhaseGateReport,
+  PostPhaseGateDecision,
+  PostPhaseGateRuleHandler,
+  PhaseExitValidation,
+  PhaseDeliverable,
+} from './post-phase-gate.js';
+
+export {
+  createDefaultPostPhaseGateConfig,
+  DEFAULT_DEV_POST_PHASE_RULES,
+  DEFAULT_CR_POST_PHASE_RULES,
+  DEFAULT_QA_POST_PHASE_RULES,
+  DEFAULT_EVAL_POST_PHASE_RULES,
+} from './post-phase-gate.js';
