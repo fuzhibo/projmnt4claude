@@ -28,15 +28,15 @@ export {
   type GitWorkspaceCheckResult,
 } from './git-checker.js';
 
-// 分支检查器 - 由 prob8c 任务实现
-// export {
-//   checkBranchExists,
-//   checkBranchAssociation,
-//   checkBranchTracking,
-//   checkBranchSync,
-//   checkBranchSwitchable,
-//   type BranchCheckResult,
-// } from './branch-checker.js';
+// 导出分支检查器
+export {
+  checkBranchExists,
+  checkBranchAssociation,
+  checkBranchTracking,
+  checkBranchSync,
+  checkBranchSwitchable,
+  type BranchCheckResult,
+} from './branch-checker.js';
 
 // 导出依赖输出检查器
 export {
@@ -81,23 +81,39 @@ export class GitWorkspaceChecker implements Checker {
 /**
  * 分支状态检查器
  * CP-PDGC-CHECK-2: 分支状态检查
- * 由 prob8c 任务实现，暂时注释
+ * 根据规则ID路由到具体的分支检查函数
  */
-// export class BranchStatusChecker implements Checker {
-//   async check(
-//     rule: PreDevPhaseRule,
-//     context: PreDevPhaseCheckContext
-//   ): Promise<PreDevPhaseCheckItemResult> {
-//     // 根据规则ID选择具体检查
-//     const { checkBranchExists, checkBranchSync } = await import('./branch-checker.js');
-//
-//     if (rule.id === 'R-BR-001') {
-//       return checkBranchExists(rule, context);
-//     }
-//
-//     return checkBranchSync(rule, context);
-//   }
-// }
+export class BranchStatusChecker implements Checker {
+  async check(
+    rule: PreDevPhaseRule,
+    context: PreDevPhaseCheckContext
+  ): Promise<PreDevPhaseCheckItemResult> {
+    // 根据规则ID选择具体检查
+    const {
+      checkBranchExists,
+      checkBranchAssociation,
+      checkBranchTracking,
+      checkBranchSync,
+      checkBranchSwitchable,
+    } = await import('./branch-checker.js');
+
+    switch (rule.id) {
+      case 'R-BR-001':
+        return checkBranchExists(rule, context);
+      case 'R-BR-002':
+        return checkBranchAssociation(rule, context);
+      case 'R-BR-003':
+        return checkBranchTracking(rule, context);
+      case 'R-BR-004':
+        return checkBranchSync(rule, context);
+      case 'R-BR-005':
+        return checkBranchSwitchable(rule, context);
+      default:
+        // 默认使用分支存在性检查
+        return checkBranchExists(rule, context);
+    }
+  }
+}
 
 /**
  * 依赖输出检查器
