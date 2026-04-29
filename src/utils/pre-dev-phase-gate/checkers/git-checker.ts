@@ -255,6 +255,20 @@ export async function checkGitIgnore(
             ...missingPatterns.map(p => `  ${p}`),
           ]
         : undefined,
+      autoFix: missingPatterns.length > 0
+        ? {
+            description: '自动添加缺失的 .gitignore 配置',
+            fix: async () => {
+              const content = missingPatterns.map(p => p).join('\n') + '\n';
+              if (fs.existsSync(gitignorePath)) {
+                fs.appendFileSync(gitignorePath, '\n' + content);
+              } else {
+                fs.writeFileSync(gitignorePath, content);
+              }
+              return { success: true, message: '已添加 .gitignore 配置' };
+            },
+          }
+        : undefined,
       duration: Date.now() - startTime,
       timestamp: new Date().toISOString(),
     };

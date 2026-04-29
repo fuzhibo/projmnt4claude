@@ -38,6 +38,23 @@ export {
   type BranchCheckResult,
 } from './branch-checker.js';
 
+// 导出依赖输出检查器
+export {
+  checkDependencyOutputAvailable,
+  checkDependencyInterface,
+  checkCircularDependency,
+  type DependencyCheckResult,
+} from './dependency-checker.js';
+
+// 导出资源配置检查器
+export {
+  checkDevBranchConfig,
+  checkDevDirectoryConfig,
+  checkEnvConfig,
+  checkDiskSpace,
+  type ResourceCheckResult,
+} from './resource-checker.js';
+
 /**
  * 检查器接口
  */
@@ -91,24 +108,24 @@ export class DependencyOutputChecker implements Checker {
     rule: PreDevPhaseRule,
     context: PreDevPhaseCheckContext
   ): Promise<PreDevPhaseCheckItemResult> {
-    const taskDeps = context.task.dependencies || [];
+    // 根据规则ID路由到具体检查器
+    const {
+      checkDependencyOutputAvailable,
+      checkDependencyInterface,
+      checkCircularDependency,
+    } = await import('./dependency-checker.js');
 
-    return {
-      checkId: 'dependency-output',
-      checkName: '依赖输出检查',
-      ruleId: rule.id,
-      passed: true,
-      severity: 'info',
-      message: taskDeps.length > 0
-        ? `检查 ${taskDeps.length} 个依赖任务的输出`
-        : '无依赖任务',
-      details: {
-        dependencyCount: taskDeps.length,
-        dependencies: taskDeps,
-      },
-      duration: 0,
-      timestamp: new Date().toISOString(),
-    };
+    switch (rule.id) {
+      case 'R-DEPOUT-001':
+        return checkDependencyOutputAvailable(rule, context);
+      case 'R-DEPOUT-002':
+        return checkDependencyInterface(rule, context);
+      case 'R-DEPOUT-003':
+        return checkCircularDependency(rule, context);
+      default:
+        // 默认使用输出可用性检查
+        return checkDependencyOutputAvailable(rule, context);
+    }
   }
 }
 
@@ -121,27 +138,27 @@ export class ResourceConfigChecker implements Checker {
     rule: PreDevPhaseRule,
     context: PreDevPhaseCheckContext
   ): Promise<PreDevPhaseCheckItemResult> {
-    const config = rule.config as { requiredEnvVars?: string[] } | undefined;
-    const requiredEnvVars = config?.requiredEnvVars ?? ['NODE_ENV'];
-    const missingVars = requiredEnvVars.filter(v => !process.env[v]);
+    // 根据规则ID路由到具体检查器
+    const {
+      checkDevBranchConfig,
+      checkDevDirectoryConfig,
+      checkEnvConfig,
+      checkDiskSpace,
+    } = await import('./resource-checker.js');
 
-    return {
-      checkId: 'resource-config',
-      checkName: '资源配置检查',
-      ruleId: rule.id,
-      passed: missingVars.length === 0,
-      severity: rule.severity,
-      message: missingVars.length > 0
-        ? `缺少环境变量: ${missingVars.join(', ')}`
-        : '所有必需环境变量已配置',
-      details: {
-        missingVars,
-        requiredVars: requiredEnvVars,
-      },
-      suggestions: missingVars.map(v => `设置环境变量: export ${v}=value`),
-      duration: 0,
-      timestamp: new Date().toISOString(),
-    };
+    switch (rule.id) {
+      case 'R-RES-001':
+        return checkDevBranchConfig(rule, context);
+      case 'R-RES-002':
+        return checkDevDirectoryConfig(rule, context);
+      case 'R-RES-003':
+        return checkEnvConfig(rule, context);
+      case 'R-RES-004':
+        return checkDiskSpace(rule, context);
+      default:
+        // 默认使用环境变量检查
+        return checkEnvConfig(rule, context);
+    }
   }
 }
 

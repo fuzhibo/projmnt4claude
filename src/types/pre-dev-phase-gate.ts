@@ -124,6 +124,28 @@ export interface PreDevPhaseRuleConfig {
 }
 
 /**
+ * 自动修复函数返回结果
+ */
+export interface AutoFixResult {
+  /** 修复是否成功 */
+  success: boolean;
+  /** 修复结果消息 */
+  message: string;
+  /** 额外详情 */
+  details?: Record<string, unknown>;
+}
+
+/**
+ * 自动修复配置
+ */
+export interface AutoFix {
+  /** 修复描述 */
+  description: string;
+  /** 修复函数 */
+  fix: () => Promise<AutoFixResult>;
+}
+
+/**
  * 单个检查结果
  */
 export interface PreDevPhaseCheckItemResult {
@@ -147,6 +169,10 @@ export interface PreDevPhaseCheckItemResult {
   duration: number;
   /** 执行时间戳 */
   timestamp: string;
+  /** 是否可自动修复 */
+  autoFixable?: boolean;
+  /** 自动修复配置 */
+  autoFix?: AutoFix;
 }
 
 /**
@@ -342,6 +368,7 @@ export const DEFAULT_BRANCH_STATUS_RULE: PreDevPhaseRule = {
 
 /**
  * 依赖输出规则默认配置
+ * R-DEPOUT-001: 依赖任务输出可用性检查
  */
 export const DEFAULT_DEPENDENCY_OUTPUT_RULE: PreDevPhaseRule = {
   id: 'R-DEPOUT-001',
@@ -350,20 +377,105 @@ export const DEFAULT_DEPENDENCY_OUTPUT_RULE: PreDevPhaseRule = {
   description: '检查上游依赖任务的输出是否可用',
   enabled: true,
   severity: 'error',
+  config: {
+    outputPathPattern: '.projmnt4claude/outputs/{taskId}/',
+    requiredOutputs: ['output.json', 'interface.json'],
+  },
+};
+
+/**
+ * 依赖接口规则默认配置
+ * R-DEPOUT-002: 依赖接口定义检查
+ */
+export const DEFAULT_DEPENDENCY_INTERFACE_RULE: PreDevPhaseRule = {
+  id: 'R-DEPOUT-002',
+  type: 'dependency_output',
+  name: '依赖接口定义检查',
+  description: '检查依赖任务的接口定义是否完整',
+  enabled: true,
+  severity: 'error',
+  config: {
+    interfaceFileName: 'interface.json',
+    requiredFields: ['exports', 'version'],
+  },
+};
+
+/**
+ * 循环依赖规则默认配置
+ * R-DEPOUT-003: 循环依赖检查
+ */
+export const DEFAULT_CIRCULAR_DEPENDENCY_RULE: PreDevPhaseRule = {
+  id: 'R-DEPOUT-003',
+  type: 'dependency_output',
+  name: '循环依赖检查',
+  description: '检查是否存在循环依赖',
+  enabled: true,
+  severity: 'error',
 };
 
 /**
  * 资源配置规则默认配置
+ * R-RES-001: 开发分支配置检查
  */
 export const DEFAULT_RESOURCE_CONFIG_RULE: PreDevPhaseRule = {
   id: 'R-RES-001',
   type: 'resource_config',
-  name: '资源配置检查',
-  description: '检查开发所需资源是否配置正确',
+  name: '开发分支配置检查',
+  description: '检查开发分支是否存在且配置正确',
+  enabled: true,
+  severity: 'error',
+  config: {
+    allowedPrefixes: ['feature/', 'bugfix/', 'hotfix/', 'task/'],
+  },
+};
+
+/**
+ * 开发目录规则默认配置
+ * R-RES-002: 开发目录配置检查
+ */
+export const DEFAULT_DEV_DIRECTORY_RULE: PreDevPhaseRule = {
+  id: 'R-RES-002',
+  type: 'resource_config',
+  name: '开发目录配置检查',
+  description: '检查开发目录是否存在且可写',
+  enabled: true,
+  severity: 'error',
+  config: {
+    requiredSubdirs: ['src', '.projmnt4claude/tasks'],
+  },
+};
+
+/**
+ * 环境变量规则默认配置
+ * R-RES-003: 环境变量配置检查
+ */
+export const DEFAULT_ENV_CONFIG_RULE: PreDevPhaseRule = {
+  id: 'R-RES-003',
+  type: 'resource_config',
+  name: '环境变量配置检查',
+  description: '检查必需的环境变量是否已配置',
   enabled: true,
   severity: 'error',
   config: {
     requiredEnvVars: ['NODE_ENV'],
+    optionalEnvVars: [],
+  },
+};
+
+/**
+ * 磁盘空间规则默认配置
+ * R-RES-004: 磁盘空间检查
+ */
+export const DEFAULT_DISK_SPACE_RULE: PreDevPhaseRule = {
+  id: 'R-RES-004',
+  type: 'resource_config',
+  name: '磁盘空间检查',
+  description: '检查可用磁盘空间是否足够',
+  enabled: true,
+  severity: 'warning',
+  config: {
+    minFreeSpaceMB: 100,
+    minFreeSpacePercent: 10,
   },
 };
 
@@ -485,7 +597,12 @@ export const DEFAULT_PRE_DEV_PHASE_RULES: PreDevPhaseRule[] = [
   DEFAULT_BRANCH_SYNC_RULE,
   DEFAULT_BRANCH_SWITCHABLE_RULE,
   DEFAULT_DEPENDENCY_OUTPUT_RULE,
+  DEFAULT_DEPENDENCY_INTERFACE_RULE,
+  DEFAULT_CIRCULAR_DEPENDENCY_RULE,
   DEFAULT_RESOURCE_CONFIG_RULE,
+  DEFAULT_DEV_DIRECTORY_RULE,
+  DEFAULT_ENV_CONFIG_RULE,
+  DEFAULT_DISK_SPACE_RULE,
   DEFAULT_RETRY_CONTEXT_RULE,
 ];
 

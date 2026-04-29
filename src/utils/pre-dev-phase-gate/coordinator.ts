@@ -158,6 +158,29 @@ export class PreDevPhaseGateCoordinator {
         case 'R-BR-005':
           checkResults.push(await this.executeBranchChecker('checkBranchSwitchable', rule, context));
           break;
+        // 依赖输出规则
+        case 'R-DEPOUT-001':
+          checkResults.push(await this.executeDependencyChecker('checkDependencyOutputAvailable', rule, context));
+          break;
+        case 'R-DEPOUT-002':
+          checkResults.push(await this.executeDependencyChecker('checkDependencyInterface', rule, context));
+          break;
+        case 'R-DEPOUT-003':
+          checkResults.push(await this.executeDependencyChecker('checkCircularDependency', rule, context));
+          break;
+        // 资源配置规则
+        case 'R-RES-001':
+          checkResults.push(await this.executeResourceChecker('checkDevBranchConfig', rule, context));
+          break;
+        case 'R-RES-002':
+          checkResults.push(await this.executeResourceChecker('checkDevDirectoryConfig', rule, context));
+          break;
+        case 'R-RES-003':
+          checkResults.push(await this.executeResourceChecker('checkEnvConfig', rule, context));
+          break;
+        case 'R-RES-004':
+          checkResults.push(await this.executeResourceChecker('checkDiskSpace', rule, context));
+          break;
         // 其他规则按类型处理
         default:
           switch (rule.type) {
@@ -237,6 +260,30 @@ export class PreDevPhaseGateCoordinator {
     context: PreDevPhaseCheckContext
   ): Promise<PreDevPhaseCheckItemResult> {
     const { [checkerName]: checkerFn } = await import('./checkers/branch-checker.js');
+    return checkerFn(rule, context);
+  }
+
+  /**
+   * 执行依赖检查器
+   */
+  private async executeDependencyChecker(
+    checkerName: 'checkDependencyOutputAvailable' | 'checkDependencyInterface' | 'checkCircularDependency',
+    rule: PreDevPhaseRule,
+    context: PreDevPhaseCheckContext
+  ): Promise<PreDevPhaseCheckItemResult> {
+    const { [checkerName]: checkerFn } = await import('./checkers/dependency-checker.js');
+    return checkerFn(rule, context);
+  }
+
+  /**
+   * 执行资源配置检查器
+   */
+  private async executeResourceChecker(
+    checkerName: 'checkDevBranchConfig' | 'checkDevDirectoryConfig' | 'checkEnvConfig' | 'checkDiskSpace',
+    rule: PreDevPhaseRule,
+    context: PreDevPhaseCheckContext
+  ): Promise<PreDevPhaseCheckItemResult> {
+    const { [checkerName]: checkerFn } = await import('./checkers/resource-checker.js');
     return checkerFn(rule, context);
   }
 
