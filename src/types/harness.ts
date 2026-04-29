@@ -340,6 +340,33 @@ export interface HumanVerdict {
 }
 
 /**
+ * Phase checkpoint - for --continue recovery
+ * CP-P16: Tracks phase execution state for crash recovery
+ */
+export interface PhaseCheckpoint {
+  /** Phase name */
+  phase: 'development' | 'code_review' | 'qa' | 'evaluation';
+  /** Phase status */
+  status: 'not_started' | 'in_progress' | 'completed' | 'failed';
+  /** Execution attempt count */
+  attempts: number;
+  /** Last attempt timestamp */
+  lastAttemptAt?: string;
+  /** Phase output report path */
+  reportPath?: string;
+  /** Phase result summary */
+  result?: {
+    status: string;
+    summary: string;
+  };
+  /** Previous failure reason (if any) */
+  lastFailure?: {
+    reason: string;
+    timestamp: string;
+  };
+}
+
+/**
  * Task execution record
  */
 export interface TaskExecutionRecord {
@@ -530,6 +557,19 @@ export interface HarnessRuntimeState {
    * CP-P6: Stores complete failure history to enable intelligent retry context
    */
   failureHistory?: Map<string, FailureRecord[]>;
+
+  // ============================================================
+  // P16: Phase Checkpoints for --continue Recovery
+  // ============================================================
+
+  /**
+   * Phase checkpoints for recovery
+   * key: taskId
+   * value: Map of phase -> PhaseCheckpoint
+   *
+   * CP-P16: Tracks detailed phase execution state for crash recovery
+   */
+  phaseCheckpoints?: Map<string, Map<string, PhaseCheckpoint>>;
 }
 
 /**

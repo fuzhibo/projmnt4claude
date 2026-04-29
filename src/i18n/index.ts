@@ -659,6 +659,11 @@ export interface I18nTexts {
     noPreviousState: string;
     stateFileMigrated: string;
     loadingStateFailed: string;
+    emptyStateFile: string;
+    invalidStateFileFormat: string;
+    invalidStateStructure: string;
+    stateValidationFailed: string;
+    stateRepairFailed: string;
     cleaningOrphanSnapshots: string;
     cleanedSnapshots: string;
     forceCleanedSnapshots: string;

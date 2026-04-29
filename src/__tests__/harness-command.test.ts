@@ -605,7 +605,7 @@ describe('harnessCommand: continue mode', () => {
     );
 
     expect(logSpy).toHaveBeenCalledWith(
-      expect.stringContaining('从中断处继续')
+      expect.stringContaining('Resuming from interruption')
     );
     // The loaded state should be passed to AssemblyLine
     const runArg = runSpy.mock.calls[0]![0] as any;
@@ -622,7 +622,7 @@ describe('harnessCommand: continue mode', () => {
     );
 
     expect(logSpy).toHaveBeenCalledWith(
-      expect.stringContaining('没有找到之前的执行状态')
+      expect.stringContaining('No previous execution state found')
     );
     expect(runSpy).toHaveBeenCalled();
     const runArg = runSpy.mock.calls[0]![0] as any;

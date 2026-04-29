@@ -54,14 +54,14 @@ describe('buildBatchAwareQueue', () => {
   test('builds single batch with multiple tasks', () => {
     const result = buildBatchAwareQueue(['T1', 'T2', 'T3'], [['T1', 'T2', 'T3']]);
     expect(result.batchBoundaries).toEqual([0]);
-    expect(result.batchLabels).toEqual(['批次 1']);
+    expect(result.batchLabels).toEqual(['Batch 1']);
     expect(result.batchParallelizable).toEqual([true]);
   });
 
   test('builds single batch with single task (not parallelizable)', () => {
     const result = buildBatchAwareQueue(['T1'], [['T1']]);
     expect(result.batchBoundaries).toEqual([0]);
-    expect(result.batchLabels).toEqual(['批次 1']);
+    expect(result.batchLabels).toEqual(['Batch 1']);
     expect(result.batchParallelizable).toEqual([false]);
   });
 
@@ -71,7 +71,7 @@ describe('buildBatchAwareQueue', () => {
       [['T1', 'T2'], ['T3', 'T4'], ['T5']]
     );
     expect(result.batchBoundaries).toEqual([0, 2, 4]);
-    expect(result.batchLabels).toEqual(['批次 1', '批次 2', '批次 3']);
+    expect(result.batchLabels).toEqual(['Batch 1', 'Batch 2', 'Batch 3']);
     expect(result.batchParallelizable).toEqual([true, true, false]);
   });
 
@@ -86,7 +86,7 @@ describe('buildBatchAwareQueue', () => {
       ['T1', 'T2', 'T3', 'T4'],
       [['T1'], ['T2'], ['T3'], ['T4']]
     );
-    expect(result.batchLabels).toEqual(['批次 1', '批次 2', '批次 3', '批次 4']);
+    expect(result.batchLabels).toEqual(['Batch 1', 'Batch 2', 'Batch 3', 'Batch 4']);
   });
 
   test('handles batches of varying sizes', () => {

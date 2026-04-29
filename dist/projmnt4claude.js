@@ -7849,6 +7849,11 @@ var init_zh = __esm(() => {
       noPreviousState: "\uD83D\uDCE6 未找到之前的执行状态，从头开始",
       stateFileMigrated: "\uD83D\uDCE6 状态文件自动从 v{from} 迁移到 v{to}",
       loadingStateFailed: "加载运行时状态失败，重置: {error}",
+      emptyStateFile: "状态文件为空，重置运行时状态",
+      invalidStateFileFormat: "状态文件格式无效: {error}",
+      invalidStateStructure: "状态文件结构无效",
+      stateValidationFailed: "状态验证失败: {errors}",
+      stateRepairFailed: "状态修复失败，将重新开始",
       cleaningOrphanSnapshots: "\uD83E\uDDF9 清理孤立快照: {id} (PID: {pid})",
       cleanedSnapshots: "✅ 总共清理 {count} 个快照",
       forceCleanedSnapshots: "  ⚠️  强制清理活跃快照: {id} (PID: {pid})",
@@ -8915,6 +8920,11 @@ var init_en = __esm(() => {
       noPreviousState: "\uD83D\uDCE6 No previous execution state found, starting from beginning",
       stateFileMigrated: "\uD83D\uDCE6 State file auto-migrated from v{from} to v{to}",
       loadingStateFailed: "Failed to load runtime state, resetting: {error}",
+      emptyStateFile: "State file is empty, resetting runtime state",
+      invalidStateFileFormat: "Invalid state file format: {error}",
+      invalidStateStructure: "Invalid state file structure",
+      stateValidationFailed: "State validation failed: {errors}",
+      stateRepairFailed: "State repair failed, will restart from beginning",
       cleaningOrphanSnapshots: "\uD83E\uDDF9 Cleaned orphan snapshot: {id} (PID: {pid})",
       cleanedSnapshots: "✅ Cleaned {count} snapshots total",
       forceCleanedSnapshots: "  ⚠️  Force cleaned active snapshot: {id} (PID: {pid})",
@@ -40779,7 +40789,7 @@ async function harnessCommand(options, cwd2 = process.cwd()) {
       if (state) {
         const latestSnapshot = getLatestSnapshot(cwd2);
         if (latestSnapshot) {
-          console.log(`\uD83D\uDCE6 Resuming from interruption (task ${state.currentIndex + 1}/${state.taskQueue.length})`);
+          console.log(texts.harnessCmd.resumingFromInterruption.replace("{current}", String(state.currentIndex + 1)).replace("{total}", String(state.taskQueue.length)));
           console.log(`   \uD83D\uDCBE Using plan snapshot: ${latestSnapshot.snapshotId}`);
           if (latestSnapshot.tasks.length > 0 && state.taskQueue.length === 0) {
             state.taskQueue = latestSnapshot.tasks;
@@ -40788,10 +40798,10 @@ async function harnessCommand(options, cwd2 = process.cwd()) {
             state.batchParallelizable = latestSnapshot.batchParallelizable || [];
           }
         } else {
-          console.log(`\uD83D\uDCE6 Resuming from interruption (task ${state.currentIndex + 1}/${state.taskQueue.length})`);
+          console.log(texts.harnessCmd.resumingFromInterruption.replace("{current}", String(state.currentIndex + 1)).replace("{total}", String(state.taskQueue.length)));
         }
       } else {
-        console.log("\uD83D\uDCE6 No previous execution state found, starting from beginning");
+        console.log(texts.harnessCmd.noPreviousState);
         state = createDefaultRuntimeState(config);
         state.taskQueue = batchQueue.taskQueue;
         state.batchBoundaries = batchQueue.batchBoundaries;
@@ -40836,33 +40846,207 @@ async function harnessCommand(options, cwd2 = process.cwd()) {
 function getRuntimeStatePath2(cwd2) {
   return path29.join(getProjectDir(cwd2), "harness-state.json");
 }
+function validateAndRepairState(data, cwd2) {
+  const errors = [];
+  const repairedFields = [];
+  let repaired = false;
+  const texts = t(cwd2);
+  const requiredFields = [
+    { field: "state", type: "string" },
+    { field: "config", type: "object" },
+    { field: "taskQueue", type: "array" },
+    { field: "currentIndex", type: "number" },
+    { field: "startTime", type: "string" },
+    { field: "updatedAt", type: "string" }
+  ];
+  for (const { field, type } of requiredFields) {
+    if (!(field in data)) {
+      errors.push({
+        field,
+        expected: type,
+        actual: "missing",
+        severity: "error"
+      });
+    } else if (type === "array" && !Array.isArray(data[field])) {
+      errors.push({
+        field,
+        expected: type,
+        actual: typeof data[field],
+        severity: "error"
+      });
+    } else if (type !== "array" && typeof data[field] !== type) {
+      errors.push({
+        field,
+        expected: type,
+        actual: typeof data[field],
+        severity: "error"
+      });
+    }
+  }
+  if (errors.some((e) => e.severity === "error")) {
+    console.warn(texts.harnessCmd.stateValidationFailed.replace("{errors}", errors.map((e) => `${e.field}(${e.actual})`).join(", ")));
+    return {
+      data: null,
+      validation: { valid: false, errors, repaired: false, repairedFields }
+    };
+  }
+  const mapFields = [
+    "retryCounter",
+    "taskResults",
+    "resumeFrom",
+    "reevaluateCounter",
+    "phaseRetryCounters",
+    "taskPhaseCheckpoints",
+    "failureHistory",
+    "phaseCheckpoints"
+  ];
+  for (const field of mapFields) {
+    if (!(field in data) || data[field] === null || data[field] === undefined) {
+      data[field] = {};
+      repairedFields.push(field);
+      repaired = true;
+    }
+    if (data[field] && typeof data[field] === "object" && !(data[field] instanceof Map)) {
+      try {
+        data[field] = new Map(Object.entries(data[field]));
+      } catch (e) {
+        console.warn(`Failed to convert ${field} to Map, using empty Map`);
+        data[field] = new Map;
+        repairedFields.push(field);
+        repaired = true;
+      }
+    }
+  }
+  const arrayFields = ["passedTasks", "failedTasks", "retryingTasks", "readyTasks", "preCheckFailedTasks"];
+  for (const field of arrayFields) {
+    if (!(field in data) || !Array.isArray(data[field])) {
+      data[field] = [];
+      repairedFields.push(field);
+      repaired = true;
+    }
+  }
+  if (!("batchBoundaries" in data) || !Array.isArray(data.batchBoundaries)) {
+    data.batchBoundaries = [];
+    repairedFields.push("batchBoundaries");
+    repaired = true;
+  }
+  if (!("batchLabels" in data) || !Array.isArray(data.batchLabels)) {
+    data.batchLabels = [];
+    repairedFields.push("batchLabels");
+    repaired = true;
+  }
+  if (!("batchParallelizable" in data) || !Array.isArray(data.batchParallelizable)) {
+    data.batchParallelizable = [];
+    repairedFields.push("batchParallelizable");
+    repaired = true;
+  }
+  if (typeof data.preCheckCompleted !== "boolean") {
+    data.preCheckCompleted = false;
+    repairedFields.push("preCheckCompleted");
+    repaired = true;
+  }
+  if (!("pendingPreCheckTasks" in data) || !Array.isArray(data.pendingPreCheckTasks)) {
+    data.pendingPreCheckTasks = [];
+    repairedFields.push("pendingPreCheckTasks");
+    repaired = true;
+  }
+  if (!("pendingExecutionTasks" in data) || !Array.isArray(data.pendingExecutionTasks)) {
+    data.pendingExecutionTasks = [];
+    repairedFields.push("pendingExecutionTasks");
+    repaired = true;
+  }
+  if (typeof data.config === "object" && data.config !== null) {
+    const config = data.config;
+    const configDefaults = {
+      maxRetries: 3,
+      timeout: 300,
+      parallel: 1,
+      dryRun: false,
+      continue: false,
+      jsonOutput: false,
+      batchGitCommit: false,
+      forceContinue: false
+    };
+    for (const [key, defaultValue] of Object.entries(configDefaults)) {
+      if (!(key in config) || config[key] === undefined || config[key] === null) {
+        config[key] = defaultValue;
+        repairedFields.push(`config.${key}`);
+        repaired = true;
+      }
+    }
+    if (!config.cwd || typeof config.cwd !== "string") {
+      config.cwd = cwd2;
+      repairedFields.push("config.cwd");
+      repaired = true;
+    }
+  }
+  if (typeof data.currentIndex === "number" && data.currentIndex < 0) {
+    data.currentIndex = 0;
+    repairedFields.push("currentIndex");
+    repaired = true;
+  }
+  const validStates = ["idle", "running", "pre_checking", "executing", "paused", "completed", "failed", "cancelled"];
+  if (!validStates.includes(data.state)) {
+    console.warn(`Invalid state value "${data.state}", resetting to 'idle'`);
+    data.state = "idle";
+    repairedFields.push("state");
+    repaired = true;
+  }
+  if (repaired && repairedFields.length > 0) {
+    console.log(`\uD83D\uDCE6 State file repaired: ${repairedFields.length} fields fixed (${repairedFields.slice(0, 5).join(", ")}${repairedFields.length > 5 ? "..." : ""})`);
+  }
+  return {
+    data,
+    validation: { valid: true, errors, repaired, repairedFields }
+  };
+}
 function loadRuntimeState(cwd2) {
   const statePath = getRuntimeStatePath2(cwd2);
   if (!fs33.existsSync(statePath)) {
     return null;
   }
+  const texts = t(cwd2);
   try {
     const content = fs33.readFileSync(statePath, "utf-8");
-    const data = JSON.parse(content);
+    if (!content.trim()) {
+      console.warn(texts.harnessCmd.emptyStateFile);
+      return null;
+    }
+    let data;
+    try {
+      data = JSON.parse(content);
+    } catch (parseError) {
+      console.warn(texts.harnessCmd.invalidStateFileFormat.replace("{error}", String(parseError)));
+      return null;
+    }
+    if (!data || typeof data !== "object") {
+      console.warn(texts.harnessCmd.invalidStateStructure);
+      return null;
+    }
     const version = data.stateFormatVersion ?? 0;
     if (version < 1 || version > 2) {
       console.warn(`State file version mismatch (v${version}), resetting runtime state`);
       return null;
     }
-    const texts = t(cwd2);
     if (version === 1) {
       data.stateFormatVersion = 2;
       console.log(texts.harnessCmd.stateFileMigrated.replace("{from}", "1").replace("{to}", "2"));
     }
-    data.retryCounter = new Map(Object.entries(data.retryCounter || {}));
-    data.taskResults = new Map(Object.entries(data.taskResults || {}));
-    data.resumeFrom = new Map(Object.entries(data.resumeFrom || {}));
-    data.reevaluateCounter = new Map(Object.entries(data.reevaluateCounter || {}));
-    data.phaseRetryCounters = new Map(Object.entries(data.phaseRetryCounters || {}));
-    data.taskPhaseCheckpoints = new Map(Object.entries(data.taskPhaseCheckpoints || {}));
-    return data;
+    const { data: validatedData, validation } = validateAndRepairState(data, cwd2);
+    if (!validatedData) {
+      console.warn(texts.harnessCmd.stateRepairFailed);
+      return null;
+    }
+    if (process.env.DEBUG_HARNESS) {
+      console.log("State validation:", {
+        valid: validation.valid,
+        repaired: validation.repaired,
+        repairedFields: validation.repairedFields,
+        errors: validation.errors
+      });
+    }
+    return validatedData;
   } catch (error) {
-    const texts = t(cwd2);
     console.warn(texts.harnessCmd.loadingStateFailed.replace("{error}", String(error)));
     return null;
   }

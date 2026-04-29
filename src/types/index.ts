@@ -71,3 +71,8 @@ export {
   DEFAULT_QA_POST_PHASE_RULES,
   DEFAULT_EVAL_POST_PHASE_RULES,
 } from './post-phase-gate.js';
+
+// Harness types
+export type {
+  PhaseCheckpoint,
+} from './harness.js';
