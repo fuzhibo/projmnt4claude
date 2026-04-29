@@ -6,6 +6,8 @@
  * - PreDevPhaseGateCoordinator - 协调器类
  * - PreDevPhaseRuleRegistry - 规则注册表
  * - createPreDevPhaseGateCoordinator - 工厂函数
+ * - runPreDevPhaseGate - 便利函数（运行门禁检查）
+ * - runPreDevPhaseGateWithAutoFix - 便利函数（运行门禁并自动修复）
  * - 所有检查器
  *
  * @module pre-dev-phase-gate
@@ -15,6 +17,8 @@ export {
   PreDevPhaseGateCoordinator,
   PreDevPhaseRuleRegistry,
   createPreDevPhaseGateCoordinator,
+  runPreDevPhaseGate,
+  runPreDevPhaseGateWithAutoFix,
 } from './coordinator.js';
 
 export {
@@ -23,4 +27,5 @@ export {
   DependencyOutputChecker,
   ResourceConfigChecker,
   RetryContextChecker,
+  PathAlignmentChecker,
 } from './checkers/index.js';

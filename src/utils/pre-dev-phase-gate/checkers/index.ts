@@ -9,6 +9,7 @@
  * - 依赖输出检查 (R-DEPOUT-001~003)
  * - 资源配置检查 (R-RES-001~004)
  * - 重试上下文检查 (R-RETRY-001~003)
+ * - 路径对齐检查 (R-PATH-001~003)
  *
  * @module pre-dev-phase-gate/checkers
  */
@@ -72,6 +73,24 @@ export {
   checkDiskSpace,
   type ResourceCheckResult,
 } from './resource-checker.js';
+
+// 导出路径对齐检查器
+export {
+  checkTaskFilePath,
+  checkCodeReferencePath,
+  checkResourceReferencePath,
+  type PathCheckResult,
+} from './path-checker.js';
+
+// 导出 Git 工作区综合检查器
+export {
+  GitWorkspaceChecker,
+  createGitWorkspaceChecker,
+  quickGitWorkspaceCheck,
+  DEFAULT_GIT_WORKSPACE_CHECKER_CONFIG,
+  type GitWorkspaceCheckerConfig,
+  type GitWorkspaceReport,
+} from './git-workspace-checker.js';
 
 /**
  * 检查器接口
@@ -252,6 +271,37 @@ export class RetryContextChecker implements Checker {
           duration: 0,
           timestamp: new Date().toISOString(),
         };
+    }
+  }
+}
+
+/**
+ * 路径对齐检查器
+ * CP-PDGC-CHECK-6: 路径对齐检查
+ * 根据规则ID路由到具体的路径检查函数
+ */
+export class PathAlignmentChecker implements Checker {
+  async check(
+    rule: PreDevPhaseRule,
+    context: PreDevPhaseCheckContext
+  ): Promise<PreDevPhaseCheckItemResult> {
+    // 根据规则ID选择具体检查
+    const {
+      checkTaskFilePath,
+      checkCodeReferencePath,
+      checkResourceReferencePath,
+    } = await import('./path-checker.js');
+
+    switch (rule.id) {
+      case 'R-PATH-001':
+        return checkTaskFilePath(rule, context);
+      case 'R-PATH-002':
+        return checkCodeReferencePath(rule, context);
+      case 'R-PATH-003':
+        return checkResourceReferencePath(rule, context);
+      default:
+        // 默认使用任务文件路径检查
+        return checkTaskFilePath(rule, context);
     }
   }
 }

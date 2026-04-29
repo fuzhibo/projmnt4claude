@@ -20,7 +20,8 @@ export type PreDevPhaseRuleType =
   | 'branch_status'      // 分支状态检查
   | 'dependency_output'  // 依赖输出检查
   | 'resource_config'    // 资源配置检查
-  | 'retry_context';     // 重试上下文检查
+  | 'retry_context'      // 重试上下文检查
+  | 'path_alignment';    // 路径对齐检查
 
 /**
  * 规则严重级别
@@ -584,6 +585,66 @@ export const DEFAULT_BRANCH_SWITCHABLE_RULE: PreDevPhaseRule = {
 };
 
 /**
+ * 路径对齐规则默认配置
+ * R-PATH-001: 任务文件路径对齐检查
+ */
+export const DEFAULT_TASK_FILE_PATH_RULE: PreDevPhaseRule = {
+  id: 'R-PATH-001',
+  type: 'path_alignment',
+  name: '任务文件路径对齐检查',
+  description: '检查任务文件是否存放在正确的路径位置',
+  enabled: true,
+  severity: 'error',
+  config: {
+    strictMode: true,
+    expectedPaths: ['.projmnt4claude/tasks/{taskId}/meta.json', '.projmnt4claude/tasks/{taskId}/contract.json'],
+  },
+};
+
+/**
+ * 代码引用路径规则默认配置
+ * R-PATH-002: 代码引用路径正确性检查
+ */
+export const DEFAULT_CODE_REFERENCE_PATH_RULE: PreDevPhaseRule = {
+  id: 'R-PATH-002',
+  type: 'path_alignment',
+  name: '代码引用路径检查',
+  description: '检查代码中的文件引用是否指向有效路径',
+  enabled: true,
+  severity: 'warning',
+  config: {
+    checkPatterns: ['src/**/*.{ts,js}'],
+    excludePatterns: ['node_modules/**', 'dist/**'],
+  },
+};
+
+/**
+ * 资源引用路径规则默认配置
+ * R-PATH-003: 资源引用路径有效性检查
+ */
+export const DEFAULT_RESOURCE_REFERENCE_PATH_RULE: PreDevPhaseRule = {
+  id: 'R-PATH-003',
+  type: 'path_alignment',
+  name: '资源引用路径检查',
+  description: '检查项目资源路径配置是否有效',
+  enabled: true,
+  severity: 'warning',
+  config: {
+    requiredPaths: ['.projmnt4claude/tasks', '.projmnt4claude/reports', '.projmnt4claude/outputs'],
+  },
+};
+
+/**
+ * 路径对齐规则数组
+ * PRE_DEV_PHASE_PATH_RULES - 路径对齐检查规则
+ */
+export const PRE_DEV_PHASE_PATH_RULES: PreDevPhaseRule[] = [
+  DEFAULT_TASK_FILE_PATH_RULE,
+  DEFAULT_CODE_REFERENCE_PATH_RULE,
+  DEFAULT_RESOURCE_REFERENCE_PATH_RULE,
+];
+
+/**
  * 默认规则列表
  */
 export const DEFAULT_PRE_DEV_PHASE_RULES: PreDevPhaseRule[] = [
@@ -604,6 +665,9 @@ export const DEFAULT_PRE_DEV_PHASE_RULES: PreDevPhaseRule[] = [
   DEFAULT_ENV_CONFIG_RULE,
   DEFAULT_DISK_SPACE_RULE,
   DEFAULT_RETRY_CONTEXT_RULE,
+  DEFAULT_TASK_FILE_PATH_RULE,
+  DEFAULT_CODE_REFERENCE_PATH_RULE,
+  DEFAULT_RESOURCE_REFERENCE_PATH_RULE,
 ];
 
 // ============================================================================

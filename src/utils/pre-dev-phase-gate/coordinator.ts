@@ -25,6 +25,7 @@ import type {
   DependencyOutputCheckResult,
   ResourceConfigCheckResult,
   RetryContext,
+  AutoFixResult,
 } from '../../types/pre-dev-phase-gate.js';
 import { DEFAULT_PRE_DEV_PHASE_RULES } from '../../types/pre-dev-phase-gate.js';
 
@@ -115,6 +116,52 @@ export class PreDevPhaseGateCoordinator {
   }
 
   /**
+   * 尝试自动修复失败的检查
+   * CP-PDGC-AF-1: 自动修复入口
+   * 遍历所有失败的检查项，尝试执行自动修复
+   *
+   * @param result - 门禁检查结果
+   * @param context - 检查上下文
+   * @returns 修复结果映射（检查ID -> 修复结果）
+   */
+  async tryAutoFix(
+    result: PreDevPhaseGateResult,
+    context: PreDevPhaseCheckContext
+  ): Promise<Map<string, AutoFixResult>> {
+    const fixResults = new Map<string, AutoFixResult>();
+
+    // 遍历所有失败的检查项
+    for (const check of result.checks) {
+      // 跳过已通过或没有自动修复的检查项
+      if (check.passed || !check.autoFixable || !check.autoFix) {
+        continue;
+      }
+
+      try {
+        // 执行自动修复
+        const fixResult = await check.autoFix.fix();
+        fixResults.set(check.checkId, fixResult);
+
+        // 记录修复结果
+        if (fixResult.success) {
+          console.log(`✅ 自动修复成功 [${check.checkId}]: ${fixResult.message}`);
+        } else {
+          console.log(`❌ 自动修复失败 [${check.checkId}]: ${fixResult.message}`);
+        }
+      } catch (error) {
+        const errorResult: AutoFixResult = {
+          success: false,
+          message: `执行自动修复时发生错误: ${error instanceof Error ? error.message : String(error)}`,
+        };
+        fixResults.set(check.checkId, errorResult);
+        console.log(`❌ 自动修复异常 [${check.checkId}]: ${errorResult.message}`);
+      }
+    }
+
+    return fixResults;
+  }
+
+  /**
    * 执行单个规则
    * CP-PDGC-2: 规则执行
    * 根据规则ID路由到具体的检查器
@@ -181,6 +228,16 @@ export class PreDevPhaseGateCoordinator {
         case 'R-RES-004':
           checkResults.push(await this.executeResourceChecker('checkDiskSpace', rule, context));
           break;
+        // 路径对齐规则
+        case 'R-PATH-001':
+          checkResults.push(await this.executePathChecker('checkTaskFilePath', rule, context));
+          break;
+        case 'R-PATH-002':
+          checkResults.push(await this.executePathChecker('checkCodeReferencePath', rule, context));
+          break;
+        case 'R-PATH-003':
+          checkResults.push(await this.executePathChecker('checkResourceReferencePath', rule, context));
+          break;
         // 其他规则按类型处理
         default:
           switch (rule.type) {
@@ -198,6 +255,9 @@ export class PreDevPhaseGateCoordinator {
               break;
             case 'retry_context':
               checkResults.push(await this.checkRetryContext(rule, context));
+              break;
+            case 'path_alignment':
+              checkResults.push(await this.checkPathAlignment(rule, context));
               break;
             default:
               checkResults.push({
@@ -284,6 +344,18 @@ export class PreDevPhaseGateCoordinator {
     context: PreDevPhaseCheckContext
   ): Promise<PreDevPhaseCheckItemResult> {
     const { [checkerName]: checkerFn } = await import('./checkers/resource-checker.js');
+    return checkerFn(rule, context);
+  }
+
+  /**
+   * 执行路径对齐检查器
+   */
+  private async executePathChecker(
+    checkerName: 'checkTaskFilePath' | 'checkCodeReferencePath' | 'checkResourceReferencePath',
+    rule: PreDevPhaseRule,
+    context: PreDevPhaseCheckContext
+  ): Promise<PreDevPhaseCheckItemResult> {
+    const { [checkerName]: checkerFn } = await import('./checkers/path-checker.js');
     return checkerFn(rule, context);
   }
 
@@ -603,6 +675,58 @@ export class PreDevPhaseGateCoordinator {
   }
 
   /**
+   * 路径对齐检查
+   * CP-PDGC-11: 路径对齐检查
+   */
+  private async checkPathAlignment(
+    rule: PreDevPhaseRule,
+    context: PreDevPhaseCheckContext
+  ): Promise<PreDevPhaseCheckItemResult> {
+    const startTime = Date.now();
+
+    try {
+      // 根据规则ID路由到具体检查
+      switch (rule.id) {
+        case 'R-PATH-001': {
+          const { checkTaskFilePath } = await import('./checkers/path-checker.js');
+          return checkTaskFilePath(rule, context);
+        }
+        case 'R-PATH-002': {
+          const { checkCodeReferencePath } = await import('./checkers/path-checker.js');
+          return checkCodeReferencePath(rule, context);
+        }
+        case 'R-PATH-003': {
+          const { checkResourceReferencePath } = await import('./checkers/path-checker.js');
+          return checkResourceReferencePath(rule, context);
+        }
+        default: {
+          return {
+            checkId: 'path-alignment-check',
+            checkName: '路径对齐检查',
+            ruleId: rule.id,
+            passed: true,
+            severity: 'info',
+            message: `未知路径规则: ${rule.id}，跳过检查`,
+            duration: Date.now() - startTime,
+            timestamp: new Date().toISOString(),
+          };
+        }
+      }
+    } catch (error) {
+      return {
+        checkId: 'path-alignment-check',
+        checkName: '路径对齐检查',
+        ruleId: rule.id,
+        passed: false,
+        severity: 'error',
+        message: `路径对齐检查失败: ${error instanceof Error ? error.message : String(error)}`,
+        duration: Date.now() - startTime,
+        timestamp: new Date().toISOString(),
+      };
+    }
+  }
+
+  /**
    * 获取当前分支
    */
   private getCurrentBranch(cwd: string): string {
@@ -802,4 +926,133 @@ export function createPreDevPhaseGateCoordinator(
   config?: Partial<PreDevPhaseGateConfig>
 ): PreDevPhaseGateCoordinator {
   return new PreDevPhaseGateCoordinator(config);
+}
+
+/**
+ * 运行开发前门禁检查（便利函数）
+ * CP-PDGC-11: 便利函数
+ * 提供简单的方式来运行门禁检查，无需手动创建协调器
+ *
+ * @param taskId - 任务ID
+ * @param cwd - 工作目录
+ * @param attempt - 当前尝试次数
+ * @param config - 可选的门禁配置
+ * @returns 门禁检查结果
+ *
+ * @example
+ * ```typescript
+ * const result = await runPreDevPhaseGate('TASK-001', process.cwd(), 1);
+ * if (!result.passed) {
+ *   console.log('门禁检查未通过:', result.summary);
+ * }
+ * ```
+ */
+export async function runPreDevPhaseGate(
+  taskId: string,
+  cwd: string,
+  attempt: number,
+  config?: Partial<PreDevPhaseGateConfig>
+): Promise<PreDevPhaseGateResult> {
+  // 导入 readTaskMeta 加载任务元数据
+  const { readTaskMeta } = await import('../task.js');
+  const task = readTaskMeta(taskId, cwd);
+
+  if (!task) {
+    throw new Error(`任务不存在: ${taskId}`);
+  }
+
+  // 创建协调器
+  const coordinator = createPreDevPhaseGateCoordinator(config);
+
+  // 构建检查上下文
+  const context: PreDevPhaseCheckContext = {
+    taskId,
+    task,
+    cwd,
+    attempt,
+    maxRetries: 3,
+    isResumed: attempt > 1,
+    config: {
+      enabled: true,
+      rules: new Map(),
+      enableRetryRules: true,
+      stopOnFailure: true,
+      generateReport: true,
+      reportPath: '.projmnt4claude/reports/pre-dev-gate-report.json',
+      ...config,
+    },
+  };
+
+  // 运行门禁检查
+  return coordinator.runGate(context);
+}
+
+/**
+ * 运行开发前门禁检查并尝试自动修复
+ * CP-PDGC-12: 带自动修复的便利函数
+ * 运行门禁检查，并对失败的项尝试自动修复
+ *
+ * @param taskId - 任务ID
+ * @param cwd - 工作目录
+ * @param attempt - 当前尝试次数
+ * @param config - 可选的门禁配置
+ * @returns 包含原始结果和修复结果的复合结果
+ *
+ * @example
+ * ```typescript
+ * const { result, fixResults } = await runPreDevPhaseGateWithAutoFix('TASK-001', process.cwd(), 1);
+ * if (!result.passed && fixResults.size > 0) {
+ *   console.log(`尝试了 ${fixResults.size} 个自动修复`);
+ * }
+ * ```
+ */
+export async function runPreDevPhaseGateWithAutoFix(
+  taskId: string,
+  cwd: string,
+  attempt: number,
+  config?: Partial<PreDevPhaseGateConfig>
+): Promise<{
+  result: PreDevPhaseGateResult;
+  fixResults: Map<string, AutoFixResult>;
+}> {
+  // 导入 readTaskMeta 加载任务元数据
+  const { readTaskMeta } = await import('../task.js');
+  const task = readTaskMeta(taskId, cwd);
+
+  if (!task) {
+    throw new Error(`任务不存在: ${taskId}`);
+  }
+
+  // 创建协调器
+  const coordinator = createPreDevPhaseGateCoordinator(config);
+
+  // 构建检查上下文
+  const context: PreDevPhaseCheckContext = {
+    taskId,
+    task,
+    cwd,
+    attempt,
+    maxRetries: 3,
+    isResumed: attempt > 1,
+    config: {
+      enabled: true,
+      rules: new Map(),
+      enableRetryRules: true,
+      stopOnFailure: true,
+      generateReport: true,
+      reportPath: '.projmnt4claude/reports/pre-dev-gate-report.json',
+      ...config,
+    },
+  };
+
+  // 运行门禁检查
+  const result = await coordinator.runGate(context);
+
+  // 如果检查未通过，尝试自动修复
+  let fixResults = new Map<string, AutoFixResult>();
+  if (!result.passed) {
+    fixResults = await coordinator.tryAutoFix(result, context);
+  }
+
+  return { result, fixResults };
 }
