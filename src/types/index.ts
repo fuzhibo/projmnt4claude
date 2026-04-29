@@ -72,6 +72,39 @@ export {
   DEFAULT_EVAL_POST_PHASE_RULES,
 } from './post-phase-gate.js';
 
+// 开发阶段后门禁类型
+export type {
+  PostDevPhaseCheckContext,
+  PostDevPhaseGateConfig,
+  PostDevPhaseGateResult,
+  PostDevPhaseGateReport,
+  PostDevPhaseRule,
+  PostDevPhaseRuleResult,
+  PostDevPhaseCheckItemResult,
+  PostDevPhaseCheckResult,
+  PostDevPhaseRuleType,
+  RuleSeverity,
+  PostDevPhaseRuleConfig,
+  AutoFixResult,
+  AutoFix,
+  OutputAlignmentCheckResult,
+  PathDrift,
+  ReportIntegrityCheckResult,
+  IPostDevPhaseChecker,
+} from './post-dev-phase-gate.js';
+
+export {
+  DEFAULT_POST_DEV_PHASE_GATE_CONFIG,
+  DEFAULT_OUTPUT_ALIGNMENT_RULE,
+  DEFAULT_REPORT_INTEGRITY_RULE,
+  DEFAULT_ARTIFACT_VALIDATION_RULE,
+  DEFAULT_DELIVERABLE_CHECK_RULE,
+  DEFAULT_POST_DEV_PHASE_RULES,
+  POST_DEV_PHASE_OUTPUT_RULES,
+  POST_DEV_PHASE_REPORT_RULES,
+  createDefaultPostDevPhaseGateConfig,
+} from './post-dev-phase-gate.js';
+
 // Harness types
 export type {
   PhaseCheckpoint,
