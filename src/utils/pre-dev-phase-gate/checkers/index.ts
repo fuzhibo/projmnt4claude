@@ -19,6 +19,24 @@ import type {
   PreDevPhaseCheckItemResult,
 } from '../../../types/pre-dev-phase-gate.js';
 
+// 导出重试上下文检查器
+export {
+  checkLegacyFiles,
+  checkLockFiles,
+  checkDevReportReset,
+} from './retry-checker.js';
+
+// 导出自动修复工具
+export {
+  cleanupLockFiles,
+  archiveDevReport,
+  createNewDevReport,
+  resetDevReport,
+  cleanupTempFiles,
+  fullCleanup,
+  type CleanupResult,
+} from './auto-fix.js';
+
 // 导出 Git 检查器
 export {
   checkGitWorkspaceClean,
@@ -181,41 +199,59 @@ export class ResourceConfigChecker implements Checker {
 /**
  * 重试上下文检查器
  * CP-PDGC-CHECK-5: 重试上下文检查
+ * 根据规则ID路由到具体的重试检查函数
  */
 export class RetryContextChecker implements Checker {
   async check(
     rule: PreDevPhaseRule,
     context: PreDevPhaseCheckContext
   ): Promise<PreDevPhaseCheckItemResult> {
-    if (!context.isResumed && context.attempt === 1) {
-      return {
-        checkId: 'retry-context',
-        checkName: '重试上下文检查',
-        ruleId: rule.id,
-        passed: true,
-        severity: 'info',
-        message: '首次执行，跳过重试检查',
-        duration: 0,
-        timestamp: new Date().toISOString(),
-      };
-    }
+    // 根据规则ID选择具体检查
+    const {
+      checkLegacyFiles,
+      checkLockFiles,
+      checkDevReportReset,
+    } = await import('./retry-checker.js');
 
-    return {
-      checkId: 'retry-context',
-      checkName: '重试上下文检查',
-      ruleId: rule.id,
-      passed: true,
-      severity: 'info',
-      message: `第 ${context.attempt}/${context.maxRetries} 次尝试`,
-      details: {
-        attempt: context.attempt,
-        maxRetries: context.maxRetries,
-        isResumed: context.isResumed,
-        previousFailure: context.previousFailure,
-      },
-      suggestions: context.previousFailure?.suggestedFixes,
-      duration: 0,
-      timestamp: new Date().toISOString(),
-    };
+    switch (rule.id) {
+      case 'R-RETRY-001':
+        return checkLegacyFiles(rule, context);
+      case 'R-RETRY-002':
+        return checkLockFiles(rule, context);
+      case 'R-RETRY-003':
+        return checkDevReportReset(rule, context);
+      default:
+        // 默认使用通用重试检查
+        if (!context.isResumed && context.attempt === 1) {
+          return {
+            checkId: 'retry-context',
+            checkName: '重试上下文检查',
+            ruleId: rule.id,
+            passed: true,
+            severity: 'info',
+            message: '首次执行，跳过重试检查',
+            duration: 0,
+            timestamp: new Date().toISOString(),
+          };
+        }
+
+        return {
+          checkId: 'retry-context',
+          checkName: '重试上下文检查',
+          ruleId: rule.id,
+          passed: true,
+          severity: 'info',
+          message: `第 ${context.attempt}/${context.maxRetries} 次尝试`,
+          details: {
+            attempt: context.attempt,
+            maxRetries: context.maxRetries,
+            isResumed: context.isResumed,
+            previousFailure: context.previousFailure,
+          },
+          suggestions: context.previousFailure?.suggestedFixes,
+          duration: 0,
+          timestamp: new Date().toISOString(),
+        };
+    }
   }
 }
