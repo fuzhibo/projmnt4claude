@@ -28,15 +28,15 @@ export {
   type GitWorkspaceCheckResult,
 } from './git-checker.js';
 
-// 导出分支检查器
-export {
-  checkBranchExists,
-  checkBranchAssociation,
-  checkBranchTracking,
-  checkBranchSync,
-  checkBranchSwitchable,
-  type BranchCheckResult,
-} from './branch-checker.js';
+// 分支检查器 - 由 prob8c 任务实现
+// export {
+//   checkBranchExists,
+//   checkBranchAssociation,
+//   checkBranchTracking,
+//   checkBranchSync,
+//   checkBranchSwitchable,
+//   type BranchCheckResult,
+// } from './branch-checker.js';
 
 // 导出依赖输出检查器
 export {
@@ -81,23 +81,23 @@ export class GitWorkspaceChecker implements Checker {
 /**
  * 分支状态检查器
  * CP-PDGC-CHECK-2: 分支状态检查
- * 使用 branch-checker.ts 中的具体实现
+ * 由 prob8c 任务实现，暂时注释
  */
-export class BranchStatusChecker implements Checker {
-  async check(
-    rule: PreDevPhaseRule,
-    context: PreDevPhaseCheckContext
-  ): Promise<PreDevPhaseCheckItemResult> {
-    // 根据规则ID选择具体检查
-    const { checkBranchExists, checkBranchSync } = await import('./branch-checker.js');
-
-    if (rule.id === 'R-BR-001') {
-      return checkBranchExists(rule, context);
-    }
-
-    return checkBranchSync(rule, context);
-  }
-}
+// export class BranchStatusChecker implements Checker {
+//   async check(
+//     rule: PreDevPhaseRule,
+//     context: PreDevPhaseCheckContext
+//   ): Promise<PreDevPhaseCheckItemResult> {
+//     // 根据规则ID选择具体检查
+//     const { checkBranchExists, checkBranchSync } = await import('./branch-checker.js');
+//
+//     if (rule.id === 'R-BR-001') {
+//       return checkBranchExists(rule, context);
+//     }
+//
+//     return checkBranchSync(rule, context);
+//   }
+// }
 
 /**
  * 依赖输出检查器
