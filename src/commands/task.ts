@@ -4574,11 +4574,11 @@ export function showBatchUpdateLogs(
 const CHECKPOINT_TEMPLATES: Record<string, string[]> = {
   bug: [
     '复现问题',
-    '定位根本Reason',
+    '定位根本原因',
     '实现修复',
-    '编写测试用例Verification修复',
-    'Verification不影响其他功能',
-    'Updated相关文档',
+    '编写测试用例验证修复',
+    '验证不影响其他功能',
+    '更新相关文档',
   ],
   feature: [
     '理解需求和设计',
