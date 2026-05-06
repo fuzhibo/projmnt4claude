@@ -12,7 +12,6 @@
  */
 
 import type { TaskMeta } from '../../../types/task.js';
-import { normalizeStatus } from '../../../types/task.js';
 import { readTaskMeta } from '../../task.js';
 
 // ============== 检查结果类型定义 ==============
@@ -200,8 +199,8 @@ export class CodeReviewPassChecker {
    */
   private checkStatusMarker(task: TaskMeta): CodeReviewPassCheckResult {
     const startTime = Date.now();
-    const normalizedStatus = normalizeStatus(task.status);
-    const passed = this.config.passedStatuses.includes(normalizedStatus);
+    // 使用原始状态进行比较，支持自定义审核通过状态
+    const passed = this.config.passedStatuses.includes(task.status);
 
     return {
       checkId: 'status-marker',
@@ -212,7 +211,6 @@ export class CodeReviewPassChecker {
         : `任务状态未标记为审核通过 (当前: ${task.status}，期望: ${this.config.passedStatuses.join(', ')})`,
       details: {
         currentStatus: task.status,
-        normalizedStatus,
         passedStatuses: this.config.passedStatuses,
       },
       duration: Date.now() - startTime,
@@ -238,10 +236,10 @@ export class CodeReviewPassChecker {
       };
     }
 
-    // 查找审核通过记录
+    // 查找审核通过记录 (使用原始状态值进行比较)
     const passRecords = task.requirementHistory.filter(h =>
       h.field === 'status' &&
-      this.config.passedStatuses.includes(normalizeStatus(h.newValue))
+      this.config.passedStatuses.includes(h.newValue)
     );
 
     const passed = passRecords.length > 0;
