@@ -92,7 +92,6 @@ function createTestConfig(overrides?: Partial<HarnessConfig>): HarnessConfig {
     continue: false,
     jsonOutput: false,
     cwd: tmpDir,
-    batchGitCommit: false,
     forceContinue: false,
     ...overrides,
   };

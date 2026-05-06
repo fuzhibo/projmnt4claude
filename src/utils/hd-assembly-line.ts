@@ -82,6 +82,7 @@ export class AssemblyLine {
   constructor(config: HarnessConfig, sessionId?: string) {
     this.config = config;
     this.sessionId = sessionId;
+
     this.taskRetryContexts = new Map();
     this.executor = new HarnessExecutor(config);
     this.codeReviewer = new HarnessCodeReviewer(config);
@@ -251,7 +252,7 @@ export class AssemblyLine {
         // 跨批次边界时输出批次摘要
         if (hasBatches && batchPos && batchCtx && batchPos.batchIndex !== batchCtx.batchIndex) {
           this.outputBatchSummary(state, batchPos.batchIndex);
-          this.commitBatchChanges(state, batchPos.batchIndex);
+          this.tagBatchCompletion(state, batchPos.batchIndex);
         }
 
         // 保存状态（用于中断恢复）
@@ -288,7 +289,7 @@ export class AssemblyLine {
           const nextBatch = this.getBatchPosition(state.currentIndex, state);
           if (nextBatch && batchPos.batchIndex !== nextBatch.batchIndex) {
             this.outputBatchSummary(state, batchPos.batchIndex);
-            this.commitBatchChanges(state, batchPos.batchIndex);
+            this.tagBatchCompletion(state, batchPos.batchIndex);
           }
         }
       }
@@ -297,7 +298,7 @@ export class AssemblyLine {
     // 输出最后一个批次的摘要
     if (hasBatches && state.batchBoundaries!.length > 0) {
       this.outputBatchSummary(state, state.batchBoundaries!.length - 1);
-      this.commitBatchChanges(state, state.batchBoundaries!.length - 1);
+      this.tagBatchCompletion(state, state.batchBoundaries!.length - 1);
     }
 
     // 生成摘要
@@ -2353,17 +2354,22 @@ export class AssemblyLine {
   }
 
   /**
-   * 批次间自动 git commit
+   * 批次间自动 git tag + commit
    *
-   * 当启用 --batch-git-commit 且跨批次边界时，检查工作区是否有变更，
-   * 有则执行 git add -A + git commit，commit message 包含批次标签和统计。
+   * 当启用 --batch-git-tag-commit 且跨批次边界时，
+   * 检查工作区是否有变更，有则执行 git add -A + git commit，
+   * 然后创建 git tag 标记批次完成。
+   *
+   * tag 格式: batch-{N}-{timestamp}
+   * commit message: harness: batch N completed (X passed, Y failed, Z file changes)
+   *
    * dry-run 模式仅输出提示不实际提交。
    */
-  private commitBatchChanges(
+  private tagBatchCompletion(
     state: HarnessRuntimeState,
     batchIndex: number
   ): void {
-    if (!this.config.batchGitCommit) return;
+    if (!this.config.batchGitTagCommit) return;
 
     const boundaries = state.batchBoundaries;
     if (!boundaries || boundaries.length === 0) return;
@@ -2389,7 +2395,8 @@ export class AssemblyLine {
     }
 
     if (this.config.dryRun) {
-      console.log(`\n📝 [dry-run] 将为 ${label} 创建 git commit (${passed} 通过, ${failed} 失败)`);
+      const tagHint = this.config.batchGitTagCommit ? ' + git tag (batch-{N}-{timestamp})' : '';
+      console.log(`\n📝 [dry-run] 将为 ${label} 创建 git commit${tagHint} (${passed} 通过, ${failed} 失败)`);
       return;
     }
 
@@ -2403,6 +2410,22 @@ export class AssemblyLine {
 
       if (!statusOutput.trim()) {
         console.log(`\n📦 ${label}: 无文件变更，跳过 git commit`);
+        // batchGitTagCommit 模式下仍需创建 tag 标记批次完成
+        if (this.config.batchGitTagCommit) {
+          try {
+            const batchNumber = batchIndex + 1;
+            const timestamp = Math.floor(Date.now() / 1000);
+            const tagName = `batch-${batchNumber}-${timestamp}`;
+            execSync(`git tag ${tagName}`, {
+              cwd: this.config.cwd,
+              encoding: 'utf-8',
+              timeout: 10000,
+            });
+            console.log(`   🏷️  已创建 git tag: ${tagName}`);
+          } catch (tagError) {
+            console.error(`   ⚠️ 创建 git tag 失败: ${tagError instanceof Error ? tagError.message : String(tagError)}`);
+          }
+        }
         return;
       }
 
@@ -2441,12 +2464,32 @@ export class AssemblyLine {
 
       console.log(`\n📦 ${label}: 已提交 ${changedFiles} 个文件变更 (git commit${commitSha ? ` ${commitSha.substring(0, 7)}` : ''})`);
 
+      // 创建 git tag（仅 --batch-git-tag-commit 模式）
+      let tagName = '';
+      if (this.config.batchGitTagCommit) {
+        try {
+          const batchNumber = batchIndex + 1;
+          const timestamp = Math.floor(Date.now() / 1000);
+          tagName = `batch-${batchNumber}-${timestamp}`;
+          execSync(`git tag ${tagName}`, {
+            cwd: this.config.cwd,
+            encoding: 'utf-8',
+            timeout: 10000,
+          });
+          console.log(`   🏷️  已创建 git tag: ${tagName}`);
+        } catch (tagError) {
+          console.error(`   ⚠️ 创建 git tag 失败: ${tagError instanceof Error ? tagError.message : String(tagError)}`);
+          tagName = '';
+        }
+      }
+
       // 将 commit SHA 写入该批次所有任务的 executionStats.commitHistory
       if (commitSha) {
         const entry: CommitHistoryEntry = {
           sha: commitSha,
           batchLabel: label,
           timestamp: new Date().toISOString(),
+          ...(tagName ? { tagName } : {}),
         };
         for (const taskId of batchTaskIds) {
           try {

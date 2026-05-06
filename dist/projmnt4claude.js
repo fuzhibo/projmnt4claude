@@ -18546,7 +18546,7 @@ var init_harness = __esm(() => {
     dryRun: false,
     continue: false,
     jsonOutput: false,
-    batchGitCommit: false,
+    batchGitTagCommit: false,
     forceContinue: false
   };
   VALID_VERDICT_ACTIONS = [
@@ -39022,7 +39022,7 @@ ${"━".repeat(SEPARATOR_WIDTH)}`);
         } : undefined);
         if (hasBatches && batchPos && batchCtx && batchPos.batchIndex !== batchCtx.batchIndex) {
           this.outputBatchSummary(state, batchPos.batchIndex);
-          this.commitBatchChanges(state, batchPos.batchIndex);
+          this.tagBatchCompletion(state, batchPos.batchIndex);
         }
         saveRuntimeState(state, this.config.cwd);
       } catch (error) {
@@ -39048,14 +39048,14 @@ ${"━".repeat(SEPARATOR_WIDTH)}`);
           const nextBatch = this.getBatchPosition(state.currentIndex, state);
           if (nextBatch && batchPos.batchIndex !== nextBatch.batchIndex) {
             this.outputBatchSummary(state, batchPos.batchIndex);
-            this.commitBatchChanges(state, batchPos.batchIndex);
+            this.tagBatchCompletion(state, batchPos.batchIndex);
           }
         }
       }
     }
     if (hasBatches && state.batchBoundaries.length > 0) {
       this.outputBatchSummary(state, state.batchBoundaries.length - 1);
-      this.commitBatchChanges(state, state.batchBoundaries.length - 1);
+      this.tagBatchCompletion(state, state.batchBoundaries.length - 1);
     }
     const endTime = new Date().toISOString();
     const duration = new Date(endTime).getTime() - new Date(startTime).getTime();
@@ -40393,8 +40393,8 @@ ${"━".repeat(SEPARATOR_WIDTH)}`);
     console.log(`
 \uD83D\uDCCA ${label} 完成: ${passed} 通过, ${failed} 失败, ${skipped} 跳过 (${batchSize} 任务)`);
   }
-  commitBatchChanges(state, batchIndex) {
-    if (!this.config.batchGitCommit)
+  tagBatchCompletion(state, batchIndex) {
+    if (!this.config.batchGitTagCommit)
       return;
     const boundaries = state.batchBoundaries;
     if (!boundaries || boundaries.length === 0)
@@ -40414,8 +40414,9 @@ ${"━".repeat(SEPARATOR_WIDTH)}`);
       }
     }
     if (this.config.dryRun) {
+      const tagHint = this.config.batchGitTagCommit ? " + git tag (batch-{N}-{timestamp})" : "";
       console.log(`
-\uD83D\uDCDD [dry-run] 将为 ${label} 创建 git commit (${passed} 通过, ${failed} 失败)`);
+\uD83D\uDCDD [dry-run] 将为 ${label} 创建 git commit${tagHint} (${passed} 通过, ${failed} 失败)`);
       return;
     }
     try {
@@ -40427,6 +40428,21 @@ ${"━".repeat(SEPARATOR_WIDTH)}`);
       if (!statusOutput.trim()) {
         console.log(`
 \uD83D\uDCE6 ${label}: 无文件变更，跳过 git commit`);
+        if (this.config.batchGitTagCommit) {
+          try {
+            const batchNumber = batchIndex + 1;
+            const timestamp = Math.floor(Date.now() / 1000);
+            const tagName2 = `batch-${batchNumber}-${timestamp}`;
+            execSync4(`git tag ${tagName2}`, {
+              cwd: this.config.cwd,
+              encoding: "utf-8",
+              timeout: 1e4
+            });
+            console.log(`   \uD83C\uDFF7️  已创建 git tag: ${tagName2}`);
+          } catch (tagError) {
+            console.error(`   ⚠️ 创建 git tag 失败: ${tagError instanceof Error ? tagError.message : String(tagError)}`);
+          }
+        }
         return;
       }
       const changedFiles = statusOutput.trim().split(`
@@ -40457,11 +40473,29 @@ ${"━".repeat(SEPARATOR_WIDTH)}`);
       }
       console.log(`
 \uD83D\uDCE6 ${label}: 已提交 ${changedFiles} 个文件变更 (git commit${commitSha ? ` ${commitSha.substring(0, 7)}` : ""})`);
+      let tagName = "";
+      if (this.config.batchGitTagCommit) {
+        try {
+          const batchNumber = batchIndex + 1;
+          const timestamp = Math.floor(Date.now() / 1000);
+          tagName = `batch-${batchNumber}-${timestamp}`;
+          execSync4(`git tag ${tagName}`, {
+            cwd: this.config.cwd,
+            encoding: "utf-8",
+            timeout: 1e4
+          });
+          console.log(`   \uD83C\uDFF7️  已创建 git tag: ${tagName}`);
+        } catch (tagError) {
+          console.error(`   ⚠️ 创建 git tag 失败: ${tagError instanceof Error ? tagError.message : String(tagError)}`);
+          tagName = "";
+        }
+      }
       if (commitSha) {
         const entry = {
           sha: commitSha,
           batchLabel: label,
-          timestamp: new Date().toISOString()
+          timestamp: new Date().toISOString(),
+          ...tagName ? { tagName } : {}
         };
         for (const taskId of batchTaskIds) {
           try {
@@ -40661,7 +40695,7 @@ async function harnessCommand(options, cwd2 = process.cwd()) {
     dryRun: options.dryRun ?? DEFAULT_HARNESS_CONFIG.dryRun,
     continue: options.continue ?? DEFAULT_HARNESS_CONFIG.continue,
     jsonOutput: options.json ?? DEFAULT_HARNESS_CONFIG.jsonOutput,
-    batchGitCommit: options.batchGitCommit ?? DEFAULT_HARNESS_CONFIG.batchGitCommit,
+    batchGitTagCommit: options.batchGitTagCommit ?? DEFAULT_HARNESS_CONFIG.batchGitTagCommit,
     forceContinue: options.forceContinue ?? DEFAULT_HARNESS_CONFIG.forceContinue,
     cwd: cwd2
   };
@@ -40697,6 +40731,9 @@ async function harnessCommand(options, cwd2 = process.cwd()) {
     console.log(`\uD83D\uDD00 Parallel: ${config.parallel}`);
     console.log(`\uD83E\uDDEA Dry run: ${config.dryRun ? "Yes" : "No"}`);
     console.log(`▶️  Continue: ${config.continue ? "Yes" : "No"}`);
+    if (config.batchGitTagCommit) {
+      console.log(`\uD83C\uDFF7️  Batch git tag+commit: Yes`);
+    }
     console.log("");
   }
   if (config.dryRun) {
@@ -40964,7 +41001,7 @@ function validateAndRepairState(data, cwd2) {
       dryRun: false,
       continue: false,
       jsonOutput: false,
-      batchGitCommit: false,
+      batchGitTagCommit: false,
       forceContinue: false
     };
     for (const [key, defaultValue] of Object.entries(configDefaults)) {
@@ -41873,7 +41910,6 @@ Main Options:
   --dry-run                  Dry run mode (no actual execution)
   --continue                 Continue from last interruption
   --json                     JSON format output
-  --batch-git-commit         Auto git commit after each batch
 
 Quality Gate Options:
   --require-quality <n>      Quality score threshold (0-100, default: 60)
@@ -41885,7 +41921,10 @@ Sub-command: cleanup
   --orphans-only             Clean only orphaned snapshots (process no longer exists)
 
 Deprecated Options:
-  ~~--skip-quality-gate~~    Deprecated, use --skip-harness-gate instead`).option("--plan <file>", "Plan file path (optional, auto-read/generate if not specified)").option("--max-retries <n>", "Max retry attempts", "3").option("--timeout <seconds>", "Per-task timeout (seconds)", "300").option("--parallel <n>", "Parallel execution count", "1").option("--dry-run", "Dry run mode (no actual execution)").option("--continue", "Continue from last interruption").option("--json", "JSON format output").option("--require-quality <n>", "Quality gate: minimum quality score threshold (0-100, default 60)", "60").option("--skip-harness-gate", "Skip Harness pre-execution quality gate check (not recommended)").option("--skip-quality-gate", "[Deprecated] Use --skip-harness-gate instead").option("--batch-git-commit", "Auto git commit after each batch completes").option("--force", "Force cleanup all snapshots (cleanup subcommand only)").option("--orphans-only", "Clean only orphaned snapshots (cleanup subcommand only)").action(async (action, options) => {
+  ~~--skip-quality-gate~~    Deprecated, use --skip-harness-gate instead
+
+Batch Tag+Commit Options:
+  --batch-git-tag-commit   Auto git tag + commit after each batch (tag: batch-{N}-{timestamp})`).option("--plan <file>", "Plan file path (optional, auto-read/generate if not specified)").option("--max-retries <n>", "Max retry attempts", "3").option("--timeout <seconds>", "Per-task timeout (seconds)", "300").option("--parallel <n>", "Parallel execution count", "1").option("--dry-run", "Dry run mode (no actual execution)").option("--continue", "Continue from last interruption").option("--json", "JSON format output").option("--require-quality <n>", "Quality gate: minimum quality score threshold (0-100, default 60)", "60").option("--skip-harness-gate", "Skip Harness pre-execution quality gate check (not recommended)").option("--skip-quality-gate", "[Deprecated] Use --skip-harness-gate instead").option("--batch-git-tag-commit", "Auto git tag + commit after each batch completes (tag format: batch-{N}-{timestamp})").option("--force", "Force cleanup all snapshots (cleanup subcommand only)").option("--orphans-only", "Clean only orphaned snapshots (cleanup subcommand only)").action(async (action, options) => {
   requireInit();
   if (action === "cleanup") {
     await cleanupHarnessSnapshots({
@@ -41916,7 +41955,7 @@ Deprecated Options:
     json: options.json,
     requireQuality: options.requireQuality,
     skipHarnessGate: options.skipHarnessGate || options.skipQualityGate,
-    batchGitCommit: options.batchGitCommit
+    batchGitTagCommit: options.batchGitTagCommit
   });
 });
 program2.command("help [topic]").description(`Show help information

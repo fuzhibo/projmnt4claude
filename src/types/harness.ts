@@ -31,8 +31,12 @@ export interface HarnessConfig {
   cwd: string;
   /** Independent retry limit configuration for each phase */
   phaseRetryLimits?: PhaseRetryLimits;
-  /** Auto git commit after each batch completes */
-  batchGitCommit: boolean;
+  /**
+   * Auto git tag + commit after each batch completes
+   * Tag format: batch-{N}-{timestamp}
+   * Commit message: harness: batch N completed (X passed, Y failed, Z file changes)
+   */
+  batchGitTagCommit: boolean;
   /** Skip pipeline blocking on basic field validation failure (--force-continue) */
   forceContinue: boolean;
 }
@@ -47,7 +51,7 @@ export const DEFAULT_HARNESS_CONFIG: Omit<HarnessConfig, 'cwd'> = {
   dryRun: false,
   continue: false,
   jsonOutput: false,
-  batchGitCommit: false,
+  batchGitTagCommit: false,
   forceContinue: false,
 };
 

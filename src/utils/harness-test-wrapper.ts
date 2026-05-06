@@ -93,7 +93,6 @@ const DEFAULT_HARNESS_CONFIG: HarnessConfig = {
   dryRun: false,
   continue: false,
   jsonOutput: false,
-  batchGitCommit: false,
   forceContinue: false,
   cwd: process.cwd(),
 };

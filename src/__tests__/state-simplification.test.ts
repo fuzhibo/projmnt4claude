@@ -120,7 +120,6 @@ describe('State Simplification', () => {
           continue: false,
           jsonOutput: false,
           cwd: testEnv.cwd,
-          batchGitCommit: false,
           forceContinue: false,
         },
         taskQueue: [],

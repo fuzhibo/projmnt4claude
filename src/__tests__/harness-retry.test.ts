@@ -12,7 +12,6 @@ function createTestConfig(cwd: string, maxRetries = 3): HarnessConfig {
     continue: false,
     jsonOutput: false,
     cwd,
-    batchGitCommit: false,
   };
 }
 

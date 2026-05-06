@@ -28,7 +28,7 @@ node ${CLAUDE_PLUGIN_ROOT}/skills/projmnt4claude/dist/projmnt4claude.js headless
 | `--api-retry-delay <seconds>` | API retry base delay (seconds) | 60 |
 | `--require-quality <n>` | Quality gate: minimum quality score threshold (0-100) | 60 |
 | `--skip-harness-gate` | Skip Harness pre-execution quality gate (not recommended, `--skip-quality-gate` is backward-compatible alias) | false |
-| `--batch-git-commit` | Auto git commit after each batch completes | false |
+| `--batch-git-tag-commit` | Auto git tag + commit after each batch completes (tag format: `batch-{N}-{timestamp}`) | false |
 
 ## Pipeline Status Query
 
@@ -98,18 +98,20 @@ projmnt4claude headless-harness-design --api-retry-attempts 5 --api-retry-delay 
 ```
 
 ### Batch Auto Commit
+
 ```bash
-projmnt4claude headless-harness-design --batch-git-commit
+projmnt4claude headless-harness-design --batch-git-tag-commit
 ```
 
-When enabled, automatically runs `git add -A` + `git commit` after each batch completes. The commit message includes the batch label and statistics (passed/failed/file changes). Combine with `--dry-run` to preview commit behavior.
+When enabled, automatically runs `git add -A` + `git commit` + `git tag` after each batch completes. The commit message includes the batch label and statistics (passed/failed/file changes). A git tag is also created to mark batch completion. Combine with `--dry-run` to preview commit behavior.
 
 ### Batch Commit Tracing
 
-With `--batch-git-commit`, a git commit is automatically created after each batch completes, creating a traceable execution history:
+With `--batch-git-tag-commit`, a git commit and tag are automatically created after each batch completes, creating a traceable execution history:
 
 - **Commit Format**: `harness: batch N completed (X passed, Y failed, Z file changes)`
-- **Tracing**: Use `git log --oneline | grep "harness:"` to view all batch commits
+- **Tag Format**: `batch-{N}-{timestamp}` (N = batch number, timestamp = Unix epoch seconds)
+- **Tracing**: Use `git log --oneline | grep "harness:"` to view all batch commits, `git tag -l "batch-*"` to view all batch tags
 - **Batch Content**: Each commit includes file changes from all tasks in that batch
 - **Resume Safety**: `--continue` won't re-commit changes from completed batches
 - **Dry-run Preview**: Combine with `--dry-run` to preview commit behavior without executing
@@ -136,5 +138,5 @@ Only use `--skip-harness-gate` when explicitly instructed by the user.
 2. **Headless Claude**: Requires `claude` CLI installed and authenticated
 3. **Timeout**: Complex tasks may need longer timeout values
 4. **Parallel**: Currently only serial execution (parallel=1)
-5. **Batch Git Commit**: With `--batch-git-commit`, auto git commit after each batch completes. Commit message format: `harness: batch N completed (X passed, Y failed, Z file changes)`. Resuming with `--continue` won't re-commit already-committed batch changes
+5. **Batch Git Tag+Commit**: `--batch-git-tag-commit` auto git commit + git tag after each batch completes. Commit message format: `harness: batch N completed (X passed, Y failed, Z file changes)`. Tag format: `batch-{N}-{timestamp}`. Resuming with `--continue` won't re-commit already-committed batch changes
 6. **State File**: `harness-status.json` tracks pipeline state. In batch mode, batch boundaries and progress are tracked. Batch commit failure does not block pipeline execution

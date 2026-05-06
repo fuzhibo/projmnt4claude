@@ -155,8 +155,8 @@ export interface HarnessCommandOptions {
   skipQualityGate?: boolean;  // 已弃用，保持向后兼容
   /** 跳过 Harness 执行前质量门禁检查 (--skip-harness-gate) */
   skipHarnessGate?: boolean;
-  /** 每个批次完成后自动 git commit */
-  batchGitCommit?: boolean;
+  /** 每个批次完成后自动 git tag + commit */
+  batchGitTagCommit?: boolean;
   /** 跳过基础字段验证失败时的流水线阻塞 */
   forceContinue?: boolean;
 }
@@ -319,7 +319,7 @@ export async function harnessCommand(
     dryRun: options.dryRun ?? DEFAULT_HARNESS_CONFIG.dryRun,
     continue: options.continue ?? DEFAULT_HARNESS_CONFIG.continue,
     jsonOutput: options.json ?? DEFAULT_HARNESS_CONFIG.jsonOutput,
-    batchGitCommit: options.batchGitCommit ?? DEFAULT_HARNESS_CONFIG.batchGitCommit,
+    batchGitTagCommit: options.batchGitTagCommit ?? DEFAULT_HARNESS_CONFIG.batchGitTagCommit,
     forceContinue: options.forceContinue ?? DEFAULT_HARNESS_CONFIG.forceContinue,
     cwd,
   };
@@ -363,6 +363,9 @@ export async function harnessCommand(
     console.log(`🔀 Parallel: ${config.parallel}`);
     console.log(`🧪 Dry run: ${config.dryRun ? 'Yes' : 'No'}`);
     console.log(`▶️  Continue: ${config.continue ? 'Yes' : 'No'}`);
+    if (config.batchGitTagCommit) {
+      console.log(`🏷️  Batch git tag+commit: Yes`);
+    }
     console.log('');
   }
 
@@ -727,7 +730,7 @@ function validateAndRepairState(
       dryRun: false,
       continue: false,
       jsonOutput: false,
-      batchGitCommit: false,
+      batchGitTagCommit: false,
       forceContinue: false,
     };
 

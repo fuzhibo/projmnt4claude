@@ -28,7 +28,7 @@ node ${CLAUDE_PLUGIN_ROOT}/skills/projmnt4claude/dist/projmnt4claude.js headless
 | `--api-retry-delay <seconds>` | API 重试基础延迟（秒） | 60 |
 | `--require-quality <n>` | 质量门禁：最低质量分阈值（0-100） | 60 |
 | `--skip-harness-gate` | 跳过 Harness 执行前质量门禁检查（不推荐，`--skip-quality-gate` 为向后兼容别名） | false |
-| `--batch-git-commit` | 每个批次完成后自动 git commit | false |
+| `--batch-git-tag-commit` | 每个批次完成后自动创建 git tag + commit（tag 格式: `batch-{N}-{timestamp}`） | false |
 
 ## 流水线状态查询
 
@@ -100,18 +100,20 @@ projmnt4claude headless-harness-design --api-retry-attempts 5 --api-retry-delay 
 ```
 
 ### 批次自动提交
+
 ```bash
-projmnt4claude headless-harness-design --batch-git-commit
+projmnt4claude headless-harness-design --batch-git-tag-commit
 ```
 
-启用后，每个批次完成时会自动执行 `git add -A` + `git commit`，commit message 包含批次标签和统计信息。配合 `--dry-run` 可预览提交行为。
+启用后，每个批次完成时会自动执行 `git add -A` + `git commit` + `git tag`，commit message 包含批次标签和统计信息，同时创建 git tag 标记批次完成。配合 `--dry-run` 可预览提交行为。
 
 ### 批次提交追溯
 
-启用 `--batch-git-commit` 后，每个批次完成时会自动创建 git commit，形成可追溯的执行历史：
+启用 `--batch-git-tag-commit` 后，每个批次完成时会自动创建 git commit 和 git tag，形成可追溯的执行历史：
 
 - **Commit 格式**: `harness: 批次 N 完成 (X 通过, Y 失败, Z 文件变更)`
-- **追溯方式**: 使用 `git log --oneline | grep "harness:"` 查看所有批次提交
+- **Tag 格式**: `batch-{N}-{timestamp}`（N 为批次序号，timestamp 为 Unix 时间戳）
+- **追溯方式**: 使用 `git log --oneline | grep "harness:"` 查看所有批次提交，`git tag -l "batch-*"` 查看所有批次标签
 - **批次内容**: 每个 commit 包含该批次所有任务的文件变更
 - **中断安全**: `--continue` 恢复时不会重复提交已完成批次的变更
 - **Dry-run 预览**: 配合 `--dry-run` 可预览提交行为，不实际执行
@@ -141,5 +143,5 @@ projmnt4claude headless-harness-design --batch-git-commit
 3. **超时设置**: 复杂任务可能需要更长的超时时间
 4. **并行执行**: 目前仅支持串行（parallel=1）
 5. **质量门禁**: 使用 `--require-quality` 设置最低质量分阈值，低于阈值的任务将被标记为失败
-6. **批次提交**: 启用 `--batch-git-commit` 后，每个批次完成时自动 git commit。commit message 格式：`harness: 批次 N 完成 (X 通过, Y 失败, Z 文件变更)`。`--continue` 恢复时不会重复提交已完成批次的变更
+6. **批次提交**: `--batch-git-tag-commit` 启用后每个批次完成时自动 git commit + git tag。commit message 格式：`harness: 批次 N 完成 (X 通过, Y 失败, Z 文件变更)`，tag 格式：`batch-{N}-{timestamp}`。`--continue` 恢复时不会重复提交已完成批次的变更
 7. **状态文件**: `harness-status.json` 记录流水线状态，启用批次模式时会追踪批次边界和进度。批次提交失败不影响流水线继续执行

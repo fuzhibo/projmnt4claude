@@ -147,7 +147,7 @@ Run the complete 4-stage pipeline on your plan:
 /projmnt4claude:headless-harness-design
 
 # With batch auto-commit
-/projmnt4claude:headless-harness-design --batch-git-commit
+/projmnt4claude:headless-harness-design --batch-git-tag-commit
 
 # Continue from interruption
 /projmnt4claude:headless-harness-design --continue
@@ -565,7 +565,7 @@ GNU Affero General Public License v3.0 (AGPLv3)
 /projmnt4claude:headless-harness-design
 
 # 带批次自动提交
-/projmnt4claude:headless-harness-design --batch-git-commit
+/projmnt4claude:headless-harness-design --batch-git-tag-commit
 
 # 从中断处继续
 /projmnt4claude:headless-harness-design --continue

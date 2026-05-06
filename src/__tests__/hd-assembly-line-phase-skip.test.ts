@@ -38,7 +38,6 @@ function createTestConfig(cwd: string): HarnessConfig {
     forceContinue: false,
     jsonOutput: false,
     cwd,
-    batchGitCommit: false,
   };
 }
 

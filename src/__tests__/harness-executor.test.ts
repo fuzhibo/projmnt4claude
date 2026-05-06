@@ -45,7 +45,6 @@ function createConfig(tempDir: string, overrides: Partial<HarnessConfig> = {}): 
     continue: false,
     jsonOutput: false,
     cwd: tempDir,
-    batchGitCommit: false,
     forceContinue: false,
     ...overrides,
   };

@@ -324,6 +324,8 @@ export interface CommitHistoryEntry {
   batchLabel: string;
   /** Commit time (ISO) */
   timestamp: string;
+  /** Git tag name (e.g., "batch-1-1715000000"), set when --batch-git-tag-commit is enabled */
+  tagName?: string;
 }
 
 /**
