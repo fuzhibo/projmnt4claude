@@ -67,3 +67,17 @@ export type {
   CoverageCheckerConfig,
   CoverageWeights,
 } from './checkers/coverage-checker.js';
+
+// Checkpoint sync checker exports
+export {
+  QACheckpointSyncChecker,
+  createCheckpointSyncChecker,
+  quickCheckpointSyncCheck,
+  DEFAULT_CHECKPOINT_SYNC_CONFIG,
+} from './checkers/checkpoint-sync-checker.js';
+
+export type {
+  CheckpointSyncCheckResult,
+  CheckpointSyncCheckerConfig,
+  MismatchedCheckpoint,
+} from './checkers/checkpoint-sync-checker.js';
