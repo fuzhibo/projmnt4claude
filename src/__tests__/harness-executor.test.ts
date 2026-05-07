@@ -381,10 +381,10 @@ describe('HarnessExecutor', () => {
       const executor = new HarnessExecutor(config);
       await executor.execute(task, contract, undefined, retryCtx);
 
-      expect(capturedPrompt).toContain('重试上下文');
+      expect(capturedPrompt).toContain('Retry Context (Previous Failure Info)');
       expect(capturedPrompt).toContain('Tests did not cover the module');
-      expect(capturedPrompt).toContain('QA 验证');
-      expect(capturedPrompt).toContain('第 2 次尝试');
+      expect(capturedPrompt).toContain('QA Validation');
+      expect(capturedPrompt).toContain('This is attempt #2');
     });
 
     test('injects retry context with partial progress', async () => {
@@ -518,7 +518,7 @@ describe('HarnessExecutor', () => {
       );
       expect(fs.existsSync(reportPath)).toBe(true);
       const content = fs.readFileSync(reportPath, 'utf-8');
-      expect(content).toContain('开发报告');
+      expect(content).toContain('Development Report');
       expect(content).toContain(task.id);
     });
 
@@ -539,7 +539,7 @@ describe('HarnessExecutor', () => {
         config.cwd, '.projmnt4claude', 'reports', 'harness', task.id, 'dev-report.md'
       );
       const content = fs.readFileSync(reportPath, 'utf-8');
-      expect(content).toContain('错误信息');
+      expect(content).toContain('Error Information');
       expect(content).toContain('Build error');
     });
 

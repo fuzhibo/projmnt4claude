@@ -45,19 +45,19 @@ describe('hasValidCheckpoints', () => {
   it('returns invalid for null content', async () => {
     const result = hasValidCheckpoints(null, false);
     expect(result.valid).toBe(false);
-    expect(result.reason).toBe('无检查点内容');
+    expect(result.reason).toBe('Validation error');
   });
 
   it('returns invalid for null content with isContent=true', async () => {
     const result = hasValidCheckpoints(null, true);
     expect(result.valid).toBe(false);
-    expect(result.reason).toBe('无检查点内容');
+    expect(result.reason).toBe('Validation error');
   });
 
   it('returns invalid for content with no checkpoint items', async () => {
     const result = hasValidCheckpoints('# Title\nSome text without checkboxes', true);
     expect(result.valid).toBe(false);
-    expect(result.reason).toBe('checkpoint.md 中没有检查点项');
+    expect(result.reason).toBe('No checkpoint items in checkpoint.md');
   });
 
   it('returns valid for content with meaningful checkpoints', async () => {
@@ -67,29 +67,29 @@ describe('hasValidCheckpoints', () => {
     expect(result.reason).toBe('');
   });
 
-  it('returns invalid when majority are template checkpoints (检查点1, 检查点2)', async () => {
-    const content = `# TASK-001 检查点\n- [ ] 检查点1\n- [ ] 检查点2\n- [ ] 验证功能`;
+  it('returns invalid when majority are template checkpoints (Checkpoint1, Checkpoint2)', async () => {
+    const content = `# TASK-001 Checkpoints\n- [ ] Checkpoint1\n- [ ] Checkpoint2\n- [ ] Verify the feature`;
     // 2/3 are template → majority
     const result = hasValidCheckpoints(content, true);
     expect(result.valid).toBe(false);
-    expect(result.reason).toContain('模板内容');
+    expect(result.reason).toContain('template content');
   });
 
   it('returns valid when minority are template checkpoints', async () => {
-    const content = `# TASK-001 检查点\n- [ ] 检查点1\n- [ ] 验证登录功能\n- [ ] 确认 API 正常\n- [ ] 更新文档`;
+    const content = `# TASK-001 Checkpoints\n- [ ] Checkpoint1\n- [ ] Verify login functionality\n- [ ] Confirm API is working\n- [ ] Update documentation`;
     // 1/4 are template → minority
     const result = hasValidCheckpoints(content, true);
     expect(result.valid).toBe(true);
   });
 
-  it('detects "完成任务" template pattern', async () => {
-    const content = `# TASK-001 检查点\n- [ ] 完成任务\n- [ ] 完成任`;
+  it('detects "完成Task" template pattern', async () => {
+    const content = `# TASK-001 Checkpoints\n- [ ] 完成Task\n- [ ] 完成Task`;
     const result = hasValidCheckpoints(content, true);
     expect(result.valid).toBe(false);
   });
 
   it('detects "待填写" template pattern', async () => {
-    const content = `# TASK-001 检查点\n- [ ] 待填写\n- [ ] 待填写`;
+    const content = `# TASK-001 Checkpoints\n- [ ] 待填写\n- [ ] 待填写`;
     const result = hasValidCheckpoints(content, true);
     expect(result.valid).toBe(false);
   });
@@ -122,7 +122,7 @@ describe('hasValidCheckpoints', () => {
     const content = `# TASK-001 检查点\n- [ ] 检查点1（请替换为具体验收标准）\n- [ ] 检查点2（请替换为具体验收标准）`;
     const result = hasValidCheckpoints(content, true);
     expect(result.valid).toBe(false);
-    expect(result.reason).toContain('模板内容');
+    expect(result.reason).toContain('template content');
   });
 
   it('detects "请替换.*具体" pattern', async () => {
@@ -136,7 +136,7 @@ describe('hasValidCheckpoints', () => {
   it('returns invalid when checkpoint file does not exist', async () => {
     const result = hasValidCheckpoints(path.join(env.tempDir, 'nonexistent.md'), false);
     expect(result.valid).toBe(false);
-    expect(result.reason).toBe('checkpoint.md 文件不存在');
+    expect(result.reason).toBe('checkpoint.md file does not exist');
   });
 
   it('reads from file when isContent=false and file exists', async () => {
@@ -148,8 +148,8 @@ describe('hasValidCheckpoints', () => {
 
   it('reads from file and detects template content', async () => {
     const cpPath = path.join(env.tempDir, 'checkpoint.md');
-    fs.writeFileSync(cpPath, `# TASK-001 检查点\n- [ ] 检查点1\n- [ ] 检查点2`);
-    const result = hasValidCheckpoints(cpPath, false);
+    fs.writeFileSync(cpPath, `# TASK-001 Checkpoints\n- [ ] Checkpoint1\n- [ ] Checkpoint2`);
+    const result = hasValidCheckpoints(cpPath, false, env.tempDir);
     expect(result.valid).toBe(false);
   });
 
@@ -166,15 +166,18 @@ describe('hasValidCheckpoints', () => {
 describe('displayCheckpointVerificationWarnings', () => {
   let displayCheckpointVerificationWarnings: typeof import('../commands/task.js')['displayCheckpointVerificationWarnings'];
   let consoleSpy: ReturnType<typeof spyOn>;
+  let env: IsolatedTestEnv;
 
   beforeEach(async () => {
     const mod = await taskModule();
     displayCheckpointVerificationWarnings = mod.displayCheckpointVerificationWarnings;
     consoleSpy = spyOn(console, 'log');
+    env = await createIsolatedTestEnv();
   });
 
-  afterEach(() => {
+  afterEach(async () => {
     consoleSpy.mockRestore();
+    await env.cleanup();
   });
 
   it('does not output anything when warnings array is empty', () => {
@@ -184,23 +187,23 @@ describe('displayCheckpointVerificationWarnings', () => {
 
   it('displays warnings for missing verification commands', () => {
     displayCheckpointVerificationWarnings([
-      '检查点 "验证登录" 的验证方法为 functional_test，但缺少 commands 或 steps',
-    ]);
+      'Checkpoint "Verify Login" uses functional_test but missing commands or steps',
+    ], env.tempDir);
     expect(consoleSpy).toHaveBeenCalled();
     const output = consoleSpy.mock.calls.map((c: any[]) => c[0]).join('\n');
-    expect(output).toContain('检查点验证命令缺失提醒');
-    expect(output).toContain('1 个检查点缺少自动化验证命令');
-    expect(output).toContain('验证登录');
+    expect(output).toContain('Missing Checkpoint Verification Commands');
+    expect(output).toContain('1 checkpoints missing automated verification commands');
+    expect(output).toContain('Verify Login');
   });
 
   it('displays multiple warnings', () => {
     displayCheckpointVerificationWarnings([
-      '检查点 "A" 缺少 commands',
-      '检查点 "B" 缺少 commands',
-      '检查点 "C" 缺少 commands',
-    ]);
+      'Checkpoint "A" missing commands',
+      'Checkpoint "B" missing commands',
+      'Checkpoint "C" missing commands',
+    ], env.tempDir);
     const output = consoleSpy.mock.calls.map((c: any[]) => c[0]).join('\n');
-    expect(output).toContain('3 个检查点缺少自动化验证命令');
+    expect(output).toContain('3 checkpoints missing automated verification commands');
   });
 });
 
@@ -209,27 +212,30 @@ describe('displayCheckpointVerificationWarnings', () => {
 describe('displayCheckpointCreationWarning', () => {
   let displayCheckpointCreationWarning: typeof import('../commands/task.js')['displayCheckpointCreationWarning'];
   let consoleSpy: ReturnType<typeof spyOn>;
+  let env: IsolatedTestEnv;
 
   beforeEach(async () => {
     const mod = await taskModule();
     displayCheckpointCreationWarning = mod.displayCheckpointCreationWarning;
     consoleSpy = spyOn(console, 'log');
+    env = await createIsolatedTestEnv();
   });
 
-  afterEach(() => {
+  afterEach(async () => {
     consoleSpy.mockRestore();
+    await env.cleanup();
   });
 
   it('displays checkpoint quality reminder with task ID', () => {
-    displayCheckpointCreationWarning('TASK-feature-P2-test-20260411', '/project');
+    displayCheckpointCreationWarning('TASK-feature-P2-test-20260411', env.tempDir);
     const output = consoleSpy.mock.calls.map((c: any[]) => c[0]).join('\n');
-    expect(output).toContain('检查点质量提醒');
+    expect(output).toContain('Checkpoint Quality Reminder');
     expect(output).toContain('TASK-feature-P2-test-20260411');
     expect(output).toContain('checkpoint.md');
   });
 
   it('mentions analyze command for auto-generation', () => {
-    displayCheckpointCreationWarning('TASK-001', '/project');
+    displayCheckpointCreationWarning('TASK-001', env.tempDir);
     const output = consoleSpy.mock.calls.map((c: any[]) => c[0]).join('\n');
     expect(output).toContain('analyze');
     expect(output).toContain('--generate-checkpoints');
@@ -497,7 +503,7 @@ describe('createTask', () => {
     }, env.tempDir);
 
     expect(result.history.length).toBeGreaterThan(0);
-    const createEntry = result.history.find(h => h.action === '任务创建');
+    const createEntry = result.history.find(h => h.action === 'TaskCreated');
     expect(createEntry).toBeDefined();
     expect(createEntry!.newValue).toBe('open');
   });
@@ -602,7 +608,7 @@ describe('updateTask', () => {
     // Should have transitionNotes
     expect(task.transitionNotes!.length).toBeGreaterThan(0);
     // Should have history entry
-    const reopenEntry = task.history.find(h => h.action.includes('重开'));
+    const reopenEntry = task.history.find(h => h.action.includes('TaskReopen'));
     expect(reopenEntry).toBeDefined();
   });
 
@@ -650,7 +656,7 @@ describe('updateTask', () => {
     readTaskMetaSpy.mockReturnValue(task);
     await updateTask(task.id, {}, env.tempDir);
     const output = consoleSpy.mock.calls.map((c: any[]) => c[0]).join('\n');
-    expect(output).toContain('没有指定要更新的字段');
+    expect(output).toContain('No fields specified for update');
     expect(writeTaskMetaSpy).not.toHaveBeenCalled();
   });
 
@@ -666,7 +672,7 @@ describe('updateTask', () => {
 
     await updateTask(task.id, { status: 'resolved' }, env.tempDir);
     const output = consoleSpy.mock.calls.map((c: any[]) => c[0]).join('\n');
-    expect(output).toContain('检查点确认提醒');
+    expect(output).toContain('Checkpoint Confirmation Reminder');
   });
 
   it('resolves directly when no checkpoint file exists', async () => {
@@ -678,7 +684,7 @@ describe('updateTask', () => {
     await updateTask(task.id, { status: 'resolved' }, env.tempDir);
     expect(task.status).toBe('resolved');
     const output = consoleSpy.mock.calls.map((c: any[]) => c[0]).join('\n');
-    expect(output).toContain('已更新为已解决状态');
+    expect(output).toContain('updated to resolved status');
   });
 
   it('rejects invalid token for resolved status', async () => {
@@ -924,7 +930,7 @@ describe('completeTask', () => {
     expect(task.status).toBe('resolved');
     expect(writeTaskMetaSpy).toHaveBeenCalled();
     const output = consoleSpy.mock.calls.map((c: any[]) => c[0]).join('\n');
-    expect(output).toContain('已完成');
+    expect(output).toContain('Completed');
   });
 
   it('auto-marks unchecked checkpoints when using yes flag', async () => {
@@ -942,7 +948,7 @@ describe('completeTask', () => {
     expect(task.status).toBe('resolved');
     // Verify writeFileSync was called with [x] content
     const output = consoleSpy.mock.calls.map((c: any[]) => c[0]).join('\n');
-    expect(output).toContain('已自动标记');
+    expect(output).toContain('All checkpoints auto-marked as completed');
   });
 
   it('shows unchecked checkpoints warning in non-yes mode and user cancels', async () => {
@@ -963,7 +969,7 @@ describe('completeTask', () => {
     await completeTask(task.id, { yes: false }, env.tempDir);
 
     const output = consoleSpy.mock.calls.map((c: any[]) => c[0]).join('\n');
-    expect(output).toContain('已取消');
+    expect(output).toContain('Cancelled');
     promptsSpy.mockRestore();
   });
 

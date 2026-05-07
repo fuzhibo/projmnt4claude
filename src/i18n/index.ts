@@ -935,7 +935,7 @@ export function getLanguage(cwd: string = process.cwd()): Language {
  */
 export function getI18n(language?: Language, cwd?: string): I18nTexts {
   const lang = language || getLanguage(cwd);
-  return languagePacks[lang] || languagePacks.zh;
+  return languagePacks[lang] || languagePacks.en;
 }
 
 /**
