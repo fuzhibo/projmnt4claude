@@ -126,12 +126,19 @@ function extractSlugFromTask(task: TaskMeta): string {
  * 修复管线内部使用：所有状态变更通过此函数集中管理
  * - 验证状态转换是否合法
  * - 非标准转换时输出警告（修复管线允许强制设置）
+ *
+ * NOTE(i18n-20260507): cwd 参数用于 i18n 翻译上下文。
+ * 此函数在 i18n 集成时遗漏添加 cwd 参数，导致 ReferenceError。
+ * 所有调用点都需要传递 cwd 以支持多语言警告消息。
+ * 未来重构 analyze-fix-pipeline 时，考虑将 cwd 作为上下文对象传递。
+ *
  * @returns 验证结果
  */
 function setTaskStatusValidated(
   task: TaskMeta,
   newStatus: TaskStatus,
   context: string,
+  cwd: string,
 ): StatusTransitionResult {
   const result = validateStatusTransition(task.status, newStatus);
   if (!result.valid) {
@@ -169,7 +176,7 @@ export async function fixSingleIssue(
         const staleDays = Math.floor((Date.now() - updatedAt.getTime()) / (24 * 60 * 60 * 1000));
         if (staleDays > 30) {
           const oldStatus = task.status;
-          setTaskStatusValidated(task, 'closed', 'stale-auto-close');
+          setTaskStatusValidated(task, 'closed', 'stale-auto-close', cwd);
           if (!task.transitionNotes) task.transitionNotes = [];
           task.transitionNotes.push({
             timestamp: new Date().toISOString(),
@@ -200,7 +207,7 @@ export async function fixSingleIssue(
 
       if (response.action === 'close') {
         const oldStatus = task.status;
-        setTaskStatusValidated(task, 'closed', 'stale-user-close');
+        setTaskStatusValidated(task, 'closed', 'stale-user-close', cwd);
         if (!task.transitionNotes) task.transitionNotes = [];
         task.transitionNotes.push({
           timestamp: new Date().toISOString(),
@@ -214,7 +221,7 @@ export async function fixSingleIssue(
         return 'fixed';
       } else if (response.action === 'progress') {
         const oldStatus = task.status;
-        setTaskStatusValidated(task, 'in_progress', 'stale-user-progress');
+        setTaskStatusValidated(task, 'in_progress', 'stale-user-progress', cwd);
         if (!task.transitionNotes) task.transitionNotes = [];
         task.transitionNotes.push({
           timestamp: new Date().toISOString(),
@@ -308,7 +315,7 @@ export async function fixSingleIssue(
       console.log(t(cwd).analyzeFixPipeline.fixingStatus.replace('{taskId}', issue.taskId));
       const oldStatus = task.status;
       const newStatus = normalizeStatus(task.status);
-      setTaskStatusValidated(task, newStatus, 'legacy-status-fix');
+      setTaskStatusValidated(task, newStatus, 'legacy-status-fix', cwd);
       if (!task.transitionNotes) task.transitionNotes = [];
       task.transitionNotes.push({
         timestamp: new Date().toISOString(),
@@ -365,7 +372,7 @@ export async function fixSingleIssue(
       const oldStatus = task.status;
       const targetStatus = issue.details?.targetStatus as TaskStatus;
       if (targetStatus && PIPELINE_STATUS_MIGRATION_MAP[oldStatus]) {
-        setTaskStatusValidated(task, targetStatus, 'pipeline-status-migration');
+        setTaskStatusValidated(task, targetStatus, 'pipeline-status-migration', cwd);
         if (!task.transitionNotes) task.transitionNotes = [];
         task.transitionNotes.push({
           timestamp: new Date().toISOString(),
@@ -471,7 +478,7 @@ export async function fixSingleIssue(
       console.log(t(cwd).analyzeFixPipeline.fixingInvalidStatus.replace('{taskId}', issue.taskId));
       if (issue.details?.currentValue) {
         const oldStatus = task.status;
-        setTaskStatusValidated(task, normalizeStatus(task.status), 'invalid-status-value-fix');
+        setTaskStatusValidated(task, normalizeStatus(task.status), 'invalid-status-value-fix', cwd);
         if (!task.transitionNotes) task.transitionNotes = [];
         task.transitionNotes.push({
           timestamp: new Date().toISOString(),
@@ -527,7 +534,7 @@ export async function fixSingleIssue(
 
       // 确保 status 为 open（已废弃 reopened）
       if ((task.status as string) === 'reopened') {
-        setTaskStatusValidated(task, 'open', 'reopen-mismatch-fix');
+        setTaskStatusValidated(task, 'open', 'reopen-mismatch-fix', cwd);
         task.transitionNotes.push({
           timestamp: new Date().toISOString(),
           fromStatus: 'reopened',
@@ -546,7 +553,7 @@ export async function fixSingleIssue(
       console.log(t(cwd).analyzeFixPipeline.fixingStatusContradiction.replace('{taskId}', issue.taskId));
       // 将状态改回 open，清除旧的 verification
       const oldStatus = task.status;
-      setTaskStatusValidated(task, 'open', 'inconsistent-status-fix');
+      setTaskStatusValidated(task, 'open', 'inconsistent-status-fix', cwd);
       task.verification = undefined;
       task.updatedAt = new Date().toISOString();
       if (!task.transitionNotes) task.transitionNotes = [];
@@ -906,7 +913,7 @@ export async function fixSingleIssue(
       // 非交互模式下直接应用建议
       if (nonInteractive || !process.stdin.isTTY) {
         const oldStatus = task.status;
-        setTaskStatusValidated(task, suggestedStatus as TaskStatus, 'interrupted-task-auto');
+        setTaskStatusValidated(task, suggestedStatus as TaskStatus, 'interrupted-task-auto', cwd);
         task.updatedAt = new Date().toISOString();
 
         // writeTaskMeta 自动监听 status 字段变更并生成 history 记录
@@ -936,7 +943,7 @@ export async function fixSingleIssue(
 
       if (response.apply) {
         const oldStatus = task.status;
-        setTaskStatusValidated(task, suggestedStatus as TaskStatus, 'interrupted-task-manual');
+        setTaskStatusValidated(task, suggestedStatus as TaskStatus, 'interrupted-task-manual', cwd);
         task.updatedAt = new Date().toISOString();
 
         // writeTaskMeta 自动监听 status 字段变更并生成 history 记录
@@ -960,7 +967,7 @@ export async function fixSingleIssue(
     case 'reopened_status': {
       console.log(t(cwd).analyzeFixPipeline.migratingReopenedStatus.replace('{taskId}', issue.taskId));
       const oldStatus = task.status;
-      setTaskStatusValidated(task, 'open', 'reopened-migration');
+      setTaskStatusValidated(task, 'open', 'reopened-migration', cwd);
       if (!task.transitionNotes) task.transitionNotes = [];
       task.transitionNotes.push({
         timestamp: new Date().toISOString(),
@@ -978,7 +985,7 @@ export async function fixSingleIssue(
     case 'needs_human_status': {
       console.log(t(cwd).analyzeFixPipeline.migratingNeedsHumanStatus.replace('{taskId}', issue.taskId));
       const oldStatus = task.status;
-      setTaskStatusValidated(task, 'open', 'needs-human-migration');
+      setTaskStatusValidated(task, 'open', 'needs-human-migration', cwd);
       if (!task.transitionNotes) task.transitionNotes = [];
       task.transitionNotes.push({
         timestamp: new Date().toISOString(),
@@ -1065,7 +1072,7 @@ export async function fixSingleIssue(
 
       console.log(t(cwd).analyzeFixPipeline.fixingReportStatusMismatch.replace('{taskId}', issue.taskId));
       const oldStatus = task.status;
-      setTaskStatusValidated(task, impliedStatus, 'report-status-mismatch');
+      setTaskStatusValidated(task, impliedStatus, 'report-status-mismatch', cwd);
       task.updatedAt = new Date().toISOString();
       if (!task.transitionNotes) task.transitionNotes = [];
       task.transitionNotes.push({
@@ -1124,7 +1131,7 @@ export async function fixSingleIssue(
 
       console.log(t(cwd).analyzeFixPipeline.resettingTask.replace('{taskId}', issue.taskId));
       const oldStatus = task.status;
-      setTaskStatusValidated(task, 'open', 'missing-pipeline-evidence');
+      setTaskStatusValidated(task, 'open', 'missing-pipeline-evidence', cwd);
       task.updatedAt = new Date().toISOString();
 
       if (!task.transitionNotes) task.transitionNotes = [];
