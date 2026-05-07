@@ -11,7 +11,7 @@
  * @module pre-qa-gate/checkers/qa-checkpoints-checker
  */
 
-import type { TaskMeta, Checkpoint } from '../../../types/task.js';
+import type { TaskMeta, CheckpointMetadata } from '../../../types/task.js';
 import { readTaskMeta } from '../../task.js';
 
 // ============== 检查结果类型定义 ==============
@@ -51,7 +51,7 @@ export interface QACheckpointsCheckerResult {
   /** 失败的检查项数 */
   failedCount: number;
   /** QA检查点列表 */
-  qaCheckpoints: Checkpoint[];
+  qaCheckpoints: CheckpointMetadata[];
   /** QA检查点数量 */
   qaCheckpointCount: number;
   /** 总检查点数量 */
@@ -257,7 +257,7 @@ export class QACheckpointsChecker {
         totalCheckpoints: task.checkpoints.length,
         qaCheckpointCount: qaCheckpoints.length,
         minRequired: this.config.minQACheckpointCount,
-        qaCheckpoints: qaCheckpoints.map(cp => ({ id: cp.id, name: cp.name, status: cp.status })),
+        qaCheckpoints: qaCheckpoints.map(cp => ({ id: cp.id, description: cp.description, status: cp.status })),
       },
       duration: Date.now() - startTime,
       timestamp: new Date().toISOString(),
@@ -301,17 +301,17 @@ export class QACheckpointsChecker {
 
     // 检查QA检查点状态
     const failedCheckpoints = qaCheckpoints.filter(cp => cp.status === 'failed');
-    const blockedCheckpoints = qaCheckpoints.filter(cp => cp.status === 'blocked');
+    const skippedCheckpoints = qaCheckpoints.filter(cp => cp.status === 'skipped');
     const completedCheckpoints = qaCheckpoints.filter(cp => cp.status === 'completed');
 
-    const hasIssues = failedCheckpoints.length > 0 || blockedCheckpoints.length > 0;
+    const hasIssues = failedCheckpoints.length > 0;
 
     return {
       checkId: 'qa-checkpoint-status',
       name: 'QA检查点状态检查',
       passed: !hasIssues,
       message: hasIssues
-        ? `QA检查点存在问题: ${failedCheckpoints.length} 个失败, ${blockedCheckpoints.length} 个阻塞`
+        ? `QA检查点存在问题: ${failedCheckpoints.length} 个失败`
         : `QA检查点状态正常: ${completedCheckpoints.length} 个已完成, ${qaCheckpoints.length - completedCheckpoints.length} 个待处理`,
       details: {
         hasCheckpoints: true,
@@ -319,11 +319,11 @@ export class QACheckpointsChecker {
         totalQACheckpoints: qaCheckpoints.length,
         completed: completedCheckpoints.length,
         failed: failedCheckpoints.length,
-        blocked: blockedCheckpoints.length,
+        skipped: skippedCheckpoints.length,
         pending: qaCheckpoints.filter(cp => cp.status === 'pending').length,
-        issues: [...failedCheckpoints, ...blockedCheckpoints].map(cp => ({
+        issues: failedCheckpoints.map(cp => ({
           id: cp.id,
-          name: cp.name,
+          description: cp.description,
           status: cp.status,
         })),
       },
@@ -335,10 +335,10 @@ export class QACheckpointsChecker {
   /**
    * 识别QA检查点
    */
-  private identifyQACheckpoints(checkpoints: Checkpoint[]): Checkpoint[] {
+  private identifyQACheckpoints(checkpoints: CheckpointMetadata[]): CheckpointMetadata[] {
     return checkpoints.filter(cp =>
       this.config.qaKeywords.some(keyword =>
-        cp.name.toLowerCase().includes(keyword.toLowerCase())
+        cp.description.toLowerCase().includes(keyword.toLowerCase())
       )
     );
   }
@@ -448,8 +448,8 @@ export function formatQACheckpointsResult(result: QACheckpointsCheckerResult): s
     for (const cp of result.qaCheckpoints) {
       const statusIcon = cp.status === 'completed' ? '✅' :
                         cp.status === 'failed' ? '❌' :
-                        cp.status === 'blocked' ? '🚫' : '⏳';
-      lines.push(`   ${statusIcon} ${cp.name} (${cp.status})`);
+                        cp.status === 'skipped' ? '⏭️' : '⏳';
+      lines.push(`   ${statusIcon} ${cp.description} (${cp.status})`);
     }
     lines.push('');
   }

@@ -847,7 +847,7 @@ program
 // headless-harness-design command
 program
   .command('headless-harness-design [action]')
-  .description('Execute task plan using Harness Design pattern (automated dev & review)\n\nMain Options:\n  --plan <file>              Plan file path (default: auto read/generate)\n  --max-retries <n>          Max retry attempts (default: 3)\n  --timeout <seconds>        Per-task timeout in seconds (default: 300)\n  --parallel <n>             Parallel execution count (default: 1)\n  --dry-run                  Dry run mode (no actual execution)\n  --continue                 Continue from last interruption\n  --json                     JSON format output\n  --batch-git-commit         Auto git commit after each batch\n\nQuality Gate Options:\n  --require-quality <n>      Quality score threshold (0-100, default: 60)\n  --skip-harness-gate        Skip harness quality gate check (not recommended)\n\nSub-command: cleanup\n  cleanup                    Clean up orphaned snapshots\n  --force                    Force cleanup all snapshots (including active ones)\n  --orphans-only             Clean only orphaned snapshots (process no longer exists)\n\nDeprecated Options:\n  ~~--skip-quality-gate~~    Deprecated, use --skip-harness-gate instead')
+  .description('Execute task plan using Harness Design pattern (automated dev & review)\n\nMain Options:\n  --plan <file>              Plan file path (default: auto read/generate)\n  --max-retries <n>          Max retry attempts (default: 3)\n  --timeout <seconds>        Per-task timeout in seconds (default: 300)\n  --parallel <n>             Parallel execution count (default: 1)\n  --dry-run                  Dry run mode (no actual execution)\n  --continue                 Continue from last interruption\n  --json                     JSON format output\n\nQuality Gate Options:\n  --require-quality <n>      Quality score threshold (0-100, default: 60)\n  --skip-harness-gate        Skip harness quality gate check (not recommended)\n\nSub-command: cleanup\n  cleanup                    Clean up orphaned snapshots\n  --force                    Force cleanup all snapshots (including active ones)\n  --orphans-only             Clean only orphaned snapshots (process no longer exists)\n\nDeprecated Options:\n  ~~--skip-quality-gate~~    Deprecated, use --skip-harness-gate instead\n\nBatch Tag+Commit Options:\n  --batch-git-tag-commit   Auto git tag + commit after each batch (tag: batch-{N}-{timestamp})')
   .option('--plan <file>', 'Plan file path (optional, auto-read/generate if not specified)')
   .option('--max-retries <n>', 'Max retry attempts', '3')
   .option('--timeout <seconds>', 'Per-task timeout (seconds)', '300')
@@ -858,7 +858,7 @@ program
   .option('--require-quality <n>', 'Quality gate: minimum quality score threshold (0-100, default 60)', '60')
   .option('--skip-harness-gate', 'Skip Harness pre-execution quality gate check (not recommended)')
   .option('--skip-quality-gate', '[Deprecated] Use --skip-harness-gate instead')
-  .option('--batch-git-commit', 'Auto git commit after each batch completes')
+  .option('--batch-git-tag-commit', 'Auto git tag + commit after each batch completes (tag format: batch-{N}-{timestamp})')
   .option('--force', 'Force cleanup all snapshots (cleanup subcommand only)')
   .option('--orphans-only', 'Clean only orphaned snapshots (cleanup subcommand only)')
   .action(async (action, options) => {
@@ -898,7 +898,7 @@ program
       json: options.json,
       requireQuality: options.requireQuality,
       skipHarnessGate: options.skipHarnessGate || options.skipQualityGate,
-      batchGitCommit: options.batchGitCommit,
+      batchGitTagCommit: options.batchGitTagCommit,
     });
   });
 
