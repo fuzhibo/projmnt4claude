@@ -191,7 +191,7 @@ describe('harnessCommand: validation', () => {
     } catch {}
     expect(exitSpy).toHaveBeenCalledWith(1);
     expect(errorSpy).toHaveBeenCalledWith(
-      expect.stringContaining('无法获取任务列表')
+      expect.stringContaining('Cannot get task list')
     );
   });
 
@@ -204,7 +204,7 @@ describe('harnessCommand: validation', () => {
     } catch {}
     expect(exitSpy).toHaveBeenCalledWith(1);
     expect(errorSpy).toHaveBeenCalledWith(
-      expect.stringContaining('计划文件不存在')
+      expect.stringContaining('Plan file does not exist')
     );
   });
 
@@ -265,7 +265,7 @@ describe('harnessCommand: dry run', () => {
     );
 
     expect(logSpy).toHaveBeenCalledWith(
-      expect.stringContaining('试运行')
+      expect.stringContaining('Dry run')
     );
     expect(logSpy).toHaveBeenCalledWith(
       expect.stringContaining('TASK-1')
@@ -292,14 +292,14 @@ describe('harnessCommand: dry run', () => {
     );
 
     expect(logSpy).toHaveBeenCalledWith(
-      expect.stringContaining('批次 1')
+      expect.stringContaining('Batch 1')
     );
     expect(logSpy).toHaveBeenCalledWith(
-      expect.stringContaining('批次 2')
+      expect.stringContaining('Batch 2')
     );
     // Batch 1 has 2 tasks → parallelizable
     expect(logSpy).toHaveBeenCalledWith(
-      expect.stringContaining('可并行')
+      expect.stringContaining('[Parallel]')
     );
   });
 
@@ -314,7 +314,7 @@ describe('harnessCommand: dry run', () => {
 
     // Should not contain batch count
     const calls = logSpy.mock.calls.map((c: any[]) => c[0]).join('\n');
-    expect(calls).not.toContain('批次数');
+    expect(calls).not.toContain('Batch count');
   });
 
   test('displays config header with task count', async () => {
@@ -338,7 +338,7 @@ describe('harnessCommand: dry run', () => {
       expect.stringContaining('Harness Design')
     );
     expect(logSpy).toHaveBeenCalledWith(
-      expect.stringContaining('任务数量: 2')
+      expect.stringContaining('Task count: 2')
     );
   });
 
@@ -427,7 +427,7 @@ describe('harnessCommand: execution', () => {
     expect(runSpy).toHaveBeenCalled();
     expect(reportSpy).toHaveBeenCalled();
     expect(logSpy).toHaveBeenCalledWith(
-      expect.stringContaining('执行摘要')
+      expect.stringContaining('Summary')
     );
     expect(exitSpy).not.toHaveBeenCalled();
   });
@@ -447,7 +447,7 @@ describe('harnessCommand: execution', () => {
     expect(forceFailSpy).toHaveBeenCalled();
     expect(exitSpy).toHaveBeenCalledWith(1);
     expect(errorSpy).toHaveBeenCalledWith(
-      expect.stringContaining('执行失败'),
+      expect.stringContaining('failed'),
       expect.any(String)
     );
   });
@@ -543,7 +543,7 @@ describe('harnessCommand: execution', () => {
 
     const state = runSpy.mock.calls[0]![0] as any;
     expect(state.batchBoundaries).toEqual([0, 2]);
-    expect(state.batchLabels).toEqual(['批次 1', '批次 2']);
+    expect(state.batchLabels).toEqual(['Batch 1', 'Batch 2']);
     expect(state.batchParallelizable).toEqual([true, false]);
   });
 });
@@ -794,7 +794,7 @@ describe('harnessCommand: task filtering', () => {
 
     expect(exitSpy).toHaveBeenCalledWith(1);
     expect(errorSpy).toHaveBeenCalledWith(
-      expect.stringContaining('没有可执行的任务')
+      expect.stringContaining('No executable tasks')
     );
   });
 
@@ -823,7 +823,7 @@ describe('harnessCommand: task filtering', () => {
     );
 
     expect(logSpy).toHaveBeenCalledWith(
-      expect.stringContaining('已过滤')
+      expect.stringContaining('filtered')
     );
   });
 });
