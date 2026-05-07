@@ -289,8 +289,8 @@ describe('runDoctor', () => {
 
     await runDoctor(false, CWD);
 
-    expect(logContains('项目未初始化')).toBe(true);
-    expect(logContains('项目初始化')).toBe(true);
+    expect(logContains('Project not initialized')).toBe(true);
+    expect(logContains('Project Initialization')).toBe(true);
     expect(logContains('❌')).toBe(true);
   });
 
@@ -300,7 +300,7 @@ describe('runDoctor', () => {
 
     await runDoctor(false, CWD);
 
-    expect(logContains('项目已初始化')).toBe(true);
+    expect(logContains('Project initialized')).toBe(true);
   });
 
   // ── CP-003: checkPluginCache — CLI mode (no CLAUDE_PLUGIN_ROOT) ──
@@ -310,7 +310,7 @@ describe('runDoctor', () => {
 
     await runDoctor(false, CWD);
 
-    expect(logContains('CLI 模式运行，跳过插件缓存检查')).toBe(true);
+    expect(logContains('Running in CLI mode, skipping plugin cache check')).toBe(true);
   });
 
   // ── CP-004: checkPluginCache — plugin mode, missing main file ────
@@ -320,7 +320,7 @@ describe('runDoctor', () => {
 
     await runDoctor(false, CWD);
 
-    expect(logContains('主程序文件缺失')).toBe(true);
+    expect(logContains('Main program file missing')).toBe(true);
 
     delete process.env.CLAUDE_PLUGIN_ROOT;
   });
@@ -331,8 +331,8 @@ describe('runDoctor', () => {
 
     await runDoctor(false, CWD);
 
-    expect(logContains('命令文档')).toBe(true);
-    expect(logContains('1 个命令文档')).toBe(true);
+    expect(logContains('Command Docs')).toBe(true);
+    expect(logContains('1 command docs')).toBe(true);
   });
 
   // ── CP-006: checkSkillFiles — commands dir missing ────────
@@ -343,7 +343,7 @@ describe('runDoctor', () => {
 
     await runDoctor(false, CWD);
 
-    expect(logContains('命令文档目录缺失')).toBe(true);
+    expect(logContains('Command docs directory missing')).toBe(true);
   });
 
   // ── CP-007: checkDirectoryStructure — all dirs exist ──────
@@ -352,8 +352,8 @@ describe('runDoctor', () => {
 
     await runDoctor(false, CWD);
 
-    expect(logContains('目录: tasks')).toBe(true);
-    expect(logContains('目录: toolbox')).toBe(true);
+    expect(logContains('Directory: tasks')).toBe(true);
+    expect(logContains('Directory: toolbox')).toBe(true);
   });
 
   // ── CP-008: checkDirectoryStructure — missing tasks dir ───
@@ -363,7 +363,7 @@ describe('runDoctor', () => {
 
     await runDoctor(false, CWD);
 
-    expect(logContains('目录: tasks')).toBe(true);
+    expect(logContains('Directory: tasks')).toBe(true);
   });
 
   // ── CP-015: checkLoggingModule — logs dir and config ok ──
@@ -372,8 +372,8 @@ describe('runDoctor', () => {
 
     await runDoctor(false, CWD);
 
-    expect(logContains('日志目录')).toBe(true);
-    expect(logContains('日志配置完整性')).toBe(true);
+    expect(logContains('Log Directory')).toBe(true);
+    expect(logContains('Log Config Completeness')).toBe(true);
   });
 
   // ── CP-016: checkLoggingModule — logs dir missing ────────
@@ -383,7 +383,7 @@ describe('runDoctor', () => {
 
     await runDoctor(false, CWD);
 
-    expect(logContains('logs 目录不存在')).toBe(true);
+    expect(logContains('logs directory does not exist')).toBe(true);
   });
 
   // ── CP-017: checkLoggingModule — incomplete logging config ──
@@ -400,8 +400,8 @@ describe('runDoctor', () => {
 
     await runDoctor(false, CWD);
 
-    expect(logContains('日志配置完整性')).toBe(true);
-    expect(logContains('日志配置项缺失')).toBe(true);
+    expect(logContains('Log Config Completeness')).toBe(true);
+    expect(logContains('log config items missing')).toBe(true);
   });
 
   // ── CP-018: checkLoggingModule — oversized log files ─────
@@ -414,8 +414,8 @@ describe('runDoctor', () => {
 
     await runDoctor(false, CWD);
 
-    expect(logContains('日志健康')).toBe(true);
-    expect(logContains('超过 10MB')).toBe(true);
+    expect(logContains('Log Health')).toBe(true);
+    expect(logContains('log files exceed 10MB')).toBe(true);
   });
 
   // ── CP-021: checkDeprecatedStatuses — no deprecated ──────
@@ -428,8 +428,8 @@ describe('runDoctor', () => {
 
     await runDoctor(false, CWD);
 
-    expect(logContains('废弃状态检测')).toBe(true);
-    expect(logContains('无废弃状态残留')).toBe(true);
+    expect(logContains('Deprecated Status Check')).toBe(true);
+    expect(logContains('tasks have no deprecated status')).toBe(true);
   });
 
   // ── CP-022: checkDeprecatedStatuses — has reopened ───────
@@ -442,8 +442,8 @@ describe('runDoctor', () => {
 
     await runDoctor(false, CWD);
 
-    expect(logContains('废弃状态检测')).toBe(true);
-    expect(logContains('使用废弃状态')).toBe(true);
+    expect(logContains('Deprecated Status Check')).toBe(true);
+    expect(logContains('tasks using deprecated status')).toBe(true);
   });
 
   // ── CP-023: checkDeprecatedStatuses — has needs_human ────
@@ -456,8 +456,8 @@ describe('runDoctor', () => {
 
     await runDoctor(false, CWD);
 
-    expect(logContains('废弃状态检测')).toBe(true);
-    expect(logContains('使用废弃状态')).toBe(true);
+    expect(logContains('Deprecated Status Check')).toBe(true);
+    expect(logContains('tasks using deprecated status')).toBe(true);
   });
 
   // ── CP-026: displayResults — summary counts ──────────────
@@ -468,7 +468,7 @@ describe('runDoctor', () => {
 
     await runDoctor(false, CWD);
 
-    expect(logContains('汇总')).toBe(true);
+    expect(logContains('Summary')).toBe(true);
   });
 
   // ── CP-027: --fix hint when fixable issues exist ─────────
@@ -552,7 +552,7 @@ describe('runDoctor', () => {
     await runDoctor(false, CWD);
 
     // No plugin scope warnings
-    expect(logContains('插件安装作用域')).toBe(false);
+    expect(logContains('Plugin Installation Scope')).toBe(false);
   });
 
   // ── CP-036: checkPluginInstallationScope — project-scope mismatch ──
@@ -571,7 +571,7 @@ describe('runDoctor', () => {
 
     await runDoctor(false, CWD);
 
-    expect(logContains('插件安装作用域')).toBe(true);
+    expect(logContains('Plugin Installation Scope')).toBe(true);
     expect(logContains('project-scope')).toBe(true);
   });
 
@@ -583,7 +583,7 @@ describe('runDoctor', () => {
 
     await runDoctor(false, CWD);
 
-    expect(logContains('任务目录不存在')).toBe(true);
+    expect(logContains('Required directory missing')).toBe(true);
   });
 
   // ── CP-042: checkDirectoryStructure — archive with abandoned tasks ──
@@ -600,7 +600,7 @@ describe('runDoctor', () => {
     await runDoctor(false, CWD);
 
     expect(logContains('archive')).toBe(true);
-    expect(logContains('archive 目录缺失')).toBe(true);
+    expect(logContains('Abandoned tasks exist but archive directory is missing')).toBe(true);
   });
 
   // ── CP-045: checkLoggingModule — AI config missing ───────
@@ -617,8 +617,8 @@ describe('runDoctor', () => {
 
     await runDoctor(false, CWD);
 
-    expect(logContains('AI 配置完整性')).toBe(true);
-    expect(logContains('ai.provider 配置缺失')).toBe(true);
+    expect(logContains('AI Config Completeness')).toBe(true);
+    expect(logContains('ai.provider config missing')).toBe(true);
   });
 
   // ── CP-046: checkLoggingModule — training config missing ─
@@ -635,8 +635,8 @@ describe('runDoctor', () => {
 
     await runDoctor(false, CWD);
 
-    expect(logContains('训练数据配置完整性')).toBe(true);
-    expect(logContains('training.* 配置缺失')).toBe(true);
+    expect(logContains('Training Data Config Completeness')).toBe(true);
+    expect(logContains('training.* config missing')).toBe(true);
   });
 
   // ── CP-047: all checks pass ──────────────────────────────
@@ -656,7 +656,7 @@ describe('runDoctor', () => {
 
     await runDoctor(false, CWD);
 
-    expect(logContains('所有检查通过')).toBe(true);
+    expect(logContains('All checks passed')).toBe(true);
   });
 });
 
@@ -695,10 +695,10 @@ describe('runBugReport', () => {
 
     await runBugReport(CWD);
 
-    expect(logContains('Bug 报告')).toBe(true);
-    expect(logContains('Bug 报告已生成')).toBe(true);
-    expect(logContains('AI 成本汇总')).toBe(true);
-    expect(logContains('使用分析')).toBe(true);
+    expect(logContains('Bug Report Generation')).toBe(true);
+    expect(logContains('Bug report generated')).toBe(true);
+    expect(logContains('AI Cost Summary')).toBe(true);
+    expect(logContains('Usage Analysis')).toBe(true);
   });
 });
 
@@ -718,7 +718,7 @@ describe('runDoctorDeep', () => {
 
     await runDoctorDeep(CWD);
 
-    expect(logContains('深度日志分析')).toBe(true);
-    expect(logContains('未找到日志文件')).toBe(true);
+    expect(logContains('Deep Log Analysis (--deep)')).toBe(true);
+    expect(logContains('No log files found, skipping log analysis')).toBe(true);
   });
 });
