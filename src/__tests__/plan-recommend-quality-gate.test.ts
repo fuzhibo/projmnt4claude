@@ -376,11 +376,11 @@ describe('Plan Recommend 质量门禁集成', () => {
       const report = formatPlanQualityGateReport(result);
 
       // 验证报告内容
-      expect(report).toContain('Plan 质量门禁检查报告');
-      expect(report).toContain('统计摘要');
-      expect(report).toContain('总任务数: 1');
-      expect(report).toContain('通过: 1');
-      expect(report).toContain('验证时间');
+      expect(report).toContain('Plan Quality Gate Check Report');
+      expect(report).toContain('Statistics Summary');
+      expect(report).toContain('Total tasks: 1');
+      expect(report).toContain('Passed: 1');
+      expect(report).toContain('Validated at');
     });
 
     it('应该显示未通过任务的详细信息', () => {
@@ -396,9 +396,9 @@ describe('Plan Recommend 质量门禁集成', () => {
       const report = formatPlanQualityGateReport(result, { showDetails: true });
 
       // 验证失败报告内容
-      expect(report).toContain('未通过的任务');
+      expect(report).toContain('Failed Tasks');
       expect(report).toContain('TASK-fail-report-001');
-      expect(report).toContain('修复建议');
+      expect(report).toContain('Fix Suggestions');
     });
 
     it('应该支持紧凑模式', () => {
@@ -449,7 +449,7 @@ describe('Plan Recommend 质量门禁集成', () => {
       const report = formatPlanQualityGateReport(passResult);
 
       expect(report).toContain('✅');
-      expect(report).toContain('所有任务通过 Plan 质量门禁检查');
+      expect(report).toContain('All tasks passed Plan quality gate check!');
     });
   });
 

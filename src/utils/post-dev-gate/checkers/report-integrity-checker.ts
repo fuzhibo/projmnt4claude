@@ -49,14 +49,14 @@ export async function checkReportIntegrity(
     if (!devReport) {
       return {
         checkId: 'report-integrity-check',
-        checkName: '开发报告完整性检查',
+        checkName: 'Dev Report Integrity Check',
         ruleId: rule.id,
         passed: false,
         severity: 'error',
-        message: '未找到开发报告',
+        message: 'Dev report not found',
         suggestions: [
-          '确保开发阶段已完成并生成了报告',
-          `检查报告路径: .projmnt4claude/outputs/${context.taskId}/dev-report.json`,
+          'Ensure dev phase completed and generated report',
+          `Check report path: .projmnt4claude/outputs/${context.taskId}/dev-report.json`,
         ],
         duration: Date.now() - startTime,
         timestamp: new Date().toISOString(),
@@ -79,7 +79,7 @@ export async function checkReportIntegrity(
 
     return {
       checkId: 'report-integrity-check',
-      checkName: '开发报告完整性检查',
+      checkName: 'Dev Report Integrity Check',
       ruleId: rule.id,
       passed,
       severity: passed ? 'info' : rule.severity,
@@ -88,16 +88,16 @@ export async function checkReportIntegrity(
       suggestions,
       duration: Date.now() - startTime,
       timestamp: new Date().toISOString(),
-      autoFixable: false, // 报告完整性问题通常无法自动修复
+      autoFixable: false, // Report integrity issues usually can't be auto-fixed
     };
   } catch (error) {
     return {
       checkId: 'report-integrity-check',
-      checkName: '开发报告完整性检查',
+      checkName: 'Dev Report Integrity Check',
       ruleId: rule.id,
       passed: false,
       severity: 'error',
-      message: `报告完整性检查失败: ${error instanceof Error ? error.message : String(error)}`,
+      message: `Report integrity check failed: ${error instanceof Error ? error.message : String(error)}`,
       duration: Date.now() - startTime,
       timestamp: new Date().toISOString(),
     };
@@ -214,50 +214,50 @@ function validateField(field: string, value: unknown): { valid: boolean; error?:
   switch (field) {
     case 'taskId':
       if (typeof value !== 'string' || value.length === 0) {
-        return { valid: false, error: 'taskId 必须是非空字符串' };
+        return { valid: false, error: 'taskId must be non-empty string' };
       }
       break;
 
     case 'status':
       const validStatuses = ['pending', 'running', 'success', 'failed', 'timeout'];
       if (typeof value !== 'string' || !validStatuses.includes(value)) {
-        return { valid: false, error: `status 必须是以下之一: ${validStatuses.join(', ')}` };
+        return { valid: false, error: `status must be one of: ${validStatuses.join(', ')}` };
       }
       break;
 
     case 'changes':
       if (!Array.isArray(value)) {
-        return { valid: false, error: 'changes 必须是数组' };
+        return { valid: false, error: 'changes must be an array' };
       }
       break;
 
     case 'evidence':
       if (!Array.isArray(value)) {
-        return { valid: false, error: 'evidence 必须是数组' };
+        return { valid: false, error: 'evidence must be an array' };
       }
       break;
 
     case 'checkpointsCompleted':
       if (!Array.isArray(value)) {
-        return { valid: false, error: 'checkpointsCompleted 必须是数组' };
+        return { valid: false, error: 'checkpointsCompleted must be an array' };
       }
       break;
 
     case 'startTime':
     case 'endTime':
       if (typeof value !== 'string') {
-        return { valid: false, error: `${field} 必须是字符串` };
+        return { valid: false, error: `${field} must be a string` };
       }
       // 验证 ISO 8601 格式
       const date = new Date(value as string);
       if (isNaN(date.getTime())) {
-        return { valid: false, error: `${field} 必须是有效的 ISO 8601 日期格式` };
+        return { valid: false, error: `${field} must be valid ISO 8601 date format` };
       }
       break;
 
     case 'duration':
       if (typeof value !== 'number' || value < 0) {
-        return { valid: false, error: 'duration 必须是非负数字' };
+        return { valid: false, error: 'duration must be non-negative number' };
       }
       break;
   }
@@ -273,21 +273,21 @@ function generateIntegrityMessage(
   minScore: number
 ): string {
   if (result.complete && result.completenessScore >= minScore) {
-    return `报告完整性检查通过 (评分: ${result.completenessScore}/100)`;
+    return `Report integrity check passed (score: ${result.completenessScore}/100)`;
   }
 
   const parts: string[] = [];
   if (result.missingFields.length > 0) {
-    parts.push(`${result.missingFields.length} 个必需字段缺失`);
+    parts.push(`${result.missingFields.length} required fields missing`);
   }
   if (result.errors.length > 0) {
-    parts.push(`${result.errors.length} 个字段验证错误`);
+    parts.push(`${result.errors.length} field validation errors`);
   }
   if (result.completenessScore < minScore) {
-    parts.push(`完整性评分 ${result.completenessScore} 低于阈值 ${minScore}`);
+    parts.push(`Completeness score ${result.completenessScore} below threshold ${minScore}`);
   }
 
-  return `报告完整性检查失败: ${parts.join(', ')}`;
+  return `Report integrity check failed: ${parts.join(', ')}`;
 }
 
 /**
@@ -300,21 +300,21 @@ function generateIntegritySuggestions(
   const suggestions: string[] = [];
 
   if (result.missingFields.length > 0) {
-    suggestions.push(`添加缺失的字段: ${result.missingFields.join(', ')}`);
+    suggestions.push(`Add missing fields: ${result.missingFields.join(', ')}`);
     for (const field of result.missingFields) {
       suggestions.push(`  - ${field}: ${getFieldDescription(field)}`);
     }
   }
 
   if (result.errors.length > 0) {
-    suggestions.push('修复以下字段错误:');
+    suggestions.push('Fix the following field errors:');
     for (const error of result.errors) {
       suggestions.push(`  - ${error}`);
     }
   }
 
   if (result.completenessScore < 80) {
-    suggestions.push('提高报告完整性: 确保所有阶段都正确记录了执行结果');
+    suggestions.push('Improve report completeness: ensure all phases correctly recorded execution results');
   }
 
   return suggestions;
@@ -325,17 +325,17 @@ function generateIntegritySuggestions(
  */
 function getFieldDescription(field: string): string {
   const descriptions: Record<string, string> = {
-    taskId: '任务唯一标识符 (字符串)',
-    status: '任务状态: pending, running, success, failed, timeout',
-    changes: '代码变更列表 (字符串数组)',
-    evidence: '证据文件路径列表 (字符串数组)',
-    checkpointsCompleted: '已完成的检查点ID列表 (字符串数组)',
-    startTime: '执行开始时间 (ISO 8601 格式)',
-    endTime: '执行结束时间 (ISO 8601 格式)',
-    duration: '执行时长 (毫秒, 非负数字)',
+    taskId: 'Task unique identifier (string)',
+    status: 'Task status: pending, running, success, failed, timeout',
+    changes: 'Code change list (string array)',
+    evidence: 'Evidence file path list (string array)',
+    checkpointsCompleted: 'Completed checkpoint ID list (string array)',
+    startTime: 'Execution start time (ISO 8601 format)',
+    endTime: 'Execution end time (ISO 8601 format)',
+    duration: 'Execution duration (milliseconds, non-negative number)',
   };
 
-  return descriptions[field] || '必需字段';
+  return descriptions[field] || 'Required field';
 }
 
 /**
@@ -378,8 +378,8 @@ export async function getReportCompletenessScore(
  */
 export class ReportIntegrityChecker {
   readonly id = 'report-integrity-checker';
-  readonly name = '报告完整性检查器';
-  readonly description = '检查开发报告是否包含所有必需字段';
+  readonly name = 'Report Integrity Checker';
+  readonly description = 'Check if dev report contains all required fields';
 
   async check(
     rule: PostDevPhaseRule,

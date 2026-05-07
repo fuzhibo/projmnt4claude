@@ -91,7 +91,7 @@ describe('Report Integrity Checker', () => {
 
       expect(result.passed).toBe(true);
       expect(result.checkId).toBe('report-integrity-check');
-      expect(result.checkName).toBe('开发报告完整性检查');
+      expect(result.checkName).toBe('Dev Report Integrity Check');
     });
 
     it('should fail when dev report is missing required fields', async () => {
@@ -108,7 +108,7 @@ describe('Report Integrity Checker', () => {
 
       expect(result.passed).toBe(false);
       expect(result.severity).toBe('error');
-      expect(result.message).toContain('缺失');
+      expect(result.message).toContain('missing');
     });
 
     it('should fail when dev report does not exist', async () => {
@@ -116,7 +116,7 @@ describe('Report Integrity Checker', () => {
       const result = await checkReportIntegrity(DEFAULT_REPORT_INTEGRITY_RULE, context);
 
       expect(result.passed).toBe(false);
-      expect(result.message).toContain('未找到开发报告');
+      expect(result.message).toContain('Dev report not found');
     });
 
     it('should load dev report from file when not provided in context', async () => {
@@ -160,7 +160,7 @@ describe('Report Integrity Checker', () => {
       const result = await checkReportIntegrity(DEFAULT_REPORT_INTEGRITY_RULE, context);
 
       expect(result.passed).toBe(false);
-      expect(result.message).toContain('status');
+      expect((result.details as any)?.errors).toEqual(expect.arrayContaining([expect.stringContaining('status')]));
     });
 
     it('should validate duration is non-negative', async () => {
@@ -180,7 +180,7 @@ describe('Report Integrity Checker', () => {
       const result = await checkReportIntegrity(DEFAULT_REPORT_INTEGRITY_RULE, context);
 
       expect(result.passed).toBe(false);
-      expect(result.message).toContain('duration');
+      expect((result.details as any)?.errors).toEqual(expect.arrayContaining([expect.stringContaining('duration')]));
     });
 
     it('should validate ISO 8601 timestamp format', async () => {
@@ -200,7 +200,7 @@ describe('Report Integrity Checker', () => {
       const result = await checkReportIntegrity(DEFAULT_REPORT_INTEGRITY_RULE, context);
 
       expect(result.passed).toBe(false);
-      expect(result.message).toContain('startTime');
+      expect((result.details as any)?.errors).toEqual(expect.arrayContaining([expect.stringContaining('startTime')]));
     });
 
     it('should validate arrays are properly typed', async () => {
@@ -220,7 +220,7 @@ describe('Report Integrity Checker', () => {
       const result = await checkReportIntegrity(DEFAULT_REPORT_INTEGRITY_RULE, context);
 
       expect(result.passed).toBe(false);
-      expect(result.message).toContain('changes');
+      expect((result.details as any)?.errors).toEqual(expect.arrayContaining([expect.stringContaining('changes')]));
     });
   });
 
@@ -300,8 +300,8 @@ describe('Report Integrity Checker', () => {
   describe('ReportIntegrityChecker class', () => {
     it('should have correct metadata', () => {
       expect(reportIntegrityChecker.id).toBe('report-integrity-checker');
-      expect(reportIntegrityChecker.name).toBe('报告完整性检查器');
-      expect(reportIntegrityChecker.description).toBe('检查开发报告是否包含所有必需字段');
+      expect(reportIntegrityChecker.name).toBe('Report Integrity Checker');
+      expect(reportIntegrityChecker.description).toBe('Check if dev report contains all required fields');
     });
 
     it('should execute check via class method', async () => {
@@ -437,7 +437,7 @@ describe('Report Integrity Checker', () => {
       const result = await checkReportIntegrity(DEFAULT_REPORT_INTEGRITY_RULE, context);
 
       expect(result.passed).toBe(false);
-      expect(result.message).toContain('未找到开发报告');
+      expect(result.message).toContain('Dev report not found');
     });
 
     it('should handle file system errors gracefully', async () => {
