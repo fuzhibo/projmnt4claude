@@ -6,9 +6,8 @@
  */
 
 import { describe, it, expect, beforeEach, afterEach } from 'bun:test';
-import * as fs from 'node:fs';
 import * as path from 'node:path';
-import * as os from 'node:os';
+import * as fs from 'node:fs';
 import {
   TestEnvConfigChecker,
   createTestEnvConfigChecker,
@@ -17,23 +16,23 @@ import {
   DEFAULT_TEST_ENV_CHECKER_CONFIG,
 } from '../utils/post-cr-gate/checkers/test-env-checker.js';
 import { createDefaultTaskMeta } from '../types/task.js';
-import { writeTaskMeta } from '../utils/task.js';
+import {
+  createIsolatedTestEnv,
+  createTaskDir,
+  type IsolatedTestEnv,
+} from '../utils/test-env.js';
 
 describe('TestEnvConfigChecker', () => {
-  let tempDir: string;
+  let env: IsolatedTestEnv;
   let checker: TestEnvConfigChecker;
 
-  beforeEach(() => {
-    tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'test-env-checker-test-'));
-    checker = createTestEnvConfigChecker(tempDir);
-
-    // Create .projmnt4claude structure
-    fs.mkdirSync(path.join(tempDir, '.projmnt4claude', 'tasks'), { recursive: true });
-    fs.mkdirSync(path.join(tempDir, '.projmnt4claude', 'outputs'), { recursive: true });
+  beforeEach(async () => {
+    env = await createIsolatedTestEnv({ prefix: 'test-env-checker-test-' });
+    checker = createTestEnvConfigChecker(env.tempDir);
   });
 
   afterEach(() => {
-    fs.rmSync(tempDir, { recursive: true, force: true });
+    env.cleanup();
   });
 
   describe('Basic Functionality', () => {
@@ -49,7 +48,7 @@ describe('TestEnvConfigChecker', () => {
     });
 
     it('should allow custom config', () => {
-      const customChecker = createTestEnvConfigChecker(tempDir, {
+      const customChecker = createTestEnvConfigChecker(env.tempDir, {
         requireTestCommands: false,
         autoCreate: false,
       });
@@ -59,7 +58,7 @@ describe('TestEnvConfigChecker', () => {
 
   describe('Config Existence Check (R-CR-POST-008)', () => {
     it('should fail when config does not exist and autoCreate is disabled', async () => {
-      const checkerNoAuto = createTestEnvConfigChecker(tempDir, { autoCreate: false });
+      const checkerNoAuto = createTestEnvConfigChecker(env.tempDir, { autoCreate: false });
       const taskId = 'TASK-feature-P2-test-task-20260101';
 
       const result = await checkerNoAuto.checkConfigExistence(taskId);
@@ -71,8 +70,7 @@ describe('TestEnvConfigChecker', () => {
 
     it('should auto-create config when it does not exist and autoCreate is enabled', async () => {
       const taskId = 'TASK-feature-P2-test-task-20260101';
-      const task = createDefaultTaskMeta(taskId, 'Test Task', 'feature');
-      writeTaskMeta(task, tempDir);
+      createTaskDir(env.tasksDir, taskId, createDefaultTaskMeta(taskId, 'Test Task', 'feature'));
 
       const result = await checker.checkConfigExistence(taskId);
 
@@ -84,7 +82,7 @@ describe('TestEnvConfigChecker', () => {
 
     it('should pass when config exists', async () => {
       const taskId = 'TASK-feature-P2-test-task-20260101';
-      const configPath = path.join(tempDir, '.projmnt4claude', 'outputs', taskId, 'tasks_test_env_adv.json');
+      const configPath = path.join(env.tempDir, '.projmnt4claude', 'outputs', taskId, 'tasks_test_env_adv.json');
       fs.mkdirSync(path.dirname(configPath), { recursive: true });
       fs.writeFileSync(configPath, JSON.stringify({
         version: '1.0.0',
@@ -118,7 +116,7 @@ describe('TestEnvConfigChecker', () => {
 
     it('should fail when config has invalid JSON', async () => {
       const taskId = 'TASK-feature-P2-test-task-20260101';
-      const configPath = path.join(tempDir, '.projmnt4claude', 'outputs', taskId, 'tasks_test_env_adv.json');
+      const configPath = path.join(env.tempDir, '.projmnt4claude', 'outputs', taskId, 'tasks_test_env_adv.json');
       fs.mkdirSync(path.dirname(configPath), { recursive: true });
       fs.writeFileSync(configPath, 'invalid json {{{');
 
@@ -130,7 +128,7 @@ describe('TestEnvConfigChecker', () => {
 
     it('should fail when config is missing required fields', async () => {
       const taskId = 'TASK-feature-P2-test-task-20260101';
-      const configPath = path.join(tempDir, '.projmnt4claude', 'outputs', taskId, 'tasks_test_env_adv.json');
+      const configPath = path.join(env.tempDir, '.projmnt4claude', 'outputs', taskId, 'tasks_test_env_adv.json');
       fs.mkdirSync(path.dirname(configPath), { recursive: true });
       fs.writeFileSync(configPath, JSON.stringify({
         version: '1.0.0',
@@ -146,7 +144,7 @@ describe('TestEnvConfigChecker', () => {
 
     it('should pass when config has all required fields', async () => {
       const taskId = 'TASK-feature-P2-test-task-20260101';
-      const configPath = path.join(tempDir, '.projmnt4claude', 'outputs', taskId, 'tasks_test_env_adv.json');
+      const configPath = path.join(env.tempDir, '.projmnt4claude', 'outputs', taskId, 'tasks_test_env_adv.json');
       fs.mkdirSync(path.dirname(configPath), { recursive: true });
       fs.writeFileSync(configPath, JSON.stringify({
         version: '1.0.0',
@@ -180,8 +178,7 @@ describe('TestEnvConfigChecker', () => {
 
     it('should pass when task description contains test keywords', async () => {
       const taskId = 'TASK-feature-P2-test-task-20260101';
-      const task = createDefaultTaskMeta(taskId, 'Test Task', 'feature', 'Test Task with testing requirements');
-      writeTaskMeta(task, tempDir);
+      createTaskDir(env.tasksDir, taskId, createDefaultTaskMeta(taskId, 'Test Task', 'feature', 'Test Task with testing requirements'));
 
       const result = await checker.checkTaskHasTestRecommendations(taskId);
 
@@ -205,7 +202,7 @@ describe('TestEnvConfigChecker', () => {
           updatedAt: new Date().toISOString(),
         },
       ];
-      writeTaskMeta(task, tempDir);
+      createTaskDir(env.tasksDir, taskId, task);
 
       const result = await checker.checkTaskHasTestRecommendations(taskId);
 
@@ -215,8 +212,7 @@ describe('TestEnvConfigChecker', () => {
 
     it('should fail when task has no test recommendations', async () => {
       const taskId = 'TASK-feature-P2-test-task-20260101';
-      const task = createDefaultTaskMeta(taskId, 'Implementation task', 'feature', 'Implement some feature without any relevant terms');
-      writeTaskMeta(task, tempDir);
+      createTaskDir(env.tasksDir, taskId, createDefaultTaskMeta(taskId, 'Implementation task', 'feature', 'Implement some feature without any relevant terms'));
 
       const result = await checker.checkTaskHasTestRecommendations(taskId);
 
@@ -242,7 +238,7 @@ describe('TestEnvConfigChecker', () => {
           updatedAt: new Date().toISOString(),
         },
       ];
-      writeTaskMeta(task, tempDir);
+      createTaskDir(env.tasksDir, taskId, task);
 
       const results = await checker.check(taskId);
 
@@ -276,13 +272,13 @@ describe('TestEnvConfigChecker', () => {
           updatedAt: new Date().toISOString(),
         },
       ];
-      writeTaskMeta(task, tempDir);
+      createTaskDir(env.tasksDir, taskId, task);
 
       const configPath = await checker.generateConfig(taskId);
 
-      expect(fs.existsSync(path.join(tempDir, configPath))).toBe(true);
+      expect(fs.existsSync(path.join(env.tempDir, configPath))).toBe(true);
 
-      const config = JSON.parse(fs.readFileSync(path.join(tempDir, configPath), 'utf-8'));
+      const config = JSON.parse(fs.readFileSync(path.join(env.tempDir, configPath), 'utf-8'));
       expect(config.taskId).toBe(taskId);
       expect(config.version).toBe('1.0.0');
       expect(config.environment.testCommands).toContain('bun test');
@@ -291,35 +287,32 @@ describe('TestEnvConfigChecker', () => {
 
     it('should infer test commands from task type when no checkpoints', async () => {
       const taskId = 'TASK-feature-P2-test-task-20260101';
-      const task = createDefaultTaskMeta(taskId, 'Test Task', 'feature');
-      writeTaskMeta(task, tempDir);
+      createTaskDir(env.tasksDir, taskId, createDefaultTaskMeta(taskId, 'Test Task', 'feature'));
 
       const configPath = await checker.generateConfig(taskId);
 
-      const config = JSON.parse(fs.readFileSync(path.join(tempDir, configPath), 'utf-8'));
+      const config = JSON.parse(fs.readFileSync(path.join(env.tempDir, configPath), 'utf-8'));
       expect(config.environment.testCommands.length).toBeGreaterThan(0);
     });
 
     it('should include environment variables', async () => {
       const taskId = 'TASK-feature-P2-test-task-20260101';
-      const task = createDefaultTaskMeta(taskId, 'Test Task', 'feature');
-      writeTaskMeta(task, tempDir);
+      createTaskDir(env.tasksDir, taskId, createDefaultTaskMeta(taskId, 'Test Task', 'feature'));
 
       const configPath = await checker.generateConfig(taskId);
 
-      const config = JSON.parse(fs.readFileSync(path.join(tempDir, configPath), 'utf-8'));
+      const config = JSON.parse(fs.readFileSync(path.join(env.tempDir, configPath), 'utf-8'));
       expect(config.environment.envVars.NODE_ENV).toBe('test');
       expect(config.environment.envVars.TASK_ID).toBe(taskId);
     });
 
     it('should include recommendations', async () => {
       const taskId = 'TASK-feature-P2-test-task-20260101';
-      const task = createDefaultTaskMeta(taskId, 'Test Task', 'feature');
-      writeTaskMeta(task, tempDir);
+      createTaskDir(env.tasksDir, taskId, createDefaultTaskMeta(taskId, 'Test Task', 'feature'));
 
       const configPath = await checker.generateConfig(taskId);
 
-      const config = JSON.parse(fs.readFileSync(path.join(tempDir, configPath), 'utf-8'));
+      const config = JSON.parse(fs.readFileSync(path.join(env.tempDir, configPath), 'utf-8'));
       expect(config.recommendations.length).toBeGreaterThan(0);
       expect(config.recommendations.some((r: string) => r.includes('bun install'))).toBe(true);
     });
@@ -336,8 +329,7 @@ describe('TestEnvConfigChecker', () => {
 
     it('should return config when it exists', async () => {
       const taskId = 'TASK-feature-P2-test-task-20260101';
-      const task = createDefaultTaskMeta(taskId, 'Test Task', 'feature');
-      writeTaskMeta(task, tempDir);
+      createTaskDir(env.tasksDir, taskId, createDefaultTaskMeta(taskId, 'Test Task', 'feature'));
       await checker.generateConfig(taskId);
 
       const config = checker.readConfig(taskId);
@@ -348,7 +340,7 @@ describe('TestEnvConfigChecker', () => {
 
     it('should return null for invalid JSON', () => {
       const taskId = 'TASK-feature-P2-test-task-20260101';
-      const configPath = path.join(tempDir, '.projmnt4claude', 'outputs', taskId, 'tasks_test_env_adv.json');
+      const configPath = path.join(env.tempDir, '.projmnt4claude', 'outputs', taskId, 'tasks_test_env_adv.json');
       fs.mkdirSync(path.dirname(configPath), { recursive: true });
       fs.writeFileSync(configPath, 'invalid json');
 
@@ -370,10 +362,9 @@ describe('TestEnvConfigChecker', () => {
   describe('Utility Functions', () => {
     it('quickTestEnvCheck should work', async () => {
       const taskId = 'TASK-feature-P2-test-task-20260101';
-      const task = createDefaultTaskMeta(taskId, 'Test Task with test', 'feature');
-      writeTaskMeta(task, tempDir);
+      createTaskDir(env.tasksDir, taskId, createDefaultTaskMeta(taskId, 'Test Task with test', 'feature'));
 
-      const results = await quickTestEnvCheck(taskId, tempDir);
+      const results = await quickTestEnvCheck(taskId, env.tempDir);
 
       expect(results).toBeDefined();
       expect(Array.isArray(results)).toBe(true);
@@ -395,10 +386,10 @@ describe('TestEnvConfigChecker', () => {
           updatedAt: new Date().toISOString(),
         },
       ];
-      writeTaskMeta(task, tempDir);
+      createTaskDir(env.tasksDir, taskId, task);
 
-      const configPath = await generateTestEnvConfig(taskId, tempDir);
-      const fullPath = path.join(tempDir, configPath);
+      const configPath = await generateTestEnvConfig(taskId, env.tempDir);
+      const fullPath = path.join(env.tempDir, configPath);
 
       expect(fs.existsSync(fullPath)).toBe(true);
 

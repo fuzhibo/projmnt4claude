@@ -21,6 +21,10 @@ import type {
   PreDevPhaseCheckContext,
 } from '../types/pre-dev-phase-gate.js';
 import type { TaskMeta } from '../types/task.js';
+import {
+  createIsolatedTestEnv,
+  type IsolatedTestEnv,
+} from '../utils/test-env.js';
 
 // 创建 mock 规则
 function createMockRule(overrides: Partial<PreDevPhaseRule> = {}): PreDevPhaseRule {
@@ -79,25 +83,21 @@ function createMockContext(
 }
 
 describe('Dependency Checker Rules', () => {
+  let env: IsolatedTestEnv;
   let testDir: string;
   let outputsDir: string;
   let tasksDir: string;
 
-  beforeEach(() => {
-    // 创建临时测试目录
-    testDir = fs.mkdtempSync('/tmp/dependency-checker-test-');
+  beforeEach(async () => {
+    env = await createIsolatedTestEnv({ prefix: 'dependency-checker-test-' });
+    testDir = env.tempDir;
+    tasksDir = env.tasksDir;
     outputsDir = path.join(testDir, '.projmnt4claude', 'outputs');
-    tasksDir = path.join(testDir, '.projmnt4claude', 'tasks');
-
     fs.mkdirSync(outputsDir, { recursive: true });
-    fs.mkdirSync(tasksDir, { recursive: true });
   });
 
   afterEach(() => {
-    // 清理测试目录
-    if (fs.existsSync(testDir)) {
-      fs.rmSync(testDir, { recursive: true });
-    }
+    env.cleanup();
   });
 
   // ============================================================================

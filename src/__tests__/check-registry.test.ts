@@ -1,9 +1,13 @@
 /**
  * Check Registry Tests
  * 检查项注册表单元测试
+ *
+ * 迁移说明:
+ * - 使用 createIsolatedTestEnv 创建隔离测试环境
+ * - 确保 CheckRegistry 实例在隔离环境中创建
  */
 
-import { describe, it, expect, beforeEach } from 'bun:test';
+import { describe, it, expect, beforeEach, afterEach } from 'bun:test';
 import {
   CheckRegistry,
   EnvironmentCheck,
@@ -19,12 +23,22 @@ import {
   PermissionsCheck,
 } from '../utils/check-registry';
 import type { CheckContext, CheckItem } from '../types/precheck';
+import {
+  createIsolatedTestEnv,
+  type IsolatedTestEnv,
+} from '../utils/test-env.js';
 
 describe('CheckRegistry', () => {
   let registry: CheckRegistry;
+  let env: IsolatedTestEnv;
 
-  beforeEach(() => {
+  beforeEach(async () => {
+    env = await createIsolatedTestEnv();
     registry = new CheckRegistry();
+  });
+
+  afterEach(() => {
+    env.cleanup();
   });
 
   describe('register()', () => {

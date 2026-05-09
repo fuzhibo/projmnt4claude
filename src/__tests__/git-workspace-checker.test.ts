@@ -24,6 +24,7 @@ import {
 } from '../utils/pre-dev-phase-gate/checkers/git-workspace-checker.js';
 import type { PreDevPhaseCheckContext } from '../types/pre-dev-phase-gate.js';
 import type { TaskMeta } from '../types/task.js';
+import { createGitTestEnv, type GitTestEnv } from '../utils/test-env.js';
 
 // 创建 mock 上下文
 function createMockContext(
@@ -68,29 +69,16 @@ function createMockContext(
 }
 
 describe('GitWorkspaceChecker', () => {
-  let testDir: string;
+  let gitEnv: GitTestEnv;
   let checker: GitWorkspaceChecker;
 
-  beforeEach(() => {
-    // 创建临时测试目录并初始化为 git 仓库
-    testDir = fs.mkdtempSync('/tmp/git-workspace-checker-test-');
-
-    // 初始化 git 仓库
-    execSync('git init', { cwd: testDir, encoding: 'utf-8' });
-    execSync('git config user.email "test@test.com"', { cwd: testDir, encoding: 'utf-8' });
-    execSync('git config user.name "Test User"', { cwd: testDir, encoding: 'utf-8' });
-
-    // 创建初始提交
-    fs.writeFileSync(path.join(testDir, 'README.md'), '# Test Project');
-    execSync('git add README.md', { cwd: testDir, encoding: 'utf-8' });
-    execSync('git commit -m "Initial commit"', { cwd: testDir, encoding: 'utf-8' });
-
+  beforeEach(async () => {
+    gitEnv = await createGitTestEnv();
     checker = new GitWorkspaceChecker();
   });
 
   afterEach(() => {
-    // 清理测试目录
-    fs.rmSync(testDir, { recursive: true, force: true });
+    gitEnv.cleanup();
   });
 
   describe('基本属性', () => {
@@ -108,7 +96,7 @@ describe('GitWorkspaceChecker', () => {
     });
 
     it('isApplicable 应该始终返回 true', () => {
-      const context = createMockContext(testDir);
+      const context = createMockContext(gitEnv.tempDir);
       expect(checker.isApplicable(context)).toBe(true);
     });
   });
@@ -140,7 +128,7 @@ describe('GitWorkspaceChecker', () => {
 
   describe('Git工作区检查', () => {
     it('应该检查工作区是否干净', async () => {
-      const context = createMockContext(testDir);
+      const context = createMockContext(gitEnv.tempDir);
       const result = await checker.check(context);
 
       expect(result.passed).toBe(true);
@@ -150,10 +138,9 @@ describe('GitWorkspaceChecker', () => {
     });
 
     it('应该检测未提交更改', async () => {
-      // 创建未提交的文件
-      fs.writeFileSync(path.join(testDir, 'uncommitted.ts'), 'const x = 1;');
+      gitEnv.createUntracked('uncommitted.ts', 'const x = 1;');
 
-      const context = createMockContext(testDir);
+      const context = createMockContext(gitEnv.tempDir);
       const result = await checker.check(context);
 
       const report = result.details?.report as GitWorkspaceReport;
@@ -162,11 +149,9 @@ describe('GitWorkspaceChecker', () => {
     });
 
     it('应该检查暂存区状态', async () => {
-      // 创建并暂存文件
-      fs.writeFileSync(path.join(testDir, 'staged.ts'), 'const y = 2;');
-      execSync('git add staged.ts', { cwd: testDir, encoding: 'utf-8' });
+      gitEnv.createStaged('staged.ts', 'const y = 2;');
 
-      const context = createMockContext(testDir);
+      const context = createMockContext(gitEnv.tempDir);
       const result = await checker.check(context);
 
       const report = result.details?.report as GitWorkspaceReport;
@@ -175,14 +160,9 @@ describe('GitWorkspaceChecker', () => {
     });
 
     it('应该检查冲突标记', async () => {
-      // 创建包含冲突标记的文件
-      fs.writeFileSync(
-        path.join(testDir, 'conflict.ts'),
-        'const x = 1;\n<<<<<<< HEAD\nconsole.log("local");\n=======\nconsole.log("remote");\n>>>>>>> branch'
-      );
-      execSync('git add conflict.ts', { cwd: testDir, encoding: 'utf-8' });
+      gitEnv.createConflict('conflict.ts');
 
-      const context = createMockContext(testDir);
+      const context = createMockContext(gitEnv.tempDir);
       const result = await checker.check(context);
 
       const report = result.details?.report as GitWorkspaceReport;
@@ -192,10 +172,9 @@ describe('GitWorkspaceChecker', () => {
 
   describe('分支状态检查', () => {
     it('应该检查分支是否存在', async () => {
-      // 创建测试分支
-      execSync('git checkout -b feature/test-branch', { cwd: testDir, encoding: 'utf-8' });
+      gitEnv.execGit('checkout -b feature/test-branch');
 
-      const context = createMockContext(testDir, 'feature/test-branch');
+      const context = createMockContext(gitEnv.tempDir, 'feature/test-branch');
       const result = await checker.check(context);
 
       const report = result.details?.report as GitWorkspaceReport;
@@ -204,7 +183,7 @@ describe('GitWorkspaceChecker', () => {
     });
 
     it('应该检测不存在的分支', async () => {
-      const context = createMockContext(testDir, 'feature/non-existent');
+      const context = createMockContext(gitEnv.tempDir, 'feature/non-existent');
       const result = await checker.check(context);
 
       const report = result.details?.report as GitWorkspaceReport;
@@ -212,9 +191,9 @@ describe('GitWorkspaceChecker', () => {
     });
 
     it('应该检查当前分支', async () => {
-      execSync('git checkout -b feature/current', { cwd: testDir, encoding: 'utf-8' });
+      gitEnv.execGit('checkout -b feature/current');
 
-      const context = createMockContext(testDir);
+      const context = createMockContext(gitEnv.tempDir);
       const result = await checker.check(context);
 
       const report = result.details?.report as GitWorkspaceReport;
@@ -222,22 +201,14 @@ describe('GitWorkspaceChecker', () => {
     });
 
     it('应该检查可切换性', async () => {
-      // 获取默认分支名
-      const defaultBranch = execSync('git branch --show-current', {
-        cwd: testDir,
-        encoding: 'utf-8',
-      }).trim();
+      const defaultBranch = gitEnv.currentBranch;
 
-      // 创建目标分支
-      execSync('git checkout -b feature/target', { cwd: testDir, encoding: 'utf-8' });
-      fs.writeFileSync(path.join(testDir, 'target.txt'), 'target');
-      execSync('git add target.txt', { cwd: testDir, encoding: 'utf-8' });
-      execSync('git commit -m "Add target file"', { cwd: testDir, encoding: 'utf-8' });
+      gitEnv.execGit('checkout -b feature/target');
+      gitEnv.createAndCommit('target.txt', 'target', 'Add target file');
 
-      // 返回默认分支
-      execSync(`git checkout ${defaultBranch}`, { cwd: testDir, encoding: 'utf-8' });
+      gitEnv.execGit(`checkout ${defaultBranch}`);
 
-      const context = createMockContext(testDir, 'feature/target');
+      const context = createMockContext(gitEnv.tempDir, 'feature/target');
       const result = await checker.check(context);
 
       const report = result.details?.report as GitWorkspaceReport;
@@ -247,7 +218,7 @@ describe('GitWorkspaceChecker', () => {
 
   describe('综合报告', () => {
     it('应该生成完整的报告', async () => {
-      const context = createMockContext(testDir);
+      const context = createMockContext(gitEnv.tempDir);
       const result = await checker.check(context);
 
       const report = result.details?.report as GitWorkspaceReport;
@@ -266,7 +237,7 @@ describe('GitWorkspaceChecker', () => {
     });
 
     it('报告应该包含所有检查结果', async () => {
-      const context = createMockContext(testDir);
+      const context = createMockContext(gitEnv.tempDir);
       const result = await checker.check(context);
 
       expect(result.details?.checkResults).toBeDefined();
@@ -277,10 +248,9 @@ describe('GitWorkspaceChecker', () => {
 
   describe('建议生成', () => {
     it('应该为有问题的检查结果生成建议', async () => {
-      // 创建未提交文件
-      fs.writeFileSync(path.join(testDir, 'dirty.ts'), 'const dirty = true;');
+      gitEnv.createUntracked('dirty.ts', 'const dirty = true;');
 
-      const context = createMockContext(testDir);
+      const context = createMockContext(gitEnv.tempDir);
       const result = await checker.check(context);
 
       expect(result.suggestions).toBeDefined();
@@ -291,7 +261,7 @@ describe('GitWorkspaceChecker', () => {
 
   describe('结果严重级别', () => {
     it('干净工作区应该返回通过的检查结果', async () => {
-      const context = createMockContext(testDir);
+      const context = createMockContext(gitEnv.tempDir);
       const result = await checker.check(context);
 
       expect(result.passed).toBe(true);
@@ -300,7 +270,7 @@ describe('GitWorkspaceChecker', () => {
 
   describe('快速检查函数', () => {
     it('quickGitWorkspaceCheck 应该返回检查结果', async () => {
-      const context = createMockContext(testDir);
+      const context = createMockContext(gitEnv.tempDir);
       const result = await quickGitWorkspaceCheck(context);
 
       expect(result).toBeDefined();
@@ -333,7 +303,7 @@ describe('GitWorkspaceChecker', () => {
       };
       const disabledChecker = new GitWorkspaceChecker(config);
 
-      const context = createMockContext(testDir);
+      const context = createMockContext(gitEnv.tempDir);
       const result = await disabledChecker.check(context);
 
       // 当禁用 Git 检查时，只有分支检查的结果 (5个)
@@ -346,7 +316,7 @@ describe('GitWorkspaceChecker', () => {
       };
       const disabledChecker = new GitWorkspaceChecker(config);
 
-      const context = createMockContext(testDir);
+      const context = createMockContext(gitEnv.tempDir);
       const result = await disabledChecker.check(context);
 
       // 当禁用分支检查时，只有 Git 检查的结果 (4个)
@@ -356,7 +326,7 @@ describe('GitWorkspaceChecker', () => {
 
   describe('执行时长', () => {
     it('应该包含执行时长', async () => {
-      const context = createMockContext(testDir);
+      const context = createMockContext(gitEnv.tempDir);
       const result = await checker.check(context);
 
       expect(result.duration).toBeGreaterThanOrEqual(0);

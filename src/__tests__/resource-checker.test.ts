@@ -24,6 +24,7 @@ import type {
   PreDevPhaseCheckContext,
 } from '../types/pre-dev-phase-gate.js';
 import type { TaskMeta } from '../types/task.js';
+import { createIsolatedTestEnv, type IsolatedTestEnv } from '../utils/test-env.js';
 
 // 创建 mock 规则
 function createMockRule(overrides: Partial<PreDevPhaseRule> = {}): PreDevPhaseRule {
@@ -83,18 +84,16 @@ function createMockContext(
 }
 
 describe('Resource Checker Rules', () => {
+  let env: IsolatedTestEnv;
   let testDir: string;
 
-  beforeEach(() => {
-    // 创建临时测试目录
-    testDir = fs.mkdtempSync('/tmp/resource-checker-test-');
+  beforeEach(async () => {
+    env = await createIsolatedTestEnv();
+    testDir = env.projectDir;
   });
 
   afterEach(() => {
-    // 清理测试目录
-    if (fs.existsSync(testDir)) {
-      fs.rmSync(testDir, { recursive: true });
-    }
+    env.cleanup();
   });
 
   // ============================================================================

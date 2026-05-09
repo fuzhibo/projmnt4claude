@@ -11,8 +11,7 @@
 import { describe, it, expect, beforeEach, afterEach } from 'bun:test';
 import * as fs from 'fs';
 import * as path from 'path';
-import { mkdtempSync, writeFileSync, mkdirSync, rmSync } from 'fs';
-import { tmpdir } from 'os';
+import { mkdirSync, writeFileSync } from 'fs';
 import {
   CodeReadyChecker,
   createCodeReadyChecker,
@@ -22,70 +21,42 @@ import {
   DEFAULT_CODE_READY_CHECKER_CONFIG,
 } from '../utils/pre-cr-gate/checkers/code-ready-checker.js';
 import type { TaskMeta } from '../types/task.js';
-
-// ============== 测试工具函数 ==============
-
-function createTempDir(): string {
-  return mkdtempSync(path.join(tmpdir(), 'code-ready-test-'));
-}
-
-function setupProjectDir(baseDir: string): void {
-  // 创建 .projmnt4claude 目录结构
-  const configDir = path.join(baseDir, '.projmnt4claude');
-  mkdirSync(configDir, { recursive: true });
-
-  // 创建 config.json (用于 isInitialized 检查)
-  writeFileSync(
-    path.join(configDir, 'config.json'),
-    JSON.stringify({
-      version: '1.0.0',
-      projectName: 'test-project',
-    }, null, 2)
-  );
-}
-
-function createTaskDir(baseDir: string, taskId: string): string {
-  const taskDir = path.join(baseDir, '.projmnt4claude', 'tasks', taskId);
-  mkdirSync(taskDir, { recursive: true });
-  return taskDir;
-}
-
-function writeTaskMeta(taskDir: string, task: Partial<TaskMeta>): void {
-  const metaPath = path.join(taskDir, 'meta.json');
-  writeFileSync(metaPath, JSON.stringify(task, null, 2));
-}
+import {
+  createIsolatedTestEnv,
+  createTaskDir,
+  writeTaskMeta,
+  type IsolatedTestEnv,
+} from '../utils/test-env.js';
 
 // ============== 测试套件 ==============
 
 describe('CodeReadyChecker', () => {
-  let tempDir: string;
+  let env: IsolatedTestEnv;
 
-  beforeEach(() => {
-    tempDir = createTempDir();
-    setupProjectDir(tempDir);
+  beforeEach(async () => {
+    env = await createIsolatedTestEnv({ prefix: 'code-ready-test-' });
   });
 
   afterEach(() => {
-    rmSync(tempDir, { recursive: true, force: true });
+    env.cleanup();
   });
 
   describe('CP-1: 代码文件存在检查', () => {
     it('当所有文件存在时应该通过', async () => {
       // Arrange
       const taskId = 'TASK-test-001';
-      const taskDir = createTaskDir(tempDir, taskId);
-      const codeFile = path.join(tempDir, 'src', 'test.ts');
-      mkdirSync(path.dirname(codeFile), { recursive: true });
-      writeFileSync(codeFile, 'console.log("test");');
-
-      writeTaskMeta(taskDir, {
+      createTaskDir(env.tasksDir, taskId, {
         id: taskId,
         title: 'Test Task',
         status: 'in_progress',
         affected_files: ['src/test.ts'],
       });
 
-      const checker = new CodeReadyChecker(tempDir);
+      const codeFile = path.join(env.tempDir, 'src', 'test.ts');
+      mkdirSync(path.dirname(codeFile), { recursive: true });
+      writeFileSync(codeFile, 'console.log("test");');
+
+      const checker = new CodeReadyChecker(env.tempDir);
 
       // Act
       const result = await checker.check(taskId);
@@ -99,16 +70,14 @@ describe('CodeReadyChecker', () => {
     it('当文件不存在时应该失败', async () => {
       // Arrange
       const taskId = 'TASK-test-002';
-      const taskDir = createTaskDir(tempDir, taskId);
-
-      writeTaskMeta(taskDir, {
+      createTaskDir(env.tasksDir, taskId, {
         id: taskId,
         title: 'Test Task',
         status: 'in_progress',
         affected_files: ['src/non-existent.ts'],
       });
 
-      const checker = new CodeReadyChecker(tempDir);
+      const checker = new CodeReadyChecker(env.tempDir);
 
       // Act
       const result = await checker.check(taskId);
@@ -122,15 +91,13 @@ describe('CodeReadyChecker', () => {
     it('当没有配置文件时应该跳过', async () => {
       // Arrange
       const taskId = 'TASK-test-003';
-      const taskDir = createTaskDir(tempDir, taskId);
-
-      writeTaskMeta(taskDir, {
+      createTaskDir(env.tasksDir, taskId, {
         id: taskId,
         title: 'Test Task',
         status: 'in_progress',
       });
 
-      const checker = new CodeReadyChecker(tempDir);
+      const checker = new CodeReadyChecker(env.tempDir);
 
       // Act
       const result = await checker.check(taskId);
@@ -144,15 +111,7 @@ describe('CodeReadyChecker', () => {
     it('应该同时检查 affected_files 和 files', async () => {
       // Arrange
       const taskId = 'TASK-test-004';
-      const taskDir = createTaskDir(tempDir, taskId);
-
-      const file1 = path.join(tempDir, 'src', 'file1.ts');
-      const file2 = path.join(tempDir, 'src', 'file2.ts');
-      mkdirSync(path.dirname(file1), { recursive: true });
-      writeFileSync(file1, 'console.log("file1");');
-      writeFileSync(file2, 'console.log("file2");');
-
-      writeTaskMeta(taskDir, {
+      createTaskDir(env.tasksDir, taskId, {
         id: taskId,
         title: 'Test Task',
         status: 'in_progress',
@@ -160,7 +119,13 @@ describe('CodeReadyChecker', () => {
         files: ['src/file2.ts'],
       });
 
-      const checker = new CodeReadyChecker(tempDir);
+      const file1 = path.join(env.tempDir, 'src', 'file1.ts');
+      const file2 = path.join(env.tempDir, 'src', 'file2.ts');
+      mkdirSync(path.dirname(file1), { recursive: true });
+      writeFileSync(file1, 'console.log("file1");');
+      writeFileSync(file2, 'console.log("file2");');
+
+      const checker = new CodeReadyChecker(env.tempDir);
 
       // Act
       const result = await checker.check(taskId);
@@ -176,18 +141,17 @@ describe('CodeReadyChecker', () => {
     it('当 JSON 文件语法有效时应该通过', async () => {
       // Arrange
       const taskId = 'TASK-test-101';
-      const taskDir = createTaskDir(tempDir, taskId);
-      const jsonFile = path.join(tempDir, 'config.json');
-      writeFileSync(jsonFile, '{"key": "value", "number": 123}');
-
-      writeTaskMeta(taskDir, {
+      createTaskDir(env.tasksDir, taskId, {
         id: taskId,
         title: 'Test Task',
         status: 'in_progress',
         affected_files: ['config.json'],
       });
 
-      const checker = new CodeReadyChecker(tempDir);
+      const jsonFile = path.join(env.tempDir, 'config.json');
+      writeFileSync(jsonFile, '{"key": "value", "number": 123}');
+
+      const checker = new CodeReadyChecker(env.tempDir);
 
       // Act
       const result = await checker.check(taskId);
@@ -201,18 +165,17 @@ describe('CodeReadyChecker', () => {
     it('当 JSON 文件语法无效时应该失败', async () => {
       // Arrange
       const taskId = 'TASK-test-102';
-      const taskDir = createTaskDir(tempDir, taskId);
-      const jsonFile = path.join(tempDir, 'invalid.json');
-      writeFileSync(jsonFile, '{"key": "value", invalid}');
-
-      writeTaskMeta(taskDir, {
+      createTaskDir(env.tasksDir, taskId, {
         id: taskId,
         title: 'Test Task',
         status: 'in_progress',
         affected_files: ['invalid.json'],
       });
 
-      const checker = new CodeReadyChecker(tempDir);
+      const jsonFile = path.join(env.tempDir, 'invalid.json');
+      writeFileSync(jsonFile, '{"key": "value", invalid}');
+
+      const checker = new CodeReadyChecker(env.tempDir);
 
       // Act
       const result = await checker.check(taskId);
@@ -225,18 +188,17 @@ describe('CodeReadyChecker', () => {
     it('当 JavaScript 文件语法有效时应该通过', async () => {
       // Arrange
       const taskId = 'TASK-test-103';
-      const taskDir = createTaskDir(tempDir, taskId);
-      const jsFile = path.join(tempDir, 'script.js');
-      writeFileSync(jsFile, 'const x = 1;\nfunction test() { return x + 1; }\nmodule.exports = test;');
-
-      writeTaskMeta(taskDir, {
+      createTaskDir(env.tasksDir, taskId, {
         id: taskId,
         title: 'Test Task',
         status: 'in_progress',
         affected_files: ['script.js'],
       });
 
-      const checker = new CodeReadyChecker(tempDir);
+      const jsFile = path.join(env.tempDir, 'script.js');
+      writeFileSync(jsFile, 'const x = 1;\nfunction test() { return x + 1; }\nmodule.exports = test;');
+
+      const checker = new CodeReadyChecker(env.tempDir);
 
       // Act
       const result = await checker.check(taskId);
@@ -249,18 +211,17 @@ describe('CodeReadyChecker', () => {
     it('当 Markdown 文件不为空时应该通过', async () => {
       // Arrange
       const taskId = 'TASK-test-104';
-      const taskDir = createTaskDir(tempDir, taskId);
-      const mdFile = path.join(tempDir, 'README.md');
-      writeFileSync(mdFile, '# Test\n\nThis is a test file.');
-
-      writeTaskMeta(taskDir, {
+      createTaskDir(env.tasksDir, taskId, {
         id: taskId,
         title: 'Test Task',
         status: 'in_progress',
         affected_files: ['README.md'],
       });
 
-      const checker = new CodeReadyChecker(tempDir);
+      const mdFile = path.join(env.tempDir, 'README.md');
+      writeFileSync(mdFile, '# Test\n\nThis is a test file.');
+
+      const checker = new CodeReadyChecker(env.tempDir);
 
       // Act
       const result = await checker.check(taskId);
@@ -273,18 +234,17 @@ describe('CodeReadyChecker', () => {
     it('当没有需要检查语法的文件时应该跳过', async () => {
       // Arrange
       const taskId = 'TASK-test-105';
-      const taskDir = createTaskDir(tempDir, taskId);
-      const txtFile = path.join(tempDir, 'file.txt');
-      writeFileSync(txtFile, 'plain text content');
-
-      writeTaskMeta(taskDir, {
+      createTaskDir(env.tasksDir, taskId, {
         id: taskId,
         title: 'Test Task',
         status: 'in_progress',
         affected_files: ['file.txt'],
       });
 
-      const checker = new CodeReadyChecker(tempDir);
+      const txtFile = path.join(env.tempDir, 'file.txt');
+      writeFileSync(txtFile, 'plain text content');
+
+      const checker = new CodeReadyChecker(env.tempDir);
 
       // Act
       const result = await checker.check(taskId);
@@ -300,15 +260,13 @@ describe('CodeReadyChecker', () => {
     it('当没有构建配置时应该跳过', async () => {
       // Arrange
       const taskId = 'TASK-test-201';
-      const taskDir = createTaskDir(tempDir, taskId);
-
-      writeTaskMeta(taskDir, {
+      createTaskDir(env.tasksDir, taskId, {
         id: taskId,
         title: 'Test Task',
         status: 'in_progress',
       });
 
-      const checker = new CodeReadyChecker(tempDir);
+      const checker = new CodeReadyChecker(env.tempDir);
 
       // Act
       const result = await checker.check(taskId);
@@ -322,21 +280,20 @@ describe('CodeReadyChecker', () => {
     it('当 package.json 存在但没有 build 脚本时应该跳过', async () => {
       // Arrange
       const taskId = 'TASK-test-202';
-      const taskDir = createTaskDir(tempDir, taskId);
-      const packageJson = path.join(tempDir, 'package.json');
+      createTaskDir(env.tasksDir, taskId, {
+        id: taskId,
+        title: 'Test Task',
+        status: 'in_progress',
+      });
+
+      const packageJson = path.join(env.tempDir, 'package.json');
       writeFileSync(packageJson, JSON.stringify({
         name: 'test',
         version: '1.0.0',
         scripts: { test: 'echo test' },
       }, null, 2));
 
-      writeTaskMeta(taskDir, {
-        id: taskId,
-        title: 'Test Task',
-        status: 'in_progress',
-      });
-
-      const checker = new CodeReadyChecker(tempDir);
+      const checker = new CodeReadyChecker(env.tempDir);
 
       // Act
       const result = await checker.check(taskId);
@@ -352,19 +309,18 @@ describe('CodeReadyChecker', () => {
     it('应该检查变更大小', async () => {
       // Arrange
       const taskId = 'TASK-test-301';
-      const taskDir = createTaskDir(tempDir, taskId);
-      const codeFile = path.join(tempDir, 'src', 'large.ts');
-      mkdirSync(path.dirname(codeFile), { recursive: true });
-      writeFileSync(codeFile, 'console.log("test");\n'.repeat(10));
-
-      writeTaskMeta(taskDir, {
+      createTaskDir(env.tasksDir, taskId, {
         id: taskId,
         title: 'Test Task',
         status: 'in_progress',
         affected_files: ['src/large.ts'],
       });
 
-      const checker = new CodeReadyChecker(tempDir, { maxChangeLines: 100 });
+      const codeFile = path.join(env.tempDir, 'src', 'large.ts');
+      mkdirSync(path.dirname(codeFile), { recursive: true });
+      writeFileSync(codeFile, 'console.log("test");\n'.repeat(10));
+
+      const checker = new CodeReadyChecker(env.tempDir, { maxChangeLines: 100 });
 
       // Act
       const result = await checker.check(taskId);
@@ -378,19 +334,18 @@ describe('CodeReadyChecker', () => {
     it('当变更行数超过限制时应该警告', async () => {
       // Arrange
       const taskId = 'TASK-test-302';
-      const taskDir = createTaskDir(tempDir, taskId);
-      const codeFile = path.join(tempDir, 'src', 'huge.ts');
-      mkdirSync(path.dirname(codeFile), { recursive: true });
-      writeFileSync(codeFile, 'console.log("test");\n'.repeat(200));
-
-      writeTaskMeta(taskDir, {
+      createTaskDir(env.tasksDir, taskId, {
         id: taskId,
         title: 'Test Task',
         status: 'in_progress',
         affected_files: ['src/huge.ts'],
       });
 
-      const checker = new CodeReadyChecker(tempDir, { maxChangeLines: 100 });
+      const codeFile = path.join(env.tempDir, 'src', 'huge.ts');
+      mkdirSync(path.dirname(codeFile), { recursive: true });
+      writeFileSync(codeFile, 'console.log("test");\n'.repeat(200));
+
+      const checker = new CodeReadyChecker(env.tempDir, { maxChangeLines: 100 });
 
       // Act
       const result = await checker.check(taskId);
@@ -404,16 +359,14 @@ describe('CodeReadyChecker', () => {
     it('应该检测二进制文件', async () => {
       // Arrange
       const taskId = 'TASK-test-303';
-      const taskDir = createTaskDir(tempDir, taskId);
-
-      writeTaskMeta(taskDir, {
+      createTaskDir(env.tasksDir, taskId, {
         id: taskId,
         title: 'Test Task',
         status: 'in_progress',
         affected_files: ['file.exe', 'data.bin'],
       });
 
-      const checker = new CodeReadyChecker(tempDir);
+      const checker = new CodeReadyChecker(env.tempDir);
 
       // Act
       const result = await checker.check(taskId);
@@ -428,13 +381,13 @@ describe('CodeReadyChecker', () => {
 
   describe('配置和工具函数', () => {
     it('createCodeReadyChecker 应该创建检查器实例', () => {
-      const checker = createCodeReadyChecker(tempDir, { maxChangeLines: 100 });
+      const checker = createCodeReadyChecker(env.tempDir, { maxChangeLines: 100 });
       expect(checker).toBeInstanceOf(CodeReadyChecker);
       expect(checker.getConfig().maxChangeLines).toBe(100);
     });
 
     it('updateConfig 应该更新配置', () => {
-      const checker = new CodeReadyChecker(tempDir);
+      const checker = new CodeReadyChecker(env.tempDir);
       checker.updateConfig({ maxChangeLines: 200 });
       expect(checker.getConfig().maxChangeLines).toBe(200);
     });
@@ -442,15 +395,13 @@ describe('CodeReadyChecker', () => {
     it('当检查禁用时应该直接返回通过', async () => {
       // Arrange
       const taskId = 'TASK-test-401';
-      const taskDir = createTaskDir(tempDir, taskId);
-
-      writeTaskMeta(taskDir, {
+      createTaskDir(env.tasksDir, taskId, {
         id: taskId,
         title: 'Test Task',
         status: 'in_progress',
       });
 
-      const checker = new CodeReadyChecker(tempDir, { enabled: false });
+      const checker = new CodeReadyChecker(env.tempDir, { enabled: false });
 
       // Act
       const result = await checker.check(taskId);
@@ -462,7 +413,7 @@ describe('CodeReadyChecker', () => {
 
     it('当任务不存在时应该返回失败', async () => {
       // Arrange
-      const checker = new CodeReadyChecker(tempDir);
+      const checker = new CodeReadyChecker(env.tempDir);
 
       // Act
       const result = await checker.check('NON-EXISTENT-TASK');
@@ -478,30 +429,26 @@ describe('CodeReadyChecker', () => {
       // Arrange
       const taskId1 = 'TASK-test-batch-001';
       const taskId2 = 'TASK-test-batch-002';
-      const taskDir1 = createTaskDir(tempDir, taskId1);
-      const taskDir2 = createTaskDir(tempDir, taskId2);
-
-      const file1 = path.join(tempDir, 'src1.ts');
-      const file2 = path.join(tempDir, 'src2.ts');
-      writeFileSync(file1, 'console.log("1");');
-      writeFileSync(file2, 'console.log("2");');
-
-      writeTaskMeta(taskDir1, {
+      createTaskDir(env.tasksDir, taskId1, {
         id: taskId1,
         title: 'Test Task 1',
         status: 'in_progress',
         affected_files: ['src1.ts'],
       });
-
-      writeTaskMeta(taskDir2, {
+      createTaskDir(env.tasksDir, taskId2, {
         id: taskId2,
         title: 'Test Task 2',
         status: 'in_progress',
         affected_files: ['src2.ts'],
       });
 
+      const file1 = path.join(env.tempDir, 'src1.ts');
+      const file2 = path.join(env.tempDir, 'src2.ts');
+      writeFileSync(file1, 'console.log("1");');
+      writeFileSync(file2, 'console.log("2");');
+
       // Act
-      const results = await batchCodeReadyCheck([taskId1, taskId2], tempDir);
+      const results = await batchCodeReadyCheck([taskId1, taskId2], env.tempDir);
 
       // Assert
       expect(results).toHaveLength(2);
@@ -512,19 +459,18 @@ describe('CodeReadyChecker', () => {
     it('quickCodeReadyCheck 应该快速执行检查', async () => {
       // Arrange
       const taskId = 'TASK-test-quick-001';
-      const taskDir = createTaskDir(tempDir, taskId);
-      const codeFile = path.join(tempDir, 'test.ts');
-      writeFileSync(codeFile, 'console.log("test");');
-
-      writeTaskMeta(taskDir, {
+      createTaskDir(env.tasksDir, taskId, {
         id: taskId,
         title: 'Test Task',
         status: 'in_progress',
         affected_files: ['test.ts'],
       });
 
+      const codeFile = path.join(env.tempDir, 'test.ts');
+      writeFileSync(codeFile, 'console.log("test");');
+
       // Act
-      const result = await quickCodeReadyCheck(taskId, tempDir);
+      const result = await quickCodeReadyCheck(taskId, env.tempDir);
 
       // Assert
       expect(result.taskId).toBe(taskId);

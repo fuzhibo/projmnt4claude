@@ -21,6 +21,10 @@ import {
   type CodeReviewReportCheckerConfig,
   type CodeReviewReport,
 } from '../utils/post-cr-gate/checkers/report-checker.js';
+import {
+  createIsolatedTestEnv,
+  type IsolatedTestEnv,
+} from '../utils/test-env.js';
 
 // 测试辅助函数
 function createMockReport(overrides: Partial<CodeReviewReport> = {}): CodeReviewReport {
@@ -38,21 +42,19 @@ function createMockReport(overrides: Partial<CodeReviewReport> = {}): CodeReview
 }
 
 describe('CodeReviewReportChecker', () => {
+  let env: IsolatedTestEnv;
   let testDir: string;
   let outputsDir: string;
 
-  beforeEach(() => {
-    // 创建临时测试目录
-    testDir = fs.mkdtempSync('/tmp/report-checker-test-');
+  beforeEach(async () => {
+    env = await createIsolatedTestEnv({ prefix: 'report-checker-test-' });
+    testDir = env.tempDir;
     outputsDir = path.join(testDir, '.projmnt4claude', 'outputs');
     fs.mkdirSync(outputsDir, { recursive: true });
   });
 
   afterEach(() => {
-    // 清理测试目录
-    if (fs.existsSync(testDir)) {
-      fs.rmSync(testDir, { recursive: true });
-    }
+    env.cleanup();
   });
 
   describe('基础功能', () => {

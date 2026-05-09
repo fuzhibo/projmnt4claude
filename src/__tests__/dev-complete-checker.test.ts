@@ -21,6 +21,11 @@ import {
   type DevCompleteCheckerConfig,
 } from '../utils/pre-cr-gate/checkers/dev-complete-checker.js';
 import type { TaskMeta } from '../types/task.js';
+import {
+  createIsolatedTestEnv,
+  createTaskDir,
+  type IsolatedTestEnv,
+} from '../utils/test-env.js';
 
 // 测试辅助函数
 function createMockTask(overrides: Partial<TaskMeta> = {}): TaskMeta {
@@ -49,46 +54,30 @@ function createMockTask(overrides: Partial<TaskMeta> = {}): TaskMeta {
 }
 
 describe('DevCompleteChecker', () => {
-  let testDir: string;
+  let env: IsolatedTestEnv;
   let tasksDir: string;
   let reportsDir: string;
 
-  beforeEach(() => {
-    // 创建临时测试目录
-    testDir = fs.mkdtempSync('/tmp/dev-complete-checker-test-');
-    tasksDir = path.join(testDir, '.projmnt4claude', 'tasks');
-    reportsDir = path.join(testDir, '.projmnt4claude', 'reports', 'harness');
-    fs.mkdirSync(tasksDir, { recursive: true });
+  beforeEach(async () => {
+    env = await createIsolatedTestEnv({ prefix: 'dev-complete-checker-test-' });
+    tasksDir = env.tasksDir;
+    reportsDir = path.join(env.tempDir, '.projmnt4claude', 'reports', 'harness');
     fs.mkdirSync(reportsDir, { recursive: true });
-
-    // 创建项目配置
-    const configDir = path.join(testDir, '.projmnt4claude');
-    fs.mkdirSync(configDir, { recursive: true });
-    fs.writeFileSync(
-      path.join(configDir, 'config.json'),
-      JSON.stringify({
-        version: '1.0.0',
-        projectName: 'test-project',
-      })
-    );
   });
 
   afterEach(() => {
-    // 清理测试目录
-    if (fs.existsSync(testDir)) {
-      fs.rmSync(testDir, { recursive: true });
-    }
+    env.cleanup();
   });
 
   describe('基础功能', () => {
     it('应该创建实例', () => {
-      const checker = new DevCompleteChecker(testDir);
+      const checker = new DevCompleteChecker(env.tempDir);
       expect(checker).toBeDefined();
       expect(checker.getConfig()).toBeDefined();
     });
 
     it('应该使用默认配置', () => {
-      const checker = new DevCompleteChecker(testDir);
+      const checker = new DevCompleteChecker(env.tempDir);
       const config = checker.getConfig();
 
       expect(config.enabled).toBe(true);
@@ -105,7 +94,7 @@ describe('DevCompleteChecker', () => {
         requireAllCheckpoints: false,
       };
 
-      const checker = new DevCompleteChecker(testDir, customConfig);
+      const checker = new DevCompleteChecker(env.tempDir, customConfig);
       const config = checker.getConfig();
 
       expect(config.enabled).toBe(false);
@@ -117,17 +106,10 @@ describe('DevCompleteChecker', () => {
   describe('任务状态检查', () => {
     it('in_progress状态应该通过', async () => {
       const taskId = 'TASK-test-status';
-      const taskDir = path.join(tasksDir, taskId);
-      fs.mkdirSync(taskDir, { recursive: true });
-
-      const task = createMockTask({
+      createTaskDir(tasksDir, taskId, {
         id: taskId,
         status: 'in_progress',
       });
-      fs.writeFileSync(
-        path.join(taskDir, 'meta.json'),
-        JSON.stringify(task)
-      );
 
       // 创建开发报告
       const taskReportDir = path.join(reportsDir, taskId);
@@ -137,7 +119,7 @@ describe('DevCompleteChecker', () => {
         '# Development Report\n\nTest content'
       );
 
-      const checker = new DevCompleteChecker(testDir, {
+      const checker = new DevCompleteChecker(env.tempDir, {
         validateArtifacts: false,
       });
       const result = await checker.check(taskId);
@@ -148,17 +130,10 @@ describe('DevCompleteChecker', () => {
 
     it('open状态应该失败', async () => {
       const taskId = 'TASK-test-status';
-      const taskDir = path.join(tasksDir, taskId);
-      fs.mkdirSync(taskDir, { recursive: true });
-
-      const task = createMockTask({
+      createTaskDir(tasksDir, taskId, {
         id: taskId,
         status: 'open',
       });
-      fs.writeFileSync(
-        path.join(taskDir, 'meta.json'),
-        JSON.stringify(task)
-      );
 
       // 创建开发报告
       const taskReportDir = path.join(reportsDir, taskId);
@@ -168,7 +143,7 @@ describe('DevCompleteChecker', () => {
         '# Development Report\n\nTest content'
       );
 
-      const checker = new DevCompleteChecker(testDir, {
+      const checker = new DevCompleteChecker(env.tempDir, {
         validateArtifacts: false,
       });
       const result = await checker.check(taskId);
@@ -181,14 +156,7 @@ describe('DevCompleteChecker', () => {
   describe('开发报告检查', () => {
     it('报告存在应该通过', async () => {
       const taskId = 'TASK-test-report';
-      const taskDir = path.join(tasksDir, taskId);
-      fs.mkdirSync(taskDir, { recursive: true });
-
-      const task = createMockTask({ id: taskId });
-      fs.writeFileSync(
-        path.join(taskDir, 'meta.json'),
-        JSON.stringify(task)
-      );
+      createTaskDir(tasksDir, taskId, { id: taskId });
 
       // 创建开发报告
       const taskReportDir = path.join(reportsDir, taskId);
@@ -198,7 +166,7 @@ describe('DevCompleteChecker', () => {
         '# Development Report\n\nTest content'
       );
 
-      const checker = new DevCompleteChecker(testDir, {
+      const checker = new DevCompleteChecker(env.tempDir, {
         validateArtifacts: false,
       });
       const result = await checker.check(taskId);
@@ -209,18 +177,11 @@ describe('DevCompleteChecker', () => {
 
     it('报告不存在应该失败', async () => {
       const taskId = 'TASK-test-report';
-      const taskDir = path.join(tasksDir, taskId);
-      fs.mkdirSync(taskDir, { recursive: true });
-
-      const task = createMockTask({ id: taskId });
-      fs.writeFileSync(
-        path.join(taskDir, 'meta.json'),
-        JSON.stringify(task)
-      );
+      createTaskDir(tasksDir, taskId, { id: taskId });
 
       // 不创建开发报告
 
-      const checker = new DevCompleteChecker(testDir, {
+      const checker = new DevCompleteChecker(env.tempDir, {
         validateArtifacts: false,
       });
       const result = await checker.check(taskId);
@@ -231,16 +192,9 @@ describe('DevCompleteChecker', () => {
 
     it('禁用报告检查时应该跳过', async () => {
       const taskId = 'TASK-test-report';
-      const taskDir = path.join(tasksDir, taskId);
-      fs.mkdirSync(taskDir, { recursive: true });
+      createTaskDir(tasksDir, taskId, { id: taskId });
 
-      const task = createMockTask({ id: taskId });
-      fs.writeFileSync(
-        path.join(taskDir, 'meta.json'),
-        JSON.stringify(task)
-      );
-
-      const checker = new DevCompleteChecker(testDir, {
+      const checker = new DevCompleteChecker(env.tempDir, {
         requireDevReport: false,
         validateArtifacts: false,
       });
@@ -254,20 +208,13 @@ describe('DevCompleteChecker', () => {
   describe('检查点完成检查', () => {
     it('所有检查点完成应该通过', async () => {
       const taskId = 'TASK-test-checkpoints';
-      const taskDir = path.join(tasksDir, taskId);
-      fs.mkdirSync(taskDir, { recursive: true });
-
-      const task = createMockTask({
+      createTaskDir(tasksDir, taskId, {
         id: taskId,
         checkpoints: [
           { id: 'CP-001', description: '检查点1', status: 'completed', createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() },
           { id: 'CP-002', description: '检查点2', status: 'completed', createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() },
         ],
       });
-      fs.writeFileSync(
-        path.join(taskDir, 'meta.json'),
-        JSON.stringify(task)
-      );
 
       // 创建开发报告
       const taskReportDir = path.join(reportsDir, taskId);
@@ -277,7 +224,7 @@ describe('DevCompleteChecker', () => {
         '# Development Report\n\nTest content'
       );
 
-      const checker = new DevCompleteChecker(testDir, {
+      const checker = new DevCompleteChecker(env.tempDir, {
         validateArtifacts: false,
       });
       const result = await checker.check(taskId);
@@ -288,10 +235,7 @@ describe('DevCompleteChecker', () => {
 
     it('存在未完成的检查点应该失败', async () => {
       const taskId = 'TASK-test-checkpoints';
-      const taskDir = path.join(tasksDir, taskId);
-      fs.mkdirSync(taskDir, { recursive: true });
-
-      const task = createMockTask({
+      createTaskDir(tasksDir, taskId, {
         id: taskId,
         priority: 'P1', // required checkpoint policy
         checkpoints: [
@@ -299,10 +243,6 @@ describe('DevCompleteChecker', () => {
           { id: 'CP-002', description: '检查点2', status: 'pending', createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() },
         ],
       });
-      fs.writeFileSync(
-        path.join(taskDir, 'meta.json'),
-        JSON.stringify(task)
-      );
 
       // 创建开发报告
       const taskReportDir = path.join(reportsDir, taskId);
@@ -312,7 +252,7 @@ describe('DevCompleteChecker', () => {
         '# Development Report\n\nTest content'
       );
 
-      const checker = new DevCompleteChecker(testDir, {
+      const checker = new DevCompleteChecker(env.tempDir, {
         validateArtifacts: false,
       });
       const result = await checker.check(taskId);
@@ -323,18 +263,11 @@ describe('DevCompleteChecker', () => {
 
     it('checkpointPolicy为none时应该通过', async () => {
       const taskId = 'TASK-test-checkpoints';
-      const taskDir = path.join(tasksDir, taskId);
-      fs.mkdirSync(taskDir, { recursive: true });
-
-      const task = createMockTask({
+      createTaskDir(tasksDir, taskId, {
         id: taskId,
         checkpointPolicy: 'none',
         checkpoints: [],
       });
-      fs.writeFileSync(
-        path.join(taskDir, 'meta.json'),
-        JSON.stringify(task)
-      );
 
       // 创建开发报告
       const taskReportDir = path.join(reportsDir, taskId);
@@ -344,7 +277,7 @@ describe('DevCompleteChecker', () => {
         '# Development Report\n\nTest content'
       );
 
-      const checker = new DevCompleteChecker(testDir, {
+      const checker = new DevCompleteChecker(env.tempDir, {
         validateArtifacts: false,
       });
       const result = await checker.check(taskId);
@@ -357,22 +290,15 @@ describe('DevCompleteChecker', () => {
   describe('开发产物验证', () => {
     it('文件存在应该通过', async () => {
       const taskId = 'TASK-test-artifacts';
-      const taskDir = path.join(tasksDir, taskId);
-      fs.mkdirSync(taskDir, { recursive: true });
-
-      // 创建测试文件
-      const srcDir = path.join(testDir, 'src');
-      fs.mkdirSync(srcDir, { recursive: true });
-      fs.writeFileSync(path.join(srcDir, 'test.ts'), 'export const test = 1;');
-
-      const task = createMockTask({
+      createTaskDir(tasksDir, taskId, {
         id: taskId,
         affected_files: ['src/test.ts'],
       });
-      fs.writeFileSync(
-        path.join(taskDir, 'meta.json'),
-        JSON.stringify(task)
-      );
+
+      // 创建测试文件
+      const srcDir = path.join(env.tempDir, 'src');
+      fs.mkdirSync(srcDir, { recursive: true });
+      fs.writeFileSync(path.join(srcDir, 'test.ts'), 'export const test = 1;');
 
       // 创建开发报告
       const taskReportDir = path.join(reportsDir, taskId);
@@ -382,7 +308,7 @@ describe('DevCompleteChecker', () => {
         '# Development Report\n\nTest content'
       );
 
-      const checker = new DevCompleteChecker(testDir);
+      const checker = new DevCompleteChecker(env.tempDir);
       const result = await checker.check(taskId);
       const artifactResult = result.checks.find(c => c.checkId === 'artifacts');
 
@@ -391,17 +317,10 @@ describe('DevCompleteChecker', () => {
 
     it('文件不存在应该失败', async () => {
       const taskId = 'TASK-test-artifacts';
-      const taskDir = path.join(tasksDir, taskId);
-      fs.mkdirSync(taskDir, { recursive: true });
-
-      const task = createMockTask({
+      createTaskDir(tasksDir, taskId, {
         id: taskId,
         affected_files: ['src/non-existent.ts'],
       });
-      fs.writeFileSync(
-        path.join(taskDir, 'meta.json'),
-        JSON.stringify(task)
-      );
 
       // 创建开发报告
       const taskReportDir = path.join(reportsDir, taskId);
@@ -411,7 +330,7 @@ describe('DevCompleteChecker', () => {
         '# Development Report\n\nTest content'
       );
 
-      const checker = new DevCompleteChecker(testDir);
+      const checker = new DevCompleteChecker(env.tempDir);
       const result = await checker.check(taskId);
       const artifactResult = result.checks.find(c => c.checkId === 'artifacts');
 
@@ -420,17 +339,10 @@ describe('DevCompleteChecker', () => {
 
     it('禁用产物验证时应该跳过', async () => {
       const taskId = 'TASK-test-artifacts';
-      const taskDir = path.join(tasksDir, taskId);
-      fs.mkdirSync(taskDir, { recursive: true });
-
-      const task = createMockTask({
+      createTaskDir(tasksDir, taskId, {
         id: taskId,
         affected_files: ['src/non-existent.ts'],
       });
-      fs.writeFileSync(
-        path.join(taskDir, 'meta.json'),
-        JSON.stringify(task)
-      );
 
       // 创建开发报告
       const taskReportDir = path.join(reportsDir, taskId);
@@ -440,7 +352,7 @@ describe('DevCompleteChecker', () => {
         '# Development Report\n\nTest content'
       );
 
-      const checker = new DevCompleteChecker(testDir, {
+      const checker = new DevCompleteChecker(env.tempDir, {
         validateArtifacts: false,
       });
       const result = await checker.check(taskId);
@@ -457,7 +369,7 @@ describe('DevCompleteChecker', () => {
       fs.mkdirSync(taskDir, { recursive: true });
 
       // 创建测试文件
-      const srcDir = path.join(testDir, 'src');
+      const srcDir = path.join(env.tempDir, 'src');
       fs.mkdirSync(srcDir, { recursive: true });
       fs.writeFileSync(path.join(srcDir, 'test.ts'), 'export const test = 1;');
 
@@ -475,7 +387,7 @@ describe('DevCompleteChecker', () => {
         '# Development Report\n\nTest content'
       );
 
-      const checker = new DevCompleteChecker(testDir);
+      const checker = new DevCompleteChecker(env.tempDir);
       const result = await checker.check(taskId);
 
       expect(result.allPassed).toBe(true);
@@ -484,21 +396,14 @@ describe('DevCompleteChecker', () => {
 
     it('有检查失败时allPassed应该为false', async () => {
       const taskId = 'TASK-test-fail';
-      const taskDir = path.join(tasksDir, taskId);
-      fs.mkdirSync(taskDir, { recursive: true });
-
-      const task = createMockTask({
+      createTaskDir(tasksDir, taskId, {
         id: taskId,
         status: 'open', // 会导致任务状态检查失败
       });
-      fs.writeFileSync(
-        path.join(taskDir, 'meta.json'),
-        JSON.stringify(task)
-      );
 
       // 不创建开发报告，会导致报告检查失败
 
-      const checker = new DevCompleteChecker(testDir, {
+      const checker = new DevCompleteChecker(env.tempDir, {
         validateArtifacts: false,
       });
       const result = await checker.check(taskId);
@@ -510,20 +415,13 @@ describe('DevCompleteChecker', () => {
 
   describe('便捷函数', () => {
     it('createDevCompleteChecker应该创建实例', () => {
-      const checker = createDevCompleteChecker(testDir);
+      const checker = createDevCompleteChecker(env.tempDir);
       expect(checker).toBeInstanceOf(DevCompleteChecker);
     });
 
     it('quickDevCompleteCheck应该快速执行检查', async () => {
       const taskId = 'TASK-test-quick';
-      const taskDir = path.join(tasksDir, taskId);
-      fs.mkdirSync(taskDir, { recursive: true });
-
-      const task = createMockTask({ id: taskId });
-      fs.writeFileSync(
-        path.join(taskDir, 'meta.json'),
-        JSON.stringify(task)
-      );
+      createTaskDir(tasksDir, taskId, { id: taskId });
 
       // 创建开发报告
       const taskReportDir = path.join(reportsDir, taskId);
@@ -533,7 +431,7 @@ describe('DevCompleteChecker', () => {
         '# Development Report\n\nTest content'
       );
 
-      const result = await quickDevCompleteCheck(taskId, testDir, {
+      const result = await quickDevCompleteCheck(taskId, env.tempDir, {
         validateArtifacts: false,
       });
 
@@ -544,14 +442,7 @@ describe('DevCompleteChecker', () => {
       const taskIds = ['TASK-test-batch-1', 'TASK-test-batch-2'];
 
       for (const taskId of taskIds) {
-        const taskDir = path.join(tasksDir, taskId);
-        fs.mkdirSync(taskDir, { recursive: true });
-
-        const task = createMockTask({ id: taskId });
-        fs.writeFileSync(
-          path.join(taskDir, 'meta.json'),
-          JSON.stringify(task)
-        );
+        createTaskDir(tasksDir, taskId, { id: taskId });
 
         // 创建开发报告
         const taskReportDir = path.join(reportsDir, taskId);
@@ -562,7 +453,7 @@ describe('DevCompleteChecker', () => {
         );
       }
 
-      const results = await batchDevCompleteCheck(taskIds, testDir, {
+      const results = await batchDevCompleteCheck(taskIds, env.tempDir, {
         validateArtifacts: false,
       });
 
@@ -573,14 +464,7 @@ describe('DevCompleteChecker', () => {
   describe('格式化输出', () => {
     it('应该格式化结果为字符串', async () => {
       const taskId = 'TASK-test-format';
-      const taskDir = path.join(tasksDir, taskId);
-      fs.mkdirSync(taskDir, { recursive: true });
-
-      const task = createMockTask({ id: taskId });
-      fs.writeFileSync(
-        path.join(taskDir, 'meta.json'),
-        JSON.stringify(task)
-      );
+      createTaskDir(tasksDir, taskId, { id: taskId });
 
       // 创建开发报告
       const taskReportDir = path.join(reportsDir, taskId);
@@ -590,7 +474,7 @@ describe('DevCompleteChecker', () => {
         '# Development Report\n\nTest content'
       );
 
-      const checker = new DevCompleteChecker(testDir, {
+      const checker = new DevCompleteChecker(env.tempDir, {
         validateArtifacts: false,
       });
       const result = await checker.check(taskId);
@@ -604,7 +488,7 @@ describe('DevCompleteChecker', () => {
 
   describe('配置管理', () => {
     it('应该更新配置', () => {
-      const checker = new DevCompleteChecker(testDir);
+      const checker = new DevCompleteChecker(env.tempDir);
 
       checker.updateConfig({
         requireDevReport: false,

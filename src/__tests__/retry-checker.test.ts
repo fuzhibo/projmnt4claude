@@ -29,6 +29,7 @@ import type {
   PreDevPhaseCheckContext,
 } from '../types/pre-dev-phase-gate.js';
 import type { TaskMeta } from '../types/task.js';
+import { createIsolatedTestEnv, type IsolatedTestEnv } from '../utils/test-env.js';
 
 // 创建 mock 规则
 function createMockRule(overrides: Partial<PreDevPhaseRule> = {}): PreDevPhaseRule {
@@ -86,13 +87,14 @@ function createMockContext(
 }
 
 describe('Retry Checker Rules', () => {
+  let env: IsolatedTestEnv;
   let testDir: string;
   let taskDir: string;
   let reportsDir: string;
 
-  beforeEach(() => {
-    // 创建临时测试目录
-    testDir = fs.mkdtempSync('/tmp/retry-checker-test-');
+  beforeEach(async () => {
+    env = await createIsolatedTestEnv();
+    testDir = env.projectDir;
     taskDir = path.join(testDir, '.projmnt4claude', 'tasks', 'TASK-test-001');
     reportsDir = path.join(testDir, '.projmnt4claude', 'reports', 'dev');
 
@@ -102,10 +104,7 @@ describe('Retry Checker Rules', () => {
   });
 
   afterEach(() => {
-    // 清理测试目录
-    if (fs.existsSync(testDir)) {
-      fs.rmSync(testDir, { recursive: true });
-    }
+    env.cleanup();
   });
 
   // ============================================================================
@@ -433,19 +432,19 @@ describe('Retry Checker Rules', () => {
 // 自动修复工具测试
 // ============================================================================
 describe('Auto Fix Tools', () => {
+  let env: IsolatedTestEnv;
   let testDir: string;
   let taskDir: string;
 
-  beforeEach(() => {
-    testDir = fs.mkdtempSync('/tmp/auto-fix-test-');
+  beforeEach(async () => {
+    env = await createIsolatedTestEnv();
+    testDir = env.projectDir;
     taskDir = path.join(testDir, '.projmnt4claude', 'tasks', 'TASK-test-001');
     fs.mkdirSync(taskDir, { recursive: true });
   });
 
   afterEach(() => {
-    if (fs.existsSync(testDir)) {
-      fs.rmSync(testDir, { recursive: true });
-    }
+    env.cleanup();
   });
 
   describe('cleanupLockFiles', () => {
