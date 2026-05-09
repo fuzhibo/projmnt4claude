@@ -7079,16 +7079,16 @@ var require_prompts3 = __commonJS((exports, module) => {
 // src/utils/path.ts
 import * as path from "path";
 import * as fs from "fs";
-function getProjectDir(cwd2 = process.cwd()) {
-  return path.join(cwd2, ".projmnt4claude");
+function getProjectDir(cwd = process.cwd()) {
+  return path.join(cwd, ".projmnt4claude");
 }
 function ensureDir(dir) {
   if (!fs.existsSync(dir)) {
     fs.mkdirSync(dir, { recursive: true });
   }
 }
-function isInitialized(cwd2 = process.cwd()) {
-  const projectDir = getProjectDir(cwd2);
+function isInitialized(cwd = process.cwd()) {
+  const projectDir = getProjectDir(cwd);
   const configPath = path.join(projectDir, "config.json");
   if (fs.existsSync(configPath)) {
     return true;
@@ -7107,26 +7107,26 @@ function isInitialized(cwd2 = process.cwd()) {
   }
   return false;
 }
-function getConfigPath(cwd2 = process.cwd()) {
-  return path.join(getProjectDir(cwd2), "config.json");
+function getConfigPath(cwd = process.cwd()) {
+  return path.join(getProjectDir(cwd), "config.json");
 }
-function getTasksDir(cwd2 = process.cwd()) {
-  return path.join(getProjectDir(cwd2), "tasks");
+function getTasksDir(cwd = process.cwd()) {
+  return path.join(getProjectDir(cwd), "tasks");
 }
-function getArchiveDir(cwd2 = process.cwd()) {
-  return path.join(getProjectDir(cwd2), "archive");
+function getArchiveDir(cwd = process.cwd()) {
+  return path.join(getProjectDir(cwd), "archive");
 }
-function getToolboxDir(cwd2 = process.cwd()) {
-  return path.join(getProjectDir(cwd2), "toolbox");
+function getToolboxDir(cwd = process.cwd()) {
+  return path.join(getProjectDir(cwd), "toolbox");
 }
-function getBinDir(cwd2 = process.cwd()) {
-  return path.join(getProjectDir(cwd2), "bin");
+function getBinDir(cwd = process.cwd()) {
+  return path.join(getProjectDir(cwd), "bin");
 }
-function getReportsDir(cwd2 = process.cwd()) {
-  return path.join(getProjectDir(cwd2), "reports");
+function getReportsDir(cwd = process.cwd()) {
+  return path.join(getProjectDir(cwd), "reports");
 }
-function getLogsDir(cwd2 = process.cwd()) {
-  return path.join(getProjectDir(cwd2), "logs");
+function getLogsDir(cwd = process.cwd()) {
+  return path.join(getProjectDir(cwd), "logs");
 }
 var init_path = () => {};
 
@@ -7141,14 +7141,14 @@ function getAIPreset(scenario, overrides) {
     ...overrides
   };
 }
-function buildAgentOptionsFromPreset(scenario, cwd2, overrides) {
+function buildAgentOptionsFromPreset(scenario, cwd, overrides) {
   const preset = getAIPreset(scenario, overrides);
   return {
     timeout: preset.timeout,
     allowedTools: preset.allowedTools,
     outputFormat: preset.outputFormat,
     maxRetries: preset.maxRetries,
-    cwd: cwd2,
+    cwd,
     dangerouslySkipPermissions: true
   };
 }
@@ -9390,8 +9390,8 @@ __export(exports_i18n, {
   getDecompositionTemplate: () => getDecompositionTemplate
 });
 import * as fs3 from "fs";
-function getLanguage(cwd2 = process.cwd()) {
-  const configPath = getConfigPath(cwd2);
+function getLanguage(cwd = process.cwd()) {
+  const configPath = getConfigPath(cwd);
   try {
     if (fs3.existsSync(configPath)) {
       const config = JSON.parse(fs3.readFileSync(configPath, "utf-8"));
@@ -9400,15 +9400,15 @@ function getLanguage(cwd2 = process.cwd()) {
   } catch (error) {}
   return "en";
 }
-function getI18n(language, cwd2) {
-  const lang = language || getLanguage(cwd2);
-  return languagePacks[lang] || languagePacks.zh;
+function getI18n(language, cwd) {
+  const lang = language || getLanguage(cwd);
+  return languagePacks[lang] || languagePacks.en;
 }
-function t(cwd2) {
-  return getI18n(undefined, cwd2);
+function t(cwd) {
+  return getI18n(undefined, cwd);
 }
-function getDecompositionTemplate(cwd2) {
-  const texts = t(cwd2).decomposition;
+function getDecompositionTemplate(cwd) {
+  const texts = t(cwd).decomposition;
   const aiTemplate = texts.aiPromptTemplate;
   const rulesText = aiTemplate.rules.map((rule, i) => `${i + 1}. ${rule}`).join(`
 `);
@@ -9506,11 +9506,11 @@ function ensureConfigDefaults(config) {
   }
   return result;
 }
-function readConfig(cwd2 = process.cwd()) {
-  if (!isInitialized(cwd2)) {
+function readConfig(cwd = process.cwd()) {
+  if (!isInitialized(cwd)) {
     return null;
   }
-  const configPath = getConfigPath(cwd2);
+  const configPath = getConfigPath(cwd);
   try {
     const content = fs5.readFileSync(configPath, "utf-8");
     return JSON.parse(content);
@@ -9518,8 +9518,8 @@ function readConfig(cwd2 = process.cwd()) {
     return null;
   }
 }
-function writeConfig(config, cwd2 = process.cwd()) {
-  const configPath = getConfigPath(cwd2);
+function writeConfig(config, cwd = process.cwd()) {
+  const configPath = getConfigPath(cwd);
   fs5.writeFileSync(configPath, JSON.stringify(config, null, 2), "utf-8");
 }
 function getConfigValue(config, key) {
@@ -9584,12 +9584,12 @@ function validateConfigValue(key, value, schema) {
       break;
   }
 }
-function listConfig(cwd2 = process.cwd()) {
-  if (!isInitialized(cwd2)) {
+function listConfig(cwd = process.cwd()) {
+  if (!isInitialized(cwd)) {
     console.error("Error: Project not initialized. Please run `projmnt4claude setup` first");
     process.exit(1);
   }
-  const config = readConfig(cwd2);
+  const config = readConfig(cwd);
   if (!config) {
     console.error("Error: Cannot read configuration file");
     process.exit(1);
@@ -9666,12 +9666,12 @@ function listConfig(cwd2 = process.cwd()) {
   }
   console.log("");
 }
-function getConfig(key, cwd2 = process.cwd()) {
-  if (!isInitialized(cwd2)) {
+function getConfig(key, cwd = process.cwd()) {
+  if (!isInitialized(cwd)) {
     console.error("Error: Project not initialized. Please run `projmnt4claude setup` first");
     process.exit(1);
   }
-  const config = readConfig(cwd2);
+  const config = readConfig(cwd);
   if (!config) {
     console.error("Error: Cannot read configuration file");
     process.exit(1);
@@ -9683,12 +9683,12 @@ function getConfig(key, cwd2 = process.cwd()) {
   }
   console.log(value);
 }
-function setConfig(key, value, cwd2 = process.cwd()) {
-  if (!isInitialized(cwd2)) {
+function setConfig(key, value, cwd = process.cwd()) {
+  if (!isInitialized(cwd)) {
     console.error("Error: Project not initialized. Please run `projmnt4claude setup` first");
     process.exit(1);
   }
-  const config = readConfig(cwd2);
+  const config = readConfig(cwd);
   if (!config) {
     console.error("Error: Cannot read configuration file");
     process.exit(1);
@@ -9747,7 +9747,7 @@ function setConfig(key, value, cwd2 = process.cwd()) {
     process.exit(1);
   }
   const newConfig = setConfigValue(config, key, value);
-  writeConfig(newConfig, cwd2);
+  writeConfig(newConfig, cwd);
   console.log(`✓ Set ${key} = ${value}`);
 }
 var CONFIG_SCHEMA;
@@ -9784,8 +9784,8 @@ function resolveTemplate(template, variables) {
     return String(value);
   });
 }
-function loadPromptTemplate(name, cwd2, language) {
-  const config = cwd2 ? readConfig(cwd2) : null;
+function loadPromptTemplate(name, cwd, language) {
+  const config = cwd ? readConfig(cwd) : null;
   const prompts2 = config?.prompts;
   if (prompts2?.customTemplates && typeof prompts2.customTemplates === "object") {
     const customTemplates = prompts2.customTemplates;
@@ -11362,17 +11362,17 @@ function validateStatusTransition(fromStatus, toStatus) {
   }
   return { valid: false, reason: `${fromStatus} → ${toStatus} 不在允许的转换路径中` };
 }
-function getTaskDir(taskId, cwd2 = process.cwd()) {
-  return path4.join(getTasksDir(cwd2), taskId);
+function getTaskDir(taskId, cwd = process.cwd()) {
+  return path4.join(getTasksDir(cwd), taskId);
 }
-function getTaskMetaPath(taskId, cwd2 = process.cwd()) {
-  return path4.join(getTaskDir(taskId, cwd2), "meta.json");
+function getTaskMetaPath(taskId, cwd = process.cwd()) {
+  return path4.join(getTaskDir(taskId, cwd), "meta.json");
 }
-function readTaskMeta(taskId, cwd2 = process.cwd()) {
-  if (!isInitialized(cwd2)) {
+function readTaskMeta(taskId, cwd = process.cwd()) {
+  if (!isInitialized(cwd)) {
     return null;
   }
-  const metaPath = getTaskMetaPath(taskId, cwd2);
+  const metaPath = getTaskMetaPath(taskId, cwd);
   try {
     if (!fs7.existsSync(metaPath)) {
       return null;
@@ -11394,13 +11394,13 @@ function readTaskMeta(taskId, cwd2 = process.cwd()) {
     return null;
   }
 }
-function writeTaskMeta(task, cwd2 = process.cwd()) {
-  const taskDir = getTaskDir(task.id, cwd2);
-  const metaPath = getTaskMetaPath(task.id, cwd2);
+function writeTaskMeta(task, cwd = process.cwd()) {
+  const taskDir = getTaskDir(task.id, cwd);
+  const metaPath = getTaskMetaPath(task.id, cwd);
   if (!fs7.existsSync(taskDir)) {
     fs7.mkdirSync(taskDir, { recursive: true });
   }
-  const oldTask = readTaskMeta(task.id, cwd2);
+  const oldTask = readTaskMeta(task.id, cwd);
   const historyEntries = [];
   if (oldTask) {
     const fields = ["title", "description", "priority", "status", "recommendedRole", "branch", "dependencies", "type", "subtaskIds", "parentId", "checkpoints", "schemaVersion"];
@@ -11481,11 +11481,11 @@ function writeTaskMeta(task, cwd2 = process.cwd()) {
   task.updatedAt = new Date().toISOString();
   fs7.writeFileSync(metaPath, JSON.stringify(task, null, 2), "utf-8");
 }
-function getAllTaskIds(cwd2 = process.cwd()) {
-  if (!isInitialized(cwd2)) {
+function getAllTaskIds(cwd = process.cwd()) {
+  if (!isInitialized(cwd)) {
     return [];
   }
-  const tasksDir = getTasksDir(cwd2);
+  const tasksDir = getTasksDir(cwd);
   if (!fs7.existsSync(tasksDir)) {
     return [];
   }
@@ -11495,11 +11495,11 @@ function getAllTaskIds(cwd2 = process.cwd()) {
     return fs7.statSync(taskDir).isDirectory() && fs7.existsSync(metaPath);
   });
 }
-function getAllTasks(cwd2 = process.cwd(), includeArchived = false) {
-  const taskIds = getAllTaskIds(cwd2);
-  const tasks = taskIds.map((id) => readTaskMeta(id, cwd2)).filter((task) => task !== null);
+function getAllTasks(cwd = process.cwd(), includeArchived = false) {
+  const taskIds = getAllTaskIds(cwd);
+  const tasks = taskIds.map((id) => readTaskMeta(id, cwd)).filter((task) => task !== null);
   if (includeArchived) {
-    const archiveDir = path4.join(getProjectDir(cwd2), "archive");
+    const archiveDir = path4.join(getProjectDir(cwd), "archive");
     if (fs7.existsSync(archiveDir)) {
       const archivedTaskDirs = fs7.readdirSync(archiveDir).filter((name) => fs7.statSync(path4.join(archiveDir, name)).isDirectory());
       for (const taskId of archivedTaskDirs) {
@@ -11516,15 +11516,15 @@ function getAllTasks(cwd2 = process.cwd(), includeArchived = false) {
   }
   return tasks;
 }
-function generateNewTaskId(cwd2 = process.cwd(), type = "feature", priority = "P2", title = "task") {
-  const existingIds = getAllTaskIds(cwd2);
+function generateNewTaskId(cwd = process.cwd(), type = "feature", priority = "P2", title = "task") {
+  const existingIds = getAllTaskIds(cwd);
   return generateTaskId(type, priority, title, existingIds);
 }
-function taskExists(taskId, cwd2 = process.cwd()) {
-  return readTaskMeta(taskId, cwd2) !== null;
+function taskExists(taskId, cwd = process.cwd()) {
+  return readTaskMeta(taskId, cwd) !== null;
 }
-function generateSubtaskId(parentId, cwd2 = process.cwd()) {
-  const parentTask = readTaskMeta(parentId, cwd2);
+function generateSubtaskId(parentId, cwd = process.cwd()) {
+  const parentTask = readTaskMeta(parentId, cwd);
   if (!parentTask) {
     throw new Error(`父任务 ${parentId} 不存在`);
   }
@@ -11541,8 +11541,8 @@ function generateSubtaskId(parentId, cwd2 = process.cwd()) {
   }
   return `${parentId}-${maxNum + 1}`;
 }
-function addSubtaskToParent(parentId, subtaskId, cwd2 = process.cwd()) {
-  const parentTask = readTaskMeta(parentId, cwd2);
+function addSubtaskToParent(parentId, subtaskId, cwd = process.cwd()) {
+  const parentTask = readTaskMeta(parentId, cwd);
   if (!parentTask) {
     throw new Error(`父任务 ${parentId} 不存在`);
   }
@@ -11563,17 +11563,17 @@ function addSubtaskToParent(parentId, subtaskId, cwd2 = process.cwd()) {
     field: "subtaskIds",
     newValue: subtaskId
   });
-  writeTaskMeta(parentTask, cwd2);
+  writeTaskMeta(parentTask, cwd);
 }
-function getSubtasks(parentId, cwd2 = process.cwd()) {
-  const parentTask = readTaskMeta(parentId, cwd2);
+function getSubtasks(parentId, cwd = process.cwd()) {
+  const parentTask = readTaskMeta(parentId, cwd);
   if (!parentTask) {
     return [];
   }
   const subtaskIds = parentTask.subtaskIds || [];
   const subtasks = [];
   for (const subtaskId of subtaskIds) {
-    const subtask = readTaskMeta(subtaskId, cwd2);
+    const subtask = readTaskMeta(subtaskId, cwd);
     if (subtask) {
       subtasks.push(subtask);
     }
@@ -11594,12 +11594,12 @@ function parseParentFromSubtaskId(subtaskId) {
 function isSubtask(taskId) {
   return parseParentFromSubtaskId(taskId) !== null;
 }
-function getParentTask(taskId, cwd2 = process.cwd()) {
-  const task = readTaskMeta(taskId, cwd2);
+function getParentTask(taskId, cwd = process.cwd()) {
+  const task = readTaskMeta(taskId, cwd);
   if (!task || !task.parentId) {
     return null;
   }
-  return readTaskMeta(task.parentId, cwd2);
+  return readTaskMeta(task.parentId, cwd);
 }
 function shouldRecordHistory(history, field, oldValue, newValue) {
   if (oldValue === newValue) {
@@ -11616,8 +11616,8 @@ function shouldRecordHistory(history, field, oldValue, newValue) {
   }
   return true;
 }
-function updateTaskStatus(taskId, status, cwd2 = process.cwd(), reason, transitionNote, options) {
-  const task = readTaskMeta(taskId, cwd2);
+function updateTaskStatus(taskId, status, cwd = process.cwd(), reason, transitionNote, options) {
+  const task = readTaskMeta(taskId, cwd);
   if (!task) {
     throw new Error(`任务 '${taskId}' 不存在`);
   }
@@ -11687,7 +11687,7 @@ function updateTaskStatus(taskId, status, cwd2 = process.cwd(), reason, transiti
       author: "system"
     });
   }
-  writeTaskMeta(task, cwd2);
+  writeTaskMeta(task, cwd);
 }
 function buildTaskVerification(task) {
   const now = new Date().toISOString();
@@ -11723,8 +11723,8 @@ function buildTaskVerification(task) {
     note: checkpoints.length === 0 ? "任务无检查点，自动通过验证" : `完成 ${completedCount}/${checkpoints.length} 个检查点`
   };
 }
-function assignRole(taskId, role, cwd2 = process.cwd()) {
-  const task = readTaskMeta(taskId, cwd2);
+function assignRole(taskId, role, cwd = process.cwd()) {
+  const task = readTaskMeta(taskId, cwd);
   if (!task) {
     throw new Error(`任务 '${taskId}' 不存在`);
   }
@@ -11739,10 +11739,10 @@ function assignRole(taskId, role, cwd2 = process.cwd()) {
     newValue: role,
     user: process.env.USER || undefined
   });
-  writeTaskMeta(task, cwd2);
+  writeTaskMeta(task, cwd);
 }
-function incrementReopenCount(taskId, reason, cwd2 = process.cwd(), record) {
-  const task = readTaskMeta(taskId, cwd2);
+function incrementReopenCount(taskId, reason, cwd = process.cwd(), record) {
+  const task = readTaskMeta(taskId, cwd);
   if (!task) {
     throw new Error(`任务 '${taskId}' 不存在`);
   }
@@ -11768,10 +11768,10 @@ function incrementReopenCount(taskId, reason, cwd2 = process.cwd(), record) {
     reason,
     user: process.env.USER || undefined
   });
-  writeTaskMeta(task, cwd2);
+  writeTaskMeta(task, cwd);
 }
-function recordExecutionStats(taskId, stats, cwd2 = process.cwd()) {
-  const taskInitial = readTaskMeta(taskId, cwd2);
+function recordExecutionStats(taskId, stats, cwd = process.cwd()) {
+  const taskInitial = readTaskMeta(taskId, cwd);
   if (!taskInitial) {
     throw new Error(`任务 '${taskId}' 不存在`);
   }
@@ -11780,7 +11780,7 @@ function recordExecutionStats(taskId, stats, cwd2 = process.cwd()) {
     stats.commitHistory = existingCommitHistory;
   }
   const oldValue = taskInitial.executionStats ? JSON.stringify(taskInitial.executionStats) : "无";
-  const task = readTaskMeta(taskId, cwd2);
+  const task = readTaskMeta(taskId, cwd);
   if (!task) {
     throw new Error(`任务 '${taskId}' 在重新读取时消失`);
   }
@@ -11794,17 +11794,17 @@ function recordExecutionStats(taskId, stats, cwd2 = process.cwd()) {
     newValue: JSON.stringify(stats),
     user: process.env.USER || undefined
   });
-  writeTaskMeta(task, cwd2);
+  writeTaskMeta(task, cwd);
 }
-function renameTask(oldTaskId, newTaskId, cwd2 = process.cwd()) {
-  const task = readTaskMeta(oldTaskId, cwd2);
+function renameTask(oldTaskId, newTaskId, cwd = process.cwd()) {
+  const task = readTaskMeta(oldTaskId, cwd);
   if (!task) {
     return { success: false, oldId: oldTaskId, newId: newTaskId, error: `任务 '${oldTaskId}' 不存在` };
   }
-  if (oldTaskId !== newTaskId && taskExists(newTaskId, cwd2)) {
+  if (oldTaskId !== newTaskId && taskExists(newTaskId, cwd)) {
     return { success: false, oldId: oldTaskId, newId: newTaskId, error: `目标 ID '${newTaskId}' 已被占用` };
   }
-  const tasksDir = getTasksDir(cwd2);
+  const tasksDir = getTasksDir(cwd);
   const oldDir = path4.join(tasksDir, oldTaskId);
   const newDir = path4.join(tasksDir, newTaskId);
   task.id = newTaskId;
@@ -11837,19 +11837,19 @@ function renameTask(oldTaskId, newTaskId, cwd2 = process.cwd()) {
       fs7.rmSync(oldDir, { recursive: true, force: true });
     } catch {}
   } else {
-    writeTaskMeta(task, cwd2);
+    writeTaskMeta(task, cwd);
   }
-  updateTaskReferences(oldTaskId, newTaskId, cwd2);
+  updateTaskReferences(oldTaskId, newTaskId, cwd);
   return { success: true, oldId: oldTaskId, newId: newTaskId };
 }
-function updateTaskReferences(oldId, newId, cwd2) {
+function updateTaskReferences(oldId, newId, cwd) {
   if (oldId === newId)
     return;
-  const allIds = getAllTaskIds(cwd2);
+  const allIds = getAllTaskIds(cwd);
   for (const tid of allIds) {
     if (tid === oldId || tid === newId)
       continue;
-    const task = readTaskMeta(tid, cwd2);
+    const task = readTaskMeta(tid, cwd);
     if (!task)
       continue;
     let changed = false;
@@ -11881,7 +11881,7 @@ function updateTaskReferences(oldId, newId, cwd2) {
         newValue: newId,
         user: process.env.USER || undefined
       });
-      writeTaskMeta(task, cwd2);
+      writeTaskMeta(task, cwd);
     }
   }
 }
@@ -11893,8 +11893,8 @@ var init_task2 = __esm(() => {
     open: ["in_progress", "closed", "abandoned"],
     in_progress: ["wait_review", "resolved", "failed", "closed", "abandoned", "open"],
     wait_review: ["wait_qa", "in_progress", "failed", "closed", "abandoned"],
-    wait_qa: ["wait_evaluation", "in_progress", "failed", "closed", "abandoned"],
-    wait_evaluation: ["resolved", "in_progress", "failed", "closed", "abandoned"],
+    wait_qa: ["wait_evaluation", "in_progress", "failed", "closed", "abandoned", "open"],
+    wait_evaluation: ["resolved", "in_progress", "failed", "closed", "abandoned", "open"],
     resolved: ["open", "closed"],
     closed: ["open", "in_progress"],
     abandoned: ["open", "in_progress"],
@@ -12591,8 +12591,8 @@ function generateCheckpointId(taskId, index, description) {
   }
   return `CP-${String(index + 1).padStart(3, "0")}`;
 }
-function parseCheckpointsWithIds(taskId, cwd2 = process.cwd()) {
-  const checkpointPath = path5.join(getTasksDir(cwd2), taskId, "checkpoint.md");
+function parseCheckpointsWithIds(taskId, cwd = process.cwd()) {
+  const checkpointPath = path5.join(getTasksDir(cwd), taskId, "checkpoint.md");
   if (!fs8.existsSync(checkpointPath)) {
     return [];
   }
@@ -12614,7 +12614,7 @@ function parseCheckpointsWithIds(taskId, cwd2 = process.cwd()) {
       });
     }
   }
-  const task = readTaskMeta(taskId, cwd2);
+  const task = readTaskMeta(taskId, cwd);
   const existingCheckpoints = task?.checkpoints || [];
   checkpoints.forEach((cp, index) => {
     const existing = existingCheckpoints.find((ec) => ec.description === cp.text);
@@ -12723,19 +12723,19 @@ function inferCheckpointCategory(description) {
   return;
 }
 function syncCheckpointsToMeta(taskId, checkpointsOrCwd, maybeCwd) {
-  const cwd2 = typeof checkpointsOrCwd === "string" ? checkpointsOrCwd : maybeCwd ?? process.cwd();
+  const cwd = typeof checkpointsOrCwd === "string" ? checkpointsOrCwd : maybeCwd ?? process.cwd();
   const checkpoints = Array.isArray(checkpointsOrCwd) ? checkpointsOrCwd : undefined;
-  const task = readTaskMeta(taskId, cwd2);
+  const task = readTaskMeta(taskId, cwd);
   if (!task) {
     throw new Error(`任务 '${taskId}' 不存在`);
   }
   if (checkpoints && Array.isArray(checkpoints)) {
     task.checkpoints = checkpoints;
-    writeTaskMeta(task, cwd2);
-    updateCheckpointMdFromArray(taskId, checkpoints, cwd2);
+    writeTaskMeta(task, cwd);
+    updateCheckpointMdFromArray(taskId, checkpoints, cwd);
     return;
   }
-  const parsedCheckpoints = parseCheckpointsWithIds(taskId, cwd2);
+  const parsedCheckpoints = parseCheckpointsWithIds(taskId, cwd);
   const existingMeta = task.checkpoints || [];
   const now = new Date().toISOString();
   const checkpointTexts = parsedCheckpoints.map((cp) => cp.text);
@@ -12744,7 +12744,7 @@ function syncCheckpointsToMeta(taskId, checkpointsOrCwd, maybeCwd) {
   if (filteredCheckpoints.length === 0) {
     if (task.checkpoints && task.checkpoints.length > 0) {
       task.checkpoints = [];
-      writeTaskMeta(task, cwd2);
+      writeTaskMeta(task, cwd);
     }
     return;
   }
@@ -12793,16 +12793,16 @@ function syncCheckpointsToMeta(taskId, checkpointsOrCwd, maybeCwd) {
   const hasChanges = JSON.stringify(task.checkpoints) !== JSON.stringify(mergedCheckpoints);
   if (hasChanges) {
     task.checkpoints = mergedCheckpoints;
-    writeTaskMeta(task, cwd2);
+    writeTaskMeta(task, cwd);
   }
 }
-function updateCheckpointStatus(taskId, checkpointId, status, options = {}, cwd2 = process.cwd()) {
-  const task = readTaskMeta(taskId, cwd2);
+function updateCheckpointStatus(taskId, checkpointId, status, options = {}, cwd = process.cwd()) {
+  const task = readTaskMeta(taskId, cwd);
   if (!task) {
     throw new Error(`任务 '${taskId}' 不存在`);
   }
-  syncCheckpointsToMeta(taskId, cwd2);
-  const updatedTask = readTaskMeta(taskId, cwd2);
+  syncCheckpointsToMeta(taskId, cwd);
+  const updatedTask = readTaskMeta(taskId, cwd);
   if (!updatedTask) {
     throw new Error(`任务 '${taskId}' 不存在`);
   }
@@ -12825,11 +12825,11 @@ function updateCheckpointStatus(taskId, checkpointId, status, options = {}, cwd2
     checkpoint.verification.verifiedAt = new Date().toISOString();
     checkpoint.verification.verifiedBy = options.verifiedBy || process.env.USER || "unknown";
   }
-  updateCheckpointMd(taskId, checkpointId, status === "completed", updatedTask, cwd2);
-  writeTaskMeta(updatedTask, cwd2);
+  updateCheckpointMd(taskId, checkpointId, status === "completed", updatedTask, cwd);
+  writeTaskMeta(updatedTask, cwd);
 }
-function updateCheckpointMd(taskId, checkpointId, checked, task, cwd2 = process.cwd()) {
-  const checkpointPath = path5.join(getTasksDir(cwd2), taskId, "checkpoint.md");
+function updateCheckpointMd(taskId, checkpointId, checked, task, cwd = process.cwd()) {
+  const checkpointPath = path5.join(getTasksDir(cwd), taskId, "checkpoint.md");
   if (!fs8.existsSync(checkpointPath))
     return;
   const content = fs8.readFileSync(checkpointPath, "utf-8");
@@ -12848,18 +12848,18 @@ function updateCheckpointMd(taskId, checkpointId, checked, task, cwd2 = process.
   fs8.writeFileSync(checkpointPath, lines.join(`
 `), "utf-8");
 }
-function getCheckpointDetail(taskId, checkpointId, cwd2 = process.cwd()) {
-  syncCheckpointsToMeta(taskId, cwd2);
-  const task = readTaskMeta(taskId, cwd2);
+function getCheckpointDetail(taskId, checkpointId, cwd = process.cwd()) {
+  syncCheckpointsToMeta(taskId, cwd);
+  const task = readTaskMeta(taskId, cwd);
   return task?.checkpoints?.find((cp) => cp.id === checkpointId) || null;
 }
-function listCheckpoints(taskId, cwd2 = process.cwd()) {
-  syncCheckpointsToMeta(taskId, cwd2);
-  const task = readTaskMeta(taskId, cwd2);
+function listCheckpoints(taskId, cwd = process.cwd()) {
+  syncCheckpointsToMeta(taskId, cwd);
+  const task = readTaskMeta(taskId, cwd);
   return task?.checkpoints || [];
 }
-function updateCheckpointMdFromArray(taskId, checkpoints, cwd2 = process.cwd()) {
-  const checkpointPath = path5.join(getTasksDir(cwd2), taskId, "checkpoint.md");
+function updateCheckpointMdFromArray(taskId, checkpoints, cwd = process.cwd()) {
+  const checkpointPath = path5.join(getTasksDir(cwd), taskId, "checkpoint.md");
   const content = `# ${taskId} 检查点
 
 ` + checkpoints.map((cp) => `- [ ] ${cp.description}`).join(`
@@ -12925,8 +12925,8 @@ function convertParsedCheckpointsToMetadata(parsedCheckpoints, task) {
     };
   });
 }
-function syncTextCheckpointsToMeta(taskId, cwd2 = process.cwd()) {
-  const task = readTaskMeta(taskId, cwd2);
+function syncTextCheckpointsToMeta(taskId, cwd = process.cwd()) {
+  const task = readTaskMeta(taskId, cwd);
   if (!task) {
     throw new Error(`任务 '${taskId}' 不存在`);
   }
@@ -12939,8 +12939,8 @@ function syncTextCheckpointsToMeta(taskId, cwd2 = process.cwd()) {
   }
   const checkpointMetadata = convertParsedCheckpointsToMetadata(parsedCheckpoints, task);
   task.checkpoints = checkpointMetadata;
-  writeTaskMeta(task, cwd2);
-  updateCheckpointMdFromArray(taskId, checkpointMetadata, cwd2);
+  writeTaskMeta(task, cwd);
+  updateCheckpointMdFromArray(taskId, checkpointMetadata, cwd);
   return true;
 }
 var VERIFICATION_KEYWORDS;
@@ -14060,10 +14060,10 @@ function detectContradiction(resultLabel, content) {
 function qualityScoreToVerdict(score, minScore = 60) {
   return score >= minScore ? "PASS" : "NOPASS";
 }
-function getQualityMinScore(cwd2) {
+function getQualityMinScore(cwd) {
   try {
     const { readConfig: readConfig3 } = (init_config2(), __toCommonJS(exports_config));
-    const config = readConfig3(cwd2);
+    const config = readConfig3(cwd);
     if (config) {
       const quality = config.quality;
       if (quality && typeof quality.minScore === "number") {
@@ -14101,9 +14101,9 @@ var init_contradiction_detector = __esm(() => {
 import * as fs9 from "fs";
 import * as path6 from "path";
 import { execSync as execSync2 } from "child_process";
-function getLogFilePath(command, cwd2 = process.cwd()) {
+function getLogFilePath(command, cwd = process.cwd()) {
   const date = new Date().toISOString().slice(0, 10).replace(/-/g, "");
-  const logsDir = getLogsDir(cwd2);
+  const logsDir = getLogsDir(cwd);
   ensureDir(logsDir);
   return path6.join(logsDir, `${command}-${date}.log`);
 }
@@ -14467,8 +14467,8 @@ class Logger {
     };
   }
 }
-function createLogger(command, cwd2) {
-  const logger = new Logger({ command, cwd: cwd2 });
+function createLogger(command, cwd) {
+  const logger = new Logger({ command, cwd });
   logger.logCommandStart(command);
   return logger;
 }
@@ -14487,10 +14487,10 @@ var init_logger = __esm(() => {
 import * as fs10 from "fs";
 import * as path7 from "path";
 import { spawn } from "child_process";
-function classifyExitResult(code, stderr, stdout, cwd2) {
+function classifyExitResult(code, stderr, stdout, cwd) {
   let texts;
   try {
-    texts = t(cwd2 || process.cwd());
+    texts = t(cwd || process.cwd());
   } catch {
     texts = t();
   }
@@ -14584,10 +14584,10 @@ async function runHeadlessClaude(options) {
     }
   });
 }
-function archiveReportIfExists(reportPath, cwd2) {
+function archiveReportIfExists(reportPath, cwd) {
   let texts;
   try {
-    texts = t(cwd2);
+    texts = t(cwd);
   } catch {
     const { getI18n: getI18n2 } = (init_i18n(), __toCommonJS(exports_i18n));
     texts = getI18n2("zh");
@@ -14728,11 +14728,11 @@ function parseVerdictResult(output, options) {
   }
   return result;
 }
-function getReportDir(taskId, cwd2) {
-  return path7.join(getProjectDir(cwd2), "reports", "harness", taskId);
+function getReportDir(taskId, cwd) {
+  return path7.join(getProjectDir(cwd), "reports", "harness", taskId);
 }
-function getReportPath(taskId, reportType, cwd2) {
-  return path7.join(getReportDir(taskId, cwd2), `${reportType}-report.md`);
+function getReportPath(taskId, reportType, cwd) {
+  return path7.join(getReportDir(taskId, cwd), `${reportType}-report.md`);
 }
 var REVIEW_TIMEOUT_RATIO = 3;
 var init_harness_helpers = __esm(() => {
@@ -14742,12 +14742,12 @@ var init_harness_helpers = __esm(() => {
 
 // src/utils/headless-agent.ts
 import * as fs11 from "fs";
-function buildEffectiveTools(phase, cwd2, task) {
+function buildEffectiveTools(phase, cwd, task) {
   const codeDefaults = PHASE_DEFAULT_TOOLS[phase] || ["Read", "Bash", "Grep", "Glob"];
   const configKey = PHASE_CONFIG_KEY[phase];
   let phaseTools = codeDefaults;
   try {
-    const configPath = getConfigPath(cwd2);
+    const configPath = getConfigPath(cwd);
     if (fs11.existsSync(configPath)) {
       const config = JSON.parse(fs11.readFileSync(configPath, "utf-8"));
       const configPhaseTools = config?.harness?.perPhaseTools?.[configKey || phase];
@@ -14905,9 +14905,9 @@ function initializeProviders() {
     agentRegistry.register(new ClaudeCodeProvider);
   }
 }
-function loadAIConfig(cwd2) {
+function loadAIConfig(cwd) {
   try {
-    const configPath = getConfigPath(cwd2);
+    const configPath = getConfigPath(cwd);
     if (!fs11.existsSync(configPath)) {
       return DEFAULT_AI;
     }
@@ -14924,8 +14924,8 @@ function loadAIConfig(cwd2) {
     return DEFAULT_AI;
   }
 }
-function getAgent(cwd2) {
-  const aiConfig = loadAIConfig(cwd2);
+function getAgent(cwd) {
+  const aiConfig = loadAIConfig(cwd);
   return agentRegistry.getProvider(aiConfig.provider);
 }
 async function invokeAgent(prompt, options) {
@@ -14995,19 +14995,19 @@ class AIMetadataAssistant {
   logger;
   cwd;
   presets;
-  constructor(cwd2 = process.cwd()) {
-    this.cwd = cwd2;
-    this.logger = new Logger({ component: "ai-metadata", cwd: cwd2 });
+  constructor(cwd = process.cwd()) {
+    this.cwd = cwd;
+    this.logger = new Logger({ component: "ai-metadata", cwd });
     this.presets = {
-      metadataEnhancement: buildAgentOptionsFromPreset("metadataEnhancement", cwd2),
-      checkpointEnhancement: buildAgentOptionsFromPreset("checkpointEnhancement", cwd2),
-      qualityAnalysis: buildAgentOptionsFromPreset("qualityAnalysis", cwd2),
-      duplicateDetection: buildAgentOptionsFromPreset("duplicateDetection", cwd2),
-      stalenessAssessment: buildAgentOptionsFromPreset("stalenessAssessment", cwd2),
-      bugAnalysis: buildAgentOptionsFromPreset("bugAnalysis", cwd2)
+      metadataEnhancement: buildAgentOptionsFromPreset("metadataEnhancement", cwd),
+      checkpointEnhancement: buildAgentOptionsFromPreset("checkpointEnhancement", cwd),
+      qualityAnalysis: buildAgentOptionsFromPreset("qualityAnalysis", cwd),
+      duplicateDetection: buildAgentOptionsFromPreset("duplicateDetection", cwd),
+      stalenessAssessment: buildAgentOptionsFromPreset("stalenessAssessment", cwd),
+      bugAnalysis: buildAgentOptionsFromPreset("bugAnalysis", cwd)
     };
     this.logger.info("AIMetadataAssistant 初始化完成", {
-      cwd: cwd2,
+      cwd,
       presets: Object.keys(this.presets)
     });
   }
@@ -15254,38 +15254,38 @@ class AIMetadataAssistant {
     });
     return { dependencies: deps, aiUsed: true };
   }
-  buildSemanticDependencyPrompt(tasks, cwd2) {
+  buildSemanticDependencyPrompt(tasks, cwd) {
     const taskList = tasks.slice(0, 50).map((t2) => `ID: ${t2.id}
 标题: ${t2.title}
 描述: ${(t2.description || "").substring(0, 150)}`).join(`
 ---
 `);
-    const template = loadPromptTemplate("semanticDependency", cwd2);
+    const template = loadPromptTemplate("semanticDependency", cwd);
     return resolveTemplate(template, { taskList });
   }
-  buildRequirementPrompt(description, errorFeedback, cwd2) {
+  buildRequirementPrompt(description, errorFeedback, cwd) {
     const errorFeedbackSection = errorFeedback ? `
 
 ## 上次输出错误
 ${errorFeedback}
 请修正以上错误并重新输出。` : "";
-    const template = loadPromptTemplate("requirement", cwd2);
+    const template = loadPromptTemplate("requirement", cwd);
     return resolveTemplate(template, { description, errorFeedback: errorFeedbackSection });
   }
-  buildCheckpointsPrompt(description, type, existing, cwd2) {
+  buildCheckpointsPrompt(description, type, existing, cwd) {
     const existingCheckpointsSection = existing.length > 0 ? `
 
 ## 已有检查点
 ${existing.map((c, i) => `${i + 1}. ${c}`).join(`
 `)}` : "";
-    const template = loadPromptTemplate("checkpoints", cwd2);
+    const template = loadPromptTemplate("checkpoints", cwd);
     return resolveTemplate(template, {
       description,
       type: type || "未指定",
       existingCheckpointsSection
     });
   }
-  buildQualityPrompt(task, cwd2) {
+  buildQualityPrompt(task, cwd) {
     const taskData = JSON.stringify({
       id: task.id,
       title: task.title,
@@ -15296,20 +15296,20 @@ ${existing.map((c, i) => `${i + 1}. ${c}`).join(`
       checkpoints: task.checkpoints?.map((c) => c.description),
       dependencies: task.dependencies
     }, null, 2);
-    const template = loadPromptTemplate("quality", cwd2);
+    const template = loadPromptTemplate("quality", cwd);
     return resolveTemplate(template, { taskData });
   }
-  buildDuplicatesPrompt(tasks, cwd2) {
+  buildDuplicatesPrompt(tasks, cwd) {
     const taskList = tasks.slice(0, 50).map((t2) => `ID: ${t2.id}
 标题: ${t2.title}
 描述: ${(t2.description || "").substring(0, 200)}
 类型: ${t2.type}`).join(`
 ---
 `);
-    const template = loadPromptTemplate("duplicates", cwd2);
+    const template = loadPromptTemplate("duplicates", cwd);
     return resolveTemplate(template, { taskList });
   }
-  buildStalenessPrompt(task, cwd2) {
+  buildStalenessPrompt(task, cwd) {
     const ageMs = Date.now() - new Date(task.updatedAt).getTime();
     const ageDays = Math.round(ageMs / (1000 * 60 * 60 * 24));
     const taskData = JSON.stringify({
@@ -15324,14 +15324,14 @@ ${existing.map((c, i) => `${i + 1}. ${c}`).join(`
       checkpointCount: task.checkpoints?.length ?? 0,
       completedCheckpoints: task.checkpoints?.filter((c) => c.status === "completed").length ?? 0
     }, null, 2);
-    const template = loadPromptTemplate("staleness", cwd2);
+    const template = loadPromptTemplate("staleness", cwd);
     return resolveTemplate(template, { taskData });
   }
-  buildBugReportPrompt(reportContent, logContext, cwd2) {
+  buildBugReportPrompt(reportContent, logContext, cwd) {
     const logContextSection = logContext ? `
 ## 日志上下文
 ${logContext.substring(0, 2000)}` : "";
-    const template = loadPromptTemplate("bugReport", cwd2);
+    const template = loadPromptTemplate("bugReport", cwd);
     return resolveTemplate(template, {
       reportContent: reportContent.substring(0, 4000),
       logContextSection
@@ -15677,12 +15677,12 @@ function validateBasicFields(task) {
     missingFields
   };
 }
-function validateFilesExist(task, cwd2 = process.cwd()) {
+function validateFilesExist(task, cwd = process.cwd()) {
   const affectedFiles = extractAffectedFiles(task);
   const missingFiles = [];
   const existingFiles = [];
   for (const file of affectedFiles) {
-    const fullPath = path8.resolve(cwd2, file);
+    const fullPath = path8.resolve(cwd, file);
     if (fs12.existsSync(fullPath)) {
       existingFiles.push(file);
     } else {
@@ -15764,13 +15764,13 @@ function generateSuggestions(task, score, affectedFiles, changeSize, requiresCon
   }
   return suggestions;
 }
-async function checkQualityGate(taskId, config = DEFAULT_QUALITY_GATE_CONFIG, cwd2 = process.cwd()) {
-  const configuredMinScore = getQualityMinScore(cwd2);
+async function checkQualityGate(taskId, config = DEFAULT_QUALITY_GATE_CONFIG, cwd = process.cwd()) {
+  const configuredMinScore = getQualityMinScore(cwd);
   const effectiveConfig = {
     ...config,
     minQualityScore: config.minQualityScore === DEFAULT_QUALITY_GATE_CONFIG.minQualityScore ? configuredMinScore : config.minQualityScore
   };
-  const metaPath = getTaskMetaPath(taskId, cwd2);
+  const metaPath = getTaskMetaPath(taskId, cwd);
   let task = null;
   let metaViolations = null;
   if (fs12.existsSync(metaPath)) {
@@ -15821,7 +15821,7 @@ async function checkQualityGate(taskId, config = DEFAULT_QUALITY_GATE_CONFIG, cw
     };
   }
   const checkpointViolations = validateCheckpoints(task);
-  const score = await calculateContentQuality(task, undefined, cwd2);
+  const score = await calculateContentQuality(task, undefined, cwd);
   const affectedFiles = extractAffectedFiles(task);
   const changeSize = inferChangeSize(task, affectedFiles);
   const needsConfirmation = requiresSolutionConfirmation(task);
@@ -16155,7 +16155,7 @@ function evaluateLayerOrdering(checkpoints, description) {
   }
   return { score: Math.max(0, score), deductions };
 }
-async function calculateContentQuality(task, aiOptions, cwd2) {
+async function calculateContentQuality(task, aiOptions, cwd) {
   const deductions = [];
   let descriptionScore = 100;
   let checkpointScore = 100;
@@ -16180,8 +16180,8 @@ async function calculateContentQuality(task, aiOptions, cwd2) {
   const structuralTotal = Math.round(descriptionScore * 0.35 + checkpointScore * 0.3 + relatedFilesScore * 0.15 + solutionScore * 0.2);
   let aiSemanticScore;
   const qualityResult = await withAIEnhancement({
-    enabled: !!(aiOptions?.deepAnalyze && !aiOptions?.noAi && cwd2),
-    aiCall: () => new AIMetadataAssistant(cwd2).analyzeTaskQuality(task, { cwd: cwd2 }),
+    enabled: !!(aiOptions?.deepAnalyze && !aiOptions?.noAi && cwd),
+    aiCall: () => new AIMetadataAssistant(cwd).analyzeTaskQuality(task, { cwd }),
     fallback: { score: 0, issues: [], suggestions: [], aiUsed: false },
     operationName: "语义质量评估"
   });
@@ -16200,13 +16200,13 @@ async function calculateContentQuality(task, aiOptions, cwd2) {
     ...aiSemanticScore !== undefined ? { aiSemanticScore } : {}
   };
 }
-async function batchCheckQualityGate(taskIds, config = DEFAULT_QUALITY_GATE_CONFIG, cwd2 = process.cwd()) {
+async function batchCheckQualityGate(taskIds, config = DEFAULT_QUALITY_GATE_CONFIG, cwd = process.cwd()) {
   const results = new Map;
   let passedCount = 0;
   let failedCount = 0;
   const blockedTasks = [];
   for (const taskId of taskIds) {
-    const result = await checkQualityGate(taskId, config, cwd2);
+    const result = await checkQualityGate(taskId, config, cwd);
     results.set(taskId, result);
     if (result.passed) {
       passedCount++;
@@ -16521,7 +16521,7 @@ var init_inference = __esm(() => {
 });
 
 // src/utils/dependency-graph/cascade.ts
-function executeFailureCascade(failedTaskId, graph, cwd2, completedTaskIds) {
+function executeFailureCascade(failedTaskId, graph, cwd, completedTaskIds) {
   const cascade = graph.computeCascadeImpact(failedTaskId);
   const affectedTasks = [];
   const skippedTasks = [];
@@ -17336,18 +17336,18 @@ __export(exports_validation, {
 import * as path10 from "path";
 import * as fs14 from "fs";
 import { execSync as execSync3 } from "child_process";
-function getEvidenceDir(taskId, cwd2 = process.cwd()) {
-  return path10.join(getProjectDir(cwd2), "evidence", taskId);
+function getEvidenceDir(taskId, cwd = process.cwd()) {
+  return path10.join(getProjectDir(cwd), "evidence", taskId);
 }
-function ensureEvidenceDir(taskId, cwd2 = process.cwd()) {
-  const evidenceDir = getEvidenceDir(taskId, cwd2);
+function ensureEvidenceDir(taskId, cwd = process.cwd()) {
+  const evidenceDir = getEvidenceDir(taskId, cwd);
   if (!fs14.existsSync(evidenceDir)) {
     fs14.mkdirSync(evidenceDir, { recursive: true });
   }
   return evidenceDir;
 }
-async function executeVerificationCommands(taskId, checkpointId, commands, cwd2 = process.cwd()) {
-  const evidenceDir = ensureEvidenceDir(taskId, cwd2);
+async function executeVerificationCommands(taskId, checkpointId, commands, cwd = process.cwd()) {
+  const evidenceDir = ensureEvidenceDir(taskId, cwd);
   const timestamp = new Date().toISOString().replace(/[:.]/g, "-");
   const evidenceFileName = `${checkpointId}-${timestamp}.log`;
   const evidencePath = path10.join(evidenceDir, evidenceFileName);
@@ -17366,7 +17366,7 @@ async function executeVerificationCommands(taskId, checkpointId, commands, cwd2 
 `;
     try {
       const result = execSync3(cmd, {
-        cwd: cwd2,
+        cwd,
         encoding: "utf-8",
         timeout: 60000,
         stdio: ["pipe", "pipe", "pipe"],
@@ -17396,15 +17396,15 @@ async function executeVerificationCommands(taskId, checkpointId, commands, cwd2 
   return {
     exitCode: lastExitCode,
     output: combinedOutput,
-    evidencePath: path10.relative(cwd2, evidencePath)
+    evidencePath: path10.relative(cwd, evidencePath)
   };
 }
-async function validateTaskCompletion(taskId, cwd2 = process.cwd(), options = {}) {
+async function validateTaskCompletion(taskId, cwd = process.cwd(), options = {}) {
   const errors = [];
   const warnings = [];
   const evidenceCollected = [];
   const { executeCommands = true, collectEvidence = true } = options;
-  const task = readTaskMeta(taskId, cwd2);
+  const task = readTaskMeta(taskId, cwd);
   if (!task) {
     errors.push({
       code: "TASK_NOT_FOUND",
@@ -17436,7 +17436,7 @@ async function validateTaskCompletion(taskId, cwd2 = process.cwd(), options = {}
       if (cp.verification?.method === "manual")
         continue;
       try {
-        const evidence = await executeVerificationCommands(taskId, cp.id, cp.verification.commands, cwd2);
+        const evidence = await executeVerificationCommands(taskId, cp.id, cp.verification.commands, cwd);
         if (evidence.exitCode !== 0) {
           errors.push({
             code: "VERIFICATION_COMMAND_FAILED",
@@ -17469,17 +17469,17 @@ async function validateTaskCompletion(taskId, cwd2 = process.cwd(), options = {}
     evidenceCollected
   };
 }
-function getTasksByStatus(status, cwd2 = process.cwd()) {
-  const tasks = getAllTasks(cwd2, false);
+function getTasksByStatus(status, cwd = process.cwd()) {
+  const tasks = getAllTasks(cwd, false);
   return tasks.filter((task) => task.status === status);
 }
-function getWaitEvaluationTasks(cwd2 = process.cwd()) {
-  return getTasksByStatus("wait_evaluation", cwd2);
+function getWaitEvaluationTasks(cwd = process.cwd()) {
+  return getTasksByStatus("wait_evaluation", cwd);
 }
-async function validateMultipleTasks(taskIds, cwd2 = process.cwd(), options) {
+async function validateMultipleTasks(taskIds, cwd = process.cwd(), options) {
   const results = new Map;
   for (const taskId of taskIds) {
-    const result = await validateTaskCompletion(taskId, cwd2, options);
+    const result = await validateTaskCompletion(taskId, cwd, options);
     results.set(taskId, result);
   }
   return results;
@@ -17488,8 +17488,8 @@ function hasManualVerification(task) {
   const checkpoints = task.checkpoints || [];
   return checkpoints.some((cp) => cp.verification?.method === "manual");
 }
-function getTasksWithManualVerification(cwd2 = process.cwd()) {
-  const tasks = getAllTasks(cwd2, false);
+function getTasksWithManualVerification(cwd = process.cwd()) {
+  const tasks = getAllTasks(cwd, false);
   return tasks.filter(hasManualVerification);
 }
 function generateValidationReport(taskId, result) {
@@ -17526,8 +17526,8 @@ function generateValidationReport(taskId, result) {
   return lines.join(`
 `);
 }
-function cleanupEvidence(taskId, maxAge = 30, cwd2 = process.cwd()) {
-  const evidenceBaseDir = path10.join(getProjectDir(cwd2), "evidence");
+function cleanupEvidence(taskId, maxAge = 30, cwd = process.cwd()) {
+  const evidenceBaseDir = path10.join(getProjectDir(cwd), "evidence");
   if (!fs14.existsSync(evidenceBaseDir)) {
     return { deletedCount: 0, freedBytes: 0 };
   }
@@ -17567,14 +17567,14 @@ function getStatusPriority(status) {
   const normalized = normalizeStatus(status);
   return EXECUTABLE_STATUS_PRIORITY[normalized] ?? 999;
 }
-function getPlanPath(cwd2 = process.cwd()) {
-  return path12.join(getProjectDir(cwd2), "current-plan.json");
+function getPlanPath(cwd = process.cwd()) {
+  return path12.join(getProjectDir(cwd), "current-plan.json");
 }
-function readPlan(cwd2 = process.cwd()) {
-  if (!isInitialized(cwd2)) {
+function readPlan(cwd = process.cwd()) {
+  if (!isInitialized(cwd)) {
     return null;
   }
-  const planPath = getPlanPath(cwd2);
+  const planPath = getPlanPath(cwd);
   try {
     if (!fs16.existsSync(planPath)) {
       return null;
@@ -17585,8 +17585,8 @@ function readPlan(cwd2 = process.cwd()) {
     return null;
   }
 }
-function writePlan(plan, cwd2 = process.cwd()) {
-  const planPath = getPlanPath(cwd2);
+function writePlan(plan, cwd = process.cwd()) {
+  const planPath = getPlanPath(cwd);
   plan.updatedAt = new Date().toISOString();
   fs16.writeFileSync(planPath, JSON.stringify(plan, null, 2), "utf-8");
 }
@@ -17598,15 +17598,15 @@ function createEmptyPlan() {
     updatedAt: now
   };
 }
-function getOrCreatePlan(cwd2 = process.cwd()) {
-  const plan = readPlan(cwd2);
+function getOrCreatePlan(cwd = process.cwd()) {
+  const plan = readPlan(cwd);
   if (plan) {
     return plan;
   }
   return createEmptyPlan();
 }
-function addTaskToPlan(taskId, afterId, cwd2 = process.cwd()) {
-  const plan = getOrCreatePlan(cwd2);
+function addTaskToPlan(taskId, afterId, cwd = process.cwd()) {
+  const plan = getOrCreatePlan(cwd);
   if (plan.tasks.includes(taskId)) {
     return false;
   }
@@ -17620,11 +17620,11 @@ function addTaskToPlan(taskId, afterId, cwd2 = process.cwd()) {
   } else {
     plan.tasks.push(taskId);
   }
-  writePlan(plan, cwd2);
+  writePlan(plan, cwd);
   return true;
 }
-function removeTaskFromPlan(taskId, cwd2 = process.cwd()) {
-  const plan = readPlan(cwd2);
+function removeTaskFromPlan(taskId, cwd = process.cwd()) {
+  const plan = readPlan(cwd);
   if (!plan) {
     return false;
   }
@@ -17633,20 +17633,20 @@ function removeTaskFromPlan(taskId, cwd2 = process.cwd()) {
     return false;
   }
   plan.tasks.splice(index, 1);
-  writePlan(plan, cwd2);
+  writePlan(plan, cwd);
   return true;
 }
-function clearPlan(cwd2 = process.cwd()) {
+function clearPlan(cwd = process.cwd()) {
   const plan = createEmptyPlan();
-  writePlan(plan, cwd2);
+  writePlan(plan, cwd);
 }
-function areDependenciesCompleted(taskId, cwd2 = process.cwd()) {
-  const task = readTaskMeta(taskId, cwd2);
+function areDependenciesCompleted(taskId, cwd = process.cwd()) {
+  const task = readTaskMeta(taskId, cwd);
   if (!task) {
     return false;
   }
   for (const depId of task.dependencies) {
-    const depTask = readTaskMeta(depId, cwd2);
+    const depTask = readTaskMeta(depId, cwd);
     if (!depTask) {
       return false;
     }
@@ -17657,20 +17657,20 @@ function areDependenciesCompleted(taskId, cwd2 = process.cwd()) {
   }
   return true;
 }
-function isParentTaskCompleted(taskId, cwd2 = process.cwd()) {
-  const task = readTaskMeta(taskId, cwd2);
+function isParentTaskCompleted(taskId, cwd = process.cwd()) {
+  const task = readTaskMeta(taskId, cwd);
   if (!task || !task.parentId) {
     return false;
   }
-  const parentTask = readTaskMeta(task.parentId, cwd2);
+  const parentTask = readTaskMeta(task.parentId, cwd);
   if (!parentTask) {
     return false;
   }
   const normalizedStatus = normalizeStatus(parentTask.status);
   return normalizedStatus === "resolved" || normalizedStatus === "closed";
 }
-function getExecutableTasks(cwd2 = process.cwd(), includeSubtasks = false) {
-  const tasks = getAllTasks(cwd2);
+function getExecutableTasks(cwd = process.cwd(), includeSubtasks = false) {
+  const tasks = getAllTasks(cwd);
   const skippedDueToParent = [];
   const executableTasks = tasks.filter((task) => {
     if (!includeSubtasks && (isSubtask(task.id) || !!task.parentId)) {
@@ -17679,11 +17679,11 @@ function getExecutableTasks(cwd2 = process.cwd(), includeSubtasks = false) {
     if (task.subtaskIds && task.subtaskIds.length > 0) {
       return false;
     }
-    if (task.parentId && isParentTaskCompleted(task.id, cwd2)) {
+    if (task.parentId && isParentTaskCompleted(task.id, cwd)) {
       skippedDueToParent.push(task.id);
       return false;
     }
-    return isExecutableStatus(task.status) && areDependenciesCompleted(task.id, cwd2);
+    return isExecutableStatus(task.status) && areDependenciesCompleted(task.id, cwd);
   });
   executableTasks.sort((a, b) => {
     const priorityA = getStatusPriority(a.status);
@@ -17703,8 +17703,8 @@ function getExecutableTasks(cwd2 = process.cwd(), includeSubtasks = false) {
   }
   return executableTasks.map((task) => task.id);
 }
-function detectMissingSubtasks(cwd2 = process.cwd()) {
-  const allTasks = getAllTasks(cwd2);
+function detectMissingSubtasks(cwd = process.cwd()) {
+  const allTasks = getAllTasks(cwd);
   const warnings = [];
   for (const task of allTasks) {
     if (!task.subtaskIds || task.subtaskIds.length === 0) {
@@ -17713,7 +17713,7 @@ function detectMissingSubtasks(cwd2 = process.cwd()) {
     const missingIds = [];
     let actualCount = 0;
     for (const subtaskId of task.subtaskIds) {
-      const subtask = readTaskMeta(subtaskId, cwd2);
+      const subtask = readTaskMeta(subtaskId, cwd);
       if (subtask) {
         actualCount++;
       } else {
@@ -18305,8 +18305,8 @@ var init_quality_gate_registry = __esm(() => {
 // src/utils/harness-snapshot.ts
 import * as fs17 from "fs";
 import * as path13 from "path";
-function getRunsDir(cwd2) {
-  const runsDir = path13.join(getProjectDir(cwd2), "runs");
+function getRunsDir(cwd) {
+  const runsDir = path13.join(getProjectDir(cwd), "runs");
   if (!fs17.existsSync(runsDir)) {
     fs17.mkdirSync(runsDir, { recursive: true });
   }
@@ -18315,15 +18315,15 @@ function getRunsDir(cwd2) {
 function generateSnapshotFilename(pid, timestamp) {
   return `harness-plan-snapshot-${pid}-${timestamp}.json`;
 }
-function createPlanSnapshot(executionPlan, cwd2 = process.cwd(), batchAwareQueue) {
+function createPlanSnapshot(executionPlan, cwd = process.cwd(), batchAwareQueue) {
   const pid = process.pid;
   const timestamp = Date.now();
   const snapshotId = generateSnapshotFilename(pid, timestamp);
-  const runsDir = getRunsDir(cwd2);
+  const runsDir = getRunsDir(cwd);
   const snapshotPath = path13.join(runsDir, snapshotId);
   const taskStatusSnapshot = {};
   for (const taskId of executionPlan.tasks) {
-    const task = readTaskMeta(taskId, cwd2);
+    const task = readTaskMeta(taskId, cwd);
     if (task) {
       taskStatusSnapshot[taskId] = task.status;
     }
@@ -18338,18 +18338,18 @@ function createPlanSnapshot(executionPlan, cwd2 = process.cwd(), batchAwareQueue
     batchBoundaries: batchAwareQueue?.batchBoundaries,
     batchLabels: batchAwareQueue?.batchLabels,
     batchParallelizable: batchAwareQueue?.batchParallelizable,
-    sourcePlanPath: path13.join(getProjectDir(cwd2), "current-plan.json"),
+    sourcePlanPath: path13.join(getProjectDir(cwd), "current-plan.json"),
     taskStatusSnapshot
   };
   fs17.writeFileSync(snapshotPath, JSON.stringify(snapshot, null, 2), "utf-8");
   return snapshot;
 }
-function readPlanSnapshot(snapshotIdOrPath, cwd2 = process.cwd()) {
+function readPlanSnapshot(snapshotIdOrPath, cwd = process.cwd()) {
   let snapshotPath;
   if (path13.isAbsolute(snapshotIdOrPath)) {
     snapshotPath = snapshotIdOrPath;
   } else {
-    const runsDir = getRunsDir(cwd2);
+    const runsDir = getRunsDir(cwd);
     snapshotPath = path13.join(runsDir, snapshotIdOrPath);
   }
   if (!fs17.existsSync(snapshotPath)) {
@@ -18366,8 +18366,8 @@ function readPlanSnapshot(snapshotIdOrPath, cwd2 = process.cwd()) {
     return null;
   }
 }
-function listSnapshots(cwd2 = process.cwd()) {
-  const runsDir = getRunsDir(cwd2);
+function listSnapshots(cwd = process.cwd()) {
+  const runsDir = getRunsDir(cwd);
   if (!fs17.existsSync(runsDir)) {
     return [];
   }
@@ -18377,19 +18377,19 @@ function listSnapshots(cwd2 = process.cwd()) {
     if (!file.startsWith("harness-plan-snapshot-") || !file.endsWith(".json")) {
       continue;
     }
-    const snapshot = readPlanSnapshot(file, cwd2);
+    const snapshot = readPlanSnapshot(file, cwd);
     if (snapshot) {
       snapshots.push(snapshot);
     }
   }
   return snapshots.sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
 }
-function cleanupSnapshot(snapshotIdOrPath, cwd2 = process.cwd()) {
+function cleanupSnapshot(snapshotIdOrPath, cwd = process.cwd()) {
   let snapshotPath;
   if (path13.isAbsolute(snapshotIdOrPath)) {
     snapshotPath = snapshotIdOrPath;
   } else {
-    const runsDir = getRunsDir(cwd2);
+    const runsDir = getRunsDir(cwd);
     snapshotPath = path13.join(runsDir, snapshotIdOrPath);
   }
   if (!fs17.existsSync(snapshotPath)) {
@@ -18402,10 +18402,10 @@ function cleanupSnapshot(snapshotIdOrPath, cwd2 = process.cwd()) {
     return false;
   }
 }
-function isSnapshotActive(snapshot, cwd2 = process.cwd()) {
+function isSnapshotActive(snapshot, cwd = process.cwd()) {
   let pid;
   if (typeof snapshot === "string") {
-    const snapshotData = readPlanSnapshot(snapshot, cwd2);
+    const snapshotData = readPlanSnapshot(snapshot, cwd);
     if (!snapshotData)
       return false;
     pid = snapshotData.pid;
@@ -18422,8 +18422,8 @@ function isProcessAlive(pid) {
     return false;
   }
 }
-function getLatestSnapshot(cwd2 = process.cwd(), maxAgeMs = 24 * 60 * 60 * 1000) {
-  const snapshots = listSnapshots(cwd2);
+function getLatestSnapshot(cwd = process.cwd(), maxAgeMs = 24 * 60 * 60 * 1000) {
+  const snapshots = listSnapshots(cwd);
   if (snapshots.length === 0) {
     return null;
   }
@@ -18434,10 +18434,10 @@ function getLatestSnapshot(cwd2 = process.cwd(), maxAgeMs = 24 * 60 * 60 * 1000)
   }
   return latest;
 }
-function detectActiveSnapshot(cwd2 = process.cwd()) {
-  const snapshots = listSnapshots(cwd2);
+function detectActiveSnapshot(cwd = process.cwd()) {
+  const snapshots = listSnapshots(cwd);
   for (const snapshot of snapshots) {
-    if (isSnapshotActive(snapshot, cwd2)) {
+    if (isSnapshotActive(snapshot, cwd)) {
       return {
         hasActive: true,
         activeSnapshot: snapshot,
@@ -18552,6 +18552,9 @@ var init_harness = __esm(() => {
   VALID_VERDICT_ACTIONS = [
     "resolve",
     "redevelop",
+    "retest",
+    "reevaluate",
+    "minor_fix",
     "escalate_human"
   ];
   DEFAULT_PHASE_RETRY_LIMITS = {
@@ -18727,7 +18730,7 @@ function validateFieldUpdate(field, value) {
   }
   return { valid: errors.length === 0, errors, warnings };
 }
-function validateRelationship(taskId, updates, cwd2) {
+function validateRelationship(taskId, updates, cwd) {
   const errors = [];
   const warnings = [];
   if (updates.parentId !== undefined && updates.parentId !== null) {
@@ -18735,7 +18738,7 @@ function validateRelationship(taskId, updates, cwd2) {
     if (parentId === taskId) {
       errors.push(`自引用: 任务 ${taskId} 不能成为自身的父任务`);
     } else {
-      const parentTask = readTaskMeta(parentId, cwd2);
+      const parentTask = readTaskMeta(parentId, cwd);
       if (!parentTask) {
         errors.push(`父任务 "${parentId}" 不存在`);
       } else {
@@ -18749,13 +18752,13 @@ function validateRelationship(taskId, updates, cwd2) {
           visited.add(current.id);
           if (!current.parentId)
             break;
-          current = readTaskMeta(current.parentId, cwd2);
+          current = readTaskMeta(current.parentId, cwd);
         }
       }
     }
   }
   if (updates.subtaskIds !== undefined && updates.subtaskIds.length > 0) {
-    const allIds = new Set(getAllTaskIds(cwd2));
+    const allIds = new Set(getAllTaskIds(cwd));
     for (const subtaskId of updates.subtaskIds) {
       if (!allIds.has(subtaskId)) {
         warnings.push(`子任务 "${subtaskId}" 不存在`);
@@ -18764,7 +18767,7 @@ function validateRelationship(taskId, updates, cwd2) {
   }
   return { valid: errors.length === 0, errors, warnings };
 }
-function validateTaskBeforeWrite(task, cwd2, oldTask = null, options = {}) {
+function validateTaskBeforeWrite(task, cwd, oldTask = null, options = {}) {
   const {
     validateSchema = true,
     validateCheckpoint = true,
@@ -18783,7 +18786,7 @@ function validateTaskBeforeWrite(task, cwd2, oldTask = null, options = {}) {
     allErrors.push(...result.errors);
     allWarnings.push(...result.warnings);
   }
-  const relResult = validateRelationship(task.id, { parentId: task.parentId, subtaskIds: task.subtaskIds }, cwd2);
+  const relResult = validateRelationship(task.id, { parentId: task.parentId, subtaskIds: task.subtaskIds }, cwd);
   allErrors.push(...relResult.errors);
   allWarnings.push(...relResult.warnings);
   if (validateSchema) {
@@ -18803,15 +18806,15 @@ function validateTaskBeforeWrite(task, cwd2, oldTask = null, options = {}) {
   }
   return { valid: allErrors.length === 0, errors: allErrors, warnings: allWarnings };
 }
-function validatedWriteTaskMeta(task, cwd2, options = {}) {
+function validatedWriteTaskMeta(task, cwd, options = {}) {
   const {
     strict = false,
     validateSchema = true,
     validateCheckpoint = true,
     validateBackfill = true
   } = options;
-  const oldTask = readTaskMeta(task.id, cwd2);
-  const validation = validateTaskBeforeWrite(task, cwd2, oldTask, {
+  const oldTask = readTaskMeta(task.id, cwd);
+  const validation = validateTaskBeforeWrite(task, cwd, oldTask, {
     validateSchema,
     validateCheckpoint,
     validateBackfill
@@ -18825,7 +18828,7 @@ function validatedWriteTaskMeta(task, cwd2, options = {}) {
   for (const warning of validation.warnings) {
     console.warn(`  ⚠️  验证警告 (${task.id}): ${warning}`);
   }
-  writeTaskMeta(task, cwd2);
+  writeTaskMeta(task, cwd);
   return { validation };
 }
 var VALID_PRIORITIES2, VALID_TYPES2, TITLE_MAX_LENGTH = 200, DESCRIPTION_MAX_LENGTH = 1e4, SCHEMA_ARRAY_FIELD_DEFAULTS, VALID_CHECKPOINT_TRANSITIONS, VALID_VERIFICATION_RESULTS, VALID_VERIFICATION_METHODS, TaskValidationError;
@@ -18966,8 +18969,8 @@ function parseCheckRange(input) {
   }
   throw new AnalyzeError("UNKNOWN_RANGE_FORMAT", `无法识别的 check-range 格式: "${sanitized.length > 50 ? sanitized.slice(0, 50) + "..." : sanitized}"`, "支持的格式: all | tasks:ID1,ID2 | keyword:pattern");
 }
-function getTasksByRange(range, cwd2 = process.cwd()) {
-  const allTasks = getAllTasks(cwd2);
+function getTasksByRange(range, cwd = process.cwd()) {
+  const allTasks = getAllTasks(cwd);
   switch (range.type) {
     case "all": {
       return allTasks.filter((t2) => t2.status === "open" || t2.status === "in_progress" || t2.status === "wait_review" || t2.status === "wait_qa" || t2.status === "wait_evaluation");
@@ -18976,7 +18979,7 @@ function getTasksByRange(range, cwd2 = process.cwd()) {
       const ids = range.taskIds ?? [];
       const tasks = [];
       for (const id of ids) {
-        const task = readTaskMeta(id, cwd2);
+        const task = readTaskMeta(id, cwd);
         if (task) {
           tasks.push(task);
         }
@@ -19019,8 +19022,8 @@ var init_analyze_range_parser = __esm(() => {
 // src/commands/analyze.ts
 import * as path14 from "path";
 import * as fs18 from "fs";
-function readAnalyzeConfig(cwd2 = process.cwd()) {
-  const config = readConfig(cwd2);
+function readAnalyzeConfig(cwd = process.cwd()) {
+  const config = readConfig(cwd);
   if (!config)
     return { ...DEFAULT_ANALYZE_CONFIG };
   const analyzeRaw = config.analyze;
@@ -19114,9 +19117,9 @@ function validateRequirementHistoryEntry(entry, index) {
   }
   return { valid: errors.length === 0, errors };
 }
-function validateTaskIdFormat(id, cwd2 = process.cwd()) {
+function validateTaskIdFormat(id, cwd = process.cwd()) {
   const errors = [];
-  const texts = t(cwd2);
+  const texts = t(cwd);
   if (!id || typeof id !== "string") {
     return { valid: false, format: "unknown", errors: [texts.analyzeCmd.taskIdEmpty] };
   }
@@ -19146,11 +19149,11 @@ function isValidTypeValue(type) {
 function isValidPriorityValue(priority) {
   return VALID_PRIORITIES3.includes(priority);
 }
-async function performQualityCheck(cwd2 = process.cwd(), aiOptions) {
-  const tasks = getAllTasks(cwd2, false);
+async function performQualityCheck(cwd = process.cwd(), aiOptions) {
+  const tasks = getAllTasks(cwd, false);
   const scores = new Map;
   for (const task of tasks) {
-    const score = await calculateContentQuality(task, aiOptions, cwd2);
+    const score = await calculateContentQuality(task, aiOptions, cwd);
     scores.set(task.id, score);
   }
   return scores;
@@ -19226,18 +19229,18 @@ function showQualityReport(scores, options = {}) {
   console.log(separator);
   console.log("");
 }
-async function detectSemanticDuplicates(tasks, cwd2) {
+async function detectSemanticDuplicates(tasks, cwd) {
   if (tasks.length < 2)
     return [];
-  const aiAssistant = new AIMetadataAssistant(cwd2);
-  const analyzeLogger = createLogger("analyze", cwd2);
+  const aiAssistant = new AIMetadataAssistant(cwd);
+  const analyzeLogger = createLogger("analyze", cwd);
   const batchSize = 10;
   const allIssues = [];
   for (let i = 0;i < tasks.length; i += batchSize) {
     const batch = tasks.slice(i, i + batchSize);
     const result = await withAIEnhancement({
       enabled: true,
-      aiCall: () => aiAssistant.detectDuplicates(batch, { cwd: cwd2 }),
+      aiCall: () => aiAssistant.detectDuplicates(batch, { cwd }),
       fallback: { duplicates: [], aiUsed: false },
       operationName: "Semantic duplicate detection",
       logger: analyzeLogger
@@ -19263,10 +19266,10 @@ async function detectSemanticDuplicates(tasks, cwd2) {
   }
   return allIssues;
 }
-async function assessStalenessWithAI(task, cwd2) {
+async function assessStalenessWithAI(task, cwd) {
   const result = await withAIEnhancement({
     enabled: true,
-    aiCall: () => new AIMetadataAssistant(cwd2).assessStaleness(task, { cwd: cwd2 }),
+    aiCall: () => new AIMetadataAssistant(cwd).assessStaleness(task, { cwd }),
     fallback: { isStale: false, stalenessScore: 0, suggestedAction: "keep", reason: "", aiUsed: false },
     operationName: "陈旧任务评估"
   });
@@ -19294,11 +19297,11 @@ function parseReportVerdict(reportPath) {
     return null;
   }
 }
-function getHarnessReportDir(taskId, cwd2) {
-  return path14.join(getProjectDir(cwd2), "reports", "harness", taskId);
+function getHarnessReportDir(taskId, cwd) {
+  return path14.join(getProjectDir(cwd), "reports", "harness", taskId);
 }
-function checkReportStatusConsistency(taskId, task, cwd2) {
-  const reportDir = getHarnessReportDir(taskId, cwd2);
+function checkReportStatusConsistency(taskId, task, cwd) {
+  const reportDir = getHarnessReportDir(taskId, cwd);
   if (!fs18.existsSync(reportDir))
     return null;
   const currentStatus = normalizeStatus(task.status);
@@ -19351,13 +19354,13 @@ function checkCheckpointConsistency(taskId, task) {
   }
   return null;
 }
-async function checkQualityGateIssues(taskId, task, cwd2, config) {
+async function checkQualityGateIssues(taskId, task, cwd, config) {
   const issues = [];
   const qualityConfig = {
     ...DEFAULT_QUALITY_GATE_CONFIG,
     ...config
   };
-  const result = await checkQualityGate(taskId, qualityConfig, cwd2);
+  const result = await checkQualityGate(taskId, qualityConfig, cwd);
   if (result.score.totalScore < qualityConfig.minQualityScore) {
     issues.push({
       taskId,
@@ -19408,7 +19411,7 @@ async function checkQualityGateIssues(taskId, task, cwd2, config) {
       });
     }
   }
-  const filesResult = validateFilesExist(task, cwd2);
+  const filesResult = validateFilesExist(task, cwd);
   if (!filesResult.valid) {
     issues.push({
       taskId,
@@ -19433,9 +19436,9 @@ async function checkQualityGateIssues(taskId, task, cwd2, config) {
   }
   return issues;
 }
-function checkMissingPipelineEvidence(taskId, task, cwd2) {
+function checkMissingPipelineEvidence(taskId, task, cwd) {
   const currentStatus = normalizeStatus(task.status);
-  const reportDir = getHarnessReportDir(taskId, cwd2);
+  const reportDir = getHarnessReportDir(taskId, cwd);
   const STATUS_REQUIRED_REPORTS = {
     wait_review: [
       { reportFile: "dev-report.md", phase: "development" }
@@ -19489,7 +19492,7 @@ function checkMissingPipelineEvidence(taskId, task, cwd2) {
   }
   return null;
 }
-function shouldTriggerAIInference(task, layer1Issues, cwd2) {
+function shouldTriggerAIInference(task, layer1Issues, cwd) {
   const currentStatus = normalizeStatus(task.status);
   if (TERMINAL_STATUSES_SET4.has(currentStatus))
     return false;
@@ -19497,7 +19500,7 @@ function shouldTriggerAIInference(task, layer1Issues, cwd2) {
     return false;
   const historyCount = task.history?.length ?? 0;
   if (historyCount >= 3) {
-    const reportDir = getHarnessReportDir(task.id, cwd2);
+    const reportDir = getHarnessReportDir(task.id, cwd);
     if (!fs18.existsSync(reportDir))
       return true;
   }
@@ -19512,8 +19515,8 @@ function shouldTriggerAIInference(task, layer1Issues, cwd2) {
   }
   return false;
 }
-function buildStatusInferencePrompt(task, layer1Findings, cwd2 = process.cwd()) {
-  const texts = t(cwd2);
+function buildStatusInferencePrompt(task, layer1Findings, cwd = process.cwd()) {
+  const texts = t(cwd);
   const currentStatus = normalizeStatus(task.status);
   const taskInfo = [
     texts.analyzeCmd.aiPromptTaskInfo,
@@ -19574,14 +19577,14 @@ ${texts.analyzeCmd.aiPromptJsonFormat}
   ${texts.analyzeCmd.aiPromptSuggestion}
 }`;
 }
-async function runAIStatusInference(task, layer1Findings, cwd2) {
-  const prompt = buildStatusInferencePrompt(task, layer1Findings, cwd2);
+async function runAIStatusInference(task, layer1Findings, cwd) {
+  const prompt = buildStatusInferencePrompt(task, layer1Findings, cwd);
   const options = {
     timeout: 120,
     allowedTools: [],
     outputFormat: "text",
     maxRetries: 0,
-    cwd: cwd2
+    cwd
   };
   try {
     const result = await invokeAgent(prompt, options);
@@ -19620,25 +19623,25 @@ async function runAIStatusInference(task, layer1Findings, cwd2) {
     return null;
   }
 }
-async function detectStatusInferenceIssues(task, cwd2, aiOptions) {
+async function detectStatusInferenceIssues(task, cwd, aiOptions) {
   const issues = [];
-  const reportIssue = checkReportStatusConsistency(task.id, task, cwd2);
+  const reportIssue = checkReportStatusConsistency(task.id, task, cwd);
   if (reportIssue)
     issues.push(reportIssue);
   const checkpointIssue = checkCheckpointConsistency(task.id, task);
   if (checkpointIssue)
     issues.push(checkpointIssue);
-  const qualityGateIssues = await checkQualityGateIssues(task.id, task, cwd2);
+  const qualityGateIssues = await checkQualityGateIssues(task.id, task, cwd);
   issues.push(...qualityGateIssues);
-  const evidenceIssue = checkMissingPipelineEvidence(task.id, task, cwd2);
+  const evidenceIssue = checkMissingPipelineEvidence(task.id, task, cwd);
   if (evidenceIssue)
     issues.push(evidenceIssue);
   const aiEnabled = aiOptions?.deepAnalyze && !aiOptions?.noAi;
   if (!aiEnabled)
     return issues;
-  if (!shouldTriggerAIInference(task, issues, cwd2))
+  if (!shouldTriggerAIInference(task, issues, cwd))
     return issues;
-  const aiResult = await runAIStatusInference(task, issues, cwd2);
+  const aiResult = await runAIStatusInference(task, issues, cwd);
   if (!aiResult)
     return issues;
   const currentStatus = normalizeStatus(task.status);
@@ -19661,15 +19664,15 @@ async function detectStatusInferenceIssues(task, cwd2, aiOptions) {
   }
   return issues;
 }
-async function analyzeProject(cwd2 = process.cwd(), includeArchived = false, aiOptions) {
-  if (!isInitialized(cwd2)) {
+async function analyzeProject(cwd = process.cwd(), includeArchived = false, aiOptions) {
+  if (!isInitialized(cwd)) {
     console.error("Error: Project not initialized. Please run `projmnt4claude setup` first");
     process.exit(1);
   }
-  const texts = t(cwd2);
-  const tasks = getAllTasks(cwd2, includeArchived);
+  const texts = t(cwd);
+  const tasks = getAllTasks(cwd, includeArchived);
   const issues = [];
-  const analyzeConfig = readAnalyzeConfig(cwd2);
+  const analyzeConfig = readAnalyzeConfig(cwd);
   const filteredTasks = analyzeConfig.ignorePatterns && analyzeConfig.ignorePatterns.length > 0 ? tasks.filter((task) => {
     if (matchesIgnorePattern(task.id, analyzeConfig.ignorePatterns)) {
       return false;
@@ -19741,7 +19744,7 @@ async function analyzeProject(cwd2 = process.cwd(), includeArchived = false, aiO
       let shouldFlagStale = true;
       let aiAssessment = null;
       if (aiOptions?.deepAnalyze && !aiOptions?.noAi) {
-        aiAssessment = await assessStalenessWithAI(task, cwd2);
+        aiAssessment = await assessStalenessWithAI(task, cwd);
         if (aiAssessment !== null && !aiAssessment.stillStale) {
           shouldFlagStale = false;
         }
@@ -19774,7 +19777,7 @@ async function analyzeProject(cwd2 = process.cwd(), includeArchived = false, aiO
     }
     if (task.dependencies.length > 0) {
       const uncompletedDeps = task.dependencies.filter((depId) => {
-        const depTask = readTaskMeta(depId, cwd2);
+        const depTask = readTaskMeta(depId, cwd);
         if (!depTask)
           return true;
         const depStatus = normalizeStatus(depTask.status);
@@ -19909,7 +19912,7 @@ async function analyzeProject(cwd2 = process.cwd(), includeArchived = false, aiO
         suggestion: "Set createdBy field to comply with latest specification (cli | init-requirement | harness-dev | harness-review | harness-qa | harness-eval | import)"
       });
     }
-    const idValidation = validateTaskIdFormat(task.id, cwd2);
+    const idValidation = validateTaskIdFormat(task.id, cwd);
     if (!idValidation.valid) {
       issues.push({
         taskId: task.id,
@@ -20095,7 +20098,7 @@ async function analyzeProject(cwd2 = process.cwd(), includeArchived = false, aiO
       });
     }
     if (task.parentId) {
-      if (!taskExists(task.parentId, cwd2)) {
+      if (!taskExists(task.parentId, cwd)) {
         issues.push({
           taskId: task.id,
           type: "invalid_parent_ref",
@@ -20105,7 +20108,7 @@ async function analyzeProject(cwd2 = process.cwd(), includeArchived = false, aiO
           details: { parentId: task.parentId }
         });
       } else {
-        const parentTask = readTaskMeta(task.parentId, cwd2);
+        const parentTask = readTaskMeta(task.parentId, cwd);
         if (parentTask && parentTask.subtaskIds && !parentTask.subtaskIds.includes(task.id)) {
           issues.push({
             taskId: task.id,
@@ -20120,7 +20123,7 @@ async function analyzeProject(cwd2 = process.cwd(), includeArchived = false, aiO
     }
     if (task.subtaskIds && task.subtaskIds.length > 0) {
       for (const subtaskId of task.subtaskIds) {
-        if (!taskExists(subtaskId, cwd2)) {
+        if (!taskExists(subtaskId, cwd)) {
           issues.push({
             taskId: task.id,
             type: "invalid_subtask_ref",
@@ -20130,7 +20133,7 @@ async function analyzeProject(cwd2 = process.cwd(), includeArchived = false, aiO
             details: { subtaskId }
           });
         } else {
-          const subtask = readTaskMeta(subtaskId, cwd2);
+          const subtask = readTaskMeta(subtaskId, cwd);
           if (subtask && subtask.parentId !== task.id) {
             issues.push({
               taskId: task.id,
@@ -20237,7 +20240,7 @@ async function analyzeProject(cwd2 = process.cwd(), includeArchived = false, aiO
       }
     }
     if (normalizedStatus === "in_progress") {
-      const omcStateDir = path14.resolve(cwd2, ".omc/state");
+      const omcStateDir = path14.resolve(cwd, ".omc/state");
       let hasActivePipeline = false;
       if (fs18.existsSync(omcStateDir)) {
         const pipelineStateFiles = fs18.readdirSync(omcStateDir).filter((f) => f.includes("pipeline") && f.endsWith(".json"));
@@ -20293,14 +20296,14 @@ async function analyzeProject(cwd2 = process.cwd(), includeArchived = false, aiO
         });
       }
     }
-    const statusInferenceIssues = await detectStatusInferenceIssues(task, cwd2, aiOptions);
+    const statusInferenceIssues = await detectStatusInferenceIssues(task, cwd, aiOptions);
     if (statusInferenceIssues.length > 0) {
       issues.push(...statusInferenceIssues);
     }
     const taskText = `${task.description || ""}
 ${task.title || ""}`;
     const referencedFiles = extractFilePaths(taskText, { includeBareFilenames: false });
-    const missingRefs = referencedFiles.filter((fp) => !fs18.existsSync(path14.resolve(cwd2, fp)));
+    const missingRefs = referencedFiles.filter((fp) => !fs18.existsSync(path14.resolve(cwd, fp)));
     if (missingRefs.length > 0) {
       stats.fileNotFound++;
       issues.push({
@@ -20317,7 +20320,7 @@ ${task.title || ""}`;
   for (const task of filteredTasks) {
     if ((!task.checkpoints || task.checkpoints.length === 0) && task.description) {
       try {
-        const synced = syncTextCheckpointsToMeta(task.id, cwd2);
+        const synced = syncTextCheckpointsToMeta(task.id, cwd);
         if (synced) {
           syncedCheckpointCount++;
           issues.push({
@@ -20357,7 +20360,7 @@ ${task.title || ""}`;
   stats.subtaskCompletionRate = subtasks.length > 0 ? Math.round(completedSubtasks.length / subtasks.length * 100) : 0;
   for (const subtask of subtasks) {
     const parentId = subtask.parentId;
-    if (parentId && !taskExists(parentId, cwd2)) {
+    if (parentId && !taskExists(parentId, cwd)) {
       stats.orphanSubtasks++;
       issues.push({
         taskId: subtask.id,
@@ -20368,7 +20371,7 @@ ${task.title || ""}`;
       });
     }
   }
-  const archiveDir = getArchiveDir(cwd2);
+  const archiveDir = getArchiveDir(cwd);
   if (fs18.existsSync(archiveDir)) {
     const abandonedDirs = fs18.readdirSync(archiveDir).filter((name) => {
       const dirPath = path14.join(archiveDir, name);
@@ -20457,7 +20460,7 @@ ${task.title || ""}`;
     }
   }
   if (aiOptions?.deepAnalyze && !aiOptions?.noAi && filteredTasks.length >= 2) {
-    const semanticIssues = await detectSemanticDuplicates(filteredTasks, cwd2);
+    const semanticIssues = await detectSemanticDuplicates(filteredTasks, cwd);
     if (semanticIssues.length > 0) {
       issues.push(...semanticIssues);
     }
@@ -20558,7 +20561,7 @@ function extractKeywordsFromCriteria(criteria) {
   }
   return [...new Set(keywords)];
 }
-function searchCodebaseForCriteria(criteria, cwd2) {
+function searchCodebaseForCriteria(criteria, cwd) {
   const results = [];
   const keywords = extractKeywordsFromCriteria(criteria);
   if (keywords.length === 0) {
@@ -20631,7 +20634,7 @@ function searchCodebaseForCriteria(criteria, cwd2) {
               const matchDensity = lineNumbers.length / Math.max(lines.length, 1);
               const relevanceScore = (uniqueKeywordRatio * 0.7 + matchDensity * 0.3) * 100;
               results.push({
-                filePath: path14.relative(cwd2, fullPath),
+                filePath: path14.relative(cwd, fullPath),
                 lineNumbers: lineNumbers.slice(0, 10),
                 matchedKeywords,
                 relevanceScore: Math.round(relevanceScore)
@@ -20645,7 +20648,7 @@ function searchCodebaseForCriteria(criteria, cwd2) {
   function escapeRegExp(string) {
     return string.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
   }
-  searchDirectory(cwd2);
+  searchDirectory(cwd);
   results.sort((a, b) => b.relevanceScore - a.relevanceScore);
   return results.slice(0, 10);
 }
@@ -20733,11 +20736,11 @@ function inferVerificationCommands(criteria, searchResults) {
   }
   return commands;
 }
-function getContractPath(taskId, cwd2) {
-  return path14.join(getTasksDir(cwd2), taskId, "contract.json");
+function getContractPath(taskId, cwd) {
+  return path14.join(getTasksDir(cwd), taskId, "contract.json");
 }
-function readContract(taskId, cwd2) {
-  const contractPath = getContractPath(taskId, cwd2);
+function readContract(taskId, cwd) {
+  const contractPath = getContractPath(taskId, cwd);
   if (!fs18.existsSync(contractPath)) {
     return null;
   }
@@ -20748,8 +20751,8 @@ function readContract(taskId, cwd2) {
     return null;
   }
 }
-function saveContract(taskId, contract, cwd2) {
-  const contractPath = getContractPath(taskId, cwd2);
+function saveContract(taskId, contract, cwd) {
+  const contractPath = getContractPath(taskId, cwd);
   const dir = path14.dirname(contractPath);
   if (!fs18.existsSync(dir)) {
     fs18.mkdirSync(dir, { recursive: true });
@@ -20757,10 +20760,10 @@ function saveContract(taskId, contract, cwd2) {
   contract.updatedAt = new Date().toISOString();
   fs18.writeFileSync(contractPath, JSON.stringify(contract, null, 2), "utf-8");
 }
-function generateCheckpointsFromCriteria(taskId, acceptanceCriteria, taskTitle, cwd2 = process.cwd(), taskDescription) {
+function generateCheckpointsFromCriteria(taskId, acceptanceCriteria, taskTitle, cwd = process.cwd(), taskDescription) {
   const checkpoints = [];
   const now = new Date().toISOString();
-  const analyzeConfig = readAnalyzeConfig(cwd2);
+  const analyzeConfig = readAnalyzeConfig(cwd);
   const useSimpleMode = analyzeConfig.checkpointGenerator === "rule-based";
   const criteriaList = acceptanceCriteria && acceptanceCriteria.length > 0 ? acceptanceCriteria : generateDefaultCheckpoints(taskTitle || taskId, taskDescription);
   for (let index = 0;index < criteriaList.length; index++) {
@@ -20777,7 +20780,7 @@ function generateCheckpointsFromCriteria(taskId, acceptanceCriteria, taskTitle, 
         updatedAt: now
       });
     } else {
-      const searchResults = searchCodebaseForCriteria(criteria, cwd2);
+      const searchResults = searchCodebaseForCriteria(criteria, cwd);
       const checkpoint = generateSmartCheckpoints(taskId, criteria, searchResults, index);
       checkpoint.createdAt = now;
       checkpoint.updatedAt = now;
@@ -20871,12 +20874,12 @@ function extractAcceptanceCriteriaFromDescription(description) {
   }
   return criteria;
 }
-function fixTaskCheckpoints(taskId, cwd2) {
-  const task = readTaskMeta(taskId, cwd2);
+function fixTaskCheckpoints(taskId, cwd) {
+  const task = readTaskMeta(taskId, cwd);
   if (!task) {
     return { fixed: false, reason: "任务不存在" };
   }
-  let contract = readContract(taskId, cwd2);
+  let contract = readContract(taskId, cwd);
   if (!contract) {
     const now = new Date().toISOString();
     contract = {
@@ -20896,17 +20899,17 @@ function fixTaskCheckpoints(taskId, cwd2) {
     acceptanceCriteria = extractAcceptanceCriteriaFromDescription(task.description);
     contract.acceptanceCriteria = acceptanceCriteria;
   }
-  const checkpoints = generateCheckpointsFromCriteria(taskId, acceptanceCriteria, task.title, cwd2, task.description);
+  const checkpoints = generateCheckpointsFromCriteria(taskId, acceptanceCriteria, task.title, cwd, task.description);
   if (checkpoints.length === 0) {
     return { fixed: false, reason: "无法生成检查点" };
   }
   contract.checkpoints = checkpoints.map((cp) => cp.id);
-  syncCheckpointsToMeta(taskId, checkpoints, cwd2);
-  saveContract(taskId, contract, cwd2);
+  syncCheckpointsToMeta(taskId, checkpoints, cwd);
+  saveContract(taskId, contract, cwd);
   return { fixed: true, reason: `生成了 ${checkpoints.length} 个检查点` };
 }
-async function fixCheckpoints(cwd2 = process.cwd(), options = {}) {
-  const analyzeConfig = readAnalyzeConfig(cwd2);
+async function fixCheckpoints(cwd = process.cwd(), options = {}) {
+  const analyzeConfig = readAnalyzeConfig(cwd);
   if (analyzeConfig.autoGenerateCheckpoints === false) {
     console.log("");
     console.log("⏭️  Auto-generate checkpoints disabled (analyze.autoGenerateCheckpoints = false)");
@@ -20922,18 +20925,18 @@ async function fixCheckpoints(cwd2 = process.cwd(), options = {}) {
   console.log("");
   let tasksToFix;
   if (options.taskId) {
-    const task = readTaskMeta(options.taskId, cwd2);
+    const task = readTaskMeta(options.taskId, cwd);
     if (!task) {
       console.error(`❌ Task ${options.taskId} not found`);
       return;
     }
     tasksToFix = [task];
   } else {
-    tasksToFix = getAllTasks(cwd2, false);
+    tasksToFix = getAllTasks(cwd, false);
   }
   const tasksNeedingFix = [];
   for (const task of tasksToFix) {
-    const contract = readContract(task.id, cwd2);
+    const contract = readContract(task.id, cwd);
     if (!contract || !contract.checkpoints || contract.checkpoints.length === 0) {
       tasksNeedingFix.push(task);
     }
@@ -20968,7 +20971,7 @@ async function fixCheckpoints(cwd2 = process.cwd(), options = {}) {
   for (const task of tasksNeedingFix) {
     console.log(`
 Processing ${task.id}...`);
-    const result = fixTaskCheckpoints(task.id, cwd2);
+    const result = fixTaskCheckpoints(task.id, cwd);
     if (result.fixed) {
       console.log(`  ✅ ${result.reason}`);
       fixedCount++;
@@ -21533,15 +21536,15 @@ function validateAIResponse(parsed) {
     items
   };
 }
-async function decomposeWithAI(content, cwd2) {
+async function decomposeWithAI(content, cwd) {
   if (content.length > SECURITY_CONFIG.MAX_INPUT_LENGTH) {
     console.warn(`AI 分解警告：输入内容过长(${content.length}字符)，已截断处理`);
   }
   try {
     const safeContent = content.substring(0, Math.min(content.length, SECURITY_CONFIG.MAX_INPUT_LENGTH));
-    const template = getDecompositionTemplate(cwd2);
+    const template = getDecompositionTemplate(cwd);
     const prompt = template.replace("${safeContent}", safeContent.substring(0, 4000));
-    const agentOptions = buildAgentOptionsFromPreset("decomposition", cwd2);
+    const agentOptions = buildAgentOptionsFromPreset("decomposition", cwd);
     const result = await invokeAgent(prompt, agentOptions);
     if (!result.success) {
       return null;
@@ -21611,7 +21614,7 @@ async function decomposeWithAI(content, cwd2) {
     return null;
   }
 }
-async function aiShouldDecomposeFurther(item, currentLevel, maxHierarchyLevel, cwd2) {
+async function aiShouldDecomposeFurther(item, currentLevel, maxHierarchyLevel, cwd) {
   if (currentLevel >= maxHierarchyLevel) {
     return { needsDecomposition: false, reason: "达到最大层级限制" };
   }
@@ -21650,7 +21653,7 @@ async function aiShouldDecomposeFurther(item, currentLevel, maxHierarchyLevel, c
 - 如果预估耗时较长且可以拆分，应返回 true
 - 如果描述范围明确且单一，即使耗时较长也应返回 false
 - 只输出 JSON，不要输出其他内容`;
-    const agentOptions = buildAgentOptionsFromPreset("decomposition", cwd2);
+    const agentOptions = buildAgentOptionsFromPreset("decomposition", cwd);
     const result = await invokeAgent(prompt, agentOptions);
     if (!result.success) {
       return { needsDecomposition: false, reason: "AI 调用失败" };
@@ -21680,7 +21683,7 @@ async function aiShouldDecomposeFurther(item, currentLevel, maxHierarchyLevel, c
     return { needsDecomposition: false, reason: "分析过程出错" };
   }
 }
-async function shouldDecomposeFurther(item, depth, config, cwd2) {
+async function shouldDecomposeFurther(item, depth, config, cwd) {
   if (depth >= config.maxDepth) {
     return { needsDecomposition: false, reason: "达到最大递归深度限制" };
   }
@@ -21720,7 +21723,7 @@ async function shouldDecomposeFurther(item, depth, config, cwd2) {
 - 如果预估耗时远大于复杂度阈值（如 2 倍以上），应返回 true
 - 如果描述范围明确且单一，即使耗时较长也应返回 false
 - 只输出 JSON，不要输出其他内容`;
-    const agentOptions = buildAgentOptionsFromPreset("decomposition", cwd2);
+    const agentOptions = buildAgentOptionsFromPreset("decomposition", cwd);
     const result = await invokeAgent(prompt, agentOptions);
     if (!result.success) {
       return { needsDecomposition: false, reason: "AI 调用失败" };
@@ -21760,7 +21763,7 @@ async function decomposeRecursively(items, options, config, depth = 0) {
   if (!config.enabled || depth >= config.maxDepth) {
     return items;
   }
-  const cwd2 = options.cwd || process.cwd();
+  const cwd = options.cwd || process.cwd();
   const result = [];
   let totalSubtaskCount = 0;
   for (const item of items) {
@@ -21768,7 +21771,7 @@ async function decomposeRecursively(items, options, config, depth = 0) {
       result.push(item);
       continue;
     }
-    const decompositionCheck = await shouldDecomposeFurther(item, depth, config, cwd2);
+    const decompositionCheck = await shouldDecomposeFurther(item, depth, config, cwd);
     if (!decompositionCheck.needsDecomposition) {
       result.push(item);
       totalSubtaskCount++;
@@ -21822,7 +21825,7 @@ async function decomposeRequirement(content, options = {}) {
     minItems = 2,
     maxItems = 10,
     useAI = true,
-    cwd: cwd2 = process.cwd(),
+    cwd = process.cwd(),
     validateQuality = true,
     currentLevel = 0,
     enableRecursive = false,
@@ -21831,7 +21834,7 @@ async function decomposeRequirement(content, options = {}) {
   } = options;
   const trimmedContent = content.trim();
   if (trimmedContent.length < 100) {
-    const texts = t(cwd2).decomposition;
+    const texts = t(cwd).decomposition;
     return {
       decomposable: false,
       reason: texts.contentTooShort,
@@ -21858,7 +21861,7 @@ async function decomposeRequirement(content, options = {}) {
   }
   const isReport = isInvestigationReport(trimmedContent);
   if (useAI) {
-    const aiResult = await decomposeWithAI(trimmedContent, cwd2);
+    const aiResult = await decomposeWithAI(trimmedContent, cwd);
     if (aiResult && aiResult.decomposable && aiResult.items.length >= minItems) {
       const result2 = {
         ...aiResult,
@@ -21889,7 +21892,7 @@ async function decomposeRequirement(content, options = {}) {
   }
   const problems = extractProblemsByPattern(trimmedContent);
   if (problems.length < minItems) {
-    const texts = t(cwd2).decomposition;
+    const texts = t(cwd).decomposition;
     return {
       decomposable: false,
       reason: `仅识别到 ${problems.length} 个问题项，少于阈值 ${minItems}`,
@@ -21944,10 +21947,10 @@ async function decomposeRequirement(content, options = {}) {
   return result;
 }
 async function decomposeRecursivelyWithAI(items, options, currentLevel, maxHierarchyLevel) {
-  const { cwd: cwd2 = process.cwd() } = options;
+  const { cwd = process.cwd() } = options;
   const result = [];
   for (const item of items) {
-    const decompositionCheck = await aiShouldDecomposeFurther(item, currentLevel, maxHierarchyLevel, cwd2);
+    const decompositionCheck = await aiShouldDecomposeFurther(item, currentLevel, maxHierarchyLevel, cwd);
     if (!decompositionCheck.needsDecomposition) {
       result.push(item);
       continue;
@@ -22039,8 +22042,8 @@ function shouldDecompose(content) {
   const headerCount = (content.match(/(?:^|\n)#{1,3}\s+/g) || []).length;
   return problemCount >= 2 || numberedCount >= 3 || headerCount >= 3;
 }
-function formatDecomposition(decomposition, cwd2) {
-  const texts = t(cwd2).decomposition;
+function formatDecomposition(decomposition, cwd) {
+  const texts = t(cwd).decomposition;
   if (!decomposition.decomposable) {
     return `${texts.notDecomposable}: ${decomposition.reason || texts.unknownReason}`;
   }
@@ -22380,7 +22383,7 @@ function inferArchitectureLayer2(task) {
   const layers = ["Layer0", "Layer1", "Layer2", "Layer3"];
   return { layer: layers[minValue], layerValue: minValue };
 }
-function buildTaskChains2(tasks, cwd2, precomputedDeps) {
+function buildTaskChains2(tasks, cwd, precomputedDeps) {
   if (tasks.length === 0)
     return [];
   const taskMap = new Map;
@@ -22637,7 +22640,7 @@ function generateAIOutput2(chains, originalCount, filteredCount, batches, query,
     }
   };
 }
-function showBasicPlan2(plan, cwd2) {
+function showBasicPlan2(plan, cwd) {
   console.log("");
   console.log("Execution Plan:");
   console.log("━".repeat(SEPARATOR_WIDTH));
@@ -22645,7 +22648,7 @@ function showBasicPlan2(plan, cwd2) {
   console.log("-----|-----------|------------------------------|------------");
   for (let i = 0;i < plan.tasks.length; i++) {
     const taskId = plan.tasks[i];
-    const task = readTaskMeta(taskId, cwd2);
+    const task = readTaskMeta(taskId, cwd);
     const order = String(i + 1).padEnd(4);
     const id = taskId.padEnd(9);
     const title = (task?.title || "(Unknown task)").substring(0, 28).padEnd(28);
@@ -22657,13 +22660,13 @@ function showBasicPlan2(plan, cwd2) {
   console.log(`Created: ${plan.createdAt}`);
   console.log(`Updated: ${plan.updatedAt}`);
 }
-function showBatchedPlan2(plan, cwd2) {
+function showBatchedPlan2(plan, cwd) {
   console.log("");
   console.log("Execution Plan (Batched):");
   console.log("━".repeat(SEPARATOR_WIDTH));
   const batches = plan.batches;
   let taskIndex = 0;
-  const allTasks = getAllTasks(cwd2);
+  const allTasks = getAllTasks(cwd);
   const planTaskIds = new Set(plan.tasks);
   const planTasks = allTasks.filter((t2) => planTaskIds.has(t2.id));
   const inferredDeps = inferDependenciesBatch(planTasks);
@@ -22675,7 +22678,7 @@ function showBatchedPlan2(plan, cwd2) {
     console.log("─────┬───────────┬──────────────────────────────┬────────────");
     for (let i = 0;i < batch.length; i++) {
       const taskId = batch[i];
-      const task = readTaskMeta(taskId, cwd2);
+      const task = readTaskMeta(taskId, cwd);
       const order = String(taskIndex + 1).padEnd(4);
       const id = taskId.padEnd(9);
       const title = (task?.title || "(Unknown task)").substring(0, 28).padEnd(28);
@@ -22703,12 +22706,12 @@ function showBatchedPlan2(plan, cwd2) {
   console.log(`Created: ${plan.createdAt}`);
   console.log(`Updated: ${plan.updatedAt}`);
 }
-function showPlan2(json2 = false, cwd2 = process.cwd()) {
-  if (!isInitialized(cwd2)) {
+function showPlan2(json2 = false, cwd = process.cwd()) {
+  if (!isInitialized(cwd)) {
     console.error("Error: Project not initialized. Please run `projmnt4claude setup` first");
     process.exit(1);
   }
-  const plan = readPlan(cwd2);
+  const plan = readPlan(cwd);
   if (!plan || plan.tasks.length === 0) {
     console.log("No execution plan");
     console.log("");
@@ -22717,7 +22720,7 @@ function showPlan2(json2 = false, cwd2 = process.cwd()) {
   }
   if (json2) {
     const tasks = plan.tasks.map((taskId, index) => {
-      const task = readTaskMeta(taskId, cwd2);
+      const task = readTaskMeta(taskId, cwd);
       return {
         order: index + 1,
         id: taskId,
@@ -22730,37 +22733,37 @@ function showPlan2(json2 = false, cwd2 = process.cwd()) {
   }
   const hasBatches = Array.isArray(plan.batches) && plan.batches.length > 0;
   if (hasBatches) {
-    showBatchedPlan2(plan, cwd2);
+    showBatchedPlan2(plan, cwd);
   } else {
-    showBasicPlan2(plan, cwd2);
+    showBasicPlan2(plan, cwd);
   }
 }
-function addTask2(taskId, afterId, cwd2 = process.cwd()) {
-  if (!isInitialized(cwd2)) {
+function addTask2(taskId, afterId, cwd = process.cwd()) {
+  if (!isInitialized(cwd)) {
     console.error("Error: Project not initialized. Please run `projmnt4claude setup` first");
     process.exit(1);
   }
-  if (!taskExists(taskId, cwd2)) {
+  if (!taskExists(taskId, cwd)) {
     console.error(`Error: Task '${taskId}' does not exist`);
     process.exit(1);
   }
-  if (afterId && !taskExists(afterId, cwd2)) {
+  if (afterId && !taskExists(afterId, cwd)) {
     console.error(`Error: Reference task '${afterId}' does not exist`);
     process.exit(1);
   }
-  const success = addTaskToPlan(taskId, afterId, cwd2);
+  const success = addTaskToPlan(taskId, afterId, cwd);
   if (success) {
     console.log(`✅ Added task ${taskId} to execution plan${afterId ? ` (after ${afterId})` : ""}`);
   } else {
     console.log(`Task ${taskId} is already in the execution plan`);
   }
 }
-function removeTask2(taskId, cwd2 = process.cwd()) {
-  if (!isInitialized(cwd2)) {
+function removeTask2(taskId, cwd = process.cwd()) {
+  if (!isInitialized(cwd)) {
     console.error("Error: Project not initialized. Please run `projmnt4claude setup` first");
     process.exit(1);
   }
-  const allTasks = getAllTasks(cwd2);
+  const allTasks = getAllTasks(cwd);
   const depGraph = DependencyGraph.fromTasks(allTasks);
   const opValidation = validatePlanOperation("delete", [taskId], depGraph);
   if (opValidation.warnings.length > 0) {
@@ -22769,15 +22772,15 @@ function removeTask2(taskId, cwd2 = process.cwd()) {
       console.log(`   ⚠️  ${w}`);
     }
   }
-  const success = removeTaskFromPlan(taskId, cwd2);
+  const success = removeTaskFromPlan(taskId, cwd);
   if (success) {
     console.log(`✅ Removed task ${taskId} from execution plan`);
   } else {
     console.log(`Task ${taskId} is not in the execution plan`);
   }
 }
-async function clearPlanCmd2(force = false, cwd2 = process.cwd()) {
-  if (!isInitialized(cwd2)) {
+async function clearPlanCmd2(force = false, cwd = process.cwd()) {
+  if (!isInitialized(cwd)) {
     console.error("Error: Project not initialized. Please run `projmnt4claude setup` first");
     process.exit(1);
   }
@@ -22793,15 +22796,15 @@ async function clearPlanCmd2(force = false, cwd2 = process.cwd()) {
       return;
     }
   }
-  clearPlan(cwd2);
+  clearPlan(cwd);
   console.log("✅ Execution plan cleared");
 }
-async function recommendPlan2(options = {}, cwd2 = process.cwd()) {
-  if (!isInitialized(cwd2)) {
+async function recommendPlan2(options = {}, cwd = process.cwd()) {
+  if (!isInitialized(cwd)) {
     console.error("Error: Project not initialized. Please run `projmnt4claude setup` first");
     process.exit(1);
   }
-  const activeCheck = detectActiveSnapshot(cwd2);
+  const activeCheck = detectActiveSnapshot(cwd);
   if (activeCheck.hasActive) {
     console.error("❌ Error: Active pipeline detected");
     console.error(`   ${activeCheck.message}`);
@@ -22811,12 +22814,12 @@ async function recommendPlan2(options = {}, cwd2 = process.cwd()) {
   }
   console.log(`Analyzing project tasks...
 `);
-  const logger = createLogger("plan-recommend", cwd2);
+  const logger = createLogger("plan-recommend", cwd);
   const startTime = Date.now();
   const inputQuery = options.query || "";
   let recommendationAccepted = false;
   let suggestedOrder = [];
-  const allTasks = getAllTasks(cwd2);
+  const allTasks = getAllTasks(cwd);
   const failedTasks = allTasks.filter((t2) => normalizeStatus(t2.status) === "failed");
   if (failedTasks.length > 0) {
     console.log("⚠️  Quality check: Found failed tasks:");
@@ -22850,7 +22853,7 @@ async function recommendPlan2(options = {}, cwd2 = process.cwd()) {
     console.log("");
   }
   const chainEligibleTasks = activeTasks.filter((t2) => normalizeStatus(t2.status) !== "in_progress");
-  const missingSubtaskWarnings = detectMissingSubtasks(cwd2);
+  const missingSubtaskWarnings = detectMissingSubtasks(cwd);
   if (missingSubtaskWarnings.length > 0) {
     const label = options.strictSubtaskCoverage ? "❌ ERR" : "⚠️  WARN";
     console.log(`${label} Subtask missing detection (${missingSubtaskWarnings.length} parent tasks affected):`);
@@ -22880,7 +22883,7 @@ async function recommendPlan2(options = {}, cwd2 = process.cwd()) {
 `);
   }
   if (!options.all) {
-    const executableIds = new Set(getExecutableTasks(cwd2));
+    const executableIds = new Set(getExecutableTasks(cwd));
     const beforeExecFilter = filteredTasks.length;
     filteredTasks = filteredTasks.filter((task) => executableIds.has(task.id));
     if (beforeExecFilter - filteredTasks.length > 0) {
@@ -22978,7 +22981,7 @@ async function recommendPlan2(options = {}, cwd2 = process.cwd()) {
     console.log("Analyzing semantic dependencies via AI...");
     const semanticResult = await withAIEnhancement({
       enabled: true,
-      aiCall: () => new AIMetadataAssistant(cwd2).inferSemanticDependencies(filteredTasks, { cwd: cwd2 }),
+      aiCall: () => new AIMetadataAssistant(cwd).inferSemanticDependencies(filteredTasks, { cwd }),
       fallback: { dependencies: [], aiUsed: false },
       operationName: "Semantic dependency inference"
     });
@@ -23002,7 +23005,7 @@ async function recommendPlan2(options = {}, cwd2 = process.cwd()) {
       console.log("  AI found no additional semantic dependencies");
     }
   }
-  const chains = buildTaskChains2(filteredTasks, cwd2, mergedDeps);
+  const chains = buildTaskChains2(filteredTasks, cwd, mergedDeps);
   const sortedChains = sortChains2(chains);
   const cachedBatches = buildBatches2(sortedChains);
   const keywordsForOutput = filter.type === "keywords" ? filter.keywords.length > 0 ? filter.keywords : undefined : [filter.pattern];
@@ -23084,10 +23087,10 @@ async function recommendPlan2(options = {}, cwd2 = process.cwd()) {
   console.log("");
   const isNonInteractive = options.nonInteractive || !process.stdout.isTTY;
   if (isNonInteractive) {
-    const plan = getOrCreatePlan(cwd2);
+    const plan = getOrCreatePlan(cwd);
     plan.tasks = aiOutput.recommendation.suggestedOrder;
     plan.batches = aiOutput.batchOrder;
-    writePlan(plan, cwd2);
+    writePlan(plan, cwd);
     console.log("✅ Execution plan updated (non-interactive mode)");
     logger.logInstrumentation({
       module: "plan-recommend",
@@ -23113,10 +23116,10 @@ async function recommendPlan2(options = {}, cwd2 = process.cwd()) {
     initial: true
   });
   if (response.confirm) {
-    const plan = getOrCreatePlan(cwd2);
+    const plan = getOrCreatePlan(cwd);
     plan.tasks = aiOutput.recommendation.suggestedOrder;
     plan.batches = aiOutput.batchOrder;
-    writePlan(plan, cwd2);
+    writePlan(plan, cwd);
     console.log("✅ Execution plan updated");
     recommendationAccepted = true;
   } else {
@@ -23605,16 +23608,16 @@ var DEFAULT_CONFIG = {
   language: "zh",
   ai: { provider: "claude-code" }
 };
-async function setup(cwd2 = process.cwd(), options = {}) {
-  const projectDir = getProjectDir(cwd2);
-  const texts = t(cwd2);
-  if (isInitialized(cwd2) && !options.force) {
+async function setup(cwd = process.cwd(), options = {}) {
+  const projectDir = getProjectDir(cwd);
+  const texts = t(cwd);
+  if (isInitialized(cwd) && !options.force) {
     console.log(texts.setupCmd.alreadyInitialized);
     console.log(texts.setupCmd.directory.replace("{path}", projectDir));
     console.log(texts.setupCmd.tipUseForce);
     return;
   }
-  if (options.force && isInitialized(cwd2)) {
+  if (options.force && isInitialized(cwd)) {
     console.log(texts.setupCmd.forceMode);
   }
   let language;
@@ -23639,12 +23642,12 @@ async function setup(cwd2 = process.cwd(), options = {}) {
   ensureDir(projectDir);
   console.log(`✓ ${texts.setup.createDir}: ${projectDir}`);
   const subDirs = [
-    { dir: getTasksDir(cwd2), name: "tasks" },
-    { dir: getArchiveDir(cwd2), name: "archive" },
-    { dir: getToolboxDir(cwd2), name: "toolbox" },
-    { dir: getBinDir(cwd2), name: "bin" },
-    { dir: getReportsDir(cwd2), name: "reports" },
-    { dir: getLogsDir(cwd2), name: "logs" }
+    { dir: getTasksDir(cwd), name: "tasks" },
+    { dir: getArchiveDir(cwd), name: "archive" },
+    { dir: getToolboxDir(cwd), name: "toolbox" },
+    { dir: getBinDir(cwd), name: "bin" },
+    { dir: getReportsDir(cwd), name: "reports" },
+    { dir: getLogsDir(cwd), name: "logs" }
   ];
   for (const { dir, name } of subDirs) {
     ensureDir(dir);
@@ -23652,17 +23655,17 @@ async function setup(cwd2 = process.cwd(), options = {}) {
   }
   const config = {
     ...DEFAULT_CONFIG,
-    projectName: path3.basename(cwd2),
+    projectName: path3.basename(cwd),
     createdAt: new Date().toISOString(),
     language
   };
-  const configPath = getConfigPath(cwd2);
+  const configPath = getConfigPath(cwd);
   fs4.writeFileSync(configPath, JSON.stringify(config, null, 2), "utf-8");
   console.log(`✓ ${texts.setup.createConfig}`);
-  copySkillFiles(cwd2, language, texts);
+  copySkillFiles(cwd, language, texts);
   const gitHookConfig = config.gitHook ?? DEFAULT_GIT_HOOK;
   if (gitHookConfig.enabled) {
-    const pre = new Pre(cwd2);
+    const pre = new Pre(cwd);
     if (fs4.existsSync(pre.gitDir)) {
       try {
         pre.installAll();
@@ -23679,7 +23682,7 @@ async function setup(cwd2 = process.cwd(), options = {}) {
   console.log(`
 ${texts.setup.nextStep}`);
 }
-function copySkillFiles(cwd2, language, texts) {
+function copySkillFiles(cwd, language, texts) {
   console.log(`
 \uD83D\uDCE6 ${texts.setup.copyingSkills}`);
   const pluginRoot = process.env.CLAUDE_PLUGIN_ROOT;
@@ -23687,7 +23690,7 @@ function copySkillFiles(cwd2, language, texts) {
     console.log(texts.setupCmd.pluginRootNotSet);
     return;
   }
-  const toolboxDir = getToolboxDir(cwd2);
+  const toolboxDir = getToolboxDir(cwd);
   const skillName = "projmnt4claude";
   const targetDir = path3.join(toolboxDir, skillName);
   ensureDir(targetDir);
@@ -23726,11 +23729,11 @@ init_path();
 init_prompt_templates();
 init_config();
 import * as fs6 from "fs";
-function readConfig2(cwd2 = process.cwd()) {
-  if (!isInitialized(cwd2)) {
+function readConfig2(cwd = process.cwd()) {
+  if (!isInitialized(cwd)) {
     return null;
   }
-  const configPath = getConfigPath(cwd2);
+  const configPath = getConfigPath(cwd);
   try {
     const content = fs6.readFileSync(configPath, "utf-8");
     return JSON.parse(content);
@@ -23738,8 +23741,8 @@ function readConfig2(cwd2 = process.cwd()) {
     return null;
   }
 }
-function writeConfig2(config, cwd2 = process.cwd()) {
-  const configPath = getConfigPath(cwd2);
+function writeConfig2(config, cwd = process.cwd()) {
+  const configPath = getConfigPath(cwd);
   fs6.writeFileSync(configPath, JSON.stringify(config, null, 2), "utf-8");
 }
 function getConfigValue2(config, key) {
@@ -23821,12 +23824,12 @@ function validateConfigValue2(key, value, schema) {
       break;
   }
 }
-function listConfig2(cwd2 = process.cwd()) {
-  if (!isInitialized(cwd2)) {
+function listConfig2(cwd = process.cwd()) {
+  if (!isInitialized(cwd)) {
     console.error("Error: Project not initialized. Please run `projmnt4claude setup` first");
     process.exit(1);
   }
-  const config = readConfig2(cwd2);
+  const config = readConfig2(cwd);
   if (!config) {
     console.error("Error: Cannot read configuration file");
     process.exit(1);
@@ -23903,12 +23906,12 @@ function listConfig2(cwd2 = process.cwd()) {
   }
   console.log("");
 }
-function getConfig2(key, cwd2 = process.cwd()) {
-  if (!isInitialized(cwd2)) {
+function getConfig2(key, cwd = process.cwd()) {
+  if (!isInitialized(cwd)) {
     console.error("Error: Project not initialized. Please run `projmnt4claude setup` first");
     process.exit(1);
   }
-  const config = readConfig2(cwd2);
+  const config = readConfig2(cwd);
   if (!config) {
     console.error("Error: Cannot read configuration file");
     process.exit(1);
@@ -23920,12 +23923,12 @@ function getConfig2(key, cwd2 = process.cwd()) {
   }
   console.log(value);
 }
-function setConfig2(key, value, cwd2 = process.cwd()) {
-  if (!isInitialized(cwd2)) {
+function setConfig2(key, value, cwd = process.cwd()) {
+  if (!isInitialized(cwd)) {
     console.error("Error: Project not initialized. Please run `projmnt4claude setup` first");
     process.exit(1);
   }
-  const config = readConfig2(cwd2);
+  const config = readConfig2(cwd);
   if (!config) {
     console.error("Error: Cannot read configuration file");
     process.exit(1);
@@ -23984,7 +23987,7 @@ function setConfig2(key, value, cwd2 = process.cwd()) {
     process.exit(1);
   }
   const newConfig = setConfigValue2(config, key, value);
-  writeConfig2(newConfig, cwd2);
+  writeConfig2(newConfig, cwd);
   console.log(`✓ Set ${key} = ${value}`);
 }
 
@@ -24059,10 +24062,10 @@ function getCallStack() {
   } catch {}
   return stack;
 }
-function getExecutionContext(cwd2 = process.cwd()) {
+function getExecutionContext(cwd = process.cwd()) {
   const env = process.env;
   return {
-    cwd: cwd2,
+    cwd,
     user: env.USER || env.USERNAME,
     hostname: env.HOSTNAME || env.COMPUTERNAME,
     pid: process.pid,
@@ -24079,27 +24082,27 @@ function getExecutionContext(cwd2 = process.cwd()) {
     fullCommand: process.argv.join(" ")
   };
 }
-function getBatchUpdateLogPath(cwd2 = process.cwd()) {
-  const logsDir = getLogsDir(cwd2);
+function getBatchUpdateLogPath(cwd = process.cwd()) {
+  const logsDir = getLogsDir(cwd);
   const date = new Date().toISOString().split("T")[0];
   return path9.join(logsDir, `batch-update-${date}.log`);
 }
-function writeBatchUpdateLog(entry, cwd2 = process.cwd()) {
-  const logsDir = getLogsDir(cwd2);
+function writeBatchUpdateLog(entry, cwd = process.cwd()) {
+  const logsDir = getLogsDir(cwd);
   ensureDir(logsDir);
-  const logPath = getBatchUpdateLogPath(cwd2);
+  const logPath = getBatchUpdateLogPath(cwd);
   const fullEntry = {
     ...entry,
     timestamp: new Date().toISOString(),
     source: detectOperationSource(),
-    context: getExecutionContext(cwd2)
+    context: getExecutionContext(cwd)
   };
   const logLine = JSON.stringify(fullEntry) + `
 `;
   fs13.appendFileSync(logPath, logLine, "utf-8");
 }
-function queryBatchUpdateLogs(options = {}, cwd2 = process.cwd()) {
-  const logsDir = getLogsDir(cwd2);
+function queryBatchUpdateLogs(options = {}, cwd = process.cwd()) {
+  const logsDir = getLogsDir(cwd);
   if (!fs13.existsSync(logsDir)) {
     return [];
   }
@@ -24171,8 +24174,8 @@ function formatLogList(entries, verbose = false) {
   return lines.join(`
 `);
 }
-function showLogSummary(cwd2 = process.cwd()) {
-  const entries = queryBatchUpdateLogs({}, cwd2);
+function showLogSummary(cwd = process.cwd()) {
+  const entries = queryBatchUpdateLogs({}, cwd);
   if (entries.length === 0) {
     return "暂无 batch-update 操作日志";
   }
@@ -24251,8 +24254,8 @@ function parseCheckpoints(checkpointPath) {
 function generateCheckpointToken() {
   return crypto.randomBytes(16).toString("hex");
 }
-function hasValidCheckpoints(checkpointPathOrContent, isContent = false, cwd2) {
-  const texts = t(cwd2);
+function hasValidCheckpoints(checkpointPathOrContent, isContent = false, cwd) {
+  const texts = t(cwd);
   let content;
   if (isContent && checkpointPathOrContent !== null) {
     content = checkpointPathOrContent;
@@ -24299,8 +24302,8 @@ function hasValidCheckpoints(checkpointPathOrContent, isContent = false, cwd2) {
   }
   return { valid: true, reason: "" };
 }
-function displayCheckpointCreationWarning(taskId, cwd2) {
-  const texts = t(cwd2);
+function displayCheckpointCreationWarning(taskId, cwd) {
+  const texts = t(cwd);
   console.log("");
   console.log("━".repeat(SEPARATOR_WIDTH));
   console.log(texts.taskCommand.checkpointQualityReminder);
@@ -24321,8 +24324,8 @@ function displayCheckpointCreationWarning(taskId, cwd2) {
   console.log("\uD83D\uDCA1 " + texts.taskCommand.tipStrictValidation);
   console.log("━".repeat(SEPARATOR_WIDTH));
 }
-function validateTaskCheckpointCommands(taskId, cwd2) {
-  const task = readTaskMeta(taskId, cwd2);
+function validateTaskCheckpointCommands(taskId, cwd) {
+  const task = readTaskMeta(taskId, cwd);
   if (!task?.checkpoints)
     return [];
   const warnings = [];
@@ -24334,10 +24337,10 @@ function validateTaskCheckpointCommands(taskId, cwd2) {
   }
   return warnings;
 }
-function displayCheckpointVerificationWarnings(warnings, cwd2) {
+function displayCheckpointVerificationWarnings(warnings, cwd) {
   if (warnings.length === 0)
     return;
-  const texts = t(cwd2);
+  const texts = t(cwd);
   console.log("");
   console.log("━".repeat(SEPARATOR_WIDTH));
   console.log(texts.taskCommand.missingCheckpointVerificationCommands);
@@ -24375,24 +24378,24 @@ function extractFileReferencesFromText(text) {
   }
   return files;
 }
-function findMissingFiles(filePaths, cwd2) {
+function findMissingFiles(filePaths, cwd) {
   const missing = [];
   for (const fp of filePaths) {
-    const absolutePath = path11.resolve(cwd2, fp);
+    const absolutePath = path11.resolve(cwd, fp);
     if (!fs15.existsSync(absolutePath)) {
       missing.push(fp);
     }
   }
   return missing;
 }
-async function validateFileReferences(description, title, nonInteractive, cwd2) {
+async function validateFileReferences(description, title, nonInteractive, cwd) {
   const source = `${title || ""}
 ${description || ""}`;
   const fileRefs = extractFileReferencesFromText(source);
   if (fileRefs.length === 0) {
     return { proceed: true, missingFiles: [] };
   }
-  const missingFiles = findMissingFiles(fileRefs, cwd2);
+  const missingFiles = findMissingFiles(fileRefs, cwd);
   if (missingFiles.length === 0) {
     return { proceed: true, missingFiles: [] };
   }
@@ -24413,8 +24416,8 @@ ${description || ""}`;
   });
   return { proceed: response.proceed !== false, missingFiles };
 }
-async function createTask(options = {}, cwd2 = process.cwd()) {
-  if (!isInitialized(cwd2)) {
+async function createTask(options = {}, cwd = process.cwd()) {
+  if (!isInitialized(cwd)) {
     console.error("Error: Project not initialized. Please run `projmnt4claude setup` first");
     process.exit(1);
   }
@@ -24427,15 +24430,15 @@ async function createTask(options = {}, cwd2 = process.cwd()) {
         console.error(`Error: Invalid task ID format '${options.id}'`);
         process.exit(1);
       }
-      if (taskExists(options.id, cwd2)) {
+      if (taskExists(options.id, cwd)) {
         console.error(`Error: Task ID '${options.id}' already exists`);
         process.exit(1);
       }
       taskId2 = options.id;
     } else {
-      taskId2 = generateNewTaskId(cwd2, taskType, taskPriority, options.title);
+      taskId2 = generateNewTaskId(cwd, taskType, taskPriority, options.title);
     }
-    const fileValidation2 = await validateFileReferences(options.description, options.title, true, cwd2);
+    const fileValidation2 = await validateFileReferences(options.description, options.title, true, cwd);
     if (!fileValidation2.proceed) {
       console.log("Task creation cancelled");
       process.exit(0);
@@ -24487,7 +24490,7 @@ async function createTask(options = {}, cwd2 = process.cwd()) {
       newValue: "open"
     });
     if ((options.aiEnhancement || options.potentialDependencies) && options.description) {
-      const existingTasks = getAllTasks(cwd2);
+      const existingTasks = getAllTasks(cwd);
       const inferredDeps = inferDependencies(options.description, existingTasks, { keywordHints: options.potentialDependencies });
       if (inferredDeps.length > 0) {
         task2.dependencies = inferredDeps.map((d) => d.depTaskId);
@@ -24496,7 +24499,7 @@ async function createTask(options = {}, cwd2 = process.cwd()) {
     const referencedFiles = finalRelatedFiles.length > 0 ? finalRelatedFiles : extractFilePaths(task2.description || "", { includeBareFilenames: false });
     const fileWarnings = [];
     for (const file of referencedFiles) {
-      if (!fs15.existsSync(path11.join(cwd2, file))) {
+      if (!fs15.existsSync(path11.join(cwd, file))) {
         fileWarnings.push(file);
       }
     }
@@ -24513,8 +24516,8 @@ async function createTask(options = {}, cwd2 = process.cwd()) {
       }
       finalCheckpoints = filterResult.kept;
     }
-    writeTaskMeta(task2, cwd2);
-    const taskDir2 = path11.join(getTasksDir(cwd2), taskId2);
+    writeTaskMeta(task2, cwd);
+    const taskDir2 = path11.join(getTasksDir(cwd), taskId2);
     const checkpointPath2 = path11.join(taskDir2, "checkpoint.md");
     let checkpointContent;
     if (finalCheckpoints.length > 0) {
@@ -24542,13 +24545,13 @@ ${finalCheckpoints.map((cp) => `- [ ] ${cp}`).join(`
     if (!options.skipValidation) {
       const validation = hasValidCheckpoints(checkpointPath2, false);
       if (!validation.valid) {
-        displayCheckpointCreationWarning(taskId2, cwd2);
+        displayCheckpointCreationWarning(taskId2, cwd);
       }
     }
-    syncCheckpointsToMeta(taskId2, cwd2);
-    const cpWarnings2 = validateTaskCheckpointCommands(taskId2, cwd2);
+    syncCheckpointsToMeta(taskId2, cwd);
+    const cpWarnings2 = validateTaskCheckpointCommands(taskId2, cwd);
     displayCheckpointVerificationWarnings(cpWarnings2);
-    const allExistingTasks = getAllTasks(cwd2);
+    const allExistingTasks = getAllTasks(cwd);
     const depGraph = DependencyGraph.fromTasks(allExistingTasks);
     const depValidation = validateNewTaskDeps(taskId2, task2.dependencies || [], depGraph, allExistingTasks);
     if (depValidation.warnings.length > 0) {
@@ -24600,15 +24603,15 @@ ${finalCheckpoints.map((cp) => `- [ ] ${cp}`).join(`
       console.error(`Error: Invalid task ID format '${options.id}'`);
       process.exit(1);
     }
-    if (taskExists(options.id, cwd2)) {
+    if (taskExists(options.id, cwd)) {
       console.error(`Error: Task ID '${options.id}' already exists`);
       process.exit(1);
     }
     taskId = options.id;
   } else {
-    taskId = generateNewTaskId(cwd2, "feature", response.priority, response.title);
+    taskId = generateNewTaskId(cwd, "feature", response.priority, response.title);
   }
-  const fileValidation = await validateFileReferences(response.description, response.title, false, cwd2);
+  const fileValidation = await validateFileReferences(response.description, response.title, false, cwd);
   if (!fileValidation.proceed) {
     console.log("Task creation cancelled");
     process.exit(0);
@@ -24626,8 +24629,8 @@ ${finalCheckpoints.map((cp) => `- [ ] ${cp}`).join(`
   if (fileValidation.missingFiles.length > 0) {
     task.fileWarnings = fileValidation.missingFiles;
   }
-  writeTaskMeta(task, cwd2);
-  const taskDir = path11.join(getTasksDir(cwd2), taskId);
+  writeTaskMeta(task, cwd);
+  const taskDir = path11.join(getTasksDir(cwd), taskId);
   const checkpointPath = path11.join(taskDir, "checkpoint.md");
   fs15.writeFileSync(checkpointPath, defaultCheckpointContent, "utf-8");
   console.log(`
@@ -24638,21 +24641,21 @@ ${finalCheckpoints.map((cp) => `- [ ] ${cp}`).join(`
   if (!options.skipValidation) {
     const validation = hasValidCheckpoints(checkpointPath, false);
     if (!validation.valid) {
-      displayCheckpointCreationWarning(taskId, cwd2);
+      displayCheckpointCreationWarning(taskId, cwd);
     }
   }
-  syncCheckpointsToMeta(taskId, cwd2);
-  const cpWarnings = validateTaskCheckpointCommands(taskId, cwd2);
+  syncCheckpointsToMeta(taskId, cwd);
+  const cpWarnings = validateTaskCheckpointCommands(taskId, cwd);
   displayCheckpointVerificationWarnings(cpWarnings);
   return task;
 }
-function listTasks(options = {}, cwd2 = process.cwd()) {
-  const texts = t(cwd2);
-  if (!isInitialized(cwd2)) {
+function listTasks(options = {}, cwd = process.cwd()) {
+  const texts = t(cwd);
+  if (!isInitialized(cwd)) {
     console.error(texts.task.projectNotInitialized);
     process.exit(1);
   }
-  let tasks = getAllTasks(cwd2);
+  let tasks = getAllTasks(cwd);
   if (options.status) {
     tasks = tasks.filter((t2) => t2.status === options.status);
   }
@@ -24728,8 +24731,8 @@ function listTasks(options = {}, cwd2 = process.cwd()) {
   for (const task of parentTasks) {
     const id = task.id.padEnd(11);
     const title = task.title.substring(0, 28).padEnd(28);
-    const priority = formatPriority(task.priority, cwd2).padEnd(8);
-    const status = formatStatus(task.status, cwd2);
+    const priority = formatPriority(task.priority, cwd).padEnd(8);
+    const status = formatStatus(task.status, cwd);
     const discussionIcon = task.needsDiscussion ? " \uD83D\uDCAC" : "";
     const reqChangeIcon = task.requirementHistory && task.requirementHistory.length > 0 ? ` \uD83D\uDCDD${task.requirementHistory.length}` : "";
     const subtaskCount = task.subtaskIds?.length || subtaskMap.get(task.id)?.length || 0;
@@ -24739,8 +24742,8 @@ function listTasks(options = {}, cwd2 = process.cwd()) {
     for (const subtask of subtasks) {
       const subId = `  └─ ${subtask.id}`.substring(0, 11).padEnd(11);
       const subTitle = subtask.title.substring(0, 26).padEnd(26);
-      const subPriority = formatPriority(subtask.priority, cwd2).padEnd(8);
-      const subStatus = formatStatus(subtask.status, cwd2);
+      const subPriority = formatPriority(subtask.priority, cwd).padEnd(8);
+      const subStatus = formatStatus(subtask.status, cwd);
       console.log(`${subId} | ${subTitle} | ${subPriority} | ${subStatus}`);
     }
   }
@@ -24850,8 +24853,8 @@ function formatLocalTime(isoString) {
     minute: "2-digit"
   });
 }
-function formatRelativeTime(isoString, cwd2) {
-  const texts = t(cwd2);
+function formatRelativeTime(isoString, cwd) {
+  const texts = t(cwd);
   const date = new Date(isoString);
   const now = new Date;
   const diffMs = now.getTime() - date.getTime();
@@ -24868,8 +24871,8 @@ function formatRelativeTime(isoString, cwd2) {
     return texts.task.timeDaysAgo.replace("{days}", String(diffDays));
   return formatLocalTime(isoString);
 }
-function showTask(taskId, options = {}, cwd2 = process.cwd()) {
-  if (!isInitialized(cwd2)) {
+function showTask(taskId, options = {}, cwd = process.cwd()) {
+  if (!isInitialized(cwd)) {
     console.error("Error: Project not initialized. Please run `projmnt4claude setup` first");
     process.exit(1);
   }
@@ -24877,7 +24880,7 @@ function showTask(taskId, options = {}, cwd2 = process.cwd()) {
     console.error(`Error: Invalid task ID format '${taskId}'`);
     process.exit(1);
   }
-  const task = readTaskMeta(taskId, cwd2);
+  const task = readTaskMeta(taskId, cwd);
   if (!task) {
     console.error(`Error: Task '${taskId}' does not exist`);
     process.exit(1);
@@ -24887,21 +24890,21 @@ function showTask(taskId, options = {}, cwd2 = process.cwd()) {
     return;
   }
   if (options.history) {
-    showTaskHistory(taskId, cwd2);
+    showTaskHistory(taskId, cwd);
     return;
   }
   if (options.compact) {
-    showTaskCompact(task, cwd2);
+    showTaskCompact(task, cwd);
     return;
   }
   if (options.format !== "classic" && !options.verbose) {
-    showTaskPanel(task, options, cwd2);
+    showTaskPanel(task, options, cwd);
     return;
   }
-  showTaskClassic(task, options, cwd2);
+  showTaskClassic(task, options, cwd);
 }
-function showTaskCompact(task, cwd2) {
-  const texts = t(cwd2);
+function showTaskCompact(task, cwd) {
+  const texts = t(cwd);
   const statusIcon = getStatusIcon(task.status);
   const typeMap = {
     bug: texts.task.typeBug,
@@ -24913,15 +24916,15 @@ function showTaskCompact(task, cwd2) {
   };
   const typeText = typeMap[task.type] || task.type;
   console.log(`${statusIcon} ${task.id}: ${task.title}`);
-  console.log(`   Status: ${formatStatus(task.status, cwd2)} | Priority: ${formatPriority(task.priority, cwd2)} | Type: ${typeText}`);
+  console.log(`   Status: ${formatStatus(task.status, cwd)} | Priority: ${formatPriority(task.priority, cwd)} | Type: ${typeText}`);
   if (task.description) {
     console.log(`   Description: ${task.description.substring(0, 120)}${task.description.length > 120 ? "..." : ""}`);
   }
   if (task.dependencies.length > 0) {
     console.log(`   Dependencies: ${task.dependencies.join(", ")}`);
   }
-  if (cwd2) {
-    const taskDir = path11.join(getTasksDir(cwd2), task.id);
+  if (cwd) {
+    const taskDir = path11.join(getTasksDir(cwd), task.id);
     const checkpointPath = path11.join(taskDir, "checkpoint.md");
     if (fs15.existsSync(checkpointPath)) {
       const content = fs15.readFileSync(checkpointPath, "utf-8");
@@ -24944,7 +24947,7 @@ function showTaskCompact(task, cwd2) {
   if (task.requirementHistory && task.requirementHistory.length > 0) {
     console.log(`   \uD83D\uDCDD ${texts.task.requirementChanges}: ${task.requirementHistory.length}`);
   }
-  console.log(`   ${texts.task.createdAt}: ${formatRelativeTime(task.createdAt, cwd2)} · ${texts.task.updatedAt}: ${formatRelativeTime(task.updatedAt, cwd2)}`);
+  console.log(`   ${texts.task.createdAt}: ${formatRelativeTime(task.createdAt, cwd)} · ${texts.task.updatedAt}: ${formatRelativeTime(task.updatedAt, cwd)}`);
 }
 function getStatusIcon(status) {
   const icons = {
@@ -24994,8 +24997,8 @@ function padByDisplayWidth(str, targetWidth) {
   }
   return str + " ".repeat(targetWidth - currentWidth);
 }
-function showTaskPanel(task, options, cwd2) {
-  const texts = t(cwd2);
+function showTaskPanel(task, options, cwd) {
+  const texts = t(cwd);
   const termWidth = process.stdout.columns || 80;
   const width = Math.min(Math.max(termWidth, 60), 100);
   const hLine = "─".repeat(width - 2);
@@ -25045,11 +25048,11 @@ function showTaskPanel(task, options, cwd2) {
       console.log(`│ ${padByDisplayWidth(moreDesc, width - 3)}│`);
     }
   }
-  const taskDir = path11.join(getTasksDir(cwd2), task.id);
+  const taskDir = path11.join(getTasksDir(cwd), task.id);
   const checkpointPath = path11.join(taskDir, "checkpoint.md");
   if (fs15.existsSync(checkpointPath)) {
     if (options.checkpoints) {
-      const checkpointsMeta = listCheckpoints(task.id, cwd2);
+      const checkpointsMeta = listCheckpoints(task.id, cwd);
       if (checkpointsMeta.length > 0) {
         console.log(`├${hLine}┤`);
         const sectionTitle = "\uD83D\uDCCB Checkpoints";
@@ -25109,7 +25112,7 @@ function showTaskPanel(task, options, cwd2) {
       let doneCount = 0;
       let activeCount = 0;
       for (const subId of task.subtaskIds) {
-        const sub = readTaskMeta(subId, cwd2);
+        const sub = readTaskMeta(subId, cwd);
         if (sub && TERMINAL_STATUSES_SET2.has(normalizeStatus(sub.status)))
           doneCount++;
         else if (sub && (sub.status === "in_progress" || sub.status === "wait_review" || sub.status === "wait_qa" || sub.status === "wait_evaluation"))
@@ -25142,7 +25145,7 @@ function showTaskPanel(task, options, cwd2) {
   }
   console.log(`├${hLine}┤`);
   const createdTime = formatLocalTime(task.createdAt);
-  const updatedTime = formatRelativeTime(task.updatedAt, cwd2);
+  const updatedTime = formatRelativeTime(task.updatedAt, cwd);
   const timeLine = `\uD83D\uDCC5 ${texts.task.createdAt}: ${createdTime}  ·  ${texts.task.updatedAt}: ${updatedTime}`;
   console.log(`│ ${padByDisplayWidth(timeLine, width - 3)}│`);
   if (task.reopenCount && task.reopenCount > 0) {
@@ -25180,7 +25183,7 @@ function makeSectionHeader(title) {
   const dashes = "─".repeat(Math.max(0, SEPARATOR_WIDTH - usedWidth));
   return `${prefix}${title}${suffix}${dashes}`;
 }
-function showTaskClassic(task, options, cwd2) {
+function showTaskClassic(task, options, cwd) {
   const line = "━".repeat(SEPARATOR_WIDTH);
   const statusIcon = getStatusIcon(task.status);
   console.log("");
@@ -25214,7 +25217,7 @@ function showTaskClassic(task, options, cwd2) {
     }
     if (task.subtaskIds && task.subtaskIds.length > 0) {
       const subtaskDisplays = task.subtaskIds.map((subId) => {
-        const sub = readTaskMeta(subId, cwd2);
+        const sub = readTaskMeta(subId, cwd);
         if (sub) {
           return `${getStatusIcon(sub.status)} ${subId}`;
         }
@@ -25270,11 +25273,11 @@ function showTaskClassic(task, options, cwd2) {
       });
     }
   }
-  const taskDir = path11.join(getTasksDir(cwd2), task.id);
+  const taskDir = path11.join(getTasksDir(cwd), task.id);
   const checkpointPath = path11.join(taskDir, "checkpoint.md");
   console.log("");
   if (options.checkpoints || options.verbose) {
-    const checkpointsMeta = listCheckpoints(task.id, cwd2);
+    const checkpointsMeta = listCheckpoints(task.id, cwd);
     if (checkpointsMeta.length > 0) {
       console.log(makeSectionHeader("Checkpoints"));
       console.log("");
@@ -25383,23 +25386,23 @@ function wrapText(text, maxWidth) {
   }
   return lines;
 }
-async function updateTask(taskId, options, cwd2 = process.cwd()) {
-  if (!isInitialized(cwd2)) {
+async function updateTask(taskId, options, cwd = process.cwd()) {
+  if (!isInitialized(cwd)) {
     console.error("Error: Project not initialized. Please run `projmnt4claude setup` first");
     process.exit(1);
   }
-  const task = readTaskMeta(taskId, cwd2);
+  const task = readTaskMeta(taskId, cwd);
   if (!task) {
     console.error(`Error: Task '${taskId}' does not exist`);
     process.exit(1);
   }
   if (options.status === "resolved") {
-    const taskDir = path11.join(getTasksDir(cwd2), taskId);
+    const taskDir = path11.join(getTasksDir(cwd), taskId);
     const checkpointPath = path11.join(taskDir, "checkpoint.md");
     if (!options.token) {
       if (!fs15.existsSync(checkpointPath)) {
         task.status = options.status;
-        writeTaskMeta(task, cwd2);
+        writeTaskMeta(task, cwd);
         console.log(`✅ Task ${taskId} updated to resolved status`);
         return;
       }
@@ -25447,7 +25450,7 @@ async function updateTask(taskId, options, cwd2 = process.cwd()) {
       }
       task.status = options.status;
       task.checkpointConfirmationToken = undefined;
-      writeTaskMeta(task, cwd2);
+      writeTaskMeta(task, cwd);
       console.log(`✅ Task ${taskId} updated to resolved status`);
       return;
     }
@@ -25548,7 +25551,7 @@ async function updateTask(taskId, options, cwd2 = process.cwd()) {
     console.log("No fields specified for update");
     return;
   }
-  writeTaskMeta(task, cwd2);
+  writeTaskMeta(task, cwd);
   console.log(`✅ Task ${taskId} updated`);
   if (options.status || options.priority) {
     const commandArgs = process.argv.slice(2);
@@ -25573,7 +25576,7 @@ async function updateTask(taskId, options, cwd2 = process.cwd()) {
         updatedCount: 1,
         filteredCount: 0
       }
-    }, cwd2);
+    }, cwd);
   }
   if ((options.status === "resolved" || options.status === "closed") && !options.noSync) {
     const childTasks = task.subtaskIds || [];
@@ -25581,14 +25584,14 @@ async function updateTask(taskId, options, cwd2 = process.cwd()) {
       console.log("");
       console.log(`⚠️  Detected ${childTasks.length} subtasks:`);
       for (const childId of childTasks) {
-        const childTask = readTaskMeta(childId, cwd2);
+        const childTask = readTaskMeta(childId, cwd);
         if (childTask) {
           console.log(`   - ${childId} (status: ${childTask.status})`);
         }
       }
       if (options.syncChildren) {
         for (const childId of childTasks) {
-          const childTask = readTaskMeta(childId, cwd2);
+          const childTask = readTaskMeta(childId, cwd);
           if (childTask && childTask.status !== "resolved" && childTask.status !== "closed") {
             childTask.status = options.status;
             if (!childTask.history) {
@@ -25602,7 +25605,7 @@ async function updateTask(taskId, options, cwd2 = process.cwd()) {
               newValue: options.status,
               reason: "Parent taskCompleted, Subtasks功能已在Parent task中实现"
             });
-            writeTaskMeta(childTask, cwd2);
+            writeTaskMeta(childTask, cwd);
             console.log(`   ✅ ${childId} synced to ${options.status}`);
           }
         }
@@ -25616,12 +25619,12 @@ async function updateTask(taskId, options, cwd2 = process.cwd()) {
     }
   }
 }
-async function reopenTask(taskId, options, cwd2 = process.cwd()) {
-  if (!isInitialized(cwd2)) {
+async function reopenTask(taskId, options, cwd = process.cwd()) {
+  if (!isInitialized(cwd)) {
     console.error("Error: Project not initialized. Please run `projmnt4claude setup` first");
     process.exit(1);
   }
-  const task = readTaskMeta(taskId, cwd2);
+  const task = readTaskMeta(taskId, cwd);
   if (!task) {
     console.error(`Error: Task '${taskId}' does not exist`);
     process.exit(1);
@@ -25680,7 +25683,7 @@ async function reopenTask(taskId, options, cwd2 = process.cwd()) {
     reason: options.reason || options.qaFeedback || "用户发起 Reopen, Status映射为 open + reopenCount 递增"
   });
   task.updatedAt = new Date().toISOString();
-  writeTaskMeta(task, cwd2);
+  writeTaskMeta(task, cwd);
   console.log(`\uD83D\uDD01 Task reopened (#${task.reopenCount} times)`);
   console.log(`   ${oldStatus} → open (reopenCount: ${task.reopenCount})`);
   if (options.enhancement) {
@@ -25694,16 +25697,16 @@ async function reopenTask(taskId, options, cwd2 = process.cwd()) {
   }
   console.log(`✅ Task ${taskId} reopened successfully`);
 }
-async function submitTask(taskId, options = {}, cwd2 = process.cwd()) {
+async function submitTask(taskId, options = {}, cwd = process.cwd()) {
   console.warn("");
   console.warn("⚠️ Warning: task submit command is deprecated and will be removed in a future version");
   console.warn("   Please use alternative command: projmnt4claude task update <taskId> --status wait_evaluation");
   console.warn("");
-  if (!isInitialized(cwd2)) {
+  if (!isInitialized(cwd)) {
     console.error("Error: Project not initialized. Please run `projmnt4claude setup` first");
     process.exit(1);
   }
-  const task = readTaskMeta(taskId, cwd2);
+  const task = readTaskMeta(taskId, cwd);
   if (!task) {
     console.error(`Error: Task '${taskId}' does not exist`);
     process.exit(1);
@@ -25730,7 +25733,7 @@ async function submitTask(taskId, options = {}, cwd2 = process.cwd()) {
     task.history = [];
   }
   task.history.push(historyEntry);
-  writeTaskMeta(task, cwd2);
+  writeTaskMeta(task, cwd);
   console.log("");
   console.log("━".repeat(SEPARATOR_WIDTH));
   console.log("\uD83D\uDCE4 Task submitted for verification");
@@ -25747,17 +25750,17 @@ async function submitTask(taskId, options = {}, cwd2 = process.cwd()) {
   console.log("After verification passes, task status will auto-update to resolved");
   console.log("");
 }
-async function validateTask(taskId, options = {}, cwd2 = process.cwd()) {
+async function validateTask(taskId, options = {}, cwd = process.cwd()) {
   const { validateTaskCompletion: validateTaskCompletion2, generateValidationReport: generateValidationReport2 } = await Promise.resolve().then(() => (init_validation(), exports_validation));
   console.warn("[Notice]: task validate command is deprecated");
   console.warn("   Use: projmnt4claude task update <taskId> --status wait_evaluation");
   console.warn("   Validation will be automatically executed by harness evaluation phase");
   console.warn("");
-  if (!isInitialized(cwd2)) {
+  if (!isInitialized(cwd)) {
     console.error("Error: Project not initialized. Please run `projmnt4claude setup` first");
     process.exit(1);
   }
-  const task = readTaskMeta(taskId, cwd2);
+  const task = readTaskMeta(taskId, cwd);
   if (!task) {
     console.error(`Error: Task '${taskId}' does not exist`);
     process.exit(1);
@@ -25774,7 +25777,7 @@ async function validateTask(taskId, options = {}, cwd2 = process.cwd()) {
   console.log("\uD83D\uDD0D Starting task verification");
   console.log("━".repeat(SEPARATOR_WIDTH));
   console.log("");
-  const result = await validateTaskCompletion2(taskId, cwd2, {
+  const result = await validateTaskCompletion2(taskId, cwd, {
     executeCommands: options.executeCommands !== false,
     collectEvidence: true
   });
@@ -25795,7 +25798,7 @@ async function validateTask(taskId, options = {}, cwd2 = process.cwd()) {
         task.history = [];
       }
       task.history.push(historyEntry);
-      writeTaskMeta(task, cwd2);
+      writeTaskMeta(task, cwd);
       console.log("✅ Task status updated to resolved");
     } else {
       console.log("✅ Verification passed, can manually update status:");
@@ -25816,21 +25819,21 @@ async function validateTask(taskId, options = {}, cwd2 = process.cwd()) {
       task.history = [];
     }
     task.history.push(historyEntry);
-    writeTaskMeta(task, cwd2);
+    writeTaskMeta(task, cwd);
     console.log("❌ Task returned to in_progress status, please fix issues and resubmit");
   }
 }
-async function deleteTask(taskId, force = false, cwd2 = process.cwd()) {
-  if (!isInitialized(cwd2)) {
+async function deleteTask(taskId, force = false, cwd = process.cwd()) {
+  if (!isInitialized(cwd)) {
     console.error("Error: Project not initialized. Please run `projmnt4claude setup` first");
     process.exit(1);
   }
-  const task = readTaskMeta(taskId, cwd2);
+  const task = readTaskMeta(taskId, cwd);
   if (!task) {
     console.error(`Error: Task '${taskId}' does not exist`);
     process.exit(1);
   }
-  const allTasks = getAllTasks(cwd2);
+  const allTasks = getAllTasks(cwd);
   const graph = DependencyGraph.fromTasks(allTasks);
   const downstream = graph.getDirectDownstream(taskId);
   const allDownstream = graph.getAllDownstream(taskId);
@@ -25838,7 +25841,7 @@ async function deleteTask(taskId, force = false, cwd2 = process.cwd()) {
     console.log("");
     console.log(`⚠️  This task has ${downstream.length} direct dependents and ${allDownstream.length} transitive dependents:`);
     for (const depId of downstream.slice(0, 10)) {
-      const depTask = readTaskMeta(depId, cwd2);
+      const depTask = readTaskMeta(depId, cwd);
       const status = depTask ? formatStatus(depTask.status) : "❓";
       console.log(`   - ${depId} (${depTask?.title?.substring(0, 30) || "Unknown"} ${status})`);
     }
@@ -25861,24 +25864,24 @@ async function deleteTask(taskId, force = false, cwd2 = process.cwd()) {
       return;
     }
   }
-  const tasksDir = getTasksDir(cwd2);
-  const archiveDir = getArchiveDir(cwd2);
+  const tasksDir = getTasksDir(cwd);
+  const archiveDir = getArchiveDir(cwd);
   const taskPath = path11.join(tasksDir, taskId);
   const archivePath = path11.join(archiveDir, taskId);
   if (!fs15.existsSync(archiveDir)) {
     fs15.mkdirSync(archiveDir, { recursive: true });
   }
   task.status = "abandoned";
-  writeTaskMeta(task, cwd2);
+  writeTaskMeta(task, cwd);
   fs15.renameSync(taskPath, archivePath);
   console.log(`✅ Task ${taskId} Archived`);
 }
-function purgeTasks(options = {}, cwd2 = process.cwd()) {
-  if (!isInitialized(cwd2)) {
+function purgeTasks(options = {}, cwd = process.cwd()) {
+  if (!isInitialized(cwd)) {
     console.error("Error: Project not initialized. Please run `projmnt4claude setup` first");
     process.exit(1);
   }
-  const archiveDir = getArchiveDir(cwd2);
+  const archiveDir = getArchiveDir(cwd);
   if (!fs15.existsSync(archiveDir)) {
     const msg = "没有需要清除的 abandoned Task";
     if (options.json) {
@@ -25939,17 +25942,17 @@ Use  --force or -y to confirm deletion`);
     console.log(`✅ Purged ${purged}/${abandonedDirs.length}  abandoned Task`);
   }
 }
-function addDependency(taskId, depId, cwd2 = process.cwd()) {
-  if (!isInitialized(cwd2)) {
+function addDependency(taskId, depId, cwd = process.cwd()) {
+  if (!isInitialized(cwd)) {
     console.error("Error: Project not initialized. Please run `projmnt4claude setup` first");
     process.exit(1);
   }
-  const task = readTaskMeta(taskId, cwd2);
+  const task = readTaskMeta(taskId, cwd);
   if (!task) {
     console.error(`Error: Task '${taskId}' does not exist`);
     process.exit(1);
   }
-  const depTask = readTaskMeta(depId, cwd2);
+  const depTask = readTaskMeta(depId, cwd);
   if (!depTask) {
     console.error(`Error: Dependency Tasks '${depId}' does not exist`);
     process.exit(1);
@@ -25958,22 +25961,22 @@ function addDependency(taskId, depId, cwd2 = process.cwd()) {
     console.log(`Task ${taskId} already depends on ${depId}`);
     return;
   }
-  const allTasks = getAllTasks(cwd2);
+  const allTasks = getAllTasks(cwd);
   const graph = DependencyGraph.fromTasks(allTasks);
   if (!graph.addEdge(taskId, depId)) {
     console.error(`Error: Adding dependency ${depId} would create circular dependency (GATE-DEP-002)`);
     process.exit(1);
   }
   task.dependencies.push(depId);
-  writeTaskMeta(task, cwd2);
+  writeTaskMeta(task, cwd);
   console.log(`✅ Dependency added: ${taskId} -> ${depId}`);
 }
-function removeDependency(taskId, depId, cwd2 = process.cwd()) {
-  if (!isInitialized(cwd2)) {
+function removeDependency(taskId, depId, cwd = process.cwd()) {
+  if (!isInitialized(cwd)) {
     console.error("Error: Project not initialized. Please run `projmnt4claude setup` first");
     process.exit(1);
   }
-  const task = readTaskMeta(taskId, cwd2);
+  const task = readTaskMeta(taskId, cwd);
   if (!task) {
     console.error(`Error: Task '${taskId}' does not exist`);
     process.exit(1);
@@ -25983,11 +25986,11 @@ function removeDependency(taskId, depId, cwd2 = process.cwd()) {
     console.log(`Task ${taskId} does not depend on ${depId}`);
     return;
   }
-  const allTasks = getAllTasks(cwd2);
+  const allTasks = getAllTasks(cwd);
   const graph = DependencyGraph.fromTasks(allTasks);
   graph.removeEdge(taskId, depId);
   task.dependencies.splice(index, 1);
-  writeTaskMeta(task, cwd2);
+  writeTaskMeta(task, cwd);
   console.log(`✅ Dependency removed: ${taskId} -/-> ${depId}`);
   const remainingDeps = task.dependencies;
   if (remainingDeps.length === 0) {
@@ -25997,8 +26000,8 @@ function removeDependency(taskId, depId, cwd2 = process.cwd()) {
     }
   }
 }
-function formatPriority(priority, cwd2) {
-  const texts = t(cwd2);
+function formatPriority(priority, cwd) {
+  const texts = t(cwd);
   const map = {
     P0: `\uD83D\uDD34 ${texts.task.priorityP0}`,
     P1: `\uD83D\uDFE0 ${texts.task.priorityP1}`,
@@ -26015,8 +26018,8 @@ function formatPriority(priority, cwd2) {
   };
   return map[priority] || `❓ ${priority}`;
 }
-function formatStatus(status, cwd2) {
-  const texts = t(cwd2);
+function formatStatus(status, cwd) {
+  const texts = t(cwd);
   const map = {
     open: `⬜ ${texts.task.statusOpen}`,
     in_progress: `\uD83D\uDD35 ${texts.task.statusInProgress}`,
@@ -26088,12 +26091,12 @@ function showStatusGuide() {
   console.log("");
   console.log("━".repeat(SEPARATOR_WIDTH));
 }
-async function completeTask(taskId, options = {}, cwd2 = process.cwd()) {
-  if (!isInitialized(cwd2)) {
+async function completeTask(taskId, options = {}, cwd = process.cwd()) {
+  if (!isInitialized(cwd)) {
     console.error("Error: Project not initialized. Please run `projmnt4claude setup` first");
     process.exit(1);
   }
-  const task = readTaskMeta(taskId, cwd2);
+  const task = readTaskMeta(taskId, cwd);
   if (!task) {
     console.error(`Error: Task '${taskId}' does not exist`);
     process.exit(1);
@@ -26103,7 +26106,7 @@ async function completeTask(taskId, options = {}, cwd2 = process.cwd()) {
   console.log(`\uD83D\uDE80 One-click complete task: ${taskId}`);
   console.log("━".repeat(SEPARATOR_WIDTH));
   console.log("");
-  const taskDir = path11.join(getTasksDir(cwd2), taskId);
+  const taskDir = path11.join(getTasksDir(cwd), taskId);
   const checkpointPath = path11.join(taskDir, "checkpoint.md");
   if (fs15.existsSync(checkpointPath)) {
     const content = fs15.readFileSync(checkpointPath, "utf-8");
@@ -26140,7 +26143,7 @@ async function completeTask(taskId, options = {}, cwd2 = process.cwd()) {
     }
   }
   task.status = "resolved";
-  writeTaskMeta(task, cwd2);
+  writeTaskMeta(task, cwd);
   console.log("");
   console.log("━".repeat(SEPARATOR_WIDTH));
   console.log(`\uD83C\uDF89 Task ${taskId} Completed！`);
@@ -26176,7 +26179,7 @@ async function completeTask(taskId, options = {}, cwd2 = process.cwd()) {
           field: "completionNote",
           newValue: noteResponse.note
         });
-        const taskDir2 = path11.join(getTasksDir(cwd2), taskId);
+        const taskDir2 = path11.join(getTasksDir(cwd), taskId);
         const notesDir = path11.join(taskDir2, "notes");
         if (!fs15.existsSync(notesDir)) {
           fs15.mkdirSync(notesDir, { recursive: true });
@@ -26186,19 +26189,19 @@ async function completeTask(taskId, options = {}, cwd2 = process.cwd()) {
 
 ${noteResponse.note}
 `, "utf-8");
-        writeTaskMeta(task, cwd2);
+        writeTaskMeta(task, cwd);
         console.log("");
         console.log("✅ Completion note saved");
       }
     }
   }
 }
-function showTaskHistory(taskId, cwd2 = process.cwd()) {
-  if (!isInitialized(cwd2)) {
+function showTaskHistory(taskId, cwd = process.cwd()) {
+  if (!isInitialized(cwd)) {
     console.error("Error: Project not initialized. Please run `projmnt4claude setup` first");
     process.exit(1);
   }
-  const task = readTaskMeta(taskId, cwd2);
+  const task = readTaskMeta(taskId, cwd);
   if (!task) {
     console.error(`Error: Task '${taskId}' does not exist`);
     process.exit(1);
@@ -26256,8 +26259,8 @@ function showTaskHistory(taskId, cwd2 = process.cwd()) {
   console.log(`\uD83D\uDCCA Statistics: Total ${task.history.length}  history records, filtered ${meaningfulHistory.length} ${totalCount > MAX_HISTORY_DISPLAY ? `, showing last ${MAX_HISTORY_DISPLAY} ` : ""}`);
   console.log("");
 }
-function addHistoryEntry(taskId, entry, cwd2 = process.cwd()) {
-  const task = readTaskMeta(taskId, cwd2);
+function addHistoryEntry(taskId, entry, cwd = process.cwd()) {
+  const task = readTaskMeta(taskId, cwd);
   if (!task)
     return;
   if (!task.history) {
@@ -26273,10 +26276,10 @@ function addHistoryEntry(taskId, entry, cwd2 = process.cwd()) {
     relatedIssue: entry.relatedIssue,
     verificationDetails: entry.verificationDetails
   });
-  writeTaskMeta(task, cwd2);
+  writeTaskMeta(task, cwd);
 }
-async function executeTask(taskId, cwd2 = process.cwd()) {
-  if (!isInitialized(cwd2)) {
+async function executeTask(taskId, cwd = process.cwd()) {
+  if (!isInitialized(cwd)) {
     console.error("Error: Project not initialized. Please run `projmnt4claude setup` first");
     process.exit(1);
   }
@@ -26284,7 +26287,7 @@ async function executeTask(taskId, cwd2 = process.cwd()) {
     console.error(`Error: Invalid task ID format '${taskId}'`);
     process.exit(1);
   }
-  const task = readTaskMeta(taskId, cwd2);
+  const task = readTaskMeta(taskId, cwd);
   if (!task) {
     console.error(`Error: Task '${taskId}' does not exist`);
     process.exit(1);
@@ -26315,12 +26318,12 @@ async function executeTask(taskId, cwd2 = process.cwd()) {
   if (task.dependencies.length > 0) {
     console.log("");
     console.log("\uD83D\uDD17 Dependency Tasks:");
-    const allExTasks = getAllTasks(cwd2);
+    const allExTasks = getAllTasks(cwd);
     const exGraph = DependencyGraph.fromTasks(allExTasks);
     const upstreamIds = exGraph.getDirectUpstream(taskId);
     const terminalStatuses = new Set(["resolved", "closed"]);
     const depsStatus = task.dependencies.map((depId) => {
-      const depTask = readTaskMeta(depId, cwd2);
+      const depTask = readTaskMeta(depId, cwd);
       const status = depTask ? terminalStatuses.has(depTask.status) ? "✅" : "❌" : "❓";
       const upstreamValid = upstreamIds.includes(depId);
       const graphTag = upstreamValid ? "" : " (⚠️ in graphdoes not exist)";
@@ -26329,7 +26332,7 @@ async function executeTask(taskId, cwd2 = process.cwd()) {
     console.log(depsStatus.join(`
 `));
     const uncompletedDeps = task.dependencies.filter((depId) => {
-      const depTask = readTaskMeta(depId, cwd2);
+      const depTask = readTaskMeta(depId, cwd);
       return !depTask || !terminalStatuses.has(depTask.status);
     });
     if (uncompletedDeps.length > 0) {
@@ -26337,7 +26340,7 @@ async function executeTask(taskId, cwd2 = process.cwd()) {
       console.log("⚠️ Note: Incomplete dependencies exist, recommend completing them first.");
     }
   }
-  const taskDir = path11.join(getTasksDir(cwd2), taskId);
+  const taskDir = path11.join(getTasksDir(cwd), taskId);
   const checkpointPath = path11.join(taskDir, "checkpoint.md");
   console.log("");
   console.log("━".repeat(SEPARATOR_WIDTH));
@@ -26371,22 +26374,22 @@ async function executeTask(taskId, cwd2 = process.cwd()) {
     });
     if (response.start) {
       task.status = "in_progress";
-      writeTaskMeta(task, cwd2);
+      writeTaskMeta(task, cwd);
       console.log(`✅ Task ${taskId} status updated to"In Progress"`);
     }
   }
 }
-async function completeCheckpoint(taskId, options = {}, cwd2 = process.cwd()) {
-  if (!isInitialized(cwd2)) {
+async function completeCheckpoint(taskId, options = {}, cwd = process.cwd()) {
+  if (!isInitialized(cwd)) {
     console.error("Error: Project not initialized. Please run `projmnt4claude setup` first");
     process.exit(1);
   }
-  const task = readTaskMeta(taskId, cwd2);
+  const task = readTaskMeta(taskId, cwd);
   if (!task) {
     console.error(`Error: Task '${taskId}' does not exist`);
     process.exit(1);
   }
-  const taskDir = path11.join(getTasksDir(cwd2), taskId);
+  const taskDir = path11.join(getTasksDir(cwd), taskId);
   const checkpointPath = path11.join(taskDir, "checkpoint.md");
   if (!fs15.existsSync(checkpointPath)) {
     console.log("No checkpoint file");
@@ -26446,7 +26449,7 @@ async function completeCheckpoint(taskId, options = {}, cwd2 = process.cwd()) {
     console.log(`   projmnt4claude task update ${taskId} --status resolved`);
     if (options.yes) {
       task.status = "resolved";
-      writeTaskMeta(task, cwd2);
+      writeTaskMeta(task, cwd);
       console.log(`✅ Task ${taskId} auto-marked as resolved`);
     } else {
       const response = await import_prompts2.default({
@@ -26457,7 +26460,7 @@ async function completeCheckpoint(taskId, options = {}, cwd2 = process.cwd()) {
       });
       if (response.complete) {
         task.status = "resolved";
-        writeTaskMeta(task, cwd2);
+        writeTaskMeta(task, cwd);
         console.log(`✅ Task ${taskId} marked as resolved`);
       }
     }
@@ -26465,17 +26468,17 @@ async function completeCheckpoint(taskId, options = {}, cwd2 = process.cwd()) {
     console.log("⚠️ Some checkpoints failed, please continue working");
   }
 }
-async function verifyCheckpoint(taskId, cwd2 = process.cwd()) {
-  if (!isInitialized(cwd2)) {
+async function verifyCheckpoint(taskId, cwd = process.cwd()) {
+  if (!isInitialized(cwd)) {
     console.error("Error: Project not initialized. Please run `projmnt4claude setup` first");
     process.exit(1);
   }
-  const task = readTaskMeta(taskId, cwd2);
+  const task = readTaskMeta(taskId, cwd);
   if (!task) {
     console.error(`Error: Task '${taskId}' does not exist`);
     process.exit(1);
   }
-  const taskDir = path11.join(getTasksDir(cwd2), taskId);
+  const taskDir = path11.join(getTasksDir(cwd), taskId);
   const checkpointPath = path11.join(taskDir, "checkpoint.md");
   const checkpoints = parseCheckpoints(checkpointPath);
   if (checkpoints.length === 0) {
@@ -26504,7 +26507,7 @@ async function verifyCheckpoint(taskId, cwd2 = process.cwd()) {
   }
   const token = generateCheckpointToken();
   task.checkpointConfirmationToken = token;
-  writeTaskMeta(task, cwd2);
+  writeTaskMeta(task, cwd);
   console.log("━".repeat(SEPARATOR_WIDTH));
   console.log("✅ All checkpoints verified!");
   console.log("");
@@ -26515,30 +26518,30 @@ async function verifyCheckpoint(taskId, cwd2 = process.cwd()) {
   console.log(`   projmnt4claude task update ${taskId} --status resolved --token ${token}`);
   console.log("");
 }
-async function addSubtask(parentId, title, cwd2 = process.cwd()) {
-  if (!isInitialized(cwd2)) {
+async function addSubtask(parentId, title, cwd = process.cwd()) {
+  if (!isInitialized(cwd)) {
     console.error("Error: Project not initialized. Please run `projmnt4claude setup` first");
     process.exit(1);
   }
-  const parentTask = readTaskMeta(parentId, cwd2);
+  const parentTask = readTaskMeta(parentId, cwd);
   if (!parentTask) {
     console.error(`Error: Parent task ${parentId} does not exist`);
     process.exit(1);
   }
   const { generateSubtaskId: generateSubtaskId2, addSubtaskToParent: addSubtaskToParent2 } = await Promise.resolve().then(() => (init_task2(), exports_task2));
-  const subtaskId = generateSubtaskId2(parentId, cwd2);
+  const subtaskId = generateSubtaskId2(parentId, cwd);
   const subtask = createDefaultTaskMeta(subtaskId, title, parentTask.type, undefined, "cli");
   subtask.parentId = parentId;
   subtask.priority = parentTask.priority;
-  writeTaskMeta(subtask, cwd2);
-  const taskDir = path11.join(getTasksDir(cwd2), subtaskId);
+  writeTaskMeta(subtask, cwd);
+  const taskDir = path11.join(getTasksDir(cwd), subtaskId);
   const checkpointPath = path11.join(taskDir, "checkpoint.md");
   fs15.writeFileSync(checkpointPath, `# ${subtaskId} Checkpoints
 
 - [ ] Checkpoints1
 - [ ] Checkpoints2
 `, "utf-8");
-  addSubtaskToParent2(parentId, subtaskId, cwd2);
+  addSubtaskToParent2(parentId, subtaskId, cwd);
   console.log(`
 ✅ Subtask created successfully!`);
   console.log(`   Subtasks ID: ${subtaskId}`);
@@ -26546,12 +26549,12 @@ async function addSubtask(parentId, title, cwd2 = process.cwd()) {
   console.log(`   Title: ${title}`);
   console.log(`   Priority: ${formatPriority(subtask.priority)}`);
 }
-async function syncChildren(parentTaskId, options = {}, cwd2 = process.cwd()) {
-  if (!isInitialized(cwd2)) {
+async function syncChildren(parentTaskId, options = {}, cwd = process.cwd()) {
+  if (!isInitialized(cwd)) {
     console.error("❌ Error: Project not initialized");
     process.exit(1);
   }
-  const parentTask = readTaskMeta(parentTaskId, cwd2);
+  const parentTask = readTaskMeta(parentTaskId, cwd);
   if (!parentTask) {
     console.error(`❌ Error: Task ${parentTaskId} does not exist`);
     process.exit(1);
@@ -26572,7 +26575,7 @@ async function syncChildren(parentTaskId, options = {}, cwd2 = process.cwd()) {
   let syncedCount = 0;
   let skippedCount = 0;
   for (const childId of childrenToSync) {
-    const childTask = readTaskMeta(childId, cwd2);
+    const childTask = readTaskMeta(childId, cwd);
     if (!childTask) {
       console.log(`   ⚠️  ${childId}: does not exist, skipped`);
       skippedCount++;
@@ -26598,31 +26601,31 @@ async function syncChildren(parentTaskId, options = {}, cwd2 = process.cwd()) {
       oldValue: oldStatus,
       newValue: targetStatus,
       reason: `Parent task ${parentTaskId} Status同步`
-    }, cwd2);
-    writeTaskMeta(childTask, cwd2);
+    }, cwd);
+    writeTaskMeta(childTask, cwd);
     console.log(`   ✅ ${childId}: ${oldStatus} → ${targetStatus}`);
     syncedCount++;
   }
   console.log("");
   console.log(`✅ Sync completed: ${syncedCount} subtasks updated, ${skippedCount} skipped`);
 }
-async function updateCheckpoint(taskId, checkpointId, action, options = {}, cwd2 = process.cwd()) {
-  if (!isInitialized(cwd2)) {
+async function updateCheckpoint(taskId, checkpointId, action, options = {}, cwd = process.cwd()) {
+  if (!isInitialized(cwd)) {
     console.error("Error: Project not initialized");
     process.exit(1);
   }
-  const task = readTaskMeta(taskId, cwd2);
+  const task = readTaskMeta(taskId, cwd);
   if (!task) {
     console.error(`Error: Task '${taskId}' does not exist`);
     process.exit(1);
   }
-  syncCheckpointsToMeta(taskId, cwd2);
+  syncCheckpointsToMeta(taskId, cwd);
   switch (action) {
     case "complete":
       updateCheckpointStatus(taskId, checkpointId, "completed", {
         result: options.result,
         note: options.note
-      }, cwd2);
+      }, cwd);
       console.log(`✅ Checkpoints ${checkpointId} marked as completed`);
       if (options.result) {
         console.log(`   Verification result: ${options.result}`);
@@ -26631,7 +26634,7 @@ async function updateCheckpoint(taskId, checkpointId, action, options = {}, cwd2
     case "fail":
       updateCheckpointStatus(taskId, checkpointId, "failed", {
         note: options.note
-      }, cwd2);
+      }, cwd);
       console.log(`❌ Checkpoints ${checkpointId} marked as failed`);
       if (options.note) {
         console.log(`   Note: ${options.note}`);
@@ -26642,19 +26645,19 @@ async function updateCheckpoint(taskId, checkpointId, action, options = {}, cwd2
         console.error("Error: Using note action requires --note parameter");
         process.exit(1);
       }
-      const checkpoint = getCheckpointDetail(taskId, checkpointId, cwd2);
+      const checkpoint = getCheckpointDetail(taskId, checkpointId, cwd);
       if (!checkpoint) {
         console.error(`Error: Checkpoints '${checkpointId}' does not exist`);
         process.exit(1);
       }
       updateCheckpointStatus(taskId, checkpointId, checkpoint.status, {
         note: options.note
-      }, cwd2);
+      }, cwd);
       console.log(`\uD83D\uDCDD Checkpoints ${checkpointId} note updated`);
       console.log(`   Note: ${options.note}`);
       break;
     case "show":
-      const cpDetail = getCheckpointDetail(taskId, checkpointId, cwd2);
+      const cpDetail = getCheckpointDetail(taskId, checkpointId, cwd);
       if (!cpDetail) {
         console.error(`Error: Checkpoints '${checkpointId}' does not exist`);
         process.exit(1);
@@ -26666,17 +26669,17 @@ async function updateCheckpoint(taskId, checkpointId, action, options = {}, cwd2
       process.exit(1);
   }
 }
-async function listTaskCheckpoints(taskId, options = {}, cwd2 = process.cwd()) {
-  if (!isInitialized(cwd2)) {
+async function listTaskCheckpoints(taskId, options = {}, cwd = process.cwd()) {
+  if (!isInitialized(cwd)) {
     console.error("Error: Project not initialized");
     process.exit(1);
   }
-  const task = readTaskMeta(taskId, cwd2);
+  const task = readTaskMeta(taskId, cwd);
   if (!task) {
     console.error(`Error: Task '${taskId}' does not exist`);
     process.exit(1);
   }
-  const checkpoints = listCheckpoints(taskId, cwd2);
+  const checkpoints = listCheckpoints(taskId, cwd);
   if (options.json) {
     console.log(JSON.stringify(checkpoints, null, 2));
     return;
@@ -26712,12 +26715,12 @@ async function listTaskCheckpoints(taskId, options = {}, cwd2 = process.cwd()) {
     console.log(separator);
   }
 }
-async function splitTask(parentId, options = {}, cwd2 = process.cwd()) {
-  if (!isInitialized(cwd2)) {
+async function splitTask(parentId, options = {}, cwd = process.cwd()) {
+  if (!isInitialized(cwd)) {
     console.error("Error: Project not initialized. Please run `projmnt4claude setup` first");
     process.exit(1);
   }
-  const parentTask = readTaskMeta(parentId, cwd2);
+  const parentTask = readTaskMeta(parentId, cwd);
   if (!parentTask) {
     console.error(`Error: Parent task ${parentId} does not exist`);
     process.exit(1);
@@ -26794,29 +26797,29 @@ async function splitTask(parentId, options = {}, cwd2 = process.cwd()) {
   const createdSubtaskIds = [];
   for (let i = 0;i < subtaskTitles.length; i++) {
     const title = subtaskTitles[i];
-    const subtaskId = generateSubtaskId2(parentId, cwd2);
+    const subtaskId = generateSubtaskId2(parentId, cwd);
     const subtask = createDefaultTaskMeta(subtaskId, title, parentTask.type || "feature", undefined, "cli");
     subtask.parentId = parentId;
     subtask.priority = parentTask.priority;
     subtask.description = `从 ${parentId} 拆分的Subtasks`;
-    writeTaskMeta(subtask, cwd2);
-    const taskDir = path11.join(getTasksDir(cwd2), subtaskId);
+    writeTaskMeta(subtask, cwd);
+    const taskDir = path11.join(getTasksDir(cwd), subtaskId);
     const checkpointPath = path11.join(taskDir, "checkpoint.md");
     fs15.writeFileSync(checkpointPath, `# ${subtaskId} Checkpoints
 
 - [ ] 完成Task
 `, "utf-8");
-    addSubtaskToParent2(parentId, subtaskId, cwd2);
+    addSubtaskToParent2(parentId, subtaskId, cwd);
     createdSubtaskIds.push(subtaskId);
     console.log(`   ✅ CreatedSubtasks: ${subtaskId} - ${title}`);
   }
   for (let i = 1;i < createdSubtaskIds.length; i++) {
     const currentId = createdSubtaskIds[i];
     const prevId = createdSubtaskIds[i - 1];
-    const currentTask = readTaskMeta(currentId, cwd2);
+    const currentTask = readTaskMeta(currentId, cwd);
     if (currentTask) {
       currentTask.dependencies.push(prevId);
-      writeTaskMeta(currentTask, cwd2);
+      writeTaskMeta(currentTask, cwd);
       console.log(`   \uD83D\uDD17 Set dependency: ${currentId} Dependencies ${prevId}`);
     }
   }
@@ -26867,12 +26870,12 @@ function displayCheckpointDetail(checkpoint) {
   }
   console.log("");
 }
-function searchTasks(keyword, options = {}, cwd2 = process.cwd()) {
-  if (!isInitialized(cwd2)) {
+function searchTasks(keyword, options = {}, cwd = process.cwd()) {
+  if (!isInitialized(cwd)) {
     console.error("Error: Project not initialized. Please run `projmnt4claude setup` first");
     process.exit(1);
   }
-  const allTasks = getAllTasks(cwd2);
+  const allTasks = getAllTasks(cwd);
   const lowerKeyword = keyword.toLowerCase();
   const matchedTasks = allTasks.filter((task) => {
     if (options.status && task.status !== options.status) {
@@ -26906,12 +26909,12 @@ function searchTasks(keyword, options = {}, cwd2 = process.cwd()) {
     console.log("");
   });
 }
-function countTasks(options = {}, cwd2 = process.cwd()) {
-  if (!isInitialized(cwd2)) {
+function countTasks(options = {}, cwd = process.cwd()) {
+  if (!isInitialized(cwd)) {
     console.error("Error: Project not initialized. Please run `projmnt4claude setup` first");
     process.exit(1);
   }
-  let tasks = getAllTasks(cwd2);
+  let tasks = getAllTasks(cwd);
   if (options.status) {
     tasks = tasks.filter((t2) => t2.status === options.status);
   }
@@ -27067,10 +27070,10 @@ function countTasks(options = {}, cwd2 = process.cwd()) {
     console.log("");
   }
 }
-async function batchUpdateTasks(options = {}, cwd2 = process.cwd()) {
+async function batchUpdateTasks(options = {}, cwd = process.cwd()) {
   const operationStartTime = new Date().toISOString();
   const commandArgs = process.argv.slice(2);
-  if (!isInitialized(cwd2)) {
+  if (!isInitialized(cwd)) {
     console.error("Error: Project not initialized. Please run `projmnt4claude setup` first");
     process.exit(1);
   }
@@ -27083,10 +27086,10 @@ async function batchUpdateTasks(options = {}, cwd2 = process.cwd()) {
     console.error('Example: --change-note "Fixed XX issue, passed testing"');
     process.exit(1);
   }
-  const allTasks = getAllTasks(cwd2);
+  const allTasks = getAllTasks(cwd);
   let specifiedTaskIds = [];
   if (options.taskFile) {
-    const taskFilePath = path11.resolve(cwd2, options.taskFile);
+    const taskFilePath = path11.resolve(cwd, options.taskFile);
     if (!fs15.existsSync(taskFilePath)) {
       console.error(`Error: Task filedoes not exist: ${taskFilePath}`);
       process.exit(1);
@@ -27194,7 +27197,7 @@ async function batchUpdateTasks(options = {}, cwd2 = process.cwd()) {
             updatedCount: 0,
             filteredCount: filteredTasks.length
           }
-        }, cwd2);
+        }, cwd);
         console.log("Cancelled");
         return;
       }
@@ -27234,7 +27237,7 @@ async function batchUpdateTasks(options = {}, cwd2 = process.cwd()) {
           updatedCount: 0,
           filteredCount: filteredTasks.length
         }
-      }, cwd2);
+      }, cwd);
       console.log("Cancelled");
       return;
     }
@@ -27304,7 +27307,7 @@ async function batchUpdateTasks(options = {}, cwd2 = process.cwd()) {
     }
     if (updated) {
       task.updatedAt = new Date().toISOString();
-      writeTaskMeta(task, cwd2);
+      writeTaskMeta(task, cwd);
       updatedCount++;
       console.log(`   ✅ ${task.id}`);
       taskChanges.push({
@@ -27332,25 +27335,25 @@ async function batchUpdateTasks(options = {}, cwd2 = process.cwd()) {
       updatedCount,
       filteredCount: filteredTasks.length
     }
-  }, cwd2);
+  }, cwd);
   console.log("");
   console.log(`✅ Batch update completed: ${updatedCount} tasksupdated`);
   console.log("");
   console.log(`\uD83D\uDCDD Operation logged to: .projmnt4claude/logs/batch-update-${operationStartTime.split("T")[0]}.log`);
 }
-function showBatchUpdateLogs(options = {}, cwd2 = process.cwd()) {
+function showBatchUpdateLogs(options = {}, cwd = process.cwd()) {
   if (options.summary) {
-    console.log(showLogSummary(cwd2));
+    console.log(showLogSummary(cwd));
     return;
   }
   const entries = queryBatchUpdateLogs({
     taskId: options.taskId,
     source: options.source
-  }, cwd2);
+  }, cwd);
   console.log(formatLogList(entries, options.verbose));
 }
-function renameTaskCommand(oldTaskId, newTaskId, cwd2 = process.cwd()) {
-  if (!isInitialized(cwd2)) {
+function renameTaskCommand(oldTaskId, newTaskId, cwd = process.cwd()) {
+  if (!isInitialized(cwd)) {
     console.error("Error: Project not initialized. Please run `projmnt4claude setup` first");
     process.exit(1);
   }
@@ -27366,7 +27369,7 @@ function renameTaskCommand(oldTaskId, newTaskId, cwd2 = process.cwd()) {
     console.error("Task ID must start with TASK-, followed by letters, numbers, hyphens or underscores");
     process.exit(1);
   }
-  const result = renameTask(oldTaskId, newTaskId, cwd2);
+  const result = renameTask(oldTaskId, newTaskId, cwd);
   if (result.success) {
     console.log("");
     console.log("━".repeat(SEPARATOR_WIDTH));
@@ -27588,7 +27591,7 @@ function inferArchitectureLayer(task) {
   const layers = ["Layer0", "Layer1", "Layer2", "Layer3"];
   return { layer: layers[minValue], layerValue: minValue };
 }
-function buildTaskChains(tasks, cwd2, precomputedDeps) {
+function buildTaskChains(tasks, cwd, precomputedDeps) {
   if (tasks.length === 0)
     return [];
   const taskMap = new Map;
@@ -27845,7 +27848,7 @@ function generateAIOutput(chains, originalCount, filteredCount, batches, query, 
     }
   };
 }
-function showBasicPlan(plan, cwd2) {
+function showBasicPlan(plan, cwd) {
   console.log("");
   console.log("Execution Plan:");
   console.log("━".repeat(SEPARATOR_WIDTH));
@@ -27853,7 +27856,7 @@ function showBasicPlan(plan, cwd2) {
   console.log("-----|-----------|------------------------------|------------");
   for (let i = 0;i < plan.tasks.length; i++) {
     const taskId = plan.tasks[i];
-    const task = readTaskMeta(taskId, cwd2);
+    const task = readTaskMeta(taskId, cwd);
     const order = String(i + 1).padEnd(4);
     const id = taskId.padEnd(9);
     const title = (task?.title || "(Unknown task)").substring(0, 28).padEnd(28);
@@ -27865,13 +27868,13 @@ function showBasicPlan(plan, cwd2) {
   console.log(`Created: ${plan.createdAt}`);
   console.log(`Updated: ${plan.updatedAt}`);
 }
-function showBatchedPlan(plan, cwd2) {
+function showBatchedPlan(plan, cwd) {
   console.log("");
   console.log("Execution Plan (Batched):");
   console.log("━".repeat(SEPARATOR_WIDTH));
   const batches = plan.batches;
   let taskIndex = 0;
-  const allTasks = getAllTasks(cwd2);
+  const allTasks = getAllTasks(cwd);
   const planTaskIds = new Set(plan.tasks);
   const planTasks = allTasks.filter((t2) => planTaskIds.has(t2.id));
   const inferredDeps = inferDependenciesBatch(planTasks);
@@ -27883,7 +27886,7 @@ function showBatchedPlan(plan, cwd2) {
     console.log("─────┬───────────┬──────────────────────────────┬────────────");
     for (let i = 0;i < batch.length; i++) {
       const taskId = batch[i];
-      const task = readTaskMeta(taskId, cwd2);
+      const task = readTaskMeta(taskId, cwd);
       const order = String(taskIndex + 1).padEnd(4);
       const id = taskId.padEnd(9);
       const title = (task?.title || "(Unknown task)").substring(0, 28).padEnd(28);
@@ -27911,12 +27914,12 @@ function showBatchedPlan(plan, cwd2) {
   console.log(`Created: ${plan.createdAt}`);
   console.log(`Updated: ${plan.updatedAt}`);
 }
-function showPlan(json2 = false, cwd2 = process.cwd()) {
-  if (!isInitialized(cwd2)) {
+function showPlan(json2 = false, cwd = process.cwd()) {
+  if (!isInitialized(cwd)) {
     console.error("Error: Project not initialized. Please run `projmnt4claude setup` first");
     process.exit(1);
   }
-  const plan = readPlan(cwd2);
+  const plan = readPlan(cwd);
   if (!plan || plan.tasks.length === 0) {
     console.log("No execution plan");
     console.log("");
@@ -27925,7 +27928,7 @@ function showPlan(json2 = false, cwd2 = process.cwd()) {
   }
   if (json2) {
     const tasks = plan.tasks.map((taskId, index) => {
-      const task = readTaskMeta(taskId, cwd2);
+      const task = readTaskMeta(taskId, cwd);
       return {
         order: index + 1,
         id: taskId,
@@ -27938,37 +27941,37 @@ function showPlan(json2 = false, cwd2 = process.cwd()) {
   }
   const hasBatches = Array.isArray(plan.batches) && plan.batches.length > 0;
   if (hasBatches) {
-    showBatchedPlan(plan, cwd2);
+    showBatchedPlan(plan, cwd);
   } else {
-    showBasicPlan(plan, cwd2);
+    showBasicPlan(plan, cwd);
   }
 }
-function addTask(taskId, afterId, cwd2 = process.cwd()) {
-  if (!isInitialized(cwd2)) {
+function addTask(taskId, afterId, cwd = process.cwd()) {
+  if (!isInitialized(cwd)) {
     console.error("Error: Project not initialized. Please run `projmnt4claude setup` first");
     process.exit(1);
   }
-  if (!taskExists(taskId, cwd2)) {
+  if (!taskExists(taskId, cwd)) {
     console.error(`Error: Task '${taskId}' does not exist`);
     process.exit(1);
   }
-  if (afterId && !taskExists(afterId, cwd2)) {
+  if (afterId && !taskExists(afterId, cwd)) {
     console.error(`Error: Reference task '${afterId}' does not exist`);
     process.exit(1);
   }
-  const success = addTaskToPlan(taskId, afterId, cwd2);
+  const success = addTaskToPlan(taskId, afterId, cwd);
   if (success) {
     console.log(`✅ Added task ${taskId} to execution plan${afterId ? ` (after ${afterId})` : ""}`);
   } else {
     console.log(`Task ${taskId} is already in the execution plan`);
   }
 }
-function removeTask(taskId, cwd2 = process.cwd()) {
-  if (!isInitialized(cwd2)) {
+function removeTask(taskId, cwd = process.cwd()) {
+  if (!isInitialized(cwd)) {
     console.error("Error: Project not initialized. Please run `projmnt4claude setup` first");
     process.exit(1);
   }
-  const allTasks = getAllTasks(cwd2);
+  const allTasks = getAllTasks(cwd);
   const depGraph = DependencyGraph.fromTasks(allTasks);
   const opValidation = validatePlanOperation("delete", [taskId], depGraph);
   if (opValidation.warnings.length > 0) {
@@ -27977,15 +27980,15 @@ function removeTask(taskId, cwd2 = process.cwd()) {
       console.log(`   ⚠️  ${w}`);
     }
   }
-  const success = removeTaskFromPlan(taskId, cwd2);
+  const success = removeTaskFromPlan(taskId, cwd);
   if (success) {
     console.log(`✅ Removed task ${taskId} from execution plan`);
   } else {
     console.log(`Task ${taskId} is not in the execution plan`);
   }
 }
-async function clearPlanCmd(force = false, cwd2 = process.cwd()) {
-  if (!isInitialized(cwd2)) {
+async function clearPlanCmd(force = false, cwd = process.cwd()) {
+  if (!isInitialized(cwd)) {
     console.error("Error: Project not initialized. Please run `projmnt4claude setup` first");
     process.exit(1);
   }
@@ -28001,15 +28004,15 @@ async function clearPlanCmd(force = false, cwd2 = process.cwd()) {
       return;
     }
   }
-  clearPlan(cwd2);
+  clearPlan(cwd);
   console.log("✅ Execution plan cleared");
 }
-async function recommendPlan(options = {}, cwd2 = process.cwd()) {
-  if (!isInitialized(cwd2)) {
+async function recommendPlan(options = {}, cwd = process.cwd()) {
+  if (!isInitialized(cwd)) {
     console.error("Error: Project not initialized. Please run `projmnt4claude setup` first");
     process.exit(1);
   }
-  const activeCheck = detectActiveSnapshot(cwd2);
+  const activeCheck = detectActiveSnapshot(cwd);
   if (activeCheck.hasActive) {
     console.error("❌ Error: Active pipeline detected");
     console.error(`   ${activeCheck.message}`);
@@ -28019,12 +28022,12 @@ async function recommendPlan(options = {}, cwd2 = process.cwd()) {
   }
   console.log(`Analyzing project tasks...
 `);
-  const logger = createLogger("plan-recommend", cwd2);
+  const logger = createLogger("plan-recommend", cwd);
   const startTime = Date.now();
   const inputQuery = options.query || "";
   let recommendationAccepted = false;
   let suggestedOrder = [];
-  const allTasks = getAllTasks(cwd2);
+  const allTasks = getAllTasks(cwd);
   const failedTasks = allTasks.filter((t2) => normalizeStatus(t2.status) === "failed");
   if (failedTasks.length > 0) {
     console.log("⚠️  Quality check: Found failed tasks:");
@@ -28058,7 +28061,7 @@ async function recommendPlan(options = {}, cwd2 = process.cwd()) {
     console.log("");
   }
   const chainEligibleTasks = activeTasks.filter((t2) => normalizeStatus(t2.status) !== "in_progress");
-  const missingSubtaskWarnings = detectMissingSubtasks(cwd2);
+  const missingSubtaskWarnings = detectMissingSubtasks(cwd);
   if (missingSubtaskWarnings.length > 0) {
     const label = options.strictSubtaskCoverage ? "❌ ERR" : "⚠️  WARN";
     console.log(`${label} Subtask missing detection (${missingSubtaskWarnings.length} parent tasks affected):`);
@@ -28088,7 +28091,7 @@ async function recommendPlan(options = {}, cwd2 = process.cwd()) {
 `);
   }
   if (!options.all) {
-    const executableIds = new Set(getExecutableTasks(cwd2));
+    const executableIds = new Set(getExecutableTasks(cwd));
     const beforeExecFilter = filteredTasks.length;
     filteredTasks = filteredTasks.filter((task) => executableIds.has(task.id));
     if (beforeExecFilter - filteredTasks.length > 0) {
@@ -28186,7 +28189,7 @@ async function recommendPlan(options = {}, cwd2 = process.cwd()) {
     console.log("Analyzing semantic dependencies via AI...");
     const semanticResult = await withAIEnhancement({
       enabled: true,
-      aiCall: () => new AIMetadataAssistant(cwd2).inferSemanticDependencies(filteredTasks, { cwd: cwd2 }),
+      aiCall: () => new AIMetadataAssistant(cwd).inferSemanticDependencies(filteredTasks, { cwd }),
       fallback: { dependencies: [], aiUsed: false },
       operationName: "Semantic dependency inference"
     });
@@ -28210,7 +28213,7 @@ async function recommendPlan(options = {}, cwd2 = process.cwd()) {
       console.log("  AI found no additional semantic dependencies");
     }
   }
-  const chains = buildTaskChains(filteredTasks, cwd2, mergedDeps);
+  const chains = buildTaskChains(filteredTasks, cwd, mergedDeps);
   const sortedChains = sortChains(chains);
   const cachedBatches = buildBatches(sortedChains);
   const keywordsForOutput = filter.type === "keywords" ? filter.keywords.length > 0 ? filter.keywords : undefined : [filter.pattern];
@@ -28292,10 +28295,10 @@ async function recommendPlan(options = {}, cwd2 = process.cwd()) {
   console.log("");
   const isNonInteractive = options.nonInteractive || !process.stdout.isTTY;
   if (isNonInteractive) {
-    const plan = getOrCreatePlan(cwd2);
+    const plan = getOrCreatePlan(cwd);
     plan.tasks = aiOutput.recommendation.suggestedOrder;
     plan.batches = aiOutput.batchOrder;
-    writePlan(plan, cwd2);
+    writePlan(plan, cwd);
     console.log("✅ Execution plan updated (non-interactive mode)");
     logger.logInstrumentation({
       module: "plan-recommend",
@@ -28321,10 +28324,10 @@ async function recommendPlan(options = {}, cwd2 = process.cwd()) {
     initial: true
   });
   if (response.confirm) {
-    const plan = getOrCreatePlan(cwd2);
+    const plan = getOrCreatePlan(cwd);
     plan.tasks = aiOutput.recommendation.suggestedOrder;
     plan.batches = aiOutput.batchOrder;
-    writePlan(plan, cwd2);
+    writePlan(plan, cwd);
     console.log("✅ Execution plan updated");
     recommendationAccepted = true;
   } else {
@@ -28522,8 +28525,8 @@ var DEFAULT_ANALYZE_CONFIG2 = {
   minCheckpointCoverage: 0.8,
   ignorePatterns: []
 };
-function readAnalyzeConfig2(cwd2 = process.cwd()) {
-  const config = readConfig(cwd2);
+function readAnalyzeConfig2(cwd = process.cwd()) {
+  const config = readConfig(cwd);
   if (!config)
     return { ...DEFAULT_ANALYZE_CONFIG2 };
   const analyzeRaw = config.analyze;
@@ -28771,9 +28774,9 @@ function validateRequirementHistoryEntry2(entry, index) {
   }
   return { valid: errors.length === 0, errors };
 }
-function validateTaskIdFormat2(id, cwd2 = process.cwd()) {
+function validateTaskIdFormat2(id, cwd = process.cwd()) {
   const errors = [];
-  const texts = t(cwd2);
+  const texts = t(cwd);
   if (!id || typeof id !== "string") {
     return { valid: false, format: "unknown", errors: [texts.analyzeCmd.taskIdEmpty] };
   }
@@ -28803,11 +28806,11 @@ function isValidTypeValue2(type) {
 function isValidPriorityValue2(priority) {
   return VALID_PRIORITIES4.includes(priority);
 }
-async function performQualityCheck2(cwd2 = process.cwd(), aiOptions) {
-  const tasks = getAllTasks(cwd2, false);
+async function performQualityCheck2(cwd = process.cwd(), aiOptions) {
+  const tasks = getAllTasks(cwd, false);
   const scores = new Map;
   for (const task of tasks) {
-    const score = await calculateContentQuality(task, aiOptions, cwd2);
+    const score = await calculateContentQuality(task, aiOptions, cwd);
     scores.set(task.id, score);
   }
   return scores;
@@ -28883,18 +28886,18 @@ function showQualityReport2(scores, options = {}) {
   console.log(separator);
   console.log("");
 }
-async function detectSemanticDuplicates2(tasks, cwd2) {
+async function detectSemanticDuplicates2(tasks, cwd) {
   if (tasks.length < 2)
     return [];
-  const aiAssistant = new AIMetadataAssistant(cwd2);
-  const analyzeLogger = createLogger("analyze", cwd2);
+  const aiAssistant = new AIMetadataAssistant(cwd);
+  const analyzeLogger = createLogger("analyze", cwd);
   const batchSize = 10;
   const allIssues = [];
   for (let i = 0;i < tasks.length; i += batchSize) {
     const batch = tasks.slice(i, i + batchSize);
     const result = await withAIEnhancement({
       enabled: true,
-      aiCall: () => aiAssistant.detectDuplicates(batch, { cwd: cwd2 }),
+      aiCall: () => aiAssistant.detectDuplicates(batch, { cwd }),
       fallback: { duplicates: [], aiUsed: false },
       operationName: "Semantic duplicate detection",
       logger: analyzeLogger
@@ -28920,10 +28923,10 @@ async function detectSemanticDuplicates2(tasks, cwd2) {
   }
   return allIssues;
 }
-async function assessStalenessWithAI2(task, cwd2) {
+async function assessStalenessWithAI2(task, cwd) {
   const result = await withAIEnhancement({
     enabled: true,
-    aiCall: () => new AIMetadataAssistant(cwd2).assessStaleness(task, { cwd: cwd2 }),
+    aiCall: () => new AIMetadataAssistant(cwd).assessStaleness(task, { cwd }),
     fallback: { isStale: false, stalenessScore: 0, suggestedAction: "keep", reason: "", aiUsed: false },
     operationName: "陈旧任务评估"
   });
@@ -28977,11 +28980,11 @@ function parseReportVerdict2(reportPath) {
     return null;
   }
 }
-function getHarnessReportDir2(taskId, cwd2) {
-  return path15.join(getProjectDir(cwd2), "reports", "harness", taskId);
+function getHarnessReportDir2(taskId, cwd) {
+  return path15.join(getProjectDir(cwd), "reports", "harness", taskId);
 }
-function checkReportStatusConsistency2(taskId, task, cwd2) {
-  const reportDir = getHarnessReportDir2(taskId, cwd2);
+function checkReportStatusConsistency2(taskId, task, cwd) {
+  const reportDir = getHarnessReportDir2(taskId, cwd);
   if (!fs19.existsSync(reportDir))
     return null;
   const currentStatus = normalizeStatus(task.status);
@@ -29034,13 +29037,13 @@ function checkCheckpointConsistency2(taskId, task) {
   }
   return null;
 }
-async function checkQualityGateIssues2(taskId, task, cwd2, config) {
+async function checkQualityGateIssues2(taskId, task, cwd, config) {
   const issues = [];
   const qualityConfig = {
     ...DEFAULT_QUALITY_GATE_CONFIG,
     ...config
   };
-  const result = await checkQualityGate(taskId, qualityConfig, cwd2);
+  const result = await checkQualityGate(taskId, qualityConfig, cwd);
   if (result.score.totalScore < qualityConfig.minQualityScore) {
     issues.push({
       taskId,
@@ -29091,7 +29094,7 @@ async function checkQualityGateIssues2(taskId, task, cwd2, config) {
       });
     }
   }
-  const filesResult = validateFilesExist(task, cwd2);
+  const filesResult = validateFilesExist(task, cwd);
   if (!filesResult.valid) {
     issues.push({
       taskId,
@@ -29116,9 +29119,9 @@ async function checkQualityGateIssues2(taskId, task, cwd2, config) {
   }
   return issues;
 }
-function checkMissingPipelineEvidence2(taskId, task, cwd2) {
+function checkMissingPipelineEvidence2(taskId, task, cwd) {
   const currentStatus = normalizeStatus(task.status);
-  const reportDir = getHarnessReportDir2(taskId, cwd2);
+  const reportDir = getHarnessReportDir2(taskId, cwd);
   const STATUS_REQUIRED_REPORTS = {
     wait_review: [
       { reportFile: "dev-report.md", phase: "development" }
@@ -29173,7 +29176,7 @@ function checkMissingPipelineEvidence2(taskId, task, cwd2) {
   return null;
 }
 var TERMINAL_STATUSES_SET5 = new Set(TERMINAL_STATUSES);
-function shouldTriggerAIInference2(task, layer1Issues, cwd2) {
+function shouldTriggerAIInference2(task, layer1Issues, cwd) {
   const currentStatus = normalizeStatus(task.status);
   if (TERMINAL_STATUSES_SET5.has(currentStatus))
     return false;
@@ -29181,7 +29184,7 @@ function shouldTriggerAIInference2(task, layer1Issues, cwd2) {
     return false;
   const historyCount = task.history?.length ?? 0;
   if (historyCount >= 3) {
-    const reportDir = getHarnessReportDir2(task.id, cwd2);
+    const reportDir = getHarnessReportDir2(task.id, cwd);
     if (!fs19.existsSync(reportDir))
       return true;
   }
@@ -29196,8 +29199,8 @@ function shouldTriggerAIInference2(task, layer1Issues, cwd2) {
   }
   return false;
 }
-function buildStatusInferencePrompt2(task, layer1Findings, cwd2 = process.cwd()) {
-  const texts = t(cwd2);
+function buildStatusInferencePrompt2(task, layer1Findings, cwd = process.cwd()) {
+  const texts = t(cwd);
   const currentStatus = normalizeStatus(task.status);
   const taskInfo = [
     texts.analyzeCmd.aiPromptTaskInfo,
@@ -29258,14 +29261,14 @@ ${texts.analyzeCmd.aiPromptJsonFormat}
   ${texts.analyzeCmd.aiPromptSuggestion}
 }`;
 }
-async function runAIStatusInference2(task, layer1Findings, cwd2) {
-  const prompt = buildStatusInferencePrompt2(task, layer1Findings, cwd2);
+async function runAIStatusInference2(task, layer1Findings, cwd) {
+  const prompt = buildStatusInferencePrompt2(task, layer1Findings, cwd);
   const options = {
     timeout: 120,
     allowedTools: [],
     outputFormat: "text",
     maxRetries: 0,
-    cwd: cwd2
+    cwd
   };
   try {
     const result = await invokeAgent(prompt, options);
@@ -29304,25 +29307,25 @@ async function runAIStatusInference2(task, layer1Findings, cwd2) {
     return null;
   }
 }
-async function detectStatusInferenceIssues2(task, cwd2, aiOptions) {
+async function detectStatusInferenceIssues2(task, cwd, aiOptions) {
   const issues = [];
-  const reportIssue = checkReportStatusConsistency2(task.id, task, cwd2);
+  const reportIssue = checkReportStatusConsistency2(task.id, task, cwd);
   if (reportIssue)
     issues.push(reportIssue);
   const checkpointIssue = checkCheckpointConsistency2(task.id, task);
   if (checkpointIssue)
     issues.push(checkpointIssue);
-  const qualityGateIssues = await checkQualityGateIssues2(task.id, task, cwd2);
+  const qualityGateIssues = await checkQualityGateIssues2(task.id, task, cwd);
   issues.push(...qualityGateIssues);
-  const evidenceIssue = checkMissingPipelineEvidence2(task.id, task, cwd2);
+  const evidenceIssue = checkMissingPipelineEvidence2(task.id, task, cwd);
   if (evidenceIssue)
     issues.push(evidenceIssue);
   const aiEnabled = aiOptions?.deepAnalyze && !aiOptions?.noAi;
   if (!aiEnabled)
     return issues;
-  if (!shouldTriggerAIInference2(task, issues, cwd2))
+  if (!shouldTriggerAIInference2(task, issues, cwd))
     return issues;
-  const aiResult = await runAIStatusInference2(task, issues, cwd2);
+  const aiResult = await runAIStatusInference2(task, issues, cwd);
   if (!aiResult)
     return issues;
   const currentStatus = normalizeStatus(task.status);
@@ -29345,15 +29348,15 @@ async function detectStatusInferenceIssues2(task, cwd2, aiOptions) {
   }
   return issues;
 }
-async function analyzeProject2(cwd2 = process.cwd(), includeArchived = false, aiOptions) {
-  if (!isInitialized(cwd2)) {
+async function analyzeProject2(cwd = process.cwd(), includeArchived = false, aiOptions) {
+  if (!isInitialized(cwd)) {
     console.error("Error: Project not initialized. Please run `projmnt4claude setup` first");
     process.exit(1);
   }
-  const texts = t(cwd2);
-  const tasks = getAllTasks(cwd2, includeArchived);
+  const texts = t(cwd);
+  const tasks = getAllTasks(cwd, includeArchived);
   const issues = [];
-  const analyzeConfig = readAnalyzeConfig2(cwd2);
+  const analyzeConfig = readAnalyzeConfig2(cwd);
   const filteredTasks = analyzeConfig.ignorePatterns && analyzeConfig.ignorePatterns.length > 0 ? tasks.filter((task) => {
     if (matchesIgnorePattern2(task.id, analyzeConfig.ignorePatterns)) {
       return false;
@@ -29425,7 +29428,7 @@ async function analyzeProject2(cwd2 = process.cwd(), includeArchived = false, ai
       let shouldFlagStale = true;
       let aiAssessment = null;
       if (aiOptions?.deepAnalyze && !aiOptions?.noAi) {
-        aiAssessment = await assessStalenessWithAI2(task, cwd2);
+        aiAssessment = await assessStalenessWithAI2(task, cwd);
         if (aiAssessment !== null && !aiAssessment.stillStale) {
           shouldFlagStale = false;
         }
@@ -29458,7 +29461,7 @@ async function analyzeProject2(cwd2 = process.cwd(), includeArchived = false, ai
     }
     if (task.dependencies.length > 0) {
       const uncompletedDeps = task.dependencies.filter((depId) => {
-        const depTask = readTaskMeta(depId, cwd2);
+        const depTask = readTaskMeta(depId, cwd);
         if (!depTask)
           return true;
         const depStatus = normalizeStatus(depTask.status);
@@ -29593,7 +29596,7 @@ async function analyzeProject2(cwd2 = process.cwd(), includeArchived = false, ai
         suggestion: "Set createdBy field to comply with latest specification (cli | init-requirement | harness-dev | harness-review | harness-qa | harness-eval | import)"
       });
     }
-    const idValidation = validateTaskIdFormat2(task.id, cwd2);
+    const idValidation = validateTaskIdFormat2(task.id, cwd);
     if (!idValidation.valid) {
       issues.push({
         taskId: task.id,
@@ -29779,7 +29782,7 @@ async function analyzeProject2(cwd2 = process.cwd(), includeArchived = false, ai
       });
     }
     if (task.parentId) {
-      if (!taskExists(task.parentId, cwd2)) {
+      if (!taskExists(task.parentId, cwd)) {
         issues.push({
           taskId: task.id,
           type: "invalid_parent_ref",
@@ -29789,7 +29792,7 @@ async function analyzeProject2(cwd2 = process.cwd(), includeArchived = false, ai
           details: { parentId: task.parentId }
         });
       } else {
-        const parentTask = readTaskMeta(task.parentId, cwd2);
+        const parentTask = readTaskMeta(task.parentId, cwd);
         if (parentTask && parentTask.subtaskIds && !parentTask.subtaskIds.includes(task.id)) {
           issues.push({
             taskId: task.id,
@@ -29804,7 +29807,7 @@ async function analyzeProject2(cwd2 = process.cwd(), includeArchived = false, ai
     }
     if (task.subtaskIds && task.subtaskIds.length > 0) {
       for (const subtaskId of task.subtaskIds) {
-        if (!taskExists(subtaskId, cwd2)) {
+        if (!taskExists(subtaskId, cwd)) {
           issues.push({
             taskId: task.id,
             type: "invalid_subtask_ref",
@@ -29814,7 +29817,7 @@ async function analyzeProject2(cwd2 = process.cwd(), includeArchived = false, ai
             details: { subtaskId }
           });
         } else {
-          const subtask = readTaskMeta(subtaskId, cwd2);
+          const subtask = readTaskMeta(subtaskId, cwd);
           if (subtask && subtask.parentId !== task.id) {
             issues.push({
               taskId: task.id,
@@ -29921,7 +29924,7 @@ async function analyzeProject2(cwd2 = process.cwd(), includeArchived = false, ai
       }
     }
     if (normalizedStatus === "in_progress") {
-      const omcStateDir = path15.resolve(cwd2, ".omc/state");
+      const omcStateDir = path15.resolve(cwd, ".omc/state");
       let hasActivePipeline = false;
       if (fs19.existsSync(omcStateDir)) {
         const pipelineStateFiles = fs19.readdirSync(omcStateDir).filter((f) => f.includes("pipeline") && f.endsWith(".json"));
@@ -29977,14 +29980,14 @@ async function analyzeProject2(cwd2 = process.cwd(), includeArchived = false, ai
         });
       }
     }
-    const statusInferenceIssues = await detectStatusInferenceIssues2(task, cwd2, aiOptions);
+    const statusInferenceIssues = await detectStatusInferenceIssues2(task, cwd, aiOptions);
     if (statusInferenceIssues.length > 0) {
       issues.push(...statusInferenceIssues);
     }
     const taskText = `${task.description || ""}
 ${task.title || ""}`;
     const referencedFiles = extractFilePaths(taskText, { includeBareFilenames: false });
-    const missingRefs = referencedFiles.filter((fp) => !fs19.existsSync(path15.resolve(cwd2, fp)));
+    const missingRefs = referencedFiles.filter((fp) => !fs19.existsSync(path15.resolve(cwd, fp)));
     if (missingRefs.length > 0) {
       stats.fileNotFound++;
       issues.push({
@@ -30001,7 +30004,7 @@ ${task.title || ""}`;
   for (const task of filteredTasks) {
     if ((!task.checkpoints || task.checkpoints.length === 0) && task.description) {
       try {
-        const synced = syncTextCheckpointsToMeta(task.id, cwd2);
+        const synced = syncTextCheckpointsToMeta(task.id, cwd);
         if (synced) {
           syncedCheckpointCount++;
           issues.push({
@@ -30041,7 +30044,7 @@ ${task.title || ""}`;
   stats.subtaskCompletionRate = subtasks.length > 0 ? Math.round(completedSubtasks.length / subtasks.length * 100) : 0;
   for (const subtask of subtasks) {
     const parentId = subtask.parentId;
-    if (parentId && !taskExists(parentId, cwd2)) {
+    if (parentId && !taskExists(parentId, cwd)) {
       stats.orphanSubtasks++;
       issues.push({
         taskId: subtask.id,
@@ -30052,7 +30055,7 @@ ${task.title || ""}`;
       });
     }
   }
-  const archiveDir = getArchiveDir(cwd2);
+  const archiveDir = getArchiveDir(cwd);
   if (fs19.existsSync(archiveDir)) {
     const abandonedDirs = fs19.readdirSync(archiveDir).filter((name) => {
       const dirPath = path15.join(archiveDir, name);
@@ -30141,26 +30144,26 @@ ${task.title || ""}`;
     }
   }
   if (aiOptions?.deepAnalyze && !aiOptions?.noAi && filteredTasks.length >= 2) {
-    const semanticIssues = await detectSemanticDuplicates2(filteredTasks, cwd2);
+    const semanticIssues = await detectSemanticDuplicates2(filteredTasks, cwd);
     if (semanticIssues.length > 0) {
       issues.push(...semanticIssues);
     }
   }
   return { issues, stats };
 }
-async function showAnalysis(options = {}, cwd2 = process.cwd()) {
-  const logger = createLogger("analyze", cwd2);
+async function showAnalysis(options = {}, cwd = process.cwd()) {
+  const logger = createLogger("analyze", cwd);
   const startTime = Date.now();
   const aiOptions = {
     deepAnalyze: !!options.deepAnalyze,
     noAi: !!options.noAi
   };
-  let result = await analyzeProject2(cwd2, false, aiOptions);
+  let result = await analyzeProject2(cwd, false, aiOptions);
   if (options.checkRange) {
     try {
       const range = parseCheckRange(options.checkRange);
       if (range.type !== "all") {
-        const rangeTasks = getTasksByRange(range, cwd2);
+        const rangeTasks = getTasksByRange(range, cwd);
         const allowedIds = new Set(rangeTasks.map((t2) => t2.id));
         result = {
           ...result,
@@ -30262,14 +30265,14 @@ async function showAnalysis(options = {}, cwd2 = process.cwd()) {
   });
   logger.flush();
 }
-async function showStatus(options = {}, cwd2 = process.cwd()) {
-  if (!isInitialized(cwd2)) {
+async function showStatus(options = {}, cwd = process.cwd()) {
+  if (!isInitialized(cwd)) {
     console.error("Error: Project not initialized. Please run `projmnt4claude setup` first");
     process.exit(1);
   }
   const includeArchived = options.includeArchived || false;
-  const tasks = getAllTasks(cwd2, includeArchived);
-  const result = await analyzeProject2(cwd2, includeArchived);
+  const tasks = getAllTasks(cwd, includeArchived);
+  const result = await analyzeProject2(cwd, includeArchived);
   const healthScore = calculateHealthScore(result);
   if (options.json) {
     console.log(JSON.stringify({
@@ -30329,7 +30332,7 @@ async function showStatus(options = {}, cwd2 = process.cwd()) {
     console.log("");
   }
   if (includeArchived) {
-    const archivedCount = countArchivedTasks(cwd2);
+    const archivedCount = countArchivedTasks(cwd);
     console.log("\uD83D\uDCE6 Archive Statistics:");
     console.log(`   Archived tasks: ${archivedCount}`);
     console.log("");
@@ -30376,8 +30379,8 @@ function calculateReopenStats(tasks) {
   reopenCounts.sort((a, b) => b.count - a.count);
   return { reopenCount, topReopened: reopenCounts };
 }
-function countArchivedTasks(cwd2) {
-  const archiveDir = path15.join(getProjectDir(cwd2), "archive");
+function countArchivedTasks(cwd) {
+  const archiveDir = path15.join(getProjectDir(cwd), "archive");
   if (!fs19.existsSync(archiveDir)) {
     return 0;
   }
@@ -30490,7 +30493,7 @@ function extractKeywordsFromCriteria2(criteria) {
   }
   return [...new Set(keywords)];
 }
-function searchCodebaseForCriteria2(criteria, cwd2) {
+function searchCodebaseForCriteria2(criteria, cwd) {
   const results = [];
   const keywords = extractKeywordsFromCriteria2(criteria);
   if (keywords.length === 0) {
@@ -30563,7 +30566,7 @@ function searchCodebaseForCriteria2(criteria, cwd2) {
               const matchDensity = lineNumbers.length / Math.max(lines.length, 1);
               const relevanceScore = (uniqueKeywordRatio * 0.7 + matchDensity * 0.3) * 100;
               results.push({
-                filePath: path15.relative(cwd2, fullPath),
+                filePath: path15.relative(cwd, fullPath),
                 lineNumbers: lineNumbers.slice(0, 10),
                 matchedKeywords,
                 relevanceScore: Math.round(relevanceScore)
@@ -30577,7 +30580,7 @@ function searchCodebaseForCriteria2(criteria, cwd2) {
   function escapeRegExp(string) {
     return string.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
   }
-  searchDirectory(cwd2);
+  searchDirectory(cwd);
   results.sort((a, b) => b.relevanceScore - a.relevanceScore);
   return results.slice(0, 10);
 }
@@ -30665,11 +30668,11 @@ function inferVerificationCommands2(criteria, searchResults) {
   }
   return commands;
 }
-function getContractPath2(taskId, cwd2) {
-  return path15.join(getTasksDir(cwd2), taskId, "contract.json");
+function getContractPath2(taskId, cwd) {
+  return path15.join(getTasksDir(cwd), taskId, "contract.json");
 }
-function readContract2(taskId, cwd2) {
-  const contractPath = getContractPath2(taskId, cwd2);
+function readContract2(taskId, cwd) {
+  const contractPath = getContractPath2(taskId, cwd);
   if (!fs19.existsSync(contractPath)) {
     return null;
   }
@@ -30680,8 +30683,8 @@ function readContract2(taskId, cwd2) {
     return null;
   }
 }
-function saveContract2(taskId, contract, cwd2) {
-  const contractPath = getContractPath2(taskId, cwd2);
+function saveContract2(taskId, contract, cwd) {
+  const contractPath = getContractPath2(taskId, cwd);
   const dir = path15.dirname(contractPath);
   if (!fs19.existsSync(dir)) {
     fs19.mkdirSync(dir, { recursive: true });
@@ -30689,10 +30692,10 @@ function saveContract2(taskId, contract, cwd2) {
   contract.updatedAt = new Date().toISOString();
   fs19.writeFileSync(contractPath, JSON.stringify(contract, null, 2), "utf-8");
 }
-function generateCheckpointsFromCriteria2(taskId, acceptanceCriteria, taskTitle, cwd2 = process.cwd(), taskDescription) {
+function generateCheckpointsFromCriteria2(taskId, acceptanceCriteria, taskTitle, cwd = process.cwd(), taskDescription) {
   const checkpoints = [];
   const now = new Date().toISOString();
-  const analyzeConfig = readAnalyzeConfig2(cwd2);
+  const analyzeConfig = readAnalyzeConfig2(cwd);
   const useSimpleMode = analyzeConfig.checkpointGenerator === "rule-based";
   const criteriaList = acceptanceCriteria && acceptanceCriteria.length > 0 ? acceptanceCriteria : generateDefaultCheckpoints2(taskTitle || taskId, taskDescription);
   for (let index = 0;index < criteriaList.length; index++) {
@@ -30709,7 +30712,7 @@ function generateCheckpointsFromCriteria2(taskId, acceptanceCriteria, taskTitle,
         updatedAt: now
       });
     } else {
-      const searchResults = searchCodebaseForCriteria2(criteria, cwd2);
+      const searchResults = searchCodebaseForCriteria2(criteria, cwd);
       const checkpoint = generateSmartCheckpoints2(taskId, criteria, searchResults, index);
       checkpoint.createdAt = now;
       checkpoint.updatedAt = now;
@@ -30803,12 +30806,12 @@ function extractAcceptanceCriteriaFromDescription2(description) {
   }
   return criteria;
 }
-function fixTaskCheckpoints2(taskId, cwd2) {
-  const task = readTaskMeta(taskId, cwd2);
+function fixTaskCheckpoints2(taskId, cwd) {
+  const task = readTaskMeta(taskId, cwd);
   if (!task) {
     return { fixed: false, reason: "任务不存在" };
   }
-  let contract = readContract2(taskId, cwd2);
+  let contract = readContract2(taskId, cwd);
   if (!contract) {
     const now = new Date().toISOString();
     contract = {
@@ -30828,17 +30831,17 @@ function fixTaskCheckpoints2(taskId, cwd2) {
     acceptanceCriteria = extractAcceptanceCriteriaFromDescription2(task.description);
     contract.acceptanceCriteria = acceptanceCriteria;
   }
-  const checkpoints = generateCheckpointsFromCriteria2(taskId, acceptanceCriteria, task.title, cwd2, task.description);
+  const checkpoints = generateCheckpointsFromCriteria2(taskId, acceptanceCriteria, task.title, cwd, task.description);
   if (checkpoints.length === 0) {
     return { fixed: false, reason: "无法生成检查点" };
   }
   contract.checkpoints = checkpoints.map((cp) => cp.id);
-  syncCheckpointsToMeta(taskId, checkpoints, cwd2);
-  saveContract2(taskId, contract, cwd2);
+  syncCheckpointsToMeta(taskId, checkpoints, cwd);
+  saveContract2(taskId, contract, cwd);
   return { fixed: true, reason: `生成了 ${checkpoints.length} 个检查点` };
 }
-async function fixCheckpoints2(cwd2 = process.cwd(), options = {}) {
-  const analyzeConfig = readAnalyzeConfig2(cwd2);
+async function fixCheckpoints2(cwd = process.cwd(), options = {}) {
+  const analyzeConfig = readAnalyzeConfig2(cwd);
   if (analyzeConfig.autoGenerateCheckpoints === false) {
     console.log("");
     console.log("⏭️  Auto-generate checkpoints disabled (analyze.autoGenerateCheckpoints = false)");
@@ -30854,18 +30857,18 @@ async function fixCheckpoints2(cwd2 = process.cwd(), options = {}) {
   console.log("");
   let tasksToFix;
   if (options.taskId) {
-    const task = readTaskMeta(options.taskId, cwd2);
+    const task = readTaskMeta(options.taskId, cwd);
     if (!task) {
       console.error(`❌ Task ${options.taskId} not found`);
       return;
     }
     tasksToFix = [task];
   } else {
-    tasksToFix = getAllTasks(cwd2, false);
+    tasksToFix = getAllTasks(cwd, false);
   }
   const tasksNeedingFix = [];
   for (const task of tasksToFix) {
-    const contract = readContract2(task.id, cwd2);
+    const contract = readContract2(task.id, cwd);
     if (!contract || !contract.checkpoints || contract.checkpoints.length === 0) {
       tasksNeedingFix.push(task);
     }
@@ -30900,7 +30903,7 @@ async function fixCheckpoints2(cwd2 = process.cwd(), options = {}) {
   for (const task of tasksNeedingFix) {
     console.log(`
 Processing ${task.id}...`);
-    const result = fixTaskCheckpoints2(task.id, cwd2);
+    const result = fixTaskCheckpoints2(task.id, cwd);
     if (result.fixed) {
       console.log(`  ✅ ${result.reason}`);
       fixedCount++;
@@ -31028,8 +31031,8 @@ function extractBugReportFields(markdown) {
   }
   return fields;
 }
-function loadLogContext(cwd2, keywords) {
-  const logsDir = getLogsDir(cwd2);
+function loadLogContext(cwd, keywords) {
+  const logsDir = getLogsDir(cwd);
   if (!fs19.existsSync(logsDir))
     return [];
   const contextLines = [];
@@ -31306,8 +31309,8 @@ function exportTrainingDataToJsonl(fields, analysis, exportPath) {
   fs19.appendFileSync(exportPath, line + `
 `, "utf-8");
 }
-async function analyzeBugReport(bugReportPath, cwd2 = process.cwd(), options = {}) {
-  const logger = createLogger("analyze-bug-report", cwd2);
+async function analyzeBugReport(bugReportPath, cwd = process.cwd(), options = {}) {
+  const logger = createLogger("analyze-bug-report", cwd);
   const startTime = Date.now();
   const resolvedPath = path15.resolve(bugReportPath);
   if (!fs19.existsSync(resolvedPath)) {
@@ -31352,7 +31355,7 @@ async function analyzeBugReport(bugReportPath, cwd2 = process.cwd(), options = {
     ...fields.problem.split(/\s+/).filter((w) => w.length > 3).slice(0, 5),
     ...fields.errorMessage ? [fields.errorMessage.substring(0, 30)] : []
   ];
-  const logContext = loadLogContext(cwd2, keywords);
+  const logContext = loadLogContext(cwd, keywords);
   console.log(`    Related logs: ${logContext.length} entries`);
   console.log("");
   console.log("  \uD83D\uDD0D Performing classification and severity assessment...");
@@ -31363,7 +31366,7 @@ async function analyzeBugReport(bugReportPath, cwd2 = process.cwd(), options = {
 `) : undefined;
   const aiResult = await withAIEnhancement({
     enabled: options.noAi !== true,
-    aiCall: () => new AIMetadataAssistant(cwd2).analyzeBugReport(markdown, logContextStr, { cwd: cwd2 }),
+    aiCall: () => new AIMetadataAssistant(cwd).analyzeBugReport(markdown, logContextStr, { cwd }),
     fallback: { title: null, description: null, type: null, priority: null, checkpoints: null, rootCause: null, impactScope: null, aiUsed: false },
     operationName: "Bug Report Analysis"
   });
@@ -31415,7 +31418,7 @@ async function analyzeBugReport(bugReportPath, cwd2 = process.cwd(), options = {
   console.log("");
   const timestamp = new Date().toISOString().replace(/[:.]/g, "-").slice(0, 19);
   const reportMarkdown = generateBugAnalysisMarkdown(fields, logContext, analysis, timestamp);
-  const reportsDir = getReportsDir(cwd2);
+  const reportsDir = getReportsDir(cwd);
   ensureDir(reportsDir);
   const reportPath = path15.join(reportsDir, `bug-analysis-${timestamp}.md`);
   fs19.writeFileSync(reportPath, reportMarkdown, "utf-8");
@@ -31435,14 +31438,14 @@ async function analyzeBugReport(bugReportPath, cwd2 = process.cwd(), options = {
     reportPath
   };
   if (options.exportTrainingData) {
-    const config = readConfig(cwd2);
+    const config = readConfig(cwd);
     const trainingConfig = config?.training;
     const trainingEnabled = trainingConfig?.exportEnabled === true;
     if (!trainingEnabled) {
       console.log("  ⚠️  Training data export not enabled. Please set training.exportEnabled: true in config.json");
     } else {
       const trainingDir = trainingConfig.outputDir || ".projmnt4claude/training-data/";
-      const resolvedTrainingDir = path15.isAbsolute(trainingDir) ? trainingDir : path15.join(getProjectDir(cwd2), trainingDir);
+      const resolvedTrainingDir = path15.isAbsolute(trainingDir) ? trainingDir : path15.join(getProjectDir(cwd), trainingDir);
       ensureDir(resolvedTrainingDir);
       const exportPath = path15.join(resolvedTrainingDir, "bug-analysis-training.jsonl");
       exportTrainingDataToJsonl(fields, result, exportPath);
@@ -31597,7 +31600,7 @@ function extractSlugFromTask(task) {
   }
   return `t${Math.abs(hash).toString(36)}`;
 }
-function setTaskStatusValidated(task, newStatus, context) {
+function setTaskStatusValidated(task, newStatus, context, cwd) {
   const result = validateStatusTransition(task.status, newStatus);
   if (!result.valid) {
     console.warn(`  ⚠️  ${t(cwd).analyzeFixPipeline.nonStandardTransition.replace("{context}", context).replace("{oldStatus}", task.status).replace("{newStatus}", newStatus)} — ${result.reason}`);
@@ -31605,8 +31608,8 @@ function setTaskStatusValidated(task, newStatus, context) {
   task.status = newStatus;
   return result;
 }
-async function fixSingleIssue(issue, cwd2, nonInteractive) {
-  const task = readTaskMeta(issue.taskId, cwd2);
+async function fixSingleIssue(issue, cwd, nonInteractive) {
+  const task = readTaskMeta(issue.taskId, cwd);
   if (!task)
     return "skipped";
   switch (issue.type) {
@@ -31616,167 +31619,167 @@ async function fixSingleIssue(issue, cwd2, nonInteractive) {
         const staleDays = Math.floor((Date.now() - updatedAt.getTime()) / (24 * 60 * 60 * 1000));
         if (staleDays > 30) {
           const oldStatus = task.status;
-          setTaskStatusValidated(task, "closed", "stale-auto-close");
+          setTaskStatusValidated(task, "closed", "stale-auto-close", cwd);
           if (!task.transitionNotes)
             task.transitionNotes = [];
           task.transitionNotes.push({
             timestamp: new Date().toISOString(),
             fromStatus: oldStatus,
             toStatus: "closed",
-            note: t(cwd2).analyzeFixPipeline.staleAutoCloseNote.replace("{days}", String(staleDays)),
+            note: t(cwd).analyzeFixPipeline.staleAutoCloseNote.replace("{days}", String(staleDays)),
             author: "analyze-fix"
           });
-          validatedWriteTaskMeta(task, cwd2);
-          console.log("  " + t(cwd2).analyzeFixPipeline.autoClosingStale.replace("{days}", String(staleDays)).replace("{taskId}", issue.taskId));
+          validatedWriteTaskMeta(task, cwd);
+          console.log("  " + t(cwd).analyzeFixPipeline.autoClosingStale.replace("{days}", String(staleDays)).replace("{taskId}", issue.taskId));
           return "fixed";
         }
-        console.log(t(cwd2).analyzeFixPipeline.skipStale.replace("{taskId}", issue.taskId).replace("{days}", String(staleDays)));
+        console.log(t(cwd).analyzeFixPipeline.skipStale.replace("{taskId}", issue.taskId).replace("{days}", String(staleDays)));
         return "skipped";
       }
-      console.log(t(cwd2).analyzeFixPipeline.checkingStale.replace("{taskId}", issue.taskId));
+      console.log(t(cwd).analyzeFixPipeline.checkingStale.replace("{taskId}", issue.taskId));
       const response = await import_prompts7.default({
         type: "select",
         name: "action",
-        message: t(cwd2).analyzeFixPipeline.staleTaskPrompt.replace("{taskId}", issue.taskId),
+        message: t(cwd).analyzeFixPipeline.staleTaskPrompt.replace("{taskId}", issue.taskId),
         choices: [
-          { title: t(cwd2).analyzeFixPipeline.closingTask, value: "close" },
-          { title: t(cwd2).analyzeFixPipeline.markingInProgress, value: "progress" },
-          { title: t(cwd2).common.skip, value: "skip" }
+          { title: t(cwd).analyzeFixPipeline.closingTask, value: "close" },
+          { title: t(cwd).analyzeFixPipeline.markingInProgress, value: "progress" },
+          { title: t(cwd).common.skip, value: "skip" }
         ]
       });
       if (response.action === "close") {
         const oldStatus = task.status;
-        setTaskStatusValidated(task, "closed", "stale-user-close");
+        setTaskStatusValidated(task, "closed", "stale-user-close", cwd);
         if (!task.transitionNotes)
           task.transitionNotes = [];
         task.transitionNotes.push({
           timestamp: new Date().toISOString(),
           fromStatus: oldStatus,
           toStatus: "closed",
-          note: t(cwd2).analyzeFixPipeline.staleUserCloseNote,
+          note: t(cwd).analyzeFixPipeline.staleUserCloseNote,
           author: "analyze-fix"
         });
-        validatedWriteTaskMeta(task, cwd2);
-        console.log("  " + t(cwd2).analyzeFixPipeline.closedTask.replace("{taskId}", issue.taskId));
+        validatedWriteTaskMeta(task, cwd);
+        console.log("  " + t(cwd).analyzeFixPipeline.closedTask.replace("{taskId}", issue.taskId));
         return "fixed";
       } else if (response.action === "progress") {
         const oldStatus = task.status;
-        setTaskStatusValidated(task, "in_progress", "stale-user-progress");
+        setTaskStatusValidated(task, "in_progress", "stale-user-progress", cwd);
         if (!task.transitionNotes)
           task.transitionNotes = [];
         task.transitionNotes.push({
           timestamp: new Date().toISOString(),
           fromStatus: oldStatus,
           toStatus: "in_progress",
-          note: t(cwd2).analyzeFixPipeline.staleUserProgressNote,
+          note: t(cwd).analyzeFixPipeline.staleUserProgressNote,
           author: "analyze-fix"
         });
-        validatedWriteTaskMeta(task, cwd2);
-        console.log("  " + t(cwd2).analyzeFixPipeline.markedInProgress.replace("{taskId}", issue.taskId));
+        validatedWriteTaskMeta(task, cwd);
+        console.log("  " + t(cwd).analyzeFixPipeline.markedInProgress.replace("{taskId}", issue.taskId));
         return "fixed";
       }
       return "skipped";
     }
     case "no_description": {
       if (nonInteractive) {
-        console.log(t(cwd2).analyzeFixPipeline.skipNoDescription.replace("{taskId}", issue.taskId));
+        console.log(t(cwd).analyzeFixPipeline.skipNoDescription.replace("{taskId}", issue.taskId));
         return "skipped";
       }
-      console.log(t(cwd2).analyzeFixPipeline.checkingNoDescription.replace("{taskId}", issue.taskId));
+      console.log(t(cwd).analyzeFixPipeline.checkingNoDescription.replace("{taskId}", issue.taskId));
       const response = await import_prompts7.default({
         type: "text",
         name: "description",
-        message: t(cwd2).analyzeFixPipeline.descriptionPrompt.replace("{taskId}", issue.taskId)
+        message: t(cwd).analyzeFixPipeline.descriptionPrompt.replace("{taskId}", issue.taskId)
       });
       if (response.description && response.description.trim()) {
         task.description = response.description.trim();
-        validatedWriteTaskMeta(task, cwd2);
-        console.log("  " + t(cwd2).analyzeFixPipeline.addingDescription.replace("{taskId}", issue.taskId));
+        validatedWriteTaskMeta(task, cwd);
+        console.log("  " + t(cwd).analyzeFixPipeline.addingDescription.replace("{taskId}", issue.taskId));
         return "fixed";
       }
       return "skipped";
     }
     case "cycle": {
-      console.log(t(cwd2).analyzeFixPipeline.analyzingCycle.replace("{taskId}", issue.taskId));
-      const allCycleTasks = getAllTaskIds(cwd2).map((id) => readTaskMeta(id, cwd2)).filter((t2) => t2 !== null);
+      console.log(t(cwd).analyzeFixPipeline.analyzingCycle.replace("{taskId}", issue.taskId));
+      const allCycleTasks = getAllTaskIds(cwd).map((id) => readTaskMeta(id, cwd)).filter((t2) => t2 !== null);
       const cycleGraph = DependencyGraph.fromTasks(allCycleTasks);
       const anomalies = cycleGraph.detectAnomalies();
       const cycleAnomalies = anomalies.filter((a) => a.type === "cycle" && a.nodeIds.includes(issue.taskId));
       if (cycleAnomalies.length === 0) {
-        console.log("   " + t(cwd2).analyzeFixPipeline.cycleNotFound.replace("{taskId}", issue.taskId));
+        console.log("   " + t(cwd).analyzeFixPipeline.cycleNotFound.replace("{taskId}", issue.taskId));
         return "skipped";
       }
       let fixedAny = false;
       for (const anomaly of cycleAnomalies) {
         if (anomaly.autoFix) {
-          console.log("   " + t(cwd2).analyzeFixPipeline.autoFixDescription.replace("{description}", anomaly.autoFix.description));
+          console.log("   " + t(cwd).analyzeFixPipeline.autoFixDescription.replace("{description}", anomaly.autoFix.description));
           for (const change of anomaly.autoFix.edgeChanges) {
             if (change.action === "remove") {
-              const fromTask = readTaskMeta(change.from, cwd2);
+              const fromTask = readTaskMeta(change.from, cwd);
               if (fromTask && fromTask.dependencies.includes(change.to)) {
                 fromTask.dependencies = fromTask.dependencies.filter((d) => d !== change.to);
-                validatedWriteTaskMeta(fromTask, cwd2);
-                console.log("  " + t(cwd2).analyzeFixPipeline.breakingCycle.replace("{from}", change.from).replace("{to}", change.to));
+                validatedWriteTaskMeta(fromTask, cwd);
+                console.log("  " + t(cwd).analyzeFixPipeline.breakingCycle.replace("{from}", change.from).replace("{to}", change.to));
                 fixedAny = true;
               }
             }
           }
         } else {
           const cycle = (anomaly.cyclePath || anomaly.nodeIds).join(" → ");
-          console.log("   " + t(cwd2).analyzeFixPipeline.cycleManualFix.replace("{cycle}", cycle));
+          console.log("   " + t(cwd).analyzeFixPipeline.cycleManualFix.replace("{cycle}", cycle));
         }
       }
       if (fixedAny) {
         return "fixed";
       }
-      console.log("   " + t(cwd2).analyzeFixPipeline.manualCheckCycle);
+      console.log("   " + t(cwd).analyzeFixPipeline.manualCheckCycle);
       return "unfixable";
     }
     case "legacy_priority": {
-      console.log(t(cwd2).analyzeFixPipeline.fixingPriority.replace("{taskId}", issue.taskId));
+      console.log(t(cwd).analyzeFixPipeline.fixingPriority.replace("{taskId}", issue.taskId));
       const oldPriority = task.priority;
       const newPriority = normalizePriority(task.priority);
       task.priority = newPriority;
-      validatedWriteTaskMeta(task, cwd2);
-      console.log("  " + t(cwd2).analyzeFixPipeline.priorityUpdated.replace("{old}", oldPriority).replace("{new}", newPriority));
+      validatedWriteTaskMeta(task, cwd);
+      console.log("  " + t(cwd).analyzeFixPipeline.priorityUpdated.replace("{old}", oldPriority).replace("{new}", newPriority));
       return "fixed";
     }
     case "legacy_status": {
-      console.log(t(cwd2).analyzeFixPipeline.fixingStatus.replace("{taskId}", issue.taskId));
+      console.log(t(cwd).analyzeFixPipeline.fixingStatus.replace("{taskId}", issue.taskId));
       const oldStatus = task.status;
       const newStatus = normalizeStatus(task.status);
-      setTaskStatusValidated(task, newStatus, "legacy-status-fix");
+      setTaskStatusValidated(task, newStatus, "legacy-status-fix", cwd);
       if (!task.transitionNotes)
         task.transitionNotes = [];
       task.transitionNotes.push({
         timestamp: new Date().toISOString(),
         fromStatus: oldStatus,
         toStatus: newStatus,
-        note: t(cwd2).analyzeFixPipeline.legacyStatusFixNote.replace("{oldStatus}", oldStatus).replace("{newStatus}", newStatus),
+        note: t(cwd).analyzeFixPipeline.legacyStatusFixNote.replace("{oldStatus}", oldStatus).replace("{newStatus}", newStatus),
         author: "analyze-fix"
       });
-      validatedWriteTaskMeta(task, cwd2);
-      console.log("  " + t(cwd2).analyzeFixPipeline.statusUpdated.replace("{old}", oldStatus).replace("{new}", newStatus));
+      validatedWriteTaskMeta(task, cwd);
+      console.log("  " + t(cwd).analyzeFixPipeline.statusUpdated.replace("{old}", oldStatus).replace("{new}", newStatus));
       return "fixed";
     }
     case "legacy_schema": {
-      console.log(t(cwd2).analyzeFixPipeline.fixingSchema.replace("{taskId}", issue.taskId));
+      console.log(t(cwd).analyzeFixPipeline.fixingSchema.replace("{taskId}", issue.taskId));
       if (task.reopenCount === undefined) {
         task.reopenCount = 0;
-        console.log("  " + t(cwd2).analyzeFixPipeline.reopenCountAdded);
+        console.log("  " + t(cwd).analyzeFixPipeline.reopenCountAdded);
       }
       if (task.requirementHistory === undefined) {
         task.requirementHistory = [];
-        console.log("  " + t(cwd2).analyzeFixPipeline.requirementHistoryAdded);
+        console.log("  " + t(cwd).analyzeFixPipeline.requirementHistoryAdded);
       }
-      validatedWriteTaskMeta(task, cwd2);
+      validatedWriteTaskMeta(task, cwd);
       return "fixed";
     }
     case "null_array_field": {
       const fields = issue.details?.fields ?? [];
       if (fields.length === 0)
         return "skipped";
-      console.log(t(cwd2).analyzeFixPipeline.fixingEmptyArrays.replace("{taskId}", issue.taskId).replace("{fields}", fields.join(", ")));
+      console.log(t(cwd).analyzeFixPipeline.fixingEmptyArrays.replace("{taskId}", issue.taskId).replace("{fields}", fields.join(", ")));
       const FIELD_DEFAULTS = {
         dependencies: [],
         history: [],
@@ -31790,36 +31793,36 @@ async function fixSingleIssue(issue, cwd2, nonInteractive) {
         const key = field;
         if (task[key] === null || task[key] === undefined) {
           task[key] = FIELD_DEFAULTS[field] ?? [];
-          console.log("  " + t(cwd2).analyzeFixPipeline.arrayInitialized.replace("{field}", field));
+          console.log("  " + t(cwd).analyzeFixPipeline.arrayInitialized.replace("{field}", field));
         }
       }
-      validatedWriteTaskMeta(task, cwd2);
+      validatedWriteTaskMeta(task, cwd);
       return "fixed";
     }
     case "pipeline_status_migration": {
-      console.log(t(cwd2).analyzeFixPipeline.migratingPipelineStatus.replace("{taskId}", issue.taskId));
+      console.log(t(cwd).analyzeFixPipeline.migratingPipelineStatus.replace("{taskId}", issue.taskId));
       const oldStatus = task.status;
       const targetStatus = issue.details?.targetStatus;
       if (targetStatus && PIPELINE_STATUS_MIGRATION_MAP[oldStatus]) {
-        setTaskStatusValidated(task, targetStatus, "pipeline-status-migration");
+        setTaskStatusValidated(task, targetStatus, "pipeline-status-migration", cwd);
         if (!task.transitionNotes)
           task.transitionNotes = [];
         task.transitionNotes.push({
           timestamp: new Date().toISOString(),
           fromStatus: oldStatus,
           toStatus: targetStatus,
-          note: t(cwd2).analyzeFixPipeline.pipelineStatusMigrationNote.replace("{oldStatus}", oldStatus).replace("{targetStatus}", targetStatus),
+          note: t(cwd).analyzeFixPipeline.pipelineStatusMigrationNote.replace("{oldStatus}", oldStatus).replace("{targetStatus}", targetStatus),
           author: "analyze-fix"
         });
-        validatedWriteTaskMeta(task, cwd2);
-        console.log("  " + t(cwd2).analyzeFixPipeline.statusMigrated.replace("{old}", oldStatus).replace("{new}", targetStatus));
+        validatedWriteTaskMeta(task, cwd);
+        console.log("  " + t(cwd).analyzeFixPipeline.statusMigrated.replace("{old}", oldStatus).replace("{new}", targetStatus));
         return "fixed";
       }
-      console.log("  " + t(cwd2).analyzeFixPipeline.cannotDetermineTargetStatus);
+      console.log("  " + t(cwd).analyzeFixPipeline.cannotDetermineTargetStatus);
       return "unfixable";
     }
     case "verdict_action_schema": {
-      console.log(t(cwd2).analyzeFixPipeline.fixingVerdictAction.replace("{taskId}", issue.taskId));
+      console.log(t(cwd).analyzeFixPipeline.fixingVerdictAction.replace("{taskId}", issue.taskId));
       let fixedAny = false;
       if (!task.history)
         task.history = [];
@@ -31829,7 +31832,7 @@ async function fixSingleIssue(issue, cwd2, nonInteractive) {
           if (!VALID_VERDICT_ACTIONS.includes(entry.newValue)) {
             const oldVal = entry.newValue;
             entry.newValue = `[migrated: invalid_verdict_action "${oldVal}" removed]`;
-            console.log("  " + t(cwd2).analyzeFixPipeline.verdictActionCleared.replace("{index}", String(i)).replace("{value}", oldVal));
+            console.log("  " + t(cwd).analyzeFixPipeline.verdictActionCleared.replace("{index}", String(i)).replace("{value}", oldVal));
             fixedAny = true;
           }
         }
@@ -31840,44 +31843,44 @@ async function fixSingleIssue(issue, cwd2, nonInteractive) {
           if (!VALID_VERDICT_ACTIONS.includes(verification.verdictAction)) {
             const oldVal = verification.verdictAction;
             delete verification.verdictAction;
-            console.log("  " + t(cwd2).analyzeFixPipeline.verificationCleared.replace("{value}", oldVal));
+            console.log("  " + t(cwd).analyzeFixPipeline.verificationCleared.replace("{value}", oldVal));
             fixedAny = true;
           }
         }
       }
       if (fixedAny) {
-        validatedWriteTaskMeta(task, cwd2);
+        validatedWriteTaskMeta(task, cwd);
         return "fixed";
       }
       return "skipped";
     }
     case "schema_version_outdated": {
-      console.log(t(cwd2).analyzeFixPipeline.migratingSchema.replace("{taskId}", issue.taskId));
+      console.log(t(cwd).analyzeFixPipeline.migratingSchema.replace("{taskId}", issue.taskId));
       const migrationResult = applySchemaMigrations(task);
       if (migrationResult.changed) {
-        validatedWriteTaskMeta(task, cwd2);
+        validatedWriteTaskMeta(task, cwd);
         for (const detail of migrationResult.details) {
           let translatedDetail = detail;
           if (detail === "schemaMigrationReopenCount") {
-            translatedDetail = t(cwd2).analyzeCmd.schemaMigrationReopenCount;
+            translatedDetail = t(cwd).analyzeCmd.schemaMigrationReopenCount;
           } else if (detail === "schemaMigrationRequirementHistory") {
-            translatedDetail = t(cwd2).analyzeCmd.schemaMigrationRequirementHistory;
+            translatedDetail = t(cwd).analyzeCmd.schemaMigrationRequirementHistory;
           } else if (detail === "schemaMigrationCommitHistory") {
-            translatedDetail = t(cwd2).analyzeCmd.schemaMigrationCommitHistory;
+            translatedDetail = t(cwd).analyzeCmd.schemaMigrationCommitHistory;
           } else if (detail === "schemaMigrationTransitionNotes") {
-            translatedDetail = t(cwd2).analyzeCmd.schemaMigrationTransitionNotes;
+            translatedDetail = t(cwd).analyzeCmd.schemaMigrationTransitionNotes;
           } else if (detail.startsWith("schemaMigrationResumeAction:")) {
             const status = detail.match(/status:(.+)/)?.[1] || "";
-            translatedDetail = t(cwd2).analyzeCmd.schemaMigrationResumeAction.replace("{status}", status);
+            translatedDetail = t(cwd).analyzeCmd.schemaMigrationResumeAction.replace("{status}", status);
           } else if (detail.startsWith("schemaMigrationCheckpointPrefix:")) {
             const oldMatch = detail.match(/old:"([^"]+)"/)?.[1] || "";
             const newMatch = detail.match(/new:"([^"]+)"/)?.[1] || "";
-            translatedDetail = t(cwd2).analyzeCmd.schemaMigrationCheckpointPrefix.replace("{old}", oldMatch).replace("{new}", newMatch);
+            translatedDetail = t(cwd).analyzeCmd.schemaMigrationCheckpointPrefix.replace("{old}", oldMatch).replace("{new}", newMatch);
           } else if (detail.startsWith("schemaMigrationCheckpointPolicy:")) {
             const policy = detail.match(/policy:"([^"]+)"/)?.[1] || "";
             const type = detail.match(/type:"([^"]+)"/)?.[1] || "";
             const priority = detail.match(/priority:"([^"]+)"/)?.[1] || "";
-            translatedDetail = t(cwd2).analyzeCmd.schemaMigrationCheckpointPolicy.replace("{policy}", policy).replace("{type}", type).replace("{priority}", priority);
+            translatedDetail = t(cwd).analyzeCmd.schemaMigrationCheckpointPolicy.replace("{policy}", policy).replace("{type}", type).replace("{priority}", priority);
           }
           console.log(`  ✅ ${translatedDetail}`);
         }
@@ -31886,85 +31889,85 @@ async function fixSingleIssue(issue, cwd2, nonInteractive) {
       return "skipped";
     }
     case "missing_createdBy": {
-      console.log(t(cwd2).analyzeFixPipeline.fixingCreatedBy.replace("{taskId}", issue.taskId));
+      console.log(t(cwd).analyzeFixPipeline.fixingCreatedBy.replace("{taskId}", issue.taskId));
       if (!task.createdBy) {
         task.createdBy = "import";
-        console.log("  " + t(cwd2).analyzeFixPipeline.createdByAdded);
+        console.log("  " + t(cwd).analyzeFixPipeline.createdByAdded);
       }
-      validatedWriteTaskMeta(task, cwd2);
+      validatedWriteTaskMeta(task, cwd);
       return "fixed";
     }
     case "invalid_status_value": {
-      console.log(t(cwd2).analyzeFixPipeline.fixingInvalidStatus.replace("{taskId}", issue.taskId));
+      console.log(t(cwd).analyzeFixPipeline.fixingInvalidStatus.replace("{taskId}", issue.taskId));
       if (issue.details?.currentValue) {
         const oldStatus = task.status;
-        setTaskStatusValidated(task, normalizeStatus(task.status), "invalid-status-value-fix");
+        setTaskStatusValidated(task, normalizeStatus(task.status), "invalid-status-value-fix", cwd);
         if (!task.transitionNotes)
           task.transitionNotes = [];
         task.transitionNotes.push({
           timestamp: new Date().toISOString(),
           fromStatus: oldStatus,
           toStatus: task.status,
-          note: t(cwd2).analyzeFixPipeline.invalidStatusValueFixNote.replace("{oldStatus}", oldStatus).replace("{newStatus}", task.status),
+          note: t(cwd).analyzeFixPipeline.invalidStatusValueFixNote.replace("{oldStatus}", oldStatus).replace("{newStatus}", task.status),
           author: "analyze-fix"
         });
-        validatedWriteTaskMeta(task, cwd2);
-        console.log("  " + t(cwd2).analyzeFixPipeline.statusUpdated.replace("{old}", oldStatus).replace("{new}", task.status));
+        validatedWriteTaskMeta(task, cwd);
+        console.log("  " + t(cwd).analyzeFixPipeline.statusUpdated.replace("{old}", oldStatus).replace("{new}", task.status));
         return "fixed";
       }
       return "unfixable";
     }
     case "invalid_type_value": {
-      console.log(t(cwd2).analyzeFixPipeline.fixingInvalidType.replace("{taskId}", issue.taskId));
+      console.log(t(cwd).analyzeFixPipeline.fixingInvalidType.replace("{taskId}", issue.taskId));
       if (issue.details?.currentValue) {
         const oldType = task.type;
         task.type = normalizeType(task.type);
-        validatedWriteTaskMeta(task, cwd2);
-        console.log("  " + t(cwd2).analyzeFixPipeline.typeUpdated.replace("{old}", oldType).replace("{new}", task.type));
+        validatedWriteTaskMeta(task, cwd);
+        console.log("  " + t(cwd).analyzeFixPipeline.typeUpdated.replace("{old}", oldType).replace("{new}", task.type));
         return "fixed";
       }
       return "unfixable";
     }
     case "invalid_priority_value": {
-      console.log(t(cwd2).analyzeFixPipeline.fixingInvalidPriority.replace("{taskId}", issue.taskId));
+      console.log(t(cwd).analyzeFixPipeline.fixingInvalidPriority.replace("{taskId}", issue.taskId));
       if (issue.details?.currentValue) {
         const oldPriority = task.priority;
         task.priority = normalizePriority(task.priority);
-        validatedWriteTaskMeta(task, cwd2);
-        console.log("  " + t(cwd2).analyzeFixPipeline.priorityUpdated.replace("{old}", oldPriority).replace("{new}", task.priority));
+        validatedWriteTaskMeta(task, cwd);
+        console.log("  " + t(cwd).analyzeFixPipeline.priorityUpdated.replace("{old}", oldPriority).replace("{new}", task.priority));
         return "fixed";
       }
       return "unfixable";
     }
     case "status_reopen_mismatch": {
-      console.log(t(cwd2).analyzeFixPipeline.fixingReopenTransition.replace("{taskId}", issue.taskId));
+      console.log(t(cwd).analyzeFixPipeline.fixingReopenTransition.replace("{taskId}", issue.taskId));
       if (!task.transitionNotes)
         task.transitionNotes = [];
       task.transitionNotes.push({
         timestamp: new Date().toISOString(),
         fromStatus: "resolved",
         toStatus: "open",
-        note: t(cwd2).analyzeFixPipeline.reopenMismatchFixNote.replace("{count}", String(task.reopenCount ?? 0)),
+        note: t(cwd).analyzeFixPipeline.reopenMismatchFixNote.replace("{count}", String(task.reopenCount ?? 0)),
         author: "analyze-fix"
       });
       if (task.status === "reopened") {
-        setTaskStatusValidated(task, "open", "reopen-mismatch-fix");
+        setTaskStatusValidated(task, "open", "reopen-mismatch-fix", cwd);
         task.transitionNotes.push({
           timestamp: new Date().toISOString(),
           fromStatus: "reopened",
           toStatus: "open",
-          note: t(cwd2).analyzeFixPipeline.reopenedStatusMigrationNote,
+          note: t(cwd).analyzeFixPipeline.reopenedStatusMigrationNote,
           author: "analyze-fix"
         });
       }
-      validatedWriteTaskMeta(task, cwd2);
-      console.log("  " + t(cwd2).analyzeFixPipeline.transitionNoteAdded.replace("{count}", String(task.reopenCount ?? 0)));
+      validatedWriteTaskMeta(task, cwd);
+      console.log("  " + t(cwd).analyzeFixPipeline.transitionNoteAdded.replace("{count}", String(task.reopenCount ?? 0)));
       return "fixed";
     }
     case "inconsistent_status": {
-      console.log(t(cwd2).analyzeFixPipeline.fixingStatusContradiction.replace("{taskId}", issue.taskId));
+      console.log(t(cwd).analyzeFixPipeline.fixingStatusContradiction.replace("{taskId}", issue.taskId));
       const oldStatus = task.status;
-      setTaskStatusValidated(task, "open", "inconsistent-status-fix");
+      setTaskStatusValidated(task, "open", "inconsistent-status-fix", cwd);
       task.verification = undefined;
       task.updatedAt = new Date().toISOString();
       if (!task.transitionNotes)
@@ -31973,49 +31976,49 @@ async function fixSingleIssue(issue, cwd2, nonInteractive) {
         timestamp: new Date().toISOString(),
         fromStatus: oldStatus,
         toStatus: "open",
-        note: t(cwd2).analyzeFixPipeline.inconsistentStatusFixNote,
+        note: t(cwd).analyzeFixPipeline.inconsistentStatusFixNote,
         author: "analyze-fix"
       });
-      validatedWriteTaskMeta(task, cwd2);
-      console.log("  " + t(cwd2).analyzeFixPipeline.statusContradictionFixed);
+      validatedWriteTaskMeta(task, cwd);
+      console.log("  " + t(cwd).analyzeFixPipeline.statusContradictionFixed);
       return "fixed";
     }
     case "invalid_timestamp_format": {
-      console.log(t(cwd2).analyzeFixPipeline.fixingTimestamp.replace("{taskId}", issue.taskId));
+      console.log(t(cwd).analyzeFixPipeline.fixingTimestamp.replace("{taskId}", issue.taskId));
       if (issue.details?.field) {
         const field = issue.details.field;
         const now = new Date().toISOString();
         if (field === "createdAt" || field === "updatedAt") {
           task[field] = now;
-          validatedWriteTaskMeta(task, cwd2);
-          console.log("  " + t(cwd2).analyzeFixPipeline.timestampUpdated.replace("{field}", field).replace("{value}", now));
+          validatedWriteTaskMeta(task, cwd);
+          console.log("  " + t(cwd).analyzeFixPipeline.timestampUpdated.replace("{field}", field).replace("{value}", now));
           return "fixed";
         }
       }
       return "unfixable";
     }
     case "invalid_parent_ref": {
-      console.log(t(cwd2).analyzeFixPipeline.invalidParent.replace("{taskId}", issue.taskId));
-      console.log("   " + t(cwd2).analyzeFixPipeline.manualFixInvalidParent);
+      console.log(t(cwd).analyzeFixPipeline.invalidParent.replace("{taskId}", issue.taskId));
+      console.log("   " + t(cwd).analyzeFixPipeline.manualFixInvalidParent);
       return "unfixable";
     }
     case "invalid_subtask_ref": {
-      console.log(t(cwd2).analyzeFixPipeline.fixingSubtaskRef.replace("{taskId}", issue.taskId));
+      console.log(t(cwd).analyzeFixPipeline.fixingSubtaskRef.replace("{taskId}", issue.taskId));
       if (task.subtaskIds && issue.details?.subtaskId) {
         const invalidId = issue.details.subtaskId;
         const oldLength = task.subtaskIds.length;
         task.subtaskIds = task.subtaskIds.filter((id) => id !== invalidId);
         if (task.subtaskIds.length < oldLength) {
-          validatedWriteTaskMeta(task, cwd2);
-          console.log("  " + t(cwd2).analyzeFixPipeline.subtaskRefRemoved.replace("{id}", invalidId));
+          validatedWriteTaskMeta(task, cwd);
+          console.log("  " + t(cwd).analyzeFixPipeline.subtaskRefRemoved.replace("{id}", invalidId));
           return "fixed";
         }
       }
       return "skipped";
     }
     case "invalid_dependency_ref": {
-      console.log(t(cwd2).analyzeFixPipeline.fixingDependencyRef.replace("{taskId}", issue.taskId));
-      const allDepTasks = getAllTaskIds(cwd2).map((id) => readTaskMeta(id, cwd2)).filter((t2) => t2 !== null);
+      console.log(t(cwd).analyzeFixPipeline.fixingDependencyRef.replace("{taskId}", issue.taskId));
+      const allDepTasks = getAllTaskIds(cwd).map((id) => readTaskMeta(id, cwd)).filter((t2) => t2 !== null);
       const validTaskIds = new Set(allDepTasks.map((t2) => t2.id));
       let removedAny = false;
       if (task.dependencies) {
@@ -32025,9 +32028,9 @@ async function fixSingleIssue(issue, cwd2, nonInteractive) {
           task.dependencies = task.dependencies.filter((depId) => validTaskIds.has(depId));
           removedAny = task.dependencies.length < oldLength;
           if (removedAny) {
-            validatedWriteTaskMeta(task, cwd2);
+            validatedWriteTaskMeta(task, cwd);
             for (const invalidId of invalidRefs) {
-              console.log("  " + t(cwd2).analyzeFixPipeline.dependencyRefRemoved.replace("{id}", invalidId));
+              console.log("  " + t(cwd).analyzeFixPipeline.dependencyRefRemoved.replace("{id}", invalidId));
             }
           }
         }
@@ -32037,16 +32040,16 @@ async function fixSingleIssue(issue, cwd2, nonInteractive) {
         const oldLength = task.dependencies.length;
         task.dependencies = task.dependencies.filter((id) => id !== invalidId);
         if (task.dependencies.length < oldLength) {
-          validatedWriteTaskMeta(task, cwd2);
-          console.log("  " + t(cwd2).analyzeFixPipeline.dependencyRefRemoved.replace("{id}", invalidId));
+          validatedWriteTaskMeta(task, cwd);
+          console.log("  " + t(cwd).analyzeFixPipeline.dependencyRefRemoved.replace("{id}", invalidId));
           removedAny = true;
         }
       }
       return removedAny ? "fixed" : "skipped";
     }
     case "missing_inferred_dependency": {
-      console.log(t(cwd2).analyzeFixPipeline.inferringDependencies.replace("{taskId}", issue.taskId));
-      const allInferredTasks = getAllTaskIds(cwd2).map((id) => readTaskMeta(id, cwd2)).filter((t2) => t2 !== null);
+      console.log(t(cwd).analyzeFixPipeline.inferringDependencies.replace("{taskId}", issue.taskId));
+      const allInferredTasks = getAllTaskIds(cwd).map((id) => readTaskMeta(id, cwd)).filter((t2) => t2 !== null);
       const inferredGraph = DependencyGraph.fromTasks(allInferredTasks);
       if (issue.details?.inferredDependencies) {
         const inferredDeps = issue.details.inferredDependencies;
@@ -32055,20 +32058,20 @@ async function fixSingleIssue(issue, cwd2, nonInteractive) {
           for (const inferred of inferredDeps) {
             if (!task.dependencies.includes(inferred.depTaskId)) {
               if (!inferredGraph.hasNode(inferred.depTaskId)) {
-                console.log("   " + t(cwd2).analyzeFixPipeline.inferredDepNotFound.replace("{id}", inferred.depTaskId));
+                console.log("   " + t(cwd).analyzeFixPipeline.inferredDepNotFound.replace("{id}", inferred.depTaskId));
                 continue;
               }
               if (inferredGraph.wouldCreateCycle(issue.taskId, inferred.depTaskId)) {
-                console.log("   " + t(cwd2).analyzeFixPipeline.inferredDepWouldCreateCycle.replace("{id}", inferred.depTaskId));
+                console.log("   " + t(cwd).analyzeFixPipeline.inferredDepWouldCreateCycle.replace("{id}", inferred.depTaskId));
                 continue;
               }
               task.dependencies.push(inferred.depTaskId);
-              console.log("  " + t(cwd2).analyzeFixPipeline.inferredDepAdded.replace("{id}", inferred.depTaskId).replace("{reason}", inferred.reason));
+              console.log("  " + t(cwd).analyzeFixPipeline.inferredDepAdded.replace("{id}", inferred.depTaskId).replace("{reason}", inferred.reason));
               addedAny = true;
             }
           }
           if (addedAny) {
-            validatedWriteTaskMeta(task, cwd2);
+            validatedWriteTaskMeta(task, cwd);
             return "fixed";
           }
         }
@@ -32076,17 +32079,17 @@ async function fixSingleIssue(issue, cwd2, nonInteractive) {
       return "skipped";
     }
     case "subtask_not_in_parent": {
-      console.log(t(cwd2).analyzeFixPipeline.fixingParentRef.replace("{taskId}", issue.taskId));
+      console.log(t(cwd).analyzeFixPipeline.fixingParentRef.replace("{taskId}", issue.taskId));
       if (task.parentId) {
-        const parentTask = readTaskMeta(task.parentId, cwd2);
+        const parentTask = readTaskMeta(task.parentId, cwd);
         if (parentTask) {
           if (!parentTask.subtaskIds) {
             parentTask.subtaskIds = [];
           }
           if (!parentTask.subtaskIds.includes(task.id)) {
             parentTask.subtaskIds.push(task.id);
-            validatedWriteTaskMeta(parentTask, cwd2);
-            console.log("  " + t(cwd2).analyzeFixPipeline.parentRefAdded);
+            validatedWriteTaskMeta(parentTask, cwd);
+            console.log("  " + t(cwd).analyzeFixPipeline.parentRefAdded);
             return "fixed";
           }
         }
@@ -32094,14 +32097,14 @@ async function fixSingleIssue(issue, cwd2, nonInteractive) {
       return "skipped";
     }
     case "parent_child_mismatch": {
-      console.log(t(cwd2).analyzeFixPipeline.fixingParentChildRelation.replace("{taskId}", issue.taskId));
+      console.log(t(cwd).analyzeFixPipeline.fixingParentChildRelation.replace("{taskId}", issue.taskId));
       if (issue.details?.subtaskId && issue.details?.expectedParentId) {
         const subtaskId = issue.details.subtaskId;
-        const subtask = readTaskMeta(subtaskId, cwd2);
+        const subtask = readTaskMeta(subtaskId, cwd);
         if (subtask) {
           subtask.parentId = issue.details.expectedParentId;
-          validatedWriteTaskMeta(subtask, cwd2);
-          console.log("  " + t(cwd2).analyzeFixPipeline.parentChildRelationFixed.replace("{subtaskId}", subtaskId).replace("{parentId}", subtask.parentId));
+          validatedWriteTaskMeta(subtask, cwd);
+          console.log("  " + t(cwd).analyzeFixPipeline.parentChildRelationFixed.replace("{subtaskId}", subtaskId).replace("{parentId}", subtask.parentId));
           return "fixed";
         }
       }
@@ -32110,67 +32113,67 @@ async function fixSingleIssue(issue, cwd2, nonInteractive) {
     case "meaningless_id": {
       const slug = extractSlugFromTask(task);
       if (!slug || isMeaninglessSlug2(slug)) {
-        console.log(t(cwd2).analyzeFixPipeline.cannotExtractKeywords.replace("{taskId}", issue.taskId));
+        console.log(t(cwd).analyzeFixPipeline.cannotExtractKeywords.replace("{taskId}", issue.taskId));
         return "unfixable";
       }
       const idInfo = parseTaskId(task.id);
       const taskType = task.type || idInfo.type || "feature";
       const taskPriority = task.priority || idInfo.priority;
-      const existingIds = getAllTaskIds(cwd2);
+      const existingIds = getAllTaskIds(cwd);
       const newId = generateTaskId(taskType, taskPriority, slug, existingIds);
       if (newId === task.id) {
-        console.log("  " + t(cwd2).analyzeFixPipeline.generatedIdSame);
+        console.log("  " + t(cwd).analyzeFixPipeline.generatedIdSame);
         return "skipped";
       }
-      console.log(t(cwd2).analyzeFixPipeline.renamingTask.replace("{old}", task.id).replace("{new}", newId));
-      const result = renameTask(task.id, newId, cwd2);
+      console.log(t(cwd).analyzeFixPipeline.renamingTask.replace("{old}", task.id).replace("{new}", newId));
+      const result = renameTask(task.id, newId, cwd);
       if (result.success) {
-        console.log("  " + t(cwd2).analyzeFixPipeline.taskRenamed.replace("{id}", newId));
+        console.log("  " + t(cwd).analyzeFixPipeline.taskRenamed.replace("{id}", newId));
         return "fixed";
       }
-      console.log("  " + t(cwd2).analyzeFixPipeline.renameFailed.replace("{error}", result.error || ""));
+      console.log("  " + t(cwd).analyzeFixPipeline.renameFailed.replace("{error}", result.error || ""));
       return "unfixable";
     }
     case "invalid_history_format":
     case "invalid_requirement_history_format":
     case "invalid_task_id_format": {
-      console.log(t(cwd2).analyzeFixPipeline.cannotAutoFix.replace("{taskId}", issue.taskId).replace("{type}", issue.type));
-      console.log("   " + t(cwd2).analyzeFixPipeline.suggestion.replace("{suggestion}", issue.suggestion || ""));
+      console.log(t(cwd).analyzeFixPipeline.cannotAutoFix.replace("{taskId}", issue.taskId).replace("{type}", issue.type));
+      console.log("   " + t(cwd).analyzeFixPipeline.suggestion.replace("{suggestion}", issue.suggestion || ""));
       return "unfixable";
     }
     case "manual_verification": {
-      console.log(t(cwd2).analyzeFixPipeline.fixingManualVerification.replace("{taskId}", issue.taskId));
+      console.log(t(cwd).analyzeFixPipeline.fixingManualVerification.replace("{taskId}", issue.taskId));
       if (task.checkpoints && issue.details?.checkpointIds) {
         let fixedCount_local = 0;
         for (const cpId of issue.details.checkpointIds) {
           const cp = task.checkpoints.find((c) => c.id === cpId);
           if (cp && cp.verification && cp.verification.method === "manual") {
             cp.verification.method = "automated";
-            console.log("  " + t(cwd2).analyzeFixPipeline.manualToAutomated.replace("{id}", cpId));
+            console.log("  " + t(cwd).analyzeFixPipeline.manualToAutomated.replace("{id}", cpId));
             fixedCount_local++;
           }
         }
         if (fixedCount_local > 0) {
-          validatedWriteTaskMeta(task, cwd2);
+          validatedWriteTaskMeta(task, cwd);
           return "fixed";
         }
       }
       return "skipped";
     }
     case "missing_verification": {
-      console.log(t(cwd2).analyzeFixPipeline.fixingMissingVerification.replace("{taskId}", issue.taskId));
+      console.log(t(cwd).analyzeFixPipeline.fixingMissingVerification.replace("{taskId}", issue.taskId));
       if (task.status === "resolved" && !task.verification) {
         task.verification = buildTaskVerification(task);
-        validatedWriteTaskMeta(task, cwd2);
-        console.log("  " + t(cwd2).analyzeFixPipeline.verificationAutoFilled);
-        console.log("     " + t(cwd2).analyzeFixPipeline.result + ": " + task.verification.result);
-        console.log("     " + t(cwd2).analyzeFixPipeline.checkpointCompletionRate.replace("{rate}", String(task.verification.checkpointCompletionRate)));
+        validatedWriteTaskMeta(task, cwd);
+        console.log("  " + t(cwd).analyzeFixPipeline.verificationAutoFilled);
+        console.log("     " + t(cwd).analyzeFixPipeline.result + ": " + task.verification.result);
+        console.log("     " + t(cwd).analyzeFixPipeline.checkpointCompletionRate.replace("{rate}", String(task.verification.checkpointCompletionRate)));
         return "fixed";
       }
       return "skipped";
     }
     case "abandoned_residual": {
-      const archiveDir = getArchiveDir(cwd2);
+      const archiveDir = getArchiveDir(cwd);
       const tasksToDelete = issue.details?.tasks || [];
       if (tasksToDelete.length === 0)
         return "skipped";
@@ -32182,18 +32185,18 @@ async function fixSingleIssue(issue, cwd2, nonInteractive) {
             fs20.rmSync(dirPath, { recursive: true, force: true });
             deleted++;
           } catch {
-            console.error("  " + t(cwd2).analyzeFixPipeline.deleteFailed.replace("{taskId}", taskId));
+            console.error("  " + t(cwd).analyzeFixPipeline.deleteFailed.replace("{taskId}", taskId));
           }
         }
-        console.log("  " + t(cwd2).analyzeFixPipeline.abandonedTaskDeleted.replace("{count}", String(deleted)));
+        console.log("  " + t(cwd).analyzeFixPipeline.abandonedTaskDeleted.replace("{count}", String(deleted)));
         return deleted > 0 ? "fixed" : "skipped";
       } else {
-        console.log(t(cwd2).analyzeFixPipeline.checkingAbandoned);
-        console.log("  " + t(cwd2).analyzeFixPipeline.abandonedFound.replace("{count}", String(tasksToDelete.length)).replace("{tasks}", tasksToDelete.join(", ")));
+        console.log(t(cwd).analyzeFixPipeline.checkingAbandoned);
+        console.log("  " + t(cwd).analyzeFixPipeline.abandonedFound.replace("{count}", String(tasksToDelete.length)).replace("{tasks}", tasksToDelete.join(", ")));
         const response = await import_prompts7.default({
           type: "confirm",
           name: "confirm",
-          message: t(cwd2).analyzeFixPipeline.confirmCleanupAbandoned,
+          message: t(cwd).analyzeFixPipeline.confirmCleanupAbandoned,
           initial: true
         });
         if (response.confirm) {
@@ -32204,35 +32207,35 @@ async function fixSingleIssue(issue, cwd2, nonInteractive) {
               fs20.rmSync(dirPath, { recursive: true, force: true });
               deleted++;
             } catch {
-              console.error("  " + t(cwd2).analyzeFixPipeline.deleteFailed.replace("{taskId}", taskId));
+              console.error("  " + t(cwd).analyzeFixPipeline.deleteFailed.replace("{taskId}", taskId));
             }
           }
-          console.log("  " + t(cwd2).analyzeFixPipeline.abandonedTaskDeleted.replace("{count}", String(deleted)));
+          console.log("  " + t(cwd).analyzeFixPipeline.abandonedTaskDeleted.replace("{count}", String(deleted)));
           return deleted > 0 ? "fixed" : "skipped";
         }
         return "skipped";
       }
     }
     case "file_not_found": {
-      console.log(t(cwd2).analyzeFixPipeline.missingFileRef.replace("{taskId}", issue.taskId));
+      console.log(t(cwd).analyzeFixPipeline.missingFileRef.replace("{taskId}", issue.taskId));
       if (issue.details?.missingFiles) {
-        console.log("   " + t(cwd2).analyzeFixPipeline.missingFiles.replace("{files}", issue.details.missingFiles.join(", ")));
+        console.log("   " + t(cwd).analyzeFixPipeline.missingFiles.replace("{files}", issue.details.missingFiles.join(", ")));
       }
-      console.log("   " + t(cwd2).analyzeFixPipeline.suggestion.replace("{suggestion}", issue.suggestion || ""));
+      console.log("   " + t(cwd).analyzeFixPipeline.suggestion.replace("{suggestion}", issue.suggestion || ""));
       return "unfixable";
     }
     case "missing_transition_note": {
-      console.log(t(cwd2).analyzeFixPipeline.fillingTransitionNote.replace("{taskId}", issue.taskId));
+      console.log(t(cwd).analyzeFixPipeline.fillingTransitionNote.replace("{taskId}", issue.taskId));
       const historyEntry = issue.details?.historyEntry;
       if (!historyEntry) {
-        console.log("  " + t(cwd2).analyzeFixPipeline.missingHistoryDetail);
+        console.log("  " + t(cwd).analyzeFixPipeline.missingHistoryDetail);
         return "unfixable";
       }
       const actionLower = (historyEntry.action || "").toLowerCase();
       const author = actionLower.includes("pipeline") || actionLower.includes("harness") ? "pipeline" : "user";
       const analysis = historyEntry.reason || "";
       const evidence = historyEntry.verificationDetails || "";
-      const texts = t(cwd2).analyzeCmd;
+      const texts = t(cwd).analyzeCmd;
       const decisionMap = {
         "open→in_progress": texts.transitionStartExecution,
         "in_progress→wait_review": texts.transitionSubmitReview,
@@ -32264,26 +32267,26 @@ async function fixSingleIssue(issue, cwd2, nonInteractive) {
         note,
         author
       });
-      validatedWriteTaskMeta(task, cwd2);
-      console.log("  " + t(cwd2).analyzeFixPipeline.transitionNoteFilled.replace("{status}", statusKey).replace("{author}", author));
+      validatedWriteTaskMeta(task, cwd);
+      console.log("  " + t(cwd).analyzeFixPipeline.transitionNoteFilled.replace("{status}", statusKey).replace("{author}", author));
       return "fixed";
     }
     case "interrupted_task": {
       const suggestedStatus = issue.details?.suggestedStatus;
       if (!suggestedStatus) {
-        console.log("  " + t(cwd2).analyzeFixPipeline.missingSuggestion);
+        console.log("  " + t(cwd).analyzeFixPipeline.missingSuggestion);
         return "unfixable";
       }
-      console.log(t(cwd2).analyzeFixPipeline.fixingInterruptedTask.replace("{taskId}", issue.taskId));
-      console.log("   " + t(cwd2).analyzeFixPipeline.currentStatus.replace("{status}", task.status) + " → " + t(cwd2).analyzeFixPipeline.suggestedStatus.replace("{status}", suggestedStatus));
-      console.log("   " + t(cwd2).analyzeFixPipeline.reason.replace("{reason}", issue.details?.suggestionReason || issue.suggestion || ""));
+      console.log(t(cwd).analyzeFixPipeline.fixingInterruptedTask.replace("{taskId}", issue.taskId));
+      console.log("   " + t(cwd).analyzeFixPipeline.currentStatus.replace("{status}", task.status) + " → " + t(cwd).analyzeFixPipeline.suggestedStatus.replace("{status}", suggestedStatus));
+      console.log("   " + t(cwd).analyzeFixPipeline.reason.replace("{reason}", issue.details?.suggestionReason || issue.suggestion || ""));
       if (suggestedStatus === "in_progress") {
-        console.log("  " + t(cwd2).analyzeFixPipeline.skipKeepInProgress);
+        console.log("  " + t(cwd).analyzeFixPipeline.skipKeepInProgress);
         return "skipped";
       }
       if (nonInteractive || !process.stdin.isTTY) {
         const oldStatus = task.status;
-        setTaskStatusValidated(task, suggestedStatus, "interrupted-task-auto");
+        setTaskStatusValidated(task, suggestedStatus, "interrupted-task-auto", cwd);
         task.updatedAt = new Date().toISOString();
         if (!task.transitionNotes)
           task.transitionNotes = [];
@@ -32291,22 +32294,22 @@ async function fixSingleIssue(issue, cwd2, nonInteractive) {
           timestamp: new Date().toISOString(),
           fromStatus: oldStatus,
           toStatus: suggestedStatus,
-          note: t(cwd2).analyzeFixPipeline.interruptedTaskAutoNote.replace("{days}", String(issue.details?.interruptedDays || 0)),
+          note: t(cwd).analyzeFixPipeline.interruptedTaskAutoNote.replace("{days}", String(issue.details?.interruptedDays || 0)),
           author: "analyze"
         });
-        validatedWriteTaskMeta(task, cwd2);
-        console.log("  " + t(cwd2).analyzeFixPipeline.statusFixed.replace("{taskId}", issue.taskId).replace("{old}", oldStatus).replace("{new}", suggestedStatus));
+        validatedWriteTaskMeta(task, cwd);
+        console.log("  " + t(cwd).analyzeFixPipeline.statusFixed.replace("{taskId}", issue.taskId).replace("{old}", oldStatus).replace("{new}", suggestedStatus));
         return "fixed";
       }
       const response = await import_prompts7.default({
         type: "confirm",
         name: "apply",
-        message: t(cwd2).analyzeFixPipeline.confirmStatusChange.replace("{taskId}", issue.taskId).replace("{oldStatus}", task.status).replace("{newStatus}", suggestedStatus),
+        message: t(cwd).analyzeFixPipeline.confirmStatusChange.replace("{taskId}", issue.taskId).replace("{oldStatus}", task.status).replace("{newStatus}", suggestedStatus),
         initial: true
       });
       if (response.apply) {
         const oldStatus = task.status;
-        setTaskStatusValidated(task, suggestedStatus, "interrupted-task-manual");
+        setTaskStatusValidated(task, suggestedStatus, "interrupted-task-manual", cwd);
         task.updatedAt = new Date().toISOString();
         if (!task.transitionNotes)
           task.transitionNotes = [];
@@ -32314,74 +32317,74 @@ async function fixSingleIssue(issue, cwd2, nonInteractive) {
           timestamp: new Date().toISOString(),
           fromStatus: oldStatus,
           toStatus: suggestedStatus,
-          note: t(cwd2).analyzeFixPipeline.interruptedTaskManualNote.replace("{days}", String(issue.details?.interruptedDays || 0)),
+          note: t(cwd).analyzeFixPipeline.interruptedTaskManualNote.replace("{days}", String(issue.details?.interruptedDays || 0)),
           author: "analyze"
         });
-        validatedWriteTaskMeta(task, cwd2);
-        console.log("  " + t(cwd2).analyzeFixPipeline.statusFixed.replace("{taskId}", issue.taskId).replace("{old}", oldStatus).replace("{new}", suggestedStatus));
+        validatedWriteTaskMeta(task, cwd);
+        console.log("  " + t(cwd).analyzeFixPipeline.statusFixed.replace("{taskId}", issue.taskId).replace("{old}", oldStatus).replace("{new}", suggestedStatus));
         return "fixed";
       }
       return "skipped";
     }
     case "reopened_status": {
-      console.log(t(cwd2).analyzeFixPipeline.migratingReopenedStatus.replace("{taskId}", issue.taskId));
+      console.log(t(cwd).analyzeFixPipeline.migratingReopenedStatus.replace("{taskId}", issue.taskId));
       const oldStatus = task.status;
-      setTaskStatusValidated(task, "open", "reopened-migration");
+      setTaskStatusValidated(task, "open", "reopened-migration", cwd);
       if (!task.transitionNotes)
         task.transitionNotes = [];
       task.transitionNotes.push({
         timestamp: new Date().toISOString(),
         fromStatus: "reopened",
         toStatus: "open",
-        note: t(cwd2).analyzeFixPipeline.reopenedStatusMigrationNote,
+        note: t(cwd).analyzeFixPipeline.reopenedStatusMigrationNote,
         author: "analyze-fix"
       });
-      validatedWriteTaskMeta(task, cwd2);
-      console.log("  " + t(cwd2).analyzeFixPipeline.reopenedMigrated);
+      validatedWriteTaskMeta(task, cwd);
+      console.log("  " + t(cwd).analyzeFixPipeline.reopenedMigrated);
       return "fixed";
     }
     case "needs_human_status": {
-      console.log(t(cwd2).analyzeFixPipeline.migratingNeedsHumanStatus.replace("{taskId}", issue.taskId));
+      console.log(t(cwd).analyzeFixPipeline.migratingNeedsHumanStatus.replace("{taskId}", issue.taskId));
       const oldStatus = task.status;
-      setTaskStatusValidated(task, "open", "needs-human-migration");
+      setTaskStatusValidated(task, "open", "needs-human-migration", cwd);
       if (!task.transitionNotes)
         task.transitionNotes = [];
       task.transitionNotes.push({
         timestamp: new Date().toISOString(),
         fromStatus: "needs_human",
         toStatus: "open",
-        note: t(cwd2).analyzeFixPipeline.needsHumanStatusMigrationNote,
+        note: t(cwd).analyzeFixPipeline.needsHumanStatusMigrationNote,
         author: "analyze-fix"
       });
-      validatedWriteTaskMeta(task, cwd2);
-      console.log("  " + t(cwd2).analyzeFixPipeline.needsHumanMigrated);
+      validatedWriteTaskMeta(task, cwd);
+      console.log("  " + t(cwd).analyzeFixPipeline.needsHumanMigrated);
       return "fixed";
     }
     case "low_checkpoint_coverage": {
-      console.log(t(cwd2).analyzeFixPipeline.checkpointCoverageWarning);
+      console.log(t(cwd).analyzeFixPipeline.checkpointCoverageWarning);
       if (issue.details?.tasksWithoutCheckpoints) {
-        console.log("   " + t(cwd2).analyzeFixPipeline.tasksWithoutCheckpoints.replace("{count}", String(issue.details.tasksWithoutCheckpoints)));
+        console.log("   " + t(cwd).analyzeFixPipeline.tasksWithoutCheckpoints.replace("{count}", String(issue.details.tasksWithoutCheckpoints)));
       }
       if (issue.details?.coverageRate != null) {
-        console.log("   " + t(cwd2).analyzeFixPipeline.currentCoverage.replace("{rate}", String((issue.details.coverageRate * 100).toFixed(1))));
+        console.log("   " + t(cwd).analyzeFixPipeline.currentCoverage.replace("{rate}", String((issue.details.coverageRate * 100).toFixed(1))));
       }
-      console.log("   " + t(cwd2).analyzeFixPipeline.suggestion.replace("{suggestion}", t(cwd2).analyzeFixPipeline.lowQualitySuggestion));
+      console.log("   " + t(cwd).analyzeFixPipeline.suggestion.replace("{suggestion}", t(cwd).analyzeFixPipeline.lowQualitySuggestion));
       return "unfixable";
     }
     case "low_quality": {
       const score = issue.details?.totalScore ?? "?";
-      console.log(t(cwd2).analyzeFixPipeline.lowQualityTask.replace("{taskId}", issue.taskId).replace("{score}", String(score)));
+      console.log(t(cwd).analyzeFixPipeline.lowQualityTask.replace("{taskId}", issue.taskId).replace("{score}", String(score)));
       const deductions = issue.details?.deductions ?? [];
       if (deductions.length > 0) {
         for (const d of deductions.slice(0, 3)) {
-          console.log(`   └─ ${d.reason}${d.suggestion ? ` (${t(cwd2).analyzeFixPipeline.suggestion.replace("{suggestion}", d.suggestion)})` : ""}`);
+          console.log(`   └─ ${d.reason}${d.suggestion ? ` (${t(cwd).analyzeFixPipeline.suggestion.replace("{suggestion}", d.suggestion)})` : ""}`);
         }
       }
-      console.log("   " + t(cwd2).analyzeFixPipeline.suggestion.replace("{suggestion}", issue.suggestion || ""));
+      console.log("   " + t(cwd).analyzeFixPipeline.suggestion.replace("{suggestion}", issue.suggestion || ""));
       return "unfixable";
     }
     case "deprecated_status_reference": {
-      console.log(t(cwd2).analyzeFixPipeline.cleaningObsoleteStatus.replace("{taskId}", issue.taskId));
+      console.log(t(cwd).analyzeFixPipeline.cleaningObsoleteStatus.replace("{taskId}", issue.taskId));
       let fixedAny = false;
       for (const entry of task.history || []) {
         if (entry.oldValue === "reopened" || entry.oldValue === "needs_human") {
@@ -32408,8 +32411,8 @@ async function fixSingleIssue(issue, cwd2, nonInteractive) {
         }
       }
       if (fixedAny) {
-        validatedWriteTaskMeta(task, cwd2);
-        console.log("  " + t(cwd2).analyzeFixPipeline.obsoleteStatusCleaned);
+        validatedWriteTaskMeta(task, cwd);
+        console.log("  " + t(cwd).analyzeFixPipeline.obsoleteStatusCleaned);
         return "fixed";
       }
       return "skipped";
@@ -32417,12 +32420,12 @@ async function fixSingleIssue(issue, cwd2, nonInteractive) {
     case "report_status_mismatch": {
       const impliedStatus = issue.details?.impliedStatus;
       if (!impliedStatus) {
-        console.log("  " + t(cwd2).analyzeFixPipeline.missingInferenceInfo);
+        console.log("  " + t(cwd).analyzeFixPipeline.missingInferenceInfo);
         return "unfixable";
       }
-      console.log(t(cwd2).analyzeFixPipeline.fixingReportStatusMismatch.replace("{taskId}", issue.taskId));
+      console.log(t(cwd).analyzeFixPipeline.fixingReportStatusMismatch.replace("{taskId}", issue.taskId));
       const oldStatus = task.status;
-      setTaskStatusValidated(task, impliedStatus, "report-status-mismatch");
+      setTaskStatusValidated(task, impliedStatus, "report-status-mismatch", cwd);
       task.updatedAt = new Date().toISOString();
       if (!task.transitionNotes)
         task.transitionNotes = [];
@@ -32430,15 +32433,15 @@ async function fixSingleIssue(issue, cwd2, nonInteractive) {
         timestamp: new Date().toISOString(),
         fromStatus: oldStatus,
         toStatus: impliedStatus,
-        note: t(cwd2).analyzeFixPipeline.reportStatusMismatchNote.replace("{oldStatus}", oldStatus).replace("{newStatus}", impliedStatus).replace("{reportFile}", String(issue.details?.reportFile)),
+        note: t(cwd).analyzeFixPipeline.reportStatusMismatchNote.replace("{oldStatus}", oldStatus).replace("{newStatus}", impliedStatus).replace("{reportFile}", String(issue.details?.reportFile)),
         author: "analyze-fix"
       });
-      validatedWriteTaskMeta(task, cwd2);
-      console.log("  " + t(cwd2).analyzeFixPipeline.reportStatusMismatchFixed.replace("{old}", oldStatus).replace("{new}", impliedStatus).replace("{report}", String(issue.details?.reportFile)));
+      validatedWriteTaskMeta(task, cwd);
+      console.log("  " + t(cwd).analyzeFixPipeline.reportStatusMismatchFixed.replace("{old}", oldStatus).replace("{new}", impliedStatus).replace("{report}", String(issue.details?.reportFile)));
       return "fixed";
     }
     case "checkpoint_status_mismatch": {
-      console.log(t(cwd2).analyzeFixPipeline.fixingCheckpointStatusMismatch.replace("{taskId}", issue.taskId));
+      console.log(t(cwd).analyzeFixPipeline.fixingCheckpointStatusMismatch.replace("{taskId}", issue.taskId));
       if (!task.checkpoints || task.checkpoints.length === 0) {
         return "skipped";
       }
@@ -32458,8 +32461,8 @@ async function fixSingleIssue(issue, cwd2, nonInteractive) {
       }
       if (completedCount > 0) {
         task.updatedAt = now;
-        validatedWriteTaskMeta(task, cwd2);
-        console.log("  " + t(cwd2).analyzeFixPipeline.checkpointStatusMismatchFixed.replace("{count}", String(completedCount)));
+        validatedWriteTaskMeta(task, cwd);
+        console.log("  " + t(cwd).analyzeFixPipeline.checkpointStatusMismatchFixed.replace("{count}", String(completedCount)));
         return "fixed";
       }
       return "skipped";
@@ -32467,12 +32470,12 @@ async function fixSingleIssue(issue, cwd2, nonInteractive) {
     case "missing_pipeline_evidence": {
       const fixAction = issue.details?.fixAction;
       if (fixAction !== "reset_to_open") {
-        console.log("  " + t(cwd2).analyzeFixPipeline.unknownFixAction.replace("{action}", fixAction || ""));
+        console.log("  " + t(cwd).analyzeFixPipeline.unknownFixAction.replace("{action}", fixAction || ""));
         return "unfixable";
       }
-      console.log(t(cwd2).analyzeFixPipeline.resettingTask.replace("{taskId}", issue.taskId));
+      console.log(t(cwd).analyzeFixPipeline.resettingTask.replace("{taskId}", issue.taskId));
       const oldStatus = task.status;
-      setTaskStatusValidated(task, "open", "missing-pipeline-evidence");
+      setTaskStatusValidated(task, "open", "missing-pipeline-evidence", cwd);
       task.updatedAt = new Date().toISOString();
       if (!task.transitionNotes)
         task.transitionNotes = [];
@@ -32480,25 +32483,25 @@ async function fixSingleIssue(issue, cwd2, nonInteractive) {
         timestamp: new Date().toISOString(),
         fromStatus: oldStatus,
         toStatus: "open",
-        note: t(cwd2).analyzeFixPipeline.missingPipelineEvidenceNote.replace("{oldStatus}", oldStatus),
+        note: t(cwd).analyzeFixPipeline.missingPipelineEvidenceNote.replace("{oldStatus}", oldStatus),
         author: "analyze-fix"
       });
       if (!task.resumeAction) {
         task.resumeAction = "reset_to_open";
       }
-      validatedWriteTaskMeta(task, cwd2);
-      console.log("  " + t(cwd2).analyzeFixPipeline.taskReset.replace("{old}", oldStatus));
+      validatedWriteTaskMeta(task, cwd);
+      console.log("  " + t(cwd).analyzeFixPipeline.taskReset.replace("{old}", oldStatus));
       return "fixed";
     }
     case "checkpoint_validation_error": {
       const ruleId = issue.details?.ruleId;
       if (ruleId !== "checkpoint-required-prefix") {
-        console.log("  " + t(cwd2).analyzeFixPipeline.unsupportedRule.replace("{rule}", ruleId || ""));
+        console.log("  " + t(cwd).analyzeFixPipeline.unsupportedRule.replace("{rule}", ruleId || ""));
         return "unfixable";
       }
-      console.log(t(cwd2).analyzeFixPipeline.fixingCheckpointPrefix.replace("{taskId}", issue.taskId));
+      console.log(t(cwd).analyzeFixPipeline.fixingCheckpointPrefix.replace("{taskId}", issue.taskId));
       if (!task.checkpoints || task.checkpoints.length === 0) {
-        console.log("  " + t(cwd2).analyzeFixPipeline.noCheckpoints);
+        console.log("  " + t(cwd).analyzeFixPipeline.noCheckpoints);
         return "skipped";
       }
       let updatedCount = 0;
@@ -32515,17 +32518,17 @@ async function fixSingleIssue(issue, cwd2, nonInteractive) {
       }
       if (updatedCount > 0) {
         task.updatedAt = now;
-        syncCheckpointsToMeta(task.id, task.checkpoints, cwd2);
-        console.log("  " + t(cwd2).analyzeFixPipeline.checkpointPrefixUpdated.replace("{count}", String(updatedCount)));
+        syncCheckpointsToMeta(task.id, task.checkpoints, cwd);
+        console.log("  " + t(cwd).analyzeFixPipeline.checkpointPrefixUpdated.replace("{count}", String(updatedCount)));
         return "fixed";
       }
-      console.log("  " + t(cwd2).analyzeFixPipeline.allCheckpointsHavePrefix);
+      console.log("  " + t(cwd).analyzeFixPipeline.allCheckpointsHavePrefix);
       return "skipped";
     }
     case "missing_checkpoint_prefix": {
-      console.log(t(cwd2).analyzeFixPipeline.fixingCheckpointPrefix.replace("{taskId}", issue.taskId));
+      console.log(t(cwd).analyzeFixPipeline.fixingCheckpointPrefix.replace("{taskId}", issue.taskId));
       if (!task.checkpoints || task.checkpoints.length === 0) {
-        console.log("  " + t(cwd2).analyzeFixPipeline.noCheckpoints);
+        console.log("  " + t(cwd).analyzeFixPipeline.noCheckpoints);
         return "skipped";
       }
       let updatedCount = 0;
@@ -32542,29 +32545,29 @@ async function fixSingleIssue(issue, cwd2, nonInteractive) {
       }
       if (updatedCount > 0) {
         task.updatedAt = now;
-        syncCheckpointsToMeta(task.id, task.checkpoints, cwd2);
-        console.log("  " + t(cwd2).analyzeFixPipeline.checkpointPrefixUpdated.replace("{count}", String(updatedCount)));
+        syncCheckpointsToMeta(task.id, task.checkpoints, cwd);
+        console.log("  " + t(cwd).analyzeFixPipeline.checkpointPrefixUpdated.replace("{count}", String(updatedCount)));
         return "fixed";
       }
-      console.log("  " + t(cwd2).analyzeFixPipeline.allCheckpointsHavePrefix);
+      console.log("  " + t(cwd).analyzeFixPipeline.allCheckpointsHavePrefix);
       return "skipped";
     }
     default:
       return "unfixable";
   }
 }
-async function fixIssues2(cwd2 = process.cwd(), options = {}, existingResult) {
+async function fixIssues2(cwd = process.cwd(), options = {}, existingResult) {
   const { nonInteractive = false } = options;
-  const result = existingResult ?? await analyzeProject(cwd2);
+  const result = existingResult ?? await analyzeProject(cwd);
   if (result.issues.length === 0) {
-    console.log(t(cwd2).analyzeFixPipeline.noIssuesFound);
+    console.log(t(cwd).analyzeFixPipeline.noIssuesFound);
     return { fixed: 0, skipped: 0, unfixable: 0 };
   }
   console.log("");
   console.log("━".repeat(SEPARATOR_WIDTH));
-  console.log(t(cwd2).analyzeFixPipeline.autoFixIssues);
+  console.log(t(cwd).analyzeFixPipeline.autoFixIssues);
   if (nonInteractive) {
-    console.log("   " + t(cwd2).analyzeFixPipeline.nonInteractiveMode);
+    console.log("   " + t(cwd).analyzeFixPipeline.nonInteractiveMode);
   }
   console.log("━".repeat(SEPARATOR_WIDTH));
   console.log("");
@@ -32574,10 +32577,10 @@ async function fixIssues2(cwd2 = process.cwd(), options = {}, existingResult) {
   for (const issue of result.issues) {
     let fixResult;
     try {
-      fixResult = await fixSingleIssue(issue, cwd2, nonInteractive);
+      fixResult = await fixSingleIssue(issue, cwd, nonInteractive);
     } catch (error) {
       const errorMsg = error instanceof Error ? error.message : String(error);
-      console.error(t(cwd2).analyzeFixPipeline.fixError.replace("{taskId}", issue.taskId).replace("{type}", issue.type).replace("{error}", errorMsg));
+      console.error(t(cwd).analyzeFixPipeline.fixError.replace("{taskId}", issue.taskId).replace("{type}", issue.type).replace("{error}", errorMsg));
       fixResult = "skipped";
     }
     if (fixResult === "fixed") {
@@ -32590,18 +32593,18 @@ async function fixIssues2(cwd2 = process.cwd(), options = {}, existingResult) {
   }
   console.log("");
   console.log("━".repeat(SEPARATOR_WIDTH));
-  console.log(t(cwd2).analyzeFixPipeline.fixComplete.replace("{count}", String(fixedCount)));
+  console.log(t(cwd).analyzeFixPipeline.fixComplete.replace("{count}", String(fixedCount)));
   if (skippedCount > 0)
-    console.log(t(cwd2).analyzeFixPipeline.fixSkipped.replace("{count}", String(skippedCount)));
+    console.log(t(cwd).analyzeFixPipeline.fixSkipped.replace("{count}", String(skippedCount)));
   if (unfixableCount > 0)
-    console.log(t(cwd2).analyzeFixPipeline.fixUnfixable.replace("{count}", String(unfixableCount)));
+    console.log(t(cwd).analyzeFixPipeline.fixUnfixable.replace("{count}", String(unfixableCount)));
   console.log("━".repeat(SEPARATOR_WIDTH));
   return { fixed: fixedCount, skipped: skippedCount, unfixable: unfixableCount };
 }
 function emptyStageResult(summary) {
   return { executed: false, skipped: true, duration: 0, summary };
 }
-async function fixPipeline(cwd2 = process.cwd(), options = {}) {
+async function fixPipeline(cwd = process.cwd(), options = {}) {
   const pipelineStart = Date.now();
   const {
     nonInteractive = false,
@@ -32623,7 +32626,7 @@ async function fixPipeline(cwd2 = process.cwd(), options = {}) {
   let analysisResult;
   console.log("");
   console.log("━".repeat(SEPARATOR_WIDTH));
-  console.log(t(cwd2).analyzeFixPipeline.fixPipelineMode);
+  console.log(t(cwd).analyzeFixPipeline.fixPipelineMode);
   const stages = [];
   if (runStage1)
     stages.push("1");
@@ -32635,24 +32638,24 @@ async function fixPipeline(cwd2 = process.cwd(), options = {}) {
     stages.push("4");
   if (runStage5)
     stages.push("5");
-  console.log("   " + t(cwd2).analyzeFixPipeline.executingStages + ": " + stages.join(", ") + " / 5");
+  console.log("   " + t(cwd).analyzeFixPipeline.executingStages + ": " + stages.join(", ") + " / 5");
   console.log("━".repeat(SEPARATOR_WIDTH));
   let stage1Result;
   if (runStage1) {
     const start = Date.now();
     console.log(`
-` + t(cwd2).analyzeFixPipeline.stage1Analysis);
+` + t(cwd).analyzeFixPipeline.stage1Analysis);
     try {
-      analysisResult = await analyzeProject(cwd2, false, aiOptions);
+      analysisResult = await analyzeProject(cwd, false, aiOptions);
       const issueCount = analysisResult.issues.length;
       const duration = Date.now() - start;
       stage1Result = {
         executed: true,
         skipped: false,
         duration,
-        summary: t(cwd2).analyzeFixPipeline.stage1Complete.replace("{count}", String(issueCount)).replace("{duration}", (duration / 1000).toFixed(1))
+        summary: t(cwd).analyzeFixPipeline.stage1Complete.replace("{count}", String(issueCount)).replace("{duration}", (duration / 1000).toFixed(1))
       };
-      console.log("   " + t(cwd2).analyzeFixPipeline.stage1Complete.replace("{count}", String(issueCount)).replace("{duration}", (duration / 1000).toFixed(1)));
+      console.log("   " + t(cwd).analyzeFixPipeline.stage1Complete.replace("{count}", String(issueCount)).replace("{duration}", (duration / 1000).toFixed(1)));
     } catch (error) {
       const duration = Date.now() - start;
       const errorMsg = error instanceof Error ? error.message : String(error);
@@ -32660,29 +32663,29 @@ async function fixPipeline(cwd2 = process.cwd(), options = {}) {
         executed: true,
         skipped: false,
         duration,
-        summary: t(cwd2).analyzeFixPipeline.stage1Failed.replace("{error}", errorMsg)
+        summary: t(cwd).analyzeFixPipeline.stage1Failed.replace("{error}", errorMsg)
       };
-      console.error("   " + t(cwd2).analyzeFixPipeline.stage1Failed.replace("{error}", errorMsg));
+      console.error("   " + t(cwd).analyzeFixPipeline.stage1Failed.replace("{error}", errorMsg));
     }
   } else {
-    stage1Result = emptyStageResult(t(cwd2).analyzeFixPipeline.stage1Skipped);
-    console.log("   " + t(cwd2).analyzeFixPipeline.stage1Skipped);
+    stage1Result = emptyStageResult(t(cwd).analyzeFixPipeline.stage1Skipped);
+    console.log("   " + t(cwd).analyzeFixPipeline.stage1Skipped);
   }
   let stage2Result;
   if (runStage2 && analysisResult) {
     const start = Date.now();
     console.log(`
-` + t(cwd2).analyzeFixPipeline.stage2Fix);
+` + t(cwd).analyzeFixPipeline.stage2Fix);
     try {
-      const fixResult = await fixIssues2(cwd2, { nonInteractive }, analysisResult);
+      const fixResult = await fixIssues2(cwd, { nonInteractive }, analysisResult);
       const duration = Date.now() - start;
       stage2Result = {
         executed: true,
         skipped: false,
         duration,
-        summary: t(cwd2).analyzeFixPipeline.stage2Complete.replace("{fixed}", String(fixResult.fixed)).replace("{skipped}", String(fixResult.skipped)).replace("{duration}", (duration / 1000).toFixed(1))
+        summary: t(cwd).analyzeFixPipeline.stage2Complete.replace("{fixed}", String(fixResult.fixed)).replace("{skipped}", String(fixResult.skipped)).replace("{duration}", (duration / 1000).toFixed(1))
       };
-      console.log("   " + t(cwd2).analyzeFixPipeline.stage2Complete.replace("{fixed}", String(fixResult.fixed)).replace("{skipped}", String(fixResult.skipped)).replace("{duration}", (duration / 1000).toFixed(1)));
+      console.log("   " + t(cwd).analyzeFixPipeline.stage2Complete.replace("{fixed}", String(fixResult.fixed)).replace("{skipped}", String(fixResult.skipped)).replace("{duration}", (duration / 1000).toFixed(1)));
     } catch (error) {
       const duration = Date.now() - start;
       const errorMsg = error instanceof Error ? error.message : String(error);
@@ -32690,24 +32693,24 @@ async function fixPipeline(cwd2 = process.cwd(), options = {}) {
         executed: true,
         skipped: false,
         duration,
-        summary: t(cwd2).analyzeFixPipeline.stage2Failed.replace("{error}", errorMsg)
+        summary: t(cwd).analyzeFixPipeline.stage2Failed.replace("{error}", errorMsg)
       };
-      console.error("   " + t(cwd2).analyzeFixPipeline.stage2Failed.replace("{error}", errorMsg));
+      console.error("   " + t(cwd).analyzeFixPipeline.stage2Failed.replace("{error}", errorMsg));
     }
   } else if (runStage2 && !analysisResult) {
     const start = Date.now();
     console.log(`
-` + t(cwd2).analyzeFixPipeline.stage2FixWithAnalysis);
+` + t(cwd).analyzeFixPipeline.stage2FixWithAnalysis);
     try {
-      const fixResult = await fixIssues2(cwd2, { nonInteractive });
+      const fixResult = await fixIssues2(cwd, { nonInteractive });
       const duration = Date.now() - start;
       stage2Result = {
         executed: true,
         skipped: false,
         duration,
-        summary: t(cwd2).analyzeFixPipeline.stage2Complete.replace("{fixed}", String(fixResult.fixed)).replace("{skipped}", String(fixResult.skipped)).replace("{duration}", (duration / 1000).toFixed(1))
+        summary: t(cwd).analyzeFixPipeline.stage2Complete.replace("{fixed}", String(fixResult.fixed)).replace("{skipped}", String(fixResult.skipped)).replace("{duration}", (duration / 1000).toFixed(1))
       };
-      console.log("   " + t(cwd2).analyzeFixPipeline.stage2Complete.replace("{fixed}", String(fixResult.fixed)).replace("{skipped}", String(fixResult.skipped)).replace("{duration}", (duration / 1000).toFixed(1)));
+      console.log("   " + t(cwd).analyzeFixPipeline.stage2Complete.replace("{fixed}", String(fixResult.fixed)).replace("{skipped}", String(fixResult.skipped)).replace("{duration}", (duration / 1000).toFixed(1)));
     } catch (error) {
       const duration = Date.now() - start;
       const errorMsg = error instanceof Error ? error.message : String(error);
@@ -32715,23 +32718,23 @@ async function fixPipeline(cwd2 = process.cwd(), options = {}) {
         executed: true,
         skipped: false,
         duration,
-        summary: t(cwd2).analyzeFixPipeline.stage2Failed.replace("{error}", errorMsg)
+        summary: t(cwd).analyzeFixPipeline.stage2Failed.replace("{error}", errorMsg)
       };
-      console.error("   " + t(cwd2).analyzeFixPipeline.stage2Failed.replace("{error}", errorMsg));
+      console.error("   " + t(cwd).analyzeFixPipeline.stage2Failed.replace("{error}", errorMsg));
     }
   } else {
-    stage2Result = emptyStageResult(t(cwd2).analyzeFixPipeline.stage2Skipped);
-    console.log("   " + t(cwd2).analyzeFixPipeline.stage2Skipped);
+    stage2Result = emptyStageResult(t(cwd).analyzeFixPipeline.stage2Skipped);
+    console.log("   " + t(cwd).analyzeFixPipeline.stage2Skipped);
   }
   let stage3Result;
   if (runStage3) {
     const start = Date.now();
     console.log(`
-` + t(cwd2).analyzeFixPipeline.stage3AI);
+` + t(cwd).analyzeFixPipeline.stage3AI);
     if (aiOptions.deepAnalyze && !aiOptions.noAi) {
       try {
         if (!analysisResult) {
-          analysisResult = await analyzeProject(cwd2, false, aiOptions);
+          analysisResult = await analyzeProject(cwd, false, aiOptions);
         }
         const aiIssues = analysisResult.issues.filter((i) => i.type === "semantic_duplicate" || i.type === "missing_inferred_dependency");
         const duration = Date.now() - start;
@@ -32739,9 +32742,9 @@ async function fixPipeline(cwd2 = process.cwd(), options = {}) {
           executed: true,
           skipped: false,
           duration,
-          summary: t(cwd2).analyzeFixPipeline.stage3Complete.replace("{count}", String(aiIssues.length)).replace("{duration}", (duration / 1000).toFixed(1))
+          summary: t(cwd).analyzeFixPipeline.stage3Complete.replace("{count}", String(aiIssues.length)).replace("{duration}", (duration / 1000).toFixed(1))
         };
-        console.log("   " + t(cwd2).analyzeFixPipeline.stage3Complete.replace("{count}", String(aiIssues.length)).replace("{duration}", (duration / 1000).toFixed(1)));
+        console.log("   " + t(cwd).analyzeFixPipeline.stage3Complete.replace("{count}", String(aiIssues.length)).replace("{duration}", (duration / 1000).toFixed(1)));
       } catch (error) {
         const duration = Date.now() - start;
         const errorMsg = error instanceof Error ? error.message : String(error);
@@ -32749,9 +32752,9 @@ async function fixPipeline(cwd2 = process.cwd(), options = {}) {
           executed: true,
           skipped: false,
           duration,
-          summary: t(cwd2).analyzeFixPipeline.stage3Failed.replace("{error}", errorMsg)
+          summary: t(cwd).analyzeFixPipeline.stage3Failed.replace("{error}", errorMsg)
         };
-        console.error("   " + t(cwd2).analyzeFixPipeline.stage3Failed.replace("{error}", errorMsg));
+        console.error("   " + t(cwd).analyzeFixPipeline.stage3Failed.replace("{error}", errorMsg));
       }
     } else {
       const duration = Date.now() - start;
@@ -32759,30 +32762,30 @@ async function fixPipeline(cwd2 = process.cwd(), options = {}) {
         executed: true,
         skipped: false,
         duration,
-        summary: t(cwd2).analyzeFixPipeline.stage3NotEnabled
+        summary: t(cwd).analyzeFixPipeline.stage3NotEnabled
       };
-      console.log("   " + t(cwd2).analyzeFixPipeline.stage3NotEnabled);
+      console.log("   " + t(cwd).analyzeFixPipeline.stage3NotEnabled);
     }
   } else {
     const skipReason = noAi ? "--no-ai" : "--rules-only/--checkpoints-only/--quality-only";
-    stage3Result = emptyStageResult(t(cwd2).analyzeFixPipeline.stage3Skipped.replace("{reason}", skipReason));
-    console.log("   " + t(cwd2).analyzeFixPipeline.stage3Skipped.replace("{reason}", skipReason));
+    stage3Result = emptyStageResult(t(cwd).analyzeFixPipeline.stage3Skipped.replace("{reason}", skipReason));
+    console.log("   " + t(cwd).analyzeFixPipeline.stage3Skipped.replace("{reason}", skipReason));
   }
   let stage4Result;
   if (runStage4) {
     const start = Date.now();
     console.log(`
-` + t(cwd2).analyzeFixPipeline.stage4Checkpoint);
+` + t(cwd).analyzeFixPipeline.stage4Checkpoint);
     try {
-      await fixCheckpoints(cwd2, { nonInteractive, taskId });
+      await fixCheckpoints(cwd, { nonInteractive, taskId });
       const duration = Date.now() - start;
       stage4Result = {
         executed: true,
         skipped: false,
         duration,
-        summary: t(cwd2).analyzeFixPipeline.stage4Complete.replace("{duration}", (duration / 1000).toFixed(1))
+        summary: t(cwd).analyzeFixPipeline.stage4Complete.replace("{duration}", (duration / 1000).toFixed(1))
       };
-      console.log("   " + t(cwd2).analyzeFixPipeline.stage4Complete.replace("{duration}", (duration / 1000).toFixed(1)));
+      console.log("   " + t(cwd).analyzeFixPipeline.stage4Complete.replace("{duration}", (duration / 1000).toFixed(1)));
     } catch (error) {
       const duration = Date.now() - start;
       const errorMsg = error instanceof Error ? error.message : String(error);
@@ -32790,38 +32793,38 @@ async function fixPipeline(cwd2 = process.cwd(), options = {}) {
         executed: true,
         skipped: false,
         duration,
-        summary: t(cwd2).analyzeFixPipeline.stage4Failed.replace("{error}", errorMsg)
+        summary: t(cwd).analyzeFixPipeline.stage4Failed.replace("{error}", errorMsg)
       };
-      console.error("   " + t(cwd2).analyzeFixPipeline.stage4Failed.replace("{error}", errorMsg));
+      console.error("   " + t(cwd).analyzeFixPipeline.stage4Failed.replace("{error}", errorMsg));
     }
   } else {
-    stage4Result = emptyStageResult(t(cwd2).analyzeFixPipeline.stage4Skipped);
-    console.log("   " + t(cwd2).analyzeFixPipeline.stage4Skipped);
+    stage4Result = emptyStageResult(t(cwd).analyzeFixPipeline.stage4Skipped);
+    console.log("   " + t(cwd).analyzeFixPipeline.stage4Skipped);
   }
   let stage5Result;
   if (runStage5) {
     const start = Date.now();
     console.log(`
-` + t(cwd2).analyzeFixPipeline.stage5Quality);
+` + t(cwd).analyzeFixPipeline.stage5Quality);
     try {
-      const scores = await performQualityCheck(cwd2, aiOptions);
+      const scores = await performQualityCheck(cwd, aiOptions);
       showQualityReport(scores, { compact, json: json2, threshold });
       const lowQualityCount = Array.from(scores.values()).filter((s) => s.totalScore < threshold).length;
       let qualityReportedCount = 0;
       if (lowQualityCount > 0) {
         console.log(`
-   ` + t(cwd2).analyzeFixPipeline.qualityIssuesFound.replace("{count}", String(lowQualityCount)));
+   ` + t(cwd).analyzeFixPipeline.qualityIssuesFound.replace("{count}", String(lowQualityCount)));
         for (const [taskId2, score] of scores) {
           if (score.totalScore < threshold) {
             const qualityIssue = {
               taskId: taskId2,
               type: "low_quality",
               severity: score.totalScore < 40 ? "high" : "medium",
-              message: t(cwd2).analyzeFixPipeline.lowQualityTask.replace("{taskId}", taskId2).replace("{score}", String(score.totalScore)),
-              suggestion: score.deductions.length > 0 && score.deductions[0]?.suggestion ? score.deductions[0].suggestion : t(cwd2).analyzeFixPipeline.lowQualitySuggestion,
+              message: t(cwd).analyzeFixPipeline.lowQualityTask.replace("{taskId}", taskId2).replace("{score}", String(score.totalScore)),
+              suggestion: score.deductions.length > 0 && score.deductions[0]?.suggestion ? score.deductions[0].suggestion : t(cwd).analyzeFixPipeline.lowQualitySuggestion,
               details: { totalScore: score.totalScore, deductions: score.deductions }
             };
-            await fixSingleIssue(qualityIssue, cwd2, nonInteractive);
+            await fixSingleIssue(qualityIssue, cwd, nonInteractive);
             qualityReportedCount++;
           }
         }
@@ -32831,9 +32834,9 @@ async function fixPipeline(cwd2 = process.cwd(), options = {}) {
         executed: true,
         skipped: false,
         duration,
-        summary: t(cwd2).analyzeFixPipeline.stage5Complete.replace("{count}", String(scores.size)).replace("{suggestions}", String(qualityReportedCount)).replace("{duration}", (duration / 1000).toFixed(1))
+        summary: t(cwd).analyzeFixPipeline.stage5Complete.replace("{count}", String(scores.size)).replace("{suggestions}", String(qualityReportedCount)).replace("{duration}", (duration / 1000).toFixed(1))
       };
-      console.log("   " + t(cwd2).analyzeFixPipeline.stage5Complete.replace("{count}", String(scores.size)).replace("{suggestions}", String(qualityReportedCount)).replace("{duration}", (duration / 1000).toFixed(1)));
+      console.log("   " + t(cwd).analyzeFixPipeline.stage5Complete.replace("{count}", String(scores.size)).replace("{suggestions}", String(qualityReportedCount)).replace("{duration}", (duration / 1000).toFixed(1)));
     } catch (error) {
       const duration = Date.now() - start;
       const errorMsg = error instanceof Error ? error.message : String(error);
@@ -32841,20 +32844,20 @@ async function fixPipeline(cwd2 = process.cwd(), options = {}) {
         executed: true,
         skipped: false,
         duration,
-        summary: t(cwd2).analyzeFixPipeline.stage5Failed.replace("{error}", errorMsg)
+        summary: t(cwd).analyzeFixPipeline.stage5Failed.replace("{error}", errorMsg)
       };
-      console.error("   " + t(cwd2).analyzeFixPipeline.stage5Failed.replace("{error}", errorMsg));
+      console.error("   " + t(cwd).analyzeFixPipeline.stage5Failed.replace("{error}", errorMsg));
     }
   } else {
-    stage5Result = emptyStageResult(t(cwd2).analyzeFixPipeline.stage5Skipped);
-    console.log("   " + t(cwd2).analyzeFixPipeline.stage5Skipped);
+    stage5Result = emptyStageResult(t(cwd).analyzeFixPipeline.stage5Skipped);
+    console.log("   " + t(cwd).analyzeFixPipeline.stage5Skipped);
   }
   const totalTime = Date.now() - pipelineStart;
   const allStages = [stage1Result, stage2Result, stage3Result, stage4Result, stage5Result];
   const executedStages = allStages.filter((s) => s.executed).length;
   console.log("");
   console.log("━".repeat(SEPARATOR_WIDTH));
-  console.log(t(cwd2).analyzeFixPipeline.pipelineComplete.replace("{stages}", String(executedStages)).replace("{duration}", (totalTime / 1000).toFixed(1)));
+  console.log(t(cwd).analyzeFixPipeline.pipelineComplete.replace("{stages}", String(executedStages)).replace("{duration}", (totalTime / 1000).toFixed(1)));
   console.log("━".repeat(SEPARATOR_WIDTH));
   return {
     stages: {
@@ -32900,8 +32903,8 @@ var NOISE_ACTIONS2 = new Set([
   "检查Status",
   "同步Status"
 ]);
-function hasValidCheckpoints2(checkpointPathOrContent, isContent = false, cwd2) {
-  const texts = t(cwd2);
+function hasValidCheckpoints2(checkpointPathOrContent, isContent = false, cwd) {
+  const texts = t(cwd);
   let content;
   if (isContent && checkpointPathOrContent !== null) {
     content = checkpointPathOrContent;
@@ -32948,8 +32951,8 @@ function hasValidCheckpoints2(checkpointPathOrContent, isContent = false, cwd2) 
   }
   return { valid: true, reason: "" };
 }
-function displayCheckpointCreationWarning2(taskId, cwd2) {
-  const texts = t(cwd2);
+function displayCheckpointCreationWarning2(taskId, cwd) {
+  const texts = t(cwd);
   console.log("");
   console.log("━".repeat(SEPARATOR_WIDTH));
   console.log(texts.taskCommand.checkpointQualityReminder);
@@ -32970,8 +32973,8 @@ function displayCheckpointCreationWarning2(taskId, cwd2) {
   console.log("\uD83D\uDCA1 " + texts.taskCommand.tipStrictValidation);
   console.log("━".repeat(SEPARATOR_WIDTH));
 }
-function validateTaskCheckpointCommands2(taskId, cwd2) {
-  const task = readTaskMeta(taskId, cwd2);
+function validateTaskCheckpointCommands2(taskId, cwd) {
+  const task = readTaskMeta(taskId, cwd);
   if (!task?.checkpoints)
     return [];
   const warnings = [];
@@ -32983,10 +32986,10 @@ function validateTaskCheckpointCommands2(taskId, cwd2) {
   }
   return warnings;
 }
-function displayCheckpointVerificationWarnings2(warnings, cwd2) {
+function displayCheckpointVerificationWarnings2(warnings, cwd) {
   if (warnings.length === 0)
     return;
-  const texts = t(cwd2);
+  const texts = t(cwd);
   console.log("");
   console.log("━".repeat(SEPARATOR_WIDTH));
   console.log(texts.taskCommand.missingCheckpointVerificationCommands);
@@ -33024,24 +33027,24 @@ function extractFileReferencesFromText2(text) {
   }
   return files;
 }
-function findMissingFiles2(filePaths, cwd2) {
+function findMissingFiles2(filePaths, cwd) {
   const missing = [];
   for (const fp of filePaths) {
-    const absolutePath = path17.resolve(cwd2, fp);
+    const absolutePath = path17.resolve(cwd, fp);
     if (!fs21.existsSync(absolutePath)) {
       missing.push(fp);
     }
   }
   return missing;
 }
-async function validateFileReferences2(description, title, nonInteractive, cwd2) {
+async function validateFileReferences2(description, title, nonInteractive, cwd) {
   const source = `${title || ""}
 ${description || ""}`;
   const fileRefs = extractFileReferencesFromText2(source);
   if (fileRefs.length === 0) {
     return { proceed: true, missingFiles: [] };
   }
-  const missingFiles = findMissingFiles2(fileRefs, cwd2);
+  const missingFiles = findMissingFiles2(fileRefs, cwd);
   if (missingFiles.length === 0) {
     return { proceed: true, missingFiles: [] };
   }
@@ -33062,8 +33065,8 @@ ${description || ""}`;
   });
   return { proceed: response.proceed !== false, missingFiles };
 }
-async function createTask2(options = {}, cwd2 = process.cwd()) {
-  if (!isInitialized(cwd2)) {
+async function createTask2(options = {}, cwd = process.cwd()) {
+  if (!isInitialized(cwd)) {
     console.error("Error: Project not initialized. Please run `projmnt4claude setup` first");
     process.exit(1);
   }
@@ -33076,15 +33079,15 @@ async function createTask2(options = {}, cwd2 = process.cwd()) {
         console.error(`Error: Invalid task ID format '${options.id}'`);
         process.exit(1);
       }
-      if (taskExists(options.id, cwd2)) {
+      if (taskExists(options.id, cwd)) {
         console.error(`Error: Task ID '${options.id}' already exists`);
         process.exit(1);
       }
       taskId2 = options.id;
     } else {
-      taskId2 = generateNewTaskId(cwd2, taskType, taskPriority, options.title);
+      taskId2 = generateNewTaskId(cwd, taskType, taskPriority, options.title);
     }
-    const fileValidation2 = await validateFileReferences2(options.description, options.title, true, cwd2);
+    const fileValidation2 = await validateFileReferences2(options.description, options.title, true, cwd);
     if (!fileValidation2.proceed) {
       console.log("Task creation cancelled");
       process.exit(0);
@@ -33136,7 +33139,7 @@ async function createTask2(options = {}, cwd2 = process.cwd()) {
       newValue: "open"
     });
     if ((options.aiEnhancement || options.potentialDependencies) && options.description) {
-      const existingTasks = getAllTasks(cwd2);
+      const existingTasks = getAllTasks(cwd);
       const inferredDeps = inferDependencies(options.description, existingTasks, { keywordHints: options.potentialDependencies });
       if (inferredDeps.length > 0) {
         task2.dependencies = inferredDeps.map((d) => d.depTaskId);
@@ -33145,7 +33148,7 @@ async function createTask2(options = {}, cwd2 = process.cwd()) {
     const referencedFiles = finalRelatedFiles.length > 0 ? finalRelatedFiles : extractFilePaths(task2.description || "", { includeBareFilenames: false });
     const fileWarnings = [];
     for (const file of referencedFiles) {
-      if (!fs21.existsSync(path17.join(cwd2, file))) {
+      if (!fs21.existsSync(path17.join(cwd, file))) {
         fileWarnings.push(file);
       }
     }
@@ -33162,8 +33165,8 @@ async function createTask2(options = {}, cwd2 = process.cwd()) {
       }
       finalCheckpoints = filterResult.kept;
     }
-    writeTaskMeta(task2, cwd2);
-    const taskDir2 = path17.join(getTasksDir(cwd2), taskId2);
+    writeTaskMeta(task2, cwd);
+    const taskDir2 = path17.join(getTasksDir(cwd), taskId2);
     const checkpointPath2 = path17.join(taskDir2, "checkpoint.md");
     let checkpointContent;
     if (finalCheckpoints.length > 0) {
@@ -33191,13 +33194,13 @@ ${finalCheckpoints.map((cp) => `- [ ] ${cp}`).join(`
     if (!options.skipValidation) {
       const validation = hasValidCheckpoints2(checkpointPath2, false);
       if (!validation.valid) {
-        displayCheckpointCreationWarning2(taskId2, cwd2);
+        displayCheckpointCreationWarning2(taskId2, cwd);
       }
     }
-    syncCheckpointsToMeta(taskId2, cwd2);
-    const cpWarnings2 = validateTaskCheckpointCommands2(taskId2, cwd2);
+    syncCheckpointsToMeta(taskId2, cwd);
+    const cpWarnings2 = validateTaskCheckpointCommands2(taskId2, cwd);
     displayCheckpointVerificationWarnings2(cpWarnings2);
-    const allExistingTasks = getAllTasks(cwd2);
+    const allExistingTasks = getAllTasks(cwd);
     const depGraph = DependencyGraph.fromTasks(allExistingTasks);
     const depValidation = validateNewTaskDeps(taskId2, task2.dependencies || [], depGraph, allExistingTasks);
     if (depValidation.warnings.length > 0) {
@@ -33249,15 +33252,15 @@ ${finalCheckpoints.map((cp) => `- [ ] ${cp}`).join(`
       console.error(`Error: Invalid task ID format '${options.id}'`);
       process.exit(1);
     }
-    if (taskExists(options.id, cwd2)) {
+    if (taskExists(options.id, cwd)) {
       console.error(`Error: Task ID '${options.id}' already exists`);
       process.exit(1);
     }
     taskId = options.id;
   } else {
-    taskId = generateNewTaskId(cwd2, "feature", response.priority, response.title);
+    taskId = generateNewTaskId(cwd, "feature", response.priority, response.title);
   }
-  const fileValidation = await validateFileReferences2(response.description, response.title, false, cwd2);
+  const fileValidation = await validateFileReferences2(response.description, response.title, false, cwd);
   if (!fileValidation.proceed) {
     console.log("Task creation cancelled");
     process.exit(0);
@@ -33275,8 +33278,8 @@ ${finalCheckpoints.map((cp) => `- [ ] ${cp}`).join(`
   if (fileValidation.missingFiles.length > 0) {
     task.fileWarnings = fileValidation.missingFiles;
   }
-  writeTaskMeta(task, cwd2);
-  const taskDir = path17.join(getTasksDir(cwd2), taskId);
+  writeTaskMeta(task, cwd);
+  const taskDir = path17.join(getTasksDir(cwd), taskId);
   const checkpointPath = path17.join(taskDir, "checkpoint.md");
   fs21.writeFileSync(checkpointPath, defaultCheckpointContent, "utf-8");
   console.log(`
@@ -33287,16 +33290,16 @@ ${finalCheckpoints.map((cp) => `- [ ] ${cp}`).join(`
   if (!options.skipValidation) {
     const validation = hasValidCheckpoints2(checkpointPath, false);
     if (!validation.valid) {
-      displayCheckpointCreationWarning2(taskId, cwd2);
+      displayCheckpointCreationWarning2(taskId, cwd);
     }
   }
-  syncCheckpointsToMeta(taskId, cwd2);
-  const cpWarnings = validateTaskCheckpointCommands2(taskId, cwd2);
+  syncCheckpointsToMeta(taskId, cwd);
+  const cpWarnings = validateTaskCheckpointCommands2(taskId, cwd);
   displayCheckpointVerificationWarnings2(cpWarnings);
   return task;
 }
-function formatPriority2(priority, cwd2) {
-  const texts = t(cwd2);
+function formatPriority2(priority, cwd) {
+  const texts = t(cwd);
   const map = {
     P0: `\uD83D\uDD34 ${texts.task.priorityP0}`,
     P1: `\uD83D\uDFE0 ${texts.task.priorityP1}`,
@@ -33370,9 +33373,9 @@ function mergeAnalysisResults(ruleBased, aiEnhanced) {
     aiUsed: true
   };
 }
-async function initRequirement(description, cwd2 = process.cwd(), options = {}) {
+async function initRequirement(description, cwd = process.cwd(), options = {}) {
   const { nonInteractive = false, noPlan = false, skipValidation = false, template = "simple", noAI = false, requireQuality, decompose: shouldDecomposeOption = true } = options;
-  const logger = createLogger("init-requirement", cwd2);
+  const logger = createLogger("init-requirement", cwd);
   const startTime = Date.now();
   const inputDescLength = description.length;
   let userEditCount = 0;
@@ -33396,7 +33399,7 @@ async function initRequirement(description, cwd2 = process.cwd(), options = {}) 
     console.error("");
     process.exit(1);
   }
-  if (!isInitialized(cwd2)) {
+  if (!isInitialized(cwd)) {
     console.error("");
     console.error("❌ Project not initialized");
     console.error("");
@@ -33414,13 +33417,13 @@ async function initRequirement(description, cwd2 = process.cwd(), options = {}) 
     console.log("━".repeat(SEPARATOR_WIDTH));
     console.log("");
     const decomposition = await decomposeRequirement(description, {
-      cwd: cwd2,
+      cwd,
       useAI: !noAI,
       minItems: 2,
       maxItems: 10
     });
     if (decomposition.decomposable && decomposition.items.length >= 2) {
-      console.log(formatDecomposition(decomposition, cwd2));
+      console.log(formatDecomposition(decomposition, cwd));
       console.log("");
       let confirmDecompose = true;
       if (!nonInteractive) {
@@ -33439,7 +33442,7 @@ async function initRequirement(description, cwd2 = process.cwd(), options = {}) 
         confirmDecompose = result.confirm;
       }
       if (confirmDecompose) {
-        await initRequirementBatch(decomposition.items, cwd2, options);
+        await initRequirementBatch(decomposition.items, cwd, options);
         return;
       }
     }
@@ -33451,7 +33454,7 @@ async function initRequirement(description, cwd2 = process.cwd(), options = {}) 
   console.log("\uD83D\uDD0D Analyzing requirement...");
   console.log("━".repeat(SEPARATOR_WIDTH));
   console.log("");
-  const ruleAnalysis = analyzeRequirement(description, cwd2);
+  const ruleAnalysis = analyzeRequirement(description, cwd);
   let analysis = {
     ...ruleAnalysis,
     aiEnhancedFields: [],
@@ -33462,7 +33465,7 @@ async function initRequirement(description, cwd2 = process.cwd(), options = {}) 
     const aiStartTime = Date.now();
     const aiResult = await withAIEnhancement({
       enabled: true,
-      aiCall: () => new AIMetadataAssistant(cwd2).enhanceRequirement(description, { cwd: cwd2 }),
+      aiCall: () => new AIMetadataAssistant(cwd).enhanceRequirement(description, { cwd }),
       fallback: { title: null, description: null, type: null, priority: null, recommendedRole: null, checkpoints: null, dependencies: null, aiUsed: false },
       operationName: "enhancement_call",
       logger
@@ -33699,7 +33702,7 @@ async function initRequirement(description, cwd2 = process.cwd(), options = {}) 
     potentialDependencies: analysis.potentialDependencies,
     recommendedRole: response.recommendedRole || analysis.recommendedRole,
     relatedFiles: allRelatedFiles
-  }, cwd2);
+  }, cwd);
   const taskId = task.id;
   if (checkpoints.length > 0) {
     const parsedCheckpoints = checkpoints.map((desc, index) => ({
@@ -33709,16 +33712,16 @@ async function initRequirement(description, cwd2 = process.cwd(), options = {}) 
       lineNumber: index
     }));
     const checkpointMetadata = convertParsedCheckpointsToMetadata(parsedCheckpoints, task);
-    const taskToUpdate = readTaskMeta(taskId, cwd2);
+    const taskToUpdate = readTaskMeta(taskId, cwd);
     if (taskToUpdate) {
       taskToUpdate.checkpoints = checkpointMetadata;
-      writeTaskMeta(taskToUpdate, cwd2);
-      updateCheckpointMdFromArray(taskId, checkpointMetadata, cwd2);
+      writeTaskMeta(taskToUpdate, cwd);
+      updateCheckpointMdFromArray(taskId, checkpointMetadata, cwd);
     }
   }
-  const taskDir = path18.join(getTasksDir(cwd2), taskId);
+  const taskDir = path18.join(getTasksDir(cwd), taskId);
   const checkpointPath = path18.join(taskDir, "checkpoint.md");
-  const updatedTask = readTaskMeta(taskId, cwd2);
+  const updatedTask = readTaskMeta(taskId, cwd);
   if (updatedTask?.checkpoints) {
     const checkpointsWithoutCommands = updatedTask.checkpoints.filter((cp) => {
       const result = validateCheckpointVerification(cp);
@@ -33744,7 +33747,7 @@ async function initRequirement(description, cwd2 = process.cwd(), options = {}) 
     }
   }
   if (updatedTask) {
-    const filesValidation = validateFilesExist(updatedTask, cwd2);
+    const filesValidation = validateFilesExist(updatedTask, cwd);
     if (!filesValidation.valid) {
       console.log(`
    ⚠️  ${filesValidation.missingFiles.length} referenced files do not exist:`);
@@ -33770,11 +33773,11 @@ async function initRequirement(description, cwd2 = process.cwd(), options = {}) 
     console.error("Error: --require-quality must be between 0-100");
     process.exit(1);
   }
-  const qualityResult = await checkQualityGate(taskId, qualityGateConfig, cwd2);
-  const taskWithScore = readTaskMeta(taskId, cwd2);
+  const qualityResult = await checkQualityGate(taskId, qualityGateConfig, cwd);
+  const taskWithScore = readTaskMeta(taskId, cwd);
   if (taskWithScore) {
     taskWithScore.initQualityScore = qualityResult.score.totalScore;
-    writeTaskMeta(taskWithScore, cwd2);
+    writeTaskMeta(taskWithScore, cwd);
   }
   const scoreIcon = qualityResult.score.totalScore >= 80 ? "\uD83D\uDFE2" : qualityResult.score.totalScore >= 60 ? "\uD83D\uDFE1" : "\uD83D\uDD34";
   console.log(`\uD83D\uDCCA Quality Score: ${scoreIcon} ${qualityResult.score.totalScore}/100`);
@@ -33783,7 +33786,7 @@ async function initRequirement(description, cwd2 = process.cwd(), options = {}) 
   console.log(`   Related Files: ${qualityResult.score.relatedFilesScore}%`);
   console.log(`   Solution: ${qualityResult.score.solutionScore}%`);
   console.log("");
-  const allExistingTasks = getAllTasks(cwd2);
+  const allExistingTasks = getAllTasks(cwd);
   const depGraph = DependencyGraph.fromTasks(allExistingTasks);
   const depValidation = validateNewTaskDeps(taskId, task.dependencies || [], depGraph, allExistingTasks);
   if (depValidation.warnings.length > 0) {
@@ -33882,7 +33885,7 @@ async function initRequirement(description, cwd2 = process.cwd(), options = {}) 
   if (!skipValidation) {
     const validation = hasValidCheckpoints2(checkpointPath, false);
     if (!validation.valid) {
-      displayCheckpointCreationWarning2(taskId, cwd2);
+      displayCheckpointCreationWarning2(taskId, cwd);
     }
   }
   if (!noPlan && !nonInteractive) {
@@ -34020,9 +34023,9 @@ function assessComplexity(description, analysis) {
     signals
   };
 }
-function detectRoleFromProject(cwd2, description) {
+function detectRoleFromProject(cwd, description) {
   const lowerDesc = description.toLowerCase();
-  const srcDir = path18.join(cwd2, "src");
+  const srcDir = path18.join(cwd, "src");
   let projectDirs = [];
   try {
     if (fs22.existsSync(srcDir)) {
@@ -34054,7 +34057,7 @@ function detectRoleFromProject(cwd2, description) {
     return "architect";
   return "developer";
 }
-function analyzeRequirement(description, cwd2) {
+function analyzeRequirement(description, cwd) {
   const lowerDesc = description.toLowerCase();
   let priority = "P2";
   if (lowerDesc.includes("紧急") || lowerDesc.includes("urgent") || lowerDesc.includes("asap") || lowerDesc.includes("立即")) {
@@ -34064,7 +34067,7 @@ function analyzeRequirement(description, cwd2) {
   } else if (lowerDesc.includes("低优先级") || lowerDesc.includes("low priority") || lowerDesc.includes("可选") || lowerDesc.includes("optional")) {
     priority = "P3";
   }
-  const recommendedRole = detectRoleFromProject(cwd2, description);
+  const recommendedRole = detectRoleFromProject(cwd, description);
   let estimatedComplexity = "medium";
   const complexityKeywords = {
     high: ["重构", "refactor", "架构", "architecture", "迁移", "migrate", "集成", "integration", "系统"],
@@ -34094,7 +34097,7 @@ function analyzeRequirement(description, cwd2) {
   const potentialDependencies = [];
   const currentFiles = extractFilePaths(description, { includeBareFilenames: false });
   if (currentFiles.length > 0) {
-    const existingTasks = getAllTasks(cwd2);
+    const existingTasks = getAllTasks(cwd);
     for (const existing of existingTasks) {
       if (TERMINAL_STATUSES_SET7.has(normalizeStatus(existing.status)))
         continue;
@@ -34135,7 +34138,7 @@ function formatPriority3(priority) {
   };
   return map[priority] || `❓ ${priority}`;
 }
-async function initRequirementSingle(item, cwd2, options) {
+async function initRequirementSingle(item, cwd, options) {
   const { template = "simple", nonInteractive = true, skipValidation = true, requireQuality } = options;
   try {
     const structuredData = {
@@ -34157,18 +34160,18 @@ async function initRequirementSingle(item, cwd2, options) {
       aiEnhancement: false,
       suggestedCheckpoints: item.suggestedCheckpoints,
       potentialDependencies: []
-    }, cwd2);
+    }, cwd);
     const taskId = task.id;
     if (requireQuality !== undefined) {
       const qualityGateConfig = {
         ...DEFAULT_QUALITY_GATE_CONFIG,
         minQualityScore: requireQuality
       };
-      const qualityResult = await checkQualityGate(taskId, qualityGateConfig, cwd2);
-      const taskWithScore = readTaskMeta(taskId, cwd2);
+      const qualityResult = await checkQualityGate(taskId, qualityGateConfig, cwd);
+      const taskWithScore = readTaskMeta(taskId, cwd);
       if (taskWithScore) {
         taskWithScore.initQualityScore = qualityResult.score.totalScore;
-        writeTaskMeta(taskWithScore, cwd2);
+        writeTaskMeta(taskWithScore, cwd);
       }
     }
     console.log(`  ✅ ${taskId}: ${item.title}`);
@@ -34194,7 +34197,7 @@ function reportBatchResult(created, failed, totalCount) {
     failed.forEach((f) => console.log(`     - ${f.item.title}: ${f.reason}`));
   }
 }
-async function initRequirementBatch(items, cwd2, options) {
+async function initRequirementBatch(items, cwd, options) {
   const createdTaskIds = [];
   const failedTasks = [];
   const taskIdMap = new Map;
@@ -34210,7 +34213,7 @@ async function initRequirementBatch(items, cwd2, options) {
       try {
         const { decomposeRecursively: decomposeRecursively3 } = await Promise.resolve().then(() => (init_requirement_decomposer(), exports_requirement_decomposer));
         processedItems = await decomposeRecursively3(items, {
-          cwd: cwd2,
+          cwd,
           useAI: !options.noAI,
           minItems: 2,
           maxItems: 10
@@ -34251,7 +34254,7 @@ async function initRequirementBatch(items, cwd2, options) {
       decompose: false
     };
     try {
-      const taskId = await initRequirementSingle(item, cwd2, itemOptions);
+      const taskId = await initRequirementSingle(item, cwd, itemOptions);
       if (taskId) {
         createdTaskIds.push(taskId);
         taskIdMap.set(i, taskId);
@@ -34277,7 +34280,7 @@ async function initRequirementBatch(items, cwd2, options) {
       const taskId = taskIdMap.get(i);
       if (!taskId || item.dependsOn.length === 0)
         continue;
-      const task = readTaskMeta(taskId, cwd2);
+      const task = readTaskMeta(taskId, cwd);
       if (!task)
         continue;
       const deps = [];
@@ -34301,7 +34304,7 @@ async function initRequirementBatch(items, cwd2, options) {
       }
       if (deps.length > 0) {
         task.dependencies = [...task.dependencies || [], ...deps];
-        writeTaskMeta(task, cwd2);
+        writeTaskMeta(task, cwd);
         console.log(`  ${taskId} dependencies: ${deps.join(", ")}`);
       }
     }
@@ -34338,8 +34341,8 @@ function parseCommandMetadata(filePath) {
     return null;
   }
 }
-function getCommandsDir(cwd2) {
-  const language = getLanguage(cwd2);
+function getCommandsDir(cwd) {
+  const language = getLanguage(cwd);
   const pluginRoot = process.env.CLAUDE_PLUGIN_ROOT;
   if (pluginRoot) {
     const localesDir = path19.join(pluginRoot, "locales", language, "commands");
@@ -34347,7 +34350,7 @@ function getCommandsDir(cwd2) {
       return localesDir;
     }
   }
-  return path19.join(cwd2, "commands");
+  return path19.join(cwd, "commands");
 }
 function getAvailableCommands(commandsDir) {
   try {
@@ -34357,8 +34360,8 @@ function getAvailableCommands(commandsDir) {
     return [];
   }
 }
-function showOverview(commandsDir, cwd2) {
-  const t2 = (init_i18n(), __toCommonJS(exports_i18n)).getI18n(getLanguage(cwd2));
+function showOverview(commandsDir, cwd) {
+  const t2 = (init_i18n(), __toCommonJS(exports_i18n)).getI18n(getLanguage(cwd));
   const commands = getAvailableCommands(commandsDir);
   console.log("");
   console.log("━".repeat(70));
@@ -34385,8 +34388,8 @@ function showOverview(commandsDir, cwd2) {
   console.log(`      ${t2.help.examples}`);
   console.log("");
 }
-function showCommandHelp(commandsDir, commandName, cwd2) {
-  const t2 = (init_i18n(), __toCommonJS(exports_i18n)).getI18n(getLanguage(cwd2));
+function showCommandHelp(commandsDir, commandName, cwd) {
+  const t2 = (init_i18n(), __toCommonJS(exports_i18n)).getI18n(getLanguage(cwd));
   const commands = getAvailableCommands(commandsDir);
   const matchedCommand = commands.find((cmd) => cmd === commandName.toLowerCase());
   if (!matchedCommand) {
@@ -34410,8 +34413,8 @@ function showCommandHelp(commandsDir, commandName, cwd2) {
   console.log("");
   console.log(cleanContent);
 }
-function showSmartHelp(commandsDir, topic, cwd2) {
-  const t2 = (init_i18n(), __toCommonJS(exports_i18n)).getI18n(getLanguage(cwd2));
+function showSmartHelp(commandsDir, topic, cwd) {
+  const t2 = (init_i18n(), __toCommonJS(exports_i18n)).getI18n(getLanguage(cwd));
   const commands = getAvailableCommands(commandsDir);
   const lowerTopic = topic.toLowerCase();
   console.log("");
@@ -34470,24 +34473,24 @@ function showSmartHelp(commandsDir, topic, cwd2) {
   console.log(t2.help.tipUseHelp);
   console.log("");
 }
-function showHelp(topic, cwd2 = process.cwd()) {
-  const commandsDir = getCommandsDir(cwd2);
+function showHelp(topic, cwd = process.cwd()) {
+  const commandsDir = getCommandsDir(cwd);
   if (!fs23.existsSync(commandsDir)) {
-    const t2 = (init_i18n(), __toCommonJS(exports_i18n)).getI18n(getLanguage(cwd2));
+    const t2 = (init_i18n(), __toCommonJS(exports_i18n)).getI18n(getLanguage(cwd));
     console.error(`${t2.error}: ${t2.help.commandNotFound}`);
     console.error(`${t2.setupCmd.directory.replace("{path}", commandsDir)}`);
     process.exit(1);
   }
   if (!topic) {
-    showOverview(commandsDir, cwd2);
+    showOverview(commandsDir, cwd);
     return;
   }
   const commands = getAvailableCommands(commandsDir);
   const matchedCommand = commands.find((cmd) => cmd === topic.toLowerCase());
   if (matchedCommand) {
-    showCommandHelp(commandsDir, topic, cwd2);
+    showCommandHelp(commandsDir, topic, cwd);
   } else {
-    showSmartHelp(commandsDir, topic, cwd2);
+    showSmartHelp(commandsDir, topic, cwd);
   }
 }
 
@@ -34509,9 +34512,9 @@ import * as path20 from "path";
 class LogCollector {
   cwd;
   logger;
-  constructor(cwd2 = process.cwd()) {
-    this.cwd = cwd2;
-    this.logger = new Logger({ component: "log-collector", cwd: cwd2 });
+  constructor(cwd = process.cwd()) {
+    this.cwd = cwd;
+    this.logger = new Logger({ component: "log-collector", cwd });
   }
   collect(options = {}) {
     const {
@@ -34591,8 +34594,8 @@ class LogCollector {
 class LogAnalyzerRegistry {
   analyzers = new Map;
   logger;
-  constructor(cwd2 = process.cwd()) {
-    this.logger = new Logger({ component: "log-analyzer-registry", cwd: cwd2 });
+  constructor(cwd = process.cwd()) {
+    this.logger = new Logger({ component: "log-analyzer-registry", cwd });
   }
   register(analyzer) {
     if (this.analyzers.has(analyzer.name)) {
@@ -35090,26 +35093,26 @@ function getBuiltInAnalyzers() {
 init_config();
 init_i18n();
 var __dirname = "/home/fuzhibo/workerplace/git/projmnt4claude/src/commands";
-async function runDoctor(fix = false, cwd2 = process.cwd()) {
-  const texts = t(cwd2).doctorCmd;
+async function runDoctor(fix = false, cwd = process.cwd()) {
+  const texts = t(cwd).doctorCmd;
   console.log("");
   console.log("━".repeat(SEPARATOR_WIDTH));
   console.log("\uD83D\uDD0D " + texts.environmentDiagnostics);
   console.log("━".repeat(SEPARATOR_WIDTH));
   console.log("");
   const results = [];
-  results.push(checkProjectInit(cwd2));
-  results.push(...checkPluginInstallationScope(cwd2));
-  if (isInitialized(cwd2)) {
-    results.push(checkPluginCache(cwd2));
-    results.push(...checkSkillFiles(cwd2));
-    results.push(...checkDirectoryStructure(cwd2));
-    results.push(...checkLoggingModule(cwd2));
-    results.push(...checkDeprecatedStatuses(cwd2));
-    results.push(...checkGitHooks(cwd2));
-    results.push(...checkDeprecatedHooks(cwd2));
+  results.push(checkProjectInit(cwd));
+  results.push(...checkPluginInstallationScope(cwd));
+  if (isInitialized(cwd)) {
+    results.push(checkPluginCache(cwd));
+    results.push(...checkSkillFiles(cwd));
+    results.push(...checkDirectoryStructure(cwd));
+    results.push(...checkLoggingModule(cwd));
+    results.push(...checkDeprecatedStatuses(cwd));
+    results.push(...checkGitHooks(cwd));
+    results.push(...checkDeprecatedHooks(cwd));
   }
-  displayResults(results, cwd2);
+  displayResults(results, cwd);
   const fixableIssues = results.filter((r) => r.status !== "ok" && r.fixable);
   if (fix && fixableIssues.length > 0) {
     console.log("");
@@ -35117,20 +35120,20 @@ async function runDoctor(fix = false, cwd2 = process.cwd()) {
     console.log("\uD83D\uDD27 " + texts.autoFix);
     console.log("━".repeat(SEPARATOR_WIDTH));
     console.log("");
-    await fixIssues3(fixableIssues, cwd2);
+    await fixIssues3(fixableIssues, cwd);
     console.log("");
     console.log("\uD83D\uDD04 " + texts.reChecking);
     console.log("");
-    await runDoctor(false, cwd2);
+    await runDoctor(false, cwd);
     return;
   } else if (fixableIssues.length > 0) {
     console.log("");
     console.log(`\uD83D\uDCA1 ${texts.useFixToAutoFix.replace("{count}", String(fixableIssues.length))}`);
   }
 }
-function checkProjectInit(cwd2) {
-  const texts = t(cwd2).doctorCmd;
-  const projectDir = getProjectDir(cwd2);
+function checkProjectInit(cwd) {
+  const texts = t(cwd).doctorCmd;
+  const projectDir = getProjectDir(cwd);
   const configPath = path21.join(projectDir, "config.json");
   if (!fs25.existsSync(configPath)) {
     return {
@@ -35149,8 +35152,8 @@ function checkProjectInit(cwd2) {
     fixable: false
   };
 }
-function checkPluginCache(cwd2) {
-  const texts = t(cwd2).doctorCmd;
+function checkPluginCache(cwd) {
+  const texts = t(cwd).doctorCmd;
   const pluginRoot = process.env.CLAUDE_PLUGIN_ROOT;
   const details = [];
   let status = "ok";
@@ -35216,10 +35219,10 @@ function checkPluginCache(cwd2) {
     fixable: false
   };
 }
-function checkSkillFiles(cwd2) {
-  const texts = t(cwd2).doctorCmd;
+function checkSkillFiles(cwd) {
+  const texts = t(cwd).doctorCmd;
   const results = [];
-  const toolboxDir = getToolboxDir(cwd2);
+  const toolboxDir = getToolboxDir(cwd);
   const skillDir = path21.join(toolboxDir, "projmnt4claude");
   const commandsDir = path21.join(skillDir, "commands");
   if (fs25.existsSync(commandsDir)) {
@@ -35242,13 +35245,13 @@ function checkSkillFiles(cwd2) {
   }
   return results;
 }
-function checkDirectoryStructure(cwd2) {
-  const texts = t(cwd2).doctorCmd;
+function checkDirectoryStructure(cwd) {
+  const texts = t(cwd).doctorCmd;
   const results = [];
-  const projectDir = getProjectDir(cwd2);
+  const projectDir = getProjectDir(cwd);
   const requiredDirs = [
-    { name: "tasks", path: getTasksDir(cwd2) },
-    { name: "toolbox", path: getToolboxDir(cwd2) }
+    { name: "tasks", path: getTasksDir(cwd) },
+    { name: "toolbox", path: getToolboxDir(cwd) }
   ];
   for (const dir of requiredDirs) {
     if (!fs25.existsSync(dir.path)) {
@@ -35269,9 +35272,9 @@ function checkDirectoryStructure(cwd2) {
       });
     }
   }
-  const tasksDir = getTasksDir(cwd2);
+  const tasksDir = getTasksDir(cwd);
   if (fs25.existsSync(tasksDir)) {
-    const taskIds = getAllTaskIds(cwd2);
+    const taskIds = getAllTaskIds(cwd);
     const hasAbandonedTasks = taskIds.some((taskId) => {
       const metaPath = path21.join(tasksDir, taskId, "meta.json");
       try {
@@ -35296,7 +35299,7 @@ function checkDirectoryStructure(cwd2) {
   }
   return results;
 }
-function checkPluginInstallationScope(cwd2) {
+function checkPluginInstallationScope(cwd) {
   const results = [];
   const homeDir = os.homedir();
   const installedPluginsPath = path21.join(homeDir, ".claude", "plugins", "installed_plugins.json");
@@ -35312,14 +35315,14 @@ function checkPluginInstallationScope(cwd2) {
     if (projectScopedInstalls.length === 0) {
       return results;
     }
-    const normalizedCwd = path21.resolve(cwd2);
+    const normalizedCwd = path21.resolve(cwd);
     const mismatchedInstalls = projectScopedInstalls.filter((inst) => {
       if (!inst.projectPath)
         return true;
       return path21.resolve(inst.projectPath) !== normalizedCwd;
     });
     if (mismatchedInstalls.length > 0) {
-      const texts = t(cwd2).doctorCmd;
+      const texts = t(cwd).doctorCmd;
       const mismatchedList = mismatchedInstalls.map((inst) => `  - Version ${inst.version || "unknown"} bound to: ${inst.projectPath || "unknown path"}`).join(`
 `);
       results.push({
@@ -35348,7 +35351,7 @@ function checkPluginInstallationScope(cwd2) {
         fixable: false
       });
     } else if (projectScopedInstalls.length > 0) {
-      const texts = t(cwd2).doctorCmd;
+      const texts = t(cwd).doctorCmd;
       results.push({
         name: texts.checkPluginScope,
         status: "warning",
@@ -35366,10 +35369,10 @@ function checkPluginInstallationScope(cwd2) {
   } catch {}
   return results;
 }
-function checkLoggingModule(cwd2) {
-  const texts = t(cwd2).doctorCmd;
+function checkLoggingModule(cwd) {
+  const texts = t(cwd).doctorCmd;
   const results = [];
-  const logsDir = getLogsDir(cwd2);
+  const logsDir = getLogsDir(cwd);
   if (!fs25.existsSync(logsDir)) {
     results.push({
       name: texts.checkLogDirectory,
@@ -35390,7 +35393,7 @@ function checkLoggingModule(cwd2) {
     details: [`Location: ${logsDir}`],
     fixable: false
   });
-  const config = readConfig(cwd2);
+  const config = readConfig(cwd);
   if (config) {
     const loggingConfig = config.logging;
     const requiredKeys = {
@@ -35519,10 +35522,10 @@ function checkLoggingModule(cwd2) {
   }
   return results;
 }
-function checkDeprecatedStatuses(cwd2) {
-  const texts = t(cwd2).doctorCmd;
+function checkDeprecatedStatuses(cwd) {
+  const texts = t(cwd).doctorCmd;
   const results = [];
-  const tasksDir = getTasksDir(cwd2);
+  const tasksDir = getTasksDir(cwd);
   if (!fs25.existsSync(tasksDir)) {
     return [{
       name: texts.checkDeprecatedStatus,
@@ -35532,7 +35535,7 @@ function checkDeprecatedStatuses(cwd2) {
       fixable: false
     }];
   }
-  const taskIds = getAllTaskIds(cwd2);
+  const taskIds = getAllTaskIds(cwd);
   const deprecatedStatuses = ["reopened", "needs_human"];
   const tasksWithDeprecatedStatus = [];
   for (const taskId of taskIds) {
@@ -35574,19 +35577,19 @@ function checkDeprecatedStatuses(cwd2) {
   }
   return results;
 }
-function checkGitHooks(cwd2) {
-  const texts = t(cwd2).doctorCmd;
-  const config = readConfig(cwd2);
+function checkGitHooks(cwd) {
+  const texts = t(cwd).doctorCmd;
+  const config = readConfig(cwd);
   const gitHookConfig = config?.gitHook ?? DEFAULT_GIT_HOOK;
   if (!gitHookConfig.enabled) {
     return [{ status: "ok", name: texts.checkGitHooks, message: texts.checkGitHooksDisabled, fixable: false }];
   }
-  const gitDir = path21.join(cwd2, ".git");
+  const gitDir = path21.join(cwd, ".git");
   if (!fs25.existsSync(gitDir)) {
     return [{ status: "ok", name: texts.checkGitHooks, message: texts.checkGitHooksNotGitRepo, fixable: false }];
   }
   try {
-    const pre = new Pre(cwd2);
+    const pre = new Pre(cwd);
     if (pre.isPreCommitInstalled()) {
       return [{
         name: texts.checkGitHooks,
@@ -35615,11 +35618,11 @@ function checkGitHooks(cwd2) {
   }
 }
 var DEPRECATED_HOOK_SCRIPTS = ["pre-complete.ts", "post-task.ts", "pre-task.ts", "plan-complete.ts", "config.json"];
-function checkDeprecatedHooks(cwd2) {
+function checkDeprecatedHooks(cwd) {
   const results = [];
   const deprecatedSettings = [];
   const deprecatedFiles = [];
-  const settingsPath = path21.join(cwd2, ".claude", "settings.json");
+  const settingsPath = path21.join(cwd, ".claude", "settings.json");
   if (fs25.existsSync(settingsPath)) {
     try {
       const settings = JSON.parse(fs25.readFileSync(settingsPath, "utf-8"));
@@ -35651,7 +35654,7 @@ function checkDeprecatedHooks(cwd2) {
       }
     } catch {}
   }
-  const hooksDir = path21.join(cwd2, ".projmnt4claude", "hooks");
+  const hooksDir = path21.join(cwd, ".projmnt4claude", "hooks");
   if (fs25.existsSync(hooksDir)) {
     try {
       const files = fs25.readdirSync(hooksDir);
@@ -35662,7 +35665,7 @@ function checkDeprecatedHooks(cwd2) {
       }
     } catch {}
   }
-  const texts = t(cwd2).doctorCmd;
+  const texts = t(cwd).doctorCmd;
   const hasSettingsIssue = deprecatedSettings.length > 0;
   const hasFilesIssue = deprecatedFiles.length > 0;
   if (hasSettingsIssue || hasFilesIssue) {
@@ -35704,8 +35707,8 @@ function checkDeprecatedHooks(cwd2) {
   }
   return results;
 }
-function displayResults(results, cwd2 = process.cwd()) {
-  const texts = t(cwd2).doctorCmd;
+function displayResults(results, cwd = process.cwd()) {
+  const texts = t(cwd).doctorCmd;
   const sorted = [...results].sort((a, b) => {
     const order = { error: 0, warning: 1, ok: 2 };
     return order[a.status] - order[b.status];
@@ -35750,15 +35753,15 @@ function resolvePluginRoot() {
   } catch {}
   return null;
 }
-async function fixIssues3(issues, cwd2) {
-  const texts = t(cwd2).doctorCmd;
-  const projectDir = getProjectDir(cwd2);
+async function fixIssues3(issues, cwd) {
+  const texts = t(cwd).doctorCmd;
+  const projectDir = getProjectDir(cwd);
   const pluginRoot = resolvePluginRoot();
   for (const issue of issues) {
     console.log(texts.fixing.replace("{name}", issue.name));
     if (issue.name === "Skill Files" || issue.name === "Command Docs") {
       if (pluginRoot) {
-        const toolboxDir = getToolboxDir(cwd2);
+        const toolboxDir = getToolboxDir(cwd);
         const skillDir = path21.join(toolboxDir, "projmnt4claude");
         if (!fs25.existsSync(skillDir)) {
           fs25.mkdirSync(skillDir, { recursive: true });
@@ -35795,8 +35798,8 @@ async function fixIssues3(issues, cwd2) {
     } else if (issue.name.startsWith("Directory:")) {
       const dirName = issue.name.replace("Directory: ", "");
       const dirMap = {
-        tasks: getTasksDir(cwd2),
-        toolbox: getToolboxDir(cwd2),
+        tasks: getTasksDir(cwd),
+        toolbox: getToolboxDir(cwd),
         archive: path21.join(projectDir, "archive")
       };
       const dirPath = dirMap[dirName];
@@ -35805,23 +35808,23 @@ async function fixIssues3(issues, cwd2) {
         console.log(texts.createdDirectory.replace("{name}", dirName));
       }
     } else if (issue.name === texts.checkLogDirectory) {
-      const logsDir = getLogsDir(cwd2);
+      const logsDir = getLogsDir(cwd);
       if (!fs25.existsSync(logsDir)) {
         fs25.mkdirSync(logsDir, { recursive: true });
         console.log(texts.createdLogsDirectory);
       }
     } else if (issue.name === texts.checkLogConfigCompleteness || issue.name === texts.checkAiConfigCompleteness || issue.name === texts.checkTrainingConfigCompleteness) {
-      const config = readConfig(cwd2);
+      const config = readConfig(cwd);
       if (config) {
         const fixedConfig = ensureConfigDefaults(config);
-        writeConfig(fixedConfig, cwd2);
+        writeConfig(fixedConfig, cwd);
         console.log(texts.autoFilledMissingConfig);
       }
     } else if (issue.name === texts.checkDeprecatedStatus) {
-      const tasksDir = getTasksDir(cwd2);
+      const tasksDir = getTasksDir(cwd);
       const deprecatedMap = { reopened: "open", needs_human: "open" };
       let fixedCount = 0;
-      for (const taskId of getAllTaskIds(cwd2)) {
+      for (const taskId of getAllTaskIds(cwd)) {
         const metaPath = path21.join(tasksDir, taskId, "meta.json");
         if (fs25.existsSync(metaPath)) {
           try {
@@ -35849,7 +35852,7 @@ async function fixIssues3(issues, cwd2) {
     } else if (issue.name === texts.checkDeprecatedHooks) {
       let removedSettings = false;
       let removedFiles = false;
-      const settingsPath = path21.join(cwd2, ".claude", "settings.json");
+      const settingsPath = path21.join(cwd, ".claude", "settings.json");
       if (fs25.existsSync(settingsPath)) {
         try {
           const settings = JSON.parse(fs25.readFileSync(settingsPath, "utf-8"));
@@ -35898,7 +35901,7 @@ async function fixIssues3(issues, cwd2) {
           }
         } catch {}
       }
-      const hooksDir = path21.join(cwd2, ".projmnt4claude", "hooks");
+      const hooksDir = path21.join(cwd, ".projmnt4claude", "hooks");
       if (fs25.existsSync(hooksDir)) {
         try {
           const files = fs25.readdirSync(hooksDir);
@@ -35929,19 +35932,19 @@ async function fixIssues3(issues, cwd2) {
   console.log("");
   console.log("✅ " + texts.fixComplete);
 }
-async function runBugReport(cwd2 = process.cwd()) {
-  const texts = t(cwd2).doctorCmd;
+async function runBugReport(cwd = process.cwd()) {
+  const texts = t(cwd).doctorCmd;
   console.log("");
   console.log("━".repeat(SEPARATOR_WIDTH));
   console.log("\uD83D\uDCCB " + texts.bugReportGeneration);
   console.log("━".repeat(SEPARATOR_WIDTH));
   console.log("");
-  if (!isInitialized(cwd2)) {
+  if (!isInitialized(cwd)) {
     console.error("❌ " + texts.errorProjectNotInitialized);
     console.error(texts.runSetupFirst);
     process.exit(1);
   }
-  const logger = new Logger({ cwd: cwd2 });
+  const logger = new Logger({ cwd });
   try {
     const report = logger.generateBugReport(100);
     console.log(report.markdown);
@@ -35998,24 +36001,24 @@ async function runBugReport(cwd2 = process.cwd()) {
     process.exit(1);
   }
 }
-async function runDoctorDeep(cwd2 = process.cwd()) {
-  const texts = t(cwd2).doctorCmd;
+async function runDoctorDeep(cwd = process.cwd()) {
+  const texts = t(cwd).doctorCmd;
   console.log("");
   console.log("━".repeat(SEPARATOR_WIDTH));
   console.log("\uD83D\uDD2C " + texts.deepLogAnalysis);
   console.log("━".repeat(SEPARATOR_WIDTH));
   console.log("");
-  await runDoctor(false, cwd2);
+  await runDoctor(false, cwd);
   console.log("");
   console.log("━".repeat(SEPARATOR_WIDTH));
   console.log("\uD83D\uDCCA " + texts.deepLogAnalysis.replace(" (--deep)", ""));
   console.log("━".repeat(SEPARATOR_WIDTH));
   console.log("");
-  const collector = new LogCollector(cwd2);
+  const collector = new LogCollector(cwd);
   const stats = collector.getStats();
   if (stats.fileCount === 0) {
     console.log("ℹ️  " + texts.noLogFilesFound);
-    console.log(texts.logDirectory.replace("{path}", getLogsDir(cwd2)));
+    console.log(texts.logDirectory.replace("{path}", getLogsDir(cwd)));
     return;
   }
   console.log("\uD83D\uDCC2 " + texts.logFilesCount.replace("{count}", String(stats.fileCount)).replace("{size}", String(stats.totalSizeKB)));
@@ -36026,7 +36029,7 @@ async function runDoctorDeep(cwd2 = process.cwd()) {
     console.log("ℹ️  " + texts.noLogEntriesInLast24Hours);
     return;
   }
-  const registry = new LogAnalyzerRegistry(cwd2);
+  const registry = new LogAnalyzerRegistry(cwd);
   for (const analyzer of getBuiltInAnalyzers()) {
     registry.register(analyzer);
   }
@@ -36035,7 +36038,7 @@ async function runDoctorDeep(cwd2 = process.cwd()) {
     console.log("   " + texts.analyzerEntry.replace("{name}", analyzer.name).replace("{category}", analyzer.category).replace("{strategies}", analyzer.supportedStrategies.join(", ")));
   }
   console.log("");
-  const results = await registry.runAll(entries, "hybrid", { cwd: cwd2, enableAI: true });
+  const results = await registry.runAll(entries, "hybrid", { cwd, enableAI: true });
   const reporter = new AnalysisReporter;
   const report = reporter.buildReport(results, stats.fileCount, entries.length);
   console.log(reporter.formatText(report));
@@ -36074,8 +36077,8 @@ init_quality_gate();
 
 class HarnessPreValidator {
   cwd;
-  constructor(cwd2) {
-    this.cwd = cwd2;
+  constructor(cwd) {
+    this.cwd = cwd;
   }
   async runPreCheckLoop(taskIds) {
     const startTime = new Date().toISOString();
@@ -38394,8 +38397,8 @@ class HarnessStatusReporter {
   sessionId;
   currentReport;
   lastBatchContext;
-  constructor(cwd2, sessionId) {
-    this.statusPath = path25.join(getProjectDir(cwd2), "harness-status.json");
+  constructor(cwd, sessionId) {
+    this.statusPath = path25.join(getProjectDir(cwd), "harness-status.json");
     this.sessionId = sessionId;
     this.currentReport = this.createInitialReport();
   }
@@ -38868,11 +38871,11 @@ init_task();
 init_plan2();
 init_quality_gate();
 init_harness_snapshot();
-function getRuntimeStatePath(cwd2) {
-  return path27.join(getProjectDir(cwd2), "harness-state.json");
+function getRuntimeStatePath(cwd) {
+  return path27.join(getProjectDir(cwd), "harness-state.json");
 }
-function saveRuntimeState(state, cwd2) {
-  const statePath = getRuntimeStatePath(cwd2);
+function saveRuntimeState(state, cwd) {
+  const statePath = getRuntimeStatePath(cwd);
   const data = {
     ...state,
     stateFormatVersion: 2,
@@ -39778,7 +39781,8 @@ ${"━".repeat(SEPARATOR_WIDTH)}`);
         console.log("✅ architect 建议完成任务");
         return record;
       }
-      case "redevelop": {
+      case "redevelop":
+      case "minor_fix": {
         const devPhaseLimit = this.getPhaseRetryLimit("development");
         const devRetryCount = this.getPhaseRetryCount(taskId, "development", state);
         if (devRetryCount >= devPhaseLimit) {
@@ -39803,9 +39807,38 @@ ${"━".repeat(SEPARATOR_WIDTH)}`);
         record.retryCount = devRetryCount + 1;
         return record;
       }
+      case "retest": {
+        const qaPhaseLimit = this.getPhaseRetryLimit("qa");
+        const qaRetryCount = this.getPhaseRetryCount(taskId, "qa", state);
+        if (qaRetryCount >= qaPhaseLimit) {
+          console.log(`⚠️  QA 阶段重试次数已达上限 (${qaPhaseLimit})，回退到开发阶段重试`);
+          return this.handleVerdictBasedTransition(taskId, record, state, addTimeline, phase, "redevelop");
+        }
+        await this.ensureTransition(taskId, "wait_qa", `${phase} 阶段失败，从 QA 阶段重试`);
+        this.incrementPhaseRetryCount(taskId, "qa", state);
+        addTimeline("retry", `任务将从 QA 阶段重试 (第 ${qaRetryCount + 1}/${qaPhaseLimit} 次)`, { action, phase });
+        console.log(`⚠️  任务将从 QA 阶段重试 (第 ${qaRetryCount + 1}/${qaPhaseLimit} 次)`);
+        record.finalStatus = "wait_qa";
+        return record;
+      }
+      case "reevaluate": {
+        const MAX_REEVALUATE_ATTEMPTS = 2;
+        const reevaluateCount = state.reevaluateCounter.get(taskId) || 0;
+        if (reevaluateCount >= MAX_REEVALUATE_ATTEMPTS) {
+          console.log(`⚠️  评估重试次数已达上限 (${MAX_REEVALUATE_ATTEMPTS})，回退到开发阶段重试`);
+          return this.handleVerdictBasedTransition(taskId, record, state, addTimeline, phase, "redevelop");
+        }
+        await this.ensureTransition(taskId, "wait_evaluation", `${phase} 阶段失败，从评估阶段重试`);
+        this.incrementPhaseRetryCount(taskId, "evaluation", state);
+        state.reevaluateCounter.set(taskId, reevaluateCount + 1);
+        addTimeline("retry", `任务将从评估阶段重试 (第 ${reevaluateCount + 1}/${MAX_REEVALUATE_ATTEMPTS} 次)`, { action, phase });
+        console.log(`⚠️  任务将从评估阶段重试 (第 ${reevaluateCount + 1}/${MAX_REEVALUATE_ATTEMPTS} 次)`);
+        record.finalStatus = "wait_evaluation";
+        return record;
+      }
       case "escalate_human": {
-        await this.ensureTransition(taskId, "needs_human", `architect 建议人工介入 (action: escalate_human)`);
-        record.finalStatus = "needs_human";
+        await this.ensureTransition(taskId, "open", `architect 建议人工介入 (action: escalate_human)`);
+        record.finalStatus = "open";
         addTimeline("failed", "architect 建议人工介入", { action });
         console.log("\uD83D\uDD34 任务需要人工介入");
         return record;
@@ -40595,13 +40628,13 @@ function rebuildBatchesFromBoundaries(batchQueue) {
   }
   return batches;
 }
-async function cleanupHarnessSnapshots(options = {}, cwd2 = process.cwd()) {
-  const texts = t(cwd2);
-  if (!isInitialized(cwd2)) {
+async function cleanupHarnessSnapshots(options = {}, cwd = process.cwd()) {
+  const texts = t(cwd);
+  if (!isInitialized(cwd)) {
     console.error(texts.harnessCmd.projectNotInitialized);
     process.exit(1);
   }
-  const snapshots = listSnapshots(cwd2);
+  const snapshots = listSnapshots(cwd);
   if (snapshots.length === 0) {
     console.log(texts.harnessCmd.noSnapshotsFound);
     return 0;
@@ -40610,21 +40643,21 @@ async function cleanupHarnessSnapshots(options = {}, cwd2 = process.cwd()) {
   const activeSnapshots = [];
   const orphanSnapshots = [];
   for (const snapshot of snapshots) {
-    if (isSnapshotActive(snapshot, cwd2)) {
+    if (isSnapshotActive(snapshot, cwd)) {
       activeSnapshots.push(snapshot);
     } else {
       orphanSnapshots.push(snapshot);
     }
   }
   for (const snapshot of orphanSnapshots) {
-    if (cleanupSnapshot(snapshot.snapshotId, cwd2)) {
+    if (cleanupSnapshot(snapshot.snapshotId, cwd)) {
       cleaned++;
       console.log(texts.harnessCmd.cleaningOrphanSnapshots.replace("{id}", snapshot.snapshotId).replace("{pid}", String(snapshot.pid)));
     }
   }
   if (options.force && !options.orphansOnly) {
     for (const snapshot of activeSnapshots) {
-      if (cleanupSnapshot(snapshot.snapshotId, cwd2)) {
+      if (cleanupSnapshot(snapshot.snapshotId, cwd)) {
         cleaned++;
         console.log(texts.harnessCmd.forceCleanedSnapshots.replace("{id}", snapshot.snapshotId).replace("{pid}", String(snapshot.pid)));
       }
@@ -40642,9 +40675,9 @@ async function cleanupHarnessSnapshots(options = {}, cwd2 = process.cwd()) {
   console.log(texts.harnessCmd.cleanedSnapshots.replace("{count}", String(cleaned)));
   return cleaned;
 }
-function checkConcurrency(cwd2) {
-  const detection = detectActiveSnapshot(cwd2);
-  const texts = t(cwd2);
+function checkConcurrency(cwd) {
+  const detection = detectActiveSnapshot(cwd);
+  const texts = t(cwd);
   if (detection.hasActive && detection.activeSnapshot) {
     console.error("");
     console.error(texts.harnessCmd.concurrentPipelineRunning);
@@ -40669,13 +40702,13 @@ function checkConcurrency(cwd2) {
   }
   return false;
 }
-async function harnessCommand(options, cwd2 = process.cwd()) {
-  const texts = t(cwd2);
-  if (!isInitialized(cwd2)) {
+async function harnessCommand(options, cwd = process.cwd()) {
+  const texts = t(cwd);
+  if (!isInitialized(cwd)) {
     console.error(texts.harnessCmd.projectNotInitialized);
     process.exit(1);
   }
-  if (!options.continue && checkConcurrency(cwd2)) {
+  if (!options.continue && checkConcurrency(cwd)) {
     process.exit(1);
   }
   const qualityGateConfig = {
@@ -40697,7 +40730,7 @@ async function harnessCommand(options, cwd2 = process.cwd()) {
     jsonOutput: options.json ?? DEFAULT_HARNESS_CONFIG.jsonOutput,
     batchGitTagCommit: options.batchGitTagCommit ?? DEFAULT_HARNESS_CONFIG.batchGitTagCommit,
     forceContinue: options.forceContinue ?? DEFAULT_HARNESS_CONFIG.forceContinue,
-    cwd: cwd2
+    cwd
   };
   if (config.maxRetries < 0) {
     console.error(texts.harnessCmd.invalidMaxRetries);
@@ -40711,7 +40744,7 @@ async function harnessCommand(options, cwd2 = process.cwd()) {
     console.error(texts.harnessCmd.invalidParallel);
     process.exit(1);
   }
-  const batchQueue = await loadTaskQueue(options, cwd2);
+  const batchQueue = await loadTaskQueue(options, cwd);
   if (batchQueue.taskQueue.length === 0) {
     console.error("Error: No executable tasks");
     process.exit(1);
@@ -40766,7 +40799,7 @@ async function harnessCommand(options, cwd2 = process.cwd()) {
     console.log("━".repeat(SEPARATOR_WIDTH));
     console.log(texts.harnessCmd.minQualityScoreThreshold.replace("{score}", String(qualityGateConfig.minQualityScore)));
     console.log("");
-    const batchResult = await batchCheckQualityGate(batchQueue.taskQueue, qualityGateConfig, cwd2);
+    const batchResult = await batchCheckQualityGate(batchQueue.taskQueue, qualityGateConfig, cwd);
     console.log(formatBatchQualityGateResult(batchResult, { compact: false, showDetails: true }));
     if (!batchResult.allPassed) {
       console.log("");
@@ -40797,7 +40830,7 @@ async function harnessCommand(options, cwd2 = process.cwd()) {
     createdAt: new Date().toISOString(),
     updatedAt: new Date().toISOString()
   };
-  const snapshot = createPlanSnapshot(executionPlan, cwd2, {
+  const snapshot = createPlanSnapshot(executionPlan, cwd, {
     batchBoundaries: batchQueue.batchBoundaries,
     batchLabels: batchQueue.batchLabels,
     batchParallelizable: batchQueue.batchParallelizable
@@ -40822,9 +40855,9 @@ async function harnessCommand(options, cwd2 = process.cwd()) {
   try {
     let state;
     if (config.continue) {
-      state = loadRuntimeState(cwd2);
+      state = loadRuntimeState(cwd);
       if (state) {
-        const latestSnapshot = getLatestSnapshot(cwd2);
+        const latestSnapshot = getLatestSnapshot(cwd);
         if (latestSnapshot) {
           console.log(texts.harnessCmd.resumingFromInterruption.replace("{current}", String(state.currentIndex + 1)).replace("{total}", String(state.taskQueue.length)));
           console.log(`   \uD83D\uDCBE Using plan snapshot: ${latestSnapshot.snapshotId}`);
@@ -40866,10 +40899,10 @@ async function harnessCommand(options, cwd2 = process.cwd()) {
     process.exit(1);
   } finally {
     if (pipelineCompleted) {
-      clearRuntimeState(cwd2);
+      clearRuntimeState(cwd);
     }
     if (currentSnapshotId && pipelineCompleted) {
-      if (cleanupSnapshot(currentSnapshotId, cwd2)) {
+      if (cleanupSnapshot(currentSnapshotId, cwd)) {
         console.log(`   \uD83E\uDDF9 Plan snapshot cleaned: ${currentSnapshotId}`);
       }
       currentSnapshotId = null;
@@ -40880,14 +40913,14 @@ async function harnessCommand(options, cwd2 = process.cwd()) {
     process.removeListener("SIGTERM", gracefulShutdown);
   }
 }
-function getRuntimeStatePath2(cwd2) {
-  return path29.join(getProjectDir(cwd2), "harness-state.json");
+function getRuntimeStatePath2(cwd) {
+  return path29.join(getProjectDir(cwd), "harness-state.json");
 }
-function validateAndRepairState(data, cwd2) {
+function validateAndRepairState(data, cwd) {
   const errors = [];
   const repairedFields = [];
   let repaired = false;
-  const texts = t(cwd2);
+  const texts = t(cwd);
   const requiredFields = [
     { field: "state", type: "string" },
     { field: "config", type: "object" },
@@ -41012,7 +41045,7 @@ function validateAndRepairState(data, cwd2) {
       }
     }
     if (!config.cwd || typeof config.cwd !== "string") {
-      config.cwd = cwd2;
+      config.cwd = cwd;
       repairedFields.push("config.cwd");
       repaired = true;
     }
@@ -41037,12 +41070,12 @@ function validateAndRepairState(data, cwd2) {
     validation: { valid: true, errors, repaired, repairedFields }
   };
 }
-function loadRuntimeState(cwd2) {
-  const statePath = getRuntimeStatePath2(cwd2);
+function loadRuntimeState(cwd) {
+  const statePath = getRuntimeStatePath2(cwd);
   if (!fs33.existsSync(statePath)) {
     return null;
   }
-  const texts = t(cwd2);
+  const texts = t(cwd);
   try {
     const content = fs33.readFileSync(statePath, "utf-8");
     if (!content.trim()) {
@@ -41069,7 +41102,7 @@ function loadRuntimeState(cwd2) {
       data.stateFormatVersion = 2;
       console.log(texts.harnessCmd.stateFileMigrated.replace("{from}", "1").replace("{to}", "2"));
     }
-    const { data: validatedData, validation } = validateAndRepairState(data, cwd2);
+    const { data: validatedData, validation } = validateAndRepairState(data, cwd);
     if (!validatedData) {
       console.warn(texts.harnessCmd.stateRepairFailed);
       return null;
@@ -41088,8 +41121,8 @@ function loadRuntimeState(cwd2) {
     return null;
   }
 }
-function clearRuntimeState(cwd2) {
-  const statePath = getRuntimeStatePath2(cwd2);
+function clearRuntimeState(cwd) {
+  const statePath = getRuntimeStatePath2(cwd);
   if (fs33.existsSync(statePath)) {
     fs33.unlinkSync(statePath);
   }
@@ -41116,9 +41149,9 @@ function summaryToJSON(summary) {
     ]))
   };
 }
-async function loadTaskQueue(options, cwd2) {
+async function loadTaskQueue(options, cwd) {
   if (options.plan) {
-    const planFile = path29.resolve(cwd2, options.plan);
+    const planFile = path29.resolve(cwd, options.plan);
     if (!fs33.existsSync(planFile)) {
       console.error(`Error: Plan file does not exist: ${planFile}`);
       process.exit(1);
@@ -41135,7 +41168,7 @@ async function loadTaskQueue(options, cwd2) {
       const TERMINAL_STATUSES_SET8 = new Set(TERMINAL_STATUSES);
       const originalCount = taskQueue.length;
       taskQueue = taskQueue.filter((id) => {
-        const task = readTaskMeta(id, cwd2);
+        const task = readTaskMeta(id, cwd);
         if (!task)
           return false;
         return !TERMINAL_STATUSES_SET8.has(normalizeStatus(task.status));
@@ -41152,9 +41185,9 @@ async function loadTaskQueue(options, cwd2) {
       process.exit(1);
     }
   }
-  const executionPlan = readPlan(cwd2);
+  const executionPlan = readPlan(cwd);
   if (executionPlan && executionPlan.tasks.length > 0) {
-    const queue = filterExecutableFromPlan(executionPlan, cwd2, "\uD83D\uDCCB Using project execution plan");
+    const queue = filterExecutableFromPlan(executionPlan, cwd, "\uD83D\uDCCB Using project execution plan");
     if (queue.taskQueue.length > 0) {
       return queue;
     }
@@ -41162,10 +41195,10 @@ async function loadTaskQueue(options, cwd2) {
   }
   console.log("\uD83D\uDD0D No execution plan found, auto-generating...");
   try {
-    await recommendPlan2({ nonInteractive: true, json: false }, cwd2);
-    const newPlan = readPlan(cwd2);
+    await recommendPlan2({ nonInteractive: true, json: false }, cwd);
+    const newPlan = readPlan(cwd);
     if (newPlan && newPlan.tasks.length > 0) {
-      const queue = filterExecutableFromPlan(newPlan, cwd2, "✅ Execution plan auto-generated");
+      const queue = filterExecutableFromPlan(newPlan, cwd, "✅ Execution plan auto-generated");
       if (queue.taskQueue.length > 0) {
         return queue;
       }
@@ -41177,10 +41210,10 @@ async function loadTaskQueue(options, cwd2) {
   console.error("Hint: Please run `projmnt4claude plan recommend` to generate execution plan");
   process.exit(1);
 }
-function filterExecutableFromPlan(plan, cwd2, logPrefix) {
+function filterExecutableFromPlan(plan, cwd, logPrefix) {
   const TERMINAL_STATUSES_SET8 = new Set(TERMINAL_STATUSES);
   const filteredTasks = plan.tasks.filter((taskId) => {
-    const task = readTaskMeta(taskId, cwd2);
+    const task = readTaskMeta(taskId, cwd);
     if (!task)
       return false;
     return !TERMINAL_STATUSES_SET8.has(normalizeStatus(task.status));
@@ -41231,11 +41264,11 @@ function printSummary(summary) {
 // src/utils/path.ts
 import * as path30 from "path";
 import * as fs34 from "fs";
-function getProjectDir5(cwd2 = process.cwd()) {
-  return path30.join(cwd2, ".projmnt4claude");
+function getProjectDir5(cwd = process.cwd()) {
+  return path30.join(cwd, ".projmnt4claude");
 }
-function isInitialized2(cwd2 = process.cwd()) {
-  const projectDir = getProjectDir5(cwd2);
+function isInitialized2(cwd = process.cwd()) {
+  const projectDir = getProjectDir5(cwd);
   const configPath = path30.join(projectDir, "config.json");
   if (fs34.existsSync(configPath)) {
     return true;
