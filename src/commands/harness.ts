@@ -157,6 +157,8 @@ export interface HarnessCommandOptions {
   skipHarnessGate?: boolean;
   /** 每个批次完成后自动 git tag + commit */
   batchGitTagCommit?: boolean;
+  /** 每个任务完成后自动 git commit */
+  taskGitCommit?: boolean;
   /** 跳过基础字段验证失败时的流水线阻塞 */
   forceContinue?: boolean;
 }
@@ -320,6 +322,7 @@ export async function harnessCommand(
     continue: options.continue ?? DEFAULT_HARNESS_CONFIG.continue,
     jsonOutput: options.json ?? DEFAULT_HARNESS_CONFIG.jsonOutput,
     batchGitTagCommit: options.batchGitTagCommit ?? DEFAULT_HARNESS_CONFIG.batchGitTagCommit,
+    taskGitCommit: options.taskGitCommit ?? DEFAULT_HARNESS_CONFIG.taskGitCommit,
     forceContinue: options.forceContinue ?? DEFAULT_HARNESS_CONFIG.forceContinue,
     cwd,
   };
