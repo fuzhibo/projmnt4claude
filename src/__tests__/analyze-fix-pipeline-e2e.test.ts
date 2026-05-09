@@ -12,14 +12,10 @@
 import { describe, test, expect, beforeEach, afterEach } from 'bun:test';
 import * as fs from 'fs';
 import * as path from 'path';
-import * as os from 'os';
 import type { TaskMeta, TaskStatus, CheckpointMetadata } from '../types/task';
+import { createIsolatedTestEnv, type IsolatedTestEnv } from '../utils/test-env';
 
 // ============== 辅助函数 ==============
-
-function createTempDir(): string {
-  return fs.mkdtempSync(path.join(os.tmpdir(), 'analyze-fix-pipeline-e2e-'));
-}
 
 function createTask(overrides: Partial<TaskMeta> = {}): TaskMeta {
   return {
@@ -62,7 +58,6 @@ function writeReport(reportDir: string, fileName: string, verdict: 'PASS' | 'NOP
 }
 
 function initProject(cwd: string): void {
-  fs.mkdirSync(path.join(cwd, '.projmnt4claude'), { recursive: true });
   fs.writeFileSync(
     path.join(cwd, '.projmnt4claude', 'config.json'),
     JSON.stringify({ analyze: { autoGenerateCheckpoints: true } }),
@@ -79,15 +74,17 @@ function readTaskFromDisk(cwd: string, taskId: string): TaskMeta | null {
 // ============== E2E Tests ==============
 
 describe('applyStatusInferenceFix E2E', () => {
+  let env: IsolatedTestEnv;
   let tmpDir: string;
 
-  beforeEach(() => {
-    tmpDir = createTempDir();
+  beforeEach(async () => {
+    env = await createIsolatedTestEnv({ prefix: 'analyze-fix-pipeline-e2e-' });
+    tmpDir = env.tempDir;
     initProject(tmpDir);
   });
 
   afterEach(() => {
-    fs.rmSync(tmpDir, { recursive: true, force: true });
+    env.cleanup();
   });
 
   test('applies all 3 fix types in a single pass', async () => {
@@ -236,15 +233,17 @@ describe('applyStatusInferenceFix E2E', () => {
 // ============== fixSingleIssue E2E edge cases ==============
 
 describe('fixSingleIssue edge cases', () => {
+  let env: IsolatedTestEnv;
   let tmpDir: string;
 
-  beforeEach(() => {
-    tmpDir = createTempDir();
+  beforeEach(async () => {
+    env = await createIsolatedTestEnv({ prefix: 'analyze-fix-pipeline-e2e-' });
+    tmpDir = env.tempDir;
     initProject(tmpDir);
   });
 
   afterEach(() => {
-    fs.rmSync(tmpDir, { recursive: true, force: true });
+    env.cleanup();
   });
 
   test('report_status_mismatch with missing impliedStatus returns unfixable', async () => {

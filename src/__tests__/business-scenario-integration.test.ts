@@ -9,12 +9,20 @@
  * 5. AI 增强流程: FeedbackConstraintEngine
  * 6. Verdict 路由: handleVerdictBasedTransition
  * 7. 批次执行与 Git Commit
+ *
+ * 迁移说明:
+ * - 使用 createIsolatedTestEnv 创建隔离测试环境
+ * - 替代 fs.mkdtempSync 手动创建临时目录
  */
 
 import { describe, test, expect, beforeEach, afterEach, spyOn, mock } from 'bun:test';
 import * as fs from 'fs';
 import * as path from 'path';
 import * as os from 'os';
+import {
+  createIsolatedTestEnv,
+  type IsolatedTestEnv,
+} from '../utils/test-env.js';
 
 // Types
 import type {
@@ -81,6 +89,7 @@ import { assessComplexity } from '../commands/init-requirement.js';
 // Test helpers
 // ============================================================
 
+let env: IsolatedTestEnv;
 let tmpDir: string;
 
 function createTestConfig(overrides?: Partial<HarnessConfig>): HarnessConfig {
@@ -251,8 +260,9 @@ function makeRuleSet(name: string, rules: ValidationRule[], maxRetries = 2): Val
   return { name, outputType: 'json', rules, maxRetriesOnError: maxRetries };
 }
 
-beforeEach(() => {
-  tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'biz-scenario-'));
+beforeEach(async () => {
+  env = await createIsolatedTestEnv();
+  tmpDir = env.tempDir;
   setupProjectDir();
   // Suppress console output during tests
   spyOn(console, 'log').mockImplementation(() => {});
@@ -262,7 +272,7 @@ beforeEach(() => {
 
 afterEach(() => {
   mock.restore();
-  fs.rmSync(tmpDir, { recursive: true, force: true });
+  env.cleanup();
 });
 
 // ============================================================

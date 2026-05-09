@@ -11,8 +11,8 @@
 import { describe, test, expect, beforeEach, afterEach } from 'bun:test';
 import * as fs from 'fs';
 import * as path from 'path';
-import * as os from 'os';
 import { AssemblyLine } from '../utils/hd-assembly-line.js';
+import { createIsolatedTestEnv, type IsolatedTestEnv } from '../utils/test-env.js';
 import type { HarnessConfig, TaskMeta } from '../types/harness.js';
 
 // ============================================================
@@ -78,23 +78,17 @@ function updateMockTaskStatus(taskDir: string, taskId: string, status: string): 
 // ============================================================
 
 describe('AssemblyLine - checkDependencies', () => {
-  let tempDir: string;
-  let tasksDir: string;
+  let env: IsolatedTestEnv;
   let assemblyLine: AssemblyLine;
 
-  beforeEach(() => {
-    tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'hd-assembly-line-dep-test-'));
-    tasksDir = path.join(tempDir, '.projmnt4claude', 'tasks');
-    fs.mkdirSync(tasksDir, { recursive: true });
-
-    const config = createTestConfig(tempDir);
+  beforeEach(async () => {
+    env = await createIsolatedTestEnv();
+    const config = createTestConfig(env.tempDir);
     assemblyLine = new AssemblyLine(config);
   });
 
   afterEach(() => {
-    if (tempDir && fs.existsSync(tempDir)) {
-      fs.rmSync(tempDir, { recursive: true, force: true });
-    }
+    env.cleanup();
   });
 
   describe('CP-1: checkDependencies supports polling for in_progress tasks', () => {
@@ -108,8 +102,8 @@ describe('AssemblyLine - checkDependencies', () => {
         dependencies: ['DEP-TASK-001'],
       });
 
-      createMockTaskMeta(tasksDir, depTask);
-      createMockTaskMeta(tasksDir, mainTask);
+      createMockTaskMeta(env.tasksDir, depTask);
+      createMockTaskMeta(env.tasksDir, mainTask);
 
       // Access private method via any
       const result = await (assemblyLine as any).checkDependencies(mainTask);
@@ -126,8 +120,8 @@ describe('AssemblyLine - checkDependencies', () => {
         dependencies: ['DEP-TASK-001'],
       });
 
-      createMockTaskMeta(tasksDir, depTask);
-      createMockTaskMeta(tasksDir, mainTask);
+      createMockTaskMeta(env.tasksDir, depTask);
+      createMockTaskMeta(env.tasksDir, mainTask);
 
       const result = await (assemblyLine as any).checkDependencies(mainTask);
       expect(result).toBe(true);
@@ -143,12 +137,12 @@ describe('AssemblyLine - checkDependencies', () => {
         dependencies: ['DEP-TASK-001'],
       });
 
-      createMockTaskMeta(tasksDir, depTask);
-      createMockTaskMeta(tasksDir, mainTask);
+      createMockTaskMeta(env.tasksDir, depTask);
+      createMockTaskMeta(env.tasksDir, mainTask);
 
       // Simulate dependency completing after a short delay (before first poll)
       setTimeout(() => {
-        updateMockTaskStatus(tasksDir, 'DEP-TASK-001', 'resolved');
+        updateMockTaskStatus(env.tasksDir, 'DEP-TASK-001', 'resolved');
       }, 100);
 
       const result = await (assemblyLine as any).checkDependencies(mainTask);
@@ -167,8 +161,8 @@ describe('AssemblyLine - checkDependencies', () => {
         dependencies: ['DEP-TASK-001'],
       });
 
-      createMockTaskMeta(tasksDir, depTask);
-      createMockTaskMeta(tasksDir, mainTask);
+      createMockTaskMeta(env.tasksDir, depTask);
+      createMockTaskMeta(env.tasksDir, mainTask);
 
       const result = await (assemblyLine as any).checkDependencies(mainTask);
       expect(result).toBe(false);
@@ -184,8 +178,8 @@ describe('AssemblyLine - checkDependencies', () => {
         dependencies: ['DEP-TASK-001'],
       });
 
-      createMockTaskMeta(tasksDir, depTask);
-      createMockTaskMeta(tasksDir, mainTask);
+      createMockTaskMeta(env.tasksDir, depTask);
+      createMockTaskMeta(env.tasksDir, mainTask);
 
       const result = await (assemblyLine as any).checkDependencies(mainTask);
       expect(result).toBe(false);
@@ -205,13 +199,13 @@ describe('AssemblyLine - checkDependencies', () => {
         dependencies: ['DEP-TASK-001', 'DEP-TASK-002'],
       });
 
-      createMockTaskMeta(tasksDir, depTask1);
-      createMockTaskMeta(tasksDir, depTask2);
-      createMockTaskMeta(tasksDir, mainTask);
+      createMockTaskMeta(env.tasksDir, depTask1);
+      createMockTaskMeta(env.tasksDir, depTask2);
+      createMockTaskMeta(env.tasksDir, mainTask);
 
       // Complete second dependency after a short delay
       setTimeout(() => {
-        updateMockTaskStatus(tasksDir, 'DEP-TASK-002', 'resolved');
+        updateMockTaskStatus(env.tasksDir, 'DEP-TASK-002', 'resolved');
       }, 100);
 
       const result = await (assemblyLine as any).checkDependencies(mainTask);
@@ -256,7 +250,7 @@ describe('AssemblyLine - checkDependencies', () => {
         dependencies: [],
       });
 
-      createMockTaskMeta(tasksDir, mainTask);
+      createMockTaskMeta(env.tasksDir, mainTask);
 
       const result = await (assemblyLine as any).checkDependencies(mainTask);
       expect(result).toBe(true);
@@ -268,7 +262,7 @@ describe('AssemblyLine - checkDependencies', () => {
         dependencies: undefined as any,
       });
 
-      createMockTaskMeta(tasksDir, mainTask);
+      createMockTaskMeta(env.tasksDir, mainTask);
 
       const result = await (assemblyLine as any).checkDependencies(mainTask);
       expect(result).toBe(true);
@@ -284,12 +278,12 @@ describe('AssemblyLine - checkDependencies', () => {
         dependencies: ['DEP-TASK-001'],
       });
 
-      createMockTaskMeta(tasksDir, depTask);
-      createMockTaskMeta(tasksDir, mainTask);
+      createMockTaskMeta(env.tasksDir, depTask);
+      createMockTaskMeta(env.tasksDir, mainTask);
 
       // Complete dependency after a short delay
       setTimeout(() => {
-        updateMockTaskStatus(tasksDir, 'DEP-TASK-001', 'resolved');
+        updateMockTaskStatus(env.tasksDir, 'DEP-TASK-001', 'resolved');
       }, 100);
 
       const result = await (assemblyLine as any).checkDependencies(mainTask);
@@ -306,12 +300,12 @@ describe('AssemblyLine - checkDependencies', () => {
         dependencies: ['DEP-TASK-001'],
       });
 
-      createMockTaskMeta(tasksDir, depTask);
-      createMockTaskMeta(tasksDir, mainTask);
+      createMockTaskMeta(env.tasksDir, depTask);
+      createMockTaskMeta(env.tasksDir, mainTask);
 
       // Complete dependency after a short delay
       setTimeout(() => {
-        updateMockTaskStatus(tasksDir, 'DEP-TASK-001', 'resolved');
+        updateMockTaskStatus(env.tasksDir, 'DEP-TASK-001', 'resolved');
       }, 100);
 
       const result = await (assemblyLine as any).checkDependencies(mainTask);

@@ -18,8 +18,8 @@
 import { describe, test, expect, beforeEach, afterEach } from 'bun:test';
 import * as fs from 'fs';
 import * as path from 'path';
-import * as os from 'os';
 import { AssemblyLine } from '../utils/hd-assembly-line.js';
+import { createIsolatedTestEnv, type IsolatedTestEnv } from '../utils/test-env.js';
 import type { HarnessConfig, HarnessRuntimeState, TaskExecutionRecord, CodeReviewVerdict, QAVerdict, DevReport } from '../types/harness.js';
 import { createDefaultRuntimeState, createDefaultExecutionRecord } from '../types/harness.js';
 import type { TaskStatus, TaskMeta } from '../types/task.js';
@@ -143,64 +143,64 @@ describe('Phase-skippable pipeline structure', () => {
 // ============================================================
 
 describe('determineResumePhase decision interface', () => {
-  let tmpDir: string;
+  let env: IsolatedTestEnv;
   let assemblyLine: AssemblyLine;
   const taskId = 'TEST-PHASE-SKIP-001';
 
-  beforeEach(() => {
-    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'phase-skip-test-'));
-    const config = createTestConfig(tmpDir);
+  beforeEach(async () => {
+    env = await createIsolatedTestEnv();
+    const config = createTestConfig(env.tempDir);
     assemblyLine = new AssemblyLine(config);
   });
 
   afterEach(() => {
-    fs.rmSync(tmpDir, { recursive: true, force: true });
+    env.cleanup();
   });
 
   test('maps in_progress → development (for redevelop/minor_fix)', () => {
-    const state = createDefaultRuntimeState(createTestConfig(tmpDir));
+    const state = createDefaultRuntimeState(createTestConfig(env.tempDir));
     // redevelop/minor_fix transitions to in_progress
     const result = assemblyLine.determineResumePhase(taskId, 'in_progress', state);
     expect(result).toBe('development');
   });
 
   test('maps wait_qa → qa (for retest)', () => {
-    const reportDir = setupTaskDir(tmpDir, taskId);
+    const reportDir = setupTaskDir(env.tempDir, taskId);
     writeReport(reportDir, 'dev-report.md', 'dev content');
     writeReport(reportDir, 'code-review-report.md', 'review content');
 
-    const state = createDefaultRuntimeState(createTestConfig(tmpDir));
+    const state = createDefaultRuntimeState(createTestConfig(env.tempDir));
     // retest transitions to wait_qa
     const result = assemblyLine.determineResumePhase(taskId, 'wait_qa', state);
     expect(result).toBe('qa');
   });
 
   test('maps wait_evaluation → evaluation (for reevaluate)', () => {
-    const reportDir = setupTaskDir(tmpDir, taskId);
+    const reportDir = setupTaskDir(env.tempDir, taskId);
     writeReport(reportDir, 'dev-report.md', 'dev content');
     writeReport(reportDir, 'code-review-report.md', 'review content');
     writeReport(reportDir, 'qa-report.md', 'qa content');
 
-    const state = createDefaultRuntimeState(createTestConfig(tmpDir));
+    const state = createDefaultRuntimeState(createTestConfig(env.tempDir));
     // reevaluate transitions to wait_evaluation
     const result = assemblyLine.determineResumePhase(taskId, 'wait_evaluation', state);
     expect(result).toBe('evaluation');
   });
 
   test('wait_qa with qa-report auto-migrates to evaluation', () => {
-    const reportDir = setupTaskDir(tmpDir, taskId);
+    const reportDir = setupTaskDir(env.tempDir, taskId);
     writeReport(reportDir, 'dev-report.md', 'dev content');
     writeReport(reportDir, 'code-review-report.md', 'review content');
     writeReport(reportDir, 'qa-report.md', 'qa content');
 
-    const state = createDefaultRuntimeState(createTestConfig(tmpDir));
+    const state = createDefaultRuntimeState(createTestConfig(env.tempDir));
     // Legacy wait_qa + qa-report → auto-upgrade to evaluation
     const result = assemblyLine.determineResumePhase(taskId, 'wait_qa', state);
     expect(result).toBe('evaluation');
   });
 
   test('returns skip for terminal statuses', () => {
-    const state = createDefaultRuntimeState(createTestConfig(tmpDir));
+    const state = createDefaultRuntimeState(createTestConfig(env.tempDir));
     expect(assemblyLine.determineResumePhase(taskId, 'resolved', state)).toBe('skip');
     expect(assemblyLine.determineResumePhase(taskId, 'closed', state)).toBe('skip');
     expect(assemblyLine.determineResumePhase(taskId, 'failed', state)).toBe('skip');
@@ -213,19 +213,19 @@ describe('determineResumePhase decision interface', () => {
 // ============================================================
 
 describe('handleVerdictBasedTransition status transitions', () => {
-  let tmpDir: string;
+  let env: IsolatedTestEnv;
   let assemblyLine: AssemblyLine;
   const taskId = 'TEST-VERDICT-001';
 
-  beforeEach(() => {
-    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'verdict-test-'));
-    const config = createTestConfig(tmpDir);
+  beforeEach(async () => {
+    env = await createIsolatedTestEnv();
+    const config = createTestConfig(env.tempDir);
     assemblyLine = new AssemblyLine(config);
-    setupTaskDir(tmpDir, taskId, 'wait_qa');
+    setupTaskDir(env.tempDir, taskId, 'wait_qa');
   });
 
   afterEach(() => {
-    fs.rmSync(tmpDir, { recursive: true, force: true });
+    env.cleanup();
   });
 
   /**
@@ -237,14 +237,14 @@ describe('handleVerdictBasedTransition status transitions', () => {
     initialStatus: TaskStatus = 'wait_qa',
   ): Promise<TaskExecutionRecord> {
     // Reset task status for the test
-    const taskDir = path.join(tmpDir, '.projmnt4claude', 'tasks', taskId);
+    const taskDir = path.join(env.tempDir, '.projmnt4claude', 'tasks', taskId);
     const meta = JSON.parse(fs.readFileSync(path.join(taskDir, 'meta.json'), 'utf-8'));
     meta.status = initialStatus;
     fs.writeFileSync(path.join(taskDir, 'meta.json'), JSON.stringify(meta));
 
     const task = createMockTask({ id: taskId, status: initialStatus });
     const record = createDefaultExecutionRecord(task);
-    const state = createDefaultRuntimeState(createTestConfig(tmpDir));
+    const state = createDefaultRuntimeState(createTestConfig(env.tempDir));
 
     const timeline: Array<{ timestamp: string; event: string; description: string; data?: Record<string, unknown> }> = [];
     const addTimeline = (event: string, description: string, data?: Record<string, unknown>) => {
@@ -262,7 +262,7 @@ describe('handleVerdictBasedTransition status transitions', () => {
    * Read current task status from meta.json
    */
   function getTaskStatus(): TaskStatus {
-    const metaPath = path.join(tmpDir, '.projmnt4claude', 'tasks', taskId, 'meta.json');
+    const metaPath = path.join(env.tempDir, '.projmnt4claude', 'tasks', taskId, 'meta.json');
     const meta = JSON.parse(fs.readFileSync(metaPath, 'utf-8'));
     return meta.status;
   }
@@ -273,7 +273,7 @@ describe('handleVerdictBasedTransition status transitions', () => {
     expect(result.finalStatus).toBe('in_progress');
     expect(getTaskStatus()).toBe('in_progress');
     // Verify determineResumePhase maps in_progress → development
-    const state = createDefaultRuntimeState(createTestConfig(tmpDir));
+    const state = createDefaultRuntimeState(createTestConfig(env.tempDir));
     const resumePhase = assemblyLine.determineResumePhase(taskId, 'in_progress', state);
     expect(resumePhase).toBe('development');
   });
@@ -288,7 +288,7 @@ describe('handleVerdictBasedTransition status transitions', () => {
   // CP-11: retest → wait_qa
   test('CP-11: retest transitions to wait_qa (qa phase)', async () => {
     // Setup: need code-review-report for QA prerequisites
-    const reportDir = path.join(tmpDir, '.projmnt4claude', 'reports', 'harness', taskId);
+    const reportDir = path.join(env.tempDir, '.projmnt4claude', 'reports', 'harness', taskId);
     writeReport(reportDir, 'dev-report.md', 'dev content');
     writeReport(reportDir, 'code-review-report.md', 'review content');
 
@@ -296,7 +296,7 @@ describe('handleVerdictBasedTransition status transitions', () => {
     expect(result.finalStatus).toBe('wait_qa');
     expect(getTaskStatus()).toBe('wait_qa');
     // Verify determineResumePhase maps wait_qa → qa
-    const state = createDefaultRuntimeState(createTestConfig(tmpDir));
+    const state = createDefaultRuntimeState(createTestConfig(env.tempDir));
     const resumePhase = assemblyLine.determineResumePhase(taskId, 'wait_qa', state);
     expect(resumePhase).toBe('qa');
   });
@@ -304,7 +304,7 @@ describe('handleVerdictBasedTransition status transitions', () => {
   // CP-12: reevaluate → wait_evaluation
   test('CP-12: reevaluate transitions to wait_evaluation (evaluation phase)', async () => {
     // Setup: need all reports for evaluation prerequisites
-    const reportDir = path.join(tmpDir, '.projmnt4claude', 'reports', 'harness', taskId);
+    const reportDir = path.join(env.tempDir, '.projmnt4claude', 'reports', 'harness', taskId);
     writeReport(reportDir, 'dev-report.md', 'dev content');
     writeReport(reportDir, 'code-review-report.md', 'review content');
     writeReport(reportDir, 'qa-report.md', 'qa content');
@@ -313,20 +313,20 @@ describe('handleVerdictBasedTransition status transitions', () => {
     expect(result.finalStatus).toBe('wait_evaluation');
     expect(getTaskStatus()).toBe('wait_evaluation');
     // Verify determineResumePhase maps wait_evaluation → evaluation
-    const state = createDefaultRuntimeState(createTestConfig(tmpDir));
+    const state = createDefaultRuntimeState(createTestConfig(env.tempDir));
     const resumePhase = assemblyLine.determineResumePhase(taskId, 'wait_evaluation', state);
     expect(resumePhase).toBe('evaluation');
   });
 
   // CP-13: retest does NOT use resumeFrom
   test('CP-13: retest does not set resumeFrom (deprecated mechanism)', async () => {
-    const reportDir = path.join(tmpDir, '.projmnt4claude', 'reports', 'harness', taskId);
+    const reportDir = path.join(env.tempDir, '.projmnt4claude', 'reports', 'harness', taskId);
     writeReport(reportDir, 'dev-report.md', 'dev content');
     writeReport(reportDir, 'code-review-report.md', 'review content');
 
     const task = createMockTask({ id: taskId, status: 'wait_qa' });
     const record = createDefaultExecutionRecord(task);
-    const state = createDefaultRuntimeState(createTestConfig(tmpDir));
+    const state = createDefaultRuntimeState(createTestConfig(env.tempDir));
 
     const addTimeline = () => {};
     await (assemblyLine as any).handleVerdictBasedTransition(
@@ -339,14 +339,14 @@ describe('handleVerdictBasedTransition status transitions', () => {
 
   // CP-13: reevaluate does NOT use resumeFrom
   test('CP-13: reevaluate does not set resumeFrom (deprecated mechanism)', async () => {
-    const reportDir = path.join(tmpDir, '.projmnt4claude', 'reports', 'harness', taskId);
+    const reportDir = path.join(env.tempDir, '.projmnt4claude', 'reports', 'harness', taskId);
     writeReport(reportDir, 'dev-report.md', 'dev content');
     writeReport(reportDir, 'code-review-report.md', 'review content');
     writeReport(reportDir, 'qa-report.md', 'qa content');
 
     const task = createMockTask({ id: taskId, status: 'wait_evaluation' });
     const record = createDefaultExecutionRecord(task);
-    const state = createDefaultRuntimeState(createTestConfig(tmpDir));
+    const state = createDefaultRuntimeState(createTestConfig(env.tempDir));
 
     const addTimeline = () => {};
     await (assemblyLine as any).handleVerdictBasedTransition(
@@ -360,7 +360,7 @@ describe('handleVerdictBasedTransition status transitions', () => {
   test('CP-11: retest falls back to redevelop when QA retries exhausted', async () => {
     const task = createMockTask({ id: taskId, status: 'wait_qa' });
     const record = createDefaultExecutionRecord(task);
-    const state = createDefaultRuntimeState(createTestConfig(tmpDir));
+    const state = createDefaultRuntimeState(createTestConfig(env.tempDir));
     // Exhaust QA retry limit
     state.phaseRetryCounters.set(`${taskId}:qa`, 3); // default limit
 
@@ -378,7 +378,7 @@ describe('handleVerdictBasedTransition status transitions', () => {
   test('CP-12: reevaluate falls back to redevelop when max attempts reached', async () => {
     const task = createMockTask({ id: taskId, status: 'wait_evaluation' });
     const record = createDefaultExecutionRecord(task);
-    const state = createDefaultRuntimeState(createTestConfig(tmpDir));
+    const state = createDefaultRuntimeState(createTestConfig(env.tempDir));
     // Exhaust reevaluate limit
     state.reevaluateCounter.set(taskId, 2); // MAX_REEVALUATE_ATTEMPTS
 
@@ -393,14 +393,14 @@ describe('handleVerdictBasedTransition status transitions', () => {
 
   // CP-17: resolve → resolved
   test('CP-17: resolve transitions to resolved', async () => {
-    const taskDir = path.join(tmpDir, '.projmnt4claude', 'tasks', taskId);
+    const taskDir = path.join(env.tempDir, '.projmnt4claude', 'tasks', taskId);
     const meta = JSON.parse(fs.readFileSync(path.join(taskDir, 'meta.json'), 'utf-8'));
     meta.status = 'wait_evaluation';
     fs.writeFileSync(path.join(taskDir, 'meta.json'), JSON.stringify(meta));
 
     const task = createMockTask({ id: taskId, status: 'wait_evaluation' });
     const record = createDefaultExecutionRecord(task);
-    const state = createDefaultRuntimeState(createTestConfig(tmpDir));
+    const state = createDefaultRuntimeState(createTestConfig(env.tempDir));
     const timeline: Array<{ timestamp: string; event: string; description: string; data?: Record<string, unknown> }> = [];
     const addTimeline = (event: string, description: string, data?: Record<string, unknown>) => {
       timeline.push({ timestamp: new Date().toISOString(), event, description, data });
@@ -418,14 +418,14 @@ describe('handleVerdictBasedTransition status transitions', () => {
 
   // CP-17: escalate_human → open
   test('CP-17: escalate_human transitions to open', async () => {
-    const taskDir = path.join(tmpDir, '.projmnt4claude', 'tasks', taskId);
+    const taskDir = path.join(env.tempDir, '.projmnt4claude', 'tasks', taskId);
     const meta = JSON.parse(fs.readFileSync(path.join(taskDir, 'meta.json'), 'utf-8'));
     meta.status = 'wait_evaluation';
     fs.writeFileSync(path.join(taskDir, 'meta.json'), JSON.stringify(meta));
 
     const task = createMockTask({ id: taskId, status: 'wait_evaluation' });
     const record = createDefaultExecutionRecord(task);
-    const state = createDefaultRuntimeState(createTestConfig(tmpDir));
+    const state = createDefaultRuntimeState(createTestConfig(env.tempDir));
     const timeline: Array<{ timestamp: string; event: string; description: string; data?: Record<string, unknown> }> = [];
     const addTimeline = (event: string, description: string, data?: Record<string, unknown>) => {
       timeline.push({ timestamp: new Date().toISOString(), event, description, data });
@@ -453,7 +453,7 @@ describe('handleVerdictBasedTransition status transitions', () => {
   test('boundary: redevelop marks failed when dev retries exhausted', async () => {
     const task = createMockTask({ id: taskId, status: 'wait_qa' });
     const record = createDefaultExecutionRecord(task);
-    const state = createDefaultRuntimeState(createTestConfig(tmpDir));
+    const state = createDefaultRuntimeState(createTestConfig(env.tempDir));
     state.phaseRetryCounters.set(`${taskId}:development`, 3); // default limit
 
     const addTimeline = () => {};
@@ -469,7 +469,7 @@ describe('handleVerdictBasedTransition status transitions', () => {
   test('boundary: minor_fix falls back to redevelop when phase retries exhausted', async () => {
     const task = createMockTask({ id: taskId, status: 'wait_qa' });
     const record = createDefaultExecutionRecord(task);
-    const state = createDefaultRuntimeState(createTestConfig(tmpDir));
+    const state = createDefaultRuntimeState(createTestConfig(env.tempDir));
     state.phaseRetryCounters.set(`${taskId}:qa`, 2); // qa default limit
 
     const addTimeline = () => {};
@@ -484,14 +484,14 @@ describe('handleVerdictBasedTransition status transitions', () => {
 
   // Boundary: reevaluate increments reevaluateCounter but not retryCounter
   test('boundary: reevaluate increments reevaluateCounter not retryCounter', async () => {
-    const reportDir = path.join(tmpDir, '.projmnt4claude', 'reports', 'harness', taskId);
+    const reportDir = path.join(env.tempDir, '.projmnt4claude', 'reports', 'harness', taskId);
     writeReport(reportDir, 'dev-report.md', 'dev content');
     writeReport(reportDir, 'code-review-report.md', 'review content');
     writeReport(reportDir, 'qa-report.md', 'qa content');
 
     const task = createMockTask({ id: taskId, status: 'wait_evaluation' });
     const record = createDefaultExecutionRecord(task);
-    const state = createDefaultRuntimeState(createTestConfig(tmpDir));
+    const state = createDefaultRuntimeState(createTestConfig(env.tempDir));
 
     const addTimeline = () => {};
     await (assemblyLine as any).handleVerdictBasedTransition(
@@ -574,26 +574,26 @@ describe('CP-14: Skip phase log messages in implementation', () => {
 // ============================================================
 
 describe('End-to-end phase skip integration', () => {
-  let tmpDir: string;
+  let env: IsolatedTestEnv;
   let assemblyLine: AssemblyLine;
   const taskId = 'TEST-E2E-PHASE-001';
 
-  beforeEach(() => {
-    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'e2e-phase-test-'));
-    const config = createTestConfig(tmpDir);
+  beforeEach(async () => {
+    env = await createIsolatedTestEnv();
+    const config = createTestConfig(env.tempDir);
     assemblyLine = new AssemblyLine(config);
   });
 
   afterEach(() => {
-    fs.rmSync(tmpDir, { recursive: true, force: true });
+    env.cleanup();
   });
 
   test('retest flow: wait_qa status → qa phase → skips dev and code_review', () => {
-    const reportDir = setupTaskDir(tmpDir, taskId, 'wait_qa');
+    const reportDir = setupTaskDir(env.tempDir, taskId, 'wait_qa');
     writeReport(reportDir, 'dev-report.md', 'dev content');
     writeReport(reportDir, 'code-review-report.md', 'review content');
 
-    const state = createDefaultRuntimeState(createTestConfig(tmpDir));
+    const state = createDefaultRuntimeState(createTestConfig(env.tempDir));
     const resumePhase = assemblyLine.determineResumePhase(taskId, 'wait_qa', state);
 
     expect(resumePhase).toBe('qa');
@@ -608,12 +608,12 @@ describe('End-to-end phase skip integration', () => {
   });
 
   test('reevaluate flow: wait_evaluation status → evaluation phase → skips all prior', () => {
-    const reportDir = setupTaskDir(tmpDir, taskId, 'wait_evaluation');
+    const reportDir = setupTaskDir(env.tempDir, taskId, 'wait_evaluation');
     writeReport(reportDir, 'dev-report.md', 'dev content');
     writeReport(reportDir, 'code-review-report.md', 'review content');
     writeReport(reportDir, 'qa-report.md', 'qa content');
 
-    const state = createDefaultRuntimeState(createTestConfig(tmpDir));
+    const state = createDefaultRuntimeState(createTestConfig(env.tempDir));
     const resumePhase = assemblyLine.determineResumePhase(taskId, 'wait_evaluation', state);
 
     expect(resumePhase).toBe('evaluation');
@@ -629,9 +629,9 @@ describe('End-to-end phase skip integration', () => {
   });
 
   test('redevelop flow: in_progress status → development phase → runs all', () => {
-    setupTaskDir(tmpDir, taskId, 'in_progress');
+    setupTaskDir(env.tempDir, taskId, 'in_progress');
 
-    const state = createDefaultRuntimeState(createTestConfig(tmpDir));
+    const state = createDefaultRuntimeState(createTestConfig(env.tempDir));
     const resumePhase = assemblyLine.determineResumePhase(taskId, 'in_progress', state);
 
     expect(resumePhase).toBe('development');
@@ -652,18 +652,18 @@ describe('End-to-end phase skip integration', () => {
 // ============================================================
 
 describe('CP-5: prerequisite data rebuild from prevRecord', () => {
-  let tmpDir: string;
+  let env: IsolatedTestEnv;
   let assemblyLine: AssemblyLine;
   const taskId = 'TEST-PREREQ-REBUILD-001';
 
-  beforeEach(() => {
-    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'prereq-rebuild-test-'));
-    const config = createTestConfig(tmpDir);
+  beforeEach(async () => {
+    env = await createIsolatedTestEnv();
+    const config = createTestConfig(env.tempDir);
     assemblyLine = new AssemblyLine(config);
   });
 
   afterEach(() => {
-    fs.rmSync(tmpDir, { recursive: true, force: true });
+    env.cleanup();
   });
 
   test('implementation references prevRecord for skipped development phase', () => {

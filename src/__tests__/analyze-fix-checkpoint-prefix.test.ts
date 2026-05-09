@@ -5,20 +5,20 @@
 import { describe, it, expect, beforeEach, afterEach } from 'bun:test';
 import * as fs from 'fs';
 import * as path from 'path';
-import { tmpdir } from 'os';
-import { randomUUID } from 'crypto';
 import type { TaskMeta, Checkpoint } from '../types/task';
 import { fixSingleIssue } from '../commands/analyze-fix-pipeline';
 import type { Issue } from '../commands/analyze';
+import { createIsolatedTestEnv, type IsolatedTestEnv } from '../utils/test-env';
 
 describe('analyze --fix checkpoint prefix', () => {
+  let env: IsolatedTestEnv;
   let testDir: string;
   let taskDir: string;
   let taskId: string;
 
-  beforeEach(() => {
-    // 创建临时测试目录
-    testDir = path.join(tmpdir(), `test-checkpoint-prefix-${randomUUID()}`);
+  beforeEach(async () => {
+    env = await createIsolatedTestEnv({ prefix: 'test-checkpoint-prefix-' });
+    testDir = env.tempDir;
     taskId = 'TASK-feature-P1-test-prefix-20260101';
     const tasksDir = path.join(testDir, '.projmnt4claude', 'tasks');
     taskDir = path.join(tasksDir, taskId);
@@ -74,10 +74,7 @@ describe('analyze --fix checkpoint prefix', () => {
   });
 
   afterEach(() => {
-    // 清理测试目录
-    if (fs.existsSync(testDir)) {
-      fs.rmSync(testDir, { recursive: true, force: true });
-    }
+    env.cleanup();
   });
 
   it('should fix missing checkpoint prefixes via analyze --fix', async () => {

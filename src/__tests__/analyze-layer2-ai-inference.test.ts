@@ -14,7 +14,6 @@
 import { describe, test, expect, beforeEach, afterEach, mock } from 'bun:test';
 import * as fs from 'fs';
 import * as path from 'path';
-import * as os from 'os';
 
 // ============== Mock headless-agent before analyze imports ==============
 
@@ -46,12 +45,9 @@ import {
 } from '../commands/analyze';
 import type { TaskMeta, TaskStatus } from '../types/task';
 import type { Issue } from '../commands/analyze';
+import { createIsolatedTestEnv, type IsolatedTestEnv } from '../utils/test-env';
 
 // ============== 辅助函数 ==============
-
-function createTempDir(): string {
-  return fs.mkdtempSync(path.join(os.tmpdir(), 'analyze-layer2-test-'));
-}
 
 function createTask(overrides: Partial<TaskMeta> = {}): TaskMeta {
   return {
@@ -96,15 +92,16 @@ function writeReport(reportDir: string, fileName: string, verdict: 'PASS' | 'NOP
 // ============== shouldTriggerAIInference (CP-23) ==============
 
 describe('shouldTriggerAIInference', () => {
+  let env: IsolatedTestEnv;
   let tmpDir: string;
 
-  beforeEach(() => {
-    tmpDir = createTempDir();
-    fs.mkdirSync(path.join(tmpDir, '.projmnt4claude'), { recursive: true });
+  beforeEach(async () => {
+    env = await createIsolatedTestEnv({ prefix: 'analyze-layer2-test-' });
+    tmpDir = env.tempDir;
   });
 
   afterEach(() => {
-    fs.rmSync(tmpDir, { recursive: true, force: true });
+    env.cleanup();
   });
 
   // CP-2: 终态任务不需要 AI 推断
@@ -363,16 +360,17 @@ describe('buildStatusInferencePrompt', () => {
 // ============== runAIStatusInference (CP-25, CP-27, CP-28) ==============
 
 describe('runAIStatusInference', () => {
+  let env: IsolatedTestEnv;
   let tmpDir: string;
 
-  beforeEach(() => {
-    tmpDir = createTempDir();
-    fs.mkdirSync(path.join(tmpDir, '.projmnt4claude'), { recursive: true });
+  beforeEach(async () => {
+    env = await createIsolatedTestEnv({ prefix: 'analyze-layer2-test-' });
+    tmpDir = env.tempDir;
     mockInvokeAgent.mockClear();
   });
 
   afterEach(() => {
-    fs.rmSync(tmpDir, { recursive: true, force: true });
+    env.cleanup();
   });
 
   // CP-27: Headless 已调用
@@ -511,16 +509,17 @@ describe('runAIStatusInference', () => {
 // ============== detectStatusInferenceIssues e2e (CP-26) ==============
 
 describe('detectStatusInferenceIssues', () => {
+  let env: IsolatedTestEnv;
   let tmpDir: string;
 
-  beforeEach(() => {
-    tmpDir = createTempDir();
-    fs.mkdirSync(path.join(tmpDir, '.projmnt4claude'), { recursive: true });
+  beforeEach(async () => {
+    env = await createIsolatedTestEnv({ prefix: 'analyze-layer2-test-' });
+    tmpDir = env.tempDir;
     mockInvokeAgent.mockClear();
   });
 
   afterEach(() => {
-    fs.rmSync(tmpDir, { recursive: true, force: true });
+    env.cleanup();
   });
 
   // CP-15: 先运行 Layer 1 确定性规则

@@ -14,19 +14,15 @@
 import { describe, test, expect, beforeEach, afterEach } from 'bun:test';
 import * as fs from 'fs';
 import * as path from 'path';
-import * as os from 'os';
 import {
   checkReportStatusConsistency,
   checkCheckpointConsistency,
   checkMissingPipelineEvidence,
 } from '../commands/analyze';
 import type { TaskMeta, CheckpointMetadata, TaskStatus } from '../types/task';
+import { createIsolatedTestEnv, type IsolatedTestEnv } from '../utils/test-env';
 
 // ============== 辅助函数 ==============
-
-function createTempDir(): string {
-  return fs.mkdtempSync(path.join(os.tmpdir(), 'analyze-status-inference-test-'));
-}
 
 function createTask(overrides: Partial<TaskMeta> = {}): TaskMeta {
   return {
@@ -71,14 +67,16 @@ function writeReport(reportDir: string, fileName: string, verdict: 'PASS' | 'NOP
 // ============== checkReportStatusConsistency (CP-2) ==============
 
 describe('checkReportStatusConsistency', () => {
+  let env: IsolatedTestEnv;
   let tmpDir: string;
 
-  beforeEach(() => {
-    tmpDir = createTempDir();
+  beforeEach(async () => {
+    env = await createIsolatedTestEnv({ prefix: 'analyze-status-inference-' });
+    tmpDir = env.tempDir;
   });
 
   afterEach(() => {
-    fs.rmSync(tmpDir, { recursive: true, force: true });
+    env.cleanup();
   });
 
   test('returns null when no report directory exists', () => {
@@ -239,14 +237,16 @@ describe('checkCheckpointConsistency', () => {
 // ============== checkMissingPipelineEvidence (CP-4) ==============
 
 describe('checkMissingPipelineEvidence', () => {
+  let env: IsolatedTestEnv;
   let tmpDir: string;
 
-  beforeEach(() => {
-    tmpDir = createTempDir();
+  beforeEach(async () => {
+    env = await createIsolatedTestEnv({ prefix: 'analyze-status-inference-' });
+    tmpDir = env.tempDir;
   });
 
   afterEach(() => {
-    fs.rmSync(tmpDir, { recursive: true, force: true });
+    env.cleanup();
   });
 
   test('returns null for non-pipeline-intermediate statuses', () => {
@@ -315,12 +315,13 @@ describe('checkMissingPipelineEvidence', () => {
 // ============== Fix Actions (CP-10) ==============
 
 describe('Fix actions for status inference issues', () => {
+  let env: IsolatedTestEnv;
   let tmpDir: string;
 
-  beforeEach(() => {
-    tmpDir = createTempDir();
-    // Initialize .projmnt4claude directory
-    fs.mkdirSync(path.join(tmpDir, '.projmnt4claude'), { recursive: true });
+  beforeEach(async () => {
+    env = await createIsolatedTestEnv({ prefix: 'analyze-status-inference-' });
+    tmpDir = env.tempDir;
+    // Initialize config.json
     fs.writeFileSync(
       path.join(tmpDir, '.projmnt4claude', 'config.json'),
       JSON.stringify({ analyze: { autoGenerateCheckpoints: true } }),
@@ -329,7 +330,7 @@ describe('Fix actions for status inference issues', () => {
   });
 
   afterEach(() => {
-    fs.rmSync(tmpDir, { recursive: true, force: true });
+    env.cleanup();
   });
 
   test('report_status_mismatch fix updates task status', async () => {

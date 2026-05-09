@@ -1,8 +1,8 @@
 import { describe, test, expect, beforeEach, afterEach } from 'bun:test';
 import * as fs from 'fs';
 import * as path from 'path';
-import * as os from 'os';
 import { AssemblyLine } from '../utils/hd-assembly-line.js';
+import { createIsolatedTestEnv, type IsolatedTestEnv } from '../utils/test-env.js';
 import type { HarnessConfig, HarnessRuntimeState } from '../types/harness.js';
 import { createDefaultRuntimeState } from '../types/harness.js';
 import type { TaskStatus } from '../types/task.js';
@@ -124,24 +124,24 @@ describe('AssemblyLine.PHASE_PREREQUISITES', () => {
 // ============================================================
 
 describe('AssemblyLine.determineResumePhase', () => {
-  let tmpDir: string;
+  let env: IsolatedTestEnv;
   let assemblyLine: AssemblyLine;
   const taskId = 'TEST-TASK-001';
 
-  beforeEach(() => {
-    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'resume-test-'));
-    const config = createTestConfig(tmpDir);
+  beforeEach(async () => {
+    env = await createIsolatedTestEnv();
+    const config = createTestConfig(env.tempDir);
     assemblyLine = new AssemblyLine(config);
   });
 
   afterEach(() => {
-    fs.rmSync(tmpDir, { recursive: true, force: true });
+    env.cleanup();
   });
 
   // --- 优先级1: taskPhaseCheckpoints ---
 
   test('uses taskPhaseCheckpoints when available and prerequisites met', () => {
-    const reportDir = setupReportDir(tmpDir, taskId);
+    const reportDir = setupReportDir(env.tempDir, taskId);
     writeReport(reportDir, 'dev-report.md', 'dev content');
 
     const state = createStateWithCheckpoint(taskId, 'development');
@@ -152,7 +152,7 @@ describe('AssemblyLine.determineResumePhase', () => {
 
   test('falls back to development when taskPhaseCheckpoints points to phase with missing prerequisites', () => {
     // No reports created
-    setupReportDir(tmpDir, taskId);
+    setupReportDir(env.tempDir, taskId);
 
     const state = createStateWithCheckpoint(taskId, 'code_review');
     // code_review checkpoint → next is qa, needs dev+code-review reports → missing
@@ -181,7 +181,7 @@ describe('AssemblyLine.determineResumePhase', () => {
   });
 
   test('maps wait_review status to code_review when prerequisites met', () => {
-    const reportDir = setupReportDir(tmpDir, taskId);
+    const reportDir = setupReportDir(env.tempDir, taskId);
     writeReport(reportDir, 'dev-report.md', 'dev content');
 
     const state = createStateWithoutCheckpoint();
@@ -190,7 +190,7 @@ describe('AssemblyLine.determineResumePhase', () => {
   });
 
   test('maps wait_qa status to qa when prerequisites met', () => {
-    const reportDir = setupReportDir(tmpDir, taskId);
+    const reportDir = setupReportDir(env.tempDir, taskId);
     writeReport(reportDir, 'dev-report.md', 'dev content');
     writeReport(reportDir, 'code-review-report.md', 'review content');
 
@@ -200,7 +200,7 @@ describe('AssemblyLine.determineResumePhase', () => {
   });
 
   test('maps wait_evaluation status to evaluation when prerequisites met', () => {
-    const reportDir = setupReportDir(tmpDir, taskId);
+    const reportDir = setupReportDir(env.tempDir, taskId);
     writeReport(reportDir, 'dev-report.md', 'dev content');
     writeReport(reportDir, 'code-review-report.md', 'review content');
     writeReport(reportDir, 'qa-report.md', 'qa content');
@@ -235,14 +235,14 @@ describe('AssemblyLine.determineResumePhase', () => {
   // --- 优先级3: 前置报告不完整降级 ---
 
   test('degrades to development when wait_review has no dev-report', () => {
-    setupReportDir(tmpDir, taskId); // no reports
+    setupReportDir(env.tempDir, taskId); // no reports
     const state = createStateWithoutCheckpoint();
     const result = assemblyLine.determineResumePhase(taskId, 'wait_review', state);
     expect(result).toBe('development');
   });
 
   test('degrades to development when wait_qa has no code-review-report', () => {
-    const reportDir = setupReportDir(tmpDir, taskId);
+    const reportDir = setupReportDir(env.tempDir, taskId);
     writeReport(reportDir, 'dev-report.md', 'dev content');
     // missing code-review-report.md
     const state = createStateWithoutCheckpoint();
@@ -251,7 +251,7 @@ describe('AssemblyLine.determineResumePhase', () => {
   });
 
   test('degrades to development when wait_evaluation has no qa-report', () => {
-    const reportDir = setupReportDir(tmpDir, taskId);
+    const reportDir = setupReportDir(env.tempDir, taskId);
     writeReport(reportDir, 'dev-report.md', 'dev content');
     writeReport(reportDir, 'code-review-report.md', 'review content');
     // missing qa-report.md
@@ -263,7 +263,7 @@ describe('AssemblyLine.determineResumePhase', () => {
   // --- 旧状态迁移: wait_qa + qa-report.md 存在 → wait_evaluation ---
 
   test('migrates wait_qa to evaluation when qa-report.md exists', () => {
-    const reportDir = setupReportDir(tmpDir, taskId);
+    const reportDir = setupReportDir(env.tempDir, taskId);
     writeReport(reportDir, 'dev-report.md', 'dev content');
     writeReport(reportDir, 'code-review-report.md', 'review content');
     writeReport(reportDir, 'qa-report.md', 'qa content');
@@ -275,7 +275,7 @@ describe('AssemblyLine.determineResumePhase', () => {
   });
 
   test('does not migrate wait_qa when qa-report.md is empty', () => {
-    const reportDir = setupReportDir(tmpDir, taskId);
+    const reportDir = setupReportDir(env.tempDir, taskId);
     writeReport(reportDir, 'dev-report.md', 'dev content');
     writeReport(reportDir, 'code-review-report.md', 'review content');
     writeReport(reportDir, 'qa-report.md', ''); // empty
@@ -287,7 +287,7 @@ describe('AssemblyLine.determineResumePhase', () => {
   });
 
   test('does not migrate wait_qa when qa-report.md does not exist', () => {
-    const reportDir = setupReportDir(tmpDir, taskId);
+    const reportDir = setupReportDir(env.tempDir, taskId);
     writeReport(reportDir, 'dev-report.md', 'dev content');
     writeReport(reportDir, 'code-review-report.md', 'review content');
     // no qa-report.md
@@ -309,7 +309,7 @@ describe('AssemblyLine.determineResumePhase', () => {
   // --- checkpoint 指向 qa 阶段且有完整前置报告 ---
 
   test('resumes at evaluation when checkpoint shows qa completed and all reports exist', () => {
-    const reportDir = setupReportDir(tmpDir, taskId);
+    const reportDir = setupReportDir(env.tempDir, taskId);
     writeReport(reportDir, 'dev-report.md', 'dev content');
     writeReport(reportDir, 'code-review-report.md', 'review content');
     writeReport(reportDir, 'qa-report.md', 'qa content');
@@ -325,18 +325,18 @@ describe('AssemblyLine.determineResumePhase', () => {
 // ============================================================
 
 describe('AssemblyLine.validatePrerequisites', () => {
-  let tmpDir: string;
+  let env: IsolatedTestEnv;
   let assemblyLine: AssemblyLine;
   const taskId = 'TEST-TASK-002';
 
-  beforeEach(() => {
-    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'prereq-test-'));
-    const config = createTestConfig(tmpDir);
+  beforeEach(async () => {
+    env = await createIsolatedTestEnv();
+    const config = createTestConfig(env.tempDir);
     assemblyLine = new AssemblyLine(config);
   });
 
   afterEach(() => {
-    fs.rmSync(tmpDir, { recursive: true, force: true });
+    env.cleanup();
   });
 
   test('returns true for development (no prerequisites)', () => {
@@ -344,37 +344,37 @@ describe('AssemblyLine.validatePrerequisites', () => {
   });
 
   test('returns true for code_review when dev-report.md exists', () => {
-    const reportDir = setupReportDir(tmpDir, taskId);
+    const reportDir = setupReportDir(env.tempDir, taskId);
     writeReport(reportDir, 'dev-report.md', 'content');
     expect(assemblyLine.validatePrerequisites(taskId, 'code_review')).toBe(true);
   });
 
   test('returns false for code_review when dev-report.md missing', () => {
-    setupReportDir(tmpDir, taskId);
+    setupReportDir(env.tempDir, taskId);
     expect(assemblyLine.validatePrerequisites(taskId, 'code_review')).toBe(false);
   });
 
   test('returns false for code_review when dev-report.md is empty', () => {
-    const reportDir = setupReportDir(tmpDir, taskId);
+    const reportDir = setupReportDir(env.tempDir, taskId);
     writeReport(reportDir, 'dev-report.md', '');
     expect(assemblyLine.validatePrerequisites(taskId, 'code_review')).toBe(false);
   });
 
   test('returns true for qa when both reports exist', () => {
-    const reportDir = setupReportDir(tmpDir, taskId);
+    const reportDir = setupReportDir(env.tempDir, taskId);
     writeReport(reportDir, 'dev-report.md', 'dev');
     writeReport(reportDir, 'code-review-report.md', 'review');
     expect(assemblyLine.validatePrerequisites(taskId, 'qa')).toBe(true);
   });
 
   test('returns false for qa when code-review-report.md missing', () => {
-    const reportDir = setupReportDir(tmpDir, taskId);
+    const reportDir = setupReportDir(env.tempDir, taskId);
     writeReport(reportDir, 'dev-report.md', 'dev');
     expect(assemblyLine.validatePrerequisites(taskId, 'qa')).toBe(false);
   });
 
   test('returns true for evaluation when all three reports exist', () => {
-    const reportDir = setupReportDir(tmpDir, taskId);
+    const reportDir = setupReportDir(env.tempDir, taskId);
     writeReport(reportDir, 'dev-report.md', 'dev');
     writeReport(reportDir, 'code-review-report.md', 'review');
     writeReport(reportDir, 'qa-report.md', 'qa');
@@ -382,7 +382,7 @@ describe('AssemblyLine.validatePrerequisites', () => {
   });
 
   test('returns false for evaluation when qa-report.md missing', () => {
-    const reportDir = setupReportDir(tmpDir, taskId);
+    const reportDir = setupReportDir(env.tempDir, taskId);
     writeReport(reportDir, 'dev-report.md', 'dev');
     writeReport(reportDir, 'code-review-report.md', 'review');
     expect(assemblyLine.validatePrerequisites(taskId, 'evaluation')).toBe(false);
@@ -400,16 +400,16 @@ describe('AssemblyLine.validatePrerequisites', () => {
 // ============================================================
 
 describe('AssemblyLine.executeTask - resume with missing fields', () => {
-  let tmpDir: string;
+  let env: IsolatedTestEnv;
   let assemblyLine: AssemblyLine;
   const taskId = 'TEST-TASK-RESUME-001';
 
-  beforeEach(() => {
-    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'resume-null-test-'));
+  beforeEach(async () => {
+    env = await createIsolatedTestEnv();
   });
 
   afterEach(() => {
-    fs.rmSync(tmpDir, { recursive: true, force: true });
+    env.cleanup();
   });
 
   // PROBLEM-2: Tests removed because they depend on state.records which was removed
@@ -417,7 +417,7 @@ describe('AssemblyLine.executeTask - resume with missing fields', () => {
   // The determineResumePhase functionality is preserved but tested differently
 
   test('should handle empty prevRecord gracefully', async () => {
-    const config = createTestConfig(tmpDir);
+    const config = createTestConfig(env.tempDir);
     assemblyLine = new AssemblyLine(config);
 
     const state = createDefaultRuntimeState(config);

@@ -7,7 +7,7 @@
  * - CP-12: PHASE_RULES.plan_recommend 更新包含新规则
  */
 
-import { describe, it, expect } from 'bun:test';
+import { describe, it, expect, beforeEach, afterEach } from 'bun:test';
 import { runQualityGate, getRulesForPhase, PHASE_RULES } from '../utils/quality-gate-registry';
 import {
   planCycleDetection,
@@ -19,6 +19,7 @@ import {
   planInferredOnlyDependency,
 } from '../utils/validation-rules/plan-rules';
 import type { TaskMeta } from '../types/task';
+import { createIsolatedTestEnv, type IsolatedTestEnv } from '../utils/test-env';
 
 // 创建测试任务
 function createTestTaskMeta(overrides: Partial<TaskMeta> = {}): TaskMeta {
@@ -45,6 +46,17 @@ function createTestTaskMeta(overrides: Partial<TaskMeta> = {}): TaskMeta {
     ...overrides,
   };
 }
+
+// 测试环境隔离
+let env: IsolatedTestEnv;
+
+beforeEach(async () => {
+  env = await createIsolatedTestEnv({ prefix: 'plan-blocking-rules-' });
+});
+
+afterEach(() => {
+  env.cleanup();
+});
 
 describe('阻断性质量门禁规则 (QG-PLAN-003)', () => {
   describe('CP-12: PHASE_RULES.plan_recommend 包含新规则', () => {
