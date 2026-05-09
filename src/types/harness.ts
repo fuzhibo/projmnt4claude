@@ -122,6 +122,9 @@ export type ReviewResult = 'PASS' | 'NOPASS';
 export type VerdictAction =
   | 'resolve'         // Pass, mark as resolved
   | 'redevelop'       // Retry from development phase (consumes retry count)
+  | 'retest'          // Retry from QA phase (CP-11)
+  | 'reevaluate'      // Retry from evaluation phase (CP-12)
+  | 'minor_fix'       // Minor fix, retry from development phase (CP-10)
   | 'escalate_human'; // Requires human intervention
 
 /**
@@ -131,6 +134,9 @@ export type VerdictAction =
 export const VALID_VERDICT_ACTIONS: VerdictAction[] = [
   'resolve',
   'redevelop',
+  'retest',
+  'reevaluate',
+  'minor_fix',
   'escalate_human',
 ];
 

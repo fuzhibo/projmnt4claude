@@ -7,6 +7,7 @@
 import * as fs from 'fs';
 import * as path from 'path';
 import * as os from 'os';
+import { execSync } from 'child_process';
 import { spyOn } from 'bun:test';
 
 // ============================================================
@@ -624,5 +625,212 @@ export function createTestLifecycle(options: TestEnvOptions = {}) {
         env.reset();
       }
     },
+  };
+}
+
+// ============================================================
+// Git 测试环境辅助工具
+// ============================================================
+
+/**
+ * Git 测试环境配置选项
+ */
+export interface GitTestEnvOptions {
+  /** 是否自动初始化 git 仓库 */
+  autoInitGit?: boolean;
+  /** Git 用户邮箱 */
+  gitUserEmail?: string;
+  /** Git 用户名 */
+  gitUserName?: string;
+  /** 是否创建初始提交 */
+  createInitialCommit?: boolean;
+  /** 初始提交的文件名 */
+  initialFileName?: string;
+}
+
+/**
+ * Git 测试环境上下文
+ */
+export interface GitTestEnv {
+  /** 继承自 IsolatedTestEnv 的所有属性 */
+  readonly tempDir: string;
+  readonly tasksDir: string;
+  readonly projectDir: string;
+  readonly mocks: MockHandles;
+  reset: () => void;
+  cleanup: () => void;
+  /** Git 相关属性 */
+  /** Git 目录路径 */
+  readonly gitDir: string;
+  /** 当前分支名 */
+  readonly currentBranch: string;
+  /** 初始化 git 仓库 */
+  initGit: () => void;
+  /** 创建并提交文件 */
+  createAndCommit: (fileName: string, content: string, message?: string) => void;
+  /** 创建未跟踪文件 */
+  createUntracked: (fileName: string, content: string) => void;
+  /** 创建已暂存文件 */
+  createStaged: (fileName: string, content: string) => void;
+  /** 创建冲突文件 */
+  createConflict: (fileName: string, branch?: string) => void;
+  /** 执行 git 命令 */
+  execGit: (command: string) => string;
+  /** 获取 git 状态 */
+  getGitStatus: () => string;
+}
+
+const DEFAULT_GIT_OPTIONS: Required<GitTestEnvOptions> = {
+  autoInitGit: true,
+  gitUserEmail: 'test@test.com',
+  gitUserName: 'Test User',
+  createInitialCommit: true,
+  initialFileName: 'README.md',
+};
+
+/**
+ * 创建 Git 测试环境
+ *
+ * 提供完整的 Git 测试环境，包括仓库初始化、文件操作等便捷方法
+ *
+ * @example
+ * ```typescript
+ * describe('Git Checker Tests', () => {
+ *   let gitEnv: GitTestEnv;
+ *
+ *   beforeEach(async () => {
+ *     gitEnv = await createGitTestEnv();
+ *   });
+ *
+ *   afterEach(() => {
+ *     gitEnv.cleanup();
+ *   });
+ *
+ *   it('should detect uncommitted changes', async () => {
+ *     gitEnv.createUntracked('new-file.txt', 'content');
+ *     // ... test code
+ *   });
+ * });
+ * ```
+ */
+export async function createGitTestEnv(
+  options: GitTestEnvOptions = {}
+): Promise<GitTestEnv> {
+  const mergedOptions = { ...DEFAULT_GIT_OPTIONS, ...options };
+  const env = await createIsolatedTestEnv({ autoInit: false });
+
+  const gitDir = env.tempDir; // Git 目录就是临时目录本身
+
+  /**
+   * 执行 git 命令
+   */
+  const execGit = (command: string): string => {
+    return execSync(`git ${command}`, {
+      cwd: gitDir,
+      encoding: 'utf-8',
+    }).trim();
+  };
+
+  /**
+   * 初始化 git 仓库
+   */
+  const initGit = (): void => {
+    execSync('git init', { cwd: gitDir, encoding: 'utf-8' });
+    execSync(`git config user.email "${mergedOptions.gitUserEmail}"`, {
+      cwd: gitDir,
+      encoding: 'utf-8',
+    });
+    execSync(`git config user.name "${mergedOptions.gitUserName}"`, {
+      cwd: gitDir,
+      encoding: 'utf-8',
+    });
+  };
+
+  /**
+   * 创建并提交文件
+   */
+  const createAndCommit = (
+    fileName: string,
+    content: string,
+    message?: string
+  ): void => {
+    const filePath = path.join(gitDir, fileName);
+    fs.writeFileSync(filePath, content);
+    execGit(`add ${fileName}`);
+    execGit(`commit -m "${message || `Add ${fileName}`}"`);
+  };
+
+  /**
+   * 创建未跟踪文件
+   */
+  const createUntracked = (fileName: string, content: string): void => {
+    const filePath = path.join(gitDir, fileName);
+    fs.writeFileSync(filePath, content);
+  };
+
+  /**
+   * 创建已暂存文件
+   */
+  const createStaged = (fileName: string, content: string): void => {
+    const filePath = path.join(gitDir, fileName);
+    fs.writeFileSync(filePath, content);
+    execGit(`add ${fileName}`);
+  };
+
+  /**
+   * 创建冲突文件
+   */
+  const createConflict = (fileName: string, branch = 'feature-branch'): void => {
+    const filePath = path.join(gitDir, fileName);
+    const conflictContent = `This is a file
+<<<<<<< HEAD
+Our changes
+=======
+Their changes
+>>>>>>> ${branch}
+End of file
+`;
+    fs.writeFileSync(filePath, conflictContent);
+    execGit(`add ${fileName}`);
+  };
+
+  /**
+   * 获取 git 状态
+   */
+  const getGitStatus = (): string => {
+    return execGit('status --porcelain');
+  };
+
+  // 自动初始化 git 仓库
+  if (mergedOptions.autoInitGit) {
+    initGit();
+
+    // 创建初始提交
+    if (mergedOptions.createInitialCommit) {
+      createAndCommit(
+        mergedOptions.initialFileName,
+        '# Test Project\n',
+        'Initial commit'
+      );
+    }
+  }
+
+  return {
+    ...env,
+    gitDir,
+    get currentBranch() {
+      try {
+        return execGit('branch --show-current') || 'main';
+      } catch {
+        return 'main';
+      }
+    },
+    initGit,
+    createAndCommit,
+    createUntracked,
+    createStaged,
+    createConflict,
+    execGit,
+    getGitStatus,
   };
 }
