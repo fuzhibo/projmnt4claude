@@ -8,6 +8,7 @@
  */
 
 import type { TaskMeta, TaskStatus, TaskRole, CheckpointCategory, TaskFailureReason } from './task.js';
+import type { QAAcceptanceResult } from './qa-acceptance-criteria.js';
 
 /**
  * Harness execution configuration
@@ -37,6 +38,12 @@ export interface HarnessConfig {
    * Commit message: harness: batch N completed (X passed, Y failed, Z file changes)
    */
   batchGitTagCommit: boolean;
+  /**
+   * Auto git commit after each task completes (resolved status)
+   * Commit message format: feat: TASK-{id} - {title}
+   * Only commits when batchGitTagCommit is true
+   */
+  taskGitCommit: boolean;
   /** Skip pipeline blocking on basic field validation failure (--force-continue) */
   forceContinue: boolean;
 }
@@ -52,6 +59,7 @@ export const DEFAULT_HARNESS_CONFIG: Omit<HarnessConfig, 'cwd'> = {
   continue: false,
   jsonOutput: false,
   batchGitTagCommit: false,
+  taskGitCommit: false,
   forceContinue: false,
 };
 
@@ -152,6 +160,103 @@ export type FailureCategory =
   | 'phantom_task'         // Phantom task violation
   | 'incomplete'           // Incomplete implementation
   | 'other';               // Other
+
+/**
+ * Error classification for rollback strategy (§9)
+ *
+ * Categorizes errors to determine appropriate handling:
+ * - recoverable: Can be fixed and retried (needs rollback)
+ * - unrecoverable: Max retries exhausted or user interrupt (preserve state)
+ * - system: Environmental errors requiring cleanup
+ */
+export type ErrorClassification = 'recoverable' | 'unrecoverable' | 'system';
+
+/**
+ * Error category for rollback decision (§9)
+ *
+ * Maps error types to their classification and handling strategy
+ */
+export interface ErrorCategory {
+  /** Error type identifier */
+  type: string;
+  /** Classification for rollback decision */
+  classification: ErrorClassification;
+  /** Whether rollback is needed */
+  needsRollback: boolean;
+  /** Human-readable description */
+  description: string;
+}
+
+/**
+ * Predefined error categories (§9)
+ */
+export const ERROR_CATEGORIES: Record<string, ErrorCategory> = {
+  // Type 1: Recoverable errors (need rollback)
+  phase_failure: {
+    type: 'phase_failure',
+    classification: 'recoverable',
+    needsRollback: true,
+    description: '阶段执行失败（开发/代码审核/QA/评估）',
+  },
+  quality_gate_failure: {
+    type: 'quality_gate_failure',
+    classification: 'recoverable',
+    needsRollback: true,
+    description: '质量门禁失败（可修复后重试）',
+  },
+
+  // Type 2: Unrecoverable errors (preserve state)
+  max_retries_exhausted: {
+    type: 'max_retries_exhausted',
+    classification: 'unrecoverable',
+    needsRollback: false,
+    description: '最大重试次数耗尽',
+  },
+  user_interrupt: {
+    type: 'user_interrupt',
+    classification: 'unrecoverable',
+    needsRollback: false,
+    description: '用户手动中断',
+  },
+
+  // Type 3: System errors (need cleanup)
+  disk_space: {
+    type: 'disk_space',
+    classification: 'system',
+    needsRollback: false,
+    description: '磁盘空间不足',
+  },
+  permission_error: {
+    type: 'permission_error',
+    classification: 'system',
+    needsRollback: false,
+    description: '权限错误',
+  },
+  api_error: {
+    type: 'api_error',
+    classification: 'system',
+    needsRollback: false,
+    description: 'API 服务错误（502/503/429）',
+  },
+};
+
+/**
+ * Rollback result
+ */
+export interface RollbackResult {
+  /** Whether rollback was successful */
+  success: boolean;
+  /** Task ID */
+  taskId: string;
+  /** Reason for rollback */
+  reason: string;
+  /** Git commit SHA that was rolled back (if any) */
+  rolledBackCommit?: string;
+  /** Files that were cleaned up */
+  cleanedFiles: string[];
+  /** Error message (if rollback failed) */
+  error?: string;
+}
 
 /**
  * Evaluation inference type
@@ -327,6 +432,8 @@ export interface QAVerdict {
   verifiedBy: 'qa_tester';
   /** Detailed feedback */
   details?: string;
+  /** Acceptance criteria verification result (optional, if performed) */
+  acceptanceCriteriaResult?: QAAcceptanceResult;
 }
 
 /**
@@ -411,7 +518,7 @@ export interface ExecutionTimelineEntry {
   /** Timestamp */
   timestamp: string;
   /** Event type */
-  event: 'started' | 'skipped' | 'dev_started' | 'dev_completed' | 'code_review_started' | 'code_review_completed' | 'qa_started' | 'qa_completed' | 'review_started' | 'review_completed' | 'retry' | 'completed' | 'failed';
+  event: 'started' | 'skipped' | 'dev_started' | 'dev_completed' | 'code_review_started' | 'code_review_completed' | 'qa_started' | 'qa_completed' | 'review_started' | 'review_completed' | 'retry' | 'completed' | 'committed' | 'failed';
   /** Description */
   description: string;
   /** Additional data */

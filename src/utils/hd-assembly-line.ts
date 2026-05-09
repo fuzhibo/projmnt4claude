@@ -29,11 +29,15 @@ import type {
   RetryContext,
   PhaseRetryLimits,
   FailureRecord,
+  ErrorClassification,
+  ErrorCategory,
+  RollbackResult,
 } from '../types/harness.js';
 import { HarnessPreValidator } from './harness-prevalidation.js';
 import {
   createDefaultExecutionRecord,
   DEFAULT_PHASE_RETRY_LIMITS,
+  ERROR_CATEGORIES,
 } from '../types/harness.js';
 import type { TaskMeta, TaskStatus, TaskRole, CheckpointMetadata, CommitHistoryEntry, TransitionNote, PhaseHistoryEntry, FailureReason, TaskFailureReason } from '../types/task.js';
 import { Pipeline, normalizeStatus } from '../types/task.js';
@@ -62,6 +66,8 @@ interface PhaseLifecycleResult {
   reason: string;
   retryable: boolean;
   result?: DevReport | CodeReviewVerdict | QAVerdict | ReviewVerdict;
+  /** §9: Rollback result if rollback was performed */
+  rollbackResult?: RollbackResult;
 }
 
 export class AssemblyLine {
@@ -803,6 +809,13 @@ export class AssemblyLine {
           console.log('✅ 评估通过！');
           this.savePhaseCheckpoint(taskId, 'evaluation', state);
           addTimeline('completed', '任务完成');
+
+          // CP-1/CP-2/CP-3: 任务级自动提交
+          // 在任务完成后（resolved 状态）执行 git commit
+          const commitSha = this.commitTaskCompletion(taskId, task.title);
+          if (commitSha) {
+            addTimeline('committed', `任务变更已提交: ${commitSha.substring(0, 7)}`, { commitSha });
+          }
         } else {
           console.log(`❌ 评估未通过: ${verdict.reason}`);
           this.statusReporter.failPhase('evaluation', new Error(verdict.reason || '评估未通过'), taskId);
@@ -893,7 +906,17 @@ export class AssemblyLine {
         // 存储失败原因到重试上下文
         this.storeFailureContext(taskId, phase, errorMsg, state);
 
-        if (attempt <= maxRetries) {
+        // §9: 错误分类与回滚策略
+        const retryCount = this.getPhaseRetryCount(taskId, phase, state);
+        const { canRetry, rollbackResult } = await this.handlePhaseFailureWithRollback(
+          taskId,
+          phase,
+          errorMsg,
+          retryCount,
+          maxRetries
+        );
+
+        if (canRetry && attempt <= maxRetries) {
           console.log(`   🔄 阶段执行失败，准备重试...`);
           this.incrementPhaseRetryCount(taskId, phase, state);
           state.retryCounter.set(taskId, (state.retryCounter.get(taskId) || 0) + 1);
@@ -907,6 +930,7 @@ export class AssemblyLine {
           attempt,
           reason: `阶段执行失败（${attempt}次尝试）: ${errorMsg}`,
           retryable: false,
+          rollbackResult,
         };
       }
       console.log(`   ✅ 阶段执行成功`);
@@ -2457,6 +2481,323 @@ export class AssemblyLine {
 
     const label = labels?.[batchIndex] || `批次 ${batchIndex + 1}`;
     console.log(`\n📊 ${label} 完成: ${passed} 通过, ${failed} 失败, ${skipped} 跳过 (${batchSize} 任务)`);
+  }
+
+  /**
+   * 任务级自动 git commit
+   *
+   * 当启用 --task-git-commit 时，任务完成后（resolved 状态）执行 git commit。
+   * 提交信息格式: feat: {taskId} - {taskTitle}
+   *
+   * CP-1: 任务完成后执行 git commit
+   * CP-2: 提交信息格式规范
+   * CP-3: 与质量门禁集成（仅在任务通过所有阶段后才提交）
+   *
+   * @param taskId - 任务ID
+   * @param taskTitle - 任务标题
+   * @returns commit SHA 或空字符串（如果未提交）
+   */
+  private commitTaskCompletion(
+    taskId: string,
+    taskTitle: string
+  ): string {
+    if (!this.config.taskGitCommit) return '';
+
+    if (this.config.dryRun) {
+      console.log(`\n📝 [dry-run] 将为任务 ${taskId} 创建 git commit`);
+      return '';
+    }
+
+    try {
+      // 检查是否有未提交的变更
+      const statusOutput = execSync('git status --porcelain', {
+        cwd: this.config.cwd,
+        encoding: 'utf-8',
+        timeout: 10000,
+      });
+
+      if (!statusOutput.trim()) {
+        console.log(`\n📦 任务 ${taskId}: 无文件变更，跳过 git commit`);
+        return '';
+      }
+
+      const changedFiles = statusOutput.trim().split('\n').length;
+
+      // git add + commit
+      execSync('git add -A', {
+        cwd: this.config.cwd,
+        encoding: 'utf-8',
+        timeout: 30000,
+      });
+
+      // 提交信息格式: feat: {taskId} - {taskTitle}
+      // 遵循 Conventional Commits 规范
+      const commitMessage = `feat: ${taskId} - ${taskTitle}`;
+      const commitOutput = execSync(`git commit -m ${JSON.stringify(commitMessage)}`, {
+        cwd: this.config.cwd,
+        encoding: 'utf-8',
+        timeout: 30000,
+      });
+
+      // 提取 commit SHA
+      let commitSha = '';
+      const shaMatch = commitOutput.match(/\[.+?\s+([0-9a-f]{7,40})\]/);
+      if (shaMatch) {
+        commitSha = shaMatch[1]!;
+      } else {
+        try {
+          commitSha = execSync('git rev-parse HEAD', {
+            cwd: this.config.cwd,
+            encoding: 'utf-8',
+            timeout: 5000,
+          }).trim();
+        } catch {
+          // 无法获取 SHA，留空
+        }
+      }
+
+      console.log(`\n📦 任务 ${taskId}: 已提交 ${changedFiles} 个文件变更 (git commit${commitSha ? ` ${commitSha.substring(0, 7)}` : ''})`);
+      return commitSha;
+    } catch (error) {
+      console.error(`\n⚠️ 任务 ${taskId}: git commit 失败: ${error instanceof Error ? error.message : String(error)}`);
+      return '';
+    }
+  }
+
+  // ============================================================
+  // §9: Error Handling and Rollback Strategy
+  // ============================================================
+
+  /**
+   * Classify error to determine rollback strategy (§9)
+   *
+   * Maps error types to their classification:
+   * - recoverable: Phase failures, quality gate failures (need rollback)
+   * - unrecoverable: Max retries exhausted, user interrupt (preserve state)
+   * - system: Disk space, permission, API errors (need cleanup)
+   *
+   * @param error - Error message or type
+   * @param phase - Phase where error occurred
+   * @param retryCount - Current retry count
+   * @param maxRetries - Maximum allowed retries
+   * @returns Error classification
+   */
+  private classifyErrorForRollback(
+    error: string,
+    phase: Phase,
+    retryCount: number,
+    maxRetries: number
+  ): ErrorCategory {
+    const lowerError = error.toLowerCase();
+
+    // Check for max retries exhausted first
+    if (retryCount >= maxRetries) {
+      return ERROR_CATEGORIES.max_retries_exhausted;
+    }
+
+    // Check for system errors
+    if (lowerError.includes('disk') || lowerError.includes('space') || lowerError.includes('enosp')) {
+      return ERROR_CATEGORIES.disk_space;
+    }
+    if (lowerError.includes('permission') || lowerError.includes('eacces') || lowerError.includes('eperm')) {
+      return ERROR_CATEGORIES.permission_error;
+    }
+    if (lowerError.includes('api') || lowerError.includes('502') || lowerError.includes('503') || lowerError.includes('429')) {
+      return ERROR_CATEGORIES.api_error;
+    }
+
+    // Check for user interrupt
+    if (lowerError.includes('interrupt') || lowerError.includes('cancel') || lowerError.includes('abort')) {
+      return ERROR_CATEGORIES.user_interrupt;
+    }
+
+    // Phase failures are recoverable
+    if (phase === 'development' || phase === 'code_review' || phase === 'qa' || phase === 'evaluation') {
+      return ERROR_CATEGORIES.phase_failure;
+    }
+
+    // Quality gate failures are recoverable
+    if (lowerError.includes('quality gate') || lowerError.includes('validation failed')) {
+      return ERROR_CATEGORIES.quality_gate_failure;
+    }
+
+    // Default to phase failure (recoverable)
+    return ERROR_CATEGORIES.phase_failure;
+  }
+
+  /**
+   * Rollback task after failure (§9)
+   *
+   * Performs rollback operations:
+   * 1. Git reset --soft HEAD~1 (if unpushed commit exists)
+   * 2. Clean up stage output files (dev-report.json, etc.)
+   * 3. Reset task status to in_progress
+   *
+   * @param taskId - Task ID
+   * @param reason - Reason for rollback
+   * @param phase - Phase where failure occurred
+   * @returns Rollback result
+   */
+  private async rollbackTask(
+    taskId: string,
+    reason: string,
+    phase: Phase
+  ): Promise<RollbackResult> {
+    console.log(`\n🔄 回滚任务 ${taskId}: ${reason}`);
+
+    const result: RollbackResult = {
+      success: true,
+      taskId,
+      reason,
+      cleanedFiles: [],
+    };
+
+    try {
+      // 1. Git rollback (if there's an unpushed commit)
+      if (this.config.taskGitCommit) {
+        try {
+          const lastCommitMsg = execSync('git log -1 --pretty=%s', {
+            cwd: this.config.cwd,
+            encoding: 'utf-8',
+            timeout: 5000,
+          }).trim();
+
+          // Check if last commit is for this task
+          if (lastCommitMsg.includes(taskId)) {
+            const currentBranch = execSync('git rev-parse --abbrev-ref HEAD', {
+              cwd: this.config.cwd,
+              encoding: 'utf-8',
+              timeout: 5000,
+            }).trim();
+
+            // Check if commit is unpushed
+            const unpushedCheck = execSync(`git log origin/${currentBranch}..HEAD --oneline 2>/dev/null || echo ""`, {
+              cwd: this.config.cwd,
+              encoding: 'utf-8',
+              timeout: 5000,
+            }).trim();
+
+            if (unpushedCheck.includes(taskId) || unpushedCheck.length > 0) {
+              // Get commit SHA before reset
+              const commitSha = execSync('git rev-parse HEAD', {
+                cwd: this.config.cwd,
+                encoding: 'utf-8',
+                timeout: 5000,
+              }).trim();
+
+              // Soft reset to keep changes in working directory
+              execSync('git reset --soft HEAD~1', {
+                cwd: this.config.cwd,
+                encoding: 'utf-8',
+                timeout: 10000,
+              });
+
+              result.rolledBackCommit = commitSha;
+              console.log('   ✅ Git 提交已回滚，变更保留在工作区');
+            }
+          }
+        } catch (gitError) {
+          // Git operations may fail if not in a git repo or no commits
+          console.log(`   ℹ️ Git 回滚跳过: ${gitError instanceof Error ? gitError.message : String(gitError)}`);
+        }
+      }
+
+      // 2. Clean up stage output files
+      const stageFiles = [
+        path.join(this.config.cwd, '.projmnt4claude', 'reports', taskId, 'dev-report.json'),
+        path.join(this.config.cwd, '.projmnt4claude', 'reports', taskId, 'code-review-report.json'),
+        path.join(this.config.cwd, '.projmnt4claude', 'reports', taskId, 'qa-report.json'),
+        path.join(this.config.cwd, '.projmnt4claude', 'reports', taskId, 'evaluation-report.json'),
+      ];
+
+      for (const file of stageFiles) {
+        if (fs.existsSync(file)) {
+          try {
+            fs.unlinkSync(file);
+            result.cleanedFiles.push(file);
+          } catch (unlinkError) {
+            console.warn(`   ⚠️ 无法删除文件 ${file}: ${unlinkError instanceof Error ? unlinkError.message : String(unlinkError)}`);
+          }
+        }
+      }
+
+      if (result.cleanedFiles.length > 0) {
+        console.log(`   ✅ 阶段输出文件已清理 (${result.cleanedFiles.length} 个文件)`);
+      }
+
+      // 3. Reset task status to in_progress
+      try {
+        const task = readTaskMeta(taskId, this.config.cwd);
+        if (task && task.status !== 'in_progress') {
+          await this.updateTaskStatus(taskId, 'in_progress', `回滚: ${reason}`);
+          console.log('   ✅ 任务状态已重置为 in_progress');
+        }
+      } catch (taskError) {
+        console.warn(`   ⚠️ 重置任务状态失败: ${taskError instanceof Error ? taskError.message : String(taskError)}`);
+      }
+
+      // Add timeline entry
+      this.addTimelineEntry(taskId, 'failed', `任务回滚: ${reason}`, { phase, rollback: true });
+
+    } catch (error) {
+      result.success = false;
+      result.error = error instanceof Error ? error.message : String(error);
+      console.error(`   ❌ 回滚失败: ${result.error}`);
+    }
+
+    return result;
+  }
+
+  /**
+   * Handle phase failure with rollback decision (§9)
+   *
+   * Determines whether to rollback based on error classification:
+   * - recoverable: Execute rollback and allow retry
+   * - unrecoverable: Preserve state, no rollback
+   * - system: Report error, minimal cleanup
+   *
+   * @param taskId - Task ID
+   * @param phase - Failed phase
+   * @param error - Error message
+   * @param retryCount - Current retry count
+   * @param maxRetries - Maximum retries for this phase
+   * @returns Whether retry is possible
+   */
+  private async handlePhaseFailureWithRollback(
+    taskId: string,
+    phase: Phase,
+    error: string,
+    retryCount: number,
+    maxRetries: number
+  ): Promise<{ canRetry: boolean; rollbackResult?: RollbackResult }> {
+    const errorCategory = this.classifyErrorForRollback(error, phase, retryCount, maxRetries);
+
+    console.log(`\n   📋 错误分类: ${errorCategory.type} (${errorCategory.classification})`);
+    console.log(`   📋 描述: ${errorCategory.description}`);
+
+    // Unrecoverable errors: preserve state, no rollback
+    if (errorCategory.classification === 'unrecoverable') {
+      console.log('   ℹ️ 不可恢复错误，保留当前状态');
+      return { canRetry: false };
+    }
+
+    // System errors: report and exit
+    if (errorCategory.classification === 'system') {
+      console.error(`   🚨 系统错误: ${errorCategory.description}`);
+      console.error('   请修复系统问题后重试');
+      return { canRetry: false };
+    }
+
+    // Recoverable errors: execute rollback
+    if (errorCategory.needsRollback) {
+      const rollbackResult = await this.rollbackTask(taskId, error, phase);
+      return {
+        canRetry: retryCount < maxRetries,
+        rollbackResult,
+      };
+    }
+
+    return { canRetry: retryCount < maxRetries };
   }
 
   /**
