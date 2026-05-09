@@ -18571,7 +18571,7 @@ function createDefaultStatusReport(sessionId) {
     phaseDurations: {}
   };
 }
-var DEFAULT_HARNESS_CONFIG, VALID_VERDICT_ACTIONS, DEFAULT_PHASE_RETRY_LIMITS;
+var DEFAULT_HARNESS_CONFIG, VALID_VERDICT_ACTIONS, ERROR_CATEGORIES, DEFAULT_PHASE_RETRY_LIMITS;
 var init_harness = __esm(() => {
   DEFAULT_HARNESS_CONFIG = {
     maxRetries: 3,
@@ -18581,6 +18581,7 @@ var init_harness = __esm(() => {
     continue: false,
     jsonOutput: false,
     batchGitTagCommit: false,
+    taskGitCommit: false,
     forceContinue: false
   };
   VALID_VERDICT_ACTIONS = [
@@ -18591,6 +18592,50 @@ var init_harness = __esm(() => {
     "minor_fix",
     "escalate_human"
   ];
+  ERROR_CATEGORIES = {
+    phase_failure: {
+      type: "phase_failure",
+      classification: "recoverable",
+      needsRollback: true,
+      description: "阶段执行失败（开发/代码审核/QA/评估）"
+    },
+    quality_gate_failure: {
+      type: "quality_gate_failure",
+      classification: "recoverable",
+      needsRollback: true,
+      description: "质量门禁失败（可修复后重试）"
+    },
+    max_retries_exhausted: {
+      type: "max_retries_exhausted",
+      classification: "unrecoverable",
+      needsRollback: false,
+      description: "最大重试次数耗尽"
+    },
+    user_interrupt: {
+      type: "user_interrupt",
+      classification: "unrecoverable",
+      needsRollback: false,
+      description: "用户手动中断"
+    },
+    disk_space: {
+      type: "disk_space",
+      classification: "system",
+      needsRollback: false,
+      description: "磁盘空间不足"
+    },
+    permission_error: {
+      type: "permission_error",
+      classification: "system",
+      needsRollback: false,
+      description: "权限错误"
+    },
+    api_error: {
+      type: "api_error",
+      classification: "system",
+      needsRollback: false,
+      description: "API 服务错误（502/503/429）"
+    }
+  };
   DEFAULT_PHASE_RETRY_LIMITS = {
     development: 3,
     code_review: 1,
@@ -23441,8 +23486,8 @@ var {
 } = import__.default;
 
 // src/index.ts
-import * as fs35 from "fs";
-import * as path31 from "path";
+import * as fs36 from "fs";
+import * as path32 from "path";
 
 // src/commands/setup.ts
 init_path();
@@ -36096,13 +36141,13 @@ async function runDoctorDeep(cwd = process.cwd()) {
 init_harness();
 init_path();
 init_i18n();
-import * as fs33 from "fs";
-import * as path29 from "path";
+import * as fs34 from "fs";
+import * as path30 from "path";
 
 // src/utils/hd-assembly-line.ts
-import * as path28 from "path";
-import * as fs32 from "fs";
-import { execSync as execSync4 } from "child_process";
+import * as path29 from "path";
+import * as fs33 from "fs";
+import { execSync as execSync5 } from "child_process";
 
 // src/utils/harness-prevalidation.ts
 init_task();
@@ -37328,12 +37373,454 @@ ${devReport.evidence.map((evidence) => `- ${evidence}`).join(`
 init_task();
 init_harness_helpers();
 init_headless_agent();
-import * as path23 from "path";
-import * as fs27 from "fs";
+import * as path24 from "path";
+import * as fs28 from "fs";
 init_checkpoint();
 init_contradiction_detector();
 init_prompt_templates();
 init_i18n();
+
+// src/types/qa-acceptance-criteria.ts
+var DEFAULT_PARSER_CONFIG = {
+  fileCountPatterns: [
+    /所有\s*(\d+)\s*个文件/,
+    /(\d+)\s*个文件/,
+    /all\s*(\d+)\s*files/i,
+    /(\d+)\s*files/i
+  ],
+  fileMigrationPatterns: [
+    /文件.*迁移/,
+    /migrated?\s*to/i,
+    /使用\s+(\w+)/,
+    /using\s+(\w+)/i
+  ],
+  functionCallPatterns: [
+    /(\w+)\s*中.*调用/,
+    /(\w+)\s*中.*设置/,
+    /call\s+(\w+)/i,
+    /in\s+(\w+)/i
+  ]
+};
+var ACCEPTANCE_LEVEL_DESCRIPTIONS = {
+  checkpoint: "任务检查点验证 - 所有 QA 类型检查点状态为 completed",
+  build: "构建验证 - bun run build 成功，无 TypeScript 编译错误",
+  test: "测试验证 - 任务相关测试通过",
+  criteria: "验收标准验证 - 解析任务描述中的验收标准并验证"
+};
+function createDefaultAcceptanceResult(level) {
+  return {
+    level,
+    passed: false,
+    reason: "",
+    timestamp: new Date().toISOString()
+  };
+}
+function createDefaultQAAcceptanceResult(taskId) {
+  return {
+    taskId,
+    passed: false,
+    reason: "",
+    levelResults: new Map,
+    requiredLevelsPassed: false,
+    criteriaEvaluated: false,
+    timestamp: new Date().toISOString()
+  };
+}
+
+// src/utils/qa-acceptance-criteria-verifier.ts
+import * as fs27 from "fs";
+import * as path23 from "path";
+import { execSync as execSync4 } from "child_process";
+
+// src/utils/qa-acceptance-criteria-parser.ts
+class AcceptanceCriteriaParser {
+  config;
+  constructor(config) {
+    this.config = { ...DEFAULT_PARSER_CONFIG, ...config };
+  }
+  parse(description) {
+    const criteria = [];
+    const sectionContent = this.extractCriteriaSection(description);
+    if (!sectionContent) {
+      return criteria;
+    }
+    const lines = sectionContent.split(`
+`);
+    for (const line of lines) {
+      const trimmed = line.trim();
+      if (!trimmed || trimmed.startsWith("#"))
+        continue;
+      const listMatch = trimmed.match(/^-\s*(?:\[[ x]\])?\s*(.+)$/i);
+      if (listMatch) {
+        const criterionText = listMatch[1];
+        const parsed = this.parseCriterion(criterionText);
+        if (parsed) {
+          criteria.push(parsed);
+        }
+      }
+    }
+    return criteria;
+  }
+  extractCriteriaSection(description) {
+    const sectionRegex = /^##\s*(验收标准|Acceptance\s*Criteria)\s*$/im;
+    const match = description.match(sectionRegex);
+    if (!match || match.index === undefined) {
+      return null;
+    }
+    const startIndex = match.index + match[0].length;
+    const remainingText = description.slice(startIndex);
+    const nextSectionMatch = remainingText.match(/\n##\s/);
+    const endIndex = nextSectionMatch ? nextSectionMatch.index : remainingText.length;
+    return remainingText.slice(0, endIndex).trim();
+  }
+  parseCriterion(text) {
+    if (!text)
+      return null;
+    const fileCount = this.parseFileCountCriterion(text);
+    if (fileCount)
+      return fileCount;
+    const fileMigration = this.parseFileMigrationCriterion(text);
+    if (fileMigration)
+      return fileMigration;
+    const functionCall = this.parseFunctionCallCriterion(text);
+    if (functionCall)
+      return functionCall;
+    return {
+      original: text,
+      type: "general"
+    };
+  }
+  parseFileCountCriterion(text) {
+    for (const pattern of this.config.fileCountPatterns) {
+      const match = text.match(pattern);
+      if (match) {
+        const count = parseInt(match[1], 10);
+        return {
+          original: text,
+          type: "file_count",
+          expected: count
+        };
+      }
+    }
+    return null;
+  }
+  parseFileMigrationCriterion(text) {
+    for (const pattern of this.config.fileMigrationPatterns) {
+      const match = text.match(pattern);
+      if (match) {
+        return {
+          original: text,
+          type: "file_migration",
+          expected: match[1] || true
+        };
+      }
+    }
+    return null;
+  }
+  parseFunctionCallCriterion(text) {
+    for (const pattern of this.config.functionCallPatterns) {
+      const match = text.match(pattern);
+      if (match) {
+        return {
+          original: text,
+          type: "function_call",
+          expected: match[1]
+        };
+      }
+    }
+    return null;
+  }
+  verify(criteria, context) {
+    return criteria.map((criterion) => this.verifyCriterion(criterion, context));
+  }
+  verifyCriterion(criterion, context) {
+    switch (criterion.type) {
+      case "file_count":
+        return this.verifyFileCount(criterion, context);
+      case "file_migration":
+        return this.verifyFileMigration(criterion, context);
+      case "function_call":
+        return this.verifyFunctionCall(criterion, context);
+      default:
+        return { ...criterion, satisfied: undefined };
+    }
+  }
+  verifyFileCount(criterion, context) {
+    const expected = criterion.expected;
+    const actual = context.migratedFiles?.length ?? context.affectedFiles?.length ?? 0;
+    const satisfied = actual >= expected;
+    return {
+      ...criterion,
+      actual,
+      satisfied,
+      details: satisfied ? `文件数量满足要求: ${actual}/${expected}` : `文件数量不足: ${actual}/${expected}`
+    };
+  }
+  verifyFileMigration(criterion, context) {
+    const targetPattern = criterion.expected;
+    const migratedCount = context.migratedFiles?.length ?? 0;
+    const totalCount = context.affectedFiles?.length ?? 0;
+    const satisfied = totalCount > 0 ? migratedCount >= totalCount : undefined;
+    return {
+      ...criterion,
+      actual: migratedCount,
+      satisfied,
+      details: satisfied !== undefined ? `迁移进度: ${migratedCount}/${totalCount} 文件使用 ${targetPattern}` : `无法验证迁移状态，需要提供 migratedFiles 上下文`
+    };
+  }
+  verifyFunctionCall(criterion, context) {
+    const functionName = criterion.expected;
+    const hasCall = context.functionCalls?.includes(functionName) ?? false;
+    return {
+      ...criterion,
+      actual: hasCall,
+      satisfied: hasCall ? true : undefined,
+      details: hasCall ? `函数 ${functionName} 调用已验证` : `未找到函数 ${functionName} 的调用`
+    };
+  }
+}
+
+// src/utils/qa-acceptance-criteria-verifier.ts
+class QAAcceptanceCriteriaVerifier {
+  cwd;
+  parser;
+  constructor(cwd) {
+    this.cwd = cwd;
+    this.parser = new AcceptanceCriteriaParser;
+  }
+  async verify(task, context) {
+    const result = createDefaultQAAcceptanceResult(task.id);
+    const checkpointResult = await this.verifyCheckpoints(task);
+    result.levelResults.set("checkpoint", checkpointResult);
+    const buildResult = await this.verifyBuild(task);
+    result.levelResults.set("build", buildResult);
+    const testResult = await this.verifyTests(task, context);
+    result.levelResults.set("test", testResult);
+    const criteria = this.parser.parse(task.description || "");
+    if (criteria.length > 0) {
+      const criteriaResult = await this.verifyCriteria(task, criteria, context);
+      result.levelResults.set("criteria", criteriaResult);
+      result.criteriaEvaluated = true;
+    }
+    const requiredLevels = ["checkpoint", "build", "test"];
+    result.requiredLevelsPassed = requiredLevels.every((level) => result.levelResults.get(level)?.passed === true);
+    result.passed = result.requiredLevelsPassed;
+    result.reason = this.generateOverallReason(result);
+    return result;
+  }
+  async verifyCheckpoints(task) {
+    const result = createDefaultAcceptanceResult("checkpoint");
+    const qaCheckpoints = (task.checkpoints || []).filter((cp) => cp.category === "qa_verification" || cp.verification?.method === "unit_test" || cp.verification?.method === "functional_test" || cp.verification?.method === "integration_test" || cp.verification?.method === "e2e_test");
+    if (qaCheckpoints.length === 0) {
+      result.passed = true;
+      result.reason = "无 QA 类型检查点，跳过检查点验证";
+      return result;
+    }
+    const completedCount = qaCheckpoints.filter((cp) => cp.status === "completed").length;
+    const totalCount = qaCheckpoints.length;
+    result.passed = completedCount === totalCount;
+    result.reason = result.passed ? `所有 ${totalCount} 个 QA 检查点已完成` : `QA 检查点完成度不足: ${completedCount}/${totalCount}`;
+    result.criteria = qaCheckpoints.map((cp) => ({
+      original: cp.description,
+      type: "general",
+      satisfied: cp.status === "completed",
+      details: `检查点 ${cp.id}: ${cp.status}`
+    }));
+    return result;
+  }
+  async verifyBuild(task) {
+    const result = createDefaultAcceptanceResult("build");
+    try {
+      const packageJsonPath = path23.join(this.cwd, "package.json");
+      if (!fs27.existsSync(packageJsonPath)) {
+        result.passed = true;
+        result.reason = "无 package.json，跳过构建验证";
+        return result;
+      }
+      const buildCommand = this.getBuildCommand();
+      execSync4(buildCommand, {
+        cwd: this.cwd,
+        timeout: 60000,
+        stdio: "pipe"
+      });
+      result.passed = true;
+      result.reason = "构建成功，无编译错误";
+    } catch (error) {
+      result.passed = false;
+      result.error = error instanceof Error ? error.message : String(error);
+      const output = error?.stdout?.toString() || error?.stderr?.toString() || "";
+      if (output.includes("error TS")) {
+        result.reason = "TypeScript 编译错误";
+        const errorMatch = output.match(/Found\s+(\d+)\s+error/i);
+        if (errorMatch) {
+          result.reason = `TypeScript 编译错误: ${errorMatch[1]} 个`;
+        }
+      } else {
+        result.reason = `构建失败: ${result.error}`;
+      }
+    }
+    return result;
+  }
+  getBuildCommand() {
+    try {
+      const packageJsonPath = path23.join(this.cwd, "package.json");
+      const packageJson = JSON.parse(fs27.readFileSync(packageJsonPath, "utf-8"));
+      if (packageJson.scripts?.build) {
+        return `bun run build`;
+      }
+    } catch {}
+    return `bun run build`;
+  }
+  async verifyTests(task, context) {
+    const result = createDefaultAcceptanceResult("test");
+    if (context?.testResults) {
+      const { passed, failed, total } = context.testResults;
+      result.passed = failed === 0;
+      result.reason = result.passed ? `所有测试通过: ${passed}/${total}` : `测试失败: ${failed}/${total} 个测试未通过`;
+      return result;
+    }
+    const taskFiles = task.files || [];
+    if (taskFiles.length === 0) {
+      result.passed = true;
+      result.reason = "无关联文件，跳过测试验证";
+      return result;
+    }
+    const testFiles = this.findRelatedTestFiles(taskFiles);
+    if (testFiles.length === 0) {
+      result.passed = true;
+      result.reason = "未找到相关测试文件，跳过测试验证";
+      return result;
+    }
+    try {
+      const testCommand = this.getTestCommand(testFiles);
+      execSync4(testCommand, {
+        cwd: this.cwd,
+        timeout: 120000,
+        stdio: "pipe"
+      });
+      result.passed = true;
+      result.reason = `相关测试通过: ${testFiles.length} 个测试文件`;
+    } catch (error) {
+      result.passed = false;
+      result.error = error instanceof Error ? error.message : String(error);
+      result.reason = `测试失败: ${result.error}`;
+    }
+    return result;
+  }
+  findRelatedTestFiles(taskFiles) {
+    const testFiles = [];
+    for (const file of taskFiles) {
+      const patterns = [
+        file.replace(/\.ts$/, ".test.ts") || file,
+        file.replace(/\.ts$/, ".spec.ts") || file,
+        file.replace(/\.js$/, ".test.js") || file,
+        file.replace(/\.js$/, ".spec.js") || file,
+        file.replace(/src\/(.+)\.ts$/, "__tests__/$1.test.ts") || file,
+        file.replace(/src\/(.+)\.ts$/, "src/__tests__/$1.test.ts") || file
+      ];
+      for (const pattern of patterns) {
+        if (pattern && pattern !== file) {
+          const fullPath = path23.join(this.cwd, pattern);
+          if (fs27.existsSync(fullPath)) {
+            testFiles.push(pattern);
+          }
+        }
+      }
+    }
+    return testFiles;
+  }
+  getTestCommand(testFiles) {
+    if (testFiles.length > 0) {
+      return `bun test ${testFiles.join(" ")}`;
+    }
+    return `bun test`;
+  }
+  async verifyCriteria(task, criteria, context) {
+    const result = createDefaultAcceptanceResult("criteria");
+    const fullContext = {
+      affectedFiles: task.files || [],
+      migratedFiles: context?.migratedFiles || [],
+      functionCalls: context?.functionCalls || [],
+      testResults: context?.testResults,
+      buildStatus: context?.buildStatus
+    };
+    const verifiedCriteria = this.parser.verify(criteria, fullContext);
+    result.criteria = verifiedCriteria;
+    const satisfiedCount = verifiedCriteria.filter((c) => c.satisfied === true).length;
+    const totalCount = verifiedCriteria.length;
+    const unsatisfiedCount = verifiedCriteria.filter((c) => c.satisfied === false).length;
+    result.passed = unsatisfiedCount === 0;
+    result.reason = result.passed ? `验收标准满足: ${satisfiedCount}/${totalCount} 已验证` : `验收标准未满足: ${unsatisfiedCount} 个标准未通过`;
+    return result;
+  }
+  generateOverallReason(result) {
+    const failedLevels = [];
+    for (const [level, levelResult] of result.levelResults) {
+      if (!levelResult.passed && level !== "criteria") {
+        failedLevels.push(level);
+      }
+    }
+    if (failedLevels.length === 0) {
+      const parts = ["所有必需验证层次通过"];
+      if (result.criteriaEvaluated) {
+        const criteriaResult = result.levelResults.get("criteria");
+        if (criteriaResult?.passed) {
+          parts.push("验收标准验证通过");
+        } else {
+          parts.push("验收标准验证未完全满足（可选）");
+        }
+      }
+      return parts.join("，");
+    }
+    const levelNames = failedLevels.map((l) => ACCEPTANCE_LEVEL_DESCRIPTIONS[l].split(" - ")[0]);
+    return `验证失败: ${levelNames.join("、")} 未通过`;
+  }
+  formatResult(result) {
+    const lines = [];
+    const separator = "━".repeat(60);
+    lines.push("");
+    lines.push(separator);
+    lines.push(`\uD83D\uDCCB QA 验收标准验证结果: ${result.taskId}`);
+    lines.push(separator);
+    lines.push("");
+    const overallIcon = result.passed ? "✅" : "❌";
+    lines.push(`${overallIcon} 总体结果: ${result.passed ? "通过" : "未通过"}`);
+    lines.push(`   ${result.reason}`);
+    lines.push("");
+    lines.push("\uD83D\uDCCA 验证层次结果:");
+    const levels = ["checkpoint", "build", "test", "criteria"];
+    for (const level of levels) {
+      const levelResult = result.levelResults.get(level);
+      if (levelResult) {
+        const icon = levelResult.passed ? "✅" : "❌";
+        const severity = level === "criteria" ? "(可选)" : "(必需)";
+        lines.push(`   ${icon} ${ACCEPTANCE_LEVEL_DESCRIPTIONS[level].split(" - ")[0]} ${severity}`);
+        lines.push(`      ${levelResult.reason}`);
+      }
+    }
+    lines.push("");
+    const criteriaResult = result.levelResults.get("criteria");
+    if (criteriaResult?.criteria && criteriaResult.criteria.length > 0) {
+      lines.push("\uD83D\uDCDD 验收标准详情:");
+      for (const criterion of criteriaResult.criteria) {
+        const icon = criterion.satisfied === true ? "✅" : criterion.satisfied === false ? "❌" : "⏳";
+        lines.push(`   ${icon} ${criterion.original}`);
+        if (criterion.details) {
+          lines.push(`      ${criterion.details}`);
+        }
+      }
+      lines.push("");
+    }
+    lines.push(separator);
+    return lines.join(`
+`);
+  }
+}
+function createQAAcceptanceCriteriaVerifier(cwd) {
+  return new QAAcceptanceCriteriaVerifier(cwd);
+}
+
+// src/utils/harness-qa-tester.ts
 class HarnessQATester {
   config;
   constructor(config) {
@@ -37349,6 +37836,17 @@ class HarnessQATester {
     console.log(`
 \uD83E\uDDEA ${texts.harness.logs.qaPhase}`);
     console.log(`   ${texts.harness.logs.taskLabel}: ${task.title}`);
+    let acceptanceCriteriaResult;
+    try {
+      console.log(`
+   \uD83D\uDCCB 执行验收标准验证...`);
+      const verifier = createQAAcceptanceCriteriaVerifier(this.config.cwd);
+      acceptanceCriteriaResult = await verifier.verify(task);
+      const resultText = verifier.formatResult(acceptanceCriteriaResult);
+      console.log(resultText);
+    } catch (error) {
+      console.log(`   ⚠️ 验收标准验证出错: ${error instanceof Error ? error.message : String(error)}`);
+    }
     const verdict = {
       taskId: task.id,
       result: "PASS",
@@ -37358,8 +37856,15 @@ class HarnessQATester {
       requiresHuman: false,
       humanVerificationCheckpoints: [],
       verifiedAt: new Date().toISOString(),
-      verifiedBy: "qa_tester"
+      verifiedBy: "qa_tester",
+      acceptanceCriteriaResult
     };
+    if (acceptanceCriteriaResult && !acceptanceCriteriaResult.requiredLevelsPassed) {
+      verdict.result = "NOPASS";
+      verdict.reason = `验收标准验证未通过: ${acceptanceCriteriaResult.reason}`;
+      await this.saveReport(task.id, verdict);
+      return verdict;
+    }
     if (codeReviewVerdict.result !== "PASS") {
       verdict.result = "NOPASS";
       verdict.reason = `${texts.harness.logs.qaSkippedDueToCodeReview}: ${codeReviewVerdict.reason}`;
@@ -37439,8 +37944,8 @@ ${deferredInfo}` : deferredInfo;
     const existingFiles = [];
     const missingFiles = [];
     for (const filePath of task.files) {
-      const fullPath = path23.isAbsolute(filePath) ? filePath : path23.join(this.config.cwd, filePath);
-      if (fs27.existsSync(fullPath)) {
+      const fullPath = path24.isAbsolute(filePath) ? filePath : path24.join(this.config.cwd, filePath);
+      if (fs28.existsSync(fullPath)) {
         existingFiles.push(filePath);
       } else {
         missingFiles.push(filePath);
@@ -37707,6 +38212,26 @@ ${task.description}` : "";
       lines.push(verdict.details);
       lines.push("");
     }
+    if (verdict.acceptanceCriteriaResult) {
+      const acResult = verdict.acceptanceCriteriaResult;
+      lines.push("## 验收标准验证结果");
+      lines.push("");
+      lines.push(`**总体结果**: ${acResult.passed ? "✅ 通过" : "❌ 未通过"}`);
+      lines.push(`**原因**: ${acResult.reason}`);
+      lines.push("");
+      lines.push("### 验证层次结果");
+      const levels = ["checkpoint", "build", "test", "criteria"];
+      for (const level of levels) {
+        const levelResult = acResult.levelResults.get(level);
+        if (levelResult) {
+          const icon = levelResult.passed ? "✅" : "❌";
+          const severity = level === "criteria" ? "(可选)" : "(必需)";
+          const levelName = ACCEPTANCE_LEVEL_DESCRIPTIONS[level].split(" - ")[0];
+          lines.push(`- ${icon} ${levelName} ${severity}: ${levelResult.reason}`);
+        }
+      }
+      lines.push("");
+    }
     return lines.join(`
 `);
   }
@@ -37718,8 +38243,8 @@ init_task2();
 init_harness_helpers();
 init_headless_agent();
 init_contradiction_detector();
-import * as fs28 from "fs";
-import * as path24 from "path";
+import * as fs29 from "fs";
+import * as path25 from "path";
 init_prompt_templates();
 init_harness_snapshot();
 init_i18n();
@@ -38198,11 +38723,11 @@ ${texts.harness.logs.phantomTaskNopassRequirement}
       texts = getI18n("zh");
     }
     const contractPath = this.getContractPath(taskId);
-    if (!fs28.existsSync(contractPath)) {
+    if (!fs29.existsSync(contractPath)) {
       return null;
     }
     try {
-      const content = fs28.readFileSync(contractPath, "utf-8");
+      const content = fs29.readFileSync(contractPath, "utf-8");
       const parsed = JSON.parse(content);
       const validated = this.validateSprintContract(parsed, taskId);
       if (!validated) {
@@ -38216,21 +38741,21 @@ ${texts.harness.logs.phantomTaskNopassRequirement}
   }
   getContractPath(taskId) {
     const projectDir = getProjectDir(this.config.cwd);
-    return path24.join(projectDir, "tasks", taskId, "contract.json");
+    return path25.join(projectDir, "tasks", taskId, "contract.json");
   }
   getReviewReportPath(taskId) {
     const projectDir = getProjectDir(this.config.cwd);
-    return path24.join(projectDir, "reports", "harness", taskId, "review-report.md");
+    return path25.join(projectDir, "reports", "harness", taskId, "review-report.md");
   }
   async saveReviewReport(taskId, verdict, devReport) {
     const reportPath = this.getReviewReportPath(taskId);
-    const dir = path24.dirname(reportPath);
-    if (!fs28.existsSync(dir)) {
-      fs28.mkdirSync(dir, { recursive: true });
+    const dir = path25.dirname(reportPath);
+    if (!fs29.existsSync(dir)) {
+      fs29.mkdirSync(dir, { recursive: true });
     }
     archiveReportIfExists(reportPath);
     const content = this.formatReviewReport(verdict, devReport);
-    fs28.writeFileSync(reportPath, content, "utf-8");
+    fs29.writeFileSync(reportPath, content, "utf-8");
   }
   saveRawEvaluationOutput(taskId, output, stderr, success) {
     let texts;
@@ -38241,12 +38766,12 @@ ${texts.harness.logs.phantomTaskNopassRequirement}
     }
     try {
       const projectDir = getProjectDir(this.config.cwd);
-      const dir = path24.join(projectDir, "reports", "harness", taskId);
-      if (!fs28.existsSync(dir)) {
-        fs28.mkdirSync(dir, { recursive: true });
+      const dir = path25.join(projectDir, "reports", "harness", taskId);
+      if (!fs29.existsSync(dir)) {
+        fs29.mkdirSync(dir, { recursive: true });
       }
       const timestamp = new Date().toISOString().replace(/[:.]/g, "-");
-      const rawPath = path24.join(dir, `evaluation-raw-${timestamp}.log`);
+      const rawPath = path25.join(dir, `evaluation-raw-${timestamp}.log`);
       const lines = [
         `# ${texts.harness.logs.rawEvaluationOutputTitle || "Raw Evaluation Output"}`,
         `Task: ${taskId}`,
@@ -38261,7 +38786,7 @@ ${texts.harness.logs.phantomTaskNopassRequirement}
         "--- STDERR ---",
         stderr || "(empty)"
       ];
-      fs28.writeFileSync(rawPath, lines.join(`
+      fs29.writeFileSync(rawPath, lines.join(`
 `), "utf-8");
       console.log(`   \uD83D\uDCC4 ${texts.harness.logs.rawOutputSaved.replace("{filename}", `evaluation-raw-${timestamp}.log`)}`);
     } catch (error) {
@@ -38423,8 +38948,8 @@ class RetryHandler {
 // src/utils/harness-status-reporter.ts
 init_harness();
 init_path();
-import * as fs29 from "fs";
-import * as path25 from "path";
+import * as fs30 from "fs";
+import * as path26 from "path";
 
 class HarnessStatusReporter {
   statusPath;
@@ -38432,7 +38957,7 @@ class HarnessStatusReporter {
   currentReport;
   lastBatchContext;
   constructor(cwd, sessionId) {
-    this.statusPath = path25.join(getProjectDir(cwd), "harness-status.json");
+    this.statusPath = path26.join(getProjectDir(cwd), "harness-status.json");
     this.sessionId = sessionId;
     this.currentReport = this.createInitialReport();
   }
@@ -38709,9 +39234,9 @@ class HarnessStatusReporter {
   }
   checkStaleStatus() {
     try {
-      if (!fs29.existsSync(this.statusPath))
+      if (!fs30.existsSync(this.statusPath))
         return;
-      const raw = fs29.readFileSync(this.statusPath, "utf-8");
+      const raw = fs30.readFileSync(this.statusPath, "utf-8");
       const existing = JSON.parse(raw);
       if (existing.state !== "running")
         return;
@@ -38722,11 +39247,11 @@ class HarnessStatusReporter {
     } catch {}
   }
   writeStatus() {
-    const dir = path25.dirname(this.statusPath);
-    if (!fs29.existsSync(dir)) {
-      fs29.mkdirSync(dir, { recursive: true });
+    const dir = path26.dirname(this.statusPath);
+    if (!fs30.existsSync(dir)) {
+      fs30.mkdirSync(dir, { recursive: true });
     }
-    fs29.writeFileSync(this.statusPath, JSON.stringify(this.currentReport, null, 2), "utf-8");
+    fs30.writeFileSync(this.statusPath, JSON.stringify(this.currentReport, null, 2), "utf-8");
   }
   logToConsole(phase, status, message) {
     const progress = `${this.currentReport.completedTasks}/${this.currentReport.totalTasks}`;
@@ -38756,13 +39281,13 @@ class HarnessStatusReporter {
 init_harness();
 init_path();
 init_i18n();
-import * as fs31 from "fs";
-import * as path27 from "path";
+import * as fs32 from "fs";
+import * as path28 from "path";
 
 // src/utils/harness-reporter.ts
 init_path();
-import * as fs30 from "fs";
-import * as path26 from "path";
+import * as fs31 from "fs";
+import * as path27 from "path";
 
 class HarnessReporter {
   config;
@@ -38771,12 +39296,12 @@ class HarnessReporter {
   }
   async generateSummaryReport(summary) {
     const reportPath = this.getSummaryReportPath();
-    const dir = path26.dirname(reportPath);
-    if (!fs30.existsSync(dir)) {
-      fs30.mkdirSync(dir, { recursive: true });
+    const dir = path27.dirname(reportPath);
+    if (!fs31.existsSync(dir)) {
+      fs31.mkdirSync(dir, { recursive: true });
     }
     const content = this.formatSummaryReport(summary);
-    fs30.writeFileSync(reportPath, content, "utf-8");
+    fs31.writeFileSync(reportPath, content, "utf-8");
     console.log(`
 \uD83D\uDCC4 执行摘要已保存: ${reportPath}`);
   }
@@ -38866,16 +39391,16 @@ class HarnessReporter {
   getSummaryReportPath() {
     const projectDir = getProjectDir(this.config.cwd);
     const timestamp = new Date().toISOString().replace(/[:.]/g, "-").substring(0, 19);
-    return path26.join(projectDir, "reports", "harness", `summary-${timestamp}.md`);
+    return path27.join(projectDir, "reports", "harness", `summary-${timestamp}.md`);
   }
   async generateTaskReport(record) {
     const taskDir = this.getTaskReportDir(record.taskId);
-    if (!fs30.existsSync(taskDir)) {
-      fs30.mkdirSync(taskDir, { recursive: true });
+    if (!fs31.existsSync(taskDir)) {
+      fs31.mkdirSync(taskDir, { recursive: true });
     }
-    const overviewPath = path26.join(taskDir, "overview.md");
+    const overviewPath = path27.join(taskDir, "overview.md");
     const overviewContent = this.formatTaskOverview(record);
-    fs30.writeFileSync(overviewPath, overviewContent, "utf-8");
+    fs31.writeFileSync(overviewPath, overviewContent, "utf-8");
   }
   formatTaskOverview(record) {
     const lines = [];
@@ -38945,7 +39470,7 @@ class HarnessReporter {
   }
   getTaskReportDir(taskId) {
     const projectDir = getProjectDir(this.config.cwd);
-    return path26.join(projectDir, "reports", "harness", taskId);
+    return path27.join(projectDir, "reports", "harness", taskId);
   }
   generateJSONSummary(summary) {
     const data = {
@@ -38982,7 +39507,7 @@ init_plan2();
 init_quality_gate();
 init_harness_snapshot();
 function getRuntimeStatePath(cwd) {
-  return path27.join(getProjectDir(cwd), "harness-state.json");
+  return path28.join(getProjectDir(cwd), "harness-state.json");
 }
 function saveRuntimeState(state, cwd) {
   const statePath = getRuntimeStatePath(cwd);
@@ -38995,7 +39520,7 @@ function saveRuntimeState(state, cwd) {
     phaseRetryCounters: Object.fromEntries(state.phaseRetryCounters || []),
     taskPhaseCheckpoints: Object.fromEntries(state.taskPhaseCheckpoints || [])
   };
-  fs31.writeFileSync(statePath, JSON.stringify(data, null, 2), "utf-8");
+  fs32.writeFileSync(statePath, JSON.stringify(data, null, 2), "utf-8");
 }
 
 // src/utils/hd-assembly-line.ts
@@ -39545,6 +40070,10 @@ ${"━".repeat(SEPARATOR_WIDTH)}`);
           console.log("✅ 评估通过！");
           this.savePhaseCheckpoint(taskId, "evaluation", state);
           addTimeline("completed", "任务完成");
+          const commitSha = this.commitTaskCompletion(taskId, task.title);
+          if (commitSha) {
+            addTimeline("committed", `任务变更已提交: ${commitSha.substring(0, 7)}`, { commitSha });
+          }
         } else {
           console.log(`❌ 评估未通过: ${verdict.reason}`);
           this.statusReporter.failPhase("evaluation", new Error(verdict.reason || "评估未通过"), taskId);
@@ -39599,7 +40128,9 @@ ${"━".repeat(SEPARATOR_WIDTH)}`);
         const errorMsg = error instanceof Error ? error.message : String(error);
         console.log(`   ❌ 阶段执行失败: ${errorMsg}`);
         this.storeFailureContext(taskId, phase, errorMsg, state);
-        if (attempt <= maxRetries) {
+        const retryCount = this.getPhaseRetryCount(taskId, phase, state);
+        const { canRetry, rollbackResult } = await this.handlePhaseFailureWithRollback(taskId, phase, errorMsg, retryCount, maxRetries);
+        if (canRetry && attempt <= maxRetries) {
           console.log(`   \uD83D\uDD04 阶段执行失败，准备重试...`);
           this.incrementPhaseRetryCount(taskId, phase, state);
           state.retryCounter.set(taskId, (state.retryCounter.get(taskId) || 0) + 1);
@@ -39611,7 +40142,8 @@ ${"━".repeat(SEPARATOR_WIDTH)}`);
           failedAt: "phase_execution",
           attempt,
           reason: `阶段执行失败（${attempt}次尝试）: ${errorMsg}`,
-          retryable: false
+          retryable: false,
+          rollbackResult
         };
       }
       console.log(`   ✅ 阶段执行成功`);
@@ -40194,9 +40726,9 @@ ${"━".repeat(SEPARATOR_WIDTH)}`);
     }
     if (status === "wait_qa") {
       const projectDir = getProjectDir(this.config.cwd);
-      const qaReportPath = path28.join(projectDir, "reports", "harness", taskId, "qa-report.md");
-      if (fs32.existsSync(qaReportPath)) {
-        const content = fs32.readFileSync(qaReportPath, "utf-8");
+      const qaReportPath = path29.join(projectDir, "reports", "harness", taskId, "qa-report.md");
+      if (fs33.existsSync(qaReportPath)) {
+        const content = fs33.readFileSync(qaReportPath, "utf-8");
         if (content.trim().length > 0) {
           console.log(`   \uD83D\uDCCB 检测到 wait_qa 但 qa-report.md 已存在，自动迁移为 wait_evaluation`);
           return "evaluation";
@@ -40223,14 +40755,14 @@ ${"━".repeat(SEPARATOR_WIDTH)}`);
       return true;
     }
     const projectDir = getProjectDir(this.config.cwd);
-    const reportDir = path28.join(projectDir, "reports", "harness", taskId);
+    const reportDir = path29.join(projectDir, "reports", "harness", taskId);
     for (const reportFile of required) {
-      const filePath = path28.join(reportDir, reportFile);
-      if (!fs32.existsSync(filePath)) {
+      const filePath = path29.join(reportDir, reportFile);
+      if (!fs33.existsSync(filePath)) {
         return false;
       }
       try {
-        const content = fs32.readFileSync(filePath, "utf-8");
+        const content = fs33.readFileSync(filePath, "utf-8");
         if (content.trim().length === 0) {
           return false;
         }
@@ -40489,31 +41021,31 @@ ${"━".repeat(SEPARATOR_WIDTH)}`);
     if (!resumePhase)
       return true;
     const projectDir = getProjectDir(this.config.cwd);
-    const reportDir = path28.join(projectDir, "reports", "harness", taskId);
+    const reportDir = path29.join(projectDir, "reports", "harness", taskId);
     const checks = [];
     switch (resumePhase) {
       case "qa":
-        checks.push({ file: path28.join(reportDir, "dev-report.md"), label: "开发报告" });
-        checks.push({ file: path28.join(reportDir, "code-review-report.md"), label: "代码审核报告" });
+        checks.push({ file: path29.join(reportDir, "dev-report.md"), label: "开发报告" });
+        checks.push({ file: path29.join(reportDir, "code-review-report.md"), label: "代码审核报告" });
         break;
       case "evaluation":
-        checks.push({ file: path28.join(reportDir, "dev-report.md"), label: "开发报告" });
-        checks.push({ file: path28.join(reportDir, "code-review-report.md"), label: "代码审核报告" });
-        checks.push({ file: path28.join(reportDir, "qa-report.md"), label: "QA报告" });
+        checks.push({ file: path29.join(reportDir, "dev-report.md"), label: "开发报告" });
+        checks.push({ file: path29.join(reportDir, "code-review-report.md"), label: "代码审核报告" });
+        checks.push({ file: path29.join(reportDir, "qa-report.md"), label: "QA报告" });
         break;
       case "code_review":
-        checks.push({ file: path28.join(reportDir, "dev-report.md"), label: "开发报告" });
+        checks.push({ file: path29.join(reportDir, "dev-report.md"), label: "开发报告" });
         break;
       case "development":
         return true;
     }
     for (const check of checks) {
-      if (!fs32.existsSync(check.file)) {
+      if (!fs33.existsSync(check.file)) {
         console.log(`   ⚠️ 缺少${check.label}: ${check.file}`);
         return false;
       }
       try {
-        const content = fs32.readFileSync(check.file, "utf-8");
+        const content = fs33.readFileSync(check.file, "utf-8");
         if (content.trim().length === 0) {
           console.log(`   ⚠️ ${check.label}为空: ${check.file}`);
           return false;
@@ -40580,6 +41112,191 @@ ${"━".repeat(SEPARATOR_WIDTH)}`);
     console.log(`
 \uD83D\uDCCA ${label} 完成: ${passed} 通过, ${failed} 失败, ${skipped} 跳过 (${batchSize} 任务)`);
   }
+  commitTaskCompletion(taskId, taskTitle) {
+    if (!this.config.taskGitCommit)
+      return "";
+    if (this.config.dryRun) {
+      console.log(`
+\uD83D\uDCDD [dry-run] 将为任务 ${taskId} 创建 git commit`);
+      return "";
+    }
+    try {
+      const statusOutput = execSync5("git status --porcelain", {
+        cwd: this.config.cwd,
+        encoding: "utf-8",
+        timeout: 1e4
+      });
+      if (!statusOutput.trim()) {
+        console.log(`
+\uD83D\uDCE6 任务 ${taskId}: 无文件变更，跳过 git commit`);
+        return "";
+      }
+      const changedFiles = statusOutput.trim().split(`
+`).length;
+      execSync5("git add -A", {
+        cwd: this.config.cwd,
+        encoding: "utf-8",
+        timeout: 30000
+      });
+      const commitMessage = `feat: ${taskId} - ${taskTitle}`;
+      const commitOutput = execSync5(`git commit -m ${JSON.stringify(commitMessage)}`, {
+        cwd: this.config.cwd,
+        encoding: "utf-8",
+        timeout: 30000
+      });
+      let commitSha = "";
+      const shaMatch = commitOutput.match(/\[.+?\s+([0-9a-f]{7,40})\]/);
+      if (shaMatch) {
+        commitSha = shaMatch[1];
+      } else {
+        try {
+          commitSha = execSync5("git rev-parse HEAD", {
+            cwd: this.config.cwd,
+            encoding: "utf-8",
+            timeout: 5000
+          }).trim();
+        } catch {}
+      }
+      console.log(`
+\uD83D\uDCE6 任务 ${taskId}: 已提交 ${changedFiles} 个文件变更 (git commit${commitSha ? ` ${commitSha.substring(0, 7)}` : ""})`);
+      return commitSha;
+    } catch (error) {
+      console.error(`
+⚠️ 任务 ${taskId}: git commit 失败: ${error instanceof Error ? error.message : String(error)}`);
+      return "";
+    }
+  }
+  classifyErrorForRollback(error, phase, retryCount, maxRetries) {
+    const lowerError = error.toLowerCase();
+    if (retryCount >= maxRetries) {
+      return ERROR_CATEGORIES.max_retries_exhausted;
+    }
+    if (lowerError.includes("disk") || lowerError.includes("space") || lowerError.includes("enosp")) {
+      return ERROR_CATEGORIES.disk_space;
+    }
+    if (lowerError.includes("permission") || lowerError.includes("eacces") || lowerError.includes("eperm")) {
+      return ERROR_CATEGORIES.permission_error;
+    }
+    if (lowerError.includes("api") || lowerError.includes("502") || lowerError.includes("503") || lowerError.includes("429")) {
+      return ERROR_CATEGORIES.api_error;
+    }
+    if (lowerError.includes("interrupt") || lowerError.includes("cancel") || lowerError.includes("abort")) {
+      return ERROR_CATEGORIES.user_interrupt;
+    }
+    if (phase === "development" || phase === "code_review" || phase === "qa" || phase === "evaluation") {
+      return ERROR_CATEGORIES.phase_failure;
+    }
+    if (lowerError.includes("quality gate") || lowerError.includes("validation failed")) {
+      return ERROR_CATEGORIES.quality_gate_failure;
+    }
+    return ERROR_CATEGORIES.phase_failure;
+  }
+  async rollbackTask(taskId, reason, phase) {
+    console.log(`
+\uD83D\uDD04 回滚任务 ${taskId}: ${reason}`);
+    const result = {
+      success: true,
+      taskId,
+      reason,
+      cleanedFiles: []
+    };
+    try {
+      if (this.config.taskGitCommit) {
+        try {
+          const lastCommitMsg = execSync5("git log -1 --pretty=%s", {
+            cwd: this.config.cwd,
+            encoding: "utf-8",
+            timeout: 5000
+          }).trim();
+          if (lastCommitMsg.includes(taskId)) {
+            const currentBranch = execSync5("git rev-parse --abbrev-ref HEAD", {
+              cwd: this.config.cwd,
+              encoding: "utf-8",
+              timeout: 5000
+            }).trim();
+            const unpushedCheck = execSync5(`git log origin/${currentBranch}..HEAD --oneline 2>/dev/null || echo ""`, {
+              cwd: this.config.cwd,
+              encoding: "utf-8",
+              timeout: 5000
+            }).trim();
+            if (unpushedCheck.includes(taskId) || unpushedCheck.length > 0) {
+              const commitSha = execSync5("git rev-parse HEAD", {
+                cwd: this.config.cwd,
+                encoding: "utf-8",
+                timeout: 5000
+              }).trim();
+              execSync5("git reset --soft HEAD~1", {
+                cwd: this.config.cwd,
+                encoding: "utf-8",
+                timeout: 1e4
+              });
+              result.rolledBackCommit = commitSha;
+              console.log("   ✅ Git 提交已回滚，变更保留在工作区");
+            }
+          }
+        } catch (gitError) {
+          console.log(`   ℹ️ Git 回滚跳过: ${gitError instanceof Error ? gitError.message : String(gitError)}`);
+        }
+      }
+      const stageFiles = [
+        path29.join(this.config.cwd, ".projmnt4claude", "reports", taskId, "dev-report.json"),
+        path29.join(this.config.cwd, ".projmnt4claude", "reports", taskId, "code-review-report.json"),
+        path29.join(this.config.cwd, ".projmnt4claude", "reports", taskId, "qa-report.json"),
+        path29.join(this.config.cwd, ".projmnt4claude", "reports", taskId, "evaluation-report.json")
+      ];
+      for (const file of stageFiles) {
+        if (fs33.existsSync(file)) {
+          try {
+            fs33.unlinkSync(file);
+            result.cleanedFiles.push(file);
+          } catch (unlinkError) {
+            console.warn(`   ⚠️ 无法删除文件 ${file}: ${unlinkError instanceof Error ? unlinkError.message : String(unlinkError)}`);
+          }
+        }
+      }
+      if (result.cleanedFiles.length > 0) {
+        console.log(`   ✅ 阶段输出文件已清理 (${result.cleanedFiles.length} 个文件)`);
+      }
+      try {
+        const task = readTaskMeta(taskId, this.config.cwd);
+        if (task && task.status !== "in_progress") {
+          await this.updateTaskStatus(taskId, "in_progress", `回滚: ${reason}`);
+          console.log("   ✅ 任务状态已重置为 in_progress");
+        }
+      } catch (taskError) {
+        console.warn(`   ⚠️ 重置任务状态失败: ${taskError instanceof Error ? taskError.message : String(taskError)}`);
+      }
+      this.addTimelineEntry(taskId, "failed", `任务回滚: ${reason}`, { phase, rollback: true });
+    } catch (error) {
+      result.success = false;
+      result.error = error instanceof Error ? error.message : String(error);
+      console.error(`   ❌ 回滚失败: ${result.error}`);
+    }
+    return result;
+  }
+  async handlePhaseFailureWithRollback(taskId, phase, error, retryCount, maxRetries) {
+    const errorCategory = this.classifyErrorForRollback(error, phase, retryCount, maxRetries);
+    console.log(`
+   \uD83D\uDCCB 错误分类: ${errorCategory.type} (${errorCategory.classification})`);
+    console.log(`   \uD83D\uDCCB 描述: ${errorCategory.description}`);
+    if (errorCategory.classification === "unrecoverable") {
+      console.log("   ℹ️ 不可恢复错误，保留当前状态");
+      return { canRetry: false };
+    }
+    if (errorCategory.classification === "system") {
+      console.error(`   \uD83D\uDEA8 系统错误: ${errorCategory.description}`);
+      console.error("   请修复系统问题后重试");
+      return { canRetry: false };
+    }
+    if (errorCategory.needsRollback) {
+      const rollbackResult = await this.rollbackTask(taskId, error, phase);
+      return {
+        canRetry: retryCount < maxRetries,
+        rollbackResult
+      };
+    }
+    return { canRetry: retryCount < maxRetries };
+  }
   tagBatchCompletion(state, batchIndex) {
     if (!this.config.batchGitTagCommit)
       return;
@@ -40607,7 +41324,7 @@ ${"━".repeat(SEPARATOR_WIDTH)}`);
       return;
     }
     try {
-      const statusOutput = execSync4("git status --porcelain", {
+      const statusOutput = execSync5("git status --porcelain", {
         cwd: this.config.cwd,
         encoding: "utf-8",
         timeout: 1e4
@@ -40620,7 +41337,7 @@ ${"━".repeat(SEPARATOR_WIDTH)}`);
             const batchNumber = batchIndex + 1;
             const timestamp = Math.floor(Date.now() / 1000);
             const tagName2 = `batch-${batchNumber}-${timestamp}`;
-            execSync4(`git tag ${tagName2}`, {
+            execSync5(`git tag ${tagName2}`, {
               cwd: this.config.cwd,
               encoding: "utf-8",
               timeout: 1e4
@@ -40634,13 +41351,13 @@ ${"━".repeat(SEPARATOR_WIDTH)}`);
       }
       const changedFiles = statusOutput.trim().split(`
 `).length;
-      execSync4("git add -A", {
+      execSync5("git add -A", {
         cwd: this.config.cwd,
         encoding: "utf-8",
         timeout: 30000
       });
       const commitMessage = `harness: ${label} 完成 (${passed} 通过, ${failed} 失败, ${changedFiles} 文件变更)`;
-      const commitOutput = execSync4(`git commit -m ${JSON.stringify(commitMessage)}`, {
+      const commitOutput = execSync5(`git commit -m ${JSON.stringify(commitMessage)}`, {
         cwd: this.config.cwd,
         encoding: "utf-8",
         timeout: 30000
@@ -40651,7 +41368,7 @@ ${"━".repeat(SEPARATOR_WIDTH)}`);
         commitSha = shaMatch[1];
       } else {
         try {
-          commitSha = execSync4("git rev-parse HEAD", {
+          commitSha = execSync5("git rev-parse HEAD", {
             cwd: this.config.cwd,
             encoding: "utf-8",
             timeout: 5000
@@ -40666,7 +41383,7 @@ ${"━".repeat(SEPARATOR_WIDTH)}`);
           const batchNumber = batchIndex + 1;
           const timestamp = Math.floor(Date.now() / 1000);
           tagName = `batch-${batchNumber}-${timestamp}`;
-          execSync4(`git tag ${tagName}`, {
+          execSync5(`git tag ${tagName}`, {
             cwd: this.config.cwd,
             encoding: "utf-8",
             timeout: 1e4
@@ -41048,6 +41765,7 @@ async function harnessCommand(options, cwd = process.cwd()) {
     continue: options.continue ?? DEFAULT_HARNESS_CONFIG.continue,
     jsonOutput: options.json ?? DEFAULT_HARNESS_CONFIG.jsonOutput,
     batchGitTagCommit: options.batchGitTagCommit ?? DEFAULT_HARNESS_CONFIG.batchGitTagCommit,
+    taskGitCommit: options.taskGitCommit ?? DEFAULT_HARNESS_CONFIG.taskGitCommit,
     forceContinue: options.forceContinue ?? DEFAULT_HARNESS_CONFIG.forceContinue,
     cwd
   };
@@ -41233,7 +41951,7 @@ async function harnessCommand(options, cwd = process.cwd()) {
   }
 }
 function getRuntimeStatePath2(cwd) {
-  return path29.join(getProjectDir(cwd), "harness-state.json");
+  return path30.join(getProjectDir(cwd), "harness-state.json");
 }
 function validateAndRepairState(data, cwd) {
   const errors = [];
@@ -41391,12 +42109,12 @@ function validateAndRepairState(data, cwd) {
 }
 function loadRuntimeState(cwd) {
   const statePath = getRuntimeStatePath2(cwd);
-  if (!fs33.existsSync(statePath)) {
+  if (!fs34.existsSync(statePath)) {
     return null;
   }
   const texts = t(cwd);
   try {
-    const content = fs33.readFileSync(statePath, "utf-8");
+    const content = fs34.readFileSync(statePath, "utf-8");
     if (!content.trim()) {
       console.warn(texts.harnessCmd.emptyStateFile);
       return null;
@@ -41442,8 +42160,8 @@ function loadRuntimeState(cwd) {
 }
 function clearRuntimeState(cwd) {
   const statePath = getRuntimeStatePath2(cwd);
-  if (fs33.existsSync(statePath)) {
-    fs33.unlinkSync(statePath);
+  if (fs34.existsSync(statePath)) {
+    fs34.unlinkSync(statePath);
   }
 }
 function summaryToJSON(summary) {
@@ -41470,13 +42188,13 @@ function summaryToJSON(summary) {
 }
 async function loadTaskQueue(options, cwd) {
   if (options.plan) {
-    const planFile = path29.resolve(cwd, options.plan);
-    if (!fs33.existsSync(planFile)) {
+    const planFile = path30.resolve(cwd, options.plan);
+    if (!fs34.existsSync(planFile)) {
       console.error(`Error: Plan file does not exist: ${planFile}`);
       process.exit(1);
     }
     try {
-      const planContent = fs33.readFileSync(planFile, "utf-8");
+      const planContent = fs34.readFileSync(planFile, "utf-8");
       const planData = JSON.parse(planContent);
       let taskQueue = planData.recommendation?.suggestedOrder || [];
       const batches = planData.batchOrder || planData.batches;
@@ -41581,24 +42299,24 @@ function printSummary(summary) {
 }
 
 // src/utils/path.ts
-import * as path30 from "path";
-import * as fs34 from "fs";
+import * as path31 from "path";
+import * as fs35 from "fs";
 function getProjectDir5(cwd = process.cwd()) {
-  return path30.join(cwd, ".projmnt4claude");
+  return path31.join(cwd, ".projmnt4claude");
 }
 function isInitialized2(cwd = process.cwd()) {
   const projectDir = getProjectDir5(cwd);
-  const configPath = path30.join(projectDir, "config.json");
-  if (fs34.existsSync(configPath)) {
+  const configPath = path31.join(projectDir, "config.json");
+  if (fs35.existsSync(configPath)) {
     return true;
   }
-  const tasksDir = path30.join(projectDir, "tasks");
-  if (fs34.existsSync(tasksDir)) {
+  const tasksDir = path31.join(projectDir, "tasks");
+  if (fs35.existsSync(tasksDir)) {
     try {
-      const taskDirs = fs34.readdirSync(tasksDir);
+      const taskDirs = fs35.readdirSync(tasksDir);
       return taskDirs.some((taskDir) => {
-        const metaPath = path30.join(tasksDir, taskDir, "meta.json");
-        return fs34.existsSync(metaPath);
+        const metaPath = path31.join(tasksDir, taskDir, "meta.json");
+        return fs35.existsSync(metaPath);
       });
     } catch {
       return false;
@@ -41729,12 +42447,12 @@ rename format:
     case "create": {
       let taskDescription = options.description;
       if (options.file) {
-        const filePath = path31.resolve(options.file);
-        if (!fs35.existsSync(filePath)) {
+        const filePath = path32.resolve(options.file);
+        if (!fs36.existsSync(filePath)) {
           console.error("(X) Error: Description file not found: " + filePath);
           process.exit(1);
         }
-        const stat = fs35.statSync(filePath);
+        const stat = fs36.statSync(filePath);
         if (!stat.isFile()) {
           console.error("(X) Error: Path is not a file: " + filePath);
           process.exit(1);
@@ -41745,14 +42463,14 @@ rename format:
           process.exit(1);
         }
         try {
-          taskDescription = fs35.readFileSync(filePath, "utf-8");
+          taskDescription = fs36.readFileSync(filePath, "utf-8");
         } catch (error) {
           console.error("(X) Error: Cannot read description file: " + error.message);
           process.exit(1);
         }
         if (filePath.startsWith("/tmp/")) {
           try {
-            fs35.unlinkSync(filePath);
+            fs36.unlinkSync(filePath);
           } catch {}
         }
       }
@@ -42193,12 +42911,12 @@ program2.command("init-requirement [description]").description(`\u4ECE\u81EA\u71
 ` + "\u524D\u63D0: \u9700\u5148\u8FD0\u884C projmnt4claude setup \u521D\u59CB\u5316\u9879\u76EE").option("-y, --yes", "\u975E\u4EA4\u4E92\u6A21\u5F0F\uFF1A\u8DF3\u8FC7\u6240\u6709\u786E\u8BA4\uFF0C\u76F4\u63A5\u4F7F\u7528\u5206\u6790\u7ED3\u679C\u521B\u5EFA\u4EFB\u52A1").option("--no-plan", "\u521B\u5EFA\u4EFB\u52A1\u540E\u4E0D\u8BE2\u95EE\u662F\u5426\u6DFB\u52A0\u5230\u6267\u884C\u8BA1\u5212").option("--skip-validation", "\u8DF3\u8FC7\u521D\u59CB\u5316\u9A8C\u8BC1").option("--template <file>", "\u4F7F\u7528\u9700\u6C42\u6A21\u677F\u6587\u4EF6", "simple").option("--no-ai", "\u7981\u7528 AI \u8F85\u52A9").option("--require-quality <n>", "\u8D28\u91CF\u95E8\u7981\u9608\u503C").option("-f, --force", "\u5F3A\u5236\u8986\u76D6").option("--file <path>", "\u4ECE\u6587\u4EF6\u8BFB\u53D6\u63CF\u8FF0\uFF08\u7528\u4E8E\u5305\u542B\u7279\u6B8A\u5B57\u7B26\u7684\u957F\u63CF\u8FF0\uFF09").option("--decompose", "\u81EA\u52A8\u5206\u89E3\u591A\u95EE\u9898\u9700\u6C42/\u62A5\u544A\uFF08\u9ED8\u8BA4\u542F\u7528\uFF09", true).option("--no-decompose", "\u7981\u7528\u9700\u6C42\u5206\u89E3\uFF0C\u5F3A\u5236\u521B\u5EFA\u5355\u4E2A\u4EFB\u52A1").option("--accept-draft", "\u63A5\u53D7\u8349\u7A3F").option("--accept-audit", "\u63A5\u53D7\u5BA1\u8BA1").option("--accept-eval", "\u63A5\u53D7\u8BC4\u4F30").action(async (description, options) => {
   let finalDescription;
   if (options.file) {
-    const filePath = path31.resolve(options.file);
-    if (!fs35.existsSync(filePath)) {
+    const filePath = path32.resolve(options.file);
+    if (!fs36.existsSync(filePath)) {
       console.error("(X) Error: Description file not found: " + filePath);
       process.exit(1);
     }
-    const stat = fs35.statSync(filePath);
+    const stat = fs36.statSync(filePath);
     if (!stat.isFile()) {
       console.error("(X) Error: Path is not a file: " + filePath);
       process.exit(1);
@@ -42209,14 +42927,14 @@ program2.command("init-requirement [description]").description(`\u4ECE\u81EA\u71
       process.exit(1);
     }
     try {
-      finalDescription = fs35.readFileSync(filePath, "utf-8");
+      finalDescription = fs36.readFileSync(filePath, "utf-8");
     } catch (error) {
       console.error("(X) Error: Cannot read description file: " + error.message);
       process.exit(1);
     }
     if (filePath.startsWith("/tmp/")) {
       try {
-        fs35.unlinkSync(filePath);
+        fs36.unlinkSync(filePath);
       } catch {}
     }
   } else if (description) {
@@ -42276,7 +42994,7 @@ Deprecated Options:
   ~~--skip-quality-gate~~    Deprecated, use --skip-harness-gate instead
 
 Batch Tag+Commit Options:
-  --batch-git-tag-commit   Auto git tag + commit after each batch (tag: batch-{N}-{timestamp})`).option("--plan <file>", "Plan file path (optional, auto-read/generate if not specified)").option("--max-retries <n>", "Max retry attempts", "3").option("--timeout <seconds>", "Per-task timeout (seconds)", "300").option("--parallel <n>", "Parallel execution count", "1").option("--dry-run", "Dry run mode (no actual execution)").option("--continue", "Continue from last interruption").option("--json", "JSON format output").option("--require-quality <n>", "Quality gate: minimum quality score threshold (0-100, default 60)", "60").option("--skip-harness-gate", "Skip Harness pre-execution quality gate check (not recommended)").option("--skip-quality-gate", "[Deprecated] Use --skip-harness-gate instead").option("--batch-git-tag-commit", "Auto git tag + commit after each batch completes (tag format: batch-{N}-{timestamp})").option("--force", "Force cleanup all snapshots (cleanup subcommand only)").option("--orphans-only", "Clean only orphaned snapshots (cleanup subcommand only)").action(async (action, options) => {
+  --batch-git-tag-commit   Auto git tag + commit after each batch (tag: batch-{N}-{timestamp})`).option("--plan <file>", "Plan file path (optional, auto-read/generate if not specified)").option("--max-retries <n>", "Max retry attempts", "3").option("--timeout <seconds>", "Per-task timeout (seconds)", "300").option("--parallel <n>", "Parallel execution count", "1").option("--dry-run", "Dry run mode (no actual execution)").option("--continue", "Continue from last interruption").option("--json", "JSON format output").option("--require-quality <n>", "Quality gate: minimum quality score threshold (0-100, default 60)", "60").option("--skip-harness-gate", "Skip Harness pre-execution quality gate check (not recommended)").option("--skip-quality-gate", "[Deprecated] Use --skip-harness-gate instead").option("--batch-git-tag-commit", "Auto git tag + commit after each batch completes (tag format: batch-{N}-{timestamp})").option("--task-git-commit", "Auto git commit after each task completes (commit format: feat: {taskId} - {title})").option("--force", "Force cleanup all snapshots (cleanup subcommand only)").option("--orphans-only", "Clean only orphaned snapshots (cleanup subcommand only)").action(async (action, options) => {
   requireInit();
   if (action === "cleanup") {
     await cleanupHarnessSnapshots({
@@ -42307,7 +43025,8 @@ Batch Tag+Commit Options:
     json: options.json,
     requireQuality: options.requireQuality,
     skipHarnessGate: options.skipHarnessGate || options.skipQualityGate,
-    batchGitTagCommit: options.batchGitTagCommit
+    batchGitTagCommit: options.batchGitTagCommit,
+    taskGitCommit: options.taskGitCommit
   });
 });
 program2.command("help [topic]").description(`Show help information
