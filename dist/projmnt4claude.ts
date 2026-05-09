@@ -859,6 +859,7 @@ program
   .option('--skip-harness-gate', 'Skip Harness pre-execution quality gate check (not recommended)')
   .option('--skip-quality-gate', '[Deprecated] Use --skip-harness-gate instead')
   .option('--batch-git-tag-commit', 'Auto git tag + commit after each batch completes (tag format: batch-{N}-{timestamp})')
+  .option('--task-git-commit', 'Auto git commit after each task completes (commit format: feat: {taskId} - {title})')
   .option('--force', 'Force cleanup all snapshots (cleanup subcommand only)')
   .option('--orphans-only', 'Clean only orphaned snapshots (cleanup subcommand only)')
   .action(async (action, options) => {
@@ -899,6 +900,7 @@ program
       requireQuality: options.requireQuality,
       skipHarnessGate: options.skipHarnessGate || options.skipQualityGate,
       batchGitTagCommit: options.batchGitTagCommit,
+      taskGitCommit: options.taskGitCommit,
     });
   });
 
