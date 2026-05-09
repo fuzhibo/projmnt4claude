@@ -33,6 +33,8 @@ import { createSessionAwareEngine } from './feedback-constraint-engine.js';
 import { qaVerdictResultMarker, qaVerdictHasReason } from './validation-rules/verdict-rules.js';
 import { loadPromptTemplate, resolveTemplate } from './prompt-templates.js';
 import { t, getI18n } from '../i18n/index.js';
+import { verifyQAAcceptanceCriteria, QAAcceptanceResult, ACCEPTANCE_LEVEL_DESCRIPTIONS, type AcceptanceLevel } from '../types/qa-acceptance-criteria.js';
+import { QAAcceptanceCriteriaVerifier, createQAAcceptanceCriteriaVerifier } from './qa-acceptance-criteria-verifier.js';
 
 /**
  * 验证检查点的验证信息完整性
@@ -64,6 +66,20 @@ export class HarnessQATester {
     console.log(`\n🧪 ${texts.harness.logs.qaPhase}`);
     console.log(`   ${texts.harness.logs.taskLabel}: ${task.title}`);
 
+    // Run acceptance criteria verification first
+    let acceptanceCriteriaResult: QAAcceptanceResult | undefined;
+    try {
+      console.log(`\n   📋 执行验收标准验证...`);
+      const verifier = createQAAcceptanceCriteriaVerifier(this.config.cwd);
+      acceptanceCriteriaResult = await verifier.verify(task);
+
+      // Show result
+      const resultText = verifier.formatResult(acceptanceCriteriaResult);
+      console.log(resultText);
+    } catch (error) {
+      console.log(`   ⚠️ 验收标准验证出错: ${error instanceof Error ? error.message : String(error)}`);
+    }
+
     const verdict: QAVerdict = {
       taskId: task.id,
       result: 'PASS',
@@ -74,7 +90,16 @@ export class HarnessQATester {
       humanVerificationCheckpoints: [],
       verifiedAt: new Date().toISOString(),
       verifiedBy: 'qa_tester',
+      acceptanceCriteriaResult,
     };
+
+    // Check acceptance criteria result - if required levels failed, mark as NOPASS
+    if (acceptanceCriteriaResult && !acceptanceCriteriaResult.requiredLevelsPassed) {
+      verdict.result = 'NOPASS';
+      verdict.reason = `验收标准验证未通过: ${acceptanceCriteriaResult.reason}`;
+      await this.saveReport(task.id, verdict);
+      return verdict;
+    }
 
     // 如果代码审核未通过，直接返回 NOPASS
     if (codeReviewVerdict.result !== 'PASS') {
@@ -559,6 +584,30 @@ export class HarnessQATester {
     if (verdict.details) {
       lines.push(`## ${texts.harness.reports.detailsSection}`);
       lines.push(verdict.details);
+      lines.push('');
+    }
+
+    // Add acceptance criteria verification results
+    if (verdict.acceptanceCriteriaResult) {
+      const acResult = verdict.acceptanceCriteriaResult;
+      lines.push('## 验收标准验证结果');
+      lines.push('');
+      lines.push(`**总体结果**: ${acResult.passed ? '✅ 通过' : '❌ 未通过'}`);
+      lines.push(`**原因**: ${acResult.reason}`);
+      lines.push('');
+
+      // Show level results
+      lines.push('### 验证层次结果');
+      const levels: AcceptanceLevel[] = ['checkpoint', 'build', 'test', 'criteria'];
+      for (const level of levels) {
+        const levelResult = acResult.levelResults.get(level);
+        if (levelResult) {
+          const icon = levelResult.passed ? '✅' : '❌';
+          const severity = level === 'criteria' ? '(可选)' : '(必需)';
+          const levelName = ACCEPTANCE_LEVEL_DESCRIPTIONS[level].split(' - ')[0];
+          lines.push(`- ${icon} ${levelName} ${severity}: ${levelResult.reason}`);
+        }
+      }
       lines.push('');
     }
 
