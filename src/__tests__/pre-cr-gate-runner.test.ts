@@ -11,6 +11,7 @@
 import { describe, it, expect, beforeEach, afterEach } from 'bun:test';
 import * as fs from 'fs';
 import * as path from 'path';
+import { mkdirSync, writeFileSync } from 'fs';
 import {
   PreCRGateRunner,
   createPreCRGateRunner,
@@ -24,6 +25,12 @@ import {
   type PreCRGateContext,
 } from '../utils/pre-cr-gate/runner.js';
 import type { TaskMeta } from '../types/task.js';
+import {
+  createIsolatedTestEnv,
+  createTaskDir,
+  writeTaskMeta,
+  type IsolatedTestEnv,
+} from '../utils/test-env.js';
 
 // 测试辅助函数
 function createMockTask(overrides: Partial<TaskMeta> = {}): TaskMeta {
@@ -53,43 +60,25 @@ function createMockTask(overrides: Partial<TaskMeta> = {}): TaskMeta {
 }
 
 describe('PreCRGateRunner', () => {
-  let testDir: string;
-  let tasksDir: string;
+  let env: IsolatedTestEnv;
 
-  beforeEach(() => {
-    // 创建临时测试目录
-    testDir = fs.mkdtempSync('/tmp/pre-cr-gate-test-');
-    tasksDir = path.join(testDir, '.projmnt4claude', 'tasks');
-    fs.mkdirSync(tasksDir, { recursive: true });
-
-    // 创建项目配置
-    const configDir = path.join(testDir, '.projmnt4claude');
-    fs.mkdirSync(configDir, { recursive: true });
-    fs.writeFileSync(
-      path.join(configDir, 'config.json'),
-      JSON.stringify({
-        version: '1.0.0',
-        projectName: 'test-project',
-      })
-    );
+  beforeEach(async () => {
+    env = await createIsolatedTestEnv({ prefix: 'pre-cr-gate-test-' });
   });
 
   afterEach(() => {
-    // 清理测试目录
-    if (fs.existsSync(testDir)) {
-      fs.rmSync(testDir, { recursive: true });
-    }
+    env.cleanup();
   });
 
   describe('基础功能', () => {
     it('应该创建实例', () => {
-      const runner = new PreCRGateRunner(testDir);
+      const runner = new PreCRGateRunner(env.tempDir);
       expect(runner).toBeDefined();
       expect(runner.getConfig()).toBeDefined();
     });
 
     it('应该使用默认配置', () => {
-      const runner = new PreCRGateRunner(testDir);
+      const runner = new PreCRGateRunner(env.tempDir);
       const config = runner.getConfig();
 
       expect(config.enabled).toBe(true);
@@ -107,7 +96,7 @@ describe('PreCRGateRunner', () => {
         stopOnFailure: true,
       };
 
-      const runner = new PreCRGateRunner(testDir, customConfig);
+      const runner = new PreCRGateRunner(env.tempDir, customConfig);
       const config = runner.getConfig();
 
       expect(config.enabled).toBe(false);
@@ -119,16 +108,9 @@ describe('PreCRGateRunner', () => {
   describe('规则执行', () => {
     it('应该执行所有启用规则', async () => {
       const taskId = 'TASK-test-001';
-      const taskDir = path.join(tasksDir, taskId);
-      fs.mkdirSync(taskDir, { recursive: true });
+      createTaskDir(env.tasksDir, taskId, createMockTask({ id: taskId }));
 
-      const task = createMockTask({ id: taskId });
-      fs.writeFileSync(
-        path.join(taskDir, 'meta.json'),
-        JSON.stringify(task)
-      );
-
-      const runner = new PreCRGateRunner(testDir);
+      const runner = new PreCRGateRunner(env.tempDir);
       const result = await runner.run(taskId);
 
       expect(result.ruleResults.length).toBeGreaterThan(0);
@@ -136,7 +118,7 @@ describe('PreCRGateRunner', () => {
     });
 
     it('当禁用时应该直接通过', async () => {
-      const runner = new PreCRGateRunner(testDir, {
+      const runner = new PreCRGateRunner(env.tempDir, {
         enabled: false,
       });
 
@@ -148,7 +130,7 @@ describe('PreCRGateRunner', () => {
     });
 
     it('任务不存在时应该失败', async () => {
-      const runner = new PreCRGateRunner(testDir);
+      const runner = new PreCRGateRunner(env.tempDir);
       const result = await runner.run('TASK-non-existent');
 
       expect(result.decision).toBe('PRE_CR_FAIL');
@@ -160,19 +142,12 @@ describe('PreCRGateRunner', () => {
   describe('任务状态规则', () => {
     it('in_progress状态应该通过', async () => {
       const taskId = 'TASK-test-status';
-      const taskDir = path.join(tasksDir, taskId);
-      fs.mkdirSync(taskDir, { recursive: true });
-
-      const task = createMockTask({
+      createTaskDir(env.tasksDir, taskId, createMockTask({
         id: taskId,
         status: 'in_progress',
-      });
-      fs.writeFileSync(
-        path.join(taskDir, 'meta.json'),
-        JSON.stringify(task)
-      );
+      }));
 
-      const runner = new PreCRGateRunner(testDir, {
+      const runner = new PreCRGateRunner(env.tempDir, {
         rules: [DEFAULT_PRE_CR_GATE_RULES[0]],
       });
 
@@ -184,19 +159,12 @@ describe('PreCRGateRunner', () => {
 
     it('wait_review状态应该通过', async () => {
       const taskId = 'TASK-test-status';
-      const taskDir = path.join(tasksDir, taskId);
-      fs.mkdirSync(taskDir, { recursive: true });
-
-      const task = createMockTask({
+      createTaskDir(env.tasksDir, taskId, createMockTask({
         id: taskId,
         status: 'wait_review',
-      });
-      fs.writeFileSync(
-        path.join(taskDir, 'meta.json'),
-        JSON.stringify(task)
-      );
+      }));
 
-      const runner = new PreCRGateRunner(testDir, {
+      const runner = new PreCRGateRunner(env.tempDir, {
         rules: [DEFAULT_PRE_CR_GATE_RULES[0]],
       });
 
@@ -208,19 +176,12 @@ describe('PreCRGateRunner', () => {
 
     it('open状态应该失败', async () => {
       const taskId = 'TASK-test-status';
-      const taskDir = path.join(tasksDir, taskId);
-      fs.mkdirSync(taskDir, { recursive: true });
-
-      const task = createMockTask({
+      createTaskDir(env.tasksDir, taskId, createMockTask({
         id: taskId,
         status: 'open',
-      });
-      fs.writeFileSync(
-        path.join(taskDir, 'meta.json'),
-        JSON.stringify(task)
-      );
+      }));
 
-      const runner = new PreCRGateRunner(testDir, {
+      const runner = new PreCRGateRunner(env.tempDir, {
         rules: [DEFAULT_PRE_CR_GATE_RULES[0]],
       });
 
@@ -235,22 +196,15 @@ describe('PreCRGateRunner', () => {
   describe('检查点完成规则', () => {
     it('所有检查点完成应该通过', async () => {
       const taskId = 'TASK-test-checkpoints';
-      const taskDir = path.join(tasksDir, taskId);
-      fs.mkdirSync(taskDir, { recursive: true });
-
-      const task = createMockTask({
+      createTaskDir(env.tasksDir, taskId, createMockTask({
         id: taskId,
         checkpoints: [
           { id: 'CP-001', description: '检查点1', status: 'completed' },
           { id: 'CP-002', description: '检查点2', status: 'completed' },
         ],
-      });
-      fs.writeFileSync(
-        path.join(taskDir, 'meta.json'),
-        JSON.stringify(task)
-      );
+      }));
 
-      const runner = new PreCRGateRunner(testDir, {
+      const runner = new PreCRGateRunner(env.tempDir, {
         rules: [DEFAULT_PRE_CR_GATE_RULES[1]],
       });
 
@@ -262,23 +216,16 @@ describe('PreCRGateRunner', () => {
 
     it('存在未完成的检查点应该失败', async () => {
       const taskId = 'TASK-test-checkpoints';
-      const taskDir = path.join(tasksDir, taskId);
-      fs.mkdirSync(taskDir, { recursive: true });
-
-      const task = createMockTask({
+      createTaskDir(env.tasksDir, taskId, createMockTask({
         id: taskId,
         priority: 'P1', // required checkpoint policy
         checkpoints: [
           { id: 'CP-001', description: '检查点1', status: 'completed' },
           { id: 'CP-002', description: '检查点2', status: 'pending' },
         ],
-      });
-      fs.writeFileSync(
-        path.join(taskDir, 'meta.json'),
-        JSON.stringify(task)
-      );
+      }));
 
-      const runner = new PreCRGateRunner(testDir, {
+      const runner = new PreCRGateRunner(env.tempDir, {
         rules: [DEFAULT_PRE_CR_GATE_RULES[1]],
       });
 
@@ -291,20 +238,13 @@ describe('PreCRGateRunner', () => {
 
     it('checkpointPolicy为none时应该通过', async () => {
       const taskId = 'TASK-test-checkpoints';
-      const taskDir = path.join(tasksDir, taskId);
-      fs.mkdirSync(taskDir, { recursive: true });
-
-      const task = createMockTask({
+      createTaskDir(env.tasksDir, taskId, createMockTask({
         id: taskId,
         checkpointPolicy: 'none',
         checkpoints: [],
-      });
-      fs.writeFileSync(
-        path.join(taskDir, 'meta.json'),
-        JSON.stringify(task)
-      );
+      }));
 
-      const runner = new PreCRGateRunner(testDir, {
+      const runner = new PreCRGateRunner(env.tempDir, {
         rules: [DEFAULT_PRE_CR_GATE_RULES[1]],
       });
 
@@ -318,24 +258,17 @@ describe('PreCRGateRunner', () => {
   describe('开发产物规则', () => {
     it('文件存在应该通过', async () => {
       const taskId = 'TASK-test-artifacts';
-      const taskDir = path.join(tasksDir, taskId);
-      fs.mkdirSync(taskDir, { recursive: true });
-
-      // 创建测试文件
-      const srcDir = path.join(testDir, 'src');
-      fs.mkdirSync(srcDir, { recursive: true });
-      fs.writeFileSync(path.join(srcDir, 'test.ts'), 'export const test = 1;');
-
-      const task = createMockTask({
+      createTaskDir(env.tasksDir, taskId, createMockTask({
         id: taskId,
         affected_files: ['src/test.ts'],
-      });
-      fs.writeFileSync(
-        path.join(taskDir, 'meta.json'),
-        JSON.stringify(task)
-      );
+      }));
 
-      const runner = new PreCRGateRunner(testDir, {
+      // 创建测试文件
+      const srcDir = path.join(env.tempDir, 'src');
+      mkdirSync(srcDir, { recursive: true });
+      writeFileSync(path.join(srcDir, 'test.ts'), 'export const test = 1;');
+
+      const runner = new PreCRGateRunner(env.tempDir, {
         rules: [DEFAULT_PRE_CR_GATE_RULES[2]],
       });
 
@@ -347,19 +280,12 @@ describe('PreCRGateRunner', () => {
 
     it('文件不存在应该警告（非阻塞）', async () => {
       const taskId = 'TASK-test-artifacts';
-      const taskDir = path.join(tasksDir, taskId);
-      fs.mkdirSync(taskDir, { recursive: true });
-
-      const task = createMockTask({
+      createTaskDir(env.tasksDir, taskId, createMockTask({
         id: taskId,
         affected_files: ['src/non-existent.ts'],
-      });
-      fs.writeFileSync(
-        path.join(taskDir, 'meta.json'),
-        JSON.stringify(task)
-      );
+      }));
 
-      const runner = new PreCRGateRunner(testDir, {
+      const runner = new PreCRGateRunner(env.tempDir, {
         rules: [DEFAULT_PRE_CR_GATE_RULES[2]],
       });
 
@@ -375,21 +301,14 @@ describe('PreCRGateRunner', () => {
   describe('门禁决策', () => {
     it('所有规则通过应该返回PRE_CR_PASS', async () => {
       const taskId = 'TASK-test-pass';
-      const taskDir = path.join(tasksDir, taskId);
-      fs.mkdirSync(taskDir, { recursive: true });
+      createTaskDir(env.tasksDir, taskId, createMockTask({ id: taskId }));
 
       // 创建测试文件
-      const srcDir = path.join(testDir, 'src');
-      fs.mkdirSync(srcDir, { recursive: true });
-      fs.writeFileSync(path.join(srcDir, 'test.ts'), 'export const test = 1;');
+      const srcDir = path.join(env.tempDir, 'src');
+      mkdirSync(srcDir, { recursive: true });
+      writeFileSync(path.join(srcDir, 'test.ts'), 'export const test = 1;');
 
-      const task = createMockTask({ id: taskId });
-      fs.writeFileSync(
-        path.join(taskDir, 'meta.json'),
-        JSON.stringify(task)
-      );
-
-      const runner = new PreCRGateRunner(testDir);
+      const runner = new PreCRGateRunner(env.tempDir);
       const result = await runner.run(taskId);
 
       expect(result.decision).toBe('PRE_CR_PASS');
@@ -398,19 +317,12 @@ describe('PreCRGateRunner', () => {
 
     it('阻塞规则失败应该返回PRE_CR_FAIL', async () => {
       const taskId = 'TASK-test-fail';
-      const taskDir = path.join(tasksDir, taskId);
-      fs.mkdirSync(taskDir, { recursive: true });
-
-      const task = createMockTask({
+      createTaskDir(env.tasksDir, taskId, createMockTask({
         id: taskId,
         status: 'open', // 阻塞规则失败
-      });
-      fs.writeFileSync(
-        path.join(taskDir, 'meta.json'),
-        JSON.stringify(task)
-      );
+      }));
 
-      const runner = new PreCRGateRunner(testDir);
+      const runner = new PreCRGateRunner(env.tempDir);
       const result = await runner.run(taskId);
 
       expect(result.decision).toBe('PRE_CR_FAIL');
@@ -420,25 +332,18 @@ describe('PreCRGateRunner', () => {
 
     it('非阻塞规则失败应该返回PRE_CR_WARN', async () => {
       const taskId = 'TASK-test-warn';
-      const taskDir = path.join(tasksDir, taskId);
-      fs.mkdirSync(taskDir, { recursive: true });
-
-      // 创建测试文件以满足产物检查
-      const srcDir = path.join(testDir, 'src');
-      fs.mkdirSync(srcDir, { recursive: true });
-      fs.writeFileSync(path.join(srcDir, 'test.ts'), 'export const test = 1;');
-
-      const task = createMockTask({
+      createTaskDir(env.tasksDir, taskId, createMockTask({
         id: taskId,
         initQualityScore: 50, // 质量分数不足
         affected_files: ['src/test.ts'],
-      });
-      fs.writeFileSync(
-        path.join(taskDir, 'meta.json'),
-        JSON.stringify(task)
-      );
+      }));
 
-      const runner = new PreCRGateRunner(testDir, {
+      // 创建测试文件以满足产物检查
+      const srcDir = path.join(env.tempDir, 'src');
+      mkdirSync(srcDir, { recursive: true });
+      writeFileSync(path.join(srcDir, 'test.ts'), 'export const test = 1;');
+
+      const runner = new PreCRGateRunner(env.tempDir, {
         rules: [DEFAULT_PRE_CR_GATE_RULES[3]], // 仅使用质量分数规则
         minQualityScore: 70,
       });
@@ -453,16 +358,9 @@ describe('PreCRGateRunner', () => {
   describe('报告生成', () => {
     it('应该生成报告', async () => {
       const taskId = 'TASK-test-report';
-      const taskDir = path.join(tasksDir, taskId);
-      fs.mkdirSync(taskDir, { recursive: true });
+      createTaskDir(env.tasksDir, taskId, createMockTask({ id: taskId }));
 
-      const task = createMockTask({ id: taskId });
-      fs.writeFileSync(
-        path.join(taskDir, 'meta.json'),
-        JSON.stringify(task)
-      );
-
-      const runner = new PreCRGateRunner(testDir);
+      const runner = new PreCRGateRunner(env.tempDir);
       const result = await runner.run(taskId);
       const report = runner.generateReport(result);
 
@@ -473,19 +371,12 @@ describe('PreCRGateRunner', () => {
 
     it('失败时应该生成建议', async () => {
       const taskId = 'TASK-test-suggestions';
-      const taskDir = path.join(tasksDir, taskId);
-      fs.mkdirSync(taskDir, { recursive: true });
-
-      const task = createMockTask({
+      createTaskDir(env.tasksDir, taskId, createMockTask({
         id: taskId,
         status: 'open',
-      });
-      fs.writeFileSync(
-        path.join(taskDir, 'meta.json'),
-        JSON.stringify(task)
-      );
+      }));
 
-      const runner = new PreCRGateRunner(testDir);
+      const runner = new PreCRGateRunner(env.tempDir);
       const result = await runner.run(taskId);
       const report = runner.generateReport(result);
 
@@ -494,21 +385,14 @@ describe('PreCRGateRunner', () => {
 
     it('通过时应该生成正面反馈', async () => {
       const taskId = 'TASK-test-success';
-      const taskDir = path.join(tasksDir, taskId);
-      fs.mkdirSync(taskDir, { recursive: true });
+      createTaskDir(env.tasksDir, taskId, createMockTask({ id: taskId }));
 
       // 创建测试文件以满足产物检查
-      const srcDir = path.join(testDir, 'src');
-      fs.mkdirSync(srcDir, { recursive: true });
-      fs.writeFileSync(path.join(srcDir, 'test.ts'), 'export const test = 1;');
+      const srcDir = path.join(env.tempDir, 'src');
+      mkdirSync(srcDir, { recursive: true });
+      writeFileSync(path.join(srcDir, 'test.ts'), 'export const test = 1;');
 
-      const task = createMockTask({ id: taskId });
-      fs.writeFileSync(
-        path.join(taskDir, 'meta.json'),
-        JSON.stringify(task)
-      );
-
-      const runner = new PreCRGateRunner(testDir);
+      const runner = new PreCRGateRunner(env.tempDir);
       const result = await runner.run(taskId);
       const report = runner.generateReport(result);
 
@@ -521,22 +405,15 @@ describe('PreCRGateRunner', () => {
 
   describe('便捷函数', () => {
     it('createPreCRGateRunner应该创建实例', () => {
-      const runner = createPreCRGateRunner(testDir);
+      const runner = createPreCRGateRunner(env.tempDir);
       expect(runner).toBeInstanceOf(PreCRGateRunner);
     });
 
     it('quickPreCRGateCheck应该快速执行检查', async () => {
       const taskId = 'TASK-test-quick';
-      const taskDir = path.join(tasksDir, taskId);
-      fs.mkdirSync(taskDir, { recursive: true });
+      createTaskDir(env.tasksDir, taskId, createMockTask({ id: taskId }));
 
-      const task = createMockTask({ id: taskId });
-      fs.writeFileSync(
-        path.join(taskDir, 'meta.json'),
-        JSON.stringify(task)
-      );
-
-      const result = await quickPreCRGateCheck(taskId, testDir);
+      const result = await quickPreCRGateCheck(taskId, env.tempDir);
 
       expect(result.taskId).toBe(taskId);
       expect(result.decision).toBeDefined();
@@ -546,17 +423,10 @@ describe('PreCRGateRunner', () => {
       const taskIds = ['TASK-test-batch-1', 'TASK-test-batch-2'];
 
       for (const taskId of taskIds) {
-        const taskDir = path.join(tasksDir, taskId);
-        fs.mkdirSync(taskDir, { recursive: true });
-
-        const task = createMockTask({ id: taskId });
-        fs.writeFileSync(
-          path.join(taskDir, 'meta.json'),
-          JSON.stringify(task)
-        );
+        createTaskDir(env.tasksDir, taskId, createMockTask({ id: taskId }));
       }
 
-      const results = await batchPreCRGateCheck(taskIds, testDir);
+      const results = await batchPreCRGateCheck(taskIds, env.tempDir);
 
       expect(results.length).toBe(taskIds.length);
     });
@@ -564,7 +434,7 @@ describe('PreCRGateRunner', () => {
 
   describe('配置管理', () => {
     it('应该更新配置', () => {
-      const runner = new PreCRGateRunner(testDir);
+      const runner = new PreCRGateRunner(env.tempDir);
 
       runner.updateConfig({
         minQualityScore: 90,
@@ -577,7 +447,7 @@ describe('PreCRGateRunner', () => {
     });
 
     it('应该添加和移除规则', () => {
-      const runner = new PreCRGateRunner(testDir);
+      const runner = new PreCRGateRunner(env.tempDir);
 
       const newRule: PreCRGateRule = {
         id: 'rule-custom',
@@ -600,16 +470,9 @@ describe('PreCRGateRunner', () => {
   describe('格式化输出', () => {
     it('应该格式化结果为字符串', async () => {
       const taskId = 'TASK-test-format';
-      const taskDir = path.join(tasksDir, taskId);
-      fs.mkdirSync(taskDir, { recursive: true });
+      createTaskDir(env.tasksDir, taskId, createMockTask({ id: taskId }));
 
-      const task = createMockTask({ id: taskId });
-      fs.writeFileSync(
-        path.join(taskDir, 'meta.json'),
-        JSON.stringify(task)
-      );
-
-      const runner = new PreCRGateRunner(testDir);
+      const runner = new PreCRGateRunner(env.tempDir);
       const result = await runner.run(taskId);
       const formatted = runner.formatResult(result);
 

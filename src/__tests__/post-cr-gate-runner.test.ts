@@ -8,7 +8,6 @@
 import { describe, it, expect, beforeEach, afterEach } from 'bun:test';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
-import * as os from 'node:os';
 import {
   PostCRGateRunner,
   createPostCRGateRunner,
@@ -20,24 +19,27 @@ import {
 } from '../utils/post-cr-gate/runner.js';
 import { createDefaultTaskMeta } from '../types/task.js';
 import { writeTaskMeta } from '../utils/task.js';
+import {
+  createIsolatedTestEnv,
+  createTaskDir,
+  type IsolatedTestEnv,
+} from '../utils/test-env.js';
 
 describe('PostCRGateRunner', () => {
-  let tempDir: string;
+  let env: IsolatedTestEnv;
   let runner: PostCRGateRunner;
 
-  beforeEach(() => {
-    tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'post-cr-gate-test-'));
-    runner = createPostCRGateRunner(tempDir);
+  beforeEach(async () => {
+    env = await createIsolatedTestEnv({ prefix: 'post-cr-gate-test-' });
+    runner = createPostCRGateRunner(env.tempDir);
 
-    // Create .projmnt4claude structure
-    fs.mkdirSync(path.join(tempDir, '.projmnt4claude', 'tasks'), { recursive: true });
-    fs.mkdirSync(path.join(tempDir, '.projmnt4claude', 'outputs'), { recursive: true });
-    fs.mkdirSync(path.join(tempDir, '.projmnt4claude', 'reports'), { recursive: true });
+    // Create additional directories needed for tests
+    fs.mkdirSync(path.join(env.tempDir, '.projmnt4claude', 'outputs'), { recursive: true });
+    fs.mkdirSync(path.join(env.tempDir, '.projmnt4claude', 'reports'), { recursive: true });
   });
 
   afterEach(() => {
-    // Clean up temp directory
-    fs.rmSync(tempDir, { recursive: true, force: true });
+    env.cleanup();
   });
 
   describe('Basic Functionality', () => {
@@ -49,12 +51,12 @@ describe('PostCRGateRunner', () => {
     });
 
     it('should skip gate when disabled', async () => {
-      const disabledRunner = createPostCRGateRunner(tempDir, { enabled: false });
+      const disabledRunner = createPostCRGateRunner(env.tempDir, { enabled: false });
       const taskId = 'TASK-test-P2-test-task-20260101';
 
       // Create task
       const task = createDefaultTaskMeta(taskId, 'Test Task', 'feature');
-      writeTaskMeta(task, tempDir);
+      writeTaskMeta(task, env.tempDir);
 
       const result = await disabledRunner.run(taskId);
 
@@ -76,7 +78,7 @@ describe('PostCRGateRunner', () => {
     it('should fail when report does not exist', async () => {
       const taskId = 'TASK-feature-P2-test-task-20260101';
       const task = createDefaultTaskMeta(taskId, 'Test Task', 'feature');
-      writeTaskMeta(task, tempDir);
+      writeTaskMeta(task, env.tempDir);
 
       const result = await runner.run(taskId);
 
@@ -88,10 +90,10 @@ describe('PostCRGateRunner', () => {
     it('should pass when report exists', async () => {
       const taskId = 'TASK-feature-P2-test-task-20260101';
       const task = createDefaultTaskMeta(taskId, 'Test Task', 'feature');
-      writeTaskMeta(task, tempDir);
+      writeTaskMeta(task, env.tempDir);
 
       // Create report
-      const reportPath = path.join(tempDir, '.projmnt4claude', 'outputs', taskId, 'code-review-report.json');
+      const reportPath = path.join(env.tempDir, '.projmnt4claude', 'outputs', taskId, 'code-review-report.json');
       fs.mkdirSync(path.dirname(reportPath), { recursive: true });
       fs.writeFileSync(reportPath, JSON.stringify({
         version: '1.0.0',
@@ -114,10 +116,10 @@ describe('PostCRGateRunner', () => {
     it('should fail when report has invalid format', async () => {
       const taskId = 'TASK-feature-P2-test-task-20260101';
       const task = createDefaultTaskMeta(taskId, 'Test Task', 'feature');
-      writeTaskMeta(task, tempDir);
+      writeTaskMeta(task, env.tempDir);
 
       // Create invalid report
-      const reportPath = path.join(tempDir, '.projmnt4claude', 'outputs', taskId, 'code-review-report.json');
+      const reportPath = path.join(env.tempDir, '.projmnt4claude', 'outputs', taskId, 'code-review-report.json');
       fs.mkdirSync(path.dirname(reportPath), { recursive: true });
       fs.writeFileSync(reportPath, JSON.stringify({
         // Missing required fields
@@ -134,10 +136,10 @@ describe('PostCRGateRunner', () => {
     it('should pass when report has valid format', async () => {
       const taskId = 'TASK-feature-P2-test-task-20260101';
       const task = createDefaultTaskMeta(taskId, 'Test Task', 'feature');
-      writeTaskMeta(task, tempDir);
+      writeTaskMeta(task, env.tempDir);
 
       // Create valid report
-      const reportPath = path.join(tempDir, '.projmnt4claude', 'outputs', taskId, 'code-review-report.json');
+      const reportPath = path.join(env.tempDir, '.projmnt4claude', 'outputs', taskId, 'code-review-report.json');
       fs.mkdirSync(path.dirname(reportPath), { recursive: true });
       fs.writeFileSync(reportPath, JSON.stringify({
         version: '1.0.0',
@@ -162,10 +164,10 @@ describe('PostCRGateRunner', () => {
     it('should fail when verdict is invalid', async () => {
       const taskId = 'TASK-feature-P2-test-task-20260101';
       const task = createDefaultTaskMeta(taskId, 'Test Task', 'feature');
-      writeTaskMeta(task, tempDir);
+      writeTaskMeta(task, env.tempDir);
 
       // Create report with invalid verdict
-      const reportPath = path.join(tempDir, '.projmnt4claude', 'outputs', taskId, 'code-review-report.json');
+      const reportPath = path.join(env.tempDir, '.projmnt4claude', 'outputs', taskId, 'code-review-report.json');
       fs.mkdirSync(path.dirname(reportPath), { recursive: true });
       fs.writeFileSync(reportPath, JSON.stringify({
         version: '1.0.0',
@@ -186,9 +188,9 @@ describe('PostCRGateRunner', () => {
     it('should pass with PASS verdict', async () => {
       const taskId = 'TASK-feature-P2-test-task-20260101';
       const task = createDefaultTaskMeta(taskId, 'Test Task', 'feature');
-      writeTaskMeta(task, tempDir);
+      writeTaskMeta(task, env.tempDir);
 
-      const reportPath = path.join(tempDir, '.projmnt4claude', 'outputs', taskId, 'code-review-report.json');
+      const reportPath = path.join(env.tempDir, '.projmnt4claude', 'outputs', taskId, 'code-review-report.json');
       fs.mkdirSync(path.dirname(reportPath), { recursive: true });
       fs.writeFileSync(reportPath, JSON.stringify({
         version: '1.0.0',
@@ -209,9 +211,9 @@ describe('PostCRGateRunner', () => {
     it('should pass with NOPASS verdict', async () => {
       const taskId = 'TASK-feature-P2-test-task-20260101';
       const task = createDefaultTaskMeta(taskId, 'Test Task', 'feature');
-      writeTaskMeta(task, tempDir);
+      writeTaskMeta(task, env.tempDir);
 
-      const reportPath = path.join(tempDir, '.projmnt4claude', 'outputs', taskId, 'code-review-report.json');
+      const reportPath = path.join(env.tempDir, '.projmnt4claude', 'outputs', taskId, 'code-review-report.json');
       fs.mkdirSync(path.dirname(reportPath), { recursive: true });
       fs.writeFileSync(reportPath, JSON.stringify({
         version: '1.0.0',
@@ -234,9 +236,9 @@ describe('PostCRGateRunner', () => {
     it('should fail when summary is too short', async () => {
       const taskId = 'TASK-feature-P2-test-task-20260101';
       const task = createDefaultTaskMeta(taskId, 'Test Task', 'feature');
-      writeTaskMeta(task, tempDir);
+      writeTaskMeta(task, env.tempDir);
 
-      const reportPath = path.join(tempDir, '.projmnt4claude', 'outputs', taskId, 'code-review-report.json');
+      const reportPath = path.join(env.tempDir, '.projmnt4claude', 'outputs', taskId, 'code-review-report.json');
       fs.mkdirSync(path.dirname(reportPath), { recursive: true });
       fs.writeFileSync(reportPath, JSON.stringify({
         version: '1.0.0',
@@ -257,9 +259,9 @@ describe('PostCRGateRunner', () => {
     it('should pass when summary is complete', async () => {
       const taskId = 'TASK-feature-P2-test-task-20260101';
       const task = createDefaultTaskMeta(taskId, 'Test Task', 'feature');
-      writeTaskMeta(task, tempDir);
+      writeTaskMeta(task, env.tempDir);
 
-      const reportPath = path.join(tempDir, '.projmnt4claude', 'outputs', taskId, 'code-review-report.json');
+      const reportPath = path.join(env.tempDir, '.projmnt4claude', 'outputs', taskId, 'code-review-report.json');
       fs.mkdirSync(path.dirname(reportPath), { recursive: true });
       fs.writeFileSync(reportPath, JSON.stringify({
         version: '1.0.0',
@@ -281,12 +283,12 @@ describe('PostCRGateRunner', () => {
     it('should fail when timestamp is in the future', async () => {
       const taskId = 'TASK-feature-P2-test-task-20260101';
       const task = createDefaultTaskMeta(taskId, 'Test Task', 'feature');
-      writeTaskMeta(task, tempDir);
+      writeTaskMeta(task, env.tempDir);
 
       const futureDate = new Date();
       futureDate.setFullYear(futureDate.getFullYear() + 1);
 
-      const reportPath = path.join(tempDir, '.projmnt4claude', 'outputs', taskId, 'code-review-report.json');
+      const reportPath = path.join(env.tempDir, '.projmnt4claude', 'outputs', taskId, 'code-review-report.json');
       fs.mkdirSync(path.dirname(reportPath), { recursive: true });
       fs.writeFileSync(reportPath, JSON.stringify({
         version: '1.0.0',
@@ -307,9 +309,9 @@ describe('PostCRGateRunner', () => {
     it('should pass with valid timestamp', async () => {
       const taskId = 'TASK-feature-P2-test-task-20260101';
       const task = createDefaultTaskMeta(taskId, 'Test Task', 'feature');
-      writeTaskMeta(task, tempDir);
+      writeTaskMeta(task, env.tempDir);
 
-      const reportPath = path.join(tempDir, '.projmnt4claude', 'outputs', taskId, 'code-review-report.json');
+      const reportPath = path.join(env.tempDir, '.projmnt4claude', 'outputs', taskId, 'code-review-report.json');
       fs.mkdirSync(path.dirname(reportPath), { recursive: true });
       fs.writeFileSync(reportPath, JSON.stringify({
         version: '1.0.0',
@@ -344,9 +346,9 @@ describe('PostCRGateRunner', () => {
           updatedAt: new Date().toISOString(),
         },
       ];
-      writeTaskMeta(task, tempDir);
+      writeTaskMeta(task, env.tempDir);
 
-      const reportPath = path.join(tempDir, '.projmnt4claude', 'outputs', taskId, 'code-review-report.json');
+      const reportPath = path.join(env.tempDir, '.projmnt4claude', 'outputs', taskId, 'code-review-report.json');
       fs.mkdirSync(path.dirname(reportPath), { recursive: true });
       fs.writeFileSync(reportPath, JSON.stringify({
         version: '1.0.0',
@@ -359,7 +361,7 @@ describe('PostCRGateRunner', () => {
       }));
 
       // Create test env config to pass R-CR-POST-008
-      const testEnvPath = path.join(tempDir, '.projmnt4claude', 'outputs', taskId, 'tasks_test_env_adv.json');
+      const testEnvPath = path.join(env.tempDir, '.projmnt4claude', 'outputs', taskId, 'tasks_test_env_adv.json');
       fs.mkdirSync(path.dirname(testEnvPath), { recursive: true });
       fs.writeFileSync(testEnvPath, JSON.stringify({
         version: '1.0.0',
@@ -382,9 +384,9 @@ describe('PostCRGateRunner', () => {
     it('should return POST_CR_WARN when non-blocking checks fail', async () => {
       const taskId = 'TASK-feature-P2-test-task-20260101';
       const task = createDefaultTaskMeta(taskId, 'Test Task', 'feature');
-      writeTaskMeta(task, tempDir);
+      writeTaskMeta(task, env.tempDir);
 
-      const reportPath = path.join(tempDir, '.projmnt4claude', 'outputs', taskId, 'code-review-report.json');
+      const reportPath = path.join(env.tempDir, '.projmnt4claude', 'outputs', taskId, 'code-review-report.json');
       fs.mkdirSync(path.dirname(reportPath), { recursive: true });
       fs.writeFileSync(reportPath, JSON.stringify({
         version: '1.0.0',
@@ -420,9 +422,9 @@ describe('PostCRGateRunner', () => {
           updatedAt: new Date().toISOString(),
         },
       ];
-      writeTaskMeta(task, tempDir);
+      writeTaskMeta(task, env.tempDir);
 
-      const reportPath = path.join(tempDir, '.projmnt4claude', 'outputs', taskId, 'code-review-report.json');
+      const reportPath = path.join(env.tempDir, '.projmnt4claude', 'outputs', taskId, 'code-review-report.json');
       fs.mkdirSync(path.dirname(reportPath), { recursive: true });
       fs.writeFileSync(reportPath, JSON.stringify({
         version: '1.0.0',
@@ -434,7 +436,7 @@ describe('PostCRGateRunner', () => {
       }));
 
       // Create test env config to pass R-CR-POST-008
-      const testEnvPath = path.join(tempDir, '.projmnt4claude', 'outputs', taskId, 'tasks_test_env_adv.json');
+      const testEnvPath = path.join(env.tempDir, '.projmnt4claude', 'outputs', taskId, 'tasks_test_env_adv.json');
       fs.mkdirSync(path.dirname(testEnvPath), { recursive: true });
       fs.writeFileSync(testEnvPath, JSON.stringify({
         version: '1.0.0',
@@ -448,8 +450,8 @@ describe('PostCRGateRunner', () => {
         recommendations: ['Run bun install first'],
       }));
 
-      const gateReportPath = path.join(tempDir, '.projmnt4claude', 'reports', 'post-cr-gate-report.json');
-      const customRunner = createPostCRGateRunner(tempDir, {
+      const gateReportPath = path.join(env.tempDir, '.projmnt4claude', 'reports', 'post-cr-gate-report.json');
+      const customRunner = createPostCRGateRunner(env.tempDir, {
         generateReport: true,
         reportPath: '.projmnt4claude/reports/post-cr-gate-report.json',
       });
@@ -469,9 +471,9 @@ describe('PostCRGateRunner', () => {
     it('quickPostCRGateCheck should work', async () => {
       const taskId = 'TASK-feature-P2-test-task-20260101';
       const task = createDefaultTaskMeta(taskId, 'Test Task', 'feature');
-      writeTaskMeta(task, tempDir);
+      writeTaskMeta(task, env.tempDir);
 
-      const result = await quickPostCRGateCheck(taskId, tempDir);
+      const result = await quickPostCRGateCheck(taskId, env.tempDir);
       expect(result.taskId).toBe(taskId);
     });
 
@@ -483,10 +485,10 @@ describe('PostCRGateRunner', () => {
 
       for (const taskId of taskIds) {
         const task = createDefaultTaskMeta(taskId, 'Test Task', 'feature');
-        writeTaskMeta(task, tempDir);
+        writeTaskMeta(task, env.tempDir);
       }
 
-      const results = await batchPostCRGateCheck(taskIds, tempDir);
+      const results = await batchPostCRGateCheck(taskIds, env.tempDir);
       expect(results).toHaveLength(2);
       expect(results[0].taskId).toBe(taskIds[0]);
       expect(results[1].taskId).toBe(taskIds[1]);
@@ -508,9 +510,9 @@ describe('PostCRGateRunner', () => {
           updatedAt: new Date().toISOString(),
         },
       ];
-      writeTaskMeta(task, tempDir);
+      writeTaskMeta(task, env.tempDir);
 
-      const configPath = await generateTestEnvConfig(taskId, tempDir);
+      const configPath = await generateTestEnvConfig(taskId, env.tempDir);
       expect(fs.existsSync(configPath)).toBe(true);
 
       const config = JSON.parse(fs.readFileSync(configPath, 'utf-8'));
@@ -521,7 +523,7 @@ describe('PostCRGateRunner', () => {
 
   describe('Configuration Management', () => {
     it('should update config', () => {
-      const customRunner = createPostCRGateRunner(tempDir);
+      const customRunner = createPostCRGateRunner(env.tempDir);
       customRunner.updateConfig({ enabled: false });
 
       const config = customRunner.getConfig();
@@ -529,7 +531,7 @@ describe('PostCRGateRunner', () => {
     });
 
     it('should add custom rule', () => {
-      const customRunner = createPostCRGateRunner(tempDir);
+      const customRunner = createPostCRGateRunner(env.tempDir);
       const newRule = {
         id: 'custom-rule',
         type: 'custom' as const,
@@ -547,7 +549,7 @@ describe('PostCRGateRunner', () => {
     });
 
     it('should remove rule', () => {
-      const customRunner = createPostCRGateRunner(tempDir);
+      const customRunner = createPostCRGateRunner(env.tempDir);
       customRunner.removeRule('R-CR-POST-001');
 
       const config = customRunner.getConfig();

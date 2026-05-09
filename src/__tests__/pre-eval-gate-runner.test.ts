@@ -26,6 +26,7 @@ import type {
   QAReport,
 } from '../utils/pre-eval-gate/types.js';
 import type { TaskMeta } from '../types/task.js';
+import { createIsolatedTestEnv, type IsolatedTestEnv } from '../utils/test-env.js';
 
 // 测试辅助函数
 function createMockTask(overrides: Partial<TaskMeta> = {}): TaskMeta {
@@ -70,14 +71,14 @@ function createMockQAReport(overrides: Partial<QAReport> = {}): QAReport {
   };
 }
 
-function setupTaskDir(testDir: string, taskId: string, task: TaskMeta): void {
-  const taskDir = path.join(testDir, '.projmnt4claude', 'tasks', taskId);
+function setupTaskDir(tasksDir: string, taskId: string, task: TaskMeta): void {
+  const taskDir = path.join(tasksDir, taskId);
   fs.mkdirSync(taskDir, { recursive: true });
   fs.writeFileSync(path.join(taskDir, 'meta.json'), JSON.stringify(task, null, 2));
 }
 
-function setupOutputsDir(testDir: string, taskId: string, files: Record<string, unknown>): void {
-  const outputsDir = path.join(testDir, '.projmnt4claude', 'outputs', taskId);
+function setupOutputsDir(projectDir: string, taskId: string, files: Record<string, unknown>): void {
+  const outputsDir = path.join(projectDir, '.projmnt4claude', 'outputs', taskId);
   fs.mkdirSync(outputsDir, { recursive: true });
   for (const [name, content] of Object.entries(files)) {
     fs.writeFileSync(path.join(outputsDir, name), JSON.stringify(content, null, 2));
@@ -85,10 +86,14 @@ function setupOutputsDir(testDir: string, taskId: string, files: Record<string, 
 }
 
 describe('PreEvalGateRunner', () => {
+  let env: IsolatedTestEnv;
   let testDir: string;
+  let tasksDir: string;
 
-  beforeEach(() => {
-    testDir = fs.mkdtempSync('/tmp/pre-eval-gate-test-');
+  beforeEach(async () => {
+    env = await createIsolatedTestEnv();
+    testDir = env.projectDir;
+    tasksDir = env.tasksDir;
     const configDir = path.join(testDir, '.projmnt4claude');
     fs.mkdirSync(configDir, { recursive: true });
     fs.writeFileSync(
@@ -98,9 +103,7 @@ describe('PreEvalGateRunner', () => {
   });
 
   afterEach(() => {
-    if (fs.existsSync(testDir)) {
-      fs.rmSync(testDir, { recursive: true });
-    }
+    env.cleanup();
   });
 
   describe('基础功能', () => {
@@ -141,7 +144,7 @@ describe('PreEvalGateRunner', () => {
   describe('R-EVAL-PRE-001: QA验证通过检查', () => {
     it('QA报告为 PASS 时应通过', async () => {
       const task = createMockTask();
-      setupTaskDir(testDir, task.id, task);
+      setupTaskDir(env.tasksDir, task.id, task);
       setupOutputsDir(testDir, task.id, {
         'qa-report.json': createMockQAReport({ verdict: 'PASS' }),
         'dev-report.json': { version: '1.0.0' },
@@ -159,7 +162,7 @@ describe('PreEvalGateRunner', () => {
 
     it('QA报告为 NOPASS 时应失败', async () => {
       const task = createMockTask();
-      setupTaskDir(testDir, task.id, task);
+      setupTaskDir(env.tasksDir, task.id, task);
       setupOutputsDir(testDir, task.id, {
         'qa-report.json': createMockQAReport({ verdict: 'NOPASS' }),
         'dev-report.json': { version: '1.0.0' },
@@ -177,7 +180,7 @@ describe('PreEvalGateRunner', () => {
 
     it('QA报告不存在时应失败', async () => {
       const task = createMockTask();
-      setupTaskDir(testDir, task.id, task);
+      setupTaskDir(env.tasksDir, task.id, task);
       setupOutputsDir(testDir, task.id, {
         'dev-report.json': { version: '1.0.0' },
         'code-review-report.json': { version: '1.0.0' },
@@ -195,7 +198,7 @@ describe('PreEvalGateRunner', () => {
   describe('R-EVAL-PRE-002~004: 阶段报告存在性检查', () => {
     it('所有报告存在时应全部通过', async () => {
       const task = createMockTask();
-      setupTaskDir(testDir, task.id, task);
+      setupTaskDir(env.tasksDir, task.id, task);
       setupOutputsDir(testDir, task.id, {
         'dev-report.json': { version: '1.0.0' },
         'code-review-report.json': { version: '1.0.0' },
@@ -216,7 +219,7 @@ describe('PreEvalGateRunner', () => {
 
     it('缺少 dev-report.json 时 R-EVAL-PRE-002 应失败', async () => {
       const task = createMockTask();
-      setupTaskDir(testDir, task.id, task);
+      setupTaskDir(env.tasksDir, task.id, task);
       setupOutputsDir(testDir, task.id, {
         'code-review-report.json': { version: '1.0.0' },
         'qa-report.json': createMockQAReport(),
@@ -232,7 +235,7 @@ describe('PreEvalGateRunner', () => {
 
     it('缺少 code-review-report.json 时 R-EVAL-PRE-003 应失败', async () => {
       const task = createMockTask();
-      setupTaskDir(testDir, task.id, task);
+      setupTaskDir(env.tasksDir, task.id, task);
       setupOutputsDir(testDir, task.id, {
         'dev-report.json': { version: '1.0.0' },
         'qa-report.json': createMockQAReport(),
@@ -255,7 +258,7 @@ describe('PreEvalGateRunner', () => {
           { id: 'CP-002', description: '测试2', status: 'completed', createdAt: '', updatedAt: '' },
         ],
       });
-      setupTaskDir(testDir, task.id, task);
+      setupTaskDir(env.tasksDir, task.id, task);
       setupOutputsDir(testDir, task.id, {
         'dev-report.json': {},
         'code-review-report.json': {},
@@ -276,7 +279,7 @@ describe('PreEvalGateRunner', () => {
           { id: 'CP-002', description: '测试2', status: 'pending', createdAt: '', updatedAt: '' },
         ],
       });
-      setupTaskDir(testDir, task.id, task);
+      setupTaskDir(env.tasksDir, task.id, task);
       setupOutputsDir(testDir, task.id, {
         'dev-report.json': {},
         'code-review-report.json': {},
@@ -299,7 +302,7 @@ describe('PreEvalGateRunner', () => {
           { id: 'CP-002', description: '测试2', status: 'skipped', createdAt: '', updatedAt: '' },
         ],
       });
-      setupTaskDir(testDir, task.id, task);
+      setupTaskDir(env.tasksDir, task.id, task);
       setupOutputsDir(testDir, task.id, {
         'dev-report.json': {},
         'code-review-report.json': {},
@@ -323,7 +326,7 @@ describe('PreEvalGateRunner', () => {
           { phase: 'qa', role: 'qa_tester', verdict: 'PASS', timestamp: '' },
         ],
       });
-      setupTaskDir(testDir, task.id, task);
+      setupTaskDir(env.tasksDir, task.id, task);
       setupOutputsDir(testDir, task.id, {
         'dev-report.json': {},
         'code-review-report.json': {},
@@ -344,7 +347,7 @@ describe('PreEvalGateRunner', () => {
           { phase: 'development', role: 'executor', verdict: 'PASS', timestamp: '' },
         ],
       });
-      setupTaskDir(testDir, task.id, task);
+      setupTaskDir(env.tasksDir, task.id, task);
       setupOutputsDir(testDir, task.id, {
         'dev-report.json': {},
         'code-review-report.json': {},
@@ -365,7 +368,7 @@ describe('PreEvalGateRunner', () => {
   describe('门禁决策', () => {
     it('所有规则通过时应返回 PRE_EVAL_PASS', async () => {
       const task = createMockTask();
-      setupTaskDir(testDir, task.id, task);
+      setupTaskDir(env.tasksDir, task.id, task);
       setupOutputsDir(testDir, task.id, {
         'dev-report.json': {},
         'code-review-report.json': {},
@@ -382,7 +385,7 @@ describe('PreEvalGateRunner', () => {
 
     it('ERROR 级别失败时应返回 PRE_EVAL_FAIL', async () => {
       const task = createMockTask();
-      setupTaskDir(testDir, task.id, task);
+      setupTaskDir(env.tasksDir, task.id, task);
       // 不创建任何报告
 
       const runner = new PreEvalGateRunner(testDir);
@@ -397,7 +400,7 @@ describe('PreEvalGateRunner', () => {
       const task = createMockTask({
         phaseHistory: [], // 缺少阶段历史 -> WARNING
       });
-      setupTaskDir(testDir, task.id, task);
+      setupTaskDir(env.tasksDir, task.id, task);
       setupOutputsDir(testDir, task.id, {
         'dev-report.json': {},
         'code-review-report.json': {},
@@ -438,7 +441,7 @@ describe('PreEvalGateRunner', () => {
   describe('报告生成', () => {
     it('应生成门禁报告文件', async () => {
       const task = createMockTask();
-      setupTaskDir(testDir, task.id, task);
+      setupTaskDir(env.tasksDir, task.id, task);
       setupOutputsDir(testDir, task.id, {
         'dev-report.json': {},
         'code-review-report.json': {},
@@ -462,7 +465,7 @@ describe('PreEvalGateRunner', () => {
   describe('格式化输出', () => {
     it('应格式化结果为终端输出', async () => {
       const task = createMockTask();
-      setupTaskDir(testDir, task.id, task);
+      setupTaskDir(env.tasksDir, task.id, task);
       setupOutputsDir(testDir, task.id, {
         'dev-report.json': {},
         'code-review-report.json': {},
@@ -482,7 +485,7 @@ describe('PreEvalGateRunner', () => {
   describe('便捷函数', () => {
     it('quickPreEvalGateCheck 应直接返回结果', async () => {
       const task = createMockTask();
-      setupTaskDir(testDir, task.id, task);
+      setupTaskDir(env.tasksDir, task.id, task);
       setupOutputsDir(testDir, task.id, {
         'dev-report.json': {},
         'code-review-report.json': {},
@@ -525,7 +528,7 @@ describe('PreEvalGateRunner', () => {
   describe('stopOnFailure', () => {
     it('启用 stopOnFailure 时应在首个阻塞失败后停止', async () => {
       const task = createMockTask();
-      setupTaskDir(testDir, task.id, task);
+      setupTaskDir(env.tasksDir, task.id, task);
       // 不创建任何报告，所有 ERROR 规则都会失败
 
       const runner = new PreEvalGateRunner(testDir, { stopOnFailure: true });

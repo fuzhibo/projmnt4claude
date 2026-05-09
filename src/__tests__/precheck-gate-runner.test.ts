@@ -9,7 +9,6 @@
  */
 
 import { describe, it, expect, beforeEach, afterEach } from 'bun:test';
-import * as fs from 'fs';
 import * as path from 'path';
 import {
   PreCheckGateRunner,
@@ -24,6 +23,11 @@ import {
   type GateContext,
 } from '../utils/precheck-gate-runner.js';
 import type { TaskMeta } from '../types/task.js';
+import {
+  createIsolatedTestEnv,
+  createTaskDir,
+  type IsolatedTestEnv,
+} from '../utils/test-env.js';
 
 // 测试辅助函数
 function createMockTask(overrides: Partial<TaskMeta> = {}): TaskMeta {
@@ -53,32 +57,20 @@ function createMockTask(overrides: Partial<TaskMeta> = {}): TaskMeta {
 }
 
 describe('PreCheckGateRunner', () => {
+  let env: IsolatedTestEnv;
   let testDir: string;
   let tasksDir: string;
 
-  beforeEach(() => {
-    // 创建临时测试目录
-    testDir = fs.mkdtempSync('/tmp/precheck-gate-test-');
-    tasksDir = path.join(testDir, '.projmnt4claude', 'tasks');
-    fs.mkdirSync(tasksDir, { recursive: true });
-
-    // 创建项目配置
-    const configDir = path.join(testDir, '.projmnt4claude');
-    fs.mkdirSync(configDir, { recursive: true });
-    fs.writeFileSync(
-      path.join(configDir, 'config.json'),
-      JSON.stringify({
-        version: '1.0.0',
-        projectName: 'test-project',
-      })
-    );
+  beforeEach(async () => {
+    // 创建隔离测试环境
+    env = await createIsolatedTestEnv();
+    testDir = env.tempDir;
+    tasksDir = env.tasksDir;
   });
 
   afterEach(() => {
-    // 清理测试目录
-    if (fs.existsSync(testDir)) {
-      fs.rmSync(testDir, { recursive: true });
-    }
+    // 清理测试环境
+    env.cleanup();
   });
 
   describe('基础功能', () => {
@@ -118,14 +110,8 @@ describe('PreCheckGateRunner', () => {
   describe('规则执行', () => {
     it('应该执行所有启用规则', async () => {
       const taskId = 'TASK-test-001';
-      const taskDir = path.join(tasksDir, taskId);
-      fs.mkdirSync(taskDir, { recursive: true });
-
       const task = createMockTask({ id: taskId });
-      fs.writeFileSync(
-        path.join(taskDir, 'meta.json'),
-        JSON.stringify(task)
-      );
+      createTaskDir(tasksDir, taskId, task);
 
       const runner = new PreCheckGateRunner(testDir, {
         usePrecheckOrchestrator: false,
@@ -165,9 +151,6 @@ describe('PreCheckGateRunner', () => {
   describe('元数据完整性规则', () => {
     it('完整元数据应该通过', async () => {
       const taskId = 'TASK-test-metadata';
-      const taskDir = path.join(tasksDir, taskId);
-      fs.mkdirSync(taskDir, { recursive: true });
-
       const task = createMockTask({
         id: taskId,
         title: '完整任务',
@@ -175,10 +158,7 @@ describe('PreCheckGateRunner', () => {
         type: 'feature',
         priority: 'P2',
       });
-      fs.writeFileSync(
-        path.join(taskDir, 'meta.json'),
-        JSON.stringify(task)
-      );
+      createTaskDir(tasksDir, taskId, task);
 
       const runner = new PreCheckGateRunner(testDir, {
         usePrecheckOrchestrator: false,
@@ -193,17 +173,11 @@ describe('PreCheckGateRunner', () => {
 
     it('缺少标题应该失败', async () => {
       const taskId = 'TASK-test-no-title';
-      const taskDir = path.join(tasksDir, taskId);
-      fs.mkdirSync(taskDir, { recursive: true });
-
       const task = createMockTask({
         id: taskId,
         title: '',
       });
-      fs.writeFileSync(
-        path.join(taskDir, 'meta.json'),
-        JSON.stringify(task)
-      );
+      createTaskDir(tasksDir, taskId, task);
 
       const runner = new PreCheckGateRunner(testDir, {
         usePrecheckOrchestrator: false,
@@ -219,17 +193,11 @@ describe('PreCheckGateRunner', () => {
 
     it('描述太短应该失败', async () => {
       const taskId = 'TASK-test-short-desc';
-      const taskDir = path.join(tasksDir, taskId);
-      fs.mkdirSync(taskDir, { recursive: true });
-
       const task = createMockTask({
         id: taskId,
         description: '短',
       });
-      fs.writeFileSync(
-        path.join(taskDir, 'meta.json'),
-        JSON.stringify(task)
-      );
+      createTaskDir(tasksDir, taskId, task);
 
       const runner = new PreCheckGateRunner(testDir, {
         usePrecheckOrchestrator: false,
@@ -247,9 +215,6 @@ describe('PreCheckGateRunner', () => {
   describe('检查点有效性规则', () => {
     it('有效检查点应该通过', async () => {
       const taskId = 'TASK-test-checkpoints';
-      const taskDir = path.join(tasksDir, taskId);
-      fs.mkdirSync(taskDir, { recursive: true });
-
       const task = createMockTask({
         id: taskId,
         checkpoints: [
@@ -257,10 +222,7 @@ describe('PreCheckGateRunner', () => {
           { id: 'CP-002', description: '检查点2', status: 'pending' },
         ],
       });
-      fs.writeFileSync(
-        path.join(taskDir, 'meta.json'),
-        JSON.stringify(task)
-      );
+      createTaskDir(tasksDir, taskId, task);
 
       const runner = new PreCheckGateRunner(testDir, {
         usePrecheckOrchestrator: false,
@@ -275,19 +237,13 @@ describe('PreCheckGateRunner', () => {
 
     it('缺少检查点应该失败', async () => {
       const taskId = 'TASK-test-no-checkpoints';
-      const taskDir = path.join(tasksDir, taskId);
-      fs.mkdirSync(taskDir, { recursive: true });
-
       const task = createMockTask({
         id: taskId,
         type: 'bug',
         priority: 'P0',
         checkpoints: [],
       });
-      fs.writeFileSync(
-        path.join(taskDir, 'meta.json'),
-        JSON.stringify(task)
-      );
+      createTaskDir(tasksDir, taskId, task);
 
       const runner = new PreCheckGateRunner(testDir, {
         usePrecheckOrchestrator: false,
@@ -304,17 +260,11 @@ describe('PreCheckGateRunner', () => {
   describe('依赖就绪规则', () => {
     it('无依赖应该通过', async () => {
       const taskId = 'TASK-test-no-deps';
-      const taskDir = path.join(tasksDir, taskId);
-      fs.mkdirSync(taskDir, { recursive: true });
-
       const task = createMockTask({
         id: taskId,
         dependencies: [],
       });
-      fs.writeFileSync(
-        path.join(taskDir, 'meta.json'),
-        JSON.stringify(task)
-      );
+      createTaskDir(tasksDir, taskId, task);
 
       const runner = new PreCheckGateRunner(testDir, {
         usePrecheckOrchestrator: false,
@@ -329,17 +279,11 @@ describe('PreCheckGateRunner', () => {
 
     it('依赖不存在应该失败', async () => {
       const taskId = 'TASK-test-missing-dep';
-      const taskDir = path.join(tasksDir, taskId);
-      fs.mkdirSync(taskDir, { recursive: true });
-
       const task = createMockTask({
         id: taskId,
         dependencies: ['TASK-non-existent'],
       });
-      fs.writeFileSync(
-        path.join(taskDir, 'meta.json'),
-        JSON.stringify(task)
-      );
+      createTaskDir(tasksDir, taskId, task);
 
       const runner = new PreCheckGateRunner(testDir, {
         usePrecheckOrchestrator: false,
@@ -355,31 +299,19 @@ describe('PreCheckGateRunner', () => {
     it('完成的依赖应该通过', async () => {
       // 创建依赖任务
       const depId = 'TASK-dep-completed';
-      const depDir = path.join(tasksDir, depId);
-      fs.mkdirSync(depDir, { recursive: true });
-
       const depTask = createMockTask({
         id: depId,
         status: 'resolved',
       });
-      fs.writeFileSync(
-        path.join(depDir, 'meta.json'),
-        JSON.stringify(depTask)
-      );
+      createTaskDir(tasksDir, depId, depTask);
 
       // 创建主任务
       const taskId = 'TASK-test-with-dep';
-      const taskDir = path.join(tasksDir, taskId);
-      fs.mkdirSync(taskDir, { recursive: true });
-
       const task = createMockTask({
         id: taskId,
         dependencies: [depId],
       });
-      fs.writeFileSync(
-        path.join(taskDir, 'meta.json'),
-        JSON.stringify(task)
-      );
+      createTaskDir(tasksDir, taskId, task);
 
       const runner = new PreCheckGateRunner(testDir, {
         usePrecheckOrchestrator: false,
@@ -396,14 +328,8 @@ describe('PreCheckGateRunner', () => {
   describe('门禁决策', () => {
     it('所有规则通过应该返回PASS', async () => {
       const taskId = 'TASK-test-pass';
-      const taskDir = path.join(tasksDir, taskId);
-      fs.mkdirSync(taskDir, { recursive: true });
-
       const task = createMockTask({ id: taskId });
-      fs.writeFileSync(
-        path.join(taskDir, 'meta.json'),
-        JSON.stringify(task)
-      );
+      createTaskDir(tasksDir, taskId, task);
 
       const runner = new PreCheckGateRunner(testDir, {
         usePrecheckOrchestrator: false,
@@ -417,17 +343,11 @@ describe('PreCheckGateRunner', () => {
 
     it('阻塞规则失败应该返回FAIL', async () => {
       const taskId = 'TASK-test-fail';
-      const taskDir = path.join(tasksDir, taskId);
-      fs.mkdirSync(taskDir, { recursive: true });
-
       const task = createMockTask({
         id: taskId,
         title: '',
       });
-      fs.writeFileSync(
-        path.join(taskDir, 'meta.json'),
-        JSON.stringify(task)
-      );
+      createTaskDir(tasksDir, taskId, task);
 
       const runner = new PreCheckGateRunner(testDir, {
         usePrecheckOrchestrator: false,
@@ -442,9 +362,6 @@ describe('PreCheckGateRunner', () => {
 
     it('非阻塞规则失败应该返回WARN', async () => {
       const taskId = 'TASK-test-warn';
-      const taskDir = path.join(tasksDir, taskId);
-      fs.mkdirSync(taskDir, { recursive: true });
-
       const task = createMockTask({
         id: taskId,
         description: '短',
@@ -452,10 +369,7 @@ describe('PreCheckGateRunner', () => {
         affected_files: undefined,
         initQualityScore: undefined,
       });
-      fs.writeFileSync(
-        path.join(taskDir, 'meta.json'),
-        JSON.stringify(task)
-      );
+      createTaskDir(tasksDir, taskId, task);
 
       const runner = new PreCheckGateRunner(testDir, {
         usePrecheckOrchestrator: false,
@@ -473,14 +387,8 @@ describe('PreCheckGateRunner', () => {
   describe('报告生成', () => {
     it('应该生成报告', async () => {
       const taskId = 'TASK-test-report';
-      const taskDir = path.join(tasksDir, taskId);
-      fs.mkdirSync(taskDir, { recursive: true });
-
       const task = createMockTask({ id: taskId });
-      fs.writeFileSync(
-        path.join(taskDir, 'meta.json'),
-        JSON.stringify(task)
-      );
+      createTaskDir(tasksDir, taskId, task);
 
       const runner = new PreCheckGateRunner(testDir, {
         usePrecheckOrchestrator: false,
@@ -496,17 +404,11 @@ describe('PreCheckGateRunner', () => {
 
     it('失败时应该生成建议', async () => {
       const taskId = 'TASK-test-suggestions';
-      const taskDir = path.join(tasksDir, taskId);
-      fs.mkdirSync(taskDir, { recursive: true });
-
       const task = createMockTask({
         id: taskId,
         title: '',
       });
-      fs.writeFileSync(
-        path.join(taskDir, 'meta.json'),
-        JSON.stringify(task)
-      );
+      createTaskDir(tasksDir, taskId, task);
 
       const runner = new PreCheckGateRunner(testDir, {
         usePrecheckOrchestrator: false,
@@ -527,14 +429,8 @@ describe('PreCheckGateRunner', () => {
 
     it('quickGateCheck应该快速执行检查', async () => {
       const taskId = 'TASK-test-quick';
-      const taskDir = path.join(tasksDir, taskId);
-      fs.mkdirSync(taskDir, { recursive: true });
-
       const task = createMockTask({ id: taskId });
-      fs.writeFileSync(
-        path.join(taskDir, 'meta.json'),
-        JSON.stringify(task)
-      );
+      createTaskDir(tasksDir, taskId, task);
 
       const result = await quickGateCheck(taskId, testDir, {
         usePrecheckOrchestrator: false,
@@ -548,14 +444,8 @@ describe('PreCheckGateRunner', () => {
       const taskIds = ['TASK-test-batch-1', 'TASK-test-batch-2'];
 
       for (const taskId of taskIds) {
-        const taskDir = path.join(tasksDir, taskId);
-        fs.mkdirSync(taskDir, { recursive: true });
-
         const task = createMockTask({ id: taskId });
-        fs.writeFileSync(
-          path.join(taskDir, 'meta.json'),
-          JSON.stringify(task)
-        );
+        createTaskDir(tasksDir, taskId, task);
       }
 
       const results = await batchGateCheck(taskIds, testDir, {
@@ -604,14 +494,8 @@ describe('PreCheckGateRunner', () => {
   describe('格式化输出', () => {
     it('应该格式化结果为字符串', async () => {
       const taskId = 'TASK-test-format';
-      const taskDir = path.join(tasksDir, taskId);
-      fs.mkdirSync(taskDir, { recursive: true });
-
       const task = createMockTask({ id: taskId });
-      fs.writeFileSync(
-        path.join(taskDir, 'meta.json'),
-        JSON.stringify(task)
-      );
+      createTaskDir(tasksDir, taskId, task);
 
       const runner = new PreCheckGateRunner(testDir, {
         usePrecheckOrchestrator: false,

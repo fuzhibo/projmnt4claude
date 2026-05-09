@@ -24,6 +24,10 @@ import {
   type PreQAGateContext,
 } from '../utils/pre-qa-gate/runner.js';
 import type { TaskMeta } from '../types/task.js';
+import {
+  createIsolatedTestEnv,
+  type IsolatedTestEnv,
+} from '../utils/test-env.js';
 
 // 测试辅助函数
 function createMockTask(overrides: Partial<TaskMeta> = {}): TaskMeta {
@@ -64,32 +68,18 @@ function createMockTask(overrides: Partial<TaskMeta> = {}): TaskMeta {
 }
 
 describe('PreQAGateRunner', () => {
+  let env: IsolatedTestEnv;
   let testDir: string;
   let tasksDir: string;
 
-  beforeEach(() => {
-    // 创建临时测试目录
-    testDir = fs.mkdtempSync('/tmp/pre-qa-gate-test-');
-    tasksDir = path.join(testDir, '.projmnt4claude', 'tasks');
-    fs.mkdirSync(tasksDir, { recursive: true });
-
-    // 创建项目配置
-    const configDir = path.join(testDir, '.projmnt4claude');
-    fs.mkdirSync(configDir, { recursive: true });
-    fs.writeFileSync(
-      path.join(configDir, 'config.json'),
-      JSON.stringify({
-        version: '1.0.0',
-        projectName: 'test-project',
-      })
-    );
+  beforeEach(async () => {
+    env = await createIsolatedTestEnv({ prefix: 'pre-qa-gate-test-' });
+    testDir = env.tempDir;
+    tasksDir = env.tasksDir;
   });
 
   afterEach(() => {
-    // 清理测试目录
-    if (fs.existsSync(testDir)) {
-      fs.rmSync(testDir, { recursive: true });
-    }
+    env.cleanup();
   });
 
   describe('基础功能', () => {

@@ -13,7 +13,6 @@
 import { describe, it, expect, beforeEach, afterEach } from 'bun:test';
 import * as fs from 'fs';
 import * as path from 'path';
-import { execSync } from 'child_process';
 import {
   PreDevPhaseGateCoordinator,
   PreDevPhaseRuleRegistry,
@@ -27,6 +26,11 @@ import type {
   PreDevPhaseRule,
 } from '../types/pre-dev-phase-gate.js';
 import type { TaskMeta } from '../types/task.js';
+import {
+  createGitTestEnv,
+  createTaskDir,
+  type GitTestEnv,
+} from '../utils/test-env.js';
 
 // 创建 mock 规则
 function createMockRule(overrides: Partial<PreDevPhaseRule> = {}): PreDevPhaseRule {
@@ -81,23 +85,15 @@ function createMockContext(cwd: string, overrides: Partial<PreDevPhaseCheckConte
 }
 
 describe('PreDevPhaseGateCoordinator', () => {
+  let gitEnv: GitTestEnv;
   let testDir: string;
 
-  beforeEach(() => {
-    // 创建临时测试目录
-    testDir = fs.mkdtempSync('/tmp/predev-coordinator-test-');
+  beforeEach(async () => {
+    // 创建 Git 测试环境
+    gitEnv = await createGitTestEnv();
+    testDir = gitEnv.gitDir;
 
-    // 初始化 git 仓库
-    execSync('git init', { cwd: testDir, encoding: 'utf-8' });
-    execSync('git config user.email "test@test.com"', { cwd: testDir, encoding: 'utf-8' });
-    execSync('git config user.name "Test User"', { cwd: testDir, encoding: 'utf-8' });
-
-    // 创建初始提交
-    fs.writeFileSync(path.join(testDir, 'README.md'), '# Test Project');
-    execSync('git add README.md', { cwd: testDir, encoding: 'utf-8' });
-    execSync('git commit -m "Initial commit"', { cwd: testDir, encoding: 'utf-8' });
-
-    // 创建 .projmnt4claude 目录结构
+    // 创建 .projmnt4claude 目录结构和任务
     const tasksDir = path.join(testDir, '.projmnt4claude', 'tasks', 'TASK-test-001');
     fs.mkdirSync(tasksDir, { recursive: true });
     fs.writeFileSync(path.join(tasksDir, 'meta.json'), JSON.stringify({
@@ -114,10 +110,8 @@ describe('PreDevPhaseGateCoordinator', () => {
   });
 
   afterEach(() => {
-    // 清理测试目录
-    if (testDir && fs.existsSync(testDir)) {
-      fs.rmSync(testDir, { recursive: true, force: true });
-    }
+    // 清理测试环境
+    gitEnv.cleanup();
   });
 
   describe('CP-PDGC-1: 门禁执行入口 (runGate)', () => {
@@ -184,7 +178,7 @@ describe('PreDevPhaseGateCoordinator', () => {
 
     it('stopOnFailure=true 时遇到错误停止', async () => {
       // 创建一个不干净的工作区
-      fs.writeFileSync(path.join(testDir, 'uncommitted.txt'), 'dirty');
+      gitEnv.createUntracked('uncommitted.txt', 'dirty');
 
       const coordinator = new PreDevPhaseGateCoordinator({
         enabled: true,
@@ -364,12 +358,12 @@ describe('PreDevPhaseRuleRegistry', () => {
     expect(gitRules.every(r => r.type === 'git_workspace')).toBe(true);
   });
 
-  it('应获取适用于上下文的规则', () => {
+  it('应获取适用于上下文的规则', async () => {
     const registry = new PreDevPhaseRuleRegistry();
-    const testDir = fs.mkdtempSync('/tmp/registry-test-');
+    const gitEnv = await createGitTestEnv();
 
     try {
-      const context = createMockContext(testDir, {
+      const context = createMockContext(gitEnv.gitDir, {
         config: {
           enabled: true,
           rules: new Map([
@@ -386,11 +380,8 @@ describe('PreDevPhaseRuleRegistry', () => {
 
       // R-GIT-001 应该启用
       expect(applicableRules.some(r => r.id === 'R-GIT-001')).toBe(true);
-
-      // 清理
-      fs.rmSync(testDir, { recursive: true, force: true });
-    } catch {
-      fs.rmSync(testDir, { recursive: true, force: true });
+    } finally {
+      gitEnv.cleanup();
     }
   });
 
@@ -427,20 +418,12 @@ describe('CP-PDGC-10: 工厂函数 (createPreDevPhaseGateCoordinator)', () => {
 });
 
 describe('CP-PDGC-11: 便利函数 (runPreDevPhaseGate)', () => {
+  let gitEnv: GitTestEnv;
   let testDir: string;
 
-  beforeEach(() => {
-    testDir = fs.mkdtempSync('/tmp/runpredev-test-');
-
-    // 初始化 git 仓库
-    execSync('git init', { cwd: testDir, encoding: 'utf-8' });
-    execSync('git config user.email "test@test.com"', { cwd: testDir, encoding: 'utf-8' });
-    execSync('git config user.name "Test User"', { cwd: testDir, encoding: 'utf-8' });
-
-    // 创建初始提交
-    fs.writeFileSync(path.join(testDir, 'README.md'), '# Test Project');
-    execSync('git add README.md', { cwd: testDir, encoding: 'utf-8' });
-    execSync('git commit -m "Initial commit"', { cwd: testDir, encoding: 'utf-8' });
+  beforeEach(async () => {
+    gitEnv = await createGitTestEnv();
+    testDir = gitEnv.gitDir;
 
     // 创建任务目录 - 需要完整的 TaskMeta 结构
     const tasksDir = path.join(testDir, '.projmnt4claude', 'tasks', 'TASK-convenience-001');
@@ -471,9 +454,7 @@ describe('CP-PDGC-11: 便利函数 (runPreDevPhaseGate)', () => {
   });
 
   afterEach(() => {
-    if (testDir && fs.existsSync(testDir)) {
-      fs.rmSync(testDir, { recursive: true, force: true });
-    }
+    gitEnv.cleanup();
   });
 
   it('应使用便捷参数运行门禁检查', async () => {
@@ -532,20 +513,12 @@ describe('CP-PDGC-11: 便利函数 (runPreDevPhaseGate)', () => {
 });
 
 describe('CP-PDGC-12: 带自动修复的便利函数 (runPreDevPhaseGateWithAutoFix)', () => {
+  let gitEnv: GitTestEnv;
   let testDir: string;
 
-  beforeEach(() => {
-    testDir = fs.mkdtempSync('/tmp/runpredev-autofix-test-');
-
-    // 初始化 git 仓库
-    execSync('git init', { cwd: testDir, encoding: 'utf-8' });
-    execSync('git config user.email "test@test.com"', { cwd: testDir, encoding: 'utf-8' });
-    execSync('git config user.name "Test User"', { cwd: testDir, encoding: 'utf-8' });
-
-    // 创建初始提交
-    fs.writeFileSync(path.join(testDir, 'README.md'), '# Test Project');
-    execSync('git add README.md', { cwd: testDir, encoding: 'utf-8' });
-    execSync('git commit -m "Initial commit"', { cwd: testDir, encoding: 'utf-8' });
+  beforeEach(async () => {
+    gitEnv = await createGitTestEnv();
+    testDir = gitEnv.gitDir;
 
     // 创建任务目录 - 需要完整的 TaskMeta 结构
     const tasksDir = path.join(testDir, '.projmnt4claude', 'tasks', 'TASK-autofix-001');
@@ -576,9 +549,7 @@ describe('CP-PDGC-12: 带自动修复的便利函数 (runPreDevPhaseGateWithAuto
   });
 
   afterEach(() => {
-    if (testDir && fs.existsSync(testDir)) {
-      fs.rmSync(testDir, { recursive: true, force: true });
-    }
+    gitEnv.cleanup();
   });
 
   it('应运行门禁检查并返回修复结果', async () => {

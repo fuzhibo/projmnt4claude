@@ -11,7 +11,6 @@
 import { describe, it, expect, beforeEach, afterEach } from 'bun:test';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
-import * as os from 'node:os';
 import {
   PostQAGateRunner,
   createPostQAGateRunner,
@@ -23,24 +22,24 @@ import {
 import type { PendingHumanVerification } from '../utils/post-qa-gate/runner.js';
 import { createDefaultTaskMeta } from '../types/task.js';
 import { writeTaskMeta } from '../utils/task.js';
+import {
+  createIsolatedTestEnv,
+  type IsolatedTestEnv,
+} from '../utils/test-env.js';
 
 describe('PostQAGateRunner', () => {
+  let env: IsolatedTestEnv;
   let tempDir: string;
   let runner: PostQAGateRunner;
 
-  beforeEach(() => {
-    tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'post-qa-gate-test-'));
+  beforeEach(async () => {
+    env = await createIsolatedTestEnv({ prefix: 'post-qa-gate-test-' });
+    tempDir = env.tempDir;
     runner = createPostQAGateRunner(tempDir);
-
-    // Create .projmnt4claude structure
-    fs.mkdirSync(path.join(tempDir, '.projmnt4claude', 'tasks'), { recursive: true });
-    fs.mkdirSync(path.join(tempDir, '.projmnt4claude', 'outputs'), { recursive: true });
-    fs.mkdirSync(path.join(tempDir, '.projmnt4claude', 'reports'), { recursive: true });
   });
 
   afterEach(() => {
-    // Clean up temp directory
-    fs.rmSync(tempDir, { recursive: true, force: true });
+    env.cleanup();
   });
 
   describe('Basic Functionality', () => {
@@ -106,7 +105,7 @@ describe('PostQAGateRunner', () => {
       writeTaskMeta(task, tempDir);
 
       // Create report
-      const reportPath = path.join(tempDir, '.projmnt4claude', 'outputs', taskId, 'qa-report.json');
+      const reportPath = path.join(env.projectDir, 'outputs', taskId, 'qa-report.json');
       fs.mkdirSync(path.dirname(reportPath), { recursive: true });
       fs.writeFileSync(reportPath, JSON.stringify({
         version: '1.0.0',
@@ -132,7 +131,7 @@ describe('PostQAGateRunner', () => {
       writeTaskMeta(task, tempDir);
 
       // Create invalid JSON report
-      const reportPath = path.join(tempDir, '.projmnt4claude', 'outputs', taskId, 'qa-report.json');
+      const reportPath = path.join(env.projectDir, 'outputs', taskId, 'qa-report.json');
       fs.mkdirSync(path.dirname(reportPath), { recursive: true });
       fs.writeFileSync(reportPath, 'not valid json{{{');
 
@@ -148,7 +147,7 @@ describe('PostQAGateRunner', () => {
       writeTaskMeta(task, tempDir);
 
       // Create report with missing fields
-      const reportPath = path.join(tempDir, '.projmnt4claude', 'outputs', taskId, 'qa-report.json');
+      const reportPath = path.join(env.projectDir, 'outputs', taskId, 'qa-report.json');
       fs.mkdirSync(path.dirname(reportPath), { recursive: true });
       fs.writeFileSync(reportPath, JSON.stringify({
         taskId,
@@ -167,7 +166,7 @@ describe('PostQAGateRunner', () => {
       writeTaskMeta(task, tempDir);
 
       // Create valid report
-      const reportPath = path.join(tempDir, '.projmnt4claude', 'outputs', taskId, 'qa-report.json');
+      const reportPath = path.join(env.projectDir, 'outputs', taskId, 'qa-report.json');
       fs.mkdirSync(path.dirname(reportPath), { recursive: true });
       fs.writeFileSync(reportPath, JSON.stringify({
         version: '1.0.0',
@@ -192,7 +191,7 @@ describe('PostQAGateRunner', () => {
       const task = createDefaultTaskMeta(taskId, 'Test Task', 'feature');
       writeTaskMeta(task, tempDir);
 
-      const reportPath = path.join(tempDir, '.projmnt4claude', 'outputs', taskId, 'qa-report.json');
+      const reportPath = path.join(env.projectDir, 'outputs', taskId, 'qa-report.json');
       fs.mkdirSync(path.dirname(reportPath), { recursive: true });
       fs.writeFileSync(reportPath, JSON.stringify({
         version: '1.0.0',
@@ -215,7 +214,7 @@ describe('PostQAGateRunner', () => {
       const task = createDefaultTaskMeta(taskId, 'Test Task', 'feature');
       writeTaskMeta(task, tempDir);
 
-      const reportPath = path.join(tempDir, '.projmnt4claude', 'outputs', taskId, 'qa-report.json');
+      const reportPath = path.join(env.projectDir, 'outputs', taskId, 'qa-report.json');
       fs.mkdirSync(path.dirname(reportPath), { recursive: true });
       fs.writeFileSync(reportPath, JSON.stringify({
         version: '1.0.0',
@@ -238,7 +237,7 @@ describe('PostQAGateRunner', () => {
       const task = createDefaultTaskMeta(taskId, 'Test Task', 'feature');
       writeTaskMeta(task, tempDir);
 
-      const reportPath = path.join(tempDir, '.projmnt4claude', 'outputs', taskId, 'qa-report.json');
+      const reportPath = path.join(env.projectDir, 'outputs', taskId, 'qa-report.json');
       fs.mkdirSync(path.dirname(reportPath), { recursive: true });
       fs.writeFileSync(reportPath, JSON.stringify({
         version: '1.0.0',
@@ -263,7 +262,7 @@ describe('PostQAGateRunner', () => {
       const task = createDefaultTaskMeta(taskId, 'Test Task', 'feature');
       writeTaskMeta(task, tempDir);
 
-      const reportPath = path.join(tempDir, '.projmnt4claude', 'outputs', taskId, 'qa-report.json');
+      const reportPath = path.join(env.projectDir, 'outputs', taskId, 'qa-report.json');
       fs.mkdirSync(path.dirname(reportPath), { recursive: true });
       fs.writeFileSync(reportPath, JSON.stringify({
         version: '1.0.0',
@@ -286,7 +285,7 @@ describe('PostQAGateRunner', () => {
       const task = createDefaultTaskMeta(taskId, 'Test Task', 'feature');
       writeTaskMeta(task, tempDir);
 
-      const reportPath = path.join(tempDir, '.projmnt4claude', 'outputs', taskId, 'qa-report.json');
+      const reportPath = path.join(env.projectDir, 'outputs', taskId, 'qa-report.json');
       fs.mkdirSync(path.dirname(reportPath), { recursive: true });
       fs.writeFileSync(reportPath, JSON.stringify({
         version: '1.0.0',
@@ -309,7 +308,7 @@ describe('PostQAGateRunner', () => {
       const task = createDefaultTaskMeta(taskId, 'Test Task', 'feature');
       writeTaskMeta(task, tempDir);
 
-      const reportPath = path.join(tempDir, '.projmnt4claude', 'outputs', taskId, 'qa-report.json');
+      const reportPath = path.join(env.projectDir, 'outputs', taskId, 'qa-report.json');
       fs.mkdirSync(path.dirname(reportPath), { recursive: true });
       fs.writeFileSync(reportPath, JSON.stringify({
         version: '1.0.0',
@@ -335,7 +334,7 @@ describe('PostQAGateRunner', () => {
       const task = createDefaultTaskMeta(taskId, 'Test Task', 'feature');
       writeTaskMeta(task, tempDir);
 
-      const reportPath = path.join(tempDir, '.projmnt4claude', 'outputs', taskId, 'qa-report.json');
+      const reportPath = path.join(env.projectDir, 'outputs', taskId, 'qa-report.json');
       fs.mkdirSync(path.dirname(reportPath), { recursive: true });
       fs.writeFileSync(reportPath, JSON.stringify({
         version: '1.0.0',
@@ -363,7 +362,7 @@ describe('PostQAGateRunner', () => {
       const task = createDefaultTaskMeta(taskId, 'Test Task', 'feature');
       writeTaskMeta(task, tempDir);
 
-      const reportPath = path.join(tempDir, '.projmnt4claude', 'outputs', taskId, 'qa-report.json');
+      const reportPath = path.join(env.projectDir, 'outputs', taskId, 'qa-report.json');
       fs.mkdirSync(path.dirname(reportPath), { recursive: true });
       fs.writeFileSync(reportPath, JSON.stringify({
         version: '1.0.0',
@@ -405,7 +404,7 @@ describe('PostQAGateRunner', () => {
       ];
       writeTaskMeta(task, tempDir);
 
-      const reportPath = path.join(tempDir, '.projmnt4claude', 'outputs', taskId, 'qa-report.json');
+      const reportPath = path.join(env.projectDir, 'outputs', taskId, 'qa-report.json');
       fs.mkdirSync(path.dirname(reportPath), { recursive: true });
       fs.writeFileSync(reportPath, JSON.stringify({
         version: '1.0.0',
@@ -445,7 +444,7 @@ describe('PostQAGateRunner', () => {
       ];
       writeTaskMeta(task, tempDir);
 
-      const reportPath = path.join(tempDir, '.projmnt4claude', 'outputs', taskId, 'qa-report.json');
+      const reportPath = path.join(env.projectDir, 'outputs', taskId, 'qa-report.json');
       fs.mkdirSync(path.dirname(reportPath), { recursive: true });
       fs.writeFileSync(reportPath, JSON.stringify({
         version: '1.0.0',
@@ -472,7 +471,7 @@ describe('PostQAGateRunner', () => {
       const task = createDefaultTaskMeta(taskId, 'Test Task', 'feature');
       writeTaskMeta(task, tempDir);
 
-      const reportPath = path.join(tempDir, '.projmnt4claude', 'outputs', taskId, 'qa-report.json');
+      const reportPath = path.join(env.projectDir, 'outputs', taskId, 'qa-report.json');
       fs.mkdirSync(path.dirname(reportPath), { recursive: true });
       fs.writeFileSync(reportPath, JSON.stringify({
         version: '1.0.0',
@@ -506,7 +505,7 @@ describe('PostQAGateRunner', () => {
       ];
       writeTaskMeta(task, tempDir);
 
-      const reportPath = path.join(tempDir, '.projmnt4claude', 'outputs', taskId, 'qa-report.json');
+      const reportPath = path.join(env.projectDir, 'outputs', taskId, 'qa-report.json');
       fs.mkdirSync(path.dirname(reportPath), { recursive: true });
       fs.writeFileSync(reportPath, JSON.stringify({
         version: '1.0.0',
@@ -532,7 +531,7 @@ describe('PostQAGateRunner', () => {
       const task = createDefaultTaskMeta(taskId, 'Test Task', 'feature');
       writeTaskMeta(task, tempDir);
 
-      const reportPath = path.join(tempDir, '.projmnt4claude', 'outputs', taskId, 'qa-report.json');
+      const reportPath = path.join(env.projectDir, 'outputs', taskId, 'qa-report.json');
       fs.mkdirSync(path.dirname(reportPath), { recursive: true });
       fs.writeFileSync(reportPath, JSON.stringify({
         version: '1.0.0',
@@ -565,7 +564,7 @@ describe('PostQAGateRunner', () => {
       ];
       writeTaskMeta(task, tempDir);
 
-      const reportPath = path.join(tempDir, '.projmnt4claude', 'outputs', taskId, 'qa-report.json');
+      const reportPath = path.join(env.projectDir, 'outputs', taskId, 'qa-report.json');
       fs.mkdirSync(path.dirname(reportPath), { recursive: true });
       fs.writeFileSync(reportPath, JSON.stringify({
         version: '1.0.0',
@@ -590,7 +589,7 @@ describe('PostQAGateRunner', () => {
       const task = createDefaultTaskMeta(taskId, 'Test Task', 'feature');
       writeTaskMeta(task, tempDir);
 
-      const reportPath = path.join(tempDir, '.projmnt4claude', 'outputs', taskId, 'qa-report.json');
+      const reportPath = path.join(env.projectDir, 'outputs', taskId, 'qa-report.json');
       fs.mkdirSync(path.dirname(reportPath), { recursive: true });
       fs.writeFileSync(reportPath, JSON.stringify({
         version: '1.0.0',
@@ -614,7 +613,7 @@ describe('PostQAGateRunner', () => {
       const task = createDefaultTaskMeta(taskId, 'Test Task', 'feature');
       writeTaskMeta(task, tempDir);
 
-      const reportPath = path.join(tempDir, '.projmnt4claude', 'outputs', taskId, 'qa-report.json');
+      const reportPath = path.join(env.projectDir, 'outputs', taskId, 'qa-report.json');
       fs.mkdirSync(path.dirname(reportPath), { recursive: true });
       fs.writeFileSync(reportPath, JSON.stringify({
         version: '1.0.0',
@@ -646,7 +645,7 @@ describe('PostQAGateRunner', () => {
       const task = createDefaultTaskMeta(taskId, 'Test Task', 'feature');
       writeTaskMeta(task, tempDir);
 
-      const reportPath = path.join(tempDir, '.projmnt4claude', 'outputs', taskId, 'qa-report.json');
+      const reportPath = path.join(env.projectDir, 'outputs', taskId, 'qa-report.json');
       fs.mkdirSync(path.dirname(reportPath), { recursive: true });
       fs.writeFileSync(reportPath, JSON.stringify({
         version: '1.0.0',
@@ -684,7 +683,7 @@ describe('PostQAGateRunner', () => {
       ];
       writeTaskMeta(task, tempDir);
 
-      const reportPath = path.join(tempDir, '.projmnt4claude', 'outputs', taskId, 'qa-report.json');
+      const reportPath = path.join(env.projectDir, 'outputs', taskId, 'qa-report.json');
       fs.mkdirSync(path.dirname(reportPath), { recursive: true });
       fs.writeFileSync(reportPath, JSON.stringify({
         version: '1.0.0',
@@ -708,7 +707,7 @@ describe('PostQAGateRunner', () => {
       const task = createDefaultTaskMeta(taskId, 'Test Task', 'feature');
       writeTaskMeta(task, tempDir);
 
-      const reportPath = path.join(tempDir, '.projmnt4claude', 'outputs', taskId, 'qa-report.json');
+      const reportPath = path.join(env.projectDir, 'outputs', taskId, 'qa-report.json');
       fs.mkdirSync(path.dirname(reportPath), { recursive: true });
       fs.writeFileSync(reportPath, JSON.stringify({
         version: '1.0.0',
@@ -761,7 +760,7 @@ describe('PostQAGateRunner', () => {
       ];
       writeTaskMeta(task, tempDir);
 
-      const reportPath = path.join(tempDir, '.projmnt4claude', 'outputs', taskId, 'qa-report.json');
+      const reportPath = path.join(env.projectDir, 'outputs', taskId, 'qa-report.json');
       fs.mkdirSync(path.dirname(reportPath), { recursive: true });
       fs.writeFileSync(reportPath, JSON.stringify({
         version: '1.0.0',
@@ -773,7 +772,7 @@ describe('PostQAGateRunner', () => {
         coverage: 0.85,
       }));
 
-      const gateReportPath = path.join(tempDir, '.projmnt4claude', 'reports', 'post-qa-gate-report.json');
+      const gateReportPath = path.join(env.projectDir, 'reports', 'post-qa-gate-report.json');
       const customRunner = createPostQAGateRunner(tempDir, {
         generateReport: true,
         reportPath: '.projmnt4claude/reports/post-qa-gate-report.json',

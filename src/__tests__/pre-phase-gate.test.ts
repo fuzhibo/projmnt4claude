@@ -9,7 +9,6 @@
  */
 
 import { describe, it, expect, beforeEach, afterEach } from 'bun:test';
-import * as fs from 'fs';
 import * as path from 'path';
 import {
   PrePhaseGateChecker,
@@ -23,6 +22,11 @@ import type {
   ExecutionPhase,
 } from '../types/pre-phase-gate.js';
 import type { TaskMeta } from '../types/task.js';
+import {
+  createIsolatedTestEnv,
+  createTaskDir,
+  type IsolatedTestEnv,
+} from '../utils/test-env.js';
 
 // 测试辅助函数
 function createMockTask(overrides: Partial<TaskMeta> = {}): TaskMeta {
@@ -52,32 +56,20 @@ function createMockTask(overrides: Partial<TaskMeta> = {}): TaskMeta {
 }
 
 describe('PrePhaseGateChecker', () => {
+  let env: IsolatedTestEnv;
   let testDir: string;
   let tasksDir: string;
 
-  beforeEach(() => {
-    // 创建临时测试目录
-    testDir = fs.mkdtempSync('/tmp/pre-phase-gate-test-');
-    tasksDir = path.join(testDir, '.projmnt4claude', 'tasks');
-    fs.mkdirSync(tasksDir, { recursive: true });
-
-    // 创建项目配置
-    const configDir = path.join(testDir, '.projmnt4claude');
-    fs.mkdirSync(configDir, { recursive: true });
-    fs.writeFileSync(
-      path.join(configDir, 'config.json'),
-      JSON.stringify({
-        version: '1.0.0',
-        projectName: 'test-project',
-      })
-    );
+  beforeEach(async () => {
+    // 创建隔离测试环境
+    env = await createIsolatedTestEnv();
+    testDir = env.tempDir;
+    tasksDir = env.tasksDir;
   });
 
   afterEach(() => {
-    // 清理测试目录
-    if (fs.existsSync(testDir)) {
-      fs.rmSync(testDir, { recursive: true });
-    }
+    // 清理测试环境
+    env.cleanup();
   });
 
   describe('基础功能', () => {
@@ -117,14 +109,8 @@ describe('PrePhaseGateChecker', () => {
   describe('development 阶段门禁', () => {
     it('状态为 open 的任务应该允许进入 development 阶段', async () => {
       const taskId = 'TASK-test-dev-open';
-      const taskDir = path.join(tasksDir, taskId);
-      fs.mkdirSync(taskDir, { recursive: true });
-
       const task = createMockTask({ id: taskId, status: 'open' });
-      fs.writeFileSync(
-        path.join(taskDir, 'meta.json'),
-        JSON.stringify(task)
-      );
+      createTaskDir(tasksDir, taskId, task);
 
       const checker = new PrePhaseGateChecker(testDir);
       const result = await checker.checkPhaseEntry(taskId, 'development');
@@ -136,14 +122,8 @@ describe('PrePhaseGateChecker', () => {
 
     it('状态为 in_progress 的任务应该允许进入 development 阶段', async () => {
       const taskId = 'TASK-test-dev-progress';
-      const taskDir = path.join(tasksDir, taskId);
-      fs.mkdirSync(taskDir, { recursive: true });
-
       const task = createMockTask({ id: taskId, status: 'in_progress' });
-      fs.writeFileSync(
-        path.join(taskDir, 'meta.json'),
-        JSON.stringify(task)
-      );
+      createTaskDir(tasksDir, taskId, task);
 
       const checker = new PrePhaseGateChecker(testDir);
       const result = await checker.checkPhaseEntry(taskId, 'development');
@@ -155,14 +135,8 @@ describe('PrePhaseGateChecker', () => {
 
     it('状态为 failed 的任务不应该允许进入 development 阶段', async () => {
       const taskId = 'TASK-test-dev-failed';
-      const taskDir = path.join(tasksDir, taskId);
-      fs.mkdirSync(taskDir, { recursive: true });
-
       const task = createMockTask({ id: taskId, status: 'failed' });
-      fs.writeFileSync(
-        path.join(taskDir, 'meta.json'),
-        JSON.stringify(task)
-      );
+      createTaskDir(tasksDir, taskId, task);
 
       const checker = new PrePhaseGateChecker(testDir);
       const result = await checker.checkPhaseEntry(taskId, 'development');
@@ -173,14 +147,8 @@ describe('PrePhaseGateChecker', () => {
 
     it('状态为 resolved 的任务不应该允许进入 development 阶段', async () => {
       const taskId = 'TASK-test-dev-resolved';
-      const taskDir = path.join(tasksDir, taskId);
-      fs.mkdirSync(taskDir, { recursive: true });
-
       const task = createMockTask({ id: taskId, status: 'resolved' });
-      fs.writeFileSync(
-        path.join(taskDir, 'meta.json'),
-        JSON.stringify(task)
-      );
+      createTaskDir(tasksDir, taskId, task);
 
       const checker = new PrePhaseGateChecker(testDir);
       const result = await checker.checkPhaseEntry(taskId, 'development');
@@ -191,14 +159,8 @@ describe('PrePhaseGateChecker', () => {
 
     it('禁用时应该直接允许', async () => {
       const taskId = 'TASK-test-dev-disabled';
-      const taskDir = path.join(tasksDir, taskId);
-      fs.mkdirSync(taskDir, { recursive: true });
-
       const task = createMockTask({ id: taskId, status: 'failed' });
-      fs.writeFileSync(
-        path.join(taskDir, 'meta.json'),
-        JSON.stringify(task)
-      );
+      createTaskDir(tasksDir, taskId, task);
 
       const checker = new PrePhaseGateChecker(testDir, { enabled: false });
       const result = await checker.checkPhaseEntry(taskId, 'development');
@@ -220,14 +182,8 @@ describe('PrePhaseGateChecker', () => {
   describe('code_review 阶段门禁', () => {
     it('有成功开发报告的任务应该允许进入 code_review 阶段', async () => {
       const taskId = 'TASK-test-cr-success';
-      const taskDir = path.join(tasksDir, taskId);
-      fs.mkdirSync(taskDir, { recursive: true });
-
       const task = createMockTask({ id: taskId });
-      fs.writeFileSync(
-        path.join(taskDir, 'meta.json'),
-        JSON.stringify(task)
-      );
+      createTaskDir(tasksDir, taskId, task);
 
       const checker = new PrePhaseGateChecker(testDir);
       const result = await checker.checkPhaseEntry(taskId, 'code_review', {
@@ -249,14 +205,8 @@ describe('PrePhaseGateChecker', () => {
 
     it('开发失败的任务不应该允许进入 code_review 阶段', async () => {
       const taskId = 'TASK-test-cr-failed';
-      const taskDir = path.join(tasksDir, taskId);
-      fs.mkdirSync(taskDir, { recursive: true });
-
       const task = createMockTask({ id: taskId });
-      fs.writeFileSync(
-        path.join(taskDir, 'meta.json'),
-        JSON.stringify(task)
-      );
+      createTaskDir(tasksDir, taskId, task);
 
       const checker = new PrePhaseGateChecker(testDir);
       const result = await checker.checkPhaseEntry(taskId, 'code_review', {
@@ -279,14 +229,8 @@ describe('PrePhaseGateChecker', () => {
 
     it('缺少开发报告的任务不应该允许进入 code_review 阶段', async () => {
       const taskId = 'TASK-test-cr-no-report';
-      const taskDir = path.join(tasksDir, taskId);
-      fs.mkdirSync(taskDir, { recursive: true });
-
       const task = createMockTask({ id: taskId });
-      fs.writeFileSync(
-        path.join(taskDir, 'meta.json'),
-        JSON.stringify(task)
-      );
+      createTaskDir(tasksDir, taskId, task);
 
       const checker = new PrePhaseGateChecker(testDir);
       const result = await checker.checkPhaseEntry(taskId, 'code_review');
@@ -299,14 +243,8 @@ describe('PrePhaseGateChecker', () => {
   describe('qa 阶段门禁', () => {
     it('代码审核通过的任务应该允许进入 qa 阶段', async () => {
       const taskId = 'TASK-test-qa-pass';
-      const taskDir = path.join(tasksDir, taskId);
-      fs.mkdirSync(taskDir, { recursive: true });
-
       const task = createMockTask({ id: taskId });
-      fs.writeFileSync(
-        path.join(taskDir, 'meta.json'),
-        JSON.stringify(task)
-      );
+      createTaskDir(tasksDir, taskId, task);
 
       const checker = new PrePhaseGateChecker(testDir);
       const result = await checker.checkPhaseEntry(taskId, 'qa', {
@@ -326,14 +264,8 @@ describe('PrePhaseGateChecker', () => {
 
     it('代码审核未通过的任务不应该允许进入 qa 阶段', async () => {
       const taskId = 'TASK-test-qa-nopass';
-      const taskDir = path.join(tasksDir, taskId);
-      fs.mkdirSync(taskDir, { recursive: true });
-
       const task = createMockTask({ id: taskId });
-      fs.writeFileSync(
-        path.join(taskDir, 'meta.json'),
-        JSON.stringify(task)
-      );
+      createTaskDir(tasksDir, taskId, task);
 
       const checker = new PrePhaseGateChecker(testDir);
       const result = await checker.checkPhaseEntry(taskId, 'qa', {
@@ -356,14 +288,8 @@ describe('PrePhaseGateChecker', () => {
   describe('evaluation 阶段门禁', () => {
     it('QA通过的任务应该允许进入 evaluation 阶段', async () => {
       const taskId = 'TASK-test-eval-pass';
-      const taskDir = path.join(tasksDir, taskId);
-      fs.mkdirSync(taskDir, { recursive: true });
-
       const task = createMockTask({ id: taskId });
-      fs.writeFileSync(
-        path.join(taskDir, 'meta.json'),
-        JSON.stringify(task)
-      );
+      createTaskDir(tasksDir, taskId, task);
 
       const checker = new PrePhaseGateChecker(testDir);
       const result = await checker.checkPhaseEntry(taskId, 'evaluation', {
@@ -381,14 +307,8 @@ describe('PrePhaseGateChecker', () => {
 
     it('QA未通过的任务不应该允许进入 evaluation 阶段', async () => {
       const taskId = 'TASK-test-eval-fail';
-      const taskDir = path.join(tasksDir, taskId);
-      fs.mkdirSync(taskDir, { recursive: true });
-
       const task = createMockTask({ id: taskId });
-      fs.writeFileSync(
-        path.join(taskDir, 'meta.json'),
-        JSON.stringify(task)
-      );
+      createTaskDir(tasksDir, taskId, task);
 
       const checker = new PrePhaseGateChecker(testDir);
       const result = await checker.checkPhaseEntry(taskId, 'evaluation', {
@@ -409,14 +329,8 @@ describe('PrePhaseGateChecker', () => {
   describe('门禁决策', () => {
     it('所有规则通过应该返回 ALLOW', async () => {
       const taskId = 'TASK-test-allow';
-      const taskDir = path.join(tasksDir, taskId);
-      fs.mkdirSync(taskDir, { recursive: true });
-
       const task = createMockTask({ id: taskId, status: 'open' });
-      fs.writeFileSync(
-        path.join(taskDir, 'meta.json'),
-        JSON.stringify(task)
-      );
+      createTaskDir(tasksDir, taskId, task);
 
       const checker = new PrePhaseGateChecker(testDir);
       const result = await checker.checkPhaseEntry(taskId, 'development');
@@ -427,14 +341,8 @@ describe('PrePhaseGateChecker', () => {
 
     it('阻塞规则失败应该返回 BLOCK', async () => {
       const taskId = 'TASK-test-block';
-      const taskDir = path.join(tasksDir, taskId);
-      fs.mkdirSync(taskDir, { recursive: true });
-
       const task = createMockTask({ id: taskId, status: 'failed' });
-      fs.writeFileSync(
-        path.join(taskDir, 'meta.json'),
-        JSON.stringify(task)
-      );
+      createTaskDir(tasksDir, taskId, task);
 
       const checker = new PrePhaseGateChecker(testDir);
       const result = await checker.checkPhaseEntry(taskId, 'development');
@@ -448,14 +356,8 @@ describe('PrePhaseGateChecker', () => {
   describe('报告生成', () => {
     it('应该生成报告', async () => {
       const taskId = 'TASK-test-report';
-      const taskDir = path.join(tasksDir, taskId);
-      fs.mkdirSync(taskDir, { recursive: true });
-
       const task = createMockTask({ id: taskId, status: 'open' });
-      fs.writeFileSync(
-        path.join(taskDir, 'meta.json'),
-        JSON.stringify(task)
-      );
+      createTaskDir(tasksDir, taskId, task);
 
       const checker = new PrePhaseGateChecker(testDir);
       const result = await checker.checkPhaseEntry(taskId, 'development');
@@ -469,14 +371,8 @@ describe('PrePhaseGateChecker', () => {
 
     it('应该格式化结果为字符串', async () => {
       const taskId = 'TASK-test-format';
-      const taskDir = path.join(tasksDir, taskId);
-      fs.mkdirSync(taskDir, { recursive: true });
-
       const task = createMockTask({ id: taskId, status: 'open' });
-      fs.writeFileSync(
-        path.join(taskDir, 'meta.json'),
-        JSON.stringify(task)
-      );
+      createTaskDir(tasksDir, taskId, task);
 
       const checker = new PrePhaseGateChecker(testDir);
       const result = await checker.checkPhaseEntry(taskId, 'development');
@@ -496,14 +392,8 @@ describe('PrePhaseGateChecker', () => {
 
     it('quickPhaseGateCheck 应该快速执行检查', async () => {
       const taskId = 'TASK-test-quick';
-      const taskDir = path.join(tasksDir, taskId);
-      fs.mkdirSync(taskDir, { recursive: true });
-
       const task = createMockTask({ id: taskId, status: 'open' });
-      fs.writeFileSync(
-        path.join(taskDir, 'meta.json'),
-        JSON.stringify(task)
-      );
+      createTaskDir(tasksDir, taskId, task);
 
       const result = await quickPhaseGateCheck(taskId, 'development', testDir);
 
@@ -514,14 +404,8 @@ describe('PrePhaseGateChecker', () => {
 
     it('validatePhaseEntry 应该返回验证结果', async () => {
       const taskId = 'TASK-test-validate';
-      const taskDir = path.join(tasksDir, taskId);
-      fs.mkdirSync(taskDir, { recursive: true });
-
       const task = createMockTask({ id: taskId, status: 'open' });
-      fs.writeFileSync(
-        path.join(taskDir, 'meta.json'),
-        JSON.stringify(task)
-      );
+      createTaskDir(tasksDir, taskId, task);
 
       const validation = await validatePhaseEntry(taskId, 'development', testDir);
 
