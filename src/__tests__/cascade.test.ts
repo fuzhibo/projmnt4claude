@@ -2,8 +2,12 @@
  * 级联操作模块单元测试
  *
  * 测试 computeFailureCascade, executeFailureCascade, computeUnblockingImpact
+ *
+ * 迁移说明:
+ * - 使用 createIsolatedTestEnv 创建隔离测试环境
+ * - 确保测试隔离，防止跨测试污染
  */
-import { describe, test, expect, beforeEach } from 'bun:test';
+import { describe, test, expect, beforeEach, afterEach } from 'bun:test';
 import { DependencyGraph } from '../utils/dependency-graph/graph.js';
 import {
   computeFailureCascade,
@@ -12,6 +16,10 @@ import {
 } from '../utils/dependency-graph/cascade.js';
 import { createTestTask } from './helpers/mock-task.js';
 import type { TaskMeta } from '../types/task.js';
+import {
+  createIsolatedTestEnv,
+  type IsolatedTestEnv,
+} from '../utils/test-env.js';
 
 function makeTask(id: string, deps: string[] = [], status: TaskMeta['status'] = 'open'): TaskMeta {
   return createTestTask({ id, dependencies: deps, status, title: `Task ${id}`, type: 'feature' });
@@ -20,6 +28,16 @@ function makeTask(id: string, deps: string[] = [], status: TaskMeta['status'] = 
 // ============== computeFailureCascade ==============
 
 describe('computeFailureCascade', () => {
+  let env: IsolatedTestEnv;
+
+  beforeEach(async () => {
+    env = await createIsolatedTestEnv();
+  });
+
+  afterEach(() => {
+    env.cleanup();
+  });
+
   test('单级级联: 直接下游受影响', () => {
     const graph = DependencyGraph.fromTasks([
       makeTask('A'),
@@ -84,13 +102,23 @@ describe('computeFailureCascade', () => {
 // ============== executeFailureCascade ==============
 
 describe('executeFailureCascade', () => {
+  let env: IsolatedTestEnv;
+
+  beforeEach(async () => {
+    env = await createIsolatedTestEnv();
+  });
+
+  afterEach(() => {
+    env.cleanup();
+  });
+
   test('标记所有受影响任务', () => {
     const graph = DependencyGraph.fromTasks([
       makeTask('A'),
       makeTask('B', ['A']),
       makeTask('C', ['B']),
     ]);
-    const result = executeFailureCascade('A', graph, '/tmp/test', new Set());
+    const result = executeFailureCascade('A', graph, env.tasksDir, new Set());
     expect(result.affectedTasks).toContain('B');
     expect(result.affectedTasks).toContain('C');
   });
@@ -101,7 +129,7 @@ describe('executeFailureCascade', () => {
       makeTask('B', ['A']),
       makeTask('C', ['B'], 'resolved'),
     ]);
-    const result = executeFailureCascade('A', graph, '/tmp/test', new Set(['C']));
+    const result = executeFailureCascade('A', graph, env.tasksDir, new Set(['C']));
     expect(result.affectedTasks).toContain('B');
     expect(result.skippedTasks).toContain('C');
   });
@@ -111,7 +139,7 @@ describe('executeFailureCascade', () => {
       makeTask('A'),
       makeTask('B', ['A'], 'resolved'),
     ]);
-    const result = executeFailureCascade('A', graph, '/tmp/test', new Set());
+    const result = executeFailureCascade('A', graph, env.tasksDir, new Set());
     expect(result.skippedTasks).toContain('B');
     expect(result.affectedTasks).toEqual([]);
   });
@@ -121,7 +149,7 @@ describe('executeFailureCascade', () => {
       makeTask('A'),
       makeTask('B', ['A']),
     ]);
-    const result = executeFailureCascade('B', graph, '/tmp/test', new Set());
+    const result = executeFailureCascade('B', graph, env.tasksDir, new Set());
     expect(result.affectedTasks).toEqual([]);
     expect(result.skippedTasks).toEqual([]);
   });
@@ -130,12 +158,22 @@ describe('executeFailureCascade', () => {
 // ============== computeUnblockingImpact ==============
 
 describe('computeUnblockingImpact', () => {
+  let env: IsolatedTestEnv;
+
+  beforeEach(async () => {
+    env = await createIsolatedTestEnv();
+  });
+
+  afterEach(() => {
+    env.cleanup();
+  });
+
   test('完成根任务解除所有下游阻塞', () => {
     const graph = DependencyGraph.fromTasks([
       makeTask('A', [], 'resolved'),
       makeTask('B', ['A']),
     ]);
-    const result = computeUnblockingImpact('A', graph, '/tmp/test');
+    const result = computeUnblockingImpact('A', graph, env.tasksDir);
     expect(result.unblockedTasks).toContain('B');
     expect(result.stillBlocked.size).toBe(0);
   });
@@ -146,7 +184,7 @@ describe('computeUnblockingImpact', () => {
       makeTask('Blocker'),
       makeTask('C', ['A', 'Blocker']),
     ]);
-    const result = computeUnblockingImpact('A', graph, '/tmp/test');
+    const result = computeUnblockingImpact('A', graph, env.tasksDir);
     // C still blocked by Blocker
     expect(result.unblockedTasks).toEqual([]);
     expect(result.stillBlocked.has('C')).toBe(true);
@@ -159,7 +197,7 @@ describe('computeUnblockingImpact', () => {
       makeTask('B', [], 'open'),
       makeTask('C', ['A', 'B']),
     ]);
-    const resultA = computeUnblockingImpact('A', graph, '/tmp/test');
+    const resultA = computeUnblockingImpact('A', graph, env.tasksDir);
     // C still blocked by B (B is open)
     expect(resultA.stillBlocked.has('C')).toBe(true);
     expect(resultA.stillBlocked.get('C')).toContain('B');
@@ -172,7 +210,7 @@ describe('computeUnblockingImpact', () => {
       makeTask('C', ['A', 'B']),
     ]);
     // Both A and B are resolved, so completing either one unblocks C
-    const resultA = computeUnblockingImpact('A', graph, '/tmp/test');
+    const resultA = computeUnblockingImpact('A', graph, env.tasksDir);
     expect(resultA.unblockedTasks).toContain('C');
   });
 
@@ -181,7 +219,7 @@ describe('computeUnblockingImpact', () => {
       makeTask('A'),
       makeTask('B', ['A']),
     ]);
-    const result = computeUnblockingImpact('B', graph, '/tmp/test');
+    const result = computeUnblockingImpact('B', graph, env.tasksDir);
     expect(result.unblockedTasks).toEqual([]);
     expect(result.stillBlocked.size).toBe(0);
   });
@@ -189,7 +227,7 @@ describe('computeUnblockingImpact', () => {
   test('空图返回空结果', () => {
     const graph = new DependencyGraph();
     graph.addNode(makeTask('A'));
-    const result = computeUnblockingImpact('A', graph, '/tmp/test');
+    const result = computeUnblockingImpact('A', graph, env.tasksDir);
     expect(result.unblockedTasks).toEqual([]);
     expect(result.stillBlocked.size).toBe(0);
   });

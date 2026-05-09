@@ -27,7 +27,7 @@ describe('State Simplification', () => {
   });
 
   afterEach(() => {
-    resetTestEnv(testEnv);
+    testEnv.cleanup();
   });
 
   describe('checkDependencies simplification', () => {

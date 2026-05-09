@@ -11,6 +11,11 @@
  * - syncCheckpointsToMeta: 检查点同步（需 mock）
  * - updateCheckpointStatus: 状态更新（需 mock）
  * - getCheckpointDetail / listCheckpoints / findCheckpointIdByDescription
+ *
+ * 迁移说明:
+ * - 使用 createIsolatedTestEnv 创建隔离测试环境
+ * - 使用 env.mocks 自动管理 path 模块的 mock
+ * - 确保测试隔离，防止跨测试污染
  */
 
 import { describe, it, expect, beforeEach, afterEach, spyOn } from 'bun:test';
@@ -31,9 +36,12 @@ import {
   parseTextCheckpoints,
   convertParsedCheckpointsToMetadata,
 } from '../utils/checkpoint.js';
-import * as pathModule from '../utils/path.js';
 import * as taskModule from '../utils/task.js';
 import type { TaskMeta, CheckpointMetadata } from '../types/task.js';
+import {
+  createIsolatedTestEnv,
+  type IsolatedTestEnv,
+} from '../utils/test-env.js';
 
 // ============== filterLowQualityCheckpoints ==============
 
@@ -335,21 +343,21 @@ describe('generateFallbackVerification', () => {
 // ============== parseCheckpointsWithIds (mocked) ==============
 
 describe('parseCheckpointsWithIds', () => {
+  let env: IsolatedTestEnv;
   let existsSyncSpy: ReturnType<typeof spyOn>;
   let readFileSyncSpy: ReturnType<typeof spyOn>;
-  let getTasksDirSpy: ReturnType<typeof spyOn>;
   let readTaskMetaSpy: ReturnType<typeof spyOn>;
 
-  beforeEach(() => {
-    getTasksDirSpy = spyOn(pathModule, 'getTasksDir').mockReturnValue('/fake/tasks');
+  beforeEach(async () => {
+    env = await createIsolatedTestEnv();
     readTaskMetaSpy = spyOn(taskModule, 'readTaskMeta').mockReturnValue(null);
   });
 
   afterEach(() => {
-    getTasksDirSpy.mockRestore();
     readTaskMetaSpy.mockRestore();
     existsSyncSpy?.mockRestore();
     readFileSyncSpy?.mockRestore();
+    env.cleanup();
   });
 
   it('returns empty array when checkpoint.md does not exist', () => {
@@ -441,15 +449,15 @@ describe('parseCheckpointsWithIds', () => {
 // ============== syncCheckpointsToMeta (mocked) ==============
 
 describe('syncCheckpointsToMeta', () => {
-  let getTasksDirSpy: ReturnType<typeof spyOn>;
+  let env: IsolatedTestEnv;
   let readTaskMetaSpy: ReturnType<typeof spyOn>;
   let writeTaskMetaSpy: ReturnType<typeof spyOn>;
   let existsSyncSpy: ReturnType<typeof spyOn>;
   let readFileSyncSpy: ReturnType<typeof spyOn>;
   let writeFileSyncSpy: ReturnType<typeof spyOn>;
 
-  beforeEach(() => {
-    getTasksDirSpy = spyOn(pathModule, 'getTasksDir').mockReturnValue('/fake/tasks');
+  beforeEach(async () => {
+    env = await createIsolatedTestEnv();
     readTaskMetaSpy = spyOn(taskModule, 'readTaskMeta');
     writeTaskMetaSpy = spyOn(taskModule, 'writeTaskMeta').mockImplementation(() => {});
     existsSyncSpy = spyOn(fs, 'existsSync').mockReturnValue(false);
@@ -458,12 +466,12 @@ describe('syncCheckpointsToMeta', () => {
   });
 
   afterEach(() => {
-    getTasksDirSpy.mockRestore();
     readTaskMetaSpy.mockRestore();
     writeTaskMetaSpy.mockRestore();
     existsSyncSpy.mockRestore();
     readFileSyncSpy.mockRestore();
     writeFileSyncSpy.mockRestore();
+    env.cleanup();
   });
 
   it('throws if task does not exist', () => {
@@ -534,15 +542,15 @@ describe('syncCheckpointsToMeta', () => {
 // ============== updateCheckpointStatus (mocked) ==============
 
 describe('updateCheckpointStatus', () => {
-  let getTasksDirSpy: ReturnType<typeof spyOn>;
+  let env: IsolatedTestEnv;
   let readTaskMetaSpy: ReturnType<typeof spyOn>;
   let writeTaskMetaSpy: ReturnType<typeof spyOn>;
   let existsSyncSpy: ReturnType<typeof spyOn>;
   let readFileSyncSpy: ReturnType<typeof spyOn>;
   let writeFileSyncSpy: ReturnType<typeof spyOn>;
 
-  beforeEach(() => {
-    getTasksDirSpy = spyOn(pathModule, 'getTasksDir').mockReturnValue('/fake/tasks');
+  beforeEach(async () => {
+    env = await createIsolatedTestEnv();
     readTaskMetaSpy = spyOn(taskModule, 'readTaskMeta');
     writeTaskMetaSpy = spyOn(taskModule, 'writeTaskMeta').mockImplementation(() => {});
     existsSyncSpy = spyOn(fs, 'existsSync').mockReturnValue(false);
@@ -551,12 +559,12 @@ describe('updateCheckpointStatus', () => {
   });
 
   afterEach(() => {
-    getTasksDirSpy.mockRestore();
     readTaskMetaSpy.mockRestore();
     writeTaskMetaSpy.mockRestore();
     existsSyncSpy.mockRestore();
     readFileSyncSpy.mockRestore();
     writeFileSyncSpy.mockRestore();
+    env.cleanup();
   });
 
   it('throws if task does not exist', () => {
@@ -658,14 +666,14 @@ describe('updateCheckpointStatus', () => {
 // ============== getCheckpointDetail / listCheckpoints / findCheckpointIdByDescription ==============
 
 describe('getCheckpointDetail', () => {
-  let getTasksDirSpy: ReturnType<typeof spyOn>;
+  let env: IsolatedTestEnv;
   let readTaskMetaSpy: ReturnType<typeof spyOn>;
   let writeTaskMetaSpy: ReturnType<typeof spyOn>;
   let existsSyncSpy: ReturnType<typeof spyOn>;
   let writeFileSyncSpy: ReturnType<typeof spyOn>;
 
-  beforeEach(() => {
-    getTasksDirSpy = spyOn(pathModule, 'getTasksDir').mockReturnValue('/fake/tasks');
+  beforeEach(async () => {
+    env = await createIsolatedTestEnv();
     readTaskMetaSpy = spyOn(taskModule, 'readTaskMeta');
     writeTaskMetaSpy = spyOn(taskModule, 'writeTaskMeta').mockImplementation(() => {});
     existsSyncSpy = spyOn(fs, 'existsSync').mockReturnValue(false);
@@ -673,11 +681,11 @@ describe('getCheckpointDetail', () => {
   });
 
   afterEach(() => {
-    getTasksDirSpy.mockRestore();
     readTaskMetaSpy.mockRestore();
     writeTaskMetaSpy.mockRestore();
     existsSyncSpy.mockRestore();
     writeFileSyncSpy.mockRestore();
+    env.cleanup();
   });
 
   it('throws if task does not exist (syncCheckpointsToMeta throws)', () => {
@@ -717,14 +725,14 @@ describe('getCheckpointDetail', () => {
 });
 
 describe('listCheckpoints', () => {
-  let getTasksDirSpy: ReturnType<typeof spyOn>;
+  let env: IsolatedTestEnv;
   let readTaskMetaSpy: ReturnType<typeof spyOn>;
   let writeTaskMetaSpy: ReturnType<typeof spyOn>;
   let existsSyncSpy: ReturnType<typeof spyOn>;
   let writeFileSyncSpy: ReturnType<typeof spyOn>;
 
-  beforeEach(() => {
-    getTasksDirSpy = spyOn(pathModule, 'getTasksDir').mockReturnValue('/fake/tasks');
+  beforeEach(async () => {
+    env = await createIsolatedTestEnv();
     readTaskMetaSpy = spyOn(taskModule, 'readTaskMeta');
     writeTaskMetaSpy = spyOn(taskModule, 'writeTaskMeta').mockImplementation(() => {});
     existsSyncSpy = spyOn(fs, 'existsSync').mockReturnValue(false);
@@ -732,11 +740,11 @@ describe('listCheckpoints', () => {
   });
 
   afterEach(() => {
-    getTasksDirSpy.mockRestore();
     readTaskMetaSpy.mockRestore();
     writeTaskMetaSpy.mockRestore();
     existsSyncSpy.mockRestore();
     writeFileSyncSpy.mockRestore();
+    env.cleanup();
   });
 
   it('returns empty array if task has no checkpoints', () => {
@@ -761,14 +769,14 @@ describe('listCheckpoints', () => {
 });
 
 describe('findCheckpointIdByDescription', () => {
-  let getTasksDirSpy: ReturnType<typeof spyOn>;
+  let env: IsolatedTestEnv;
   let readTaskMetaSpy: ReturnType<typeof spyOn>;
   let writeTaskMetaSpy: ReturnType<typeof spyOn>;
   let existsSyncSpy: ReturnType<typeof spyOn>;
   let writeFileSyncSpy: ReturnType<typeof spyOn>;
 
-  beforeEach(() => {
-    getTasksDirSpy = spyOn(pathModule, 'getTasksDir').mockReturnValue('/fake/tasks');
+  beforeEach(async () => {
+    env = await createIsolatedTestEnv();
     readTaskMetaSpy = spyOn(taskModule, 'readTaskMeta');
     writeTaskMetaSpy = spyOn(taskModule, 'writeTaskMeta').mockImplementation(() => {});
     existsSyncSpy = spyOn(fs, 'existsSync').mockReturnValue(false);
@@ -776,11 +784,11 @@ describe('findCheckpointIdByDescription', () => {
   });
 
   afterEach(() => {
-    getTasksDirSpy.mockRestore();
     readTaskMetaSpy.mockRestore();
     writeTaskMetaSpy.mockRestore();
     existsSyncSpy.mockRestore();
     writeFileSyncSpy.mockRestore();
+    env.cleanup();
   });
 
   it('finds checkpoint by exact description match', () => {

@@ -7,6 +7,7 @@ import {
 } from '../utils/plan';
 import type { ExecutionPlan, TaskRelation } from '../utils/plan';
 import type { TaskMeta } from '../types/task';
+import { createIsolatedTestEnv, type IsolatedTestEnv } from '../utils/test-env';
 
 // Mock for showPlan tests
 let consoleOutput: string[] = [];
@@ -42,6 +43,17 @@ function makeTask(overrides: Partial<TaskMeta> & { id: string }): TaskMeta {
     ...overrides,
   };
 }
+
+// 测试环境隔离
+let env: IsolatedTestEnv;
+
+beforeEach(async () => {
+  env = await createIsolatedTestEnv({ prefix: 'plan-test-' });
+});
+
+afterEach(() => {
+  env.cleanup();
+});
 
 // ==================== parsePlanOutput ====================
 

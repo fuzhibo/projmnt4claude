@@ -107,12 +107,15 @@ describe('Pipeline Status Constants', () => {
 // ============== VerdictAction Constants ==============
 
 describe('VerdictAction Constants', () => {
-  test('VALID_VERDICT_ACTIONS should contain all valid actions (P5 simplified)', () => {
-    // P5: 简化后的 verdict actions，移除了 minor_fix, retest, reevaluate
+  test('VALID_VERDICT_ACTIONS should contain all valid actions', () => {
+    // CP-10/11/12: 完整的 verdict actions，包含 retest, reevaluate, minor_fix
     expect(VALID_VERDICT_ACTIONS).toContain('resolve');
     expect(VALID_VERDICT_ACTIONS).toContain('redevelop');
+    expect(VALID_VERDICT_ACTIONS).toContain('retest');
+    expect(VALID_VERDICT_ACTIONS).toContain('reevaluate');
+    expect(VALID_VERDICT_ACTIONS).toContain('minor_fix');
     expect(VALID_VERDICT_ACTIONS).toContain('escalate_human');
-    expect(VALID_VERDICT_ACTIONS).toHaveLength(3);
+    expect(VALID_VERDICT_ACTIONS).toHaveLength(6);
   });
 
   test('VALID_VERDICT_ACTIONS should not contain invalid actions', () => {

@@ -3,41 +3,20 @@
  *
  * 覆盖: ensureConfigDefaults, readConfig, writeConfig,
  *        getConfigValue, setConfigValue, listConfig, getConfig, setConfig
+ *
+ * 迁移说明:
+ * - 使用 createIsolatedTestEnv 创建隔离测试环境
+ * - 不使用 mock.module() 避免 global 污染
+ * - 直接操作文件系统进行测试
  */
 
-import { describe, test, expect, mock, beforeEach } from 'bun:test';
-import path from 'path';
-
-// ── Mock 函数（在 mock.module 前定义，以便闭包引用） ─────────
-const mockIsInitialized = mock((cwd: string) => true);
-const mockGetConfigPath = mock((cwd: string) =>
-  path.join(cwd, '.projmnt4claude', 'config.json'),
-);
-
-const mockReadFileSync = mock(() => '');
-const mockWriteFileSync = mock(() => {});
-
-// ── Mock 模块 ──────────────────────────────────────────────
-mock.module('../utils/path', () => ({
-  isInitialized: mockIsInitialized,
-  getConfigPath: mockGetConfigPath,
-}));
-
-mock.module('../utils/prompt-templates', () => ({
-  PROMPT_TEMPLATE_NAMES: ['dev', 'codeReview', 'qa', 'evaluation', 'requirement'],
-  DEFAULT_TEMPLATES: {
-    dev: { zh: 'Hello {name}, your task is {task}', en: 'Hello {name}, your task is {task}' },
-    codeReview: { zh: 'Review: {code}', en: 'Review: {code}' },
-    qa: { zh: 'Verify: {task}', en: 'Verify: {task}' },
-    evaluation: { zh: 'Eval: {score}', en: 'Eval: {score}' },
-    requirement: { zh: 'Req: {text}', en: 'Req: {text}' },
-  },
-}));
-
-mock.module('fs', () => ({
-  readFileSync: mockReadFileSync,
-  writeFileSync: mockWriteFileSync,
-}));
+import { describe, test, expect, beforeEach, afterEach } from 'bun:test';
+import * as fs from 'fs';
+import * as path from 'path';
+import {
+  createIsolatedTestEnv,
+  type IsolatedTestEnv,
+} from '../utils/test-env.js';
 
 import {
   ensureConfigDefaults,
@@ -48,13 +27,11 @@ import {
   listConfig,
   getConfig,
   setConfig,
-} from '../commands/config';
-import type { ProjectConfig } from '../types/config';
-import { DEFAULT_LOGGING, DEFAULT_AI, DEFAULT_TRAINING } from '../types/config';
+} from '../commands/config.js';
+import type { ProjectConfig } from '../types/config.js';
+import { DEFAULT_LOGGING, DEFAULT_AI, DEFAULT_TRAINING } from '../types/config.js';
 
 // ── 测试辅助 ──────────────────────────────────────────────
-const CWD = '/tmp/test-project';
-
 function baseConfig(overrides: Partial<ProjectConfig> = {}): ProjectConfig {
   return {
     projectName: 'test-project',
@@ -74,16 +51,20 @@ function mockProcessExit() {
   return () => { process.exit = original; };
 }
 
-beforeEach(() => {
-  mockIsInitialized.mockClear();
-  mockGetConfigPath.mockClear();
-  mockReadFileSync.mockClear();
-  mockWriteFileSync.mockClear();
-  // 默认行为
-  mockIsInitialized.mockReturnValue(true);
-});
+/** 创建测试配置文件 */
+function createTestConfigFile(projectDir: string, config: ProjectConfig): void {
+  const configPath = path.join(projectDir, 'config.json');
+  fs.writeFileSync(configPath, JSON.stringify(config, null, 2), 'utf-8');
+}
 
-// ── ensureConfigDefaults ───────────────────────────────────
+/** 读取测试配置文件 */
+function readTestConfigFile(projectDir: string): ProjectConfig | null {
+  const configPath = path.join(projectDir, 'config.json');
+  if (!fs.existsSync(configPath)) return null;
+  return JSON.parse(fs.readFileSync(configPath, 'utf-8'));
+}
+
+// ── ensureConfigDefaults 测试 ───────────────────────────────────
 describe('ensureConfigDefaults', () => {
   test('补全缺失的 logging 配置', () => {
     const result = ensureConfigDefaults(baseConfig());
@@ -131,42 +112,7 @@ describe('ensureConfigDefaults', () => {
   });
 });
 
-// ── readConfig ─────────────────────────────────────────────
-describe('readConfig', () => {
-  test('项目未初始化时返回 null', () => {
-    mockIsInitialized.mockReturnValue(false);
-    expect(readConfig(CWD)).toBeNull();
-  });
-
-  test('正确读取并解析配置文件', () => {
-    const configData = baseConfig({ logging: DEFAULT_LOGGING });
-    mockReadFileSync.mockReturnValueOnce(JSON.stringify(configData));
-    expect(readConfig(CWD)).toEqual(configData);
-  });
-
-  test('文件读取失败时返回 null', () => {
-    mockReadFileSync.mockImplementationOnce(() => { throw new Error('ENOENT'); });
-    expect(readConfig(CWD)).toBeNull();
-  });
-
-  test('JSON 解析失败时返回 null', () => {
-    mockReadFileSync.mockReturnValueOnce('not valid json{{{');
-    expect(readConfig(CWD)).toBeNull();
-  });
-});
-
-// ── writeConfig ────────────────────────────────────────────
-describe('writeConfig', () => {
-  test('将配置写入文件', () => {
-    const config = baseConfig();
-    writeConfig(config, CWD);
-    expect(mockWriteFileSync).toHaveBeenCalledTimes(1);
-    const writtenContent = mockWriteFileSync.mock.calls[0]![1] as string;
-    expect(JSON.parse(writtenContent)).toEqual(config);
-  });
-});
-
-// ── getConfigValue ─────────────────────────────────────────
+// ── getConfigValue 测试 ─────────────────────────────────────────
 describe('getConfigValue', () => {
   const config = baseConfig({ logging: DEFAULT_LOGGING });
 
@@ -187,7 +133,7 @@ describe('getConfigValue', () => {
   });
 });
 
-// ── setConfigValue ─────────────────────────────────────────
+// ── setConfigValue 测试 ─────────────────────────────────────────
 describe('setConfigValue', () => {
   test('设置顶级键值', () => {
     const result = setConfigValue(baseConfig(), 'projectName', 'new-name');
@@ -210,26 +156,69 @@ describe('setConfigValue', () => {
   });
 });
 
-// ── listConfig ─────────────────────────────────────────────
+// ── readConfig/writeConfig 集成测试 ──────────────────────────────
+describe('readConfig/writeConfig 集成测试', () => {
+  let env: IsolatedTestEnv;
+  let projectDir: string;
+
+  beforeEach(async () => {
+    env = await createIsolatedTestEnv({ autoInit: false });
+    projectDir = env.projectDir;
+    // 创建 config.json
+    createTestConfigFile(projectDir, baseConfig({ logging: DEFAULT_LOGGING, ai: DEFAULT_AI }));
+  });
+
+  afterEach(() => {
+    env.cleanup();
+  });
+
+  test('readConfig 正确读取配置文件', () => {
+    const config = readConfig(env.tempDir);
+    expect(config).not.toBeNull();
+    expect(config!.projectName).toBe('test-project');
+  });
+
+  test('readConfig 项目未初始化时返回 null', () => {
+    // 删除 config.json
+    const configPath = path.join(projectDir, 'config.json');
+    fs.unlinkSync(configPath);
+    const config = readConfig(env.tempDir);
+    expect(config).toBeNull();
+  });
+
+  test('writeConfig 将配置写入文件', () => {
+    const newConfig = baseConfig({ projectName: 'updated-project' });
+    writeConfig(newConfig, env.tempDir);
+    const readBack = readTestConfigFile(projectDir);
+    expect(readBack!.projectName).toBe('updated-project');
+  });
+
+  test('readConfig JSON 解析失败时返回 null', () => {
+    const configPath = path.join(projectDir, 'config.json');
+    fs.writeFileSync(configPath, 'not valid json{{{', 'utf-8');
+    const config = readConfig(env.tempDir);
+    expect(config).toBeNull();
+  });
+});
+
+// ── listConfig 测试 ─────────────────────────────────────────────
 describe('listConfig', () => {
-  test('项目未初始化时调用 process.exit', () => {
-    mockIsInitialized.mockReturnValue(false);
-    const restore = mockProcessExit();
-    const errorLogs: string[] = [];
-    const origError = console.error;
-    console.error = (...args: any[]) => errorLogs.push(args.join(' '));
-    expect(() => listConfig(CWD)).toThrow('process.exit:1');
-    console.error = origError;
-    restore();
+  let env: IsolatedTestEnv;
+
+  beforeEach(async () => {
+    env = await createIsolatedTestEnv({ autoInit: false });
+    createTestConfigFile(env.projectDir, baseConfig({ logging: DEFAULT_LOGGING, ai: DEFAULT_AI }));
+  });
+
+  afterEach(() => {
+    env.cleanup();
   });
 
   test('成功输出配置信息', () => {
-    const configData = baseConfig({ logging: DEFAULT_LOGGING, ai: DEFAULT_AI });
-    mockReadFileSync.mockReturnValueOnce(JSON.stringify(configData));
     const logs: string[] = [];
     const origLog = console.log;
     console.log = (...args: any[]) => logs.push(args.join(' '));
-    listConfig(CWD);
+    listConfig(env.tempDir);
     console.log = origLog;
     const output = logs.join('\n');
     expect(output).toContain('test-project');
@@ -238,130 +227,133 @@ describe('listConfig', () => {
   });
 });
 
-// ── getConfig ──────────────────────────────────────────────
+// ── getConfig 测试 ──────────────────────────────────────────────
 describe('getConfig', () => {
+  let env: IsolatedTestEnv;
+
+  beforeEach(async () => {
+    env = await createIsolatedTestEnv({ autoInit: false });
+    createTestConfigFile(env.projectDir, baseConfig({ logging: DEFAULT_LOGGING }));
+  });
+
+  afterEach(() => {
+    env.cleanup();
+  });
+
   test('获取存在的配置项并输出', () => {
-    const configData = baseConfig({ logging: DEFAULT_LOGGING });
-    mockReadFileSync.mockReturnValueOnce(JSON.stringify(configData));
     const logs: string[] = [];
     const origLog = console.log;
     console.log = (...args: any[]) => logs.push(args.join(' '));
-    getConfig('logging.level', CWD);
+    getConfig('logging.level', env.tempDir);
     console.log = origLog;
     expect(logs).toContain('info');
   });
 
   test('配置项不存在时调用 process.exit', () => {
-    const configData = baseConfig();
-    mockReadFileSync.mockReturnValueOnce(JSON.stringify(configData));
     const restore = mockProcessExit();
     const origError = console.error;
     console.error = () => {};
-    expect(() => getConfig('nonexistent.key', CWD)).toThrow('process.exit:1');
+    expect(() => getConfig('nonexistent.key', env.tempDir)).toThrow('process.exit:1');
     console.error = origError;
     restore();
   });
 });
 
-// ── setConfig ──────────────────────────────────────────────
+// ── setConfig 测试 ──────────────────────────────────────────────
 describe('setConfig', () => {
+  let env: IsolatedTestEnv;
+
+  beforeEach(async () => {
+    env = await createIsolatedTestEnv({ autoInit: false });
+    createTestConfigFile(env.projectDir, baseConfig({ logging: { ...DEFAULT_LOGGING } }));
+  });
+
+  afterEach(() => {
+    env.cleanup();
+  });
+
   test('设置已知配置项并写入文件', () => {
-    const configData = baseConfig({ logging: { ...DEFAULT_LOGGING } });
-    mockReadFileSync.mockReturnValueOnce(JSON.stringify(configData));
     const origLog = console.log;
     console.log = () => {};
-    setConfig('logging.level', 'debug', CWD);
+    setConfig('logging.level', 'debug', env.tempDir);
     console.log = origLog;
-    const writtenContent = mockWriteFileSync.mock.calls[0]![1] as string;
-    const written = JSON.parse(writtenContent);
-    expect(written.logging.level).toBe('debug');
+    const written = readTestConfigFile(env.projectDir);
+    expect(written!.logging!.level).toBe('debug');
   });
 
   test('未知配置键被拒绝', () => {
-    const configData = baseConfig();
-    mockReadFileSync.mockReturnValueOnce(JSON.stringify(configData));
     const restore = mockProcessExit();
     const origError = console.error;
     console.error = () => {};
-    expect(() => setConfig('unknown.key', 'value', CWD)).toThrow('process.exit:1');
+    expect(() => setConfig('unknown.key', 'value', env.tempDir)).toThrow('process.exit:1');
     console.error = origError;
     restore();
   });
 
   test('非法枚举值被拒绝 (logging.level)', () => {
-    const configData = baseConfig({ logging: DEFAULT_LOGGING });
-    mockReadFileSync.mockReturnValueOnce(JSON.stringify(configData));
     const restore = mockProcessExit();
     const origError = console.error;
     console.error = () => {};
-    expect(() => setConfig('logging.level', 'INVALID', CWD)).toThrow('process.exit:1');
+    expect(() => setConfig('logging.level', 'INVALID', env.tempDir)).toThrow('process.exit:1');
     console.error = origError;
     restore();
   });
 
   test('设置布尔类型配置 (training.exportEnabled)', () => {
-    const configData = baseConfig({ training: { ...DEFAULT_TRAINING } });
-    mockReadFileSync.mockReturnValueOnce(JSON.stringify(configData));
+    createTestConfigFile(env.projectDir, baseConfig({ training: { ...DEFAULT_TRAINING } }));
     const origLog = console.log;
     console.log = () => {};
-    setConfig('training.exportEnabled', 'true', CWD);
+    setConfig('training.exportEnabled', 'true', env.tempDir);
     console.log = origLog;
-    const written = JSON.parse(mockWriteFileSync.mock.calls[0]![1] as string);
-    expect(written.training.exportEnabled).toBe(true);
+    const written = readTestConfigFile(env.projectDir);
+    expect(written!.training!.exportEnabled).toBe(true);
   });
 
   test('非法布尔值被拒绝', () => {
-    const configData = baseConfig({ training: DEFAULT_TRAINING });
-    mockReadFileSync.mockReturnValueOnce(JSON.stringify(configData));
+    createTestConfigFile(env.projectDir, baseConfig({ training: DEFAULT_TRAINING }));
     const restore = mockProcessExit();
     const origError = console.error;
     console.error = () => {};
-    expect(() => setConfig('training.exportEnabled', 'yes', CWD)).toThrow('process.exit:1');
+    expect(() => setConfig('training.exportEnabled', 'yes', env.tempDir)).toThrow('process.exit:1');
     console.error = origError;
     restore();
   });
 
   test('数值超范围被拒绝 (logging.maxFiles < 1)', () => {
-    const configData = baseConfig({ logging: DEFAULT_LOGGING });
-    mockReadFileSync.mockReturnValueOnce(JSON.stringify(configData));
     const restore = mockProcessExit();
     const origError = console.error;
     console.error = () => {};
-    expect(() => setConfig('logging.maxFiles', '0', CWD)).toThrow('process.exit:1');
+    expect(() => setConfig('logging.maxFiles', '0', env.tempDir)).toThrow('process.exit:1');
     console.error = origError;
     restore();
   });
 
   test('设置 prompts.* 自定义模板', () => {
-    const configData = baseConfig({ prompts: {} });
-    mockReadFileSync.mockReturnValueOnce(JSON.stringify(configData));
+    createTestConfigFile(env.projectDir, baseConfig({ prompts: {} }));
     const origLog = console.log;
     console.log = () => {};
-    setConfig('prompts.dev', 'Custom {name} do {task}', CWD);
+    setConfig('prompts.dev', 'Custom {name} do {task}', env.tempDir);
     console.log = origLog;
-    const written = JSON.parse(mockWriteFileSync.mock.calls[0]![1] as string);
-    expect(written.prompts.dev).toBe('Custom {name} do {task}');
+    const written = readTestConfigFile(env.projectDir);
+    expect(written!.prompts!.dev).toBe('Custom {name} do {task}');
   });
 
   test('未知 prompts 模板名被拒绝', () => {
-    const configData = baseConfig();
-    mockReadFileSync.mockReturnValueOnce(JSON.stringify(configData));
     const restore = mockProcessExit();
     const origError = console.error;
     console.error = () => {};
-    expect(() => setConfig('prompts.unknown', 'value', CWD)).toThrow('process.exit:1');
+    expect(() => setConfig('prompts.unknown', 'value', env.tempDir)).toThrow('process.exit:1');
     console.error = origError;
     restore();
   });
 
   test('设置数字类型配置 (quality.minScore)', () => {
-    const configData = baseConfig({ quality: { minScore: 50 } });
-    mockReadFileSync.mockReturnValueOnce(JSON.stringify(configData));
+    createTestConfigFile(env.projectDir, baseConfig({ quality: { minScore: 50 } }));
     const origLog = console.log;
     console.log = () => {};
-    setConfig('quality.minScore', '85', CWD);
+    setConfig('quality.minScore', '85', env.tempDir);
     console.log = origLog;
-    const written = JSON.parse(mockWriteFileSync.mock.calls[0]![1] as string);
-    expect(written.quality.minScore).toBe(85);
+    const written = readTestConfigFile(env.projectDir);
+    expect(written!.quality!.minScore).toBe(85);
   });
 });

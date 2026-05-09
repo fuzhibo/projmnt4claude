@@ -2,8 +2,12 @@
  * 验证器模块单元测试
  *
  * 测试 validateOrphan, validateNewTaskDeps, validatePlanOperation
+ *
+ * 迁移说明:
+ * - 使用 createIsolatedTestEnv 创建隔离测试环境
+ * - 确保 DependencyGraph 实例在隔离环境中创建
  */
-import { describe, test, expect, beforeEach } from 'bun:test';
+import { describe, test, expect, beforeEach, afterEach } from 'bun:test';
 import { DependencyGraph } from '../utils/dependency-graph/graph.js';
 import {
   validateOrphan,
@@ -12,6 +16,10 @@ import {
 } from '../utils/dependency-graph/validators.js';
 import { createTestTask } from './helpers/mock-task.js';
 import type { TaskMeta } from '../types/task.js';
+import {
+  createIsolatedTestEnv,
+  type IsolatedTestEnv,
+} from '../utils/test-env.js';
 
 function makeTask(id: string, deps: string[] = [], status: TaskMeta['status'] = 'open'): TaskMeta {
   return createTestTask({ id, dependencies: deps, status, title: `Task ${id}`, type: 'feature' });
@@ -78,13 +86,19 @@ describe('validateOrphan', () => {
 
 describe('validateNewTaskDeps', () => {
   let graph: DependencyGraph;
+  let env: IsolatedTestEnv;
 
-  beforeEach(() => {
+  beforeEach(async () => {
+    env = await createIsolatedTestEnv();
     graph = DependencyGraph.fromTasks([
       makeTask('A'),
       makeTask('B', ['A']),
       makeTask('C', ['B']),
     ]);
+  });
+
+  afterEach(() => {
+    env.cleanup();
   });
 
   test('GATE-DEP-001: 无依赖触发警告', () => {
@@ -142,14 +156,20 @@ describe('validateNewTaskDeps', () => {
 
 describe('validatePlanOperation', () => {
   let graph: DependencyGraph;
+  let env: IsolatedTestEnv;
 
-  beforeEach(() => {
+  beforeEach(async () => {
+    env = await createIsolatedTestEnv();
     graph = DependencyGraph.fromTasks([
       makeTask('A'),
       makeTask('B', ['A']),
       makeTask('C', ['B']),
       makeTask('D', ['A']),
     ]);
+  });
+
+  afterEach(() => {
+    env.cleanup();
   });
 
   test('delete 有下游依赖时返回警告', () => {

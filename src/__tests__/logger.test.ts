@@ -1,72 +1,100 @@
-import { describe, test, expect, beforeEach, afterEach, mock } from 'bun:test';
+/**
+ * logger.ts 单元测试
+ *
+ * 测试重点:
+ * - Logger 基本日志功能 (info, error, warn, debug)
+ * - 组件标记和子 logger
+ * - 命令日志记录
+ * - 日志级别过滤
+ * - AI 成本日志
+ * - Bug 报告生成
+ * - 日志清理
+ * - 成本汇总
+ * - 使用分析
+ * - createLogger 工厂函数
+ * - 日志持久化
+ *
+ * 迁移说明:
+ * - 使用 createIsolatedTestEnv 创建隔离测试环境
+ * - 使用 spyOn 替代直接修改 console 全局对象
+ * - 确保测试隔离，防止跨测试污染
+ */
+
+import { describe, test, expect, beforeEach, afterEach, spyOn, mock } from 'bun:test';
 import * as fs from 'fs';
 import * as path from 'path';
 import { Logger, createLogger, type LogLevel, type AICostSummary, type InstrumentationRecord } from '../utils/logger';
 import { getLogsDir } from '../utils/path';
+import {
+  createIsolatedTestEnv,
+  type IsolatedTestEnv,
+} from '../utils/test-env.js';
 
 describe('Logger', () => {
-  const testCwd = path.join(process.cwd(), '.test-logs');
-  let consoleSpy: {
-    log: ReturnType<typeof mock>;
-    error: ReturnType<typeof mock>;
-    warn: ReturnType<typeof mock>;
-  };
+  let env: IsolatedTestEnv;
+  let testCwd: string;
+  let consoleLogSpy: ReturnType<typeof spyOn>;
+  let consoleErrorSpy: ReturnType<typeof spyOn>;
+  let consoleWarnSpy: ReturnType<typeof spyOn>;
 
-  beforeEach(() => {
-    // Clean up test directory
-    if (fs.existsSync(testCwd)) {
-      fs.rmSync(testCwd, { recursive: true, force: true });
+  beforeEach(async () => {
+    env = await createIsolatedTestEnv({ autoInit: false });
+    testCwd = env.tempDir;
+
+    // 创建测试目录
+    if (!fs.existsSync(testCwd)) {
+      fs.mkdirSync(testCwd, { recursive: true });
     }
-    fs.mkdirSync(testCwd, { recursive: true });
 
-    // Mock console methods
-    consoleSpy = {
-      log: mock(() => {}),
-      error: mock(() => {}),
-      warn: mock(() => {}),
-    };
-    console.log = consoleSpy.log;
-    console.error = consoleSpy.error;
-    console.warn = consoleSpy.warn;
+    // 使用 spyOn 监听 console 方法，而不是直接替换
+    consoleLogSpy = spyOn(console, 'log').mockImplementation(() => {});
+    consoleErrorSpy = spyOn(console, 'error').mockImplementation(() => {});
+    consoleWarnSpy = spyOn(console, 'warn').mockImplementation(() => {});
   });
 
-  afterEach(() => {
-    // Clean up test directory
-    if (fs.existsSync(testCwd)) {
-      fs.rmSync(testCwd, { recursive: true, force: true });
-    }
+  afterEach(async () => {
+    // 恢复所有 spy
+    consoleLogSpy.mockRestore();
+    consoleErrorSpy.mockRestore();
+    consoleWarnSpy.mockRestore();
+
+    // 清理测试环境
+    await env.cleanup();
   });
 
   describe('Basic Logging', () => {
     test('should log info message', () => {
       const logger = new Logger({ cwd: testCwd });
       logger.info('Test info message');
-      expect(consoleSpy.log).toHaveBeenCalled();
+      expect(consoleLogSpy).toHaveBeenCalled();
     });
 
     test('should log error message', () => {
       const logger = new Logger({ cwd: testCwd });
       logger.error('Test error message');
-      expect(consoleSpy.error).toHaveBeenCalled();
+      expect(consoleErrorSpy).toHaveBeenCalled();
     });
 
     test('should log warn message', () => {
       const logger = new Logger({ cwd: testCwd });
       logger.warn('Test warn message');
-      expect(consoleSpy.warn).toHaveBeenCalled();
+      expect(consoleWarnSpy).toHaveBeenCalled();
     });
 
     test('should log debug message when level is debug', () => {
       const originalLevel = process.env.LOG_LEVEL;
       process.env.LOG_LEVEL = 'debug';
-      const logger = new Logger({ cwd: testCwd });
-      logger.debug('Test debug message');
-      expect(consoleSpy.log).toHaveBeenCalled();
-      // Reset environment
-      if (originalLevel) {
-        process.env.LOG_LEVEL = originalLevel;
-      } else {
-        delete process.env.LOG_LEVEL;
+      try {
+        const logger = new Logger({ cwd: testCwd });
+        logger.debug('Test debug message');
+        expect(consoleLogSpy).toHaveBeenCalled();
+      } finally {
+        // Reset environment
+        if (originalLevel) {
+          process.env.LOG_LEVEL = originalLevel;
+        } else {
+          delete process.env.LOG_LEVEL;
+        }
       }
     });
 
@@ -74,7 +102,7 @@ describe('Logger', () => {
       const logger = new Logger({ cwd: testCwd });
       const testData = { key: 'value', count: 42 };
       logger.info('Test with data', testData);
-      expect(consoleSpy.log).toHaveBeenCalled();
+      expect(consoleLogSpy).toHaveBeenCalled();
     });
   });
 
@@ -84,7 +112,7 @@ describe('Logger', () => {
       const childLogger = logger.child('child');
 
       childLogger.info('Child message');
-      expect(consoleSpy.log).toHaveBeenCalled();
+      expect(consoleLogSpy).toHaveBeenCalled();
     });
 
     test('should create nested child loggers', () => {
@@ -93,14 +121,14 @@ describe('Logger', () => {
       const child2 = child1.child('level2');
 
       child2.info('Nested message');
-      expect(consoleSpy.log).toHaveBeenCalled();
+      expect(consoleLogSpy).toHaveBeenCalled();
     });
 
     test('should prefix logs with component name', () => {
       const logger = new Logger({ cwd: testCwd, component: 'TestComponent' });
       logger.info('Component message');
 
-      const calls = consoleSpy.log.mock.calls as string[][];
+      const calls = consoleLogSpy.mock.calls as string[][];
       expect(calls.length).toBeGreaterThan(0);
       expect(calls[0][0]).toContain('[TestComponent]');
     });
@@ -111,8 +139,8 @@ describe('Logger', () => {
       const logger = new Logger({ cwd: testCwd });
       logger.logCommandStart('test-command', { arg1: 'value1' });
 
-      expect(consoleSpy.log).toHaveBeenCalled();
-      const calls = consoleSpy.log.mock.calls as string[][];
+      expect(consoleLogSpy).toHaveBeenCalled();
+      const calls = consoleLogSpy.mock.calls as string[][];
       expect(calls[0][0]).toContain('test-command');
     });
 
@@ -121,7 +149,7 @@ describe('Logger', () => {
       logger.logCommandStart('test-command');
       logger.logCommandEnd('test-command', 0);
 
-      const calls = consoleSpy.log.mock.calls as string[][];
+      const calls = consoleLogSpy.mock.calls as string[][];
       const lastCall = calls[calls.length - 1];
       expect(lastCall[0]).toContain('test-command');
     });
@@ -142,34 +170,35 @@ describe('Logger', () => {
       const originalLevel = process.env.LOG_LEVEL;
       process.env.LOG_LEVEL = 'error';
 
-      const logger = new Logger({ cwd: testCwd });
-      logger.info('This should not appear');
-      logger.error('This should appear');
+      try {
+        const logger = new Logger({ cwd: testCwd });
+        logger.info('This should not appear');
+        logger.error('This should appear');
 
-      // Reset environment
-      if (originalLevel) {
-        process.env.LOG_LEVEL = originalLevel;
-      } else {
-        delete process.env.LOG_LEVEL;
+        expect(consoleLogSpy).not.toHaveBeenCalled();
+        expect(consoleErrorSpy).toHaveBeenCalled();
+      } finally {
+        // Reset environment
+        if (originalLevel) {
+          process.env.LOG_LEVEL = originalLevel;
+        } else {
+          delete process.env.LOG_LEVEL;
+        }
       }
-
-      expect(consoleSpy.log).not.toHaveBeenCalled();
-      expect(consoleSpy.error).toHaveBeenCalled();
     });
 
     test('should filter by log level', () => {
       const logger = new Logger({ cwd: testCwd });
 
       // At default 'info' level, debug should not be logged
-      // Note: This depends on the actual implementation behavior
       logger.debug('Debug message');
       logger.info('Info message');
       logger.warn('Warn message');
       logger.error('Error message');
 
-      expect(consoleSpy.log).toHaveBeenCalled();
-      expect(consoleSpy.warn).toHaveBeenCalled();
-      expect(consoleSpy.error).toHaveBeenCalled();
+      expect(consoleLogSpy).toHaveBeenCalled();
+      expect(consoleWarnSpy).toHaveBeenCalled();
+      expect(consoleErrorSpy).toHaveBeenCalled();
     });
   });
 
@@ -185,7 +214,7 @@ describe('Logger', () => {
       };
 
       logger.logAICost(costSummary);
-      expect(consoleSpy.log).toHaveBeenCalled();
+      expect(consoleLogSpy).toHaveBeenCalled();
     });
 
     test('should log instrumentation record', () => {
@@ -202,7 +231,7 @@ describe('Logger', () => {
       };
 
       logger.logInstrumentation(record);
-      expect(consoleSpy.log).toHaveBeenCalled();
+      expect(consoleLogSpy).toHaveBeenCalled();
     });
   });
 
@@ -353,7 +382,7 @@ describe('Logger', () => {
       logger.logCommandEnd('factory-test', 0);
       logger.flush();
 
-      expect(consoleSpy.log).toHaveBeenCalled();
+      expect(consoleLogSpy).toHaveBeenCalled();
     });
   });
 

@@ -7,31 +7,28 @@
  * - Pre 类: pre-commit/pre-publish hook 管理
  *
  * 测试类型:
- * - Mock 环境搭建
+ * - 隔离测试环境
  * - 边界条件（空输入、异常输入）
  * - 正常流程
  * - 错误处理
  * - 集成测试
+ *
+ * 迁移说明:
+ * - 使用 createIsolatedTestEnv 创建隔离测试环境
+ * - 确保测试隔离，防止跨测试污染
  */
 
 import { describe, it, expect, beforeEach, afterEach } from 'bun:test';
 import * as fs from 'fs';
 import * as path from 'path';
-import * as os from 'os';
 import { json, toml, Pre, DEFAULT_HOOKS } from '../utils/pre.js';
 import type { JsonOps, TomlOps, HookType, PreCheckResult } from '../utils/pre.js';
+import {
+  createIsolatedTestEnv,
+  type IsolatedTestEnv,
+} from '../utils/test-env.js';
 
-// ============== Mock 环境工具 ==============
-
-/** 创建临时测试目录 */
-function createTempDir(): string {
-  return fs.mkdtempSync(path.join(os.tmpdir(), 'pre-test-'));
-}
-
-/** 递归删除目录 */
-function rmrf(dir: string): void {
-  fs.rmSync(dir, { recursive: true, force: true });
-}
+// ============== Git 测试环境工具 ==============
 
 /** 在目录中创建 git 仓库结构 */
 function initGitRepo(dir: string): void {
@@ -67,16 +64,18 @@ function createBunfigToml(dir: string): string {
 // ============== json() 测试 ==============
 
 describe('json()', () => {
+  let env: IsolatedTestEnv;
   let tempDir: string;
   let jsonPath: string;
 
-  beforeEach(() => {
-    tempDir = createTempDir();
+  beforeEach(async () => {
+    env = await createIsolatedTestEnv({ autoInit: false });
+    tempDir = env.tempDir;
     jsonPath = path.join(tempDir, 'test.json');
   });
 
   afterEach(() => {
-    rmrf(tempDir);
+    env.cleanup();
   });
 
   describe('正常流程', () => {
@@ -171,16 +170,18 @@ describe('json()', () => {
 // ============== toml() 测试 ==============
 
 describe('toml()', () => {
+  let env: IsolatedTestEnv;
   let tempDir: string;
   let tomlPath: string;
 
-  beforeEach(() => {
-    tempDir = createTempDir();
+  beforeEach(async () => {
+    env = await createIsolatedTestEnv({ autoInit: false });
+    tempDir = env.tempDir;
     tomlPath = path.join(tempDir, 'test.toml');
   });
 
   afterEach(() => {
-    rmrf(tempDir);
+    env.cleanup();
   });
 
   describe('正常流程', () => {
@@ -342,11 +343,13 @@ describe('toml()', () => {
 // ============== Pre 类测试 ==============
 
 describe('Pre', () => {
+  let env: IsolatedTestEnv;
   let tempDir: string;
   let pre: Pre;
 
-  beforeEach(() => {
-    tempDir = createTempDir();
+  beforeEach(async () => {
+    env = await createIsolatedTestEnv({ autoInit: false });
+    tempDir = env.tempDir;
     initGitRepo(tempDir);
     createPackageJson(tempDir);
     createBunfigToml(tempDir);
@@ -354,7 +357,7 @@ describe('Pre', () => {
   });
 
   afterEach(() => {
-    rmrf(tempDir);
+    env.cleanup();
   });
 
   describe('构造函数', () => {
@@ -506,11 +509,11 @@ describe('Pre', () => {
       expect(pre.isPreCommitInstalled()).toBe(true);
     });
 
-    it('hooks 目录不存在时返回 false', () => {
-      const noGitDir = createTempDir();
-      const noGitPre = new Pre(noGitDir);
+    it('hooks 目录不存在时返回 false', async () => {
+      const noGitEnv = await createIsolatedTestEnv({ autoInit: false });
+      const noGitPre = new Pre(noGitEnv.tempDir);
       expect(noGitPre.isPreCommitInstalled()).toBe(false);
-      rmrf(noGitDir);
+      noGitEnv.cleanup();
     });
   });
 
@@ -524,21 +527,21 @@ describe('Pre', () => {
       expect(pre.isPrePublishInstalled()).toBe(true);
     });
 
-    it('package.json 不存在时返回 false', () => {
-      const emptyDir = createTempDir();
-      const emptyPre = new Pre(emptyDir);
+    it('package.json 不存在时返回 false', async () => {
+      const emptyEnv = await createIsolatedTestEnv({ autoInit: false });
+      const emptyPre = new Pre(emptyEnv.tempDir);
       expect(emptyPre.isPrePublishInstalled()).toBe(false);
-      rmrf(emptyDir);
+      emptyEnv.cleanup();
     });
   });
 
   describe('runTests', () => {
-    it('返回 PreCheckResult 结构', () => {
+    it('返回 PreCheckResult 结构', async () => {
       // 使用临时目录（没有测试文件会失败但应返回结构化结果）
-      const emptyDir = createTempDir();
-      initGitRepo(emptyDir);
-      createPackageJson(emptyDir);
-      const emptyPre = new Pre(emptyDir);
+      const emptyEnv = await createIsolatedTestEnv({ autoInit: false });
+      initGitRepo(emptyEnv.tempDir);
+      createPackageJson(emptyEnv.tempDir);
+      const emptyPre = new Pre(emptyEnv.tempDir);
 
       const result = emptyPre.runTests();
       expect(result).toHaveProperty('passed');
@@ -546,40 +549,40 @@ describe('Pre', () => {
       expect(result).toHaveProperty('duration');
       expect(typeof result.duration).toBe('number');
 
-      rmrf(emptyDir);
+      emptyEnv.cleanup();
     });
 
-    it('duration 是非负数', () => {
-      const emptyDir = createTempDir();
-      const emptyPre = new Pre(emptyDir);
+    it('duration 是非负数', async () => {
+      const emptyEnv = await createIsolatedTestEnv({ autoInit: false });
+      const emptyPre = new Pre(emptyEnv.tempDir);
       const result = emptyPre.runTests();
       expect(result.duration).toBeGreaterThanOrEqual(0);
-      rmrf(emptyDir);
+      emptyEnv.cleanup();
     });
   });
 
   describe('runCoverageCheck', () => {
-    it('返回 PreCheckResult 结构', () => {
-      const emptyDir = createTempDir();
-      initGitRepo(emptyDir);
-      createPackageJson(emptyDir);
-      const emptyPre = new Pre(emptyDir);
+    it('返回 PreCheckResult 结构', async () => {
+      const emptyEnv = await createIsolatedTestEnv({ autoInit: false });
+      initGitRepo(emptyEnv.tempDir);
+      createPackageJson(emptyEnv.tempDir);
+      const emptyPre = new Pre(emptyEnv.tempDir);
 
       const result = emptyPre.runCoverageCheck();
       expect(result).toHaveProperty('passed');
       expect(result).toHaveProperty('output');
       expect(result).toHaveProperty('duration');
 
-      rmrf(emptyDir);
+      emptyEnv.cleanup();
     });
 
-    it('自定义阈值参数', () => {
-      const emptyDir = createTempDir();
-      const emptyPre = new Pre(emptyDir);
+    it('自定义阈值参数', async () => {
+      const emptyEnv = await createIsolatedTestEnv({ autoInit: false });
+      const emptyPre = new Pre(emptyEnv.tempDir);
       // 使用高阈值，即使没有测试也不会 panic
       const result = emptyPre.runCoverageCheck(0.99);
       expect(typeof result.passed).toBe('boolean');
-      rmrf(emptyDir);
+      emptyEnv.cleanup();
     });
   });
 });
@@ -587,17 +590,19 @@ describe('Pre', () => {
 // ============== 集成测试 ==============
 
 describe('集成测试: 完整发布流程', () => {
+  let env: IsolatedTestEnv;
   let tempDir: string;
 
-  beforeEach(() => {
-    tempDir = createTempDir();
+  beforeEach(async () => {
+    env = await createIsolatedTestEnv({ autoInit: false });
+    tempDir = env.tempDir;
     initGitRepo(tempDir);
     createPackageJson(tempDir);
     createBunfigToml(tempDir);
   });
 
   afterEach(() => {
-    rmrf(tempDir);
+    env.cleanup();
   });
 
   it('完整安装→验证→卸载流程', () => {
@@ -657,14 +662,16 @@ describe('集成测试: 完整发布流程', () => {
 // ============== 性能测试 ==============
 
 describe('性能测试', () => {
+  let env: IsolatedTestEnv;
   let tempDir: string;
 
-  beforeEach(() => {
-    tempDir = createTempDir();
+  beforeEach(async () => {
+    env = await createIsolatedTestEnv({ autoInit: false });
+    tempDir = env.tempDir;
   });
 
   afterEach(() => {
-    rmrf(tempDir);
+    env.cleanup();
   });
 
   it('json 大数据量写入/读取性能', () => {
