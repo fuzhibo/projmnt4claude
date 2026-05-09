@@ -40,7 +40,8 @@ export type TaskStatus =
   | 'wait_review'   // Waiting for code review
   | 'wait_qa'           // Waiting for QA verification (AI or Human)
   | 'wait_evaluation'   // Waiting for evaluation (after QA pass, waiting for final evaluation)
-  | 'resolved'      // Resolved
+  | 'resolved'      // Resolved (canonical status)
+  | 'completed'     // Completed (alias for resolved, backward compatibility)
   | 'closed'        // Closed
   | 'abandoned'     // Abandoned
   | 'needs_human'   // Needs human intervention
@@ -57,6 +58,36 @@ export type FailureReason =
   | 'evaluation_nopass'    // Evaluation phase not passed (max retries reached)
   | 'max_retries_exceeded' // Max retries exceeded
   | 'upstream_failed';     // Upstream dependency task failed (cascade failure)
+
+/**
+ * Task failure reason details (for harness pipeline)
+ * Used to record detailed failure information for retrospective analysis
+ */
+export interface TaskFailureReason {
+  /** Task ID */
+  taskId: string;
+  /** Failed at (checkpoint ID or phase name) */
+  failedAt: string;
+  /** Phase (development/code_review/qa_verification/evaluation) */
+  phase: string;
+  /** Human-readable failure reason */
+  reason: string;
+  /** Error details (for debugging) */
+  errorDetails?: {
+    stack?: string;
+    name?: string;
+    message?: string;
+    upstreamTaskId?: string;
+    upstreamFailureReason?: string;
+    upstreamFailedAt?: string;
+  };
+  /** Failure timestamp (ISO) */
+  timestamp: string;
+  /** Attempt number */
+  attemptNumber: number;
+  /** Whether this is a cascade failure (due to upstream failure) */
+  isCascadeFailure?: boolean;
+}
 
 /**
  * Task history entry
@@ -537,6 +568,65 @@ export function normalizeStatus(status: string): TaskStatus {
     'failed': 'failed',
   };
   return statusMap[status] || 'open';
+}
+
+/**
+ * Status equivalence groups
+ * completed and resolved are treated as equivalent
+ */
+const STATUS_EQUIVALENCE_GROUPS: TaskStatus[][] = [
+  ['resolved', 'completed'],
+];
+
+/**
+ * Check if two statuses are equivalent
+ * completed and resolved are treated as equivalent
+ */
+export function isStatusEquivalent(status1: TaskStatus, status2: TaskStatus): boolean {
+  if (status1 === status2) return true;
+  return STATUS_EQUIVALENCE_GROUPS.some(
+    group => group.includes(status1) && group.includes(status2)
+  );
+}
+
+/**
+ * Dependency satisfied statuses
+ * Tasks in these statuses are considered as satisfying dependencies
+ */
+export const DEPENDENCY_SATISFIED_STATUSES: TaskStatus[] = ['resolved', 'completed', 'closed'];
+
+/**
+ * Check if a dependency task is satisfied
+ *
+ * A dependency is satisfied only if:
+ * 1. The task exists
+ * 2. The task status is in DEPENDENCY_SATISFIED_STATUSES
+ * 3. All checkpoints of the task are completed
+ *
+ * @param depTask - Dependency task metadata, or null if task not found
+ * @returns Whether the dependency is satisfied
+ */
+export function isDependencySatisfied(depTask: TaskMeta | null | undefined): boolean {
+  // Rule 1: Task must exist
+  if (!depTask) return false;
+
+  // Rule 2: Task status must be in satisfied statuses (considering equivalence)
+  const normalizedStatus = normalizeStatus(depTask.status);
+  const isStatusSatisfied = DEPENDENCY_SATISFIED_STATUSES.some(
+    satisfiedStatus => isStatusEquivalent(normalizedStatus, satisfiedStatus)
+  );
+  if (!isStatusSatisfied) return false;
+
+  // Rule 3: All checkpoints must be completed (if checkpoints exist)
+  const checkpoints = depTask.checkpoints || [];
+  if (checkpoints.length > 0) {
+    const allCheckpointsCompleted = checkpoints.every(
+      cp => cp.status === 'completed' || cp.status === 'skipped'
+    );
+    if (!allCheckpointsCompleted) return false;
+  }
+
+  return true;
 }
 
 /**

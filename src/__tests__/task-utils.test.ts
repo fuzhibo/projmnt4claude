@@ -1061,6 +1061,18 @@ describe('validateStatusTransition', () => {
     expect(validateStatusTransition('in_progress', 'in_progress')).toEqual({ valid: true });
   });
 
+  // ---- 重试场景转换（prob4 补充设计）----
+
+  it('allows resolved → in_progress (retry path)', async () => {
+    const { validateStatusTransition } = await taskUtils();
+    expect(validateStatusTransition('resolved', 'in_progress')).toEqual({ valid: true });
+  });
+
+  it('allows completed → in_progress (retry path, backward compat)', async () => {
+    const { validateStatusTransition } = await taskUtils();
+    expect(validateStatusTransition('completed', 'in_progress')).toEqual({ valid: true });
+  });
+
   // ---- 非法转换 ----
 
   it('rejects open → resolved (skipping in_progress)', async () => {
@@ -1082,13 +1094,7 @@ describe('validateStatusTransition', () => {
     expect(result.valid).toBe(false);
   });
 
-  it('rejects resolved → in_progress (must reopen first)', async () => {
-    const { validateStatusTransition } = await taskUtils();
-    const result = validateStatusTransition('resolved', 'in_progress');
-    expect(result.valid).toBe(false);
-  });
-
-  it('rejects resolved → failed (must reopen first)', async () => {
+  it('rejects resolved → failed (must retry or reopen first)', async () => {
     const { validateStatusTransition } = await taskUtils();
     const result = validateStatusTransition('resolved', 'failed');
     expect(result.valid).toBe(false);

@@ -2,7 +2,7 @@ import * as path from 'path';
 import * as fs from 'fs';
 import { getTasksDir, isInitialized, getProjectDir } from './path';
 import type { TaskMeta, TaskHistoryEntry, TaskStatus, TaskRole, TaskVerification, VerificationMethod, TaskType, TaskPriority, ExecutionStats, ReopenRecord } from '../types/task';
-import { createDefaultTaskMeta, isValidTaskId, generateNextTaskId, generateTaskId, parseTaskId } from '../types/task';
+import { createDefaultTaskMeta, isValidTaskId, generateNextTaskId, generateTaskId, parseTaskId, normalizeStatus, isStatusEquivalent } from '../types/task';
 
 // ============================================================
 // 状态转换验证
@@ -11,14 +11,17 @@ import { createDefaultTaskMeta, isValidTaskId, generateNextTaskId, generateTaskI
 /**
  * 合法状态转换规则
  * 定义每个状态可以转换到的目标状态列表
+ *
+ * 注意：completed 是 resolved 的别名，使用相同的转换规则
  */
 export const VALID_TRANSITIONS: Record<TaskStatus, TaskStatus[]> = {
   open:          ['in_progress', 'closed', 'abandoned'],
-  in_progress:   ['wait_review', 'resolved', 'failed', 'closed', 'abandoned', 'open'],
+  in_progress:   ['wait_review', 'resolved', 'completed', 'failed', 'closed', 'abandoned', 'open'],
   wait_review:   ['wait_qa', 'in_progress', 'failed', 'closed', 'abandoned'],
   wait_qa:       ['wait_evaluation', 'in_progress', 'failed', 'closed', 'abandoned', 'open'],
-  wait_evaluation: ['resolved', 'in_progress', 'failed', 'closed', 'abandoned', 'open'],
-  resolved:      ['open', 'closed'],
+  wait_evaluation: ['resolved', 'completed', 'in_progress', 'failed', 'closed', 'abandoned', 'open'],
+  resolved:      ['open', 'in_progress', 'closed'],
+  completed:     ['open', 'in_progress', 'closed'],  // completed 是 resolved 的别名，使用相同转换规则
   closed:        ['open', 'in_progress'],
   abandoned:     ['open', 'in_progress'],
   failed:        ['in_progress', 'open', 'closed', 'abandoned'],
@@ -59,6 +62,11 @@ export function validateStatusTransition(
 ): StatusTransitionResult {
   // 相同状态不需要转换
   if (fromStatus === toStatus) {
+    return { valid: true };
+  }
+
+  // 等价状态不需要转换（completed 和 resolved 视为等价）
+  if (isStatusEquivalent(fromStatus, toStatus)) {
     return { valid: true };
   }
 

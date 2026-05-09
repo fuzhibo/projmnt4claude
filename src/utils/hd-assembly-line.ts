@@ -35,7 +35,7 @@ import {
   createDefaultExecutionRecord,
   DEFAULT_PHASE_RETRY_LIMITS,
 } from '../types/harness.js';
-import type { TaskMeta, TaskStatus, TaskRole, CheckpointMetadata, CommitHistoryEntry, TransitionNote, PhaseHistoryEntry, FailureReason } from '../types/task.js';
+import type { TaskMeta, TaskStatus, TaskRole, CheckpointMetadata, CommitHistoryEntry, TransitionNote, PhaseHistoryEntry, FailureReason, TaskFailureReason } from '../types/task.js';
 import { Pipeline, normalizeStatus } from '../types/task.js';
 import { readTaskMeta, writeTaskMeta, taskExists, updateTaskStatus, assignRole, incrementReopenCount, recordExecutionStats } from './task.js';
 import { getProjectDir } from './path.js';
@@ -219,11 +219,37 @@ export class AssemblyLine {
         if (record.finalStatus === 'resolved' || record.finalStatus === 'closed') {
           state.passedTasks.push(taskId);
           this.statusReporter.recordTaskPassed(taskId);
+          // CP-P16-PROGRESS: 任务完成，实时更新进度
+          this.statusReporter.completeTaskProgress(taskId, true);
         } else if (record.finalStatus === 'failed') {
           state.failedTasks.push(taskId);
           this.statusReporter.recordTaskFailed(taskId, 'task_failed', 'execution');
+          // CP-P16-PROGRESS: 任务失败，实时更新进度
+          this.statusReporter.completeTaskProgress(taskId, false);
+
+          // CP-P1-9: 记录失败原因
+          if (!state.taskFailureReasons) {
+            state.taskFailureReasons = new Map();
+          }
+          const lastFailedEntry = record.timeline.findLast(e => e.event === 'failed');
+          const failureReason: TaskFailureReason = {
+            taskId,
+            failedAt: lastFailedEntry?.data?.failedAt || 'unknown',
+            phase: lastFailedEntry?.data?.phase || 'unknown',
+            reason: lastFailedEntry?.description || '执行失败',
+            errorDetails: lastFailedEntry?.data?.errorDetails,
+            timestamp: new Date().toISOString(),
+            attemptNumber: record.retryCount + 1,
+          };
+          state.taskFailureReasons.set(taskId, failureReason);
+          console.log(`   ❌ 任务 ${taskId} 执行失败: ${failureReason.reason}`);
+          console.log(`      失败阶段: ${failureReason.phase}`);
+          console.log(`      失败位置: ${failureReason.failedAt}`);
+
           // 上游失败级联：标记依赖该任务的下游任务为 failed
           this.cascadeFailureToDownstream(taskId, state);
+          // CP-P1-8: 使用新的级联失败处理函数记录详细原因
+          this.markDependentTasksAsFailed(state, taskId, failureReason);
         } else if (record.finalStatus === 'in_progress' && state.taskQueue.includes(taskId)) {
           state.retryingTasks.push(taskId);
           const retryCount = state.retryCounter.get(taskId) || 0;
@@ -278,8 +304,31 @@ export class AssemblyLine {
           state.failedTasks.push(taskId);
           this.statusReporter.recordTaskFailed(taskId, error instanceof Error ? error.message : String(error), 'execution');
 
+          // CP-P1-9: 记录异常失败原因
+          if (!state.taskFailureReasons) {
+            state.taskFailureReasons = new Map();
+          }
+          const failureReason: TaskFailureReason = {
+            taskId,
+            failedAt: 'exception',
+            phase: 'unknown',
+            reason: error instanceof Error ? error.message : '执行异常',
+            errorDetails: {
+              stack: error instanceof Error ? error.stack : undefined,
+              name: error instanceof Error ? error.name : undefined,
+              message: error instanceof Error ? error.message : String(error),
+            },
+            timestamp: new Date().toISOString(),
+            attemptNumber: 1,
+          };
+          state.taskFailureReasons.set(taskId, failureReason);
+
+          console.log(`   ❌ 任务 ${taskId} 执行异常: ${failureReason.reason}`);
+
           // 上游失败级联
           this.cascadeFailureToDownstream(taskId, state);
+          // CP-P1-8: 使用新的级联失败处理函数记录详细原因
+          this.markDependentTasksAsFailed(state, taskId, failureReason);
         }
 
         state.currentIndex++;
@@ -300,6 +349,9 @@ export class AssemblyLine {
       this.outputBatchSummary(state, state.batchBoundaries!.length - 1);
       this.tagBatchCompletion(state, state.batchBoundaries!.length - 1);
     }
+
+    // CP-P1-10: 输出失败原因汇总
+    this.printFailureSummary(state);
 
     // 生成摘要
     const endTime = new Date().toISOString();
@@ -360,6 +412,9 @@ export class AssemblyLine {
     };
 
     addTimeline('started', `开始执行任务: ${task.title}`);
+
+    // CP-P16-PROGRESS: 开始任务进度追踪
+    this.statusReporter.startTaskProgress(taskId, 'development');
 
     // 1. 检查依赖
     if (!await this.checkDependencies(task)) {
@@ -516,6 +571,9 @@ export class AssemblyLine {
             continue;
           }
 
+          // CP-P16-PROGRESS: 更新任务阶段进度
+          this.statusReporter.updateTaskPhase(taskId, 'code_review');
+
           addTimeline('code_review_started', '开始代码审核阶段');
           this.statusReporter.startPhase('code_review', taskId, '开始代码审核阶段');
           console.log('\n🔍 代码审核阶段...');
@@ -593,6 +651,9 @@ export class AssemblyLine {
             currentPhaseIndex = 1;
             continue;
           }
+
+          // CP-P16-PROGRESS: 更新任务阶段进度
+          this.statusReporter.updateTaskPhase(taskId, 'qa');
 
           addTimeline('qa_started', '开始 QA 验证阶段');
           this.statusReporter.startPhase('qa_verification', taskId, '开始 QA 验证阶段');
@@ -673,6 +734,9 @@ export class AssemblyLine {
           currentPhaseIndex = 0;
           continue;
         }
+
+        // CP-P16-PROGRESS: 更新任务阶段进度
+        this.statusReporter.updateTaskPhase(taskId, 'evaluation');
 
         addTimeline('review_started', '开始最终评估阶段');
         this.statusReporter.startPhase('evaluation', taskId, '开始最终评估阶段');
@@ -2601,5 +2665,245 @@ export class AssemblyLine {
       taskInBatch,
       batchSize,
     };
+  }
+
+  // ============================================================
+  // P1-PROB1: Cascade Failure Handling & Failure Reason Recording
+  // ============================================================
+
+  /**
+   * CP-P1-8: 标记依赖失败任务为失败（级联）
+   *
+   * 当一个任务失败时，递归标记所有依赖该任务的下游任务为失败。
+   * 使用 taskFailureReasons 记录详细的失败原因，用于后续复盘。
+   */
+  private async markDependentTasksAsFailed(
+    state: HarnessRuntimeState,
+    failedTaskId: string,
+    failureReason: TaskFailureReason
+  ): Promise<number> {
+    let cascadeCount = 0;
+
+    if (!state.taskFailureReasons) {
+      state.taskFailureReasons = new Map();
+    }
+    if (!state.failedTasks) {
+      state.failedTasks = [];
+    }
+
+    // 收集队列中所有任务的元数据，查找依赖关系
+    const allTaskMeta = new Map<string, TaskMeta>();
+    for (const taskId of state.taskQueue) {
+      if (taskId && !allTaskMeta.has(taskId)) {
+        const task = readTaskMeta(taskId, this.config.cwd);
+        if (task) allTaskMeta.set(taskId, task);
+      }
+    }
+
+    // 遍历所有任务，查找依赖失败任务的任务
+    for (const taskId of allTaskMeta.keys()) {
+      // 跳过已处理的任务
+      if (
+        state.passedTasks?.includes(taskId) ||
+        state.failedTasks.includes(taskId) ||
+        taskId === failedTaskId
+      ) {
+        continue;
+      }
+
+      const task = allTaskMeta.get(taskId);
+      if (task && task.dependencies && task.dependencies.includes(failedTaskId)) {
+        // 级联标记为失败
+        state.failedTasks.push(taskId);
+
+        // 记录失败原因（标记为上游依赖失败）
+        const cascadeFailureReason: TaskFailureReason = {
+          taskId,
+          failedAt: 'dependency_check',
+          phase: 'pre_execution',
+          reason: `上游依赖任务 ${failedTaskId} 执行失败`,
+          errorDetails: {
+            upstreamTaskId: failedTaskId,
+            upstreamFailureReason: failureReason.reason,
+            upstreamFailedAt: failureReason.failedAt,
+          },
+          timestamp: new Date().toISOString(),
+          attemptNumber: 0,
+          isCascadeFailure: true,
+        };
+        state.taskFailureReasons.set(taskId, cascadeFailureReason);
+
+        cascadeCount++;
+        console.log(`   ⚠️ 任务 ${taskId} 因上游依赖 ${failedTaskId} 失败而被连带标记为失败`);
+
+        // 更新任务元数据
+        try {
+          const previousStatus = task.status;
+          task.status = 'failed';
+          task.failureReason = 'upstream_failed';
+          task.updatedAt = new Date().toISOString();
+          if (!task.transitionNotes) {
+            task.transitionNotes = [];
+          }
+          task.transitionNotes.push({
+            timestamp: new Date().toISOString(),
+            fromStatus: previousStatus,
+            toStatus: 'failed',
+            note: `上游任务 ${failedTaskId} 失败，级联标记为 failed(upstream_failed)`,
+            author: 'assembly-line-cascade',
+          });
+          writeTaskMeta(task, this.config.cwd);
+        } catch (err) {
+          console.error(`   ⚠️ 级联标记 ${taskId} 失败: ${err instanceof Error ? err.message : String(err)}`);
+        }
+
+        // 递归处理下游任务的下游任务
+        cascadeCount += await this.markDependentTasksAsFailed(state, taskId, cascadeFailureReason);
+      }
+    }
+
+    return cascadeCount;
+  }
+
+  /**
+   * CP-P1-8: 标记因上游失败而被阻塞的任务为失败
+   *
+   * 当没有可执行任务时，检查所有被阻塞任务，
+   * 如果它们的上游依赖已失败，则连带标记为失败。
+   */
+  private markCascadeFailedTasks(state: HarnessRuntimeState): number {
+    let cascadeCount = 0;
+
+    if (!state.taskFailureReasons) {
+      state.taskFailureReasons = new Map();
+    }
+    if (!state.failedTasks) {
+      state.failedTasks = [];
+    }
+
+    const executionQueue = state.readyTasks && state.readyTasks.length > 0
+      ? state.readyTasks
+      : state.taskQueue;
+
+    for (const taskId of executionQueue) {
+      // 跳过已处理的任务
+      if (
+        state.passedTasks?.includes(taskId) ||
+        state.failedTasks.includes(taskId)
+      ) {
+        continue;
+      }
+
+      // 检查依赖是否因上游失败而不满足
+      const dependencyStatus = this.checkDependencyFailureStatus(state, taskId);
+
+      if (dependencyStatus.hasFailedDependency) {
+        // 级联标记为失败
+        state.failedTasks.push(taskId);
+
+        // 记录失败原因
+        const cascadeFailureReason: TaskFailureReason = {
+          taskId,
+          failedAt: 'dependency_check',
+          phase: 'pre_execution',
+          reason: `上游依赖任务 ${dependencyStatus.failedDependencyId} 执行失败`,
+          errorDetails: {
+            upstreamTaskId: dependencyStatus.failedDependencyId,
+            upstreamFailureReason: dependencyStatus.failureReason,
+          },
+          timestamp: new Date().toISOString(),
+          attemptNumber: 0,
+          isCascadeFailure: true,
+        };
+        state.taskFailureReasons.set(taskId, cascadeFailureReason);
+
+        cascadeCount++;
+        console.log(`   ⚠️ 任务 ${taskId} 因上游依赖失败而被连带标记为失败`);
+      }
+    }
+
+    return cascadeCount;
+  }
+
+  /**
+   * 检查任务的依赖失败状态
+   */
+  private checkDependencyFailureStatus(
+    state: HarnessRuntimeState,
+    taskId: string
+  ): { hasFailedDependency: boolean; failedDependencyId?: string; failureReason?: string } {
+    const task = readTaskMeta(taskId, this.config.cwd);
+
+    if (!task || !task.dependencies || task.dependencies.length === 0) {
+      return { hasFailedDependency: false };
+    }
+
+    // 检查每个依赖任务的状态
+    for (const depTaskId of task.dependencies) {
+      if (state.failedTasks?.includes(depTaskId)) {
+        const failureReason = state.taskFailureReasons?.get(depTaskId);
+        return {
+          hasFailedDependency: true,
+          failedDependencyId: depTaskId,
+          failureReason: failureReason?.reason || '未知原因',
+        };
+      }
+    }
+
+    return { hasFailedDependency: false };
+  }
+
+  /**
+   * CP-P1-10: 输出失败原因汇总（用于复盘）
+   */
+  private printFailureSummary(state: HarnessRuntimeState): void {
+    if (!state.taskFailureReasons || state.taskFailureReasons.size === 0) {
+      return;
+    }
+
+    console.log('\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+    console.log('📋 失败原因汇总（用于复盘）');
+    console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n');
+
+    // 按失败类型分组
+    const directFailures: TaskFailureReason[] = [];
+    const cascadeFailures: TaskFailureReason[] = [];
+
+    state.taskFailureReasons.forEach((reason) => {
+      if (reason.isCascadeFailure) {
+        cascadeFailures.push(reason);
+      } else {
+        directFailures.push(reason);
+      }
+    });
+
+    // 输出直接失败
+    if (directFailures.length > 0) {
+      console.log('【直接失败】');
+      directFailures.forEach((reason, index) => {
+        console.log(`\n  ${index + 1}. 任务: ${reason.taskId}`);
+        console.log(`     失败阶段: ${reason.phase}`);
+        console.log(`     失败位置: ${reason.failedAt}`);
+        console.log(`     失败原因: ${reason.reason}`);
+        console.log(`     尝试次数: ${reason.attemptNumber}`);
+        console.log(`     时间: ${reason.timestamp}`);
+        if (reason.errorDetails) {
+          console.log(`     详情: ${JSON.stringify(reason.errorDetails, null, 2)}`);
+        }
+      });
+    }
+
+    // 输出级联失败
+    if (cascadeFailures.length > 0) {
+      console.log('\n【级联失败（上游依赖失败）】');
+      cascadeFailures.forEach((reason, index) => {
+        console.log(`\n  ${index + 1}. 任务: ${reason.taskId}`);
+        console.log(`     上游任务: ${reason.errorDetails?.upstreamTaskId}`);
+        console.log(`     上游失败原因: ${reason.errorDetails?.upstreamFailureReason}`);
+        console.log(`     时间: ${reason.timestamp}`);
+      });
+    }
+
+    console.log('\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n');
   }
 }

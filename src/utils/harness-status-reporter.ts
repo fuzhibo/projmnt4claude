@@ -279,6 +279,138 @@ export class HarnessStatusReporter {
     this.writeStatus();
   }
 
+  // ============================================================
+  // CP-P16-PROGRESS: Real-time progress tracking methods (§9)
+  // ============================================================
+
+  /**
+   * 开始任务执行 - 实时进度更新
+   * 在任务开始时调用，更新当前任务ID和阶段
+   */
+  startTaskProgress(taskId: string, phase: 'development' | 'code_review' | 'qa' | 'evaluation' = 'development'): void {
+    this.currentReport.currentTaskId = taskId;
+    this.currentReport.currentTaskPhase = phase;
+    this.currentReport.currentPhase = this.mapTaskPhaseToReportPhase(phase);
+
+    // 初始化阶段开始时间
+    if (!this.currentReport.phaseStartTimes) {
+      this.currentReport.phaseStartTimes = {};
+    }
+    this.currentReport.phaseStartTimes[phase] = new Date().toISOString();
+
+    // 更新消息
+    this.currentReport.message = `执行任务 ${taskId} - ${this.getPhaseDisplayName(phase)}阶段`;
+    this.currentReport.timestamp = new Date().toISOString();
+
+    this.writeStatus();
+  }
+
+  /**
+   * 更新任务阶段 - 实时进度更新
+   * 在任务阶段切换时调用（如开发完成进入代码审核）
+   */
+  updateTaskPhase(taskId: string, phase: 'development' | 'code_review' | 'qa' | 'evaluation'): void {
+    if (this.currentReport.currentTaskId !== taskId) {
+      // 任务不匹配，重新初始化
+      this.startTaskProgress(taskId, phase);
+      return;
+    }
+
+    // 记录上一阶段的持续时间
+    const prevPhase = this.currentReport.currentTaskPhase;
+    if (prevPhase && this.currentReport.phaseStartTimes?.[prevPhase]) {
+      const startTime = new Date(this.currentReport.phaseStartTimes[prevPhase]).getTime();
+      const duration = Date.now() - startTime;
+
+      if (!this.currentReport.phaseDurations) {
+        this.currentReport.phaseDurations = {};
+      }
+      this.currentReport.phaseDurations[prevPhase] = duration;
+    }
+
+    // 更新到新阶段
+    this.currentReport.currentTaskPhase = phase;
+    this.currentReport.currentPhase = this.mapTaskPhaseToReportPhase(phase);
+
+    // 记录新阶段开始时间
+    if (!this.currentReport.phaseStartTimes) {
+      this.currentReport.phaseStartTimes = {};
+    }
+    this.currentReport.phaseStartTimes[phase] = new Date().toISOString();
+
+    this.currentReport.message = `执行任务 ${taskId} - ${this.getPhaseDisplayName(phase)}阶段`;
+    this.currentReport.timestamp = new Date().toISOString();
+
+    this.writeStatus();
+  }
+
+  /**
+   * 完成任务进度 - 实时进度更新
+   * 在任务完成时调用，立即更新 completedTasks 和 progress
+   */
+  completeTaskProgress(taskId: string, passed: boolean): void {
+    // 记录最后阶段的持续时间
+    const currentPhase = this.currentReport.currentTaskPhase;
+    if (currentPhase && this.currentReport.phaseStartTimes?.[currentPhase]) {
+      const startTime = new Date(this.currentReport.phaseStartTimes[currentPhase]).getTime();
+      const duration = Date.now() - startTime;
+
+      if (!this.currentReport.phaseDurations) {
+        this.currentReport.phaseDurations = {};
+      }
+      this.currentReport.phaseDurations[currentPhase] = duration;
+    }
+
+    // 立即更新 completedTasks
+    this.currentReport.completedTasks++;
+
+    // 重新计算进度百分比
+    if (this.currentReport.totalTasks > 0) {
+      this.currentReport.progress = Math.round(
+        (this.currentReport.completedTasks / this.currentReport.totalTasks) * 100
+      );
+    }
+
+    // 更新消息
+    const statusText = passed ? '通过' : '失败';
+    this.currentReport.message = `任务 ${taskId} ${statusText} (${this.currentReport.completedTasks}/${this.currentReport.totalTasks})`;
+    this.currentReport.timestamp = new Date().toISOString();
+
+    // 清理当前任务状态
+    this.currentReport.currentTaskId = undefined;
+    this.currentReport.currentTaskPhase = undefined;
+    this.currentReport.phaseStartTimes = {};
+    // phaseDurations 保留用于日志
+
+    this.writeStatus();
+  }
+
+  /**
+   * 映射任务阶段到报告阶段
+   */
+  private mapTaskPhaseToReportPhase(phase: 'development' | 'code_review' | 'qa' | 'evaluation'): HarnessReportPhase {
+    const mapping: Record<string, HarnessReportPhase> = {
+      development: 'development',
+      code_review: 'code_review',
+      qa: 'qa_verification',
+      evaluation: 'evaluation',
+    };
+    return mapping[phase] || 'development';
+  }
+
+  /**
+   * 获取阶段显示名称
+   */
+  private getPhaseDisplayName(phase: 'development' | 'code_review' | 'qa' | 'evaluation'): string {
+    const names: Record<string, string> = {
+      development: '开发',
+      code_review: '代码审核',
+      qa: 'QA验证',
+      evaluation: '评估',
+    };
+    return names[phase] || phase;
+  }
+
   /**
    * 过期状态阈值（5 分钟）
    * 正常流水线每个任务至少 1-2 分钟，超过 5 分钟无更新必然异常

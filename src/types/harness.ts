@@ -7,7 +7,7 @@
  * - Sprint Contract: Define "done" criteria before development
  */
 
-import type { TaskMeta, TaskStatus, TaskRole, CheckpointCategory } from './task.js';
+import type { TaskMeta, TaskStatus, TaskRole, CheckpointCategory, TaskFailureReason } from './task.js';
 
 /**
  * Harness execution configuration
@@ -580,6 +580,20 @@ export interface HarnessRuntimeState {
    * CP-P16: Tracks detailed phase execution state for crash recovery
    */
   phaseCheckpoints?: Map<string, Map<string, PhaseCheckpoint>>;
+
+  // ============================================================
+  // P1-PROB1: Cascade Failure Handling
+  // ============================================================
+
+  /**
+   * Task failure reasons map
+   * key: taskId
+   * value: TaskFailureReason
+   *
+   * CP-P1-8: Records detailed failure reasons for each failed task
+   * Used for cascade failure handling and retrospective analysis
+   */
+  taskFailureReasons?: Map<string, TaskFailureReason>;
 }
 
 /**
@@ -771,6 +785,11 @@ export interface PhaseHistoryEntry {
  * - state only represents process-level status (running/completed/stopped)
  * - Individual task failures don't affect state, only recorded in failedTasks array
  * - totalTasks based on unique task IDs, not inflated by retries
+ *
+ * CP-P16-PROGRESS: Real-time progress tracking (§9)
+ * - Progress updates at task start, phase completion, task completion
+ * - completedTasks increments immediately on task completion
+ * - progress percentage calculated in real-time
  */
 export interface HarnessStatusReport {
   /** Session ID (associated with current AI session) */
@@ -854,6 +873,26 @@ export interface HarnessStatusReport {
     reason: string;
     timestamp: string;
   }>;
+
+  // --- CP-P16-PROGRESS: Real-time progress tracking fields ---
+
+  /**
+   * Current phase for the active task
+   * One of: 'development', 'code_review', 'qa', 'evaluation'
+   */
+  currentTaskPhase?: 'development' | 'code_review' | 'qa' | 'evaluation';
+
+  /**
+   * Phase start times for current task (for duration tracking)
+   * key: phase name, value: ISO timestamp
+   */
+  phaseStartTimes?: Record<string, string>;
+
+  /**
+   * Phase durations for current task (milliseconds)
+   * key: phase name, value: duration in ms
+   */
+  phaseDurations?: Record<string, number>;
 }
 
 /**
@@ -875,5 +914,9 @@ export function createDefaultStatusReport(sessionId?: string): HarnessStatusRepo
     retryingTasks: [],
     retryCount: 0,
     retryHistory: [],
+    // CP-P16-PROGRESS: Initialize progress tracking fields
+    currentTaskPhase: undefined,
+    phaseStartTimes: {},
+    phaseDurations: {},
   };
 }

@@ -13,7 +13,7 @@
  */
 
 import type { TaskMeta, TaskStatus } from '../types/task.js';
-import { normalizeStatus } from '../types/task.js';
+import { normalizeStatus, isDependencySatisfied } from '../types/task.js';
 import type { HarnessRuntimeState } from '../types/harness.js';
 import { readTaskMeta } from './task.js';
 import { validateBasicFields, validateCheckpoints } from './quality-gate.js';
@@ -248,12 +248,13 @@ export class HarnessPreValidator {
         continue;
       }
 
-      const normalizedStatus = normalizeStatus(depTask.status);
-
-      // 检查依赖是否已完成
-      if (normalizedStatus === 'resolved' || normalizedStatus === 'closed') {
+      // Use isDependencySatisfied to check if dependency is satisfied
+      // This checks both status AND checkpoint completion
+      if (isDependencySatisfied(depTask)) {
         continue;
       }
+
+      const normalizedStatus = normalizeStatus(depTask.status);
 
       // 检查依赖是否已失败
       if (normalizedStatus === 'failed' || normalizedStatus === 'abandoned') {

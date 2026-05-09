@@ -11018,7 +11018,9 @@ __export(exports_task, {
   normalizePriority: () => normalizePriority,
   needsConversion: () => needsConversion,
   isValidTaskId: () => isValidTaskId,
+  isStatusEquivalent: () => isStatusEquivalent,
   isOldFormatTaskId: () => isOldFormatTaskId,
+  isDependencySatisfied: () => isDependencySatisfied,
   inferTaskType: () => inferTaskType,
   inferTaskPriority: () => inferTaskPriority,
   inferCheckpointPolicy: () => inferCheckpointPolicy,
@@ -11031,6 +11033,7 @@ __export(exports_task, {
   PIPELINE_STATUS_MIGRATION_MAP: () => PIPELINE_STATUS_MIGRATION_MAP,
   PIPELINE_INTERMEDIATE_STATUSES: () => PIPELINE_INTERMEDIATE_STATUSES,
   PHASE_ROLE_MAP: () => PHASE_ROLE_MAP,
+  DEPENDENCY_SATISFIED_STATUSES: () => DEPENDENCY_SATISFIED_STATUSES,
   CURRENT_TASK_SCHEMA_VERSION: () => CURRENT_TASK_SCHEMA_VERSION
 });
 function validateCheckpointVerification(checkpoint) {
@@ -11069,6 +11072,26 @@ function normalizeStatus(status) {
     failed: "failed"
   };
   return statusMap[status] || "open";
+}
+function isStatusEquivalent(status1, status2) {
+  if (status1 === status2)
+    return true;
+  return STATUS_EQUIVALENCE_GROUPS.some((group) => group.includes(status1) && group.includes(status2));
+}
+function isDependencySatisfied(depTask) {
+  if (!depTask)
+    return false;
+  const normalizedStatus = normalizeStatus(depTask.status);
+  const isStatusSatisfied = DEPENDENCY_SATISFIED_STATUSES.some((satisfiedStatus) => isStatusEquivalent(normalizedStatus, satisfiedStatus));
+  if (!isStatusSatisfied)
+    return false;
+  const checkpoints = depTask.checkpoints || [];
+  if (checkpoints.length > 0) {
+    const allCheckpointsCompleted = checkpoints.every((cp) => cp.status === "completed" || cp.status === "skipped");
+    if (!allCheckpointsCompleted)
+      return false;
+  }
+  return true;
 }
 function normalizePriority(priority) {
   const priorityMap = {
@@ -11259,7 +11282,7 @@ function generateNextTaskId(existingIds) {
   const maxNumber = Math.max(...numbers, 0);
   return `TASK-${String(maxNumber + 1).padStart(3, "0")}`;
 }
-var METHODS_REQUIRING_COMMANDS, PHASE_ROLE_MAP, Pipeline, CURRENT_TASK_SCHEMA_VERSION = 6, TERMINAL_STATUSES, PIPELINE_INTERMEDIATE_STATUSES, PIPELINE_STATUS_MIGRATION_MAP;
+var METHODS_REQUIRING_COMMANDS, PHASE_ROLE_MAP, Pipeline, CURRENT_TASK_SCHEMA_VERSION = 6, TERMINAL_STATUSES, PIPELINE_INTERMEDIATE_STATUSES, PIPELINE_STATUS_MIGRATION_MAP, STATUS_EQUIVALENCE_GROUPS, DEPENDENCY_SATISFIED_STATUSES;
 var init_task = __esm(() => {
   METHODS_REQUIRING_COMMANDS = [
     "functional_test",
@@ -11318,6 +11341,10 @@ var init_task = __esm(() => {
     wait_qa: "in_progress",
     wait_evaluation: "wait_qa"
   };
+  STATUS_EQUIVALENCE_GROUPS = [
+    ["resolved", "completed"]
+  ];
+  DEPENDENCY_SATISFIED_STATUSES = ["resolved", "completed", "closed"];
 });
 
 // src/utils/task.ts
@@ -11351,6 +11378,9 @@ import * as path4 from "path";
 import * as fs7 from "fs";
 function validateStatusTransition(fromStatus, toStatus) {
   if (fromStatus === toStatus) {
+    return { valid: true };
+  }
+  if (isStatusEquivalent(fromStatus, toStatus)) {
     return { valid: true };
   }
   const allowed = VALID_TRANSITIONS[fromStatus];
@@ -11891,11 +11921,12 @@ var init_task2 = __esm(() => {
   init_task();
   VALID_TRANSITIONS = {
     open: ["in_progress", "closed", "abandoned"],
-    in_progress: ["wait_review", "resolved", "failed", "closed", "abandoned", "open"],
+    in_progress: ["wait_review", "resolved", "completed", "failed", "closed", "abandoned", "open"],
     wait_review: ["wait_qa", "in_progress", "failed", "closed", "abandoned"],
     wait_qa: ["wait_evaluation", "in_progress", "failed", "closed", "abandoned", "open"],
-    wait_evaluation: ["resolved", "in_progress", "failed", "closed", "abandoned", "open"],
-    resolved: ["open", "closed"],
+    wait_evaluation: ["resolved", "completed", "in_progress", "failed", "closed", "abandoned", "open"],
+    resolved: ["open", "in_progress", "closed"],
+    completed: ["open", "in_progress", "closed"],
     closed: ["open", "in_progress"],
     abandoned: ["open", "in_progress"],
     failed: ["in_progress", "open", "closed", "abandoned"],
@@ -18534,7 +18565,10 @@ function createDefaultStatusReport(sessionId) {
     failedTasks: [],
     retryingTasks: [],
     retryCount: 0,
-    retryHistory: []
+    retryHistory: [],
+    currentTaskPhase: undefined,
+    phaseStartTimes: {},
+    phaseDurations: {}
   };
 }
 var DEFAULT_HARNESS_CONFIG, VALID_VERDICT_ACTIONS, DEFAULT_PHASE_RETRY_LIMITS;
@@ -36199,10 +36233,10 @@ class HarnessPreValidator {
         result.satisfied = false;
         continue;
       }
-      const normalizedStatus = normalizeStatus(depTask.status);
-      if (normalizedStatus === "resolved" || normalizedStatus === "closed") {
+      if (isDependencySatisfied(depTask)) {
         continue;
       }
+      const normalizedStatus = normalizeStatus(depTask.status);
       if (normalizedStatus === "failed" || normalizedStatus === "abandoned") {
         result.failedDeps.push(depId);
         result.satisfied = false;
@@ -38554,6 +38588,82 @@ class HarnessStatusReporter {
     this.currentReport.timestamp = new Date().toISOString();
     this.writeStatus();
   }
+  startTaskProgress(taskId, phase = "development") {
+    this.currentReport.currentTaskId = taskId;
+    this.currentReport.currentTaskPhase = phase;
+    this.currentReport.currentPhase = this.mapTaskPhaseToReportPhase(phase);
+    if (!this.currentReport.phaseStartTimes) {
+      this.currentReport.phaseStartTimes = {};
+    }
+    this.currentReport.phaseStartTimes[phase] = new Date().toISOString();
+    this.currentReport.message = `执行任务 ${taskId} - ${this.getPhaseDisplayName(phase)}阶段`;
+    this.currentReport.timestamp = new Date().toISOString();
+    this.writeStatus();
+  }
+  updateTaskPhase(taskId, phase) {
+    if (this.currentReport.currentTaskId !== taskId) {
+      this.startTaskProgress(taskId, phase);
+      return;
+    }
+    const prevPhase = this.currentReport.currentTaskPhase;
+    if (prevPhase && this.currentReport.phaseStartTimes?.[prevPhase]) {
+      const startTime = new Date(this.currentReport.phaseStartTimes[prevPhase]).getTime();
+      const duration = Date.now() - startTime;
+      if (!this.currentReport.phaseDurations) {
+        this.currentReport.phaseDurations = {};
+      }
+      this.currentReport.phaseDurations[prevPhase] = duration;
+    }
+    this.currentReport.currentTaskPhase = phase;
+    this.currentReport.currentPhase = this.mapTaskPhaseToReportPhase(phase);
+    if (!this.currentReport.phaseStartTimes) {
+      this.currentReport.phaseStartTimes = {};
+    }
+    this.currentReport.phaseStartTimes[phase] = new Date().toISOString();
+    this.currentReport.message = `执行任务 ${taskId} - ${this.getPhaseDisplayName(phase)}阶段`;
+    this.currentReport.timestamp = new Date().toISOString();
+    this.writeStatus();
+  }
+  completeTaskProgress(taskId, passed) {
+    const currentPhase = this.currentReport.currentTaskPhase;
+    if (currentPhase && this.currentReport.phaseStartTimes?.[currentPhase]) {
+      const startTime = new Date(this.currentReport.phaseStartTimes[currentPhase]).getTime();
+      const duration = Date.now() - startTime;
+      if (!this.currentReport.phaseDurations) {
+        this.currentReport.phaseDurations = {};
+      }
+      this.currentReport.phaseDurations[currentPhase] = duration;
+    }
+    this.currentReport.completedTasks++;
+    if (this.currentReport.totalTasks > 0) {
+      this.currentReport.progress = Math.round(this.currentReport.completedTasks / this.currentReport.totalTasks * 100);
+    }
+    const statusText = passed ? "通过" : "失败";
+    this.currentReport.message = `任务 ${taskId} ${statusText} (${this.currentReport.completedTasks}/${this.currentReport.totalTasks})`;
+    this.currentReport.timestamp = new Date().toISOString();
+    this.currentReport.currentTaskId = undefined;
+    this.currentReport.currentTaskPhase = undefined;
+    this.currentReport.phaseStartTimes = {};
+    this.writeStatus();
+  }
+  mapTaskPhaseToReportPhase(phase) {
+    const mapping = {
+      development: "development",
+      code_review: "code_review",
+      qa: "qa_verification",
+      evaluation: "evaluation"
+    };
+    return mapping[phase] || "development";
+  }
+  getPhaseDisplayName(phase) {
+    const names = {
+      development: "开发",
+      code_review: "代码审核",
+      qa: "QA验证",
+      evaluation: "评估"
+    };
+    return names[phase] || phase;
+  }
   static STALE_THRESHOLD_MS = 5 * 60 * 1000;
   startPipeline(totalTasks, message) {
     this.checkStaleStatus();
@@ -39002,10 +39112,30 @@ ${"━".repeat(SEPARATOR_WIDTH)}`);
         if (record.finalStatus === "resolved" || record.finalStatus === "closed") {
           state.passedTasks.push(taskId);
           this.statusReporter.recordTaskPassed(taskId);
+          this.statusReporter.completeTaskProgress(taskId, true);
         } else if (record.finalStatus === "failed") {
           state.failedTasks.push(taskId);
           this.statusReporter.recordTaskFailed(taskId, "task_failed", "execution");
+          this.statusReporter.completeTaskProgress(taskId, false);
+          if (!state.taskFailureReasons) {
+            state.taskFailureReasons = new Map;
+          }
+          const lastFailedEntry = record.timeline.findLast((e) => e.event === "failed");
+          const failureReason = {
+            taskId,
+            failedAt: lastFailedEntry?.data?.failedAt || "unknown",
+            phase: lastFailedEntry?.data?.phase || "unknown",
+            reason: lastFailedEntry?.description || "执行失败",
+            errorDetails: lastFailedEntry?.data?.errorDetails,
+            timestamp: new Date().toISOString(),
+            attemptNumber: record.retryCount + 1
+          };
+          state.taskFailureReasons.set(taskId, failureReason);
+          console.log(`   ❌ 任务 ${taskId} 执行失败: ${failureReason.reason}`);
+          console.log(`      失败阶段: ${failureReason.phase}`);
+          console.log(`      失败位置: ${failureReason.failedAt}`);
           this.cascadeFailureToDownstream(taskId, state);
+          this.markDependentTasksAsFailed(state, taskId, failureReason);
         } else if (record.finalStatus === "in_progress" && state.taskQueue.includes(taskId)) {
           state.retryingTasks.push(taskId);
           const retryCount = state.retryCounter.get(taskId) || 0;
@@ -39044,7 +39174,26 @@ ${"━".repeat(SEPARATOR_WIDTH)}`);
             state.failedTasks = [];
           state.failedTasks.push(taskId);
           this.statusReporter.recordTaskFailed(taskId, error instanceof Error ? error.message : String(error), "execution");
+          if (!state.taskFailureReasons) {
+            state.taskFailureReasons = new Map;
+          }
+          const failureReason = {
+            taskId,
+            failedAt: "exception",
+            phase: "unknown",
+            reason: error instanceof Error ? error.message : "执行异常",
+            errorDetails: {
+              stack: error instanceof Error ? error.stack : undefined,
+              name: error instanceof Error ? error.name : undefined,
+              message: error instanceof Error ? error.message : String(error)
+            },
+            timestamp: new Date().toISOString(),
+            attemptNumber: 1
+          };
+          state.taskFailureReasons.set(taskId, failureReason);
+          console.log(`   ❌ 任务 ${taskId} 执行异常: ${failureReason.reason}`);
           this.cascadeFailureToDownstream(taskId, state);
+          this.markDependentTasksAsFailed(state, taskId, failureReason);
         }
         state.currentIndex++;
         if (hasBatches && batchPos) {
@@ -39060,6 +39209,7 @@ ${"━".repeat(SEPARATOR_WIDTH)}`);
       this.outputBatchSummary(state, state.batchBoundaries.length - 1);
       this.tagBatchCompletion(state, state.batchBoundaries.length - 1);
     }
+    this.printFailureSummary(state);
     const endTime = new Date().toISOString();
     const duration = new Date(endTime).getTime() - new Date(startTime).getTime();
     const uniqueTaskCount = uniqueTaskIds.size;
@@ -39098,6 +39248,7 @@ ${"━".repeat(SEPARATOR_WIDTH)}`);
       });
     };
     addTimeline("started", `开始执行任务: ${task.title}`);
+    this.statusReporter.startTaskProgress(taskId, "development");
     if (!await this.checkDependencies(task)) {
       console.log(`⚠️  依赖未完成，延后处理`);
       addTimeline("failed", "依赖未完成");
@@ -39213,6 +39364,7 @@ ${"━".repeat(SEPARATOR_WIDTH)}`);
             currentPhaseIndex = 0;
             continue;
           }
+          this.statusReporter.updateTaskPhase(taskId, "code_review");
           addTimeline("code_review_started", "开始代码审核阶段");
           this.statusReporter.startPhase("code_review", taskId, "开始代码审核阶段");
           console.log(`
@@ -39276,6 +39428,7 @@ ${"━".repeat(SEPARATOR_WIDTH)}`);
             currentPhaseIndex = 1;
             continue;
           }
+          this.statusReporter.updateTaskPhase(taskId, "qa");
           addTimeline("qa_started", "开始 QA 验证阶段");
           this.statusReporter.startPhase("qa_verification", taskId, "开始 QA 验证阶段");
           console.log(`
@@ -39340,6 +39493,7 @@ ${"━".repeat(SEPARATOR_WIDTH)}`);
           currentPhaseIndex = 0;
           continue;
         }
+        this.statusReporter.updateTaskPhase(taskId, "evaluation");
         addTimeline("review_started", "开始最终评估阶段");
         this.statusReporter.startPhase("evaluation", taskId, "开始最终评估阶段");
         console.log(`
@@ -40582,6 +40736,171 @@ ${"━".repeat(SEPARATOR_WIDTH)}`);
       taskInBatch,
       batchSize
     };
+  }
+  async markDependentTasksAsFailed(state, failedTaskId, failureReason) {
+    let cascadeCount = 0;
+    if (!state.taskFailureReasons) {
+      state.taskFailureReasons = new Map;
+    }
+    if (!state.failedTasks) {
+      state.failedTasks = [];
+    }
+    const allTaskMeta = new Map;
+    for (const taskId of state.taskQueue) {
+      if (taskId && !allTaskMeta.has(taskId)) {
+        const task = readTaskMeta(taskId, this.config.cwd);
+        if (task)
+          allTaskMeta.set(taskId, task);
+      }
+    }
+    for (const taskId of allTaskMeta.keys()) {
+      if (state.passedTasks?.includes(taskId) || state.failedTasks.includes(taskId) || taskId === failedTaskId) {
+        continue;
+      }
+      const task = allTaskMeta.get(taskId);
+      if (task && task.dependencies && task.dependencies.includes(failedTaskId)) {
+        state.failedTasks.push(taskId);
+        const cascadeFailureReason = {
+          taskId,
+          failedAt: "dependency_check",
+          phase: "pre_execution",
+          reason: `上游依赖任务 ${failedTaskId} 执行失败`,
+          errorDetails: {
+            upstreamTaskId: failedTaskId,
+            upstreamFailureReason: failureReason.reason,
+            upstreamFailedAt: failureReason.failedAt
+          },
+          timestamp: new Date().toISOString(),
+          attemptNumber: 0,
+          isCascadeFailure: true
+        };
+        state.taskFailureReasons.set(taskId, cascadeFailureReason);
+        cascadeCount++;
+        console.log(`   ⚠️ 任务 ${taskId} 因上游依赖 ${failedTaskId} 失败而被连带标记为失败`);
+        try {
+          const previousStatus = task.status;
+          task.status = "failed";
+          task.failureReason = "upstream_failed";
+          task.updatedAt = new Date().toISOString();
+          if (!task.transitionNotes) {
+            task.transitionNotes = [];
+          }
+          task.transitionNotes.push({
+            timestamp: new Date().toISOString(),
+            fromStatus: previousStatus,
+            toStatus: "failed",
+            note: `上游任务 ${failedTaskId} 失败，级联标记为 failed(upstream_failed)`,
+            author: "assembly-line-cascade"
+          });
+          writeTaskMeta(task, this.config.cwd);
+        } catch (err) {
+          console.error(`   ⚠️ 级联标记 ${taskId} 失败: ${err instanceof Error ? err.message : String(err)}`);
+        }
+        cascadeCount += await this.markDependentTasksAsFailed(state, taskId, cascadeFailureReason);
+      }
+    }
+    return cascadeCount;
+  }
+  markCascadeFailedTasks(state) {
+    let cascadeCount = 0;
+    if (!state.taskFailureReasons) {
+      state.taskFailureReasons = new Map;
+    }
+    if (!state.failedTasks) {
+      state.failedTasks = [];
+    }
+    const executionQueue = state.readyTasks && state.readyTasks.length > 0 ? state.readyTasks : state.taskQueue;
+    for (const taskId of executionQueue) {
+      if (state.passedTasks?.includes(taskId) || state.failedTasks.includes(taskId)) {
+        continue;
+      }
+      const dependencyStatus = this.checkDependencyFailureStatus(state, taskId);
+      if (dependencyStatus.hasFailedDependency) {
+        state.failedTasks.push(taskId);
+        const cascadeFailureReason = {
+          taskId,
+          failedAt: "dependency_check",
+          phase: "pre_execution",
+          reason: `上游依赖任务 ${dependencyStatus.failedDependencyId} 执行失败`,
+          errorDetails: {
+            upstreamTaskId: dependencyStatus.failedDependencyId,
+            upstreamFailureReason: dependencyStatus.failureReason
+          },
+          timestamp: new Date().toISOString(),
+          attemptNumber: 0,
+          isCascadeFailure: true
+        };
+        state.taskFailureReasons.set(taskId, cascadeFailureReason);
+        cascadeCount++;
+        console.log(`   ⚠️ 任务 ${taskId} 因上游依赖失败而被连带标记为失败`);
+      }
+    }
+    return cascadeCount;
+  }
+  checkDependencyFailureStatus(state, taskId) {
+    const task = readTaskMeta(taskId, this.config.cwd);
+    if (!task || !task.dependencies || task.dependencies.length === 0) {
+      return { hasFailedDependency: false };
+    }
+    for (const depTaskId of task.dependencies) {
+      if (state.failedTasks?.includes(depTaskId)) {
+        const failureReason = state.taskFailureReasons?.get(depTaskId);
+        return {
+          hasFailedDependency: true,
+          failedDependencyId: depTaskId,
+          failureReason: failureReason?.reason || "未知原因"
+        };
+      }
+    }
+    return { hasFailedDependency: false };
+  }
+  printFailureSummary(state) {
+    if (!state.taskFailureReasons || state.taskFailureReasons.size === 0) {
+      return;
+    }
+    console.log(`
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`);
+    console.log("\uD83D\uDCCB 失败原因汇总（用于复盘）");
+    console.log(`━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+`);
+    const directFailures = [];
+    const cascadeFailures = [];
+    state.taskFailureReasons.forEach((reason) => {
+      if (reason.isCascadeFailure) {
+        cascadeFailures.push(reason);
+      } else {
+        directFailures.push(reason);
+      }
+    });
+    if (directFailures.length > 0) {
+      console.log("【直接失败】");
+      directFailures.forEach((reason, index) => {
+        console.log(`
+  ${index + 1}. 任务: ${reason.taskId}`);
+        console.log(`     失败阶段: ${reason.phase}`);
+        console.log(`     失败位置: ${reason.failedAt}`);
+        console.log(`     失败原因: ${reason.reason}`);
+        console.log(`     尝试次数: ${reason.attemptNumber}`);
+        console.log(`     时间: ${reason.timestamp}`);
+        if (reason.errorDetails) {
+          console.log(`     详情: ${JSON.stringify(reason.errorDetails, null, 2)}`);
+        }
+      });
+    }
+    if (cascadeFailures.length > 0) {
+      console.log(`
+【级联失败（上游依赖失败）】`);
+      cascadeFailures.forEach((reason, index) => {
+        console.log(`
+  ${index + 1}. 任务: ${reason.taskId}`);
+        console.log(`     上游任务: ${reason.errorDetails?.upstreamTaskId}`);
+        console.log(`     上游失败原因: ${reason.errorDetails?.upstreamFailureReason}`);
+        console.log(`     时间: ${reason.timestamp}`);
+      });
+    }
+    console.log(`
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+`);
   }
 }
 
