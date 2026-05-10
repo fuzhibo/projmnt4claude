@@ -18587,9 +18587,6 @@ var init_harness = __esm(() => {
   VALID_VERDICT_ACTIONS = [
     "resolve",
     "redevelop",
-    "retest",
-    "reevaluate",
-    "minor_fix",
     "escalate_human"
   ];
   ERROR_CATEGORIES = {

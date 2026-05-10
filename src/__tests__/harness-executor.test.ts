@@ -3,6 +3,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 import { HarnessExecutor } from '../utils/harness-executor.js';
 import * as harnessHelpers from '../utils/harness-helpers.js';
+import * as promptTemplates from '../utils/prompt-templates.js';
 import { createIsolatedTestEnv, type IsolatedTestEnv } from '../utils/test-env.js';
 import type { HarnessConfig, SprintContract, DevReport, RetryContext } from '../types/harness.js';
 import type { TaskMeta } from '../types/task.js';
@@ -25,12 +26,8 @@ mock.module('../utils/role-prompts.js', () => ({
   }),
 }));
 
-mock.module('../utils/prompt-templates.js', () => ({
-  loadPromptTemplate: () => '{title}\n{taskId}\n{descriptionSection}',
-  resolveTemplate: (_tpl: string, vars: Record<string, string>) => {
-    return Object.entries(vars).reduce((t, [k, v]) => t.replace(`{${k}}`, v || ''), _tpl);
-  },
-}));
+// Note: prompt-templates is NOT mocked via mock.module() to avoid global pollution
+// Instead, we use spyOn in beforeEach/afterEach for isolated mocking
 
 // ============================================================
 // Helpers
@@ -90,14 +87,25 @@ function setupProjectDir(cwd: string, taskId: string) {
 
 describe('HarnessExecutor', () => {
   let env: IsolatedTestEnv;
+  let loadPromptTemplateSpy: ReturnType<typeof spyOn>;
+  let resolveTemplateSpy: ReturnType<typeof spyOn>;
 
   beforeEach(async () => {
     env = await createIsolatedTestEnv();
+
+    // Use spyOn for prompt-templates to allow restoration in afterEach
+    // This prevents global pollution of mock.module()
+    loadPromptTemplateSpy = spyOn(promptTemplates, 'loadPromptTemplate').mockReturnValue('{title}\n{taskId}\n{descriptionSection}');
+    resolveTemplateSpy = spyOn(promptTemplates, 'resolveTemplate').mockImplementation((_tpl: string, vars: Record<string, string>) => {
+      return Object.entries(vars).reduce((t, [k, v]) => t.replace(`{${k}}`, v || ''), _tpl);
+    });
   });
 
   afterEach(() => {
     env.cleanup();
     mockAgentInvoke.mockClear();
+    loadPromptTemplateSpy.mockRestore();
+    resolveTemplateSpy.mockRestore();
   });
 
   // ============================================================

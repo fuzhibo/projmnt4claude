@@ -6,9 +6,16 @@
  * - loadPromptTemplate 模板加载
  * - 默认模板常量
  * - 模板注册表
+ *
+ * 迁移说明:
+ * - 使用 createIsolatedTestEnv 创建隔离测试环境
+ * - 直接操作文件系统进行测试（创建实际的 config.json）
+ * - 不再使用 spyOn mock readConfig
  */
 
-import { describe, it, expect, beforeEach, afterEach, spyOn } from 'bun:test';
+import { describe, it, expect, beforeEach, afterEach } from 'bun:test';
+import * as fs from 'fs';
+import * as path from 'path';
 import {
   resolveTemplate,
   loadPromptTemplate,
@@ -29,7 +36,20 @@ import {
   DEFAULT_BUG_REPORT_TEMPLATE,
   DEFAULT_SEMANTIC_DEPENDENCY_TEMPLATE,
 } from '../utils/prompt-templates.js';
-import * as configModule from '../commands/config.js';
+import {
+  createIsolatedTestEnv,
+  type IsolatedTestEnv,
+} from '../utils/test-env.js';
+
+// ── 测试辅助函数 ──────────────────────────────────────────────
+
+/**
+ * 创建测试配置文件
+ */
+function createTestConfig(projectDir: string, config: Record<string, unknown>): void {
+  const configPath = path.join(projectDir, 'config.json');
+  fs.writeFileSync(configPath, JSON.stringify(config, null, 2), 'utf-8');
+}
 
 describe('resolveTemplate', () => {
   describe('正常输入处理', () => {
@@ -133,149 +153,148 @@ describe('resolveTemplate', () => {
 });
 
 describe('loadPromptTemplate', () => {
-  let readConfigSpy: ReturnType<typeof spyOn>;
+  let env: IsolatedTestEnv;
 
-  beforeEach(() => {
-    readConfigSpy = spyOn(configModule, 'readConfig');
+  beforeEach(async () => {
+    env = await createIsolatedTestEnv();
   });
 
   afterEach(() => {
-    readConfigSpy.mockRestore();
+    env.cleanup();
   });
 
   describe('正常输入处理', () => {
     it('应该返回默认开发模板的英文版本', () => {
-      readConfigSpy.mockReturnValue(null);
-      const result = loadPromptTemplate('dev', '/test');
+      // 无配置文件时返回默认模板
+      const result = loadPromptTemplate('dev', env.projectDir);
       expect(result).toBe(DEFAULT_DEV_TEMPLATE.en);
     });
 
     it('应该返回默认 QA 模板的英文版本', () => {
-      readConfigSpy.mockReturnValue(null);
-      const result = loadPromptTemplate('qa', '/test');
+      const result = loadPromptTemplate('qa', env.projectDir);
       expect(result).toBe(DEFAULT_QA_TEMPLATE.en);
     });
 
     it('应该返回默认代码审核模板的英文版本', () => {
-      readConfigSpy.mockReturnValue(null);
-      const result = loadPromptTemplate('codeReview', '/test');
+      const result = loadPromptTemplate('codeReview', env.projectDir);
       expect(result).toBe(DEFAULT_CODE_REVIEW_TEMPLATE.en);
     });
 
     it('应该返回默认评估模板的英文版本', () => {
-      readConfigSpy.mockReturnValue(null);
-      const result = loadPromptTemplate('evaluation', '/test');
+      const result = loadPromptTemplate('evaluation', env.projectDir);
       expect(result).toBe(DEFAULT_EVALUATION_TEMPLATE.en);
     });
 
     it('应该返回默认需求模板的英文版本', () => {
-      readConfigSpy.mockReturnValue(null);
-      const result = loadPromptTemplate('requirement', '/test');
+      const result = loadPromptTemplate('requirement', env.projectDir);
       expect(result).toBe(DEFAULT_REQUIREMENT_TEMPLATE.en);
     });
 
     it('应该返回默认检查点模板的英文版本', () => {
-      readConfigSpy.mockReturnValue(null);
-      const result = loadPromptTemplate('checkpoints', '/test');
+      const result = loadPromptTemplate('checkpoints', env.projectDir);
       expect(result).toBe(DEFAULT_CHECKPOINTS_TEMPLATE.en);
     });
 
     it('应该返回默认质量模板的英文版本', () => {
-      readConfigSpy.mockReturnValue(null);
-      const result = loadPromptTemplate('quality', '/test');
+      const result = loadPromptTemplate('quality', env.projectDir);
       expect(result).toBe(DEFAULT_QUALITY_TEMPLATE.en);
     });
 
     it('应该返回默认重复检测模板的英文版本', () => {
-      readConfigSpy.mockReturnValue(null);
-      const result = loadPromptTemplate('duplicates', '/test');
+      const result = loadPromptTemplate('duplicates', env.projectDir);
       expect(result).toBe(DEFAULT_DUPLICATES_TEMPLATE.en);
     });
 
     it('应该返回默认过期评估模板的英文版本', () => {
-      readConfigSpy.mockReturnValue(null);
-      const result = loadPromptTemplate('staleness', '/test');
+      const result = loadPromptTemplate('staleness', env.projectDir);
       expect(result).toBe(DEFAULT_STALENESS_TEMPLATE.en);
     });
 
     it('应该返回默认 Bug 报告模板的英文版本', () => {
-      readConfigSpy.mockReturnValue(null);
-      const result = loadPromptTemplate('bugReport', '/test');
+      const result = loadPromptTemplate('bugReport', env.projectDir);
       expect(result).toBe(DEFAULT_BUG_REPORT_TEMPLATE.en);
     });
 
     it('应该返回默认语义依赖模板的英文版本', () => {
-      readConfigSpy.mockReturnValue(null);
-      const result = loadPromptTemplate('semanticDependency', '/test');
+      const result = loadPromptTemplate('semanticDependency', env.projectDir);
       expect(result).toBe(DEFAULT_SEMANTIC_DEPENDENCY_TEMPLATE.en);
     });
 
     it('当配置指定中文语言时应该返回中文模板', () => {
-      readConfigSpy.mockReturnValue({
+      createTestConfig(env.projectDir, {
+        projectName: 'test',
         language: 'zh',
       });
-      const result = loadPromptTemplate('dev', '/test');
+      const result = loadPromptTemplate('dev', env.projectDir);
       expect(result).toBe(DEFAULT_DEV_TEMPLATE.zh);
     });
 
     it('当配置指定英文语言时应该返回英文模板', () => {
-      readConfigSpy.mockReturnValue({
+      createTestConfig(env.projectDir, {
+        projectName: 'test',
         language: 'en',
       });
-      const result = loadPromptTemplate('dev', '/test');
+      const result = loadPromptTemplate('dev', env.projectDir);
       expect(result).toBe(DEFAULT_DEV_TEMPLATE.en);
     });
 
     it('当配置存在自定义模板时应该返回自定义模板', () => {
       const customTemplate = 'Custom template for {taskId}';
-      readConfigSpy.mockReturnValue({
+      createTestConfig(env.projectDir, {
+        projectName: 'test',
         prompts: {
           dev: customTemplate,
         },
       });
-      const result = loadPromptTemplate('dev', '/test');
+      const result = loadPromptTemplate('dev', env.projectDir);
       expect(result).toBe(customTemplate);
     });
   });
 
   describe('边界条件处理', () => {
     it('当没有提供 cwd 时应该返回默认英文模板', () => {
+      // 无 cwd 时使用 process.cwd()，但由于 mock 了 isInitialized 返回 true
+      // 这里测试的是函数的默认行为
       const result = loadPromptTemplate('dev');
       expect(result).toBe(DEFAULT_DEV_TEMPLATE.en);
     });
 
     it('当配置存在但没有 prompts 节时应该返回默认模板', () => {
-      readConfigSpy.mockReturnValue({});
-      const result = loadPromptTemplate('dev', '/test');
+      createTestConfig(env.projectDir, {
+        projectName: 'test',
+      });
+      const result = loadPromptTemplate('dev', env.projectDir);
       expect(result).toBe(DEFAULT_DEV_TEMPLATE.en);
     });
 
     it('当 prompts 节存在但请求模板不存在时应该返回默认模板', () => {
-      readConfigSpy.mockReturnValue({
+      createTestConfig(env.projectDir, {
+        projectName: 'test',
         prompts: {
           qa: 'Custom QA template',
         },
       });
-      const result = loadPromptTemplate('dev', '/test');
+      const result = loadPromptTemplate('dev', env.projectDir);
       expect(result).toBe(DEFAULT_DEV_TEMPLATE.en);
     });
 
     it('当自定义模板为空字符串时应该返回空字符串', () => {
-      readConfigSpy.mockReturnValue({
+      createTestConfig(env.projectDir, {
+        projectName: 'test',
         prompts: {
           dev: '',
         },
       });
-      const result = loadPromptTemplate('dev', '/test');
+      const result = loadPromptTemplate('dev', env.projectDir);
       expect(result).toBe('');
     });
 
     it('应该支持通过参数指定语言', () => {
-      readConfigSpy.mockReturnValue(null);
-      const resultZh = loadPromptTemplate('dev', '/test', 'zh');
+      // 无配置文件
+      const resultZh = loadPromptTemplate('dev', env.projectDir, 'zh');
       expect(resultZh).toBe(DEFAULT_DEV_TEMPLATE.zh);
 
-      const resultEn = loadPromptTemplate('dev', '/test', 'en');
+      const resultEn = loadPromptTemplate('dev', env.projectDir, 'en');
       expect(resultEn).toBe(DEFAULT_DEV_TEMPLATE.en);
     });
   });
