@@ -298,7 +298,7 @@ describe('checkMissingPipelineEvidence', () => {
 
     const result = checkMissingPipelineEvidence(task.id, task, tmpDir);
     expect(result).not.toBeNull();
-    expect(result!.details?.missingReports).toContain('review-report.md');
+    expect(result!.details?.missingReports).toContain('qa-report.md');
   });
 
   test('returns null when all required reports exist', () => {

@@ -595,7 +595,7 @@ describe('applySchemaMigrations', () => {
     const result = applySchemaMigrations(task);
     expect(task.reopenCount).toBe(0);
     expect(task.requirementHistory).toEqual([]);
-    expect(result.details.some(d => d.includes('reopenCount'))).toBe(true);
+    expect(result.details.some(d => d.includes('schemaMigrationReopenCount'))).toBe(true);
   });
 });
 

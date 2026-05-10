@@ -53,7 +53,13 @@ function createTask(overrides: Partial<TaskMeta> = {}): TaskMeta {
   return {
     id: 'TASK-feature-P2-test-task-20260411',
     title: 'Test Task',
-    description: 'Test description',
+    description: `Test description with enough content to pass quality gate checks. This description is long enough to meet the minimum requirements.
+
+## 相关文件
+- src/utils/helper.ts
+
+## 解决方案
+Implement the feature with proper implementation.`,
     type: 'feature',
     priority: 'P2',
     status: 'open',
@@ -64,6 +70,12 @@ function createTask(overrides: Partial<TaskMeta> = {}): TaskMeta {
     reopenCount: 0,
     requirementHistory: [],
     schemaVersion: 4,
+    checkpointPolicy: 'none',
+    checkpoints: [],
+    subtaskIds: [],
+    discussionTopics: [],
+    fileWarnings: [],
+    allowedTools: [],
     ...overrides,
   };
 }
@@ -76,6 +88,12 @@ function setupProjectWithTask(cwd: string, task: TaskMeta): void {
     JSON.stringify(task, null, 2),
     'utf-8',
   );
+  // 创建引用的文件以避免 file_not_found issue
+  const srcUtilsDir = path.join(cwd, 'src', 'utils');
+  fs.mkdirSync(srcUtilsDir, { recursive: true });
+  fs.writeFileSync(path.join(srcUtilsDir, 'helper.ts'), '// helper file', 'utf-8');
+  // 创建根目录的 helper.ts (extractFilePaths 可能提取的)
+  fs.writeFileSync(path.join(cwd, 'helper.ts'), '// helper file', 'utf-8');
 }
 
 function createReportDir(cwd: string, taskId: string): string {
@@ -556,6 +574,8 @@ describe('detectStatusInferenceIssues', () => {
         action: `action_${i}`,
       })),
     });
+    setupProjectWithTask(tmpDir, task);
+    // 不创建报告目录 - 让 shouldTriggerAIInference 的 CP-3 条件满足
 
     const aiOptions = { deepAnalyze: true, noAi: false };
     const issues = await detectStatusInferenceIssues(task, tmpDir, aiOptions);
@@ -585,6 +605,8 @@ describe('detectStatusInferenceIssues', () => {
         },
       ],
     });
+    setupProjectWithTask(tmpDir, task);
+    // 不创建报告目录 - open 状态有 transitionNotes 会触发 CP-4
 
     mockInvokeAgent.mockResolvedValueOnce({
       output: JSON.stringify({
@@ -617,6 +639,8 @@ describe('detectStatusInferenceIssues', () => {
         action: `action_${i}`,
       })),
     });
+    setupProjectWithTask(tmpDir, task);
+    // 不创建报告目录 - 让 CP-3 条件满足
 
     // Default mock returns confidence 0.9 → severity 'high'
     const aiOptions = { deepAnalyze: true, noAi: false };
@@ -637,6 +661,8 @@ describe('detectStatusInferenceIssues', () => {
         action: `action_${i}`,
       })),
     });
+    setupProjectWithTask(tmpDir, task);
+    // 不创建报告目录 - 让 CP-3 条件满足
 
     mockInvokeAgent.mockResolvedValueOnce({
       output: JSON.stringify({
@@ -742,11 +768,32 @@ describe('detectStatusInferenceIssues', () => {
 
   // CP-26: 完整端到端 - Layer 1 无问题 + Layer 2 AI 推断
   test('full e2e: Layer 1 clean + Layer 2 AI detects stale in_progress (CP-26)', async () => {
+    // 清除所有待处理的 mockResolvedValueOnce 值
+    mockInvokeAgent.mockReset();
+    // 重新设置默认实现
+    mockInvokeAgent.mockImplementation((_prompt: string, _options: unknown) =>
+      Promise.resolve({
+        output: JSON.stringify({
+          inferredStatus: 'resolved',
+          confidence: 0.9,
+          reasoning: 'All checkpoints completed',
+          suggestion: 'Mark as resolved',
+        }),
+        success: true,
+        provider: 'claude-code',
+        durationMs: 1000,
+        tokensUsed: 500,
+        model: 'claude-sonnet',
+      })
+    );
+
     const twoDaysAgo = new Date(Date.now() - 2 * 24 * 60 * 60 * 1000).toISOString();
     const task = createTask({
       status: 'in_progress',
       createdAt: twoDaysAgo,
     });
+    setupProjectWithTask(tmpDir, task);
+    // 不创建报告目录 - CP-5 条件: in_progress 超过 1 天会触发 AI
 
     mockInvokeAgent.mockResolvedValueOnce({
       output: JSON.stringify({
