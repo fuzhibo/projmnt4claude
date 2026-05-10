@@ -123,6 +123,7 @@ export type ReviewResult = 'PASS' | 'NOPASS';
  * Output by architect role evaluator, drives state transition
  *
  * P5 变更：移除 minor_fix, retest, reevaluate 复杂分支
+ * 只保留 3 个核心动作：
  * - resolve: 评估通过，标记为 resolved
  * - redevelop: 评估未通过，从开发阶段重试（消耗重试次数）
  * - escalate_human: 需要人工介入
@@ -130,9 +131,6 @@ export type ReviewResult = 'PASS' | 'NOPASS';
 export type VerdictAction =
   | 'resolve'         // Pass, mark as resolved
   | 'redevelop'       // Retry from development phase (consumes retry count)
-  | 'retest'          // Retry from QA phase (CP-11)
-  | 'reevaluate'      // Retry from evaluation phase (CP-12)
-  | 'minor_fix'       // Minor fix, retry from development phase (CP-10)
   | 'escalate_human'; // Requires human intervention
 
 /**
@@ -142,9 +140,6 @@ export type VerdictAction =
 export const VALID_VERDICT_ACTIONS: VerdictAction[] = [
   'resolve',
   'redevelop',
-  'retest',
-  'reevaluate',
-  'minor_fix',
   'escalate_human',
 ];
 
