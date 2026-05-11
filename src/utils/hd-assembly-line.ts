@@ -32,6 +32,7 @@ import type {
   ErrorClassification,
   ErrorCategory,
   RollbackResult,
+  FailureCategory,
 } from '../types/harness.js';
 import { HarnessPreValidator } from './harness-prevalidation.js';
 import {
@@ -1420,15 +1421,17 @@ export class AssemblyLine {
   }
 
   /**
-   * P5: 基于评估者动作的状态路由（简化版）
+   * P5: 基于评估者动作的状态路由（增强版 v2.1）
    *
    * 根据 architect 评估者输出的 action 关键字驱动不同的状态流转：
    * - resolve: 直接标记为 resolved（评估通过）
-   * - redevelop: 从开发阶段重试（消耗重试次数，统一使用阶段内重试）
+   * - redevelop: 根据失败阶段智能路由回退
    * - escalate_human: 转为 needs_human 状态
    *
-   * P5 变更：移除 minor_fix, retest, reevaluate 复杂分支
-   * 所有重试统一通过 executePhaseLifecycle 的阶段内重试处理
+   * P5 v2.1 变更：
+   * - code_review 失败 → in_progress（回退到开发阶段）
+   * - qa 失败 → wait_review（链式回退第一步）
+   * - evaluation 失败 → 路由到目标阶段（根据 failureCategory）
    */
   private async handleVerdictBasedTransition(
     taskId: string,
@@ -1453,34 +1456,85 @@ export class AssemblyLine {
       }
 
       case 'redevelop': {
-        // P5: 统一重试路径 - 所有失败都回退到开发阶段重试
-        const devPhaseLimit = this.getPhaseRetryLimit('development');
-        const devRetryCount = this.getPhaseRetryCount(taskId, 'development', state);
-        if (devRetryCount >= devPhaseLimit) {
-          await this.markTaskFailed(taskId, 'max_retries_exceeded', `开发阶段重试次数已达上限 (${devPhaseLimit})`);
-          record.finalStatus = 'failed';
-          record.retryCount = devRetryCount;
-          addTimeline('failed', `开发阶段重试次数已达上限 (${devPhaseLimit})，任务标记为 failed`);
-          console.log(`❌ 开发阶段重试次数已达上限 (${devPhaseLimit})，任务标记为 failed`);
-          return record;
+        // P5 v2.1: 智能路由回退 - 根据阶段和失败类型决定回退目标
+        let targetStatus: TaskStatus;
+        let targetPhase: Phase;
+        let retryLimit: number;
+        let retryCount: number;
+
+        if (phase === 'code_review') {
+          // 代码审核失败 → 回退到开发阶段
+          targetStatus = 'in_progress';
+          targetPhase = 'development';
+          retryLimit = this.getPhaseRetryLimit('development');
+          retryCount = this.getPhaseRetryCount(taskId, 'development', state);
+        } else if (phase === 'qa') {
+          // QA 失败 → 链式回退第一步：先回退到代码审核阶段
+          targetStatus = 'wait_review';
+          targetPhase = 'code_review';
+          retryLimit = this.getPhaseRetryLimit('code_review');
+          retryCount = this.getPhaseRetryCount(taskId, 'code_review', state);
+        } else if (phase === 'evaluation') {
+          // 评估失败 → 路由回退：根据 failureCategory 直接路由到目标阶段
+          const failureCategory = record.reviewVerdict?.failureCategory;
+          const routingResult = this.routeEvaluationFailure(failureCategory);
+          targetStatus = routingResult.targetStatus;
+          targetPhase = routingResult.targetPhase;
+          retryLimit = this.getPhaseRetryLimit(targetPhase);
+          retryCount = this.getPhaseRetryCount(taskId, targetPhase, state);
+        } else {
+          // 安全回退：默认回退到开发阶段
+          targetStatus = 'in_progress';
+          targetPhase = 'development';
+          retryLimit = this.getPhaseRetryLimit('development');
+          retryCount = this.getPhaseRetryCount(taskId, 'development', state);
         }
 
-        // P5: 统一使用阶段内重试，消耗重试次数，从开发阶段重试
-        this.incrementTaskReopenCount(taskId, `${phase} 阶段失败，从开发阶段重试`);
-        await this.ensureTransition(taskId, 'in_progress', `${phase} 阶段失败，从开发阶段重试`);
+        // 检查目标阶段的重试次数是否已达上限
+        if (retryCount >= retryLimit) {
+          // 目标阶段重试次数已达上限 → 降级回退到开发阶段
+          const devPhaseLimit = this.getPhaseRetryLimit('development');
+          const devRetryCount = this.getPhaseRetryCount(taskId, 'development', state);
+          if (devRetryCount >= devPhaseLimit) {
+            // 所有阶段重试次数都已耗尽 → 标记任务失败
+            await this.markTaskFailed(taskId, 'max_retries_exceeded', `所有阶段重试次数已达上限`);
+            record.finalStatus = 'failed';
+            record.retryCount = devRetryCount;
+            addTimeline('failed', `所有阶段重试次数已达上限，任务标记为 failed`);
+            console.log(`❌ 所有阶段重试次数已达上限，任务标记为 failed`);
+            return record;
+          }
+          // 降级：从开发阶段重试
+          targetStatus = 'in_progress';
+          targetPhase = 'development';
+          retryLimit = devPhaseLimit;
+          retryCount = devRetryCount;
+        }
+
+        // 执行回退
+        const failureReason =
+          phase === 'code_review' ? record.codeReviewVerdict?.reason :
+          phase === 'qa' ? record.qaVerdict?.reason :
+          record.reviewVerdict?.reason;
+
+        const failureCategory = phase === 'evaluation' ? record.reviewVerdict?.failureCategory : undefined;
+
+        const routeDescription = failureCategory ? ` (失败类型: ${failureCategory})` : '';
+        this.incrementTaskReopenCount(taskId, `${phase} 阶段失败${routeDescription}，回退到 ${targetPhase} 阶段`);
+        await this.ensureTransition(taskId, targetStatus, `${phase} 阶段失败${routeDescription}，回退到 ${targetPhase} 阶段`);
         // 设置 resumeAction 和角色感知恢复
-        await this.setTaskResumeAction(taskId, 'retry', 'development');
+        await this.setTaskResumeAction(taskId, 'retry', targetPhase);
         await this.assignTaskRole(taskId, 'executor');
         // 记录阶段历史
-        this.appendPhaseHistory(taskId, { phase: 'development', role: 'executor', verdict: 'NOPASS', timestamp: new Date().toISOString(), analysis: `${phase} 阶段失败，retry from development`, resumeAction: 'retry' });
-        this.incrementPhaseRetryCount(taskId, 'development', state);
+        this.appendPhaseHistory(taskId, { phase: targetPhase, role: 'executor', verdict: 'NOPASS', timestamp: new Date().toISOString(), analysis: `${phase} 阶段失败${routeDescription}，retry from ${targetPhase}`, resumeAction: 'retry' });
+        this.incrementPhaseRetryCount(taskId, targetPhase, state);
         state.retryCounter.set(taskId, (state.retryCounter.get(taskId) || 0) + 1);
 
-        addTimeline('retry', `任务将从开发阶段重试 (第 ${devRetryCount + 1}/${devPhaseLimit} 次)`, { action, phase });
-        console.log(`⚠️  任务将从开发阶段重试 (第 ${devRetryCount + 1}/${devPhaseLimit} 次)`);
-        this.statusReporter.recordTaskRetrying(taskId, devRetryCount + 1, devPhaseLimit, 'development', `${phase} 阶段失败，从开发阶段重试`);
-        record.finalStatus = 'in_progress';
-        record.retryCount = devRetryCount + 1;
+        addTimeline('retry', `任务将从 ${targetPhase} 阶段重试 (第 ${retryCount + 1}/${retryLimit} 次)`, { action, phase, targetStatus, targetPhase, failureCategory });
+        console.log(`⚠️  任务将从 ${targetPhase} 阶段重试 (第 ${retryCount + 1}/${retryLimit} 次)${routeDescription}`);
+        this.statusReporter.recordTaskRetrying(taskId, retryCount + 1, retryLimit, targetPhase, `${phase} 阶段失败${routeDescription}，回退到 ${targetPhase} 阶段`);
+        record.finalStatus = targetStatus;
+        record.retryCount = retryCount + 1;
         // P5: 返回记录，由 executeTask 的阶段循环处理重试
         return record;
       }
@@ -1499,6 +1553,53 @@ export class AssemblyLine {
         console.log(`⚠️  未知的 verdict action: ${action}，回退到 redevelop`);
         return this.handleVerdictBasedTransition(taskId, record, state, addTimeline, phase, 'redevelop');
       }
+    }
+  }
+
+  /**
+   * P5: 评估失败路由决策
+   * 根据 failureCategory 直接路由到能修复问题的阶段，不走逐级回退
+   *
+   * @param failureCategory 失败类型（从 ReviewVerdict 获取）
+   * @returns 路由目标状态和对应阶段
+   */
+  private routeEvaluationFailure(failureCategory?: FailureCategory): {
+    targetStatus: TaskStatus,
+    targetPhase: Phase
+  } {
+    switch (failureCategory) {
+      case 'code_quality':
+      case 'incomplete':
+      case 'phantom_task':
+      case 'specification':
+      case 'other':
+        // 代码问题 → 需要从开发阶段修复
+        return {
+          targetStatus: 'in_progress',
+          targetPhase: 'development'
+        };
+
+      case 'test_failure':
+        // 测试问题 → 重新进行 QA 验证
+        return {
+          targetStatus: 'wait_qa',
+          targetPhase: 'qa'
+        };
+
+      case 'acceptance_criteria':
+      case 'architecture':
+        // 验收标准/架构问题 → 需要重新审核
+        return {
+          targetStatus: 'wait_review',
+          targetPhase: 'code_review'
+        };
+
+      default:
+        // 安全回退：默认回退到开发阶段
+        return {
+          targetStatus: 'in_progress',
+          targetPhase: 'development'
+        };
     }
   }
 

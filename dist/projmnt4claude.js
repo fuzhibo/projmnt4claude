@@ -11919,8 +11919,8 @@ var init_task2 = __esm(() => {
     open: ["in_progress", "closed", "abandoned"],
     in_progress: ["wait_review", "resolved", "completed", "failed", "closed", "abandoned", "open"],
     wait_review: ["wait_qa", "in_progress", "failed", "closed", "abandoned"],
-    wait_qa: ["wait_evaluation", "in_progress", "failed", "closed", "abandoned", "open"],
-    wait_evaluation: ["resolved", "completed", "in_progress", "failed", "closed", "abandoned", "open"],
+    wait_qa: ["wait_evaluation", "wait_review", "in_progress", "failed", "closed", "abandoned", "open"],
+    wait_evaluation: ["resolved", "completed", "in_progress", "wait_review", "wait_qa", "failed", "closed", "abandoned", "open"],
     resolved: ["open", "in_progress", "closed"],
     completed: ["open", "in_progress", "closed"],
     closed: ["open", "in_progress"],
@@ -40709,28 +40709,64 @@ ${"━".repeat(SEPARATOR_WIDTH)}`);
         return record;
       }
       case "redevelop": {
-        const devPhaseLimit = this.getPhaseRetryLimit("development");
-        const devRetryCount = this.getPhaseRetryCount(taskId, "development", state);
-        if (devRetryCount >= devPhaseLimit) {
-          await this.markTaskFailed(taskId, "max_retries_exceeded", `开发阶段重试次数已达上限 (${devPhaseLimit})`);
-          record.finalStatus = "failed";
-          record.retryCount = devRetryCount;
-          addTimeline("failed", `开发阶段重试次数已达上限 (${devPhaseLimit})，任务标记为 failed`);
-          console.log(`❌ 开发阶段重试次数已达上限 (${devPhaseLimit})，任务标记为 failed`);
-          return record;
+        let targetStatus;
+        let targetPhase;
+        let retryLimit;
+        let retryCount;
+        if (phase === "code_review") {
+          targetStatus = "in_progress";
+          targetPhase = "development";
+          retryLimit = this.getPhaseRetryLimit("development");
+          retryCount = this.getPhaseRetryCount(taskId, "development", state);
+        } else if (phase === "qa") {
+          targetStatus = "wait_review";
+          targetPhase = "code_review";
+          retryLimit = this.getPhaseRetryLimit("code_review");
+          retryCount = this.getPhaseRetryCount(taskId, "code_review", state);
+        } else if (phase === "evaluation") {
+          const failureCategory2 = record.reviewVerdict?.failureCategory;
+          const routingResult = this.routeEvaluationFailure(failureCategory2);
+          targetStatus = routingResult.targetStatus;
+          targetPhase = routingResult.targetPhase;
+          retryLimit = this.getPhaseRetryLimit(targetPhase);
+          retryCount = this.getPhaseRetryCount(taskId, targetPhase, state);
+        } else {
+          targetStatus = "in_progress";
+          targetPhase = "development";
+          retryLimit = this.getPhaseRetryLimit("development");
+          retryCount = this.getPhaseRetryCount(taskId, "development", state);
         }
-        this.incrementTaskReopenCount(taskId, `${phase} 阶段失败，从开发阶段重试`);
-        await this.ensureTransition(taskId, "in_progress", `${phase} 阶段失败，从开发阶段重试`);
-        await this.setTaskResumeAction(taskId, "retry", "development");
+        if (retryCount >= retryLimit) {
+          const devPhaseLimit = this.getPhaseRetryLimit("development");
+          const devRetryCount = this.getPhaseRetryCount(taskId, "development", state);
+          if (devRetryCount >= devPhaseLimit) {
+            await this.markTaskFailed(taskId, "max_retries_exceeded", `所有阶段重试次数已达上限`);
+            record.finalStatus = "failed";
+            record.retryCount = devRetryCount;
+            addTimeline("failed", `所有阶段重试次数已达上限，任务标记为 failed`);
+            console.log(`❌ 所有阶段重试次数已达上限，任务标记为 failed`);
+            return record;
+          }
+          targetStatus = "in_progress";
+          targetPhase = "development";
+          retryLimit = devPhaseLimit;
+          retryCount = devRetryCount;
+        }
+        const failureReason = phase === "code_review" ? record.codeReviewVerdict?.reason : phase === "qa" ? record.qaVerdict?.reason : record.reviewVerdict?.reason;
+        const failureCategory = phase === "evaluation" ? record.reviewVerdict?.failureCategory : undefined;
+        const routeDescription = failureCategory ? ` (失败类型: ${failureCategory})` : "";
+        this.incrementTaskReopenCount(taskId, `${phase} 阶段失败${routeDescription}，回退到 ${targetPhase} 阶段`);
+        await this.ensureTransition(taskId, targetStatus, `${phase} 阶段失败${routeDescription}，回退到 ${targetPhase} 阶段`);
+        await this.setTaskResumeAction(taskId, "retry", targetPhase);
         await this.assignTaskRole(taskId, "executor");
-        this.appendPhaseHistory(taskId, { phase: "development", role: "executor", verdict: "NOPASS", timestamp: new Date().toISOString(), analysis: `${phase} 阶段失败，retry from development`, resumeAction: "retry" });
-        this.incrementPhaseRetryCount(taskId, "development", state);
+        this.appendPhaseHistory(taskId, { phase: targetPhase, role: "executor", verdict: "NOPASS", timestamp: new Date().toISOString(), analysis: `${phase} 阶段失败${routeDescription}，retry from ${targetPhase}`, resumeAction: "retry" });
+        this.incrementPhaseRetryCount(taskId, targetPhase, state);
         state.retryCounter.set(taskId, (state.retryCounter.get(taskId) || 0) + 1);
-        addTimeline("retry", `任务将从开发阶段重试 (第 ${devRetryCount + 1}/${devPhaseLimit} 次)`, { action, phase });
-        console.log(`⚠️  任务将从开发阶段重试 (第 ${devRetryCount + 1}/${devPhaseLimit} 次)`);
-        this.statusReporter.recordTaskRetrying(taskId, devRetryCount + 1, devPhaseLimit, "development", `${phase} 阶段失败，从开发阶段重试`);
-        record.finalStatus = "in_progress";
-        record.retryCount = devRetryCount + 1;
+        addTimeline("retry", `任务将从 ${targetPhase} 阶段重试 (第 ${retryCount + 1}/${retryLimit} 次)`, { action, phase, targetStatus, targetPhase, failureCategory });
+        console.log(`⚠️  任务将从 ${targetPhase} 阶段重试 (第 ${retryCount + 1}/${retryLimit} 次)${routeDescription}`);
+        this.statusReporter.recordTaskRetrying(taskId, retryCount + 1, retryLimit, targetPhase, `${phase} 阶段失败${routeDescription}，回退到 ${targetPhase} 阶段`);
+        record.finalStatus = targetStatus;
+        record.retryCount = retryCount + 1;
         return record;
       }
       case "escalate_human": {
@@ -40744,6 +40780,35 @@ ${"━".repeat(SEPARATOR_WIDTH)}`);
         console.log(`⚠️  未知的 verdict action: ${action}，回退到 redevelop`);
         return this.handleVerdictBasedTransition(taskId, record, state, addTimeline, phase, "redevelop");
       }
+    }
+  }
+  routeEvaluationFailure(failureCategory) {
+    switch (failureCategory) {
+      case "code_quality":
+      case "incomplete":
+      case "phantom_task":
+      case "specification":
+      case "other":
+        return {
+          targetStatus: "in_progress",
+          targetPhase: "development"
+        };
+      case "test_failure":
+        return {
+          targetStatus: "wait_qa",
+          targetPhase: "qa"
+        };
+      case "acceptance_criteria":
+      case "architecture":
+        return {
+          targetStatus: "wait_review",
+          targetPhase: "code_review"
+        };
+      default:
+        return {
+          targetStatus: "in_progress",
+          targetPhase: "development"
+        };
     }
   }
   async ensureTransition(taskId, targetStatus, reason) {

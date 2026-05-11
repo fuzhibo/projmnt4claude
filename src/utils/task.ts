@@ -19,11 +19,10 @@ export const VALID_TRANSITIONS: Record<TaskStatus, TaskStatus[]> = {
   in_progress:   ['wait_review', 'resolved', 'completed', 'failed', 'closed', 'abandoned', 'open'],
   wait_review:   ['wait_qa', 'in_progress', 'failed', 'closed', 'abandoned'],
   // prob4/prob5: wait_qa 失败链式回退 -> 先回退到 wait_review，审核再失败才回退到 in_progress
-  // 移除 commit 4221884 遗留的 'open' 路径
-  wait_qa:       ['wait_evaluation', 'wait_review', 'in_progress', 'failed', 'closed', 'abandoned'],
+  wait_qa:       ['wait_evaluation', 'wait_review', 'in_progress', 'failed', 'closed', 'abandoned', 'open'],
   // prob4/prob5: wait_evaluation 失败路由回退 -> 根据失败类型直接路由到目标阶段
-  // 移除 commit 4221884 遗留的 'open' 路径
-  wait_evaluation: ['resolved', 'completed', 'in_progress', 'wait_review', 'wait_qa', 'failed', 'closed', 'abandoned'],
+  // escalate_human: 人工介入 -> open
+  wait_evaluation: ['resolved', 'completed', 'in_progress', 'wait_review', 'wait_qa', 'failed', 'closed', 'abandoned', 'open'],
   resolved:      ['open', 'in_progress', 'closed'],
   completed:     ['open', 'in_progress', 'closed'],  // completed 是 resolved 的别名，使用相同转换规则
   closed:        ['open', 'in_progress'],

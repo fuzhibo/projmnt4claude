@@ -267,15 +267,27 @@ describe('handleVerdictBasedTransition status transitions', () => {
     return meta.status;
   }
 
-  // CP-10: redevelop → in_progress
-  test('CP-10: redevelop transitions to in_progress (development phase)', async () => {
-    const result = await runVerdictTransition('qa', 'redevelop', 'wait_qa');
+  // CP-10: redevelop from code_review → in_progress (回退到开发阶段)
+  test('CP-10: redevelop from code_review transitions to in_progress', async () => {
+    const result = await runVerdictTransition('code_review', 'redevelop', 'wait_review');
     expect(result.finalStatus).toBe('in_progress');
     expect(getTaskStatus()).toBe('in_progress');
     // Verify determineResumePhase maps in_progress → development
     const state = createDefaultRuntimeState(createTestConfig(env.tempDir));
     const resumePhase = assemblyLine.determineResumePhase(taskId, 'in_progress', state);
     expect(resumePhase).toBe('development');
+  });
+
+  // P5 v2.1: redevelop from QA → wait_review (链式回退第一步)
+  test('P5 v2.1: redevelop from QA transitions to wait_review (chain fallback)', async () => {
+    const reportDir = path.join(env.tempDir, '.projmnt4claude', 'reports', 'harness', taskId);
+    writeReport(reportDir, 'dev-report.md', 'dev content');
+    writeReport(reportDir, 'code-review-report.md', 'review content');
+
+    const result = await runVerdictTransition('qa', 'redevelop', 'wait_qa');
+    // P5 v2.1: QA 失败 → 先回退到 wait_review（链式回退第一步）
+    expect(result.finalStatus).toBe('wait_review');
+    expect(getTaskStatus()).toBe('wait_review');
   });
 
   // CP-10: minor_fix → in_progress
@@ -292,17 +304,17 @@ describe('handleVerdictBasedTransition status transitions', () => {
     expect(getTaskStatus()).toBe('in_progress');
   });
 
-  // P5: retest treated as redevelop (simplified behavior)
-  test('P5: retest treated as redevelop (simplified behavior)', async () => {
+  // P5 v2.1: retest from QA → wait_review (链式回退第一步)
+  test('P5 v2.1: retest from QA transitions to wait_review (chain fallback)', async () => {
     // Setup: need code-review-report for QA prerequisites
     const reportDir = path.join(env.tempDir, '.projmnt4claude', 'reports', 'harness', taskId);
     writeReport(reportDir, 'dev-report.md', 'dev content');
     writeReport(reportDir, 'code-review-report.md', 'review content');
 
     const result = await runVerdictTransition('qa', 'retest', 'wait_qa');
-    // P5: retest now treated as redevelop → in_progress (not wait_qa)
-    expect(result.finalStatus).toBe('in_progress');
-    expect(getTaskStatus()).toBe('in_progress');
+    // P5 v2.1: QA 失败 → 先回退到 wait_review（链式回退第一步）
+    expect(result.finalStatus).toBe('wait_review');
+    expect(getTaskStatus()).toBe('wait_review');
   });
 
   // P5: reevaluate treated as redevelop (simplified behavior)
@@ -377,35 +389,40 @@ describe('handleVerdictBasedTransition status transitions', () => {
     expect(getTaskStatus()).toBe('in_progress');
   });
 
-  // Boundary: redevelop when dev retries exhausted → failed
-  test('boundary: redevelop marks failed when dev retries exhausted', async () => {
+  // Boundary: redevelop when all retries exhausted → failed
+  test('boundary: redevelop marks failed when all retries exhausted', async () => {
     const task = createMockTask({ id: taskId, status: 'wait_qa' });
     const record = createDefaultExecutionRecord(task);
     const state = createDefaultRuntimeState(createTestConfig(env.tempDir));
-    state.phaseRetryCounters.set(`${taskId}:development`, 3); // default limit
+    // Exhaust all phase retry limits
+    state.phaseRetryCounters.set(`${taskId}:development`, 3);
+    state.phaseRetryCounters.set(`${taskId}:code_review`, 1);
+    state.phaseRetryCounters.set(`${taskId}:qa`, 2);
 
     const addTimeline = () => {};
     const result = await (assemblyLine as any).handleVerdictBasedTransition(
       taskId, record, state, addTimeline, 'qa', 'redevelop',
     );
 
+    // All retries exhausted → failed
     expect(result.finalStatus).toBe('failed');
     expect(getTaskStatus()).toBe('failed');
   });
 
-  // Boundary: minor_fix when phase retries exhausted → falls back to redevelop
-  test('boundary: minor_fix falls back to redevelop when phase retries exhausted', async () => {
+  // Boundary: QA failure with code_review retries exhausted → fallback to development
+  test('boundary: QA failure with code_review exhausted falls back to development', async () => {
     const task = createMockTask({ id: taskId, status: 'wait_qa' });
     const record = createDefaultExecutionRecord(task);
     const state = createDefaultRuntimeState(createTestConfig(env.tempDir));
-    state.phaseRetryCounters.set(`${taskId}:qa`, 2); // qa default limit
+    // Exhaust code_review retry limit
+    state.phaseRetryCounters.set(`${taskId}:code_review`, 1);
 
     const addTimeline = () => {};
     const result = await (assemblyLine as any).handleVerdictBasedTransition(
-      taskId, record, state, addTimeline, 'qa', 'minor_fix',
+      taskId, record, state, addTimeline, 'qa', 'redevelop',
     );
 
-    // Falls back to redevelop → in_progress
+    // Falls back to development → in_progress
     expect(result.finalStatus).toBe('in_progress');
   });
 
