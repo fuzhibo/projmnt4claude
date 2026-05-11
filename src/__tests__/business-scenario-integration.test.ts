@@ -810,7 +810,7 @@ describe('Scenario 7: Batch Execution & Git Commit', () => {
       [['T1', 'T2'], ['T3', 'T4'], ['T5']]
     );
     expect(result.batchBoundaries).toEqual([0, 2, 4]);
-    expect(result.batchLabels).toEqual(['批次 1', '批次 2', '批次 3']);
+    expect(result.batchLabels).toEqual(['Batch 1', 'Batch 2', 'Batch 3']);
     expect(result.batchParallelizable).toEqual([true, true, false]);
   });
 
