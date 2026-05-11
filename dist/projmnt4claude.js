@@ -37577,13 +37577,202 @@ class AcceptanceCriteriaParser {
   }
 }
 
+// src/utils/safe-command-executor.ts
+import { spawn as spawn2 } from "child_process";
+var FORBIDDEN_PREFIXES = [
+  "sudo",
+  "su",
+  "passwd",
+  "useradd",
+  "userdel",
+  "usermod",
+  "groupadd",
+  "groupdel",
+  "groupmod",
+  "systemctl",
+  "service",
+  "journalctl",
+  "iptables",
+  "ip6tables",
+  "ufw",
+  "firewall-cmd",
+  "ssh",
+  "scp",
+  "rsync",
+  "sftp",
+  "mount",
+  "umount",
+  "fdisk",
+  "parted",
+  "mkfs",
+  "fsck",
+  "dd",
+  "shutdown",
+  "reboot",
+  "halt",
+  "poweroff",
+  "init",
+  "crontab",
+  "at",
+  "batch"
+];
+var FORBIDDEN_PATTERNS = [
+  { pattern: /rm\s+-rf/, reason: "Recursive deletion is forbidden" },
+  { pattern: />\s*\//, reason: "Overwriting system files is forbidden" },
+  { pattern: /\|\s*sh/, reason: "Piping to shell is forbidden" },
+  { pattern: /\|\s*bash/, reason: "Piping to bash is forbidden" },
+  { pattern: /\$\([^)]+\)/, reason: "Command substitution is forbidden" },
+  { pattern: /`[^`]+`/, reason: "Backtick command substitution is forbidden" },
+  { pattern: /curl.*\|.*sh/, reason: "Remote script execution is forbidden" },
+  { pattern: /wget.*\|.*sh/, reason: "Remote script execution is forbidden" },
+  { pattern: /eval\s+/, reason: "eval is forbidden" },
+  { pattern: /exec\s+/, reason: "exec is forbidden" },
+  { pattern: /sudo\s+/, reason: "sudo is forbidden" },
+  { pattern: /chmod\s+[0-7]{3,4}/, reason: "Permission modification is forbidden" },
+  { pattern: /chown\s+/, reason: "Owner modification is forbidden" },
+  { pattern: /mkfs/, reason: "Filesystem formatting is forbidden" },
+  { pattern: /dd\s+if=/, reason: "Disk operations are forbidden" },
+  { pattern: />\s*\/dev/, reason: "Writing to device files is forbidden" },
+  { pattern: /kill\s+-9/, reason: "Force killing processes is forbidden" },
+  { pattern: /shutdown/, reason: "Shutdown is forbidden" },
+  { pattern: /reboot/, reason: "Reboot is forbidden" },
+  { pattern: /init\s+[06]/, reason: "Runlevel change is forbidden" }
+];
+var MAX_COMMAND_LENGTH = 500;
+var MAX_ARGS = 50;
+var DEFAULT_TIMEOUT = 60000;
+function validateCommand(command) {
+  if (command.length > MAX_COMMAND_LENGTH) {
+    return {
+      valid: false,
+      reason: `Command length exceeds limit (${MAX_COMMAND_LENGTH} characters)`
+    };
+  }
+  const parts = command.trim().split(/\s+/);
+  if (parts.length > MAX_ARGS) {
+    return {
+      valid: false,
+      reason: `Command has too many arguments (${parts.length} > ${MAX_ARGS})`
+    };
+  }
+  const firstPart = parts[0]?.toLowerCase();
+  if (firstPart && FORBIDDEN_PREFIXES.includes(firstPart)) {
+    return {
+      valid: false,
+      reason: `Forbidden system command: ${firstPart}`
+    };
+  }
+  for (const { pattern, reason } of FORBIDDEN_PATTERNS) {
+    if (pattern.test(command)) {
+      return {
+        valid: false,
+        reason
+      };
+    }
+  }
+  return { valid: true };
+}
+
+class SafeCommandExecutor {
+  async execute(command, options) {
+    const startTime = Date.now();
+    const timeout = options.timeout ?? DEFAULT_TIMEOUT;
+    const validation = validateCommand(command);
+    if (!validation.valid) {
+      return {
+        success: false,
+        exitCode: -1,
+        stdout: "",
+        stderr: "",
+        duration: 0,
+        timedOut: false,
+        error: `Command validation failed: ${validation.reason}`
+      };
+    }
+    const parts = command.trim().split(/\s+/);
+    const [cmd, ...args] = parts;
+    if (!cmd) {
+      return {
+        success: false,
+        exitCode: -1,
+        stdout: "",
+        stderr: "",
+        duration: 0,
+        timedOut: false,
+        error: "Empty command"
+      };
+    }
+    return new Promise((resolve9) => {
+      let stdout = "";
+      let stderr = "";
+      let timedOut = false;
+      const proc = spawn2(cmd, args, {
+        cwd: options.cwd,
+        env: { ...process.env, ...options.env },
+        timeout,
+        shell: false
+      });
+      proc.stdout.on("data", (data) => {
+        stdout += data.toString();
+      });
+      proc.stderr.on("data", (data) => {
+        stderr += data.toString();
+      });
+      proc.on("close", (exitCode) => {
+        resolve9({
+          success: exitCode === 0 && !timedOut,
+          exitCode: exitCode ?? -1,
+          stdout,
+          stderr,
+          duration: Date.now() - startTime,
+          timedOut
+        });
+      });
+      proc.on("error", (error) => {
+        resolve9({
+          success: false,
+          exitCode: -1,
+          stdout,
+          stderr,
+          duration: Date.now() - startTime,
+          timedOut: false,
+          error: error.message
+        });
+      });
+      const timeoutId = setTimeout(() => {
+        timedOut = true;
+        proc.kill("SIGTERM");
+      }, timeout);
+      proc.on("close", () => {
+        clearTimeout(timeoutId);
+      });
+    });
+  }
+  async executeAll(commands, options) {
+    const results = [];
+    for (const command of commands) {
+      const result = await this.execute(command, options);
+      results.push(result);
+      if (!result.success) {
+        break;
+      }
+    }
+    return results;
+  }
+}
+function createSafeCommandExecutor() {
+  return new SafeCommandExecutor;
+}
+
 // src/utils/qa-acceptance-criteria-verifier.ts
 class QAAcceptanceCriteriaVerifier {
   cwd;
   parser;
-  constructor(cwd) {
+  executor;
+  constructor(cwd, executor) {
     this.cwd = cwd;
     this.parser = new AcceptanceCriteriaParser;
+    this.executor = executor ?? createSafeCommandExecutor();
   }
   async verify(task, context) {
     const result = createDefaultQAAcceptanceResult(task.id);
@@ -37607,23 +37796,84 @@ class QAAcceptanceCriteriaVerifier {
   }
   async verifyCheckpoints(task) {
     const result = createDefaultAcceptanceResult("checkpoint");
-    const qaCheckpoints = (task.checkpoints || []).filter((cp) => cp.category === "qa_verification" || cp.verification?.method === "unit_test" || cp.verification?.method === "functional_test" || cp.verification?.method === "integration_test" || cp.verification?.method === "e2e_test");
+    const qaCheckpoints = (task.checkpoints || []).filter((cp) => cp.category === "qa_verification" || cp.verification?.method === "unit_test" || cp.verification?.method === "functional_test" || cp.verification?.method === "integration_test" || cp.verification?.method === "e2e_test" || cp.verification?.method === "automated");
     if (qaCheckpoints.length === 0) {
       result.passed = true;
       result.reason = "无 QA 类型检查点，跳过检查点验证";
       return result;
     }
-    const completedCount = qaCheckpoints.filter((cp) => cp.status === "completed").length;
-    const totalCount = qaCheckpoints.length;
-    result.passed = completedCount === totalCount;
-    result.reason = result.passed ? `所有 ${totalCount} 个 QA 检查点已完成` : `QA 检查点完成度不足: ${completedCount}/${totalCount}`;
-    result.criteria = qaCheckpoints.map((cp) => ({
-      original: cp.description,
+    const verificationResults = [];
+    for (const checkpoint of qaCheckpoints) {
+      if (checkpoint.status === "completed") {
+        verificationResults.push({
+          checkpoint,
+          success: true,
+          details: `检查点 ${checkpoint.id}: 已完成`
+        });
+        continue;
+      }
+      const commands = checkpoint.verification?.commands;
+      if (!commands || commands.length === 0) {
+        verificationResults.push({
+          checkpoint,
+          success: false,
+          details: `检查点 ${checkpoint.id}: 无验证命令`
+        });
+        continue;
+      }
+      try {
+        const results = await this.executor.executeAll(commands, { cwd: this.cwd });
+        const allSuccess = results.every((r) => r.success);
+        verificationResults.push({
+          checkpoint,
+          success: allSuccess,
+          details: allSuccess ? `检查点 ${checkpoint.id}: 验证通过 (${commands.length} 个命令)` : `检查点 ${checkpoint.id}: 验证失败`
+        });
+      } catch (error) {
+        verificationResults.push({
+          checkpoint,
+          success: false,
+          details: `检查点 ${checkpoint.id}: 执行错误 - ${error instanceof Error ? error.message : String(error)}`
+        });
+      }
+    }
+    const successCount = verificationResults.filter((r) => r.success).length;
+    const totalCount = verificationResults.length;
+    result.passed = successCount === totalCount;
+    result.reason = result.passed ? `所有 ${totalCount} 个 QA 检查点验证通过` : `QA 检查点验证失败: ${successCount}/${totalCount} 通过`;
+    result.criteria = verificationResults.map((r) => ({
+      original: r.checkpoint.description,
       type: "general",
-      satisfied: cp.status === "completed",
-      details: `检查点 ${cp.id}: ${cp.status}`
+      satisfied: r.success,
+      details: r.details
     }));
+    await this.updateTaskCheckpoints(task.id, verificationResults);
     return result;
+  }
+  async updateTaskCheckpoints(taskId, results) {
+    try {
+      const taskMetaPath = path23.join(this.cwd, ".projmnt4claude", "tasks", taskId, "meta.json");
+      if (!fs27.existsSync(taskMetaPath)) {
+        return;
+      }
+      const taskMetaContent = fs27.readFileSync(taskMetaPath, "utf-8");
+      const taskMeta = JSON.parse(taskMetaContent);
+      if (taskMeta.checkpoints) {
+        for (const result of results) {
+          const checkpointIndex = taskMeta.checkpoints.findIndex((cp) => cp.id === result.checkpoint.id);
+          if (checkpointIndex >= 0) {
+            const checkpoint = taskMeta.checkpoints[checkpointIndex];
+            checkpoint.status = result.success ? "completed" : "failed";
+            if (checkpoint.verification) {
+              checkpoint.verification.result = result.success ? "passed" : "failed";
+              checkpoint.verification.verifiedAt = new Date().toISOString();
+              checkpoint.verification.verifiedBy = "checkpoint_executor";
+            }
+          }
+        }
+        fs27.writeFileSync(taskMetaPath, JSON.stringify(taskMeta, null, 2), "utf-8");
+      }
+    } catch {}
   }
   async verifyBuild(task) {
     const result = createDefaultAcceptanceResult("build");
