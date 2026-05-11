@@ -290,7 +290,7 @@ describe('QAAcceptanceCriteriaVerifier', () => {
 
       const checkpointResult = result.levelResults.get('checkpoint');
       expect(checkpointResult?.passed).toBe(false);
-      expect(checkpointResult?.reason).toContain('完成度不足');
+      expect(checkpointResult?.reason).toContain('验证失败');
     });
 
     it('should use test results from context', async () => {

@@ -23,6 +23,7 @@ import {
 } from '../types/qa-acceptance-criteria.js';
 import type { TaskMeta, CheckpointMetadata } from '../types/task.js';
 import { AcceptanceCriteriaParser, VerificationContext } from './qa-acceptance-criteria-parser.js';
+import { SafeCommandExecutor, createSafeCommandExecutor } from './safe-command-executor.js';
 
 /**
  * QA Acceptance Criteria Verifier
@@ -36,10 +37,12 @@ import { AcceptanceCriteriaParser, VerificationContext } from './qa-acceptance-c
 export class QAAcceptanceCriteriaVerifier {
   private cwd: string;
   private parser: AcceptanceCriteriaParser;
+  private executor: SafeCommandExecutor;
 
-  constructor(cwd: string) {
+  constructor(cwd: string, executor?: SafeCommandExecutor) {
     this.cwd = cwd;
     this.parser = new AcceptanceCriteriaParser();
+    this.executor = executor ?? createSafeCommandExecutor();
   }
 
   /**
@@ -90,7 +93,7 @@ export class QAAcceptanceCriteriaVerifier {
   /**
    * Level 1: Verify task checkpoints
    *
-   * Checks that all QA-type checkpoints are completed
+   * Executes verification commands for checkpoints and marks them as completed if successful
    */
   private async verifyCheckpoints(task: TaskMeta): Promise<AcceptanceVerificationResult> {
     const result = createDefaultAcceptanceResult('checkpoint');
@@ -100,7 +103,8 @@ export class QAAcceptanceCriteriaVerifier {
            cp.verification?.method === 'unit_test' ||
            cp.verification?.method === 'functional_test' ||
            cp.verification?.method === 'integration_test' ||
-           cp.verification?.method === 'e2e_test'
+           cp.verification?.method === 'e2e_test' ||
+           cp.verification?.method === 'automated'
     );
 
     if (qaCheckpoints.length === 0) {
@@ -109,21 +113,114 @@ export class QAAcceptanceCriteriaVerifier {
       return result;
     }
 
-    const completedCount = qaCheckpoints.filter(cp => cp.status === 'completed').length;
-    const totalCount = qaCheckpoints.length;
+    // Execute verification for each checkpoint
+    const verificationResults: Array<{
+      checkpoint: CheckpointMetadata;
+      success: boolean;
+      details: string;
+    }> = [];
 
-    result.passed = completedCount === totalCount;
+    for (const checkpoint of qaCheckpoints) {
+      // Skip if already completed
+      if (checkpoint.status === 'completed') {
+        verificationResults.push({
+          checkpoint,
+          success: true,
+          details: `检查点 ${checkpoint.id}: 已完成`,
+        });
+        continue;
+      }
+
+      // Check if we have commands to execute
+      const commands = checkpoint.verification?.commands;
+      if (!commands || commands.length === 0) {
+        verificationResults.push({
+          checkpoint,
+          success: false,
+          details: `检查点 ${checkpoint.id}: 无验证命令`,
+        });
+        continue;
+      }
+
+      // Execute commands
+      try {
+        const results = await this.executor.executeAll(commands, { cwd: this.cwd });
+        const allSuccess = results.every(r => r.success);
+
+        verificationResults.push({
+          checkpoint,
+          success: allSuccess,
+          details: allSuccess
+            ? `检查点 ${checkpoint.id}: 验证通过 (${commands.length} 个命令)`
+            : `检查点 ${checkpoint.id}: 验证失败`,
+        });
+      } catch (error) {
+        verificationResults.push({
+          checkpoint,
+          success: false,
+          details: `检查点 ${checkpoint.id}: 执行错误 - ${error instanceof Error ? error.message : String(error)}`,
+        });
+      }
+    }
+
+    // Calculate result
+    const successCount = verificationResults.filter(r => r.success).length;
+    const totalCount = verificationResults.length;
+
+    result.passed = successCount === totalCount;
     result.reason = result.passed
-      ? `所有 ${totalCount} 个 QA 检查点已完成`
-      : `QA 检查点完成度不足: ${completedCount}/${totalCount}`;
-    result.criteria = qaCheckpoints.map(cp => ({
-      original: cp.description,
+      ? `所有 ${totalCount} 个 QA 检查点验证通过`
+      : `QA 检查点验证失败: ${successCount}/${totalCount} 通过`;
+    result.criteria = verificationResults.map(r => ({
+      original: r.checkpoint.description,
       type: 'general' as const,
-      satisfied: cp.status === 'completed',
-      details: `检查点 ${cp.id}: ${cp.status}`,
+      satisfied: r.success,
+      details: r.details,
     }));
 
+    // Update task checkpoints in meta.json if we're in harness mode
+    await this.updateTaskCheckpoints(task.id, verificationResults);
+
     return result;
+  }
+
+  /**
+   * Update task checkpoints in meta.json after verification
+   */
+  private async updateTaskCheckpoints(
+    taskId: string,
+    results: Array<{ checkpoint: CheckpointMetadata; success: boolean; details: string }>
+  ): Promise<void> {
+    try {
+      const taskMetaPath = path.join(this.cwd, '.projmnt4claude', 'tasks', taskId, 'meta.json');
+      if (!fs.existsSync(taskMetaPath)) {
+        return;
+      }
+
+      const taskMetaContent = fs.readFileSync(taskMetaPath, 'utf-8');
+      const taskMeta = JSON.parse(taskMetaContent) as TaskMeta;
+
+      // Update checkpoints
+      if (taskMeta.checkpoints) {
+        for (const result of results) {
+          const checkpointIndex = taskMeta.checkpoints.findIndex(cp => cp.id === result.checkpoint.id);
+          if (checkpointIndex >= 0) {
+            const checkpoint = taskMeta.checkpoints[checkpointIndex];
+            checkpoint.status = result.success ? 'completed' : 'failed';
+            if (checkpoint.verification) {
+              checkpoint.verification.result = result.success ? 'passed' : 'failed';
+              checkpoint.verification.verifiedAt = new Date().toISOString();
+              checkpoint.verification.verifiedBy = 'checkpoint_executor';
+            }
+          }
+        }
+
+        // Write back
+        fs.writeFileSync(taskMetaPath, JSON.stringify(taskMeta, null, 2), 'utf-8');
+      }
+    } catch {
+      // Ignore errors, we don't want to fail the whole verification
+    }
   }
 
   /**
