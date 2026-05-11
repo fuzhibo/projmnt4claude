@@ -165,7 +165,6 @@ describe('saveRuntimeState', () => {
     const state = createDefaultRuntimeState(config);
     state.retryCounter.set('TASK-1', 2);
     state.resumeFrom.set('TASK-2', 'development');
-    state.reevaluateCounter.set('TASK-3', 1);
     state.phaseRetryCounters.set('TASK-1:development', 3);
 
     saveRuntimeState(state, env.tempDir);
@@ -173,7 +172,6 @@ describe('saveRuntimeState', () => {
     const data = JSON.parse(fs.readFileSync(stateFilePath(env.tempDir), 'utf-8'));
     expect(data.retryCounter).toEqual({ 'TASK-1': 2 });
     expect(data.resumeFrom).toEqual({ 'TASK-2': 'development' });
-    expect(data.reevaluateCounter).toEqual({ 'TASK-3': 1 });
     expect(data.phaseRetryCounters).toEqual({ 'TASK-1:development': 3 });
   });
 
@@ -186,7 +184,6 @@ describe('saveRuntimeState', () => {
     const data = JSON.parse(fs.readFileSync(stateFilePath(env.tempDir), 'utf-8'));
     expect(data.retryCounter).toEqual({});
     expect(data.resumeFrom).toEqual({});
-    expect(data.reevaluateCounter).toEqual({});
     expect(data.phaseRetryCounters).toEqual({});
   });
 
@@ -265,7 +262,6 @@ describe('loadRuntimeState', () => {
     const state = createDefaultRuntimeState(config);
     state.retryCounter.set('TASK-1', 2);
     state.resumeFrom.set('TASK-2', 'qa');
-    state.reevaluateCounter.set('TASK-3', 1);
     state.phaseRetryCounters.set('TASK-1:development', 3);
     saveRuntimeState(state, env.tempDir);
 
@@ -275,8 +271,6 @@ describe('loadRuntimeState', () => {
     expect(loaded!.retryCounter.get('TASK-1')).toBe(2);
     expect(loaded!.resumeFrom).toBeInstanceOf(Map);
     expect(loaded!.resumeFrom.get('TASK-2')).toBe('qa');
-    expect(loaded!.reevaluateCounter).toBeInstanceOf(Map);
-    expect(loaded!.reevaluateCounter.get('TASK-3')).toBe(1);
     expect(loaded!.phaseRetryCounters).toBeInstanceOf(Map);
     expect(loaded!.phaseRetryCounters.get('TASK-1:development')).toBe(3);
   });
@@ -322,7 +316,6 @@ describe('loadRuntimeState', () => {
     expect(loaded).not.toBeNull();
     expect(loaded!.retryCounter.size).toBe(0);
     expect(loaded!.resumeFrom.size).toBe(0);
-    expect(loaded!.reevaluateCounter.size).toBe(0);
     expect(loaded!.phaseRetryCounters.size).toBe(0);
   });
 

@@ -417,7 +417,6 @@ describe('Scenario 2: Harness Full Pipeline', () => {
     expect('records' in state).toBe(false);
     expect(state.retryCounter.size).toBe(0);
     expect(state.resumeFrom.size).toBe(0);
-    expect(state.reevaluateCounter.size).toBe(0);
     expect(state.phaseRetryCounters.size).toBe(0);
     expect(state.passedTasks).toEqual([]);
     expect(state.failedTasks).toEqual([]);
@@ -557,7 +556,6 @@ describe('Scenario 4: State Recovery and Retry', () => {
     state.currentIndex = 1;
     state.retryCounter.set('TASK-1', 2);
     state.resumeFrom.set('TASK-1', 'qa');
-    state.reevaluateCounter.set('TASK-1', 1);
     state.phaseRetryCounters.set('TASK-1:development', 1);
 
     saveRuntimeState(state, tmpDir);
@@ -568,7 +566,6 @@ describe('Scenario 4: State Recovery and Retry', () => {
     expect(loaded!.currentIndex).toBe(1);
     expect(loaded!.retryCounter.get('TASK-1')).toBe(2);
     expect(loaded!.resumeFrom.get('TASK-1')).toBe('qa');
-    expect(loaded!.reevaluateCounter.get('TASK-1')).toBe(1);
     expect(loaded!.phaseRetryCounters.get('TASK-1:development')).toBe(1);
     expect(loaded!.stateFormatVersion).toBe(2);
   });

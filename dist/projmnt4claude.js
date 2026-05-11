@@ -10234,7 +10234,7 @@ EVALUATION_REASON: [简要说明为什么通过或不通过]
 \`\`\`
 ## 评估结果: PASS 或 NOPASS
 ## 原因: [简要说明为什么通过或不通过]
-## 后续动作: [resolve|redevelop|retest|reevaluate|escalate_human]
+## 后续动作: [resolve|redevelop|escalate_human]
 ## 失败分类: [acceptance_criteria|code_quality|test_failure|architecture|specification|phantom_task|incomplete|other]
 ## 未满足的标准: [列出未满足的验收标准，如果没有则为空]
 ## 未完成的检查点: [列出未完成的检查点，如果没有则为空]
@@ -10282,9 +10282,7 @@ EVALUATION_RESULT: 不通过  ← 错误：使用了"不通过"而非 NOPASS
 
 **动作说明（评估结果为 NOPASS 时必须填写）**:
 - resolve: 评估通过，任务可以完成（仅 PASS 时使用）
-- redevelop: 实现有严重问题，需要从开发阶段重新开始
-- retest: 实现基本OK但测试未通过，从QA阶段重试即可
-- reevaluate: 评估不明确需要更多信息，重新评估
+- redevelop: 实现有问题，需要从开发阶段重新开始
 - escalate_human: 问题超出自动处理范围，需要人工介入
 
 现在开始评估。`,
@@ -10332,7 +10330,7 @@ Then output detailed evaluation in this Markdown format:
 \`\`\`
 ## Evaluation Result: PASS or NOPASS
 ## Reason: [Brief explanation of why it passed or failed]
-## Next Action: [resolve|redevelop|retest|reevaluate|escalate_human]
+## Next Action: [resolve|redevelop|escalate_human]
 ## Failure Category: [acceptance_criteria|code_quality|test_failure|architecture|specification|phantom_task|incomplete|other]
 ## Unmet Criteria: [List unmet acceptance criteria, empty if none]
 ## Incomplete Checkpoints: [List incomplete checkpoints, empty if none]
@@ -10380,9 +10378,7 @@ EVALUATION_RESULT: failed  ← Error: Used "failed" instead of NOPASS
 
 **Action Descriptions (Required when evaluation is NOPASS)**:
 - resolve: Evaluation passed, task can be completed (only use when PASS)
-- redevelop: Serious implementation issues, need to restart from development phase
-- retest: Implementation basically OK but tests failed, retry from QA phase
-- reevaluate: Evaluation unclear needs more info, re-evaluate
+- redevelop: Implementation issues, need to restart from development phase
 - escalate_human: Issue beyond automatic processing scope, needs human intervention
 
 Begin evaluation now.`
@@ -18534,7 +18530,6 @@ function createDefaultRuntimeState(config) {
     retryCounter: new Map,
     updatedAt: now,
     resumeFrom: new Map,
-    reevaluateCounter: new Map,
     phaseRetryCounters: new Map,
     batchBoundaries: [],
     batchLabels: [],
@@ -38813,8 +38808,8 @@ ${texts.harness.logs.phantomTaskNopassRequirement}
       }
     }
     const actionPatterns = [
-      /##\s*后续动作\s*[:：]\s*(resolve|redevelop|retest|reevaluate|escalate_human)/i,
-      /(?:后续动作|Action|Verdict Action|Next Action)[:：]?\s*(resolve|redevelop|retest|reevaluate|escalate_human)/i
+      /##\s*后续动作\s*[:：]\s*(resolve|redevelop|escalate_human)/i,
+      /(?:后续动作|Action|Verdict Action|Next Action)[:：]?\s*(resolve|redevelop|escalate_human)/i
     ];
     for (const pattern of actionPatterns) {
       const match = output.match(pattern);
@@ -39763,7 +39758,6 @@ function saveRuntimeState(state, cwd) {
     stateFormatVersion: 2,
     retryCounter: Object.fromEntries(state.retryCounter),
     resumeFrom: Object.fromEntries(state.resumeFrom || []),
-    reevaluateCounter: Object.fromEntries(state.reevaluateCounter || []),
     phaseRetryCounters: Object.fromEntries(state.phaseRetryCounters || []),
     taskPhaseCheckpoints: Object.fromEntries(state.taskPhaseCheckpoints || [])
   };
@@ -40714,8 +40708,7 @@ ${"━".repeat(SEPARATOR_WIDTH)}`);
         console.log("✅ architect 建议完成任务");
         return record;
       }
-      case "redevelop":
-      case "minor_fix": {
+      case "redevelop": {
         const devPhaseLimit = this.getPhaseRetryLimit("development");
         const devRetryCount = this.getPhaseRetryCount(taskId, "development", state);
         if (devRetryCount >= devPhaseLimit) {
@@ -40738,35 +40731,6 @@ ${"━".repeat(SEPARATOR_WIDTH)}`);
         this.statusReporter.recordTaskRetrying(taskId, devRetryCount + 1, devPhaseLimit, "development", `${phase} 阶段失败，从开发阶段重试`);
         record.finalStatus = "in_progress";
         record.retryCount = devRetryCount + 1;
-        return record;
-      }
-      case "retest": {
-        const qaPhaseLimit = this.getPhaseRetryLimit("qa");
-        const qaRetryCount = this.getPhaseRetryCount(taskId, "qa", state);
-        if (qaRetryCount >= qaPhaseLimit) {
-          console.log(`⚠️  QA 阶段重试次数已达上限 (${qaPhaseLimit})，回退到开发阶段重试`);
-          return this.handleVerdictBasedTransition(taskId, record, state, addTimeline, phase, "redevelop");
-        }
-        await this.ensureTransition(taskId, "wait_qa", `${phase} 阶段失败，从 QA 阶段重试`);
-        this.incrementPhaseRetryCount(taskId, "qa", state);
-        addTimeline("retry", `任务将从 QA 阶段重试 (第 ${qaRetryCount + 1}/${qaPhaseLimit} 次)`, { action, phase });
-        console.log(`⚠️  任务将从 QA 阶段重试 (第 ${qaRetryCount + 1}/${qaPhaseLimit} 次)`);
-        record.finalStatus = "wait_qa";
-        return record;
-      }
-      case "reevaluate": {
-        const MAX_REEVALUATE_ATTEMPTS = 2;
-        const reevaluateCount = state.reevaluateCounter.get(taskId) || 0;
-        if (reevaluateCount >= MAX_REEVALUATE_ATTEMPTS) {
-          console.log(`⚠️  评估重试次数已达上限 (${MAX_REEVALUATE_ATTEMPTS})，回退到开发阶段重试`);
-          return this.handleVerdictBasedTransition(taskId, record, state, addTimeline, phase, "redevelop");
-        }
-        await this.ensureTransition(taskId, "wait_evaluation", `${phase} 阶段失败，从评估阶段重试`);
-        this.incrementPhaseRetryCount(taskId, "evaluation", state);
-        state.reevaluateCounter.set(taskId, reevaluateCount + 1);
-        addTimeline("retry", `任务将从评估阶段重试 (第 ${reevaluateCount + 1}/${MAX_REEVALUATE_ATTEMPTS} 次)`, { action, phase });
-        console.log(`⚠️  任务将从评估阶段重试 (第 ${reevaluateCount + 1}/${MAX_REEVALUATE_ATTEMPTS} 次)`);
-        record.finalStatus = "wait_evaluation";
         return record;
       }
       case "escalate_human": {
@@ -42248,7 +42212,6 @@ function validateAndRepairState(data, cwd) {
     "retryCounter",
     "taskResults",
     "resumeFrom",
-    "reevaluateCounter",
     "phaseRetryCounters",
     "taskPhaseCheckpoints",
     "failureHistory",
@@ -42345,6 +42308,9 @@ function validateAndRepairState(data, cwd) {
     data.state = "idle";
     repairedFields.push("state");
     repaired = true;
+  }
+  if ("reevaluateCounter" in data) {
+    delete data.reevaluateCounter;
   }
   if (repaired && repairedFields.length > 0) {
     console.log(`\uD83D\uDCE6 State file repaired: ${repairedFields.length} fields fixed (${repairedFields.slice(0, 5).join(", ")}${repairedFields.length > 5 ? "..." : ""})`);

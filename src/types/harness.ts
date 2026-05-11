@@ -572,8 +572,6 @@ export interface HarnessRuntimeState {
    * @deprecated Use state-driven determineResumePhase instead. Kept for backward compatibility serialization.
    */
   resumeFrom: Map<string, 'development' | 'code_review' | 'qa' | 'evaluation'>;
-  /** Re-evaluation counter (independent of retry count, max 2) */
-  reevaluateCounter: Map<string, number>;
   /** Independent retry counter for each phase - key format: `${taskId}:${phase}` */
   phaseRetryCounters: Map<string, number>;
   /**
@@ -826,7 +824,6 @@ export function createDefaultRuntimeState(config: HarnessConfig): HarnessRuntime
     retryCounter: new Map(),
     updatedAt: now,
     resumeFrom: new Map(),
-    reevaluateCounter: new Map(),
     phaseRetryCounters: new Map(),
     batchBoundaries: [],
     batchLabels: [],

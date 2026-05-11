@@ -285,24 +285,28 @@ describe('handleVerdictBasedTransition status transitions', () => {
     expect(getTaskStatus()).toBe('in_progress');
   });
 
-  // CP-11: retest → wait_qa
-  test('CP-11: retest transitions to wait_qa (qa phase)', async () => {
+  // P5: minor_fix treated as redevelop (simplified behavior)
+  test('P5: minor_fix treated as redevelop (simplified behavior)', async () => {
+    const result = await runVerdictTransition('code_review', 'minor_fix', 'wait_review');
+    expect(result.finalStatus).toBe('in_progress');
+    expect(getTaskStatus()).toBe('in_progress');
+  });
+
+  // P5: retest treated as redevelop (simplified behavior)
+  test('P5: retest treated as redevelop (simplified behavior)', async () => {
     // Setup: need code-review-report for QA prerequisites
     const reportDir = path.join(env.tempDir, '.projmnt4claude', 'reports', 'harness', taskId);
     writeReport(reportDir, 'dev-report.md', 'dev content');
     writeReport(reportDir, 'code-review-report.md', 'review content');
 
     const result = await runVerdictTransition('qa', 'retest', 'wait_qa');
-    expect(result.finalStatus).toBe('wait_qa');
-    expect(getTaskStatus()).toBe('wait_qa');
-    // Verify determineResumePhase maps wait_qa → qa
-    const state = createDefaultRuntimeState(createTestConfig(env.tempDir));
-    const resumePhase = assemblyLine.determineResumePhase(taskId, 'wait_qa', state);
-    expect(resumePhase).toBe('qa');
+    // P5: retest now treated as redevelop → in_progress (not wait_qa)
+    expect(result.finalStatus).toBe('in_progress');
+    expect(getTaskStatus()).toBe('in_progress');
   });
 
-  // CP-12: reevaluate → wait_evaluation
-  test('CP-12: reevaluate transitions to wait_evaluation (evaluation phase)', async () => {
+  // P5: reevaluate treated as redevelop (simplified behavior)
+  test('P5: reevaluate treated as redevelop (simplified behavior)', async () => {
     // Setup: need all reports for evaluation prerequisites
     const reportDir = path.join(env.tempDir, '.projmnt4claude', 'reports', 'harness', taskId);
     writeReport(reportDir, 'dev-report.md', 'dev content');
@@ -310,85 +314,9 @@ describe('handleVerdictBasedTransition status transitions', () => {
     writeReport(reportDir, 'qa-report.md', 'qa content');
 
     const result = await runVerdictTransition('evaluation', 'reevaluate', 'wait_evaluation');
-    expect(result.finalStatus).toBe('wait_evaluation');
-    expect(getTaskStatus()).toBe('wait_evaluation');
-    // Verify determineResumePhase maps wait_evaluation → evaluation
-    const state = createDefaultRuntimeState(createTestConfig(env.tempDir));
-    const resumePhase = assemblyLine.determineResumePhase(taskId, 'wait_evaluation', state);
-    expect(resumePhase).toBe('evaluation');
-  });
-
-  // CP-13: retest does NOT use resumeFrom
-  test('CP-13: retest does not set resumeFrom (deprecated mechanism)', async () => {
-    const reportDir = path.join(env.tempDir, '.projmnt4claude', 'reports', 'harness', taskId);
-    writeReport(reportDir, 'dev-report.md', 'dev content');
-    writeReport(reportDir, 'code-review-report.md', 'review content');
-
-    const task = createMockTask({ id: taskId, status: 'wait_qa' });
-    const record = createDefaultExecutionRecord(task);
-    const state = createDefaultRuntimeState(createTestConfig(env.tempDir));
-
-    const addTimeline = () => {};
-    await (assemblyLine as any).handleVerdictBasedTransition(
-      taskId, record, state, addTimeline, 'qa', 'retest',
-    );
-
-    // resumeFrom should NOT have the task (deprecated mechanism not used)
-    expect(state.resumeFrom.has(taskId)).toBe(false);
-  });
-
-  // CP-13: reevaluate does NOT use resumeFrom
-  test('CP-13: reevaluate does not set resumeFrom (deprecated mechanism)', async () => {
-    const reportDir = path.join(env.tempDir, '.projmnt4claude', 'reports', 'harness', taskId);
-    writeReport(reportDir, 'dev-report.md', 'dev content');
-    writeReport(reportDir, 'code-review-report.md', 'review content');
-    writeReport(reportDir, 'qa-report.md', 'qa content');
-
-    const task = createMockTask({ id: taskId, status: 'wait_evaluation' });
-    const record = createDefaultExecutionRecord(task);
-    const state = createDefaultRuntimeState(createTestConfig(env.tempDir));
-
-    const addTimeline = () => {};
-    await (assemblyLine as any).handleVerdictBasedTransition(
-      taskId, record, state, addTimeline, 'evaluation', 'reevaluate',
-    );
-
-    expect(state.resumeFrom.has(taskId)).toBe(false);
-  });
-
-  // CP-11: retest respects QA retry limit
-  test('CP-11: retest falls back to redevelop when QA retries exhausted', async () => {
-    const task = createMockTask({ id: taskId, status: 'wait_qa' });
-    const record = createDefaultExecutionRecord(task);
-    const state = createDefaultRuntimeState(createTestConfig(env.tempDir));
-    // Exhaust QA retry limit
-    state.phaseRetryCounters.set(`${taskId}:qa`, 3); // default limit
-
-    const addTimeline = () => {};
-    const result = await (assemblyLine as any).handleVerdictBasedTransition(
-      taskId, record, state, addTimeline, 'qa', 'retest',
-    );
-
-    // Should fall back to redevelop → in_progress
+    // P5: reevaluate now treated as redevelop → in_progress (not wait_evaluation)
     expect(result.finalStatus).toBe('in_progress');
-    expect(state.resumeFrom.has(taskId)).toBe(false);
-  });
-
-  // CP-12: reevaluate respects max reevaluate attempts
-  test('CP-12: reevaluate falls back to redevelop when max attempts reached', async () => {
-    const task = createMockTask({ id: taskId, status: 'wait_evaluation' });
-    const record = createDefaultExecutionRecord(task);
-    const state = createDefaultRuntimeState(createTestConfig(env.tempDir));
-    // Exhaust reevaluate limit
-    state.reevaluateCounter.set(taskId, 2); // MAX_REEVALUATE_ATTEMPTS
-
-    const addTimeline = () => {};
-    const result = await (assemblyLine as any).handleVerdictBasedTransition(
-      taskId, record, state, addTimeline, 'evaluation', 'reevaluate',
-    );
-
-    // Should fall back to redevelop → in_progress
-    expect(result.finalStatus).toBe('in_progress');
+    expect(getTaskStatus()).toBe('in_progress');
   });
 
   // CP-17: resolve → resolved
@@ -482,27 +410,11 @@ describe('handleVerdictBasedTransition status transitions', () => {
   });
 
 
-  // Boundary: reevaluate increments reevaluateCounter but not retryCounter
-  test('boundary: reevaluate increments reevaluateCounter not retryCounter', async () => {
-    const reportDir = path.join(env.tempDir, '.projmnt4claude', 'reports', 'harness', taskId);
-    writeReport(reportDir, 'dev-report.md', 'dev content');
-    writeReport(reportDir, 'code-review-report.md', 'review content');
-    writeReport(reportDir, 'qa-report.md', 'qa content');
-
-    const task = createMockTask({ id: taskId, status: 'wait_evaluation' });
-    const record = createDefaultExecutionRecord(task);
+  // P5: reevaluateCounter removed - no longer needed
+  test('P5: reevaluateCounter removed from state', async () => {
     const state = createDefaultRuntimeState(createTestConfig(env.tempDir));
-
-    const addTimeline = () => {};
-    await (assemblyLine as any).handleVerdictBasedTransition(
-      taskId, record, state, addTimeline, 'evaluation', 'reevaluate',
-    );
-
-    expect(state.reevaluateCounter.get(taskId)).toBe(1);
-    // reevaluate does NOT consume retry counter
-    expect(state.retryCounter.get(taskId) || 0).toBe(0);
-    // CP-P4: 阶段内重试，不再重新入队
-    expect(state.taskQueue).not.toContain(taskId);
+    // P5: reevaluateCounter field removed from HarnessRuntimeState
+    expect(state).not.toHaveProperty('reevaluateCounter');
   });
 });
 

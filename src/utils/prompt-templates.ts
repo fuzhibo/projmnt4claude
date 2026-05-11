@@ -531,7 +531,7 @@ EVALUATION_REASON: [简要说明为什么通过或不通过]
 \`\`\`
 ## 评估结果: PASS 或 NOPASS
 ## 原因: [简要说明为什么通过或不通过]
-## 后续动作: [resolve|redevelop|retest|reevaluate|escalate_human]
+## 后续动作: [resolve|redevelop|escalate_human]
 ## 失败分类: [acceptance_criteria|code_quality|test_failure|architecture|specification|phantom_task|incomplete|other]
 ## 未满足的标准: [列出未满足的验收标准，如果没有则为空]
 ## 未完成的检查点: [列出未完成的检查点，如果没有则为空]
@@ -579,9 +579,7 @@ EVALUATION_RESULT: 不通过  ← 错误：使用了"不通过"而非 NOPASS
 
 **动作说明（评估结果为 NOPASS 时必须填写）**:
 - resolve: 评估通过，任务可以完成（仅 PASS 时使用）
-- redevelop: 实现有严重问题，需要从开发阶段重新开始
-- retest: 实现基本OK但测试未通过，从QA阶段重试即可
-- reevaluate: 评估不明确需要更多信息，重新评估
+- redevelop: 实现有问题，需要从开发阶段重新开始
 - escalate_human: 问题超出自动处理范围，需要人工介入
 
 现在开始评估。`,
@@ -629,7 +627,7 @@ Then output detailed evaluation in this Markdown format:
 \`\`\`
 ## Evaluation Result: PASS or NOPASS
 ## Reason: [Brief explanation of why it passed or failed]
-## Next Action: [resolve|redevelop|retest|reevaluate|escalate_human]
+## Next Action: [resolve|redevelop|escalate_human]
 ## Failure Category: [acceptance_criteria|code_quality|test_failure|architecture|specification|phantom_task|incomplete|other]
 ## Unmet Criteria: [List unmet acceptance criteria, empty if none]
 ## Incomplete Checkpoints: [List incomplete checkpoints, empty if none]
@@ -677,9 +675,7 @@ EVALUATION_RESULT: failed  ← Error: Used "failed" instead of NOPASS
 
 **Action Descriptions (Required when evaluation is NOPASS)**:
 - resolve: Evaluation passed, task can be completed (only use when PASS)
-- redevelop: Serious implementation issues, need to restart from development phase
-- retest: Implementation basically OK but tests failed, retry from QA phase
-- reevaluate: Evaluation unclear needs more info, re-evaluate
+- redevelop: Implementation issues, need to restart from development phase
 - escalate_human: Issue beyond automatic processing scope, needs human intervention
 
 Begin evaluation now.`,

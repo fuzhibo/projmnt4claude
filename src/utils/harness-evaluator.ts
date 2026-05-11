@@ -438,9 +438,10 @@ export class HarnessEvaluator {
     }
 
     // 提取后续动作（action）
+    // P5: 简化为只支持 resolve/redevelop/escalate_human
     const actionPatterns = [
-      /##\s*后续动作\s*[:：]\s*(resolve|redevelop|retest|reevaluate|escalate_human)/i,
-      /(?:后续动作|Action|Verdict Action|Next Action)[:：]?\s*(resolve|redevelop|retest|reevaluate|escalate_human)/i,
+      /##\s*后续动作\s*[:：]\s*(resolve|redevelop|escalate_human)/i,
+      /(?:后续动作|Action|Verdict Action|Next Action)[:：]?\s*(resolve|redevelop|escalate_human)/i,
     ];
     for (const pattern of actionPatterns) {
       const match = output.match(pattern);

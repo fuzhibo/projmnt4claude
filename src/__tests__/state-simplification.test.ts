@@ -128,7 +128,6 @@ describe('State Simplification', () => {
         retryCounter: new Map(),
         updatedAt: new Date().toISOString(),
         resumeFrom: new Map(),
-        reevaluateCounter: new Map(),
         phaseRetryCounters: new Map(),
         taskPhaseCheckpoints: new Map(),
       };

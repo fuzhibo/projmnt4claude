@@ -646,7 +646,6 @@ function validateAndRepairState(
     'retryCounter',
     'taskResults',
     'resumeFrom',
-    'reevaluateCounter',
     'phaseRetryCounters',
     'taskPhaseCheckpoints',
     'failureHistory',
@@ -770,6 +769,11 @@ function validateAndRepairState(
     repaired = true;
   }
 
+  // 10. P5 向后兼容：移除旧状态文件中的 reevaluateCounter 字段
+  if ('reevaluateCounter' in data) {
+    delete data.reevaluateCounter;
+  }
+
   // 输出修复信息
   if (repaired && repairedFields.length > 0) {
     console.log(`📦 State file repaired: ${repairedFields.length} fields fixed (${repairedFields.slice(0, 5).join(', ')}${repairedFields.length > 5 ? '...' : ''})`);
@@ -873,7 +877,6 @@ export function saveRuntimeState(state: HarnessRuntimeState, cwd: string): void 
     stateFormatVersion: 2,
     retryCounter: Object.fromEntries(state.retryCounter),
     resumeFrom: Object.fromEntries(state.resumeFrom || []),
-    reevaluateCounter: Object.fromEntries(state.reevaluateCounter || []),
     // 修复：添加 phaseRetryCounters 保存
     phaseRetryCounters: Object.fromEntries(state.phaseRetryCounters || []),
     taskPhaseCheckpoints: Object.fromEntries(state.taskPhaseCheckpoints || []),

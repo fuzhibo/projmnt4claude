@@ -615,7 +615,7 @@ export class AssemblyLine {
             // 存储失败原因到重试上下文
             this.storeFailureContext(taskId, 'code_review', codeReviewVerdict.reason || '代码审核未通过', state);
             this.statusReporter.failPhase('code_review', new Error(codeReviewVerdict.reason || '代码审核未通过'), taskId);
-            // P5: 统一使用 redevelop，移除 minor_fix 复杂分支
+            // P5: 统一重试路径，所有失败回退到开发阶段
             return this.handleVerdictBasedTransition(taskId, record, state, addTimeline, 'code_review', 'redevelop');
           }
 
@@ -702,7 +702,7 @@ export class AssemblyLine {
             // 存储失败原因到重试上下文
             this.storeFailureContext(taskId, 'qa', qaVerdict.reason || 'QA 验证未通过', state);
             this.statusReporter.failPhase('qa_verification', new Error(qaVerdict.reason || 'QA 验证未通过'), taskId);
-            // P5: 统一使用 redevelop，移除 minor_fix 复杂分支
+            // P5: 统一重试路径，所有失败回退到开发阶段
             return this.handleVerdictBasedTransition(taskId, record, state, addTimeline, 'qa', 'redevelop');
           }
 
@@ -1452,9 +1452,8 @@ export class AssemblyLine {
         return record;
       }
 
-      case 'redevelop':
-      case 'minor_fix': {
-        // CP-10: minor_fix 和 redevelop 都从开发阶段重试
+      case 'redevelop': {
+        // P5: 统一重试路径 - 所有失败都回退到开发阶段重试
         const devPhaseLimit = this.getPhaseRetryLimit('development');
         const devRetryCount = this.getPhaseRetryCount(taskId, 'development', state);
         if (devRetryCount >= devPhaseLimit) {
@@ -1483,45 +1482,6 @@ export class AssemblyLine {
         record.finalStatus = 'in_progress';
         record.retryCount = devRetryCount + 1;
         // P5: 返回记录，由 executeTask 的阶段循环处理重试
-        return record;
-      }
-
-      case 'retest': {
-        // CP-11: retest 从 QA 阶段重试
-        const qaPhaseLimit = this.getPhaseRetryLimit('qa');
-        const qaRetryCount = this.getPhaseRetryCount(taskId, 'qa', state);
-        if (qaRetryCount >= qaPhaseLimit) {
-          // QA 重试次数用尽，回退到开发阶段重试
-          console.log(`⚠️  QA 阶段重试次数已达上限 (${qaPhaseLimit})，回退到开发阶段重试`);
-          return this.handleVerdictBasedTransition(taskId, record, state, addTimeline, phase, 'redevelop');
-        }
-
-        await this.ensureTransition(taskId, 'wait_qa', `${phase} 阶段失败，从 QA 阶段重试`);
-        this.incrementPhaseRetryCount(taskId, 'qa', state);
-        addTimeline('retry', `任务将从 QA 阶段重试 (第 ${qaRetryCount + 1}/${qaPhaseLimit} 次)`, { action, phase });
-        console.log(`⚠️  任务将从 QA 阶段重试 (第 ${qaRetryCount + 1}/${qaPhaseLimit} 次)`);
-        record.finalStatus = 'wait_qa';
-        return record;
-      }
-
-      case 'reevaluate': {
-        // CP-12: reevaluate 从评估阶段重试
-        // Check reevaluateCounter limit (MAX_REEVALUATE_ATTEMPTS = 2)
-        const MAX_REEVALUATE_ATTEMPTS = 2;
-        const reevaluateCount = state.reevaluateCounter.get(taskId) || 0;
-        if (reevaluateCount >= MAX_REEVALUATE_ATTEMPTS) {
-          // 评估重试次数用尽，回退到开发阶段重试
-          console.log(`⚠️  评估重试次数已达上限 (${MAX_REEVALUATE_ATTEMPTS})，回退到开发阶段重试`);
-          return this.handleVerdictBasedTransition(taskId, record, state, addTimeline, phase, 'redevelop');
-        }
-
-        await this.ensureTransition(taskId, 'wait_evaluation', `${phase} 阶段失败，从评估阶段重试`);
-        this.incrementPhaseRetryCount(taskId, 'evaluation', state);
-        // CP-12: reevaluate increments reevaluateCounter but not retryCounter
-        state.reevaluateCounter.set(taskId, reevaluateCount + 1);
-        addTimeline('retry', `任务将从评估阶段重试 (第 ${reevaluateCount + 1}/${MAX_REEVALUATE_ATTEMPTS} 次)`, { action, phase });
-        console.log(`⚠️  任务将从评估阶段重试 (第 ${reevaluateCount + 1}/${MAX_REEVALUATE_ATTEMPTS} 次)`);
-        record.finalStatus = 'wait_evaluation';
         return record;
       }
 
