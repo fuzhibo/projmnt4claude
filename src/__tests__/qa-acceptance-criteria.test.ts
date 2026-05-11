@@ -357,6 +357,126 @@ describe('QAAcceptanceCriteriaVerifier', () => {
       expect(formatted).toContain('验证层次结果');
     });
   });
+
+  describe('checkpoint command execution', () => {
+    it('should execute checkpoint verification commands', async () => {
+      const task: TaskMeta = {
+        id: 'test-task-006',
+        title: 'Test Task',
+        description: '',
+        status: 'in_progress',
+        type: 'feature',
+        priority: 'P2',
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+        checkpoints: [
+          {
+            id: 'CP-001',
+            description: 'Test checkpoint with command',
+            status: 'pending',
+            category: 'qa_verification',
+            createdAt: new Date().toISOString(),
+            updatedAt: new Date().toISOString(),
+            verification: {
+              method: 'automated',
+              commands: ['echo test'],
+              expected: 'test',
+            },
+          },
+        ],
+        files: [],
+        dependencies: [],
+        reopenCount: 0,
+        requirementHistory: [],
+        createdBy: 'cli',
+        schemaVersion: 6,
+        checkpointPolicy: 'optional',
+      };
+
+      const result = await verifier.verify(task);
+
+      const checkpointResult = result.levelResults.get('checkpoint');
+      expect(checkpointResult?.passed).toBe(true);
+      expect(checkpointResult?.reason).toContain('验证通过');
+    });
+
+    it('should fail when checkpoint command fails', async () => {
+      const task: TaskMeta = {
+        id: 'test-task-007',
+        title: 'Test Task',
+        description: '',
+        status: 'in_progress',
+        type: 'feature',
+        priority: 'P2',
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+        checkpoints: [
+          {
+            id: 'CP-001',
+            description: 'Test checkpoint with failing command',
+            status: 'pending',
+            category: 'qa_verification',
+            createdAt: new Date().toISOString(),
+            updatedAt: new Date().toISOString(),
+            verification: {
+              method: 'automated',
+              commands: ['ls /nonexistent/path'],
+              expected: 'should fail',
+            },
+          },
+        ],
+        files: [],
+        dependencies: [],
+        reopenCount: 0,
+        requirementHistory: [],
+        createdBy: 'cli',
+        schemaVersion: 6,
+        checkpointPolicy: 'optional',
+      };
+
+      const result = await verifier.verify(task);
+
+      const checkpointResult = result.levelResults.get('checkpoint');
+      expect(checkpointResult?.passed).toBe(false);
+      expect(checkpointResult?.reason).toContain('验证失败');
+    });
+
+    it('should skip completed checkpoints', async () => {
+      const task: TaskMeta = {
+        id: 'test-task-008',
+        title: 'Test Task',
+        description: '',
+        status: 'in_progress',
+        type: 'feature',
+        priority: 'P2',
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+        checkpoints: [
+          {
+            id: 'CP-001',
+            description: 'Already completed checkpoint',
+            status: 'completed',
+            category: 'qa_verification',
+            createdAt: new Date().toISOString(),
+            updatedAt: new Date().toISOString(),
+          },
+        ],
+        files: [],
+        dependencies: [],
+        reopenCount: 0,
+        requirementHistory: [],
+        createdBy: 'cli',
+        schemaVersion: 6,
+        checkpointPolicy: 'optional',
+      };
+
+      const result = await verifier.verify(task);
+
+      const checkpointResult = result.levelResults.get('checkpoint');
+      expect(checkpointResult?.passed).toBe(true);
+      expect(checkpointResult?.reason).toContain('验证通过');
+    });
+  });
 });
 
 describe('parseAcceptanceCriteria (quick function)', () => {
