@@ -599,9 +599,12 @@ export const checkpointHasVerificationCommands: ValidationRule = {
 
 /**
  * 检测字符串值中的 JSON 格式问题：
- * - 未转义引号（值中间出现裸引号）
  * - 控制字符（\x00-\x1F 除 \t \n \r 外）
- * - 截断/不完整的字符串
+ *
+ * 注意：未转义引号的检查已移除，因为：
+ * 1. JSON.parse() 已经会捕获 JSON 格式错误
+ * 2. 当 JSON 被正确解析后，字符串值中的引号是合法的字符
+ * 3. 原有的正则检查会误判包含代码示例的正常文本
  */
 function detectStringFormatIssues(value: string): string[] {
   const issues: string[] = [];
@@ -609,14 +612,6 @@ function detectStringFormatIssues(value: string): string[] {
   // 检测未转义的控制字符
   if (/[\x00-\x08\x0b\x0c\x0e-\x1f]/.test(value)) {
     issues.push('contains unescaped control characters');
-  }
-
-  // 检测未转义引号：字符串中间出现 " 但不是 \" 或开头/结尾的引号
-  // 先去除合法转义引号，再检查是否有裸引号混在字符串中间
-  const withoutEscapes = value.replace(/\\"/g, '');
-  // 匹配: 非引号字符 + 裸引号 + 非引号字符 (表示引号嵌入在文本中)
-  if (/[^"]"[^"]/.test(withoutEscapes)) {
-    issues.push('contains unescaped quotes');
   }
 
   return issues;

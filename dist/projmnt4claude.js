@@ -12211,10 +12211,6 @@ function detectStringFormatIssues(value) {
   if (/[\x00-\x08\x0b\x0c\x0e-\x1f]/.test(value)) {
     issues.push("contains unescaped control characters");
   }
-  const withoutEscapes = value.replace(/\\"/g, "");
-  if (/[^"]"[^"]/.test(withoutEscapes)) {
-    issues.push("contains unescaped quotes");
-  }
   return issues;
 }
 var CHINESE_VERBS, ENGLISH_VERBS, checkpointNoDuplicate, checkpointNoFilePath, checkpointCountControl, checkpointVerbPrefix, checkpointMinLength, METHODS_REQUIRING_COMMANDS2, VALID_CHECKPOINT_PREFIXES, checkpointRequiredPrefix, checkpointHasVerificationCommands, metaJsonValid, checkpointValidationRules;
