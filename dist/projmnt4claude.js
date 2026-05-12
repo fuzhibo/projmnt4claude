@@ -8148,12 +8148,14 @@ var init_zh = __esm(() => {
         noCodeReviewCheckpoints: "无代码审核检查点，自动通过",
         codeReviewPromptGenerated: "代码审核提示词已生成",
         startingCodeReview: "启动代码审核会话...",
+        startingCodeReviewSession: "启动代码审核会话...",
         codeReviewFormatRetry: "代码审核结果格式不匹配，已重试 {retries} 次",
         contradictionDetected: "矛盾检测",
         codeReviewPassed: "代码审核通过",
         codeReviewFailed: "代码审核未通过",
         codeReviewError: "代码审核出错",
         codeReviewSessionFailed: "代码审核会话失败",
+        codeReviewRetry: "代码审核结果格式不匹配，已重试 {retries} 次",
         qaPhase: "QA 验证阶段...",
         qaCheckpoints: "QA 验证检查点",
         noQACheckpoints: "无 QA 验证检查点，自动通过",
@@ -9219,12 +9221,14 @@ var init_en = __esm(() => {
         noCodeReviewCheckpoints: "No code review checkpoints, auto-pass",
         codeReviewPromptGenerated: "Code review prompt generated",
         startingCodeReview: "Starting code review session...",
+        startingCodeReviewSession: "Starting code review session...",
         codeReviewFormatRetry: "Code review result format mismatch, retried {retries} times",
         contradictionDetected: "Contradiction detected",
         codeReviewPassed: "Code review passed",
         codeReviewFailed: "Code review failed",
         codeReviewError: "Code review error",
         codeReviewSessionFailed: "Code review session failed",
+        codeReviewRetry: "Code review result format mismatch, retried {retries} times",
         qaPhase: "QA verification phase...",
         qaCheckpoints: "QA verification checkpoints",
         noQACheckpoints: "No QA verification checkpoints, auto-pass",
@@ -37636,6 +37640,52 @@ var FORBIDDEN_PATTERNS = [
 var MAX_COMMAND_LENGTH = 500;
 var MAX_ARGS = 50;
 var DEFAULT_TIMEOUT = 60000;
+function parseCommand(command) {
+  const result = [];
+  let current = "";
+  let inQuote = null;
+  let escaped = false;
+  let i = 0;
+  while (i < command.length) {
+    const char = command[i];
+    if (escaped) {
+      current += char;
+      escaped = false;
+      i++;
+      continue;
+    }
+    if (char === "\\" && inQuote !== "'") {
+      escaped = true;
+      i++;
+      continue;
+    }
+    if (char === '"' || char === "'") {
+      if (inQuote === null) {
+        inQuote = char;
+      } else if (inQuote === char) {
+        inQuote = null;
+      } else {
+        current += char;
+      }
+      i++;
+      continue;
+    }
+    if (char === " " && inQuote === null) {
+      if (current.length > 0) {
+        result.push(current);
+        current = "";
+      }
+      i++;
+      continue;
+    }
+    current += char;
+    i++;
+  }
+  if (current.length > 0) {
+    result.push(current);
+  }
+  return result;
+}
 function validateCommand(command) {
   if (command.length > MAX_COMMAND_LENGTH) {
     return {
@@ -37643,7 +37693,7 @@ function validateCommand(command) {
       reason: `Command length exceeds limit (${MAX_COMMAND_LENGTH} characters)`
     };
   }
-  const parts = command.trim().split(/\s+/);
+  const parts = parseCommand(command);
   if (parts.length > MAX_ARGS) {
     return {
       valid: false,
@@ -37684,7 +37734,7 @@ class SafeCommandExecutor {
         error: `Command validation failed: ${validation.reason}`
       };
     }
-    const parts = command.trim().split(/\s+/);
+    const parts = parseCommand(command);
     const [cmd, ...args] = parts;
     if (!cmd) {
       return {

@@ -280,13 +280,13 @@ export interface I18nTexts {
       noCodeReviewCheckpoints: string;
       codeReviewPromptGenerated: string;
       startingCodeReview: string;
+      startingCodeReviewSession: string;
       codeReviewFormatRetry: string;
       contradictionDetected: string;
       codeReviewPassed: string;
       codeReviewFailed: string;
       codeReviewError: string;
       codeReviewSessionFailed: string;
-      startingCodeReviewSession: string;
       codeReviewRetry: string;
       qaPhase: string;
       qaCheckpoints: string;
