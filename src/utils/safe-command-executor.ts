@@ -125,6 +125,78 @@ const DEFAULT_TIMEOUT = 60000;
 // ============================================================
 
 /**
+ * Parse command string into command and arguments
+ *
+ * Handles:
+ * - Quoted arguments (single and double quotes)
+ * - Escaped characters
+ * - Environment variable assignments (VAR=value)
+ *
+ * @param command - Command string to parse
+ * @returns Parsed command parts
+ */
+function parseCommand(command: string): string[] {
+  const result: string[] = [];
+  let current = '';
+  let inQuote: '"' | "'" | null = null;
+  let escaped = false;
+  let i = 0;
+
+  while (i < command.length) {
+    const char = command[i];
+
+    if (escaped) {
+      current += char;
+      escaped = false;
+      i++;
+      continue;
+    }
+
+    if (char === '\\' && inQuote !== "'") {
+      // Backslash escapes next character (except in single quotes)
+      escaped = true;
+      i++;
+      continue;
+    }
+
+    if (char === '"' || char === "'") {
+      if (inQuote === null) {
+        // Start quote
+        inQuote = char;
+      } else if (inQuote === char) {
+        // End quote
+        inQuote = null;
+      } else {
+        // Different quote type inside quote - keep as literal
+        current += char;
+      }
+      i++;
+      continue;
+    }
+
+    if (char === ' ' && inQuote === null) {
+      // Space outside quotes - split here
+      if (current.length > 0) {
+        result.push(current);
+        current = '';
+      }
+      i++;
+      continue;
+    }
+
+    current += char;
+    i++;
+  }
+
+  // Add last part
+  if (current.length > 0) {
+    result.push(current);
+  }
+
+  return result;
+}
+
+/**
  * Validate command format
  *
  * Uses blacklist-first strategy: only block dangerous operations,
@@ -143,7 +215,7 @@ export function validateCommand(command: string): ValidationResult {
   }
 
   // 2. Parse command
-  const parts = command.trim().split(/\s+/);
+  const parts = parseCommand(command);
   if (parts.length > MAX_ARGS) {
     return {
       valid: false,
@@ -213,7 +285,7 @@ export class SafeCommandExecutor {
     }
 
     // 2. Parse command
-    const parts = command.trim().split(/\s+/);
+    const parts = parseCommand(command);
     const [cmd, ...args] = parts;
 
     if (!cmd) {

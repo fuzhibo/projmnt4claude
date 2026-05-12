@@ -23,6 +23,32 @@ describe('validateCommand', () => {
     expect(result.valid).toBe(true);
   });
 
+  // Edge case tests for quoted arguments
+  it('should handle double-quoted arguments', () => {
+    const result = validateCommand('echo "hello world"');
+    expect(result.valid).toBe(true);
+  });
+
+  it('should handle single-quoted arguments', () => {
+    const result = validateCommand("echo 'hello world'");
+    expect(result.valid).toBe(true);
+  });
+
+  it('should handle escaped spaces in arguments', () => {
+    const result = validateCommand('echo hello\\ world');
+    expect(result.valid).toBe(true);
+  });
+
+  it('should handle mixed quotes and escapes', () => {
+    const result = validateCommand('echo "hello \\"world\\""');
+    expect(result.valid).toBe(true);
+  });
+
+  it('should handle paths with spaces', () => {
+    const result = validateCommand('cat "/path/to/my file.txt"');
+    expect(result.valid).toBe(true);
+  });
+
   it('should block forbidden prefixes (sudo)', () => {
     const result = validateCommand('sudo rm -rf /');
     expect(result.valid).toBe(false);
@@ -156,6 +182,30 @@ describe('SafeCommandExecutor', () => {
     expect(results.length).toBe(2);
     expect(results[0].success).toBe(true);
     expect(results[1].success).toBe(false);
+  });
+
+  it('should execute commands with quoted arguments', async () => {
+    const result = await executor.execute('echo "hello world"', {
+      cwd: env.tempDir,
+      timeout: 5000,
+    });
+
+    expect(result.success).toBe(true);
+    expect(result.stdout.trim()).toBe('hello world');
+  });
+
+  it('should execute commands with escaped spaces', async () => {
+    // Create a file with space in name
+    const testFile = `${env.tempDir}/test file.txt`;
+    await Bun.write(testFile, 'content');
+
+    const result = await executor.execute(`cat "${testFile}"`, {
+      cwd: env.tempDir,
+      timeout: 5000,
+    });
+
+    expect(result.success).toBe(true);
+    expect(result.stdout.trim()).toBe('content');
   });
 });
 
