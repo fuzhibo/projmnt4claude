@@ -1,4 +1,4 @@
-import { describe, test, expect, mock, beforeEach, afterEach } from 'bun:test';
+import { describe, test, expect, mock, beforeEach, afterEach, afterAll } from 'bun:test';
 import * as fs from 'fs';
 import * as path from 'path';
 import { EventEmitter } from 'events';
@@ -1236,4 +1236,14 @@ describe('rebuildPrerequisiteData', () => {
     const result = rebuildPrerequisiteData('TASK-nonexistent-999', 'code_review', env.tempDir);
     expect(result).toBeNull();
   });
+});
+
+// ============================================================
+// Cleanup: Restore child_process mock to prevent pollution
+// ============================================================
+
+afterAll(() => {
+  mock.module('child_process', () => ({
+    spawn: require('child_process').spawn,
+  }));
 });

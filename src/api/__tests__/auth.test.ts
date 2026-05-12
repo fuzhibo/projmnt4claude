@@ -77,7 +77,7 @@ describe('Auth API - Timeout Handling', () => {
       const result = await login({ username: 'test', password: 'wrong' });
 
       expect(result.success).toBe(false);
-      expect(result.message).toContain('用户名或密码错误');
+      expect(result.message).toContain('Invalid username or password');
     });
 
     test('应该处理 408 请求超时错误', async () => {
@@ -91,7 +91,7 @@ describe('Auth API - Timeout Handling', () => {
       const result = await login({ username: 'test', password: 'pass' });
 
       expect(result.success).toBe(false);
-      expect(result.message).toContain('超时');
+      expect(result.message).toContain('timeout');
     });
 
     test('应该处理 504 网关超时错误', async () => {
@@ -105,7 +105,7 @@ describe('Auth API - Timeout Handling', () => {
       const result = await login({ username: 'test', password: 'pass' });
 
       expect(result.success).toBe(false);
-      expect(result.message).toContain('超时');
+      expect(result.message).toContain('timeout');
     });
 
     test('应该处理网络错误', async () => {
@@ -116,7 +116,7 @@ describe('Auth API - Timeout Handling', () => {
       const result = await login({ username: 'test', password: 'pass' });
 
       expect(result.success).toBe(false);
-      expect(result.message).toContain('网络错误');
+      expect(result.message).toContain('Network error');
     });
 
     test('成功登录应该返回 token', async () => {
@@ -132,7 +132,7 @@ describe('Auth API - Timeout Handling', () => {
 
       expect(result.success).toBe(true);
       expect(result.token).toBe('valid-token-123');
-      expect(result.message).toContain('登录成功');
+      expect(result.message).toContain('Login successful');
     });
   });
 
