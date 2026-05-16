@@ -6,10 +6,12 @@
  * - 运行功能测试
  * - 运行集成测试
  * - 判断是否需要人工验证
+ * - 程序化验证：flaky test 检测、测试卫生检查
  */
 
 import * as path from 'path';
 import * as fs from 'fs';
+import { spawn } from 'child_process';
 import type {
   HarnessConfig,
   CodeReviewVerdict,
@@ -31,7 +33,7 @@ import { generateFallbackVerification } from './checkpoint.js';
 import { detectContradiction } from './contradiction-detector.js';
 import { createSessionAwareEngine } from './feedback-constraint-engine.js';
 import { qaVerdictResultMarker, qaVerdictHasReason } from './validation-rules/verdict-rules.js';
-import { loadPromptTemplate, resolveTemplate } from './prompt-templates.js';
+import { loadPromptTemplate, resolveTemplate, loadCustomRequirements } from './prompt-templates.js';
 import { t, getI18n } from '../i18n/index.js';
 import { verifyQAAcceptanceCriteria, QAAcceptanceResult, ACCEPTANCE_LEVEL_DESCRIPTIONS, type AcceptanceLevel } from '../types/qa-acceptance-criteria.js';
 import { QAAcceptanceCriteriaVerifier, createQAAcceptanceCriteriaVerifier } from './qa-acceptance-criteria-verifier.js';
@@ -265,6 +267,269 @@ export class HarnessQATester {
   }
 
   /**
+   * 执行测试套件两次以检测 flaky test
+   * @param testCommand 测试命令，默认为 'bun test'
+   * @returns 测试结果，包含是否通过、flaky 检测结果、失败信息
+   */
+  async runTestSuite(testCommand: string = 'bun test'): Promise<{
+    passed: boolean;
+    hasFlaky: boolean;
+    flakyTests: string[];
+    failures: string[];
+    details: string;
+  }> {
+    const results: { passed: boolean; output: string; failures: string[] }[] = [];
+
+    // 执行测试两次
+    for (let run = 1; run <= 2; run++) {
+      console.log(`\n   🔄 执行测试套件 (第 ${run}/2 次)...`);
+      const result = await this.executeTestCommand(testCommand);
+      results.push(result);
+      if (result.passed) {
+        console.log(`   ✅ 第 ${run} 次测试通过`);
+      } else {
+        console.log(`   ❌ 第 ${run} 次测试失败: ${result.failures.length} 个失败`);
+      }
+    }
+
+    // 比较两次结果检测 flaky test
+    const flakyTests = this.detectFlakyTests(results[0], results[1]);
+    const hasFlaky = flakyTests.length > 0;
+
+    // 两次都通过才算通过
+    const passed = results[0].passed && results[1].passed;
+
+    // 合并失败信息
+    const allFailures = [...new Set([...results[0].failures, ...results[1].failures])];
+
+    let details = `测试套件执行结果:\n`;
+    details += `- 第 1 次: ${results[0].passed ? '✅ 通过' : '❌ 失败'}\n`;
+    details += `- 第 2 次: ${results[1].passed ? '✅ 通过' : '❌ 失败'}\n`;
+    if (hasFlaky) {
+      details += `\n⚠️ 检测到 ${flakyTests.length} 个 flaky test:\n`;
+      flakyTests.forEach(t => details += `  - ${t}\n`);
+    }
+
+    return {
+      passed,
+      hasFlaky,
+      flakyTests,
+      failures: allFailures,
+      details,
+    };
+  }
+
+  /**
+   * 执行单个测试命令
+   */
+  private async executeTestCommand(testCommand: string): Promise<{
+    passed: boolean;
+    output: string;
+    failures: string[];
+  }> {
+    return new Promise((resolve) => {
+      const parts = testCommand.split(' ');
+      const command = parts[0];
+      const args = parts.slice(1);
+
+      let output = '';
+      let failures: string[] = [];
+
+      const proc = spawn(command, args, {
+        cwd: this.config.cwd,
+        shell: true,
+        timeout: 300000, // 5 minutes timeout
+      });
+
+      proc.stdout?.on('data', (data) => {
+        output += data.toString();
+      });
+
+      proc.stderr?.on('data', (data) => {
+        output += data.toString();
+      });
+
+      proc.on('close', (code) => {
+        // 解析失败测试
+        failures = this.parseTestFailures(output);
+        resolve({
+          passed: code === 0,
+          output,
+          failures,
+        });
+      });
+
+      proc.on('error', (error) => {
+        resolve({
+          passed: false,
+          output: error.message,
+          failures: [error.message],
+        });
+      });
+    });
+  }
+
+  /**
+   * 从测试输出中解析失败的测试
+   */
+  private parseTestFailures(output: string): string[] {
+    const failures: string[] = [];
+
+    // Bun test 格式: "✗ test name"
+    const bunFailMatch = output.matchAll(/✗\s+(.+)/g);
+    for (const match of bunFailMatch) {
+      failures.push(match[1].trim());
+    }
+
+    // Jest/Vitest 格式: "FAIL test-file.test.ts"
+    const jestFailMatch = output.matchAll(/FAIL\s+(.+\.(test|spec)\.[jt]sx?)/g);
+    for (const match of jestFailMatch) {
+      failures.push(match[1].trim());
+    }
+
+    return [...new Set(failures)];
+  }
+
+  /**
+   * 检测 flaky test：比较两次测试结果
+   */
+  private detectFlakyTests(
+    result1: { passed: boolean; output: string; failures: string[] },
+    result2: { passed: boolean; output: string; failures: string[] }
+  ): string[] {
+    const flakyTests: string[] = [];
+
+    // 如果两次结果不同，说明有 flaky
+    if (result1.passed !== result2.passed) {
+      // 找出只在某一次失败的测试
+      const onlyInFirst = result1.failures.filter(f => !result2.failures.includes(f));
+      const onlyInSecond = result2.failures.filter(f => !result1.failures.includes(f));
+      flakyTests.push(...onlyInFirst, ...onlyInSecond);
+    }
+
+    // 如果两次都失败但失败项不同
+    if (!result1.passed && !result2.passed) {
+      const onlyInFirst = result1.failures.filter(f => !result2.failures.includes(f));
+      const onlyInSecond = result2.failures.filter(f => !result1.failures.includes(f));
+      flakyTests.push(...onlyInFirst, ...onlyInSecond);
+    }
+
+    return [...new Set(flakyTests)];
+  }
+
+  /**
+   * 检查测试卫生：检测 .only/.skip/mock.module 泄漏
+   * @param testDir 测试目录，默认为 'src/__tests__'
+   * @returns 检查结果，包含是否通过、发现的问题
+   */
+  async checkTestHygiene(testDir: string = 'src/__tests__'): Promise<{
+    passed: boolean;
+    issues: Array<{ type: string; file: string; line: number; content: string }>;
+    details: string;
+  }> {
+    const issues: Array<{ type: string; file: string; line: number; content: string }> = [];
+    const testPath = path.isAbsolute(testDir) ? testDir : path.join(this.config.cwd, testDir);
+
+    console.log(`\n   🔍 检查测试卫生: ${testDir}`);
+
+    if (!fs.existsSync(testPath)) {
+      return {
+        passed: true,
+        issues: [],
+        details: `测试目录不存在: ${testDir}`,
+      };
+    }
+
+    // 遍历测试文件
+    const testFiles = this.findTestFiles(testPath);
+    console.log(`   📄 扫描 ${testFiles.length} 个测试文件...`);
+
+    for (const file of testFiles) {
+      const content = fs.readFileSync(file, 'utf-8');
+      const lines = content.split('\n');
+      const relativePath = path.relative(this.config.cwd, file);
+
+      lines.forEach((line, index) => {
+        const lineNum = index + 1;
+
+        // 检测 .only
+        const onlyMatch = line.match(/\.only\s*[\(\{]/);
+        if (onlyMatch) {
+          issues.push({
+            type: '.only',
+            file: relativePath,
+            line: lineNum,
+            content: line.trim(),
+          });
+        }
+
+        // 检测 .skip
+        const skipMatch = line.match(/\.skip\s*[\(\{]/);
+        if (skipMatch) {
+          issues.push({
+            type: '.skip',
+            file: relativePath,
+            line: lineNum,
+            content: line.trim(),
+          });
+        }
+
+        // 检测顶层 mock.module (bun:test 的 mock.module)
+        const mockMatch = line.match(/^mock\.module\s*\(/);
+        if (mockMatch) {
+          issues.push({
+            type: 'mock.module',
+            file: relativePath,
+            line: lineNum,
+            content: line.trim(),
+          });
+        }
+      });
+    }
+
+    const passed = issues.length === 0;
+
+    let details = `测试卫生检查结果:\n`;
+    details += `- 扫描文件: ${testFiles.length} 个\n`;
+    details += `- 发现问题: ${issues.length} 个\n`;
+
+    if (issues.length > 0) {
+      details += `\n问题列表:\n`;
+      issues.forEach(issue => {
+        details += `  - [${issue.type}] ${issue.file}:${issue.line}\n`;
+        details += `    ${issue.content}\n`;
+      });
+    }
+
+    if (passed) {
+      console.log(`   ✅ 测试卫生检查通过`);
+    } else {
+      console.log(`   ⚠️ 发现 ${issues.length} 个测试卫生问题`);
+    }
+
+    return { passed, issues, details };
+  }
+
+  /**
+   * 递归查找测试文件
+   */
+  private findTestFiles(dir: string): string[] {
+    const files: string[] = [];
+    const entries = fs.readdirSync(dir, { withFileTypes: true });
+
+    for (const entry of entries) {
+      const fullPath = path.join(dir, entry.name);
+      if (entry.isDirectory()) {
+        files.push(...this.findTestFiles(fullPath));
+      } else if (entry.isFile() && /\.(test|spec)\.[jt]sx?$/.test(entry.name)) {
+        files.push(fullPath);
+      }
+    }
+
+    return files;
+  }
+
+  /**
    * 运行 QA 验证
    */
   private async runQAVerification(
@@ -302,6 +567,39 @@ export class HarnessQATester {
     const automatedCheckpoints = checkpoints.filter(cp => !cp.requiresHuman);
     const humanCheckpoints = checkpoints.filter(cp => cp.requiresHuman === true);
 
+    // 程序化验证：先执行测试套件和测试卫生检查
+    console.log(`\n   🔬 执行程序化验证...`);
+
+    // 1. 运行测试套件（两次检测 flaky）
+    const testSuiteResult = await this.runTestSuite();
+    if (!testSuiteResult.passed) {
+      return {
+        passed: false,
+        reason: `测试套件执行失败: ${testSuiteResult.failures.length} 个测试失败`,
+        failures: testSuiteResult.failures,
+        failedCheckpoints: [],
+        details: testSuiteResult.details,
+      };
+    }
+    if (testSuiteResult.hasFlaky) {
+      console.log(`   ⚠️ 检测到 ${testSuiteResult.flakyTests.length} 个 flaky test`);
+    }
+
+    // 2. 检查测试卫生
+    const hygieneResult = await this.checkTestHygiene();
+    if (!hygieneResult.passed) {
+      return {
+        passed: false,
+        reason: `测试卫生检查失败: 发现 ${hygieneResult.issues.length} 个问题 (.only/.skip/mock.module)`,
+        failures: hygieneResult.issues.map(i => `[${i.type}] ${i.file}:${i.line}`),
+        failedCheckpoints: [],
+        details: hygieneResult.details,
+      };
+    }
+
+    // 程序化验证通过，继续 AI 验证（如果有检查点）
+    console.log(`   ✅ 程序化验证通过`);
+
     // BUG-013-2: 检查自动化检查点中是否有缺少验证命令的情况
     const checkpointsWithoutCommands = automatedCheckpoints.filter(cp => {
       const result = validateCheckpointVerification(cp);
@@ -317,13 +615,14 @@ export class HarnessQATester {
     }
 
     if (automatedCheckpoints.length === 0) {
-      // 只有需要人工验证的检查点，自动化 QA 自动通过
+      // 没有自动化检查点，但程序化验证已通过
       // BUG-014-2B: reason 不包含"需要人工验证"字样，避免误导下游评估者
       return {
         passed: true,
-        reason: texts.harness.logs.noAutomatedQACheckpoints,
+        reason: '程序化验证通过（无自动化检查点）',
         failures: [],
         failedCheckpoints: [],
+        details: `${testSuiteResult.details}\n\n${hygieneResult.details}`,
       };
     }
 
@@ -480,6 +779,11 @@ export class HarnessQATester {
 
     const testStrategy = roleTemplate.testStrategy.map((strategy, i) => `${i + 1}. ${strategy}`).join('\n');
 
+    const customRequirementsSection = loadCustomRequirements('qa', this.config.cwd);
+
+    // Get dev report path for QA to analyze
+    const devReportPath = getReportPath(task.id, 'dev', this.config.cwd);
+
     const template = loadPromptTemplate('qa', this.config.cwd);
     return resolveTemplate(template, {
       roleDeclaration: roleTemplate.roleDeclaration,
@@ -489,8 +793,10 @@ export class HarnessQATester {
       checkpointsList,
       codeReviewResult: codeReviewVerdict.result,
       codeReviewReason: codeReviewVerdict.reason,
+      customRequirementsSection,
       testStrategy,
       retryContextSection,
+      devReportPath,
     }).replace(/\n{3,}/g, '\n\n');
   }
 

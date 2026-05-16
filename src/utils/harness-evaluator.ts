@@ -26,7 +26,7 @@ import { getAgent, buildEffectiveTools } from './headless-agent.js';
 import { detectContradiction } from './contradiction-detector.js';
 import { createSessionAwareEngine } from './feedback-constraint-engine.js';
 import { verdictResultMarker, verdictHasReason } from './validation-rules/verdict-rules.js';
-import { loadPromptTemplate, resolveTemplate } from './prompt-templates.js';
+import { loadPromptTemplate, resolveTemplate, loadCustomRequirements } from './prompt-templates.js';
 import { getLatestSnapshot } from './harness-snapshot.js';
 import { t, getI18n } from '../i18n/index.js';
 
@@ -284,6 +284,8 @@ export class HarnessEvaluator {
       ? `## ${texts.harness.logs.phantomTaskDetectedTitle}\n${texts.harness.logs.phantomTaskViolation.replace('{count}', String(phantomTasks.length))}\n${phantomTasks.map(tid => `- ${tid}`).join('\n')}\n\n${texts.harness.logs.phantomTaskProhibited}\n${texts.harness.logs.phantomTaskNopassRequirement}\n`
       : '';
 
+    const customRequirementsSection = loadCustomRequirements('evaluation', this.config.cwd);
+
     const template = loadPromptTemplate('evaluation', this.config.cwd);
 
     // Build retry context section if present
@@ -323,6 +325,7 @@ export class HarnessEvaluator {
       evidenceSection,
       completedCheckpointsSection,
       phantomTasksSection,
+      customRequirementsSection,
       retryContextSection,
     });
 

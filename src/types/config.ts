@@ -88,6 +88,7 @@ export interface TrainingConfig {
  * 支持以下配置项：
  * - language: 提示词模板语言，可选，默认为全局 language 设置
  * - customTemplates: 自定义模板，键为模板名称（如 dev, codeReview, qa 等），值为模板字符串
+ * - customRequirements: 用户定制需求，按阶段注入到对应 Prompt 中
  *   也可以直接以模板名称为键（向后兼容）
  */
 export interface PromptsConfig {
@@ -95,6 +96,16 @@ export interface PromptsConfig {
   language?: 'zh' | 'en';
   /** 自定义模板，键为模板名称，值为模板字符串 */
   customTemplates?: Record<string, string>;
+  /**
+   * 用户定制需求，按阶段注入到对应 Prompt 中
+   * 键为阶段名（dev, codeReview, qa, evaluation），值为该阶段的定制需求内容
+   */
+  customRequirements?: {
+    dev?: string;
+    codeReview?: string;
+    qa?: string;
+    evaluation?: string;
+  };
   /** 向后兼容：直接以模板名称为键 */
   [templateName: string]: string | 'zh' | 'en' | Record<string, string> | undefined;
 }

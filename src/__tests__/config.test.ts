@@ -356,4 +356,64 @@ describe('setConfig', () => {
     const written = readTestConfigFile(env.projectDir);
     expect(written!.quality!.minScore).toBe(85);
   });
+
+  // ── prompts.customRequirements.* 测试 ─────────────────────────────
+  test('设置 prompts.customRequirements.dev', () => {
+    createTestConfigFile(env.projectDir, baseConfig({ prompts: {} }));
+    const origLog = console.log;
+    console.log = () => {};
+    setConfig('prompts.customRequirements.dev', 'Focus on performance optimization', env.tempDir);
+    console.log = origLog;
+    const written = readTestConfigFile(env.projectDir);
+    expect(written!.prompts!.customRequirements!.dev).toBe('Focus on performance optimization');
+  });
+
+  test('设置 prompts.customRequirements.codeReview', () => {
+    createTestConfigFile(env.projectDir, baseConfig({ prompts: { customRequirements: {} } }));
+    const origLog = console.log;
+    console.log = () => {};
+    setConfig('prompts.customRequirements.codeReview', 'Check for security issues', env.tempDir);
+    console.log = origLog;
+    const written = readTestConfigFile(env.projectDir);
+    expect(written!.prompts!.customRequirements!.codeReview).toBe('Check for security issues');
+  });
+
+  test('设置 prompts.customRequirements.qa', () => {
+    createTestConfigFile(env.projectDir, baseConfig({ prompts: { customRequirements: {} } }));
+    const origLog = console.log;
+    console.log = () => {};
+    setConfig('prompts.customRequirements.qa', 'Verify edge cases', env.tempDir);
+    console.log = origLog;
+    const written = readTestConfigFile(env.projectDir);
+    expect(written!.prompts!.customRequirements!.qa).toBe('Verify edge cases');
+  });
+
+  test('设置 prompts.customRequirements.evaluation', () => {
+    createTestConfigFile(env.projectDir, baseConfig({ prompts: { customRequirements: {} } }));
+    const origLog = console.log;
+    console.log = () => {};
+    setConfig('prompts.customRequirements.evaluation', 'Ensure backward compatibility', env.tempDir);
+    console.log = origLog;
+    const written = readTestConfigFile(env.projectDir);
+    expect(written!.prompts!.customRequirements!.evaluation).toBe('Ensure backward compatibility');
+  });
+
+  test('未知 phase 名被拒绝', () => {
+    const restore = mockProcessExit();
+    const origError = console.error;
+    console.error = () => {};
+    expect(() => setConfig('prompts.customRequirements.unknown', 'value', env.tempDir)).toThrow('process.exit:1');
+    console.error = origError;
+    restore();
+  });
+
+  test('清空 customRequirements (空字符串)', () => {
+    createTestConfigFile(env.projectDir, baseConfig({ prompts: { customRequirements: { dev: 'old value' } } }));
+    const origLog = console.log;
+    console.log = () => {};
+    setConfig('prompts.customRequirements.dev', '', env.tempDir);
+    console.log = origLog;
+    const written = readTestConfigFile(env.projectDir);
+    expect(written!.prompts!.customRequirements!.dev).toBe('');
+  });
 });

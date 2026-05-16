@@ -27,7 +27,7 @@ import { getDevRoleTemplate } from './role-prompts.js';
 import { archiveReportIfExists } from './harness-helpers.js';
 import { getAgent, buildEffectiveTools } from './headless-agent.js';
 import { createSessionAwareEngine } from './feedback-constraint-engine.js';
-import { loadPromptTemplate, resolveTemplate } from './prompt-templates.js';
+import { loadPromptTemplate, resolveTemplate, loadCustomRequirements } from './prompt-templates.js';
 import { t, getI18n } from '../i18n/index.js';
 
 export class HarnessExecutor {
@@ -256,6 +256,8 @@ export class HarnessExecutor {
       ? `## ${texts.harness.roleSpecificRequirements}\n${roleTemplate.extraInstructions.map((inst, i) => `${i + 1}. ${inst}`).join('\n')}\n`
       : '';
 
+    const customRequirementsSection = loadCustomRequirements('dev', this.config.cwd);
+
     const template = loadPromptTemplate('dev', this.config.cwd);
     let result = resolveTemplate(template, {
       title: task.title,
@@ -269,6 +271,7 @@ export class HarnessExecutor {
       checkpointsSection,
       timeoutInstruction,
       extraInstructionsSection,
+      customRequirementsSection,
       roleDeclaration: roleTemplate.roleDeclaration,
     });
 

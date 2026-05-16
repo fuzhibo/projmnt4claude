@@ -891,6 +891,7 @@ export const zhTexts: I18nTexts = {
     previousFailureReason: '前次失败原因',
     partialProgress: '已完成的部分进度',
     upstreamFailureInfo: '上游失败信息',
+    customRequirements: '定制需求',
     phaseLabels: {
       development: '开发',
       codeReview: '代码审核',
@@ -1072,7 +1073,6 @@ export const zhTexts: I18nTexts = {
       reviewedAtLabel: '审查时间',
       reviewedByLabel: '审查者',
       verifiedAtLabel: '验证时间',
-      verifiedByLabel: '验证者',
       inferenceTypeLabel: '推断类型',
       reasonSection: '原因',
       failedCriteriaSection: '未满足的验收标准',

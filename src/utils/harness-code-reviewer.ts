@@ -28,7 +28,7 @@ import { getCodeReviewRoleTemplate } from './role-prompts.js';
 import { detectContradiction } from './contradiction-detector.js';
 import { createSessionAwareEngine } from './feedback-constraint-engine.js';
 import { verdictResultMarker, verdictHasReason } from './validation-rules/verdict-rules.js';
-import { loadPromptTemplate, resolveTemplate } from './prompt-templates.js';
+import { loadPromptTemplate, resolveTemplate, loadCustomRequirements } from './prompt-templates.js';
 import { t, getI18n } from '../i18n/index.js';
 
 export class HarnessCodeReviewer {
@@ -240,6 +240,8 @@ export class HarnessCodeReviewer {
 
     const reviewFocus = roleTemplate.reviewFocus.map((focus, i) => `${i + 1}. ${focus}`).join('\n');
 
+    const customRequirementsSection = loadCustomRequirements('codeReview', this.config.cwd);
+
     const template = loadPromptTemplate('codeReview', this.config.cwd);
     return resolveTemplate(template, {
       roleDeclaration: roleTemplate.roleDeclaration,
@@ -249,6 +251,7 @@ export class HarnessCodeReviewer {
       checkpointsList,
       changesSection,
       evidenceSection,
+      customRequirementsSection,
       reviewFocus,
       retryContextSection,
     }).replace(/\n{3,}/g, '\n\n');

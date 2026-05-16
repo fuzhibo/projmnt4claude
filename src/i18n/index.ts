@@ -240,6 +240,7 @@ export interface I18nTexts {
     previousFailureReason: string;
     partialProgress: string;
     upstreamFailureInfo: string;
+    customRequirements: string;
     phaseLabels: {
       development: string;
       codeReview: string;
@@ -389,6 +390,20 @@ export interface I18nTexts {
       existingFiles: string;
       noFilesToVerify: string;
       retryContextEval: string;
+      // Additional keys for evaluation phase
+      retryAttemptInfoEval: string;
+      previousFailureReasonLabel: string;
+      retryReferenceHint: string;
+      evalOutputEmptyError: string;
+      acceptanceCriteriaEmpty: string;
+      checkpointSectionTitle: string;
+      checkpointSectionConfirm: string;
+      aboutHumanVerification: string;
+      humanVerificationNote: string;
+      humanVerificationExcluded: string;
+      taskDescriptionSection: string;
+      taskDescriptionEmpty: string;
+      phantomTaskDetectedTitle: string;
     };
     reports: {
       devReportTitle: string;
@@ -573,6 +588,39 @@ export interface I18nTexts {
     noCheckpoints: string;
     checkpointPrefixUpdated: string;
     allCheckpointsHavePrefix: string;
+    deleted: string;
+    taskNotExpired: string;
+    closedTask: string;
+    markedInProgress: string;
+    staleTaskPrompt: string;
+    descriptionPrompt: string;
+    confirmCleanupAbandoned: string;
+    confirmStatusChange: string;
+    staleAutoCloseNote: string;
+    staleUserCloseNote: string;
+    staleUserProgressNote: string;
+    legacyStatusFixNote: string;
+    pipelineStatusMigrationNote: string;
+    verificationCleared: string;
+    invalidStatusValueFixNote: string;
+    reopenMismatchFixNote: string;
+    reopenedStatusMigrationNote: string;
+    inconsistentStatusFixNote: string;
+    interruptedTaskAutoNote: string;
+    interruptedTaskManualNote: string;
+    needsHumanStatusMigrationNote: string;
+    checkpointPrefixFixNote: string;
+    reportStatusMismatchNote: string;
+    missingPipelineEvidenceNote: string;
+    deleteFailed: string;
+    autoFixDescription: string;
+    manualCheckCycle: string;
+    manualFixInvalidParent: string;
+    lowQualitySuggestion: string;
+    qualityIssuesFound: string;
+    deleteTaskConfirm: string;
+    result: string;
+    nonStandardTransition: string;
   };
 
   // task command additional keys
@@ -769,7 +817,6 @@ export interface I18nTexts {
     checkDeprecatedHooks: string;
     checkDeprecatedHooksFound: string;
     checkDeprecatedHooksOk: string;
-    nonStandardTransition: string;
   };
 
   // decomposition

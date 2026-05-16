@@ -6,6 +6,7 @@
  */
 
 import { readConfig } from '../commands/config.js';
+import { getI18n } from '../i18n/index.js';
 import type { Language } from '../i18n/index.js';
 
 // ============================================================
@@ -112,16 +113,40 @@ export const DEFAULT_DEV_TEMPLATE: PromptTemplate = {
 {acceptanceCriteriaSection}
 {checkpointsSection}
 ## 指示
+
+{roleDeclaration}
+
 {timeoutInstruction}
 1. 仔细阅读任务描述和验收标准
 2. 实现所需的功能或修复
 3. 确保代码符合项目规范
-4. 运行必要的测试验证实现
-5. 完成后简要总结所做的更改
+4. **编写基本自测试用例**（详见下方自测要求）
+5. 运行测试验证实现
+6. 完成后简要总结所做的更改
+
+### 自测要求
+
+作为开发者，你需要编写基本自测试用例来验证实现。自测是基本验证，全面测试覆盖由 QA 阶段完成。
+
+**自测范围**：
+- **Happy Path**: 验证核心功能正常工作
+- **边界条件**: 验证输入边界和极限情况
+- **异常处理**: 验证错误处理和异常路径
+
+**自测步骤**：
+1. 识别任务涉及的核心功能点
+2. 为每个核心功能编写至少一个 Happy Path 测试
+3. 识别关键边界条件并编写测试
+4. 识别异常路径并编写测试
+5. 运行 \`bun test\` 确保所有自测通过
+
+**注意**：自测是基本验证，不需要追求 100% 覆盖率。全面测试覆盖由 QA 阶段扩展完成。
 
 {extraInstructionsSection}
+{customRequirements}
 ## ⛔ 禁止操作（严格遵守）
-{roleDeclaration}以下操作被严格禁止：
+
+以下操作被严格禁止：
 
 1. **禁止创建新任务** - 不要运行 \`task create\`、\`init-requirement\` 或任何创建任务的命令
 2. **禁止修改任务元数据** - 不要修改 \`.projmnt4claude/tasks/\` 下的 meta.json 文件
@@ -140,16 +165,40 @@ export const DEFAULT_DEV_TEMPLATE: PromptTemplate = {
 {acceptanceCriteriaSection}
 {checkpointsSection}
 ## Instructions
+
+{roleDeclaration}
+
 {timeoutInstruction}
 1. Read the task description and acceptance criteria carefully
 2. Implement the required functionality or fix
 3. Ensure the code follows project standards
-4. Run necessary tests to verify the implementation
-5. Briefly summarize the changes made upon completion
+4. **Write basic self-test cases** (see self-test requirements below)
+5. Run tests to verify the implementation
+6. Briefly summarize the changes made upon completion
+
+### Self-Test Requirements
+
+As a developer, you need to write basic self-test cases to verify the implementation. Self-testing is basic verification; comprehensive test coverage is completed in the QA phase.
+
+**Self-Test Scope**:
+- **Happy Path**: Verify core functionality works correctly
+- **Boundary Conditions**: Verify input boundaries and edge cases
+- **Exception Handling**: Verify error handling and exception paths
+
+**Self-Test Steps**:
+1. Identify core functionality points involved in the task
+2. Write at least one Happy Path test for each core function
+3. Identify key boundary conditions and write tests
+4. Identify exception paths and write tests
+5. Run \`bun test\` to ensure all self-tests pass
+
+**Note**: Self-testing is basic verification, no need to pursue 100% coverage. Comprehensive test coverage is expanded in the QA phase.
 
 {extraInstructionsSection}
+{customRequirements}
 ## ⛔ Prohibited Operations (Strictly Enforced)
-{roleDeclaration}The following operations are strictly prohibited:
+
+The following operations are strictly prohibited:
 
 1. **Do NOT create new tasks** - Do not run \`task create\`, \`init-requirement\`, or any task creation commands
 2. **Do NOT modify task metadata** - Do not modify meta.json files under \`.projmnt4claude/tasks/\`
@@ -164,9 +213,9 @@ Violating any of the above prohibitions will result in evaluation failure.`,
  * @source harness-code-reviewer.ts buildCodeReviewPrompt()
  */
 export const DEFAULT_CODE_REVIEW_TEMPLATE: PromptTemplate = {
-  zh: `# 代码审核任务
+  zh: `{roleDeclaration}
 
-{roleDeclaration}你需要审核一个任务的代码实现，确保代码质量符合标准。
+# 代码审核任务
 
 **重要**: 你必须严格审核，发现所有代码质量问题。
 
@@ -178,6 +227,7 @@ export const DEFAULT_CODE_REVIEW_TEMPLATE: PromptTemplate = {
 {checkpointsList}
 {changesSection}
 {evidenceSection}
+{customRequirements}
 ## 审核要求
 {reviewFocus}
 ## 输出格式
@@ -194,9 +244,9 @@ VERDICT: PASS 或 VERDICT: NOPASS
 **重要**: 必须输出 VERDICT: PASS 或 VERDICT: NOPASS，不得使用"通过"、"不通过"等中文词语。
 
 现在开始审核。`,
-  en: `# Code Review Task
+  en: `{roleDeclaration}
 
-{roleDeclaration}You need to review the code implementation of a task to ensure it meets quality standards.
+# Code Review Task
 
 **Important**: You must review strictly and identify all code quality issues.
 
@@ -208,6 +258,7 @@ VERDICT: PASS 或 VERDICT: NOPASS
 {checkpointsList}
 {changesSection}
 {evidenceSection}
+{customRequirements}
 ## Review Requirements
 {reviewFocus}
 ## Output Format
@@ -231,11 +282,19 @@ Begin review now.`,
  * @source harness-qa-tester.ts buildQAPrompt()
  */
 export const DEFAULT_QA_TEMPLATE: PromptTemplate = {
-  zh: `# QA 验证任务
+  zh: `{roleDeclaration}
 
-{roleDeclaration}你需要验证一个任务的实现是否满足功能要求。
+# QA 验证任务
 
 **重要**: 你必须严格验证，确保所有功能正常工作。
+
+## 开发阶段产物
+
+开发阶段已生成以下产物，请基于此进行验证：
+
+**开发报告路径**: {devReportPath}
+
+请先阅读开发报告，了解开发者声明的变更和自测情况。
 
 ## 验证原则
 
@@ -260,9 +319,44 @@ export const DEFAULT_QA_TEMPLATE: PromptTemplate = {
 - 结果: {codeReviewResult}
 - 原因: {codeReviewReason}
 
+{customRequirements}
+## 工作流程
+
+### 步骤 1: 分析开发产物
+
+1. 阅读开发报告 ({devReportPath})
+2. 了解开发者声明的变更内容
+3. 查看开发者编写的自测试用例
+4. 识别开发者已验证的范围
+
+### 步骤 2: 识别测试缺口
+
+基于开发报告和验收标准，识别以下类型的测试缺口：
+
+| 缺口类型 | 说明 | 示例 |
+|---------|------|------|
+| 未覆盖场景 | 开发者自测未覆盖的功能场景 | 开发者只测了正常路径，未测异常路径 |
+| 边界条件缺失 | 边界值或极限情况未测试 | 空输入、最大值、并发场景 |
+| 集成测试缺失 | 模块间交互未验证 | API 与数据库的集成 |
+| 回归测试缺失 | 变更可能影响的现有功能 | 重构后原有功能是否正常 |
+| 性能测试缺失 | 性能相关验证未覆盖 | 大数据量下的响应时间 |
+
+### 步骤 3: 扩展测试
+
+针对识别的缺口，编写并运行补充测试：
+
+1. 为每个缺口类型编写测试用例
+2. 运行新增测试用例
+3. 记录测试结果
+
+### 步骤 4: 报告结果
+
+汇总所有测试结果，输出验证报告。
+
 ## 验证要求
 {testStrategy}
 ## 输出格式
+
 请按以下格式输出验证结果:
 
 \`\`\`
@@ -271,6 +365,8 @@ VERDICT: PASS 或 VERDICT: NOPASS
 ## 原因: [简要说明为什么通过或不通过]
 ## 测试失败: [列出失败的测试，如果没有则为空]
 ## 未通过的检查点: [列出未通过的检查点ID，如果没有则为空]
+## 新增测试用例: [列出本次验证新增的测试用例，如果没有则为空]
+## 覆盖缺口: [列出本次验证覆盖的缺口类型，如果没有则为空]
 ## 详细反馈: [可选的详细反馈]
 \`\`\`
 
@@ -292,85 +388,20 @@ VERDICT: PASS 或 VERDICT: NOPASS
   3. 功能不符合预期
   4. 代码审核结果为 NOPASS
 
-**格式说明**:
-| 字段 | 说明 | 必填 |
-|------|------|------|
-| VERDICT: | 只能是 PASS 或 NOPASS | 是 |
-| ## 验证结果: | 与 VERDICT 一致 | 是 |
-| ## 原因: | 简明说明判定理由（1-2句话） | 是 |
-| ## 测试失败: | 列出具体失败测试，PASS 时留空或用"无" | 是 |
-| ## 未通过的检查点: | 列出失败检查点ID，PASS 时留空或用"无" | 是 |
-| ## 详细反馈: | 可选的补充说明 | 否 |
-
-**正确示例（通过）**:
-\`\`\`
-VERDICT: PASS
-## 验证结果: PASS
-## 原因: 所有功能测试通过，检查点验证完成
-## 测试失败:
-## 未通过的检查点:
-## 详细反馈: 实现符合需求，功能正确。
-\`\`\`
-
-**正确示例（通过 - 简洁版）**:
-\`\`\`
-VERDICT: PASS
-## 验证结果: PASS
-## 原因: 所有检查点验证通过，无测试失败
-## 测试失败: 无
-## 未通过的检查点: 无
-\`\`\`
-
-**正确示例（未通过 - 测试失败）**:
-\`\`\`
-VERDICT: NOPASS
-## 验证结果: NOPASS
-## 原因: 单元测试未通过
-## 测试失败:
-- test_add_user: Expected 200 but got 404
-- test_delete_user: Timeout after 5000ms
-## 未通过的检查点:
-- CP-2-unit-test
-## 详细反馈: 边界条件处理不正确，需要修复删除功能的错误处理。
-\`\`\`
-
-**正确示例（未通过 - 检查点失败）**:
-\`\`\`
-VERDICT: NOPASS
-## 验证结果: NOPASS
-## 原因: 检查点 CP-3-integration 未通过
-## 测试失败:
-- 集成测试 test_api_flow 失败
-## 未通过的检查点:
-- CP-3-integration
-## 详细反馈: API 响应格式与需求不符，缺少必要字段。
-\`\`\`
-
-**正确示例（未通过 - 简洁版）**:
-\`\`\`
-VERDICT: NOPASS
-## 验证结果: NOPASS
-## 原因: 功能测试失败，返回结果不符合预期
-## 测试失败: test_feature_x 返回 500 错误
-## 未通过的检查点: CP-1-functional
-\`\`\`
-
-**错误示例（严禁这样输出）**:
-\`\`\`
-所有功能测试都已通过。 ← 错误：缺少 VERDICT 标记
-VERDICT: 通过 ← 错误：使用了"通过"而非 PASS
-VERDICT: 不通过 ← 错误：使用了"不通过"而非 NOPASS
-VERDICT: PASS ← 错误：说 PASS 但未通过的检查点不为空
-## 未通过的检查点:
-- CP-1-test
-\`\`\`
-
 现在开始验证。`,
-  en: `# QA Verification Task
+  en: `{roleDeclaration}
 
-{roleDeclaration}You need to verify that a task implementation meets functional requirements.
+# QA Verification Task
 
 **Important**: You must verify strictly and ensure all functionality works correctly.
+
+## Development Phase Artifacts
+
+The development phase has generated the following artifacts, please verify based on them:
+
+**Development Report Path**: {devReportPath}
+
+Please read the development report first to understand the developer's declared changes and self-testing status.
 
 ## Verification Principles
 
@@ -395,9 +426,44 @@ Please follow these principles during verification:
 - Result: {codeReviewResult}
 - Reason: {codeReviewReason}
 
+{customRequirements}
+## Workflow
+
+### Step 1: Analyze Development Artifacts
+
+1. Read the development report ({devReportPath})
+2. Understand the developer's declared changes
+3. Review the self-test cases written by the developer
+4. Identify the scope already verified by the developer
+
+### Step 2: Identify Test Gaps
+
+Based on the development report and acceptance criteria, identify the following types of test gaps:
+
+| Gap Type | Description | Example |
+|----------|-------------|---------|
+| Uncovered Scenarios | Functional scenarios not covered by developer's self-tests | Developer only tested happy path, not exception paths |
+| Missing Boundary Conditions | Boundary values or edge cases not tested | Empty input, max values, concurrent scenarios |
+| Missing Integration Tests | Module interactions not verified | API and database integration |
+| Missing Regression Tests | Existing functionality potentially affected by changes | Whether original functionality works after refactoring |
+| Missing Performance Tests | Performance-related verification not covered | Response time under large data volumes |
+
+### Step 3: Expand Testing
+
+For identified gaps, write and run supplementary tests:
+
+1. Write test cases for each gap type
+2. Run the new test cases
+3. Record test results
+
+### Step 4: Report Results
+
+Summarize all test results and output a verification report.
+
 ## Verification Requirements
 {testStrategy}
 ## Output Format
+
 Please output the verification result in the following format:
 
 \`\`\`
@@ -406,6 +472,8 @@ VERDICT: PASS or VERDICT: NOPASS
 ## Reason: [Brief explanation of why it passed or failed]
 ## Test Failures: [List of failed tests, empty if none]
 ## Failed Checkpoints: [List of checkpoint IDs that failed, empty if none]
+## New Test Cases: [List of new test cases added in this verification, empty if none]
+## Coverage Gaps: [List of gap types covered in this verification, empty if none]
 ## Detailed Feedback: [Optional detailed feedback]
 \`\`\`
 
@@ -427,58 +495,6 @@ VERDICT: PASS or VERDICT: NOPASS
   3. Functionality does not meet expectations
   4. Code review result is NOPASS
 
-**Format Reference**:
-| Field | Description | Required |
-|-------|-------------|----------|
-| VERDICT: | Must be PASS or NOPASS | Yes |
-| ## Verification Result: | Consistent with VERDICT | Yes |
-| ## Reason: | Concise explanation (1-2 sentences) | Yes |
-| ## Test Failures: | List specific failed tests, empty or "none" when PASS | Yes |
-| ## Failed Checkpoints: | List failed checkpoint IDs, empty or "none" when PASS | Yes |
-| ## Detailed Feedback: | Optional supplementary notes | No |
-
-**Correct Example (Pass)**:
-\`\`\`
-VERDICT: PASS
-## Verification Result: PASS
-## Reason: All functional tests passed, checkpoint verification complete
-## Test Failures:
-## Failed Checkpoints:
-## Detailed Feedback: Implementation meets requirements, functionality correct.
-\`\`\`
-
-**Correct Example (Pass - Concise)**:
-\`\`\`
-VERDICT: PASS
-## Verification Result: PASS
-## Reason: All checkpoints verified, no test failures
-## Test Failures: none
-## Failed Checkpoints: none
-\`\`\`
-
-**Correct Example (Fail - Test Failure)**:
-\`\`\`
-VERDICT: NOPASS
-## Verification Result: NOPASS
-## Reason: Unit tests failed
-## Test Failures:
-- test_add_user: Expected 200 but got 404
-- test_delete_user: Timeout after 5000ms
-## Failed Checkpoints:
-- CP-2-unit-test
-## Detailed Feedback: Boundary condition handling incorrect, need to fix error handling in delete function.
-\`\`\`
-
-**Incorrect Example (Do NOT output like this)**:
-\`\`\`
-All functional tests have passed. ← Error: Missing VERDICT marker
-VERDICT: passed ← Error: Used "passed" instead of PASS
-VERDICT: failed ← Error: Used "failed" instead of NOPASS
-VERDICT: PASS ← Error: Says PASS but failed checkpoints is not empty
-## Failed Checkpoints:
-- CP-1-test
-\`\`\`
-
 Begin verification now.`,
 };
 
@@ -487,9 +503,9 @@ Begin verification now.`,
  * @source harness-evaluator.ts buildEvaluationPrompt()
  */
 export const DEFAULT_EVALUATION_TEMPLATE: PromptTemplate = {
-  zh: `# 架构评估任务
+  zh: `{roleDeclaration}
 
-你是一位资深架构师。你需要从架构角度评估任务的完成质量，判断是否满足验收标准，并给出明确的后续动作建议。
+# 架构评估任务
 
 **重要**: 你必须独立判断，不要因为这是 AI 完成的工作就给予优待。
 
@@ -506,6 +522,7 @@ export const DEFAULT_EVALUATION_TEMPLATE: PromptTemplate = {
 {evidenceSection}
 {completedCheckpointsSection}
 {phantomTasksSection}
+{customRequirements}
 ## 评估要求
 1. 阅读任务描述和验收标准
 2. 检查相关代码文件
@@ -583,9 +600,9 @@ EVALUATION_RESULT: 不通过  ← 错误：使用了"不通过"而非 NOPASS
 - escalate_human: 问题超出自动处理范围，需要人工介入
 
 现在开始评估。`,
-  en: `# Architecture Evaluation Task
+  en: `{roleDeclaration}
 
-You are a senior architect. You need to evaluate the quality of task completion from an architectural perspective, determine whether acceptance criteria are met, and provide clear follow-up action recommendations.
+# Architecture Evaluation Task
 
 **Important**: You must judge independently and do not give preferential treatment just because this is AI-completed work.
 
@@ -602,6 +619,7 @@ You are a senior architect. You need to evaluate the quality of task completion 
 {evidenceSection}
 {completedCheckpointsSection}
 {phantomTasksSection}
+{customRequirements}
 ## Evaluation Requirements
 1. Read task description and acceptance criteria
 2. Check relevant code files
@@ -1405,5 +1423,62 @@ export function loadPromptTemplate(
   // Return the template for the specified language
   const template = DEFAULT_TEMPLATES[name];
   return template[lang] || template.en;
+}
+
+/**
+ * Valid phase names for customRequirements
+ */
+export type CustomRequirementsPhase = 'dev' | 'codeReview' | 'qa' | 'evaluation';
+
+/**
+ * Load custom requirements for a specific phase.
+ *
+ * Reads user-defined requirements from config.json prompts.customRequirements.{phase}
+ * and formats them with an i18n title prefix.
+ *
+ * Language priority: parameter > config.prompts.language > config.language > 'en'
+ *
+ * @param phase - Phase name (dev, codeReview, qa, evaluation)
+ * @param cwd - Working directory (for locating config.json)
+ * @param language - Language code ('zh' | 'en')
+ * @returns Formatted custom requirements section, or empty string if not configured
+ *
+ * @example
+ * // With config: { prompts: { customRequirements: { dev: "Focus on performance" } } }
+ * loadCustomRequirements('dev', cwd) // => "## 定制需求\nFocus on performance\n"
+ *
+ * // Without config
+ * loadCustomRequirements('dev', cwd) // => ""
+ */
+export function loadCustomRequirements(
+  phase: CustomRequirementsPhase,
+  cwd?: string,
+  language?: Language
+): string {
+  const config = cwd ? readConfig(cwd) : null;
+  const prompts = config?.prompts as Record<string, unknown> | undefined;
+
+  // Get customRequirements object
+  const customRequirements = prompts?.customRequirements as Record<string, string> | undefined;
+  if (!customRequirements) {
+    return '';
+  }
+
+  // Get the requirement for the specified phase
+  const requirement = customRequirements[phase];
+  if (!requirement || requirement.trim() === '') {
+    return '';
+  }
+
+  // Determine language: parameter > prompts.language > global language > 'en'
+  const lang: Language = language || (prompts?.language as Language) || (config?.language as Language) || 'en';
+
+  // Get i18n texts for the determined language
+  const i18n = getI18n(lang);
+
+  // Format with i18n title prefix
+  const title = i18n.harness.customRequirements;
+
+  return `## ${title}\n${requirement.trim()}\n`;
 }
 

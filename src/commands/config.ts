@@ -147,6 +147,9 @@ interface ConfigKeySchema {
   max?: number;
 }
 
+/** Valid phase names for customRequirements */
+const VALID_PHASE_NAMES = ['dev', 'codeReview', 'qa', 'evaluation'] as const;
+
 /** Known config keys and their validation rules */
 const CONFIG_SCHEMA: Record<string, ConfigKeySchema> = {
   'projectName': { type: 'string' },
@@ -396,6 +399,15 @@ export function setConfig(key: string, value: string, cwd: string = process.cwd(
         }
       }
     }
+    // Handle prompts.customRequirements.{phase}
+    else if (subKey.startsWith('customRequirements.')) {
+      const phaseName = subKey.substring('customRequirements.'.length);
+      if (!VALID_PHASE_NAMES.includes(phaseName as any)) {
+        console.error(`Error: Unknown phase name '${phaseName}' for customRequirements. Options: ${VALID_PHASE_NAMES.join(', ')}`);
+        process.exit(1);
+      }
+      // Value can be any string (including empty string to clear)
+    }
     // Handle prompts.{templateName} (legacy format, backward compatibility)
     else if (PROMPT_TEMPLATE_NAMES.includes(subKey as any)) {
       // Check template has valid {variable} placeholders
@@ -415,7 +427,7 @@ export function setConfig(key: string, value: string, cwd: string = process.cwd(
     }
     else {
       console.error(`Error: Unknown config key '${key}'`);
-      console.error(`Available keys: ${Object.keys(CONFIG_SCHEMA).join(', ')}, prompts.language, prompts.customTemplates.*, prompts.{${PROMPT_TEMPLATE_NAMES.join(', ')}}`);
+      console.error(`Available keys: ${Object.keys(CONFIG_SCHEMA).join(', ')}, prompts.language, prompts.customTemplates.*, prompts.customRequirements.{${VALID_PHASE_NAMES.join(',')}}, prompts.{${PROMPT_TEMPLATE_NAMES.join(', ')}}`);
       process.exit(1);
     }
   } else if (key in CONFIG_SCHEMA) {
@@ -424,7 +436,7 @@ export function setConfig(key: string, value: string, cwd: string = process.cwd(
   } else {
     // 3. Unknown config keys: reject
     console.error(`Error: Unknown config key '${key}'`);
-    console.error(`Available keys: ${Object.keys(CONFIG_SCHEMA).join(', ')}, prompts.language, prompts.customTemplates.*, prompts.{${PROMPT_TEMPLATE_NAMES.join(', ')}}`);
+    console.error(`Available keys: ${Object.keys(CONFIG_SCHEMA).join(', ')}, prompts.language, prompts.customTemplates.*, prompts.customRequirements.{${VALID_PHASE_NAMES.join(',')}}, prompts.{${PROMPT_TEMPLATE_NAMES.join(', ')}}`);
     process.exit(1);
   }
 

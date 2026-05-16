@@ -891,6 +891,7 @@ export const enTexts: I18nTexts = {
     previousFailureReason: 'Previous Failure Reason',
     partialProgress: 'Partial Progress Completed',
     upstreamFailureInfo: 'Upstream Failure Info',
+    customRequirements: 'Custom Requirements',
     phaseLabels: {
       development: 'Development',
       codeReview: 'Code Review',
