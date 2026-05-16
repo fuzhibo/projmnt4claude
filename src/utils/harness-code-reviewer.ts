@@ -240,7 +240,7 @@ export class HarnessCodeReviewer {
 
     const reviewFocus = roleTemplate.reviewFocus.map((focus, i) => `${i + 1}. ${focus}`).join('\n');
 
-    const customRequirementsSection = loadCustomRequirements('codeReview', this.config.cwd);
+    const customRequirements = loadCustomRequirements('codeReview', this.config.cwd);
 
     const template = loadPromptTemplate('codeReview', this.config.cwd);
     return resolveTemplate(template, {
@@ -251,7 +251,7 @@ export class HarnessCodeReviewer {
       checkpointsList,
       changesSection,
       evidenceSection,
-      customRequirementsSection,
+      customRequirements,
       reviewFocus,
       retryContextSection,
     }).replace(/\n{3,}/g, '\n\n');

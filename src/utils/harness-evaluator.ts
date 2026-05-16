@@ -284,7 +284,7 @@ export class HarnessEvaluator {
       ? `## ${texts.harness.logs.phantomTaskDetectedTitle}\n${texts.harness.logs.phantomTaskViolation.replace('{count}', String(phantomTasks.length))}\n${phantomTasks.map(tid => `- ${tid}`).join('\n')}\n\n${texts.harness.logs.phantomTaskProhibited}\n${texts.harness.logs.phantomTaskNopassRequirement}\n`
       : '';
 
-    const customRequirementsSection = loadCustomRequirements('evaluation', this.config.cwd);
+    const customRequirements = loadCustomRequirements('evaluation', this.config.cwd);
 
     const template = loadPromptTemplate('evaluation', this.config.cwd);
 
@@ -325,7 +325,7 @@ export class HarnessEvaluator {
       evidenceSection,
       completedCheckpointsSection,
       phantomTasksSection,
-      customRequirementsSection,
+      customRequirements,
       retryContextSection,
     });
 

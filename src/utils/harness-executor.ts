@@ -256,7 +256,7 @@ export class HarnessExecutor {
       ? `## ${texts.harness.roleSpecificRequirements}\n${roleTemplate.extraInstructions.map((inst, i) => `${i + 1}. ${inst}`).join('\n')}\n`
       : '';
 
-    const customRequirementsSection = loadCustomRequirements('dev', this.config.cwd);
+    const customRequirements = loadCustomRequirements('dev', this.config.cwd);
 
     const template = loadPromptTemplate('dev', this.config.cwd);
     let result = resolveTemplate(template, {
@@ -271,7 +271,7 @@ export class HarnessExecutor {
       checkpointsSection,
       timeoutInstruction,
       extraInstructionsSection,
-      customRequirementsSection,
+      customRequirements,
       roleDeclaration: roleTemplate.roleDeclaration,
     });
 

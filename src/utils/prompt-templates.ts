@@ -228,6 +228,9 @@ export const DEFAULT_CODE_REVIEW_TEMPLATE: PromptTemplate = {
 {changesSection}
 {evidenceSection}
 {customRequirements}
+
+**用户定制扩展要求**: 上述用户定制需求与默认审核要求具有同等约束力，必须在审核过程中同步遵守。
+
 ## 审核要求
 {reviewFocus}
 ## 输出格式
@@ -259,6 +262,9 @@ VERDICT: PASS 或 VERDICT: NOPASS
 {changesSection}
 {evidenceSection}
 {customRequirements}
+
+**User Custom Extended Requirements**: The above user customization requirements have the same binding force as the default review requirements and must be followed during the review process.
+
 ## Review Requirements
 {reviewFocus}
 ## Output Format
@@ -523,6 +529,9 @@ export const DEFAULT_EVALUATION_TEMPLATE: PromptTemplate = {
 {completedCheckpointsSection}
 {phantomTasksSection}
 {customRequirements}
+
+**用户定制扩展要求**: 上述用户定制需求与默认评估要求具有同等约束力，必须在评估过程中同步遵守。
+
 ## 评估要求
 1. 阅读任务描述和验收标准
 2. 检查相关代码文件
@@ -620,6 +629,9 @@ EVALUATION_RESULT: 不通过  ← 错误：使用了"不通过"而非 NOPASS
 {completedCheckpointsSection}
 {phantomTasksSection}
 {customRequirements}
+
+**User Custom Extended Requirements**: The above user customization requirements have the same binding force as the default evaluation requirements and must be followed during the evaluation process.
+
 ## Evaluation Requirements
 1. Read task description and acceptance criteria
 2. Check relevant code files

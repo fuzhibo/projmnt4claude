@@ -779,7 +779,7 @@ export class HarnessQATester {
 
     const testStrategy = roleTemplate.testStrategy.map((strategy, i) => `${i + 1}. ${strategy}`).join('\n');
 
-    const customRequirementsSection = loadCustomRequirements('qa', this.config.cwd);
+    const customRequirements = loadCustomRequirements('qa', this.config.cwd);
 
     // Get dev report path for QA to analyze
     const devReportPath = getReportPath(task.id, 'dev', this.config.cwd);
@@ -793,7 +793,7 @@ export class HarnessQATester {
       checkpointsList,
       codeReviewResult: codeReviewVerdict.result,
       codeReviewReason: codeReviewVerdict.reason,
-      customRequirementsSection,
+      customRequirements,
       testStrategy,
       retryContextSection,
       devReportPath,

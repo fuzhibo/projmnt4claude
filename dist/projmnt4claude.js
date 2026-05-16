@@ -9971,6 +9971,9 @@ Violating any of the above prohibitions will result in evaluation failure.`
 {changesSection}
 {evidenceSection}
 {customRequirements}
+
+**用户定制扩展要求**: 上述用户定制需求与默认审核要求具有同等约束力，必须在审核过程中同步遵守。
+
 ## 审核要求
 {reviewFocus}
 ## 输出格式
@@ -10002,6 +10005,9 @@ VERDICT: PASS 或 VERDICT: NOPASS
 {changesSection}
 {evidenceSection}
 {customRequirements}
+
+**User Custom Extended Requirements**: The above user customization requirements have the same binding force as the default review requirements and must be followed during the review process.
+
 ## Review Requirements
 {reviewFocus}
 ## Output Format
@@ -10256,6 +10262,9 @@ Begin verification now.`
 {completedCheckpointsSection}
 {phantomTasksSection}
 {customRequirements}
+
+**用户定制扩展要求**: 上述用户定制需求与默认评估要求具有同等约束力，必须在评估过程中同步遵守。
+
 ## 评估要求
 1. 阅读任务描述和验收标准
 2. 检查相关代码文件
@@ -10353,6 +10362,9 @@ EVALUATION_RESULT: 不通过  ← 错误：使用了"不通过"而非 NOPASS
 {completedCheckpointsSection}
 {phantomTasksSection}
 {customRequirements}
+
+**User Custom Extended Requirements**: The above user customization requirements have the same binding force as the default evaluation requirements and must be followed during the evaluation process.
+
 ## Evaluation Requirements
 1. Read task description and acceptance criteria
 2. Check relevant code files
@@ -36825,7 +36837,7 @@ ${contract.checkpoints.map((cp, i) => `${i + 1}. ${cp}`).join(`
 ${roleTemplate.extraInstructions.map((inst, i) => `${i + 1}. ${inst}`).join(`
 `)}
 ` : "";
-    const customRequirementsSection = loadCustomRequirements("dev", this.config.cwd);
+    const customRequirements = loadCustomRequirements("dev", this.config.cwd);
     const template = loadPromptTemplate("dev", this.config.cwd);
     let result = resolveTemplate(template, {
       title: task.title,
@@ -36839,7 +36851,7 @@ ${roleTemplate.extraInstructions.map((inst, i) => `${i + 1}. ${inst}`).join(`
       checkpointsSection,
       timeoutInstruction,
       extraInstructionsSection,
-      customRequirementsSection,
+      customRequirements,
       roleDeclaration: roleTemplate.roleDeclaration
     });
     if (retryContext?.previousFailureReason) {
@@ -37336,7 +37348,7 @@ ${devReport.evidence.map((evidence) => `- ${evidence}`).join(`
 `)}` : "";
     const reviewFocus = roleTemplate.reviewFocus.map((focus, i) => `${i + 1}. ${focus}`).join(`
 `);
-    const customRequirementsSection = loadCustomRequirements("codeReview", this.config.cwd);
+    const customRequirements = loadCustomRequirements("codeReview", this.config.cwd);
     const template = loadPromptTemplate("codeReview", this.config.cwd);
     return resolveTemplate(template, {
       roleDeclaration: roleTemplate.roleDeclaration,
@@ -37346,7 +37358,7 @@ ${devReport.evidence.map((evidence) => `- ${evidence}`).join(`
       checkpointsList,
       changesSection,
       evidenceSection,
-      customRequirementsSection,
+      customRequirements,
       reviewFocus,
       retryContextSection
     }).replace(/\n{3,}/g, `
@@ -38690,7 +38702,7 @@ ${task.description}` : "";
 `);
     const testStrategy = roleTemplate.testStrategy.map((strategy, i) => `${i + 1}. ${strategy}`).join(`
 `);
-    const customRequirementsSection = loadCustomRequirements("qa", this.config.cwd);
+    const customRequirements = loadCustomRequirements("qa", this.config.cwd);
     const devReportPath = getReportPath(task.id, "dev", this.config.cwd);
     const template = loadPromptTemplate("qa", this.config.cwd);
     return resolveTemplate(template, {
@@ -38701,7 +38713,7 @@ ${task.description}` : "";
       checkpointsList,
       codeReviewResult: codeReviewVerdict.result,
       codeReviewReason: codeReviewVerdict.reason,
-      customRequirementsSection,
+      customRequirements,
       testStrategy,
       retryContextSection,
       devReportPath
@@ -39008,7 +39020,7 @@ ${phantomTasks.map((tid) => `- ${tid}`).join(`
 ${texts.harness.logs.phantomTaskProhibited}
 ${texts.harness.logs.phantomTaskNopassRequirement}
 ` : "";
-    const customRequirementsSection = loadCustomRequirements("evaluation", this.config.cwd);
+    const customRequirements = loadCustomRequirements("evaluation", this.config.cwd);
     const template = loadPromptTemplate("evaluation", this.config.cwd);
     let retryContextSection = "";
     if (retryContext?.previousFailureReason) {
@@ -39044,7 +39056,7 @@ ${texts.harness.logs.phantomTaskNopassRequirement}
       evidenceSection,
       completedCheckpointsSection,
       phantomTasksSection,
-      customRequirementsSection,
+      customRequirements,
       retryContextSection
     });
     return result.replace(/\n{3,}/g, `
