@@ -117,30 +117,15 @@ export const DEFAULT_DEV_TEMPLATE: PromptTemplate = {
 {roleDeclaration}
 
 {timeoutInstruction}
-1. 仔细阅读任务描述和验收标准
-2. 实现所需的功能或修复
-3. 确保代码符合项目规范
-4. **编写基本自测试用例**（详见下方自测要求）
-5. 运行测试验证实现
-6. 完成后简要总结所做的更改
+**核心任务**: 根据任务描述和检查点实现功能代码，这是首要目标。
 
-### 自测要求
+1. **实现功能** - 根据任务描述和检查点编写代码实现（这是主要工作）
+2. 确保代码符合项目规范，运行 \`bun run build\` 验证编译
+3. 编写基本自测用例验证核心功能（Happy Path + 关键边界）
+4. 运行 \`bun test\` 确保自测通过
+5. 完成后总结实现内容
 
-作为开发者，你需要编写基本自测试用例来验证实现。自测是基本验证，全面测试覆盖由 QA 阶段完成。
-
-**自测范围**：
-- **Happy Path**: 验证核心功能正常工作
-- **边界条件**: 验证输入边界和极限情况
-- **异常处理**: 验证错误处理和异常路径
-
-**自测步骤**：
-1. 识别任务涉及的核心功能点
-2. 为每个核心功能编写至少一个 Happy Path 测试
-3. 识别关键边界条件并编写测试
-4. 识别异常路径并编写测试
-5. 运行 \`bun test\` 确保所有自测通过
-
-**注意**：自测是基本验证，不需要追求 100% 覆盖率。全面测试覆盖由 QA 阶段扩展完成。
+**自测说明**: 自测是基本验证（Happy Path + 关键边界），全面测试覆盖由 QA 阶段完成。不要过度追求测试覆盖率。
 
 {extraInstructionsSection}
 {customRequirements}
@@ -169,30 +154,15 @@ export const DEFAULT_DEV_TEMPLATE: PromptTemplate = {
 {roleDeclaration}
 
 {timeoutInstruction}
-1. Read the task description and acceptance criteria carefully
-2. Implement the required functionality or fix
-3. Ensure the code follows project standards
-4. **Write basic self-test cases** (see self-test requirements below)
-5. Run tests to verify the implementation
-6. Briefly summarize the changes made upon completion
+**Core Task**: Implement functionality based on task description and checkpoints. This is the primary goal.
 
-### Self-Test Requirements
+1. **Implement functionality** - Write code implementation based on task description and checkpoints (this is the main work)
+2. Ensure code follows project standards, run \`bun run build\` to verify compilation
+3. Write basic self-test cases to verify core functionality (Happy Path + key boundaries)
+4. Run \`bun test\` to ensure self-tests pass
+5. Summarize implementation upon completion
 
-As a developer, you need to write basic self-test cases to verify the implementation. Self-testing is basic verification; comprehensive test coverage is completed in the QA phase.
-
-**Self-Test Scope**:
-- **Happy Path**: Verify core functionality works correctly
-- **Boundary Conditions**: Verify input boundaries and edge cases
-- **Exception Handling**: Verify error handling and exception paths
-
-**Self-Test Steps**:
-1. Identify core functionality points involved in the task
-2. Write at least one Happy Path test for each core function
-3. Identify key boundary conditions and write tests
-4. Identify exception paths and write tests
-5. Run \`bun test\` to ensure all self-tests pass
-
-**Note**: Self-testing is basic verification, no need to pursue 100% coverage. Comprehensive test coverage is expanded in the QA phase.
+**Self-Test Note**: Self-testing is basic verification (Happy Path + key boundaries). Comprehensive test coverage is completed in QA phase. Do not over-pursue test coverage.
 
 {extraInstructionsSection}
 {customRequirements}
