@@ -90,8 +90,6 @@ export class HarnessEvaluator {
           ? loadedContract.acceptanceCriteria : contract.acceptanceCriteria;
         contract.verificationCommands = loadedContract.verificationCommands.length > 0
           ? loadedContract.verificationCommands : contract.verificationCommands;
-        contract.checkpoints = loadedContract.checkpoints.length > 0
-          ? loadedContract.checkpoints : contract.checkpoints;
         contract.createdAt = loadedContract.createdAt;
         contract.updatedAt = loadedContract.updatedAt;
       }
@@ -230,7 +228,8 @@ export class HarnessEvaluator {
     }
     // BUG-014-2A: 过滤掉 requiresHuman 检查点，仅评估自动化检查点
     // BUG-013-1: 防御性处理，确保数组字段始终为有效数组
-    const contractCheckpoints = Array.isArray(contract.checkpoints) ? contract.checkpoints : [];
+    // Note: checkpoints now accessed from task.checkpoints directly, not contract.checkpoints
+    const taskCheckpoints = task.checkpoints || [];
     const contractCriteria = Array.isArray(contract.acceptanceCriteria) ? contract.acceptanceCriteria : [];
     const contractCommands = Array.isArray(contract.verificationCommands) ? contract.verificationCommands : [];
     const devCheckpointsCompleted = Array.isArray(devReport.checkpointsCompleted) ? devReport.checkpointsCompleted : [];
@@ -248,7 +247,7 @@ export class HarnessEvaluator {
     }
     const isHumanCheckpoint = (cp: string) =>
       humanCheckpointIds.has(cp) || humanCheckpointDescs.has(cp);
-    const filteredContractCheckpoints = contractCheckpoints.filter(cp => !isHumanCheckpoint(cp));
+    const filteredTaskCheckpoints = taskCheckpoints.filter(cp => !isHumanCheckpoint(cp.id));
     const filteredDevCheckpoints = devCheckpointsCompleted.filter(cp => !isHumanCheckpoint(cp));
 
     // Build section variables (each non-empty section ends with \n for blank-line separation)
@@ -264,8 +263,8 @@ export class HarnessEvaluator {
       ? `## ${texts.harness.logs.verificationCommands}\n${texts.harness.logs.runVerificationCommands}:\n\`\`\`bash\n${contractCommands.join('\n')}\n\`\`\`\n`
       : '';
 
-    const checkpointsSection = filteredContractCheckpoints.length > 0
-      ? `## ${texts.harness.logs.checkpointSectionTitle}\n${texts.harness.logs.checkpointSectionConfirm}${filteredContractCheckpoints.map((cp, i) => `${i + 1}. ${cp}`).join('\n')}\n`
+    const checkpointsSection = filteredTaskCheckpoints.length > 0
+      ? `## ${texts.harness.logs.checkpointSectionTitle}\n${texts.harness.logs.checkpointSectionConfirm}${filteredTaskCheckpoints.map((cp, i) => `${i + 1}. [${cp.id}] ${cp.description}`).join('\n')}\n`
       : '';
 
     const humanCheckpointsSection = humanCheckpointIds.size > 0

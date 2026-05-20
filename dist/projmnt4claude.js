@@ -18546,7 +18546,6 @@ function createDefaultSprintContract(taskId) {
     taskId,
     acceptanceCriteria: [],
     verificationCommands: [],
-    checkpoints: [],
     createdAt: now,
     updatedAt: now
   };
@@ -21018,7 +21017,7 @@ function fixTaskCheckpoints(taskId, cwd) {
       updatedAt: now
     };
   }
-  if (contract.checkpoints && contract.checkpoints.length > 0) {
+  if (task.checkpoints && task.checkpoints.length > 0) {
     return { fixed: false, reason: "检查点已存在" };
   }
   let acceptanceCriteria = contract.acceptanceCriteria || [];
@@ -21030,8 +21029,8 @@ function fixTaskCheckpoints(taskId, cwd) {
   if (checkpoints.length === 0) {
     return { fixed: false, reason: "无法生成检查点" };
   }
-  contract.checkpoints = checkpoints.map((cp) => cp.id);
   syncCheckpointsToMeta(taskId, checkpoints, cwd);
+  contract.verificationCommands = checkpoints.filter((cp) => cp.verification?.commands).flatMap((cp) => cp.verification.commands);
   saveContract(taskId, contract, cwd);
   return { fixed: true, reason: `生成了 ${checkpoints.length} 个检查点` };
 }
@@ -21063,8 +21062,7 @@ async function fixCheckpoints(cwd = process.cwd(), options = {}) {
   }
   const tasksNeedingFix = [];
   for (const task of tasksToFix) {
-    const contract = readContract(task.id, cwd);
-    if (!contract || !contract.checkpoints || contract.checkpoints.length === 0) {
+    if (!task.checkpoints || task.checkpoints.length === 0) {
       tasksNeedingFix.push(task);
     }
   }
@@ -30957,7 +30955,7 @@ function fixTaskCheckpoints2(taskId, cwd) {
       updatedAt: now
     };
   }
-  if (contract.checkpoints && contract.checkpoints.length > 0) {
+  if (task.checkpoints && task.checkpoints.length > 0) {
     return { fixed: false, reason: "检查点已存在" };
   }
   let acceptanceCriteria = contract.acceptanceCriteria || [];
@@ -30969,8 +30967,8 @@ function fixTaskCheckpoints2(taskId, cwd) {
   if (checkpoints.length === 0) {
     return { fixed: false, reason: "无法生成检查点" };
   }
-  contract.checkpoints = checkpoints.map((cp) => cp.id);
   syncCheckpointsToMeta(taskId, checkpoints, cwd);
+  contract.verificationCommands = checkpoints.filter((cp) => cp.verification?.commands).flatMap((cp) => cp.verification.commands);
   saveContract2(taskId, contract, cwd);
   return { fixed: true, reason: `生成了 ${checkpoints.length} 个检查点` };
 }
@@ -31002,8 +31000,7 @@ async function fixCheckpoints2(cwd = process.cwd(), options = {}) {
   }
   const tasksNeedingFix = [];
   for (const task of tasksToFix) {
-    const contract = readContract2(task.id, cwd);
-    if (!contract || !contract.checkpoints || contract.checkpoints.length === 0) {
+    if (!task.checkpoints || task.checkpoints.length === 0) {
       tasksNeedingFix.push(task);
     }
   }
@@ -36753,7 +36750,8 @@ class HarnessExecutor {
         report.evidence = await this.collectEvidence(task.id);
         console.log(`   \uD83D\uDCCE ${texts.harness.logs.evidenceCollected}: ${report.evidence.length}`);
         report.checkpointsCompleted = await this.checkCompletedCheckpoints(task, sprintContract);
-        console.log(`   ✓ ${texts.harness.logs.checkpointsCompleted}: ${report.checkpointsCompleted.length}/${sprintContract.checkpoints.length}`);
+        const totalCheckpoints = task.checkpoints?.length || 0;
+        console.log(`   ✓ ${texts.harness.logs.checkpointsCompleted}: ${report.checkpointsCompleted.length}/${totalCheckpoints}`);
       }
     } catch (error) {
       report.status = "failed";
@@ -36780,7 +36778,6 @@ class HarnessExecutor {
       contract.acceptanceCriteria = this.extractAcceptanceCriteria(task.description);
     }
     if (task.checkpoints && task.checkpoints.length > 0) {
-      contract.checkpoints = task.checkpoints.map((cp) => cp.id);
       contract.verificationCommands = task.checkpoints.filter((cp) => cp.verification?.commands).flatMap((cp) => cp.verification.commands);
     }
     this.saveContract(task.id, contract);
@@ -36826,9 +36823,9 @@ ${texts.harness.acceptanceCriteriaInstruction}
 ${contract.acceptanceCriteria.map((criteria, i) => `${i + 1}. ${criteria}`).join(`
 `)}
 ` : "";
-    const checkpointsSection = contract.checkpoints.length > 0 ? `## ${texts.harness.checkpoints}
+    const checkpointsSection = task.checkpoints && task.checkpoints.length > 0 ? `## ${texts.harness.checkpoints}
 ${texts.harness.checkpointsInstruction}
-${contract.checkpoints.map((cp, i) => `${i + 1}. ${cp}`).join(`
+${task.checkpoints.map((cp, i) => `${i + 1}. [${cp.id}] ${cp.description}`).join(`
 `)}
 ` : "";
     const timeoutInstruction = timeoutMinutes ? texts.harness.timeoutInstruction.replace("{timeout}", String(timeoutMinutes)) + `
@@ -36951,15 +36948,14 @@ ${roleTemplate.extraInstructions.map((inst, i) => `${i + 1}. ${inst}`).join(`
     }
     return evidence;
   }
-  async checkCompletedCheckpoints(task, contract) {
+  async checkCompletedCheckpoints(task, _contract) {
     const completed = [];
     if (!task.checkpoints) {
       return completed;
     }
-    for (const checkpointId of contract.checkpoints) {
-      const checkpoint = task.checkpoints.find((cp) => cp.id === checkpointId);
-      if (checkpoint && checkpoint.status === "completed") {
-        completed.push(checkpointId);
+    for (const checkpoint of task.checkpoints) {
+      if (checkpoint.status === "completed") {
+        completed.push(checkpoint.id);
       }
     }
     return completed;
@@ -38864,7 +38860,6 @@ class HarnessEvaluator {
         contract.taskId = loadedContract.taskId;
         contract.acceptanceCriteria = loadedContract.acceptanceCriteria.length > 0 ? loadedContract.acceptanceCriteria : contract.acceptanceCriteria;
         contract.verificationCommands = loadedContract.verificationCommands.length > 0 ? loadedContract.verificationCommands : contract.verificationCommands;
-        contract.checkpoints = loadedContract.checkpoints.length > 0 ? loadedContract.checkpoints : contract.checkpoints;
         contract.createdAt = loadedContract.createdAt;
         contract.updatedAt = loadedContract.updatedAt;
       }
@@ -38961,7 +38956,7 @@ class HarnessEvaluator {
     } catch {
       texts = getI18n("zh");
     }
-    const contractCheckpoints = Array.isArray(contract.checkpoints) ? contract.checkpoints : [];
+    const taskCheckpoints = task.checkpoints || [];
     const contractCriteria = Array.isArray(contract.acceptanceCriteria) ? contract.acceptanceCriteria : [];
     const contractCommands = Array.isArray(contract.verificationCommands) ? contract.verificationCommands : [];
     const devCheckpointsCompleted = Array.isArray(devReport.checkpointsCompleted) ? devReport.checkpointsCompleted : [];
@@ -38977,7 +38972,7 @@ class HarnessEvaluator {
       }
     }
     const isHumanCheckpoint = (cp) => humanCheckpointIds.has(cp) || humanCheckpointDescs.has(cp);
-    const filteredContractCheckpoints = contractCheckpoints.filter((cp) => !isHumanCheckpoint(cp));
+    const filteredTaskCheckpoints = taskCheckpoints.filter((cp) => !isHumanCheckpoint(cp.id));
     const filteredDevCheckpoints = devCheckpointsCompleted.filter((cp) => !isHumanCheckpoint(cp));
     const descriptionSection = task.description ? `## ${texts.harness.logs.taskDescriptionSection}
 ${task.description}
@@ -38995,8 +38990,8 @@ ${contractCommands.join(`
 `)}
 \`\`\`
 ` : "";
-    const checkpointsSection = filteredContractCheckpoints.length > 0 ? `## ${texts.harness.logs.checkpointSectionTitle}
-${texts.harness.logs.checkpointSectionConfirm}${filteredContractCheckpoints.map((cp, i) => `${i + 1}. ${cp}`).join(`
+    const checkpointsSection = filteredTaskCheckpoints.length > 0 ? `## ${texts.harness.logs.checkpointSectionTitle}
+${texts.harness.logs.checkpointSectionConfirm}${filteredTaskCheckpoints.map((cp, i) => `${i + 1}. [${cp.id}] ${cp.description}`).join(`
 `)}
 ` : "";
     const humanCheckpointsSection = humanCheckpointIds.size > 0 ? `## ${texts.harness.logs.aboutHumanVerification}
@@ -39999,10 +39994,11 @@ class HarnessReporter {
       });
       lines.push("");
     }
-    if (record.contract.checkpoints.length > 0) {
+    const taskCheckpoints = record.task.checkpoints || [];
+    if (taskCheckpoints.length > 0) {
       lines.push("### 检查点");
-      record.contract.checkpoints.forEach((cp, i) => {
-        lines.push(`${i + 1}. ${cp}`);
+      taskCheckpoints.forEach((cp, i) => {
+        lines.push(`${i + 1}. [${cp.id}] ${cp.description}`);
       });
       lines.push("");
     }
@@ -40011,7 +40007,7 @@ class HarnessReporter {
     lines.push(`- **状态**: ${record.devReport.status}`);
     lines.push(`- **耗时**: ${(record.devReport.duration / 1000).toFixed(1)}s`);
     lines.push(`- **证据数量**: ${record.devReport.evidence.length}`);
-    lines.push(`- **完成检查点**: ${record.devReport.checkpointsCompleted.length}/${record.contract.checkpoints.length}`);
+    lines.push(`- **完成检查点**: ${record.devReport.checkpointsCompleted.length}/${taskCheckpoints.length}`);
     lines.push("");
     if (record.reviewVerdict) {
       lines.push("## 审查阶段");

@@ -67,7 +67,7 @@ function createContract(overrides: Partial<SprintContract> = {}): SprintContract
     taskId: 'TASK-exec-test-001',
     acceptanceCriteria: ['All tests pass'],
     verificationCommands: ['bun test'],
-    checkpoints: ['CP-001', 'CP-002'],
+    // checkpoints removed from SprintContract - now accessed from TaskMeta.checkpoints
     createdAt: '2026-04-10T00:00:00.000Z',
     updatedAt: '2026-04-10T00:00:00.000Z',
     ...overrides,
@@ -144,7 +144,7 @@ describe('HarnessExecutor', () => {
           { id: 'CP-002', description: 'CP2', status: 'pending', createdAt: '', updatedAt: '' },
         ],
       });
-      const contract = createContract({ checkpoints: ['CP-001', 'CP-002'] });
+      const contract = createContract(); // checkpoints now in task.checkpoints
       const projectDir = setupProjectDir(config.cwd, task.id);
 
       // Create evidence files
@@ -216,7 +216,7 @@ describe('HarnessExecutor', () => {
     test('handles task with no checkpoints', async () => {
       const config = createConfig(env.tempDir);
       const task = createTask(); // no checkpoints
-      const contract = createContract({ checkpoints: [] });
+      const contract = createContract(); // checkpoints removed from SprintContract
       setupProjectDir(config.cwd, task.id);
 
       mockAgentInvoke.mockResolvedValue({
@@ -347,7 +347,7 @@ describe('HarnessExecutor', () => {
     test('handles task with no description and no dependencies', async () => {
       const config = createConfig(env.tempDir);
       const task = createTask({ description: '', dependencies: [] });
-      const contract = createContract({ acceptanceCriteria: [], checkpoints: [] });
+      const contract = createContract({ acceptanceCriteria: [] }); // checkpoints removed from SprintContract
       setupProjectDir(config.cwd, task.id);
 
       let capturedPrompt = '';

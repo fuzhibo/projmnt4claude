@@ -449,7 +449,7 @@ describe('Scenario 2: Harness Full Pipeline', () => {
     expect(contract.taskId).toBe('TASK-001');
     expect(contract.acceptanceCriteria).toEqual([]);
     expect(contract.verificationCommands).toEqual([]);
-    expect(contract.checkpoints).toEqual([]);
+    // checkpoints removed from SprintContract - now accessed from TaskMeta.checkpoints
     expect(contract.createdAt).toBeTruthy();
     expect(contract.updatedAt).toBeTruthy();
   });

@@ -125,7 +125,8 @@ export class HarnessExecutor {
 
         // 5. 检查完成的检查点
         report.checkpointsCompleted = await this.checkCompletedCheckpoints(task, sprintContract);
-        console.log(`   ✓ ${texts.harness.logs.checkpointsCompleted}: ${report.checkpointsCompleted.length}/${sprintContract.checkpoints.length}`);
+        const totalCheckpoints = task.checkpoints?.length || 0;
+        console.log(`   ✓ ${texts.harness.logs.checkpointsCompleted}: ${report.checkpointsCompleted.length}/${totalCheckpoints}`);
       }
 
     } catch (error) {
@@ -169,8 +170,9 @@ export class HarnessExecutor {
     }
 
     // 从检查点提取验证命令
+    // Note: checkpoints are now accessed directly from task.checkpoints via filterCheckpoints()
+    // This eliminates ID-only references and preserves full checkpoint metadata.
     if (task.checkpoints && task.checkpoints.length > 0) {
-      contract.checkpoints = task.checkpoints.map(cp => cp.id);
       contract.verificationCommands = task.checkpoints
         .filter(cp => cp.verification?.commands)
         .flatMap(cp => cp.verification!.commands!);
@@ -244,8 +246,10 @@ export class HarnessExecutor {
       ? `## ${texts.harness.acceptanceCriteria}\n${texts.harness.acceptanceCriteriaInstruction}\n${contract.acceptanceCriteria.map((criteria, i) => `${i + 1}. ${criteria}`).join('\n')}\n`
       : '';
 
-    const checkpointsSection = contract.checkpoints.length > 0
-      ? `## ${texts.harness.checkpoints}\n${texts.harness.checkpointsInstruction}\n${contract.checkpoints.map((cp, i) => `${i + 1}. ${cp}`).join('\n')}\n`
+    // Build checkpoints section with full checkpoint descriptions (not just IDs)
+    // This fixes the issue where AI only saw checkpoint IDs without descriptions
+    const checkpointsSection = task.checkpoints && task.checkpoints.length > 0
+      ? `## ${texts.harness.checkpoints}\n${texts.harness.checkpointsInstruction}\n${task.checkpoints.map((cp, i) => `${i + 1}. [${cp.id}] ${cp.description}`).join('\n')}\n`
       : '';
 
     const timeoutInstruction = timeoutMinutes
@@ -405,7 +409,7 @@ export class HarnessExecutor {
    */
   private async checkCompletedCheckpoints(
     task: TaskMeta,
-    contract: SprintContract
+    _contract: SprintContract
   ): Promise<string[]> {
     const completed: string[] = [];
 
@@ -413,10 +417,11 @@ export class HarnessExecutor {
       return completed;
     }
 
-    for (const checkpointId of contract.checkpoints) {
-      const checkpoint = task.checkpoints.find(cp => cp.id === checkpointId);
-      if (checkpoint && checkpoint.status === 'completed') {
-        completed.push(checkpointId);
+    // Now directly iterate task.checkpoints instead of contract.checkpoints
+    // This eliminates the unnecessary ID lookup
+    for (const checkpoint of task.checkpoints) {
+      if (checkpoint.status === 'completed') {
+        completed.push(checkpoint.id);
       }
     }
 

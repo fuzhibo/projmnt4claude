@@ -203,10 +203,12 @@ export class HarnessReporter {
       lines.push('');
     }
 
-    if (record.contract.checkpoints.length > 0) {
+    // Checkpoints now from task.checkpoints directly
+    const taskCheckpoints = record.task.checkpoints || [];
+    if (taskCheckpoints.length > 0) {
       lines.push('### 检查点');
-      record.contract.checkpoints.forEach((cp, i) => {
-        lines.push(`${i + 1}. ${cp}`);
+      taskCheckpoints.forEach((cp, i) => {
+        lines.push(`${i + 1}. [${cp.id}] ${cp.description}`);
       });
       lines.push('');
     }
@@ -217,7 +219,7 @@ export class HarnessReporter {
     lines.push(`- **状态**: ${record.devReport.status}`);
     lines.push(`- **耗时**: ${(record.devReport.duration / 1000).toFixed(1)}s`);
     lines.push(`- **证据数量**: ${record.devReport.evidence.length}`);
-    lines.push(`- **完成检查点**: ${record.devReport.checkpointsCompleted.length}/${record.contract.checkpoints.length}`);
+    lines.push(`- **完成检查点**: ${record.devReport.checkpointsCompleted.length}/${taskCheckpoints.length}`);
     lines.push('');
 
     // 审查阶段

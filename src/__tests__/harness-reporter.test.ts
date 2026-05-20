@@ -225,7 +225,11 @@ describe('HarnessReporter: formatTaskOverview', () => {
   test('includes sprint contract with acceptance criteria and checkpoints', () => {
     const record = createTestRecord();
     record.contract.acceptanceCriteria = ['AC-1: Must work', 'AC-2: Must be fast'];
-    record.contract.checkpoints = ['CP-1', 'CP-2'];
+    // checkpoints now accessed from task.checkpoints directly (not contract)
+    record.task.checkpoints = [
+      { id: 'CP-1', description: 'Checkpoint 1', status: 'pending' },
+      { id: 'CP-2', description: 'Checkpoint 2', status: 'pending' },
+    ];
     const overview = (reporter as any).formatTaskOverview(record);
     expect(overview).toContain('验收标准');
     expect(overview).toContain('AC-1: Must work');

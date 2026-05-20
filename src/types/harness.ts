@@ -66,6 +66,10 @@ export const DEFAULT_HARNESS_CONFIG: Omit<HarnessConfig, 'cwd'> = {
 /**
  * Sprint Contract - Agreement between developer and evaluator
  * Defines the "done" criteria
+ *
+ * Note: checkpoints field removed (P0 fix). Checkpoints are now accessed
+ * directly from TaskMeta.checkpoints via filterCheckpoints() in each phase.
+ * This eliminates ID-only references and preserves full checkpoint metadata.
  */
 export interface SprintContract {
   /** Task ID */
@@ -74,8 +78,6 @@ export interface SprintContract {
   acceptanceCriteria: string[];
   /** List of verification commands */
   verificationCommands: string[];
-  /** List of checkpoint IDs */
-  checkpoints: string[];
   /** Creation time */
   createdAt: string;
   /** Last update time */
@@ -739,7 +741,6 @@ export function createDefaultSprintContract(taskId: string): SprintContract {
     taskId,
     acceptanceCriteria: [],
     verificationCommands: [],
-    checkpoints: [],
     createdAt: now,
     updatedAt: now,
   };

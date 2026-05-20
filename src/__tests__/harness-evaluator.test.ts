@@ -180,10 +180,11 @@ describe('BUG-013-1: buildEvaluationPrompt defensive array handling', () => {
   afterEach(() => {
     env.cleanup();
   });
-  test('should not crash when contract.checkpoints is undefined', () => {
-    const task = createTestTask();
+  // Note: checkpoints field removed from SprintContract - now accessed from TaskMeta.checkpoints directly
+  test('should not crash when task.checkpoints is undefined', () => {
+    const task = { ...createTestTask(), checkpoints: undefined as any };
     const devReport = createDefaultDevReport(task.id);
-    const contract = { ...createDefaultSprintContract(task.id), checkpoints: undefined as any };
+    const contract = createDefaultSprintContract(task.id);
     expect(() => {
       (evaluator as any).buildEvaluationPrompt(task, devReport, contract);
     }).not.toThrow();
@@ -231,23 +232,20 @@ describe('BUG-013-1: buildEvaluationPrompt defensive array handling', () => {
       ...createDefaultSprintContract(task.id),
       acceptanceCriteria: undefined as any,
       verificationCommands: undefined as any,
-      checkpoints: undefined as any,
+      // checkpoints removed from SprintContract - now in TaskMeta
     };
     expect(() => {
       (evaluator as any).buildEvaluationPrompt(task, devReport, contract);
     }).not.toThrow();
   });
   test('should produce valid prompt with undefined arrays', () => {
-    const task = createTestTask();
+    const task = { ...createTestTask(), checkpoints: undefined as any };
     const devReport = {
       ...createDefaultDevReport(task.id),
       evidence: undefined as any,
       checkpointsCompleted: undefined as any,
     };
-    const contract = {
-      ...createDefaultSprintContract(task.id),
-      checkpoints: undefined as any,
-    };
+    const contract = createDefaultSprintContract(task.id);
     const prompt = (evaluator as any).buildEvaluationPrompt(task, devReport, contract);
     expect(typeof prompt).toBe('string');
     expect(prompt.length).toBeGreaterThan(0);
@@ -264,7 +262,7 @@ describe('createDefaultSprintContract', () => {
     expect(contract.taskId).toBe('TASK-test');
     expect(contract.acceptanceCriteria).toEqual([]);
     expect(contract.verificationCommands).toEqual([]);
-    expect(contract.checkpoints).toEqual([]);
+    // checkpoints removed from SprintContract - now accessed from TaskMeta.checkpoints
     expect(contract.createdAt).toBeTruthy();
     expect(contract.updatedAt).toBeTruthy();
   });

@@ -3431,8 +3431,9 @@ function fixTaskCheckpoints(taskId: string, cwd: string): { fixed: boolean; reas
     };
   }
 
-  // 检查是否需要修复（基于 contract.json 的 checkpoints 是否为空）
-  if (contract.checkpoints && contract.checkpoints.length > 0) {
+  // 检查是否需要修复（基于 task.checkpoints 是否为空）
+  // Note: checkpoints are now stored in task.checkpoints, not contract.checkpoints
+  if (task.checkpoints && task.checkpoints.length > 0) {
     return { fixed: false, reason: '检查点已存在' };
   }
 
@@ -3457,14 +3458,17 @@ function fixTaskCheckpoints(taskId: string, cwd: string): { fixed: boolean; reas
     return { fixed: false, reason: '无法生成检查点' };
   }
 
-  // 更新 contract
-  contract.checkpoints = checkpoints.map(cp => cp.id);
+  // Note: checkpoints are now stored directly in task.checkpoints via syncCheckpointsToMeta
+  // No need to update contract.checkpoints anymore
 
   // 使用 checkpoint 模块的 syncCheckpointsToMeta 函数同步检查点
   // 这会同时更新 meta.json 和 checkpoint.md，确保两者保持一致
   syncCheckpointsToMeta(taskId, checkpoints, cwd);
 
-  // 保存 contract
+  // 保存 contract (verificationCommands updated if needed)
+  contract.verificationCommands = checkpoints
+    .filter(cp => cp.verification?.commands)
+    .flatMap(cp => cp.verification!.commands!);
   saveContract(taskId, contract, cwd);
 
   return { fixed: true, reason: `生成了 ${checkpoints.length} 个检查点` };
@@ -3510,11 +3514,11 @@ export async function fixCheckpoints(
   }
 
   // 筛选需要修复的任务
+  // Note: checkpoints are now stored in task.checkpoints, not contract.checkpoints
   const tasksNeedingFix: TaskMeta[] = [];
 
   for (const task of tasksToFix) {
-    const contract = readContract(task.id, cwd);
-    if (!contract || !contract.checkpoints || contract.checkpoints.length === 0) {
+    if (!task.checkpoints || task.checkpoints.length === 0) {
       tasksNeedingFix.push(task);
     }
   }
