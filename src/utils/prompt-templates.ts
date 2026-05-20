@@ -112,20 +112,36 @@ export const DEFAULT_DEV_TEMPLATE: PromptTemplate = {
 {dependenciesSection}
 {acceptanceCriteriaSection}
 {checkpointsSection}
+## ⚠️ 重要：检查点是验收标准
+
+**检查点定义了本任务的验收标准**。你必须实现检查点中描述的代码或功能，而非仅仅验证它们。
+
+- 检查点中的 \`[script]\` 前缀表示需要实现具体的代码产出（如类型定义、函数实现）
+- 检查点中的 \`[ai review]\` 前缀表示需要实现代码并通过代码审核
+- 检查点中的 \`[ai qa]\` 前缀表示需要实现功能并通过 QA 验证
+
+**错误理解示例**：
+- ❌ "检查点说要定义 FailureType 枚举，我写测试来验证它是否存在" — 这是错误的！
+- ✅ "检查点说要定义 FailureType 枚举，我需要在 src/types/task.ts 中实现它" — 这是正确的！
+
 ## 指示
 
 {roleDeclaration}
 
 {timeoutInstruction}
-**核心任务**: 根据任务描述和检查点实现功能代码，这是首要目标。
 
-1. **实现功能** - 根据任务描述和检查点编写代码实现（这是主要工作）
-2. 确保代码符合项目规范，运行 \`bun run build\` 验证编译
-3. 编写基本自测用例验证核心功能（Happy Path + 关键边界）
-4. 运行 \`bun test\` 确保自测通过
-5. 完成后总结实现内容
+### 开发步骤（按顺序执行）
 
-**自测说明**: 自测是基本验证（Happy Path + 关键边界），全面测试覆盖由 QA 阶段完成。不要过度追求测试覆盖率。
+1. **理解检查点要求** — 仔细阅读每个检查点，理解需要实现什么代码或功能
+2. **实现检查点要求的代码** — 这是主要工作，占开发时间 80% 以上
+3. **验证实现** — 运行 \`bun run build\` 确保编译通过
+4. **编写自测** — 为实现的功能编写基本测试（Happy Path + 关键边界），验证实现正确性
+5. **运行测试** — \`bun test\` 确保自测通过
+6. **总结实现** — 在开发报告中说明实现了哪些检查点
+
+### 自测说明
+
+自测是验证你的实现是否正确，而非替代实现。自测应该测试你实现的代码，而非测试现有代码。
 
 {extraInstructionsSection}
 {customRequirements}
@@ -136,6 +152,7 @@ export const DEFAULT_DEV_TEMPLATE: PromptTemplate = {
 1. **禁止创建新任务** - 不要运行 \`task create\`、\`init-requirement\` 或任何创建任务的命令
 2. **禁止修改任务元数据** - 不要修改 \`.projmnt4claude/tasks/\` 下的 meta.json 文件
 3. **禁止创建子任务** - 不要将当前任务拆分为多个子任务并尝试创建它们
+4. **禁止只写测试不实现** - 检查点要求实现代码，而非写测试验证代码是否存在
 
 如果任务确实需要拆分，请在开发报告中 **建议** 拆分方案，由人工决定是否创建新任务。
 违反以上任何禁令将导致评估不通过。`,
@@ -149,20 +166,36 @@ export const DEFAULT_DEV_TEMPLATE: PromptTemplate = {
 {dependenciesSection}
 {acceptanceCriteriaSection}
 {checkpointsSection}
+## ⚠️ Important: Checkpoints are Acceptance Criteria
+
+**Checkpoints define the acceptance criteria for this task**. You must implement the code or functionality described in checkpoints, not merely verify them.
+
+- \`[script]\` prefix means you need to implement concrete code artifacts (e.g., type definitions, function implementations)
+- \`[ai review]\` prefix means you need to implement code and pass code review
+- \`[ai qa]\` prefix means you need to implement functionality and pass QA verification
+
+**Wrong Understanding Example**:
+- ❌ "Checkpoint says to define FailureType enum, I'll write tests to verify it exists" — This is WRONG!
+- ✅ "Checkpoint says to define FailureType enum, I need to implement it in src/types/task.ts" — This is CORRECT!
+
 ## Instructions
 
 {roleDeclaration}
 
 {timeoutInstruction}
-**Core Task**: Implement functionality based on task description and checkpoints. This is the primary goal.
 
-1. **Implement functionality** - Write code implementation based on task description and checkpoints (this is the main work)
-2. Ensure code follows project standards, run \`bun run build\` to verify compilation
-3. Write basic self-test cases to verify core functionality (Happy Path + key boundaries)
-4. Run \`bun test\` to ensure self-tests pass
-5. Summarize implementation upon completion
+### Development Steps (Execute in order)
 
-**Self-Test Note**: Self-testing is basic verification (Happy Path + key boundaries). Comprehensive test coverage is completed in QA phase. Do not over-pursue test coverage.
+1. **Understand checkpoint requirements** — Carefully read each checkpoint to understand what code or functionality to implement
+2. **Implement checkpoint-required code** — This is the main work, taking 80%+ of development time
+3. **Verify implementation** — Run \`bun run build\` to ensure compilation passes
+4. **Write self-tests** — Write basic tests for your implementation (Happy Path + key boundaries) to verify correctness
+5. **Run tests** — \`bun test\` to ensure self-tests pass
+6. **Summarize implementation** — In dev report, explain which checkpoints you implemented
+
+### Self-Test Note
+
+Self-tests verify your implementation is correct, not replace implementation. Tests should test the code you implemented, not test existing code.
 
 {extraInstructionsSection}
 {customRequirements}
@@ -173,6 +206,7 @@ The following operations are strictly prohibited:
 1. **Do NOT create new tasks** - Do not run \`task create\`, \`init-requirement\`, or any task creation commands
 2. **Do NOT modify task metadata** - Do not modify meta.json files under \`.projmnt4claude/tasks/\`
 3. **Do NOT create subtasks** - Do not split the current task into multiple subtasks and attempt to create them
+4. **Do NOT write tests without implementation** - Checkpoints require implementing code, not writing tests to verify code exists
 
 If the task truly needs to be split, **suggest** a split plan in the development report and let humans decide whether to create new tasks.
 Violating any of the above prohibitions will result in evaluation failure.`,
