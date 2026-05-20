@@ -11,6 +11,38 @@ import type { TaskMeta, CheckpointMetadata, CheckpointVerification, Verification
 import { inferCheckpointAttributesFromPrefix } from './validation-rules/checkpoint-rules';
 
 /**
+ * 从任务检查点列表中筛选符合条件的检查点
+ *
+ * 这是检查点数据访问的推荐方式，替代通过 SprintContract.checkpoints ID 引用模式。
+ * 直接从 task.checkpoints 获取完整检查点对象，保留所有元数据。
+ *
+ * @param task - 任务元数据
+ * @param filterFn - 筛选函数，返回 true 表示保留该检查点
+ * @returns 筛选后的检查点数组
+ *
+ * @example
+ * // 获取开发阶段检查点（非 code_review 和 qa 类别）
+ * const devCheckpoints = filterCheckpoints(task, cp =>
+ *   cp.category !== 'code_review' && cp.category !== 'qa'
+ * );
+ *
+ * @example
+ * // 获取代码审核检查点
+ * const codeReviewCheckpoints = filterCheckpoints(task, cp =>
+ *   cp.category === 'code_review' || cp.description?.toLowerCase().includes('[ai review]')
+ * );
+ */
+export function filterCheckpoints(
+  task: TaskMeta,
+  filterFn: (checkpoint: CheckpointMetadata) => boolean
+): CheckpointMetadata[] {
+  if (!task.checkpoints || task.checkpoints.length === 0) {
+    return [];
+  }
+  return task.checkpoints.filter(filterFn);
+}
+
+/**
  * 低质量检查点过滤结果
  */
 export interface FilterResult {
