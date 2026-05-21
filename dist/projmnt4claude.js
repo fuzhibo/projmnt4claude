@@ -11983,8 +11983,8 @@ var init_task2 = __esm(() => {
     open: ["in_progress", "closed", "abandoned"],
     in_progress: ["wait_review", "resolved", "completed", "failed", "closed", "abandoned", "open"],
     wait_review: ["wait_qa", "in_progress", "failed", "closed", "abandoned"],
-    wait_qa: ["wait_evaluation", "wait_review", "in_progress", "failed", "closed", "abandoned", "open"],
-    wait_evaluation: ["resolved", "completed", "in_progress", "wait_review", "wait_qa", "failed", "closed", "abandoned", "open"],
+    wait_qa: ["wait_evaluation", "wait_review", "in_progress", "failed", "closed", "abandoned"],
+    wait_evaluation: ["resolved", "completed", "in_progress", "wait_review", "wait_qa", "failed", "closed", "abandoned", "needs_human"],
     resolved: ["open", "in_progress", "closed"],
     completed: ["open", "in_progress", "closed"],
     closed: ["open", "in_progress"],
@@ -40397,45 +40397,29 @@ ${"━".repeat(SEPARATOR_WIDTH)}`);
           if ((task.estimatedMinutes ?? 0) > 15) {
             console.log(`   \uD83D\uDCA1 提示: 此任务预估耗时 ${task.estimatedMinutes} 分钟，建议使用 task split 命令拆分为子任务`);
           }
-          try {
+          const devLifecycleResult = await this.executePhaseLifecycle(taskId, "development", state, async () => {
             const devRetryContext = this.buildRetryContextForPhase(taskId, "development", state);
-            devReport = await this.executor.execute(task, record.contract, adaptiveTimeout, devRetryContext);
-            record.devReport = devReport;
-            addTimeline("dev_completed", `开发完成: ${devReport.status}`, { status: devReport.status });
-            this.statusReporter.completePhase("development", taskId, `开发完成: ${devReport.status}`);
-          } catch (error) {
-            devReport = {
-              taskId,
-              status: "failed",
-              changes: [],
-              evidence: [],
-              checkpointsCompleted: [],
-              startTime: new Date().toISOString(),
-              endTime: new Date().toISOString(),
-              duration: 0,
-              error: error instanceof Error ? error.message : String(error)
-            };
-            record.devReport = devReport;
-            addTimeline("dev_completed", `开发失败: ${devReport.error}`, { error: devReport.error });
-            this.statusReporter.failPhase("development", error instanceof Error ? error : new Error(String(error)), taskId);
-          }
-          if (devReport.status !== "success") {
-            const isTimeout = devReport.status === "timeout";
-            console.log(`❌ 开发阶段${isTimeout ? "超时" : "失败"}: ${devReport.error || "未知错误"}`);
-            this.statusReporter.failPhase("development", new Error(devReport.error || "开发阶段失败"), taskId);
-            this.storeFailureContext(taskId, "development", devReport.error || "开发阶段失败", state);
+            return await this.executor.execute(task, record.contract, adaptiveTimeout, devRetryContext);
+          }, (result) => {
+            devReport = result;
+            record.devReport = result;
+          });
+          if (!devLifecycleResult.success) {
+            const isTimeout = devLifecycleResult.failedAt === "phase_execution" && devReport?.status === "timeout";
+            console.log(`❌ 开发阶段失败: ${devLifecycleResult.reason}`);
             if (isTimeout) {
-              await this.markTaskFailed(taskId, "timeout", `开发超时: ${devReport.error || "超过时间限制"}`);
+              await this.markTaskFailed(taskId, "timeout", `开发超时: ${devLifecycleResult.reason}`);
               record.finalStatus = "failed";
               addTimeline("failed", "开发超时，任务标记为 failed(timeout)");
-              console.log(`   ⏰ 任务 ${taskId} 因超时标记为 failed(timeout)`);
             } else {
-              await this.markTaskFailed(taskId, "execution_failed", `开发阶段失败: ${devReport.error || "未知错误"}`);
+              await this.markTaskFailed(taskId, "execution_failed", `开发阶段失败: ${devLifecycleResult.reason}`);
               record.finalStatus = "failed";
               addTimeline("failed", "开发阶段失败，任务标记为 failed");
             }
             return record;
           }
+          addTimeline("dev_completed", `开发完成: ${devReport.status}`, { status: devReport.status });
+          this.statusReporter.completePhase("development", taskId, `开发完成: ${devReport.status}`);
           this.syncCheckpointStatus(taskId, "development", { devReport });
           await this.ensureTransition(taskId, "wait_review", "开发完成，等待代码审核");
           record.finalStatus = "wait_review";
@@ -40471,35 +40455,20 @@ ${"━".repeat(SEPARATOR_WIDTH)}`);
           this.statusReporter.startPhase("code_review", taskId, "开始代码审核阶段");
           console.log(`
 \uD83D\uDD0D 代码审核阶段...`);
-          try {
+          const crLifecycleResult = await this.executePhaseLifecycle(taskId, "code_review", state, async () => {
             const crRetryContext = this.buildRetryContextForPhase(taskId, "code_review", state);
-            codeReviewVerdict = await this.codeReviewer.review(task, devReport, crRetryContext);
-            record.codeReviewVerdict = codeReviewVerdict;
-            addTimeline("code_review_completed", `代码审核完成: ${codeReviewVerdict.result}`, { result: codeReviewVerdict.result });
-            this.statusReporter.completePhase("code_review", taskId, `代码审核完成: ${codeReviewVerdict.result}`);
-          } catch (error) {
-            codeReviewVerdict = {
-              taskId,
-              result: "NOPASS",
-              reason: `代码审核出错: ${error instanceof Error ? error.message : String(error)}`,
-              codeQualityIssues: [],
-              failedCheckpoints: [],
-              reviewedAt: new Date().toISOString(),
-              reviewedBy: "code_reviewer"
-            };
-            record.codeReviewVerdict = codeReviewVerdict;
-            addTimeline("code_review_completed", `代码审核出错: ${codeReviewVerdict.reason}`, { error: codeReviewVerdict.reason });
-            this.statusReporter.failPhase("code_review", error instanceof Error ? error : new Error(String(error)), taskId);
-          }
-          if (codeReviewVerdict.result !== "PASS") {
-            console.log(`❌ 代码审核未通过: ${codeReviewVerdict.reason}`);
-            if (this.detectFalseFailure("code_review", record)) {
-              console.log(`   ⚠️ 检测到可能的假失败：审核标记为 NOPASS 但无具体失败项，重新检查`);
-            }
-            this.storeFailureContext(taskId, "code_review", codeReviewVerdict.reason || "代码审核未通过", state);
-            this.statusReporter.failPhase("code_review", new Error(codeReviewVerdict.reason || "代码审核未通过"), taskId);
+            return await this.codeReviewer.review(task, devReport, crRetryContext);
+          }, (result) => {
+            codeReviewVerdict = result;
+            record.codeReviewVerdict = result;
+          });
+          if (!crLifecycleResult.success) {
+            console.log(`❌ 代码审核失败: ${crLifecycleResult.reason}`);
+            this.statusReporter.failPhase("code_review", new Error(crLifecycleResult.reason || "代码审核未通过"), taskId);
             return this.handleVerdictBasedTransition(taskId, record, state, addTimeline, "code_review", "redevelop");
           }
+          addTimeline("code_review_completed", `代码审核完成: ${codeReviewVerdict.result}`, { result: codeReviewVerdict.result });
+          this.statusReporter.completePhase("code_review", taskId, `代码审核完成: ${codeReviewVerdict.result}`);
           this.syncCheckpointStatus(taskId, "code_review", { codeReviewVerdict });
           await this.ensureTransition(taskId, "wait_qa", "代码审核通过，等待QA验证");
           record.finalStatus = "wait_qa";
@@ -40535,40 +40504,23 @@ ${"━".repeat(SEPARATOR_WIDTH)}`);
           this.statusReporter.startPhase("qa_verification", taskId, "开始 QA 验证阶段");
           console.log(`
 \uD83E\uDDEA QA 验证阶段...`);
-          try {
+          const qaLifecycleResult = await this.executePhaseLifecycle(taskId, "qa", state, async () => {
             const qaRetryContext = this.buildRetryContextForPhase(taskId, "qa", state);
-            qaVerdict = await this.qaTester.verify(task, codeReviewVerdict, qaRetryContext);
-            record.qaVerdict = qaVerdict;
-            addTimeline("qa_completed", `QA 验证完成: ${qaVerdict.result}`, {
-              result: qaVerdict.result,
-              requiresHuman: qaVerdict.requiresHuman
-            });
-            this.statusReporter.completePhase("qa_verification", taskId, `QA 验证完成: ${qaVerdict.result}`);
-          } catch (error) {
-            qaVerdict = {
-              taskId,
-              result: "NOPASS",
-              reason: `QA 验证出错: ${error instanceof Error ? error.message : String(error)}`,
-              testFailures: [],
-              failedCheckpoints: [],
-              requiresHuman: false,
-              humanVerificationCheckpoints: [],
-              verifiedAt: new Date().toISOString(),
-              verifiedBy: "qa_tester"
-            };
-            record.qaVerdict = qaVerdict;
-            addTimeline("qa_completed", `QA 验证出错: ${qaVerdict.reason}`, { error: qaVerdict.reason });
-            this.statusReporter.failPhase("qa_verification", error instanceof Error ? error : new Error(String(error)), taskId);
-          }
-          if (qaVerdict.result !== "PASS") {
-            console.log(`❌ QA 验证未通过: ${qaVerdict.reason}`);
-            if (this.detectFalseFailure("qa", record)) {
-              console.log(`   ⚠️ 检测到可能的假失败：QA 标记为 NOPASS 但无具体失败项，重新检查`);
-            }
-            this.storeFailureContext(taskId, "qa", qaVerdict.reason || "QA 验证未通过", state);
-            this.statusReporter.failPhase("qa_verification", new Error(qaVerdict.reason || "QA 验证未通过"), taskId);
+            return await this.qaTester.verify(task, codeReviewVerdict, qaRetryContext);
+          }, (result) => {
+            qaVerdict = result;
+            record.qaVerdict = result;
+          });
+          if (!qaLifecycleResult.success) {
+            console.log(`❌ QA 验证失败: ${qaLifecycleResult.reason}`);
+            this.statusReporter.failPhase("qa_verification", new Error(qaLifecycleResult.reason || "QA 验证未通过"), taskId);
             return this.handleVerdictBasedTransition(taskId, record, state, addTimeline, "qa", "redevelop");
           }
+          addTimeline("qa_completed", `QA 验证完成: ${qaVerdict.result}`, {
+            result: qaVerdict.result,
+            requiresHuman: qaVerdict.requiresHuman
+          });
+          this.statusReporter.completePhase("qa_verification", taskId, `QA 验证完成: ${qaVerdict.result}`);
           this.syncCheckpointStatus(taskId, "qa", { qaVerdict });
           await this.ensureTransition(taskId, "wait_evaluation", "QA验证通过");
           const qaGateResult = this.validateTransitionCompleteness(taskId, "wait_evaluation", "qa");
@@ -40600,61 +40552,16 @@ ${"━".repeat(SEPARATOR_WIDTH)}`);
         this.statusReporter.startPhase("evaluation", taskId, "开始最终评估阶段");
         console.log(`
 \uD83C\uDFAF 最终评估阶段...`);
-        let verdict;
-        try {
+        const evalLifecycleResult = await this.executePhaseLifecycle(taskId, "evaluation", state, async () => {
           const evalRetryContext = this.buildRetryContextForPhase(taskId, "evaluation", state);
-          verdict = await this.evaluator.evaluate(task, devReport, record.contract, evalRetryContext);
-          record.reviewVerdict = verdict;
-          addTimeline("review_completed", `评估完成: ${verdict.result}`, { result: verdict.result });
-          this.statusReporter.completePhase("evaluation", taskId, `评估完成: ${verdict.result}`);
-        } catch (error) {
-          verdict = {
-            taskId,
-            result: "NOPASS",
-            reason: `评估出错: ${error instanceof Error ? error.message : String(error)}`,
-            failedCriteria: [],
-            failedCheckpoints: [],
-            reviewedAt: new Date().toISOString(),
-            reviewedBy: "harness-evaluator"
-          };
-          record.reviewVerdict = verdict;
-          addTimeline("review_completed", `评估出错: ${verdict.reason}`, { error: verdict.reason });
-          this.statusReporter.failPhase("evaluation", error instanceof Error ? error : new Error(String(error)), taskId);
-        }
-        if (verdict.result === "PASS") {
-          this.syncAllPendingCheckpoints(taskId);
-          await this.assignTaskRole(taskId, "executor");
-          const retryCount = state.retryCounter.get(taskId) || 0;
-          await this.ensureTransition(taskId, "resolved", "评估通过，任务完成");
-          record.finalStatus = "resolved";
-          const evalGateResult = this.validateTransitionCompleteness(taskId, "resolved", "evaluation");
-          if (!evalGateResult.valid) {
-            await this.handleTransitionValidationFailure(taskId, "resolved", "wait_qa", "evaluation", evalGateResult.errors);
-          }
-          const taskStartTime = record.timeline[0]?.timestamp;
-          const taskDuration = taskStartTime ? new Date().getTime() - new Date(taskStartTime).getTime() : 0;
-          try {
-            recordExecutionStats(taskId, {
-              duration: taskDuration,
-              retryCount,
-              completedAt: new Date().toISOString(),
-              branch: task.branch
-            }, this.config.cwd);
-          } catch (error) {
-            console.error(`   ⚠️ 记录执行统计失败: ${error instanceof Error ? error.message : String(error)}`);
-          }
-          record.retryCount = retryCount;
-          console.log("✅ 评估通过！");
-          this.savePhaseCheckpoint(taskId, "evaluation", state);
-          addTimeline("completed", "任务完成");
-          const commitSha = this.commitTaskCompletion(taskId, task.title);
-          if (commitSha) {
-            addTimeline("committed", `任务变更已提交: ${commitSha.substring(0, 7)}`, { commitSha });
-          }
-        } else {
-          console.log(`❌ 评估未通过: ${verdict.reason}`);
-          this.statusReporter.failPhase("evaluation", new Error(verdict.reason || "评估未通过"), taskId);
-          const failRecord = await this.handleVerdictBasedTransition(taskId, record, state, addTimeline, "evaluation", verdict.action);
+          return await this.evaluator.evaluate(task, devReport, record.contract, evalRetryContext);
+        }, (result) => {
+          record.reviewVerdict = result;
+        });
+        if (!evalLifecycleResult.success) {
+          console.log(`❌ 评估失败: ${evalLifecycleResult.reason}`);
+          this.statusReporter.failPhase("evaluation", new Error(evalLifecycleResult.reason || "评估未通过"), taskId);
+          const failRecord = await this.handleVerdictBasedTransition(taskId, record, state, addTimeline, "evaluation", "redevelop");
           const failStatus = failRecord.finalStatus;
           if (failStatus !== "abandoned") {
             const evalFailGate = this.validateTransitionCompleteness(taskId, failStatus, "evaluation");
@@ -40663,6 +40570,38 @@ ${"━".repeat(SEPARATOR_WIDTH)}`);
             }
           }
           return failRecord;
+        }
+        const verdict = record.reviewVerdict;
+        addTimeline("review_completed", `评估完成: ${verdict.result}`, { result: verdict.result });
+        this.statusReporter.completePhase("evaluation", taskId, `评估完成: ${verdict.result}`);
+        this.syncAllPendingCheckpoints(taskId);
+        await this.assignTaskRole(taskId, "executor");
+        const retryCount = state.retryCounter.get(taskId) || 0;
+        await this.ensureTransition(taskId, "resolved", "评估通过，任务完成");
+        record.finalStatus = "resolved";
+        const evalGateResult = this.validateTransitionCompleteness(taskId, "resolved", "evaluation");
+        if (!evalGateResult.valid) {
+          await this.handleTransitionValidationFailure(taskId, "resolved", "wait_qa", "evaluation", evalGateResult.errors);
+        }
+        const taskStartTime = record.timeline[0]?.timestamp;
+        const taskDuration = taskStartTime ? new Date().getTime() - new Date(taskStartTime).getTime() : 0;
+        try {
+          recordExecutionStats(taskId, {
+            duration: taskDuration,
+            retryCount,
+            completedAt: new Date().toISOString(),
+            branch: task.branch
+          }, this.config.cwd);
+        } catch (error) {
+          console.error(`   ⚠️ 记录执行统计失败: ${error instanceof Error ? error.message : String(error)}`);
+        }
+        record.retryCount = retryCount;
+        console.log("✅ 评估通过！");
+        this.savePhaseCheckpoint(taskId, "evaluation", state);
+        addTimeline("completed", "任务完成");
+        const commitSha = this.commitTaskCompletion(taskId, task.title);
+        if (commitSha) {
+          addTimeline("committed", `任务变更已提交: ${commitSha.substring(0, 7)}`, { commitSha });
         }
         break;
       }
@@ -41106,8 +41045,8 @@ ${"━".repeat(SEPARATOR_WIDTH)}`);
         return record;
       }
       case "escalate_human": {
-        await this.ensureTransition(taskId, "open", `architect 建议人工介入 (action: escalate_human)`);
-        record.finalStatus = "open";
+        await this.ensureTransition(taskId, "needs_human", `architect 建议人工介入 (action: escalate_human)`);
+        record.finalStatus = "needs_human";
         addTimeline("failed", "architect 建议人工介入", { action });
         console.log("\uD83D\uDD34 任务需要人工介入");
         return record;
