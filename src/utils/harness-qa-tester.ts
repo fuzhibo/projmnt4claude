@@ -351,10 +351,11 @@ export class HarnessQATester {
       });
 
       proc.on('close', (code) => {
-        // 解析失败测试
-        failures = this.parseTestFailures(output);
+        const passed = code === 0;
+        // 解析失败测试（仅当测试失败时才解析）
+        failures = this.parseTestFailures(output, passed);
         resolve({
-          passed: code === 0,
+          passed,
           output,
           failures,
         });
@@ -374,13 +375,23 @@ export class HarnessQATester {
    * 从测试输出中解析失败的测试
    *
    * 解析流程（完全可配置化设计）：
-   * 1. 标准格式检测（JUnit XML、TAP）- 仅当配置启用时
-   * 2. 用户自定义正则规则 - 从 config.json 读取，按顺序匹配，命中即返回
-   * 3. 降级处理 - 输出原始日志摘要
+   * 1. 测试通过时直接返回空数组，无需解析
+   * 2. 标准格式检测（JUnit XML、TAP）- 仅当配置启用时
+   * 3. 用户自定义正则规则 - 从 config.json 读取，按顺序匹配，命中即返回
+   * 4. 降级处理 - 输出原始日志摘要（仅当测试失败时）
    *
    * 注意：不再使用内置硬编码规则，所有规则均从配置读取。
+   *
+   * @param output 测试输出内容
+   * @param testPassed 测试是否通过（exit code = 0）
+   * @returns 失败测试列表，测试通过时返回空数组
    */
-  private parseTestFailures(output: string): string[] {
+  private parseTestFailures(output: string, testPassed: boolean): string[] {
+    // 如果测试通过，直接返回空数组，无需解析
+    if (testPassed) {
+      return [];
+    }
+
     // 获取测试配置
     const testConfig = this.getTestConfig();
 
