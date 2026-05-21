@@ -122,6 +122,46 @@ export interface QualityConfig {
   minScore?: number;
 }
 
+/**
+ * 标准格式检测配置
+ */
+export interface StandardFormatDetection {
+  /** 是否启用 JUnit XML 检测，默认 false */
+  junitXml?: boolean;
+  /** 是否启用 TAP 检测，默认 false */
+  tap?: boolean;
+}
+
+/**
+ * 测试失败解析规则
+ */
+export interface TestFailurePattern {
+  /** 规则名称，如 "bun-fail", "jest-fail" */
+  name: string;
+  /** 正则表达式字符串（序列化用） */
+  pattern: string;
+  /** 是否启用，默认 true */
+  enabled?: boolean;
+  /** 规则描述 */
+  description?: string;
+}
+
+/**
+ * Harness 测试配置
+ */
+export interface HarnessTestConfig {
+  /** 测试命令，默认 'bun test' */
+  testCommand?: string;
+  /** 标准格式检测配置 */
+  standardFormatDetection?: StandardFormatDetection;
+  /** 自定义测试失败解析规则（优先于内置规则） */
+  testFailurePatterns?: TestFailurePattern[];
+  /** 解析失败时是否输出原始日志，默认 true */
+  fallbackToRawOutput?: boolean;
+  /** 原始输出截取长度，默认 500 */
+  rawOutputMaxLength?: number;
+}
+
 /** Harness 阶段工具配置 */
 export interface HarnessToolsConfig {
   /** 开发阶段允许的工具 */
@@ -138,6 +178,8 @@ export interface HarnessToolsConfig {
 export interface HarnessConfig {
   /** 各阶段允许的工具列表（覆盖代码默认值） */
   perPhaseTools?: HarnessToolsConfig;
+  /** 测试相关配置 */
+  test?: HarnessTestConfig;
 }
 
 /** 项目配置 */

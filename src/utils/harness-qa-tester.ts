@@ -19,6 +19,7 @@ import type {
   RetryContext,
 } from '../types/harness.js';
 import type { TaskMeta, CheckpointMetadata } from '../types/task.js';
+import type { TestFailurePattern, StandardFormatDetection, HarnessTestConfig } from '../types/config.js';
 import { validateCheckpointVerification } from '../types/task.js';
 import {
   saveReport,
@@ -371,23 +372,216 @@ export class HarnessQATester {
 
   /**
    * 从测试输出中解析失败的测试
+   *
+   * 解析流程：
+   * 1. 标准格式检测（JUnit XML、TAP）- 仅当配置启用时
+   * 2. 用户自定义正则规则 - 按顺序匹配，命中即返回
+   * 3. 内置默认规则 - 兜底处理
+   * 4. 降级处理 - 输出原始日志摘要
    */
   private parseTestFailures(output: string): string[] {
-    const failures: string[] = [];
+    // 获取测试配置
+    const testConfig = this.getTestConfig();
 
-    // Bun test 格式: "✗ test name"
-    const bunFailMatch = output.matchAll(/✗\s+(.+)/g);
-    for (const match of bunFailMatch) {
-      failures.push(match[1].trim());
+    // Step 1: 标准格式检测（仅当配置启用时）
+    if (testConfig.standardFormatDetection) {
+      const standardResult = this.tryStandardFormatDetection(output, testConfig.standardFormatDetection);
+      if (standardResult.length > 0) {
+        return standardResult;
+      }
     }
 
-    // Jest/Vitest 格式: "FAIL test-file.test.ts"
-    const jestFailMatch = output.matchAll(/FAIL\s+(.+\.(test|spec)\.[jt]sx?)/g);
-    for (const match of jestFailMatch) {
-      failures.push(match[1].trim());
+    // Step 2: 用户自定义正则规则
+    if (testConfig.testFailurePatterns && testConfig.testFailurePatterns.length > 0) {
+      const userResult = this.parseWithPatterns(output, testConfig.testFailurePatterns);
+      if (userResult.length > 0) {
+        return userResult;
+      }
+    }
+
+    // Step 3: 内置默认规则
+    const builtInResult = this.parseWithBuiltInRules(output);
+    if (builtInResult.length > 0) {
+      return builtInResult;
+    }
+
+    // Step 4: 降级处理
+    if (testConfig.fallbackToRawOutput !== false) {
+      return this.createFallbackOutput(output, testConfig.rawOutputMaxLength || 500);
+    }
+
+    return [];
+  }
+
+  /**
+   * 获取测试配置
+   */
+  private getTestConfig(): HarnessTestConfig {
+    // 尝试从项目配置加载
+    try {
+      const configPath = path.join(this.config.cwd, '.projmnt4claude', 'config.json');
+      if (fs.existsSync(configPath)) {
+        const content = fs.readFileSync(configPath, 'utf-8');
+        const projectConfig = JSON.parse(content);
+        return projectConfig.harness?.test || {};
+      }
+    } catch {
+      // 配置读取失败，使用默认配置
+    }
+    return {};
+  }
+
+  /**
+   * 尝试标准格式检测
+   */
+  private tryStandardFormatDetection(output: string, detection: StandardFormatDetection): string[] {
+    // JUnit XML 检测
+    if (detection.junitXml) {
+      const junitResult = this.parseJUnitXML(output);
+      if (junitResult.length > 0) {
+        return junitResult;
+      }
+    }
+
+    // TAP 检测
+    if (detection.tap) {
+      const tapResult = this.parseTAP(output);
+      if (tapResult.length > 0) {
+        return tapResult;
+      }
+    }
+
+    return [];
+  }
+
+  /**
+   * 解析 JUnit XML 格式
+   *
+   * 检测条件：输出以 <?xml 开头，或包含 <testsuites> 或 <testsuite> 标签
+   */
+  private parseJUnitXML(output: string): string[] {
+    const failures: string[] = [];
+
+    // 检测是否为 JUnit XML 格式
+    const isJUnitXML = output.trim().startsWith('<?xml') ||
+                       output.includes('<testsuites>') ||
+                       output.includes('<testsuite>');
+    if (!isJUnitXML) {
+      return [];
+    }
+
+    // 匹配包含 failure/error 的 testcase（直接匹配，避免贪婪匹配问题）
+    const failureTestcaseRegex = /<testcase[^>]*name="([^"]+)"[^>]*>\s*<(?:failure|error)[^>]*>[\s\S]*?<\/testcase>/g;
+    let match;
+
+    while ((match = failureTestcaseRegex.exec(output)) !== null) {
+      failures.push(match[1]);
     }
 
     return [...new Set(failures)];
+  }
+
+  /**
+   * 解析 TAP 格式
+   *
+   * 检测条件：首行为 TAP version，或输出包含 "not ok" 行
+   */
+  private parseTAP(output: string): string[] {
+    const failures: string[] = [];
+    const lines = output.split('\n');
+
+    // 检测是否为 TAP 格式
+    const isTAP = lines[0]?.trim().startsWith('TAP version') ||
+                  output.includes('not ok');
+    if (!isTAP) {
+      return [];
+    }
+
+    // 解析 "not ok" 行
+    const notOkRegex = /^not ok\s+(\d+)\s+-?\s*(.+)$/;
+    for (const line of lines) {
+      const match = line.match(notOkRegex);
+      if (match) {
+        failures.push(match[2].trim());
+      }
+    }
+
+    return [...new Set(failures)];
+  }
+
+  /**
+   * 使用正则规则解析
+   *
+   * 按顺序匹配，命中即返回
+   */
+  private parseWithPatterns(output: string, patterns: TestFailurePattern[]): string[] {
+    for (const pattern of patterns) {
+      // 跳过禁用的规则
+      if (pattern.enabled === false) {
+        continue;
+      }
+
+      try {
+        const regex = new RegExp(pattern.pattern, 'g');
+        const failures: string[] = [];
+        let match;
+
+        while ((match = regex.exec(output)) !== null) {
+          if (match[1]) {
+            failures.push(match[1].trim());
+          }
+        }
+
+        // 命中即返回
+        if (failures.length > 0) {
+          return [...new Set(failures)];
+        }
+      } catch {
+        // 正则表达式无效，跳过该规则
+        console.warn(`   ⚠️ 无效的正则表达式规则: ${pattern.name}`);
+      }
+    }
+
+    return [];
+  }
+
+  /**
+   * 使用内置默认规则解析
+   */
+  private parseWithBuiltInRules(output: string): string[] {
+    const builtInPatterns: TestFailurePattern[] = [
+      {
+        name: 'bun-fail-new',
+        pattern: '\\(fail\\)\\s+(.+)',
+        enabled: true,
+        description: 'Bun 测试框架 (fail) 格式',
+      },
+      {
+        name: 'bun-fail-old',
+        pattern: '✗\\s+(.+)',
+        enabled: true,
+        description: 'Bun 测试框架 ✗ 格式',
+      },
+      {
+        name: 'jest-vitest',
+        pattern: 'FAIL\\s+(.+\\.(test|spec)\\.[jt]sx?)',
+        enabled: true,
+        description: 'Jest/Vitest FAIL 格式',
+      },
+    ];
+
+    return this.parseWithPatterns(output, builtInPatterns);
+  }
+
+  /**
+   * 创建降级输出
+   */
+  private createFallbackOutput(output: string, maxLength: number): string[] {
+    const truncated = output.length > maxLength
+      ? output.slice(0, maxLength) + '...'
+      : output;
+
+    return [`[解析失败，输出原始日志摘要]\n${truncated}`];
   }
 
   /**
