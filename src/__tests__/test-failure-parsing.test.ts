@@ -729,4 +729,38 @@ describe('Test Failure Parsing - Configuration', () => {
     // Should use configured patterns
     expect(result).toContain('test-name');
   });
+
+  // CP-CF-04: 正则表达式验证
+  test('CP-CF-04: Invalid regex throws error on startup', async () => {
+    const config: HarnessConfig = {
+      maxRetries: 3,
+      timeout: 300,
+      parallel: 1,
+      dryRun: false,
+      continue: false,
+      jsonOutput: false,
+      cwd: tempDir,
+      batchGitTagCommit: false,
+      taskGitCommit: false,
+      forceContinue: false,
+    };
+
+    // Configure invalid regex pattern
+    fs.mkdirSync(path.dirname(configPath), { recursive: true });
+    fs.writeFileSync(configPath, JSON.stringify({
+      harness: {
+        test: {
+          testFailurePatterns: [
+            { name: 'invalid', pattern: '[invalid(regex', enabled: true },
+          ],
+        },
+      },
+    }));
+
+    const tester = createTester(configPath, config);
+
+    // Calling parseTestFailures should throw error for invalid regex
+    const parseMethod = (tester as unknown as { parseTestFailures: (o: string) => string[] }).parseTestFailures.bind(tester);
+    expect(() => parseMethod('test output')).toThrow();
+  });
 });

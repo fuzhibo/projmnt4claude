@@ -413,6 +413,8 @@ export class HarnessQATester {
 
   /**
    * 获取测试配置
+   *
+   * 加载配置时会验证正则表达式合法性，非法正则会在启动时报错。
    */
   private getTestConfig(): HarnessTestConfig {
     // 尝试从项目配置加载
@@ -421,12 +423,45 @@ export class HarnessQATester {
       if (fs.existsSync(configPath)) {
         const content = fs.readFileSync(configPath, 'utf-8');
         const projectConfig = JSON.parse(content);
-        return projectConfig.harness?.test || {};
+        const testConfig = projectConfig.harness?.test || {};
+
+        // 验证正则表达式合法性
+        if (testConfig.testFailurePatterns) {
+          this.validatePatterns(testConfig.testFailurePatterns);
+        }
+
+        return testConfig;
       }
-    } catch {
-      // 配置读取失败，使用默认配置
+    } catch (error) {
+      // 配置读取失败或正则验证失败，抛出错误
+      if (error instanceof Error && error.message.startsWith('正则表达式验证失败')) {
+        throw error;
+      }
+      // 其他错误使用默认配置
     }
     return {};
+  }
+
+  /**
+   * 验证正则表达式合法性
+   *
+   * 在配置加载时验证，非法正则会在启动时报错。
+   */
+  private validatePatterns(patterns: TestFailurePattern[]): void {
+    for (const pattern of patterns) {
+      if (pattern.enabled === false) {
+        continue; // 跳过禁用的规则
+      }
+
+      try {
+        new RegExp(pattern.pattern, 'g');
+      } catch (error) {
+        const errorMessage = error instanceof Error ? error.message : String(error);
+        throw new Error(
+          `正则表达式验证失败: 规则 "${pattern.name}" 的正则 "${pattern.pattern}" 无效 - ${errorMessage}`
+        );
+      }
+    }
   }
 
   /**
