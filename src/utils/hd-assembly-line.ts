@@ -40,7 +40,7 @@ import {
   DEFAULT_PHASE_RETRY_LIMITS,
   ERROR_CATEGORIES,
 } from '../types/harness.js';
-import type { TaskMeta, TaskStatus, TaskRole, CheckpointMetadata, CommitHistoryEntry, TransitionNote, PhaseHistoryEntry, FailureReason, TaskFailureReason } from '../types/task.js';
+import type { TaskMeta, TaskStatus, TaskRole, CheckpointMetadata, CommitHistoryEntry, TransitionNote, PhaseHistoryEntry, FailureReason, TaskFailureReason, FailureType } from '../types/task.js';
 import { Pipeline, normalizeStatus } from '../types/task.js';
 import { readTaskMeta, writeTaskMeta, taskExists, updateTaskStatus, assignRole, incrementReopenCount, recordExecutionStats } from './task.js';
 import { getProjectDir } from './path.js';
@@ -54,6 +54,10 @@ import { saveRuntimeState } from '../commands/harness.js';
 import { validateBasicFields, validateCheckpoints } from './quality-gate.js';
 import { DependencyGraph, executeFailureCascade } from './dependency-graph/index.js';
 import { SEPARATOR_WIDTH } from './format';
+import {
+  verifyAndRecordCheckpoint,
+  inferCategoryFromCheckpoint,
+} from './checkpoint-verification.js';
 
 /** 阶段类型定义 (P4: 阶段内重试) */
 type Phase = 'development' | 'code_review' | 'qa' | 'evaluation';
@@ -69,6 +73,12 @@ interface PhaseLifecycleResult {
   result?: DevReport | CodeReviewVerdict | QAVerdict | ReviewVerdict;
   /** §9: Rollback result if rollback was performed */
   rollbackResult?: RollbackResult;
+  /**
+   * 失败类型分类
+   * - 'A': Task Foundation - 任务数据有效性检查失败，需中断流水线
+   * - 'B': Phase Artifact - 阶段输出质量检查失败，需回退到阶段起点重试
+   */
+  failureType?: FailureType;
 }
 
 export class AssemblyLine {
@@ -838,18 +848,17 @@ export class AssemblyLine {
       if (!canProceed) {
         console.log(`   ❌ 阶段前置条件检查失败`);
 
-        if (attempt <= maxRetries) {
-          console.log(`   🔄 前置条件不满足，准备重试...`);
-          continue; // CP-P4-2: 阶段内重试，不入队
-        }
-
+        // CP-005: A 类门禁失败（Task Foundation）- 中断流水线，不重试
+        // 阶段前门禁检查任务数据本身有效性，失败说明任务数据有问题，重试无意义
+        console.log(`   🚫 A 类门禁失败，中断流水线（任务数据有效性检查失败）`);
         return {
           success: false,
           phase,
           failedAt: 'pre_phase_gate',
           attempt,
-          reason: `阶段前置条件检查失败`,
+          reason: `阶段前置条件检查失败（A 类门禁）`,
           retryable: false,
+          failureType: 'A',
         };
       }
       console.log(`   ✅ 阶段前置条件检查通过`);
@@ -901,11 +910,13 @@ export class AssemblyLine {
       if (!postGatePassed) {
         console.log(`   ❌ 阶段后质量门禁失败`);
 
+        // CP-005: B 类门禁失败（Phase Artifact）- 回退到阶段起点重试
+        // 阶段后门禁检查阶段输出质量，失败说明产出不达标，重试可能改善
         if (attempt <= maxRetries) {
-          console.log(`   🔄 阶段输出不符合要求，准备重试...`);
+          console.log(`   🔄 B 类门禁失败，回退到阶段起点重试...`);
           this.incrementPhaseRetryCount(taskId, phase, state);
           state.retryCounter.set(taskId, (state.retryCounter.get(taskId) || 0) + 1);
-          continue; // CP-P4-2: 阶段内重试，不入队
+          continue; // CP-P4-2: 阶段内重试，回退到阶段起点
         }
 
         return {
@@ -913,8 +924,9 @@ export class AssemblyLine {
           phase,
           failedAt: 'post_phase_gate',
           attempt,
-          reason: `阶段后质量门禁失败（${attempt}次尝试）`,
+          reason: `阶段后质量门禁失败（B 类门禁，${attempt}次尝试）`,
           retryable: false,
+          failureType: 'B',
         };
       }
       console.log(`   ✅ 阶段后质量门禁通过`);
@@ -1011,8 +1023,9 @@ export class AssemblyLine {
   /**
    * 同步检查点状态
    * 在流水线阶段完成后，根据阶段结果自动更新对应检查点为 completed
+   * CP-006: 接入产出验证，检测假成功
    */
-  private syncCheckpointStatus(
+  private async syncCheckpointStatus(
     taskId: string,
     phase: 'development' | 'code_review' | 'qa',
     phaseData?: {
@@ -1020,13 +1033,14 @@ export class AssemblyLine {
       codeReviewVerdict?: CodeReviewVerdict;
       qaVerdict?: QAVerdict;
     }
-  ): void {
+  ): Promise<void> {
     try {
       const task = readTaskMeta(taskId, this.config.cwd);
       if (!task?.checkpoints?.length) return;
 
       const now = new Date().toISOString();
       let updated = false;
+      const warnings: string[] = [];
 
       for (const checkpoint of task.checkpoints) {
         // 跳过已完成/已跳过的检查点
@@ -1035,6 +1049,22 @@ export class AssemblyLine {
         const shouldComplete = this.matchCheckpointToPhase(checkpoint, phase, phaseData);
         if (!shouldComplete) continue;
 
+        // CP-006: 阶段自动同步接入产出验证
+        const verificationOutput = await verifyAndRecordCheckpoint(task, checkpoint.id, 'phase_sync', this.config.cwd, {
+          phase,
+          devReport: phaseData?.devReport,
+          codeReviewVerdict: phaseData?.codeReviewVerdict,
+          qaVerdict: phaseData?.qaVerdict,
+        });
+
+        if (verificationOutput.result === 'unverified' || verificationOutput.result === 'failed') {
+          // 记录警告但继续标记（阶段通过即认为完成）
+          if (verificationOutput.warnings) {
+            warnings.push(...verificationOutput.warnings.map(w => `${checkpoint.id}: ${w}`));
+          }
+          console.log(`   ⚠️ 检查点 ${checkpoint.id} 产出验证未通过，但阶段已通过，仍标记为 completed`);
+        }
+
         checkpoint.status = 'completed';
         checkpoint.updatedAt = now;
         checkpoint.note = `${phase} 阶段通过后自动同步`;
@@ -1042,12 +1072,20 @@ export class AssemblyLine {
         if (!checkpoint.verification) {
           checkpoint.verification = { method: 'automated' };
         }
-        checkpoint.verification.result = 'passed';
+        checkpoint.verification.result = verificationOutput.result === 'verified' ? 'passed' : 'passed (with warnings)';
         checkpoint.verification.verifiedAt = now;
         checkpoint.verification.verifiedBy = `${phase}_phase`;
 
         updated = true;
         console.log(`   ✓ 检查点 ${checkpoint.id} 已自动标记为 completed (${phase})`);
+      }
+
+      // 输出假成功警告
+      if (warnings.length > 0) {
+        console.log(`\n   ⚠️  假成功检测警告 (${warnings.length} 个):`);
+        for (const warning of warnings) {
+          console.log(`      - ${warning}`);
+        }
       }
 
       if (updated) {

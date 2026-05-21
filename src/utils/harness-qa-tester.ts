@@ -627,6 +627,11 @@ export class HarnessQATester {
     return [...new Set(flakyTests)];
   }
 
+  // 测试卫生检测白名单：这些文件中的 .only/.skip/mock.module 是测试数据，不是调试残留
+  private static readonly TEST_HYGIENE_WHITELIST = [
+    'harness-qa-tester.test.ts', // 测试卫生检测功能的测试文件
+  ];
+
   /**
    * 检查测试卫生：检测 .only/.skip/mock.module 泄漏
    * @param testDir 测试目录，默认为 'src/__tests__'
@@ -655,9 +660,16 @@ export class HarnessQATester {
     console.log(`   📄 扫描 ${testFiles.length} 个测试文件...`);
 
     for (const file of testFiles) {
+      const relativePath = path.relative(this.config.cwd, file);
+      const fileName = path.basename(file);
+
+      // 跳过白名单文件（这些文件中的 .only/.skip/mock.module 是测试数据，不是调试残留）
+      if (HarnessQATester.TEST_HYGIENE_WHITELIST.includes(fileName)) {
+        continue;
+      }
+
       const content = fs.readFileSync(file, 'utf-8');
       const lines = content.split('\n');
-      const relativePath = path.relative(this.config.cwd, file);
 
       lines.forEach((line, index) => {
         const lineNum = index + 1;

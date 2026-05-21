@@ -39028,9 +39028,10 @@ ${texts.harness.logs.existingFiles || "Existing Files"}:`);
         output += data.toString();
       });
       proc.on("close", (code) => {
-        failures = this.parseTestFailures(output);
+        const passed = code === 0;
+        failures = this.parseTestFailures(output, passed);
         resolve9({
-          passed: code === 0,
+          passed,
           output,
           failures
         });
@@ -39044,7 +39045,10 @@ ${texts.harness.logs.existingFiles || "Existing Files"}:`);
       });
     });
   }
-  parseTestFailures(output) {
+  parseTestFailures(output, testPassed) {
+    if (testPassed) {
+      return [];
+    }
     const testConfig = this.getTestConfig();
     if (testConfig.standardFormatDetection) {
       const standardResult = this.tryStandardFormatDetection(output, testConfig.standardFormatDetection);
@@ -39182,6 +39186,9 @@ ${truncated}`];
     }
     return [...new Set(flakyTests)];
   }
+  static TEST_HYGIENE_WHITELIST = [
+    "harness-qa-tester.test.ts"
+  ];
   async checkTestHygiene(testDir = "src/__tests__") {
     const issues = [];
     const testPath = path25.isAbsolute(testDir) ? testDir : path25.join(this.config.cwd, testDir);
@@ -39197,10 +39204,14 @@ ${truncated}`];
     const testFiles = this.findTestFiles(testPath);
     console.log(`   \uD83D\uDCC4 扫描 ${testFiles.length} 个测试文件...`);
     for (const file of testFiles) {
+      const relativePath = path25.relative(this.config.cwd, file);
+      const fileName = path25.basename(file);
+      if (HarnessQATester.TEST_HYGIENE_WHITELIST.includes(fileName)) {
+        continue;
+      }
       const content = fs29.readFileSync(file, "utf-8");
       const lines = content.split(`
 `);
-      const relativePath = path25.relative(this.config.cwd, file);
       lines.forEach((line, index) => {
         const lineNum = index + 1;
         const onlyMatch = line.match(/\.only\s*[\(\{]/);

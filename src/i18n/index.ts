@@ -233,6 +233,10 @@ export interface I18nTexts {
     acceptanceCriteriaInstruction: string;
     checkpoints: string;
     checkpointsInstruction: string;
+    checkpointCategoryGeneral: string;
+    checkpointCategoryCodeReview: string;
+    checkpointCategoryQA: string;
+    checkpointCategoryEvaluation: string;
     timeoutInstruction: string;
     roleSpecificRequirements: string;
     retryContext: string;

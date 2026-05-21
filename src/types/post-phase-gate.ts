@@ -10,7 +10,7 @@
  * @module post-phase-gate
  */
 
-import type { TaskMeta } from './task.js';
+import type { TaskMeta, FailureType } from './task.js';
 import type { DevReport, CodeReviewVerdict, QAVerdict } from './harness.js';
 
 /**
@@ -81,6 +81,13 @@ export interface PostPhaseGateRule {
   enabled: boolean;
   /** 是否为阻塞规则 */
   blocking: boolean;
+  /**
+   * 失败类型分类
+   * - 'A': Task Foundation - 任务数据有效性检查，失败需中断流水线
+   * - 'B': Phase Artifact - 阶段输出质量检查，失败需回退到阶段起点重试
+   * 阶段后门禁默认为 'B' 类（检查阶段输出质量）
+   */
+  failureType?: FailureType;
   /** 规则配置参数 */
   config?: Record<string, unknown>;
 }
@@ -254,6 +261,7 @@ export const DEFAULT_DEV_POST_PHASE_RULES: PostPhaseGateRule[] = [
     description: '验证开发阶段是否成功完成',
     enabled: true,
     blocking: true,
+    failureType: 'B',
   },
   {
     id: 'dev-artifact-validation',
@@ -262,6 +270,7 @@ export const DEFAULT_DEV_POST_PHASE_RULES: PostPhaseGateRule[] = [
     description: '验证开发产物是否完整',
     enabled: true,
     blocking: true,
+    failureType: 'B',
   },
   {
     id: 'dev-checkpoint-completion',
@@ -270,6 +279,7 @@ export const DEFAULT_DEV_POST_PHASE_RULES: PostPhaseGateRule[] = [
     description: '验证开发阶段检查点完成情况',
     enabled: true,
     blocking: false,
+    failureType: 'B',
     config: { minCompletionRate: 0.8 },
   },
   {
@@ -279,6 +289,7 @@ export const DEFAULT_DEV_POST_PHASE_RULES: PostPhaseGateRule[] = [
     description: '检查代码变更和测试是否就绪',
     enabled: true,
     blocking: true,
+    failureType: 'B',
   },
 ];
 
@@ -293,6 +304,7 @@ export const DEFAULT_CR_POST_PHASE_RULES: PostPhaseGateRule[] = [
     description: '验证代码审核是否成功完成',
     enabled: true,
     blocking: true,
+    failureType: 'B',
   },
   {
     id: 'cr-review-approval',
@@ -301,6 +313,7 @@ export const DEFAULT_CR_POST_PHASE_RULES: PostPhaseGateRule[] = [
     description: '验证代码审核是否获得批准',
     enabled: true,
     blocking: true,
+    failureType: 'B',
   },
   {
     id: 'cr-artifact-validation',
@@ -309,6 +322,7 @@ export const DEFAULT_CR_POST_PHASE_RULES: PostPhaseGateRule[] = [
     description: '验证代码审核产物是否完整',
     enabled: true,
     blocking: false,
+    failureType: 'B',
   },
   {
     id: 'cr-quality-score',
@@ -317,6 +331,7 @@ export const DEFAULT_CR_POST_PHASE_RULES: PostPhaseGateRule[] = [
     description: '检查代码审核后的质量分数',
     enabled: true,
     blocking: false,
+    failureType: 'B',
     config: { minScore: 60 },
   },
 ];
@@ -332,6 +347,7 @@ export const DEFAULT_QA_POST_PHASE_RULES: PostPhaseGateRule[] = [
     description: '验证QA阶段是否成功完成',
     enabled: true,
     blocking: true,
+    failureType: 'B',
   },
   {
     id: 'qa-test-results',
@@ -340,6 +356,7 @@ export const DEFAULT_QA_POST_PHASE_RULES: PostPhaseGateRule[] = [
     description: '验证QA测试结果是否通过',
     enabled: true,
     blocking: true,
+    failureType: 'B',
   },
   {
     id: 'qa-review-approval',
@@ -348,6 +365,7 @@ export const DEFAULT_QA_POST_PHASE_RULES: PostPhaseGateRule[] = [
     description: '验证QA是否获得批准',
     enabled: true,
     blocking: true,
+    failureType: 'B',
   },
   {
     id: 'qa-deliverable-check',
@@ -356,6 +374,7 @@ export const DEFAULT_QA_POST_PHASE_RULES: PostPhaseGateRule[] = [
     description: '检查QA报告和测试结果',
     enabled: true,
     blocking: false,
+    failureType: 'B',
   },
 ];
 
@@ -370,6 +389,7 @@ export const DEFAULT_EVAL_POST_PHASE_RULES: PostPhaseGateRule[] = [
     description: '验证评估阶段是否成功完成',
     enabled: true,
     blocking: true,
+    failureType: 'B',
   },
   {
     id: 'eval-deliverable-check',
@@ -378,6 +398,7 @@ export const DEFAULT_EVAL_POST_PHASE_RULES: PostPhaseGateRule[] = [
     description: '检查最终评估报告',
     enabled: true,
     blocking: true,
+    failureType: 'B',
   },
   {
     id: 'eval-quality-score',
@@ -386,6 +407,7 @@ export const DEFAULT_EVAL_POST_PHASE_RULES: PostPhaseGateRule[] = [
     description: '检查最终质量分数是否达标',
     enabled: true,
     blocking: false,
+    failureType: 'B',
     config: { minScore: 70 },
   },
   {
@@ -395,6 +417,7 @@ export const DEFAULT_EVAL_POST_PHASE_RULES: PostPhaseGateRule[] = [
     description: '验证所有阶段是否已完成',
     enabled: true,
     blocking: true,
+    failureType: 'B',
   },
 ];
 

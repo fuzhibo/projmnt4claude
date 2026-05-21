@@ -105,16 +105,24 @@ describe('applyStatusInferenceFix E2E', () => {
     writeReport(reportDirB, 'dev-report.md', 'PASS');
 
     // Task C: resolved with all pending checkpoints → complete_checkpoints (CP-7)
+    // CP-008: 需要产出证据才能自动标记完成
     const now = new Date().toISOString();
     const taskC = createTask({
       id: 'TASK-feature-P2-task-c-20260411',
       status: 'resolved',
       checkpoints: [
-        { id: 'CP-1', description: 'Test A', status: 'pending', createdAt: now, updatedAt: now },
-        { id: 'CP-2', description: 'Test B', status: 'pending', createdAt: now, updatedAt: now },
+        // 使用 implementation 类别描述，避免被推断为 testing
+        { id: 'CP-1', description: '实现功能 A', status: 'pending', createdAt: now, updatedAt: now },
+        { id: 'CP-2', description: '实现功能 B', status: 'pending', createdAt: now, updatedAt: now },
       ] as CheckpointMetadata[],
     });
     setupProjectWithTask(tmpDir, taskC);
+    // 创建产出证据目录和开发报告，使检查点可以被验证
+    const evidenceDirC = path.join(tmpDir, '.projmnt4claude', 'evidence', taskC.id);
+    fs.mkdirSync(evidenceDirC, { recursive: true });
+    fs.writeFileSync(path.join(evidenceDirC, 'test-evidence.txt'), 'evidence content');
+    const reportDirC = createReportDir(tmpDir, taskC.id);
+    writeReport(reportDirC, 'dev-report.md', 'PASS');
 
     // Run the unified fix pipeline
     const { applyStatusInferenceFix } = await import('../commands/analyze-fix-pipeline');

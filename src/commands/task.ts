@@ -18,6 +18,10 @@ import {
   listCheckpoints,
   filterLowQualityCheckpoints,
 } from '../utils/checkpoint';
+import {
+  verifyAndRecordCheckpoint,
+  inferCategoryFromCheckpoint,
+} from '../utils/checkpoint-verification';
 import type {
   TaskMeta,
   TaskPriority,
@@ -3474,7 +3478,48 @@ export async function updateCheckpoint(
   syncCheckpointsToMeta(taskId, cwd);
 
   switch (action) {
-    case 'complete':
+    case 'complete': {
+      // CP-005: CLI 手动标记接入产出验证
+      const verificationOutput = await verifyAndRecordCheckpoint(task, checkpointId, 'cli_manual', cwd);
+
+      if (verificationOutput.result === 'unverified' || verificationOutput.result === 'failed') {
+        // 显示警告但允许用户继续标记
+        if (verificationOutput.warnings && verificationOutput.warnings.length > 0) {
+          console.log(`\n⚠️  产出验证警告:`);
+          for (const warning of verificationOutput.warnings) {
+            console.log(`   - ${warning}`);
+          }
+        }
+
+        // 如果有建议操作，显示给用户
+        if (verificationOutput.suggestedActions && verificationOutput.suggestedActions.length > 0) {
+          console.log(`\n📋 建议操作:`);
+          for (const action of verificationOutput.suggestedActions) {
+            console.log(`   - ${action}`);
+          }
+        }
+
+        // 询问用户是否继续
+        if (!options.yes) {
+          const response = await prompts({
+            type: 'confirm',
+            name: 'continue',
+            message: '未找到产出证据，是否仍要标记为完成？',
+            initial: false,
+          });
+
+          if (!response.continue) {
+            console.log('操作已取消');
+            return;
+          }
+        }
+      } else if (verificationOutput.result === 'verified') {
+        console.log(`✅ 产出验证通过`);
+        if (verificationOutput.record.evidence && verificationOutput.record.evidence.length > 0) {
+          console.log(`   证据: ${verificationOutput.record.evidence.join(', ')}`);
+        }
+      }
+
       updateCheckpointStatus(taskId, checkpointId, 'completed', {
         result: options.result,
         note: options.note,
@@ -3484,6 +3529,7 @@ export async function updateCheckpoint(
         console.log(`   Verification result: ${options.result}`);
       }
       break;
+    }
 
     case 'fail':
       updateCheckpointStatus(taskId, checkpointId, 'failed', {

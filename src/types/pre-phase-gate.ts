@@ -9,7 +9,7 @@
  * @module pre-phase-gate
  */
 
-import type { TaskMeta } from './task.js';
+import type { TaskMeta, FailureType } from './task.js';
 import type { DevReport, CodeReviewVerdict, QAVerdict } from './harness.js';
 
 /**
@@ -77,6 +77,13 @@ export interface PhaseGateRule {
   enabled: boolean;
   /** 是否为阻塞规则 */
   blocking: boolean;
+  /**
+   * 失败类型分类
+   * - 'A': Task Foundation - 任务数据有效性检查，失败需中断流水线
+   * - 'B': Phase Artifact - 阶段输出质量检查，失败需回退到阶段起点重试
+   * 阶段前门禁默认为 'A' 类（检查任务数据本身有效性）
+   */
+  failureType?: FailureType;
   /** 规则配置参数 */
   config?: Record<string, unknown>;
 }
@@ -224,6 +231,7 @@ export const DEFAULT_DEV_PHASE_RULES: PhaseGateRule[] = [
     description: '检查任务是否满足开始开发的条件',
     enabled: true,
     blocking: true,
+    failureType: 'A',
   },
   {
     id: 'dev-status-check',
@@ -232,6 +240,7 @@ export const DEFAULT_DEV_PHASE_RULES: PhaseGateRule[] = [
     description: '验证任务当前状态是否允许开始开发',
     enabled: true,
     blocking: true,
+    failureType: 'A',
   },
   {
     id: 'dev-quality-score',
@@ -240,6 +249,7 @@ export const DEFAULT_DEV_PHASE_RULES: PhaseGateRule[] = [
     description: '检查任务质量分数是否达到开发要求',
     enabled: true,
     blocking: false,
+    failureType: 'A',
     config: { minScore: 50 },
   },
 ];
@@ -255,6 +265,7 @@ export const DEFAULT_CR_PHASE_RULES: PhaseGateRule[] = [
     description: '验证开发阶段是否成功完成并产生必要产物',
     enabled: true,
     blocking: true,
+    failureType: 'A',
   },
   {
     id: 'cr-dev-report-check',
@@ -263,6 +274,7 @@ export const DEFAULT_CR_PHASE_RULES: PhaseGateRule[] = [
     description: '检查开发报告是否存在且状态为成功',
     enabled: true,
     blocking: true,
+    failureType: 'A',
   },
   {
     id: 'cr-checkpoint-validation',
@@ -271,6 +283,7 @@ export const DEFAULT_CR_PHASE_RULES: PhaseGateRule[] = [
     description: '验证开发阶段检查点是否已完成',
     enabled: true,
     blocking: false,
+    failureType: 'A',
   },
 ];
 
@@ -285,6 +298,7 @@ export const DEFAULT_QA_PHASE_RULES: PhaseGateRule[] = [
     description: '验证代码审核是否通过',
     enabled: true,
     blocking: true,
+    failureType: 'A',
   },
   {
     id: 'qa-artifact-check',
@@ -293,6 +307,7 @@ export const DEFAULT_QA_PHASE_RULES: PhaseGateRule[] = [
     description: '验证代码审核产物是否完整',
     enabled: true,
     blocking: true,
+    failureType: 'A',
   },
   {
     id: 'qa-quality-score',
@@ -301,6 +316,7 @@ export const DEFAULT_QA_PHASE_RULES: PhaseGateRule[] = [
     description: '检查任务质量分数是否达到QA要求',
     enabled: true,
     blocking: false,
+    failureType: 'A',
     config: { minScore: 60 },
   },
 ];
@@ -316,6 +332,7 @@ export const DEFAULT_EVAL_PHASE_RULES: PhaseGateRule[] = [
     description: '验证QA阶段是否成功完成',
     enabled: true,
     blocking: true,
+    failureType: 'A',
   },
   {
     id: 'eval-all-phases-check',
@@ -324,6 +341,7 @@ export const DEFAULT_EVAL_PHASE_RULES: PhaseGateRule[] = [
     description: '验证所有前置阶段是否已完成',
     enabled: true,
     blocking: true,
+    failureType: 'A',
   },
   {
     id: 'eval-quality-score',
@@ -332,6 +350,7 @@ export const DEFAULT_EVAL_PHASE_RULES: PhaseGateRule[] = [
     description: '检查任务质量分数是否达到评估要求',
     enabled: true,
     blocking: false,
+    failureType: 'A',
     config: { minScore: 70 },
   },
 ];

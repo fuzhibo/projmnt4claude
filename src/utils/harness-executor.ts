@@ -28,6 +28,7 @@ import { archiveReportIfExists } from './harness-helpers.js';
 import { getAgent, buildEffectiveTools } from './headless-agent.js';
 import { createSessionAwareEngine } from './feedback-constraint-engine.js';
 import { loadPromptTemplate, resolveTemplate, loadCustomRequirements } from './prompt-templates.js';
+import { detectFalseSuccess } from './checkpoint-verification.js';
 import { t, getI18n } from '../i18n/index.js';
 
 export class HarnessExecutor {
@@ -212,6 +213,136 @@ export class HarnessExecutor {
   }
 
   /**
+   * 按阶段分组检查点
+   * 开发阶段需要看到所有检查点作为约束，但按类别分组有助于理解
+   *
+   * @param checkpoints - 检查点列表
+   * @returns 按阶段分组的检查点
+   */
+  private groupCheckpointsByPhase(checkpoints: TaskMeta['checkpoints']): {
+    codeReview: typeof checkpoints;
+    qa: typeof checkpoints;
+    evaluation: typeof checkpoints;
+    general: typeof checkpoints;
+  } {
+    const result = {
+      codeReview: [] as typeof checkpoints,
+      qa: [] as typeof checkpoints,
+      evaluation: [] as typeof checkpoints,
+      general: [] as typeof checkpoints,
+    };
+
+    if (!checkpoints || checkpoints.length === 0) {
+      return result;
+    }
+
+    for (const cp of checkpoints) {
+      // 根据描述前缀判断阶段
+      const desc = cp.description.toLowerCase();
+
+      if (cp.category === 'code_review' || desc.includes('[ai review]') || desc.includes('代码审查') || desc.includes('code review')) {
+        result.codeReview.push(cp);
+      } else if (cp.category === 'qa_verification' || desc.includes('[ai qa]') || desc.includes('qa验证') || desc.includes('测试验证')) {
+        result.qa.push(cp);
+      } else if (desc.includes('[script]') || desc.includes('脚本') || desc.includes('自动化')) {
+        result.evaluation.push(cp);
+      } else {
+        result.general.push(cp);
+      }
+    }
+
+    return result;
+  }
+
+  /**
+   * 构建检查点约束章节
+   * 输出完整检查点描述 + 验证命令/步骤
+   *
+   * @param checkpoints - 检查点列表
+   * @param texts - 国际化文本
+   * @returns 格式化的检查点约束章节
+   */
+  private buildCheckpointConstraintsSection(
+    checkpoints: TaskMeta['checkpoints'],
+    texts: ReturnType<typeof t>
+  ): string {
+    if (!checkpoints || checkpoints.length === 0) {
+      return '';
+    }
+
+    const lines: string[] = [];
+    lines.push(`## ${texts.harness.checkpoints}`);
+    lines.push('');
+    lines.push(texts.harness.checkpointsInstruction);
+    lines.push('');
+
+    // 按阶段分组展示
+    const grouped = this.groupCheckpointsByPhase(checkpoints);
+
+    // 通用检查点（开发阶段主要关注）
+    if (grouped.general.length > 0) {
+      lines.push(`### ${texts.harness.checkpointCategoryGeneral || '开发检查点'}`);
+      for (const cp of grouped.general) {
+        lines.push(`- [${cp.id}] ${cp.description}`);
+        if (cp.verification?.commands?.length) {
+          lines.push(`  - 验证命令: \`${cp.verification.commands.join(' && ')}\``);
+        }
+        if (cp.verification?.expected) {
+          lines.push(`  - 预期结果: ${cp.verification.expected}`);
+        }
+      }
+      lines.push('');
+    }
+
+    // 代码审查检查点
+    if (grouped.codeReview.length > 0) {
+      lines.push(`### ${texts.harness.checkpointCategoryCodeReview || '代码审查检查点'}`);
+      for (const cp of grouped.codeReview) {
+        lines.push(`- [${cp.id}] ${cp.description}`);
+        if (cp.verification?.commands?.length) {
+          lines.push(`  - 验证命令: \`${cp.verification.commands.join(' && ')}\``);
+        }
+        if (cp.verification?.expected) {
+          lines.push(`  - 预期结果: ${cp.verification.expected}`);
+        }
+      }
+      lines.push('');
+    }
+
+    // QA 验证检查点
+    if (grouped.qa.length > 0) {
+      lines.push(`### ${texts.harness.checkpointCategoryQA || 'QA 验证检查点'}`);
+      for (const cp of grouped.qa) {
+        lines.push(`- [${cp.id}] ${cp.description}`);
+        if (cp.verification?.commands?.length) {
+          lines.push(`  - 验证命令: \`${cp.verification.commands.join(' && ')}\``);
+        }
+        if (cp.verification?.expected) {
+          lines.push(`  - 预期结果: ${cp.verification.expected}`);
+        }
+      }
+      lines.push('');
+    }
+
+    // 自动化验证检查点
+    if (grouped.evaluation.length > 0) {
+      lines.push(`### ${texts.harness.checkpointCategoryEvaluation || '自动化验证检查点'}`);
+      for (const cp of grouped.evaluation) {
+        lines.push(`- [${cp.id}] ${cp.description}`);
+        if (cp.verification?.commands?.length) {
+          lines.push(`  - 验证命令: \`${cp.verification.commands.join(' && ')}\``);
+        }
+        if (cp.verification?.expected) {
+          lines.push(`  - 预期结果: ${cp.verification.expected}`);
+        }
+      }
+      lines.push('');
+    }
+
+    return lines.join('\n');
+  }
+
+  /**
    * 构建开发提示词
    * @param task - 任务元数据
    * @param contract - Sprint Contract
@@ -246,11 +377,10 @@ export class HarnessExecutor {
       ? `## ${texts.harness.acceptanceCriteria}\n${texts.harness.acceptanceCriteriaInstruction}\n${contract.acceptanceCriteria.map((criteria, i) => `${i + 1}. ${criteria}`).join('\n')}\n`
       : '';
 
-    // Build checkpoints section with full checkpoint descriptions (not just IDs)
+    // Build checkpoints section with full checkpoint descriptions and verification commands
     // This fixes the issue where AI only saw checkpoint IDs without descriptions
-    const checkpointsSection = task.checkpoints && task.checkpoints.length > 0
-      ? `## ${texts.harness.checkpoints}\n${texts.harness.checkpointsInstruction}\n${task.checkpoints.map((cp, i) => `${i + 1}. [${cp.id}] ${cp.description}`).join('\n')}\n`
-      : '';
+    // Group checkpoints by phase for better understanding
+    const checkpointsSection = this.buildCheckpointConstraintsSection(task.checkpoints, texts);
 
     const timeoutInstruction = timeoutMinutes
       ? texts.harness.timeoutInstruction.replace('{timeout}', String(timeoutMinutes)) + '\n'
@@ -406,6 +536,7 @@ export class HarnessExecutor {
 
   /**
    * 检查完成的检查点
+   * CP-007: 检测假成功并输出警告日志
    */
   private async checkCompletedCheckpoints(
     task: TaskMeta,
@@ -417,12 +548,29 @@ export class HarnessExecutor {
       return completed;
     }
 
-    // Now directly iterate task.checkpoints instead of contract.checkpoints
-    // This eliminates the unnecessary ID lookup
+    // 收集已完成的检查点
     for (const checkpoint of task.checkpoints) {
       if (checkpoint.status === 'completed') {
         completed.push(checkpoint.id);
       }
+    }
+
+    // CP-007: 假成功检测
+    const falseSuccessResult = await detectFalseSuccess(task, this.config.cwd);
+
+    if (falseSuccessResult.falseSuccessCheckpoints.length > 0) {
+      console.log(`\n   ⚠️  假成功检测警告: 发现 ${falseSuccessResult.falseSuccessCheckpoints.length} 个可疑检查点`);
+
+      for (const detail of falseSuccessResult.details) {
+        console.log(`      - ${detail.checkpointId} (${detail.category}): ${detail.reason}`);
+      }
+
+      // 输出详细警告
+      for (const warning of falseSuccessResult.warnings) {
+        console.log(`      ${warning}`);
+      }
+
+      console.log(`   💡 建议: 检查这些检查点是否有对应的代码变更或产出物`);
     }
 
     return completed;

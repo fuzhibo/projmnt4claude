@@ -42,6 +42,10 @@ import {
   VALID_CHECKPOINT_PREFIXES,
 } from '../utils/validation-rules/checkpoint-rules.js';
 import { syncCheckpointsToMeta } from '../utils/checkpoint.js';
+import {
+  verifyAndRecordCheckpoint,
+  inferCategoryFromCheckpoint,
+} from '../utils/checkpoint-verification.js';
 import { t } from '../i18n/index.js';
 
 import {
@@ -1090,7 +1094,7 @@ export async function fixSingleIssue(
     }
 
     case 'checkpoint_status_mismatch': {
-      // CP-7: complete_checkpoints — 自动完成 pending 检查点（旧版遗留）
+      // CP-008: analyze --fix 验证产出，不符合则 reopen 检查点
       console.log(t(cwd).analyzeFixPipeline.fixingCheckpointStatusMismatch.replace('{taskId}', issue.taskId));
       if (!task.checkpoints || task.checkpoints.length === 0) {
         return 'skipped';
@@ -1098,24 +1102,56 @@ export async function fixSingleIssue(
 
       const now = new Date().toISOString();
       let completedCount = 0;
+      let reopenedCount = 0;
+
       for (const cp of task.checkpoints) {
         if (cp.status === 'pending') {
-          cp.status = 'completed';
-          cp.updatedAt = now;
-          if (cp.verification) {
-            cp.verification.result = 'passed (auto-completed by analyze-fix: legacy task)';
-            cp.verification.verifiedAt = now;
-            cp.verification.verifiedBy = 'analyze-fix';
+          // 对 pending 检查点进行产出验证
+          const verificationOutput = await verifyAndRecordCheckpoint(task, cp.id, 'analyze_fix', cwd);
+
+          if (verificationOutput.result === 'verified') {
+            // 有产出证据，可以标记为完成
+            cp.status = 'completed';
+            cp.updatedAt = now;
+            if (cp.verification) {
+              cp.verification.result = 'passed (auto-completed by analyze-fix: verified output)';
+              cp.verification.verifiedAt = now;
+              cp.verification.verifiedBy = 'analyze-fix';
+            }
+            completedCount++;
+          } else {
+            // 无产出证据，保持 pending 状态并记录警告
+            console.log(`  ⚠️ 检查点 ${cp.id} 无产出证据，保持 pending 状态`);
+            if (verificationOutput.warnings) {
+              for (const warning of verificationOutput.warnings) {
+                console.log(`     - ${warning}`);
+              }
+            }
           }
-          completedCount++;
+        } else if (cp.status === 'completed') {
+          // 对已完成的检查点也进行假成功检测
+          const verificationOutput = await verifyAndRecordCheckpoint(task, cp.id, 'analyze_fix', cwd);
+
+          if (verificationOutput.result === 'unverified' || verificationOutput.result === 'failed') {
+            // 假成功检测：已完成但无产出证据，reopen 检查点
+            console.log(`  ⚠️ 检查点 ${cp.id} 疑似假成功，重新打开`);
+            cp.status = 'pending';
+            cp.updatedAt = now;
+            cp.note = `${cp.note ? cp.note + '; ' : ''}analyze-fix 检测到假成功，重新打开`;
+            reopenedCount++;
+          }
         }
       }
 
-      if (completedCount > 0) {
+      if (completedCount > 0 || reopenedCount > 0) {
         task.updatedAt = now;
-        // writeTaskMeta 自动监听 7 个字段(title/description/priority/status/recommendedRole/branch/dependencies)变更并生成 history 记录
         validatedWriteTaskMeta(task, cwd);
-        console.log('  ' + t(cwd).analyzeFixPipeline.checkpointStatusMismatchFixed.replace('{count}', String(completedCount)));
+        if (completedCount > 0) {
+          console.log('  ' + t(cwd).analyzeFixPipeline.checkpointStatusMismatchFixed.replace('{count}', String(completedCount)));
+        }
+        if (reopenedCount > 0) {
+          console.log(`  🔄 重新打开 ${reopenedCount} 个假成功检查点`);
+        }
         return 'fixed';
       }
       return 'skipped';

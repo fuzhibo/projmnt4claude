@@ -365,11 +365,16 @@ describe('Fix actions for status inference issues', () => {
     const task = createTask({
       status: 'resolved',
       checkpoints: [
-        { id: 'CP-1', description: 'Test A', status: 'pending', createdAt: now, updatedAt: now },
-        { id: 'CP-2', description: 'Test B', status: 'pending', createdAt: now, updatedAt: now },
+        // 使用 implementation 类别描述，避免被推断为 testing
+        { id: 'CP-1', description: '实现功能 A', status: 'pending', createdAt: now, updatedAt: now },
+        { id: 'CP-2', description: '实现功能 B', status: 'pending', createdAt: now, updatedAt: now },
       ],
     });
     setupProjectWithTask(tmpDir, task);
+    // 创建产出证据，使检查点可以被验证
+    const evidenceDir = path.join(tmpDir, '.projmnt4claude', 'evidence', task.id);
+    fs.mkdirSync(evidenceDir, { recursive: true });
+    fs.writeFileSync(path.join(evidenceDir, 'evidence.txt'), 'evidence content');
 
     const issue = checkCheckpointConsistency(task.id, task);
     expect(issue).not.toBeNull();

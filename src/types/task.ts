@@ -4,6 +4,15 @@
 export type TaskType = 'bug' | 'feature' | 'research' | 'docs' | 'refactor' | 'test';
 
 /**
+ * Quality gate failure type
+ * Used to classify quality gate failures for retry handling
+ *
+ * - 'A': Task Foundation - Checks task data validity, failure requires pipeline interruption
+ * - 'B': Phase Artifact - Checks phase output quality, failure requires retry from phase start
+ */
+export type FailureType = 'A' | 'B';
+
+/**
  * Task priority
  */
 export type TaskPriority = 'P0' | 'P1' | 'P2' | 'P3' | 'Q1' | 'Q2' | 'Q3' | 'Q4';
