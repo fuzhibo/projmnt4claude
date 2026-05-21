@@ -763,10 +763,10 @@ describe('Scenario 6: Verdict Routing', () => {
     // Phase retry limit is defined in DEFAULT_PHASE_RETRY_LIMITS
   });
 
-  test('S6.5: ReviewVerdict with action=escalate_human sets status to open', () => {
+  test('S6.5: ReviewVerdict with action=escalate_human sets status to needs_human', () => {
     const verdict = createFailedVerdict('TASK-001', 'escalate_human');
     expect(verdict.action).toBe('escalate_human');
-    // When processed, task should transition to 'open' state
+    // When processed, task should transition to 'needs_human' state
   });
 
   test('S6.6: CodeReviewVerdict NOPASS with minor issues routes to minor_fix', () => {

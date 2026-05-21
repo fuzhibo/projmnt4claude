@@ -356,8 +356,8 @@ describe('handleVerdictBasedTransition status transitions', () => {
     expect(timeline.some(e => e.event === 'completed' && e.description.includes('architect'))).toBe(true);
   });
 
-  // CP-17: escalate_human → open
-  test('CP-17: escalate_human transitions to open', async () => {
+  // CP-17: escalate_human → needs_human
+  test('CP-17: escalate_human transitions to needs_human', async () => {
     const taskDir = path.join(env.tempDir, '.projmnt4claude', 'tasks', taskId);
     const meta = JSON.parse(fs.readFileSync(path.join(taskDir, 'meta.json'), 'utf-8'));
     meta.status = 'wait_evaluation';
@@ -375,8 +375,8 @@ describe('handleVerdictBasedTransition status transitions', () => {
       taskId, record, state, addTimeline, 'evaluation', 'escalate_human',
     );
 
-    expect(result.finalStatus).toBe('open');
-    expect(getTaskStatus()).toBe('open');
+    expect(result.finalStatus).toBe('needs_human');
+    expect(getTaskStatus()).toBe('needs_human');
     // Verify timeline entry for escalation
     expect(timeline.some(e => e.event === 'failed' && e.description.includes('人工介入'))).toBe(true);
   });

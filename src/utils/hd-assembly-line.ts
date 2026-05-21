@@ -1500,9 +1500,9 @@ export class AssemblyLine {
       }
 
       case 'escalate_human': {
-        // CP-17: escalate_human 转到 open 状态（人工处理）
-        await this.ensureTransition(taskId, 'open', `architect 建议人工介入 (action: escalate_human)`);
-        record.finalStatus = 'open';
+        // CP-17: escalate_human 转到 needs_human 状态（人工处理）
+        await this.ensureTransition(taskId, 'needs_human', `architect 建议人工介入 (action: escalate_human)`);
+        record.finalStatus = 'needs_human';
         addTimeline('failed', 'architect 建议人工介入', { action });
         console.log('🔴 任务需要人工介入');
         return record;
