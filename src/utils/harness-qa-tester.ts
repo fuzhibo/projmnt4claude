@@ -547,9 +547,20 @@ export class HarnessQATester {
 
   /**
    * 使用内置默认规则解析
+   *
+   * 默认规则从 config.json 的 harness.test.testFailurePatterns 读取，
+   * 如果配置中没有定义，则使用硬编码的默认规则。
    */
   private parseWithBuiltInRules(output: string): string[] {
-    const builtInPatterns: TestFailurePattern[] = [
+    const testConfig = this.getTestConfig();
+
+    // 如果配置中定义了 testFailurePatterns，使用配置中的规则
+    if (testConfig.testFailurePatterns && testConfig.testFailurePatterns.length > 0) {
+      return this.parseWithPatterns(output, testConfig.testFailurePatterns);
+    }
+
+    // 否则使用硬编码的默认规则（向后兼容）
+    const defaultPatterns: TestFailurePattern[] = [
       {
         name: 'bun-fail-new',
         pattern: '\\(fail\\)\\s+(.+)',
@@ -570,7 +581,7 @@ export class HarnessQATester {
       },
     ];
 
-    return this.parseWithPatterns(output, builtInPatterns);
+    return this.parseWithPatterns(output, defaultPatterns);
   }
 
   /**
