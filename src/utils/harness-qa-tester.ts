@@ -373,11 +373,12 @@ export class HarnessQATester {
   /**
    * 从测试输出中解析失败的测试
    *
-   * 解析流程：
+   * 解析流程（完全可配置化设计）：
    * 1. 标准格式检测（JUnit XML、TAP）- 仅当配置启用时
-   * 2. 用户自定义正则规则 - 按顺序匹配，命中即返回
-   * 3. 内置默认规则 - 兜底处理
-   * 4. 降级处理 - 输出原始日志摘要
+   * 2. 用户自定义正则规则 - 从 config.json 读取，按顺序匹配，命中即返回
+   * 3. 降级处理 - 输出原始日志摘要
+   *
+   * 注意：不再使用内置硬编码规则，所有规则均从配置读取。
    */
   private parseTestFailures(output: string): string[] {
     // 获取测试配置
@@ -391,21 +392,18 @@ export class HarnessQATester {
       }
     }
 
-    // Step 2: 用户自定义正则规则
+    // Step 2: 用户自定义正则规则（从 config.json 读取）
+    // 如果配置了 testFailurePatterns（非空数组），使用配置的规则
+    // 如果未配置或为空数组，直接跳到降级处理
     if (testConfig.testFailurePatterns && testConfig.testFailurePatterns.length > 0) {
       const userResult = this.parseWithPatterns(output, testConfig.testFailurePatterns);
       if (userResult.length > 0) {
         return userResult;
       }
+      // 用户规则未命中，继续降级处理
     }
 
-    // Step 3: 内置默认规则
-    const builtInResult = this.parseWithBuiltInRules(output);
-    if (builtInResult.length > 0) {
-      return builtInResult;
-    }
-
-    // Step 4: 降级处理
+    // Step 3: 降级处理
     if (testConfig.fallbackToRawOutput !== false) {
       return this.createFallbackOutput(output, testConfig.rawOutputMaxLength || 500);
     }
@@ -543,45 +541,6 @@ export class HarnessQATester {
     }
 
     return [];
-  }
-
-  /**
-   * 使用内置默认规则解析
-   *
-   * 默认规则从 config.json 的 harness.test.testFailurePatterns 读取，
-   * 如果配置中没有定义，则使用硬编码的默认规则。
-   */
-  private parseWithBuiltInRules(output: string): string[] {
-    const testConfig = this.getTestConfig();
-
-    // 如果配置中定义了 testFailurePatterns，使用配置中的规则
-    if (testConfig.testFailurePatterns && testConfig.testFailurePatterns.length > 0) {
-      return this.parseWithPatterns(output, testConfig.testFailurePatterns);
-    }
-
-    // 否则使用硬编码的默认规则（向后兼容）
-    const defaultPatterns: TestFailurePattern[] = [
-      {
-        name: 'bun-fail-new',
-        pattern: '\\(fail\\)\\s+(.+)',
-        enabled: true,
-        description: 'Bun 测试框架 (fail) 格式',
-      },
-      {
-        name: 'bun-fail-old',
-        pattern: '✗\\s+(.+)',
-        enabled: true,
-        description: 'Bun 测试框架 ✗ 格式',
-      },
-      {
-        name: 'jest-vitest',
-        pattern: 'FAIL\\s+(.+\\.(test|spec)\\.[jt]sx?)',
-        enabled: true,
-        description: 'Jest/Vitest FAIL 格式',
-      },
-    ];
-
-    return this.parseWithPatterns(output, defaultPatterns);
   }
 
   /**

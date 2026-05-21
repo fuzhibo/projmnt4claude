@@ -438,8 +438,8 @@ ENABLED: should-match`;
     expect(result).toContain('should-match');
   });
 
-  // CP-RE-05: 内置规则兜底
-  test('CP-RE-05: Built-in rules are used as fallback', async () => {
+  // CP-RE-04: 空规则列表降级
+  test('CP-RE-04: Empty patterns list triggers fallback', async () => {
     const config: HarnessConfig = {
       maxRetries: 3,
       timeout: 300,
@@ -453,9 +453,16 @@ ENABLED: should-match`;
       forceContinue: false,
     };
 
-    // No custom patterns configured
+    // Configure empty patterns list
     fs.mkdirSync(path.dirname(configPath), { recursive: true });
-    fs.writeFileSync(configPath, JSON.stringify({}));
+    fs.writeFileSync(configPath, JSON.stringify({
+      harness: {
+        test: {
+          testFailurePatterns: [],
+          fallbackToRawOutput: true,
+        },
+      },
+    }));
 
     const tester = createTester(configPath, config);
 
@@ -464,7 +471,49 @@ ENABLED: should-match`;
     const parseMethod = (tester as unknown as { parseTestFailures: (o: string) => string[] }).parseTestFailures.bind(tester);
     const result = parseMethod(output);
 
-    expect(result).toContain('bun-test-failure');
+    // Should fallback to raw output since patterns list is empty
+    expect(result.length).toBeGreaterThan(0);
+    expect(result[0]).toContain('解析失败');
+  });
+
+  // CP-RE-05: 规则未命中降级
+  test('CP-RE-05: Rules not matched triggers fallback', async () => {
+    const config: HarnessConfig = {
+      maxRetries: 3,
+      timeout: 300,
+      parallel: 1,
+      dryRun: false,
+      continue: false,
+      jsonOutput: false,
+      cwd: tempDir,
+      batchGitTagCommit: false,
+      taskGitCommit: false,
+      forceContinue: false,
+    };
+
+    // Configure patterns that won't match
+    fs.mkdirSync(path.dirname(configPath), { recursive: true });
+    fs.writeFileSync(configPath, JSON.stringify({
+      harness: {
+        test: {
+          testFailurePatterns: [
+            { name: 'custom', pattern: 'CUSTOM_FAIL:\\s*(.+)', enabled: true },
+          ],
+          fallbackToRawOutput: true,
+        },
+      },
+    }));
+
+    const tester = createTester(configPath, config);
+
+    const output = `(fail) bun-test-failure`;
+
+    const parseMethod = (tester as unknown as { parseTestFailures: (o: string) => string[] }).parseTestFailures.bind(tester);
+    const result = parseMethod(output);
+
+    // Should fallback to raw output since pattern doesn't match
+    expect(result.length).toBeGreaterThan(0);
+    expect(result[0]).toContain('解析失败');
   });
 });
 
@@ -643,8 +692,8 @@ describe('Test Failure Parsing - Configuration', () => {
     expect(config.harness.test.testFailurePatterns).toHaveLength(1);
   });
 
-  // CP-CF-03: 向后兼容
-  test('CP-CF-03: Backward compatible when no config', async () => {
+  // CP-CF-03: 默认规则写入 config.json
+  test('CP-CF-03: Default patterns in config.json', async () => {
     const config: HarnessConfig = {
       maxRetries: 3,
       timeout: 300,
@@ -658,7 +707,18 @@ describe('Test Failure Parsing - Configuration', () => {
       forceContinue: false,
     };
 
-    // No config file
+    // Configure default patterns (simulating what should be in config.json)
+    fs.mkdirSync(path.dirname(configPath), { recursive: true });
+    fs.writeFileSync(configPath, JSON.stringify({
+      harness: {
+        test: {
+          testFailurePatterns: [
+            { name: 'bun-fail-new', pattern: '\\(fail\\)\\s+(.+)', enabled: true },
+          ],
+        },
+      },
+    }));
+
     const tester = createTester(configPath, config);
 
     const output = `(fail) test-name`;
@@ -666,7 +726,7 @@ describe('Test Failure Parsing - Configuration', () => {
     const parseMethod = (tester as unknown as { parseTestFailures: (o: string) => string[] }).parseTestFailures.bind(tester);
     const result = parseMethod(output);
 
-    // Should use built-in rules
+    // Should use configured patterns
     expect(result).toContain('test-name');
   });
 });
