@@ -39058,10 +39058,6 @@ ${texts.harness.logs.existingFiles || "Existing Files"}:`);
         return userResult;
       }
     }
-    const builtInResult = this.parseWithBuiltInRules(output);
-    if (builtInResult.length > 0) {
-      return builtInResult;
-    }
     if (testConfig.fallbackToRawOutput !== false) {
       return this.createFallbackOutput(output, testConfig.rawOutputMaxLength || 500);
     }
@@ -39073,10 +39069,31 @@ ${texts.harness.logs.existingFiles || "Existing Files"}:`);
       if (fs29.existsSync(configPath)) {
         const content = fs29.readFileSync(configPath, "utf-8");
         const projectConfig = JSON.parse(content);
-        return projectConfig.harness?.test || {};
+        const testConfig = projectConfig.harness?.test || {};
+        if (testConfig.testFailurePatterns) {
+          this.validatePatterns(testConfig.testFailurePatterns);
+        }
+        return testConfig;
       }
-    } catch {}
+    } catch (error) {
+      if (error instanceof Error && error.message.startsWith("正则表达式验证失败")) {
+        throw error;
+      }
+    }
     return {};
+  }
+  validatePatterns(patterns) {
+    for (const pattern of patterns) {
+      if (pattern.enabled === false) {
+        continue;
+      }
+      try {
+        new RegExp(pattern.pattern, "g");
+      } catch (error) {
+        const errorMessage = error instanceof Error ? error.message : String(error);
+        throw new Error(`正则表达式验证失败: 规则 "${pattern.name}" 的正则 "${pattern.pattern}" 无效 - ${errorMessage}`);
+      }
+    }
   }
   tryStandardFormatDetection(output, detection) {
     if (detection.junitXml) {
@@ -39145,29 +39162,6 @@ ${texts.harness.logs.existingFiles || "Existing Files"}:`);
       }
     }
     return [];
-  }
-  parseWithBuiltInRules(output) {
-    const builtInPatterns = [
-      {
-        name: "bun-fail-new",
-        pattern: "\\(fail\\)\\s+(.+)",
-        enabled: true,
-        description: "Bun 测试框架 (fail) 格式"
-      },
-      {
-        name: "bun-fail-old",
-        pattern: "✗\\s+(.+)",
-        enabled: true,
-        description: "Bun 测试框架 ✗ 格式"
-      },
-      {
-        name: "jest-vitest",
-        pattern: "FAIL\\s+(.+\\.(test|spec)\\.[jt]sx?)",
-        enabled: true,
-        description: "Jest/Vitest FAIL 格式"
-      }
-    ];
-    return this.parseWithPatterns(output, builtInPatterns);
   }
   createFallbackOutput(output, maxLength) {
     const truncated = output.length > maxLength ? output.slice(0, maxLength) + "..." : output;
