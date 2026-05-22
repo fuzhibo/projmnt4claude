@@ -486,12 +486,12 @@ export function inferCheckpointPrefix(description: string): string {
     'mockup', 'prototype', '原型',
   ];
 
-  // [script] 关键词: 脚本、构建、命令执行
+  // [script] 关键词: 仅限构建、部署、CI/CD（收紧范围，避免误匹配代码修改任务）
+  // 移除了 '脚本', '命令', 'command', 'shell', 'bash', 'script', 'install' 等过于宽泛的关键词
   const scriptKeywords = [
-    '脚本', '构建', '编译', '部署', 'ci/cd', 'pipeline',
-    'script', 'build', 'compile', 'deploy', '发布', 'publish',
-    '打包', 'bundle', 'install', 'npm run', 'yarn ', 'pnpm ',
-    '命令', 'command', 'shell', 'bash', 'npm install', '依赖安装',
+    '构建', '编译', '部署', 'ci/cd', 'pipeline',
+    'build', 'compile', 'deploy', 'publish',
+    '打包', 'bundle', 'lint', 'test', 'check',
   ];
 
   // [ai review] 关键词: 代码审查、代码质量
@@ -593,6 +593,45 @@ export const checkpointHasVerificationCommands: ValidationRule = {
         const method = ((cp['verification'] as Record<string, unknown>)?.['method'] as string) || '';
         return `"${desc}" (method: ${method})`;
       }).join(', ')}`,
+    };
+  },
+};
+
+/**
+ * Rule 7.5: checkpointScriptHasCommands (severity: error)
+ * [script] 前缀的检查点必须有 verification.commands 字段
+ *
+ * [script] 仅用于可自动执行的验证脚本（构建、部署、CI/CD），
+ * 必须有 verification.commands 指定执行命令。
+ */
+export const checkpointScriptHasCommands: ValidationRule = {
+  id: 'checkpoint-script-has-commands',
+  description: '[script] 前缀的检查点必须有 verification.commands 字段',
+  severity: 'error' as const,
+  check: (output: unknown): ValidationViolation | null => {
+    const checkpoints = extractCheckpointObjects(output);
+    if (checkpoints.length === 0) return null;
+
+    const invalid = checkpoints.filter(cp => {
+      const desc = cp['description'];
+      if (typeof desc !== 'string') return false;
+      const trimmed = desc.trim().toLowerCase();
+
+      // 仅检查 [script] 前缀的检查点
+      if (!trimmed.startsWith('[script]')) return false;
+
+      // 检查是否有 verification.commands
+      const verification = cp['verification'] as Record<string, unknown> | undefined;
+      const commands = verification?.['commands'];
+      return !commands || !Array.isArray(commands) || commands.length === 0;
+    });
+
+    if (invalid.length === 0) return null;
+
+    return {
+      ruleId: 'checkpoint-script-has-commands',
+      severity: 'error',
+      message: `${invalid.length} 条 [script] 检查点缺少 verification.commands: ${invalid.map(cp => `"${cp['description'] ?? cp['id'] ?? 'unknown'}"`).join(', ')}`,
     };
   },
 };
@@ -714,5 +753,6 @@ export const checkpointValidationRules: ValidationRule[] = [
   checkpointMinLength,
   checkpointRequiredPrefix,
   checkpointHasVerificationCommands,
+  checkpointScriptHasCommands,
   metaJsonValid,
 ];

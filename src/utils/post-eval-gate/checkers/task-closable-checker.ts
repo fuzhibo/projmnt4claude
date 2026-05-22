@@ -38,6 +38,12 @@ import type {
  */
 export class TaskClosableChecker implements IPostEvalChecker {
   /**
+   * 失败类型: A (中断流水线)
+   * 任务不可关闭是数据问题，应中断流水线
+   */
+  readonly failureType = 'A' as const;
+
+  /**
    * 执行任务可关闭检查
    *
    * @param ctx 检查上下文，包含任务元数据和评估报告
@@ -63,7 +69,7 @@ export class TaskClosableChecker implements IPostEvalChecker {
       message: closable
         ? '任务可标记为完成'
         : `任务不满足关闭条件: ${reasons.join('; ')}`,
-      details: { closable, evalPassed, allCheckpointsDone },
+      details: { closable, evalPassed, allCheckpointsDone, failureType: this.failureType },
     };
   }
 }

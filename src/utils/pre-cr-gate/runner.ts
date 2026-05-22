@@ -11,7 +11,7 @@
  * @module pre-cr-gate/runner
  */
 
-import type { TaskMeta } from '../../types/task.js';
+import type { TaskMeta, FailureType } from '../../types/task.js';
 import { normalizeStatus } from '../../types/task.js';
 import { readTaskMeta } from '../task.js';
 
@@ -45,6 +45,13 @@ export interface PreCRGateRule {
   priority: number;
   /** 是否为阻塞规则 (失败则整体失败) */
   blocking: boolean;
+  /**
+   * 失败类型分类
+   * - 'A': Task Foundation - 任务数据有效性检查，失败需中断流水线
+   * - 'B': Phase Artifact - 阶段输出质量检查，失败需回退到阶段起点重试
+   * Pre-CR Gate 默认为 'A' 类（检查任务数据本身有效性）
+   */
+  failureType?: FailureType;
   /** 规则配置参数 */
   config?: Record<string, unknown>;
 }
@@ -179,6 +186,7 @@ export const DEFAULT_PRE_CR_GATE_RULES: PreCRGateRule[] = [
     enabled: true,
     priority: 1,
     blocking: true,
+    failureType: 'A',
   },
   {
     id: 'rule-checkpoints-complete',
@@ -188,6 +196,7 @@ export const DEFAULT_PRE_CR_GATE_RULES: PreCRGateRule[] = [
     enabled: true,
     priority: 2,
     blocking: true,
+    failureType: 'A',
   },
   {
     id: 'rule-artifacts-exist',
@@ -197,6 +206,7 @@ export const DEFAULT_PRE_CR_GATE_RULES: PreCRGateRule[] = [
     enabled: true,
     priority: 3,
     blocking: false,
+    failureType: 'A',
   },
   {
     id: 'rule-quality-score',
@@ -206,6 +216,7 @@ export const DEFAULT_PRE_CR_GATE_RULES: PreCRGateRule[] = [
     enabled: true,
     priority: 4,
     blocking: false,
+    failureType: 'A',
     config: {
       minScore: 70,
     },

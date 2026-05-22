@@ -75,3 +75,14 @@ export type {
   SyncIssue,
   SyncIssueType,
 } from './checkers/checkpoint-sync-checker.js';
+
+// Quality Score Checker exports
+export {
+  QualityScoreChecker,
+  createQualityScoreChecker,
+  quickQualityScoreCheck,
+} from './checkers/quality-score-checker.js';
+
+export type {
+  QualityScoreCheckResult,
+} from './checkers/quality-score-checker.js';

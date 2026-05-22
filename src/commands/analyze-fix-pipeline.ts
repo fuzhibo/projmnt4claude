@@ -45,6 +45,7 @@ import { syncCheckpointsToMeta } from '../utils/checkpoint.js';
 import {
   verifyAndRecordCheckpoint,
   inferCategoryFromCheckpoint,
+  CheckpointStatusMismatchFixer,
 } from '../utils/checkpoint-verification.js';
 import { t } from '../i18n/index.js';
 
@@ -1100,61 +1101,10 @@ export async function fixSingleIssue(
         return 'skipped';
       }
 
-      const now = new Date().toISOString();
-      let completedCount = 0;
-      let reopenedCount = 0;
+      const fixer = new CheckpointStatusMismatchFixer(cwd);
+      const result = await fixer.fix(task);
 
-      for (const cp of task.checkpoints) {
-        if (cp.status === 'pending') {
-          // 对 pending 检查点进行产出验证
-          const verificationOutput = await verifyAndRecordCheckpoint(task, cp.id, 'analyze_fix', cwd);
-
-          if (verificationOutput.result === 'verified') {
-            // 有产出证据，可以标记为完成
-            cp.status = 'completed';
-            cp.updatedAt = now;
-            if (cp.verification) {
-              cp.verification.result = 'passed (auto-completed by analyze-fix: verified output)';
-              cp.verification.verifiedAt = now;
-              cp.verification.verifiedBy = 'analyze-fix';
-            }
-            completedCount++;
-          } else {
-            // 无产出证据，保持 pending 状态并记录警告
-            console.log(`  ⚠️ 检查点 ${cp.id} 无产出证据，保持 pending 状态`);
-            if (verificationOutput.warnings) {
-              for (const warning of verificationOutput.warnings) {
-                console.log(`     - ${warning}`);
-              }
-            }
-          }
-        } else if (cp.status === 'completed') {
-          // 对已完成的检查点也进行假成功检测
-          const verificationOutput = await verifyAndRecordCheckpoint(task, cp.id, 'analyze_fix', cwd);
-
-          if (verificationOutput.result === 'unverified' || verificationOutput.result === 'failed') {
-            // 假成功检测：已完成但无产出证据，reopen 检查点
-            console.log(`  ⚠️ 检查点 ${cp.id} 疑似假成功，重新打开`);
-            cp.status = 'pending';
-            cp.updatedAt = now;
-            cp.note = `${cp.note ? cp.note + '; ' : ''}analyze-fix 检测到假成功，重新打开`;
-            reopenedCount++;
-          }
-        }
-      }
-
-      if (completedCount > 0 || reopenedCount > 0) {
-        task.updatedAt = now;
-        validatedWriteTaskMeta(task, cwd);
-        if (completedCount > 0) {
-          console.log('  ' + t(cwd).analyzeFixPipeline.checkpointStatusMismatchFixed.replace('{count}', String(completedCount)));
-        }
-        if (reopenedCount > 0) {
-          console.log(`  🔄 重新打开 ${reopenedCount} 个假成功检查点`);
-        }
-        return 'fixed';
-      }
-      return 'skipped';
+      return result.status;
     }
 
     case 'missing_pipeline_evidence': {

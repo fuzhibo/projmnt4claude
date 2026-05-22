@@ -24,6 +24,12 @@ import type { PreEvalCheckContext, PreEvalCheckResult, IPreEvalChecker } from '.
  * 缺少阶段仅产生警告，不阻塞评估阶段进入。
  */
 export class PhaseHistoryCompleteChecker implements IPreEvalChecker {
+  /**
+   * 失败类型: A (中断流水线)
+   * Pre-Eval Gate 所有检查器均为 A 类
+   */
+  readonly failureType = 'A' as const;
+
   private readonly requiredPhases = ['development', 'code_review', 'qa'];
 
   /**
@@ -48,6 +54,7 @@ export class PhaseHistoryCompleteChecker implements IPreEvalChecker {
         requiredPhases: this.requiredPhases,
         historyPhases,
         missingPhases: missing,
+        failureType: this.failureType,
       },
     };
   }

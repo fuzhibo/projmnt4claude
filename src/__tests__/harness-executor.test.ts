@@ -140,7 +140,22 @@ describe('HarnessExecutor', () => {
       const config = createConfig(env.tempDir);
       const task = createTask({
         checkpoints: [
-          { id: 'CP-001', description: 'CP1', status: 'completed', createdAt: '', updatedAt: '' },
+          {
+            id: 'CP-001',
+            description: 'CP1',
+            status: 'completed',
+            createdAt: '',
+            updatedAt: '',
+            // 添加验证证据，使其通过兜底验证
+            verification: {
+              method: 'automated',
+              result: 'passed',
+              evidencePath: 'proof.txt',
+              verifiedAt: '2026-05-20T00:00:00Z',
+              verifiedBy: 'test',
+              details: { type: 'automated' },
+            },
+          },
           { id: 'CP-002', description: 'CP2', status: 'pending', createdAt: '', updatedAt: '' },
         ],
       });

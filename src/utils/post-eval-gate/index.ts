@@ -25,6 +25,25 @@ export { AllCheckpointsFinalChecker } from './checkers/checkpoints-final-checker
 export { FinalStateConsistencyChecker } from './checkers/state-consistency-checker.js';
 export { TaskClosableChecker } from './checkers/task-closable-checker.js';
 
+// AI Checker exports (B类 - 回退到评估阶段)
+export {
+  EvalLogsAIChecker,
+  createEvalLogsAIChecker,
+  checkEvalLogsAI,
+  DEFAULT_EVAL_LOGS_AI_CHECKER_CONFIG,
+  type EvalLogsAIReviewResult,
+  type EvalLogsAICheckerConfig,
+} from './checkers/eval-logs-ai-checker.js';
+
+export {
+  EvalResultAIChecker,
+  createEvalResultAIChecker,
+  checkEvalResultAI,
+  DEFAULT_EVAL_RESULT_AI_CHECKER_CONFIG,
+  type EvalResultAIReviewResult,
+  type EvalResultAICheckerConfig,
+} from './checkers/eval-result-ai-checker.js';
+
 // Type exports
 export type {
   PostEvalCheckContext,

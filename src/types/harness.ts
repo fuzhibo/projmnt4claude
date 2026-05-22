@@ -292,6 +292,9 @@ export interface FailureRecord {
  * CP-P6-1: previousErrors - complete error history
  * CP-P6-2: accumulatedInsights - extracted learning from failures
  * CP-P6-3: suggestedFixes - generated repair suggestions
+ * CP-P6-4: gateClassification - gate classification result (from A/B classification)
+ * CP-6: routingDecision - routing decision for evaluation phase smart routing
+ * CP-6: qaFailureAnalysis - QA failure analysis for chain rollback
  */
 export interface RetryContext {
   /** CP-P6-1: Previous failure reason (legacy, kept for backward compatibility) */
@@ -329,6 +332,45 @@ export interface RetryContext {
 
   /** Complete failure history for this task:phase */
   failureHistory?: FailureRecord[];
+
+  /** CP-P6-4: Gate classification result */
+  gateClassification?: {
+    type: 'A' | 'B';
+    gateName: string;
+    reason: string;
+    recoverable: boolean;
+  };
+
+  // ============================================================
+  // CP-6: Chain Fallback & Smart Routing Fields
+  // ============================================================
+
+  /** CP-6: QA failure analysis result (for chain rollback) */
+  qaFailureAnalysis?: {
+    attribution: 'code_issue' | 'test_issue' | 'environment_issue';
+    reasoning: string;
+    suggestedRollbackTarget: 'development' | 'qa';
+  };
+
+  /** CP-6: Routing decision (for evaluation phase smart routing) */
+  routingDecision?: {
+    problemSource: 'development' | 'code_review' | 'qa' | 'evaluation';
+    targetPhase: 'development' | 'code_review' | 'qa' | 'evaluation';
+    reason: string;
+    specificIssues: string[];
+  };
+
+  /** CP-5: QA coverage gap context (for coverage retry) */
+  qaCoverageGapContext?: {
+    currentCoverage: number;
+    minCoverage: number;
+    gap: number;
+    gapPercent: string;
+    coverageDetails?: { lines: number; branches: number; functions: number; statements: number };
+    failureType: 'A' | 'B';
+    message: string;
+    qaRetryPrompt?: string;
+  };
 }
 
 /**
@@ -609,6 +651,21 @@ export interface HarnessRuntimeState {
    * key: taskId, value: { completedPhase, completedAt }
    */
   taskPhaseCheckpoints: Map<string, { completedPhase: 'development' | 'code_review' | 'qa' | 'evaluation'; completedAt: string }>;
+  /**
+   * CP-6: QA 覆盖率缺口上下文
+   * 存储覆盖率缺口数据，供 QA 重试时使用
+   * key: taskId, value: { currentCoverage, minCoverage, gap, gapPercent, coverageDetails?, failureType, message, timestamp }
+   */
+  qaCoverageGapContexts?: Map<string, {
+    currentCoverage: number;
+    minCoverage: number;
+    gap: number;
+    gapPercent: string;
+    coverageDetails?: { lines: number; branches: number; functions: number; statements: number };
+    failureType: 'A' | 'B';
+    message: string;
+    timestamp: string;
+  }>;
 
   // ============================================================
   // Two-Loop Architecture: Pre-check Loop (P1-PROB1)

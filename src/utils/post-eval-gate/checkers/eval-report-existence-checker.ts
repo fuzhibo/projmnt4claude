@@ -34,6 +34,12 @@ import type {
  */
 export class EvalReportExistsChecker implements IPostEvalChecker {
   /**
+   * 失败类型: B (回退到评估阶段重试)
+   * 评估报告缺失是评估阶段执行问题
+   */
+  readonly failureType = 'B' as const;
+
+  /**
    * 执行评估报告存在性检查
    *
    * @param ctx 检查上下文，包含任务ID和工作目录
@@ -55,6 +61,7 @@ export class EvalReportExistsChecker implements IPostEvalChecker {
         reportName: 'evaluation-report.json',
         reportPath,
         exists,
+        failureType: this.failureType,
       },
     };
   }

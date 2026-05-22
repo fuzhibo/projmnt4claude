@@ -27,6 +27,26 @@ export {
   getReportCompletenessScore,
 } from './report-integrity-checker.js';
 
+// 报告完整性 AI 审核检查器 (B类 - 回退到开发阶段)
+export {
+  ReportIntegrityAIChecker,
+  createReportIntegrityAIChecker,
+  checkReportIntegrityAI,
+  DEFAULT_REPORT_INTEGRITY_AI_CHECKER_CONFIG,
+  type AIReviewResult,
+  type ReportIntegrityAICheckerConfig,
+} from './report-integrity-ai-checker.js';
+
+// 输出对齐 AI 审核检查器 (B类 - 回退到开发阶段)
+export {
+  OutputAlignmentAIChecker,
+  createOutputAlignmentAIChecker,
+  checkOutputAlignmentAI,
+  DEFAULT_OUTPUT_ALIGNMENT_AI_CHECKER_CONFIG,
+  type OutputAlignmentAIReviewResult,
+  type OutputAlignmentAICheckerConfig,
+} from './output-alignment-ai-checker.js';
+
 // 代码变更检查器
 export {
   checkCodeChanges,

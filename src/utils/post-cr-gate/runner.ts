@@ -15,7 +15,7 @@
 
 import * as fs from 'node:fs';
 import * as path from 'node:path';
-import type { TaskMeta, CheckpointMetadata } from '../../types/task.js';
+import type { TaskMeta, FailureType } from '../../types/task.js';
 import { readTaskMeta } from '../task.js';
 
 // ============== 门禁规则类型定义 ==============
@@ -50,6 +50,13 @@ export interface PostCRGateRule {
   priority: number;
   /** 是否为阻塞规则 (失败则整体失败) */
   blocking: boolean;
+  /**
+   * 失败类型分类
+   * - 'A': Task Foundation - 任务数据有效性检查，失败需中断流水线
+   * - 'B': Phase Artifact - 阶段输出质量检查，失败需回退到阶段起点重试
+   * Post-CR Gate 默认为 'B' 类（检查阶段输出质量）
+   */
+  failureType?: FailureType;
   /** 规则配置参数 */
   config?: Record<string, unknown>;
 }
@@ -275,6 +282,7 @@ export const DEFAULT_POST_CR_GATE_RULES: PostCRGateRule[] = [
     enabled: true,
     priority: 1,
     blocking: true,
+    failureType: 'A',
   },
   {
     id: 'R-CR-POST-002',
@@ -284,6 +292,7 @@ export const DEFAULT_POST_CR_GATE_RULES: PostCRGateRule[] = [
     enabled: true,
     priority: 2,
     blocking: true,
+    failureType: 'A',
   },
   {
     id: 'R-CR-POST-003',
@@ -293,6 +302,7 @@ export const DEFAULT_POST_CR_GATE_RULES: PostCRGateRule[] = [
     enabled: true,
     priority: 3,
     blocking: true,
+    failureType: 'A',
   },
   {
     id: 'R-CR-POST-004',
@@ -302,6 +312,7 @@ export const DEFAULT_POST_CR_GATE_RULES: PostCRGateRule[] = [
     enabled: true,
     priority: 4,
     blocking: false,
+    failureType: 'B',
   },
   {
     id: 'R-CR-POST-005',
@@ -311,6 +322,7 @@ export const DEFAULT_POST_CR_GATE_RULES: PostCRGateRule[] = [
     enabled: true,
     priority: 5,
     blocking: false,
+    failureType: 'B',
   },
   {
     id: 'R-CR-POST-006',
@@ -320,6 +332,7 @@ export const DEFAULT_POST_CR_GATE_RULES: PostCRGateRule[] = [
     enabled: true,
     priority: 6,
     blocking: false,
+    failureType: 'A',
   },
   {
     id: 'R-CR-POST-007',
@@ -329,6 +342,7 @@ export const DEFAULT_POST_CR_GATE_RULES: PostCRGateRule[] = [
     enabled: true,
     priority: 7,
     blocking: false,
+    failureType: 'B',
   },
   {
     id: 'R-CR-POST-008',
@@ -338,6 +352,7 @@ export const DEFAULT_POST_CR_GATE_RULES: PostCRGateRule[] = [
     enabled: true,
     priority: 8,
     blocking: false,
+    failureType: 'B',
   },
   {
     id: 'R-CR-POST-009',
@@ -347,6 +362,7 @@ export const DEFAULT_POST_CR_GATE_RULES: PostCRGateRule[] = [
     enabled: true,
     priority: 9,
     blocking: false,
+    failureType: 'B',
   },
   {
     id: 'R-CR-POST-010',
@@ -356,6 +372,7 @@ export const DEFAULT_POST_CR_GATE_RULES: PostCRGateRule[] = [
     enabled: true,
     priority: 10,
     blocking: false,
+    failureType: 'B',
   },
 ];
 

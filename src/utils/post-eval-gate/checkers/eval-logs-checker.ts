@@ -41,6 +41,12 @@ const LOG_ENTRY_REQUIRED_FIELDS = ['timestamp', 'message'] as const;
  */
 export class EvalLogsChecker implements IPostEvalChecker {
   /**
+   * 失败类型: B (回退到评估阶段重试)
+   * 评估日志问题是评估阶段执行问题，属于 B 类
+   */
+  readonly failureType = 'B' as const;
+
+  /**
    * 执行评估日志检查
    *
    * @param ctx 检查上下文，包含已解析的评估报告

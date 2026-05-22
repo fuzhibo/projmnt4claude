@@ -11,7 +11,7 @@
  * @module pre-qa-gate/runner
  */
 
-import type { TaskMeta } from '../../types/task.js';
+import type { TaskMeta, FailureType } from '../../types/task.js';
 import { normalizeStatus } from '../../types/task.js';
 import { readTaskMeta } from '../task.js';
 
@@ -46,6 +46,13 @@ export interface PreQAGateRule {
   priority: number;
   /** 是否为阻塞规则 (失败则整体失败) */
   blocking: boolean;
+  /**
+   * 失败类型分类
+   * - 'A': Task Foundation - 任务数据有效性检查，失败需中断流水线
+   * - 'B': Phase Artifact - 阶段输出质量检查，失败需回退到阶段起点重试
+   * Pre-QA Gate 默认为 'A' 类（检查任务基础数据）
+   */
+  failureType?: FailureType;
   /** 规则配置参数 */
   config?: Record<string, unknown>;
 }
@@ -182,6 +189,7 @@ export const DEFAULT_PRE_QA_GATE_RULES: PreQAGateRule[] = [
     enabled: true,
     priority: 1,
     blocking: true,
+    failureType: 'A',
   },
   {
     id: 'rule-code-review-pass',
@@ -191,6 +199,7 @@ export const DEFAULT_PRE_QA_GATE_RULES: PreQAGateRule[] = [
     enabled: true,
     priority: 2,
     blocking: true,
+    failureType: 'A',
   },
   {
     id: 'rule-qa-checkpoints-defined',
@@ -200,6 +209,7 @@ export const DEFAULT_PRE_QA_GATE_RULES: PreQAGateRule[] = [
     enabled: true,
     priority: 3,
     blocking: true,
+    failureType: 'A',
   },
   {
     id: 'rule-test-config-ready',
@@ -209,6 +219,7 @@ export const DEFAULT_PRE_QA_GATE_RULES: PreQAGateRule[] = [
     enabled: true,
     priority: 4,
     blocking: false,
+    failureType: 'B',
   },
   {
     id: 'rule-review-report-exist',
@@ -218,6 +229,7 @@ export const DEFAULT_PRE_QA_GATE_RULES: PreQAGateRule[] = [
     enabled: true,
     priority: 5,
     blocking: false,
+    failureType: 'B',
   },
 ];
 

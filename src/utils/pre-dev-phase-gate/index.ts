@@ -28,4 +28,11 @@ export {
   ResourceConfigChecker,
   RetryContextChecker,
   PathAlignmentChecker,
+  TestEnvChecker,
+  createTestEnvChecker,
+  checkTestEnv,
+  checkTestEnvRule,
+  TestFrameworkChecker,
+  createTestFrameworkChecker,
+  checkTestFramework,
 } from './checkers/index.js';

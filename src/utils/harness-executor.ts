@@ -28,7 +28,7 @@ import { archiveReportIfExists } from './harness-helpers.js';
 import { getAgent, buildEffectiveTools } from './headless-agent.js';
 import { createSessionAwareEngine } from './feedback-constraint-engine.js';
 import { loadPromptTemplate, resolveTemplate, loadCustomRequirements } from './prompt-templates.js';
-import { detectFalseSuccess } from './checkpoint-verification.js';
+import { checkCompletedCheckpoints as checkCompletedCheckpointsWithVerification } from './checkpoint-verification.js';
 import { t, getI18n } from '../i18n/index.js';
 
 export class HarnessExecutor {
@@ -244,7 +244,8 @@ export class HarnessExecutor {
         result.codeReview.push(cp);
       } else if (cp.category === 'qa_verification' || desc.includes('[ai qa]') || desc.includes('qa验证') || desc.includes('测试验证')) {
         result.qa.push(cp);
-      } else if (desc.includes('[script]') || desc.includes('脚本') || desc.includes('自动化')) {
+      } else if (desc.includes('[script]')) {
+        // [script] 仅用于验证脚本，不再匹配'脚本'或'自动化'关键词
         result.evaluation.push(cp);
       } else {
         result.general.push(cp);
@@ -542,38 +543,15 @@ export class HarnessExecutor {
     task: TaskMeta,
     _contract: SprintContract
   ): Promise<string[]> {
-    const completed: string[] = [];
-
-    if (!task.checkpoints) {
-      return completed;
+    if (!task.checkpoints || task.checkpoints.length === 0) {
+      return [];
     }
 
-    // 收集已完成的检查点
-    for (const checkpoint of task.checkpoints) {
-      if (checkpoint.status === 'completed') {
-        completed.push(checkpoint.id);
-      }
-    }
+    // 使用兜底验证机制检查已完成的检查点
+    const checkpointIds = task.checkpoints.map(cp => cp.id);
+    const result = await checkCompletedCheckpointsWithVerification(task, checkpointIds, this.config.cwd);
 
-    // CP-007: 假成功检测
-    const falseSuccessResult = await detectFalseSuccess(task, this.config.cwd);
-
-    if (falseSuccessResult.falseSuccessCheckpoints.length > 0) {
-      console.log(`\n   ⚠️  假成功检测警告: 发现 ${falseSuccessResult.falseSuccessCheckpoints.length} 个可疑检查点`);
-
-      for (const detail of falseSuccessResult.details) {
-        console.log(`      - ${detail.checkpointId} (${detail.category}): ${detail.reason}`);
-      }
-
-      // 输出详细警告
-      for (const warning of falseSuccessResult.warnings) {
-        console.log(`      ${warning}`);
-      }
-
-      console.log(`   💡 建议: 检查这些检查点是否有对应的代码变更或产出物`);
-    }
-
-    return completed;
+    return result.completed;
   }
 
   /**

@@ -22,6 +22,16 @@ export {
 // 检查器
 export * from './checkers/index.js';
 
+// AI 审核检查器导出
+export {
+  ReportIntegrityAIChecker,
+  createReportIntegrityAIChecker,
+  checkReportIntegrityAI,
+  OutputAlignmentAIChecker,
+  createOutputAlignmentAIChecker,
+  checkOutputAlignmentAI,
+} from './checkers/index.js';
+
 // 重新导出类型
 export type {
   PostDevPhaseCheckContext,

@@ -109,3 +109,41 @@ export {
 export type {
   PhaseCheckpoint,
 } from './harness.js';
+
+// Quality Score types
+export type {
+  QualityScoreDimension,
+  DimensionScore,
+  CodeReviewQualityScore,
+  QualityScoreCheckerConfig,
+  QualityScoreCheckResult,
+  AIReviewContext,
+  AIReviewResponse,
+} from './quality-score.js';
+
+export {
+  DEFAULT_DIMENSION_WEIGHTS,
+  DEFAULT_QUALITY_SCORE_CHECKER_CONFIG,
+  calculateWeightedTotalScore,
+  isScoreAcceptable,
+  createDefaultQualityScore,
+} from './quality-score.js';
+
+// Checkpoint Verification types
+export type {
+  CheckpointOutputCategory,
+  VerificationResult,
+  VerificationSource,
+  VerificationRecord,
+  VerificationStrategy,
+  VerificationContext,
+  VerificationOutput,
+} from './checkpoint-verification.js';
+
+// Task types - TestEnvCheckCommand, QAFailureCategory, QAFailureAnalysis, RoutingDecision
+export type {
+  TestEnvCheckCommand,
+  QAFailureCategory,
+  QAFailureAnalysis,
+  RoutingDecision,
+} from './task.js';

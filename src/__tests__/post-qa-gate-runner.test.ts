@@ -702,7 +702,7 @@ describe('PostQAGateRunner', () => {
       expect(result.allowed).toBe(true);
     });
 
-    it('should return POST_QA_WARN when non-blocking checks fail', async () => {
+    it('should return POST_QA_FAIL when coverage check fails (B-type blocking)', async () => {
       const taskId = 'TASK-feature-P2-test-task-20260101';
       const task = createDefaultTaskMeta(taskId, 'Test Task', 'feature');
       writeTaskMeta(task, tempDir);
@@ -716,14 +716,18 @@ describe('PostQAGateRunner', () => {
         verifiedAt: new Date().toISOString(),
         verifier: 'qa_tester',
         summary: 'Test summary with enough length for validation.',
-        coverage: 0.3, // Below threshold - non-blocking warning
+        coverage: 0.3, // Below threshold - B-type blocking failure
       }));
 
       const result = await runner.run(taskId);
 
-      expect(result.decision).toBe('POST_QA_WARN');
-      expect(result.allowed).toBe(true);
-      expect(result.warningCount).toBeGreaterThan(0);
+      // CP-4: Coverage check is now blocking with failureType: B
+      expect(result.decision).toBe('POST_QA_FAIL');
+      expect(result.allowed).toBe(false);
+      expect(result.blockingFailures).toBeGreaterThan(0);
+      // CP-6: Coverage gap data should be available for QA retry
+      expect(result.coverageGapData).toBeDefined();
+      expect(result.coverageGapData?.failureType).toBe('B');
     });
 
     it('should return POST_QA_FAIL when blocking checks fail', async () => {

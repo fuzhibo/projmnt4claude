@@ -51,6 +51,12 @@ const REPORT_REQUIRED_FIELDS = [
  * - 缺少必要字段
  */
 export class EvalReportJsonChecker implements IPostEvalChecker {
+  /**
+   * 失败类型: B (回退到评估阶段重试)
+   * 报告格式问题是评估阶段执行问题
+   */
+  readonly failureType = 'B' as const;
+
   async check(ctx: PostEvalCheckContext): Promise<PostEvalCheckResult> {
     const { taskId, cwd } = ctx;
     const reportPath = path.join(cwd, '.projmnt4claude', 'outputs', taskId, 'evaluation-report.json');
@@ -145,6 +151,12 @@ export class EvalReportJsonChecker implements IPostEvalChecker {
  * - result 字段值不在 {PASS, NOPASS} 中
  */
 export class EvalResultValidChecker implements IPostEvalChecker {
+  /**
+   * 失败类型: B (回退到评估阶段重试)
+   * 评估结果无效是评估阶段执行问题
+   */
+  readonly failureType = 'B' as const;
+
   async check(ctx: PostEvalCheckContext): Promise<PostEvalCheckResult> {
     const { evalReport } = ctx;
 

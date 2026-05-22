@@ -36,6 +36,12 @@ import type {
  */
 export class AllCheckpointsFinalChecker implements IPostEvalChecker {
   /**
+   * 失败类型: A (中断流水线)
+   * 检查点状态是前置数据，缺失应中断
+   */
+  readonly failureType = 'A' as const;
+
+  /**
    * 执行检查点最终完成检查
    *
    * @param ctx 检查上下文，包含任务元数据和评估报告
@@ -66,6 +72,7 @@ export class AllCheckpointsFinalChecker implements IPostEvalChecker {
         : `${incomplete.length} 个检查点未完成`,
       details: {
         incompleteCheckpoints: incomplete.map(cp => ({ id: cp.id, status: cp.status })),
+        failureType: this.failureType,
       },
     };
   }

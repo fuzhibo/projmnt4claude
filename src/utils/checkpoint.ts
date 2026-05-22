@@ -7,7 +7,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 import { getTasksDir } from './path';
 import { readTaskMeta, writeTaskMeta } from './task';
-import type { TaskMeta, CheckpointMetadata, CheckpointVerification, VerificationMethod } from '../types/task';
+import type { TaskMeta, CheckpointMetadata, CheckpointVerification, VerificationMethod, CheckpointVerificationDetails } from '../types/task';
 import { inferCheckpointAttributesFromPrefix } from './validation-rules/checkpoint-rules';
 
 /**
@@ -576,6 +576,7 @@ export function updateCheckpointStatus(
     note?: string;
     result?: string;
     verifiedBy?: string;
+    human?: boolean;  // 人类直接执行标识
   } = {},
   cwd: string = process.cwd()
 ): void {
@@ -616,7 +617,27 @@ export function updateCheckpointStatus(
     }
     checkpoint.verification.result = options.result;
     checkpoint.verification.verifiedAt = new Date().toISOString();
-    checkpoint.verification.verifiedBy = options.verifiedBy || process.env.USER || 'unknown';
+
+    // 根据是否为人类直接执行，设置不同的 verifiedBy
+    if (options.human) {
+      // 人类直接执行：使用用户名
+      checkpoint.verification.verifiedBy = options.verifiedBy || process.env.USER || 'unknown';
+      checkpoint.verification.details = {
+        type: 'human',
+        directHumanInput: true,
+      };
+    } else if (options.verifiedBy?.startsWith('ai_proxy:')) {
+      // AI 代为执行：使用传入的 ai_proxy:xxx 格式
+      checkpoint.verification.verifiedBy = options.verifiedBy;
+      checkpoint.verification.details = {
+        type: 'human',
+        aiProxied: true,
+        userConfirmation: options.note,
+      };
+    } else {
+      // 默认：使用传入的 verifiedBy 或当前用户
+      checkpoint.verification.verifiedBy = options.verifiedBy || process.env.USER || 'unknown';
+    }
   }
 
   // 同步回 checkpoint.md（更新勾选状态）
@@ -1041,4 +1062,400 @@ function mergeCheckpoints(
   }
 
   return merged;
+}
+
+// ============== Pre-CR Gate 和 Post-CR Gate 导出 ==============
+
+/**
+ * Pre-CR Gate 类重新导出
+ * 代码审核前门禁检查
+ */
+export {
+  PreCRGateRunner,
+  createPreCRGateRunner,
+  quickPreCRGateCheck,
+  batchPreCRGateCheck,
+  DEFAULT_PRE_CR_GATE_RULES,
+  DEFAULT_PRE_CR_GATE_RUNNER_CONFIG,
+} from './pre-cr-gate/index.js';
+
+export type {
+  PreCRGateRuleType,
+  PreCRGateRule,
+  PreCRGateRuleResult,
+  PreCRGateDecision,
+  PreCRGateRunResult,
+  PreCRGateReport,
+  PreCRGateRunnerConfig,
+  PreCRGateRuleHandler,
+  PreCRGateContext,
+} from './pre-cr-gate/index.js';
+
+/**
+ * Post-CR Gate 类重新导出
+ * 代码审核后门禁检查
+ */
+export {
+  PostCRGateRunner,
+  createPostCRGateRunner,
+  quickPostCRGateCheck,
+  batchPostCRGateCheck,
+  generateTestEnvConfig,
+  DEFAULT_POST_CR_GATE_RULES,
+  DEFAULT_POST_CR_GATE_RUNNER_CONFIG,
+} from './post-cr-gate/index.js';
+
+export type {
+  PostCRGateRuleType,
+  PostCRGateRule,
+  PostCRGateRuleResult,
+  PostCRGateDecision,
+  PostCRGateRunResult,
+  PostCRGateReport,
+  PostCRGateRunnerConfig,
+  PostCRGateRuleHandler,
+  PostCRGateContext,
+  FeedbackLoopItem,
+  CodeReviewReport,
+  CodeReviewIssue,
+  TestEnvConfig,
+} from './post-cr-gate/index.js';
+
+/**
+ * QualityScoreChecker 重新导出
+ * 质量分数检查器
+ */
+export {
+  QualityScoreChecker,
+  createQualityScoreChecker,
+  quickQualityScoreCheck,
+} from './post-cr-gate/index.js';
+
+export type {
+  QualityScoreCheckResult,
+} from './post-cr-gate/index.js';
+
+// ============== Checkpoint Verification 导出 ==============
+
+/**
+ * 检查点产出验证模块重新导出
+ * 用于检测假成功 — 检查点被标记为完成但没有对应的代码变更或产出物
+ */
+export {
+  checkCompletedCheckpoints,
+  validateHumanCheckpointCompletion,
+  validateAutomatedCheckpointCompletion,
+  reportFalseSuccessWarnings,
+  CheckpointOutputVerifier,
+  CheckpointStatusMismatchFixer,
+  detectFalseSuccess,
+  verifyAndRecordCheckpoint,
+  verifyCheckpointOutput,
+  verifyPhaseSyncCheckpoint,
+  getVerificationSource,
+  inferCategoryFromCheckpoint,
+  inferCategoryFromDescription,
+  CATEGORY_STRATEGIES,
+} from './checkpoint-verification.js';
+
+export type {
+  FalseSuccessWarning,
+  CheckpointCompletionResult,
+  CheckpointValidationResult,
+  PhaseSyncVerificationResult,
+  CheckpointMismatchFixResult,
+  VerificationEvidence,
+} from './checkpoint-verification.js';
+
+// ============== CLI 手动标记验证类 ==============
+
+/**
+ * AI 代理验证结果
+ * 用于 AI 代为执行检查点标记时返回的结果
+ */
+export interface AIVerificationResult {
+  /** 验证是否通过 */
+  valid: boolean;
+  /** 验证证据列表 */
+  evidence: Array<{ type: string; description: string }>;
+  /** 验证者标识 (ai_proxy:xxx 格式) */
+  verifiedBy: string;
+  /** 验证时间 */
+  verifiedAt: string;
+  /** 用户确认内容 */
+  userConfirmation?: string;
+  /** 失败原因 */
+  failureReason?: string;
+}
+
+/**
+ * CLI 验证结果
+ * 用于人类直接执行检查点标记时返回的结果
+ */
+export interface CLIVerificationResult {
+  /** 验证是否通过 */
+  valid: boolean;
+  /** 验证证据列表 */
+  evidence: Array<{ type: string; description: string }>;
+  /** 验证者标识 (用户名) */
+  verifiedBy: string;
+  /** 验证时间 */
+  verifiedAt: string;
+  /** 用户输入内容 */
+  userInput?: string;
+  /** 失败原因 */
+  failureReason?: string;
+}
+
+/**
+ * CheckpointVerificationAI 类
+ * 用于 AI 代为执行检查点验证
+ *
+ * AI 代为执行是默认行为，AI 需要在调用前收集验证证据。
+ * verifiedBy 字段格式为 ai_proxy:xxx，表示 AI 代为执行。
+ */
+export class CheckpointVerificationAI {
+  private aiName: string;
+  private cwd: string;
+
+  constructor(aiName: string = 'claude-code', cwd: string = process.cwd()) {
+    this.aiName = aiName;
+    this.cwd = cwd;
+  }
+
+  /**
+   * 获取 AI 验证者标识
+   * 格式: ai_proxy:xxx
+   */
+  getVerifiedBy(): string {
+    return `ai_proxy:${this.aiName}`;
+  }
+
+  /**
+   * 构建 AI 代理验证记录
+   * 用于人工验证检查点（requiresHuman: true）
+   *
+   * @param userConfirmation - 用户确认内容
+   * @param note - 验证说明
+   * @returns AI 代理验证结果
+   */
+  buildHumanVerificationRecord(
+    userConfirmation: string,
+    note?: string
+  ): AIVerificationResult {
+    const now = new Date().toISOString();
+    return {
+      valid: true,
+      evidence: [
+        {
+          type: 'human',
+          description: userConfirmation,
+        },
+      ],
+      verifiedBy: this.getVerifiedBy(),
+      verifiedAt: now,
+      userConfirmation: note || userConfirmation,
+    };
+  }
+
+  /**
+   * 构建自动验证记录
+   * 用于自动验证检查点（requiresHuman: false）
+   *
+   * @param evidence - 验证证据列表
+   * @returns AI 代理验证结果
+   */
+  buildAutomatedVerificationRecord(
+    evidence: Array<{ type: string; description: string }>
+  ): AIVerificationResult {
+    const now = new Date().toISOString();
+    return {
+      valid: evidence.length > 0,
+      evidence,
+      verifiedBy: this.getVerifiedBy(),
+      verifiedAt: now,
+    };
+  }
+
+  /**
+   * 构建验证失败记录
+   *
+   * @param failureReason - 失败原因
+   * @param missingOutputs - 缺失产出列表
+   * @returns AI 代理验证结果
+   */
+  buildFailureRecord(
+    failureReason: string,
+    missingOutputs?: string[]
+  ): AIVerificationResult {
+    const now = new Date().toISOString();
+    return {
+      valid: false,
+      evidence: [],
+      verifiedBy: this.getVerifiedBy(),
+      verifiedAt: now,
+      failureReason,
+      userConfirmation: missingOutputs ? `缺失产出: ${missingOutputs.join(', ')}` : undefined,
+    };
+  }
+
+  /**
+   * 更新检查点状态（AI 代为执行）
+   *
+   * @param taskId - 任务 ID
+   * @param checkpointId - 检查点 ID
+   * @param result - AI 代理验证结果
+   * @param note - 验证说明
+   * @param cwd - 工作目录
+   */
+  updateCheckpointWithAIVerification(
+    taskId: string,
+    checkpointId: string,
+    result: AIVerificationResult,
+    note?: string,
+    cwd?: string
+  ): void {
+    updateCheckpointStatus(
+      taskId,
+      checkpointId,
+      result.valid ? 'completed' : 'failed',
+      {
+        result: result.valid ? 'passed' : 'failed',
+        verifiedBy: result.verifiedBy,
+        note: note || result.userConfirmation,
+      },
+      cwd || this.cwd
+    );
+  }
+}
+
+/**
+ * CheckpointVerificationCLI 类
+ * 用于人类直接执行检查点验证
+ *
+ * 人类直接执行通过 --human 参数启动交互式界面。
+ * verifiedBy 字段格式为用户名，表示人类直接执行。
+ */
+export class CheckpointVerificationCLI {
+  private cwd: string;
+
+  constructor(cwd: string = process.cwd()) {
+    this.cwd = cwd;
+  }
+
+  /**
+   * 获取人类验证者标识
+   * 格式: 用户名
+   */
+  getVerifiedBy(): string {
+    return process.env.USER || process.env.USERNAME || 'unknown';
+  }
+
+  /**
+   * 构建人类直接验证记录
+   * 用于 --human 模式下的人工验证检查点
+   *
+   * @param userInput - 用户输入内容
+   * @returns CLI 验证结果
+   */
+  buildHumanVerificationRecord(userInput: string): CLIVerificationResult {
+    const now = new Date().toISOString();
+    return {
+      valid: true,
+      evidence: [
+        {
+          type: 'human',
+          description: userInput,
+        },
+      ],
+      verifiedBy: this.getVerifiedBy(),
+      verifiedAt: now,
+      userInput,
+    };
+  }
+
+  /**
+   * 构建自动验证记录
+   * 用于 --human 模式下的自动验证检查点
+   *
+   * @param evidence - 验证证据列表
+   * @returns CLI 验证结果
+   */
+  buildAutomatedVerificationRecord(
+    evidence: Array<{ type: string; description: string }>
+  ): CLIVerificationResult {
+    const now = new Date().toISOString();
+    return {
+      valid: evidence.length > 0,
+      evidence,
+      verifiedBy: this.getVerifiedBy(),
+      verifiedAt: now,
+    };
+  }
+
+  /**
+   * 构建验证失败记录
+   *
+   * @param failureReason - 失败原因
+   * @returns CLI 验证结果
+   */
+  buildFailureRecord(failureReason: string): CLIVerificationResult {
+    const now = new Date().toISOString();
+    return {
+      valid: false,
+      evidence: [],
+      verifiedBy: this.getVerifiedBy(),
+      verifiedAt: now,
+      failureReason,
+    };
+  }
+
+  /**
+   * 更新检查点状态（人类直接执行）
+   *
+   * @param taskId - 任务 ID
+   * @param checkpointId - 检查点 ID
+   * @param result - CLI 验证结果
+   * @param note - 验证说明
+   * @param cwd - 工作目录
+   */
+  updateCheckpointWithCLIVerification(
+    taskId: string,
+    checkpointId: string,
+    result: CLIVerificationResult,
+    note?: string,
+    cwd?: string
+  ): void {
+    updateCheckpointStatus(
+      taskId,
+      checkpointId,
+      result.valid ? 'completed' : 'failed',
+      {
+        result: result.valid ? 'passed' : 'failed',
+        verifiedBy: result.verifiedBy,
+        note: note || result.userInput,
+        human: true,  // 标识为人类直接执行
+      },
+      cwd || this.cwd
+    );
+  }
+}
+
+/**
+ * 创建 AI 代理验证器
+ */
+export function createCheckpointVerificationAI(
+  aiName: string = 'claude-code',
+  cwd: string = process.cwd()
+): CheckpointVerificationAI {
+  return new CheckpointVerificationAI(aiName, cwd);
+}
+
+/**
+ * 创建 CLI 验证器
+ */
+export function createCheckpointVerificationCLI(
+  cwd: string = process.cwd()
+): CheckpointVerificationCLI {
+  return new CheckpointVerificationCLI(cwd);
 }

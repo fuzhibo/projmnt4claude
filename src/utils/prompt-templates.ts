@@ -318,7 +318,7 @@ export const DEFAULT_QA_TEMPLATE: PromptTemplate = {
    - 任务描述中的"创建类"、"定义接口"等措辞可能是算法描述的产物，不构成实际的代码结构要求。
    - 如果代码通过不同结构（如模块级函数代替类方法）实现了相同功能，应视为满足要求。
 
-{retryContextSection}
+{retryContextSection}{coverageGapSection}
 ## 任务信息
 - ID: {taskId}
 - 标题: {title}
@@ -425,7 +425,7 @@ Please follow these principles during verification:
    - Phrases like "create class" or "define interface" in task descriptions may be artifacts of algorithm description and do not constitute actual code structure requirements.
    - If code achieves the same functionality through different structures (such as module-level functions instead of class methods), it should be considered as meeting the requirements.
 
-{retryContextSection}
+{retryContextSection}{coverageGapSection}
 ## Task Information
 - ID: {taskId}
 - Title: {title}
@@ -765,7 +765,7 @@ export const DEFAULT_REQUIREMENT_TEMPLATE: PromptTemplate = {
 |------|----------|----------|---------------|
 | [ai review] | 代码审查、结构检查、代码质量、逻辑正确性、重构、命名规范 | code_review | false |
 | [ai qa] | 测试、验证、覆盖率、自动化检查、回归测试、类型检查 | qa_verification | false |
-| [script] | 脚本执行、构建、命令行操作、CI/CD、部署、打包 | evaluation | false |
+| [script] | 可自动执行的验证脚本：构建、部署、CI/CD、打包、lint、test（必须有 verification.commands） | evaluation | false |
 
 ## 前缀选择示例
 
@@ -774,7 +774,13 @@ export const DEFAULT_REQUIREMENT_TEMPLATE: PromptTemplate = {
 - "[ai qa] 登录模块单元测试覆盖率 >= 80%"
 - "[ai qa] 运行 tsc --noEmit 确认类型检查通过"
 - "[script] bun run build 构建成功"
-- "[script] 运行 npm run lint 代码检查通过"
+- "[script] npm run lint 代码检查通过"
+
+## [script] 前缀使用约束
+
+- [script] 仅用于可自动执行的验证脚本（构建、部署、CI/CD、lint、test）
+- [script] 检查点必须包含 verification.commands 字段，指定执行命令
+- 代码修改任务不应使用 [script] 前缀（使用 [ai review] 或无前缀）
 
 ## requiresHuman 字段使用说明
 
@@ -835,7 +841,7 @@ Each checkpoint description must start with one of these prefixes to identify th
 |--------|----------|-------------------|---------------|
 | [ai review] | Code review, structure check, code quality, logic correctness, refactoring, naming conventions | code_review | false |
 | [ai qa] | Testing, verification, coverage, automated checks, regression testing, type checking | qa_verification | false |
-| [script] | Script execution, build, command line operations, CI/CD, deployment, packaging | evaluation | false |
+| [script] | Automatically executable verification scripts: build, deploy, CI/CD, packaging, lint, test (must have verification.commands) | evaluation | false |
 
 ## Prefix Selection Examples
 
@@ -844,7 +850,13 @@ Each checkpoint description must start with one of these prefixes to identify th
 - "[ai qa] Login module unit test coverage >= 80%"
 - "[ai qa] Run tsc --noEmit to confirm type check passes"
 - "[script] bun run build succeeds"
-- "[script] Run npm run lint code check passes"
+- "[script] npm run lint code check passes"
+
+## [script] Prefix Usage Constraints
+
+- [script] is only for automatically executable verification scripts (build, deploy, CI/CD, lint, test)
+- [script] checkpoints must include verification.commands field specifying execution commands
+- Code modification tasks should not use [script] prefix (use [ai review] or no prefix)
 
 ## requiresHuman Field Usage
 

@@ -17,7 +17,7 @@
 
 import * as fs from 'node:fs';
 import * as path from 'node:path';
-import type { TaskMeta } from '../../types/task.js';
+import type { TaskMeta, FailureType, QAFailureCategory } from '../../types/task.js';
 import { readTaskMeta } from '../task.js';
 import { QACheckpointSyncChecker } from './checkers/checkpoint-sync-checker.js';
 
@@ -56,6 +56,14 @@ export interface PostQAGateRule {
   priority: number;
   /** 是否为阻塞规则 (失败则整体失败) */
   blocking: boolean;
+  /**
+   * 失败类型分类
+   * - 'A': Task Foundation - 任务数据有效性检查，失败需中断流水线
+   * - 'B': Phase Artifact - 阶段输出质量检查，失败需回退到阶段起点重试
+   * Post-QA Gate 默认为 'B' 类（检查阶段输出质量）
+   * 特殊: 覆盖率检查失败触发 QA 内部重试，而非链式回退
+   */
+  failureType?: FailureType;
   /** 规则配置参数 */
   config?: Record<string, unknown>;
 }
@@ -78,6 +86,12 @@ export interface PostQAGateRuleResult {
   duration: number;
   /** 执行时间戳 */
   timestamp: string;
+  /**
+   * CP-5: 失败类型分类
+   * 'A' = Task Foundation (中断流水线)
+   * 'B' = Phase Artifact (QA内部重试)
+   */
+  failureType?: FailureType;
 }
 
 /**
@@ -113,6 +127,26 @@ export interface PostQAGateRunResult {
   qaReportPath?: string;
   /** 待人工验证检查点列表 */
   pendingHumanVerifications?: PendingHumanVerification[];
+  /**
+   * CP-5: 覆盖率缺口数据
+   * 当覆盖率检查失败时，包含缺口信息供 QA 重试机制使用
+   */
+  coverageGapData?: {
+    /** 当前覆盖率 */
+    currentCoverage: number;
+    /** 最小覆盖率阈值 */
+    minCoverage: number;
+    /** 覆盖率缺口 */
+    gap: number;
+    /** 缺口百分比字符串 */
+    gapPercent: string;
+    /** 覆盖率详情 */
+    coverageDetails?: { lines: number; branches: number; functions: number; statements: number };
+    /** 失败类型 */
+    failureType: 'A' | 'B';
+    /** 人类可读消息 */
+    message: string;
+  };
 }
 
 /**
@@ -287,6 +321,7 @@ export const DEFAULT_POST_QA_GATE_RULES: PostQAGateRule[] = [
     enabled: true,
     priority: 1,
     blocking: true,
+    failureType: 'A',
   },
   {
     id: 'R-QA-POST-002',
@@ -296,6 +331,7 @@ export const DEFAULT_POST_QA_GATE_RULES: PostQAGateRule[] = [
     enabled: true,
     priority: 2,
     blocking: true,
+    failureType: 'A',
   },
   {
     id: 'R-QA-POST-003',
@@ -305,6 +341,7 @@ export const DEFAULT_POST_QA_GATE_RULES: PostQAGateRule[] = [
     enabled: true,
     priority: 3,
     blocking: true,
+    failureType: 'A',
   },
   {
     id: 'R-QA-POST-004',
@@ -314,6 +351,7 @@ export const DEFAULT_POST_QA_GATE_RULES: PostQAGateRule[] = [
     enabled: true,
     priority: 4,
     blocking: false,
+    failureType: 'B',
   },
   {
     id: 'R-QA-POST-005',
@@ -323,6 +361,7 @@ export const DEFAULT_POST_QA_GATE_RULES: PostQAGateRule[] = [
     enabled: true,
     priority: 5,
     blocking: false,
+    failureType: 'B',
   },
   {
     id: 'R-QA-POST-005a',
@@ -332,6 +371,7 @@ export const DEFAULT_POST_QA_GATE_RULES: PostQAGateRule[] = [
     enabled: true,
     priority: 6,
     blocking: false,
+    failureType: 'B',
   },
   {
     id: 'R-QA-POST-006',
@@ -341,15 +381,17 @@ export const DEFAULT_POST_QA_GATE_RULES: PostQAGateRule[] = [
     enabled: true,
     priority: 7,
     blocking: true,
+    failureType: 'A',
   },
   {
     id: 'R-QA-POST-007',
     type: 'test_coverage',
     name: '测试覆盖率达标',
-    description: 'coverage >= 阈值',
+    description: 'coverage >= 阈值，覆盖率不足触发QA内部重试而非链式回退',
     enabled: true,
     priority: 8,
-    blocking: false,
+    blocking: true,
+    failureType: 'B',
   },
 ];
 
@@ -530,6 +572,9 @@ export class PostQAGateRunner {
     // 获取待人工验证列表
     const pendingHumanVerifications = (context.sharedData.get('pendingHumanVerifications') ?? []) as PendingHumanVerification[];
 
+    // CP-5: 获取覆盖率缺口数据（用于 QA 重试 prompt）
+    const coverageGapData = context.sharedData.get('coverageGap') as PostQAGateRunResult['coverageGapData'];
+
     const runResult: PostQAGateRunResult = {
       taskId,
       decision,
@@ -543,6 +588,7 @@ export class PostQAGateRunner {
       timestamp: new Date().toISOString(),
       qaReportPath,
       pendingHumanVerifications: pendingHumanVerifications.length > 0 ? pendingHumanVerifications : undefined,
+      coverageGapData,
     };
 
     // 生成报告
@@ -575,6 +621,7 @@ export class PostQAGateRunner {
           passed: false,
           ruleName: rule.name,
           message: `未找到规则类型 ${rule.type} 的处理器`,
+          failureType: rule.failureType ?? 'A',
           duration: Date.now() - startTime,
           timestamp,
         };
@@ -584,6 +631,7 @@ export class PostQAGateRunner {
       const result = await handler(task, rule, context);
       result.duration = Date.now() - startTime;
       result.ruleId = rule.id;
+      result.failureType = rule.failureType ?? (rule.blocking ? 'A' : 'B');
       return result;
     } catch (error) {
       return {
@@ -591,6 +639,7 @@ export class PostQAGateRunner {
         passed: false,
         ruleName: rule.name,
         message: `规则执行失败: ${error instanceof Error ? error.message : String(error)}`,
+        failureType: rule.failureType ?? 'A',
         duration: Date.now() - startTime,
         timestamp,
       };
@@ -620,6 +669,128 @@ export class PostQAGateRunner {
   private isBlockingRule(ruleId: string): boolean {
     const rule = this.config.rules.find(r => r.id === ruleId);
     return rule?.blocking ?? false;
+  }
+
+  // ============== CP-4/CP-6: QA 门禁失败分类 ==============
+
+  /**
+   * CP-4: Classify QA gate failure into categories for retry routing
+   *
+   * Coverage issues → 'coverage_retry' (QA internal retry)
+   * Functional issues → 'chain_rollback' (chain rollback: QA → CR → Dev)
+   * No failure → 'none'
+   *
+   * @param result - Post-QA gate run result
+   * @returns QAFailureCategory classification
+   */
+  classifyQAFailureCategory(result: PostQAGateRunResult): QAFailureCategory {
+    if (result.decision === 'POST_QA_PASS') {
+      return 'none';
+    }
+
+    // Check for coverage-related failures (R-QA-POST-007: test_coverage)
+    const coverageFailure = result.ruleResults.find(
+      r => !r.passed && r.failureType === 'B' && r.ruleId === 'R-QA-POST-007'
+    );
+
+    // If coverage failure exists and we have gap data → coverage_retry
+    if (coverageFailure && result.coverageGapData) {
+      return 'coverage_retry';
+    }
+
+    // All other failures → chain_rollback
+    const hasFailures = result.ruleResults.some(r => !r.passed);
+    if (hasFailures) {
+      return 'chain_rollback';
+    }
+
+    return 'none';
+  }
+
+  /**
+   * CP-6: Classify QA gate failure with detailed retry information
+   *
+   * 覆盖率问题触发 QA 内部重试，功能性问题触发链式回退
+   *
+   * - 覆盖率问题 (failureType: B, ruleType: test_coverage) → QA 内部重试
+   * - 功能性问题 (failureType: A) → 链式回退 (QA → CR → Dev)
+   * - 其他 B 类问题 → 链式回退到阶段起点
+   *
+   * @deprecated Use classifyQAFailureCategory for simple category check
+   */
+  classifyQAGateFailure(result: PostQAGateRunResult): {
+    /** 是否需要 QA 内部重试（覆盖率问题） */
+    needsQARetry: boolean;
+    /** 是否需要链式回退（功能性问题） */
+    needsChainRollback: boolean;
+    /** 失败分类 */
+    failureCategory: QAFailureCategory;
+    /** 覆盖率缺口数据（仅覆盖率重试时有值） */
+    coverageGapData?: PostQAGateRunResult['coverageGapData'];
+    /** QA 重试 prompt（仅覆盖率重试时有值） */
+    qaRetryPrompt?: string;
+  } {
+    const category = this.classifyQAFailureCategory(result);
+
+    if (category === 'none') {
+      return { needsQARetry: false, needsChainRollback: false, failureCategory: 'none' };
+    }
+
+    if (category === 'coverage_retry' && result.coverageGapData) {
+      const prompt = this.generateQARetryPrompt(result.coverageGapData);
+      return {
+        needsQARetry: true,
+        needsChainRollback: false,
+        failureCategory: 'coverage_retry',
+        coverageGapData: result.coverageGapData,
+        qaRetryPrompt: prompt,
+      };
+    }
+
+    // chain_rollback
+    return { needsQARetry: false, needsChainRollback: true, failureCategory: 'chain_rollback' };
+  }
+
+  /**
+   * CP-5: 生成 QA 重试 prompt
+   *
+   * 包含覆盖率缺口数据，让 QA 根据覆盖率要求扩展测试用例
+   */
+  generateQARetryPrompt(gapData: NonNullable<PostQAGateRunResult['coverageGapData']>): string {
+    const lines: string[] = [];
+
+    lines.push('覆盖率门禁未通过，需要扩展测试用例。');
+    lines.push('');
+    lines.push(`当前覆盖率: ${(gapData.currentCoverage * 100).toFixed(1)}%`);
+    lines.push(`阈值要求: ${(gapData.minCoverage * 100).toFixed(0)}%`);
+    lines.push(`覆盖率缺口: ${gapData.gapPercent}`);
+    lines.push('');
+
+    if (gapData.coverageDetails) {
+      const d = gapData.coverageDetails;
+      lines.push('覆盖率详情:');
+      lines.push(`  行覆盖率: ${(d.lines * 100).toFixed(1)}%`);
+      lines.push(`  分支覆盖率: ${(d.branches * 100).toFixed(1)}%`);
+      lines.push(`  函数覆盖率: ${(d.functions * 100).toFixed(1)}%`);
+      lines.push(`  语句覆盖率: ${(d.statements * 100).toFixed(1)}%`);
+      lines.push('');
+
+      // 找出最低覆盖率维度，给出针对性建议
+      const dimensions = [
+        { name: '行覆盖率', value: d.lines },
+        { name: '分支覆盖率', value: d.branches },
+        { name: '函数覆盖率', value: d.functions },
+        { name: '语句覆盖率', value: d.statements },
+      ].sort((a, b) => a.value - b.value);
+
+      lines.push(`最低覆盖率维度: ${dimensions[0].name} (${(dimensions[0].value * 100).toFixed(1)}%)`);
+      lines.push('建议优先补充该维度的测试用例。');
+    }
+
+    lines.push('');
+    lines.push('请扩展测试用例，覆盖上述未覆盖的代码路径。');
+
+    return lines.join('\n');
   }
 
   // ============== 内置规则处理器 ==============
@@ -1039,8 +1210,10 @@ export class PostQAGateRunner {
 
   /**
    * R-QA-POST-007: 测试覆盖率达标检查
-   * 等级: WARNING (非阻塞)
+   * 等级: ERROR (阻塞) - CP-4: 改为 blocking: true
    * 覆盖率 >= 阈值 (默认60%)
+   *
+   * CP-5: 覆盖率缺口数据存储在 sharedData 中，供 QA 重试机制使用
    *
    * 覆盖率来源优先级:
    * 1. qa-report.json 中的 coverage 字段
@@ -1059,6 +1232,8 @@ export class PostQAGateRunner {
 
     // 尝试从 qa-report.json 获取覆盖率
     let coverage: number | undefined;
+    let coverageDetails: { lines: number; branches: number; functions: number; statements: number } | undefined;
+
     if (fs.existsSync(reportPath)) {
       try {
         const content = fs.readFileSync(reportPath, 'utf-8');
@@ -1071,23 +1246,43 @@ export class PostQAGateRunner {
 
     // 如果 qa-report.json 中没有覆盖率，从覆盖率报告文件计算
     if (coverage === undefined) {
-      coverage = await this.calculateCoverageFromReports(context);
+      const result = await this.calculateCoverageFromReportsWithDetails(context);
+      coverage = result.coverage;
+      coverageDetails = result.details;
     }
 
     const passed = coverage >= minCoverage;
+    const gap = passed ? 0 : minCoverage - coverage!;
+
+    // CP-5: 将覆盖率缺口数据存储在 sharedData 中，供 QA 重试机制使用
+    if (!passed) {
+      context.sharedData.set('coverageGap', {
+        currentCoverage: coverage,
+        minCoverage,
+        gap,
+        gapPercent: `${(gap * 100).toFixed(1)}%`,
+        coverageDetails,
+        failureType: 'B', // 覆盖率问题触发 QA 内部重试
+        message: `当前覆盖率: ${(coverage! * 100).toFixed(1)}%，阈值要求: ${(minCoverage * 100).toFixed(0)}%，缺口: ${(gap * 100).toFixed(1)}%`,
+      });
+    }
 
     return {
       ruleId: rule.id,
       passed,
       ruleName: rule.name,
       message: passed
-        ? `测试覆盖率达标: ${(coverage * 100).toFixed(1)}% >= ${(minCoverage * 100).toFixed(0)}%`
-        : `测试覆盖率未达标: ${(coverage * 100).toFixed(1)}% < ${(minCoverage * 100).toFixed(0)}%`,
+        ? `测试覆盖率达标: ${(coverage! * 100).toFixed(1)}% >= ${(minCoverage * 100).toFixed(0)}%`
+        : `测试覆盖率未达标: ${(coverage! * 100).toFixed(1)}% < ${(minCoverage * 100).toFixed(0)}%`,
       details: {
         coverage,
         minCoverage,
-        coveragePercent: `${(coverage * 100).toFixed(1)}%`,
+        coveragePercent: `${(coverage! * 100).toFixed(1)}%`,
         thresholdPercent: `${(minCoverage * 100).toFixed(0)}%`,
+        gap: gap,
+        gapPercent: `${(gap * 100).toFixed(1)}%`,
+        coverageDetails,
+        failureType: 'B',
       },
       duration: 0,
       timestamp: new Date().toISOString(),
@@ -1098,6 +1293,18 @@ export class PostQAGateRunner {
    * 从测试框架报告计算综合覆盖率
    */
   private async calculateCoverageFromReports(context: PostQAGateContext): Promise<number> {
+    const result = await this.calculateCoverageFromReportsWithDetails(context);
+    return result.coverage;
+  }
+
+  /**
+   * 从测试框架报告计算综合覆盖率（带详细信息）
+   * CP-5: 返回覆盖率详情，用于 QA 重试 prompt
+   */
+  private async calculateCoverageFromReportsWithDetails(context: PostQAGateContext): Promise<{
+    coverage: number;
+    details?: { lines: number; branches: number; functions: number; statements: number };
+  }> {
     const coverageFiles = [
       path.join(context.cwd, 'coverage', 'coverage-summary.json'),
       path.join(context.cwd, 'coverage', 'lcov-report', 'coverage-summary.json'),
@@ -1110,16 +1317,20 @@ export class PostQAGateRunner {
           const content = JSON.parse(fs.readFileSync(filePath, 'utf-8'));
           const raw = this.parseCoverageData(content);
           // 加权平均
-          return Math.round(
+          const coverage = Math.round(
             (raw.lines * 0.4 + raw.branches * 0.3 + raw.functions * 0.2 + raw.statements * 0.1) * 1000
           ) / 1000;
+          return {
+            coverage,
+            details: raw,
+          };
         } catch {
           // 解析失败，尝试下一个文件
         }
       }
     }
 
-    return 0; // 默认返回0
+    return { coverage: 0 }; // 默认返回0
   }
 
   /**

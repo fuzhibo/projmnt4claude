@@ -26,7 +26,10 @@ export type VerificationResult = 'verified' | 'unverified' | 'failed' | 'skipped
  */
 export type VerificationSource =
   | 'cli_manual'       // CLI 手动标记
-  | 'phase_sync'       // 阶段自动同步
+  | 'phase_sync'       // 阶段自动同步（通用）
+  | 'phase_sync_dev'   // 开发阶段自动同步
+  | 'phase_sync_cr'    // 代码审查阶段自动同步
+  | 'phase_sync_qa'    // QA 阶段自动同步
   | 'check_completed'  // checkCompletedCheckpoints 检测
   | 'analyze_fix';     // analyze --fix 修复
 

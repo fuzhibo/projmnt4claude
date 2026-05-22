@@ -92,6 +92,29 @@ export {
   type GitWorkspaceReport,
 } from './git-workspace-checker.js';
 
+// 导出测试环境检查器 (A类 - 中断任务)
+export {
+  TestEnvChecker,
+  createTestEnvChecker,
+  checkTestEnv,
+  checkTestEnvRule,
+  DEFAULT_TEST_ENV_CHECKER_CONFIG,
+  type TestEnvCheckCommand,
+  type CheckCommandResult,
+  type TestEnvCheckerConfig,
+} from './test-env-checker.js';
+
+// 导出测试框架检查器 (A类 - 中断任务)
+export {
+  TestFrameworkChecker,
+  createTestFrameworkChecker,
+  checkTestFramework,
+  DEFAULT_TEST_FRAMEWORK_CHECKER_CONFIG,
+  type FrameworkDetectionResult,
+  type TestFrameworkDetector,
+  type TestFrameworkCheckerConfig,
+} from './test-framework-checker.js';
+
 /**
  * 检查器接口
  */

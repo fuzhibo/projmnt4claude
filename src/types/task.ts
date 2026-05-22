@@ -13,6 +13,44 @@ export type TaskType = 'bug' | 'feature' | 'research' | 'docs' | 'refactor' | 't
 export type FailureType = 'A' | 'B';
 
 /**
+ * CP-4: QA failure category
+ * Used to distinguish coverage issues from functional issues for retry routing
+ *
+ * - 'coverage_retry': Coverage gap issue - triggers QA internal retry (not chain rollback)
+ * - 'chain_rollback': Functional issue - triggers chain rollback (QA → CR → Dev)
+ * - 'none': No failure (QA gate passed)
+ */
+export type QAFailureCategory = 'coverage_retry' | 'chain_rollback' | 'none';
+
+/**
+ * CP-6: QA failure analysis result
+ * Used for chain rollback decision making
+ */
+export interface QAFailureAnalysis {
+  /** Problem attribution */
+  attribution: 'code_issue' | 'test_issue' | 'environment_issue';
+  /** Reasoning for the attribution */
+  reasoning: string;
+  /** Suggested rollback target phase */
+  suggestedRollbackTarget: 'development' | 'qa';
+}
+
+/**
+ * CP-6: Routing decision for Evaluation phase
+ * Used for smart routing after evaluation failure
+ */
+export interface RoutingDecision {
+  /** Problem source phase */
+  problemSource: 'development' | 'code_review' | 'qa' | 'evaluation';
+  /** Target phase to route to */
+  targetPhase: 'development' | 'code_review' | 'qa' | 'evaluation';
+  /** Reason for routing decision */
+  reason: string;
+  /** Specific issues identified */
+  specificIssues: string[];
+}
+
+/**
  * Task priority
  */
 export type TaskPriority = 'P0' | 'P1' | 'P2' | 'P3' | 'Q1' | 'Q2' | 'Q3' | 'Q4';
@@ -196,7 +234,35 @@ export interface CheckpointVerification {
   evidencePath?: string;       // Evidence path (relative path)
   exitCode?: number;           // Command exit code
   verifiedAt?: string;         // Verification time
-  verifiedBy?: string;         // Verified by
+  verifiedBy?: string;         // Verified by (username or ai_proxy:xxx format)
+  /** Verification details for AI proxy or human direct execution */
+  details?: CheckpointVerificationDetails;
+}
+
+/**
+ * Checkpoint verification details
+ * Used to track whether verification was AI-proxied or human direct execution
+ */
+export interface CheckpointVerificationDetails {
+  /** Verification type: human or automated */
+  type: 'human' | 'automated';
+  /** AI proxied execution (AI collected evidence on behalf of user) */
+  aiProxied?: boolean;
+  /** User confirmation content (for AI proxy mode) */
+  userConfirmation?: string;
+  /** Direct human input (for --human mode) */
+  directHumanInput?: boolean;
+  /** Verification strategy used */
+  strategy?: {
+    verifyFiles?: boolean;
+    verifyCodeChange?: boolean;
+    verifyTests?: boolean;
+    verifyCoverage?: boolean;
+    verifyReport?: boolean;
+    verifyCommands?: boolean;
+  };
+  /** Missing outputs (for failed verification) */
+  missingOutputs?: string[];
 }
 
 /**
@@ -662,6 +728,32 @@ export function normalizePriority(priority: string): TaskPriority {
 }
 
 /**
+ * 测试环境检测指令
+ *
+ * 存储在 task.meta.json 中，由任务创建时定义。
+ * Pre-Dev Gate 的 TestEnvChecker 运行这些检测指令，验证环境是否就绪。
+ */
+export interface TestEnvCheckCommand {
+  /** 指令 ID */
+  id: string;
+
+  /** 指令描述 */
+  description: string;
+
+  /** 检测命令（shell 命令或脚本路径） */
+  command: string;
+
+  /** 预期退出码（默认 0） */
+  expectedExitCode?: number;
+
+  /** 超时时间（毫秒，默认 30000） */
+  timeout?: number;
+
+  /** 是否必需（默认 true） */
+  required?: boolean;
+}
+
+/**
  * Task metadata interface
  */
 export interface TaskMeta {
@@ -713,6 +805,12 @@ export interface TaskMeta {
    * Used by QA phase to verify file coverage and file existence
    */
   files?: string[];
+  /**
+   * 测试环境检测指令列表
+   * 存储在 task.meta.json 中，由任务创建时定义。
+   * Pre-Dev Gate 的 TestEnvChecker 运行这些检测指令，验证环境是否就绪。
+   */
+  testEnvCheckCommands?: TestEnvCheckCommand[];
 }
 
 /**

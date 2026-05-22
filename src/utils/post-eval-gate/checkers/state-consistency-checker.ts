@@ -41,6 +41,12 @@ import type {
  */
 export class FinalStateConsistencyChecker implements IPostEvalChecker {
   /**
+   * 失败类型: A (中断流水线)
+   * 状态不一致是数据问题，应中断流水线
+   */
+  readonly failureType = 'A' as const;
+
+  /**
    * 执行最终状态一致性检查
    *
    * @param ctx 检查上下文，包含各阶段报告
@@ -83,7 +89,7 @@ export class FinalStateConsistencyChecker implements IPostEvalChecker {
       message: inconsistencies.length === 0
         ? '最终状态一致'
         : `状态不一致: ${inconsistencies.join('; ')}`,
-      details: { inconsistencies },
+      details: { inconsistencies, failureType: this.failureType },
     };
   }
 }

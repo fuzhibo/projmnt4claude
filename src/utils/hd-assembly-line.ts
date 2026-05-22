@@ -40,7 +40,7 @@ import {
   DEFAULT_PHASE_RETRY_LIMITS,
   ERROR_CATEGORIES,
 } from '../types/harness.js';
-import type { TaskMeta, TaskStatus, TaskRole, CheckpointMetadata, CommitHistoryEntry, TransitionNote, PhaseHistoryEntry, FailureReason, TaskFailureReason, FailureType } from '../types/task.js';
+import type { TaskMeta, TaskStatus, TaskRole, CheckpointMetadata, CommitHistoryEntry, TransitionNote, PhaseHistoryEntry, FailureReason, TaskFailureReason, FailureType, QAFailureAnalysis, RoutingDecision } from '../types/task.js';
 import { Pipeline, normalizeStatus } from '../types/task.js';
 import { readTaskMeta, writeTaskMeta, taskExists, updateTaskStatus, assignRole, incrementReopenCount, recordExecutionStats } from './task.js';
 import { getProjectDir } from './path.js';
@@ -58,6 +58,7 @@ import {
   verifyAndRecordCheckpoint,
   inferCategoryFromCheckpoint,
 } from './checkpoint-verification.js';
+import { PostQAGateRunner, createPostQAGateRunner, type PostQAGateRunResult } from './post-qa-gate/index.js';
 
 /** 阶段类型定义 (P4: 阶段内重试) */
 type Phase = 'development' | 'code_review' | 'qa' | 'evaluation';
@@ -680,6 +681,52 @@ export class AssemblyLine {
           });
           this.statusReporter.completePhase('qa_verification', taskId, `QA 验证完成: ${qaVerdict!.result}`);
 
+          // CP-6: Post-QA Gate 门禁检查
+          // QA 验证成功后，运行 PostQAGateRunner 进行质量门禁检查
+          const postQAGateRunner = createPostQAGateRunner(
+            this.config.cwd,
+            { coverageThreshold: this.config.coverageThreshold ?? 0.8 }
+          );
+
+          console.log('\n🔒 Post-QA Gate 门禁检查...');
+          const postQAGateResult = await postQAGateRunner.run(taskId);
+
+          if (!postQAGateResult.passed) {
+            console.log(`❌ Post-QA Gate 门禁检查失败`);
+            const failureClassification = postQAGateRunner.classifyQAGateFailure(postQAGateResult);
+
+            if (failureClassification.needsQARetry) {
+              // B 类门禁失败（覆盖率不足）→ QA 内部重试
+              console.log(`   🔄 B 类门禁失败（覆盖率不足），触发 QA 内部重试...`);
+              console.log(`   📊 ${failureClassification.coverageGapData?.message}`);
+
+              // 将覆盖率缺口数据存入重试上下文，供 QA 重试使用
+              this.storeQACoverageGapContext(taskId, state, failureClassification.coverageGapData!);
+
+              // 触发 QA 阶段内重试
+              const qaRetryLimit = this.getPhaseRetryLimit('qa');
+              const qaRetryCount = this.getPhaseRetryCount(taskId, 'qa', state);
+              if (qaRetryCount < qaRetryLimit) {
+                this.incrementPhaseRetryCount(taskId, 'qa', state);
+                state.retryCounter.set(taskId, (state.retryCounter.get(taskId) || 0) + 1);
+                console.log(`   🔄 准备 QA 内部重试 (${qaRetryCount + 1}/${qaRetryLimit})...`);
+                // 重新执行 QA 阶段
+                currentPhaseIndex = 2;
+                continue;
+              }
+
+              // QA 内部重试耗尽，转为链式回退
+              console.log(`   ❌ QA 内部重试耗尽，转为链式回退`);
+            }
+
+            // A 类门禁失败 或 B 类重试耗尽 → 链式回退
+            console.log(`   🚫 ${failureClassification.needsChainRollback ? 'A 类门禁失败' : 'B 类重试耗尽'}，执行链式回退`);
+            this.statusReporter.failPhase('qa_verification', new Error(postQAGateResult.summary), taskId);
+            return this.handleVerdictBasedTransition(taskId, record, state, addTimeline, 'qa', 'redevelop');
+          }
+
+          console.log(`✅ Post-QA Gate 门禁检查通过`);
+
           // 8.4 同步检查点状态（QA 通过后）
           this.syncCheckpointStatus(taskId, 'qa', { qaVerdict });
           // 8.5 QA 通过后转为 wait_evaluation 状态
@@ -1024,6 +1071,7 @@ export class AssemblyLine {
    * 同步检查点状态
    * 在流水线阶段完成后，根据阶段结果自动更新对应检查点为 completed
    * CP-006: 接入产出验证，检测假成功
+   * 验证失败时不标记完成，人工检查点跳过自动同步
    */
   private async syncCheckpointStatus(
     taskId: string,
@@ -1041,6 +1089,7 @@ export class AssemblyLine {
       const now = new Date().toISOString();
       let updated = false;
       const warnings: string[] = [];
+      const pendingHumanCheckpoints: string[] = [];
 
       for (const checkpoint of task.checkpoints) {
         // 跳过已完成/已跳过的检查点
@@ -1049,8 +1098,16 @@ export class AssemblyLine {
         const shouldComplete = this.matchCheckpointToPhase(checkpoint, phase, phaseData);
         if (!shouldComplete) continue;
 
-        // CP-006: 阶段自动同步接入产出验证
-        const verificationOutput = await verifyAndRecordCheckpoint(task, checkpoint.id, 'phase_sync', this.config.cwd, {
+        // 跳过人工验证检查点（阶段自动同步不处理人工验证）
+        if (checkpoint.requiresHuman) {
+          pendingHumanCheckpoints.push(checkpoint.id);
+          console.log(`   ⊘ 检查点 ${checkpoint.id} 需要人工验证，跳过自动同步`);
+          continue;
+        }
+
+        // 产出验证
+        console.log(`   ◷ 验证检查点 ${checkpoint.id} 的产出...`);
+        const verificationOutput = await verifyAndRecordCheckpoint(task, checkpoint.id, this.getVerificationSource(phase), this.config.cwd, {
           phase,
           devReport: phaseData?.devReport,
           codeReviewVerdict: phaseData?.codeReviewVerdict,
@@ -1058,34 +1115,54 @@ export class AssemblyLine {
         });
 
         if (verificationOutput.result === 'unverified' || verificationOutput.result === 'failed') {
-          // 记录警告但继续标记（阶段通过即认为完成）
+          // 产出验证失败，不标记完成
           if (verificationOutput.warnings) {
             warnings.push(...verificationOutput.warnings.map(w => `${checkpoint.id}: ${w}`));
           }
-          console.log(`   ⚠️ 检查点 ${checkpoint.id} 产出验证未通过，但阶段已通过，仍标记为 completed`);
+          console.log(`   ⚠️ 检查点 ${checkpoint.id} 产出验证失败，跳过自动完成`);
+          if (verificationOutput.record.failureReason) {
+            console.log(`      原因: ${verificationOutput.record.failureReason}`);
+          }
+          continue;
         }
 
+        // 产出验证通过，标记完成
         checkpoint.status = 'completed';
         checkpoint.updatedAt = now;
-        checkpoint.note = `${phase} 阶段通过后自动同步`;
+        checkpoint.verification = {
+          method: 'automated',
+          result: 'passed',
+          verifiedAt: now,
+          verifiedBy: `${phase}_phase_output_verified`,
+          details: {
+            type: 'automated',
+            missingOutputs: [],
+          },
+        };
 
-        if (!checkpoint.verification) {
-          checkpoint.verification = { method: 'automated' };
+        // 记录验证证据
+        if (verificationOutput.record.evidence && verificationOutput.record.evidence.length > 0) {
+          checkpoint.verification.evidencePath = verificationOutput.record.evidence.join('; ');
         }
-        checkpoint.verification.result = verificationOutput.result === 'verified' ? 'passed' : 'passed (with warnings)';
-        checkpoint.verification.verifiedAt = now;
-        checkpoint.verification.verifiedBy = `${phase}_phase`;
 
         updated = true;
         console.log(`   ✓ 检查点 ${checkpoint.id} 已自动标记为 completed (${phase})`);
+        if (verificationOutput.record.evidence) {
+          console.log(`      验证: ${verificationOutput.record.evidence.join(', ')}`);
+        }
       }
 
       // 输出假成功警告
       if (warnings.length > 0) {
-        console.log(`\n   ⚠️  假成功检测警告 (${warnings.length} 个):`);
+        console.log(`\n   ⚠️  产出验证警告 (${warnings.length} 个):`);
         for (const warning of warnings) {
           console.log(`      - ${warning}`);
         }
+      }
+
+      // 汇报待人工验证的检查点
+      if (pendingHumanCheckpoints.length > 0) {
+        console.log(`\n   ⊘ 待人工验证检查点 (${pendingHumanCheckpoints.length} 个): ${pendingHumanCheckpoints.join(', ')}`);
       }
 
       if (updated) {
@@ -1093,6 +1170,23 @@ export class AssemblyLine {
       }
     } catch (error) {
       console.error(`   ⚠️ 同步检查点状态失败: ${error instanceof Error ? error.message : String(error)}`);
+    }
+  }
+
+  /**
+   * 获取验证来源
+   * 根据阶段返回对应的细粒度验证来源标识
+   */
+  private getVerificationSource(
+    phase: 'development' | 'code_review' | 'qa'
+  ): 'phase_sync_dev' | 'phase_sync_cr' | 'phase_sync_qa' {
+    switch (phase) {
+      case 'development':
+        return 'phase_sync_dev';
+      case 'code_review':
+        return 'phase_sync_cr';
+      case 'qa':
+        return 'phase_sync_qa';
     }
   }
 
@@ -2048,6 +2142,33 @@ export class AssemblyLine {
   }
 
   /**
+   * CP-6: 存储 QA 覆盖率缺口上下文
+   *
+   * 将覆盖率缺口数据存入重试上下文，供 QA 重试时使用
+   */
+  private storeQACoverageGapContext(
+    taskId: string,
+    state: HarnessRuntimeState,
+    coverageGapData: {
+      currentCoverage: number;
+      minCoverage: number;
+      gap: number;
+      gapPercent: string;
+      coverageDetails?: { lines: number; branches: number; functions: number; statements: number };
+      failureType: 'A' | 'B';
+      message: string;
+    }
+  ): void {
+    if (!state.qaCoverageGapContexts) {
+      state.qaCoverageGapContexts = new Map();
+    }
+    state.qaCoverageGapContexts.set(taskId, {
+      ...coverageGapData,
+      timestamp: new Date().toISOString(),
+    });
+  }
+
+  /**
    * 构建指定阶段的重试上下文（供 Claude 会话使用）
    *
    * P6 Enhanced: 构建完整的重试上下文，包含失败历史、洞察和建议
@@ -2080,6 +2201,21 @@ export class AssemblyLine {
     // 如果没有存储的上下文且没有失败历史，返回 undefined
     if (!stored && failureHistory.length === 0) return undefined;
 
+    // CP-5: 对于 QA 阶段，从 state 获取覆盖率缺口数据
+    let qaCoverageGapContext: RetryContext['qaCoverageGapContext'] | undefined;
+    if (phase === 'qa' && state.qaCoverageGapContexts?.has(taskId)) {
+      const gapData = state.qaCoverageGapContexts.get(taskId)!;
+      qaCoverageGapContext = {
+        currentCoverage: gapData.currentCoverage,
+        minCoverage: gapData.minCoverage,
+        gap: gapData.gap,
+        gapPercent: gapData.gapPercent,
+        coverageDetails: gapData.coverageDetails,
+        failureType: gapData.failureType,
+        message: gapData.message,
+      };
+    }
+
     return {
       // 保留原有字段
       previousFailureReason: stored?.previousFailureReason ?? (failureHistory.length > 0 ? failureHistory[failureHistory.length - 1]!.error : undefined),
@@ -2094,6 +2230,9 @@ export class AssemblyLine {
       accumulatedInsights,
       suggestedFixes,
       failureHistory,
+
+      // CP-5: QA 覆盖率缺口上下文
+      qaCoverageGapContext,
     };
   }
 
@@ -2857,6 +2996,236 @@ export class AssemblyLine {
     }
 
     return { canRetry: retryCount < maxRetries };
+  }
+
+  // ============================================================
+  // CP-6: Chain Fallback & Smart Routing
+  // ============================================================
+
+  /**
+   * CP-6: QA 阶段链式回退
+   *
+   * 测试失败时先回退到 Code Review 确认问题归属，再决定最终回退目标。
+   *
+   * @param taskId - Task ID
+   * @param qaError - QA error message
+   * @param qaVerdict - QA verdict with test failures
+   * @param state - Runtime state
+   * @returns Rollback target and analysis result
+   */
+  private async handleQAFailureWithChainedRollback(
+    taskId: string,
+    qaError: string,
+    qaVerdict: QAVerdict | undefined,
+    state: HarnessRuntimeState
+  ): Promise<{ rollbackTarget: Phase; analysis: QAFailureAnalysis }> {
+    console.log('\n   🔗 启动链式回退分析...');
+
+    // 1. 分析 QA 失败原因
+    const analysis = this.analyzeQAFailure(qaError, qaVerdict);
+
+    console.log(`   📋 问题归属: ${analysis.attribution}`);
+    console.log(`   📋 判断依据: ${analysis.reasoning}`);
+
+    // 2. 根据分析结果决定回退目标
+    const rollbackTarget = analysis.suggestedRollbackTarget;
+
+    if (rollbackTarget === 'development') {
+      console.log('   🔗 确认为代码问题，回退到 Development 阶段');
+    } else {
+      console.log('   🔗 确认为测试/环境问题，回退到 QA 阶段');
+    }
+
+    // 3. 记录分析结果到重试上下文
+    const existingContext = this.taskRetryContexts.get(taskId);
+    this.taskRetryContexts.set(taskId, {
+      ...existingContext,
+      previousFailureReason: qaError,
+      previousPhase: 'qa',
+      attemptNumber: (existingContext?.attemptNumber || 0) + 1,
+      maxRetries: this.getPhaseRetryLimit('qa'),
+      previousErrors: [...(existingContext?.previousErrors || []), qaError],
+      accumulatedInsights: [],
+      suggestedFixes: [],
+      qaFailureAnalysis: analysis,
+    });
+
+    return { rollbackTarget, analysis };
+  }
+
+  /**
+   * CP-6: 分析 QA 失败原因
+   *
+   * 基于测试失败类型判断问题归属
+   */
+  private analyzeQAFailure(
+    qaError: string,
+    qaVerdict: QAVerdict | undefined
+  ): QAFailureAnalysis {
+    const errorLower = qaError.toLowerCase();
+
+    // 逻辑错误、功能不符合预期 → 代码问题
+    if (
+      errorLower.includes('logic') ||
+      errorLower.includes('功能') ||
+      errorLower.includes('断言失败') ||
+      errorLower.includes('assertion') ||
+      errorLower.includes('expected') ||
+      errorLower.includes('逻辑')
+    ) {
+      return {
+        attribution: 'code_issue',
+        reasoning: '测试断言失败，表明代码逻辑存在问题',
+        suggestedRollbackTarget: 'development',
+      };
+    }
+
+    // 测试配置缺失、环境问题 → 测试问题
+    if (
+      errorLower.includes('config') ||
+      errorLower.includes('环境') ||
+      errorLower.includes('setup') ||
+      errorLower.includes('fixture') ||
+      errorLower.includes('timeout') ||
+      errorLower.includes('配置')
+    ) {
+      return {
+        attribution: 'environment_issue',
+        reasoning: '测试配置或环境问题，非代码逻辑错误',
+        suggestedRollbackTarget: 'qa',
+      };
+    }
+
+    // 检查 QA verdict 中的测试失败详情
+    if (qaVerdict?.testFailures && qaVerdict.testFailures.length > 0) {
+      const hasAssertionFailure = qaVerdict.testFailures.some(
+        (f) =>
+          f.reason.toLowerCase().includes('assertion') ||
+          f.reason.toLowerCase().includes('expected') ||
+          f.reason.toLowerCase().includes('断言')
+      );
+      if (hasAssertionFailure) {
+        return {
+          attribution: 'code_issue',
+          reasoning: '测试断言失败，表明代码逻辑存在问题',
+          suggestedRollbackTarget: 'development',
+        };
+      }
+    }
+
+    // 默认判断为代码问题
+    return {
+      attribution: 'code_issue',
+      reasoning: '无法明确归类，默认视为代码问题',
+      suggestedRollbackTarget: 'development',
+    };
+  }
+
+  /**
+   * CP-6: Evaluation 阶段智能路由
+   *
+   * 根据评估结果分析问题来源，路由到正确的阶段重试。
+   *
+   * @param taskId - Task ID
+   * @param evaluationResult - Evaluation result with failure info
+   * @param state - Runtime state
+   * @returns Routing target and decision
+   */
+  private handleEvaluationFailureWithRouting(
+    taskId: string,
+    evaluationResult: { reason?: string; failureCategory?: string },
+    state: HarnessRuntimeState
+  ): { routingTarget: Phase; routingDecision: RoutingDecision } {
+    console.log('\n   🧭 启动智能路由分析...');
+
+    // 分析评估结果，确定路由目标
+    const routingDecision = this.analyzeEvaluationResult(evaluationResult);
+
+    console.log(`   📋 问题来源: ${routingDecision.problemSource}`);
+    console.log(`   📋 路由目标: ${routingDecision.targetPhase}`);
+    console.log(`   📋 路由原因: ${routingDecision.reason}`);
+
+    // 记录路由决策到重试上下文
+    const existingContext = this.taskRetryContexts.get(taskId);
+    this.taskRetryContexts.set(taskId, {
+      ...existingContext,
+      previousFailureReason: evaluationResult.reason,
+      previousPhase: 'evaluation',
+      attemptNumber: (existingContext?.attemptNumber || 0) + 1,
+      maxRetries: this.getPhaseRetryLimit('evaluation'),
+      previousErrors: [...(existingContext?.previousErrors || []), evaluationResult.reason || ''],
+      accumulatedInsights: [],
+      suggestedFixes: [],
+      routingDecision,
+    });
+
+    return { routingTarget: routingDecision.targetPhase, routingDecision };
+  }
+
+  /**
+   * CP-6: 分析评估结果，确定路由目标
+   */
+  private analyzeEvaluationResult(
+    evaluationResult: { reason?: string; failureCategory?: string }
+  ): RoutingDecision {
+    const failureReason = evaluationResult.reason?.toLowerCase() || '';
+
+    // 功能未实现/逻辑错误 → Development
+    if (
+      failureReason.includes('功能') ||
+      failureReason.includes('逻辑') ||
+      failureReason.includes('实现') ||
+      failureReason.includes('feature') ||
+      failureReason.includes('logic') ||
+      failureReason.includes('implementation')
+    ) {
+      return {
+        problemSource: 'development',
+        targetPhase: 'development',
+        reason: '功能实现问题，需重新开发',
+        specificIssues: [],
+      };
+    }
+
+    // 代码质量问题 → Code Review
+    if (
+      failureReason.includes('可读性') ||
+      failureReason.includes('可维护性') ||
+      failureReason.includes('代码质量') ||
+      failureReason.includes('readability') ||
+      failureReason.includes('maintainability') ||
+      failureReason.includes('quality')
+    ) {
+      return {
+        problemSource: 'code_review',
+        targetPhase: 'code_review',
+        reason: '代码质量问题，需重新审查',
+        specificIssues: [],
+      };
+    }
+
+    // 测试问题 → QA
+    if (
+      failureReason.includes('测试') ||
+      failureReason.includes('覆盖') ||
+      failureReason.includes('test') ||
+      failureReason.includes('coverage')
+    ) {
+      return {
+        problemSource: 'qa',
+        targetPhase: 'qa',
+        reason: '测试验证问题，需重新测试',
+        specificIssues: [],
+      };
+    }
+
+    // 默认路由到 Development
+    return {
+      problemSource: 'development',
+      targetPhase: 'development',
+      reason: '无法明确归类，默认重新开发',
+      specificIssues: [],
+    };
   }
 
   /**

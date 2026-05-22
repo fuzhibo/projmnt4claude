@@ -9,6 +9,9 @@
  * @module post-qa-gate
  */
 
+// Type imports for QAFailureCategory
+import type { QAFailureCategory } from '../../types/task.js';
+
 // Runner exports
 export {
   PostQAGateRunner,
@@ -35,6 +38,9 @@ export type {
   QATestFailure,
   PendingHumanVerification,
 } from './runner.js';
+
+// CP-4: Re-export QAFailureCategory from task.ts for convenience
+export type { QAFailureCategory } from '../../types/task.js';
 
 // Checker exports
 export {

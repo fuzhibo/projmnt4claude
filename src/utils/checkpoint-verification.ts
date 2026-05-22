@@ -14,8 +14,8 @@ import type {
   VerificationResult,
 } from '../types/checkpoint-verification.js';
 import { getProjectDir } from './path.js';
-import { readTaskMeta } from './task.js';
-import type { TaskMeta, CheckpointMetadata } from '../types/task.js';
+import { readTaskMeta, writeTaskMeta } from './task.js';
+import type { TaskMeta, CheckpointMetadata, CheckpointVerification } from '../types/task.js';
 
 /**
  * 类别到验证策略的映射
@@ -654,4 +654,727 @@ export async function verifyAndRecordCheckpoint(
   };
 
   return verifier.verify(context);
+}
+
+/**
+ * 检查点验证结果（简化版）
+ * 用于 checkCompletedCheckpoints 函数返回
+ */
+export interface CheckpointValidationResult {
+  /** 验证是否通过 */
+  valid: boolean;
+  /** 缺失产出列表 */
+  missingOutputs: string[];
+}
+
+/**
+ * 验证检查点完成状态（重载方法）
+ * 用于 checkCompletedCheckpoints 兜底验证
+ *
+ * @param checkpoint - 检查点元数据
+ * @param cwd - 工作目录
+ * @returns 验证结果
+ */
+export async function verifyCheckpointOutput(
+  checkpoint: CheckpointMetadata,
+  cwd: string = process.cwd()
+): Promise<CheckpointValidationResult> {
+  const category = inferCategoryFromCheckpoint(checkpoint);
+  const verifier = new CheckpointOutputVerifier(cwd);
+
+  const context: VerificationContext = {
+    taskId: 'unknown',
+    checkpointId: checkpoint.id,
+    checkpointDescription: checkpoint.description,
+    category,
+    cwd,
+    source: 'check_completed',
+    existingVerification: checkpoint.verification ? {
+      method: checkpoint.verification.method,
+      result: checkpoint.verification.result,
+      evidencePath: checkpoint.verification.evidencePath,
+    } : undefined,
+  };
+
+  const output = await verifier.verify(context);
+
+  return {
+    valid: output.result === 'verified',
+    missingOutputs: output.record.failureReason ? [output.record.failureReason] : [],
+  };
+}
+
+/**
+ * 阶段同步验证结果
+ * 用于阶段自动同步验证流程
+ */
+export interface PhaseSyncVerificationResult {
+  /** 验证是否通过 */
+  valid: boolean;
+  /** 检查点 ID */
+  checkpointId: string;
+  /** 检查点类别 */
+  category: CheckpointOutputCategory;
+  /** 验证证据 */
+  evidence: Array<{ type: string; description: string }>;
+  /** 缺失产出列表 */
+  missingOutputs: string[];
+  /** 验证策略 */
+  strategy?: {
+    verifyFiles?: boolean;
+    verifyCodeChange?: boolean;
+    verifyTests?: boolean;
+    verifyCoverage?: boolean;
+    verifyReport?: boolean;
+    verifyCommands?: boolean;
+  };
+  /** 是否需要人工验证 */
+  requiresHuman?: boolean;
+  /** 警告信息 */
+  warnings?: string[];
+}
+
+/**
+ * 获取验证来源
+ * 根据阶段返回对应的验证来源标识
+ */
+export function getVerificationSource(
+  phase: 'development' | 'code_review' | 'qa'
+): VerificationSource {
+  switch (phase) {
+    case 'development':
+      return 'phase_sync_dev';
+    case 'code_review':
+      return 'phase_sync_cr';
+    case 'qa':
+      return 'phase_sync_qa';
+    default:
+      return 'phase_sync';
+  }
+}
+
+/**
+ * 阶段同步验证
+ * 在阶段完成后验证检查点产出，用于 syncCheckpointStatus
+ *
+ * @param task - 任务元数据
+ * @param checkpoint - 检查点元数据
+ * @param phase - 阶段名称
+ * @param cwd - 工作目录
+ * @param phaseData - 阶段数据（开发报告、审核结论、QA 结论）
+ * @returns 阶段同步验证结果
+ */
+export async function verifyPhaseSyncCheckpoint(
+  task: TaskMeta,
+  checkpoint: CheckpointMetadata,
+  phase: 'development' | 'code_review' | 'qa',
+  cwd: string = process.cwd(),
+  phaseData?: {
+    devReport?: unknown;
+    codeReviewVerdict?: unknown;
+    qaVerdict?: unknown;
+  }
+): Promise<PhaseSyncVerificationResult> {
+  const category = inferCategoryFromCheckpoint(checkpoint);
+  const source = getVerificationSource(phase);
+  const now = new Date().toISOString();
+
+  // 跳过人工验证检查点
+  if (checkpoint.requiresHuman) {
+    return {
+      valid: false,
+      checkpointId: checkpoint.id,
+      category,
+      evidence: [],
+      missingOutputs: [],
+      requiresHuman: true,
+      warnings: [`检查点 ${checkpoint.id} 需要人工验证，跳过自动同步`],
+    };
+  }
+
+  const verifier = new CheckpointOutputVerifier(cwd);
+
+  const context: VerificationContext = {
+    taskId: task.id,
+    checkpointId: checkpoint.id,
+    checkpointDescription: checkpoint.description,
+    category,
+    cwd,
+    source,
+    existingVerification: checkpoint.verification ? {
+      method: checkpoint.verification.method,
+      result: checkpoint.verification.result,
+      evidencePath: checkpoint.verification.evidencePath,
+    } : undefined,
+    phaseData: {
+      phase,
+      devReport: phaseData?.devReport,
+      codeReviewVerdict: phaseData?.codeReviewVerdict,
+      qaVerdict: phaseData?.qaVerdict,
+    },
+  };
+
+  const output = await verifier.verify(context);
+
+  // 转换为 PhaseSyncVerificationResult 格式
+  const result: PhaseSyncVerificationResult = {
+    valid: output.result === 'verified',
+    checkpointId: checkpoint.id,
+    category,
+    evidence: output.record.evidence?.map(e => ({
+      type: 'evidence',
+      description: typeof e === 'string' ? e : String(e),
+    })) || [],
+    missingOutputs: output.record.failureReason ? [output.record.failureReason] : [],
+    strategy: output.record.metadata?.strategy as PhaseSyncVerificationResult['strategy'],
+    warnings: output.warnings,
+  };
+
+  return result;
+}
+
+// ============== checkCompletedCheckpoints 兜底验证 ==============
+
+/**
+ * 假成功警告
+ * 用于报告检查点状态与产出不一致的情况
+ */
+export interface FalseSuccessWarning {
+  /** 检查点 ID */
+  checkpointId: string;
+  /** 检查点描述 */
+  description: string;
+  /** 检查点类别 */
+  category: CheckpointOutputCategory;
+  /** 是否需要人工验证 */
+  requiresHuman: boolean;
+  /** 缺失产出列表 */
+  missingOutputs: string[];
+  /** 现有验证证据 */
+  existingEvidence: Array<{ type: string; description: string }>;
+}
+
+/**
+ * 验证证据类型
+ */
+export interface VerificationEvidence {
+  /** 证据类型 */
+  type: string;
+  /** 证据描述 */
+  description: string;
+}
+
+/**
+ * 检查点完成验证结果
+ * 用于 checkCompletedCheckpoints 返回
+ */
+export interface CheckpointCompletionResult {
+  /** 已完成检查点 ID 列表（验证通过） */
+  completed: string[];
+  /** 假成功检查点列表 */
+  falseSuccesses: FalseSuccessWarning[];
+  /** 是否有假成功 */
+  hasFalseSuccess: boolean;
+}
+
+/**
+ * 验证人工检查点完成状态
+ *
+ * 检查验证记录中是否有证据。
+ *
+ * @param checkpoint - 检查点元数据
+ * @returns 验证结果
+ */
+export function validateHumanCheckpointCompletion(
+  checkpoint: CheckpointMetadata
+): { valid: boolean; missingOutputs: string[] } {
+  const verification = checkpoint.verification;
+
+  // 检查是否有验证记录
+  if (!verification) {
+    return {
+      valid: false,
+      missingOutputs: ['缺少验证记录'],
+    };
+  }
+
+  // 检查是否有验证证据
+  if (!verification.evidencePath && !verification.details) {
+    return {
+      valid: false,
+      missingOutputs: ['缺少验证证据'],
+    };
+  }
+
+  // 检查验证结果是否为 passed
+  if (verification.result && verification.result !== 'passed') {
+    return {
+      valid: false,
+      missingOutputs: [`验证结果: ${verification.result}`],
+    };
+  }
+
+  // 有验证证据，视为有效
+  return { valid: true, missingOutputs: [] };
+}
+
+/**
+ * 验证自动检查点完成状态
+ *
+ * 执行产出验证。
+ *
+ * @param checkpoint - 检查点元数据
+ * @param taskId - 任务 ID
+ * @param verifier - 验证器实例
+ * @param cwd - 工作目录
+ * @returns 验证结果
+ */
+export async function validateAutomatedCheckpointCompletion(
+  checkpoint: CheckpointMetadata,
+  taskId: string,
+  verifier: CheckpointOutputVerifier,
+  cwd: string
+): Promise<{ valid: boolean; missingOutputs: string[] }> {
+  const category = inferCategoryFromCheckpoint(checkpoint);
+  const context: VerificationContext = {
+    taskId,
+    checkpointId: checkpoint.id,
+    checkpointDescription: checkpoint.description,
+    category,
+    cwd,
+    source: 'check_completed',
+    existingVerification: checkpoint.verification ? {
+      method: checkpoint.verification.method,
+      result: checkpoint.verification.result,
+      evidencePath: checkpoint.verification.evidencePath,
+    } : undefined,
+  };
+
+  const output = await verifier.verify(context);
+
+  return {
+    valid: output.result === 'verified',
+    missingOutputs: output.record.failureReason ? [output.record.failureReason] : [],
+  };
+}
+
+/**
+ * 输出假成功警告
+ *
+ * @param warnings - 假成功警告列表
+ */
+export function reportFalseSuccessWarnings(warnings: FalseSuccessWarning[]): void {
+  // 空数组时不输出任何内容
+  if (warnings.length === 0) {
+    return;
+  }
+
+  console.warn('');
+  console.warn('═══════════════════════════════════════════════════════════════');
+  console.warn('⚠️  假成功检测：发现检查点状态与产出不一致');
+  console.warn('═══════════════════════════════════════════════════════════════');
+  console.warn('');
+
+  for (const warning of warnings) {
+    console.warn(`检查点: ${warning.checkpointId}`);
+    console.warn(`描述: ${warning.description}`);
+    console.warn(`类别: ${warning.category}`);
+    console.warn(`类型: ${warning.requiresHuman ? '人工验证' : '自动验证'}`);
+    console.warn('');
+
+    if (warning.requiresHuman) {
+      console.warn('问题: 状态为 completed 但缺少验证证据');
+      console.warn('      人工验证检查点应有用户提供的验证记录');
+      console.warn('');
+      console.warn('建议操作:');
+      console.warn('  1. 检查验证记录: projmnt4claude task show <taskId>');
+      console.warn('  2. 补充验证记录: projmnt4claude task checkpoint <taskId> <cp-id> complete --note "验证说明"');
+    } else {
+      console.warn('问题: 状态为 completed 但产出验证失败');
+      console.warn('      缺失产出:');
+      for (const missing of warning.missingOutputs) {
+        console.warn(`        - ${missing}`);
+      }
+      console.warn('');
+      console.warn('建议操作:');
+      console.warn('  1. 检查产出文件是否存在');
+      console.warn('  2. 重新完成检查点对应的实现工作');
+      console.warn('  3. 重新标记: projmnt4claude task checkpoint <taskId> <cp-id> complete');
+    }
+
+    if (warning.existingEvidence.length > 0) {
+      console.warn('');
+      console.warn('现有验证证据:');
+      for (const evidence of warning.existingEvidence) {
+        console.warn(`  - ${evidence.description}`);
+      }
+    }
+
+    console.warn('───────────────────────────────────────────────────────────────');
+    console.warn('');
+  }
+
+  console.warn('提示: 假成功检查点不计入已完成列表，需要重新验证或补充证据。');
+  console.warn('═══════════════════════════════════════════════════════════════');
+  console.warn('');
+}
+
+/**
+ * 检查已完成的检查点（兜底验证）
+ *
+ * 作为检测兜底机制，验证产出并检测假成功。
+ * 对每个 completed 状态检查点执行产出验证：
+ * - 人工验证检查点：检查验证记录是否存在证据
+ * - 自动验证检查点：执行产出验证
+ *
+ * 假成功检查点不计入已完成列表。
+ *
+ * @param task - 任务元数据
+ * @param checkpointIds - 要检查的检查点 ID 列表（来自 SprintContract）
+ * @param cwd - 工作目录
+ * @returns 已完成检查点 ID 列表（验证通过）
+ */
+export async function checkCompletedCheckpoints(
+  task: TaskMeta,
+  checkpointIds: string[],
+  cwd: string = process.cwd()
+): Promise<CheckpointCompletionResult> {
+  const completed: string[] = [];
+  const falseSuccesses: FalseSuccessWarning[] = [];
+
+  if (!task.checkpoints) {
+    return { completed, falseSuccesses, hasFalseSuccess: false };
+  }
+
+  const verifier = new CheckpointOutputVerifier(cwd);
+
+  for (const checkpointId of checkpointIds) {
+    const checkpoint = task.checkpoints.find(cp => cp.id === checkpointId);
+    if (!checkpoint) continue;
+
+    // 状态检查：只处理已完成的检查点
+    if (checkpoint.status !== 'completed') continue;
+
+    // 兜底验证
+    const requiresHuman = checkpoint.requiresHuman ?? false;
+    let validationResult: { valid: boolean; missingOutputs: string[] };
+
+    if (requiresHuman) {
+      // 人工验证检查点：检查验证记录
+      validationResult = validateHumanCheckpointCompletion(checkpoint);
+    } else {
+      // 自动验证检查点：执行产出验证
+      validationResult = await validateAutomatedCheckpointCompletion(checkpoint, task.id, verifier, cwd);
+    }
+
+    if (!validationResult.valid) {
+      // 假成功检测
+      falseSuccesses.push({
+        checkpointId,
+        description: checkpoint.description,
+        category: inferCategoryFromCheckpoint(checkpoint),
+        requiresHuman,
+        missingOutputs: validationResult.missingOutputs,
+        existingEvidence: checkpoint.verification?.details ? [
+          { type: checkpoint.verification.details.type, description: checkpoint.verification.details.userConfirmation || '无描述' }
+        ] : [],
+      });
+      continue;
+    }
+
+    completed.push(checkpointId);
+  }
+
+  // 输出假成功警告
+  if (falseSuccesses.length > 0) {
+    reportFalseSuccessWarnings(falseSuccesses);
+  }
+
+  return {
+    completed,
+    falseSuccesses,
+    hasFalseSuccess: falseSuccesses.length > 0,
+  };
+}
+
+// ============== CheckpointStatusMismatchFixer (analyze --fix 验证) ==============
+
+/**
+ * 检查点验证结果条目
+ * 用于 CheckpointStatusMismatchFixer 内部追踪
+ */
+interface CheckpointVerificationEntry {
+  checkpoint: CheckpointMetadata;
+  output: VerificationOutput;
+}
+
+/**
+ * CheckpointStatusMismatchFixer 修复结果
+ */
+export interface CheckpointMismatchFixResult {
+  /** 修复结果状态 */
+  status: 'fixed' | 'skipped' | 'unfixable';
+  /** 已标记完成的检查点数量 */
+  completedCount: number;
+  /** 已重新打开（假成功检测）的检查点数量 */
+  reopenedCount: number;
+  /** 需要人工验证的检查点数量 */
+  humanPendingCount: number;
+  /** 是否重新打开了任务 */
+  taskReopened: boolean;
+  /** 人工待验证检查点详情 */
+  humanPendingDetails: Array<{
+    checkpointId: string;
+    description: string;
+    category?: string;
+    verificationSteps?: string[];
+    expectedResult?: string;
+  }>;
+}
+
+/**
+ * 检查点状态不一致修复器
+ *
+ * 用于 analyze --fix 检测到 checkpoint_status_mismatch 时的验证与修复。
+ * 验证流程：遍历 pending/completed 检查点，调用 CheckpointOutputVerifier.verify，
+ * 然后分类处理结果。
+ *
+ * 处理策略：
+ * - 所有验证通过时标记 completed 并记录证据
+ * - 自动检查点失败时 reopen 任务重置检查点
+ * - 人工检查点待验证时记录并汇报等待用户验证
+ *
+ * 验证来源标识为 analyze_fix
+ */
+export class CheckpointStatusMismatchFixer {
+  private verifier: CheckpointOutputVerifier;
+  private cwd: string;
+
+  constructor(cwd: string = process.cwd()) {
+    this.cwd = cwd;
+    this.verifier = new CheckpointOutputVerifier(cwd);
+  }
+
+  /**
+   * 修复检查点状态不一致
+   *
+   * @param task - 任务元数据（会被直接修改）
+   * @returns 修复结果
+   */
+  async fix(task: TaskMeta): Promise<CheckpointMismatchFixResult> {
+    if (!task.checkpoints || task.checkpoints.length === 0) {
+      return {
+        status: 'skipped',
+        completedCount: 0,
+        reopenedCount: 0,
+        humanPendingCount: 0,
+        taskReopened: false,
+        humanPendingDetails: [],
+      };
+    }
+
+    const now = new Date().toISOString();
+    const entries: CheckpointVerificationEntry[] = [];
+
+    // 1. 验证所有 pending 和 completed 检查点
+    for (const checkpoint of task.checkpoints) {
+      if (checkpoint.status !== 'pending' && checkpoint.status !== 'completed') continue;
+
+      const category = inferCategoryFromCheckpoint(checkpoint);
+      const context: VerificationContext = {
+        taskId: task.id,
+        checkpointId: checkpoint.id,
+        checkpointDescription: checkpoint.description,
+        category,
+        cwd: this.cwd,
+        source: 'analyze_fix',
+        existingVerification: checkpoint.verification ? {
+          method: checkpoint.verification.method,
+          result: checkpoint.verification.result,
+          evidencePath: checkpoint.verification.evidencePath,
+        } : undefined,
+      };
+
+      const output = await this.verifier.verify(context);
+      entries.push({ checkpoint, output });
+    }
+
+    // 2. 分类检查点
+    const verifiedEntries = entries.filter(e => e.output.result === 'verified');
+    const failedEntries = entries.filter(e =>
+      e.output.result === 'unverified' || e.output.result === 'failed'
+    );
+    const skippedEntries = entries.filter(e => e.output.result === 'skipped');
+
+    const autoFailed = failedEntries.filter(e => !(e.checkpoint.requiresHuman ?? false));
+    const humanPending = failedEntries.filter(e => (e.checkpoint.requiresHuman ?? false));
+    // skipped 的检查点（如 review 类别）也归入人工待验证
+    const humanSkipped = skippedEntries.filter(e => (e.checkpoint.requiresHuman ?? false));
+
+    // 3. 处理验证通过的检查点 — 标记 completed 并记录证据
+    let completedCount = 0;
+    for (const entry of verifiedEntries) {
+      const cp = task.checkpoints.find(c => c.id === entry.checkpoint.id);
+      if (!cp) continue;
+
+      cp.status = 'completed';
+      cp.updatedAt = now;
+      cp.verification = {
+        method: 'automated',
+        result: 'passed (auto-completed by analyze-fix: verified output)',
+        verifiedAt: now,
+        verifiedBy: 'analyze-fix',
+        details: {
+          type: 'automated',
+          missingOutputs: [],
+        },
+      };
+      if (entry.output.record.evidence) {
+        cp.verification.evidencePath = entry.output.record.evidence.join('; ');
+      }
+      completedCount++;
+    }
+
+    // 4. 处理自动检查点失败 — reopen 任务并重置检查点
+    let reopenedCount = 0;
+    let taskReopened = false;
+
+    if (autoFailed.length > 0) {
+      console.log('');
+      console.log(`  ⚠️ 发现 ${autoFailed.length} 个自动验证检查点产出验证失败`);
+      console.log('     将重新打开任务以重新执行');
+      console.log('');
+
+      task.status = 'open';
+      task.updatedAt = now;
+      taskReopened = true;
+
+      for (const entry of autoFailed) {
+        const cp = task.checkpoints.find(c => c.id === entry.checkpoint.id);
+        if (!cp) continue;
+
+        cp.status = 'pending';
+        cp.updatedAt = now;
+        cp.note = `${cp.note ? cp.note + '; ' : ''}analyze-fix 检测到假成功，重新打开`;
+        cp.verification = {
+          method: 'automated',
+          result: 'failed',
+          verifiedAt: now,
+          verifiedBy: 'analyze-fix',
+          details: {
+            type: 'automated',
+            missingOutputs: entry.output.record.failureReason
+              ? [entry.output.record.failureReason]
+              : [],
+          },
+        };
+        reopenedCount++;
+      }
+
+      writeTaskMeta(task, this.cwd);
+      console.log('  ✓ 任务已重新打开');
+      console.log('     请重新执行任务以完成检查点');
+    }
+
+    // 5. 处理人工检查点待验证 — 记录并汇报
+    const allHumanPending = [...humanPending, ...humanSkipped];
+    const humanPendingDetails: CheckpointMismatchFixResult['humanPendingDetails'] = [];
+    let humanPendingCount = 0;
+
+    if (allHumanPending.length > 0) {
+      console.log('');
+      console.log('  ═══════════════════════════════════════════════════════════');
+      console.log('  ⚠️  人工验证检查点待验证');
+      console.log('  ═══════════════════════════════════════════════════════════');
+      console.log('');
+      console.log(`  任务 ${task.id} 有 ${allHumanPending.length} 个检查点需要人工验证：`);
+      console.log('');
+
+      for (let i = 0; i < allHumanPending.length; i++) {
+        const { checkpoint } = allHumanPending[i]!;
+        console.log(`  ${i + 1}. [${checkpoint.id}] ${checkpoint.description}`);
+        console.log(`     类别: ${checkpoint.category ?? 'implementation'}`);
+
+        if (checkpoint.verification?.steps) {
+          console.log('     验证步骤:');
+          for (const step of checkpoint.verification.steps) {
+            console.log(`       - ${step}`);
+          }
+        }
+
+        if (checkpoint.verification?.expected) {
+          console.log(`     预期结果: ${checkpoint.verification.expected}`);
+        }
+
+        console.log('');
+
+        humanPendingDetails.push({
+          checkpointId: checkpoint.id,
+          description: checkpoint.description,
+          category: checkpoint.category,
+          verificationSteps: checkpoint.verification?.steps,
+          expectedResult: checkpoint.verification?.expected,
+        });
+        humanPendingCount++;
+      }
+
+      console.log('  ───────────────────────────────────────────────────────────');
+      console.log('  完成验证后，请执行以下命令标记检查点完成：');
+      console.log('');
+      console.log(`    projmnt4claude task checkpoint ${task.id} <checkpoint-id> complete --note "验证结果"`);
+      console.log('');
+      console.log('  ═══════════════════════════════════════════════════════════');
+      console.log('');
+    }
+
+    // 6. 如果有变更，写入 meta
+    if (completedCount > 0 && !taskReopened) {
+      task.updatedAt = now;
+      writeTaskMeta(task, this.cwd);
+    }
+
+    // 7. 确定最终状态
+    if (taskReopened) {
+      return {
+        status: 'fixed',
+        completedCount,
+        reopenedCount,
+        humanPendingCount,
+        taskReopened: true,
+        humanPendingDetails,
+      };
+    }
+
+    if (completedCount > 0) {
+      console.log(`  ✅ 已标记 ${completedCount} 个检查点为完成（产出验证通过）`);
+      return {
+        status: 'fixed',
+        completedCount,
+        reopenedCount,
+        humanPendingCount,
+        taskReopened: false,
+        humanPendingDetails,
+      };
+    }
+
+    if (humanPendingCount > 0) {
+      return {
+        status: 'unfixable',
+        completedCount,
+        reopenedCount,
+        humanPendingCount,
+        taskReopened: false,
+        humanPendingDetails,
+      };
+    }
+
+    return {
+      status: 'skipped',
+      completedCount: 0,
+      reopenedCount: 0,
+      humanPendingCount: 0,
+      taskReopened: false,
+      humanPendingDetails: [],
+    };
+  }
 }

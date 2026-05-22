@@ -34,6 +34,12 @@ import type {
  */
 export class QAPassChecker implements IPreEvalChecker {
   /**
+   * 失败类型: A (中断流水线)
+   * Pre-Eval Gate 所有检查器均为 A 类
+   */
+  readonly failureType = 'A' as const;
+
+  /**
    * 执行QA验证通过检查
    *
    * @param ctx 检查上下文，包含QA报告数据
@@ -53,6 +59,7 @@ export class QAPassChecker implements IPreEvalChecker {
       details: {
         qaVerdict: qaReport?.verdict,
         qaVerifiedAt: qaReport?.verifiedAt,
+        failureType: this.failureType,
       },
     };
   }

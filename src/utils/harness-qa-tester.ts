@@ -852,6 +852,44 @@ export class HarnessQATester {
       ].join('\n');
     }
 
+    // CP-5: Build coverage gap section for QA internal retry
+    let coverageGapSection = '';
+    if (retryContext?.qaCoverageGapContext) {
+      const gap = retryContext.qaCoverageGapContext;
+      coverageGapSection = [
+        '## 覆盖率不足 - 需要扩展测试用例',
+        '',
+        `当前覆盖率: ${(gap.currentCoverage * 100).toFixed(1)}%`,
+        `阈值要求: ${(gap.minCoverage * 100).toFixed(0)}%`,
+        `覆盖率缺口: ${gap.gapPercent}`,
+        '',
+      ].join('\n');
+
+      if (gap.coverageDetails) {
+        const d = gap.coverageDetails;
+        coverageGapSection += [
+          '覆盖率详情:',
+          `  行覆盖率: ${(d.lines * 100).toFixed(1)}%`,
+          `  分支覆盖率: ${(d.branches * 100).toFixed(1)}%`,
+          `  函数覆盖率: ${(d.functions * 100).toFixed(1)}%`,
+          `  语句覆盖率: ${(d.statements * 100).toFixed(1)}%`,
+          '',
+        ].join('\n');
+
+        const dimensions = [
+          { name: '行覆盖率', value: d.lines },
+          { name: '分支覆盖率', value: d.branches },
+          { name: '函数覆盖率', value: d.functions },
+          { name: '语句覆盖率', value: d.statements },
+        ].sort((a, b) => a.value - b.value);
+
+        coverageGapSection += `最低覆盖率维度: ${dimensions[0].name} (${(dimensions[0].value * 100).toFixed(1)}%)\n`;
+        coverageGapSection += '建议优先补充该维度的测试用例。\n\n';
+      }
+
+      coverageGapSection += '请扩展测试用例，覆盖上述未覆盖的代码路径，使覆盖率达到阈值要求。';
+    }
+
     const descriptionSection = task.description
       ? `## ${texts.harness.taskDescription}\n${task.description}`
       : '';
@@ -901,6 +939,7 @@ export class HarnessQATester {
       customRequirements,
       testStrategy,
       retryContextSection,
+      coverageGapSection,
       devReportPath,
     }).replace(/\n{3,}/g, '\n\n');
   }

@@ -10064,7 +10064,7 @@ Begin review now.`
    - 任务描述中的"创建类"、"定义接口"等措辞可能是算法描述的产物，不构成实际的代码结构要求。
    - 如果代码通过不同结构（如模块级函数代替类方法）实现了相同功能，应视为满足要求。
 
-{retryContextSection}
+{retryContextSection}{coverageGapSection}
 ## 任务信息
 - ID: {taskId}
 - 标题: {title}
@@ -10171,7 +10171,7 @@ Please follow these principles during verification:
    - Phrases like "create class" or "define interface" in task descriptions may be artifacts of algorithm description and do not constitute actual code structure requirements.
    - If code achieves the same functionality through different structures (such as module-level functions instead of class methods), it should be considered as meeting the requirements.
 
-{retryContextSection}
+{retryContextSection}{coverageGapSection}
 ## Task Information
 - ID: {taskId}
 - Title: {title}
@@ -10501,7 +10501,7 @@ Begin evaluation now.`
 |------|----------|----------|---------------|
 | [ai review] | 代码审查、结构检查、代码质量、逻辑正确性、重构、命名规范 | code_review | false |
 | [ai qa] | 测试、验证、覆盖率、自动化检查、回归测试、类型检查 | qa_verification | false |
-| [script] | 脚本执行、构建、命令行操作、CI/CD、部署、打包 | evaluation | false |
+| [script] | 可自动执行的验证脚本：构建、部署、CI/CD、打包、lint、test（必须有 verification.commands） | evaluation | false |
 
 ## 前缀选择示例
 
@@ -10510,7 +10510,13 @@ Begin evaluation now.`
 - "[ai qa] 登录模块单元测试覆盖率 >= 80%"
 - "[ai qa] 运行 tsc --noEmit 确认类型检查通过"
 - "[script] bun run build 构建成功"
-- "[script] 运行 npm run lint 代码检查通过"
+- "[script] npm run lint 代码检查通过"
+
+## [script] 前缀使用约束
+
+- [script] 仅用于可自动执行的验证脚本（构建、部署、CI/CD、lint、test）
+- [script] 检查点必须包含 verification.commands 字段，指定执行命令
+- 代码修改任务不应使用 [script] 前缀（使用 [ai review] 或无前缀）
 
 ## requiresHuman 字段使用说明
 
@@ -10571,7 +10577,7 @@ Each checkpoint description must start with one of these prefixes to identify th
 |--------|----------|-------------------|---------------|
 | [ai review] | Code review, structure check, code quality, logic correctness, refactoring, naming conventions | code_review | false |
 | [ai qa] | Testing, verification, coverage, automated checks, regression testing, type checking | qa_verification | false |
-| [script] | Script execution, build, command line operations, CI/CD, deployment, packaging | evaluation | false |
+| [script] | Automatically executable verification scripts: build, deploy, CI/CD, packaging, lint, test (must have verification.commands) | evaluation | false |
 
 ## Prefix Selection Examples
 
@@ -10580,7 +10586,13 @@ Each checkpoint description must start with one of these prefixes to identify th
 - "[ai qa] Login module unit test coverage >= 80%"
 - "[ai qa] Run tsc --noEmit to confirm type check passes"
 - "[script] bun run build succeeds"
-- "[script] Run npm run lint code check passes"
+- "[script] npm run lint code check passes"
+
+## [script] Prefix Usage Constraints
+
+- [script] is only for automatically executable verification scripts (build, deploy, CI/CD, lint, test)
+- [script] checkpoints must include verification.commands field specifying execution commands
+- Code modification tasks should not use [script] prefix (use [ai review] or no prefix)
 
 ## requiresHuman Field Usage
 
@@ -12021,6 +12033,7 @@ __export(exports_checkpoint_rules, {
   getCheckpointPhase: () => getCheckpointPhase,
   checkpointVerbPrefix: () => checkpointVerbPrefix,
   checkpointValidationRules: () => checkpointValidationRules,
+  checkpointScriptHasCommands: () => checkpointScriptHasCommands,
   checkpointRequiredPrefix: () => checkpointRequiredPrefix,
   checkpointNoFilePath: () => checkpointNoFilePath,
   checkpointNoDuplicate: () => checkpointNoDuplicate,
@@ -12216,30 +12229,20 @@ function inferCheckpointPrefix(description) {
     "原型"
   ];
   const scriptKeywords = [
-    "脚本",
     "构建",
     "编译",
     "部署",
     "ci/cd",
     "pipeline",
-    "script",
     "build",
     "compile",
     "deploy",
-    "发布",
     "publish",
     "打包",
     "bundle",
-    "install",
-    "npm run",
-    "yarn ",
-    "pnpm ",
-    "命令",
-    "command",
-    "shell",
-    "bash",
-    "npm install",
-    "依赖安装"
+    "lint",
+    "test",
+    "check"
   ];
   const aiReviewKeywords = [
     "代码审查",
@@ -12281,7 +12284,7 @@ function detectStringFormatIssues(value) {
   }
   return issues;
 }
-var CHINESE_VERBS, ENGLISH_VERBS, checkpointNoDuplicate, checkpointNoFilePath, checkpointCountControl, checkpointVerbPrefix, checkpointMinLength, METHODS_REQUIRING_COMMANDS2, VALID_CHECKPOINT_PREFIXES, checkpointRequiredPrefix, checkpointHasVerificationCommands, metaJsonValid, checkpointValidationRules;
+var CHINESE_VERBS, ENGLISH_VERBS, checkpointNoDuplicate, checkpointNoFilePath, checkpointCountControl, checkpointVerbPrefix, checkpointMinLength, METHODS_REQUIRING_COMMANDS2, VALID_CHECKPOINT_PREFIXES, checkpointRequiredPrefix, checkpointHasVerificationCommands, checkpointScriptHasCommands, metaJsonValid, checkpointValidationRules;
 var init_checkpoint_rules = __esm(() => {
   CHINESE_VERBS = new Set([
     "实现",
@@ -12539,6 +12542,34 @@ var init_checkpoint_rules = __esm(() => {
       };
     }
   };
+  checkpointScriptHasCommands = {
+    id: "checkpoint-script-has-commands",
+    description: "[script] 前缀的检查点必须有 verification.commands 字段",
+    severity: "error",
+    check: (output) => {
+      const checkpoints = extractCheckpointObjects(output);
+      if (checkpoints.length === 0)
+        return null;
+      const invalid = checkpoints.filter((cp) => {
+        const desc = cp["description"];
+        if (typeof desc !== "string")
+          return false;
+        const trimmed = desc.trim().toLowerCase();
+        if (!trimmed.startsWith("[script]"))
+          return false;
+        const verification = cp["verification"];
+        const commands = verification?.["commands"];
+        return !commands || !Array.isArray(commands) || commands.length === 0;
+      });
+      if (invalid.length === 0)
+        return null;
+      return {
+        ruleId: "checkpoint-script-has-commands",
+        severity: "error",
+        message: `${invalid.length} 条 [script] 检查点缺少 verification.commands: ${invalid.map((cp) => `"${cp["description"] ?? cp["id"] ?? "unknown"}"`).join(", ")}`
+      };
+    }
+  };
   metaJsonValid = {
     id: "meta-json-valid",
     description: "meta.json 必须包含必需字段、值合法且 JSON 格式正确",
@@ -12634,13 +12665,1718 @@ var init_checkpoint_rules = __esm(() => {
     checkpointMinLength,
     checkpointRequiredPrefix,
     checkpointHasVerificationCommands,
+    checkpointScriptHasCommands,
     metaJsonValid
   ];
 });
 
-// src/utils/checkpoint.ts
+// src/utils/pre-cr-gate/runner.ts
+var init_runner = __esm(() => {
+  init_task();
+  init_task2();
+});
+
+// src/utils/pre-cr-gate/checkers/prerequisites-checker.ts
+var init_prerequisites_checker = __esm(() => {
+  init_task();
+  init_task2();
+});
+
+// src/utils/pre-cr-gate/checkers/dev-complete-checker.ts
+var init_dev_complete_checker = __esm(() => {
+  init_task();
+  init_task2();
+});
+
+// src/utils/pre-cr-gate/checkers/report-validity-checker.ts
+var init_report_validity_checker = __esm(() => {
+  init_task2();
+});
+
+// src/utils/pre-cr-gate/checkers/checkpoint-sync-checker.ts
+var DEFAULT_CHECKPOINT_SYNC_CHECKER_CONFIG;
+var init_checkpoint_sync_checker = __esm(() => {
+  init_task();
+  init_task2();
+  DEFAULT_CHECKPOINT_SYNC_CHECKER_CONFIG = {
+    enabled: true,
+    checkStatusConsistency: true,
+    checkTaskStatusMatch: true,
+    checkReportConsistency: true,
+    detectStaleCheckpoints: true,
+    staleThresholdMs: 7 * 24 * 60 * 60 * 1000,
+    allowSkippedCheckpoints: true,
+    reportsDir: ".projmnt4claude/reports/harness"
+  };
+});
+
+// src/utils/pre-cr-gate/checkers/code-ready-checker.ts
+var init_code_ready_checker = __esm(() => {
+  init_task2();
+});
+
+// src/utils/pre-cr-gate/index.ts
+var init_pre_cr_gate = __esm(() => {
+  init_runner();
+  init_prerequisites_checker();
+  init_dev_complete_checker();
+  init_report_validity_checker();
+  init_checkpoint_sync_checker();
+  init_code_ready_checker();
+});
+
+// src/utils/post-cr-gate/runner.ts
+var init_runner2 = __esm(() => {
+  init_task2();
+});
+
+// src/utils/post-cr-gate/checkers/report-checker.ts
+var init_report_checker = () => {};
+
+// src/utils/post-cr-gate/checkers/test-env-checker.ts
+var init_test_env_checker = __esm(() => {
+  init_task2();
+});
+
+// src/utils/post-cr-gate/checkers/checkpoint-sync-checker.ts
+var init_checkpoint_sync_checker2 = __esm(() => {
+  init_task2();
+});
+
+// src/utils/logger.ts
 import * as fs8 from "fs";
 import * as path5 from "path";
+import { execSync as execSync2 } from "child_process";
+function getLogFilePath(command, cwd = process.cwd()) {
+  const date = new Date().toISOString().slice(0, 10).replace(/-/g, "");
+  const logsDir = getLogsDir(cwd);
+  ensureDir(logsDir);
+  return path5.join(logsDir, `${command}-${date}.log`);
+}
+
+class Logger {
+  component;
+  cwd;
+  command;
+  buffer;
+  minLevel;
+  lastWrittenIndex;
+  constructor(options = {}) {
+    this.component = options.component;
+    this.cwd = options.cwd || process.cwd();
+    this.command = options.command;
+    this.buffer = [];
+    this.minLevel = this.resolveLogLevel();
+    this.lastWrittenIndex = 0;
+  }
+  resolveLogLevel() {
+    const envLevel = process.env.LOG_LEVEL;
+    if (envLevel && envLevel in LEVEL_PRIORITY) {
+      return envLevel;
+    }
+    try {
+      const configPath = getConfigPath(this.cwd);
+      if (fs8.existsSync(configPath)) {
+        const raw = fs8.readFileSync(configPath, "utf-8");
+        const config = JSON.parse(raw);
+        const configLevel = config?.logging?.level;
+        if (configLevel && configLevel in LEVEL_PRIORITY) {
+          return configLevel;
+        }
+      }
+    } catch {}
+    return "info";
+  }
+  log(level, message, data) {
+    if (LEVEL_PRIORITY[level] > LEVEL_PRIORITY[this.minLevel]) {
+      return;
+    }
+    const entry = {
+      timestamp: new Date().toISOString(),
+      level,
+      message
+    };
+    if (this.component) {
+      entry.component = this.component;
+    }
+    if (data) {
+      entry.data = data;
+    }
+    this.buffer.push(entry);
+    this.outputToConsole(level, entry);
+    if (this.command) {
+      this.writeEntry(entry);
+      this.lastWrittenIndex = this.buffer.length;
+    }
+  }
+  outputToConsole(level, entry) {
+    const fn = level === "error" ? console.error : level === "warn" ? console.warn : console.log;
+    const prefix = entry.component ? `[${entry.component}] ` : "";
+    fn(`${prefix}${entry.message}`);
+  }
+  writeEntry(entry) {
+    try {
+      const filePath = getLogFilePath(this.command, this.cwd);
+      fs8.appendFileSync(filePath, JSON.stringify(entry) + `
+`, "utf-8");
+    } catch {}
+  }
+  error(message, data) {
+    this.log("error", message, data);
+  }
+  warn(message, data) {
+    this.log("warn", message, data);
+  }
+  info(message, data) {
+    this.log("info", message, data);
+  }
+  debug(message, data) {
+    this.log("debug", message, data);
+  }
+  child(component) {
+    return new Logger({
+      component: this.component ? `${this.component}:${component}` : component,
+      cwd: this.cwd,
+      command: this.command
+    });
+  }
+  logCommandStart(command, args) {
+    this.command = command;
+    this.flush();
+    this.log("info", `命令开始: ${command}`, {
+      command,
+      ...args ? { args } : {}
+    });
+  }
+  logCommandEnd(command, exitCode = 0) {
+    this.log("info", `命令结束: ${command}`, { command, exitCode });
+  }
+  logAICost(summary) {
+    this.log("info", `AI 成本: ${summary.field}`, {
+      aiCost: {
+        field: summary.field,
+        durationMs: summary.durationMs,
+        inputTokens: summary.inputTokens,
+        outputTokens: summary.outputTokens,
+        totalTokens: summary.totalTokens
+      }
+    });
+  }
+  logInstrumentation(record) {
+    this.log("info", `埋点: ${record.module}:${record.action}`, {
+      instrumentation: record
+    });
+  }
+  flush() {
+    if (!this.command)
+      return;
+    for (let i = this.lastWrittenIndex;i < this.buffer.length; i++) {
+      const entry = this.buffer[i];
+      if (entry)
+        this.writeEntry(entry);
+    }
+    this.lastWrittenIndex = this.buffer.length;
+  }
+  readRecentLogEntries(recentCount = 50) {
+    const logsDir = getLogsDir(this.cwd);
+    if (!fs8.existsSync(logsDir))
+      return [];
+    try {
+      const files = fs8.readdirSync(logsDir).filter((f) => f.endsWith(".log")).map((f) => ({ name: f, mtime: fs8.statSync(path5.join(logsDir, f)).mtimeMs })).sort((a, b) => b.mtime - a.mtime);
+      const allEntries = [];
+      for (const file of files) {
+        if (allEntries.length >= recentCount)
+          break;
+        try {
+          const content = fs8.readFileSync(path5.join(logsDir, file.name), "utf-8");
+          const lines = content.trim().split(`
+`).filter(Boolean);
+          for (const line of lines) {
+            try {
+              allEntries.push(JSON.parse(line));
+            } catch {}
+          }
+        } catch {}
+      }
+      allEntries.sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
+      return allEntries.slice(0, recentCount);
+    } catch {
+      return [];
+    }
+  }
+  readAllLogEntries() {
+    const logsDir = getLogsDir(this.cwd);
+    if (!fs8.existsSync(logsDir))
+      return [];
+    try {
+      const files = fs8.readdirSync(logsDir).filter((f) => f.endsWith(".log"));
+      const allEntries = [];
+      for (const file of files) {
+        try {
+          const content = fs8.readFileSync(path5.join(logsDir, file), "utf-8");
+          const lines = content.trim().split(`
+`).filter(Boolean);
+          for (const line of lines) {
+            try {
+              allEntries.push(JSON.parse(line));
+            } catch {}
+          }
+        } catch {}
+      }
+      return allEntries.sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime());
+    } catch {
+      return [];
+    }
+  }
+  generateBugReport(recentCount = 100) {
+    const entries = this.readRecentLogEntries(recentCount);
+    const errors = entries.filter((e) => e.level === "error");
+    const warnings = entries.filter((e) => e.level === "warn");
+    const now = new Date().toISOString();
+    const timestamp = now.replace(/[:.]/g, "-").slice(0, 19);
+    const lines = [
+      `# Bug Report`,
+      ``,
+      `**生成时间**: ${now}`,
+      `**工作目录**: ${this.cwd}`,
+      `**平台**: ${process.platform} / ${process.version}`,
+      ``,
+      `## 概要`,
+      ``,
+      `- 总日志条目: ${entries.length}`,
+      `- 错误数: ${errors.length}`,
+      `- 警告数: ${warnings.length}`,
+      ``
+    ];
+    if (errors.length > 0) {
+      lines.push(`## 错误详情`, ``);
+      for (const err of errors) {
+        const comp = err.component ? ` [${err.component}]` : "";
+        lines.push(`### ${err.timestamp}${comp}`, ``);
+        lines.push(`\`${err.message}\``, ``);
+        if (err.data) {
+          lines.push("```json", JSON.stringify(err.data, null, 2), "```", "");
+        }
+      }
+    }
+    if (warnings.length > 0) {
+      lines.push(`## 警告详情`, ``);
+      for (const warn of warnings) {
+        const comp = warn.component ? ` [${warn.component}]` : "";
+        lines.push(`- **${warn.timestamp}**${comp}: ${warn.message}`);
+      }
+      lines.push("");
+    }
+    const archivePath = this.compressLogs(path5.join(getLogsDir(this.cwd), "..", `bug-report-${timestamp}.tar.gz`));
+    lines.push(`---`, `*日志压缩附件: ${archivePath}*`);
+    return {
+      markdown: lines.join(`
+`),
+      archivePath
+    };
+  }
+  compressLogs(outputPath) {
+    const logsDir = getLogsDir(this.cwd);
+    if (!fs8.existsSync(logsDir)) {
+      throw new Error(`日志目录不存在: ${logsDir}`);
+    }
+    const archivePath = outputPath || path5.join(path5.dirname(logsDir), "logs-archive.tar.gz");
+    ensureDir(path5.dirname(archivePath));
+    const parentDir = path5.dirname(logsDir);
+    const logsDirName = path5.basename(logsDir);
+    try {
+      execSync2(`tar -czf "${archivePath}" -C "${parentDir}" "${logsDirName}"`, {
+        stdio: "pipe"
+      });
+    } catch (err) {
+      throw new Error(`日志压缩失败: ${err instanceof Error ? err.message : String(err)}`);
+    }
+    return archivePath;
+  }
+  cleanupOldLogs(maxAgeDays = 30) {
+    const logsDir = getLogsDir(this.cwd);
+    if (!fs8.existsSync(logsDir))
+      return 0;
+    const cutoff = Date.now() - maxAgeDays * 24 * 60 * 60 * 1000;
+    let deletedCount = 0;
+    try {
+      const files = fs8.readdirSync(logsDir);
+      for (const file of files) {
+        if (!file.endsWith(".log"))
+          continue;
+        const filePath = path5.join(logsDir, file);
+        try {
+          const stat = fs8.statSync(filePath);
+          if (stat.mtimeMs < cutoff) {
+            fs8.unlinkSync(filePath);
+            deletedCount++;
+          }
+        } catch {}
+      }
+    } catch {}
+    return deletedCount;
+  }
+  getCostSummary() {
+    const entries = this.readAllLogEntries();
+    const aiEntries = entries.filter((e) => e.data?.aiCost);
+    const result = {
+      totalCalls: 0,
+      totalDurationMs: 0,
+      totalInputTokens: 0,
+      totalOutputTokens: 0,
+      totalTokens: 0,
+      byField: {},
+      byCommand: {}
+    };
+    for (const entry of aiEntries) {
+      const cost = entry.data.aiCost;
+      result.totalCalls++;
+      result.totalDurationMs += cost.durationMs || 0;
+      result.totalInputTokens += cost.inputTokens || 0;
+      result.totalOutputTokens += cost.outputTokens || 0;
+      result.totalTokens += cost.totalTokens || 0;
+      const field = cost.field || "unknown";
+      if (!result.byField[field]) {
+        result.byField[field] = { calls: 0, durationMs: 0, totalTokens: 0 };
+      }
+      result.byField[field].calls++;
+      result.byField[field].durationMs += cost.durationMs || 0;
+      result.byField[field].totalTokens += cost.totalTokens || 0;
+      const command = entry.data?.command || "unknown";
+      if (!result.byCommand[command]) {
+        result.byCommand[command] = { calls: 0, durationMs: 0, totalTokens: 0 };
+      }
+      result.byCommand[command].calls++;
+      result.byCommand[command].durationMs += cost.durationMs || 0;
+      result.byCommand[command].totalTokens += cost.totalTokens || 0;
+    }
+    return result;
+  }
+  analyzeUsage() {
+    const entries = this.readAllLogEntries();
+    const commandFrequency = {};
+    const commandDurations = {};
+    const commandsWithAI = new Set;
+    const errorMessages = {};
+    let totalCommands = 0;
+    let totalErrors = 0;
+    let totalWarnings = 0;
+    const commandStarts = {};
+    for (const entry of entries) {
+      const data = entry.data;
+      const command = data?.command || "unknown";
+      if (entry.message?.startsWith("命令开始:")) {
+        totalCommands++;
+        commandFrequency[command] = (commandFrequency[command] || 0) + 1;
+        commandStarts[command] = entry.timestamp;
+      }
+      if (entry.message?.startsWith("命令结束:") && commandStarts[command]) {
+        const startMs = new Date(commandStarts[command]).getTime();
+        const endMs = new Date(entry.timestamp).getTime();
+        if (!isNaN(startMs) && !isNaN(endMs) && endMs >= startMs) {
+          if (!commandDurations[command])
+            commandDurations[command] = [];
+          commandDurations[command].push(endMs - startMs);
+        }
+        delete commandStarts[command];
+      }
+      if (data?.aiCost) {
+        commandsWithAI.add(command);
+      }
+      if (entry.level === "error") {
+        totalErrors++;
+        const msg = entry.message;
+        if (msg) {
+          if (!errorMessages[msg]) {
+            errorMessages[msg] = { count: 0, lastSeen: entry.timestamp };
+          }
+          errorMessages[msg].count++;
+          errorMessages[msg].lastSeen = entry.timestamp;
+        }
+      }
+      if (entry.level === "warn") {
+        totalWarnings++;
+      }
+    }
+    const allDurations = Object.values(commandDurations).flat();
+    const averageDurationMs = allDurations.length > 0 ? Math.round(allDurations.reduce((a, b) => a + b, 0) / allDurations.length) : 0;
+    const aiUsageRate = totalCommands > 0 ? commandsWithAI.size / Object.keys(commandFrequency).length : 0;
+    const commonErrors = Object.entries(errorMessages).map(([message, info]) => ({ message, count: info.count, lastSeen: info.lastSeen })).sort((a, b) => b.count - a.count).slice(0, 10);
+    return {
+      commandFrequency,
+      commonErrors,
+      averageDurationMs,
+      aiUsageRate: Math.min(aiUsageRate, 1),
+      totalCommands,
+      totalErrors,
+      totalWarnings
+    };
+  }
+}
+function createLogger(command, cwd) {
+  const logger = new Logger({ command, cwd });
+  logger.logCommandStart(command);
+  return logger;
+}
+var LEVEL_PRIORITY;
+var init_logger = __esm(() => {
+  init_path();
+  LEVEL_PRIORITY = {
+    error: 0,
+    warn: 1,
+    info: 2,
+    debug: 3
+  };
+});
+
+// src/utils/harness-helpers.ts
+import * as fs9 from "fs";
+import * as path6 from "path";
+import { spawn } from "child_process";
+function classifyExitResult(code, stderr, stdout, cwd) {
+  let texts;
+  try {
+    texts = t(cwd || process.cwd());
+  } catch {
+    texts = t();
+  }
+  if (code === 0) {
+    return { success: true };
+  }
+  const isHookError = /hook\s+.*\s+failed/i.test(stderr) || /Hook cancelled/i.test(stderr) || /SessionEnd\s+hook/i.test(stderr);
+  const hasOutput = stdout.trim().length > 0;
+  if (isHookError && hasOutput) {
+    return {
+      success: true,
+      hookWarning: `${texts.harness.logs.hookWarningIgnored}: ${stderr.substring(0, 200)}`
+    };
+  }
+  if (isHookError && !hasOutput) {
+    return {
+      success: false,
+      error: `${texts.harness.logs.hookErrorNoOutput}: ${stderr.substring(0, 200)}`
+    };
+  }
+  return {
+    success: false,
+    error: stderr || `${texts.harness.logs.processExitCode}: ${code}`
+  };
+}
+async function runHeadlessClaude(options) {
+  return new Promise((resolve3) => {
+    const args = [
+      "--allowedTools",
+      options.allowedTools.join(","),
+      "--print"
+    ];
+    if (options.dangerouslySkipPermissions) {
+      args.push("--dangerously-skip-permissions");
+    }
+    if (options.outputFormat) {
+      args.push("--output-format", options.outputFormat);
+    }
+    if (options.sessionId) {
+      args.push("--session-id", options.sessionId);
+    }
+    if (options.resumeSession) {
+      args.push("--resume");
+    }
+    if (options.forkSession) {
+      args.push("--fork-session");
+    }
+    try {
+      const child = spawn("claude", args, {
+        cwd: options.cwd,
+        stdio: ["pipe", "pipe", "pipe"],
+        timeout: options.timeout * 1000
+      });
+      if (child.stdin) {
+        child.stdin.write(options.prompt);
+        child.stdin.end();
+      }
+      let stdout = "";
+      let stderr = "";
+      child.stdout?.on("data", (data) => {
+        stdout += data.toString();
+      });
+      child.stderr?.on("data", (data) => {
+        stderr += data.toString();
+      });
+      child.on("close", (code) => {
+        const classified = classifyExitResult(code, stderr, stdout);
+        resolve3({
+          success: classified.success,
+          output: stdout,
+          error: classified.error,
+          hookWarning: classified.hookWarning,
+          stderr
+        });
+      });
+      child.on("error", (error) => {
+        resolve3({
+          success: false,
+          output: "",
+          error: error.message,
+          stderr: ""
+        });
+      });
+    } catch (error) {
+      resolve3({
+        success: false,
+        output: "",
+        error: error instanceof Error ? error.message : String(error),
+        stderr: ""
+      });
+    }
+  });
+}
+function archiveReportIfExists(reportPath, cwd) {
+  let texts;
+  try {
+    texts = t(cwd);
+  } catch {
+    const { getI18n: getI18n2 } = (init_i18n(), __toCommonJS(exports_i18n));
+    texts = getI18n2("zh");
+  }
+  try {
+    const absolutePath = path6.resolve(reportPath);
+    if (!fs9.existsSync(absolutePath)) {
+      return;
+    }
+    const dir = path6.dirname(absolutePath);
+    const filename = path6.basename(absolutePath);
+    const archiveDir = path6.join(dir, "archive");
+    if (!fs9.existsSync(archiveDir)) {
+      fs9.mkdirSync(archiveDir, { recursive: true });
+    }
+    const timestamp = new Date().toISOString().replace(/[:.]/g, "-");
+    const archivePath = path6.join(archiveDir, `${timestamp}-${filename}`);
+    fs9.copyFileSync(absolutePath, archivePath);
+    console.log(`   \uD83D\uDCE6 ${texts.harness.logs.archivedReport.replace("{filename}", `${timestamp}-${filename}`)}`);
+  } catch (error) {
+    console.warn(`   ⚠️ ${texts.harness.logs.archiveFailed}: ${error instanceof Error ? error.message : String(error)}`);
+  }
+}
+async function saveReport(reportPath, content) {
+  const dir = path6.dirname(reportPath);
+  try {
+    if (!fs9.existsSync(dir)) {
+      fs9.mkdirSync(dir, { recursive: true });
+    }
+    archiveReportIfExists(reportPath);
+    fs9.writeFileSync(reportPath, content, "utf-8");
+  } catch (error) {
+    throw new Error(`保存报告失败: ${error instanceof Error ? error.message : String(error)}`);
+  }
+}
+function filterCheckpoints(task, filterFn) {
+  if (!task.checkpoints) {
+    return [];
+  }
+  return task.checkpoints.filter(filterFn);
+}
+function parseStructuredResult(output) {
+  if (!output || output.trim().length === 0) {
+    return { passed: null, matchLevel: null };
+  }
+  const level1 = output.match(/(?:EVALUATION_RESULT|VERDICT)\s*[:：]\s*(PASS|NOPASS)/i);
+  if (level1) {
+    return { passed: level1[1].toUpperCase() === "PASS", matchLevel: 1 };
+  }
+  const level2Patterns = [
+    /##\s*(?:评估结果|审核结果|验证结果|Evaluation Result|Result|Verdict)\s*[:：]?\s*(PASS|NOPASS)/i,
+    /(?:评估结果|审核结果|验证结果|Evaluation Result|Result|Verdict)[:：]?\s*(PASS|NOPASS)/i,
+    /"result"\s*[:：]\s*"(PASS|NOPASS)"/i
+  ];
+  for (const pattern of level2Patterns) {
+    const match = output.match(pattern);
+    if (match) {
+      return { passed: match[1].toUpperCase() === "PASS", matchLevel: 2 };
+    }
+  }
+  const level3 = output.match(/\b(PASS|NOPASS)\b/i);
+  if (level3) {
+    return { passed: level3[1].toUpperCase() === "PASS", matchLevel: 3 };
+  }
+  return { passed: null, matchLevel: null };
+}
+function parseVerdictResult(output, options) {
+  const result = {
+    passed: true,
+    reason: "",
+    items: [],
+    failedCheckpoints: [],
+    details: ""
+  };
+  const resultPattern = new RegExp(`##\\s*${options.resultField}\\s*[:：]\\s*(PASS|NOPASS)`, "i");
+  const resultMatch = output.match(resultPattern);
+  if (resultMatch) {
+    result.passed = resultMatch[1].toUpperCase() === "PASS";
+  }
+  const reasonPattern = new RegExp(`##\\s*${options.reasonField}\\s*[:：]\\s*(.+?)(?=##|$)`, "si");
+  const reasonMatch = output.match(reasonPattern);
+  if (reasonMatch) {
+    result.reason = reasonMatch[1].trim();
+  }
+  const listPattern = new RegExp(`##\\s*${options.listField}\\s*[:：]\\s*(.+?)(?=##|$)`, "si");
+  const listMatch = output.match(listPattern);
+  if (listMatch) {
+    const listText = listMatch[1].trim();
+    if (listText && listText !== "无" && listText !== "N/A") {
+      result.items = listText.split(`
+`).map((line) => line.replace(/^[-*]\s*/, "").trim()).filter((line) => line.length > 0);
+    }
+  }
+  const checkpointPattern = new RegExp(`##\\s*${options.checkpointField}\\s*[:：]\\s*(.+?)(?=##|$)`, "si");
+  const checkpointMatch = output.match(checkpointPattern);
+  if (checkpointMatch) {
+    const checkpointText = checkpointMatch[1].trim();
+    if (checkpointText && checkpointText !== "无" && checkpointText !== "N/A") {
+      result.failedCheckpoints = checkpointText.split(`
+`).map((line) => line.replace(/^[-*]\s*/, "").trim()).filter((line) => line.length > 0);
+    }
+  }
+  if (options.detailsField) {
+    const detailsPattern = new RegExp(`##\\s*${options.detailsField}\\s*[:：]\\s*(.+?)(?=##|$)`, "si");
+    const detailsMatch = output.match(detailsPattern);
+    if (detailsMatch) {
+      result.details = detailsMatch[1].trim();
+    }
+  }
+  if (!resultMatch) {
+    const structured = parseStructuredResult(output);
+    if (structured.passed !== null) {
+      result.passed = structured.passed;
+      if (!result.reason) {
+        const reasonPatterns = [
+          /REASON\s*[:：]\s*(.+?)(?=\n\n|\n## |$)/si,
+          /EVALUATION_REASON\s*[:：]\s*(.+?)(?=\n\n|\n## |$)/si,
+          new RegExp(`##?s*${options.reasonField}s*[:：]?s*(.+?)(?=
+
+|
+## |$)`, "si")
+        ];
+        for (const pattern of reasonPatterns) {
+          const match = output.match(pattern);
+          if (match && match[1]?.trim()) {
+            result.reason = match[1].trim();
+            break;
+          }
+        }
+        if (!result.reason) {
+          result.reason = `基于结构化关键词匹配（级别 ${structured.matchLevel}）`;
+        }
+      }
+    }
+  }
+  if (!result.reason) {
+    result.reason = "无法解析判定结果";
+  }
+  return result;
+}
+function getReportDir(taskId, cwd) {
+  return path6.join(getProjectDir(cwd), "reports", "harness", taskId);
+}
+function getReportPath(taskId, reportType, cwd) {
+  return path6.join(getReportDir(taskId, cwd), `${reportType}-report.md`);
+}
+var REVIEW_TIMEOUT_RATIO = 3;
+var init_harness_helpers = __esm(() => {
+  init_path();
+  init_i18n();
+});
+
+// src/utils/headless-agent.ts
+import * as fs10 from "fs";
+function buildEffectiveTools(phase, cwd, task) {
+  const codeDefaults = PHASE_DEFAULT_TOOLS[phase] || ["Read", "Bash", "Grep", "Glob"];
+  const configKey = PHASE_CONFIG_KEY[phase];
+  let phaseTools = codeDefaults;
+  try {
+    const configPath = getConfigPath(cwd);
+    if (fs10.existsSync(configPath)) {
+      const config = JSON.parse(fs10.readFileSync(configPath, "utf-8"));
+      const configPhaseTools = config?.harness?.perPhaseTools?.[configKey || phase];
+      if (Array.isArray(configPhaseTools) && configPhaseTools.length > 0) {
+        phaseTools = configPhaseTools;
+      }
+    }
+  } catch {}
+  if (task?.allowedTools && task.allowedTools.length > 0) {
+    const taskToolSet = new Set(task.allowedTools);
+    const effectiveTools = phaseTools.filter((t2) => taskToolSet.has(t2));
+    return { tools: effectiveTools, skipPermissions: false };
+  }
+  return { tools: phaseTools, skipPermissions: true };
+}
+
+class AgentProviderRegistryImpl {
+  providers = new Map;
+  defaultProvider = "claude-code";
+  logger;
+  constructor() {
+    this.logger = new Logger({ component: "headless-agent" });
+  }
+  register(provider) {
+    if (this.providers.has(provider.name)) {
+      this.logger.warn(`Provider '${provider.name}' 已存在，将被覆盖`);
+    }
+    this.providers.set(provider.name, provider);
+    this.logger.info(`注册 Agent provider: ${provider.name}`);
+  }
+  getProvider(name) {
+    const providerName = name || this.defaultProvider;
+    const provider = this.providers.get(providerName);
+    if (!provider) {
+      throw new Error(`Agent provider '${providerName}' 未注册。可用: ${[...this.providers.keys()].join(", ")}`);
+    }
+    return provider;
+  }
+  setDefault(name) {
+    if (!this.providers.has(name)) {
+      throw new Error(`无法设置默认 provider: '${name}' 未注册`);
+    }
+    this.defaultProvider = name;
+    this.logger.info(`默认 Agent provider 设置为: ${name}`);
+  }
+  getDefaultName() {
+    return this.defaultProvider;
+  }
+  listProviders() {
+    return [...this.providers.keys()];
+  }
+}
+
+class ClaudeCodeProvider {
+  name = "claude-code";
+  logger;
+  constructor() {
+    this.logger = new Logger({ component: "headless-agent:claude-code" });
+  }
+  async invoke(prompt, options) {
+    const startTime = Date.now();
+    this.logger.info("调用 Claude Code", {
+      timeout: options.timeout,
+      allowedTools: options.allowedTools,
+      cwd: options.cwd,
+      dangerouslySkipPermissions: options.dangerouslySkipPermissions,
+      outputFormat: options.outputFormat,
+      sessionId: options.sessionId,
+      resumeSession: options.resumeSession,
+      forkSession: options.forkSession
+    });
+    const claudeOptions = {
+      prompt,
+      allowedTools: options.allowedTools,
+      timeout: options.timeout,
+      cwd: options.cwd,
+      dangerouslySkipPermissions: options.dangerouslySkipPermissions,
+      outputFormat: options.outputFormat === "json" ? "json" : undefined,
+      sessionId: options.sessionId,
+      resumeSession: options.resumeSession,
+      forkSession: options.forkSession
+    };
+    const result = await runHeadlessClaude(claudeOptions);
+    const durationMs = Date.now() - startTime;
+    const tokensUsed = this.extractTokens(result.output);
+    const model = this.extractModel(result.output);
+    this.logger.info("Claude Code 调用完成", {
+      success: result.success,
+      durationMs,
+      tokensUsed,
+      model
+    });
+    if (result.success) {
+      this.logger.logAICost({
+        field: "headless-agent:invoke",
+        durationMs,
+        inputTokens: 0,
+        outputTokens: tokensUsed,
+        totalTokens: tokensUsed
+      });
+    }
+    return {
+      output: result.output,
+      success: result.success,
+      provider: this.name,
+      durationMs,
+      tokensUsed,
+      model,
+      error: result.error,
+      hookWarning: result.hookWarning,
+      stderr: result.stderr
+    };
+  }
+  extractTokens(output) {
+    try {
+      const jsonOutput = JSON.parse(output);
+      if (jsonOutput && typeof jsonOutput === "object") {
+        const usage = jsonOutput.usage;
+        if (usage) {
+          return (usage.input_tokens || 0) + (usage.output_tokens || 0);
+        }
+      }
+    } catch {}
+    let totalTokens = 0;
+    let foundJsonl = false;
+    for (const line of output.split(`
+`)) {
+      const trimmed = line.trim();
+      if (!trimmed)
+        continue;
+      try {
+        const obj = JSON.parse(trimmed);
+        foundJsonl = true;
+        if (obj?.usage) {
+          totalTokens += (obj.usage.input_tokens || 0) + (obj.usage.output_tokens || 0);
+        }
+      } catch {}
+    }
+    if (foundJsonl && totalTokens > 0)
+      return totalTokens;
+    const tokenMatch = output.match(/tokens?[:\s]+(\d+)/i);
+    return tokenMatch ? parseInt(tokenMatch[1], 10) : 0;
+  }
+  extractModel(output) {
+    try {
+      const jsonOutput = JSON.parse(output);
+      if (jsonOutput?.model)
+        return jsonOutput.model;
+    } catch {}
+    return "claude-code";
+  }
+}
+function initializeProviders() {
+  if (!agentRegistry.listProviders().includes("claude-code")) {
+    agentRegistry.register(new ClaudeCodeProvider);
+  }
+}
+function loadAIConfig(cwd) {
+  try {
+    const configPath = getConfigPath(cwd);
+    if (!fs10.existsSync(configPath)) {
+      return DEFAULT_AI;
+    }
+    const config = JSON.parse(fs10.readFileSync(configPath, "utf-8"));
+    if (!config.ai) {
+      return DEFAULT_AI;
+    }
+    return {
+      provider: config.ai.provider || DEFAULT_AI.provider,
+      customEndpoint: config.ai.customEndpoint,
+      providerOptions: config.ai.providerOptions
+    };
+  } catch {
+    return DEFAULT_AI;
+  }
+}
+function getAgent(cwd) {
+  const aiConfig = loadAIConfig(cwd);
+  return agentRegistry.getProvider(aiConfig.provider);
+}
+async function invokeAgent(prompt, options) {
+  const agent = getAgent(options.cwd);
+  return agent.invoke(prompt, options);
+}
+var PHASE_DEFAULT_TOOLS, PHASE_CONFIG_KEY, agentRegistry;
+var init_headless_agent = __esm(() => {
+  init_logger();
+  init_harness_helpers();
+  init_config();
+  init_path();
+  PHASE_DEFAULT_TOOLS = {
+    development: ["Read", "Edit", "Write", "Bash", "Grep", "Glob"],
+    codeReview: ["Read", "Bash", "Grep", "Glob"],
+    qaVerification: ["Read", "Bash", "Grep", "Glob"],
+    evaluation: ["Read", "Bash", "Grep", "Glob"]
+  };
+  PHASE_CONFIG_KEY = {
+    development: "development",
+    codeReview: "codeReview",
+    code_review: "codeReview",
+    qaVerification: "qaVerification",
+    qa_verification: "qaVerification",
+    evaluation: "evaluation"
+  };
+  agentRegistry = new AgentProviderRegistryImpl;
+  initializeProviders();
+});
+
+// src/types/quality-score.ts
+var init_quality_score = () => {};
+
+// src/utils/post-cr-gate/checkers/quality-score-checker.ts
+var init_quality_score_checker = __esm(() => {
+  init_headless_agent();
+  init_quality_score();
+});
+
+// src/utils/post-cr-gate/index.ts
+var init_post_cr_gate = __esm(() => {
+  init_runner2();
+  init_report_checker();
+  init_test_env_checker();
+  init_checkpoint_sync_checker2();
+  init_quality_score_checker();
+});
+
+// src/utils/checkpoint-verification.ts
+import * as fs11 from "fs";
+import * as path7 from "path";
+function inferCategoryFromDescription(description) {
+  const lowerDesc = description.toLowerCase();
+  if (lowerDesc.includes("test") || lowerDesc.includes("测试") || lowerDesc.includes("unit test") || lowerDesc.includes("单元测试") || lowerDesc.includes("integration test") || lowerDesc.includes("集成测试") || lowerDesc.includes("e2e") || lowerDesc.includes("端到端")) {
+    return "testing";
+  }
+  if (lowerDesc.includes("doc") || lowerDesc.includes("文档") || lowerDesc.includes("readme") || lowerDesc.includes("comment") || lowerDesc.includes("注释")) {
+    return "documentation";
+  }
+  if (lowerDesc.includes("review") || lowerDesc.includes("审核") || lowerDesc.includes("[ai review]") || lowerDesc.includes("code review")) {
+    return "review";
+  }
+  if (lowerDesc.includes("deploy") || lowerDesc.includes("部署") || lowerDesc.includes("build") || lowerDesc.includes("构建") || lowerDesc.includes("release") || lowerDesc.includes("发布")) {
+    return "deployment";
+  }
+  if (lowerDesc.includes("config") || lowerDesc.includes("配置") || lowerDesc.includes("setting") || lowerDesc.includes("设置") || lowerDesc.includes("env") || lowerDesc.includes("环境变量")) {
+    return "configuration";
+  }
+  return "implementation";
+}
+function inferCategoryFromCheckpoint(checkpoint) {
+  if (checkpoint.category) {
+    const cat = checkpoint.category.toLowerCase();
+    if (cat === "code_review" || cat === "review")
+      return "review";
+    if (cat === "qa_verification" || cat === "qa")
+      return "testing";
+  }
+  if (checkpoint.verification?.method) {
+    const method = checkpoint.verification.method;
+    if (method === "unit_test" || method === "integration_test" || method === "e2e_test" || method === "functional_test") {
+      return "testing";
+    }
+    if (method === "code_review" || method === "architect_review") {
+      return "review";
+    }
+  }
+  return inferCategoryFromDescription(checkpoint.description);
+}
+
+class CheckpointOutputVerifier {
+  cwd;
+  constructor(cwd = process.cwd()) {
+    this.cwd = cwd;
+  }
+  async verify(context) {
+    const strategy = CATEGORY_STRATEGIES[context.category];
+    const now = new Date().toISOString();
+    const baseRecord = {
+      source: context.source,
+      result: "unverified",
+      verifiedBy: "CheckpointOutputVerifier",
+      verifiedAt: now
+    };
+    if (strategy.requiresHumanConfirmation && context.source !== "cli_manual") {
+      return {
+        result: "skipped",
+        record: {
+          ...baseRecord,
+          result: "skipped",
+          failureReason: "此类别检查点需要人工确认"
+        },
+        warnings: [`检查点 ${context.checkpointId} 需要人工确认`],
+        suggestedActions: ["请手动验证此检查点"]
+      };
+    }
+    try {
+      switch (context.category) {
+        case "implementation":
+          return await this.verifyImplementation(context, baseRecord);
+        case "testing":
+          return await this.verifyTesting(context, baseRecord);
+        case "documentation":
+          return await this.verifyDocumentation(context, baseRecord);
+        case "review":
+          return await this.verifyReview(context, baseRecord);
+        case "deployment":
+          return await this.verifyDeployment(context, baseRecord);
+        case "configuration":
+          return await this.verifyConfiguration(context, baseRecord);
+        default:
+          return {
+            result: "unverified",
+            record: {
+              ...baseRecord,
+              result: "unverified",
+              failureReason: "未知检查点类别"
+            }
+          };
+      }
+    } catch (error) {
+      return {
+        result: "failed",
+        record: {
+          ...baseRecord,
+          result: "failed",
+          failureReason: error instanceof Error ? error.message : String(error)
+        },
+        warnings: [`验证过程出错: ${error instanceof Error ? error.message : String(error)}`]
+      };
+    }
+  }
+  async verifyImplementation(context, baseRecord) {
+    const warnings = [];
+    const evidence = [];
+    const projectDir = getProjectDir(this.cwd);
+    const evidenceDir = path7.join(projectDir, "evidence", context.taskId);
+    if (fs11.existsSync(evidenceDir)) {
+      const files = fs11.readdirSync(evidenceDir);
+      if (files.length > 0) {
+        evidence.push(`证据目录存在 ${files.length} 个文件`);
+      }
+    }
+    const reportPath = path7.join(projectDir, "reports", "harness", context.taskId, "dev-report.md");
+    if (fs11.existsSync(reportPath)) {
+      evidence.push("开发报告存在");
+    }
+    const gitDir = path7.join(this.cwd, ".git");
+    if (fs11.existsSync(gitDir)) {
+      evidence.push("Git 仓库存在变更记录");
+    }
+    if (evidence.length > 0) {
+      return {
+        result: "verified",
+        record: {
+          ...baseRecord,
+          result: "verified",
+          evidence
+        }
+      };
+    }
+    warnings.push(`检查点 ${context.checkpointId} 被标记为完成，但没有找到产出证据`);
+    warnings.push("这可能是假成功 — 检查点状态与实际产出不符");
+    return {
+      result: "unverified",
+      record: {
+        ...baseRecord,
+        result: "unverified",
+        evidence: [],
+        failureReason: "未找到产出证据"
+      },
+      warnings,
+      suggestedActions: [
+        "检查是否有对应的代码变更",
+        "确认开发报告是否生成",
+        "手动验证检查点是否真正完成"
+      ]
+    };
+  }
+  async verifyTesting(context, baseRecord) {
+    const warnings = [];
+    const evidence = [];
+    const projectDir = getProjectDir(this.cwd);
+    const qaReportPath = path7.join(projectDir, "reports", "harness", context.taskId, "qa-report.md");
+    if (fs11.existsSync(qaReportPath)) {
+      evidence.push("QA 报告存在");
+    }
+    const testPatterns = [".test.ts", ".spec.ts", ".test.js", ".spec.js"];
+    const srcDir = path7.join(this.cwd, "src");
+    if (fs11.existsSync(srcDir)) {
+      const foundTestFiles = this.findFilesWithPatterns(srcDir, testPatterns);
+      if (foundTestFiles.length > 0) {
+        evidence.push(`找到 ${foundTestFiles.length} 个测试文件`);
+      }
+    }
+    if (evidence.length > 0) {
+      return {
+        result: "verified",
+        record: {
+          ...baseRecord,
+          result: "verified",
+          evidence
+        }
+      };
+    }
+    warnings.push(`测试检查点 ${context.checkpointId} 没有找到测试证据`);
+    return {
+      result: "unverified",
+      record: {
+        ...baseRecord,
+        result: "unverified",
+        failureReason: "未找到测试证据"
+      },
+      warnings,
+      suggestedActions: ["运行测试并生成测试报告"]
+    };
+  }
+  async verifyDocumentation(context, baseRecord) {
+    const evidence = [];
+    const docPatterns = ["README.md", "CHANGELOG.md", "docs/", ".md"];
+    const foundDocs = [];
+    for (const pattern of docPatterns) {
+      const fullPath = path7.join(this.cwd, pattern);
+      if (fs11.existsSync(fullPath)) {
+        foundDocs.push(pattern);
+      }
+    }
+    if (foundDocs.length > 0) {
+      evidence.push(`找到文档: ${foundDocs.join(", ")}`);
+    }
+    if (evidence.length > 0) {
+      return {
+        result: "verified",
+        record: {
+          ...baseRecord,
+          result: "verified",
+          evidence
+        }
+      };
+    }
+    return {
+      result: "unverified",
+      record: {
+        ...baseRecord,
+        result: "unverified",
+        failureReason: "未找到文档文件"
+      },
+      warnings: [`文档检查点 ${context.checkpointId} 没有找到文档证据`]
+    };
+  }
+  async verifyReview(context, baseRecord) {
+    const evidence = [];
+    const projectDir = getProjectDir(this.cwd);
+    const crReportPath = path7.join(projectDir, "reports", "harness", context.taskId, "cr-report.md");
+    if (fs11.existsSync(crReportPath)) {
+      evidence.push("代码审核报告存在");
+    }
+    if (context.phaseData?.codeReviewVerdict) {
+      evidence.push("存在审核结论");
+    }
+    if (evidence.length > 0) {
+      return {
+        result: "verified",
+        record: {
+          ...baseRecord,
+          result: "verified",
+          evidence
+        }
+      };
+    }
+    return {
+      result: "unverified",
+      record: {
+        ...baseRecord,
+        result: "unverified",
+        failureReason: "未找到审核证据"
+      },
+      warnings: [`审核检查点 ${context.checkpointId} 没有找到审核证据`]
+    };
+  }
+  async verifyDeployment(context, baseRecord) {
+    const evidence = [];
+    const distDir = path7.join(this.cwd, "dist");
+    if (fs11.existsSync(distDir)) {
+      const files = fs11.readdirSync(distDir);
+      if (files.length > 0) {
+        evidence.push(`构建产物存在: ${files.length} 个文件`);
+      }
+    }
+    if (evidence.length > 0) {
+      return {
+        result: "verified",
+        record: {
+          ...baseRecord,
+          result: "verified",
+          evidence
+        }
+      };
+    }
+    return {
+      result: "unverified",
+      record: {
+        ...baseRecord,
+        result: "unverified",
+        failureReason: "未找到部署产物"
+      },
+      warnings: [`部署检查点 ${context.checkpointId} 没有找到部署产物`]
+    };
+  }
+  async verifyConfiguration(context, baseRecord) {
+    const evidence = [];
+    const configPatterns = [
+      ".env",
+      ".env.local",
+      ".env.production",
+      "config.json",
+      "config.yaml",
+      "config.yml",
+      "settings.json"
+    ];
+    for (const pattern of configPatterns) {
+      const fullPath = path7.join(this.cwd, pattern);
+      if (fs11.existsSync(fullPath)) {
+        evidence.push(`配置文件存在: ${pattern}`);
+      }
+    }
+    if (evidence.length > 0) {
+      return {
+        result: "verified",
+        record: {
+          ...baseRecord,
+          result: "verified",
+          evidence
+        }
+      };
+    }
+    return {
+      result: "unverified",
+      record: {
+        ...baseRecord,
+        result: "unverified",
+        failureReason: "未找到配置文件"
+      },
+      warnings: [`配置检查点 ${context.checkpointId} 没有找到配置文件`]
+    };
+  }
+  findFilesWithPatterns(dir, patterns) {
+    const results = [];
+    const walk = (currentDir) => {
+      const entries = fs11.readdirSync(currentDir, { withFileTypes: true });
+      for (const entry of entries) {
+        const fullPath = path7.join(currentDir, entry.name);
+        if (entry.isDirectory()) {
+          walk(fullPath);
+        } else if (entry.isFile()) {
+          for (const pattern of patterns) {
+            if (entry.name.includes(pattern) || entry.name.endsWith(pattern)) {
+              results.push(fullPath);
+              break;
+            }
+          }
+        }
+      }
+    };
+    walk(dir);
+    return results;
+  }
+}
+async function verifyAndRecordCheckpoint(task, checkpointId, source, cwd = process.cwd(), phaseData) {
+  const checkpoint = task.checkpoints?.find((cp) => cp.id === checkpointId);
+  if (!checkpoint) {
+    const now = new Date().toISOString();
+    return {
+      result: "failed",
+      record: {
+        source,
+        result: "failed",
+        verifiedBy: "CheckpointOutputVerifier",
+        verifiedAt: now,
+        failureReason: `检查点 ${checkpointId} 不存在`
+      },
+      warnings: [`检查点 ${checkpointId} 不存在`]
+    };
+  }
+  const category = inferCategoryFromCheckpoint(checkpoint);
+  const verifier = new CheckpointOutputVerifier(cwd);
+  const context = {
+    taskId: task.id,
+    checkpointId,
+    checkpointDescription: checkpoint.description,
+    category,
+    cwd,
+    source,
+    existingVerification: checkpoint.verification ? {
+      method: checkpoint.verification.method,
+      result: checkpoint.verification.result,
+      evidencePath: checkpoint.verification.evidencePath
+    } : undefined,
+    phaseData
+  };
+  return verifier.verify(context);
+}
+function validateHumanCheckpointCompletion(checkpoint) {
+  const verification = checkpoint.verification;
+  if (!verification) {
+    return {
+      valid: false,
+      missingOutputs: ["缺少验证记录"]
+    };
+  }
+  if (!verification.evidencePath && !verification.details) {
+    return {
+      valid: false,
+      missingOutputs: ["缺少验证证据"]
+    };
+  }
+  if (verification.result && verification.result !== "passed") {
+    return {
+      valid: false,
+      missingOutputs: [`验证结果: ${verification.result}`]
+    };
+  }
+  return { valid: true, missingOutputs: [] };
+}
+async function validateAutomatedCheckpointCompletion(checkpoint, taskId, verifier, cwd) {
+  const category = inferCategoryFromCheckpoint(checkpoint);
+  const context = {
+    taskId,
+    checkpointId: checkpoint.id,
+    checkpointDescription: checkpoint.description,
+    category,
+    cwd,
+    source: "check_completed",
+    existingVerification: checkpoint.verification ? {
+      method: checkpoint.verification.method,
+      result: checkpoint.verification.result,
+      evidencePath: checkpoint.verification.evidencePath
+    } : undefined
+  };
+  const output = await verifier.verify(context);
+  return {
+    valid: output.result === "verified",
+    missingOutputs: output.record.failureReason ? [output.record.failureReason] : []
+  };
+}
+function reportFalseSuccessWarnings(warnings) {
+  if (warnings.length === 0) {
+    return;
+  }
+  console.warn("");
+  console.warn("═══════════════════════════════════════════════════════════════");
+  console.warn("⚠️  假成功检测：发现检查点状态与产出不一致");
+  console.warn("═══════════════════════════════════════════════════════════════");
+  console.warn("");
+  for (const warning of warnings) {
+    console.warn(`检查点: ${warning.checkpointId}`);
+    console.warn(`描述: ${warning.description}`);
+    console.warn(`类别: ${warning.category}`);
+    console.warn(`类型: ${warning.requiresHuman ? "人工验证" : "自动验证"}`);
+    console.warn("");
+    if (warning.requiresHuman) {
+      console.warn("问题: 状态为 completed 但缺少验证证据");
+      console.warn("      人工验证检查点应有用户提供的验证记录");
+      console.warn("");
+      console.warn("建议操作:");
+      console.warn("  1. 检查验证记录: projmnt4claude task show <taskId>");
+      console.warn('  2. 补充验证记录: projmnt4claude task checkpoint <taskId> <cp-id> complete --note "验证说明"');
+    } else {
+      console.warn("问题: 状态为 completed 但产出验证失败");
+      console.warn("      缺失产出:");
+      for (const missing of warning.missingOutputs) {
+        console.warn(`        - ${missing}`);
+      }
+      console.warn("");
+      console.warn("建议操作:");
+      console.warn("  1. 检查产出文件是否存在");
+      console.warn("  2. 重新完成检查点对应的实现工作");
+      console.warn("  3. 重新标记: projmnt4claude task checkpoint <taskId> <cp-id> complete");
+    }
+    if (warning.existingEvidence.length > 0) {
+      console.warn("");
+      console.warn("现有验证证据:");
+      for (const evidence of warning.existingEvidence) {
+        console.warn(`  - ${evidence.description}`);
+      }
+    }
+    console.warn("───────────────────────────────────────────────────────────────");
+    console.warn("");
+  }
+  console.warn("提示: 假成功检查点不计入已完成列表，需要重新验证或补充证据。");
+  console.warn("═══════════════════════════════════════════════════════════════");
+  console.warn("");
+}
+async function checkCompletedCheckpoints(task, checkpointIds, cwd = process.cwd()) {
+  const completed = [];
+  const falseSuccesses = [];
+  if (!task.checkpoints) {
+    return { completed, falseSuccesses, hasFalseSuccess: false };
+  }
+  const verifier = new CheckpointOutputVerifier(cwd);
+  for (const checkpointId of checkpointIds) {
+    const checkpoint = task.checkpoints.find((cp) => cp.id === checkpointId);
+    if (!checkpoint)
+      continue;
+    if (checkpoint.status !== "completed")
+      continue;
+    const requiresHuman = checkpoint.requiresHuman ?? false;
+    let validationResult;
+    if (requiresHuman) {
+      validationResult = validateHumanCheckpointCompletion(checkpoint);
+    } else {
+      validationResult = await validateAutomatedCheckpointCompletion(checkpoint, task.id, verifier, cwd);
+    }
+    if (!validationResult.valid) {
+      falseSuccesses.push({
+        checkpointId,
+        description: checkpoint.description,
+        category: inferCategoryFromCheckpoint(checkpoint),
+        requiresHuman,
+        missingOutputs: validationResult.missingOutputs,
+        existingEvidence: checkpoint.verification?.details ? [
+          { type: checkpoint.verification.details.type, description: checkpoint.verification.details.userConfirmation || "无描述" }
+        ] : []
+      });
+      continue;
+    }
+    completed.push(checkpointId);
+  }
+  if (falseSuccesses.length > 0) {
+    reportFalseSuccessWarnings(falseSuccesses);
+  }
+  return {
+    completed,
+    falseSuccesses,
+    hasFalseSuccess: falseSuccesses.length > 0
+  };
+}
+
+class CheckpointStatusMismatchFixer {
+  verifier;
+  cwd;
+  constructor(cwd = process.cwd()) {
+    this.cwd = cwd;
+    this.verifier = new CheckpointOutputVerifier(cwd);
+  }
+  async fix(task) {
+    if (!task.checkpoints || task.checkpoints.length === 0) {
+      return {
+        status: "skipped",
+        completedCount: 0,
+        reopenedCount: 0,
+        humanPendingCount: 0,
+        taskReopened: false,
+        humanPendingDetails: []
+      };
+    }
+    const now = new Date().toISOString();
+    const entries = [];
+    for (const checkpoint of task.checkpoints) {
+      if (checkpoint.status !== "pending" && checkpoint.status !== "completed")
+        continue;
+      const category = inferCategoryFromCheckpoint(checkpoint);
+      const context = {
+        taskId: task.id,
+        checkpointId: checkpoint.id,
+        checkpointDescription: checkpoint.description,
+        category,
+        cwd: this.cwd,
+        source: "analyze_fix",
+        existingVerification: checkpoint.verification ? {
+          method: checkpoint.verification.method,
+          result: checkpoint.verification.result,
+          evidencePath: checkpoint.verification.evidencePath
+        } : undefined
+      };
+      const output = await this.verifier.verify(context);
+      entries.push({ checkpoint, output });
+    }
+    const verifiedEntries = entries.filter((e) => e.output.result === "verified");
+    const failedEntries = entries.filter((e) => e.output.result === "unverified" || e.output.result === "failed");
+    const skippedEntries = entries.filter((e) => e.output.result === "skipped");
+    const autoFailed = failedEntries.filter((e) => !(e.checkpoint.requiresHuman ?? false));
+    const humanPending = failedEntries.filter((e) => e.checkpoint.requiresHuman ?? false);
+    const humanSkipped = skippedEntries.filter((e) => e.checkpoint.requiresHuman ?? false);
+    let completedCount = 0;
+    for (const entry of verifiedEntries) {
+      const cp = task.checkpoints.find((c) => c.id === entry.checkpoint.id);
+      if (!cp)
+        continue;
+      cp.status = "completed";
+      cp.updatedAt = now;
+      cp.verification = {
+        method: "automated",
+        result: "passed (auto-completed by analyze-fix: verified output)",
+        verifiedAt: now,
+        verifiedBy: "analyze-fix",
+        details: {
+          type: "automated",
+          missingOutputs: []
+        }
+      };
+      if (entry.output.record.evidence) {
+        cp.verification.evidencePath = entry.output.record.evidence.join("; ");
+      }
+      completedCount++;
+    }
+    let reopenedCount = 0;
+    let taskReopened = false;
+    if (autoFailed.length > 0) {
+      console.log("");
+      console.log(`  ⚠️ 发现 ${autoFailed.length} 个自动验证检查点产出验证失败`);
+      console.log("     将重新打开任务以重新执行");
+      console.log("");
+      task.status = "open";
+      task.updatedAt = now;
+      taskReopened = true;
+      for (const entry of autoFailed) {
+        const cp = task.checkpoints.find((c) => c.id === entry.checkpoint.id);
+        if (!cp)
+          continue;
+        cp.status = "pending";
+        cp.updatedAt = now;
+        cp.note = `${cp.note ? cp.note + "; " : ""}analyze-fix 检测到假成功，重新打开`;
+        cp.verification = {
+          method: "automated",
+          result: "failed",
+          verifiedAt: now,
+          verifiedBy: "analyze-fix",
+          details: {
+            type: "automated",
+            missingOutputs: entry.output.record.failureReason ? [entry.output.record.failureReason] : []
+          }
+        };
+        reopenedCount++;
+      }
+      writeTaskMeta(task, this.cwd);
+      console.log("  ✓ 任务已重新打开");
+      console.log("     请重新执行任务以完成检查点");
+    }
+    const allHumanPending = [...humanPending, ...humanSkipped];
+    const humanPendingDetails = [];
+    let humanPendingCount = 0;
+    if (allHumanPending.length > 0) {
+      console.log("");
+      console.log("  ═══════════════════════════════════════════════════════════");
+      console.log("  ⚠️  人工验证检查点待验证");
+      console.log("  ═══════════════════════════════════════════════════════════");
+      console.log("");
+      console.log(`  任务 ${task.id} 有 ${allHumanPending.length} 个检查点需要人工验证：`);
+      console.log("");
+      for (let i = 0;i < allHumanPending.length; i++) {
+        const { checkpoint } = allHumanPending[i];
+        console.log(`  ${i + 1}. [${checkpoint.id}] ${checkpoint.description}`);
+        console.log(`     类别: ${checkpoint.category ?? "implementation"}`);
+        if (checkpoint.verification?.steps) {
+          console.log("     验证步骤:");
+          for (const step of checkpoint.verification.steps) {
+            console.log(`       - ${step}`);
+          }
+        }
+        if (checkpoint.verification?.expected) {
+          console.log(`     预期结果: ${checkpoint.verification.expected}`);
+        }
+        console.log("");
+        humanPendingDetails.push({
+          checkpointId: checkpoint.id,
+          description: checkpoint.description,
+          category: checkpoint.category,
+          verificationSteps: checkpoint.verification?.steps,
+          expectedResult: checkpoint.verification?.expected
+        });
+        humanPendingCount++;
+      }
+      console.log("  ───────────────────────────────────────────────────────────");
+      console.log("  完成验证后，请执行以下命令标记检查点完成：");
+      console.log("");
+      console.log(`    projmnt4claude task checkpoint ${task.id} <checkpoint-id> complete --note "验证结果"`);
+      console.log("");
+      console.log("  ═══════════════════════════════════════════════════════════");
+      console.log("");
+    }
+    if (completedCount > 0 && !taskReopened) {
+      task.updatedAt = now;
+      writeTaskMeta(task, this.cwd);
+    }
+    if (taskReopened) {
+      return {
+        status: "fixed",
+        completedCount,
+        reopenedCount,
+        humanPendingCount,
+        taskReopened: true,
+        humanPendingDetails
+      };
+    }
+    if (completedCount > 0) {
+      console.log(`  ✅ 已标记 ${completedCount} 个检查点为完成（产出验证通过）`);
+      return {
+        status: "fixed",
+        completedCount,
+        reopenedCount,
+        humanPendingCount,
+        taskReopened: false,
+        humanPendingDetails
+      };
+    }
+    if (humanPendingCount > 0) {
+      return {
+        status: "unfixable",
+        completedCount,
+        reopenedCount,
+        humanPendingCount,
+        taskReopened: false,
+        humanPendingDetails
+      };
+    }
+    return {
+      status: "skipped",
+      completedCount: 0,
+      reopenedCount: 0,
+      humanPendingCount: 0,
+      taskReopened: false,
+      humanPendingDetails: []
+    };
+  }
+}
+var CATEGORY_STRATEGIES;
+var init_checkpoint_verification = __esm(() => {
+  init_path();
+  init_task2();
+  CATEGORY_STRATEGIES = {
+    implementation: {
+      category: "implementation",
+      description: "实现类检查点：验证代码文件变更",
+      evidenceTypes: ["file_exists", "git_diff", "code_change"],
+      requiresHumanConfirmation: false,
+      autoVerifyFunction: "verifyImplementationCheckpoint"
+    },
+    testing: {
+      category: "testing",
+      description: "测试类检查点：验证测试文件和测试通过",
+      evidenceTypes: ["test_file_exists", "test_passed", "coverage_report"],
+      requiresHumanConfirmation: false,
+      autoVerifyFunction: "verifyTestingCheckpoint"
+    },
+    documentation: {
+      category: "documentation",
+      description: "文档类检查点：验证文档文件存在",
+      evidenceTypes: ["file_exists", "content_not_empty"],
+      requiresHumanConfirmation: false,
+      autoVerifyFunction: "verifyDocumentationCheckpoint"
+    },
+    review: {
+      category: "review",
+      description: "审核类检查点：验证审核记录存在",
+      evidenceTypes: ["review_record", "approval_status"],
+      requiresHumanConfirmation: true,
+      autoVerifyFunction: "verifyReviewCheckpoint"
+    },
+    deployment: {
+      category: "deployment",
+      description: "部署类检查点：验证部署产物",
+      evidenceTypes: ["build_artifact", "deployment_log"],
+      requiresHumanConfirmation: false,
+      autoVerifyFunction: "verifyDeploymentCheckpoint"
+    },
+    configuration: {
+      category: "configuration",
+      description: "配置类检查点：验证配置文件变更",
+      evidenceTypes: ["file_exists", "config_valid"],
+      requiresHumanConfirmation: false,
+      autoVerifyFunction: "verifyConfigurationCheckpoint"
+    },
+    custom: {
+      category: "custom",
+      description: "自定义检查点：需要人工验证",
+      evidenceTypes: ["manual_verification"],
+      requiresHumanConfirmation: true
+    }
+  };
+});
+
+// src/utils/checkpoint.ts
+import * as fs12 from "fs";
+import * as path8 from "path";
 function filterLowQualityCheckpoints(checkpoints) {
   const kept = [];
   const removed = [];
@@ -12687,11 +14423,11 @@ function generateCheckpointId(taskId, index, description) {
   return `CP-${String(index + 1).padStart(3, "0")}`;
 }
 function parseCheckpointsWithIds(taskId, cwd = process.cwd()) {
-  const checkpointPath = path5.join(getTasksDir(cwd), taskId, "checkpoint.md");
-  if (!fs8.existsSync(checkpointPath)) {
+  const checkpointPath = path8.join(getTasksDir(cwd), taskId, "checkpoint.md");
+  if (!fs12.existsSync(checkpointPath)) {
     return [];
   }
-  const content = fs8.readFileSync(checkpointPath, "utf-8");
+  const content = fs12.readFileSync(checkpointPath, "utf-8");
   const lines = content.split(`
 `);
   const checkpoints = [];
@@ -12726,7 +14462,7 @@ function extractTestPatterns(desc, task) {
   const srcFileMatch = desc.match(/(?:src\/[\w/.-]+)\.[a-z]+/g);
   if (srcFileMatch) {
     for (const f of srcFileMatch) {
-      const base = path5.basename(f, path5.extname(f));
+      const base = path8.basename(f, path8.extname(f));
       if (base && base.length > 2) {
         patterns.push(base);
       }
@@ -12751,7 +14487,7 @@ function extractTestPatterns(desc, task) {
     const descFiles = task.description.match(/src\/([\w/-]+)\.[a-z]+/g);
     if (descFiles) {
       for (const f of descFiles.slice(0, 2)) {
-        const dir = path5.dirname(f).replace("src/", "");
+        const dir = path8.dirname(f).replace("src/", "");
         if (dir && dir !== "." && dir.length > 2) {
           patterns.push(dir);
           break;
@@ -12918,16 +14654,31 @@ function updateCheckpointStatus(taskId, checkpointId, status, options = {}, cwd 
     }
     checkpoint.verification.result = options.result;
     checkpoint.verification.verifiedAt = new Date().toISOString();
-    checkpoint.verification.verifiedBy = options.verifiedBy || process.env.USER || "unknown";
+    if (options.human) {
+      checkpoint.verification.verifiedBy = options.verifiedBy || process.env.USER || "unknown";
+      checkpoint.verification.details = {
+        type: "human",
+        directHumanInput: true
+      };
+    } else if (options.verifiedBy?.startsWith("ai_proxy:")) {
+      checkpoint.verification.verifiedBy = options.verifiedBy;
+      checkpoint.verification.details = {
+        type: "human",
+        aiProxied: true,
+        userConfirmation: options.note
+      };
+    } else {
+      checkpoint.verification.verifiedBy = options.verifiedBy || process.env.USER || "unknown";
+    }
   }
   updateCheckpointMd(taskId, checkpointId, status === "completed", updatedTask, cwd);
   writeTaskMeta(updatedTask, cwd);
 }
 function updateCheckpointMd(taskId, checkpointId, checked, task, cwd = process.cwd()) {
-  const checkpointPath = path5.join(getTasksDir(cwd), taskId, "checkpoint.md");
-  if (!fs8.existsSync(checkpointPath))
+  const checkpointPath = path8.join(getTasksDir(cwd), taskId, "checkpoint.md");
+  if (!fs12.existsSync(checkpointPath))
     return;
-  const content = fs8.readFileSync(checkpointPath, "utf-8");
+  const content = fs12.readFileSync(checkpointPath, "utf-8");
   const lines = content.split(`
 `);
   const checkpoint = task.checkpoints?.find((cp) => cp.id === checkpointId);
@@ -12940,7 +14691,7 @@ function updateCheckpointMd(taskId, checkpointId, checked, task, cwd = process.c
       break;
     }
   }
-  fs8.writeFileSync(checkpointPath, lines.join(`
+  fs12.writeFileSync(checkpointPath, lines.join(`
 `), "utf-8");
 }
 function getCheckpointDetail(taskId, checkpointId, cwd = process.cwd()) {
@@ -12954,13 +14705,13 @@ function listCheckpoints(taskId, cwd = process.cwd()) {
   return task?.checkpoints || [];
 }
 function updateCheckpointMdFromArray(taskId, checkpoints, cwd = process.cwd()) {
-  const checkpointPath = path5.join(getTasksDir(cwd), taskId, "checkpoint.md");
+  const checkpointPath = path8.join(getTasksDir(cwd), taskId, "checkpoint.md");
   const content = `# ${taskId} 检查点
 
 ` + checkpoints.map((cp) => `- [ ] ${cp.description}`).join(`
 `) + `
 `;
-  fs8.writeFileSync(checkpointPath, content, "utf-8");
+  fs12.writeFileSync(checkpointPath, content, "utf-8");
 }
 function parseTextCheckpoints(description) {
   if (!description || description.trim().length === 0) {
@@ -13043,6 +14794,10 @@ var init_checkpoint = __esm(() => {
   init_path();
   init_task2();
   init_checkpoint_rules();
+  init_pre_cr_gate();
+  init_post_cr_gate();
+  init_post_cr_gate();
+  init_checkpoint_verification();
   VERIFICATION_KEYWORDS = [
     {
       method: "functional_test",
@@ -13108,475 +14863,6 @@ var init_checkpoint = __esm(() => {
   ];
 });
 
-// src/utils/checkpoint-verification.ts
-import * as fs9 from "fs";
-import * as path6 from "path";
-function inferCategoryFromDescription(description) {
-  const lowerDesc = description.toLowerCase();
-  if (lowerDesc.includes("test") || lowerDesc.includes("测试") || lowerDesc.includes("unit test") || lowerDesc.includes("单元测试") || lowerDesc.includes("integration test") || lowerDesc.includes("集成测试") || lowerDesc.includes("e2e") || lowerDesc.includes("端到端")) {
-    return "testing";
-  }
-  if (lowerDesc.includes("doc") || lowerDesc.includes("文档") || lowerDesc.includes("readme") || lowerDesc.includes("comment") || lowerDesc.includes("注释")) {
-    return "documentation";
-  }
-  if (lowerDesc.includes("review") || lowerDesc.includes("审核") || lowerDesc.includes("[ai review]") || lowerDesc.includes("code review")) {
-    return "review";
-  }
-  if (lowerDesc.includes("deploy") || lowerDesc.includes("部署") || lowerDesc.includes("build") || lowerDesc.includes("构建") || lowerDesc.includes("release") || lowerDesc.includes("发布")) {
-    return "deployment";
-  }
-  if (lowerDesc.includes("config") || lowerDesc.includes("配置") || lowerDesc.includes("setting") || lowerDesc.includes("设置") || lowerDesc.includes("env") || lowerDesc.includes("环境变量")) {
-    return "configuration";
-  }
-  return "implementation";
-}
-function inferCategoryFromCheckpoint(checkpoint) {
-  if (checkpoint.category) {
-    const cat = checkpoint.category.toLowerCase();
-    if (cat === "code_review" || cat === "review")
-      return "review";
-    if (cat === "qa_verification" || cat === "qa")
-      return "testing";
-  }
-  if (checkpoint.verification?.method) {
-    const method = checkpoint.verification.method;
-    if (method === "unit_test" || method === "integration_test" || method === "e2e_test" || method === "functional_test") {
-      return "testing";
-    }
-    if (method === "code_review" || method === "architect_review") {
-      return "review";
-    }
-  }
-  return inferCategoryFromDescription(checkpoint.description);
-}
-
-class CheckpointOutputVerifier {
-  cwd;
-  constructor(cwd = process.cwd()) {
-    this.cwd = cwd;
-  }
-  async verify(context) {
-    const strategy = CATEGORY_STRATEGIES[context.category];
-    const now = new Date().toISOString();
-    const baseRecord = {
-      source: context.source,
-      result: "unverified",
-      verifiedBy: "CheckpointOutputVerifier",
-      verifiedAt: now
-    };
-    if (strategy.requiresHumanConfirmation && context.source !== "cli_manual") {
-      return {
-        result: "skipped",
-        record: {
-          ...baseRecord,
-          result: "skipped",
-          failureReason: "此类别检查点需要人工确认"
-        },
-        warnings: [`检查点 ${context.checkpointId} 需要人工确认`],
-        suggestedActions: ["请手动验证此检查点"]
-      };
-    }
-    try {
-      switch (context.category) {
-        case "implementation":
-          return await this.verifyImplementation(context, baseRecord);
-        case "testing":
-          return await this.verifyTesting(context, baseRecord);
-        case "documentation":
-          return await this.verifyDocumentation(context, baseRecord);
-        case "review":
-          return await this.verifyReview(context, baseRecord);
-        case "deployment":
-          return await this.verifyDeployment(context, baseRecord);
-        case "configuration":
-          return await this.verifyConfiguration(context, baseRecord);
-        default:
-          return {
-            result: "unverified",
-            record: {
-              ...baseRecord,
-              result: "unverified",
-              failureReason: "未知检查点类别"
-            }
-          };
-      }
-    } catch (error) {
-      return {
-        result: "failed",
-        record: {
-          ...baseRecord,
-          result: "failed",
-          failureReason: error instanceof Error ? error.message : String(error)
-        },
-        warnings: [`验证过程出错: ${error instanceof Error ? error.message : String(error)}`]
-      };
-    }
-  }
-  async verifyImplementation(context, baseRecord) {
-    const warnings = [];
-    const evidence = [];
-    const projectDir = getProjectDir(this.cwd);
-    const evidenceDir = path6.join(projectDir, "evidence", context.taskId);
-    if (fs9.existsSync(evidenceDir)) {
-      const files = fs9.readdirSync(evidenceDir);
-      if (files.length > 0) {
-        evidence.push(`证据目录存在 ${files.length} 个文件`);
-      }
-    }
-    const reportPath = path6.join(projectDir, "reports", "harness", context.taskId, "dev-report.md");
-    if (fs9.existsSync(reportPath)) {
-      evidence.push("开发报告存在");
-    }
-    const gitDir = path6.join(this.cwd, ".git");
-    if (fs9.existsSync(gitDir)) {
-      evidence.push("Git 仓库存在变更记录");
-    }
-    if (evidence.length > 0) {
-      return {
-        result: "verified",
-        record: {
-          ...baseRecord,
-          result: "verified",
-          evidence
-        }
-      };
-    }
-    warnings.push(`检查点 ${context.checkpointId} 被标记为完成，但没有找到产出证据`);
-    warnings.push("这可能是假成功 — 检查点状态与实际产出不符");
-    return {
-      result: "unverified",
-      record: {
-        ...baseRecord,
-        result: "unverified",
-        evidence: [],
-        failureReason: "未找到产出证据"
-      },
-      warnings,
-      suggestedActions: [
-        "检查是否有对应的代码变更",
-        "确认开发报告是否生成",
-        "手动验证检查点是否真正完成"
-      ]
-    };
-  }
-  async verifyTesting(context, baseRecord) {
-    const warnings = [];
-    const evidence = [];
-    const projectDir = getProjectDir(this.cwd);
-    const qaReportPath = path6.join(projectDir, "reports", "harness", context.taskId, "qa-report.md");
-    if (fs9.existsSync(qaReportPath)) {
-      evidence.push("QA 报告存在");
-    }
-    const testPatterns = [".test.ts", ".spec.ts", ".test.js", ".spec.js"];
-    const srcDir = path6.join(this.cwd, "src");
-    if (fs9.existsSync(srcDir)) {
-      const foundTestFiles = this.findFilesWithPatterns(srcDir, testPatterns);
-      if (foundTestFiles.length > 0) {
-        evidence.push(`找到 ${foundTestFiles.length} 个测试文件`);
-      }
-    }
-    if (evidence.length > 0) {
-      return {
-        result: "verified",
-        record: {
-          ...baseRecord,
-          result: "verified",
-          evidence
-        }
-      };
-    }
-    warnings.push(`测试检查点 ${context.checkpointId} 没有找到测试证据`);
-    return {
-      result: "unverified",
-      record: {
-        ...baseRecord,
-        result: "unverified",
-        failureReason: "未找到测试证据"
-      },
-      warnings,
-      suggestedActions: ["运行测试并生成测试报告"]
-    };
-  }
-  async verifyDocumentation(context, baseRecord) {
-    const evidence = [];
-    const docPatterns = ["README.md", "CHANGELOG.md", "docs/", ".md"];
-    const foundDocs = [];
-    for (const pattern of docPatterns) {
-      const fullPath = path6.join(this.cwd, pattern);
-      if (fs9.existsSync(fullPath)) {
-        foundDocs.push(pattern);
-      }
-    }
-    if (foundDocs.length > 0) {
-      evidence.push(`找到文档: ${foundDocs.join(", ")}`);
-    }
-    if (evidence.length > 0) {
-      return {
-        result: "verified",
-        record: {
-          ...baseRecord,
-          result: "verified",
-          evidence
-        }
-      };
-    }
-    return {
-      result: "unverified",
-      record: {
-        ...baseRecord,
-        result: "unverified",
-        failureReason: "未找到文档文件"
-      },
-      warnings: [`文档检查点 ${context.checkpointId} 没有找到文档证据`]
-    };
-  }
-  async verifyReview(context, baseRecord) {
-    const evidence = [];
-    const projectDir = getProjectDir(this.cwd);
-    const crReportPath = path6.join(projectDir, "reports", "harness", context.taskId, "cr-report.md");
-    if (fs9.existsSync(crReportPath)) {
-      evidence.push("代码审核报告存在");
-    }
-    if (context.phaseData?.codeReviewVerdict) {
-      evidence.push("存在审核结论");
-    }
-    if (evidence.length > 0) {
-      return {
-        result: "verified",
-        record: {
-          ...baseRecord,
-          result: "verified",
-          evidence
-        }
-      };
-    }
-    return {
-      result: "unverified",
-      record: {
-        ...baseRecord,
-        result: "unverified",
-        failureReason: "未找到审核证据"
-      },
-      warnings: [`审核检查点 ${context.checkpointId} 没有找到审核证据`]
-    };
-  }
-  async verifyDeployment(context, baseRecord) {
-    const evidence = [];
-    const distDir = path6.join(this.cwd, "dist");
-    if (fs9.existsSync(distDir)) {
-      const files = fs9.readdirSync(distDir);
-      if (files.length > 0) {
-        evidence.push(`构建产物存在: ${files.length} 个文件`);
-      }
-    }
-    if (evidence.length > 0) {
-      return {
-        result: "verified",
-        record: {
-          ...baseRecord,
-          result: "verified",
-          evidence
-        }
-      };
-    }
-    return {
-      result: "unverified",
-      record: {
-        ...baseRecord,
-        result: "unverified",
-        failureReason: "未找到部署产物"
-      },
-      warnings: [`部署检查点 ${context.checkpointId} 没有找到部署产物`]
-    };
-  }
-  async verifyConfiguration(context, baseRecord) {
-    const evidence = [];
-    const configPatterns = [
-      ".env",
-      ".env.local",
-      ".env.production",
-      "config.json",
-      "config.yaml",
-      "config.yml",
-      "settings.json"
-    ];
-    for (const pattern of configPatterns) {
-      const fullPath = path6.join(this.cwd, pattern);
-      if (fs9.existsSync(fullPath)) {
-        evidence.push(`配置文件存在: ${pattern}`);
-      }
-    }
-    if (evidence.length > 0) {
-      return {
-        result: "verified",
-        record: {
-          ...baseRecord,
-          result: "verified",
-          evidence
-        }
-      };
-    }
-    return {
-      result: "unverified",
-      record: {
-        ...baseRecord,
-        result: "unverified",
-        failureReason: "未找到配置文件"
-      },
-      warnings: [`配置检查点 ${context.checkpointId} 没有找到配置文件`]
-    };
-  }
-  findFilesWithPatterns(dir, patterns) {
-    const results = [];
-    const walk = (currentDir) => {
-      const entries = fs9.readdirSync(currentDir, { withFileTypes: true });
-      for (const entry of entries) {
-        const fullPath = path6.join(currentDir, entry.name);
-        if (entry.isDirectory()) {
-          walk(fullPath);
-        } else if (entry.isFile()) {
-          for (const pattern of patterns) {
-            if (entry.name.includes(pattern) || entry.name.endsWith(pattern)) {
-              results.push(fullPath);
-              break;
-            }
-          }
-        }
-      }
-    };
-    walk(dir);
-    return results;
-  }
-}
-async function detectFalseSuccess(task, cwd = process.cwd()) {
-  const falseSuccessCheckpoints = [];
-  const warnings = [];
-  const details = [];
-  if (!task.checkpoints || task.checkpoints.length === 0) {
-    return { falseSuccessCheckpoints, warnings, details };
-  }
-  const verifier = new CheckpointOutputVerifier(cwd);
-  for (const checkpoint of task.checkpoints) {
-    if (checkpoint.status !== "completed")
-      continue;
-    const category = inferCategoryFromCheckpoint(checkpoint);
-    const context = {
-      taskId: task.id,
-      checkpointId: checkpoint.id,
-      checkpointDescription: checkpoint.description,
-      category,
-      cwd,
-      source: "check_completed",
-      existingVerification: checkpoint.verification ? {
-        method: checkpoint.verification.method,
-        result: checkpoint.verification.result,
-        evidencePath: checkpoint.verification.evidencePath
-      } : undefined
-    };
-    const output = await verifier.verify(context);
-    if (output.result === "unverified" || output.result === "failed") {
-      falseSuccessCheckpoints.push(checkpoint.id);
-      if (output.warnings) {
-        warnings.push(...output.warnings);
-      }
-      details.push({
-        checkpointId: checkpoint.id,
-        category,
-        reason: output.record.failureReason || "未找到产出证据"
-      });
-    }
-  }
-  return { falseSuccessCheckpoints, warnings, details };
-}
-async function verifyAndRecordCheckpoint(task, checkpointId, source, cwd = process.cwd(), phaseData) {
-  const checkpoint = task.checkpoints?.find((cp) => cp.id === checkpointId);
-  if (!checkpoint) {
-    const now = new Date().toISOString();
-    return {
-      result: "failed",
-      record: {
-        source,
-        result: "failed",
-        verifiedBy: "CheckpointOutputVerifier",
-        verifiedAt: now,
-        failureReason: `检查点 ${checkpointId} 不存在`
-      },
-      warnings: [`检查点 ${checkpointId} 不存在`]
-    };
-  }
-  const category = inferCategoryFromCheckpoint(checkpoint);
-  const verifier = new CheckpointOutputVerifier(cwd);
-  const context = {
-    taskId: task.id,
-    checkpointId,
-    checkpointDescription: checkpoint.description,
-    category,
-    cwd,
-    source,
-    existingVerification: checkpoint.verification ? {
-      method: checkpoint.verification.method,
-      result: checkpoint.verification.result,
-      evidencePath: checkpoint.verification.evidencePath
-    } : undefined,
-    phaseData
-  };
-  return verifier.verify(context);
-}
-var CATEGORY_STRATEGIES;
-var init_checkpoint_verification = __esm(() => {
-  init_path();
-  CATEGORY_STRATEGIES = {
-    implementation: {
-      category: "implementation",
-      description: "实现类检查点：验证代码文件变更",
-      evidenceTypes: ["file_exists", "git_diff", "code_change"],
-      requiresHumanConfirmation: false,
-      autoVerifyFunction: "verifyImplementationCheckpoint"
-    },
-    testing: {
-      category: "testing",
-      description: "测试类检查点：验证测试文件和测试通过",
-      evidenceTypes: ["test_file_exists", "test_passed", "coverage_report"],
-      requiresHumanConfirmation: false,
-      autoVerifyFunction: "verifyTestingCheckpoint"
-    },
-    documentation: {
-      category: "documentation",
-      description: "文档类检查点：验证文档文件存在",
-      evidenceTypes: ["file_exists", "content_not_empty"],
-      requiresHumanConfirmation: false,
-      autoVerifyFunction: "verifyDocumentationCheckpoint"
-    },
-    review: {
-      category: "review",
-      description: "审核类检查点：验证审核记录存在",
-      evidenceTypes: ["review_record", "approval_status"],
-      requiresHumanConfirmation: true,
-      autoVerifyFunction: "verifyReviewCheckpoint"
-    },
-    deployment: {
-      category: "deployment",
-      description: "部署类检查点：验证部署产物",
-      evidenceTypes: ["build_artifact", "deployment_log"],
-      requiresHumanConfirmation: false,
-      autoVerifyFunction: "verifyDeploymentCheckpoint"
-    },
-    configuration: {
-      category: "configuration",
-      description: "配置类检查点：验证配置文件变更",
-      evidenceTypes: ["file_exists", "config_valid"],
-      requiresHumanConfirmation: false,
-      autoVerifyFunction: "verifyConfigurationCheckpoint"
-    },
-    custom: {
-      category: "custom",
-      description: "自定义检查点：需要人工验证",
-      evidenceTypes: ["manual_verification"],
-      requiresHumanConfirmation: true
-    }
-  };
-});
-
 // src/utils/format.ts
 var SEPARATOR_WIDTH = 60;
 
@@ -13585,12 +14871,12 @@ function detectCyclesDFS(adjacency) {
   const cycles = [];
   const visited = new Set;
   const onStack = new Set;
-  const path7 = [];
+  const path9 = [];
   function dfs(node) {
     if (onStack.has(node)) {
-      const cycleStart = path7.indexOf(node);
+      const cycleStart = path9.indexOf(node);
       if (cycleStart !== -1) {
-        cycles.push([...path7.slice(cycleStart), node]);
+        cycles.push([...path9.slice(cycleStart), node]);
       }
       return;
     }
@@ -13598,14 +14884,14 @@ function detectCyclesDFS(adjacency) {
       return;
     visited.add(node);
     onStack.add(node);
-    path7.push(node);
+    path9.push(node);
     const neighbors = adjacency.get(node);
     if (neighbors) {
       for (const neighbor of neighbors) {
         dfs(neighbor);
       }
     }
-    path7.pop();
+    path9.pop();
     onStack.delete(node);
   }
   for (const nodeId of adjacency.keys()) {
@@ -14193,8 +15479,8 @@ class DependencyGraph {
     return bridges.map((b) => {
       const pathsFromRoots = new Map;
       for (const root of b.bridgedRoots) {
-        const path7 = this.findPath(root, b.nodeId);
-        pathsFromRoots.set(root, path7);
+        const path9 = this.findPath(root, b.nodeId);
+        pathsFromRoots.set(root, path9);
       }
       return {
         nodeId: b.nodeId,
@@ -14233,12 +15519,12 @@ class DependencyGraph {
       for (const depId of deps.keys()) {
         const otherDeps = [...deps.keys()].filter((d) => d !== depId);
         for (const otherDep of otherDeps) {
-          const path7 = this.findPathThroughDep(otherDep, depId);
-          if (path7) {
+          const path9 = this.findPathThroughDep(otherDep, depId);
+          if (path9) {
             redundant.push({
               from: nodeId,
               to: depId,
-              viaPath: [nodeId, ...path7]
+              viaPath: [nodeId, ...path9]
             });
             break;
           }
@@ -14262,10 +15548,10 @@ class DependencyGraph {
       visited.set(depId, { depth: 1, path: [failedTaskId, depId], source: depId });
     }
     while (queue.length > 0) {
-      const [current, depth, path7, source] = queue.shift();
+      const [current, depth, path9, source] = queue.shift();
       details.set(current, {
         depth,
-        pathFromSource: path7,
+        pathFromSource: path9,
         sourceTaskId: source
       });
       const nextDownstream = this.reverseAdj.get(current);
@@ -14274,10 +15560,10 @@ class DependencyGraph {
           if (!visited.has(next)) {
             visited.set(next, {
               depth: depth + 1,
-              path: [...path7, next],
+              path: [...path9, next],
               source
             });
-            queue.push([next, depth + 1, [...path7, next], source]);
+            queue.push([next, depth + 1, [...path9, next], source]);
           }
         }
       }
@@ -14494,15 +15780,15 @@ class DependencyGraph {
     const visited = new Set([from]);
     const queue = [[from, [from]]];
     while (queue.length > 0) {
-      const [current, path7] = queue.shift();
+      const [current, path9] = queue.shift();
       if (current === to)
-        return path7;
+        return path9;
       const downstream = this.reverseAdj.get(current);
       if (downstream) {
         for (const next of downstream) {
           if (!visited.has(next)) {
             visited.add(next);
-            queue.push([next, [...path7, next]]);
+            queue.push([next, [...path9, next]]);
           }
         }
       }
@@ -14659,865 +15945,6 @@ var init_contradiction_detector = __esm(() => {
     /\b(?:不满足|未通过|未完成|缺失|错误|问题|失败|遗漏|不正确)\b/,
     /\b(?:not\s+(?:met|satisfied|passed|implemented|completed|working))\b/i
   ];
-});
-
-// src/utils/logger.ts
-import * as fs10 from "fs";
-import * as path7 from "path";
-import { execSync as execSync2 } from "child_process";
-function getLogFilePath(command, cwd = process.cwd()) {
-  const date = new Date().toISOString().slice(0, 10).replace(/-/g, "");
-  const logsDir = getLogsDir(cwd);
-  ensureDir(logsDir);
-  return path7.join(logsDir, `${command}-${date}.log`);
-}
-
-class Logger {
-  component;
-  cwd;
-  command;
-  buffer;
-  minLevel;
-  lastWrittenIndex;
-  constructor(options = {}) {
-    this.component = options.component;
-    this.cwd = options.cwd || process.cwd();
-    this.command = options.command;
-    this.buffer = [];
-    this.minLevel = this.resolveLogLevel();
-    this.lastWrittenIndex = 0;
-  }
-  resolveLogLevel() {
-    const envLevel = process.env.LOG_LEVEL;
-    if (envLevel && envLevel in LEVEL_PRIORITY) {
-      return envLevel;
-    }
-    try {
-      const configPath = getConfigPath(this.cwd);
-      if (fs10.existsSync(configPath)) {
-        const raw = fs10.readFileSync(configPath, "utf-8");
-        const config = JSON.parse(raw);
-        const configLevel = config?.logging?.level;
-        if (configLevel && configLevel in LEVEL_PRIORITY) {
-          return configLevel;
-        }
-      }
-    } catch {}
-    return "info";
-  }
-  log(level, message, data) {
-    if (LEVEL_PRIORITY[level] > LEVEL_PRIORITY[this.minLevel]) {
-      return;
-    }
-    const entry = {
-      timestamp: new Date().toISOString(),
-      level,
-      message
-    };
-    if (this.component) {
-      entry.component = this.component;
-    }
-    if (data) {
-      entry.data = data;
-    }
-    this.buffer.push(entry);
-    this.outputToConsole(level, entry);
-    if (this.command) {
-      this.writeEntry(entry);
-      this.lastWrittenIndex = this.buffer.length;
-    }
-  }
-  outputToConsole(level, entry) {
-    const fn = level === "error" ? console.error : level === "warn" ? console.warn : console.log;
-    const prefix = entry.component ? `[${entry.component}] ` : "";
-    fn(`${prefix}${entry.message}`);
-  }
-  writeEntry(entry) {
-    try {
-      const filePath = getLogFilePath(this.command, this.cwd);
-      fs10.appendFileSync(filePath, JSON.stringify(entry) + `
-`, "utf-8");
-    } catch {}
-  }
-  error(message, data) {
-    this.log("error", message, data);
-  }
-  warn(message, data) {
-    this.log("warn", message, data);
-  }
-  info(message, data) {
-    this.log("info", message, data);
-  }
-  debug(message, data) {
-    this.log("debug", message, data);
-  }
-  child(component) {
-    return new Logger({
-      component: this.component ? `${this.component}:${component}` : component,
-      cwd: this.cwd,
-      command: this.command
-    });
-  }
-  logCommandStart(command, args) {
-    this.command = command;
-    this.flush();
-    this.log("info", `命令开始: ${command}`, {
-      command,
-      ...args ? { args } : {}
-    });
-  }
-  logCommandEnd(command, exitCode = 0) {
-    this.log("info", `命令结束: ${command}`, { command, exitCode });
-  }
-  logAICost(summary) {
-    this.log("info", `AI 成本: ${summary.field}`, {
-      aiCost: {
-        field: summary.field,
-        durationMs: summary.durationMs,
-        inputTokens: summary.inputTokens,
-        outputTokens: summary.outputTokens,
-        totalTokens: summary.totalTokens
-      }
-    });
-  }
-  logInstrumentation(record) {
-    this.log("info", `埋点: ${record.module}:${record.action}`, {
-      instrumentation: record
-    });
-  }
-  flush() {
-    if (!this.command)
-      return;
-    for (let i = this.lastWrittenIndex;i < this.buffer.length; i++) {
-      const entry = this.buffer[i];
-      if (entry)
-        this.writeEntry(entry);
-    }
-    this.lastWrittenIndex = this.buffer.length;
-  }
-  readRecentLogEntries(recentCount = 50) {
-    const logsDir = getLogsDir(this.cwd);
-    if (!fs10.existsSync(logsDir))
-      return [];
-    try {
-      const files = fs10.readdirSync(logsDir).filter((f) => f.endsWith(".log")).map((f) => ({ name: f, mtime: fs10.statSync(path7.join(logsDir, f)).mtimeMs })).sort((a, b) => b.mtime - a.mtime);
-      const allEntries = [];
-      for (const file of files) {
-        if (allEntries.length >= recentCount)
-          break;
-        try {
-          const content = fs10.readFileSync(path7.join(logsDir, file.name), "utf-8");
-          const lines = content.trim().split(`
-`).filter(Boolean);
-          for (const line of lines) {
-            try {
-              allEntries.push(JSON.parse(line));
-            } catch {}
-          }
-        } catch {}
-      }
-      allEntries.sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
-      return allEntries.slice(0, recentCount);
-    } catch {
-      return [];
-    }
-  }
-  readAllLogEntries() {
-    const logsDir = getLogsDir(this.cwd);
-    if (!fs10.existsSync(logsDir))
-      return [];
-    try {
-      const files = fs10.readdirSync(logsDir).filter((f) => f.endsWith(".log"));
-      const allEntries = [];
-      for (const file of files) {
-        try {
-          const content = fs10.readFileSync(path7.join(logsDir, file), "utf-8");
-          const lines = content.trim().split(`
-`).filter(Boolean);
-          for (const line of lines) {
-            try {
-              allEntries.push(JSON.parse(line));
-            } catch {}
-          }
-        } catch {}
-      }
-      return allEntries.sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime());
-    } catch {
-      return [];
-    }
-  }
-  generateBugReport(recentCount = 100) {
-    const entries = this.readRecentLogEntries(recentCount);
-    const errors = entries.filter((e) => e.level === "error");
-    const warnings = entries.filter((e) => e.level === "warn");
-    const now = new Date().toISOString();
-    const timestamp = now.replace(/[:.]/g, "-").slice(0, 19);
-    const lines = [
-      `# Bug Report`,
-      ``,
-      `**生成时间**: ${now}`,
-      `**工作目录**: ${this.cwd}`,
-      `**平台**: ${process.platform} / ${process.version}`,
-      ``,
-      `## 概要`,
-      ``,
-      `- 总日志条目: ${entries.length}`,
-      `- 错误数: ${errors.length}`,
-      `- 警告数: ${warnings.length}`,
-      ``
-    ];
-    if (errors.length > 0) {
-      lines.push(`## 错误详情`, ``);
-      for (const err of errors) {
-        const comp = err.component ? ` [${err.component}]` : "";
-        lines.push(`### ${err.timestamp}${comp}`, ``);
-        lines.push(`\`${err.message}\``, ``);
-        if (err.data) {
-          lines.push("```json", JSON.stringify(err.data, null, 2), "```", "");
-        }
-      }
-    }
-    if (warnings.length > 0) {
-      lines.push(`## 警告详情`, ``);
-      for (const warn of warnings) {
-        const comp = warn.component ? ` [${warn.component}]` : "";
-        lines.push(`- **${warn.timestamp}**${comp}: ${warn.message}`);
-      }
-      lines.push("");
-    }
-    const archivePath = this.compressLogs(path7.join(getLogsDir(this.cwd), "..", `bug-report-${timestamp}.tar.gz`));
-    lines.push(`---`, `*日志压缩附件: ${archivePath}*`);
-    return {
-      markdown: lines.join(`
-`),
-      archivePath
-    };
-  }
-  compressLogs(outputPath) {
-    const logsDir = getLogsDir(this.cwd);
-    if (!fs10.existsSync(logsDir)) {
-      throw new Error(`日志目录不存在: ${logsDir}`);
-    }
-    const archivePath = outputPath || path7.join(path7.dirname(logsDir), "logs-archive.tar.gz");
-    ensureDir(path7.dirname(archivePath));
-    const parentDir = path7.dirname(logsDir);
-    const logsDirName = path7.basename(logsDir);
-    try {
-      execSync2(`tar -czf "${archivePath}" -C "${parentDir}" "${logsDirName}"`, {
-        stdio: "pipe"
-      });
-    } catch (err) {
-      throw new Error(`日志压缩失败: ${err instanceof Error ? err.message : String(err)}`);
-    }
-    return archivePath;
-  }
-  cleanupOldLogs(maxAgeDays = 30) {
-    const logsDir = getLogsDir(this.cwd);
-    if (!fs10.existsSync(logsDir))
-      return 0;
-    const cutoff = Date.now() - maxAgeDays * 24 * 60 * 60 * 1000;
-    let deletedCount = 0;
-    try {
-      const files = fs10.readdirSync(logsDir);
-      for (const file of files) {
-        if (!file.endsWith(".log"))
-          continue;
-        const filePath = path7.join(logsDir, file);
-        try {
-          const stat = fs10.statSync(filePath);
-          if (stat.mtimeMs < cutoff) {
-            fs10.unlinkSync(filePath);
-            deletedCount++;
-          }
-        } catch {}
-      }
-    } catch {}
-    return deletedCount;
-  }
-  getCostSummary() {
-    const entries = this.readAllLogEntries();
-    const aiEntries = entries.filter((e) => e.data?.aiCost);
-    const result = {
-      totalCalls: 0,
-      totalDurationMs: 0,
-      totalInputTokens: 0,
-      totalOutputTokens: 0,
-      totalTokens: 0,
-      byField: {},
-      byCommand: {}
-    };
-    for (const entry of aiEntries) {
-      const cost = entry.data.aiCost;
-      result.totalCalls++;
-      result.totalDurationMs += cost.durationMs || 0;
-      result.totalInputTokens += cost.inputTokens || 0;
-      result.totalOutputTokens += cost.outputTokens || 0;
-      result.totalTokens += cost.totalTokens || 0;
-      const field = cost.field || "unknown";
-      if (!result.byField[field]) {
-        result.byField[field] = { calls: 0, durationMs: 0, totalTokens: 0 };
-      }
-      result.byField[field].calls++;
-      result.byField[field].durationMs += cost.durationMs || 0;
-      result.byField[field].totalTokens += cost.totalTokens || 0;
-      const command = entry.data?.command || "unknown";
-      if (!result.byCommand[command]) {
-        result.byCommand[command] = { calls: 0, durationMs: 0, totalTokens: 0 };
-      }
-      result.byCommand[command].calls++;
-      result.byCommand[command].durationMs += cost.durationMs || 0;
-      result.byCommand[command].totalTokens += cost.totalTokens || 0;
-    }
-    return result;
-  }
-  analyzeUsage() {
-    const entries = this.readAllLogEntries();
-    const commandFrequency = {};
-    const commandDurations = {};
-    const commandsWithAI = new Set;
-    const errorMessages = {};
-    let totalCommands = 0;
-    let totalErrors = 0;
-    let totalWarnings = 0;
-    const commandStarts = {};
-    for (const entry of entries) {
-      const data = entry.data;
-      const command = data?.command || "unknown";
-      if (entry.message?.startsWith("命令开始:")) {
-        totalCommands++;
-        commandFrequency[command] = (commandFrequency[command] || 0) + 1;
-        commandStarts[command] = entry.timestamp;
-      }
-      if (entry.message?.startsWith("命令结束:") && commandStarts[command]) {
-        const startMs = new Date(commandStarts[command]).getTime();
-        const endMs = new Date(entry.timestamp).getTime();
-        if (!isNaN(startMs) && !isNaN(endMs) && endMs >= startMs) {
-          if (!commandDurations[command])
-            commandDurations[command] = [];
-          commandDurations[command].push(endMs - startMs);
-        }
-        delete commandStarts[command];
-      }
-      if (data?.aiCost) {
-        commandsWithAI.add(command);
-      }
-      if (entry.level === "error") {
-        totalErrors++;
-        const msg = entry.message;
-        if (msg) {
-          if (!errorMessages[msg]) {
-            errorMessages[msg] = { count: 0, lastSeen: entry.timestamp };
-          }
-          errorMessages[msg].count++;
-          errorMessages[msg].lastSeen = entry.timestamp;
-        }
-      }
-      if (entry.level === "warn") {
-        totalWarnings++;
-      }
-    }
-    const allDurations = Object.values(commandDurations).flat();
-    const averageDurationMs = allDurations.length > 0 ? Math.round(allDurations.reduce((a, b) => a + b, 0) / allDurations.length) : 0;
-    const aiUsageRate = totalCommands > 0 ? commandsWithAI.size / Object.keys(commandFrequency).length : 0;
-    const commonErrors = Object.entries(errorMessages).map(([message, info]) => ({ message, count: info.count, lastSeen: info.lastSeen })).sort((a, b) => b.count - a.count).slice(0, 10);
-    return {
-      commandFrequency,
-      commonErrors,
-      averageDurationMs,
-      aiUsageRate: Math.min(aiUsageRate, 1),
-      totalCommands,
-      totalErrors,
-      totalWarnings
-    };
-  }
-}
-function createLogger(command, cwd) {
-  const logger = new Logger({ command, cwd });
-  logger.logCommandStart(command);
-  return logger;
-}
-var LEVEL_PRIORITY;
-var init_logger = __esm(() => {
-  init_path();
-  LEVEL_PRIORITY = {
-    error: 0,
-    warn: 1,
-    info: 2,
-    debug: 3
-  };
-});
-
-// src/utils/harness-helpers.ts
-import * as fs11 from "fs";
-import * as path8 from "path";
-import { spawn } from "child_process";
-function classifyExitResult(code, stderr, stdout, cwd) {
-  let texts;
-  try {
-    texts = t(cwd || process.cwd());
-  } catch {
-    texts = t();
-  }
-  if (code === 0) {
-    return { success: true };
-  }
-  const isHookError = /hook\s+.*\s+failed/i.test(stderr) || /Hook cancelled/i.test(stderr) || /SessionEnd\s+hook/i.test(stderr);
-  const hasOutput = stdout.trim().length > 0;
-  if (isHookError && hasOutput) {
-    return {
-      success: true,
-      hookWarning: `${texts.harness.logs.hookWarningIgnored}: ${stderr.substring(0, 200)}`
-    };
-  }
-  if (isHookError && !hasOutput) {
-    return {
-      success: false,
-      error: `${texts.harness.logs.hookErrorNoOutput}: ${stderr.substring(0, 200)}`
-    };
-  }
-  return {
-    success: false,
-    error: stderr || `${texts.harness.logs.processExitCode}: ${code}`
-  };
-}
-async function runHeadlessClaude(options) {
-  return new Promise((resolve3) => {
-    const args = [
-      "--allowedTools",
-      options.allowedTools.join(","),
-      "--print"
-    ];
-    if (options.dangerouslySkipPermissions) {
-      args.push("--dangerously-skip-permissions");
-    }
-    if (options.outputFormat) {
-      args.push("--output-format", options.outputFormat);
-    }
-    if (options.sessionId) {
-      args.push("--session-id", options.sessionId);
-    }
-    if (options.resumeSession) {
-      args.push("--resume");
-    }
-    if (options.forkSession) {
-      args.push("--fork-session");
-    }
-    try {
-      const child = spawn("claude", args, {
-        cwd: options.cwd,
-        stdio: ["pipe", "pipe", "pipe"],
-        timeout: options.timeout * 1000
-      });
-      if (child.stdin) {
-        child.stdin.write(options.prompt);
-        child.stdin.end();
-      }
-      let stdout = "";
-      let stderr = "";
-      child.stdout?.on("data", (data) => {
-        stdout += data.toString();
-      });
-      child.stderr?.on("data", (data) => {
-        stderr += data.toString();
-      });
-      child.on("close", (code) => {
-        const classified = classifyExitResult(code, stderr, stdout);
-        resolve3({
-          success: classified.success,
-          output: stdout,
-          error: classified.error,
-          hookWarning: classified.hookWarning,
-          stderr
-        });
-      });
-      child.on("error", (error) => {
-        resolve3({
-          success: false,
-          output: "",
-          error: error.message,
-          stderr: ""
-        });
-      });
-    } catch (error) {
-      resolve3({
-        success: false,
-        output: "",
-        error: error instanceof Error ? error.message : String(error),
-        stderr: ""
-      });
-    }
-  });
-}
-function archiveReportIfExists(reportPath, cwd) {
-  let texts;
-  try {
-    texts = t(cwd);
-  } catch {
-    const { getI18n: getI18n2 } = (init_i18n(), __toCommonJS(exports_i18n));
-    texts = getI18n2("zh");
-  }
-  try {
-    const absolutePath = path8.resolve(reportPath);
-    if (!fs11.existsSync(absolutePath)) {
-      return;
-    }
-    const dir = path8.dirname(absolutePath);
-    const filename = path8.basename(absolutePath);
-    const archiveDir = path8.join(dir, "archive");
-    if (!fs11.existsSync(archiveDir)) {
-      fs11.mkdirSync(archiveDir, { recursive: true });
-    }
-    const timestamp = new Date().toISOString().replace(/[:.]/g, "-");
-    const archivePath = path8.join(archiveDir, `${timestamp}-${filename}`);
-    fs11.copyFileSync(absolutePath, archivePath);
-    console.log(`   \uD83D\uDCE6 ${texts.harness.logs.archivedReport.replace("{filename}", `${timestamp}-${filename}`)}`);
-  } catch (error) {
-    console.warn(`   ⚠️ ${texts.harness.logs.archiveFailed}: ${error instanceof Error ? error.message : String(error)}`);
-  }
-}
-async function saveReport(reportPath, content) {
-  const dir = path8.dirname(reportPath);
-  try {
-    if (!fs11.existsSync(dir)) {
-      fs11.mkdirSync(dir, { recursive: true });
-    }
-    archiveReportIfExists(reportPath);
-    fs11.writeFileSync(reportPath, content, "utf-8");
-  } catch (error) {
-    throw new Error(`保存报告失败: ${error instanceof Error ? error.message : String(error)}`);
-  }
-}
-function filterCheckpoints(task, filterFn) {
-  if (!task.checkpoints) {
-    return [];
-  }
-  return task.checkpoints.filter(filterFn);
-}
-function parseStructuredResult(output) {
-  if (!output || output.trim().length === 0) {
-    return { passed: null, matchLevel: null };
-  }
-  const level1 = output.match(/(?:EVALUATION_RESULT|VERDICT)\s*[:：]\s*(PASS|NOPASS)/i);
-  if (level1) {
-    return { passed: level1[1].toUpperCase() === "PASS", matchLevel: 1 };
-  }
-  const level2Patterns = [
-    /##\s*(?:评估结果|审核结果|验证结果|Evaluation Result|Result|Verdict)\s*[:：]?\s*(PASS|NOPASS)/i,
-    /(?:评估结果|审核结果|验证结果|Evaluation Result|Result|Verdict)[:：]?\s*(PASS|NOPASS)/i,
-    /"result"\s*[:：]\s*"(PASS|NOPASS)"/i
-  ];
-  for (const pattern of level2Patterns) {
-    const match = output.match(pattern);
-    if (match) {
-      return { passed: match[1].toUpperCase() === "PASS", matchLevel: 2 };
-    }
-  }
-  const level3 = output.match(/\b(PASS|NOPASS)\b/i);
-  if (level3) {
-    return { passed: level3[1].toUpperCase() === "PASS", matchLevel: 3 };
-  }
-  return { passed: null, matchLevel: null };
-}
-function parseVerdictResult(output, options) {
-  const result = {
-    passed: true,
-    reason: "",
-    items: [],
-    failedCheckpoints: [],
-    details: ""
-  };
-  const resultPattern = new RegExp(`##\\s*${options.resultField}\\s*[:：]\\s*(PASS|NOPASS)`, "i");
-  const resultMatch = output.match(resultPattern);
-  if (resultMatch) {
-    result.passed = resultMatch[1].toUpperCase() === "PASS";
-  }
-  const reasonPattern = new RegExp(`##\\s*${options.reasonField}\\s*[:：]\\s*(.+?)(?=##|$)`, "si");
-  const reasonMatch = output.match(reasonPattern);
-  if (reasonMatch) {
-    result.reason = reasonMatch[1].trim();
-  }
-  const listPattern = new RegExp(`##\\s*${options.listField}\\s*[:：]\\s*(.+?)(?=##|$)`, "si");
-  const listMatch = output.match(listPattern);
-  if (listMatch) {
-    const listText = listMatch[1].trim();
-    if (listText && listText !== "无" && listText !== "N/A") {
-      result.items = listText.split(`
-`).map((line) => line.replace(/^[-*]\s*/, "").trim()).filter((line) => line.length > 0);
-    }
-  }
-  const checkpointPattern = new RegExp(`##\\s*${options.checkpointField}\\s*[:：]\\s*(.+?)(?=##|$)`, "si");
-  const checkpointMatch = output.match(checkpointPattern);
-  if (checkpointMatch) {
-    const checkpointText = checkpointMatch[1].trim();
-    if (checkpointText && checkpointText !== "无" && checkpointText !== "N/A") {
-      result.failedCheckpoints = checkpointText.split(`
-`).map((line) => line.replace(/^[-*]\s*/, "").trim()).filter((line) => line.length > 0);
-    }
-  }
-  if (options.detailsField) {
-    const detailsPattern = new RegExp(`##\\s*${options.detailsField}\\s*[:：]\\s*(.+?)(?=##|$)`, "si");
-    const detailsMatch = output.match(detailsPattern);
-    if (detailsMatch) {
-      result.details = detailsMatch[1].trim();
-    }
-  }
-  if (!resultMatch) {
-    const structured = parseStructuredResult(output);
-    if (structured.passed !== null) {
-      result.passed = structured.passed;
-      if (!result.reason) {
-        const reasonPatterns = [
-          /REASON\s*[:：]\s*(.+?)(?=\n\n|\n## |$)/si,
-          /EVALUATION_REASON\s*[:：]\s*(.+?)(?=\n\n|\n## |$)/si,
-          new RegExp(`##?s*${options.reasonField}s*[:：]?s*(.+?)(?=
-
-|
-## |$)`, "si")
-        ];
-        for (const pattern of reasonPatterns) {
-          const match = output.match(pattern);
-          if (match && match[1]?.trim()) {
-            result.reason = match[1].trim();
-            break;
-          }
-        }
-        if (!result.reason) {
-          result.reason = `基于结构化关键词匹配（级别 ${structured.matchLevel}）`;
-        }
-      }
-    }
-  }
-  if (!result.reason) {
-    result.reason = "无法解析判定结果";
-  }
-  return result;
-}
-function getReportDir(taskId, cwd) {
-  return path8.join(getProjectDir(cwd), "reports", "harness", taskId);
-}
-function getReportPath(taskId, reportType, cwd) {
-  return path8.join(getReportDir(taskId, cwd), `${reportType}-report.md`);
-}
-var REVIEW_TIMEOUT_RATIO = 3;
-var init_harness_helpers = __esm(() => {
-  init_path();
-  init_i18n();
-});
-
-// src/utils/headless-agent.ts
-import * as fs12 from "fs";
-function buildEffectiveTools(phase, cwd, task) {
-  const codeDefaults = PHASE_DEFAULT_TOOLS[phase] || ["Read", "Bash", "Grep", "Glob"];
-  const configKey = PHASE_CONFIG_KEY[phase];
-  let phaseTools = codeDefaults;
-  try {
-    const configPath = getConfigPath(cwd);
-    if (fs12.existsSync(configPath)) {
-      const config = JSON.parse(fs12.readFileSync(configPath, "utf-8"));
-      const configPhaseTools = config?.harness?.perPhaseTools?.[configKey || phase];
-      if (Array.isArray(configPhaseTools) && configPhaseTools.length > 0) {
-        phaseTools = configPhaseTools;
-      }
-    }
-  } catch {}
-  if (task?.allowedTools && task.allowedTools.length > 0) {
-    const taskToolSet = new Set(task.allowedTools);
-    const effectiveTools = phaseTools.filter((t2) => taskToolSet.has(t2));
-    return { tools: effectiveTools, skipPermissions: false };
-  }
-  return { tools: phaseTools, skipPermissions: true };
-}
-
-class AgentProviderRegistryImpl {
-  providers = new Map;
-  defaultProvider = "claude-code";
-  logger;
-  constructor() {
-    this.logger = new Logger({ component: "headless-agent" });
-  }
-  register(provider) {
-    if (this.providers.has(provider.name)) {
-      this.logger.warn(`Provider '${provider.name}' 已存在，将被覆盖`);
-    }
-    this.providers.set(provider.name, provider);
-    this.logger.info(`注册 Agent provider: ${provider.name}`);
-  }
-  getProvider(name) {
-    const providerName = name || this.defaultProvider;
-    const provider = this.providers.get(providerName);
-    if (!provider) {
-      throw new Error(`Agent provider '${providerName}' 未注册。可用: ${[...this.providers.keys()].join(", ")}`);
-    }
-    return provider;
-  }
-  setDefault(name) {
-    if (!this.providers.has(name)) {
-      throw new Error(`无法设置默认 provider: '${name}' 未注册`);
-    }
-    this.defaultProvider = name;
-    this.logger.info(`默认 Agent provider 设置为: ${name}`);
-  }
-  getDefaultName() {
-    return this.defaultProvider;
-  }
-  listProviders() {
-    return [...this.providers.keys()];
-  }
-}
-
-class ClaudeCodeProvider {
-  name = "claude-code";
-  logger;
-  constructor() {
-    this.logger = new Logger({ component: "headless-agent:claude-code" });
-  }
-  async invoke(prompt, options) {
-    const startTime = Date.now();
-    this.logger.info("调用 Claude Code", {
-      timeout: options.timeout,
-      allowedTools: options.allowedTools,
-      cwd: options.cwd,
-      dangerouslySkipPermissions: options.dangerouslySkipPermissions,
-      outputFormat: options.outputFormat,
-      sessionId: options.sessionId,
-      resumeSession: options.resumeSession,
-      forkSession: options.forkSession
-    });
-    const claudeOptions = {
-      prompt,
-      allowedTools: options.allowedTools,
-      timeout: options.timeout,
-      cwd: options.cwd,
-      dangerouslySkipPermissions: options.dangerouslySkipPermissions,
-      outputFormat: options.outputFormat === "json" ? "json" : undefined,
-      sessionId: options.sessionId,
-      resumeSession: options.resumeSession,
-      forkSession: options.forkSession
-    };
-    const result = await runHeadlessClaude(claudeOptions);
-    const durationMs = Date.now() - startTime;
-    const tokensUsed = this.extractTokens(result.output);
-    const model = this.extractModel(result.output);
-    this.logger.info("Claude Code 调用完成", {
-      success: result.success,
-      durationMs,
-      tokensUsed,
-      model
-    });
-    if (result.success) {
-      this.logger.logAICost({
-        field: "headless-agent:invoke",
-        durationMs,
-        inputTokens: 0,
-        outputTokens: tokensUsed,
-        totalTokens: tokensUsed
-      });
-    }
-    return {
-      output: result.output,
-      success: result.success,
-      provider: this.name,
-      durationMs,
-      tokensUsed,
-      model,
-      error: result.error,
-      hookWarning: result.hookWarning,
-      stderr: result.stderr
-    };
-  }
-  extractTokens(output) {
-    try {
-      const jsonOutput = JSON.parse(output);
-      if (jsonOutput && typeof jsonOutput === "object") {
-        const usage = jsonOutput.usage;
-        if (usage) {
-          return (usage.input_tokens || 0) + (usage.output_tokens || 0);
-        }
-      }
-    } catch {}
-    let totalTokens = 0;
-    let foundJsonl = false;
-    for (const line of output.split(`
-`)) {
-      const trimmed = line.trim();
-      if (!trimmed)
-        continue;
-      try {
-        const obj = JSON.parse(trimmed);
-        foundJsonl = true;
-        if (obj?.usage) {
-          totalTokens += (obj.usage.input_tokens || 0) + (obj.usage.output_tokens || 0);
-        }
-      } catch {}
-    }
-    if (foundJsonl && totalTokens > 0)
-      return totalTokens;
-    const tokenMatch = output.match(/tokens?[:\s]+(\d+)/i);
-    return tokenMatch ? parseInt(tokenMatch[1], 10) : 0;
-  }
-  extractModel(output) {
-    try {
-      const jsonOutput = JSON.parse(output);
-      if (jsonOutput?.model)
-        return jsonOutput.model;
-    } catch {}
-    return "claude-code";
-  }
-}
-function initializeProviders() {
-  if (!agentRegistry.listProviders().includes("claude-code")) {
-    agentRegistry.register(new ClaudeCodeProvider);
-  }
-}
-function loadAIConfig(cwd) {
-  try {
-    const configPath = getConfigPath(cwd);
-    if (!fs12.existsSync(configPath)) {
-      return DEFAULT_AI;
-    }
-    const config = JSON.parse(fs12.readFileSync(configPath, "utf-8"));
-    if (!config.ai) {
-      return DEFAULT_AI;
-    }
-    return {
-      provider: config.ai.provider || DEFAULT_AI.provider,
-      customEndpoint: config.ai.customEndpoint,
-      providerOptions: config.ai.providerOptions
-    };
-  } catch {
-    return DEFAULT_AI;
-  }
-}
-function getAgent(cwd) {
-  const aiConfig = loadAIConfig(cwd);
-  return agentRegistry.getProvider(aiConfig.provider);
-}
-async function invokeAgent(prompt, options) {
-  const agent = getAgent(options.cwd);
-  return agent.invoke(prompt, options);
-}
-var PHASE_DEFAULT_TOOLS, PHASE_CONFIG_KEY, agentRegistry;
-var init_headless_agent = __esm(() => {
-  init_logger();
-  init_harness_helpers();
-  init_config();
-  init_path();
-  PHASE_DEFAULT_TOOLS = {
-    development: ["Read", "Edit", "Write", "Bash", "Grep", "Glob"],
-    codeReview: ["Read", "Bash", "Grep", "Glob"],
-    qaVerification: ["Read", "Bash", "Grep", "Glob"],
-    evaluation: ["Read", "Bash", "Grep", "Glob"]
-  };
-  PHASE_CONFIG_KEY = {
-    development: "development",
-    codeReview: "codeReview",
-    code_review: "codeReview",
-    qaVerification: "qaVerification",
-    qa_verification: "qaVerification",
-    evaluation: "evaluation"
-  };
-  agentRegistry = new AgentProviderRegistryImpl;
-  initializeProviders();
 });
 
 // src/utils/ai-metadata.ts
@@ -24014,8 +24441,8 @@ var {
 } = import__.default;
 
 // src/index.ts
-import * as fs37 from "fs";
-import * as path33 from "path";
+import * as fs39 from "fs";
+import * as path35 from "path";
 
 // src/commands/setup.ts
 init_path();
@@ -33095,52 +33522,9 @@ async function fixSingleIssue(issue, cwd, nonInteractive) {
       if (!task.checkpoints || task.checkpoints.length === 0) {
         return "skipped";
       }
-      const now = new Date().toISOString();
-      let completedCount = 0;
-      let reopenedCount = 0;
-      for (const cp of task.checkpoints) {
-        if (cp.status === "pending") {
-          const verificationOutput = await verifyAndRecordCheckpoint(task, cp.id, "analyze_fix", cwd);
-          if (verificationOutput.result === "verified") {
-            cp.status = "completed";
-            cp.updatedAt = now;
-            if (cp.verification) {
-              cp.verification.result = "passed (auto-completed by analyze-fix: verified output)";
-              cp.verification.verifiedAt = now;
-              cp.verification.verifiedBy = "analyze-fix";
-            }
-            completedCount++;
-          } else {
-            console.log(`  ⚠️ 检查点 ${cp.id} 无产出证据，保持 pending 状态`);
-            if (verificationOutput.warnings) {
-              for (const warning of verificationOutput.warnings) {
-                console.log(`     - ${warning}`);
-              }
-            }
-          }
-        } else if (cp.status === "completed") {
-          const verificationOutput = await verifyAndRecordCheckpoint(task, cp.id, "analyze_fix", cwd);
-          if (verificationOutput.result === "unverified" || verificationOutput.result === "failed") {
-            console.log(`  ⚠️ 检查点 ${cp.id} 疑似假成功，重新打开`);
-            cp.status = "pending";
-            cp.updatedAt = now;
-            cp.note = `${cp.note ? cp.note + "; " : ""}analyze-fix 检测到假成功，重新打开`;
-            reopenedCount++;
-          }
-        }
-      }
-      if (completedCount > 0 || reopenedCount > 0) {
-        task.updatedAt = now;
-        validatedWriteTaskMeta(task, cwd);
-        if (completedCount > 0) {
-          console.log("  " + t(cwd).analyzeFixPipeline.checkpointStatusMismatchFixed.replace("{count}", String(completedCount)));
-        }
-        if (reopenedCount > 0) {
-          console.log(`  \uD83D\uDD04 重新打开 ${reopenedCount} 个假成功检查点`);
-        }
-        return "fixed";
-      }
-      return "skipped";
+      const fixer = new CheckpointStatusMismatchFixer(cwd);
+      const result = await fixer.fix(task);
+      return result.status;
     }
     case "missing_pipeline_evidence": {
       const fixAction = issue.details?.fixAction;
@@ -36738,12 +37122,12 @@ async function runDoctorDeep(cwd = process.cwd()) {
 init_harness();
 init_path();
 init_i18n();
-import * as fs35 from "fs";
-import * as path31 from "path";
+import * as fs37 from "fs";
+import * as path33 from "path";
 
 // src/utils/hd-assembly-line.ts
-import * as path30 from "path";
-import * as fs34 from "fs";
+import * as path32 from "path";
+import * as fs36 from "fs";
 import { execSync as execSync5 } from "child_process";
 
 // src/utils/harness-prevalidation.ts
@@ -37363,7 +37747,7 @@ class HarnessExecutor {
         result.codeReview.push(cp);
       } else if (cp.category === "qa_verification" || desc.includes("[ai qa]") || desc.includes("qa验证") || desc.includes("测试验证")) {
         result.qa.push(cp);
-      } else if (desc.includes("[script]") || desc.includes("脚本") || desc.includes("自动化")) {
+      } else if (desc.includes("[script]")) {
         result.evaluation.push(cp);
       } else {
         result.general.push(cp);
@@ -37580,28 +37964,12 @@ ${roleTemplate.extraInstructions.map((inst, i) => `${i + 1}. ${inst}`).join(`
     return evidence;
   }
   async checkCompletedCheckpoints(task, _contract) {
-    const completed = [];
-    if (!task.checkpoints) {
-      return completed;
+    if (!task.checkpoints || task.checkpoints.length === 0) {
+      return [];
     }
-    for (const checkpoint of task.checkpoints) {
-      if (checkpoint.status === "completed") {
-        completed.push(checkpoint.id);
-      }
-    }
-    const falseSuccessResult = await detectFalseSuccess(task, this.config.cwd);
-    if (falseSuccessResult.falseSuccessCheckpoints.length > 0) {
-      console.log(`
-   ⚠️  假成功检测警告: 发现 ${falseSuccessResult.falseSuccessCheckpoints.length} 个可疑检查点`);
-      for (const detail of falseSuccessResult.details) {
-        console.log(`      - ${detail.checkpointId} (${detail.category}): ${detail.reason}`);
-      }
-      for (const warning of falseSuccessResult.warnings) {
-        console.log(`      ${warning}`);
-      }
-      console.log(`   \uD83D\uDCA1 建议: 检查这些检查点是否有对应的代码变更或产出物`);
-    }
-    return completed;
+    const checkpointIds = task.checkpoints.map((cp) => cp.id);
+    const result = await checkCompletedCheckpoints(task, checkpointIds, this.config.cwd);
+    return result.completed;
   }
   getContractPath(taskId) {
     const projectDir = getProjectDir(this.config.cwd);
@@ -39340,6 +39708,43 @@ ${fileCoverage.details}`;
       ].join(`
 `);
     }
+    let coverageGapSection = "";
+    if (retryContext?.qaCoverageGapContext) {
+      const gap = retryContext.qaCoverageGapContext;
+      coverageGapSection = [
+        "## 覆盖率不足 - 需要扩展测试用例",
+        "",
+        `当前覆盖率: ${(gap.currentCoverage * 100).toFixed(1)}%`,
+        `阈值要求: ${(gap.minCoverage * 100).toFixed(0)}%`,
+        `覆盖率缺口: ${gap.gapPercent}`,
+        ""
+      ].join(`
+`);
+      if (gap.coverageDetails) {
+        const d = gap.coverageDetails;
+        coverageGapSection += [
+          "覆盖率详情:",
+          `  行覆盖率: ${(d.lines * 100).toFixed(1)}%`,
+          `  分支覆盖率: ${(d.branches * 100).toFixed(1)}%`,
+          `  函数覆盖率: ${(d.functions * 100).toFixed(1)}%`,
+          `  语句覆盖率: ${(d.statements * 100).toFixed(1)}%`,
+          ""
+        ].join(`
+`);
+        const dimensions = [
+          { name: "行覆盖率", value: d.lines },
+          { name: "分支覆盖率", value: d.branches },
+          { name: "函数覆盖率", value: d.functions },
+          { name: "语句覆盖率", value: d.statements }
+        ].sort((a, b) => a.value - b.value);
+        coverageGapSection += `最低覆盖率维度: ${dimensions[0].name} (${(dimensions[0].value * 100).toFixed(1)}%)
+`;
+        coverageGapSection += `建议优先补充该维度的测试用例。
+
+`;
+      }
+      coverageGapSection += "请扩展测试用例，覆盖上述未覆盖的代码路径，使覆盖率达到阈值要求。";
+    }
     const descriptionSection = task.description ? `## ${texts.harness.taskDescription}
 ${task.description}` : "";
     const checkpointsList = checkpoints.map((cp, i) => {
@@ -39384,6 +39789,7 @@ ${task.description}` : "";
       customRequirements,
       testStrategy,
       retryContextSection,
+      coverageGapSection,
       devReportPath
     }).replace(/\n{3,}/g, `
 
@@ -40773,6 +41179,955 @@ init_quality_gate();
 init_dependency_graph();
 init_checkpoint_verification();
 
+// src/utils/post-qa-gate/runner.ts
+init_task2();
+import * as fs35 from "node:fs";
+import * as path31 from "node:path";
+
+// src/utils/post-qa-gate/checkers/checkpoint-sync-checker.ts
+import * as fs34 from "node:fs";
+import * as path30 from "node:path";
+var DEFAULT_CHECKPOINT_SYNC_CONFIG = {
+  reportPath: ".projmnt4claude/outputs/{taskId}/qa-report.json"
+};
+
+class QACheckpointSyncChecker {
+  cwd;
+  config;
+  constructor(cwd, config) {
+    this.cwd = cwd;
+    this.config = { ...DEFAULT_CHECKPOINT_SYNC_CONFIG, ...config };
+  }
+  async check(taskId, checkpoints) {
+    const qaCheckpoints = this.getQACheckpoints(checkpoints);
+    if (qaCheckpoints.length === 0) {
+      return {
+        passed: true,
+        check: "checkpoint_sync",
+        message: "任务没有QA相关检查点，跳过同步检查",
+        details: {
+          totalCheckpoints: checkpoints.length,
+          qaCheckpoints: 0
+        }
+      };
+    }
+    const reportVerdict = this.readReportVerdict(taskId);
+    if (!reportVerdict) {
+      return {
+        passed: true,
+        check: "checkpoint_sync",
+        message: "QA报告不存在，跳过同步检查",
+        details: {
+          totalCheckpoints: checkpoints.length,
+          qaCheckpoints: qaCheckpoints.length,
+          reportVerdict: null
+        }
+      };
+    }
+    const mismatched = [];
+    if (reportVerdict === "PASS") {
+      for (const cp of qaCheckpoints) {
+        if (cp.status !== "completed" && !cp.requiresHuman) {
+          mismatched.push({
+            id: cp.id,
+            description: cp.description,
+            status: cp.status,
+            expectedStatus: "completed",
+            requiresHuman: cp.requiresHuman ?? false
+          });
+        }
+      }
+    }
+    const passed = mismatched.length === 0;
+    return {
+      passed,
+      check: "checkpoint_sync",
+      message: passed ? `检查点状态同步 (${this.countCompleted(qaCheckpoints)}/${qaCheckpoints.length} QA检查点完成)` : `检查点状态不同步: ${mismatched.length} 个QA检查点未完成`,
+      details: {
+        reportVerdict,
+        totalCheckpoints: checkpoints.length,
+        qaCheckpoints: qaCheckpoints.length,
+        completedQACheckpoints: this.countCompleted(qaCheckpoints),
+        mismatched,
+        checkpoints: qaCheckpoints.map((cp) => ({
+          id: cp.id,
+          description: cp.description,
+          status: cp.status,
+          requiresHuman: cp.requiresHuman ?? false
+        }))
+      }
+    };
+  }
+  getQACheckpoints(checkpoints) {
+    return checkpoints.filter((cp) => cp.category === "qa_verification");
+  }
+  countCompleted(checkpoints) {
+    return checkpoints.filter((cp) => cp.status === "completed").length;
+  }
+  readReportVerdict(taskId) {
+    const reportPath = this.config.reportPath.replace("{taskId}", taskId);
+    const fullPath = path30.join(this.cwd, reportPath);
+    if (!fs34.existsSync(fullPath)) {
+      return null;
+    }
+    try {
+      const content = fs34.readFileSync(fullPath, "utf-8");
+      const report = JSON.parse(content);
+      return report.verdict ?? null;
+    } catch {
+      return null;
+    }
+  }
+}
+
+// src/utils/post-qa-gate/runner.ts
+var DEFAULT_POST_QA_GATE_RULES = [
+  {
+    id: "R-QA-POST-001",
+    type: "qa_report_existence",
+    name: "QA报告存在",
+    description: "验证 qa-report.json 是否存在",
+    enabled: true,
+    priority: 1,
+    blocking: true,
+    failureType: "A"
+  },
+  {
+    id: "R-QA-POST-002",
+    type: "qa_report_format",
+    name: "报告格式有效",
+    description: "验证 qa-report.json 是否可解析为有效JSON",
+    enabled: true,
+    priority: 2,
+    blocking: true,
+    failureType: "A"
+  },
+  {
+    id: "R-QA-POST-003",
+    type: "qa_verdict_validity",
+    name: "测试结果有效",
+    description: "验证 result 是否为 PASS 或 NOPASS",
+    enabled: true,
+    priority: 3,
+    blocking: true,
+    failureType: "A"
+  },
+  {
+    id: "R-QA-POST-004",
+    type: "qa_failures_detail",
+    name: "测试失败详情",
+    description: "NOPASS 时验证 testFailures 是否有详细记录",
+    enabled: true,
+    priority: 4,
+    blocking: false,
+    failureType: "B"
+  },
+  {
+    id: "R-QA-POST-005",
+    type: "human_verification_collect",
+    name: "人工验证状态收集",
+    description: "收集 requiresHuman 的检查点状态到待人工验证列表",
+    enabled: true,
+    priority: 5,
+    blocking: false,
+    failureType: "B"
+  },
+  {
+    id: "R-QA-POST-005a",
+    type: "pipeline_exit_notify",
+    name: "人工验证汇总通知",
+    description: "流水线退出前统一通知所有待人工验证任务",
+    enabled: true,
+    priority: 6,
+    blocking: false,
+    failureType: "B"
+  },
+  {
+    id: "R-QA-POST-006",
+    type: "checkpoint_sync",
+    name: "检查点状态同步",
+    description: "QA结果与检查点状态一致",
+    enabled: true,
+    priority: 7,
+    blocking: true,
+    failureType: "A"
+  },
+  {
+    id: "R-QA-POST-007",
+    type: "test_coverage",
+    name: "测试覆盖率达标",
+    description: "coverage >= 阈值，覆盖率不足触发QA内部重试而非链式回退",
+    enabled: true,
+    priority: 8,
+    blocking: true,
+    failureType: "B"
+  }
+];
+var DEFAULT_POST_QA_GATE_RUNNER_CONFIG = {
+  enabled: true,
+  rules: DEFAULT_POST_QA_GATE_RULES,
+  stopOnFailure: false,
+  generateReport: true,
+  reportPath: ".projmnt4claude/reports/post-qa-gate-report.json",
+  qaReportPath: ".projmnt4claude/outputs/{taskId}/qa-report.json",
+  enableFeedbackLoop: true
+};
+
+class PostQAGateRunner {
+  config;
+  customHandlers;
+  cwd;
+  constructor(cwd, config) {
+    this.cwd = cwd;
+    this.config = this.mergeConfig(config);
+    this.customHandlers = new Map(config?.customRuleHandlers || []);
+    this.registerBuiltinHandlers();
+  }
+  mergeConfig(config) {
+    return {
+      ...DEFAULT_POST_QA_GATE_RUNNER_CONFIG,
+      ...config,
+      rules: config?.rules ?? DEFAULT_POST_QA_GATE_RULES
+    };
+  }
+  registerBuiltinHandlers() {
+    this.customHandlers.set("qa_report_existence", this.handleQAReportExistenceRule.bind(this));
+    this.customHandlers.set("qa_report_format", this.handleQAReportFormatRule.bind(this));
+    this.customHandlers.set("qa_verdict_validity", this.handleQAVerdictValidityRule.bind(this));
+    this.customHandlers.set("qa_failures_detail", this.handleQAFailuresDetailRule.bind(this));
+    this.customHandlers.set("human_verification_collect", this.handleHumanVerificationCollectRule.bind(this));
+    this.customHandlers.set("pipeline_exit_notify", this.handlePipelineExitNotifyRule.bind(this));
+    this.customHandlers.set("checkpoint_sync", this.handleCheckpointSyncRule.bind(this));
+    this.customHandlers.set("test_coverage", this.handleTestCoverageRule.bind(this));
+  }
+  async run(taskId, options) {
+    const startTime = Date.now();
+    const timestamp = new Date().toISOString();
+    if (!this.config.enabled) {
+      return {
+        taskId,
+        decision: "POST_QA_PASS",
+        allowed: true,
+        ruleResults: [],
+        passedRules: 0,
+        failedRules: 0,
+        warningCount: 0,
+        blockingFailures: 0,
+        duration: 0,
+        timestamp
+      };
+    }
+    const task = readTaskMeta(taskId, this.cwd);
+    if (!task) {
+      return {
+        taskId,
+        decision: "POST_QA_FAIL",
+        allowed: false,
+        ruleResults: [{
+          ruleId: "task-existence",
+          passed: false,
+          ruleName: "任务存在性检查",
+          message: `任务 ${taskId} 不存在`,
+          duration: 0,
+          timestamp
+        }],
+        passedRules: 0,
+        failedRules: 1,
+        warningCount: 0,
+        blockingFailures: 1,
+        duration: Date.now() - startTime,
+        timestamp
+      };
+    }
+    const qaReportPath = options?.qaReportPath ?? this.config.qaReportPath.replace("{taskId}", taskId);
+    const context = {
+      taskId,
+      cwd: this.cwd,
+      qaReportPath,
+      sharedData: new Map
+    };
+    const sortedRules = [...this.config.rules].filter((rule) => rule.enabled).sort((a, b) => a.priority - b.priority);
+    const ruleResults = [];
+    let blockingFailures = 0;
+    let failedRules = 0;
+    for (const rule of sortedRules) {
+      const result = await this.executeRule(task, rule, context);
+      ruleResults.push(result);
+      if (!result.passed) {
+        failedRules++;
+        if (rule.blocking) {
+          blockingFailures++;
+          if (this.config.stopOnFailure) {
+            break;
+          }
+        }
+      }
+    }
+    const decision = this.calculateDecision(ruleResults, blockingFailures);
+    const allowed = decision === "POST_QA_PASS" || decision === "POST_QA_WARN" && blockingFailures === 0;
+    const duration = Date.now() - startTime;
+    const passedRules = ruleResults.filter((r) => r.passed).length;
+    const warningCount = ruleResults.filter((r) => !r.passed && !this.isBlockingRule(r.ruleId)).length;
+    const pendingHumanVerifications = context.sharedData.get("pendingHumanVerifications") ?? [];
+    const coverageGapData = context.sharedData.get("coverageGap");
+    const runResult = {
+      taskId,
+      decision,
+      allowed,
+      ruleResults,
+      passedRules,
+      failedRules,
+      warningCount,
+      blockingFailures,
+      duration,
+      timestamp: new Date().toISOString(),
+      qaReportPath,
+      pendingHumanVerifications: pendingHumanVerifications.length > 0 ? pendingHumanVerifications : undefined,
+      coverageGapData
+    };
+    if (this.config.generateReport) {
+      const report = this.generateReport(runResult, context);
+      await this.saveReport(report);
+    }
+    return runResult;
+  }
+  async executeRule(task, rule, context) {
+    const startTime = Date.now();
+    const timestamp = new Date().toISOString();
+    try {
+      const handler = this.customHandlers.get(rule.type);
+      if (!handler) {
+        return {
+          ruleId: rule.id,
+          passed: false,
+          ruleName: rule.name,
+          message: `未找到规则类型 ${rule.type} 的处理器`,
+          failureType: rule.failureType ?? "A",
+          duration: Date.now() - startTime,
+          timestamp
+        };
+      }
+      const result = await handler(task, rule, context);
+      result.duration = Date.now() - startTime;
+      result.ruleId = rule.id;
+      result.failureType = rule.failureType ?? (rule.blocking ? "A" : "B");
+      return result;
+    } catch (error) {
+      return {
+        ruleId: rule.id,
+        passed: false,
+        ruleName: rule.name,
+        message: `规则执行失败: ${error instanceof Error ? error.message : String(error)}`,
+        failureType: rule.failureType ?? "A",
+        duration: Date.now() - startTime,
+        timestamp
+      };
+    }
+  }
+  calculateDecision(results, blockingFailures) {
+    if (blockingFailures > 0) {
+      return "POST_QA_FAIL";
+    }
+    const failedCount = results.filter((r) => !r.passed).length;
+    if (failedCount === 0) {
+      return "POST_QA_PASS";
+    }
+    return "POST_QA_WARN";
+  }
+  isBlockingRule(ruleId) {
+    const rule = this.config.rules.find((r) => r.id === ruleId);
+    return rule?.blocking ?? false;
+  }
+  classifyQAFailureCategory(result) {
+    if (result.decision === "POST_QA_PASS") {
+      return "none";
+    }
+    const coverageFailure = result.ruleResults.find((r) => !r.passed && r.failureType === "B" && r.ruleId === "R-QA-POST-007");
+    if (coverageFailure && result.coverageGapData) {
+      return "coverage_retry";
+    }
+    const hasFailures = result.ruleResults.some((r) => !r.passed);
+    if (hasFailures) {
+      return "chain_rollback";
+    }
+    return "none";
+  }
+  classifyQAGateFailure(result) {
+    const category = this.classifyQAFailureCategory(result);
+    if (category === "none") {
+      return { needsQARetry: false, needsChainRollback: false, failureCategory: "none" };
+    }
+    if (category === "coverage_retry" && result.coverageGapData) {
+      const prompt = this.generateQARetryPrompt(result.coverageGapData);
+      return {
+        needsQARetry: true,
+        needsChainRollback: false,
+        failureCategory: "coverage_retry",
+        coverageGapData: result.coverageGapData,
+        qaRetryPrompt: prompt
+      };
+    }
+    return { needsQARetry: false, needsChainRollback: true, failureCategory: "chain_rollback" };
+  }
+  generateQARetryPrompt(gapData) {
+    const lines = [];
+    lines.push("覆盖率门禁未通过，需要扩展测试用例。");
+    lines.push("");
+    lines.push(`当前覆盖率: ${(gapData.currentCoverage * 100).toFixed(1)}%`);
+    lines.push(`阈值要求: ${(gapData.minCoverage * 100).toFixed(0)}%`);
+    lines.push(`覆盖率缺口: ${gapData.gapPercent}`);
+    lines.push("");
+    if (gapData.coverageDetails) {
+      const d = gapData.coverageDetails;
+      lines.push("覆盖率详情:");
+      lines.push(`  行覆盖率: ${(d.lines * 100).toFixed(1)}%`);
+      lines.push(`  分支覆盖率: ${(d.branches * 100).toFixed(1)}%`);
+      lines.push(`  函数覆盖率: ${(d.functions * 100).toFixed(1)}%`);
+      lines.push(`  语句覆盖率: ${(d.statements * 100).toFixed(1)}%`);
+      lines.push("");
+      const dimensions = [
+        { name: "行覆盖率", value: d.lines },
+        { name: "分支覆盖率", value: d.branches },
+        { name: "函数覆盖率", value: d.functions },
+        { name: "语句覆盖率", value: d.statements }
+      ].sort((a, b) => a.value - b.value);
+      lines.push(`最低覆盖率维度: ${dimensions[0].name} (${(dimensions[0].value * 100).toFixed(1)}%)`);
+      lines.push("建议优先补充该维度的测试用例。");
+    }
+    lines.push("");
+    lines.push("请扩展测试用例，覆盖上述未覆盖的代码路径。");
+    return lines.join(`
+`);
+  }
+  async handleQAReportExistenceRule(_task, rule, context) {
+    const reportPath = path31.join(context.cwd, context.qaReportPath);
+    const exists = fs35.existsSync(reportPath);
+    return {
+      ruleId: rule.id,
+      passed: exists,
+      ruleName: rule.name,
+      message: exists ? `QA报告存在: ${context.qaReportPath}` : `QA报告不存在: ${context.qaReportPath}`,
+      details: {
+        reportPath: context.qaReportPath,
+        fullPath: reportPath,
+        exists
+      },
+      duration: 0,
+      timestamp: new Date().toISOString()
+    };
+  }
+  async handleQAReportFormatRule(_task, rule, context) {
+    const reportPath = path31.join(context.cwd, context.qaReportPath);
+    if (!fs35.existsSync(reportPath)) {
+      return {
+        ruleId: rule.id,
+        passed: false,
+        ruleName: rule.name,
+        message: "无法检查QA报告格式: 报告文件不存在",
+        details: { reportPath: context.qaReportPath },
+        duration: 0,
+        timestamp: new Date().toISOString()
+      };
+    }
+    try {
+      const content = fs35.readFileSync(reportPath, "utf-8");
+      const report = JSON.parse(content);
+      const requiredFields = ["version", "taskId", "verdict", "verifiedAt", "verifier", "summary"];
+      const missingFields = requiredFields.filter((field) => !(field in report));
+      const passed = missingFields.length === 0;
+      return {
+        ruleId: rule.id,
+        passed,
+        ruleName: rule.name,
+        message: passed ? "QA报告格式有效" : `QA报告格式无效: 缺少字段 [${missingFields.join(", ")}]`,
+        details: {
+          reportPath: context.qaReportPath,
+          requiredFields,
+          missingFields
+        },
+        duration: 0,
+        timestamp: new Date().toISOString()
+      };
+    } catch (error) {
+      return {
+        ruleId: rule.id,
+        passed: false,
+        ruleName: rule.name,
+        message: `QA报告格式检查失败: ${error instanceof Error ? error.message : String(error)}`,
+        details: { reportPath: context.qaReportPath },
+        duration: 0,
+        timestamp: new Date().toISOString()
+      };
+    }
+  }
+  async handleQAVerdictValidityRule(_task, rule, context) {
+    const reportPath = path31.join(context.cwd, context.qaReportPath);
+    if (!fs35.existsSync(reportPath)) {
+      return {
+        ruleId: rule.id,
+        passed: false,
+        ruleName: rule.name,
+        message: "无法检查QA验证结果: 报告文件不存在",
+        details: { reportPath: context.qaReportPath },
+        duration: 0,
+        timestamp: new Date().toISOString()
+      };
+    }
+    try {
+      const content = fs35.readFileSync(reportPath, "utf-8");
+      const report = JSON.parse(content);
+      const validVerdicts = ["PASS", "NOPASS"];
+      const isValid = validVerdicts.includes(report.verdict);
+      return {
+        ruleId: rule.id,
+        passed: isValid,
+        ruleName: rule.name,
+        message: isValid ? `QA验证结果有效: ${report.verdict}` : `QA验证结果无效: ${report.verdict} (应为 PASS 或 NOPASS)`,
+        details: {
+          verdict: report.verdict,
+          validVerdicts
+        },
+        duration: 0,
+        timestamp: new Date().toISOString()
+      };
+    } catch (error) {
+      return {
+        ruleId: rule.id,
+        passed: false,
+        ruleName: rule.name,
+        message: `QA验证结果检查失败: ${error instanceof Error ? error.message : String(error)}`,
+        details: { reportPath: context.qaReportPath },
+        duration: 0,
+        timestamp: new Date().toISOString()
+      };
+    }
+  }
+  async handleQAFailuresDetailRule(_task, rule, context) {
+    const reportPath = path31.join(context.cwd, context.qaReportPath);
+    if (!fs35.existsSync(reportPath)) {
+      return {
+        ruleId: rule.id,
+        passed: false,
+        ruleName: rule.name,
+        message: "无法检查测试失败详情: 报告文件不存在",
+        details: { reportPath: context.qaReportPath },
+        duration: 0,
+        timestamp: new Date().toISOString()
+      };
+    }
+    try {
+      const content = fs35.readFileSync(reportPath, "utf-8");
+      const report = JSON.parse(content);
+      if (report.verdict === "PASS") {
+        return {
+          ruleId: rule.id,
+          passed: true,
+          ruleName: rule.name,
+          message: "QA结果为PASS，无需检查测试失败详情",
+          details: { verdict: report.verdict },
+          duration: 0,
+          timestamp: new Date().toISOString()
+        };
+      }
+      const hasTestFailures = !!report.testFailures && Array.isArray(report.testFailures);
+      if (!hasTestFailures || report.testFailures.length === 0) {
+        return {
+          ruleId: rule.id,
+          passed: false,
+          ruleName: rule.name,
+          message: "QA结果为NOPASS但缺少测试失败详情",
+          details: { verdict: report.verdict, hasTestFailures },
+          duration: 0,
+          timestamp: new Date().toISOString()
+        };
+      }
+      const failuresWithDetails = report.testFailures.filter((f) => f.testName && f.reason && f.severity);
+      const passed = failuresWithDetails.length === report.testFailures.length;
+      return {
+        ruleId: rule.id,
+        passed,
+        ruleName: rule.name,
+        message: passed ? `测试失败文档完整 (${failuresWithDetails.length}/${report.testFailures.length})` : `测试失败文档不完整: ${report.testFailures.length - failuresWithDetails.length} 个失败项缺少详情`,
+        details: {
+          totalFailures: report.testFailures.length,
+          failuresWithDetails: failuresWithDetails.length
+        },
+        duration: 0,
+        timestamp: new Date().toISOString()
+      };
+    } catch (error) {
+      return {
+        ruleId: rule.id,
+        passed: false,
+        ruleName: rule.name,
+        message: `测试失败详情检查失败: ${error instanceof Error ? error.message : String(error)}`,
+        duration: 0,
+        timestamp: new Date().toISOString()
+      };
+    }
+  }
+  async handleHumanVerificationCollectRule(task, rule, context) {
+    const reportPath = path31.join(context.cwd, context.qaReportPath);
+    let qaReport;
+    if (fs35.existsSync(reportPath)) {
+      try {
+        const content = fs35.readFileSync(reportPath, "utf-8");
+        qaReport = JSON.parse(content);
+      } catch {}
+    }
+    const pendingHuman = [];
+    for (const cp of task.checkpoints || []) {
+      if (cp.requiresHuman && cp.status !== "completed") {
+        const verified = qaReport?.humanVerificationCheckpoints?.includes(cp.id);
+        if (!verified) {
+          pendingHuman.push({
+            id: cp.id,
+            description: cp.description,
+            taskId: context.taskId
+          });
+        }
+      }
+    }
+    if (pendingHuman.length > 0) {
+      context.sharedData.set("pendingHumanVerifications", pendingHuman);
+    }
+    return {
+      ruleId: rule.id,
+      passed: true,
+      ruleName: rule.name,
+      message: pendingHuman.length === 0 ? "无待人工验证检查点" : `已收集 ${pendingHuman.length} 个待人工验证检查点`,
+      details: {
+        pendingHumanVerifications: pendingHuman,
+        willNotifyAtPipelineExit: pendingHuman.length > 0
+      },
+      duration: 0,
+      timestamp: new Date().toISOString()
+    };
+  }
+  async handlePipelineExitNotifyRule(_task, rule, context) {
+    const pendingList = context.sharedData.get("pendingHumanVerifications") ?? [];
+    if (pendingList.length === 0) {
+      return {
+        ruleId: rule.id,
+        passed: true,
+        ruleName: rule.name,
+        message: "无待人工验证检查点，跳过通知",
+        details: { pendingCount: 0 },
+        duration: 0,
+        timestamp: new Date().toISOString()
+      };
+    }
+    const groupedByTask = new Map;
+    for (const item of pendingList) {
+      const existing = groupedByTask.get(item.taskId) || [];
+      existing.push(item);
+      groupedByTask.set(item.taskId, existing);
+    }
+    const notificationSummary = this.formatHumanVerificationNotification(groupedByTask);
+    return {
+      ruleId: rule.id,
+      passed: true,
+      ruleName: rule.name,
+      message: `已生成待人工验证通知: ${pendingList.length} 个检查点待验证`,
+      details: {
+        pendingCount: pendingList.length,
+        taskCount: groupedByTask.size,
+        notificationSummary,
+        pendingItems: pendingList
+      },
+      duration: 0,
+      timestamp: new Date().toISOString()
+    };
+  }
+  formatHumanVerificationNotification(groupedByTask) {
+    const lines = [
+      "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━",
+      "         待人工验证检查点汇总",
+      "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━",
+      ""
+    ];
+    for (const [taskId, items] of groupedByTask) {
+      lines.push(`任务: ${taskId}`);
+      lines.push("");
+      for (const item of items) {
+        lines.push(`  - ${item.id}`);
+        lines.push(`    ${item.description}`);
+        lines.push("");
+      }
+    }
+    lines.push("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
+    lines.push(`总计: ${Array.from(groupedByTask.values()).flat().length} 个检查点待人工验证`);
+    lines.push("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
+    return lines.join(`
+`);
+  }
+  async handleCheckpointSyncRule(task, rule, context) {
+    const syncChecker = new QACheckpointSyncChecker(context.cwd, {
+      reportPath: this.config.qaReportPath
+    });
+    const result = await syncChecker.check(context.taskId, task.checkpoints ?? []);
+    return {
+      ruleId: rule.id,
+      passed: result.passed,
+      ruleName: rule.name,
+      message: result.message,
+      details: result.details,
+      duration: 0,
+      timestamp: new Date().toISOString()
+    };
+  }
+  async handleTestCoverageRule(_task, rule, context) {
+    const reportPath = path31.join(context.cwd, context.qaReportPath);
+    const minCoverage = rule.config?.minCoverage ?? 0.6;
+    let coverage;
+    let coverageDetails;
+    if (fs35.existsSync(reportPath)) {
+      try {
+        const content = fs35.readFileSync(reportPath, "utf-8");
+        const report = JSON.parse(content);
+        coverage = report.coverage;
+      } catch {}
+    }
+    if (coverage === undefined) {
+      const result = await this.calculateCoverageFromReportsWithDetails(context);
+      coverage = result.coverage;
+      coverageDetails = result.details;
+    }
+    const passed = coverage >= minCoverage;
+    const gap = passed ? 0 : minCoverage - coverage;
+    if (!passed) {
+      context.sharedData.set("coverageGap", {
+        currentCoverage: coverage,
+        minCoverage,
+        gap,
+        gapPercent: `${(gap * 100).toFixed(1)}%`,
+        coverageDetails,
+        failureType: "B",
+        message: `当前覆盖率: ${(coverage * 100).toFixed(1)}%，阈值要求: ${(minCoverage * 100).toFixed(0)}%，缺口: ${(gap * 100).toFixed(1)}%`
+      });
+    }
+    return {
+      ruleId: rule.id,
+      passed,
+      ruleName: rule.name,
+      message: passed ? `测试覆盖率达标: ${(coverage * 100).toFixed(1)}% >= ${(minCoverage * 100).toFixed(0)}%` : `测试覆盖率未达标: ${(coverage * 100).toFixed(1)}% < ${(minCoverage * 100).toFixed(0)}%`,
+      details: {
+        coverage,
+        minCoverage,
+        coveragePercent: `${(coverage * 100).toFixed(1)}%`,
+        thresholdPercent: `${(minCoverage * 100).toFixed(0)}%`,
+        gap,
+        gapPercent: `${(gap * 100).toFixed(1)}%`,
+        coverageDetails,
+        failureType: "B"
+      },
+      duration: 0,
+      timestamp: new Date().toISOString()
+    };
+  }
+  async calculateCoverageFromReports(context) {
+    const result = await this.calculateCoverageFromReportsWithDetails(context);
+    return result.coverage;
+  }
+  async calculateCoverageFromReportsWithDetails(context) {
+    const coverageFiles = [
+      path31.join(context.cwd, "coverage", "coverage-summary.json"),
+      path31.join(context.cwd, "coverage", "lcov-report", "coverage-summary.json"),
+      path31.join(context.cwd, ".projmnt4claude", "outputs", context.taskId, "coverage-report.json")
+    ];
+    for (const filePath of coverageFiles) {
+      if (fs35.existsSync(filePath)) {
+        try {
+          const content = JSON.parse(fs35.readFileSync(filePath, "utf-8"));
+          const raw = this.parseCoverageData(content);
+          const coverage = Math.round((raw.lines * 0.4 + raw.branches * 0.3 + raw.functions * 0.2 + raw.statements * 0.1) * 1000) / 1000;
+          return {
+            coverage,
+            details: raw
+          };
+        } catch {}
+      }
+    }
+    return { coverage: 0 };
+  }
+  parseCoverageData(content) {
+    const total = content.total;
+    if (total) {
+      return {
+        lines: (total.lines?.pct ?? 0) / 100,
+        branches: (total.branches?.pct ?? 0) / 100,
+        functions: (total.functions?.pct ?? 0) / 100,
+        statements: (total.statements?.pct ?? 0) / 100
+      };
+    }
+    return {
+      lines: (content.lines?.pct ?? 0) / 100,
+      branches: (content.branches?.pct ?? 0) / 100,
+      functions: (content.functions?.pct ?? 0) / 100,
+      statements: (content.statements?.pct ?? 0) / 100
+    };
+  }
+  generateReport(result, context) {
+    const recommendations = [];
+    const feedbackItems = [];
+    for (const ruleResult of result.ruleResults) {
+      if (!ruleResult.passed) {
+        switch (ruleResult.ruleId) {
+          case "R-QA-POST-001":
+            recommendations.push("QA报告不存在: 请先生成QA验证报告");
+            feedbackItems.push({
+              type: "missing_qa_report",
+              description: "QA报告不存在",
+              suggestedAction: "在QA验证阶段生成QA报告",
+              targetPhase: "qa_verification",
+              severity: "error"
+            });
+            break;
+          case "R-QA-POST-002":
+            recommendations.push("QA报告格式无效: 检查报告文件格式");
+            feedbackItems.push({
+              type: "qa_report_invalid",
+              description: "QA报告格式无效",
+              suggestedAction: "修复QA报告格式",
+              targetPhase: "qa_verification",
+              severity: "error"
+            });
+            break;
+          case "R-QA-POST-003":
+            recommendations.push("QA验证结果无效: 确保验证结果为 PASS 或 NOPASS");
+            break;
+          case "R-QA-POST-004":
+            recommendations.push("测试失败详情不完整: 为所有失败项添加详细信息");
+            feedbackItems.push({
+              type: "test_failures",
+              description: "测试失败文档不完整",
+              suggestedAction: "补充测试失败项的详细信息",
+              targetPhase: "qa_verification",
+              severity: "warning"
+            });
+            break;
+          case "R-QA-POST-006":
+            recommendations.push("检查点状态不同步: 同步QA结果与检查点状态");
+            feedbackItems.push({
+              type: "checkpoint_mismatch",
+              description: "QA结果与检查点状态不一致",
+              suggestedAction: "更新检查点状态以匹配QA结果",
+              targetPhase: "qa_verification",
+              severity: "warning"
+            });
+            break;
+          case "R-QA-POST-007":
+            recommendations.push("测试覆盖率未达标: 增加测试用例提高覆盖率");
+            break;
+        }
+      }
+    }
+    if (result.pendingHumanVerifications && result.pendingHumanVerifications.length > 0) {
+      recommendations.push(`有 ${result.pendingHumanVerifications.length} 个检查点需要人工验证`);
+      feedbackItems.push({
+        type: "human_verification_pending",
+        description: `${result.pendingHumanVerifications.length} 个检查点待人工验证`,
+        suggestedAction: "请在流水线退出前完成人工验证",
+        targetPhase: "qa_verification",
+        severity: "warning"
+      });
+    }
+    if (result.decision === "POST_QA_PASS") {
+      recommendations.push("QA验证后质量门禁通过，可以进入评估阶段");
+    }
+    return {
+      reportId: `post-qa-gate-report-${result.taskId}-${Date.now()}`,
+      taskId: result.taskId,
+      generatedAt: new Date().toISOString(),
+      result,
+      recommendations,
+      feedbackItems,
+      metadata: {
+        version: "1.0.0",
+        runnerVersion: "1.0.0",
+        rulesExecuted: result.ruleResults.length
+      }
+    };
+  }
+  async saveReport(report) {
+    if (!this.config.reportPath)
+      return;
+    const reportDir = path31.dirname(path31.join(this.cwd, this.config.reportPath));
+    if (!fs35.existsSync(reportDir)) {
+      fs35.mkdirSync(reportDir, { recursive: true });
+    }
+    const reportPath = path31.join(this.cwd, this.config.reportPath);
+    fs35.writeFileSync(reportPath, JSON.stringify(report, null, 2));
+  }
+  formatResult(result) {
+    const lines = [];
+    const separator = "━".repeat(60);
+    const decisionIcon = result.decision === "POST_QA_PASS" ? "✅" : result.decision === "POST_QA_WARN" ? "⚠️ " : "❌";
+    lines.push("");
+    lines.push(separator);
+    lines.push(`${decisionIcon} QA验证后质量门禁检查: ${result.taskId}`);
+    lines.push(separator);
+    lines.push("");
+    lines.push(`\uD83D\uDCCA 决策结果: ${result.decision}`);
+    lines.push(`   允许进入评估阶段: ${result.allowed ? "是" : "否"}`);
+    lines.push("");
+    lines.push(`\uD83D\uDCCB 规则统计:`);
+    lines.push(`   通过: ${result.passedRules}`);
+    lines.push(`   失败: ${result.failedRules}`);
+    if (result.warningCount > 0) {
+      lines.push(`   警告: ${result.warningCount}`);
+    }
+    if (result.blockingFailures > 0) {
+      lines.push(`   阻塞失败: ${result.blockingFailures}`);
+    }
+    lines.push("");
+    if (result.ruleResults.length > 0) {
+      lines.push("\uD83D\uDD0D 详细结果:");
+      lines.push("");
+      for (const ruleResult of result.ruleResults) {
+        const icon = ruleResult.passed ? "✅" : this.isBlockingRule(ruleResult.ruleId) ? "❌" : "⚠️ ";
+        lines.push(`   ${icon} ${ruleResult.ruleName}`);
+        lines.push(`      ${ruleResult.message}`);
+        lines.push("");
+      }
+    }
+    if (result.pendingHumanVerifications && result.pendingHumanVerifications.length > 0) {
+      lines.push("\uD83D\uDD14 待人工验证检查点:");
+      for (const item of result.pendingHumanVerifications) {
+        lines.push(`   - ${item.id}: ${item.description}`);
+      }
+      lines.push("");
+    }
+    lines.push(`⏱️  执行时长: ${result.duration}ms`);
+    lines.push("");
+    lines.push(separator);
+    return lines.join(`
+`);
+  }
+  updateConfig(config) {
+    this.config = {
+      ...this.config,
+      ...config
+    };
+  }
+  getConfig() {
+    return { ...this.config };
+  }
+  registerRuleHandler(ruleType, handler) {
+    this.customHandlers.set(ruleType, handler);
+  }
+  addRule(rule) {
+    this.config.rules = this.config.rules.filter((r) => r.id !== rule.id);
+    this.config.rules.push(rule);
+  }
+  removeRule(ruleId) {
+    this.config.rules = this.config.rules.filter((r) => r.id !== ruleId);
+  }
+}
+function createPostQAGateRunner(cwd, config) {
+  return new PostQAGateRunner(cwd, config);
+}
+// src/utils/hd-assembly-line.ts
 class AssemblyLine {
   config;
   executor;
@@ -41190,6 +42545,33 @@ ${"━".repeat(SEPARATOR_WIDTH)}`);
             requiresHuman: qaVerdict.requiresHuman
           });
           this.statusReporter.completePhase("qa_verification", taskId, `QA 验证完成: ${qaVerdict.result}`);
+          const postQAGateRunner = createPostQAGateRunner(this.config.cwd, { coverageThreshold: this.config.coverageThreshold ?? 0.8 });
+          console.log(`
+\uD83D\uDD12 Post-QA Gate 门禁检查...`);
+          const postQAGateResult = await postQAGateRunner.run(taskId);
+          if (!postQAGateResult.passed) {
+            console.log(`❌ Post-QA Gate 门禁检查失败`);
+            const failureClassification = postQAGateRunner.classifyQAGateFailure(postQAGateResult);
+            if (failureClassification.needsQARetry) {
+              console.log(`   \uD83D\uDD04 B 类门禁失败（覆盖率不足），触发 QA 内部重试...`);
+              console.log(`   \uD83D\uDCCA ${failureClassification.coverageGapData?.message}`);
+              this.storeQACoverageGapContext(taskId, state, failureClassification.coverageGapData);
+              const qaRetryLimit = this.getPhaseRetryLimit("qa");
+              const qaRetryCount = this.getPhaseRetryCount(taskId, "qa", state);
+              if (qaRetryCount < qaRetryLimit) {
+                this.incrementPhaseRetryCount(taskId, "qa", state);
+                state.retryCounter.set(taskId, (state.retryCounter.get(taskId) || 0) + 1);
+                console.log(`   \uD83D\uDD04 准备 QA 内部重试 (${qaRetryCount + 1}/${qaRetryLimit})...`);
+                currentPhaseIndex = 2;
+                continue;
+              }
+              console.log(`   ❌ QA 内部重试耗尽，转为链式回退`);
+            }
+            console.log(`   \uD83D\uDEAB ${failureClassification.needsChainRollback ? "A 类门禁失败" : "B 类重试耗尽"}，执行链式回退`);
+            this.statusReporter.failPhase("qa_verification", new Error(postQAGateResult.summary), taskId);
+            return this.handleVerdictBasedTransition(taskId, record, state, addTimeline, "qa", "redevelop");
+          }
+          console.log(`✅ Post-QA Gate 门禁检查通过`);
           this.syncCheckpointStatus(taskId, "qa", { qaVerdict });
           await this.ensureTransition(taskId, "wait_evaluation", "QA验证通过");
           const qaGateResult = this.validateTransitionCompleteness(taskId, "wait_evaluation", "qa");
@@ -41414,13 +42796,20 @@ ${"━".repeat(SEPARATOR_WIDTH)}`);
       const now = new Date().toISOString();
       let updated = false;
       const warnings = [];
+      const pendingHumanCheckpoints = [];
       for (const checkpoint of task.checkpoints) {
         if (checkpoint.status === "completed" || checkpoint.status === "skipped")
           continue;
         const shouldComplete = this.matchCheckpointToPhase(checkpoint, phase, phaseData);
         if (!shouldComplete)
           continue;
-        const verificationOutput = await verifyAndRecordCheckpoint(task, checkpoint.id, "phase_sync", this.config.cwd, {
+        if (checkpoint.requiresHuman) {
+          pendingHumanCheckpoints.push(checkpoint.id);
+          console.log(`   ⊘ 检查点 ${checkpoint.id} 需要人工验证，跳过自动同步`);
+          continue;
+        }
+        console.log(`   ◷ 验证检查点 ${checkpoint.id} 的产出...`);
+        const verificationOutput = await verifyAndRecordCheckpoint(task, checkpoint.id, this.getVerificationSource(phase), this.config.cwd, {
           phase,
           devReport: phaseData?.devReport,
           codeReviewVerdict: phaseData?.codeReviewVerdict,
@@ -41430,32 +42819,59 @@ ${"━".repeat(SEPARATOR_WIDTH)}`);
           if (verificationOutput.warnings) {
             warnings.push(...verificationOutput.warnings.map((w) => `${checkpoint.id}: ${w}`));
           }
-          console.log(`   ⚠️ 检查点 ${checkpoint.id} 产出验证未通过，但阶段已通过，仍标记为 completed`);
+          console.log(`   ⚠️ 检查点 ${checkpoint.id} 产出验证失败，跳过自动完成`);
+          if (verificationOutput.record.failureReason) {
+            console.log(`      原因: ${verificationOutput.record.failureReason}`);
+          }
+          continue;
         }
         checkpoint.status = "completed";
         checkpoint.updatedAt = now;
-        checkpoint.note = `${phase} 阶段通过后自动同步`;
-        if (!checkpoint.verification) {
-          checkpoint.verification = { method: "automated" };
+        checkpoint.verification = {
+          method: "automated",
+          result: "passed",
+          verifiedAt: now,
+          verifiedBy: `${phase}_phase_output_verified`,
+          details: {
+            type: "automated",
+            missingOutputs: []
+          }
+        };
+        if (verificationOutput.record.evidence && verificationOutput.record.evidence.length > 0) {
+          checkpoint.verification.evidencePath = verificationOutput.record.evidence.join("; ");
         }
-        checkpoint.verification.result = verificationOutput.result === "verified" ? "passed" : "passed (with warnings)";
-        checkpoint.verification.verifiedAt = now;
-        checkpoint.verification.verifiedBy = `${phase}_phase`;
         updated = true;
         console.log(`   ✓ 检查点 ${checkpoint.id} 已自动标记为 completed (${phase})`);
+        if (verificationOutput.record.evidence) {
+          console.log(`      验证: ${verificationOutput.record.evidence.join(", ")}`);
+        }
       }
       if (warnings.length > 0) {
         console.log(`
-   ⚠️  假成功检测警告 (${warnings.length} 个):`);
+   ⚠️  产出验证警告 (${warnings.length} 个):`);
         for (const warning of warnings) {
           console.log(`      - ${warning}`);
         }
+      }
+      if (pendingHumanCheckpoints.length > 0) {
+        console.log(`
+   ⊘ 待人工验证检查点 (${pendingHumanCheckpoints.length} 个): ${pendingHumanCheckpoints.join(", ")}`);
       }
       if (updated) {
         writeTaskMeta(task, this.config.cwd);
       }
     } catch (error) {
       console.error(`   ⚠️ 同步检查点状态失败: ${error instanceof Error ? error.message : String(error)}`);
+    }
+  }
+  getVerificationSource(phase) {
+    switch (phase) {
+      case "development":
+        return "phase_sync_dev";
+      case "code_review":
+        return "phase_sync_cr";
+      case "qa":
+        return "phase_sync_qa";
     }
   }
   matchCheckpointToPhase(checkpoint, phase, phaseData) {
@@ -41965,9 +43381,9 @@ ${"━".repeat(SEPARATOR_WIDTH)}`);
     }
     if (status === "wait_qa") {
       const projectDir = getProjectDir(this.config.cwd);
-      const qaReportPath = path30.join(projectDir, "reports", "harness", taskId, "qa-report.md");
-      if (fs34.existsSync(qaReportPath)) {
-        const content = fs34.readFileSync(qaReportPath, "utf-8");
+      const qaReportPath = path32.join(projectDir, "reports", "harness", taskId, "qa-report.md");
+      if (fs36.existsSync(qaReportPath)) {
+        const content = fs36.readFileSync(qaReportPath, "utf-8");
         if (content.trim().length > 0) {
           console.log(`   \uD83D\uDCCB 检测到 wait_qa 但 qa-report.md 已存在，自动迁移为 wait_evaluation`);
           return "evaluation";
@@ -41994,14 +43410,14 @@ ${"━".repeat(SEPARATOR_WIDTH)}`);
       return true;
     }
     const projectDir = getProjectDir(this.config.cwd);
-    const reportDir = path30.join(projectDir, "reports", "harness", taskId);
+    const reportDir = path32.join(projectDir, "reports", "harness", taskId);
     for (const reportFile of required) {
-      const filePath = path30.join(reportDir, reportFile);
-      if (!fs34.existsSync(filePath)) {
+      const filePath = path32.join(reportDir, reportFile);
+      if (!fs36.existsSync(filePath)) {
         return false;
       }
       try {
-        const content = fs34.readFileSync(filePath, "utf-8");
+        const content = fs36.readFileSync(filePath, "utf-8");
         if (content.trim().length === 0) {
           return false;
         }
@@ -42027,6 +43443,15 @@ ${"━".repeat(SEPARATOR_WIDTH)}`);
     const current = state.phaseRetryCounters.get(key) || 0;
     state.phaseRetryCounters.set(key, current + 1);
   }
+  storeQACoverageGapContext(taskId, state, coverageGapData) {
+    if (!state.qaCoverageGapContexts) {
+      state.qaCoverageGapContexts = new Map;
+    }
+    state.qaCoverageGapContexts.set(taskId, {
+      ...coverageGapData,
+      timestamp: new Date().toISOString()
+    });
+  }
   buildRetryContextForPhase(taskId, phase, state) {
     const stored = this.taskRetryContexts.get(taskId);
     const phaseKey = `${taskId}:${phase}`;
@@ -42038,6 +43463,19 @@ ${"━".repeat(SEPARATOR_WIDTH)}`);
     const suggestedFixes = this.generateSuggestedFixes(failureHistory);
     if (!stored && failureHistory.length === 0)
       return;
+    let qaCoverageGapContext;
+    if (phase === "qa" && state.qaCoverageGapContexts?.has(taskId)) {
+      const gapData = state.qaCoverageGapContexts.get(taskId);
+      qaCoverageGapContext = {
+        currentCoverage: gapData.currentCoverage,
+        minCoverage: gapData.minCoverage,
+        gap: gapData.gap,
+        gapPercent: gapData.gapPercent,
+        coverageDetails: gapData.coverageDetails,
+        failureType: gapData.failureType,
+        message: gapData.message
+      };
+    }
     return {
       previousFailureReason: stored?.previousFailureReason ?? (failureHistory.length > 0 ? failureHistory[failureHistory.length - 1].error : undefined),
       previousPhase: stored?.previousPhase ?? phase,
@@ -42048,7 +43486,8 @@ ${"━".repeat(SEPARATOR_WIDTH)}`);
       previousErrors,
       accumulatedInsights,
       suggestedFixes,
-      failureHistory
+      failureHistory,
+      qaCoverageGapContext
     };
   }
   storeFailureContext(taskId, phase, reason, state) {
@@ -42260,31 +43699,31 @@ ${"━".repeat(SEPARATOR_WIDTH)}`);
     if (!resumePhase)
       return true;
     const projectDir = getProjectDir(this.config.cwd);
-    const reportDir = path30.join(projectDir, "reports", "harness", taskId);
+    const reportDir = path32.join(projectDir, "reports", "harness", taskId);
     const checks = [];
     switch (resumePhase) {
       case "qa":
-        checks.push({ file: path30.join(reportDir, "dev-report.md"), label: "开发报告" });
-        checks.push({ file: path30.join(reportDir, "code-review-report.md"), label: "代码审核报告" });
+        checks.push({ file: path32.join(reportDir, "dev-report.md"), label: "开发报告" });
+        checks.push({ file: path32.join(reportDir, "code-review-report.md"), label: "代码审核报告" });
         break;
       case "evaluation":
-        checks.push({ file: path30.join(reportDir, "dev-report.md"), label: "开发报告" });
-        checks.push({ file: path30.join(reportDir, "code-review-report.md"), label: "代码审核报告" });
-        checks.push({ file: path30.join(reportDir, "qa-report.md"), label: "QA报告" });
+        checks.push({ file: path32.join(reportDir, "dev-report.md"), label: "开发报告" });
+        checks.push({ file: path32.join(reportDir, "code-review-report.md"), label: "代码审核报告" });
+        checks.push({ file: path32.join(reportDir, "qa-report.md"), label: "QA报告" });
         break;
       case "code_review":
-        checks.push({ file: path30.join(reportDir, "dev-report.md"), label: "开发报告" });
+        checks.push({ file: path32.join(reportDir, "dev-report.md"), label: "开发报告" });
         break;
       case "development":
         return true;
     }
     for (const check of checks) {
-      if (!fs34.existsSync(check.file)) {
+      if (!fs36.existsSync(check.file)) {
         console.log(`   ⚠️ 缺少${check.label}: ${check.file}`);
         return false;
       }
       try {
-        const content = fs34.readFileSync(check.file, "utf-8");
+        const content = fs36.readFileSync(check.file, "utf-8");
         if (content.trim().length === 0) {
           console.log(`   ⚠️ ${check.label}为空: ${check.file}`);
           return false;
@@ -42478,15 +43917,15 @@ ${"━".repeat(SEPARATOR_WIDTH)}`);
         }
       }
       const stageFiles = [
-        path30.join(this.config.cwd, ".projmnt4claude", "reports", taskId, "dev-report.json"),
-        path30.join(this.config.cwd, ".projmnt4claude", "reports", taskId, "code-review-report.json"),
-        path30.join(this.config.cwd, ".projmnt4claude", "reports", taskId, "qa-report.json"),
-        path30.join(this.config.cwd, ".projmnt4claude", "reports", taskId, "evaluation-report.json")
+        path32.join(this.config.cwd, ".projmnt4claude", "reports", taskId, "dev-report.json"),
+        path32.join(this.config.cwd, ".projmnt4claude", "reports", taskId, "code-review-report.json"),
+        path32.join(this.config.cwd, ".projmnt4claude", "reports", taskId, "qa-report.json"),
+        path32.join(this.config.cwd, ".projmnt4claude", "reports", taskId, "evaluation-report.json")
       ];
       for (const file of stageFiles) {
-        if (fs34.existsSync(file)) {
+        if (fs36.existsSync(file)) {
           try {
-            fs34.unlinkSync(file);
+            fs36.unlinkSync(file);
             result.cleanedFiles.push(file);
           } catch (unlinkError) {
             console.warn(`   ⚠️ 无法删除文件 ${file}: ${unlinkError instanceof Error ? unlinkError.message : String(unlinkError)}`);
@@ -42535,6 +43974,118 @@ ${"━".repeat(SEPARATOR_WIDTH)}`);
       };
     }
     return { canRetry: retryCount < maxRetries };
+  }
+  async handleQAFailureWithChainedRollback(taskId, qaError, qaVerdict, state) {
+    console.log(`
+   \uD83D\uDD17 启动链式回退分析...`);
+    const analysis = this.analyzeQAFailure(qaError, qaVerdict);
+    console.log(`   \uD83D\uDCCB 问题归属: ${analysis.attribution}`);
+    console.log(`   \uD83D\uDCCB 判断依据: ${analysis.reasoning}`);
+    const rollbackTarget = analysis.suggestedRollbackTarget;
+    if (rollbackTarget === "development") {
+      console.log("   \uD83D\uDD17 确认为代码问题，回退到 Development 阶段");
+    } else {
+      console.log("   \uD83D\uDD17 确认为测试/环境问题，回退到 QA 阶段");
+    }
+    const existingContext = this.taskRetryContexts.get(taskId);
+    this.taskRetryContexts.set(taskId, {
+      ...existingContext,
+      previousFailureReason: qaError,
+      previousPhase: "qa",
+      attemptNumber: (existingContext?.attemptNumber || 0) + 1,
+      maxRetries: this.getPhaseRetryLimit("qa"),
+      previousErrors: [...existingContext?.previousErrors || [], qaError],
+      accumulatedInsights: [],
+      suggestedFixes: [],
+      qaFailureAnalysis: analysis
+    });
+    return { rollbackTarget, analysis };
+  }
+  analyzeQAFailure(qaError, qaVerdict) {
+    const errorLower = qaError.toLowerCase();
+    if (errorLower.includes("logic") || errorLower.includes("功能") || errorLower.includes("断言失败") || errorLower.includes("assertion") || errorLower.includes("expected") || errorLower.includes("逻辑")) {
+      return {
+        attribution: "code_issue",
+        reasoning: "测试断言失败，表明代码逻辑存在问题",
+        suggestedRollbackTarget: "development"
+      };
+    }
+    if (errorLower.includes("config") || errorLower.includes("环境") || errorLower.includes("setup") || errorLower.includes("fixture") || errorLower.includes("timeout") || errorLower.includes("配置")) {
+      return {
+        attribution: "environment_issue",
+        reasoning: "测试配置或环境问题，非代码逻辑错误",
+        suggestedRollbackTarget: "qa"
+      };
+    }
+    if (qaVerdict?.testFailures && qaVerdict.testFailures.length > 0) {
+      const hasAssertionFailure = qaVerdict.testFailures.some((f) => f.reason.toLowerCase().includes("assertion") || f.reason.toLowerCase().includes("expected") || f.reason.toLowerCase().includes("断言"));
+      if (hasAssertionFailure) {
+        return {
+          attribution: "code_issue",
+          reasoning: "测试断言失败，表明代码逻辑存在问题",
+          suggestedRollbackTarget: "development"
+        };
+      }
+    }
+    return {
+      attribution: "code_issue",
+      reasoning: "无法明确归类，默认视为代码问题",
+      suggestedRollbackTarget: "development"
+    };
+  }
+  handleEvaluationFailureWithRouting(taskId, evaluationResult, state) {
+    console.log(`
+   \uD83E\uDDED 启动智能路由分析...`);
+    const routingDecision = this.analyzeEvaluationResult(evaluationResult);
+    console.log(`   \uD83D\uDCCB 问题来源: ${routingDecision.problemSource}`);
+    console.log(`   \uD83D\uDCCB 路由目标: ${routingDecision.targetPhase}`);
+    console.log(`   \uD83D\uDCCB 路由原因: ${routingDecision.reason}`);
+    const existingContext = this.taskRetryContexts.get(taskId);
+    this.taskRetryContexts.set(taskId, {
+      ...existingContext,
+      previousFailureReason: evaluationResult.reason,
+      previousPhase: "evaluation",
+      attemptNumber: (existingContext?.attemptNumber || 0) + 1,
+      maxRetries: this.getPhaseRetryLimit("evaluation"),
+      previousErrors: [...existingContext?.previousErrors || [], evaluationResult.reason || ""],
+      accumulatedInsights: [],
+      suggestedFixes: [],
+      routingDecision
+    });
+    return { routingTarget: routingDecision.targetPhase, routingDecision };
+  }
+  analyzeEvaluationResult(evaluationResult) {
+    const failureReason = evaluationResult.reason?.toLowerCase() || "";
+    if (failureReason.includes("功能") || failureReason.includes("逻辑") || failureReason.includes("实现") || failureReason.includes("feature") || failureReason.includes("logic") || failureReason.includes("implementation")) {
+      return {
+        problemSource: "development",
+        targetPhase: "development",
+        reason: "功能实现问题，需重新开发",
+        specificIssues: []
+      };
+    }
+    if (failureReason.includes("可读性") || failureReason.includes("可维护性") || failureReason.includes("代码质量") || failureReason.includes("readability") || failureReason.includes("maintainability") || failureReason.includes("quality")) {
+      return {
+        problemSource: "code_review",
+        targetPhase: "code_review",
+        reason: "代码质量问题，需重新审查",
+        specificIssues: []
+      };
+    }
+    if (failureReason.includes("测试") || failureReason.includes("覆盖") || failureReason.includes("test") || failureReason.includes("coverage")) {
+      return {
+        problemSource: "qa",
+        targetPhase: "qa",
+        reason: "测试验证问题，需重新测试",
+        specificIssues: []
+      };
+    }
+    return {
+      problemSource: "development",
+      targetPhase: "development",
+      reason: "无法明确归类，默认重新开发",
+      specificIssues: []
+    };
   }
   tagBatchCompletion(state, batchIndex) {
     if (!this.config.batchGitTagCommit)
@@ -43190,7 +44741,7 @@ async function harnessCommand(options, cwd = process.cwd()) {
   }
 }
 function getRuntimeStatePath2(cwd) {
-  return path31.join(getProjectDir(cwd), "harness-state.json");
+  return path33.join(getProjectDir(cwd), "harness-state.json");
 }
 function validateAndRepairState(data, cwd) {
   const errors = [];
@@ -43350,12 +44901,12 @@ function validateAndRepairState(data, cwd) {
 }
 function loadRuntimeState(cwd) {
   const statePath = getRuntimeStatePath2(cwd);
-  if (!fs35.existsSync(statePath)) {
+  if (!fs37.existsSync(statePath)) {
     return null;
   }
   const texts = t(cwd);
   try {
-    const content = fs35.readFileSync(statePath, "utf-8");
+    const content = fs37.readFileSync(statePath, "utf-8");
     if (!content.trim()) {
       console.warn(texts.harnessCmd.emptyStateFile);
       return null;
@@ -43401,8 +44952,8 @@ function loadRuntimeState(cwd) {
 }
 function clearRuntimeState(cwd) {
   const statePath = getRuntimeStatePath2(cwd);
-  if (fs35.existsSync(statePath)) {
-    fs35.unlinkSync(statePath);
+  if (fs37.existsSync(statePath)) {
+    fs37.unlinkSync(statePath);
   }
 }
 function summaryToJSON(summary) {
@@ -43429,13 +44980,13 @@ function summaryToJSON(summary) {
 }
 async function loadTaskQueue(options, cwd) {
   if (options.plan) {
-    const planFile = path31.resolve(cwd, options.plan);
-    if (!fs35.existsSync(planFile)) {
+    const planFile = path33.resolve(cwd, options.plan);
+    if (!fs37.existsSync(planFile)) {
       console.error(`Error: Plan file does not exist: ${planFile}`);
       process.exit(1);
     }
     try {
-      const planContent = fs35.readFileSync(planFile, "utf-8");
+      const planContent = fs37.readFileSync(planFile, "utf-8");
       const planData = JSON.parse(planContent);
       let taskQueue = planData.recommendation?.suggestedOrder || [];
       const batches = planData.batchOrder || planData.batches;
@@ -43540,24 +45091,24 @@ function printSummary(summary) {
 }
 
 // src/utils/path.ts
-import * as path32 from "path";
-import * as fs36 from "fs";
+import * as path34 from "path";
+import * as fs38 from "fs";
 function getProjectDir5(cwd = process.cwd()) {
-  return path32.join(cwd, ".projmnt4claude");
+  return path34.join(cwd, ".projmnt4claude");
 }
 function isInitialized2(cwd = process.cwd()) {
   const projectDir = getProjectDir5(cwd);
-  const configPath = path32.join(projectDir, "config.json");
-  if (fs36.existsSync(configPath)) {
+  const configPath = path34.join(projectDir, "config.json");
+  if (fs38.existsSync(configPath)) {
     return true;
   }
-  const tasksDir = path32.join(projectDir, "tasks");
-  if (fs36.existsSync(tasksDir)) {
+  const tasksDir = path34.join(projectDir, "tasks");
+  if (fs38.existsSync(tasksDir)) {
     try {
-      const taskDirs = fs36.readdirSync(tasksDir);
+      const taskDirs = fs38.readdirSync(tasksDir);
       return taskDirs.some((taskDir) => {
-        const metaPath = path32.join(tasksDir, taskDir, "meta.json");
-        return fs36.existsSync(metaPath);
+        const metaPath = path34.join(tasksDir, taskDir, "meta.json");
+        return fs38.existsSync(metaPath);
       });
     } catch {
       return false;
@@ -43688,12 +45239,12 @@ rename format:
     case "create": {
       let taskDescription = options.description;
       if (options.file) {
-        const filePath = path33.resolve(options.file);
-        if (!fs37.existsSync(filePath)) {
+        const filePath = path35.resolve(options.file);
+        if (!fs39.existsSync(filePath)) {
           console.error("(X) Error: Description file not found: " + filePath);
           process.exit(1);
         }
-        const stat = fs37.statSync(filePath);
+        const stat = fs39.statSync(filePath);
         if (!stat.isFile()) {
           console.error("(X) Error: Path is not a file: " + filePath);
           process.exit(1);
@@ -43704,14 +45255,14 @@ rename format:
           process.exit(1);
         }
         try {
-          taskDescription = fs37.readFileSync(filePath, "utf-8");
+          taskDescription = fs39.readFileSync(filePath, "utf-8");
         } catch (error) {
           console.error("(X) Error: Cannot read description file: " + error.message);
           process.exit(1);
         }
         if (filePath.startsWith("/tmp/")) {
           try {
-            fs37.unlinkSync(filePath);
+            fs39.unlinkSync(filePath);
           } catch {}
         }
       }
@@ -44152,12 +45703,12 @@ program2.command("init-requirement [description]").description(`\u4ECE\u81EA\u71
 ` + "\u524D\u63D0: \u9700\u5148\u8FD0\u884C projmnt4claude setup \u521D\u59CB\u5316\u9879\u76EE").option("-y, --yes", "\u975E\u4EA4\u4E92\u6A21\u5F0F\uFF1A\u8DF3\u8FC7\u6240\u6709\u786E\u8BA4\uFF0C\u76F4\u63A5\u4F7F\u7528\u5206\u6790\u7ED3\u679C\u521B\u5EFA\u4EFB\u52A1").option("--no-plan", "\u521B\u5EFA\u4EFB\u52A1\u540E\u4E0D\u8BE2\u95EE\u662F\u5426\u6DFB\u52A0\u5230\u6267\u884C\u8BA1\u5212").option("--skip-validation", "\u8DF3\u8FC7\u521D\u59CB\u5316\u9A8C\u8BC1").option("--template <file>", "\u4F7F\u7528\u9700\u6C42\u6A21\u677F\u6587\u4EF6", "simple").option("--no-ai", "\u7981\u7528 AI \u8F85\u52A9").option("--require-quality <n>", "\u8D28\u91CF\u95E8\u7981\u9608\u503C").option("-f, --force", "\u5F3A\u5236\u8986\u76D6").option("--file <path>", "\u4ECE\u6587\u4EF6\u8BFB\u53D6\u63CF\u8FF0\uFF08\u7528\u4E8E\u5305\u542B\u7279\u6B8A\u5B57\u7B26\u7684\u957F\u63CF\u8FF0\uFF09").option("--decompose", "\u81EA\u52A8\u5206\u89E3\u591A\u95EE\u9898\u9700\u6C42/\u62A5\u544A\uFF08\u9ED8\u8BA4\u542F\u7528\uFF09", true).option("--no-decompose", "\u7981\u7528\u9700\u6C42\u5206\u89E3\uFF0C\u5F3A\u5236\u521B\u5EFA\u5355\u4E2A\u4EFB\u52A1").option("--accept-draft", "\u63A5\u53D7\u8349\u7A3F").option("--accept-audit", "\u63A5\u53D7\u5BA1\u8BA1").option("--accept-eval", "\u63A5\u53D7\u8BC4\u4F30").action(async (description, options) => {
   let finalDescription;
   if (options.file) {
-    const filePath = path33.resolve(options.file);
-    if (!fs37.existsSync(filePath)) {
+    const filePath = path35.resolve(options.file);
+    if (!fs39.existsSync(filePath)) {
       console.error("(X) Error: Description file not found: " + filePath);
       process.exit(1);
     }
-    const stat = fs37.statSync(filePath);
+    const stat = fs39.statSync(filePath);
     if (!stat.isFile()) {
       console.error("(X) Error: Path is not a file: " + filePath);
       process.exit(1);
@@ -44168,14 +45719,14 @@ program2.command("init-requirement [description]").description(`\u4ECE\u81EA\u71
       process.exit(1);
     }
     try {
-      finalDescription = fs37.readFileSync(filePath, "utf-8");
+      finalDescription = fs39.readFileSync(filePath, "utf-8");
     } catch (error) {
       console.error("(X) Error: Cannot read description file: " + error.message);
       process.exit(1);
     }
     if (filePath.startsWith("/tmp/")) {
       try {
-        fs37.unlinkSync(filePath);
+        fs39.unlinkSync(filePath);
       } catch {}
     }
   } else if (description) {

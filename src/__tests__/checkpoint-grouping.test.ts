@@ -204,7 +204,7 @@ describe('groupCheckpointsByPhase', () => {
     const checkpoints: CheckpointMetadata[] = [
       createCheckpoint({ id: 'CP-001', description: '代码审查检查点' }),
       createCheckpoint({ id: 'CP-002', description: 'QA验证检查点' }),
-      createCheckpoint({ id: 'CP-003', description: '脚本自动化检查点' }),
+      createCheckpoint({ id: 'CP-003', description: '[script] 构建成功' }),
     ];
 
     const result = groupCheckpointsByPhase(checkpoints);

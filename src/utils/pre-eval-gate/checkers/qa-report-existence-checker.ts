@@ -34,6 +34,12 @@ import type {
  */
 export class QAReportExistenceChecker implements IPreEvalChecker {
   /**
+   * 失败类型: A (中断流水线)
+   * Pre-Eval Gate 所有检查器均为 A 类
+   */
+  readonly failureType = 'A' as const;
+
+  /**
    * 执行QA报告存在性检查
    *
    * @param ctx 检查上下文，包含任务ID和工作目录
@@ -55,6 +61,7 @@ export class QAReportExistenceChecker implements IPreEvalChecker {
         reportName: 'qa-report.json',
         reportPath,
         exists,
+        failureType: this.failureType,
       },
     };
   }

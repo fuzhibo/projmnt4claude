@@ -25,6 +25,12 @@ import type { PreEvalCheckContext, PreEvalCheckResult, IPreEvalChecker } from '.
  */
 export class AllCheckpointsCompletedChecker implements IPreEvalChecker {
   /**
+   * 失败类型: A (中断流水线)
+   * Pre-Eval Gate 所有检查器均为 A 类
+   */
+  readonly failureType = 'A' as const;
+
+  /**
    * 执行检查
    *
    * @param ctx 检查上下文
@@ -56,6 +62,7 @@ export class AllCheckpointsCompletedChecker implements IPreEvalChecker {
         incompleteCount: incomplete.length,
         incompleteIds: incomplete.map(c => c.id),
         humanVerificationIds: humanCheckpoints.map(c => c.id),
+        failureType: this.failureType,
       },
     };
   }
