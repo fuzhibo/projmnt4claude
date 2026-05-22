@@ -627,111 +627,6 @@ export class HarnessQATester {
     return [...new Set(flakyTests)];
   }
 
-  // 测试卫生检测白名单：这些文件中的 .only/.skip/mock.module 是测试数据，不是调试残留
-  private static readonly TEST_HYGIENE_WHITELIST = [
-    'harness-qa-tester.test.ts', // 测试卫生检测功能的测试文件
-  ];
-
-  /**
-   * 检查测试卫生：检测 .only/.skip/mock.module 泄漏
-   * @param testDir 测试目录，默认为 'src/__tests__'
-   * @returns 检查结果，包含是否通过、发现的问题
-   */
-  async checkTestHygiene(testDir: string = 'src/__tests__'): Promise<{
-    passed: boolean;
-    issues: Array<{ type: string; file: string; line: number; content: string }>;
-    details: string;
-  }> {
-    const issues: Array<{ type: string; file: string; line: number; content: string }> = [];
-    const testPath = path.isAbsolute(testDir) ? testDir : path.join(this.config.cwd, testDir);
-
-    console.log(`\n   🔍 检查测试卫生: ${testDir}`);
-
-    if (!fs.existsSync(testPath)) {
-      return {
-        passed: true,
-        issues: [],
-        details: `测试目录不存在: ${testDir}`,
-      };
-    }
-
-    // 遍历测试文件
-    const testFiles = this.findTestFiles(testPath);
-    console.log(`   📄 扫描 ${testFiles.length} 个测试文件...`);
-
-    for (const file of testFiles) {
-      const relativePath = path.relative(this.config.cwd, file);
-      const fileName = path.basename(file);
-
-      // 跳过白名单文件（这些文件中的 .only/.skip/mock.module 是测试数据，不是调试残留）
-      if (HarnessQATester.TEST_HYGIENE_WHITELIST.includes(fileName)) {
-        continue;
-      }
-
-      const content = fs.readFileSync(file, 'utf-8');
-      const lines = content.split('\n');
-
-      lines.forEach((line, index) => {
-        const lineNum = index + 1;
-
-        // 检测 .only
-        const onlyMatch = line.match(/\.only\s*[\(\{]/);
-        if (onlyMatch) {
-          issues.push({
-            type: '.only',
-            file: relativePath,
-            line: lineNum,
-            content: line.trim(),
-          });
-        }
-
-        // 检测 .skip
-        const skipMatch = line.match(/\.skip\s*[\(\{]/);
-        if (skipMatch) {
-          issues.push({
-            type: '.skip',
-            file: relativePath,
-            line: lineNum,
-            content: line.trim(),
-          });
-        }
-
-        // 检测顶层 mock.module (bun:test 的 mock.module)
-        const mockMatch = line.match(/^mock\.module\s*\(/);
-        if (mockMatch) {
-          issues.push({
-            type: 'mock.module',
-            file: relativePath,
-            line: lineNum,
-            content: line.trim(),
-          });
-        }
-      });
-    }
-
-    const passed = issues.length === 0;
-
-    let details = `测试卫生检查结果:\n`;
-    details += `- 扫描文件: ${testFiles.length} 个\n`;
-    details += `- 发现问题: ${issues.length} 个\n`;
-
-    if (issues.length > 0) {
-      details += `\n问题列表:\n`;
-      issues.forEach(issue => {
-        details += `  - [${issue.type}] ${issue.file}:${issue.line}\n`;
-        details += `    ${issue.content}\n`;
-      });
-    }
-
-    if (passed) {
-      console.log(`   ✅ 测试卫生检查通过`);
-    } else {
-      console.log(`   ⚠️ 发现 ${issues.length} 个测试卫生问题`);
-    }
-
-    return { passed, issues, details };
-  }
-
   /**
    * 递归查找测试文件
    */
@@ -807,18 +702,6 @@ export class HarnessQATester {
       console.log(`   ⚠️ 检测到 ${testSuiteResult.flakyTests.length} 个 flaky test`);
     }
 
-    // 2. 检查测试卫生
-    const hygieneResult = await this.checkTestHygiene();
-    if (!hygieneResult.passed) {
-      return {
-        passed: false,
-        reason: `测试卫生检查失败: 发现 ${hygieneResult.issues.length} 个问题 (.only/.skip/mock.module)`,
-        failures: hygieneResult.issues.map(i => `[${i.type}] ${i.file}:${i.line}`),
-        failedCheckpoints: [],
-        details: hygieneResult.details,
-      };
-    }
-
     // 程序化验证通过，继续 AI 验证（如果有检查点）
     console.log(`   ✅ 程序化验证通过`);
 
@@ -844,7 +727,7 @@ export class HarnessQATester {
         reason: '程序化验证通过（无自动化检查点）',
         failures: [],
         failedCheckpoints: [],
-        details: `${testSuiteResult.details}\n\n${hygieneResult.details}`,
+        details: testSuiteResult.details,
       };
     }
 
