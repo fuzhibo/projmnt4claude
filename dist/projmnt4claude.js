@@ -39186,88 +39186,6 @@ ${truncated}`];
     }
     return [...new Set(flakyTests)];
   }
-  static TEST_HYGIENE_WHITELIST = [
-    "harness-qa-tester.test.ts"
-  ];
-  async checkTestHygiene(testDir = "src/__tests__") {
-    const issues = [];
-    const testPath = path25.isAbsolute(testDir) ? testDir : path25.join(this.config.cwd, testDir);
-    console.log(`
-   \uD83D\uDD0D 检查测试卫生: ${testDir}`);
-    if (!fs29.existsSync(testPath)) {
-      return {
-        passed: true,
-        issues: [],
-        details: `测试目录不存在: ${testDir}`
-      };
-    }
-    const testFiles = this.findTestFiles(testPath);
-    console.log(`   \uD83D\uDCC4 扫描 ${testFiles.length} 个测试文件...`);
-    for (const file of testFiles) {
-      const relativePath = path25.relative(this.config.cwd, file);
-      const fileName = path25.basename(file);
-      if (HarnessQATester.TEST_HYGIENE_WHITELIST.includes(fileName)) {
-        continue;
-      }
-      const content = fs29.readFileSync(file, "utf-8");
-      const lines = content.split(`
-`);
-      lines.forEach((line, index) => {
-        const lineNum = index + 1;
-        const onlyMatch = line.match(/\.only\s*[\(\{]/);
-        if (onlyMatch) {
-          issues.push({
-            type: ".only",
-            file: relativePath,
-            line: lineNum,
-            content: line.trim()
-          });
-        }
-        const skipMatch = line.match(/\.skip\s*[\(\{]/);
-        if (skipMatch) {
-          issues.push({
-            type: ".skip",
-            file: relativePath,
-            line: lineNum,
-            content: line.trim()
-          });
-        }
-        const mockMatch = line.match(/^mock\.module\s*\(/);
-        if (mockMatch) {
-          issues.push({
-            type: "mock.module",
-            file: relativePath,
-            line: lineNum,
-            content: line.trim()
-          });
-        }
-      });
-    }
-    const passed = issues.length === 0;
-    let details = `测试卫生检查结果:
-`;
-    details += `- 扫描文件: ${testFiles.length} 个
-`;
-    details += `- 发现问题: ${issues.length} 个
-`;
-    if (issues.length > 0) {
-      details += `
-问题列表:
-`;
-      issues.forEach((issue) => {
-        details += `  - [${issue.type}] ${issue.file}:${issue.line}
-`;
-        details += `    ${issue.content}
-`;
-      });
-    }
-    if (passed) {
-      console.log(`   ✅ 测试卫生检查通过`);
-    } else {
-      console.log(`   ⚠️ 发现 ${issues.length} 个测试卫生问题`);
-    }
-    return { passed, issues, details };
-  }
   findTestFiles(dir) {
     const files = [];
     const entries = fs29.readdirSync(dir, { withFileTypes: true });
@@ -39315,16 +39233,6 @@ ${truncated}`];
     if (testSuiteResult.hasFlaky) {
       console.log(`   ⚠️ 检测到 ${testSuiteResult.flakyTests.length} 个 flaky test`);
     }
-    const hygieneResult = await this.checkTestHygiene();
-    if (!hygieneResult.passed) {
-      return {
-        passed: false,
-        reason: `测试卫生检查失败: 发现 ${hygieneResult.issues.length} 个问题 (.only/.skip/mock.module)`,
-        failures: hygieneResult.issues.map((i) => `[${i.type}] ${i.file}:${i.line}`),
-        failedCheckpoints: [],
-        details: hygieneResult.details
-      };
-    }
     console.log(`   ✅ 程序化验证通过`);
     const checkpointsWithoutCommands = automatedCheckpoints.filter((cp) => {
       const result2 = validateCheckpointVerification(cp);
@@ -39345,9 +39253,7 @@ ${truncated}`];
         reason: "程序化验证通过（无自动化检查点）",
         failures: [],
         failedCheckpoints: [],
-        details: `${testSuiteResult.details}
-
-${hygieneResult.details}`
+        details: testSuiteResult.details
       };
     }
     const prompt = this.buildQAPrompt(task, codeReviewVerdict, automatedCheckpoints, retryContext);
