@@ -10,7 +10,17 @@
  * - 当 qaReport.verdict === 'PASS' 时，检查QA检查点是否已完成
  * - requiresHuman 的检查点允许未完成（等待人工验证）
  *
+ * 【重要边界情况 - 2026-05-27 修复】
+ * requiresHuman 字段三种值的处理规范：
+ * - true:  需要人工验证，跳过自动同步检查
+ * - false: 自动验证已完成，参与同步检查
+ * - null:  字段未设置，需根据检查点描述前缀推断默认值
+ *   - [human qa] 前缀 → 视为 true（人工验证）
+ *   - 其他前缀/无前缀 → 视为 false（自动验证）
+ *
  * 设计文档: docs/investigation/hd-p13-qa-post-gate-design.md
+ * 关联调查: docs/investigation/harness-qa-gate-requiresHuman-null-handling-20260527.md
+ * 关联任务: TASK-feature-P2-prob13-checkpoint-sync-checker-20260427
  *
  * @module post-qa-gate/checkers/checkpoint-sync-checker
  */
@@ -19,6 +29,7 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 import type { CheckpointMetadata } from '../../../types/task.js';
 import type { QAReport } from '../runner.js';
+import { inferCheckpointAttributesFromPrefix } from '../../validation-rules/checkpoint-rules.js';
 
 /**
  * 检查点同步检查结果
@@ -128,14 +139,16 @@ export class QACheckpointSyncChecker {
 
     if (reportVerdict === 'PASS') {
       for (const cp of qaCheckpoints) {
-        // requiresHuman 的检查点允许未完成
-        if (cp.status !== 'completed' && !cp.requiresHuman) {
+        // requiresHuman 的检查点允许未完成（等待人工验证）
+        // null 值时根据前缀推断，避免误判 [human qa] 检查点
+        const effectiveRequiresHuman = this.inferRequiresHuman(cp);
+        if (cp.status !== 'completed' && !effectiveRequiresHuman) {
           mismatched.push({
             id: cp.id,
             description: cp.description,
             status: cp.status,
             expectedStatus: 'completed',
-            requiresHuman: cp.requiresHuman ?? false,
+            requiresHuman: effectiveRequiresHuman,
           });
         }
       }
@@ -159,10 +172,35 @@ export class QACheckpointSyncChecker {
           id: cp.id,
           description: cp.description,
           status: cp.status,
-          requiresHuman: cp.requiresHuman ?? false,
+          requiresHuman: this.inferRequiresHuman(cp),
         })),
       },
     };
+  }
+
+  /**
+   * 推断 requiresHuman 的有效值
+   *
+   * 当 requiresHuman 为 null/undefined 时，根据检查点描述前缀推断默认值：
+   * - [human qa] 前缀 → true（人工验证）
+   * - 其他前缀/无前缀 → false（自动验证）
+   *
+   * 2026-05-27 新增：修复 requiresHuman 为 null 时的误判问题
+   */
+  private inferRequiresHuman(cp: CheckpointMetadata): boolean {
+    // 显式设置时直接返回
+    if (cp.requiresHuman !== null && cp.requiresHuman !== undefined) {
+      return cp.requiresHuman;
+    }
+
+    // null/undefined 时根据前缀推断
+    const inferred = inferCheckpointAttributesFromPrefix(cp.description ?? '');
+    if (inferred.requiresHuman !== undefined) {
+      return inferred.requiresHuman;
+    }
+
+    // 无前缀匹配时默认为自动验证
+    return false;
   }
 
   /**

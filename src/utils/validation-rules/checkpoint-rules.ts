@@ -406,9 +406,15 @@ export function getCheckpointPhase(description: string): string | null {
  * 根据检查点前缀推断检查点属性
  *
  * 前缀映射规则：
- * - [ai review] → 无额外属性（默认）
- * - [ai qa] → verification.method=automated
- * - [script] → verification.method=automated
+ * - [ai review] → requiresHuman=false（默认）
+ * - [ai qa] → requiresHuman=false, verification.method=automated
+ * - [human qa] → requiresHuman=true（人工验证）
+ * - [script] → requiresHuman=false, verification.method=automated
+ *
+ * 【重要 - 2026-05-27 修复】
+ * 补充 [human qa] 前缀的处理分支，避免 requiresHuman 保持 null 导致 QA 门禁误判。
+ * 关联调查: docs/investigation/harness-qa-gate-requiresHuman-null-handling-20260527.md
+ * 关联任务: TASK-feature-P2-prob13-checkpoint-sync-checker-20260427
  *
  * @param description - 检查点描述文本
  * @returns 推断的属性对象，包含 requiresHuman 和 verification.method
@@ -422,6 +428,13 @@ export function inferCheckpointAttributesFromPrefix(description: string): {
   }
 
   const trimmed = description.trim().toLowerCase();
+
+  // [human qa] → 人工 QA 验证（2026-05-27 新增）
+  if (trimmed.startsWith('[human qa]')) {
+    return {
+      requiresHuman: true,
+    };
+  }
 
   // [ai qa] → 自动化 QA 验证
   if (trimmed.startsWith('[ai qa]')) {
