@@ -66,7 +66,7 @@ var __export = (target, all) => {
 var __esm = (fn, res) => () => (fn && (res = fn(fn = 0)), res);
 var __require = /* @__PURE__ */ createRequire(import.meta.url);
 
-// ../../../node_modules/commander/lib/error.js
+// node_modules/commander/lib/error.js
 var require_error = __commonJS((exports) => {
   class CommanderError extends Error {
     constructor(exitCode, code, message) {
@@ -90,7 +90,7 @@ var require_error = __commonJS((exports) => {
   exports.InvalidArgumentError = InvalidArgumentError;
 });
 
-// ../../../node_modules/commander/lib/argument.js
+// node_modules/commander/lib/argument.js
 var require_argument = __commonJS((exports) => {
   var { InvalidArgumentError } = require_error();
 
@@ -170,7 +170,7 @@ var require_argument = __commonJS((exports) => {
   exports.humanReadableArgName = humanReadableArgName;
 });
 
-// ../../../node_modules/commander/lib/help.js
+// node_modules/commander/lib/help.js
 var require_help = __commonJS((exports) => {
   var { humanReadableArgName } = require_argument();
 
@@ -527,7 +527,7 @@ ${itemIndentStr}`);
   exports.stripColor = stripColor;
 });
 
-// ../../../node_modules/commander/lib/option.js
+// node_modules/commander/lib/option.js
 var require_option = __commonJS((exports) => {
   var { InvalidArgumentError } = require_error();
 
@@ -711,7 +711,7 @@ var require_option = __commonJS((exports) => {
   exports.DualOptions = DualOptions;
 });
 
-// ../../../node_modules/commander/lib/suggestSimilar.js
+// node_modules/commander/lib/suggestSimilar.js
 var require_suggestSimilar = __commonJS((exports) => {
   var maxDistance = 3;
   function editDistance(a, b) {
@@ -784,7 +784,7 @@ var require_suggestSimilar = __commonJS((exports) => {
   exports.suggestSimilar = suggestSimilar;
 });
 
-// ../../../node_modules/commander/lib/command.js
+// node_modules/commander/lib/command.js
 var require_command = __commonJS((exports) => {
   var EventEmitter = __require("node:events").EventEmitter;
   var childProcess = __require("node:child_process");
@@ -2139,7 +2139,7 @@ Expecting one of '${allowedValues.join("', '")}'`);
   exports.useColor = useColor;
 });
 
-// ../../../node_modules/commander/index.js
+// node_modules/commander/index.js
 var require_commander = __commonJS((exports) => {
   var { Argument } = require_argument();
   var { Command } = require_command();
@@ -2159,7 +2159,7 @@ var require_commander = __commonJS((exports) => {
   exports.InvalidOptionArgumentError = InvalidArgumentError;
 });
 
-// ../../../node_modules/kleur/index.js
+// node_modules/kleur/index.js
 var require_kleur = __commonJS((exports, module) => {
   var { FORCE_COLOR, NODE_DISABLE_COLORS, TERM } = process.env;
   var $ = {
@@ -2250,7 +2250,7 @@ var require_kleur = __commonJS((exports, module) => {
   module.exports = $;
 });
 
-// ../../../node_modules/prompts/dist/util/action.js
+// node_modules/prompts/dist/util/action.js
 var require_action = __commonJS((exports, module) => {
   module.exports = (key, isSelect) => {
     if (key.meta && key.name !== "escape")
@@ -2307,7 +2307,7 @@ var require_action = __commonJS((exports, module) => {
   };
 });
 
-// ../../../node_modules/prompts/dist/util/strip.js
+// node_modules/prompts/dist/util/strip.js
 var require_strip = __commonJS((exports, module) => {
   module.exports = (str) => {
     const pattern = ["[\\u001B\\u009B][[\\]()#;?]*(?:(?:(?:(?:;[-a-zA-Z\\d\\/#&.:=?%@~_]+)*|[a-zA-Z\\d]+(?:;[-a-zA-Z\\d\\/#&.:=?%@~_]*)*)?\\u0007)", "(?:(?:\\d{1,4}(?:;\\d{0,4})*)?[\\dA-PRZcf-ntqry=><~]))"].join("|");
@@ -2316,7 +2316,7 @@ var require_strip = __commonJS((exports, module) => {
   };
 });
 
-// ../../../node_modules/sisteransi/src/index.js
+// node_modules/sisteransi/src/index.js
 var require_src = __commonJS((exports, module) => {
   var ESC = "\x1B";
   var CSI = `${ESC}[`;
@@ -2374,7 +2374,7 @@ var require_src = __commonJS((exports, module) => {
   module.exports = { cursor, scroll, erase, beep };
 });
 
-// ../../../node_modules/prompts/dist/util/clear.js
+// node_modules/prompts/dist/util/clear.js
 var require_clear = __commonJS((exports, module) => {
   function _createForOfIteratorHelper(o, allowArrayLike) {
     var it = typeof Symbol !== "undefined" && o[Symbol.iterator] || o["@@iterator"];
@@ -2460,7 +2460,7 @@ In order to be iterable, non-array objects must have a [Symbol.iterator]() metho
   };
 });
 
-// ../../../node_modules/prompts/dist/util/figures.js
+// node_modules/prompts/dist/util/figures.js
 var require_figures = __commonJS((exports, module) => {
   var main = {
     arrowUp: "↑",
@@ -2494,7 +2494,7 @@ var require_figures = __commonJS((exports, module) => {
   module.exports = figures;
 });
 
-// ../../../node_modules/prompts/dist/util/style.js
+// node_modules/prompts/dist/util/style.js
 var require_style = __commonJS((exports, module) => {
   var c = require_kleur();
   var figures = require_figures();
@@ -2536,7 +2536,7 @@ var require_style = __commonJS((exports, module) => {
   };
 });
 
-// ../../../node_modules/prompts/dist/util/lines.js
+// node_modules/prompts/dist/util/lines.js
 var require_lines = __commonJS((exports, module) => {
   var strip = require_strip();
   module.exports = function(msg, perLine) {
@@ -2547,7 +2547,7 @@ var require_lines = __commonJS((exports, module) => {
   };
 });
 
-// ../../../node_modules/prompts/dist/util/wrap.js
+// node_modules/prompts/dist/util/wrap.js
 var require_wrap = __commonJS((exports, module) => {
   module.exports = (msg, opts = {}) => {
     const tab = Number.isSafeInteger(parseInt(opts.margin)) ? new Array(parseInt(opts.margin)).fill(" ").join("") : opts.margin || "";
@@ -2564,7 +2564,7 @@ var require_wrap = __commonJS((exports, module) => {
   };
 });
 
-// ../../../node_modules/prompts/dist/util/entriesToDisplay.js
+// node_modules/prompts/dist/util/entriesToDisplay.js
 var require_entriesToDisplay = __commonJS((exports, module) => {
   module.exports = (cursor, total, maxVisible) => {
     maxVisible = maxVisible || total;
@@ -2579,7 +2579,7 @@ var require_entriesToDisplay = __commonJS((exports, module) => {
   };
 });
 
-// ../../../node_modules/prompts/dist/util/index.js
+// node_modules/prompts/dist/util/index.js
 var require_util = __commonJS((exports, module) => {
   module.exports = {
     action: require_action(),
@@ -2593,7 +2593,7 @@ var require_util = __commonJS((exports, module) => {
   };
 });
 
-// ../../../node_modules/prompts/dist/elements/prompt.js
+// node_modules/prompts/dist/elements/prompt.js
 var require_prompt = __commonJS((exports, module) => {
   var readline = __require("readline");
   var _require = require_util();
@@ -2661,7 +2661,7 @@ var require_prompt = __commonJS((exports, module) => {
   module.exports = Prompt;
 });
 
-// ../../../node_modules/prompts/dist/elements/text.js
+// node_modules/prompts/dist/elements/text.js
 var require_text = __commonJS((exports, module) => {
   function asyncGeneratorStep(gen, resolve, reject, _next, _throw, key, arg) {
     try {
@@ -2885,7 +2885,7 @@ ${i ? " " : figures.pointerSmall} ${color.red().italic(l)}`, ``);
   module.exports = TextPrompt;
 });
 
-// ../../../node_modules/prompts/dist/elements/select.js
+// node_modules/prompts/dist/elements/select.js
 var require_select = __commonJS((exports, module) => {
   var color = require_kleur();
   var Prompt = require_prompt();
@@ -3041,7 +3041,7 @@ var require_select = __commonJS((exports, module) => {
   module.exports = SelectPrompt;
 });
 
-// ../../../node_modules/prompts/dist/elements/toggle.js
+// node_modules/prompts/dist/elements/toggle.js
 var require_toggle = __commonJS((exports, module) => {
   var color = require_kleur();
   var Prompt = require_prompt();
@@ -3145,7 +3145,7 @@ var require_toggle = __commonJS((exports, module) => {
   module.exports = TogglePrompt;
 });
 
-// ../../../node_modules/prompts/dist/dateparts/datepart.js
+// node_modules/prompts/dist/dateparts/datepart.js
 var require_datepart = __commonJS((exports, module) => {
   class DatePart {
     constructor({
@@ -3178,7 +3178,7 @@ var require_datepart = __commonJS((exports, module) => {
   module.exports = DatePart;
 });
 
-// ../../../node_modules/prompts/dist/dateparts/meridiem.js
+// node_modules/prompts/dist/dateparts/meridiem.js
 var require_meridiem = __commonJS((exports, module) => {
   var DatePart = require_datepart();
 
@@ -3200,7 +3200,7 @@ var require_meridiem = __commonJS((exports, module) => {
   module.exports = Meridiem;
 });
 
-// ../../../node_modules/prompts/dist/dateparts/day.js
+// node_modules/prompts/dist/dateparts/day.js
 var require_day = __commonJS((exports, module) => {
   var DatePart = require_datepart();
   var pos = (n) => {
@@ -3230,7 +3230,7 @@ var require_day = __commonJS((exports, module) => {
   module.exports = Day;
 });
 
-// ../../../node_modules/prompts/dist/dateparts/hours.js
+// node_modules/prompts/dist/dateparts/hours.js
 var require_hours = __commonJS((exports, module) => {
   var DatePart = require_datepart();
 
@@ -3257,7 +3257,7 @@ var require_hours = __commonJS((exports, module) => {
   module.exports = Hours;
 });
 
-// ../../../node_modules/prompts/dist/dateparts/milliseconds.js
+// node_modules/prompts/dist/dateparts/milliseconds.js
 var require_milliseconds = __commonJS((exports, module) => {
   var DatePart = require_datepart();
 
@@ -3281,7 +3281,7 @@ var require_milliseconds = __commonJS((exports, module) => {
   module.exports = Milliseconds;
 });
 
-// ../../../node_modules/prompts/dist/dateparts/minutes.js
+// node_modules/prompts/dist/dateparts/minutes.js
 var require_minutes = __commonJS((exports, module) => {
   var DatePart = require_datepart();
 
@@ -3306,7 +3306,7 @@ var require_minutes = __commonJS((exports, module) => {
   module.exports = Minutes;
 });
 
-// ../../../node_modules/prompts/dist/dateparts/month.js
+// node_modules/prompts/dist/dateparts/month.js
 var require_month = __commonJS((exports, module) => {
   var DatePart = require_datepart();
 
@@ -3333,7 +3333,7 @@ var require_month = __commonJS((exports, module) => {
   module.exports = Month;
 });
 
-// ../../../node_modules/prompts/dist/dateparts/seconds.js
+// node_modules/prompts/dist/dateparts/seconds.js
 var require_seconds = __commonJS((exports, module) => {
   var DatePart = require_datepart();
 
@@ -3358,7 +3358,7 @@ var require_seconds = __commonJS((exports, module) => {
   module.exports = Seconds;
 });
 
-// ../../../node_modules/prompts/dist/dateparts/year.js
+// node_modules/prompts/dist/dateparts/year.js
 var require_year = __commonJS((exports, module) => {
   var DatePart = require_datepart();
 
@@ -3383,7 +3383,7 @@ var require_year = __commonJS((exports, module) => {
   module.exports = Year;
 });
 
-// ../../../node_modules/prompts/dist/dateparts/index.js
+// node_modules/prompts/dist/dateparts/index.js
 var require_dateparts = __commonJS((exports, module) => {
   module.exports = {
     DatePart: require_datepart(),
@@ -3398,7 +3398,7 @@ var require_dateparts = __commonJS((exports, module) => {
   };
 });
 
-// ../../../node_modules/prompts/dist/elements/date.js
+// node_modules/prompts/dist/elements/date.js
 var require_date = __commonJS((exports, module) => {
   function asyncGeneratorStep(gen, resolve, reject, _next, _throw, key, arg) {
     try {
@@ -3625,7 +3625,7 @@ ${i ? ` ` : figures.pointerSmall} ${color.red().italic(l)}`, ``);
   module.exports = DatePrompt;
 });
 
-// ../../../node_modules/prompts/dist/elements/number.js
+// node_modules/prompts/dist/elements/number.js
 var require_number = __commonJS((exports, module) => {
   function asyncGeneratorStep(gen, resolve, reject, _next, _throw, key, arg) {
     try {
@@ -3848,7 +3848,7 @@ ${i ? ` ` : figures.pointerSmall} ${color.red().italic(l)}`, ``);
   module.exports = NumberPrompt;
 });
 
-// ../../../node_modules/prompts/dist/elements/multiselect.js
+// node_modules/prompts/dist/elements/multiselect.js
 var require_multiselect = __commonJS((exports, module) => {
   var color = require_kleur();
   var _require = require_src();
@@ -4084,7 +4084,7 @@ Instructions:
   module.exports = MultiselectPrompt;
 });
 
-// ../../../node_modules/prompts/dist/elements/autocomplete.js
+// node_modules/prompts/dist/elements/autocomplete.js
 var require_autocomplete = __commonJS((exports, module) => {
   function asyncGeneratorStep(gen, resolve, reject, _next, _throw, key, arg) {
     try {
@@ -4355,7 +4355,7 @@ var require_autocomplete = __commonJS((exports, module) => {
   module.exports = AutocompletePrompt;
 });
 
-// ../../../node_modules/prompts/dist/elements/autocompleteMultiselect.js
+// node_modules/prompts/dist/elements/autocompleteMultiselect.js
 var require_autocompleteMultiselect = __commonJS((exports, module) => {
   var color = require_kleur();
   var _require = require_src();
@@ -4517,7 +4517,7 @@ Filtered results for: ${this.inputValue ? this.inputValue : color.gray("Enter so
   module.exports = AutocompleteMultiselectPrompt;
 });
 
-// ../../../node_modules/prompts/dist/elements/confirm.js
+// node_modules/prompts/dist/elements/confirm.js
 var require_confirm = __commonJS((exports, module) => {
   var color = require_kleur();
   var Prompt = require_prompt();
@@ -4592,7 +4592,7 @@ var require_confirm = __commonJS((exports, module) => {
   module.exports = ConfirmPrompt;
 });
 
-// ../../../node_modules/prompts/dist/elements/index.js
+// node_modules/prompts/dist/elements/index.js
 var require_elements = __commonJS((exports, module) => {
   module.exports = {
     TextPrompt: require_text(),
@@ -4607,7 +4607,7 @@ var require_elements = __commonJS((exports, module) => {
   };
 });
 
-// ../../../node_modules/prompts/dist/prompts.js
+// node_modules/prompts/dist/prompts.js
 var require_prompts = __commonJS((exports) => {
   var $ = exports;
   var el = require_elements();
@@ -4668,7 +4668,7 @@ var require_prompts = __commonJS((exports) => {
   };
 });
 
-// ../../../node_modules/prompts/dist/index.js
+// node_modules/prompts/dist/index.js
 var require_dist = __commonJS((exports, module) => {
   function ownKeys(object, enumerableOnly) {
     var keys = Object.keys(object);
@@ -4898,7 +4898,7 @@ In order to be iterable, non-array objects must have a [Symbol.iterator]() metho
   });
 });
 
-// ../../../node_modules/prompts/lib/util/action.js
+// node_modules/prompts/lib/util/action.js
 var require_action2 = __commonJS((exports, module) => {
   module.exports = (key, isSelect) => {
     if (key.meta && key.name !== "escape")
@@ -4955,7 +4955,7 @@ var require_action2 = __commonJS((exports, module) => {
   };
 });
 
-// ../../../node_modules/prompts/lib/util/strip.js
+// node_modules/prompts/lib/util/strip.js
 var require_strip2 = __commonJS((exports, module) => {
   module.exports = (str) => {
     const pattern = [
@@ -4967,7 +4967,7 @@ var require_strip2 = __commonJS((exports, module) => {
   };
 });
 
-// ../../../node_modules/prompts/lib/util/clear.js
+// node_modules/prompts/lib/util/clear.js
 var require_clear2 = __commonJS((exports, module) => {
   var strip = require_strip2();
   var { erase, cursor } = require_src();
@@ -4984,7 +4984,7 @@ var require_clear2 = __commonJS((exports, module) => {
   };
 });
 
-// ../../../node_modules/prompts/lib/util/figures.js
+// node_modules/prompts/lib/util/figures.js
 var require_figures2 = __commonJS((exports, module) => {
   var main = {
     arrowUp: "↑",
@@ -5018,7 +5018,7 @@ var require_figures2 = __commonJS((exports, module) => {
   module.exports = figures;
 });
 
-// ../../../node_modules/prompts/lib/util/style.js
+// node_modules/prompts/lib/util/style.js
 var require_style2 = __commonJS((exports, module) => {
   var c = require_kleur();
   var figures = require_figures2();
@@ -5048,7 +5048,7 @@ var require_style2 = __commonJS((exports, module) => {
   };
 });
 
-// ../../../node_modules/prompts/lib/util/lines.js
+// node_modules/prompts/lib/util/lines.js
 var require_lines2 = __commonJS((exports, module) => {
   var strip = require_strip2();
   module.exports = function(msg, perLine) {
@@ -5059,7 +5059,7 @@ var require_lines2 = __commonJS((exports, module) => {
   };
 });
 
-// ../../../node_modules/prompts/lib/util/wrap.js
+// node_modules/prompts/lib/util/wrap.js
 var require_wrap2 = __commonJS((exports, module) => {
   module.exports = (msg, opts = {}) => {
     const tab = Number.isSafeInteger(parseInt(opts.margin)) ? new Array(parseInt(opts.margin)).fill(" ").join("") : opts.margin || "";
@@ -5076,7 +5076,7 @@ var require_wrap2 = __commonJS((exports, module) => {
   };
 });
 
-// ../../../node_modules/prompts/lib/util/entriesToDisplay.js
+// node_modules/prompts/lib/util/entriesToDisplay.js
 var require_entriesToDisplay2 = __commonJS((exports, module) => {
   module.exports = (cursor, total, maxVisible) => {
     maxVisible = maxVisible || total;
@@ -5088,7 +5088,7 @@ var require_entriesToDisplay2 = __commonJS((exports, module) => {
   };
 });
 
-// ../../../node_modules/prompts/lib/util/index.js
+// node_modules/prompts/lib/util/index.js
 var require_util2 = __commonJS((exports, module) => {
   module.exports = {
     action: require_action2(),
@@ -5102,7 +5102,7 @@ var require_util2 = __commonJS((exports, module) => {
   };
 });
 
-// ../../../node_modules/prompts/lib/elements/prompt.js
+// node_modules/prompts/lib/elements/prompt.js
 var require_prompt2 = __commonJS((exports, module) => {
   var readline = __require("readline");
   var { action } = require_util2();
@@ -5164,7 +5164,7 @@ var require_prompt2 = __commonJS((exports, module) => {
   module.exports = Prompt;
 });
 
-// ../../../node_modules/prompts/lib/elements/text.js
+// node_modules/prompts/lib/elements/text.js
 var require_text2 = __commonJS((exports, module) => {
   var color = require_kleur();
   var Prompt = require_prompt2();
@@ -5352,7 +5352,7 @@ ${i ? " " : figures.pointerSmall} ${color.red().italic(l)}`, ``);
   module.exports = TextPrompt;
 });
 
-// ../../../node_modules/prompts/lib/elements/select.js
+// node_modules/prompts/lib/elements/select.js
 var require_select2 = __commonJS((exports, module) => {
   var color = require_kleur();
   var Prompt = require_prompt2();
@@ -5501,7 +5501,7 @@ var require_select2 = __commonJS((exports, module) => {
   module.exports = SelectPrompt;
 });
 
-// ../../../node_modules/prompts/lib/elements/toggle.js
+// node_modules/prompts/lib/elements/toggle.js
 var require_toggle2 = __commonJS((exports, module) => {
   var color = require_kleur();
   var Prompt = require_prompt2();
@@ -5608,7 +5608,7 @@ var require_toggle2 = __commonJS((exports, module) => {
   module.exports = TogglePrompt;
 });
 
-// ../../../node_modules/prompts/lib/dateparts/datepart.js
+// node_modules/prompts/lib/dateparts/datepart.js
 var require_datepart2 = __commonJS((exports, module) => {
   class DatePart {
     constructor({ token, date, parts, locales }) {
@@ -5636,7 +5636,7 @@ var require_datepart2 = __commonJS((exports, module) => {
   module.exports = DatePart;
 });
 
-// ../../../node_modules/prompts/lib/dateparts/meridiem.js
+// node_modules/prompts/lib/dateparts/meridiem.js
 var require_meridiem2 = __commonJS((exports, module) => {
   var DatePart = require_datepart2();
 
@@ -5658,7 +5658,7 @@ var require_meridiem2 = __commonJS((exports, module) => {
   module.exports = Meridiem;
 });
 
-// ../../../node_modules/prompts/lib/dateparts/day.js
+// node_modules/prompts/lib/dateparts/day.js
 var require_day2 = __commonJS((exports, module) => {
   var DatePart = require_datepart2();
   var pos = (n) => {
@@ -5688,7 +5688,7 @@ var require_day2 = __commonJS((exports, module) => {
   module.exports = Day;
 });
 
-// ../../../node_modules/prompts/lib/dateparts/hours.js
+// node_modules/prompts/lib/dateparts/hours.js
 var require_hours2 = __commonJS((exports, module) => {
   var DatePart = require_datepart2();
 
@@ -5715,7 +5715,7 @@ var require_hours2 = __commonJS((exports, module) => {
   module.exports = Hours;
 });
 
-// ../../../node_modules/prompts/lib/dateparts/milliseconds.js
+// node_modules/prompts/lib/dateparts/milliseconds.js
 var require_milliseconds2 = __commonJS((exports, module) => {
   var DatePart = require_datepart2();
 
@@ -5739,7 +5739,7 @@ var require_milliseconds2 = __commonJS((exports, module) => {
   module.exports = Milliseconds;
 });
 
-// ../../../node_modules/prompts/lib/dateparts/minutes.js
+// node_modules/prompts/lib/dateparts/minutes.js
 var require_minutes2 = __commonJS((exports, module) => {
   var DatePart = require_datepart2();
 
@@ -5764,7 +5764,7 @@ var require_minutes2 = __commonJS((exports, module) => {
   module.exports = Minutes;
 });
 
-// ../../../node_modules/prompts/lib/dateparts/month.js
+// node_modules/prompts/lib/dateparts/month.js
 var require_month2 = __commonJS((exports, module) => {
   var DatePart = require_datepart2();
 
@@ -5791,7 +5791,7 @@ var require_month2 = __commonJS((exports, module) => {
   module.exports = Month;
 });
 
-// ../../../node_modules/prompts/lib/dateparts/seconds.js
+// node_modules/prompts/lib/dateparts/seconds.js
 var require_seconds2 = __commonJS((exports, module) => {
   var DatePart = require_datepart2();
 
@@ -5816,7 +5816,7 @@ var require_seconds2 = __commonJS((exports, module) => {
   module.exports = Seconds;
 });
 
-// ../../../node_modules/prompts/lib/dateparts/year.js
+// node_modules/prompts/lib/dateparts/year.js
 var require_year2 = __commonJS((exports, module) => {
   var DatePart = require_datepart2();
 
@@ -5841,7 +5841,7 @@ var require_year2 = __commonJS((exports, module) => {
   module.exports = Year;
 });
 
-// ../../../node_modules/prompts/lib/dateparts/index.js
+// node_modules/prompts/lib/dateparts/index.js
 var require_dateparts2 = __commonJS((exports, module) => {
   module.exports = {
     DatePart: require_datepart2(),
@@ -5856,7 +5856,7 @@ var require_dateparts2 = __commonJS((exports, module) => {
   };
 });
 
-// ../../../node_modules/prompts/lib/elements/date.js
+// node_modules/prompts/lib/elements/date.js
 var require_date2 = __commonJS((exports, module) => {
   var color = require_kleur();
   var Prompt = require_prompt2();
@@ -6032,7 +6032,7 @@ ${i ? ` ` : figures.pointerSmall} ${color.red().italic(l)}`, ``);
   module.exports = DatePrompt;
 });
 
-// ../../../node_modules/prompts/lib/elements/number.js
+// node_modules/prompts/lib/elements/number.js
 var require_number2 = __commonJS((exports, module) => {
   var color = require_kleur();
   var Prompt = require_prompt2();
@@ -6219,7 +6219,7 @@ ${i ? ` ` : figures.pointerSmall} ${color.red().italic(l)}`, ``);
   module.exports = NumberPrompt;
 });
 
-// ../../../node_modules/prompts/lib/elements/multiselect.js
+// node_modules/prompts/lib/elements/multiselect.js
 var require_multiselect2 = __commonJS((exports, module) => {
   var color = require_kleur();
   var { cursor } = require_src();
@@ -6448,7 +6448,7 @@ Instructions:
   module.exports = MultiselectPrompt;
 });
 
-// ../../../node_modules/prompts/lib/elements/autocomplete.js
+// node_modules/prompts/lib/elements/autocomplete.js
 var require_autocomplete2 = __commonJS((exports, module) => {
   var color = require_kleur();
   var Prompt = require_prompt2();
@@ -6672,7 +6672,7 @@ var require_autocomplete2 = __commonJS((exports, module) => {
   module.exports = AutocompletePrompt;
 });
 
-// ../../../node_modules/prompts/lib/elements/autocompleteMultiselect.js
+// node_modules/prompts/lib/elements/autocompleteMultiselect.js
 var require_autocompleteMultiselect2 = __commonJS((exports, module) => {
   var color = require_kleur();
   var { cursor } = require_src();
@@ -6835,7 +6835,7 @@ Filtered results for: ${this.inputValue ? this.inputValue : color.gray("Enter so
   module.exports = AutocompleteMultiselectPrompt;
 });
 
-// ../../../node_modules/prompts/lib/elements/confirm.js
+// node_modules/prompts/lib/elements/confirm.js
 var require_confirm2 = __commonJS((exports, module) => {
   var color = require_kleur();
   var Prompt = require_prompt2();
@@ -6911,7 +6911,7 @@ var require_confirm2 = __commonJS((exports, module) => {
   module.exports = ConfirmPrompt;
 });
 
-// ../../../node_modules/prompts/lib/elements/index.js
+// node_modules/prompts/lib/elements/index.js
 var require_elements2 = __commonJS((exports, module) => {
   module.exports = {
     TextPrompt: require_text2(),
@@ -6926,7 +6926,7 @@ var require_elements2 = __commonJS((exports, module) => {
   };
 });
 
-// ../../../node_modules/prompts/lib/prompts.js
+// node_modules/prompts/lib/prompts.js
 var require_prompts2 = __commonJS((exports) => {
   var $ = exports;
   var el = require_elements2();
@@ -6987,7 +6987,7 @@ var require_prompts2 = __commonJS((exports) => {
   };
 });
 
-// ../../../node_modules/prompts/lib/index.js
+// node_modules/prompts/lib/index.js
 var require_lib = __commonJS((exports, module) => {
   var prompts = require_prompts2();
   var passOn = ["suggest", "format", "onState", "validate", "onRender", "type"];
@@ -7060,7 +7060,7 @@ var require_lib = __commonJS((exports, module) => {
   module.exports = Object.assign(prompt, { prompt, prompts, inject, override });
 });
 
-// ../../../node_modules/prompts/index.js
+// node_modules/prompts/index.js
 var require_prompts3 = __commonJS((exports, module) => {
   function isNodeLT(tar) {
     tar = (Array.isArray(tar) ? tar : tar.split(".")).map(Number);
@@ -24429,7 +24429,7 @@ var init_plan2 = __esm(() => {
   inferDependenciesFromFiles = inferDependenciesBatch;
 });
 
-// ../../../node_modules/commander/esm.mjs
+// node_modules/commander/esm.mjs
 var import__ = __toESM(require_commander(), 1);
 var {
   program,
@@ -36157,7 +36157,7 @@ function getBuiltInAnalyzers() {
 // src/commands/doctor.ts
 init_config();
 init_i18n();
-var __dirname = "/home/fuzhibo/workerplace/git/projmnt4claude/.claude/worktrees/fix-requiresHuman-null/src/commands";
+var __dirname = "/home/fuzhibo/workerplace/git/projmnt4claude/src/commands";
 async function runDoctor(fix = false, cwd = process.cwd()) {
   const texts = t(cwd).doctorCmd;
   console.log("");
