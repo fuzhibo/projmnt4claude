@@ -14,6 +14,6 @@
     "subtask"
   ],
   "license": "AGPL-3.0",
-  "skills": "./skills/projmnt4claude/SKILL.md",
+  "skills": "./skills/projmnt4claude",
   "commands": "./commands/"
 }
