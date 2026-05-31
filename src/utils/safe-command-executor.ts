@@ -7,7 +7,7 @@
  * @module utils/safe-command-executor
  */
 
-import { spawn } from 'child_process';
+import { spawnWithMemoryLimit } from './spawn-utils.js';
 
 // ============================================================
 // Types
@@ -306,12 +306,12 @@ export class SafeCommandExecutor {
       let stderr = '';
       let timedOut = false;
 
-      const proc = spawn(cmd, args, {
+      const proc = spawnWithMemoryLimit(cmd, args, {
         cwd: options.cwd,
         env: { ...process.env, ...options.env },
         timeout,
         shell: false,
-      });
+      }, 'default');
 
       proc.stdout.on('data', (data) => {
         stdout += data.toString();

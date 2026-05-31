@@ -1038,7 +1038,7 @@ Expecting one of '${allowedValues.join("', '")}'`);
         this._exitCallback = (err) => {
           if (err.code !== "commander.executeSubCommandAsync") {
             throw err;
-          } else {}
+          }
         };
       }
       return this;
@@ -7130,116 +7130,6 @@ function getLogsDir(cwd = process.cwd()) {
 }
 var init_path = () => {};
 
-// src/types/config.ts
-function getAIPreset(scenario, overrides) {
-  const preset = DEFAULT_AI.presets?.[scenario];
-  if (!preset) {
-    throw new Error(`未知的 AI 场景预设: ${String(scenario)}`);
-  }
-  return {
-    ...preset,
-    ...overrides
-  };
-}
-function buildAgentOptionsFromPreset(scenario, cwd, overrides) {
-  const preset = getAIPreset(scenario, overrides);
-  return {
-    timeout: preset.timeout,
-    allowedTools: preset.allowedTools,
-    outputFormat: preset.outputFormat,
-    maxRetries: preset.maxRetries,
-    cwd,
-    dangerouslySkipPermissions: true
-  };
-}
-var DEFAULT_LOGGING, DEFAULT_AI, DEFAULT_TRAINING, DEFAULT_GIT_HOOK;
-var init_config = __esm(() => {
-  DEFAULT_LOGGING = {
-    level: "info",
-    maxFiles: 30,
-    recordInputs: true,
-    inputMaxLength: 500
-  };
-  DEFAULT_AI = {
-    provider: "claude-code",
-    timeout: 60,
-    maxRetries: 1,
-    presets: {
-      metadataEnhancement: {
-        name: "metadataEnhancement",
-        timeout: 60,
-        maxRetries: 1,
-        allowedTools: [],
-        outputFormat: "text",
-        description: "元数据增强：分析需求并返回增强后的任务元数据"
-      },
-      decomposition: {
-        name: "decomposition",
-        timeout: 90,
-        maxRetries: 2,
-        allowedTools: ["Read", "Glob", "Grep"],
-        outputFormat: "text",
-        description: "需求分解：将复杂需求分解为多个子任务"
-      },
-      codeReview: {
-        name: "codeReview",
-        timeout: 120,
-        maxRetries: 1,
-        allowedTools: ["Read", "Bash", "Grep", "Glob"],
-        outputFormat: "text",
-        description: "代码审查：分析代码并提供审查意见"
-      },
-      qualityAnalysis: {
-        name: "qualityAnalysis",
-        timeout: 60,
-        maxRetries: 1,
-        allowedTools: [],
-        outputFormat: "text",
-        description: "质量分析：评估任务描述的清晰度和完整性"
-      },
-      duplicateDetection: {
-        name: "duplicateDetection",
-        timeout: 90,
-        maxRetries: 1,
-        allowedTools: [],
-        outputFormat: "text",
-        description: "重复检测：检测任务是否与其他任务重复"
-      },
-      stalenessAssessment: {
-        name: "stalenessAssessment",
-        timeout: 60,
-        maxRetries: 1,
-        allowedTools: [],
-        outputFormat: "text",
-        description: "过时评估：评估任务是否已过时"
-      },
-      bugAnalysis: {
-        name: "bugAnalysis",
-        timeout: 60,
-        maxRetries: 1,
-        allowedTools: [],
-        outputFormat: "text",
-        description: "Bug分析：从Bug报告中提取结构化信息"
-      },
-      checkpointEnhancement: {
-        name: "checkpointEnhancement",
-        timeout: 60,
-        maxRetries: 1,
-        allowedTools: [],
-        outputFormat: "text",
-        description: "检查点增强：优化检查点使其更具体可验证"
-      }
-    }
-  };
-  DEFAULT_TRAINING = {
-    exportEnabled: false,
-    outputDir: ".projmnt4claude/training-data/"
-  };
-  DEFAULT_GIT_HOOK = {
-    enabled: true
-  };
-});
-
 // src/i18n/zh.ts
 var zhTexts;
 var init_zh = __esm(() => {
@@ -9402,12 +9292,12 @@ __export(exports_i18n, {
   getI18n: () => getI18n,
   getDecompositionTemplate: () => getDecompositionTemplate
 });
-import * as fs3 from "fs";
+import * as fs2 from "fs";
 function getLanguage(cwd = process.cwd()) {
   const configPath = getConfigPath(cwd);
   try {
-    if (fs3.existsSync(configPath)) {
-      const config = JSON.parse(fs3.readFileSync(configPath, "utf-8"));
+    if (fs2.existsSync(configPath)) {
+      const config = JSON.parse(fs2.readFileSync(configPath, "utf-8"));
       return config.language || "en";
     }
   } catch (error) {}
@@ -9468,332 +9358,6 @@ var init_i18n = __esm(() => {
   };
 });
 
-// src/commands/config.ts
-var exports_config = {};
-__export(exports_config, {
-  writeConfig: () => writeConfig,
-  setConfigValue: () => setConfigValue,
-  setConfig: () => setConfig,
-  readConfig: () => readConfig,
-  listConfig: () => listConfig,
-  getConfigValue: () => getConfigValue,
-  getConfig: () => getConfig,
-  ensureConfigDefaults: () => ensureConfigDefaults
-});
-import * as fs5 from "fs";
-function ensureConfigDefaults(config) {
-  const result = { ...config };
-  if (!result.logging) {
-    result.logging = { ...DEFAULT_LOGGING };
-  } else {
-    result.logging = {
-      level: result.logging.level ?? DEFAULT_LOGGING.level,
-      maxFiles: result.logging.maxFiles ?? DEFAULT_LOGGING.maxFiles,
-      recordInputs: result.logging.recordInputs ?? DEFAULT_LOGGING.recordInputs,
-      inputMaxLength: result.logging.inputMaxLength ?? DEFAULT_LOGGING.inputMaxLength
-    };
-  }
-  if (!result.ai) {
-    result.ai = { ...DEFAULT_AI };
-  } else {
-    result.ai = {
-      provider: result.ai.provider ?? DEFAULT_AI.provider,
-      ...result.ai.customEndpoint !== undefined ? { customEndpoint: result.ai.customEndpoint } : {},
-      ...result.ai.providerOptions !== undefined ? { providerOptions: result.ai.providerOptions } : {}
-    };
-  }
-  if (!result.training) {
-    result.training = { ...DEFAULT_TRAINING };
-  } else {
-    result.training = {
-      exportEnabled: result.training.exportEnabled ?? DEFAULT_TRAINING.exportEnabled,
-      outputDir: result.training.outputDir ?? DEFAULT_TRAINING.outputDir
-    };
-  }
-  if (!result.gitHook) {
-    result.gitHook = { ...DEFAULT_GIT_HOOK };
-  } else {
-    result.gitHook = {
-      enabled: result.gitHook.enabled ?? DEFAULT_GIT_HOOK.enabled
-    };
-  }
-  return result;
-}
-function readConfig(cwd = process.cwd()) {
-  if (!isInitialized(cwd)) {
-    return null;
-  }
-  const configPath = getConfigPath(cwd);
-  try {
-    const content = fs5.readFileSync(configPath, "utf-8");
-    return JSON.parse(content);
-  } catch {
-    return null;
-  }
-}
-function writeConfig(config, cwd = process.cwd()) {
-  const configPath = getConfigPath(cwd);
-  fs5.writeFileSync(configPath, JSON.stringify(config, null, 2), "utf-8");
-}
-function getConfigValue(config, key) {
-  const keys = key.split(".");
-  let value = config;
-  for (const k of keys) {
-    if (value && typeof value === "object" && k in value) {
-      value = value[k];
-    } else {
-      return;
-    }
-  }
-  return value;
-}
-function setConfigValue(config, key, value) {
-  const keys = key.split(".");
-  const result = { ...config };
-  let current = result;
-  for (let i = 0;i < keys.length - 1; i++) {
-    const k = keys[i];
-    if (!(k in current) || typeof current[k] !== "object") {
-      current[k] = {};
-    }
-    current = current[k];
-  }
-  try {
-    current[keys[keys.length - 1]] = JSON.parse(value);
-  } catch {
-    current[keys[keys.length - 1]] = value;
-  }
-  return result;
-}
-function validateConfigValue(key, value, schema) {
-  switch (schema.type) {
-    case "string":
-      if (schema.enum && !schema.enum.includes(value)) {
-        console.error(`Error: ${key} only allows: ${schema.enum.join(", ")}`);
-        process.exit(1);
-      }
-      break;
-    case "number": {
-      const num = Number(value);
-      if (isNaN(num)) {
-        console.error(`Error: ${key} requires a number, got '${value}'`);
-        process.exit(1);
-      }
-      if (schema.min !== undefined && num < schema.min) {
-        console.error(`Error: ${key} minimum value is ${schema.min}`);
-        process.exit(1);
-      }
-      if (schema.max !== undefined && num > schema.max) {
-        console.error(`Error: ${key} maximum value is ${schema.max}`);
-        process.exit(1);
-      }
-      break;
-    }
-    case "boolean":
-      if (value !== "true" && value !== "false") {
-        console.error(`Error: ${key} only allows: true, false`);
-        process.exit(1);
-      }
-      break;
-  }
-}
-function listConfig(cwd = process.cwd()) {
-  if (!isInitialized(cwd)) {
-    console.error("Error: Project not initialized. Please run `projmnt4claude setup` first");
-    process.exit(1);
-  }
-  const config = readConfig(cwd);
-  if (!config) {
-    console.error("Error: Cannot read configuration file");
-    process.exit(1);
-  }
-  console.log("## Basic");
-  console.log(`  projectName: ${config.projectName}`);
-  console.log(`  branchPrefix: ${config.branchPrefix}`);
-  console.log(`  defaultPriority: ${config.defaultPriority}`);
-  console.log("");
-  console.log("## Logging");
-  const logging = config.logging;
-  if (logging) {
-    console.log(`  logging.level: ${logging.level}`);
-    console.log(`  logging.maxFiles: ${logging.maxFiles}`);
-    console.log(`  logging.recordInputs: ${logging.recordInputs}`);
-    console.log(`  logging.inputMaxLength: ${logging.inputMaxLength}`);
-  } else {
-    console.log("  (using defaults)");
-  }
-  console.log("");
-  console.log("## AI");
-  const ai = config.ai;
-  if (ai) {
-    console.log(`  ai.provider: ${ai.provider}`);
-    if (ai.customEndpoint) {
-      console.log(`  ai.customEndpoint: ${ai.customEndpoint}`);
-    }
-  } else {
-    console.log("  (using defaults)");
-  }
-  console.log("");
-  console.log("## Training");
-  const training = config.training;
-  if (training) {
-    console.log(`  training.exportEnabled: ${training.exportEnabled}`);
-    console.log(`  training.outputDir: ${training.outputDir}`);
-  } else {
-    console.log("  (using defaults)");
-  }
-  console.log("");
-  console.log("## Quality");
-  const quality = config.quality;
-  if (quality?.minScore !== undefined) {
-    console.log(`  quality.minScore: ${quality.minScore}`);
-  } else {
-    console.log("  (using defaults)");
-  }
-  console.log("");
-  console.log("## Git Hook");
-  const gitHook = config.gitHook;
-  if (gitHook) {
-    console.log(`  gitHook.enabled: ${gitHook.enabled}`);
-  } else {
-    console.log("  (using defaults)");
-  }
-  console.log("");
-  console.log("## Prompt Templates");
-  const prompts2 = config.prompts;
-  if (prompts2?.language) {
-    console.log(`  language: ${prompts2.language}`);
-  } else {
-    console.log(`  language: ${config.language || "en"} (inherited from global)`);
-  }
-  console.log("");
-  const customTemplates = prompts2?.customTemplates;
-  console.log("  Custom Templates:");
-  for (const name of PROMPT_TEMPLATE_NAMES) {
-    const hasCustomNew = customTemplates && typeof customTemplates[name] === "string";
-    const hasCustomOld = prompts2 && typeof prompts2[name] === "string";
-    const hasCustom = hasCustomNew || hasCustomOld;
-    const label = hasCustom ? "custom" : "default";
-    const format = hasCustomNew ? "(customTemplates)" : hasCustomOld ? "(legacy)" : "";
-    console.log(`    ${name}: [${label}] ${format}`);
-  }
-  console.log("");
-}
-function getConfig(key, cwd = process.cwd()) {
-  if (!isInitialized(cwd)) {
-    console.error("Error: Project not initialized. Please run `projmnt4claude setup` first");
-    process.exit(1);
-  }
-  const config = readConfig(cwd);
-  if (!config) {
-    console.error("Error: Cannot read configuration file");
-    process.exit(1);
-  }
-  const value = getConfigValue(config, key);
-  if (value === undefined) {
-    console.error(`Error: Config key '${key}' does not exist`);
-    process.exit(1);
-  }
-  console.log(value);
-}
-function setConfig(key, value, cwd = process.cwd()) {
-  if (!isInitialized(cwd)) {
-    console.error("Error: Project not initialized. Please run `projmnt4claude setup` first");
-    process.exit(1);
-  }
-  const config = readConfig(cwd);
-  if (!config) {
-    console.error("Error: Cannot read configuration file");
-    process.exit(1);
-  }
-  if (key.startsWith("prompts.")) {
-    const subKey = key.substring("prompts.".length);
-    if (subKey === "language") {
-      if (!["zh", "en"].includes(value)) {
-        console.error(`Error: prompts.language only allows: zh, en`);
-        process.exit(1);
-      }
-    } else if (subKey.startsWith("customTemplates.")) {
-      const templateName = subKey.substring("customTemplates.".length);
-      if (!PROMPT_TEMPLATE_NAMES.includes(templateName)) {
-        console.error(`Error: Unknown prompt template name '${templateName}'. Options: ${PROMPT_TEMPLATE_NAMES.join(", ")}`);
-        process.exit(1);
-      }
-      const variables = value.match(/\{(\w+)\}/g);
-      if (variables) {
-        const defaultTemplate = DEFAULT_TEMPLATES[templateName];
-        if (defaultTemplate) {
-          const zhVars = new Set((defaultTemplate.zh.match(/\{(\w+)\}/g) || []).map((v) => v));
-          const enVars = new Set((defaultTemplate.en.match(/\{(\w+)\}/g) || []).map((v) => v));
-          const customVars = new Set(variables);
-          const missingZh = [...zhVars].filter((v) => !customVars.has(v));
-          if (missingZh.length > 0) {
-            console.warn(`Warning: Custom template missing variables from default: ${missingZh.join(", ")}`);
-            console.warn("Missing variables may cause unsubstituted placeholders in prompts.");
-          }
-        }
-      }
-    } else if (subKey.startsWith("customRequirements.")) {
-      const phaseName = subKey.substring("customRequirements.".length);
-      if (!VALID_PHASE_NAMES.includes(phaseName)) {
-        console.error(`Error: Unknown phase name '${phaseName}' for customRequirements. Options: ${VALID_PHASE_NAMES.join(", ")}`);
-        process.exit(1);
-      }
-    } else if (PROMPT_TEMPLATE_NAMES.includes(subKey)) {
-      const variables = value.match(/\{(\w+)\}/g);
-      if (variables) {
-        const defaultTemplate = DEFAULT_TEMPLATES[subKey];
-        if (defaultTemplate) {
-          const zhVars = new Set((defaultTemplate.zh.match(/\{(\w+)\}/g) || []).map((v) => v));
-          const customVars = new Set(variables);
-          const missingZh = [...zhVars].filter((v) => !customVars.has(v));
-          if (missingZh.length > 0) {
-            console.warn(`Warning: Custom template missing variables from default: ${missingZh.join(", ")}`);
-            console.warn("Missing variables may cause unsubstituted placeholders in prompts.");
-          }
-        }
-      }
-    } else {
-      console.error(`Error: Unknown config key '${key}'`);
-      console.error(`Available keys: ${Object.keys(CONFIG_SCHEMA).join(", ")}, prompts.language, prompts.customTemplates.*, prompts.customRequirements.{${VALID_PHASE_NAMES.join(",")}}, prompts.{${PROMPT_TEMPLATE_NAMES.join(", ")}}`);
-      process.exit(1);
-    }
-  } else if (key in CONFIG_SCHEMA) {
-    validateConfigValue(key, value, CONFIG_SCHEMA[key]);
-  } else {
-    console.error(`Error: Unknown config key '${key}'`);
-    console.error(`Available keys: ${Object.keys(CONFIG_SCHEMA).join(", ")}, prompts.language, prompts.customTemplates.*, prompts.customRequirements.{${VALID_PHASE_NAMES.join(",")}}, prompts.{${PROMPT_TEMPLATE_NAMES.join(", ")}}`);
-    process.exit(1);
-  }
-  const newConfig = setConfigValue(config, key, value);
-  writeConfig(newConfig, cwd);
-  console.log(`✓ Set ${key} = ${value}`);
-}
-var VALID_PHASE_NAMES, CONFIG_SCHEMA;
-var init_config2 = __esm(() => {
-  init_path();
-  init_prompt_templates();
-  init_config();
-  VALID_PHASE_NAMES = ["dev", "codeReview", "qa", "evaluation"];
-  CONFIG_SCHEMA = {
-    projectName: { type: "string" },
-    branchPrefix: { type: "string" },
-    defaultPriority: { type: "string", enum: ["low", "medium", "high", "urgent"] },
-    language: { type: "string", enum: ["zh", "en"] },
-    "logging.level": { type: "string", enum: ["debug", "info", "warn", "error"] },
-    "logging.maxFiles": { type: "number", min: 1 },
-    "logging.recordInputs": { type: "boolean" },
-    "logging.inputMaxLength": { type: "number", min: 0 },
-    "ai.provider": { type: "string" },
-    "ai.customEndpoint": { type: "string" },
-    "training.exportEnabled": { type: "boolean" },
-    "training.outputDir": { type: "string" },
-    "quality.minScore": { type: "number", min: 0, max: 100 },
-    "gitHook.enabled": { type: "boolean" },
-    "prompts.language": { type: "string", enum: ["zh", "en"] }
-  };
-});
-
 // src/utils/prompt-templates.ts
 function resolveTemplate(template, variables) {
   return template.replace(/\{(\w+)\}/g, (match, key) => {
@@ -9806,25 +9370,25 @@ function resolveTemplate(template, variables) {
 }
 function loadPromptTemplate(name, cwd, language) {
   const config = cwd ? readConfig(cwd) : null;
-  const prompts2 = config?.prompts;
-  if (prompts2?.customTemplates && typeof prompts2.customTemplates === "object") {
-    const customTemplates = prompts2.customTemplates;
+  const prompts = config?.prompts;
+  if (prompts?.customTemplates && typeof prompts.customTemplates === "object") {
+    const customTemplates = prompts.customTemplates;
     if (typeof customTemplates[name] === "string") {
-      const lang2 = language || prompts2.language || config?.language || "en";
+      const lang2 = language || prompts.language || config?.language || "en";
       return customTemplates[name];
     }
   }
-  if (prompts2 && typeof prompts2[name] === "string") {
-    return prompts2[name];
+  if (prompts && typeof prompts[name] === "string") {
+    return prompts[name];
   }
-  const lang = language || prompts2?.language || config?.language || "en";
+  const lang = language || prompts?.language || config?.language || "en";
   const template = DEFAULT_TEMPLATES[name];
   return template[lang] || template.en;
 }
 function loadCustomRequirements(phase, cwd, language) {
   const config = cwd ? readConfig(cwd) : null;
-  const prompts2 = config?.prompts;
-  const customRequirements = prompts2?.customRequirements;
+  const prompts = config?.prompts;
+  const customRequirements = prompts?.customRequirements;
   if (!customRequirements) {
     return "";
   }
@@ -9832,7 +9396,7 @@ function loadCustomRequirements(phase, cwd, language) {
   if (!requirement || requirement.trim() === "") {
     return "";
   }
-  const lang = language || prompts2?.language || config?.language || "en";
+  const lang = language || prompts?.language || config?.language || "en";
   const i18n = getI18n(lang);
   const title = i18n.harness.customRequirements;
   return `## ${title}
@@ -11086,6 +10650,543 @@ For example:
     bugReport: DEFAULT_BUG_REPORT_TEMPLATE,
     semanticDependency: DEFAULT_SEMANTIC_DEPENDENCY_TEMPLATE,
     decomposition: DEFAULT_DECOMPOSITION_TEMPLATE
+  };
+});
+
+// src/types/config.ts
+function getAIPreset(scenario, overrides) {
+  const preset = DEFAULT_AI.presets?.[scenario];
+  if (!preset) {
+    throw new Error(`未知的 AI 场景预设: ${String(scenario)}`);
+  }
+  return {
+    ...preset,
+    ...overrides
+  };
+}
+function buildAgentOptionsFromPreset(scenario, cwd, overrides) {
+  const preset = getAIPreset(scenario, overrides);
+  return {
+    timeout: preset.timeout,
+    allowedTools: preset.allowedTools,
+    outputFormat: preset.outputFormat,
+    maxRetries: preset.maxRetries,
+    cwd,
+    dangerouslySkipPermissions: true
+  };
+}
+var DEFAULT_LOGGING, DEFAULT_AI, DEFAULT_TRAINING, DEFAULT_GIT_HOOK;
+var init_config = __esm(() => {
+  DEFAULT_LOGGING = {
+    level: "info",
+    maxFiles: 30,
+    recordInputs: true,
+    inputMaxLength: 500
+  };
+  DEFAULT_AI = {
+    provider: "claude-code",
+    timeout: 60,
+    maxRetries: 1,
+    presets: {
+      metadataEnhancement: {
+        name: "metadataEnhancement",
+        timeout: 60,
+        maxRetries: 1,
+        allowedTools: [],
+        outputFormat: "text",
+        description: "元数据增强：分析需求并返回增强后的任务元数据"
+      },
+      decomposition: {
+        name: "decomposition",
+        timeout: 90,
+        maxRetries: 2,
+        allowedTools: ["Read", "Glob", "Grep"],
+        outputFormat: "text",
+        description: "需求分解：将复杂需求分解为多个子任务"
+      },
+      codeReview: {
+        name: "codeReview",
+        timeout: 120,
+        maxRetries: 1,
+        allowedTools: ["Read", "Bash", "Grep", "Glob"],
+        outputFormat: "text",
+        description: "代码审查：分析代码并提供审查意见"
+      },
+      qualityAnalysis: {
+        name: "qualityAnalysis",
+        timeout: 60,
+        maxRetries: 1,
+        allowedTools: [],
+        outputFormat: "text",
+        description: "质量分析：评估任务描述的清晰度和完整性"
+      },
+      duplicateDetection: {
+        name: "duplicateDetection",
+        timeout: 90,
+        maxRetries: 1,
+        allowedTools: [],
+        outputFormat: "text",
+        description: "重复检测：检测任务是否与其他任务重复"
+      },
+      stalenessAssessment: {
+        name: "stalenessAssessment",
+        timeout: 60,
+        maxRetries: 1,
+        allowedTools: [],
+        outputFormat: "text",
+        description: "过时评估：评估任务是否已过时"
+      },
+      bugAnalysis: {
+        name: "bugAnalysis",
+        timeout: 60,
+        maxRetries: 1,
+        allowedTools: [],
+        outputFormat: "text",
+        description: "Bug分析：从Bug报告中提取结构化信息"
+      },
+      checkpointEnhancement: {
+        name: "checkpointEnhancement",
+        timeout: 60,
+        maxRetries: 1,
+        allowedTools: [],
+        outputFormat: "text",
+        description: "检查点增强：优化检查点使其更具体可验证"
+      }
+    }
+  };
+  DEFAULT_TRAINING = {
+    exportEnabled: false,
+    outputDir: ".projmnt4claude/training-data/"
+  };
+  DEFAULT_GIT_HOOK = {
+    enabled: true
+  };
+});
+
+// src/commands/config.ts
+var exports_config = {};
+__export(exports_config, {
+  writeConfig: () => writeConfig,
+  setConfigValue: () => setConfigValue,
+  setConfig: () => setConfig,
+  readConfig: () => readConfig,
+  listConfig: () => listConfig,
+  getConfigValue: () => getConfigValue,
+  getConfig: () => getConfig,
+  ensureConfigDefaults: () => ensureConfigDefaults
+});
+import * as fs3 from "fs";
+function ensureConfigDefaults(config) {
+  const result = { ...config };
+  if (!result.logging) {
+    result.logging = { ...DEFAULT_LOGGING };
+  } else {
+    result.logging = {
+      level: result.logging.level ?? DEFAULT_LOGGING.level,
+      maxFiles: result.logging.maxFiles ?? DEFAULT_LOGGING.maxFiles,
+      recordInputs: result.logging.recordInputs ?? DEFAULT_LOGGING.recordInputs,
+      inputMaxLength: result.logging.inputMaxLength ?? DEFAULT_LOGGING.inputMaxLength
+    };
+  }
+  if (!result.ai) {
+    result.ai = { ...DEFAULT_AI };
+  } else {
+    result.ai = {
+      provider: result.ai.provider ?? DEFAULT_AI.provider,
+      ...result.ai.customEndpoint !== undefined ? { customEndpoint: result.ai.customEndpoint } : {},
+      ...result.ai.providerOptions !== undefined ? { providerOptions: result.ai.providerOptions } : {}
+    };
+  }
+  if (!result.training) {
+    result.training = { ...DEFAULT_TRAINING };
+  } else {
+    result.training = {
+      exportEnabled: result.training.exportEnabled ?? DEFAULT_TRAINING.exportEnabled,
+      outputDir: result.training.outputDir ?? DEFAULT_TRAINING.outputDir
+    };
+  }
+  if (!result.gitHook) {
+    result.gitHook = { ...DEFAULT_GIT_HOOK };
+  } else {
+    result.gitHook = {
+      enabled: result.gitHook.enabled ?? DEFAULT_GIT_HOOK.enabled
+    };
+  }
+  return result;
+}
+function readConfig(cwd = process.cwd()) {
+  if (!isInitialized(cwd)) {
+    return null;
+  }
+  const configPath = getConfigPath(cwd);
+  try {
+    const content = fs3.readFileSync(configPath, "utf-8");
+    return JSON.parse(content);
+  } catch {
+    return null;
+  }
+}
+function writeConfig(config, cwd = process.cwd()) {
+  const configPath = getConfigPath(cwd);
+  fs3.writeFileSync(configPath, JSON.stringify(config, null, 2), "utf-8");
+}
+function getConfigValue(config, key) {
+  const keys = key.split(".");
+  let value = config;
+  for (const k of keys) {
+    if (value && typeof value === "object" && k in value) {
+      value = value[k];
+    } else {
+      return;
+    }
+  }
+  return value;
+}
+function setConfigValue(config, key, value) {
+  const keys = key.split(".");
+  const result = { ...config };
+  let current = result;
+  for (let i = 0;i < keys.length - 1; i++) {
+    const k = keys[i];
+    if (!(k in current) || typeof current[k] !== "object") {
+      current[k] = {};
+    }
+    current = current[k];
+  }
+  try {
+    current[keys[keys.length - 1]] = JSON.parse(value);
+  } catch {
+    current[keys[keys.length - 1]] = value;
+  }
+  return result;
+}
+function validateConfigValue(key, value, schema) {
+  switch (schema.type) {
+    case "string":
+      if (schema.enum && !schema.enum.includes(value)) {
+        console.error(`Error: ${key} only allows: ${schema.enum.join(", ")}`);
+        process.exit(1);
+      }
+      break;
+    case "number": {
+      const num = Number(value);
+      if (isNaN(num)) {
+        console.error(`Error: ${key} requires a number, got '${value}'`);
+        process.exit(1);
+      }
+      if (schema.min !== undefined && num < schema.min) {
+        console.error(`Error: ${key} minimum value is ${schema.min}`);
+        process.exit(1);
+      }
+      if (schema.max !== undefined && num > schema.max) {
+        console.error(`Error: ${key} maximum value is ${schema.max}`);
+        process.exit(1);
+      }
+      break;
+    }
+    case "boolean":
+      if (value !== "true" && value !== "false") {
+        console.error(`Error: ${key} only allows: true, false`);
+        process.exit(1);
+      }
+      break;
+  }
+}
+function listConfig(cwd = process.cwd()) {
+  if (!isInitialized(cwd)) {
+    console.error("Error: Project not initialized. Please run `projmnt4claude setup` first");
+    process.exit(1);
+  }
+  const config = readConfig(cwd);
+  if (!config) {
+    console.error("Error: Cannot read configuration file");
+    process.exit(1);
+  }
+  console.log("## Basic");
+  console.log(`  projectName: ${config.projectName}`);
+  console.log(`  branchPrefix: ${config.branchPrefix}`);
+  console.log(`  defaultPriority: ${config.defaultPriority}`);
+  console.log("");
+  console.log("## Logging");
+  const logging = config.logging;
+  if (logging) {
+    console.log(`  logging.level: ${logging.level}`);
+    console.log(`  logging.maxFiles: ${logging.maxFiles}`);
+    console.log(`  logging.recordInputs: ${logging.recordInputs}`);
+    console.log(`  logging.inputMaxLength: ${logging.inputMaxLength}`);
+  } else {
+    console.log("  (using defaults)");
+  }
+  console.log("");
+  console.log("## AI");
+  const ai = config.ai;
+  if (ai) {
+    console.log(`  ai.provider: ${ai.provider}`);
+    if (ai.customEndpoint) {
+      console.log(`  ai.customEndpoint: ${ai.customEndpoint}`);
+    }
+  } else {
+    console.log("  (using defaults)");
+  }
+  console.log("");
+  console.log("## Training");
+  const training = config.training;
+  if (training) {
+    console.log(`  training.exportEnabled: ${training.exportEnabled}`);
+    console.log(`  training.outputDir: ${training.outputDir}`);
+  } else {
+    console.log("  (using defaults)");
+  }
+  console.log("");
+  console.log("## Quality");
+  const quality = config.quality;
+  if (quality?.minScore !== undefined) {
+    console.log(`  quality.minScore: ${quality.minScore}`);
+  } else {
+    console.log("  (using defaults)");
+  }
+  console.log("");
+  console.log("## Git Hook");
+  const gitHook = config.gitHook;
+  if (gitHook) {
+    console.log(`  gitHook.enabled: ${gitHook.enabled}`);
+  } else {
+    console.log("  (using defaults)");
+  }
+  console.log("");
+  console.log("## Prompt Templates");
+  const prompts = config.prompts;
+  if (prompts?.language) {
+    console.log(`  language: ${prompts.language}`);
+  } else {
+    console.log(`  language: ${config.language || "en"} (inherited from global)`);
+  }
+  console.log("");
+  const customTemplates = prompts?.customTemplates;
+  console.log("  Custom Templates:");
+  for (const name of PROMPT_TEMPLATE_NAMES) {
+    const hasCustomNew = customTemplates && typeof customTemplates[name] === "string";
+    const hasCustomOld = prompts && typeof prompts[name] === "string";
+    const hasCustom = hasCustomNew || hasCustomOld;
+    const label = hasCustom ? "custom" : "default";
+    const format = hasCustomNew ? "(customTemplates)" : hasCustomOld ? "(legacy)" : "";
+    console.log(`    ${name}: [${label}] ${format}`);
+  }
+  console.log("");
+}
+function getConfig(key, cwd = process.cwd()) {
+  if (!isInitialized(cwd)) {
+    console.error("Error: Project not initialized. Please run `projmnt4claude setup` first");
+    process.exit(1);
+  }
+  const config = readConfig(cwd);
+  if (!config) {
+    console.error("Error: Cannot read configuration file");
+    process.exit(1);
+  }
+  const value = getConfigValue(config, key);
+  if (value === undefined) {
+    console.error(`Error: Config key '${key}' does not exist`);
+    process.exit(1);
+  }
+  console.log(value);
+}
+function setConfig(key, value, cwd = process.cwd()) {
+  if (!isInitialized(cwd)) {
+    console.error("Error: Project not initialized. Please run `projmnt4claude setup` first");
+    process.exit(1);
+  }
+  const config = readConfig(cwd);
+  if (!config) {
+    console.error("Error: Cannot read configuration file");
+    process.exit(1);
+  }
+  if (key.startsWith("prompts.")) {
+    const subKey = key.substring("prompts.".length);
+    if (subKey === "language") {
+      if (!["zh", "en"].includes(value)) {
+        console.error(`Error: prompts.language only allows: zh, en`);
+        process.exit(1);
+      }
+    } else if (subKey.startsWith("customTemplates.")) {
+      const templateName = subKey.substring("customTemplates.".length);
+      if (!PROMPT_TEMPLATE_NAMES.includes(templateName)) {
+        console.error(`Error: Unknown prompt template name '${templateName}'. Options: ${PROMPT_TEMPLATE_NAMES.join(", ")}`);
+        process.exit(1);
+      }
+      const variables = value.match(/\{(\w+)\}/g);
+      if (variables) {
+        const defaultTemplate = DEFAULT_TEMPLATES[templateName];
+        if (defaultTemplate) {
+          const zhVars = new Set((defaultTemplate.zh.match(/\{(\w+)\}/g) || []).map((v) => v));
+          const enVars = new Set((defaultTemplate.en.match(/\{(\w+)\}/g) || []).map((v) => v));
+          const customVars = new Set(variables);
+          const missingZh = [...zhVars].filter((v) => !customVars.has(v));
+          if (missingZh.length > 0) {
+            console.warn(`Warning: Custom template missing variables from default: ${missingZh.join(", ")}`);
+            console.warn("Missing variables may cause unsubstituted placeholders in prompts.");
+          }
+        }
+      }
+    } else if (subKey.startsWith("customRequirements.")) {
+      const phaseName = subKey.substring("customRequirements.".length);
+      if (!VALID_PHASE_NAMES.includes(phaseName)) {
+        console.error(`Error: Unknown phase name '${phaseName}' for customRequirements. Options: ${VALID_PHASE_NAMES.join(", ")}`);
+        process.exit(1);
+      }
+    } else if (PROMPT_TEMPLATE_NAMES.includes(subKey)) {
+      const variables = value.match(/\{(\w+)\}/g);
+      if (variables) {
+        const defaultTemplate = DEFAULT_TEMPLATES[subKey];
+        if (defaultTemplate) {
+          const zhVars = new Set((defaultTemplate.zh.match(/\{(\w+)\}/g) || []).map((v) => v));
+          const customVars = new Set(variables);
+          const missingZh = [...zhVars].filter((v) => !customVars.has(v));
+          if (missingZh.length > 0) {
+            console.warn(`Warning: Custom template missing variables from default: ${missingZh.join(", ")}`);
+            console.warn("Missing variables may cause unsubstituted placeholders in prompts.");
+          }
+        }
+      }
+    } else {
+      console.error(`Error: Unknown config key '${key}'`);
+      console.error(`Available keys: ${Object.keys(CONFIG_SCHEMA).join(", ")}, prompts.language, prompts.customTemplates.*, prompts.customRequirements.{${VALID_PHASE_NAMES.join(",")}}, prompts.{${PROMPT_TEMPLATE_NAMES.join(", ")}}`);
+      process.exit(1);
+    }
+  } else if (key in CONFIG_SCHEMA) {
+    validateConfigValue(key, value, CONFIG_SCHEMA[key]);
+  } else {
+    console.error(`Error: Unknown config key '${key}'`);
+    console.error(`Available keys: ${Object.keys(CONFIG_SCHEMA).join(", ")}, prompts.language, prompts.customTemplates.*, prompts.customRequirements.{${VALID_PHASE_NAMES.join(",")}}, prompts.{${PROMPT_TEMPLATE_NAMES.join(", ")}}`);
+    process.exit(1);
+  }
+  const newConfig = setConfigValue(config, key, value);
+  writeConfig(newConfig, cwd);
+  console.log(`✓ Set ${key} = ${value}`);
+}
+var VALID_PHASE_NAMES, CONFIG_SCHEMA;
+var init_config2 = __esm(() => {
+  init_path();
+  init_prompt_templates();
+  init_config();
+  VALID_PHASE_NAMES = ["dev", "codeReview", "qa", "evaluation"];
+  CONFIG_SCHEMA = {
+    projectName: { type: "string" },
+    branchPrefix: { type: "string" },
+    defaultPriority: { type: "string", enum: ["low", "medium", "high", "urgent"] },
+    language: { type: "string", enum: ["zh", "en"] },
+    "logging.level": { type: "string", enum: ["debug", "info", "warn", "error"] },
+    "logging.maxFiles": { type: "number", min: 1 },
+    "logging.recordInputs": { type: "boolean" },
+    "logging.inputMaxLength": { type: "number", min: 0 },
+    "ai.provider": { type: "string" },
+    "ai.customEndpoint": { type: "string" },
+    "training.exportEnabled": { type: "boolean" },
+    "training.outputDir": { type: "string" },
+    "quality.minScore": { type: "number", min: 0, max: 100 },
+    "gitHook.enabled": { type: "boolean" },
+    "prompts.language": { type: "string", enum: ["zh", "en"] },
+    "harness.memoryLimit.defaultGB": { type: "number", min: 1 },
+    "harness.memoryLimit.overrides.coverage": { type: "number", min: 1 },
+    "harness.memoryLimit.overrides.claudeAgent": { type: "number", min: 1 },
+    "harness.memoryLimit.overrides.build": { type: "number", min: 1 },
+    "harness.memoryLimit.enabled": { type: "boolean" }
+  };
+});
+
+// src/utils/spawn-utils.ts
+import { spawn, execSync } from "child_process";
+import * as os from "os";
+function hasCgroupV2Support() {
+  if (_cgroupV2Available !== null)
+    return _cgroupV2Available;
+  if (os.platform() !== "linux") {
+    _cgroupV2Available = false;
+    return false;
+  }
+  try {
+    const fsType = execSync("stat -f /sys/fs/cgroup -c %T 2>/dev/null", { encoding: "utf-8", timeout: 5000 }).trim();
+    if (fsType !== "cgroup2fs") {
+      _cgroupV2Available = false;
+      return false;
+    }
+    execSync("systemd-run --user --scope true 2>/dev/null", { timeout: 5000 });
+    _cgroupV2Available = true;
+    return true;
+  } catch {
+    _cgroupV2Available = false;
+    return false;
+  }
+}
+function getMemoryLimitConfig(cwd) {
+  try {
+    const config = readConfig(cwd);
+    if (config?.harness?.memoryLimit) {
+      const user = config.harness.memoryLimit;
+      return {
+        defaultGB: user.defaultGB ?? DEFAULT_MEMORY_LIMIT_CONFIG.defaultGB,
+        overrides: {
+          coverage: user.overrides?.coverage ?? DEFAULT_MEMORY_LIMIT_CONFIG.overrides.coverage,
+          claudeAgent: user.overrides?.claudeAgent ?? DEFAULT_MEMORY_LIMIT_CONFIG.overrides.claudeAgent,
+          build: user.overrides?.build ?? DEFAULT_MEMORY_LIMIT_CONFIG.overrides.build
+        },
+        enabled: user.enabled ?? DEFAULT_MEMORY_LIMIT_CONFIG.enabled
+      };
+    }
+  } catch {}
+  return { ...DEFAULT_MEMORY_LIMIT_CONFIG, overrides: { ...DEFAULT_MEMORY_LIMIT_CONFIG.overrides } };
+}
+function spawnWithMemoryLimit(command, args, options, type = "default") {
+  const cfg = getMemoryLimitConfig(options.cwd);
+  if (cfg.enabled && hasCgroupV2Support()) {
+    const maxGB = type === "coverage" ? cfg.overrides.coverage : type === "claudeAgent" ? cfg.overrides.claudeAgent : type === "build" ? cfg.overrides.build : cfg.defaultGB;
+    const wrappedArgs = [
+      "--user",
+      "--scope",
+      "-p",
+      `MemoryMax=${maxGB}G`,
+      "--",
+      command,
+      ...args
+    ];
+    return spawn("systemd-run", wrappedArgs, options);
+  }
+  if (cfg.enabled && !hasCgroupV2Support()) {
+    console.warn(`[spawn-utils] cgroup v2 不可用 (平台: ${os.platform()})，` + `直接运行 "${command}" (无内存限制)`);
+  }
+  return spawn(command, args, options);
+}
+function execSyncWithMemoryLimit(command, options, type = "default") {
+  const cfg = getMemoryLimitConfig(options.cwd);
+  if (cfg.enabled && hasCgroupV2Support()) {
+    const maxGB = type === "coverage" ? cfg.overrides.coverage : type === "claudeAgent" ? cfg.overrides.claudeAgent : type === "build" ? cfg.overrides.build : cfg.defaultGB;
+    const wrappedCmd = [
+      "systemd-run",
+      "--user",
+      "--scope",
+      `-p`,
+      `MemoryMax=${maxGB}G`,
+      "--",
+      command
+    ].join(" ");
+    return execSync(wrappedCmd, options);
+  }
+  if (cfg.enabled && !hasCgroupV2Support()) {
+    console.warn(`[spawn-utils] cgroup v2 不可用 (平台: ${os.platform()})，` + `直接运行命令 (无内存限制)`);
+  }
+  return execSync(command, options);
+}
+var DEFAULT_MEMORY_LIMIT_CONFIG, _cgroupV2Available = null;
+var init_spawn_utils = __esm(() => {
+  init_config2();
+  DEFAULT_MEMORY_LIMIT_CONFIG = {
+    defaultGB: 4,
+    overrides: {
+      coverage: 8,
+      claudeAgent: 8,
+      build: 2
+    },
+    enabled: true
   };
 });
 
@@ -13137,7 +13238,6 @@ var init_logger = __esm(() => {
 // src/utils/harness-helpers.ts
 import * as fs9 from "fs";
 import * as path6 from "path";
-import { spawn } from "child_process";
 function classifyExitResult(code, stderr, stdout, cwd) {
   let texts;
   try {
@@ -13190,11 +13290,11 @@ async function runHeadlessClaude(options) {
       args.push("--fork-session");
     }
     try {
-      const child = spawn("claude", args, {
+      const child = spawnWithMemoryLimit("claude", args, {
         cwd: options.cwd,
         stdio: ["pipe", "pipe", "pipe"],
         timeout: options.timeout * 1000
-      });
+      }, "claudeAgent");
       if (child.stdin) {
         child.stdin.write(options.prompt);
         child.stdin.end();
@@ -13389,6 +13489,7 @@ var REVIEW_TIMEOUT_RATIO = 3;
 var init_harness_helpers = __esm(() => {
   init_path();
   init_i18n();
+  init_spawn_utils();
 });
 
 // src/utils/headless-agent.ts
@@ -24452,24 +24553,24 @@ import * as path35 from "path";
 // src/commands/setup.ts
 init_path();
 var import_prompts = __toESM(require_prompts3(), 1);
-import * as fs4 from "fs";
+import * as fs5 from "fs";
 import * as path3 from "path";
 
 // src/utils/pre.ts
-import * as fs2 from "fs";
+init_spawn_utils();
+import * as fs4 from "fs";
 import * as path2 from "path";
-import { execSync } from "child_process";
 function json(filePath) {
   const resolved = path2.resolve(filePath);
   return {
     exists() {
-      return fs2.existsSync(resolved);
+      return fs4.existsSync(resolved);
     },
     read() {
-      if (!fs2.existsSync(resolved)) {
+      if (!fs4.existsSync(resolved)) {
         throw new Error(`JSON file not found: ${resolved}`);
       }
-      const content = fs2.readFileSync(resolved, "utf-8");
+      const content = fs4.readFileSync(resolved, "utf-8");
       if (!content.trim()) {
         throw new Error(`JSON file is empty: ${resolved}`);
       }
@@ -24477,16 +24578,16 @@ function json(filePath) {
     },
     write(data) {
       const dir = path2.dirname(resolved);
-      if (!fs2.existsSync(dir)) {
-        fs2.mkdirSync(dir, { recursive: true });
+      if (!fs4.existsSync(dir)) {
+        fs4.mkdirSync(dir, { recursive: true });
       }
-      fs2.writeFileSync(resolved, JSON.stringify(data, null, 2) + `
+      fs4.writeFileSync(resolved, JSON.stringify(data, null, 2) + `
 `, "utf-8");
     },
     update(updater) {
-      const current = fs2.existsSync(resolved) ? JSON.parse(fs2.readFileSync(resolved, "utf-8") || "{}") : {};
+      const current = fs4.existsSync(resolved) ? JSON.parse(fs4.readFileSync(resolved, "utf-8") || "{}") : {};
       const updated = updater(current);
-      fs2.writeFileSync(resolved, JSON.stringify(updated, null, 2) + `
+      fs4.writeFileSync(resolved, JSON.stringify(updated, null, 2) + `
 `, "utf-8");
       return updated;
     }
@@ -24518,11 +24619,11 @@ class Pre {
     const hookPath = this.getHookPath("pre-commit");
     const command = DEFAULT_HOOKS["pre-commit"].command;
     this.ensureHooksDir();
-    fs2.writeFileSync(hookPath, `#!/bin/sh
+    fs4.writeFileSync(hookPath, `#!/bin/sh
 # pre-commit hook — auto-generated by projmnt4claude
 ${command}
 `, "utf-8");
-    fs2.chmodSync(hookPath, 493);
+    fs4.chmodSync(hookPath, 493);
     return hookPath;
   }
   installPrePublish() {
@@ -24540,10 +24641,10 @@ ${command}
   }
   removePreCommit() {
     const hookPath = this.getHookPath("pre-commit");
-    if (fs2.existsSync(hookPath)) {
-      const content = fs2.readFileSync(hookPath, "utf-8");
+    if (fs4.existsSync(hookPath)) {
+      const content = fs4.readFileSync(hookPath, "utf-8");
       if (content.includes("auto-generated by projmnt4claude")) {
-        fs2.unlinkSync(hookPath);
+        fs4.unlinkSync(hookPath);
         return true;
       }
     }
@@ -24568,9 +24669,9 @@ ${command}
   }
   isPreCommitInstalled() {
     const hookPath = this.getHookPath("pre-commit");
-    if (!fs2.existsSync(hookPath))
+    if (!fs4.existsSync(hookPath))
       return false;
-    const content = fs2.readFileSync(hookPath, "utf-8");
+    const content = fs4.readFileSync(hookPath, "utf-8");
     return content.includes("bun test");
   }
   isPrePublishInstalled() {
@@ -24584,11 +24685,11 @@ ${command}
   runTests() {
     const start = Date.now();
     try {
-      const output = execSync("bun test 2>&1", {
+      const output = execSyncWithMemoryLimit("bun test 2>&1", {
         cwd: this.projectRoot,
         encoding: "utf-8",
         timeout: 120000
-      });
+      }, "default");
       return { passed: true, output, duration: Date.now() - start };
     } catch (err) {
       const error = err;
@@ -24602,11 +24703,11 @@ ${command}
   runCoverageCheck(threshold = 0.8) {
     const start = Date.now();
     try {
-      const output = execSync(`bun test --coverage 2>&1`, {
+      const output = execSyncWithMemoryLimit(`bun test --coverage 2>&1`, {
         cwd: this.projectRoot,
         encoding: "utf-8",
         timeout: 120000
-      });
+      }, "coverage");
       const coverageMatch = output.match(/(\d+(?:\.\d+)?)\s*%/);
       const coveragePercent = coverageMatch ? parseFloat(coverageMatch[1]) : 0;
       const passed = coveragePercent / 100 >= threshold;
@@ -24630,8 +24731,8 @@ Coverage: ${coveragePercent}% (threshold: ${threshold * 100}%)`,
   }
   ensureHooksDir() {
     const hooksDir = path2.join(this.gitDir, "hooks");
-    if (!fs2.existsSync(hooksDir)) {
-      fs2.mkdirSync(hooksDir, { recursive: true });
+    if (!fs4.existsSync(hooksDir)) {
+      fs4.mkdirSync(hooksDir, { recursive: true });
     }
   }
 }
@@ -24699,13 +24800,13 @@ async function setup(cwd = process.cwd(), options = {}) {
     language
   };
   const configPath = getConfigPath(cwd);
-  fs4.writeFileSync(configPath, JSON.stringify(config, null, 2), "utf-8");
+  fs5.writeFileSync(configPath, JSON.stringify(config, null, 2), "utf-8");
   console.log(`✓ ${texts.setup.createConfig}`);
   copySkillFiles(cwd, language, texts);
   const gitHookConfig = config.gitHook ?? DEFAULT_GIT_HOOK;
   if (gitHookConfig.enabled) {
     const pre = new Pre(cwd);
-    if (fs4.existsSync(pre.gitDir)) {
+    if (fs5.existsSync(pre.gitDir)) {
       try {
         pre.installAll();
         console.log(texts.setupCmd.gitHookCreated);
@@ -24736,13 +24837,13 @@ function copySkillFiles(cwd, language, texts) {
   ensureDir(path3.join(targetDir, "skills"));
   const skillSource = path3.join(pluginRoot, "locales", language, "SKILL.md");
   const skillTarget = path3.join(targetDir, "SKILL.md");
-  if (fs4.existsSync(skillSource)) {
-    fs4.copyFileSync(skillSource, skillTarget);
+  if (fs5.existsSync(skillSource)) {
+    fs5.copyFileSync(skillSource, skillTarget);
     console.log(texts.setupCmd.copySkillFile.replace("{language}", language));
   } else {
     const defaultSource = path3.join(pluginRoot, "skills", "projmnt4claude", "SKILL.md");
-    if (fs4.existsSync(defaultSource)) {
-      fs4.copyFileSync(defaultSource, skillTarget);
+    if (fs5.existsSync(defaultSource)) {
+      fs5.copyFileSync(defaultSource, skillTarget);
       console.log(texts.setupCmd.copyDefault);
     } else {
       console.log(texts.setupCmd.fileNotFound);
@@ -24751,10 +24852,10 @@ function copySkillFiles(cwd, language, texts) {
   const commandsSourceDir = path3.join(pluginRoot, "locales", language, "commands");
   const commandsTargetDir = path3.join(targetDir, "commands");
   ensureDir(commandsTargetDir);
-  if (fs4.existsSync(commandsSourceDir)) {
-    const commandFiles = fs4.readdirSync(commandsSourceDir).filter((f) => f.endsWith(".md"));
+  if (fs5.existsSync(commandsSourceDir)) {
+    const commandFiles = fs5.readdirSync(commandsSourceDir).filter((f) => f.endsWith(".md"));
     for (const file of commandFiles) {
-      fs4.copyFileSync(path3.join(commandsSourceDir, file), path3.join(commandsTargetDir, file));
+      fs5.copyFileSync(path3.join(commandsSourceDir, file), path3.join(commandsTargetDir, file));
     }
     console.log(texts.setupCmd.copyCommandDocs.replace("{count}", String(commandFiles.length)).replace("{language}", language));
   } else {
@@ -24830,7 +24931,12 @@ var CONFIG_SCHEMA2 = {
   "training.outputDir": { type: "string" },
   "quality.minScore": { type: "number", min: 0, max: 100 },
   "gitHook.enabled": { type: "boolean" },
-  "prompts.language": { type: "string", enum: ["zh", "en"] }
+  "prompts.language": { type: "string", enum: ["zh", "en"] },
+  "harness.memoryLimit.defaultGB": { type: "number", min: 1 },
+  "harness.memoryLimit.overrides.coverage": { type: "number", min: 1 },
+  "harness.memoryLimit.overrides.claudeAgent": { type: "number", min: 1 },
+  "harness.memoryLimit.overrides.build": { type: "number", min: 1 },
+  "harness.memoryLimit.enabled": { type: "boolean" }
 };
 function validateConfigValue2(key, value, schema) {
   switch (schema.type) {
@@ -35566,7 +35672,7 @@ init_logger();
 init_config2();
 import * as fs26 from "fs";
 import * as path22 from "path";
-import * as os from "os";
+import * as os2 from "os";
 
 // src/utils/log-analyzer.ts
 init_path();
@@ -36157,7 +36263,7 @@ function getBuiltInAnalyzers() {
 // src/commands/doctor.ts
 init_config();
 init_i18n();
-var __dirname = "/home/fuzhibo/workerplace/git/projmnt4claude/src/commands";
+var __dirname = "/mydata/workplace/git/projmnt4claude/src/commands";
 async function runDoctor(fix = false, cwd = process.cwd()) {
   const texts = t(cwd).doctorCmd;
   console.log("");
@@ -36366,7 +36472,7 @@ function checkDirectoryStructure(cwd) {
 }
 function checkPluginInstallationScope(cwd) {
   const results = [];
-  const homeDir = os.homedir();
+  const homeDir = os2.homedir();
   const installedPluginsPath = path22.join(homeDir, ".claude", "plugins", "installed_plugins.json");
   if (!fs26.existsSync(installedPluginsPath)) {
     return results;
@@ -37133,7 +37239,7 @@ import * as path33 from "path";
 // src/utils/hd-assembly-line.ts
 import * as path32 from "path";
 import * as fs36 from "fs";
-import { execSync as execSync5 } from "child_process";
+import { execSync as execSync4 } from "child_process";
 
 // src/utils/harness-prevalidation.ts
 init_task();
@@ -38446,7 +38552,6 @@ init_harness_helpers();
 init_headless_agent();
 import * as path25 from "path";
 import * as fs29 from "fs";
-import { spawn as spawn3 } from "child_process";
 init_checkpoint();
 init_contradiction_detector();
 init_prompt_templates();
@@ -38500,9 +38605,9 @@ function createDefaultQAAcceptanceResult(taskId) {
 }
 
 // src/utils/qa-acceptance-criteria-verifier.ts
+init_spawn_utils();
 import * as fs28 from "fs";
 import * as path24 from "path";
-import { execSync as execSync4 } from "child_process";
 
 // src/utils/qa-acceptance-criteria-parser.ts
 class AcceptanceCriteriaParser {
@@ -38653,7 +38758,7 @@ class AcceptanceCriteriaParser {
 }
 
 // src/utils/safe-command-executor.ts
-import { spawn as spawn2 } from "child_process";
+init_spawn_utils();
 var FORBIDDEN_PREFIXES = [
   "sudo",
   "su",
@@ -38827,12 +38932,12 @@ class SafeCommandExecutor {
       let stdout = "";
       let stderr = "";
       let timedOut = false;
-      const proc = spawn2(cmd, args, {
+      const proc = spawnWithMemoryLimit(cmd, args, {
         cwd: options.cwd,
         env: { ...process.env, ...options.env },
         timeout,
         shell: false
-      });
+      }, "default");
       proc.stdout.on("data", (data) => {
         stdout += data.toString();
       });
@@ -38933,6 +39038,14 @@ class QAAcceptanceCriteriaVerifier {
         });
         continue;
       }
+      if (checkpoint.requiresHuman === true) {
+        verificationResults.push({
+          checkpoint,
+          success: true,
+          details: `检查点 ${checkpoint.id}: 人工验证检查点，跳过自动化验证`
+        });
+        continue;
+      }
       const commands = checkpoint.verification?.commands;
       if (!commands || commands.length === 0) {
         verificationResults.push({
@@ -39006,11 +39119,11 @@ class QAAcceptanceCriteriaVerifier {
         return result;
       }
       const buildCommand = this.getBuildCommand();
-      execSync4(buildCommand, {
+      execSyncWithMemoryLimit(buildCommand, {
         cwd: this.cwd,
         timeout: 60000,
         stdio: "pipe"
-      });
+      }, "build");
       result.passed = true;
       result.reason = "构建成功，无编译错误";
     } catch (error) {
@@ -39061,11 +39174,11 @@ class QAAcceptanceCriteriaVerifier {
     }
     try {
       const testCommand = this.getTestCommand(testFiles);
-      execSync4(testCommand, {
+      execSyncWithMemoryLimit(testCommand, {
         cwd: this.cwd,
         timeout: 120000,
         stdio: "pipe"
-      });
+      }, "default");
       result.passed = true;
       result.reason = `相关测试通过: ${testFiles.length} 个测试文件`;
     } catch (error) {
@@ -39189,6 +39302,7 @@ function createQAAcceptanceCriteriaVerifier(cwd) {
 }
 
 // src/utils/harness-qa-tester.ts
+init_spawn_utils();
 class HarnessQATester {
   config;
   constructor(config) {
@@ -39389,11 +39503,11 @@ ${texts.harness.logs.existingFiles || "Existing Files"}:`);
       const args = parts.slice(1);
       let output = "";
       let failures = [];
-      const proc = spawn3(command, args, {
+      const proc = spawnWithMemoryLimit(command, args, {
         cwd: this.config.cwd,
         shell: true,
         timeout: 300000
-      });
+      }, "default");
       proc.stdout?.on("data", (data) => {
         output += data.toString();
       });
@@ -43816,7 +43930,7 @@ ${"━".repeat(SEPARATOR_WIDTH)}`);
       return "";
     }
     try {
-      const statusOutput = execSync5("git status --porcelain", {
+      const statusOutput = execSync4("git status --porcelain", {
         cwd: this.config.cwd,
         encoding: "utf-8",
         timeout: 1e4
@@ -43828,13 +43942,13 @@ ${"━".repeat(SEPARATOR_WIDTH)}`);
       }
       const changedFiles = statusOutput.trim().split(`
 `).length;
-      execSync5("git add -A", {
+      execSync4("git add -A", {
         cwd: this.config.cwd,
         encoding: "utf-8",
         timeout: 30000
       });
       const commitMessage = `feat: ${taskId} - ${taskTitle}`;
-      const commitOutput = execSync5(`git commit -m ${JSON.stringify(commitMessage)}`, {
+      const commitOutput = execSync4(`git commit -m ${JSON.stringify(commitMessage)}`, {
         cwd: this.config.cwd,
         encoding: "utf-8",
         timeout: 30000
@@ -43845,7 +43959,7 @@ ${"━".repeat(SEPARATOR_WIDTH)}`);
         commitSha = shaMatch[1];
       } else {
         try {
-          commitSha = execSync5("git rev-parse HEAD", {
+          commitSha = execSync4("git rev-parse HEAD", {
             cwd: this.config.cwd,
             encoding: "utf-8",
             timeout: 5000
@@ -43898,29 +44012,29 @@ ${"━".repeat(SEPARATOR_WIDTH)}`);
     try {
       if (this.config.taskGitCommit) {
         try {
-          const lastCommitMsg = execSync5("git log -1 --pretty=%s", {
+          const lastCommitMsg = execSync4("git log -1 --pretty=%s", {
             cwd: this.config.cwd,
             encoding: "utf-8",
             timeout: 5000
           }).trim();
           if (lastCommitMsg.includes(taskId)) {
-            const currentBranch = execSync5("git rev-parse --abbrev-ref HEAD", {
+            const currentBranch = execSync4("git rev-parse --abbrev-ref HEAD", {
               cwd: this.config.cwd,
               encoding: "utf-8",
               timeout: 5000
             }).trim();
-            const unpushedCheck = execSync5(`git log origin/${currentBranch}..HEAD --oneline 2>/dev/null || echo ""`, {
+            const unpushedCheck = execSync4(`git log origin/${currentBranch}..HEAD --oneline 2>/dev/null || echo ""`, {
               cwd: this.config.cwd,
               encoding: "utf-8",
               timeout: 5000
             }).trim();
             if (unpushedCheck.includes(taskId) || unpushedCheck.length > 0) {
-              const commitSha = execSync5("git rev-parse HEAD", {
+              const commitSha = execSync4("git rev-parse HEAD", {
                 cwd: this.config.cwd,
                 encoding: "utf-8",
                 timeout: 5000
               }).trim();
-              execSync5("git reset --soft HEAD~1", {
+              execSync4("git reset --soft HEAD~1", {
                 cwd: this.config.cwd,
                 encoding: "utf-8",
                 timeout: 1e4
@@ -44131,7 +44245,7 @@ ${"━".repeat(SEPARATOR_WIDTH)}`);
       return;
     }
     try {
-      const statusOutput = execSync5("git status --porcelain", {
+      const statusOutput = execSync4("git status --porcelain", {
         cwd: this.config.cwd,
         encoding: "utf-8",
         timeout: 1e4
@@ -44144,7 +44258,7 @@ ${"━".repeat(SEPARATOR_WIDTH)}`);
             const batchNumber = batchIndex + 1;
             const timestamp = Math.floor(Date.now() / 1000);
             const tagName2 = `batch-${batchNumber}-${timestamp}`;
-            execSync5(`git tag ${tagName2}`, {
+            execSync4(`git tag ${tagName2}`, {
               cwd: this.config.cwd,
               encoding: "utf-8",
               timeout: 1e4
@@ -44158,13 +44272,13 @@ ${"━".repeat(SEPARATOR_WIDTH)}`);
       }
       const changedFiles = statusOutput.trim().split(`
 `).length;
-      execSync5("git add -A", {
+      execSync4("git add -A", {
         cwd: this.config.cwd,
         encoding: "utf-8",
         timeout: 30000
       });
       const commitMessage = `harness: ${label} 完成 (${passed} 通过, ${failed} 失败, ${changedFiles} 文件变更)`;
-      const commitOutput = execSync5(`git commit -m ${JSON.stringify(commitMessage)}`, {
+      const commitOutput = execSync4(`git commit -m ${JSON.stringify(commitMessage)}`, {
         cwd: this.config.cwd,
         encoding: "utf-8",
         timeout: 30000
@@ -44175,7 +44289,7 @@ ${"━".repeat(SEPARATOR_WIDTH)}`);
         commitSha = shaMatch[1];
       } else {
         try {
-          commitSha = execSync5("git rev-parse HEAD", {
+          commitSha = execSync4("git rev-parse HEAD", {
             cwd: this.config.cwd,
             encoding: "utf-8",
             timeout: 5000
@@ -44190,7 +44304,7 @@ ${"━".repeat(SEPARATOR_WIDTH)}`);
           const batchNumber = batchIndex + 1;
           const timestamp = Math.floor(Date.now() / 1000);
           tagName = `batch-${batchNumber}-${timestamp}`;
-          execSync5(`git tag ${tagName}`, {
+          execSync4(`git tag ${tagName}`, {
             cwd: this.config.cwd,
             encoding: "utf-8",
             timeout: 1e4

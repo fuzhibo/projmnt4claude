@@ -8,6 +8,7 @@
 import * as fs from 'fs';
 import * as path from 'path';
 import { execSync } from 'child_process';
+import { execSyncWithMemoryLimit } from './spawn-utils.js';
 
 // ============== JSON 工具函数 ==============
 
@@ -357,11 +358,11 @@ export class Pre {
   runTests(): PreCheckResult {
     const start = Date.now();
     try {
-      const output = execSync('bun test 2>&1', {
+      const output = execSyncWithMemoryLimit('bun test 2>&1', {
         cwd: this.projectRoot,
         encoding: 'utf-8',
         timeout: 120_000,
-      });
+      }, 'default');
       return { passed: true, output, duration: Date.now() - start };
     } catch (err: unknown) {
       const error = err as { stdout?: string; message?: string };
@@ -377,11 +378,11 @@ export class Pre {
   runCoverageCheck(threshold: number = 0.8): PreCheckResult {
     const start = Date.now();
     try {
-      const output = execSync(`bun test --coverage 2>&1`, {
+      const output = execSyncWithMemoryLimit(`bun test --coverage 2>&1`, {
         cwd: this.projectRoot,
         encoding: 'utf-8',
         timeout: 120_000,
-      });
+      }, 'coverage');
 
       // 从输出中提取覆盖率百分比
       const coverageMatch = output.match(/(\d+(?:\.\d+)?)\s*%/);

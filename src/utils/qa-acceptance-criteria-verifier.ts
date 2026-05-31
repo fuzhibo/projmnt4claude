@@ -9,7 +9,7 @@
 
 import * as fs from 'fs';
 import * as path from 'path';
-import { execSync } from 'child_process';
+import { execSyncWithMemoryLimit } from './spawn-utils.js';
 import type {
   AcceptanceLevel,
   AcceptanceVerificationResult,
@@ -131,6 +131,16 @@ export class QAAcceptanceCriteriaVerifier {
         continue;
       }
 
+      // Check if requiresHuman - skip automated verification for human checkpoints
+      if (checkpoint.requiresHuman === true) {
+        verificationResults.push({
+          checkpoint,
+          success: true, // 不阻断，允许流水线继续
+          details: `检查点 ${checkpoint.id}: 人工验证检查点，跳过自动化验证`,
+        });
+        continue;
+      }
+
       // Check if we have commands to execute
       const commands = checkpoint.verification?.commands;
       if (!commands || commands.length === 0) {
@@ -242,11 +252,11 @@ export class QAAcceptanceCriteriaVerifier {
 
       // Run build command
       const buildCommand = this.getBuildCommand();
-      execSync(buildCommand, {
+      execSyncWithMemoryLimit(buildCommand, {
         cwd: this.cwd,
         timeout: 60000,
         stdio: 'pipe',
-      });
+      }, 'build');
 
       result.passed = true;
       result.reason = '构建成功，无编译错误';
@@ -333,11 +343,11 @@ export class QAAcceptanceCriteriaVerifier {
     // Run tests
     try {
       const testCommand = this.getTestCommand(testFiles);
-      execSync(testCommand, {
+      execSyncWithMemoryLimit(testCommand, {
         cwd: this.cwd,
         timeout: 120000,
         stdio: 'pipe',
-      });
+      }, 'default');
 
       result.passed = true;
       result.reason = `相关测试通过: ${testFiles.length} 个测试文件`;

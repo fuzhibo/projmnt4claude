@@ -38,6 +38,7 @@ import { loadPromptTemplate, resolveTemplate, loadCustomRequirements } from './p
 import { t, getI18n } from '../i18n/index.js';
 import { verifyQAAcceptanceCriteria, QAAcceptanceResult, ACCEPTANCE_LEVEL_DESCRIPTIONS, type AcceptanceLevel } from '../types/qa-acceptance-criteria.js';
 import { QAAcceptanceCriteriaVerifier, createQAAcceptanceCriteriaVerifier } from './qa-acceptance-criteria-verifier.js';
+import { spawnWithMemoryLimit } from './spawn-utils.js';
 
 /**
  * 验证检查点的验证信息完整性
@@ -336,11 +337,11 @@ export class HarnessQATester {
       let output = '';
       let failures: string[] = [];
 
-      const proc = spawn(command, args, {
+      const proc = spawnWithMemoryLimit(command, args, {
         cwd: this.config.cwd,
         shell: true,
         timeout: 300000, // 5 minutes timeout
-      });
+      }, 'default');
 
       proc.stdout?.on('data', (data) => {
         output += data.toString();

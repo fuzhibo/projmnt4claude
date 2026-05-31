@@ -167,6 +167,11 @@ const CONFIG_SCHEMA: Record<string, ConfigKeySchema> = {
   'quality.minScore': { type: 'number', min: 0, max: 100 },
   'gitHook.enabled': { type: 'boolean' },
   'prompts.language': { type: 'string', enum: ['zh', 'en'] },
+  'harness.memoryLimit.defaultGB': { type: 'number', min: 1 },
+  'harness.memoryLimit.overrides.coverage': { type: 'number', min: 1 },
+  'harness.memoryLimit.overrides.claudeAgent': { type: 'number', min: 1 },
+  'harness.memoryLimit.overrides.build': { type: 'number', min: 1 },
+  'harness.memoryLimit.enabled': { type: 'boolean' },
 };
 
 /**

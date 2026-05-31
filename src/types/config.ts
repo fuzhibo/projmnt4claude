@@ -174,12 +174,38 @@ export interface HarnessToolsConfig {
   evaluation?: string[];
 }
 
+/**
+ * 子进程内存限制配置
+ *
+ * 通过 cgroup v2 MemoryMax 为 bun/claude 子进程施加硬内存限制，
+ * 防止 JSC heap 贪心分配在 harness 长运行中触发系统 OOM。
+ *
+ * @see docs/investigation-oom/OOM-INVESTIGATION-REPORT.md
+ */
+export interface HarnessMemoryLimitConfig {
+  /** 默认子进程内存上限 (GB)，默认 4 */
+  defaultGB?: number;
+  /** 特定场景覆盖 */
+  overrides?: {
+    /** bun test --coverage 上限 (GB)，默认 8 */
+    coverage?: number;
+    /** Claude CLI 子 agent 上限 (GB)，默认 8 */
+    claudeAgent?: number;
+    /** bun run build 上限 (GB)，默认 2 */
+    build?: number;
+  };
+  /** 是否启用 cgroup 限制。非 Linux 环境自动禁用。默认 true */
+  enabled?: boolean;
+}
+
 /** Harness 配置 */
 export interface HarnessConfig {
   /** 各阶段允许的工具列表（覆盖代码默认值） */
   perPhaseTools?: HarnessToolsConfig;
   /** 测试相关配置 */
   test?: HarnessTestConfig;
+  /** 子进程内存限制配置。默认 defaultGB=4, enabled=true */
+  memoryLimit?: HarnessMemoryLimitConfig;
 }
 
 /** 项目配置 */

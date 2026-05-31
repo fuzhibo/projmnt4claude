@@ -10,6 +10,7 @@ import { spawn } from 'child_process';
 import type { TaskMeta, CheckpointMetadata } from '../types/task.js';
 import { getProjectDir } from './path.js';
 import { t } from '../i18n/index.js';
+import { spawnWithMemoryLimit } from './spawn-utils.js';
 
 // ============================================================
 // 常量定义
@@ -151,11 +152,11 @@ export async function runHeadlessClaude(options: HeadlessClaudeOptions): Promise
     }
 
     try {
-      const child = spawn('claude', args, {
+      const child = spawnWithMemoryLimit('claude', args, {
         cwd: options.cwd,
         stdio: ['pipe', 'pipe', 'pipe'],  // stdin 改为 pipe 以支持写入
         timeout: options.timeout * 1000,
-      });
+      }, 'claudeAgent');
 
       // 通过 stdin 传递 prompt
       if (child.stdin) {
