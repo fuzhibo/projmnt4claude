@@ -23,7 +23,10 @@ import {
 } from '../utils/harness-helpers.js';
 import type { TaskMeta, CheckpointMetadata } from '../types/task.js';
 
-// Mock child_process - hoisted before imports that use it
+// Mock child_process - hoisted before imports that use it.
+// Note: mock.module() cannot be restored via mock.restore() (Bun design).
+// This mock persists for the file's lifetime; process isolation
+// (batched-test-runner) prevents cross-file pollution.
 mock.module('child_process', () => ({
   spawn: mock(() => {
     throw new Error('spawn not configured');
@@ -1239,11 +1242,12 @@ describe('rebuildPrerequisiteData', () => {
 });
 
 // ============================================================
-// Cleanup: Restore child_process mock to prevent pollution
+// Cleanup: Restore function-level mocks after all tests
+// Note: Re-mocking child_process in afterAll does NOT truly restore
+// the original module (Bun design). Changed to mock.restore() which
+// at least cleans up function-level mock state. Process isolation
+// (batched-test-runner) prevents cross-file pollution.
 // ============================================================
-
 afterAll(() => {
-  mock.module('child_process', () => ({
-    spawn: require('child_process').spawn,
-  }));
+  mock.restore();
 });

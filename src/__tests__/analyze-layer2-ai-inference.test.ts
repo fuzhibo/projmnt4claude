@@ -11,7 +11,7 @@
  * - CP-28: AI 已调用
  */
 
-import { describe, test, expect, beforeEach, afterEach, mock } from 'bun:test';
+import { describe, test, expect, beforeEach, afterEach, afterAll, mock } from 'bun:test';
 import * as fs from 'fs';
 import * as path from 'path';
 
@@ -32,6 +32,11 @@ const mockInvokeAgent = mock((_prompt: string, _options: unknown) =>
     model: 'claude-sonnet',
   })
 );
+
+// Note: mock.module() is hoisted before imports — cannot migrate to spyOn.
+// mock.restore() does NOT restore module-level mocks (Bun design).
+// This mock persists for the file's lifetime; process isolation
+// (batched-test-runner) prevents cross-file pollution.
 
 mock.module('../utils/headless-agent', () => ({
   invokeAgent: mockInvokeAgent,
@@ -853,4 +858,14 @@ describe('detectStatusInferenceIssues', () => {
     const aiIssue = issues.find(i => i.type === 'ai_status_inference');
     expect(aiIssue).toBeUndefined();
   });
+});
+
+// ============================================================
+// Cleanup: Restore function-level mocks after all tests
+// Note: mock.module() mocks persist for the file's lifetime and
+// cannot be restored via mock.restore() (Bun design limitation).
+// Process isolation (batched-test-runner) prevents cross-file pollution.
+// ============================================================
+afterAll(() => {
+  mock.restore();
 });

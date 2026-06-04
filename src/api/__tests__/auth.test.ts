@@ -2,8 +2,11 @@
  * Auth API 超时处理测试
  */
 
-import { describe, test, expect, beforeEach, afterEach, mock } from 'bun:test';
+import { describe, test, expect, beforeEach, afterEach, afterAll, mock } from 'bun:test';
 import { login, createAuthClient, LoginRequest, ApiConfig } from '../auth';
+
+// 保存原始 fetch 以便恢复
+const originalFetch = global.fetch;
 
 // 模拟 fetch
 global.fetch = mock(() =>
@@ -17,8 +20,11 @@ global.fetch = mock(() =>
 describe('Auth API - Timeout Handling', () => {
   beforeEach(() => {
     // 重置 fetch mock
-    (fetch as any).mockClear?.() || ((fetch as any).mock.calls = []);
+    (global.fetch as any).mockClear?.();
   });
+
+  // Note: afterEach 不恢复 global.fetch，因为测试需要使用 mock fetch
+  // afterAll 在所有测试结束后恢复原始 fetch
 
   describe('CP-1: 核心功能实现', () => {
     test('login 函数应该存在并可调用', async () => {
@@ -178,4 +184,13 @@ describe('Auth API - Timeout Handling', () => {
       expect(calls.length).toBeGreaterThan(0);
     });
   });
+});
+
+// ============================================================
+// Cleanup: Restore global.fetch after all tests
+// Note: mock.restore() does not restore global.* assignments,
+// so we manually restore the original fetch.
+// ============================================================
+afterAll(() => {
+  global.fetch = originalFetch;
 });

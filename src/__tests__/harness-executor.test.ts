@@ -1,4 +1,4 @@
-import { describe, test, expect, mock, spyOn, beforeEach, afterEach } from 'bun:test';
+import { describe, test, expect, mock, spyOn, beforeEach, afterEach, afterAll } from 'bun:test';
 import * as fs from 'fs';
 import * as path from 'path';
 import { HarnessExecutor } from '../utils/harness-executor.js';
@@ -14,11 +14,19 @@ import type { TaskMeta } from '../types/task.js';
 
 const mockAgentInvoke = mock<(prompt: string, options: any) => Promise<any>>();
 
+// Note: mock.module() is hoisted before imports — cannot migrate to spyOn.
+// mock.restore() does NOT restore module-level mocks (Bun design).
+// These mocks persist for the file's lifetime; cleanup is limited to
+// restoring function-level mocks (mockAgentInvoke) in afterAll.
+
 mock.module('../utils/headless-agent.js', () => ({
   getAgent: () => ({ invoke: mockAgentInvoke }),
   buildEffectiveTools: () => ({ tools: ['Read', 'Edit', 'Write'], skipPermissions: true }),
 }));
 
+// Note: role-prompts is mocked via mock.module() because it's imported
+// transitively by headless-agent. spyOn requires the module to be imported
+// first, but the import chain depends on the mock being in place.
 mock.module('../utils/role-prompts.js', () => ({
   getDevRoleTemplate: () => ({
     roleDeclaration: 'You are an executor.',
@@ -618,4 +626,14 @@ describe('HarnessExecutor', () => {
       expect(executor).toBeInstanceOf(HarnessExecutor);
     });
   });
+});
+
+// ============================================================
+// Cleanup: Restore function-level mocks after all tests
+// Note: mock.module() mocks persist for the file's lifetime and
+// cannot be restored via mock.restore() (Bun design limitation).
+// Process isolation (batched-test-runner) prevents cross-file pollution.
+// ============================================================
+afterAll(() => {
+  mock.restore();
 });
