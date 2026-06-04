@@ -8,12 +8,19 @@
  *
  * 配置优先级: config.json harness.memoryLimit > 代码默认值
  *
+ * 关键行为（已通过 memory-stress-test.cjs 验证）：
+ * - MemoryMax 单独使用时是**软限制**：进程达到限制后被 throttle，不被 kill
+ * - MemoryMax + MemorySwapMax=0 + memory.oom.group=1 = 硬限制：达到限制时 OOM kill
+ * - 不设置 SwapMax=0 时，进程可通过 swap 继续分配，导致系统 hung 死
+ *
  * @module spawn-utils
- * @see docs/investigation-oom/OOM-INVESTIGATION-REPORT.md
+ * @see docs/investigation-oom/SYSTEM-HANG-ROOT-CAUSE-ANALYSIS.md
  */
 
 import { spawn, execSync, type SpawnOptions, type ExecSyncOptions } from 'child_process';
+import * as fs from 'fs';
 import * as os from 'os';
+import * as path from 'path';
 import { readConfig } from '../commands/config.js';
 import type { HarnessMemoryLimitConfig } from '../types/config.js';
 
@@ -63,6 +70,69 @@ export function resetCgroupV2Detection(): void {
   _cgroupV2Available = null;
 }
 
+// ─── 系统内存压力检测 ───
+
+export interface SystemMemoryInfo {
+  totalMB: number;
+  freeMB: number;
+  availableMB: number;
+  committedMB: number;
+  overcommitRatio: number;
+  isUnderPressure: boolean;
+}
+
+/**
+ * 读取 /proc/meminfo 获取系统内存状态
+ */
+export function getSystemMemoryInfo(): SystemMemoryInfo {
+  const defaults: SystemMemoryInfo = {
+    totalMB: 0, freeMB: 0, availableMB: 0, committedMB: 0,
+    overcommitRatio: 0, isUnderPressure: false,
+  };
+
+  if (os.platform() !== 'linux') return defaults;
+
+  try {
+    const meminfo = fs.readFileSync('/proc/meminfo', 'utf-8');
+    const parseField = (name: string): number => {
+      const match = meminfo.match(new RegExp(`${name}:\\s+(\\d+)`));
+      return match ? parseInt(match[1]!) / 1024 : 0;
+    };
+
+    const totalMB = parseField('MemTotal');
+    const freeMB = parseField('MemFree');
+    const availableMB = parseField('MemAvailable');
+    const committedMB = parseField('Committed_AS');
+    const overcommitRatio = totalMB > 0 ? committedMB / totalMB : 0;
+    const isUnderPressure = availableMB < totalMB * 0.1;
+
+    return { totalMB, freeMB, availableMB, committedMB, overcommitRatio, isUnderPressure };
+  } catch {
+    return defaults;
+  }
+}
+
+/**
+ * 检查系统内存压力，如果可用内存 < 阈值则拒绝启动新进程
+ */
+export function checkMemoryPressure(thresholdRatio = 0.1): { ok: boolean; message: string } {
+  if (os.platform() !== 'linux') {
+    return { ok: true, message: '非 Linux 环境，跳过内存压力检查' };
+  }
+
+  const info = getSystemMemoryInfo();
+  const thresholdMB = info.totalMB * thresholdRatio;
+
+  if (info.availableMB < thresholdMB) {
+    return {
+      ok: false,
+      message: `[spawn-utils] 系统内存不足 (可用: ${info.availableMB.toFixed(0)}MB < 阈值: ${thresholdMB.toFixed(0)}MB)，拒绝启动子进程`,
+    };
+  }
+
+  return { ok: true, message: `内存充足 (可用: ${info.availableMB.toFixed(0)}MB)` };
+}
+
 // ─── 配置读取 ───
 
 /** 操作类型，决定使用哪个 override 限制值 */
@@ -108,10 +178,62 @@ export function getMemoryLimitGB(
   }
 }
 
+// ─── cgroup v2 OOM kill 配置 ───
+
+/**
+ * 在子进程的 cgroup scope 中设置 memory.oom.group=1
+ *
+ * 默认情况下，MemoryMax 是软限制：达到限制后进程被 throttle（阻塞），
+ * 而非被 kill。这会导致系统 hung 死（swap thrashing）。
+ *
+ * 设置 memory.oom.group=1 后，当 cgroup 内存达到 MemoryMax 时，
+ * OOM killer 会直接 kill 整个 cgroup 的进程，而不是 throttle。
+ *
+ * @param pid 子进程 PID
+ */
+function setCgroupOOMGroup(pid: number): void {
+  try {
+    const cgroupPath = getCgroupPathForPid(pid);
+    if (cgroupPath) {
+      const oomGroupPath = path.join('/sys/fs/cgroup', cgroupPath, 'memory.oom.group');
+      if (fs.existsSync(oomGroupPath)) {
+        fs.writeFileSync(oomGroupPath, '1');
+      }
+    }
+  } catch (err) {
+    console.warn(
+      '[spawn-utils] 无法设置 memory.oom.group=1，进程可能被 throttle 而非 OOM kill:',
+      err instanceof Error ? err.message : err
+    );
+  }
+}
+
+/**
+ * 获取进程的 cgroup 路径
+ */
+function getCgroupPathForPid(pid: number): string | null {
+  try {
+    const cgroupFile = fs.readFileSync(`/proc/${pid}/cgroup`, 'utf-8');
+    // 查找 cgroup v2 统一层级条目（0:: 前缀）
+    const v2Line = cgroupFile.trim().split('\n').find(l => l.startsWith('0::'));
+    if (v2Line) {
+      return v2Line.split(':').slice(2).join(':') || null;
+    }
+  } catch {
+    // 进程可能已退出
+  }
+  return null;
+}
+
 // ─── spawn 封装 ───
 
 /**
  * spawn 子进程。在支持 cgroup v2 的环境中自动添加内存限制。
+ *
+ * 关键行为变更（v1.34.0）：
+ * - 同时设置 MemoryMax + MemorySwapMax=0，禁止进程使用 swap
+ * - 通过 memory.oom.group=1 使 OOM kill 替代 throttle
+ * - 启动前检查系统内存压力，不足时拒绝启动
  *
  * @param command  要执行的命令
  * @param args     命令参数
@@ -126,6 +248,14 @@ export function spawnWithMemoryLimit(
 ) {
   const cfg = getMemoryLimitConfig(options.cwd);
 
+  // 启动前检查内存压力，不足时拒绝启动
+  if (cfg.enabled) {
+    const pressure = checkMemoryPressure();
+    if (!pressure.ok) {
+      throw new Error(pressure.message);
+    }
+  }
+
   if (cfg.enabled && hasCgroupV2Support()) {
     const maxGB = type === 'coverage' ? cfg.overrides.coverage
       : type === 'claudeAgent' ? cfg.overrides.claudeAgent
@@ -135,11 +265,19 @@ export function spawnWithMemoryLimit(
     const wrappedArgs = [
       '--user', '--scope',
       '-p', `MemoryMax=${maxGB}G`,
+      '-p', 'MemorySwapMax=0',
       '--',
       command,
       ...args,
     ];
-    return spawn('systemd-run', wrappedArgs, options);
+    const child = spawn('systemd-run', wrappedArgs, options);
+
+    // 设置 OOM group kill：使用 spawn 事件确保 cgroup 已创建
+    child.on('spawn', () => {
+      if (child.pid) setCgroupOOMGroup(child.pid);
+    });
+
+    return child;
   }
 
   // 降级：直接 spawn
@@ -157,6 +295,10 @@ export function spawnWithMemoryLimit(
 /**
  * 等效于 execSync，但在支持 cgroup v2 的环境中添加内存限制。
  *
+ * 关键行为变更（v1.34.0）：
+ * - 同时设置 MemoryMax + MemorySwapMax=0
+ * - 启动前检查系统内存压力
+ *
  * @param command  要执行的命令（shell 字符串）
  * @param options  execSync 选项（需包含 cwd 用于定位 config.json）
  * @param type     操作类型（决定使用哪个 override 限制值）
@@ -168,21 +310,28 @@ export function execSyncWithMemoryLimit(
 ): Buffer | string {
   const cfg = getMemoryLimitConfig(options.cwd);
 
+  // 启动前检查内存压力，不足时拒绝启动
+  if (cfg.enabled) {
+    const pressure = checkMemoryPressure();
+    if (!pressure.ok) {
+      throw new Error(pressure.message);
+    }
+  }
+
   if (cfg.enabled && hasCgroupV2Support()) {
     const maxGB = type === 'coverage' ? cfg.overrides.coverage
       : type === 'claudeAgent' ? cfg.overrides.claudeAgent
       : type === 'build' ? cfg.overrides.build
       : cfg.defaultGB;
 
-    // systemd-run --user --scope -p MemoryMax=N -- <command>
-    // 注意：原始 command 可能包含 shell 重定向 (如 2>&1)，需要保留
+    // systemd-run --user --scope -p MemoryMax=N -p MemorySwapMax=0 -- <command>
     const wrappedCmd = [
       'systemd-run', '--user', '--scope',
       `-p`, `MemoryMax=${maxGB}G`,
+      '-p', 'MemorySwapMax=0',
       '--', command,
     ].join(' ');
 
-    // execSync 使用 shell 模式执行包装后的命令
     return execSync(wrappedCmd, options);
   }
 

@@ -1038,7 +1038,7 @@ Expecting one of '${allowedValues.join("', '")}'`);
         this._exitCallback = (err) => {
           if (err.code !== "commander.executeSubCommandAsync") {
             throw err;
-          }
+          } else {}
         };
       }
       return this;
@@ -11096,7 +11096,9 @@ var init_config2 = __esm(() => {
 
 // src/utils/spawn-utils.ts
 import { spawn, execSync } from "child_process";
+import * as fs4 from "fs";
 import * as os from "os";
+import * as path2 from "path";
 function hasCgroupV2Support() {
   if (_cgroupV2Available !== null)
     return _cgroupV2Available;
@@ -11118,6 +11120,48 @@ function hasCgroupV2Support() {
     return false;
   }
 }
+function getSystemMemoryInfo() {
+  const defaults = {
+    totalMB: 0,
+    freeMB: 0,
+    availableMB: 0,
+    committedMB: 0,
+    overcommitRatio: 0,
+    isUnderPressure: false
+  };
+  if (os.platform() !== "linux")
+    return defaults;
+  try {
+    const meminfo = fs4.readFileSync("/proc/meminfo", "utf-8");
+    const parseField = (name) => {
+      const match = meminfo.match(new RegExp(`${name}:\\s+(\\d+)`));
+      return match ? parseInt(match[1]) / 1024 : 0;
+    };
+    const totalMB = parseField("MemTotal");
+    const freeMB = parseField("MemFree");
+    const availableMB = parseField("MemAvailable");
+    const committedMB = parseField("Committed_AS");
+    const overcommitRatio = totalMB > 0 ? committedMB / totalMB : 0;
+    const isUnderPressure = availableMB < totalMB * 0.1;
+    return { totalMB, freeMB, availableMB, committedMB, overcommitRatio, isUnderPressure };
+  } catch {
+    return defaults;
+  }
+}
+function checkMemoryPressure(thresholdRatio = 0.1) {
+  if (os.platform() !== "linux") {
+    return { ok: true, message: "非 Linux 环境，跳过内存压力检查" };
+  }
+  const info = getSystemMemoryInfo();
+  const thresholdMB = info.totalMB * thresholdRatio;
+  if (info.availableMB < thresholdMB) {
+    return {
+      ok: false,
+      message: `[spawn-utils] 系统内存不足 (可用: ${info.availableMB.toFixed(0)}MB < 阈值: ${thresholdMB.toFixed(0)}MB)，拒绝启动子进程`
+    };
+  }
+  return { ok: true, message: `内存充足 (可用: ${info.availableMB.toFixed(0)}MB)` };
+}
 function getMemoryLimitConfig(cwd) {
   try {
     const config = readConfig(cwd);
@@ -11136,8 +11180,38 @@ function getMemoryLimitConfig(cwd) {
   } catch {}
   return { ...DEFAULT_MEMORY_LIMIT_CONFIG, overrides: { ...DEFAULT_MEMORY_LIMIT_CONFIG.overrides } };
 }
+function setCgroupOOMGroup(pid) {
+  try {
+    const cgroupPath = getCgroupPathForPid(pid);
+    if (cgroupPath) {
+      const oomGroupPath = path2.join("/sys/fs/cgroup", cgroupPath, "memory.oom.group");
+      if (fs4.existsSync(oomGroupPath)) {
+        fs4.writeFileSync(oomGroupPath, "1");
+      }
+    }
+  } catch (err) {
+    console.warn("[spawn-utils] 无法设置 memory.oom.group=1，进程可能被 throttle 而非 OOM kill:", err instanceof Error ? err.message : err);
+  }
+}
+function getCgroupPathForPid(pid) {
+  try {
+    const cgroupFile = fs4.readFileSync(`/proc/${pid}/cgroup`, "utf-8");
+    const v2Line = cgroupFile.trim().split(`
+`).find((l) => l.startsWith("0::"));
+    if (v2Line) {
+      return v2Line.split(":").slice(2).join(":") || null;
+    }
+  } catch {}
+  return null;
+}
 function spawnWithMemoryLimit(command, args, options, type = "default") {
   const cfg = getMemoryLimitConfig(options.cwd);
+  if (cfg.enabled) {
+    const pressure = checkMemoryPressure();
+    if (!pressure.ok) {
+      throw new Error(pressure.message);
+    }
+  }
   if (cfg.enabled && hasCgroupV2Support()) {
     const maxGB = type === "coverage" ? cfg.overrides.coverage : type === "claudeAgent" ? cfg.overrides.claudeAgent : type === "build" ? cfg.overrides.build : cfg.defaultGB;
     const wrappedArgs = [
@@ -11145,11 +11219,18 @@ function spawnWithMemoryLimit(command, args, options, type = "default") {
       "--scope",
       "-p",
       `MemoryMax=${maxGB}G`,
+      "-p",
+      "MemorySwapMax=0",
       "--",
       command,
       ...args
     ];
-    return spawn("systemd-run", wrappedArgs, options);
+    const child = spawn("systemd-run", wrappedArgs, options);
+    child.on("spawn", () => {
+      if (child.pid)
+        setCgroupOOMGroup(child.pid);
+    });
+    return child;
   }
   if (cfg.enabled && !hasCgroupV2Support()) {
     console.warn(`[spawn-utils] cgroup v2 不可用 (平台: ${os.platform()})，` + `直接运行 "${command}" (无内存限制)`);
@@ -11158,6 +11239,12 @@ function spawnWithMemoryLimit(command, args, options, type = "default") {
 }
 function execSyncWithMemoryLimit(command, options, type = "default") {
   const cfg = getMemoryLimitConfig(options.cwd);
+  if (cfg.enabled) {
+    const pressure = checkMemoryPressure();
+    if (!pressure.ok) {
+      throw new Error(pressure.message);
+    }
+  }
   if (cfg.enabled && hasCgroupV2Support()) {
     const maxGB = type === "coverage" ? cfg.overrides.coverage : type === "claudeAgent" ? cfg.overrides.claudeAgent : type === "build" ? cfg.overrides.build : cfg.defaultGB;
     const wrappedCmd = [
@@ -11166,6 +11253,8 @@ function execSyncWithMemoryLimit(command, options, type = "default") {
       "--scope",
       `-p`,
       `MemoryMax=${maxGB}G`,
+      "-p",
+      "MemorySwapMax=0",
       "--",
       command
     ].join(" ");
@@ -11555,8 +11644,8 @@ __export(exports_task2, {
   VALID_TRANSITIONS: () => VALID_TRANSITIONS,
   StatusTransitionError: () => StatusTransitionError
 });
-import * as path4 from "path";
-import * as fs7 from "fs";
+import * as path5 from "path";
+import * as fs8 from "fs";
 function validateStatusTransition(fromStatus, toStatus) {
   if (fromStatus === toStatus) {
     return { valid: true };
@@ -11574,10 +11663,10 @@ function validateStatusTransition(fromStatus, toStatus) {
   return { valid: false, reason: `${fromStatus} → ${toStatus} 不在允许的转换路径中` };
 }
 function getTaskDir(taskId, cwd = process.cwd()) {
-  return path4.join(getTasksDir(cwd), taskId);
+  return path5.join(getTasksDir(cwd), taskId);
 }
 function getTaskMetaPath(taskId, cwd = process.cwd()) {
-  return path4.join(getTaskDir(taskId, cwd), "meta.json");
+  return path5.join(getTaskDir(taskId, cwd), "meta.json");
 }
 function readTaskMeta(taskId, cwd = process.cwd()) {
   if (!isInitialized(cwd)) {
@@ -11585,10 +11674,10 @@ function readTaskMeta(taskId, cwd = process.cwd()) {
   }
   const metaPath = getTaskMetaPath(taskId, cwd);
   try {
-    if (!fs7.existsSync(metaPath)) {
+    if (!fs8.existsSync(metaPath)) {
       return null;
     }
-    const content = fs7.readFileSync(metaPath, "utf-8");
+    const content = fs8.readFileSync(metaPath, "utf-8");
     const parsed = JSON.parse(content);
     parsed.dependencies = parsed.dependencies ?? [];
     parsed.history = parsed.history ?? [];
@@ -11608,8 +11697,8 @@ function readTaskMeta(taskId, cwd = process.cwd()) {
 function writeTaskMeta(task, cwd = process.cwd()) {
   const taskDir = getTaskDir(task.id, cwd);
   const metaPath = getTaskMetaPath(task.id, cwd);
-  if (!fs7.existsSync(taskDir)) {
-    fs7.mkdirSync(taskDir, { recursive: true });
+  if (!fs8.existsSync(taskDir)) {
+    fs8.mkdirSync(taskDir, { recursive: true });
   }
   const oldTask = readTaskMeta(task.id, cwd);
   const historyEntries = [];
@@ -11690,34 +11779,34 @@ function writeTaskMeta(task, cwd = process.cwd()) {
     task.history = [...task.history || [], ...historyEntries];
   }
   task.updatedAt = new Date().toISOString();
-  fs7.writeFileSync(metaPath, JSON.stringify(task, null, 2), "utf-8");
+  fs8.writeFileSync(metaPath, JSON.stringify(task, null, 2), "utf-8");
 }
 function getAllTaskIds(cwd = process.cwd()) {
   if (!isInitialized(cwd)) {
     return [];
   }
   const tasksDir = getTasksDir(cwd);
-  if (!fs7.existsSync(tasksDir)) {
+  if (!fs8.existsSync(tasksDir)) {
     return [];
   }
-  return fs7.readdirSync(tasksDir).filter((name) => {
-    const taskDir = path4.join(tasksDir, name);
-    const metaPath = path4.join(taskDir, "meta.json");
-    return fs7.statSync(taskDir).isDirectory() && fs7.existsSync(metaPath);
+  return fs8.readdirSync(tasksDir).filter((name) => {
+    const taskDir = path5.join(tasksDir, name);
+    const metaPath = path5.join(taskDir, "meta.json");
+    return fs8.statSync(taskDir).isDirectory() && fs8.existsSync(metaPath);
   });
 }
 function getAllTasks(cwd = process.cwd(), includeArchived = false) {
   const taskIds = getAllTaskIds(cwd);
   const tasks = taskIds.map((id) => readTaskMeta(id, cwd)).filter((task) => task !== null);
   if (includeArchived) {
-    const archiveDir = path4.join(getProjectDir(cwd), "archive");
-    if (fs7.existsSync(archiveDir)) {
-      const archivedTaskDirs = fs7.readdirSync(archiveDir).filter((name) => fs7.statSync(path4.join(archiveDir, name)).isDirectory());
+    const archiveDir = path5.join(getProjectDir(cwd), "archive");
+    if (fs8.existsSync(archiveDir)) {
+      const archivedTaskDirs = fs8.readdirSync(archiveDir).filter((name) => fs8.statSync(path5.join(archiveDir, name)).isDirectory());
       for (const taskId of archivedTaskDirs) {
-        const metaPath = path4.join(archiveDir, taskId, "meta.json");
-        if (fs7.existsSync(metaPath)) {
+        const metaPath = path5.join(archiveDir, taskId, "meta.json");
+        if (fs8.existsSync(metaPath)) {
           try {
-            const content = fs7.readFileSync(metaPath, "utf-8");
+            const content = fs8.readFileSync(metaPath, "utf-8");
             const task = JSON.parse(content);
             tasks.push(task);
           } catch (e) {}
@@ -12016,8 +12105,8 @@ function renameTask(oldTaskId, newTaskId, cwd = process.cwd()) {
     return { success: false, oldId: oldTaskId, newId: newTaskId, error: `目标 ID '${newTaskId}' 已被占用` };
   }
   const tasksDir = getTasksDir(cwd);
-  const oldDir = path4.join(tasksDir, oldTaskId);
-  const newDir = path4.join(tasksDir, newTaskId);
+  const oldDir = path5.join(tasksDir, oldTaskId);
+  const newDir = path5.join(tasksDir, newTaskId);
   task.id = newTaskId;
   task.updatedAt = new Date().toISOString();
   task.history.push({
@@ -12029,23 +12118,23 @@ function renameTask(oldTaskId, newTaskId, cwd = process.cwd()) {
     user: process.env.USER || undefined
   });
   if (oldTaskId !== newTaskId) {
-    if (!fs7.existsSync(newDir)) {
-      fs7.mkdirSync(newDir, { recursive: true });
+    if (!fs8.existsSync(newDir)) {
+      fs8.mkdirSync(newDir, { recursive: true });
     }
-    const newMetaPath = path4.join(newDir, "meta.json");
-    fs7.writeFileSync(newMetaPath, JSON.stringify(task, null, 2), "utf-8");
-    const oldFiles = fs7.readdirSync(oldDir);
+    const newMetaPath = path5.join(newDir, "meta.json");
+    fs8.writeFileSync(newMetaPath, JSON.stringify(task, null, 2), "utf-8");
+    const oldFiles = fs8.readdirSync(oldDir);
     for (const file of oldFiles) {
       if (file === "meta.json")
         continue;
-      const srcPath = path4.join(oldDir, file);
-      const dstPath = path4.join(newDir, file);
-      if (!fs7.existsSync(dstPath)) {
-        fs7.copyFileSync(srcPath, dstPath);
+      const srcPath = path5.join(oldDir, file);
+      const dstPath = path5.join(newDir, file);
+      if (!fs8.existsSync(dstPath)) {
+        fs8.copyFileSync(srcPath, dstPath);
       }
     }
     try {
-      fs7.rmSync(oldDir, { recursive: true, force: true });
+      fs8.rmSync(oldDir, { recursive: true, force: true });
     } catch {}
   } else {
     writeTaskMeta(task, cwd);
@@ -12850,14 +12939,14 @@ var init_checkpoint_sync_checker2 = __esm(() => {
 });
 
 // src/utils/logger.ts
-import * as fs8 from "fs";
-import * as path5 from "path";
+import * as fs9 from "fs";
+import * as path6 from "path";
 import { execSync as execSync2 } from "child_process";
 function getLogFilePath(command, cwd = process.cwd()) {
   const date = new Date().toISOString().slice(0, 10).replace(/-/g, "");
   const logsDir = getLogsDir(cwd);
   ensureDir(logsDir);
-  return path5.join(logsDir, `${command}-${date}.log`);
+  return path6.join(logsDir, `${command}-${date}.log`);
 }
 
 class Logger {
@@ -12882,8 +12971,8 @@ class Logger {
     }
     try {
       const configPath = getConfigPath(this.cwd);
-      if (fs8.existsSync(configPath)) {
-        const raw = fs8.readFileSync(configPath, "utf-8");
+      if (fs9.existsSync(configPath)) {
+        const raw = fs9.readFileSync(configPath, "utf-8");
         const config = JSON.parse(raw);
         const configLevel = config?.logging?.level;
         if (configLevel && configLevel in LEVEL_PRIORITY) {
@@ -12923,7 +13012,7 @@ class Logger {
   writeEntry(entry) {
     try {
       const filePath = getLogFilePath(this.command, this.cwd);
-      fs8.appendFileSync(filePath, JSON.stringify(entry) + `
+      fs9.appendFileSync(filePath, JSON.stringify(entry) + `
 `, "utf-8");
     } catch {}
   }
@@ -12985,16 +13074,16 @@ class Logger {
   }
   readRecentLogEntries(recentCount = 50) {
     const logsDir = getLogsDir(this.cwd);
-    if (!fs8.existsSync(logsDir))
+    if (!fs9.existsSync(logsDir))
       return [];
     try {
-      const files = fs8.readdirSync(logsDir).filter((f) => f.endsWith(".log")).map((f) => ({ name: f, mtime: fs8.statSync(path5.join(logsDir, f)).mtimeMs })).sort((a, b) => b.mtime - a.mtime);
+      const files = fs9.readdirSync(logsDir).filter((f) => f.endsWith(".log")).map((f) => ({ name: f, mtime: fs9.statSync(path6.join(logsDir, f)).mtimeMs })).sort((a, b) => b.mtime - a.mtime);
       const allEntries = [];
       for (const file of files) {
         if (allEntries.length >= recentCount)
           break;
         try {
-          const content = fs8.readFileSync(path5.join(logsDir, file.name), "utf-8");
+          const content = fs9.readFileSync(path6.join(logsDir, file.name), "utf-8");
           const lines = content.trim().split(`
 `).filter(Boolean);
           for (const line of lines) {
@@ -13012,14 +13101,14 @@ class Logger {
   }
   readAllLogEntries() {
     const logsDir = getLogsDir(this.cwd);
-    if (!fs8.existsSync(logsDir))
+    if (!fs9.existsSync(logsDir))
       return [];
     try {
-      const files = fs8.readdirSync(logsDir).filter((f) => f.endsWith(".log"));
+      const files = fs9.readdirSync(logsDir).filter((f) => f.endsWith(".log"));
       const allEntries = [];
       for (const file of files) {
         try {
-          const content = fs8.readFileSync(path5.join(logsDir, file), "utf-8");
+          const content = fs9.readFileSync(path6.join(logsDir, file), "utf-8");
           const lines = content.trim().split(`
 `).filter(Boolean);
           for (const line of lines) {
@@ -13073,7 +13162,7 @@ class Logger {
       }
       lines.push("");
     }
-    const archivePath = this.compressLogs(path5.join(getLogsDir(this.cwd), "..", `bug-report-${timestamp}.tar.gz`));
+    const archivePath = this.compressLogs(path6.join(getLogsDir(this.cwd), "..", `bug-report-${timestamp}.tar.gz`));
     lines.push(`---`, `*日志压缩附件: ${archivePath}*`);
     return {
       markdown: lines.join(`
@@ -13083,13 +13172,13 @@ class Logger {
   }
   compressLogs(outputPath) {
     const logsDir = getLogsDir(this.cwd);
-    if (!fs8.existsSync(logsDir)) {
+    if (!fs9.existsSync(logsDir)) {
       throw new Error(`日志目录不存在: ${logsDir}`);
     }
-    const archivePath = outputPath || path5.join(path5.dirname(logsDir), "logs-archive.tar.gz");
-    ensureDir(path5.dirname(archivePath));
-    const parentDir = path5.dirname(logsDir);
-    const logsDirName = path5.basename(logsDir);
+    const archivePath = outputPath || path6.join(path6.dirname(logsDir), "logs-archive.tar.gz");
+    ensureDir(path6.dirname(archivePath));
+    const parentDir = path6.dirname(logsDir);
+    const logsDirName = path6.basename(logsDir);
     try {
       execSync2(`tar -czf "${archivePath}" -C "${parentDir}" "${logsDirName}"`, {
         stdio: "pipe"
@@ -13101,20 +13190,20 @@ class Logger {
   }
   cleanupOldLogs(maxAgeDays = 30) {
     const logsDir = getLogsDir(this.cwd);
-    if (!fs8.existsSync(logsDir))
+    if (!fs9.existsSync(logsDir))
       return 0;
     const cutoff = Date.now() - maxAgeDays * 24 * 60 * 60 * 1000;
     let deletedCount = 0;
     try {
-      const files = fs8.readdirSync(logsDir);
+      const files = fs9.readdirSync(logsDir);
       for (const file of files) {
         if (!file.endsWith(".log"))
           continue;
-        const filePath = path5.join(logsDir, file);
+        const filePath = path6.join(logsDir, file);
         try {
-          const stat = fs8.statSync(filePath);
+          const stat = fs9.statSync(filePath);
           if (stat.mtimeMs < cutoff) {
-            fs8.unlinkSync(filePath);
+            fs9.unlinkSync(filePath);
             deletedCount++;
           }
         } catch {}
@@ -13236,8 +13325,8 @@ var init_logger = __esm(() => {
 });
 
 // src/utils/harness-helpers.ts
-import * as fs9 from "fs";
-import * as path6 from "path";
+import * as fs10 from "fs";
+import * as path7 from "path";
 function classifyExitResult(code, stderr, stdout, cwd) {
   let texts;
   try {
@@ -13344,32 +13433,32 @@ function archiveReportIfExists(reportPath, cwd) {
     texts = getI18n2("zh");
   }
   try {
-    const absolutePath = path6.resolve(reportPath);
-    if (!fs9.existsSync(absolutePath)) {
+    const absolutePath = path7.resolve(reportPath);
+    if (!fs10.existsSync(absolutePath)) {
       return;
     }
-    const dir = path6.dirname(absolutePath);
-    const filename = path6.basename(absolutePath);
-    const archiveDir = path6.join(dir, "archive");
-    if (!fs9.existsSync(archiveDir)) {
-      fs9.mkdirSync(archiveDir, { recursive: true });
+    const dir = path7.dirname(absolutePath);
+    const filename = path7.basename(absolutePath);
+    const archiveDir = path7.join(dir, "archive");
+    if (!fs10.existsSync(archiveDir)) {
+      fs10.mkdirSync(archiveDir, { recursive: true });
     }
     const timestamp = new Date().toISOString().replace(/[:.]/g, "-");
-    const archivePath = path6.join(archiveDir, `${timestamp}-${filename}`);
-    fs9.copyFileSync(absolutePath, archivePath);
+    const archivePath = path7.join(archiveDir, `${timestamp}-${filename}`);
+    fs10.copyFileSync(absolutePath, archivePath);
     console.log(`   \uD83D\uDCE6 ${texts.harness.logs.archivedReport.replace("{filename}", `${timestamp}-${filename}`)}`);
   } catch (error) {
     console.warn(`   ⚠️ ${texts.harness.logs.archiveFailed}: ${error instanceof Error ? error.message : String(error)}`);
   }
 }
 async function saveReport(reportPath, content) {
-  const dir = path6.dirname(reportPath);
+  const dir = path7.dirname(reportPath);
   try {
-    if (!fs9.existsSync(dir)) {
-      fs9.mkdirSync(dir, { recursive: true });
+    if (!fs10.existsSync(dir)) {
+      fs10.mkdirSync(dir, { recursive: true });
     }
     archiveReportIfExists(reportPath);
-    fs9.writeFileSync(reportPath, content, "utf-8");
+    fs10.writeFileSync(reportPath, content, "utf-8");
   } catch (error) {
     throw new Error(`保存报告失败: ${error instanceof Error ? error.message : String(error)}`);
   }
@@ -13480,10 +13569,10 @@ function parseVerdictResult(output, options) {
   return result;
 }
 function getReportDir(taskId, cwd) {
-  return path6.join(getProjectDir(cwd), "reports", "harness", taskId);
+  return path7.join(getProjectDir(cwd), "reports", "harness", taskId);
 }
 function getReportPath(taskId, reportType, cwd) {
-  return path6.join(getReportDir(taskId, cwd), `${reportType}-report.md`);
+  return path7.join(getReportDir(taskId, cwd), `${reportType}-report.md`);
 }
 var REVIEW_TIMEOUT_RATIO = 3;
 var init_harness_helpers = __esm(() => {
@@ -13493,15 +13582,15 @@ var init_harness_helpers = __esm(() => {
 });
 
 // src/utils/headless-agent.ts
-import * as fs10 from "fs";
+import * as fs11 from "fs";
 function buildEffectiveTools(phase, cwd, task) {
   const codeDefaults = PHASE_DEFAULT_TOOLS[phase] || ["Read", "Bash", "Grep", "Glob"];
   const configKey = PHASE_CONFIG_KEY[phase];
   let phaseTools = codeDefaults;
   try {
     const configPath = getConfigPath(cwd);
-    if (fs10.existsSync(configPath)) {
-      const config = JSON.parse(fs10.readFileSync(configPath, "utf-8"));
+    if (fs11.existsSync(configPath)) {
+      const config = JSON.parse(fs11.readFileSync(configPath, "utf-8"));
       const configPhaseTools = config?.harness?.perPhaseTools?.[configKey || phase];
       if (Array.isArray(configPhaseTools) && configPhaseTools.length > 0) {
         phaseTools = configPhaseTools;
@@ -13660,10 +13749,10 @@ function initializeProviders() {
 function loadAIConfig(cwd) {
   try {
     const configPath = getConfigPath(cwd);
-    if (!fs10.existsSync(configPath)) {
+    if (!fs11.existsSync(configPath)) {
       return DEFAULT_AI;
     }
-    const config = JSON.parse(fs10.readFileSync(configPath, "utf-8"));
+    const config = JSON.parse(fs11.readFileSync(configPath, "utf-8"));
     if (!config.ai) {
       return DEFAULT_AI;
     }
@@ -13727,8 +13816,8 @@ var init_post_cr_gate = __esm(() => {
 });
 
 // src/utils/checkpoint-verification.ts
-import * as fs11 from "fs";
-import * as path7 from "path";
+import * as fs12 from "fs";
+import * as path8 from "path";
 function inferCategoryFromDescription(description) {
   const lowerDesc = description.toLowerCase();
   if (lowerDesc.includes("test") || lowerDesc.includes("测试") || lowerDesc.includes("unit test") || lowerDesc.includes("单元测试") || lowerDesc.includes("integration test") || lowerDesc.includes("集成测试") || lowerDesc.includes("e2e") || lowerDesc.includes("端到端")) {
@@ -13834,19 +13923,19 @@ class CheckpointOutputVerifier {
     const warnings = [];
     const evidence = [];
     const projectDir = getProjectDir(this.cwd);
-    const evidenceDir = path7.join(projectDir, "evidence", context.taskId);
-    if (fs11.existsSync(evidenceDir)) {
-      const files = fs11.readdirSync(evidenceDir);
+    const evidenceDir = path8.join(projectDir, "evidence", context.taskId);
+    if (fs12.existsSync(evidenceDir)) {
+      const files = fs12.readdirSync(evidenceDir);
       if (files.length > 0) {
         evidence.push(`证据目录存在 ${files.length} 个文件`);
       }
     }
-    const reportPath = path7.join(projectDir, "reports", "harness", context.taskId, "dev-report.md");
-    if (fs11.existsSync(reportPath)) {
+    const reportPath = path8.join(projectDir, "reports", "harness", context.taskId, "dev-report.md");
+    if (fs12.existsSync(reportPath)) {
       evidence.push("开发报告存在");
     }
-    const gitDir = path7.join(this.cwd, ".git");
-    if (fs11.existsSync(gitDir)) {
+    const gitDir = path8.join(this.cwd, ".git");
+    if (fs12.existsSync(gitDir)) {
       evidence.push("Git 仓库存在变更记录");
     }
     if (evidence.length > 0) {
@@ -13881,13 +13970,13 @@ class CheckpointOutputVerifier {
     const warnings = [];
     const evidence = [];
     const projectDir = getProjectDir(this.cwd);
-    const qaReportPath = path7.join(projectDir, "reports", "harness", context.taskId, "qa-report.md");
-    if (fs11.existsSync(qaReportPath)) {
+    const qaReportPath = path8.join(projectDir, "reports", "harness", context.taskId, "qa-report.md");
+    if (fs12.existsSync(qaReportPath)) {
       evidence.push("QA 报告存在");
     }
     const testPatterns = [".test.ts", ".spec.ts", ".test.js", ".spec.js"];
-    const srcDir = path7.join(this.cwd, "src");
-    if (fs11.existsSync(srcDir)) {
+    const srcDir = path8.join(this.cwd, "src");
+    if (fs12.existsSync(srcDir)) {
       const foundTestFiles = this.findFilesWithPatterns(srcDir, testPatterns);
       if (foundTestFiles.length > 0) {
         evidence.push(`找到 ${foundTestFiles.length} 个测试文件`);
@@ -13920,8 +14009,8 @@ class CheckpointOutputVerifier {
     const docPatterns = ["README.md", "CHANGELOG.md", "docs/", ".md"];
     const foundDocs = [];
     for (const pattern of docPatterns) {
-      const fullPath = path7.join(this.cwd, pattern);
-      if (fs11.existsSync(fullPath)) {
+      const fullPath = path8.join(this.cwd, pattern);
+      if (fs12.existsSync(fullPath)) {
         foundDocs.push(pattern);
       }
     }
@@ -13951,8 +14040,8 @@ class CheckpointOutputVerifier {
   async verifyReview(context, baseRecord) {
     const evidence = [];
     const projectDir = getProjectDir(this.cwd);
-    const crReportPath = path7.join(projectDir, "reports", "harness", context.taskId, "cr-report.md");
-    if (fs11.existsSync(crReportPath)) {
+    const crReportPath = path8.join(projectDir, "reports", "harness", context.taskId, "cr-report.md");
+    if (fs12.existsSync(crReportPath)) {
       evidence.push("代码审核报告存在");
     }
     if (context.phaseData?.codeReviewVerdict) {
@@ -13980,9 +14069,9 @@ class CheckpointOutputVerifier {
   }
   async verifyDeployment(context, baseRecord) {
     const evidence = [];
-    const distDir = path7.join(this.cwd, "dist");
-    if (fs11.existsSync(distDir)) {
-      const files = fs11.readdirSync(distDir);
+    const distDir = path8.join(this.cwd, "dist");
+    if (fs12.existsSync(distDir)) {
+      const files = fs12.readdirSync(distDir);
       if (files.length > 0) {
         evidence.push(`构建产物存在: ${files.length} 个文件`);
       }
@@ -14019,8 +14108,8 @@ class CheckpointOutputVerifier {
       "settings.json"
     ];
     for (const pattern of configPatterns) {
-      const fullPath = path7.join(this.cwd, pattern);
-      if (fs11.existsSync(fullPath)) {
+      const fullPath = path8.join(this.cwd, pattern);
+      if (fs12.existsSync(fullPath)) {
         evidence.push(`配置文件存在: ${pattern}`);
       }
     }
@@ -14047,9 +14136,9 @@ class CheckpointOutputVerifier {
   findFilesWithPatterns(dir, patterns) {
     const results = [];
     const walk = (currentDir) => {
-      const entries = fs11.readdirSync(currentDir, { withFileTypes: true });
+      const entries = fs12.readdirSync(currentDir, { withFileTypes: true });
       for (const entry of entries) {
-        const fullPath = path7.join(currentDir, entry.name);
+        const fullPath = path8.join(currentDir, entry.name);
         if (entry.isDirectory()) {
           walk(fullPath);
         } else if (entry.isFile()) {
@@ -14481,8 +14570,8 @@ var init_checkpoint_verification = __esm(() => {
 });
 
 // src/utils/checkpoint.ts
-import * as fs12 from "fs";
-import * as path8 from "path";
+import * as fs13 from "fs";
+import * as path9 from "path";
 function filterLowQualityCheckpoints(checkpoints) {
   const kept = [];
   const removed = [];
@@ -14529,11 +14618,11 @@ function generateCheckpointId(taskId, index, description) {
   return `CP-${String(index + 1).padStart(3, "0")}`;
 }
 function parseCheckpointsWithIds(taskId, cwd = process.cwd()) {
-  const checkpointPath = path8.join(getTasksDir(cwd), taskId, "checkpoint.md");
-  if (!fs12.existsSync(checkpointPath)) {
+  const checkpointPath = path9.join(getTasksDir(cwd), taskId, "checkpoint.md");
+  if (!fs13.existsSync(checkpointPath)) {
     return [];
   }
-  const content = fs12.readFileSync(checkpointPath, "utf-8");
+  const content = fs13.readFileSync(checkpointPath, "utf-8");
   const lines = content.split(`
 `);
   const checkpoints = [];
@@ -14568,7 +14657,7 @@ function extractTestPatterns(desc, task) {
   const srcFileMatch = desc.match(/(?:src\/[\w/.-]+)\.[a-z]+/g);
   if (srcFileMatch) {
     for (const f of srcFileMatch) {
-      const base = path8.basename(f, path8.extname(f));
+      const base = path9.basename(f, path9.extname(f));
       if (base && base.length > 2) {
         patterns.push(base);
       }
@@ -14593,7 +14682,7 @@ function extractTestPatterns(desc, task) {
     const descFiles = task.description.match(/src\/([\w/-]+)\.[a-z]+/g);
     if (descFiles) {
       for (const f of descFiles.slice(0, 2)) {
-        const dir = path8.dirname(f).replace("src/", "");
+        const dir = path9.dirname(f).replace("src/", "");
         if (dir && dir !== "." && dir.length > 2) {
           patterns.push(dir);
           break;
@@ -14781,10 +14870,10 @@ function updateCheckpointStatus(taskId, checkpointId, status, options = {}, cwd 
   writeTaskMeta(updatedTask, cwd);
 }
 function updateCheckpointMd(taskId, checkpointId, checked, task, cwd = process.cwd()) {
-  const checkpointPath = path8.join(getTasksDir(cwd), taskId, "checkpoint.md");
-  if (!fs12.existsSync(checkpointPath))
+  const checkpointPath = path9.join(getTasksDir(cwd), taskId, "checkpoint.md");
+  if (!fs13.existsSync(checkpointPath))
     return;
-  const content = fs12.readFileSync(checkpointPath, "utf-8");
+  const content = fs13.readFileSync(checkpointPath, "utf-8");
   const lines = content.split(`
 `);
   const checkpoint = task.checkpoints?.find((cp) => cp.id === checkpointId);
@@ -14797,7 +14886,7 @@ function updateCheckpointMd(taskId, checkpointId, checked, task, cwd = process.c
       break;
     }
   }
-  fs12.writeFileSync(checkpointPath, lines.join(`
+  fs13.writeFileSync(checkpointPath, lines.join(`
 `), "utf-8");
 }
 function getCheckpointDetail(taskId, checkpointId, cwd = process.cwd()) {
@@ -14811,13 +14900,13 @@ function listCheckpoints(taskId, cwd = process.cwd()) {
   return task?.checkpoints || [];
 }
 function updateCheckpointMdFromArray(taskId, checkpoints, cwd = process.cwd()) {
-  const checkpointPath = path8.join(getTasksDir(cwd), taskId, "checkpoint.md");
+  const checkpointPath = path9.join(getTasksDir(cwd), taskId, "checkpoint.md");
   const content = `# ${taskId} 检查点
 
 ` + checkpoints.map((cp) => `- [ ] ${cp.description}`).join(`
 `) + `
 `;
-  fs12.writeFileSync(checkpointPath, content, "utf-8");
+  fs13.writeFileSync(checkpointPath, content, "utf-8");
 }
 function parseTextCheckpoints(description) {
   if (!description || description.trim().length === 0) {
@@ -14977,12 +15066,12 @@ function detectCyclesDFS(adjacency) {
   const cycles = [];
   const visited = new Set;
   const onStack = new Set;
-  const path9 = [];
+  const path10 = [];
   function dfs(node) {
     if (onStack.has(node)) {
-      const cycleStart = path9.indexOf(node);
+      const cycleStart = path10.indexOf(node);
       if (cycleStart !== -1) {
-        cycles.push([...path9.slice(cycleStart), node]);
+        cycles.push([...path10.slice(cycleStart), node]);
       }
       return;
     }
@@ -14990,14 +15079,14 @@ function detectCyclesDFS(adjacency) {
       return;
     visited.add(node);
     onStack.add(node);
-    path9.push(node);
+    path10.push(node);
     const neighbors = adjacency.get(node);
     if (neighbors) {
       for (const neighbor of neighbors) {
         dfs(neighbor);
       }
     }
-    path9.pop();
+    path10.pop();
     onStack.delete(node);
   }
   for (const nodeId of adjacency.keys()) {
@@ -15585,8 +15674,8 @@ class DependencyGraph {
     return bridges.map((b) => {
       const pathsFromRoots = new Map;
       for (const root of b.bridgedRoots) {
-        const path9 = this.findPath(root, b.nodeId);
-        pathsFromRoots.set(root, path9);
+        const path10 = this.findPath(root, b.nodeId);
+        pathsFromRoots.set(root, path10);
       }
       return {
         nodeId: b.nodeId,
@@ -15625,12 +15714,12 @@ class DependencyGraph {
       for (const depId of deps.keys()) {
         const otherDeps = [...deps.keys()].filter((d) => d !== depId);
         for (const otherDep of otherDeps) {
-          const path9 = this.findPathThroughDep(otherDep, depId);
-          if (path9) {
+          const path10 = this.findPathThroughDep(otherDep, depId);
+          if (path10) {
             redundant.push({
               from: nodeId,
               to: depId,
-              viaPath: [nodeId, ...path9]
+              viaPath: [nodeId, ...path10]
             });
             break;
           }
@@ -15654,10 +15743,10 @@ class DependencyGraph {
       visited.set(depId, { depth: 1, path: [failedTaskId, depId], source: depId });
     }
     while (queue.length > 0) {
-      const [current, depth, path9, source] = queue.shift();
+      const [current, depth, path10, source] = queue.shift();
       details.set(current, {
         depth,
-        pathFromSource: path9,
+        pathFromSource: path10,
         sourceTaskId: source
       });
       const nextDownstream = this.reverseAdj.get(current);
@@ -15666,10 +15755,10 @@ class DependencyGraph {
           if (!visited.has(next)) {
             visited.set(next, {
               depth: depth + 1,
-              path: [...path9, next],
+              path: [...path10, next],
               source
             });
-            queue.push([next, depth + 1, [...path9, next], source]);
+            queue.push([next, depth + 1, [...path10, next], source]);
           }
         }
       }
@@ -15886,15 +15975,15 @@ class DependencyGraph {
     const visited = new Set([from]);
     const queue = [[from, [from]]];
     while (queue.length > 0) {
-      const [current, path9] = queue.shift();
+      const [current, path10] = queue.shift();
       if (current === to)
-        return path9;
+        return path10;
       const downstream = this.reverseAdj.get(current);
       if (downstream) {
         for (const next of downstream) {
           if (!visited.has(next)) {
             visited.add(next);
-            queue.push([next, [...path9, next]]);
+            queue.push([next, [...path10, next]]);
           }
         }
       }
@@ -16651,8 +16740,8 @@ async function withAIEnhancement(options) {
 }
 
 // src/utils/quality-gate.ts
-import * as fs13 from "fs";
-import * as path9 from "path";
+import * as fs14 from "fs";
+import * as path10 from "path";
 function extractFilePaths(text, options) {
   const files = [];
   const seen = new Set;
@@ -16779,8 +16868,8 @@ function validateFilesExist(task, cwd = process.cwd()) {
   const missingFiles = [];
   const existingFiles = [];
   for (const file of affectedFiles) {
-    const fullPath = path9.resolve(cwd, file);
-    if (fs13.existsSync(fullPath)) {
+    const fullPath = path10.resolve(cwd, file);
+    if (fs14.existsSync(fullPath)) {
       existingFiles.push(file);
     } else {
       missingFiles.push(file);
@@ -16870,8 +16959,8 @@ async function checkQualityGate(taskId, config = DEFAULT_QUALITY_GATE_CONFIG, cw
   const metaPath = getTaskMetaPath(taskId, cwd);
   let task = null;
   let metaViolations = null;
-  if (fs13.existsSync(metaPath)) {
-    const rawContent = fs13.readFileSync(metaPath, "utf-8");
+  if (fs14.existsSync(metaPath)) {
+    const rawContent = fs14.readFileSync(metaPath, "utf-8");
     metaViolations = metaJsonValid.check(rawContent);
     try {
       task = JSON.parse(rawContent);
@@ -18430,16 +18519,16 @@ __export(exports_validation, {
   ensureEvidenceDir: () => ensureEvidenceDir,
   cleanupEvidence: () => cleanupEvidence
 });
-import * as path11 from "path";
-import * as fs15 from "fs";
+import * as path12 from "path";
+import * as fs16 from "fs";
 import { execSync as execSync3 } from "child_process";
 function getEvidenceDir(taskId, cwd = process.cwd()) {
-  return path11.join(getProjectDir(cwd), "evidence", taskId);
+  return path12.join(getProjectDir(cwd), "evidence", taskId);
 }
 function ensureEvidenceDir(taskId, cwd = process.cwd()) {
   const evidenceDir = getEvidenceDir(taskId, cwd);
-  if (!fs15.existsSync(evidenceDir)) {
-    fs15.mkdirSync(evidenceDir, { recursive: true });
+  if (!fs16.existsSync(evidenceDir)) {
+    fs16.mkdirSync(evidenceDir, { recursive: true });
   }
   return evidenceDir;
 }
@@ -18447,7 +18536,7 @@ async function executeVerificationCommands(taskId, checkpointId, commands, cwd =
   const evidenceDir = ensureEvidenceDir(taskId, cwd);
   const timestamp = new Date().toISOString().replace(/[:.]/g, "-");
   const evidenceFileName = `${checkpointId}-${timestamp}.log`;
-  const evidencePath = path11.join(evidenceDir, evidenceFileName);
+  const evidencePath = path12.join(evidenceDir, evidenceFileName);
   let combinedOutput = "";
   let lastExitCode = 0;
   const header = `# 验证证据
@@ -18489,11 +18578,11 @@ async function executeVerificationCommands(taskId, checkpointId, commands, cwd =
 `;
     }
   }
-  fs15.writeFileSync(evidencePath, combinedOutput, "utf-8");
+  fs16.writeFileSync(evidencePath, combinedOutput, "utf-8");
   return {
     exitCode: lastExitCode,
     output: combinedOutput,
-    evidencePath: path11.relative(cwd, evidencePath)
+    evidencePath: path12.relative(cwd, evidencePath)
   };
 }
 async function validateTaskCompletion(taskId, cwd = process.cwd(), options = {}) {
@@ -18624,24 +18713,24 @@ function generateValidationReport(taskId, result) {
 `);
 }
 function cleanupEvidence(taskId, maxAge = 30, cwd = process.cwd()) {
-  const evidenceBaseDir = path11.join(getProjectDir(cwd), "evidence");
-  if (!fs15.existsSync(evidenceBaseDir)) {
+  const evidenceBaseDir = path12.join(getProjectDir(cwd), "evidence");
+  if (!fs16.existsSync(evidenceBaseDir)) {
     return { deletedCount: 0, freedBytes: 0 };
   }
   let deletedCount = 0;
   let freedBytes = 0;
   const cutoffTime = Date.now() - maxAge * 24 * 60 * 60 * 1000;
-  const dirsToClean = taskId ? [path11.join(evidenceBaseDir, taskId)] : fs15.readdirSync(evidenceBaseDir).map((name) => path11.join(evidenceBaseDir, name));
+  const dirsToClean = taskId ? [path12.join(evidenceBaseDir, taskId)] : fs16.readdirSync(evidenceBaseDir).map((name) => path12.join(evidenceBaseDir, name));
   for (const dir of dirsToClean) {
-    if (!fs15.existsSync(dir) || !fs15.statSync(dir).isDirectory())
+    if (!fs16.existsSync(dir) || !fs16.statSync(dir).isDirectory())
       continue;
-    const files = fs15.readdirSync(dir);
+    const files = fs16.readdirSync(dir);
     for (const file of files) {
-      const filePath = path11.join(dir, file);
-      const stat = fs15.statSync(filePath);
+      const filePath = path12.join(dir, file);
+      const stat = fs16.statSync(filePath);
       if (stat.mtime.getTime() < cutoffTime) {
         freedBytes += stat.size;
-        fs15.unlinkSync(filePath);
+        fs16.unlinkSync(filePath);
         deletedCount++;
       }
     }
@@ -18654,8 +18743,8 @@ var init_validation = __esm(() => {
 });
 
 // src/utils/plan.ts
-import * as path13 from "path";
-import * as fs17 from "fs";
+import * as path14 from "path";
+import * as fs18 from "fs";
 function isExecutableStatus(status) {
   const normalized = normalizeStatus(status);
   return normalized in EXECUTABLE_STATUS_PRIORITY;
@@ -18665,7 +18754,7 @@ function getStatusPriority(status) {
   return EXECUTABLE_STATUS_PRIORITY[normalized] ?? 999;
 }
 function getPlanPath(cwd = process.cwd()) {
-  return path13.join(getProjectDir(cwd), "current-plan.json");
+  return path14.join(getProjectDir(cwd), "current-plan.json");
 }
 function readPlan(cwd = process.cwd()) {
   if (!isInitialized(cwd)) {
@@ -18673,10 +18762,10 @@ function readPlan(cwd = process.cwd()) {
   }
   const planPath = getPlanPath(cwd);
   try {
-    if (!fs17.existsSync(planPath)) {
+    if (!fs18.existsSync(planPath)) {
       return null;
     }
-    const content = fs17.readFileSync(planPath, "utf-8");
+    const content = fs18.readFileSync(planPath, "utf-8");
     return JSON.parse(content);
   } catch {
     return null;
@@ -18685,7 +18774,7 @@ function readPlan(cwd = process.cwd()) {
 function writePlan(plan, cwd = process.cwd()) {
   const planPath = getPlanPath(cwd);
   plan.updatedAt = new Date().toISOString();
-  fs17.writeFileSync(planPath, JSON.stringify(plan, null, 2), "utf-8");
+  fs18.writeFileSync(planPath, JSON.stringify(plan, null, 2), "utf-8");
 }
 function createEmptyPlan() {
   const now = new Date().toISOString();
@@ -18854,12 +18943,12 @@ function detectTaskCycles(tasks) {
   const cycles = [];
   const visited = new Set;
   const onStack = new Set;
-  const path14 = [];
+  const path15 = [];
   function dfs(node) {
     if (onStack.has(node)) {
-      const cycleStart = path14.indexOf(node);
+      const cycleStart = path15.indexOf(node);
       if (cycleStart !== -1) {
-        cycles.push([...path14.slice(cycleStart), node]);
+        cycles.push([...path15.slice(cycleStart), node]);
       }
       return;
     }
@@ -18867,14 +18956,14 @@ function detectTaskCycles(tasks) {
       return;
     visited.add(node);
     onStack.add(node);
-    path14.push(node);
+    path15.push(node);
     const neighbors = adjacency.get(node);
     if (neighbors) {
       for (const neighbor of neighbors) {
         dfs(neighbor);
       }
     }
-    path14.pop();
+    path15.pop();
     onStack.delete(node);
   }
   for (const taskId of adjacency.keys()) {
@@ -19400,12 +19489,12 @@ var init_quality_gate_registry = __esm(() => {
 });
 
 // src/utils/harness-snapshot.ts
-import * as fs18 from "fs";
-import * as path14 from "path";
+import * as fs19 from "fs";
+import * as path15 from "path";
 function getRunsDir(cwd) {
-  const runsDir = path14.join(getProjectDir(cwd), "runs");
-  if (!fs18.existsSync(runsDir)) {
-    fs18.mkdirSync(runsDir, { recursive: true });
+  const runsDir = path15.join(getProjectDir(cwd), "runs");
+  if (!fs19.existsSync(runsDir)) {
+    fs19.mkdirSync(runsDir, { recursive: true });
   }
   return runsDir;
 }
@@ -19417,7 +19506,7 @@ function createPlanSnapshot(executionPlan, cwd = process.cwd(), batchAwareQueue)
   const timestamp = Date.now();
   const snapshotId = generateSnapshotFilename(pid, timestamp);
   const runsDir = getRunsDir(cwd);
-  const snapshotPath = path14.join(runsDir, snapshotId);
+  const snapshotPath = path15.join(runsDir, snapshotId);
   const taskStatusSnapshot = {};
   for (const taskId of executionPlan.tasks) {
     const task = readTaskMeta(taskId, cwd);
@@ -19435,25 +19524,25 @@ function createPlanSnapshot(executionPlan, cwd = process.cwd(), batchAwareQueue)
     batchBoundaries: batchAwareQueue?.batchBoundaries,
     batchLabels: batchAwareQueue?.batchLabels,
     batchParallelizable: batchAwareQueue?.batchParallelizable,
-    sourcePlanPath: path14.join(getProjectDir(cwd), "current-plan.json"),
+    sourcePlanPath: path15.join(getProjectDir(cwd), "current-plan.json"),
     taskStatusSnapshot
   };
-  fs18.writeFileSync(snapshotPath, JSON.stringify(snapshot, null, 2), "utf-8");
+  fs19.writeFileSync(snapshotPath, JSON.stringify(snapshot, null, 2), "utf-8");
   return snapshot;
 }
 function readPlanSnapshot(snapshotIdOrPath, cwd = process.cwd()) {
   let snapshotPath;
-  if (path14.isAbsolute(snapshotIdOrPath)) {
+  if (path15.isAbsolute(snapshotIdOrPath)) {
     snapshotPath = snapshotIdOrPath;
   } else {
     const runsDir = getRunsDir(cwd);
-    snapshotPath = path14.join(runsDir, snapshotIdOrPath);
+    snapshotPath = path15.join(runsDir, snapshotIdOrPath);
   }
-  if (!fs18.existsSync(snapshotPath)) {
+  if (!fs19.existsSync(snapshotPath)) {
     return null;
   }
   try {
-    const content = fs18.readFileSync(snapshotPath, "utf-8");
+    const content = fs19.readFileSync(snapshotPath, "utf-8");
     const snapshot = JSON.parse(content);
     if (!snapshot.snapshotId || !snapshot.tasks || !Array.isArray(snapshot.tasks)) {
       return null;
@@ -19465,10 +19554,10 @@ function readPlanSnapshot(snapshotIdOrPath, cwd = process.cwd()) {
 }
 function listSnapshots(cwd = process.cwd()) {
   const runsDir = getRunsDir(cwd);
-  if (!fs18.existsSync(runsDir)) {
+  if (!fs19.existsSync(runsDir)) {
     return [];
   }
-  const files = fs18.readdirSync(runsDir);
+  const files = fs19.readdirSync(runsDir);
   const snapshots = [];
   for (const file of files) {
     if (!file.startsWith("harness-plan-snapshot-") || !file.endsWith(".json")) {
@@ -19483,17 +19572,17 @@ function listSnapshots(cwd = process.cwd()) {
 }
 function cleanupSnapshot(snapshotIdOrPath, cwd = process.cwd()) {
   let snapshotPath;
-  if (path14.isAbsolute(snapshotIdOrPath)) {
+  if (path15.isAbsolute(snapshotIdOrPath)) {
     snapshotPath = snapshotIdOrPath;
   } else {
     const runsDir = getRunsDir(cwd);
-    snapshotPath = path14.join(runsDir, snapshotIdOrPath);
+    snapshotPath = path15.join(runsDir, snapshotIdOrPath);
   }
-  if (!fs18.existsSync(snapshotPath)) {
+  if (!fs19.existsSync(snapshotPath)) {
     return false;
   }
   try {
-    fs18.unlinkSync(snapshotPath);
+    fs19.unlinkSync(snapshotPath);
     return true;
   } catch {
     return false;
@@ -20160,8 +20249,8 @@ var init_analyze_range_parser = __esm(() => {
 });
 
 // src/commands/analyze.ts
-import * as path15 from "path";
-import * as fs19 from "fs";
+import * as path16 from "path";
+import * as fs20 from "fs";
 function readAnalyzeConfig(cwd = process.cwd()) {
   const config = readConfig(cwd);
   if (!config)
@@ -20422,10 +20511,10 @@ async function assessStalenessWithAI(task, cwd) {
   return null;
 }
 function parseReportVerdict(reportPath) {
-  if (!fs19.existsSync(reportPath))
+  if (!fs20.existsSync(reportPath))
     return null;
   try {
-    const content = fs19.readFileSync(reportPath, "utf-8");
+    const content = fs20.readFileSync(reportPath, "utf-8");
     const passMatch = content.match(/\*\*结果\*\*:\s*✅\s*PASS|Result:\s*PASS|\bPASS\b/i);
     const nopassMatch = content.match(/\*\*结果\*\*:\s*❌\s*NOPASS|Result:\s*NOPASS|\bNOPASS\b/i);
     if (nopassMatch)
@@ -20438,17 +20527,17 @@ function parseReportVerdict(reportPath) {
   }
 }
 function getHarnessReportDir(taskId, cwd) {
-  return path15.join(getProjectDir(cwd), "reports", "harness", taskId);
+  return path16.join(getProjectDir(cwd), "reports", "harness", taskId);
 }
 function checkReportStatusConsistency(taskId, task, cwd) {
   const reportDir = getHarnessReportDir(taskId, cwd);
-  if (!fs19.existsSync(reportDir))
+  if (!fs20.existsSync(reportDir))
     return null;
   const currentStatus = normalizeStatus(task.status);
   if (["resolved", "closed", "abandoned", "failed"].includes(currentStatus))
     return null;
   for (const mapping of REPORT_PHASE_STATUS_MAP) {
-    const reportPath = path15.join(reportDir, mapping.reportFile);
+    const reportPath = path16.join(reportDir, mapping.reportFile);
     const verdict = parseReportVerdict(reportPath);
     if (verdict === "PASS" && mapping.prerequisiteStatuses.includes(currentStatus)) {
       return {
@@ -20593,7 +20682,7 @@ function checkMissingPipelineEvidence(taskId, task, cwd) {
   const required = STATUS_REQUIRED_REPORTS[currentStatus];
   if (!required)
     return null;
-  if (!fs19.existsSync(reportDir)) {
+  if (!fs20.existsSync(reportDir)) {
     return {
       taskId,
       type: "missing_pipeline_evidence",
@@ -20610,8 +20699,8 @@ function checkMissingPipelineEvidence(taskId, task, cwd) {
   }
   const missingReports = [];
   for (const req of required) {
-    const reportPath = path15.join(reportDir, req.reportFile);
-    if (!fs19.existsSync(reportPath)) {
+    const reportPath = path16.join(reportDir, req.reportFile);
+    if (!fs20.existsSync(reportPath)) {
       missingReports.push(req);
     }
   }
@@ -20641,7 +20730,7 @@ function shouldTriggerAIInference(task, layer1Issues, cwd) {
   const historyCount = task.history?.length ?? 0;
   if (historyCount >= 3) {
     const reportDir = getHarnessReportDir(task.id, cwd);
-    if (!fs19.existsSync(reportDir))
+    if (!fs20.existsSync(reportDir))
       return true;
   }
   if (currentStatus === "open" && task.transitionNotes && task.transitionNotes.length > 0) {
@@ -21380,13 +21469,13 @@ async function analyzeProject(cwd = process.cwd(), includeArchived = false, aiOp
       }
     }
     if (normalizedStatus === "in_progress") {
-      const omcStateDir = path15.resolve(cwd, ".omc/state");
+      const omcStateDir = path16.resolve(cwd, ".omc/state");
       let hasActivePipeline = false;
-      if (fs19.existsSync(omcStateDir)) {
-        const pipelineStateFiles = fs19.readdirSync(omcStateDir).filter((f) => f.includes("pipeline") && f.endsWith(".json"));
+      if (fs20.existsSync(omcStateDir)) {
+        const pipelineStateFiles = fs20.readdirSync(omcStateDir).filter((f) => f.includes("pipeline") && f.endsWith(".json"));
         for (const stateFile of pipelineStateFiles) {
           try {
-            const stateData = JSON.parse(fs19.readFileSync(path15.join(omcStateDir, stateFile), "utf-8"));
+            const stateData = JSON.parse(fs20.readFileSync(path16.join(omcStateDir, stateFile), "utf-8"));
             if (stateData.active === true) {
               const taskIds = stateData.taskIds || (stateData.taskDescription ? [task.id] : []);
               if (taskIds.length === 0 || taskIds.includes(task.id)) {
@@ -21443,7 +21532,7 @@ async function analyzeProject(cwd = process.cwd(), includeArchived = false, aiOp
     const taskText = `${task.description || ""}
 ${task.title || ""}`;
     const referencedFiles = extractFilePaths(taskText, { includeBareFilenames: false });
-    const missingRefs = referencedFiles.filter((fp) => !fs19.existsSync(path15.resolve(cwd, fp)));
+    const missingRefs = referencedFiles.filter((fp) => !fs20.existsSync(path16.resolve(cwd, fp)));
     if (missingRefs.length > 0) {
       stats.fileNotFound++;
       issues.push({
@@ -21512,16 +21601,16 @@ ${task.title || ""}`;
     }
   }
   const archiveDir = getArchiveDir(cwd);
-  if (fs19.existsSync(archiveDir)) {
-    const abandonedDirs = fs19.readdirSync(archiveDir).filter((name) => {
-      const dirPath = path15.join(archiveDir, name);
-      if (!fs19.statSync(dirPath).isDirectory())
+  if (fs20.existsSync(archiveDir)) {
+    const abandonedDirs = fs20.readdirSync(archiveDir).filter((name) => {
+      const dirPath = path16.join(archiveDir, name);
+      if (!fs20.statSync(dirPath).isDirectory())
         return false;
-      const metaPath = path15.join(dirPath, "meta.json");
-      if (!fs19.existsSync(metaPath))
+      const metaPath = path16.join(dirPath, "meta.json");
+      if (!fs20.existsSync(metaPath))
         return false;
       try {
-        const meta = JSON.parse(fs19.readFileSync(metaPath, "utf-8"));
+        const meta = JSON.parse(fs20.readFileSync(metaPath, "utf-8"));
         return meta.status === "abandoned";
       } catch {
         return false;
@@ -21735,21 +21824,21 @@ function searchCodebaseForCriteria(criteria, cwd) {
     if (depth > 10)
       return;
     try {
-      const entries = fs19.readdirSync(dir, { withFileTypes: true });
+      const entries = fs20.readdirSync(dir, { withFileTypes: true });
       for (const entry of entries) {
-        const fullPath = path15.join(dir, entry.name);
+        const fullPath = path16.join(dir, entry.name);
         if (entry.isDirectory()) {
           if (excludeDirs.has(entry.name) || entry.name.startsWith(".")) {
             continue;
           }
           searchDirectory(fullPath, depth + 1);
         } else if (entry.isFile()) {
-          const ext = path15.extname(entry.name);
+          const ext = path16.extname(entry.name);
           if (!priorityExtensions.has(ext)) {
             continue;
           }
           try {
-            const content = fs19.readFileSync(fullPath, "utf-8");
+            const content = fs20.readFileSync(fullPath, "utf-8");
             const lines = content.split(`
 `);
             const matchedKeywords = [];
@@ -21774,7 +21863,7 @@ function searchCodebaseForCriteria(criteria, cwd) {
               const matchDensity = lineNumbers.length / Math.max(lines.length, 1);
               const relevanceScore = (uniqueKeywordRatio * 0.7 + matchDensity * 0.3) * 100;
               results.push({
-                filePath: path15.relative(cwd, fullPath),
+                filePath: path16.relative(cwd, fullPath),
                 lineNumbers: lineNumbers.slice(0, 10),
                 matchedKeywords,
                 relevanceScore: Math.round(relevanceScore)
@@ -21877,15 +21966,15 @@ function inferVerificationCommands(criteria, searchResults) {
   return commands;
 }
 function getContractPath(taskId, cwd) {
-  return path15.join(getTasksDir(cwd), taskId, "contract.json");
+  return path16.join(getTasksDir(cwd), taskId, "contract.json");
 }
 function readContract(taskId, cwd) {
   const contractPath = getContractPath(taskId, cwd);
-  if (!fs19.existsSync(contractPath)) {
+  if (!fs20.existsSync(contractPath)) {
     return null;
   }
   try {
-    const content = fs19.readFileSync(contractPath, "utf-8");
+    const content = fs20.readFileSync(contractPath, "utf-8");
     return JSON.parse(content);
   } catch {
     return null;
@@ -21893,12 +21982,12 @@ function readContract(taskId, cwd) {
 }
 function saveContract(taskId, contract, cwd) {
   const contractPath = getContractPath(taskId, cwd);
-  const dir = path15.dirname(contractPath);
-  if (!fs19.existsSync(dir)) {
-    fs19.mkdirSync(dir, { recursive: true });
+  const dir = path16.dirname(contractPath);
+  if (!fs20.existsSync(dir)) {
+    fs20.mkdirSync(dir, { recursive: true });
   }
   contract.updatedAt = new Date().toISOString();
-  fs19.writeFileSync(contractPath, JSON.stringify(contract, null, 2), "utf-8");
+  fs20.writeFileSync(contractPath, JSON.stringify(contract, null, 2), "utf-8");
 }
 function generateCheckpointsFromCriteria(taskId, acceptanceCriteria, taskTitle, cwd = process.cwd(), taskDescription) {
   const checkpoints = [];
@@ -24547,47 +24636,47 @@ var {
 } = import__.default;
 
 // src/index.ts
-import * as fs39 from "fs";
-import * as path35 from "path";
+import * as fs40 from "fs";
+import * as path36 from "path";
 
 // src/commands/setup.ts
 init_path();
 var import_prompts = __toESM(require_prompts3(), 1);
-import * as fs5 from "fs";
-import * as path3 from "path";
+import * as fs6 from "fs";
+import * as path4 from "path";
 
 // src/utils/pre.ts
 init_spawn_utils();
-import * as fs4 from "fs";
-import * as path2 from "path";
+import * as fs5 from "fs";
+import * as path3 from "path";
 function json(filePath) {
-  const resolved = path2.resolve(filePath);
+  const resolved = path3.resolve(filePath);
   return {
     exists() {
-      return fs4.existsSync(resolved);
+      return fs5.existsSync(resolved);
     },
     read() {
-      if (!fs4.existsSync(resolved)) {
+      if (!fs5.existsSync(resolved)) {
         throw new Error(`JSON file not found: ${resolved}`);
       }
-      const content = fs4.readFileSync(resolved, "utf-8");
+      const content = fs5.readFileSync(resolved, "utf-8");
       if (!content.trim()) {
         throw new Error(`JSON file is empty: ${resolved}`);
       }
       return JSON.parse(content);
     },
     write(data) {
-      const dir = path2.dirname(resolved);
-      if (!fs4.existsSync(dir)) {
-        fs4.mkdirSync(dir, { recursive: true });
+      const dir = path3.dirname(resolved);
+      if (!fs5.existsSync(dir)) {
+        fs5.mkdirSync(dir, { recursive: true });
       }
-      fs4.writeFileSync(resolved, JSON.stringify(data, null, 2) + `
+      fs5.writeFileSync(resolved, JSON.stringify(data, null, 2) + `
 `, "utf-8");
     },
     update(updater) {
-      const current = fs4.existsSync(resolved) ? JSON.parse(fs4.readFileSync(resolved, "utf-8") || "{}") : {};
+      const current = fs5.existsSync(resolved) ? JSON.parse(fs5.readFileSync(resolved, "utf-8") || "{}") : {};
       const updated = updater(current);
-      fs4.writeFileSync(resolved, JSON.stringify(updated, null, 2) + `
+      fs5.writeFileSync(resolved, JSON.stringify(updated, null, 2) + `
 `, "utf-8");
       return updated;
     }
@@ -24611,19 +24700,19 @@ class Pre {
   gitDir;
   packageJsonPath;
   constructor(projectRoot = process.cwd()) {
-    this.projectRoot = path2.resolve(projectRoot);
-    this.gitDir = path2.join(this.projectRoot, ".git");
-    this.packageJsonPath = path2.join(this.projectRoot, "package.json");
+    this.projectRoot = path3.resolve(projectRoot);
+    this.gitDir = path3.join(this.projectRoot, ".git");
+    this.packageJsonPath = path3.join(this.projectRoot, "package.json");
   }
   installPreCommit() {
     const hookPath = this.getHookPath("pre-commit");
     const command = DEFAULT_HOOKS["pre-commit"].command;
     this.ensureHooksDir();
-    fs4.writeFileSync(hookPath, `#!/bin/sh
+    fs5.writeFileSync(hookPath, `#!/bin/sh
 # pre-commit hook — auto-generated by projmnt4claude
 ${command}
 `, "utf-8");
-    fs4.chmodSync(hookPath, 493);
+    fs5.chmodSync(hookPath, 493);
     return hookPath;
   }
   installPrePublish() {
@@ -24641,10 +24730,10 @@ ${command}
   }
   removePreCommit() {
     const hookPath = this.getHookPath("pre-commit");
-    if (fs4.existsSync(hookPath)) {
-      const content = fs4.readFileSync(hookPath, "utf-8");
+    if (fs5.existsSync(hookPath)) {
+      const content = fs5.readFileSync(hookPath, "utf-8");
       if (content.includes("auto-generated by projmnt4claude")) {
-        fs4.unlinkSync(hookPath);
+        fs5.unlinkSync(hookPath);
         return true;
       }
     }
@@ -24669,9 +24758,9 @@ ${command}
   }
   isPreCommitInstalled() {
     const hookPath = this.getHookPath("pre-commit");
-    if (!fs4.existsSync(hookPath))
+    if (!fs5.existsSync(hookPath))
       return false;
-    const content = fs4.readFileSync(hookPath, "utf-8");
+    const content = fs5.readFileSync(hookPath, "utf-8");
     return content.includes("bun test");
   }
   isPrePublishInstalled() {
@@ -24727,12 +24816,12 @@ Coverage: ${coveragePercent}% (threshold: ${threshold * 100}%)`,
     }
   }
   getHookPath(type) {
-    return path2.join(this.gitDir, "hooks", type);
+    return path3.join(this.gitDir, "hooks", type);
   }
   ensureHooksDir() {
-    const hooksDir = path2.join(this.gitDir, "hooks");
-    if (!fs4.existsSync(hooksDir)) {
-      fs4.mkdirSync(hooksDir, { recursive: true });
+    const hooksDir = path3.join(this.gitDir, "hooks");
+    if (!fs5.existsSync(hooksDir)) {
+      fs5.mkdirSync(hooksDir, { recursive: true });
     }
   }
 }
@@ -24795,18 +24884,18 @@ async function setup(cwd = process.cwd(), options = {}) {
   }
   const config = {
     ...DEFAULT_CONFIG,
-    projectName: path3.basename(cwd),
+    projectName: path4.basename(cwd),
     createdAt: new Date().toISOString(),
     language
   };
   const configPath = getConfigPath(cwd);
-  fs5.writeFileSync(configPath, JSON.stringify(config, null, 2), "utf-8");
+  fs6.writeFileSync(configPath, JSON.stringify(config, null, 2), "utf-8");
   console.log(`✓ ${texts.setup.createConfig}`);
   copySkillFiles(cwd, language, texts);
   const gitHookConfig = config.gitHook ?? DEFAULT_GIT_HOOK;
   if (gitHookConfig.enabled) {
     const pre = new Pre(cwd);
-    if (fs5.existsSync(pre.gitDir)) {
+    if (fs6.existsSync(pre.gitDir)) {
       try {
         pre.installAll();
         console.log(texts.setupCmd.gitHookCreated);
@@ -24832,30 +24921,30 @@ function copySkillFiles(cwd, language, texts) {
   }
   const toolboxDir = getToolboxDir(cwd);
   const skillName = "projmnt4claude";
-  const targetDir = path3.join(toolboxDir, skillName);
+  const targetDir = path4.join(toolboxDir, skillName);
   ensureDir(targetDir);
-  ensureDir(path3.join(targetDir, "skills"));
-  const skillSource = path3.join(pluginRoot, "locales", language, "SKILL.md");
-  const skillTarget = path3.join(targetDir, "SKILL.md");
-  if (fs5.existsSync(skillSource)) {
-    fs5.copyFileSync(skillSource, skillTarget);
+  ensureDir(path4.join(targetDir, "skills"));
+  const skillSource = path4.join(pluginRoot, "locales", language, "SKILL.md");
+  const skillTarget = path4.join(targetDir, "SKILL.md");
+  if (fs6.existsSync(skillSource)) {
+    fs6.copyFileSync(skillSource, skillTarget);
     console.log(texts.setupCmd.copySkillFile.replace("{language}", language));
   } else {
-    const defaultSource = path3.join(pluginRoot, "skills", "projmnt4claude", "SKILL.md");
-    if (fs5.existsSync(defaultSource)) {
-      fs5.copyFileSync(defaultSource, skillTarget);
+    const defaultSource = path4.join(pluginRoot, "skills", "projmnt4claude", "SKILL.md");
+    if (fs6.existsSync(defaultSource)) {
+      fs6.copyFileSync(defaultSource, skillTarget);
       console.log(texts.setupCmd.copyDefault);
     } else {
       console.log(texts.setupCmd.fileNotFound);
     }
   }
-  const commandsSourceDir = path3.join(pluginRoot, "locales", language, "commands");
-  const commandsTargetDir = path3.join(targetDir, "commands");
+  const commandsSourceDir = path4.join(pluginRoot, "locales", language, "commands");
+  const commandsTargetDir = path4.join(targetDir, "commands");
   ensureDir(commandsTargetDir);
-  if (fs5.existsSync(commandsSourceDir)) {
-    const commandFiles = fs5.readdirSync(commandsSourceDir).filter((f) => f.endsWith(".md"));
+  if (fs6.existsSync(commandsSourceDir)) {
+    const commandFiles = fs6.readdirSync(commandsSourceDir).filter((f) => f.endsWith(".md"));
     for (const file of commandFiles) {
-      fs5.copyFileSync(path3.join(commandsSourceDir, file), path3.join(commandsTargetDir, file));
+      fs6.copyFileSync(path4.join(commandsSourceDir, file), path4.join(commandsTargetDir, file));
     }
     console.log(texts.setupCmd.copyCommandDocs.replace("{count}", String(commandFiles.length)).replace("{language}", language));
   } else {
@@ -24868,14 +24957,14 @@ function copySkillFiles(cwd, language, texts) {
 init_path();
 init_prompt_templates();
 init_config();
-import * as fs6 from "fs";
+import * as fs7 from "fs";
 function readConfig2(cwd = process.cwd()) {
   if (!isInitialized(cwd)) {
     return null;
   }
   const configPath = getConfigPath(cwd);
   try {
-    const content = fs6.readFileSync(configPath, "utf-8");
+    const content = fs7.readFileSync(configPath, "utf-8");
     return JSON.parse(content);
   } catch {
     return null;
@@ -24883,7 +24972,7 @@ function readConfig2(cwd = process.cwd()) {
 }
 function writeConfig2(config, cwd = process.cwd()) {
   const configPath = getConfigPath(cwd);
-  fs6.writeFileSync(configPath, JSON.stringify(config, null, 2), "utf-8");
+  fs7.writeFileSync(configPath, JSON.stringify(config, null, 2), "utf-8");
 }
 function getConfigValue2(config, key) {
   const keys = key.split(".");
@@ -25154,14 +25243,14 @@ init_dependency_engine();
 init_description_template();
 init_quality_gate();
 var import_prompts2 = __toESM(require_prompts3(), 1);
-import * as fs16 from "fs";
-import * as path12 from "path";
+import * as fs17 from "fs";
+import * as path13 from "path";
 import * as crypto from "crypto";
 
 // src/utils/batch-update-logger.ts
 init_path();
-import * as fs14 from "fs";
-import * as path10 from "path";
+import * as fs15 from "fs";
+import * as path11 from "path";
 function detectOperationSource() {
   const env = process.env;
   if (env.PROJMNT4CLAUDE_HOOK_MODE) {
@@ -25238,7 +25327,7 @@ function getExecutionContext(cwd = process.cwd()) {
 function getBatchUpdateLogPath(cwd = process.cwd()) {
   const logsDir = getLogsDir(cwd);
   const date = new Date().toISOString().split("T")[0];
-  return path10.join(logsDir, `batch-update-${date}.log`);
+  return path11.join(logsDir, `batch-update-${date}.log`);
 }
 function writeBatchUpdateLog(entry, cwd = process.cwd()) {
   const logsDir = getLogsDir(cwd);
@@ -25252,17 +25341,17 @@ function writeBatchUpdateLog(entry, cwd = process.cwd()) {
   };
   const logLine = JSON.stringify(fullEntry) + `
 `;
-  fs14.appendFileSync(logPath, logLine, "utf-8");
+  fs15.appendFileSync(logPath, logLine, "utf-8");
 }
 function queryBatchUpdateLogs(options = {}, cwd = process.cwd()) {
   const logsDir = getLogsDir(cwd);
-  if (!fs14.existsSync(logsDir)) {
+  if (!fs15.existsSync(logsDir)) {
     return [];
   }
-  const logFiles = fs14.readdirSync(logsDir).filter((f) => f.startsWith("batch-update-") && f.endsWith(".log")).map((f) => path10.join(logsDir, f));
+  const logFiles = fs15.readdirSync(logsDir).filter((f) => f.startsWith("batch-update-") && f.endsWith(".log")).map((f) => path11.join(logsDir, f));
   const allEntries = [];
   for (const logPath of logFiles) {
-    const content = fs14.readFileSync(logPath, "utf-8");
+    const content = fs15.readFileSync(logPath, "utf-8");
     const entries = content.split(`
 `).filter((line) => line.trim()).map((line) => JSON.parse(line));
     allEntries.push(...entries);
@@ -25390,7 +25479,7 @@ function filterMeaningfulHistory(history) {
   });
 }
 function parseCheckpoints(checkpointPath) {
-  const content = fs16.readFileSync(checkpointPath, "utf-8");
+  const content = fs17.readFileSync(checkpointPath, "utf-8");
   const lines = content.split(`
 `);
   const checkpoints = [];
@@ -25413,10 +25502,10 @@ function hasValidCheckpoints(checkpointPathOrContent, isContent = false, cwd) {
   if (isContent && checkpointPathOrContent !== null) {
     content = checkpointPathOrContent;
   } else if (!isContent && checkpointPathOrContent) {
-    if (!fs16.existsSync(checkpointPathOrContent)) {
+    if (!fs17.existsSync(checkpointPathOrContent)) {
       return { valid: false, reason: texts.taskCommand.checkpointFileNotExist };
     }
-    content = fs16.readFileSync(checkpointPathOrContent, "utf-8");
+    content = fs17.readFileSync(checkpointPathOrContent, "utf-8");
   } else {
     return { valid: false, reason: texts.taskCommand.validationError };
   }
@@ -25534,8 +25623,8 @@ function extractFileReferencesFromText(text) {
 function findMissingFiles(filePaths, cwd) {
   const missing = [];
   for (const fp of filePaths) {
-    const absolutePath = path12.resolve(cwd, fp);
-    if (!fs16.existsSync(absolutePath)) {
+    const absolutePath = path13.resolve(cwd, fp);
+    if (!fs17.existsSync(absolutePath)) {
       missing.push(fp);
     }
   }
@@ -25652,7 +25741,7 @@ async function createTask(options = {}, cwd = process.cwd()) {
     const referencedFiles = finalRelatedFiles.length > 0 ? finalRelatedFiles : extractFilePaths(task2.description || "", { includeBareFilenames: false });
     const fileWarnings = [];
     for (const file of referencedFiles) {
-      if (!fs16.existsSync(path12.join(cwd, file))) {
+      if (!fs17.existsSync(path13.join(cwd, file))) {
         fileWarnings.push(file);
       }
     }
@@ -25670,8 +25759,8 @@ async function createTask(options = {}, cwd = process.cwd()) {
       finalCheckpoints = filterResult.kept;
     }
     writeTaskMeta(task2, cwd);
-    const taskDir2 = path12.join(getTasksDir(cwd), taskId2);
-    const checkpointPath2 = path12.join(taskDir2, "checkpoint.md");
+    const taskDir2 = path13.join(getTasksDir(cwd), taskId2);
+    const checkpointPath2 = path13.join(taskDir2, "checkpoint.md");
     let checkpointContent;
     if (finalCheckpoints.length > 0) {
       checkpointContent = `# ${taskId2} Checkpoints
@@ -25686,7 +25775,7 @@ ${finalCheckpoints.map((cp) => `- [ ] ${cp}`).join(`
 - [ ] Checkpoints2（请替换为具体验收标准）
 `;
     }
-    fs16.writeFileSync(checkpointPath2, checkpointContent, "utf-8");
+    fs17.writeFileSync(checkpointPath2, checkpointContent, "utf-8");
     console.log(`
 ✅ Task created successfully!`);
     console.log(`   ID: ${taskId2}`);
@@ -25783,9 +25872,9 @@ ${finalCheckpoints.map((cp) => `- [ ] ${cp}`).join(`
     task.fileWarnings = fileValidation.missingFiles;
   }
   writeTaskMeta(task, cwd);
-  const taskDir = path12.join(getTasksDir(cwd), taskId);
-  const checkpointPath = path12.join(taskDir, "checkpoint.md");
-  fs16.writeFileSync(checkpointPath, defaultCheckpointContent, "utf-8");
+  const taskDir = path13.join(getTasksDir(cwd), taskId);
+  const checkpointPath = path13.join(taskDir, "checkpoint.md");
+  fs17.writeFileSync(checkpointPath, defaultCheckpointContent, "utf-8");
   console.log(`
 ✅ Task created successfully!`);
   console.log(`   ID: ${taskId}`);
@@ -26077,10 +26166,10 @@ function showTaskCompact(task, cwd) {
     console.log(`   Dependencies: ${task.dependencies.join(", ")}`);
   }
   if (cwd) {
-    const taskDir = path12.join(getTasksDir(cwd), task.id);
-    const checkpointPath = path12.join(taskDir, "checkpoint.md");
-    if (fs16.existsSync(checkpointPath)) {
-      const content = fs16.readFileSync(checkpointPath, "utf-8");
+    const taskDir = path13.join(getTasksDir(cwd), task.id);
+    const checkpointPath = path13.join(taskDir, "checkpoint.md");
+    if (fs17.existsSync(checkpointPath)) {
+      const content = fs17.readFileSync(checkpointPath, "utf-8");
       const cpLines = content.split(`
 `).filter((l) => l.trim().startsWith("- ["));
       if (cpLines.length > 0) {
@@ -26201,9 +26290,9 @@ function showTaskPanel(task, options, cwd) {
       console.log(`│ ${padByDisplayWidth(moreDesc, width - 3)}│`);
     }
   }
-  const taskDir = path12.join(getTasksDir(cwd), task.id);
-  const checkpointPath = path12.join(taskDir, "checkpoint.md");
-  if (fs16.existsSync(checkpointPath)) {
+  const taskDir = path13.join(getTasksDir(cwd), task.id);
+  const checkpointPath = path13.join(taskDir, "checkpoint.md");
+  if (fs17.existsSync(checkpointPath)) {
     if (options.checkpoints) {
       const checkpointsMeta = listCheckpoints(task.id, cwd);
       if (checkpointsMeta.length > 0) {
@@ -26226,7 +26315,7 @@ function showTaskPanel(task, options, cwd) {
         }
       }
     } else {
-      const content = fs16.readFileSync(checkpointPath, "utf-8");
+      const content = fs17.readFileSync(checkpointPath, "utf-8");
       const checkpointLines = content.split(`
 `).filter((l) => l.trim().startsWith("- ["));
       if (checkpointLines.length > 0) {
@@ -26426,8 +26515,8 @@ function showTaskClassic(task, options, cwd) {
       });
     }
   }
-  const taskDir = path12.join(getTasksDir(cwd), task.id);
-  const checkpointPath = path12.join(taskDir, "checkpoint.md");
+  const taskDir = path13.join(getTasksDir(cwd), task.id);
+  const checkpointPath = path13.join(taskDir, "checkpoint.md");
   console.log("");
   if (options.checkpoints || options.verbose) {
     const checkpointsMeta = listCheckpoints(task.id, cwd);
@@ -26451,10 +26540,10 @@ function showTaskClassic(task, options, cwd) {
         }
       });
     }
-  } else if (fs16.existsSync(checkpointPath)) {
+  } else if (fs17.existsSync(checkpointPath)) {
     console.log(makeSectionHeader("Checkpoints"));
     console.log("");
-    const content = fs16.readFileSync(checkpointPath, "utf-8");
+    const content = fs17.readFileSync(checkpointPath, "utf-8");
     const checkpointLines = content.split(`
 `).filter((l) => l.trim().startsWith("- ["));
     if (checkpointLines.length > 0) {
@@ -26550,10 +26639,10 @@ async function updateTask(taskId, options, cwd = process.cwd()) {
     process.exit(1);
   }
   if (options.status === "resolved") {
-    const taskDir = path12.join(getTasksDir(cwd), taskId);
-    const checkpointPath = path12.join(taskDir, "checkpoint.md");
+    const taskDir = path13.join(getTasksDir(cwd), taskId);
+    const checkpointPath = path13.join(taskDir, "checkpoint.md");
     if (!options.token) {
-      if (!fs16.existsSync(checkpointPath)) {
+      if (!fs17.existsSync(checkpointPath)) {
         task.status = options.status;
         writeTaskMeta(task, cwd);
         console.log(`✅ Task ${taskId} updated to resolved status`);
@@ -27019,14 +27108,14 @@ async function deleteTask(taskId, force = false, cwd = process.cwd()) {
   }
   const tasksDir = getTasksDir(cwd);
   const archiveDir = getArchiveDir(cwd);
-  const taskPath = path12.join(tasksDir, taskId);
-  const archivePath = path12.join(archiveDir, taskId);
-  if (!fs16.existsSync(archiveDir)) {
-    fs16.mkdirSync(archiveDir, { recursive: true });
+  const taskPath = path13.join(tasksDir, taskId);
+  const archivePath = path13.join(archiveDir, taskId);
+  if (!fs17.existsSync(archiveDir)) {
+    fs17.mkdirSync(archiveDir, { recursive: true });
   }
   task.status = "abandoned";
   writeTaskMeta(task, cwd);
-  fs16.renameSync(taskPath, archivePath);
+  fs17.renameSync(taskPath, archivePath);
   console.log(`✅ Task ${taskId} Archived`);
 }
 function purgeTasks(options = {}, cwd = process.cwd()) {
@@ -27035,7 +27124,7 @@ function purgeTasks(options = {}, cwd = process.cwd()) {
     process.exit(1);
   }
   const archiveDir = getArchiveDir(cwd);
-  if (!fs16.existsSync(archiveDir)) {
+  if (!fs17.existsSync(archiveDir)) {
     const msg = "没有需要清除的 abandoned Task";
     if (options.json) {
       console.log(JSON.stringify({ purged: 0, message: msg }));
@@ -27044,15 +27133,15 @@ function purgeTasks(options = {}, cwd = process.cwd()) {
     }
     return;
   }
-  const abandonedDirs = fs16.readdirSync(archiveDir).filter((name) => {
-    const dirPath = path12.join(archiveDir, name);
-    if (!fs16.statSync(dirPath).isDirectory())
+  const abandonedDirs = fs17.readdirSync(archiveDir).filter((name) => {
+    const dirPath = path13.join(archiveDir, name);
+    if (!fs17.statSync(dirPath).isDirectory())
       return false;
-    const metaPath = path12.join(dirPath, "meta.json");
-    if (!fs16.existsSync(metaPath))
+    const metaPath = path13.join(dirPath, "meta.json");
+    if (!fs17.existsSync(metaPath))
       return false;
     try {
-      const meta = JSON.parse(fs16.readFileSync(metaPath, "utf-8"));
+      const meta = JSON.parse(fs17.readFileSync(metaPath, "utf-8"));
       return meta.status === "abandoned";
     } catch {
       return false;
@@ -27081,9 +27170,9 @@ Use  --force or -y to confirm deletion`);
   }
   let purged = 0;
   for (const dir of abandonedDirs) {
-    const dirPath = path12.join(archiveDir, dir);
+    const dirPath = path13.join(archiveDir, dir);
     try {
-      fs16.rmSync(dirPath, { recursive: true, force: true });
+      fs17.rmSync(dirPath, { recursive: true, force: true });
       purged++;
     } catch (e) {
       console.error(`Delete ${dir} failed: ${e}`);
@@ -27259,10 +27348,10 @@ async function completeTask(taskId, options = {}, cwd = process.cwd()) {
   console.log(`\uD83D\uDE80 One-click complete task: ${taskId}`);
   console.log("━".repeat(SEPARATOR_WIDTH));
   console.log("");
-  const taskDir = path12.join(getTasksDir(cwd), taskId);
-  const checkpointPath = path12.join(taskDir, "checkpoint.md");
-  if (fs16.existsSync(checkpointPath)) {
-    const content = fs16.readFileSync(checkpointPath, "utf-8");
+  const taskDir = path13.join(getTasksDir(cwd), taskId);
+  const checkpointPath = path13.join(taskDir, "checkpoint.md");
+  if (fs17.existsSync(checkpointPath)) {
+    const content = fs17.readFileSync(checkpointPath, "utf-8");
     const lines = content.split(`
 `).filter((line) => line.trim().startsWith("- ["));
     if (lines.length > 0) {
@@ -27290,7 +27379,7 @@ async function completeTask(taskId, options = {}, cwd = process.cwd()) {
         for (const line of unchecked) {
           newContent = newContent.replace(line, line.replace("[ ]", "[x]"));
         }
-        fs16.writeFileSync(checkpointPath, newContent, "utf-8");
+        fs17.writeFileSync(checkpointPath, newContent, "utf-8");
         console.log("✅ All checkpoints auto-marked as completed");
       }
     }
@@ -27332,13 +27421,13 @@ async function completeTask(taskId, options = {}, cwd = process.cwd()) {
           field: "completionNote",
           newValue: noteResponse.note
         });
-        const taskDir2 = path12.join(getTasksDir(cwd), taskId);
-        const notesDir = path12.join(taskDir2, "notes");
-        if (!fs16.existsSync(notesDir)) {
-          fs16.mkdirSync(notesDir, { recursive: true });
+        const taskDir2 = path13.join(getTasksDir(cwd), taskId);
+        const notesDir = path13.join(taskDir2, "notes");
+        if (!fs17.existsSync(notesDir)) {
+          fs17.mkdirSync(notesDir, { recursive: true });
         }
-        const notePath = path12.join(notesDir, `completion-${new Date().toISOString().slice(0, 10)}.md`);
-        fs16.writeFileSync(notePath, `# 完成Description
+        const notePath = path13.join(notesDir, `completion-${new Date().toISOString().slice(0, 10)}.md`);
+        fs17.writeFileSync(notePath, `# 完成Description
 
 ${noteResponse.note}
 `, "utf-8");
@@ -27493,14 +27582,14 @@ async function executeTask(taskId, cwd = process.cwd()) {
       console.log("⚠️ Note: Incomplete dependencies exist, recommend completing them first.");
     }
   }
-  const taskDir = path12.join(getTasksDir(cwd), taskId);
-  const checkpointPath = path12.join(taskDir, "checkpoint.md");
+  const taskDir = path13.join(getTasksDir(cwd), taskId);
+  const checkpointPath = path13.join(taskDir, "checkpoint.md");
   console.log("");
   console.log("━".repeat(SEPARATOR_WIDTH));
   console.log("✅ Checkpoint List");
   console.log("━".repeat(SEPARATOR_WIDTH));
-  if (fs16.existsSync(checkpointPath)) {
-    const content = fs16.readFileSync(checkpointPath, "utf-8");
+  if (fs17.existsSync(checkpointPath)) {
+    const content = fs17.readFileSync(checkpointPath, "utf-8");
     console.log(content);
   } else {
     console.log("No checkpoints");
@@ -27542,13 +27631,13 @@ async function completeCheckpoint(taskId, options = {}, cwd = process.cwd()) {
     console.error(`Error: Task '${taskId}' does not exist`);
     process.exit(1);
   }
-  const taskDir = path12.join(getTasksDir(cwd), taskId);
-  const checkpointPath = path12.join(taskDir, "checkpoint.md");
-  if (!fs16.existsSync(checkpointPath)) {
+  const taskDir = path13.join(getTasksDir(cwd), taskId);
+  const checkpointPath = path13.join(taskDir, "checkpoint.md");
+  if (!fs17.existsSync(checkpointPath)) {
     console.log("No checkpoint file");
     return;
   }
-  const content = fs16.readFileSync(checkpointPath, "utf-8");
+  const content = fs17.readFileSync(checkpointPath, "utf-8");
   const lines = content.split(`
 `).filter((line) => line.trim().startsWith("- ["));
   if (lines.length === 0) {
@@ -27592,7 +27681,7 @@ async function completeCheckpoint(taskId, options = {}, cwd = process.cwd()) {
   for (let i = 0;i < lines.length; i++) {
     newContent = newContent.replace(lines[i], updatedLines[i]);
   }
-  fs16.writeFileSync(checkpointPath, newContent, "utf-8");
+  fs17.writeFileSync(checkpointPath, newContent, "utf-8");
   console.log("");
   console.log("━".repeat(SEPARATOR_WIDTH));
   if (allPassed) {
@@ -27631,8 +27720,8 @@ async function verifyCheckpoint(taskId, cwd = process.cwd()) {
     console.error(`Error: Task '${taskId}' does not exist`);
     process.exit(1);
   }
-  const taskDir = path12.join(getTasksDir(cwd), taskId);
-  const checkpointPath = path12.join(taskDir, "checkpoint.md");
+  const taskDir = path13.join(getTasksDir(cwd), taskId);
+  const checkpointPath = path13.join(taskDir, "checkpoint.md");
   const checkpoints = parseCheckpoints(checkpointPath);
   if (checkpoints.length === 0) {
     console.log("No checkpoints");
@@ -27687,9 +27776,9 @@ async function addSubtask(parentId, title, cwd = process.cwd()) {
   subtask.parentId = parentId;
   subtask.priority = parentTask.priority;
   writeTaskMeta(subtask, cwd);
-  const taskDir = path12.join(getTasksDir(cwd), subtaskId);
-  const checkpointPath = path12.join(taskDir, "checkpoint.md");
-  fs16.writeFileSync(checkpointPath, `# ${subtaskId} Checkpoints
+  const taskDir = path13.join(getTasksDir(cwd), subtaskId);
+  const checkpointPath = path13.join(taskDir, "checkpoint.md");
+  fs17.writeFileSync(checkpointPath, `# ${subtaskId} Checkpoints
 
 - [ ] Checkpoints1
 - [ ] Checkpoints2
@@ -27991,9 +28080,9 @@ async function splitTask(parentId, options = {}, cwd = process.cwd()) {
     subtask.priority = parentTask.priority;
     subtask.description = `从 ${parentId} 拆分的Subtasks`;
     writeTaskMeta(subtask, cwd);
-    const taskDir = path12.join(getTasksDir(cwd), subtaskId);
-    const checkpointPath = path12.join(taskDir, "checkpoint.md");
-    fs16.writeFileSync(checkpointPath, `# ${subtaskId} Checkpoints
+    const taskDir = path13.join(getTasksDir(cwd), subtaskId);
+    const checkpointPath = path13.join(taskDir, "checkpoint.md");
+    fs17.writeFileSync(checkpointPath, `# ${subtaskId} Checkpoints
 
 - [ ] 完成Task
 `, "utf-8");
@@ -28277,13 +28366,13 @@ async function batchUpdateTasks(options = {}, cwd = process.cwd()) {
   const allTasks = getAllTasks(cwd);
   let specifiedTaskIds = [];
   if (options.taskFile) {
-    const taskFilePath = path12.resolve(cwd, options.taskFile);
-    if (!fs16.existsSync(taskFilePath)) {
+    const taskFilePath = path13.resolve(cwd, options.taskFile);
+    if (!fs17.existsSync(taskFilePath)) {
       console.error(`Error: Task filedoes not exist: ${taskFilePath}`);
       process.exit(1);
     }
     try {
-      const fileContent = fs16.readFileSync(taskFilePath, "utf-8");
+      const fileContent = fs17.readFileSync(taskFilePath, "utf-8");
       specifiedTaskIds = fileContent.split(/[\n,]/).map((id) => id.trim()).filter((id) => id.length > 0);
     } catch (error) {
       console.error(`Error: Cannot readTask file: ${error.message}`);
@@ -29705,8 +29794,8 @@ init_quality_gate();
 init_dependency_engine();
 init_dependency_graph();
 var import_prompts6 = __toESM(require_prompts3(), 1);
-import * as path16 from "path";
-import * as fs20 from "fs";
+import * as path17 from "path";
+import * as fs21 from "fs";
 var DEFAULT_ANALYZE_CONFIG2 = {
   autoGenerateCheckpoints: true,
   checkpointGenerator: "rule-based",
@@ -30153,10 +30242,10 @@ var REPORT_PHASE_STATUS_MAP2 = [
   }
 ];
 function parseReportVerdict2(reportPath) {
-  if (!fs20.existsSync(reportPath))
+  if (!fs21.existsSync(reportPath))
     return null;
   try {
-    const content = fs20.readFileSync(reportPath, "utf-8");
+    const content = fs21.readFileSync(reportPath, "utf-8");
     const passMatch = content.match(/\*\*结果\*\*:\s*✅\s*PASS|Result:\s*PASS|\bPASS\b/i);
     const nopassMatch = content.match(/\*\*结果\*\*:\s*❌\s*NOPASS|Result:\s*NOPASS|\bNOPASS\b/i);
     if (nopassMatch)
@@ -30169,17 +30258,17 @@ function parseReportVerdict2(reportPath) {
   }
 }
 function getHarnessReportDir2(taskId, cwd) {
-  return path16.join(getProjectDir(cwd), "reports", "harness", taskId);
+  return path17.join(getProjectDir(cwd), "reports", "harness", taskId);
 }
 function checkReportStatusConsistency2(taskId, task, cwd) {
   const reportDir = getHarnessReportDir2(taskId, cwd);
-  if (!fs20.existsSync(reportDir))
+  if (!fs21.existsSync(reportDir))
     return null;
   const currentStatus = normalizeStatus(task.status);
   if (["resolved", "closed", "abandoned", "failed"].includes(currentStatus))
     return null;
   for (const mapping of REPORT_PHASE_STATUS_MAP2) {
-    const reportPath = path16.join(reportDir, mapping.reportFile);
+    const reportPath = path17.join(reportDir, mapping.reportFile);
     const verdict = parseReportVerdict2(reportPath);
     if (verdict === "PASS" && mapping.prerequisiteStatuses.includes(currentStatus)) {
       return {
@@ -30324,7 +30413,7 @@ function checkMissingPipelineEvidence2(taskId, task, cwd) {
   const required = STATUS_REQUIRED_REPORTS[currentStatus];
   if (!required)
     return null;
-  if (!fs20.existsSync(reportDir)) {
+  if (!fs21.existsSync(reportDir)) {
     return {
       taskId,
       type: "missing_pipeline_evidence",
@@ -30341,8 +30430,8 @@ function checkMissingPipelineEvidence2(taskId, task, cwd) {
   }
   const missingReports = [];
   for (const req of required) {
-    const reportPath = path16.join(reportDir, req.reportFile);
-    if (!fs20.existsSync(reportPath)) {
+    const reportPath = path17.join(reportDir, req.reportFile);
+    if (!fs21.existsSync(reportPath)) {
       missingReports.push(req);
     }
   }
@@ -30373,7 +30462,7 @@ function shouldTriggerAIInference2(task, layer1Issues, cwd) {
   const historyCount = task.history?.length ?? 0;
   if (historyCount >= 3) {
     const reportDir = getHarnessReportDir2(task.id, cwd);
-    if (!fs20.existsSync(reportDir))
+    if (!fs21.existsSync(reportDir))
       return true;
   }
   if (currentStatus === "open" && task.transitionNotes && task.transitionNotes.length > 0) {
@@ -31112,13 +31201,13 @@ async function analyzeProject2(cwd = process.cwd(), includeArchived = false, aiO
       }
     }
     if (normalizedStatus === "in_progress") {
-      const omcStateDir = path16.resolve(cwd, ".omc/state");
+      const omcStateDir = path17.resolve(cwd, ".omc/state");
       let hasActivePipeline = false;
-      if (fs20.existsSync(omcStateDir)) {
-        const pipelineStateFiles = fs20.readdirSync(omcStateDir).filter((f) => f.includes("pipeline") && f.endsWith(".json"));
+      if (fs21.existsSync(omcStateDir)) {
+        const pipelineStateFiles = fs21.readdirSync(omcStateDir).filter((f) => f.includes("pipeline") && f.endsWith(".json"));
         for (const stateFile of pipelineStateFiles) {
           try {
-            const stateData = JSON.parse(fs20.readFileSync(path16.join(omcStateDir, stateFile), "utf-8"));
+            const stateData = JSON.parse(fs21.readFileSync(path17.join(omcStateDir, stateFile), "utf-8"));
             if (stateData.active === true) {
               const taskIds = stateData.taskIds || (stateData.taskDescription ? [task.id] : []);
               if (taskIds.length === 0 || taskIds.includes(task.id)) {
@@ -31175,7 +31264,7 @@ async function analyzeProject2(cwd = process.cwd(), includeArchived = false, aiO
     const taskText = `${task.description || ""}
 ${task.title || ""}`;
     const referencedFiles = extractFilePaths(taskText, { includeBareFilenames: false });
-    const missingRefs = referencedFiles.filter((fp) => !fs20.existsSync(path16.resolve(cwd, fp)));
+    const missingRefs = referencedFiles.filter((fp) => !fs21.existsSync(path17.resolve(cwd, fp)));
     if (missingRefs.length > 0) {
       stats.fileNotFound++;
       issues.push({
@@ -31244,16 +31333,16 @@ ${task.title || ""}`;
     }
   }
   const archiveDir = getArchiveDir(cwd);
-  if (fs20.existsSync(archiveDir)) {
-    const abandonedDirs = fs20.readdirSync(archiveDir).filter((name) => {
-      const dirPath = path16.join(archiveDir, name);
-      if (!fs20.statSync(dirPath).isDirectory())
+  if (fs21.existsSync(archiveDir)) {
+    const abandonedDirs = fs21.readdirSync(archiveDir).filter((name) => {
+      const dirPath = path17.join(archiveDir, name);
+      if (!fs21.statSync(dirPath).isDirectory())
         return false;
-      const metaPath = path16.join(dirPath, "meta.json");
-      if (!fs20.existsSync(metaPath))
+      const metaPath = path17.join(dirPath, "meta.json");
+      if (!fs21.existsSync(metaPath))
         return false;
       try {
-        const meta = JSON.parse(fs20.readFileSync(metaPath, "utf-8"));
+        const meta = JSON.parse(fs21.readFileSync(metaPath, "utf-8"));
         return meta.status === "abandoned";
       } catch {
         return false;
@@ -31568,11 +31657,11 @@ function calculateReopenStats(tasks) {
   return { reopenCount, topReopened: reopenCounts };
 }
 function countArchivedTasks(cwd) {
-  const archiveDir = path16.join(getProjectDir(cwd), "archive");
-  if (!fs20.existsSync(archiveDir)) {
+  const archiveDir = path17.join(getProjectDir(cwd), "archive");
+  if (!fs21.existsSync(archiveDir)) {
     return 0;
   }
-  return fs20.readdirSync(archiveDir).filter((name) => fs20.statSync(path16.join(archiveDir, name)).isDirectory()).length;
+  return fs21.readdirSync(archiveDir).filter((name) => fs21.statSync(path17.join(archiveDir, name)).isDirectory()).length;
 }
 function calculateHealthScore(result) {
   if (result.stats.total === 0)
@@ -31715,21 +31804,21 @@ function searchCodebaseForCriteria2(criteria, cwd) {
     if (depth > 10)
       return;
     try {
-      const entries = fs20.readdirSync(dir, { withFileTypes: true });
+      const entries = fs21.readdirSync(dir, { withFileTypes: true });
       for (const entry of entries) {
-        const fullPath = path16.join(dir, entry.name);
+        const fullPath = path17.join(dir, entry.name);
         if (entry.isDirectory()) {
           if (excludeDirs.has(entry.name) || entry.name.startsWith(".")) {
             continue;
           }
           searchDirectory(fullPath, depth + 1);
         } else if (entry.isFile()) {
-          const ext = path16.extname(entry.name);
+          const ext = path17.extname(entry.name);
           if (!priorityExtensions.has(ext)) {
             continue;
           }
           try {
-            const content = fs20.readFileSync(fullPath, "utf-8");
+            const content = fs21.readFileSync(fullPath, "utf-8");
             const lines = content.split(`
 `);
             const matchedKeywords = [];
@@ -31754,7 +31843,7 @@ function searchCodebaseForCriteria2(criteria, cwd) {
               const matchDensity = lineNumbers.length / Math.max(lines.length, 1);
               const relevanceScore = (uniqueKeywordRatio * 0.7 + matchDensity * 0.3) * 100;
               results.push({
-                filePath: path16.relative(cwd, fullPath),
+                filePath: path17.relative(cwd, fullPath),
                 lineNumbers: lineNumbers.slice(0, 10),
                 matchedKeywords,
                 relevanceScore: Math.round(relevanceScore)
@@ -31857,15 +31946,15 @@ function inferVerificationCommands2(criteria, searchResults) {
   return commands;
 }
 function getContractPath2(taskId, cwd) {
-  return path16.join(getTasksDir(cwd), taskId, "contract.json");
+  return path17.join(getTasksDir(cwd), taskId, "contract.json");
 }
 function readContract2(taskId, cwd) {
   const contractPath = getContractPath2(taskId, cwd);
-  if (!fs20.existsSync(contractPath)) {
+  if (!fs21.existsSync(contractPath)) {
     return null;
   }
   try {
-    const content = fs20.readFileSync(contractPath, "utf-8");
+    const content = fs21.readFileSync(contractPath, "utf-8");
     return JSON.parse(content);
   } catch {
     return null;
@@ -31873,12 +31962,12 @@ function readContract2(taskId, cwd) {
 }
 function saveContract2(taskId, contract, cwd) {
   const contractPath = getContractPath2(taskId, cwd);
-  const dir = path16.dirname(contractPath);
-  if (!fs20.existsSync(dir)) {
-    fs20.mkdirSync(dir, { recursive: true });
+  const dir = path17.dirname(contractPath);
+  if (!fs21.existsSync(dir)) {
+    fs21.mkdirSync(dir, { recursive: true });
   }
   contract.updatedAt = new Date().toISOString();
-  fs20.writeFileSync(contractPath, JSON.stringify(contract, null, 2), "utf-8");
+  fs21.writeFileSync(contractPath, JSON.stringify(contract, null, 2), "utf-8");
 }
 function generateCheckpointsFromCriteria2(taskId, acceptanceCriteria, taskTitle, cwd = process.cwd(), taskDescription) {
   const checkpoints = [];
@@ -32220,15 +32309,15 @@ function extractBugReportFields(markdown) {
 }
 function loadLogContext(cwd, keywords) {
   const logsDir = getLogsDir(cwd);
-  if (!fs20.existsSync(logsDir))
+  if (!fs21.existsSync(logsDir))
     return [];
   const contextLines = [];
   try {
-    const files = fs20.readdirSync(logsDir).filter((f) => f.endsWith(".log")).map((f) => ({ name: f, path: path16.join(logsDir, f), mtime: fs20.statSync(path16.join(logsDir, f)).mtimeMs })).sort((a, b) => b.mtime - a.mtime);
+    const files = fs21.readdirSync(logsDir).filter((f) => f.endsWith(".log")).map((f) => ({ name: f, path: path17.join(logsDir, f), mtime: fs21.statSync(path17.join(logsDir, f)).mtimeMs })).sort((a, b) => b.mtime - a.mtime);
     const recentFiles = files.slice(0, 3);
     for (const file of recentFiles) {
       try {
-        const content = fs20.readFileSync(file.path, "utf-8");
+        const content = fs21.readFileSync(file.path, "utf-8");
         const lines = content.trim().split(`
 `).filter(Boolean);
         for (const line of lines) {
@@ -32493,14 +32582,14 @@ function exportTrainingDataToJsonl(fields, analysis, exportPath) {
     }
   };
   const line = JSON.stringify(trainingEntry);
-  fs20.appendFileSync(exportPath, line + `
+  fs21.appendFileSync(exportPath, line + `
 `, "utf-8");
 }
 async function analyzeBugReport(bugReportPath, cwd = process.cwd(), options = {}) {
   const logger = createLogger("analyze-bug-report", cwd);
   const startTime = Date.now();
-  const resolvedPath = path16.resolve(bugReportPath);
-  if (!fs20.existsSync(resolvedPath)) {
+  const resolvedPath = path17.resolve(bugReportPath);
+  if (!fs21.existsSync(resolvedPath)) {
     throw new Error(`Bug report 路径不存在: ${resolvedPath}`);
   }
   console.log("");
@@ -32511,13 +32600,13 @@ async function analyzeBugReport(bugReportPath, cwd = process.cwd(), options = {}
   console.log(`  Input: ${resolvedPath}`);
   console.log("");
   let markdown;
-  const stat = fs20.statSync(resolvedPath);
+  const stat = fs21.statSync(resolvedPath);
   if (stat.isDirectory()) {
-    const mdFiles = fs20.readdirSync(resolvedPath).filter((f) => f.endsWith(".md") || f.endsWith(".markdown"));
+    const mdFiles = fs21.readdirSync(resolvedPath).filter((f) => f.endsWith(".md") || f.endsWith(".markdown"));
     if (mdFiles.length === 0) {
       throw new Error(`目录中未找到 Markdown 文件: ${resolvedPath}`);
     }
-    const sorted = mdFiles.map((f) => ({ name: f, path: path16.join(resolvedPath, f), mtime: fs20.statSync(path16.join(resolvedPath, f)).mtimeMs })).sort((a, b) => b.mtime - a.mtime);
+    const sorted = mdFiles.map((f) => ({ name: f, path: path17.join(resolvedPath, f), mtime: fs21.statSync(path17.join(resolvedPath, f)).mtimeMs })).sort((a, b) => b.mtime - a.mtime);
     if (sorted.length > 1) {
       console.log(`  ⚠️  Directory has ${sorted.length} Markdown files, analyzing latest: ${sorted[0].name}`);
       console.log(`     Other files: ${sorted.slice(1).map((f) => f.name).join(", ")}`);
@@ -32526,10 +32615,10 @@ async function analyzeBugReport(bugReportPath, cwd = process.cwd(), options = {}
     if (!latestFile) {
       throw new Error(`目录中未找到有效的 Markdown 文件: ${resolvedPath}`);
     }
-    markdown = fs20.readFileSync(latestFile.path, "utf-8");
+    markdown = fs21.readFileSync(latestFile.path, "utf-8");
     console.log(`  Using file: ${latestFile.name}`);
   } else {
-    markdown = fs20.readFileSync(resolvedPath, "utf-8");
+    markdown = fs21.readFileSync(resolvedPath, "utf-8");
   }
   console.log("  \uD83D\uDCCB Extracting Bug Report fields...");
   const fields = extractBugReportFields(markdown);
@@ -32607,8 +32696,8 @@ async function analyzeBugReport(bugReportPath, cwd = process.cwd(), options = {}
   const reportMarkdown = generateBugAnalysisMarkdown(fields, logContext, analysis, timestamp);
   const reportsDir = getReportsDir(cwd);
   ensureDir(reportsDir);
-  const reportPath = path16.join(reportsDir, `bug-analysis-${timestamp}.md`);
-  fs20.writeFileSync(reportPath, reportMarkdown, "utf-8");
+  const reportPath = path17.join(reportsDir, `bug-analysis-${timestamp}.md`);
+  fs21.writeFileSync(reportPath, reportMarkdown, "utf-8");
   console.log(`  \uD83D\uDCC4 Report written to: ${reportPath}`);
   console.log("");
   const requirementDescription = generateRequirementFromAnalysis(fields, analysis);
@@ -32632,9 +32721,9 @@ async function analyzeBugReport(bugReportPath, cwd = process.cwd(), options = {}
       console.log("  ⚠️  Training data export not enabled. Please set training.exportEnabled: true in config.json");
     } else {
       const trainingDir = trainingConfig.outputDir || ".projmnt4claude/training-data/";
-      const resolvedTrainingDir = path16.isAbsolute(trainingDir) ? trainingDir : path16.join(getProjectDir(cwd), trainingDir);
+      const resolvedTrainingDir = path17.isAbsolute(trainingDir) ? trainingDir : path17.join(getProjectDir(cwd), trainingDir);
       ensureDir(resolvedTrainingDir);
-      const exportPath = path16.join(resolvedTrainingDir, "bug-analysis-training.jsonl");
+      const exportPath = path17.join(resolvedTrainingDir, "bug-analysis-training.jsonl");
       exportTrainingDataToJsonl(fields, result, exportPath);
       console.log(`  \uD83D\uDCCA Training data appended: ${exportPath}`);
       console.log("");
@@ -32682,8 +32771,8 @@ init_checkpoint_verification();
 init_i18n();
 init_analyze();
 var import_prompts7 = __toESM(require_prompts3(), 1);
-import * as path17 from "path";
-import * as fs21 from "fs";
+import * as path18 from "path";
+import * as fs22 from "fs";
 function normalizeType(type) {
   const typeMap = {
     bugfix: "bug",
@@ -33368,9 +33457,9 @@ async function fixSingleIssue(issue, cwd, nonInteractive) {
       if (nonInteractive) {
         let deleted = 0;
         for (const taskId of tasksToDelete) {
-          const dirPath = path17.join(archiveDir, taskId);
+          const dirPath = path18.join(archiveDir, taskId);
           try {
-            fs21.rmSync(dirPath, { recursive: true, force: true });
+            fs22.rmSync(dirPath, { recursive: true, force: true });
             deleted++;
           } catch {
             console.error("  " + t(cwd).analyzeFixPipeline.deleteFailed.replace("{taskId}", taskId));
@@ -33390,9 +33479,9 @@ async function fixSingleIssue(issue, cwd, nonInteractive) {
         if (response.confirm) {
           let deleted = 0;
           for (const taskId of tasksToDelete) {
-            const dirPath = path17.join(archiveDir, taskId);
+            const dirPath = path18.join(archiveDir, taskId);
             try {
-              fs21.rmSync(dirPath, { recursive: true, force: true });
+              fs22.rmSync(dirPath, { recursive: true, force: true });
               deleted++;
             } catch {
               console.error("  " + t(cwd).analyzeFixPipeline.deleteFailed.replace("{taskId}", taskId));
@@ -34046,8 +34135,8 @@ init_path();
 init_task2();
 init_quality_gate();
 var import_prompts10 = __toESM(require_prompts3(), 1);
-import * as fs23 from "fs";
-import * as path19 from "path";
+import * as fs24 from "fs";
+import * as path20 from "path";
 
 // src/commands/task.ts
 init_path();
@@ -34056,8 +34145,8 @@ init_checkpoint();
 init_checkpoint_verification();
 init_task();
 var import_prompts8 = __toESM(require_prompts3(), 1);
-import * as fs22 from "fs";
-import * as path18 from "path";
+import * as fs23 from "fs";
+import * as path19 from "path";
 init_dependency_graph();
 init_dependency_engine();
 init_description_template();
@@ -34080,10 +34169,10 @@ function hasValidCheckpoints2(checkpointPathOrContent, isContent = false, cwd) {
   if (isContent && checkpointPathOrContent !== null) {
     content = checkpointPathOrContent;
   } else if (!isContent && checkpointPathOrContent) {
-    if (!fs22.existsSync(checkpointPathOrContent)) {
+    if (!fs23.existsSync(checkpointPathOrContent)) {
       return { valid: false, reason: texts.taskCommand.checkpointFileNotExist };
     }
-    content = fs22.readFileSync(checkpointPathOrContent, "utf-8");
+    content = fs23.readFileSync(checkpointPathOrContent, "utf-8");
   } else {
     return { valid: false, reason: texts.taskCommand.validationError };
   }
@@ -34201,8 +34290,8 @@ function extractFileReferencesFromText2(text) {
 function findMissingFiles2(filePaths, cwd) {
   const missing = [];
   for (const fp of filePaths) {
-    const absolutePath = path18.resolve(cwd, fp);
-    if (!fs22.existsSync(absolutePath)) {
+    const absolutePath = path19.resolve(cwd, fp);
+    if (!fs23.existsSync(absolutePath)) {
       missing.push(fp);
     }
   }
@@ -34319,7 +34408,7 @@ async function createTask2(options = {}, cwd = process.cwd()) {
     const referencedFiles = finalRelatedFiles.length > 0 ? finalRelatedFiles : extractFilePaths(task2.description || "", { includeBareFilenames: false });
     const fileWarnings = [];
     for (const file of referencedFiles) {
-      if (!fs22.existsSync(path18.join(cwd, file))) {
+      if (!fs23.existsSync(path19.join(cwd, file))) {
         fileWarnings.push(file);
       }
     }
@@ -34337,8 +34426,8 @@ async function createTask2(options = {}, cwd = process.cwd()) {
       finalCheckpoints = filterResult.kept;
     }
     writeTaskMeta(task2, cwd);
-    const taskDir2 = path18.join(getTasksDir(cwd), taskId2);
-    const checkpointPath2 = path18.join(taskDir2, "checkpoint.md");
+    const taskDir2 = path19.join(getTasksDir(cwd), taskId2);
+    const checkpointPath2 = path19.join(taskDir2, "checkpoint.md");
     let checkpointContent;
     if (finalCheckpoints.length > 0) {
       checkpointContent = `# ${taskId2} Checkpoints
@@ -34353,7 +34442,7 @@ ${finalCheckpoints.map((cp) => `- [ ] ${cp}`).join(`
 - [ ] Checkpoints2（请替换为具体验收标准）
 `;
     }
-    fs22.writeFileSync(checkpointPath2, checkpointContent, "utf-8");
+    fs23.writeFileSync(checkpointPath2, checkpointContent, "utf-8");
     console.log(`
 ✅ Task created successfully!`);
     console.log(`   ID: ${taskId2}`);
@@ -34450,9 +34539,9 @@ ${finalCheckpoints.map((cp) => `- [ ] ${cp}`).join(`
     task.fileWarnings = fileValidation.missingFiles;
   }
   writeTaskMeta(task, cwd);
-  const taskDir = path18.join(getTasksDir(cwd), taskId);
-  const checkpointPath = path18.join(taskDir, "checkpoint.md");
-  fs22.writeFileSync(checkpointPath, defaultCheckpointContent, "utf-8");
+  const taskDir = path19.join(getTasksDir(cwd), taskId);
+  const checkpointPath = path19.join(taskDir, "checkpoint.md");
+  fs23.writeFileSync(checkpointPath, defaultCheckpointContent, "utf-8");
   console.log(`
 ✅ Task created successfully!`);
   console.log(`   ID: ${taskId}`);
@@ -34890,8 +34979,8 @@ async function initRequirement(description, cwd = process.cwd(), options = {}) {
       updateCheckpointMdFromArray(taskId, checkpointMetadata, cwd);
     }
   }
-  const taskDir = path19.join(getTasksDir(cwd), taskId);
-  const checkpointPath = path19.join(taskDir, "checkpoint.md");
+  const taskDir = path20.join(getTasksDir(cwd), taskId);
+  const checkpointPath = path20.join(taskDir, "checkpoint.md");
   const updatedTask = readTaskMeta(taskId, cwd);
   if (updatedTask?.checkpoints) {
     const checkpointsWithoutCommands = updatedTask.checkpoints.filter((cp) => {
@@ -35196,11 +35285,11 @@ function assessComplexity(description, analysis) {
 }
 function detectRoleFromProject(cwd, description) {
   const lowerDesc = description.toLowerCase();
-  const srcDir = path19.join(cwd, "src");
+  const srcDir = path20.join(cwd, "src");
   let projectDirs = [];
   try {
-    if (fs23.existsSync(srcDir)) {
-      projectDirs = fs23.readdirSync(srcDir, { withFileTypes: true }).filter((e) => e.isDirectory()).map((e) => e.name);
+    if (fs24.existsSync(srcDir)) {
+      projectDirs = fs24.readdirSync(srcDir, { withFileTypes: true }).filter((e) => e.isDirectory()).map((e) => e.name);
     }
   } catch {}
   const signals = {
@@ -35485,11 +35574,11 @@ async function initRequirementBatch(items, cwd, options) {
 
 // src/commands/help.ts
 init_i18n();
-import * as fs24 from "fs";
-import * as path20 from "path";
+import * as fs25 from "fs";
+import * as path21 from "path";
 function parseCommandMetadata(filePath) {
   try {
-    const content = fs24.readFileSync(filePath, "utf-8");
+    const content = fs25.readFileSync(filePath, "utf-8");
     const frontmatterMatch = content.match(/^---\n(.*?)\n---/s);
     if (!frontmatterMatch) {
       return null;
@@ -35516,16 +35605,16 @@ function getCommandsDir(cwd) {
   const language = getLanguage(cwd);
   const pluginRoot = process.env.CLAUDE_PLUGIN_ROOT;
   if (pluginRoot) {
-    const localesDir = path20.join(pluginRoot, "locales", language, "commands");
-    if (fs24.existsSync(localesDir)) {
+    const localesDir = path21.join(pluginRoot, "locales", language, "commands");
+    if (fs25.existsSync(localesDir)) {
       return localesDir;
     }
   }
-  return path20.join(cwd, "commands");
+  return path21.join(cwd, "commands");
 }
 function getAvailableCommands(commandsDir) {
   try {
-    const files = fs24.readdirSync(commandsDir);
+    const files = fs25.readdirSync(commandsDir);
     return files.filter((file) => file.endsWith(".md")).map((file) => file.replace(".md", "")).sort();
   } catch (error) {
     return [];
@@ -35549,7 +35638,7 @@ function showOverview(commandsDir, cwd) {
   console.log(`${t2.help.availableCommands}` + " ".repeat(maxCommandLength - 22) + " | " + t2.help.noDescription.split(" ")[0]);
   console.log("─".repeat(maxCommandLength + 2) + "-+-" + "─".repeat(50));
   for (const command of commands) {
-    const metadata = parseCommandMetadata(path20.join(commandsDir, `${command}.md`));
+    const metadata = parseCommandMetadata(path21.join(commandsDir, `${command}.md`));
     const description = metadata?.description || t2.help.noDescription;
     const paddedCommand = command.padEnd(maxCommandLength);
     console.log(`${paddedCommand} | ${description}`);
@@ -35574,12 +35663,12 @@ function showCommandHelp(commandsDir, commandName, cwd) {
     console.log("");
     return;
   }
-  const filePath = path20.join(commandsDir, `${matchedCommand}.md`);
-  if (!fs24.existsSync(filePath)) {
+  const filePath = path21.join(commandsDir, `${matchedCommand}.md`);
+  if (!fs25.existsSync(filePath)) {
     console.log(`❌ ${t2.help.commandNotFound}: ${matchedCommand}`);
     return;
   }
-  const content = fs24.readFileSync(filePath, "utf-8");
+  const content = fs25.readFileSync(filePath, "utf-8");
   const cleanContent = content.replace(/^---\n.*?\n---\n/s, "");
   console.log("");
   console.log(cleanContent);
@@ -35624,7 +35713,7 @@ function showSmartHelp(commandsDir, topic, cwd) {
     console.log(t2.help.suggestedCommands);
     console.log("");
     for (const cmd of matchedCommands) {
-      const metadata = parseCommandMetadata(path20.join(commandsDir, `${cmd}.md`));
+      const metadata = parseCommandMetadata(path21.join(commandsDir, `${cmd}.md`));
       const description = metadata?.description || t2.help.noDescription;
       console.log(`  \uD83D\uDCCC ${cmd}`);
       console.log(`     ${description}`);
@@ -35646,7 +35735,7 @@ function showSmartHelp(commandsDir, topic, cwd) {
 }
 function showHelp(topic, cwd = process.cwd()) {
   const commandsDir = getCommandsDir(cwd);
-  if (!fs24.existsSync(commandsDir)) {
+  if (!fs25.existsSync(commandsDir)) {
     const t2 = (init_i18n(), __toCommonJS(exports_i18n)).getI18n(getLanguage(cwd));
     console.error(`${t2.error}: ${t2.help.commandNotFound}`);
     console.error(`${t2.setupCmd.directory.replace("{path}", commandsDir)}`);
@@ -35670,15 +35759,15 @@ init_path();
 init_task2();
 init_logger();
 init_config2();
-import * as fs26 from "fs";
-import * as path22 from "path";
+import * as fs27 from "fs";
+import * as path23 from "path";
 import * as os2 from "os";
 
 // src/utils/log-analyzer.ts
 init_path();
 init_logger();
-import * as fs25 from "fs";
-import * as path21 from "path";
+import * as fs26 from "fs";
+import * as path22 from "path";
 
 class LogCollector {
   cwd;
@@ -35697,10 +35786,10 @@ class LogCollector {
       commands
     } = options;
     const logsDir = getLogsDir(this.cwd);
-    if (!fs25.existsSync(logsDir)) {
+    if (!fs26.existsSync(logsDir)) {
       return [];
     }
-    const logFiles = fs25.readdirSync(logsDir).filter((f) => f.endsWith(".log")).sort().reverse().slice(0, maxFiles);
+    const logFiles = fs26.readdirSync(logsDir).filter((f) => f.endsWith(".log")).sort().reverse().slice(0, maxFiles);
     const allEntries = [];
     const levelPriority = {
       error: 0,
@@ -35709,9 +35798,9 @@ class LogCollector {
       debug: 3
     };
     for (const file of logFiles) {
-      const filePath = path21.join(logsDir, file);
+      const filePath = path22.join(logsDir, file);
       try {
-        const content = fs25.readFileSync(filePath, "utf-8");
+        const content = fs26.readFileSync(filePath, "utf-8");
         const lines = content.split(`
 `).filter((l) => l.trim());
         for (const line of lines) {
@@ -35741,14 +35830,14 @@ class LogCollector {
   }
   getStats() {
     const logsDir = getLogsDir(this.cwd);
-    if (!fs25.existsSync(logsDir)) {
+    if (!fs26.existsSync(logsDir)) {
       return { fileCount: 0, totalSizeKB: 0, oldestFile: null, newestFile: null };
     }
-    const files = fs25.readdirSync(logsDir).filter((f) => f.endsWith(".log"));
+    const files = fs26.readdirSync(logsDir).filter((f) => f.endsWith(".log"));
     let totalSizeKB = 0;
     for (const f of files) {
       try {
-        const stat = fs25.statSync(path21.join(logsDir, f));
+        const stat = fs26.statSync(path22.join(logsDir, f));
         totalSizeKB += stat.size / 1024;
       } catch {}
     }
@@ -36263,7 +36352,7 @@ function getBuiltInAnalyzers() {
 // src/commands/doctor.ts
 init_config();
 init_i18n();
-var __dirname = "/mydata/workplace/git/projmnt4claude/src/commands";
+var __dirname = "/home/fuzhibo/workerplace/git/projmnt4claude/src/commands";
 async function runDoctor(fix = false, cwd = process.cwd()) {
   const texts = t(cwd).doctorCmd;
   console.log("");
@@ -36305,8 +36394,8 @@ async function runDoctor(fix = false, cwd = process.cwd()) {
 function checkProjectInit(cwd) {
   const texts = t(cwd).doctorCmd;
   const projectDir = getProjectDir(cwd);
-  const configPath = path22.join(projectDir, "config.json");
-  if (!fs26.existsSync(configPath)) {
+  const configPath = path23.join(projectDir, "config.json");
+  if (!fs27.existsSync(configPath)) {
     return {
       name: texts.checkProjectInit,
       status: "error",
@@ -36339,31 +36428,31 @@ function checkPluginCache(cwd) {
     };
   }
   details.push(`Plugin root: ${pluginRoot}`);
-  const mainFile = path22.join(pluginRoot, "dist", "projmnt4claude.js");
-  if (!fs26.existsSync(mainFile)) {
+  const mainFile = path23.join(pluginRoot, "dist", "projmnt4claude.js");
+  if (!fs27.existsSync(mainFile)) {
     status = "error";
     message = texts.checkPluginCacheMainFileMissing;
     details.push(`Missing: ${mainFile}`);
   } else {
     details.push(`✓ Main program: ${mainFile}`);
   }
-  const localesDir = path22.join(pluginRoot, "locales");
-  if (!fs26.existsSync(localesDir)) {
+  const localesDir = path23.join(pluginRoot, "locales");
+  if (!fs27.existsSync(localesDir)) {
     if (status !== "error") {
       status = "warning";
       message = texts.checkPluginCacheLocalesMissing;
     }
     details.push(`Missing: ${localesDir}`);
   } else {
-    const zhDir = path22.join(localesDir, "zh");
-    const enDir = path22.join(localesDir, "en");
-    if (fs26.existsSync(zhDir)) {
+    const zhDir = path23.join(localesDir, "zh");
+    const enDir = path23.join(localesDir, "en");
+    if (fs27.existsSync(zhDir)) {
       details.push("✓ Chinese language pack: locales/zh/");
     }
-    if (fs26.existsSync(enDir)) {
+    if (fs27.existsSync(enDir)) {
       details.push("✓ English language pack: locales/en/");
     }
-    if (!fs26.existsSync(zhDir) && !fs26.existsSync(enDir)) {
+    if (!fs27.existsSync(zhDir) && !fs27.existsSync(enDir)) {
       if (status !== "error") {
         status = "warning";
         message = "Language pack directories missing";
@@ -36371,15 +36460,15 @@ function checkPluginCache(cwd) {
       details.push("Warning: No language pack directories found");
     }
   }
-  const commandsDir = path22.join(pluginRoot, "commands");
-  if (!fs26.existsSync(commandsDir)) {
+  const commandsDir = path23.join(pluginRoot, "commands");
+  if (!fs27.existsSync(commandsDir)) {
     if (status !== "error") {
       status = "warning";
       message = texts.checkPluginCacheCommandsMissing;
     }
     details.push(`Missing: ${commandsDir}`);
   } else {
-    const commandFiles = fs26.readdirSync(commandsDir).filter((f) => f.endsWith(".md"));
+    const commandFiles = fs27.readdirSync(commandsDir).filter((f) => f.endsWith(".md"));
     details.push(`✓ Slash commands: ${commandFiles.length}`);
   }
   return {
@@ -36394,10 +36483,10 @@ function checkSkillFiles(cwd) {
   const texts = t(cwd).doctorCmd;
   const results = [];
   const toolboxDir = getToolboxDir(cwd);
-  const skillDir = path22.join(toolboxDir, "projmnt4claude");
-  const commandsDir = path22.join(skillDir, "commands");
-  if (fs26.existsSync(commandsDir)) {
-    const commandFiles = fs26.readdirSync(commandsDir).filter((f) => f.endsWith(".md"));
+  const skillDir = path23.join(toolboxDir, "projmnt4claude");
+  const commandsDir = path23.join(skillDir, "commands");
+  if (fs27.existsSync(commandsDir)) {
+    const commandFiles = fs27.readdirSync(commandsDir).filter((f) => f.endsWith(".md"));
     results.push({
       name: texts.checkSkillFiles,
       status: "ok",
@@ -36425,7 +36514,7 @@ function checkDirectoryStructure(cwd) {
     { name: "toolbox", path: getToolboxDir(cwd) }
   ];
   for (const dir of requiredDirs) {
-    if (!fs26.existsSync(dir.path)) {
+    if (!fs27.existsSync(dir.path)) {
       results.push({
         name: texts.checkDirectoryStructure.replace("{name}", dir.name),
         status: "error",
@@ -36444,20 +36533,20 @@ function checkDirectoryStructure(cwd) {
     }
   }
   const tasksDir = getTasksDir(cwd);
-  if (fs26.existsSync(tasksDir)) {
+  if (fs27.existsSync(tasksDir)) {
     const taskIds = getAllTaskIds(cwd);
     const hasAbandonedTasks = taskIds.some((taskId) => {
-      const metaPath = path22.join(tasksDir, taskId, "meta.json");
+      const metaPath = path23.join(tasksDir, taskId, "meta.json");
       try {
-        const meta = JSON.parse(fs26.readFileSync(metaPath, "utf-8"));
+        const meta = JSON.parse(fs27.readFileSync(metaPath, "utf-8"));
         return meta.status === "abandoned";
       } catch {
         return false;
       }
     });
     if (hasAbandonedTasks) {
-      const archiveDir = path22.join(projectDir, "archive");
-      if (!fs26.existsSync(archiveDir)) {
+      const archiveDir = path23.join(projectDir, "archive");
+      if (!fs27.existsSync(archiveDir)) {
         results.push({
           name: texts.checkDirectoryStructure.replace("{name}", "archive"),
           status: "warning",
@@ -36473,12 +36562,12 @@ function checkDirectoryStructure(cwd) {
 function checkPluginInstallationScope(cwd) {
   const results = [];
   const homeDir = os2.homedir();
-  const installedPluginsPath = path22.join(homeDir, ".claude", "plugins", "installed_plugins.json");
-  if (!fs26.existsSync(installedPluginsPath)) {
+  const installedPluginsPath = path23.join(homeDir, ".claude", "plugins", "installed_plugins.json");
+  if (!fs27.existsSync(installedPluginsPath)) {
     return results;
   }
   try {
-    const pluginsConfig = JSON.parse(fs26.readFileSync(installedPluginsPath, "utf-8"));
+    const pluginsConfig = JSON.parse(fs27.readFileSync(installedPluginsPath, "utf-8"));
     const plugins = pluginsConfig.plugins || {};
     const pluginKey = "projmnt4claude@projmnt4claude";
     const installations = plugins[pluginKey] || [];
@@ -36486,11 +36575,11 @@ function checkPluginInstallationScope(cwd) {
     if (projectScopedInstalls.length === 0) {
       return results;
     }
-    const normalizedCwd = path22.resolve(cwd);
+    const normalizedCwd = path23.resolve(cwd);
     const mismatchedInstalls = projectScopedInstalls.filter((inst) => {
       if (!inst.projectPath)
         return true;
-      return path22.resolve(inst.projectPath) !== normalizedCwd;
+      return path23.resolve(inst.projectPath) !== normalizedCwd;
     });
     if (mismatchedInstalls.length > 0) {
       const texts = t(cwd).doctorCmd;
@@ -36544,7 +36633,7 @@ function checkLoggingModule(cwd) {
   const texts = t(cwd).doctorCmd;
   const results = [];
   const logsDir = getLogsDir(cwd);
-  if (!fs26.existsSync(logsDir)) {
+  if (!fs27.existsSync(logsDir)) {
     results.push({
       name: texts.checkLogDirectory,
       status: "warning",
@@ -36646,11 +36735,11 @@ function checkLoggingModule(cwd) {
   const oversizedFiles = [];
   let totalSizeMB = 0;
   try {
-    const files = fs26.readdirSync(logsDir).filter((f) => f.endsWith(".log"));
+    const files = fs27.readdirSync(logsDir).filter((f) => f.endsWith(".log"));
     for (const file of files) {
-      const filePath = path22.join(logsDir, file);
+      const filePath = path23.join(logsDir, file);
       try {
-        const stat = fs26.statSync(filePath);
+        const stat = fs27.statSync(filePath);
         const sizeMB = stat.size / (1024 * 1024);
         totalSizeMB += sizeMB;
         if (sizeMB > 10) {
@@ -36697,7 +36786,7 @@ function checkDeprecatedStatuses(cwd) {
   const texts = t(cwd).doctorCmd;
   const results = [];
   const tasksDir = getTasksDir(cwd);
-  if (!fs26.existsSync(tasksDir)) {
+  if (!fs27.existsSync(tasksDir)) {
     return [{
       name: texts.checkDeprecatedStatus,
       status: "ok",
@@ -36710,10 +36799,10 @@ function checkDeprecatedStatuses(cwd) {
   const deprecatedStatuses = ["reopened", "needs_human"];
   const tasksWithDeprecatedStatus = [];
   for (const taskId of taskIds) {
-    const metaPath = path22.join(tasksDir, taskId, "meta.json");
-    if (fs26.existsSync(metaPath)) {
+    const metaPath = path23.join(tasksDir, taskId, "meta.json");
+    if (fs27.existsSync(metaPath)) {
       try {
-        const meta = JSON.parse(fs26.readFileSync(metaPath, "utf-8"));
+        const meta = JSON.parse(fs27.readFileSync(metaPath, "utf-8"));
         if (deprecatedStatuses.includes(meta.status)) {
           tasksWithDeprecatedStatus.push({ taskId, status: meta.status });
         }
@@ -36755,8 +36844,8 @@ function checkGitHooks(cwd) {
   if (!gitHookConfig.enabled) {
     return [{ status: "ok", name: texts.checkGitHooks, message: texts.checkGitHooksDisabled, fixable: false }];
   }
-  const gitDir = path22.join(cwd, ".git");
-  if (!fs26.existsSync(gitDir)) {
+  const gitDir = path23.join(cwd, ".git");
+  if (!fs27.existsSync(gitDir)) {
     return [{ status: "ok", name: texts.checkGitHooks, message: texts.checkGitHooksNotGitRepo, fixable: false }];
   }
   try {
@@ -36793,10 +36882,10 @@ function checkDeprecatedHooks(cwd) {
   const results = [];
   const deprecatedSettings = [];
   const deprecatedFiles = [];
-  const settingsPath = path22.join(cwd, ".claude", "settings.json");
-  if (fs26.existsSync(settingsPath)) {
+  const settingsPath = path23.join(cwd, ".claude", "settings.json");
+  if (fs27.existsSync(settingsPath)) {
     try {
-      const settings = JSON.parse(fs26.readFileSync(settingsPath, "utf-8"));
+      const settings = JSON.parse(fs27.readFileSync(settingsPath, "utf-8"));
       const hooks = settings.hooks || {};
       for (const [hookType, hookConfig] of Object.entries(hooks)) {
         if (typeof hookConfig === "string") {
@@ -36825,10 +36914,10 @@ function checkDeprecatedHooks(cwd) {
       }
     } catch {}
   }
-  const hooksDir = path22.join(cwd, ".projmnt4claude", "hooks");
-  if (fs26.existsSync(hooksDir)) {
+  const hooksDir = path23.join(cwd, ".projmnt4claude", "hooks");
+  if (fs27.existsSync(hooksDir)) {
     try {
-      const files = fs26.readdirSync(hooksDir);
+      const files = fs27.readdirSync(hooksDir);
       for (const file of files) {
         if (DEPRECATED_HOOK_SCRIPTS.includes(file)) {
           deprecatedFiles.push(file);
@@ -36916,10 +37005,10 @@ function resolvePluginRoot() {
   try {
     let dir = __dirname;
     for (let i = 0;i < 3; i++) {
-      if (fs26.existsSync(path22.join(dir, "locales"))) {
+      if (fs27.existsSync(path23.join(dir, "locales"))) {
         return dir;
       }
-      dir = path22.dirname(dir);
+      dir = path23.dirname(dir);
     }
   } catch {}
   return null;
@@ -36933,33 +37022,33 @@ async function fixIssues3(issues, cwd) {
     if (issue.name === "Skill Files" || issue.name === "Command Docs") {
       if (pluginRoot) {
         const toolboxDir = getToolboxDir(cwd);
-        const skillDir = path22.join(toolboxDir, "projmnt4claude");
-        if (!fs26.existsSync(skillDir)) {
-          fs26.mkdirSync(skillDir, { recursive: true });
+        const skillDir = path23.join(toolboxDir, "projmnt4claude");
+        if (!fs27.existsSync(skillDir)) {
+          fs27.mkdirSync(skillDir, { recursive: true });
         }
-        const configPath = path22.join(projectDir, "config.json");
+        const configPath = path23.join(projectDir, "config.json");
         let language = "zh";
-        if (fs26.existsSync(configPath)) {
+        if (fs27.existsSync(configPath)) {
           try {
-            const config = JSON.parse(fs26.readFileSync(configPath, "utf-8"));
+            const config = JSON.parse(fs27.readFileSync(configPath, "utf-8"));
             language = config.language || "zh";
           } catch {}
         }
-        const skillSource = path22.join(pluginRoot, "locales", language, "SKILL.md");
-        const skillTarget = path22.join(skillDir, "SKILL.md");
-        if (fs26.existsSync(skillSource)) {
-          fs26.copyFileSync(skillSource, skillTarget);
+        const skillSource = path23.join(pluginRoot, "locales", language, "SKILL.md");
+        const skillTarget = path23.join(skillDir, "SKILL.md");
+        if (fs27.existsSync(skillSource)) {
+          fs27.copyFileSync(skillSource, skillTarget);
           console.log(texts.copiedSkillMd);
         }
-        const commandsSourceDir = path22.join(pluginRoot, "locales", language, "commands");
-        const commandsTargetDir = path22.join(skillDir, "commands");
-        if (fs26.existsSync(commandsSourceDir)) {
-          if (!fs26.existsSync(commandsTargetDir)) {
-            fs26.mkdirSync(commandsTargetDir, { recursive: true });
+        const commandsSourceDir = path23.join(pluginRoot, "locales", language, "commands");
+        const commandsTargetDir = path23.join(skillDir, "commands");
+        if (fs27.existsSync(commandsSourceDir)) {
+          if (!fs27.existsSync(commandsTargetDir)) {
+            fs27.mkdirSync(commandsTargetDir, { recursive: true });
           }
-          const commandFiles = fs26.readdirSync(commandsSourceDir).filter((f) => f.endsWith(".md"));
+          const commandFiles = fs27.readdirSync(commandsSourceDir).filter((f) => f.endsWith(".md"));
           for (const file of commandFiles) {
-            fs26.copyFileSync(path22.join(commandsSourceDir, file), path22.join(commandsTargetDir, file));
+            fs27.copyFileSync(path23.join(commandsSourceDir, file), path23.join(commandsTargetDir, file));
           }
           console.log(texts.copiedCommandDocs.replace("{count}", String(commandFiles.length)));
         }
@@ -36971,17 +37060,17 @@ async function fixIssues3(issues, cwd) {
       const dirMap = {
         tasks: getTasksDir(cwd),
         toolbox: getToolboxDir(cwd),
-        archive: path22.join(projectDir, "archive")
+        archive: path23.join(projectDir, "archive")
       };
       const dirPath = dirMap[dirName];
-      if (dirPath && !fs26.existsSync(dirPath)) {
-        fs26.mkdirSync(dirPath, { recursive: true });
+      if (dirPath && !fs27.existsSync(dirPath)) {
+        fs27.mkdirSync(dirPath, { recursive: true });
         console.log(texts.createdDirectory.replace("{name}", dirName));
       }
     } else if (issue.name === texts.checkLogDirectory) {
       const logsDir = getLogsDir(cwd);
-      if (!fs26.existsSync(logsDir)) {
-        fs26.mkdirSync(logsDir, { recursive: true });
+      if (!fs27.existsSync(logsDir)) {
+        fs27.mkdirSync(logsDir, { recursive: true });
         console.log(texts.createdLogsDirectory);
       }
     } else if (issue.name === texts.checkLogConfigCompleteness || issue.name === texts.checkAiConfigCompleteness || issue.name === texts.checkTrainingConfigCompleteness) {
@@ -36996,10 +37085,10 @@ async function fixIssues3(issues, cwd) {
       const deprecatedMap = { reopened: "open", needs_human: "open" };
       let fixedCount = 0;
       for (const taskId of getAllTaskIds(cwd)) {
-        const metaPath = path22.join(tasksDir, taskId, "meta.json");
-        if (fs26.existsSync(metaPath)) {
+        const metaPath = path23.join(tasksDir, taskId, "meta.json");
+        if (fs27.existsSync(metaPath)) {
           try {
-            const meta = JSON.parse(fs26.readFileSync(metaPath, "utf-8"));
+            const meta = JSON.parse(fs27.readFileSync(metaPath, "utf-8"));
             if (deprecatedMap[meta.status]) {
               const oldStatus = meta.status;
               meta.status = deprecatedMap[oldStatus];
@@ -37013,7 +37102,7 @@ async function fixIssues3(issues, cwd) {
                 author: "doctor-fix"
               });
               meta.updatedAt = new Date().toISOString();
-              fs26.writeFileSync(metaPath, JSON.stringify(meta, null, 2), "utf-8");
+              fs27.writeFileSync(metaPath, JSON.stringify(meta, null, 2), "utf-8");
               fixedCount++;
             }
           } catch {}
@@ -37023,10 +37112,10 @@ async function fixIssues3(issues, cwd) {
     } else if (issue.name === texts.checkDeprecatedHooks) {
       let removedSettings = false;
       let removedFiles = false;
-      const settingsPath = path22.join(cwd, ".claude", "settings.json");
-      if (fs26.existsSync(settingsPath)) {
+      const settingsPath = path23.join(cwd, ".claude", "settings.json");
+      if (fs27.existsSync(settingsPath)) {
         try {
-          const settings = JSON.parse(fs26.readFileSync(settingsPath, "utf-8"));
+          const settings = JSON.parse(fs27.readFileSync(settingsPath, "utf-8"));
           const hooks = settings.hooks || {};
           let modified = false;
           for (const [hookType, hookConfig] of Object.entries(hooks)) {
@@ -37067,25 +37156,25 @@ async function fixIssues3(issues, cwd) {
             }
           }
           if (modified) {
-            fs26.writeFileSync(settingsPath, JSON.stringify(settings, null, 2), "utf-8");
+            fs27.writeFileSync(settingsPath, JSON.stringify(settings, null, 2), "utf-8");
             removedSettings = true;
           }
         } catch {}
       }
-      const hooksDir = path22.join(cwd, ".projmnt4claude", "hooks");
-      if (fs26.existsSync(hooksDir)) {
+      const hooksDir = path23.join(cwd, ".projmnt4claude", "hooks");
+      if (fs27.existsSync(hooksDir)) {
         try {
-          const files = fs26.readdirSync(hooksDir);
+          const files = fs27.readdirSync(hooksDir);
           for (const file of files) {
             if (DEPRECATED_HOOK_SCRIPTS.includes(file)) {
-              const filePath = path22.join(hooksDir, file);
-              fs26.unlinkSync(filePath);
+              const filePath = path23.join(hooksDir, file);
+              fs27.unlinkSync(filePath);
               removedFiles = true;
             }
           }
-          const remainingFiles = fs26.readdirSync(hooksDir);
+          const remainingFiles = fs27.readdirSync(hooksDir);
           if (remainingFiles.length === 0) {
-            fs26.rmdirSync(hooksDir);
+            fs27.rmdirSync(hooksDir);
           }
         } catch {}
       }
@@ -37233,12 +37322,12 @@ async function runDoctorDeep(cwd = process.cwd()) {
 init_harness();
 init_path();
 init_i18n();
-import * as fs37 from "fs";
-import * as path33 from "path";
+import * as fs38 from "fs";
+import * as path34 from "path";
 
 // src/utils/hd-assembly-line.ts
-import * as path32 from "path";
-import * as fs36 from "fs";
+import * as path33 from "path";
+import * as fs37 from "fs";
 import { execSync as execSync4 } from "child_process";
 
 // src/utils/harness-prevalidation.ts
@@ -37422,8 +37511,8 @@ init_path();
 // src/utils/harness-executor.ts
 init_harness();
 init_path();
-import * as fs27 from "fs";
-import * as path23 from "path";
+import * as fs28 from "fs";
+import * as path24 from "path";
 
 // src/utils/role-prompts.ts
 init_i18n();
@@ -37808,9 +37897,9 @@ class HarnessExecutor {
   }
   async buildOrLoadContract(task) {
     const contractPath = this.getContractPath(task.id);
-    if (fs27.existsSync(contractPath)) {
+    if (fs28.existsSync(contractPath)) {
       try {
-        const content = fs27.readFileSync(contractPath, "utf-8");
+        const content = fs28.readFileSync(contractPath, "utf-8");
         return JSON.parse(content);
       } catch {}
     }
@@ -38062,14 +38151,14 @@ ${roleTemplate.extraInstructions.map((inst, i) => `${i + 1}. ${inst}`).join(`
   async collectEvidence(taskId) {
     const evidenceDir = this.getEvidenceDir(taskId);
     const evidence = [];
-    if (!fs27.existsSync(evidenceDir)) {
+    if (!fs28.existsSync(evidenceDir)) {
       return evidence;
     }
-    const files = fs27.readdirSync(evidenceDir);
+    const files = fs28.readdirSync(evidenceDir);
     for (const file of files) {
-      const filePath = path23.join(evidenceDir, file);
-      if (fs27.statSync(filePath).isFile()) {
-        evidence.push(path23.relative(this.config.cwd, filePath));
+      const filePath = path24.join(evidenceDir, file);
+      if (fs28.statSync(filePath).isFile()) {
+        evidence.push(path24.relative(this.config.cwd, filePath));
       }
     }
     return evidence;
@@ -38084,34 +38173,34 @@ ${roleTemplate.extraInstructions.map((inst, i) => `${i + 1}. ${inst}`).join(`
   }
   getContractPath(taskId) {
     const projectDir = getProjectDir(this.config.cwd);
-    return path23.join(projectDir, "tasks", taskId, "contract.json");
+    return path24.join(projectDir, "tasks", taskId, "contract.json");
   }
   saveContract(taskId, contract) {
     const contractPath = this.getContractPath(taskId);
-    const dir = path23.dirname(contractPath);
-    if (!fs27.existsSync(dir)) {
-      fs27.mkdirSync(dir, { recursive: true });
+    const dir = path24.dirname(contractPath);
+    if (!fs28.existsSync(dir)) {
+      fs28.mkdirSync(dir, { recursive: true });
     }
     contract.updatedAt = new Date().toISOString();
-    fs27.writeFileSync(contractPath, JSON.stringify(contract, null, 2), "utf-8");
+    fs28.writeFileSync(contractPath, JSON.stringify(contract, null, 2), "utf-8");
   }
   getEvidenceDir(taskId) {
     const projectDir = getProjectDir(this.config.cwd);
-    return path23.join(projectDir, "evidence", taskId);
+    return path24.join(projectDir, "evidence", taskId);
   }
   getDevReportPath(taskId) {
     const projectDir = getProjectDir(this.config.cwd);
-    return path23.join(projectDir, "reports", "harness", taskId, "dev-report.md");
+    return path24.join(projectDir, "reports", "harness", taskId, "dev-report.md");
   }
   async saveDevReport(taskId, report) {
     const reportPath = this.getDevReportPath(taskId);
-    const dir = path23.dirname(reportPath);
-    if (!fs27.existsSync(dir)) {
-      fs27.mkdirSync(dir, { recursive: true });
+    const dir = path24.dirname(reportPath);
+    if (!fs28.existsSync(dir)) {
+      fs28.mkdirSync(dir, { recursive: true });
     }
     archiveReportIfExists(reportPath);
     const content = this.formatDevReport(report);
-    fs27.writeFileSync(reportPath, content, "utf-8");
+    fs28.writeFileSync(reportPath, content, "utf-8");
   }
   formatDevReport(report) {
     let texts;
@@ -38550,8 +38639,8 @@ ${devReport.evidence.map((evidence) => `- ${evidence}`).join(`
 init_task();
 init_harness_helpers();
 init_headless_agent();
-import * as path25 from "path";
-import * as fs29 from "fs";
+import * as path26 from "path";
+import * as fs30 from "fs";
 init_checkpoint();
 init_contradiction_detector();
 init_prompt_templates();
@@ -38606,8 +38695,8 @@ function createDefaultQAAcceptanceResult(taskId) {
 
 // src/utils/qa-acceptance-criteria-verifier.ts
 init_spawn_utils();
-import * as fs28 from "fs";
-import * as path24 from "path";
+import * as fs29 from "fs";
+import * as path25 from "path";
 
 // src/utils/qa-acceptance-criteria-parser.ts
 class AcceptanceCriteriaParser {
@@ -39086,11 +39175,11 @@ class QAAcceptanceCriteriaVerifier {
   }
   async updateTaskCheckpoints(taskId, results) {
     try {
-      const taskMetaPath = path24.join(this.cwd, ".projmnt4claude", "tasks", taskId, "meta.json");
-      if (!fs28.existsSync(taskMetaPath)) {
+      const taskMetaPath = path25.join(this.cwd, ".projmnt4claude", "tasks", taskId, "meta.json");
+      if (!fs29.existsSync(taskMetaPath)) {
         return;
       }
-      const taskMetaContent = fs28.readFileSync(taskMetaPath, "utf-8");
+      const taskMetaContent = fs29.readFileSync(taskMetaPath, "utf-8");
       const taskMeta = JSON.parse(taskMetaContent);
       if (taskMeta.checkpoints) {
         for (const result of results) {
@@ -39105,15 +39194,15 @@ class QAAcceptanceCriteriaVerifier {
             }
           }
         }
-        fs28.writeFileSync(taskMetaPath, JSON.stringify(taskMeta, null, 2), "utf-8");
+        fs29.writeFileSync(taskMetaPath, JSON.stringify(taskMeta, null, 2), "utf-8");
       }
     } catch {}
   }
   async verifyBuild(task) {
     const result = createDefaultAcceptanceResult("build");
     try {
-      const packageJsonPath = path24.join(this.cwd, "package.json");
-      if (!fs28.existsSync(packageJsonPath)) {
+      const packageJsonPath = path25.join(this.cwd, "package.json");
+      if (!fs29.existsSync(packageJsonPath)) {
         result.passed = true;
         result.reason = "无 package.json，跳过构建验证";
         return result;
@@ -39144,8 +39233,8 @@ class QAAcceptanceCriteriaVerifier {
   }
   getBuildCommand() {
     try {
-      const packageJsonPath = path24.join(this.cwd, "package.json");
-      const packageJson = JSON.parse(fs28.readFileSync(packageJsonPath, "utf-8"));
+      const packageJsonPath = path25.join(this.cwd, "package.json");
+      const packageJson = JSON.parse(fs29.readFileSync(packageJsonPath, "utf-8"));
       if (packageJson.scripts?.build) {
         return `bun run build`;
       }
@@ -39201,8 +39290,8 @@ class QAAcceptanceCriteriaVerifier {
       ];
       for (const pattern of patterns) {
         if (pattern && pattern !== file) {
-          const fullPath = path24.join(this.cwd, pattern);
-          if (fs28.existsSync(fullPath)) {
+          const fullPath = path25.join(this.cwd, pattern);
+          if (fs29.existsSync(fullPath)) {
             testFiles.push(pattern);
           }
         }
@@ -39426,8 +39515,8 @@ ${deferredInfo}` : deferredInfo;
     const existingFiles = [];
     const missingFiles = [];
     for (const filePath of task.files) {
-      const fullPath = path25.isAbsolute(filePath) ? filePath : path25.join(this.config.cwd, filePath);
-      if (fs29.existsSync(fullPath)) {
+      const fullPath = path26.isAbsolute(filePath) ? filePath : path26.join(this.config.cwd, filePath);
+      if (fs30.existsSync(fullPath)) {
         existingFiles.push(filePath);
       } else {
         missingFiles.push(filePath);
@@ -39556,9 +39645,9 @@ ${texts.harness.logs.existingFiles || "Existing Files"}:`);
   }
   getTestConfig() {
     try {
-      const configPath = path25.join(this.config.cwd, ".projmnt4claude", "config.json");
-      if (fs29.existsSync(configPath)) {
-        const content = fs29.readFileSync(configPath, "utf-8");
+      const configPath = path26.join(this.config.cwd, ".projmnt4claude", "config.json");
+      if (fs30.existsSync(configPath)) {
+        const content = fs30.readFileSync(configPath, "utf-8");
         const projectConfig = JSON.parse(content);
         const testConfig = projectConfig.harness?.test || {};
         if (testConfig.testFailurePatterns) {
@@ -39675,9 +39764,9 @@ ${truncated}`];
   }
   findTestFiles(dir) {
     const files = [];
-    const entries = fs29.readdirSync(dir, { withFileTypes: true });
+    const entries = fs30.readdirSync(dir, { withFileTypes: true });
     for (const entry of entries) {
-      const fullPath = path25.join(dir, entry.name);
+      const fullPath = path26.join(dir, entry.name);
       if (entry.isDirectory()) {
         files.push(...this.findTestFiles(fullPath));
       } else if (entry.isFile() && /\.(test|spec)\.[jt]sx?$/.test(entry.name)) {
@@ -40012,8 +40101,8 @@ init_task2();
 init_harness_helpers();
 init_headless_agent();
 init_contradiction_detector();
-import * as fs30 from "fs";
-import * as path26 from "path";
+import * as fs31 from "fs";
+import * as path27 from "path";
 init_prompt_templates();
 init_harness_snapshot();
 init_i18n();
@@ -40493,11 +40582,11 @@ ${texts.harness.logs.phantomTaskNopassRequirement}
       texts = getI18n("zh");
     }
     const contractPath = this.getContractPath(taskId);
-    if (!fs30.existsSync(contractPath)) {
+    if (!fs31.existsSync(contractPath)) {
       return null;
     }
     try {
-      const content = fs30.readFileSync(contractPath, "utf-8");
+      const content = fs31.readFileSync(contractPath, "utf-8");
       const parsed = JSON.parse(content);
       const validated = this.validateSprintContract(parsed, taskId);
       if (!validated) {
@@ -40511,21 +40600,21 @@ ${texts.harness.logs.phantomTaskNopassRequirement}
   }
   getContractPath(taskId) {
     const projectDir = getProjectDir(this.config.cwd);
-    return path26.join(projectDir, "tasks", taskId, "contract.json");
+    return path27.join(projectDir, "tasks", taskId, "contract.json");
   }
   getReviewReportPath(taskId) {
     const projectDir = getProjectDir(this.config.cwd);
-    return path26.join(projectDir, "reports", "harness", taskId, "review-report.md");
+    return path27.join(projectDir, "reports", "harness", taskId, "review-report.md");
   }
   async saveReviewReport(taskId, verdict, devReport) {
     const reportPath = this.getReviewReportPath(taskId);
-    const dir = path26.dirname(reportPath);
-    if (!fs30.existsSync(dir)) {
-      fs30.mkdirSync(dir, { recursive: true });
+    const dir = path27.dirname(reportPath);
+    if (!fs31.existsSync(dir)) {
+      fs31.mkdirSync(dir, { recursive: true });
     }
     archiveReportIfExists(reportPath);
     const content = this.formatReviewReport(verdict, devReport);
-    fs30.writeFileSync(reportPath, content, "utf-8");
+    fs31.writeFileSync(reportPath, content, "utf-8");
   }
   saveRawEvaluationOutput(taskId, output, stderr, success) {
     let texts;
@@ -40536,12 +40625,12 @@ ${texts.harness.logs.phantomTaskNopassRequirement}
     }
     try {
       const projectDir = getProjectDir(this.config.cwd);
-      const dir = path26.join(projectDir, "reports", "harness", taskId);
-      if (!fs30.existsSync(dir)) {
-        fs30.mkdirSync(dir, { recursive: true });
+      const dir = path27.join(projectDir, "reports", "harness", taskId);
+      if (!fs31.existsSync(dir)) {
+        fs31.mkdirSync(dir, { recursive: true });
       }
       const timestamp = new Date().toISOString().replace(/[:.]/g, "-");
-      const rawPath = path26.join(dir, `evaluation-raw-${timestamp}.log`);
+      const rawPath = path27.join(dir, `evaluation-raw-${timestamp}.log`);
       const lines = [
         `# ${texts.harness.logs.rawEvaluationOutputTitle || "Raw Evaluation Output"}`,
         `Task: ${taskId}`,
@@ -40556,7 +40645,7 @@ ${texts.harness.logs.phantomTaskNopassRequirement}
         "--- STDERR ---",
         stderr || "(empty)"
       ];
-      fs30.writeFileSync(rawPath, lines.join(`
+      fs31.writeFileSync(rawPath, lines.join(`
 `), "utf-8");
       console.log(`   \uD83D\uDCC4 ${texts.harness.logs.rawOutputSaved.replace("{filename}", `evaluation-raw-${timestamp}.log`)}`);
     } catch (error) {
@@ -40718,8 +40807,8 @@ class RetryHandler {
 // src/utils/harness-status-reporter.ts
 init_harness();
 init_path();
-import * as fs31 from "fs";
-import * as path27 from "path";
+import * as fs32 from "fs";
+import * as path28 from "path";
 
 class HarnessStatusReporter {
   statusPath;
@@ -40727,7 +40816,7 @@ class HarnessStatusReporter {
   currentReport;
   lastBatchContext;
   constructor(cwd, sessionId) {
-    this.statusPath = path27.join(getProjectDir(cwd), "harness-status.json");
+    this.statusPath = path28.join(getProjectDir(cwd), "harness-status.json");
     this.sessionId = sessionId;
     this.currentReport = this.createInitialReport();
   }
@@ -41004,9 +41093,9 @@ class HarnessStatusReporter {
   }
   checkStaleStatus() {
     try {
-      if (!fs31.existsSync(this.statusPath))
+      if (!fs32.existsSync(this.statusPath))
         return;
-      const raw = fs31.readFileSync(this.statusPath, "utf-8");
+      const raw = fs32.readFileSync(this.statusPath, "utf-8");
       const existing = JSON.parse(raw);
       if (existing.state !== "running")
         return;
@@ -41017,11 +41106,11 @@ class HarnessStatusReporter {
     } catch {}
   }
   writeStatus() {
-    const dir = path27.dirname(this.statusPath);
-    if (!fs31.existsSync(dir)) {
-      fs31.mkdirSync(dir, { recursive: true });
+    const dir = path28.dirname(this.statusPath);
+    if (!fs32.existsSync(dir)) {
+      fs32.mkdirSync(dir, { recursive: true });
     }
-    fs31.writeFileSync(this.statusPath, JSON.stringify(this.currentReport, null, 2), "utf-8");
+    fs32.writeFileSync(this.statusPath, JSON.stringify(this.currentReport, null, 2), "utf-8");
   }
   logToConsole(phase, status, message) {
     const progress = `${this.currentReport.completedTasks}/${this.currentReport.totalTasks}`;
@@ -41051,13 +41140,13 @@ class HarnessStatusReporter {
 init_harness();
 init_path();
 init_i18n();
-import * as fs33 from "fs";
-import * as path29 from "path";
+import * as fs34 from "fs";
+import * as path30 from "path";
 
 // src/utils/harness-reporter.ts
 init_path();
-import * as fs32 from "fs";
-import * as path28 from "path";
+import * as fs33 from "fs";
+import * as path29 from "path";
 
 class HarnessReporter {
   config;
@@ -41066,12 +41155,12 @@ class HarnessReporter {
   }
   async generateSummaryReport(summary) {
     const reportPath = this.getSummaryReportPath();
-    const dir = path28.dirname(reportPath);
-    if (!fs32.existsSync(dir)) {
-      fs32.mkdirSync(dir, { recursive: true });
+    const dir = path29.dirname(reportPath);
+    if (!fs33.existsSync(dir)) {
+      fs33.mkdirSync(dir, { recursive: true });
     }
     const content = this.formatSummaryReport(summary);
-    fs32.writeFileSync(reportPath, content, "utf-8");
+    fs33.writeFileSync(reportPath, content, "utf-8");
     console.log(`
 \uD83D\uDCC4 执行摘要已保存: ${reportPath}`);
   }
@@ -41161,16 +41250,16 @@ class HarnessReporter {
   getSummaryReportPath() {
     const projectDir = getProjectDir(this.config.cwd);
     const timestamp = new Date().toISOString().replace(/[:.]/g, "-").substring(0, 19);
-    return path28.join(projectDir, "reports", "harness", `summary-${timestamp}.md`);
+    return path29.join(projectDir, "reports", "harness", `summary-${timestamp}.md`);
   }
   async generateTaskReport(record) {
     const taskDir = this.getTaskReportDir(record.taskId);
-    if (!fs32.existsSync(taskDir)) {
-      fs32.mkdirSync(taskDir, { recursive: true });
+    if (!fs33.existsSync(taskDir)) {
+      fs33.mkdirSync(taskDir, { recursive: true });
     }
-    const overviewPath = path28.join(taskDir, "overview.md");
+    const overviewPath = path29.join(taskDir, "overview.md");
     const overviewContent = this.formatTaskOverview(record);
-    fs32.writeFileSync(overviewPath, overviewContent, "utf-8");
+    fs33.writeFileSync(overviewPath, overviewContent, "utf-8");
   }
   formatTaskOverview(record) {
     const lines = [];
@@ -41241,7 +41330,7 @@ class HarnessReporter {
   }
   getTaskReportDir(taskId) {
     const projectDir = getProjectDir(this.config.cwd);
-    return path28.join(projectDir, "reports", "harness", taskId);
+    return path29.join(projectDir, "reports", "harness", taskId);
   }
   generateJSONSummary(summary) {
     const data = {
@@ -41278,7 +41367,7 @@ init_plan2();
 init_quality_gate();
 init_harness_snapshot();
 function getRuntimeStatePath(cwd) {
-  return path29.join(getProjectDir(cwd), "harness-state.json");
+  return path30.join(getProjectDir(cwd), "harness-state.json");
 }
 function saveRuntimeState(state, cwd) {
   const statePath = getRuntimeStatePath(cwd);
@@ -41290,7 +41379,7 @@ function saveRuntimeState(state, cwd) {
     phaseRetryCounters: Object.fromEntries(state.phaseRetryCounters || []),
     taskPhaseCheckpoints: Object.fromEntries(state.taskPhaseCheckpoints || [])
   };
-  fs33.writeFileSync(statePath, JSON.stringify(data, null, 2), "utf-8");
+  fs34.writeFileSync(statePath, JSON.stringify(data, null, 2), "utf-8");
 }
 
 // src/utils/hd-assembly-line.ts
@@ -41300,13 +41389,13 @@ init_checkpoint_verification();
 
 // src/utils/post-qa-gate/runner.ts
 init_task2();
-import * as fs35 from "node:fs";
-import * as path31 from "node:path";
+import * as fs36 from "node:fs";
+import * as path32 from "node:path";
 
 // src/utils/post-qa-gate/checkers/checkpoint-sync-checker.ts
 init_checkpoint_rules();
-import * as fs34 from "node:fs";
-import * as path30 from "node:path";
+import * as fs35 from "node:fs";
+import * as path31 from "node:path";
 var DEFAULT_CHECKPOINT_SYNC_CONFIG = {
   reportPath: ".projmnt4claude/outputs/{taskId}/qa-report.json"
 };
@@ -41397,12 +41486,12 @@ class QACheckpointSyncChecker {
   }
   readReportVerdict(taskId) {
     const reportPath = this.config.reportPath.replace("{taskId}", taskId);
-    const fullPath = path30.join(this.cwd, reportPath);
-    if (!fs34.existsSync(fullPath)) {
+    const fullPath = path31.join(this.cwd, reportPath);
+    if (!fs35.existsSync(fullPath)) {
       return null;
     }
     try {
-      const content = fs34.readFileSync(fullPath, "utf-8");
+      const content = fs35.readFileSync(fullPath, "utf-8");
       const report = JSON.parse(content);
       return report.verdict ?? null;
     } catch {
@@ -41731,8 +41820,8 @@ class PostQAGateRunner {
 `);
   }
   async handleQAReportExistenceRule(_task, rule, context) {
-    const reportPath = path31.join(context.cwd, context.qaReportPath);
-    const exists = fs35.existsSync(reportPath);
+    const reportPath = path32.join(context.cwd, context.qaReportPath);
+    const exists = fs36.existsSync(reportPath);
     return {
       ruleId: rule.id,
       passed: exists,
@@ -41748,8 +41837,8 @@ class PostQAGateRunner {
     };
   }
   async handleQAReportFormatRule(_task, rule, context) {
-    const reportPath = path31.join(context.cwd, context.qaReportPath);
-    if (!fs35.existsSync(reportPath)) {
+    const reportPath = path32.join(context.cwd, context.qaReportPath);
+    if (!fs36.existsSync(reportPath)) {
       return {
         ruleId: rule.id,
         passed: false,
@@ -41761,7 +41850,7 @@ class PostQAGateRunner {
       };
     }
     try {
-      const content = fs35.readFileSync(reportPath, "utf-8");
+      const content = fs36.readFileSync(reportPath, "utf-8");
       const report = JSON.parse(content);
       const requiredFields = ["version", "taskId", "verdict", "verifiedAt", "verifier", "summary"];
       const missingFields = requiredFields.filter((field) => !(field in report));
@@ -41792,8 +41881,8 @@ class PostQAGateRunner {
     }
   }
   async handleQAVerdictValidityRule(_task, rule, context) {
-    const reportPath = path31.join(context.cwd, context.qaReportPath);
-    if (!fs35.existsSync(reportPath)) {
+    const reportPath = path32.join(context.cwd, context.qaReportPath);
+    if (!fs36.existsSync(reportPath)) {
       return {
         ruleId: rule.id,
         passed: false,
@@ -41805,7 +41894,7 @@ class PostQAGateRunner {
       };
     }
     try {
-      const content = fs35.readFileSync(reportPath, "utf-8");
+      const content = fs36.readFileSync(reportPath, "utf-8");
       const report = JSON.parse(content);
       const validVerdicts = ["PASS", "NOPASS"];
       const isValid = validVerdicts.includes(report.verdict);
@@ -41834,8 +41923,8 @@ class PostQAGateRunner {
     }
   }
   async handleQAFailuresDetailRule(_task, rule, context) {
-    const reportPath = path31.join(context.cwd, context.qaReportPath);
-    if (!fs35.existsSync(reportPath)) {
+    const reportPath = path32.join(context.cwd, context.qaReportPath);
+    if (!fs36.existsSync(reportPath)) {
       return {
         ruleId: rule.id,
         passed: false,
@@ -41847,7 +41936,7 @@ class PostQAGateRunner {
       };
     }
     try {
-      const content = fs35.readFileSync(reportPath, "utf-8");
+      const content = fs36.readFileSync(reportPath, "utf-8");
       const report = JSON.parse(content);
       if (report.verdict === "PASS") {
         return {
@@ -41898,11 +41987,11 @@ class PostQAGateRunner {
     }
   }
   async handleHumanVerificationCollectRule(task, rule, context) {
-    const reportPath = path31.join(context.cwd, context.qaReportPath);
+    const reportPath = path32.join(context.cwd, context.qaReportPath);
     let qaReport;
-    if (fs35.existsSync(reportPath)) {
+    if (fs36.existsSync(reportPath)) {
       try {
-        const content = fs35.readFileSync(reportPath, "utf-8");
+        const content = fs36.readFileSync(reportPath, "utf-8");
         qaReport = JSON.parse(content);
       } catch {}
     }
@@ -42008,13 +42097,13 @@ class PostQAGateRunner {
     };
   }
   async handleTestCoverageRule(_task, rule, context) {
-    const reportPath = path31.join(context.cwd, context.qaReportPath);
+    const reportPath = path32.join(context.cwd, context.qaReportPath);
     const minCoverage = rule.config?.minCoverage ?? 0.6;
     let coverage;
     let coverageDetails;
-    if (fs35.existsSync(reportPath)) {
+    if (fs36.existsSync(reportPath)) {
       try {
-        const content = fs35.readFileSync(reportPath, "utf-8");
+        const content = fs36.readFileSync(reportPath, "utf-8");
         const report = JSON.parse(content);
         coverage = report.coverage;
       } catch {}
@@ -42062,14 +42151,14 @@ class PostQAGateRunner {
   }
   async calculateCoverageFromReportsWithDetails(context) {
     const coverageFiles = [
-      path31.join(context.cwd, "coverage", "coverage-summary.json"),
-      path31.join(context.cwd, "coverage", "lcov-report", "coverage-summary.json"),
-      path31.join(context.cwd, ".projmnt4claude", "outputs", context.taskId, "coverage-report.json")
+      path32.join(context.cwd, "coverage", "coverage-summary.json"),
+      path32.join(context.cwd, "coverage", "lcov-report", "coverage-summary.json"),
+      path32.join(context.cwd, ".projmnt4claude", "outputs", context.taskId, "coverage-report.json")
     ];
     for (const filePath of coverageFiles) {
-      if (fs35.existsSync(filePath)) {
+      if (fs36.existsSync(filePath)) {
         try {
-          const content = JSON.parse(fs35.readFileSync(filePath, "utf-8"));
+          const content = JSON.parse(fs36.readFileSync(filePath, "utf-8"));
           const raw = this.parseCoverageData(content);
           const coverage = Math.round((raw.lines * 0.4 + raw.branches * 0.3 + raw.functions * 0.2 + raw.statements * 0.1) * 1000) / 1000;
           return {
@@ -42183,12 +42272,12 @@ class PostQAGateRunner {
   async saveReport(report) {
     if (!this.config.reportPath)
       return;
-    const reportDir = path31.dirname(path31.join(this.cwd, this.config.reportPath));
-    if (!fs35.existsSync(reportDir)) {
-      fs35.mkdirSync(reportDir, { recursive: true });
+    const reportDir = path32.dirname(path32.join(this.cwd, this.config.reportPath));
+    if (!fs36.existsSync(reportDir)) {
+      fs36.mkdirSync(reportDir, { recursive: true });
     }
-    const reportPath = path31.join(this.cwd, this.config.reportPath);
-    fs35.writeFileSync(reportPath, JSON.stringify(report, null, 2));
+    const reportPath = path32.join(this.cwd, this.config.reportPath);
+    fs36.writeFileSync(reportPath, JSON.stringify(report, null, 2));
   }
   formatResult(result) {
     const lines = [];
@@ -43512,9 +43601,9 @@ ${"━".repeat(SEPARATOR_WIDTH)}`);
     }
     if (status === "wait_qa") {
       const projectDir = getProjectDir(this.config.cwd);
-      const qaReportPath = path32.join(projectDir, "reports", "harness", taskId, "qa-report.md");
-      if (fs36.existsSync(qaReportPath)) {
-        const content = fs36.readFileSync(qaReportPath, "utf-8");
+      const qaReportPath = path33.join(projectDir, "reports", "harness", taskId, "qa-report.md");
+      if (fs37.existsSync(qaReportPath)) {
+        const content = fs37.readFileSync(qaReportPath, "utf-8");
         if (content.trim().length > 0) {
           console.log(`   \uD83D\uDCCB 检测到 wait_qa 但 qa-report.md 已存在，自动迁移为 wait_evaluation`);
           return "evaluation";
@@ -43541,14 +43630,14 @@ ${"━".repeat(SEPARATOR_WIDTH)}`);
       return true;
     }
     const projectDir = getProjectDir(this.config.cwd);
-    const reportDir = path32.join(projectDir, "reports", "harness", taskId);
+    const reportDir = path33.join(projectDir, "reports", "harness", taskId);
     for (const reportFile of required) {
-      const filePath = path32.join(reportDir, reportFile);
-      if (!fs36.existsSync(filePath)) {
+      const filePath = path33.join(reportDir, reportFile);
+      if (!fs37.existsSync(filePath)) {
         return false;
       }
       try {
-        const content = fs36.readFileSync(filePath, "utf-8");
+        const content = fs37.readFileSync(filePath, "utf-8");
         if (content.trim().length === 0) {
           return false;
         }
@@ -43830,31 +43919,31 @@ ${"━".repeat(SEPARATOR_WIDTH)}`);
     if (!resumePhase)
       return true;
     const projectDir = getProjectDir(this.config.cwd);
-    const reportDir = path32.join(projectDir, "reports", "harness", taskId);
+    const reportDir = path33.join(projectDir, "reports", "harness", taskId);
     const checks = [];
     switch (resumePhase) {
       case "qa":
-        checks.push({ file: path32.join(reportDir, "dev-report.md"), label: "开发报告" });
-        checks.push({ file: path32.join(reportDir, "code-review-report.md"), label: "代码审核报告" });
+        checks.push({ file: path33.join(reportDir, "dev-report.md"), label: "开发报告" });
+        checks.push({ file: path33.join(reportDir, "code-review-report.md"), label: "代码审核报告" });
         break;
       case "evaluation":
-        checks.push({ file: path32.join(reportDir, "dev-report.md"), label: "开发报告" });
-        checks.push({ file: path32.join(reportDir, "code-review-report.md"), label: "代码审核报告" });
-        checks.push({ file: path32.join(reportDir, "qa-report.md"), label: "QA报告" });
+        checks.push({ file: path33.join(reportDir, "dev-report.md"), label: "开发报告" });
+        checks.push({ file: path33.join(reportDir, "code-review-report.md"), label: "代码审核报告" });
+        checks.push({ file: path33.join(reportDir, "qa-report.md"), label: "QA报告" });
         break;
       case "code_review":
-        checks.push({ file: path32.join(reportDir, "dev-report.md"), label: "开发报告" });
+        checks.push({ file: path33.join(reportDir, "dev-report.md"), label: "开发报告" });
         break;
       case "development":
         return true;
     }
     for (const check of checks) {
-      if (!fs36.existsSync(check.file)) {
+      if (!fs37.existsSync(check.file)) {
         console.log(`   ⚠️ 缺少${check.label}: ${check.file}`);
         return false;
       }
       try {
-        const content = fs36.readFileSync(check.file, "utf-8");
+        const content = fs37.readFileSync(check.file, "utf-8");
         if (content.trim().length === 0) {
           console.log(`   ⚠️ ${check.label}为空: ${check.file}`);
           return false;
@@ -44048,15 +44137,15 @@ ${"━".repeat(SEPARATOR_WIDTH)}`);
         }
       }
       const stageFiles = [
-        path32.join(this.config.cwd, ".projmnt4claude", "reports", taskId, "dev-report.json"),
-        path32.join(this.config.cwd, ".projmnt4claude", "reports", taskId, "code-review-report.json"),
-        path32.join(this.config.cwd, ".projmnt4claude", "reports", taskId, "qa-report.json"),
-        path32.join(this.config.cwd, ".projmnt4claude", "reports", taskId, "evaluation-report.json")
+        path33.join(this.config.cwd, ".projmnt4claude", "reports", taskId, "dev-report.json"),
+        path33.join(this.config.cwd, ".projmnt4claude", "reports", taskId, "code-review-report.json"),
+        path33.join(this.config.cwd, ".projmnt4claude", "reports", taskId, "qa-report.json"),
+        path33.join(this.config.cwd, ".projmnt4claude", "reports", taskId, "evaluation-report.json")
       ];
       for (const file of stageFiles) {
-        if (fs36.existsSync(file)) {
+        if (fs37.existsSync(file)) {
           try {
-            fs36.unlinkSync(file);
+            fs37.unlinkSync(file);
             result.cleanedFiles.push(file);
           } catch (unlinkError) {
             console.warn(`   ⚠️ 无法删除文件 ${file}: ${unlinkError instanceof Error ? unlinkError.message : String(unlinkError)}`);
@@ -44872,7 +44961,7 @@ async function harnessCommand(options, cwd = process.cwd()) {
   }
 }
 function getRuntimeStatePath2(cwd) {
-  return path33.join(getProjectDir(cwd), "harness-state.json");
+  return path34.join(getProjectDir(cwd), "harness-state.json");
 }
 function validateAndRepairState(data, cwd) {
   const errors = [];
@@ -45032,12 +45121,12 @@ function validateAndRepairState(data, cwd) {
 }
 function loadRuntimeState(cwd) {
   const statePath = getRuntimeStatePath2(cwd);
-  if (!fs37.existsSync(statePath)) {
+  if (!fs38.existsSync(statePath)) {
     return null;
   }
   const texts = t(cwd);
   try {
-    const content = fs37.readFileSync(statePath, "utf-8");
+    const content = fs38.readFileSync(statePath, "utf-8");
     if (!content.trim()) {
       console.warn(texts.harnessCmd.emptyStateFile);
       return null;
@@ -45083,8 +45172,8 @@ function loadRuntimeState(cwd) {
 }
 function clearRuntimeState(cwd) {
   const statePath = getRuntimeStatePath2(cwd);
-  if (fs37.existsSync(statePath)) {
-    fs37.unlinkSync(statePath);
+  if (fs38.existsSync(statePath)) {
+    fs38.unlinkSync(statePath);
   }
 }
 function summaryToJSON(summary) {
@@ -45111,13 +45200,13 @@ function summaryToJSON(summary) {
 }
 async function loadTaskQueue(options, cwd) {
   if (options.plan) {
-    const planFile = path33.resolve(cwd, options.plan);
-    if (!fs37.existsSync(planFile)) {
+    const planFile = path34.resolve(cwd, options.plan);
+    if (!fs38.existsSync(planFile)) {
       console.error(`Error: Plan file does not exist: ${planFile}`);
       process.exit(1);
     }
     try {
-      const planContent = fs37.readFileSync(planFile, "utf-8");
+      const planContent = fs38.readFileSync(planFile, "utf-8");
       const planData = JSON.parse(planContent);
       let taskQueue = planData.recommendation?.suggestedOrder || [];
       const batches = planData.batchOrder || planData.batches;
@@ -45222,24 +45311,24 @@ function printSummary(summary) {
 }
 
 // src/utils/path.ts
-import * as path34 from "path";
-import * as fs38 from "fs";
+import * as path35 from "path";
+import * as fs39 from "fs";
 function getProjectDir5(cwd = process.cwd()) {
-  return path34.join(cwd, ".projmnt4claude");
+  return path35.join(cwd, ".projmnt4claude");
 }
 function isInitialized2(cwd = process.cwd()) {
   const projectDir = getProjectDir5(cwd);
-  const configPath = path34.join(projectDir, "config.json");
-  if (fs38.existsSync(configPath)) {
+  const configPath = path35.join(projectDir, "config.json");
+  if (fs39.existsSync(configPath)) {
     return true;
   }
-  const tasksDir = path34.join(projectDir, "tasks");
-  if (fs38.existsSync(tasksDir)) {
+  const tasksDir = path35.join(projectDir, "tasks");
+  if (fs39.existsSync(tasksDir)) {
     try {
-      const taskDirs = fs38.readdirSync(tasksDir);
+      const taskDirs = fs39.readdirSync(tasksDir);
       return taskDirs.some((taskDir) => {
-        const metaPath = path34.join(tasksDir, taskDir, "meta.json");
-        return fs38.existsSync(metaPath);
+        const metaPath = path35.join(tasksDir, taskDir, "meta.json");
+        return fs39.existsSync(metaPath);
       });
     } catch {
       return false;
@@ -45370,12 +45459,12 @@ rename format:
     case "create": {
       let taskDescription = options.description;
       if (options.file) {
-        const filePath = path35.resolve(options.file);
-        if (!fs39.existsSync(filePath)) {
+        const filePath = path36.resolve(options.file);
+        if (!fs40.existsSync(filePath)) {
           console.error("(X) Error: Description file not found: " + filePath);
           process.exit(1);
         }
-        const stat = fs39.statSync(filePath);
+        const stat = fs40.statSync(filePath);
         if (!stat.isFile()) {
           console.error("(X) Error: Path is not a file: " + filePath);
           process.exit(1);
@@ -45386,14 +45475,14 @@ rename format:
           process.exit(1);
         }
         try {
-          taskDescription = fs39.readFileSync(filePath, "utf-8");
+          taskDescription = fs40.readFileSync(filePath, "utf-8");
         } catch (error) {
           console.error("(X) Error: Cannot read description file: " + error.message);
           process.exit(1);
         }
         if (filePath.startsWith("/tmp/")) {
           try {
-            fs39.unlinkSync(filePath);
+            fs40.unlinkSync(filePath);
           } catch {}
         }
       }
@@ -45834,12 +45923,12 @@ program2.command("init-requirement [description]").description(`\u4ECE\u81EA\u71
 ` + "\u524D\u63D0: \u9700\u5148\u8FD0\u884C projmnt4claude setup \u521D\u59CB\u5316\u9879\u76EE").option("-y, --yes", "\u975E\u4EA4\u4E92\u6A21\u5F0F\uFF1A\u8DF3\u8FC7\u6240\u6709\u786E\u8BA4\uFF0C\u76F4\u63A5\u4F7F\u7528\u5206\u6790\u7ED3\u679C\u521B\u5EFA\u4EFB\u52A1").option("--no-plan", "\u521B\u5EFA\u4EFB\u52A1\u540E\u4E0D\u8BE2\u95EE\u662F\u5426\u6DFB\u52A0\u5230\u6267\u884C\u8BA1\u5212").option("--skip-validation", "\u8DF3\u8FC7\u521D\u59CB\u5316\u9A8C\u8BC1").option("--template <file>", "\u4F7F\u7528\u9700\u6C42\u6A21\u677F\u6587\u4EF6", "simple").option("--no-ai", "\u7981\u7528 AI \u8F85\u52A9").option("--require-quality <n>", "\u8D28\u91CF\u95E8\u7981\u9608\u503C").option("-f, --force", "\u5F3A\u5236\u8986\u76D6").option("--file <path>", "\u4ECE\u6587\u4EF6\u8BFB\u53D6\u63CF\u8FF0\uFF08\u7528\u4E8E\u5305\u542B\u7279\u6B8A\u5B57\u7B26\u7684\u957F\u63CF\u8FF0\uFF09").option("--decompose", "\u81EA\u52A8\u5206\u89E3\u591A\u95EE\u9898\u9700\u6C42/\u62A5\u544A\uFF08\u9ED8\u8BA4\u542F\u7528\uFF09", true).option("--no-decompose", "\u7981\u7528\u9700\u6C42\u5206\u89E3\uFF0C\u5F3A\u5236\u521B\u5EFA\u5355\u4E2A\u4EFB\u52A1").option("--accept-draft", "\u63A5\u53D7\u8349\u7A3F").option("--accept-audit", "\u63A5\u53D7\u5BA1\u8BA1").option("--accept-eval", "\u63A5\u53D7\u8BC4\u4F30").action(async (description, options) => {
   let finalDescription;
   if (options.file) {
-    const filePath = path35.resolve(options.file);
-    if (!fs39.existsSync(filePath)) {
+    const filePath = path36.resolve(options.file);
+    if (!fs40.existsSync(filePath)) {
       console.error("(X) Error: Description file not found: " + filePath);
       process.exit(1);
     }
-    const stat = fs39.statSync(filePath);
+    const stat = fs40.statSync(filePath);
     if (!stat.isFile()) {
       console.error("(X) Error: Path is not a file: " + filePath);
       process.exit(1);
@@ -45850,14 +45939,14 @@ program2.command("init-requirement [description]").description(`\u4ECE\u81EA\u71
       process.exit(1);
     }
     try {
-      finalDescription = fs39.readFileSync(filePath, "utf-8");
+      finalDescription = fs40.readFileSync(filePath, "utf-8");
     } catch (error) {
       console.error("(X) Error: Cannot read description file: " + error.message);
       process.exit(1);
     }
     if (filePath.startsWith("/tmp/")) {
       try {
-        fs39.unlinkSync(filePath);
+        fs40.unlinkSync(filePath);
       } catch {}
     }
   } else if (description) {
