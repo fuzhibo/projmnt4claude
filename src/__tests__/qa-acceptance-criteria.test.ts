@@ -4,7 +4,7 @@
  * Tests the four-level acceptance criteria verification hierarchy.
  */
 
-import { describe, it, expect, beforeEach } from 'bun:test';
+import { describe, it, expect, beforeEach } from '@jest/globals';
 import { AcceptanceCriteriaParser, parseAcceptanceCriteria } from '../utils/qa-acceptance-criteria-parser.js';
 import { QAAcceptanceCriteriaVerifier, verifyQAAcceptanceCriteria } from '../utils/qa-acceptance-criteria-verifier.js';
 import type { TaskMeta } from '../types/task.js';

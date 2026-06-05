@@ -9,7 +9,7 @@
  * - 未完成检查点列表生成
  */
 
-import { describe, it, expect } from 'bun:test';
+import { describe, it, expect } from '@jest/globals';
 import { AllCheckpointsFinalChecker } from '../../../utils/post-eval-gate/checkers/checkpoints-final-checker.js';
 import type {
   PostEvalCheckContext,

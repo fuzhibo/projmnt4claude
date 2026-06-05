@@ -4,7 +4,7 @@
  * CP-1: Tests for CodeReview class chain fallback mechanism
  */
 
-import { describe, test, expect } from 'bun:test';
+import { describe, test, expect } from '@jest/globals';
 import { CodeReview, createCodeReview } from '../code-review.js';
 import type { QAFailureAnalysis, QAFailureCategory } from '../../types/task.js';
 

@@ -4,7 +4,7 @@
  * 验证终端状态常量的定义和使用
  */
 
-import { describe, it, expect } from 'bun:test';
+import { describe, it, expect } from '@jest/globals';
 import {
   TERMINAL_STATUSES,
   normalizeStatus,

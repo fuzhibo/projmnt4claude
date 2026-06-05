@@ -3,7 +3,7 @@
  *
  * 覆盖范围:
  * - assessComplexity: 复杂度评估算法 (10 tests)
- * - initRequirement: 需求创建主流程 (5 tests, spyOn + fs)
+ * - initRequirement: 需求创建主流程 (5 tests + fs)
  * - 质量门禁验证
  *
  * 迁移说明:
@@ -12,7 +12,7 @@
  * - 在 beforeEach 中创建 spy，在 afterEach 中 mockRestore
  */
 
-import { describe, test, expect, mock, beforeEach, afterEach, spyOn } from 'bun:test';
+import { describe, test, expect,  beforeEach, afterEach } from '@jest/globals';
 import * as fs from 'fs';
 import * as path from 'path';
 import {
@@ -37,16 +37,16 @@ import { assessComplexity, initRequirement } from '../commands/init-requirement'
 
 // ============== Console capture using spyOn ==============
 
-let consoleLogSpy: ReturnType<typeof spyOn>;
-let consoleErrorSpy: ReturnType<typeof spyOn>;
+let consoleLogSpy: jest.SpyInstance;
+let consoleErrorSpy: jest.SpyInstance;
 const consoleLogs: string[] = [];
 
 function captureConsole() {
   consoleLogs.length = 0;
-  consoleLogSpy = spyOn(console, 'log').mockImplementation((...args: any[]) => {
+  consoleLogSpy = jest.spyOn(console, 'log').mockImplementation((...args: any[]) => {
     consoleLogs.push(args.map(String).join(' '));
   });
-  consoleErrorSpy = spyOn(console, 'error').mockImplementation((...args: any[]) => {
+  consoleErrorSpy = jest.spyOn(console, 'error').mockImplementation((...args: any[]) => {
     consoleLogs.push('[ERROR] ' + args.map(String).join(' '));
   });
 }
@@ -68,23 +68,23 @@ let tasksDir: string;
 
 // ============== Spies for module mocking ==============
 
-let isInitializedSpy: ReturnType<typeof spyOn>;
-let getTasksDirSpy: ReturnType<typeof spyOn>;
-let getAllTasksSpy: ReturnType<typeof spyOn>;
-let readTaskMetaSpy: ReturnType<typeof spyOn>;
-let writeTaskMetaSpy: ReturnType<typeof spyOn>;
-let generateNewTaskIdSpy: ReturnType<typeof spyOn>;
-let addSubtaskToParentSpy: ReturnType<typeof spyOn>;
-let createTaskSpy: ReturnType<typeof spyOn>;
-let hasValidCheckpointsSpy: ReturnType<typeof spyOn>;
-let displayCheckpointWarningSpy: ReturnType<typeof spyOn>;
-let syncCheckpointsSpy: ReturnType<typeof spyOn>;
-let filterLowQualitySpy: ReturnType<typeof spyOn>;
-let checkQualityGateSpy: ReturnType<typeof spyOn>;
-let extractFilePathsSpy: ReturnType<typeof spyOn>;
-let withAISpy: ReturnType<typeof spyOn>;
-let inferDepsSpy: ReturnType<typeof spyOn>;
-let createLoggerSpy: ReturnType<typeof spyOn>;
+let isInitializedSpy: jest.SpyInstance;
+let getTasksDirSpy: jest.SpyInstance;
+let getAllTasksSpy: jest.SpyInstance;
+let readTaskMetaSpy: jest.SpyInstance;
+let writeTaskMetaSpy: jest.SpyInstance;
+let generateNewTaskIdSpy: jest.SpyInstance;
+let addSubtaskToParentSpy: jest.SpyInstance;
+let createTaskSpy: jest.SpyInstance;
+let hasValidCheckpointsSpy: jest.SpyInstance;
+let displayCheckpointWarningSpy: jest.SpyInstance;
+let syncCheckpointsSpy: jest.SpyInstance;
+let filterLowQualitySpy: jest.SpyInstance;
+let checkQualityGateSpy: jest.SpyInstance;
+let extractFilePathsSpy: jest.SpyInstance;
+let withAISpy: jest.SpyInstance;
+let inferDepsSpy: jest.SpyInstance;
+let createLoggerSpy: jest.SpyInstance;
 
 // ============== Helpers ==============
 
@@ -262,33 +262,33 @@ describe('initRequirement', () => {
     setupExitInterception();
 
     // Setup spies for path utils
-    isInitializedSpy = spyOn(pathUtils, 'isInitialized').mockReturnValue(true);
-    getTasksDirSpy = spyOn(pathUtils, 'getTasksDir').mockReturnValue(tasksDir);
+    isInitializedSpy = jest.spyOn(pathUtils, 'isInitialized').mockReturnValue(true);
+    getTasksDirSpy = jest.spyOn(pathUtils, 'getTasksDir').mockReturnValue(tasksDir);
 
     // Setup spies for task utils
-    getAllTasksSpy = spyOn(taskUtils, 'getAllTasks').mockReturnValue([]);
-    readTaskMetaSpy = spyOn(taskUtils, 'readTaskMeta').mockImplementation((id: string) => ({
+    getAllTasksSpy = jest.spyOn(taskUtils, 'getAllTasks').mockReturnValue([]);
+    readTaskMetaSpy = jest.spyOn(taskUtils, 'readTaskMeta').mockImplementation((id: string) => ({
       id,
       title: 'Test Task',
       description: 'Test description',
       checkpoints: [],
       status: 'open',
     }));
-    writeTaskMetaSpy = spyOn(taskUtils, 'writeTaskMeta').mockImplementation(() => {});
-    generateNewTaskIdSpy = spyOn(taskUtils, 'generateNewTaskId').mockReturnValue('TASK-test-001');
-    addSubtaskToParentSpy = spyOn(taskUtils, 'addSubtaskToParent').mockImplementation(() => {});
+    writeTaskMetaSpy = jest.spyOn(taskUtils, 'writeTaskMeta').mockImplementation(() => {});
+    generateNewTaskIdSpy = jest.spyOn(taskUtils, 'generateNewTaskId').mockReturnValue('TASK-test-001');
+    addSubtaskToParentSpy = jest.spyOn(taskUtils, 'addSubtaskToParent').mockImplementation(() => {});
 
     // Setup spies for task command
-    createTaskSpy = spyOn(taskCommand, 'createTask').mockReturnValue(Promise.resolve({
+    createTaskSpy = jest.spyOn(taskCommand, 'createTask').mockReturnValue(Promise.resolve({
       id: 'TASK-test-001',
       title: 'Test Task',
       priority: 'P2',
     }));
-    hasValidCheckpointsSpy = spyOn(taskCommand, 'hasValidCheckpoints').mockReturnValue({ valid: true });
-    displayCheckpointWarningSpy = spyOn(taskCommand, 'displayCheckpointCreationWarning').mockImplementation(() => {});
+    hasValidCheckpointsSpy = jest.spyOn(taskCommand, 'hasValidCheckpoints').mockReturnValue({ valid: true });
+    displayCheckpointWarningSpy = jest.spyOn(taskCommand, 'displayCheckpointCreationWarning').mockImplementation(() => {});
 
     // Setup spies for quality gate
-    checkQualityGateSpy = spyOn(qualityGateUtils, 'checkQualityGate').mockReturnValue(Promise.resolve({
+    checkQualityGateSpy = jest.spyOn(qualityGateUtils, 'checkQualityGate').mockReturnValue(Promise.resolve({
       passed: true,
       score: { totalScore: 85, descriptionScore: 80, checkpointScore: 90, relatedFilesScore: 85, solutionScore: 85 },
       suggestions: [] as any[],
@@ -300,32 +300,32 @@ describe('initRequirement', () => {
       errorViolations: [] as any[],
       warningViolations: [] as any[],
     }));
-    extractFilePathsSpy = spyOn(qualityGateUtils, 'extractFilePaths').mockImplementation((desc: string) => {
+    extractFilePathsSpy = jest.spyOn(qualityGateUtils, 'extractFilePaths').mockImplementation((desc: string) => {
       const matches = desc.match(/(?:src|lib|test|tests)\/[^\s,;，；\n"'`)}\]]+(?:\.ts|\.js|\.tsx|\.jsx|\.json|\.py)/g);
       return matches ? [...new Set(matches)] : [];
     });
 
     // Setup spies for checkpoint utils
-    syncCheckpointsSpy = spyOn(checkpointUtils, 'syncCheckpointsToMeta').mockImplementation(() => {});
-    filterLowQualitySpy = spyOn(checkpointUtils, 'filterLowQualityCheckpoints').mockImplementation((cps: string[]) => ({
+    syncCheckpointsSpy = jest.spyOn(checkpointUtils, 'syncCheckpointsToMeta').mockImplementation(() => {});
+    filterLowQualitySpy = jest.spyOn(checkpointUtils, 'filterLowQualityCheckpoints').mockImplementation((cps: string[]) => ({
       kept: cps,
       removed: [] as string[],
       reasons: new Map<string, string>(),
     }));
 
     // Setup spies for AI helpers
-    withAISpy = spyOn(aiHelpers, 'withAIEnhancement').mockReturnValue(Promise.resolve({ aiUsed: false }));
+    withAISpy = jest.spyOn(aiHelpers, 'withAIEnhancement').mockReturnValue(Promise.resolve({ aiUsed: false }));
 
     // Setup spies for dependency engine
-    inferDepsSpy = spyOn(dependencyEngine, 'inferDependencies').mockReturnValue([]);
+    inferDepsSpy = jest.spyOn(dependencyEngine, 'inferDependencies').mockReturnValue([]);
 
     // Setup spies for logger
     const mockLogger = {
-      logInstrumentation: mock(() => {}),
-      logAICost: mock(() => {}),
-      flush: mock(() => {}),
+      logInstrumentation: jest.fn(() => {}),
+      logAICost: jest.fn(() => {}),
+      flush: jest.fn(() => {}),
     };
-    createLoggerSpy = spyOn(loggerUtils, 'createLogger').mockReturnValue(mockLogger as any);
+    createLoggerSpy = jest.spyOn(loggerUtils, 'createLogger').mockReturnValue(mockLogger as any);
 
     // Setup project structure
     setupProjectWithTask('TASK-test-001');

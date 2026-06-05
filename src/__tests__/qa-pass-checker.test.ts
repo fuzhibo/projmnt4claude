@@ -8,7 +8,7 @@
  * - 上下文缺少 qaReport 时失败
  */
 
-import { describe, it, expect } from 'bun:test';
+import { describe, it, expect } from '@jest/globals';
 import { QAPassChecker } from '../utils/pre-eval-gate/qa-pass-checker.js';
 import type { PreEvalCheckContext, QAReport } from '../utils/pre-eval-gate/types.js';
 import type { TaskMeta } from '../types/task.js';

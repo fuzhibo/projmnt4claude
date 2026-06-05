@@ -7,7 +7,7 @@
  * - R-DEPOUT-003: 循环依赖检查
  */
 
-import { describe, it, expect, beforeEach, afterEach } from 'bun:test';
+import { describe, it, expect, beforeEach, afterEach } from '@jest/globals';
 import * as fs from 'fs';
 import * as path from 'path';
 import {

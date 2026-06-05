@@ -4,7 +4,7 @@
  * 测试表单验证工具函数
  */
 
-import { describe, it, expect } from 'bun:test';
+import { describe, it, expect } from '@jest/globals';
 import {
   validateEmail,
   validatePassword,

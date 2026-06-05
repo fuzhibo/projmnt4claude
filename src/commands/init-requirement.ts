@@ -700,3 +700,89 @@ export interface InitRequirementOptionsLegacy {
 
 /** @deprecated 旧导出，保留向后兼容 */
 export { inferDependencies } from '../utils/dependency-engine';
+
+/** @deprecated 旧导出，保留向后兼容 — 复杂度评估算法 */
+export function assessComplexity(
+  description: string,
+  analysis: {
+    title?: string;
+    description?: string;
+    priority?: string;
+    recommendedRole?: string;
+    estimatedComplexity?: 'low' | 'medium' | 'high';
+    suggestedCheckpoints?: string[];
+    potentialDependencies?: string[];
+    files?: string[];
+    estimatedMinutes?: number;
+  },
+): ComplexityAssessment {
+  const signals: Array<{ type: string; weight: number; description: string }> = [];
+
+  // Extract file paths from description
+  const filePathPattern = /(?:src\/|\.ts|\.js|\.tsx|\.jsx)[\w./-]+/g;
+  const filePaths = description.match(filePathPattern) || [];
+  const fileCount = filePaths.length;
+  const fileWeight = Math.min(fileCount * 8, 30);
+  if (fileCount > 0) {
+    signals.push({ type: 'file_count', weight: fileWeight, description: `${fileCount} 个文件涉及` });
+  }
+
+  // Count work items (list items and action phrases)
+  const listItemPattern = /^[-*]\s+/gm;
+  const listItems = description.match(listItemPattern) || [];
+  const actionPhrases = (description.match(/创建|添加|修改|实现|重构|迁移|集成|修复|配置|增强|部署|更新/g) || []).length;
+  const workItemCount = Math.max(listItems.length, actionPhrases);
+  const workItemWeight = Math.min(workItemCount * 5, 25);
+  if (workItemCount > 0) {
+    signals.push({ type: 'work_items', weight: workItemWeight, description: `${workItemCount} 个工作项` });
+  }
+
+  // Cross-module references
+  const modulePattern = /模块|系统|服务|组件/g;
+  const moduleCount = (description.match(modulePattern) || []).length;
+  const crossModuleWeight = Math.min(moduleCount * 6, 20);
+  if (moduleCount > 0) {
+    signals.push({ type: 'cross_module', weight: crossModuleWeight, description: `${moduleCount} 个跨模块引用` });
+  }
+
+  // Checkpoint count signal
+  const checkpointCount = analysis.suggestedCheckpoints?.length || 0;
+  const checkpointWeight = Math.min(checkpointCount * 4, 15);
+  if (checkpointCount > 0) {
+    signals.push({ type: 'checkpoint_count', weight: checkpointWeight, description: `${checkpointCount} 个检查点` });
+  }
+
+  // AI estimated complexity bonus
+  const complexityBonus = analysis.estimatedComplexity === 'high' ? 15 : analysis.estimatedComplexity === 'medium' ? 5 : 0;
+  if (complexityBonus > 0) {
+    signals.push({ type: 'ai_estimate', weight: complexityBonus, description: `AI 评估为 ${analysis.estimatedComplexity}` });
+  }
+
+  // Calculate total score (capped at 100)
+  const score = Math.min(
+    signals.reduce((sum, s) => sum + s.weight, 0),
+    100,
+  );
+
+  // Estimate minutes: base 5 + score * 0.5, minimum 5
+  const estimatedMinutes = Math.max(5, Math.round(5 + score * 0.5));
+
+  // Determine level: estimatedMinutes >= 15 forces high
+  let level: 'low' | 'medium' | 'high';
+  if (estimatedMinutes >= 15 || score >= 40) {
+    level = 'high';
+  } else if (score >= 20) {
+    level = 'medium';
+  } else {
+    level = 'low';
+  }
+
+  return {
+    level,
+    score,
+    fileCount,
+    workItemCount,
+    estimatedMinutes,
+    signals,
+  };
+}

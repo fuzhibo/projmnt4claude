@@ -4,7 +4,7 @@
  * Tests command validation and secure execution.
  */
 
-import { describe, it, expect, beforeEach } from 'bun:test';
+import { describe, it, expect, beforeEach } from '@jest/globals';
 import {
   validateCommand,
   SafeCommandExecutor,

@@ -9,7 +9,7 @@
  * - 报告内容无关性
  */
 
-import { describe, it, expect, beforeEach, afterEach } from 'bun:test';
+import { describe, it, expect, beforeEach, afterEach } from '@jest/globals';
 import * as fs from 'fs';
 import * as path from 'path';
 import { EvalReportExistsChecker } from '../../../utils/post-eval-gate/checkers/eval-report-existence-checker.js';

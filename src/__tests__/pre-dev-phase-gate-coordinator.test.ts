@@ -10,7 +10,7 @@
  * - CP-PDGC-AF-1: 自动修复入口
  */
 
-import { describe, it, expect, beforeEach, afterEach } from 'bun:test';
+import { describe, it, expect, beforeEach, afterEach } from '@jest/globals';
 import * as fs from 'fs';
 import * as path from 'path';
 import {

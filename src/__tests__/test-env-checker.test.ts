@@ -5,7 +5,7 @@
  * @module __tests__/test-env-checker
  */
 
-import { describe, it, expect, beforeEach, afterEach } from 'bun:test';
+import { describe, it, expect, beforeEach, afterEach } from '@jest/globals';
 import * as path from 'node:path';
 import * as fs from 'node:fs';
 import {

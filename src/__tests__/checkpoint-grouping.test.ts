@@ -5,7 +5,7 @@
  * - groupCheckpointsByPhase: 按阶段分组检查点
  * - buildCheckpointConstraintsSection: 构建检查点约束章节
  */
-import { describe, test, expect, beforeEach, afterEach } from 'bun:test';
+import { describe, test, expect, beforeEach, afterEach } from '@jest/globals';
 import { HarnessExecutor } from '../utils/harness-executor.js';
 import type { TaskMeta, CheckpointMetadata } from '../types/task.js';
 import type { HarnessConfig, SprintContract } from '../types/harness.js';

@@ -8,7 +8,7 @@
  * - 缺少阶段报告时正确报错
  */
 
-import { describe, it, expect, beforeEach, afterEach } from 'bun:test';
+import { describe, it, expect, beforeEach, afterEach } from '@jest/globals';
 import * as fs from 'fs';
 import * as path from 'path';
 import { QAReportExistenceChecker } from '../../../utils/pre-eval-gate/checkers/qa-report-existence-checker.js';

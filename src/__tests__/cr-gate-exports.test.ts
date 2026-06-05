@@ -10,7 +10,7 @@
  * - 验证 DEFAULT_POST_CR_GATE_RULES 混合 failureType (包含 'A' 和 'B')
  */
 
-import { describe, it, expect, beforeEach, afterEach } from 'bun:test';
+import { describe, it, expect, beforeEach, afterEach } from '@jest/globals';
 import * as path from 'node:path';
 import { createIsolatedTestEnv, type IsolatedTestEnv } from '../utils/test-env.js';
 

@@ -8,7 +8,7 @@
  * - CP-004: post-phase-gate.ts 检查器添加 failureType: 'B'
  * - CP-005: hd-assembly-line.ts 重试逻辑按 failureType 分类处理
  */
-import { describe, it, expect, beforeEach, afterEach } from 'bun:test';
+import { describe, it, expect, beforeEach, afterEach } from '@jest/globals';
 import { createIsolatedTestEnv, type IsolatedTestEnv } from '../utils/test-env.js';
 
 // ============================================================

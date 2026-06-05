@@ -11,7 +11,7 @@
  * - completeTask: 一键完成任务
  */
 
-import { describe, it, expect, beforeEach, afterEach, spyOn, mock } from 'bun:test';
+import { describe, it, expect, beforeEach, afterEach} from '@jest/globals';
 import * as fs from 'fs';
 import * as path from 'path';
 import {
@@ -165,13 +165,13 @@ describe('hasValidCheckpoints', () => {
 
 describe('displayCheckpointVerificationWarnings', () => {
   let displayCheckpointVerificationWarnings: typeof import('../commands/task.js')['displayCheckpointVerificationWarnings'];
-  let consoleSpy: ReturnType<typeof spyOn>;
+  let consoleSpy: jest.SpyInstance;
   let env: IsolatedTestEnv;
 
   beforeEach(async () => {
     const mod = await taskModule();
     displayCheckpointVerificationWarnings = mod.displayCheckpointVerificationWarnings;
-    consoleSpy = spyOn(console, 'log');
+    consoleSpy = jest.spyOn(console, 'log');
     env = await createIsolatedTestEnv();
   });
 
@@ -211,13 +211,13 @@ describe('displayCheckpointVerificationWarnings', () => {
 
 describe('displayCheckpointCreationWarning', () => {
   let displayCheckpointCreationWarning: typeof import('../commands/task.js')['displayCheckpointCreationWarning'];
-  let consoleSpy: ReturnType<typeof spyOn>;
+  let consoleSpy: jest.SpyInstance;
   let env: IsolatedTestEnv;
 
   beforeEach(async () => {
     const mod = await taskModule();
     displayCheckpointCreationWarning = mod.displayCheckpointCreationWarning;
-    consoleSpy = spyOn(console, 'log');
+    consoleSpy = jest.spyOn(console, 'log');
     env = await createIsolatedTestEnv();
   });
 
@@ -247,8 +247,8 @@ describe('displayCheckpointCreationWarning', () => {
 describe('generateCheckpointTemplate', () => {
   let generateCheckpointTemplate: typeof import('../commands/task.js')['generateCheckpointTemplate'];
   let env: IsolatedTestEnv;
-  let consoleSpy: ReturnType<typeof spyOn>;
-  let taskSpy: ReturnType<typeof spyOn>;
+  let consoleSpy: jest.SpyInstance;
+  let taskSpy: jest.SpyInstance;
 
   const mockTask = {
     id: 'TASK-feature-P2-test-20260411',
@@ -274,9 +274,9 @@ describe('generateCheckpointTemplate', () => {
 
     // Mock dependencies
     const taskMod = await import('../utils/task.js');
-    taskSpy = spyOn(taskMod, 'readTaskMeta').mockReturnValue({ ...mockTask });
+    taskSpy = jest.spyOn(taskMod, 'readTaskMeta').mockReturnValue({ ...mockTask });
 
-    consoleSpy = spyOn(console, 'log');
+    consoleSpy = jest.spyOn(console, 'log');
   });
 
   afterEach(async () => {
@@ -287,7 +287,7 @@ describe('generateCheckpointTemplate', () => {
 
   it('exits if project not initialized', async () => {
     env.mocks.isInitialized.mockReturnValue(false);
-    const exitSpy = spyOn(process, 'exit').mockImplementation(() => { throw new Error('exit'); });
+    const exitSpy = jest.spyOn(process, 'exit').mockImplementation(() => { throw new Error('exit'); });
     try {
       generateCheckpointTemplate('TASK-001');
     } catch (e) {
@@ -299,7 +299,7 @@ describe('generateCheckpointTemplate', () => {
 
   it('exits if task not found', async () => {
     taskSpy.mockReturnValue(null);
-    const exitSpy = spyOn(process, 'exit').mockImplementation(() => { throw new Error('exit'); });
+    const exitSpy = jest.spyOn(process, 'exit').mockImplementation(() => { throw new Error('exit'); });
     try {
       generateCheckpointTemplate('TASK-NONEXIST');
     } catch (e) {
@@ -359,12 +359,12 @@ describe('generateCheckpointTemplate', () => {
 describe('createTask', () => {
   let createTask: typeof import('../commands/task.js')['createTask'];
   let env: IsolatedTestEnv;
-  let consoleSpy: ReturnType<typeof spyOn>;
-  let consoleErrorSpy: ReturnType<typeof spyOn>;
-  let taskExistsSpy: ReturnType<typeof spyOn>;
-  let generateNewTaskIdSpy: ReturnType<typeof spyOn>;
-  let writeTaskMetaSpy: ReturnType<typeof spyOn>;
-  let syncCheckpointsSpy: ReturnType<typeof spyOn>;
+  let consoleSpy: jest.SpyInstance;
+  let consoleErrorSpy: jest.SpyInstance;
+  let taskExistsSpy: jest.SpyInstance;
+  let generateNewTaskIdSpy: jest.SpyInstance;
+  let writeTaskMetaSpy: jest.SpyInstance;
+  let syncCheckpointsSpy: jest.SpyInstance;
 
   beforeEach(async () => {
     const mod = await taskModule();
@@ -373,19 +373,19 @@ describe('createTask', () => {
     env = await createIsolatedTestEnv();
 
     const taskMod = await import('../utils/task.js');
-    taskExistsSpy = spyOn(taskMod, 'taskExists').mockReturnValue(false);
-    generateNewTaskIdSpy = spyOn(taskMod, 'generateNewTaskId').mockReturnValue('TASK-feature-P2-test-20260411');
-    writeTaskMetaSpy = spyOn(taskMod, 'writeTaskMeta').mockImplementation(() => {});
+    taskExistsSpy = jest.spyOn(taskMod, 'taskExists').mockReturnValue(false);
+    generateNewTaskIdSpy = jest.spyOn(taskMod, 'generateNewTaskId').mockReturnValue('TASK-feature-P2-test-20260411');
+    writeTaskMetaSpy = jest.spyOn(taskMod, 'writeTaskMeta').mockImplementation(() => {});
 
     const cpMod = await import('../utils/checkpoint.js');
-    syncCheckpointsSpy = spyOn(cpMod, 'syncCheckpointsToMeta').mockImplementation(() => {});
+    syncCheckpointsSpy = jest.spyOn(cpMod, 'syncCheckpointsToMeta').mockImplementation(() => {});
 
     // Pre-create the task directory (normally writeTaskMeta creates it)
     const defaultTaskDir = path.join(env.tasksDir, 'TASK-feature-P2-test-20260411');
     fs.mkdirSync(defaultTaskDir, { recursive: true });
 
-    consoleSpy = spyOn(console, 'log');
-    consoleErrorSpy = spyOn(console, 'error');
+    consoleSpy = jest.spyOn(console, 'log');
+    consoleErrorSpy = jest.spyOn(console, 'error');
   });
 
   afterEach(async () => {
@@ -400,7 +400,7 @@ describe('createTask', () => {
 
   it('exits if project not initialized', async () => {
     env.mocks.isInitialized.mockReturnValue(false);
-    const exitSpy = spyOn(process, 'exit').mockImplementation(() => { throw new Error('exit'); });
+    const exitSpy = jest.spyOn(process, 'exit').mockImplementation(() => { throw new Error('exit'); });
     try {
       await createTask({ title: 'Test', nonInteractive: true }, env.tempDir);
     } catch (e) {
@@ -449,7 +449,7 @@ describe('createTask', () => {
   });
 
   it('rejects invalid custom task ID', async () => {
-    const exitSpy = spyOn(process, 'exit').mockImplementation(() => { throw new Error('exit'); });
+    const exitSpy = jest.spyOn(process, 'exit').mockImplementation(() => { throw new Error('exit'); });
     try {
       await createTask({
         title: 'Test',
@@ -465,7 +465,7 @@ describe('createTask', () => {
 
   it('rejects duplicate task ID', async () => {
     taskExistsSpy.mockReturnValue(true);
-    const exitSpy = spyOn(process, 'exit').mockImplementation(() => { throw new Error('exit'); });
+    const exitSpy = jest.spyOn(process, 'exit').mockImplementation(() => { throw new Error('exit'); });
     try {
       await createTask({
         title: 'Test',
@@ -514,10 +514,10 @@ describe('createTask', () => {
 describe('updateTask', () => {
   let updateTask: typeof import('../commands/task.js')['updateTask'];
   let env: IsolatedTestEnv;
-  let consoleSpy: ReturnType<typeof spyOn>;
-  let consoleErrorSpy: ReturnType<typeof spyOn>;
-  let readTaskMetaSpy: ReturnType<typeof spyOn>;
-  let writeTaskMetaSpy: ReturnType<typeof spyOn>;
+  let consoleSpy: jest.SpyInstance;
+  let consoleErrorSpy: jest.SpyInstance;
+  let readTaskMetaSpy: jest.SpyInstance;
+  let writeTaskMetaSpy: jest.SpyInstance;
 
   const baseTask = (): import('../types/task').TaskMeta => ({
     id: 'TASK-feature-P2-test-20260411',
@@ -537,11 +537,11 @@ describe('updateTask', () => {
     env = await createIsolatedTestEnv();
 
     const taskMod = await import('../utils/task.js');
-    readTaskMetaSpy = spyOn(taskMod, 'readTaskMeta');
-    writeTaskMetaSpy = spyOn(taskMod, 'writeTaskMeta').mockImplementation(() => {});
+    readTaskMetaSpy = jest.spyOn(taskMod, 'readTaskMeta');
+    writeTaskMetaSpy = jest.spyOn(taskMod, 'writeTaskMeta').mockImplementation(() => {});
 
-    consoleSpy = spyOn(console, 'log');
-    consoleErrorSpy = spyOn(console, 'error');
+    consoleSpy = jest.spyOn(console, 'log');
+    consoleErrorSpy = jest.spyOn(console, 'error');
   });
 
   afterEach(async () => {
@@ -554,7 +554,7 @@ describe('updateTask', () => {
 
   it('exits if project not initialized', async () => {
     env.mocks.isInitialized.mockReturnValue(false);
-    const exitSpy = spyOn(process, 'exit').mockImplementation(() => { throw new Error('exit'); });
+    const exitSpy = jest.spyOn(process, 'exit').mockImplementation(() => { throw new Error('exit'); });
     try {
       await updateTask('TASK-001', { title: 'New Title' }, env.tempDir);
     } catch (e) {
@@ -566,7 +566,7 @@ describe('updateTask', () => {
 
   it('exits if task not found', async () => {
     readTaskMetaSpy.mockReturnValue(null);
-    const exitSpy = spyOn(process, 'exit').mockImplementation(() => { throw new Error('exit'); });
+    const exitSpy = jest.spyOn(process, 'exit').mockImplementation(() => { throw new Error('exit'); });
     try {
       await updateTask('TASK-NONEXIST', { title: 'New' }, env.tempDir);
     } catch (e) {
@@ -698,7 +698,7 @@ describe('updateTask', () => {
     fs.mkdirSync(cpDir, { recursive: true });
     fs.writeFileSync(path.join(cpDir, 'checkpoint.md'), '- [x] checked item');
 
-    const exitSpy = spyOn(process, 'exit').mockImplementation(() => { throw new Error('exit'); });
+    const exitSpy = jest.spyOn(process, 'exit').mockImplementation(() => { throw new Error('exit'); });
     try {
       await updateTask(task.id, { status: 'resolved', token: 'wrong-token' }, env.tempDir);
     } catch (e) {
@@ -729,9 +729,9 @@ describe('updateTask', () => {
 describe('reopenTask', () => {
   let reopenTask: typeof import('../commands/task.js')['reopenTask'];
   let env: IsolatedTestEnv;
-  let consoleSpy: ReturnType<typeof spyOn>;
-  let readTaskMetaSpy: ReturnType<typeof spyOn>;
-  let writeTaskMetaSpy: ReturnType<typeof spyOn>;
+  let consoleSpy: jest.SpyInstance;
+  let readTaskMetaSpy: jest.SpyInstance;
+  let writeTaskMetaSpy: jest.SpyInstance;
 
   const baseTask = (): import('../types/task').TaskMeta => ({
     id: 'TASK-feature-P2-test-20260411',
@@ -749,9 +749,9 @@ describe('reopenTask', () => {
     env = await createIsolatedTestEnv();
     const mod = await import('../commands/task.js');
     reopenTask = mod.reopenTask;
-    consoleSpy = spyOn(console, 'log').mockImplementation(() => {});
-    readTaskMetaSpy = spyOn(await import('../utils/task.js'), 'readTaskMeta');
-    writeTaskMetaSpy = spyOn(await import('../utils/task.js'), 'writeTaskMeta').mockImplementation(() => {});
+    consoleSpy = jest.spyOn(console, 'log').mockImplementation(() => {});
+    readTaskMetaSpy = jest.spyOn(await import('../utils/task.js'), 'readTaskMeta');
+    writeTaskMetaSpy = jest.spyOn(await import('../utils/task.js'), 'writeTaskMeta').mockImplementation(() => {});
   });
 
   afterEach(async () => {
@@ -824,7 +824,7 @@ describe('reopenTask', () => {
 
   it('exits if task does not exist', async () => {
     readTaskMetaSpy.mockReturnValue(null);
-    const exitSpy = spyOn(process, 'exit').mockImplementation(() => { throw new Error('exit'); });
+    const exitSpy = jest.spyOn(process, 'exit').mockImplementation(() => { throw new Error('exit'); });
 
     try {
       await reopenTask('NON-EXISTENT', {}, env.tempDir);
@@ -840,7 +840,7 @@ describe('reopenTask', () => {
     const task = baseTask();
     task.status = 'open';
     readTaskMetaSpy.mockReturnValue(task);
-    const exitSpy = spyOn(process, 'exit').mockImplementation(() => { throw new Error('exit'); });
+    const exitSpy = jest.spyOn(process, 'exit').mockImplementation(() => { throw new Error('exit'); });
 
     try {
       await reopenTask(task.id, {}, env.tempDir);
@@ -858,10 +858,10 @@ describe('reopenTask', () => {
 describe('completeTask', () => {
   let completeTask: typeof import('../commands/task.js')['completeTask'];
   let env: IsolatedTestEnv;
-  let consoleSpy: ReturnType<typeof spyOn>;
-  let consoleErrorSpy: ReturnType<typeof spyOn>;
-  let readTaskMetaSpy: ReturnType<typeof spyOn>;
-  let writeTaskMetaSpy: ReturnType<typeof spyOn>;
+  let consoleSpy: jest.SpyInstance;
+  let consoleErrorSpy: jest.SpyInstance;
+  let readTaskMetaSpy: jest.SpyInstance;
+  let writeTaskMetaSpy: jest.SpyInstance;
 
   const baseTask = (): import('../types/task').TaskMeta => ({
     id: 'TASK-feature-P2-test-20260411',
@@ -881,11 +881,11 @@ describe('completeTask', () => {
     env = await createIsolatedTestEnv();
 
     const taskMod = await import('../utils/task.js');
-    readTaskMetaSpy = spyOn(taskMod, 'readTaskMeta');
-    writeTaskMetaSpy = spyOn(taskMod, 'writeTaskMeta').mockImplementation(() => {});
+    readTaskMetaSpy = jest.spyOn(taskMod, 'readTaskMeta');
+    writeTaskMetaSpy = jest.spyOn(taskMod, 'writeTaskMeta').mockImplementation(() => {});
 
-    consoleSpy = spyOn(console, 'log');
-    consoleErrorSpy = spyOn(console, 'error');
+    consoleSpy = jest.spyOn(console, 'log');
+    consoleErrorSpy = jest.spyOn(console, 'error');
   });
 
   afterEach(async () => {
@@ -898,7 +898,7 @@ describe('completeTask', () => {
 
   it('exits if project not initialized', async () => {
     env.mocks.isInitialized.mockReturnValue(false);
-    const exitSpy = spyOn(process, 'exit').mockImplementation(() => { throw new Error('exit'); });
+    const exitSpy = jest.spyOn(process, 'exit').mockImplementation(() => { throw new Error('exit'); });
     try {
       await completeTask('TASK-001', {}, env.tempDir);
     } catch (e) {
@@ -910,7 +910,7 @@ describe('completeTask', () => {
 
   it('exits if task not found', async () => {
     readTaskMetaSpy.mockReturnValue(null);
-    const exitSpy = spyOn(process, 'exit').mockImplementation(() => { throw new Error('exit'); });
+    const exitSpy = jest.spyOn(process, 'exit').mockImplementation(() => { throw new Error('exit'); });
     try {
       await completeTask('TASK-NONEXIST', {}, env.tempDir);
     } catch (e) {
@@ -963,7 +963,7 @@ describe('completeTask', () => {
     // Mock prompts to reject (user cancels marking checkpoints)
     const prompts = await import('prompts');
     // First call: proceed=false (don't mark all as complete)
-    const promptsSpy = spyOn(prompts, 'default')
+    const promptsSpy = jest.spyOn(prompts, 'default')
       .mockResolvedValueOnce({ proceed: false });
 
     await completeTask(task.id, { yes: false }, env.tempDir);

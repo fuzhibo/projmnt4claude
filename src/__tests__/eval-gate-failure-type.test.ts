@@ -2,7 +2,7 @@
  * Eval Gate failureType 单元测试
  * 验证 Pre-Eval Gate 和 Post-Eval Gate 检查器的 failureType 属性正确性
  */
-import { describe, it, expect } from 'bun:test';
+import { describe, it, expect } from '@jest/globals';
 import { QAPassChecker } from '../utils/pre-eval-gate/qa-pass-checker.js';
 import { QAReportExistenceChecker } from '../utils/pre-eval-gate/checkers/qa-report-existence-checker.js';
 import { DevReportChecker } from '../utils/pre-eval-gate/checkers/dev-report-checker.js';

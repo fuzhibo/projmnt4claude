@@ -15,7 +15,7 @@
  * - CP-17: handleVerdictBasedTransition verdict action tests
  */
 
-import { describe, test, expect, beforeEach, afterEach } from 'bun:test';
+import { describe, test, expect, beforeEach, afterEach } from '@jest/globals';
 import * as fs from 'fs';
 import * as path from 'path';
 import { AssemblyLine } from '../utils/hd-assembly-line.js';

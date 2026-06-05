@@ -4,7 +4,7 @@
  * 测试质量门禁检查器的核心函数
  */
 
-import { describe, it, expect, beforeEach, afterEach } from 'bun:test';
+import { describe, it, expect, beforeEach, afterEach } from '@jest/globals';
 import * as path from 'path';
 import * as fs from 'fs';
 import { createIsolatedTestEnv, type IsolatedTestEnv } from '../utils/test-env.js';

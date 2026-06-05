@@ -4,7 +4,7 @@
  * 测试项目路径相关的工具函数
  */
 
-import { describe, it, expect, beforeEach, afterEach } from 'bun:test';
+import { describe, it, expect, beforeEach, afterEach } from '@jest/globals';
 import * as fs from 'fs';
 import * as path from 'path';
 import { createIsolatedTestEnv, type IsolatedTestEnv } from '../utils/test-env.js';

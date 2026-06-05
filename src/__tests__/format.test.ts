@@ -4,7 +4,7 @@
  * 测试统一输出格式常量和函数
  */
 
-import { describe, it, expect } from 'bun:test';
+import { describe, it, expect } from '@jest/globals';
 import { SEPARATOR_WIDTH, separator } from '../utils/format.js';
 
 // ============================================================

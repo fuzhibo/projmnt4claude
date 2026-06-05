@@ -12,7 +12,7 @@
  * - 3.8 接口契约：validator 规则表两端一致、PREFIX_MAP 两端一致、InvestigationReport 作为正式接口
  */
 
-import { describe, test, expect } from 'bun:test';
+import { describe, test, expect } from '@jest/globals';
 import {
   PREFIX_MAP,
   type InvestigationReport,

@@ -8,7 +8,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 import * as os from 'os';
 import { execSync } from 'child_process';
-import { spyOn } from 'bun:test';
+import { jest } from '@jest/globals';
 
 // ============================================================
 // 类型定义
@@ -36,9 +36,9 @@ export interface IsolatedTestEnv {
  * Mock 函数句柄集合
  */
 export interface MockHandles {
-  isInitialized: ReturnType<typeof spyOn>;
-  getTasksDir: ReturnType<typeof spyOn>;
-  getProjectDir: ReturnType<typeof spyOn>;
+  isInitialized: any;
+  getTasksDir: any;
+  getProjectDir: any;
   restore: () => void;
 }
 
@@ -135,9 +135,9 @@ function safeRemoveDir(dir: string): void {
 async function createPathMocks(state: TestEnvState): Promise<MockHandles> {
   const pathModule = await import('./path.js');
 
-  const isInitializedMock = spyOn(pathModule, 'isInitialized').mockReturnValue(true);
-  const getTasksDirMock = spyOn(pathModule, 'getTasksDir').mockReturnValue(state.tasksDir);
-  const getProjectDirMock = spyOn(pathModule, 'getProjectDir').mockReturnValue(state.projectDir);
+  const isInitializedMock = jest.spyOn(pathModule, 'isInitialized').mockReturnValue(true);
+  const getTasksDirMock = jest.spyOn(pathModule, 'getTasksDir').mockReturnValue(state.tasksDir);
+  const getProjectDirMock = jest.spyOn(pathModule, 'getProjectDir').mockReturnValue(state.projectDir);
 
   return {
     isInitialized: isInitializedMock,

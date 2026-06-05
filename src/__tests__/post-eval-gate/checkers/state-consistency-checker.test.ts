@@ -11,7 +11,7 @@
  * - 各阶段报告缺失时跳过对应检查
  */
 
-import { describe, it, expect } from 'bun:test';
+import { describe, it, expect } from '@jest/globals';
 import { FinalStateConsistencyChecker } from '../../../utils/post-eval-gate/checkers/state-consistency-checker.js';
 import type {
   PostEvalCheckContext,

@@ -2,7 +2,7 @@
  * analyze.ts 辅助函数单元测试
  */
 
-import { describe, test, expect } from 'bun:test';
+import { describe, test, expect } from '@jest/globals';
 import {
   normalizeStatus,
   normalizePriority,

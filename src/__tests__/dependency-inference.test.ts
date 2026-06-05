@@ -14,7 +14,7 @@
  * - 场景E: 无依赖 → parallelizable=true
  */
 
-import { describe, test, expect } from 'bun:test';
+import { describe, test, expect } from '@jest/globals';
 import {
   inferDependenciesFromFiles,
   inferArchitectureLayer,

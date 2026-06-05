@@ -1,4 +1,4 @@
-import { describe, test, expect, mock, beforeEach, afterEach, afterAll } from 'bun:test';
+import { describe, test, expect, jest, beforeEach, afterEach, afterAll } from '@jest/globals';
 import * as fs from 'fs';
 import * as path from 'path';
 import { EventEmitter } from 'events';
@@ -23,12 +23,10 @@ import {
 } from '../utils/harness-helpers.js';
 import type { TaskMeta, CheckpointMetadata } from '../types/task.js';
 
-// Mock child_process - hoisted before imports that use it.
-// Note: mock.module() cannot be restored via mock.restore() (Bun design).
-// This mock persists for the file's lifetime; process isolation
-// (batched-test-runner) prevents cross-file pollution.
-mock.module('child_process', () => ({
-  spawn: mock(() => {
+// Mock child_process - Jest hoists jest.mock() before imports that use it.
+// jest.restoreAllMocks() restores all mocks properly (unlike Bun's mock.restore).
+jest.mock('child_process', () => ({
+  spawn: jest.fn(() => {
     throw new Error('spawn not configured');
   }),
 }));
@@ -1244,10 +1242,10 @@ describe('rebuildPrerequisiteData', () => {
 // ============================================================
 // Cleanup: Restore function-level mocks after all tests
 // Note: Re-mocking child_process in afterAll does NOT truly restore
-// the original module (Bun design). Changed to mock.restore() which
+// the original module (Bun design). Changed to jest.restoreAllMocks() which
 // at least cleans up function-level mock state. Process isolation
 // (batched-test-runner) prevents cross-file pollution.
 // ============================================================
 afterAll(() => {
-  mock.restore();
+  jest.restoreAllMocks();
 });

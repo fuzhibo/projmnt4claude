@@ -12,7 +12,7 @@
  * 5. 错误处理场景
  */
 
-import { describe, test, expect, beforeEach, afterEach, beforeAll, afterAll } from 'bun:test';
+import { describe, test, expect, beforeEach, afterEach, beforeAll, afterAll } from '@jest/globals';
 import * as fs from 'fs';
 import * as path from 'path';
 

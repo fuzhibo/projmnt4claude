@@ -2,7 +2,7 @@
  * 测试辅助工具单元测试
  */
 
-import { describe, test, expect, beforeEach } from 'bun:test';
+import { describe, test, expect, beforeEach } from '@jest/globals';
 import {
   MockFs,
   createMockFs,

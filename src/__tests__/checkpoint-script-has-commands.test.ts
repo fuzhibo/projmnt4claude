@@ -4,7 +4,7 @@
  * 2. inferCheckpointPrefix 关键词收紧后不再误匹配代码修改任务
  */
 
-import { describe, test, expect } from 'bun:test';
+import { describe, test, expect } from '@jest/globals';
 import {
   checkpointScriptHasCommands,
   inferCheckpointPrefix,

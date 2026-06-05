@@ -1,4 +1,4 @@
-import { describe, test, expect, mock, spyOn, beforeEach, afterEach, afterAll } from 'bun:test';
+import { describe, test, expect, jest, beforeEach, afterEach, afterAll } from '@jest/globals';
 import * as fs from 'fs';
 import * as path from 'path';
 import { HarnessExecutor } from '../utils/harness-executor.js';
@@ -9,25 +9,24 @@ import type { HarnessConfig, SprintContract, DevReport, RetryContext } from '../
 import type { TaskMeta } from '../types/task.js';
 
 // ============================================================
-// Mocks - must be hoisted before imports that use them
+// Mocks - Jest hoists jest.mock() before imports that use them
 // ============================================================
 
-const mockAgentInvoke = mock<(prompt: string, options: any) => Promise<any>>();
+const mockAgentInvoke = jest.fn<(prompt: string, options: any) => Promise<any>>();
 
-// Note: mock.module() is hoisted before imports — cannot migrate to spyOn.
-// mock.restore() does NOT restore module-level mocks (Bun design).
-// These mocks persist for the file's lifetime; cleanup is limited to
-// restoring function-level mocks (mockAgentInvoke) in afterAll.
+// Note: jest.mock() is hoisted before imports — same behavior as Bun's mock.module().
+// jest.restoreAllMocks() restores function-level mocks (mockAgentInvoke).
+// Module-level mocks persist for the file's lifetime (Jest design).
 
-mock.module('../utils/headless-agent.js', () => ({
+jest.mock('../utils/headless-agent.js', () => ({
   getAgent: () => ({ invoke: mockAgentInvoke }),
   buildEffectiveTools: () => ({ tools: ['Read', 'Edit', 'Write'], skipPermissions: true }),
 }));
 
-// Note: role-prompts is mocked via mock.module() because it's imported
+// Note: role-prompts is mocked via jest.mock() because it's imported
 // transitively by headless-agent. spyOn requires the module to be imported
 // first, but the import chain depends on the mock being in place.
-mock.module('../utils/role-prompts.js', () => ({
+jest.mock('../utils/role-prompts.js', () => ({
   getDevRoleTemplate: () => ({
     roleDeclaration: 'You are an executor.',
     extraInstructions: ['Follow coding standards'],
@@ -95,16 +94,16 @@ function setupProjectDir(cwd: string, taskId: string) {
 
 describe('HarnessExecutor', () => {
   let env: IsolatedTestEnv;
-  let loadPromptTemplateSpy: ReturnType<typeof spyOn>;
-  let resolveTemplateSpy: ReturnType<typeof spyOn>;
+  let loadPromptTemplateSpy: jest.SpyInstance;
+  let resolveTemplateSpy: jest.SpyInstance;
 
   beforeEach(async () => {
     env = await createIsolatedTestEnv();
 
     // Use spyOn for prompt-templates to allow restoration in afterEach
     // This prevents global pollution of mock.module()
-    loadPromptTemplateSpy = spyOn(promptTemplates, 'loadPromptTemplate').mockReturnValue('{title}\n{taskId}\n{descriptionSection}');
-    resolveTemplateSpy = spyOn(promptTemplates, 'resolveTemplate').mockImplementation((_tpl: string, vars: Record<string, string>) => {
+    loadPromptTemplateSpy = jest.spyOn(promptTemplates, 'loadPromptTemplate').mockReturnValue('{title}\n{taskId}\n{descriptionSection}');
+    resolveTemplateSpy = jest.spyOn(promptTemplates, 'resolveTemplate').mockImplementation((_tpl: string, vars: Record<string, string>) => {
       return Object.entries(vars).reduce((t, [k, v]) => t.replace(`{${k}}`, v || ''), _tpl);
     });
   });
@@ -584,7 +583,7 @@ describe('HarnessExecutor', () => {
         output: 'done', success: true, durationMs: 100, exitCode: 0,
       });
 
-      const archiveSpy = spyOn(harnessHelpers, 'archiveReportIfExists').mockImplementation(() => {});
+      const archiveSpy = jest.spyOn(harnessHelpers, 'archiveReportIfExists').mockImplementation(() => {});
 
       const executor = new HarnessExecutor(config);
       await executor.execute(task, contract);
@@ -631,9 +630,9 @@ describe('HarnessExecutor', () => {
 // ============================================================
 // Cleanup: Restore function-level mocks after all tests
 // Note: mock.module() mocks persist for the file's lifetime and
-// cannot be restored via mock.restore() (Bun design limitation).
+// cannot be restored via jest.restoreAllMocks() (Bun design limitation).
 // Process isolation (batched-test-runner) prevents cross-file pollution.
 // ============================================================
 afterAll(() => {
-  mock.restore();
+  jest.restoreAllMocks();
 });

@@ -4,7 +4,7 @@
  * 验证 createIsolatedTestEnv 和 resetTestEnv 功能
  */
 
-import { describe, it, expect, beforeEach, afterEach } from 'bun:test';
+import { describe, it, expect, beforeEach, afterEach } from '@jest/globals';
 import * as fs from 'fs';
 import * as path from 'path';
 import {

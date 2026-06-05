@@ -3,7 +3,7 @@
  * 评估结果 AI 审核检查器测试
  */
 
-import { describe, test, expect, beforeEach, mock } from 'bun:test';
+import { describe, test, expect, beforeEach} from '@jest/globals';
 import {
   EvalResultAIChecker,
   createEvalResultAIChecker,

@@ -7,7 +7,7 @@
  * - R-RETRY-003: 开发报告重置检查 (含 autoFix)
  */
 
-import { describe, it, expect, beforeEach, afterEach } from 'bun:test';
+import { describe, it, expect, beforeEach, afterEach } from '@jest/globals';
 import * as fs from 'fs';
 import * as path from 'path';
 import {

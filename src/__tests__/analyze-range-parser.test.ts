@@ -9,7 +9,7 @@
  * - getTasksByRange: 任务过滤（需 mock）
  */
 
-import { describe, it, expect, mock, beforeEach } from 'bun:test';
+import { describe, it, expect,  beforeEach } from '@jest/globals';
 import {
   AnalyzeError,
   safeRegexMatch,

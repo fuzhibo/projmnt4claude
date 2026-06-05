@@ -5,7 +5,7 @@
  * topologicalSortDFS, computeTransitiveClosure, breakCycle,
  * detectBridgeNodes, computeDepths
  */
-import { describe, test, expect } from 'bun:test';
+import { describe, test, expect } from '@jest/globals';
 import {
   detectCyclesDFS,
   wouldCreateCycleBFS,

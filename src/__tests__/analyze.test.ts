@@ -12,7 +12,7 @@
  * quality-gate.ts 导入，相关测试在 quality-gate.test.ts 中覆盖
  */
 
-import { describe, test, expect } from 'bun:test';
+import { describe, test, expect } from '@jest/globals';
 import {
   readAnalyzeConfig,
   matchesIgnorePattern,

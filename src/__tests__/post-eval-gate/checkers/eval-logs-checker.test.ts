@@ -10,7 +10,7 @@
  * - 日志条目有效时通过
  */
 
-import { describe, it, expect } from 'bun:test';
+import { describe, it, expect } from '@jest/globals';
 import { EvalLogsChecker } from '../../../utils/post-eval-gate/checkers/eval-logs-checker.js';
 import type {
   PostEvalCheckContext,

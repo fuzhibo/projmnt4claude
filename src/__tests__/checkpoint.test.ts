@@ -18,7 +18,7 @@
  * - 确保测试隔离，防止跨测试污染
  */
 
-import { describe, it, expect, beforeEach, afterEach, spyOn } from 'bun:test';
+import { describe, it, expect, beforeEach, afterEach } from '@jest/globals';
 import * as fs from 'fs';
 import * as path from 'path';
 import {
@@ -344,13 +344,13 @@ describe('generateFallbackVerification', () => {
 
 describe('parseCheckpointsWithIds', () => {
   let env: IsolatedTestEnv;
-  let existsSyncSpy: ReturnType<typeof spyOn>;
-  let readFileSyncSpy: ReturnType<typeof spyOn>;
-  let readTaskMetaSpy: ReturnType<typeof spyOn>;
+  let existsSyncSpy: jest.SpyInstance;
+  let readFileSyncSpy: jest.SpyInstance;
+  let readTaskMetaSpy: jest.SpyInstance;
 
   beforeEach(async () => {
     env = await createIsolatedTestEnv();
-    readTaskMetaSpy = spyOn(taskModule, 'readTaskMeta').mockReturnValue(null);
+    readTaskMetaSpy = jest.spyOn(taskModule, 'readTaskMeta').mockReturnValue(null);
   });
 
   afterEach(() => {
@@ -361,14 +361,14 @@ describe('parseCheckpointsWithIds', () => {
   });
 
   it('returns empty array when checkpoint.md does not exist', () => {
-    existsSyncSpy = spyOn(fs, 'existsSync').mockReturnValue(false);
+    existsSyncSpy = jest.spyOn(fs, 'existsSync').mockReturnValue(false);
     const result = parseCheckpointsWithIds('TASK-1');
     expect(result).toEqual([]);
   });
 
   it('parses unchecked checkpoints from markdown', () => {
-    existsSyncSpy = spyOn(fs, 'existsSync').mockReturnValue(true);
-    readFileSyncSpy = spyOn(fs, 'readFileSync').mockReturnValue(
+    existsSyncSpy = jest.spyOn(fs, 'existsSync').mockReturnValue(true);
+    readFileSyncSpy = jest.spyOn(fs, 'readFileSync').mockReturnValue(
       '# Task Checkpoints\n\n- [ ] 验证登录功能\n- [ ] 确认数据持久化\n'
     );
     readTaskMetaSpy.mockReturnValue({ id: 'TASK-1', checkpoints: [] } as TaskMeta);
@@ -382,8 +382,8 @@ describe('parseCheckpointsWithIds', () => {
   });
 
   it('parses checked checkpoints', () => {
-    existsSyncSpy = spyOn(fs, 'existsSync').mockReturnValue(true);
-    readFileSyncSpy = spyOn(fs, 'readFileSync').mockReturnValue(
+    existsSyncSpy = jest.spyOn(fs, 'existsSync').mockReturnValue(true);
+    readFileSyncSpy = jest.spyOn(fs, 'readFileSync').mockReturnValue(
       '- [x] 已完成的功能\n- [X] 另一个完成项\n- [ ] 未完成项\n'
     );
     readTaskMetaSpy.mockReturnValue({ id: 'TASK-1', checkpoints: [] } as TaskMeta);
@@ -396,8 +396,8 @@ describe('parseCheckpointsWithIds', () => {
   });
 
   it('generates IDs when no existing metadata', () => {
-    existsSyncSpy = spyOn(fs, 'existsSync').mockReturnValue(true);
-    readFileSyncSpy = spyOn(fs, 'readFileSync').mockReturnValue(
+    existsSyncSpy = jest.spyOn(fs, 'existsSync').mockReturnValue(true);
+    readFileSyncSpy = jest.spyOn(fs, 'readFileSync').mockReturnValue(
       '- [ ] 验证功能\n'
     );
     readTaskMetaSpy.mockReturnValue(null);
@@ -408,8 +408,8 @@ describe('parseCheckpointsWithIds', () => {
   });
 
   it('matches existing checkpoint IDs by description', () => {
-    existsSyncSpy = spyOn(fs, 'existsSync').mockReturnValue(true);
-    readFileSyncSpy = spyOn(fs, 'readFileSync').mockReturnValue(
+    existsSyncSpy = jest.spyOn(fs, 'existsSync').mockReturnValue(true);
+    readFileSyncSpy = jest.spyOn(fs, 'readFileSync').mockReturnValue(
       '- [ ] 验证登录功能\n'
     );
     readTaskMetaSpy.mockReturnValue({
@@ -422,8 +422,8 @@ describe('parseCheckpointsWithIds', () => {
   });
 
   it('records correct line indices', () => {
-    existsSyncSpy = spyOn(fs, 'existsSync').mockReturnValue(true);
-    readFileSyncSpy = spyOn(fs, 'readFileSync').mockReturnValue(
+    existsSyncSpy = jest.spyOn(fs, 'existsSync').mockReturnValue(true);
+    readFileSyncSpy = jest.spyOn(fs, 'readFileSync').mockReturnValue(
       '# Header\n\n- [ ] First\n- [ ] Second\n'
     );
     readTaskMetaSpy.mockReturnValue(null);
@@ -434,8 +434,8 @@ describe('parseCheckpointsWithIds', () => {
   });
 
   it('skips non-checkpoint lines', () => {
-    existsSyncSpy = spyOn(fs, 'existsSync').mockReturnValue(true);
-    readFileSyncSpy = spyOn(fs, 'readFileSync').mockReturnValue(
+    existsSyncSpy = jest.spyOn(fs, 'existsSync').mockReturnValue(true);
+    readFileSyncSpy = jest.spyOn(fs, 'readFileSync').mockReturnValue(
       '# Header\nSome text\n- [ ] Real checkpoint\nMore text\n'
     );
     readTaskMetaSpy.mockReturnValue(null);
@@ -450,19 +450,19 @@ describe('parseCheckpointsWithIds', () => {
 
 describe('syncCheckpointsToMeta', () => {
   let env: IsolatedTestEnv;
-  let readTaskMetaSpy: ReturnType<typeof spyOn>;
-  let writeTaskMetaSpy: ReturnType<typeof spyOn>;
-  let existsSyncSpy: ReturnType<typeof spyOn>;
-  let readFileSyncSpy: ReturnType<typeof spyOn>;
-  let writeFileSyncSpy: ReturnType<typeof spyOn>;
+  let readTaskMetaSpy: jest.SpyInstance;
+  let writeTaskMetaSpy: jest.SpyInstance;
+  let existsSyncSpy: jest.SpyInstance;
+  let readFileSyncSpy: jest.SpyInstance;
+  let writeFileSyncSpy: jest.SpyInstance;
 
   beforeEach(async () => {
     env = await createIsolatedTestEnv();
-    readTaskMetaSpy = spyOn(taskModule, 'readTaskMeta');
-    writeTaskMetaSpy = spyOn(taskModule, 'writeTaskMeta').mockImplementation(() => {});
-    existsSyncSpy = spyOn(fs, 'existsSync').mockReturnValue(false);
-    readFileSyncSpy = spyOn(fs, 'readFileSync');
-    writeFileSyncSpy = spyOn(fs, 'writeFileSync').mockImplementation(() => {});
+    readTaskMetaSpy = jest.spyOn(taskModule, 'readTaskMeta');
+    writeTaskMetaSpy = jest.spyOn(taskModule, 'writeTaskMeta').mockImplementation(() => {});
+    existsSyncSpy = jest.spyOn(fs, 'existsSync').mockReturnValue(false);
+    readFileSyncSpy = jest.spyOn(fs, 'readFileSync');
+    writeFileSyncSpy = jest.spyOn(fs, 'writeFileSync').mockImplementation(() => {});
   });
 
   afterEach(() => {
@@ -543,19 +543,19 @@ describe('syncCheckpointsToMeta', () => {
 
 describe('updateCheckpointStatus', () => {
   let env: IsolatedTestEnv;
-  let readTaskMetaSpy: ReturnType<typeof spyOn>;
-  let writeTaskMetaSpy: ReturnType<typeof spyOn>;
-  let existsSyncSpy: ReturnType<typeof spyOn>;
-  let readFileSyncSpy: ReturnType<typeof spyOn>;
-  let writeFileSyncSpy: ReturnType<typeof spyOn>;
+  let readTaskMetaSpy: jest.SpyInstance;
+  let writeTaskMetaSpy: jest.SpyInstance;
+  let existsSyncSpy: jest.SpyInstance;
+  let readFileSyncSpy: jest.SpyInstance;
+  let writeFileSyncSpy: jest.SpyInstance;
 
   beforeEach(async () => {
     env = await createIsolatedTestEnv();
-    readTaskMetaSpy = spyOn(taskModule, 'readTaskMeta');
-    writeTaskMetaSpy = spyOn(taskModule, 'writeTaskMeta').mockImplementation(() => {});
-    existsSyncSpy = spyOn(fs, 'existsSync').mockReturnValue(false);
-    readFileSyncSpy = spyOn(fs, 'readFileSync');
-    writeFileSyncSpy = spyOn(fs, 'writeFileSync').mockImplementation(() => {});
+    readTaskMetaSpy = jest.spyOn(taskModule, 'readTaskMeta');
+    writeTaskMetaSpy = jest.spyOn(taskModule, 'writeTaskMeta').mockImplementation(() => {});
+    existsSyncSpy = jest.spyOn(fs, 'existsSync').mockReturnValue(false);
+    readFileSyncSpy = jest.spyOn(fs, 'readFileSync');
+    writeFileSyncSpy = jest.spyOn(fs, 'writeFileSync').mockImplementation(() => {});
   });
 
   afterEach(() => {
@@ -667,17 +667,17 @@ describe('updateCheckpointStatus', () => {
 
 describe('getCheckpointDetail', () => {
   let env: IsolatedTestEnv;
-  let readTaskMetaSpy: ReturnType<typeof spyOn>;
-  let writeTaskMetaSpy: ReturnType<typeof spyOn>;
-  let existsSyncSpy: ReturnType<typeof spyOn>;
-  let writeFileSyncSpy: ReturnType<typeof spyOn>;
+  let readTaskMetaSpy: jest.SpyInstance;
+  let writeTaskMetaSpy: jest.SpyInstance;
+  let existsSyncSpy: jest.SpyInstance;
+  let writeFileSyncSpy: jest.SpyInstance;
 
   beforeEach(async () => {
     env = await createIsolatedTestEnv();
-    readTaskMetaSpy = spyOn(taskModule, 'readTaskMeta');
-    writeTaskMetaSpy = spyOn(taskModule, 'writeTaskMeta').mockImplementation(() => {});
-    existsSyncSpy = spyOn(fs, 'existsSync').mockReturnValue(false);
-    writeFileSyncSpy = spyOn(fs, 'writeFileSync').mockImplementation(() => {});
+    readTaskMetaSpy = jest.spyOn(taskModule, 'readTaskMeta');
+    writeTaskMetaSpy = jest.spyOn(taskModule, 'writeTaskMeta').mockImplementation(() => {});
+    existsSyncSpy = jest.spyOn(fs, 'existsSync').mockReturnValue(false);
+    writeFileSyncSpy = jest.spyOn(fs, 'writeFileSync').mockImplementation(() => {});
   });
 
   afterEach(() => {
@@ -700,7 +700,7 @@ describe('getCheckpointDetail', () => {
       status: 'pending',
     };
     // Provide checkpoint.md so syncCheckpointsToMeta preserves checkpoints
-    const readFileSyncSpy = spyOn(fs, 'readFileSync').mockReturnValue('- [ ] 验证功能\n');
+    const readFileSyncSpy = jest.spyOn(fs, 'readFileSync').mockReturnValue('- [ ] 验证功能\n');
     existsSyncSpy.mockReturnValue(true);
     readTaskMetaSpy.mockReturnValue({ id: 'TASK-1', title: 'Test', type: 'feature', priority: 'P2', checkpoints: [cp] } as TaskMeta);
 
@@ -712,7 +712,7 @@ describe('getCheckpointDetail', () => {
   });
 
   it('returns null if checkpoint id not found', () => {
-    const readFileSyncSpy = spyOn(fs, 'readFileSync').mockReturnValue('- [ ] 验证功能\n');
+    const readFileSyncSpy = jest.spyOn(fs, 'readFileSync').mockReturnValue('- [ ] 验证功能\n');
     existsSyncSpy.mockReturnValue(true);
     readTaskMetaSpy.mockReturnValue({
       id: 'TASK-1', title: 'Test', type: 'feature', priority: 'P2',
@@ -726,17 +726,17 @@ describe('getCheckpointDetail', () => {
 
 describe('listCheckpoints', () => {
   let env: IsolatedTestEnv;
-  let readTaskMetaSpy: ReturnType<typeof spyOn>;
-  let writeTaskMetaSpy: ReturnType<typeof spyOn>;
-  let existsSyncSpy: ReturnType<typeof spyOn>;
-  let writeFileSyncSpy: ReturnType<typeof spyOn>;
+  let readTaskMetaSpy: jest.SpyInstance;
+  let writeTaskMetaSpy: jest.SpyInstance;
+  let existsSyncSpy: jest.SpyInstance;
+  let writeFileSyncSpy: jest.SpyInstance;
 
   beforeEach(async () => {
     env = await createIsolatedTestEnv();
-    readTaskMetaSpy = spyOn(taskModule, 'readTaskMeta');
-    writeTaskMetaSpy = spyOn(taskModule, 'writeTaskMeta').mockImplementation(() => {});
-    existsSyncSpy = spyOn(fs, 'existsSync').mockReturnValue(false);
-    writeFileSyncSpy = spyOn(fs, 'writeFileSync').mockImplementation(() => {});
+    readTaskMetaSpy = jest.spyOn(taskModule, 'readTaskMeta');
+    writeTaskMetaSpy = jest.spyOn(taskModule, 'writeTaskMeta').mockImplementation(() => {});
+    existsSyncSpy = jest.spyOn(fs, 'existsSync').mockReturnValue(false);
+    writeFileSyncSpy = jest.spyOn(fs, 'writeFileSync').mockImplementation(() => {});
   });
 
   afterEach(() => {
@@ -753,7 +753,7 @@ describe('listCheckpoints', () => {
   });
 
   it('returns all checkpoints for a task', () => {
-    const readFileSyncSpy = spyOn(fs, 'readFileSync').mockReturnValue('- [ ] 功能A\n- [ ] 功能B\n');
+    const readFileSyncSpy = jest.spyOn(fs, 'readFileSync').mockReturnValue('- [ ] 功能A\n- [ ] 功能B\n');
     existsSyncSpy.mockReturnValue(true);
     const cps: CheckpointMetadata[] = [
       { id: 'CP-001', description: '功能A', status: 'completed' },
@@ -770,17 +770,17 @@ describe('listCheckpoints', () => {
 
 describe('findCheckpointIdByDescription', () => {
   let env: IsolatedTestEnv;
-  let readTaskMetaSpy: ReturnType<typeof spyOn>;
-  let writeTaskMetaSpy: ReturnType<typeof spyOn>;
-  let existsSyncSpy: ReturnType<typeof spyOn>;
-  let writeFileSyncSpy: ReturnType<typeof spyOn>;
+  let readTaskMetaSpy: jest.SpyInstance;
+  let writeTaskMetaSpy: jest.SpyInstance;
+  let existsSyncSpy: jest.SpyInstance;
+  let writeFileSyncSpy: jest.SpyInstance;
 
   beforeEach(async () => {
     env = await createIsolatedTestEnv();
-    readTaskMetaSpy = spyOn(taskModule, 'readTaskMeta');
-    writeTaskMetaSpy = spyOn(taskModule, 'writeTaskMeta').mockImplementation(() => {});
-    existsSyncSpy = spyOn(fs, 'existsSync').mockReturnValue(false);
-    writeFileSyncSpy = spyOn(fs, 'writeFileSync').mockImplementation(() => {});
+    readTaskMetaSpy = jest.spyOn(taskModule, 'readTaskMeta');
+    writeTaskMetaSpy = jest.spyOn(taskModule, 'writeTaskMeta').mockImplementation(() => {});
+    existsSyncSpy = jest.spyOn(fs, 'existsSync').mockReturnValue(false);
+    writeFileSyncSpy = jest.spyOn(fs, 'writeFileSync').mockImplementation(() => {});
   });
 
   afterEach(() => {
@@ -792,7 +792,7 @@ describe('findCheckpointIdByDescription', () => {
   });
 
   it('finds checkpoint by exact description match', () => {
-    const readFileSyncSpy = spyOn(fs, 'readFileSync').mockReturnValue('- [ ] 验证用户登录\n');
+    const readFileSyncSpy = jest.spyOn(fs, 'readFileSync').mockReturnValue('- [ ] 验证用户登录\n');
     existsSyncSpy.mockReturnValue(true);
     readTaskMetaSpy.mockReturnValue({
       id: 'TASK-1', title: 'Test', type: 'feature', priority: 'P2',
@@ -806,7 +806,7 @@ describe('findCheckpointIdByDescription', () => {
   });
 
   it('finds checkpoint by partial description match (contains)', () => {
-    const readFileSyncSpy = spyOn(fs, 'readFileSync').mockReturnValue('- [ ] 验证用户登录功能正常\n');
+    const readFileSyncSpy = jest.spyOn(fs, 'readFileSync').mockReturnValue('- [ ] 验证用户登录功能正常\n');
     existsSyncSpy.mockReturnValue(true);
     readTaskMetaSpy.mockReturnValue({
       id: 'TASK-1', title: 'Test', type: 'feature', priority: 'P2',
@@ -820,7 +820,7 @@ describe('findCheckpointIdByDescription', () => {
   });
 
   it('finds checkpoint when description is contained in search', () => {
-    const readFileSyncSpy = spyOn(fs, 'readFileSync').mockReturnValue('- [ ] 登录\n');
+    const readFileSyncSpy = jest.spyOn(fs, 'readFileSync').mockReturnValue('- [ ] 登录\n');
     existsSyncSpy.mockReturnValue(true);
     readTaskMetaSpy.mockReturnValue({
       id: 'TASK-1', title: 'Test', type: 'feature', priority: 'P2',
@@ -834,7 +834,7 @@ describe('findCheckpointIdByDescription', () => {
   });
 
   it('returns null if no match found', () => {
-    const readFileSyncSpy = spyOn(fs, 'readFileSync').mockReturnValue('- [ ] 验证用户登录\n');
+    const readFileSyncSpy = jest.spyOn(fs, 'readFileSync').mockReturnValue('- [ ] 验证用户登录\n');
     existsSyncSpy.mockReturnValue(true);
     readTaskMetaSpy.mockReturnValue({
       id: 'TASK-1', title: 'Test', type: 'feature', priority: 'P2',

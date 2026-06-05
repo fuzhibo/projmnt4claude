@@ -20,7 +20,7 @@
  * - 确保测试隔离，防止跨测试污染
  */
 
-import { describe, test, expect, beforeEach, afterEach, spyOn, mock } from 'bun:test';
+import { describe, test, expect, beforeEach, afterEach} from '@jest/globals';
 import * as fs from 'fs';
 import * as path from 'path';
 import { Logger, createLogger, type LogLevel, type AICostSummary, type InstrumentationRecord } from '../utils/logger';
@@ -33,9 +33,9 @@ import {
 describe('Logger', () => {
   let env: IsolatedTestEnv;
   let testCwd: string;
-  let consoleLogSpy: ReturnType<typeof spyOn>;
-  let consoleErrorSpy: ReturnType<typeof spyOn>;
-  let consoleWarnSpy: ReturnType<typeof spyOn>;
+  let consoleLogSpy: jest.SpyInstance;
+  let consoleErrorSpy: jest.SpyInstance;
+  let consoleWarnSpy: jest.SpyInstance;
 
   beforeEach(async () => {
     env = await createIsolatedTestEnv({ autoInit: false });
@@ -47,9 +47,9 @@ describe('Logger', () => {
     }
 
     // 使用 spyOn 监听 console 方法，而不是直接替换
-    consoleLogSpy = spyOn(console, 'log').mockImplementation(() => {});
-    consoleErrorSpy = spyOn(console, 'error').mockImplementation(() => {});
-    consoleWarnSpy = spyOn(console, 'warn').mockImplementation(() => {});
+    consoleLogSpy = jest.spyOn(console, 'log').mockImplementation(() => {});
+    consoleErrorSpy = jest.spyOn(console, 'error').mockImplementation(() => {});
+    consoleWarnSpy = jest.spyOn(console, 'warn').mockImplementation(() => {});
   });
 
   afterEach(async () => {

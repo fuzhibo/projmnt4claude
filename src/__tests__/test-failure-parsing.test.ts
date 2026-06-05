@@ -8,7 +8,7 @@
  * - CP-CF-01 ~ CP-CF-03: 配置支持
  */
 
-import { describe, test, expect, beforeEach, afterEach } from 'bun:test';
+import { describe, test, expect, beforeEach, afterEach } from '@jest/globals';
 import * as fs from 'fs';
 import * as path from 'path';
 import { HarnessQATester } from '../utils/harness-qa-tester.js';

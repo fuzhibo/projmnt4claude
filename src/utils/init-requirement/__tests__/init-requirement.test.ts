@@ -10,7 +10,7 @@
  * - 3.6 gateCheckAndFix: 门禁失败→AI修正→对齐→重试闭环
  */
 
-import { describe, test, expect, beforeEach, afterEach, mock } from 'bun:test';
+import { describe, test, expect, beforeEach, afterEach} from '@jest/globals';
 import {
   PREFIX_MAP,
   VALID_PREFIXES,
@@ -346,7 +346,7 @@ describe('conversion-status (§3.4, §3.5)', () => {
 describe('gateCheckAndFix (§3.6)', () => {
   test('gate pass + alignment pass returns { passed: true }', async () => {
     const mockDeps: GateDependencies = {
-      runPreDevGate: mock(async () => ({
+      runPreDevGate: jest.fn(async () => ({
         taskId: 'TASK-001',
         passed: true,
         summary: 'All checks passed',
@@ -354,16 +354,16 @@ describe('gateCheckAndFix (§3.6)', () => {
         duration: 100,
         timestamp: new Date().toISOString(),
       })),
-      checkQualityGate: mock(async () => ({
+      checkQualityGate: jest.fn(async () => ({
         passed: true,
         score: { totalScore: 80 },
         suggestions: [],
       })),
-      validateNewTaskDeps: mock(() => true),
-      readTaskMeta: mock(() => ({ id: 'TASK-001', title: 'Test' })),
-      writeTaskMeta: mock(() => {}),
-      invokeAIAgent: mock(async () => ({ output: '{}', success: true, durationMs: 100 })),
-      runAlignmentCheck: mock(async () => ({
+      validateNewTaskDeps: jest.fn(() => true),
+      readTaskMeta: jest.fn(() => ({ id: 'TASK-001', title: 'Test' })),
+      writeTaskMeta: jest.fn(() => {}),
+      invokeAIAgent: jest.fn(async () => ({ output: '{}', success: true, durationMs: 100 })),
+      runAlignmentCheck: jest.fn(async () => ({
         aligned: true,
         checks: {
           rootCauseAlignment: { passed: true, detail: 'ok' },
@@ -372,8 +372,8 @@ describe('gateCheckAndFix (§3.6)', () => {
         },
         issues: [],
       })),
-      moveTaskToArchive: mock(() => {}),
-      updateConversionStatus: mock(() => {}),
+      moveTaskToArchive: jest.fn(() => {}),
+      updateConversionStatus: jest.fn(() => {}),
     };
 
     const result = await gateCheckAndFix(
@@ -394,7 +394,7 @@ describe('gateCheckAndFix (§3.6)', () => {
     let fixCalled = false;
 
     const mockDeps: GateDependencies = {
-      runPreDevGate: mock(async () => ({
+      runPreDevGate: jest.fn(async () => ({
         taskId: 'TASK-001',
         passed: false,
         summary: 'Gate failed',
@@ -402,19 +402,19 @@ describe('gateCheckAndFix (§3.6)', () => {
         duration: 100,
         timestamp: new Date().toISOString(),
       })),
-      checkQualityGate: mock(async () => ({
+      checkQualityGate: jest.fn(async () => ({
         passed: true,
         score: { totalScore: 70 },
         suggestions: [],
       })),
-      validateNewTaskDeps: mock(() => true),
-      readTaskMeta: mock(() => ({ id: 'TASK-001', title: 'Test' })),
-      writeTaskMeta: mock(() => {}),
-      invokeAIAgent: mock(async () => {
+      validateNewTaskDeps: jest.fn(() => true),
+      readTaskMeta: jest.fn(() => ({ id: 'TASK-001', title: 'Test' })),
+      writeTaskMeta: jest.fn(() => {}),
+      invokeAIAgent: jest.fn(async () => {
         fixCalled = true;
         return { output: '{"checkpoints":[]}', success: true, durationMs: 100 };
       }),
-      runAlignmentCheck: mock(async () => ({
+      runAlignmentCheck: jest.fn(async () => ({
         aligned: true,
         checks: {
           rootCauseAlignment: { passed: true, detail: 'ok' },
@@ -423,8 +423,8 @@ describe('gateCheckAndFix (§3.6)', () => {
         },
         issues: [],
       })),
-      moveTaskToArchive: mock(() => {}),
-      updateConversionStatus: mock(() => {}),
+      moveTaskToArchive: jest.fn(() => {}),
+      updateConversionStatus: jest.fn(() => {}),
     };
 
     const result = await gateCheckAndFix(
@@ -447,7 +447,7 @@ describe('gateCheckAndFix (§3.6)', () => {
     let archiveCalled = false;
 
     const mockDeps: GateDependencies = {
-      runPreDevGate: mock(async () => ({
+      runPreDevGate: jest.fn(async () => ({
         taskId: 'TASK-001',
         passed: false,
         summary: 'Always fails',
@@ -455,16 +455,16 @@ describe('gateCheckAndFix (§3.6)', () => {
         duration: 100,
         timestamp: new Date().toISOString(),
       })),
-      checkQualityGate: mock(async () => ({
+      checkQualityGate: jest.fn(async () => ({
         passed: false,
         score: { totalScore: 40 },
         suggestions: ['Fix checkpoints'],
       })),
-      validateNewTaskDeps: mock(() => false),
-      readTaskMeta: mock(() => ({ id: 'TASK-001', title: 'Test' })),
-      writeTaskMeta: mock(() => {}),
-      invokeAIAgent: mock(async () => ({ output: '{}', success: false, durationMs: 100, error: 'Failed' })),
-      runAlignmentCheck: mock(async () => ({
+      validateNewTaskDeps: jest.fn(() => false),
+      readTaskMeta: jest.fn(() => ({ id: 'TASK-001', title: 'Test' })),
+      writeTaskMeta: jest.fn(() => {}),
+      invokeAIAgent: jest.fn(async () => ({ output: '{}', success: false, durationMs: 100, error: 'Failed' })),
+      runAlignmentCheck: jest.fn(async () => ({
         aligned: false,
         checks: {
           rootCauseAlignment: { passed: false, detail: 'not aligned' },
@@ -473,8 +473,8 @@ describe('gateCheckAndFix (§3.6)', () => {
         },
         issues: ['Checkpoint mismatch'],
       })),
-      moveTaskToArchive: mock(() => { archiveCalled = true; }),
-      updateConversionStatus: mock(() => {}),
+      moveTaskToArchive: jest.fn(() => { archiveCalled = true; }),
+      updateConversionStatus: jest.fn(() => {}),
     };
 
     const result = await gateCheckAndFix(
@@ -497,7 +497,7 @@ describe('gateCheckAndFix (§3.6)', () => {
     let writeMetaCalled = false;
 
     const mockDeps: GateDependencies = {
-      runPreDevGate: mock(async () => ({
+      runPreDevGate: jest.fn(async () => ({
         taskId: 'TASK-001',
         passed: true,
         summary: 'Passed',
@@ -505,16 +505,16 @@ describe('gateCheckAndFix (§3.6)', () => {
         duration: 100,
         timestamp: new Date().toISOString(),
       })),
-      checkQualityGate: mock(async () => ({
+      checkQualityGate: jest.fn(async () => ({
         passed: true,
         score: { totalScore: 80 },
         suggestions: [],
       })),
-      validateNewTaskDeps: mock(() => true),
-      readTaskMeta: mock(() => ({ id: 'TASK-001', title: 'Test', issues: [] })),
-      writeTaskMeta: mock(() => { writeMetaCalled = true; }),
-      invokeAIAgent: mock(async () => ({ output: '{}', success: true, durationMs: 100 })),
-      runAlignmentCheck: mock(async () => ({
+      validateNewTaskDeps: jest.fn(() => true),
+      readTaskMeta: jest.fn(() => ({ id: 'TASK-001', title: 'Test', issues: [] })),
+      writeTaskMeta: jest.fn(() => { writeMetaCalled = true; }),
+      invokeAIAgent: jest.fn(async () => ({ output: '{}', success: true, durationMs: 100 })),
+      runAlignmentCheck: jest.fn(async () => ({
         aligned: false,
         checks: {
           rootCauseAlignment: { passed: true, detail: 'ok' },
@@ -523,8 +523,8 @@ describe('gateCheckAndFix (§3.6)', () => {
         },
         issues: ['Solution does not match root cause'],
       })),
-      moveTaskToArchive: mock(() => {}),
-      updateConversionStatus: mock(() => {}),
+      moveTaskToArchive: jest.fn(() => {}),
+      updateConversionStatus: jest.fn(() => {}),
     };
 
     const result = await gateCheckAndFix(
@@ -555,7 +555,7 @@ describe('Alignment Verification Three Levels (§3.7)', () => {
     let fixCallCount = 0;
 
     const mockDeps: GateDependencies = {
-      runPreDevGate: mock(async () => ({
+      runPreDevGate: jest.fn(async () => ({
         taskId: 'TASK-001',
         passed: true,
         summary: 'Passed',
@@ -563,19 +563,19 @@ describe('Alignment Verification Three Levels (§3.7)', () => {
         duration: 100,
         timestamp: new Date().toISOString(),
       })),
-      checkQualityGate: mock(async () => ({
+      checkQualityGate: jest.fn(async () => ({
         passed: true,
         score: { totalScore: 80 },
         suggestions: [],
       })),
-      validateNewTaskDeps: mock(() => true),
-      readTaskMeta: mock(() => ({ id: 'TASK-001', title: 'Test', issues: [] })),
-      writeTaskMeta: mock(() => { writeMetaCalled = true; }),
-      invokeAIAgent: mock(async () => {
+      validateNewTaskDeps: jest.fn(() => true),
+      readTaskMeta: jest.fn(() => ({ id: 'TASK-001', title: 'Test', issues: [] })),
+      writeTaskMeta: jest.fn(() => { writeMetaCalled = true; }),
+      invokeAIAgent: jest.fn(async () => {
         fixCallCount++;
         return { output: '{}', success: true, durationMs: 100 };
       }),
-      runAlignmentCheck: mock(async () => ({
+      runAlignmentCheck: jest.fn(async () => ({
         aligned: false,
         checks: {
           rootCauseAlignment: { passed: false, detail: 'Root cause mismatch: task missing CA-001' },
@@ -584,8 +584,8 @@ describe('Alignment Verification Three Levels (§3.7)', () => {
         },
         issues: ['Root cause mismatch: task missing CA-001'],
       })),
-      moveTaskToArchive: mock(() => {}),
-      updateConversionStatus: mock(() => {}),
+      moveTaskToArchive: jest.fn(() => {}),
+      updateConversionStatus: jest.fn(() => {}),
     };
 
     const result = await gateCheckAndFix(
@@ -606,7 +606,7 @@ describe('Alignment Verification Three Levels (§3.7)', () => {
 
   test('solutionAlignment failure triggers re-fix', async () => {
     const mockDeps: GateDependencies = {
-      runPreDevGate: mock(async () => ({
+      runPreDevGate: jest.fn(async () => ({
         taskId: 'TASK-001',
         passed: true,
         summary: 'Passed',
@@ -614,16 +614,16 @@ describe('Alignment Verification Three Levels (§3.7)', () => {
         duration: 100,
         timestamp: new Date().toISOString(),
       })),
-      checkQualityGate: mock(async () => ({
+      checkQualityGate: jest.fn(async () => ({
         passed: true,
         score: { totalScore: 80 },
         suggestions: [],
       })),
-      validateNewTaskDeps: mock(() => true),
-      readTaskMeta: mock(() => ({ id: 'TASK-001', title: 'Test', issues: [] })),
-      writeTaskMeta: mock(() => {}),
-      invokeAIAgent: mock(async () => ({ output: '{}', success: true, durationMs: 100 })),
-      runAlignmentCheck: mock(async () => ({
+      validateNewTaskDeps: jest.fn(() => true),
+      readTaskMeta: jest.fn(() => ({ id: 'TASK-001', title: 'Test', issues: [] })),
+      writeTaskMeta: jest.fn(() => {}),
+      invokeAIAgent: jest.fn(async () => ({ output: '{}', success: true, durationMs: 100 })),
+      runAlignmentCheck: jest.fn(async () => ({
         aligned: false,
         checks: {
           rootCauseAlignment: { passed: true, detail: 'ok' },
@@ -632,8 +632,8 @@ describe('Alignment Verification Three Levels (§3.7)', () => {
         },
         issues: ['Solution SOL-001 not linked to CA-001'],
       })),
-      moveTaskToArchive: mock(() => {}),
-      updateConversionStatus: mock(() => {}),
+      moveTaskToArchive: jest.fn(() => {}),
+      updateConversionStatus: jest.fn(() => {}),
     };
 
     const result = await gateCheckAndFix(
@@ -652,7 +652,7 @@ describe('Alignment Verification Three Levels (§3.7)', () => {
 
   test('checkpointAlignment failure triggers re-fix', async () => {
     const mockDeps: GateDependencies = {
-      runPreDevGate: mock(async () => ({
+      runPreDevGate: jest.fn(async () => ({
         taskId: 'TASK-001',
         passed: true,
         summary: 'Passed',
@@ -660,16 +660,16 @@ describe('Alignment Verification Three Levels (§3.7)', () => {
         duration: 100,
         timestamp: new Date().toISOString(),
       })),
-      checkQualityGate: mock(async () => ({
+      checkQualityGate: jest.fn(async () => ({
         passed: true,
         score: { totalScore: 80 },
         suggestions: [],
       })),
-      validateNewTaskDeps: mock(() => true),
-      readTaskMeta: mock(() => ({ id: 'TASK-001', title: 'Test', issues: [] })),
-      writeTaskMeta: mock(() => {}),
-      invokeAIAgent: mock(async () => ({ output: '{}', success: true, durationMs: 100 })),
-      runAlignmentCheck: mock(async () => ({
+      validateNewTaskDeps: jest.fn(() => true),
+      readTaskMeta: jest.fn(() => ({ id: 'TASK-001', title: 'Test', issues: [] })),
+      writeTaskMeta: jest.fn(() => {}),
+      invokeAIAgent: jest.fn(async () => ({ output: '{}', success: true, durationMs: 100 })),
+      runAlignmentCheck: jest.fn(async () => ({
         aligned: false,
         checks: {
           rootCauseAlignment: { passed: true, detail: 'ok' },
@@ -678,8 +678,8 @@ describe('Alignment Verification Three Levels (§3.7)', () => {
         },
         issues: ['Missing checkpoint for SOL-001'],
       })),
-      moveTaskToArchive: mock(() => {}),
-      updateConversionStatus: mock(() => {}),
+      moveTaskToArchive: jest.fn(() => {}),
+      updateConversionStatus: jest.fn(() => {}),
     };
 
     const result = await gateCheckAndFix(
@@ -698,7 +698,7 @@ describe('Alignment Verification Three Levels (§3.7)', () => {
 
   test('all three levels pass returns aligned: true', async () => {
     const mockDeps: GateDependencies = {
-      runPreDevGate: mock(async () => ({
+      runPreDevGate: jest.fn(async () => ({
         taskId: 'TASK-001',
         passed: true,
         summary: 'Passed',
@@ -706,16 +706,16 @@ describe('Alignment Verification Three Levels (§3.7)', () => {
         duration: 100,
         timestamp: new Date().toISOString(),
       })),
-      checkQualityGate: mock(async () => ({
+      checkQualityGate: jest.fn(async () => ({
         passed: true,
         score: { totalScore: 80 },
         suggestions: [],
       })),
-      validateNewTaskDeps: mock(() => true),
-      readTaskMeta: mock(() => ({ id: 'TASK-001', title: 'Test' })),
-      writeTaskMeta: mock(() => {}),
-      invokeAIAgent: mock(async () => ({ output: '{}', success: true, durationMs: 100 })),
-      runAlignmentCheck: mock(async () => ({
+      validateNewTaskDeps: jest.fn(() => true),
+      readTaskMeta: jest.fn(() => ({ id: 'TASK-001', title: 'Test' })),
+      writeTaskMeta: jest.fn(() => {}),
+      invokeAIAgent: jest.fn(async () => ({ output: '{}', success: true, durationMs: 100 })),
+      runAlignmentCheck: jest.fn(async () => ({
         aligned: true,
         checks: {
           rootCauseAlignment: { passed: true, detail: 'Task CA matches report CA-001' },
@@ -724,8 +724,8 @@ describe('Alignment Verification Three Levels (§3.7)', () => {
         },
         issues: [],
       })),
-      moveTaskToArchive: mock(() => {}),
-      updateConversionStatus: mock(() => {}),
+      moveTaskToArchive: jest.fn(() => {}),
+      updateConversionStatus: jest.fn(() => {}),
     };
 
     const result = await gateCheckAndFix(
@@ -756,7 +756,7 @@ describe('Archive Cleanup (§3.8)', () => {
     let archiveDest: string | null = null;
 
     const mockDeps: GateDependencies = {
-      runPreDevGate: mock(async () => ({
+      runPreDevGate: jest.fn(async () => ({
         taskId: 'TASK-001',
         passed: false,
         summary: 'Always fails',
@@ -764,16 +764,16 @@ describe('Archive Cleanup (§3.8)', () => {
         duration: 100,
         timestamp: new Date().toISOString(),
       })),
-      checkQualityGate: mock(async () => ({
+      checkQualityGate: jest.fn(async () => ({
         passed: false,
         score: { totalScore: 40 },
         suggestions: ['Fix checkpoints'],
       })),
-      validateNewTaskDeps: mock(() => false),
-      readTaskMeta: mock(() => ({ id: 'TASK-001', title: 'Test', status: 'pending' })),
-      writeTaskMeta: mock(() => {}),
-      invokeAIAgent: mock(async () => ({ output: '{}', success: false, durationMs: 100, error: 'Failed' })),
-      runAlignmentCheck: mock(async () => ({
+      validateNewTaskDeps: jest.fn(() => false),
+      readTaskMeta: jest.fn(() => ({ id: 'TASK-001', title: 'Test', status: 'pending' })),
+      writeTaskMeta: jest.fn(() => {}),
+      invokeAIAgent: jest.fn(async () => ({ output: '{}', success: false, durationMs: 100, error: 'Failed' })),
+      runAlignmentCheck: jest.fn(async () => ({
         aligned: false,
         checks: {
           rootCauseAlignment: { passed: false, detail: 'fail' },
@@ -782,7 +782,7 @@ describe('Archive Cleanup (§3.8)', () => {
         },
         issues: ['All failed'],
       })),
-      moveTaskToArchive: mock((taskId: string, cwd: string) => {
+      moveTaskToArchive: jest.fn((taskId: string, cwd: string) => {
         const src = join(cwd, '.projmnt4claude', 'tasks', taskId);
         const dest = join(cwd, '.projmnt4claude', 'archive', taskId);
         const archiveRoot = join(cwd, '.projmnt4claude', 'archive');
@@ -798,7 +798,7 @@ describe('Archive Cleanup (§3.8)', () => {
         }
         archiveDest = dest;
       }),
-      updateConversionStatus: mock(() => {}),
+      updateConversionStatus: jest.fn(() => {}),
     };
 
     const result = await gateCheckAndFix(
@@ -825,7 +825,7 @@ describe('Archive Cleanup (§3.8)', () => {
     let recordedTime: string | null = null;
 
     const mockDeps: GateDependencies = {
-      runPreDevGate: mock(async () => ({
+      runPreDevGate: jest.fn(async () => ({
         taskId: 'TASK-001',
         passed: false,
         summary: 'Gate failed',
@@ -833,16 +833,16 @@ describe('Archive Cleanup (§3.8)', () => {
         duration: 100,
         timestamp: new Date().toISOString(),
       })),
-      checkQualityGate: mock(async () => ({
+      checkQualityGate: jest.fn(async () => ({
         passed: false,
         score: { totalScore: 40 },
         suggestions: ['Fix'],
       })),
-      validateNewTaskDeps: mock(() => false),
-      readTaskMeta: mock(() => ({ id: 'TASK-001', title: 'Test' })),
-      writeTaskMeta: mock(() => {}),
-      invokeAIAgent: mock(async () => ({ output: '{}', success: false, durationMs: 100, error: 'Failed' })),
-      runAlignmentCheck: mock(async () => ({
+      validateNewTaskDeps: jest.fn(() => false),
+      readTaskMeta: jest.fn(() => ({ id: 'TASK-001', title: 'Test' })),
+      writeTaskMeta: jest.fn(() => {}),
+      invokeAIAgent: jest.fn(async () => ({ output: '{}', success: false, durationMs: 100, error: 'Failed' })),
+      runAlignmentCheck: jest.fn(async () => ({
         aligned: false,
         checks: {
           rootCauseAlignment: { passed: false, detail: 'fail' },
@@ -851,8 +851,8 @@ describe('Archive Cleanup (§3.8)', () => {
         },
         issues: ['All failed'],
       })),
-      moveTaskToArchive: mock(() => {}),
-      updateConversionStatus: mock((
+      moveTaskToArchive: jest.fn(() => {}),
+      updateConversionStatus: jest.fn((
         _investigationDir: string,
         _reportPath: string,
         _state: ConversionState,

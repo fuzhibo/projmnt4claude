@@ -29,6 +29,7 @@ import type {
   TaskType,
   TaskHistoryEntry,
   CheckpointMetadata,
+  ReopenRecord,
 } from '../types/task';
 import {
   createDefaultTaskMeta,

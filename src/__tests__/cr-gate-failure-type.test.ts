@@ -2,7 +2,7 @@
  * CR Gate failureType 声明单元测试
  * 验证 Pre-CR Gate 和 Post-CR Gate 的 failureType 分类正确性
  */
-import { describe, it, expect } from 'bun:test';
+import { describe, it, expect } from '@jest/globals';
 import {
   DEFAULT_PRE_CR_GATE_RULES,
   DEFAULT_POST_CR_GATE_RULES,

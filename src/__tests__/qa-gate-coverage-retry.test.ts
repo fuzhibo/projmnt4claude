@@ -5,7 +5,7 @@
  * CP-5: 测试覆盖率缺口数据提取和 QA 重试 prompt 生成
  * CP-6: 测试 classifyQAFailureCategory 返回 'coverage_retry'
  */
-import { describe, it, expect } from 'bun:test';
+import { describe, it, expect } from '@jest/globals';
 import { PostQAGateRunner } from '../utils/post-qa-gate/runner.js';
 import type { PostQAGateRunResult } from '../utils/post-qa-gate/runner.js';
 

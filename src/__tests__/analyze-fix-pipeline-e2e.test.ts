@@ -9,7 +9,7 @@
  * - CP-7: complete_checkpoints (checkpoint_status_mismatch)
  */
 
-import { describe, test, expect, beforeEach, afterEach } from 'bun:test';
+import { describe, test, expect, beforeEach, afterEach } from '@jest/globals';
 import * as fs from 'fs';
 import * as path from 'path';
 import type { TaskMeta, TaskStatus, CheckpointMetadata } from '../types/task';

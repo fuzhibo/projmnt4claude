@@ -9,7 +9,7 @@
  * - 混合场景 → 自动失败优先（reopen task）
  */
 
-import { describe, it, expect, beforeEach, afterEach, spyOn, mockReset } from 'bun:test';
+import { describe, it, expect, beforeEach, afterEach, Reset } from '@jest/globals';
 import * as checkpointVerification from '../utils/checkpoint-verification';
 import * as taskModule from '../utils/task';
 import type { TaskMeta, CheckpointMetadata } from '../types/task';
@@ -101,13 +101,13 @@ function makeSkippedOutput(reason: string = '需要人工确认'): VerificationO
 
 describe('CheckpointStatusMismatchFixer', () => {
   let env: IsolatedTestEnv;
-  let verifySpy: ReturnType<typeof spyOn>;
-  let writeMetaSpy: ReturnType<typeof spyOn>;
+  let verifySpy: jest.SpyInstance;
+  let writeMetaSpy: jest.SpyInstance;
 
   beforeEach(async () => {
     env = await createIsolatedTestEnv();
-    verifySpy = spyOn(checkpointVerification.CheckpointOutputVerifier.prototype, 'verify');
-    writeMetaSpy = spyOn(taskModule, 'writeTaskMeta').mockImplementation(() => {});
+    verifySpy = jest.spyOn(checkpointVerification.CheckpointOutputVerifier.prototype, 'verify');
+    writeMetaSpy = jest.spyOn(taskModule, 'writeTaskMeta').mockImplementation(() => {});
   });
 
   afterEach(() => {

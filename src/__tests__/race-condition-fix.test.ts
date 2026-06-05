@@ -6,7 +6,7 @@
  *      recordExecutionStats 写入 stale 数据（覆盖状态）
  * Fix: 在 recordExecutionStats 写入前重新读取任务，获取最新状态
  */
-import { describe, it, expect, beforeEach, afterEach } from 'bun:test';
+import { describe, it, expect, beforeEach, afterEach } from '@jest/globals';
 import { createIsolatedTestEnv, type IsolatedTestEnv } from '../utils/test-env.js';
 import type { TaskMeta, ExecutionStats } from '../types/task';
 

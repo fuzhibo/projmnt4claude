@@ -6,7 +6,7 @@
  * - 3.5 恢复：conversion-status.json 读写、断点续转
  */
 
-import { describe, test, expect, beforeEach, afterEach } from 'bun:test';
+import { describe, test, expect, beforeEach, afterEach } from '@jest/globals';
 import {
   loadConversionStatus,
   createEmptyConversionStatus,

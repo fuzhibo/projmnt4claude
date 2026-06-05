@@ -8,7 +8,7 @@
  * - CP-4: Post-CR Gate 集成验证
  */
 
-import { describe, test, expect, mock, beforeEach } from 'bun:test';
+import { describe, test, expect,  beforeEach } from '@jest/globals';
 import {
   QualityScoreChecker,
   createQualityScoreChecker,
@@ -177,7 +177,7 @@ describe('AI Review Integration', () => {
 
   test('should handle AI review failure gracefully', async () => {
     // Mock invokeAgent to fail
-    const originalInvoke = mock(() => Promise.resolve({
+    const originalInvoke = jest.fn(() => Promise.resolve({
       success: false,
       output: '',
       error: 'AI service unavailable',

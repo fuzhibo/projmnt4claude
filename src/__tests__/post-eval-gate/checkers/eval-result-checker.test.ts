@@ -5,7 +5,7 @@
  * R-EVAL-POST-003: 评估结果有效 (PASS|NOPASS) (ERROR级)
  */
 
-import { describe, it, expect, beforeEach, afterEach } from 'bun:test';
+import { describe, it, expect, beforeEach, afterEach } from '@jest/globals';
 import * as fs from 'fs';
 import * as path from 'path';
 import {

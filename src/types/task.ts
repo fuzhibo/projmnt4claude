@@ -806,6 +806,11 @@ export interface TaskMeta {
    */
   files?: string[];
   /**
+   * Alias for files - affected files for this task
+   * Used by pre-cr-gate and analyze commands
+   */
+  affected_files?: string[];
+  /**
    * 测试环境检测指令列表
    * 存储在 task.meta.json 中，由任务创建时定义。
    * Pre-Dev Gate 的 TestEnvChecker 运行这些检测指令，验证环境是否就绪。

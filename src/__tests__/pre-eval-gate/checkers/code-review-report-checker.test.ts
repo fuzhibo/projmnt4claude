@@ -8,7 +8,7 @@
  * - 缺少阶段报告时正确报错
  */
 
-import { describe, it, expect, beforeEach, afterEach } from 'bun:test';
+import { describe, it, expect, beforeEach, afterEach } from '@jest/globals';
 import * as fs from 'fs';
 import * as path from 'path';
 import { CodeReviewReportChecker } from '../../../utils/pre-eval-gate/checkers/code-review-report-checker.js';

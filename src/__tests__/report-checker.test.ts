@@ -10,7 +10,7 @@
  * - 审核时间戳有效性检查 (R-CR-POST-007)
  */
 
-import { describe, it, expect, beforeEach, afterEach } from 'bun:test';
+import { describe, it, expect, beforeEach, afterEach } from '@jest/globals';
 import * as fs from 'fs';
 import * as path from 'path';
 import {

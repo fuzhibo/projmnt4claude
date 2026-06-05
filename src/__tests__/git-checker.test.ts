@@ -8,7 +8,7 @@
  * - R-GIT-004: 冲突标记检查
  */
 
-import { describe, it, expect, beforeEach, afterEach } from 'bun:test';
+import { describe, it, expect, beforeEach, afterEach } from '@jest/globals';
 import * as fs from 'fs';
 import * as path from 'path';
 import { execSync } from 'child_process';

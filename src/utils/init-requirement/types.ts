@@ -6,7 +6,7 @@
  */
 
 import type { CheckpointPrefix, ParsedCheckpoint } from './prefix-map.js';
-import type { PreDevPhaseGateResult, PreDevPhaseRuleResult } from '../types/pre-dev-phase-gate.js';
+import type { PreDevPhaseGateResult, PreDevPhaseRuleResult } from '../../types/pre-dev-phase-gate.js';
 
 // ParsedCheckpoint 从 prefix-map.ts 导入，避免重复定义
 export type { ParsedCheckpoint };

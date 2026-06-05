@@ -1,7 +1,7 @@
 /**
  * ReportIntegrityAIChecker & OutputAlignmentAIChecker 单元测试
  */
-import { describe, it, expect } from 'bun:test';
+import { describe, it, expect } from '@jest/globals';
 import { ReportIntegrityAIChecker, createReportIntegrityAIChecker, checkReportIntegrityAI } from '../utils/post-dev-gate/checkers/report-integrity-ai-checker.js';
 import { OutputAlignmentAIChecker, createOutputAlignmentAIChecker, checkOutputAlignmentAI } from '../utils/post-dev-gate/checkers/output-alignment-ai-checker.js';
 import type { PostDevPhaseCheckContext } from '../types/post-dev-phase-gate.js';

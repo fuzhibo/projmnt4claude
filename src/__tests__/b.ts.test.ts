@@ -8,7 +8,7 @@
  * incrementReopenCount, recordExecutionStats, renameTask
  */
 
-import { describe, it, expect, beforeEach, afterEach, spyOn } from 'bun:test';
+import { describe, it, expect, beforeEach, afterEach } from '@jest/globals';
 import * as fs from 'fs';
 import * as path from 'path';
 import type { TaskMeta, ExecutionStats } from '../types/task';
@@ -37,11 +37,11 @@ function writeTaskToDisk(taskDir: string, task: TaskMeta): void {
 // ============================================================
 
 describe('getTaskDir', () => {
-  let getTasksDirSpy: ReturnType<typeof spyOn>;
+  let getTasksDirSpy: jest.SpyInstance;
 
   beforeEach(async () => {
     const pMod = await pathUtils();
-    getTasksDirSpy = spyOn(pMod, 'getTasksDir').mockReturnValue('/project/.projmnt4claude/tasks');
+    getTasksDirSpy = jest.spyOn(pMod, 'getTasksDir').mockReturnValue('/project/.projmnt4claude/tasks');
   });
 
   afterEach(() => {
@@ -60,11 +60,11 @@ describe('getTaskDir', () => {
 });
 
 describe('getTaskMetaPath', () => {
-  let getTasksDirSpy: ReturnType<typeof spyOn>;
+  let getTasksDirSpy: jest.SpyInstance;
 
   beforeEach(async () => {
     const pMod = await pathUtils();
-    getTasksDirSpy = spyOn(pMod, 'getTasksDir').mockReturnValue('/project/.projmnt4claude/tasks');
+    getTasksDirSpy = jest.spyOn(pMod, 'getTasksDir').mockReturnValue('/project/.projmnt4claude/tasks');
   });
 
   afterEach(() => {

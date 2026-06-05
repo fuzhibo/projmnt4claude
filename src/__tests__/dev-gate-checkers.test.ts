@@ -1,7 +1,7 @@
 /**
  * TestEnvChecker & TestFrameworkChecker 单元测试
  */
-import { describe, it, expect, beforeEach, afterEach, spyOn } from 'bun:test';
+import { describe, it, expect, beforeEach, afterEach } from '@jest/globals';
 import { TestEnvChecker, createTestEnvChecker, checkTestEnv } from '../utils/pre-dev-phase-gate/checkers/test-env-checker.js';
 import { TestFrameworkChecker, createTestFrameworkChecker, checkTestFramework } from '../utils/pre-dev-phase-gate/checkers/test-framework-checker.js';
 import type { PreDevPhaseCheckContext } from '../types/pre-dev-phase-gate.js';

@@ -12,7 +12,7 @@
  * - 3.11 用户确认约束：不存在自动传递报告路径的代码路径
  */
 
-import { describe, test, expect, beforeEach, afterEach, mock } from 'bun:test';
+import { describe, test, expect, beforeEach, afterEach} from '@jest/globals';
 import * as fs from 'fs';
 import * as path from 'path';
 import { initRequirement, type ConversionResult } from '../init-requirement';
@@ -91,7 +91,7 @@ describe('Checkpoint 3.3: Prefix Mapping', () => {
 
 describe('Checkpoint 3.9: Boundary Conditions', () => {
   test('report file not found should exit with error', async () => {
-    const exitSpy = mock(() => {});
+    const exitSpy = jest.fn(() => {});
     const originalExit = process.exit;
     // @ts-expect-error Mock process.exit
     process.exit = exitSpy;
@@ -107,7 +107,7 @@ describe('Checkpoint 3.9: Boundary Conditions', () => {
   });
 
   test('directory not found should exit with error', async () => {
-    const exitSpy = mock(() => {});
+    const exitSpy = jest.fn(() => {});
     const originalExit = process.exit;
     // @ts-expect-error Mock process.exit
     process.exit = exitSpy;

@@ -7,7 +7,7 @@
  * 3. en.ts and zh.ts have identical key structures
  */
 
-import { describe, it, expect } from 'bun:test';
+import { describe, it, expect } from '@jest/globals';
 import * as fs from 'fs';
 import * as path from 'path';
 

@@ -7,7 +7,7 @@
  * - 确保 CheckRegistry 实例在隔离环境中创建
  */
 
-import { describe, it, expect, beforeEach, afterEach } from 'bun:test';
+import { describe, it, expect, beforeEach, afterEach } from '@jest/globals';
 import {
   CheckRegistry,
   EnvironmentCheck,

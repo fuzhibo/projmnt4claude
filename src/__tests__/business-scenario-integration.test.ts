@@ -15,7 +15,7 @@
  * - 替代 fs.mkdtempSync 手动创建临时目录
  */
 
-import { describe, test, expect, beforeEach, afterEach, spyOn, mock } from 'bun:test';
+import { describe, test, expect, beforeEach, afterEach} from '@jest/globals';
 import * as fs from 'fs';
 import * as path from 'path';
 import * as os from 'os';
@@ -265,13 +265,13 @@ beforeEach(async () => {
   tmpDir = env.tempDir;
   setupProjectDir();
   // Suppress console output during tests
-  spyOn(console, 'log').mockImplementation(() => {});
-  spyOn(console, 'error').mockImplementation(() => {});
-  spyOn(console, 'warn').mockImplementation(() => {});
+  jest.spyOn(console, 'log').mockImplementation(() => {});
+  jest.spyOn(console, 'error').mockImplementation(() => {});
+  jest.spyOn(console, 'warn').mockImplementation(() => {});
 });
 
 afterEach(() => {
-  mock.restore();
+  jest.restoreAllMocks();
   env.cleanup();
 });
 

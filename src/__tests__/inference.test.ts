@@ -3,7 +3,7 @@
  *
  * 测试 inferredToEdgeMeta 转换函数
  */
-import { describe, test, expect } from 'bun:test';
+import { describe, test, expect } from '@jest/globals';
 import { inferredToEdgeMeta } from '../utils/dependency-graph/inference.js';
 
 // ============== inferredToEdgeMeta ==============

@@ -6,7 +6,7 @@
  * - CP-2: 质量门禁检查集成到 recommendPlan
  */
 
-import { describe, it, expect } from 'bun:test';
+import { describe, it, expect } from '@jest/globals';
 import { runQualityGate, getRulesForPhase } from '../utils/quality-gate-registry';
 import { runPlanQualityGateCheck, formatPlanQualityGateReport } from '../commands/plan';
 import type { TaskMeta } from '../types/task';

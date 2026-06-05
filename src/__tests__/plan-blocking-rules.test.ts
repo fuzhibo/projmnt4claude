@@ -7,7 +7,7 @@
  * - CP-12: PHASE_RULES.plan_recommend 更新包含新规则
  */
 
-import { describe, it, expect, beforeEach, afterEach } from 'bun:test';
+import { describe, it, expect, beforeEach, afterEach } from '@jest/globals';
 import { runQualityGate, getRulesForPhase, PHASE_RULES } from '../utils/quality-gate-registry';
 import {
   planCycleDetection,

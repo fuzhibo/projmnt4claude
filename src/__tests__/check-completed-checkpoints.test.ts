@@ -1,7 +1,7 @@
 /**
  * checkCompletedCheckpoints 单元测试
  */
-import { describe, it, expect, beforeEach, afterEach, spyOn } from 'bun:test';
+import { describe, it, expect, beforeEach, afterEach } from '@jest/globals';
 import {
   checkCompletedCheckpoints,
   validateHumanCheckpointCompletion,
@@ -150,14 +150,14 @@ describe('checkCompletedCheckpoints', () => {
   });
 
   describe('automated checkpoint validation', () => {
-    let verifySpy: ReturnType<typeof spyOn>;
+    let verifySpy: jest.SpyInstance;
 
     afterEach(() => {
       if (verifySpy) verifySpy.mockRestore();
     });
 
     it('should flag automated checkpoint when output verification fails', async () => {
-      verifySpy = spyOn(CheckpointOutputVerifier.prototype, 'verify')
+      verifySpy = jest.spyOn(CheckpointOutputVerifier.prototype, 'verify')
         .mockResolvedValue({
           result: 'unverified',
           record: {
@@ -188,7 +188,7 @@ describe('checkCompletedCheckpoints', () => {
     });
 
     it('should accept automated checkpoint when output verification passes', async () => {
-      verifySpy = spyOn(CheckpointOutputVerifier.prototype, 'verify')
+      verifySpy = jest.spyOn(CheckpointOutputVerifier.prototype, 'verify')
         .mockResolvedValue({
           result: 'verified',
           record: {
@@ -350,10 +350,10 @@ describe('validateHumanCheckpointCompletion', () => {
 });
 
 describe('reportFalseSuccessWarnings', () => {
-  let consoleSpy: ReturnType<typeof spyOn>;
+  let consoleSpy: jest.SpyInstance;
 
   beforeEach(() => {
-    consoleSpy = spyOn(console, 'warn').mockImplementation(() => {});
+    consoleSpy = jest.spyOn(console, 'warn').mockImplementation(() => {});
   });
 
   afterEach(() => {

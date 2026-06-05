@@ -7,7 +7,7 @@
  * - P2/P3 任务: 建议包含检查点，空数组返回 warning
  */
 
-import { describe, it, expect } from 'bun:test';
+import { describe, it, expect } from '@jest/globals';
 import { validateCheckpoints } from '../utils/quality-gate.js';
 import type { TaskMeta } from '../types/task.js';
 

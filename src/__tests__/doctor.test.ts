@@ -14,7 +14,7 @@
  * - 使用真实文件系统，确保测试隔离
  */
 
-import { describe, test, expect, beforeEach, afterEach, spyOn, mock } from 'bun:test';
+import { describe, test, expect, beforeEach, afterEach} from '@jest/globals';
 import * as fs from 'fs';
 import * as path from 'path';
 import {
@@ -24,16 +24,16 @@ import {
 } from '../utils/test-env.js';
 
 // ── Console capture using spyOn ─────────────────────────────
-let consoleLogSpy: ReturnType<typeof spyOn>;
-let consoleErrorSpy: ReturnType<typeof spyOn>;
+let consoleLogSpy: jest.SpyInstance;
+let consoleErrorSpy: jest.SpyInstance;
 const consoleLogs: string[] = [];
 
 function captureConsole() {
   consoleLogs.length = 0;
-  consoleLogSpy = spyOn(console, 'log').mockImplementation((...args: any[]) => {
+  consoleLogSpy = jest.spyOn(console, 'log').mockImplementation((...args: any[]) => {
     consoleLogs.push(args.map(String).join(' '));
   });
-  consoleErrorSpy = spyOn(console, 'error').mockImplementation((...args: any[]) => {
+  consoleErrorSpy = jest.spyOn(console, 'error').mockImplementation((...args: any[]) => {
     consoleLogs.push('[ERROR] ' + args.map(String).join(' '));
   });
 }

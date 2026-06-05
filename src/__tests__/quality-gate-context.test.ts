@@ -7,7 +7,7 @@
  * - 上下文正确传递到规则执行函数
  */
 
-import { describe, it, expect } from 'bun:test';
+import { describe, it, expect } from '@jest/globals';
 import {
   runQualityGate,
   batchRunQualityGate,

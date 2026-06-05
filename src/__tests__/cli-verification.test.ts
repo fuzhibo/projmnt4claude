@@ -1,7 +1,7 @@
 /**
  * CheckpointVerificationAI 和 CheckpointVerificationCLI 单元测试
  */
-import { describe, it, expect, beforeEach, afterEach, spyOn } from 'bun:test';
+import { describe, it, expect, beforeEach, afterEach } from '@jest/globals';
 import {
   CheckpointVerificationAI,
   CheckpointVerificationCLI,
@@ -256,11 +256,11 @@ describe('CheckpointVerificationDetails type', () => {
 
 describe('updateCheckpointStatus with human parameter', () => {
   let env: IsolatedTestEnv;
-  let writeTaskMetaSpy: ReturnType<typeof spyOn>;
+  let writeTaskMetaSpy: jest.SpyInstance;
 
   beforeEach(async () => {
     env = await createIsolatedTestEnv();
-    writeTaskMetaSpy = spyOn(require('../utils/task.js'), 'writeTaskMeta');
+    writeTaskMetaSpy = jest.spyOn(require('../utils/task.js'), 'writeTaskMeta');
   });
 
   afterEach(async () => {
@@ -302,11 +302,11 @@ describe('updateCheckpointStatus with human parameter', () => {
 
 describe('updateCheckpointWithAIVerification integration', () => {
   let env: IsolatedTestEnv;
-  let writeTaskMetaSpy: ReturnType<typeof spyOn>;
+  let writeTaskMetaSpy: jest.SpyInstance;
 
   beforeEach(async () => {
     env = await createIsolatedTestEnv();
-    writeTaskMetaSpy = spyOn(require('../utils/task.js'), 'writeTaskMeta');
+    writeTaskMetaSpy = jest.spyOn(require('../utils/task.js'), 'writeTaskMeta');
   });
 
   afterEach(async () => {
@@ -359,12 +359,12 @@ describe('updateCheckpointWithAIVerification integration', () => {
 
 describe('updateCheckpointWithCLIVerification integration', () => {
   let env: IsolatedTestEnv;
-  let writeTaskMetaSpy: ReturnType<typeof spyOn>;
+  let writeTaskMetaSpy: jest.SpyInstance;
   let originalUser: string | undefined;
 
   beforeEach(async () => {
     env = await createIsolatedTestEnv();
-    writeTaskMetaSpy = spyOn(require('../utils/task.js'), 'writeTaskMeta');
+    writeTaskMetaSpy = jest.spyOn(require('../utils/task.js'), 'writeTaskMeta');
     originalUser = process.env.USER;
   });
 

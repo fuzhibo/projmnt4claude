@@ -1,4 +1,4 @@
-import { describe, test, expect, beforeEach, afterEach, spyOn } from 'bun:test';
+import { describe, test, expect, beforeEach, afterEach } from '@jest/globals';
 import * as fs from 'fs';
 import * as path from 'path';
 import { harnessCommand, saveRuntimeState } from '../commands/harness.js';
@@ -99,21 +99,21 @@ function createTestConfig(cwd: string): HarnessConfig {
 
 describe('harnessCommand: validation', () => {
   let env: IsolatedTestEnv;
-  let exitSpy: ReturnType<typeof spyOn>;
-  let logSpy: ReturnType<typeof spyOn>;
-  let errorSpy: ReturnType<typeof spyOn>;
-  let runSpy: ReturnType<typeof spyOn>;
+  let exitSpy: jest.SpyInstance;
+  let logSpy: jest.SpyInstance;
+  let errorSpy: jest.SpyInstance;
+  let runSpy: jest.SpyInstance;
 
   beforeEach(async () => {
     env = await createIsolatedTestEnv();
     createProjectDir(env.tempDir);
 
-    exitSpy = spyOn(process, 'exit').mockImplementation(((code?: number) => {
+    exitSpy = jest.spyOn(process, 'exit').mockImplementation(((code?: number) => {
       throw new Error(`process.exit(${code ?? 0})`);
     }) as any);
-    logSpy = spyOn(console, 'log').mockImplementation(() => {});
-    errorSpy = spyOn(console, 'error').mockImplementation(() => {});
-    runSpy = spyOn(AssemblyLine.prototype, 'run').mockResolvedValue(
+    logSpy = jest.spyOn(console, 'log').mockImplementation(() => {});
+    errorSpy = jest.spyOn(console, 'error').mockImplementation(() => {});
+    runSpy = jest.spyOn(AssemblyLine.prototype, 'run').mockResolvedValue(
       createMockSummary()
     );
   });
@@ -235,17 +235,17 @@ describe('harnessCommand: validation', () => {
 describe('harnessCommand: dry run', () => {
   let env: IsolatedTestEnv;
   let projDir: string;
-  let exitSpy: ReturnType<typeof spyOn>;
-  let logSpy: ReturnType<typeof spyOn>;
+  let exitSpy: jest.SpyInstance;
+  let logSpy: jest.SpyInstance;
 
   beforeEach(async () => {
     env = await createIsolatedTestEnv();
     projDir = createProjectDir(env.tempDir);
 
-    exitSpy = spyOn(process, 'exit').mockImplementation(((code?: number) => {
+    exitSpy = jest.spyOn(process, 'exit').mockImplementation(((code?: number) => {
       throw new Error(`process.exit(${code ?? 0})`);
     }) as any);
-    logSpy = spyOn(console, 'log').mockImplementation(() => {});
+    logSpy = jest.spyOn(console, 'log').mockImplementation(() => {});
   });
 
   afterEach(() => {
@@ -345,7 +345,7 @@ describe('harnessCommand: dry run', () => {
   test('does not call AssemblyLine in dry run mode', async () => {
     createTaskMeta(projDir, 'TASK-1');
     const planFile = createPlanFile(env.tempDir, ['TASK-1']);
-    const runSpy = spyOn(AssemblyLine.prototype, 'run');
+    const runSpy = jest.spyOn(AssemblyLine.prototype, 'run');
 
     await harnessCommand(
       { plan: planFile, dryRun: true, skipHarnessGate: true },
@@ -379,30 +379,30 @@ describe('harnessCommand: dry run', () => {
 describe('harnessCommand: execution', () => {
   let env: IsolatedTestEnv;
   let projDir: string;
-  let exitSpy: ReturnType<typeof spyOn>;
-  let logSpy: ReturnType<typeof spyOn>;
-  let errorSpy: ReturnType<typeof spyOn>;
-  let runSpy: ReturnType<typeof spyOn>;
-  let reportSpy: ReturnType<typeof spyOn>;
-  let forceFailSpy: ReturnType<typeof spyOn>;
+  let exitSpy: jest.SpyInstance;
+  let logSpy: jest.SpyInstance;
+  let errorSpy: jest.SpyInstance;
+  let runSpy: jest.SpyInstance;
+  let reportSpy: jest.SpyInstance;
+  let forceFailSpy: jest.SpyInstance;
 
   beforeEach(async () => {
     env = await createIsolatedTestEnv();
     projDir = createProjectDir(env.tempDir);
 
-    exitSpy = spyOn(process, 'exit').mockImplementation(((code?: number) => {
+    exitSpy = jest.spyOn(process, 'exit').mockImplementation(((code?: number) => {
       throw new Error(`process.exit(${code ?? 0})`);
     }) as any);
-    logSpy = spyOn(console, 'log').mockImplementation(() => {});
-    errorSpy = spyOn(console, 'error').mockImplementation(() => {});
-    runSpy = spyOn(AssemblyLine.prototype, 'run').mockResolvedValue(
+    logSpy = jest.spyOn(console, 'log').mockImplementation(() => {});
+    errorSpy = jest.spyOn(console, 'error').mockImplementation(() => {});
+    runSpy = jest.spyOn(AssemblyLine.prototype, 'run').mockResolvedValue(
       createMockSummary()
     );
-    reportSpy = spyOn(
+    reportSpy = jest.spyOn(
       HarnessReporter.prototype,
       'generateSummaryReport'
     ).mockResolvedValue();
-    forceFailSpy = spyOn(AssemblyLine.prototype, 'forceFailStatus');
+    forceFailSpy = jest.spyOn(AssemblyLine.prototype, 'forceFailStatus');
   });
 
   afterEach(() => {
@@ -553,28 +553,28 @@ describe('harnessCommand: execution', () => {
 describe('harnessCommand: continue mode', () => {
   let env: IsolatedTestEnv;
   let projDir: string;
-  let exitSpy: ReturnType<typeof spyOn>;
-  let logSpy: ReturnType<typeof spyOn>;
-  let runSpy: ReturnType<typeof spyOn>;
-  let reportSpy: ReturnType<typeof spyOn>;
-  let forceFailSpy: ReturnType<typeof spyOn>;
+  let exitSpy: jest.SpyInstance;
+  let logSpy: jest.SpyInstance;
+  let runSpy: jest.SpyInstance;
+  let reportSpy: jest.SpyInstance;
+  let forceFailSpy: jest.SpyInstance;
 
   beforeEach(async () => {
     env = await createIsolatedTestEnv();
     projDir = createProjectDir(env.tempDir);
 
-    exitSpy = spyOn(process, 'exit').mockImplementation(((code?: number) => {
+    exitSpy = jest.spyOn(process, 'exit').mockImplementation(((code?: number) => {
       throw new Error(`process.exit(${code ?? 0})`);
     }) as any);
-    logSpy = spyOn(console, 'log').mockImplementation(() => {});
-    runSpy = spyOn(AssemblyLine.prototype, 'run').mockResolvedValue(
+    logSpy = jest.spyOn(console, 'log').mockImplementation(() => {});
+    runSpy = jest.spyOn(AssemblyLine.prototype, 'run').mockResolvedValue(
       createMockSummary()
     );
-    reportSpy = spyOn(
+    reportSpy = jest.spyOn(
       HarnessReporter.prototype,
       'generateSummaryReport'
     ).mockResolvedValue();
-    forceFailSpy = spyOn(AssemblyLine.prototype, 'forceFailStatus');
+    forceFailSpy = jest.spyOn(AssemblyLine.prototype, 'forceFailStatus');
   });
 
   afterEach(() => {
@@ -634,25 +634,25 @@ describe('harnessCommand: continue mode', () => {
 describe('harnessCommand: quality gate', () => {
   let env: IsolatedTestEnv;
   let projDir: string;
-  let exitSpy: ReturnType<typeof spyOn>;
-  let logSpy: ReturnType<typeof spyOn>;
-  let errorSpy: ReturnType<typeof spyOn>;
-  let runSpy: ReturnType<typeof spyOn>;
-  let reportSpy: ReturnType<typeof spyOn>;
+  let exitSpy: jest.SpyInstance;
+  let logSpy: jest.SpyInstance;
+  let errorSpy: jest.SpyInstance;
+  let runSpy: jest.SpyInstance;
+  let reportSpy: jest.SpyInstance;
 
   beforeEach(async () => {
     env = await createIsolatedTestEnv();
     projDir = createProjectDir(env.tempDir);
 
-    exitSpy = spyOn(process, 'exit').mockImplementation(((code?: number) => {
+    exitSpy = jest.spyOn(process, 'exit').mockImplementation(((code?: number) => {
       throw new Error(`process.exit(${code ?? 0})`);
     }) as any);
-    logSpy = spyOn(console, 'log').mockImplementation(() => {});
-    errorSpy = spyOn(console, 'error').mockImplementation(() => {});
-    runSpy = spyOn(AssemblyLine.prototype, 'run').mockResolvedValue(
+    logSpy = jest.spyOn(console, 'log').mockImplementation(() => {});
+    errorSpy = jest.spyOn(console, 'error').mockImplementation(() => {});
+    runSpy = jest.spyOn(AssemblyLine.prototype, 'run').mockResolvedValue(
       createMockSummary()
     );
-    reportSpy = spyOn(
+    reportSpy = jest.spyOn(
       HarnessReporter.prototype,
       'generateSummaryReport'
     ).mockResolvedValue();
@@ -732,25 +732,25 @@ describe('harnessCommand: quality gate', () => {
 describe('harnessCommand: task filtering', () => {
   let env: IsolatedTestEnv;
   let projDir: string;
-  let exitSpy: ReturnType<typeof spyOn>;
-  let logSpy: ReturnType<typeof spyOn>;
-  let errorSpy: ReturnType<typeof spyOn>;
-  let runSpy: ReturnType<typeof spyOn>;
-  let reportSpy: ReturnType<typeof spyOn>;
+  let exitSpy: jest.SpyInstance;
+  let logSpy: jest.SpyInstance;
+  let errorSpy: jest.SpyInstance;
+  let runSpy: jest.SpyInstance;
+  let reportSpy: jest.SpyInstance;
 
   beforeEach(async () => {
     env = await createIsolatedTestEnv();
     projDir = createProjectDir(env.tempDir);
 
-    exitSpy = spyOn(process, 'exit').mockImplementation(((code?: number) => {
+    exitSpy = jest.spyOn(process, 'exit').mockImplementation(((code?: number) => {
       throw new Error(`process.exit(${code ?? 0})`);
     }) as any);
-    logSpy = spyOn(console, 'log').mockImplementation(() => {});
-    errorSpy = spyOn(console, 'error').mockImplementation(() => {});
-    runSpy = spyOn(AssemblyLine.prototype, 'run').mockResolvedValue(
+    logSpy = jest.spyOn(console, 'log').mockImplementation(() => {});
+    errorSpy = jest.spyOn(console, 'error').mockImplementation(() => {});
+    runSpy = jest.spyOn(AssemblyLine.prototype, 'run').mockResolvedValue(
       createMockSummary()
     );
-    reportSpy = spyOn(
+    reportSpy = jest.spyOn(
       HarnessReporter.prototype,
       'generateSummaryReport'
     ).mockResolvedValue();

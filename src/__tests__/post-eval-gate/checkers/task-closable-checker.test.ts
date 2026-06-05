@@ -9,7 +9,7 @@
  * - 边界条件: 空检查点、undefined 检查点、混合状态
  */
 
-import { describe, it, expect } from 'bun:test';
+import { describe, it, expect } from '@jest/globals';
 import { TaskClosableChecker } from '../../../utils/post-eval-gate/checkers/task-closable-checker.js';
 import type {
   PostEvalCheckContext,

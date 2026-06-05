@@ -11,7 +11,7 @@
  * - 混合状态正确处理
  */
 
-import { describe, it, expect } from 'bun:test';
+import { describe, it, expect } from '@jest/globals';
 import { AllCheckpointsCompletedChecker } from '../../../utils/pre-eval-gate/checkers/all-checkpoints-completed-checker.js';
 import type { PreEvalCheckContext } from '../../../utils/pre-eval-gate/types.js';
 import type { TaskMeta, CheckpointMetadata } from '../../../types/task.js';

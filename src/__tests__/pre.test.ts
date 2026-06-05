@@ -18,7 +18,7 @@
  * - 确保测试隔离，防止跨测试污染
  */
 
-import { describe, it, expect, beforeEach, afterEach } from 'bun:test';
+import { describe, it, expect, beforeEach, afterEach } from '@jest/globals';
 import * as fs from 'fs';
 import * as path from 'path';
 import { json, toml, Pre, DEFAULT_HOOKS } from '../utils/pre.js';

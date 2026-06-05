@@ -44,6 +44,8 @@ export interface AgentInvokeOptions {
   resumeSession?: boolean;
   /** 分叉 session 而非覆盖原 session（对应 --fork-session） */
   forkSession?: boolean;
+  /** 最大重试次数 */
+  maxRetries?: number;
 }
 
 /** Agent 调用结果 */

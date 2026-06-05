@@ -2,7 +2,7 @@
  * 测试 analyze --fix 检查点前缀修复功能
  */
 
-import { describe, it, expect, beforeEach, afterEach } from 'bun:test';
+import { describe, it, expect, beforeEach, afterEach } from '@jest/globals';
 import * as fs from 'fs';
 import * as path from 'path';
 import type { TaskMeta, Checkpoint } from '../types/task';
@@ -82,7 +82,7 @@ describe('analyze --fix checkpoint prefix', () => {
     const issue: Issue = {
       taskId,
       type: 'missing_checkpoint_prefix',
-      severity: 'error',
+      severity: 'high',
       message: '2 条检查点描述缺少验证类别前缀',
       suggestion: '运行 analyze --fix 自动为检查点添加前缀',
     };
@@ -118,7 +118,7 @@ describe('analyze --fix checkpoint prefix', () => {
     const issue: Issue = {
       taskId,
       type: 'missing_checkpoint_prefix',
-      severity: 'error',
+      severity: 'high',
       message: '检查点描述缺少验证类别前缀',
       suggestion: '运行 analyze --fix 自动为检查点添加前缀',
     };

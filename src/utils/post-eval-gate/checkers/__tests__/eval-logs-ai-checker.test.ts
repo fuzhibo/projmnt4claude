@@ -3,7 +3,7 @@
  * 评估日志 AI 审核检查器测试
  */
 
-import { describe, test, expect, beforeEach, mock } from 'bun:test';
+import { describe, test, expect, beforeEach} from '@jest/globals';
 import {
   EvalLogsAIChecker,
   createEvalLogsAIChecker,
@@ -14,7 +14,7 @@ import type { PostEvalCheckContext, EvalReport } from '../../types.js';
 import type { TaskMeta } from '../../../types/task.js';
 
 // Mock invokeAgent
-const mockInvokeAgent = mock(async (prompt: string, options: unknown) => {
+const mockInvokeAgent = jest.fn(async (prompt: string, options: unknown) => {
   return {
     success: true,
     output: JSON.stringify({

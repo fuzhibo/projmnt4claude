@@ -9,7 +9,7 @@
  * - CP-005: hd-assembly-line.ts 重试逻辑分类处理验证
  */
 
-import { describe, it, expect } from 'bun:test';
+import { describe, it, expect } from '@jest/globals';
 import type { FailureType } from '../types/task';
 import type { PhaseGateRule } from '../types/pre-phase-gate';
 import type { PostPhaseGateRule } from '../types/post-phase-gate';

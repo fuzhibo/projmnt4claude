@@ -4,7 +4,7 @@
  * CP-2: Tests for Evaluation class smart routing mechanism
  */
 
-import { describe, test, expect } from 'bun:test';
+import { describe, test, expect } from '@jest/globals';
 import { Evaluation, createEvaluation } from '../evaluation.js';
 import type { RoutingDecision } from '../../types/task.js';
 

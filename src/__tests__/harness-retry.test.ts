@@ -1,4 +1,4 @@
-import { describe, test, expect, beforeEach, afterEach, spyOn } from 'bun:test';
+import { describe, test, expect, beforeEach, afterEach } from '@jest/globals';
 import { RetryHandler } from '../utils/harness-retry.js';
 import { createIsolatedTestEnv, type IsolatedTestEnv } from '../utils/test-env.js';
 import type { HarnessConfig, ReviewVerdict } from '../types/harness.js';

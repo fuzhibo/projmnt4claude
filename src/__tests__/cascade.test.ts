@@ -7,7 +7,7 @@
  * - 使用 createIsolatedTestEnv 创建隔离测试环境
  * - 确保测试隔离，防止跨测试污染
  */
-import { describe, test, expect, beforeEach, afterEach } from 'bun:test';
+import { describe, test, expect, beforeEach, afterEach } from '@jest/globals';
 import { DependencyGraph } from '../utils/dependency-graph/graph.js';
 import {
   computeFailureCascade,

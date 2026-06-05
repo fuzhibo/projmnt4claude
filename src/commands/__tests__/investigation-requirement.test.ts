@@ -1,7 +1,7 @@
 /**
  * investigation-requirement 命令单元测试
  */
-import { describe, it, expect, beforeEach, afterEach, spyOn } from 'bun:test';
+import { describe, it, expect, beforeEach, afterEach } from '@jest/globals';
 import * as fs from 'fs';
 import * as path from 'path';
 import { createIsolatedTestEnv, type IsolatedTestEnv } from '../../utils/test-env.js';

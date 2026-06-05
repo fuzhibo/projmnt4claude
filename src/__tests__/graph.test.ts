@@ -3,7 +3,7 @@
  *
  * 测试图构建、查询、分析和统计功能
  */
-import { describe, test, expect, beforeEach } from 'bun:test';
+import { describe, test, expect, beforeEach } from '@jest/globals';
 import { DependencyGraph } from '../utils/dependency-graph/graph.js';
 import { createTestTask } from './helpers/mock-task.js';
 import type { TaskMeta } from '../types/task.js';

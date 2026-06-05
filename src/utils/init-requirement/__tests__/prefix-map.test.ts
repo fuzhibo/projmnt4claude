@@ -6,7 +6,7 @@
  * - 3.2 检查点解析：前缀提取、无前缀报错、category 推断
  */
 
-import { describe, test, expect } from 'bun:test';
+import { describe, test, expect } from '@jest/globals';
 import {
   PREFIX_MAP,
   VALID_PREFIXES,

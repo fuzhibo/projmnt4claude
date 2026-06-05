@@ -2,14 +2,14 @@
  * Auth API 超时处理测试
  */
 
-import { describe, test, expect, beforeEach, afterEach, afterAll, mock } from 'bun:test';
+import { describe, test, expect, beforeEach, afterEach, afterAll} from '@jest/globals';
 import { login, createAuthClient, LoginRequest, ApiConfig } from '../auth';
 
 // 保存原始 fetch 以便恢复
 const originalFetch = global.fetch;
 
 // 模拟 fetch
-global.fetch = mock(() =>
+global.fetch = jest.fn(() =>
   Promise.resolve({
     ok: true,
     status: 200,
@@ -188,7 +188,7 @@ describe('Auth API - Timeout Handling', () => {
 
 // ============================================================
 // Cleanup: Restore global.fetch after all tests
-// Note: mock.restore() does not restore global.* assignments,
+// Note: jest.restoreAllMocks() does not restore global.* assignments,
 // so we manually restore the original fetch.
 // ============================================================
 afterAll(() => {

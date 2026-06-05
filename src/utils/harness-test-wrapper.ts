@@ -7,7 +7,7 @@
 import * as fs from 'fs';
 import * as path from 'path';
 import * as os from 'os';
-import { spyOn } from 'bun:test';
+import { jest } from '@jest/globals';
 import type { HarnessConfig, HarnessRuntimeState } from '../types/harness.js';
 import { createDefaultRuntimeState } from '../types/harness.js';
 
@@ -55,9 +55,9 @@ export interface HarnessTestContext {
  * Harness Mock 函数句柄集合
  */
 export interface HarnessMockHandles {
-  isInitialized: ReturnType<typeof spyOn>;
-  getTasksDir: ReturnType<typeof spyOn>;
-  getProjectDir: ReturnType<typeof spyOn>;
+  isInitialized: any;
+  getTasksDir: any;
+  getProjectDir: any;
   restore: () => void;
 }
 
@@ -142,9 +142,9 @@ async function createPathMocks(
 ): Promise<HarnessMockHandles> {
   const pathModule = await import('./path.js');
 
-  const isInitializedMock = spyOn(pathModule, 'isInitialized').mockReturnValue(true);
-  const getTasksDirMock = spyOn(pathModule, 'getTasksDir').mockReturnValue(tasksDir);
-  const getProjectDirMock = spyOn(pathModule, 'getProjectDir').mockReturnValue(projectDir);
+  const isInitializedMock = jest.spyOn(pathModule, 'isInitialized').mockReturnValue(true);
+  const getTasksDirMock = jest.spyOn(pathModule, 'getTasksDir').mockReturnValue(tasksDir);
+  const getProjectDirMock = jest.spyOn(pathModule, 'getProjectDir').mockReturnValue(projectDir);
 
   return {
     isInitialized: isInitializedMock,

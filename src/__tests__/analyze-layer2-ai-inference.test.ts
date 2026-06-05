@@ -11,13 +11,13 @@
  * - CP-28: AI 已调用
  */
 
-import { describe, test, expect, beforeEach, afterEach, afterAll, mock } from 'bun:test';
+import { describe, test, expect, jest, beforeEach, afterEach, afterAll } from '@jest/globals';
 import * as fs from 'fs';
 import * as path from 'path';
 
 // ============== Mock headless-agent before analyze imports ==============
 
-const mockInvokeAgent = mock((_prompt: string, _options: unknown) =>
+const mockInvokeAgent = jest.fn((_prompt: string, _options: unknown) =>
   Promise.resolve({
     output: JSON.stringify({
       inferredStatus: 'resolved',
@@ -33,12 +33,10 @@ const mockInvokeAgent = mock((_prompt: string, _options: unknown) =>
   })
 );
 
-// Note: mock.module() is hoisted before imports — cannot migrate to spyOn.
-// mock.restore() does NOT restore module-level mocks (Bun design).
-// This mock persists for the file's lifetime; process isolation
-// (batched-test-runner) prevents cross-file pollution.
+// Note: jest.mock() is hoisted before imports — same behavior as Bun's mock.module().
+// jest.restoreAllMocks() restores all mocks properly (unlike Bun's mock.restore).
 
-mock.module('../utils/headless-agent', () => ({
+jest.mock('../utils/headless-agent', () => ({
   invokeAgent: mockInvokeAgent,
 }));
 
@@ -863,9 +861,9 @@ describe('detectStatusInferenceIssues', () => {
 // ============================================================
 // Cleanup: Restore function-level mocks after all tests
 // Note: mock.module() mocks persist for the file's lifetime and
-// cannot be restored via mock.restore() (Bun design limitation).
+// cannot be restored via jest.restoreAllMocks() (Bun design limitation).
 // Process isolation (batched-test-runner) prevents cross-file pollution.
 // ============================================================
 afterAll(() => {
-  mock.restore();
+  jest.restoreAllMocks();
 });
