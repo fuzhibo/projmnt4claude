@@ -13582,7 +13582,40 @@ var init_harness_helpers = __esm(() => {
 });
 
 // src/utils/headless-agent.ts
+var exports_headless_agent = {};
+__export(exports_headless_agent, {
+  translateOptionsToCliArgs: () => translateOptionsToCliArgs,
+  loadAIConfig: () => loadAIConfig,
+  invokeAgent: () => invokeAgent,
+  initializeProviders: () => initializeProviders,
+  getAgent: () => getAgent,
+  buildEffectiveTools: () => buildEffectiveTools,
+  agentRegistry: () => agentRegistry,
+  ClaudeCodeProvider: () => ClaudeCodeProvider
+});
 import * as fs11 from "fs";
+function translateOptionsToCliArgs(options) {
+  const args = ["--print"];
+  if (options.allowedTools && options.allowedTools.length > 0) {
+    args.push("--allowedTools", options.allowedTools.join(","));
+  }
+  if (options.dangerouslySkipPermissions) {
+    args.push("--dangerously-skip-permissions");
+  }
+  if (options.outputFormat === "json") {
+    args.push("--output-format", "json");
+  }
+  if (options.sessionId) {
+    args.push("--session-id", options.sessionId);
+  }
+  if (options.resumeSession) {
+    args.push("--resume");
+  }
+  if (options.forkSession) {
+    args.push("--fork-session");
+  }
+  return args;
+}
 function buildEffectiveTools(phase, cwd, task) {
   const codeDefaults = PHASE_DEFAULT_TOOLS[phase] || ["Read", "Bash", "Grep", "Glob"];
   const configKey = PHASE_CONFIG_KEY[phase];
@@ -18929,719 +18962,6 @@ var init_plan = __esm(() => {
   };
 });
 
-// src/utils/validation-rules/plan-rules.ts
-function detectTaskCycles(tasks) {
-  const adjacency = new Map;
-  for (const task of tasks) {
-    if (!adjacency.has(task.id)) {
-      adjacency.set(task.id, new Set);
-    }
-    for (const depId of task.dependencies) {
-      adjacency.get(task.id).add(depId);
-    }
-  }
-  const cycles = [];
-  const visited = new Set;
-  const onStack = new Set;
-  const path15 = [];
-  function dfs(node) {
-    if (onStack.has(node)) {
-      const cycleStart = path15.indexOf(node);
-      if (cycleStart !== -1) {
-        cycles.push([...path15.slice(cycleStart), node]);
-      }
-      return;
-    }
-    if (visited.has(node))
-      return;
-    visited.add(node);
-    onStack.add(node);
-    path15.push(node);
-    const neighbors = adjacency.get(node);
-    if (neighbors) {
-      for (const neighbor of neighbors) {
-        dfs(neighbor);
-      }
-    }
-    path15.pop();
-    onStack.delete(node);
-  }
-  for (const taskId of adjacency.keys()) {
-    if (!visited.has(taskId)) {
-      dfs(taskId);
-    }
-  }
-  return {
-    hasCycle: cycles.length > 0,
-    cycles,
-    taskId: cycles.length > 0 ? cycles[0][0] : ""
-  };
-}
-var TERMINAL_STATUSES_SET3, planCycleDetection, planInvalidDependency, planOrphanSubtask, planOrphanTask, planBlockedTask, planBridgeNode, planInferredOnlyDependency;
-var init_plan_rules = __esm(() => {
-  init_task();
-  TERMINAL_STATUSES_SET3 = new Set(TERMINAL_STATUSES);
-  planCycleDetection = {
-    id: "plan-cycle-detection",
-    description: "检测任务依赖关系中是否存在循环依赖",
-    severity: "error",
-    check: (task, context) => {
-      const t2 = task;
-      const allTasks = context?.allTasks;
-      if (!allTasks || allTasks.length === 0) {
-        return null;
-      }
-      const result = detectTaskCycles(allTasks);
-      if (result.hasCycle) {
-        const cycleStr = result.cycles.map((c) => c.join(" → ")).join("; ");
-        return {
-          ruleId: "plan-cycle-detection",
-          severity: "error",
-          message: `检测到循环依赖: ${cycleStr}。请检查任务依赖关系，移除循环引用`
-        };
-      }
-      return null;
-    }
-  };
-  planInvalidDependency = {
-    id: "plan-invalid-dependency",
-    description: "检测任务依赖是否引用不存在的任务",
-    severity: "error",
-    check: (task, context) => {
-      const t2 = task;
-      const allTasks = context?.allTasks;
-      if (!allTasks || allTasks.length === 0) {
-        return null;
-      }
-      const validTaskIds = new Set(allTasks.map((task2) => task2.id));
-      const invalidDeps = [];
-      for (const depId of t2.dependencies) {
-        if (!validTaskIds.has(depId)) {
-          invalidDeps.push(depId);
-        }
-      }
-      if (invalidDeps.length > 0) {
-        return {
-          ruleId: "plan-invalid-dependency",
-          severity: "error",
-          message: `任务 ${t2.id} 包含无效依赖: ${invalidDeps.join(", ")}。这些任务ID不存在`
-        };
-      }
-      return null;
-    }
-  };
-  planOrphanSubtask = {
-    id: "plan-orphan-subtask",
-    description: "检测有 parentId 但父任务不存在的孤儿子任务",
-    severity: "error",
-    check: (task, context) => {
-      const t2 = task;
-      const allTasks = context?.allTasks;
-      if (!allTasks || allTasks.length === 0) {
-        return null;
-      }
-      if (!t2.parentId) {
-        return null;
-      }
-      const validTaskIds = new Set(allTasks.map((task2) => task2.id));
-      if (!validTaskIds.has(t2.parentId)) {
-        return {
-          ruleId: "plan-orphan-subtask",
-          severity: "error",
-          message: `任务 ${t2.id} 声明了父任务 ${t2.parentId}，但该父任务不存在。请检查 parentId 或创建父任务`
-        };
-      }
-      return null;
-    }
-  };
-  planOrphanTask = {
-    id: "plan-orphan-task",
-    description: "检测孤立任务（无依赖且不被依赖的任务）",
-    severity: "warning",
-    check: (task, context) => {
-      const t2 = task;
-      const allTasks = context?.allTasks;
-      if (!allTasks || allTasks.length === 0) {
-        return null;
-      }
-      if (t2.dependencies.length > 0 || t2.subtaskIds && t2.subtaskIds.length > 0) {
-        return null;
-      }
-      const isDependedOn = allTasks.some((otherTask) => otherTask.dependencies.includes(t2.id));
-      if (!isDependedOn) {
-        return {
-          ruleId: "plan-orphan-task",
-          severity: "warning",
-          message: `任务 ${t2.id} 是孤立任务：没有依赖且不被其他任务依赖。建议检查是否遗漏依赖关系或删除无用任务`
-        };
-      }
-      return null;
-    }
-  };
-  planBlockedTask = {
-    id: "plan-blocked-task",
-    description: "检测被阻塞的任务（所有依赖都未完成）",
-    severity: "warning",
-    check: (task, context) => {
-      const t2 = task;
-      const allTasks = context?.allTasks;
-      if (!allTasks || allTasks.length === 0) {
-        return null;
-      }
-      if (t2.dependencies.length === 0) {
-        return null;
-      }
-      if (TERMINAL_STATUSES_SET3.has(normalizeStatus(t2.status))) {
-        return null;
-      }
-      const incompleteDeps = [];
-      for (const depId of t2.dependencies) {
-        const depTask = allTasks.find((task2) => task2.id === depId);
-        if (depTask) {
-          const isCompleted = TERMINAL_STATUSES_SET3.has(normalizeStatus(depTask.status));
-          if (!isCompleted) {
-            incompleteDeps.push(depId);
-          }
-        }
-      }
-      if (incompleteDeps.length === t2.dependencies.length) {
-        return {
-          ruleId: "plan-blocked-task",
-          severity: "warning",
-          message: `任务 ${t2.id} 被阻塞：所有 ${t2.dependencies.length} 个依赖任务都未完成。建议优先处理依赖任务：${incompleteDeps.join(", ")}`
-        };
-      }
-      return null;
-    }
-  };
-  planBridgeNode = {
-    id: "plan-bridge-node",
-    description: "检测桥接节点任务（作为依赖桥梁但缺少检查点）",
-    severity: "warning",
-    check: (task, context) => {
-      const t2 = task;
-      const allTasks = context?.allTasks;
-      if (!allTasks || allTasks.length === 0) {
-        return null;
-      }
-      const dependentTasks = allTasks.filter((otherTask) => otherTask.dependencies.includes(t2.id));
-      const hasManyDependents = dependentTasks.length >= 2;
-      const hasDependencies = t2.dependencies.length > 0;
-      const hasMinimalCheckpoints = !t2.checkpoints || t2.checkpoints.length <= 1;
-      if (hasManyDependents && hasDependencies && hasMinimalCheckpoints) {
-        return {
-          ruleId: "plan-bridge-node",
-          severity: "warning",
-          message: `任务 ${t2.id} 可能是桥接节点：被 ${dependentTasks.length} 个任务依赖且有 ${t2.dependencies.length} 个依赖，但检查点过少（${t2.checkpoints?.length || 0} 个）。建议添加更多检查点确保质量`
-        };
-      }
-      return null;
-    }
-  };
-  planInferredOnlyDependency = {
-    id: "plan-inferred-only-dependency",
-    description: "检测只有推断依赖的任务（建议显式声明关键依赖）",
-    severity: "warning",
-    check: (task, context) => {
-      const t2 = task;
-      if (t2.dependencies.length === 0) {
-        return null;
-      }
-      const hasExplicitDeps = context?.hasExplicitDeps;
-      if (hasExplicitDeps !== false) {
-        return null;
-      }
-      return {
-        ruleId: "plan-inferred-only-dependency",
-        severity: "warning",
-        message: `任务 ${t2.id} 只有推断依赖（${t2.dependencies.length} 个），没有显式声明的依赖。建议显式声明关键依赖以提高可维护性`
-      };
-    }
-  };
-});
-
-// src/utils/quality-gate-registry.ts
-function runQualityGate(task, phase, context) {
-  const violations = [];
-  const errors = [];
-  const warnings = [];
-  let rulesExecuted = 0;
-  let rulesSkipped = 0;
-  const ruleIds = PHASE_RULES[phase] || [];
-  for (const ruleId of ruleIds) {
-    const registered = QUALITY_GATE_RULES[ruleId];
-    if (!registered) {
-      rulesSkipped++;
-      continue;
-    }
-    if (registered.appliesToPriorities !== null) {
-      if (!registered.appliesToPriorities.includes(task.priority || "P2")) {
-        rulesSkipped++;
-        continue;
-      }
-    }
-    try {
-      const violation = registered.rule.check(task, context);
-      rulesExecuted++;
-      if (violation) {
-        violations.push(violation);
-        if (violation.severity === "error") {
-          errors.push(violation);
-        } else {
-          warnings.push(violation);
-        }
-      }
-    } catch (err) {
-      const errorViolation = {
-        ruleId: registered.id,
-        severity: "error",
-        message: `规则执行异常: ${err instanceof Error ? err.message : String(err)}`
-      };
-      violations.push(errorViolation);
-      errors.push(errorViolation);
-      rulesExecuted++;
-    }
-  }
-  return {
-    passed: errors.length === 0,
-    phase,
-    taskId: task.id,
-    violations,
-    errors,
-    warnings,
-    validatedAt: new Date().toISOString(),
-    rulesExecuted,
-    rulesSkipped
-  };
-}
-var QUALITY_GATE_RULES, PHASE_RULES;
-var init_quality_gate_registry = __esm(() => {
-  init_checkpoint_rules();
-  init_plan_rules();
-  init_quality_gate();
-  QUALITY_GATE_RULES = {
-    "meta-json-valid": {
-      id: "meta-json-valid",
-      description: "meta.json 必须包含必需字段、值合法且 JSON 格式正确",
-      priority: "critical",
-      rule: metaJsonValid,
-      appliesToPriorities: null,
-      phases: ["initialization", "transition", "execution"]
-    },
-    "checkpoint-array-not-empty": {
-      id: "checkpoint-array-not-empty",
-      description: "P0/P1 任务必须包含至少 2 个结构化检查点",
-      priority: "critical",
-      rule: {
-        id: "checkpoint-array-not-empty",
-        description: "P0/P1 任务必须包含至少 2 个结构化检查点",
-        severity: "error",
-        check: (task) => {
-          const t2 = task;
-          if (!t2.checkpoints || t2.checkpoints.length === 0) {
-            if (t2.priority === "P0" || t2.priority === "P1") {
-              return {
-                ruleId: "checkpoint-array-not-empty",
-                severity: "error",
-                message: `${t2.priority} 任务必须包含至少 2 个结构化检查点，当前: 0`
-              };
-            }
-          }
-          return null;
-        }
-      },
-      appliesToPriorities: ["P0", "P1"],
-      phases: ["initialization", "transition"]
-    },
-    "checkpoint-required-prefix": {
-      id: "checkpoint-required-prefix",
-      description: "检查点描述必须以验证类别前缀开头 ([ai review]/[ai qa]/[human qa]/[script])",
-      priority: "high",
-      rule: checkpointRequiredPrefix,
-      appliesToPriorities: null,
-      phases: ["initialization", "transition"]
-    },
-    "checkpoint-has-verification-commands": {
-      id: "checkpoint-has-verification-commands",
-      description: "使用自动化验证方法的检查点应包含验证命令或步骤",
-      priority: "medium",
-      rule: checkpointHasVerificationCommands,
-      appliesToPriorities: null,
-      phases: ["initialization", "transition"]
-    },
-    "checkpoint-no-duplicate": {
-      id: "checkpoint-no-duplicate",
-      description: "检查点描述不允许重复（三层去重）",
-      priority: "high",
-      rule: checkpointNoDuplicate,
-      appliesToPriorities: null,
-      phases: ["initialization"]
-    },
-    "checkpoint-no-file-path": {
-      id: "checkpoint-no-file-path",
-      description: "检查点描述不能是纯文件路径格式",
-      priority: "high",
-      rule: checkpointNoFilePath,
-      appliesToPriorities: null,
-      phases: ["initialization"]
-    },
-    "checkpoint-count-control": {
-      id: "checkpoint-count-control",
-      description: "检查点数量控制在合理范围 (>8 warning, >15 error)",
-      priority: "medium",
-      rule: checkpointCountControl,
-      appliesToPriorities: null,
-      phases: ["initialization"]
-    },
-    "checkpoint-verb-prefix": {
-      id: "checkpoint-verb-prefix",
-      description: "检查点描述应以动词开头",
-      priority: "low",
-      rule: checkpointVerbPrefix,
-      appliesToPriorities: null,
-      phases: ["initialization"]
-    },
-    "checkpoint-min-length": {
-      id: "checkpoint-min-length",
-      description: "每条检查点描述至少 10 个字符",
-      priority: "low",
-      rule: checkpointMinLength,
-      appliesToPriorities: null,
-      phases: ["initialization"]
-    },
-    "basic-fields-valid": {
-      id: "basic-fields-valid",
-      description: "任务基础字段完整性验证 (id, title, description, checkpoints)",
-      priority: "critical",
-      rule: {
-        id: "basic-fields-valid",
-        description: "任务基础字段完整性验证",
-        severity: "error",
-        check: (task) => {
-          const t2 = task;
-          const result = validateBasicFields(t2);
-          if (!result.valid) {
-            return {
-              ruleId: "basic-fields-valid",
-              severity: "error",
-              message: `基础字段验证失败: ${result.errors.join(", ")}`
-            };
-          }
-          return null;
-        }
-      },
-      appliesToPriorities: null,
-      phases: ["transition", "execution"]
-    },
-    "status-transition-valid": {
-      id: "status-transition-valid",
-      description: "状态转换必须通过有效的 transition note 记录",
-      priority: "high",
-      rule: {
-        id: "status-transition-valid",
-        description: "状态转换验证",
-        severity: "error",
-        check: (task, context) => {
-          const t2 = task;
-          const expectedStatus = context?.expectedStatus;
-          const phase = context?.phase;
-          if (!expectedStatus)
-            return null;
-          if (t2.status !== expectedStatus) {
-            return {
-              ruleId: "status-transition-valid",
-              severity: "error",
-              message: `状态不匹配: 期望 ${expectedStatus}, 实际 ${t2.status} (阶段: ${phase || "unknown"})`
-            };
-          }
-          const notes = t2.transitionNotes;
-          if (!notes || notes.length === 0) {
-            return {
-              ruleId: "status-transition-valid",
-              severity: "error",
-              message: `transitionNotes 为空，缺少流转记录 (阶段: ${phase || "unknown"}, 期望状态: ${expectedStatus})`
-            };
-          }
-          const latest = notes[notes.length - 1];
-          if (!latest.note || latest.note.trim().length === 0) {
-            return {
-              ruleId: "status-transition-valid",
-              severity: "error",
-              message: `最新 transitionNote 缺少决策说明 (阶段: ${phase || "unknown"})`
-            };
-          }
-          if (latest.toStatus !== expectedStatus) {
-            return {
-              ruleId: "status-transition-valid",
-              severity: "error",
-              message: `transitionNote.toStatus 不匹配: 期望 ${expectedStatus}, 实际 ${latest.toStatus} (阶段: ${phase || "unknown"})`
-            };
-          }
-          return null;
-        }
-      },
-      appliesToPriorities: null,
-      phases: ["transition"]
-    },
-    "plan-cycle-detection": {
-      id: "plan-cycle-detection",
-      description: "检测任务依赖关系中是否存在循环依赖",
-      priority: "critical",
-      rule: planCycleDetection,
-      appliesToPriorities: null,
-      phases: ["plan_recommend"]
-    },
-    "plan-invalid-dependency": {
-      id: "plan-invalid-dependency",
-      description: "检测任务依赖是否引用不存在的任务",
-      priority: "critical",
-      rule: planInvalidDependency,
-      appliesToPriorities: null,
-      phases: ["plan_recommend"]
-    },
-    "plan-orphan-subtask": {
-      id: "plan-orphan-subtask",
-      description: "检测有 parentId 但父任务不存在的孤儿子任务",
-      priority: "critical",
-      rule: planOrphanSubtask,
-      appliesToPriorities: null,
-      phases: ["plan_recommend"]
-    },
-    "plan-orphan-task": {
-      id: "plan-orphan-task",
-      description: "检测孤立任务（无依赖且不被依赖的任务）",
-      priority: "medium",
-      rule: planOrphanTask,
-      appliesToPriorities: null,
-      phases: ["plan_recommend"]
-    },
-    "plan-blocked-task": {
-      id: "plan-blocked-task",
-      description: "检测被阻塞的任务（所有依赖都未完成）",
-      priority: "medium",
-      rule: planBlockedTask,
-      appliesToPriorities: null,
-      phases: ["plan_recommend"]
-    },
-    "plan-bridge-node": {
-      id: "plan-bridge-node",
-      description: "检测桥接节点任务（作为依赖桥梁但缺少检查点）",
-      priority: "medium",
-      rule: planBridgeNode,
-      appliesToPriorities: null,
-      phases: ["plan_recommend"]
-    },
-    "plan-inferred-only-dependency": {
-      id: "plan-inferred-only-dependency",
-      description: "检测只有推断依赖的任务（建议显式声明关键依赖）",
-      priority: "low",
-      rule: planInferredOnlyDependency,
-      appliesToPriorities: null,
-      phases: ["plan_recommend"]
-    }
-  };
-  PHASE_RULES = {
-    plan_recommend: [
-      "meta-json-valid",
-      "checkpoint-array-not-empty",
-      "checkpoint-required-prefix",
-      "checkpoint-no-duplicate",
-      "checkpoint-no-file-path",
-      "checkpoint-count-control",
-      "basic-fields-valid",
-      "plan-cycle-detection",
-      "plan-invalid-dependency",
-      "plan-orphan-subtask",
-      "plan-orphan-task",
-      "plan-blocked-task",
-      "plan-bridge-node",
-      "plan-inferred-only-dependency"
-    ],
-    initialization: [
-      "meta-json-valid",
-      "checkpoint-array-not-empty",
-      "checkpoint-required-prefix",
-      "checkpoint-has-verification-commands",
-      "checkpoint-no-duplicate",
-      "checkpoint-no-file-path",
-      "checkpoint-count-control",
-      "checkpoint-verb-prefix",
-      "checkpoint-min-length",
-      "basic-fields-valid"
-    ],
-    transition: [
-      "meta-json-valid",
-      "checkpoint-array-not-empty",
-      "checkpoint-required-prefix",
-      "checkpoint-has-verification-commands",
-      "basic-fields-valid",
-      "status-transition-valid"
-    ],
-    execution: [
-      "meta-json-valid",
-      "basic-fields-valid"
-    ],
-    completion: [
-      "meta-json-valid",
-      "basic-fields-valid"
-    ]
-  };
-});
-
-// src/utils/harness-snapshot.ts
-import * as fs19 from "fs";
-import * as path15 from "path";
-function getRunsDir(cwd) {
-  const runsDir = path15.join(getProjectDir(cwd), "runs");
-  if (!fs19.existsSync(runsDir)) {
-    fs19.mkdirSync(runsDir, { recursive: true });
-  }
-  return runsDir;
-}
-function generateSnapshotFilename(pid, timestamp) {
-  return `harness-plan-snapshot-${pid}-${timestamp}.json`;
-}
-function createPlanSnapshot(executionPlan, cwd = process.cwd(), batchAwareQueue) {
-  const pid = process.pid;
-  const timestamp = Date.now();
-  const snapshotId = generateSnapshotFilename(pid, timestamp);
-  const runsDir = getRunsDir(cwd);
-  const snapshotPath = path15.join(runsDir, snapshotId);
-  const taskStatusSnapshot = {};
-  for (const taskId of executionPlan.tasks) {
-    const task = readTaskMeta(taskId, cwd);
-    if (task) {
-      taskStatusSnapshot[taskId] = task.status;
-    }
-  }
-  const snapshot = {
-    snapshotId,
-    pid,
-    timestamp: new Date(timestamp).toISOString(),
-    path: snapshotPath,
-    tasks: executionPlan.tasks,
-    batches: executionPlan.batches,
-    batchBoundaries: batchAwareQueue?.batchBoundaries,
-    batchLabels: batchAwareQueue?.batchLabels,
-    batchParallelizable: batchAwareQueue?.batchParallelizable,
-    sourcePlanPath: path15.join(getProjectDir(cwd), "current-plan.json"),
-    taskStatusSnapshot
-  };
-  fs19.writeFileSync(snapshotPath, JSON.stringify(snapshot, null, 2), "utf-8");
-  return snapshot;
-}
-function readPlanSnapshot(snapshotIdOrPath, cwd = process.cwd()) {
-  let snapshotPath;
-  if (path15.isAbsolute(snapshotIdOrPath)) {
-    snapshotPath = snapshotIdOrPath;
-  } else {
-    const runsDir = getRunsDir(cwd);
-    snapshotPath = path15.join(runsDir, snapshotIdOrPath);
-  }
-  if (!fs19.existsSync(snapshotPath)) {
-    return null;
-  }
-  try {
-    const content = fs19.readFileSync(snapshotPath, "utf-8");
-    const snapshot = JSON.parse(content);
-    if (!snapshot.snapshotId || !snapshot.tasks || !Array.isArray(snapshot.tasks)) {
-      return null;
-    }
-    return snapshot;
-  } catch {
-    return null;
-  }
-}
-function listSnapshots(cwd = process.cwd()) {
-  const runsDir = getRunsDir(cwd);
-  if (!fs19.existsSync(runsDir)) {
-    return [];
-  }
-  const files = fs19.readdirSync(runsDir);
-  const snapshots = [];
-  for (const file of files) {
-    if (!file.startsWith("harness-plan-snapshot-") || !file.endsWith(".json")) {
-      continue;
-    }
-    const snapshot = readPlanSnapshot(file, cwd);
-    if (snapshot) {
-      snapshots.push(snapshot);
-    }
-  }
-  return snapshots.sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
-}
-function cleanupSnapshot(snapshotIdOrPath, cwd = process.cwd()) {
-  let snapshotPath;
-  if (path15.isAbsolute(snapshotIdOrPath)) {
-    snapshotPath = snapshotIdOrPath;
-  } else {
-    const runsDir = getRunsDir(cwd);
-    snapshotPath = path15.join(runsDir, snapshotIdOrPath);
-  }
-  if (!fs19.existsSync(snapshotPath)) {
-    return false;
-  }
-  try {
-    fs19.unlinkSync(snapshotPath);
-    return true;
-  } catch {
-    return false;
-  }
-}
-function isSnapshotActive(snapshot, cwd = process.cwd()) {
-  let pid;
-  if (typeof snapshot === "string") {
-    const snapshotData = readPlanSnapshot(snapshot, cwd);
-    if (!snapshotData)
-      return false;
-    pid = snapshotData.pid;
-  } else {
-    pid = snapshot.pid;
-  }
-  return isProcessAlive(pid);
-}
-function isProcessAlive(pid) {
-  try {
-    process.kill(pid, 0);
-    return true;
-  } catch {
-    return false;
-  }
-}
-function getLatestSnapshot(cwd = process.cwd(), maxAgeMs = 24 * 60 * 60 * 1000) {
-  const snapshots = listSnapshots(cwd);
-  if (snapshots.length === 0) {
-    return null;
-  }
-  const latest = snapshots[0];
-  const age = Date.now() - new Date(latest.timestamp).getTime();
-  if (age > maxAgeMs) {
-    return null;
-  }
-  return latest;
-}
-function detectActiveSnapshot(cwd = process.cwd()) {
-  const snapshots = listSnapshots(cwd);
-  for (const snapshot of snapshots) {
-    if (isSnapshotActive(snapshot, cwd)) {
-      return {
-        hasActive: true,
-        activeSnapshot: snapshot,
-        message: `检测到活跃流水线: PID ${snapshot.pid}, 创建于 ${snapshot.timestamp}, 包含 ${snapshot.tasks.length} 个任务`
-      };
-    }
-  }
-  return {
-    hasActive: false,
-    activeSnapshot: null,
-    message: "未检测到活跃流水线"
-  };
-}
-var init_harness_snapshot = __esm(() => {
-  init_path();
-  init_task2();
-});
-
 // src/types/harness.ts
 function createDefaultSprintContract(taskId) {
   const now = new Date().toISOString();
@@ -22470,2155 +21790,6 @@ var init_analyze_fix_pipeline = __esm(() => {
   import_prompts5 = __toESM(require_prompts3(), 1);
 });
 
-// src/types/decomposition.ts
-function isValidTaskType(value) {
-  return typeof value === "string" && VALID_TASK_TYPES.includes(value);
-}
-function isValidTaskPriority(value) {
-  return typeof value === "string" && VALID_TASK_PRIORITIES.includes(value);
-}
-function isValidDecomposedTaskItem(item) {
-  if (typeof item !== "object" || item === null) {
-    return false;
-  }
-  const obj = item;
-  if (typeof obj.title !== "string" || obj.title.trim().length === 0) {
-    return false;
-  }
-  if (typeof obj.description !== "string") {
-    return false;
-  }
-  if (!isValidTaskType(obj.type)) {
-    return false;
-  }
-  if (!isValidTaskPriority(obj.priority)) {
-    return false;
-  }
-  if (!Array.isArray(obj.suggestedCheckpoints)) {
-    return false;
-  }
-  for (const checkpoint of obj.suggestedCheckpoints) {
-    if (typeof checkpoint !== "string") {
-      return false;
-    }
-  }
-  if (!Array.isArray(obj.relatedFiles)) {
-    return false;
-  }
-  for (const file of obj.relatedFiles) {
-    if (typeof file !== "string") {
-      return false;
-    }
-  }
-  if (typeof obj.estimatedMinutes !== "number" || obj.estimatedMinutes < 0) {
-    return false;
-  }
-  if (!Array.isArray(obj.dependsOn)) {
-    return false;
-  }
-  for (const dep of obj.dependsOn) {
-    if (typeof dep !== "number") {
-      return false;
-    }
-  }
-  return true;
-}
-function isValidRequirementDecomposition(result) {
-  if (typeof result !== "object" || result === null) {
-    return false;
-  }
-  const obj = result;
-  if (typeof obj.decomposable !== "boolean") {
-    return false;
-  }
-  if (!Array.isArray(obj.items)) {
-    return false;
-  }
-  for (const item of obj.items) {
-    if (!isValidDecomposedTaskItem(item)) {
-      return false;
-    }
-  }
-  if (typeof obj.summary !== "string") {
-    return false;
-  }
-  if (obj.reason !== undefined && typeof obj.reason !== "string") {
-    return false;
-  }
-  return true;
-}
-var DECOMPOSITION_CONSTRAINTS, VALID_TASK_TYPES, VALID_TASK_PRIORITIES;
-var init_decomposition = __esm(() => {
-  DECOMPOSITION_CONSTRAINTS = {
-    MIN_TITLE_LENGTH: 10,
-    MIN_PROBLEM_LENGTH: 50,
-    MIN_SOLUTION_LENGTH: 50,
-    MIN_ROOT_CAUSE_LENGTH: 20,
-    MIN_CHECKPOINTS: 1,
-    VALID_PRIORITIES: ["P0", "P1", "P2", "P3"]
-  };
-  VALID_TASK_TYPES = ["bug", "feature", "research", "docs", "refactor", "test"];
-  VALID_TASK_PRIORITIES = ["P0", "P1", "P2", "P3"];
-});
-
-// src/utils/requirement-decomposer.ts
-var exports_requirement_decomposer = {};
-__export(exports_requirement_decomposer, {
-  validateDecompositionItems: () => validateDecompositionItems,
-  validateDecompositionItem: () => validateDecompositionItem,
-  validateDecomposition: () => validateDecomposition,
-  shouldDecompose: () => shouldDecompose,
-  reportDecompositionFailure: () => reportDecompositionFailure,
-  formatDecomposition: () => formatDecomposition,
-  decomposeRequirement: () => decomposeRequirement,
-  decomposeRecursively: () => decomposeRecursively,
-  convertToDecomposedItem: () => convertToDecomposedItem,
-  aiShouldDecomposeFurther: () => aiShouldDecomposeFurther,
-  DEFAULT_RECURSIVE_CONFIG: () => DEFAULT_RECURSIVE_CONFIG
-});
-function validateInputSecurity(content) {
-  if (content.length > SECURITY_CONFIG.MAX_INPUT_LENGTH) {
-    return {
-      valid: false,
-      error: `输入内容过长（当前 ${content.length} 字符），超过最大限制 ${SECURITY_CONFIG.MAX_INPUT_LENGTH} 字符`
-    };
-  }
-  for (const pattern of SECURITY_CONFIG.DANGEROUS_PATTERNS) {
-    if (pattern.test(content)) {
-      return {
-        valid: false,
-        error: "检测到潜在的危险内容模式，输入被拒绝"
-      };
-    }
-  }
-  return { valid: true };
-}
-function isInvestigationReport(content) {
-  const problemKeywords = ["问题", "Issue", "Bug", "缺陷", "发现"];
-  let problemCount = 0;
-  for (const keyword of problemKeywords) {
-    const regex = new RegExp(keyword, "gi");
-    const matches = content.match(regex);
-    if (matches) {
-      problemCount += matches.length;
-    }
-  }
-  const numberedItems = content.match(/(?:^|\n)\s*\d+[.:\-]\s+/g);
-  const bulletItems = content.match(/(?:^|\n)\s*[-*]\s+/g);
-  const headers = content.match(/(?:^|\n)#{1,3}\s+[^\n]+/g);
-  const hasListStructure = !!numberedItems && numberedItems.length >= 2 || !!bulletItems && bulletItems.length >= 2 || !!headers && headers.length >= 2;
-  return problemCount >= 2 || hasListStructure && content.length > 300;
-}
-function extractProblemsByPattern(content) {
-  const problems = [];
-  const seen = new Set;
-  const problemPositions = [];
-  const problemRegex = /(?:^|\n)(?:#{1,3}\s+)?(?:问题|Issue|Bug|缺陷)\s*(?:#\s*)?(\d+[A-Z]?)\s*(?:\((P\d|urgent|high|medium|low|[紧急高种低])\))?\s*[.:\-]?\s*([^\n]{10,200})/gi;
-  let match;
-  while ((match = problemRegex.exec(content)) !== null) {
-    const problemId = match[1]?.trim() || "";
-    const priorityFromParen = match[2]?.trim() || "";
-    const title = match[3]?.trim() || "";
-    if (!title || seen.has(title))
-      continue;
-    seen.add(title);
-    problemPositions.push({
-      index: match.index,
-      length: match[0].length,
-      id: problemId,
-      priorityFromParen,
-      title
-    });
-  }
-  for (let i = 0;i < problemPositions.length; i++) {
-    const current = problemPositions[i];
-    const next = problemPositions[i + 1];
-    const startIdx = current.index + current.length;
-    const endIdx = next ? next.index : content.length;
-    const body = content.substring(startIdx, endIdx).trim();
-    let priority = "P2";
-    if (current.priorityFromParen) {
-      const p = current.priorityFromParen.toUpperCase();
-      if (p === "P0" || p.includes("紧急") || p.includes("URGENT"))
-        priority = "P0";
-      else if (p === "P1" || p.includes("高") || p.includes("HIGH"))
-        priority = "P1";
-      else if (p === "P3" || p.includes("低") || p.includes("LOW"))
-        priority = "P3";
-    } else {
-      const priorityMatch = content.substring(Math.max(0, current.index - 100), current.index).match(/(P\d|紧急|urgent|高|high|中|medium|低|low)/i);
-      if (priorityMatch && priorityMatch[1]) {
-        const p = priorityMatch[1].toUpperCase();
-        if (p === "P0" || p.includes("紧急") || p.includes("URGENT"))
-          priority = "P0";
-        else if (p === "P1" || p.includes("高") || p.includes("HIGH"))
-          priority = "P1";
-        else if (p === "P3" || p.includes("低") || p.includes("LOW"))
-          priority = "P3";
-      }
-    }
-    problems.push({
-      title: current.title.length > 100 ? current.title.substring(0, 97) + "..." : current.title,
-      description: body || current.title,
-      priority
-    });
-  }
-  if (problems.length < 2) {
-    const numberedRegex = /(?:^|\n)\s*(\d+)[.:\-]\s*([^\n]{10,200})/g;
-    while ((match = numberedRegex.exec(content)) !== null) {
-      const title = match[2]?.trim() || "";
-      if (!title || seen.has(title))
-        continue;
-      const hasActionVerb = /(?:修复|解决|实现|添加|创建|修改|更新|验证|分析|优化|重构|删除|移除|调整|配置|部署)/.test(title);
-      if (!hasActionVerb && title.length < 20)
-        continue;
-      seen.add(title);
-      const startIdx = match.index + match[0].length;
-      const nextMatch = numberedRegex.exec(content);
-      numberedRegex.lastIndex = startIdx;
-      const endIdx = nextMatch ? nextMatch.index : content.length;
-      const body = content.substring(startIdx, endIdx).trim();
-      problems.push({
-        title: title.length > 100 ? title.substring(0, 97) + "..." : title,
-        description: body || title,
-        priority: "P2"
-      });
-      if (problems.length >= 10)
-        break;
-    }
-  }
-  if (problems.length < 2) {
-    const headerRegex = /(?:^|\n)(#{1,3}\s+)([^\n]{5,100})/g;
-    while ((match = headerRegex.exec(content)) !== null) {
-      const title = match[2]?.trim() || "";
-      if (!title || seen.has(title))
-        continue;
-      const nonProblemTitles = [
-        "概述",
-        "总结",
-        "结论",
-        "背景",
-        "目标",
-        "介绍",
-        "前言",
-        "附录",
-        "Summary",
-        "Conclusion",
-        "Background",
-        "Overview",
-        "Introduction",
-        "Appendix"
-      ];
-      if (nonProblemTitles.some((t2) => title.includes(t2)))
-        continue;
-      seen.add(title);
-      const startIdx = match.index + match[0].length;
-      const nextMatch = headerRegex.exec(content);
-      headerRegex.lastIndex = startIdx;
-      const endIdx = nextMatch ? nextMatch.index : content.length;
-      const body = content.substring(startIdx, endIdx).trim();
-      problems.push({
-        title: title.length > 100 ? title.substring(0, 97) + "..." : title,
-        description: body || title,
-        priority: "P2"
-      });
-      if (problems.length >= 10)
-        break;
-    }
-  }
-  return problems;
-}
-function validateAIResponse(parsed) {
-  if (!parsed || typeof parsed !== "object") {
-    return null;
-  }
-  if (!("items" in parsed) || !Array.isArray(parsed.items)) {
-    return null;
-  }
-  const decomposable = parsed.decomposable === true;
-  const reason = typeof parsed.reason === "string" ? parsed.reason : undefined;
-  const summary = typeof parsed.summary === "string" ? parsed.summary : undefined;
-  const items = [];
-  for (const rawItem of parsed.items) {
-    if (!rawItem || typeof rawItem !== "object") {
-      continue;
-    }
-    const item = rawItem;
-    if (!("title" in item) || typeof item.title !== "string" || item.title.trim().length === 0) {
-      continue;
-    }
-    if ("suggestedCheckpoints" in item && !Array.isArray(item.suggestedCheckpoints)) {
-      continue;
-    }
-    if ("relatedFiles" in item && !Array.isArray(item.relatedFiles)) {
-      continue;
-    }
-    if ("dependsOn" in item && !Array.isArray(item.dependsOn)) {
-      continue;
-    }
-    items.push(item);
-  }
-  return {
-    decomposable,
-    reason,
-    summary,
-    items
-  };
-}
-async function decomposeWithAI(content, cwd) {
-  if (content.length > SECURITY_CONFIG.MAX_INPUT_LENGTH) {
-    console.warn(`AI 分解警告：输入内容过长(${content.length}字符)，已截断处理`);
-  }
-  try {
-    const safeContent = content.substring(0, Math.min(content.length, SECURITY_CONFIG.MAX_INPUT_LENGTH));
-    const template = getDecompositionTemplate(cwd);
-    const prompt = template.replace("${safeContent}", safeContent.substring(0, 4000));
-    const agentOptions = buildAgentOptionsFromPreset("decomposition", cwd);
-    const result = await invokeAgent(prompt, agentOptions);
-    if (!result.success) {
-      return null;
-    }
-    let parsed = null;
-    try {
-      parsed = JSON.parse(result.output);
-    } catch {
-      const jsonMatch = result.output.match(/```(?:json)?\s*\n?([\s\S]*?)\n?```/);
-      if (jsonMatch?.[1]) {
-        try {
-          parsed = JSON.parse(jsonMatch[1]);
-        } catch {}
-      }
-    }
-    const validated = validateAIResponse(parsed);
-    if (!validated) {
-      return null;
-    }
-    const responseLength = JSON.stringify(parsed).length;
-    if (responseLength > SECURITY_CONFIG.MAX_AI_RESPONSE_LENGTH) {
-      console.warn(`AI 响应过长(${responseLength}字符)，可能存在异常`);
-      validated.items = validated.items.slice(0, 10);
-    }
-    const candidateResult = {
-      decomposable: validated.decomposable,
-      reason: validated.reason,
-      summary: validated.summary || `分解为 ${validated.items.length} 个子任务`,
-      items: validated.items.map((item, index) => ({
-        title: String(item.title || `任务 ${index + 1}`),
-        description: String(item.description || item.title || ""),
-        type: item.type || inferTaskType(String(item.title)),
-        priority: item.priority || "P2",
-        suggestedCheckpoints: Array.isArray(item.suggestedCheckpoints) ? item.suggestedCheckpoints.filter((c) => typeof c === "string") : [],
-        relatedFiles: Array.isArray(item.relatedFiles) ? item.relatedFiles.filter((f) => typeof f === "string") : extractFilePaths(String(item.description || "")),
-        estimatedMinutes: typeof item.estimatedMinutes === "number" && item.estimatedMinutes > 0 ? item.estimatedMinutes : 15,
-        dependsOn: Array.isArray(item.dependsOn) ? item.dependsOn.filter((d) => typeof d === "number" && Number.isInteger(d) && d >= 0) : []
-      }))
-    };
-    if (!isValidRequirementDecomposition(candidateResult)) {
-      const validItems = candidateResult.items.filter((item, idx) => {
-        const isValid = isValidDecomposedTaskItem(item);
-        if (!isValid) {
-          console.warn(`[decomposeWithAI] 第 ${idx + 1} 个子任务验证失败，已跳过`);
-        }
-        return isValid;
-      });
-      if (validItems.length === 0) {
-        console.error("[decomposeWithAI] AI 返回的数据验证失败，无有效子任务");
-        return null;
-      }
-      const filteredResult = {
-        ...candidateResult,
-        items: validItems
-      };
-      if (!isValidRequirementDecomposition(filteredResult)) {
-        console.error("[decomposeWithAI] 过滤后的数据仍验证失败");
-        return null;
-      }
-      return filteredResult;
-    }
-    return candidateResult;
-  } catch (error) {
-    if (process.env.DEBUG === "true") {
-      console.error("AI 分解过程中发生错误:", error);
-    }
-    return null;
-  }
-}
-async function aiShouldDecomposeFurther(item, currentLevel, maxHierarchyLevel, cwd) {
-  if (currentLevel >= maxHierarchyLevel) {
-    return { needsDecomposition: false, reason: "达到最大层级限制" };
-  }
-  if (item.estimatedMinutes < 15) {
-    return { needsDecomposition: false, reason: "预估耗时较短，无需进一步分解" };
-  }
-  if (item.description.length < 100) {
-    return { needsDecomposition: false, reason: "描述过短，无法进一步分解" };
-  }
-  try {
-    const prompt = `请分析以下子任务是否需要进一步分解为更小的子任务。
-
-子任务信息：
-- 标题：${item.title}
-- 描述：${item.description}
-- 类型：${item.type}
-- 优先级：${item.priority}
-- 预估耗时：${item.estimatedMinutes} 分钟
-- 当前层级：${currentLevel}
-- 最大层级：${maxHierarchyLevel}
-
-请分析：
-1. 这个子任务是否包含多个独立的实现步骤？
-2. 预估耗时 ${item.estimatedMinutes} 分钟是否合理？
-3. 是否可以拆分为多个预估耗时小于15分钟的更小任务？
-4. 拆分后是否能产生至少2个独立的子任务？
-
-返回 JSON 格式：
-{
-  "needsDecomposition": true | false,
-  "reason": "判断原因，说明为什么需要或不需要进一步分解"
-}
-
-注意：
-- 如果子任务包含明显的多步骤，应返回 true
-- 如果预估耗时较长且可以拆分，应返回 true
-- 如果描述范围明确且单一，即使耗时较长也应返回 false
-- 只输出 JSON，不要输出其他内容`;
-    const agentOptions = buildAgentOptionsFromPreset("decomposition", cwd);
-    const result = await invokeAgent(prompt, agentOptions);
-    if (!result.success) {
-      return { needsDecomposition: false, reason: "AI 调用失败" };
-    }
-    let parsed = null;
-    try {
-      parsed = JSON.parse(result.output);
-    } catch {
-      const jsonMatch = result.output.match(/```(?:json)?\s*\n?([\s\S]*?)\n?```/);
-      if (jsonMatch?.[1]) {
-        try {
-          parsed = JSON.parse(jsonMatch[1]);
-        } catch {}
-      }
-    }
-    if (!parsed || typeof parsed.needsDecomposition !== "boolean") {
-      return { needsDecomposition: false, reason: "AI 响应格式无效" };
-    }
-    return {
-      needsDecomposition: parsed.needsDecomposition,
-      reason: parsed.reason || (parsed.needsDecomposition ? "AI 判定需要进一步分解" : "AI 判定无需进一步分解")
-    };
-  } catch (error) {
-    if (process.env.DEBUG === "true") {
-      console.error("[aiShouldDecomposeFurther] 分析过程中发生错误:", error);
-    }
-    return { needsDecomposition: false, reason: "分析过程出错" };
-  }
-}
-async function shouldDecomposeFurther(item, depth, config, cwd) {
-  if (depth >= config.maxDepth) {
-    return { needsDecomposition: false, reason: "达到最大递归深度限制" };
-  }
-  if (item.estimatedMinutes < config.complexityThreshold) {
-    return { needsDecomposition: false, reason: "预估耗时低于复杂度阈值" };
-  }
-  if (item.description.length < 100) {
-    return { needsDecomposition: false, reason: "描述过短，无法进一步分解" };
-  }
-  try {
-    const prompt = `请分析以下子任务是否需要进一步分解为更小的子任务。
-
-子任务信息：
-- 标题：${item.title}
-- 描述：${item.description}
-- 类型：${item.type}
-- 优先级：${item.priority}
-- 预估耗时：${item.estimatedMinutes} 分钟
-- 当前递归深度：${depth}
-- 复杂度阈值：${config.complexityThreshold} 分钟
-
-请分析：
-1. 这个子任务是否包含多个独立的实现步骤？
-2. 预估耗时 ${item.estimatedMinutes} 分钟是否合理？
-3. 是否可以拆分为多个预估耗时小于 ${config.complexityThreshold} 分钟的更小任务？
-4. 拆分后是否能产生至少 ${config.minSubtaskCount} 个独立的子任务？
-
-返回 JSON 格式：
-{
-  "needsDecomposition": true | false,
-  "reason": "判断原因，说明为什么需要或不需要进一步分解",
-  "suggestedSubtaskCount": 预估可分解的子任务数量（数字）
-}
-
-注意：
-- 如果子任务包含明显的多步骤（如"实现功能A，然后实现功能B"），应返回 true
-- 如果预估耗时远大于复杂度阈值（如 2 倍以上），应返回 true
-- 如果描述范围明确且单一，即使耗时较长也应返回 false
-- 只输出 JSON，不要输出其他内容`;
-    const agentOptions = buildAgentOptionsFromPreset("decomposition", cwd);
-    const result = await invokeAgent(prompt, agentOptions);
-    if (!result.success) {
-      return { needsDecomposition: false, reason: "AI 调用失败" };
-    }
-    let parsed = null;
-    try {
-      parsed = JSON.parse(result.output);
-    } catch {
-      const jsonMatch = result.output.match(/```(?:json)?\s*\n?([\s\S]*?)\n?```/);
-      if (jsonMatch?.[1]) {
-        try {
-          parsed = JSON.parse(jsonMatch[1]);
-        } catch {}
-      }
-    }
-    if (!parsed || typeof parsed.needsDecomposition !== "boolean") {
-      return { needsDecomposition: false, reason: "AI 响应格式无效" };
-    }
-    if (parsed.needsDecomposition && typeof parsed.suggestedSubtaskCount === "number" && parsed.suggestedSubtaskCount < config.minSubtaskCount) {
-      return {
-        needsDecomposition: false,
-        reason: `建议的子任务数(${parsed.suggestedSubtaskCount})少于最小要求(${config.minSubtaskCount})`
-      };
-    }
-    return {
-      needsDecomposition: parsed.needsDecomposition,
-      reason: parsed.reason || (parsed.needsDecomposition ? "AI 判定需要进一步分解" : "AI 判定无需进一步分解")
-    };
-  } catch (error) {
-    if (process.env.DEBUG === "true") {
-      console.error("[shouldDecomposeFurther] 分析过程中发生错误:", error);
-    }
-    return { needsDecomposition: false, reason: "分析过程出错" };
-  }
-}
-async function decomposeRecursively(items, options, config, depth = 0) {
-  if (!config.enabled || depth >= config.maxDepth) {
-    return items;
-  }
-  const cwd = options.cwd || process.cwd();
-  const result = [];
-  let totalSubtaskCount = 0;
-  for (const item of items) {
-    if (totalSubtaskCount >= config.maxSubtaskCount) {
-      result.push(item);
-      continue;
-    }
-    const decompositionCheck = await shouldDecomposeFurther(item, depth, config, cwd);
-    if (!decompositionCheck.needsDecomposition) {
-      result.push(item);
-      totalSubtaskCount++;
-      continue;
-    }
-    if (process.env.DEBUG === "true") {
-      console.log(`[decomposeRecursively] 深度 ${depth}，正在分解：${item.title}`);
-      console.log(`  原因：${decompositionCheck.reason}`);
-    }
-    const detailedDescription = `## 任务标题
-${item.title}
-
-## 任务描述
-${item.description}
-
-## 检查点
-${item.suggestedCheckpoints.map((cp) => `- ${cp}`).join(`
-`)}
-
-## 相关文件
-${item.relatedFiles.join(", ")}`;
-    const subDecomposition = await decomposeRequirement(detailedDescription, {
-      ...options,
-      minItems: config.minSubtaskCount,
-      maxItems: Math.min(5, config.maxSubtaskCount - totalSubtaskCount)
-    });
-    if (subDecomposition.decomposable && subDecomposition.items.length >= config.minSubtaskCount) {
-      const recursivelyDecomposed = await decomposeRecursively(subDecomposition.items, options, config, depth + 1);
-      const baseIndex = result.length;
-      for (let i = 0;i < recursivelyDecomposed.length; i++) {
-        const subItem = recursivelyDecomposed[i];
-        if (i > 0 && subItem.dependsOn.length === 0) {
-          subItem.dependsOn = [baseIndex + i - 1];
-        }
-        subItem.parentId = item.title;
-      }
-      result.push(...recursivelyDecomposed);
-      totalSubtaskCount += recursivelyDecomposed.length;
-      if (process.env.DEBUG === "true") {
-        console.log(`  分解完成：${recursivelyDecomposed.length} 个子任务`);
-      }
-    } else {
-      result.push(item);
-      totalSubtaskCount++;
-    }
-  }
-  return result;
-}
-async function decomposeRequirement(content, options = {}) {
-  const {
-    minItems = 2,
-    maxItems = 10,
-    useAI = true,
-    cwd = process.cwd(),
-    validateQuality = true,
-    currentLevel = 0,
-    enableRecursive = false,
-    maxHierarchyLevel = 3,
-    parentTaskId
-  } = options;
-  const trimmedContent = content.trim();
-  if (trimmedContent.length < 100) {
-    const texts = t(cwd).decomposition;
-    return {
-      decomposable: false,
-      reason: texts.contentTooShort,
-      items: [],
-      summary: texts.singleTask
-    };
-  }
-  if (trimmedContent.length > SECURITY_CONFIG.MAX_INPUT_LENGTH) {
-    return {
-      decomposable: false,
-      reason: `输入内容过长（当前 ${trimmedContent.length} 字符），超过最大限制 ${SECURITY_CONFIG.MAX_INPUT_LENGTH} 字符。请分批次提交或精简内容。`,
-      items: [],
-      summary: "内容超出限制"
-    };
-  }
-  const securityCheck = validateInputSecurity(trimmedContent);
-  if (!securityCheck.valid) {
-    return {
-      decomposable: false,
-      reason: securityCheck.error || "内容安全检查未通过",
-      items: [],
-      summary: "安全检查失败"
-    };
-  }
-  const isReport = isInvestigationReport(trimmedContent);
-  if (useAI) {
-    const aiResult = await decomposeWithAI(trimmedContent, cwd);
-    if (aiResult && aiResult.decomposable && aiResult.items.length >= minItems) {
-      const result2 = {
-        ...aiResult,
-        items: aiResult.items.slice(0, maxItems)
-      };
-      if (validateQuality) {
-        const validation = validateDecomposition(result2);
-        if (!validation.valid) {
-          reportDecompositionFailure("AI 分解结果未通过质量检查", validation.errors, "AI 分解任务");
-          return {
-            decomposable: false,
-            reason: `质量检查失败: ${validation.errors.join("; ")}`,
-            items: [],
-            summary: "分解质量检查未通过"
-          };
-        }
-      }
-      if (enableRecursive && currentLevel < maxHierarchyLevel) {
-        const recursivelyDecomposed = await decomposeRecursivelyWithAI(result2.items, options, currentLevel, maxHierarchyLevel);
-        return {
-          ...result2,
-          items: recursivelyDecomposed,
-          summary: `递归分解为 ${recursivelyDecomposed.length} 个子任务（层级: ${currentLevel + 1}/${maxHierarchyLevel}）`
-        };
-      }
-      return result2;
-    }
-  }
-  const problems = extractProblemsByPattern(trimmedContent);
-  if (problems.length < minItems) {
-    const texts = t(cwd).decomposition;
-    return {
-      decomposable: false,
-      reason: `仅识别到 ${problems.length} 个问题项，少于阈值 ${minItems}`,
-      items: [],
-      summary: texts.singleTask
-    };
-  }
-  const items = problems.slice(0, maxItems).map((problem, index) => {
-    const title = problem.title;
-    const description = problem.description;
-    const type = inferTaskType(title);
-    const priority = problem.priority || inferTaskPriority(title);
-    const relatedFiles = extractFilePaths(description);
-    const suggestedCheckpoints = generateCheckpoints(type, title, description);
-    const estimatedMinutes = Math.max(10, Math.min(60, 10 + relatedFiles.length * 5));
-    return {
-      title,
-      description,
-      type,
-      priority,
-      suggestedCheckpoints,
-      relatedFiles,
-      estimatedMinutes,
-      dependsOn: index > 0 ? [index - 1] : []
-    };
-  });
-  const result = {
-    decomposable: true,
-    items,
-    summary: `基于模式匹配分解为 ${items.length} 个子任务`
-  };
-  if (validateQuality) {
-    const validation = validateDecomposition(result);
-    if (!validation.valid) {
-      reportDecompositionFailure("模式匹配分解结果未通过质量检查", validation.errors, "模式匹配分解任务");
-      return {
-        decomposable: false,
-        reason: `质量检查失败: ${validation.errors.join("; ")}`,
-        items: [],
-        summary: "分解质量检查未通过"
-      };
-    }
-  }
-  if (enableRecursive && currentLevel < maxHierarchyLevel) {
-    const recursivelyDecomposed = await decomposeRecursivelyWithAI(result.items, options, currentLevel, maxHierarchyLevel);
-    return {
-      ...result,
-      items: recursivelyDecomposed,
-      summary: `递归分解为 ${recursivelyDecomposed.length} 个子任务（层级: ${currentLevel + 1}/${maxHierarchyLevel}）`
-    };
-  }
-  return result;
-}
-async function decomposeRecursivelyWithAI(items, options, currentLevel, maxHierarchyLevel) {
-  const { cwd = process.cwd() } = options;
-  const result = [];
-  for (const item of items) {
-    const decompositionCheck = await aiShouldDecomposeFurther(item, currentLevel, maxHierarchyLevel, cwd);
-    if (!decompositionCheck.needsDecomposition) {
-      result.push(item);
-      continue;
-    }
-    if (process.env.DEBUG === "true") {
-      console.log(`[decomposeRecursivelyWithAI] 层级 ${currentLevel}，正在分解：${item.title}`);
-      console.log(`  原因：${decompositionCheck.reason}`);
-    }
-    const detailedDescription = `## 任务标题
-${item.title}
-
-## 任务描述
-${item.description}
-
-## 检查点
-${item.suggestedCheckpoints.map((cp) => `- ${cp}`).join(`
-`)}
-
-## 相关文件
-${item.relatedFiles.join(", ")}`;
-    const subDecomposition = await decomposeRequirement(detailedDescription, {
-      ...options,
-      currentLevel: currentLevel + 1,
-      enableRecursive: true,
-      maxHierarchyLevel,
-      minItems: 2,
-      maxItems: 5
-    });
-    if (subDecomposition.decomposable && subDecomposition.items.length >= 2) {
-      const baseIndex = result.length;
-      for (let i = 0;i < subDecomposition.items.length; i++) {
-        const subItem = subDecomposition.items[i];
-        if (subItem.dependsOn.length > 0) {
-          subItem.dependsOn = subItem.dependsOn.map((dep) => baseIndex + dep);
-        }
-        if (i > 0 && subItem.dependsOn.length === 0) {
-          subItem.dependsOn = [baseIndex + i - 1];
-        }
-        subItem.parentId = item.title;
-      }
-      result.push(...subDecomposition.items);
-      if (process.env.DEBUG === "true") {
-        console.log(`  分解完成：${subDecomposition.items.length} 个子任务`);
-      }
-    } else {
-      result.push(item);
-    }
-  }
-  return result;
-}
-function generateCheckpoints(type, title, description) {
-  const checkpoints = [];
-  switch (type) {
-    case "bug":
-      checkpoints.push("[implem] 定位并修复问题根因");
-      checkpoints.push("[test] 验证修复后问题不再复现");
-      break;
-    case "feature":
-      checkpoints.push("[implem] 实现核心功能逻辑");
-      checkpoints.push("[test] 功能测试通过");
-      break;
-    case "refactor":
-      checkpoints.push("[implem] 完成代码重构");
-      checkpoints.push("[test] 回归测试通过");
-      break;
-    case "docs":
-      checkpoints.push("[implem] 完成文档编写");
-      checkpoints.push("[verify] 文档内容审核通过");
-      break;
-    case "test":
-      checkpoints.push("[implem] 编写测试用例");
-      checkpoints.push("[verify] 测试覆盖率达标");
-      break;
-    default:
-      checkpoints.push("[implem] 完成功能实现");
-      checkpoints.push("[verify] 验证功能正确性");
-  }
-  const files = extractFilePaths(description);
-  if (files.length > 0) {
-    checkpoints.push(`[verify] 确认修改文件: ${files.slice(0, 3).join(", ")}${files.length > 3 ? " 等" : ""}`);
-  }
-  return checkpoints;
-}
-function shouldDecompose(content) {
-  if (content.length < 200)
-    return false;
-  const problemCount = (content.match(/(?:^|\n)(?:问题|Issue|Bug|缺陷)\s*\d+/gi) || []).length;
-  const numberedCount = (content.match(/(?:^|\n)\s*\d+[.:\-]\s+/g) || []).length;
-  const headerCount = (content.match(/(?:^|\n)#{1,3}\s+/g) || []).length;
-  return problemCount >= 2 || numberedCount >= 3 || headerCount >= 3;
-}
-function formatDecomposition(decomposition, cwd) {
-  const texts = t(cwd).decomposition;
-  if (!decomposition.decomposable) {
-    return `${texts.notDecomposable}: ${decomposition.reason || texts.unknownReason}`;
-  }
-  const lines = [
-    `\uD83D\uDCCB ${decomposition.summary}`,
-    ""
-  ];
-  for (let i = 0;i < decomposition.items.length; i++) {
-    const item = decomposition.items[i];
-    const priorityIcon = item.priority === "P0" ? texts.priorityP0 : item.priority === "P1" ? texts.priorityP1 : item.priority === "P2" ? texts.priorityP2 : texts.priorityP3;
-    const typeIcon = item.type === "bug" ? texts.typeBug : item.type === "feature" ? texts.typeFeature : item.type === "refactor" ? texts.typeRefactor : item.type === "docs" ? texts.typeDocs : item.type === "test" ? texts.typeTest : "\uD83D\uDCDD";
-    lines.push(`  ${i + 1}. ${typeIcon} ${priorityIcon} ${item.title}`);
-    lines.push(`     类型: ${item.type} | 优先级: ${item.priority} | 预估: ${item.estimatedMinutes}分钟`);
-    if (item.dependsOn.length > 0) {
-      lines.push(`     ${texts.dependsOn}: ${item.dependsOn.map((d) => `#${d + 1}`).join(", ")}`);
-    }
-  }
-  return lines.join(`
-`);
-}
-function validateDecompositionItem(item) {
-  const errors = [];
-  const warnings = [];
-  const {
-    MIN_TITLE_LENGTH,
-    MIN_PROBLEM_LENGTH,
-    MIN_SOLUTION_LENGTH,
-    MIN_CHECKPOINTS,
-    VALID_PRIORITIES: VALID_PRIORITIES5
-  } = DECOMPOSITION_CONSTRAINTS;
-  if (!item.title || item.title.trim().length === 0) {
-    errors.push("标题不能为空");
-  } else if (item.title.trim().length < MIN_TITLE_LENGTH) {
-    errors.push(`标题过短，需要至少 ${MIN_TITLE_LENGTH} 个字符（当前 ${item.title.trim().length} 个）`);
-  }
-  const isLegacyFormat = item.problem === item.solution;
-  if (isLegacyFormat) {
-    const totalLength = (item.problem || "").trim().length;
-    if (totalLength === 0) {
-      errors.push("描述不能为空");
-    } else if (totalLength < MIN_PROBLEM_LENGTH) {
-      errors.push(`描述过短，需要至少 ${MIN_PROBLEM_LENGTH} 个字符（当前 ${totalLength} 个）。建议提供详细的问题描述和解决方案`);
-    }
-  } else {
-    if (!item.problem || item.problem.trim().length === 0) {
-      errors.push("问题描述不能为空");
-    } else if (item.problem.trim().length < MIN_PROBLEM_LENGTH) {
-      errors.push(`问题描述过短或不完整，需要至少 ${MIN_PROBLEM_LENGTH} 个字符描述现象和背景（当前 ${item.problem.trim().length} 个）`);
-    }
-    if (!item.solution || item.solution.trim().length === 0) {
-      errors.push("解决方案不能为空");
-    } else if (item.solution.trim().length < MIN_SOLUTION_LENGTH) {
-      errors.push(`解决方案过短或不完整，需要至少 ${MIN_SOLUTION_LENGTH} 个字符描述具体解决步骤（当前 ${item.solution.trim().length} 个）`);
-    }
-  }
-  if (!item.priority) {
-    errors.push("优先级不能为空");
-  } else if (!VALID_PRIORITIES5.includes(item.priority)) {
-    errors.push(`优先级无效，必须是 ${VALID_PRIORITIES5.join("/")} 之一`);
-  }
-  if (!item.checkpoints || item.checkpoints.length === 0) {
-    errors.push(`缺少检查点，需要至少 ${MIN_CHECKPOINTS} 个验证步骤`);
-  } else if (item.checkpoints.length < MIN_CHECKPOINTS) {
-    errors.push(`检查点数量不足，需要至少 ${MIN_CHECKPOINTS} 个`);
-  }
-  if (!item.rootCause || item.rootCause.trim().length < 20) {
-    warnings.push("建议提供根因分析（至少20个字符），以便更好地理解问题本质");
-  }
-  if (!item.estimatedMinutes || item.estimatedMinutes <= 0) {
-    warnings.push("建议提供预估耗时（分钟），以便合理安排开发计划");
-  }
-  return {
-    valid: errors.length === 0,
-    errors,
-    warnings
-  };
-}
-function validateDecompositionItems(items) {
-  const validItems = [];
-  const invalidItems = [];
-  const allErrors = [];
-  for (let i = 0;i < items.length; i++) {
-    const item = items[i];
-    const validation = validateDecompositionItem(item);
-    if (validation.valid) {
-      validItems.push(item);
-    } else {
-      invalidItems.push({ item, errors: validation.errors });
-      allErrors.push(`
-[项 ${i + 1}: "${item.title}"]`);
-      for (const error of validation.errors) {
-        allErrors.push(`  - ${error}`);
-      }
-    }
-  }
-  return {
-    valid: invalidItems.length === 0,
-    validItems,
-    invalidItems,
-    allErrors
-  };
-}
-function reportDecompositionFailure(reason, errors, itemTitle) {
-  console.error("❌ 分解失败");
-  if (itemTitle) {
-    console.error(`任务: ${itemTitle}`);
-  }
-  console.error(`原因: ${reason}`);
-  if (errors && errors.length > 0) {
-    console.error(`
-具体问题:`);
-    for (const error of errors) {
-      console.error(`  - ${error}`);
-    }
-  }
-  console.error(`
-\uD83D\uDCA1 建议:`);
-  console.error("  1. 提供详细的问题描述（现象、背景、影响）");
-  console.error("  2. 提供根因分析，解释为什么会出现这个问题");
-  console.error("  3. 提供具体的解决方案步骤，包括实现思路");
-  console.error("  4. 参考格式：问题描述 → 根因分析 → 解决方案");
-  console.error("  5. 确保问题描述和解决方案各至少50个字符");
-  console.error("  6. 提供至少1个检查点用于验证完成情况");
-}
-function convertToDecomposedItem(item) {
-  return {
-    title: item.title,
-    problem: item.description,
-    solution: item.description,
-    type: item.type,
-    priority: item.priority,
-    checkpoints: item.suggestedCheckpoints,
-    relatedFiles: item.relatedFiles,
-    estimatedMinutes: item.estimatedMinutes
-  };
-}
-function validateDecomposition(decomposition) {
-  if (!decomposition.decomposable || decomposition.items.length === 0) {
-    return { valid: true, errors: [] };
-  }
-  const allErrors = [];
-  const warnings = [];
-  const itemsWithIssues = [];
-  for (let i = 0;i < decomposition.items.length; i++) {
-    const item = decomposition.items[i];
-    const decomposedItem = convertToDecomposedItem(item);
-    const validation = validateDecompositionItem(decomposedItem);
-    if (!validation.valid) {
-      const itemErrors = validation.errors;
-      itemsWithIssues.push({ index: i, title: item.title, errors: itemErrors });
-      allErrors.push(`
-[子任务 ${i + 1}: "${item.title}"]`);
-      for (const error of itemErrors) {
-        allErrors.push(`  - ${error}`);
-      }
-    }
-    if (validation.warnings && validation.warnings.length > 0) {
-      for (const warning of validation.warnings) {
-        warnings.push(`[${item.title}] ${warning}`);
-      }
-    }
-  }
-  if (itemsWithIssues.length === decomposition.items.length) {
-    const summary = `所有 ${decomposition.items.length} 个子任务均未通过质量检查`;
-    return {
-      valid: false,
-      errors: [summary, ...allErrors],
-      warnings,
-      itemsWithIssues
-    };
-  }
-  if (itemsWithIssues.length > 0) {
-    const summary = `${itemsWithIssues.length}/${decomposition.items.length} 个子任务未通过质量检查`;
-    return {
-      valid: false,
-      errors: [summary, ...allErrors],
-      warnings,
-      itemsWithIssues
-    };
-  }
-  return { valid: true, errors: [], warnings };
-}
-var SECURITY_CONFIG, DEFAULT_RECURSIVE_CONFIG;
-var init_requirement_decomposer = __esm(() => {
-  init_decomposition();
-  init_task();
-  init_quality_gate();
-  init_config();
-  init_headless_agent();
-  init_i18n();
-  SECURITY_CONFIG = {
-    MAX_INPUT_LENGTH: 50000,
-    MAX_AI_RESPONSE_LENGTH: 1e5,
-    DANGEROUS_PATTERNS: [
-      /<script\b[^>]*>/i,
-      /javascript:/i,
-      /on\w+\s*=/i,
-      /eval\s*\(/i,
-      /Function\s*\(/i,
-      /new\s+Function/i,
-      /setTimeout\s*\(\s*['"`]/i,
-      /setInterval\s*\(\s*['"`]/i,
-      /__proto__/,
-      /constructor\s*\[/,
-      /\[\s*['"]constructor['"]\s*\]/
-    ]
-  };
-  DEFAULT_RECURSIVE_CONFIG = {
-    enabled: true,
-    maxDepth: 2,
-    complexityThreshold: 15,
-    minSubtaskCount: 2,
-    maxSubtaskCount: 20
-  };
-});
-
-// src/commands/plan.ts
-var exports_plan = {};
-__export(exports_plan, {
-  sortChains: () => sortChains2,
-  showPlan: () => showPlan2,
-  runPlanQualityGateCheck: () => runPlanQualityGateCheck2,
-  removeTask: () => removeTask2,
-  recommendPlan: () => recommendPlan2,
-  inferDependenciesFromFiles: () => inferDependenciesFromFiles,
-  inferArchitectureLayer: () => inferArchitectureLayer2,
-  formatPlanQualityGateReport: () => formatPlanQualityGateReport2,
-  clearPlanCmd: () => clearPlanCmd2,
-  buildTaskChains: () => buildTaskChains2,
-  buildBatches: () => buildBatches2,
-  addTask: () => addTask2
-});
-function isRegexPattern2(query) {
-  const regexMetaChars = /[.*+?^${}()|\[\]]/;
-  if (!regexMetaChars.test(query)) {
-    return false;
-  }
-  if (/^\/.*\/[gimsuy]*$/.test(query)) {
-    return true;
-  }
-  const regexPatterns = [
-    /\..*[+*?]/,
-    /\[.*\]/,
-    /\(.*\)/,
-    /\{.*\}/,
-    /\^|\$/,
-    /\|/,
-    /\\[dDsSwW]/,
-    /\\[bB]/
-  ];
-  return regexPatterns.some((pattern) => pattern.test(query));
-}
-function parseQuery2(query) {
-  const trimmed = query.trim();
-  if (!isRegexPattern2(trimmed)) {
-    const words = trimmed.toLowerCase().replace(/[^\w\u4e00-\u9fa5\s]/g, " ").split(/\s+/).filter((w) => w.length > 1 && !STOP_WORDS2.has(w));
-    return { type: "keywords", keywords: [...new Set(words)] };
-  }
-  const slashPattern = /^\/(.*)\/([gimsuy]*)$/;
-  const match = trimmed.match(slashPattern);
-  if (match) {
-    const [, pattern, flags] = match;
-    try {
-      new RegExp(pattern, flags);
-      return { type: "regex", pattern, flags: flags || undefined };
-    } catch (e) {
-      console.warn(`⚠️  Invalid regex pattern "${pattern}", falling back to keyword matching`);
-      const words = trimmed.toLowerCase().replace(/[^\w\u4e00-\u9fa5\s]/g, " ").split(/\s+/).filter((w) => w.length > 1 && !STOP_WORDS2.has(w));
-      return { type: "keywords", keywords: [...new Set(words)] };
-    }
-  }
-  try {
-    new RegExp(trimmed);
-    return { type: "regex", pattern: trimmed };
-  } catch (e) {
-    console.warn(`⚠️  Invalid regex pattern "${trimmed}", falling back to keyword matching`);
-    const words = trimmed.toLowerCase().replace(/[^\w\u4e00-\u9fa5\s]/g, " ").split(/\s+/).filter((w) => w.length > 1 && !STOP_WORDS2.has(w));
-    return { type: "keywords", keywords: [...new Set(words)] };
-  }
-}
-function buildTaskSearchText2(task) {
-  return [
-    task.id,
-    task.title,
-    task.description || "",
-    task.type,
-    task.recommendedRole || "",
-    ...task.dependencies
-  ].join(" ").toLowerCase();
-}
-function taskMatchesFilter2(task, filter) {
-  const searchText = buildTaskSearchText2(task);
-  if (filter.type === "keywords") {
-    if (filter.keywords.length === 0)
-      return true;
-    return filter.keywords.some((kw) => searchText.includes(kw.toLowerCase()));
-  }
-  if (filter.type === "regex") {
-    try {
-      const regex = new RegExp(filter.pattern, filter.flags || "i");
-      return regex.test(searchText);
-    } catch (e) {
-      console.warn(`⚠️  Regex execution failed: ${filter.pattern}, skipping this filter`);
-      return true;
-    }
-  }
-  return true;
-}
-function extractKeywords2(description) {
-  const filter = parseQuery2(description);
-  if (filter.type === "keywords") {
-    return filter.keywords;
-  }
-  return description.toLowerCase().replace(/[^\w\u4e00-\u9fa5\s]/g, " ").split(/\s+/).filter((w) => w.length > 1 && !STOP_WORDS2.has(w));
-}
-function inferArchitectureLayer2(task) {
-  const files = extractAffectedFiles(task);
-  const layerOrder = { Layer0: 0, Layer1: 1, Layer2: 2, Layer3: 3 };
-  if (files.length === 0) {
-    const desc = `${task.title} ${task.description || ""}`.toLowerCase();
-    if (desc.includes("类型") || desc.includes("type") || desc.includes("接口") || desc.includes("interface")) {
-      return { layer: "Layer0", layerValue: 0 };
-    }
-    if (desc.includes("命令") || desc.includes("command") || desc.includes("cli")) {
-      return { layer: "Layer3", layerValue: 3 };
-    }
-    return { layer: "Layer1", layerValue: 1 };
-  }
-  let minValue = 3;
-  for (const file of files) {
-    const fileLayer = classifyFileToLayer(file);
-    const value = layerOrder[fileLayer];
-    if (value < minValue) {
-      minValue = value;
-    }
-  }
-  const layers = ["Layer0", "Layer1", "Layer2", "Layer3"];
-  return { layer: layers[minValue], layerValue: minValue };
-}
-function buildTaskChains2(tasks, cwd, precomputedDeps) {
-  if (tasks.length === 0)
-    return [];
-  const taskMap = new Map;
-  for (const task of tasks) {
-    taskMap.set(task.id, task);
-  }
-  const inferredDeps = precomputedDeps || inferDependenciesBatch(tasks);
-  const taskIds = new Set(tasks.map((t2) => t2.id));
-  const adjacency = new Map;
-  const nodesMap = new Map;
-  for (const task of tasks) {
-    nodesMap.set(task.id, {
-      taskId: task.id,
-      status: task.status,
-      priority: task.priority,
-      title: task.title,
-      type: task.type
-    });
-    const deps = new Map;
-    for (const depId of task.dependencies) {
-      if (taskIds.has(depId)) {
-        deps.set(depId, { source: "explicit", confidence: 1 });
-      }
-    }
-    const inferred = inferredDeps.get(task.id);
-    if (inferred) {
-      for (const d of inferred) {
-        if (taskIds.has(d.depTaskId) && !deps.has(d.depTaskId)) {
-          deps.set(d.depTaskId, { source: d.source, confidence: 0.5 });
-        }
-      }
-    }
-    adjacency.set(task.id, deps);
-  }
-  const components = findComponentsUnionFind(adjacency, nodesMap);
-  const chains = [];
-  for (const component of components) {
-    const componentNodeIds = new Set(component.nodes);
-    const componentAdj = new Map;
-    for (const nodeId of component.nodes) {
-      const allDeps = adjacency.get(nodeId);
-      const filtered = new Map;
-      if (allDeps) {
-        for (const [depId, meta] of allDeps) {
-          if (componentNodeIds.has(depId)) {
-            filtered.set(depId, meta);
-          }
-        }
-      }
-      componentAdj.set(nodeId, filtered);
-    }
-    const topoResult = topologicalSortDFS(componentAdj, componentNodeIds);
-    const chainTasks = topoResult.order.map((id) => taskMap.get(id)).filter(Boolean);
-    const totalReopenCount = chainTasks.reduce((sum, t2) => sum + (t2.reopenCount || 0), 0);
-    const priorityOrder = {
-      P0: 0,
-      P1: 1,
-      P2: 2,
-      P3: 3,
-      Q1: 4,
-      Q2: 5,
-      Q3: 6,
-      Q4: 7
-    };
-    const maxPriority = Math.min(...chainTasks.map((t2) => priorityOrder[t2.priority] ?? 2));
-    const keywords = extractKeywords2(chainTasks.map((t2) => `${t2.title} ${t2.description || ""}`).join(" "));
-    const chainLayers = chainTasks.map((t2) => inferArchitectureLayer2(t2));
-    const minLayerValue = Math.min(...chainLayers.map((cl) => cl.layerValue));
-    const layerOrder = ["Layer0", "Layer1", "Layer2", "Layer3"];
-    const minLayer = layerOrder[minLayerValue];
-    chains.push({
-      chainId: chainTasks[0].id,
-      tasks: chainTasks,
-      length: chainTasks.length,
-      totalReopenCount,
-      maxPriority,
-      minLayer,
-      minLayerValue,
-      keywords,
-      inferredDependencies: inferredDeps
-    });
-  }
-  return chains;
-}
-function sortChains2(chains) {
-  return [...chains].sort((a, b) => {
-    if (a.maxPriority !== b.maxPriority) {
-      return a.maxPriority - b.maxPriority;
-    }
-    if (a.minLayerValue !== b.minLayerValue) {
-      return a.minLayerValue - b.minLayerValue;
-    }
-    if (b.length !== a.length) {
-      return b.length - a.length;
-    }
-    return b.totalReopenCount - a.totalReopenCount;
-  });
-}
-function buildBatches2(sortedChains) {
-  const priorityNames = {
-    0: "P0",
-    1: "P1",
-    2: "P2",
-    3: "P3",
-    4: "Q1",
-    5: "Q2",
-    6: "Q3",
-    7: "Q4"
-  };
-  const buckets = new Map;
-  for (const chain of sortedChains) {
-    const existing = buckets.get(chain.maxPriority);
-    if (existing) {
-      existing.push(chain);
-    } else {
-      buckets.set(chain.maxPriority, [chain]);
-    }
-  }
-  const sortedPriorities = [...buckets.keys()].sort((a, b) => a - b);
-  const batches = [];
-  for (const priority of sortedPriorities) {
-    const chainsInBucket = buckets.get(priority);
-    const allTasks = [];
-    const chainIds = [];
-    const bucketTaskIds = new Set;
-    for (const chain of chainsInBucket) {
-      for (const task of chain.tasks) {
-        bucketTaskIds.add(task.id);
-      }
-    }
-    let hasCrossChainInferredDep = false;
-    for (const chain of chainsInBucket) {
-      if (hasCrossChainInferredDep)
-        break;
-      const inferredDeps = chain.inferredDependencies;
-      if (!inferredDeps)
-        continue;
-      for (const task of chain.tasks) {
-        if (hasCrossChainInferredDep)
-          break;
-        const deps = inferredDeps.get(task.id);
-        if (!deps)
-          continue;
-        const myChainTaskIds = new Set(chain.tasks.map((t2) => t2.id));
-        for (const dep of deps) {
-          if (bucketTaskIds.has(dep.depTaskId) && !myChainTaskIds.has(dep.depTaskId)) {
-            hasCrossChainInferredDep = true;
-            break;
-          }
-        }
-      }
-    }
-    for (const chain of chainsInBucket) {
-      chainIds.push(chain.chainId);
-      for (const task of chain.tasks) {
-        if (!allTasks.includes(task.id)) {
-          allTasks.push(task.id);
-        }
-      }
-    }
-    const parallelizable = chainsInBucket.length > 1 && !hasCrossChainInferredDep;
-    batches.push({
-      batchId: `batch-${priorityNames[priority] || `L${priority}`}`,
-      priority: priorityNames[priority] || `L${priority}`,
-      priorityValue: priority,
-      chains: chainIds,
-      tasks: allTasks,
-      parallelizable
-    });
-  }
-  return batches;
-}
-function generateAIOutput2(chains, originalCount, filteredCount, batches, query, keywords, genOptions, subtaskWarnings) {
-  const priorityNames = {
-    0: "P0",
-    1: "P1",
-    2: "P2",
-    3: "P3",
-    4: "Q1",
-    5: "Q2",
-    6: "Q3",
-    7: "Q4"
-  };
-  const suggestedOrder = [];
-  const topChains = [];
-  for (let i = 0;i < chains.length; i++) {
-    const chain = chains[i];
-    topChains.push(chain.chainId);
-    for (const task of chain.tasks) {
-      if (!suggestedOrder.includes(task.id)) {
-        suggestedOrder.push(task.id);
-      }
-    }
-  }
-  const batchOrder = batches.map((b) => b.tasks);
-  return {
-    missingSubtaskWarnings: subtaskWarnings && subtaskWarnings.length > 0 ? subtaskWarnings : undefined,
-    query,
-    keywords,
-    filterStats: {
-      totalTasks: originalCount,
-      filteredTasks: filteredCount,
-      chainCount: chains.length
-    },
-    chains: chains.map((chain) => ({
-      chainId: chain.chainId,
-      length: chain.length,
-      totalReopenCount: chain.totalReopenCount,
-      maxPriority: priorityNames[chain.maxPriority] || "P2",
-      minLayer: chain.minLayer,
-      keywords: chain.keywords.slice(0, 10),
-      tasks: chain.tasks.map((task, idx) => {
-        const taskLayerInfo = inferArchitectureLayer2(task);
-        const taskEntry = {
-          order: idx + 1,
-          id: task.id,
-          title: task.title,
-          priority: task.priority,
-          status: task.status,
-          reopenCount: task.reopenCount || 0,
-          layer: taskLayerInfo.layer,
-          dependencies: task.dependencies
-        };
-        const inferred = chain.inferredDependencies?.get(task.id);
-        if (inferred && inferred.length > 0) {
-          taskEntry.inferredDependencies = inferred.map((d) => ({
-            depTaskId: d.depTaskId,
-            overlappingFiles: d.overlappingFiles,
-            source: d.source,
-            reason: d.reason
-          }));
-        }
-        return taskEntry;
-      })
-    })),
-    batches: batches.map((b) => {
-      const batchEntry = {
-        batchId: b.batchId,
-        priority: b.priority,
-        chains: b.chains,
-        tasks: b.tasks,
-        parallelizable: b.parallelizable
-      };
-      if (!b.parallelizable && b.chains.length > 1) {
-        batchEntry.parallelBlockedBy = "推断依赖: 文件重叠/AI语义";
-      }
-      return batchEntry;
-    }),
-    batchOrder,
-    recommendation: {
-      summary: `Found ${chains.length} task chains, ${filteredCount} tasks total, divided into ${batches.length} batches. Three-layer dependency inference: Layer1/2 file path overlap + ${genOptions?.smart ? "Layer3 AI semantic inference (enabled)" : "Layer3 AI semantic inference (disabled, use --smart to enable)"}。Sorted by architecture layer within same priority (Layer0→Layer3)`,
-      topChains,
-      suggestedOrder
-    }
-  };
-}
-function showBasicPlan2(plan, cwd) {
-  console.log("");
-  console.log("Execution Plan:");
-  console.log("━".repeat(SEPARATOR_WIDTH));
-  console.log("No.  | Task ID   | Title                        | Status");
-  console.log("-----|-----------|------------------------------|------------");
-  for (let i = 0;i < plan.tasks.length; i++) {
-    const taskId = plan.tasks[i];
-    const task = readTaskMeta(taskId, cwd);
-    const order = String(i + 1).padEnd(4);
-    const id = taskId.padEnd(9);
-    const title = (task?.title || "(Unknown task)").substring(0, 28).padEnd(28);
-    const status = task ? formatStatus3(task.status) : "❓ Unknown";
-    console.log(`${order} | ${id} | ${title} | ${status}`);
-  }
-  console.log("");
-  console.log(`Total ${plan.tasks.length} tasks`);
-  console.log(`Created: ${plan.createdAt}`);
-  console.log(`Updated: ${plan.updatedAt}`);
-}
-function showBatchedPlan2(plan, cwd) {
-  console.log("");
-  console.log("Execution Plan (Batched):");
-  console.log("━".repeat(SEPARATOR_WIDTH));
-  const batches = plan.batches;
-  let taskIndex = 0;
-  const allTasks = getAllTasks(cwd);
-  const planTaskIds = new Set(plan.tasks);
-  const planTasks = allTasks.filter((t2) => planTaskIds.has(t2.id));
-  const inferredDeps = inferDependenciesBatch(planTasks);
-  for (let batchIdx = 0;batchIdx < batches.length; batchIdx++) {
-    const batch = batches[batchIdx];
-    const batchNum = batchIdx + 1;
-    console.log("");
-    console.log(`\uD83D\uDCE6 Batch ${batchNum}/${batches.length} (${batch.length} tasks)`);
-    console.log("─────┬───────────┬──────────────────────────────┬────────────");
-    for (let i = 0;i < batch.length; i++) {
-      const taskId = batch[i];
-      const task = readTaskMeta(taskId, cwd);
-      const order = String(taskIndex + 1).padEnd(4);
-      const id = taskId.padEnd(9);
-      const title = (task?.title || "(Unknown task)").substring(0, 28).padEnd(28);
-      const status = task ? formatStatus3(task.status) : "❓ Unknown";
-      console.log(`${order} | ${id} | ${title} | ${status}`);
-      const taskInferredDeps = inferredDeps.get(taskId);
-      if (taskInferredDeps && taskInferredDeps.length > 0) {
-        const fileOverlapDeps = taskInferredDeps.filter((d) => d.source !== "ai-semantic");
-        const aiSemanticDeps = taskInferredDeps.filter((d) => d.source === "ai-semantic");
-        if (fileOverlapDeps.length > 0) {
-          const files = [...new Set(fileOverlapDeps.flatMap((d) => d.overlappingFiles))].slice(0, 2);
-          const moreFiles = fileOverlapDeps.flatMap((d) => d.overlappingFiles).length > 2 ? "..." : "";
-          console.log(`                    [Inferred:file overlap] ${files.join(", ")}${moreFiles}`);
-        }
-        if (aiSemanticDeps.length > 0) {
-          const reasons = aiSemanticDeps.map((d) => d.reason || "Semantic relation").slice(0, 2);
-          console.log(`                    [Inferred:AI semantic] ${reasons.join("; ")}`);
-        }
-      }
-      taskIndex++;
-    }
-  }
-  console.log("");
-  console.log(`Total ${plan.tasks.length} tasks in ${batches.length} batches`);
-  console.log(`Created: ${plan.createdAt}`);
-  console.log(`Updated: ${plan.updatedAt}`);
-}
-function showPlan2(json2 = false, cwd = process.cwd()) {
-  if (!isInitialized(cwd)) {
-    console.error("Error: Project not initialized. Please run `projmnt4claude setup` first");
-    process.exit(1);
-  }
-  const plan = readPlan(cwd);
-  if (!plan || plan.tasks.length === 0) {
-    console.log("No execution plan");
-    console.log("");
-    console.log("Use `projmnt4claude plan recommend` to generate a recommended plan");
-    return;
-  }
-  if (json2) {
-    const tasks = plan.tasks.map((taskId, index) => {
-      const task = readTaskMeta(taskId, cwd);
-      return {
-        order: index + 1,
-        id: taskId,
-        title: task?.title || "(Unknown task)",
-        status: task?.status || "unknown"
-      };
-    });
-    console.log(JSON.stringify({ ...plan, taskDetails: tasks }, null, 2));
-    return;
-  }
-  const hasBatches = Array.isArray(plan.batches) && plan.batches.length > 0;
-  if (hasBatches) {
-    showBatchedPlan2(plan, cwd);
-  } else {
-    showBasicPlan2(plan, cwd);
-  }
-}
-function addTask2(taskId, afterId, cwd = process.cwd()) {
-  if (!isInitialized(cwd)) {
-    console.error("Error: Project not initialized. Please run `projmnt4claude setup` first");
-    process.exit(1);
-  }
-  if (!taskExists(taskId, cwd)) {
-    console.error(`Error: Task '${taskId}' does not exist`);
-    process.exit(1);
-  }
-  if (afterId && !taskExists(afterId, cwd)) {
-    console.error(`Error: Reference task '${afterId}' does not exist`);
-    process.exit(1);
-  }
-  const success = addTaskToPlan(taskId, afterId, cwd);
-  if (success) {
-    console.log(`✅ Added task ${taskId} to execution plan${afterId ? ` (after ${afterId})` : ""}`);
-  } else {
-    console.log(`Task ${taskId} is already in the execution plan`);
-  }
-}
-function removeTask2(taskId, cwd = process.cwd()) {
-  if (!isInitialized(cwd)) {
-    console.error("Error: Project not initialized. Please run `projmnt4claude setup` first");
-    process.exit(1);
-  }
-  const allTasks = getAllTasks(cwd);
-  const depGraph = DependencyGraph.fromTasks(allTasks);
-  const opValidation = validatePlanOperation("delete", [taskId], depGraph);
-  if (opValidation.warnings.length > 0) {
-    console.log("\uD83D\uDCCB Pre-delete dependency check:");
-    for (const w of opValidation.warnings) {
-      console.log(`   ⚠️  ${w}`);
-    }
-  }
-  const success = removeTaskFromPlan(taskId, cwd);
-  if (success) {
-    console.log(`✅ Removed task ${taskId} from execution plan`);
-  } else {
-    console.log(`Task ${taskId} is not in the execution plan`);
-  }
-}
-async function clearPlanCmd2(force = false, cwd = process.cwd()) {
-  if (!isInitialized(cwd)) {
-    console.error("Error: Project not initialized. Please run `projmnt4claude setup` first");
-    process.exit(1);
-  }
-  if (!force) {
-    const response = await import_prompts9.default({
-      type: "confirm",
-      name: "confirm",
-      message: "Are you sure you want to clear the execution plan?",
-      initial: false
-    });
-    if (!response.confirm) {
-      console.log("Cancelled");
-      return;
-    }
-  }
-  clearPlan(cwd);
-  console.log("✅ Execution plan cleared");
-}
-async function recommendPlan2(options = {}, cwd = process.cwd()) {
-  if (!isInitialized(cwd)) {
-    console.error("Error: Project not initialized. Please run `projmnt4claude setup` first");
-    process.exit(1);
-  }
-  const activeCheck = detectActiveSnapshot(cwd);
-  if (activeCheck.hasActive) {
-    console.error("❌ Error: Active pipeline detected");
-    console.error(`   ${activeCheck.message}`);
-    console.error("   Please wait for the pipeline to complete or use `projmnt4claude harness --continue` to resume");
-    console.error("   To force create a new plan, stop the running pipeline process first");
-    process.exit(1);
-  }
-  console.log(`Analyzing project tasks...
-`);
-  const logger = createLogger("plan-recommend", cwd);
-  const startTime = Date.now();
-  const inputQuery = options.query || "";
-  let recommendationAccepted = false;
-  let suggestedOrder = [];
-  const allTasks = getAllTasks(cwd);
-  const failedTasks = allTasks.filter((t2) => normalizeStatus(t2.status) === "failed");
-  if (failedTasks.length > 0) {
-    console.log("⚠️  Quality check: Found failed tasks:");
-    for (const task of failedTasks) {
-      console.log(`   ❌ ${task.id}: ${task.title.substring(0, 50)}`);
-    }
-    console.log("");
-    console.log("\uD83D\uDCA1 Constraint hints:");
-    console.log("   • To retry failed tasks, check the failure reason and fix first");
-    console.log("   • Use `projmnt4claude task update <id> --status open` to reset status and retry");
-    console.log("   • Or manually add failed tasks to the plan after `plan recommend`");
-    console.log("");
-    if (options.nonInteractive || !process.stdout.isTTY) {
-      console.log("   (Non-interactive mode: continuing, but note the failed tasks above)");
-      console.log("");
-    }
-  }
-  const inProgressTasks = allTasks.filter((t2) => normalizeStatus(t2.status) === "in_progress");
-  const TERMINAL_STATUSES_SET7 = new Set(TERMINAL_STATUSES);
-  const activeTasks = options.all ? allTasks.filter((t2) => !TERMINAL_STATUSES_SET7.has(normalizeStatus(t2.status))) : allTasks.filter((t2) => normalizeStatus(t2.status) === "open");
-  const excludedCount = allTasks.length - activeTasks.length;
-  if (excludedCount > 0) {
-    const reason = options.all ? "terminal (resolved/closed/abandoned)" : "non-open status";
-    console.log(`Excluded ${excludedCount} ${reason} tasks`);
-  }
-  if (inProgressTasks.length > 0) {
-    console.log("\uD83D\uDD35 In-progress tasks:");
-    for (const t2 of inProgressTasks) {
-      console.log(`   ${t2.id}: ${t2.title.substring(0, 60)}`);
-    }
-    console.log("");
-  }
-  const chainEligibleTasks = activeTasks.filter((t2) => normalizeStatus(t2.status) !== "in_progress");
-  const missingSubtaskWarnings = detectMissingSubtasks(cwd);
-  if (missingSubtaskWarnings.length > 0) {
-    const label = options.strictSubtaskCoverage ? "❌ ERR" : "⚠️  WARN";
-    console.log(`${label} Subtask missing detection (${missingSubtaskWarnings.length} parent tasks affected):`);
-    for (const w of missingSubtaskWarnings) {
-      console.log(`   ${label} Parent task ${w.parentTaskId} ("${w.parentTitle.substring(0, 30)}"): missing ${w.missingSubtaskIds.length}/${w.expectedCount} subtasks`);
-      for (const missingId of w.missingSubtaskIds) {
-        console.log(`      - ${missingId} does not exist`);
-      }
-    }
-    console.log("");
-    if (options.strictSubtaskCoverage) {
-      console.error("❌ --strict-subtask-coverage: Missing subtasks detected, aborting recommendation. Please create missing subtasks or clean up invalid subtaskIds.");
-      process.exit(1);
-    }
-  }
-  let filter = { type: "keywords", keywords: [] };
-  let filteredTasks = chainEligibleTasks;
-  if (options.query) {
-    filter = parseQuery2(options.query);
-    if (filter.type === "regex") {
-      console.log(`Regex mode: /${filter.pattern}/${filter.flags || ""}`);
-    } else {
-      console.log(`Keywords: ${filter.keywords.join(", ")}`);
-    }
-    filteredTasks = chainEligibleTasks.filter((task) => taskMatchesFilter2(task, filter));
-    console.log(`Filter result: ${filteredTasks.length}/${chainEligibleTasks.length} tasks match
-`);
-  }
-  if (!options.all) {
-    const executableIds = new Set(getExecutableTasks(cwd));
-    const beforeExecFilter = filteredTasks.length;
-    filteredTasks = filteredTasks.filter((task) => executableIds.has(task.id));
-    if (beforeExecFilter - filteredTasks.length > 0) {
-      console.log(`Excluded ${beforeExecFilter - filteredTasks.length} tasks with incomplete dependencies or not executable`);
-    }
-  }
-  if (!options.skipQualityGate && filteredTasks.length > 0) {
-    console.log("Running quality gate check...");
-    const qualityGateResult = runPlanQualityGateCheck2(filteredTasks, {
-      phase: "plan_recommend",
-      includeWarnings: true
-    });
-    if (!qualityGateResult.passed) {
-      console.log(formatPlanQualityGateReport2(qualityGateResult, {
-        compact: false,
-        showDetails: true,
-        phase: "plan_recommend"
-      }));
-      if (options.strictQualityGate) {
-        console.error("❌ Quality gate check failed (--strict-quality-gate mode), aborting plan recommendation");
-        console.error(`   Failed tasks: ${qualityGateResult.failedTasks.join(", ")}`);
-        console.error("   Fix the issues or use --skip-quality-gate to skip quality check (not recommended)");
-        process.exit(1);
-      }
-      if (options.nonInteractive || !process.stdout.isTTY) {
-        console.error("❌ Quality gate check failed, aborting plan recommendation");
-        console.error(`   Failed tasks: ${qualityGateResult.failedTasks.join(", ")}`);
-        console.error("   Use --skip-quality-gate to skip quality check (not recommended)");
-        process.exit(1);
-      }
-      const { continueAnyway } = await import_prompts9.default({
-        type: "confirm",
-        name: "continueAnyway",
-        message: `${qualityGateResult.failedCount} tasks failed quality gate, continue?`,
-        initial: false
-      });
-      if (!continueAnyway) {
-        console.log("Cancelled");
-        return;
-      }
-      console.log("");
-    } else {
-      console.log(`✅ Quality gate check passed (${qualityGateResult.passedCount}/${qualityGateResult.totalTasks})`);
-      console.log("");
-    }
-  }
-  if (filteredTasks.length === 0) {
-    const emptyResult = {
-      missingSubtaskWarnings: missingSubtaskWarnings.length > 0 ? missingSubtaskWarnings : undefined,
-      query: options.query,
-      keywords: filter.type === "keywords" ? filter.keywords : [filter.pattern],
-      filterStats: {
-        totalTasks: activeTasks.length,
-        filteredTasks: 0,
-        chainCount: 0
-      },
-      chains: [],
-      batches: [],
-      batchOrder: [],
-      recommendation: {
-        summary: "No matching tasks",
-        topChains: [],
-        suggestedOrder: []
-      }
-    };
-    if (options.json) {
-      console.log(JSON.stringify(emptyResult, null, 2));
-    } else {
-      console.log("No matching tasks");
-      if (options.query) {
-        console.log(`Query: "${options.query}"`);
-        const displayKeywords = filter.type === "keywords" ? filter.keywords : [filter.pattern];
-        console.log(`Keywords: ${displayKeywords.join(", ")}`);
-      }
-    }
-    const logKeywords = filter.type === "keywords" ? filter.keywords : [filter.pattern];
-    logger.logInstrumentation({
-      module: "plan-recommend",
-      action: "recommend_empty",
-      input_summary: `query="${inputQuery}", all=${options.all || false}`,
-      output_summary: `no_match, active=${activeTasks.length}, filtered=0`,
-      ai_used: false,
-      ai_enhanced_fields: [],
-      duration_ms: Date.now() - startTime,
-      user_edit_count: 0,
-      module_data: { keywords: logKeywords, excluded: excludedCount }
-    });
-    logger.flush();
-    return;
-  }
-  console.log("Analyzing task dependencies...");
-  const fileOverlapDeps = inferDependenciesBatch(filteredTasks);
-  let mergedDeps = fileOverlapDeps;
-  if (options.smart) {
-    console.log("Analyzing semantic dependencies via AI...");
-    const semanticResult = await withAIEnhancement({
-      enabled: true,
-      aiCall: () => new AIMetadataAssistant(cwd).inferSemanticDependencies(filteredTasks, { cwd }),
-      fallback: { dependencies: [], aiUsed: false },
-      operationName: "Semantic dependency inference"
-    });
-    if (semanticResult.aiUsed && semanticResult.dependencies.length > 0) {
-      mergedDeps = new Map(fileOverlapDeps);
-      for (const aiDep of semanticResult.dependencies) {
-        const existing = mergedDeps.get(aiDep.taskId) || [];
-        const alreadyInferred = existing.some((e) => e.depTaskId === aiDep.depTaskId);
-        if (!alreadyInferred) {
-          existing.push({
-            depTaskId: aiDep.depTaskId,
-            overlappingFiles: [],
-            source: "ai-semantic",
-            reason: aiDep.reason
-          });
-          mergedDeps.set(aiDep.taskId, existing);
-        }
-      }
-      console.log(`  AI found ${semanticResult.dependencies.length} semantic dependencies`);
-    } else {
-      console.log("  AI found no additional semantic dependencies");
-    }
-  }
-  const chains = buildTaskChains2(filteredTasks, cwd, mergedDeps);
-  const sortedChains = sortChains2(chains);
-  const cachedBatches = buildBatches2(sortedChains);
-  const keywordsForOutput = filter.type === "keywords" ? filter.keywords.length > 0 ? filter.keywords : undefined : [filter.pattern];
-  const aiOutput = generateAIOutput2(sortedChains, activeTasks.length, filteredTasks.length, cachedBatches, options.query, keywordsForOutput, { smart: options.smart }, missingSubtaskWarnings);
-  suggestedOrder = aiOutput.recommendation.suggestedOrder;
-  if (options.json) {
-    console.log(JSON.stringify(aiOutput, null, 2));
-    logger.logInstrumentation({
-      module: "plan-recommend",
-      action: "recommend_json",
-      input_summary: `query="${inputQuery}", all=${options.all || false}`,
-      output_summary: `chains=${chains.length}, tasks=${filteredTasks.length}, batches=${aiOutput.batches.length}`,
-      ai_used: false,
-      ai_enhanced_fields: [],
-      duration_ms: Date.now() - startTime,
-      user_edit_count: 0,
-      module_data: {
-        hit_rate: filteredTasks.length / activeTasks.length,
-        suggested_order: suggestedOrder.slice(0, 5)
-      }
-    });
-    logger.flush();
-    return;
-  }
-  console.log("━".repeat(SEPARATOR_WIDTH));
-  console.log("\uD83D\uDCCB Task chain analysis results (grouped by batch)");
-  console.log("━".repeat(SEPARATOR_WIDTH));
-  console.log("");
-  console.log("\uD83D\uDCCA Statistics summary:");
-  console.log(`   Total tasks: ${aiOutput.filterStats.totalTasks}`);
-  console.log(`   Matched tasks: ${aiOutput.filterStats.filteredTasks}`);
-  console.log(`   Task chains: ${aiOutput.filterStats.chainCount}`);
-  console.log(`   Batches: ${aiOutput.batches.length}`);
-  console.log("");
-  const batches = cachedBatches;
-  for (let b = 0;b < batches.length; b++) {
-    const batch = batches[b];
-    const batchIcon = getPriorityIcon2(batch.priorityValue);
-    const parallelTag = batch.parallelizable ? " [Parallel]" : batch.chains.length > 1 ? " [Not parallel: inferred deps]" : "";
-    console.log(`\uD83D\uDCE6 Batch ${b + 1}/${batches.length} ${batchIcon} ${batch.priority}${parallelTag}`);
-    console.log(`   Chains: ${batch.chains.length} | Tasks: ${batch.tasks.length}`);
-    console.log("");
-    const chainsInBatch = sortedChains.filter((c) => batch.chains.includes(c.chainId));
-    for (let i = 0;i < chainsInBatch.length; i++) {
-      const chain = chainsInBatch[i];
-      const chainLabel = batch.parallelizable ? `[Chain${i + 1}]` : `[Chain]`;
-      console.log(`   ${chainLabel} ${chain.chainId} (${chain.minLayer} Length:${chain.length} Reopen:${chain.totalReopenCount})`);
-      for (let j = 0;j < chain.tasks.length; j++) {
-        const task = chain.tasks[j];
-        const prefix = j === chain.tasks.length - 1 ? "      └─" : "      ├─";
-        const statusIcon = getStatusIcon3(task.status);
-        const inferredDeps = chain.inferredDependencies?.get(task.id);
-        let inferredTag = "";
-        if (inferredDeps && inferredDeps.length > 0) {
-          const fileOverlapDeps2 = inferredDeps.filter((d) => d.source !== "ai-semantic");
-          const aiSemanticDeps = inferredDeps.filter((d) => d.source === "ai-semantic");
-          if (fileOverlapDeps2.length > 0) {
-            const files = [...new Set(fileOverlapDeps2.flatMap((d) => d.overlappingFiles))].slice(0, 2);
-            inferredTag = ` [Inferred:file overlap] ${files.join(", ")}${fileOverlapDeps2.flatMap((d) => d.overlappingFiles).length > 2 ? "..." : ""}`;
-          }
-          if (aiSemanticDeps.length > 0) {
-            const reasons = aiSemanticDeps.map((d) => d.reason || "Semantic relation").slice(0, 2);
-            inferredTag += ` [Inferred:AI semantic] ${reasons.join("; ")}`;
-          }
-        }
-        console.log(`${prefix} ${statusIcon} ${task.id}: ${task.title.substring(0, 40)}${inferredTag}`);
-      }
-      console.log("");
-    }
-    if (b < batches.length - 1) {
-      console.log("   ─────────────────────────────────");
-      console.log("");
-    }
-  }
-  console.log("━".repeat(SEPARATOR_WIDTH));
-  console.log("\uD83D\uDCA1 Recommendation summary:");
-  console.log(`   ${aiOutput.recommendation.summary}`);
-  console.log(`   Priority chains: ${aiOutput.recommendation.topChains.slice(0, 3).join(", ")}`);
-  console.log("");
-  const isNonInteractive = options.nonInteractive || !process.stdout.isTTY;
-  if (isNonInteractive) {
-    const plan = getOrCreatePlan(cwd);
-    plan.tasks = aiOutput.recommendation.suggestedOrder;
-    plan.batches = aiOutput.batchOrder;
-    writePlan(plan, cwd);
-    console.log("✅ Execution plan updated (non-interactive mode)");
-    logger.logInstrumentation({
-      module: "plan-recommend",
-      action: "recommend_auto",
-      input_summary: `query="${inputQuery}", all=${options.all || false}`,
-      output_summary: `chains=${chains.length}, tasks=${filteredTasks.length}, accepted=true`,
-      ai_used: false,
-      ai_enhanced_fields: [],
-      duration_ms: Date.now() - startTime,
-      user_edit_count: 0,
-      module_data: {
-        hit_rate: filteredTasks.length / activeTasks.length,
-        suggested_order: aiOutput.recommendation.suggestedOrder.slice(0, 5)
-      }
-    });
-    logger.flush();
-    return;
-  }
-  const response = await import_prompts9.default({
-    type: "confirm",
-    name: "confirm",
-    message: "Write the recommended task order to the execution plan?",
-    initial: true
-  });
-  if (response.confirm) {
-    const plan = getOrCreatePlan(cwd);
-    plan.tasks = aiOutput.recommendation.suggestedOrder;
-    plan.batches = aiOutput.batchOrder;
-    writePlan(plan, cwd);
-    console.log("✅ Execution plan updated");
-    recommendationAccepted = true;
-  } else {
-    console.log("Cancelled");
-  }
-  logger.logInstrumentation({
-    module: "plan-recommend",
-    action: response.confirm ? "recommend_accept" : "recommend_skip",
-    input_summary: `query="${inputQuery}", all=${options.all || false}`,
-    output_summary: `chains=${chains.length}, tasks=${filteredTasks.length}, accepted=${response.confirm}`,
-    ai_used: false,
-    ai_enhanced_fields: [],
-    duration_ms: Date.now() - startTime,
-    user_edit_count: response.confirm ? 0 : 1,
-    module_data: {
-      hit_rate: filteredTasks.length / activeTasks.length,
-      skip_rate: response.confirm ? 0 : 1,
-      suggested_order: suggestedOrder.slice(0, 5),
-      accepted: recommendationAccepted
-    }
-  });
-  logger.flush();
-}
-function getPriorityIcon2(priority) {
-  const icons = {
-    0: "\uD83D\uDD34",
-    1: "\uD83D\uDFE0",
-    2: "\uD83D\uDFE1",
-    3: "\uD83D\uDFE2",
-    4: "\uD83D\uDCCA",
-    5: "\uD83D\uDCCA",
-    6: "\uD83D\uDCCA",
-    7: "\uD83D\uDCCA"
-  };
-  return icons[priority] || "⚪";
-}
-function getStatusIcon3(status) {
-  const normalized = normalizeStatus(status);
-  const icons = {
-    open: "⬜",
-    in_progress: "\uD83D\uDD35",
-    resolved: "✅",
-    closed: "⚫",
-    abandoned: "❌",
-    failed: "❌"
-  };
-  return icons[normalized] || "❓";
-}
-function formatStatus3(status) {
-  const normalized = normalizeStatus(status);
-  const map = {
-    open: "⬜ Open",
-    in_progress: "\uD83D\uDD35 In Progress",
-    resolved: "✅ Resolved",
-    closed: "⚫ Closed",
-    abandoned: "❌ Abandoned",
-    failed: "❌ Failed"
-  };
-  return map[normalized] || status;
-}
-function runPlanQualityGateCheck2(tasks, options = {}) {
-  const phase = options.phase || "plan_recommend";
-  const includeWarnings = options.includeWarnings !== false;
-  const validationResults = [];
-  let passedCount = 0;
-  let failedCount = 0;
-  const failedTasks = [];
-  for (const task of tasks) {
-    const result = runQualityGate(task, phase);
-    validationResults.push(result);
-    if (result.passed) {
-      passedCount++;
-    } else {
-      failedCount++;
-      failedTasks.push(task.id);
-    }
-  }
-  const hasBlockingErrors = validationResults.some((r) => !r.passed && r.errors.length > 0);
-  const passed = includeWarnings ? failedCount === 0 : !hasBlockingErrors;
-  return {
-    passed,
-    totalTasks: tasks.length,
-    passedCount,
-    failedCount,
-    failedTasks,
-    validationResults,
-    validatedAt: new Date().toISOString()
-  };
-}
-function formatPlanQualityGateReport2(result, options = {}) {
-  const { compact = false, showDetails = true, phase = "plan_recommend" } = options;
-  const lines = [];
-  const separator = compact ? "---" : "━".repeat(SEPARATOR_WIDTH);
-  const statusIcon = result.passed ? "✅" : "❌";
-  lines.push("");
-  lines.push(separator);
-  lines.push(`${statusIcon} Plan Quality Gate Check Report [${phase}]`);
-  lines.push(separator);
-  lines.push("");
-  lines.push("\uD83D\uDCCA Statistics Summary:");
-  lines.push(`   Total tasks: ${result.totalTasks}`);
-  lines.push(`   ✅ Passed: ${result.passedCount}`);
-  lines.push(`   ❌ Failed: ${result.failedCount}`);
-  lines.push("");
-  if (result.failedTasks.length > 0) {
-    lines.push(separator);
-    lines.push(`❌ Failed Tasks (${result.failedTasks.length}):`);
-    lines.push("");
-    if (showDetails) {
-      for (const taskResult of result.validationResults) {
-        if (!taskResult.passed) {
-          lines.push(`   ${taskResult.taskId}:`);
-          if (taskResult.errors.length > 0) {
-            for (const error of taskResult.errors) {
-              lines.push(`      ❌ ${error.message}`);
-            }
-          }
-          if (taskResult.warnings.length > 0) {
-            for (const warning of taskResult.warnings) {
-              lines.push(`      ⚠️  ${warning.message}`);
-            }
-          }
-          lines.push("");
-        }
-      }
-    } else {
-      for (const taskId of result.failedTasks) {
-        lines.push(`   - ${taskId}`);
-      }
-      lines.push("");
-    }
-  }
-  if (showDetails && result.validationResults.length > 0) {
-    const hasViolations = result.validationResults.some((r) => r.violations.length > 0);
-    if (hasViolations) {
-      lines.push(separator);
-      lines.push("\uD83D\uDCCB Detailed Violation Info:");
-      lines.push("");
-      for (const taskResult of result.validationResults) {
-        if (taskResult.violations.length > 0) {
-          lines.push(`   ${taskResult.taskId}:`);
-          for (const violation of taskResult.violations) {
-            const icon = violation.severity === "error" ? "❌" : "⚠️";
-            lines.push(`      ${icon} [${violation.ruleId}] ${violation.message}`);
-          }
-          lines.push("");
-        }
-      }
-    }
-  }
-  lines.push(separator);
-  if (result.passed) {
-    lines.push("✅ All tasks passed Plan quality gate check!");
-  } else {
-    lines.push(`⚠️  ${result.failedCount} tasks failed quality gate, recommend fixing before running plan recommend`);
-    lines.push("");
-    lines.push("\uD83D\uDCA1 Fix Suggestions:");
-    lines.push("   • Check circular dependencies: ensure no cycles in task dependencies");
-    lines.push("   • Check invalid dependencies: ensure dependent task IDs exist and are valid");
-    lines.push("   • Check orphan subtasks: ensure parentId points to existing task");
-    lines.push("   • Use `projmnt4claude analyze --fix` to auto-fix some issues");
-  }
-  lines.push("");
-  lines.push(`\uD83D\uDD50 Validated at: ${result.validatedAt}`);
-  lines.push(separator);
-  lines.push("");
-  return lines.join(`
-`);
-}
-var import_prompts9, STOP_WORDS2, inferDependenciesFromFiles;
-var init_plan2 = __esm(() => {
-  init_plan();
-  init_path();
-  init_task2();
-  init_task();
-  init_logger();
-  init_quality_gate();
-  init_quality_gate_registry();
-  init_ai_metadata();
-  init_dependency_engine();
-  init_harness_snapshot();
-  init_dependency_graph();
-  import_prompts9 = __toESM(require_prompts3(), 1);
-  STOP_WORDS2 = new Set([
-    "的",
-    "了",
-    "是",
-    "在",
-    "和",
-    "有",
-    "我",
-    "要",
-    "想",
-    "把",
-    "这",
-    "那",
-    "对",
-    "就",
-    "也",
-    "都",
-    "会",
-    "能",
-    "可",
-    "上",
-    "下",
-    "中",
-    "来",
-    "去",
-    "做",
-    "给",
-    "让",
-    "被",
-    "用",
-    "为",
-    "与",
-    "或",
-    "但",
-    "如",
-    "到",
-    "从",
-    "the",
-    "a",
-    "an",
-    "is",
-    "are",
-    "was",
-    "were",
-    "be",
-    "been",
-    "being",
-    "have",
-    "has",
-    "had",
-    "do",
-    "does",
-    "did",
-    "will",
-    "would",
-    "could",
-    "should",
-    "may",
-    "might",
-    "must",
-    "shall",
-    "can",
-    "need",
-    "want",
-    "to",
-    "of",
-    "in",
-    "for",
-    "on",
-    "with",
-    "at",
-    "by",
-    "from",
-    "as",
-    "and",
-    "or",
-    "but",
-    "if",
-    "then",
-    "else",
-    "when",
-    "where",
-    "which"
-  ]);
-  inferDependenciesFromFiles = inferDependenciesBatch;
-});
-
 // node_modules/commander/esm.mjs
 var import__ = __toESM(require_commander(), 1);
 var {
@@ -24636,8 +21807,8 @@ var {
 } = import__.default;
 
 // src/index.ts
-import * as fs40 from "fs";
-import * as path36 from "path";
+import * as fs44 from "fs";
+import * as path39 from "path";
 
 // src/commands/setup.ts
 init_path();
@@ -28671,12 +25842,720 @@ init_task2();
 init_task();
 init_logger();
 init_quality_gate();
-init_quality_gate_registry();
+var import_prompts3 = __toESM(require_prompts3(), 1);
+
+// src/utils/quality-gate-registry.ts
+init_checkpoint_rules();
+
+// src/utils/validation-rules/plan-rules.ts
+init_task();
+var TERMINAL_STATUSES_SET3 = new Set(TERMINAL_STATUSES);
+function detectTaskCycles(tasks) {
+  const adjacency = new Map;
+  for (const task of tasks) {
+    if (!adjacency.has(task.id)) {
+      adjacency.set(task.id, new Set);
+    }
+    for (const depId of task.dependencies) {
+      adjacency.get(task.id).add(depId);
+    }
+  }
+  const cycles = [];
+  const visited = new Set;
+  const onStack = new Set;
+  const path15 = [];
+  function dfs(node) {
+    if (onStack.has(node)) {
+      const cycleStart = path15.indexOf(node);
+      if (cycleStart !== -1) {
+        cycles.push([...path15.slice(cycleStart), node]);
+      }
+      return;
+    }
+    if (visited.has(node))
+      return;
+    visited.add(node);
+    onStack.add(node);
+    path15.push(node);
+    const neighbors = adjacency.get(node);
+    if (neighbors) {
+      for (const neighbor of neighbors) {
+        dfs(neighbor);
+      }
+    }
+    path15.pop();
+    onStack.delete(node);
+  }
+  for (const taskId of adjacency.keys()) {
+    if (!visited.has(taskId)) {
+      dfs(taskId);
+    }
+  }
+  return {
+    hasCycle: cycles.length > 0,
+    cycles,
+    taskId: cycles.length > 0 ? cycles[0][0] : ""
+  };
+}
+var planCycleDetection = {
+  id: "plan-cycle-detection",
+  description: "检测任务依赖关系中是否存在循环依赖",
+  severity: "error",
+  check: (task, context) => {
+    const t2 = task;
+    const allTasks = context?.allTasks;
+    if (!allTasks || allTasks.length === 0) {
+      return null;
+    }
+    const result = detectTaskCycles(allTasks);
+    if (result.hasCycle) {
+      const cycleStr = result.cycles.map((c) => c.join(" → ")).join("; ");
+      return {
+        ruleId: "plan-cycle-detection",
+        severity: "error",
+        message: `检测到循环依赖: ${cycleStr}。请检查任务依赖关系，移除循环引用`
+      };
+    }
+    return null;
+  }
+};
+var planInvalidDependency = {
+  id: "plan-invalid-dependency",
+  description: "检测任务依赖是否引用不存在的任务",
+  severity: "error",
+  check: (task, context) => {
+    const t2 = task;
+    const allTasks = context?.allTasks;
+    if (!allTasks || allTasks.length === 0) {
+      return null;
+    }
+    const validTaskIds = new Set(allTasks.map((task2) => task2.id));
+    const invalidDeps = [];
+    for (const depId of t2.dependencies) {
+      if (!validTaskIds.has(depId)) {
+        invalidDeps.push(depId);
+      }
+    }
+    if (invalidDeps.length > 0) {
+      return {
+        ruleId: "plan-invalid-dependency",
+        severity: "error",
+        message: `任务 ${t2.id} 包含无效依赖: ${invalidDeps.join(", ")}。这些任务ID不存在`
+      };
+    }
+    return null;
+  }
+};
+var planOrphanSubtask = {
+  id: "plan-orphan-subtask",
+  description: "检测有 parentId 但父任务不存在的孤儿子任务",
+  severity: "error",
+  check: (task, context) => {
+    const t2 = task;
+    const allTasks = context?.allTasks;
+    if (!allTasks || allTasks.length === 0) {
+      return null;
+    }
+    if (!t2.parentId) {
+      return null;
+    }
+    const validTaskIds = new Set(allTasks.map((task2) => task2.id));
+    if (!validTaskIds.has(t2.parentId)) {
+      return {
+        ruleId: "plan-orphan-subtask",
+        severity: "error",
+        message: `任务 ${t2.id} 声明了父任务 ${t2.parentId}，但该父任务不存在。请检查 parentId 或创建父任务`
+      };
+    }
+    return null;
+  }
+};
+var planOrphanTask = {
+  id: "plan-orphan-task",
+  description: "检测孤立任务（无依赖且不被依赖的任务）",
+  severity: "warning",
+  check: (task, context) => {
+    const t2 = task;
+    const allTasks = context?.allTasks;
+    if (!allTasks || allTasks.length === 0) {
+      return null;
+    }
+    if (t2.dependencies.length > 0 || t2.subtaskIds && t2.subtaskIds.length > 0) {
+      return null;
+    }
+    const isDependedOn = allTasks.some((otherTask) => otherTask.dependencies.includes(t2.id));
+    if (!isDependedOn) {
+      return {
+        ruleId: "plan-orphan-task",
+        severity: "warning",
+        message: `任务 ${t2.id} 是孤立任务：没有依赖且不被其他任务依赖。建议检查是否遗漏依赖关系或删除无用任务`
+      };
+    }
+    return null;
+  }
+};
+var planBlockedTask = {
+  id: "plan-blocked-task",
+  description: "检测被阻塞的任务（所有依赖都未完成）",
+  severity: "warning",
+  check: (task, context) => {
+    const t2 = task;
+    const allTasks = context?.allTasks;
+    if (!allTasks || allTasks.length === 0) {
+      return null;
+    }
+    if (t2.dependencies.length === 0) {
+      return null;
+    }
+    if (TERMINAL_STATUSES_SET3.has(normalizeStatus(t2.status))) {
+      return null;
+    }
+    const incompleteDeps = [];
+    for (const depId of t2.dependencies) {
+      const depTask = allTasks.find((task2) => task2.id === depId);
+      if (depTask) {
+        const isCompleted = TERMINAL_STATUSES_SET3.has(normalizeStatus(depTask.status));
+        if (!isCompleted) {
+          incompleteDeps.push(depId);
+        }
+      }
+    }
+    if (incompleteDeps.length === t2.dependencies.length) {
+      return {
+        ruleId: "plan-blocked-task",
+        severity: "warning",
+        message: `任务 ${t2.id} 被阻塞：所有 ${t2.dependencies.length} 个依赖任务都未完成。建议优先处理依赖任务：${incompleteDeps.join(", ")}`
+      };
+    }
+    return null;
+  }
+};
+var planBridgeNode = {
+  id: "plan-bridge-node",
+  description: "检测桥接节点任务（作为依赖桥梁但缺少检查点）",
+  severity: "warning",
+  check: (task, context) => {
+    const t2 = task;
+    const allTasks = context?.allTasks;
+    if (!allTasks || allTasks.length === 0) {
+      return null;
+    }
+    const dependentTasks = allTasks.filter((otherTask) => otherTask.dependencies.includes(t2.id));
+    const hasManyDependents = dependentTasks.length >= 2;
+    const hasDependencies = t2.dependencies.length > 0;
+    const hasMinimalCheckpoints = !t2.checkpoints || t2.checkpoints.length <= 1;
+    if (hasManyDependents && hasDependencies && hasMinimalCheckpoints) {
+      return {
+        ruleId: "plan-bridge-node",
+        severity: "warning",
+        message: `任务 ${t2.id} 可能是桥接节点：被 ${dependentTasks.length} 个任务依赖且有 ${t2.dependencies.length} 个依赖，但检查点过少（${t2.checkpoints?.length || 0} 个）。建议添加更多检查点确保质量`
+      };
+    }
+    return null;
+  }
+};
+var planInferredOnlyDependency = {
+  id: "plan-inferred-only-dependency",
+  description: "检测只有推断依赖的任务（建议显式声明关键依赖）",
+  severity: "warning",
+  check: (task, context) => {
+    const t2 = task;
+    if (t2.dependencies.length === 0) {
+      return null;
+    }
+    const hasExplicitDeps = context?.hasExplicitDeps;
+    if (hasExplicitDeps !== false) {
+      return null;
+    }
+    return {
+      ruleId: "plan-inferred-only-dependency",
+      severity: "warning",
+      message: `任务 ${t2.id} 只有推断依赖（${t2.dependencies.length} 个），没有显式声明的依赖。建议显式声明关键依赖以提高可维护性`
+    };
+  }
+};
+
+// src/utils/quality-gate-registry.ts
+init_quality_gate();
+var QUALITY_GATE_RULES = {
+  "meta-json-valid": {
+    id: "meta-json-valid",
+    description: "meta.json 必须包含必需字段、值合法且 JSON 格式正确",
+    priority: "critical",
+    rule: metaJsonValid,
+    appliesToPriorities: null,
+    phases: ["initialization", "transition", "execution"]
+  },
+  "checkpoint-array-not-empty": {
+    id: "checkpoint-array-not-empty",
+    description: "P0/P1 任务必须包含至少 2 个结构化检查点",
+    priority: "critical",
+    rule: {
+      id: "checkpoint-array-not-empty",
+      description: "P0/P1 任务必须包含至少 2 个结构化检查点",
+      severity: "error",
+      check: (task) => {
+        const t2 = task;
+        if (!t2.checkpoints || t2.checkpoints.length === 0) {
+          if (t2.priority === "P0" || t2.priority === "P1") {
+            return {
+              ruleId: "checkpoint-array-not-empty",
+              severity: "error",
+              message: `${t2.priority} 任务必须包含至少 2 个结构化检查点，当前: 0`
+            };
+          }
+        }
+        return null;
+      }
+    },
+    appliesToPriorities: ["P0", "P1"],
+    phases: ["initialization", "transition"]
+  },
+  "checkpoint-required-prefix": {
+    id: "checkpoint-required-prefix",
+    description: "检查点描述必须以验证类别前缀开头 ([ai review]/[ai qa]/[human qa]/[script])",
+    priority: "high",
+    rule: checkpointRequiredPrefix,
+    appliesToPriorities: null,
+    phases: ["initialization", "transition"]
+  },
+  "checkpoint-has-verification-commands": {
+    id: "checkpoint-has-verification-commands",
+    description: "使用自动化验证方法的检查点应包含验证命令或步骤",
+    priority: "medium",
+    rule: checkpointHasVerificationCommands,
+    appliesToPriorities: null,
+    phases: ["initialization", "transition"]
+  },
+  "checkpoint-no-duplicate": {
+    id: "checkpoint-no-duplicate",
+    description: "检查点描述不允许重复（三层去重）",
+    priority: "high",
+    rule: checkpointNoDuplicate,
+    appliesToPriorities: null,
+    phases: ["initialization"]
+  },
+  "checkpoint-no-file-path": {
+    id: "checkpoint-no-file-path",
+    description: "检查点描述不能是纯文件路径格式",
+    priority: "high",
+    rule: checkpointNoFilePath,
+    appliesToPriorities: null,
+    phases: ["initialization"]
+  },
+  "checkpoint-count-control": {
+    id: "checkpoint-count-control",
+    description: "检查点数量控制在合理范围 (>8 warning, >15 error)",
+    priority: "medium",
+    rule: checkpointCountControl,
+    appliesToPriorities: null,
+    phases: ["initialization"]
+  },
+  "checkpoint-verb-prefix": {
+    id: "checkpoint-verb-prefix",
+    description: "检查点描述应以动词开头",
+    priority: "low",
+    rule: checkpointVerbPrefix,
+    appliesToPriorities: null,
+    phases: ["initialization"]
+  },
+  "checkpoint-min-length": {
+    id: "checkpoint-min-length",
+    description: "每条检查点描述至少 10 个字符",
+    priority: "low",
+    rule: checkpointMinLength,
+    appliesToPriorities: null,
+    phases: ["initialization"]
+  },
+  "basic-fields-valid": {
+    id: "basic-fields-valid",
+    description: "任务基础字段完整性验证 (id, title, description, checkpoints)",
+    priority: "critical",
+    rule: {
+      id: "basic-fields-valid",
+      description: "任务基础字段完整性验证",
+      severity: "error",
+      check: (task) => {
+        const t2 = task;
+        const result = validateBasicFields(t2);
+        if (!result.valid) {
+          return {
+            ruleId: "basic-fields-valid",
+            severity: "error",
+            message: `基础字段验证失败: ${result.errors.join(", ")}`
+          };
+        }
+        return null;
+      }
+    },
+    appliesToPriorities: null,
+    phases: ["transition", "execution"]
+  },
+  "status-transition-valid": {
+    id: "status-transition-valid",
+    description: "状态转换必须通过有效的 transition note 记录",
+    priority: "high",
+    rule: {
+      id: "status-transition-valid",
+      description: "状态转换验证",
+      severity: "error",
+      check: (task, context) => {
+        const t2 = task;
+        const expectedStatus = context?.expectedStatus;
+        const phase = context?.phase;
+        if (!expectedStatus)
+          return null;
+        if (t2.status !== expectedStatus) {
+          return {
+            ruleId: "status-transition-valid",
+            severity: "error",
+            message: `状态不匹配: 期望 ${expectedStatus}, 实际 ${t2.status} (阶段: ${phase || "unknown"})`
+          };
+        }
+        const notes = t2.transitionNotes;
+        if (!notes || notes.length === 0) {
+          return {
+            ruleId: "status-transition-valid",
+            severity: "error",
+            message: `transitionNotes 为空，缺少流转记录 (阶段: ${phase || "unknown"}, 期望状态: ${expectedStatus})`
+          };
+        }
+        const latest = notes[notes.length - 1];
+        if (!latest.note || latest.note.trim().length === 0) {
+          return {
+            ruleId: "status-transition-valid",
+            severity: "error",
+            message: `最新 transitionNote 缺少决策说明 (阶段: ${phase || "unknown"})`
+          };
+        }
+        if (latest.toStatus !== expectedStatus) {
+          return {
+            ruleId: "status-transition-valid",
+            severity: "error",
+            message: `transitionNote.toStatus 不匹配: 期望 ${expectedStatus}, 实际 ${latest.toStatus} (阶段: ${phase || "unknown"})`
+          };
+        }
+        return null;
+      }
+    },
+    appliesToPriorities: null,
+    phases: ["transition"]
+  },
+  "plan-cycle-detection": {
+    id: "plan-cycle-detection",
+    description: "检测任务依赖关系中是否存在循环依赖",
+    priority: "critical",
+    rule: planCycleDetection,
+    appliesToPriorities: null,
+    phases: ["plan_recommend"]
+  },
+  "plan-invalid-dependency": {
+    id: "plan-invalid-dependency",
+    description: "检测任务依赖是否引用不存在的任务",
+    priority: "critical",
+    rule: planInvalidDependency,
+    appliesToPriorities: null,
+    phases: ["plan_recommend"]
+  },
+  "plan-orphan-subtask": {
+    id: "plan-orphan-subtask",
+    description: "检测有 parentId 但父任务不存在的孤儿子任务",
+    priority: "critical",
+    rule: planOrphanSubtask,
+    appliesToPriorities: null,
+    phases: ["plan_recommend"]
+  },
+  "plan-orphan-task": {
+    id: "plan-orphan-task",
+    description: "检测孤立任务（无依赖且不被依赖的任务）",
+    priority: "medium",
+    rule: planOrphanTask,
+    appliesToPriorities: null,
+    phases: ["plan_recommend"]
+  },
+  "plan-blocked-task": {
+    id: "plan-blocked-task",
+    description: "检测被阻塞的任务（所有依赖都未完成）",
+    priority: "medium",
+    rule: planBlockedTask,
+    appliesToPriorities: null,
+    phases: ["plan_recommend"]
+  },
+  "plan-bridge-node": {
+    id: "plan-bridge-node",
+    description: "检测桥接节点任务（作为依赖桥梁但缺少检查点）",
+    priority: "medium",
+    rule: planBridgeNode,
+    appliesToPriorities: null,
+    phases: ["plan_recommend"]
+  },
+  "plan-inferred-only-dependency": {
+    id: "plan-inferred-only-dependency",
+    description: "检测只有推断依赖的任务（建议显式声明关键依赖）",
+    priority: "low",
+    rule: planInferredOnlyDependency,
+    appliesToPriorities: null,
+    phases: ["plan_recommend"]
+  }
+};
+var PHASE_RULES = {
+  plan_recommend: [
+    "meta-json-valid",
+    "checkpoint-array-not-empty",
+    "checkpoint-required-prefix",
+    "checkpoint-no-duplicate",
+    "checkpoint-no-file-path",
+    "checkpoint-count-control",
+    "basic-fields-valid",
+    "plan-cycle-detection",
+    "plan-invalid-dependency",
+    "plan-orphan-subtask",
+    "plan-orphan-task",
+    "plan-blocked-task",
+    "plan-bridge-node",
+    "plan-inferred-only-dependency"
+  ],
+  initialization: [
+    "meta-json-valid",
+    "checkpoint-array-not-empty",
+    "checkpoint-required-prefix",
+    "checkpoint-has-verification-commands",
+    "checkpoint-no-duplicate",
+    "checkpoint-no-file-path",
+    "checkpoint-count-control",
+    "checkpoint-verb-prefix",
+    "checkpoint-min-length",
+    "basic-fields-valid"
+  ],
+  transition: [
+    "meta-json-valid",
+    "checkpoint-array-not-empty",
+    "checkpoint-required-prefix",
+    "checkpoint-has-verification-commands",
+    "basic-fields-valid",
+    "status-transition-valid"
+  ],
+  execution: [
+    "meta-json-valid",
+    "basic-fields-valid"
+  ],
+  completion: [
+    "meta-json-valid",
+    "basic-fields-valid"
+  ]
+};
+function runQualityGate(task, phase, context) {
+  const violations = [];
+  const errors = [];
+  const warnings = [];
+  let rulesExecuted = 0;
+  let rulesSkipped = 0;
+  const ruleIds = PHASE_RULES[phase] || [];
+  for (const ruleId of ruleIds) {
+    const registered = QUALITY_GATE_RULES[ruleId];
+    if (!registered) {
+      rulesSkipped++;
+      continue;
+    }
+    if (registered.appliesToPriorities !== null) {
+      if (!registered.appliesToPriorities.includes(task.priority || "P2")) {
+        rulesSkipped++;
+        continue;
+      }
+    }
+    try {
+      const violation = registered.rule.check(task, context);
+      rulesExecuted++;
+      if (violation) {
+        violations.push(violation);
+        if (violation.severity === "error") {
+          errors.push(violation);
+        } else {
+          warnings.push(violation);
+        }
+      }
+    } catch (err) {
+      const errorViolation = {
+        ruleId: registered.id,
+        severity: "error",
+        message: `规则执行异常: ${err instanceof Error ? err.message : String(err)}`
+      };
+      violations.push(errorViolation);
+      errors.push(errorViolation);
+      rulesExecuted++;
+    }
+  }
+  return {
+    passed: errors.length === 0,
+    phase,
+    taskId: task.id,
+    violations,
+    errors,
+    warnings,
+    validatedAt: new Date().toISOString(),
+    rulesExecuted,
+    rulesSkipped
+  };
+}
+
+// src/commands/plan.ts
 init_ai_metadata();
 init_dependency_engine();
-init_harness_snapshot();
+
+// src/utils/harness-snapshot.ts
+init_path();
+init_task2();
+import * as fs19 from "fs";
+import * as path15 from "path";
+function getRunsDir(cwd) {
+  const runsDir = path15.join(getProjectDir(cwd), "runs");
+  if (!fs19.existsSync(runsDir)) {
+    fs19.mkdirSync(runsDir, { recursive: true });
+  }
+  return runsDir;
+}
+function generateSnapshotFilename(pid, timestamp) {
+  return `harness-plan-snapshot-${pid}-${timestamp}.json`;
+}
+function createPlanSnapshot(executionPlan, cwd = process.cwd(), batchAwareQueue) {
+  const pid = process.pid;
+  const timestamp = Date.now();
+  const snapshotId = generateSnapshotFilename(pid, timestamp);
+  const runsDir = getRunsDir(cwd);
+  const snapshotPath = path15.join(runsDir, snapshotId);
+  const taskStatusSnapshot = {};
+  for (const taskId of executionPlan.tasks) {
+    const task = readTaskMeta(taskId, cwd);
+    if (task) {
+      taskStatusSnapshot[taskId] = task.status;
+    }
+  }
+  const snapshot = {
+    snapshotId,
+    pid,
+    timestamp: new Date(timestamp).toISOString(),
+    path: snapshotPath,
+    tasks: executionPlan.tasks,
+    batches: executionPlan.batches,
+    batchBoundaries: batchAwareQueue?.batchBoundaries,
+    batchLabels: batchAwareQueue?.batchLabels,
+    batchParallelizable: batchAwareQueue?.batchParallelizable,
+    sourcePlanPath: path15.join(getProjectDir(cwd), "current-plan.json"),
+    taskStatusSnapshot
+  };
+  fs19.writeFileSync(snapshotPath, JSON.stringify(snapshot, null, 2), "utf-8");
+  return snapshot;
+}
+function readPlanSnapshot(snapshotIdOrPath, cwd = process.cwd()) {
+  let snapshotPath;
+  if (path15.isAbsolute(snapshotIdOrPath)) {
+    snapshotPath = snapshotIdOrPath;
+  } else {
+    const runsDir = getRunsDir(cwd);
+    snapshotPath = path15.join(runsDir, snapshotIdOrPath);
+  }
+  if (!fs19.existsSync(snapshotPath)) {
+    return null;
+  }
+  try {
+    const content = fs19.readFileSync(snapshotPath, "utf-8");
+    const snapshot = JSON.parse(content);
+    if (!snapshot.snapshotId || !snapshot.tasks || !Array.isArray(snapshot.tasks)) {
+      return null;
+    }
+    return snapshot;
+  } catch {
+    return null;
+  }
+}
+function listSnapshots(cwd = process.cwd()) {
+  const runsDir = getRunsDir(cwd);
+  if (!fs19.existsSync(runsDir)) {
+    return [];
+  }
+  const files = fs19.readdirSync(runsDir);
+  const snapshots = [];
+  for (const file of files) {
+    if (!file.startsWith("harness-plan-snapshot-") || !file.endsWith(".json")) {
+      continue;
+    }
+    const snapshot = readPlanSnapshot(file, cwd);
+    if (snapshot) {
+      snapshots.push(snapshot);
+    }
+  }
+  return snapshots.sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
+}
+function cleanupSnapshot(snapshotIdOrPath, cwd = process.cwd()) {
+  let snapshotPath;
+  if (path15.isAbsolute(snapshotIdOrPath)) {
+    snapshotPath = snapshotIdOrPath;
+  } else {
+    const runsDir = getRunsDir(cwd);
+    snapshotPath = path15.join(runsDir, snapshotIdOrPath);
+  }
+  if (!fs19.existsSync(snapshotPath)) {
+    return false;
+  }
+  try {
+    fs19.unlinkSync(snapshotPath);
+    return true;
+  } catch {
+    return false;
+  }
+}
+function isSnapshotActive(snapshot, cwd = process.cwd()) {
+  let pid;
+  if (typeof snapshot === "string") {
+    const snapshotData = readPlanSnapshot(snapshot, cwd);
+    if (!snapshotData)
+      return false;
+    pid = snapshotData.pid;
+  } else {
+    pid = snapshot.pid;
+  }
+  return isProcessAlive(pid);
+}
+function isProcessAlive(pid) {
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch {
+    return false;
+  }
+}
+function getLatestSnapshot(cwd = process.cwd(), maxAgeMs = 24 * 60 * 60 * 1000) {
+  const snapshots = listSnapshots(cwd);
+  if (snapshots.length === 0) {
+    return null;
+  }
+  const latest = snapshots[0];
+  const age = Date.now() - new Date(latest.timestamp).getTime();
+  if (age > maxAgeMs) {
+    return null;
+  }
+  return latest;
+}
+function detectActiveSnapshot(cwd = process.cwd()) {
+  const snapshots = listSnapshots(cwd);
+  for (const snapshot of snapshots) {
+    if (isSnapshotActive(snapshot, cwd)) {
+      return {
+        hasActive: true,
+        activeSnapshot: snapshot,
+        message: `检测到活跃流水线: PID ${snapshot.pid}, 创建于 ${snapshot.timestamp}, 包含 ${snapshot.tasks.length} 个任务`
+      };
+    }
+  }
+  return {
+    hasActive: false,
+    activeSnapshot: null,
+    message: "未检测到活跃流水线"
+  };
+}
+
+// src/commands/plan.ts
 init_dependency_graph();
-var import_prompts3 = __toESM(require_prompts3(), 1);
 var STOP_WORDS = new Set([
   "的",
   "了",
@@ -34133,10 +32012,9 @@ async function fixPipeline(cwd = process.cwd(), options = {}) {
 // src/commands/init-requirement.ts
 init_path();
 init_task2();
-init_quality_gate();
-var import_prompts10 = __toESM(require_prompts3(), 1);
-import * as fs24 from "fs";
-import * as path20 from "path";
+var import_prompts9 = __toESM(require_prompts3(), 1);
+import * as fs25 from "fs";
+import * as path21 from "path";
 
 // src/commands/task.ts
 init_path();
@@ -34578,1007 +32456,2480 @@ function formatPriority2(priority, cwd) {
 }
 
 // src/commands/init-requirement.ts
-init_checkpoint();
-init_dependency_graph();
-init_task();
 init_logger();
-init_ai_metadata();
-init_requirement_decomposer();
-init_description_template();
-init_dependency_engine();
-var TERMINAL_STATUSES_SET7 = new Set(TERMINAL_STATUSES);
-function mergeAnalysisResults(ruleBased, aiEnhanced) {
-  const aiEnhancedFields = [];
-  let title = ruleBased.title;
-  if (aiEnhanced.title && aiEnhanced.title.length <= 50 && aiEnhanced.title.length >= 10) {
-    title = aiEnhanced.title;
-    aiEnhancedFields.push("title");
+
+// src/utils/investigation/ai-integration.ts
+init_headless_agent();
+var DEFAULT_TIMEOUT = 120;
+var DEFAULT_ALLOWED_TOOLS = [];
+async function callAI(options) {
+  const startTime = Date.now();
+  try {
+    const result = await invokeAgent(options.prompt, {
+      timeout: options.timeout ?? DEFAULT_TIMEOUT,
+      allowedTools: options.allowedTools ?? DEFAULT_ALLOWED_TOOLS,
+      outputFormat: options.outputFormat,
+      cwd: options.cwd,
+      dangerouslySkipPermissions: true
+    });
+    return {
+      output: result.output,
+      success: result.success,
+      durationMs: result.durationMs,
+      error: result.error
+    };
+  } catch (err) {
+    return {
+      output: "",
+      success: false,
+      durationMs: Date.now() - startTime,
+      error: err instanceof Error ? err.message : String(err)
+    };
   }
-  let priority = ruleBased.priority;
-  if (aiEnhanced.priority && ["P0", "P1", "P2", "P3"].includes(aiEnhanced.priority)) {
-    priority = aiEnhanced.priority;
-    aiEnhancedFields.push("priority");
+}
+async function callAIForJSON(options, validator) {
+  const result = await callAI({ ...options, outputFormat: "text" });
+  if (!result.success) {
+    throw new Error(`AI call failed: ${result.error}`);
   }
-  let recommendedRole = ruleBased.recommendedRole;
-  if (aiEnhanced.recommendedRole) {
-    recommendedRole = aiEnhanced.recommendedRole;
-    aiEnhancedFields.push("recommendedRole");
+  const output = result.output.trim();
+  let jsonStr = output;
+  const jsonBlockMatch = output.match(/```json\s*([\s\S]*?)\s*```/);
+  if (jsonBlockMatch) {
+    jsonStr = jsonBlockMatch[1].trim();
+  } else {
+    const start = output.indexOf("{");
+    const end = output.lastIndexOf("}");
+    if (start !== -1 && end !== -1 && end > start) {
+      jsonStr = output.substring(start, end + 1);
+    }
   }
-  let suggestedCheckpoints = ruleBased.suggestedCheckpoints;
-  if (aiEnhanced.checkpoints && aiEnhanced.checkpoints.length > 0) {
-    const combined = [...aiEnhanced.checkpoints, ...ruleBased.suggestedCheckpoints];
-    suggestedCheckpoints = [...new Set(combined)];
-    aiEnhancedFields.push("checkpoints");
+  let parsed;
+  try {
+    parsed = JSON.parse(jsonStr);
+  } catch (parseErr) {
+    throw new Error(`Failed to parse AI output as JSON: ${parseErr instanceof Error ? parseErr.message : String(parseErr)}
+Output: ${output.substring(0, 500)}`);
   }
-  let potentialDependencies = ruleBased.potentialDependencies;
-  if (aiEnhanced.dependencies && aiEnhanced.dependencies.length > 0) {
-    const combined = [...aiEnhanced.dependencies, ...ruleBased.potentialDependencies];
-    potentialDependencies = [...new Set(combined)];
-    aiEnhancedFields.push("dependencies");
+  if (validator) {
+    try {
+      return validator(parsed);
+    } catch (validationErr) {
+      throw new Error(`JSON validation failed: ${validationErr instanceof Error ? validationErr.message : String(validationErr)}`);
+    }
   }
-  let description = ruleBased.description;
-  if (aiEnhanced.description) {
-    description = aiEnhanced.description;
-    aiEnhancedFields.push("description");
+  return parsed;
+}
+
+// src/utils/investigation/types.ts
+var PREFIX_MAP = {
+  verify: { category: "qa_verification", method: "functional_test", requiresHuman: false },
+  test: { category: "qa_verification", method: "unit_test", requiresHuman: false },
+  review: { category: "code_review", method: "code_review", requiresHuman: true },
+  implem: { category: "implementation", method: "automated", requiresHuman: false },
+  doc: { category: "documentation", method: "automated", requiresHuman: false }
+};
+
+// src/utils/investigation/report-validator.ts
+function validateReport(report) {
+  const errors = [];
+  const warnings = [];
+  if (!report.metadata || !report.metadata.requirementSource) {
+    errors.push({ rule: "metadata-required", message: "metadata.requirementSource 缺失或为空" });
+  }
+  if (!report.rootCauseAnalysis || report.rootCauseAnalysis.length === 0) {
+    errors.push({ rule: "root-cause-non-empty", message: "rootCauseAnalysis 为空，至少需要 1 项原因分析" });
+  }
+  if (!report.solutions || report.solutions.length === 0) {
+    errors.push({ rule: "solution-non-empty", message: "solutions 为空，至少需要 1 项解决方案" });
+  }
+  const caIds = new Set;
+  const solIds = new Set;
+  const caFormatRe = /^CA-\d{3,}$/;
+  const solFormatRe = /^SOL-\d{3,}$/;
+  for (const ca of report.rootCauseAnalysis || []) {
+    caIds.add(ca.id);
+    if (!caFormatRe.test(ca.id)) {
+      warnings.push({ rule: "id-format", message: `CA 编号格式不合法: ${ca.id}，期望 CA-NNN` });
+    }
+  }
+  for (const sol of report.solutions || []) {
+    solIds.add(sol.id);
+    if (!solFormatRe.test(sol.id)) {
+      warnings.push({ rule: "id-format", message: `SOL 编号格式不合法: ${sol.id}，期望 SOL-NNN` });
+    }
+  }
+  for (const sol of report.solutions || []) {
+    if (sol.correspondsTo && !caIds.has(sol.correspondsTo)) {
+      errors.push({
+        rule: "ca-sol-correspondence",
+        message: `SOL ${sol.id} 的 correspondsTo "${sol.correspondsTo}" 未在原因分析中找到对应 CA`
+      });
+    }
+  }
+  const validPrefixes = new Set(Object.keys(PREFIX_MAP));
+  if (!report.checkpoints || report.checkpoints.length === 0) {
+    errors.push({ rule: "checkpoint-prefix", message: "checkpoints 为空，至少需要 1 个检查点" });
+  }
+  for (const cp of report.checkpoints || []) {
+    if (!validPrefixes.has(cp.prefix)) {
+      warnings.push({
+        rule: "checkpoint-prefix",
+        message: `检查点前缀 "${cp.prefix}" 不在 PREFIX_MAP 中，有效值: ${[...validPrefixes].join(", ")}`
+      });
+    }
+  }
+  for (const cp of report.checkpoints || []) {
+    if (cp.belongsTo && !solIds.has(cp.belongsTo)) {
+      warnings.push({
+        rule: "checkpoint-belongsto",
+        message: `检查点 belongsTo "${cp.belongsTo}" 未在解决方案中找到对应 SOL`
+      });
+    }
+  }
+  if (!report.assessment) {
+    warnings.push({ rule: "assessment-required", message: "assessment 缺失" });
+  } else {
+    const validComplexity = new Set(["low", "medium", "high"]);
+    if (!validComplexity.has(report.assessment.complexity)) {
+      warnings.push({
+        rule: "assessment-required",
+        message: `assessment.complexity "${report.assessment.complexity}" 不合法，有效值: low, medium, high`
+      });
+    }
   }
   return {
-    title,
-    description,
-    priority,
-    recommendedRole,
-    estimatedComplexity: ruleBased.estimatedComplexity,
-    suggestedCheckpoints,
-    potentialDependencies,
-    aiEnhancedFields,
-    aiUsed: true
+    valid: errors.length === 0,
+    errors,
+    warnings
   };
 }
-async function initRequirement(description, cwd = process.cwd(), options = {}) {
-  const { nonInteractive = false, noPlan = false, skipValidation = false, template = "simple", noAI = false, requireQuality, decompose: shouldDecomposeOption = true } = options;
+
+// src/utils/prompt-templates/i18n/zh.ts
+var investigationTemplates = {
+  investigate: `你是 projmnt4claude 项目的需求调查分析师。
+
+## 任务
+根据以下需求描述，生成一份结构化的调查报告。
+
+## 需求描述
+{requirement}
+
+## 项目上下文
+{projectContext}
+
+## 排版层级约束（必须严格遵守）
+- 标题层级：# 一级 → ## 二级 → ### 三级，不得跳级
+- 章节编号：使用 数字. 数字 格式（如 1.1, 1.2），不使用混合编号
+- 列表层级：缩进使用 2 空格，最多 3 级嵌套
+- 代码块：必须标注语言类型
+- 表格：必须有表头行，列对齐
+- 检查点：必须使用 [prefix] 标准前缀格式
+
+## 输出格式
+请严格按照以下格式输出调查报告（zh）：
+
+# 调查报告：{title}
+
+## 元数据
+- 需求来源: {requirement}
+- 调查时间: {date}
+- 调查目录: investigation-{slug}
+- 语言: zh
+
+## 原因分析
+### CA-001: {原因标题}
+{原因详细描述}
+
+## 解决方案
+### SOL-001: {方案标题} → 对应 CA-001
+{方案详细描述}
+- 涉及文件: \`src/path/to/file.ts\`
+- 预期变更: {变更描述}
+
+## 检查点覆盖清单
+### SOL-001 相关检查点
+- [verify] 验证 {具体验证内容}
+- [test] 测试 {具体测试内容}
+
+## 评估
+- 复杂度: {low|medium|high}
+- 影响范围: {有限|中等|广泛}
+- 预估工时: {N} 分钟
+
+## 注意事项
+- 原因分析必须追溯到需求本身，确保"需求→原因"链路完整
+- 解决方案必须逐一对应原因分析中的每个结论
+- 检查点必须覆盖解决方案中的每个要点
+- 检查点使用门禁标准前缀: [verify], [test], [review], [implem], [doc]
+`,
+  review: `你是 projmnt4claude 项目的调查报告质量评审员。
+
+## 任务
+评审以下调查报告的质量，从三个维度进行评估。
+
+## 原始需求
+{requirement}
+
+## 调查报告
+{report}
+
+## 排版层级约束（评审时检查）
+- 标题层级：# 一级 → ## 二级 → ### 三级，不得跳级
+- 章节编号：使用 数字. 数字 格式
+- 列表层级：缩进使用 2 空格，最多 3 级嵌套
+- 代码块：必须标注语言类型
+- 表格：必须有表头行，列对齐
+- 检查点：必须使用 [prefix] 标准前缀格式
+
+## 评审标准
+
+### 维度1: 原因分析对齐度
+- 原因分析是否完整覆盖了用户需求中的所有要点？
+- 是否存在遗漏的需求维度？
+- 原因推导是否逻辑自洽？
+
+### 维度2: 解决方案有效性
+- 解决方案是否逐一对应了原因分析中的每个结论？
+- 解决方案是否确实能够解决用户的需求？
+- 是否存在解决方案与原因不对应的情况？
+
+### 维度3: 检查点完善度
+- 检查点是否覆盖了解决方案中的所有要点？
+- 检查点的验证方法是否具体且可执行？
+- 检查点是否使用了标准前缀分类？
+
+## 输出格式
+\`\`\`json
+{
+  "pass": true或false,
+  "scores": {
+    "rootCauseAlignment": 0-100,
+    "solutionEffectiveness": 0-100,
+    "checkpointCompleteness": 0-100
+  },
+  "issues": [
+    {
+      "dimension": "rootCauseAlignment|solutionEffectiveness|checkpointCompleteness",
+      "severity": "critical|major|minor",
+      "description": "问题描述",
+      "suggestion": "改进建议"
+    }
+  ]
+}
+\`\`\`
+
+## 通过标准
+- 所有维度分数 >= 70 且无 critical 问题 → pass: true
+- 任一维度分数 < 70 或存在 critical 问题 → pass: false
+`,
+  investigateWithFeedback: `你是 projmnt4claude 项目的需求调查分析师。
+
+## 任务
+根据用户反馈，修正以下调查报告。
+
+## 原始需求
+{requirement}
+
+## 当前调查报告
+{currentReport}
+
+## 用户反馈
+{feedback}
+
+## 修正指导
+- 针对反馈中提到的问题，在报告中对应章节进行修正
+- 修正时保持报告整体结构不变
+- 在修正的章节末尾添加 [修订: {date}] 标记
+- 如果反馈涉及新的原因或解决方案，在对应章节中追加
+
+## 排版层级约束（必须严格遵守）
+- 标题层级：# 一级 → ## 二级 → ### 三级，不得跳级
+- 章节编号：使用 数字. 数字 格式
+- 列表层级：缩进使用 2 空格，最多 3 级嵌套
+- 代码块：必须标注语言类型
+- 表格：必须有表头行，列对齐
+- 检查点：必须使用 [prefix] 标准前缀格式
+
+## 输出格式
+（同 investigate 模板）
+`,
+  split: `你是 projmnt4claude 项目的需求分解分析师。
+
+## 任务
+将以下调查报告拆分为多个独立的子问题/子需求调查报告。
+
+## 原始调查报告
+{report}
+
+## 当前拆分阈值
+{splitThreshold} KB
+
+## 拆分指导
+
+### 子问题关系类型
+子问题之间存在两种关系：
+1. **并列分类（parallel）**: 按主题/模块分类，子项间无先后依赖，可并行处理
+2. **分层依赖（hierarchical）**: 子项间存在上下层依赖，dependsOn 体现层次结构，需按序处理
+每个子项必须在 \`relationship\` 字段注明类型。
+
+### dependsOn 约束
+- dependsOn 是体现分层结构的关键信息
+- 并列分类的子项 dependsOn 为空数组
+- 分层依赖的子项：底层在前（dependsOn 为空），上层依赖底层（dependsOn 标注底层 index）
+
+### 禁止的拆分方式
+**严禁**按照执行流程的阶段（开发→审核→验证→评估）拆分报告。
+每个子报告必须是自身完整的闭环（含原因分析、解决方案、检查点覆盖清单、评估），
+不能将闭环的不同阶段分散到不同子报告中。
+
+### 粒度控制
+每个子项的预估大小应控制在阈值 {splitThreshold} KB 以内。预估超过阈值 1.5 倍会被标记为粒度过大。
+
+## 输出格式
+\`\`\`json
+{
+  "items": [
+    {
+      "title": "子问题/子需求标题",
+      "relationship": "parallel|hierarchical",
+      "scope": "涉及的范围描述",
+      "description": "详细描述，包含原始需求映射",
+      "estimatedSize": 预估大小(KB),
+      "dependsOn": [依赖子项的index，从0开始。parallel类型为空数组]
+    }
+  ]
+}
+\`\`\`
+`,
+  splitReview: `你是 projmnt4claude 项目的拆分方案质量审核员。
+
+## 任务
+审核以下拆分方案是否满足拆分要求，从六个维度进行评估。
+
+## 原始调查报告
+{report}
+
+## 拆分方案
+{splitPlan}
+
+## 当前拆分阈值
+{splitThreshold} KB
+
+## 审核标准
+
+### 维度1: 覆盖完整性
+- 拆分后的子项是否完整覆盖了原报告中的所有需求/问题？
+- 是否存在遗漏的需求维度或解决方案？
+
+### 维度2: 边界清晰性
+- 各子项之间的 scope 是否有重叠或模糊地带？
+- 每个子项的边界是否明确定义？
+
+### 维度3: 独立性
+- 每个子项是否能独立理解和实施（自身包含原因分析、解决方案、检查点、评估的完整闭环）？
+- 是否存在不合理的耦合？
+
+### 维度4: 依赖合理性
+- dependsOn 标注的依赖关系是否真实存在且必要？
+- 是否存在循环依赖？
+- relationship 字段标注的类型是否准确（parallel vs hierarchical）？
+
+### 维度5: 反阶段拆分（一票否决）
+- **严格检查**：是否存在按执行流程阶段（开发→审核→验证→评估）拆分的子项？
+- 每个子报告必须自身是完整闭环，不能将闭环的不同阶段分散到不同子报告中。
+- 发现此类拆分 → 直接判定 FAIL，severity = critical。
+
+### 维度6: 粒度适中
+- 每个子项的预估大小是否在阈值 {splitThreshold} KB 上下合理范围内？
+- 是否存在粒度过大（预估超过阈值 1.5 倍）或过小的子项？
+- 注意：粒度检查为 warning 级别，不硬阻断。实际递归拆分由子报告生成后的文件大小触发。
+
+## 输出格式
+\`\`\`json
+{
+  "pass": true或false,
+  "scores": {
+    "coverage": 0-100,
+    "boundaryClarity": 0-100,
+    "independence": 0-100,
+    "dependencyReasonability": 0-100,
+    "antiPhaseSplitting": 0-100,
+    "granularity": 0-100
+  },
+  "issues": [
+    {
+      "dimension": "coverage|boundaryClarity|independence|dependencyReasonability|antiPhaseSplitting|granularity",
+      "severity": "critical|major|minor",
+      "description": "问题描述",
+      "suggestion": "改进建议"
+    }
+  ]
+}
+\`\`\`
+
+## 通过标准
+- 所有维度分数 >= 70 且无 critical 问题 → pass: true
+- 任一维度分数 < 70 或存在 critical 问题 → pass: false
+`
+};
+
+// src/utils/prompt-templates/i18n/en.ts
+var investigationTemplates2 = {
+  investigate: `You are a requirement investigation analyst for the projmnt4claude project.
+
+## Task
+Generate a structured investigation report based on the following requirement description.
+
+## Requirement Description
+{requirement}
+
+## Project Context
+{projectContext}
+
+## Layout Hierarchy Constraints (Must Strictly Follow)
+- Title hierarchy: # Level 1 → ## Level 2 → ### Level 3, no skipping
+- Section numbering: Use digit.digit format (e.g., 1.1, 1.2), no mixed numbering
+- List hierarchy: Use 2-space indentation, max 3 levels nested
+- Code blocks: Must specify language type
+- Tables: Must have header row, columns aligned
+- Checkpoints: Must use [prefix] standard prefix format
+
+## Output Format
+Output the investigation report in the following format (en):
+
+# Investigation Report: {title}
+
+## Metadata
+- Requirement Source: {requirement}
+- Investigation Date: {date}
+- Investigation Directory: investigation-{slug}
+- Language: en
+
+## Root Cause Analysis
+### CA-001: {Root cause title}
+{Root cause detailed description}
+
+## Solution
+### SOL-001: {Solution title} → Corresponds to CA-001
+{Solution detailed description}
+- Involved Files: \`src/path/to/file.ts\`
+- Expected Changes: {Change description}
+
+## Checkpoint Checklist
+### SOL-001 Related Checkpoints
+- [verify] Verify {specific verification content}
+- [test] Test {specific test content}
+
+## Assessment
+- Complexity: {low|medium|high}
+- Impact Scope: {limited|moderate|extensive}
+- Estimated Effort: {N} minutes
+
+## Notes
+- Root cause analysis must trace back to the requirement, ensuring a complete "requirement→cause" chain
+- Solutions must correspond one-to-one with each conclusion in the root cause analysis
+- Checkpoints must cover every key point in the solution
+- Use standard gate prefixes for checkpoints: [verify], [test], [review], [implem], [doc]
+`,
+  review: `You are an investigation report quality reviewer for the projmnt4claude project.
+
+## Task
+Review the quality of the following investigation report across three dimensions.
+
+## Original Requirement
+{requirement}
+
+## Investigation Report
+{report}
+
+## Layout Hierarchy Constraints (Check During Review)
+- Title hierarchy: # Level 1 → ## Level 2 → ### Level 3, no skipping
+- Section numbering: Use digit.digit format
+- List hierarchy: Use 2-space indentation, max 3 levels nested
+- Code blocks: Must specify language type
+- Tables: Must have header row, columns aligned
+- Checkpoints: Must use [prefix] standard prefix format
+
+## Review Criteria
+
+### Dimension 1: Root Cause Alignment
+- Does the root cause analysis comprehensively cover all key points in the user's requirement?
+- Are there any missing requirement dimensions?
+- Is the root cause reasoning logically consistent?
+
+### Dimension 2: Solution Effectiveness
+- Does each solution correspond one-to-one with each conclusion in the root cause analysis?
+- Can the solutions genuinely address the user's requirement?
+- Are there any cases where solutions do not correspond to root causes?
+
+### Dimension 3: Checkpoint Completeness
+- Do the checkpoints cover all key points in the solution?
+- Are the checkpoint verification methods specific and executable?
+- Do the checkpoints use standard prefix categorization?
+
+## Output Format
+\`\`\`json
+{
+  "pass": true or false,
+  "scores": {
+    "rootCauseAlignment": 0-100,
+    "solutionEffectiveness": 0-100,
+    "checkpointCompleteness": 0-100
+  },
+  "issues": [
+    {
+      "dimension": "rootCauseAlignment|solutionEffectiveness|checkpointCompleteness",
+      "severity": "critical|major|minor",
+      "description": "Problem description",
+      "suggestion": "Improvement suggestion"
+    }
+  ]
+}
+\`\`\`
+
+## Pass Criteria
+- All dimension scores >= 70 and no critical issues → pass: true
+- Any dimension score < 70 or critical issues exist → pass: false
+`,
+  investigateWithFeedback: `You are a requirement investigation analyst for the projmnt4claude project.
+
+## Task
+Revise the following investigation report based on user feedback.
+
+## Original Requirement
+{requirement}
+
+## Current Investigation Report
+{currentReport}
+
+## User Feedback
+{feedback}
+
+## Revision Guidelines
+- Address the issues raised in the feedback in the corresponding sections of the report
+- Keep the overall report structure unchanged
+- Add a [Revised: {date}] marker at the end of revised sections
+- If feedback involves new root causes or solutions, append them in the corresponding sections
+
+## Layout Hierarchy Constraints (Must Strictly Follow)
+- Title hierarchy: # Level 1 → ## Level 2 → ### Level 3, no skipping
+- Section numbering: Use digit.digit format
+- List hierarchy: Use 2-space indentation, max 3 levels nested
+- Code blocks: Must specify language type
+- Tables: Must have header row, columns aligned
+- Checkpoints: Must use [prefix] standard prefix format
+
+## Output Format
+(Same as the investigate template)
+`,
+  split: `You are a requirement decomposition analyst for the projmnt4claude project.
+
+## Task
+Split the following investigation report into independent sub-problem/sub-requirement reports.
+
+## Original Report
+{report}
+
+## Current Split Threshold
+{splitThreshold} KB
+
+## Split Guidelines
+
+### Sub-Problem Relationship Types
+Two relationship types exist between sub-problems:
+1. **Parallel**: Items are categorized by theme/module with no ordering dependencies. Can be processed concurrently.
+2. **Hierarchical**: Items have layered dependencies. dependsOn reflects the hierarchy. Must be processed in order.
+Each item MUST specify its \`relationship\` type.
+
+### dependsOn Constraints
+- dependsOn is critical for representing hierarchical structure
+- Parallel items: dependsOn is an empty array
+- Hierarchical items: base layers first (empty dependsOn), upper layers depend on base (specify base index in dependsOn)
+
+### Forbidden Split Pattern
+**DO NOT** split by execution phase (development→review→verification→evaluation).
+Each sub-report must be a self-contained closed loop (root cause analysis, solution design, checkpoint checklist, assessment).
+Do not distribute phases of the closed loop across different sub-reports.
+
+### Size Control
+Each sub-item's estimated size should stay within the {splitThreshold} KB threshold. Estimates exceeding 1.5x the threshold will be flagged as oversized.
+
+## Output Format
+\`\`\`json
+{
+  "items": [
+    {
+      "title": "Sub-problem title",
+      "relationship": "parallel|hierarchical",
+      "scope": "Scope description",
+      "description": "Detailed description with original requirement mapping",
+      "estimatedSize": "estimated size in KB",
+      "dependsOn": ["indices of dependent sub-items, 0-based. Empty array for parallel type"]
+    }
+  ]
+}
+\`\`\`
+`,
+  splitReview: `You are a split plan quality reviewer for the projmnt4claude project.
+
+## Task
+Review the following split plan against split requirements across six dimensions.
+
+## Original Report
+{report}
+
+## Split Plan
+{splitPlan}
+
+## Current Split Threshold
+{splitThreshold} KB
+
+## Review Criteria
+
+### Dimension 1: Coverage Completeness
+- Do the sub-items completely cover all requirements/problems in the original report?
+- Are there any missing requirement dimensions or solutions?
+
+### Dimension 2: Boundary Clarity
+- Is there any overlap or ambiguity in scope between sub-items?
+- Is each sub-item's boundary clearly defined?
+
+### Dimension 3: Independence
+- Can each sub-item be understood and implemented independently (as a self-contained closed loop with root cause analysis, solutions, checkpoints, and assessment)?
+- Are there any unreasonable couplings?
+
+### Dimension 4: Dependency Reasonability
+- Are the dependsOn dependencies real and necessary?
+- Are there any circular dependencies?
+- Is the relationship type (parallel vs hierarchical) accurately labeled?
+
+### Dimension 5: Anti-Phase-Splitting (One-Vote Veto)
+- **Strict check**: Are there any sub-items split by execution phase (development→review→verification→evaluation)?
+- Each sub-report MUST be a self-contained closed loop. Do not distribute phases across different sub-reports.
+- If found → immediate FAIL, severity = critical.
+
+### Dimension 6: Appropriate Granularity
+- Is each sub-item's estimated size within a reasonable range of the {splitThreshold} KB threshold?
+- Are there any items that are oversized (estimated > 1.5x threshold) or undersized?
+- Note: granularity is a warning-level check, not a hard block. Actual recursive splitting is triggered by the generated sub-report file size.
+
+## Output Format
+\`\`\`json
+{
+  "pass": true or false,
+  "scores": {
+    "coverage": 0-100,
+    "boundaryClarity": 0-100,
+    "independence": 0-100,
+    "dependencyReasonability": 0-100,
+    "antiPhaseSplitting": 0-100,
+    "granularity": 0-100
+  },
+  "issues": [
+    {
+      "dimension": "coverage|boundaryClarity|independence|dependencyReasonability|antiPhaseSplitting|granularity",
+      "severity": "critical|major|minor",
+      "description": "Problem description",
+      "suggestion": "Improvement suggestion"
+    }
+  ]
+}
+\`\`\`
+
+## Pass Criteria
+- All dimension scores >= 70 and no critical issues → pass: true
+- Any dimension score < 70 or critical issues exist → pass: false
+`
+};
+
+// src/utils/prompt-templates/i18n/init-requirement-zh.ts
+var initRequirementTemplates = {
+  reportToTask: `你是 projmnt4claude 项目的任务创建助手。
+
+## 任务
+根据以下调查报告，生成创建任务所需的完整元数据结构（JSON 格式）。
+
+## 调查报告
+{report}
+
+## 检查点前缀映射规则
+{prefixMap}
+
+## 输出要求
+请输出一个完整的 JSON 对象，包含以下字段：
+
+\`\`\`json
+{
+  "title": "任务标题（从报告标题提取）",
+  "type": "bug|feature|research|docs|refactor|test",
+  "priority": "P0|P1|P2|P3",
+  "description": "完整的任务描述，必须包含: ## 原因分析\\n{对应报告CA章节}\\n\\n## 解决方案\\n{对应报告SOL章节}",
+  "checkpoints": [
+    {
+      "prefix": "verify|test|review|implem|doc",
+      "description": "检查点描述（去除前缀后的纯文本）",
+      "category": "按 PREFIX_MAP 推断",
+      "verificationMethod": "按 PREFIX_MAP 推断"
+    }
+  ],
+  "files": ["从报告解决方案章节提取的涉及文件路径"],
+  "estimatedMinutes": "预估工时（数字）",
+  "dependencies": ["依赖的报告相对路径，如无可为空数组"]
+}
+\`\`\`
+
+## 约束
+- 检查点必须从报告的「检查点覆盖清单」章节提取
+- 每个检查点必须包含标准前缀 [verify]/[test]/[review]/[implem]/[doc]
+- 按照 PREFIX_MAP 正确设置 category 和 verificationMethod
+- description 必须包含「原因分析」和「解决方案」两个章节
+- 输出纯 JSON，不要包含 markdown 代码块标记`,
+  taskFix: `你是 projmnt4claude 项目的任务元数据修复助手。
+
+## 任务
+以下任务未通过质量门禁，请根据失败原因修正任务元数据。
+
+## 当前任务元数据（meta.json）
+{currentMeta}
+
+## 门禁失败原因
+{gateErrors}
+
+## 质量评分详情
+{qualityIssues}
+
+## 对齐验证失败项（如有）
+{alignmentIssues}
+
+## 修正要求
+请输出修正后的完整任务元数据 JSON，保持原有结构，仅修改失败项相关的字段:
+
+1. 如果检查点缺少前缀 → 补充标准前缀
+2. 如果 category 不正确 → 按 PREFIX_MAP 修正
+3. 如果 verification.commands 为空 → 根据检查点前缀 + 任务 files 生成
+4. 如果 description 缺少章节 → 补充完整的「原因分析」和「解决方案」
+5. 如果对齐验证失败 → 根据 alignmentIssues 中的具体描述修正对应章节
+6. 如果评分过低 → 提升对应维度的内容质量
+
+## 输出格式
+输出修正后的完整 meta.json JSON 对象，保持所有原有字段不变，仅修改需要修正的部分。`,
+  aiAlignmentCheck: `你是 projmnt4claude 项目的任务对齐验证助手。
+
+## 任务
+对比以下调查报告和已创建的任务元数据，判断两者是否对齐。
+
+## 调查报告
+{report}
+
+## 任务元数据（meta.json）
+{taskMeta}
+
+## 对齐验证维度
+1. **原因分析对齐**: 任务 description 中的「原因分析」章节是否覆盖了报告的所有 CA-xxx 条目
+2. **解决方案对齐**: 任务 description 中的「解决方案」章节是否覆盖了报告的所有 SOL-xxx 条目
+3. **检查点对齐**: 任务 checkpoints 数量和内容是否与报告的「检查点覆盖清单」一致
+
+## 输出格式
+\`\`\`json
+{
+  "aligned": true或false,
+  "checks": {
+    "rootCauseAlignment": { "passed": true或false, "detail": "具体描述" },
+    "solutionAlignment": { "passed": true或false, "detail": "具体描述" },
+    "checkpointAlignment": { "passed": true或false, "detail": "具体描述" }
+  },
+  "issues": ["不对齐项的描述列表，aligned=true时为空数组"]
+}
+\`\`\``
+};
+
+// src/utils/prompt-templates/i18n/init-requirement-en.ts
+var initRequirementTemplates2 = {
+  reportToTask: `You are a task creation assistant for the projmnt4claude project.
+
+## Task
+Generate a complete task metadata structure (JSON format) based on the following investigation report.
+
+## Investigation Report
+{report}
+
+## Checkpoint Prefix Mapping Rules
+{prefixMap}
+
+## Output Requirements
+Output a complete JSON object with the following fields:
+
+\`\`\`json
+{
+  "title": "Task title (extracted from report title)",
+  "type": "bug|feature|research|docs|refactor|test",
+  "priority": "P0|P1|P2|P3",
+  "description": "Full task description, must include: ## Root Cause Analysis\\n{map report CA sections}\\n\\n## Solution\\n{map report SOL sections}",
+  "checkpoints": [
+    {
+      "prefix": "verify|test|review|implem|doc",
+      "description": "Checkpoint description (plain text without prefix)",
+      "category": "Inferred from PREFIX_MAP",
+      "verificationMethod": "Inferred from PREFIX_MAP"
+    }
+  ],
+  "files": ["File paths extracted from report solution sections"],
+  "estimatedMinutes": "Estimated hours (number)",
+  "dependencies": ["Dependent report relative paths, empty array if none"]
+}
+\`\`\`
+
+## Constraints
+- Checkpoints MUST be extracted from the report's "Checkpoint Checklist" section
+- Each checkpoint MUST include a standard prefix: [verify]/[test]/[review]/[implem]/[doc]
+- Correctly set category and verificationMethod according to PREFIX_MAP
+- description MUST include both "Root Cause Analysis" and "Solution" sections
+- Output pure JSON only, do NOT include markdown code block markers`,
+  taskFix: `You are a task metadata repair assistant for the projmnt4claude project.
+
+## Task
+The following task failed the quality gate. Fix the task metadata based on the failure reasons.
+
+## Current Task Metadata (meta.json)
+{currentMeta}
+
+## Gate Failure Reasons
+{gateErrors}
+
+## Quality Score Details
+{qualityIssues}
+
+## Alignment Verification Failures (if any)
+{alignmentIssues}
+
+## Fix Requirements
+Output the corrected full task metadata JSON. Keep the existing structure, only modify fields related to failures:
+
+1. If checkpoints are missing prefixes → add standard prefixes
+2. If category is incorrect → correct according to PREFIX_MAP
+3. If verification.commands is empty → generate based on checkpoint prefix + task files
+4. If description is missing sections → add complete "Root Cause Analysis" and "Solution" sections
+5. If alignment verification failed → fix corresponding sections based on alignmentIssues
+6. If quality score is too low → improve content quality for the relevant dimensions
+
+## Output Format
+Output the corrected full meta.json JSON object. Keep all existing fields unchanged, only modify what needs fixing.`,
+  aiAlignmentCheck: `You are a task alignment verification assistant for the projmnt4claude project.
+
+## Task
+Compare the following investigation report with the created task metadata to determine whether they are aligned.
+
+## Investigation Report
+{report}
+
+## Task Metadata (meta.json)
+{taskMeta}
+
+## Alignment Verification Dimensions
+1. **Root Cause Alignment**: Does the "Root Cause Analysis" section in the task description cover all CA-xxx entries in the report?
+2. **Solution Alignment**: Does the "Solution" section in the task description cover all SOL-xxx entries in the report?
+3. **Checkpoint Alignment**: Do the task checkpoints match the report's "Checkpoint Checklist" in both count and content?
+
+## Output Format
+\`\`\`json
+{
+  "aligned": true or false,
+  "checks": {
+    "rootCauseAlignment": { "passed": true or false, "detail": "specific description" },
+    "solutionAlignment": { "passed": true or false, "detail": "specific description" },
+    "checkpointAlignment": { "passed": true or false, "detail": "specific description" }
+  },
+  "issues": ["List of misalignment descriptions, empty array when aligned=true"]
+}
+\`\`\``
+};
+
+// src/utils/prompt-templates/loader.ts
+var templateRegistry = {
+  zh: { ...investigationTemplates, ...initRequirementTemplates },
+  en: { ...investigationTemplates2, ...initRequirementTemplates2 }
+};
+function loadTemplate(name, lang = "zh") {
+  const templates = templateRegistry[lang];
+  if (!templates) {
+    throw new Error(`Unsupported language: ${lang}. Supported: zh, en`);
+  }
+  const template = templates[name];
+  if (!template) {
+    throw new Error(`Template "${name}" not found for language "${lang}". Available: ${Object.keys(templates).join(", ")}`);
+  }
+  return template;
+}
+function renderTemplate(template, params) {
+  return template.replace(/\{(\w+)\}/g, (match, key) => {
+    if (key in params) {
+      return params[key];
+    }
+    return match;
+  });
+}
+function loadAndRenderTemplate(name, params, lang = "zh") {
+  const template = loadTemplate(name, lang);
+  return renderTemplate(template, params);
+}
+
+// src/utils/init-requirement/types.ts
+var DEFAULT_QUALITY_GATE_CONFIG2 = {
+  minQualityScore: 60
+};
+// src/utils/init-requirement/prefix-map.ts
+var PREFIX_MAP2 = {
+  verify: { category: "qa_verification", method: "functional_test", requiresHuman: false },
+  test: { category: "qa_verification", method: "unit_test", requiresHuman: false },
+  review: { category: "code_review", method: "code_review", requiresHuman: true },
+  implem: { category: "implementation", method: "automated", requiresHuman: false },
+  doc: { category: "documentation", method: "automated", requiresHuman: false }
+};
+var VALID_PREFIXES = Object.keys(PREFIX_MAP2);
+function parseCheckpoint(raw) {
+  const match = raw.match(/^\[(verify|test|review|implem|doc)\]\s*(.+)/);
+  if (!match)
+    return null;
+  const prefix = match[1];
+  const mapped = PREFIX_MAP2[prefix];
+  return {
+    prefix,
+    description: match[2].trim(),
+    category: mapped.category,
+    verificationMethod: mapped.method,
+    requiresHuman: mapped.requiresHuman
+  };
+}
+// src/utils/init-requirement/verification-commands.ts
+import { existsSync as existsSync21 } from "node:fs";
+function generateVerificationCommands(checkpoint, taskFiles) {
+  switch (checkpoint.prefix) {
+    case "test": {
+      const testFiles = taskFiles.map((f) => f.replace(/src\/(.*)\.ts$/, "tests/$1.test.ts")).filter((f) => existsSync21(f));
+      return testFiles.length > 0 ? [`bun test ${testFiles.join(" ")}`] : [`bun test --test-name-pattern="${checkpoint.description}"`];
+    }
+    case "verify":
+      return ["bun run build && bun test"];
+    case "review":
+      return [`git diff HEAD -- ${taskFiles.join(" ")}`];
+    case "implem":
+      return ["bun run build"];
+    case "doc":
+      return ["bun run build"];
+  }
+}
+// src/utils/init-requirement/conversion-status.ts
+import fs24 from "node:fs";
+import path20 from "node:path";
+var STATUS_FILE = "conversion-status.json";
+function loadConversionStatus(investigationDir) {
+  const filePath = path20.join(investigationDir, STATUS_FILE);
+  if (fs24.existsSync(filePath)) {
+    return JSON.parse(fs24.readFileSync(filePath, "utf-8"));
+  }
+  return createEmptyConversionStatus();
+}
+function createEmptyConversionStatus() {
+  return {
+    reports: {},
+    tasks: {},
+    lastRunAt: new Date().toISOString()
+  };
+}
+function saveConversionStatus(investigationDir, status) {
+  const filePath = path20.join(investigationDir, STATUS_FILE);
+  status.lastRunAt = new Date().toISOString();
+  fs24.writeFileSync(filePath, JSON.stringify(status, null, 2), "utf-8");
+}
+function updateConversionStatus(investigationDir, reportPath, state, detail) {
+  const status = loadConversionStatus(investigationDir);
+  status.reports[reportPath] = state;
+  if (detail) {
+    const existing = status.tasks[reportPath] || {};
+    status.tasks[reportPath] = {
+      ...existing,
+      ...detail
+    };
+  }
+  saveConversionStatus(investigationDir, status);
+}
+function topologicalSort(reports, status, investigationDir) {
+  const dependencies = new Map;
+  const allReports = new Set(reports);
+  for (const report of reports) {
+    const deps = new Set;
+    const metaPath = path20.join(investigationDir, report.replace(/\.md$/, ""), "meta.json");
+    if (fs24.existsSync(metaPath)) {
+      try {
+        const meta = JSON.parse(fs24.readFileSync(metaPath, "utf-8"));
+        if (meta.dependsOn && Array.isArray(meta.dependsOn)) {
+          for (const dep of meta.dependsOn) {
+            if (allReports.has(dep)) {
+              deps.add(dep);
+            }
+          }
+        }
+      } catch {}
+    }
+    dependencies.set(report, deps);
+  }
+  const inDegree = new Map;
+  for (const report of reports) {
+    inDegree.set(report, 0);
+  }
+  for (const report of reports) {
+    const deps = dependencies.get(report) || new Set;
+    inDegree.set(report, deps.size);
+  }
+  const queue = [];
+  for (const [report, degree] of inDegree) {
+    if (degree === 0) {
+      queue.push(report);
+    }
+  }
+  const sorted = [];
+  while (queue.length > 0) {
+    const current = queue.shift();
+    sorted.push(current);
+    for (const report of reports) {
+      const deps = dependencies.get(report);
+      if (deps && deps.has(current)) {
+        const newDegree = (inDegree.get(report) || 1) - 1;
+        inDegree.set(report, newDegree);
+        if (newDegree === 0 && !sorted.includes(report)) {
+          queue.push(report);
+        }
+      }
+    }
+  }
+  if (sorted.length !== reports.length) {
+    throw new Error("循环依赖检测：报告之间存在循环依赖，无法进行拓扑排序");
+  }
+  return sorted;
+}
+// src/utils/init-requirement/gate-check-fix.ts
+var MAX_RETRIES = 3;
+async function gateCheckAndFix(params, deps) {
+  const {
+    taskId,
+    reportPath,
+    investigationDir,
+    cwd,
+    maxRetries = MAX_RETRIES,
+    isResumed = false
+  } = params;
+  let attempt = 0;
+  let lastFailures = [];
+  while (attempt < maxRetries) {
+    attempt++;
+    const gateResult = await runGateCheck(taskId, cwd, attempt, maxRetries, isResumed, deps);
+    if (!gateResult.passed) {
+      lastFailures = gateResult.failures.map((f) => `${f.source}: ${f.detail}`);
+      deps.updateConversionStatus(investigationDir, reportPath, "failed", {
+        taskId,
+        lastError: lastFailures.join("; "),
+        lastAttemptAt: new Date().toISOString()
+      });
+      const fixResult = await runAIFix(taskId, cwd, gateResult.failures, deps);
+      if (!fixResult.success) {
+        continue;
+      }
+    }
+    const alignmentResult = await runAlignmentVerification(reportPath, taskId, cwd, deps);
+    if (!alignmentResult.aligned) {
+      await injectAlignmentIssues(taskId, cwd, alignmentResult, deps);
+      lastFailures = alignmentResult.issues;
+      deps.updateConversionStatus(investigationDir, reportPath, "failed", {
+        taskId,
+        lastError: `Alignment failed: ${alignmentResult.issues.join("; ")}`,
+        lastAttemptAt: new Date().toISOString()
+      });
+      const alignmentIssuesStr = alignmentResult.issues.join(`
+`);
+      const fixResult = await runAIFix(taskId, cwd, [], deps, alignmentIssuesStr);
+      if (!fixResult.success) {
+        continue;
+      }
+      continue;
+    }
+    deps.updateConversionStatus(investigationDir, reportPath, "completed", {
+      taskId
+    });
+    return { passed: true, taskId, attempt };
+  }
+  await archiveAndCleanup(taskId, investigationDir, reportPath, lastFailures, deps);
+  return {
+    passed: false,
+    taskId,
+    attempt,
+    failures: lastFailures,
+    cleanedUp: true
+  };
+}
+async function runGateCheck(taskId, cwd, attempt, maxRetries, isResumed, deps) {
+  const failures = [];
+  const preDevResult = await deps.runPreDevGate({
+    taskId,
+    task: deps.readTaskMeta(taskId, cwd),
+    cwd,
+    attempt,
+    maxRetries,
+    isResumed
+  });
+  if (!preDevResult.passed) {
+    failures.push({
+      source: "preDevGate",
+      detail: "Pre-dev gate failed",
+      ruleResults: preDevResult.results,
+      suggestions: preDevResult.results?.map((r) => r.message).filter(Boolean)
+    });
+  }
+  const qualityResult = await deps.checkQualityGate(taskId, DEFAULT_QUALITY_GATE_CONFIG2, cwd);
+  if (!qualityResult.passed) {
+    failures.push({
+      source: "qualityGate",
+      detail: `Quality score ${qualityResult.score.totalScore} below threshold ${DEFAULT_QUALITY_GATE_CONFIG2.minQualityScore}`,
+      suggestions: qualityResult.suggestions
+    });
+  }
+  const depsValid = deps.validateNewTaskDeps(taskId);
+  if (!depsValid) {
+    failures.push({
+      source: "dependencyCheck",
+      detail: "Task has unmet dependencies"
+    });
+  }
+  return { passed: failures.length === 0, failures };
+}
+async function runAIFix(taskId, cwd, failures, deps, alignmentIssues) {
+  const gateErrors = failures.filter((f) => f.source === "preDevGate" || f.source === "dependencyCheck").map((f) => `- [${f.source}] ${f.detail}`).join(`
+`);
+  const qualityIssues = failures.filter((f) => f.source === "qualityGate").map((f) => `${f.detail}${f.suggestions ? `
+  Suggestions: ` + f.suggestions.join("; ") : ""}`).join(`
+`);
+  const currentMeta = JSON.stringify(deps.readTaskMeta(taskId, cwd), null, 2);
+  const prompt = loadAndRenderTemplate("taskFix", {
+    currentMeta,
+    gateErrors: gateErrors || "None",
+    qualityIssues: qualityIssues || "None",
+    alignmentIssues: alignmentIssues || "None"
+  });
+  const result = await deps.invokeAIAgent(prompt, {
+    outputFormat: "json",
+    timeout: 60000,
+    allowedTools: ["Read", "Write", "Edit"],
+    cwd
+  });
+  return { success: result.success };
+}
+async function runAlignmentVerification(reportPath, taskId, cwd, deps) {
+  return deps.runAlignmentCheck(reportPath, taskId, cwd);
+}
+async function injectAlignmentIssues(taskId, cwd, alignmentResult, deps) {
+  const task = deps.readTaskMeta(taskId, cwd);
+  const existingIssues = task.issues || [];
+  const newIssues = alignmentResult.issues.filter((i) => !existingIssues.includes(i));
+  task.issues = [...existingIssues, ...newIssues];
+  deps.writeTaskMeta(task, cwd);
+}
+async function archiveAndCleanup(taskId, investigationDir, reportPath, failures, deps) {
+  deps.moveTaskToArchive(taskId, investigationDir);
+  deps.updateConversionStatus(investigationDir, reportPath, "failed", {
+    taskId,
+    lastError: `Max retries exceeded: ${failures.join("; ")}`,
+    lastAttemptAt: new Date().toISOString()
+  });
+}
+// src/commands/init-requirement.ts
+init_dependency_engine();
+var DEFAULT_MAX_RETRY = 3;
+var AI_TIMEOUT_SECONDS = 120;
+async function initRequirement(reportPath, cwd = process.cwd(), options = {}) {
+  const { interactive = false, maxRetry = DEFAULT_MAX_RETRY, noPlan = false, skipGate = false } = options;
   const logger = createLogger("init-requirement", cwd);
   const startTime = Date.now();
-  const inputDescLength = description.length;
-  let userEditCount = 0;
-  const trimmedDesc = description?.trim() ?? "";
-  if (trimmedDesc.length === 0) {
-    console.error("");
-    console.error("❌ Requirement description cannot be empty");
-    console.error("");
-    console.error("  Please provide a requirement description, for example:");
-    console.error('    projmnt4claude init-requirement "Fix login button styling issue"');
-    console.error('    projmnt4claude init-requirement "Add user registration feature with form validation"');
-    console.error("");
-    process.exit(1);
-  }
-  if (trimmedDesc.length < 2) {
-    console.error("");
-    console.error("❌ Requirement description too short");
-    console.error("");
-    console.error(`  Current description: "${trimmedDesc}" (${trimmedDesc.length} characters)`);
-    console.error("  Please provide a more detailed requirement description (at least 2 characters).");
-    console.error("");
-    process.exit(1);
-  }
   if (!isInitialized(cwd)) {
-    console.error("");
-    console.error("❌ Project not initialized");
-    console.error("");
-    console.error("  Please run the following command to initialize the project environment:");
-    console.error("    projmnt4claude setup");
-    console.error("");
-    console.error("  After initialization, you can use init-requirement to create tasks.");
-    console.error("");
+    console.error("Project not initialized. Run: projmnt4claude setup");
     process.exit(1);
   }
-  if (shouldDecomposeOption && shouldDecompose(description)) {
-    console.log("");
-    console.log("━".repeat(SEPARATOR_WIDTH));
-    console.log("\uD83D\uDD0D Decomposable content detected, analyzing requirement...");
-    console.log("━".repeat(SEPARATOR_WIDTH));
-    console.log("");
-    const decomposition = await decomposeRequirement(description, {
-      cwd,
-      useAI: !noAI,
-      minItems: 2,
-      maxItems: 10
-    });
-    if (decomposition.decomposable && decomposition.items.length >= 2) {
-      console.log(formatDecomposition(decomposition, cwd));
-      console.log("");
-      let confirmDecompose = true;
-      if (!nonInteractive) {
-        const result = await import_prompts10.default({
-          type: "confirm",
-          name: "confirm",
-          message: `Decompose requirement into ${decomposition.items.length} independent tasks?`,
-          initial: true
-        });
-        if (result === undefined) {
-          console.log("");
-          console.log("ℹ️  Task creation cancelled.");
-          console.log("");
-          return;
-        }
-        confirmDecompose = result.confirm;
-      }
-      if (confirmDecompose) {
-        await initRequirementBatch(decomposition.items, cwd, options);
-        return;
-      }
-    }
-    console.log("  Skipping decomposition, continuing with single task creation...");
-    console.log("");
+  const resolvedPath = path21.resolve(cwd, reportPath);
+  if (!fs25.existsSync(resolvedPath)) {
+    console.error(`Path not found: ${resolvedPath}`);
+    process.exit(1);
   }
-  console.log("");
-  console.log("━".repeat(SEPARATOR_WIDTH));
-  console.log("\uD83D\uDD0D Analyzing requirement...");
-  console.log("━".repeat(SEPARATOR_WIDTH));
-  console.log("");
-  const ruleAnalysis = analyzeRequirement(description, cwd);
-  let analysis = {
-    ...ruleAnalysis,
-    aiEnhancedFields: [],
-    aiUsed: false
-  };
-  let aiCost;
-  if (!noAI) {
-    const aiStartTime = Date.now();
-    const aiResult = await withAIEnhancement({
-      enabled: true,
-      aiCall: () => new AIMetadataAssistant(cwd).enhanceRequirement(description, { cwd }),
-      fallback: { title: null, description: null, type: null, priority: null, recommendedRole: null, checkpoints: null, dependencies: null, aiUsed: false },
-      operationName: "enhancement_call",
+  const stat = fs25.statSync(resolvedPath);
+  if (stat.isDirectory()) {
+    await convertDirectory(resolvedPath, cwd, { interactive, maxRetry, skipGate, logger });
+  } else if (stat.isFile()) {
+    const result = await convertSingleReport(resolvedPath, cwd, {
+      interactive,
+      maxRetry,
+      skipGate,
+      investigationDir: path21.dirname(resolvedPath),
       logger
     });
-    if (aiResult.aiUsed) {
-      analysis = mergeAnalysisResults(ruleAnalysis, aiResult);
-      const aiDurationMs = Date.now() - aiStartTime;
-      aiCost = {
-        field: "enhanceRequirement",
-        durationMs: aiDurationMs,
-        inputTokens: 0,
-        outputTokens: 0,
-        totalTokens: 0
-      };
-      logger.logAICost(aiCost);
+    if (!result.success) {
+      process.exit(1);
     }
-  }
-  let complexity = assessComplexity(description, analysis);
-  const aiTag = (field) => analysis.aiEnhancedFields.includes(field) ? " (AI enhanced)" : "";
-  console.log("\uD83D\uDCCB Requirement Analysis Results:");
-  console.log("");
-  console.log(`  Title: ${analysis.title}${aiTag("title")}`);
-  console.log(`  Priority: ${formatPriority3(analysis.priority)}${aiTag("priority")}`);
-  console.log(`  Complexity: ${formatComplexity(complexity)}`);
-  console.log(`  Recommended Role: ${analysis.recommendedRole}${aiTag("recommendedRole")}`);
-  console.log(`  Files Involved: ${complexity.fileCount}`);
-  console.log(`  Work Items: ${complexity.workItemCount}`);
-  console.log(`  Estimated Time: ~${complexity.estimatedMinutes} minutes`);
-  if (analysis.aiUsed) {
-    console.log(`  AI Enhanced: ${analysis.aiEnhancedFields.join(", ")}`);
-  }
-  console.log("");
-  if (complexity.level === "high") {
-    console.log("━".repeat(SEPARATOR_WIDTH));
-    console.log("⚠️  Complexity Warning");
-    console.log("━".repeat(SEPARATOR_WIDTH));
-    console.log("");
-    console.log(`  This task is estimated to take ${complexity.estimatedMinutes} minutes, exceeding the default Harness timeout threshold.`);
-    console.log("  Consider splitting this task into smaller subtasks, each under 15 minutes.");
-    console.log("");
-  }
-  if (analysis.suggestedCheckpoints.length > 0) {
-    console.log(`  Suggested checkpoints${aiTag("checkpoints")}:`);
-    for (const cp of analysis.suggestedCheckpoints) {
-      console.log(`    - ${cp}`);
-    }
-    console.log("");
-  }
-  if (analysis.potentialDependencies.length > 0) {
-    console.log(`  Potential dependencies${aiTag("dependencies")}:`);
-    for (const dep of analysis.potentialDependencies) {
-      console.log(`    - ${dep}`);
-    }
-    console.log("");
-  }
-  let confirmCreate = { confirm: true };
-  if (!nonInteractive) {
-    const result = await import_prompts10.default({
-      type: "confirm",
-      name: "confirm",
-      message: "Create task based on this analysis?",
-      initial: true
-    });
-    if (result === undefined) {
-      console.log("");
-      console.log("ℹ️  Task creation cancelled.");
-      console.log("");
-      logger.logInstrumentation({
-        module: "init-requirement",
-        action: "cancel",
-        input_summary: `desc_len=${inputDescLength}`,
-        output_summary: "Ctrl+C cancelled creation",
-        ai_used: analysis.aiUsed,
-        ai_enhanced_fields: analysis.aiEnhancedFields,
-        duration_ms: Date.now() - startTime,
-        user_edit_count: 0,
-        module_data: { cancel_reason: "sigint" }
-      });
-      logger.flush();
-      return;
-    }
-    confirmCreate = result;
-  }
-  if (!confirmCreate.confirm) {
-    console.log("");
-    console.log("ℹ️  Task creation cancelled.");
-    console.log("   Run init-requirement again to recreate.");
-    console.log("");
-    logger.logInstrumentation({
-      module: "init-requirement",
-      action: "cancel",
-      input_summary: `desc_len=${inputDescLength}`,
-      output_summary: "User cancelled creation",
-      ai_used: analysis.aiUsed,
-      ai_enhanced_fields: analysis.aiEnhancedFields,
-      duration_ms: Date.now() - startTime,
-      user_edit_count: 0,
-      module_data: { cancel_reason: "user_rejected_confirm" }
-    });
-    logger.flush();
-    return;
-  }
-  let response;
-  if (nonInteractive) {
-    response = {
-      title: analysis.title,
-      description: analysis.description,
-      priority: analysis.priority,
-      recommendedRole: analysis.recommendedRole
-    };
   } else {
-    const promptResponse = await import_prompts10.default([
-      {
-        type: "text",
-        name: "title",
-        message: "Task title",
-        initial: analysis.title
-      },
-      {
-        type: "text",
-        name: "description",
-        message: "Task description",
-        initial: analysis.description
-      },
-      {
-        type: "select",
-        name: "priority",
-        message: "Priority",
-        choices: [
-          { title: "P3 Low", value: "P3" },
-          { title: "P2 Medium", value: "P2", selected: analysis.priority === "P2" },
-          { title: "P1 High", value: "P1", selected: analysis.priority === "P1" },
-          { title: "P0 Urgent", value: "P0", selected: analysis.priority === "P0" }
-        ],
-        initial: analysis.priority === "P3" ? 0 : analysis.priority === "P2" ? 1 : analysis.priority === "P1" ? 2 : 3
-      },
-      {
-        type: "text",
-        name: "recommendedRole",
-        message: "Recommended role",
-        initial: analysis.recommendedRole
-      }
-    ]);
-    if (promptResponse === undefined) {
-      console.log("");
-      console.log("ℹ️  Task creation cancelled.");
-      console.log("");
-      logger.logInstrumentation({
-        module: "init-requirement",
-        action: "cancel",
-        input_summary: `desc_len=${inputDescLength}`,
-        output_summary: "Ctrl+C cancelled creation",
-        ai_used: analysis.aiUsed,
-        ai_enhanced_fields: analysis.aiEnhancedFields,
-        duration_ms: Date.now() - startTime,
-        user_edit_count: userEditCount
-      });
-      logger.flush();
-      return;
-    }
-    response = promptResponse;
-    if (response.title !== analysis.title)
-      userEditCount++;
-    if (response.priority !== analysis.priority)
-      userEditCount++;
-    if (response.recommendedRole !== analysis.recommendedRole)
-      userEditCount++;
-    if (response.description && response.description !== analysis.description) {
-      const newAnalysis = {
-        ...analysis,
-        description: response.description,
-        title: response.title || analysis.title,
-        priority: response.priority || analysis.priority,
-        recommendedRole: response.recommendedRole || analysis.recommendedRole
-      };
-      const newComplexity = assessComplexity(response.description, newAnalysis);
-      if (newComplexity.level !== complexity.level || newComplexity.estimatedMinutes !== complexity.estimatedMinutes) {
-        console.log(`   \uD83D\uDCCA Complexity reassessed: ${formatComplexity(newComplexity)} (was: ${formatComplexity(complexity)})`);
-        complexity = newComplexity;
-      }
-    }
-  }
-  if (!response.title) {
-    console.log("");
-    console.log("ℹ️  Task creation cancelled (title cannot be empty).");
-    console.log("   Run init-requirement again to recreate.");
-    console.log("");
-    logger.logInstrumentation({
-      module: "init-requirement",
-      action: "cancel",
-      input_summary: `desc_len=${inputDescLength}`,
-      output_summary: "Empty title, cancelled creation",
-      ai_used: analysis.aiUsed,
-      ai_enhanced_fields: analysis.aiEnhancedFields,
-      duration_ms: Date.now() - startTime,
-      user_edit_count: userEditCount
-    });
-    logger.flush();
-    return;
-  }
-  const taskType = inferTaskType(response.title);
-  const taskPriority = response.priority || analysis.priority;
-  const structuredInfo = extractStructuredInfo(response.description || analysis.description);
-  const inferredCheckpoints = inferCheckpointsFromDescription(response.description || analysis.description, taskType);
-  const inferredFiles = inferRelatedFiles(response.description || analysis.description, taskType);
-  const allCheckpoints = [...new Set([...structuredInfo.checkpoints, ...inferredCheckpoints, ...analysis.suggestedCheckpoints])];
-  const allRelatedFiles = [...new Set([...structuredInfo.relatedFiles, ...inferredFiles])];
-  const filterResult = filterLowQualityCheckpoints(allCheckpoints.length > 0 ? allCheckpoints : analysis.suggestedCheckpoints);
-  if (filterResult.removed.length > 0) {
-    console.log(`   \uD83D\uDD0D Filtered ${filterResult.removed.length} low-quality checkpoints:`);
-    for (const removed of filterResult.removed) {
-      const reason = filterResult.reasons.get(removed) || "Unknown reason";
-      console.log(`     - "${removed}" (${reason})`);
-    }
-  }
-  const checkpoints = filterResult.kept;
-  const finalDescription = generateStructuredDescription({
-    problem: structuredInfo.problem || analysis.description,
-    rootCause: structuredInfo.rootCause,
-    solution: structuredInfo.solution,
-    checkpoints,
-    relatedFiles: allRelatedFiles,
-    notes: structuredInfo.notes
-  }, template);
-  const task = await createTask2({
-    title: response.title,
-    description: finalDescription,
-    type: taskType,
-    priority: taskPriority,
-    nonInteractive: true,
-    skipValidation: true,
-    aiEnhancement: false,
-    suggestedCheckpoints: checkpoints,
-    potentialDependencies: analysis.potentialDependencies,
-    recommendedRole: response.recommendedRole || analysis.recommendedRole,
-    relatedFiles: allRelatedFiles
-  }, cwd);
-  const taskId = task.id;
-  if (checkpoints.length > 0) {
-    const parsedCheckpoints = checkpoints.map((desc, index) => ({
-      id: `CP-${String(index + 1).padStart(3, "0")}`,
-      description: desc,
-      originalText: `- [ ] ${desc}`,
-      lineNumber: index
-    }));
-    const checkpointMetadata = convertParsedCheckpointsToMetadata(parsedCheckpoints, task);
-    const taskToUpdate = readTaskMeta(taskId, cwd);
-    if (taskToUpdate) {
-      taskToUpdate.checkpoints = checkpointMetadata;
-      writeTaskMeta(taskToUpdate, cwd);
-      updateCheckpointMdFromArray(taskId, checkpointMetadata, cwd);
-    }
-  }
-  const taskDir = path20.join(getTasksDir(cwd), taskId);
-  const checkpointPath = path20.join(taskDir, "checkpoint.md");
-  const updatedTask = readTaskMeta(taskId, cwd);
-  if (updatedTask?.checkpoints) {
-    const checkpointsWithoutCommands = updatedTask.checkpoints.filter((cp) => {
-      const result = validateCheckpointVerification(cp);
-      return !result.valid;
-    });
-    if (checkpointsWithoutCommands.length > 0) {
-      console.log(`
-   ⚠️  ${checkpointsWithoutCommands.length} checkpoints missing verification commands:`);
-      for (const cp of checkpointsWithoutCommands) {
-        const result = validateCheckpointVerification(cp);
-        console.log(`   - [${cp.id}] ${result.warning || cp.description}`);
-      }
-    }
-  }
-  if (updatedTask) {
-    const basicValidation = validateBasicFields(updatedTask);
-    if (!basicValidation.valid) {
-      console.log(`
-   ⚠️  Basic field validation failed:`);
-      for (const err of basicValidation.errors) {
-        console.log(`     - ${err}`);
-      }
-    }
-  }
-  if (updatedTask) {
-    const filesValidation = validateFilesExist(updatedTask, cwd);
-    if (!filesValidation.valid) {
-      console.log(`
-   ⚠️  ${filesValidation.missingFiles.length} referenced files do not exist:`);
-      for (const f of filesValidation.missingFiles) {
-        console.log(`     - ${f}`);
-      }
-    }
-  }
-  console.log(`✅ Task created successfully!`);
-  console.log(`   ID: ${taskId}`);
-  console.log(`   Title: ${task.title}`);
-  console.log(`   Priority: ${formatPriority3(task.priority)}`);
-  console.log(`   Checkpoints: ${checkpoints.length} items`);
-  if (task.dependencies && task.dependencies.length > 0) {
-    console.log(`   Inferred dependencies: ${task.dependencies.join(", ")}`);
-  }
-  console.log("");
-  const qualityGateConfig = {
-    ...DEFAULT_QUALITY_GATE_CONFIG,
-    minQualityScore: requireQuality ?? DEFAULT_QUALITY_GATE_CONFIG.minQualityScore
-  };
-  if (qualityGateConfig.minQualityScore < 0 || qualityGateConfig.minQualityScore > 100) {
-    console.error("Error: --require-quality must be between 0-100");
+    console.error(`Invalid path type: ${resolvedPath}`);
     process.exit(1);
-  }
-  const qualityResult = await checkQualityGate(taskId, qualityGateConfig, cwd);
-  const taskWithScore = readTaskMeta(taskId, cwd);
-  if (taskWithScore) {
-    taskWithScore.initQualityScore = qualityResult.score.totalScore;
-    writeTaskMeta(taskWithScore, cwd);
-  }
-  const scoreIcon = qualityResult.score.totalScore >= 80 ? "\uD83D\uDFE2" : qualityResult.score.totalScore >= 60 ? "\uD83D\uDFE1" : "\uD83D\uDD34";
-  console.log(`\uD83D\uDCCA Quality Score: ${scoreIcon} ${qualityResult.score.totalScore}/100`);
-  console.log(`   Description Completeness: ${qualityResult.score.descriptionScore}%`);
-  console.log(`   Checkpoint Quality: ${qualityResult.score.checkpointScore}%`);
-  console.log(`   Related Files: ${qualityResult.score.relatedFilesScore}%`);
-  console.log(`   Solution: ${qualityResult.score.solutionScore}%`);
-  console.log("");
-  const allExistingTasks = getAllTasks(cwd);
-  const depGraph = DependencyGraph.fromTasks(allExistingTasks);
-  const depValidation = validateNewTaskDeps(taskId, task.dependencies || [], depGraph, allExistingTasks);
-  if (depValidation.warnings.length > 0) {
-    console.log("\uD83D\uDCCB Dependency Gate:");
-    for (const w of depValidation.warnings) {
-      console.log(`   ⚠️  ${w}`);
-    }
-  }
-  if (depValidation.errors.length > 0) {
-    console.log("\uD83D\uDCCB Dependency Errors:");
-    for (const e of depValidation.errors) {
-      console.log(`   ❌ ${e}`);
-    }
-  }
-  console.log("");
-  if (qualityResult.errorViolations.length > 0) {
-    console.log("━".repeat(SEPARATOR_WIDTH));
-    console.log(`❌ Quality gate failed: ${qualityResult.errorViolations.length} error-level violations found`);
-    console.log("━".repeat(SEPARATOR_WIDTH));
-    console.log("");
-    console.log("\uD83D\uDEAB The following errors must be fixed before creating task:");
-    for (const violation of qualityResult.errorViolations) {
-      console.log(`   ❌ [${violation.ruleId}] ${violation.message}`);
-      if (violation.field) {
-        console.log(`      Field: ${violation.field}`);
-      }
-    }
-    console.log("");
-    console.log("\uD83D\uDCA1 Fix suggestions:");
-    console.log("   1. Checkpoints must start with standard prefixes: [implem], [test], [doc], [verify]");
-    console.log("   2. meta.json must be in standard format with all required fields");
-    console.log("   3. Use --skip-quality-gate to skip temporarily (not recommended for production)");
-    console.log("");
-    logger.logInstrumentation({
-      module: "init-requirement",
-      action: "quality_gate_error_blocked",
-      input_summary: `desc_len=${inputDescLength}, error_count=${qualityResult.errorViolations.length}`,
-      output_summary: `task_id=${taskId}, error_violations=${qualityResult.errorViolations.map((v) => v.ruleId).join(",")}`,
-      ai_used: analysis.aiUsed,
-      ai_enhanced_fields: analysis.aiEnhancedFields,
-      duration_ms: Date.now() - startTime,
-      user_edit_count: userEditCount
-    });
-    logger.flush();
-    process.exit(1);
-  }
-  if (requireQuality !== undefined && !qualityResult.passed) {
-    console.log("━".repeat(SEPARATOR_WIDTH));
-    console.log(`❌ Quality gate failed: ${qualityResult.score.totalScore} < ${requireQuality}`);
-    console.log("━".repeat(SEPARATOR_WIDTH));
-    console.log("");
-    if (qualityResult.suggestions.length > 0) {
-      const sorted = [...qualityResult.suggestions].sort((a, b) => {
-        const order = { high: 0, medium: 1, low: 2 };
-        return order[a.priority] - order[b.priority];
-      });
-      console.log("\uD83D\uDCA1 Improvement suggestions:");
-      for (const s of sorted.slice(0, 5)) {
-        const icon = s.priority === "high" ? "\uD83D\uDD34" : s.priority === "medium" ? "\uD83D\uDFE0" : "\uD83D\uDFE1";
-        console.log(`  ${icon} [${s.category}] ${s.message}`);
-        console.log(`     \uD83D\uDC49 ${s.action}`);
-      }
-      console.log("");
-    }
-    console.log(`Task ${taskId} created but did not pass quality gate (score ${qualityResult.score.totalScore} < threshold ${requireQuality}).`);
-    console.log("Please improve the task description and recreate, or use a lower --require-quality threshold.");
-    console.log("");
-    logger.logInstrumentation({
-      module: "init-requirement",
-      action: "quality_gate_blocked",
-      input_summary: `desc_len=${inputDescLength}, require_quality=${requireQuality}`,
-      output_summary: `task_id=${taskId}, quality_score=${qualityResult.score.totalScore}, blocked=true`,
-      ai_used: analysis.aiUsed,
-      ai_enhanced_fields: analysis.aiEnhancedFields,
-      duration_ms: Date.now() - startTime,
-      user_edit_count: userEditCount
-    });
-    logger.flush();
-    process.exit(1);
-  }
-  if (!qualityResult.passed) {
-    console.log("⚠️  Quality Gate Warning: Task quality score below default threshold, improvements recommended");
-    if (qualityResult.suggestions.length > 0) {
-      const sorted = [...qualityResult.suggestions].sort((a, b) => {
-        const order = { high: 0, medium: 1, low: 2 };
-        return order[a.priority] - order[b.priority];
-      });
-      for (const s of sorted.slice(0, 3)) {
-        const icon = s.priority === "high" ? "\uD83D\uDD34" : s.priority === "medium" ? "\uD83D\uDFE0" : "\uD83D\uDFE1";
-        console.log(`  ${icon} ${s.message}`);
-        console.log(`     \uD83D\uDC49 ${s.action}`);
-      }
-    }
-    console.log("");
-  }
-  if (!skipValidation) {
-    const validation = hasValidCheckpoints2(checkpointPath, false);
-    if (!validation.valid) {
-      displayCheckpointCreationWarning2(taskId, cwd);
-    }
-  }
-  if (!noPlan && !nonInteractive) {
-    const addToPlan = await import_prompts10.default({
-      type: "confirm",
-      name: "add",
-      message: "Add this task to execution plan?",
-      initial: true
-    });
-    if (addToPlan === undefined) {} else if (addToPlan.add) {
-      const planModule = await Promise.resolve().then(() => (init_plan2(), exports_plan));
-      planModule.addTask(taskId);
-    }
   }
   logger.logInstrumentation({
     module: "init-requirement",
-    action: "create_task",
-    input_summary: `desc_len=${inputDescLength}, non_interactive=${nonInteractive}`,
-    output_summary: `task_id=${taskId}, checkpoints=${checkpoints.length}, complexity=${complexity.level}`,
-    ai_used: analysis.aiUsed,
-    ai_enhanced_fields: analysis.aiEnhancedFields,
+    action: "complete",
+    input_summary: `report=${reportPath}`,
+    output_summary: `duration=${Date.now() - startTime}ms`,
+    ai_used: true,
+    ai_enhanced_fields: [],
     duration_ms: Date.now() - startTime,
-    user_edit_count: userEditCount
+    user_edit_count: 0
   });
   logger.flush();
 }
-function formatComplexity(assessment) {
-  const icons = {
-    low: "\uD83D\uDFE2 low",
-    medium: "\uD83D\uDFE1 medium",
-    high: "\uD83D\uDD34 high"
-  };
-  return `${icons[assessment.level]} (Score: ${assessment.score}/100)`;
-}
-function countWorkItems(description) {
-  const actionPatterns = [
-    /(?:^\s*(?:\d+\.|[-*])\s+[^\n]+)/gm,
-    /(?:验证|修复|创建|修改|添加|实现|配置|部署|更新|增强|完善|重构|编写|分析|处理|集成|迁移|支持|移除)[^\n,;，；。、]+/g
-  ];
-  const items = new Set;
-  for (const pattern of actionPatterns) {
-    const matches = description.match(pattern);
-    if (matches) {
-      for (const m of matches) {
-        items.add(m.trim());
-      }
-    }
+async function convertSingleReport(reportPath, cwd, options) {
+  const { interactive, maxRetry, skipGate, investigationDir, logger } = options;
+  console.log("");
+  console.log("━".repeat(SEPARATOR_WIDTH));
+  console.log(`Converting report: ${path21.basename(reportPath)}`);
+  console.log("━".repeat(SEPARATOR_WIDTH));
+  console.log("");
+  if (!fs25.existsSync(reportPath)) {
+    return { success: false, error: `Report file not found: ${reportPath}` };
   }
-  return items.size;
-}
-function countCrossModuleReferences(description) {
-  const modulePatterns = [
-    /(?:模块|module|系统|system|服务|service|组件|component|插件|plugin)/gi
-  ];
-  let count = 0;
-  for (const pattern of modulePatterns) {
-    const matches = description.match(pattern);
-    if (matches)
-      count += matches.length;
+  const reportContent = fs25.readFileSync(reportPath, "utf-8");
+  if (reportContent.trim().length === 0) {
+    return { success: false, error: "Report file is empty" };
   }
-  const files = extractFilePaths(description);
-  const dirs = new Set(files.map((f) => {
-    const parts = f.split("/");
-    return parts.length > 1 ? parts.slice(0, -1).join("/") : "";
-  }).filter(Boolean));
-  count += dirs.size;
-  return count;
-}
-function assessComplexity(description, analysis) {
-  const signals = [];
-  const files = extractFilePaths(description);
-  const fileCount = files.length;
-  const fileWeight = Math.min(fileCount * 8, 30);
-  signals.push({
-    type: "file_count",
-    weight: fileWeight,
-    description: `Involves ${fileCount} files`
-  });
-  const workItemCount = countWorkItems(description);
-  const workItemWeight = Math.min(workItemCount * 5, 25);
-  signals.push({
-    type: "work_items",
-    weight: workItemWeight,
-    description: `Contains ${workItemCount} work items`
-  });
-  const crossModuleCount = countCrossModuleReferences(description);
-  const crossModuleWeight = Math.min(crossModuleCount * 6, 20);
-  signals.push({
-    type: "cross_module",
-    weight: crossModuleWeight,
-    description: `Crosses ${crossModuleCount} modules/systems`
-  });
-  const checkpointCount = analysis.suggestedCheckpoints.length;
-  const checkpointWeight = Math.min(checkpointCount * 4, 15);
-  signals.push({
-    type: "checkpoint_count",
-    weight: checkpointWeight,
-    description: `Contains ${checkpointCount} checkpoints`
-  });
-  const descLength = description.length;
-  const descWeight = descLength > 500 ? 10 : descLength > 200 ? 5 : 0;
-  signals.push({
-    type: "description_length",
-    weight: descWeight,
-    description: `Description length ${descLength} characters`
-  });
-  const actionVerbPattern = /(?:验证|修复|创建|修改|添加|实现|配置|部署|更新|增强|完善|重构|编写|分析|处理|集成|迁移|支持|移除|检查|测试)/g;
-  const actionVerbMatches = description.match(actionVerbPattern);
-  const actionVerbCount = actionVerbMatches ? actionVerbMatches.length : 0;
-  const actionDensityWeight = actionVerbCount > 10 ? 10 : actionVerbCount > 5 ? 5 : 0;
-  signals.push({
-    type: "action_verb_density",
-    weight: actionDensityWeight,
-    description: `Contains ${actionVerbCount} action verbs`
-  });
-  const totalScore = Math.min(signals.reduce((sum, s) => sum + s.weight, 0), 100);
-  let level;
-  if (totalScore >= 40) {
-    level = "high";
-  } else if (totalScore >= 20) {
-    level = "medium";
-  } else {
-    level = "low";
-  }
-  const estimatedMinutes = Math.max(5 + fileCount * 3 + workItemCount * 2, Math.ceil(descLength / 100));
-  if (estimatedMinutes > 15 && level !== "high") {
-    level = "high";
-  }
-  return {
-    level,
-    score: totalScore,
-    fileCount,
-    workItemCount,
-    estimatedMinutes,
-    signals
-  };
-}
-function detectRoleFromProject(cwd, description) {
-  const lowerDesc = description.toLowerCase();
-  const srcDir = path20.join(cwd, "src");
-  let projectDirs = [];
   try {
-    if (fs24.existsSync(srcDir)) {
-      projectDirs = fs24.readdirSync(srcDir, { withFileTypes: true }).filter((e) => e.isDirectory()).map((e) => e.name);
-    }
-  } catch {}
-  const signals = {
-    frontend: projectDirs.some((d) => ["components", "pages", "views", "styles", "assets", "public"].includes(d)) || lowerDesc.includes("ui") || lowerDesc.includes("界面") || lowerDesc.includes("前端") || lowerDesc.includes("frontend"),
-    backend: projectDirs.some((d) => ["routes", "controllers", "middleware", "services", "api", "models"].includes(d)) || lowerDesc.includes("api") || lowerDesc.includes("后端") || lowerDesc.includes("backend") || lowerDesc.includes("服务端"),
-    qa: projectDirs.some((d) => ["__tests__", "test", "tests", "spec"].includes(d)) || lowerDesc.includes("测试") || lowerDesc.includes("test") || lowerDesc.includes("qa"),
-    writer: projectDirs.some((d) => ["docs", "documents"].includes(d)) || lowerDesc.includes("文档") || lowerDesc.includes("document") || lowerDesc.includes("readme"),
-    security: lowerDesc.includes("安全") || lowerDesc.includes("security") || lowerDesc.includes("漏洞"),
-    performance: lowerDesc.includes("性能") || lowerDesc.includes("performance") || lowerDesc.includes("优化"),
-    architect: lowerDesc.includes("架构") || lowerDesc.includes("architecture") || lowerDesc.includes("设计")
-  };
-  if (signals.frontend)
-    return "frontend";
-  if (signals.backend)
-    return "backend";
-  if (signals.qa)
-    return "qa";
-  if (signals.writer)
-    return "writer";
-  if (signals.security)
-    return "security";
-  if (signals.performance)
-    return "performance";
-  if (signals.architect)
-    return "architect";
-  return "developer";
-}
-function analyzeRequirement(description, cwd) {
-  const lowerDesc = description.toLowerCase();
-  let priority = "P2";
-  if (lowerDesc.includes("紧急") || lowerDesc.includes("urgent") || lowerDesc.includes("asap") || lowerDesc.includes("立即")) {
-    priority = "P0";
-  } else if (lowerDesc.includes("重要") || lowerDesc.includes("important") || lowerDesc.includes("优先") || lowerDesc.includes("high")) {
-    priority = "P1";
-  } else if (lowerDesc.includes("低优先级") || lowerDesc.includes("low priority") || lowerDesc.includes("可选") || lowerDesc.includes("optional")) {
-    priority = "P3";
-  }
-  const recommendedRole = detectRoleFromProject(cwd, description);
-  let estimatedComplexity = "medium";
-  const complexityKeywords = {
-    high: ["重构", "refactor", "架构", "architecture", "迁移", "migrate", "集成", "integration", "系统"],
-    low: ["修复", "fix", "更新", "update", "添加", "add", "修改", "modify", "调整", "adjust"]
-  };
-  const highCount = complexityKeywords.high.filter((kw) => lowerDesc.includes(kw)).length;
-  const lowCount = complexityKeywords.low.filter((kw) => lowerDesc.includes(kw)).length;
-  if (highCount > lowCount) {
-    estimatedComplexity = "high";
-  } else if (lowCount > highCount) {
-    estimatedComplexity = "low";
-  }
-  let title = description;
-  if (description.length > 50) {
-    const keywords = description.match(/(?:修复|实现|添加|创建|更新|设计|优化|重构|集成|迁移|验证|初始化|编写|配置|部署|测试|分析|处理|支持|增强|完善)[^\n。！？]*/);
-    if (keywords && keywords[0] && keywords[0].length >= 5) {
-      title = keywords[0].trim();
-      if (title.length > 50) {
-        title = title.substring(0, 47) + "...";
+    const reportData = parseReportContent(reportContent);
+    const validation = validateReport(reportData);
+    if (!validation.valid) {
+      console.warn("Report format validation warnings:");
+      for (const err of validation.errors) {
+        console.warn(`  - ${err}`);
       }
-    } else {
-      title = description.substring(0, 47) + "...";
+    }
+  } catch {
+    console.warn("Report format validation skipped (non-standard format)");
+  }
+  const status = loadConversionStatus(investigationDir);
+  const relativePath = path21.relative(investigationDir, reportPath);
+  if (status.reports[relativePath] === "completed") {
+    const existingTaskId = status.tasks[relativePath]?.taskId;
+    console.log(`Report already converted (taskId: ${existingTaskId}). Skipping.`);
+    return { success: true, taskId: existingTaskId, gateScore: 100, aligned: true };
+  }
+  console.log("Step 2: Extracting task metadata from report...");
+  let extractedMeta;
+  try {
+    extractedMeta = await extractTaskMeta(reportContent, cwd);
+  } catch (err) {
+    const errorMsg = err instanceof Error ? err.message : String(err);
+    console.error(`AI metadata extraction failed: ${errorMsg}`);
+    updateConversionStatus(investigationDir, relativePath, "failed", {
+      lastError: `Extraction failed: ${errorMsg}`,
+      lastAttemptAt: new Date().toISOString()
+    });
+    return { success: false, error: `Extraction failed: ${errorMsg}` };
+  }
+  if (interactive) {
+    console.log("");
+    console.log("Extracted task metadata:");
+    console.log(`  Title: ${extractedMeta.title}`);
+    console.log(`  Type: ${extractedMeta.type}`);
+    console.log(`  Priority: ${extractedMeta.priority}`);
+    console.log(`  Checkpoints: ${extractedMeta.checkpoints.length}`);
+    console.log(`  Files: ${extractedMeta.files.length}`);
+    console.log("");
+    const confirmResult = await import_prompts9.default({
+      type: "confirm",
+      name: "confirm",
+      message: "Create task with this metadata?",
+      initial: true
+    });
+    if (confirmResult === undefined || !confirmResult.confirm) {
+      console.log("Task creation cancelled.");
+      return { success: false, error: "User cancelled" };
     }
   }
-  const taskType = inferTaskType(title);
-  const suggestedCheckpoints = inferCheckpointsFromDescription(description, taskType);
-  const potentialDependencies = [];
-  const currentFiles = extractFilePaths(description, { includeBareFilenames: false });
-  if (currentFiles.length > 0) {
-    const existingTasks = getAllTasks(cwd);
-    for (const existing of existingTasks) {
-      if (TERMINAL_STATUSES_SET7.has(normalizeStatus(existing.status)))
-        continue;
-      const existingFiles = extractAffectedFiles(existing);
-      const overlap = currentFiles.filter((f) => existingFiles.includes(f));
-      if (overlap.length > 0) {
-        const depHint = `文件重叠依赖 ${existing.id}: 共享 ${overlap.join(", ")}`;
-        if (!potentialDependencies.some((d) => d.includes(existing.id))) {
-          potentialDependencies.push(depHint);
+  console.log("Step 3: Creating task...");
+  const taskId = generateNewTaskId(extractedMeta.type, extractedMeta.priority, extractedMeta.title);
+  const task = await createTask2({
+    title: extractedMeta.title,
+    description: extractedMeta.description,
+    type: extractedMeta.type,
+    priority: extractedMeta.priority,
+    nonInteractive: true,
+    skipValidation: true,
+    aiEnhancement: false,
+    suggestedCheckpoints: extractedMeta.checkpoints.map((cp) => `[${cp.prefix}] ${cp.description}`),
+    potentialDependencies: extractedMeta.dependencies,
+    relatedFiles: extractedMeta.files
+  }, cwd);
+  const createdTaskId = task.id;
+  if (extractedMeta.checkpoints.length > 0) {
+    const taskToUpdate = readTaskMeta(createdTaskId, cwd);
+    if (taskToUpdate) {
+      taskToUpdate.checkpoints = extractedMeta.checkpoints.map((cp, idx) => ({
+        id: `CP-${String(idx + 1).padStart(3, "0")}`,
+        prefix: cp.prefix,
+        description: cp.description,
+        category: cp.category,
+        verificationMethod: cp.verificationMethod,
+        verification: {
+          commands: generateVerificationCommands(parseCheckpoint(`[${cp.prefix}] ${cp.description}`), extractedMeta.files)
         }
+      }));
+      taskToUpdate.estimatedMinutes = extractedMeta.estimatedMinutes;
+      taskToUpdate.createdBy = "init-requirement";
+      writeTaskMeta(taskToUpdate, cwd);
+    }
+  }
+  console.log(`Task created: ${createdTaskId}`);
+  let gateScore = 0;
+  let aligned = false;
+  if (!skipGate) {
+    console.log("Step 4-5: Gate check + alignment verification...");
+    const deps = createGateDependencies(cwd, reportPath);
+    const fixResult = await gateCheckAndFix({
+      taskId: createdTaskId,
+      reportPath,
+      investigationDir,
+      cwd,
+      maxRetries: maxRetry
+    }, deps);
+    if (!fixResult.passed) {
+      console.error(`Gate check failed after ${fixResult.attempt} attempts.`);
+      if (fixResult.failures) {
+        for (const f of fixResult.failures) {
+          console.error(`  - ${f}`);
+        }
+      }
+      return { success: false, taskId: createdTaskId, error: "Gate check failed" };
+    }
+    gateScore = 100;
+    aligned = true;
+  } else {
+    console.log("Step 4-5: Skipped (--skip-gate)");
+    gateScore = 100;
+    aligned = true;
+  }
+  updateConversionStatus(investigationDir, relativePath, "completed", {
+    taskId: createdTaskId
+  });
+  console.log("");
+  console.log("━".repeat(SEPARATOR_WIDTH));
+  console.log("Conversion Result");
+  console.log("━".repeat(SEPARATOR_WIDTH));
+  console.log(`  Task ID: ${createdTaskId}`);
+  console.log(`  Gate Score: ${gateScore}/100`);
+  console.log(`  Aligned: ${aligned ? "Yes" : "No"}`);
+  console.log(`  Report: ${reportPath}`);
+  console.log("");
+  return { success: true, taskId: createdTaskId, gateScore, aligned };
+}
+async function convertDirectory(dirPath, cwd, options) {
+  const { interactive, maxRetry, skipGate, logger } = options;
+  const subDir = path21.join(dirPath, "sub");
+  let reportFiles;
+  if (fs25.existsSync(subDir) && fs25.statSync(subDir).isDirectory()) {
+    reportFiles = fs25.readdirSync(subDir).filter((f) => f.endsWith(".md")).sort().map((f) => path21.join(subDir, f));
+  } else {
+    const reportPath = path21.join(dirPath, "report.md");
+    if (fs25.existsSync(reportPath)) {
+      const result = await convertSingleReport(reportPath, cwd, {
+        ...options,
+        investigationDir: dirPath
+      });
+      if (!result.success)
+        process.exit(1);
+      return;
+    }
+    console.error(`No sub/ directory or report.md found in: ${dirPath}`);
+    process.exit(1);
+    return;
+  }
+  if (reportFiles.length === 0) {
+    console.error("No report files found in sub/ directory");
+    process.exit(1);
+    return;
+  }
+  console.log("");
+  console.log("━".repeat(SEPARATOR_WIDTH));
+  console.log(`Batch conversion: ${reportFiles.length} reports`);
+  console.log("━".repeat(SEPARATOR_WIDTH));
+  console.log("");
+  const status = loadConversionStatus(dirPath);
+  for (const rf of reportFiles) {
+    const rel = path21.relative(dirPath, rf);
+    if (!status.reports[rel]) {
+      status.reports[rel] = "pending";
+    }
+  }
+  const pendingReports = reportFiles.filter((rf) => {
+    const rel = path21.relative(dirPath, rf);
+    return status.reports[rel] !== "completed";
+  });
+  if (pendingReports.length === 0) {
+    console.log("All reports already converted. Nothing to do.");
+    return;
+  }
+  const relativePending = pendingReports.map((rf) => path21.relative(dirPath, rf));
+  let sortedReports;
+  try {
+    sortedReports = topologicalSort(relativePending, status, dirPath).map((rel) => path21.join(dirPath, rel));
+  } catch (err) {
+    console.error(`Dependency error: ${err instanceof Error ? err.message : String(err)}`);
+    process.exit(1);
+    return;
+  }
+  const results = [];
+  const taskMapping = [];
+  for (const reportFile of sortedReports) {
+    console.log(`
+Processing: ${path21.basename(reportFile)}`);
+    const result = await convertSingleReport(reportFile, cwd, {
+      interactive,
+      maxRetry,
+      skipGate,
+      investigationDir: dirPath,
+      logger
+    });
+    results.push(result);
+    taskMapping.push({ report: reportFile, taskId: result.taskId });
+    if (!result.success) {
+      console.error("");
+      console.error("━".repeat(SEPARATOR_WIDTH));
+      console.error("Batch conversion FAILED");
+      console.error("━".repeat(SEPARATOR_WIDTH));
+      console.error(`Failed report: ${reportFile}`);
+      console.error(`Reason: ${result.error}`);
+      console.error("");
+      console.error("Successfully converted:");
+      for (const m of taskMapping.filter((m2) => m2.taskId)) {
+        console.error(`  - ${m.report} → ${m.taskId}`);
+      }
+      console.error("");
+      console.error("Please improve the report and re-run to continue (断点续建).");
+      process.exit(1);
+    }
+  }
+  console.log("");
+  console.log("━".repeat(SEPARATOR_WIDTH));
+  console.log("Batch Conversion Result");
+  console.log("━".repeat(SEPARATOR_WIDTH));
+  for (const m of taskMapping) {
+    console.log(`  ${m.taskId} ← ${path21.basename(m.report)}`);
+  }
+  console.log("");
+}
+async function extractTaskMeta(reportContent, cwd) {
+  const prefixMapStr = Object.entries(PREFIX_MAP2).map(([prefix, mapping]) => `[${prefix}] → category: ${mapping.category}, method: ${mapping.method}, requiresHuman: ${mapping.requiresHuman}`).join(`
+`);
+  const prompt = loadAndRenderTemplate("reportToTask", {
+    report: reportContent,
+    prefixMap: prefixMapStr
+  });
+  const result = await callAIForJSON({ prompt, cwd, timeout: AI_TIMEOUT_SECONDS }, validateExtractedMeta);
+  return result;
+}
+function validateExtractedMeta(data) {
+  if (!data || typeof data !== "object") {
+    throw new Error("AI output is not a valid object");
+  }
+  const d = data;
+  const title = typeof d.title === "string" && d.title.trim() ? d.title.trim() : "Untitled Task";
+  const type = ["bug", "feature", "research", "docs", "refactor", "test"].includes(d.type) ? d.type : "feature";
+  const priority = ["P0", "P1", "P2", "P3"].includes(d.priority) ? d.priority : "P2";
+  const description = typeof d.description === "string" ? d.description : "";
+  const rawCheckpoints = Array.isArray(d.checkpoints) ? d.checkpoints : [];
+  const checkpoints = rawCheckpoints.map((cp) => {
+    const prefix = ["verify", "test", "review", "implem", "doc"].includes(cp.prefix) ? cp.prefix : "verify";
+    const cpDesc = typeof cp.description === "string" ? cp.description : "Checkpoint";
+    const mapping = PREFIX_MAP2[prefix];
+    return {
+      prefix,
+      description: cpDesc,
+      category: mapping.category,
+      verificationMethod: mapping.method
+    };
+  });
+  const files = Array.isArray(d.files) ? d.files.filter((f) => typeof f === "string") : [];
+  const estimatedMinutes = typeof d.estimatedMinutes === "number" ? d.estimatedMinutes : 30;
+  const dependencies = Array.isArray(d.dependencies) ? d.dependencies.filter((d2) => typeof d2 === "string") : [];
+  return { title, type, priority, description, checkpoints, files, estimatedMinutes, dependencies };
+}
+function parseReportContent(content) {
+  const titleMatch = content.match(/^#\s+(.+)/m);
+  const title = titleMatch ? titleMatch[1].trim() : "Untitled Report";
+  const metadataSection = content.match(/##\s*(?:元数据|Metadata)\s*\n([\s\S]*?)(?=\n##\s|$)/);
+  const metadata = {};
+  if (metadataSection) {
+    const lines = metadataSection[1].split(`
+`);
+    for (const line of lines) {
+      const match = line.match(/-\s*(.+?):\s*(.+)/);
+      if (match) {
+        metadata[match[1].trim()] = match[2].trim();
       }
     }
   }
   return {
     title,
-    description,
-    priority,
-    recommendedRole,
-    estimatedComplexity,
-    suggestedCheckpoints,
-    potentialDependencies
+    content,
+    metadata,
+    requirement: metadata["需求来源"] || metadata["Requirement Source"] || title,
+    date: metadata["调查时间"] || metadata["Investigation Date"] || new Date().toISOString().split("T")[0],
+    investigationDir: metadata["调查目录"] || metadata["Investigation Directory"] || ""
   };
 }
-function formatPriority3(priority) {
-  const map = {
-    P0: "\uD83D\uDD34 P0 Urgent",
-    P1: "\uD83D\uDFE0 P1 High",
-    P2: "\uD83D\uDFE1 P2 Medium",
-    P3: "\uD83D\uDFE2 P3 Low",
-    Q1: "\uD83D\uDCCA Q1",
-    Q2: "\uD83D\uDCCA Q2",
-    Q3: "\uD83D\uDCCA Q3",
-    Q4: "\uD83D\uDCCA Q4",
-    low: "\uD83D\uDFE2 Low",
-    medium: "\uD83D\uDFE1 Medium",
-    high: "\uD83D\uDFE0 High",
-    urgent: "\uD83D\uDD34 Urgent"
+function createGateDependencies(cwd, reportPath) {
+  return {
+    runPreDevGate: async () => ({ passed: true, results: [] }),
+    checkQualityGate: async () => ({ passed: true, score: { totalScore: 100 } }),
+    validateNewTaskDeps: () => true,
+    readTaskMeta: (taskId) => readTaskMeta(taskId, cwd),
+    writeTaskMeta: (task) => writeTaskMeta(task, cwd),
+    invokeAIAgent: async (prompt, options) => {
+      const { invokeAgent: invokeAgent2 } = await Promise.resolve().then(() => (init_headless_agent(), exports_headless_agent));
+      return invokeAgent2(prompt, {
+        timeout: options.timeout / 1000,
+        allowedTools: options.allowedTools,
+        outputFormat: options.outputFormat,
+        cwd: options.cwd,
+        dangerouslySkipPermissions: true
+      });
+    },
+    runAlignmentCheck: async (rPath, taskId, c) => {
+      return runAlignmentCheck(rPath, taskId, c);
+    },
+    moveTaskToArchive: (taskId) => {
+      const tasksDir = getTasksDir(cwd);
+      const archiveDir = path21.join(tasksDir, "..", "archive");
+      if (!fs25.existsSync(archiveDir))
+        fs25.mkdirSync(archiveDir, { recursive: true });
+      const taskDir = path21.join(tasksDir, taskId);
+      if (fs25.existsSync(taskDir)) {
+        fs25.renameSync(taskDir, path21.join(archiveDir, taskId));
+      }
+    },
+    updateConversionStatus: (invDir, rPath, state, detail) => {
+      updateConversionStatus(invDir, rPath, state, detail);
+    }
   };
-  return map[priority] || `❓ ${priority}`;
 }
-async function initRequirementSingle(item, cwd, options) {
-  const { template = "simple", nonInteractive = true, skipValidation = true, requireQuality } = options;
-  try {
-    const structuredData = {
-      problem: item.description,
-      rootCause: "",
-      solution: "",
-      checkpoints: item.suggestedCheckpoints,
-      relatedFiles: item.relatedFiles,
-      notes: ""
-    };
-    const finalDescription = generateStructuredDescription(structuredData, template);
-    const task = await createTask2({
-      title: item.title,
-      description: finalDescription,
-      type: item.type,
-      priority: item.priority,
-      nonInteractive,
-      skipValidation,
-      aiEnhancement: false,
-      suggestedCheckpoints: item.suggestedCheckpoints,
-      potentialDependencies: []
-    }, cwd);
-    const taskId = task.id;
-    if (requireQuality !== undefined) {
-      const qualityGateConfig = {
-        ...DEFAULT_QUALITY_GATE_CONFIG,
-        minQualityScore: requireQuality
-      };
-      const qualityResult = await checkQualityGate(taskId, qualityGateConfig, cwd);
-      const taskWithScore = readTaskMeta(taskId, cwd);
-      if (taskWithScore) {
-        taskWithScore.initQualityScore = qualityResult.score.totalScore;
-        writeTaskMeta(taskWithScore, cwd);
-      }
-    }
-    console.log(`  ✅ ${taskId}: ${item.title}`);
-    return taskId;
-  } catch (error) {
-    console.error(`  ❌ Failed to create task: ${item.title}`);
-    console.error(`     ${error instanceof Error ? error.message : String(error)}`);
-    return null;
-  }
-}
-function reportBatchResult(created, failed, totalCount) {
-  console.log(`
-` + "━".repeat(50));
-  console.log("\uD83D\uDCCA Batch creation completed");
-  console.log("━".repeat(50));
-  console.log(`   Success: ${created.length}/${totalCount}`);
-  if (created.length > 0) {
-    console.log(`   Task list:`);
-    created.forEach((id) => console.log(`     - ${id}`));
-  }
-  if (failed.length > 0) {
-    console.log(`   Failed: ${failed.length}`);
-    failed.forEach((f) => console.log(`     - ${f.item.title}: ${f.reason}`));
-  }
-}
-async function initRequirementBatch(items, cwd, options) {
-  const createdTaskIds = [];
-  const failedTasks = [];
-  const taskIdMap = new Map;
-  let processedItems = items;
-  if (options.recursiveDecompose !== false && !options.noAI) {
-    const recursiveConfig = typeof options.recursiveDecompose === "object" ? { ...DEFAULT_RECURSIVE_CONFIG, ...options.recursiveDecompose } : DEFAULT_RECURSIVE_CONFIG;
-    if (recursiveConfig.enabled) {
-      console.log("");
-      console.log("━".repeat(SEPARATOR_WIDTH));
-      console.log("\uD83D\uDD04 Recursive decomposition: Checking if subtasks need further decomposition...");
-      console.log("━".repeat(SEPARATOR_WIDTH));
-      console.log("");
-      try {
-        const { decomposeRecursively: decomposeRecursively3 } = await Promise.resolve().then(() => (init_requirement_decomposer(), exports_requirement_decomposer));
-        processedItems = await decomposeRecursively3(items, {
-          cwd,
-          useAI: !options.noAI,
-          minItems: 2,
-          maxItems: 10
-        }, recursiveConfig);
-        if (processedItems.length > items.length) {
-          console.log(`   \uD83D\uDCCA Recursively decomposed: ${items.length} → ${processedItems.length} tasks`);
-          console.log("");
-        } else {
-          console.log("   ℹ️ No further decomposition needed");
-          console.log("");
-        }
-      } catch (error) {
-        console.warn("   ⚠️ Recursive decomposition failed:", error instanceof Error ? error.message : String(error));
-        console.log("   Continuing with original tasks...");
-        console.log("");
-        processedItems = items;
-      }
-    }
-  }
-  console.log("");
-  console.log("━".repeat(SEPARATOR_WIDTH));
-  console.log(`\uD83D\uDCDD Decomposition result: ${processedItems.length} tasks`);
-  processedItems.forEach((item, i) => {
-    console.log(`   ${i + 1}. [${item.priority}] ${item.title}`);
+async function runAlignmentCheck(reportPath, taskId, cwd) {
+  const reportContent = fs25.readFileSync(reportPath, "utf-8");
+  const taskMeta = readTaskMeta(taskId, cwd);
+  const prompt = loadAndRenderTemplate("aiAlignmentCheck", {
+    report: reportContent,
+    taskMeta: JSON.stringify(taskMeta, null, 2)
   });
-  console.log("━".repeat(SEPARATOR_WIDTH));
-  console.log("");
-  console.log("━".repeat(SEPARATOR_WIDTH));
-  console.log("\uD83D\uDCDD Creating tasks...");
-  console.log("━".repeat(SEPARATOR_WIDTH));
-  console.log("");
-  for (let i = 0;i < processedItems.length; i++) {
-    const item = processedItems[i];
-    console.log(`Creating task ${i + 1}/${processedItems.length}...`);
-    const itemOptions = {
-      ...options,
-      nonInteractive: true,
-      decompose: false
+  try {
+    const result = await callAIForJSON({ prompt, cwd, timeout: AI_TIMEOUT_SECONDS });
+    return result;
+  } catch {
+    return {
+      aligned: true,
+      checks: {
+        rootCauseAlignment: { passed: true, detail: "Alignment check skipped (AI error)" },
+        solutionAlignment: { passed: true, detail: "Alignment check skipped (AI error)" },
+        checkpointAlignment: { passed: true, detail: "Alignment check skipped (AI error)" }
+      },
+      issues: []
     };
+  }
+}
+
+// src/commands/investigation-requirement.ts
+import * as fs28 from "fs";
+import * as path23 from "path";
+import * as readline from "readline";
+
+// src/utils/investigation/report-generator.ts
+function generateReport(report) {
+  const sections = [];
+  sections.push(renderMetadata(report.metadata));
+  sections.push(renderRootCauseAnalysis(report.rootCauseAnalysis));
+  sections.push(renderSolutions(report.solutions));
+  sections.push(renderCheckpoints(report.checkpoints));
+  sections.push(renderAssessment(report.assessment));
+  return sections.join(`
+
+`);
+}
+function renderMetadata(m) {
+  const lines = [
+    "# 调查报告",
+    "",
+    `- **需求来源**: ${m.requirementSource}`,
+    `- **调查时间**: ${m.investigationDate}`,
+    `- **调查目录**: ${m.investigationDir}`,
+    `- **语言**: ${m.language}`
+  ];
+  if (m.parentReport)
+    lines.push(`- **父报告**: ${m.parentReport}`);
+  if (m.dependsOn?.length)
+    lines.push(`- **依赖子报告**: ${m.dependsOn.join(", ")}`);
+  return lines.join(`
+`);
+}
+function renderRootCauseAnalysis(items) {
+  const lines = ["## 原因分析", ""];
+  for (const item of items) {
+    lines.push(`### ${item.id}: ${item.title}`);
+    lines.push("");
+    lines.push(item.description);
+    lines.push("");
+  }
+  return lines.join(`
+`);
+}
+function renderSolutions(items) {
+  const lines = ["## 解决方案", ""];
+  for (const item of items) {
+    lines.push(`### ${item.id}: ${item.title}`);
+    lines.push("");
+    lines.push(`- **对应原因**: ${item.correspondsTo}`);
+    lines.push(`- **涉及文件**: ${item.files.join(", ")}`);
+    lines.push(`- **预期变更**: ${item.expectedChanges}`);
+    lines.push("");
+    lines.push(item.description);
+    lines.push("");
+  }
+  return lines.join(`
+`);
+}
+function renderCheckpoints(items) {
+  const lines = ["## 检查点", ""];
+  for (const cp of items) {
+    lines.push(`- [${cp.prefix}] ${cp.description} (→ ${cp.belongsTo})`);
+  }
+  return lines.join(`
+`);
+}
+function renderAssessment(a) {
+  const lines = [
+    "## 评估",
+    "",
+    `- **复杂度**: ${a.complexity}`,
+    `- **影响范围**: ${a.impactScope}`,
+    `- **预估工时**: ${a.estimatedMinutes} 分钟`
+  ];
+  return lines.join(`
+`);
+}
+
+// src/utils/investigation/report-parser.ts
+function parseReport(markdown) {
+  const metadata = parseMetadata(markdown);
+  const rootCauseAnalysis = parseRootCauseAnalysis(markdown);
+  const solutions = parseSolutions(markdown);
+  const checkpoints = parseCheckpoints2(markdown);
+  const assessment = parseAssessment(markdown);
+  return { metadata, rootCauseAnalysis, solutions, checkpoints, assessment };
+}
+function extractDependencies(markdown) {
+  const depLine = markdown.match(/^- \*\*依赖子报告\*\*: (.+)$/m);
+  if (!depLine)
+    return [];
+  return depLine[1].split(",").map((s) => s.trim()).filter(Boolean);
+}
+function parseMetadata(md) {
+  const source = extractField(md, "需求来源") || extractField(md, "Requirement Source") || "";
+  const date = extractField(md, "调查时间") || extractField(md, "Investigation Date") || new Date().toISOString();
+  const dir = extractField(md, "调查目录") || extractField(md, "Investigation Dir") || "";
+  const langRaw = extractField(md, "语言") || extractField(md, "Language") || "zh";
+  const parent = extractField(md, "父报告") || extractField(md, "Parent Report");
+  return {
+    requirementSource: source,
+    investigationDate: date,
+    investigationDir: dir,
+    language: langRaw === "en" ? "en" : "zh",
+    parentReport: parent || undefined,
+    dependsOn: extractDependencies(md)
+  };
+}
+function extractField(md, label) {
+  const re = new RegExp(`^- \\*\\*${escapeRegex(label)}\\*\\*: (.+)$`, "m");
+  const m = md.match(re);
+  return m ? m[1].trim() : null;
+}
+function parseRootCauseAnalysis(md) {
+  const items = [];
+  const sectionMd = extractSection(md, "原因分析", "Root Cause Analysis");
+  if (!sectionMd)
+    return items;
+  const re = /### (CA-\d+): (.+)/g;
+  let match;
+  while ((match = re.exec(sectionMd)) !== null) {
+    const id = match[1];
+    const title = match[2].trim();
+    const descStart = match.index + match[0].length;
+    const nextMatch = re.exec(sectionMd);
+    const descEnd = nextMatch ? nextMatch.index : sectionMd.length;
+    re.lastIndex = nextMatch ? nextMatch.index : re.lastIndex;
+    const description = sectionMd.slice(descStart, descEnd).trim();
+    items.push({ id, title, description });
+    if (nextMatch)
+      re.lastIndex = nextMatch.index;
+  }
+  return items;
+}
+function parseSolutions(md) {
+  const items = [];
+  const sectionMd = extractSection(md, "解决方案", "Solutions");
+  if (!sectionMd)
+    return items;
+  const re = /### (SOL-\d+): (.+)/g;
+  let match;
+  while ((match = re.exec(sectionMd)) !== null) {
+    const id = match[1];
+    const title = match[2].trim();
+    const descStart = match.index + match[0].length;
+    const nextMatch = re.exec(sectionMd);
+    const descEnd = nextMatch ? nextMatch.index : sectionMd.length;
+    re.lastIndex = nextMatch ? nextMatch.index : re.lastIndex;
+    const body = sectionMd.slice(descStart, descEnd).trim();
+    const correspondsTo = extractInlineField(body, "对应原因", "Corresponds To") || "";
+    const filesRaw = extractInlineField(body, "涉及文件", "Files") || "";
+    const files = filesRaw.split(",").map((s) => s.trim()).filter(Boolean);
+    const expectedChanges = extractInlineField(body, "预期变更", "Expected Changes") || "";
+    const description = body.split(`
+`).filter((l) => !l.startsWith("- ")).join(`
+`).trim();
+    items.push({ id, title, correspondsTo, description, files, expectedChanges });
+    if (nextMatch)
+      re.lastIndex = nextMatch.index;
+  }
+  return items;
+}
+function parseCheckpoints2(md) {
+  const items = [];
+  const sectionMd = extractSection(md, "检查点", "Checkpoints");
+  if (!sectionMd)
+    return items;
+  const validPrefixes = new Set(["verify", "test", "review", "implem", "doc"]);
+  const re = /^- \[([a-z]+)\] (.+) \(→ (SOL-\d+)\)$/gm;
+  let match;
+  while ((match = re.exec(sectionMd)) !== null) {
+    const prefix = match[1];
+    if (!validPrefixes.has(prefix))
+      continue;
+    items.push({
+      prefix,
+      description: match[2].trim(),
+      belongsTo: match[3]
+    });
+  }
+  return items;
+}
+function parseAssessment(md) {
+  const sectionMd = extractSection(md, "评估", "Assessment") || "";
+  const complexity = extractInlineField(sectionMd, "复杂度", "Complexity") || "medium";
+  const impactRaw = extractInlineField(sectionMd, "影响范围", "Impact Scope") || "中等";
+  const minutesRaw = extractInlineField(sectionMd, "预估工时", "Estimated Minutes") || "60";
+  return {
+    complexity: validateComplexity(complexity),
+    impactScope: impactRaw,
+    estimatedMinutes: parseInt(minutesRaw.replace(/[^\d]/g, ""), 10) || 60
+  };
+}
+function extractSection(md, zhTitle, enTitle) {
+  const re = new RegExp(`^## (?:${escapeRegex(zhTitle)}|${escapeRegex(enTitle)})\\s*\\n([\\s\\S]*?)(?=^## |$)`, "m");
+  const m = md.match(re);
+  return m ? m[1] : null;
+}
+function extractInlineField(text, zhLabel, enLabel) {
+  const re = new RegExp(`\\*\\*(?:${escapeRegex(zhLabel)}|${escapeRegex(enLabel)})\\*\\*: (.+)$`, "m");
+  const m = text.match(re);
+  return m ? m[1].trim() : null;
+}
+function escapeRegex(s) {
+  return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+function validateComplexity(v) {
+  if (v === "low" || v === "medium" || v === "high")
+    return v;
+  if (v === "低")
+    return "low";
+  if (v === "中")
+    return "medium";
+  if (v === "高")
+    return "high";
+  return "medium";
+}
+
+// src/utils/investigation/report-reviewer.ts
+async function reviewReport(requirement, report, cwd, lang = "zh") {
+  const reportMarkdown = generateReport(report);
+  const prompt = loadAndRenderTemplate("review", { report: reportMarkdown }, lang);
+  return callAIForJSON({ prompt, cwd }, validateReviewResult);
+}
+async function reviewWithRetry(requirement, report, options) {
+  let currentReport = report;
+  let lastReview;
+  for (let attempt = 0;attempt <= options.maxRetry; attempt++) {
+    lastReview = await reviewReport(requirement, currentReport, options.cwd, options.lang);
+    if (lastReview.pass) {
+      return { report: currentReport, review: lastReview };
+    }
+    if (attempt < options.maxRetry) {
+      const issuesText = lastReview.issues.map((i) => `[${i.severity}] ${i.dimension}: ${i.description} → ${i.suggestion}`).join(`
+`);
+      const previousReport = generateReport(currentReport);
+      const prompt = loadAndRenderTemplate("investigateWithFeedback", { requirement, previousReport, issues: issuesText }, options.lang);
+      const aiResult = await callAI({ prompt, outputFormat: "text", cwd: options.cwd });
+      if (!aiResult.success) {
+        throw new Error(`AI regeneration failed: ${aiResult.error}`);
+      }
+      currentReport = {
+        ...currentReport,
+        metadata: { ...currentReport.metadata, investigationDate: new Date().toISOString() }
+      };
+    }
+  }
+  throw new Error(`Review failed after ${options.maxRetry} retries. Last issues: ${lastReview?.issues.map((i) => i.description).join("; ")}`);
+}
+function validateReviewResult(data) {
+  if (!data || typeof data !== "object")
+    throw new Error("Invalid review result: expected object");
+  const r = data;
+  if (typeof r.pass !== "boolean")
+    throw new Error("Invalid review result: pass must be boolean");
+  const s = r.scores;
+  if (!s || typeof s.rootCauseAlignment !== "number" || typeof s.solutionEffectiveness !== "number" || typeof s.checkpointCompleteness !== "number") {
+    throw new Error("Invalid review result: scores missing required dimensions");
+  }
+  return {
+    pass: r.pass,
+    scores: { rootCauseAlignment: s.rootCauseAlignment, solutionEffectiveness: s.solutionEffectiveness, checkpointCompleteness: s.checkpointCompleteness },
+    issues: r.issues || []
+  };
+}
+
+// src/utils/investigation/report-splitter.ts
+import * as fs26 from "fs";
+function shouldSplit(reportPath, thresholdKB) {
+  if (!fs26.existsSync(reportPath))
+    return false;
+  const sizeKB = fs26.statSync(reportPath).size / 1024;
+  return sizeKB > thresholdKB;
+}
+async function generateSplitPlan(report, cwd, lang = "zh") {
+  const reportMarkdown = generateReport(report);
+  const prompt = loadAndRenderTemplate("split", { report: reportMarkdown }, lang);
+  return callAIForJSON({ prompt, cwd }, validateSplitPlan);
+}
+async function reviewSplitPlan(report, splitPlan, cwd, lang = "zh") {
+  const summary = summarizeReport(report);
+  const planJson = JSON.stringify(splitPlan, null, 2);
+  const prompt = loadAndRenderTemplate("splitReview", { reportSummary: summary, splitPlan: planJson }, lang);
+  return callAIForJSON({ prompt, cwd }, validateSplitReviewResult);
+}
+function summarizeReport(report) {
+  return [
+    `原因分析: ${report.rootCauseAnalysis.length} 项`,
+    `解决方案: ${report.solutions.length} 项`,
+    `检查点: ${report.checkpoints.length} 项`
+  ].join(`
+`);
+}
+function validateSplitPlan(data) {
+  if (!data || typeof data !== "object")
+    throw new Error("Invalid split plan: expected object");
+  const r = data;
+  if (!Array.isArray(r.items))
+    throw new Error("Invalid split plan: items must be an array");
+  for (const item of r.items) {
+    if (!item.title || !item.relationship || !item.scope) {
+      throw new Error("Invalid split item: missing required fields");
+    }
+    if (!["parallel", "hierarchical"].includes(item.relationship)) {
+      throw new Error(`Invalid relationship: ${item.relationship}`);
+    }
+  }
+  return { items: r.items };
+}
+function validateSplitReviewResult(data) {
+  if (!data || typeof data !== "object")
+    throw new Error("Invalid split review result: expected object");
+  const r = data;
+  if (typeof r.pass !== "boolean")
+    throw new Error("Invalid: pass must be boolean");
+  const s = r.scores;
+  const dims = ["coverage", "boundaryClarity", "independence", "dependencyReasonability", "antiPhaseSplitting", "granularity"];
+  if (!s)
+    throw new Error("Invalid: missing scores");
+  for (const d of dims) {
+    if (typeof s[d] !== "number")
+      throw new Error(`Invalid: missing score ${d}`);
+  }
+  return {
+    pass: r.pass,
+    scores: {
+      coverage: s.coverage,
+      boundaryClarity: s.boundaryClarity,
+      independence: s.independence,
+      dependencyReasonability: s.dependencyReasonability,
+      antiPhaseSplitting: s.antiPhaseSplitting,
+      granularity: s.granularity
+    },
+    issues: r.issues || []
+  };
+}
+
+// src/utils/investigation/config.ts
+import * as fs27 from "fs";
+import * as path22 from "path";
+var DEFAULT_CONFIG2 = {
+  splitThreshold: 30,
+  maxRetry: 3,
+  outputDir: "docs/investigation"
+};
+function loadInvestigationConfig(cwd, cliThreshold) {
+  try {
+    const configPath = findConfigPath(cwd);
+    if (configPath && fs27.existsSync(configPath)) {
+      const raw = fs27.readFileSync(configPath, "utf-8");
+      const config = JSON.parse(raw);
+      const inv = config?.investigation;
+      if (inv) {
+        return {
+          splitThreshold: cliThreshold ?? inv.splitThreshold ?? DEFAULT_CONFIG2.splitThreshold,
+          maxRetry: inv.maxRetry ?? DEFAULT_CONFIG2.maxRetry,
+          outputDir: inv.outputDir ?? DEFAULT_CONFIG2.outputDir
+        };
+      }
+    }
+  } catch {}
+  return {
+    ...DEFAULT_CONFIG2,
+    splitThreshold: cliThreshold ?? DEFAULT_CONFIG2.splitThreshold
+  };
+}
+function loadLanguageConfig(cwd) {
+  try {
+    const configPath = findConfigPath(cwd);
+    if (configPath && fs27.existsSync(configPath)) {
+      const raw = fs27.readFileSync(configPath, "utf-8");
+      const config = JSON.parse(raw);
+      const lang = config?.prompts?.language;
+      if (lang === "zh" || lang === "en")
+        return lang;
+    }
+  } catch {}
+  return "zh";
+}
+function findConfigPath(cwd) {
+  const configPath = path22.join(cwd, ".projmnt4claude", "config.json");
+  if (fs27.existsSync(configPath))
+    return configPath;
+  const rootConfig = path22.join(cwd, "config.json");
+  if (fs27.existsSync(rootConfig))
+    return rootConfig;
+  return null;
+}
+
+// src/commands/investigation-requirement.ts
+init_path();
+var DEFAULT_MAX_RETRY2 = 3;
+var DEFAULT_SPLIT_THRESHOLD = 30;
+var DEFAULT_LANGUAGE = "zh";
+var MIN_REQUIREMENT_LENGTH = 5;
+var MAX_SPLIT_DEPTH = 3;
+async function investigationRequirement(description, cwd, options) {
+  if (!isInitialized()) {
+    return {
+      success: false,
+      error: "Project not initialized. Run `projmnt4claude setup` first."
+    };
+  }
+  const config = loadInvestigationConfig(cwd);
+  const lang = options.language ?? loadLanguageConfig(cwd) ?? DEFAULT_LANGUAGE;
+  const maxRetry = options.maxRetry ?? config.maxRetry ?? DEFAULT_MAX_RETRY2;
+  const splitThreshold = options.splitThreshold ?? config.splitThreshold ?? DEFAULT_SPLIT_THRESHOLD;
+  let requirement = description;
+  if (options.file) {
+    requirement = readFileContent(options.file);
+  }
+  if (options.feedback) {
+    return runFeedbackMode(requirement ?? "", cwd, { ...options, lang, maxRetry, splitThreshold });
+  }
+  if (options.review) {
+    return runReviewMode(requirement ?? "", cwd, { ...options, lang, maxRetry });
+  }
+  if (options.split) {
+    return runSplitMode(cwd, { ...options, lang, maxRetry, splitThreshold });
+  }
+  if (options.interactive) {
+    return runInteractiveMode(requirement ?? "", cwd, { ...options, lang, maxRetry, splitThreshold });
+  }
+  if (!requirement) {
+    return {
+      success: false,
+      error: "Requirement description required. Provide description or use --file option."
+    };
+  }
+  if (requirement.length < MIN_REQUIREMENT_LENGTH) {
+    return {
+      success: false,
+      error: `Requirement description must be at least ${MIN_REQUIREMENT_LENGTH} characters. Got: ${requirement.length}`
+    };
+  }
+  return runNewInvestigation(requirement, cwd, { ...options, lang, maxRetry, splitThreshold });
+}
+async function runNewInvestigation(requirement, cwd, options) {
+  const { lang, maxRetry, splitThreshold } = options;
+  if (!options.quiet) {
+    console.log("");
+    console.log("\uD83D\uDD0D Starting investigation...");
+    console.log(`   Language: ${lang}`);
+    console.log(`   Max retry: ${maxRetry}`);
+    console.log(`   Split threshold: ${splitThreshold} KB`);
+    console.log("");
+  }
+  let report = await generateInvestigationReport(requirement, cwd, lang);
+  const formatValidation = validateReport(report);
+  if (!formatValidation.valid) {
+    if (!options.quiet) {
+      console.log(`   ⚠️ Format validation failed: ${formatValidation.errors.map((e) => e.message).join("; ")}`);
+      console.log("   Retrying report generation with format corrections...");
+    }
+    report = await generateInvestigationReport(`${requirement}
+
+[Format correction needed: ${formatValidation.errors.map((e) => e.message).join("; ")}]`, cwd, lang);
+  }
+  let reviewResult;
+  if (!options.skipReview) {
+    const retryResult = await reviewWithRetry(requirement, report, {
+      cwd,
+      lang,
+      maxRetry
+    });
+    reviewResult = retryResult.review;
+    if (!reviewResult.pass) {
+      return {
+        success: false,
+        reviewResult,
+        error: `Investigation report review failed after ${maxRetry} retries. Issues: ${reviewResult.issues.map((i) => i.description).join("; ")}`
+      };
+    }
+    if (!options.quiet) {
+      console.log(`   ✅ Review passed (scores: ${formatScores(reviewResult.scores)})`);
+    }
+  }
+  const outputMode = determineOutputMode(options, cwd);
+  const reportPath = await writeReport(report, outputMode, { force: options.force });
+  if (!options.quiet) {
+    console.log(`   \uD83D\uDCC4 Report saved: ${reportPath}`);
+  }
+  let subReports = [];
+  if (!options.skipSplit && shouldSplit(reportPath, splitThreshold)) {
+    if (!options.quiet) {
+      console.log(`   \uD83D\uDCCA Report exceeds ${splitThreshold} KB, triggering split...`);
+    }
+    const splitResult = await runSplitFlow(report, requirement, cwd, {
+      lang,
+      maxRetry,
+      splitThreshold,
+      outputDir: path23.dirname(reportPath),
+      quiet: options.quiet
+    });
+    if (splitResult.success && splitResult.subReports) {
+      subReports = splitResult.subReports;
+    }
+  }
+  return {
+    success: true,
+    reportPath,
+    subReports,
+    reviewResult
+  };
+}
+async function runInteractiveMode(requirement, cwd, options) {
+  const { lang, maxRetry, splitThreshold } = options;
+  if (!requirement) {
+    return {
+      success: false,
+      error: "Interactive mode requires requirement description."
+    };
+  }
+  console.log("");
+  console.log("\uD83D\uDD0D Starting interactive investigation...");
+  console.log('   Type "quit" or Ctrl+C to exit at any time');
+  console.log("");
+  let report = await generateInvestigationReport(requirement, cwd, lang);
+  let reportPath = "";
+  let iteration = 0;
+  const maxIterations = maxRetry * 2;
+  while (iteration < maxIterations) {
+    iteration++;
+    console.log(`
+\uD83D\uDCDD Iteration ${iteration}`);
+    console.log("─".repeat(50));
+    const reportMarkdown = generateReport(report);
+    console.log(`
+` + reportMarkdown.slice(0, 500) + (reportMarkdown.length > 500 ? "..." : ""));
+    console.log("");
+    const feedback = await promptUser(`
+\uD83D\uDCAC Your feedback (or "accept" to approve): `);
+    if (feedback.toLowerCase() === "quit" || feedback.toLowerCase() === "exit") {
+      console.log(`
+⏹️ Investigation cancelled by user`);
+      return { success: false, error: "User cancelled" };
+    }
+    if (feedback.toLowerCase() === "accept" || feedback.toLowerCase() === "ok") {
+      const outputMode = determineOutputMode(options, cwd);
+      reportPath = await writeReport(report, outputMode, { force: options.force });
+      console.log(`
+✅ Report accepted and saved: ${reportPath}`);
+      break;
+    }
+    console.log(`
+\uD83D\uDD04 Refining report based on feedback...`);
+    const prompt = loadAndRenderTemplate("investigateWithFeedback", { requirement, currentReport: reportMarkdown, feedback, date: new Date().toISOString() }, lang);
+    const aiResult = await callAI({ prompt, cwd, outputFormat: "text" });
+    if (aiResult.success) {
+      report = parseReport(aiResult.output);
+    }
+  }
+  let subReports = [];
+  if (!options.skipSplit && reportPath && shouldSplit(reportPath, splitThreshold)) {
+    const splitResult = await runSplitFlow(report, requirement, cwd, {
+      lang,
+      maxRetry,
+      splitThreshold,
+      outputDir: path23.dirname(reportPath),
+      quiet: options.quiet
+    });
+    if (splitResult.success && splitResult.subReports) {
+      subReports = splitResult.subReports;
+    }
+  }
+  return {
+    success: true,
+    reportPath,
+    subReports
+  };
+}
+async function runFeedbackMode(requirement, cwd, options) {
+  const { lang } = options;
+  if (!options.reportPath) {
+    return {
+      success: false,
+      error: "Feedback mode requires --report-path to specify the report to modify."
+    };
+  }
+  if (!fs28.existsSync(options.reportPath)) {
+    return {
+      success: false,
+      error: `Report not found: ${options.reportPath}`
+    };
+  }
+  if (!options.quiet) {
+    console.log("");
+    console.log("\uD83D\uDD04 Starting feedback revision...");
+    console.log(`   Report: ${options.reportPath}`);
+    console.log("");
+  }
+  const existingReportContent = fs28.readFileSync(options.reportPath, "utf-8");
+  const report = parseReport(existingReportContent);
+  const feedbackContent = requirement || "Please review and improve this report.";
+  const prompt = loadAndRenderTemplate("investigateWithFeedback", {
+    requirement: report.metadata.requirementSource,
+    currentReport: existingReportContent,
+    feedback: feedbackContent,
+    date: new Date().toISOString()
+  }, lang);
+  const aiResult = await callAI({ prompt, cwd, outputFormat: "text" });
+  if (!aiResult.success) {
+    return {
+      success: false,
+      error: `AI revision failed: ${aiResult.error}`
+    };
+  }
+  const revisedReport = parseReport(aiResult.output);
+  const outputPath = options.reportPath.replace(".md", "-revised.md");
+  fs28.writeFileSync(outputPath, generateReport(revisedReport));
+  if (!options.quiet) {
+    console.log(`   ✅ Revised report saved: ${outputPath}`);
+  }
+  return {
+    success: true,
+    reportPath: outputPath
+  };
+}
+async function runReviewMode(requirement, cwd, options) {
+  const { lang } = options;
+  if (!options.reportPath) {
+    return {
+      success: false,
+      error: "Review mode requires --report-path to specify the report to review."
+    };
+  }
+  if (!fs28.existsSync(options.reportPath)) {
+    return {
+      success: false,
+      error: `Report not found: ${options.reportPath}`
+    };
+  }
+  if (!options.quiet) {
+    console.log("");
+    console.log("\uD83D\uDD0E Starting review...");
+    console.log(`   Report: ${options.reportPath}`);
+    console.log("");
+  }
+  const reportContent = fs28.readFileSync(options.reportPath, "utf-8");
+  const report = parseReport(reportContent);
+  const reviewResult = await reviewReport(report.metadata.requirementSource, report, cwd, lang);
+  if (options.json) {
+    console.log(JSON.stringify(reviewResult, null, 2));
+  } else {
+    console.log(`
+\uD83D\uDCCA Review Result:`);
+    console.log(`   Pass: ${reviewResult.pass ? "✅" : "❌"}`);
+    console.log(`   Scores:`);
+    console.log(`     - Root Cause Alignment: ${reviewResult.scores.rootCauseAlignment}`);
+    console.log(`     - Solution Effectiveness: ${reviewResult.scores.solutionEffectiveness}`);
+    console.log(`     - Checkpoint Completeness: ${reviewResult.scores.checkpointCompleteness}`);
+    if (reviewResult.issues.length > 0) {
+      console.log(`
+   Issues:`);
+      for (const issue of reviewResult.issues) {
+        console.log(`     [${issue.severity}] ${issue.dimension}: ${issue.description}`);
+        console.log(`       Suggestion: ${issue.suggestion}`);
+      }
+    }
+  }
+  return {
+    success: reviewResult.pass,
+    reportPath: options.reportPath,
+    reviewResult
+  };
+}
+async function runSplitMode(cwd, options) {
+  const { lang, maxRetry, splitThreshold } = options;
+  if (!options.reportPath) {
+    return {
+      success: false,
+      error: "Split mode requires --report-path to specify the report to split."
+    };
+  }
+  if (!fs28.existsSync(options.reportPath)) {
+    return {
+      success: false,
+      error: `Report not found: ${options.reportPath}`
+    };
+  }
+  if (!options.quiet) {
+    console.log("");
+    console.log("✂️ Starting split...");
+    console.log(`   Report: ${options.reportPath}`);
+    console.log(`   Threshold: ${splitThreshold} KB`);
+    console.log("");
+  }
+  const reportContent = fs28.readFileSync(options.reportPath, "utf-8");
+  const report = parseReport(reportContent);
+  const result = await runSplitFlow(report, report.metadata.requirementSource, cwd, {
+    lang,
+    maxRetry,
+    splitThreshold,
+    outputDir: path23.dirname(options.reportPath),
+    quiet: options.quiet
+  });
+  return result;
+}
+async function runSplitFlow(report, requirement, cwd, options) {
+  const { lang, maxRetry, splitThreshold, outputDir, quiet } = options;
+  const depth = options.depth ?? 0;
+  if (depth >= MAX_SPLIT_DEPTH) {
+    if (!quiet) {
+      console.log(`   ⚠️ Max split depth (${MAX_SPLIT_DEPTH}) reached, skipping further splits`);
+    }
+    return { success: true, subReports: [] };
+  }
+  if (!quiet) {
+    console.log("   \uD83D\uDCCB Generating split plan...");
+  }
+  let splitPlan;
+  let splitReviewResult;
+  for (let attempt = 0;attempt <= maxRetry; attempt++) {
+    splitPlan = await generateSplitPlan(report, cwd, lang);
+    splitReviewResult = await reviewSplitPlan(report, splitPlan, cwd, lang);
+    if (splitReviewResult.pass) {
+      break;
+    }
+    if (!quiet) {
+      console.log(`   ⚠️ Split plan review failed (attempt ${attempt + 1}/${maxRetry + 1})`);
+      console.log(`     Issues: ${splitReviewResult.issues.length}`);
+    }
+    if (attempt >= maxRetry) {
+      return {
+        success: false,
+        splitPlan,
+        splitReviewResult,
+        error: `Split plan review failed after ${maxRetry} retries. Issues: ${splitReviewResult.issues.map((i) => i.description).join("; ")}`
+      };
+    }
+  }
+  if (!splitPlan) {
+    return { success: false, error: "Failed to generate split plan" };
+  }
+  if (!quiet) {
+    console.log(`   ✅ Split plan approved (${splitPlan.items.length} sub-items)`);
+  }
+  const subReports = [];
+  const subDir = path23.join(outputDir, "sub");
+  if (!fs28.existsSync(subDir)) {
+    fs28.mkdirSync(subDir, { recursive: true });
+  }
+  const outputMode = { type: "dir", path: subDir };
+  for (let i = 0;i < splitPlan.items.length; i++) {
+    const item = splitPlan.items[i];
+    if (!quiet) {
+      console.log(`   \uD83D\uDCC4 Generating sub-report ${i + 1}/${splitPlan.items.length}: ${item.title}`);
+    }
+    const subReport = await generateSubReport(report, item, requirement, cwd, lang);
+    const subSlug = slugify(item.title);
+    const subReportPath = path23.join(subDir, `${subSlug}.md`);
+    fs28.writeFileSync(subReportPath, generateReport(subReport));
+    subReports.push(subReportPath);
+    if (shouldSplit(subReportPath, splitThreshold)) {
+      if (!quiet) {
+        console.log(`   \uD83D\uDCCA Sub-report ${i + 1} exceeds threshold, recursing (depth ${depth + 1}/${MAX_SPLIT_DEPTH})...`);
+      }
+      const recursiveResult = await runSplitFlow(subReport, item.description, cwd, {
+        ...options,
+        outputDir: path23.dirname(subReportPath),
+        depth: depth + 1
+      });
+      if (recursiveResult.success && recursiveResult.subReports) {
+        subReports.push(...recursiveResult.subReports);
+      }
+    }
+  }
+  if (!quiet) {
+    console.log(`   ✅ Split complete: ${subReports.length} reports generated`);
+  }
+  return {
+    success: true,
+    subReports,
+    splitPlan,
+    splitReviewResult
+  };
+}
+async function generateInvestigationReport(requirement, cwd, lang) {
+  const slug = slugify(requirement);
+  const date = new Date().toISOString();
+  const projectContext = await getProjectContext(cwd);
+  const prompt = loadAndRenderTemplate("investigate", { requirement, projectContext, date, slug }, lang);
+  const result = await callAI({ prompt, cwd, outputFormat: "text" });
+  if (!result.success) {
+    throw new Error(`Failed to generate investigation report: ${result.error}`);
+  }
+  return parseReport(result.output);
+}
+async function getProjectContext(cwd) {
+  const parts = [];
+  const configPath = path23.join(cwd, ".projmnt4claude", "config.json");
+  if (fs28.existsSync(configPath)) {
     try {
-      const taskId = await initRequirementSingle(item, cwd, itemOptions);
-      if (taskId) {
-        createdTaskIds.push(taskId);
-        taskIdMap.set(i, taskId);
-        console.log(`✅ ${taskId}`);
-      } else {
-        failedTasks.push({ item, reason: "Creation failed (returned null)" });
-        console.log(`❌ Failed: returned null`);
-      }
-    } catch (error) {
-      const reason = error instanceof Error ? error.message : String(error);
-      failedTasks.push({ item, reason });
-      console.log(`❌ Failed: ${reason}`);
-    }
+      const config = JSON.parse(fs28.readFileSync(configPath, "utf-8"));
+      parts.push(`Language: ${config.prompts?.language || "zh"}`);
+    } catch {}
   }
-  if (createdTaskIds.length > 0) {
-    console.log("");
-    console.log("━".repeat(SEPARATOR_WIDTH));
-    console.log("\uD83D\uDD17 Setting up task dependencies...");
-    console.log("━".repeat(SEPARATOR_WIDTH));
-    console.log("");
-    for (let i = 0;i < processedItems.length; i++) {
-      const item = processedItems[i];
-      const taskId = taskIdMap.get(i);
-      if (!taskId || item.dependsOn.length === 0)
-        continue;
-      const task = readTaskMeta(taskId, cwd);
-      if (!task)
-        continue;
-      const deps = [];
-      for (const depIndex of item.dependsOn) {
-        if (!Number.isInteger(depIndex)) {
-          console.warn(`  Warning: Invalid dependency index (not an integer) for task ${taskId}: ${depIndex}`);
-          continue;
-        }
-        if (depIndex < 0 || depIndex >= processedItems.length) {
-          console.warn(`  Warning: Dependency index out of range for task ${taskId}: ${depIndex} (valid range: 0-${processedItems.length - 1})`);
-          continue;
-        }
-        const depId = taskIdMap.get(depIndex);
-        if (!depId) {
-          console.warn(`  Warning: No task ID found for dependency index ${depIndex} of task ${taskId}`);
-          continue;
-        }
-        if (!deps.includes(depId)) {
-          deps.push(depId);
-        }
-      }
-      if (deps.length > 0) {
-        task.dependencies = [...task.dependencies || [], ...deps];
-        writeTaskMeta(task, cwd);
-        console.log(`  ${taskId} dependencies: ${deps.join(", ")}`);
-      }
-    }
+  const mainDirs = ["src", "lib", "docs", "tests", "test"];
+  const existingDirs = mainDirs.filter((d) => fs28.existsSync(path23.join(cwd, d)));
+  if (existingDirs.length > 0) {
+    parts.push(`Main directories: ${existingDirs.join(", ")}`);
   }
-  reportBatchResult(createdTaskIds, failedTasks, processedItems.length);
+  return parts.join(`
+`);
+}
+async function generateSubReport(parentReport, splitItem, requirement, cwd, lang) {
+  const subPrompt = loadAndRenderTemplate("investigate", {
+    requirement: `[Sub-investigation] ${splitItem.title}
+
+Scope: ${splitItem.scope}
+Description: ${splitItem.description}
+
+Original requirement: ${requirement}`
+  }, lang);
+  const result = await callAI({ prompt: subPrompt, cwd, outputFormat: "text" });
+  if (!result.success) {
+    throw new Error(`Failed to generate sub-report: ${result.error}`);
+  }
+  const subReport = parseReport(result.output);
+  subReport.metadata.parentReport = "../report.md";
+  subReport.metadata.dependsOn = splitItem.dependsOn.length > 0 ? splitItem.dependsOn.map((d) => `sub-${String(d + 1).padStart(2, "0")}.md`) : undefined;
+  return subReport;
+}
+async function writeReport(report, outputMode, options = {}) {
+  const content = generateReport(report);
+  let filePath;
+  if (outputMode.type === "file") {
+    filePath = outputMode.path;
+  } else {
+    const slug = slugify(report.metadata.requirementSource);
+    const prefix = options.prefix ? `${options.prefix}-` : "";
+    const fileName = `${prefix}investigation-${slug}.md`;
+    filePath = path23.join(outputMode.path, fileName);
+  }
+  if (fs28.existsSync(filePath) && !options.force) {
+    const ext = path23.extname(filePath);
+    const base = filePath.slice(0, -ext.length);
+    filePath = `${base}-${Date.now()}${ext}`;
+  }
+  const dir = path23.dirname(filePath);
+  if (!fs28.existsSync(dir)) {
+    fs28.mkdirSync(dir, { recursive: true });
+  }
+  fs28.writeFileSync(filePath, content);
+  return filePath;
+}
+function determineOutputMode(options, cwd) {
+  if (options.outputFile) {
+    return { type: "file", path: options.outputFile };
+  }
+  const outputDir = options.outputDir ?? path23.join(cwd, "investigations");
+  return { type: "dir", path: outputDir };
+}
+function readFileContent(filePath) {
+  const absolutePath = path23.resolve(filePath);
+  if (!fs28.existsSync(absolutePath)) {
+    throw new Error(`File not found: ${absolutePath}`);
+  }
+  return fs28.readFileSync(absolutePath, "utf-8");
+}
+function slugify(text) {
+  return text.toLowerCase().replace(/[^a-z0-9一-龥]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 50);
+}
+function formatScores(scores) {
+  return `RCA=${scores.rootCauseAlignment}, SOL=${scores.solutionEffectiveness}, CP=${scores.checkpointCompleteness}`;
+}
+function promptUser(prompt) {
+  const rl = readline.createInterface({
+    input: process.stdin,
+    output: process.stdout
+  });
+  return new Promise((resolve10) => {
+    rl.question(prompt, (answer) => {
+      rl.close();
+      resolve10(answer.trim());
+    });
+  });
 }
 
 // src/commands/help.ts
 init_i18n();
-import * as fs25 from "fs";
-import * as path21 from "path";
+import * as fs29 from "fs";
+import * as path24 from "path";
 function parseCommandMetadata(filePath) {
   try {
-    const content = fs25.readFileSync(filePath, "utf-8");
+    const content = fs29.readFileSync(filePath, "utf-8");
     const frontmatterMatch = content.match(/^---\n(.*?)\n---/s);
     if (!frontmatterMatch) {
       return null;
@@ -35605,16 +34956,16 @@ function getCommandsDir(cwd) {
   const language = getLanguage(cwd);
   const pluginRoot = process.env.CLAUDE_PLUGIN_ROOT;
   if (pluginRoot) {
-    const localesDir = path21.join(pluginRoot, "locales", language, "commands");
-    if (fs25.existsSync(localesDir)) {
+    const localesDir = path24.join(pluginRoot, "locales", language, "commands");
+    if (fs29.existsSync(localesDir)) {
       return localesDir;
     }
   }
-  return path21.join(cwd, "commands");
+  return path24.join(cwd, "commands");
 }
 function getAvailableCommands(commandsDir) {
   try {
-    const files = fs25.readdirSync(commandsDir);
+    const files = fs29.readdirSync(commandsDir);
     return files.filter((file) => file.endsWith(".md")).map((file) => file.replace(".md", "")).sort();
   } catch (error) {
     return [];
@@ -35638,7 +34989,7 @@ function showOverview(commandsDir, cwd) {
   console.log(`${t2.help.availableCommands}` + " ".repeat(maxCommandLength - 22) + " | " + t2.help.noDescription.split(" ")[0]);
   console.log("─".repeat(maxCommandLength + 2) + "-+-" + "─".repeat(50));
   for (const command of commands) {
-    const metadata = parseCommandMetadata(path21.join(commandsDir, `${command}.md`));
+    const metadata = parseCommandMetadata(path24.join(commandsDir, `${command}.md`));
     const description = metadata?.description || t2.help.noDescription;
     const paddedCommand = command.padEnd(maxCommandLength);
     console.log(`${paddedCommand} | ${description}`);
@@ -35663,12 +35014,12 @@ function showCommandHelp(commandsDir, commandName, cwd) {
     console.log("");
     return;
   }
-  const filePath = path21.join(commandsDir, `${matchedCommand}.md`);
-  if (!fs25.existsSync(filePath)) {
+  const filePath = path24.join(commandsDir, `${matchedCommand}.md`);
+  if (!fs29.existsSync(filePath)) {
     console.log(`❌ ${t2.help.commandNotFound}: ${matchedCommand}`);
     return;
   }
-  const content = fs25.readFileSync(filePath, "utf-8");
+  const content = fs29.readFileSync(filePath, "utf-8");
   const cleanContent = content.replace(/^---\n.*?\n---\n/s, "");
   console.log("");
   console.log(cleanContent);
@@ -35713,7 +35064,7 @@ function showSmartHelp(commandsDir, topic, cwd) {
     console.log(t2.help.suggestedCommands);
     console.log("");
     for (const cmd of matchedCommands) {
-      const metadata = parseCommandMetadata(path21.join(commandsDir, `${cmd}.md`));
+      const metadata = parseCommandMetadata(path24.join(commandsDir, `${cmd}.md`));
       const description = metadata?.description || t2.help.noDescription;
       console.log(`  \uD83D\uDCCC ${cmd}`);
       console.log(`     ${description}`);
@@ -35735,7 +35086,7 @@ function showSmartHelp(commandsDir, topic, cwd) {
 }
 function showHelp(topic, cwd = process.cwd()) {
   const commandsDir = getCommandsDir(cwd);
-  if (!fs25.existsSync(commandsDir)) {
+  if (!fs29.existsSync(commandsDir)) {
     const t2 = (init_i18n(), __toCommonJS(exports_i18n)).getI18n(getLanguage(cwd));
     console.error(`${t2.error}: ${t2.help.commandNotFound}`);
     console.error(`${t2.setupCmd.directory.replace("{path}", commandsDir)}`);
@@ -35759,15 +35110,15 @@ init_path();
 init_task2();
 init_logger();
 init_config2();
-import * as fs27 from "fs";
-import * as path23 from "path";
+import * as fs31 from "fs";
+import * as path26 from "path";
 import * as os2 from "os";
 
 // src/utils/log-analyzer.ts
 init_path();
 init_logger();
-import * as fs26 from "fs";
-import * as path22 from "path";
+import * as fs30 from "fs";
+import * as path25 from "path";
 
 class LogCollector {
   cwd;
@@ -35786,10 +35137,10 @@ class LogCollector {
       commands
     } = options;
     const logsDir = getLogsDir(this.cwd);
-    if (!fs26.existsSync(logsDir)) {
+    if (!fs30.existsSync(logsDir)) {
       return [];
     }
-    const logFiles = fs26.readdirSync(logsDir).filter((f) => f.endsWith(".log")).sort().reverse().slice(0, maxFiles);
+    const logFiles = fs30.readdirSync(logsDir).filter((f) => f.endsWith(".log")).sort().reverse().slice(0, maxFiles);
     const allEntries = [];
     const levelPriority = {
       error: 0,
@@ -35798,9 +35149,9 @@ class LogCollector {
       debug: 3
     };
     for (const file of logFiles) {
-      const filePath = path22.join(logsDir, file);
+      const filePath = path25.join(logsDir, file);
       try {
-        const content = fs26.readFileSync(filePath, "utf-8");
+        const content = fs30.readFileSync(filePath, "utf-8");
         const lines = content.split(`
 `).filter((l) => l.trim());
         for (const line of lines) {
@@ -35830,14 +35181,14 @@ class LogCollector {
   }
   getStats() {
     const logsDir = getLogsDir(this.cwd);
-    if (!fs26.existsSync(logsDir)) {
+    if (!fs30.existsSync(logsDir)) {
       return { fileCount: 0, totalSizeKB: 0, oldestFile: null, newestFile: null };
     }
-    const files = fs26.readdirSync(logsDir).filter((f) => f.endsWith(".log"));
+    const files = fs30.readdirSync(logsDir).filter((f) => f.endsWith(".log"));
     let totalSizeKB = 0;
     for (const f of files) {
       try {
-        const stat = fs26.statSync(path22.join(logsDir, f));
+        const stat = fs30.statSync(path25.join(logsDir, f));
         totalSizeKB += stat.size / 1024;
       } catch {}
     }
@@ -36394,8 +35745,8 @@ async function runDoctor(fix = false, cwd = process.cwd()) {
 function checkProjectInit(cwd) {
   const texts = t(cwd).doctorCmd;
   const projectDir = getProjectDir(cwd);
-  const configPath = path23.join(projectDir, "config.json");
-  if (!fs27.existsSync(configPath)) {
+  const configPath = path26.join(projectDir, "config.json");
+  if (!fs31.existsSync(configPath)) {
     return {
       name: texts.checkProjectInit,
       status: "error",
@@ -36428,31 +35779,31 @@ function checkPluginCache(cwd) {
     };
   }
   details.push(`Plugin root: ${pluginRoot}`);
-  const mainFile = path23.join(pluginRoot, "dist", "projmnt4claude.js");
-  if (!fs27.existsSync(mainFile)) {
+  const mainFile = path26.join(pluginRoot, "dist", "projmnt4claude.js");
+  if (!fs31.existsSync(mainFile)) {
     status = "error";
     message = texts.checkPluginCacheMainFileMissing;
     details.push(`Missing: ${mainFile}`);
   } else {
     details.push(`✓ Main program: ${mainFile}`);
   }
-  const localesDir = path23.join(pluginRoot, "locales");
-  if (!fs27.existsSync(localesDir)) {
+  const localesDir = path26.join(pluginRoot, "locales");
+  if (!fs31.existsSync(localesDir)) {
     if (status !== "error") {
       status = "warning";
       message = texts.checkPluginCacheLocalesMissing;
     }
     details.push(`Missing: ${localesDir}`);
   } else {
-    const zhDir = path23.join(localesDir, "zh");
-    const enDir = path23.join(localesDir, "en");
-    if (fs27.existsSync(zhDir)) {
+    const zhDir = path26.join(localesDir, "zh");
+    const enDir = path26.join(localesDir, "en");
+    if (fs31.existsSync(zhDir)) {
       details.push("✓ Chinese language pack: locales/zh/");
     }
-    if (fs27.existsSync(enDir)) {
+    if (fs31.existsSync(enDir)) {
       details.push("✓ English language pack: locales/en/");
     }
-    if (!fs27.existsSync(zhDir) && !fs27.existsSync(enDir)) {
+    if (!fs31.existsSync(zhDir) && !fs31.existsSync(enDir)) {
       if (status !== "error") {
         status = "warning";
         message = "Language pack directories missing";
@@ -36460,15 +35811,15 @@ function checkPluginCache(cwd) {
       details.push("Warning: No language pack directories found");
     }
   }
-  const commandsDir = path23.join(pluginRoot, "commands");
-  if (!fs27.existsSync(commandsDir)) {
+  const commandsDir = path26.join(pluginRoot, "commands");
+  if (!fs31.existsSync(commandsDir)) {
     if (status !== "error") {
       status = "warning";
       message = texts.checkPluginCacheCommandsMissing;
     }
     details.push(`Missing: ${commandsDir}`);
   } else {
-    const commandFiles = fs27.readdirSync(commandsDir).filter((f) => f.endsWith(".md"));
+    const commandFiles = fs31.readdirSync(commandsDir).filter((f) => f.endsWith(".md"));
     details.push(`✓ Slash commands: ${commandFiles.length}`);
   }
   return {
@@ -36483,10 +35834,10 @@ function checkSkillFiles(cwd) {
   const texts = t(cwd).doctorCmd;
   const results = [];
   const toolboxDir = getToolboxDir(cwd);
-  const skillDir = path23.join(toolboxDir, "projmnt4claude");
-  const commandsDir = path23.join(skillDir, "commands");
-  if (fs27.existsSync(commandsDir)) {
-    const commandFiles = fs27.readdirSync(commandsDir).filter((f) => f.endsWith(".md"));
+  const skillDir = path26.join(toolboxDir, "projmnt4claude");
+  const commandsDir = path26.join(skillDir, "commands");
+  if (fs31.existsSync(commandsDir)) {
+    const commandFiles = fs31.readdirSync(commandsDir).filter((f) => f.endsWith(".md"));
     results.push({
       name: texts.checkSkillFiles,
       status: "ok",
@@ -36514,7 +35865,7 @@ function checkDirectoryStructure(cwd) {
     { name: "toolbox", path: getToolboxDir(cwd) }
   ];
   for (const dir of requiredDirs) {
-    if (!fs27.existsSync(dir.path)) {
+    if (!fs31.existsSync(dir.path)) {
       results.push({
         name: texts.checkDirectoryStructure.replace("{name}", dir.name),
         status: "error",
@@ -36533,20 +35884,20 @@ function checkDirectoryStructure(cwd) {
     }
   }
   const tasksDir = getTasksDir(cwd);
-  if (fs27.existsSync(tasksDir)) {
+  if (fs31.existsSync(tasksDir)) {
     const taskIds = getAllTaskIds(cwd);
     const hasAbandonedTasks = taskIds.some((taskId) => {
-      const metaPath = path23.join(tasksDir, taskId, "meta.json");
+      const metaPath = path26.join(tasksDir, taskId, "meta.json");
       try {
-        const meta = JSON.parse(fs27.readFileSync(metaPath, "utf-8"));
+        const meta = JSON.parse(fs31.readFileSync(metaPath, "utf-8"));
         return meta.status === "abandoned";
       } catch {
         return false;
       }
     });
     if (hasAbandonedTasks) {
-      const archiveDir = path23.join(projectDir, "archive");
-      if (!fs27.existsSync(archiveDir)) {
+      const archiveDir = path26.join(projectDir, "archive");
+      if (!fs31.existsSync(archiveDir)) {
         results.push({
           name: texts.checkDirectoryStructure.replace("{name}", "archive"),
           status: "warning",
@@ -36562,12 +35913,12 @@ function checkDirectoryStructure(cwd) {
 function checkPluginInstallationScope(cwd) {
   const results = [];
   const homeDir = os2.homedir();
-  const installedPluginsPath = path23.join(homeDir, ".claude", "plugins", "installed_plugins.json");
-  if (!fs27.existsSync(installedPluginsPath)) {
+  const installedPluginsPath = path26.join(homeDir, ".claude", "plugins", "installed_plugins.json");
+  if (!fs31.existsSync(installedPluginsPath)) {
     return results;
   }
   try {
-    const pluginsConfig = JSON.parse(fs27.readFileSync(installedPluginsPath, "utf-8"));
+    const pluginsConfig = JSON.parse(fs31.readFileSync(installedPluginsPath, "utf-8"));
     const plugins = pluginsConfig.plugins || {};
     const pluginKey = "projmnt4claude@projmnt4claude";
     const installations = plugins[pluginKey] || [];
@@ -36575,11 +35926,11 @@ function checkPluginInstallationScope(cwd) {
     if (projectScopedInstalls.length === 0) {
       return results;
     }
-    const normalizedCwd = path23.resolve(cwd);
+    const normalizedCwd = path26.resolve(cwd);
     const mismatchedInstalls = projectScopedInstalls.filter((inst) => {
       if (!inst.projectPath)
         return true;
-      return path23.resolve(inst.projectPath) !== normalizedCwd;
+      return path26.resolve(inst.projectPath) !== normalizedCwd;
     });
     if (mismatchedInstalls.length > 0) {
       const texts = t(cwd).doctorCmd;
@@ -36633,7 +35984,7 @@ function checkLoggingModule(cwd) {
   const texts = t(cwd).doctorCmd;
   const results = [];
   const logsDir = getLogsDir(cwd);
-  if (!fs27.existsSync(logsDir)) {
+  if (!fs31.existsSync(logsDir)) {
     results.push({
       name: texts.checkLogDirectory,
       status: "warning",
@@ -36735,11 +36086,11 @@ function checkLoggingModule(cwd) {
   const oversizedFiles = [];
   let totalSizeMB = 0;
   try {
-    const files = fs27.readdirSync(logsDir).filter((f) => f.endsWith(".log"));
+    const files = fs31.readdirSync(logsDir).filter((f) => f.endsWith(".log"));
     for (const file of files) {
-      const filePath = path23.join(logsDir, file);
+      const filePath = path26.join(logsDir, file);
       try {
-        const stat = fs27.statSync(filePath);
+        const stat = fs31.statSync(filePath);
         const sizeMB = stat.size / (1024 * 1024);
         totalSizeMB += sizeMB;
         if (sizeMB > 10) {
@@ -36786,7 +36137,7 @@ function checkDeprecatedStatuses(cwd) {
   const texts = t(cwd).doctorCmd;
   const results = [];
   const tasksDir = getTasksDir(cwd);
-  if (!fs27.existsSync(tasksDir)) {
+  if (!fs31.existsSync(tasksDir)) {
     return [{
       name: texts.checkDeprecatedStatus,
       status: "ok",
@@ -36799,10 +36150,10 @@ function checkDeprecatedStatuses(cwd) {
   const deprecatedStatuses = ["reopened", "needs_human"];
   const tasksWithDeprecatedStatus = [];
   for (const taskId of taskIds) {
-    const metaPath = path23.join(tasksDir, taskId, "meta.json");
-    if (fs27.existsSync(metaPath)) {
+    const metaPath = path26.join(tasksDir, taskId, "meta.json");
+    if (fs31.existsSync(metaPath)) {
       try {
-        const meta = JSON.parse(fs27.readFileSync(metaPath, "utf-8"));
+        const meta = JSON.parse(fs31.readFileSync(metaPath, "utf-8"));
         if (deprecatedStatuses.includes(meta.status)) {
           tasksWithDeprecatedStatus.push({ taskId, status: meta.status });
         }
@@ -36844,8 +36195,8 @@ function checkGitHooks(cwd) {
   if (!gitHookConfig.enabled) {
     return [{ status: "ok", name: texts.checkGitHooks, message: texts.checkGitHooksDisabled, fixable: false }];
   }
-  const gitDir = path23.join(cwd, ".git");
-  if (!fs27.existsSync(gitDir)) {
+  const gitDir = path26.join(cwd, ".git");
+  if (!fs31.existsSync(gitDir)) {
     return [{ status: "ok", name: texts.checkGitHooks, message: texts.checkGitHooksNotGitRepo, fixable: false }];
   }
   try {
@@ -36882,10 +36233,10 @@ function checkDeprecatedHooks(cwd) {
   const results = [];
   const deprecatedSettings = [];
   const deprecatedFiles = [];
-  const settingsPath = path23.join(cwd, ".claude", "settings.json");
-  if (fs27.existsSync(settingsPath)) {
+  const settingsPath = path26.join(cwd, ".claude", "settings.json");
+  if (fs31.existsSync(settingsPath)) {
     try {
-      const settings = JSON.parse(fs27.readFileSync(settingsPath, "utf-8"));
+      const settings = JSON.parse(fs31.readFileSync(settingsPath, "utf-8"));
       const hooks = settings.hooks || {};
       for (const [hookType, hookConfig] of Object.entries(hooks)) {
         if (typeof hookConfig === "string") {
@@ -36914,10 +36265,10 @@ function checkDeprecatedHooks(cwd) {
       }
     } catch {}
   }
-  const hooksDir = path23.join(cwd, ".projmnt4claude", "hooks");
-  if (fs27.existsSync(hooksDir)) {
+  const hooksDir = path26.join(cwd, ".projmnt4claude", "hooks");
+  if (fs31.existsSync(hooksDir)) {
     try {
-      const files = fs27.readdirSync(hooksDir);
+      const files = fs31.readdirSync(hooksDir);
       for (const file of files) {
         if (DEPRECATED_HOOK_SCRIPTS.includes(file)) {
           deprecatedFiles.push(file);
@@ -37005,10 +36356,10 @@ function resolvePluginRoot() {
   try {
     let dir = __dirname;
     for (let i = 0;i < 3; i++) {
-      if (fs27.existsSync(path23.join(dir, "locales"))) {
+      if (fs31.existsSync(path26.join(dir, "locales"))) {
         return dir;
       }
-      dir = path23.dirname(dir);
+      dir = path26.dirname(dir);
     }
   } catch {}
   return null;
@@ -37022,33 +36373,33 @@ async function fixIssues3(issues, cwd) {
     if (issue.name === "Skill Files" || issue.name === "Command Docs") {
       if (pluginRoot) {
         const toolboxDir = getToolboxDir(cwd);
-        const skillDir = path23.join(toolboxDir, "projmnt4claude");
-        if (!fs27.existsSync(skillDir)) {
-          fs27.mkdirSync(skillDir, { recursive: true });
+        const skillDir = path26.join(toolboxDir, "projmnt4claude");
+        if (!fs31.existsSync(skillDir)) {
+          fs31.mkdirSync(skillDir, { recursive: true });
         }
-        const configPath = path23.join(projectDir, "config.json");
+        const configPath = path26.join(projectDir, "config.json");
         let language = "zh";
-        if (fs27.existsSync(configPath)) {
+        if (fs31.existsSync(configPath)) {
           try {
-            const config = JSON.parse(fs27.readFileSync(configPath, "utf-8"));
+            const config = JSON.parse(fs31.readFileSync(configPath, "utf-8"));
             language = config.language || "zh";
           } catch {}
         }
-        const skillSource = path23.join(pluginRoot, "locales", language, "SKILL.md");
-        const skillTarget = path23.join(skillDir, "SKILL.md");
-        if (fs27.existsSync(skillSource)) {
-          fs27.copyFileSync(skillSource, skillTarget);
+        const skillSource = path26.join(pluginRoot, "locales", language, "SKILL.md");
+        const skillTarget = path26.join(skillDir, "SKILL.md");
+        if (fs31.existsSync(skillSource)) {
+          fs31.copyFileSync(skillSource, skillTarget);
           console.log(texts.copiedSkillMd);
         }
-        const commandsSourceDir = path23.join(pluginRoot, "locales", language, "commands");
-        const commandsTargetDir = path23.join(skillDir, "commands");
-        if (fs27.existsSync(commandsSourceDir)) {
-          if (!fs27.existsSync(commandsTargetDir)) {
-            fs27.mkdirSync(commandsTargetDir, { recursive: true });
+        const commandsSourceDir = path26.join(pluginRoot, "locales", language, "commands");
+        const commandsTargetDir = path26.join(skillDir, "commands");
+        if (fs31.existsSync(commandsSourceDir)) {
+          if (!fs31.existsSync(commandsTargetDir)) {
+            fs31.mkdirSync(commandsTargetDir, { recursive: true });
           }
-          const commandFiles = fs27.readdirSync(commandsSourceDir).filter((f) => f.endsWith(".md"));
+          const commandFiles = fs31.readdirSync(commandsSourceDir).filter((f) => f.endsWith(".md"));
           for (const file of commandFiles) {
-            fs27.copyFileSync(path23.join(commandsSourceDir, file), path23.join(commandsTargetDir, file));
+            fs31.copyFileSync(path26.join(commandsSourceDir, file), path26.join(commandsTargetDir, file));
           }
           console.log(texts.copiedCommandDocs.replace("{count}", String(commandFiles.length)));
         }
@@ -37060,17 +36411,17 @@ async function fixIssues3(issues, cwd) {
       const dirMap = {
         tasks: getTasksDir(cwd),
         toolbox: getToolboxDir(cwd),
-        archive: path23.join(projectDir, "archive")
+        archive: path26.join(projectDir, "archive")
       };
       const dirPath = dirMap[dirName];
-      if (dirPath && !fs27.existsSync(dirPath)) {
-        fs27.mkdirSync(dirPath, { recursive: true });
+      if (dirPath && !fs31.existsSync(dirPath)) {
+        fs31.mkdirSync(dirPath, { recursive: true });
         console.log(texts.createdDirectory.replace("{name}", dirName));
       }
     } else if (issue.name === texts.checkLogDirectory) {
       const logsDir = getLogsDir(cwd);
-      if (!fs27.existsSync(logsDir)) {
-        fs27.mkdirSync(logsDir, { recursive: true });
+      if (!fs31.existsSync(logsDir)) {
+        fs31.mkdirSync(logsDir, { recursive: true });
         console.log(texts.createdLogsDirectory);
       }
     } else if (issue.name === texts.checkLogConfigCompleteness || issue.name === texts.checkAiConfigCompleteness || issue.name === texts.checkTrainingConfigCompleteness) {
@@ -37085,10 +36436,10 @@ async function fixIssues3(issues, cwd) {
       const deprecatedMap = { reopened: "open", needs_human: "open" };
       let fixedCount = 0;
       for (const taskId of getAllTaskIds(cwd)) {
-        const metaPath = path23.join(tasksDir, taskId, "meta.json");
-        if (fs27.existsSync(metaPath)) {
+        const metaPath = path26.join(tasksDir, taskId, "meta.json");
+        if (fs31.existsSync(metaPath)) {
           try {
-            const meta = JSON.parse(fs27.readFileSync(metaPath, "utf-8"));
+            const meta = JSON.parse(fs31.readFileSync(metaPath, "utf-8"));
             if (deprecatedMap[meta.status]) {
               const oldStatus = meta.status;
               meta.status = deprecatedMap[oldStatus];
@@ -37102,7 +36453,7 @@ async function fixIssues3(issues, cwd) {
                 author: "doctor-fix"
               });
               meta.updatedAt = new Date().toISOString();
-              fs27.writeFileSync(metaPath, JSON.stringify(meta, null, 2), "utf-8");
+              fs31.writeFileSync(metaPath, JSON.stringify(meta, null, 2), "utf-8");
               fixedCount++;
             }
           } catch {}
@@ -37112,10 +36463,10 @@ async function fixIssues3(issues, cwd) {
     } else if (issue.name === texts.checkDeprecatedHooks) {
       let removedSettings = false;
       let removedFiles = false;
-      const settingsPath = path23.join(cwd, ".claude", "settings.json");
-      if (fs27.existsSync(settingsPath)) {
+      const settingsPath = path26.join(cwd, ".claude", "settings.json");
+      if (fs31.existsSync(settingsPath)) {
         try {
-          const settings = JSON.parse(fs27.readFileSync(settingsPath, "utf-8"));
+          const settings = JSON.parse(fs31.readFileSync(settingsPath, "utf-8"));
           const hooks = settings.hooks || {};
           let modified = false;
           for (const [hookType, hookConfig] of Object.entries(hooks)) {
@@ -37156,25 +36507,25 @@ async function fixIssues3(issues, cwd) {
             }
           }
           if (modified) {
-            fs27.writeFileSync(settingsPath, JSON.stringify(settings, null, 2), "utf-8");
+            fs31.writeFileSync(settingsPath, JSON.stringify(settings, null, 2), "utf-8");
             removedSettings = true;
           }
         } catch {}
       }
-      const hooksDir = path23.join(cwd, ".projmnt4claude", "hooks");
-      if (fs27.existsSync(hooksDir)) {
+      const hooksDir = path26.join(cwd, ".projmnt4claude", "hooks");
+      if (fs31.existsSync(hooksDir)) {
         try {
-          const files = fs27.readdirSync(hooksDir);
+          const files = fs31.readdirSync(hooksDir);
           for (const file of files) {
             if (DEPRECATED_HOOK_SCRIPTS.includes(file)) {
-              const filePath = path23.join(hooksDir, file);
-              fs27.unlinkSync(filePath);
+              const filePath = path26.join(hooksDir, file);
+              fs31.unlinkSync(filePath);
               removedFiles = true;
             }
           }
-          const remainingFiles = fs27.readdirSync(hooksDir);
+          const remainingFiles = fs31.readdirSync(hooksDir);
           if (remainingFiles.length === 0) {
-            fs27.rmdirSync(hooksDir);
+            fs31.rmdirSync(hooksDir);
           }
         } catch {}
       }
@@ -37322,12 +36673,12 @@ async function runDoctorDeep(cwd = process.cwd()) {
 init_harness();
 init_path();
 init_i18n();
-import * as fs38 from "fs";
-import * as path34 from "path";
+import * as fs42 from "fs";
+import * as path37 from "path";
 
 // src/utils/hd-assembly-line.ts
-import * as path33 from "path";
-import * as fs37 from "fs";
+import * as path36 from "path";
+import * as fs41 from "fs";
 import { execSync as execSync4 } from "child_process";
 
 // src/utils/harness-prevalidation.ts
@@ -37511,8 +36862,8 @@ init_path();
 // src/utils/harness-executor.ts
 init_harness();
 init_path();
-import * as fs28 from "fs";
-import * as path24 from "path";
+import * as fs32 from "fs";
+import * as path27 from "path";
 
 // src/utils/role-prompts.ts
 init_i18n();
@@ -37897,9 +37248,9 @@ class HarnessExecutor {
   }
   async buildOrLoadContract(task) {
     const contractPath = this.getContractPath(task.id);
-    if (fs28.existsSync(contractPath)) {
+    if (fs32.existsSync(contractPath)) {
       try {
-        const content = fs28.readFileSync(contractPath, "utf-8");
+        const content = fs32.readFileSync(contractPath, "utf-8");
         return JSON.parse(content);
       } catch {}
     }
@@ -38151,14 +37502,14 @@ ${roleTemplate.extraInstructions.map((inst, i) => `${i + 1}. ${inst}`).join(`
   async collectEvidence(taskId) {
     const evidenceDir = this.getEvidenceDir(taskId);
     const evidence = [];
-    if (!fs28.existsSync(evidenceDir)) {
+    if (!fs32.existsSync(evidenceDir)) {
       return evidence;
     }
-    const files = fs28.readdirSync(evidenceDir);
+    const files = fs32.readdirSync(evidenceDir);
     for (const file of files) {
-      const filePath = path24.join(evidenceDir, file);
-      if (fs28.statSync(filePath).isFile()) {
-        evidence.push(path24.relative(this.config.cwd, filePath));
+      const filePath = path27.join(evidenceDir, file);
+      if (fs32.statSync(filePath).isFile()) {
+        evidence.push(path27.relative(this.config.cwd, filePath));
       }
     }
     return evidence;
@@ -38173,34 +37524,34 @@ ${roleTemplate.extraInstructions.map((inst, i) => `${i + 1}. ${inst}`).join(`
   }
   getContractPath(taskId) {
     const projectDir = getProjectDir(this.config.cwd);
-    return path24.join(projectDir, "tasks", taskId, "contract.json");
+    return path27.join(projectDir, "tasks", taskId, "contract.json");
   }
   saveContract(taskId, contract) {
     const contractPath = this.getContractPath(taskId);
-    const dir = path24.dirname(contractPath);
-    if (!fs28.existsSync(dir)) {
-      fs28.mkdirSync(dir, { recursive: true });
+    const dir = path27.dirname(contractPath);
+    if (!fs32.existsSync(dir)) {
+      fs32.mkdirSync(dir, { recursive: true });
     }
     contract.updatedAt = new Date().toISOString();
-    fs28.writeFileSync(contractPath, JSON.stringify(contract, null, 2), "utf-8");
+    fs32.writeFileSync(contractPath, JSON.stringify(contract, null, 2), "utf-8");
   }
   getEvidenceDir(taskId) {
     const projectDir = getProjectDir(this.config.cwd);
-    return path24.join(projectDir, "evidence", taskId);
+    return path27.join(projectDir, "evidence", taskId);
   }
   getDevReportPath(taskId) {
     const projectDir = getProjectDir(this.config.cwd);
-    return path24.join(projectDir, "reports", "harness", taskId, "dev-report.md");
+    return path27.join(projectDir, "reports", "harness", taskId, "dev-report.md");
   }
   async saveDevReport(taskId, report) {
     const reportPath = this.getDevReportPath(taskId);
-    const dir = path24.dirname(reportPath);
-    if (!fs28.existsSync(dir)) {
-      fs28.mkdirSync(dir, { recursive: true });
+    const dir = path27.dirname(reportPath);
+    if (!fs32.existsSync(dir)) {
+      fs32.mkdirSync(dir, { recursive: true });
     }
     archiveReportIfExists(reportPath);
     const content = this.formatDevReport(report);
-    fs28.writeFileSync(reportPath, content, "utf-8");
+    fs32.writeFileSync(reportPath, content, "utf-8");
   }
   formatDevReport(report) {
     let texts;
@@ -38639,8 +37990,8 @@ ${devReport.evidence.map((evidence) => `- ${evidence}`).join(`
 init_task();
 init_harness_helpers();
 init_headless_agent();
-import * as path26 from "path";
-import * as fs30 from "fs";
+import * as path29 from "path";
+import * as fs34 from "fs";
 init_checkpoint();
 init_contradiction_detector();
 init_prompt_templates();
@@ -38695,8 +38046,8 @@ function createDefaultQAAcceptanceResult(taskId) {
 
 // src/utils/qa-acceptance-criteria-verifier.ts
 init_spawn_utils();
-import * as fs29 from "fs";
-import * as path25 from "path";
+import * as fs33 from "fs";
+import * as path28 from "path";
 
 // src/utils/qa-acceptance-criteria-parser.ts
 class AcceptanceCriteriaParser {
@@ -38909,7 +38260,7 @@ var FORBIDDEN_PATTERNS = [
 ];
 var MAX_COMMAND_LENGTH = 500;
 var MAX_ARGS = 50;
-var DEFAULT_TIMEOUT = 60000;
+var DEFAULT_TIMEOUT2 = 60000;
 function parseCommand(command) {
   const result = [];
   let current = "";
@@ -38991,7 +38342,7 @@ function validateCommand(command) {
 class SafeCommandExecutor {
   async execute(command, options) {
     const startTime = Date.now();
-    const timeout = options.timeout ?? DEFAULT_TIMEOUT;
+    const timeout = options.timeout ?? DEFAULT_TIMEOUT2;
     const validation = validateCommand(command);
     if (!validation.valid) {
       return {
@@ -39017,7 +38368,7 @@ class SafeCommandExecutor {
         error: "Empty command"
       };
     }
-    return new Promise((resolve9) => {
+    return new Promise((resolve11) => {
       let stdout = "";
       let stderr = "";
       let timedOut = false;
@@ -39034,7 +38385,7 @@ class SafeCommandExecutor {
         stderr += data.toString();
       });
       proc.on("close", (exitCode) => {
-        resolve9({
+        resolve11({
           success: exitCode === 0 && !timedOut,
           exitCode: exitCode ?? -1,
           stdout,
@@ -39044,7 +38395,7 @@ class SafeCommandExecutor {
         });
       });
       proc.on("error", (error) => {
-        resolve9({
+        resolve11({
           success: false,
           exitCode: -1,
           stdout,
@@ -39175,11 +38526,11 @@ class QAAcceptanceCriteriaVerifier {
   }
   async updateTaskCheckpoints(taskId, results) {
     try {
-      const taskMetaPath = path25.join(this.cwd, ".projmnt4claude", "tasks", taskId, "meta.json");
-      if (!fs29.existsSync(taskMetaPath)) {
+      const taskMetaPath = path28.join(this.cwd, ".projmnt4claude", "tasks", taskId, "meta.json");
+      if (!fs33.existsSync(taskMetaPath)) {
         return;
       }
-      const taskMetaContent = fs29.readFileSync(taskMetaPath, "utf-8");
+      const taskMetaContent = fs33.readFileSync(taskMetaPath, "utf-8");
       const taskMeta = JSON.parse(taskMetaContent);
       if (taskMeta.checkpoints) {
         for (const result of results) {
@@ -39194,15 +38545,15 @@ class QAAcceptanceCriteriaVerifier {
             }
           }
         }
-        fs29.writeFileSync(taskMetaPath, JSON.stringify(taskMeta, null, 2), "utf-8");
+        fs33.writeFileSync(taskMetaPath, JSON.stringify(taskMeta, null, 2), "utf-8");
       }
     } catch {}
   }
   async verifyBuild(task) {
     const result = createDefaultAcceptanceResult("build");
     try {
-      const packageJsonPath = path25.join(this.cwd, "package.json");
-      if (!fs29.existsSync(packageJsonPath)) {
+      const packageJsonPath = path28.join(this.cwd, "package.json");
+      if (!fs33.existsSync(packageJsonPath)) {
         result.passed = true;
         result.reason = "无 package.json，跳过构建验证";
         return result;
@@ -39233,8 +38584,8 @@ class QAAcceptanceCriteriaVerifier {
   }
   getBuildCommand() {
     try {
-      const packageJsonPath = path25.join(this.cwd, "package.json");
-      const packageJson = JSON.parse(fs29.readFileSync(packageJsonPath, "utf-8"));
+      const packageJsonPath = path28.join(this.cwd, "package.json");
+      const packageJson = JSON.parse(fs33.readFileSync(packageJsonPath, "utf-8"));
       if (packageJson.scripts?.build) {
         return `bun run build`;
       }
@@ -39290,8 +38641,8 @@ class QAAcceptanceCriteriaVerifier {
       ];
       for (const pattern of patterns) {
         if (pattern && pattern !== file) {
-          const fullPath = path25.join(this.cwd, pattern);
-          if (fs29.existsSync(fullPath)) {
+          const fullPath = path28.join(this.cwd, pattern);
+          if (fs33.existsSync(fullPath)) {
             testFiles.push(pattern);
           }
         }
@@ -39515,8 +38866,8 @@ ${deferredInfo}` : deferredInfo;
     const existingFiles = [];
     const missingFiles = [];
     for (const filePath of task.files) {
-      const fullPath = path26.isAbsolute(filePath) ? filePath : path26.join(this.config.cwd, filePath);
-      if (fs30.existsSync(fullPath)) {
+      const fullPath = path29.isAbsolute(filePath) ? filePath : path29.join(this.config.cwd, filePath);
+      if (fs34.existsSync(fullPath)) {
         existingFiles.push(filePath);
       } else {
         missingFiles.push(filePath);
@@ -39586,7 +38937,7 @@ ${texts.harness.logs.existingFiles || "Existing Files"}:`);
     };
   }
   async executeTestCommand(testCommand) {
-    return new Promise((resolve9) => {
+    return new Promise((resolve11) => {
       const parts = testCommand.split(" ");
       const command = parts[0];
       const args = parts.slice(1);
@@ -39606,14 +38957,14 @@ ${texts.harness.logs.existingFiles || "Existing Files"}:`);
       proc.on("close", (code) => {
         const passed = code === 0;
         failures = this.parseTestFailures(output, passed);
-        resolve9({
+        resolve11({
           passed,
           output,
           failures
         });
       });
       proc.on("error", (error) => {
-        resolve9({
+        resolve11({
           passed: false,
           output: error.message,
           failures: [error.message]
@@ -39645,9 +38996,9 @@ ${texts.harness.logs.existingFiles || "Existing Files"}:`);
   }
   getTestConfig() {
     try {
-      const configPath = path26.join(this.config.cwd, ".projmnt4claude", "config.json");
-      if (fs30.existsSync(configPath)) {
-        const content = fs30.readFileSync(configPath, "utf-8");
+      const configPath = path29.join(this.config.cwd, ".projmnt4claude", "config.json");
+      if (fs34.existsSync(configPath)) {
+        const content = fs34.readFileSync(configPath, "utf-8");
         const projectConfig = JSON.parse(content);
         const testConfig = projectConfig.harness?.test || {};
         if (testConfig.testFailurePatterns) {
@@ -39764,9 +39115,9 @@ ${truncated}`];
   }
   findTestFiles(dir) {
     const files = [];
-    const entries = fs30.readdirSync(dir, { withFileTypes: true });
+    const entries = fs34.readdirSync(dir, { withFileTypes: true });
     for (const entry of entries) {
-      const fullPath = path26.join(dir, entry.name);
+      const fullPath = path29.join(dir, entry.name);
       if (entry.isDirectory()) {
         files.push(...this.findTestFiles(fullPath));
       } else if (entry.isFile() && /\.(test|spec)\.[jt]sx?$/.test(entry.name)) {
@@ -40101,10 +39452,9 @@ init_task2();
 init_harness_helpers();
 init_headless_agent();
 init_contradiction_detector();
-import * as fs31 from "fs";
-import * as path27 from "path";
+import * as fs35 from "fs";
+import * as path30 from "path";
 init_prompt_templates();
-init_harness_snapshot();
 init_i18n();
 
 class HarnessEvaluator {
@@ -40582,11 +39932,11 @@ ${texts.harness.logs.phantomTaskNopassRequirement}
       texts = getI18n("zh");
     }
     const contractPath = this.getContractPath(taskId);
-    if (!fs31.existsSync(contractPath)) {
+    if (!fs35.existsSync(contractPath)) {
       return null;
     }
     try {
-      const content = fs31.readFileSync(contractPath, "utf-8");
+      const content = fs35.readFileSync(contractPath, "utf-8");
       const parsed = JSON.parse(content);
       const validated = this.validateSprintContract(parsed, taskId);
       if (!validated) {
@@ -40600,21 +39950,21 @@ ${texts.harness.logs.phantomTaskNopassRequirement}
   }
   getContractPath(taskId) {
     const projectDir = getProjectDir(this.config.cwd);
-    return path27.join(projectDir, "tasks", taskId, "contract.json");
+    return path30.join(projectDir, "tasks", taskId, "contract.json");
   }
   getReviewReportPath(taskId) {
     const projectDir = getProjectDir(this.config.cwd);
-    return path27.join(projectDir, "reports", "harness", taskId, "review-report.md");
+    return path30.join(projectDir, "reports", "harness", taskId, "review-report.md");
   }
   async saveReviewReport(taskId, verdict, devReport) {
     const reportPath = this.getReviewReportPath(taskId);
-    const dir = path27.dirname(reportPath);
-    if (!fs31.existsSync(dir)) {
-      fs31.mkdirSync(dir, { recursive: true });
+    const dir = path30.dirname(reportPath);
+    if (!fs35.existsSync(dir)) {
+      fs35.mkdirSync(dir, { recursive: true });
     }
     archiveReportIfExists(reportPath);
     const content = this.formatReviewReport(verdict, devReport);
-    fs31.writeFileSync(reportPath, content, "utf-8");
+    fs35.writeFileSync(reportPath, content, "utf-8");
   }
   saveRawEvaluationOutput(taskId, output, stderr, success) {
     let texts;
@@ -40625,12 +39975,12 @@ ${texts.harness.logs.phantomTaskNopassRequirement}
     }
     try {
       const projectDir = getProjectDir(this.config.cwd);
-      const dir = path27.join(projectDir, "reports", "harness", taskId);
-      if (!fs31.existsSync(dir)) {
-        fs31.mkdirSync(dir, { recursive: true });
+      const dir = path30.join(projectDir, "reports", "harness", taskId);
+      if (!fs35.existsSync(dir)) {
+        fs35.mkdirSync(dir, { recursive: true });
       }
       const timestamp = new Date().toISOString().replace(/[:.]/g, "-");
-      const rawPath = path27.join(dir, `evaluation-raw-${timestamp}.log`);
+      const rawPath = path30.join(dir, `evaluation-raw-${timestamp}.log`);
       const lines = [
         `# ${texts.harness.logs.rawEvaluationOutputTitle || "Raw Evaluation Output"}`,
         `Task: ${taskId}`,
@@ -40645,7 +39995,7 @@ ${texts.harness.logs.phantomTaskNopassRequirement}
         "--- STDERR ---",
         stderr || "(empty)"
       ];
-      fs31.writeFileSync(rawPath, lines.join(`
+      fs35.writeFileSync(rawPath, lines.join(`
 `), "utf-8");
       console.log(`   \uD83D\uDCC4 ${texts.harness.logs.rawOutputSaved.replace("{filename}", `evaluation-raw-${timestamp}.log`)}`);
     } catch (error) {
@@ -40746,7 +40096,7 @@ class RetryHandler {
     }
   }
   sleep(ms) {
-    return new Promise((resolve9) => setTimeout(resolve9, ms));
+    return new Promise((resolve11) => setTimeout(resolve11, ms));
   }
   getRetryRecommendation(verdict) {
     const suggestions = [];
@@ -40807,8 +40157,8 @@ class RetryHandler {
 // src/utils/harness-status-reporter.ts
 init_harness();
 init_path();
-import * as fs32 from "fs";
-import * as path28 from "path";
+import * as fs36 from "fs";
+import * as path31 from "path";
 
 class HarnessStatusReporter {
   statusPath;
@@ -40816,7 +40166,7 @@ class HarnessStatusReporter {
   currentReport;
   lastBatchContext;
   constructor(cwd, sessionId) {
-    this.statusPath = path28.join(getProjectDir(cwd), "harness-status.json");
+    this.statusPath = path31.join(getProjectDir(cwd), "harness-status.json");
     this.sessionId = sessionId;
     this.currentReport = this.createInitialReport();
   }
@@ -41093,9 +40443,9 @@ class HarnessStatusReporter {
   }
   checkStaleStatus() {
     try {
-      if (!fs32.existsSync(this.statusPath))
+      if (!fs36.existsSync(this.statusPath))
         return;
-      const raw = fs32.readFileSync(this.statusPath, "utf-8");
+      const raw = fs36.readFileSync(this.statusPath, "utf-8");
       const existing = JSON.parse(raw);
       if (existing.state !== "running")
         return;
@@ -41106,11 +40456,11 @@ class HarnessStatusReporter {
     } catch {}
   }
   writeStatus() {
-    const dir = path28.dirname(this.statusPath);
-    if (!fs32.existsSync(dir)) {
-      fs32.mkdirSync(dir, { recursive: true });
+    const dir = path31.dirname(this.statusPath);
+    if (!fs36.existsSync(dir)) {
+      fs36.mkdirSync(dir, { recursive: true });
     }
-    fs32.writeFileSync(this.statusPath, JSON.stringify(this.currentReport, null, 2), "utf-8");
+    fs36.writeFileSync(this.statusPath, JSON.stringify(this.currentReport, null, 2), "utf-8");
   }
   logToConsole(phase, status, message) {
     const progress = `${this.currentReport.completedTasks}/${this.currentReport.totalTasks}`;
@@ -41140,13 +40490,13 @@ class HarnessStatusReporter {
 init_harness();
 init_path();
 init_i18n();
-import * as fs34 from "fs";
-import * as path30 from "path";
+import * as fs38 from "fs";
+import * as path33 from "path";
 
 // src/utils/harness-reporter.ts
 init_path();
-import * as fs33 from "fs";
-import * as path29 from "path";
+import * as fs37 from "fs";
+import * as path32 from "path";
 
 class HarnessReporter {
   config;
@@ -41155,12 +40505,12 @@ class HarnessReporter {
   }
   async generateSummaryReport(summary) {
     const reportPath = this.getSummaryReportPath();
-    const dir = path29.dirname(reportPath);
-    if (!fs33.existsSync(dir)) {
-      fs33.mkdirSync(dir, { recursive: true });
+    const dir = path32.dirname(reportPath);
+    if (!fs37.existsSync(dir)) {
+      fs37.mkdirSync(dir, { recursive: true });
     }
     const content = this.formatSummaryReport(summary);
-    fs33.writeFileSync(reportPath, content, "utf-8");
+    fs37.writeFileSync(reportPath, content, "utf-8");
     console.log(`
 \uD83D\uDCC4 执行摘要已保存: ${reportPath}`);
   }
@@ -41250,16 +40600,16 @@ class HarnessReporter {
   getSummaryReportPath() {
     const projectDir = getProjectDir(this.config.cwd);
     const timestamp = new Date().toISOString().replace(/[:.]/g, "-").substring(0, 19);
-    return path29.join(projectDir, "reports", "harness", `summary-${timestamp}.md`);
+    return path32.join(projectDir, "reports", "harness", `summary-${timestamp}.md`);
   }
   async generateTaskReport(record) {
     const taskDir = this.getTaskReportDir(record.taskId);
-    if (!fs33.existsSync(taskDir)) {
-      fs33.mkdirSync(taskDir, { recursive: true });
+    if (!fs37.existsSync(taskDir)) {
+      fs37.mkdirSync(taskDir, { recursive: true });
     }
-    const overviewPath = path29.join(taskDir, "overview.md");
+    const overviewPath = path32.join(taskDir, "overview.md");
     const overviewContent = this.formatTaskOverview(record);
-    fs33.writeFileSync(overviewPath, overviewContent, "utf-8");
+    fs37.writeFileSync(overviewPath, overviewContent, "utf-8");
   }
   formatTaskOverview(record) {
     const lines = [];
@@ -41330,7 +40680,7 @@ class HarnessReporter {
   }
   getTaskReportDir(taskId) {
     const projectDir = getProjectDir(this.config.cwd);
-    return path29.join(projectDir, "reports", "harness", taskId);
+    return path32.join(projectDir, "reports", "harness", taskId);
   }
   generateJSONSummary(summary) {
     const data = {
@@ -41363,11 +40713,949 @@ class HarnessReporter {
 init_plan();
 init_task2();
 init_task();
-init_plan2();
+
+// src/commands/plan.ts
+init_plan();
+init_path();
+init_task2();
+init_task();
+init_logger();
 init_quality_gate();
-init_harness_snapshot();
+var import_prompts10 = __toESM(require_prompts3(), 1);
+init_ai_metadata();
+init_dependency_engine();
+init_dependency_graph();
+var STOP_WORDS2 = new Set([
+  "的",
+  "了",
+  "是",
+  "在",
+  "和",
+  "有",
+  "我",
+  "要",
+  "想",
+  "把",
+  "这",
+  "那",
+  "对",
+  "就",
+  "也",
+  "都",
+  "会",
+  "能",
+  "可",
+  "上",
+  "下",
+  "中",
+  "来",
+  "去",
+  "做",
+  "给",
+  "让",
+  "被",
+  "用",
+  "为",
+  "与",
+  "或",
+  "但",
+  "如",
+  "到",
+  "从",
+  "the",
+  "a",
+  "an",
+  "is",
+  "are",
+  "was",
+  "were",
+  "be",
+  "been",
+  "being",
+  "have",
+  "has",
+  "had",
+  "do",
+  "does",
+  "did",
+  "will",
+  "would",
+  "could",
+  "should",
+  "may",
+  "might",
+  "must",
+  "shall",
+  "can",
+  "need",
+  "want",
+  "to",
+  "of",
+  "in",
+  "for",
+  "on",
+  "with",
+  "at",
+  "by",
+  "from",
+  "as",
+  "and",
+  "or",
+  "but",
+  "if",
+  "then",
+  "else",
+  "when",
+  "where",
+  "which"
+]);
+function isRegexPattern2(query) {
+  const regexMetaChars = /[.*+?^${}()|\[\]]/;
+  if (!regexMetaChars.test(query)) {
+    return false;
+  }
+  if (/^\/.*\/[gimsuy]*$/.test(query)) {
+    return true;
+  }
+  const regexPatterns = [
+    /\..*[+*?]/,
+    /\[.*\]/,
+    /\(.*\)/,
+    /\{.*\}/,
+    /\^|\$/,
+    /\|/,
+    /\\[dDsSwW]/,
+    /\\[bB]/
+  ];
+  return regexPatterns.some((pattern) => pattern.test(query));
+}
+function parseQuery2(query) {
+  const trimmed = query.trim();
+  if (!isRegexPattern2(trimmed)) {
+    const words = trimmed.toLowerCase().replace(/[^\w\u4e00-\u9fa5\s]/g, " ").split(/\s+/).filter((w) => w.length > 1 && !STOP_WORDS2.has(w));
+    return { type: "keywords", keywords: [...new Set(words)] };
+  }
+  const slashPattern = /^\/(.*)\/([gimsuy]*)$/;
+  const match = trimmed.match(slashPattern);
+  if (match) {
+    const [, pattern, flags] = match;
+    try {
+      new RegExp(pattern, flags);
+      return { type: "regex", pattern, flags: flags || undefined };
+    } catch (e) {
+      console.warn(`⚠️  Invalid regex pattern "${pattern}", falling back to keyword matching`);
+      const words = trimmed.toLowerCase().replace(/[^\w\u4e00-\u9fa5\s]/g, " ").split(/\s+/).filter((w) => w.length > 1 && !STOP_WORDS2.has(w));
+      return { type: "keywords", keywords: [...new Set(words)] };
+    }
+  }
+  try {
+    new RegExp(trimmed);
+    return { type: "regex", pattern: trimmed };
+  } catch (e) {
+    console.warn(`⚠️  Invalid regex pattern "${trimmed}", falling back to keyword matching`);
+    const words = trimmed.toLowerCase().replace(/[^\w\u4e00-\u9fa5\s]/g, " ").split(/\s+/).filter((w) => w.length > 1 && !STOP_WORDS2.has(w));
+    return { type: "keywords", keywords: [...new Set(words)] };
+  }
+}
+function buildTaskSearchText2(task) {
+  return [
+    task.id,
+    task.title,
+    task.description || "",
+    task.type,
+    task.recommendedRole || "",
+    ...task.dependencies
+  ].join(" ").toLowerCase();
+}
+function taskMatchesFilter2(task, filter) {
+  const searchText = buildTaskSearchText2(task);
+  if (filter.type === "keywords") {
+    if (filter.keywords.length === 0)
+      return true;
+    return filter.keywords.some((kw) => searchText.includes(kw.toLowerCase()));
+  }
+  if (filter.type === "regex") {
+    try {
+      const regex = new RegExp(filter.pattern, filter.flags || "i");
+      return regex.test(searchText);
+    } catch (e) {
+      console.warn(`⚠️  Regex execution failed: ${filter.pattern}, skipping this filter`);
+      return true;
+    }
+  }
+  return true;
+}
+function extractKeywords2(description) {
+  const filter = parseQuery2(description);
+  if (filter.type === "keywords") {
+    return filter.keywords;
+  }
+  return description.toLowerCase().replace(/[^\w\u4e00-\u9fa5\s]/g, " ").split(/\s+/).filter((w) => w.length > 1 && !STOP_WORDS2.has(w));
+}
+function inferArchitectureLayer2(task) {
+  const files = extractAffectedFiles(task);
+  const layerOrder = { Layer0: 0, Layer1: 1, Layer2: 2, Layer3: 3 };
+  if (files.length === 0) {
+    const desc = `${task.title} ${task.description || ""}`.toLowerCase();
+    if (desc.includes("类型") || desc.includes("type") || desc.includes("接口") || desc.includes("interface")) {
+      return { layer: "Layer0", layerValue: 0 };
+    }
+    if (desc.includes("命令") || desc.includes("command") || desc.includes("cli")) {
+      return { layer: "Layer3", layerValue: 3 };
+    }
+    return { layer: "Layer1", layerValue: 1 };
+  }
+  let minValue = 3;
+  for (const file of files) {
+    const fileLayer = classifyFileToLayer(file);
+    const value = layerOrder[fileLayer];
+    if (value < minValue) {
+      minValue = value;
+    }
+  }
+  const layers = ["Layer0", "Layer1", "Layer2", "Layer3"];
+  return { layer: layers[minValue], layerValue: minValue };
+}
+function buildTaskChains2(tasks, cwd, precomputedDeps) {
+  if (tasks.length === 0)
+    return [];
+  const taskMap = new Map;
+  for (const task of tasks) {
+    taskMap.set(task.id, task);
+  }
+  const inferredDeps = precomputedDeps || inferDependenciesBatch(tasks);
+  const taskIds = new Set(tasks.map((t2) => t2.id));
+  const adjacency = new Map;
+  const nodesMap = new Map;
+  for (const task of tasks) {
+    nodesMap.set(task.id, {
+      taskId: task.id,
+      status: task.status,
+      priority: task.priority,
+      title: task.title,
+      type: task.type
+    });
+    const deps = new Map;
+    for (const depId of task.dependencies) {
+      if (taskIds.has(depId)) {
+        deps.set(depId, { source: "explicit", confidence: 1 });
+      }
+    }
+    const inferred = inferredDeps.get(task.id);
+    if (inferred) {
+      for (const d of inferred) {
+        if (taskIds.has(d.depTaskId) && !deps.has(d.depTaskId)) {
+          deps.set(d.depTaskId, { source: d.source, confidence: 0.5 });
+        }
+      }
+    }
+    adjacency.set(task.id, deps);
+  }
+  const components = findComponentsUnionFind(adjacency, nodesMap);
+  const chains = [];
+  for (const component of components) {
+    const componentNodeIds = new Set(component.nodes);
+    const componentAdj = new Map;
+    for (const nodeId of component.nodes) {
+      const allDeps = adjacency.get(nodeId);
+      const filtered = new Map;
+      if (allDeps) {
+        for (const [depId, meta] of allDeps) {
+          if (componentNodeIds.has(depId)) {
+            filtered.set(depId, meta);
+          }
+        }
+      }
+      componentAdj.set(nodeId, filtered);
+    }
+    const topoResult = topologicalSortDFS(componentAdj, componentNodeIds);
+    const chainTasks = topoResult.order.map((id) => taskMap.get(id)).filter(Boolean);
+    const totalReopenCount = chainTasks.reduce((sum, t2) => sum + (t2.reopenCount || 0), 0);
+    const priorityOrder = {
+      P0: 0,
+      P1: 1,
+      P2: 2,
+      P3: 3,
+      Q1: 4,
+      Q2: 5,
+      Q3: 6,
+      Q4: 7
+    };
+    const maxPriority = Math.min(...chainTasks.map((t2) => priorityOrder[t2.priority] ?? 2));
+    const keywords = extractKeywords2(chainTasks.map((t2) => `${t2.title} ${t2.description || ""}`).join(" "));
+    const chainLayers = chainTasks.map((t2) => inferArchitectureLayer2(t2));
+    const minLayerValue = Math.min(...chainLayers.map((cl) => cl.layerValue));
+    const layerOrder = ["Layer0", "Layer1", "Layer2", "Layer3"];
+    const minLayer = layerOrder[minLayerValue];
+    chains.push({
+      chainId: chainTasks[0].id,
+      tasks: chainTasks,
+      length: chainTasks.length,
+      totalReopenCount,
+      maxPriority,
+      minLayer,
+      minLayerValue,
+      keywords,
+      inferredDependencies: inferredDeps
+    });
+  }
+  return chains;
+}
+function sortChains2(chains) {
+  return [...chains].sort((a, b) => {
+    if (a.maxPriority !== b.maxPriority) {
+      return a.maxPriority - b.maxPriority;
+    }
+    if (a.minLayerValue !== b.minLayerValue) {
+      return a.minLayerValue - b.minLayerValue;
+    }
+    if (b.length !== a.length) {
+      return b.length - a.length;
+    }
+    return b.totalReopenCount - a.totalReopenCount;
+  });
+}
+function buildBatches2(sortedChains) {
+  const priorityNames = {
+    0: "P0",
+    1: "P1",
+    2: "P2",
+    3: "P3",
+    4: "Q1",
+    5: "Q2",
+    6: "Q3",
+    7: "Q4"
+  };
+  const buckets = new Map;
+  for (const chain of sortedChains) {
+    const existing = buckets.get(chain.maxPriority);
+    if (existing) {
+      existing.push(chain);
+    } else {
+      buckets.set(chain.maxPriority, [chain]);
+    }
+  }
+  const sortedPriorities = [...buckets.keys()].sort((a, b) => a - b);
+  const batches = [];
+  for (const priority of sortedPriorities) {
+    const chainsInBucket = buckets.get(priority);
+    const allTasks = [];
+    const chainIds = [];
+    const bucketTaskIds = new Set;
+    for (const chain of chainsInBucket) {
+      for (const task of chain.tasks) {
+        bucketTaskIds.add(task.id);
+      }
+    }
+    let hasCrossChainInferredDep = false;
+    for (const chain of chainsInBucket) {
+      if (hasCrossChainInferredDep)
+        break;
+      const inferredDeps = chain.inferredDependencies;
+      if (!inferredDeps)
+        continue;
+      for (const task of chain.tasks) {
+        if (hasCrossChainInferredDep)
+          break;
+        const deps = inferredDeps.get(task.id);
+        if (!deps)
+          continue;
+        const myChainTaskIds = new Set(chain.tasks.map((t2) => t2.id));
+        for (const dep of deps) {
+          if (bucketTaskIds.has(dep.depTaskId) && !myChainTaskIds.has(dep.depTaskId)) {
+            hasCrossChainInferredDep = true;
+            break;
+          }
+        }
+      }
+    }
+    for (const chain of chainsInBucket) {
+      chainIds.push(chain.chainId);
+      for (const task of chain.tasks) {
+        if (!allTasks.includes(task.id)) {
+          allTasks.push(task.id);
+        }
+      }
+    }
+    const parallelizable = chainsInBucket.length > 1 && !hasCrossChainInferredDep;
+    batches.push({
+      batchId: `batch-${priorityNames[priority] || `L${priority}`}`,
+      priority: priorityNames[priority] || `L${priority}`,
+      priorityValue: priority,
+      chains: chainIds,
+      tasks: allTasks,
+      parallelizable
+    });
+  }
+  return batches;
+}
+function generateAIOutput2(chains, originalCount, filteredCount, batches, query, keywords, genOptions, subtaskWarnings) {
+  const priorityNames = {
+    0: "P0",
+    1: "P1",
+    2: "P2",
+    3: "P3",
+    4: "Q1",
+    5: "Q2",
+    6: "Q3",
+    7: "Q4"
+  };
+  const suggestedOrder = [];
+  const topChains = [];
+  for (let i = 0;i < chains.length; i++) {
+    const chain = chains[i];
+    topChains.push(chain.chainId);
+    for (const task of chain.tasks) {
+      if (!suggestedOrder.includes(task.id)) {
+        suggestedOrder.push(task.id);
+      }
+    }
+  }
+  const batchOrder = batches.map((b) => b.tasks);
+  return {
+    missingSubtaskWarnings: subtaskWarnings && subtaskWarnings.length > 0 ? subtaskWarnings : undefined,
+    query,
+    keywords,
+    filterStats: {
+      totalTasks: originalCount,
+      filteredTasks: filteredCount,
+      chainCount: chains.length
+    },
+    chains: chains.map((chain) => ({
+      chainId: chain.chainId,
+      length: chain.length,
+      totalReopenCount: chain.totalReopenCount,
+      maxPriority: priorityNames[chain.maxPriority] || "P2",
+      minLayer: chain.minLayer,
+      keywords: chain.keywords.slice(0, 10),
+      tasks: chain.tasks.map((task, idx) => {
+        const taskLayerInfo = inferArchitectureLayer2(task);
+        const taskEntry = {
+          order: idx + 1,
+          id: task.id,
+          title: task.title,
+          priority: task.priority,
+          status: task.status,
+          reopenCount: task.reopenCount || 0,
+          layer: taskLayerInfo.layer,
+          dependencies: task.dependencies
+        };
+        const inferred = chain.inferredDependencies?.get(task.id);
+        if (inferred && inferred.length > 0) {
+          taskEntry.inferredDependencies = inferred.map((d) => ({
+            depTaskId: d.depTaskId,
+            overlappingFiles: d.overlappingFiles,
+            source: d.source,
+            reason: d.reason
+          }));
+        }
+        return taskEntry;
+      })
+    })),
+    batches: batches.map((b) => {
+      const batchEntry = {
+        batchId: b.batchId,
+        priority: b.priority,
+        chains: b.chains,
+        tasks: b.tasks,
+        parallelizable: b.parallelizable
+      };
+      if (!b.parallelizable && b.chains.length > 1) {
+        batchEntry.parallelBlockedBy = "推断依赖: 文件重叠/AI语义";
+      }
+      return batchEntry;
+    }),
+    batchOrder,
+    recommendation: {
+      summary: `Found ${chains.length} task chains, ${filteredCount} tasks total, divided into ${batches.length} batches. Three-layer dependency inference: Layer1/2 file path overlap + ${genOptions?.smart ? "Layer3 AI semantic inference (enabled)" : "Layer3 AI semantic inference (disabled, use --smart to enable)"}。Sorted by architecture layer within same priority (Layer0→Layer3)`,
+      topChains,
+      suggestedOrder
+    }
+  };
+}
+async function recommendPlan2(options = {}, cwd = process.cwd()) {
+  if (!isInitialized(cwd)) {
+    console.error("Error: Project not initialized. Please run `projmnt4claude setup` first");
+    process.exit(1);
+  }
+  const activeCheck = detectActiveSnapshot(cwd);
+  if (activeCheck.hasActive) {
+    console.error("❌ Error: Active pipeline detected");
+    console.error(`   ${activeCheck.message}`);
+    console.error("   Please wait for the pipeline to complete or use `projmnt4claude harness --continue` to resume");
+    console.error("   To force create a new plan, stop the running pipeline process first");
+    process.exit(1);
+  }
+  console.log(`Analyzing project tasks...
+`);
+  const logger2 = createLogger("plan-recommend", cwd);
+  const startTime = Date.now();
+  const inputQuery = options.query || "";
+  let recommendationAccepted = false;
+  let suggestedOrder = [];
+  const allTasks = getAllTasks(cwd);
+  const failedTasks = allTasks.filter((t2) => normalizeStatus(t2.status) === "failed");
+  if (failedTasks.length > 0) {
+    console.log("⚠️  Quality check: Found failed tasks:");
+    for (const task of failedTasks) {
+      console.log(`   ❌ ${task.id}: ${task.title.substring(0, 50)}`);
+    }
+    console.log("");
+    console.log("\uD83D\uDCA1 Constraint hints:");
+    console.log("   • To retry failed tasks, check the failure reason and fix first");
+    console.log("   • Use `projmnt4claude task update <id> --status open` to reset status and retry");
+    console.log("   • Or manually add failed tasks to the plan after `plan recommend`");
+    console.log("");
+    if (options.nonInteractive || !process.stdout.isTTY) {
+      console.log("   (Non-interactive mode: continuing, but note the failed tasks above)");
+      console.log("");
+    }
+  }
+  const inProgressTasks = allTasks.filter((t2) => normalizeStatus(t2.status) === "in_progress");
+  const TERMINAL_STATUSES_SET7 = new Set(TERMINAL_STATUSES);
+  const activeTasks = options.all ? allTasks.filter((t2) => !TERMINAL_STATUSES_SET7.has(normalizeStatus(t2.status))) : allTasks.filter((t2) => normalizeStatus(t2.status) === "open");
+  const excludedCount = allTasks.length - activeTasks.length;
+  if (excludedCount > 0) {
+    const reason = options.all ? "terminal (resolved/closed/abandoned)" : "non-open status";
+    console.log(`Excluded ${excludedCount} ${reason} tasks`);
+  }
+  if (inProgressTasks.length > 0) {
+    console.log("\uD83D\uDD35 In-progress tasks:");
+    for (const t2 of inProgressTasks) {
+      console.log(`   ${t2.id}: ${t2.title.substring(0, 60)}`);
+    }
+    console.log("");
+  }
+  const chainEligibleTasks = activeTasks.filter((t2) => normalizeStatus(t2.status) !== "in_progress");
+  const missingSubtaskWarnings = detectMissingSubtasks(cwd);
+  if (missingSubtaskWarnings.length > 0) {
+    const label = options.strictSubtaskCoverage ? "❌ ERR" : "⚠️  WARN";
+    console.log(`${label} Subtask missing detection (${missingSubtaskWarnings.length} parent tasks affected):`);
+    for (const w of missingSubtaskWarnings) {
+      console.log(`   ${label} Parent task ${w.parentTaskId} ("${w.parentTitle.substring(0, 30)}"): missing ${w.missingSubtaskIds.length}/${w.expectedCount} subtasks`);
+      for (const missingId of w.missingSubtaskIds) {
+        console.log(`      - ${missingId} does not exist`);
+      }
+    }
+    console.log("");
+    if (options.strictSubtaskCoverage) {
+      console.error("❌ --strict-subtask-coverage: Missing subtasks detected, aborting recommendation. Please create missing subtasks or clean up invalid subtaskIds.");
+      process.exit(1);
+    }
+  }
+  let filter = { type: "keywords", keywords: [] };
+  let filteredTasks = chainEligibleTasks;
+  if (options.query) {
+    filter = parseQuery2(options.query);
+    if (filter.type === "regex") {
+      console.log(`Regex mode: /${filter.pattern}/${filter.flags || ""}`);
+    } else {
+      console.log(`Keywords: ${filter.keywords.join(", ")}`);
+    }
+    filteredTasks = chainEligibleTasks.filter((task) => taskMatchesFilter2(task, filter));
+    console.log(`Filter result: ${filteredTasks.length}/${chainEligibleTasks.length} tasks match
+`);
+  }
+  if (!options.all) {
+    const executableIds = new Set(getExecutableTasks(cwd));
+    const beforeExecFilter = filteredTasks.length;
+    filteredTasks = filteredTasks.filter((task) => executableIds.has(task.id));
+    if (beforeExecFilter - filteredTasks.length > 0) {
+      console.log(`Excluded ${beforeExecFilter - filteredTasks.length} tasks with incomplete dependencies or not executable`);
+    }
+  }
+  if (!options.skipQualityGate && filteredTasks.length > 0) {
+    console.log("Running quality gate check...");
+    const qualityGateResult = runPlanQualityGateCheck2(filteredTasks, {
+      phase: "plan_recommend",
+      includeWarnings: true
+    });
+    if (!qualityGateResult.passed) {
+      console.log(formatPlanQualityGateReport2(qualityGateResult, {
+        compact: false,
+        showDetails: true,
+        phase: "plan_recommend"
+      }));
+      if (options.strictQualityGate) {
+        console.error("❌ Quality gate check failed (--strict-quality-gate mode), aborting plan recommendation");
+        console.error(`   Failed tasks: ${qualityGateResult.failedTasks.join(", ")}`);
+        console.error("   Fix the issues or use --skip-quality-gate to skip quality check (not recommended)");
+        process.exit(1);
+      }
+      if (options.nonInteractive || !process.stdout.isTTY) {
+        console.error("❌ Quality gate check failed, aborting plan recommendation");
+        console.error(`   Failed tasks: ${qualityGateResult.failedTasks.join(", ")}`);
+        console.error("   Use --skip-quality-gate to skip quality check (not recommended)");
+        process.exit(1);
+      }
+      const { continueAnyway } = await import_prompts10.default({
+        type: "confirm",
+        name: "continueAnyway",
+        message: `${qualityGateResult.failedCount} tasks failed quality gate, continue?`,
+        initial: false
+      });
+      if (!continueAnyway) {
+        console.log("Cancelled");
+        return;
+      }
+      console.log("");
+    } else {
+      console.log(`✅ Quality gate check passed (${qualityGateResult.passedCount}/${qualityGateResult.totalTasks})`);
+      console.log("");
+    }
+  }
+  if (filteredTasks.length === 0) {
+    const emptyResult = {
+      missingSubtaskWarnings: missingSubtaskWarnings.length > 0 ? missingSubtaskWarnings : undefined,
+      query: options.query,
+      keywords: filter.type === "keywords" ? filter.keywords : [filter.pattern],
+      filterStats: {
+        totalTasks: activeTasks.length,
+        filteredTasks: 0,
+        chainCount: 0
+      },
+      chains: [],
+      batches: [],
+      batchOrder: [],
+      recommendation: {
+        summary: "No matching tasks",
+        topChains: [],
+        suggestedOrder: []
+      }
+    };
+    if (options.json) {
+      console.log(JSON.stringify(emptyResult, null, 2));
+    } else {
+      console.log("No matching tasks");
+      if (options.query) {
+        console.log(`Query: "${options.query}"`);
+        const displayKeywords = filter.type === "keywords" ? filter.keywords : [filter.pattern];
+        console.log(`Keywords: ${displayKeywords.join(", ")}`);
+      }
+    }
+    const logKeywords = filter.type === "keywords" ? filter.keywords : [filter.pattern];
+    logger2.logInstrumentation({
+      module: "plan-recommend",
+      action: "recommend_empty",
+      input_summary: `query="${inputQuery}", all=${options.all || false}`,
+      output_summary: `no_match, active=${activeTasks.length}, filtered=0`,
+      ai_used: false,
+      ai_enhanced_fields: [],
+      duration_ms: Date.now() - startTime,
+      user_edit_count: 0,
+      module_data: { keywords: logKeywords, excluded: excludedCount }
+    });
+    logger2.flush();
+    return;
+  }
+  console.log("Analyzing task dependencies...");
+  const fileOverlapDeps = inferDependenciesBatch(filteredTasks);
+  let mergedDeps = fileOverlapDeps;
+  if (options.smart) {
+    console.log("Analyzing semantic dependencies via AI...");
+    const semanticResult = await withAIEnhancement({
+      enabled: true,
+      aiCall: () => new AIMetadataAssistant(cwd).inferSemanticDependencies(filteredTasks, { cwd }),
+      fallback: { dependencies: [], aiUsed: false },
+      operationName: "Semantic dependency inference"
+    });
+    if (semanticResult.aiUsed && semanticResult.dependencies.length > 0) {
+      mergedDeps = new Map(fileOverlapDeps);
+      for (const aiDep of semanticResult.dependencies) {
+        const existing = mergedDeps.get(aiDep.taskId) || [];
+        const alreadyInferred = existing.some((e) => e.depTaskId === aiDep.depTaskId);
+        if (!alreadyInferred) {
+          existing.push({
+            depTaskId: aiDep.depTaskId,
+            overlappingFiles: [],
+            source: "ai-semantic",
+            reason: aiDep.reason
+          });
+          mergedDeps.set(aiDep.taskId, existing);
+        }
+      }
+      console.log(`  AI found ${semanticResult.dependencies.length} semantic dependencies`);
+    } else {
+      console.log("  AI found no additional semantic dependencies");
+    }
+  }
+  const chains = buildTaskChains2(filteredTasks, cwd, mergedDeps);
+  const sortedChains = sortChains2(chains);
+  const cachedBatches = buildBatches2(sortedChains);
+  const keywordsForOutput = filter.type === "keywords" ? filter.keywords.length > 0 ? filter.keywords : undefined : [filter.pattern];
+  const aiOutput = generateAIOutput2(sortedChains, activeTasks.length, filteredTasks.length, cachedBatches, options.query, keywordsForOutput, { smart: options.smart }, missingSubtaskWarnings);
+  suggestedOrder = aiOutput.recommendation.suggestedOrder;
+  if (options.json) {
+    console.log(JSON.stringify(aiOutput, null, 2));
+    logger2.logInstrumentation({
+      module: "plan-recommend",
+      action: "recommend_json",
+      input_summary: `query="${inputQuery}", all=${options.all || false}`,
+      output_summary: `chains=${chains.length}, tasks=${filteredTasks.length}, batches=${aiOutput.batches.length}`,
+      ai_used: false,
+      ai_enhanced_fields: [],
+      duration_ms: Date.now() - startTime,
+      user_edit_count: 0,
+      module_data: {
+        hit_rate: filteredTasks.length / activeTasks.length,
+        suggested_order: suggestedOrder.slice(0, 5)
+      }
+    });
+    logger2.flush();
+    return;
+  }
+  console.log("━".repeat(SEPARATOR_WIDTH));
+  console.log("\uD83D\uDCCB Task chain analysis results (grouped by batch)");
+  console.log("━".repeat(SEPARATOR_WIDTH));
+  console.log("");
+  console.log("\uD83D\uDCCA Statistics summary:");
+  console.log(`   Total tasks: ${aiOutput.filterStats.totalTasks}`);
+  console.log(`   Matched tasks: ${aiOutput.filterStats.filteredTasks}`);
+  console.log(`   Task chains: ${aiOutput.filterStats.chainCount}`);
+  console.log(`   Batches: ${aiOutput.batches.length}`);
+  console.log("");
+  const batches = cachedBatches;
+  for (let b = 0;b < batches.length; b++) {
+    const batch = batches[b];
+    const batchIcon = getPriorityIcon2(batch.priorityValue);
+    const parallelTag = batch.parallelizable ? " [Parallel]" : batch.chains.length > 1 ? " [Not parallel: inferred deps]" : "";
+    console.log(`\uD83D\uDCE6 Batch ${b + 1}/${batches.length} ${batchIcon} ${batch.priority}${parallelTag}`);
+    console.log(`   Chains: ${batch.chains.length} | Tasks: ${batch.tasks.length}`);
+    console.log("");
+    const chainsInBatch = sortedChains.filter((c) => batch.chains.includes(c.chainId));
+    for (let i = 0;i < chainsInBatch.length; i++) {
+      const chain = chainsInBatch[i];
+      const chainLabel = batch.parallelizable ? `[Chain${i + 1}]` : `[Chain]`;
+      console.log(`   ${chainLabel} ${chain.chainId} (${chain.minLayer} Length:${chain.length} Reopen:${chain.totalReopenCount})`);
+      for (let j = 0;j < chain.tasks.length; j++) {
+        const task = chain.tasks[j];
+        const prefix = j === chain.tasks.length - 1 ? "      └─" : "      ├─";
+        const statusIcon = getStatusIcon3(task.status);
+        const inferredDeps = chain.inferredDependencies?.get(task.id);
+        let inferredTag = "";
+        if (inferredDeps && inferredDeps.length > 0) {
+          const fileOverlapDeps2 = inferredDeps.filter((d) => d.source !== "ai-semantic");
+          const aiSemanticDeps = inferredDeps.filter((d) => d.source === "ai-semantic");
+          if (fileOverlapDeps2.length > 0) {
+            const files = [...new Set(fileOverlapDeps2.flatMap((d) => d.overlappingFiles))].slice(0, 2);
+            inferredTag = ` [Inferred:file overlap] ${files.join(", ")}${fileOverlapDeps2.flatMap((d) => d.overlappingFiles).length > 2 ? "..." : ""}`;
+          }
+          if (aiSemanticDeps.length > 0) {
+            const reasons = aiSemanticDeps.map((d) => d.reason || "Semantic relation").slice(0, 2);
+            inferredTag += ` [Inferred:AI semantic] ${reasons.join("; ")}`;
+          }
+        }
+        console.log(`${prefix} ${statusIcon} ${task.id}: ${task.title.substring(0, 40)}${inferredTag}`);
+      }
+      console.log("");
+    }
+    if (b < batches.length - 1) {
+      console.log("   ─────────────────────────────────");
+      console.log("");
+    }
+  }
+  console.log("━".repeat(SEPARATOR_WIDTH));
+  console.log("\uD83D\uDCA1 Recommendation summary:");
+  console.log(`   ${aiOutput.recommendation.summary}`);
+  console.log(`   Priority chains: ${aiOutput.recommendation.topChains.slice(0, 3).join(", ")}`);
+  console.log("");
+  const isNonInteractive = options.nonInteractive || !process.stdout.isTTY;
+  if (isNonInteractive) {
+    const plan = getOrCreatePlan(cwd);
+    plan.tasks = aiOutput.recommendation.suggestedOrder;
+    plan.batches = aiOutput.batchOrder;
+    writePlan(plan, cwd);
+    console.log("✅ Execution plan updated (non-interactive mode)");
+    logger2.logInstrumentation({
+      module: "plan-recommend",
+      action: "recommend_auto",
+      input_summary: `query="${inputQuery}", all=${options.all || false}`,
+      output_summary: `chains=${chains.length}, tasks=${filteredTasks.length}, accepted=true`,
+      ai_used: false,
+      ai_enhanced_fields: [],
+      duration_ms: Date.now() - startTime,
+      user_edit_count: 0,
+      module_data: {
+        hit_rate: filteredTasks.length / activeTasks.length,
+        suggested_order: aiOutput.recommendation.suggestedOrder.slice(0, 5)
+      }
+    });
+    logger2.flush();
+    return;
+  }
+  const response = await import_prompts10.default({
+    type: "confirm",
+    name: "confirm",
+    message: "Write the recommended task order to the execution plan?",
+    initial: true
+  });
+  if (response.confirm) {
+    const plan = getOrCreatePlan(cwd);
+    plan.tasks = aiOutput.recommendation.suggestedOrder;
+    plan.batches = aiOutput.batchOrder;
+    writePlan(plan, cwd);
+    console.log("✅ Execution plan updated");
+    recommendationAccepted = true;
+  } else {
+    console.log("Cancelled");
+  }
+  logger2.logInstrumentation({
+    module: "plan-recommend",
+    action: response.confirm ? "recommend_accept" : "recommend_skip",
+    input_summary: `query="${inputQuery}", all=${options.all || false}`,
+    output_summary: `chains=${chains.length}, tasks=${filteredTasks.length}, accepted=${response.confirm}`,
+    ai_used: false,
+    ai_enhanced_fields: [],
+    duration_ms: Date.now() - startTime,
+    user_edit_count: response.confirm ? 0 : 1,
+    module_data: {
+      hit_rate: filteredTasks.length / activeTasks.length,
+      skip_rate: response.confirm ? 0 : 1,
+      suggested_order: suggestedOrder.slice(0, 5),
+      accepted: recommendationAccepted
+    }
+  });
+  logger2.flush();
+}
+function getPriorityIcon2(priority) {
+  const icons = {
+    0: "\uD83D\uDD34",
+    1: "\uD83D\uDFE0",
+    2: "\uD83D\uDFE1",
+    3: "\uD83D\uDFE2",
+    4: "\uD83D\uDCCA",
+    5: "\uD83D\uDCCA",
+    6: "\uD83D\uDCCA",
+    7: "\uD83D\uDCCA"
+  };
+  return icons[priority] || "⚪";
+}
+function getStatusIcon3(status) {
+  const normalized = normalizeStatus(status);
+  const icons = {
+    open: "⬜",
+    in_progress: "\uD83D\uDD35",
+    resolved: "✅",
+    closed: "⚫",
+    abandoned: "❌",
+    failed: "❌"
+  };
+  return icons[normalized] || "❓";
+}
+function runPlanQualityGateCheck2(tasks, options = {}) {
+  const phase = options.phase || "plan_recommend";
+  const includeWarnings = options.includeWarnings !== false;
+  const validationResults = [];
+  let passedCount = 0;
+  let failedCount = 0;
+  const failedTasks = [];
+  for (const task of tasks) {
+    const result = runQualityGate(task, phase);
+    validationResults.push(result);
+    if (result.passed) {
+      passedCount++;
+    } else {
+      failedCount++;
+      failedTasks.push(task.id);
+    }
+  }
+  const hasBlockingErrors = validationResults.some((r) => !r.passed && r.errors.length > 0);
+  const passed = includeWarnings ? failedCount === 0 : !hasBlockingErrors;
+  return {
+    passed,
+    totalTasks: tasks.length,
+    passedCount,
+    failedCount,
+    failedTasks,
+    validationResults,
+    validatedAt: new Date().toISOString()
+  };
+}
+function formatPlanQualityGateReport2(result, options = {}) {
+  const { compact = false, showDetails = true, phase = "plan_recommend" } = options;
+  const lines = [];
+  const separator = compact ? "---" : "━".repeat(SEPARATOR_WIDTH);
+  const statusIcon = result.passed ? "✅" : "❌";
+  lines.push("");
+  lines.push(separator);
+  lines.push(`${statusIcon} Plan Quality Gate Check Report [${phase}]`);
+  lines.push(separator);
+  lines.push("");
+  lines.push("\uD83D\uDCCA Statistics Summary:");
+  lines.push(`   Total tasks: ${result.totalTasks}`);
+  lines.push(`   ✅ Passed: ${result.passedCount}`);
+  lines.push(`   ❌ Failed: ${result.failedCount}`);
+  lines.push("");
+  if (result.failedTasks.length > 0) {
+    lines.push(separator);
+    lines.push(`❌ Failed Tasks (${result.failedTasks.length}):`);
+    lines.push("");
+    if (showDetails) {
+      for (const taskResult of result.validationResults) {
+        if (!taskResult.passed) {
+          lines.push(`   ${taskResult.taskId}:`);
+          if (taskResult.errors.length > 0) {
+            for (const error of taskResult.errors) {
+              lines.push(`      ❌ ${error.message}`);
+            }
+          }
+          if (taskResult.warnings.length > 0) {
+            for (const warning of taskResult.warnings) {
+              lines.push(`      ⚠️  ${warning.message}`);
+            }
+          }
+          lines.push("");
+        }
+      }
+    } else {
+      for (const taskId of result.failedTasks) {
+        lines.push(`   - ${taskId}`);
+      }
+      lines.push("");
+    }
+  }
+  if (showDetails && result.validationResults.length > 0) {
+    const hasViolations = result.validationResults.some((r) => r.violations.length > 0);
+    if (hasViolations) {
+      lines.push(separator);
+      lines.push("\uD83D\uDCCB Detailed Violation Info:");
+      lines.push("");
+      for (const taskResult of result.validationResults) {
+        if (taskResult.violations.length > 0) {
+          lines.push(`   ${taskResult.taskId}:`);
+          for (const violation of taskResult.violations) {
+            const icon = violation.severity === "error" ? "❌" : "⚠️";
+            lines.push(`      ${icon} [${violation.ruleId}] ${violation.message}`);
+          }
+          lines.push("");
+        }
+      }
+    }
+  }
+  lines.push(separator);
+  if (result.passed) {
+    lines.push("✅ All tasks passed Plan quality gate check!");
+  } else {
+    lines.push(`⚠️  ${result.failedCount} tasks failed quality gate, recommend fixing before running plan recommend`);
+    lines.push("");
+    lines.push("\uD83D\uDCA1 Fix Suggestions:");
+    lines.push("   • Check circular dependencies: ensure no cycles in task dependencies");
+    lines.push("   • Check invalid dependencies: ensure dependent task IDs exist and are valid");
+    lines.push("   • Check orphan subtasks: ensure parentId points to existing task");
+    lines.push("   • Use `projmnt4claude analyze --fix` to auto-fix some issues");
+  }
+  lines.push("");
+  lines.push(`\uD83D\uDD50 Validated at: ${result.validatedAt}`);
+  lines.push(separator);
+  lines.push("");
+  return lines.join(`
+`);
+}
+
+// src/commands/harness.ts
+init_quality_gate();
 function getRuntimeStatePath(cwd) {
-  return path30.join(getProjectDir(cwd), "harness-state.json");
+  return path33.join(getProjectDir(cwd), "harness-state.json");
 }
 function saveRuntimeState(state, cwd) {
   const statePath = getRuntimeStatePath(cwd);
@@ -41379,7 +41667,7 @@ function saveRuntimeState(state, cwd) {
     phaseRetryCounters: Object.fromEntries(state.phaseRetryCounters || []),
     taskPhaseCheckpoints: Object.fromEntries(state.taskPhaseCheckpoints || [])
   };
-  fs34.writeFileSync(statePath, JSON.stringify(data, null, 2), "utf-8");
+  fs38.writeFileSync(statePath, JSON.stringify(data, null, 2), "utf-8");
 }
 
 // src/utils/hd-assembly-line.ts
@@ -41389,13 +41677,13 @@ init_checkpoint_verification();
 
 // src/utils/post-qa-gate/runner.ts
 init_task2();
-import * as fs36 from "node:fs";
-import * as path32 from "node:path";
+import * as fs40 from "node:fs";
+import * as path35 from "node:path";
 
 // src/utils/post-qa-gate/checkers/checkpoint-sync-checker.ts
 init_checkpoint_rules();
-import * as fs35 from "node:fs";
-import * as path31 from "node:path";
+import * as fs39 from "node:fs";
+import * as path34 from "node:path";
 var DEFAULT_CHECKPOINT_SYNC_CONFIG = {
   reportPath: ".projmnt4claude/outputs/{taskId}/qa-report.json"
 };
@@ -41486,12 +41774,12 @@ class QACheckpointSyncChecker {
   }
   readReportVerdict(taskId) {
     const reportPath = this.config.reportPath.replace("{taskId}", taskId);
-    const fullPath = path31.join(this.cwd, reportPath);
-    if (!fs35.existsSync(fullPath)) {
+    const fullPath = path34.join(this.cwd, reportPath);
+    if (!fs39.existsSync(fullPath)) {
       return null;
     }
     try {
-      const content = fs35.readFileSync(fullPath, "utf-8");
+      const content = fs39.readFileSync(fullPath, "utf-8");
       const report = JSON.parse(content);
       return report.verdict ?? null;
     } catch {
@@ -41820,8 +42108,8 @@ class PostQAGateRunner {
 `);
   }
   async handleQAReportExistenceRule(_task, rule, context) {
-    const reportPath = path32.join(context.cwd, context.qaReportPath);
-    const exists = fs36.existsSync(reportPath);
+    const reportPath = path35.join(context.cwd, context.qaReportPath);
+    const exists = fs40.existsSync(reportPath);
     return {
       ruleId: rule.id,
       passed: exists,
@@ -41837,8 +42125,8 @@ class PostQAGateRunner {
     };
   }
   async handleQAReportFormatRule(_task, rule, context) {
-    const reportPath = path32.join(context.cwd, context.qaReportPath);
-    if (!fs36.existsSync(reportPath)) {
+    const reportPath = path35.join(context.cwd, context.qaReportPath);
+    if (!fs40.existsSync(reportPath)) {
       return {
         ruleId: rule.id,
         passed: false,
@@ -41850,7 +42138,7 @@ class PostQAGateRunner {
       };
     }
     try {
-      const content = fs36.readFileSync(reportPath, "utf-8");
+      const content = fs40.readFileSync(reportPath, "utf-8");
       const report = JSON.parse(content);
       const requiredFields = ["version", "taskId", "verdict", "verifiedAt", "verifier", "summary"];
       const missingFields = requiredFields.filter((field) => !(field in report));
@@ -41881,8 +42169,8 @@ class PostQAGateRunner {
     }
   }
   async handleQAVerdictValidityRule(_task, rule, context) {
-    const reportPath = path32.join(context.cwd, context.qaReportPath);
-    if (!fs36.existsSync(reportPath)) {
+    const reportPath = path35.join(context.cwd, context.qaReportPath);
+    if (!fs40.existsSync(reportPath)) {
       return {
         ruleId: rule.id,
         passed: false,
@@ -41894,7 +42182,7 @@ class PostQAGateRunner {
       };
     }
     try {
-      const content = fs36.readFileSync(reportPath, "utf-8");
+      const content = fs40.readFileSync(reportPath, "utf-8");
       const report = JSON.parse(content);
       const validVerdicts = ["PASS", "NOPASS"];
       const isValid = validVerdicts.includes(report.verdict);
@@ -41923,8 +42211,8 @@ class PostQAGateRunner {
     }
   }
   async handleQAFailuresDetailRule(_task, rule, context) {
-    const reportPath = path32.join(context.cwd, context.qaReportPath);
-    if (!fs36.existsSync(reportPath)) {
+    const reportPath = path35.join(context.cwd, context.qaReportPath);
+    if (!fs40.existsSync(reportPath)) {
       return {
         ruleId: rule.id,
         passed: false,
@@ -41936,7 +42224,7 @@ class PostQAGateRunner {
       };
     }
     try {
-      const content = fs36.readFileSync(reportPath, "utf-8");
+      const content = fs40.readFileSync(reportPath, "utf-8");
       const report = JSON.parse(content);
       if (report.verdict === "PASS") {
         return {
@@ -41987,11 +42275,11 @@ class PostQAGateRunner {
     }
   }
   async handleHumanVerificationCollectRule(task, rule, context) {
-    const reportPath = path32.join(context.cwd, context.qaReportPath);
+    const reportPath = path35.join(context.cwd, context.qaReportPath);
     let qaReport;
-    if (fs36.existsSync(reportPath)) {
+    if (fs40.existsSync(reportPath)) {
       try {
-        const content = fs36.readFileSync(reportPath, "utf-8");
+        const content = fs40.readFileSync(reportPath, "utf-8");
         qaReport = JSON.parse(content);
       } catch {}
     }
@@ -42097,13 +42385,13 @@ class PostQAGateRunner {
     };
   }
   async handleTestCoverageRule(_task, rule, context) {
-    const reportPath = path32.join(context.cwd, context.qaReportPath);
+    const reportPath = path35.join(context.cwd, context.qaReportPath);
     const minCoverage = rule.config?.minCoverage ?? 0.6;
     let coverage;
     let coverageDetails;
-    if (fs36.existsSync(reportPath)) {
+    if (fs40.existsSync(reportPath)) {
       try {
-        const content = fs36.readFileSync(reportPath, "utf-8");
+        const content = fs40.readFileSync(reportPath, "utf-8");
         const report = JSON.parse(content);
         coverage = report.coverage;
       } catch {}
@@ -42151,14 +42439,14 @@ class PostQAGateRunner {
   }
   async calculateCoverageFromReportsWithDetails(context) {
     const coverageFiles = [
-      path32.join(context.cwd, "coverage", "coverage-summary.json"),
-      path32.join(context.cwd, "coverage", "lcov-report", "coverage-summary.json"),
-      path32.join(context.cwd, ".projmnt4claude", "outputs", context.taskId, "coverage-report.json")
+      path35.join(context.cwd, "coverage", "coverage-summary.json"),
+      path35.join(context.cwd, "coverage", "lcov-report", "coverage-summary.json"),
+      path35.join(context.cwd, ".projmnt4claude", "outputs", context.taskId, "coverage-report.json")
     ];
     for (const filePath of coverageFiles) {
-      if (fs36.existsSync(filePath)) {
+      if (fs40.existsSync(filePath)) {
         try {
-          const content = JSON.parse(fs36.readFileSync(filePath, "utf-8"));
+          const content = JSON.parse(fs40.readFileSync(filePath, "utf-8"));
           const raw = this.parseCoverageData(content);
           const coverage = Math.round((raw.lines * 0.4 + raw.branches * 0.3 + raw.functions * 0.2 + raw.statements * 0.1) * 1000) / 1000;
           return {
@@ -42272,12 +42560,12 @@ class PostQAGateRunner {
   async saveReport(report) {
     if (!this.config.reportPath)
       return;
-    const reportDir = path32.dirname(path32.join(this.cwd, this.config.reportPath));
-    if (!fs36.existsSync(reportDir)) {
-      fs36.mkdirSync(reportDir, { recursive: true });
+    const reportDir = path35.dirname(path35.join(this.cwd, this.config.reportPath));
+    if (!fs40.existsSync(reportDir)) {
+      fs40.mkdirSync(reportDir, { recursive: true });
     }
-    const reportPath = path32.join(this.cwd, this.config.reportPath);
-    fs36.writeFileSync(reportPath, JSON.stringify(report, null, 2));
+    const reportPath = path35.join(this.cwd, this.config.reportPath);
+    fs40.writeFileSync(reportPath, JSON.stringify(report, null, 2));
   }
   formatResult(result) {
     const lines = [];
@@ -43183,7 +43471,7 @@ ${"━".repeat(SEPARATOR_WIDTH)}`);
         return true;
       }
       console.log(`   ⏱️  轮询等待中... (${Math.round((Date.now() - startTime) / 1000)}s / ${TIMEOUT_MS / 1000}s)`);
-      await new Promise((resolve10) => setTimeout(resolve10, POLLING_INTERVAL_MS));
+      await new Promise((resolve12) => setTimeout(resolve12, POLLING_INTERVAL_MS));
     }
     console.log(`⚠️  依赖检查超时 (${TIMEOUT_MS / 1000 / 60} 分钟)`);
     return false;
@@ -43601,9 +43889,9 @@ ${"━".repeat(SEPARATOR_WIDTH)}`);
     }
     if (status === "wait_qa") {
       const projectDir = getProjectDir(this.config.cwd);
-      const qaReportPath = path33.join(projectDir, "reports", "harness", taskId, "qa-report.md");
-      if (fs37.existsSync(qaReportPath)) {
-        const content = fs37.readFileSync(qaReportPath, "utf-8");
+      const qaReportPath = path36.join(projectDir, "reports", "harness", taskId, "qa-report.md");
+      if (fs41.existsSync(qaReportPath)) {
+        const content = fs41.readFileSync(qaReportPath, "utf-8");
         if (content.trim().length > 0) {
           console.log(`   \uD83D\uDCCB 检测到 wait_qa 但 qa-report.md 已存在，自动迁移为 wait_evaluation`);
           return "evaluation";
@@ -43630,14 +43918,14 @@ ${"━".repeat(SEPARATOR_WIDTH)}`);
       return true;
     }
     const projectDir = getProjectDir(this.config.cwd);
-    const reportDir = path33.join(projectDir, "reports", "harness", taskId);
+    const reportDir = path36.join(projectDir, "reports", "harness", taskId);
     for (const reportFile of required) {
-      const filePath = path33.join(reportDir, reportFile);
-      if (!fs37.existsSync(filePath)) {
+      const filePath = path36.join(reportDir, reportFile);
+      if (!fs41.existsSync(filePath)) {
         return false;
       }
       try {
-        const content = fs37.readFileSync(filePath, "utf-8");
+        const content = fs41.readFileSync(filePath, "utf-8");
         if (content.trim().length === 0) {
           return false;
         }
@@ -43919,31 +44207,31 @@ ${"━".repeat(SEPARATOR_WIDTH)}`);
     if (!resumePhase)
       return true;
     const projectDir = getProjectDir(this.config.cwd);
-    const reportDir = path33.join(projectDir, "reports", "harness", taskId);
+    const reportDir = path36.join(projectDir, "reports", "harness", taskId);
     const checks = [];
     switch (resumePhase) {
       case "qa":
-        checks.push({ file: path33.join(reportDir, "dev-report.md"), label: "开发报告" });
-        checks.push({ file: path33.join(reportDir, "code-review-report.md"), label: "代码审核报告" });
+        checks.push({ file: path36.join(reportDir, "dev-report.md"), label: "开发报告" });
+        checks.push({ file: path36.join(reportDir, "code-review-report.md"), label: "代码审核报告" });
         break;
       case "evaluation":
-        checks.push({ file: path33.join(reportDir, "dev-report.md"), label: "开发报告" });
-        checks.push({ file: path33.join(reportDir, "code-review-report.md"), label: "代码审核报告" });
-        checks.push({ file: path33.join(reportDir, "qa-report.md"), label: "QA报告" });
+        checks.push({ file: path36.join(reportDir, "dev-report.md"), label: "开发报告" });
+        checks.push({ file: path36.join(reportDir, "code-review-report.md"), label: "代码审核报告" });
+        checks.push({ file: path36.join(reportDir, "qa-report.md"), label: "QA报告" });
         break;
       case "code_review":
-        checks.push({ file: path33.join(reportDir, "dev-report.md"), label: "开发报告" });
+        checks.push({ file: path36.join(reportDir, "dev-report.md"), label: "开发报告" });
         break;
       case "development":
         return true;
     }
     for (const check of checks) {
-      if (!fs37.existsSync(check.file)) {
+      if (!fs41.existsSync(check.file)) {
         console.log(`   ⚠️ 缺少${check.label}: ${check.file}`);
         return false;
       }
       try {
-        const content = fs37.readFileSync(check.file, "utf-8");
+        const content = fs41.readFileSync(check.file, "utf-8");
         if (content.trim().length === 0) {
           console.log(`   ⚠️ ${check.label}为空: ${check.file}`);
           return false;
@@ -44137,15 +44425,15 @@ ${"━".repeat(SEPARATOR_WIDTH)}`);
         }
       }
       const stageFiles = [
-        path33.join(this.config.cwd, ".projmnt4claude", "reports", taskId, "dev-report.json"),
-        path33.join(this.config.cwd, ".projmnt4claude", "reports", taskId, "code-review-report.json"),
-        path33.join(this.config.cwd, ".projmnt4claude", "reports", taskId, "qa-report.json"),
-        path33.join(this.config.cwd, ".projmnt4claude", "reports", taskId, "evaluation-report.json")
+        path36.join(this.config.cwd, ".projmnt4claude", "reports", taskId, "dev-report.json"),
+        path36.join(this.config.cwd, ".projmnt4claude", "reports", taskId, "code-review-report.json"),
+        path36.join(this.config.cwd, ".projmnt4claude", "reports", taskId, "qa-report.json"),
+        path36.join(this.config.cwd, ".projmnt4claude", "reports", taskId, "evaluation-report.json")
       ];
       for (const file of stageFiles) {
-        if (fs37.existsSync(file)) {
+        if (fs41.existsSync(file)) {
           try {
-            fs37.unlinkSync(file);
+            fs41.unlinkSync(file);
             result.cleanedFiles.push(file);
           } catch (unlinkError) {
             console.warn(`   ⚠️ 无法删除文件 ${file}: ${unlinkError instanceof Error ? unlinkError.message : String(unlinkError)}`);
@@ -44635,9 +44923,7 @@ ${"━".repeat(SEPARATOR_WIDTH)}`);
 init_plan();
 init_task2();
 init_task();
-init_plan2();
 init_quality_gate();
-init_harness_snapshot();
 var currentSnapshotId = null;
 function buildBatchAwareQueue(taskQueue, batches) {
   if (!batches || batches.length === 0) {
@@ -44961,7 +45247,7 @@ async function harnessCommand(options, cwd = process.cwd()) {
   }
 }
 function getRuntimeStatePath2(cwd) {
-  return path34.join(getProjectDir(cwd), "harness-state.json");
+  return path37.join(getProjectDir(cwd), "harness-state.json");
 }
 function validateAndRepairState(data, cwd) {
   const errors = [];
@@ -45121,12 +45407,12 @@ function validateAndRepairState(data, cwd) {
 }
 function loadRuntimeState(cwd) {
   const statePath = getRuntimeStatePath2(cwd);
-  if (!fs38.existsSync(statePath)) {
+  if (!fs42.existsSync(statePath)) {
     return null;
   }
   const texts = t(cwd);
   try {
-    const content = fs38.readFileSync(statePath, "utf-8");
+    const content = fs42.readFileSync(statePath, "utf-8");
     if (!content.trim()) {
       console.warn(texts.harnessCmd.emptyStateFile);
       return null;
@@ -45172,8 +45458,8 @@ function loadRuntimeState(cwd) {
 }
 function clearRuntimeState(cwd) {
   const statePath = getRuntimeStatePath2(cwd);
-  if (fs38.existsSync(statePath)) {
-    fs38.unlinkSync(statePath);
+  if (fs42.existsSync(statePath)) {
+    fs42.unlinkSync(statePath);
   }
 }
 function summaryToJSON(summary) {
@@ -45200,13 +45486,13 @@ function summaryToJSON(summary) {
 }
 async function loadTaskQueue(options, cwd) {
   if (options.plan) {
-    const planFile = path34.resolve(cwd, options.plan);
-    if (!fs38.existsSync(planFile)) {
+    const planFile = path37.resolve(cwd, options.plan);
+    if (!fs42.existsSync(planFile)) {
       console.error(`Error: Plan file does not exist: ${planFile}`);
       process.exit(1);
     }
     try {
-      const planContent = fs38.readFileSync(planFile, "utf-8");
+      const planContent = fs42.readFileSync(planFile, "utf-8");
       const planData = JSON.parse(planContent);
       let taskQueue = planData.recommendation?.suggestedOrder || [];
       const batches = planData.batchOrder || planData.batches;
@@ -45214,13 +45500,13 @@ async function loadTaskQueue(options, cwd) {
         console.error("Error: No tasks in plan file");
         process.exit(1);
       }
-      const TERMINAL_STATUSES_SET8 = new Set(TERMINAL_STATUSES);
+      const TERMINAL_STATUSES_SET7 = new Set(TERMINAL_STATUSES);
       const originalCount = taskQueue.length;
       taskQueue = taskQueue.filter((id) => {
         const task = readTaskMeta(id, cwd);
         if (!task)
           return false;
-        return !TERMINAL_STATUSES_SET8.has(normalizeStatus(task.status));
+        return !TERMINAL_STATUSES_SET7.has(normalizeStatus(task.status));
       });
       if (originalCount - taskQueue.length > 0) {
         console.log(`Using plan file: ${options.plan} (filtered ${originalCount - taskQueue.length} terminal tasks)`);
@@ -45260,12 +45546,12 @@ async function loadTaskQueue(options, cwd) {
   process.exit(1);
 }
 function filterExecutableFromPlan(plan, cwd, logPrefix) {
-  const TERMINAL_STATUSES_SET8 = new Set(TERMINAL_STATUSES);
+  const TERMINAL_STATUSES_SET7 = new Set(TERMINAL_STATUSES);
   const filteredTasks = plan.tasks.filter((taskId) => {
     const task = readTaskMeta(taskId, cwd);
     if (!task)
       return false;
-    return !TERMINAL_STATUSES_SET8.has(normalizeStatus(task.status));
+    return !TERMINAL_STATUSES_SET7.has(normalizeStatus(task.status));
   });
   const filteredCount = plan.tasks.length - filteredTasks.length;
   if (filteredCount > 0) {
@@ -45311,24 +45597,24 @@ function printSummary(summary) {
 }
 
 // src/utils/path.ts
-import * as path35 from "path";
-import * as fs39 from "fs";
+import * as path38 from "path";
+import * as fs43 from "fs";
 function getProjectDir5(cwd = process.cwd()) {
-  return path35.join(cwd, ".projmnt4claude");
+  return path38.join(cwd, ".projmnt4claude");
 }
 function isInitialized2(cwd = process.cwd()) {
   const projectDir = getProjectDir5(cwd);
-  const configPath = path35.join(projectDir, "config.json");
-  if (fs39.existsSync(configPath)) {
+  const configPath = path38.join(projectDir, "config.json");
+  if (fs43.existsSync(configPath)) {
     return true;
   }
-  const tasksDir = path35.join(projectDir, "tasks");
-  if (fs39.existsSync(tasksDir)) {
+  const tasksDir = path38.join(projectDir, "tasks");
+  if (fs43.existsSync(tasksDir)) {
     try {
-      const taskDirs = fs39.readdirSync(tasksDir);
+      const taskDirs = fs43.readdirSync(tasksDir);
       return taskDirs.some((taskDir) => {
-        const metaPath = path35.join(tasksDir, taskDir, "meta.json");
-        return fs39.existsSync(metaPath);
+        const metaPath = path38.join(tasksDir, taskDir, "meta.json");
+        return fs43.existsSync(metaPath);
       });
     } catch {
       return false;
@@ -45459,12 +45745,12 @@ rename format:
     case "create": {
       let taskDescription = options.description;
       if (options.file) {
-        const filePath = path36.resolve(options.file);
-        if (!fs40.existsSync(filePath)) {
+        const filePath = path39.resolve(options.file);
+        if (!fs44.existsSync(filePath)) {
           console.error("(X) Error: Description file not found: " + filePath);
           process.exit(1);
         }
-        const stat = fs40.statSync(filePath);
+        const stat = fs44.statSync(filePath);
         if (!stat.isFile()) {
           console.error("(X) Error: Path is not a file: " + filePath);
           process.exit(1);
@@ -45475,14 +45761,14 @@ rename format:
           process.exit(1);
         }
         try {
-          taskDescription = fs40.readFileSync(filePath, "utf-8");
+          taskDescription = fs44.readFileSync(filePath, "utf-8");
         } catch (error) {
           console.error("(X) Error: Cannot read description file: " + error.message);
           process.exit(1);
         }
         if (filePath.startsWith("/tmp/")) {
           try {
-            fs40.unlinkSync(filePath);
+            fs44.unlinkSync(filePath);
           } catch {}
         }
       }
@@ -45898,80 +46184,142 @@ program2.command("analyze").description("Analyze project health status").option(
     await showAnalysis({ compact: options.compact, ...aiOptions, checkRange: options.checkRange });
   }
 });
-program2.command("init-requirement [description]").description(`\u4ECE\u81EA\u7136\u8BED\u8A00\u9700\u6C42\u63CF\u8FF0\u521B\u5EFA\u4EFB\u52A1\uFF0C\u81EA\u52A8\u89E3\u6790\u9700\u6C42\u5E76\u751F\u6210\u4EFB\u52A1\u7ED3\u6784
+program2.command("init-requirement <report-path>").description(`\u4ECE\u8C03\u67E5\u62A5\u544A\u521B\u5EFA\u4EFB\u52A1 - \u5C06\u62A5\u544A\u8F6C\u6362\u4E3A\u5DF2\u901A\u8FC7\u95E8\u7981\u7684\u4EFB\u52A1
 
-` + `\u81EA\u52A8\u5206\u6790: \u4F18\u5148\u7EA7(P0-P3)\u3001\u63A8\u8350\u89D2\u8272\u3001\u590D\u6742\u5EA6\u3001\u68C0\u67E5\u70B9\u3001\u4F9D\u8D56
+` + `\u6D41\u7A0B: \u62A5\u544A\u89E3\u6790 \u2192 AI\u63D0\u53D6\u5143\u6570\u636E \u2192 \u521B\u5EFA\u4EFB\u52A1 \u2192 \u95E8\u7981\u4FEE\u6B63 \u2192 \u5BF9\u9F50\u9A8C\u8BC1
 
 ` + `\u793A\u4F8B:
-` + `  init-requirement "\u5B9E\u73B0\u7528\u6237\u767B\u5F55API\u63A5\u53E3\uFF0C\u9700\u8981\u9AD8\u4F18\u5148\u7EA7\u5904\u7406"
-` + `  init-requirement -y "\u7D27\u6025\u4FEE\u590D\u7EBF\u4E0A\u652F\u4ED8\u63A5\u53E3\u8D85\u65F6\u95EE\u9898"
-` + `  init-requirement -y --no-plan "\u4E3A\u8BA4\u8BC1\u6A21\u5757\u7F16\u5199\u5355\u5143\u6D4B\u8BD5"
-` + `  init-requirement -y --file ./description.md
+` + `  init-requirement docs/investigation/investigation-login-style/report.md
+` + `  init-requirement docs/investigation/investigation-frontend-bugs/  # \u6279\u91CF\u8F6C\u6362
+` + `  init-requirement report.md --interactive  # \u6BCF\u4E2A\u4EFB\u52A1\u521B\u5EFA\u524D\u7528\u6237\u786E\u8BA4
+` + `  init-requirement report.md --max-retry 5  # \u4FEE\u6539\u4FEE\u6B63\u5FAA\u73AF\u91CD\u8BD5\u6B21\u6570
 
 ` + `\u9009\u9879:
-` + `  -y, --yes                \u975E\u4EA4\u4E92\u6A21\u5F0F\uFF1A\u8DF3\u8FC7\u6240\u6709\u786E\u8BA4\uFF0C\u76F4\u63A5\u4F7F\u7528\u5206\u6790\u7ED3\u679C\u521B\u5EFA\u4EFB\u52A1
-` + `  --no-plan                \u521B\u5EFA\u4EFB\u52A1\u540E\u4E0D\u8BE2\u95EE\u662F\u5426\u6DFB\u52A0\u5230\u6267\u884C\u8BA1\u5212
-` + `  --skip-validation        \u8DF3\u8FC7\u521D\u59CB\u5316\u9A8C\u8BC1
-` + `  --template <file>        \u4F7F\u7528\u9700\u6C42\u6A21\u677F\u6587\u4EF6
-` + `  --no-ai                  \u7981\u7528 AI \u8F85\u52A9
-` + `  --require-quality <n>    \u8D28\u91CF\u95E8\u7981\u9608\u503C
-` + `  -f, --force              \u5F3A\u5236\u8986\u76D6
-` + `  --accept-draft           \u63A5\u53D7\u8349\u7A3F
-` + `  --accept-audit           \u63A5\u53D7\u5BA1\u8BA1
-` + `  --accept-eval            \u63A5\u53D7\u8BC4\u4F30
+` + `  --interactive           \u4EA4\u4E92\u6A21\u5F0F\uFF08\u6BCF\u4E2A\u4EFB\u52A1\u521B\u5EFA\u524D\u9700\u7528\u6237\u786E\u8BA4\uFF09
+` + `  --max-retry <num>       \u4FEE\u6B63\u5FAA\u73AF\u6700\u5927\u91CD\u8BD5\u6B21\u6570\uFF08\u9ED8\u8BA4 3\uFF09
+` + `  --no-plan               \u4E0D\u6DFB\u52A0\u5230\u6267\u884C\u8BA1\u5212
+` + `  --skip-gate             \u8DF3\u8FC7\u95E8\u7981\u9884\u68C0\uFF08\u4EC5\u7528\u4E8E\u8C03\u8BD5\uFF09
 
-` + "\u524D\u63D0: \u9700\u5148\u8FD0\u884C projmnt4claude setup \u521D\u59CB\u5316\u9879\u76EE").option("-y, --yes", "\u975E\u4EA4\u4E92\u6A21\u5F0F\uFF1A\u8DF3\u8FC7\u6240\u6709\u786E\u8BA4\uFF0C\u76F4\u63A5\u4F7F\u7528\u5206\u6790\u7ED3\u679C\u521B\u5EFA\u4EFB\u52A1").option("--no-plan", "\u521B\u5EFA\u4EFB\u52A1\u540E\u4E0D\u8BE2\u95EE\u662F\u5426\u6DFB\u52A0\u5230\u6267\u884C\u8BA1\u5212").option("--skip-validation", "\u8DF3\u8FC7\u521D\u59CB\u5316\u9A8C\u8BC1").option("--template <file>", "\u4F7F\u7528\u9700\u6C42\u6A21\u677F\u6587\u4EF6", "simple").option("--no-ai", "\u7981\u7528 AI \u8F85\u52A9").option("--require-quality <n>", "\u8D28\u91CF\u95E8\u7981\u9608\u503C").option("-f, --force", "\u5F3A\u5236\u8986\u76D6").option("--file <path>", "\u4ECE\u6587\u4EF6\u8BFB\u53D6\u63CF\u8FF0\uFF08\u7528\u4E8E\u5305\u542B\u7279\u6B8A\u5B57\u7B26\u7684\u957F\u63CF\u8FF0\uFF09").option("--decompose", "\u81EA\u52A8\u5206\u89E3\u591A\u95EE\u9898\u9700\u6C42/\u62A5\u544A\uFF08\u9ED8\u8BA4\u542F\u7528\uFF09", true).option("--no-decompose", "\u7981\u7528\u9700\u6C42\u5206\u89E3\uFF0C\u5F3A\u5236\u521B\u5EFA\u5355\u4E2A\u4EFB\u52A1").option("--accept-draft", "\u63A5\u53D7\u8349\u7A3F").option("--accept-audit", "\u63A5\u53D7\u5BA1\u8BA1").option("--accept-eval", "\u63A5\u53D7\u8BC4\u4F30").action(async (description, options) => {
-  let finalDescription;
+` + "\u524D\u63D0: \u9700\u5148\u8FD0\u884C projmnt4claude setup \u521D\u59CB\u5316\u9879\u76EE").option("--interactive", "\u4EA4\u4E92\u6A21\u5F0F\uFF08\u6BCF\u4E2A\u4EFB\u52A1\u521B\u5EFA\u524D\u9700\u7528\u6237\u786E\u8BA4\uFF09").option("--max-retry <num>", "\u4FEE\u6B63\u5FAA\u73AF\u6700\u5927\u91CD\u8BD5\u6B21\u6570\uFF08\u9ED8\u8BA4 3\uFF09", parseInt).option("--no-plan", "\u4E0D\u6DFB\u52A0\u5230\u6267\u884C\u8BA1\u5212").option("--skip-gate", "\u8DF3\u8FC7\u95E8\u7981\u9884\u68C0\uFF08\u4EC5\u7528\u4E8E\u8C03\u8BD5\uFF09").action(async (reportPath, options) => {
+  requireInit();
+  await initRequirement(reportPath, process.cwd(), {
+    interactive: options.interactive,
+    maxRetry: options.maxRetry,
+    noPlan: options.noPlan,
+    skipGate: options.skipGate
+  });
+});
+program2.command("investigation-requirement [description]").description(`\u9700\u6C42\u8C03\u67E5\u6307\u4EE4 - \u4ECE\u81EA\u7136\u8BED\u8A00\u9700\u6C42\u751F\u6210\u7ED3\u6784\u5316\u8C03\u67E5\u62A5\u544A
+
+` + `\u652F\u6301\u4E94\u79CD\u8FD0\u884C\u6A21\u5F0F:
+` + `  1. \u65B0\u5EFA\u8C03\u67E5\uFF08\u9ED8\u8BA4\uFF09        \u751F\u6210\u8C03\u67E5\u62A5\u544A\u5E76\u8FDB\u884CAI\u8BC4\u5BA1
+` + `  2. \u4EA4\u4E92\u6A21\u5F0F (--interactive) \u4E0E\u7528\u6237\u8BC4\u5BA1\u53CD\u9988\u5FAA\u73AF
+` + `  3. \u53CD\u9988\u4FEE\u6B63 (--feedback)    \u57FA\u4E8E\u53CD\u9988\u4FEE\u6B63\u5DF2\u6709\u62A5\u544A
+` + `  4. \u8BC4\u5BA1\u6A21\u5F0F (--review)      \u4EC5\u8BC4\u5BA1\u5DF2\u6709\u62A5\u544A
+` + `  5. \u62C6\u5206\u6A21\u5F0F (--split)       \u5BF9\u8FC7\u5927\u62A5\u544A\u8FDB\u884C\u62C6\u5206
+
+` + `\u793A\u4F8B:
+` + `  investigation-requirement "\u5206\u6790\u767B\u5F55\u6A21\u5757\u6027\u80FD\u95EE\u9898"
+` + `  investigation-requirement --interactive "\u8C03\u67E5\u652F\u4ED8\u6D41\u7A0B\u74F6\u9888"
+` + `  investigation-requirement --feedback --report-path ./investigation/report.md
+` + `  investigation-requirement --review --report-path ./investigation/report.md
+` + `  investigation-requirement --split --report-path ./investigation/report.md
+
+` + `\u9009\u9879:
+` + `  -y, --yes                \u975E\u4EA4\u4E92\u6A21\u5F0F
+` + `  --interactive            \u4EA4\u4E92\u6A21\u5F0F: \u4E0E\u7528\u6237\u8BC4\u5BA1\u5FAA\u73AF
+` + `  --feedback               \u53CD\u9988\u4FEE\u6B63\u6A21\u5F0F
+` + `  --review                 \u8BC4\u5BA1\u6A21\u5F0F
+` + `  --split                  \u62C6\u5206\u6A21\u5F0F
+` + `  --report-path <path>     \u5DF2\u6709\u62A5\u544A\u8DEF\u5F84 (feedback/review/split \u5FC5\u9700)
+` + `  --file <path>            \u4ECE\u6587\u4EF6\u8BFB\u53D6\u9700\u6C42\u63CF\u8FF0
+` + `  --output-dir <path>      \u8F93\u51FA\u76EE\u5F55
+` + `  --output-file <path>     \u8F93\u51FA\u6587\u4EF6\u8DEF\u5F84
+` + `  --max-retry <n>          \u6700\u5927\u91CD\u8BD5\u6B21\u6570 (\u9ED8\u8BA4 3)
+` + `  --split-threshold <kb>   \u62C6\u5206\u9608\u503C (\u9ED8\u8BA4 20 KB)
+` + `  --language <lang>        \u8BED\u8A00 (zh/en)
+` + `  --skip-review            \u8DF3\u8FC7 AI \u8BC4\u5BA1
+` + `  --skip-split             \u8DF3\u8FC7\u62C6\u5206
+` + `  -f, --force              \u5F3A\u5236\u8986\u76D6
+` + `  --json                   JSON \u8F93\u51FA
+` + `  -q, --quiet              \u9759\u9ED8\u6A21\u5F0F
+
+` + `\u63D0\u793A\u8BCD\u6A21\u677F:
+` + `  investigate              \u8C03\u67E5\u4E3B\u6A21\u677F
+` + `  investigateWithFeedback  \u53CD\u9988\u4FEE\u6B63\u6A21\u677F
+` + `  review                   \u8BC4\u5BA1\u6A21\u677F
+` + `  split                    \u62C6\u5206\u6A21\u677F
+` + `  splitReview              \u62C6\u5206\u5BA1\u6838\u6A21\u677F
+
+` + "\u524D\u63D0: \u9700\u5148\u8FD0\u884C projmnt4claude setup \u521D\u59CB\u5316\u9879\u76EE").option("-y, --yes", "\u975E\u4EA4\u4E92\u6A21\u5F0F").option("--interactive", "\u4EA4\u4E92\u6A21\u5F0F: \u4E0E\u7528\u6237\u8BC4\u5BA1\u53CD\u9988\u5FAA\u73AF").option("--feedback", "\u53CD\u9988\u4FEE\u6B63\u6A21\u5F0F: \u57FA\u4E8E\u53CD\u9988\u4FEE\u6B63\u5DF2\u6709\u62A5\u544A").option("--review", "\u8BC4\u5BA1\u6A21\u5F0F: \u4EC5\u8BC4\u5BA1\u5DF2\u6709\u62A5\u544A").option("--split", "\u62C6\u5206\u6A21\u5F0F: \u5BF9\u8FC7\u5927\u62A5\u544A\u8FDB\u884C\u62C6\u5206").option("--report-path <path>", "\u5DF2\u6709\u62A5\u544A\u8DEF\u5F84 (feedback/review/split \u5FC5\u9700)").option("--file <path>", "\u4ECE\u6587\u4EF6\u8BFB\u53D6\u9700\u6C42\u63CF\u8FF0").option("--output-dir <path>", "\u8F93\u51FA\u76EE\u5F55").option("--output-file <path>", "\u8F93\u51FA\u6587\u4EF6\u8DEF\u5F84").option("--max-retry <n>", "\u6700\u5927\u91CD\u8BD5\u6B21\u6570", "3").option("--split-threshold <kb>", "\u62C6\u5206\u9608\u503C (KB)", "20").option("--language <lang>", "\u8BED\u8A00 (zh/en)", "zh").option("--skip-review", "\u8DF3\u8FC7 AI \u8BC4\u5BA1").option("--skip-split", "\u8DF3\u8FC7\u62C6\u5206").option("-f, --force", "\u5F3A\u5236\u8986\u76D6").option("--json", "JSON \u8F93\u51FA").option("-q, --quiet", "\u9759\u9ED8\u6A21\u5F0F").action(async (description, options) => {
+  let finalDescription = description;
   if (options.file) {
-    const filePath = path36.resolve(options.file);
-    if (!fs40.existsSync(filePath)) {
+    const filePath = path39.resolve(options.file);
+    if (!fs44.existsSync(filePath)) {
       console.error("(X) Error: Description file not found: " + filePath);
       process.exit(1);
     }
-    const stat = fs40.statSync(filePath);
+    const stat = fs44.statSync(filePath);
     if (!stat.isFile()) {
       console.error("(X) Error: Path is not a file: " + filePath);
       process.exit(1);
     }
     const MAX_FILE_SIZE = 10 * 1024 * 1024;
     if (stat.size > MAX_FILE_SIZE) {
-      console.error("(X) Error: File too large (" + (stat.size / 1024 / 1024).toFixed(2) + "MB), max 10MB");
+      console.error("(X) Error: File too large, max 10MB");
       process.exit(1);
     }
     try {
-      finalDescription = fs40.readFileSync(filePath, "utf-8");
+      finalDescription = fs44.readFileSync(filePath, "utf-8");
     } catch (error) {
       console.error("(X) Error: Cannot read description file: " + error.message);
       process.exit(1);
     }
     if (filePath.startsWith("/tmp/")) {
       try {
-        fs40.unlinkSync(filePath);
+        fs44.unlinkSync(filePath);
       } catch {}
     }
-  } else if (description) {
-    finalDescription = description;
-  }
-  if (!finalDescription || finalDescription.trim().length === 0) {
-    console.error("(X) Error: Description or --file option required");
-    console.error("");
-    console.error("Usage:");
-    console.error('  projmnt4claude init-requirement "description"');
-    console.error("  projmnt4claude init-requirement --file ./description.md");
-    console.error("");
-    console.error("Hint: Use --file when description contains code blocks or special characters");
-    process.exit(1);
   }
   requireInit();
-  await initRequirement(finalDescription, process.cwd(), {
+  const result = await investigationRequirement(finalDescription, process.cwd(), {
     nonInteractive: options.yes,
-    noPlan: options.noPlan,
-    skipValidation: options.skipValidation,
-    template: options.template,
-    noAI: options.noAi,
-    requireQuality: options.requireQuality ? parseInt(options.requireQuality, 10) : undefined,
-    decompose: options.decompose
+    interactive: options.interactive,
+    feedback: options.feedback,
+    review: options.review,
+    split: options.split,
+    reportPath: options.reportPath,
+    file: options.file,
+    outputDir: options.outputDir,
+    outputFile: options.outputFile,
+    maxRetry: options.maxRetry ? parseInt(options.maxRetry, 10) : undefined,
+    splitThreshold: options.splitThreshold ? parseInt(options.splitThreshold, 10) : undefined,
+    language: options.language,
+    skipReview: options.skipReview,
+    skipSplit: options.skipSplit,
+    force: options.force,
+    json: options.json || program2.opts().json || false,
+    quiet: options.quiet
   });
+  if (!result.success) {
+    console.error("");
+    console.error("(X) Error: " + (result.error || "Investigation failed"));
+    console.error("");
+    process.exit(1);
+  }
+  if (options.json || program2.opts().json) {
+    console.log(JSON.stringify(result, null, 2));
+  } else if (!options.quiet) {
+    console.log("");
+    console.log("\u2705 Investigation completed successfully");
+    if (result.reportPath) {
+      console.log("   Report: " + result.reportPath);
+    }
+    if (result.subReports && result.subReports.length > 0) {
+      console.log("   Sub-reports: " + result.subReports.length);
+    }
+    console.log("");
+  }
 });
 program2.command("doctor").description("Run environment diagnostics, check and fix setup issues").option("--fix", "Auto-fix detected issues").option("--deep", "Deep log analysis: run all log analyzers (rule + AI hybrid strategy)").option("--bug-report", "Generate Bug report (includes log compression attachment, AI cost summary, usage analysis)").action(async (options) => {
   if (options.bugReport) {

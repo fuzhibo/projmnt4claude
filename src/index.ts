@@ -52,6 +52,7 @@ import {
 } from './commands/analyze';
 import { fixPipeline } from './commands/analyze-fix-pipeline';
 import { initRequirement } from './commands/init-requirement';
+import { investigationRequirement } from './commands/investigation-requirement';
 import { showHelp } from './commands/help';
 import { runDoctor, runBugReport, runDoctorDeep } from './commands/doctor';
 import { harnessCommand, cleanupHarnessSnapshots } from './commands/harness';
@@ -723,63 +724,113 @@ program
 
 // init-requirement command
 program
-  .command('init-requirement [description]')
-  .description('从自然语言需求描述创建任务，自动解析需求并生成任务结构\n\n' +
-    '自动分析: 优先级(P0-P3)、推荐角色、复杂度、检查点、依赖\n\n' +
+  .command('init-requirement <report-path>')
+  .description('从调查报告创建任务 - 将报告转换为已通过门禁的任务\n\n' +
+    '流程: 报告解析 → AI提取元数据 → 创建任务 → 门禁修正 → 对齐验证\n\n' +
     '示例:\n' +
-    '  init-requirement "实现用户登录API接口，需要高优先级处理"\n' +
-    '  init-requirement -y "紧急修复线上支付接口超时问题"\n' +
-    '  init-requirement -y --no-plan "为认证模块编写单元测试"\n' +
-    '  init-requirement -y --file ./description.md\n\n' +
+    '  init-requirement docs/investigation/investigation-login-style/report.md\n' +
+    '  init-requirement docs/investigation/investigation-frontend-bugs/  # 批量转换\n' +
+    '  init-requirement report.md --interactive  # 每个任务创建前用户确认\n' +
+    '  init-requirement report.md --max-retry 5  # 修改修正循环重试次数\n\n' +
     '选项:\n' +
-    '  -y, --yes                非交互模式：跳过所有确认，直接使用分析结果创建任务\n' +
-    '  --no-plan                创建任务后不询问是否添加到执行计划\n' +
-    '  --skip-validation        跳过初始化验证\n' +
-    '  --template <file>        使用需求模板文件\n' +
-    '  --no-ai                  禁用 AI 辅助\n' +
-    '  --require-quality <n>    质量门禁阈值\n' +
-    '  -f, --force              强制覆盖\n' +
-    '  --accept-draft           接受草稿\n' +
-    '  --accept-audit           接受审计\n' +
-    '  --accept-eval            接受评估\n\n' +
+    '  --interactive           交互模式（每个任务创建前需用户确认）\n' +
+    '  --max-retry <num>       修正循环最大重试次数（默认 3）\n' +
+    '  --no-plan               不添加到执行计划\n' +
+    '  --skip-gate             跳过门禁预检（仅用于调试）\n\n' +
     '前提: 需先运行 projmnt4claude setup 初始化项目')
-  .option('-y, --yes', '非交互模式：跳过所有确认，直接使用分析结果创建任务')
-  .option('--no-plan', '创建任务后不询问是否添加到执行计划')
-  .option('--skip-validation', '跳过初始化验证')
-  .option('--template <file>', '使用需求模板文件', 'simple')
-  .option('--no-ai', '禁用 AI 辅助')
-  .option('--require-quality <n>', '质量门禁阈值')
+  .option('--interactive', '交互模式（每个任务创建前需用户确认）')
+  .option('--max-retry <num>', '修正循环最大重试次数（默认 3）', parseInt)
+  .option('--no-plan', '不添加到执行计划')
+  .option('--skip-gate', '跳过门禁预检（仅用于调试）')
+  .action(async (reportPath, options) => {
+    requireInit();
+    await initRequirement(reportPath, process.cwd(), {
+      interactive: options.interactive,
+      maxRetry: options.maxRetry,
+      noPlan: options.noPlan,
+      skipGate: options.skipGate,
+    });
+  });
+
+// investigation-requirement command
+program
+  .command('investigation-requirement [description]')
+  .description('需求调查指令 - 从自然语言需求生成结构化调查报告\n\n' +
+    '支持五种运行模式:\n' +
+    '  1. 新建调查（默认）        生成调查报告并进行AI评审\n' +
+    '  2. 交互模式 (--interactive) 与用户评审反馈循环\n' +
+    '  3. 反馈修正 (--feedback)    基于反馈修正已有报告\n' +
+    '  4. 评审模式 (--review)      仅评审已有报告\n' +
+    '  5. 拆分模式 (--split)       对过大报告进行拆分\n\n' +
+    '示例:\n' +
+    '  investigation-requirement "分析登录模块性能问题"\n' +
+    '  investigation-requirement --interactive "调查支付流程瓶颈"\n' +
+    '  investigation-requirement --feedback --report-path ./investigation/report.md\n' +
+    '  investigation-requirement --review --report-path ./investigation/report.md\n' +
+    '  investigation-requirement --split --report-path ./investigation/report.md\n\n' +
+    '选项:\n' +
+    '  -y, --yes                非交互模式\n' +
+    '  --interactive            交互模式: 与用户评审循环\n' +
+    '  --feedback               反馈修正模式\n' +
+    '  --review                 评审模式\n' +
+    '  --split                  拆分模式\n' +
+    '  --report-path <path>     已有报告路径 (feedback/review/split 必需)\n' +
+    '  --file <path>            从文件读取需求描述\n' +
+    '  --output-dir <path>      输出目录\n' +
+    '  --output-file <path>     输出文件路径\n' +
+    '  --max-retry <n>          最大重试次数 (默认 3)\n' +
+    '  --split-threshold <kb>   拆分阈值 (默认 20 KB)\n' +
+    '  --language <lang>        语言 (zh/en)\n' +
+    '  --skip-review            跳过 AI 评审\n' +
+    '  --skip-split             跳过拆分\n' +
+    '  -f, --force              强制覆盖\n' +
+    '  --json                   JSON 输出\n' +
+    '  -q, --quiet              静默模式\n\n' +
+    '提示词模板:\n' +
+    '  investigate              调查主模板\n' +
+    '  investigateWithFeedback  反馈修正模板\n' +
+    '  review                   评审模板\n' +
+    '  split                    拆分模板\n' +
+    '  splitReview              拆分审核模板\n\n' +
+    '前提: 需先运行 projmnt4claude setup 初始化项目')
+  .option('-y, --yes', '非交互模式')
+  .option('--interactive', '交互模式: 与用户评审反馈循环')
+  .option('--feedback', '反馈修正模式: 基于反馈修正已有报告')
+  .option('--review', '评审模式: 仅评审已有报告')
+  .option('--split', '拆分模式: 对过大报告进行拆分')
+  .option('--report-path <path>', '已有报告路径 (feedback/review/split 必需)')
+  .option('--file <path>', '从文件读取需求描述')
+  .option('--output-dir <path>', '输出目录')
+  .option('--output-file <path>', '输出文件路径')
+  .option('--max-retry <n>', '最大重试次数', '3')
+  .option('--split-threshold <kb>', '拆分阈值 (KB)', '20')
+  .option('--language <lang>', '语言 (zh/en)', 'zh')
+  .option('--skip-review', '跳过 AI 评审')
+  .option('--skip-split', '跳过拆分')
   .option('-f, --force', '强制覆盖')
-  .option('--file <path>', '从文件读取描述（用于包含特殊字符的长描述）')
-  .option('--decompose', '自动分解多问题需求/报告（默认启用）', true)
-  .option('--no-decompose', '禁用需求分解，强制创建单个任务')
-  .option('--accept-draft', '接受草稿')
-  .option('--accept-audit', '接受审计')
-  .option('--accept-eval', '接受评估')
+  .option('--json', 'JSON 输出')
+  .option('-q, --quiet', '静默模式')
   .action(async (description, options) => {
-    let finalDescription: string | undefined;
+    let finalDescription: string | undefined = description;
 
     // Priority: --file > command line arguments
     if (options.file) {
       const filePath = path.resolve(options.file);
 
-      // Validate file exists
       if (!fs.existsSync(filePath)) {
         console.error('(X) Error: Description file not found: ' + filePath);
         process.exit(1);
       }
 
-      // Validate is file
       const stat = fs.statSync(filePath);
       if (!stat.isFile()) {
         console.error('(X) Error: Path is not a file: ' + filePath);
         process.exit(1);
       }
 
-      // Validate file size (limit 10MB to prevent memory issues)
-      const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10MB
+      const MAX_FILE_SIZE = 10 * 1024 * 1024;
       if (stat.size > MAX_FILE_SIZE) {
-        console.error('(X) Error: File too large (' + (stat.size / 1024 / 1024).toFixed(2) + 'MB), max 10MB');
+        console.error('(X) Error: File too large, max 10MB');
         process.exit(1);
       }
 
@@ -790,40 +841,52 @@ program
         process.exit(1);
       }
 
-      // Clean up temp file (if in /tmp)
       if (filePath.startsWith('/tmp/')) {
-        try {
-          fs.unlinkSync(filePath);
-        } catch {
-          // Ignore delete failure
-        }
+        try { fs.unlinkSync(filePath); } catch { /* ignore */ }
       }
-    } else if (description) {
-      finalDescription = description;
-    }
-
-    // Validate description must exist
-    if (!finalDescription || finalDescription.trim().length === 0) {
-      console.error('(X) Error: Description or --file option required');
-      console.error('');
-      console.error('Usage:');
-      console.error('  projmnt4claude init-requirement "description"');
-      console.error('  projmnt4claude init-requirement --file ./description.md');
-      console.error('');
-      console.error('Hint: Use --file when description contains code blocks or special characters');
-      process.exit(1);
     }
 
     requireInit();
-    await initRequirement(finalDescription, process.cwd(), {
+    const result = await investigationRequirement(finalDescription, process.cwd(), {
       nonInteractive: options.yes,
-      noPlan: options.noPlan,
-      skipValidation: options.skipValidation,
-      template: options.template,
-      noAI: options.noAi,
-      requireQuality: options.requireQuality ? parseInt(options.requireQuality, 10) : undefined,
-      decompose: options.decompose,
+      interactive: options.interactive,
+      feedback: options.feedback,
+      review: options.review,
+      split: options.split,
+      reportPath: options.reportPath,
+      file: options.file,
+      outputDir: options.outputDir,
+      outputFile: options.outputFile,
+      maxRetry: options.maxRetry ? parseInt(options.maxRetry, 10) : undefined,
+      splitThreshold: options.splitThreshold ? parseInt(options.splitThreshold, 10) : undefined,
+      language: options.language,
+      skipReview: options.skipReview,
+      skipSplit: options.skipSplit,
+      force: options.force,
+      json: options.json || program.opts().json || false,
+      quiet: options.quiet,
     });
+
+    if (!result.success) {
+      console.error('');
+      console.error('(X) Error: ' + (result.error || 'Investigation failed'));
+      console.error('');
+      process.exit(1);
+    }
+
+    if (options.json || program.opts().json) {
+      console.log(JSON.stringify(result, null, 2));
+    } else if (!options.quiet) {
+      console.log('');
+      console.log('✅ Investigation completed successfully');
+      if (result.reportPath) {
+        console.log('   Report: ' + result.reportPath);
+      }
+      if (result.subReports && result.subReports.length > 0) {
+        console.log('   Sub-reports: ' + result.subReports.length);
+      }
+      console.log('');
+    }
   });
 
 // doctor command
