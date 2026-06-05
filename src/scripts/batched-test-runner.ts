@@ -82,28 +82,32 @@ function findTestFiles(projectRoot: string): string[] {
   const testDirs = [
     path.join(projectRoot, 'src', '__tests__'),
     path.join(projectRoot, 'src', 'api', '__tests__'),
-    path.join(projectRoot, 'src', 'utils', '__tests__'),
+    path.join(projectRoot, 'src', 'utils'),
     path.join(projectRoot, 'src', 'components', '__tests__'),
   ];
 
   const files: string[] = [];
+  const srcDir = path.join(projectRoot, 'src');
 
   for (const dir of testDirs) {
     if (!fs.existsSync(dir)) continue;
-    collectTestFiles(dir, dir, files);
+    collectTestFiles(dir, dir, files, srcDir);
   }
 
   return [...new Set(files)].sort();
 }
 
-function collectTestFiles(baseDir: string, currentDir: string, results: string[]): void {
+function collectTestFiles(baseDir: string, currentDir: string, results: string[], srcDir: string): void {
   const entries = fs.readdirSync(currentDir, { withFileTypes: true });
   for (const entry of entries) {
     const fullPath = path.join(currentDir, entry.name);
     if (entry.isDirectory()) {
-      collectTestFiles(baseDir, fullPath, results);
+      // 递归进入子目录查找 __tests__ 或直接包含 .test.ts 文件的目录
+      collectTestFiles(baseDir, fullPath, results, srcDir);
     } else if (entry.isFile() && entry.name.endsWith('.test.ts')) {
-      results.push(path.relative(baseDir, fullPath));
+      // 返回相对于 src 的路径（保持与 runTestGroup 一致）
+      const relToSrc = path.relative(srcDir, fullPath);
+      results.push(relToSrc);
     }
   }
 }
@@ -141,13 +145,8 @@ function runTestGroup(
 ): Promise<GroupResult> {
   const startTime = Date.now();
 
-  // 构建测试文件路径
-  const testPaths = files.map(f => {
-    if (f.startsWith('api/') || f.startsWith('utils/') || f.startsWith('components/')) {
-      return path.join('src', f);
-    }
-    return path.join('src', '__tests__', f);
-  });
+  // 构建测试文件路径（文件路径已经是相对于 src 的）
+  const testPaths = files.map(f => path.join('src', f));
 
   const bunArgs: string[] = [];
   if (config.useSmol) bunArgs.push('--smol');

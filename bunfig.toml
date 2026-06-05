@@ -41,3 +41,12 @@ testTimeout = 30000
 
 # Bail on first failure in CI
 bail = true
+
+# ─── OOM 防护配置 (2026-06-05) ───
+# 限制并发以降低内存峰值，配合进程级隔离使用
+# 这些参数仅对直接 `bun test` 调用生效
+# 推荐: 使用 `npm test` 或 `bun run test` (调用批处理运行器)
+# 如果必须直接调用 `bun test`，请添加: bun --smol test --max-concurrency=5
+[test.run]
+# 降低并发数 (默认 20 过高会导致内存峰值)
+maxConcurrency = 5
