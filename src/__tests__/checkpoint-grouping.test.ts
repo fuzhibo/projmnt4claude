@@ -291,7 +291,7 @@ describe('buildCheckpointConstraintsSection', () => {
         description: 'Test checkpoint',
         verification: {
           method: 'automated',
-          commands: ['bun test', 'bun run build'],
+          commands: ['npm test', 'npm run build'],
           expected: 'All tests pass',
         },
       }),
@@ -300,7 +300,7 @@ describe('buildCheckpointConstraintsSection', () => {
     const result = buildCheckpointConstraintsSection(checkpoints, texts);
 
     expect(result).toContain('验证命令');
-    expect(result).toContain('bun test && bun run build');
+    expect(result).toContain('npm test && npm run build');
   });
 
   test('should include expected result when present', () => {

@@ -11,18 +11,16 @@ module.exports = {
       'ts-jest',
       {
         useESM: true,
+        // Key: isolatedModules=true makes ts-jest transpile only (no type checking)
+        // This matches Bun's behavior - fast transpile without full type validation
+        isolatedModules: true,
         tsconfig: {
-          // Inherit from project tsconfig but relax strict checks for tests
           target: 'ESNext',
           module: 'ESNext',
           moduleResolution: 'bundler',
           verbatimModuleSyntax: false,
           esModuleInterop: true,
           allowSyntheticDefaultImports: true,
-          // Relax strict checks that cause test failures
-          strict: false,
-          noUncheckedIndexedAccess: false,
-          strictNullChecks: false,
           skipLibCheck: true,
         },
       },
@@ -33,9 +31,10 @@ module.exports = {
   coverageDirectory: 'coverage',
   verbose: true,
   testTimeout: 30000,
-  // Prevent OOM by limiting workers
-  maxWorkers: 2,
-  // Force exit after tests complete
+  // Memory control: single worker to prevent memory accumulation
+  maxWorkers: 1,
+  // Reduce memory by not running tests in parallel
+  maxConcurrency: 1,
   forceExit: true,
   detectOpenHandles: true,
 };

@@ -389,7 +389,7 @@ describe('updateCheckpointWithCLIVerification integration', () => {
     process.env.USER = 'developer';
     const cli = new CheckpointVerificationCLI();
     const result = cli.buildAutomatedVerificationRecord([
-      { type: 'test', description: 'bun test passed' },
+      { type: 'test', description: 'npm test passed' },
     ]);
 
     expect(result.valid).toBe(true);

@@ -89,7 +89,7 @@ describe('TestEnvConfigChecker', () => {
         taskId,
         generatedAt: new Date().toISOString(),
         environment: {
-          testCommands: ['bun test'],
+          testCommands: ['npm test'],
           envVars: {},
           dependencies: [],
         },
@@ -151,7 +151,7 @@ describe('TestEnvConfigChecker', () => {
         taskId,
         generatedAt: new Date().toISOString(),
         environment: {
-          testCommands: ['bun test'],
+          testCommands: ['npm test'],
           envVars: { NODE_ENV: 'test' },
           dependencies: [],
         },
@@ -196,7 +196,7 @@ describe('TestEnvConfigChecker', () => {
           status: 'pending',
           verification: {
             method: 'unit_test',
-            commands: ['bun test'],
+            commands: ['npm test'],
           },
           createdAt: new Date().toISOString(),
           updatedAt: new Date().toISOString(),
@@ -232,7 +232,7 @@ describe('TestEnvConfigChecker', () => {
           status: 'pending',
           verification: {
             method: 'unit_test',
-            commands: ['bun test'],
+            commands: ['npm test'],
           },
           createdAt: new Date().toISOString(),
           updatedAt: new Date().toISOString(),
@@ -266,7 +266,7 @@ describe('TestEnvConfigChecker', () => {
           status: 'pending',
           verification: {
             method: 'unit_test',
-            commands: ['bun test', 'bun run lint'],
+            commands: ['npm test', 'npm run lint'],
           },
           createdAt: new Date().toISOString(),
           updatedAt: new Date().toISOString(),
@@ -281,8 +281,8 @@ describe('TestEnvConfigChecker', () => {
       const config = JSON.parse(fs.readFileSync(path.join(env.tempDir, configPath), 'utf-8'));
       expect(config.taskId).toBe(taskId);
       expect(config.version).toBe('1.0.0');
-      expect(config.environment.testCommands).toContain('bun test');
-      expect(config.environment.testCommands).toContain('bun run lint');
+      expect(config.environment.testCommands).toContain('npm test');
+      expect(config.environment.testCommands).toContain('npm run lint');
     });
 
     it('should infer test commands from task type when no checkpoints', async () => {
@@ -380,7 +380,7 @@ describe('TestEnvConfigChecker', () => {
           status: 'pending',
           verification: {
             method: 'unit_test',
-            commands: ['bun test'],
+            commands: ['npm test'],
           },
           createdAt: new Date().toISOString(),
           updatedAt: new Date().toISOString(),
@@ -395,7 +395,7 @@ describe('TestEnvConfigChecker', () => {
 
       const config = JSON.parse(fs.readFileSync(fullPath, 'utf-8'));
       expect(config.taskId).toBe(taskId);
-      expect(config.environment.testCommands).toContain('bun test');
+      expect(config.environment.testCommands).toContain('npm test');
     });
   });
 });

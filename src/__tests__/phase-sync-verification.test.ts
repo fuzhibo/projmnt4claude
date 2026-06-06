@@ -34,7 +34,7 @@ function createTestCheckpoint(overrides: Partial<CheckpointMetadata> = {}): Chec
     category: 'code_review',
     verification: {
       method: 'automated',
-      commands: ['bun run build', 'bun test'],
+      commands: ['npm run build', 'npm test'],
       expected: '编译成功；测试通过',
     },
     createdAt: new Date().toISOString(),

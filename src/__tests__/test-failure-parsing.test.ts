@@ -667,7 +667,7 @@ describe('Test Failure Parsing - Configuration', () => {
     const config = {
       harness: {
         test: {
-          testCommand: 'bun test',
+          testCommand: 'npm test',
           standardFormatDetection: {
             junitXml: true,
             tap: false,
@@ -687,7 +687,7 @@ describe('Test Failure Parsing - Configuration', () => {
     };
 
     // If this compiles, types are correct
-    expect(config.harness.test.testCommand).toBe('bun test');
+    expect(config.harness.test.testCommand).toBe('npm test');
     expect(config.harness.test.standardFormatDetection?.junitXml).toBe(true);
     expect(config.harness.test.testFailurePatterns).toHaveLength(1);
   });

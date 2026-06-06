@@ -86,7 +86,7 @@ describe('EvalReportJsonChecker (R-EVAL-POST-002)', () => {
 
   describe('基本属性', () => {
     it('应实现 IPostEvalChecker 接口', () => {
-      expect(checker.check).toBeFunction();
+      expect(checker.check).toBeInstanceOf(Function);
     });
   });
 
@@ -232,7 +232,7 @@ describe('EvalResultValidChecker (R-EVAL-POST-003)', () => {
 
   describe('基本属性', () => {
     it('应实现 IPostEvalChecker 接口', () => {
-      expect(checker.check).toBeFunction();
+      expect(checker.check).toBeInstanceOf(Function);
     });
   });
 

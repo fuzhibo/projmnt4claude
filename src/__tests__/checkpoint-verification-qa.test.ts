@@ -516,7 +516,7 @@ describe('Error Handling', () => {
     expect(output.record.failureReason).toContain('不存在');
   });
 
-  it('throws TypeError for unknown category (implementation bug: strategy undefined before try/catch)', async () => {
+  it('returns unverified for unknown category (graceful handling of missing strategy)', async () => {
     const verifier = new CheckpointOutputVerifier(env.tempDir);
     const context: VerificationContext = {
       taskId: 'TASK-001',
@@ -527,9 +527,9 @@ describe('Error Handling', () => {
       source: 'cli_manual',
     };
 
-    // BUG: CATEGORY_STRATEGIES['unknown'] is undefined, strategy access at line 175
-    // happens before the try/catch block, so TypeError is thrown instead of returning 'unverified'
-    expect(async () => await verifier.verify(context)).toThrow();
+    const output = await verifier.verify(context);
+    expect(output.result).toBe('unverified');
+    expect(output.record.failureReason).toContain('未知的检查点类别');
   });
 });
 

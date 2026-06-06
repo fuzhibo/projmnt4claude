@@ -27,7 +27,7 @@ describe('checkpointScriptHasCommands', () => {
     const checkpoint = {
       id: 'CP-001',
       description: '[script] 构建成功',
-      verification: { method: 'automated', commands: ['bun run build'] },
+      verification: { method: 'automated', commands: ['npm run build'] },
     };
     const result = checkpointScriptHasCommands.check({ checkpoints: [checkpoint] });
     expect(result).toBeNull();
@@ -69,7 +69,7 @@ describe('checkpointScriptHasCommands', () => {
       {
         id: 'CP-001',
         description: '[script] 构建成功',
-        verification: { method: 'automated', commands: ['bun run build'] },
+        verification: { method: 'automated', commands: ['npm run build'] },
       },
       {
         id: 'CP-002',

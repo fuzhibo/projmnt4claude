@@ -73,7 +73,7 @@ function createContract(overrides: Partial<SprintContract> = {}): SprintContract
   return {
     taskId: 'TASK-exec-test-001',
     acceptanceCriteria: ['All tests pass'],
-    verificationCommands: ['bun test'],
+    verificationCommands: ['npm test'],
     // checkpoints removed from SprintContract - now accessed from TaskMeta.checkpoints
     createdAt: '2026-04-10T00:00:00.000Z',
     updatedAt: '2026-04-10T00:00:00.000Z',

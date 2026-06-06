@@ -102,7 +102,7 @@ describe('isInitialized', () => {
     // because isInitialized tests need to verify actual file system state
     // without mocking
     tempDir = path.join(
-      import.meta.dir,
+      __dirname,
       '..',
       '..',
       '.tmp',

@@ -167,7 +167,7 @@ export interface AcceptanceCriteriaHierarchy {
  */
 export const ACCEPTANCE_LEVEL_DESCRIPTIONS: Record<AcceptanceLevel, string> = {
   checkpoint: '任务检查点验证 - 所有 QA 类型检查点状态为 completed',
-  build: '构建验证 - bun run build 成功，无 TypeScript 编译错误',
+  build: '构建验证 - npm run build 成功，无 TypeScript 编译错误',
   test: '测试验证 - 任务相关测试通过',
   criteria: '验收标准验证 - 解析任务描述中的验收标准并验证',
 };

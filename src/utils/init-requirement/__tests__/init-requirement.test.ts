@@ -168,7 +168,7 @@ describe('parseCheckpoint (§3.2)', () => {
 // ============================================================
 
 describe('generateVerificationCommands (§3.3)', () => {
-  test('test prefix with existing test files generates bun test command', () => {
+  test('test prefix with existing test files generates npm test command', () => {
     // Create a mock test file
     const testFile = join(tempDir, 'tests', 'auth.test.ts');
     mkdirSync(join(tempDir, 'tests'), { recursive: true });
@@ -191,7 +191,7 @@ describe('generateVerificationCommands (§3.3)', () => {
     const commands = generateVerificationCommands(checkpoint, taskFiles);
     // Since the test file doesn't exist in the expected relative path format, it falls back
     expect(commands.length).toBe(1);
-    expect(commands[0]).toContain('bun test');
+    expect(commands[0]).toContain('npm test');
   });
 
   test('test prefix without test files generates pattern command', () => {
@@ -204,7 +204,7 @@ describe('generateVerificationCommands (§3.3)', () => {
     };
 
     const commands = generateVerificationCommands(checkpoint, []);
-    expect(commands).toEqual(['bun test --test-name-pattern="测试认证流程"']);
+    expect(commands).toEqual(['npm test --testNamePattern="测试认证流程"']);
   });
 
   test('verify prefix generates build and test', () => {
@@ -217,7 +217,7 @@ describe('generateVerificationCommands (§3.3)', () => {
     };
 
     const commands = generateVerificationCommands(checkpoint, []);
-    expect(commands).toEqual(['bun run build && bun test']);
+    expect(commands).toEqual(['npm run build && npm test']);
   });
 
   test('review prefix generates git diff', () => {
@@ -244,7 +244,7 @@ describe('generateVerificationCommands (§3.3)', () => {
     };
 
     const commands = generateVerificationCommands(checkpoint, []);
-    expect(commands).toEqual(['bun run build']);
+    expect(commands).toEqual(['npm run build']);
   });
 
   test('doc prefix generates build', () => {
@@ -257,7 +257,7 @@ describe('generateVerificationCommands (§3.3)', () => {
     };
 
     const commands = generateVerificationCommands(checkpoint, []);
-    expect(commands).toEqual(['bun run build']);
+    expect(commands).toEqual(['npm run build']);
   });
 });
 

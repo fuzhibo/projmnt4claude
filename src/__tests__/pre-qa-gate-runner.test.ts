@@ -437,7 +437,7 @@ describe('PreQAGateRunner', () => {
         testConfig: undefined,
         harness: {
           runner: 'bun',
-          testCommand: 'bun test',
+          testCommand: 'npm test',
           coverage: true,
         },
       });

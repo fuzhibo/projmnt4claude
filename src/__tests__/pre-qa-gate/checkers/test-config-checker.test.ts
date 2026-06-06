@@ -63,7 +63,7 @@ function createMockTestConfig(overrides: Partial<TestConfig> = {}): TestConfig {
 function createMockHarnessConfig(overrides: Partial<HarnessConfig> = {}): HarnessConfig {
   return {
     runner: 'bun',
-    testCommand: 'bun test',
+    testCommand: 'npm test',
     coverage: true,
     timeout: 30000,
     ...overrides,
@@ -459,7 +459,7 @@ describe('TestConfigChecker', () => {
         id: 'TASK-test-harness-full',
         harness: createMockHarnessConfig({
           runner: 'bun',
-          testCommand: 'bun test',
+          testCommand: 'npm test',
           coverage: true,
         }),
       });
@@ -809,11 +809,11 @@ describe('TestConfigChecker', () => {
         taskId: overrides.taskId ?? taskId,
         generatedAt: new Date().toISOString(),
         environment: {
-          testCommands: ['bun test', 'bun run build'],
+          testCommands: ['npm test', 'npm run build'],
           envVars: { NODE_ENV: 'test' },
           dependencies: [],
         },
-        recommendations: ['运行 bun install 安装依赖', '执行 bun test 运行测试'],
+        recommendations: ['运行 npm install 安装依赖', '执行 npm test 运行测试'],
         ...overrides,
       };
 
@@ -928,7 +928,7 @@ describe('TestConfigChecker', () => {
       createTestEnvConfig(taskId, {
         recommendations: ['建议1', '建议2'],
         environment: {
-          testCommands: ['bun test'],
+          testCommands: ['npm test'],
           envVars: {},
           dependencies: [],
         },

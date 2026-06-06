@@ -340,7 +340,7 @@ describe('PostCRGateRunner', () => {
           status: 'completed',
           verification: {
             method: 'code_review',
-            commands: ['bun test'],
+            commands: ['npm test'],
           },
           createdAt: new Date().toISOString(),
           updatedAt: new Date().toISOString(),
@@ -368,7 +368,7 @@ describe('PostCRGateRunner', () => {
         taskId,
         generatedAt: new Date().toISOString(),
         environment: {
-          testCommands: ['bun test'],
+          testCommands: ['npm test'],
           envVars: { NODE_ENV: 'test' },
           dependencies: [],
         },
@@ -416,7 +416,7 @@ describe('PostCRGateRunner', () => {
           status: 'completed',
           verification: {
             method: 'code_review',
-            commands: ['bun test'],
+            commands: ['npm test'],
           },
           createdAt: new Date().toISOString(),
           updatedAt: new Date().toISOString(),
@@ -443,7 +443,7 @@ describe('PostCRGateRunner', () => {
         taskId,
         generatedAt: new Date().toISOString(),
         environment: {
-          testCommands: ['bun test'],
+          testCommands: ['npm test'],
           envVars: { NODE_ENV: 'test' },
           dependencies: [],
         },
@@ -504,7 +504,7 @@ describe('PostCRGateRunner', () => {
           status: 'pending',
           verification: {
             method: 'unit_test',
-            commands: ['bun test'],
+            commands: ['npm test'],
           },
           createdAt: new Date().toISOString(),
           updatedAt: new Date().toISOString(),
@@ -517,7 +517,7 @@ describe('PostCRGateRunner', () => {
 
       const config = JSON.parse(fs.readFileSync(configPath, 'utf-8'));
       expect(config.taskId).toBe(taskId);
-      expect(config.environment.testCommands).toContain('bun test');
+      expect(config.environment.testCommands).toContain('npm test');
     });
   });
 

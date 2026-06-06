@@ -71,7 +71,7 @@ describe('DevReportChecker', () => {
 
   describe('基本属性', () => {
     it('应实现 IPreEvalChecker 接口', () => {
-      expect(checker.check).toBeFunction();
+      expect(checker.check).toBeInstanceOf(Function);
     });
 
     it('check 方法应返回 Promise', () => {
