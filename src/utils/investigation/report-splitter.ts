@@ -1,7 +1,6 @@
 import * as fs from 'fs';
 import * as path from 'path';
 import type { InvestigationReport, SplitPlan, SplitItem, SplitReviewResult, SplitReviewIssue, OutputMode } from './types';
-import { callAI, callAIForJSON } from './ai-integration';
 import { loadAndRenderTemplate } from '../prompt-templates/loader';
 import { generateReport } from './report-generator';
 
@@ -25,6 +24,7 @@ export async function generateSplitPlan(
   const reportMarkdown = generateReport(report);
   const prompt = loadAndRenderTemplate('split', { report: reportMarkdown }, lang);
 
+  const { callAIForJSON } = await import('./ai-integration');
   return callAIForJSON<SplitPlan>({ prompt, cwd }, validateSplitPlan);
 }
 
@@ -41,6 +41,7 @@ export async function reviewSplitPlan(
   const planJson = JSON.stringify(splitPlan, null, 2);
   const prompt = loadAndRenderTemplate('splitReview', { reportSummary: summary, splitPlan: planJson }, lang);
 
+  const { callAIForJSON } = await import('./ai-integration');
   return callAIForJSON<SplitReviewResult>({ prompt, cwd }, validateSplitReviewResult);
 }
 
