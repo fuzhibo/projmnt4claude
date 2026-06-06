@@ -29,11 +29,6 @@ module.exports = {
   testMatch: ['**/__tests__/**/*.test.ts', '**/*.test.ts'],
   testPathIgnorePatterns: [
     '/node_modules/',
-    // PLAN-04-02: investigation.test.ts causes OOM due to headless-agent dependency chain
-    // ts-jest memory explodes when compiling this file (4GB+ heap not enough)
-    // Root cause: ai-integration → headless-agent → harness-helpers heavy module chain
-    // TODO: Fix by mocking headless-agent at module level or refactoring dependency structure
-    'src/utils/investigation/__tests__/investigation.test.ts',
   ],
   collectCoverageFrom: ['src/**/*.ts', '!src/**/*.test.ts', '!src/**/__tests__/**'],
   coverageDirectory: 'coverage',
