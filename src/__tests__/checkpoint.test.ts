@@ -13,13 +13,12 @@
  * - getCheckpointDetail / listCheckpoints / findCheckpointIdByDescription
  *
  * 迁移说明:
- * - 使用 createIsolatedTestEnv 创建隔离测试环境
- * - 使用 env.mocks 自动管理 path 模块的 mock
- * - 确保测试隔离，防止跨测试污染
+ * - 使用 jest.mock() 在文件顶部 mock 模块，避免 ESM 只读属性问题
+ * - 不再使用动态导入后的 jest.spyOn()
+ * - 使用 jest.requireActual('fs') 保留不需要 mock 的 fs 方法
  */
 
 import { describe, it, expect, beforeEach, afterEach } from '@jest/globals';
-import * as fs from 'fs';
 import * as path from 'path';
 import {
   filterLowQualityCheckpoints,
@@ -36,12 +35,40 @@ import {
   parseTextCheckpoints,
   convertParsedCheckpointsToMetadata,
 } from '../utils/checkpoint.js';
-import * as taskModule from '../utils/task.js';
 import type { TaskMeta, CheckpointMetadata } from '../types/task.js';
 import {
   createIsolatedTestEnv,
   type IsolatedTestEnv,
 } from '../utils/test-env.js';
+
+// ============== ESM Mock Setup ==============
+// 使用 jest.mock 在模块加载前执行 (hoisting)，避免 ESM 只读属性问题
+
+jest.mock('fs', () => ({
+  ...jest.requireActual('fs'),
+  existsSync: jest.fn(),
+  readFileSync: jest.fn(),
+  writeFileSync: jest.fn(),
+}));
+
+jest.mock('../utils/task.js', () => ({
+  readTaskMeta: jest.fn(),
+  writeTaskMeta: jest.fn(),
+}));
+
+// 导入 mock 后的模块
+import * as fs from 'fs';
+import {
+  readTaskMeta,
+  writeTaskMeta,
+} from '../utils/task.js';
+
+// 类型别名，便于使用
+const mockExistsSync = fs.existsSync as jest.Mock;
+const mockReadFileSync = fs.readFileSync as jest.Mock;
+const mockWriteFileSync = fs.writeFileSync as jest.Mock;
+const mockReadTaskMeta = readTaskMeta as jest.Mock;
+const mockWriteTaskMeta = writeTaskMeta as jest.Mock;
 
 // ============== filterLowQualityCheckpoints ==============
 
@@ -295,13 +322,13 @@ describe('inferCheckpointCategory', () => {
 // ============== generateFallbackVerification ==============
 
 describe('generateFallbackVerification', () => {
-  it('generates default verification with bun build + test', () => {
+  it('generates default verification with npm build + test', () => {
     const result = generateFallbackVerification('确认功能实现');
     expect(result.method).toBe('automated');
-    expect(result.commands).toContain('bun run build');
-    expect(result.commands).toContain('bun test');
-    expect(result.expected).toContain('bun run build');
-    expect(result.expected).toContain('bun test');
+    expect(result.commands).toContain('npm run build');
+    expect(result.commands).toContain('npm test');
+    expect(result.expected).toContain('npm run build');
+    expect(result.expected).toContain('npm test');
   });
 
   it('extracts file verification steps from src/ paths', () => {
@@ -344,34 +371,31 @@ describe('generateFallbackVerification', () => {
 
 describe('parseCheckpointsWithIds', () => {
   let env: IsolatedTestEnv;
-  let existsSyncSpy: jest.SpyInstance;
-  let readFileSyncSpy: jest.SpyInstance;
-  let readTaskMetaSpy: jest.SpyInstance;
 
   beforeEach(async () => {
     env = await createIsolatedTestEnv();
-    readTaskMetaSpy = jest.spyOn(taskModule, 'readTaskMeta').mockReturnValue(null);
+    mockReadTaskMeta.mockReturnValue(null);
+    mockExistsSync.mockReturnValue(false);
+    mockReadFileSync.mockReturnValue('');
   });
 
   afterEach(() => {
-    readTaskMetaSpy.mockRestore();
-    existsSyncSpy?.mockRestore();
-    readFileSyncSpy?.mockRestore();
+    jest.clearAllMocks();
     env.cleanup();
   });
 
   it('returns empty array when checkpoint.md does not exist', () => {
-    existsSyncSpy = jest.spyOn(fs, 'existsSync').mockReturnValue(false);
+    mockExistsSync.mockReturnValue(false);
     const result = parseCheckpointsWithIds('TASK-1');
     expect(result).toEqual([]);
   });
 
   it('parses unchecked checkpoints from markdown', () => {
-    existsSyncSpy = jest.spyOn(fs, 'existsSync').mockReturnValue(true);
-    readFileSyncSpy = jest.spyOn(fs, 'readFileSync').mockReturnValue(
+    mockExistsSync.mockReturnValue(true);
+    mockReadFileSync.mockReturnValue(
       '# Task Checkpoints\n\n- [ ] 验证登录功能\n- [ ] 确认数据持久化\n'
     );
-    readTaskMetaSpy.mockReturnValue({ id: 'TASK-1', checkpoints: [] } as TaskMeta);
+    mockReadTaskMeta.mockReturnValue({ id: 'TASK-1', checkpoints: [] } as TaskMeta);
 
     const result = parseCheckpointsWithIds('TASK-1');
     expect(result).toHaveLength(2);
@@ -382,11 +406,11 @@ describe('parseCheckpointsWithIds', () => {
   });
 
   it('parses checked checkpoints', () => {
-    existsSyncSpy = jest.spyOn(fs, 'existsSync').mockReturnValue(true);
-    readFileSyncSpy = jest.spyOn(fs, 'readFileSync').mockReturnValue(
+    mockExistsSync.mockReturnValue(true);
+    mockReadFileSync.mockReturnValue(
       '- [x] 已完成的功能\n- [X] 另一个完成项\n- [ ] 未完成项\n'
     );
-    readTaskMetaSpy.mockReturnValue({ id: 'TASK-1', checkpoints: [] } as TaskMeta);
+    mockReadTaskMeta.mockReturnValue({ id: 'TASK-1', checkpoints: [] } as TaskMeta);
 
     const result = parseCheckpointsWithIds('TASK-1');
     expect(result).toHaveLength(3);
@@ -396,11 +420,11 @@ describe('parseCheckpointsWithIds', () => {
   });
 
   it('generates IDs when no existing metadata', () => {
-    existsSyncSpy = jest.spyOn(fs, 'existsSync').mockReturnValue(true);
-    readFileSyncSpy = jest.spyOn(fs, 'readFileSync').mockReturnValue(
+    mockExistsSync.mockReturnValue(true);
+    mockReadFileSync.mockReturnValue(
       '- [ ] 验证功能\n'
     );
-    readTaskMetaSpy.mockReturnValue(null);
+    mockReadTaskMeta.mockReturnValue(null);
 
     const result = parseCheckpointsWithIds('TASK-1');
     expect(result).toHaveLength(1);
@@ -408,11 +432,11 @@ describe('parseCheckpointsWithIds', () => {
   });
 
   it('matches existing checkpoint IDs by description', () => {
-    existsSyncSpy = jest.spyOn(fs, 'existsSync').mockReturnValue(true);
-    readFileSyncSpy = jest.spyOn(fs, 'readFileSync').mockReturnValue(
+    mockExistsSync.mockReturnValue(true);
+    mockReadFileSync.mockReturnValue(
       '- [ ] 验证登录功能\n'
     );
-    readTaskMetaSpy.mockReturnValue({
+    mockReadTaskMeta.mockReturnValue({
       id: 'TASK-1',
       checkpoints: [{ id: 'CP-existing-id', description: '验证登录功能' }],
     } as TaskMeta);
@@ -422,11 +446,11 @@ describe('parseCheckpointsWithIds', () => {
   });
 
   it('records correct line indices', () => {
-    existsSyncSpy = jest.spyOn(fs, 'existsSync').mockReturnValue(true);
-    readFileSyncSpy = jest.spyOn(fs, 'readFileSync').mockReturnValue(
+    mockExistsSync.mockReturnValue(true);
+    mockReadFileSync.mockReturnValue(
       '# Header\n\n- [ ] First\n- [ ] Second\n'
     );
-    readTaskMetaSpy.mockReturnValue(null);
+    mockReadTaskMeta.mockReturnValue(null);
 
     const result = parseCheckpointsWithIds('TASK-1');
     expect(result[0].lineIndex).toBe(2);
@@ -434,11 +458,11 @@ describe('parseCheckpointsWithIds', () => {
   });
 
   it('skips non-checkpoint lines', () => {
-    existsSyncSpy = jest.spyOn(fs, 'existsSync').mockReturnValue(true);
-    readFileSyncSpy = jest.spyOn(fs, 'readFileSync').mockReturnValue(
+    mockExistsSync.mockReturnValue(true);
+    mockReadFileSync.mockReturnValue(
       '# Header\nSome text\n- [ ] Real checkpoint\nMore text\n'
     );
-    readTaskMetaSpy.mockReturnValue(null);
+    mockReadTaskMeta.mockReturnValue(null);
 
     const result = parseCheckpointsWithIds('TASK-1');
     expect(result).toHaveLength(1);
@@ -450,38 +474,29 @@ describe('parseCheckpointsWithIds', () => {
 
 describe('syncCheckpointsToMeta', () => {
   let env: IsolatedTestEnv;
-  let readTaskMetaSpy: jest.SpyInstance;
-  let writeTaskMetaSpy: jest.SpyInstance;
-  let existsSyncSpy: jest.SpyInstance;
-  let readFileSyncSpy: jest.SpyInstance;
-  let writeFileSyncSpy: jest.SpyInstance;
 
   beforeEach(async () => {
     env = await createIsolatedTestEnv();
-    readTaskMetaSpy = jest.spyOn(taskModule, 'readTaskMeta');
-    writeTaskMetaSpy = jest.spyOn(taskModule, 'writeTaskMeta').mockImplementation(() => {});
-    existsSyncSpy = jest.spyOn(fs, 'existsSync').mockReturnValue(false);
-    readFileSyncSpy = jest.spyOn(fs, 'readFileSync');
-    writeFileSyncSpy = jest.spyOn(fs, 'writeFileSync').mockImplementation(() => {});
+    mockReadTaskMeta.mockReturnValue(null);
+    mockWriteTaskMeta.mockImplementation(() => {});
+    mockExistsSync.mockReturnValue(false);
+    mockReadFileSync.mockReturnValue('');
+    mockWriteFileSync.mockImplementation(() => {});
   });
 
   afterEach(() => {
-    readTaskMetaSpy.mockRestore();
-    writeTaskMetaSpy.mockRestore();
-    existsSyncSpy.mockRestore();
-    readFileSyncSpy.mockRestore();
-    writeFileSyncSpy.mockRestore();
+    jest.clearAllMocks();
     env.cleanup();
   });
 
   it('throws if task does not exist', () => {
-    readTaskMetaSpy.mockReturnValue(null);
+    mockReadTaskMeta.mockReturnValue(null);
     expect(() => syncCheckpointsToMeta('TASK-NONEXIST', [])).toThrow('不存在');
   });
 
   it('syncs checkpoint array directly to meta', () => {
     const task = { id: 'TASK-1', checkpoints: [] } as TaskMeta;
-    readTaskMetaSpy.mockReturnValue(task);
+    mockReadTaskMeta.mockReturnValue(task);
 
     const newCheckpoints: CheckpointMetadata[] = [
       {
@@ -495,9 +510,9 @@ describe('syncCheckpointsToMeta', () => {
 
     syncCheckpointsToMeta('TASK-1', newCheckpoints);
 
-    expect(writeTaskMetaSpy).toHaveBeenCalled();
+    expect(mockWriteTaskMeta).toHaveBeenCalled();
     // Also writes checkpoint.md
-    expect(writeFileSyncSpy).toHaveBeenCalled();
+    expect(mockWriteFileSync).toHaveBeenCalled();
   });
 
   it('clears checkpoints when checkpoint.md has no entries', () => {
@@ -510,13 +525,13 @@ describe('syncCheckpointsToMeta', () => {
     };
     const task = { id: 'TASK-1', checkpoints: [cp] } as TaskMeta;
 
-    existsSyncSpy.mockReturnValue(true);
-    readFileSyncSpy.mockReturnValue('# No checkpoints here\n');
-    readTaskMetaSpy.mockReturnValue(task);
+    mockExistsSync.mockReturnValue(true);
+    mockReadFileSync.mockReturnValue('# No checkpoints here\n');
+    mockReadTaskMeta.mockReturnValue(task);
 
     syncCheckpointsToMeta('TASK-1');
 
-    const writtenTask = writeTaskMetaSpy.mock.calls[0]?.[0] as TaskMeta;
+    const writtenTask = mockWriteTaskMeta.mock.calls[0]?.[0] as TaskMeta;
     if (writtenTask) {
       expect(writtenTask.checkpoints).toHaveLength(0);
     }
@@ -524,14 +539,14 @@ describe('syncCheckpointsToMeta', () => {
 
   it('filters low quality checkpoints during sync from file', () => {
     const task = { id: 'TASK-1', checkpoints: [] } as TaskMeta;
-    existsSyncSpy.mockReturnValue(true);
-    readFileSyncSpy.mockReturnValue('- [ ] 验证功能\n- [ ] O 类复杂度\n');
-    readTaskMetaSpy.mockReturnValue(task);
+    mockExistsSync.mockReturnValue(true);
+    mockReadFileSync.mockReturnValue('- [ ] 验证功能\n- [ ] O 类复杂度\n');
+    mockReadTaskMeta.mockReturnValue(task);
 
     syncCheckpointsToMeta('TASK-1');
 
     // Should have been called with filtered checkpoints (only 1, not the O类)
-    const writtenTask = writeTaskMetaSpy.mock.calls[0]?.[0] as TaskMeta;
+    const writtenTask = mockWriteTaskMeta.mock.calls[0]?.[0] as TaskMeta;
     if (writtenTask) {
       expect(writtenTask.checkpoints).toHaveLength(1);
       expect(writtenTask.checkpoints[0].description).toBe('验证功能');
@@ -543,32 +558,23 @@ describe('syncCheckpointsToMeta', () => {
 
 describe('updateCheckpointStatus', () => {
   let env: IsolatedTestEnv;
-  let readTaskMetaSpy: jest.SpyInstance;
-  let writeTaskMetaSpy: jest.SpyInstance;
-  let existsSyncSpy: jest.SpyInstance;
-  let readFileSyncSpy: jest.SpyInstance;
-  let writeFileSyncSpy: jest.SpyInstance;
 
   beforeEach(async () => {
     env = await createIsolatedTestEnv();
-    readTaskMetaSpy = jest.spyOn(taskModule, 'readTaskMeta');
-    writeTaskMetaSpy = jest.spyOn(taskModule, 'writeTaskMeta').mockImplementation(() => {});
-    existsSyncSpy = jest.spyOn(fs, 'existsSync').mockReturnValue(false);
-    readFileSyncSpy = jest.spyOn(fs, 'readFileSync');
-    writeFileSyncSpy = jest.spyOn(fs, 'writeFileSync').mockImplementation(() => {});
+    mockReadTaskMeta.mockReturnValue(null);
+    mockWriteTaskMeta.mockImplementation(() => {});
+    mockExistsSync.mockReturnValue(false);
+    mockReadFileSync.mockReturnValue('');
+    mockWriteFileSync.mockImplementation(() => {});
   });
 
   afterEach(() => {
-    readTaskMetaSpy.mockRestore();
-    writeTaskMetaSpy.mockRestore();
-    existsSyncSpy.mockRestore();
-    readFileSyncSpy.mockRestore();
-    writeFileSyncSpy.mockRestore();
+    jest.clearAllMocks();
     env.cleanup();
   });
 
   it('throws if task does not exist', () => {
-    readTaskMetaSpy.mockReturnValue(null);
+    mockReadTaskMeta.mockReturnValue(null);
     expect(() =>
       updateCheckpointStatus('TASK-NONEXIST', 'CP-001', 'completed')
     ).toThrow('不存在');
@@ -583,9 +589,9 @@ describe('updateCheckpointStatus', () => {
       checkpoints: [{ id: 'CP-001', description: '验证功能', status: 'pending' as const, createdAt: '2026-01-01T00:00:00.000Z', updatedAt: '2026-01-01T00:00:00.000Z' }],
     } as TaskMeta;
     // Provide checkpoint.md so syncCheckpointsToMeta preserves the checkpoint
-    existsSyncSpy.mockReturnValue(true);
-    readFileSyncSpy.mockReturnValue('- [ ] 验证功能\n');
-    readTaskMetaSpy.mockReturnValue(task);
+    mockExistsSync.mockReturnValue(true);
+    mockReadFileSync.mockReturnValue('- [ ] 验证功能\n');
+    mockReadTaskMeta.mockReturnValue(task);
 
     expect(() =>
       updateCheckpointStatus('TASK-1', 'CP-NONEXIST', 'completed')
@@ -609,10 +615,10 @@ describe('updateCheckpointStatus', () => {
     };
 
     // Provide checkpoint.md so syncCheckpointsToMeta preserves the checkpoint
-    existsSyncSpy.mockReturnValue(true);
-    readFileSyncSpy.mockReturnValue('- [ ] 验证功能\n');
+    mockExistsSync.mockReturnValue(true);
+    mockReadFileSync.mockReturnValue('- [ ] 验证功能\n');
     // Return a fresh copy each time to avoid mutation issues across calls
-    readTaskMetaSpy.mockImplementation(() => ({
+    mockReadTaskMeta.mockImplementation(() => ({
       ...task,
       checkpoints: task.checkpoints?.map(c => ({ ...c })),
     }));
@@ -620,7 +626,7 @@ describe('updateCheckpointStatus', () => {
     updateCheckpointStatus('TASK-1', 'CP-001', 'completed');
 
     // Find the final writeTaskMeta call
-    const calls = writeTaskMetaSpy.mock.calls;
+    const calls = mockWriteTaskMeta.mock.calls;
     const lastCall = calls[calls.length - 1]?.[0] as TaskMeta;
     expect(lastCall.checkpoints[0].status).toBe('completed');
   });
@@ -641,9 +647,9 @@ describe('updateCheckpointStatus', () => {
       checkpoints: [cp],
     };
 
-    existsSyncSpy.mockReturnValue(true);
-    readFileSyncSpy.mockReturnValue('- [ ] 验证功能\n');
-    readTaskMetaSpy.mockImplementation(() => ({
+    mockExistsSync.mockReturnValue(true);
+    mockReadFileSync.mockReturnValue('- [ ] 验证功能\n');
+    mockReadTaskMeta.mockImplementation(() => ({
       ...task,
       checkpoints: task.checkpoints?.map(c => ({ ...c })),
     }));
@@ -654,7 +660,7 @@ describe('updateCheckpointStatus', () => {
       verifiedBy: 'tester',
     });
 
-    const calls = writeTaskMetaSpy.mock.calls;
+    const calls = mockWriteTaskMeta.mock.calls;
     const lastCall = calls[calls.length - 1]?.[0] as TaskMeta;
     expect(lastCall.checkpoints[0].status).toBe('failed');
     expect(lastCall.checkpoints[0].note).toBe('测试失败');
@@ -667,29 +673,22 @@ describe('updateCheckpointStatus', () => {
 
 describe('getCheckpointDetail', () => {
   let env: IsolatedTestEnv;
-  let readTaskMetaSpy: jest.SpyInstance;
-  let writeTaskMetaSpy: jest.SpyInstance;
-  let existsSyncSpy: jest.SpyInstance;
-  let writeFileSyncSpy: jest.SpyInstance;
 
   beforeEach(async () => {
     env = await createIsolatedTestEnv();
-    readTaskMetaSpy = jest.spyOn(taskModule, 'readTaskMeta');
-    writeTaskMetaSpy = jest.spyOn(taskModule, 'writeTaskMeta').mockImplementation(() => {});
-    existsSyncSpy = jest.spyOn(fs, 'existsSync').mockReturnValue(false);
-    writeFileSyncSpy = jest.spyOn(fs, 'writeFileSync').mockImplementation(() => {});
+    mockReadTaskMeta.mockReturnValue(null);
+    mockWriteTaskMeta.mockImplementation(() => {});
+    mockExistsSync.mockReturnValue(false);
+    mockWriteFileSync.mockImplementation(() => {});
   });
 
   afterEach(() => {
-    readTaskMetaSpy.mockRestore();
-    writeTaskMetaSpy.mockRestore();
-    existsSyncSpy.mockRestore();
-    writeFileSyncSpy.mockRestore();
+    jest.clearAllMocks();
     env.cleanup();
   });
 
   it('throws if task does not exist (syncCheckpointsToMeta throws)', () => {
-    readTaskMetaSpy.mockReturnValue(null);
+    mockReadTaskMeta.mockReturnValue(null);
     expect(() => getCheckpointDetail('TASK-NONEXIST', 'CP-001')).toThrow('不存在');
   });
 
@@ -700,68 +699,58 @@ describe('getCheckpointDetail', () => {
       status: 'pending',
     };
     // Provide checkpoint.md so syncCheckpointsToMeta preserves checkpoints
-    const readFileSyncSpy = jest.spyOn(fs, 'readFileSync').mockReturnValue('- [ ] 验证功能\n');
-    existsSyncSpy.mockReturnValue(true);
-    readTaskMetaSpy.mockReturnValue({ id: 'TASK-1', title: 'Test', type: 'feature', priority: 'P2', checkpoints: [cp] } as TaskMeta);
+    mockReadFileSync.mockReturnValue('- [ ] 验证功能\n');
+    mockExistsSync.mockReturnValue(true);
+    mockReadTaskMeta.mockReturnValue({ id: 'TASK-1', title: 'Test', type: 'feature', priority: 'P2', checkpoints: [cp] } as TaskMeta);
 
     const result = getCheckpointDetail('TASK-1', 'CP-001');
-    readFileSyncSpy.mockRestore();
     expect(result).not.toBeNull();
     expect(result!.id).toBe('CP-001');
     expect(result!.description).toBe('验证功能');
   });
 
   it('returns null if checkpoint id not found', () => {
-    const readFileSyncSpy = jest.spyOn(fs, 'readFileSync').mockReturnValue('- [ ] 验证功能\n');
-    existsSyncSpy.mockReturnValue(true);
-    readTaskMetaSpy.mockReturnValue({
+    mockReadFileSync.mockReturnValue('- [ ] 验证功能\n');
+    mockExistsSync.mockReturnValue(true);
+    mockReadTaskMeta.mockReturnValue({
       id: 'TASK-1', title: 'Test', type: 'feature', priority: 'P2',
       checkpoints: [{ id: 'CP-001', description: '验证功能', status: 'pending' }],
     } as TaskMeta);
 
     expect(getCheckpointDetail('TASK-1', 'CP-NONEXIST')).toBeNull();
-    readFileSyncSpy.mockRestore();
   });
 });
 
 describe('listCheckpoints', () => {
   let env: IsolatedTestEnv;
-  let readTaskMetaSpy: jest.SpyInstance;
-  let writeTaskMetaSpy: jest.SpyInstance;
-  let existsSyncSpy: jest.SpyInstance;
-  let writeFileSyncSpy: jest.SpyInstance;
 
   beforeEach(async () => {
     env = await createIsolatedTestEnv();
-    readTaskMetaSpy = jest.spyOn(taskModule, 'readTaskMeta');
-    writeTaskMetaSpy = jest.spyOn(taskModule, 'writeTaskMeta').mockImplementation(() => {});
-    existsSyncSpy = jest.spyOn(fs, 'existsSync').mockReturnValue(false);
-    writeFileSyncSpy = jest.spyOn(fs, 'writeFileSync').mockImplementation(() => {});
+    mockReadTaskMeta.mockReturnValue(null);
+    mockWriteTaskMeta.mockImplementation(() => {});
+    mockExistsSync.mockReturnValue(false);
+    mockWriteFileSync.mockImplementation(() => {});
   });
 
   afterEach(() => {
-    readTaskMetaSpy.mockRestore();
-    writeTaskMetaSpy.mockRestore();
-    existsSyncSpy.mockRestore();
-    writeFileSyncSpy.mockRestore();
+    jest.clearAllMocks();
     env.cleanup();
   });
 
   it('returns empty array if task has no checkpoints', () => {
-    readTaskMetaSpy.mockReturnValue({ id: 'TASK-1', title: 'Test', type: 'feature', priority: 'P2', checkpoints: [] } as TaskMeta);
+    mockReadTaskMeta.mockReturnValue({ id: 'TASK-1', title: 'Test', type: 'feature', priority: 'P2', checkpoints: [] } as TaskMeta);
     expect(listCheckpoints('TASK-1')).toEqual([]);
   });
 
   it('returns all checkpoints for a task', () => {
-    const readFileSyncSpy = jest.spyOn(fs, 'readFileSync').mockReturnValue('- [ ] 功能A\n- [ ] 功能B\n');
-    existsSyncSpy.mockReturnValue(true);
+    mockReadFileSync.mockReturnValue('- [ ] 功能A\n- [ ] 功能B\n');
+    mockExistsSync.mockReturnValue(true);
     const cps: CheckpointMetadata[] = [
       { id: 'CP-001', description: '功能A', status: 'completed' },
       { id: 'CP-002', description: '功能B', status: 'pending' },
     ];
-    readTaskMetaSpy.mockReturnValue({ id: 'TASK-1', title: 'Test', type: 'feature', priority: 'P2', checkpoints: cps } as TaskMeta);
+    mockReadTaskMeta.mockReturnValue({ id: 'TASK-1', title: 'Test', type: 'feature', priority: 'P2', checkpoints: cps } as TaskMeta);
     const result = listCheckpoints('TASK-1');
-    readFileSyncSpy.mockRestore();
     expect(result.length).toBe(2);
     expect(result[0].id).toBe('CP-001');
     expect(result[1].id).toBe('CP-002');
@@ -770,31 +759,24 @@ describe('listCheckpoints', () => {
 
 describe('findCheckpointIdByDescription', () => {
   let env: IsolatedTestEnv;
-  let readTaskMetaSpy: jest.SpyInstance;
-  let writeTaskMetaSpy: jest.SpyInstance;
-  let existsSyncSpy: jest.SpyInstance;
-  let writeFileSyncSpy: jest.SpyInstance;
 
   beforeEach(async () => {
     env = await createIsolatedTestEnv();
-    readTaskMetaSpy = jest.spyOn(taskModule, 'readTaskMeta');
-    writeTaskMetaSpy = jest.spyOn(taskModule, 'writeTaskMeta').mockImplementation(() => {});
-    existsSyncSpy = jest.spyOn(fs, 'existsSync').mockReturnValue(false);
-    writeFileSyncSpy = jest.spyOn(fs, 'writeFileSync').mockImplementation(() => {});
+    mockReadTaskMeta.mockReturnValue(null);
+    mockWriteTaskMeta.mockImplementation(() => {});
+    mockExistsSync.mockReturnValue(false);
+    mockWriteFileSync.mockImplementation(() => {});
   });
 
   afterEach(() => {
-    readTaskMetaSpy.mockRestore();
-    writeTaskMetaSpy.mockRestore();
-    existsSyncSpy.mockRestore();
-    writeFileSyncSpy.mockRestore();
+    jest.clearAllMocks();
     env.cleanup();
   });
 
   it('finds checkpoint by exact description match', () => {
-    const readFileSyncSpy = jest.spyOn(fs, 'readFileSync').mockReturnValue('- [ ] 验证用户登录\n');
-    existsSyncSpy.mockReturnValue(true);
-    readTaskMetaSpy.mockReturnValue({
+    mockReadFileSync.mockReturnValue('- [ ] 验证用户登录\n');
+    mockExistsSync.mockReturnValue(true);
+    mockReadTaskMeta.mockReturnValue({
       id: 'TASK-1', title: 'Test', type: 'feature', priority: 'P2',
       checkpoints: [
         { id: 'CP-001', description: '验证用户登录', status: 'pending' },
@@ -802,13 +784,12 @@ describe('findCheckpointIdByDescription', () => {
     } as TaskMeta);
 
     expect(findCheckpointIdByDescription('TASK-1', '验证用户登录')).toBe('CP-001');
-    readFileSyncSpy.mockRestore();
   });
 
   it('finds checkpoint by partial description match (contains)', () => {
-    const readFileSyncSpy = jest.spyOn(fs, 'readFileSync').mockReturnValue('- [ ] 验证用户登录功能正常\n');
-    existsSyncSpy.mockReturnValue(true);
-    readTaskMetaSpy.mockReturnValue({
+    mockReadFileSync.mockReturnValue('- [ ] 验证用户登录功能正常\n');
+    mockExistsSync.mockReturnValue(true);
+    mockReadTaskMeta.mockReturnValue({
       id: 'TASK-1', title: 'Test', type: 'feature', priority: 'P2',
       checkpoints: [
         { id: 'CP-001', description: '验证用户登录功能正常', status: 'pending' },
@@ -816,13 +797,12 @@ describe('findCheckpointIdByDescription', () => {
     } as TaskMeta);
 
     expect(findCheckpointIdByDescription('TASK-1', '用户登录')).toBe('CP-001');
-    readFileSyncSpy.mockRestore();
   });
 
   it('finds checkpoint when description is contained in search', () => {
-    const readFileSyncSpy = jest.spyOn(fs, 'readFileSync').mockReturnValue('- [ ] 登录\n');
-    existsSyncSpy.mockReturnValue(true);
-    readTaskMetaSpy.mockReturnValue({
+    mockReadFileSync.mockReturnValue('- [ ] 登录\n');
+    mockExistsSync.mockReturnValue(true);
+    mockReadTaskMeta.mockReturnValue({
       id: 'TASK-1', title: 'Test', type: 'feature', priority: 'P2',
       checkpoints: [
         { id: 'CP-001', description: '登录', status: 'pending' },
@@ -830,13 +810,12 @@ describe('findCheckpointIdByDescription', () => {
     } as TaskMeta);
 
     expect(findCheckpointIdByDescription('TASK-1', '验证登录功能')).toBe('CP-001');
-    readFileSyncSpy.mockRestore();
   });
 
   it('returns null if no match found', () => {
-    const readFileSyncSpy = jest.spyOn(fs, 'readFileSync').mockReturnValue('- [ ] 验证用户登录\n');
-    existsSyncSpy.mockReturnValue(true);
-    readTaskMetaSpy.mockReturnValue({
+    mockReadFileSync.mockReturnValue('- [ ] 验证用户登录\n');
+    mockExistsSync.mockReturnValue(true);
+    mockReadTaskMeta.mockReturnValue({
       id: 'TASK-1', title: 'Test', type: 'feature', priority: 'P2',
       checkpoints: [
         { id: 'CP-001', description: '验证用户登录', status: 'pending' },
@@ -844,7 +823,6 @@ describe('findCheckpointIdByDescription', () => {
     } as TaskMeta);
 
     expect(findCheckpointIdByDescription('TASK-1', '完全无关的描述')).toBeNull();
-    readFileSyncSpy.mockRestore();
   });
 });
 
