@@ -171,7 +171,19 @@ export class CheckpointOutputVerifier {
       verifiedAt: now,
     };
 
-    // 如果需要人工确认，标记为 skipped
+    // 如果 strategy 未定义或需要人工确认，标记为 skipped
+    if (!strategy) {
+      return {
+        result: 'unverified',
+        record: {
+          ...baseRecord,
+          result: 'unverified',
+          failureReason: `未知的检查点类别: ${context.category}`,
+        },
+        warnings: [`检查点 ${context.checkpointId} 类别 ${context.category} 没有对应的验证策略`],
+      };
+    }
+
     if (strategy.requiresHumanConfirmation && context.source !== 'cli_manual') {
       return {
         result: 'skipped',

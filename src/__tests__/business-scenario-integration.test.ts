@@ -1037,12 +1037,13 @@ describe('Complexity Assessment Integration', () => {
     };
     const result = assessComplexity('A test task description', analysis);
     const signalTypes = result.signals.map(s => s.type);
-    expect(signalTypes).toContain('file_count');
-    expect(signalTypes).toContain('work_items');
-    expect(signalTypes).toContain('cross_module');
+    // 信号类型与 assessComplexity 实现一致：file_count, work_items, cross_module, checkpoint_count, ai_estimate
     expect(signalTypes).toContain('checkpoint_count');
-    expect(signalTypes).toContain('description_length');
-    expect(signalTypes).toContain('action_verb_density');
+    expect(signalTypes).toContain('ai_estimate');
+    // 无文件路径/跨模块/工作项关键词，不应包含这些信号
+    expect(signalTypes).not.toContain('file_count');
+    expect(signalTypes).not.toContain('cross_module');
+    expect(signalTypes).not.toContain('work_items');
   });
 
 });

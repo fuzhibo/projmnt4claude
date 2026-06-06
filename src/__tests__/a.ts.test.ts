@@ -45,9 +45,10 @@ import {
 
 /**
  * 创建测试配置文件
+ * 在项目根目录下的 .projmnt4claude 目录中创建 config.json
  */
 function createTestConfig(projectDir: string, config: Record<string, unknown>): void {
-  const configPath = path.join(projectDir, 'config.json');
+  const configPath = path.join(projectDir, '.projmnt4claude', 'config.json');
   fs.writeFileSync(configPath, JSON.stringify(config, null, 2), 'utf-8');
 }
 
@@ -166,88 +167,88 @@ describe('loadPromptTemplate', () => {
   describe('正常输入处理', () => {
     it('应该返回默认开发模板的英文版本', () => {
       // 无配置文件时返回默认模板
-      const result = loadPromptTemplate('dev', env.projectDir);
-      expect(result).toBe(DEFAULT_DEV_TEMPLATE.en);
+      const result = loadPromptTemplate('dev', env.tempDir);
+      expect(result).toEqual(DEFAULT_DEV_TEMPLATE.en);
     });
 
     it('应该返回默认 QA 模板的英文版本', () => {
-      const result = loadPromptTemplate('qa', env.projectDir);
-      expect(result).toBe(DEFAULT_QA_TEMPLATE.en);
+      const result = loadPromptTemplate('qa', env.tempDir);
+      expect(result).toEqual(DEFAULT_QA_TEMPLATE.en);
     });
 
     it('应该返回默认代码审核模板的英文版本', () => {
-      const result = loadPromptTemplate('codeReview', env.projectDir);
-      expect(result).toBe(DEFAULT_CODE_REVIEW_TEMPLATE.en);
+      const result = loadPromptTemplate('codeReview', env.tempDir);
+      expect(result).toEqual(DEFAULT_CODE_REVIEW_TEMPLATE.en);
     });
 
     it('应该返回默认评估模板的英文版本', () => {
-      const result = loadPromptTemplate('evaluation', env.projectDir);
-      expect(result).toBe(DEFAULT_EVALUATION_TEMPLATE.en);
+      const result = loadPromptTemplate('evaluation', env.tempDir);
+      expect(result).toEqual(DEFAULT_EVALUATION_TEMPLATE.en);
     });
 
     it('应该返回默认需求模板的英文版本', () => {
-      const result = loadPromptTemplate('requirement', env.projectDir);
-      expect(result).toBe(DEFAULT_REQUIREMENT_TEMPLATE.en);
+      const result = loadPromptTemplate('requirement', env.tempDir);
+      expect(result).toEqual(DEFAULT_REQUIREMENT_TEMPLATE.en);
     });
 
     it('应该返回默认检查点模板的英文版本', () => {
-      const result = loadPromptTemplate('checkpoints', env.projectDir);
-      expect(result).toBe(DEFAULT_CHECKPOINTS_TEMPLATE.en);
+      const result = loadPromptTemplate('checkpoints', env.tempDir);
+      expect(result).toEqual(DEFAULT_CHECKPOINTS_TEMPLATE.en);
     });
 
     it('应该返回默认质量模板的英文版本', () => {
-      const result = loadPromptTemplate('quality', env.projectDir);
-      expect(result).toBe(DEFAULT_QUALITY_TEMPLATE.en);
+      const result = loadPromptTemplate('quality', env.tempDir);
+      expect(result).toEqual(DEFAULT_QUALITY_TEMPLATE.en);
     });
 
     it('应该返回默认重复检测模板的英文版本', () => {
-      const result = loadPromptTemplate('duplicates', env.projectDir);
-      expect(result).toBe(DEFAULT_DUPLICATES_TEMPLATE.en);
+      const result = loadPromptTemplate('duplicates', env.tempDir);
+      expect(result).toEqual(DEFAULT_DUPLICATES_TEMPLATE.en);
     });
 
     it('应该返回默认过期评估模板的英文版本', () => {
-      const result = loadPromptTemplate('staleness', env.projectDir);
-      expect(result).toBe(DEFAULT_STALENESS_TEMPLATE.en);
+      const result = loadPromptTemplate('staleness', env.tempDir);
+      expect(result).toEqual(DEFAULT_STALENESS_TEMPLATE.en);
     });
 
     it('应该返回默认 Bug 报告模板的英文版本', () => {
-      const result = loadPromptTemplate('bugReport', env.projectDir);
-      expect(result).toBe(DEFAULT_BUG_REPORT_TEMPLATE.en);
+      const result = loadPromptTemplate('bugReport', env.tempDir);
+      expect(result).toEqual(DEFAULT_BUG_REPORT_TEMPLATE.en);
     });
 
     it('应该返回默认语义依赖模板的英文版本', () => {
-      const result = loadPromptTemplate('semanticDependency', env.projectDir);
-      expect(result).toBe(DEFAULT_SEMANTIC_DEPENDENCY_TEMPLATE.en);
+      const result = loadPromptTemplate('semanticDependency', env.tempDir);
+      expect(result).toEqual(DEFAULT_SEMANTIC_DEPENDENCY_TEMPLATE.en);
     });
 
     it('当配置指定中文语言时应该返回中文模板', () => {
-      createTestConfig(env.projectDir, {
+      createTestConfig(env.tempDir, {
         projectName: 'test',
         language: 'zh',
       });
-      const result = loadPromptTemplate('dev', env.projectDir);
-      expect(result).toBe(DEFAULT_DEV_TEMPLATE.zh);
+      const result = loadPromptTemplate('dev', env.tempDir);
+      expect(result).toEqual(DEFAULT_DEV_TEMPLATE.zh);
     });
 
     it('当配置指定英文语言时应该返回英文模板', () => {
-      createTestConfig(env.projectDir, {
+      createTestConfig(env.tempDir, {
         projectName: 'test',
         language: 'en',
       });
-      const result = loadPromptTemplate('dev', env.projectDir);
-      expect(result).toBe(DEFAULT_DEV_TEMPLATE.en);
+      const result = loadPromptTemplate('dev', env.tempDir);
+      expect(result).toEqual(DEFAULT_DEV_TEMPLATE.en);
     });
 
     it('当配置存在自定义模板时应该返回自定义模板', () => {
       const customTemplate = 'Custom template for {taskId}';
-      createTestConfig(env.projectDir, {
+      createTestConfig(env.tempDir, {
         projectName: 'test',
         prompts: {
           dev: customTemplate,
         },
       });
-      const result = loadPromptTemplate('dev', env.projectDir);
-      expect(result).toBe(customTemplate);
+      const result = loadPromptTemplate('dev', env.tempDir);
+      expect(result).toEqual(customTemplate);
     });
   });
 
@@ -256,46 +257,46 @@ describe('loadPromptTemplate', () => {
       // 无 cwd 时使用 process.cwd()，但由于 mock 了 isInitialized 返回 true
       // 这里测试的是函数的默认行为
       const result = loadPromptTemplate('dev');
-      expect(result).toBe(DEFAULT_DEV_TEMPLATE.en);
+      expect(result).toEqual(DEFAULT_DEV_TEMPLATE.en);
     });
 
     it('当配置存在但没有 prompts 节时应该返回默认模板', () => {
-      createTestConfig(env.projectDir, {
+      createTestConfig(env.tempDir, {
         projectName: 'test',
       });
-      const result = loadPromptTemplate('dev', env.projectDir);
-      expect(result).toBe(DEFAULT_DEV_TEMPLATE.en);
+      const result = loadPromptTemplate('dev', env.tempDir);
+      expect(result).toEqual(DEFAULT_DEV_TEMPLATE.en);
     });
 
     it('当 prompts 节存在但请求模板不存在时应该返回默认模板', () => {
-      createTestConfig(env.projectDir, {
+      createTestConfig(env.tempDir, {
         projectName: 'test',
         prompts: {
           qa: 'Custom QA template',
         },
       });
-      const result = loadPromptTemplate('dev', env.projectDir);
-      expect(result).toBe(DEFAULT_DEV_TEMPLATE.en);
+      const result = loadPromptTemplate('dev', env.tempDir);
+      expect(result).toEqual(DEFAULT_DEV_TEMPLATE.en);
     });
 
     it('当自定义模板为空字符串时应该返回空字符串', () => {
-      createTestConfig(env.projectDir, {
+      createTestConfig(env.tempDir, {
         projectName: 'test',
         prompts: {
           dev: '',
         },
       });
-      const result = loadPromptTemplate('dev', env.projectDir);
+      const result = loadPromptTemplate('dev', env.tempDir);
       expect(result).toBe('');
     });
 
     it('应该支持通过参数指定语言', () => {
       // 无配置文件
-      const resultZh = loadPromptTemplate('dev', env.projectDir, 'zh');
-      expect(resultZh).toBe(DEFAULT_DEV_TEMPLATE.zh);
+      const resultZh = loadPromptTemplate('dev', env.tempDir, 'zh');
+      expect(resultZh).toEqual(DEFAULT_DEV_TEMPLATE.zh);
 
-      const resultEn = loadPromptTemplate('dev', env.projectDir, 'en');
-      expect(resultEn).toBe(DEFAULT_DEV_TEMPLATE.en);
+      const resultEn = loadPromptTemplate('dev', env.tempDir, 'en');
+      expect(resultEn).toEqual(DEFAULT_DEV_TEMPLATE.en);
     });
   });
 });
