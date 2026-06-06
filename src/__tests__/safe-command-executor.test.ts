@@ -5,6 +5,7 @@
  */
 
 import { describe, it, expect, beforeEach } from '@jest/globals';
+import { writeFileSync } from 'node:fs';
 import {
   validateCommand,
   SafeCommandExecutor,
@@ -14,12 +15,12 @@ import { createIsolatedTestEnv } from '../utils/test-env.js';
 
 describe('validateCommand', () => {
   it('should allow safe commands', () => {
-    const result = validateCommand('bun test');
+    const result = validateCommand('npm test');
     expect(result.valid).toBe(true);
   });
 
   it('should allow commands with arguments', () => {
-    const result = validateCommand('bun test src/file.test.ts --timeout 1000');
+    const result = validateCommand('npm test src/file.test.ts --timeout 1000');
     expect(result.valid).toBe(true);
   });
 
@@ -197,7 +198,7 @@ describe('SafeCommandExecutor', () => {
   it('should execute commands with escaped spaces', async () => {
     // Create a file with space in name
     const testFile = `${env.tempDir}/test file.txt`;
-    await Bun.write(testFile, 'content');
+    writeFileSync(testFile, 'content');
 
     const result = await executor.execute(`cat "${testFile}"`, {
       cwd: env.tempDir,

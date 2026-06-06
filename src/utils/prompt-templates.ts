@@ -134,9 +134,9 @@ export const DEFAULT_DEV_TEMPLATE: PromptTemplate = {
 
 1. **理解检查点要求** — 仔细阅读每个检查点，理解需要实现什么代码或功能
 2. **实现检查点要求的代码** — 这是主要工作，占开发时间 80% 以上
-3. **验证实现** — 运行 \`bun run build\` 确保编译通过
+3. **验证实现** — 运行 \`npm run build\` 确保编译通过
 4. **编写自测** — 为实现的功能编写基本测试（Happy Path + 关键边界），验证实现正确性
-5. **运行测试** — \`bun test\` 确保自测通过
+5. **运行测试** — \`npm test\` 确保自测通过
 6. **总结实现** — 在开发报告中说明实现了哪些检查点
 
 ### 自测说明
@@ -188,9 +188,9 @@ export const DEFAULT_DEV_TEMPLATE: PromptTemplate = {
 
 1. **Understand checkpoint requirements** — Carefully read each checkpoint to understand what code or functionality to implement
 2. **Implement checkpoint-required code** — This is the main work, taking 80%+ of development time
-3. **Verify implementation** — Run \`bun run build\` to ensure compilation passes
+3. **Verify implementation** — Run \`npm run build\` to ensure compilation passes
 4. **Write self-tests** — Write basic tests for your implementation (Happy Path + key boundaries) to verify correctness
-5. **Run tests** — \`bun test\` to ensure self-tests pass
+5. **Run tests** — \`npm test\` to ensure self-tests pass
 6. **Summarize implementation** — In dev report, explain which checkpoints you implemented
 
 ### Self-Test Note
@@ -773,7 +773,7 @@ export const DEFAULT_REQUIREMENT_TEMPLATE: PromptTemplate = {
 - "[ai review] 重构 userService.ts 中的重复代码"
 - "[ai qa] 登录模块单元测试覆盖率 >= 80%"
 - "[ai qa] 运行 tsc --noEmit 确认类型检查通过"
-- "[script] bun run build 构建成功"
+- "[script] npm run build 构建成功"
 - "[script] npm run lint 代码检查通过"
 
 ## [script] 前缀使用约束
@@ -849,7 +849,7 @@ Each checkpoint description must start with one of these prefixes to identify th
 - "[ai review] Refactor duplicate code in userService.ts"
 - "[ai qa] Login module unit test coverage >= 80%"
 - "[ai qa] Run tsc --noEmit to confirm type check passes"
-- "[script] bun run build succeeds"
+- "[script] npm run build succeeds"
 - "[script] npm run lint code check passes"
 
 ## [script] Prefix Usage Constraints
@@ -902,7 +902,7 @@ export const DEFAULT_CHECKPOINTS_TEMPLATE: PromptTemplate = {
       "requiresHuman": false
     },
     {
-      "description": "[script] 脚本或命令验证（如：运行 bun run build 构建成功）",
+      "description": "[script] 脚本或命令验证（如：运行 npm run build 构建成功）",
       "requiresHuman": false
     }
   ]
@@ -924,7 +924,7 @@ export const DEFAULT_CHECKPOINTS_TEMPLATE: PromptTemplate = {
 - "[ai review] 重构 userService.ts 中的重复代码，提高可维护性"
 - "[ai qa] 登录模块单元测试覆盖率 >= 80%"
 - "[ai qa] 运行 tsc --noEmit 确认类型检查无错误"
-- "[script] bun run build 构建成功"
+- "[script] npm run build 构建成功"
 - "[script] 运行 npm run lint 代码检查通过"
 
 ## requiresHuman 字段使用说明
@@ -969,7 +969,7 @@ Output pure JSON object, do not wrap in markdown code blocks.
       "requiresHuman": false
     },
     {
-      "description": "[script] Script or command verification (e.g., run bun run build succeeds)",
+      "description": "[script] Script or command verification (e.g., run npm run build succeeds)",
       "requiresHuman": false
     }
   ]
@@ -991,7 +991,7 @@ Each checkpoint description must start with one of these prefixes to identify ve
 - "[ai review] Refactor duplicate code in userService.ts for better maintainability"
 - "[ai qa] Login module unit test coverage >= 80%"
 - "[ai qa] Run tsc --noEmit to confirm type check has no errors"
-- "[script] bun run build succeeds"
+- "[script] npm run build succeeds"
 - "[script] Run npm run lint code check passes"
 
 ## requiresHuman Field Usage

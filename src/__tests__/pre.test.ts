@@ -28,6 +28,10 @@ import {
   type IsolatedTestEnv,
 } from '../utils/test-env.js';
 
+// NOTE: pre.test.ts 超时问题已修复
+// 根因: json('/proc/nonwriteable/file.json') 导致 mkdirSync 在 /proc 下永久挂起
+// 修复: 使用隔离临时路径替代系统目录
+
 // ============== Git 测试环境工具 ==============
 
 /** 在目录中创建 git 仓库结构 */
@@ -42,7 +46,7 @@ function createPackageJson(dir: string, overrides: Record<string, unknown> = {})
   const pkg = {
     name: 'test-project',
     version: '1.0.0',
-    scripts: { test: 'bun test' },
+    scripts: { test: 'npm test' },
     ...overrides,
   };
   fs.writeFileSync(pkgPath, JSON.stringify(pkg, null, 2), 'utf-8');
@@ -133,7 +137,7 @@ describe('json()', () => {
     it('处理复杂嵌套 JSON 结构', () => {
       const ops = json(jsonPath);
       const complex = {
-        scripts: { build: 'bun build', test: 'bun test' },
+        scripts: { build: 'npm run build', test: 'npm test' },
         deps: { lodash: '^4.0.0' },
         nested: { deep: { value: 42 } },
       };
@@ -144,8 +148,12 @@ describe('json()', () => {
 
   describe('错误处理', () => {
     it('写入无效路径时抛出错误', () => {
-      const ops = json('/proc/nonwriteable/file.json');
+      const readonlyDir = path.join(tempDir, 'readonly');
+      fs.mkdirSync(readonlyDir, { recursive: true });
+      fs.chmodSync(readonlyDir, 0o444);
+      const ops = json(path.join(readonlyDir, 'file.json'));
       expect(() => ops.write({ key: 'value' })).toThrow();
+      fs.chmodSync(readonlyDir, 0o755);
     });
 
     it('读取非 JSON 内容时抛出错误', () => {
@@ -392,12 +400,12 @@ describe('Pre', () => {
       }
     });
 
-    it('pre-commit 使用 bun test', () => {
-      expect(DEFAULT_HOOKS['pre-commit'].command).toContain('bun test');
+    it('pre-commit 使用 npm test', () => {
+      expect(DEFAULT_HOOKS['pre-commit'].command).toContain('npm test');
     });
 
-    it('pre-publish 使用 bun test --coverage', () => {
-      expect(DEFAULT_HOOKS['pre-publish'].command).toContain('--coverage');
+    it('pre-publish 使用 npm run test:coverage', () => {
+      expect(DEFAULT_HOOKS['pre-publish'].command).toContain('test:coverage');
     });
   });
 
@@ -407,10 +415,10 @@ describe('Pre', () => {
       expect(fs.existsSync(hookPath)).toBe(true);
     });
 
-    it('hook 文件包含 bun test 命令', () => {
+    it('hook 文件包含 npm test 命令', () => {
       const hookPath = pre.installPreCommit();
       const content = fs.readFileSync(hookPath, 'utf-8');
-      expect(content).toContain('bun test');
+      expect(content).toContain('npm test');
     });
 
     it('hook 文件包含自动生成标记', () => {
@@ -439,7 +447,7 @@ describe('Pre', () => {
       const data = pkg.read();
       const scripts = data.scripts as Record<string, string>;
       expect(scripts.prepublishOnly).toBeDefined();
-      expect(scripts.prepublishOnly).toContain('--coverage');
+      expect(scripts.prepublishOnly).toContain('test:coverage');
     });
 
     it('保留已有的 scripts', () => {
@@ -447,7 +455,7 @@ describe('Pre', () => {
       const pkg = json<Record<string, unknown>>(path.join(tempDir, 'package.json'));
       const data = pkg.read();
       const scripts = data.scripts as Record<string, string>;
-      expect(scripts.test).toBe('bun test'); // 原有 script 保留
+      expect(scripts.test).toBe('npm test'); // 原有 script 保留
     });
   });
 
@@ -640,13 +648,13 @@ describe('集成测试: 完整发布流程', () => {
     // 更新 package.json
     pkgOps.update((data) => ({
       ...data,
-      scripts: { ...(data.scripts as Record<string, string>), build: 'bun build' },
+      scripts: { ...(data.scripts as Record<string, string>), build: 'npm run build' },
     }));
 
     const updated = pkgOps.read();
     const scripts = updated.scripts as Record<string, string>;
-    expect(scripts.build).toBe('bun build');
-    expect(scripts.test).toBe('bun test');
+    expect(scripts.build).toBe('npm run build');
+    expect(scripts.test).toBe('npm test');
   });
 
   it('重复安装幂等性', () => {

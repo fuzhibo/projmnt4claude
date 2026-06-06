@@ -270,10 +270,10 @@ export class HarnessQATester {
 
   /**
    * 执行测试套件两次以检测 flaky test
-   * @param testCommand 测试命令，默认为 'bun test'
+   * @param testCommand 测试命令，默认为 'npm test'
    * @returns 测试结果，包含是否通过、flaky 检测结果、失败信息
    */
-  async runTestSuite(testCommand: string = 'bun test'): Promise<{
+  async runTestSuite(testCommand: string = 'npm test'): Promise<{
     passed: boolean;
     hasFlaky: boolean;
     flakyTests: string[];

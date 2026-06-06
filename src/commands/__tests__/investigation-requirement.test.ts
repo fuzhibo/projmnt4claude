@@ -129,7 +129,7 @@ describe('investigation-requirement', () => {
 
       expect(fs.existsSync(filePath)).toBe(true);
       expect(filePath).toContain('investigation-');
-      expect(filePath).toEndWith('.md');
+      expect(filePath.endsWith('.md')).toBe(true);
 
       const content = fs.readFileSync(filePath, 'utf-8');
       expect(content).toContain('调查报告');

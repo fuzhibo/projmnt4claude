@@ -1412,8 +1412,8 @@ export async function generateTestEnvConfig(
 
   // 如果检查点没有命令，使用默认值
   if (testCommands.length === 0) {
-    testCommands.push('bun test');
-    testCommands.push('bun run build');
+    testCommands.push('npm test');
+    testCommands.push('npm run build');
   }
 
   const config: TestEnvConfig = {

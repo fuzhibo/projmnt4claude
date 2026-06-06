@@ -236,7 +236,7 @@ export class QAAcceptanceCriteriaVerifier {
   /**
    * Level 2: Verify build
    *
-   * Checks that bun run build succeeds without TypeScript errors
+   * Checks that npm run build succeeds without TypeScript errors
    */
   private async verifyBuild(task: TaskMeta): Promise<AcceptanceVerificationResult> {
     const result = createDefaultAcceptanceResult('build');
@@ -293,14 +293,14 @@ export class QAAcceptanceCriteriaVerifier {
       const packageJson = JSON.parse(fs.readFileSync(packageJsonPath, 'utf-8'));
 
       if (packageJson.scripts?.build) {
-        return `bun run build`;
+        return `npm run build`;
       }
     } catch {
       // Ignore errors, use default
     }
 
     // Default build command
-    return `bun run build`;
+    return `npm run build`;
   }
 
   /**
@@ -396,11 +396,11 @@ export class QAAcceptanceCriteriaVerifier {
    * Get test command
    */
   private getTestCommand(testFiles: string[]): string {
-    // Use bun test with specific files
+    // Use npm test with specific files
     if (testFiles.length > 0) {
-      return `bun test ${testFiles.join(' ')}`;
+      return `npm test ${testFiles.join(' ')}`;
     }
-    return `bun test`;
+    return `npm test`;
   }
 
   /**

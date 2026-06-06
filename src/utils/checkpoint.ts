@@ -331,7 +331,7 @@ const VERIFICATION_KEYWORDS: Array<{
 
 /**
  * 为 automated 方法但缺少 commands/steps 的检查点生成回退验证
- * 从描述中提取文件引用生成验证步骤，默认回退 bun run build + bun test
+ * 从描述中提取文件引用生成验证步骤，默认回退 npm run build + npm test
  */
 export function generateFallbackVerification(
   description: string,
@@ -362,15 +362,15 @@ export function generateFallbackVerification(
   }
 
   // 4. 默认回退验证命令
-  commands.push('bun run build');
-  commands.push('bun test');
+  commands.push('npm run build');
+  commands.push('npm test');
 
   // 5. 构建 expected 描述
   const expectedParts: string[] = [];
   if (steps.length > 0) {
     expectedParts.push('文件引用验证通过');
   }
-  expectedParts.push('bun run build 编译成功', 'bun test 测试通过');
+  expectedParts.push('npm run build 编译成功', 'npm test 测试通过');
 
   return {
     method: 'automated',

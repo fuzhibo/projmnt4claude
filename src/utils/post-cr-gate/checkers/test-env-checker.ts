@@ -318,28 +318,28 @@ export class TestEnvConfigChecker {
     // 根据任务类型推断
     switch (task.type) {
       case 'test':
-        commands.push('bun test');
+        commands.push('npm test');
         break;
       case 'feature':
-        commands.push('bun test');
-        commands.push('bun run build');
+        commands.push('npm test');
+        commands.push('npm run build');
         break;
       case 'bug':
-        commands.push('bun test');
-        commands.push('bun run build');
+        commands.push('npm test');
+        commands.push('npm run build');
         break;
       case 'refactor':
-        commands.push('bun test');
-        commands.push('bun run build');
-        commands.push('bun run lint');
+        commands.push('npm test');
+        commands.push('npm run build');
+        commands.push('npm run lint');
         break;
       default:
-        commands.push('bun test');
+        commands.push('npm test');
     }
 
     // 检查相关文件类型
     if (task.files?.some(f => f.endsWith('.test.ts') || f.endsWith('.spec.ts'))) {
-      commands.push('bun test --grep "specific"');
+      commands.push('npm test --grep "specific"');
     }
 
     return [...new Set(commands)];

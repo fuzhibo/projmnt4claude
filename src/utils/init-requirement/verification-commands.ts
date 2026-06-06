@@ -25,16 +25,16 @@ export function generateVerificationCommands(
         .map(f => f.replace(/src\/(.*)\.ts$/, 'tests/$1.test.ts'))
         .filter(f => existsSync(f));
       return testFiles.length > 0
-        ? [`bun test ${testFiles.join(' ')}`]
-        : [`bun test --test-name-pattern="${checkpoint.description}"`];
+        ? [`npm test ${testFiles.join(' ')}`]
+        : [`npm test --testNamePattern="${checkpoint.description}"`];
     }
     case 'verify':
-      return ['bun run build && bun test'];
+      return ['npm run build && npm test'];
     case 'review':
       return [`git diff HEAD -- ${taskFiles.join(' ')}`];
     case 'implem':
-      return ['bun run build'];
+      return ['npm run build'];
     case 'doc':
-      return ['bun run build'];
+      return ['npm run build'];
   }
 }

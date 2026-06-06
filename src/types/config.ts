@@ -150,7 +150,7 @@ export interface TestFailurePattern {
  * Harness 测试配置
  */
 export interface HarnessTestConfig {
-  /** 测试命令，默认 'bun test' */
+  /** 测试命令，默认 'npm test' */
   testCommand?: string;
   /** 标准格式检测配置 */
   standardFormatDetection?: StandardFormatDetection;
@@ -187,11 +187,11 @@ export interface HarnessMemoryLimitConfig {
   defaultGB?: number;
   /** 特定场景覆盖 */
   overrides?: {
-    /** bun test --coverage 上限 (GB)，默认 8 */
+    /** npm run test:coverage 上限 (GB)，默认 8 */
     coverage?: number;
     /** Claude CLI 子 agent 上限 (GB)，默认 8 */
     claudeAgent?: number;
-    /** bun run build 上限 (GB)，默认 2 */
+    /** npm run build 上限 (GB)，默认 2 */
     build?: number;
   };
   /** 是否启用 cgroup 限制。非 Linux 环境自动禁用。默认 true */

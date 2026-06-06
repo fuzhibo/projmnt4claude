@@ -97,7 +97,7 @@ export const DEFAULT_CODE_READY_CHECKER_CONFIG: CodeReadyCheckerConfig = {
   maxChangeLines: 500,
   checkBinaryFiles: true,
   syntaxCheckExtensions: ['.ts', '.tsx', '.js', '.jsx', '.json', '.md'],
-  buildCommand: 'bun run build',
+  buildCommand: 'npm run build',
   getSyntaxCheckCommand: (filePath: string): string | null => {
     const ext = path.extname(filePath).toLowerCase();
     switch (ext) {

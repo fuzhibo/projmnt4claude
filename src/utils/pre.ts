@@ -45,11 +45,15 @@ export function json<T = Record<string, unknown>>(filePath: string): JsonOps<T> 
     },
 
     write(data: T): void {
-      const dir = path.dirname(resolved);
-      if (!fs.existsSync(dir)) {
-        fs.mkdirSync(dir, { recursive: true });
+      try {
+        const dir = path.dirname(resolved);
+        if (!fs.existsSync(dir)) {
+          fs.mkdirSync(dir, { recursive: true });
+        }
+        fs.writeFileSync(resolved, JSON.stringify(data, null, 2) + '\n', 'utf-8');
+      } catch (error) {
+        throw new Error(`Failed to write ${resolved}: ${error}`);
       }
-      fs.writeFileSync(resolved, JSON.stringify(data, null, 2) + '\n', 'utf-8');
     },
 
     update(updater: (data: T) => T): T {
@@ -190,11 +194,15 @@ export function toml(filePath: string): TomlOps {
     },
 
     write(data: Record<string, unknown>): void {
-      const dir = path.dirname(resolved);
-      if (!fs.existsSync(dir)) {
-        fs.mkdirSync(dir, { recursive: true });
+      try {
+        const dir = path.dirname(resolved);
+        if (!fs.existsSync(dir)) {
+          fs.mkdirSync(dir, { recursive: true });
+        }
+        fs.writeFileSync(resolved, serializeToml(data), 'utf-8');
+      } catch (error) {
+        throw new Error(`Failed to write ${resolved}: ${error}`);
       }
-      fs.writeFileSync(resolved, serializeToml(data), 'utf-8');
     },
 
     get(key: string): unknown {
@@ -237,12 +245,12 @@ export interface PreCheckResult {
 export const DEFAULT_HOOKS: Record<HookType, HookConfig> = {
   'pre-commit': {
     type: 'pre-commit',
-    command: 'bun test',
+    command: 'npm test',
     description: 'Run tests before commit',
   },
   'pre-publish': {
     type: 'pre-publish',
-    command: 'bun test --coverage',
+    command: 'npm run test:coverage',
     description: 'Run tests with coverage before publish',
   },
 };
@@ -340,7 +348,7 @@ export class Pre {
     const hookPath = this.getHookPath('pre-commit');
     if (!fs.existsSync(hookPath)) return false;
     const content = fs.readFileSync(hookPath, 'utf-8');
-    return content.includes('bun test');
+    return content.includes('npm test');
   }
 
   /** 检查 pre-publish hook 是否已安装 */
@@ -358,7 +366,7 @@ export class Pre {
   runTests(): PreCheckResult {
     const start = Date.now();
     try {
-      const output = execSyncWithMemoryLimit('bun test 2>&1', {
+      const output = execSyncWithMemoryLimit('npm test 2>&1', {
         cwd: this.projectRoot,
         encoding: 'utf-8',
         timeout: 120_000,
@@ -378,7 +386,7 @@ export class Pre {
   runCoverageCheck(threshold: number = 0.8): PreCheckResult {
     const start = Date.now();
     try {
-      const output = execSyncWithMemoryLimit(`bun test --coverage 2>&1`, {
+      const output = execSyncWithMemoryLimit(`npm run test:coverage 2>&1`, {
         cwd: this.projectRoot,
         encoding: 'utf-8',
         timeout: 120_000,
