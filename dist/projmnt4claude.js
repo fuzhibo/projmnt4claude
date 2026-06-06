@@ -9454,9 +9454,9 @@ var init_prompt_templates = __esm(() => {
 
 1. **理解检查点要求** — 仔细阅读每个检查点，理解需要实现什么代码或功能
 2. **实现检查点要求的代码** — 这是主要工作，占开发时间 80% 以上
-3. **验证实现** — 运行 \`bun run build\` 确保编译通过
+3. **验证实现** — 运行 \`npm run build\` 确保编译通过
 4. **编写自测** — 为实现的功能编写基本测试（Happy Path + 关键边界），验证实现正确性
-5. **运行测试** — \`bun test\` 确保自测通过
+5. **运行测试** — \`npm test\` 确保自测通过
 6. **总结实现** — 在开发报告中说明实现了哪些检查点
 
 ### 自测说明
@@ -9508,9 +9508,9 @@ var init_prompt_templates = __esm(() => {
 
 1. **Understand checkpoint requirements** — Carefully read each checkpoint to understand what code or functionality to implement
 2. **Implement checkpoint-required code** — This is the main work, taking 80%+ of development time
-3. **Verify implementation** — Run \`bun run build\` to ensure compilation passes
+3. **Verify implementation** — Run \`npm run build\` to ensure compilation passes
 4. **Write self-tests** — Write basic tests for your implementation (Happy Path + key boundaries) to verify correctness
-5. **Run tests** — \`bun test\` to ensure self-tests pass
+5. **Run tests** — \`npm test\` to ensure self-tests pass
 6. **Summarize implementation** — In dev report, explain which checkpoints you implemented
 
 ### Self-Test Note
@@ -10073,7 +10073,7 @@ Begin evaluation now.`
 - "[ai review] 重构 userService.ts 中的重复代码"
 - "[ai qa] 登录模块单元测试覆盖率 >= 80%"
 - "[ai qa] 运行 tsc --noEmit 确认类型检查通过"
-- "[script] bun run build 构建成功"
+- "[script] npm run build 构建成功"
 - "[script] npm run lint 代码检查通过"
 
 ## [script] 前缀使用约束
@@ -10149,7 +10149,7 @@ Each checkpoint description must start with one of these prefixes to identify th
 - "[ai review] Refactor duplicate code in userService.ts"
 - "[ai qa] Login module unit test coverage >= 80%"
 - "[ai qa] Run tsc --noEmit to confirm type check passes"
-- "[script] bun run build succeeds"
+- "[script] npm run build succeeds"
 - "[script] npm run lint code check passes"
 
 ## [script] Prefix Usage Constraints
@@ -10197,7 +10197,7 @@ Each checkpoint description must start with one of these prefixes to identify th
       "requiresHuman": false
     },
     {
-      "description": "[script] 脚本或命令验证（如：运行 bun run build 构建成功）",
+      "description": "[script] 脚本或命令验证（如：运行 npm run build 构建成功）",
       "requiresHuman": false
     }
   ]
@@ -10219,7 +10219,7 @@ Each checkpoint description must start with one of these prefixes to identify th
 - "[ai review] 重构 userService.ts 中的重复代码，提高可维护性"
 - "[ai qa] 登录模块单元测试覆盖率 >= 80%"
 - "[ai qa] 运行 tsc --noEmit 确认类型检查无错误"
-- "[script] bun run build 构建成功"
+- "[script] npm run build 构建成功"
 - "[script] 运行 npm run lint 代码检查通过"
 
 ## requiresHuman 字段使用说明
@@ -10264,7 +10264,7 @@ Output pure JSON object, do not wrap in markdown code blocks.
       "requiresHuman": false
     },
     {
-      "description": "[script] Script or command verification (e.g., run bun run build succeeds)",
+      "description": "[script] Script or command verification (e.g., run npm run build succeeds)",
       "requiresHuman": false
     }
   ]
@@ -10286,7 +10286,7 @@ Each checkpoint description must start with one of these prefixes to identify ve
 - "[ai review] Refactor duplicate code in userService.ts for better maintainability"
 - "[ai qa] Login module unit test coverage >= 80%"
 - "[ai qa] Run tsc --noEmit to confirm type check has no errors"
-- "[script] bun run build succeeds"
+- "[script] npm run build succeeds"
 - "[script] Run npm run lint code check passes"
 
 ## requiresHuman Field Usage
@@ -13904,6 +13904,17 @@ class CheckpointOutputVerifier {
       verifiedBy: "CheckpointOutputVerifier",
       verifiedAt: now
     };
+    if (!strategy) {
+      return {
+        result: "unverified",
+        record: {
+          ...baseRecord,
+          result: "unverified",
+          failureReason: `未知的检查点类别: ${context.category}`
+        },
+        warnings: [`检查点 ${context.checkpointId} 类别 ${context.category} 没有对应的验证策略`]
+      };
+    }
     if (strategy.requiresHumanConfirmation && context.source !== "cli_manual") {
       return {
         result: "skipped",
@@ -14743,13 +14754,13 @@ function generateFallbackVerification(description, task) {
   if (classMatches?.[1]) {
     steps.push(`确认 ${classMatches[1]} 类已导出且可实例化`);
   }
-  commands.push("bun run build");
-  commands.push("bun test");
+  commands.push("npm run build");
+  commands.push("npm test");
   const expectedParts = [];
   if (steps.length > 0) {
     expectedParts.push("文件引用验证通过");
   }
-  expectedParts.push("bun run build 编译成功", "bun test 测试通过");
+  expectedParts.push("npm run build 编译成功", "npm test 测试通过");
   return {
     method: "automated",
     commands,
@@ -21790,6 +21801,76 @@ var init_analyze_fix_pipeline = __esm(() => {
   import_prompts5 = __toESM(require_prompts3(), 1);
 });
 
+// src/utils/investigation/ai-integration.ts
+var exports_ai_integration = {};
+__export(exports_ai_integration, {
+  callAIForJSON: () => callAIForJSON,
+  callAI: () => callAI
+});
+async function callAI(options) {
+  const startTime = Date.now();
+  try {
+    const result = await invokeAgent(options.prompt, {
+      timeout: options.timeout ?? DEFAULT_TIMEOUT,
+      allowedTools: options.allowedTools ?? DEFAULT_ALLOWED_TOOLS,
+      outputFormat: options.outputFormat,
+      cwd: options.cwd,
+      dangerouslySkipPermissions: true
+    });
+    return {
+      output: result.output,
+      success: result.success,
+      durationMs: result.durationMs,
+      error: result.error
+    };
+  } catch (err) {
+    return {
+      output: "",
+      success: false,
+      durationMs: Date.now() - startTime,
+      error: err instanceof Error ? err.message : String(err)
+    };
+  }
+}
+async function callAIForJSON(options, validator) {
+  const result = await callAI({ ...options, outputFormat: "text" });
+  if (!result.success) {
+    throw new Error(`AI call failed: ${result.error}`);
+  }
+  const output = result.output.trim();
+  let jsonStr = output;
+  const jsonBlockMatch = output.match(/```json\s*([\s\S]*?)\s*```/);
+  if (jsonBlockMatch) {
+    jsonStr = jsonBlockMatch[1].trim();
+  } else {
+    const start = output.indexOf("{");
+    const end = output.lastIndexOf("}");
+    if (start !== -1 && end !== -1 && end > start) {
+      jsonStr = output.substring(start, end + 1);
+    }
+  }
+  let parsed;
+  try {
+    parsed = JSON.parse(jsonStr);
+  } catch (parseErr) {
+    throw new Error(`Failed to parse AI output as JSON: ${parseErr instanceof Error ? parseErr.message : String(parseErr)}
+Output: ${output.substring(0, 500)}`);
+  }
+  if (validator) {
+    try {
+      return validator(parsed);
+    } catch (validationErr) {
+      throw new Error(`JSON validation failed: ${validationErr instanceof Error ? validationErr.message : String(validationErr)}`);
+    }
+  }
+  return parsed;
+}
+var DEFAULT_TIMEOUT = 120, DEFAULT_ALLOWED_TOOLS;
+var init_ai_integration = __esm(() => {
+  init_headless_agent();
+  DEFAULT_ALLOWED_TOOLS = [];
+});
+
 // node_modules/commander/esm.mjs
 var import__ = __toESM(require_commander(), 1);
 var {
@@ -21837,12 +21918,16 @@ function json(filePath) {
       return JSON.parse(content);
     },
     write(data) {
-      const dir = path3.dirname(resolved);
-      if (!fs5.existsSync(dir)) {
-        fs5.mkdirSync(dir, { recursive: true });
-      }
-      fs5.writeFileSync(resolved, JSON.stringify(data, null, 2) + `
+      try {
+        const dir = path3.dirname(resolved);
+        if (!fs5.existsSync(dir)) {
+          fs5.mkdirSync(dir, { recursive: true });
+        }
+        fs5.writeFileSync(resolved, JSON.stringify(data, null, 2) + `
 `, "utf-8");
+      } catch (error) {
+        throw new Error(`Failed to write ${resolved}: ${error}`);
+      }
     },
     update(updater) {
       const current = fs5.existsSync(resolved) ? JSON.parse(fs5.readFileSync(resolved, "utf-8") || "{}") : {};
@@ -21856,12 +21941,12 @@ function json(filePath) {
 var DEFAULT_HOOKS = {
   "pre-commit": {
     type: "pre-commit",
-    command: "bun test",
+    command: "npm test",
     description: "Run tests before commit"
   },
   "pre-publish": {
     type: "pre-publish",
-    command: "bun test --coverage",
+    command: "npm run test:coverage",
     description: "Run tests with coverage before publish"
   }
 };
@@ -21932,7 +22017,7 @@ ${command}
     if (!fs5.existsSync(hookPath))
       return false;
     const content = fs5.readFileSync(hookPath, "utf-8");
-    return content.includes("bun test");
+    return content.includes("npm test");
   }
   isPrePublishInstalled() {
     const pkg = json(this.packageJsonPath);
@@ -21945,7 +22030,7 @@ ${command}
   runTests() {
     const start = Date.now();
     try {
-      const output = execSyncWithMemoryLimit("bun test 2>&1", {
+      const output = execSyncWithMemoryLimit("npm test 2>&1", {
         cwd: this.projectRoot,
         encoding: "utf-8",
         timeout: 120000
@@ -21963,7 +22048,7 @@ ${command}
   runCoverageCheck(threshold = 0.8) {
     const start = Date.now();
     try {
-      const output = execSyncWithMemoryLimit(`bun test --coverage 2>&1`, {
+      const output = execSyncWithMemoryLimit(`npm run test:coverage 2>&1`, {
         cwd: this.projectRoot,
         encoding: "utf-8",
         timeout: 120000
@@ -32457,69 +32542,7 @@ function formatPriority2(priority, cwd) {
 
 // src/commands/init-requirement.ts
 init_logger();
-
-// src/utils/investigation/ai-integration.ts
-init_headless_agent();
-var DEFAULT_TIMEOUT = 120;
-var DEFAULT_ALLOWED_TOOLS = [];
-async function callAI(options) {
-  const startTime = Date.now();
-  try {
-    const result = await invokeAgent(options.prompt, {
-      timeout: options.timeout ?? DEFAULT_TIMEOUT,
-      allowedTools: options.allowedTools ?? DEFAULT_ALLOWED_TOOLS,
-      outputFormat: options.outputFormat,
-      cwd: options.cwd,
-      dangerouslySkipPermissions: true
-    });
-    return {
-      output: result.output,
-      success: result.success,
-      durationMs: result.durationMs,
-      error: result.error
-    };
-  } catch (err) {
-    return {
-      output: "",
-      success: false,
-      durationMs: Date.now() - startTime,
-      error: err instanceof Error ? err.message : String(err)
-    };
-  }
-}
-async function callAIForJSON(options, validator) {
-  const result = await callAI({ ...options, outputFormat: "text" });
-  if (!result.success) {
-    throw new Error(`AI call failed: ${result.error}`);
-  }
-  const output = result.output.trim();
-  let jsonStr = output;
-  const jsonBlockMatch = output.match(/```json\s*([\s\S]*?)\s*```/);
-  if (jsonBlockMatch) {
-    jsonStr = jsonBlockMatch[1].trim();
-  } else {
-    const start = output.indexOf("{");
-    const end = output.lastIndexOf("}");
-    if (start !== -1 && end !== -1 && end > start) {
-      jsonStr = output.substring(start, end + 1);
-    }
-  }
-  let parsed;
-  try {
-    parsed = JSON.parse(jsonStr);
-  } catch (parseErr) {
-    throw new Error(`Failed to parse AI output as JSON: ${parseErr instanceof Error ? parseErr.message : String(parseErr)}
-Output: ${output.substring(0, 500)}`);
-  }
-  if (validator) {
-    try {
-      return validator(parsed);
-    } catch (validationErr) {
-      throw new Error(`JSON validation failed: ${validationErr instanceof Error ? validationErr.message : String(validationErr)}`);
-    }
-  }
-  return parsed;
-}
+init_ai_integration();
 
 // src/utils/investigation/types.ts
 var PREFIX_MAP = {
@@ -33407,16 +33430,16 @@ function generateVerificationCommands(checkpoint, taskFiles) {
   switch (checkpoint.prefix) {
     case "test": {
       const testFiles = taskFiles.map((f) => f.replace(/src\/(.*)\.ts$/, "tests/$1.test.ts")).filter((f) => existsSync21(f));
-      return testFiles.length > 0 ? [`bun test ${testFiles.join(" ")}`] : [`bun test --test-name-pattern="${checkpoint.description}"`];
+      return testFiles.length > 0 ? [`npm test ${testFiles.join(" ")}`] : [`npm test --testNamePattern="${checkpoint.description}"`];
     }
     case "verify":
-      return ["bun run build && bun test"];
+      return ["npm run build && npm test"];
     case "review":
       return [`git diff HEAD -- ${taskFiles.join(" ")}`];
     case "implem":
-      return ["bun run build"];
+      return ["npm run build"];
     case "doc":
-      return ["bun run build"];
+      return ["npm run build"];
   }
 }
 // src/utils/init-requirement/conversion-status.ts
@@ -34044,6 +34067,7 @@ async function runAlignmentCheck(reportPath, taskId, cwd) {
 }
 
 // src/commands/investigation-requirement.ts
+init_ai_integration();
 import * as fs28 from "fs";
 import * as path23 from "path";
 import * as readline from "readline";
@@ -34263,6 +34287,7 @@ function validateComplexity(v) {
 }
 
 // src/utils/investigation/report-reviewer.ts
+init_ai_integration();
 async function reviewReport(requirement, report, cwd, lang = "zh") {
   const reportMarkdown = generateReport(report);
   const prompt = loadAndRenderTemplate("review", { report: reportMarkdown }, lang);
@@ -34321,13 +34346,15 @@ function shouldSplit(reportPath, thresholdKB) {
 async function generateSplitPlan(report, cwd, lang = "zh") {
   const reportMarkdown = generateReport(report);
   const prompt = loadAndRenderTemplate("split", { report: reportMarkdown }, lang);
-  return callAIForJSON({ prompt, cwd }, validateSplitPlan);
+  const { callAIForJSON: callAIForJSON2 } = await Promise.resolve().then(() => (init_ai_integration(), exports_ai_integration));
+  return callAIForJSON2({ prompt, cwd }, validateSplitPlan);
 }
 async function reviewSplitPlan(report, splitPlan, cwd, lang = "zh") {
   const summary = summarizeReport(report);
   const planJson = JSON.stringify(splitPlan, null, 2);
   const prompt = loadAndRenderTemplate("splitReview", { reportSummary: summary, splitPlan: planJson }, lang);
-  return callAIForJSON({ prompt, cwd }, validateSplitReviewResult);
+  const { callAIForJSON: callAIForJSON2 } = await Promise.resolve().then(() => (init_ai_integration(), exports_ai_integration));
+  return callAIForJSON2({ prompt, cwd }, validateSplitReviewResult);
 }
 function summarizeReport(report) {
   return [
@@ -38020,7 +38047,7 @@ var DEFAULT_PARSER_CONFIG = {
 };
 var ACCEPTANCE_LEVEL_DESCRIPTIONS = {
   checkpoint: "任务检查点验证 - 所有 QA 类型检查点状态为 completed",
-  build: "构建验证 - bun run build 成功，无 TypeScript 编译错误",
+  build: "构建验证 - npm run build 成功，无 TypeScript 编译错误",
   test: "测试验证 - 任务相关测试通过",
   criteria: "验收标准验证 - 解析任务描述中的验收标准并验证"
 };
@@ -38587,10 +38614,10 @@ class QAAcceptanceCriteriaVerifier {
       const packageJsonPath = path28.join(this.cwd, "package.json");
       const packageJson = JSON.parse(fs33.readFileSync(packageJsonPath, "utf-8"));
       if (packageJson.scripts?.build) {
-        return `bun run build`;
+        return `npm run build`;
       }
     } catch {}
-    return `bun run build`;
+    return `npm run build`;
   }
   async verifyTests(task, context) {
     const result = createDefaultAcceptanceResult("test");
@@ -38652,9 +38679,9 @@ class QAAcceptanceCriteriaVerifier {
   }
   getTestCommand(testFiles) {
     if (testFiles.length > 0) {
-      return `bun test ${testFiles.join(" ")}`;
+      return `npm test ${testFiles.join(" ")}`;
     }
-    return `bun test`;
+    return `npm test`;
   }
   async verifyCriteria(task, criteria, context) {
     const result = createDefaultAcceptanceResult("criteria");
@@ -38898,7 +38925,7 @@ ${texts.harness.logs.existingFiles || "Existing Files"}:`);
 `)
     };
   }
-  async runTestSuite(testCommand = "bun test") {
+  async runTestSuite(testCommand = "npm test") {
     const results = [];
     for (let run = 1;run <= 2; run++) {
       console.log(`
