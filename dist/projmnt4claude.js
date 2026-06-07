@@ -39440,9 +39440,27 @@ ${task.description}` : "";
     };
   }
   async saveReport(taskId, verdict) {
-    const reportPath = getReportPath(taskId, "qa", this.config.cwd);
-    const content = this.formatReport(verdict);
-    await saveReport(reportPath, content);
+    const mdReportPath = getReportPath(taskId, "qa", this.config.cwd);
+    const mdContent = this.formatReport(verdict);
+    await saveReport(mdReportPath, mdContent);
+    const jsonReportPath = path29.join(this.config.cwd, ".projmnt4claude", "outputs", taskId, "qa-report.json");
+    const jsonDir = path29.dirname(jsonReportPath);
+    if (!fs34.existsSync(jsonDir)) {
+      fs34.mkdirSync(jsonDir, { recursive: true });
+    }
+    const jsonContent = JSON.stringify({
+      taskId: verdict.taskId,
+      result: verdict.result,
+      reason: verdict.reason,
+      testFailures: verdict.testFailures,
+      failedCheckpoints: verdict.failedCheckpoints,
+      requiresHuman: verdict.requiresHuman,
+      verifiedAt: verdict.verifiedAt,
+      verifiedBy: verdict.verifiedBy,
+      details: verdict.details,
+      acceptanceCriteriaResult: verdict.acceptanceCriteriaResult
+    }, null, 2);
+    fs34.writeFileSync(jsonReportPath, jsonContent, "utf-8");
   }
   formatReport(verdict) {
     let texts;

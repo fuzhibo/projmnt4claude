@@ -987,12 +987,39 @@ export class HarnessQATester {
   }
 
   /**
-   * 保存 QA 报告
+   * 保存 QA 报告（Markdown + JSON 双格式）
    */
   private async saveReport(taskId: string, verdict: QAVerdict): Promise<void> {
-    const reportPath = getReportPath(taskId, 'qa', this.config.cwd);
-    const content = this.formatReport(verdict);
-    await saveReport(reportPath, content);
+    // 1. Markdown 报告（harness 内部使用）
+    const mdReportPath = getReportPath(taskId, 'qa', this.config.cwd);
+    const mdContent = this.formatReport(verdict);
+    await saveReport(mdReportPath, mdContent);
+
+    // 2. JSON 报告（Post-QA Gate 门禁使用）
+    const jsonReportPath = path.join(
+      this.config.cwd,
+      '.projmnt4claude',
+      'outputs',
+      taskId,
+      'qa-report.json'
+    );
+    const jsonDir = path.dirname(jsonReportPath);
+    if (!fs.existsSync(jsonDir)) {
+      fs.mkdirSync(jsonDir, { recursive: true });
+    }
+    const jsonContent = JSON.stringify({
+      taskId: verdict.taskId,
+      result: verdict.result,
+      reason: verdict.reason,
+      testFailures: verdict.testFailures,
+      failedCheckpoints: verdict.failedCheckpoints,
+      requiresHuman: verdict.requiresHuman,
+      verifiedAt: verdict.verifiedAt,
+      verifiedBy: verdict.verifiedBy,
+      details: verdict.details,
+      acceptanceCriteriaResult: verdict.acceptanceCriteriaResult,
+    }, null, 2);
+    fs.writeFileSync(jsonReportPath, jsonContent, 'utf-8');
   }
 
   /**
