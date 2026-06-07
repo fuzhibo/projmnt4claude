@@ -113,6 +113,13 @@ export function validateReport(report: InvestigationReport): ValidationResult {
 }
 
 /**
+ * 获取验证规则表（供两指令参考）
+ */
+export function getValidationRules(): ValidationRule[] {
+  return [...VALIDATION_RULES];
+}
+
+/**
  * 获取指定规则
  */
 export function getRule(name: string): ValidationRule | undefined {

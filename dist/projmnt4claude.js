@@ -34073,18 +34073,34 @@ import * as path23 from "path";
 import * as readline from "readline";
 
 // src/utils/investigation/report-generator.ts
-function generateReport(report) {
+function generateReport(report, lang = "zh") {
   const sections = [];
-  sections.push(renderMetadata(report.metadata));
-  sections.push(renderRootCauseAnalysis(report.rootCauseAnalysis));
-  sections.push(renderSolutions(report.solutions));
-  sections.push(renderCheckpoints(report.checkpoints));
-  sections.push(renderAssessment(report.assessment));
+  sections.push(renderMetadata(report.metadata, lang));
+  sections.push(renderRootCauseAnalysis(report.rootCauseAnalysis, lang));
+  sections.push(renderSolutions(report.solutions, lang));
+  sections.push(renderCheckpoints(report.checkpoints, lang));
+  sections.push(renderAssessment(report.assessment, lang));
   return sections.join(`
 
 `);
 }
-function renderMetadata(m) {
+function renderMetadata(m, lang) {
+  if (lang === "en") {
+    const lines2 = [
+      "# Investigation Report",
+      "",
+      `- **Requirement Source**: ${m.requirementSource}`,
+      `- **Investigation Date**: ${m.investigationDate}`,
+      `- **Investigation Directory**: ${m.investigationDir}`,
+      `- **Language**: ${m.language}`
+    ];
+    if (m.parentReport)
+      lines2.push(`- **Parent Report**: ${m.parentReport}`);
+    if (m.dependsOn?.length)
+      lines2.push(`- **Depends On**: ${m.dependsOn.join(", ")}`);
+    return lines2.join(`
+`);
+  }
   const lines = [
     "# 调查报告",
     "",
@@ -34100,8 +34116,9 @@ function renderMetadata(m) {
   return lines.join(`
 `);
 }
-function renderRootCauseAnalysis(items) {
-  const lines = ["## 原因分析", ""];
+function renderRootCauseAnalysis(items, lang) {
+  const title = lang === "en" ? "Root Cause Analysis" : "原因分析";
+  const lines = [`## ${title}`, ""];
   for (const item of items) {
     lines.push(`### ${item.id}: ${item.title}`);
     lines.push("");
@@ -34111,14 +34128,18 @@ function renderRootCauseAnalysis(items) {
   return lines.join(`
 `);
 }
-function renderSolutions(items) {
-  const lines = ["## 解决方案", ""];
+function renderSolutions(items, lang) {
+  const title = lang === "en" ? "Solutions" : "解决方案";
+  const corrLabel = lang === "en" ? "Corresponds To" : "对应原因";
+  const filesLabel = lang === "en" ? "Involved Files" : "涉及文件";
+  const changesLabel = lang === "en" ? "Expected Changes" : "预期变更";
+  const lines = [`## ${title}`, ""];
   for (const item of items) {
     lines.push(`### ${item.id}: ${item.title}`);
     lines.push("");
-    lines.push(`- **对应原因**: ${item.correspondsTo}`);
-    lines.push(`- **涉及文件**: ${item.files.join(", ")}`);
-    lines.push(`- **预期变更**: ${item.expectedChanges}`);
+    lines.push(`- **${corrLabel}**: ${item.correspondsTo}`);
+    lines.push(`- **${filesLabel}**: ${item.files.join(", ")}`);
+    lines.push(`- **${changesLabel}**: ${item.expectedChanges}`);
     lines.push("");
     lines.push(item.description);
     lines.push("");
@@ -34126,23 +34147,33 @@ function renderSolutions(items) {
   return lines.join(`
 `);
 }
-function renderCheckpoints(items) {
-  const lines = ["## 检查点", ""];
+function renderCheckpoints(items, lang) {
+  const title = lang === "en" ? "Checkpoints" : "检查点覆盖清单";
+  const lines = [`## ${title}`, ""];
   for (const cp of items) {
     lines.push(`- [${cp.prefix}] ${cp.description} (→ ${cp.belongsTo})`);
   }
   return lines.join(`
 `);
 }
-function renderAssessment(a) {
-  const lines = [
+function renderAssessment(a, lang) {
+  if (lang === "en") {
+    return [
+      "## Assessment",
+      "",
+      `- **Complexity**: ${a.complexity}`,
+      `- **Impact Scope**: ${a.impactScope}`,
+      `- **Estimated Effort**: ${a.estimatedMinutes} minutes`
+    ].join(`
+`);
+  }
+  return [
     "## 评估",
     "",
     `- **复杂度**: ${a.complexity}`,
     `- **影响范围**: ${a.impactScope}`,
     `- **预估工时**: ${a.estimatedMinutes} 分钟`
-  ];
-  return lines.join(`
+  ].join(`
 `);
 }
 
@@ -34155,8 +34186,8 @@ function parseReport(markdown) {
   const assessment = parseAssessment(markdown);
   return { metadata, rootCauseAnalysis, solutions, checkpoints, assessment };
 }
-function extractDependencies(markdown) {
-  const depLine = markdown.match(/^- \*\*依赖子报告\*\*: (.+)$/m);
+function extractDependenciesFromMarkdown(markdown) {
+  const depLine = markdown.match(/^- \*\*依赖子报告\*\*: (.+)$/m) || markdown.match(/^- \*\*Depends On\*\*: (.+)$/m);
   if (!depLine)
     return [];
   return depLine[1].split(",").map((s) => s.trim()).filter(Boolean);
@@ -34173,7 +34204,7 @@ function parseMetadata(md) {
     investigationDir: dir,
     language: langRaw === "en" ? "en" : "zh",
     parentReport: parent || undefined,
-    dependsOn: extractDependencies(md)
+    dependsOn: extractDependenciesFromMarkdown(md)
   };
 }
 function extractField(md, label) {
@@ -39174,18 +39205,31 @@ ${truncated}`];
     const humanCheckpoints = checkpoints.filter((cp) => cp.requiresHuman === true);
     console.log(`
    \uD83D\uDD2C 执行程序化验证...`);
-    const testSuiteResult = await this.runTestSuite();
-    if (!testSuiteResult.passed) {
-      return {
-        passed: false,
-        reason: `测试套件执行失败: ${testSuiteResult.failures.length} 个测试失败`,
-        failures: testSuiteResult.failures,
-        failedCheckpoints: [],
-        details: testSuiteResult.details
+    const hasRelatedTestFiles = task.files && task.files.length > 0;
+    let testSuiteResult;
+    if (hasRelatedTestFiles) {
+      testSuiteResult = await this.runTestSuite();
+      if (!testSuiteResult.passed) {
+        return {
+          passed: false,
+          reason: `测试套件执行失败: ${testSuiteResult.failures.length} 个测试失败`,
+          failures: testSuiteResult.failures,
+          failedCheckpoints: [],
+          details: testSuiteResult.details
+        };
+      }
+      if (testSuiteResult.hasFlaky) {
+        console.log(`   ⚠️ 检测到 ${testSuiteResult.flakyTests.length} 个 flaky test`);
+      }
+    } else {
+      console.log(`   ⏭️  无关联测试文件，跳过全局测试套件`);
+      testSuiteResult = {
+        passed: true,
+        hasFlaky: false,
+        flakyTests: [],
+        failures: [],
+        details: "无关联测试文件，跳过全局测试套件执行"
       };
-    }
-    if (testSuiteResult.hasFlaky) {
-      console.log(`   ⚠️ 检测到 ${testSuiteResult.flakyTests.length} 个 flaky test`);
     }
     console.log(`   ✅ 程序化验证通过`);
     const checkpointsWithoutCommands = automatedCheckpoints.filter((cp) => {

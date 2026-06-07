@@ -1,3 +1,5 @@
+import * as fs from 'fs';
+import * as path from 'path';
 import type {
   InvestigationReport,
   ReportMetadata,
@@ -10,7 +12,6 @@ import type {
 
 /**
  * 将 markdown 文本解析为 InvestigationReport 结构化数据
- * 同时提取子报告依赖路径
  */
 export function parseReport(markdown: string): InvestigationReport {
   const metadata = parseMetadata(markdown);
@@ -23,12 +24,35 @@ export function parseReport(markdown: string): InvestigationReport {
 }
 
 /**
+ * 从文件路径读取并解析报告
+ */
+export function readReport(reportPath: string, cwd: string): InvestigationReport {
+  const fullPath = path.resolve(cwd, reportPath);
+  const content = fs.readFileSync(fullPath, 'utf-8');
+  return parseReport(content);
+}
+
+/**
  * 从报告 markdown 中提取子报告依赖路径
  */
-export function extractDependencies(markdown: string): string[] {
-  const depLine = markdown.match(/^- \*\*依赖子报告\*\*: (.+)$/m);
+export function extractDependenciesFromMarkdown(markdown: string): string[] {
+  const depLine = markdown.match(/^- \*\*依赖子报告\*\*: (.+)$/m)
+    || markdown.match(/^- \*\*Depends On\*\*: (.+)$/m);
   if (!depLine) return [];
   return depLine[1].split(',').map(s => s.trim()).filter(Boolean);
+}
+
+/**
+ * 从 InvestigationReport 结构中提取依赖关系
+ * 返回路径 → dependsOn 路径列表的映射
+ */
+export function extractDependencies(report: InvestigationReport): Map<string, string[]> {
+  const deps = new Map<string, string[]>();
+  const dir = report.metadata.investigationDir;
+  if (report.metadata.dependsOn?.length) {
+    deps.set(dir, report.metadata.dependsOn);
+  }
+  return deps;
 }
 
 // ---- 内部解析辅助 ----
@@ -46,7 +70,7 @@ function parseMetadata(md: string): ReportMetadata {
     investigationDir: dir,
     language: langRaw === 'en' ? 'en' : 'zh',
     parentReport: parent || undefined,
-    dependsOn: extractDependencies(md),
+    dependsOn: extractDependenciesFromMarkdown(md),
   };
 }
 

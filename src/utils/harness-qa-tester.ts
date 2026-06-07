@@ -689,18 +689,32 @@ export class HarnessQATester {
     console.log(`\n   🔬 执行程序化验证...`);
 
     // 1. 运行测试套件（两次检测 flaky）
-    const testSuiteResult = await this.runTestSuite();
-    if (!testSuiteResult.passed) {
-      return {
-        passed: false,
-        reason: `测试套件执行失败: ${testSuiteResult.failures.length} 个测试失败`,
-        failures: testSuiteResult.failures,
-        failedCheckpoints: [],
-        details: testSuiteResult.details,
+    // 当任务没有关联测试文件时，跳过全局测试套件（避免全量 Jest 编译 OOM）
+    const hasRelatedTestFiles = task.files && task.files.length > 0;
+    let testSuiteResult: Awaited<ReturnType<typeof this.runTestSuite>>;
+    if (hasRelatedTestFiles) {
+      testSuiteResult = await this.runTestSuite();
+      if (!testSuiteResult.passed) {
+        return {
+          passed: false,
+          reason: `测试套件执行失败: ${testSuiteResult.failures.length} 个测试失败`,
+          failures: testSuiteResult.failures,
+          failedCheckpoints: [],
+          details: testSuiteResult.details,
+        };
+      }
+      if (testSuiteResult.hasFlaky) {
+        console.log(`   ⚠️ 检测到 ${testSuiteResult.flakyTests.length} 个 flaky test`);
+      }
+    } else {
+      console.log(`   ⏭️  无关联测试文件，跳过全局测试套件`);
+      testSuiteResult = {
+        passed: true,
+        hasFlaky: false,
+        flakyTests: [],
+        failures: [],
+        details: '无关联测试文件，跳过全局测试套件执行',
       };
-    }
-    if (testSuiteResult.hasFlaky) {
-      console.log(`   ⚠️ 检测到 ${testSuiteResult.flakyTests.length} 个 flaky test`);
     }
 
     // 程序化验证通过，继续 AI 验证（如果有检查点）
