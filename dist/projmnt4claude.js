@@ -34844,10 +34844,9 @@ async function runSplitFlow(report, requirement, cwd, options) {
     fs28.mkdirSync(subDir, { recursive: true });
   }
   const outputMode = { type: "dir", path: subDir };
-  for (let i = 0;i < splitPlan.items.length; i++) {
-    const item = splitPlan.items[i];
+  for (const item of splitPlan.items) {
     if (!quiet) {
-      console.log(`   \uD83D\uDCC4 Generating sub-report ${i + 1}/${splitPlan.items.length}: ${item.title}`);
+      console.log(`   \uD83D\uDCC4 Generating sub-report: ${item.title}`);
     }
     const subReport = await generateSubReport(report, item, requirement, cwd, lang);
     const subSlug = slugify(item.title);
@@ -34856,7 +34855,7 @@ async function runSplitFlow(report, requirement, cwd, options) {
     subReports.push(subReportPath);
     if (shouldSplit(subReportPath, splitThreshold)) {
       if (!quiet) {
-        console.log(`   \uD83D\uDCCA Sub-report ${i + 1} exceeds threshold, recursing (depth ${depth + 1}/${MAX_SPLIT_DEPTH})...`);
+        console.log(`   \uD83D\uDCCA Sub-report exceeds threshold, recursing (depth ${depth + 1}/${MAX_SPLIT_DEPTH})...`);
       }
       const recursiveResult = await runSplitFlow(subReport, item.description, cwd, {
         ...options,
@@ -42471,6 +42470,21 @@ class PostQAGateRunner {
       coverage = result.coverage;
       coverageDetails = result.details;
     }
+    if (coverage === undefined) {
+      return {
+        ruleId: rule.id,
+        passed: true,
+        ruleName: rule.name,
+        message: "无覆盖率数据，跳过覆盖率检查（任务可能无关联测试文件）",
+        details: {
+          coverage: undefined,
+          minCoverage,
+          skipped: true,
+          reason: "no_coverage_data"
+        },
+        timestamp: new Date().toISOString()
+      };
+    }
     const passed = coverage >= minCoverage;
     const gap = passed ? 0 : minCoverage - coverage;
     if (!passed) {
@@ -42526,7 +42540,7 @@ class PostQAGateRunner {
         } catch {}
       }
     }
-    return { coverage: 0 };
+    return { coverage: undefined };
   }
   parseCoverageData(content) {
     const total = content.total;

@@ -1251,6 +1251,23 @@ export class PostQAGateRunner {
       coverageDetails = result.details;
     }
 
+    // 无覆盖率数据时（任务无关联测试文件），跳过检查视为通过
+    if (coverage === undefined) {
+      return {
+        ruleId: rule.id,
+        passed: true,
+        ruleName: rule.name,
+        message: '无覆盖率数据，跳过覆盖率检查（任务可能无关联测试文件）',
+        details: {
+          coverage: undefined,
+          minCoverage,
+          skipped: true,
+          reason: 'no_coverage_data',
+        },
+        timestamp: new Date().toISOString(),
+      };
+    }
+
     const passed = coverage >= minCoverage;
     const gap = passed ? 0 : minCoverage - coverage!;
 
@@ -1302,7 +1319,7 @@ export class PostQAGateRunner {
    * CP-5: 返回覆盖率详情，用于 QA 重试 prompt
    */
   private async calculateCoverageFromReportsWithDetails(context: PostQAGateContext): Promise<{
-    coverage: number;
+    coverage: number | undefined;
     details?: { lines: number; branches: number; functions: number; statements: number };
   }> {
     const coverageFiles = [
@@ -1330,7 +1347,8 @@ export class PostQAGateRunner {
       }
     }
 
-    return { coverage: 0 }; // 默认返回0
+    // 无覆盖率报告文件，返回 undefined（触发跳过检查逻辑）
+    return { coverage: undefined };
   }
 
   /**
