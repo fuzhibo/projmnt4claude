@@ -111,6 +111,26 @@ Transform a problem description or requirement document into structured tasks:
 - Generates checkpoints with verification methods
 - Decomposes multi-problem requirements into separate tasks
 
+### 2b. Investigation Report Generation
+
+Generate structured investigation reports from natural language requirements:
+
+```bash
+# New investigation
+/projmnt4claude:investigation-requirement "Analyze login module performance issues"
+
+# Interactive mode with review loop
+/projmnt4claude:investigation-requirement --interactive "Investigate payment flow bottleneck"
+
+# Review existing report
+/projmnt4claude:investigation-requirement --review --report-path ./investigation/report.md
+
+# Split oversized report
+/projmnt4claude:investigation-requirement --split --report-path ./investigation/report.md
+```
+
+**Modes:** new investigation, interactive, feedback, review, split
+
 ### 3. Recommend Execution Plan
 
 Intelligently organize tasks into an optimized execution plan:

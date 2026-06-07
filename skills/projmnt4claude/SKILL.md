@@ -22,6 +22,7 @@ description: Claude Code 项目管理技能。用于管理任务、执行计划�
 | `status` | 项目状态 | `projmnt4claude status` |
 | `analyze` | 项目分析 | `projmnt4claude analyze` |
 | `init-requirement` | 需求转任务 | `projmnt4claude init-requirement -y "需求描述"` |
+| `investigation-requirement` | 需求调查报告 | `projmnt4claude investigation-requirement "调查描述"` |
 | `headless-harness-design` | Harness 执行 | `projmnt4claude headless-harness-design --plan plan.json` |
 
 ### ⚠️ 常见错误
@@ -100,6 +101,16 @@ node ${CLAUDE_PLUGIN_ROOT}/dist/projmnt4claude.js setup
 |------|------|
 | `init-requirement "<description>"` | 从自然语言描述创建任务 |
 | `init-requirement -y --file <path>` | 从文件读取描述创建任务（推荐用于复杂描述） |
+
+### 需求调查
+
+| 命令 | 描述 |
+|------|------|
+| `investigation-requirement "<description>"` | 从自然语言需求生成结构化调查报告 |
+| `investigation-requirement --interactive "<desc>"` | 交互模式：与用户评审循环 |
+| `investigation-requirement --feedback --report-path <path>` | 反馈修正模式 |
+| `investigation-requirement --review --report-path <path>` | 评审模式 |
+| `investigation-requirement --split --report-path <path>` | 拆分模式 |
 
 > ⚠️ **AI调用限制**: 当描述包含代码块（特别是包含 `{}` 或 `$()` 的代码）时，**必须**使用 `--file` 选项，否则会导致Bash解析错误。详见下方的 [AI调用限制说明](#ai调用限制说明)。
 
