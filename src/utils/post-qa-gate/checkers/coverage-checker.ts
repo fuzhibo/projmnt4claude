@@ -188,8 +188,8 @@ export class TestCoverageChecker {
    * 从测试框架报告计算综合覆盖率
    */
   private calculateCoverageFromReports(): {
-    coverage: number;
-    details: RawCoverage;
+    coverage: number | undefined;
+    details?: RawCoverage;
     source: string;
   } {
     for (const file of this.config.coverageFiles) {
@@ -215,11 +215,11 @@ export class TestCoverageChecker {
       }
     }
 
-    // 默认返回0
+    // 无覆盖率报告文件，返回 undefined
     return {
-      coverage: 0,
-      details: { lines: 0, branches: 0, functions: 0, statements: 0 },
-      source: 'default',
+      coverage: undefined,
+      details: undefined,
+      source: 'none',
     };
   }
 
