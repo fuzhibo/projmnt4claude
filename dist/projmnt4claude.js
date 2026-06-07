@@ -34439,7 +34439,7 @@ function validateSplitReviewResult(data) {
   };
 }
 
-// src/utils/investigation/config.ts
+// src/utils/investigation/config-reader.ts
 import * as fs27 from "fs";
 import * as path22 from "path";
 var DEFAULT_CONFIG2 = {
@@ -34447,18 +34447,21 @@ var DEFAULT_CONFIG2 = {
   maxRetry: 3,
   outputDir: "docs/investigation"
 };
+function getConfigPath2(cwd) {
+  return path22.join(cwd, ".projmnt4claude", "config.json");
+}
 function loadInvestigationConfig(cwd, cliThreshold) {
+  const configPath = getConfigPath2(cwd);
   try {
-    const configPath = findConfigPath(cwd);
-    if (configPath && fs27.existsSync(configPath)) {
-      const raw = fs27.readFileSync(configPath, "utf-8");
-      const config = JSON.parse(raw);
-      const inv = config?.investigation;
-      if (inv) {
+    if (fs27.existsSync(configPath)) {
+      const content = fs27.readFileSync(configPath, "utf-8");
+      const config = JSON.parse(content);
+      const invConfig = config?.investigation;
+      if (invConfig) {
         return {
-          splitThreshold: cliThreshold ?? inv.splitThreshold ?? DEFAULT_CONFIG2.splitThreshold,
-          maxRetry: inv.maxRetry ?? DEFAULT_CONFIG2.maxRetry,
-          outputDir: inv.outputDir ?? DEFAULT_CONFIG2.outputDir
+          splitThreshold: cliThreshold ?? invConfig.splitThreshold ?? DEFAULT_CONFIG2.splitThreshold,
+          maxRetry: invConfig.maxRetry ?? DEFAULT_CONFIG2.maxRetry,
+          outputDir: invConfig.outputDir ?? DEFAULT_CONFIG2.outputDir
         };
       }
     }
@@ -34469,26 +34472,22 @@ function loadInvestigationConfig(cwd, cliThreshold) {
   };
 }
 function loadLanguageConfig(cwd) {
+  const configPath = getConfigPath2(cwd);
   try {
-    const configPath = findConfigPath(cwd);
-    if (configPath && fs27.existsSync(configPath)) {
-      const raw = fs27.readFileSync(configPath, "utf-8");
-      const config = JSON.parse(raw);
+    if (fs27.existsSync(configPath)) {
+      const content = fs27.readFileSync(configPath, "utf-8");
+      const config = JSON.parse(content);
       const lang = config?.prompts?.language;
-      if (lang === "zh" || lang === "en")
+      if (lang === "en" || lang === "zh") {
         return lang;
+      }
     }
   } catch {}
+  const envLang = process.env.LANG || process.env.LC_ALL || "";
+  if (envLang.toLowerCase().includes("zh")) {
+    return "zh";
+  }
   return "zh";
-}
-function findConfigPath(cwd) {
-  const configPath = path22.join(cwd, ".projmnt4claude", "config.json");
-  if (fs27.existsSync(configPath))
-    return configPath;
-  const rootConfig = path22.join(cwd, "config.json");
-  if (fs27.existsSync(rootConfig))
-    return rootConfig;
-  return null;
 }
 
 // src/commands/investigation-requirement.ts

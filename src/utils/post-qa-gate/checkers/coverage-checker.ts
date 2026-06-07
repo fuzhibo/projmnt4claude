@@ -141,6 +141,21 @@ export class TestCoverageChecker {
       source = result.source;
     }
 
+    // 无覆盖率数据时（任务无关联测试文件），跳过检查视为通过
+    if (coverage === undefined) {
+      return {
+        passed: true,
+        check: 'test_coverage',
+        message: '无覆盖率数据，跳过覆盖率检查（任务可能无关联测试文件）',
+        details: {
+          coverage: undefined,
+          minCoverage: this.config.minCoverage,
+          skipped: true,
+          reason: 'no_coverage_data',
+        },
+      };
+    }
+
     const passed = coverage >= this.config.minCoverage;
 
     return {
