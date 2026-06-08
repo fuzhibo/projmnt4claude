@@ -3676,3 +3676,70 @@ export class AssemblyLine {
     console.log('\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n');
   }
 }
+
+// ============================================================
+// Checkpoint Functions (CP-016/017/018/019/020)
+// ============================================================
+
+/**
+ * 重置任务的阶段检查点
+ * CP-016: resetPhaseCheckpoints 函数存在且可调用
+ *
+ * @param taskId 任务ID
+ * @param state 运行时状态
+ * @param cwd 工作目录
+ * @returns 更新后的状态
+ */
+export function resetPhaseCheckpoints(
+  taskId: string,
+  state: HarnessRuntimeState,
+  cwd: string
+): HarnessRuntimeState {
+  const newState = { ...state };
+  newState.taskPhaseCheckpoints = new Map(state.taskPhaseCheckpoints);
+  newState.taskPhaseCheckpoints.delete(taskId);
+  newState.updatedAt = new Date().toISOString();
+  saveRuntimeState(newState, cwd);
+  return newState;
+}
+
+/**
+ * 回滚到任务指定阶段的开始状态
+ * CP-017: rollbackToPhaseStart 函数存在且可调用
+ *
+ * @param taskId 任务ID
+ * @param targetPhase 目标阶段
+ * @param state 运行时状态
+ * @param cwd 工作目录
+ * @returns 更新后的状态
+ */
+export function rollbackToPhaseStart(
+  taskId: string,
+  targetPhase: 'development' | 'code_review' | 'qa' | 'evaluation',
+  state: HarnessRuntimeState,
+  cwd: string
+): HarnessRuntimeState {
+  const newState = { ...state };
+  newState.resumeFrom = new Map(state.resumeFrom);
+  newState.resumeFrom.set(taskId, targetPhase);
+  newState.updatedAt = new Date().toISOString();
+
+  // 重置阶段重试计数
+  const key = `${taskId}:${targetPhase}`;
+  newState.phaseRetryCounters = new Map(state.phaseRetryCounters);
+  newState.phaseRetryCounters.delete(key);
+
+  saveRuntimeState(newState, cwd);
+  return newState;
+}
+
+/**
+ * 获取所有任务的阶段检查点ID列表
+ * CP-018/019/20: getPhaseCheckpointIds 函数存在且可调用
+ *
+ * @param state 运行时状态
+ * @returns 任务ID数组
+ */
+export function getPhaseCheckpointIds(state: HarnessRuntimeState): string[] {
+  return Array.from(state.taskPhaseCheckpoints.keys());
+}
