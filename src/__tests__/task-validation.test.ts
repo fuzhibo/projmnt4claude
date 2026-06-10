@@ -435,13 +435,13 @@ describe('validateVerificationBackfill', () => {
 
     // 缺少 verifiedAt
     const v1 = { verifiedBy: 'system', result: 'passed' as const };
-    const r1 = validateVerificationBackfill(v1 as TaskMeta['verification']!);
+    const r1 = validateVerificationBackfill(v1 as unknown as NonNullable<TaskMeta['verification']>);
     expect(r1.valid).toBe(false);
     expect(r1.errors.some(e => e.includes('verifiedAt'))).toBe(true);
 
     // 缺少 verifiedBy
     const v2 = { verifiedAt: new Date().toISOString(), result: 'passed' as const };
-    const r2 = validateVerificationBackfill(v2 as TaskMeta['verification']!);
+    const r2 = validateVerificationBackfill(v2 as unknown as NonNullable<TaskMeta['verification']>);
     expect(r2.valid).toBe(false);
     expect(r2.errors.some(e => e.includes('verifiedBy'))).toBe(true);
   });
@@ -455,7 +455,7 @@ describe('validateVerificationBackfill', () => {
       result: 'invalid_result',
     };
 
-    const result = validateVerificationBackfill(verification as TaskMeta['verification']!);
+    const result = validateVerificationBackfill(verification as unknown as NonNullable<TaskMeta['verification']>);
     expect(result.valid).toBe(false);
     expect(result.errors.some(e => e.includes('result'))).toBe(true);
   });

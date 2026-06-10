@@ -7,6 +7,12 @@
 
 import type { Logger } from './logger';
 
+// 测试注入点：允许测试通过全局变量注入 mock
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function getTestMock(name: string): any {
+  return (globalThis as any).__PROJMNT4CLAUDE_TEST_MOCKS__?.[name];
+}
+
 /** withAIEnhancement 选项 */
 export interface AIEnhancementOptions<T> {
   /** 是否启用 AI 调用（由 --no-ai / --smart 等标志控制） */
@@ -42,6 +48,12 @@ export interface AIEnhancementOptions<T> {
  * ```
  */
 export async function withAIEnhancement<T>(options: AIEnhancementOptions<T>): Promise<T> {
+  // 测试注入点
+  const testMock = getTestMock('withAIEnhancement');
+  if (testMock) {
+    return testMock(options);
+  }
+
   if (!options.enabled) return options.fallback;
 
   try {

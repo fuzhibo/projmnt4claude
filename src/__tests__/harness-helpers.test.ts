@@ -23,17 +23,27 @@ import {
 } from '../utils/harness-helpers.js';
 import type { TaskMeta, CheckpointMetadata } from '../types/task.js';
 
-// Mock child_process - Jest hoists jest.mock() before imports that use it.
-// jest.restoreAllMocks() restores all mocks properly (unlike Bun's mock.restore).
-jest.mock('child_process', () => ({
-  spawn: jest.fn(() => {
-    throw new Error('spawn not configured');
-  }),
-}));
+// Mock spawnWithMemoryLimit via test injection point (SWC/ESM compatible)
+// Instead of jest.mock (which doesn't work with SWC/ESM), we use the
+// global __PROJMNT4CLAUDE_TEST_MOCKS__ injection point in spawn-utils.ts.
+const spawnMock = jest.fn(() => {
+  throw new Error('spawn not configured');
+});
 
-// Get reference to the mocked spawn function
-import * as child_process from 'child_process';
-const spawnMock = child_process.spawn as any;
+beforeAll(() => {
+  (globalThis as any).__PROJMNT4CLAUDE_TEST_MOCKS__ = {
+    ...(globalThis as any).__PROJMNT4CLAUDE_TEST_MOCKS__,
+    spawnWithMemoryLimit: spawnMock,
+  };
+});
+
+afterAll(() => {
+  // Clean up only our mock, preserve other mocks
+  const mocks = (globalThis as any).__PROJMNT4CLAUDE_TEST_MOCKS__;
+  if (mocks) {
+    delete mocks.spawnWithMemoryLimit;
+  }
+});
 
 // ============================================================
 // Helper factories
@@ -678,7 +688,7 @@ describe('runHeadlessClaude', () => {
       '--print',
       '--dangerously-skip-permissions',
       '--output-format', 'json',
-    ]), expect.any(Object));
+    ]), expect.any(Object), 'claudeAgent');
   });
 
   test('passes session options to spawn', async () => {
@@ -696,7 +706,7 @@ describe('runHeadlessClaude', () => {
       '--session-id', 'sess-123',
       '--resume',
       '--fork-session',
-    ]), expect.any(Object));
+    ]), expect.any(Object), 'claudeAgent');
   });
 
   test('writes prompt to stdin', async () => {

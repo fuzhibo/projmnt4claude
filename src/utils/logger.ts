@@ -10,6 +10,12 @@ import * as path from 'path';
 import { execSync } from 'child_process';
 import { getProjectDir, ensureDir, getLogsDir, getConfigPath } from './path';
 
+// 测试注入点：允许测试通过全局变量注入 mock
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function getTestMock(name: string): any {
+  return (globalThis as any).__PROJMNT4CLAUDE_TEST_MOCKS__?.[name];
+}
+
 /** 日志级别 */
 export type LogLevel = 'error' | 'warn' | 'info' | 'debug';
 
@@ -726,6 +732,12 @@ export interface InstrumentationRecord {
  * 创建指定命令名的 Logger 实例并记录命令开始
  */
 export function createLogger(command: string, cwd?: string): Logger {
+  // 测试注入点
+  const testMock = getTestMock('createLogger');
+  if (testMock) {
+    return testMock(command, cwd);
+  }
+
   const logger = new Logger({ command, cwd });
   logger.logCommandStart(command);
   return logger;

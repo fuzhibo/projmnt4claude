@@ -15,31 +15,6 @@ import { describe, test, expect, jest, beforeEach, afterEach, afterAll } from '@
 import * as fs from 'fs';
 import * as path from 'path';
 
-// ============== Mock headless-agent before analyze imports ==============
-
-const mockInvokeAgent = jest.fn((_prompt: string, _options: unknown) =>
-  Promise.resolve({
-    output: JSON.stringify({
-      inferredStatus: 'resolved',
-      confidence: 0.9,
-      reasoning: 'All checkpoints completed',
-      suggestion: 'Mark as resolved',
-    }),
-    success: true,
-    provider: 'claude-code',
-    durationMs: 1000,
-    tokensUsed: 500,
-    model: 'claude-sonnet',
-  })
-);
-
-// Note: jest.mock() is hoisted before imports — same behavior as Bun's mock.module().
-// jest.restoreAllMocks() restores all mocks properly (unlike Bun's mock.restore).
-
-jest.mock('../utils/headless-agent', () => ({
-  invokeAgent: mockInvokeAgent,
-}));
-
 import {
   shouldTriggerAIInference,
   buildStatusInferencePrompt,
@@ -383,14 +358,40 @@ describe('buildStatusInferencePrompt', () => {
 describe('runAIStatusInference', () => {
   let env: IsolatedTestEnv;
   let tmpDir: string;
+  let mockInvokeAgent: jest.Mock;
 
   beforeEach(async () => {
     env = await createIsolatedTestEnv({ prefix: 'analyze-layer2-test-' });
     tmpDir = env.tempDir;
-    mockInvokeAgent.mockClear();
+    mockInvokeAgent = jest.fn((_prompt: string, _options: unknown) =>
+      Promise.resolve({
+        output: JSON.stringify({
+          inferredStatus: 'resolved',
+          confidence: 0.9,
+          reasoning: 'All checkpoints completed',
+          suggestion: 'Mark as resolved',
+        }),
+        success: true,
+        provider: 'claude-code',
+        durationMs: 1000,
+        tokensUsed: 500,
+        model: 'claude-sonnet',
+      })
+    );
+
+    // Set up test injection mock for invokeAgent
+    (globalThis as any).__PROJMNT4CLAUDE_TEST_MOCKS__ = {
+      ...(globalThis as any).__PROJMNT4CLAUDE_TEST_MOCKS__,
+      invokeAgent: mockInvokeAgent,
+    };
   });
 
   afterEach(() => {
+    // Clean up test injection mock
+    const mocks = (globalThis as any).__PROJMNT4CLAUDE_TEST_MOCKS__;
+    if (mocks) {
+      delete mocks.invokeAgent;
+    }
     env.cleanup();
   });
 
@@ -532,14 +533,42 @@ describe('runAIStatusInference', () => {
 describe('detectStatusInferenceIssues', () => {
   let env: IsolatedTestEnv;
   let tmpDir: string;
+  let mockInvokeAgent: jest.Mock;
 
   beforeEach(async () => {
     env = await createIsolatedTestEnv({ prefix: 'analyze-layer2-test-' });
     tmpDir = env.tempDir;
-    mockInvokeAgent.mockClear();
+    mockInvokeAgent = jest.fn();
+
+    // Set up test injection mock for invokeAgent with default implementation
+    mockInvokeAgent.mockImplementation((_prompt: string, _options: unknown) =>
+      Promise.resolve({
+        output: JSON.stringify({
+          inferredStatus: 'resolved',
+          confidence: 0.9,
+          reasoning: 'All checkpoints completed',
+          suggestion: 'Mark as resolved',
+        }),
+        success: true,
+        provider: 'claude-code',
+        durationMs: 1000,
+        tokensUsed: 500,
+        model: 'claude-sonnet',
+      })
+    );
+
+    (globalThis as any).__PROJMNT4CLAUDE_TEST_MOCKS__ = {
+      ...(globalThis as any).__PROJMNT4CLAUDE_TEST_MOCKS__,
+      invokeAgent: mockInvokeAgent,
+    };
   });
 
   afterEach(() => {
+    // Clean up test injection mock
+    const mocks = (globalThis as any).__PROJMNT4CLAUDE_TEST_MOCKS__;
+    if (mocks) {
+      delete mocks.invokeAgent;
+    }
     env.cleanup();
   });
 
@@ -860,9 +889,6 @@ describe('detectStatusInferenceIssues', () => {
 
 // ============================================================
 // Cleanup: Restore function-level mocks after all tests
-// Note: mock.module() mocks persist for the file's lifetime and
-// cannot be restored via jest.restoreAllMocks() (Bun design limitation).
-// Process isolation (batched-test-runner) prevents cross-file pollution.
 // ============================================================
 afterAll(() => {
   jest.restoreAllMocks();

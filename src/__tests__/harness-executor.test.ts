@@ -2,39 +2,9 @@ import { describe, test, expect, jest, beforeEach, afterEach, afterAll } from '@
 import * as fs from 'fs';
 import * as path from 'path';
 import { HarnessExecutor } from '../utils/harness-executor.js';
-import * as harnessHelpers from '../utils/harness-helpers.js';
-import * as promptTemplates from '../utils/prompt-templates.js';
 import { createIsolatedTestEnv, type IsolatedTestEnv } from '../utils/test-env.js';
-import type { HarnessConfig, SprintContract, DevReport, RetryContext } from '../types/harness.js';
+import type { HarnessConfig, SprintContract, RetryContext } from '../types/harness.js';
 import type { TaskMeta } from '../types/task.js';
-
-// ============================================================
-// Mocks - Jest hoists jest.mock() before imports that use them
-// ============================================================
-
-const mockAgentInvoke = jest.fn<(prompt: string, options: any) => Promise<any>>();
-
-// Note: jest.mock() is hoisted before imports — same behavior as Bun's mock.module().
-// jest.restoreAllMocks() restores function-level mocks (mockAgentInvoke).
-// Module-level mocks persist for the file's lifetime (Jest design).
-
-jest.mock('../utils/headless-agent.js', () => ({
-  getAgent: () => ({ invoke: mockAgentInvoke }),
-  buildEffectiveTools: () => ({ tools: ['Read', 'Edit', 'Write'], skipPermissions: true }),
-}));
-
-// Note: role-prompts is mocked via jest.mock() because it's imported
-// transitively by headless-agent. spyOn requires the module to be imported
-// first, but the import chain depends on the mock being in place.
-jest.mock('../utils/role-prompts.js', () => ({
-  getDevRoleTemplate: () => ({
-    roleDeclaration: 'You are an executor.',
-    extraInstructions: ['Follow coding standards'],
-  }),
-}));
-
-// Note: prompt-templates is NOT mocked via mock.module() to avoid global pollution
-// Instead, we use spyOn in beforeEach/afterEach for isolated mocking
 
 // ============================================================
 // Helpers
@@ -74,7 +44,6 @@ function createContract(overrides: Partial<SprintContract> = {}): SprintContract
     taskId: 'TASK-exec-test-001',
     acceptanceCriteria: ['All tests pass'],
     verificationCommands: ['npm test'],
-    // checkpoints removed from SprintContract - now accessed from TaskMeta.checkpoints
     createdAt: '2026-04-10T00:00:00.000Z',
     updatedAt: '2026-04-10T00:00:00.000Z',
     ...overrides,
@@ -94,25 +63,47 @@ function setupProjectDir(cwd: string, taskId: string) {
 
 describe('HarnessExecutor', () => {
   let env: IsolatedTestEnv;
-  let loadPromptTemplateSpy: jest.SpyInstance;
-  let resolveTemplateSpy: jest.SpyInstance;
+  let mockAgentInvoke: jest.Mock;
 
   beforeEach(async () => {
     env = await createIsolatedTestEnv();
+    mockAgentInvoke = jest.fn();
 
-    // Use spyOn for prompt-templates to allow restoration in afterEach
-    // This prevents global pollution of mock.module()
-    loadPromptTemplateSpy = jest.spyOn(promptTemplates, 'loadPromptTemplate').mockReturnValue('{title}\n{taskId}\n{descriptionSection}');
-    resolveTemplateSpy = jest.spyOn(promptTemplates, 'resolveTemplate').mockImplementation((_tpl: string, vars: Record<string, string>) => {
-      return Object.entries(vars).reduce((t, [k, v]) => t.replace(`{${k}}`, v || ''), _tpl);
-    });
+    // Set up test injection mocks via global variable
+    (globalThis as any).__PROJMNT4CLAUDE_TEST_MOCKS__ = {
+      ...(globalThis as any).__PROJMNT4CLAUDE_TEST_MOCKS__,
+      // Mock getAgent to return an agent with our mock invoke
+      getAgent: () => ({ invoke: mockAgentInvoke }),
+      // Mock buildEffectiveTools to return fixed tools
+      buildEffectiveTools: () => ({ tools: ['Read', 'Edit', 'Write'], skipPermissions: true }),
+      // Mock getDevRoleTemplate to return a simple template
+      getDevRoleTemplate: () => ({
+        roleDeclaration: 'You are an executor.',
+        extraInstructions: ['Follow coding standards'],
+      }),
+      // Mock loadPromptTemplate to return a simple template
+      loadPromptTemplate: () => '{title}\n{taskId}\n{descriptionSection}',
+      // Mock resolveTemplate to do simple variable replacement
+      resolveTemplate: (tpl: string, vars: Record<string, string>) => {
+        return Object.entries(vars).reduce((t, [k, v]) => t.replace(`{${k}}`, v || ''), tpl);
+      },
+      // Mock archiveReportIfExists to be a no-op
+      archiveReportIfExists: () => {},
+    };
   });
 
   afterEach(() => {
+    // Clean up test injection mocks
+    const mocks = (globalThis as any).__PROJMNT4CLAUDE_TEST_MOCKS__;
+    if (mocks) {
+      delete mocks.getAgent;
+      delete mocks.buildEffectiveTools;
+      delete mocks.getDevRoleTemplate;
+      delete mocks.loadPromptTemplate;
+      delete mocks.resolveTemplate;
+      delete mocks.archiveReportIfExists;
+    }
     env.cleanup();
-    mockAgentInvoke.mockClear();
-    loadPromptTemplateSpy.mockRestore();
-    resolveTemplateSpy.mockRestore();
   });
 
   // ============================================================
@@ -399,7 +390,7 @@ describe('HarnessExecutor', () => {
       const retryCtx: RetryContext = {
         attemptNumber: 2,
         previousPhase: 'qa',
-        previousFailureReason: 'Tests did not cover the module',
+      previousFailureReason: 'Tests did not cover the module',
       };
 
       let capturedPrompt = '';
@@ -583,13 +574,16 @@ describe('HarnessExecutor', () => {
         output: 'done', success: true, durationMs: 100, exitCode: 0,
       });
 
-      const archiveSpy = jest.spyOn(harnessHelpers, 'archiveReportIfExists').mockImplementation(() => {});
+      // Track archiveReportIfExists calls via test injection
+      let archiveCalled = false;
+      (globalThis as any).__PROJMNT4CLAUDE_TEST_MOCKS__.archiveReportIfExists = () => {
+        archiveCalled = true;
+      };
 
       const executor = new HarnessExecutor(config);
       await executor.execute(task, contract);
 
-      expect(archiveSpy).toHaveBeenCalled();
-      archiveSpy.mockRestore();
+      expect(archiveCalled).toBe(true);
     });
   });
 
@@ -629,9 +623,6 @@ describe('HarnessExecutor', () => {
 
 // ============================================================
 // Cleanup: Restore function-level mocks after all tests
-// Note: mock.module() mocks persist for the file's lifetime and
-// cannot be restored via jest.restoreAllMocks() (Bun design limitation).
-// Process isolation (batched-test-runner) prevents cross-file pollution.
 // ============================================================
 afterAll(() => {
   jest.restoreAllMocks();

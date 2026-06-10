@@ -5,6 +5,12 @@ import * as fs from 'fs';
  * 获取 .projmnt4claude 目录路径
  */
 export function getProjectDir(cwd: string = process.cwd()): string {
+  // 测试注入点：允许测试通过全局变量注入 mock
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const testMocks = (globalThis as any).__PROJMNT4CLAUDE_TEST_MOCKS__;
+  if (testMocks?.getProjectDir) {
+    return testMocks.getProjectDir(cwd);
+  }
   return path.join(cwd, '.projmnt4claude');
 }
 
@@ -15,6 +21,12 @@ export const getProjDir = getProjectDir;
  * 确保目录存在
  */
 export function ensureDir(dir: string): void {
+  // 测试注入点
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const testMocks = (globalThis as any).__PROJMNT4CLAUDE_TEST_MOCKS__;
+  if (testMocks?.ensureDir) {
+    return testMocks.ensureDir(dir);
+  }
   if (!fs.existsSync(dir)) {
     fs.mkdirSync(dir, { recursive: true });
   }
@@ -25,6 +37,12 @@ export function ensureDir(dir: string): void {
  * 条件：config.json 存在，或者 tasks 目录存在且有有效任务
  */
 export function isInitialized(cwd: string = process.cwd()): boolean {
+  // 测试注入点
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const testMocks = (globalThis as any).__PROJMNT4CLAUDE_TEST_MOCKS__;
+  if (testMocks?.isInitialized) {
+    return testMocks.isInitialized(cwd);
+  }
   const projectDir = getProjectDir(cwd);
   const configPath = path.join(projectDir, 'config.json');
 
@@ -55,6 +73,12 @@ export function isInitialized(cwd: string = process.cwd()): boolean {
  * 获取配置文件路径
  */
 export function getConfigPath(cwd: string = process.cwd()): string {
+  // 测试注入点
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const testMocks = (globalThis as any).__PROJMNT4CLAUDE_TEST_MOCKS__;
+  if (testMocks?.getConfigPath) {
+    return testMocks.getConfigPath(cwd);
+  }
   return path.join(getProjectDir(cwd), 'config.json');
 }
 
@@ -62,6 +86,12 @@ export function getConfigPath(cwd: string = process.cwd()): string {
  * 获取任务目录路径
  */
 export function getTasksDir(cwd: string = process.cwd()): string {
+  // 测试注入点
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const testMocks = (globalThis as any).__PROJMNT4CLAUDE_TEST_MOCKS__;
+  if (testMocks?.getTasksDir) {
+    return testMocks.getTasksDir(cwd);
+  }
   return path.join(getProjectDir(cwd), 'tasks');
 }
 
@@ -69,6 +99,12 @@ export function getTasksDir(cwd: string = process.cwd()): string {
  * 获取归档目录路径
  */
 export function getArchiveDir(cwd: string = process.cwd()): string {
+  // 测试注入点
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const testMocks = (globalThis as any).__PROJMNT4CLAUDE_TEST_MOCKS__;
+  if (testMocks?.getArchiveDir) {
+    return testMocks.getArchiveDir(cwd);
+  }
   return path.join(getProjectDir(cwd), 'archive');
 }
 
@@ -76,6 +112,12 @@ export function getArchiveDir(cwd: string = process.cwd()): string {
  * 获取工具箱目录路径
  */
 export function getToolboxDir(cwd: string = process.cwd()): string {
+  // 测试注入点
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const testMocks = (globalThis as any).__PROJMNT4CLAUDE_TEST_MOCKS__;
+  if (testMocks?.getToolboxDir) {
+    return testMocks.getToolboxDir(cwd);
+  }
   return path.join(getProjectDir(cwd), 'toolbox');
 }
 
@@ -83,6 +125,12 @@ export function getToolboxDir(cwd: string = process.cwd()): string {
  * 获取 bin 目录路径
  */
 export function getBinDir(cwd: string = process.cwd()): string {
+  // 测试注入点
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const testMocks = (globalThis as any).__PROJMNT4CLAUDE_TEST_MOCKS__;
+  if (testMocks?.getBinDir) {
+    return testMocks.getBinDir(cwd);
+  }
   return path.join(getProjectDir(cwd), 'bin');
 }
 
@@ -90,6 +138,12 @@ export function getBinDir(cwd: string = process.cwd()): string {
  * 获取报告目录路径
  */
 export function getReportsDir(cwd: string = process.cwd()): string {
+  // 测试注入点
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const testMocks = (globalThis as any).__PROJMNT4CLAUDE_TEST_MOCKS__;
+  if (testMocks?.getReportsDir) {
+    return testMocks.getReportsDir(cwd);
+  }
   return path.join(getProjectDir(cwd), 'reports');
 }
 
@@ -97,5 +151,11 @@ export function getReportsDir(cwd: string = process.cwd()): string {
  * 获取日志目录路径
  */
 export function getLogsDir(cwd: string = process.cwd()): string {
+  // 测试注入点
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const testMocks = (globalThis as any).__PROJMNT4CLAUDE_TEST_MOCKS__;
+  if (testMocks?.getLogsDir) {
+    return testMocks.getLogsDir(cwd);
+  }
   return path.join(getProjectDir(cwd), 'logs');
 }

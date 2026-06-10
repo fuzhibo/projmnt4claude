@@ -37,15 +37,18 @@ function writeTaskToDisk(taskDir: string, task: TaskMeta): void {
 // ============================================================
 
 describe('getTaskDir', () => {
-  let getTasksDirSpy: jest.SpyInstance;
-
-  beforeEach(async () => {
-    const pMod = await pathUtils();
-    getTasksDirSpy = jest.spyOn(pMod, 'getTasksDir').mockReturnValue('/project/.projmnt4claude/tasks');
+  beforeEach(() => {
+    (globalThis as any).__PROJMNT4CLAUDE_TEST_MOCKS__ = {
+      ...(globalThis as any).__PROJMNT4CLAUDE_TEST_MOCKS__,
+      getTasksDir: () => '/project/.projmnt4claude/tasks',
+    };
   });
 
   afterEach(() => {
-    getTasksDirSpy.mockRestore();
+    const mocks = (globalThis as any).__PROJMNT4CLAUDE_TEST_MOCKS__;
+    if (mocks) {
+      delete mocks.getTasksDir;
+    }
   });
 
   it('returns correct task directory path', async () => {
@@ -60,15 +63,18 @@ describe('getTaskDir', () => {
 });
 
 describe('getTaskMetaPath', () => {
-  let getTasksDirSpy: jest.SpyInstance;
-
-  beforeEach(async () => {
-    const pMod = await pathUtils();
-    getTasksDirSpy = jest.spyOn(pMod, 'getTasksDir').mockReturnValue('/project/.projmnt4claude/tasks');
+  beforeEach(() => {
+    (globalThis as any).__PROJMNT4CLAUDE_TEST_MOCKS__ = {
+      ...(globalThis as any).__PROJMNT4CLAUDE_TEST_MOCKS__,
+      getTasksDir: () => '/project/.projmnt4claude/tasks',
+    };
   });
 
   afterEach(() => {
-    getTasksDirSpy.mockRestore();
+    const mocks = (globalThis as any).__PROJMNT4CLAUDE_TEST_MOCKS__;
+    if (mocks) {
+      delete mocks.getTasksDir;
+    }
   });
 
   it('returns meta.json path inside task directory', async () => {

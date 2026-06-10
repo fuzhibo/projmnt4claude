@@ -10,6 +10,12 @@ import { readTaskMeta, writeTaskMeta } from './task';
 import type { TaskMeta, CheckpointMetadata, CheckpointVerification, VerificationMethod, CheckpointVerificationDetails } from '../types/task';
 import { inferCheckpointAttributesFromPrefix } from './validation-rules/checkpoint-rules';
 
+// 测试注入点：允许测试通过全局变量注入 mock
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function getTestMock(name: string): any {
+  return (globalThis as any).__PROJMNT4CLAUDE_TEST_MOCKS__?.[name];
+}
+
 /**
  * 从任务检查点列表中筛选符合条件的检查点
  *
@@ -63,6 +69,12 @@ export interface FilterResult {
  * 3. 带 CP-N: 前缀的重复检查点：AI 生成时重复添加了编号前缀
  */
 export function filterLowQualityCheckpoints(checkpoints: string[]): FilterResult {
+  // 测试注入点
+  const testMock = getTestMock('filterLowQualityCheckpoints');
+  if (testMock) {
+    return testMock(checkpoints);
+  }
+
   const kept: string[] = [];
   const removed: string[] = [];
   const reasons = new Map<string, string>();
@@ -153,6 +165,12 @@ export function generateCheckpointId(taskId: string, index: number, description:
  * 解析 checkpoint.md 文件并分配 ID
  */
 export function parseCheckpointsWithIds(taskId: string, cwd: string = process.cwd()): ParsedCheckpoint[] {
+  // 测试注入点
+  const testMock = getTestMock('parseCheckpointsWithIds');
+  if (testMock) {
+    return testMock(taskId, cwd);
+  }
+
   const checkpointPath = path.join(getTasksDir(cwd), taskId, 'checkpoint.md');
 
   if (!fs.existsSync(checkpointPath)) {
@@ -454,6 +472,12 @@ export function syncCheckpointsToMeta(
   checkpointsOrCwd?: CheckpointMetadata[] | string,
   maybeCwd?: string
 ): void {
+  // 测试注入点
+  const testMock = getTestMock('syncCheckpointsToMeta');
+  if (testMock) {
+    return testMock(taskId, checkpointsOrCwd, maybeCwd);
+  }
+
   // 解析参数
   const cwd = typeof checkpointsOrCwd === 'string'
     ? checkpointsOrCwd
@@ -656,6 +680,12 @@ function updateCheckpointMd(
   task: TaskMeta,
   cwd: string = process.cwd()
 ): void {
+  // 测试注入点
+  const testMock = getTestMock('updateCheckpointMd');
+  if (testMock) {
+    return testMock(taskId, checkpointId, checked, task, cwd);
+  }
+
   const checkpointPath = path.join(getTasksDir(cwd), taskId, 'checkpoint.md');
 
   if (!fs.existsSync(checkpointPath)) return;
@@ -733,6 +763,12 @@ export function updateCheckpointMdFromArray(
   checkpoints: CheckpointMetadata[],
   cwd: string = process.cwd()
 ): void {
+  // 测试注入点
+  const testMock = getTestMock('updateCheckpointMdFromArray');
+  if (testMock) {
+    return testMock(taskId, checkpoints, cwd);
+  }
+
   const checkpointPath = path.join(getTasksDir(cwd), taskId, 'checkpoint.md');
   const content = `# ${taskId} 检查点\n\n` +
     checkpoints.map(cp => `- [ ] ${cp.description}`).join('\n') +

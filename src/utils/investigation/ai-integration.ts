@@ -4,6 +4,12 @@ import { invokeAgent } from '../headless-agent';
 const DEFAULT_TIMEOUT = 120;
 const DEFAULT_ALLOWED_TOOLS: string[] = [];
 
+// 测试注入点：允许测试通过全局变量注入 mock
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function getTestMock(name: string): any {
+  return (globalThis as any).__PROJMNT4CLAUDE_TEST_MOCKS__?.[name];
+}
+
 /**
  * 统一的 AI 调用入口
  *
@@ -46,6 +52,12 @@ export async function callAIForJSON<T>(
   options: Omit<AICallOptions, 'outputFormat'>,
   validator?: (data: unknown) => T,
 ): Promise<T> {
+  // 测试注入点
+  const testMock = getTestMock('callAIForJSON');
+  if (testMock) {
+    return testMock(options, validator);
+  }
+
   const result = await callAI({ ...options, outputFormat: 'text' });
 
   if (!result.success) {

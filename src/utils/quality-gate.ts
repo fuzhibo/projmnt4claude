@@ -18,6 +18,12 @@ import * as path from 'path';
 import { getTaskMetaPath } from './task.js';
 import { SEPARATOR_WIDTH } from './format';
 import { getQualityMinScore, qualityScoreToVerdict } from './contradiction-detector.js';
+
+// 测试注入点：允许测试通过全局变量注入 mock
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function getTestMock(name: string): any {
+  return (globalThis as any).__PROJMNT4CLAUDE_TEST_MOCKS__?.[name];
+}
 import {
   checkpointRequiredPrefix,
   checkpointHasVerificationCommands,
@@ -173,6 +179,12 @@ export function extractFilePaths(
   text: string,
   options?: { includeBareFilenames?: boolean }
 ): string[] {
+  // 测试注入点
+  const testMock = getTestMock('extractFilePaths');
+  if (testMock) {
+    return testMock(text, options);
+  }
+
   const files: string[] = [];
   const seen = new Set<string>();
   const includeBare = options?.includeBareFilenames !== false;

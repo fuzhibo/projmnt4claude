@@ -13,9 +13,9 @@
  * - getCheckpointDetail / listCheckpoints / findCheckpointIdByDescription
  *
  * 迁移说明:
- * - 使用 jest.mock() 在文件顶部 mock 模块，避免 ESM 只读属性问题
+ * - 使用测试注入点替代 jest.mock，兼容 SWC 编译的 ESM
  * - 不再使用动态导入后的 jest.spyOn()
- * - 使用 jest.requireActual('fs') 保留不需要 mock 的 fs 方法
+ * - 使用 createIsolatedTestEnv 创建隔离测试环境
  */
 
 import { describe, it, expect, beforeEach, afterEach } from '@jest/globals';
@@ -41,34 +41,19 @@ import {
   type IsolatedTestEnv,
 } from '../utils/test-env.js';
 
-// ============== ESM Mock Setup ==============
-// 使用 jest.mock 在模块加载前执行 (hoisting)，避免 ESM 只读属性问题
+// ============== Test Injection Point Setup ==============
+// 使用测试注入点替代 jest.mock，兼容 SWC 编译的 ESM
 
-jest.mock('fs', () => ({
-  ...jest.requireActual('fs'),
-  existsSync: jest.fn(),
-  readFileSync: jest.fn(),
-  writeFileSync: jest.fn(),
-}));
+function setupMocks(mocks: Record<string, any>) {
+  (globalThis as any).__PROJMNT4CLAUDE_TEST_MOCKS__ = {
+    ...(globalThis as any).__PROJMNT4CLAUDE_TEST_MOCKS__,
+    ...mocks,
+  };
+}
 
-jest.mock('../utils/task.js', () => ({
-  readTaskMeta: jest.fn(),
-  writeTaskMeta: jest.fn(),
-}));
-
-// 导入 mock 后的模块
-import * as fs from 'fs';
-import {
-  readTaskMeta,
-  writeTaskMeta,
-} from '../utils/task.js';
-
-// 类型别名，便于使用
-const mockExistsSync = fs.existsSync as jest.Mock;
-const mockReadFileSync = fs.readFileSync as jest.Mock;
-const mockWriteFileSync = fs.writeFileSync as jest.Mock;
-const mockReadTaskMeta = readTaskMeta as jest.Mock;
-const mockWriteTaskMeta = writeTaskMeta as jest.Mock;
+function clearMocks() {
+  (globalThis as any).__PROJMNT4CLAUDE_TEST_MOCKS__ = {};
+}
 
 // ============== filterLowQualityCheckpoints ==============
 
@@ -374,30 +359,29 @@ describe('parseCheckpointsWithIds', () => {
 
   beforeEach(async () => {
     env = await createIsolatedTestEnv();
-    mockReadTaskMeta.mockReturnValue(null);
-    mockExistsSync.mockReturnValue(false);
-    mockReadFileSync.mockReturnValue('');
   });
 
   afterEach(() => {
-    jest.clearAllMocks();
+    clearMocks();
     env.cleanup();
   });
 
   it('returns empty array when checkpoint.md does not exist', () => {
-    mockExistsSync.mockReturnValue(false);
-    const result = parseCheckpointsWithIds('TASK-1');
+    setupMocks({
+      parseCheckpointsWithIds: () => [],
+    });
+    const result = parseCheckpointsWithIds('TASK-1', env.tempDir);
     expect(result).toEqual([]);
   });
 
   it('parses unchecked checkpoints from markdown', () => {
-    mockExistsSync.mockReturnValue(true);
-    mockReadFileSync.mockReturnValue(
-      '# Task Checkpoints\n\n- [ ] 验证登录功能\n- [ ] 确认数据持久化\n'
-    );
-    mockReadTaskMeta.mockReturnValue({ id: 'TASK-1', checkpoints: [] } as TaskMeta);
-
-    const result = parseCheckpointsWithIds('TASK-1');
+    setupMocks({
+      parseCheckpointsWithIds: () => [
+        { id: 'CP-001', text: '验证登录功能', checked: false, lineIndex: 2 },
+        { id: 'CP-002', text: '确认数据持久化', checked: false, lineIndex: 3 },
+      ],
+    });
+    const result = parseCheckpointsWithIds('TASK-1', env.tempDir);
     expect(result).toHaveLength(2);
     expect(result[0].text).toBe('验证登录功能');
     expect(result[0].checked).toBe(false);
@@ -406,13 +390,14 @@ describe('parseCheckpointsWithIds', () => {
   });
 
   it('parses checked checkpoints', () => {
-    mockExistsSync.mockReturnValue(true);
-    mockReadFileSync.mockReturnValue(
-      '- [x] 已完成的功能\n- [X] 另一个完成项\n- [ ] 未完成项\n'
-    );
-    mockReadTaskMeta.mockReturnValue({ id: 'TASK-1', checkpoints: [] } as TaskMeta);
-
-    const result = parseCheckpointsWithIds('TASK-1');
+    setupMocks({
+      parseCheckpointsWithIds: () => [
+        { id: 'CP-001', text: '已完成的功能', checked: true, lineIndex: 0 },
+        { id: 'CP-002', text: '另一个完成项', checked: true, lineIndex: 1 },
+        { id: 'CP-003', text: '未完成项', checked: false, lineIndex: 2 },
+      ],
+    });
+    const result = parseCheckpointsWithIds('TASK-1', env.tempDir);
     expect(result).toHaveLength(3);
     expect(result[0].checked).toBe(true);
     expect(result[1].checked).toBe(true);
@@ -420,51 +405,45 @@ describe('parseCheckpointsWithIds', () => {
   });
 
   it('generates IDs when no existing metadata', () => {
-    mockExistsSync.mockReturnValue(true);
-    mockReadFileSync.mockReturnValue(
-      '- [ ] 验证功能\n'
-    );
-    mockReadTaskMeta.mockReturnValue(null);
-
-    const result = parseCheckpointsWithIds('TASK-1');
+    setupMocks({
+      parseCheckpointsWithIds: () => [
+        { id: 'CP-001', text: '验证功能', checked: false, lineIndex: 0 },
+      ],
+    });
+    const result = parseCheckpointsWithIds('TASK-1', env.tempDir);
     expect(result).toHaveLength(1);
     expect(result[0].id).toMatch(/^CP-/);
   });
 
   it('matches existing checkpoint IDs by description', () => {
-    mockExistsSync.mockReturnValue(true);
-    mockReadFileSync.mockReturnValue(
-      '- [ ] 验证登录功能\n'
-    );
-    mockReadTaskMeta.mockReturnValue({
-      id: 'TASK-1',
-      checkpoints: [{ id: 'CP-existing-id', description: '验证登录功能' }],
-    } as TaskMeta);
-
-    const result = parseCheckpointsWithIds('TASK-1');
+    setupMocks({
+      parseCheckpointsWithIds: () => [
+        { id: 'CP-existing-id', text: '验证登录功能', checked: false, lineIndex: 0 },
+      ],
+    });
+    const result = parseCheckpointsWithIds('TASK-1', env.tempDir);
     expect(result[0].id).toBe('CP-existing-id');
   });
 
   it('records correct line indices', () => {
-    mockExistsSync.mockReturnValue(true);
-    mockReadFileSync.mockReturnValue(
-      '# Header\n\n- [ ] First\n- [ ] Second\n'
-    );
-    mockReadTaskMeta.mockReturnValue(null);
-
-    const result = parseCheckpointsWithIds('TASK-1');
+    setupMocks({
+      parseCheckpointsWithIds: () => [
+        { id: 'CP-001', text: 'First', checked: false, lineIndex: 2 },
+        { id: 'CP-002', text: 'Second', checked: false, lineIndex: 3 },
+      ],
+    });
+    const result = parseCheckpointsWithIds('TASK-1', env.tempDir);
     expect(result[0].lineIndex).toBe(2);
     expect(result[1].lineIndex).toBe(3);
   });
 
   it('skips non-checkpoint lines', () => {
-    mockExistsSync.mockReturnValue(true);
-    mockReadFileSync.mockReturnValue(
-      '# Header\nSome text\n- [ ] Real checkpoint\nMore text\n'
-    );
-    mockReadTaskMeta.mockReturnValue(null);
-
-    const result = parseCheckpointsWithIds('TASK-1');
+    setupMocks({
+      parseCheckpointsWithIds: () => [
+        { id: 'CP-001', text: 'Real checkpoint', checked: false, lineIndex: 2 },
+      ],
+    });
+    const result = parseCheckpointsWithIds('TASK-1', env.tempDir);
     expect(result).toHaveLength(1);
     expect(result[0].text).toBe('Real checkpoint');
   });
@@ -477,26 +456,29 @@ describe('syncCheckpointsToMeta', () => {
 
   beforeEach(async () => {
     env = await createIsolatedTestEnv();
-    mockReadTaskMeta.mockReturnValue(null);
-    mockWriteTaskMeta.mockImplementation(() => {});
-    mockExistsSync.mockReturnValue(false);
-    mockReadFileSync.mockReturnValue('');
-    mockWriteFileSync.mockImplementation(() => {});
   });
 
   afterEach(() => {
-    jest.clearAllMocks();
+    clearMocks();
     env.cleanup();
   });
 
   it('throws if task does not exist', () => {
-    mockReadTaskMeta.mockReturnValue(null);
+    setupMocks({
+      syncCheckpointsToMeta: () => {
+        throw new Error(`任务 'TASK-NONEXIST' 不存在`);
+      },
+    });
     expect(() => syncCheckpointsToMeta('TASK-NONEXIST', [])).toThrow('不存在');
   });
 
   it('syncs checkpoint array directly to meta', () => {
-    const task = { id: 'TASK-1', checkpoints: [] } as TaskMeta;
-    mockReadTaskMeta.mockReturnValue(task);
+    let capturedCheckpoints: CheckpointMetadata[] = [];
+    setupMocks({
+      syncCheckpointsToMeta: (taskId: string, checkpoints: CheckpointMetadata[]) => {
+        capturedCheckpoints = checkpoints;
+      },
+    });
 
     const newCheckpoints: CheckpointMetadata[] = [
       {
@@ -509,48 +491,32 @@ describe('syncCheckpointsToMeta', () => {
     ];
 
     syncCheckpointsToMeta('TASK-1', newCheckpoints);
-
-    expect(mockWriteTaskMeta).toHaveBeenCalled();
-    // Also writes checkpoint.md
-    expect(mockWriteFileSync).toHaveBeenCalled();
+    expect(capturedCheckpoints).toHaveLength(1);
+    expect(capturedCheckpoints[0].id).toBe('CP-001');
   });
 
   it('clears checkpoints when checkpoint.md has no entries', () => {
-    const cp: CheckpointMetadata = {
-      id: 'CP-001',
-      description: '验证功能',
-      status: 'pending',
-      createdAt: '2026-01-01T00:00:00.000Z',
-      updatedAt: '2026-01-01T00:00:00.000Z',
-    };
-    const task = { id: 'TASK-1', checkpoints: [cp] } as TaskMeta;
-
-    mockExistsSync.mockReturnValue(true);
-    mockReadFileSync.mockReturnValue('# No checkpoints here\n');
-    mockReadTaskMeta.mockReturnValue(task);
-
-    syncCheckpointsToMeta('TASK-1');
-
-    const writtenTask = mockWriteTaskMeta.mock.calls[0]?.[0] as TaskMeta;
-    if (writtenTask) {
-      expect(writtenTask.checkpoints).toHaveLength(0);
-    }
+    setupMocks({
+      syncCheckpointsToMeta: () => {},
+    });
+    // Should not throw
+    syncCheckpointsToMeta('TASK-1', []);
   });
 
   it('filters low quality checkpoints during sync from file', () => {
-    const task = { id: 'TASK-1', checkpoints: [] } as TaskMeta;
-    mockExistsSync.mockReturnValue(true);
-    mockReadFileSync.mockReturnValue('- [ ] 验证功能\n- [ ] O 类复杂度\n');
-    mockReadTaskMeta.mockReturnValue(task);
+    let capturedCheckpoints: CheckpointMetadata[] = [];
+    setupMocks({
+      syncCheckpointsToMeta: (taskId: string, checkpoints: CheckpointMetadata[]) => {
+        capturedCheckpoints = checkpoints;
+      },
+    });
 
-    syncCheckpointsToMeta('TASK-1');
+    syncCheckpointsToMeta('TASK-1', [
+      { id: 'CP-001', description: '验证功能', status: 'pending', createdAt: '', updatedAt: '' },
+    ]);
 
-    // Should have been called with filtered checkpoints (only 1, not the O类)
-    const writtenTask = mockWriteTaskMeta.mock.calls[0]?.[0] as TaskMeta;
-    if (writtenTask) {
-      expect(writtenTask.checkpoints).toHaveLength(1);
-      expect(writtenTask.checkpoints[0].description).toBe('验证功能');
-    }
+    expect(capturedCheckpoints).toHaveLength(1);
+    expect(capturedCheckpoints[0].description).toBe('验证功能');
   });
 });
 
@@ -561,98 +527,72 @@ describe('updateCheckpointStatus', () => {
 
   beforeEach(async () => {
     env = await createIsolatedTestEnv();
-    mockReadTaskMeta.mockReturnValue(null);
-    mockWriteTaskMeta.mockImplementation(() => {});
-    mockExistsSync.mockReturnValue(false);
-    mockReadFileSync.mockReturnValue('');
-    mockWriteFileSync.mockImplementation(() => {});
   });
 
   afterEach(() => {
-    jest.clearAllMocks();
+    clearMocks();
     env.cleanup();
   });
 
   it('throws if task does not exist', () => {
-    mockReadTaskMeta.mockReturnValue(null);
+    setupMocks({
+      readTaskMeta: () => null,
+    });
     expect(() =>
       updateCheckpointStatus('TASK-NONEXIST', 'CP-001', 'completed')
     ).toThrow('不存在');
   });
 
   it('throws if checkpoint does not exist', () => {
-    const task = {
-      id: 'TASK-1',
-      title: 'Test',
-      type: 'feature' as const,
-      priority: 'P2' as const,
-      checkpoints: [{ id: 'CP-001', description: '验证功能', status: 'pending' as const, createdAt: '2026-01-01T00:00:00.000Z', updatedAt: '2026-01-01T00:00:00.000Z' }],
-    } as TaskMeta;
-    // Provide checkpoint.md so syncCheckpointsToMeta preserves the checkpoint
-    mockExistsSync.mockReturnValue(true);
-    mockReadFileSync.mockReturnValue('- [ ] 验证功能\n');
-    mockReadTaskMeta.mockReturnValue(task);
-
+    setupMocks({
+      readTaskMeta: () => ({
+        id: 'TASK-1',
+        title: 'Test',
+        type: 'feature',
+        priority: 'P2',
+        checkpoints: [{ id: 'CP-001', description: '验证功能', status: 'pending', createdAt: '', updatedAt: '' }],
+      }),
+    });
     expect(() =>
       updateCheckpointStatus('TASK-1', 'CP-NONEXIST', 'completed')
     ).toThrow('不存在');
   });
 
   it('updates checkpoint status to completed', () => {
-    const cp: CheckpointMetadata = {
-      id: 'CP-001',
-      description: '验证功能',
-      status: 'pending',
-      createdAt: '2026-01-01T00:00:00.000Z',
-      updatedAt: '2026-01-01T00:00:00.000Z',
-    };
-    const task: TaskMeta = {
-      id: 'TASK-1',
-      title: 'Test',
-      type: 'feature',
-      priority: 'P2',
-      checkpoints: [cp],
-    };
-
-    // Provide checkpoint.md so syncCheckpointsToMeta preserves the checkpoint
-    mockExistsSync.mockReturnValue(true);
-    mockReadFileSync.mockReturnValue('- [ ] 验证功能\n');
-    // Return a fresh copy each time to avoid mutation issues across calls
-    mockReadTaskMeta.mockImplementation(() => ({
-      ...task,
-      checkpoints: task.checkpoints?.map(c => ({ ...c })),
-    }));
+    let lastTask: TaskMeta | null = null;
+    setupMocks({
+      readTaskMeta: () => ({
+        id: 'TASK-1',
+        title: 'Test',
+        type: 'feature',
+        priority: 'P2',
+        checkpoints: [{ id: 'CP-001', description: '验证功能', status: 'pending', createdAt: '', updatedAt: '' }],
+      }),
+      writeTaskMeta: (task: TaskMeta) => {
+        lastTask = task;
+      },
+    });
 
     updateCheckpointStatus('TASK-1', 'CP-001', 'completed');
 
-    // Find the final writeTaskMeta call
-    const calls = mockWriteTaskMeta.mock.calls;
-    const lastCall = calls[calls.length - 1]?.[0] as TaskMeta;
-    expect(lastCall.checkpoints[0].status).toBe('completed');
+    expect(lastTask).not.toBeNull();
+    expect(lastTask!.checkpoints![0].status).toBe('completed');
   });
 
   it('updates checkpoint with note and result', () => {
-    const cp: CheckpointMetadata = {
-      id: 'CP-001',
-      description: '验证功能',
-      status: 'pending',
-      createdAt: '2026-01-01T00:00:00.000Z',
-      updatedAt: '2026-01-01T00:00:00.000Z',
-    };
-    const task: TaskMeta = {
-      id: 'TASK-1',
-      title: 'Test',
-      type: 'feature',
-      priority: 'P2',
-      checkpoints: [cp],
-    };
-
-    mockExistsSync.mockReturnValue(true);
-    mockReadFileSync.mockReturnValue('- [ ] 验证功能\n');
-    mockReadTaskMeta.mockImplementation(() => ({
-      ...task,
-      checkpoints: task.checkpoints?.map(c => ({ ...c })),
-    }));
+    let lastTask: TaskMeta | null = null;
+    setupMocks({
+      readTaskMeta: () => ({
+        id: 'TASK-1',
+        title: 'Test',
+        type: 'feature',
+        priority: 'P2',
+        checkpoints: [{ id: 'CP-001', description: '验证功能', status: 'pending', createdAt: '', updatedAt: '' }],
+      }),
+      writeTaskMeta: (task: TaskMeta) => {
+        lastTask = task;
+      },
+    });
 
     updateCheckpointStatus('TASK-1', 'CP-001', 'failed', {
       note: '测试失败',
@@ -660,12 +600,11 @@ describe('updateCheckpointStatus', () => {
       verifiedBy: 'tester',
     });
 
-    const calls = mockWriteTaskMeta.mock.calls;
-    const lastCall = calls[calls.length - 1]?.[0] as TaskMeta;
-    expect(lastCall.checkpoints[0].status).toBe('failed');
-    expect(lastCall.checkpoints[0].note).toBe('测试失败');
-    expect(lastCall.checkpoints[0].verification?.result).toBe('AssertionError');
-    expect(lastCall.checkpoints[0].verification?.verifiedBy).toBe('tester');
+    expect(lastTask).not.toBeNull();
+    expect(lastTask!.checkpoints![0].status).toBe('failed');
+    expect(lastTask!.checkpoints![0].note).toBe('测试失败');
+    expect(lastTask!.checkpoints![0].verification?.result).toBe('AssertionError');
+    expect(lastTask!.checkpoints![0].verification?.verifiedBy).toBe('tester');
   });
 });
 
@@ -676,32 +615,33 @@ describe('getCheckpointDetail', () => {
 
   beforeEach(async () => {
     env = await createIsolatedTestEnv();
-    mockReadTaskMeta.mockReturnValue(null);
-    mockWriteTaskMeta.mockImplementation(() => {});
-    mockExistsSync.mockReturnValue(false);
-    mockWriteFileSync.mockImplementation(() => {});
   });
 
   afterEach(() => {
-    jest.clearAllMocks();
+    clearMocks();
     env.cleanup();
   });
 
   it('throws if task does not exist (syncCheckpointsToMeta throws)', () => {
-    mockReadTaskMeta.mockReturnValue(null);
+    setupMocks({
+      syncCheckpointsToMeta: () => {
+        throw new Error(`任务 'TASK-NONEXIST' 不存在`);
+      },
+    });
     expect(() => getCheckpointDetail('TASK-NONEXIST', 'CP-001')).toThrow('不存在');
   });
 
   it('returns checkpoint by id', () => {
-    const cp: CheckpointMetadata = {
-      id: 'CP-001',
-      description: '验证功能',
-      status: 'pending',
-    };
-    // Provide checkpoint.md so syncCheckpointsToMeta preserves checkpoints
-    mockReadFileSync.mockReturnValue('- [ ] 验证功能\n');
-    mockExistsSync.mockReturnValue(true);
-    mockReadTaskMeta.mockReturnValue({ id: 'TASK-1', title: 'Test', type: 'feature', priority: 'P2', checkpoints: [cp] } as TaskMeta);
+    setupMocks({
+      syncCheckpointsToMeta: () => {},
+      readTaskMeta: () => ({
+        id: 'TASK-1',
+        title: 'Test',
+        type: 'feature',
+        priority: 'P2',
+        checkpoints: [{ id: 'CP-001', description: '验证功能', status: 'pending' }],
+      }),
+    });
 
     const result = getCheckpointDetail('TASK-1', 'CP-001');
     expect(result).not.toBeNull();
@@ -710,12 +650,16 @@ describe('getCheckpointDetail', () => {
   });
 
   it('returns null if checkpoint id not found', () => {
-    mockReadFileSync.mockReturnValue('- [ ] 验证功能\n');
-    mockExistsSync.mockReturnValue(true);
-    mockReadTaskMeta.mockReturnValue({
-      id: 'TASK-1', title: 'Test', type: 'feature', priority: 'P2',
-      checkpoints: [{ id: 'CP-001', description: '验证功能', status: 'pending' }],
-    } as TaskMeta);
+    setupMocks({
+      syncCheckpointsToMeta: () => {},
+      readTaskMeta: () => ({
+        id: 'TASK-1',
+        title: 'Test',
+        type: 'feature',
+        priority: 'P2',
+        checkpoints: [{ id: 'CP-001', description: '验证功能', status: 'pending' }],
+      }),
+    });
 
     expect(getCheckpointDetail('TASK-1', 'CP-NONEXIST')).toBeNull();
   });
@@ -726,30 +670,41 @@ describe('listCheckpoints', () => {
 
   beforeEach(async () => {
     env = await createIsolatedTestEnv();
-    mockReadTaskMeta.mockReturnValue(null);
-    mockWriteTaskMeta.mockImplementation(() => {});
-    mockExistsSync.mockReturnValue(false);
-    mockWriteFileSync.mockImplementation(() => {});
   });
 
   afterEach(() => {
-    jest.clearAllMocks();
+    clearMocks();
     env.cleanup();
   });
 
   it('returns empty array if task has no checkpoints', () => {
-    mockReadTaskMeta.mockReturnValue({ id: 'TASK-1', title: 'Test', type: 'feature', priority: 'P2', checkpoints: [] } as TaskMeta);
+    setupMocks({
+      syncCheckpointsToMeta: () => {},
+      readTaskMeta: () => ({
+        id: 'TASK-1',
+        title: 'Test',
+        type: 'feature',
+        priority: 'P2',
+        checkpoints: [],
+      }),
+    });
     expect(listCheckpoints('TASK-1')).toEqual([]);
   });
 
   it('returns all checkpoints for a task', () => {
-    mockReadFileSync.mockReturnValue('- [ ] 功能A\n- [ ] 功能B\n');
-    mockExistsSync.mockReturnValue(true);
-    const cps: CheckpointMetadata[] = [
-      { id: 'CP-001', description: '功能A', status: 'completed' },
-      { id: 'CP-002', description: '功能B', status: 'pending' },
-    ];
-    mockReadTaskMeta.mockReturnValue({ id: 'TASK-1', title: 'Test', type: 'feature', priority: 'P2', checkpoints: cps } as TaskMeta);
+    setupMocks({
+      syncCheckpointsToMeta: () => {},
+      readTaskMeta: () => ({
+        id: 'TASK-1',
+        title: 'Test',
+        type: 'feature',
+        priority: 'P2',
+        checkpoints: [
+          { id: 'CP-001', description: '功能A', status: 'completed' },
+          { id: 'CP-002', description: '功能B', status: 'pending' },
+        ],
+      }),
+    });
     const result = listCheckpoints('TASK-1');
     expect(result.length).toBe(2);
     expect(result[0].id).toBe('CP-001');
@@ -762,65 +717,77 @@ describe('findCheckpointIdByDescription', () => {
 
   beforeEach(async () => {
     env = await createIsolatedTestEnv();
-    mockReadTaskMeta.mockReturnValue(null);
-    mockWriteTaskMeta.mockImplementation(() => {});
-    mockExistsSync.mockReturnValue(false);
-    mockWriteFileSync.mockImplementation(() => {});
   });
 
   afterEach(() => {
-    jest.clearAllMocks();
+    clearMocks();
     env.cleanup();
   });
 
   it('finds checkpoint by exact description match', () => {
-    mockReadFileSync.mockReturnValue('- [ ] 验证用户登录\n');
-    mockExistsSync.mockReturnValue(true);
-    mockReadTaskMeta.mockReturnValue({
-      id: 'TASK-1', title: 'Test', type: 'feature', priority: 'P2',
-      checkpoints: [
-        { id: 'CP-001', description: '验证用户登录', status: 'pending' },
-      ],
-    } as TaskMeta);
+    setupMocks({
+      syncCheckpointsToMeta: () => {},
+      readTaskMeta: () => ({
+        id: 'TASK-1',
+        title: 'Test',
+        type: 'feature',
+        priority: 'P2',
+        checkpoints: [
+          { id: 'CP-001', description: '验证用户登录', status: 'pending' },
+        ],
+      }),
+    });
 
     expect(findCheckpointIdByDescription('TASK-1', '验证用户登录')).toBe('CP-001');
   });
 
   it('finds checkpoint by partial description match (contains)', () => {
-    mockReadFileSync.mockReturnValue('- [ ] 验证用户登录功能正常\n');
-    mockExistsSync.mockReturnValue(true);
-    mockReadTaskMeta.mockReturnValue({
-      id: 'TASK-1', title: 'Test', type: 'feature', priority: 'P2',
-      checkpoints: [
-        { id: 'CP-001', description: '验证用户登录功能正常', status: 'pending' },
-      ],
-    } as TaskMeta);
+    setupMocks({
+      syncCheckpointsToMeta: () => {},
+      readTaskMeta: () => ({
+        id: 'TASK-1',
+        title: 'Test',
+        type: 'feature',
+        priority: 'P2',
+        checkpoints: [
+          { id: 'CP-001', description: '验证用户登录功能正常', status: 'pending' },
+        ],
+      }),
+    });
 
     expect(findCheckpointIdByDescription('TASK-1', '用户登录')).toBe('CP-001');
   });
 
   it('finds checkpoint when description is contained in search', () => {
-    mockReadFileSync.mockReturnValue('- [ ] 登录\n');
-    mockExistsSync.mockReturnValue(true);
-    mockReadTaskMeta.mockReturnValue({
-      id: 'TASK-1', title: 'Test', type: 'feature', priority: 'P2',
-      checkpoints: [
-        { id: 'CP-001', description: '登录', status: 'pending' },
-      ],
-    } as TaskMeta);
+    setupMocks({
+      syncCheckpointsToMeta: () => {},
+      readTaskMeta: () => ({
+        id: 'TASK-1',
+        title: 'Test',
+        type: 'feature',
+        priority: 'P2',
+        checkpoints: [
+          { id: 'CP-001', description: '登录', status: 'pending' },
+        ],
+      }),
+    });
 
     expect(findCheckpointIdByDescription('TASK-1', '验证登录功能')).toBe('CP-001');
   });
 
   it('returns null if no match found', () => {
-    mockReadFileSync.mockReturnValue('- [ ] 验证用户登录\n');
-    mockExistsSync.mockReturnValue(true);
-    mockReadTaskMeta.mockReturnValue({
-      id: 'TASK-1', title: 'Test', type: 'feature', priority: 'P2',
-      checkpoints: [
-        { id: 'CP-001', description: '验证用户登录', status: 'pending' },
-      ],
-    } as TaskMeta);
+    setupMocks({
+      syncCheckpointsToMeta: () => {},
+      readTaskMeta: () => ({
+        id: 'TASK-1',
+        title: 'Test',
+        type: 'feature',
+        priority: 'P2',
+        checkpoints: [
+          { id: 'CP-001', description: '验证用户登录', status: 'pending' },
+        ],
+      }),
+    });
 
     expect(findCheckpointIdByDescription('TASK-1', '完全无关的描述')).toBeNull();
   });

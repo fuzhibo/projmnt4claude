@@ -10,6 +10,12 @@ import type { TaskMeta } from '../types/task.js';
 import { TERMINAL_STATUSES, normalizeStatus } from '../types/task.js';
 import { extractAffectedFiles, extractFilePaths } from './quality-gate.js';
 
+// 测试注入点：允许测试通过全局变量注入 mock
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function getTestMock(name: string): any {
+  return (globalThis as any).__PROJMNT4CLAUDE_TEST_MOCKS__?.[name];
+}
+
 // ============== 类型定义 ==============
 
 /**
@@ -66,6 +72,12 @@ export function inferDependencies(
   allTasks: TaskMeta[],
   options?: InferDependenciesOptions,
 ): InferredDependency[] {
+  // 测试注入点
+  const testMock = getTestMock('inferDependencies');
+  if (testMock) {
+    return testMock(taskOrDescription, allTasks, options);
+  }
+
   const {
     strategy = 'all',
     skipTerminal = true,

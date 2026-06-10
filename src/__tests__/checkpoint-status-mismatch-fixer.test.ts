@@ -102,17 +102,25 @@ function makeSkippedOutput(reason: string = '需要人工确认'): VerificationO
 describe('CheckpointStatusMismatchFixer', () => {
   let env: IsolatedTestEnv;
   let verifySpy: jest.SpyInstance;
-  let writeMetaSpy: jest.SpyInstance;
+  let writeTaskMetaCalled: boolean;
 
   beforeEach(async () => {
     env = await createIsolatedTestEnv();
     verifySpy = jest.spyOn(checkpointVerification.CheckpointOutputVerifier.prototype, 'verify');
-    writeMetaSpy = jest.spyOn(taskModule, 'writeTaskMeta').mockImplementation(() => {});
+    writeTaskMetaCalled = false;
+    // Use test injection point to track writeTaskMeta calls
+    (globalThis as any).__PROJMNT4CLAUDE_TEST_MOCKS__ = {
+      ...(globalThis as any).__PROJMNT4CLAUDE_TEST_MOCKS__,
+      writeTaskMeta: (...args: any[]) => {
+        writeTaskMetaCalled = true;
+      },
+    };
   });
 
   afterEach(() => {
     verifySpy.mockRestore();
-    writeMetaSpy.mockRestore();
+    // Clean up test injection point
+    delete (globalThis as any).__PROJMNT4CLAUDE_TEST_MOCKS__?.writeTaskMeta;
     env.cleanup();
   });
 
@@ -166,7 +174,7 @@ describe('CheckpointStatusMismatchFixer', () => {
       expect(task.checkpoints![1].verification?.result).toContain('passed');
 
       // writeTaskMeta called for completed checkpoints
-      expect(writeMetaSpy).toHaveBeenCalled();
+      expect(writeTaskMetaCalled).toBe(true);
     });
 
     it('should record evidence in verification', async () => {
@@ -210,7 +218,7 @@ describe('CheckpointStatusMismatchFixer', () => {
       expect(task.checkpoints![0].note).toContain('假成功');
 
       // writeTaskMeta called for reopened task
-      expect(writeMetaSpy).toHaveBeenCalled();
+      expect(writeTaskMetaCalled).toBe(true);
     });
 
     it('should handle failed result same as unverified', async () => {

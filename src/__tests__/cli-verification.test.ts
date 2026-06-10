@@ -256,15 +256,12 @@ describe('CheckpointVerificationDetails type', () => {
 
 describe('updateCheckpointStatus with human parameter', () => {
   let env: IsolatedTestEnv;
-  let writeTaskMetaSpy: jest.SpyInstance;
 
   beforeEach(async () => {
     env = await createIsolatedTestEnv();
-    writeTaskMetaSpy = jest.spyOn(require('../utils/task.js'), 'writeTaskMeta');
   });
 
   afterEach(async () => {
-    writeTaskMetaSpy.mockRestore();
     await env.cleanup();
   });
 
@@ -302,15 +299,12 @@ describe('updateCheckpointStatus with human parameter', () => {
 
 describe('updateCheckpointWithAIVerification integration', () => {
   let env: IsolatedTestEnv;
-  let writeTaskMetaSpy: jest.SpyInstance;
 
   beforeEach(async () => {
     env = await createIsolatedTestEnv();
-    writeTaskMetaSpy = jest.spyOn(require('../utils/task.js'), 'writeTaskMeta');
   });
 
   afterEach(async () => {
-    writeTaskMetaSpy.mockRestore();
     await env.cleanup();
   });
 
@@ -359,17 +353,14 @@ describe('updateCheckpointWithAIVerification integration', () => {
 
 describe('updateCheckpointWithCLIVerification integration', () => {
   let env: IsolatedTestEnv;
-  let writeTaskMetaSpy: jest.SpyInstance;
   let originalUser: string | undefined;
 
   beforeEach(async () => {
     env = await createIsolatedTestEnv();
-    writeTaskMetaSpy = jest.spyOn(require('../utils/task.js'), 'writeTaskMeta');
     originalUser = process.env.USER;
   });
 
   afterEach(async () => {
-    writeTaskMetaSpy.mockRestore();
     process.env.USER = originalUser;
     await env.cleanup();
   });

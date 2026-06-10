@@ -895,6 +895,21 @@ export class AssemblyLine {
       if (!canProceed) {
         console.log(`   ❌ 阶段前置条件检查失败`);
 
+        // CP-P6-004: 存储门禁失败信息到重试上下文
+        const preGateErrorMsg = `阶段前置条件检查失败（A 类门禁）`;
+        this.storeFailureContext(taskId, phase, preGateErrorMsg, state, {
+          ruleId: 'R-PRE-PHASE-001',
+          ruleName: '阶段前置条件检查',
+          failureType: 'A',
+          failureDetails: `任务 ${taskId} 的阶段前置条件检查未通过`,
+          suggestions: [
+            '检查任务是否存在且已正确初始化',
+            '确认任务依赖是否已完成',
+            '验证任务数据完整性',
+          ],
+          severity: 'ERROR',
+        });
+
         // CP-005: A 类门禁失败（Task Foundation）- 中断流水线，不重试
         // 阶段前门禁检查任务数据本身有效性，失败说明任务数据有问题，重试无意义
         console.log(`   🚫 A 类门禁失败，中断流水线（任务数据有效性检查失败）`);
@@ -903,7 +918,7 @@ export class AssemblyLine {
           phase,
           failedAt: 'pre_phase_gate',
           attempt,
-          reason: `阶段前置条件检查失败（A 类门禁）`,
+          reason: preGateErrorMsg,
           retryable: false,
           failureType: 'A',
         };
@@ -957,6 +972,21 @@ export class AssemblyLine {
       if (!postGatePassed) {
         console.log(`   ❌ 阶段后质量门禁失败`);
 
+        // CP-P6-004: 存储门禁失败信息到重试上下文
+        const postGateErrorMsg = `阶段后质量门禁失败（B 类门禁，${attempt}次尝试）`;
+        this.storeFailureContext(taskId, phase, postGateErrorMsg, state, {
+          ruleId: 'R-POST-PHASE-001',
+          ruleName: '阶段结果验证',
+          failureType: 'B',
+          failureDetails: `${phase} 阶段结果验证未通过`,
+          suggestions: [
+            `检查 ${phase} 阶段输出是否符合预期格式`,
+            '确认阶段执行结果包含必要的字段和数据',
+            '验证阶段输出质量是否满足门禁要求',
+          ],
+          severity: 'ERROR',
+        });
+
         // CP-005: B 类门禁失败（Phase Artifact）- 回退到阶段起点重试
         // 阶段后门禁检查阶段输出质量，失败说明产出不达标，重试可能改善
         if (attempt <= maxRetries) {
@@ -971,7 +1001,7 @@ export class AssemblyLine {
           phase,
           failedAt: 'post_phase_gate',
           attempt,
-          reason: `阶段后质量门禁失败（B 类门禁，${attempt}次尝试）`,
+          reason: postGateErrorMsg,
           retryable: false,
           failureType: 'B',
         };
@@ -2216,6 +2246,20 @@ export class AssemblyLine {
       };
     }
 
+    // CP-P6-8: 从最后一次失败提取门禁详细信息
+    let gateFailureDetails: RetryContext['gateFailureDetails'] | undefined;
+    const lastFailure = failureHistory[failureHistory.length - 1];
+    if (lastFailure?.gateInfo) {
+      gateFailureDetails = {
+        ruleId: lastFailure.gateInfo.ruleId,
+        ruleName: lastFailure.gateInfo.ruleName,
+        failureType: lastFailure.gateInfo.failureType,
+        failureDetails: lastFailure.gateInfo.failureDetails,
+        suggestions: lastFailure.gateInfo.suggestions,
+        severity: lastFailure.gateInfo.severity,
+      };
+    }
+
     return {
       // 保留原有字段
       previousFailureReason: stored?.previousFailureReason ?? (failureHistory.length > 0 ? failureHistory[failureHistory.length - 1]!.error : undefined),
@@ -2231,6 +2275,9 @@ export class AssemblyLine {
       suggestedFixes,
       failureHistory,
 
+      // CP-P6-8: 门禁失败详情
+      gateFailureDetails,
+
       // CP-5: QA 覆盖率缺口上下文
       qaCoverageGapContext,
     };
@@ -2240,12 +2287,14 @@ export class AssemblyLine {
    * 存储失败上下文供重试时使用
    *
    * P6 Enhanced: 同时记录到 failureHistory 以支持完整的重试上下文
+   * CP-P6-8: 支持接收门禁结构化结果
    */
   private storeFailureContext(
     taskId: string,
     phase: 'development' | 'code_review' | 'qa' | 'evaluation',
     reason: string,
     state: HarnessRuntimeState,
+    gateInfo?: FailureRecord['gateInfo'],
   ): void {
     const existing = this.taskRetryContexts.get(taskId);
     const phaseRetryCount = this.getPhaseRetryCount(taskId, phase, state);
@@ -2279,8 +2328,8 @@ export class AssemblyLine {
       suggestedFixes: [],
     });
 
-    // P6: 记录到 failureHistory
-    this.recordFailure(taskId, phase, phaseRetryCount + 1, reason, state);
+    // P6: 记录到 failureHistory（含门禁信息）
+    this.recordFailure(taskId, phase, phaseRetryCount + 1, reason, state, gateInfo);
   }
 
   // ============================================================
@@ -2291,6 +2340,7 @@ export class AssemblyLine {
    * 记录失败到 failureHistory
    *
    * CP-P6: 存储完整的失败历史供重试时分析
+   * CP-P6-8: 支持存储门禁结构化信息
    */
   private recordFailure(
     taskId: string,
@@ -2298,6 +2348,7 @@ export class AssemblyLine {
     attempt: number,
     error: string,
     state: HarnessRuntimeState,
+    gateInfo?: FailureRecord['gateInfo'],
   ): void {
     const phaseKey = `${taskId}:${phase}`;
 
@@ -2313,13 +2364,15 @@ export class AssemblyLine {
     // 提取洞察（基于历史 + 当前）
     const insights = this.extractInsights([...history, { attempt, timestamp: '', phase, error, errorType }]);
 
-    const record = {
+    const record: FailureRecord = {
       attempt,
       timestamp: new Date().toISOString(),
       phase,
       error,
       errorType,
       insights,
+      // CP-P6-8: 存储门禁结构化信息
+      gateInfo,
     };
 
     history.push(record);
@@ -2329,7 +2382,10 @@ export class AssemblyLine {
   /**
    * 错误分类
    *
-   * 根据错误内容分类为：syntax, import, test, type, lint, other
+   * CP-P6-5: 包含 format 类型
+   * CP-P6-6: 包含 ai_output 类型
+   *
+   * 根据错误内容分类为：syntax, import, test, type, lint, timeout, api, format, ai_output, other
    */
   private classifyError(error: string): string {
     const lowerError = error.toLowerCase();
@@ -2354,6 +2410,14 @@ export class AssemblyLine {
     }
     if (lowerError.includes('api') || lowerError.includes('rate limit') || lowerError.includes('429') || lowerError.includes('5')) {
       return 'api';
+    }
+    // CP-P6-5: format 类型识别
+    if (lowerError.includes('verdict') || lowerError.includes('format') || lowerError.includes('标记') || lowerError.includes('output format')) {
+      return 'format';
+    }
+    // CP-P6-6: ai_output 类型识别
+    if (lowerError.includes('ai') || lowerError.includes('output') || lowerError.includes('会话失败') || lowerError.includes('调用失败') || lowerError.includes('claude')) {
+      return 'ai_output';
     }
     return 'other';
   }
@@ -2409,6 +2473,16 @@ export class AssemblyLine {
 
     if (lastError.includes('timeout') || lastError.includes('timed out')) {
       insights.push('超时模式: 任务可能过于复杂，考虑拆分或优化实现');
+    }
+
+    // CP-P6-5: format 类型洞察
+    if (lastError.includes('verdict') || lastError.includes('format') || lastError.includes('标记') || lastError.includes('output format')) {
+      insights.push('格式错误模式: 输出缺少必要的标记或格式不正确，检查 VERDICT 标记和输出格式');
+    }
+
+    // CP-P6-6: ai_output 类型洞察
+    if (lastError.includes('ai') || lastError.includes('output') || lastError.includes('会话失败') || lastError.includes('调用失败') || lastError.includes('claude')) {
+      insights.push('AI输出错误模式: AI服务调用失败或输出异常，检查API状态和请求参数');
     }
 
     // 根据重试次数添加洞察
@@ -2487,6 +2561,22 @@ export class AssemblyLine {
         fixes.push('检查 API 限流情况，稍后重试');
         fixes.push('检查 API 认证和权限');
         fixes.push('查看 API 服务状态页面');
+        break;
+
+      // CP-P6-5: format 类型修复建议
+      case 'format':
+        fixes.push('确保输出第一行包含 VERDICT: PASS 或 VERDICT: NOPASS');
+        fixes.push('参考正确格式示例：VERDICT: PASS\n## 验证结果: PASS');
+        fixes.push('不要使用中文"通过"或"不通过"');
+        fixes.push('检查输出是否符合阶段要求的格式规范');
+        break;
+
+      // CP-P6-6: ai_output 类型修复建议
+      case 'ai_output':
+        fixes.push('检查 AI 服务 API 状态是否正常');
+        fixes.push('确认请求参数和提示词格式正确');
+        fixes.push('检查网络连接和 API 密钥有效性');
+        fixes.push('尝试简化请求内容或分批处理');
         break;
 
       default:

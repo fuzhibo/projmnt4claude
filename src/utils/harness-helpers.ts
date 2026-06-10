@@ -222,6 +222,13 @@ export function sleep(seconds: number): Promise<void> {
  * 归档路径格式: {报告目录}/archive/{ISO-timestamp}-{原始文件名}
  */
 export function archiveReportIfExists(reportPath: string, cwd?: string): void {
+  // 测试注入点
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const testMock = (globalThis as any).__PROJMNT4CLAUDE_TEST_MOCKS__?.archiveReportIfExists;
+  if (testMock) {
+    return testMock(reportPath, cwd);
+  }
+
   // 防御性编程：确保 texts 始终有值，防止 "texts is not defined" 错误
   let texts: ReturnType<typeof t>;
   try {

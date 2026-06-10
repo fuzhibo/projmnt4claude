@@ -246,6 +246,14 @@ export function spawnWithMemoryLimit(
   options: SpawnOptions & { cwd: string },
   type: MemoryLimitType = 'default',
 ) {
+  // 测试注入点：允许测试通过全局变量替换实现
+  // 必须在函数内读取，不能缓存到模块级变量（jest beforeAll 在模块加载后执行）
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const testMocks = (globalThis as any).__PROJMNT4CLAUDE_TEST_MOCKS__;
+  if (testMocks?.spawnWithMemoryLimit) {
+    return testMocks.spawnWithMemoryLimit(command, args, options, type);
+  }
+
   const cfg = getMemoryLimitConfig(options.cwd);
 
   // 启动前检查内存压力，不足时拒绝启动

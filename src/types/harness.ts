@@ -283,6 +283,15 @@ export interface FailureRecord {
   insights?: string[];
   /** Failure category */
   errorType?: string;
+  /** CP-P6-8: Gate structured information for retry feedback */
+  gateInfo?: {
+    ruleId?: string;
+    ruleName?: string;
+    failureType?: string;
+    failureDetails?: string;
+    suggestions?: string[];
+    severity?: 'ERROR' | 'WARNING' | 'INFO';
+  };
 }
 
 /**
@@ -341,6 +350,16 @@ export interface RetryContext {
     recoverable: boolean;
   };
 
+  /** CP-P6-8: Gate failure details for enhanced retry feedback */
+  gateFailureDetails?: {
+    ruleId?: string;
+    ruleName?: string;
+    failureType?: string;
+    failureDetails?: string;
+    suggestions?: string[];
+    severity?: 'ERROR' | 'WARNING' | 'INFO';
+  };
+
   // ============================================================
   // CP-6: Chain Fallback & Smart Routing Fields
   // ============================================================
@@ -371,6 +390,29 @@ export interface RetryContext {
     message: string;
     qaRetryPrompt?: string;
   };
+
+  // ============================================================
+  // CP-007: P6 RetryContext Alignment with P7-P15 Quality Gates
+  // ============================================================
+
+  /**
+   * CP-007: Phase gate integration points for P7-P15 quality gates.
+   * Records pre-phase and post-phase gate results for each phase,
+   * enabling retry context to carry structured gate failure information
+   * across phase boundaries.
+   *
+   * | Phase | Gate Type | Gate Doc | Retry Trigger | RetryContext Content |
+   * |-------|-----------|----------|---------------|---------------------|
+   * | Pre-dev (P7) | pre_phase_gate | P7 | Invalid task data | Task status, deps |
+   * | Post-dev (P8) | post_phase_gate | P8 | Incomplete dev output | Code changes, coverage |
+   * | Pre-review (P9) | pre_phase_gate | P9 | Format issues | Lint/type errors |
+   * | Post-review (P10) | post_phase_gate | P10 | Output format issues | VERDICT missing |
+   * | Pre-QA (P12) | pre_phase_gate | P12 | Env not ready | Missing deps, config |
+   * | Post-QA (P13) | post_phase_gate | P13 | QA output format issues | VERDICT missing |
+   * | Pre-eval (P14) | pre_phase_gate | P14 | Eval conditions not met | Prior phases incomplete |
+   * | Post-eval (P15) | post_phase_gate | P15 | Eval output format issues | Report format errors |
+   */
+  phaseGateIntegrations?: PhaseGateIntegration[];
 }
 
 /**
@@ -394,6 +436,97 @@ export const DEFAULT_PHASE_RETRY_LIMITS: PhaseRetryLimits = {
   qa: 2,
   evaluation: 2,
 };
+
+// ============================================================
+// CP-007: Phase Gate Integration Types (P6 RetryContext ↔ P7-P15 Gates)
+// ============================================================
+
+/**
+ * Phase gate type - pre-phase or post-phase gate
+ * Pre-phase gates (P7, P9, P12, P14): validate conditions before phase execution
+ * Post-phase gates (P8, P10, P13, P15): validate output after phase execution
+ */
+export type PhaseGateType = 'pre_phase_gate' | 'post_phase_gate';
+
+/**
+ * Phase identifier for gate integration
+ * Maps to P7-P15 quality gate documents
+ */
+export type PhaseGatePhase =
+  | 'development'      // P7 (pre), P8 (post)
+  | 'code_review'      // P9 (pre), P10 (post)
+  | 'qa'               // P12 (pre), P13 (post)
+  | 'evaluation';      // P14 (pre), P15 (post)
+
+/**
+ * Gate check result classification (A/B classification)
+ * A: Unrecoverable - interrupts pipeline
+ * B: Recoverable - triggers phase retry
+ */
+export type GateFailureClassification = 'A' | 'B';
+
+/**
+ * Single phase gate integration record.
+ * Captures the result of a pre-phase or post-phase gate check,
+ * enabling RetryContext to carry structured gate failure information
+ * across retry attempts.
+ *
+ * @see docs/investigation/hd-p6-retry-context.md §2.5.3
+ */
+export interface PhaseGateIntegration {
+  /** CP-007: Phase identifier (development/code_review/qa/evaluation) */
+  phase: PhaseGatePhase;
+
+  /** CP-007: Gate type - pre-phase or post-phase */
+  gateType: PhaseGateType;
+
+  /** CP-007: Quality gate document reference (P7-P15) */
+  gateDoc: 'P7' | 'P8' | 'P9' | 'P10' | 'P12' | 'P13' | 'P14' | 'P15';
+
+  /** CP-007: Gate check result */
+  result: {
+    /** Whether the gate passed */
+    passed: boolean;
+    /** Gate failure classification (A=unrecoverable, B=recoverable) */
+    failureType?: GateFailureClassification;
+    /** Human-readable failure message */
+    message?: string;
+    /** Structured gate failure details */
+    gateInfo?: {
+      /** Rule ID that failed */
+      ruleId?: string;
+      /** Rule name */
+      ruleName?: string;
+      /** Failure type classification */
+      failureType?: string;
+      /** Detailed failure description */
+      failureDetails?: string;
+      /** Suggested fixes */
+      suggestions?: string[];
+      /** Severity level */
+      severity?: 'ERROR' | 'WARNING' | 'INFO';
+    };
+  };
+
+  /** CP-007: Timestamp of gate check */
+  checkedAt: string;
+
+  /** CP-007: Attempt number when gate was checked */
+  attempt: number;
+
+  /** CP-007: Retry trigger condition summary */
+  retryTrigger?: string;
+
+  /** CP-007: RetryContext content snapshot at gate failure */
+  retryContextSnapshot?: {
+    /** Task status at failure time */
+    taskStatus?: string;
+    /** Dependency information */
+    dependencies?: string[];
+    /** Phase-specific context (e.g., code changes, coverage, lint errors) */
+    phaseContext?: Record<string, unknown>;
+  };
+}
 
 /**
  * Review phase report

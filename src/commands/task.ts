@@ -1,6 +1,21 @@
 import prompts from 'prompts';
 import * as fs from 'fs';
 import * as path from 'path';
+
+// 测试注入点：允许测试通过全局变量注入 mock 的 prompts
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function getTestMock(name: string): any {
+  return (globalThis as any).__PROJMNT4CLAUDE_TEST_MOCKS__?.[name];
+}
+
+async function promptsWrapper(args: any): Promise<any> {
+  const testMock = getTestMock('prompts');
+  if (testMock) {
+    return testMock(args);
+  }
+  return prompts(args);
+}
+
 import { isInitialized, getTasksDir, getArchiveDir } from '../utils/path';
 import {
   generateNewTaskId,
@@ -370,7 +385,7 @@ async function validateFileReferences(
   }
 
   // 交互模式: 询问是否继续
-  const response = await prompts({
+  const response = await promptsWrapper({
     type: 'confirm',
     name: 'proceed',
     message: '以上文件does not exist, 确认继续CreatedTask?',
@@ -634,7 +649,7 @@ export async function createTask(
   }
 
   // 交互式收集Task信息
-  const response = await prompts([
+  const response = await promptsWrapper([
     {
       type: 'text',
       name: 'title',
@@ -2409,7 +2424,7 @@ export async function deleteTask(taskId: string, force: boolean = false, cwd: st
 
   // to confirm deletion
   if (!force) {
-    const response = await prompts({
+    const response = await promptsWrapper({
       type: 'confirm',
       name: 'confirm',
       message: `确定要删除Task ${taskId} 吗？`,
@@ -2780,7 +2795,7 @@ export async function completeTask(
         console.log('');
 
         if (!options.yes) {
-          const response = await prompts({
+          const response = await promptsWrapper({
             type: 'confirm',
             name: 'proceed',
             message: '是否标记所有Checkpoints为Completed并继续?',
@@ -2823,7 +2838,7 @@ export async function completeTask(
     console.log('💡 Tip: Recommend adding completion notes to record solution and experience');
     console.log('');
 
-    const addNote = await prompts({
+    const addNote = await promptsWrapper({
       type: 'confirm',
       name: 'confirm',
       message: '是否添加完成Description?',
@@ -2831,7 +2846,7 @@ export async function completeTask(
     });
 
     if (addNote.confirm) {
-      const noteResponse = await prompts({
+      const noteResponse = await promptsWrapper({
         type: 'text',
         name: 'note',
         message: '请输入完成Description（解决方案, 关键决策等）:',
@@ -3109,7 +3124,7 @@ export async function executeTask(taskId: string, cwd: string = process.cwd()): 
 
   // 如果TaskStatus是 open, 询问是否开始工作
   if (task.status === 'open') {
-    const response = await prompts({
+    const response = await promptsWrapper({
       type: 'confirm',
       name: 'start',
       message: '是否将TaskStatusUpdated为"In Progress"?',
@@ -3180,7 +3195,7 @@ export async function completeCheckpoint(
         console.log(`   ✅ ${checkText} (auto-confirmed)`);
       } else {
         // 交互模式: 询问用户
-        const response = await prompts({
+        const response = await promptsWrapper({
           type: 'confirm',
           name: 'passed',
           message: `Checkpoints: ${checkText}`,
@@ -3224,7 +3239,7 @@ export async function completeCheckpoint(
       console.log(`✅ Task ${taskId} auto-marked as resolved`);
     } else {
       // 交互模式: 询问用户
-      const response = await prompts({
+      const response = await promptsWrapper({
         type: 'confirm',
         name: 'complete',
         message: '是否立即将Task标记为Resolved?',
@@ -3502,7 +3517,7 @@ export async function updateCheckpoint(
 
         // 询问用户是否继续
         if (!options.yes) {
-          const response = await prompts({
+          const response = await promptsWrapper({
             type: 'confirm',
             name: 'continue',
             message: '未找到产出证据，是否仍要标记为完成？',
@@ -3687,7 +3702,7 @@ export async function splitTask(
       process.exit(1);
     }
 
-    const response = await prompts({
+    const response = await promptsWrapper({
       type: 'select',
       name: 'mode',
       message: '选择拆分方式:',
@@ -3703,7 +3718,7 @@ export async function splitTask(
     }
 
     if (response.mode === 'count') {
-      const countResponse = await prompts({
+      const countResponse = await promptsWrapper({
         type: 'number',
         name: 'count',
         message: '拆分为几subtasks?',
@@ -3721,7 +3736,7 @@ export async function splitTask(
         subtaskTitles.push(`${parentTask.title} - 部分 ${i}`);
       }
     } else {
-      const titlesResponse = await prompts({
+      const titlesResponse = await promptsWrapper({
         type: 'text',
         name: 'titles',
         message: '输入SubtasksTitle (用逗号分隔):',
@@ -4380,7 +4395,7 @@ export async function batchUpdateTasks(
       console.log('⚠️  Despite using --yes, this high-risk operation requires additional confirmation:');
       console.log('');
 
-      const extraConfirm = await prompts({
+      const extraConfirm = await promptsWrapper({
         type: 'confirm',
         name: 'confirmed',
         message: `确认要将 ${highRiskCount} completed tasks being reopened吗？`,
@@ -4426,7 +4441,7 @@ export async function batchUpdateTasks(
 
   // 非交互模式或用户确认
   if (!options.yes) {
-    const response = await prompts({
+    const response = await promptsWrapper({
       type: 'confirm',
       name: 'confirm',
       message: `确认Updated ${tasksToUpdate.length} tasks?`,

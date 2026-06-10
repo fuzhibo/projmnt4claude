@@ -4,6 +4,12 @@ import { getTasksDir, isInitialized, getProjectDir } from './path';
 import type { TaskMeta, TaskHistoryEntry, TaskStatus, TaskRole, TaskVerification, VerificationMethod, TaskType, TaskPriority, ExecutionStats, ReopenRecord } from '../types/task';
 import { createDefaultTaskMeta, isValidTaskId, generateNextTaskId, generateTaskId, parseTaskId, normalizeStatus, isStatusEquivalent } from '../types/task';
 
+// 测试注入点：允许测试通过全局变量注入 mock
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function getTestMock(name: string): any {
+  return (globalThis as any).__PROJMNT4CLAUDE_TEST_MOCKS__?.[name];
+}
+
 // ============================================================
 // 状态转换验证
 // ============================================================
@@ -111,6 +117,12 @@ export function getTaskMetaPath(taskId: string, cwd: string = process.cwd()): st
  * 读取任务元数据
  */
 export function readTaskMeta(taskId: string, cwd: string = process.cwd()): TaskMeta | null {
+  // 测试注入点
+  const testMock = getTestMock('readTaskMeta');
+  if (testMock) {
+    return testMock(taskId, cwd);
+  }
+
   if (!isInitialized(cwd)) {
     return null;
   }
@@ -143,6 +155,12 @@ export function readTaskMeta(taskId: string, cwd: string = process.cwd()): TaskM
  * 写入任务元数据（自动记录历史)
  */
 export function writeTaskMeta(task: TaskMeta, cwd: string = process.cwd()): void {
+  // 测试注入点
+  const testMock = getTestMock('writeTaskMeta');
+  if (testMock) {
+    return testMock(task, cwd);
+  }
+
   const taskDir = getTaskDir(task.id, cwd);
   const metaPath = getTaskMetaPath(task.id, cwd);
 
@@ -280,6 +298,12 @@ export function getAllTaskIds(cwd: string = process.cwd()): string[] {
  * 获取所有任务
  */
 export function getAllTasks(cwd: string = process.cwd(), includeArchived: boolean = false): TaskMeta[] {
+  // 测试注入点
+  const testMock = getTestMock('getAllTasks');
+  if (testMock) {
+    return testMock(cwd, includeArchived);
+  }
+
   const taskIds = getAllTaskIds(cwd);
   const tasks = taskIds
     .map(id => readTaskMeta(id, cwd))
@@ -321,6 +345,12 @@ export function generateNewTaskId(
   priority: TaskPriority = 'P2',
   title: string = 'task'
 ): string {
+  // 测试注入点
+  const testMock = getTestMock('generateNewTaskId');
+  if (testMock) {
+    return testMock(cwd, type, priority, title);
+  }
+
   const existingIds = getAllTaskIds(cwd);
   return generateTaskId(type, priority, title, existingIds);
 }
@@ -329,6 +359,12 @@ export function generateNewTaskId(
  * 检查任务是否存在
  */
 export function taskExists(taskId: string, cwd: string = process.cwd()): boolean {
+  // 测试注入点
+  const testMock = getTestMock('taskExists');
+  if (testMock) {
+    return testMock(taskId, cwd);
+  }
+
   return readTaskMeta(taskId, cwd) !== null;
 }
 
@@ -812,6 +848,12 @@ export function renameTask(
   newTaskId: string,
   cwd: string = process.cwd()
 ): { success: boolean; oldId: string; newId: string; error?: string } {
+  // 测试注入点
+  const testMock = getTestMock('renameTask');
+  if (testMock) {
+    return testMock(oldTaskId, newTaskId, cwd);
+  }
+
   // 1. 验证旧任务存在
   const task = readTaskMeta(oldTaskId, cwd);
   if (!task) {

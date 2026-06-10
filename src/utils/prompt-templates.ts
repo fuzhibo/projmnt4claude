@@ -9,6 +9,12 @@ import { readConfig } from '../commands/config.js';
 import { getI18n } from '../i18n/index.js';
 import type { Language } from '../i18n/index.js';
 
+// 测试注入点：允许测试通过全局变量注入 mock
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function getTestMock(name: string): any {
+  return (globalThis as any).__PROJMNT4CLAUDE_TEST_MOCKS__?.[name];
+}
+
 // ============================================================
 // Type Definitions
 // ============================================================
@@ -84,6 +90,12 @@ export const PROMPT_TEMPLATE_NAMES: PromptTemplateName[] = [
  * // => 'T1 - Test'
  */
 export function resolveTemplate(template: string, variables: TemplateVariables): string {
+  // 测试注入点
+  const testMock = getTestMock('resolveTemplate');
+  if (testMock) {
+    return testMock(template, variables);
+  }
+
   return template.replace(/\{(\w+)\}/g, (match, key: string) => {
     const value = variables[key];
     if (value === undefined || value === null) {
@@ -1426,6 +1438,12 @@ export function loadPromptTemplate(
   cwd?: string,
   language?: Language
 ): string {
+  // 测试注入点
+  const testMock = getTestMock('loadPromptTemplate');
+  if (testMock) {
+    return testMock(name, cwd, language);
+  }
+
   const config = cwd ? readConfig(cwd) : null;
   const prompts = config?.prompts as Record<string, unknown> | undefined;
 

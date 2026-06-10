@@ -867,6 +867,33 @@ export class HarnessQATester {
       ].join('\n');
     }
 
+    // CP-P6-008: Build gate failure details section for enhanced retry feedback
+    let gateFailureDetailsSection = '';
+    if (retryContext?.gateFailureDetails) {
+      const gate = retryContext.gateFailureDetails;
+      gateFailureDetailsSection = [
+        '## 前次门禁失败详情',
+        '',
+        `规则ID: ${gate.ruleId || '未知'}`,
+        `规则名称: ${gate.ruleName || '未知'}`,
+        `失败类型: ${gate.failureType || '未知'}`,
+        `严重等级: ${gate.severity || '未知'}`,
+        '',
+      ].join('\n');
+
+      if (gate.failureDetails) {
+        gateFailureDetailsSection += `具体错误: ${gate.failureDetails}\n\n`;
+      }
+
+      if (gate.suggestions && gate.suggestions.length > 0) {
+        gateFailureDetailsSection += '修复建议:\n';
+        gate.suggestions.forEach((suggestion, index) => {
+          gateFailureDetailsSection += `${index + 1}. ${suggestion}\n`;
+        });
+        gateFailureDetailsSection += '\n';
+      }
+    }
+
     // CP-5: Build coverage gap section for QA internal retry
     let coverageGapSection = '';
     if (retryContext?.qaCoverageGapContext) {
@@ -954,6 +981,7 @@ export class HarnessQATester {
       customRequirements,
       testStrategy,
       retryContextSection,
+      gateFailureDetailsSection,
       coverageGapSection,
       devReportPath,
     }).replace(/\n{3,}/g, '\n\n');

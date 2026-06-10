@@ -10,6 +10,12 @@ import type { RoleType, DevRoleTemplate, CodeReviewRoleTemplate, QARoleTemplate 
 
 export type { RoleType, DevRoleTemplate, CodeReviewRoleTemplate, QARoleTemplate };
 
+// 测试注入点：允许测试通过全局变量注入 mock
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function getTestMock(name: string): any {
+  return (globalThis as any).__PROJMNT4CLAUDE_TEST_MOCKS__?.[name];
+}
+
 /**
  * 将 recommendedRole 字符串规范化为 RoleType
  * 支持模糊匹配：'front-end' → 'frontend', 'sec' → 'security' 等
@@ -40,6 +46,12 @@ export function normalizeRole(role?: string): RoleType | undefined {
 
 /** 获取开发阶段角色模板 */
 export function getDevRoleTemplate(role?: string, language?: Language): DevRoleTemplate {
+  // 测试注入点
+  const testMock = getTestMock('getDevRoleTemplate');
+  if (testMock) {
+    return testMock(role, language);
+  }
+
   const i18n = getI18n(language);
   const normalized = normalizeRole(role);
   return normalized ? i18n.rolePrompts.dev[normalized] : i18n.rolePrompts.defaultDev;

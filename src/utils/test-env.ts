@@ -131,22 +131,49 @@ function safeRemoveDir(dir: string): void {
 
 /**
  * 创建 path 模块的 mock
+ * 使用全局测试注入点，兼容 SWC 编译的 ESM
  */
 async function createPathMocks(state: TestEnvState): Promise<MockHandles> {
-  const pathModule = await import('./path.js');
+  const mockHandles = {
+    isInitialized: jest.fn().mockReturnValue(true),
+    getTasksDir: jest.fn().mockReturnValue(state.tasksDir),
+    getProjectDir: jest.fn().mockReturnValue(state.projectDir),
+    getArchiveDir: jest.fn().mockReturnValue(state.projectDir + '/archive'),
+    getConfigPath: jest.fn().mockReturnValue(state.projectDir + '/config.json'),
+    getProjDir: jest.fn().mockReturnValue(state.projectDir),
+    getToolboxDir: jest.fn().mockReturnValue(state.projectDir + '/toolbox'),
+    getBinDir: jest.fn().mockReturnValue(state.projectDir + '/bin'),
+    getReportsDir: jest.fn().mockReturnValue(state.projectDir + '/reports'),
+    getLogsDir: jest.fn().mockReturnValue(state.projectDir + '/logs'),
+    ensureDir: jest.fn((dir: string) => {
+      if (!fs.existsSync(dir)) {
+        fs.mkdirSync(dir, { recursive: true });
+      }
+    }),
+  };
 
-  const isInitializedMock = jest.spyOn(pathModule, 'isInitialized').mockReturnValue(true);
-  const getTasksDirMock = jest.spyOn(pathModule, 'getTasksDir').mockReturnValue(state.tasksDir);
-  const getProjectDirMock = jest.spyOn(pathModule, 'getProjectDir').mockReturnValue(state.projectDir);
+  // 通过全局注入点设置 mock（保留已有的 mock，如 spawnWithMemoryLimit）
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const existing = (globalThis as any).__PROJMNT4CLAUDE_TEST_MOCKS__ || {};
+  (globalThis as any).__PROJMNT4CLAUDE_TEST_MOCKS__ = {
+    ...existing,
+    ...mockHandles,
+  };
 
   return {
-    isInitialized: isInitializedMock,
-    getTasksDir: getTasksDirMock,
-    getProjectDir: getProjectDirMock,
+    isInitialized: mockHandles.isInitialized,
+    getTasksDir: mockHandles.getTasksDir,
+    getProjectDir: mockHandles.getProjectDir,
     restore: () => {
-      isInitializedMock.mockRestore();
-      getTasksDirMock.mockRestore();
-      getProjectDirMock.mockRestore();
+      // 恢复时只保留 path 相关的 mock，移除我们的
+      const current = (globalThis as any).__PROJMNT4CLAUDE_TEST_MOCKS__ || {};
+      const restored: Record<string, unknown> = {};
+      for (const key of Object.keys(current)) {
+        if (!(key in mockHandles)) {
+          restored[key] = current[key];
+        }
+      }
+      (globalThis as any).__PROJMNT4CLAUDE_TEST_MOCKS__ = restored;
     },
   };
 }

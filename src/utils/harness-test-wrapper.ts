@@ -7,7 +7,6 @@
 import * as fs from 'fs';
 import * as path from 'path';
 import * as os from 'os';
-import { jest } from '@jest/globals';
 import type { HarnessConfig, HarnessRuntimeState } from '../types/harness.js';
 import { createDefaultRuntimeState } from '../types/harness.js';
 
@@ -134,26 +133,28 @@ function safeRemoveDir(dir: string): void {
 
 /**
  * 创建 path 模块的 mock
+ * 使用测试注入点替代 jest.spyOn，兼容 SWC 编译的 ESM
  */
 async function createPathMocks(
   tempDir: string,
   tasksDir: string,
   projectDir: string
 ): Promise<HarnessMockHandles> {
-  const pathModule = await import('./path.js');
-
-  const isInitializedMock = jest.spyOn(pathModule, 'isInitialized').mockReturnValue(true);
-  const getTasksDirMock = jest.spyOn(pathModule, 'getTasksDir').mockReturnValue(tasksDir);
-  const getProjectDirMock = jest.spyOn(pathModule, 'getProjectDir').mockReturnValue(projectDir);
+  // 设置测试注入点
+  const testMocks = (globalThis as any).__PROJMNT4CLAUDE_TEST_MOCKS__ || {};
+  testMocks.isInitialized = () => true;
+  testMocks.getTasksDir = () => tasksDir;
+  testMocks.getProjectDir = () => projectDir;
+  (globalThis as any).__PROJMNT4CLAUDE_TEST_MOCKS__ = testMocks;
 
   return {
-    isInitialized: isInitializedMock,
-    getTasksDir: getTasksDirMock,
-    getProjectDir: getProjectDirMock,
+    isInitialized: { mockReturnValue: (v: boolean) => { testMocks.isInitialized = () => v; } },
+    getTasksDir: { mockReturnValue: (v: string) => { testMocks.getTasksDir = () => v; } },
+    getProjectDir: { mockReturnValue: (v: string) => { testMocks.getProjectDir = () => v; } },
     restore: () => {
-      isInitializedMock.mockRestore();
-      getTasksDirMock.mockRestore();
-      getProjectDirMock.mockRestore();
+      delete testMocks.isInitialized;
+      delete testMocks.getTasksDir;
+      delete testMocks.getProjectDir;
     },
   };
 }
@@ -330,9 +331,11 @@ export async function createHarnessTestContext(
     }
 
     // 重置 mock 返回值
-    mocks.isInitialized.mockReturnValue(true);
-    mocks.getTasksDir.mockReturnValue(tasksDir);
-    mocks.getProjectDir.mockReturnValue(projectDir);
+    const testMocks = (globalThis as any).__PROJMNT4CLAUDE_TEST_MOCKS__ || {};
+    testMocks.isInitialized = () => true;
+    testMocks.getTasksDir = () => tasksDir;
+    testMocks.getProjectDir = () => projectDir;
+    (globalThis as any).__PROJMNT4CLAUDE_TEST_MOCKS__ = testMocks;
   };
 
   // 完全清理测试环境

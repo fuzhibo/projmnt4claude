@@ -17,6 +17,12 @@ import { runHeadlessClaude } from './harness-helpers.js';
 import { type AIConfig, DEFAULT_AI, type HarnessToolsConfig } from '../types/config.js';
 import type { TaskMeta } from '../types/task.js';
 
+// 测试注入点：允许测试通过全局变量注入 mock
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function getTestMock(name: string): any {
+  return (globalThis as any).__PROJMNT4CLAUDE_TEST_MOCKS__?.[name];
+}
+
 // ============================================================
 // 类型定义
 // ============================================================
@@ -159,6 +165,12 @@ export function buildEffectiveTools(
   cwd: string,
   task?: TaskMeta,
 ): { tools: string[]; skipPermissions: boolean } {
+  // 测试注入点
+  const testMock = getTestMock('buildEffectiveTools');
+  if (testMock) {
+    return testMock(phase, cwd, task);
+  }
+
   // Level 3: 代码默认值
   const codeDefaults = PHASE_DEFAULT_TOOLS[phase] || ['Read', 'Bash', 'Grep', 'Glob'];
 
@@ -429,6 +441,12 @@ export function loadAIConfig(cwd: string): AIConfig {
 
 /** 获取当前配置的 Agent */
 export function getAgent(cwd: string): HeadlessAgent {
+  // 测试注入点
+  const testMock = getTestMock('getAgent');
+  if (testMock) {
+    return testMock(cwd);
+  }
+
   const aiConfig = loadAIConfig(cwd);
   return agentRegistry.getProvider(aiConfig.provider);
 }
@@ -438,6 +456,12 @@ export async function invokeAgent(
   prompt: string,
   options: AgentInvokeOptions,
 ): Promise<AgentResult> {
+  // 测试注入点
+  const testMock = getTestMock('invokeAgent');
+  if (testMock) {
+    return testMock(prompt, options);
+  }
+
   const agent = getAgent(options.cwd);
   return agent.invoke(prompt, options);
 }
