@@ -132,6 +132,12 @@ export interface PostPhaseGateCheckResult {
   duration: number;
   /** 执行时间戳 */
   timestamp: string;
+  /** CP-GATE: 错误类型分类 (format, test, import, type, lint, timeout, api, ai_output, other) */
+  failureType?: string;
+  /** CP-GATE: 规则级修复建议 */
+  suggestions?: string[];
+  /** CP-GATE: 失败等级 (ERROR | WARNING | INFO) */
+  severity?: 'ERROR' | 'WARNING' | 'INFO';
 }
 
 /**
@@ -255,7 +261,7 @@ export const DEFAULT_POST_PHASE_GATE_CONFIG: PostPhaseGateConfig = {
  */
 export const DEFAULT_DEV_POST_PHASE_RULES: PostPhaseGateRule[] = [
   {
-    id: 'dev-completion-check',
+    id: 'R-DEV-POST-001',
     type: 'completion_verification',
     name: '开发完成验证',
     description: '验证开发阶段是否成功完成',
@@ -264,7 +270,7 @@ export const DEFAULT_DEV_POST_PHASE_RULES: PostPhaseGateRule[] = [
     failureType: 'B',
   },
   {
-    id: 'dev-artifact-validation',
+    id: 'R-DEV-POST-002',
     type: 'artifact_validation',
     name: '开发产物验证',
     description: '验证开发产物是否完整',
@@ -273,7 +279,7 @@ export const DEFAULT_DEV_POST_PHASE_RULES: PostPhaseGateRule[] = [
     failureType: 'B',
   },
   {
-    id: 'dev-checkpoint-completion',
+    id: 'R-DEV-POST-003',
     type: 'checkpoint_completion',
     name: '检查点完成度验证',
     description: '验证开发阶段检查点完成情况',
@@ -283,7 +289,7 @@ export const DEFAULT_DEV_POST_PHASE_RULES: PostPhaseGateRule[] = [
     config: { minCompletionRate: 0.8 },
   },
   {
-    id: 'dev-deliverable-check',
+    id: 'R-DEV-POST-004',
     type: 'deliverable_check',
     name: '开发可交付物检查',
     description: '检查代码变更和测试是否就绪',
@@ -298,7 +304,7 @@ export const DEFAULT_DEV_POST_PHASE_RULES: PostPhaseGateRule[] = [
  */
 export const DEFAULT_CR_POST_PHASE_RULES: PostPhaseGateRule[] = [
   {
-    id: 'cr-completion-check',
+    id: 'R-CR-POST-001',
     type: 'completion_verification',
     name: '代码审核完成验证',
     description: '验证代码审核是否成功完成',
@@ -307,7 +313,7 @@ export const DEFAULT_CR_POST_PHASE_RULES: PostPhaseGateRule[] = [
     failureType: 'B',
   },
   {
-    id: 'cr-review-approval',
+    id: 'R-CR-POST-002',
     type: 'review_approval',
     name: '代码审核批准验证',
     description: '验证代码审核是否获得批准',
@@ -316,7 +322,7 @@ export const DEFAULT_CR_POST_PHASE_RULES: PostPhaseGateRule[] = [
     failureType: 'B',
   },
   {
-    id: 'cr-artifact-validation',
+    id: 'R-CR-POST-003',
     type: 'artifact_validation',
     name: '代码审核产物验证',
     description: '验证代码审核产物是否完整',
@@ -325,7 +331,7 @@ export const DEFAULT_CR_POST_PHASE_RULES: PostPhaseGateRule[] = [
     failureType: 'B',
   },
   {
-    id: 'cr-quality-score',
+    id: 'R-CR-POST-004',
     type: 'quality_score',
     name: '代码审核质量分数检查',
     description: '检查代码审核后的质量分数',
@@ -341,7 +347,7 @@ export const DEFAULT_CR_POST_PHASE_RULES: PostPhaseGateRule[] = [
  */
 export const DEFAULT_QA_POST_PHASE_RULES: PostPhaseGateRule[] = [
   {
-    id: 'qa-completion-check',
+    id: 'R-QA-POST-001',
     type: 'completion_verification',
     name: 'QA完成验证',
     description: '验证QA阶段是否成功完成',
@@ -350,7 +356,7 @@ export const DEFAULT_QA_POST_PHASE_RULES: PostPhaseGateRule[] = [
     failureType: 'B',
   },
   {
-    id: 'qa-test-results',
+    id: 'R-QA-POST-002',
     type: 'test_results',
     name: 'QA测试结果验证',
     description: '验证QA测试结果是否通过',
@@ -359,7 +365,7 @@ export const DEFAULT_QA_POST_PHASE_RULES: PostPhaseGateRule[] = [
     failureType: 'B',
   },
   {
-    id: 'qa-review-approval',
+    id: 'R-QA-POST-003',
     type: 'review_approval',
     name: 'QA审核批准验证',
     description: '验证QA是否获得批准',
@@ -368,7 +374,7 @@ export const DEFAULT_QA_POST_PHASE_RULES: PostPhaseGateRule[] = [
     failureType: 'B',
   },
   {
-    id: 'qa-deliverable-check',
+    id: 'R-QA-POST-004',
     type: 'deliverable_check',
     name: 'QA可交付物检查',
     description: '检查QA报告和测试结果',
@@ -383,7 +389,7 @@ export const DEFAULT_QA_POST_PHASE_RULES: PostPhaseGateRule[] = [
  */
 export const DEFAULT_EVAL_POST_PHASE_RULES: PostPhaseGateRule[] = [
   {
-    id: 'eval-completion-check',
+    id: 'R-EVAL-POST-001',
     type: 'completion_verification',
     name: '评估完成验证',
     description: '验证评估阶段是否成功完成',
@@ -392,7 +398,7 @@ export const DEFAULT_EVAL_POST_PHASE_RULES: PostPhaseGateRule[] = [
     failureType: 'B',
   },
   {
-    id: 'eval-deliverable-check',
+    id: 'R-EVAL-POST-002',
     type: 'deliverable_check',
     name: '评估可交付物检查',
     description: '检查最终评估报告',
@@ -401,7 +407,7 @@ export const DEFAULT_EVAL_POST_PHASE_RULES: PostPhaseGateRule[] = [
     failureType: 'B',
   },
   {
-    id: 'eval-quality-score',
+    id: 'R-EVAL-POST-003',
     type: 'quality_score',
     name: '最终质量分数检查',
     description: '检查最终质量分数是否达标',
@@ -411,7 +417,7 @@ export const DEFAULT_EVAL_POST_PHASE_RULES: PostPhaseGateRule[] = [
     config: { minScore: 70 },
   },
   {
-    id: 'eval-all-phases-check',
+    id: 'R-EVAL-POST-004',
     type: 'completion_verification',
     name: '全阶段完成检查',
     description: '验证所有阶段是否已完成',

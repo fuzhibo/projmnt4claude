@@ -128,6 +128,12 @@ export interface PhaseGateCheckResult {
   duration: number;
   /** 执行时间戳 */
   timestamp: string;
+  /** CP-GATE: 错误类型分类 (format, test, import, type, lint, timeout, api, ai_output, other) */
+  failureType?: string;
+  /** CP-GATE: 规则级修复建议 */
+  suggestions?: string[];
+  /** CP-GATE: 失败等级 (ERROR | WARNING | INFO) */
+  severity?: 'ERROR' | 'WARNING' | 'INFO';
 }
 
 /**
@@ -225,7 +231,7 @@ export const DEFAULT_PHASE_GATE_CONFIG: PrePhaseGateConfig = {
  */
 export const DEFAULT_DEV_PHASE_RULES: PhaseGateRule[] = [
   {
-    id: 'dev-prerequisite-check',
+    id: 'R-DEV-PRE-001',
     type: 'prerequisite_check',
     name: '开发前置条件检查',
     description: '检查任务是否满足开始开发的条件',
@@ -234,7 +240,7 @@ export const DEFAULT_DEV_PHASE_RULES: PhaseGateRule[] = [
     failureType: 'A',
   },
   {
-    id: 'dev-status-check',
+    id: 'R-DEV-PRE-002',
     type: 'status_verification',
     name: '任务状态验证',
     description: '验证任务当前状态是否允许开始开发',
@@ -243,7 +249,7 @@ export const DEFAULT_DEV_PHASE_RULES: PhaseGateRule[] = [
     failureType: 'A',
   },
   {
-    id: 'dev-quality-score',
+    id: 'R-DEV-PRE-003',
     type: 'quality_score',
     name: '开发前质量分数检查',
     description: '检查任务质量分数是否达到开发要求',
@@ -259,7 +265,7 @@ export const DEFAULT_DEV_PHASE_RULES: PhaseGateRule[] = [
  */
 export const DEFAULT_CR_PHASE_RULES: PhaseGateRule[] = [
   {
-    id: 'cr-artifact-check',
+    id: 'R-CR-PRE-001',
     type: 'artifact_validation',
     name: '开发产物验证',
     description: '验证开发阶段是否成功完成并产生必要产物',
@@ -268,7 +274,7 @@ export const DEFAULT_CR_PHASE_RULES: PhaseGateRule[] = [
     failureType: 'A',
   },
   {
-    id: 'cr-dev-report-check',
+    id: 'R-CR-PRE-002',
     type: 'prerequisite_check',
     name: '开发报告检查',
     description: '检查开发报告是否存在且状态为成功',
@@ -277,7 +283,7 @@ export const DEFAULT_CR_PHASE_RULES: PhaseGateRule[] = [
     failureType: 'A',
   },
   {
-    id: 'cr-checkpoint-validation',
+    id: 'R-CR-PRE-003',
     type: 'checkpoint_validation',
     name: '开发检查点验证',
     description: '验证开发阶段检查点是否已完成',
@@ -292,7 +298,7 @@ export const DEFAULT_CR_PHASE_RULES: PhaseGateRule[] = [
  */
 export const DEFAULT_QA_PHASE_RULES: PhaseGateRule[] = [
   {
-    id: 'qa-cr-result-check',
+    id: 'R-QA-PRE-001',
     type: 'prerequisite_check',
     name: '代码审核结果检查',
     description: '验证代码审核是否通过',
@@ -301,7 +307,7 @@ export const DEFAULT_QA_PHASE_RULES: PhaseGateRule[] = [
     failureType: 'A',
   },
   {
-    id: 'qa-artifact-check',
+    id: 'R-QA-PRE-002',
     type: 'artifact_validation',
     name: '代码审核产物验证',
     description: '验证代码审核产物是否完整',
@@ -310,7 +316,7 @@ export const DEFAULT_QA_PHASE_RULES: PhaseGateRule[] = [
     failureType: 'A',
   },
   {
-    id: 'qa-quality-score',
+    id: 'R-QA-PRE-003',
     type: 'quality_score',
     name: 'QA前质量分数检查',
     description: '检查任务质量分数是否达到QA要求',
@@ -326,7 +332,7 @@ export const DEFAULT_QA_PHASE_RULES: PhaseGateRule[] = [
  */
 export const DEFAULT_EVAL_PHASE_RULES: PhaseGateRule[] = [
   {
-    id: 'eval-qa-result-check',
+    id: 'R-EVAL-PRE-001',
     type: 'prerequisite_check',
     name: 'QA结果检查',
     description: '验证QA阶段是否成功完成',
@@ -335,7 +341,7 @@ export const DEFAULT_EVAL_PHASE_RULES: PhaseGateRule[] = [
     failureType: 'A',
   },
   {
-    id: 'eval-all-phases-check',
+    id: 'R-EVAL-PRE-002',
     type: 'prerequisite_check',
     name: '全阶段完成检查',
     description: '验证所有前置阶段是否已完成',
@@ -344,7 +350,7 @@ export const DEFAULT_EVAL_PHASE_RULES: PhaseGateRule[] = [
     failureType: 'A',
   },
   {
-    id: 'eval-quality-score',
+    id: 'R-EVAL-PRE-003',
     type: 'quality_score',
     name: '评估前质量分数检查',
     description: '检查任务质量分数是否达到评估要求',
