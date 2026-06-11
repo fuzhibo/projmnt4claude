@@ -368,6 +368,7 @@ export const zhTexts: I18nTexts = {
     valueLabel: '值',
     originalOutputTitle: '原始输出（供参考）',
     truncated: '... (已截断)',
+    emptyOutput: '输出为空',
     jsonRequirements: [
       '输出是合法的 JSON',
       '所有必填字段都存在且类型正确',

@@ -1209,7 +1209,7 @@ export class HarnessQATester {
     const lines: string[] = [
       `# ${texts.harness.reports.qaReportTitle} - ${verdict.taskId}`,
       '',
-      `**${texts.harness.reports.resultLabel}**: ${verdict.result === 'PASS' ? '✅ PASS' : '❌ NOPASS'}`,
+      `VERDICT: ${verdict.result}`,
       `**${texts.harness.reports.reviewedAtLabel}**: ${verdict.verifiedAt}`,
       `**${texts.harness.reports.reviewedByLabel}**: ${verdict.verifiedBy}`,
       `**${texts.harness.reports.requiresHumanLabel}**: ${verdict.requiresHuman ? texts.harness.reports.yes : texts.harness.reports.no}`,

@@ -188,6 +188,14 @@ export class MarkdownFeedbackTemplate implements FeedbackTemplate {
       (r) => `- ${r}`,
     );
 
+    const originalOutputSection = originalOutput.length > this.truncationLimit
+      ? originalOutput.slice(0, this.truncationLimit) + `\n${i18n.feedback.truncated}`
+      : originalOutput;
+
+    const originalOutputDisplay = originalOutputSection.trim().length === 0
+      ? `[${i18n.feedback.emptyOutput || '输出为空'}]`
+      : originalOutputSection;
+
     return [
       i18n.feedback.markdownHeader,
       '',
@@ -196,10 +204,7 @@ export class MarkdownFeedbackTemplate implements FeedbackTemplate {
       '',
       `### ${i18n.feedback.originalOutputTitle}`,
       '```markdown',
-      originalOutput.length > this.truncationLimit
-        ? originalOutput.slice(0, this.truncationLimit) +
-          `\n${i18n.feedback.truncated}`
-        : originalOutput,
+      originalOutputDisplay,
       '```',
       '',
       '请确保：',

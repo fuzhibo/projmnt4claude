@@ -368,6 +368,7 @@ export const enTexts: I18nTexts = {
     valueLabel: 'Value',
     originalOutputTitle: 'Original Output (for reference)',
     truncated: '... (truncated)',
+    emptyOutput: 'Output is empty',
     jsonRequirements: [
       'Output must be valid JSON',
       'All required fields must exist with correct types',

@@ -220,6 +220,7 @@ export interface I18nTexts {
     valueLabel: string;
     originalOutputTitle: string;
     truncated: string;
+    emptyOutput: string;
     jsonRequirements: string[];
     markdownRequirements: string[];
   };
