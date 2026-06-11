@@ -868,21 +868,143 @@ export class HarnessQATester {
     }
 
     // CP-P6-008: Build gate failure details section for enhanced retry feedback
+    // CP-007: Enhanced feedback constraint mechanism - rule-specific精准反馈
     let gateFailureDetailsSection = '';
     if (retryContext?.gateFailureDetails) {
       const gate = retryContext.gateFailureDetails;
+
+      // Build enhanced feedback based on ruleId and failureType
+      const ruleId = gate.ruleId || '';
+      const failureType = gate.failureType || '';
+
+      // Rule-specific精准反馈内容
+      let ruleSpecificFeedback = '';
+      let correctExample = '';
+
+      // 根据 ruleId 提供规则级精准反馈
+      switch (ruleId) {
+        case 'R-QA-POST-003':
+        case 'R-POST-PHASE-003':
+          ruleSpecificFeedback = '输出格式不正确：缺少必要的 VERDICT 标记。';
+          correctExample = [
+            '正确输出示例:',
+            'VERDICT: PASS',
+            '## 验证结果: PASS',
+            '## 原因: 所有检查点通过，测试覆盖率达到要求',
+            '',
+            '或:',
+            'VERDICT: NOPASS',
+            '## 验证结果: NOPASS',
+            '## 原因: 测试用例 X 失败，需要修复...',
+          ].join('\n');
+          break;
+
+        case 'R-QA-POST-001':
+        case 'R-POST-PHASE-001':
+          ruleSpecificFeedback = 'QA报告不存在：阶段执行后未生成有效的 qa-report.json 报告文件。';
+          correctExample = [
+            '正确行为: QA 验证完成后应自动生成 qa-report.json 文件。',
+            '检查点:',
+            '1. 确保 saveReport() 被正确调用',
+            '2. 确认报告文件路径: .projmnt4claude/outputs/{taskId}/qa-report.json',
+            '3. 验证报告文件内容包含有效的 JSON 格式',
+          ].join('\n');
+          break;
+
+        case 'R-QA-POST-002':
+        case 'R-POST-PHASE-002':
+          ruleSpecificFeedback = 'QA报告格式无效：生成的报告文件格式不符合要求。';
+          correctExample = [
+            '正确格式示例:',
+            '{',
+            '  "taskId": "TASK-xxx",',
+            '  "result": "PASS" | "NOPASS",',
+            '  "reason": "详细的验证结果说明",',
+            '  "testFailures": [],',
+            '  "failedCheckpoints": [],',
+            '  "requiresHuman": false,',
+            '  "verifiedAt": "2026-01-01T00:00:00.000Z",',
+            '  "verifiedBy": "qa_tester"',
+            '}',
+          ].join('\n');
+          break;
+
+        case 'R-QA-POST-004':
+        case 'R-POST-PHASE-004':
+          ruleSpecificFeedback = '测试失败详情缺失：NOPASS时未提供足够的失败信息。';
+          correctExample = [
+            '正确行为: 当验证结果为 NOPASS 时，必须提供:',
+            '1. testFailures: 列出所有失败的测试用例名称',
+            '2. failedCheckpoints: 列出未通过的检查点 ID',
+            '3. reason: 详细说明失败原因和修复建议',
+          ].join('\n');
+          break;
+
+        case 'R-QA-PRE-001':
+        case 'R-PRE-PHASE-001':
+          ruleSpecificFeedback = '阶段前置条件检查失败：任务数据或前置阶段结果不符合要求。';
+          correctExample = [
+            '正确行为: 进入 QA 阶段前必须满足:',
+            '1. 任务存在且已正确初始化',
+            '2. 代码审核阶段已通过（codeReviewVerdict.result === "PASS"）',
+            '3. 开发报告文件存在且完整',
+          ].join('\n');
+          break;
+
+        case 'R-QA-PRE-002':
+        case 'R-PRE-PHASE-002':
+          ruleSpecificFeedback = '任务不存在：指定的任务 ID 未找到或已被删除。';
+          correctExample = [
+            '正确行为: 确保任务在 .projmnt4claude/tasks/ 目录下存在对应的 meta.json 文件。',
+            '检查点:',
+            '1. 确认任务 ID 拼写正确',
+            '2. 验证任务目录结构完整',
+            '3. 检查任务状态是否为可执行状态（非 resolved/closed）',
+          ].join('\n');
+          break;
+
+        default:
+          // 对于未知规则，使用 failureType 生成通用反馈
+          if (failureType === 'format') {
+            ruleSpecificFeedback = '输出格式不正确。';
+            correctExample = [
+              '通用正确格式要求:',
+              '1. 输出第一行必须包含明确的结论标记',
+              '2. 使用 Markdown 格式组织内容',
+              '3. 包含必要的章节标题（如 ## 验证结果）',
+            ].join('\n');
+          } else if (failureType === 'ai_output') {
+            ruleSpecificFeedback = 'AI 服务输出异常。';
+            correctExample = [
+              '排查建议:',
+              '1. 检查 AI 服务 API 状态',
+              '2. 确认提示词格式正确且未超出 token 限制',
+              '3. 尝试简化请求内容',
+            ].join('\n');
+          } else {
+            ruleSpecificFeedback = gate.failureDetails || '门禁检查未通过。';
+          }
+      }
+
+      // Build the enhanced section
       gateFailureDetailsSection = [
-        '## 前次门禁失败详情',
+        '## 前次门禁失败详情（精准反馈）',
         '',
         `规则ID: ${gate.ruleId || '未知'}`,
         `规则名称: ${gate.ruleName || '未知'}`,
         `失败类型: ${gate.failureType || '未知'}`,
         `严重等级: ${gate.severity || '未知'}`,
         '',
+        `具体问题: ${ruleSpecificFeedback}`,
+        '',
       ].join('\n');
 
-      if (gate.failureDetails) {
-        gateFailureDetailsSection += `具体错误: ${gate.failureDetails}\n\n`;
+      if (correctExample) {
+        gateFailureDetailsSection += `${correctExample}\n\n`;
+      }
+
+      if (gate.failureDetails && !ruleSpecificFeedback.includes(gate.failureDetails)) {
+        gateFailureDetailsSection += `详细错误: ${gate.failureDetails}\n\n`;
       }
 
       if (gate.suggestions && gate.suggestions.length > 0) {
@@ -891,6 +1013,27 @@ export class HarnessQATester {
           gateFailureDetailsSection += `${index + 1}. ${suggestion}\n`;
         });
         gateFailureDetailsSection += '\n';
+      }
+
+      // CP-007: Add failureType-specific targeted feedback
+      if (failureType === 'format') {
+        gateFailureDetailsSection += [
+          '---',
+          '**格式错误专项提醒**:',
+          '- 必须使用英文 VERDICT 标记，不要使用中文"通过"/"不通过"',
+          '- VERDICT 必须出现在输出第一行',
+          '- 确保输出可被正则表达式 `^VERDICT:\s*(PASS|NOPASS)` 匹配',
+          '',
+        ].join('\n');
+      } else if (failureType === 'ai_output') {
+        gateFailureDetailsSection += [
+          '---',
+          '**AI输出错误专项提醒**:',
+          '- 检查 API 密钥和权限配置',
+          '- 确认请求未超出模型的最大 token 限制',
+          '- 如果问题持续，考虑简化任务或分批处理',
+          '',
+        ].join('\n');
       }
     }
 
