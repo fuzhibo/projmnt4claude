@@ -7519,6 +7519,7 @@ var init_zh = __esm(() => {
       valueLabel: "值",
       originalOutputTitle: "原始输出（供参考）",
       truncated: "... (已截断)",
+      emptyOutput: "输出为空",
       jsonRequirements: [
         "输出是合法的 JSON",
         "所有必填字段都存在且类型正确",
@@ -8596,6 +8597,7 @@ var init_en = __esm(() => {
       valueLabel: "Value",
       originalOutputTitle: "Original Output (for reference)",
       truncated: "... (truncated)",
+      emptyOutput: "Output is empty",
       jsonRequirements: [
         "Output must be valid JSON",
         "All required fields must exist with correct types",
@@ -37265,6 +37267,9 @@ class MarkdownFeedbackTemplate {
     const violationLines = violations.map((v, i) => `${i + 1}. **[${v.severity.toUpperCase()}] ${v.ruleId}**: ${v.message}` + (v.field ? ` (${i18n.feedback.fieldLabel}: \`${v.field}\`)` : "")).join(`
 `);
     const requirements = i18n.feedback.markdownRequirements.map((r) => `- ${r}`);
+    const originalOutputSection = originalOutput.length > this.truncationLimit ? originalOutput.slice(0, this.truncationLimit) + `
+${i18n.feedback.truncated}` : originalOutput;
+    const originalOutputDisplay = originalOutputSection.trim().length === 0 ? `[${i18n.feedback.emptyOutput || "输出为空"}]` : originalOutputSection;
     return [
       i18n.feedback.markdownHeader,
       "",
@@ -37273,8 +37278,7 @@ class MarkdownFeedbackTemplate {
       "",
       `### ${i18n.feedback.originalOutputTitle}`,
       "```markdown",
-      originalOutput.length > this.truncationLimit ? originalOutput.slice(0, this.truncationLimit) + `
-${i18n.feedback.truncated}` : originalOutput,
+      originalOutputDisplay,
       "```",
       "",
       "请确保：",
@@ -39826,7 +39830,7 @@ ${task.description}` : "";
     const lines = [
       `# ${texts.harness.reports.qaReportTitle} - ${verdict.taskId}`,
       "",
-      `**${texts.harness.reports.resultLabel}**: ${verdict.result === "PASS" ? "✅ PASS" : "❌ NOPASS"}`,
+      `VERDICT: ${verdict.result}`,
       `**${texts.harness.reports.reviewedAtLabel}**: ${verdict.verifiedAt}`,
       `**${texts.harness.reports.reviewedByLabel}**: ${verdict.verifiedBy}`,
       `**${texts.harness.reports.requiresHumanLabel}**: ${verdict.requiresHuman ? texts.harness.reports.yes : texts.harness.reports.no}`,
