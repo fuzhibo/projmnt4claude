@@ -420,7 +420,7 @@ bun run build
 bunx tsc --noEmit
 
 # Run tests
-bun test
+npx jest --runInBand
 ```
 
 ## Tech Stack
@@ -838,7 +838,7 @@ bun run build
 bunx tsc --noEmit
 
 # 运行测试
-bun test
+npx jest --runInBand
 ```
 
 ## 技术栈

@@ -192,7 +192,7 @@ describe('AI Review Integration', () => {
       aiReviewTimeout: 5000,
     });
 
-    // We can't easily mock invokeAgent in bun:test without module mocking
+    // We can't easily mock invokeAgent in jest without module mocking
     // Instead, verify the error handling path works via disableAIReview
     const fallbackChecker = new QualityScoreChecker('/tmp/test', {
       enableAIReview: false,

@@ -1,8 +1,8 @@
 /**
  * batched-test-runner.ts — 分段测试运行器
  *
- * 核心原理：每次 bun test 调用是独立进程，进程退出后内存完全释放
- * （包括 ESM 缓存、mock 泄漏），无依赖 Bun GC 行为。
+ * 核心原理：每次 npx jest --runInBand 调用是独立进程，进程退出后内存完全释放
+ * （包括 ESM 缓存、mock 泄漏），无依赖 GC 行为。
  *
  * 跨平台支持：
  * - Linux: 可选 cgroup 内存保护 (复用 spawn-utils)
@@ -148,9 +148,9 @@ function runTestGroup(
   // 构建测试文件路径（文件路径已经是相对于 src 的）
   const testPaths = files.map(f => path.join('src', f));
 
-  const bunArgs: string[] = [];
-  if (config.useSmol) bunArgs.push('--smol');
-  bunArgs.push('test', ...testPaths);
+  const jestArgs: string[] = ['jest', '--runInBand', '--no-coverage'];
+  if (config.bail) jestArgs.push('--bail');
+  jestArgs.push(...testPaths);
 
   const isLinux = os.platform() === 'linux';
   const useCgroupHere = isLinux && config.useCgroup && hasCgroupV2();
@@ -172,8 +172,8 @@ function runTestGroup(
         '-p', `MemoryMax=${config.memoryGB}G`,
         '-p', 'MemorySwapMax=0',
         '--',
-        'bun',
-        ...bunArgs,
+        'npx',
+        ...jestArgs,
       ];
       child = spawn('systemd-run', systemdArgs, {
         cwd: projectRoot,
@@ -184,7 +184,7 @@ function runTestGroup(
         if (child.pid) setCgroupOOMGroup(child.pid);
       });
     } else {
-      child = spawn('bun', bunArgs, {
+      child = spawn('npx', jestArgs, {
         cwd: projectRoot,
         stdio: config.verbose ? 'inherit' : 'pipe',
       });

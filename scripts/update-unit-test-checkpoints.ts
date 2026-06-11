@@ -188,7 +188,7 @@ function generateCheckpoints(moduleName: string, testFunctions: string[]): any[]
     category: 'qa_verification',
     verification: {
       method: 'automated_test',
-      commands: [`bun test ${moduleName}.test.ts`],
+      commands: [`npx jest --runInBand ${moduleName}.test.ts`],
       expected: '所有测试通过'
     },
     createdAt: now,
@@ -203,7 +203,7 @@ function generateCheckpoints(moduleName: string, testFunctions: string[]): any[]
     category: 'qa_verification',
     verification: {
       method: 'coverage_check',
-      commands: [`bun test --coverage ${moduleName}.test.ts`],
+      commands: [`npx jest --runInBand --coverage ${moduleName}.test.ts`],
       expected: '覆盖率 >= 80%'
     },
     createdAt: now,
