@@ -533,7 +533,7 @@ describe('PostPhaseGateChecker', () => {
       });
 
       // 检查点完成度规则是非阻塞的
-      expect(result.ruleResults.some(r => r.ruleId === 'dev-checkpoint-completion')).toBe(true);
+      expect(result.ruleResults.some(r => r.ruleId === 'R-DEV-POST-003')).toBe(true);
     });
 
     it('检查点完成度不足应该返回警告', async () => {
@@ -563,7 +563,7 @@ describe('PostPhaseGateChecker', () => {
         },
       });
 
-      const checkpointResult = result.ruleResults.find(r => r.ruleId === 'dev-checkpoint-completion');
+      const checkpointResult = result.ruleResults.find(r => r.ruleId === 'R-DEV-POST-003');
       expect(checkpointResult).toBeDefined();
     });
   });

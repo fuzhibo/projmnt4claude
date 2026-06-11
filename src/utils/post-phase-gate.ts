@@ -829,50 +829,53 @@ export class PostPhaseGateChecker {
     for (const result of ruleResults) {
       if (!result.passed) {
         switch (result.ruleId) {
-          case 'dev-completion-check':
+          case 'R-DEV-POST-001':
             recommendations.push('确保开发阶段成功完成并生成报告');
             break;
-          case 'dev-artifact-validation':
+          case 'R-DEV-POST-002':
             recommendations.push('添加代码变更记录和开发证据');
             break;
-          case 'dev-checkpoint-completion':
+          case 'R-DEV-POST-003':
             recommendations.push('完成更多检查点以满足最低完成度要求');
             break;
-          case 'dev-deliverable-check':
+          case 'R-DEV-POST-004':
             recommendations.push('确保所有开发可交付物已就绪');
             break;
-          case 'cr-completion-check':
+          case 'R-CR-POST-001':
             recommendations.push('完成代码审核阶段');
             break;
-          case 'cr-review-approval':
+          case 'R-CR-POST-002':
             recommendations.push('通过代码审核后再退出此阶段');
             break;
-          case 'cr-artifact-validation':
+          case 'R-CR-POST-003':
             recommendations.push('确保代码审核产物完整');
             break;
-          case 'cr-quality-score':
+          case 'R-CR-POST-004':
             recommendations.push('提升代码质量以满足分数要求');
             break;
-          case 'qa-completion-check':
+          case 'R-QA-POST-001':
             recommendations.push('完成QA验证阶段');
             break;
-          case 'qa-test-results':
+          case 'R-QA-POST-002':
             recommendations.push('修复测试失败问题');
             break;
-          case 'qa-review-approval':
+          case 'R-QA-POST-003':
             recommendations.push('通过QA验证后再退出此阶段');
             break;
-          case 'qa-deliverable-check':
+          case 'R-QA-POST-004':
             recommendations.push('确保QA可交付物完整');
             break;
-          case 'eval-completion-check':
+          case 'R-EVAL-POST-001':
             recommendations.push('完成评估阶段');
             break;
-          case 'eval-deliverable-check':
+          case 'R-EVAL-POST-002':
             recommendations.push('确保评估可交付物完整');
             break;
-          case 'eval-quality-score':
+          case 'R-EVAL-POST-003':
             recommendations.push('提升整体质量以满足最终要求');
+            break;
+          case 'R-EVAL-POST-004':
+            recommendations.push('完成所有阶段后再退出评估');
             break;
           default:
             recommendations.push(`${result.ruleName}: ${result.message}`);
