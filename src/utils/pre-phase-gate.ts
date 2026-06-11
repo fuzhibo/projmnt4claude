@@ -657,32 +657,41 @@ export class PrePhaseGateChecker {
     for (const result of ruleResults) {
       if (!result.passed) {
         switch (result.ruleId) {
-          case 'dev-prerequisite-check':
+          case 'R-DEV-PRE-001':
             recommendations.push('确保任务状态为 open 或 in_progress 才能开始开发');
             break;
-          case 'dev-status-check':
+          case 'R-DEV-PRE-002':
             recommendations.push('检查任务状态，确保不是终态任务');
             break;
-          case 'dev-quality-score':
+          case 'R-DEV-PRE-003':
             recommendations.push('提升任务质量: 完善描述、添加检查点、关联文件');
             break;
-          case 'cr-artifact-check':
+          case 'R-CR-PRE-001':
             recommendations.push('确保开发阶段产生有效产物');
             break;
-          case 'cr-dev-report-check':
+          case 'R-CR-PRE-002':
             recommendations.push('完成开发阶段并生成成功报告');
             break;
-          case 'cr-checkpoint-validation':
+          case 'R-CR-PRE-003':
             recommendations.push('完成更多检查点以满足最低完成度要求');
             break;
-          case 'qa-cr-result-check':
+          case 'R-QA-PRE-001':
             recommendations.push('通过代码审核后再进入QA阶段');
             break;
-          case 'eval-qa-result-check':
+          case 'R-QA-PRE-002':
+            recommendations.push('确保代码审核产物完整');
+            break;
+          case 'R-QA-PRE-003':
+            recommendations.push('提升任务质量以满足QA要求');
+            break;
+          case 'R-EVAL-PRE-001':
             recommendations.push('通过QA验证后再进入评估阶段');
             break;
-          case 'eval-all-phases-check':
+          case 'R-EVAL-PRE-002':
             recommendations.push('完成所有前置阶段后再进行评估');
+            break;
+          case 'R-EVAL-PRE-003':
+            recommendations.push('提升整体质量以满足最终评估要求');
             break;
           default:
             recommendations.push(`${result.ruleName}: ${result.message}`);
