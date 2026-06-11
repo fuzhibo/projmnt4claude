@@ -1038,7 +1038,7 @@ Expecting one of '${allowedValues.join("', '")}'`);
         this._exitCallback = (err) => {
           if (err.code !== "commander.executeSubCommandAsync") {
             throw err;
-          } else {}
+          }
         };
       }
       return this;
@@ -7080,14 +7080,26 @@ var require_prompts3 = __commonJS((exports, module) => {
 import * as path from "path";
 import * as fs from "fs";
 function getProjectDir(cwd = process.cwd()) {
+  const testMocks = globalThis.__PROJMNT4CLAUDE_TEST_MOCKS__;
+  if (testMocks?.getProjectDir) {
+    return testMocks.getProjectDir(cwd);
+  }
   return path.join(cwd, ".projmnt4claude");
 }
 function ensureDir(dir) {
+  const testMocks = globalThis.__PROJMNT4CLAUDE_TEST_MOCKS__;
+  if (testMocks?.ensureDir) {
+    return testMocks.ensureDir(dir);
+  }
   if (!fs.existsSync(dir)) {
     fs.mkdirSync(dir, { recursive: true });
   }
 }
 function isInitialized(cwd = process.cwd()) {
+  const testMocks = globalThis.__PROJMNT4CLAUDE_TEST_MOCKS__;
+  if (testMocks?.isInitialized) {
+    return testMocks.isInitialized(cwd);
+  }
   const projectDir = getProjectDir(cwd);
   const configPath = path.join(projectDir, "config.json");
   if (fs.existsSync(configPath)) {
@@ -7108,24 +7120,52 @@ function isInitialized(cwd = process.cwd()) {
   return false;
 }
 function getConfigPath(cwd = process.cwd()) {
+  const testMocks = globalThis.__PROJMNT4CLAUDE_TEST_MOCKS__;
+  if (testMocks?.getConfigPath) {
+    return testMocks.getConfigPath(cwd);
+  }
   return path.join(getProjectDir(cwd), "config.json");
 }
 function getTasksDir(cwd = process.cwd()) {
+  const testMocks = globalThis.__PROJMNT4CLAUDE_TEST_MOCKS__;
+  if (testMocks?.getTasksDir) {
+    return testMocks.getTasksDir(cwd);
+  }
   return path.join(getProjectDir(cwd), "tasks");
 }
 function getArchiveDir(cwd = process.cwd()) {
+  const testMocks = globalThis.__PROJMNT4CLAUDE_TEST_MOCKS__;
+  if (testMocks?.getArchiveDir) {
+    return testMocks.getArchiveDir(cwd);
+  }
   return path.join(getProjectDir(cwd), "archive");
 }
 function getToolboxDir(cwd = process.cwd()) {
+  const testMocks = globalThis.__PROJMNT4CLAUDE_TEST_MOCKS__;
+  if (testMocks?.getToolboxDir) {
+    return testMocks.getToolboxDir(cwd);
+  }
   return path.join(getProjectDir(cwd), "toolbox");
 }
 function getBinDir(cwd = process.cwd()) {
+  const testMocks = globalThis.__PROJMNT4CLAUDE_TEST_MOCKS__;
+  if (testMocks?.getBinDir) {
+    return testMocks.getBinDir(cwd);
+  }
   return path.join(getProjectDir(cwd), "bin");
 }
 function getReportsDir(cwd = process.cwd()) {
+  const testMocks = globalThis.__PROJMNT4CLAUDE_TEST_MOCKS__;
+  if (testMocks?.getReportsDir) {
+    return testMocks.getReportsDir(cwd);
+  }
   return path.join(getProjectDir(cwd), "reports");
 }
 function getLogsDir(cwd = process.cwd()) {
+  const testMocks = globalThis.__PROJMNT4CLAUDE_TEST_MOCKS__;
+  if (testMocks?.getLogsDir) {
+    return testMocks.getLogsDir(cwd);
+  }
   return path.join(getProjectDir(cwd), "logs");
 }
 var init_path = () => {};
@@ -9359,7 +9399,14 @@ var init_i18n = __esm(() => {
 });
 
 // src/utils/prompt-templates.ts
+function getTestMock(name) {
+  return globalThis.__PROJMNT4CLAUDE_TEST_MOCKS__?.[name];
+}
 function resolveTemplate(template, variables) {
+  const testMock = getTestMock("resolveTemplate");
+  if (testMock) {
+    return testMock(template, variables);
+  }
   return template.replace(/\{(\w+)\}/g, (match, key) => {
     const value = variables[key];
     if (value === undefined || value === null) {
@@ -9369,6 +9416,10 @@ function resolveTemplate(template, variables) {
   });
 }
 function loadPromptTemplate(name, cwd, language) {
+  const testMock = getTestMock("loadPromptTemplate");
+  if (testMock) {
+    return testMock(name, cwd, language);
+  }
   const config = cwd ? readConfig(cwd) : null;
   const prompts = config?.prompts;
   if (prompts?.customTemplates && typeof prompts.customTemplates === "object") {
@@ -11205,6 +11256,10 @@ function getCgroupPathForPid(pid) {
   return null;
 }
 function spawnWithMemoryLimit(command, args, options, type = "default") {
+  const testMocks = globalThis.__PROJMNT4CLAUDE_TEST_MOCKS__;
+  if (testMocks?.spawnWithMemoryLimit) {
+    return testMocks.spawnWithMemoryLimit(command, args, options, type);
+  }
   const cfg = getMemoryLimitConfig(options.cwd);
   if (cfg.enabled) {
     const pressure = checkMemoryPressure();
@@ -11646,6 +11701,9 @@ __export(exports_task2, {
 });
 import * as path5 from "path";
 import * as fs8 from "fs";
+function getTestMock2(name) {
+  return globalThis.__PROJMNT4CLAUDE_TEST_MOCKS__?.[name];
+}
 function validateStatusTransition(fromStatus, toStatus) {
   if (fromStatus === toStatus) {
     return { valid: true };
@@ -11669,6 +11727,10 @@ function getTaskMetaPath(taskId, cwd = process.cwd()) {
   return path5.join(getTaskDir(taskId, cwd), "meta.json");
 }
 function readTaskMeta(taskId, cwd = process.cwd()) {
+  const testMock = getTestMock2("readTaskMeta");
+  if (testMock) {
+    return testMock(taskId, cwd);
+  }
   if (!isInitialized(cwd)) {
     return null;
   }
@@ -11695,6 +11757,10 @@ function readTaskMeta(taskId, cwd = process.cwd()) {
   }
 }
 function writeTaskMeta(task, cwd = process.cwd()) {
+  const testMock = getTestMock2("writeTaskMeta");
+  if (testMock) {
+    return testMock(task, cwd);
+  }
   const taskDir = getTaskDir(task.id, cwd);
   const metaPath = getTaskMetaPath(task.id, cwd);
   if (!fs8.existsSync(taskDir)) {
@@ -11796,6 +11862,10 @@ function getAllTaskIds(cwd = process.cwd()) {
   });
 }
 function getAllTasks(cwd = process.cwd(), includeArchived = false) {
+  const testMock = getTestMock2("getAllTasks");
+  if (testMock) {
+    return testMock(cwd, includeArchived);
+  }
   const taskIds = getAllTaskIds(cwd);
   const tasks = taskIds.map((id) => readTaskMeta(id, cwd)).filter((task) => task !== null);
   if (includeArchived) {
@@ -11817,10 +11887,18 @@ function getAllTasks(cwd = process.cwd(), includeArchived = false) {
   return tasks;
 }
 function generateNewTaskId(cwd = process.cwd(), type = "feature", priority = "P2", title = "task") {
+  const testMock = getTestMock2("generateNewTaskId");
+  if (testMock) {
+    return testMock(cwd, type, priority, title);
+  }
   const existingIds = getAllTaskIds(cwd);
   return generateTaskId(type, priority, title, existingIds);
 }
 function taskExists(taskId, cwd = process.cwd()) {
+  const testMock = getTestMock2("taskExists");
+  if (testMock) {
+    return testMock(taskId, cwd);
+  }
   return readTaskMeta(taskId, cwd) !== null;
 }
 function generateSubtaskId(parentId, cwd = process.cwd()) {
@@ -12097,6 +12175,10 @@ function recordExecutionStats(taskId, stats, cwd = process.cwd()) {
   writeTaskMeta(task, cwd);
 }
 function renameTask(oldTaskId, newTaskId, cwd = process.cwd()) {
+  const testMock = getTestMock2("renameTask");
+  if (testMock) {
+    return testMock(oldTaskId, newTaskId, cwd);
+  }
   const task = readTaskMeta(oldTaskId, cwd);
   if (!task) {
     return { success: false, oldId: oldTaskId, newId: newTaskId, error: `任务 '${oldTaskId}' 不存在` };
@@ -12942,6 +13024,9 @@ var init_checkpoint_sync_checker2 = __esm(() => {
 import * as fs9 from "fs";
 import * as path6 from "path";
 import { execSync as execSync2 } from "child_process";
+function getTestMock3(name) {
+  return globalThis.__PROJMNT4CLAUDE_TEST_MOCKS__?.[name];
+}
 function getLogFilePath(command, cwd = process.cwd()) {
   const date = new Date().toISOString().slice(0, 10).replace(/-/g, "");
   const logsDir = getLogsDir(cwd);
@@ -13309,6 +13394,10 @@ class Logger {
   }
 }
 function createLogger(command, cwd) {
+  const testMock = getTestMock3("createLogger");
+  if (testMock) {
+    return testMock(command, cwd);
+  }
   const logger = new Logger({ command, cwd });
   logger.logCommandStart(command);
   return logger;
@@ -13425,6 +13514,10 @@ async function runHeadlessClaude(options) {
   });
 }
 function archiveReportIfExists(reportPath, cwd) {
+  const testMock = globalThis.__PROJMNT4CLAUDE_TEST_MOCKS__?.archiveReportIfExists;
+  if (testMock) {
+    return testMock(reportPath, cwd);
+  }
   let texts;
   try {
     texts = t(cwd);
@@ -13594,6 +13687,9 @@ __export(exports_headless_agent, {
   ClaudeCodeProvider: () => ClaudeCodeProvider
 });
 import * as fs11 from "fs";
+function getTestMock4(name) {
+  return globalThis.__PROJMNT4CLAUDE_TEST_MOCKS__?.[name];
+}
 function translateOptionsToCliArgs(options) {
   const args = ["--print"];
   if (options.allowedTools && options.allowedTools.length > 0) {
@@ -13617,6 +13713,10 @@ function translateOptionsToCliArgs(options) {
   return args;
 }
 function buildEffectiveTools(phase, cwd, task) {
+  const testMock = getTestMock4("buildEffectiveTools");
+  if (testMock) {
+    return testMock(phase, cwd, task);
+  }
   const codeDefaults = PHASE_DEFAULT_TOOLS[phase] || ["Read", "Bash", "Grep", "Glob"];
   const configKey = PHASE_CONFIG_KEY[phase];
   let phaseTools = codeDefaults;
@@ -13799,10 +13899,18 @@ function loadAIConfig(cwd) {
   }
 }
 function getAgent(cwd) {
+  const testMock = getTestMock4("getAgent");
+  if (testMock) {
+    return testMock(cwd);
+  }
   const aiConfig = loadAIConfig(cwd);
   return agentRegistry.getProvider(aiConfig.provider);
 }
 async function invokeAgent(prompt, options) {
+  const testMock = getTestMock4("invokeAgent");
+  if (testMock) {
+    return testMock(prompt, options);
+  }
   const agent = getAgent(options.cwd);
   return agent.invoke(prompt, options);
 }
@@ -14616,7 +14724,14 @@ var init_checkpoint_verification = __esm(() => {
 // src/utils/checkpoint.ts
 import * as fs13 from "fs";
 import * as path9 from "path";
+function getTestMock5(name) {
+  return globalThis.__PROJMNT4CLAUDE_TEST_MOCKS__?.[name];
+}
 function filterLowQualityCheckpoints(checkpoints) {
+  const testMock = getTestMock5("filterLowQualityCheckpoints");
+  if (testMock) {
+    return testMock(checkpoints);
+  }
   const kept = [];
   const removed = [];
   const reasons = new Map;
@@ -14662,6 +14777,10 @@ function generateCheckpointId(taskId, index, description) {
   return `CP-${String(index + 1).padStart(3, "0")}`;
 }
 function parseCheckpointsWithIds(taskId, cwd = process.cwd()) {
+  const testMock = getTestMock5("parseCheckpointsWithIds");
+  if (testMock) {
+    return testMock(taskId, cwd);
+  }
   const checkpointPath = path9.join(getTasksDir(cwd), taskId, "checkpoint.md");
   if (!fs13.existsSync(checkpointPath)) {
     return [];
@@ -14793,6 +14912,10 @@ function inferCheckpointCategory(description) {
   return;
 }
 function syncCheckpointsToMeta(taskId, checkpointsOrCwd, maybeCwd) {
+  const testMock = getTestMock5("syncCheckpointsToMeta");
+  if (testMock) {
+    return testMock(taskId, checkpointsOrCwd, maybeCwd);
+  }
   const cwd = typeof checkpointsOrCwd === "string" ? checkpointsOrCwd : maybeCwd ?? process.cwd();
   const checkpoints = Array.isArray(checkpointsOrCwd) ? checkpointsOrCwd : undefined;
   const task = readTaskMeta(taskId, cwd);
@@ -14914,6 +15037,10 @@ function updateCheckpointStatus(taskId, checkpointId, status, options = {}, cwd 
   writeTaskMeta(updatedTask, cwd);
 }
 function updateCheckpointMd(taskId, checkpointId, checked, task, cwd = process.cwd()) {
+  const testMock = getTestMock5("updateCheckpointMd");
+  if (testMock) {
+    return testMock(taskId, checkpointId, checked, task, cwd);
+  }
   const checkpointPath = path9.join(getTasksDir(cwd), taskId, "checkpoint.md");
   if (!fs13.existsSync(checkpointPath))
     return;
@@ -14944,6 +15071,10 @@ function listCheckpoints(taskId, cwd = process.cwd()) {
   return task?.checkpoints || [];
 }
 function updateCheckpointMdFromArray(taskId, checkpoints, cwd = process.cwd()) {
+  const testMock = getTestMock5("updateCheckpointMdFromArray");
+  if (testMock) {
+    return testMock(taskId, checkpoints, cwd);
+  }
   const checkpointPath = path9.join(getTasksDir(cwd), taskId, "checkpoint.md");
   const content = `# ${taskId} 检查点
 
@@ -16770,7 +16901,14 @@ var init_ai_metadata = __esm(() => {
 });
 
 // src/utils/ai-helpers.ts
+function getTestMock6(name) {
+  return globalThis.__PROJMNT4CLAUDE_TEST_MOCKS__?.[name];
+}
 async function withAIEnhancement(options) {
+  const testMock = getTestMock6("withAIEnhancement");
+  if (testMock) {
+    return testMock(options);
+  }
   if (!options.enabled)
     return options.fallback;
   try {
@@ -16786,7 +16924,14 @@ async function withAIEnhancement(options) {
 // src/utils/quality-gate.ts
 import * as fs14 from "fs";
 import * as path10 from "path";
+function getTestMock7(name) {
+  return globalThis.__PROJMNT4CLAUDE_TEST_MOCKS__?.[name];
+}
 function extractFilePaths(text, options) {
+  const testMock = getTestMock7("extractFilePaths");
+  if (testMock) {
+    return testMock(text, options);
+  }
   const files = [];
   const seen = new Set;
   const includeBare = options?.includeBareFilenames !== false;
@@ -17630,7 +17775,14 @@ var init_quality_gate = __esm(() => {
 });
 
 // src/utils/dependency-engine.ts
+function getTestMock8(name) {
+  return globalThis.__PROJMNT4CLAUDE_TEST_MOCKS__?.[name];
+}
 function inferDependencies(taskOrDescription, allTasks, options) {
+  const testMock = getTestMock8("inferDependencies");
+  if (testMock) {
+    return testMock(taskOrDescription, allTasks, options);
+  }
   const {
     strategy = "all",
     skipTerminal = true,
@@ -21807,6 +21959,9 @@ __export(exports_ai_integration, {
   callAIForJSON: () => callAIForJSON,
   callAI: () => callAI
 });
+function getTestMock11(name) {
+  return globalThis.__PROJMNT4CLAUDE_TEST_MOCKS__?.[name];
+}
 async function callAI(options) {
   const startTime = Date.now();
   try {
@@ -21833,6 +21988,10 @@ async function callAI(options) {
   }
 }
 async function callAIForJSON(options, validator) {
+  const testMock = getTestMock11("callAIForJSON");
+  if (testMock) {
+    return testMock(options, validator);
+  }
   const result = await callAI({ ...options, outputFormat: "text" });
   if (!result.success) {
     throw new Error(`AI call failed: ${result.error}`);
@@ -22708,6 +22867,16 @@ function showLogSummary(cwd = process.cwd()) {
 
 // src/commands/task.ts
 init_i18n();
+function getTestMock9(name) {
+  return globalThis.__PROJMNT4CLAUDE_TEST_MOCKS__?.[name];
+}
+async function promptsWrapper(args) {
+  const testMock = getTestMock9("prompts");
+  if (testMock) {
+    return testMock(args);
+  }
+  return import_prompts2.default(args);
+}
 var MAX_HISTORY_DISPLAY = 20;
 var TERMINAL_STATUSES_SET2 = new Set(TERMINAL_STATUSES);
 var NOISE_ACTIONS = new Set([
@@ -22906,7 +23075,7 @@ ${description || ""}`;
     console.log("   (Non-interactive mode, warnings logged, continuing task creation)");
     return { proceed: true, missingFiles };
   }
-  const response = await import_prompts2.default({
+  const response = await promptsWrapper({
     type: "confirm",
     name: "proceed",
     message: "以上文件does not exist, 确认继续CreatedTask?",
@@ -23066,7 +23235,7 @@ ${finalCheckpoints.map((cp) => `- [ ] ${cp}`).join(`
     }
     return task2;
   }
-  const response = await import_prompts2.default([
+  const response = await promptsWrapper([
     {
       type: "text",
       name: "title",
@@ -24351,7 +24520,7 @@ async function deleteTask(taskId, force = false, cwd = process.cwd()) {
     console.log("");
   }
   if (!force) {
-    const response = await import_prompts2.default({
+    const response = await promptsWrapper({
       type: "confirm",
       name: "confirm",
       message: `确定要删除Task ${taskId} 吗？`,
@@ -24620,7 +24789,7 @@ async function completeTask(taskId, options = {}, cwd = process.cwd()) {
         });
         console.log("");
         if (!options.yes) {
-          const response = await import_prompts2.default({
+          const response = await promptsWrapper({
             type: "confirm",
             name: "proceed",
             message: "是否标记所有Checkpoints为Completed并继续?",
@@ -24654,14 +24823,14 @@ async function completeTask(taskId, options = {}, cwd = process.cwd()) {
     console.log("");
     console.log("\uD83D\uDCA1 Tip: Recommend adding completion notes to record solution and experience");
     console.log("");
-    const addNote = await import_prompts2.default({
+    const addNote = await promptsWrapper({
       type: "confirm",
       name: "confirm",
       message: "是否添加完成Description?",
       initial: true
     });
     if (addNote.confirm) {
-      const noteResponse = await import_prompts2.default({
+      const noteResponse = await promptsWrapper({
         type: "text",
         name: "note",
         message: "请输入完成Description（解决方案, 关键决策等）:",
@@ -24864,7 +25033,7 @@ async function executeTask(taskId, cwd = process.cwd()) {
   console.log(`   projmnt4claude task update ${taskId} --status resolved --token <token>`);
   console.log("");
   if (task.status === "open") {
-    const response = await import_prompts2.default({
+    const response = await promptsWrapper({
       type: "confirm",
       name: "start",
       message: '是否将TaskStatusUpdated为"In Progress"?',
@@ -24914,7 +25083,7 @@ async function completeCheckpoint(taskId, options = {}, cwd = process.cwd()) {
         updatedLines.push(line.replace("[ ]", "[x]"));
         console.log(`   ✅ ${checkText} (auto-confirmed)`);
       } else {
-        const response = await import_prompts2.default({
+        const response = await promptsWrapper({
           type: "confirm",
           name: "passed",
           message: `Checkpoints: ${checkText}`,
@@ -24950,7 +25119,7 @@ async function completeCheckpoint(taskId, options = {}, cwd = process.cwd()) {
       writeTaskMeta(task, cwd);
       console.log(`✅ Task ${taskId} auto-marked as resolved`);
     } else {
-      const response = await import_prompts2.default({
+      const response = await promptsWrapper({
         type: "confirm",
         name: "complete",
         message: "是否立即将Task标记为Resolved?",
@@ -25137,7 +25306,7 @@ async function updateCheckpoint(taskId, checkpointId, action, options = {}, cwd 
           }
         }
         if (!options.yes) {
-          const response = await import_prompts2.default({
+          const response = await promptsWrapper({
             type: "confirm",
             name: "continue",
             message: "未找到产出证据，是否仍要标记为完成？",
@@ -25271,7 +25440,7 @@ async function splitTask(parentId, options = {}, cwd = process.cwd()) {
       console.error("Error: Non-interactive mode requires --into or --titles");
       process.exit(1);
     }
-    const response = await import_prompts2.default({
+    const response = await promptsWrapper({
       type: "select",
       name: "mode",
       message: "选择拆分方式:",
@@ -25285,7 +25454,7 @@ async function splitTask(parentId, options = {}, cwd = process.cwd()) {
       return;
     }
     if (response.mode === "count") {
-      const countResponse = await import_prompts2.default({
+      const countResponse = await promptsWrapper({
         type: "number",
         name: "count",
         message: "拆分为几subtasks?",
@@ -25301,7 +25470,7 @@ async function splitTask(parentId, options = {}, cwd = process.cwd()) {
         subtaskTitles.push(`${parentTask.title} - 部分 ${i}`);
       }
     } else {
-      const titlesResponse = await import_prompts2.default({
+      const titlesResponse = await promptsWrapper({
         type: "text",
         name: "titles",
         message: "输入SubtasksTitle (用逗号分隔):",
@@ -25709,7 +25878,7 @@ async function batchUpdateTasks(options = {}, cwd = process.cwd()) {
     if ((isUsingAllFlag || highRiskCount >= 5) && options.yes) {
       console.log("⚠️  Despite using --yes, this high-risk operation requires additional confirmation:");
       console.log("");
-      const extraConfirm = await import_prompts2.default({
+      const extraConfirm = await promptsWrapper({
         type: "confirm",
         name: "confirmed",
         message: `确认要将 ${highRiskCount} completed tasks being reopened吗？`,
@@ -25749,7 +25918,7 @@ async function batchUpdateTasks(options = {}, cwd = process.cwd()) {
   }
   console.log("");
   if (!options.yes) {
-    const response = await import_prompts2.default({
+    const response = await promptsWrapper({
       type: "confirm",
       name: "confirm",
       message: `确认Updated ${tasksToUpdate.length} tasks?`,
@@ -32115,6 +32284,16 @@ init_dependency_engine();
 init_description_template();
 init_quality_gate();
 init_i18n();
+function getTestMock10(name) {
+  return globalThis.__PROJMNT4CLAUDE_TEST_MOCKS__?.[name];
+}
+async function promptsWrapper2(args) {
+  const testMock = getTestMock10("prompts");
+  if (testMock) {
+    return testMock(args);
+  }
+  return import_prompts8.default(args);
+}
 var TERMINAL_STATUSES_SET6 = new Set(TERMINAL_STATUSES);
 var NOISE_ACTIONS2 = new Set([
   "查看Task",
@@ -32280,7 +32459,7 @@ ${description || ""}`;
     console.log("   (Non-interactive mode, warnings logged, continuing task creation)");
     return { proceed: true, missingFiles };
   }
-  const response = await import_prompts8.default({
+  const response = await promptsWrapper2({
     type: "confirm",
     name: "proceed",
     message: "以上文件does not exist, 确认继续CreatedTask?",
@@ -32440,7 +32619,7 @@ ${finalCheckpoints.map((cp) => `- [ ] ${cp}`).join(`
     }
     return task2;
   }
-  const response = await import_prompts8.default([
+  const response = await promptsWrapper2([
     {
       type: "text",
       name: "title",
@@ -36925,6 +37104,9 @@ import * as path27 from "path";
 
 // src/utils/role-prompts.ts
 init_i18n();
+function getTestMock12(name) {
+  return globalThis.__PROJMNT4CLAUDE_TEST_MOCKS__?.[name];
+}
 function normalizeRole(role) {
   if (!role)
     return;
@@ -36950,6 +37132,10 @@ function normalizeRole(role) {
   return mapping[lower];
 }
 function getDevRoleTemplate(role, language) {
+  const testMock = getTestMock12("getDevRoleTemplate");
+  if (testMock) {
+    return testMock(role, language);
+  }
   const i18n = getI18n(language);
   const normalized = normalizeRole(role);
   return normalized ? i18n.rolePrompts.dev[normalized] : i18n.rolePrompts.defaultDev;
@@ -39338,6 +39524,171 @@ ${fileCoverage.details}`;
       ].join(`
 `);
     }
+    let gateFailureDetailsSection = "";
+    if (retryContext?.gateFailureDetails) {
+      const gate = retryContext.gateFailureDetails;
+      const ruleId = gate.ruleId || "";
+      const failureType = gate.failureType || "";
+      let ruleSpecificFeedback = "";
+      let correctExample = "";
+      switch (ruleId) {
+        case "R-QA-POST-003":
+        case "R-POST-PHASE-003":
+          ruleSpecificFeedback = "输出格式不正确：缺少必要的 VERDICT 标记。";
+          correctExample = [
+            "正确输出示例:",
+            "VERDICT: PASS",
+            "## 验证结果: PASS",
+            "## 原因: 所有检查点通过，测试覆盖率达到要求",
+            "",
+            "或:",
+            "VERDICT: NOPASS",
+            "## 验证结果: NOPASS",
+            "## 原因: 测试用例 X 失败，需要修复..."
+          ].join(`
+`);
+          break;
+        case "R-QA-POST-001":
+        case "R-POST-PHASE-001":
+          ruleSpecificFeedback = "QA报告不存在：阶段执行后未生成有效的 qa-report.json 报告文件。";
+          correctExample = [
+            "正确行为: QA 验证完成后应自动生成 qa-report.json 文件。",
+            "检查点:",
+            "1. 确保 saveReport() 被正确调用",
+            "2. 确认报告文件路径: .projmnt4claude/outputs/{taskId}/qa-report.json",
+            "3. 验证报告文件内容包含有效的 JSON 格式"
+          ].join(`
+`);
+          break;
+        case "R-QA-POST-002":
+        case "R-POST-PHASE-002":
+          ruleSpecificFeedback = "QA报告格式无效：生成的报告文件格式不符合要求。";
+          correctExample = [
+            "正确格式示例:",
+            "{",
+            '  "taskId": "TASK-xxx",',
+            '  "result": "PASS" | "NOPASS",',
+            '  "reason": "详细的验证结果说明",',
+            '  "testFailures": [],',
+            '  "failedCheckpoints": [],',
+            '  "requiresHuman": false,',
+            '  "verifiedAt": "2026-01-01T00:00:00.000Z",',
+            '  "verifiedBy": "qa_tester"',
+            "}"
+          ].join(`
+`);
+          break;
+        case "R-QA-POST-004":
+        case "R-POST-PHASE-004":
+          ruleSpecificFeedback = "测试失败详情缺失：NOPASS时未提供足够的失败信息。";
+          correctExample = [
+            "正确行为: 当验证结果为 NOPASS 时，必须提供:",
+            "1. testFailures: 列出所有失败的测试用例名称",
+            "2. failedCheckpoints: 列出未通过的检查点 ID",
+            "3. reason: 详细说明失败原因和修复建议"
+          ].join(`
+`);
+          break;
+        case "R-QA-PRE-001":
+        case "R-PRE-PHASE-001":
+          ruleSpecificFeedback = "阶段前置条件检查失败：任务数据或前置阶段结果不符合要求。";
+          correctExample = [
+            "正确行为: 进入 QA 阶段前必须满足:",
+            "1. 任务存在且已正确初始化",
+            '2. 代码审核阶段已通过（codeReviewVerdict.result === "PASS"）',
+            "3. 开发报告文件存在且完整"
+          ].join(`
+`);
+          break;
+        case "R-QA-PRE-002":
+        case "R-PRE-PHASE-002":
+          ruleSpecificFeedback = "任务不存在：指定的任务 ID 未找到或已被删除。";
+          correctExample = [
+            "正确行为: 确保任务在 .projmnt4claude/tasks/ 目录下存在对应的 meta.json 文件。",
+            "检查点:",
+            "1. 确认任务 ID 拼写正确",
+            "2. 验证任务目录结构完整",
+            "3. 检查任务状态是否为可执行状态（非 resolved/closed）"
+          ].join(`
+`);
+          break;
+        default:
+          if (failureType === "format") {
+            ruleSpecificFeedback = "输出格式不正确。";
+            correctExample = [
+              "通用正确格式要求:",
+              "1. 输出第一行必须包含明确的结论标记",
+              "2. 使用 Markdown 格式组织内容",
+              "3. 包含必要的章节标题（如 ## 验证结果）"
+            ].join(`
+`);
+          } else if (failureType === "ai_output") {
+            ruleSpecificFeedback = "AI 服务输出异常。";
+            correctExample = [
+              "排查建议:",
+              "1. 检查 AI 服务 API 状态",
+              "2. 确认提示词格式正确且未超出 token 限制",
+              "3. 尝试简化请求内容"
+            ].join(`
+`);
+          } else {
+            ruleSpecificFeedback = gate.failureDetails || "门禁检查未通过。";
+          }
+      }
+      gateFailureDetailsSection = [
+        "## 前次门禁失败详情（精准反馈）",
+        "",
+        `规则ID: ${gate.ruleId || "未知"}`,
+        `规则名称: ${gate.ruleName || "未知"}`,
+        `失败类型: ${gate.failureType || "未知"}`,
+        `严重等级: ${gate.severity || "未知"}`,
+        "",
+        `具体问题: ${ruleSpecificFeedback}`,
+        ""
+      ].join(`
+`);
+      if (correctExample) {
+        gateFailureDetailsSection += `${correctExample}
+
+`;
+      }
+      if (gate.failureDetails && !ruleSpecificFeedback.includes(gate.failureDetails)) {
+        gateFailureDetailsSection += `详细错误: ${gate.failureDetails}
+
+`;
+      }
+      if (gate.suggestions && gate.suggestions.length > 0) {
+        gateFailureDetailsSection += `修复建议:
+`;
+        gate.suggestions.forEach((suggestion, index) => {
+          gateFailureDetailsSection += `${index + 1}. ${suggestion}
+`;
+        });
+        gateFailureDetailsSection += `
+`;
+      }
+      if (failureType === "format") {
+        gateFailureDetailsSection += [
+          "---",
+          "**格式错误专项提醒**:",
+          '- 必须使用英文 VERDICT 标记，不要使用中文"通过"/"不通过"',
+          "- VERDICT 必须出现在输出第一行",
+          "- 确保输出可被正则表达式 `^VERDICT:s*(PASS|NOPASS)` 匹配",
+          ""
+        ].join(`
+`);
+      } else if (failureType === "ai_output") {
+        gateFailureDetailsSection += [
+          "---",
+          "**AI输出错误专项提醒**:",
+          "- 检查 API 密钥和权限配置",
+          "- 确认请求未超出模型的最大 token 限制",
+          "- 如果问题持续，考虑简化任务或分批处理",
+          ""
+        ].join(`
+`);
+      }
+    }
     let coverageGapSection = "";
     if (retryContext?.qaCoverageGapContext) {
       const gap = retryContext.qaCoverageGapContext;
@@ -39419,6 +39770,7 @@ ${task.description}` : "";
       customRequirements,
       testStrategy,
       retryContextSection,
+      gateFailureDetailsSection,
       coverageGapSection,
       devReportPath
     }).replace(/\n{3,}/g, `
@@ -43284,13 +43636,26 @@ ${"━".repeat(SEPARATOR_WIDTH)}`);
       const canProceed = await this.checkPhasePreConditions(taskId, phase, state);
       if (!canProceed) {
         console.log(`   ❌ 阶段前置条件检查失败`);
+        const preGateErrorMsg = `阶段前置条件检查失败（A 类门禁）`;
+        this.storeFailureContext(taskId, phase, preGateErrorMsg, state, {
+          ruleId: "R-PRE-PHASE-001",
+          ruleName: "阶段前置条件检查",
+          failureType: "A",
+          failureDetails: `任务 ${taskId} 的阶段前置条件检查未通过`,
+          suggestions: [
+            "检查任务是否存在且已正确初始化",
+            "确认任务依赖是否已完成",
+            "验证任务数据完整性"
+          ],
+          severity: "ERROR"
+        });
         console.log(`   \uD83D\uDEAB A 类门禁失败，中断流水线（任务数据有效性检查失败）`);
         return {
           success: false,
           phase,
           failedAt: "pre_phase_gate",
           attempt,
-          reason: `阶段前置条件检查失败（A 类门禁）`,
+          reason: preGateErrorMsg,
           retryable: false,
           failureType: "A"
         };
@@ -43327,6 +43692,19 @@ ${"━".repeat(SEPARATOR_WIDTH)}`);
       const postGatePassed = this.validatePhaseResult(phase, phaseResult);
       if (!postGatePassed) {
         console.log(`   ❌ 阶段后质量门禁失败`);
+        const postGateErrorMsg = `阶段后质量门禁失败（B 类门禁，${attempt}次尝试）`;
+        this.storeFailureContext(taskId, phase, postGateErrorMsg, state, {
+          ruleId: "R-POST-PHASE-001",
+          ruleName: "阶段结果验证",
+          failureType: "B",
+          failureDetails: `${phase} 阶段结果验证未通过`,
+          suggestions: [
+            `检查 ${phase} 阶段输出是否符合预期格式`,
+            "确认阶段执行结果包含必要的字段和数据",
+            "验证阶段输出质量是否满足门禁要求"
+          ],
+          severity: "ERROR"
+        });
         if (attempt <= maxRetries) {
           console.log(`   \uD83D\uDD04 B 类门禁失败，回退到阶段起点重试...`);
           this.incrementPhaseRetryCount(taskId, phase, state);
@@ -43338,7 +43716,7 @@ ${"━".repeat(SEPARATOR_WIDTH)}`);
           phase,
           failedAt: "post_phase_gate",
           attempt,
-          reason: `阶段后质量门禁失败（B 类门禁，${attempt}次尝试）`,
+          reason: postGateErrorMsg,
           retryable: false,
           failureType: "B"
         };
@@ -44088,6 +44466,18 @@ ${"━".repeat(SEPARATOR_WIDTH)}`);
         message: gapData.message
       };
     }
+    let gateFailureDetails;
+    const lastFailure = failureHistory[failureHistory.length - 1];
+    if (lastFailure?.gateInfo) {
+      gateFailureDetails = {
+        ruleId: lastFailure.gateInfo.ruleId,
+        ruleName: lastFailure.gateInfo.ruleName,
+        failureType: lastFailure.gateInfo.failureType,
+        failureDetails: lastFailure.gateInfo.failureDetails,
+        suggestions: lastFailure.gateInfo.suggestions,
+        severity: lastFailure.gateInfo.severity
+      };
+    }
     return {
       previousFailureReason: stored?.previousFailureReason ?? (failureHistory.length > 0 ? failureHistory[failureHistory.length - 1].error : undefined),
       previousPhase: stored?.previousPhase ?? phase,
@@ -44099,10 +44489,11 @@ ${"━".repeat(SEPARATOR_WIDTH)}`);
       accumulatedInsights,
       suggestedFixes,
       failureHistory,
+      gateFailureDetails,
       qaCoverageGapContext
     };
   }
-  storeFailureContext(taskId, phase, reason, state) {
+  storeFailureContext(taskId, phase, reason, state, gateInfo) {
     const existing = this.taskRetryContexts.get(taskId);
     const phaseRetryCount = this.getPhaseRetryCount(taskId, phase, state);
     const prevRecord = this.executionRecords.get(taskId);
@@ -44133,9 +44524,9 @@ ${"━".repeat(SEPARATOR_WIDTH)}`);
       accumulatedInsights: [],
       suggestedFixes: []
     });
-    this.recordFailure(taskId, phase, phaseRetryCount + 1, reason, state);
+    this.recordFailure(taskId, phase, phaseRetryCount + 1, reason, state, gateInfo);
   }
-  recordFailure(taskId, phase, attempt, error, state) {
+  recordFailure(taskId, phase, attempt, error, state, gateInfo) {
     const phaseKey = `${taskId}:${phase}`;
     if (!state.failureHistory) {
       state.failureHistory = new Map;
@@ -44149,7 +44540,8 @@ ${"━".repeat(SEPARATOR_WIDTH)}`);
       phase,
       error,
       errorType,
-      insights
+      insights,
+      gateInfo
     };
     history.push(record);
     state.failureHistory.set(phaseKey, history);
@@ -44176,6 +44568,12 @@ ${"━".repeat(SEPARATOR_WIDTH)}`);
     }
     if (lowerError.includes("api") || lowerError.includes("rate limit") || lowerError.includes("429") || lowerError.includes("5")) {
       return "api";
+    }
+    if (lowerError.includes("verdict") || lowerError.includes("format") || lowerError.includes("标记") || lowerError.includes("output format")) {
+      return "format";
+    }
+    if (lowerError.includes("ai") || lowerError.includes("output") || lowerError.includes("会话失败") || lowerError.includes("调用失败") || lowerError.includes("claude")) {
+      return "ai_output";
     }
     return "other";
   }
@@ -44212,6 +44610,12 @@ ${"━".repeat(SEPARATOR_WIDTH)}`);
     }
     if (lastError.includes("timeout") || lastError.includes("timed out")) {
       insights.push("超时模式: 任务可能过于复杂，考虑拆分或优化实现");
+    }
+    if (lastError.includes("verdict") || lastError.includes("format") || lastError.includes("标记") || lastError.includes("output format")) {
+      insights.push("格式错误模式: 输出缺少必要的标记或格式不正确，检查 VERDICT 标记和输出格式");
+    }
+    if (lastError.includes("ai") || lastError.includes("output") || lastError.includes("会话失败") || lastError.includes("调用失败") || lastError.includes("claude")) {
+      insights.push("AI输出错误模式: AI服务调用失败或输出异常，检查API状态和请求参数");
     }
     if (failureHistory.length >= 2) {
       insights.push("多次失败: 建议尝试不同的实现方法");
@@ -44270,6 +44674,19 @@ ${"━".repeat(SEPARATOR_WIDTH)}`);
         fixes.push("检查 API 限流情况，稍后重试");
         fixes.push("检查 API 认证和权限");
         fixes.push("查看 API 服务状态页面");
+        break;
+      case "format":
+        fixes.push("确保输出第一行包含 VERDICT: PASS 或 VERDICT: NOPASS");
+        fixes.push(`参考正确格式示例：VERDICT: PASS
+## 验证结果: PASS`);
+        fixes.push('不要使用中文"通过"或"不通过"');
+        fixes.push("检查输出是否符合阶段要求的格式规范");
+        break;
+      case "ai_output":
+        fixes.push("检查 AI 服务 API 状态是否正常");
+        fixes.push("确认请求参数和提示词格式正确");
+        fixes.push("检查网络连接和 API 密钥有效性");
+        fixes.push("尝试简化请求内容或分批处理");
         break;
       default:
         fixes.push("仔细查看错误日志，定位问题根源");
@@ -45704,9 +46121,17 @@ function printSummary(summary) {
 import * as path38 from "path";
 import * as fs43 from "fs";
 function getProjectDir5(cwd = process.cwd()) {
+  const testMocks = globalThis.__PROJMNT4CLAUDE_TEST_MOCKS__;
+  if (testMocks?.getProjectDir) {
+    return testMocks.getProjectDir(cwd);
+  }
   return path38.join(cwd, ".projmnt4claude");
 }
 function isInitialized2(cwd = process.cwd()) {
+  const testMocks = globalThis.__PROJMNT4CLAUDE_TEST_MOCKS__;
+  if (testMocks?.isInitialized) {
+    return testMocks.isInitialized(cwd);
+  }
   const projectDir = getProjectDir5(cwd);
   const configPath = path38.join(projectDir, "config.json");
   if (fs43.existsSync(configPath)) {
