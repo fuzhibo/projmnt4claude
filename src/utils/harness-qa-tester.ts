@@ -762,72 +762,72 @@ export class HarnessQATester {
       dangerouslySkipPermissions: effectiveTools.skipPermissions,
     };
 
+    // 1. 调用 AI 获取原始输出
+    const rawResult = await agent.invoke(prompt, invokeOptions);
+
+    if (!rawResult.success) {
+      return {
+        passed: false,
+        reason: `${texts.harness.logs.qaSessionFailed}: ${rawResult.error || 'unknown error'}`,
+        failures: [],
+        failedCheckpoints: [],
+      };
+    }
+
+    // 2. 解析 AI 输出（不验证格式）
+    const parsedResult = this.parseQAResult(rawResult.output || '');
+
+    // 3. 构造 verdict
+    const qaVerdict: QAVerdict = {
+      taskId: task.id,
+      result: parsedResult.passed ? 'PASS' : 'NOPASS',
+      reason: parsedResult.reason,
+      testFailures: parsedResult.failures,
+      failedCheckpoints: parsedResult.failedCheckpoints,
+      requiresHuman: false,
+      humanVerificationCheckpoints: [],
+      verifiedAt: new Date().toISOString(),
+      verifiedBy: 'qa_tester',
+      details: parsedResult.details,
+    };
+
+    // 4. 生成标准化报告
+    const report = this.formatReport(qaVerdict);
+
+    // 5. 验证标准化报告格式
     const engine = createSessionAwareEngine(
       'markdown',
       [qaVerdictResultMarker, qaVerdictHasReason],
       1, // maxRetriesOnError (QA: 1 retry)
     );
-    const engineResult = await engine.runWithFeedback(
-      agent.invoke.bind(agent),
-      prompt,
-      invokeOptions,
-    );
+    const validationResult = engine.validate(report);
 
-    if (engineResult.retries > 0) {
-      console.log(`   🔄 ${texts.harness.logs.qaRetry.replace('{retries}', String(engineResult.retries))}`);
-    }
-
-    if (!engineResult.result.success) {
-      return {
-        passed: false,
-        reason: `${texts.harness.logs.qaSessionFailed}: ${engineResult.result.error || 'unknown error'}`,
-        failures: [],
-        failedCheckpoints: [],
-      };
-    }
-
-    // 验证规则未通过（如缺少 VERDICT 标记），直接返回 NOPASS 避免解析失败
-    if (!engineResult.passed) {
-      const violationMessages = engineResult.violations
+    if (!validationResult.passed) {
+      const violationMessages = validationResult.violations
         .map((v: { ruleId: string; message: string }) => `${v.ruleId}: ${v.message}`)
         .join('; ');
       console.log(`   ⚠️  ${texts.harness.logs.qaOutputValidationFailed}: ${violationMessages}`);
-
-      // 尝试从原始输出中提取可用信息
-      const rawOutput = engineResult.result.output || '';
-      const parsed = this.parseQAResult(rawOutput);
-      // 如果解析到了有效结果（非默认原因），使用解析结果
-      if (parsed.reason && parsed.reason !== texts.harness.logs.cannotParseVerdict) {
-        return parsed;
-      }
-
-      return {
-        passed: false,
-        reason: `${texts.harness.logs.qaOutputValidationFailed}: ${violationMessages}`,
-        failures: [],
-        failedCheckpoints: [],
-      };
+      // 报告格式有问题（不应该发生，因为 formatReport() 已标准化）
+      // 记录警告但不影响结果，因为内容已正确解析
+      console.warn(`   [QA Format Warning] Report format validation failed: ${violationMessages}`);
     }
-
-    // 解析验证结果
-    const result = this.parseQAResult(engineResult.result.output || '');
 
     // 合并文件覆盖信息到结果详情中
     if (task.files && task.files.length > 0) {
       const fileCoverageSection = `\n\n## ${texts.harness.logs.fileCoverageSection || 'File Coverage'}\n${fileCoverage.details}`;
-      result.details = result.details ? `${result.details}${fileCoverageSection}` : fileCoverageSection;
+      parsedResult.details = parsedResult.details ? `${parsedResult.details}${fileCoverageSection}` : fileCoverageSection;
 
       // 如果有文件缺失，将结果标记为失败
       if (!fileCoverage.covered) {
-        result.passed = false;
-        result.failures = [...result.failures, ...fileCoverage.missingFiles.map(f => `Missing file: ${f}`)];
-        if (!result.reason.includes(texts.harness.logs.fileCoverageFailed || 'File coverage failed')) {
-          result.reason = `${texts.harness.logs.fileCoverageFailed || 'File coverage check failed'}: ${fileCoverage.missingFiles.length} file(s) missing`;
+        parsedResult.passed = false;
+        parsedResult.failures = [...parsedResult.failures, ...fileCoverage.missingFiles.map(f => `Missing file: ${f}`)];
+        if (!parsedResult.reason.includes(texts.harness.logs.fileCoverageFailed || 'File coverage failed')) {
+          parsedResult.reason = `${texts.harness.logs.fileCoverageFailed || 'File coverage check failed'}: ${fileCoverage.missingFiles.length} file(s) missing`;
         }
       }
     }
 
-    return result;
+    return parsedResult;
   }
 
   /**

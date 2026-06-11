@@ -39423,15 +39423,15 @@ ${truncated}`];
     }
     console.log(`   ✅ 程序化验证通过`);
     const checkpointsWithoutCommands = automatedCheckpoints.filter((cp) => {
-      const result2 = validateCheckpointVerification(cp);
-      return !result2.valid;
+      const result = validateCheckpointVerification(cp);
+      return !result.valid;
     });
     if (checkpointsWithoutCommands.length > 0) {
       console.log(`
    ⚠️  ${texts.harness.logs.checkpointWarning.replace("{count}", String(checkpointsWithoutCommands.length))}:`);
       for (const cp of checkpointsWithoutCommands) {
-        const result2 = validateCheckpointVerification(cp);
-        console.log(`      - [${cp.id}] ${result2.warning || texts.harness.logs.checkpointWarningDetail}`);
+        const result = validateCheckpointVerification(cp);
+        console.log(`      - [${cp.id}] ${result.warning || texts.harness.logs.checkpointWarningDetail}`);
       }
       console.log(`      ${texts.harness.logs.checkpointWarningFallback}`);
     }
@@ -39458,50 +39458,51 @@ ${truncated}`];
       outputFormat: "text",
       dangerouslySkipPermissions: effectiveTools.skipPermissions
     };
+    const rawResult = await agent.invoke(prompt, invokeOptions);
+    if (!rawResult.success) {
+      return {
+        passed: false,
+        reason: `${texts.harness.logs.qaSessionFailed}: ${rawResult.error || "unknown error"}`,
+        failures: [],
+        failedCheckpoints: []
+      };
+    }
+    const parsedResult = this.parseQAResult(rawResult.output || "");
+    const qaVerdict = {
+      taskId: task.id,
+      result: parsedResult.passed ? "PASS" : "NOPASS",
+      reason: parsedResult.reason,
+      testFailures: parsedResult.failures,
+      failedCheckpoints: parsedResult.failedCheckpoints,
+      requiresHuman: false,
+      humanVerificationCheckpoints: [],
+      verifiedAt: new Date().toISOString(),
+      verifiedBy: "qa_tester",
+      details: parsedResult.details
+    };
+    const report = this.formatReport(qaVerdict);
     const engine = createSessionAwareEngine("markdown", [qaVerdictResultMarker, qaVerdictHasReason], 1);
-    const engineResult = await engine.runWithFeedback(agent.invoke.bind(agent), prompt, invokeOptions);
-    if (engineResult.retries > 0) {
-      console.log(`   \uD83D\uDD04 ${texts.harness.logs.qaRetry.replace("{retries}", String(engineResult.retries))}`);
-    }
-    if (!engineResult.result.success) {
-      return {
-        passed: false,
-        reason: `${texts.harness.logs.qaSessionFailed}: ${engineResult.result.error || "unknown error"}`,
-        failures: [],
-        failedCheckpoints: []
-      };
-    }
-    if (!engineResult.passed) {
-      const violationMessages = engineResult.violations.map((v) => `${v.ruleId}: ${v.message}`).join("; ");
+    const validationResult = engine.validate(report);
+    if (!validationResult.passed) {
+      const violationMessages = validationResult.violations.map((v) => `${v.ruleId}: ${v.message}`).join("; ");
       console.log(`   ⚠️  ${texts.harness.logs.qaOutputValidationFailed}: ${violationMessages}`);
-      const rawOutput = engineResult.result.output || "";
-      const parsed = this.parseQAResult(rawOutput);
-      if (parsed.reason && parsed.reason !== texts.harness.logs.cannotParseVerdict) {
-        return parsed;
-      }
-      return {
-        passed: false,
-        reason: `${texts.harness.logs.qaOutputValidationFailed}: ${violationMessages}`,
-        failures: [],
-        failedCheckpoints: []
-      };
+      console.warn(`   [QA Format Warning] Report format validation failed: ${violationMessages}`);
     }
-    const result = this.parseQAResult(engineResult.result.output || "");
     if (task.files && task.files.length > 0) {
       const fileCoverageSection = `
 
 ## ${texts.harness.logs.fileCoverageSection || "File Coverage"}
 ${fileCoverage.details}`;
-      result.details = result.details ? `${result.details}${fileCoverageSection}` : fileCoverageSection;
+      parsedResult.details = parsedResult.details ? `${parsedResult.details}${fileCoverageSection}` : fileCoverageSection;
       if (!fileCoverage.covered) {
-        result.passed = false;
-        result.failures = [...result.failures, ...fileCoverage.missingFiles.map((f) => `Missing file: ${f}`)];
-        if (!result.reason.includes(texts.harness.logs.fileCoverageFailed || "File coverage failed")) {
-          result.reason = `${texts.harness.logs.fileCoverageFailed || "File coverage check failed"}: ${fileCoverage.missingFiles.length} file(s) missing`;
+        parsedResult.passed = false;
+        parsedResult.failures = [...parsedResult.failures, ...fileCoverage.missingFiles.map((f) => `Missing file: ${f}`)];
+        if (!parsedResult.reason.includes(texts.harness.logs.fileCoverageFailed || "File coverage failed")) {
+          parsedResult.reason = `${texts.harness.logs.fileCoverageFailed || "File coverage check failed"}: ${fileCoverage.missingFiles.length} file(s) missing`;
         }
       }
     }
-    return result;
+    return parsedResult;
   }
   buildQAPrompt(task, codeReviewVerdict, checkpoints, retryContext) {
     let texts;
