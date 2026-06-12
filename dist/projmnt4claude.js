@@ -39814,14 +39814,16 @@ ${task.description}` : "";
       fs34.mkdirSync(jsonDir, { recursive: true });
     }
     const jsonContent = JSON.stringify({
+      version: "1.0.0",
       taskId: verdict.taskId,
-      result: verdict.result,
-      reason: verdict.reason,
+      verdict: verdict.result,
+      verifiedAt: verdict.verifiedAt,
+      verifier: verdict.verifiedBy,
+      summary: verdict.reason || "",
       testFailures: verdict.testFailures,
       failedCheckpoints: verdict.failedCheckpoints,
       requiresHuman: verdict.requiresHuman,
-      verifiedAt: verdict.verifiedAt,
-      verifiedBy: verdict.verifiedBy,
+      humanVerificationCheckpoints: verdict.humanVerificationCheckpoints,
       details: verdict.details,
       acceptanceCriteriaResult: verdict.acceptanceCriteriaResult
     }, null, 2);
