@@ -311,9 +311,18 @@ export class ClaudeCodeProvider implements HeadlessAgent {
       durationMs,
       tokensUsed,
       model,
+      hookWarning: result.hookWarning,
     });
 
-    if (result.success) {
+    // 如果存在 hookWarning，说明是 Hook 错误导致的伪失败
+    // 统一转换为成功状态，但保留警告信息
+    const isHookFailure = !result.success && result.hookWarning;
+    if (isHookFailure) {
+      console.log(`   ⚠️  ${result.hookWarning}`);
+      console.log(`   💡 Hook 错误不影响任务结果，继续处理...`);
+    }
+
+    if (result.success || isHookFailure) {
       this.logger.logAICost({
         field: 'headless-agent:invoke',
         durationMs,
@@ -325,12 +334,12 @@ export class ClaudeCodeProvider implements HeadlessAgent {
 
     return {
       output: result.output,
-      success: result.success,
+      success: isHookFailure ? true : result.success,  // Hook 错误时强制成功
       provider: this.name,
       durationMs,
       tokensUsed,
       model,
-      error: result.error,
+      error: isHookFailure ? undefined : result.error,   // Hook 错误时清除 error
       hookWarning: result.hookWarning,
       stderr: result.stderr,
     };

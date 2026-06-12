@@ -13814,9 +13814,15 @@ class ClaudeCodeProvider {
       success: result.success,
       durationMs,
       tokensUsed,
-      model
+      model,
+      hookWarning: result.hookWarning
     });
-    if (result.success) {
+    const isHookFailure = !result.success && result.hookWarning;
+    if (isHookFailure) {
+      console.log(`   ⚠️  ${result.hookWarning}`);
+      console.log(`   \uD83D\uDCA1 Hook 错误不影响任务结果，继续处理...`);
+    }
+    if (result.success || isHookFailure) {
       this.logger.logAICost({
         field: "headless-agent:invoke",
         durationMs,
@@ -13827,12 +13833,12 @@ class ClaudeCodeProvider {
     }
     return {
       output: result.output,
-      success: result.success,
+      success: isHookFailure ? true : result.success,
       provider: this.name,
       durationMs,
       tokensUsed,
       model,
-      error: result.error,
+      error: isHookFailure ? undefined : result.error,
       hookWarning: result.hookWarning,
       stderr: result.stderr
     };
