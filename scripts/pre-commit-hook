@@ -1,11 +1,12 @@
 #!/bin/sh
-# projmnt4claude pre-commit hook (增强版)
+# projmnt4claude pre-commit hook (增强版 - 目录级忽略检测)
 #
 # 安全检查：
 # 1. 检查被忽略的文件是否被强制添加（读取 .gitignore 和 .git/info/exclude）
-# 2. 检测敏感文件模式
-# 3. 检测敏感内容模式
-# 4. 执行轻量检查（AI 调用 + 构建 + 基本功能）
+# 2. 检查被忽略的目录是否被强制添加（目录级检测）
+# 3. 检测敏感文件模式
+# 4. 检测敏感内容模式
+# 5. 执行轻量检查（AI 调用 + 构建 + 基本功能）
 
 set -e
 
@@ -26,6 +27,55 @@ STAGED_FILES=$(git diff --cached --name-only)
 ERRORS=""
 WARNINGS=""
 
+# 收集所有忽略模式（包括目录级和文件级）
+# 从 .gitignore 中提取忽略模式
+IGNORED_PATTERNS=""
+if [ -f ".gitignore" ]; then
+    while IFS= read -r line; do
+        # 跳过注释和空行
+        case "$line" in
+            \#*|""|!*) continue ;;
+        esac
+        # 收集所有非注释的忽略模式
+        IGNORED_PATTERNS="$IGNORED_PATTERNS $line"
+    done < ".gitignore"
+fi
+
+# 从 .git/info/exclude 中提取忽略模式
+if [ -f ".git/info/exclude" ]; then
+    while IFS= read -r line; do
+        case "$line" in
+            \#*|""|!*) continue ;;
+        esac
+        IGNORED_PATTERNS="$IGNORED_PATTERNS $line"
+    done < ".git/info/exclude"
+fi
+
+# 从全局忽略文件中提取忽略模式
+GLOBAL_IGNORE=$(git config --get core.excludesfile 2>/dev/null || true)
+if [ -n "$GLOBAL_IGNORE" ] && [ -f "$GLOBAL_IGNORE" ]; then
+    while IFS= read -r line; do
+        case "$line" in
+            \#*|""|!*) continue ;;
+        esac
+        IGNORED_PATTERNS="$IGNORED_PATTERNS $line"
+    done < "$GLOBAL_IGNORE"
+fi
+
+# 提取目录级忽略模式（以 / 结尾的）
+IGNORED_DIRS=""
+for pattern in $IGNORED_PATTERNS; do
+    case "$pattern" in
+        */)
+            # 移除末尾的 /
+            dir_pattern="${pattern%/}"
+            # 移除可能的通配符前缀
+            CLEAN_DIR=$(echo "$dir_pattern" | sed 's/^\*\///')
+            IGNORED_DIRS="$IGNORED_DIRS $CLEAN_DIR"
+            ;;
+    esac
+done
+
 if [ -n "$STAGED_FILES" ]; then
     for FILE in $STAGED_FILES; do
         # 检查 1: 是否应该被忽略（自动读取 .gitignore 和 .git/info/exclude）
@@ -35,7 +85,19 @@ if [ -n "$STAGED_FILES" ]; then
             ERRORS="$ERRORS\n  ${RED}❌${NC} $FILE\n     忽略来源: $IGNORE_SOURCE"
         fi
 
-        # 检查 2: 敏感文件模式（仅警告，不阻止）
+        # 检查 2: 目录级忽略检测
+        # 检查文件是否位于被忽略的目录中
+        for IGNORED_DIR in $IGNORED_DIRS; do
+            # 检查文件路径是否包含被忽略的目录
+            case "$FILE" in
+                $IGNORED_DIR/*|$IGNORED_DIR)
+                    ERRORS="$ERRORS\n  ${RED}❌${NC} $FILE\n     位于被忽略的目录中: $IGNORED_DIR/"
+                    break
+                    ;;
+            esac
+        done
+
+        # 检查 3: 敏感文件模式（仅警告，不阻止）
         case "$FILE" in
             *.env|*.env.*|*.pem|*.key|*.p12|*.pfx|\
             credentials.json|secrets.json|.htpasswd|\
@@ -47,7 +109,7 @@ if [ -n "$STAGED_FILES" ]; then
                 ;;
         esac
 
-        # 检查 3: 敏感内容检测（仅对新增文件）
+        # 检查 4: 敏感内容检测（仅对新增文件）
         if [ -f "$FILE" ] && file "$FILE" 2>/dev/null | grep -q "text"; then
             if git diff --cached --name-status "$FILE" 2>/dev/null | grep -q "^A"; then
                 # 检测敏感内容模式
