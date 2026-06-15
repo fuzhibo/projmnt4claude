@@ -800,10 +800,10 @@ export class HarnessQATester {
       [qaVerdictResultMarker, qaVerdictHasReason],
       1, // maxRetriesOnError (QA: 1 retry)
     );
-    const validationResult = engine.validate(report);
+    const violations = engine.validate(report);
 
-    if (!validationResult.passed) {
-      const violationMessages = validationResult.violations
+    if (violations.length > 0) {
+      const violationMessages = violations
         .map((v: { ruleId: string; message: string }) => `${v.ruleId}: ${v.message}`)
         .join('; ');
       console.log(`   ⚠️  ${texts.harness.logs.qaOutputValidationFailed}: ${violationMessages}`);
