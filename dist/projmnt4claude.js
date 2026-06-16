@@ -21973,7 +21973,8 @@ function getTestMock11(name) {
 async function callAI(options) {
   const startTime = Date.now();
   try {
-    const result = await invokeAgent(options.prompt, {
+    const { invokeAgent: invokeAgent2 } = await Promise.resolve().then(() => (init_headless_agent(), exports_headless_agent));
+    const result = await invokeAgent2(options.prompt, {
       timeout: options.timeout ?? DEFAULT_TIMEOUT,
       allowedTools: options.allowedTools ?? DEFAULT_ALLOWED_TOOLS,
       outputFormat: options.outputFormat,
@@ -22034,8 +22035,223 @@ Output: ${output.substring(0, 500)}`);
 }
 var DEFAULT_TIMEOUT = 120, DEFAULT_ALLOWED_TOOLS;
 var init_ai_integration = __esm(() => {
-  init_headless_agent();
   DEFAULT_ALLOWED_TOOLS = [];
+});
+
+// src/utils/prompt-templates/i18n/init-requirement-zh.ts
+var exports_init_requirement_zh = {};
+__export(exports_init_requirement_zh, {
+  initRequirementTemplates: () => initRequirementTemplates
+});
+var initRequirementTemplates;
+var init_init_requirement_zh = __esm(() => {
+  initRequirementTemplates = {
+    reportToTask: `你是 projmnt4claude 项目的任务创建助手。
+
+## 任务
+根据以下调查报告，生成创建任务所需的完整元数据结构（JSON 格式）。
+
+## 调查报告
+{report}
+
+## 检查点前缀映射规则
+{prefixMap}
+
+## 输出要求
+请输出一个完整的 JSON 对象，包含以下字段：
+
+\`\`\`json
+{
+  "title": "任务标题（从报告标题提取）",
+  "type": "bug|feature|research|docs|refactor|test",
+  "priority": "P0|P1|P2|P3",
+  "description": "完整的任务描述，必须包含: ## 原因分析\\n{对应报告CA章节}\\n\\n## 解决方案\\n{对应报告SOL章节}",
+  "checkpoints": [
+    {
+      "prefix": "verify|test|review|implem|doc",
+      "description": "检查点描述（去除前缀后的纯文本）",
+      "category": "按 PREFIX_MAP 推断",
+      "verificationMethod": "按 PREFIX_MAP 推断"
+    }
+  ],
+  "files": ["从报告解决方案章节提取的涉及文件路径"],
+  "estimatedMinutes": "预估工时（数字）",
+  "dependencies": ["依赖的报告相对路径，如无可为空数组"]
+}
+\`\`\`
+
+## 约束
+- 检查点必须从报告的「检查点覆盖清单」章节提取
+- 每个检查点必须包含标准前缀 [verify]/[test]/[review]/[implem]/[doc]
+- 按照 PREFIX_MAP 正确设置 category 和 verificationMethod
+- description 必须包含「原因分析」和「解决方案」两个章节
+- 输出纯 JSON，不要包含 markdown 代码块标记`,
+    taskFix: `你是 projmnt4claude 项目的任务元数据修复助手。
+
+## 任务
+以下任务未通过质量门禁，请根据失败原因修正任务元数据。
+
+## 当前任务元数据（meta.json）
+{currentMeta}
+
+## 门禁失败原因
+{gateErrors}
+
+## 质量评分详情
+{qualityIssues}
+
+## 对齐验证失败项（如有）
+{alignmentIssues}
+
+## 修正要求
+请输出修正后的完整任务元数据 JSON，保持原有结构，仅修改失败项相关的字段:
+
+1. 如果检查点缺少前缀 → 补充标准前缀
+2. 如果 category 不正确 → 按 PREFIX_MAP 修正
+3. 如果 verification.commands 为空 → 根据检查点前缀 + 任务 files 生成
+4. 如果 description 缺少章节 → 补充完整的「原因分析」和「解决方案」
+5. 如果对齐验证失败 → 根据 alignmentIssues 中的具体描述修正对应章节
+6. 如果评分过低 → 提升对应维度的内容质量
+
+## 输出格式
+输出修正后的完整 meta.json JSON 对象，保持所有原有字段不变，仅修改需要修正的部分。`,
+    aiAlignmentCheck: `你是 projmnt4claude 项目的任务对齐验证助手。
+
+## 任务
+对比以下调查报告和已创建的任务元数据，判断两者是否对齐。
+
+## 调查报告
+{report}
+
+## 任务元数据（meta.json）
+{taskMeta}
+
+## 对齐验证维度
+1. **原因分析对齐**: 任务 description 中的「原因分析」章节是否覆盖了报告的所有 CA-xxx 条目
+2. **解决方案对齐**: 任务 description 中的「解决方案」章节是否覆盖了报告的所有 SOL-xxx 条目
+3. **检查点对齐**: 任务 checkpoints 数量和内容是否与报告的「检查点覆盖清单」一致
+
+## 输出格式
+\`\`\`json
+{
+  "aligned": true或false,
+  "checks": {
+    "rootCauseAlignment": { "passed": true或false, "detail": "具体描述" },
+    "solutionAlignment": { "passed": true或false, "detail": "具体描述" },
+    "checkpointAlignment": { "passed": true或false, "detail": "具体描述" }
+  },
+  "issues": ["不对齐项的描述列表，aligned=true时为空数组"]
+}
+\`\`\``
+  };
+});
+
+// src/utils/prompt-templates/i18n/init-requirement-en.ts
+var exports_init_requirement_en = {};
+__export(exports_init_requirement_en, {
+  initRequirementTemplates: () => initRequirementTemplates2
+});
+var initRequirementTemplates2;
+var init_init_requirement_en = __esm(() => {
+  initRequirementTemplates2 = {
+    reportToTask: `You are a task creation assistant for the projmnt4claude project.
+
+## Task
+Generate a complete task metadata structure (JSON format) based on the following investigation report.
+
+## Investigation Report
+{report}
+
+## Checkpoint Prefix Mapping Rules
+{prefixMap}
+
+## Output Requirements
+Output a complete JSON object with the following fields:
+
+\`\`\`json
+{
+  "title": "Task title (extracted from report title)",
+  "type": "bug|feature|research|docs|refactor|test",
+  "priority": "P0|P1|P2|P3",
+  "description": "Full task description, must include: ## Root Cause Analysis\\n{map report CA sections}\\n\\n## Solution\\n{map report SOL sections}",
+  "checkpoints": [
+    {
+      "prefix": "verify|test|review|implem|doc",
+      "description": "Checkpoint description (plain text without prefix)",
+      "category": "Inferred from PREFIX_MAP",
+      "verificationMethod": "Inferred from PREFIX_MAP"
+    }
+  ],
+  "files": ["File paths extracted from report solution sections"],
+  "estimatedMinutes": "Estimated hours (number)",
+  "dependencies": ["Dependent report relative paths, empty array if none"]
+}
+\`\`\`
+
+## Constraints
+- Checkpoints MUST be extracted from the report's "Checkpoint Checklist" section
+- Each checkpoint MUST include a standard prefix: [verify]/[test]/[review]/[implem]/[doc]
+- Correctly set category and verificationMethod according to PREFIX_MAP
+- description MUST include both "Root Cause Analysis" and "Solution" sections
+- Output pure JSON only, do NOT include markdown code block markers`,
+    taskFix: `You are a task metadata repair assistant for the projmnt4claude project.
+
+## Task
+The following task failed the quality gate. Fix the task metadata based on the failure reasons.
+
+## Current Task Metadata (meta.json)
+{currentMeta}
+
+## Gate Failure Reasons
+{gateErrors}
+
+## Quality Score Details
+{qualityIssues}
+
+## Alignment Verification Failures (if any)
+{alignmentIssues}
+
+## Fix Requirements
+Output the corrected full task metadata JSON. Keep the existing structure, only modify fields related to failures:
+
+1. If checkpoints are missing prefixes → add standard prefixes
+2. If category is incorrect → correct according to PREFIX_MAP
+3. If verification.commands is empty → generate based on checkpoint prefix + task files
+4. If description is missing sections → add complete "Root Cause Analysis" and "Solution" sections
+5. If alignment verification failed → fix corresponding sections based on alignmentIssues
+6. If quality score is too low → improve content quality for the relevant dimensions
+
+## Output Format
+Output the corrected full meta.json JSON object. Keep all existing fields unchanged, only modify what needs fixing.`,
+    aiAlignmentCheck: `You are a task alignment verification assistant for the projmnt4claude project.
+
+## Task
+Compare the following investigation report with the created task metadata to determine whether they are aligned.
+
+## Investigation Report
+{report}
+
+## Task Metadata (meta.json)
+{taskMeta}
+
+## Alignment Verification Dimensions
+1. **Root Cause Alignment**: Does the "Root Cause Analysis" section in the task description cover all CA-xxx entries in the report?
+2. **Solution Alignment**: Does the "Solution" section in the task description cover all SOL-xxx entries in the report?
+3. **Checkpoint Alignment**: Do the task checkpoints match the report's "Checkpoint Checklist" in both count and content?
+
+## Output Format
+\`\`\`json
+{
+  "aligned": true or false,
+  "checks": {
+    "rootCauseAlignment": { "passed": true or false, "detail": "specific description" },
+    "solutionAlignment": { "passed": true or false, "detail": "specific description" },
+    "checkpointAlignment": { "passed": true or false, "detail": "specific description" }
+  },
+  "issues": ["List of misalignment descriptions, empty array when aligned=true"]
+}
+\`\`\``
+  };
 });
 
 // node_modules/commander/esm.mjs
@@ -22056,7 +22272,7 @@ var {
 
 // src/index.ts
 import * as fs44 from "fs";
-import * as path39 from "path";
+import * as path40 from "path";
 
 // src/commands/setup.ts
 init_path();
@@ -32276,7 +32492,7 @@ init_path();
 init_task2();
 var import_prompts9 = __toESM(require_prompts3(), 1);
 import * as fs25 from "fs";
-import * as path21 from "path";
+import * as path22 from "path";
 
 // src/commands/task.ts
 init_path();
@@ -33353,218 +33569,37 @@ Review the following split plan against split requirements across six dimensions
 `
 };
 
-// src/utils/prompt-templates/i18n/init-requirement-zh.ts
-var initRequirementTemplates = {
-  reportToTask: `你是 projmnt4claude 项目的任务创建助手。
-
-## 任务
-根据以下调查报告，生成创建任务所需的完整元数据结构（JSON 格式）。
-
-## 调查报告
-{report}
-
-## 检查点前缀映射规则
-{prefixMap}
-
-## 输出要求
-请输出一个完整的 JSON 对象，包含以下字段：
-
-\`\`\`json
-{
-  "title": "任务标题（从报告标题提取）",
-  "type": "bug|feature|research|docs|refactor|test",
-  "priority": "P0|P1|P2|P3",
-  "description": "完整的任务描述，必须包含: ## 原因分析\\n{对应报告CA章节}\\n\\n## 解决方案\\n{对应报告SOL章节}",
-  "checkpoints": [
-    {
-      "prefix": "verify|test|review|implem|doc",
-      "description": "检查点描述（去除前缀后的纯文本）",
-      "category": "按 PREFIX_MAP 推断",
-      "verificationMethod": "按 PREFIX_MAP 推断"
-    }
-  ],
-  "files": ["从报告解决方案章节提取的涉及文件路径"],
-  "estimatedMinutes": "预估工时（数字）",
-  "dependencies": ["依赖的报告相对路径，如无可为空数组"]
-}
-\`\`\`
-
-## 约束
-- 检查点必须从报告的「检查点覆盖清单」章节提取
-- 每个检查点必须包含标准前缀 [verify]/[test]/[review]/[implem]/[doc]
-- 按照 PREFIX_MAP 正确设置 category 和 verificationMethod
-- description 必须包含「原因分析」和「解决方案」两个章节
-- 输出纯 JSON，不要包含 markdown 代码块标记`,
-  taskFix: `你是 projmnt4claude 项目的任务元数据修复助手。
-
-## 任务
-以下任务未通过质量门禁，请根据失败原因修正任务元数据。
-
-## 当前任务元数据（meta.json）
-{currentMeta}
-
-## 门禁失败原因
-{gateErrors}
-
-## 质量评分详情
-{qualityIssues}
-
-## 对齐验证失败项（如有）
-{alignmentIssues}
-
-## 修正要求
-请输出修正后的完整任务元数据 JSON，保持原有结构，仅修改失败项相关的字段:
-
-1. 如果检查点缺少前缀 → 补充标准前缀
-2. 如果 category 不正确 → 按 PREFIX_MAP 修正
-3. 如果 verification.commands 为空 → 根据检查点前缀 + 任务 files 生成
-4. 如果 description 缺少章节 → 补充完整的「原因分析」和「解决方案」
-5. 如果对齐验证失败 → 根据 alignmentIssues 中的具体描述修正对应章节
-6. 如果评分过低 → 提升对应维度的内容质量
-
-## 输出格式
-输出修正后的完整 meta.json JSON 对象，保持所有原有字段不变，仅修改需要修正的部分。`,
-  aiAlignmentCheck: `你是 projmnt4claude 项目的任务对齐验证助手。
-
-## 任务
-对比以下调查报告和已创建的任务元数据，判断两者是否对齐。
-
-## 调查报告
-{report}
-
-## 任务元数据（meta.json）
-{taskMeta}
-
-## 对齐验证维度
-1. **原因分析对齐**: 任务 description 中的「原因分析」章节是否覆盖了报告的所有 CA-xxx 条目
-2. **解决方案对齐**: 任务 description 中的「解决方案」章节是否覆盖了报告的所有 SOL-xxx 条目
-3. **检查点对齐**: 任务 checkpoints 数量和内容是否与报告的「检查点覆盖清单」一致
-
-## 输出格式
-\`\`\`json
-{
-  "aligned": true或false,
-  "checks": {
-    "rootCauseAlignment": { "passed": true或false, "detail": "具体描述" },
-    "solutionAlignment": { "passed": true或false, "detail": "具体描述" },
-    "checkpointAlignment": { "passed": true或false, "detail": "具体描述" }
-  },
-  "issues": ["不对齐项的描述列表，aligned=true时为空数组"]
-}
-\`\`\``
-};
-
-// src/utils/prompt-templates/i18n/init-requirement-en.ts
-var initRequirementTemplates2 = {
-  reportToTask: `You are a task creation assistant for the projmnt4claude project.
-
-## Task
-Generate a complete task metadata structure (JSON format) based on the following investigation report.
-
-## Investigation Report
-{report}
-
-## Checkpoint Prefix Mapping Rules
-{prefixMap}
-
-## Output Requirements
-Output a complete JSON object with the following fields:
-
-\`\`\`json
-{
-  "title": "Task title (extracted from report title)",
-  "type": "bug|feature|research|docs|refactor|test",
-  "priority": "P0|P1|P2|P3",
-  "description": "Full task description, must include: ## Root Cause Analysis\\n{map report CA sections}\\n\\n## Solution\\n{map report SOL sections}",
-  "checkpoints": [
-    {
-      "prefix": "verify|test|review|implem|doc",
-      "description": "Checkpoint description (plain text without prefix)",
-      "category": "Inferred from PREFIX_MAP",
-      "verificationMethod": "Inferred from PREFIX_MAP"
-    }
-  ],
-  "files": ["File paths extracted from report solution sections"],
-  "estimatedMinutes": "Estimated hours (number)",
-  "dependencies": ["Dependent report relative paths, empty array if none"]
-}
-\`\`\`
-
-## Constraints
-- Checkpoints MUST be extracted from the report's "Checkpoint Checklist" section
-- Each checkpoint MUST include a standard prefix: [verify]/[test]/[review]/[implem]/[doc]
-- Correctly set category and verificationMethod according to PREFIX_MAP
-- description MUST include both "Root Cause Analysis" and "Solution" sections
-- Output pure JSON only, do NOT include markdown code block markers`,
-  taskFix: `You are a task metadata repair assistant for the projmnt4claude project.
-
-## Task
-The following task failed the quality gate. Fix the task metadata based on the failure reasons.
-
-## Current Task Metadata (meta.json)
-{currentMeta}
-
-## Gate Failure Reasons
-{gateErrors}
-
-## Quality Score Details
-{qualityIssues}
-
-## Alignment Verification Failures (if any)
-{alignmentIssues}
-
-## Fix Requirements
-Output the corrected full task metadata JSON. Keep the existing structure, only modify fields related to failures:
-
-1. If checkpoints are missing prefixes → add standard prefixes
-2. If category is incorrect → correct according to PREFIX_MAP
-3. If verification.commands is empty → generate based on checkpoint prefix + task files
-4. If description is missing sections → add complete "Root Cause Analysis" and "Solution" sections
-5. If alignment verification failed → fix corresponding sections based on alignmentIssues
-6. If quality score is too low → improve content quality for the relevant dimensions
-
-## Output Format
-Output the corrected full meta.json JSON object. Keep all existing fields unchanged, only modify what needs fixing.`,
-  aiAlignmentCheck: `You are a task alignment verification assistant for the projmnt4claude project.
-
-## Task
-Compare the following investigation report with the created task metadata to determine whether they are aligned.
-
-## Investigation Report
-{report}
-
-## Task Metadata (meta.json)
-{taskMeta}
-
-## Alignment Verification Dimensions
-1. **Root Cause Alignment**: Does the "Root Cause Analysis" section in the task description cover all CA-xxx entries in the report?
-2. **Solution Alignment**: Does the "Solution" section in the task description cover all SOL-xxx entries in the report?
-3. **Checkpoint Alignment**: Do the task checkpoints match the report's "Checkpoint Checklist" in both count and content?
-
-## Output Format
-\`\`\`json
-{
-  "aligned": true or false,
-  "checks": {
-    "rootCauseAlignment": { "passed": true or false, "detail": "specific description" },
-    "solutionAlignment": { "passed": true or false, "detail": "specific description" },
-    "checkpointAlignment": { "passed": true or false, "detail": "specific description" }
-  },
-  "issues": ["List of misalignment descriptions, empty array when aligned=true"]
-}
-\`\`\``
-};
-
 // src/utils/prompt-templates/loader.ts
-var templateRegistry = {
-  zh: { ...investigationTemplates, ...initRequirementTemplates },
-  en: { ...investigationTemplates2, ...initRequirementTemplates2 }
+var zhInitTemplates;
+var enInitTemplates;
+async function getZhInitTemplates() {
+  if (!zhInitTemplates) {
+    const mod = await Promise.resolve().then(() => (init_init_requirement_zh(), exports_init_requirement_zh));
+    zhInitTemplates = mod.initRequirementTemplates;
+  }
+  return zhInitTemplates;
+}
+async function getEnInitTemplates() {
+  if (!enInitTemplates) {
+    const mod = await Promise.resolve().then(() => (init_init_requirement_en(), exports_init_requirement_en));
+    enInitTemplates = mod.initRequirementTemplates;
+  }
+  return enInitTemplates;
+}
+var baseRegistry = {
+  zh: { ...investigationTemplates },
+  en: { ...investigationTemplates2 }
 };
-function loadTemplate(name, lang = "zh") {
-  const templates = templateRegistry[lang];
-  if (!templates) {
+async function getFullRegistry(lang) {
+  const base = baseRegistry[lang];
+  if (!base) {
     throw new Error(`Unsupported language: ${lang}. Supported: zh, en`);
   }
+  const initTemplates = lang === "zh" ? await getZhInitTemplates() : await getEnInitTemplates();
+  return { ...base, ...initTemplates };
+}
+async function loadTemplate(name, lang = "zh") {
+  const templates = await getFullRegistry(lang);
   const template = templates[name];
   if (!template) {
     throw new Error(`Template "${name}" not found for language "${lang}". Available: ${Object.keys(templates).join(", ")}`);
@@ -33579,8 +33614,8 @@ function renderTemplate(template, params) {
     return match;
   });
 }
-function loadAndRenderTemplate(name, params, lang = "zh") {
-  const template = loadTemplate(name, lang);
+async function loadAndRenderTemplate(name, params, lang = "zh") {
+  const template = await loadTemplate(name, lang);
   return renderTemplate(template, params);
 }
 
@@ -33612,29 +33647,135 @@ function parseCheckpoint(raw) {
   };
 }
 // src/utils/init-requirement/verification-commands.ts
-import { existsSync as existsSync21 } from "node:fs";
-function generateVerificationCommands(checkpoint, taskFiles) {
+import { existsSync as existsSync21, readFileSync as readFileSync19 } from "node:fs";
+import path20 from "node:path";
+function detectPackageManager(cwd) {
+  if (existsSync21(path20.join(cwd, "bun.lockb")) || existsSync21(path20.join(cwd, "bun.lock"))) {
+    return "bun";
+  }
+  if (existsSync21(path20.join(cwd, "pnpm-lock.yaml"))) {
+    return "pnpm";
+  }
+  if (existsSync21(path20.join(cwd, "yarn.lock"))) {
+    return "yarn";
+  }
+  if (existsSync21(path20.join(cwd, "package-lock.json"))) {
+    return "npm";
+  }
+  return;
+}
+function detectTestFramework(pkg) {
+  if (!pkg)
+    return;
+  const devDeps = pkg.devDependencies || {};
+  const deps = pkg.dependencies || {};
+  const allDeps = { ...deps, ...devDeps };
+  if (allDeps.jest)
+    return "jest";
+  if (allDeps.vitest)
+    return "vitest";
+  if (allDeps.mocha)
+    return "mocha";
+  return;
+}
+function detectProjectConfig(cwd) {
+  const packageJsonPath = path20.join(cwd, "package.json");
+  if (existsSync21(packageJsonPath)) {
+    const pkg = JSON.parse(readFileSync19(packageJsonPath, "utf-8"));
+    const packageManager = detectPackageManager(cwd);
+    const testFramework = detectTestFramework(pkg);
+    let testCommand;
+    if (pkg.scripts?.test) {
+      const pm = packageManager === "bun" ? "bun" : packageManager === "pnpm" ? "pnpm" : packageManager === "yarn" ? "yarn" : "npm";
+      testCommand = `${pm} test`;
+    }
+    let buildCommand;
+    if (pkg.scripts?.build) {
+      const pm = packageManager === "bun" ? "bun" : packageManager === "pnpm" ? "pnpm" : packageManager === "yarn" ? "yarn" : "npm";
+      buildCommand = `${pm} run build`;
+    }
+    return {
+      type: "node",
+      packageManager,
+      testFramework,
+      buildCommand,
+      testCommand,
+      testFilePattern: "**/__tests__/*.test.ts"
+    };
+  }
+  if (existsSync21(path20.join(cwd, "go.mod"))) {
+    return {
+      type: "go",
+      testCommand: "go test ./...",
+      testFilePattern: "**/*_test.go"
+    };
+  }
+  if (existsSync21(path20.join(cwd, "pyproject.toml")) || existsSync21(path20.join(cwd, "setup.py"))) {
+    return {
+      type: "python",
+      testCommand: "pytest",
+      testFilePattern: "**/test_*.py"
+    };
+  }
+  if (existsSync21(path20.join(cwd, "Cargo.toml"))) {
+    return {
+      type: "rust",
+      testCommand: "cargo test",
+      buildCommand: "cargo build",
+      testFilePattern: "**/tests/*.rs"
+    };
+  }
+  return { type: "unknown" };
+}
+function mapSourceToTestFile(sourceFile, config) {
+  switch (config.type) {
+    case "node":
+      return sourceFile.replace(/src\/(.*)\.ts$/, "__tests__/$1.test.ts");
+    case "go":
+      return sourceFile.replace(/\.go$/, "_test.go");
+    case "python":
+      return sourceFile.replace(/\.py$/, "_test.py");
+    case "rust":
+      return sourceFile.replace(/src\/(.*)\.rs$/, "tests/$1.rs");
+    default:
+      return sourceFile;
+  }
+}
+function generateVerificationCommands(checkpoint, taskFiles, projectConfig) {
+  const { type, buildCommand, testCommand } = projectConfig;
   switch (checkpoint.prefix) {
     case "test": {
-      const testFiles = taskFiles.map((f) => f.replace(/src\/(.*)\.ts$/, "tests/$1.test.ts")).filter((f) => existsSync21(f));
-      return testFiles.length > 0 ? [`npm test ${testFiles.join(" ")}`] : [`npm test --testNamePattern="${checkpoint.description}"`];
+      if (!testCommand)
+        return [];
+      const mappedTestFiles = taskFiles.map((f) => mapSourceToTestFile(f, projectConfig)).filter((f) => existsSync21(f));
+      if (mappedTestFiles.length > 0) {
+        return [`${testCommand} ${mappedTestFiles.join(" ")}`];
+      }
+      return [`${testCommand} --testNamePattern="${checkpoint.description}"`];
     }
-    case "verify":
-      return ["npm run build && npm test"];
+    case "verify": {
+      const commands = [];
+      if (buildCommand)
+        commands.push(buildCommand);
+      if (testCommand)
+        commands.push(testCommand);
+      return commands;
+    }
     case "review":
       return [`git diff HEAD -- ${taskFiles.join(" ")}`];
     case "implem":
-      return ["npm run build"];
     case "doc":
-      return ["npm run build"];
+      return buildCommand ? [buildCommand] : [];
+    default:
+      return [];
   }
 }
 // src/utils/init-requirement/conversion-status.ts
 import fs24 from "node:fs";
-import path20 from "node:path";
+import path21 from "node:path";
 var STATUS_FILE = "conversion-status.json";
 function loadConversionStatus(investigationDir) {
-  const filePath = path20.join(investigationDir, STATUS_FILE);
+  const filePath = path21.join(investigationDir, STATUS_FILE);
   if (fs24.existsSync(filePath)) {
     return JSON.parse(fs24.readFileSync(filePath, "utf-8"));
   }
@@ -33648,7 +33789,7 @@ function createEmptyConversionStatus() {
   };
 }
 function saveConversionStatus(investigationDir, status) {
-  const filePath = path20.join(investigationDir, STATUS_FILE);
+  const filePath = path21.join(investigationDir, STATUS_FILE);
   status.lastRunAt = new Date().toISOString();
   fs24.writeFileSync(filePath, JSON.stringify(status, null, 2), "utf-8");
 }
@@ -33669,7 +33810,7 @@ function topologicalSort(reports, status, investigationDir) {
   const allReports = new Set(reports);
   for (const report of reports) {
     const deps = new Set;
-    const metaPath = path20.join(investigationDir, report.replace(/\.md$/, ""), "meta.json");
+    const metaPath = path21.join(investigationDir, report.replace(/\.md$/, ""), "meta.json");
     if (fs24.existsSync(metaPath)) {
       try {
         const meta = JSON.parse(fs24.readFileSync(metaPath, "utf-8"));
@@ -33863,7 +34004,7 @@ async function initRequirement(reportPath, cwd = process.cwd(), options = {}) {
     console.error("Project not initialized. Run: projmnt4claude setup");
     process.exit(1);
   }
-  const resolvedPath = path21.resolve(cwd, reportPath);
+  const resolvedPath = path22.resolve(cwd, reportPath);
   if (!fs25.existsSync(resolvedPath)) {
     console.error(`Path not found: ${resolvedPath}`);
     process.exit(1);
@@ -33876,7 +34017,7 @@ async function initRequirement(reportPath, cwd = process.cwd(), options = {}) {
       interactive,
       maxRetry,
       skipGate,
-      investigationDir: path21.dirname(resolvedPath),
+      investigationDir: path22.dirname(resolvedPath),
       logger
     });
     if (!result.success) {
@@ -33902,7 +34043,7 @@ async function convertSingleReport(reportPath, cwd, options) {
   const { interactive, maxRetry, skipGate, investigationDir, logger } = options;
   console.log("");
   console.log("━".repeat(SEPARATOR_WIDTH));
-  console.log(`Converting report: ${path21.basename(reportPath)}`);
+  console.log(`Converting report: ${path22.basename(reportPath)}`);
   console.log("━".repeat(SEPARATOR_WIDTH));
   console.log("");
   if (!fs25.existsSync(reportPath)) {
@@ -33925,7 +34066,7 @@ async function convertSingleReport(reportPath, cwd, options) {
     console.warn("Report format validation skipped (non-standard format)");
   }
   const status = loadConversionStatus(investigationDir);
-  const relativePath = path21.relative(investigationDir, reportPath);
+  const relativePath = path22.relative(investigationDir, reportPath);
   if (status.reports[relativePath] === "completed") {
     const existingTaskId = status.tasks[relativePath]?.taskId;
     console.log(`Report already converted (taskId: ${existingTaskId}). Skipping.`);
@@ -33989,7 +34130,7 @@ async function convertSingleReport(reportPath, cwd, options) {
         category: cp.category,
         verificationMethod: cp.verificationMethod,
         verification: {
-          commands: generateVerificationCommands(parseCheckpoint(`[${cp.prefix}] ${cp.description}`), extractedMeta.files)
+          commands: generateVerificationCommands(parseCheckpoint(`[${cp.prefix}] ${cp.description}`), extractedMeta.files, detectProjectConfig(cwd))
         }
       }));
       taskToUpdate.estimatedMinutes = extractedMeta.estimatedMinutes;
@@ -34042,12 +34183,12 @@ async function convertSingleReport(reportPath, cwd, options) {
 }
 async function convertDirectory(dirPath, cwd, options) {
   const { interactive, maxRetry, skipGate, logger } = options;
-  const subDir = path21.join(dirPath, "sub");
+  const subDir = path22.join(dirPath, "sub");
   let reportFiles;
   if (fs25.existsSync(subDir) && fs25.statSync(subDir).isDirectory()) {
-    reportFiles = fs25.readdirSync(subDir).filter((f) => f.endsWith(".md")).sort().map((f) => path21.join(subDir, f));
+    reportFiles = fs25.readdirSync(subDir).filter((f) => f.endsWith(".md")).sort().map((f) => path22.join(subDir, f));
   } else {
-    const reportPath = path21.join(dirPath, "report.md");
+    const reportPath = path22.join(dirPath, "report.md");
     if (fs25.existsSync(reportPath)) {
       const result = await convertSingleReport(reportPath, cwd, {
         ...options,
@@ -34073,23 +34214,23 @@ async function convertDirectory(dirPath, cwd, options) {
   console.log("");
   const status = loadConversionStatus(dirPath);
   for (const rf of reportFiles) {
-    const rel = path21.relative(dirPath, rf);
+    const rel = path22.relative(dirPath, rf);
     if (!status.reports[rel]) {
       status.reports[rel] = "pending";
     }
   }
   const pendingReports = reportFiles.filter((rf) => {
-    const rel = path21.relative(dirPath, rf);
+    const rel = path22.relative(dirPath, rf);
     return status.reports[rel] !== "completed";
   });
   if (pendingReports.length === 0) {
     console.log("All reports already converted. Nothing to do.");
     return;
   }
-  const relativePending = pendingReports.map((rf) => path21.relative(dirPath, rf));
+  const relativePending = pendingReports.map((rf) => path22.relative(dirPath, rf));
   let sortedReports;
   try {
-    sortedReports = topologicalSort(relativePending, status, dirPath).map((rel) => path21.join(dirPath, rel));
+    sortedReports = topologicalSort(relativePending, status, dirPath).map((rel) => path22.join(dirPath, rel));
   } catch (err) {
     console.error(`Dependency error: ${err instanceof Error ? err.message : String(err)}`);
     process.exit(1);
@@ -34099,7 +34240,7 @@ async function convertDirectory(dirPath, cwd, options) {
   const taskMapping = [];
   for (const reportFile of sortedReports) {
     console.log(`
-Processing: ${path21.basename(reportFile)}`);
+Processing: ${path22.basename(reportFile)}`);
     const result = await convertSingleReport(reportFile, cwd, {
       interactive,
       maxRetry,
@@ -34131,7 +34272,7 @@ Processing: ${path21.basename(reportFile)}`);
   console.log("Batch Conversion Result");
   console.log("━".repeat(SEPARATOR_WIDTH));
   for (const m of taskMapping) {
-    console.log(`  ${m.taskId} ← ${path21.basename(m.report)}`);
+    console.log(`  ${m.taskId} ← ${path22.basename(m.report)}`);
   }
   console.log("");
 }
@@ -34217,12 +34358,12 @@ function createGateDependencies(cwd, reportPath) {
     },
     moveTaskToArchive: (taskId) => {
       const tasksDir = getTasksDir(cwd);
-      const archiveDir = path21.join(tasksDir, "..", "archive");
+      const archiveDir = path22.join(tasksDir, "..", "archive");
       if (!fs25.existsSync(archiveDir))
         fs25.mkdirSync(archiveDir, { recursive: true });
-      const taskDir = path21.join(tasksDir, taskId);
+      const taskDir = path22.join(tasksDir, taskId);
       if (fs25.existsSync(taskDir)) {
-        fs25.renameSync(taskDir, path21.join(archiveDir, taskId));
+        fs25.renameSync(taskDir, path22.join(archiveDir, taskId));
       }
     },
     updateConversionStatus: (invDir, rPath, state, detail) => {
@@ -34256,7 +34397,7 @@ async function runAlignmentCheck(reportPath, taskId, cwd) {
 // src/commands/investigation-requirement.ts
 init_ai_integration();
 import * as fs28 from "fs";
-import * as path23 from "path";
+import * as path24 from "path";
 import * as readline from "readline";
 
 // src/utils/investigation/report-generator.ts
@@ -34628,7 +34769,7 @@ function validateSplitReviewResult(data) {
 
 // src/utils/investigation/config.ts
 import * as fs27 from "fs";
-import * as path22 from "path";
+import * as path23 from "path";
 var DEFAULT_CONFIG2 = {
   splitThreshold: 30,
   maxRetry: 3,
@@ -34669,10 +34810,10 @@ function loadLanguageConfig(cwd) {
   return "zh";
 }
 function findConfigPath(cwd) {
-  const configPath = path22.join(cwd, ".projmnt4claude", "config.json");
+  const configPath = path23.join(cwd, ".projmnt4claude", "config.json");
   if (fs27.existsSync(configPath))
     return configPath;
-  const rootConfig = path22.join(cwd, "config.json");
+  const rootConfig = path23.join(cwd, "config.json");
   if (fs27.existsSync(rootConfig))
     return rootConfig;
   return null;
@@ -34780,7 +34921,7 @@ async function runNewInvestigation(requirement, cwd, options) {
       lang,
       maxRetry,
       splitThreshold,
-      outputDir: path23.dirname(reportPath),
+      outputDir: path24.dirname(reportPath),
       quiet: options.quiet
     });
     if (splitResult.success && splitResult.subReports) {
@@ -34847,7 +34988,7 @@ async function runInteractiveMode(requirement, cwd, options) {
       lang,
       maxRetry,
       splitThreshold,
-      outputDir: path23.dirname(reportPath),
+      outputDir: path24.dirname(reportPath),
       quiet: options.quiet
     });
     if (splitResult.success && splitResult.subReports) {
@@ -34982,7 +35123,7 @@ async function runSplitMode(cwd, options) {
     lang,
     maxRetry,
     splitThreshold,
-    outputDir: path23.dirname(options.reportPath),
+    outputDir: path24.dirname(options.reportPath),
     quiet: options.quiet
   });
   return result;
@@ -35027,7 +35168,7 @@ async function runSplitFlow(report, requirement, cwd, options) {
     console.log(`   ✅ Split plan approved (${splitPlan.items.length} sub-items)`);
   }
   const subReports = [];
-  const subDir = path23.join(outputDir, "sub");
+  const subDir = path24.join(outputDir, "sub");
   if (!fs28.existsSync(subDir)) {
     fs28.mkdirSync(subDir, { recursive: true });
   }
@@ -35039,7 +35180,7 @@ async function runSplitFlow(report, requirement, cwd, options) {
     }
     const subReport = await generateSubReport(report, item, requirement, cwd, lang);
     const subSlug = slugify(item.title);
-    const subReportPath = path23.join(subDir, `${subSlug}.md`);
+    const subReportPath = path24.join(subDir, `${subSlug}.md`);
     fs28.writeFileSync(subReportPath, generateReport(subReport));
     subReports.push(subReportPath);
     if (shouldSplit(subReportPath, splitThreshold)) {
@@ -35048,7 +35189,7 @@ async function runSplitFlow(report, requirement, cwd, options) {
       }
       const recursiveResult = await runSplitFlow(subReport, item.description, cwd, {
         ...options,
-        outputDir: path23.dirname(subReportPath),
+        outputDir: path24.dirname(subReportPath),
         depth: depth + 1
       });
       if (recursiveResult.success && recursiveResult.subReports) {
@@ -35079,7 +35220,7 @@ async function generateInvestigationReport(requirement, cwd, lang) {
 }
 async function getProjectContext(cwd) {
   const parts = [];
-  const configPath = path23.join(cwd, ".projmnt4claude", "config.json");
+  const configPath = path24.join(cwd, ".projmnt4claude", "config.json");
   if (fs28.existsSync(configPath)) {
     try {
       const config = JSON.parse(fs28.readFileSync(configPath, "utf-8"));
@@ -35087,7 +35228,7 @@ async function getProjectContext(cwd) {
     } catch {}
   }
   const mainDirs = ["src", "lib", "docs", "tests", "test"];
-  const existingDirs = mainDirs.filter((d) => fs28.existsSync(path23.join(cwd, d)));
+  const existingDirs = mainDirs.filter((d) => fs28.existsSync(path24.join(cwd, d)));
   if (existingDirs.length > 0) {
     parts.push(`Main directories: ${existingDirs.join(", ")}`);
   }
@@ -35121,14 +35262,14 @@ async function writeReport(report, outputMode, options = {}) {
     const slug = slugify(report.metadata.requirementSource);
     const prefix = options.prefix ? `${options.prefix}-` : "";
     const fileName = `${prefix}investigation-${slug}.md`;
-    filePath = path23.join(outputMode.path, fileName);
+    filePath = path24.join(outputMode.path, fileName);
   }
   if (fs28.existsSync(filePath) && !options.force) {
-    const ext = path23.extname(filePath);
+    const ext = path24.extname(filePath);
     const base = filePath.slice(0, -ext.length);
     filePath = `${base}-${Date.now()}${ext}`;
   }
-  const dir = path23.dirname(filePath);
+  const dir = path24.dirname(filePath);
   if (!fs28.existsSync(dir)) {
     fs28.mkdirSync(dir, { recursive: true });
   }
@@ -35139,11 +35280,11 @@ function determineOutputMode(options, cwd) {
   if (options.outputFile) {
     return { type: "file", path: options.outputFile };
   }
-  const outputDir = options.outputDir ?? path23.join(cwd, "investigations");
+  const outputDir = options.outputDir ?? path24.join(cwd, "investigations");
   return { type: "dir", path: outputDir };
 }
 function readFileContent(filePath) {
-  const absolutePath = path23.resolve(filePath);
+  const absolutePath = path24.resolve(filePath);
   if (!fs28.existsSync(absolutePath)) {
     throw new Error(`File not found: ${absolutePath}`);
   }
@@ -35171,7 +35312,7 @@ function promptUser(prompt) {
 // src/commands/help.ts
 init_i18n();
 import * as fs29 from "fs";
-import * as path24 from "path";
+import * as path25 from "path";
 function parseCommandMetadata(filePath) {
   try {
     const content = fs29.readFileSync(filePath, "utf-8");
@@ -35201,12 +35342,12 @@ function getCommandsDir(cwd) {
   const language = getLanguage(cwd);
   const pluginRoot = process.env.CLAUDE_PLUGIN_ROOT;
   if (pluginRoot) {
-    const localesDir = path24.join(pluginRoot, "locales", language, "commands");
+    const localesDir = path25.join(pluginRoot, "locales", language, "commands");
     if (fs29.existsSync(localesDir)) {
       return localesDir;
     }
   }
-  return path24.join(cwd, "commands");
+  return path25.join(cwd, "commands");
 }
 function getAvailableCommands(commandsDir) {
   try {
@@ -35234,7 +35375,7 @@ function showOverview(commandsDir, cwd) {
   console.log(`${t2.help.availableCommands}` + " ".repeat(maxCommandLength - 22) + " | " + t2.help.noDescription.split(" ")[0]);
   console.log("─".repeat(maxCommandLength + 2) + "-+-" + "─".repeat(50));
   for (const command of commands) {
-    const metadata = parseCommandMetadata(path24.join(commandsDir, `${command}.md`));
+    const metadata = parseCommandMetadata(path25.join(commandsDir, `${command}.md`));
     const description = metadata?.description || t2.help.noDescription;
     const paddedCommand = command.padEnd(maxCommandLength);
     console.log(`${paddedCommand} | ${description}`);
@@ -35259,7 +35400,7 @@ function showCommandHelp(commandsDir, commandName, cwd) {
     console.log("");
     return;
   }
-  const filePath = path24.join(commandsDir, `${matchedCommand}.md`);
+  const filePath = path25.join(commandsDir, `${matchedCommand}.md`);
   if (!fs29.existsSync(filePath)) {
     console.log(`❌ ${t2.help.commandNotFound}: ${matchedCommand}`);
     return;
@@ -35309,7 +35450,7 @@ function showSmartHelp(commandsDir, topic, cwd) {
     console.log(t2.help.suggestedCommands);
     console.log("");
     for (const cmd of matchedCommands) {
-      const metadata = parseCommandMetadata(path24.join(commandsDir, `${cmd}.md`));
+      const metadata = parseCommandMetadata(path25.join(commandsDir, `${cmd}.md`));
       const description = metadata?.description || t2.help.noDescription;
       console.log(`  \uD83D\uDCCC ${cmd}`);
       console.log(`     ${description}`);
@@ -35356,14 +35497,14 @@ init_task2();
 init_logger();
 init_config2();
 import * as fs31 from "fs";
-import * as path26 from "path";
+import * as path27 from "path";
 import * as os2 from "os";
 
 // src/utils/log-analyzer.ts
 init_path();
 init_logger();
 import * as fs30 from "fs";
-import * as path25 from "path";
+import * as path26 from "path";
 
 class LogCollector {
   cwd;
@@ -35394,7 +35535,7 @@ class LogCollector {
       debug: 3
     };
     for (const file of logFiles) {
-      const filePath = path25.join(logsDir, file);
+      const filePath = path26.join(logsDir, file);
       try {
         const content = fs30.readFileSync(filePath, "utf-8");
         const lines = content.split(`
@@ -35433,7 +35574,7 @@ class LogCollector {
     let totalSizeKB = 0;
     for (const f of files) {
       try {
-        const stat = fs30.statSync(path25.join(logsDir, f));
+        const stat = fs30.statSync(path26.join(logsDir, f));
         totalSizeKB += stat.size / 1024;
       } catch {}
     }
@@ -35990,7 +36131,7 @@ async function runDoctor(fix = false, cwd = process.cwd()) {
 function checkProjectInit(cwd) {
   const texts = t(cwd).doctorCmd;
   const projectDir = getProjectDir(cwd);
-  const configPath = path26.join(projectDir, "config.json");
+  const configPath = path27.join(projectDir, "config.json");
   if (!fs31.existsSync(configPath)) {
     return {
       name: texts.checkProjectInit,
@@ -36024,7 +36165,7 @@ function checkPluginCache(cwd) {
     };
   }
   details.push(`Plugin root: ${pluginRoot}`);
-  const mainFile = path26.join(pluginRoot, "dist", "projmnt4claude.js");
+  const mainFile = path27.join(pluginRoot, "dist", "projmnt4claude.js");
   if (!fs31.existsSync(mainFile)) {
     status = "error";
     message = texts.checkPluginCacheMainFileMissing;
@@ -36032,7 +36173,7 @@ function checkPluginCache(cwd) {
   } else {
     details.push(`✓ Main program: ${mainFile}`);
   }
-  const localesDir = path26.join(pluginRoot, "locales");
+  const localesDir = path27.join(pluginRoot, "locales");
   if (!fs31.existsSync(localesDir)) {
     if (status !== "error") {
       status = "warning";
@@ -36040,8 +36181,8 @@ function checkPluginCache(cwd) {
     }
     details.push(`Missing: ${localesDir}`);
   } else {
-    const zhDir = path26.join(localesDir, "zh");
-    const enDir = path26.join(localesDir, "en");
+    const zhDir = path27.join(localesDir, "zh");
+    const enDir = path27.join(localesDir, "en");
     if (fs31.existsSync(zhDir)) {
       details.push("✓ Chinese language pack: locales/zh/");
     }
@@ -36056,7 +36197,7 @@ function checkPluginCache(cwd) {
       details.push("Warning: No language pack directories found");
     }
   }
-  const commandsDir = path26.join(pluginRoot, "commands");
+  const commandsDir = path27.join(pluginRoot, "commands");
   if (!fs31.existsSync(commandsDir)) {
     if (status !== "error") {
       status = "warning";
@@ -36079,8 +36220,8 @@ function checkSkillFiles(cwd) {
   const texts = t(cwd).doctorCmd;
   const results = [];
   const toolboxDir = getToolboxDir(cwd);
-  const skillDir = path26.join(toolboxDir, "projmnt4claude");
-  const commandsDir = path26.join(skillDir, "commands");
+  const skillDir = path27.join(toolboxDir, "projmnt4claude");
+  const commandsDir = path27.join(skillDir, "commands");
   if (fs31.existsSync(commandsDir)) {
     const commandFiles = fs31.readdirSync(commandsDir).filter((f) => f.endsWith(".md"));
     results.push({
@@ -36132,7 +36273,7 @@ function checkDirectoryStructure(cwd) {
   if (fs31.existsSync(tasksDir)) {
     const taskIds = getAllTaskIds(cwd);
     const hasAbandonedTasks = taskIds.some((taskId) => {
-      const metaPath = path26.join(tasksDir, taskId, "meta.json");
+      const metaPath = path27.join(tasksDir, taskId, "meta.json");
       try {
         const meta = JSON.parse(fs31.readFileSync(metaPath, "utf-8"));
         return meta.status === "abandoned";
@@ -36141,7 +36282,7 @@ function checkDirectoryStructure(cwd) {
       }
     });
     if (hasAbandonedTasks) {
-      const archiveDir = path26.join(projectDir, "archive");
+      const archiveDir = path27.join(projectDir, "archive");
       if (!fs31.existsSync(archiveDir)) {
         results.push({
           name: texts.checkDirectoryStructure.replace("{name}", "archive"),
@@ -36158,7 +36299,7 @@ function checkDirectoryStructure(cwd) {
 function checkPluginInstallationScope(cwd) {
   const results = [];
   const homeDir = os2.homedir();
-  const installedPluginsPath = path26.join(homeDir, ".claude", "plugins", "installed_plugins.json");
+  const installedPluginsPath = path27.join(homeDir, ".claude", "plugins", "installed_plugins.json");
   if (!fs31.existsSync(installedPluginsPath)) {
     return results;
   }
@@ -36171,11 +36312,11 @@ function checkPluginInstallationScope(cwd) {
     if (projectScopedInstalls.length === 0) {
       return results;
     }
-    const normalizedCwd = path26.resolve(cwd);
+    const normalizedCwd = path27.resolve(cwd);
     const mismatchedInstalls = projectScopedInstalls.filter((inst) => {
       if (!inst.projectPath)
         return true;
-      return path26.resolve(inst.projectPath) !== normalizedCwd;
+      return path27.resolve(inst.projectPath) !== normalizedCwd;
     });
     if (mismatchedInstalls.length > 0) {
       const texts = t(cwd).doctorCmd;
@@ -36333,7 +36474,7 @@ function checkLoggingModule(cwd) {
   try {
     const files = fs31.readdirSync(logsDir).filter((f) => f.endsWith(".log"));
     for (const file of files) {
-      const filePath = path26.join(logsDir, file);
+      const filePath = path27.join(logsDir, file);
       try {
         const stat = fs31.statSync(filePath);
         const sizeMB = stat.size / (1024 * 1024);
@@ -36395,7 +36536,7 @@ function checkDeprecatedStatuses(cwd) {
   const deprecatedStatuses = ["reopened", "needs_human"];
   const tasksWithDeprecatedStatus = [];
   for (const taskId of taskIds) {
-    const metaPath = path26.join(tasksDir, taskId, "meta.json");
+    const metaPath = path27.join(tasksDir, taskId, "meta.json");
     if (fs31.existsSync(metaPath)) {
       try {
         const meta = JSON.parse(fs31.readFileSync(metaPath, "utf-8"));
@@ -36440,7 +36581,7 @@ function checkGitHooks(cwd) {
   if (!gitHookConfig.enabled) {
     return [{ status: "ok", name: texts.checkGitHooks, message: texts.checkGitHooksDisabled, fixable: false }];
   }
-  const gitDir = path26.join(cwd, ".git");
+  const gitDir = path27.join(cwd, ".git");
   if (!fs31.existsSync(gitDir)) {
     return [{ status: "ok", name: texts.checkGitHooks, message: texts.checkGitHooksNotGitRepo, fixable: false }];
   }
@@ -36478,7 +36619,7 @@ function checkDeprecatedHooks(cwd) {
   const results = [];
   const deprecatedSettings = [];
   const deprecatedFiles = [];
-  const settingsPath = path26.join(cwd, ".claude", "settings.json");
+  const settingsPath = path27.join(cwd, ".claude", "settings.json");
   if (fs31.existsSync(settingsPath)) {
     try {
       const settings = JSON.parse(fs31.readFileSync(settingsPath, "utf-8"));
@@ -36510,7 +36651,7 @@ function checkDeprecatedHooks(cwd) {
       }
     } catch {}
   }
-  const hooksDir = path26.join(cwd, ".projmnt4claude", "hooks");
+  const hooksDir = path27.join(cwd, ".projmnt4claude", "hooks");
   if (fs31.existsSync(hooksDir)) {
     try {
       const files = fs31.readdirSync(hooksDir);
@@ -36601,10 +36742,10 @@ function resolvePluginRoot() {
   try {
     let dir = __dirname;
     for (let i = 0;i < 3; i++) {
-      if (fs31.existsSync(path26.join(dir, "locales"))) {
+      if (fs31.existsSync(path27.join(dir, "locales"))) {
         return dir;
       }
-      dir = path26.dirname(dir);
+      dir = path27.dirname(dir);
     }
   } catch {}
   return null;
@@ -36618,11 +36759,11 @@ async function fixIssues3(issues, cwd) {
     if (issue.name === "Skill Files" || issue.name === "Command Docs") {
       if (pluginRoot) {
         const toolboxDir = getToolboxDir(cwd);
-        const skillDir = path26.join(toolboxDir, "projmnt4claude");
+        const skillDir = path27.join(toolboxDir, "projmnt4claude");
         if (!fs31.existsSync(skillDir)) {
           fs31.mkdirSync(skillDir, { recursive: true });
         }
-        const configPath = path26.join(projectDir, "config.json");
+        const configPath = path27.join(projectDir, "config.json");
         let language = "zh";
         if (fs31.existsSync(configPath)) {
           try {
@@ -36630,21 +36771,21 @@ async function fixIssues3(issues, cwd) {
             language = config.language || "zh";
           } catch {}
         }
-        const skillSource = path26.join(pluginRoot, "locales", language, "SKILL.md");
-        const skillTarget = path26.join(skillDir, "SKILL.md");
+        const skillSource = path27.join(pluginRoot, "locales", language, "SKILL.md");
+        const skillTarget = path27.join(skillDir, "SKILL.md");
         if (fs31.existsSync(skillSource)) {
           fs31.copyFileSync(skillSource, skillTarget);
           console.log(texts.copiedSkillMd);
         }
-        const commandsSourceDir = path26.join(pluginRoot, "locales", language, "commands");
-        const commandsTargetDir = path26.join(skillDir, "commands");
+        const commandsSourceDir = path27.join(pluginRoot, "locales", language, "commands");
+        const commandsTargetDir = path27.join(skillDir, "commands");
         if (fs31.existsSync(commandsSourceDir)) {
           if (!fs31.existsSync(commandsTargetDir)) {
             fs31.mkdirSync(commandsTargetDir, { recursive: true });
           }
           const commandFiles = fs31.readdirSync(commandsSourceDir).filter((f) => f.endsWith(".md"));
           for (const file of commandFiles) {
-            fs31.copyFileSync(path26.join(commandsSourceDir, file), path26.join(commandsTargetDir, file));
+            fs31.copyFileSync(path27.join(commandsSourceDir, file), path27.join(commandsTargetDir, file));
           }
           console.log(texts.copiedCommandDocs.replace("{count}", String(commandFiles.length)));
         }
@@ -36656,7 +36797,7 @@ async function fixIssues3(issues, cwd) {
       const dirMap = {
         tasks: getTasksDir(cwd),
         toolbox: getToolboxDir(cwd),
-        archive: path26.join(projectDir, "archive")
+        archive: path27.join(projectDir, "archive")
       };
       const dirPath = dirMap[dirName];
       if (dirPath && !fs31.existsSync(dirPath)) {
@@ -36681,7 +36822,7 @@ async function fixIssues3(issues, cwd) {
       const deprecatedMap = { reopened: "open", needs_human: "open" };
       let fixedCount = 0;
       for (const taskId of getAllTaskIds(cwd)) {
-        const metaPath = path26.join(tasksDir, taskId, "meta.json");
+        const metaPath = path27.join(tasksDir, taskId, "meta.json");
         if (fs31.existsSync(metaPath)) {
           try {
             const meta = JSON.parse(fs31.readFileSync(metaPath, "utf-8"));
@@ -36708,7 +36849,7 @@ async function fixIssues3(issues, cwd) {
     } else if (issue.name === texts.checkDeprecatedHooks) {
       let removedSettings = false;
       let removedFiles = false;
-      const settingsPath = path26.join(cwd, ".claude", "settings.json");
+      const settingsPath = path27.join(cwd, ".claude", "settings.json");
       if (fs31.existsSync(settingsPath)) {
         try {
           const settings = JSON.parse(fs31.readFileSync(settingsPath, "utf-8"));
@@ -36757,13 +36898,13 @@ async function fixIssues3(issues, cwd) {
           }
         } catch {}
       }
-      const hooksDir = path26.join(cwd, ".projmnt4claude", "hooks");
+      const hooksDir = path27.join(cwd, ".projmnt4claude", "hooks");
       if (fs31.existsSync(hooksDir)) {
         try {
           const files = fs31.readdirSync(hooksDir);
           for (const file of files) {
             if (DEPRECATED_HOOK_SCRIPTS.includes(file)) {
-              const filePath = path26.join(hooksDir, file);
+              const filePath = path27.join(hooksDir, file);
               fs31.unlinkSync(filePath);
               removedFiles = true;
             }
@@ -36919,10 +37060,10 @@ init_harness();
 init_path();
 init_i18n();
 import * as fs42 from "fs";
-import * as path37 from "path";
+import * as path38 from "path";
 
 // src/utils/hd-assembly-line.ts
-import * as path36 from "path";
+import * as path37 from "path";
 import * as fs41 from "fs";
 import { execSync as execSync4 } from "child_process";
 
@@ -37108,7 +37249,7 @@ init_path();
 init_harness();
 init_path();
 import * as fs32 from "fs";
-import * as path27 from "path";
+import * as path28 from "path";
 
 // src/utils/role-prompts.ts
 init_i18n();
@@ -37761,9 +37902,9 @@ ${roleTemplate.extraInstructions.map((inst, i) => `${i + 1}. ${inst}`).join(`
     }
     const files = fs32.readdirSync(evidenceDir);
     for (const file of files) {
-      const filePath = path27.join(evidenceDir, file);
+      const filePath = path28.join(evidenceDir, file);
       if (fs32.statSync(filePath).isFile()) {
-        evidence.push(path27.relative(this.config.cwd, filePath));
+        evidence.push(path28.relative(this.config.cwd, filePath));
       }
     }
     return evidence;
@@ -37778,11 +37919,11 @@ ${roleTemplate.extraInstructions.map((inst, i) => `${i + 1}. ${inst}`).join(`
   }
   getContractPath(taskId) {
     const projectDir = getProjectDir(this.config.cwd);
-    return path27.join(projectDir, "tasks", taskId, "contract.json");
+    return path28.join(projectDir, "tasks", taskId, "contract.json");
   }
   saveContract(taskId, contract) {
     const contractPath = this.getContractPath(taskId);
-    const dir = path27.dirname(contractPath);
+    const dir = path28.dirname(contractPath);
     if (!fs32.existsSync(dir)) {
       fs32.mkdirSync(dir, { recursive: true });
     }
@@ -37791,15 +37932,15 @@ ${roleTemplate.extraInstructions.map((inst, i) => `${i + 1}. ${inst}`).join(`
   }
   getEvidenceDir(taskId) {
     const projectDir = getProjectDir(this.config.cwd);
-    return path27.join(projectDir, "evidence", taskId);
+    return path28.join(projectDir, "evidence", taskId);
   }
   getDevReportPath(taskId) {
     const projectDir = getProjectDir(this.config.cwd);
-    return path27.join(projectDir, "reports", "harness", taskId, "dev-report.md");
+    return path28.join(projectDir, "reports", "harness", taskId, "dev-report.md");
   }
   async saveDevReport(taskId, report) {
     const reportPath = this.getDevReportPath(taskId);
-    const dir = path27.dirname(reportPath);
+    const dir = path28.dirname(reportPath);
     if (!fs32.existsSync(dir)) {
       fs32.mkdirSync(dir, { recursive: true });
     }
@@ -38244,7 +38385,7 @@ ${devReport.evidence.map((evidence) => `- ${evidence}`).join(`
 init_task();
 init_harness_helpers();
 init_headless_agent();
-import * as path29 from "path";
+import * as path30 from "path";
 import * as fs34 from "fs";
 init_checkpoint();
 init_contradiction_detector();
@@ -38301,7 +38442,7 @@ function createDefaultQAAcceptanceResult(taskId) {
 // src/utils/qa-acceptance-criteria-verifier.ts
 init_spawn_utils();
 import * as fs33 from "fs";
-import * as path28 from "path";
+import * as path29 from "path";
 
 // src/utils/qa-acceptance-criteria-parser.ts
 class AcceptanceCriteriaParser {
@@ -38780,7 +38921,7 @@ class QAAcceptanceCriteriaVerifier {
   }
   async updateTaskCheckpoints(taskId, results) {
     try {
-      const taskMetaPath = path28.join(this.cwd, ".projmnt4claude", "tasks", taskId, "meta.json");
+      const taskMetaPath = path29.join(this.cwd, ".projmnt4claude", "tasks", taskId, "meta.json");
       if (!fs33.existsSync(taskMetaPath)) {
         return;
       }
@@ -38806,7 +38947,7 @@ class QAAcceptanceCriteriaVerifier {
   async verifyBuild(task) {
     const result = createDefaultAcceptanceResult("build");
     try {
-      const packageJsonPath = path28.join(this.cwd, "package.json");
+      const packageJsonPath = path29.join(this.cwd, "package.json");
       if (!fs33.existsSync(packageJsonPath)) {
         result.passed = true;
         result.reason = "无 package.json，跳过构建验证";
@@ -38838,7 +38979,7 @@ class QAAcceptanceCriteriaVerifier {
   }
   getBuildCommand() {
     try {
-      const packageJsonPath = path28.join(this.cwd, "package.json");
+      const packageJsonPath = path29.join(this.cwd, "package.json");
       const packageJson = JSON.parse(fs33.readFileSync(packageJsonPath, "utf-8"));
       if (packageJson.scripts?.build) {
         return `npm run build`;
@@ -38895,7 +39036,7 @@ class QAAcceptanceCriteriaVerifier {
       ];
       for (const pattern of patterns) {
         if (pattern && pattern !== file) {
-          const fullPath = path28.join(this.cwd, pattern);
+          const fullPath = path29.join(this.cwd, pattern);
           if (fs33.existsSync(fullPath)) {
             testFiles.push(pattern);
           }
@@ -39063,6 +39204,7 @@ class HarnessQATester {
         verdict.testFailures = qaResult.failures;
         verdict.failedCheckpoints = qaResult.failedCheckpoints;
         verdict.details = qaResult.details;
+        console.log(`   [DEBUG-QA] verdict after runQAVerification: testFailures_isArray=${Array.isArray(verdict.testFailures)}, failedCheckpoints_isArray=${Array.isArray(verdict.failedCheckpoints)}, humanVerificationCheckpoints_isArray=${Array.isArray(verdict.humanVerificationCheckpoints)}`);
         const contradiction = detectContradiction(verdict.result, verdict.reason || "");
         if (contradiction.hasContradiction && contradiction.correctedResult) {
           console.log(`   ⚠️  ${texts.harness.logs.contradictionDetected}: ${contradiction.reason}`);
@@ -39090,9 +39232,13 @@ ${deferredInfo}` : deferredInfo;
       }
     } catch (error) {
       verdict.result = "NOPASS";
-      verdict.reason = `${texts.harness.logs.qaError}: ${error instanceof Error ? error.message : String(error)}`;
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      const errorStack = error instanceof Error ? error.stack : "No stack trace available";
+      verdict.reason = `${texts.harness.logs.qaError}: ${errorMessage}`;
       console.log(`
    ❌ ${texts.harness.logs.qaError}: ${verdict.reason}`);
+      console.error(`   [DEBUG-QA] Stack trace for QA error:
+${errorStack}`);
     }
     await this.saveReport(task.id, verdict);
     return verdict;
@@ -39120,7 +39266,7 @@ ${deferredInfo}` : deferredInfo;
     const existingFiles = [];
     const missingFiles = [];
     for (const filePath of task.files) {
-      const fullPath = path29.isAbsolute(filePath) ? filePath : path29.join(this.config.cwd, filePath);
+      const fullPath = path30.isAbsolute(filePath) ? filePath : path30.join(this.config.cwd, filePath);
       if (fs34.existsSync(fullPath)) {
         existingFiles.push(filePath);
       } else {
@@ -39250,7 +39396,7 @@ ${texts.harness.logs.existingFiles || "Existing Files"}:`);
   }
   getTestConfig() {
     try {
-      const configPath = path29.join(this.config.cwd, ".projmnt4claude", "config.json");
+      const configPath = path30.join(this.config.cwd, ".projmnt4claude", "config.json");
       if (fs34.existsSync(configPath)) {
         const content = fs34.readFileSync(configPath, "utf-8");
         const projectConfig = JSON.parse(content);
@@ -39371,7 +39517,7 @@ ${truncated}`];
     const files = [];
     const entries = fs34.readdirSync(dir, { withFileTypes: true });
     for (const entry of entries) {
-      const fullPath = path29.join(dir, entry.name);
+      const fullPath = path30.join(dir, entry.name);
       if (entry.isDirectory()) {
         files.push(...this.findTestFiles(fullPath));
       } else if (entry.isFile() && /\.(test|spec)\.[jt]sx?$/.test(entry.name)) {
@@ -39488,9 +39634,9 @@ ${truncated}`];
     };
     const report = this.formatReport(qaVerdict);
     const engine = createSessionAwareEngine("markdown", [qaVerdictResultMarker, qaVerdictHasReason], 1);
-    const validationResult = engine.validate(report);
-    if (!validationResult.passed) {
-      const violationMessages = validationResult.violations.map((v) => `${v.ruleId}: ${v.message}`).join("; ");
+    const violations = engine.validate(report);
+    if (violations.length > 0) {
+      const violationMessages = violations.map((v) => `${v.ruleId}: ${v.message}`).join("; ");
       console.log(`   ⚠️  ${texts.harness.logs.qaOutputValidationFailed}: ${violationMessages}`);
       console.warn(`   [QA Format Warning] Report format validation failed: ${violationMessages}`);
     }
@@ -39507,6 +39653,13 @@ ${fileCoverage.details}`;
           parsedResult.reason = `${texts.harness.logs.fileCoverageFailed || "File coverage check failed"}: ${fileCoverage.missingFiles.length} file(s) missing`;
         }
       }
+    }
+    console.log(`   [DEBUG-QA] runQAVerification returning: passed=${parsedResult.passed}, reason_type=${typeof parsedResult.reason}, failures_isArray=${Array.isArray(parsedResult.failures)}, failedCheckpoints_isArray=${Array.isArray(parsedResult.failedCheckpoints)}`);
+    if (!Array.isArray(parsedResult.failures)) {
+      console.error(`   [DEBUG-QA] CRITICAL: parsedResult.failures is not array:`, JSON.stringify(parsedResult.failures));
+    }
+    if (!Array.isArray(parsedResult.failedCheckpoints)) {
+      console.error(`   [DEBUG-QA] CRITICAL: parsedResult.failedCheckpoints is not array:`, JSON.stringify(parsedResult.failedCheckpoints));
     }
     return parsedResult;
   }
@@ -39808,8 +39961,8 @@ ${task.description}` : "";
     const mdReportPath = getReportPath(taskId, "qa", this.config.cwd);
     const mdContent = this.formatReport(verdict);
     await saveReport(mdReportPath, mdContent);
-    const jsonReportPath = path29.join(this.config.cwd, ".projmnt4claude", "outputs", taskId, "qa-report.json");
-    const jsonDir = path29.dirname(jsonReportPath);
+    const jsonReportPath = path30.join(this.config.cwd, ".projmnt4claude", "outputs", taskId, "qa-report.json");
+    const jsonDir = path30.dirname(jsonReportPath);
     if (!fs34.existsSync(jsonDir)) {
       fs34.mkdirSync(jsonDir, { recursive: true });
     }
@@ -39830,6 +39983,7 @@ ${task.description}` : "";
     fs34.writeFileSync(jsonReportPath, jsonContent, "utf-8");
   }
   formatReport(verdict) {
+    console.log(`   [DEBUG-QA] formatReport called: taskId=${verdict.taskId}, testFailures_isArray=${Array.isArray(verdict.testFailures)}, failedCheckpoints_isArray=${Array.isArray(verdict.failedCheckpoints)}, humanVerificationCheckpoints_isArray=${Array.isArray(verdict.humanVerificationCheckpoints)}`);
     let texts;
     try {
       texts = t(this.config.cwd);
@@ -39848,6 +40002,18 @@ ${task.description}` : "";
       verdict.reason,
       ""
     ];
+    if (!Array.isArray(verdict.testFailures)) {
+      console.error(`   [DEBUG-QA] CRITICAL in formatReport: verdict.testFailures is not array, value=`, JSON.stringify(verdict.testFailures));
+      verdict.testFailures = [];
+    }
+    if (!Array.isArray(verdict.failedCheckpoints)) {
+      console.error(`   [DEBUG-QA] CRITICAL in formatReport: verdict.failedCheckpoints is not array, value=`, JSON.stringify(verdict.failedCheckpoints));
+      verdict.failedCheckpoints = [];
+    }
+    if (!Array.isArray(verdict.humanVerificationCheckpoints)) {
+      console.error(`   [DEBUG-QA] CRITICAL in formatReport: verdict.humanVerificationCheckpoints is not array, value=`, JSON.stringify(verdict.humanVerificationCheckpoints));
+      verdict.humanVerificationCheckpoints = [];
+    }
     if (verdict.testFailures.length > 0) {
       lines.push(`## ${texts.harness.reports.testFailuresSection}`);
       verdict.testFailures.forEach((failure) => {
@@ -39907,7 +40073,7 @@ init_harness_helpers();
 init_headless_agent();
 init_contradiction_detector();
 import * as fs35 from "fs";
-import * as path30 from "path";
+import * as path31 from "path";
 init_prompt_templates();
 init_i18n();
 
@@ -40404,15 +40570,15 @@ ${texts.harness.logs.phantomTaskNopassRequirement}
   }
   getContractPath(taskId) {
     const projectDir = getProjectDir(this.config.cwd);
-    return path30.join(projectDir, "tasks", taskId, "contract.json");
+    return path31.join(projectDir, "tasks", taskId, "contract.json");
   }
   getReviewReportPath(taskId) {
     const projectDir = getProjectDir(this.config.cwd);
-    return path30.join(projectDir, "reports", "harness", taskId, "review-report.md");
+    return path31.join(projectDir, "reports", "harness", taskId, "review-report.md");
   }
   async saveReviewReport(taskId, verdict, devReport) {
     const reportPath = this.getReviewReportPath(taskId);
-    const dir = path30.dirname(reportPath);
+    const dir = path31.dirname(reportPath);
     if (!fs35.existsSync(dir)) {
       fs35.mkdirSync(dir, { recursive: true });
     }
@@ -40429,12 +40595,12 @@ ${texts.harness.logs.phantomTaskNopassRequirement}
     }
     try {
       const projectDir = getProjectDir(this.config.cwd);
-      const dir = path30.join(projectDir, "reports", "harness", taskId);
+      const dir = path31.join(projectDir, "reports", "harness", taskId);
       if (!fs35.existsSync(dir)) {
         fs35.mkdirSync(dir, { recursive: true });
       }
       const timestamp = new Date().toISOString().replace(/[:.]/g, "-");
-      const rawPath = path30.join(dir, `evaluation-raw-${timestamp}.log`);
+      const rawPath = path31.join(dir, `evaluation-raw-${timestamp}.log`);
       const lines = [
         `# ${texts.harness.logs.rawEvaluationOutputTitle || "Raw Evaluation Output"}`,
         `Task: ${taskId}`,
@@ -40612,7 +40778,7 @@ class RetryHandler {
 init_harness();
 init_path();
 import * as fs36 from "fs";
-import * as path31 from "path";
+import * as path32 from "path";
 
 class HarnessStatusReporter {
   statusPath;
@@ -40620,7 +40786,7 @@ class HarnessStatusReporter {
   currentReport;
   lastBatchContext;
   constructor(cwd, sessionId) {
-    this.statusPath = path31.join(getProjectDir(cwd), "harness-status.json");
+    this.statusPath = path32.join(getProjectDir(cwd), "harness-status.json");
     this.sessionId = sessionId;
     this.currentReport = this.createInitialReport();
   }
@@ -40910,7 +41076,7 @@ class HarnessStatusReporter {
     } catch {}
   }
   writeStatus() {
-    const dir = path31.dirname(this.statusPath);
+    const dir = path32.dirname(this.statusPath);
     if (!fs36.existsSync(dir)) {
       fs36.mkdirSync(dir, { recursive: true });
     }
@@ -40945,12 +41111,12 @@ init_harness();
 init_path();
 init_i18n();
 import * as fs38 from "fs";
-import * as path33 from "path";
+import * as path34 from "path";
 
 // src/utils/harness-reporter.ts
 init_path();
 import * as fs37 from "fs";
-import * as path32 from "path";
+import * as path33 from "path";
 
 class HarnessReporter {
   config;
@@ -40959,7 +41125,7 @@ class HarnessReporter {
   }
   async generateSummaryReport(summary) {
     const reportPath = this.getSummaryReportPath();
-    const dir = path32.dirname(reportPath);
+    const dir = path33.dirname(reportPath);
     if (!fs37.existsSync(dir)) {
       fs37.mkdirSync(dir, { recursive: true });
     }
@@ -41054,14 +41220,14 @@ class HarnessReporter {
   getSummaryReportPath() {
     const projectDir = getProjectDir(this.config.cwd);
     const timestamp = new Date().toISOString().replace(/[:.]/g, "-").substring(0, 19);
-    return path32.join(projectDir, "reports", "harness", `summary-${timestamp}.md`);
+    return path33.join(projectDir, "reports", "harness", `summary-${timestamp}.md`);
   }
   async generateTaskReport(record) {
     const taskDir = this.getTaskReportDir(record.taskId);
     if (!fs37.existsSync(taskDir)) {
       fs37.mkdirSync(taskDir, { recursive: true });
     }
-    const overviewPath = path32.join(taskDir, "overview.md");
+    const overviewPath = path33.join(taskDir, "overview.md");
     const overviewContent = this.formatTaskOverview(record);
     fs37.writeFileSync(overviewPath, overviewContent, "utf-8");
   }
@@ -41134,7 +41300,7 @@ class HarnessReporter {
   }
   getTaskReportDir(taskId) {
     const projectDir = getProjectDir(this.config.cwd);
-    return path32.join(projectDir, "reports", "harness", taskId);
+    return path33.join(projectDir, "reports", "harness", taskId);
   }
   generateJSONSummary(summary) {
     const data = {
@@ -42109,7 +42275,7 @@ function formatPlanQualityGateReport2(result, options = {}) {
 // src/commands/harness.ts
 init_quality_gate();
 function getRuntimeStatePath(cwd) {
-  return path33.join(getProjectDir(cwd), "harness-state.json");
+  return path34.join(getProjectDir(cwd), "harness-state.json");
 }
 function saveRuntimeState(state, cwd) {
   const statePath = getRuntimeStatePath(cwd);
@@ -42132,12 +42298,12 @@ init_checkpoint_verification();
 // src/utils/post-qa-gate/runner.ts
 init_task2();
 import * as fs40 from "node:fs";
-import * as path35 from "node:path";
+import * as path36 from "node:path";
 
 // src/utils/post-qa-gate/checkers/checkpoint-sync-checker.ts
 init_checkpoint_rules();
 import * as fs39 from "node:fs";
-import * as path34 from "node:path";
+import * as path35 from "node:path";
 var DEFAULT_CHECKPOINT_SYNC_CONFIG = {
   reportPath: ".projmnt4claude/outputs/{taskId}/qa-report.json"
 };
@@ -42228,7 +42394,7 @@ class QACheckpointSyncChecker {
   }
   readReportVerdict(taskId) {
     const reportPath = this.config.reportPath.replace("{taskId}", taskId);
-    const fullPath = path34.join(this.cwd, reportPath);
+    const fullPath = path35.join(this.cwd, reportPath);
     if (!fs39.existsSync(fullPath)) {
       return null;
     }
@@ -42562,7 +42728,7 @@ class PostQAGateRunner {
 `);
   }
   async handleQAReportExistenceRule(_task, rule, context) {
-    const reportPath = path35.join(context.cwd, context.qaReportPath);
+    const reportPath = path36.join(context.cwd, context.qaReportPath);
     const exists = fs40.existsSync(reportPath);
     return {
       ruleId: rule.id,
@@ -42579,7 +42745,7 @@ class PostQAGateRunner {
     };
   }
   async handleQAReportFormatRule(_task, rule, context) {
-    const reportPath = path35.join(context.cwd, context.qaReportPath);
+    const reportPath = path36.join(context.cwd, context.qaReportPath);
     if (!fs40.existsSync(reportPath)) {
       return {
         ruleId: rule.id,
@@ -42623,7 +42789,7 @@ class PostQAGateRunner {
     }
   }
   async handleQAVerdictValidityRule(_task, rule, context) {
-    const reportPath = path35.join(context.cwd, context.qaReportPath);
+    const reportPath = path36.join(context.cwd, context.qaReportPath);
     if (!fs40.existsSync(reportPath)) {
       return {
         ruleId: rule.id,
@@ -42665,7 +42831,7 @@ class PostQAGateRunner {
     }
   }
   async handleQAFailuresDetailRule(_task, rule, context) {
-    const reportPath = path35.join(context.cwd, context.qaReportPath);
+    const reportPath = path36.join(context.cwd, context.qaReportPath);
     if (!fs40.existsSync(reportPath)) {
       return {
         ruleId: rule.id,
@@ -42729,7 +42895,7 @@ class PostQAGateRunner {
     }
   }
   async handleHumanVerificationCollectRule(task, rule, context) {
-    const reportPath = path35.join(context.cwd, context.qaReportPath);
+    const reportPath = path36.join(context.cwd, context.qaReportPath);
     let qaReport;
     if (fs40.existsSync(reportPath)) {
       try {
@@ -42839,7 +43005,7 @@ class PostQAGateRunner {
     };
   }
   async handleTestCoverageRule(_task, rule, context) {
-    const reportPath = path35.join(context.cwd, context.qaReportPath);
+    const reportPath = path36.join(context.cwd, context.qaReportPath);
     const minCoverage = rule.config?.minCoverage ?? 0.6;
     let coverage;
     let coverageDetails;
@@ -42908,9 +43074,9 @@ class PostQAGateRunner {
   }
   async calculateCoverageFromReportsWithDetails(context) {
     const coverageFiles = [
-      path35.join(context.cwd, "coverage", "coverage-summary.json"),
-      path35.join(context.cwd, "coverage", "lcov-report", "coverage-summary.json"),
-      path35.join(context.cwd, ".projmnt4claude", "outputs", context.taskId, "coverage-report.json")
+      path36.join(context.cwd, "coverage", "coverage-summary.json"),
+      path36.join(context.cwd, "coverage", "lcov-report", "coverage-summary.json"),
+      path36.join(context.cwd, ".projmnt4claude", "outputs", context.taskId, "coverage-report.json")
     ];
     for (const filePath of coverageFiles) {
       if (fs40.existsSync(filePath)) {
@@ -43029,11 +43195,11 @@ class PostQAGateRunner {
   async saveReport(report) {
     if (!this.config.reportPath)
       return;
-    const reportDir = path35.dirname(path35.join(this.cwd, this.config.reportPath));
+    const reportDir = path36.dirname(path36.join(this.cwd, this.config.reportPath));
     if (!fs40.existsSync(reportDir)) {
       fs40.mkdirSync(reportDir, { recursive: true });
     }
-    const reportPath = path35.join(this.cwd, this.config.reportPath);
+    const reportPath = path36.join(this.cwd, this.config.reportPath);
     fs40.writeFileSync(reportPath, JSON.stringify(report, null, 2));
   }
   formatResult(result) {
@@ -44384,7 +44550,7 @@ ${"━".repeat(SEPARATOR_WIDTH)}`);
     }
     if (status === "wait_qa") {
       const projectDir = getProjectDir(this.config.cwd);
-      const qaReportPath = path36.join(projectDir, "reports", "harness", taskId, "qa-report.md");
+      const qaReportPath = path37.join(projectDir, "reports", "harness", taskId, "qa-report.md");
       if (fs41.existsSync(qaReportPath)) {
         const content = fs41.readFileSync(qaReportPath, "utf-8");
         if (content.trim().length > 0) {
@@ -44413,9 +44579,9 @@ ${"━".repeat(SEPARATOR_WIDTH)}`);
       return true;
     }
     const projectDir = getProjectDir(this.config.cwd);
-    const reportDir = path36.join(projectDir, "reports", "harness", taskId);
+    const reportDir = path37.join(projectDir, "reports", "harness", taskId);
     for (const reportFile of required) {
-      const filePath = path36.join(reportDir, reportFile);
+      const filePath = path37.join(reportDir, reportFile);
       if (!fs41.existsSync(filePath)) {
         return false;
       }
@@ -44741,20 +44907,20 @@ ${"━".repeat(SEPARATOR_WIDTH)}`);
     if (!resumePhase)
       return true;
     const projectDir = getProjectDir(this.config.cwd);
-    const reportDir = path36.join(projectDir, "reports", "harness", taskId);
+    const reportDir = path37.join(projectDir, "reports", "harness", taskId);
     const checks = [];
     switch (resumePhase) {
       case "qa":
-        checks.push({ file: path36.join(reportDir, "dev-report.md"), label: "开发报告" });
-        checks.push({ file: path36.join(reportDir, "code-review-report.md"), label: "代码审核报告" });
+        checks.push({ file: path37.join(reportDir, "dev-report.md"), label: "开发报告" });
+        checks.push({ file: path37.join(reportDir, "code-review-report.md"), label: "代码审核报告" });
         break;
       case "evaluation":
-        checks.push({ file: path36.join(reportDir, "dev-report.md"), label: "开发报告" });
-        checks.push({ file: path36.join(reportDir, "code-review-report.md"), label: "代码审核报告" });
-        checks.push({ file: path36.join(reportDir, "qa-report.md"), label: "QA报告" });
+        checks.push({ file: path37.join(reportDir, "dev-report.md"), label: "开发报告" });
+        checks.push({ file: path37.join(reportDir, "code-review-report.md"), label: "代码审核报告" });
+        checks.push({ file: path37.join(reportDir, "qa-report.md"), label: "QA报告" });
         break;
       case "code_review":
-        checks.push({ file: path36.join(reportDir, "dev-report.md"), label: "开发报告" });
+        checks.push({ file: path37.join(reportDir, "dev-report.md"), label: "开发报告" });
         break;
       case "development":
         return true;
@@ -44959,10 +45125,10 @@ ${"━".repeat(SEPARATOR_WIDTH)}`);
         }
       }
       const stageFiles = [
-        path36.join(this.config.cwd, ".projmnt4claude", "reports", taskId, "dev-report.json"),
-        path36.join(this.config.cwd, ".projmnt4claude", "reports", taskId, "code-review-report.json"),
-        path36.join(this.config.cwd, ".projmnt4claude", "reports", taskId, "qa-report.json"),
-        path36.join(this.config.cwd, ".projmnt4claude", "reports", taskId, "evaluation-report.json")
+        path37.join(this.config.cwd, ".projmnt4claude", "reports", taskId, "dev-report.json"),
+        path37.join(this.config.cwd, ".projmnt4claude", "reports", taskId, "code-review-report.json"),
+        path37.join(this.config.cwd, ".projmnt4claude", "reports", taskId, "qa-report.json"),
+        path37.join(this.config.cwd, ".projmnt4claude", "reports", taskId, "evaluation-report.json")
       ];
       for (const file of stageFiles) {
         if (fs41.existsSync(file)) {
@@ -45781,7 +45947,7 @@ async function harnessCommand(options, cwd = process.cwd()) {
   }
 }
 function getRuntimeStatePath2(cwd) {
-  return path37.join(getProjectDir(cwd), "harness-state.json");
+  return path38.join(getProjectDir(cwd), "harness-state.json");
 }
 function validateAndRepairState(data, cwd) {
   const errors = [];
@@ -46020,7 +46186,7 @@ function summaryToJSON(summary) {
 }
 async function loadTaskQueue(options, cwd) {
   if (options.plan) {
-    const planFile = path37.resolve(cwd, options.plan);
+    const planFile = path38.resolve(cwd, options.plan);
     if (!fs42.existsSync(planFile)) {
       console.error(`Error: Plan file does not exist: ${planFile}`);
       process.exit(1);
@@ -46131,14 +46297,14 @@ function printSummary(summary) {
 }
 
 // src/utils/path.ts
-import * as path38 from "path";
+import * as path39 from "path";
 import * as fs43 from "fs";
 function getProjectDir5(cwd = process.cwd()) {
   const testMocks = globalThis.__PROJMNT4CLAUDE_TEST_MOCKS__;
   if (testMocks?.getProjectDir) {
     return testMocks.getProjectDir(cwd);
   }
-  return path38.join(cwd, ".projmnt4claude");
+  return path39.join(cwd, ".projmnt4claude");
 }
 function isInitialized2(cwd = process.cwd()) {
   const testMocks = globalThis.__PROJMNT4CLAUDE_TEST_MOCKS__;
@@ -46146,16 +46312,16 @@ function isInitialized2(cwd = process.cwd()) {
     return testMocks.isInitialized(cwd);
   }
   const projectDir = getProjectDir5(cwd);
-  const configPath = path38.join(projectDir, "config.json");
+  const configPath = path39.join(projectDir, "config.json");
   if (fs43.existsSync(configPath)) {
     return true;
   }
-  const tasksDir = path38.join(projectDir, "tasks");
+  const tasksDir = path39.join(projectDir, "tasks");
   if (fs43.existsSync(tasksDir)) {
     try {
       const taskDirs = fs43.readdirSync(tasksDir);
       return taskDirs.some((taskDir) => {
-        const metaPath = path38.join(tasksDir, taskDir, "meta.json");
+        const metaPath = path39.join(tasksDir, taskDir, "meta.json");
         return fs43.existsSync(metaPath);
       });
     } catch {
@@ -46287,7 +46453,7 @@ rename format:
     case "create": {
       let taskDescription = options.description;
       if (options.file) {
-        const filePath = path39.resolve(options.file);
+        const filePath = path40.resolve(options.file);
         if (!fs44.existsSync(filePath)) {
           console.error("(X) Error: Description file not found: " + filePath);
           process.exit(1);
@@ -46796,7 +46962,7 @@ program2.command("investigation-requirement [description]").description(`\u9700\
 ` + "\u524D\u63D0: \u9700\u5148\u8FD0\u884C projmnt4claude setup \u521D\u59CB\u5316\u9879\u76EE").option("-y, --yes", "\u975E\u4EA4\u4E92\u6A21\u5F0F").option("--interactive", "\u4EA4\u4E92\u6A21\u5F0F: \u4E0E\u7528\u6237\u8BC4\u5BA1\u53CD\u9988\u5FAA\u73AF").option("--feedback", "\u53CD\u9988\u4FEE\u6B63\u6A21\u5F0F: \u57FA\u4E8E\u53CD\u9988\u4FEE\u6B63\u5DF2\u6709\u62A5\u544A").option("--review", "\u8BC4\u5BA1\u6A21\u5F0F: \u4EC5\u8BC4\u5BA1\u5DF2\u6709\u62A5\u544A").option("--split", "\u62C6\u5206\u6A21\u5F0F: \u5BF9\u8FC7\u5927\u62A5\u544A\u8FDB\u884C\u62C6\u5206").option("--report-path <path>", "\u5DF2\u6709\u62A5\u544A\u8DEF\u5F84 (feedback/review/split \u5FC5\u9700)").option("--file <path>", "\u4ECE\u6587\u4EF6\u8BFB\u53D6\u9700\u6C42\u63CF\u8FF0").option("--output-dir <path>", "\u8F93\u51FA\u76EE\u5F55").option("--output-file <path>", "\u8F93\u51FA\u6587\u4EF6\u8DEF\u5F84").option("--max-retry <n>", "\u6700\u5927\u91CD\u8BD5\u6B21\u6570", "3").option("--split-threshold <kb>", "\u62C6\u5206\u9608\u503C (KB)", "20").option("--language <lang>", "\u8BED\u8A00 (zh/en)", "zh").option("--skip-review", "\u8DF3\u8FC7 AI \u8BC4\u5BA1").option("--skip-split", "\u8DF3\u8FC7\u62C6\u5206").option("-f, --force", "\u5F3A\u5236\u8986\u76D6").option("--json", "JSON \u8F93\u51FA").option("-q, --quiet", "\u9759\u9ED8\u6A21\u5F0F").action(async (description, options) => {
   let finalDescription = description;
   if (options.file) {
-    const filePath = path39.resolve(options.file);
+    const filePath = path40.resolve(options.file);
     if (!fs44.existsSync(filePath)) {
       console.error("(X) Error: Description file not found: " + filePath);
       process.exit(1);
