@@ -329,18 +329,38 @@ export function spawnWithMemoryLimit(
     return child;
   }
 
-  // 降级：已在 systemd scope 内或 cgroup v2 不可用，直接 spawn
-  if (cfg.enabled && isInSystemdScope()) {
-    console.warn(
-      `[spawn-utils] 当前进程已在 systemd scope 内，跳过 systemd-run 嵌套，` +
-      `直接运行 "${command}" (无额外内存限制)`
-    );
-  } else if (cfg.enabled && !hasCgroupV2Support()) {
-    console.warn(
-      `[spawn-utils] cgroup v2 不可用 (平台: ${os.platform()})，` +
-      `直接运行 "${command}" (无内存限制)`
-    );
+  // 降级路径：使用 prlimit 限制内存（当已在 systemd scope 内或 cgroup v2 不可用时）
+  if (cfg.enabled && (isInSystemdScope() || !hasCgroupV2Support())) {
+    const maxGB = type === 'coverage' ? cfg.overrides.coverage
+      : type === 'claudeAgent' ? cfg.overrides.claudeAgent
+      : type === 'build' ? cfg.overrides.build
+      : cfg.defaultGB;
+
+    const maxBytes = maxGB * 1024 * 1024 * 1024;
+
+    if (isInSystemdScope()) {
+      console.warn(
+        `[spawn-utils] 当前进程已在 systemd scope 内，跳过 systemd-run 嵌套，` +
+        `使用 prlimit 限制内存: ${maxGB}GB`
+      );
+    } else {
+      console.warn(
+        `[spawn-utils] cgroup v2 不可用 (平台: ${os.platform()})，` +
+        `使用 prlimit 限制内存: ${maxGB}GB`
+      );
+    }
+
+    // 使用 prlimit 限制内存：只限制 RSS（驻留集），不限制 AS（地址空间）
+    // 原因：node 等进程启动时需要大量虚拟内存，限制 AS 会导致启动失败
+    const prlimitArgs = [
+      `--rss=${maxBytes}`,
+      '--',
+      command,
+      ...args,
+    ];
+    return spawn('prlimit', prlimitArgs, options);
   }
+
   return spawn(command, args, options);
 }
 
@@ -391,17 +411,38 @@ export function execSyncWithMemoryLimit(
     return execSync(wrappedCmd, options);
   }
 
-  // 降级：已在 systemd scope 内或 cgroup v2 不可用，直接 execSync
-  if (cfg.enabled && isInSystemdScope()) {
-    console.warn(
-      `[spawn-utils] 当前进程已在 systemd scope 内，跳过 systemd-run 嵌套，` +
-      `直接运行命令 (无额外内存限制)`
-    );
-  } else if (cfg.enabled && !hasCgroupV2Support()) {
-    console.warn(
-      `[spawn-utils] cgroup v2 不可用 (平台: ${os.platform()})，` +
-      `直接运行命令 (无内存限制)`
-    );
+  // 降级路径：使用 prlimit 限制内存（当已在 systemd scope 内或 cgroup v2 不可用时）
+  if (cfg.enabled && (isInSystemdScope() || !hasCgroupV2Support())) {
+    const maxGB = type === 'coverage' ? cfg.overrides.coverage
+      : type === 'claudeAgent' ? cfg.overrides.claudeAgent
+      : type === 'build' ? cfg.overrides.build
+      : cfg.defaultGB;
+
+    const maxBytes = maxGB * 1024 * 1024 * 1024;
+
+    if (isInSystemdScope()) {
+      console.warn(
+        `[spawn-utils] 当前进程已在 systemd scope 内，跳过 systemd-run 嵌套，` +
+        `使用 prlimit 限制内存: ${maxGB}GB`
+      );
+    } else {
+      console.warn(
+        `[spawn-utils] cgroup v2 不可用 (平台: ${os.platform()})，` +
+        `使用 prlimit 限制内存: ${maxGB}GB`
+      );
+    }
+
+    // 使用 prlimit 限制内存：只限制 RSS（驻留集），不限制 AS（地址空间）
+    // 原因：node 等进程启动时需要大量虚拟内存，限制 AS 会导致启动失败
+    const wrappedCmd = [
+      'prlimit',
+      `--rss=${maxBytes}`,
+      '--',
+      command,
+    ].join(' ');
+
+    return execSync(wrappedCmd, options);
   }
+
   return execSync(command, options);
 }

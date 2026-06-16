@@ -11301,10 +11301,21 @@ function spawnWithMemoryLimit(command, args, options, type = "default") {
     });
     return child;
   }
-  if (cfg.enabled && isInSystemdScope()) {
-    console.warn(`[spawn-utils] 当前进程已在 systemd scope 内，跳过 systemd-run 嵌套，` + `直接运行 "${command}" (无额外内存限制)`);
-  } else if (cfg.enabled && !hasCgroupV2Support()) {
-    console.warn(`[spawn-utils] cgroup v2 不可用 (平台: ${os.platform()})，` + `直接运行 "${command}" (无内存限制)`);
+  if (cfg.enabled && (isInSystemdScope() || !hasCgroupV2Support())) {
+    const maxGB = type === "coverage" ? cfg.overrides.coverage : type === "claudeAgent" ? cfg.overrides.claudeAgent : type === "build" ? cfg.overrides.build : cfg.defaultGB;
+    const maxBytes = maxGB * 1024 * 1024 * 1024;
+    if (isInSystemdScope()) {
+      console.warn(`[spawn-utils] 当前进程已在 systemd scope 内，跳过 systemd-run 嵌套，` + `使用 prlimit 限制内存: ${maxGB}GB`);
+    } else {
+      console.warn(`[spawn-utils] cgroup v2 不可用 (平台: ${os.platform()})，` + `使用 prlimit 限制内存: ${maxGB}GB`);
+    }
+    const prlimitArgs = [
+      `--rss=${maxBytes}`,
+      "--",
+      command,
+      ...args
+    ];
+    return spawn("prlimit", prlimitArgs, options);
   }
   return spawn(command, args, options);
 }
@@ -11332,10 +11343,21 @@ function execSyncWithMemoryLimit(command, options, type = "default") {
     ].join(" ");
     return execSync(wrappedCmd, options);
   }
-  if (cfg.enabled && isInSystemdScope()) {
-    console.warn(`[spawn-utils] 当前进程已在 systemd scope 内，跳过 systemd-run 嵌套，` + `直接运行命令 (无额外内存限制)`);
-  } else if (cfg.enabled && !hasCgroupV2Support()) {
-    console.warn(`[spawn-utils] cgroup v2 不可用 (平台: ${os.platform()})，` + `直接运行命令 (无内存限制)`);
+  if (cfg.enabled && (isInSystemdScope() || !hasCgroupV2Support())) {
+    const maxGB = type === "coverage" ? cfg.overrides.coverage : type === "claudeAgent" ? cfg.overrides.claudeAgent : type === "build" ? cfg.overrides.build : cfg.defaultGB;
+    const maxBytes = maxGB * 1024 * 1024 * 1024;
+    if (isInSystemdScope()) {
+      console.warn(`[spawn-utils] 当前进程已在 systemd scope 内，跳过 systemd-run 嵌套，` + `使用 prlimit 限制内存: ${maxGB}GB`);
+    } else {
+      console.warn(`[spawn-utils] cgroup v2 不可用 (平台: ${os.platform()})，` + `使用 prlimit 限制内存: ${maxGB}GB`);
+    }
+    const wrappedCmd = [
+      "prlimit",
+      `--rss=${maxBytes}`,
+      "--",
+      command
+    ].join(" ");
+    return execSync(wrappedCmd, options);
   }
   return execSync(command, options);
 }
