@@ -11227,6 +11227,7 @@ function getMemoryLimitConfig(cwd) {
           claudeAgent: user.overrides?.claudeAgent ?? DEFAULT_MEMORY_LIMIT_CONFIG.overrides.claudeAgent,
           build: user.overrides?.build ?? DEFAULT_MEMORY_LIMIT_CONFIG.overrides.build
         },
+        swapMaxGB: user.swapMaxGB ?? DEFAULT_MEMORY_LIMIT_CONFIG.swapMaxGB,
         enabled: user.enabled ?? DEFAULT_MEMORY_LIMIT_CONFIG.enabled
       };
     }
@@ -11281,13 +11282,14 @@ function spawnWithMemoryLimit(command, args, options, type = "default") {
   }
   if (cfg.enabled && hasCgroupV2Support() && !isInSystemdScope()) {
     const maxGB = type === "coverage" ? cfg.overrides.coverage : type === "claudeAgent" ? cfg.overrides.claudeAgent : type === "build" ? cfg.overrides.build : cfg.defaultGB;
+    const swapMax = cfg.swapMaxGB === 0 ? "0" : `${cfg.swapMaxGB}G`;
     const wrappedArgs = [
       "--user",
       "--scope",
       "-p",
       `MemoryMax=${maxGB}G`,
       "-p",
-      "MemorySwapMax=0",
+      `MemorySwapMax=${swapMax}`,
       "--",
       command,
       ...args
@@ -11316,6 +11318,7 @@ function execSyncWithMemoryLimit(command, options, type = "default") {
   }
   if (cfg.enabled && hasCgroupV2Support() && !isInSystemdScope()) {
     const maxGB = type === "coverage" ? cfg.overrides.coverage : type === "claudeAgent" ? cfg.overrides.claudeAgent : type === "build" ? cfg.overrides.build : cfg.defaultGB;
+    const swapMax = cfg.swapMaxGB === 0 ? "0" : `${cfg.swapMaxGB}G`;
     const wrappedCmd = [
       "systemd-run",
       "--user",
@@ -11323,7 +11326,7 @@ function execSyncWithMemoryLimit(command, options, type = "default") {
       `-p`,
       `MemoryMax=${maxGB}G`,
       "-p",
-      "MemorySwapMax=0",
+      `MemorySwapMax=${swapMax}`,
       "--",
       command
     ].join(" ");
@@ -11346,6 +11349,7 @@ var init_spawn_utils = __esm(() => {
       claudeAgent: 8,
       build: 2
     },
+    swapMaxGB: 0,
     enabled: true
   };
 });
