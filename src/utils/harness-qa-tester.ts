@@ -137,6 +137,9 @@ export class HarnessQATester {
         verdict.failedCheckpoints = qaResult.failedCheckpoints;
         verdict.details = qaResult.details;
 
+        // [DEBUG-QA] 插入点 B: 验证 verdict 数组字段类型
+        console.log(`   [DEBUG-QA] verdict after runQAVerification: testFailures_isArray=${Array.isArray(verdict.testFailures)}, failedCheckpoints_isArray=${Array.isArray(verdict.failedCheckpoints)}, humanVerificationCheckpoints_isArray=${Array.isArray(verdict.humanVerificationCheckpoints)}`);
+
         // IR-08-05: 矛盾检测 — 当结果标签与内容矛盾时自动修正
         const contradiction = detectContradiction(verdict.result, verdict.reason || '');
         if (contradiction.hasContradiction && contradiction.correctedResult) {
@@ -165,9 +168,13 @@ export class HarnessQATester {
       }
 
     } catch (error) {
+      // [DEBUG-QA] 插入点 E: 捕获异常堆栈，精确定位 .map() / .forEach() 错误触发点
       verdict.result = 'NOPASS';
-      verdict.reason = `${texts.harness.logs.qaError}: ${error instanceof Error ? error.message : String(error)}`;
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      const errorStack = error instanceof Error ? error.stack : 'No stack trace available';
+      verdict.reason = `${texts.harness.logs.qaError}: ${errorMessage}`;
       console.log(`\n   ❌ ${texts.harness.logs.qaError}: ${verdict.reason}`);
+      console.error(`   [DEBUG-QA] Stack trace for QA error:\n${errorStack}`);
     }
 
     // 保存 QA 报告
@@ -827,6 +834,15 @@ export class HarnessQATester {
       }
     }
 
+    // [DEBUG-QA] 插入点 A: 验证 parsedResult 字段类型
+    console.log(`   [DEBUG-QA] runQAVerification returning: passed=${parsedResult.passed}, reason_type=${typeof parsedResult.reason}, failures_isArray=${Array.isArray(parsedResult.failures)}, failedCheckpoints_isArray=${Array.isArray(parsedResult.failedCheckpoints)}`);
+    if (!Array.isArray(parsedResult.failures)) {
+      console.error(`   [DEBUG-QA] CRITICAL: parsedResult.failures is not array:`, JSON.stringify(parsedResult.failures));
+    }
+    if (!Array.isArray(parsedResult.failedCheckpoints)) {
+      console.error(`   [DEBUG-QA] CRITICAL: parsedResult.failedCheckpoints is not array:`, JSON.stringify(parsedResult.failedCheckpoints));
+    }
+
     return parsedResult;
   }
 
@@ -1199,6 +1215,9 @@ export class HarnessQATester {
    * 格式化 QA 报告
    */
   private formatReport(verdict: QAVerdict): string {
+    // [DEBUG-QA] 插入点 C: 验证传入的 verdict 参数
+    console.log(`   [DEBUG-QA] formatReport called: taskId=${verdict.taskId}, testFailures_isArray=${Array.isArray(verdict.testFailures)}, failedCheckpoints_isArray=${Array.isArray(verdict.failedCheckpoints)}, humanVerificationCheckpoints_isArray=${Array.isArray(verdict.humanVerificationCheckpoints)}`);
+
     // 防御性编程：确保 texts 始终有值，防止 "texts is not defined" 错误
     let texts: ReturnType<typeof t>;
     try {
@@ -1220,6 +1239,20 @@ export class HarnessQATester {
       verdict.reason,
       '',
     ];
+
+    // [DEBUG-QA] 插入点 D: 防御性检查，确保数组字段在 .forEach() 前是数组
+    if (!Array.isArray(verdict.testFailures)) {
+      console.error(`   [DEBUG-QA] CRITICAL in formatReport: verdict.testFailures is not array, value=`, JSON.stringify(verdict.testFailures));
+      verdict.testFailures = [];
+    }
+    if (!Array.isArray(verdict.failedCheckpoints)) {
+      console.error(`   [DEBUG-QA] CRITICAL in formatReport: verdict.failedCheckpoints is not array, value=`, JSON.stringify(verdict.failedCheckpoints));
+      verdict.failedCheckpoints = [];
+    }
+    if (!Array.isArray(verdict.humanVerificationCheckpoints)) {
+      console.error(`   [DEBUG-QA] CRITICAL in formatReport: verdict.humanVerificationCheckpoints is not array, value=`, JSON.stringify(verdict.humanVerificationCheckpoints));
+      verdict.humanVerificationCheckpoints = [];
+    }
 
     if (verdict.testFailures.length > 0) {
       lines.push(`## ${texts.harness.reports.testFailuresSection}`);
