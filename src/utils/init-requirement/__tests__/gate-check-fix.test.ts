@@ -524,4 +524,153 @@ describe('Archive Cleanup (§3.8)', () => {
     expect(recordedError).not.toBeNull();
     expect(recordedTime).not.toBeNull();
   });
+
+  test('isResumed parameter is passed through to runPreDevGate', async () => {
+    let resumedValue: boolean | null = null;
+
+    const mockDeps: GateDependencies = {
+      runPreDevGate: jest.fn(async (params) => {
+        resumedValue = params.isResumed;
+        return {
+          taskId: 'TASK-001', passed: true, summary: 'All checks passed',
+          results: [], duration: 100, timestamp: new Date().toISOString(),
+        };
+      }),
+      checkQualityGate: jest.fn(async () => ({
+        passed: true, score: { totalScore: 80 }, suggestions: [],
+      })),
+      validateNewTaskDeps: jest.fn(() => true),
+      readTaskMeta: jest.fn(() => ({ id: 'TASK-001', title: 'Test' })),
+      writeTaskMeta: jest.fn(() => {}),
+      invokeAIAgent: jest.fn(async () => ({ output: '{}', success: true, durationMs: 100 })),
+      runAlignmentCheck: jest.fn(async () => ({
+        aligned: true,
+        checks: {
+          rootCauseAlignment: { passed: true, detail: 'ok' },
+          solutionAlignment: { passed: true, detail: 'ok' },
+          checkpointAlignment: { passed: true, detail: 'ok' },
+        },
+        issues: [],
+      })),
+      moveTaskToArchive: jest.fn(() => {}),
+      updateConversionStatus: jest.fn(() => {}),
+    };
+
+    await gateCheckAndFix(
+      { taskId: 'TASK-001', reportPath: 'report.md', investigationDir: tempDir, cwd: tempDir, isResumed: true },
+      mockDeps,
+    );
+
+    expect(resumedValue).toBe(true);
+  });
+
+  test('qualityGate failure below threshold triggers AI fix', async () => {
+    let fixCalled = false;
+
+    const mockDeps: GateDependencies = {
+      runPreDevGate: jest.fn(async () => ({
+        taskId: 'TASK-001', passed: true, summary: 'Pre-dev passed',
+        results: [], duration: 100, timestamp: new Date().toISOString(),
+      })),
+      checkQualityGate: jest.fn(async () => ({
+        passed: false, score: { totalScore: 40 }, suggestions: ['Improve coverage'],
+      })),
+      validateNewTaskDeps: jest.fn(() => true),
+      readTaskMeta: jest.fn(() => ({ id: 'TASK-001', title: 'Test' })),
+      writeTaskMeta: jest.fn(() => {}),
+      invokeAIAgent: jest.fn(async () => {
+        fixCalled = true;
+        return { output: '{}', success: true, durationMs: 100 };
+      }),
+      runAlignmentCheck: jest.fn(async () => ({
+        aligned: true,
+        checks: {
+          rootCauseAlignment: { passed: true, detail: 'ok' },
+          solutionAlignment: { passed: true, detail: 'ok' },
+          checkpointAlignment: { passed: true, detail: 'ok' },
+        },
+        issues: [],
+      })),
+      moveTaskToArchive: jest.fn(() => {}),
+      updateConversionStatus: jest.fn(() => {}),
+    };
+
+    const result = await gateCheckAndFix(
+      { taskId: 'TASK-001', reportPath: 'report.md', investigationDir: tempDir, cwd: tempDir, maxRetries: 2 },
+      mockDeps,
+    );
+
+    expect(fixCalled).toBe(true);
+  });
+
+  test('all three alignment levels fail simultaneously', async () => {
+    let writeMetaCalled = false;
+
+    const mockDeps: GateDependencies = {
+      runPreDevGate: jest.fn(async () => ({
+        taskId: 'TASK-001', passed: true, summary: 'Passed',
+        results: [], duration: 100, timestamp: new Date().toISOString(),
+      })),
+      checkQualityGate: jest.fn(async () => ({
+        passed: true, score: { totalScore: 80 }, suggestions: [],
+      })),
+      validateNewTaskDeps: jest.fn(() => true),
+      readTaskMeta: jest.fn(() => ({ id: 'TASK-001', title: 'Test', issues: [] })),
+      writeTaskMeta: jest.fn(() => { writeMetaCalled = true; }),
+      invokeAIAgent: jest.fn(async () => ({ output: '{}', success: true, durationMs: 100 })),
+      runAlignmentCheck: jest.fn(async () => ({
+        aligned: false,
+        checks: {
+          rootCauseAlignment: { passed: false, detail: 'root cause mismatch' },
+          solutionAlignment: { passed: false, detail: 'solution mismatch' },
+          checkpointAlignment: { passed: false, detail: 'checkpoint mismatch' },
+        },
+        issues: ['Root cause mismatch', 'Solution mismatch', 'Checkpoint mismatch'],
+      })),
+      moveTaskToArchive: jest.fn(() => {}),
+      updateConversionStatus: jest.fn(() => {}),
+    };
+
+    const result = await gateCheckAndFix(
+      { taskId: 'TASK-001', reportPath: 'report.md', investigationDir: tempDir, cwd: tempDir, maxRetries: 1 },
+      mockDeps,
+    );
+
+    expect(writeMetaCalled).toBe(true);
+    expect(result.passed).toBe(false);
+  });
+
+  test('dependency check failure triggers failure path', async () => {
+    const mockDeps: GateDependencies = {
+      runPreDevGate: jest.fn(async () => ({
+        taskId: 'TASK-001', passed: true, summary: 'Passed',
+        results: [], duration: 100, timestamp: new Date().toISOString(),
+      })),
+      checkQualityGate: jest.fn(async () => ({
+        passed: true, score: { totalScore: 80 }, suggestions: [],
+      })),
+      validateNewTaskDeps: jest.fn(() => false),
+      readTaskMeta: jest.fn(() => ({ id: 'TASK-001', title: 'Test' })),
+      writeTaskMeta: jest.fn(() => {}),
+      invokeAIAgent: jest.fn(async () => ({ output: '{}', success: false, durationMs: 100, error: 'Failed' })),
+      runAlignmentCheck: jest.fn(async () => ({
+        aligned: true,
+        checks: {
+          rootCauseAlignment: { passed: true, detail: 'ok' },
+          solutionAlignment: { passed: true, detail: 'ok' },
+          checkpointAlignment: { passed: true, detail: 'ok' },
+        },
+        issues: [],
+      })),
+      moveTaskToArchive: jest.fn(() => {}),
+      updateConversionStatus: jest.fn(() => {}),
+    };
+
+    const result = await gateCheckAndFix(
+      { taskId: 'TASK-001', reportPath: 'report.md', investigationDir: tempDir, cwd: tempDir, maxRetries: 1 },
+      mockDeps,
+    );
+
+    expect(result.passed).toBe(false);
+  });
 });

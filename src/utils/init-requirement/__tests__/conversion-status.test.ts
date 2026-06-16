@@ -143,6 +143,19 @@ describe('Conversion Status Read/Write (§3.5)', () => {
     expect(status.tasks['r1.md'].taskId).toBe('TASK-001');
     expect(status.tasks['r1.md'].lastError).toBe('gate fail');
   });
+
+  test('updateConversionStatus overwrites existing state', () => {
+    updateConversionStatus(tempDir, 'r1.md', 'pending');
+    updateConversionStatus(tempDir, 'r1.md', 'completed');
+    const status = loadConversionStatus(tempDir);
+    expect(status.reports['r1.md']).toBe('completed');
+  });
+
+  test('updateConversionStatus with empty detail does not create task entry', () => {
+    updateConversionStatus(tempDir, 'r1.md', 'pending');
+    const status = loadConversionStatus(tempDir);
+    expect(status.tasks['r1.md']).toBeUndefined();
+  });
 });
 
 // ============================================================

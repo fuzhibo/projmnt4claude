@@ -10,7 +10,7 @@ import { PREFIX_MAP, type InvestigationReport } from '../types.js';
 import { generateReport } from '../report-generator.js';
 import { parseReport } from '../report-parser.js';
 import { validateReport, VALIDATION_RULES } from '../report-validator.js';
-import { loadTemplate, renderTemplate, loadAndRenderTemplate, listTemplates } from '../../prompt-templates/loader.js';
+import { loadTemplate, renderTemplate, loadAndRenderTemplate, listTemplates, listInvestigationTemplatesSync } from '../../prompt-templates/loader.js';
 
 // ============================================================
 // Test helpers
@@ -82,41 +82,41 @@ function createFullTestReport(): InvestigationReport {
 
 describe('§3.7 i18n 模板', () => {
   describe('模板语言加载', () => {
-    it('should load zh templates', () => {
-      const template = loadTemplate('investigate', 'zh');
+    it('should load zh templates', async () => {
+      const template = await loadTemplate('investigate', 'zh');
       expect(template).toBeTruthy();
       expect(typeof template).toBe('string');
     });
 
-    it('should load en templates', () => {
-      const template = loadTemplate('investigate', 'en');
+    it('should load en templates', async () => {
+      const template = await loadTemplate('investigate', 'en');
       expect(template).toBeTruthy();
       expect(typeof template).toBe('string');
     });
 
-    it('should throw for unsupported language', () => {
-      expect(() => loadTemplate('investigate', 'fr' as any)).toThrow('Unsupported language');
+    it('should throw for unsupported language', async () => {
+      await expect(loadTemplate('investigate', 'fr' as any)).rejects.toThrow('Unsupported language');
     });
 
-    it('should throw for unknown template name', () => {
-      expect(() => loadTemplate('nonexistent' as any, 'zh')).toThrow('not found');
+    it('should throw for unknown template name', async () => {
+      await expect(loadTemplate('nonexistent' as any, 'zh')).rejects.toThrow('not found');
     });
 
-    it('should list available templates for zh', () => {
-      const templates = listTemplates('zh');
+    it('should list available templates for zh', async () => {
+      const templates = await listTemplates('zh');
       expect(templates.length).toBeGreaterThan(0);
       expect(templates).toContain('investigate');
     });
 
-    it('should list available templates for en', () => {
-      const templates = listTemplates('en');
+    it('should list available templates for en', async () => {
+      const templates = await listTemplates('en');
       expect(templates.length).toBeGreaterThan(0);
       expect(templates).toContain('investigate');
     });
 
     it('should have all 5 investigation templates', () => {
       const required = ['investigate', 'review', 'investigateWithFeedback', 'split', 'splitReview'];
-      const zhTemplates = listTemplates('zh');
+      const zhTemplates = listInvestigationTemplatesSync('zh');
       for (const name of required) {
         expect(zhTemplates).toContain(name);
       }
@@ -137,8 +137,8 @@ describe('§3.7 i18n 模板', () => {
       expect(result).toBe('Hello Claude, {unknown}');
     });
 
-    it('should loadAndRenderTemplate correctly', () => {
-      const result = loadAndRenderTemplate('investigate', {
+    it('should loadAndRenderTemplate correctly', async () => {
+      const result = await loadAndRenderTemplate('investigate', {
         requirement: 'Test requirement',
         context: 'Test project',
         splitThreshold: '30',
@@ -149,8 +149,8 @@ describe('§3.7 i18n 模板', () => {
 
   describe('中英文参数一致性', () => {
     it('should have same template names in zh and en', () => {
-      const zhTemplates = listTemplates('zh');
-      const enTemplates = listTemplates('en');
+      const zhTemplates = listInvestigationTemplatesSync('zh');
+      const enTemplates = listInvestigationTemplatesSync('en');
       const coreTemplates = ['investigate', 'review', 'investigateWithFeedback', 'split', 'splitReview'];
       for (const name of coreTemplates) {
         expect(zhTemplates).toContain(name);

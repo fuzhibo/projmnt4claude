@@ -31,6 +31,7 @@ import {
   getPendingReports,
   topologicalSort,
   gateCheckAndFix,
+  detectProjectConfig,
   type ConversionStatus,
   type GateFixResult,
   type AlignmentResult,
@@ -293,6 +294,7 @@ async function convertSingleReport(
           commands: generateVerificationCommands(
             parseCheckpoint(`[${cp.prefix}] ${cp.description}`)!,
             extractedMeta.files,
+            detectProjectConfig(cwd),
           ),
         },
       }));

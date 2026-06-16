@@ -19,7 +19,12 @@ import {
   type CheckpointPrefix,
   type ParsedCheckpoint,
 } from '../prefix-map.js';
-import { generateVerificationCommands } from '../verification-commands.js';
+import {
+  detectProjectConfig,
+  mapSourceToTestFile,
+  generateVerificationCommands,
+  type ProjectConfig,
+} from '../verification-commands.js';
 import {
   loadConversionStatus,
   createEmptyConversionStatus,
@@ -169,11 +174,6 @@ describe('parseCheckpoint (§3.2)', () => {
 
 describe('generateVerificationCommands (§3.3)', () => {
   test('test prefix with existing test files generates npm test command', () => {
-    // Create a mock test file
-    const testFile = join(tempDir, 'tests', 'auth.test.ts');
-    mkdirSync(join(tempDir, 'tests'), { recursive: true });
-    writeFileSync(testFile, '// mock test');
-
     const checkpoint: ParsedCheckpoint = {
       prefix: 'test',
       description: '测试认证',
@@ -182,14 +182,14 @@ describe('generateVerificationCommands (§3.3)', () => {
       requiresHuman: false,
     };
 
-    const taskFiles = [join(tempDir, 'src', 'auth.ts')];
-    mkdirSync(join(tempDir, 'src'), { recursive: true });
-    writeFileSync(taskFiles[0], '// mock source');
+    const taskFiles = ['src/auth.ts'];
+    const config: ProjectConfig = {
+      type: 'node',
+      testCommand: 'npm test',
+      testFilePattern: '**/__tests__/*.test.ts',
+    };
 
-    // Note: generateVerificationCommands uses existsSync which checks relative paths
-    // For this test, we use the absolute paths
-    const commands = generateVerificationCommands(checkpoint, taskFiles);
-    // Since the test file doesn't exist in the expected relative path format, it falls back
+    const commands = generateVerificationCommands(checkpoint, taskFiles, config);
     expect(commands.length).toBe(1);
     expect(commands[0]).toContain('npm test');
   });
@@ -203,7 +203,8 @@ describe('generateVerificationCommands (§3.3)', () => {
       requiresHuman: false,
     };
 
-    const commands = generateVerificationCommands(checkpoint, []);
+    const config: ProjectConfig = { type: 'node', testCommand: 'npm test' };
+    const commands = generateVerificationCommands(checkpoint, [], config);
     expect(commands).toEqual(['npm test --testNamePattern="测试认证流程"']);
   });
 
@@ -216,8 +217,13 @@ describe('generateVerificationCommands (§3.3)', () => {
       requiresHuman: false,
     };
 
-    const commands = generateVerificationCommands(checkpoint, []);
-    expect(commands).toEqual(['npm run build && npm test']);
+    const config: ProjectConfig = {
+      type: 'node',
+      buildCommand: 'npm run build',
+      testCommand: 'npm test',
+    };
+    const commands = generateVerificationCommands(checkpoint, [], config);
+    expect(commands).toEqual(['npm run build', 'npm test']);
   });
 
   test('review prefix generates git diff', () => {
@@ -230,7 +236,8 @@ describe('generateVerificationCommands (§3.3)', () => {
     };
 
     const taskFiles = ['src/auth.ts', 'src/middleware.ts'];
-    const commands = generateVerificationCommands(checkpoint, taskFiles);
+    const config: ProjectConfig = { type: 'node' };
+    const commands = generateVerificationCommands(checkpoint, taskFiles, config);
     expect(commands).toEqual(['git diff HEAD -- src/auth.ts src/middleware.ts']);
   });
 
@@ -243,7 +250,8 @@ describe('generateVerificationCommands (§3.3)', () => {
       requiresHuman: false,
     };
 
-    const commands = generateVerificationCommands(checkpoint, []);
+    const config: ProjectConfig = { type: 'node', buildCommand: 'npm run build' };
+    const commands = generateVerificationCommands(checkpoint, [], config);
     expect(commands).toEqual(['npm run build']);
   });
 
@@ -256,7 +264,8 @@ describe('generateVerificationCommands (§3.3)', () => {
       requiresHuman: false,
     };
 
-    const commands = generateVerificationCommands(checkpoint, []);
+    const config: ProjectConfig = { type: 'node', buildCommand: 'npm run build' };
+    const commands = generateVerificationCommands(checkpoint, [], config);
     expect(commands).toEqual(['npm run build']);
   });
 });

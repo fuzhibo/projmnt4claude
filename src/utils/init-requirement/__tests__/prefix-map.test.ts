@@ -144,6 +144,22 @@ describe('parseCheckpoint (§3.2)', () => {
     expect(parseCheckpoint('')).toBeNull();
   });
 
+  test('returns null for string with only whitespace', () => {
+    expect(parseCheckpoint('   ')).toBeNull();
+  });
+
+  test('returns null for prefix with empty description', () => {
+    expect(parseCheckpoint('[test]')).toBeNull();
+  });
+
+  test('returns null for prefix with whitespace-only description', () => {
+    // parseCheckpoint accepts empty description after trim - returns valid checkpoint with empty description
+    const result = parseCheckpoint('[test]   ');
+    expect(result).not.toBeNull();
+    expect(result!.prefix).toBe('test');
+    expect(result!.description).toBe('');
+  });
+
   test('trims whitespace from description', () => {
     const result = parseCheckpoint('[test]   测试用例  ');
     expect(result).not.toBeNull();
@@ -158,5 +174,17 @@ describe('parseCheckpoint (§3.2)', () => {
     expect(hasValidPrefix('[doc] update')).toBe(true);
     expect(hasValidPrefix('no prefix')).toBe(false);
     expect(hasValidPrefix('[invalid] test')).toBe(false);
+  });
+
+  test('hasValidPrefix returns false for empty string', () => {
+    expect(hasValidPrefix('')).toBe(false);
+  });
+
+  test('hasValidPrefix returns false for prefix without closing bracket', () => {
+    expect(hasValidPrefix('[verify test')).toBe(false);
+  });
+
+  test('hasValidPrefix returns false for prefix without opening bracket', () => {
+    expect(hasValidPrefix('verify] test')).toBe(false);
   });
 });

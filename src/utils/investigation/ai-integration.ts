@@ -1,5 +1,5 @@
 import type { AICallOptions, AICallResult } from './types';
-import { invokeAgent } from '../headless-agent';
+import type { AgentResult } from '../headless-agent.js';
 
 const DEFAULT_TIMEOUT = 120;
 const DEFAULT_ALLOWED_TOOLS: string[] = [];
@@ -19,7 +19,9 @@ export async function callAI(options: AICallOptions): Promise<AICallResult> {
   const startTime = Date.now();
 
   try {
-    const result = await invokeAgent(options.prompt, {
+    // 动态导入避免测试时拉入庞大的依赖树（harness-helpers 等）
+    const { invokeAgent } = await import('../headless-agent.js');
+    const result: AgentResult = await invokeAgent(options.prompt, {
       timeout: options.timeout ?? DEFAULT_TIMEOUT,
       allowedTools: options.allowedTools ?? DEFAULT_ALLOWED_TOOLS,
       outputFormat: options.outputFormat,

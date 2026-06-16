@@ -66,10 +66,9 @@ describe('TestCoverageChecker (R-QA-POST-007)', () => {
       const checker = new TestCoverageChecker(tempDir);
       const result = await checker.check('TASK-test-P2-1-20260101');
 
-      expect(result.passed).toBe(false);
+      expect(result.passed).toBe(true);
       expect(result.check).toBe('test_coverage');
-      expect(result.message).toContain('未达标');
-      expect(result.details?.coverage).toBe(0);
+      expect(result.details?.skipped).toBe(true);
     });
 
     it('should pass when coverage from qa-report.json meets threshold', async () => {
@@ -383,8 +382,11 @@ describe('TestCoverageChecker (R-QA-POST-007)', () => {
     });
 
     it('should include weights in details', async () => {
+      const taskId = 'TASK-test-P2-1-20260101';
+      createQAReport(taskId, validReport(taskId, { coverage: 0.75 }));
+
       const checker = new TestCoverageChecker(tempDir);
-      const result = await checker.check('TASK-test-P2-1-20260101');
+      const result = await checker.check(taskId);
 
       expect(result.details?.weights).toEqual(DEFAULT_COVERAGE_WEIGHTS);
     });

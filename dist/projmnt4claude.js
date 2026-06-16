@@ -11257,6 +11257,16 @@ function getCgroupPathForPid(pid) {
   } catch {}
   return null;
 }
+function isInSystemdScope() {
+  if (os.platform() !== "linux")
+    return false;
+  try {
+    const cgroup = fs4.readFileSync("/proc/self/cgroup", "utf-8");
+    return cgroup.includes(".scope");
+  } catch {
+    return false;
+  }
+}
 function spawnWithMemoryLimit(command, args, options, type = "default") {
   const testMocks = globalThis.__PROJMNT4CLAUDE_TEST_MOCKS__;
   if (testMocks?.spawnWithMemoryLimit) {
@@ -11269,7 +11279,7 @@ function spawnWithMemoryLimit(command, args, options, type = "default") {
       throw new Error(pressure.message);
     }
   }
-  if (cfg.enabled && hasCgroupV2Support()) {
+  if (cfg.enabled && hasCgroupV2Support() && !isInSystemdScope()) {
     const maxGB = type === "coverage" ? cfg.overrides.coverage : type === "claudeAgent" ? cfg.overrides.claudeAgent : type === "build" ? cfg.overrides.build : cfg.defaultGB;
     const wrappedArgs = [
       "--user",
@@ -11289,7 +11299,9 @@ function spawnWithMemoryLimit(command, args, options, type = "default") {
     });
     return child;
   }
-  if (cfg.enabled && !hasCgroupV2Support()) {
+  if (cfg.enabled && isInSystemdScope()) {
+    console.warn(`[spawn-utils] 当前进程已在 systemd scope 内，跳过 systemd-run 嵌套，` + `直接运行 "${command}" (无额外内存限制)`);
+  } else if (cfg.enabled && !hasCgroupV2Support()) {
     console.warn(`[spawn-utils] cgroup v2 不可用 (平台: ${os.platform()})，` + `直接运行 "${command}" (无内存限制)`);
   }
   return spawn(command, args, options);
@@ -11302,7 +11314,7 @@ function execSyncWithMemoryLimit(command, options, type = "default") {
       throw new Error(pressure.message);
     }
   }
-  if (cfg.enabled && hasCgroupV2Support()) {
+  if (cfg.enabled && hasCgroupV2Support() && !isInSystemdScope()) {
     const maxGB = type === "coverage" ? cfg.overrides.coverage : type === "claudeAgent" ? cfg.overrides.claudeAgent : type === "build" ? cfg.overrides.build : cfg.defaultGB;
     const wrappedCmd = [
       "systemd-run",
@@ -11317,7 +11329,9 @@ function execSyncWithMemoryLimit(command, options, type = "default") {
     ].join(" ");
     return execSync(wrappedCmd, options);
   }
-  if (cfg.enabled && !hasCgroupV2Support()) {
+  if (cfg.enabled && isInSystemdScope()) {
+    console.warn(`[spawn-utils] 当前进程已在 systemd scope 内，跳过 systemd-run 嵌套，` + `直接运行命令 (无额外内存限制)`);
+  } else if (cfg.enabled && !hasCgroupV2Support()) {
     console.warn(`[spawn-utils] cgroup v2 不可用 (平台: ${os.platform()})，` + `直接运行命令 (无内存限制)`);
   }
   return execSync(command, options);

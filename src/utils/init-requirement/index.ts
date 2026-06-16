@@ -30,7 +30,7 @@ export {
 export type { CheckpointPrefix } from './prefix-map.js';
 
 // 验证命令生成
-export { generateVerificationCommands } from './verification-commands.js';
+export { generateVerificationCommands, detectProjectConfig, mapSourceToTestFile } from './verification-commands.js';
 
 // 转换状态管理
 export {
