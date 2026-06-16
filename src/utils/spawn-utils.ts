@@ -225,6 +225,29 @@ function getCgroupPathForPid(pid: number): string | null {
   return null;
 }
 
+// ─── systemd scope 嵌套检测 ───
+
+/**
+ * 检测当前进程是否已在 systemd scope 内。
+ *
+ * 当 Harness 流水线通过 systemd-run --scope 启动 Headless Claude 时，
+ * Headless Claude 内部再次调用 spawnWithMemoryLimit 会尝试嵌套创建 scope，
+ * 导致 systemd 冲突错误（Running as unit: run-xxx.scope）。
+ *
+ * 通过读取 /proc/self/cgroup 检测 .scope 后缀，判断当前是否已在 scope 内。
+ *
+ * @returns true 表示当前进程已在 systemd scope 内
+ */
+function isInSystemdScope(): boolean {
+  if (os.platform() !== 'linux') return false;
+  try {
+    const cgroup = fs.readFileSync('/proc/self/cgroup', 'utf-8');
+    return cgroup.includes('.scope');
+  } catch {
+    return false;
+  }
+}
+
 // ─── spawn 封装 ───
 
 /**
@@ -264,7 +287,7 @@ export function spawnWithMemoryLimit(
     }
   }
 
-  if (cfg.enabled && hasCgroupV2Support()) {
+  if (cfg.enabled && hasCgroupV2Support() && !isInSystemdScope()) {
     const maxGB = type === 'coverage' ? cfg.overrides.coverage
       : type === 'claudeAgent' ? cfg.overrides.claudeAgent
       : type === 'build' ? cfg.overrides.build
@@ -288,8 +311,13 @@ export function spawnWithMemoryLimit(
     return child;
   }
 
-  // 降级：直接 spawn
-  if (cfg.enabled && !hasCgroupV2Support()) {
+  // 降级：已在 systemd scope 内或 cgroup v2 不可用，直接 spawn
+  if (cfg.enabled && isInSystemdScope()) {
+    console.warn(
+      `[spawn-utils] 当前进程已在 systemd scope 内，跳过 systemd-run 嵌套，` +
+      `直接运行 "${command}" (无额外内存限制)`
+    );
+  } else if (cfg.enabled && !hasCgroupV2Support()) {
     console.warn(
       `[spawn-utils] cgroup v2 不可用 (平台: ${os.platform()})，` +
       `直接运行 "${command}" (无内存限制)`
@@ -326,7 +354,7 @@ export function execSyncWithMemoryLimit(
     }
   }
 
-  if (cfg.enabled && hasCgroupV2Support()) {
+  if (cfg.enabled && hasCgroupV2Support() && !isInSystemdScope()) {
     const maxGB = type === 'coverage' ? cfg.overrides.coverage
       : type === 'claudeAgent' ? cfg.overrides.claudeAgent
       : type === 'build' ? cfg.overrides.build
@@ -343,8 +371,13 @@ export function execSyncWithMemoryLimit(
     return execSync(wrappedCmd, options);
   }
 
-  // 降级：直接 execSync
-  if (cfg.enabled && !hasCgroupV2Support()) {
+  // 降级：已在 systemd scope 内或 cgroup v2 不可用，直接 execSync
+  if (cfg.enabled && isInSystemdScope()) {
+    console.warn(
+      `[spawn-utils] 当前进程已在 systemd scope 内，跳过 systemd-run 嵌套，` +
+      `直接运行命令 (无额外内存限制)`
+    );
+  } else if (cfg.enabled && !hasCgroupV2Support()) {
     console.warn(
       `[spawn-utils] cgroup v2 不可用 (平台: ${os.platform()})，` +
       `直接运行命令 (无内存限制)`
