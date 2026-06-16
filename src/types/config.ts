@@ -194,6 +194,8 @@ export interface HarnessMemoryLimitConfig {
     /** npm run build 上限 (GB)，默认 2 */
     build?: number;
   };
+  /** swap 上限 (GB)，默认 0。设为 0 表示禁用 swap */
+  swapMaxGB?: number;
   /** 是否启用 cgroup 限制。非 Linux 环境自动禁用。默认 true */
   enabled?: boolean;
 }

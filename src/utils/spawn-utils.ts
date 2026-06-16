@@ -24,15 +24,30 @@ import * as path from 'path';
 import { readConfig } from '../commands/config.js';
 import type { HarnessMemoryLimitConfig } from '../types/config.js';
 
+// ─── 类型定义 ───
+
+/** 完全解析后的内存限制配置（所有字段均为 required） */
+interface ResolvedMemoryLimitConfig {
+  defaultGB: number;
+  overrides: {
+    coverage: number;
+    claudeAgent: number;
+    build: number;
+  };
+  swapMaxGB: number;
+  enabled: boolean;
+}
+
 // ─── 默认值 ───
 
-const DEFAULT_MEMORY_LIMIT_CONFIG: Required<HarnessMemoryLimitConfig> = {
+const DEFAULT_MEMORY_LIMIT_CONFIG: ResolvedMemoryLimitConfig = {
   defaultGB: 4,
   overrides: {
     coverage: 8,
     claudeAgent: 8,
     build: 2,
   },
+  swapMaxGB: 0,
   enabled: true,
 };
 
@@ -141,7 +156,7 @@ export type MemoryLimitType = 'default' | 'coverage' | 'claudeAgent' | 'build';
 /**
  * 从 config.json 读取内存限制配置，未配置则返回默认值
  */
-export function getMemoryLimitConfig(cwd: string): Required<HarnessMemoryLimitConfig> {
+export function getMemoryLimitConfig(cwd: string): ResolvedMemoryLimitConfig {
   try {
     const config = readConfig(cwd);
     if (config?.harness?.memoryLimit) {
@@ -153,6 +168,7 @@ export function getMemoryLimitConfig(cwd: string): Required<HarnessMemoryLimitCo
           claudeAgent: user.overrides?.claudeAgent ?? DEFAULT_MEMORY_LIMIT_CONFIG.overrides.claudeAgent,
           build: user.overrides?.build ?? DEFAULT_MEMORY_LIMIT_CONFIG.overrides.build,
         },
+        swapMaxGB: user.swapMaxGB ?? DEFAULT_MEMORY_LIMIT_CONFIG.swapMaxGB,
         enabled: user.enabled ?? DEFAULT_MEMORY_LIMIT_CONFIG.enabled,
       };
     }
@@ -171,9 +187,9 @@ export function getMemoryLimitGB(
 ): number {
   const cfg = getMemoryLimitConfig(cwd);
   switch (type) {
-    case 'coverage': return cfg.overrides.coverage;
-    case 'claudeAgent': return cfg.overrides.claudeAgent;
-    case 'build': return cfg.overrides.build;
+    case 'coverage': return cfg.overrides.coverage ?? DEFAULT_MEMORY_LIMIT_CONFIG.overrides.coverage;
+    case 'claudeAgent': return cfg.overrides.claudeAgent ?? DEFAULT_MEMORY_LIMIT_CONFIG.overrides.claudeAgent;
+    case 'build': return cfg.overrides.build ?? DEFAULT_MEMORY_LIMIT_CONFIG.overrides.build;
     default: return cfg.defaultGB;
   }
 }
@@ -293,10 +309,12 @@ export function spawnWithMemoryLimit(
       : type === 'build' ? cfg.overrides.build
       : cfg.defaultGB;
 
+    const swapMax = cfg.swapMaxGB === 0 ? '0' : `${cfg.swapMaxGB}G`;
+
     const wrappedArgs = [
       '--user', '--scope',
       '-p', `MemoryMax=${maxGB}G`,
-      '-p', 'MemorySwapMax=0',
+      '-p', `MemorySwapMax=${swapMax}`,
       '--',
       command,
       ...args,
@@ -360,11 +378,13 @@ export function execSyncWithMemoryLimit(
       : type === 'build' ? cfg.overrides.build
       : cfg.defaultGB;
 
-    // systemd-run --user --scope -p MemoryMax=N -p MemorySwapMax=0 -- <command>
+    const swapMax = cfg.swapMaxGB === 0 ? '0' : `${cfg.swapMaxGB}G`;
+
+    // systemd-run --user --scope -p MemoryMax=N -p MemorySwapMax=X -- <command>
     const wrappedCmd = [
       'systemd-run', '--user', '--scope',
       `-p`, `MemoryMax=${maxGB}G`,
-      '-p', 'MemorySwapMax=0',
+      '-p', `MemorySwapMax=${swapMax}`,
       '--', command,
     ].join(' ');
 

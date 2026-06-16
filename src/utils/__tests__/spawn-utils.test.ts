@@ -80,6 +80,7 @@ describe('getMemoryLimitConfig', () => {
     expect(cfg.overrides.coverage).toBe(8);
     expect(cfg.overrides.claudeAgent).toBe(8);
     expect(cfg.overrides.build).toBe(2);
+    expect(cfg.swapMaxGB).toBe(0);
     expect(cfg.enabled).toBe(true);
   });
 
@@ -89,6 +90,7 @@ describe('getMemoryLimitConfig', () => {
         memoryLimit: {
           defaultGB: 6,
           overrides: { coverage: 12, claudeAgent: 10, build: 3 },
+          swapMaxGB: 4,
           enabled: false,
         },
       },
@@ -98,6 +100,7 @@ describe('getMemoryLimitConfig', () => {
         const cfg = getMemoryLimitConfig(path.join(os.tmpdir(), tmpDir));
         expect(cfg.defaultGB).toBe(6);
         expect(cfg.overrides.coverage).toBe(12);
+        expect(cfg.swapMaxGB).toBe(4);
         expect(cfg.enabled).toBe(false);
       }
     });
@@ -117,6 +120,7 @@ describe('getMemoryLimitConfig', () => {
         expect(cfg.defaultGB).toBe(8);
         expect(cfg.overrides.coverage).toBe(8); // 默认值
         expect(cfg.overrides.build).toBe(2); // 默认值
+        expect(cfg.swapMaxGB).toBe(0); // 默认值
       }
     });
   });
@@ -156,7 +160,7 @@ describe('hasCgroupV2Support', () => {
 // ─── 6. spawnWithMemoryLimit 参数传递测试 ───
 
 describe('spawnWithMemoryLimit args', () => {
-  test('includes MemorySwapMax=0 on Linux with cgroup v2', () => {
+  test('includes MemorySwapMax=0 on Linux with cgroup v2 by default', () => {
     // 仅验证参数构建逻辑，不实际 spawn
     if (os.platform() !== 'linux' || !hasCgroupV2Support()) {
       return; // 跳过非 Linux 环境
@@ -177,12 +181,28 @@ describe('spawnWithMemoryLimit args', () => {
       expect(err).toBeInstanceOf(Error);
     }
   });
+
+  test('uses config swapMaxGB when set', () => {
+    withTempConfig({
+      harness: {
+        memoryLimit: {
+          swapMaxGB: 2,
+        },
+      },
+    }, () => {
+      const tmpDir = fs.readdirSync(os.tmpdir()).find(d => d.startsWith('spawn-test-'));
+      if (tmpDir) {
+        const cfg = getMemoryLimitConfig(path.join(os.tmpdir(), tmpDir));
+        expect(cfg.swapMaxGB).toBe(2);
+      }
+    });
+  });
 });
 
 // ─── 7. execSyncWithMemoryLimit 测试 ───
 
 describe('execSyncWithMemoryLimit', () => {
-  test('includes MemorySwapMax=0 on Linux with cgroup v2', () => {
+  test('includes MemorySwapMax=0 on Linux with cgroup v2 by default', () => {
     if (os.platform() !== 'linux' || !hasCgroupV2Support()) {
       return;
     }
@@ -198,6 +218,22 @@ describe('execSyncWithMemoryLimit', () => {
       // 内存压力不足时应该 throw Error
       expect(err).toBeInstanceOf(Error);
     }
+  });
+
+  test('uses config swapMaxGB when set', () => {
+    withTempConfig({
+      harness: {
+        memoryLimit: {
+          swapMaxGB: 4,
+        },
+      },
+    }, () => {
+      const tmpDir = fs.readdirSync(os.tmpdir()).find(d => d.startsWith('spawn-test-'));
+      if (tmpDir) {
+        const cfg = getMemoryLimitConfig(path.join(os.tmpdir(), tmpDir));
+        expect(cfg.swapMaxGB).toBe(4);
+      }
+    });
   });
 });
 
