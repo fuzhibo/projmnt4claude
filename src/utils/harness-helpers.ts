@@ -166,6 +166,10 @@ export async function runHeadlessClaude(options: HeadlessClaudeOptions): Promise
     }
     if (options.resumeSession) {
       args.push('--resume');
+      // --session-id + --resume 组合需要 --fork-session
+      if (options.sessionId) {
+        args.push('--fork-session');
+      }
     }
     if (options.forkSession) {
       args.push('--fork-session');
