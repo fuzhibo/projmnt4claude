@@ -37,6 +37,7 @@ import { qaVerdictResultMarker, qaVerdictHasReason } from './validation-rules/ve
 import { loadPromptTemplate, resolveTemplate, loadCustomRequirements } from './prompt-templates.js';
 import { t, getI18n } from '../i18n/index.js';
 import type { HarnessPhaseOptions } from '../types/config.js';
+import { randomUUID } from 'crypto';
 import { verifyQAAcceptanceCriteria, QAAcceptanceResult, ACCEPTANCE_LEVEL_DESCRIPTIONS, type AcceptanceLevel } from '../types/qa-acceptance-criteria.js';
 import { QAAcceptanceCriteriaVerifier, createQAAcceptanceCriteriaVerifier } from './qa-acceptance-criteria-verifier.js';
 import { spawnWithMemoryLimit } from './spawn-utils.js';
@@ -763,12 +764,17 @@ export class HarnessQATester {
     const agent = getAgent(this.config.cwd);
     const effectiveTools = buildEffectiveTools('qaVerification', this.config.cwd, task);
     const phaseOptions = this.config.perPhaseOptions?.['qaVerification'];
+
+    // 生成阶段级 session ID，用于阶段内重试时的上下文连续性
+    const sessionId = `qa-${task.id}-${Date.now()}-${randomUUID().slice(0, 8)}`;
+
     const invokeOptions = {
       allowedTools: effectiveTools.tools,
       timeout: Math.floor(this.config.timeout / REVIEW_TIMEOUT_RATIO),
       cwd: this.config.cwd,
       outputFormat: 'text',
       dangerouslySkipPermissions: effectiveTools.skipPermissions,
+      sessionId,
       bare: phaseOptions?.bare,
       noSessionPersistence: phaseOptions?.noSessionPersistence,
       mcpConfig: phaseOptions?.mcpConfig,

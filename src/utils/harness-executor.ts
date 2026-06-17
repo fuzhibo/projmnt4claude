@@ -32,6 +32,7 @@ import { checkCompletedCheckpoints as checkCompletedCheckpointsWithVerification 
 import { t, getI18n } from '../i18n/index.js';
 import { sleep } from './harness-helpers.js';
 import type { HarnessPhaseOptions } from '../types/config.js';
+import { randomUUID } from 'crypto';
 
 export class HarnessExecutor {
   private config: HarnessConfig;
@@ -80,12 +81,17 @@ export class HarnessExecutor {
       const agent = getAgent(this.config.cwd);
       const effectiveTools = buildEffectiveTools('development', this.config.cwd, task);
       const phaseOptions = this.config.perPhaseOptions?.['development'];
+
+      // 生成阶段级 session ID，用于阶段内重试时的上下文连续性
+      const sessionId = `dev-${task.id}-${Date.now()}-${randomUUID().slice(0, 8)}`;
+
       const invokeOptions = {
         timeout: effectiveTimeout,
         allowedTools: effectiveTools.tools,
         outputFormat: 'text' as const,
         cwd: this.config.cwd,
         dangerouslySkipPermissions: effectiveTools.skipPermissions,
+        sessionId,
         bare: phaseOptions?.bare,
         noSessionPersistence: phaseOptions?.noSessionPersistence,
         mcpConfig: phaseOptions?.mcpConfig,

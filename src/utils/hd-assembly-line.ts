@@ -15,6 +15,7 @@
 import * as path from 'path';
 import * as fs from 'fs';
 import { execSync } from 'child_process';
+import { randomUUID } from 'crypto';
 import type {
   HarnessConfig,
   HarnessRuntimeState,
@@ -100,7 +101,8 @@ export class AssemblyLine {
 
   constructor(config: HarnessConfig, sessionId?: string) {
     this.config = config;
-    this.sessionId = sessionId;
+    // 为每个阶段生成独立的 session ID，实现阶段内 session 连续性
+    this.sessionId = sessionId || `harness-${Date.now()}-${randomUUID().slice(0, 8)}`;
 
     this.taskRetryContexts = new Map();
     this.executor = new HarnessExecutor(config);
@@ -108,7 +110,7 @@ export class AssemblyLine {
     this.qaTester = new HarnessQATester(config);
     this.evaluator = new HarnessEvaluator(config);
     this.retryHandler = new RetryHandler(config);
-    this.statusReporter = new HarnessStatusReporter(config.cwd, sessionId);
+    this.statusReporter = new HarnessStatusReporter(config.cwd, this.sessionId);
     this.preValidator = new HarnessPreValidator(config.cwd);
   }
 

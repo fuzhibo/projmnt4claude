@@ -30,6 +30,7 @@ import { loadPromptTemplate, resolveTemplate, loadCustomRequirements } from './p
 import { getLatestSnapshot } from './harness-snapshot.js';
 import { t, getI18n } from '../i18n/index.js';
 import type { HarnessPhaseOptions } from '../types/config.js';
+import { randomUUID } from 'crypto';
 
 export class HarnessEvaluator {
   private config: HarnessConfig;
@@ -120,12 +121,17 @@ export class HarnessEvaluator {
       const agent = getAgent(this.config.cwd);
       const effectiveTools = buildEffectiveTools('evaluation', this.config.cwd, task);
       const phaseOptions = this.config.perPhaseOptions?.['evaluation'];
+
+      // 生成阶段级 session ID，用于阶段内重试时的上下文连续性
+      const sessionId = `eval-${task.id}-${Date.now()}-${randomUUID().slice(0, 8)}`;
+
       const invokeOptions = {
         allowedTools: effectiveTools.tools,
         timeout: Math.floor(this.config.timeout / 2), // 审查时间较短
         outputFormat: 'text',
         cwd: this.config.cwd,
         dangerouslySkipPermissions: effectiveTools.skipPermissions,
+        sessionId,
         bare: phaseOptions?.bare,
         noSessionPersistence: phaseOptions?.noSessionPersistence,
         mcpConfig: phaseOptions?.mcpConfig,

@@ -18,6 +18,8 @@ import type { AgentResult } from './headless-agent.js';
 import type { Language } from '../i18n/index.js';
 import { getI18n } from '../i18n/index.js';
 import { Logger } from './logger.js';
+import { randomUUID } from 'crypto';
+import { randomUUID } from 'crypto';
 
 const logger = new Logger({ component: 'feedback-constraint-engine' });
 
@@ -362,9 +364,10 @@ export class FeedbackConstraintEngineImpl implements FeedbackConstraintEngine {
     let currentPrompt = prompt;
     let lastResult: AgentResult;
 
-    // 重试时不使用 session 连续性（--session-id 需要 --resume，
-    // 但首次调用无法创建具名 session），改为在重试 prompt 中包含完整上下文
-    let currentOptions = { ...options };
+    // 生成 session ID 用于重试时的上下文连续性
+    // --session-id 首次调用时就创建具名 session，不需要先存在
+    const sessionId = options.sessionId || `fce-${Date.now()}-${randomUUID().slice(0, 8)}`;
+    let currentOptions = { ...options, sessionId };
 
     // eslint-disable-next-line no-constant-condition
     while (true) {
@@ -387,7 +390,8 @@ export class FeedbackConstraintEngineImpl implements FeedbackConstraintEngine {
           retries: this.retryCount,
           passed: true,
           sessionContinuity: {
-            used: false,
+            used: this.retryCount > 0,
+            sessionId,
           },
         };
       }
@@ -404,7 +408,8 @@ export class FeedbackConstraintEngineImpl implements FeedbackConstraintEngine {
           retries: this.retryCount,
           passed: !hasErrors,
           sessionContinuity: {
-            used: false,
+            used: this.retryCount > 0,
+            sessionId,
           },
         };
       }
@@ -412,10 +417,15 @@ export class FeedbackConstraintEngineImpl implements FeedbackConstraintEngine {
       // 生成反馈并准备重试
       this.retryCount++;
 
-      // 使用完整反馈模板（包含原始输出），不依赖 session 连续性
+      // 使用完整反馈模板（包含原始输出），同时启用 session 连续性
       currentPrompt = this.buildFeedback(violations, output);
 
-      currentOptions = { ...options };
+      // 重试时恢复同一 session
+      currentOptions = {
+        ...options,
+        sessionId,
+        resumeSession: true,
+      };
 
       logger.debug(
         `[FeedbackConstraintEngine] 准备第 ${this.retryCount} 次重试，违规项: ${violations.map((v) => v.ruleId).join(', ')}`,
