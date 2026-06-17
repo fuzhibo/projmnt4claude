@@ -13509,6 +13509,42 @@ async function runHeadlessClaude(options) {
     if (options.forkSession) {
       args.push("--fork-session");
     }
+    if (options.bare) {
+      args.push("--bare");
+    }
+    if (options.noSessionPersistence) {
+      args.push("--no-session-persistence");
+    }
+    if (options.mcpConfig && options.mcpConfig.length > 0) {
+      for (const config of options.mcpConfig) {
+        args.push("--mcp-config", config);
+      }
+    }
+    if (options.strictMcpConfig) {
+      args.push("--strict-mcp-config");
+    }
+    if (options.pluginDir && options.pluginDir.length > 0) {
+      for (const dir of options.pluginDir) {
+        args.push("--plugin-dir", dir);
+      }
+    }
+    if (options.pluginUrl && options.pluginUrl.length > 0) {
+      for (const url of options.pluginUrl) {
+        args.push("--plugin-url", url);
+      }
+    }
+    if (options.disableSlashCommands) {
+      args.push("--disable-slash-commands");
+    }
+    if (options.effort) {
+      args.push("--effort", options.effort);
+    }
+    if (options.maxBudgetUsd) {
+      args.push("--max-budget-usd", String(options.maxBudgetUsd));
+    }
+    if (options.debug) {
+      args.push("--debug");
+    }
     try {
       const child = spawnWithMemoryLimit("claude", args, {
         cwd: options.cwd,
@@ -13755,6 +13791,42 @@ function translateOptionsToCliArgs(options) {
   if (options.forkSession) {
     args.push("--fork-session");
   }
+  if (options.bare) {
+    args.push("--bare");
+  }
+  if (options.noSessionPersistence) {
+    args.push("--no-session-persistence");
+  }
+  if (options.mcpConfig && options.mcpConfig.length > 0) {
+    for (const config of options.mcpConfig) {
+      args.push("--mcp-config", config);
+    }
+  }
+  if (options.strictMcpConfig) {
+    args.push("--strict-mcp-config");
+  }
+  if (options.pluginDir && options.pluginDir.length > 0) {
+    for (const dir of options.pluginDir) {
+      args.push("--plugin-dir", dir);
+    }
+  }
+  if (options.pluginUrl && options.pluginUrl.length > 0) {
+    for (const url of options.pluginUrl) {
+      args.push("--plugin-url", url);
+    }
+  }
+  if (options.disableSlashCommands) {
+    args.push("--disable-slash-commands");
+  }
+  if (options.effort) {
+    args.push("--effort", options.effort);
+  }
+  if (options.maxBudgetUsd) {
+    args.push("--max-budget-usd", String(options.maxBudgetUsd));
+  }
+  if (options.debug) {
+    args.push("--debug");
+  }
   return args;
 }
 function buildEffectiveTools(phase, cwd, task) {
@@ -13847,7 +13919,17 @@ class ClaudeCodeProvider {
       outputFormat: options.outputFormat === "json" ? "json" : undefined,
       sessionId: options.sessionId,
       resumeSession: options.resumeSession,
-      forkSession: options.forkSession
+      forkSession: options.forkSession,
+      bare: options.bare,
+      noSessionPersistence: options.noSessionPersistence,
+      mcpConfig: options.mcpConfig,
+      strictMcpConfig: options.strictMcpConfig,
+      pluginDir: options.pluginDir,
+      pluginUrl: options.pluginUrl,
+      disableSlashCommands: options.disableSlashCommands,
+      effort: options.effort,
+      maxBudgetUsd: options.maxBudgetUsd,
+      debug: options.debug
     };
     const result = await runHeadlessClaude(claudeOptions);
     const durationMs = Date.now() - startTime;
@@ -34588,19 +34670,20 @@ function parseRootCauseAnalysis(md) {
   const sectionMd = extractSection(md, "原因分析", "Root Cause Analysis");
   if (!sectionMd)
     return items;
+  const matches = [];
   const re = /### (CA-\d+): (.+)/g;
   let match;
   while ((match = re.exec(sectionMd)) !== null) {
-    const id = match[1];
-    const title = match[2].trim();
-    const descStart = match.index + match[0].length;
-    const nextMatch = re.exec(sectionMd);
-    const descEnd = nextMatch ? nextMatch.index : sectionMd.length;
-    re.lastIndex = nextMatch ? nextMatch.index : re.lastIndex;
+    matches.push(match);
+  }
+  for (let i = 0;i < matches.length; i++) {
+    const m = matches[i];
+    const id = m[1];
+    const title = m[2].trim();
+    const descStart = m.index + m[0].length;
+    const descEnd = i < matches.length - 1 ? matches[i + 1].index : sectionMd.length;
     const description = sectionMd.slice(descStart, descEnd).trim();
     items.push({ id, title, description });
-    if (nextMatch)
-      re.lastIndex = nextMatch.index;
   }
   return items;
 }
@@ -34609,15 +34692,18 @@ function parseSolutions(md) {
   const sectionMd = extractSection(md, "解决方案", "Solutions");
   if (!sectionMd)
     return items;
+  const matches = [];
   const re = /### (SOL-\d+): (.+)/g;
   let match;
   while ((match = re.exec(sectionMd)) !== null) {
-    const id = match[1];
-    const title = match[2].trim();
-    const descStart = match.index + match[0].length;
-    const nextMatch = re.exec(sectionMd);
-    const descEnd = nextMatch ? nextMatch.index : sectionMd.length;
-    re.lastIndex = nextMatch ? nextMatch.index : re.lastIndex;
+    matches.push(match);
+  }
+  for (let i = 0;i < matches.length; i++) {
+    const m = matches[i];
+    const id = m[1];
+    const title = m[2].trim();
+    const descStart = m.index + m[0].length;
+    const descEnd = i < matches.length - 1 ? matches[i + 1].index : sectionMd.length;
     const body = sectionMd.slice(descStart, descEnd).trim();
     const correspondsTo = extractInlineField(body, "对应原因", "Corresponds To") || "";
     const filesRaw = extractInlineField(body, "涉及文件", "Files") || "";
@@ -34627,14 +34713,12 @@ function parseSolutions(md) {
 `).filter((l) => !l.startsWith("- ")).join(`
 `).trim();
     items.push({ id, title, correspondsTo, description, files, expectedChanges });
-    if (nextMatch)
-      re.lastIndex = nextMatch.index;
   }
   return items;
 }
 function parseCheckpoints2(md) {
   const items = [];
-  const sectionMd = extractSection(md, "检查点", "Checkpoints");
+  const sectionMd = extractSection(md, "检查点覆盖清单", "Checkpoint Checklist");
   if (!sectionMd)
     return items;
   const validPrefixes = new Set(["verify", "test", "review", "implem", "doc"]);
@@ -34664,7 +34748,7 @@ function parseAssessment(md) {
   };
 }
 function extractSection(md, zhTitle, enTitle) {
-  const re = new RegExp(`^## (?:${escapeRegex(zhTitle)}|${escapeRegex(enTitle)})\\s*\\n([\\s\\S]*?)(?=^## |$)`, "m");
+  const re = new RegExp(`^## (?:${escapeRegex(zhTitle)}|${escapeRegex(enTitle)})\\s*\\n([\\s\\S]*?)(?=^## |\\n## |\\n# |(?![\\s\\S]))`, "m");
   const m = md.match(re);
   return m ? m[1] : null;
 }
@@ -37109,6 +37193,7 @@ import * as path38 from "path";
 import * as path37 from "path";
 import * as fs41 from "fs";
 import { execSync as execSync4 } from "child_process";
+import { randomUUID as randomUUID6 } from "crypto";
 
 // src/utils/harness-prevalidation.ts
 init_task();
@@ -37350,6 +37435,7 @@ init_headless_agent();
 // src/utils/feedback-constraint-engine.ts
 init_i18n();
 init_logger();
+import { randomUUID } from "crypto";
 var logger = new Logger({ component: "feedback-constraint-engine" });
 var jsonParseableRule = {
   id: "json-parseable",
@@ -37543,7 +37629,8 @@ class FeedbackConstraintEngineImpl {
     this.retryCount = 0;
     let currentPrompt = prompt;
     let lastResult;
-    let currentOptions = { ...options };
+    const sessionId = options.sessionId || `fce-${Date.now()}-${randomUUID().slice(0, 8)}`;
+    let currentOptions = { ...options, sessionId };
     while (true) {
       lastResult = await invokeFn(currentPrompt, currentOptions);
       const output = lastResult.output;
@@ -37556,7 +37643,8 @@ class FeedbackConstraintEngineImpl {
           retries: this.retryCount,
           passed: true,
           sessionContinuity: {
-            used: false
+            used: this.retryCount > 0,
+            sessionId
           }
         };
       }
@@ -37569,13 +37657,18 @@ class FeedbackConstraintEngineImpl {
           retries: this.retryCount,
           passed: !hasErrors,
           sessionContinuity: {
-            used: false
+            used: this.retryCount > 0,
+            sessionId
           }
         };
       }
       this.retryCount++;
       currentPrompt = this.buildFeedback(violations, output);
-      currentOptions = { ...options };
+      currentOptions = {
+        ...options,
+        sessionId,
+        resumeSession: true
+      };
       logger.debug(`[FeedbackConstraintEngine] 准备第 ${this.retryCount} 次重试，违规项: ${violations.map((v) => v.ruleId).join(", ")}`);
     }
   }
@@ -37604,6 +37697,7 @@ function createSessionAwareEngine(outputType = "json", rules = [], maxRetriesOnE
 init_prompt_templates();
 init_checkpoint_verification();
 init_i18n();
+import { randomUUID as randomUUID2 } from "crypto";
 
 class HarnessExecutor {
   config;
@@ -37637,12 +37731,25 @@ class HarnessExecutor {
    \uD83E\uDD16 ${texts.harness.logs.startingHeadlessClaude}`);
       const agent = getAgent(this.config.cwd);
       const effectiveTools = buildEffectiveTools("development", this.config.cwd, task);
+      const phaseOptions = this.config.perPhaseOptions?.["development"];
+      const sessionId = `dev-${task.id}-${Date.now()}-${randomUUID2().slice(0, 8)}`;
       const invokeOptions = {
         timeout: effectiveTimeout,
         allowedTools: effectiveTools.tools,
         outputFormat: "text",
         cwd: this.config.cwd,
-        dangerouslySkipPermissions: effectiveTools.skipPermissions
+        dangerouslySkipPermissions: effectiveTools.skipPermissions,
+        sessionId,
+        bare: phaseOptions?.bare,
+        noSessionPersistence: phaseOptions?.noSessionPersistence,
+        mcpConfig: phaseOptions?.mcpConfig,
+        strictMcpConfig: phaseOptions?.strictMcpConfig,
+        pluginDir: phaseOptions?.pluginDir,
+        pluginUrl: phaseOptions?.pluginUrl,
+        disableSlashCommands: phaseOptions?.disableSlashCommands,
+        effort: phaseOptions?.effort,
+        maxBudgetUsd: phaseOptions?.maxBudgetUsd,
+        debug: phaseOptions?.debug
       };
       const engine = createSessionAwareEngine("markdown", [], 1);
       const engineResult = await engine.runWithFeedback(agent.invoke.bind(agent), prompt, invokeOptions);
@@ -38200,6 +38307,7 @@ var qaVerdictHasReason = {
 // src/utils/harness-code-reviewer.ts
 init_prompt_templates();
 init_i18n();
+import { randomUUID as randomUUID3 } from "crypto";
 
 class HarnessCodeReviewer {
   config;
@@ -38288,12 +38396,25 @@ class HarnessCodeReviewer {
    \uD83E\uDD16 ${texts.harness.logs.startingCodeReviewSession}`);
     const agent = getAgent(this.config.cwd);
     const effectiveTools = buildEffectiveTools("codeReview", this.config.cwd, task);
+    const phaseOptions = this.config.perPhaseOptions?.["codeReview"];
+    const sessionId = `cr-${task.id}-${Date.now()}-${randomUUID3().slice(0, 8)}`;
     const invokeOptions = {
       allowedTools: effectiveTools.tools,
       timeout: Math.floor(this.config.timeout / REVIEW_TIMEOUT_RATIO),
       cwd: this.config.cwd,
       outputFormat: "text",
-      dangerouslySkipPermissions: effectiveTools.skipPermissions
+      dangerouslySkipPermissions: effectiveTools.skipPermissions,
+      sessionId,
+      bare: phaseOptions?.bare,
+      noSessionPersistence: phaseOptions?.noSessionPersistence,
+      mcpConfig: phaseOptions?.mcpConfig,
+      strictMcpConfig: phaseOptions?.strictMcpConfig,
+      pluginDir: phaseOptions?.pluginDir,
+      pluginUrl: phaseOptions?.pluginUrl,
+      disableSlashCommands: phaseOptions?.disableSlashCommands,
+      effort: phaseOptions?.effort,
+      maxBudgetUsd: phaseOptions?.maxBudgetUsd,
+      debug: phaseOptions?.debug
     };
     const engine = createSessionAwareEngine("markdown", [verdictResultMarker, verdictHasReason], 1);
     const engineResult = await engine.runWithFeedback(agent.invoke.bind(agent), prompt, invokeOptions);
@@ -38434,6 +38555,7 @@ init_checkpoint();
 init_contradiction_detector();
 init_prompt_templates();
 init_i18n();
+import { randomUUID as randomUUID4 } from "crypto";
 
 // src/types/qa-acceptance-criteria.ts
 var DEFAULT_PARSER_CONFIG = {
@@ -39646,12 +39768,25 @@ ${truncated}`];
    \uD83E\uDD16 ${texts.harness.logs.startingQASession}`);
     const agent = getAgent(this.config.cwd);
     const effectiveTools = buildEffectiveTools("qaVerification", this.config.cwd, task);
+    const phaseOptions = this.config.perPhaseOptions?.["qaVerification"];
+    const sessionId = `qa-${task.id}-${Date.now()}-${randomUUID4().slice(0, 8)}`;
     const invokeOptions = {
       allowedTools: effectiveTools.tools,
       timeout: Math.floor(this.config.timeout / REVIEW_TIMEOUT_RATIO),
       cwd: this.config.cwd,
       outputFormat: "text",
-      dangerouslySkipPermissions: effectiveTools.skipPermissions
+      dangerouslySkipPermissions: effectiveTools.skipPermissions,
+      sessionId,
+      bare: phaseOptions?.bare,
+      noSessionPersistence: phaseOptions?.noSessionPersistence,
+      mcpConfig: phaseOptions?.mcpConfig,
+      strictMcpConfig: phaseOptions?.strictMcpConfig,
+      pluginDir: phaseOptions?.pluginDir,
+      pluginUrl: phaseOptions?.pluginUrl,
+      disableSlashCommands: phaseOptions?.disableSlashCommands,
+      effort: phaseOptions?.effort,
+      maxBudgetUsd: phaseOptions?.maxBudgetUsd,
+      debug: phaseOptions?.debug
     };
     const rawResult = await agent.invoke(prompt, invokeOptions);
     if (!rawResult.success) {
@@ -40119,6 +40254,7 @@ import * as fs35 from "fs";
 import * as path31 from "path";
 init_prompt_templates();
 init_i18n();
+import { randomUUID as randomUUID5 } from "crypto";
 
 class HarnessEvaluator {
   config;
@@ -40180,12 +40316,25 @@ class HarnessEvaluator {
    \uD83D\uDCDD ${texts.harness.logs.evalPromptGenerated}`);
       const agent = getAgent(this.config.cwd);
       const effectiveTools = buildEffectiveTools("evaluation", this.config.cwd, task);
+      const phaseOptions = this.config.perPhaseOptions?.["evaluation"];
+      const sessionId = `eval-${task.id}-${Date.now()}-${randomUUID5().slice(0, 8)}`;
       const invokeOptions = {
         allowedTools: effectiveTools.tools,
         timeout: Math.floor(this.config.timeout / 2),
         outputFormat: "text",
         cwd: this.config.cwd,
-        dangerouslySkipPermissions: effectiveTools.skipPermissions
+        dangerouslySkipPermissions: effectiveTools.skipPermissions,
+        sessionId,
+        bare: phaseOptions?.bare,
+        noSessionPersistence: phaseOptions?.noSessionPersistence,
+        mcpConfig: phaseOptions?.mcpConfig,
+        strictMcpConfig: phaseOptions?.strictMcpConfig,
+        pluginDir: phaseOptions?.pluginDir,
+        pluginUrl: phaseOptions?.pluginUrl,
+        disableSlashCommands: phaseOptions?.disableSlashCommands,
+        effort: phaseOptions?.effort,
+        maxBudgetUsd: phaseOptions?.maxBudgetUsd,
+        debug: phaseOptions?.debug
       };
       console.log(`
    \uD83D\uDD0D ${texts.harness.logs.startingEvalSession}`);
@@ -43329,14 +43478,14 @@ class AssemblyLine {
   executionRecords = new Map;
   constructor(config, sessionId) {
     this.config = config;
-    this.sessionId = sessionId;
+    this.sessionId = sessionId || `harness-${Date.now()}-${randomUUID6().slice(0, 8)}`;
     this.taskRetryContexts = new Map;
     this.executor = new HarnessExecutor(config);
     this.codeReviewer = new HarnessCodeReviewer(config);
     this.qaTester = new HarnessQATester(config);
     this.evaluator = new HarnessEvaluator(config);
     this.retryHandler = new RetryHandler(config);
-    this.statusReporter = new HarnessStatusReporter(config.cwd, sessionId);
+    this.statusReporter = new HarnessStatusReporter(config.cwd, this.sessionId);
     this.preValidator = new HarnessPreValidator(config.cwd);
   }
   async run(state) {

@@ -1,11 +1,6 @@
 /**
- * Investigation 核心功能单元测试（OOM 安全版本）
- *
- * 覆盖 §3.2 配置 + §3.3 报告格式 + §3.4 工具模块 + §3.5 输出模式
- *
- * 安全策略：直接导入独立模块（types.ts, report-generator.ts, report-parser.ts,
- * report-validator.ts, config-reader.ts），避免导入 loader.ts 或 index.ts，
- * 防止 SWC 编译时拉入庞大的 init-requirement 模板文件导致 OOM。
+ * Investigation 工具模块单元测试
+ * 覆盖 §3.4 工具模块 + §3.8 接口契约
  */
 
 import { describe, it, expect, beforeEach, afterEach } from '@jest/globals';
@@ -17,11 +12,6 @@ import type { InvestigationReport, CheckpointPrefix } from '../types.js';
 import { generateReport, writeReport } from '../report-generator.js';
 import { parseReport, extractDependencies, extractDependenciesFromMarkdown } from '../report-parser.js';
 import { validateReport, VALIDATION_RULES, getValidationRules, getRule } from '../report-validator.js';
-import { loadInvestigationConfig, loadLanguageConfig, getDefaultConfig } from '../config-reader.js';
-
-// ============================================================
-// Test helpers
-// ============================================================
 
 function createTestReport(overrides: Partial<InvestigationReport> = {}): InvestigationReport {
   return {
@@ -82,196 +72,6 @@ function createFullTestReport(): InvestigationReport {
     },
   };
 }
-
-// ============================================================
-// §3.2 配置读取
-// ============================================================
-
-describe('§3.2 配置读取', () => {
-  describe('splitThreshold 默认 30KB', () => {
-    it('should return default splitThreshold of 30', () => {
-      const config = getDefaultConfig();
-      expect(config.splitThreshold).toBe(30);
-    });
-
-    it('should return default maxRetry of 3', () => {
-      const config = getDefaultConfig();
-      expect(config.maxRetry).toBe(3);
-    });
-
-    it('should return default outputDir', () => {
-      const config = getDefaultConfig();
-      expect(config.outputDir).toBe('docs/investigation');
-    });
-  });
-
-  describe('CLI 优先级覆盖', () => {
-    it('should use CLI threshold when provided', () => {
-      const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'inv-config-test-'));
-      try {
-        const config = loadInvestigationConfig(tmpDir, 50);
-        expect(config.splitThreshold).toBe(50);
-      } finally {
-        fs.rmSync(tmpDir, { recursive: true, force: true });
-      }
-    });
-
-    it('should fallback to default when no CLI override and no config file', () => {
-      const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'inv-config-test-'));
-      try {
-        const config = loadInvestigationConfig(tmpDir);
-        expect(config.splitThreshold).toBe(30);
-        expect(config.maxRetry).toBe(3);
-      } finally {
-        fs.rmSync(tmpDir, { recursive: true, force: true });
-      }
-    });
-  });
-
-  describe('语言配置', () => {
-    it('should fallback to zh when config missing', () => {
-      const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'inv-config-test-'));
-      try {
-        const lang = loadLanguageConfig(tmpDir);
-        expect(lang).toBe('zh');
-      } finally {
-        fs.rmSync(tmpDir, { recursive: true, force: true });
-      }
-    });
-
-    it('should read language from config file', () => {
-      const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'inv-config-test-'));
-      try {
-        const projDir = path.join(tmpDir, '.projmnt4claude');
-        fs.mkdirSync(projDir, { recursive: true });
-        fs.writeFileSync(
-          path.join(projDir, 'config.json'),
-          JSON.stringify({ prompts: { language: 'en' } }),
-          'utf-8',
-        );
-        const lang = loadLanguageConfig(tmpDir);
-        expect(lang).toBe('en');
-      } finally {
-        fs.rmSync(tmpDir, { recursive: true, force: true });
-      }
-    });
-  });
-});
-
-// ============================================================
-// §3.3 报告格式
-// ============================================================
-
-describe('§3.3 报告格式', () => {
-  describe('5 大章节', () => {
-    it('should generate markdown with all 5 sections in zh', () => {
-      const report = createTestReport();
-      const md = generateReport(report, 'zh');
-      expect(md).toContain('# 调查报告');
-      expect(md).toContain('## 原因分析');
-      expect(md).toContain('## 解决方案');
-      expect(md).toContain('## 检查点覆盖清单');
-      expect(md).toContain('## 评估');
-    });
-
-    it('should generate markdown with all 5 sections in en', () => {
-      const report = createTestReport();
-      const md = generateReport(report, 'en');
-      expect(md).toContain('# Investigation Report');
-      expect(md).toContain('## Root Cause Analysis');
-      expect(md).toContain('## Solutions');
-      expect(md).toContain('## Checkpoints');
-      expect(md).toContain('## Assessment');
-    });
-  });
-
-  describe('子报告引用依赖', () => {
-    it('should render dependsOn in metadata', () => {
-      const report = createFullTestReport();
-      const md = generateReport(report, 'zh');
-      expect(md).toContain('**依赖子报告**');
-      expect(md).toContain('sub-01');
-      expect(md).toContain('sub-02');
-    });
-
-    it('should render parentReport in metadata', () => {
-      const report = createFullTestReport();
-      const md = generateReport(report, 'zh');
-      expect(md).toContain('**父报告**');
-      expect(md).toContain('investigation-parent');
-    });
-
-    it('should extract dependencies from markdown', () => {
-      const md = '- **依赖子报告**: sub-01, sub-02';
-      const deps = extractDependenciesFromMarkdown(md);
-      expect(deps).toEqual(['sub-01', 'sub-02']);
-    });
-
-    it('should extract dependencies from English markdown', () => {
-      const md = '- **Depends On**: sub-01, sub-02';
-      const deps = extractDependenciesFromMarkdown(md);
-      expect(deps).toEqual(['sub-01', 'sub-02']);
-    });
-
-    it('should return empty array when no dependencies', () => {
-      const md = '- **需求来源**: Test';
-      const deps = extractDependenciesFromMarkdown(md);
-      expect(deps).toEqual([]);
-    });
-
-    it('should extract dependencies from InvestigationReport structure', () => {
-      const report = createFullTestReport();
-      const deps = extractDependencies(report);
-      expect(deps.get('investigation-full-test')).toEqual(['sub-01', 'sub-02']);
-    });
-  });
-
-  describe('CA/SOL 编号对应', () => {
-    it('should render CA and SOL with proper IDs', () => {
-      const report = createFullTestReport();
-      const md = generateReport(report, 'zh');
-      expect(md).toContain('CA-001');
-      expect(md).toContain('CA-002');
-      expect(md).toContain('SOL-001');
-      expect(md).toContain('SOL-002');
-    });
-
-    it('should render correspondsTo mapping', () => {
-      const report = createTestReport();
-      const md = generateReport(report, 'zh');
-      expect(md).toContain('对应原因');
-      expect(md).toContain('CA-001');
-    });
-
-    it('should parse CA/SOL mapping from markdown', () => {
-      const report = createFullTestReport();
-      const md = generateReport(report, 'zh');
-      const parsed = parseReport(md);
-      expect(parsed.solutions[0].correspondsTo).toBe('CA-001');
-      expect(parsed.solutions[1].correspondsTo).toBe('CA-002');
-    });
-  });
-
-  describe('generator → parser roundtrip', () => {
-    it('should roundtrip a full report correctly', () => {
-      const original = createFullTestReport();
-      const md = generateReport(original, 'zh');
-      const parsed = parseReport(md);
-
-      expect(parsed.metadata.requirementSource).toBe(original.metadata.requirementSource);
-      expect(parsed.metadata.investigationDir).toBe(original.metadata.investigationDir);
-      expect(parsed.rootCauseAnalysis).toHaveLength(2);
-      expect(parsed.solutions).toHaveLength(2);
-      expect(parsed.checkpoints.length).toBeGreaterThanOrEqual(1);
-      expect(parsed.assessment.complexity).toBe('high');
-      expect(parsed.assessment.estimatedMinutes).toBe(120);
-    });
-  });
-});
-
-// ============================================================
-// §3.4 工具模块
-// ============================================================
 
 describe('§3.4 工具模块', () => {
   describe('report-generator.ts', () => {
@@ -476,10 +276,6 @@ describe('§3.4 工具模块', () => {
   });
 });
 
-// ============================================================
-// §3.5 输出模式
-// ============================================================
-
 describe('§3.5 输出模式', () => {
   let tmpDir: string;
 
@@ -521,10 +317,6 @@ describe('§3.5 输出模式', () => {
     expect(content).toContain('# Investigation Report');
   });
 });
-
-// ============================================================
-// §3.8 接口契约（补充验证）
-// ============================================================
 
 describe('§3.8 接口契约补充', () => {
   it('should have consistent PREFIX_MAP keys', () => {

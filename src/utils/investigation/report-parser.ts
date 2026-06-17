@@ -85,18 +85,22 @@ function parseRootCauseAnalysis(md: string): RootCauseItem[] {
   const sectionMd = extractSection(md, '原因分析', 'Root Cause Analysis');
   if (!sectionMd) return items;
 
+  // Collect all matches first to avoid interfering with regex state
+  const matches: RegExpExecArray[] = [];
   const re = /### (CA-\d+): (.+)/g;
   let match: RegExpExecArray | null;
   while ((match = re.exec(sectionMd)) !== null) {
-    const id = match[1];
-    const title = match[2].trim();
-    const descStart = match.index + match[0].length;
-    const nextMatch = re.exec(sectionMd);
-    const descEnd = nextMatch ? nextMatch.index : sectionMd.length;
-    re.lastIndex = nextMatch ? nextMatch.index : re.lastIndex;
+    matches.push(match);
+  }
+
+  for (let i = 0; i < matches.length; i++) {
+    const m = matches[i];
+    const id = m[1];
+    const title = m[2].trim();
+    const descStart = m.index + m[0].length;
+    const descEnd = i < matches.length - 1 ? matches[i + 1].index : sectionMd.length;
     const description = sectionMd.slice(descStart, descEnd).trim();
     items.push({ id, title, description });
-    if (nextMatch) re.lastIndex = nextMatch.index;
   }
   return items;
 }
@@ -106,15 +110,20 @@ function parseSolutions(md: string): SolutionItem[] {
   const sectionMd = extractSection(md, '解决方案', 'Solutions');
   if (!sectionMd) return items;
 
+  // Collect all matches first to avoid interfering with regex state
+  const matches: RegExpExecArray[] = [];
   const re = /### (SOL-\d+): (.+)/g;
   let match: RegExpExecArray | null;
   while ((match = re.exec(sectionMd)) !== null) {
-    const id = match[1];
-    const title = match[2].trim();
-    const descStart = match.index + match[0].length;
-    const nextMatch = re.exec(sectionMd);
-    const descEnd = nextMatch ? nextMatch.index : sectionMd.length;
-    re.lastIndex = nextMatch ? nextMatch.index : re.lastIndex;
+    matches.push(match);
+  }
+
+  for (let i = 0; i < matches.length; i++) {
+    const m = matches[i];
+    const id = m[1];
+    const title = m[2].trim();
+    const descStart = m.index + m[0].length;
+    const descEnd = i < matches.length - 1 ? matches[i + 1].index : sectionMd.length;
     const body = sectionMd.slice(descStart, descEnd).trim();
 
     const correspondsTo = extractInlineField(body, '对应原因', 'Corresponds To') || '';
@@ -124,14 +133,13 @@ function parseSolutions(md: string): SolutionItem[] {
     const description = body.split('\n').filter(l => !l.startsWith('- ')).join('\n').trim();
 
     items.push({ id, title, correspondsTo, description, files, expectedChanges });
-    if (nextMatch) re.lastIndex = nextMatch.index;
   }
   return items;
 }
 
 function parseCheckpoints(md: string): ReportCheckpoint[] {
   const items: ReportCheckpoint[] = [];
-  const sectionMd = extractSection(md, '检查点', 'Checkpoints');
+  const sectionMd = extractSection(md, '检查点覆盖清单', 'Checkpoint Checklist');
   if (!sectionMd) return items;
 
   const validPrefixes = new Set<string>(['verify', 'test', 'review', 'implem', 'doc']);
@@ -165,7 +173,7 @@ function parseAssessment(md: string): ReportAssessment {
 // ---- 工具函数 ----
 
 function extractSection(md: string, zhTitle: string, enTitle: string): string | null {
-  const re = new RegExp(`^## (?:${escapeRegex(zhTitle)}|${escapeRegex(enTitle)})\\s*\\n([\\s\\S]*?)(?=^## |$)`, 'm');
+  const re = new RegExp(`^## (?:${escapeRegex(zhTitle)}|${escapeRegex(enTitle)})\\s*\\n([\\s\\S]*?)(?=^## |\\n## |\\n# |(?![\\s\\S]))`, 'm');
   const m = md.match(re);
   return m ? m[1] : null;
 }
