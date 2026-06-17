@@ -54,6 +54,7 @@ import { saveRuntimeState } from '../commands/harness.js';
 import { validateBasicFields, validateCheckpoints } from './quality-gate.js';
 import { DependencyGraph, executeFailureCascade } from './dependency-graph/index.js';
 import { SEPARATOR_WIDTH } from './format';
+import { sleep } from './harness-helpers.js';
 import {
   verifyAndRecordCheckpoint,
   inferCategoryFromCheckpoint,
@@ -949,7 +950,9 @@ export class AssemblyLine {
         );
 
         if (canRetry && attempt <= maxRetries) {
-          console.log(`   🔄 阶段执行失败，准备重试...`);
+          const waitSeconds = [30, 60, 120][attempt - 1] || 120;
+          console.log(`   ⏳ 阶段执行失败，等待 ${waitSeconds} 秒后重试...`);
+          await sleep(waitSeconds);
           this.incrementPhaseRetryCount(taskId, phase, state);
           state.retryCounter.set(taskId, (state.retryCounter.get(taskId) || 0) + 1);
           continue; // CP-P4-2: 阶段内重试，不入队
@@ -990,7 +993,9 @@ export class AssemblyLine {
         // CP-005: B 类门禁失败（Phase Artifact）- 回退到阶段起点重试
         // 阶段后门禁检查阶段输出质量，失败说明产出不达标，重试可能改善
         if (attempt <= maxRetries) {
-          console.log(`   🔄 B 类门禁失败，回退到阶段起点重试...`);
+          const waitSeconds = [30, 60, 120][attempt - 1] || 120;
+          console.log(`   ⏳ B 类门禁失败，等待 ${waitSeconds} 秒后回退到阶段起点重试...`);
+          await sleep(waitSeconds);
           this.incrementPhaseRetryCount(taskId, phase, state);
           state.retryCounter.set(taskId, (state.retryCounter.get(taskId) || 0) + 1);
           continue; // CP-P4-2: 阶段内重试，回退到阶段起点

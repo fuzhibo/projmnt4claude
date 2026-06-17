@@ -30,6 +30,7 @@ import { createSessionAwareEngine } from './feedback-constraint-engine.js';
 import { loadPromptTemplate, resolveTemplate, loadCustomRequirements } from './prompt-templates.js';
 import { checkCompletedCheckpoints as checkCompletedCheckpointsWithVerification } from './checkpoint-verification.js';
 import { t, getI18n } from '../i18n/index.js';
+import { sleep } from './harness-helpers.js';
 
 export class HarnessExecutor {
   private config: HarnessConfig;
