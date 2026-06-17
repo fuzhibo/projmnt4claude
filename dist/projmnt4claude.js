@@ -13555,6 +13555,9 @@ async function runHeadlessClaude(options) {
     }
   });
 }
+function sleep(seconds) {
+  return new Promise((resolve3) => setTimeout(resolve3, seconds * 1000));
+}
 function archiveReportIfExists(reportPath, cwd) {
   const testMock = globalThis.__PROJMNT4CLAUDE_TEST_MOCKS__?.archiveReportIfExists;
   if (testMock) {
@@ -42333,6 +42336,7 @@ function saveRuntimeState(state, cwd) {
 // src/utils/hd-assembly-line.ts
 init_quality_gate();
 init_dependency_graph();
+init_harness_helpers();
 init_checkpoint_verification();
 
 // src/utils/post-qa-gate/runner.ts
@@ -43892,7 +43896,9 @@ ${"━".repeat(SEPARATOR_WIDTH)}`);
         const retryCount = this.getPhaseRetryCount(taskId, phase, state);
         const { canRetry, rollbackResult } = await this.handlePhaseFailureWithRollback(taskId, phase, errorMsg, retryCount, maxRetries);
         if (canRetry && attempt <= maxRetries) {
-          console.log(`   \uD83D\uDD04 阶段执行失败，准备重试...`);
+          const waitSeconds = [30, 60, 120][attempt - 1] || 120;
+          console.log(`   ⏳ 阶段执行失败，等待 ${waitSeconds} 秒后重试...`);
+          await sleep(waitSeconds);
           this.incrementPhaseRetryCount(taskId, phase, state);
           state.retryCounter.set(taskId, (state.retryCounter.get(taskId) || 0) + 1);
           continue;
@@ -43925,7 +43931,9 @@ ${"━".repeat(SEPARATOR_WIDTH)}`);
           severity: "ERROR"
         });
         if (attempt <= maxRetries) {
-          console.log(`   \uD83D\uDD04 B 类门禁失败，回退到阶段起点重试...`);
+          const waitSeconds = [30, 60, 120][attempt - 1] || 120;
+          console.log(`   ⏳ B 类门禁失败，等待 ${waitSeconds} 秒后回退到阶段起点重试...`);
+          await sleep(waitSeconds);
           this.incrementPhaseRetryCount(taskId, phase, state);
           state.retryCounter.set(taskId, (state.retryCounter.get(taskId) || 0) + 1);
           continue;
