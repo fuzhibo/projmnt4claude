@@ -30,6 +30,7 @@ import { createSessionAwareEngine } from './feedback-constraint-engine.js';
 import { verdictResultMarker, verdictHasReason } from './validation-rules/verdict-rules.js';
 import { loadPromptTemplate, resolveTemplate, loadCustomRequirements } from './prompt-templates.js';
 import { t, getI18n } from '../i18n/index.js';
+import type { HarnessPhaseOptions } from '../types/config.js';
 
 export class HarnessCodeReviewer {
   private config: HarnessConfig;
@@ -159,12 +160,23 @@ export class HarnessCodeReviewer {
     console.log(`\n   🤖 ${texts.harness.logs.startingCodeReviewSession}`);
     const agent = getAgent(this.config.cwd);
     const effectiveTools = buildEffectiveTools('codeReview', this.config.cwd, task);
+    const phaseOptions = this.config.perPhaseOptions?.['codeReview'];
     const invokeOptions = {
       allowedTools: effectiveTools.tools,
       timeout: Math.floor(this.config.timeout / REVIEW_TIMEOUT_RATIO),
       cwd: this.config.cwd,
       outputFormat: 'text',
       dangerouslySkipPermissions: effectiveTools.skipPermissions,
+      bare: phaseOptions?.bare,
+      noSessionPersistence: phaseOptions?.noSessionPersistence,
+      mcpConfig: phaseOptions?.mcpConfig,
+      strictMcpConfig: phaseOptions?.strictMcpConfig,
+      pluginDir: phaseOptions?.pluginDir,
+      pluginUrl: phaseOptions?.pluginUrl,
+      disableSlashCommands: phaseOptions?.disableSlashCommands,
+      effort: phaseOptions?.effort,
+      maxBudgetUsd: phaseOptions?.maxBudgetUsd,
+      debug: phaseOptions?.debug,
     };
 
     const engine = createSessionAwareEngine(

@@ -36,6 +36,7 @@ import { createSessionAwareEngine } from './feedback-constraint-engine.js';
 import { qaVerdictResultMarker, qaVerdictHasReason } from './validation-rules/verdict-rules.js';
 import { loadPromptTemplate, resolveTemplate, loadCustomRequirements } from './prompt-templates.js';
 import { t, getI18n } from '../i18n/index.js';
+import type { HarnessPhaseOptions } from '../types/config.js';
 import { verifyQAAcceptanceCriteria, QAAcceptanceResult, ACCEPTANCE_LEVEL_DESCRIPTIONS, type AcceptanceLevel } from '../types/qa-acceptance-criteria.js';
 import { QAAcceptanceCriteriaVerifier, createQAAcceptanceCriteriaVerifier } from './qa-acceptance-criteria-verifier.js';
 import { spawnWithMemoryLimit } from './spawn-utils.js';
@@ -761,12 +762,23 @@ export class HarnessQATester {
     console.log(`\n   🤖 ${texts.harness.logs.startingQASession}`);
     const agent = getAgent(this.config.cwd);
     const effectiveTools = buildEffectiveTools('qaVerification', this.config.cwd, task);
+    const phaseOptions = this.config.perPhaseOptions?.['qaVerification'];
     const invokeOptions = {
       allowedTools: effectiveTools.tools,
       timeout: Math.floor(this.config.timeout / REVIEW_TIMEOUT_RATIO),
       cwd: this.config.cwd,
       outputFormat: 'text',
       dangerouslySkipPermissions: effectiveTools.skipPermissions,
+      bare: phaseOptions?.bare,
+      noSessionPersistence: phaseOptions?.noSessionPersistence,
+      mcpConfig: phaseOptions?.mcpConfig,
+      strictMcpConfig: phaseOptions?.strictMcpConfig,
+      pluginDir: phaseOptions?.pluginDir,
+      pluginUrl: phaseOptions?.pluginUrl,
+      disableSlashCommands: phaseOptions?.disableSlashCommands,
+      effort: phaseOptions?.effort,
+      maxBudgetUsd: phaseOptions?.maxBudgetUsd,
+      debug: phaseOptions?.debug,
     };
 
     // 1. 调用 AI 获取原始输出

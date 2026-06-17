@@ -29,6 +29,7 @@ import { verdictResultMarker, verdictHasReason } from './validation-rules/verdic
 import { loadPromptTemplate, resolveTemplate, loadCustomRequirements } from './prompt-templates.js';
 import { getLatestSnapshot } from './harness-snapshot.js';
 import { t, getI18n } from '../i18n/index.js';
+import type { HarnessPhaseOptions } from '../types/config.js';
 
 export class HarnessEvaluator {
   private config: HarnessConfig;
@@ -118,12 +119,23 @@ export class HarnessEvaluator {
       // 4. 运行评估会话（使用 FeedbackConstraintEngine 带格式重试，最多 2 次）
       const agent = getAgent(this.config.cwd);
       const effectiveTools = buildEffectiveTools('evaluation', this.config.cwd, task);
+      const phaseOptions = this.config.perPhaseOptions?.['evaluation'];
       const invokeOptions = {
         allowedTools: effectiveTools.tools,
         timeout: Math.floor(this.config.timeout / 2), // 审查时间较短
         outputFormat: 'text',
         cwd: this.config.cwd,
         dangerouslySkipPermissions: effectiveTools.skipPermissions,
+        bare: phaseOptions?.bare,
+        noSessionPersistence: phaseOptions?.noSessionPersistence,
+        mcpConfig: phaseOptions?.mcpConfig,
+        strictMcpConfig: phaseOptions?.strictMcpConfig,
+        pluginDir: phaseOptions?.pluginDir,
+        pluginUrl: phaseOptions?.pluginUrl,
+        disableSlashCommands: phaseOptions?.disableSlashCommands,
+        effort: phaseOptions?.effort,
+        maxBudgetUsd: phaseOptions?.maxBudgetUsd,
+        debug: phaseOptions?.debug,
       };
 
       console.log(`\n   🔍 ${texts.harness.logs.startingEvalSession}`);

@@ -31,6 +31,7 @@ import { loadPromptTemplate, resolveTemplate, loadCustomRequirements } from './p
 import { checkCompletedCheckpoints as checkCompletedCheckpointsWithVerification } from './checkpoint-verification.js';
 import { t, getI18n } from '../i18n/index.js';
 import { sleep } from './harness-helpers.js';
+import type { HarnessPhaseOptions } from '../types/config.js';
 
 export class HarnessExecutor {
   private config: HarnessConfig;
@@ -78,12 +79,23 @@ export class HarnessExecutor {
       console.log(`\n   🤖 ${texts.harness.logs.startingHeadlessClaude}`);
       const agent = getAgent(this.config.cwd);
       const effectiveTools = buildEffectiveTools('development', this.config.cwd, task);
+      const phaseOptions = this.config.perPhaseOptions?.['development'];
       const invokeOptions = {
         timeout: effectiveTimeout,
         allowedTools: effectiveTools.tools,
         outputFormat: 'text' as const,
         cwd: this.config.cwd,
         dangerouslySkipPermissions: effectiveTools.skipPermissions,
+        bare: phaseOptions?.bare,
+        noSessionPersistence: phaseOptions?.noSessionPersistence,
+        mcpConfig: phaseOptions?.mcpConfig,
+        strictMcpConfig: phaseOptions?.strictMcpConfig,
+        pluginDir: phaseOptions?.pluginDir,
+        pluginUrl: phaseOptions?.pluginUrl,
+        disableSlashCommands: phaseOptions?.disableSlashCommands,
+        effort: phaseOptions?.effort,
+        maxBudgetUsd: phaseOptions?.maxBudgetUsd,
+        debug: phaseOptions?.debug,
       };
 
       const engine = createSessionAwareEngine(

@@ -200,10 +200,36 @@ export interface HarnessMemoryLimitConfig {
   enabled?: boolean;
 }
 
+/** Harness 阶段 CLI 选项配置 */
+export interface HarnessPhaseOptions {
+  /** 最小模式：跳过 hooks, LSP, plugin sync 等 */
+  bare?: boolean;
+  /** 禁用会话持久化 */
+  noSessionPersistence?: boolean;
+  /** MCP 配置文件路径 */
+  mcpConfig?: string[];
+  /** 仅使用指定 MCP 配置 */
+  strictMcpConfig?: boolean;
+  /** 插件目录 */
+  pluginDir?: string[];
+  /** 插件 URL */
+  pluginUrl?: string[];
+  /** 禁用 skills */
+  disableSlashCommands?: boolean;
+  /** 努力程度 */
+  effort?: 'low' | 'medium' | 'high' | 'xhigh' | 'max';
+  /** API 预算上限 */
+  maxBudgetUsd?: number;
+  /** 调试模式 */
+  debug?: boolean;
+}
+
 /** Harness 配置 */
 export interface HarnessConfig {
   /** 各阶段允许的工具列表（覆盖代码默认值） */
   perPhaseTools?: HarnessToolsConfig;
+  /** 各阶段 CLI 选项配置 */
+  perPhaseOptions?: Record<string, HarnessPhaseOptions>;
   /** 测试相关配置 */
   test?: HarnessTestConfig;
   /** 子进程内存限制配置。默认 defaultGB=4, enabled=true */

@@ -52,6 +52,26 @@ export interface AgentInvokeOptions {
   forkSession?: boolean;
   /** 最大重试次数 */
   maxRetries?: number;
+  /** 最小模式：跳过 hooks, LSP, plugin sync 等（对应 --bare） */
+  bare?: boolean;
+  /** 禁用会话持久化（对应 --no-session-persistence） */
+  noSessionPersistence?: boolean;
+  /** MCP 配置文件路径（对应 --mcp-config） */
+  mcpConfig?: string[];
+  /** 仅使用指定 MCP 配置（对应 --strict-mcp-config） */
+  strictMcpConfig?: boolean;
+  /** 插件目录（对应 --plugin-dir） */
+  pluginDir?: string[];
+  /** 插件 URL（对应 --plugin-url） */
+  pluginUrl?: string[];
+  /** 禁用 skills（对应 --disable-slash-commands） */
+  disableSlashCommands?: boolean;
+  /** 努力程度（对应 --effort） */
+  effort?: 'low' | 'medium' | 'high' | 'xhigh' | 'max';
+  /** API 预算上限（对应 --max-budget-usd） */
+  maxBudgetUsd?: number;
+  /** 调试模式（对应 --debug） */
+  debug?: boolean;
 }
 
 /** Agent 调用结果 */
@@ -121,6 +141,44 @@ export function translateOptionsToCliArgs(options: AgentInvokeOptions): string[]
   }
   if (options.forkSession) {
     args.push('--fork-session');
+  }
+
+  // 新增: 资源控制相关参数
+  if (options.bare) {
+    args.push('--bare');
+  }
+  if (options.noSessionPersistence) {
+    args.push('--no-session-persistence');
+  }
+  if (options.mcpConfig && options.mcpConfig.length > 0) {
+    for (const config of options.mcpConfig) {
+      args.push('--mcp-config', config);
+    }
+  }
+  if (options.strictMcpConfig) {
+    args.push('--strict-mcp-config');
+  }
+  if (options.pluginDir && options.pluginDir.length > 0) {
+    for (const dir of options.pluginDir) {
+      args.push('--plugin-dir', dir);
+    }
+  }
+  if (options.pluginUrl && options.pluginUrl.length > 0) {
+    for (const url of options.pluginUrl) {
+      args.push('--plugin-url', url);
+    }
+  }
+  if (options.disableSlashCommands) {
+    args.push('--disable-slash-commands');
+  }
+  if (options.effort) {
+    args.push('--effort', options.effort);
+  }
+  if (options.maxBudgetUsd) {
+    args.push('--max-budget-usd', String(options.maxBudgetUsd));
+  }
+  if (options.debug) {
+    args.push('--debug');
   }
 
   return args;
@@ -296,6 +354,17 @@ export class ClaudeCodeProvider implements HeadlessAgent {
       sessionId: options.sessionId,
       resumeSession: options.resumeSession,
       forkSession: options.forkSession,
+      // 新增: 资源控制相关选项
+      bare: options.bare,
+      noSessionPersistence: options.noSessionPersistence,
+      mcpConfig: options.mcpConfig,
+      strictMcpConfig: options.strictMcpConfig,
+      pluginDir: options.pluginDir,
+      pluginUrl: options.pluginUrl,
+      disableSlashCommands: options.disableSlashCommands,
+      effort: options.effort,
+      maxBudgetUsd: options.maxBudgetUsd,
+      debug: options.debug,
     };
 
     const result = await runHeadlessClaude(claudeOptions);
