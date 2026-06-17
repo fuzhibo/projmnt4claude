@@ -13505,6 +13505,9 @@ async function runHeadlessClaude(options) {
     }
     if (options.resumeSession) {
       args.push("--resume");
+      if (options.sessionId) {
+        args.push("--fork-session");
+      }
     }
     if (options.forkSession) {
       args.push("--fork-session");
