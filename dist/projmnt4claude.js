@@ -37197,7 +37197,54 @@ import * as path39 from "path";
 import * as path38 from "path";
 import * as fs42 from "fs";
 import { execSync as execSync4 } from "child_process";
-import { randomUUID as randomUUID6 } from "crypto";
+import { randomUUID as randomUUID7 } from "crypto";
+
+// src/utils/session-id-mapper.ts
+import { randomUUID } from "crypto";
+
+class SessionIdMapper {
+  mappings = new Map;
+  generate(internalId, taskId, phase) {
+    const cliUuid = randomUUID();
+    const mapping = {
+      internalId,
+      cliUuid,
+      taskId,
+      phase,
+      createdAt: new Date().toISOString()
+    };
+    this.mappings.set(internalId, mapping);
+    this.mappings.set(cliUuid, mapping);
+    return cliUuid;
+  }
+  toCliUuid(internalId) {
+    return this.mappings.get(internalId)?.cliUuid;
+  }
+  toInternalId(cliUuid) {
+    return this.mappings.get(cliUuid)?.internalId;
+  }
+  getMapping(id) {
+    return this.mappings.get(id);
+  }
+  serialize() {
+    const seen = new Map;
+    for (const mapping of this.mappings.values()) {
+      seen.set(mapping.cliUuid, mapping);
+    }
+    return Array.from(seen.values());
+  }
+  clear() {
+    this.mappings.clear();
+  }
+  size() {
+    const seen = new Set;
+    for (const mapping of this.mappings.values()) {
+      seen.add(mapping.cliUuid);
+    }
+    return seen.size;
+  }
+}
+var sessionIdMapper = new SessionIdMapper;
 
 // src/utils/harness-prevalidation.ts
 init_task();
@@ -37439,7 +37486,7 @@ init_headless_agent();
 // src/utils/feedback-constraint-engine.ts
 init_i18n();
 init_logger();
-import { randomUUID } from "crypto";
+import { randomUUID as randomUUID2 } from "crypto";
 var logger = new Logger({ component: "feedback-constraint-engine" });
 var jsonParseableRule = {
   id: "json-parseable",
@@ -37633,7 +37680,18 @@ class FeedbackConstraintEngineImpl {
     this.retryCount = 0;
     let currentPrompt = prompt;
     let lastResult;
-    const sessionId = options.sessionId || `fce-${Date.now()}-${randomUUID().slice(0, 8)}`;
+    let internalId;
+    let sessionId;
+    if (options.sessionId) {
+      sessionId = options.sessionId;
+      internalId = sessionIdMapper.toInternalId(sessionId) || `fce-${Date.now()}-${randomUUID2().slice(0, 8)}`;
+      if (!sessionIdMapper.toInternalId(sessionId)) {
+        sessionIdMapper.generate(internalId, "unknown", "feedback");
+      }
+    } else {
+      internalId = `fce-${Date.now()}-${randomUUID2().slice(0, 8)}`;
+      sessionId = sessionIdMapper.generate(internalId, "unknown", "feedback");
+    }
     let currentOptions = { ...options, sessionId };
     while (true) {
       lastResult = await invokeFn(currentPrompt, currentOptions);
@@ -37701,7 +37759,7 @@ function createSessionAwareEngine(outputType = "json", rules = [], maxRetriesOnE
 init_prompt_templates();
 init_checkpoint_verification();
 init_i18n();
-import { randomUUID as randomUUID2 } from "crypto";
+import { randomUUID as randomUUID3 } from "crypto";
 
 // src/utils/debug-logger.ts
 import * as fs32 from "fs";
@@ -37866,7 +37924,8 @@ class HarnessExecutor {
       const agent = getAgent(this.config.cwd);
       const effectiveTools = buildEffectiveTools("development", this.config.cwd, task);
       const phaseOptions = this.config.perPhaseOptions?.["development"];
-      const sessionId = `dev-${task.id}-${Date.now()}-${randomUUID2().slice(0, 8)}`;
+      const internalId = `dev-${task.id}-${Date.now()}-${randomUUID3().slice(0, 8)}`;
+      const sessionId = sessionIdMapper.generate(internalId, task.id, "development");
       const invokeOptions = {
         timeout: effectiveTimeout,
         allowedTools: effectiveTools.tools,
@@ -38451,7 +38510,7 @@ var qaVerdictHasReason = {
 // src/utils/harness-code-reviewer.ts
 init_prompt_templates();
 init_i18n();
-import { randomUUID as randomUUID3 } from "crypto";
+import { randomUUID as randomUUID4 } from "crypto";
 class HarnessCodeReviewer {
   config;
   debugLogger;
@@ -38547,7 +38606,8 @@ class HarnessCodeReviewer {
     const agent = getAgent(this.config.cwd);
     const effectiveTools = buildEffectiveTools("codeReview", this.config.cwd, task);
     const phaseOptions = this.config.perPhaseOptions?.["codeReview"];
-    const sessionId = `cr-${task.id}-${Date.now()}-${randomUUID3().slice(0, 8)}`;
+    const internalId = `cr-${task.id}-${Date.now()}-${randomUUID4().slice(0, 8)}`;
+    const sessionId = sessionIdMapper.generate(internalId, task.id, "codeReview");
     const invokeOptions = {
       allowedTools: effectiveTools.tools,
       timeout: Math.floor(this.config.timeout / REVIEW_TIMEOUT_RATIO),
@@ -38710,7 +38770,7 @@ init_checkpoint();
 init_contradiction_detector();
 init_prompt_templates();
 init_i18n();
-import { randomUUID as randomUUID4 } from "crypto";
+import { randomUUID as randomUUID5 } from "crypto";
 
 // src/types/qa-acceptance-criteria.ts
 var DEFAULT_PARSER_CONFIG = {
@@ -39931,7 +39991,8 @@ ${truncated}`];
     const agent = getAgent(this.config.cwd);
     const effectiveTools = buildEffectiveTools("qaVerification", this.config.cwd, task);
     const phaseOptions = this.config.perPhaseOptions?.["qaVerification"];
-    const sessionId = `qa-${task.id}-${Date.now()}-${randomUUID4().slice(0, 8)}`;
+    const internalId = `qa-${task.id}-${Date.now()}-${randomUUID5().slice(0, 8)}`;
+    const sessionId = sessionIdMapper.generate(internalId, task.id, "qaVerification");
     const invokeOptions = {
       allowedTools: effectiveTools.tools,
       timeout: Math.floor(this.config.timeout / REVIEW_TIMEOUT_RATIO),
@@ -40421,7 +40482,7 @@ import * as fs36 from "fs";
 import * as path32 from "path";
 init_prompt_templates();
 init_i18n();
-import { randomUUID as randomUUID5 } from "crypto";
+import { randomUUID as randomUUID6 } from "crypto";
 class HarnessEvaluator {
   config;
   debugLogger;
@@ -40489,7 +40550,8 @@ class HarnessEvaluator {
       const agent = getAgent(this.config.cwd);
       const effectiveTools = buildEffectiveTools("evaluation", this.config.cwd, task);
       const phaseOptions = this.config.perPhaseOptions?.["evaluation"];
-      const sessionId = `eval-${task.id}-${Date.now()}-${randomUUID5().slice(0, 8)}`;
+      const internalId = `eval-${task.id}-${Date.now()}-${randomUUID6().slice(0, 8)}`;
+      const sessionId = sessionIdMapper.generate(internalId, task.id, "evaluation");
       const invokeOptions = {
         allowedTools: effectiveTools.tools,
         timeout: Math.floor(this.config.timeout / 2),
@@ -43663,7 +43725,8 @@ class AssemblyLine {
   debugLogger;
   constructor(config, sessionId) {
     this.config = config;
-    this.sessionId = sessionId || `harness-${Date.now()}-${randomUUID6().slice(0, 8)}`;
+    const internalId = sessionId || `harness-${Date.now()}-${randomUUID7().slice(0, 8)}`;
+    this.sessionId = sessionIdMapper.generate(internalId, "pipeline", "assembly-line");
     this.taskRetryContexts = new Map;
     this.executor = new HarnessExecutor(config);
     this.codeReviewer = new HarnessCodeReviewer(config);
