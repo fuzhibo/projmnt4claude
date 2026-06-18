@@ -46,6 +46,8 @@ export interface HarnessConfig {
   taskGitCommit: boolean;
   /** Skip pipeline blocking on basic field validation failure (--force-continue) */
   forceContinue: boolean;
+  /** Enable debug mode for detailed logging (--debug) */
+  debug: boolean;
 }
 
 /**
@@ -61,6 +63,7 @@ export const DEFAULT_HARNESS_CONFIG: Omit<HarnessConfig, 'cwd'> = {
   batchGitTagCommit: false,
   taskGitCommit: false,
   forceContinue: false,
+  debug: false,
 };
 
 /**

@@ -31,12 +31,18 @@ import { getLatestSnapshot } from './harness-snapshot.js';
 import { t, getI18n } from '../i18n/index.js';
 import type { HarnessPhaseOptions } from '../types/config.js';
 import { randomUUID } from 'crypto';
+import { DebugLogger } from './debug-logger.js';
 
 export class HarnessEvaluator {
   private config: HarnessConfig;
+  private debugLogger: DebugLogger;
 
   constructor(config: HarnessConfig) {
     this.config = config;
+    this.debugLogger = new DebugLogger({
+      cwd: config.cwd,
+      enabled: config.debug,
+    });
   }
 
   /**
@@ -116,6 +122,7 @@ export class HarnessEvaluator {
       // 3. 构建评估提示词
       const prompt = this.buildEvaluationPrompt(task, devReport, contract, phantomTasks, retryContext);
       console.log(`\n   📝 ${texts.harness.logs.evalPromptGenerated}`);
+      this.debugLogger.logPrompt(task.id, 'evaluation', prompt);
 
       // 4. 运行评估会话（使用 FeedbackConstraintEngine 带格式重试，最多 2 次）
       const agent = getAgent(this.config.cwd);
@@ -175,9 +182,15 @@ export class HarnessEvaluator {
         if (engineResult.result.stderr) {
           console.log(`   📝 ${texts.harness.logs.evalStderrPrefix}: ${engineResult.result.stderr.substring(0, 300)}`);
         }
+        this.debugLogger.logError(task.id, 'evaluation', new Error('Empty output from evaluation'), { stderr: engineResult.result.stderr });
         await this.saveReviewReport(task.id, verdict, devReport);
         return verdict;
       }
+
+      this.debugLogger.logAIResponse(task.id, 'evaluation', engineResult.result.output, {
+        retries: engineResult.retries,
+        success: engineResult.result.success,
+      });
 
       // 5. 解析评估结果
       let evaluation = this.parseEvaluationResult(engineResult.result.output);
@@ -220,6 +233,7 @@ export class HarnessEvaluator {
       verdict.reason = `${texts.harness.logs.evalError}: ${error instanceof Error ? error.message : String(error)}`;
       verdict.inferenceType = 'parse_failure_default';
       console.log(`\n   ❌ ${texts.harness.logs.evalError}: ${verdict.reason}`);
+      this.debugLogger.logError(task.id, 'evaluation', error instanceof Error ? error : new Error(String(error)), { verdict });
     }
 
     // 保存审查报告
@@ -562,7 +576,9 @@ export class HarnessEvaluator {
         console.log(`   📋 ${texts.harness.logs.fallbackMode}`);
       }
     } catch (error) {
-      console.log(`   ⚠️ ${texts.harness.logs.fallbackMode}: ${error instanceof Error ? error.message : String(error)}`);
+      const errorMsg = error instanceof Error ? error.message : String(error);
+      console.log(`   ⚠️ ${texts.harness.logs.fallbackMode}: ${errorMsg}`);
+      this.debugLogger.logError(currentTaskId, 'evaluation', error instanceof Error ? error : new Error(errorMsg), { method: 'detectPhantomTasks.snapshotLoad' });
     }
 
     // 3. 检查文件系统中是否存在由开发者创建的额外任务
@@ -605,7 +621,9 @@ export class HarnessEvaluator {
         console.log(`   📊 ${texts.harness.logs.snapshotStats.replace('{total}', String(allTaskIds.length)).replace('{excluded}', String(excludedCount)).replace('{checking}', String(allTaskIds.length - excludedCount - 1))}`);
       }
     } catch (error) {
-      console.log(`   ⚠️ ${texts.harness.logs.snapshotError}: ${error instanceof Error ? error.message : String(error)}`);
+      const errorMsg = error instanceof Error ? error.message : String(error);
+      console.log(`   ⚠️ ${texts.harness.logs.snapshotError}: ${errorMsg}`);
+      this.debugLogger.logError(currentTaskId, 'evaluation', error instanceof Error ? error : new Error(errorMsg), { method: 'detectPhantomTasks.fileSystemScan' });
     }
 
     // 4. 如果 Claude 输出中包含创建命令但文件系统中未检测到，也记录警告
@@ -695,7 +713,9 @@ export class HarnessEvaluator {
       }
       return validated;
     } catch (error) {
-      console.warn(`   ⚠️  ${texts.harness.logs.contractParseFailed}: ${error instanceof Error ? error.message : String(error)}`);
+      const errorMsg = error instanceof Error ? error.message : String(error);
+      console.warn(`   ⚠️  ${texts.harness.logs.contractParseFailed}: ${errorMsg}`);
+      this.debugLogger.logError(taskId, 'evaluation', error instanceof Error ? error : new Error(errorMsg), { method: 'loadContract', contractPath });
       return null;
     }
   }

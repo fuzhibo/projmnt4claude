@@ -41,6 +41,7 @@ import { randomUUID } from 'crypto';
 import { verifyQAAcceptanceCriteria, QAAcceptanceResult, ACCEPTANCE_LEVEL_DESCRIPTIONS, type AcceptanceLevel } from '../types/qa-acceptance-criteria.js';
 import { QAAcceptanceCriteriaVerifier, createQAAcceptanceCriteriaVerifier } from './qa-acceptance-criteria-verifier.js';
 import { spawnWithMemoryLimit } from './spawn-utils.js';
+import { DebugLogger } from './debug-logger.js';
 
 /**
  * 验证检查点的验证信息完整性
@@ -52,9 +53,14 @@ function checkCheckpointVerification(cp: CheckpointMetadata): { valid: boolean; 
 
 export class HarnessQATester {
   private config: HarnessConfig;
+  private debugLogger: DebugLogger;
 
   constructor(config: HarnessConfig) {
     this.config = config;
+    this.debugLogger = new DebugLogger({
+      cwd: config.cwd,
+      enabled: config.debug,
+    });
   }
 
   /**
@@ -177,6 +183,7 @@ export class HarnessQATester {
       verdict.reason = `${texts.harness.logs.qaError}: ${errorMessage}`;
       console.log(`\n   ❌ ${texts.harness.logs.qaError}: ${verdict.reason}`);
       console.error(`   [DEBUG-QA] Stack trace for QA error:\n${errorStack}`);
+      this.debugLogger.logError(task.id, 'qa', error instanceof Error ? error : new Error(errorMessage), { verdict, errorStack });
     }
 
     // 保存 QA 报告
@@ -758,6 +765,7 @@ export class HarnessQATester {
     // 构建验证提示词
     const prompt = this.buildQAPrompt(task, codeReviewVerdict, automatedCheckpoints, retryContext);
     console.log(`\n   📝 ${texts.harness.logs.qaPromptGenerated}`);
+    this.debugLogger.logPrompt(task.id, 'qa', prompt);
 
     // 运行独立验证会话
     console.log(`\n   🤖 ${texts.harness.logs.startingQASession}`);
@@ -791,6 +799,7 @@ export class HarnessQATester {
     const rawResult = await agent.invoke(prompt, invokeOptions);
 
     if (!rawResult.success) {
+      this.debugLogger.logError(task.id, 'qa', new Error(rawResult.error || 'QA session failed'), { rawResult });
       return {
         passed: false,
         reason: `${texts.harness.logs.qaSessionFailed}: ${rawResult.error || 'unknown error'}`,
@@ -801,6 +810,10 @@ export class HarnessQATester {
 
     // 2. 解析 AI 输出（不验证格式）
     const parsedResult = this.parseQAResult(rawResult.output || '');
+    this.debugLogger.logAIResponse(task.id, 'qa', rawResult.output || '', {
+      success: rawResult.success,
+      parsedResult,
+    });
 
     // 3. 构造 verdict
     const qaVerdict: QAVerdict = {

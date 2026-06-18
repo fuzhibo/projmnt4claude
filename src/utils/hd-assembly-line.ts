@@ -61,6 +61,7 @@ import {
   inferCategoryFromCheckpoint,
 } from './checkpoint-verification.js';
 import { PostQAGateRunner, createPostQAGateRunner, type PostQAGateRunResult } from './post-qa-gate/index.js';
+import { DebugLogger } from './debug-logger.js';
 
 /** 阶段类型定义 (P4: 阶段内重试) */
 type Phase = 'development' | 'code_review' | 'qa' | 'evaluation';
@@ -98,6 +99,8 @@ export class AssemblyLine {
   private taskRetryContexts: Map<string, RetryContext> = new Map();
   /** 执行记录存储（替代 state.records，避免双层状态架构） */
   private executionRecords: Map<string, TaskExecutionRecord> = new Map();
+  /** Debug 日志记录器 */
+  private debugLogger: DebugLogger;
 
   constructor(config: HarnessConfig, sessionId?: string) {
     this.config = config;
@@ -112,6 +115,10 @@ export class AssemblyLine {
     this.retryHandler = new RetryHandler(config);
     this.statusReporter = new HarnessStatusReporter(config.cwd, this.sessionId);
     this.preValidator = new HarnessPreValidator(config.cwd);
+    this.debugLogger = new DebugLogger({
+      cwd: config.cwd,
+      enabled: config.debug,
+    });
   }
 
   /**
@@ -887,11 +894,13 @@ export class AssemblyLine {
     let attempt = 0;
 
     console.log(`\n🔨 [${phase}] 开始阶段执行生命周期 (最多${maxRetries}次重试)`);
+    this.debugLogger.logPhaseTransition(taskId, 'idle', phase, `开始阶段执行生命周期，最多${maxRetries}次重试`);
 
     // CP-P4-1: 阶段内 while 循环实现重试
     while (attempt <= maxRetries) {
       attempt++;
       console.log(`\n   [${phase}] 第 ${attempt}/${maxRetries + 1} 次尝试`);
+      this.debugLogger.log(taskId, phase, `第 ${attempt}/${maxRetries + 1} 次尝试`);
 
       // 阶段前质量门禁检查
       const canProceed = await this.checkPhasePreConditions(taskId, phase, state);
@@ -916,6 +925,7 @@ export class AssemblyLine {
         // CP-005: A 类门禁失败（Task Foundation）- 中断流水线，不重试
         // 阶段前门禁检查任务数据本身有效性，失败说明任务数据有问题，重试无意义
         console.log(`   🚫 A 类门禁失败，中断流水线（任务数据有效性检查失败）`);
+        this.debugLogger.logError(taskId, phase, new Error(preGateErrorMsg), { failedAt: 'pre_phase_gate', attempt });
         return {
           success: false,
           phase,
@@ -937,6 +947,7 @@ export class AssemblyLine {
       } catch (error) {
         const errorMsg = error instanceof Error ? error.message : String(error);
         console.log(`   ❌ 阶段执行失败: ${errorMsg}`);
+        this.debugLogger.logError(taskId, phase, error instanceof Error ? error : new Error(errorMsg), { failedAt: 'phase_execution', attempt });
 
         // 存储失败原因到重试上下文
         this.storeFailureContext(taskId, phase, errorMsg, state);
@@ -992,6 +1003,8 @@ export class AssemblyLine {
           severity: 'ERROR',
         });
 
+        this.debugLogger.logError(taskId, phase, new Error(postGateErrorMsg), { failedAt: 'post_phase_gate', attempt });
+
         // CP-005: B 类门禁失败（Phase Artifact）- 回退到阶段起点重试
         // 阶段后门禁检查阶段输出质量，失败说明产出不达标，重试可能改善
         if (attempt <= maxRetries) {
@@ -1017,6 +1030,7 @@ export class AssemblyLine {
 
       // 阶段执行完成
       console.log(`   ✅ [${phase}] 阶段执行完成（第${attempt}次尝试成功）`);
+      this.debugLogger.logPhaseTransition(taskId, phase, 'completed', `第${attempt}次尝试成功`);
 
       return {
         success: true,
@@ -2267,7 +2281,7 @@ export class AssemblyLine {
       };
     }
 
-    return {
+    const retryContext: RetryContext = {
       // 保留原有字段
       previousFailureReason: stored?.previousFailureReason ?? (failureHistory.length > 0 ? failureHistory[failureHistory.length - 1]!.error : undefined),
       previousPhase: stored?.previousPhase ?? phase,
@@ -2288,6 +2302,10 @@ export class AssemblyLine {
       // CP-5: QA 覆盖率缺口上下文
       qaCoverageGapContext,
     };
+
+    this.debugLogger.logRetryContext(taskId, phase, retryContext);
+
+    return retryContext;
   }
 
   /**

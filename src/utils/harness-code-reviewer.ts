@@ -32,12 +32,18 @@ import { loadPromptTemplate, resolveTemplate, loadCustomRequirements } from './p
 import { t, getI18n } from '../i18n/index.js';
 import type { HarnessPhaseOptions } from '../types/config.js';
 import { randomUUID } from 'crypto';
+import { DebugLogger } from './debug-logger.js';
 
 export class HarnessCodeReviewer {
   private config: HarnessConfig;
+  private debugLogger: DebugLogger;
 
   constructor(config: HarnessConfig) {
     this.config = config;
+    this.debugLogger = new DebugLogger({
+      cwd: config.cwd,
+      enabled: config.debug,
+    });
   }
 
   /**
@@ -114,6 +120,7 @@ export class HarnessCodeReviewer {
       verdict.result = 'NOPASS';
       verdict.reason = `${texts.harness.logs.codeReviewError}: ${error instanceof Error ? error.message : String(error)}`;
       console.log(`\n   ❌ ${texts.harness.logs.codeReviewError}: ${verdict.reason}`);
+      this.debugLogger.logError(task.id, 'code_review', error instanceof Error ? error : new Error(String(error)), { verdict });
     }
 
     await this.saveReport(task.id, verdict);
@@ -157,6 +164,7 @@ export class HarnessCodeReviewer {
     }
     const prompt = this.buildCodeReviewPrompt(task, devReport, checkpoints, retryContext);
     console.log(`\n   📝 ${texts.harness.logs.codeReviewPromptGenerated}`);
+    this.debugLogger.logPrompt(task.id, 'code_review', prompt);
 
     console.log(`\n   🤖 ${texts.harness.logs.startingCodeReviewSession}`);
     const agent = getAgent(this.config.cwd);
@@ -201,6 +209,7 @@ export class HarnessCodeReviewer {
     }
 
     if (!engineResult.result.success) {
+      this.debugLogger.logError(task.id, 'code_review', new Error(engineResult.result.error || 'Code review session failed'), { engineResult });
       return {
         passed: false,
         reason: `${texts.harness.logs.codeReviewSessionFailed}: ${engineResult.result.error || 'unknown error'}`,
@@ -208,6 +217,11 @@ export class HarnessCodeReviewer {
         failedCheckpoints: [],
       };
     }
+
+    this.debugLogger.logAIResponse(task.id, 'code_review', engineResult.result.output || '', {
+      retries: engineResult.retries,
+      success: engineResult.result.success,
+    });
 
     return this.parseCodeReviewResult(engineResult.result.output || '');
   }

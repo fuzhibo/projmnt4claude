@@ -161,6 +161,8 @@ export interface HarnessCommandOptions {
   taskGitCommit?: boolean;
   /** 跳过基础字段验证失败时的流水线阻塞 */
   forceContinue?: boolean;
+  /** 启用调试模式，输出详细日志 (--debug) */
+  debug?: boolean;
 }
 
 /**
@@ -324,6 +326,7 @@ export async function harnessCommand(
     batchGitTagCommit: options.batchGitTagCommit ?? DEFAULT_HARNESS_CONFIG.batchGitTagCommit,
     taskGitCommit: options.taskGitCommit ?? DEFAULT_HARNESS_CONFIG.taskGitCommit,
     forceContinue: options.forceContinue ?? DEFAULT_HARNESS_CONFIG.forceContinue,
+    debug: options.debug ?? DEFAULT_HARNESS_CONFIG.debug,
     cwd,
   };
 

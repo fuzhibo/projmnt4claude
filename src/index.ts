@@ -923,6 +923,7 @@ program
   .option('--skip-quality-gate', '[Deprecated] Use --skip-harness-gate instead')
   .option('--batch-git-tag-commit', 'Auto git tag + commit after each batch completes (tag format: batch-{N}-{timestamp})')
   .option('--task-git-commit', 'Auto git commit after each task completes (commit format: feat: {taskId} - {title})')
+  .option('--debug', 'Enable debug mode: output detailed logs to .projmnt4claude/logs/debug/')
   .option('--force', 'Force cleanup all snapshots (cleanup subcommand only)')
   .option('--orphans-only', 'Clean only orphaned snapshots (cleanup subcommand only)')
   .action(async (action, options) => {
@@ -964,6 +965,7 @@ program
       skipHarnessGate: options.skipHarnessGate || options.skipQualityGate,
       batchGitTagCommit: options.batchGitTagCommit,
       taskGitCommit: options.taskGitCommit,
+      debug: options.debug,
     });
   });
 

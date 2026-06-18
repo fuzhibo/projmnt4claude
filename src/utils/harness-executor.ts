@@ -33,12 +33,18 @@ import { t, getI18n } from '../i18n/index.js';
 import { sleep } from './harness-helpers.js';
 import type { HarnessPhaseOptions } from '../types/config.js';
 import { randomUUID } from 'crypto';
+import { DebugLogger } from './debug-logger.js';
 
 export class HarnessExecutor {
   private config: HarnessConfig;
+  private debugLogger: DebugLogger;
 
   constructor(config: HarnessConfig) {
     this.config = config;
+    this.debugLogger = new DebugLogger({
+      cwd: config.cwd,
+      enabled: config.debug,
+    });
   }
 
   /**
@@ -75,6 +81,9 @@ export class HarnessExecutor {
       // 2. 构建开发提示词（注入超时信息）
       const prompt = this.buildDevPrompt(task, sprintContract, timeoutMinutes, retryContext);
       console.log(`\n   📝 ${texts.harness.logs.devPromptGenerated}`);
+
+      // [DEBUG] 记录开发阶段提示词
+      this.debugLogger.logPrompt(task.id, 'development', prompt);
 
       // 3. 执行 headless Claude（通过 FeedbackConstraintEngine 进行输出格式验证和反馈重试）
       console.log(`\n   🤖 ${texts.harness.logs.startingHeadlessClaude}`);
@@ -115,6 +124,14 @@ export class HarnessExecutor {
         invokeOptions,
       );
 
+      // [DEBUG] 记录 AI 响应
+      this.debugLogger.logAIResponse(task.id, 'development', engineResult.result.output || '', {
+        retries: engineResult.retries,
+        success: engineResult.result.success,
+        exitCode: engineResult.result.exitCode,
+        durationMs: engineResult.result.durationMs,
+      });
+
       if (engineResult.retries > 0) {
         console.log(`   🔄 ${texts.harness.logs.devOutputFormatRetry.replace('{retries}', String(engineResult.retries))}`);
       }
@@ -153,6 +170,12 @@ export class HarnessExecutor {
       report.status = 'failed';
       report.error = error instanceof Error ? error.message : String(error);
       console.log(`\n   ❌ ${texts.harness.logs.devPhaseError}: ${report.error}`);
+
+      // [DEBUG] 记录开发阶段错误
+      this.debugLogger.logError(task.id, 'development', error instanceof Error ? error : new Error(String(error)), {
+        prompt: this.buildDevPrompt(task, contract, timeoutMinutes, retryContext),
+        retryContext,
+      });
     }
 
     const endTime = new Date();
