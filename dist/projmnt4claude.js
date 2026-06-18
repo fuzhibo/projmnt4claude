@@ -19354,7 +19354,8 @@ var init_harness = __esm(() => {
     jsonOutput: false,
     batchGitTagCommit: false,
     taskGitCommit: false,
-    forceContinue: false
+    forceContinue: false,
+    debug: false
   };
   VALID_VERDICT_ACTIONS = [
     "resolve",
@@ -22399,8 +22400,8 @@ var {
 } = import__.default;
 
 // src/index.ts
-import * as fs44 from "fs";
-import * as path40 from "path";
+import * as fs45 from "fs";
+import * as path41 from "path";
 
 // src/commands/setup.ts
 init_path();
@@ -37189,12 +37190,12 @@ async function runDoctorDeep(cwd = process.cwd()) {
 init_harness();
 init_path();
 init_i18n();
-import * as fs42 from "fs";
-import * as path38 from "path";
+import * as fs43 from "fs";
+import * as path39 from "path";
 
 // src/utils/hd-assembly-line.ts
-import * as path37 from "path";
-import * as fs41 from "fs";
+import * as path38 from "path";
+import * as fs42 from "fs";
 import { execSync as execSync4 } from "child_process";
 import { randomUUID as randomUUID6 } from "crypto";
 
@@ -37379,8 +37380,8 @@ init_path();
 // src/utils/harness-executor.ts
 init_harness();
 init_path();
-import * as fs32 from "fs";
-import * as path28 from "path";
+import * as fs33 from "fs";
+import * as path29 from "path";
 
 // src/utils/role-prompts.ts
 init_i18n();
@@ -37702,10 +37703,139 @@ init_checkpoint_verification();
 init_i18n();
 import { randomUUID as randomUUID2 } from "crypto";
 
+// src/utils/debug-logger.ts
+import * as fs32 from "fs";
+import * as path28 from "path";
+
+class DebugLogger {
+  options;
+  logDir;
+  constructor(options) {
+    this.options = options;
+    this.logDir = path28.join(options.cwd, ".projmnt4claude", "logs", "debug");
+    if (options.enabled) {
+      this.ensureLogDir();
+    }
+  }
+  isEnabled() {
+    return this.options.enabled;
+  }
+  ensureLogDir() {
+    if (!fs32.existsSync(this.logDir)) {
+      fs32.mkdirSync(this.logDir, { recursive: true });
+    }
+  }
+  getTaskLogDir(taskId) {
+    const taskDir = path28.join(this.logDir, taskId);
+    if (!fs32.existsSync(taskDir)) {
+      fs32.mkdirSync(taskDir, { recursive: true });
+    }
+    return taskDir;
+  }
+  logPrompt(taskId, phase, prompt) {
+    if (!this.isEnabled())
+      return;
+    const taskDir = this.getTaskLogDir(taskId);
+    const filePath = path28.join(taskDir, `${phase}-prompt.md`);
+    const content = `# Prompt - ${phase}
+
+**Task**: ${taskId}
+**Phase**: ${phase}
+**Time**: ${new Date().toISOString()}
+**Length**: ${prompt.length} chars
+
+---
+
+${prompt}`;
+    fs32.writeFileSync(filePath, content, "utf-8");
+  }
+  logAIResponse(taskId, phase, response, metadata) {
+    if (!this.isEnabled())
+      return;
+    const taskDir = this.getTaskLogDir(taskId);
+    const filePath = path28.join(taskDir, `${phase}-ai-response.json`);
+    const data = {
+      taskId,
+      phase,
+      timestamp: new Date().toISOString(),
+      responseLength: response.length,
+      response,
+      metadata
+    };
+    fs32.writeFileSync(filePath, JSON.stringify(data, null, 2), "utf-8");
+  }
+  logPhaseTransition(taskId, fromPhase, toPhase, reason) {
+    if (!this.isEnabled())
+      return;
+    const taskDir = this.getTaskLogDir(taskId);
+    const filePath = path28.join(taskDir, "phase-transition.log");
+    const entry = `[${new Date().toISOString()}] ${fromPhase} -> ${toPhase}${reason ? ` | Reason: ${reason}` : ""}
+`;
+    fs32.appendFileSync(filePath, entry, "utf-8");
+  }
+  logRetryContext(taskId, phase, retryContext) {
+    if (!this.isEnabled())
+      return;
+    const taskDir = this.getTaskLogDir(taskId);
+    const filePath = path28.join(taskDir, `${phase}-retry-context.json`);
+    const data = {
+      taskId,
+      phase,
+      timestamp: new Date().toISOString(),
+      retryContext
+    };
+    fs32.writeFileSync(filePath, JSON.stringify(data, null, 2), "utf-8");
+  }
+  logError(taskId, phase, error, context) {
+    if (!this.isEnabled())
+      return;
+    const taskDir = this.getTaskLogDir(taskId);
+    const filePath = path28.join(taskDir, `${phase}-error.log`);
+    const content = `# Error - ${phase}
+
+**Task**: ${taskId}
+**Phase**: ${phase}
+**Time**: ${new Date().toISOString()}
+
+## Error Message
+
+${error.message}
+
+## Stack Trace
+
+\`\`\`
+${error.stack || "No stack trace"}
+\`\`\`
+
+## Context
+
+\`\`\`json
+${JSON.stringify(context || {}, null, 2)}
+\`\`\`
+`;
+    fs32.writeFileSync(filePath, content, "utf-8");
+  }
+  log(taskId, phase, message, data) {
+    if (!this.isEnabled())
+      return;
+    const taskDir = this.getTaskLogDir(taskId);
+    const filePath = path28.join(taskDir, "debug.log");
+    const entry = `[${new Date().toISOString()}] [${phase}] ${message}${data ? ` | ${JSON.stringify(data)}` : ""}
+`;
+    fs32.appendFileSync(filePath, entry, "utf-8");
+  }
+}
+
+// src/utils/harness-executor.ts
 class HarnessExecutor {
   config;
+  debugLogger;
   constructor(config) {
     this.config = config;
+    this.debugLogger = new DebugLogger({
+      cwd: config.cwd,
+      enabled: config.debug
+    });
   }
   async execute(task, contract, timeoutOverride, retryContext) {
     const startTime = new Date;
@@ -37730,6 +37860,7 @@ class HarnessExecutor {
       const prompt = this.buildDevPrompt(task, sprintContract, timeoutMinutes, retryContext);
       console.log(`
    \uD83D\uDCDD ${texts.harness.logs.devPromptGenerated}`);
+      this.debugLogger.logPrompt(task.id, "development", prompt);
       console.log(`
    \uD83E\uDD16 ${texts.harness.logs.startingHeadlessClaude}`);
       const agent = getAgent(this.config.cwd);
@@ -37756,6 +37887,12 @@ class HarnessExecutor {
       };
       const engine = createSessionAwareEngine("markdown", [], 1);
       const engineResult = await engine.runWithFeedback(agent.invoke.bind(agent), prompt, invokeOptions);
+      this.debugLogger.logAIResponse(task.id, "development", engineResult.result.output || "", {
+        retries: engineResult.retries,
+        success: engineResult.result.success,
+        exitCode: engineResult.result.exitCode,
+        durationMs: engineResult.result.durationMs
+      });
       if (engineResult.retries > 0) {
         console.log(`   \uD83D\uDD04 ${texts.harness.logs.devOutputFormatRetry.replace("{retries}", String(engineResult.retries))}`);
       }
@@ -37787,6 +37924,10 @@ class HarnessExecutor {
       report.error = error instanceof Error ? error.message : String(error);
       console.log(`
    ❌ ${texts.harness.logs.devPhaseError}: ${report.error}`);
+      this.debugLogger.logError(task.id, "development", error instanceof Error ? error : new Error(String(error)), {
+        prompt: this.buildDevPrompt(task, contract, timeoutMinutes, retryContext),
+        retryContext
+      });
     }
     const endTime = new Date;
     report.endTime = endTime.toISOString();
@@ -37796,9 +37937,9 @@ class HarnessExecutor {
   }
   async buildOrLoadContract(task) {
     const contractPath = this.getContractPath(task.id);
-    if (fs32.existsSync(contractPath)) {
+    if (fs33.existsSync(contractPath)) {
       try {
-        const content = fs32.readFileSync(contractPath, "utf-8");
+        const content = fs33.readFileSync(contractPath, "utf-8");
         return JSON.parse(content);
       } catch {}
     }
@@ -38050,14 +38191,14 @@ ${roleTemplate.extraInstructions.map((inst, i) => `${i + 1}. ${inst}`).join(`
   async collectEvidence(taskId) {
     const evidenceDir = this.getEvidenceDir(taskId);
     const evidence = [];
-    if (!fs32.existsSync(evidenceDir)) {
+    if (!fs33.existsSync(evidenceDir)) {
       return evidence;
     }
-    const files = fs32.readdirSync(evidenceDir);
+    const files = fs33.readdirSync(evidenceDir);
     for (const file of files) {
-      const filePath = path28.join(evidenceDir, file);
-      if (fs32.statSync(filePath).isFile()) {
-        evidence.push(path28.relative(this.config.cwd, filePath));
+      const filePath = path29.join(evidenceDir, file);
+      if (fs33.statSync(filePath).isFile()) {
+        evidence.push(path29.relative(this.config.cwd, filePath));
       }
     }
     return evidence;
@@ -38072,34 +38213,34 @@ ${roleTemplate.extraInstructions.map((inst, i) => `${i + 1}. ${inst}`).join(`
   }
   getContractPath(taskId) {
     const projectDir = getProjectDir(this.config.cwd);
-    return path28.join(projectDir, "tasks", taskId, "contract.json");
+    return path29.join(projectDir, "tasks", taskId, "contract.json");
   }
   saveContract(taskId, contract) {
     const contractPath = this.getContractPath(taskId);
-    const dir = path28.dirname(contractPath);
-    if (!fs32.existsSync(dir)) {
-      fs32.mkdirSync(dir, { recursive: true });
+    const dir = path29.dirname(contractPath);
+    if (!fs33.existsSync(dir)) {
+      fs33.mkdirSync(dir, { recursive: true });
     }
     contract.updatedAt = new Date().toISOString();
-    fs32.writeFileSync(contractPath, JSON.stringify(contract, null, 2), "utf-8");
+    fs33.writeFileSync(contractPath, JSON.stringify(contract, null, 2), "utf-8");
   }
   getEvidenceDir(taskId) {
     const projectDir = getProjectDir(this.config.cwd);
-    return path28.join(projectDir, "evidence", taskId);
+    return path29.join(projectDir, "evidence", taskId);
   }
   getDevReportPath(taskId) {
     const projectDir = getProjectDir(this.config.cwd);
-    return path28.join(projectDir, "reports", "harness", taskId, "dev-report.md");
+    return path29.join(projectDir, "reports", "harness", taskId, "dev-report.md");
   }
   async saveDevReport(taskId, report) {
     const reportPath = this.getDevReportPath(taskId);
-    const dir = path28.dirname(reportPath);
-    if (!fs32.existsSync(dir)) {
-      fs32.mkdirSync(dir, { recursive: true });
+    const dir = path29.dirname(reportPath);
+    if (!fs33.existsSync(dir)) {
+      fs33.mkdirSync(dir, { recursive: true });
     }
     archiveReportIfExists(reportPath);
     const content = this.formatDevReport(report);
-    fs32.writeFileSync(reportPath, content, "utf-8");
+    fs33.writeFileSync(reportPath, content, "utf-8");
   }
   formatDevReport(report) {
     let texts;
@@ -38311,11 +38452,15 @@ var qaVerdictHasReason = {
 init_prompt_templates();
 init_i18n();
 import { randomUUID as randomUUID3 } from "crypto";
-
 class HarnessCodeReviewer {
   config;
+  debugLogger;
   constructor(config) {
     this.config = config;
+    this.debugLogger = new DebugLogger({
+      cwd: config.cwd,
+      enabled: config.debug
+    });
   }
   async review(task, devReport, retryContext) {
     let texts;
@@ -38378,6 +38523,7 @@ class HarnessCodeReviewer {
       verdict.reason = `${texts.harness.logs.codeReviewError}: ${error instanceof Error ? error.message : String(error)}`;
       console.log(`
    ❌ ${texts.harness.logs.codeReviewError}: ${verdict.reason}`);
+      this.debugLogger.logError(task.id, "code_review", error instanceof Error ? error : new Error(String(error)), { verdict });
     }
     await this.saveReport(task.id, verdict);
     return verdict;
@@ -38395,6 +38541,7 @@ class HarnessCodeReviewer {
     const prompt = this.buildCodeReviewPrompt(task, devReport, checkpoints, retryContext);
     console.log(`
    \uD83D\uDCDD ${texts.harness.logs.codeReviewPromptGenerated}`);
+    this.debugLogger.logPrompt(task.id, "code_review", prompt);
     console.log(`
    \uD83E\uDD16 ${texts.harness.logs.startingCodeReviewSession}`);
     const agent = getAgent(this.config.cwd);
@@ -38425,6 +38572,7 @@ class HarnessCodeReviewer {
       console.log(`   \uD83D\uDD04 ${texts.harness.logs.codeReviewRetry.replace("{retries}", String(engineResult.retries))}`);
     }
     if (!engineResult.result.success) {
+      this.debugLogger.logError(task.id, "code_review", new Error(engineResult.result.error || "Code review session failed"), { engineResult });
       return {
         passed: false,
         reason: `${texts.harness.logs.codeReviewSessionFailed}: ${engineResult.result.error || "unknown error"}`,
@@ -38432,6 +38580,10 @@ class HarnessCodeReviewer {
         failedCheckpoints: []
       };
     }
+    this.debugLogger.logAIResponse(task.id, "code_review", engineResult.result.output || "", {
+      retries: engineResult.retries,
+      success: engineResult.result.success
+    });
     return this.parseCodeReviewResult(engineResult.result.output || "");
   }
   buildCodeReviewPrompt(task, devReport, checkpoints, retryContext) {
@@ -38552,8 +38704,8 @@ ${devReport.evidence.map((evidence) => `- ${evidence}`).join(`
 init_task();
 init_harness_helpers();
 init_headless_agent();
-import * as path30 from "path";
-import * as fs34 from "fs";
+import * as path31 from "path";
+import * as fs35 from "fs";
 init_checkpoint();
 init_contradiction_detector();
 init_prompt_templates();
@@ -38609,8 +38761,8 @@ function createDefaultQAAcceptanceResult(taskId) {
 
 // src/utils/qa-acceptance-criteria-verifier.ts
 init_spawn_utils();
-import * as fs33 from "fs";
-import * as path29 from "path";
+import * as fs34 from "fs";
+import * as path30 from "path";
 
 // src/utils/qa-acceptance-criteria-parser.ts
 class AcceptanceCriteriaParser {
@@ -39089,11 +39241,11 @@ class QAAcceptanceCriteriaVerifier {
   }
   async updateTaskCheckpoints(taskId, results) {
     try {
-      const taskMetaPath = path29.join(this.cwd, ".projmnt4claude", "tasks", taskId, "meta.json");
-      if (!fs33.existsSync(taskMetaPath)) {
+      const taskMetaPath = path30.join(this.cwd, ".projmnt4claude", "tasks", taskId, "meta.json");
+      if (!fs34.existsSync(taskMetaPath)) {
         return;
       }
-      const taskMetaContent = fs33.readFileSync(taskMetaPath, "utf-8");
+      const taskMetaContent = fs34.readFileSync(taskMetaPath, "utf-8");
       const taskMeta = JSON.parse(taskMetaContent);
       if (taskMeta.checkpoints) {
         for (const result of results) {
@@ -39108,15 +39260,15 @@ class QAAcceptanceCriteriaVerifier {
             }
           }
         }
-        fs33.writeFileSync(taskMetaPath, JSON.stringify(taskMeta, null, 2), "utf-8");
+        fs34.writeFileSync(taskMetaPath, JSON.stringify(taskMeta, null, 2), "utf-8");
       }
     } catch {}
   }
   async verifyBuild(task) {
     const result = createDefaultAcceptanceResult("build");
     try {
-      const packageJsonPath = path29.join(this.cwd, "package.json");
-      if (!fs33.existsSync(packageJsonPath)) {
+      const packageJsonPath = path30.join(this.cwd, "package.json");
+      if (!fs34.existsSync(packageJsonPath)) {
         result.passed = true;
         result.reason = "无 package.json，跳过构建验证";
         return result;
@@ -39147,8 +39299,8 @@ class QAAcceptanceCriteriaVerifier {
   }
   getBuildCommand() {
     try {
-      const packageJsonPath = path29.join(this.cwd, "package.json");
-      const packageJson = JSON.parse(fs33.readFileSync(packageJsonPath, "utf-8"));
+      const packageJsonPath = path30.join(this.cwd, "package.json");
+      const packageJson = JSON.parse(fs34.readFileSync(packageJsonPath, "utf-8"));
       if (packageJson.scripts?.build) {
         return `npm run build`;
       }
@@ -39204,8 +39356,8 @@ class QAAcceptanceCriteriaVerifier {
       ];
       for (const pattern of patterns) {
         if (pattern && pattern !== file) {
-          const fullPath = path29.join(this.cwd, pattern);
-          if (fs33.existsSync(fullPath)) {
+          const fullPath = path30.join(this.cwd, pattern);
+          if (fs34.existsSync(fullPath)) {
             testFiles.push(pattern);
           }
         }
@@ -39308,8 +39460,13 @@ function createQAAcceptanceCriteriaVerifier(cwd) {
 init_spawn_utils();
 class HarnessQATester {
   config;
+  debugLogger;
   constructor(config) {
     this.config = config;
+    this.debugLogger = new DebugLogger({
+      cwd: config.cwd,
+      enabled: config.debug
+    });
   }
   async verify(task, codeReviewVerdict, retryContext) {
     let texts;
@@ -39407,6 +39564,7 @@ ${deferredInfo}` : deferredInfo;
    ❌ ${texts.harness.logs.qaError}: ${verdict.reason}`);
       console.error(`   [DEBUG-QA] Stack trace for QA error:
 ${errorStack}`);
+      this.debugLogger.logError(task.id, "qa", error instanceof Error ? error : new Error(errorMessage), { verdict, errorStack });
     }
     await this.saveReport(task.id, verdict);
     return verdict;
@@ -39434,8 +39592,8 @@ ${errorStack}`);
     const existingFiles = [];
     const missingFiles = [];
     for (const filePath of task.files) {
-      const fullPath = path30.isAbsolute(filePath) ? filePath : path30.join(this.config.cwd, filePath);
-      if (fs34.existsSync(fullPath)) {
+      const fullPath = path31.isAbsolute(filePath) ? filePath : path31.join(this.config.cwd, filePath);
+      if (fs35.existsSync(fullPath)) {
         existingFiles.push(filePath);
       } else {
         missingFiles.push(filePath);
@@ -39564,9 +39722,9 @@ ${texts.harness.logs.existingFiles || "Existing Files"}:`);
   }
   getTestConfig() {
     try {
-      const configPath = path30.join(this.config.cwd, ".projmnt4claude", "config.json");
-      if (fs34.existsSync(configPath)) {
-        const content = fs34.readFileSync(configPath, "utf-8");
+      const configPath = path31.join(this.config.cwd, ".projmnt4claude", "config.json");
+      if (fs35.existsSync(configPath)) {
+        const content = fs35.readFileSync(configPath, "utf-8");
         const projectConfig = JSON.parse(content);
         const testConfig = projectConfig.harness?.test || {};
         if (testConfig.testFailurePatterns) {
@@ -39683,9 +39841,9 @@ ${truncated}`];
   }
   findTestFiles(dir) {
     const files = [];
-    const entries = fs34.readdirSync(dir, { withFileTypes: true });
+    const entries = fs35.readdirSync(dir, { withFileTypes: true });
     for (const entry of entries) {
-      const fullPath = path30.join(dir, entry.name);
+      const fullPath = path31.join(dir, entry.name);
       if (entry.isDirectory()) {
         files.push(...this.findTestFiles(fullPath));
       } else if (entry.isFile() && /\.(test|spec)\.[jt]sx?$/.test(entry.name)) {
@@ -39767,6 +39925,7 @@ ${truncated}`];
     const prompt = this.buildQAPrompt(task, codeReviewVerdict, automatedCheckpoints, retryContext);
     console.log(`
    \uD83D\uDCDD ${texts.harness.logs.qaPromptGenerated}`);
+    this.debugLogger.logPrompt(task.id, "qa", prompt);
     console.log(`
    \uD83E\uDD16 ${texts.harness.logs.startingQASession}`);
     const agent = getAgent(this.config.cwd);
@@ -39793,6 +39952,7 @@ ${truncated}`];
     };
     const rawResult = await agent.invoke(prompt, invokeOptions);
     if (!rawResult.success) {
+      this.debugLogger.logError(task.id, "qa", new Error(rawResult.error || "QA session failed"), { rawResult });
       return {
         passed: false,
         reason: `${texts.harness.logs.qaSessionFailed}: ${rawResult.error || "unknown error"}`,
@@ -39801,6 +39961,10 @@ ${truncated}`];
       };
     }
     const parsedResult = this.parseQAResult(rawResult.output || "");
+    this.debugLogger.logAIResponse(task.id, "qa", rawResult.output || "", {
+      success: rawResult.success,
+      parsedResult
+    });
     const qaVerdict = {
       taskId: task.id,
       result: parsedResult.passed ? "PASS" : "NOPASS",
@@ -40142,10 +40306,10 @@ ${task.description}` : "";
     const mdReportPath = getReportPath(taskId, "qa", this.config.cwd);
     const mdContent = this.formatReport(verdict);
     await saveReport(mdReportPath, mdContent);
-    const jsonReportPath = path30.join(this.config.cwd, ".projmnt4claude", "outputs", taskId, "qa-report.json");
-    const jsonDir = path30.dirname(jsonReportPath);
-    if (!fs34.existsSync(jsonDir)) {
-      fs34.mkdirSync(jsonDir, { recursive: true });
+    const jsonReportPath = path31.join(this.config.cwd, ".projmnt4claude", "outputs", taskId, "qa-report.json");
+    const jsonDir = path31.dirname(jsonReportPath);
+    if (!fs35.existsSync(jsonDir)) {
+      fs35.mkdirSync(jsonDir, { recursive: true });
     }
     const jsonContent = JSON.stringify({
       version: "1.0.0",
@@ -40161,7 +40325,7 @@ ${task.description}` : "";
       details: verdict.details,
       acceptanceCriteriaResult: verdict.acceptanceCriteriaResult
     }, null, 2);
-    fs34.writeFileSync(jsonReportPath, jsonContent, "utf-8");
+    fs35.writeFileSync(jsonReportPath, jsonContent, "utf-8");
   }
   formatReport(verdict) {
     console.log(`   [DEBUG-QA] formatReport called: taskId=${verdict.taskId}, testFailures_isArray=${Array.isArray(verdict.testFailures)}, failedCheckpoints_isArray=${Array.isArray(verdict.failedCheckpoints)}, humanVerificationCheckpoints_isArray=${Array.isArray(verdict.humanVerificationCheckpoints)}`);
@@ -40253,16 +40417,20 @@ init_task2();
 init_harness_helpers();
 init_headless_agent();
 init_contradiction_detector();
-import * as fs35 from "fs";
-import * as path31 from "path";
+import * as fs36 from "fs";
+import * as path32 from "path";
 init_prompt_templates();
 init_i18n();
 import { randomUUID as randomUUID5 } from "crypto";
-
 class HarnessEvaluator {
   config;
+  debugLogger;
   constructor(config) {
     this.config = config;
+    this.debugLogger = new DebugLogger({
+      cwd: config.cwd,
+      enabled: config.debug
+    });
   }
   async evaluate(task, devReport, contract, retryContext) {
     let texts;
@@ -40317,6 +40485,7 @@ class HarnessEvaluator {
       const prompt = this.buildEvaluationPrompt(task, devReport, contract, phantomTasks, retryContext);
       console.log(`
    \uD83D\uDCDD ${texts.harness.logs.evalPromptGenerated}`);
+      this.debugLogger.logPrompt(task.id, "evaluation", prompt);
       const agent = getAgent(this.config.cwd);
       const effectiveTools = buildEffectiveTools("evaluation", this.config.cwd, task);
       const phaseOptions = this.config.perPhaseOptions?.["evaluation"];
@@ -40357,9 +40526,14 @@ class HarnessEvaluator {
         if (engineResult.result.stderr) {
           console.log(`   \uD83D\uDCDD ${texts.harness.logs.evalStderrPrefix}: ${engineResult.result.stderr.substring(0, 300)}`);
         }
+        this.debugLogger.logError(task.id, "evaluation", new Error("Empty output from evaluation"), { stderr: engineResult.result.stderr });
         await this.saveReviewReport(task.id, verdict, devReport);
         return verdict;
       }
+      this.debugLogger.logAIResponse(task.id, "evaluation", engineResult.result.output, {
+        retries: engineResult.retries,
+        success: engineResult.result.success
+      });
       let evaluation = this.parseEvaluationResult(engineResult.result.output);
       if (evaluation.inferenceType === "parse_failure_default") {
         console.log(`   ⚠️ ${texts.harness.logs.evalParseFailureDefault}`);
@@ -40396,6 +40570,7 @@ class HarnessEvaluator {
       verdict.inferenceType = "parse_failure_default";
       console.log(`
    ❌ ${texts.harness.logs.evalError}: ${verdict.reason}`);
+      this.debugLogger.logError(task.id, "evaluation", error instanceof Error ? error : new Error(String(error)), { verdict });
     }
     await this.saveReviewReport(task.id, verdict, devReport);
     return verdict;
@@ -40661,7 +40836,9 @@ ${texts.harness.logs.phantomTaskNopassRequirement}
         console.log(`   \uD83D\uDCCB ${texts.harness.logs.fallbackMode}`);
       }
     } catch (error) {
-      console.log(`   ⚠️ ${texts.harness.logs.fallbackMode}: ${error instanceof Error ? error.message : String(error)}`);
+      const errorMsg = error instanceof Error ? error.message : String(error);
+      console.log(`   ⚠️ ${texts.harness.logs.fallbackMode}: ${errorMsg}`);
+      this.debugLogger.logError(currentTaskId, "evaluation", error instanceof Error ? error : new Error(errorMsg), { method: "detectPhantomTasks.snapshotLoad" });
     }
     try {
       const allTaskIds = getAllTaskIds(this.config.cwd);
@@ -40692,7 +40869,9 @@ ${texts.harness.logs.phantomTaskNopassRequirement}
         console.log(`   \uD83D\uDCCA ${texts.harness.logs.snapshotStats.replace("{total}", String(allTaskIds.length)).replace("{excluded}", String(excludedCount)).replace("{checking}", String(allTaskIds.length - excludedCount - 1))}`);
       }
     } catch (error) {
-      console.log(`   ⚠️ ${texts.harness.logs.snapshotError}: ${error instanceof Error ? error.message : String(error)}`);
+      const errorMsg = error instanceof Error ? error.message : String(error);
+      console.log(`   ⚠️ ${texts.harness.logs.snapshotError}: ${errorMsg}`);
+      this.debugLogger.logError(currentTaskId, "evaluation", error instanceof Error ? error : new Error(errorMsg), { method: "detectPhantomTasks.fileSystemScan" });
     }
     if (hasCreateCommand && phantomTasks.length === 0) {
       console.log(`   ⚠️  ${texts.harness.logs.creatingCommandWarning}`);
@@ -40747,11 +40926,11 @@ ${texts.harness.logs.phantomTaskNopassRequirement}
       texts = getI18n("zh");
     }
     const contractPath = this.getContractPath(taskId);
-    if (!fs35.existsSync(contractPath)) {
+    if (!fs36.existsSync(contractPath)) {
       return null;
     }
     try {
-      const content = fs35.readFileSync(contractPath, "utf-8");
+      const content = fs36.readFileSync(contractPath, "utf-8");
       const parsed = JSON.parse(content);
       const validated = this.validateSprintContract(parsed, taskId);
       if (!validated) {
@@ -40759,27 +40938,29 @@ ${texts.harness.logs.phantomTaskNopassRequirement}
       }
       return validated;
     } catch (error) {
-      console.warn(`   ⚠️  ${texts.harness.logs.contractParseFailed}: ${error instanceof Error ? error.message : String(error)}`);
+      const errorMsg = error instanceof Error ? error.message : String(error);
+      console.warn(`   ⚠️  ${texts.harness.logs.contractParseFailed}: ${errorMsg}`);
+      this.debugLogger.logError(taskId, "evaluation", error instanceof Error ? error : new Error(errorMsg), { method: "loadContract", contractPath });
       return null;
     }
   }
   getContractPath(taskId) {
     const projectDir = getProjectDir(this.config.cwd);
-    return path31.join(projectDir, "tasks", taskId, "contract.json");
+    return path32.join(projectDir, "tasks", taskId, "contract.json");
   }
   getReviewReportPath(taskId) {
     const projectDir = getProjectDir(this.config.cwd);
-    return path31.join(projectDir, "reports", "harness", taskId, "review-report.md");
+    return path32.join(projectDir, "reports", "harness", taskId, "review-report.md");
   }
   async saveReviewReport(taskId, verdict, devReport) {
     const reportPath = this.getReviewReportPath(taskId);
-    const dir = path31.dirname(reportPath);
-    if (!fs35.existsSync(dir)) {
-      fs35.mkdirSync(dir, { recursive: true });
+    const dir = path32.dirname(reportPath);
+    if (!fs36.existsSync(dir)) {
+      fs36.mkdirSync(dir, { recursive: true });
     }
     archiveReportIfExists(reportPath);
     const content = this.formatReviewReport(verdict, devReport);
-    fs35.writeFileSync(reportPath, content, "utf-8");
+    fs36.writeFileSync(reportPath, content, "utf-8");
   }
   saveRawEvaluationOutput(taskId, output, stderr, success) {
     let texts;
@@ -40790,12 +40971,12 @@ ${texts.harness.logs.phantomTaskNopassRequirement}
     }
     try {
       const projectDir = getProjectDir(this.config.cwd);
-      const dir = path31.join(projectDir, "reports", "harness", taskId);
-      if (!fs35.existsSync(dir)) {
-        fs35.mkdirSync(dir, { recursive: true });
+      const dir = path32.join(projectDir, "reports", "harness", taskId);
+      if (!fs36.existsSync(dir)) {
+        fs36.mkdirSync(dir, { recursive: true });
       }
       const timestamp = new Date().toISOString().replace(/[:.]/g, "-");
-      const rawPath = path31.join(dir, `evaluation-raw-${timestamp}.log`);
+      const rawPath = path32.join(dir, `evaluation-raw-${timestamp}.log`);
       const lines = [
         `# ${texts.harness.logs.rawEvaluationOutputTitle || "Raw Evaluation Output"}`,
         `Task: ${taskId}`,
@@ -40810,7 +40991,7 @@ ${texts.harness.logs.phantomTaskNopassRequirement}
         "--- STDERR ---",
         stderr || "(empty)"
       ];
-      fs35.writeFileSync(rawPath, lines.join(`
+      fs36.writeFileSync(rawPath, lines.join(`
 `), "utf-8");
       console.log(`   \uD83D\uDCC4 ${texts.harness.logs.rawOutputSaved.replace("{filename}", `evaluation-raw-${timestamp}.log`)}`);
     } catch (error) {
@@ -40972,8 +41153,8 @@ class RetryHandler {
 // src/utils/harness-status-reporter.ts
 init_harness();
 init_path();
-import * as fs36 from "fs";
-import * as path32 from "path";
+import * as fs37 from "fs";
+import * as path33 from "path";
 
 class HarnessStatusReporter {
   statusPath;
@@ -40981,7 +41162,7 @@ class HarnessStatusReporter {
   currentReport;
   lastBatchContext;
   constructor(cwd, sessionId) {
-    this.statusPath = path32.join(getProjectDir(cwd), "harness-status.json");
+    this.statusPath = path33.join(getProjectDir(cwd), "harness-status.json");
     this.sessionId = sessionId;
     this.currentReport = this.createInitialReport();
   }
@@ -41258,9 +41439,9 @@ class HarnessStatusReporter {
   }
   checkStaleStatus() {
     try {
-      if (!fs36.existsSync(this.statusPath))
+      if (!fs37.existsSync(this.statusPath))
         return;
-      const raw = fs36.readFileSync(this.statusPath, "utf-8");
+      const raw = fs37.readFileSync(this.statusPath, "utf-8");
       const existing = JSON.parse(raw);
       if (existing.state !== "running")
         return;
@@ -41271,11 +41452,11 @@ class HarnessStatusReporter {
     } catch {}
   }
   writeStatus() {
-    const dir = path32.dirname(this.statusPath);
-    if (!fs36.existsSync(dir)) {
-      fs36.mkdirSync(dir, { recursive: true });
+    const dir = path33.dirname(this.statusPath);
+    if (!fs37.existsSync(dir)) {
+      fs37.mkdirSync(dir, { recursive: true });
     }
-    fs36.writeFileSync(this.statusPath, JSON.stringify(this.currentReport, null, 2), "utf-8");
+    fs37.writeFileSync(this.statusPath, JSON.stringify(this.currentReport, null, 2), "utf-8");
   }
   logToConsole(phase, status, message) {
     const progress = `${this.currentReport.completedTasks}/${this.currentReport.totalTasks}`;
@@ -41305,13 +41486,13 @@ class HarnessStatusReporter {
 init_harness();
 init_path();
 init_i18n();
-import * as fs38 from "fs";
-import * as path34 from "path";
+import * as fs39 from "fs";
+import * as path35 from "path";
 
 // src/utils/harness-reporter.ts
 init_path();
-import * as fs37 from "fs";
-import * as path33 from "path";
+import * as fs38 from "fs";
+import * as path34 from "path";
 
 class HarnessReporter {
   config;
@@ -41320,12 +41501,12 @@ class HarnessReporter {
   }
   async generateSummaryReport(summary) {
     const reportPath = this.getSummaryReportPath();
-    const dir = path33.dirname(reportPath);
-    if (!fs37.existsSync(dir)) {
-      fs37.mkdirSync(dir, { recursive: true });
+    const dir = path34.dirname(reportPath);
+    if (!fs38.existsSync(dir)) {
+      fs38.mkdirSync(dir, { recursive: true });
     }
     const content = this.formatSummaryReport(summary);
-    fs37.writeFileSync(reportPath, content, "utf-8");
+    fs38.writeFileSync(reportPath, content, "utf-8");
     console.log(`
 \uD83D\uDCC4 执行摘要已保存: ${reportPath}`);
   }
@@ -41415,16 +41596,16 @@ class HarnessReporter {
   getSummaryReportPath() {
     const projectDir = getProjectDir(this.config.cwd);
     const timestamp = new Date().toISOString().replace(/[:.]/g, "-").substring(0, 19);
-    return path33.join(projectDir, "reports", "harness", `summary-${timestamp}.md`);
+    return path34.join(projectDir, "reports", "harness", `summary-${timestamp}.md`);
   }
   async generateTaskReport(record) {
     const taskDir = this.getTaskReportDir(record.taskId);
-    if (!fs37.existsSync(taskDir)) {
-      fs37.mkdirSync(taskDir, { recursive: true });
+    if (!fs38.existsSync(taskDir)) {
+      fs38.mkdirSync(taskDir, { recursive: true });
     }
-    const overviewPath = path33.join(taskDir, "overview.md");
+    const overviewPath = path34.join(taskDir, "overview.md");
     const overviewContent = this.formatTaskOverview(record);
-    fs37.writeFileSync(overviewPath, overviewContent, "utf-8");
+    fs38.writeFileSync(overviewPath, overviewContent, "utf-8");
   }
   formatTaskOverview(record) {
     const lines = [];
@@ -41495,7 +41676,7 @@ class HarnessReporter {
   }
   getTaskReportDir(taskId) {
     const projectDir = getProjectDir(this.config.cwd);
-    return path33.join(projectDir, "reports", "harness", taskId);
+    return path34.join(projectDir, "reports", "harness", taskId);
   }
   generateJSONSummary(summary) {
     const data = {
@@ -42470,7 +42651,7 @@ function formatPlanQualityGateReport2(result, options = {}) {
 // src/commands/harness.ts
 init_quality_gate();
 function getRuntimeStatePath(cwd) {
-  return path34.join(getProjectDir(cwd), "harness-state.json");
+  return path35.join(getProjectDir(cwd), "harness-state.json");
 }
 function saveRuntimeState(state, cwd) {
   const statePath = getRuntimeStatePath(cwd);
@@ -42482,7 +42663,7 @@ function saveRuntimeState(state, cwd) {
     phaseRetryCounters: Object.fromEntries(state.phaseRetryCounters || []),
     taskPhaseCheckpoints: Object.fromEntries(state.taskPhaseCheckpoints || [])
   };
-  fs38.writeFileSync(statePath, JSON.stringify(data, null, 2), "utf-8");
+  fs39.writeFileSync(statePath, JSON.stringify(data, null, 2), "utf-8");
 }
 
 // src/utils/hd-assembly-line.ts
@@ -42493,13 +42674,13 @@ init_checkpoint_verification();
 
 // src/utils/post-qa-gate/runner.ts
 init_task2();
-import * as fs40 from "node:fs";
-import * as path36 from "node:path";
+import * as fs41 from "node:fs";
+import * as path37 from "node:path";
 
 // src/utils/post-qa-gate/checkers/checkpoint-sync-checker.ts
 init_checkpoint_rules();
-import * as fs39 from "node:fs";
-import * as path35 from "node:path";
+import * as fs40 from "node:fs";
+import * as path36 from "node:path";
 var DEFAULT_CHECKPOINT_SYNC_CONFIG = {
   reportPath: ".projmnt4claude/outputs/{taskId}/qa-report.json"
 };
@@ -42590,12 +42771,12 @@ class QACheckpointSyncChecker {
   }
   readReportVerdict(taskId) {
     const reportPath = this.config.reportPath.replace("{taskId}", taskId);
-    const fullPath = path35.join(this.cwd, reportPath);
-    if (!fs39.existsSync(fullPath)) {
+    const fullPath = path36.join(this.cwd, reportPath);
+    if (!fs40.existsSync(fullPath)) {
       return null;
     }
     try {
-      const content = fs39.readFileSync(fullPath, "utf-8");
+      const content = fs40.readFileSync(fullPath, "utf-8");
       const report = JSON.parse(content);
       return report.verdict ?? null;
     } catch {
@@ -42924,8 +43105,8 @@ class PostQAGateRunner {
 `);
   }
   async handleQAReportExistenceRule(_task, rule, context) {
-    const reportPath = path36.join(context.cwd, context.qaReportPath);
-    const exists = fs40.existsSync(reportPath);
+    const reportPath = path37.join(context.cwd, context.qaReportPath);
+    const exists = fs41.existsSync(reportPath);
     return {
       ruleId: rule.id,
       passed: exists,
@@ -42941,8 +43122,8 @@ class PostQAGateRunner {
     };
   }
   async handleQAReportFormatRule(_task, rule, context) {
-    const reportPath = path36.join(context.cwd, context.qaReportPath);
-    if (!fs40.existsSync(reportPath)) {
+    const reportPath = path37.join(context.cwd, context.qaReportPath);
+    if (!fs41.existsSync(reportPath)) {
       return {
         ruleId: rule.id,
         passed: false,
@@ -42954,7 +43135,7 @@ class PostQAGateRunner {
       };
     }
     try {
-      const content = fs40.readFileSync(reportPath, "utf-8");
+      const content = fs41.readFileSync(reportPath, "utf-8");
       const report = JSON.parse(content);
       const requiredFields = ["version", "taskId", "verdict", "verifiedAt", "verifier", "summary"];
       const missingFields = requiredFields.filter((field) => !(field in report));
@@ -42985,8 +43166,8 @@ class PostQAGateRunner {
     }
   }
   async handleQAVerdictValidityRule(_task, rule, context) {
-    const reportPath = path36.join(context.cwd, context.qaReportPath);
-    if (!fs40.existsSync(reportPath)) {
+    const reportPath = path37.join(context.cwd, context.qaReportPath);
+    if (!fs41.existsSync(reportPath)) {
       return {
         ruleId: rule.id,
         passed: false,
@@ -42998,7 +43179,7 @@ class PostQAGateRunner {
       };
     }
     try {
-      const content = fs40.readFileSync(reportPath, "utf-8");
+      const content = fs41.readFileSync(reportPath, "utf-8");
       const report = JSON.parse(content);
       const validVerdicts = ["PASS", "NOPASS"];
       const isValid = validVerdicts.includes(report.verdict);
@@ -43027,8 +43208,8 @@ class PostQAGateRunner {
     }
   }
   async handleQAFailuresDetailRule(_task, rule, context) {
-    const reportPath = path36.join(context.cwd, context.qaReportPath);
-    if (!fs40.existsSync(reportPath)) {
+    const reportPath = path37.join(context.cwd, context.qaReportPath);
+    if (!fs41.existsSync(reportPath)) {
       return {
         ruleId: rule.id,
         passed: false,
@@ -43040,7 +43221,7 @@ class PostQAGateRunner {
       };
     }
     try {
-      const content = fs40.readFileSync(reportPath, "utf-8");
+      const content = fs41.readFileSync(reportPath, "utf-8");
       const report = JSON.parse(content);
       if (report.verdict === "PASS") {
         return {
@@ -43091,11 +43272,11 @@ class PostQAGateRunner {
     }
   }
   async handleHumanVerificationCollectRule(task, rule, context) {
-    const reportPath = path36.join(context.cwd, context.qaReportPath);
+    const reportPath = path37.join(context.cwd, context.qaReportPath);
     let qaReport;
-    if (fs40.existsSync(reportPath)) {
+    if (fs41.existsSync(reportPath)) {
       try {
-        const content = fs40.readFileSync(reportPath, "utf-8");
+        const content = fs41.readFileSync(reportPath, "utf-8");
         qaReport = JSON.parse(content);
       } catch {}
     }
@@ -43201,13 +43382,13 @@ class PostQAGateRunner {
     };
   }
   async handleTestCoverageRule(_task, rule, context) {
-    const reportPath = path36.join(context.cwd, context.qaReportPath);
+    const reportPath = path37.join(context.cwd, context.qaReportPath);
     const minCoverage = rule.config?.minCoverage ?? 0.6;
     let coverage;
     let coverageDetails;
-    if (fs40.existsSync(reportPath)) {
+    if (fs41.existsSync(reportPath)) {
       try {
-        const content = fs40.readFileSync(reportPath, "utf-8");
+        const content = fs41.readFileSync(reportPath, "utf-8");
         const report = JSON.parse(content);
         coverage = report.coverage;
       } catch {}
@@ -43270,14 +43451,14 @@ class PostQAGateRunner {
   }
   async calculateCoverageFromReportsWithDetails(context) {
     const coverageFiles = [
-      path36.join(context.cwd, "coverage", "coverage-summary.json"),
-      path36.join(context.cwd, "coverage", "lcov-report", "coverage-summary.json"),
-      path36.join(context.cwd, ".projmnt4claude", "outputs", context.taskId, "coverage-report.json")
+      path37.join(context.cwd, "coverage", "coverage-summary.json"),
+      path37.join(context.cwd, "coverage", "lcov-report", "coverage-summary.json"),
+      path37.join(context.cwd, ".projmnt4claude", "outputs", context.taskId, "coverage-report.json")
     ];
     for (const filePath of coverageFiles) {
-      if (fs40.existsSync(filePath)) {
+      if (fs41.existsSync(filePath)) {
         try {
-          const content = JSON.parse(fs40.readFileSync(filePath, "utf-8"));
+          const content = JSON.parse(fs41.readFileSync(filePath, "utf-8"));
           const raw = this.parseCoverageData(content);
           const coverage = Math.round((raw.lines * 0.4 + raw.branches * 0.3 + raw.functions * 0.2 + raw.statements * 0.1) * 1000) / 1000;
           return {
@@ -43391,12 +43572,12 @@ class PostQAGateRunner {
   async saveReport(report) {
     if (!this.config.reportPath)
       return;
-    const reportDir = path36.dirname(path36.join(this.cwd, this.config.reportPath));
-    if (!fs40.existsSync(reportDir)) {
-      fs40.mkdirSync(reportDir, { recursive: true });
+    const reportDir = path37.dirname(path37.join(this.cwd, this.config.reportPath));
+    if (!fs41.existsSync(reportDir)) {
+      fs41.mkdirSync(reportDir, { recursive: true });
     }
-    const reportPath = path36.join(this.cwd, this.config.reportPath);
-    fs40.writeFileSync(reportPath, JSON.stringify(report, null, 2));
+    const reportPath = path37.join(this.cwd, this.config.reportPath);
+    fs41.writeFileSync(reportPath, JSON.stringify(report, null, 2));
   }
   formatResult(result) {
     const lines = [];
@@ -43479,6 +43660,7 @@ class AssemblyLine {
   sessionId;
   taskRetryContexts = new Map;
   executionRecords = new Map;
+  debugLogger;
   constructor(config, sessionId) {
     this.config = config;
     this.sessionId = sessionId || `harness-${Date.now()}-${randomUUID6().slice(0, 8)}`;
@@ -43490,6 +43672,10 @@ class AssemblyLine {
     this.retryHandler = new RetryHandler(config);
     this.statusReporter = new HarnessStatusReporter(config.cwd, this.sessionId);
     this.preValidator = new HarnessPreValidator(config.cwd);
+    this.debugLogger = new DebugLogger({
+      cwd: config.cwd,
+      enabled: config.debug
+    });
   }
   async run(state) {
     const startTime = new Date().toISOString();
@@ -44004,10 +44190,12 @@ ${"━".repeat(SEPARATOR_WIDTH)}`);
     let attempt = 0;
     console.log(`
 \uD83D\uDD28 [${phase}] 开始阶段执行生命周期 (最多${maxRetries}次重试)`);
+    this.debugLogger.logPhaseTransition(taskId, "idle", phase, `开始阶段执行生命周期，最多${maxRetries}次重试`);
     while (attempt <= maxRetries) {
       attempt++;
       console.log(`
    [${phase}] 第 ${attempt}/${maxRetries + 1} 次尝试`);
+      this.debugLogger.log(taskId, phase, `第 ${attempt}/${maxRetries + 1} 次尝试`);
       const canProceed = await this.checkPhasePreConditions(taskId, phase, state);
       if (!canProceed) {
         console.log(`   ❌ 阶段前置条件检查失败`);
@@ -44025,6 +44213,7 @@ ${"━".repeat(SEPARATOR_WIDTH)}`);
           severity: "ERROR"
         });
         console.log(`   \uD83D\uDEAB A 类门禁失败，中断流水线（任务数据有效性检查失败）`);
+        this.debugLogger.logError(taskId, phase, new Error(preGateErrorMsg), { failedAt: "pre_phase_gate", attempt });
         return {
           success: false,
           phase,
@@ -44044,6 +44233,7 @@ ${"━".repeat(SEPARATOR_WIDTH)}`);
       } catch (error) {
         const errorMsg = error instanceof Error ? error.message : String(error);
         console.log(`   ❌ 阶段执行失败: ${errorMsg}`);
+        this.debugLogger.logError(taskId, phase, error instanceof Error ? error : new Error(errorMsg), { failedAt: "phase_execution", attempt });
         this.storeFailureContext(taskId, phase, errorMsg, state);
         const retryCount = this.getPhaseRetryCount(taskId, phase, state);
         const { canRetry, rollbackResult } = await this.handlePhaseFailureWithRollback(taskId, phase, errorMsg, retryCount, maxRetries);
@@ -44082,6 +44272,7 @@ ${"━".repeat(SEPARATOR_WIDTH)}`);
           ],
           severity: "ERROR"
         });
+        this.debugLogger.logError(taskId, phase, new Error(postGateErrorMsg), { failedAt: "post_phase_gate", attempt });
         if (attempt <= maxRetries) {
           const waitSeconds = [30, 60, 120][attempt - 1] || 120;
           console.log(`   ⏳ B 类门禁失败，等待 ${waitSeconds} 秒后回退到阶段起点重试...`);
@@ -44102,6 +44293,7 @@ ${"━".repeat(SEPARATOR_WIDTH)}`);
       }
       console.log(`   ✅ 阶段后质量门禁通过`);
       console.log(`   ✅ [${phase}] 阶段执行完成（第${attempt}次尝试成功）`);
+      this.debugLogger.logPhaseTransition(taskId, phase, "completed", `第${attempt}次尝试成功`);
       return {
         success: true,
         phase,
@@ -44750,9 +44942,9 @@ ${"━".repeat(SEPARATOR_WIDTH)}`);
     }
     if (status === "wait_qa") {
       const projectDir = getProjectDir(this.config.cwd);
-      const qaReportPath = path37.join(projectDir, "reports", "harness", taskId, "qa-report.md");
-      if (fs41.existsSync(qaReportPath)) {
-        const content = fs41.readFileSync(qaReportPath, "utf-8");
+      const qaReportPath = path38.join(projectDir, "reports", "harness", taskId, "qa-report.md");
+      if (fs42.existsSync(qaReportPath)) {
+        const content = fs42.readFileSync(qaReportPath, "utf-8");
         if (content.trim().length > 0) {
           console.log(`   \uD83D\uDCCB 检测到 wait_qa 但 qa-report.md 已存在，自动迁移为 wait_evaluation`);
           return "evaluation";
@@ -44779,14 +44971,14 @@ ${"━".repeat(SEPARATOR_WIDTH)}`);
       return true;
     }
     const projectDir = getProjectDir(this.config.cwd);
-    const reportDir = path37.join(projectDir, "reports", "harness", taskId);
+    const reportDir = path38.join(projectDir, "reports", "harness", taskId);
     for (const reportFile of required) {
-      const filePath = path37.join(reportDir, reportFile);
-      if (!fs41.existsSync(filePath)) {
+      const filePath = path38.join(reportDir, reportFile);
+      if (!fs42.existsSync(filePath)) {
         return false;
       }
       try {
-        const content = fs41.readFileSync(filePath, "utf-8");
+        const content = fs42.readFileSync(filePath, "utf-8");
         if (content.trim().length === 0) {
           return false;
         }
@@ -44857,7 +45049,7 @@ ${"━".repeat(SEPARATOR_WIDTH)}`);
         severity: lastFailure.gateInfo.severity
       };
     }
-    return {
+    const retryContext = {
       previousFailureReason: stored?.previousFailureReason ?? (failureHistory.length > 0 ? failureHistory[failureHistory.length - 1].error : undefined),
       previousPhase: stored?.previousPhase ?? phase,
       attemptNumber,
@@ -44871,6 +45063,8 @@ ${"━".repeat(SEPARATOR_WIDTH)}`);
       gateFailureDetails,
       qaCoverageGapContext
     };
+    this.debugLogger.logRetryContext(taskId, phase, retryContext);
+    return retryContext;
   }
   storeFailureContext(taskId, phase, reason, state, gateInfo) {
     const existing = this.taskRetryContexts.get(taskId);
@@ -45107,31 +45301,31 @@ ${"━".repeat(SEPARATOR_WIDTH)}`);
     if (!resumePhase)
       return true;
     const projectDir = getProjectDir(this.config.cwd);
-    const reportDir = path37.join(projectDir, "reports", "harness", taskId);
+    const reportDir = path38.join(projectDir, "reports", "harness", taskId);
     const checks = [];
     switch (resumePhase) {
       case "qa":
-        checks.push({ file: path37.join(reportDir, "dev-report.md"), label: "开发报告" });
-        checks.push({ file: path37.join(reportDir, "code-review-report.md"), label: "代码审核报告" });
+        checks.push({ file: path38.join(reportDir, "dev-report.md"), label: "开发报告" });
+        checks.push({ file: path38.join(reportDir, "code-review-report.md"), label: "代码审核报告" });
         break;
       case "evaluation":
-        checks.push({ file: path37.join(reportDir, "dev-report.md"), label: "开发报告" });
-        checks.push({ file: path37.join(reportDir, "code-review-report.md"), label: "代码审核报告" });
-        checks.push({ file: path37.join(reportDir, "qa-report.md"), label: "QA报告" });
+        checks.push({ file: path38.join(reportDir, "dev-report.md"), label: "开发报告" });
+        checks.push({ file: path38.join(reportDir, "code-review-report.md"), label: "代码审核报告" });
+        checks.push({ file: path38.join(reportDir, "qa-report.md"), label: "QA报告" });
         break;
       case "code_review":
-        checks.push({ file: path37.join(reportDir, "dev-report.md"), label: "开发报告" });
+        checks.push({ file: path38.join(reportDir, "dev-report.md"), label: "开发报告" });
         break;
       case "development":
         return true;
     }
     for (const check of checks) {
-      if (!fs41.existsSync(check.file)) {
+      if (!fs42.existsSync(check.file)) {
         console.log(`   ⚠️ 缺少${check.label}: ${check.file}`);
         return false;
       }
       try {
-        const content = fs41.readFileSync(check.file, "utf-8");
+        const content = fs42.readFileSync(check.file, "utf-8");
         if (content.trim().length === 0) {
           console.log(`   ⚠️ ${check.label}为空: ${check.file}`);
           return false;
@@ -45325,15 +45519,15 @@ ${"━".repeat(SEPARATOR_WIDTH)}`);
         }
       }
       const stageFiles = [
-        path37.join(this.config.cwd, ".projmnt4claude", "reports", taskId, "dev-report.json"),
-        path37.join(this.config.cwd, ".projmnt4claude", "reports", taskId, "code-review-report.json"),
-        path37.join(this.config.cwd, ".projmnt4claude", "reports", taskId, "qa-report.json"),
-        path37.join(this.config.cwd, ".projmnt4claude", "reports", taskId, "evaluation-report.json")
+        path38.join(this.config.cwd, ".projmnt4claude", "reports", taskId, "dev-report.json"),
+        path38.join(this.config.cwd, ".projmnt4claude", "reports", taskId, "code-review-report.json"),
+        path38.join(this.config.cwd, ".projmnt4claude", "reports", taskId, "qa-report.json"),
+        path38.join(this.config.cwd, ".projmnt4claude", "reports", taskId, "evaluation-report.json")
       ];
       for (const file of stageFiles) {
-        if (fs41.existsSync(file)) {
+        if (fs42.existsSync(file)) {
           try {
-            fs41.unlinkSync(file);
+            fs42.unlinkSync(file);
             result.cleanedFiles.push(file);
           } catch (unlinkError) {
             console.warn(`   ⚠️ 无法删除文件 ${file}: ${unlinkError instanceof Error ? unlinkError.message : String(unlinkError)}`);
@@ -45963,6 +46157,7 @@ async function harnessCommand(options, cwd = process.cwd()) {
     batchGitTagCommit: options.batchGitTagCommit ?? DEFAULT_HARNESS_CONFIG.batchGitTagCommit,
     taskGitCommit: options.taskGitCommit ?? DEFAULT_HARNESS_CONFIG.taskGitCommit,
     forceContinue: options.forceContinue ?? DEFAULT_HARNESS_CONFIG.forceContinue,
+    debug: options.debug ?? DEFAULT_HARNESS_CONFIG.debug,
     cwd
   };
   if (config.maxRetries < 0) {
@@ -46147,7 +46342,7 @@ async function harnessCommand(options, cwd = process.cwd()) {
   }
 }
 function getRuntimeStatePath2(cwd) {
-  return path38.join(getProjectDir(cwd), "harness-state.json");
+  return path39.join(getProjectDir(cwd), "harness-state.json");
 }
 function validateAndRepairState(data, cwd) {
   const errors = [];
@@ -46307,12 +46502,12 @@ function validateAndRepairState(data, cwd) {
 }
 function loadRuntimeState(cwd) {
   const statePath = getRuntimeStatePath2(cwd);
-  if (!fs42.existsSync(statePath)) {
+  if (!fs43.existsSync(statePath)) {
     return null;
   }
   const texts = t(cwd);
   try {
-    const content = fs42.readFileSync(statePath, "utf-8");
+    const content = fs43.readFileSync(statePath, "utf-8");
     if (!content.trim()) {
       console.warn(texts.harnessCmd.emptyStateFile);
       return null;
@@ -46358,8 +46553,8 @@ function loadRuntimeState(cwd) {
 }
 function clearRuntimeState(cwd) {
   const statePath = getRuntimeStatePath2(cwd);
-  if (fs42.existsSync(statePath)) {
-    fs42.unlinkSync(statePath);
+  if (fs43.existsSync(statePath)) {
+    fs43.unlinkSync(statePath);
   }
 }
 function summaryToJSON(summary) {
@@ -46386,13 +46581,13 @@ function summaryToJSON(summary) {
 }
 async function loadTaskQueue(options, cwd) {
   if (options.plan) {
-    const planFile = path38.resolve(cwd, options.plan);
-    if (!fs42.existsSync(planFile)) {
+    const planFile = path39.resolve(cwd, options.plan);
+    if (!fs43.existsSync(planFile)) {
       console.error(`Error: Plan file does not exist: ${planFile}`);
       process.exit(1);
     }
     try {
-      const planContent = fs42.readFileSync(planFile, "utf-8");
+      const planContent = fs43.readFileSync(planFile, "utf-8");
       const planData = JSON.parse(planContent);
       let taskQueue = planData.recommendation?.suggestedOrder || [];
       const batches = planData.batchOrder || planData.batches;
@@ -46497,14 +46692,14 @@ function printSummary(summary) {
 }
 
 // src/utils/path.ts
-import * as path39 from "path";
-import * as fs43 from "fs";
+import * as path40 from "path";
+import * as fs44 from "fs";
 function getProjectDir5(cwd = process.cwd()) {
   const testMocks = globalThis.__PROJMNT4CLAUDE_TEST_MOCKS__;
   if (testMocks?.getProjectDir) {
     return testMocks.getProjectDir(cwd);
   }
-  return path39.join(cwd, ".projmnt4claude");
+  return path40.join(cwd, ".projmnt4claude");
 }
 function isInitialized2(cwd = process.cwd()) {
   const testMocks = globalThis.__PROJMNT4CLAUDE_TEST_MOCKS__;
@@ -46512,17 +46707,17 @@ function isInitialized2(cwd = process.cwd()) {
     return testMocks.isInitialized(cwd);
   }
   const projectDir = getProjectDir5(cwd);
-  const configPath = path39.join(projectDir, "config.json");
-  if (fs43.existsSync(configPath)) {
+  const configPath = path40.join(projectDir, "config.json");
+  if (fs44.existsSync(configPath)) {
     return true;
   }
-  const tasksDir = path39.join(projectDir, "tasks");
-  if (fs43.existsSync(tasksDir)) {
+  const tasksDir = path40.join(projectDir, "tasks");
+  if (fs44.existsSync(tasksDir)) {
     try {
-      const taskDirs = fs43.readdirSync(tasksDir);
+      const taskDirs = fs44.readdirSync(tasksDir);
       return taskDirs.some((taskDir) => {
-        const metaPath = path39.join(tasksDir, taskDir, "meta.json");
-        return fs43.existsSync(metaPath);
+        const metaPath = path40.join(tasksDir, taskDir, "meta.json");
+        return fs44.existsSync(metaPath);
       });
     } catch {
       return false;
@@ -46653,12 +46848,12 @@ rename format:
     case "create": {
       let taskDescription = options.description;
       if (options.file) {
-        const filePath = path40.resolve(options.file);
-        if (!fs44.existsSync(filePath)) {
+        const filePath = path41.resolve(options.file);
+        if (!fs45.existsSync(filePath)) {
           console.error("(X) Error: Description file not found: " + filePath);
           process.exit(1);
         }
-        const stat = fs44.statSync(filePath);
+        const stat = fs45.statSync(filePath);
         if (!stat.isFile()) {
           console.error("(X) Error: Path is not a file: " + filePath);
           process.exit(1);
@@ -46669,14 +46864,14 @@ rename format:
           process.exit(1);
         }
         try {
-          taskDescription = fs44.readFileSync(filePath, "utf-8");
+          taskDescription = fs45.readFileSync(filePath, "utf-8");
         } catch (error) {
           console.error("(X) Error: Cannot read description file: " + error.message);
           process.exit(1);
         }
         if (filePath.startsWith("/tmp/")) {
           try {
-            fs44.unlinkSync(filePath);
+            fs45.unlinkSync(filePath);
           } catch {}
         }
       }
@@ -47162,12 +47357,12 @@ program2.command("investigation-requirement [description]").description(`\u9700\
 ` + "\u524D\u63D0: \u9700\u5148\u8FD0\u884C projmnt4claude setup \u521D\u59CB\u5316\u9879\u76EE").option("-y, --yes", "\u975E\u4EA4\u4E92\u6A21\u5F0F").option("--interactive", "\u4EA4\u4E92\u6A21\u5F0F: \u4E0E\u7528\u6237\u8BC4\u5BA1\u53CD\u9988\u5FAA\u73AF").option("--feedback", "\u53CD\u9988\u4FEE\u6B63\u6A21\u5F0F: \u57FA\u4E8E\u53CD\u9988\u4FEE\u6B63\u5DF2\u6709\u62A5\u544A").option("--review", "\u8BC4\u5BA1\u6A21\u5F0F: \u4EC5\u8BC4\u5BA1\u5DF2\u6709\u62A5\u544A").option("--split", "\u62C6\u5206\u6A21\u5F0F: \u5BF9\u8FC7\u5927\u62A5\u544A\u8FDB\u884C\u62C6\u5206").option("--report-path <path>", "\u5DF2\u6709\u62A5\u544A\u8DEF\u5F84 (feedback/review/split \u5FC5\u9700)").option("--file <path>", "\u4ECE\u6587\u4EF6\u8BFB\u53D6\u9700\u6C42\u63CF\u8FF0").option("--output-dir <path>", "\u8F93\u51FA\u76EE\u5F55").option("--output-file <path>", "\u8F93\u51FA\u6587\u4EF6\u8DEF\u5F84").option("--max-retry <n>", "\u6700\u5927\u91CD\u8BD5\u6B21\u6570", "3").option("--split-threshold <kb>", "\u62C6\u5206\u9608\u503C (KB)", "20").option("--language <lang>", "\u8BED\u8A00 (zh/en)", "zh").option("--skip-review", "\u8DF3\u8FC7 AI \u8BC4\u5BA1").option("--skip-split", "\u8DF3\u8FC7\u62C6\u5206").option("-f, --force", "\u5F3A\u5236\u8986\u76D6").option("--json", "JSON \u8F93\u51FA").option("-q, --quiet", "\u9759\u9ED8\u6A21\u5F0F").action(async (description, options) => {
   let finalDescription = description;
   if (options.file) {
-    const filePath = path40.resolve(options.file);
-    if (!fs44.existsSync(filePath)) {
+    const filePath = path41.resolve(options.file);
+    if (!fs45.existsSync(filePath)) {
       console.error("(X) Error: Description file not found: " + filePath);
       process.exit(1);
     }
-    const stat = fs44.statSync(filePath);
+    const stat = fs45.statSync(filePath);
     if (!stat.isFile()) {
       console.error("(X) Error: Path is not a file: " + filePath);
       process.exit(1);
@@ -47178,14 +47373,14 @@ program2.command("investigation-requirement [description]").description(`\u9700\
       process.exit(1);
     }
     try {
-      finalDescription = fs44.readFileSync(filePath, "utf-8");
+      finalDescription = fs45.readFileSync(filePath, "utf-8");
     } catch (error) {
       console.error("(X) Error: Cannot read description file: " + error.message);
       process.exit(1);
     }
     if (filePath.startsWith("/tmp/")) {
       try {
-        fs44.unlinkSync(filePath);
+        fs45.unlinkSync(filePath);
       } catch {}
     }
   }
@@ -47262,7 +47457,7 @@ Deprecated Options:
   ~~--skip-quality-gate~~    Deprecated, use --skip-harness-gate instead
 
 Batch Tag+Commit Options:
-  --batch-git-tag-commit   Auto git tag + commit after each batch (tag: batch-{N}-{timestamp})`).option("--plan <file>", "Plan file path (optional, auto-read/generate if not specified)").option("--max-retries <n>", "Max retry attempts", "3").option("--timeout <seconds>", "Per-task timeout (seconds)", "300").option("--parallel <n>", "Parallel execution count", "1").option("--dry-run", "Dry run mode (no actual execution)").option("--continue", "Continue from last interruption").option("--json", "JSON format output").option("--require-quality <n>", "Quality gate: minimum quality score threshold (0-100, default 60)", "60").option("--skip-harness-gate", "Skip Harness pre-execution quality gate check (not recommended)").option("--skip-quality-gate", "[Deprecated] Use --skip-harness-gate instead").option("--batch-git-tag-commit", "Auto git tag + commit after each batch completes (tag format: batch-{N}-{timestamp})").option("--task-git-commit", "Auto git commit after each task completes (commit format: feat: {taskId} - {title})").option("--force", "Force cleanup all snapshots (cleanup subcommand only)").option("--orphans-only", "Clean only orphaned snapshots (cleanup subcommand only)").action(async (action, options) => {
+  --batch-git-tag-commit   Auto git tag + commit after each batch (tag: batch-{N}-{timestamp})`).option("--plan <file>", "Plan file path (optional, auto-read/generate if not specified)").option("--max-retries <n>", "Max retry attempts", "3").option("--timeout <seconds>", "Per-task timeout (seconds)", "300").option("--parallel <n>", "Parallel execution count", "1").option("--dry-run", "Dry run mode (no actual execution)").option("--continue", "Continue from last interruption").option("--json", "JSON format output").option("--require-quality <n>", "Quality gate: minimum quality score threshold (0-100, default 60)", "60").option("--skip-harness-gate", "Skip Harness pre-execution quality gate check (not recommended)").option("--skip-quality-gate", "[Deprecated] Use --skip-harness-gate instead").option("--batch-git-tag-commit", "Auto git tag + commit after each batch completes (tag format: batch-{N}-{timestamp})").option("--task-git-commit", "Auto git commit after each task completes (commit format: feat: {taskId} - {title})").option("--debug", "Enable debug mode: output detailed logs to .projmnt4claude/logs/debug/").option("--force", "Force cleanup all snapshots (cleanup subcommand only)").option("--orphans-only", "Clean only orphaned snapshots (cleanup subcommand only)").action(async (action, options) => {
   requireInit();
   if (action === "cleanup") {
     await cleanupHarnessSnapshots({
@@ -47294,7 +47489,8 @@ Batch Tag+Commit Options:
     requireQuality: options.requireQuality,
     skipHarnessGate: options.skipHarnessGate || options.skipQualityGate,
     batchGitTagCommit: options.batchGitTagCommit,
-    taskGitCommit: options.taskGitCommit
+    taskGitCommit: options.taskGitCommit,
+    debug: options.debug
   });
 });
 program2.command("help [topic]").description(`Show help information
