@@ -13555,8 +13555,23 @@ async function runHeadlessClaude(options) {
         timeout: options.timeout * 1000
       }, "claudeAgent");
       if (child.stdin) {
-        child.stdin.write(options.prompt);
-        child.stdin.end();
+        let writeNextChunk = function() {
+          if (offset >= options.prompt.length) {
+            child.stdin.end();
+            return;
+          }
+          const chunk = options.prompt.substring(offset, offset + chunkSize);
+          offset += chunkSize;
+          const result = child.stdin.write(chunk);
+          if (!result) {
+            child.stdin.once("drain", writeNextChunk);
+          } else {
+            writeNextChunk();
+          }
+        };
+        const chunkSize = 4096;
+        let offset = 0;
+        writeNextChunk();
       }
       let stdout = "";
       let stderr = "";

@@ -220,10 +220,29 @@ export async function runHeadlessClaude(options: HeadlessClaudeOptions): Promise
         timeout: options.timeout * 1000,
       }, 'claudeAgent');
 
-      // 通过 stdin 传递 prompt
+      // 通过 stdin 传递 prompt（分块写入以避免大数据丢失）
       if (child.stdin) {
-        child.stdin.write(options.prompt);
-        child.stdin.end();
+        const chunkSize = 4096;
+        let offset = 0;
+
+        function writeNextChunk() {
+          if (offset >= options.prompt.length) {
+            child.stdin!.end();
+            return;
+          }
+
+          const chunk = options.prompt.substring(offset, offset + chunkSize);
+          offset += chunkSize;
+
+          const result = child.stdin!.write(chunk);
+          if (!result) {
+            child.stdin!.once('drain', writeNextChunk);
+          } else {
+            writeNextChunk();
+          }
+        }
+
+        writeNextChunk();
       }
 
       let stdout = '';
