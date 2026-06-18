@@ -19,7 +19,7 @@ import type { Language } from '../i18n/index.js';
 import { getI18n } from '../i18n/index.js';
 import { Logger } from './logger.js';
 import { randomUUID } from 'crypto';
-import { randomUUID } from 'crypto';
+import { sessionIdMapper } from './session-id-mapper.js';
 
 const logger = new Logger({ component: 'feedback-constraint-engine' });
 
@@ -366,7 +366,22 @@ export class FeedbackConstraintEngineImpl implements FeedbackConstraintEngine {
 
     // 生成 session ID 用于重试时的上下文连续性
     // --session-id 首次调用时就创建具名 session，不需要先存在
-    const sessionId = options.sessionId || `fce-${Date.now()}-${randomUUID().slice(0, 8)}`;
+    // 使用双层 ID：内部可读 ID 用于日志，CLI UUID 用于 Claude Code
+    let internalId: string;
+    let sessionId: string;
+    if (options.sessionId) {
+      // 如果已有 sessionId（来自上层阶段执行器），它已经是 CLI UUID
+      // 需要查找对应的 internalId，如果没有则生成一个新的
+      sessionId = options.sessionId;
+      internalId = sessionIdMapper.toInternalId(sessionId) || `fce-${Date.now()}-${randomUUID().slice(0, 8)}`;
+      // 确保映射存在
+      if (!sessionIdMapper.toInternalId(sessionId)) {
+        sessionIdMapper.generate(internalId, 'unknown', 'feedback');
+      }
+    } else {
+      internalId = `fce-${Date.now()}-${randomUUID().slice(0, 8)}`;
+      sessionId = sessionIdMapper.generate(internalId, 'unknown', 'feedback');
+    }
     let currentOptions = { ...options, sessionId };
 
     // eslint-disable-next-line no-constant-condition

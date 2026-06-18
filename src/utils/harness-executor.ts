@@ -33,6 +33,7 @@ import { t, getI18n } from '../i18n/index.js';
 import { sleep } from './harness-helpers.js';
 import type { HarnessPhaseOptions } from '../types/config.js';
 import { randomUUID } from 'crypto';
+import { sessionIdMapper } from './session-id-mapper.js';
 import { DebugLogger } from './debug-logger.js';
 
 export class HarnessExecutor {
@@ -92,7 +93,9 @@ export class HarnessExecutor {
       const phaseOptions = this.config.perPhaseOptions?.['development'];
 
       // 生成阶段级 session ID，用于阶段内重试时的上下文连续性
-      const sessionId = `dev-${task.id}-${Date.now()}-${randomUUID().slice(0, 8)}`;
+      // 使用双层 ID：内部可读 ID 用于日志，CLI UUID 用于 Claude Code
+      const internalId = `dev-${task.id}-${Date.now()}-${randomUUID().slice(0, 8)}`;
+      const sessionId = sessionIdMapper.generate(internalId, task.id, 'development');
 
       const invokeOptions = {
         timeout: effectiveTimeout,
