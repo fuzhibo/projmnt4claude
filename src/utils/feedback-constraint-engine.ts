@@ -20,6 +20,7 @@ import { getI18n } from '../i18n/index.js';
 import { Logger } from './logger.js';
 import { randomUUID } from 'crypto';
 import { sessionIdMapper } from './session-id-mapper.js';
+import { ensureCleanSessionSlot } from './session-lock-cleanup.js';
 
 const logger = new Logger({ component: 'feedback-constraint-engine' });
 
@@ -381,6 +382,8 @@ export class FeedbackConstraintEngineImpl implements FeedbackConstraintEngine {
     } else {
       internalId = `fce-${Date.now()}-${randomUUID().slice(0, 8)}`;
       sessionId = sessionIdMapper.generate(internalId, 'unknown', 'feedback');
+      // CP-02: FCE 新建 session 时清理可能的残留锁（retry 重试复用 UUID 场景）
+      ensureCleanSessionSlot(sessionId);
     }
     let currentOptions = { ...options, sessionId };
 

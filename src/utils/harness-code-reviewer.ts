@@ -33,6 +33,7 @@ import { t, getI18n } from '../i18n/index.js';
 import type { HarnessPhaseOptions } from '../types/config.js';
 import { randomUUID } from 'crypto';
 import { sessionIdMapper } from './session-id-mapper.js';
+import { ensureCleanSessionSlot } from './session-lock-cleanup.js';
 import { DebugLogger } from './debug-logger.js';
 
 export class HarnessCodeReviewer {
@@ -176,6 +177,8 @@ export class HarnessCodeReviewer {
     // 使用双层 ID：内部可读 ID 用于日志，CLI UUID 用于 Claude Code
     const internalId = `cr-${task.id}-${Date.now()}-${randomUUID().slice(0, 8)}`;
     const sessionId = sessionIdMapper.generate(internalId, task.id, 'codeReview');
+    // CP-02: 清理可能的 session-env 残留锁，避免 "Session ID already in use"
+    ensureCleanSessionSlot(sessionId);
 
     const invokeOptions = {
       allowedTools: effectiveTools.tools,

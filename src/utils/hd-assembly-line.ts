@@ -17,6 +17,7 @@ import * as fs from 'fs';
 import { execSync } from 'child_process';
 import { randomUUID } from 'crypto';
 import { sessionIdMapper } from './session-id-mapper.js';
+import { ensureCleanSessionSlot } from './session-lock-cleanup.js';
 import type {
   HarnessConfig,
   HarnessRuntimeState,
@@ -96,6 +97,13 @@ export class AssemblyLine {
   private statusReporter: HarnessStatusReporter;
   private preValidator: HarnessPreValidator;
   private sessionId?: string;
+
+  /**
+   * 当前 AssemblyLine 的 CLI UUID（CP-03：供外部退出钩子识别活跃 session）
+   */
+  public get currentSessionId(): string | undefined {
+    return this.sessionId;
+  }
   /** 各任务的重试上下文，存储前次失败信息供重试时传递给 Claude */
   private taskRetryContexts: Map<string, RetryContext> = new Map();
   /** 执行记录存储（替代 state.records，避免双层状态架构） */
@@ -109,6 +117,8 @@ export class AssemblyLine {
     // 使用双层 ID：内部可读 ID 用于日志，CLI UUID 用于 Claude Code
     const internalId = sessionId || `harness-${Date.now()}-${randomUUID().slice(0, 8)}`;
     this.sessionId = sessionIdMapper.generate(internalId, 'pipeline', 'assembly-line');
+    // CP-02: 清理可能的 session-env 残留锁，避免 "Session ID already in use"
+    ensureCleanSessionSlot(this.sessionId);
 
     this.taskRetryContexts = new Map();
     this.executor = new HarnessExecutor(config);

@@ -36,6 +36,15 @@ import { isInitialized, getProjectDir } from '../utils/path.js';
 import { t } from '../i18n/index.js';
 import { AssemblyLine } from '../utils/hd-assembly-line.js';
 import { HarnessReporter } from '../utils/harness-reporter.js';
+import {
+  installExitHooks,
+  uninstallExitHooks,
+} from '../utils/harness-helpers.js';
+import {
+  listOrphanedSessions,
+  cleanupOrphanedSessions,
+} from '../utils/session-lock-cleanup.js';
+import { sessionIdMapper } from '../utils/session-id-mapper.js';
 import { readPlan, type ExecutionPlan } from '../utils/plan.js';
 import { readTaskMeta } from '../utils/task.js';
 import { normalizeStatus, TERMINAL_STATUSES } from '../types/task.js';
@@ -462,6 +471,29 @@ export async function harnessCommand(
   const assemblyLine = new AssemblyLine(config);
   const reporter = new HarnessReporter(config);
 
+  // CP-03: 安装进程退出钩子（SIGTERM/SIGINT/SIGHUP/exit）
+  // 在主进程退出前清理子进程 + session-env 孤儿锁，避免 "Session ID already in use"
+  const knownCliUuids = new Set<string>();
+  if (assemblyLine.currentSessionId) {
+    knownCliUuids.add(assemblyLine.currentSessionId);
+  }
+  installExitHooks(knownCliUuids);
+
+  // CP-04: 启动前扫描并清理孤儿 session-env 锁目录（崩溃残留兜底）
+  // 当前 mapper 已知 UUID 跳过；其他历史残留全部清理
+  const knownFromMapper = new Set<string>();
+  for (const mapping of sessionIdMapper.serialize()) {
+    knownFromMapper.add(mapping.cliUuid);
+  }
+  if (assemblyLine.currentSessionId) {
+    knownFromMapper.add(assemblyLine.currentSessionId);
+  }
+  const preOrphans = listOrphanedSessions(knownFromMapper);
+  if (preOrphans.length > 0) {
+    const cleaned = cleanupOrphanedSessions(preOrphans);
+    console.log(`   🧹 Pre-pipeline cleanup: removed ${cleaned} orphan session-env lock(s)`);
+  }
+
   // BUG-014-2: 流水线完成标志 & 信号防重入
   let pipelineCompleted = false;
   let shutdownInProgress = false;
@@ -562,6 +594,8 @@ export async function harnessCommand(
     // Remove signal handlers
     process.removeListener('SIGINT', gracefulShutdown);
     process.removeListener('SIGTERM', gracefulShutdown);
+    // CP-03: 卸载退出钩子，避免泄漏到后续命令
+    uninstallExitHooks();
   }
 }
 

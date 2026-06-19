@@ -11,6 +11,10 @@ import type { TaskMeta, CheckpointMetadata } from '../types/task.js';
 import { getProjectDir } from './path.js';
 import { t } from '../i18n/index.js';
 import { spawnWithMemoryLimit } from './spawn-utils.js';
+import {
+  listOrphanedSessions,
+  cleanupOrphanedSessions,
+} from './session-lock-cleanup.js';
 
 // ============================================================
 // 常量定义
@@ -113,6 +117,94 @@ export function killAllActiveChildren(signal: NodeJS.Signals = 'SIGTERM'): numbe
     activeChildProcesses.clear();
   }
   return killed;
+}
+
+/**
+ * 退出钩子注册状态（CP-03，INV-20260619-002 Track B）
+ *
+ * 防止重复注册：installExitHooks() 多次调用只生效一次，
+ * uninstallExitHooks() 在流水线正常结束或测试场景下移除监听。
+ */
+interface InstalledExitHooks {
+  handler: (signal: NodeJS.Signals) => void;
+  exitHandler: (code: number) => void;
+  signals: NodeJS.Signals[];
+}
+
+let installedHooks: InstalledExitHooks | null = null;
+
+/**
+ * 安装进程退出钩子（CP-03）
+ *
+ * 在 SIGTERM/SIGINT/SIGHUP/exit 触发时：
+ *   1. 先 SIGTERM 已注册子进程，给 Claude CLI 机会自行清理 session-env
+ *   2. 同步扫描并清理所有孤儿 session-env 锁目录（崩溃残留兜底）
+ *
+ * 使用场景：
+ *   - harness.ts pipeline 入口处调用一次
+ *   - 测试或正常退出路径调用 uninstallExitHooks() 解除
+ *
+ * @param knownCliUuids - 当前已知活跃的 cliUuid 集合，清理时跳过（可选）
+ * @param sessionEnvRoot - session-env 根目录覆盖（测试用）
+ */
+export function installExitHooks(
+  knownCliUuids: Set<string> = new Set(),
+  sessionEnvRoot?: string,
+): void {
+  if (installedHooks) {
+    return;
+  }
+
+  const handler = (_signal: NodeJS.Signals): void => {
+    try {
+      killAllActiveChildren('SIGTERM');
+      // SIGHUP/SIGTERM 多见于外部强制终止：尽力清理 session-env 孤儿
+      const orphans = listOrphanedSessions(knownCliUuids, sessionEnvRoot);
+      if (orphans.length > 0) {
+        cleanupOrphanedSessions(orphans);
+      }
+    } catch {
+      // 钩子内绝不能抛出，避免覆盖原始信号语义
+    }
+    // 不在此处 process.exit，让既有 gracefulShutdown 流程接管
+  };
+
+  const exitHandler = (_code: number): void => {
+    try {
+      // 进程即将退出：SIGKILL 兜底，防止僵尸；清理孤儿锁
+      killAllActiveChildren('SIGKILL');
+      const orphans = listOrphanedSessions(knownCliUuids, sessionEnvRoot);
+      if (orphans.length > 0) {
+        cleanupOrphanedSessions(orphans);
+      }
+    } catch {
+      // noop
+    }
+  };
+
+  const signals: NodeJS.Signals[] = ['SIGTERM', 'SIGINT', 'SIGHUP'];
+  for (const sig of signals) {
+    process.on(sig, handler);
+  }
+  process.on('exit', exitHandler);
+
+  installedHooks = { handler, exitHandler, signals };
+}
+
+/**
+ * 卸载 installExitHooks 注册的监听器（CP-03）
+ *
+ * 用于测试隔离与 pipeline 正常结束后的资源回收。
+ */
+export function uninstallExitHooks(): void {
+  if (!installedHooks) {
+    return;
+  }
+  for (const sig of installedHooks.signals) {
+    process.removeListener(sig, installedHooks.handler);
+  }
+  process.removeListener('exit', installedHooks.exitHandler);
+  installedHooks = null;
 }
 
 /**
