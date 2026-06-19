@@ -30,7 +30,7 @@ import { createSessionAwareEngine } from './feedback-constraint-engine.js';
 import { loadPromptTemplate, resolveTemplate, loadCustomRequirements } from './prompt-templates.js';
 import { checkCompletedCheckpoints as checkCompletedCheckpointsWithVerification } from './checkpoint-verification.js';
 import { t, getI18n } from '../i18n/index.js';
-import { sleep } from './harness-helpers.js';
+import { sleep, killAllActiveChildren, activeChildProcesses } from './harness-helpers.js';
 import type { HarnessPhaseOptions } from '../types/config.js';
 import { randomUUID } from 'crypto';
 import { sessionIdMapper } from './session-id-mapper.js';
@@ -39,6 +39,8 @@ import { DebugLogger } from './debug-logger.js';
 export class HarnessExecutor {
   private config: HarnessConfig;
   private debugLogger: DebugLogger;
+  /** 当前活动的子进程 PID 快照（由全局 activeChildProcesses 派生） */
+  private activeChildPid?: number;
 
   constructor(config: HarnessConfig) {
     this.config = config;
@@ -46,6 +48,61 @@ export class HarnessExecutor {
       cwd: config.cwd,
       enabled: config.debug,
     });
+  }
+
+  /**
+   * 获取当前活动的子进程 PID（最佳努力）。
+   *
+   * 说明：子进程由 runHeadlessClaude 统一注册到全局 activeChildProcesses，
+   * 此处返回最近一次观察到的 PID，用于日志与诊断。
+   */
+  getActiveChildPid(): number | undefined {
+    if (this.activeChildPid && activeChildProcesses.has(this.activeChildPid)) {
+      return this.activeChildPid;
+    }
+    // 回退：从全局集合中取第一个（适用于当前阶段仅有一个子进程的场景）
+    const first = activeChildProcesses.values().next().value;
+    this.activeChildPid = first;
+    return first;
+  }
+
+  /**
+   * 终止当前活动的子进程。
+   *
+   * @param signal POSIX 信号，默认 SIGTERM
+   * @returns 是否找到并尝试终止了子进程
+   */
+  killActiveChild(signal: NodeJS.Signals = 'SIGTERM'): boolean {
+    const pid = this.getActiveChildPid();
+    if (pid === undefined) {
+      return false;
+    }
+    try {
+      process.kill(pid, signal);
+      console.log(`   🛑 Terminated active child process ${pid} (${signal})`);
+      return true;
+    } catch (err) {
+      const errCode = (err as NodeJS.ErrnoException).code;
+      if (errCode === 'ESRCH') {
+        // 进程已退出，清理本地快照
+        this.activeChildPid = undefined;
+        return false;
+      }
+      console.warn(`   ⚠️  Failed to kill child ${pid}: ${(err as Error).message}`);
+      return false;
+    }
+  }
+
+  /**
+   * 终止所有活跃的子进程（委托给全局 killAllActiveChildren）。
+   *
+   * 供 AssemblyLine / gracefulShutdown 在流水线中断时统一清理。
+   * 方法名与 AssemblyLine.killAllChildren 保持一致，避免与全局函数同名 shadowing。
+   */
+  killAllChildren(signal: NodeJS.Signals = 'SIGTERM'): number {
+    const killed = killAllActiveChildren(signal);
+    this.activeChildPid = undefined;
+    return killed;
   }
 
   /**

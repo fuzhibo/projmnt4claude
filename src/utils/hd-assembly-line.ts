@@ -56,7 +56,7 @@ import { saveRuntimeState } from '../commands/harness.js';
 import { validateBasicFields, validateCheckpoints } from './quality-gate.js';
 import { DependencyGraph, executeFailureCascade } from './dependency-graph/index.js';
 import { SEPARATOR_WIDTH } from './format';
-import { sleep } from './harness-helpers.js';
+import { sleep, killAllActiveChildren } from './harness-helpers.js';
 import {
   verifyAndRecordCheckpoint,
   inferCategoryFromCheckpoint,
@@ -2759,6 +2759,23 @@ export class AssemblyLine {
   forceFailStatus(error: unknown): void {
     const message = error instanceof Error ? error.message : String(error);
     this.statusReporter.forceFailStatus('failed', message);
+  }
+
+  /**
+   * 终止所有活跃子进程（SYS-ORPHAN-2026-006 修复核心）。
+   *
+   * 委托给全局 killAllActiveChildren——runHeadlessClaude 已自动将
+   * 每个子进程 PID 注册到全局集合，本类无需维护冗余集合。
+   *
+   * @param signal POSIX 信号，先 SIGTERM 后 SIGKILL
+   * @returns 已发送信号的 PID 数量
+   */
+  killAllChildren(signal: NodeJS.Signals = 'SIGTERM'): number {
+    const killed = killAllActiveChildren(signal);
+    if (killed > 0) {
+      console.log(`   🛑 AssemblyLine: sent ${signal} to ${killed} child process(es)`);
+    }
+    return killed;
   }
 
   /**

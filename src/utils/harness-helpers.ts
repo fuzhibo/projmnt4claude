@@ -70,6 +70,49 @@ export interface HeadlessClaudeResult {
   hookWarning?: string;
   /** 原始 stderr 输出 */
   stderr?: string;
+  /** 子进程 PID（用于外部追踪与清理） */
+  childPid?: number;
+}
+
+/**
+ * 全局活跃子进程 PID 集合。
+ *
+ * 由 runHeadlessClaude 自动维护（spawn 时注册，close/error 时注销）。
+ * 供信号处理器（gracefulShutdown）在主进程退出前清理子进程，
+ * 避免孤儿进程累积导致系统资源耗尽（SYS-ORPHAN-2026-006）。
+ */
+export const activeChildProcesses: Set<number> = new Set();
+
+/**
+ * 终止所有已注册的活跃子进程。
+ *
+ * @param signal POSIX 信号，默认 SIGTERM，主进程退出前应先 SIGTERM 再 SIGKILL
+ * @returns 已发送信号的 PID 数量
+ */
+export function killAllActiveChildren(signal: NodeJS.Signals = 'SIGTERM'): number {
+  let killed = 0;
+  for (const pid of activeChildProcesses) {
+    try {
+      process.kill(pid, signal);
+      killed++;
+    } catch (err) {
+      const errCode = (err as NodeJS.ErrnoException).code;
+      if (errCode === 'ESRCH') {
+        // 进程已退出：立即从集合移除，避免计数虚高与后续重复无效 kill
+        activeChildProcesses.delete(pid);
+      } else {
+        console.warn(`   ⚠️  Failed to kill child ${pid}: ${(err as Error).message}`);
+      }
+    }
+  }
+  if (killed > 0) {
+    console.log(`   🛑 Sent ${signal} to ${killed} child process(es)`);
+  }
+  if (signal === 'SIGKILL') {
+    // 强制终止后清空集合；SIGTERM 保留以便后续 SIGKILL 兜底
+    activeChildProcesses.clear();
+  }
+  return killed;
 }
 
 /**
@@ -220,6 +263,11 @@ export async function runHeadlessClaude(options: HeadlessClaudeOptions): Promise
         timeout: options.timeout * 1000,
       }, 'claudeAgent');
 
+      // 注册子进程 PID 以供信号处理器清理（避免孤儿进程）
+      if (child.pid) {
+        activeChildProcesses.add(child.pid);
+      }
+
       // 通过 stdin 传递 prompt（分块写入以避免大数据丢失）
       if (child.stdin) {
         const chunkSize = 4096;
@@ -256,7 +304,18 @@ export async function runHeadlessClaude(options: HeadlessClaudeOptions): Promise
         stderr += data.toString();
       });
 
+      // 双保险：exit 先于 close 触发（close 依赖 stdio drain）。
+      // OOM/异常 stdio 场景下 close 可能丢失，exit 兜底确保 PID 反注册。
+      child.on('exit', () => {
+        if (child.pid) {
+          activeChildProcesses.delete(child.pid);
+        }
+      });
+
       child.on('close', (code) => {
+        if (child.pid) {
+          activeChildProcesses.delete(child.pid);
+        }
         const classified = classifyExitResult(code, stderr, stdout);
         resolve({
           success: classified.success,
@@ -264,15 +323,20 @@ export async function runHeadlessClaude(options: HeadlessClaudeOptions): Promise
           error: classified.error,
           hookWarning: classified.hookWarning,
           stderr,
+          childPid: child.pid,
         });
       });
 
       child.on('error', (error) => {
+        if (child.pid) {
+          activeChildProcesses.delete(child.pid);
+        }
         resolve({
           success: false,
           output: '',
           error: error.message,
           stderr: '',
+          childPid: child.pid,
         });
       });
 

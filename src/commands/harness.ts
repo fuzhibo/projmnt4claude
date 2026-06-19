@@ -470,8 +470,16 @@ export async function harnessCommand(
     if (shutdownInProgress) return;
     shutdownInProgress = true;
     console.log(`\n⚠️  Received ${signal}, shutting down gracefully...`);
-    assemblyLine.forceFailStatus(new Error(`Received ${signal}, pipeline interrupted`));
-    process.exit(signal === 'SIGINT' ? 130 : 143);
+
+    // SYS-ORPHAN-2026-006: 先 SIGTERM 所有子进程，避免孤儿进程累积
+    assemblyLine.killAllChildren('SIGTERM');
+
+    // 给子进程 3 秒清理时间，然后 SIGKILL 兜底
+    setTimeout(() => {
+      assemblyLine.killAllChildren('SIGKILL');
+      assemblyLine.forceFailStatus(new Error(`Received ${signal}, pipeline interrupted`));
+      process.exit(signal === 'SIGINT' ? 130 : 143);
+    }, 3000);
   };
 
   process.on('SIGINT', gracefulShutdown);
