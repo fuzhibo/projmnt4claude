@@ -7,60 +7,39 @@ var __defProp = Object.defineProperty;
 var __getOwnPropNames = Object.getOwnPropertyNames;
 var __getOwnPropDesc = Object.getOwnPropertyDescriptor;
 var __hasOwnProp = Object.prototype.hasOwnProperty;
-function __accessProp(key) {
-  return this[key];
-}
-var __toESMCache_node;
-var __toESMCache_esm;
 var __toESM = (mod, isNodeMode, target) => {
-  var canCache = mod != null && typeof mod === "object";
-  if (canCache) {
-    var cache = isNodeMode ? __toESMCache_node ??= new WeakMap : __toESMCache_esm ??= new WeakMap;
-    var cached = cache.get(mod);
-    if (cached)
-      return cached;
-  }
   target = mod != null ? __create(__getProtoOf(mod)) : {};
   const to = isNodeMode || !mod || !mod.__esModule ? __defProp(target, "default", { value: mod, enumerable: true }) : target;
   for (let key of __getOwnPropNames(mod))
     if (!__hasOwnProp.call(to, key))
       __defProp(to, key, {
-        get: __accessProp.bind(mod, key),
+        get: () => mod[key],
         enumerable: true
       });
-  if (canCache)
-    cache.set(mod, to);
   return to;
 };
+var __moduleCache = /* @__PURE__ */ new WeakMap;
 var __toCommonJS = (from) => {
-  var entry = (__moduleCache ??= new WeakMap).get(from), desc;
+  var entry = __moduleCache.get(from), desc;
   if (entry)
     return entry;
   entry = __defProp({}, "__esModule", { value: true });
-  if (from && typeof from === "object" || typeof from === "function") {
-    for (var key of __getOwnPropNames(from))
-      if (!__hasOwnProp.call(entry, key))
-        __defProp(entry, key, {
-          get: __accessProp.bind(from, key),
-          enumerable: !(desc = __getOwnPropDesc(from, key)) || desc.enumerable
-        });
-  }
+  if (from && typeof from === "object" || typeof from === "function")
+    __getOwnPropNames(from).map((key) => !__hasOwnProp.call(entry, key) && __defProp(entry, key, {
+      get: () => from[key],
+      enumerable: !(desc = __getOwnPropDesc(from, key)) || desc.enumerable
+    }));
   __moduleCache.set(from, entry);
   return entry;
 };
-var __moduleCache;
 var __commonJS = (cb, mod) => () => (mod || cb((mod = { exports: {} }).exports, mod), mod.exports);
-var __returnValue = (v) => v;
-function __exportSetter(name, newValue) {
-  this[name] = __returnValue.bind(null, newValue);
-}
 var __export = (target, all) => {
   for (var name in all)
     __defProp(target, name, {
       get: all[name],
       enumerable: true,
       configurable: true,
-      set: __exportSetter.bind(all, name)
+      set: (newValue) => all[name] = () => newValue
     });
 };
 var __esm = (fn, res) => () => (fn && (res = fn(fn = 0)), res);
@@ -1038,7 +1017,7 @@ Expecting one of '${allowedValues.join("', '")}'`);
         this._exitCallback = (err) => {
           if (err.code !== "commander.executeSubCommandAsync") {
             throw err;
-          }
+          } else {}
         };
       }
       return this;
@@ -13458,6 +13437,29 @@ var init_logger = __esm(() => {
 // src/utils/harness-helpers.ts
 import * as fs10 from "fs";
 import * as path7 from "path";
+function killAllActiveChildren(signal = "SIGTERM") {
+  let killed = 0;
+  for (const pid of activeChildProcesses) {
+    try {
+      process.kill(pid, signal);
+      killed++;
+    } catch (err) {
+      const errCode = err.code;
+      if (errCode === "ESRCH") {
+        activeChildProcesses.delete(pid);
+      } else {
+        console.warn(`   ⚠️  Failed to kill child ${pid}: ${err.message}`);
+      }
+    }
+  }
+  if (killed > 0) {
+    console.log(`   \uD83D\uDED1 Sent ${signal} to ${killed} child process(es)`);
+  }
+  if (signal === "SIGKILL") {
+    activeChildProcesses.clear();
+  }
+  return killed;
+}
 function classifyExitResult(code, stderr, stdout, cwd) {
   let texts;
   try {
@@ -13554,6 +13556,9 @@ async function runHeadlessClaude(options) {
         stdio: ["pipe", "pipe", "pipe"],
         timeout: options.timeout * 1000
       }, "claudeAgent");
+      if (child.pid) {
+        activeChildProcesses.add(child.pid);
+      }
       if (child.stdin) {
         let writeNextChunk = function() {
           if (offset >= options.prompt.length) {
@@ -13581,22 +13586,35 @@ async function runHeadlessClaude(options) {
       child.stderr?.on("data", (data) => {
         stderr += data.toString();
       });
+      child.on("exit", () => {
+        if (child.pid) {
+          activeChildProcesses.delete(child.pid);
+        }
+      });
       child.on("close", (code) => {
+        if (child.pid) {
+          activeChildProcesses.delete(child.pid);
+        }
         const classified = classifyExitResult(code, stderr, stdout);
         resolve3({
           success: classified.success,
           output: stdout,
           error: classified.error,
           hookWarning: classified.hookWarning,
-          stderr
+          stderr,
+          childPid: child.pid
         });
       });
       child.on("error", (error) => {
+        if (child.pid) {
+          activeChildProcesses.delete(child.pid);
+        }
         resolve3({
           success: false,
           output: "",
           error: error.message,
-          stderr: ""
+          stderr: "",
+          childPid: child.pid
         });
       });
     } catch (error) {
@@ -13766,11 +13784,12 @@ function getReportDir(taskId, cwd) {
 function getReportPath(taskId, reportType, cwd) {
   return path7.join(getReportDir(taskId, cwd), `${reportType}-report.md`);
 }
-var REVIEW_TIMEOUT_RATIO = 3;
+var REVIEW_TIMEOUT_RATIO = 3, activeChildProcesses;
 var init_harness_helpers = __esm(() => {
   init_path();
   init_i18n();
   init_spawn_utils();
+  activeChildProcesses = new Set;
 });
 
 // src/utils/headless-agent.ts
@@ -19087,193 +19106,6 @@ function cleanupEvidence(taskId, maxAge = 30, cwd = process.cwd()) {
 var init_validation = __esm(() => {
   init_path();
   init_task2();
-});
-
-// src/utils/plan.ts
-import * as path14 from "path";
-import * as fs18 from "fs";
-function isExecutableStatus(status) {
-  const normalized = normalizeStatus(status);
-  return normalized in EXECUTABLE_STATUS_PRIORITY;
-}
-function getStatusPriority(status) {
-  const normalized = normalizeStatus(status);
-  return EXECUTABLE_STATUS_PRIORITY[normalized] ?? 999;
-}
-function getPlanPath(cwd = process.cwd()) {
-  return path14.join(getProjectDir(cwd), "current-plan.json");
-}
-function readPlan(cwd = process.cwd()) {
-  if (!isInitialized(cwd)) {
-    return null;
-  }
-  const planPath = getPlanPath(cwd);
-  try {
-    if (!fs18.existsSync(planPath)) {
-      return null;
-    }
-    const content = fs18.readFileSync(planPath, "utf-8");
-    return JSON.parse(content);
-  } catch {
-    return null;
-  }
-}
-function writePlan(plan, cwd = process.cwd()) {
-  const planPath = getPlanPath(cwd);
-  plan.updatedAt = new Date().toISOString();
-  fs18.writeFileSync(planPath, JSON.stringify(plan, null, 2), "utf-8");
-}
-function createEmptyPlan() {
-  const now = new Date().toISOString();
-  return {
-    tasks: [],
-    createdAt: now,
-    updatedAt: now
-  };
-}
-function getOrCreatePlan(cwd = process.cwd()) {
-  const plan = readPlan(cwd);
-  if (plan) {
-    return plan;
-  }
-  return createEmptyPlan();
-}
-function addTaskToPlan(taskId, afterId, cwd = process.cwd()) {
-  const plan = getOrCreatePlan(cwd);
-  if (plan.tasks.includes(taskId)) {
-    return false;
-  }
-  if (afterId) {
-    const index = plan.tasks.indexOf(afterId);
-    if (index === -1) {
-      plan.tasks.push(taskId);
-    } else {
-      plan.tasks.splice(index + 1, 0, taskId);
-    }
-  } else {
-    plan.tasks.push(taskId);
-  }
-  writePlan(plan, cwd);
-  return true;
-}
-function removeTaskFromPlan(taskId, cwd = process.cwd()) {
-  const plan = readPlan(cwd);
-  if (!plan) {
-    return false;
-  }
-  const index = plan.tasks.indexOf(taskId);
-  if (index === -1) {
-    return false;
-  }
-  plan.tasks.splice(index, 1);
-  writePlan(plan, cwd);
-  return true;
-}
-function clearPlan(cwd = process.cwd()) {
-  const plan = createEmptyPlan();
-  writePlan(plan, cwd);
-}
-function areDependenciesCompleted(taskId, cwd = process.cwd()) {
-  const task = readTaskMeta(taskId, cwd);
-  if (!task) {
-    return false;
-  }
-  for (const depId of task.dependencies) {
-    const depTask = readTaskMeta(depId, cwd);
-    if (!depTask) {
-      return false;
-    }
-    const normalizedStatus = normalizeStatus(depTask.status);
-    if (normalizedStatus !== "resolved" && normalizedStatus !== "closed") {
-      return false;
-    }
-  }
-  return true;
-}
-function isParentTaskCompleted(taskId, cwd = process.cwd()) {
-  const task = readTaskMeta(taskId, cwd);
-  if (!task || !task.parentId) {
-    return false;
-  }
-  const parentTask = readTaskMeta(task.parentId, cwd);
-  if (!parentTask) {
-    return false;
-  }
-  const normalizedStatus = normalizeStatus(parentTask.status);
-  return normalizedStatus === "resolved" || normalizedStatus === "closed";
-}
-function getExecutableTasks(cwd = process.cwd(), includeSubtasks = false) {
-  const tasks = getAllTasks(cwd);
-  const skippedDueToParent = [];
-  const executableTasks = tasks.filter((task) => {
-    if (!includeSubtasks && (isSubtask(task.id) || !!task.parentId)) {
-      return false;
-    }
-    if (task.subtaskIds && task.subtaskIds.length > 0) {
-      return false;
-    }
-    if (task.parentId && isParentTaskCompleted(task.id, cwd)) {
-      skippedDueToParent.push(task.id);
-      return false;
-    }
-    return isExecutableStatus(task.status) && areDependenciesCompleted(task.id, cwd);
-  });
-  executableTasks.sort((a, b) => {
-    const priorityA = getStatusPriority(a.status);
-    const priorityB = getStatusPriority(b.status);
-    return priorityA - priorityB;
-  });
-  if (skippedDueToParent.length > 0) {
-    console.log("");
-    console.log("⚠️  以下子任务的父任务已完成，跳过推荐:");
-    for (const taskId of skippedDueToParent) {
-      const task = tasks.find((t2) => t2.id === taskId);
-      if (task) {
-        console.log(`   - ${taskId} (父任务 ${task.parentId} 已 resolved)`);
-      }
-    }
-    console.log("");
-  }
-  return executableTasks.map((task) => task.id);
-}
-function detectMissingSubtasks(cwd = process.cwd()) {
-  const allTasks = getAllTasks(cwd);
-  const warnings = [];
-  for (const task of allTasks) {
-    if (!task.subtaskIds || task.subtaskIds.length === 0) {
-      continue;
-    }
-    const missingIds = [];
-    let actualCount = 0;
-    for (const subtaskId of task.subtaskIds) {
-      const subtask = readTaskMeta(subtaskId, cwd);
-      if (subtask) {
-        actualCount++;
-      } else {
-        missingIds.push(subtaskId);
-      }
-    }
-    if (missingIds.length > 0) {
-      warnings.push({
-        parentTaskId: task.id,
-        parentTitle: task.title,
-        missingSubtaskIds: missingIds,
-        expectedCount: task.subtaskIds.length,
-        actualCount
-      });
-    }
-  }
-  return warnings;
-}
-var EXECUTABLE_STATUS_PRIORITY;
-var init_plan = __esm(() => {
-  init_path();
-  init_task2();
-  init_task();
-  EXECUTABLE_STATUS_PRIORITY = {
-    in_progress: 1,
-    open: 2
-  };
 });
 
 // src/types/harness.ts
@@ -26458,13 +26290,198 @@ function renameTaskCommand(oldTaskId, newTaskId, cwd = process.cwd()) {
 }
 
 // src/commands/plan.ts
-init_plan();
+var import_prompts3 = __toESM(require_prompts3(), 1);
+
+// src/utils/plan.ts
+init_path();
+init_task2();
+init_task();
+import * as path14 from "path";
+import * as fs18 from "fs";
+var EXECUTABLE_STATUS_PRIORITY = {
+  in_progress: 1,
+  open: 2
+};
+function isExecutableStatus(status) {
+  const normalized = normalizeStatus(status);
+  return normalized in EXECUTABLE_STATUS_PRIORITY;
+}
+function getStatusPriority(status) {
+  const normalized = normalizeStatus(status);
+  return EXECUTABLE_STATUS_PRIORITY[normalized] ?? 999;
+}
+function getPlanPath(cwd = process.cwd()) {
+  return path14.join(getProjectDir(cwd), "current-plan.json");
+}
+function readPlan(cwd = process.cwd()) {
+  if (!isInitialized(cwd)) {
+    return null;
+  }
+  const planPath = getPlanPath(cwd);
+  try {
+    if (!fs18.existsSync(planPath)) {
+      return null;
+    }
+    const content = fs18.readFileSync(planPath, "utf-8");
+    return JSON.parse(content);
+  } catch {
+    return null;
+  }
+}
+function writePlan(plan, cwd = process.cwd()) {
+  const planPath = getPlanPath(cwd);
+  plan.updatedAt = new Date().toISOString();
+  fs18.writeFileSync(planPath, JSON.stringify(plan, null, 2), "utf-8");
+}
+function createEmptyPlan() {
+  const now = new Date().toISOString();
+  return {
+    tasks: [],
+    createdAt: now,
+    updatedAt: now
+  };
+}
+function getOrCreatePlan(cwd = process.cwd()) {
+  const plan = readPlan(cwd);
+  if (plan) {
+    return plan;
+  }
+  return createEmptyPlan();
+}
+function addTaskToPlan(taskId, afterId, cwd = process.cwd()) {
+  const plan = getOrCreatePlan(cwd);
+  if (plan.tasks.includes(taskId)) {
+    return false;
+  }
+  if (afterId) {
+    const index = plan.tasks.indexOf(afterId);
+    if (index === -1) {
+      plan.tasks.push(taskId);
+    } else {
+      plan.tasks.splice(index + 1, 0, taskId);
+    }
+  } else {
+    plan.tasks.push(taskId);
+  }
+  writePlan(plan, cwd);
+  return true;
+}
+function removeTaskFromPlan(taskId, cwd = process.cwd()) {
+  const plan = readPlan(cwd);
+  if (!plan) {
+    return false;
+  }
+  const index = plan.tasks.indexOf(taskId);
+  if (index === -1) {
+    return false;
+  }
+  plan.tasks.splice(index, 1);
+  writePlan(plan, cwd);
+  return true;
+}
+function clearPlan(cwd = process.cwd()) {
+  const plan = createEmptyPlan();
+  writePlan(plan, cwd);
+}
+function areDependenciesCompleted(taskId, cwd = process.cwd()) {
+  const task = readTaskMeta(taskId, cwd);
+  if (!task) {
+    return false;
+  }
+  for (const depId of task.dependencies) {
+    const depTask = readTaskMeta(depId, cwd);
+    if (!depTask) {
+      return false;
+    }
+    const normalizedStatus = normalizeStatus(depTask.status);
+    if (normalizedStatus !== "resolved" && normalizedStatus !== "closed") {
+      return false;
+    }
+  }
+  return true;
+}
+function isParentTaskCompleted(taskId, cwd = process.cwd()) {
+  const task = readTaskMeta(taskId, cwd);
+  if (!task || !task.parentId) {
+    return false;
+  }
+  const parentTask = readTaskMeta(task.parentId, cwd);
+  if (!parentTask) {
+    return false;
+  }
+  const normalizedStatus = normalizeStatus(parentTask.status);
+  return normalizedStatus === "resolved" || normalizedStatus === "closed";
+}
+function getExecutableTasks(cwd = process.cwd(), includeSubtasks = false) {
+  const tasks = getAllTasks(cwd);
+  const skippedDueToParent = [];
+  const executableTasks = tasks.filter((task) => {
+    if (!includeSubtasks && (isSubtask(task.id) || !!task.parentId)) {
+      return false;
+    }
+    if (task.subtaskIds && task.subtaskIds.length > 0) {
+      return false;
+    }
+    if (task.parentId && isParentTaskCompleted(task.id, cwd)) {
+      skippedDueToParent.push(task.id);
+      return false;
+    }
+    return isExecutableStatus(task.status) && areDependenciesCompleted(task.id, cwd);
+  });
+  executableTasks.sort((a, b) => {
+    const priorityA = getStatusPriority(a.status);
+    const priorityB = getStatusPriority(b.status);
+    return priorityA - priorityB;
+  });
+  if (skippedDueToParent.length > 0) {
+    console.log("");
+    console.log("⚠️  以下子任务的父任务已完成，跳过推荐:");
+    for (const taskId of skippedDueToParent) {
+      const task = tasks.find((t2) => t2.id === taskId);
+      if (task) {
+        console.log(`   - ${taskId} (父任务 ${task.parentId} 已 resolved)`);
+      }
+    }
+    console.log("");
+  }
+  return executableTasks.map((task) => task.id);
+}
+function detectMissingSubtasks(cwd = process.cwd()) {
+  const allTasks = getAllTasks(cwd);
+  const warnings = [];
+  for (const task of allTasks) {
+    if (!task.subtaskIds || task.subtaskIds.length === 0) {
+      continue;
+    }
+    const missingIds = [];
+    let actualCount = 0;
+    for (const subtaskId of task.subtaskIds) {
+      const subtask = readTaskMeta(subtaskId, cwd);
+      if (subtask) {
+        actualCount++;
+      } else {
+        missingIds.push(subtaskId);
+      }
+    }
+    if (missingIds.length > 0) {
+      warnings.push({
+        parentTaskId: task.id,
+        parentTitle: task.title,
+        missingSubtaskIds: missingIds,
+        expectedCount: task.subtaskIds.length,
+        actualCount
+      });
+    }
+  }
+  return warnings;
+}
+
+// src/commands/plan.ts
 init_path();
 init_task2();
 init_task();
 init_logger();
 init_quality_gate();
-var import_prompts3 = __toESM(require_prompts3(), 1);
 
 // src/utils/quality-gate-registry.ts
 init_checkpoint_rules();
@@ -36235,7 +36252,7 @@ function getBuiltInAnalyzers() {
 // src/commands/doctor.ts
 init_config();
 init_i18n();
-var __dirname = "/home/fuzhibo/workerplace/git/projmnt4claude/src/commands";
+var __dirname = "/home/fuzhibo/workerplace/data/git/projmnt4claude/src/commands";
 async function runDoctor(fix = false, cwd = process.cwd()) {
   const texts = t(cwd).doctorCmd;
   console.log("");
@@ -37774,6 +37791,7 @@ function createSessionAwareEngine(outputType = "json", rules = [], maxRetriesOnE
 init_prompt_templates();
 init_checkpoint_verification();
 init_i18n();
+init_harness_helpers();
 import { randomUUID as randomUUID3 } from "crypto";
 
 // src/utils/debug-logger.ts
@@ -37903,12 +37921,45 @@ ${JSON.stringify(context || {}, null, 2)}
 class HarnessExecutor {
   config;
   debugLogger;
+  activeChildPid;
   constructor(config) {
     this.config = config;
     this.debugLogger = new DebugLogger({
       cwd: config.cwd,
       enabled: config.debug
     });
+  }
+  getActiveChildPid() {
+    if (this.activeChildPid && activeChildProcesses.has(this.activeChildPid)) {
+      return this.activeChildPid;
+    }
+    const first = activeChildProcesses.values().next().value;
+    this.activeChildPid = first;
+    return first;
+  }
+  killActiveChild(signal = "SIGTERM") {
+    const pid = this.getActiveChildPid();
+    if (pid === undefined) {
+      return false;
+    }
+    try {
+      process.kill(pid, signal);
+      console.log(`   \uD83D\uDED1 Terminated active child process ${pid} (${signal})`);
+      return true;
+    } catch (err) {
+      const errCode = err.code;
+      if (errCode === "ESRCH") {
+        this.activeChildPid = undefined;
+        return false;
+      }
+      console.warn(`   ⚠️  Failed to kill child ${pid}: ${err.message}`);
+      return false;
+    }
+  }
+  killAllChildren(signal = "SIGTERM") {
+    const killed = killAllActiveChildren(signal);
+    this.activeChildPid = undefined;
+    return killed;
   }
   async execute(task, contract, timeoutOverride, retryContext) {
     const startTime = new Date;
@@ -41783,18 +41834,16 @@ class HarnessReporter {
 }
 
 // src/commands/harness.ts
-init_plan();
 init_task2();
 init_task();
 
 // src/commands/plan.ts
-init_plan();
+var import_prompts10 = __toESM(require_prompts3(), 1);
 init_path();
 init_task2();
 init_task();
 init_logger();
 init_quality_gate();
-var import_prompts10 = __toESM(require_prompts3(), 1);
 init_ai_metadata();
 init_dependency_engine();
 init_dependency_graph();
@@ -45444,6 +45493,13 @@ ${"━".repeat(SEPARATOR_WIDTH)}`);
     const message = error instanceof Error ? error.message : String(error);
     this.statusReporter.forceFailStatus("failed", message);
   }
+  killAllChildren(signal = "SIGTERM") {
+    const killed = killAllActiveChildren(signal);
+    if (killed > 0) {
+      console.log(`   \uD83D\uDED1 AssemblyLine: sent ${signal} to ${killed} child process(es)`);
+    }
+    return killed;
+  }
   outputBatchSummary(state, batchIndex) {
     const boundaries = state.batchBoundaries;
     const labels = state.batchLabels;
@@ -46092,7 +46148,6 @@ ${"━".repeat(SEPARATOR_WIDTH)}`);
 }
 
 // src/commands/harness.ts
-init_plan();
 init_task2();
 init_task();
 init_quality_gate();
@@ -46353,8 +46408,12 @@ async function harnessCommand(options, cwd = process.cwd()) {
     shutdownInProgress = true;
     console.log(`
 ⚠️  Received ${signal}, shutting down gracefully...`);
-    assemblyLine.forceFailStatus(new Error(`Received ${signal}, pipeline interrupted`));
-    process.exit(signal === "SIGINT" ? 130 : 143);
+    assemblyLine.killAllChildren("SIGTERM");
+    setTimeout(() => {
+      assemblyLine.killAllChildren("SIGKILL");
+      assemblyLine.forceFailStatus(new Error(`Received ${signal}, pipeline interrupted`));
+      process.exit(signal === "SIGINT" ? 130 : 143);
+    }, 3000);
   };
   process.on("SIGINT", gracefulShutdown);
   process.on("SIGTERM", gracefulShutdown);
