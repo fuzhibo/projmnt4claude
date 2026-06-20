@@ -53,6 +53,7 @@ import { HarnessQATester } from './harness-qa-tester.js';
 import { HarnessEvaluator } from './harness-evaluator.js';
 import { RetryHandler } from './harness-retry.js';
 import { HarnessStatusReporter } from './harness-status-reporter.js';
+import { evaluateSummaryConclusion } from './harness-reporter.js';
 import { saveRuntimeState } from '../commands/harness.js';
 import { validateBasicFields, validateCheckpoints } from './quality-gate.js';
 import { DependencyGraph, executeFailureCascade } from './dependency-graph/index.js';
@@ -413,14 +414,30 @@ export class AssemblyLine {
       config: this.config,
     };
 
+    // CP-13: taskResults 填充断言 — 确保每个唯一任务 ID 都在 taskResults Map 中
+    const missingTaskIds = [...uniqueTaskIds].filter(id => !summary.taskResults.has(id));
+    if (missingTaskIds.length > 0) {
+      console.error(`[CP-13] taskResults 缺失任务: ${missingTaskIds.join(', ')}`);
+    }
+
+    // CP-13: 检测无裁决记录（executionRecords 存在但 reviewVerdict 未赋值）
+    const unverdictRecords = records.filter(r => !r.reviewVerdict && r.devReport.status !== 'failed');
+    if (unverdictRecords.length > 0) {
+      const unverdictIds = unverdictRecords.map(r => r.taskId).join(', ');
+      console.warn(`[CP-13] ${unverdictRecords.length} 条记录无裁决: ${unverdictIds}`);
+    }
+
     // CP-23: state 仅表示进程级别状态，正常结束均为 completed
     // 个别任务失败记录在 HarnessStatusReport.failedTasks 中
     state.state = 'completed';
 
     // 完成流水线状态报告
     // CP-23: 始终使用 completePipeline，任务失败信息已在 failedTasks 中
-    if (summary.failed === 0) {
+    const conclusion = evaluateSummaryConclusion(summary);
+    if (conclusion.verdict === 'success') {
       this.statusReporter.completePipeline(`流水线执行完成，${summary.passed}/${uniqueTaskCount} 任务通过`);
+    } else if (conclusion.verdict === 'anomaly' || conclusion.verdict === 'incomplete') {
+      this.statusReporter.completePipeline(conclusion.message);
     } else {
       this.statusReporter.completePipeline(`流水线执行完成，${summary.passed}/${uniqueTaskCount} 通过，${summary.failed} 失败`);
     }

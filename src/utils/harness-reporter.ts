@@ -17,6 +17,69 @@ import type {
 } from '../types/harness.js';
 import { getProjectDir } from './path.js';
 
+/**
+ * Summary 结论评估结果
+ */
+export interface SummaryConclusion {
+  /** 结论标记：success / partial-fail / all-fail / anomaly / incomplete */
+  verdict: 'success' | 'partial-fail' | 'all-fail' | 'anomaly' | 'incomplete';
+  /** 面向用户的结论消息（Markdown） */
+  message: string;
+}
+
+/**
+ * 评估执行摘要结论（CP-14 公共函数）
+ *
+ * 5 分支逻辑：
+ * 1. passed=0 && failed=0 → anomaly（流水线异常终止）
+ * 2. passed+failed < totalTasks → incomplete（流水线未完整执行）
+ * 3. failed=0 → success（所有任务执行成功）
+ * 4. passed>0 → partial-fail（部分任务失败）
+ * 5. 其余 → all-fail（所有任务执行失败）
+ */
+export function evaluateSummaryConclusion(summary: ExecutionSummary): SummaryConclusion {
+  const completedTasks = summary.passed + summary.failed;
+  const allCounted = completedTasks >= summary.totalTasks;
+
+  // 分支 1: 无任何 verdict 但 totalTasks > 0 — 异常终止
+  if (summary.totalTasks > 0 && summary.passed === 0 && summary.failed === 0) {
+    return {
+      verdict: 'anomaly',
+      message: `🚨 **流水线异常终止**: 共 ${summary.totalTasks} 个任务，但未记录任何执行结果。可能由流水线中断或 taskResults 未填充导致。`,
+    };
+  }
+
+  // 分支 2: passed + failed < totalTasks — 未完整执行
+  if (!allCounted) {
+    return {
+      verdict: 'incomplete',
+      message: `🟡 **流水线未完整执行**: ${summary.passed}/${summary.totalTasks} 通过，${summary.failed}/${summary.totalTasks} 失败，${summary.totalTasks - completedTasks} 个任务未执行。`,
+    };
+  }
+
+  // 分支 3: 全部通过
+  if (summary.failed === 0) {
+    return {
+      verdict: 'success',
+      message: '✅ **所有任务执行成功！**',
+    };
+  }
+
+  // 分支 4: 部分失败
+  if (summary.passed > 0) {
+    return {
+      verdict: 'partial-fail',
+      message: `⚠️ **部分任务失败**: ${summary.passed}/${summary.totalTasks} 通过`,
+    };
+  }
+
+  // 分支 5: 全部失败
+  return {
+    verdict: 'all-fail',
+    message: '❌ **所有任务执行失败**',
+  };
+}
+
 export class HarnessReporter {
   private config: HarnessConfig;
 
@@ -45,6 +108,17 @@ export class HarnessReporter {
    * 格式化执行摘要报告
    */
   private formatSummaryReport(summary: ExecutionSummary): string {
+    // CP-16: 审计日志 — 在报告生成入口点快照 summary 状态
+    const auditSnapshot = {
+      timestamp: new Date().toISOString(),
+      totalTasks: summary.totalTasks,
+      passed: summary.passed,
+      failed: summary.failed,
+      taskResultsSize: summary.taskResults.size,
+      passedFailedDelta: summary.totalTasks - (summary.passed + summary.failed),
+    };
+    console.error(`[CP-16] formatSummaryReport entry: ${JSON.stringify(auditSnapshot)}`);
+
     const lines: string[] = [];
 
     lines.push('# Harness Design 执行摘要');
@@ -138,15 +212,10 @@ export class HarnessReporter {
     lines.push('');
 
     // 结论
+    const conclusion = evaluateSummaryConclusion(summary);
     lines.push('## 结论');
     lines.push('');
-    if (summary.failed === 0) {
-      lines.push('✅ **所有任务执行成功！**');
-    } else if (summary.passed > 0) {
-      lines.push(`⚠️ **部分任务失败**: ${summary.passed}/${summary.totalTasks} 通过`);
-    } else {
-      lines.push('❌ **所有任务执行失败**');
-    }
+    lines.push(conclusion.message);
     lines.push('');
 
     return lines.join('\n');

@@ -1,7 +1,7 @@
 import { describe, test, expect, beforeEach, afterEach } from '@jest/globals';
 import * as fs from 'fs';
 import * as path from 'path';
-import { HarnessReporter } from '../utils/harness-reporter.js';
+import { HarnessReporter, evaluateSummaryConclusion } from '../utils/harness-reporter.js';
 import { createIsolatedTestEnv, type IsolatedTestEnv } from '../utils/test-env.js';
 import { saveReport, archiveReportIfExists } from '../utils/harness-helpers.js';
 import type {
@@ -123,6 +123,18 @@ describe('HarnessReporter: formatSummaryReport', () => {
     const summary = createTestSummary({ totalTasks: 2, passed: 0, failed: 2 });
     const report = (reporter as any).formatSummaryReport(summary);
     expect(report).toContain('所有任务执行失败');
+  });
+
+  test('shows anomaly conclusion when no verdicts recorded', () => {
+    const summary = createTestSummary({ totalTasks: 4, passed: 0, failed: 0 });
+    const report = (reporter as any).formatSummaryReport(summary);
+    expect(report).toContain('流水线异常终止');
+  });
+
+  test('shows incomplete conclusion when not all tasks executed', () => {
+    const summary = createTestSummary({ totalTasks: 4, passed: 1, failed: 0 });
+    const report = (reporter as any).formatSummaryReport(summary);
+    expect(report).toContain('流水线未完整执行');
   });
 
   test('includes execution config as JSON', () => {
@@ -408,5 +420,52 @@ describe('saveReport (harness-helpers)', () => {
     const reportPath = path.join(env.tempDir, 'a', 'b', 'c', 'deep-report.md');
     await saveReport(reportPath, 'deep content');
     expect(fs.existsSync(reportPath)).toBe(true);
+  });
+});
+
+// ============== evaluateSummaryConclusion (CP-14 shared helper) ==============
+
+describe('evaluateSummaryConclusion', () => {
+  test('returns success when all tasks pass', () => {
+    const summary = createTestSummary({ totalTasks: 2, passed: 2, failed: 0 });
+    const conclusion = evaluateSummaryConclusion(summary);
+    expect(conclusion.verdict).toBe('success');
+    expect(conclusion.message).toContain('所有任务执行成功');
+  });
+
+  test('returns partial-fail when some tasks fail', () => {
+    const summary = createTestSummary({ totalTasks: 3, passed: 1, failed: 2 });
+    const conclusion = evaluateSummaryConclusion(summary);
+    expect(conclusion.verdict).toBe('partial-fail');
+    expect(conclusion.message).toContain('部分任务失败');
+  });
+
+  test('returns all-fail when every task fails', () => {
+    const summary = createTestSummary({ totalTasks: 2, passed: 0, failed: 2 });
+    const conclusion = evaluateSummaryConclusion(summary);
+    expect(conclusion.verdict).toBe('all-fail');
+    expect(conclusion.message).toContain('所有任务执行失败');
+  });
+
+  test('returns anomaly when no verdicts recorded (passed=0, failed=0, totalTasks>0)', () => {
+    const summary = createTestSummary({ totalTasks: 4, passed: 0, failed: 0 });
+    const conclusion = evaluateSummaryConclusion(summary);
+    expect(conclusion.verdict).toBe('anomaly');
+    expect(conclusion.message).toContain('流水线异常终止');
+  });
+
+  test('returns incomplete when not all tasks executed (passed+failed < totalTasks)', () => {
+    const summary = createTestSummary({ totalTasks: 4, passed: 1, failed: 0 });
+    const conclusion = evaluateSummaryConclusion(summary);
+    expect(conclusion.verdict).toBe('incomplete');
+    expect(conclusion.message).toContain('流水线未完整执行');
+  });
+
+  test('handles zero totalTasks gracefully', () => {
+    const summary = createTestSummary({ totalTasks: 0, passed: 0, failed: 0 });
+    const conclusion = evaluateSummaryConclusion(summary);
+    // totalTasks=0 falls through anomaly check (totalTasks > 0 is false),
+    // then allCounted is true (0 >= 0), then failed === 0 → success
+    expect(conclusion.verdict).toBe('success');
   });
 });

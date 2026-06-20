@@ -35,7 +35,7 @@ import {
 import { isInitialized, getProjectDir } from '../utils/path.js';
 import { t } from '../i18n/index.js';
 import { AssemblyLine } from '../utils/hd-assembly-line.js';
-import { HarnessReporter } from '../utils/harness-reporter.js';
+import { HarnessReporter, evaluateSummaryConclusion } from '../utils/harness-reporter.js';
 import {
   installExitHooks,
   uninstallExitHooks,
@@ -1115,11 +1115,8 @@ function printSummary(summary: ExecutionSummary): void {
   }
 
   console.log('━'.repeat(SEPARATOR_WIDTH));
-  if (summary.failed === 0) {
-    console.log('✅ All tasks executed successfully!');
-  } else {
-    console.log(`⚠️  Some tasks failed, check reports for details`);
-  }
+  const conclusion = evaluateSummaryConclusion(summary);
+  console.log(conclusion.message);
   console.log('');
   console.log('━'.repeat(SEPARATOR_WIDTH));
   console.log('📊 Pipeline status saved to: .projmnt4claude/harness-status.json');
