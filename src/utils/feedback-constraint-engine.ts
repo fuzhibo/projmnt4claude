@@ -438,11 +438,11 @@ export class FeedbackConstraintEngineImpl implements FeedbackConstraintEngine {
       // 使用完整反馈模板（包含原始输出），同时启用 session 连续性
       currentPrompt = this.buildFeedback(violations, output);
 
-      // 重试时恢复同一 session
+      // V2.1 §6.1.7.6：重试时恢复同一 session（同 runId → active 状态）
       currentOptions = {
         ...options,
         sessionId,
-        resumeSession: true,
+        sessionState: 'active' as const,
       };
 
       logger.debug(

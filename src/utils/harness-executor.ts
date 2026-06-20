@@ -32,7 +32,6 @@ import { checkCompletedCheckpoints as checkCompletedCheckpointsWithVerification 
 import { t, getI18n } from '../i18n/index.js';
 import { sleep, killAllActiveChildren, activeChildProcesses } from './harness-helpers.js';
 import type { HarnessPhaseOptions } from '../types/config.js';
-import { randomUUID } from 'crypto';
 import { sessionIdMapper } from './session-id-mapper.js';
 import { ensureCleanSessionSlot } from './session-lock-cleanup.js';
 import { DebugLogger } from './debug-logger.js';
@@ -150,10 +149,16 @@ export class HarnessExecutor {
       const effectiveTools = buildEffectiveTools('development', this.config.cwd, task);
       const phaseOptions = this.config.perPhaseOptions?.['development'];
 
-      // 生成阶段级 session ID，用于阶段内重试时的上下文连续性
-      // 使用双层 ID：内部可读 ID 用于日志，CLI UUID 用于 Claude Code
-      const internalId = `dev-${task.id}-${Date.now()}-${randomUUID().slice(0, 8)}`;
-      const sessionId = sessionIdMapper.generate(internalId, task.id, 'development');
+      // V2.1 §6.1.7.6：稳定 internalId + runId + 三态探测
+      // 同一任务同一阶段的 retry / --continue 恢复均生成相同 internalId → 相同 cliUuid，
+      // probeSessionState 据此识别 fresh/active/forked，由 buildSessionCliArgs 翻译为 CLI 参数。
+      const internalId = sessionIdMapper.buildStableInternalId(task.id, 'development', 'dev');
+      const runId = sessionIdMapper.resolveRunId();
+      const probe = sessionIdMapper.probeSessionState(internalId, task.id, 'development', runId);
+      const sessionId = sessionIdMapper.generate(internalId, task.id, 'development', {
+        runId,
+        state: probe.state,
+      });
       // CP-02: 清理可能的 session-env 残留锁，避免 "Session ID already in use"
       ensureCleanSessionSlot(sessionId);
 
@@ -164,6 +169,7 @@ export class HarnessExecutor {
         cwd: this.config.cwd,
         dangerouslySkipPermissions: effectiveTools.skipPermissions,
         sessionId,
+        sessionState: probe.state,
         bare: phaseOptions?.bare,
         noSessionPersistence: phaseOptions?.noSessionPersistence,
         mcpConfig: phaseOptions?.mcpConfig,

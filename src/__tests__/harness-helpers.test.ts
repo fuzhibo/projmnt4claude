@@ -691,22 +691,87 @@ describe('runHeadlessClaude', () => {
     ]), expect.any(Object), 'claudeAgent');
   });
 
-  test('passes session options to spawn', async () => {
+  test('passes session options to spawn (legacy flags → forked)', async () => {
     setupMockSpawn({ exitCode: 0, stdout: '' });
     await runHeadlessClaude({
       prompt: 'test',
       allowedTools: ['Read'],
       timeout: 30,
       cwd: env.tempDir,
-      sessionId: 'sess-123',
+      sessionId: '12345678-1234-4123-8123-123456789abc',
       resumeSession: true,
       forkSession: true,
     });
     expect(spawnMock).toHaveBeenCalledWith('claude', expect.arrayContaining([
-      '--session-id', 'sess-123',
+      '--session-id', '12345678-1234-4123-8123-123456789abc',
       '--resume',
       '--fork-session',
     ]), expect.any(Object), 'claudeAgent');
+  });
+
+  test('sessionState=fresh only emits --session-id (V2.1 §6.1.4.2)', async () => {
+    setupMockSpawn({ exitCode: 0, stdout: '' });
+    await runHeadlessClaude({
+      prompt: 'test',
+      allowedTools: ['Read'],
+      timeout: 30,
+      cwd: env.tempDir,
+      sessionId: '12345678-1234-4123-8123-123456789abc',
+      sessionState: 'fresh',
+    });
+    const callArgs = spawnMock.mock.calls[0] as unknown as [string, string[], unknown];
+    const args = callArgs[1];
+    expect(args).toContain('--session-id');
+    expect(args).toContain('12345678-1234-4123-8123-123456789abc');
+    expect(args).not.toContain('--resume');
+    expect(args).not.toContain('--fork-session');
+  });
+
+  test('sessionState=active emits --session-id + --resume (V2.1 §6.1.4.2)', async () => {
+    setupMockSpawn({ exitCode: 0, stdout: '' });
+    await runHeadlessClaude({
+      prompt: 'test',
+      allowedTools: ['Read'],
+      timeout: 30,
+      cwd: env.tempDir,
+      sessionId: '12345678-1234-4123-8123-123456789abc',
+      sessionState: 'active',
+    });
+    const callArgs = spawnMock.mock.calls[0] as unknown as [string, string[], unknown];
+    const args = callArgs[1];
+    expect(args).toContain('--session-id');
+    expect(args).toContain('--resume');
+    expect(args).not.toContain('--fork-session');
+  });
+
+  test('sessionState=forked emits --session-id + --resume + --fork-session (V2.1 §6.1.4.2)', async () => {
+    setupMockSpawn({ exitCode: 0, stdout: '' });
+    await runHeadlessClaude({
+      prompt: 'test',
+      allowedTools: ['Read'],
+      timeout: 30,
+      cwd: env.tempDir,
+      sessionId: '12345678-1234-4123-8123-123456789abc',
+      sessionState: 'forked',
+    });
+    const callArgs = spawnMock.mock.calls[0] as unknown as [string, string[], unknown];
+    const args = callArgs[1];
+    expect(args).toContain('--session-id');
+    expect(args).toContain('--resume');
+    expect(args).toContain('--fork-session');
+  });
+
+  test('rejects invalid UUID v4 in sessionId (V2.1 §6.1.4.2)', async () => {
+    setupMockSpawn({ exitCode: 0, stdout: '' });
+    await expect(runHeadlessClaude({
+      prompt: 'test',
+      allowedTools: ['Read'],
+      timeout: 30,
+      cwd: env.tempDir,
+      sessionId: 'sess-123',
+      sessionState: 'fresh',
+    })).rejects.toThrow(/must be a valid UUID v4/);
+    expect(spawnMock).not.toHaveBeenCalled();
   });
 
   test('writes prompt to stdin', async () => {

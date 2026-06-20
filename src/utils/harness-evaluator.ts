@@ -30,7 +30,6 @@ import { loadPromptTemplate, resolveTemplate, loadCustomRequirements } from './p
 import { getLatestSnapshot } from './harness-snapshot.js';
 import { t, getI18n } from '../i18n/index.js';
 import type { HarnessPhaseOptions } from '../types/config.js';
-import { randomUUID } from 'crypto';
 import { sessionIdMapper } from './session-id-mapper.js';
 import { ensureCleanSessionSlot } from './session-lock-cleanup.js';
 import { DebugLogger } from './debug-logger.js';
@@ -131,10 +130,14 @@ export class HarnessEvaluator {
       const effectiveTools = buildEffectiveTools('evaluation', this.config.cwd, task);
       const phaseOptions = this.config.perPhaseOptions?.['evaluation'];
 
-      // 生成阶段级 session ID，用于阶段内重试时的上下文连续性
-      // 使用双层 ID：内部可读 ID 用于日志，CLI UUID 用于 Claude Code
-      const internalId = `eval-${task.id}-${Date.now()}-${randomUUID().slice(0, 8)}`;
-      const sessionId = sessionIdMapper.generate(internalId, task.id, 'evaluation');
+      // V2.1 §6.1.7.6：稳定 internalId + runId + 三态探测
+      const internalId = sessionIdMapper.buildStableInternalId(task.id, 'evaluation', 'eval');
+      const runId = sessionIdMapper.resolveRunId();
+      const probe = sessionIdMapper.probeSessionState(internalId, task.id, 'evaluation', runId);
+      const sessionId = sessionIdMapper.generate(internalId, task.id, 'evaluation', {
+        runId,
+        state: probe.state,
+      });
       // CP-02: 清理可能的 session-env 残留锁，避免 "Session ID already in use"
       ensureCleanSessionSlot(sessionId);
 
@@ -145,6 +148,7 @@ export class HarnessEvaluator {
         cwd: this.config.cwd,
         dangerouslySkipPermissions: effectiveTools.skipPermissions,
         sessionId,
+        sessionState: probe.state,
         bare: phaseOptions?.bare,
         noSessionPersistence: phaseOptions?.noSessionPersistence,
         mcpConfig: phaseOptions?.mcpConfig,

@@ -37,7 +37,6 @@ import { qaVerdictResultMarker, qaVerdictHasReason } from './validation-rules/ve
 import { loadPromptTemplate, resolveTemplate, loadCustomRequirements } from './prompt-templates.js';
 import { t, getI18n } from '../i18n/index.js';
 import type { HarnessPhaseOptions } from '../types/config.js';
-import { randomUUID } from 'crypto';
 import { sessionIdMapper } from './session-id-mapper.js';
 import { ensureCleanSessionSlot } from './session-lock-cleanup.js';
 import { verifyQAAcceptanceCriteria, QAAcceptanceResult, ACCEPTANCE_LEVEL_DESCRIPTIONS, type AcceptanceLevel } from '../types/qa-acceptance-criteria.js';
@@ -775,10 +774,14 @@ export class HarnessQATester {
     const effectiveTools = buildEffectiveTools('qaVerification', this.config.cwd, task);
     const phaseOptions = this.config.perPhaseOptions?.['qaVerification'];
 
-    // 生成阶段级 session ID，用于阶段内重试时的上下文连续性
-    // 使用双层 ID：内部可读 ID 用于日志，CLI UUID 用于 Claude Code
-    const internalId = `qa-${task.id}-${Date.now()}-${randomUUID().slice(0, 8)}`;
-    const sessionId = sessionIdMapper.generate(internalId, task.id, 'qaVerification');
+    // V2.1 §6.1.7.6：稳定 internalId + runId + 三态探测
+    const internalId = sessionIdMapper.buildStableInternalId(task.id, 'qaVerification', 'qa');
+    const runId = sessionIdMapper.resolveRunId();
+    const probe = sessionIdMapper.probeSessionState(internalId, task.id, 'qaVerification', runId);
+    const sessionId = sessionIdMapper.generate(internalId, task.id, 'qaVerification', {
+      runId,
+      state: probe.state,
+    });
     // CP-02: 清理可能的 session-env 残留锁，避免 "Session ID already in use"
     ensureCleanSessionSlot(sessionId);
 
@@ -789,6 +792,7 @@ export class HarnessQATester {
       outputFormat: 'text',
       dangerouslySkipPermissions: effectiveTools.skipPermissions,
       sessionId,
+      sessionState: probe.state,
       bare: phaseOptions?.bare,
       noSessionPersistence: phaseOptions?.noSessionPersistence,
       mcpConfig: phaseOptions?.mcpConfig,

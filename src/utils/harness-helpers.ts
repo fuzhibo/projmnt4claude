@@ -15,6 +15,11 @@ import {
   listOrphanedSessions,
   cleanupOrphanedSessions,
 } from './session-lock-cleanup.js';
+import {
+  buildSessionCliArgs,
+  deriveSessionStateFromLegacyFlags,
+  type SessionState,
+} from './session-id-mapper.js';
 
 // ============================================================
 // 常量定义
@@ -41,9 +46,14 @@ export interface HeadlessClaudeOptions {
   outputFormat?: string;
   /** 指定 Claude Code CLI session ID，用于跨调用保持上下文连续性 */
   sessionId?: string;
-  /** 恢复已有 session（对应 --resume），需配合 sessionId 使用 */
+  /**
+   * Session 三态（V2.1 §6.1.4.2）：fresh | active | forked
+   * 优先使用此字段；未设置时由 deriveSessionStateFromLegacyFlags 从遗留标志推导。
+   */
+  sessionState?: SessionState;
+  /** @deprecated V2.1：改用 sessionState='active'。恢复已有 session（对应 --resume），需配合 sessionId 使用 */
   resumeSession?: boolean;
-  /** 分叉 session 而非覆盖原 session（对应 --fork-session） */
+  /** @deprecated V2.1：改用 sessionState='forked'。分叉 session 而非覆盖原 session（对应 --fork-session） */
   forkSession?: boolean;
   /** 最小模式：跳过 hooks, LSP, plugin sync, auto-memory 等（对应 --bare） */
   bare?: boolean;
@@ -295,19 +305,16 @@ export async function runHeadlessClaude(options: HeadlessClaudeOptions): Promise
       args.push('--output-format', options.outputFormat);
     }
 
-    // Session 连续性支持
+    // Session 连续性支持（V2.1 §6.1.4.2 三态分支）
+    // 旧实现 resumeSession + sessionId 自动补 --fork-session 的隐式行为，
+    // 已收敛到 deriveSessionStateFromLegacyFlags → buildSessionCliArgs。
     if (options.sessionId) {
-      args.push('--session-id', options.sessionId);
-    }
-    if (options.resumeSession) {
-      args.push('--resume');
-      // --session-id + --resume 组合需要 --fork-session
-      if (options.sessionId) {
-        args.push('--fork-session');
-      }
-    }
-    if (options.forkSession) {
-      args.push('--fork-session');
+      const state = deriveSessionStateFromLegacyFlags({
+        sessionState: options.sessionState,
+        resumeSession: options.resumeSession,
+        forkSession: options.forkSession,
+      });
+      args.push(...buildSessionCliArgs(state, options.sessionId));
     }
 
     // 新增: 资源控制相关参数
