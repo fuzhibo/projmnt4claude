@@ -13517,6 +13517,197 @@ var init_session_lock_cleanup = __esm(() => {
   UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 });
 
+// src/utils/session-id-mapper.ts
+import { createHash } from "crypto";
+import { existsSync as existsSync9, readFileSync as readFileSync8 } from "fs";
+import { join as join8 } from "path";
+
+class SessionIdMapper {
+  mappings = new Map;
+  auditLogger;
+  setAuditLogger(logger) {
+    this.auditLogger = logger;
+  }
+  generate(internalId, taskId, phase, options) {
+    const cliUuid = this.deriveDeterministicUuid(internalId, taskId, phase);
+    const now = new Date().toISOString();
+    const runId = options?.runId;
+    const state = options?.state;
+    const existing = this.mappings.get(internalId);
+    const isReused = existing?.cliUuid === cliUuid;
+    if (existing && !isReused) {
+      this.mappings.delete(existing.cliUuid);
+    }
+    if (!isReused) {
+      const mapping = {
+        internalId,
+        cliUuid,
+        taskId,
+        phase,
+        createdAt: now,
+        ...runId ? { runId } : {},
+        ...state ? { status: state } : {},
+        lastUsedAt: now,
+        forkCount: state === "forked" ? 1 : 0
+      };
+      this.mappings.set(internalId, mapping);
+      this.mappings.set(cliUuid, mapping);
+      if (this.auditLogger) {
+        this.auditLogger({ mapping, isReused: false });
+      }
+    } else {
+      const reused = existing;
+      reused.lastUsedAt = now;
+      if (state) {
+        reused.status = state;
+      }
+      if (runId) {
+        if (reused.runId && reused.runId !== runId) {
+          reused.status = "forked";
+          reused.forkCount = (reused.forkCount ?? 0) + 1;
+        }
+        reused.runId = runId;
+      }
+      if (this.auditLogger) {
+        this.auditLogger({ mapping: reused, isReused: true });
+      }
+    }
+    return cliUuid;
+  }
+  deriveDeterministicUuid(internalId, taskId, phase) {
+    const hash = createHash("sha256").update(`${internalId}|${taskId}|${phase}`).digest("hex");
+    const variantChar = (parseInt(hash.slice(16, 18), 16) & 3 | 8).toString(16);
+    return [
+      hash.slice(0, 8),
+      hash.slice(8, 12),
+      "4" + hash.slice(13, 16),
+      variantChar + hash.slice(17, 20),
+      hash.slice(20, 32)
+    ].join("-");
+  }
+  toCliUuid(internalId) {
+    return this.mappings.get(internalId)?.cliUuid;
+  }
+  toInternalId(cliUuid) {
+    return this.mappings.get(cliUuid)?.internalId;
+  }
+  getMapping(id) {
+    return this.mappings.get(id);
+  }
+  serialize() {
+    const seen = new Map;
+    for (const mapping of this.mappings.values()) {
+      seen.set(mapping.cliUuid, mapping);
+    }
+    return Array.from(seen.values());
+  }
+  deserialize(mappings) {
+    for (const mapping of mappings) {
+      this.mappings.set(mapping.internalId, mapping);
+      this.mappings.set(mapping.cliUuid, mapping);
+    }
+  }
+  clear() {
+    this.mappings.clear();
+  }
+  size() {
+    const seen = new Set;
+    for (const mapping of this.mappings.values()) {
+      seen.add(mapping.cliUuid);
+    }
+    return seen.size;
+  }
+  probeSessionState(internalId, taskId, phase, runId) {
+    const cliUuid = this.deriveDeterministicUuid(internalId, taskId, phase);
+    const existing = this.mappings.get(internalId);
+    if (!existing || existing.cliUuid !== cliUuid) {
+      return {
+        state: "fresh",
+        cliUuid,
+        runId,
+        reason: `no existing mapping for internalId=${internalId}`
+      };
+    }
+    if (existing.runId && existing.runId === runId) {
+      return {
+        state: "active",
+        cliUuid,
+        mapping: existing,
+        runId,
+        reason: `same runId=${runId} → resume full history`
+      };
+    }
+    return {
+      state: "forked",
+      cliUuid,
+      mapping: existing,
+      runId,
+      reason: `existing runId=${existing.runId ?? "(unset)"} differs from current runId=${runId} → fork`
+    };
+  }
+  resolveRunId(explicit) {
+    if (explicit && explicit.trim()) {
+      return explicit.trim();
+    }
+    const envRunId = process.env.HARNESS_RUN_ID;
+    if (envRunId && envRunId.trim()) {
+      return envRunId.trim();
+    }
+    const projectRoot = process.env.PROJMNT4CLAUDE_ROOT ?? process.cwd();
+    const runIdFile = join8(projectRoot, ".projmnt4claude", "harness-run-id");
+    if (existsSync9(runIdFile)) {
+      const fileRunId = readFileSync8(runIdFile, "utf8").trim();
+      if (fileRunId) {
+        return fileRunId;
+      }
+    }
+    return `run-${process.pid}-${Date.now()}`;
+  }
+  buildStableInternalId(taskId, phase, prefix = "cr") {
+    return `${prefix}-${taskId}-stable-${phase}`;
+  }
+}
+function assertIsValidUuidV4(value, label = "sessionId") {
+  if (!value || typeof value !== "string") {
+    throw new Error(`[${label}] must be a non-empty string, got: ${String(value)}`);
+  }
+  if (!UUID_V4_PATTERN.test(value)) {
+    throw new Error(`[${label}] must be a valid UUID v4, got: ${value}`);
+  }
+}
+function deriveSessionStateFromLegacyFlags(options) {
+  if (options.sessionState) {
+    return options.sessionState;
+  }
+  if (options.resumeSession && options.forkSession) {
+    return "forked";
+  }
+  if (options.resumeSession) {
+    return "active";
+  }
+  return "fresh";
+}
+function buildSessionCliArgs(state, cliUuid) {
+  assertIsValidUuidV4(cliUuid, "cliUuid");
+  switch (state) {
+    case "fresh":
+      return ["--session-id", cliUuid];
+    case "active":
+      return ["--session-id", cliUuid, "--resume"];
+    case "forked":
+      return ["--session-id", cliUuid, "--resume", "--fork-session"];
+    default: {
+      const _exhaustive = state;
+      throw new Error(`Unknown sessionState: ${String(_exhaustive)}`);
+    }
+  }
+}
+var sessionIdMapper, UUID_V4_PATTERN;
+var init_session_id_mapper = __esm(() => {
+  sessionIdMapper = new SessionIdMapper;
+  UUID_V4_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+});
+
 // src/utils/harness-helpers.ts
 import * as fs11 from "fs";
 import * as path8 from "path";
@@ -13625,16 +13816,12 @@ async function runHeadlessClaude(options) {
       args.push("--output-format", options.outputFormat);
     }
     if (options.sessionId) {
-      args.push("--session-id", options.sessionId);
-    }
-    if (options.resumeSession) {
-      args.push("--resume");
-      if (options.sessionId) {
-        args.push("--fork-session");
-      }
-    }
-    if (options.forkSession) {
-      args.push("--fork-session");
+      const state = deriveSessionStateFromLegacyFlags({
+        sessionState: options.sessionState,
+        resumeSession: options.resumeSession,
+        forkSession: options.forkSession
+      });
+      args.push(...buildSessionCliArgs(state, options.sessionId));
     }
     if (options.bare) {
       args.push("--bare");
@@ -13912,6 +14099,7 @@ var init_harness_helpers = __esm(() => {
   init_i18n();
   init_spawn_utils();
   init_session_lock_cleanup();
+  init_session_id_mapper();
   activeChildProcesses = new Set;
 });
 
@@ -13943,13 +14131,12 @@ function translateOptionsToCliArgs(options) {
     args.push("--output-format", "json");
   }
   if (options.sessionId) {
-    args.push("--session-id", options.sessionId);
-  }
-  if (options.resumeSession) {
-    args.push("--resume");
-  }
-  if (options.forkSession) {
-    args.push("--fork-session");
+    const state = deriveSessionStateFromLegacyFlags({
+      sessionState: options.sessionState,
+      resumeSession: options.resumeSession,
+      forkSession: options.forkSession
+    });
+    args.push(...buildSessionCliArgs(state, options.sessionId));
   }
   if (options.bare) {
     args.push("--bare");
@@ -14212,6 +14399,7 @@ var init_headless_agent = __esm(() => {
   init_logger();
   init_harness_helpers();
   init_config();
+  init_session_id_mapper();
   init_path();
   PHASE_DEFAULT_TOOLS = {
     development: ["Read", "Edit", "Write", "Bash", "Grep", "Glob"],
@@ -22107,7 +22295,7 @@ async function callAIForJSON(options, validator) {
   const output = result.output.trim();
   let jsonStr = output;
   const jsonBlockMatch = output.match(/```json\s*([\s\S]*?)\s*```/);
-  if (jsonBlockMatch) {
+  if (jsonBlockMatch && jsonBlockMatch[1]) {
     jsonStr = jsonBlockMatch[1].trim();
   } else {
     const start = output.indexOf("{");
@@ -33892,8 +34080,9 @@ async function loadTemplate(name, lang = "zh") {
 }
 function renderTemplate(template, params) {
   return template.replace(/\{(\w+)\}/g, (match, key) => {
-    if (key in params) {
-      return params[key];
+    const value = params[key];
+    if (value !== undefined) {
+      return value;
     }
     return match;
   });
@@ -33918,32 +34107,34 @@ var PREFIX_MAP2 = {
 var VALID_PREFIXES = Object.keys(PREFIX_MAP2);
 function parseCheckpoint(raw) {
   const match = raw.match(/^\[(verify|test|review|implem|doc)\]\s*(.+)/);
-  if (!match)
+  if (!match || !match[1])
     return null;
   const prefix = match[1];
   const mapped = PREFIX_MAP2[prefix];
+  if (!mapped)
+    return null;
   return {
     prefix,
-    description: match[2].trim(),
+    description: match[2]?.trim() ?? "",
     category: mapped.category,
     verificationMethod: mapped.method,
     requiresHuman: mapped.requiresHuman
   };
 }
 // src/utils/init-requirement/verification-commands.ts
-import { existsSync as existsSync22, readFileSync as readFileSync19 } from "node:fs";
+import { existsSync as existsSync23, readFileSync as readFileSync20 } from "node:fs";
 import path21 from "node:path";
 function detectPackageManager(cwd) {
-  if (existsSync22(path21.join(cwd, "bun.lockb")) || existsSync22(path21.join(cwd, "bun.lock"))) {
+  if (existsSync23(path21.join(cwd, "bun.lockb")) || existsSync23(path21.join(cwd, "bun.lock"))) {
     return "bun";
   }
-  if (existsSync22(path21.join(cwd, "pnpm-lock.yaml"))) {
+  if (existsSync23(path21.join(cwd, "pnpm-lock.yaml"))) {
     return "pnpm";
   }
-  if (existsSync22(path21.join(cwd, "yarn.lock"))) {
+  if (existsSync23(path21.join(cwd, "yarn.lock"))) {
     return "yarn";
   }
-  if (existsSync22(path21.join(cwd, "package-lock.json"))) {
+  if (existsSync23(path21.join(cwd, "package-lock.json"))) {
     return "npm";
   }
   return;
@@ -33964,8 +34155,8 @@ function detectTestFramework(pkg) {
 }
 function detectProjectConfig(cwd) {
   const packageJsonPath = path21.join(cwd, "package.json");
-  if (existsSync22(packageJsonPath)) {
-    const pkg = JSON.parse(readFileSync19(packageJsonPath, "utf-8"));
+  if (existsSync23(packageJsonPath)) {
+    const pkg = JSON.parse(readFileSync20(packageJsonPath, "utf-8"));
     const packageManager = detectPackageManager(cwd);
     const testFramework = detectTestFramework(pkg);
     let testCommand;
@@ -33987,21 +34178,21 @@ function detectProjectConfig(cwd) {
       testFilePattern: "**/__tests__/*.test.ts"
     };
   }
-  if (existsSync22(path21.join(cwd, "go.mod"))) {
+  if (existsSync23(path21.join(cwd, "go.mod"))) {
     return {
       type: "go",
       testCommand: "go test ./...",
       testFilePattern: "**/*_test.go"
     };
   }
-  if (existsSync22(path21.join(cwd, "pyproject.toml")) || existsSync22(path21.join(cwd, "setup.py"))) {
+  if (existsSync23(path21.join(cwd, "pyproject.toml")) || existsSync23(path21.join(cwd, "setup.py"))) {
     return {
       type: "python",
       testCommand: "pytest",
       testFilePattern: "**/test_*.py"
     };
   }
-  if (existsSync22(path21.join(cwd, "Cargo.toml"))) {
+  if (existsSync23(path21.join(cwd, "Cargo.toml"))) {
     return {
       type: "rust",
       testCommand: "cargo test",
@@ -34031,7 +34222,7 @@ function generateVerificationCommands(checkpoint, taskFiles, projectConfig) {
     case "test": {
       if (!testCommand)
         return [];
-      const mappedTestFiles = taskFiles.map((f) => mapSourceToTestFile(f, projectConfig)).filter((f) => existsSync22(f));
+      const mappedTestFiles = taskFiles.map((f) => mapSourceToTestFile(f, projectConfig)).filter((f) => existsSync23(f));
       if (mappedTestFiles.length > 0) {
         return [`${testCommand} ${mappedTestFiles.join(" ")}`];
       }
@@ -34216,8 +34407,8 @@ async function runGateCheck(taskId, cwd, attempt, maxRetries, isResumed, deps) {
     failures.push({
       source: "preDevGate",
       detail: "Pre-dev gate failed",
-      ruleResults: preDevResult.results,
-      suggestions: preDevResult.results?.map((r) => r.message).filter(Boolean)
+      ruleResults: preDevResult.ruleResults,
+      suggestions: preDevResult.ruleResults?.filter((r) => !r.passed).map((r) => r.ruleName)
     });
   }
   const qualityResult = await deps.checkQualityGate(taskId, DEFAULT_QUALITY_GATE_CONFIG2, cwd);
@@ -34244,7 +34435,7 @@ async function runAIFix(taskId, cwd, failures, deps, alignmentIssues) {
   Suggestions: ` + f.suggestions.join("; ") : ""}`).join(`
 `);
   const currentMeta = JSON.stringify(deps.readTaskMeta(taskId, cwd), null, 2);
-  const prompt = loadAndRenderTemplate("taskFix", {
+  const prompt = await loadAndRenderTemplate("taskFix", {
     currentMeta,
     gateErrors: gateErrors || "None",
     qualityIssues: qualityIssues || "None",
@@ -34800,7 +34991,7 @@ function parseReport(markdown) {
 }
 function extractDependenciesFromMarkdown(markdown) {
   const depLine = markdown.match(/^- \*\*依赖子报告\*\*: (.+)$/m) || markdown.match(/^- \*\*Depends On\*\*: (.+)$/m);
-  if (!depLine)
+  if (!depLine || !depLine[1])
     return [];
   return depLine[1].split(",").map((s) => s.trim()).filter(Boolean);
 }
@@ -34822,7 +35013,7 @@ function parseMetadata(md) {
 function extractField(md, label) {
   const re = new RegExp(`^- \\*\\*${escapeRegex(label)}\\*\\*: (.+)$`, "m");
   const m = md.match(re);
-  return m ? m[1].trim() : null;
+  return m && m[1] ? m[1].trim() : null;
 }
 function parseRootCauseAnalysis(md) {
   const items = [];
@@ -34837,10 +35028,12 @@ function parseRootCauseAnalysis(md) {
   }
   for (let i = 0;i < matches.length; i++) {
     const m = matches[i];
-    const id = m[1];
-    const title = m[2].trim();
-    const descStart = m.index + m[0].length;
-    const descEnd = i < matches.length - 1 ? matches[i + 1].index : sectionMd.length;
+    if (!m)
+      continue;
+    const id = m[1] ?? "";
+    const title = (m[2] ?? "").trim();
+    const descStart = (m.index ?? 0) + m[0].length;
+    const descEnd = i < matches.length - 1 ? matches[i + 1]?.index ?? sectionMd.length : sectionMd.length;
     const description = sectionMd.slice(descStart, descEnd).trim();
     items.push({ id, title, description });
   }
@@ -34859,10 +35052,12 @@ function parseSolutions(md) {
   }
   for (let i = 0;i < matches.length; i++) {
     const m = matches[i];
-    const id = m[1];
-    const title = m[2].trim();
-    const descStart = m.index + m[0].length;
-    const descEnd = i < matches.length - 1 ? matches[i + 1].index : sectionMd.length;
+    if (!m)
+      continue;
+    const id = m[1] ?? "";
+    const title = (m[2] ?? "").trim();
+    const descStart = (m.index ?? 0) + m[0].length;
+    const descEnd = i < matches.length - 1 ? matches[i + 1]?.index ?? sectionMd.length : sectionMd.length;
     const body = sectionMd.slice(descStart, descEnd).trim();
     const correspondsTo = extractInlineField(body, "对应原因", "Corresponds To") || "";
     const filesRaw = extractInlineField(body, "涉及文件", "Files") || "";
@@ -34884,13 +35079,13 @@ function parseCheckpoints2(md) {
   const re = /^- \[([a-z]+)\] (.+) \(→ (SOL-\d+)\)$/gm;
   let match;
   while ((match = re.exec(sectionMd)) !== null) {
-    const prefix = match[1];
+    const prefix = match[1] ?? "";
     if (!validPrefixes.has(prefix))
       continue;
     items.push({
       prefix,
-      description: match[2].trim(),
-      belongsTo: match[3]
+      description: (match[2] ?? "").trim(),
+      belongsTo: match[3] ?? ""
     });
   }
   return items;
@@ -34902,19 +35097,19 @@ function parseAssessment(md) {
   const minutesRaw = extractInlineField(sectionMd, "预估工时", "Estimated Minutes") || "60";
   return {
     complexity: validateComplexity(complexity),
-    impactScope: impactRaw,
+    impactScope: validateImpactScope(impactRaw),
     estimatedMinutes: parseInt(minutesRaw.replace(/[^\d]/g, ""), 10) || 60
   };
 }
 function extractSection(md, zhTitle, enTitle) {
   const re = new RegExp(`^## (?:${escapeRegex(zhTitle)}|${escapeRegex(enTitle)})\\s*\\n([\\s\\S]*?)(?=^## |\\n## |\\n# |(?![\\s\\S]))`, "m");
   const m = md.match(re);
-  return m ? m[1] : null;
+  return m && m[1] ? m[1] : null;
 }
 function extractInlineField(text, zhLabel, enLabel) {
   const re = new RegExp(`\\*\\*(?:${escapeRegex(zhLabel)}|${escapeRegex(enLabel)})\\*\\*: (.+)$`, "m");
   const m = text.match(re);
-  return m ? m[1].trim() : null;
+  return m && m[1] ? m[1].trim() : null;
 }
 function escapeRegex(s) {
   return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
@@ -34930,12 +35125,23 @@ function validateComplexity(v) {
     return "high";
   return "medium";
 }
+function validateImpactScope(v) {
+  if (v === "有限" || v === "中等" || v === "广泛")
+    return v;
+  if (v === "limited")
+    return "有限";
+  if (v === "medium" || v === "moderate")
+    return "中等";
+  if (v === "wide" || v === "broad" || v === "extensive")
+    return "广泛";
+  return "中等";
+}
 
 // src/utils/investigation/report-reviewer.ts
 init_ai_integration();
 async function reviewReport(requirement, report, cwd, lang = "zh") {
   const reportMarkdown = generateReport(report);
-  const prompt = loadAndRenderTemplate("review", { report: reportMarkdown }, lang);
+  const prompt = await loadAndRenderTemplate("review", { report: reportMarkdown }, lang);
   return callAIForJSON({ prompt, cwd }, validateReviewResult);
 }
 async function reviewWithRetry(requirement, report, options) {
@@ -34950,7 +35156,7 @@ async function reviewWithRetry(requirement, report, options) {
       const issuesText = lastReview.issues.map((i) => `[${i.severity}] ${i.dimension}: ${i.description} → ${i.suggestion}`).join(`
 `);
       const previousReport = generateReport(currentReport);
-      const prompt = loadAndRenderTemplate("investigateWithFeedback", { requirement, previousReport, issues: issuesText }, options.lang);
+      const prompt = await loadAndRenderTemplate("investigateWithFeedback", { requirement, previousReport, issues: issuesText }, options.lang);
       const aiResult = await callAI({ prompt, outputFormat: "text", cwd: options.cwd });
       if (!aiResult.success) {
         throw new Error(`AI regeneration failed: ${aiResult.error}`);
@@ -34990,14 +35196,14 @@ function shouldSplit(reportPath, thresholdKB) {
 }
 async function generateSplitPlan(report, cwd, lang = "zh") {
   const reportMarkdown = generateReport(report);
-  const prompt = loadAndRenderTemplate("split", { report: reportMarkdown }, lang);
+  const prompt = await loadAndRenderTemplate("split", { report: reportMarkdown }, lang);
   const { callAIForJSON: callAIForJSON2 } = await Promise.resolve().then(() => (init_ai_integration(), exports_ai_integration));
   return callAIForJSON2({ prompt, cwd }, validateSplitPlan);
 }
 async function reviewSplitPlan(report, splitPlan, cwd, lang = "zh") {
   const summary = summarizeReport(report);
   const planJson = JSON.stringify(splitPlan, null, 2);
-  const prompt = loadAndRenderTemplate("splitReview", { reportSummary: summary, splitPlan: planJson }, lang);
+  const prompt = await loadAndRenderTemplate("splitReview", { reportSummary: summary, splitPlan: planJson }, lang);
   const { callAIForJSON: callAIForJSON2 } = await Promise.resolve().then(() => (init_ai_integration(), exports_ai_integration));
   return callAIForJSON2({ prompt, cwd }, validateSplitReviewResult);
 }
@@ -37349,93 +37555,11 @@ import * as fs44 from "fs";
 import * as path40 from "path";
 
 // src/utils/hd-assembly-line.ts
+init_session_id_mapper();
+init_session_lock_cleanup();
 import * as path39 from "path";
 import * as fs43 from "fs";
 import { execSync as execSync4 } from "child_process";
-import { randomUUID as randomUUID6 } from "crypto";
-
-// src/utils/session-id-mapper.ts
-import { createHash } from "crypto";
-
-class SessionIdMapper {
-  mappings = new Map;
-  auditLogger;
-  setAuditLogger(logger) {
-    this.auditLogger = logger;
-  }
-  generate(internalId, taskId, phase) {
-    const cliUuid = this.deriveDeterministicUuid(internalId, taskId, phase);
-    const existing = this.mappings.get(internalId);
-    const isReused = existing?.cliUuid === cliUuid;
-    if (existing && !isReused) {
-      this.mappings.delete(existing.cliUuid);
-    }
-    if (!isReused) {
-      const mapping = {
-        internalId,
-        cliUuid,
-        taskId,
-        phase,
-        createdAt: new Date().toISOString()
-      };
-      this.mappings.set(internalId, mapping);
-      this.mappings.set(cliUuid, mapping);
-      if (this.auditLogger) {
-        this.auditLogger({ mapping, isReused: false });
-      }
-    } else if (this.auditLogger) {
-      this.auditLogger({ mapping: existing, isReused: true });
-    }
-    return cliUuid;
-  }
-  deriveDeterministicUuid(internalId, taskId, phase) {
-    const hash = createHash("sha256").update(`${internalId}|${taskId}|${phase}`).digest("hex");
-    const variantChar = (parseInt(hash.slice(16, 18), 16) & 3 | 8).toString(16);
-    return [
-      hash.slice(0, 8),
-      hash.slice(8, 12),
-      "4" + hash.slice(13, 16),
-      variantChar + hash.slice(17, 20),
-      hash.slice(20, 32)
-    ].join("-");
-  }
-  toCliUuid(internalId) {
-    return this.mappings.get(internalId)?.cliUuid;
-  }
-  toInternalId(cliUuid) {
-    return this.mappings.get(cliUuid)?.internalId;
-  }
-  getMapping(id) {
-    return this.mappings.get(id);
-  }
-  serialize() {
-    const seen = new Map;
-    for (const mapping of this.mappings.values()) {
-      seen.set(mapping.cliUuid, mapping);
-    }
-    return Array.from(seen.values());
-  }
-  deserialize(mappings) {
-    for (const mapping of mappings) {
-      this.mappings.set(mapping.internalId, mapping);
-      this.mappings.set(mapping.cliUuid, mapping);
-    }
-  }
-  clear() {
-    this.mappings.clear();
-  }
-  size() {
-    const seen = new Set;
-    for (const mapping of this.mappings.values()) {
-      seen.add(mapping.cliUuid);
-    }
-    return seen.size;
-  }
-}
-var sessionIdMapper = new SessionIdMapper;
-
-// src/utils/hd-assembly-line.ts
-init_session_lock_cleanup();
 
 // src/utils/harness-prevalidation.ts
 init_task();
@@ -37677,8 +37801,9 @@ init_headless_agent();
 // src/utils/feedback-constraint-engine.ts
 init_i18n();
 init_logger();
-import { randomUUID } from "crypto";
+init_session_id_mapper();
 init_session_lock_cleanup();
+import { randomUUID } from "crypto";
 var logger = new Logger({ component: "feedback-constraint-engine" });
 var jsonParseableRule = {
   id: "json-parseable",
@@ -37922,7 +38047,7 @@ class FeedbackConstraintEngineImpl {
       currentOptions = {
         ...options,
         sessionId,
-        resumeSession: true
+        sessionState: "active"
       };
       logger.debug(`[FeedbackConstraintEngine] 准备第 ${this.retryCount} 次重试，违规项: ${violations.map((v) => v.ruleId).join(", ")}`);
     }
@@ -37953,7 +38078,7 @@ init_prompt_templates();
 init_checkpoint_verification();
 init_i18n();
 init_harness_helpers();
-import { randomUUID as randomUUID2 } from "crypto";
+init_session_id_mapper();
 init_session_lock_cleanup();
 
 // src/utils/debug-logger.ts
@@ -38152,8 +38277,13 @@ class HarnessExecutor {
       const agent = getAgent(this.config.cwd);
       const effectiveTools = buildEffectiveTools("development", this.config.cwd, task);
       const phaseOptions = this.config.perPhaseOptions?.["development"];
-      const internalId = `dev-${task.id}-${Date.now()}-${randomUUID2().slice(0, 8)}`;
-      const sessionId = sessionIdMapper.generate(internalId, task.id, "development");
+      const internalId = sessionIdMapper.buildStableInternalId(task.id, "development", "dev");
+      const runId = sessionIdMapper.resolveRunId();
+      const probe = sessionIdMapper.probeSessionState(internalId, task.id, "development", runId);
+      const sessionId = sessionIdMapper.generate(internalId, task.id, "development", {
+        runId,
+        state: probe.state
+      });
       ensureCleanSessionSlot(sessionId);
       const invokeOptions = {
         timeout: effectiveTimeout,
@@ -38162,6 +38292,7 @@ class HarnessExecutor {
         cwd: this.config.cwd,
         dangerouslySkipPermissions: effectiveTools.skipPermissions,
         sessionId,
+        sessionState: probe.state,
         bare: phaseOptions?.bare,
         noSessionPersistence: phaseOptions?.noSessionPersistence,
         mcpConfig: phaseOptions?.mcpConfig,
@@ -38739,7 +38870,7 @@ var qaVerdictHasReason = {
 // src/utils/harness-code-reviewer.ts
 init_prompt_templates();
 init_i18n();
-import { randomUUID as randomUUID3 } from "crypto";
+init_session_id_mapper();
 init_session_lock_cleanup();
 class HarnessCodeReviewer {
   config;
@@ -38836,8 +38967,13 @@ class HarnessCodeReviewer {
     const agent = getAgent(this.config.cwd);
     const effectiveTools = buildEffectiveTools("codeReview", this.config.cwd, task);
     const phaseOptions = this.config.perPhaseOptions?.["codeReview"];
-    const internalId = `cr-${task.id}-${Date.now()}-${randomUUID3().slice(0, 8)}`;
-    const sessionId = sessionIdMapper.generate(internalId, task.id, "codeReview");
+    const internalId = sessionIdMapper.buildStableInternalId(task.id, "codeReview", "cr");
+    const runId = sessionIdMapper.resolveRunId();
+    const probe = sessionIdMapper.probeSessionState(internalId, task.id, "codeReview", runId);
+    const sessionId = sessionIdMapper.generate(internalId, task.id, "codeReview", {
+      runId,
+      state: probe.state
+    });
     ensureCleanSessionSlot(sessionId);
     const invokeOptions = {
       allowedTools: effectiveTools.tools,
@@ -38846,6 +38982,7 @@ class HarnessCodeReviewer {
       outputFormat: "text",
       dangerouslySkipPermissions: effectiveTools.skipPermissions,
       sessionId,
+      sessionState: probe.state,
       bare: phaseOptions?.bare,
       noSessionPersistence: phaseOptions?.noSessionPersistence,
       mcpConfig: phaseOptions?.mcpConfig,
@@ -39001,7 +39138,7 @@ init_checkpoint();
 init_contradiction_detector();
 init_prompt_templates();
 init_i18n();
-import { randomUUID as randomUUID4 } from "crypto";
+init_session_id_mapper();
 init_session_lock_cleanup();
 
 // src/types/qa-acceptance-criteria.ts
@@ -40223,8 +40360,13 @@ ${truncated}`];
     const agent = getAgent(this.config.cwd);
     const effectiveTools = buildEffectiveTools("qaVerification", this.config.cwd, task);
     const phaseOptions = this.config.perPhaseOptions?.["qaVerification"];
-    const internalId = `qa-${task.id}-${Date.now()}-${randomUUID4().slice(0, 8)}`;
-    const sessionId = sessionIdMapper.generate(internalId, task.id, "qaVerification");
+    const internalId = sessionIdMapper.buildStableInternalId(task.id, "qaVerification", "qa");
+    const runId = sessionIdMapper.resolveRunId();
+    const probe = sessionIdMapper.probeSessionState(internalId, task.id, "qaVerification", runId);
+    const sessionId = sessionIdMapper.generate(internalId, task.id, "qaVerification", {
+      runId,
+      state: probe.state
+    });
     ensureCleanSessionSlot(sessionId);
     const invokeOptions = {
       allowedTools: effectiveTools.tools,
@@ -40233,6 +40375,7 @@ ${truncated}`];
       outputFormat: "text",
       dangerouslySkipPermissions: effectiveTools.skipPermissions,
       sessionId,
+      sessionState: probe.state,
       bare: phaseOptions?.bare,
       noSessionPersistence: phaseOptions?.noSessionPersistence,
       mcpConfig: phaseOptions?.mcpConfig,
@@ -40715,7 +40858,7 @@ import * as fs37 from "fs";
 import * as path33 from "path";
 init_prompt_templates();
 init_i18n();
-import { randomUUID as randomUUID5 } from "crypto";
+init_session_id_mapper();
 init_session_lock_cleanup();
 class HarnessEvaluator {
   config;
@@ -40784,8 +40927,13 @@ class HarnessEvaluator {
       const agent = getAgent(this.config.cwd);
       const effectiveTools = buildEffectiveTools("evaluation", this.config.cwd, task);
       const phaseOptions = this.config.perPhaseOptions?.["evaluation"];
-      const internalId = `eval-${task.id}-${Date.now()}-${randomUUID5().slice(0, 8)}`;
-      const sessionId = sessionIdMapper.generate(internalId, task.id, "evaluation");
+      const internalId = sessionIdMapper.buildStableInternalId(task.id, "evaluation", "eval");
+      const runId = sessionIdMapper.resolveRunId();
+      const probe = sessionIdMapper.probeSessionState(internalId, task.id, "evaluation", runId);
+      const sessionId = sessionIdMapper.generate(internalId, task.id, "evaluation", {
+        runId,
+        state: probe.state
+      });
       ensureCleanSessionSlot(sessionId);
       const invokeOptions = {
         allowedTools: effectiveTools.tools,
@@ -40794,6 +40942,7 @@ class HarnessEvaluator {
         cwd: this.config.cwd,
         dangerouslySkipPermissions: effectiveTools.skipPermissions,
         sessionId,
+        sessionState: probe.state,
         bare: phaseOptions?.bare,
         noSessionPersistence: phaseOptions?.noSessionPersistence,
         mcpConfig: phaseOptions?.mcpConfig,
@@ -42039,6 +42188,7 @@ import * as fs40 from "fs";
 import * as path36 from "path";
 init_harness_helpers();
 init_session_lock_cleanup();
+init_session_id_mapper();
 init_task2();
 init_task();
 
@@ -43997,8 +44147,13 @@ class AssemblyLine {
   debugLogger;
   constructor(config, sessionId) {
     this.config = config;
-    const internalId = sessionId || `harness-${Date.now()}-${randomUUID6().slice(0, 8)}`;
-    this.sessionId = sessionIdMapper.generate(internalId, "pipeline", "assembly-line");
+    const internalId = sessionId || sessionIdMapper.buildStableInternalId("pipeline", "assembly-line", "harness");
+    const runId = sessionIdMapper.resolveRunId();
+    const probe = sessionIdMapper.probeSessionState(internalId, "pipeline", "assembly-line", runId);
+    this.sessionId = sessionIdMapper.generate(internalId, "pipeline", "assembly-line", {
+      runId,
+      state: probe.state
+    });
     ensureCleanSessionSlot(this.sessionId);
     this.taskRetryContexts = new Map;
     this.executor = new HarnessExecutor(config);
@@ -46371,6 +46526,7 @@ ${"━".repeat(SEPARATOR_WIDTH)}`);
 // src/commands/harness.ts
 init_harness_helpers();
 init_session_lock_cleanup();
+init_session_id_mapper();
 init_task2();
 init_task();
 init_quality_gate();
