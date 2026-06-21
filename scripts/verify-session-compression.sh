@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # scripts/verify-session-compression.sh
 #
-# §7.2.2 CP-3b: forked 态会话压缩（V2.1 核心机制）
+# §7.2.2 CP-session-forked-compression-001 (alias CP-3b): forked 态会话压缩（V2.1 核心机制）
 #
 # 原理：跨流水线注入 MARKER_OLD，断言新流水线首次输出**不包含**该标记、
 #       forkCount 递增、cliUuid 不变、runId 切换。

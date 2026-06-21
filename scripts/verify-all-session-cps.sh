@@ -17,6 +17,19 @@ cd "$(git rev-parse --show-toplevel 2>/dev/null || pwd)"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 declare -A CP_STATUS
+# 命名空间化 CP 别名映射（Rule 9b 双写）— legacy key -> namespaced ID
+declare -A CP_NAMESPACE
+CP_NAMESPACE["1"]="CP-session-stable-internalid-001"
+CP_NAMESPACE["2"]="CP-session-deterministic-uuid-002"
+CP_NAMESPACE["3"]="CP-session-three-state-003"
+CP_NAMESPACE["3a"]="CP-session-active-history-001"
+CP_NAMESPACE["3b"]="CP-session-forked-compression-001"
+CP_NAMESPACE["4"]="CP-session-phase-isolation-004"
+CP_NAMESPACE["5"]="CP-harness-spawn-args-001"
+CP_NAMESPACE["6"]="CP-harness-cli-version-001"
+CP_NAMESPACE["7"]="CP-session-cleanup-boundary-007"
+CP_NAMESPACE["8"]="CP-session-preflight-conflict-001"
+CP_NAMESPACE["9"]="CP-session-forkcount-health-001"
 L1_JEST_ARGS=(
   "src/__tests__/harness-helpers.test.ts"
   "src/utils/__tests__/session-id-mapper.test.ts"
@@ -25,9 +38,9 @@ L1_JEST_ARGS=(
   "src/utils/__tests__/ensure-clean-session-slot.test.ts"
 )
 
-pass() { CP_STATUS[$1]="✅"; echo "CP $1: ✅ PASS"; }
-fail() { CP_STATUS[$1]="❌"; echo "CP $1: ❌ FAIL — $2"; }
-skip() { CP_STATUS[$1]="⏭️ "; echo "CP $1: ⏭️  SKIP — $2"; }
+pass() { CP_STATUS[$1]="✅"; CP_STATUS["${CP_NAMESPACE[$1]:-$1}"]="✅"; echo "CP-$1 / ${CP_NAMESPACE[$1]:-CP-$1}: ✅ PASS"; }
+fail() { CP_STATUS[$1]="❌"; CP_STATUS["${CP_NAMESPACE[$1]:-$1}"]="❌"; echo "CP-$1 / ${CP_NAMESPACE[$1]:-CP-$1}: ❌ FAIL — $2"; }
+skip() { CP_STATUS[$1]="⏭️ "; CP_STATUS["${CP_NAMESPACE[$1]:-$1}"]="⏭️ "; echo "CP-$1 / ${CP_NAMESPACE[$1]:-CP-$1}: ⏭️  SKIP — $2"; }
 
 GLOBAL_FAIL=0
 
@@ -132,7 +145,8 @@ echo "============================================"
 echo "Session Continuity CP-1 ~ CP-9 总报告"
 echo "============================================"
 for cp in 1 2 3 3a 3b 4 5 6 7 8 9; do
-  printf "CP-%-2s %s\n" "$cp" "${CP_STATUS[$cp]:-❓}"
+  ns="${CP_NAMESPACE[$cp]:-CP-$cp}"
+  printf "CP-%-2s / %-40s %s\n" "$cp" "$ns" "${CP_STATUS[$cp]:-❓}"
 done
 echo "============================================"
 

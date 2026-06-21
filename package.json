@@ -33,7 +33,10 @@
     "sync-marketplace": "bash scripts/sync-testmarketplace.sh",
     "release:patch": "bun run version:patch && bun run sync-testmarketplace",
     "release:minor": "bun run version:minor && bun run sync-testmarketplace",
-    "release:major": "bun run version:major && bun run sync-testmarketplace"
+    "release:major": "bun run version:major && bun run sync-testmarketplace",
+    "verify:session-cps": "bash scripts/verify-all-session-cps.sh",
+    "verify:cp-coverage": "bash scripts/verify-cp-coverage.sh",
+    "verify:all": "npm run verify:cp-coverage && npm run verify:session-cps && npm run build && npm test"
   },
   "files": [
     "dist/",

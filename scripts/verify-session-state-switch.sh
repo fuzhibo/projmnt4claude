@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 # scripts/verify-session-state-switch.sh
 #
-# §7.2.2 CP-3: 三态切换契约验证
-# §7.2.2 CP-3a: active 态读完整历史（反馈修正闭环）
+# §7.2.2 CP-session-three-state-003 (alias CP-3): 三态切换契约验证
+# §7.2.2 CP-session-active-history-001 (alias CP-3a): active 态读完整历史（反馈修正闭环）
 #
 # 用法：
 #   bash scripts/verify-session-state-switch.sh              # 默认 active 模式

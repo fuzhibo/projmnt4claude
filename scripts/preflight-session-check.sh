@@ -2,7 +2,7 @@
 # scripts/preflight-session-check.sh
 #
 # §6.1.6.3 Pre-flight 检查（流水线启动闸门）
-# §7.2.3 流水线闸门：检测 session 残留与 forkCount 健康度
+# §7.2.3 流水线闸门：检测 session 残留（CP-session-preflight-conflict-001, alias CP-8）与 forkCount 健康度（CP-session-forkcount-health-001, alias CP-9）
 #
 # 用法：
 #   bash scripts/preflight-session-check.sh                # 基础残留检查

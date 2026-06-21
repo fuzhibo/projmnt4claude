@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # scripts/audit-spawn-contract.sh
 #
-# §7.2.2 CP-5: spawn 契约静态审计
+# §7.2.2 CP-harness-spawn-args-001 (alias CP-5): spawn 契约静态审计
 #
 # 原理：对四阶段执行器（harness-executor / harness-code-reviewer /
 #       harness-qa-tester / harness-evaluator）+ FCE retry 路径的

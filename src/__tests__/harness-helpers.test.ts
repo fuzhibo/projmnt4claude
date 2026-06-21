@@ -630,6 +630,10 @@ describe('runHeadlessClaude', () => {
     env.cleanup();
   });
 
+  // CP-harness-mock-contract-001 (alias CP-5 spawn args): canonical mock per
+  // .claude/skills/unit-test/SKILL.md Rule 10 (Mock Stream Contract Completeness).
+  // Full Node WriteStream + EventEmitter contract required for spawnWithMemoryLimit
+  // stdin backpressure + Node 24 EventEmitter strict mode compatibility.
   function setupMockSpawn(options: {
     exitCode?: number | null;
     stdout?: string;
@@ -637,14 +641,26 @@ describe('runHeadlessClaude', () => {
     spawnError?: Error;
   }) {
     const child = new EventEmitter() as any;
-    child.stdin = { write: (..._args: any[]) => {}, end: () => {} };
+    // 完整模拟 Node WriteStream 契约：
+    // - write() 返回 boolean（true=可继续写，false=背压；mock 始终返回 true 避免触发 drain 死锁）
+    // - once()/on()/emit() 来自 EventEmitter，支持生产代码的 'drain' 监听
+    // - end() 关闭写端
+    const stdinEmitter = new EventEmitter() as any;
+    stdinEmitter.write = () => true;
+    stdinEmitter.end = () => {};
+    child.stdin = stdinEmitter;
     child.stdout = new EventEmitter();
     child.stderr = new EventEmitter();
 
     spawnMock.mockImplementation(() => {
       setTimeout(() => {
         if (options.spawnError) {
-          child.emit('error', options.spawnError);
+          // Node 24 严格化：emit('error') 零监听器即抛 ERR_UNHANDLED_ERROR。
+          // process.nextTick 确保生产代码 child.on('error', ...) 已同步注册。
+          // const 绑定在闭包内保留 Error 类型收窄，规避 process.nextTick 重载推断为 () => never。
+          const err: Error = options.spawnError;
+          const emitError: () => void = () => { child.emit('error', err); };
+          process.nextTick(emitError);
           return;
         }
         if (options.stdout) {
