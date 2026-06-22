@@ -331,10 +331,14 @@ describe('buildCheckpointConstraintsSection', () => {
 
     const result = buildCheckpointConstraintsSection(checkpoints, texts);
 
+    // P1: 开发提示词仅展示开发阶段检查点，其他阶段检查点被过滤
     expect(result).toContain('开发检查点');
-    expect(result).toContain('代码审查检查点');
-    expect(result).toContain('QA 验证检查点');
-    expect(result).toContain('自动化验证检查点');
+    expect(result).toContain('[CP-001]');
+    expect(result).toContain('General checkpoint');
+    expect(result).not.toContain('代码审查检查点');
+    expect(result).not.toContain('QA 验证检查点');
+    expect(result).not.toContain('自动化验证检查点');
+    expect(result).toContain('其他 3 个检查点属于代码审查/QA/评估阶段');
   });
 
   // --- Edge cases ---
@@ -353,9 +357,9 @@ describe('buildCheckpointConstraintsSection', () => {
 
   test('should handle multiple checkpoints in same category', () => {
     const checkpoints: CheckpointMetadata[] = [
-      createCheckpoint({ id: 'CP-001', description: '[ai review] Review 1' }),
-      createCheckpoint({ id: 'CP-002', description: '[ai review] Review 2' }),
-      createCheckpoint({ id: 'CP-003', description: '[ai review] Review 3' }),
+      createCheckpoint({ id: 'CP-001', description: 'Implement login' }),
+      createCheckpoint({ id: 'CP-002', description: 'Add tests' }),
+      createCheckpoint({ id: 'CP-003', description: 'Update docs' }),
     ];
 
     const result = buildCheckpointConstraintsSection(checkpoints, texts);

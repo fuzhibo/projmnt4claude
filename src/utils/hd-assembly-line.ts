@@ -1181,6 +1181,18 @@ export class AssemblyLine {
         const shouldComplete = this.matchCheckpointToPhase(checkpoint, phase, phaseData);
         if (!shouldComplete) continue;
 
+        // P1: 防御性检查 — 验证 checkpoint category 与当前 phase 一致
+        // 即使 matchCheckpointToPhase 已过滤，此检查可捕获 category 推断错误和边界情况
+        const categoryMismatch = this.detectCategoryMismatch(checkpoint, phase);
+        if (categoryMismatch) {
+          console.log(
+            `   ⚠️  检查点 ${checkpoint.id} category="${checkpoint.category ?? 'undefined'}" ` +
+            `与当前阶段 "${phase}" 不匹配，跳过自动同步。` +
+            `这可能是 category 推断错误，请检查检查点描述。`
+          );
+          continue;
+        }
+
         // 跳过人工验证检查点（阶段自动同步不处理人工验证）
         if (checkpoint.requiresHuman) {
           pendingHumanCheckpoints.push(checkpoint.id);
@@ -1270,6 +1282,39 @@ export class AssemblyLine {
         return 'phase_sync_cr';
       case 'qa':
         return 'phase_sync_qa';
+    }
+  }
+
+  /**
+   * P1: 检测检查点 category 与当前阶段的失配
+   *
+   * 防御性检查，用于捕获 category 推断错误导致的阶段归属异常。
+   * 返回 true 表示存在失配，应跳过自动同步。
+   */
+  private detectCategoryMismatch(
+    checkpoint: CheckpointMetadata,
+    phase: 'development' | 'code_review' | 'qa'
+  ): boolean {
+    const category = checkpoint.category;
+
+    // category 未设置时不触发失配（使用其他启发式判断）
+    if (!category) return false;
+
+    switch (phase) {
+      case 'development':
+        // 开发阶段不应完成 code_review 或 qa_verification 检查点
+        return category === 'code_review' || category === 'qa_verification';
+
+      case 'code_review':
+        // 代码审查阶段不应完成 qa_verification 检查点
+        return category === 'qa_verification';
+
+      case 'qa':
+        // QA 阶段不应完成 code_review 检查点
+        return category === 'code_review';
+
+      default:
+        return false;
     }
   }
 

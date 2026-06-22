@@ -351,8 +351,7 @@ export class HarnessExecutor {
         result.codeReview.push(cp);
       } else if (cp.category === 'qa_verification' || desc.includes('[ai qa]') || desc.includes('qa验证') || desc.includes('测试验证')) {
         result.qa.push(cp);
-      } else if (desc.includes('[script]')) {
-        // [script] 仅用于验证脚本，不再匹配'脚本'或'自动化'关键词
+      } else if (cp.category === 'evaluation' || desc.includes('[script]')) {
         result.evaluation.push(cp);
       } else {
         result.general.push(cp);
@@ -388,6 +387,8 @@ export class HarnessExecutor {
     const grouped = this.groupCheckpointsByPhase(checkpoints);
 
     // 通用检查点（开发阶段主要关注）
+    // P1: 仅展示开发阶段检查点，过滤掉 code_review/qa/evaluation 阶段检查点
+    // 防止 headless Claude 在开发阶段看到并错误完成其他阶段的检查点
     if (grouped.general.length > 0) {
       lines.push(`### ${texts.harness.checkpointCategoryGeneral || '开发检查点'}`);
       for (const cp of grouped.general) {
@@ -402,48 +403,10 @@ export class HarnessExecutor {
       lines.push('');
     }
 
-    // 代码审查检查点
-    if (grouped.codeReview.length > 0) {
-      lines.push(`### ${texts.harness.checkpointCategoryCodeReview || '代码审查检查点'}`);
-      for (const cp of grouped.codeReview) {
-        lines.push(`- [${cp.id}] ${cp.description}`);
-        if (cp.verification?.commands?.length) {
-          lines.push(`  - 验证命令: \`${cp.verification.commands.join(' && ')}\``);
-        }
-        if (cp.verification?.expected) {
-          lines.push(`  - 预期结果: ${cp.verification.expected}`);
-        }
-      }
-      lines.push('');
-    }
-
-    // QA 验证检查点
-    if (grouped.qa.length > 0) {
-      lines.push(`### ${texts.harness.checkpointCategoryQA || 'QA 验证检查点'}`);
-      for (const cp of grouped.qa) {
-        lines.push(`- [${cp.id}] ${cp.description}`);
-        if (cp.verification?.commands?.length) {
-          lines.push(`  - 验证命令: \`${cp.verification.commands.join(' && ')}\``);
-        }
-        if (cp.verification?.expected) {
-          lines.push(`  - 预期结果: ${cp.verification.expected}`);
-        }
-      }
-      lines.push('');
-    }
-
-    // 自动化验证检查点
-    if (grouped.evaluation.length > 0) {
-      lines.push(`### ${texts.harness.checkpointCategoryEvaluation || '自动化验证检查点'}`);
-      for (const cp of grouped.evaluation) {
-        lines.push(`- [${cp.id}] ${cp.description}`);
-        if (cp.verification?.commands?.length) {
-          lines.push(`  - 验证命令: \`${cp.verification.commands.join(' && ')}\``);
-        }
-        if (cp.verification?.expected) {
-          lines.push(`  - 预期结果: ${cp.verification.expected}`);
-        }
-      }
+    // 提示其他阶段检查点由后续阶段处理
+    const otherPhaseCount = grouped.codeReview.length + grouped.qa.length + grouped.evaluation.length;
+    if (otherPhaseCount > 0) {
+      lines.push(`> 📋 其他 ${otherPhaseCount} 个检查点属于代码审查/QA/评估阶段，将在对应阶段处理。`);
       lines.push('');
     }
 

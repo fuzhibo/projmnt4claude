@@ -403,13 +403,41 @@ export function getCheckpointPhase(description: string): string | null {
 }
 
 /**
+ * 根据检查点描述前缀映射到验证类别 (category)
+ *
+ * 将 System B 前缀（[ai review]/[ai qa]/[human qa]/[script]）映射为
+ * checkpoint.category，供 matchCheckpointToPhase 等阶段分配逻辑使用。
+ * 无前缀或未知前缀返回 undefined。
+ *
+ * 此前缀→类别映射与 getCheckpointPhase（前缀→阶段）和
+ * inferCheckpointAttributesFromPrefix（前缀→属性）保持一致。
+ *
+ * @param description - 检查点描述文本
+ * @returns 对应的 category 值，或 undefined
+ */
+export function getCategoryFromPrefix(
+  description: string
+): 'code_review' | 'qa_verification' | 'evaluation' | undefined {
+  if (!description || typeof description !== 'string') return undefined;
+
+  const trimmed = description.trim().toLowerCase();
+
+  if (trimmed.startsWith('[ai review]')) return 'code_review';
+  if (trimmed.startsWith('[ai qa]')) return 'qa_verification';
+  if (trimmed.startsWith('[human qa]')) return 'qa_verification';
+  if (trimmed.startsWith('[script]')) return 'evaluation';
+
+  return undefined;
+}
+
+/**
  * 根据检查点前缀推断检查点属性
  *
  * 前缀映射规则：
- * - [ai review] → requiresHuman=false（默认）
- * - [ai qa] → requiresHuman=false, verification.method=automated
- * - [human qa] → requiresHuman=true（人工验证）
- * - [script] → requiresHuman=false, verification.method=automated
+ * - [ai review] → requiresHuman=false, category=code_review
+ * - [ai qa] → requiresHuman=false, verification.method=automated, category=qa_verification
+ * - [human qa] → requiresHuman=true, category=qa_verification
+ * - [script] → requiresHuman=false, verification.method=automated, category=evaluation
  *
  * 【重要 - 2026-05-27 修复】
  * 补充 [human qa] 前缀的处理分支，避免 requiresHuman 保持 null 导致 QA 门禁误判。
@@ -422,6 +450,7 @@ export function getCheckpointPhase(description: string): string | null {
 export function inferCheckpointAttributesFromPrefix(description: string): {
   requiresHuman?: boolean;
   verificationMethod?: 'code_review' | 'lint' | 'unit_test' | 'functional_test' | 'integration_test' | 'e2e_test' | 'architect_review' | 'automated';
+  category?: 'code_review' | 'qa_verification' | 'evaluation';
 } {
   if (!description || typeof description !== 'string') {
     return {};
@@ -433,6 +462,7 @@ export function inferCheckpointAttributesFromPrefix(description: string): {
   if (trimmed.startsWith('[human qa]')) {
     return {
       requiresHuman: true,
+      category: 'qa_verification',
     };
   }
 
@@ -441,6 +471,7 @@ export function inferCheckpointAttributesFromPrefix(description: string): {
     return {
       requiresHuman: false,
       verificationMethod: 'automated',
+      category: 'qa_verification',
     };
   }
 
@@ -449,13 +480,15 @@ export function inferCheckpointAttributesFromPrefix(description: string): {
     return {
       requiresHuman: false,
       verificationMethod: 'automated',
+      category: 'evaluation',
     };
   }
 
-  // [ai review] → 默认，不设置额外属性
+  // [ai review] → 代码审查
   if (trimmed.startsWith('[ai review]')) {
     return {
       requiresHuman: false,
+      category: 'code_review',
     };
   }
 

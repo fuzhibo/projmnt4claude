@@ -220,7 +220,8 @@ export type TaskRole =
  */
 export type CheckpointCategory =
   | 'code_review'      // Code review checkpoint
-  | 'qa_verification'; // QA verification checkpoint
+  | 'qa_verification'  // QA verification checkpoint
+  | 'evaluation';      // Script-based evaluation checkpoint
 
 /**
  * Checkpoint verification info

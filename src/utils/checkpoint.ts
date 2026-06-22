@@ -8,7 +8,7 @@ import * as path from 'path';
 import { getTasksDir } from './path';
 import { readTaskMeta, writeTaskMeta } from './task';
 import type { TaskMeta, CheckpointMetadata, CheckpointVerification, VerificationMethod, CheckpointVerificationDetails } from '../types/task';
-import { inferCheckpointAttributesFromPrefix } from './validation-rules/checkpoint-rules';
+import { getCategoryFromPrefix, inferCheckpointAttributesFromPrefix } from './validation-rules/checkpoint-rules';
 
 // 测试注入点：允许测试通过全局变量注入 mock
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -428,6 +428,12 @@ export function inferVerificationFromDescription(
 export function inferCheckpointCategory(
   description: string
 ): 'code_review' | 'qa_verification' | undefined {
+  // 优先使用前缀映射（System B: [ai review]/[ai qa]/[human qa]/[script]）
+  const prefixCategory = getCategoryFromPrefix(description);
+  if (prefixCategory && prefixCategory !== 'evaluation') {
+    return prefixCategory;
+  }
+
   const lowerDesc = description.toLowerCase();
 
   // 代码审查类
@@ -554,7 +560,7 @@ export function syncCheckpointsToMeta(
     }
 
     if (!category) {
-      category = inferCheckpointCategory(cp.text);
+      category = prefixAttributes.category ?? inferCheckpointCategory(cp.text);
     }
 
     // 根据前缀确定 requiresHuman
