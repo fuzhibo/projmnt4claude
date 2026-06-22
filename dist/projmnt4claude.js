@@ -12324,6 +12324,7 @@ __export(exports_checkpoint_rules, {
   inferCheckpointPrefix: () => inferCheckpointPrefix,
   inferCheckpointAttributesFromPrefix: () => inferCheckpointAttributesFromPrefix,
   getCheckpointPhase: () => getCheckpointPhase,
+  getCategoryFromPrefix: () => getCategoryFromPrefix,
   checkpointVerbPrefix: () => checkpointVerbPrefix,
   checkpointValidationRules: () => checkpointValidationRules,
   checkpointScriptHasCommands: () => checkpointScriptHasCommands,
@@ -12448,6 +12449,20 @@ function getCheckpointPhase(description) {
     return "evaluation";
   return null;
 }
+function getCategoryFromPrefix(description) {
+  if (!description || typeof description !== "string")
+    return;
+  const trimmed = description.trim().toLowerCase();
+  if (trimmed.startsWith("[ai review]"))
+    return "code_review";
+  if (trimmed.startsWith("[ai qa]"))
+    return "qa_verification";
+  if (trimmed.startsWith("[human qa]"))
+    return "qa_verification";
+  if (trimmed.startsWith("[script]"))
+    return "evaluation";
+  return;
+}
 function inferCheckpointAttributesFromPrefix(description) {
   if (!description || typeof description !== "string") {
     return {};
@@ -12455,24 +12470,28 @@ function inferCheckpointAttributesFromPrefix(description) {
   const trimmed = description.trim().toLowerCase();
   if (trimmed.startsWith("[human qa]")) {
     return {
-      requiresHuman: true
+      requiresHuman: true,
+      category: "qa_verification"
     };
   }
   if (trimmed.startsWith("[ai qa]")) {
     return {
       requiresHuman: false,
-      verificationMethod: "automated"
+      verificationMethod: "automated",
+      category: "qa_verification"
     };
   }
   if (trimmed.startsWith("[script]")) {
     return {
       requiresHuman: false,
-      verificationMethod: "automated"
+      verificationMethod: "automated",
+      category: "evaluation"
     };
   }
   if (trimmed.startsWith("[ai review]")) {
     return {
-      requiresHuman: false
+      requiresHuman: false,
+      category: "code_review"
     };
   }
   return {};
@@ -15330,6 +15349,10 @@ function inferVerificationFromDescription(description, task) {
   return;
 }
 function inferCheckpointCategory(description) {
+  const prefixCategory = getCategoryFromPrefix(description);
+  if (prefixCategory && prefixCategory !== "evaluation") {
+    return prefixCategory;
+  }
   const lowerDesc = description.toLowerCase();
   if (/代码审查|code.?review|代码审核|lint|静态检查/.test(lowerDesc)) {
     return "code_review";
@@ -15391,7 +15414,7 @@ function syncCheckpointsToMeta(taskId, checkpointsOrCwd, maybeCwd) {
       }
     }
     if (!category) {
-      category = inferCheckpointCategory(cp.text);
+      category = prefixAttributes.category ?? inferCheckpointCategory(cp.text);
     }
     let requiresHuman;
     if (prefixAttributes.requiresHuman !== undefined) {
@@ -38329,7 +38352,7 @@ class HarnessExecutor {
         result.codeReview.push(cp);
       } else if (cp.category === "qa_verification" || desc.includes("[ai qa]") || desc.includes("qa验证") || desc.includes("测试验证")) {
         result.qa.push(cp);
-      } else if (desc.includes("[script]")) {
+      } else if (cp.category === "evaluation" || desc.includes("[script]")) {
         result.evaluation.push(cp);
       } else {
         result.general.push(cp);
@@ -38360,43 +38383,9 @@ class HarnessExecutor {
       }
       lines.push("");
     }
-    if (grouped.codeReview.length > 0) {
-      lines.push(`### ${texts.harness.checkpointCategoryCodeReview || "代码审查检查点"}`);
-      for (const cp of grouped.codeReview) {
-        lines.push(`- [${cp.id}] ${cp.description}`);
-        if (cp.verification?.commands?.length) {
-          lines.push(`  - 验证命令: \`${cp.verification.commands.join(" && ")}\``);
-        }
-        if (cp.verification?.expected) {
-          lines.push(`  - 预期结果: ${cp.verification.expected}`);
-        }
-      }
-      lines.push("");
-    }
-    if (grouped.qa.length > 0) {
-      lines.push(`### ${texts.harness.checkpointCategoryQA || "QA 验证检查点"}`);
-      for (const cp of grouped.qa) {
-        lines.push(`- [${cp.id}] ${cp.description}`);
-        if (cp.verification?.commands?.length) {
-          lines.push(`  - 验证命令: \`${cp.verification.commands.join(" && ")}\``);
-        }
-        if (cp.verification?.expected) {
-          lines.push(`  - 预期结果: ${cp.verification.expected}`);
-        }
-      }
-      lines.push("");
-    }
-    if (grouped.evaluation.length > 0) {
-      lines.push(`### ${texts.harness.checkpointCategoryEvaluation || "自动化验证检查点"}`);
-      for (const cp of grouped.evaluation) {
-        lines.push(`- [${cp.id}] ${cp.description}`);
-        if (cp.verification?.commands?.length) {
-          lines.push(`  - 验证命令: \`${cp.verification.commands.join(" && ")}\``);
-        }
-        if (cp.verification?.expected) {
-          lines.push(`  - 预期结果: ${cp.verification.expected}`);
-        }
-      }
+    const otherPhaseCount = grouped.codeReview.length + grouped.qa.length + grouped.evaluation.length;
+    if (otherPhaseCount > 0) {
+      lines.push(`> \uD83D\uDCCB 其他 ${otherPhaseCount} 个检查点属于代码审查/QA/评估阶段，将在对应阶段处理。`);
       lines.push("");
     }
     return lines.join(`
@@ -44778,6 +44767,11 @@ ${"━".repeat(SEPARATOR_WIDTH)}`);
         const shouldComplete = this.matchCheckpointToPhase(checkpoint, phase, phaseData);
         if (!shouldComplete)
           continue;
+        const categoryMismatch = this.detectCategoryMismatch(checkpoint, phase);
+        if (categoryMismatch) {
+          console.log(`   ⚠️  检查点 ${checkpoint.id} category="${checkpoint.category ?? "undefined"}" ` + `与当前阶段 "${phase}" 不匹配，跳过自动同步。` + `这可能是 category 推断错误，请检查检查点描述。`);
+          continue;
+        }
         if (checkpoint.requiresHuman) {
           pendingHumanCheckpoints.push(checkpoint.id);
           console.log(`   ⊘ 检查点 ${checkpoint.id} 需要人工验证，跳过自动同步`);
@@ -44847,6 +44841,21 @@ ${"━".repeat(SEPARATOR_WIDTH)}`);
         return "phase_sync_cr";
       case "qa":
         return "phase_sync_qa";
+    }
+  }
+  detectCategoryMismatch(checkpoint, phase) {
+    const category = checkpoint.category;
+    if (!category)
+      return false;
+    switch (phase) {
+      case "development":
+        return category === "code_review" || category === "qa_verification";
+      case "code_review":
+        return category === "qa_verification";
+      case "qa":
+        return category === "code_review";
+      default:
+        return false;
     }
   }
   matchCheckpointToPhase(checkpoint, phase, phaseData) {
