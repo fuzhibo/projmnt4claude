@@ -41,7 +41,7 @@ export function isUuidLike(s: string): boolean {
  *
  * V2 修正（INV-20260619-002 / Track B）：
  * 在 `sessionIdMapper.generate()` 之后、Claude CLI 调用之前，
- * 主动清理可能残留的同名锁目录，避免触发 "Session ID already in use"。
+ * 主动清理可能残留的同名锁目录，清理流水线残留锁目录，防止 session-env 无限增长。
  *
  * 残留场景：
  *   - 上一次同 UUID 会话崩溃未清理

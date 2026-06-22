@@ -20,7 +20,9 @@
  * - 正常退出时清理快照，异常时保留供诊断
  */
 
+import { createHash } from 'crypto';
 import * as fs from 'fs';
+import { homedir } from 'os';
 import * as path from 'path';
 import type {
   HarnessConfig,
@@ -596,6 +598,15 @@ export async function harnessCommand(
     process.removeListener('SIGTERM', gracefulShutdown);
     // CP-03: 卸载退出钩子，避免泄漏到后续命令
     uninstallExitHooks();
+    // M6: Clean jsonl history files for sessions created this run
+    const projectDir = process.env.PROJMNT4CLAUDE_ROOT ?? process.cwd();
+    const projectHash = createHash('sha256').update(projectDir).digest('hex').slice(0, 16);
+    const sessionsDir = path.join(homedir(), '.claude', 'projects', projectHash);
+    const mappings = sessionIdMapper.serialize();
+    for (const m of mappings) {
+      const jsonlPath = path.join(sessionsDir, `${m.cliUuid}.jsonl`);
+      try { if (fs.existsSync(jsonlPath)) fs.unlinkSync(jsonlPath); } catch { /* ignore */ }
+    }
   }
 }
 

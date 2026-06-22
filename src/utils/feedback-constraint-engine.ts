@@ -18,9 +18,7 @@ import type { AgentResult } from './headless-agent.js';
 import type { Language } from '../i18n/index.js';
 import { getI18n } from '../i18n/index.js';
 import { Logger } from './logger.js';
-import { randomUUID } from 'crypto';
 import { sessionIdMapper } from './session-id-mapper.js';
-import { ensureCleanSessionSlot } from './session-lock-cleanup.js';
 
 const logger = new Logger({ component: 'feedback-constraint-engine' });
 
@@ -370,20 +368,13 @@ export class FeedbackConstraintEngineImpl implements FeedbackConstraintEngine {
     // 使用双层 ID：内部可读 ID 用于日志，CLI UUID 用于 Claude Code
     let internalId: string;
     let sessionId: string;
-    if (options.sessionId) {
-      // 如果已有 sessionId（来自上层阶段执行器），它已经是 CLI UUID
-      // 需要查找对应的 internalId，如果没有则生成一个新的
-      sessionId = options.sessionId;
-      internalId = sessionIdMapper.toInternalId(sessionId) || `fce-${Date.now()}-${randomUUID().slice(0, 8)}`;
-      // 确保映射存在
-      if (!sessionIdMapper.toInternalId(sessionId)) {
-        sessionIdMapper.generate(internalId, 'unknown', 'feedback');
-      }
-    } else {
-      internalId = `fce-${Date.now()}-${randomUUID().slice(0, 8)}`;
-      sessionId = sessionIdMapper.generate(internalId, 'unknown', 'feedback');
-      // CP-02: FCE 新建 session 时清理可能的残留锁（retry 重试复用 UUID 场景）
-      ensureCleanSessionSlot(sessionId);
+    if (!options.sessionId) {
+      throw new Error('FCE requires an upstream sessionId');
+    }
+    sessionId = options.sessionId;
+    internalId = sessionIdMapper.toInternalId(sessionId) || `fce-${Date.now()}-${process.pid}`;
+    if (!sessionIdMapper.toInternalId(sessionId)) {
+      sessionIdMapper.generate(internalId, 'unknown', 'feedback', `${process.pid}-${Date.now()}`);
     }
     let currentOptions = { ...options, sessionId };
 

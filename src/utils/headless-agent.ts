@@ -52,13 +52,13 @@ export interface AgentInvokeOptions {
   /** 指定 Claude Code CLI session ID，用于跨调用保持上下文连续性 */
   sessionId?: string;
   /**
-   * Session 三态（V2.1 §6.1.4.2）：fresh | active | forked
+   * Session 三态（V2.1 §6.1.4.2）：fresh | active
    * 优先使用此字段；未设置时由 deriveSessionStateFromLegacyFlags 从遗留标志推导。
    */
   sessionState?: SessionState;
   /** @deprecated V2.1：改用 sessionState='active'。恢复已有 session（对应 --resume），需配合 sessionId 使用 */
   resumeSession?: boolean;
-  /** @deprecated V2.1：改用 sessionState='forked'。分叉 session 而非覆盖原 session（对应 --fork-session） */
+  /** @deprecated V2.1：不再使用，forkSession 已被忽略。使用 runSalt 区分不同运行实例。 */
   forkSession?: boolean;
   /** 最大重试次数 */
   maxRetries?: number;

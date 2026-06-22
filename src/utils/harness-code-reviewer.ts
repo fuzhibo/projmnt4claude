@@ -172,15 +172,11 @@ export class HarnessCodeReviewer {
     const effectiveTools = buildEffectiveTools('codeReview', this.config.cwd, task);
     const phaseOptions = this.config.perPhaseOptions?.['codeReview'];
 
-    // V2.1 §6.1.7.6：稳定 internalId + runId + 三态探测
+    // V2.1 §6.1.7.6：稳定 internalId + runSalt + 二态探测（fresh/active）
     const internalId = sessionIdMapper.buildStableInternalId(task.id, 'codeReview', 'cr');
-    const runId = sessionIdMapper.resolveRunId();
-    const probe = sessionIdMapper.probeSessionState(internalId, task.id, 'codeReview', runId);
-    const sessionId = sessionIdMapper.generate(internalId, task.id, 'codeReview', {
-      runId,
-      state: probe.state,
-    });
-    // CP-02: 清理可能的 session-env 残留锁，避免 "Session ID already in use"
+    const runSalt = `${process.pid}-${Date.now()}`;
+    const probe = sessionIdMapper.probeSessionState(internalId, task.id, 'codeReview', runSalt);
+    const sessionId = sessionIdMapper.generate(internalId, task.id, 'codeReview', runSalt);
     ensureCleanSessionSlot(sessionId);
 
     const invokeOptions = {

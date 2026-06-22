@@ -115,16 +115,12 @@ export class AssemblyLine {
     this.config = config;
     // V2.1 §6.1.7.6：稳定 internalId + runId + 三态探测
     // 同一 pipeline 的 --continue 恢复生成相同 internalId → 相同 cliUuid，
-    // probeSessionState 识别 fresh/active/forked，由 buildSessionCliArgs 翻译为 CLI 参数。
+    // probeSessionState 识别 fresh/active，由 buildSessionCliArgs 翻译为 CLI 参数。
     // 外部显式传入 sessionId（如 --session-id）优先，否则使用稳定派生 ID。
     const internalId = sessionId || sessionIdMapper.buildStableInternalId('pipeline', 'assembly-line', 'harness');
-    const runId = sessionIdMapper.resolveRunId();
-    const probe = sessionIdMapper.probeSessionState(internalId, 'pipeline', 'assembly-line', runId);
-    this.sessionId = sessionIdMapper.generate(internalId, 'pipeline', 'assembly-line', {
-      runId,
-      state: probe.state,
-    });
-    // CP-02: 清理可能的 session-env 残留锁，避免 "Session ID already in use"
+    const runSalt = `${process.pid}-${Date.now()}`;
+    const probe = sessionIdMapper.probeSessionState(internalId, 'pipeline', 'assembly-line', runSalt);
+    this.sessionId = sessionIdMapper.generate(internalId, 'pipeline', 'assembly-line', runSalt);
     ensureCleanSessionSlot(this.sessionId);
 
     this.taskRetryContexts = new Map();

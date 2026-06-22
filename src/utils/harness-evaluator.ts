@@ -130,15 +130,11 @@ export class HarnessEvaluator {
       const effectiveTools = buildEffectiveTools('evaluation', this.config.cwd, task);
       const phaseOptions = this.config.perPhaseOptions?.['evaluation'];
 
-      // V2.1 §6.1.7.6：稳定 internalId + runId + 三态探测
+      // V2.1 §6.1.7.6：稳定 internalId + runSalt + 二态探测（fresh/active）
       const internalId = sessionIdMapper.buildStableInternalId(task.id, 'evaluation', 'eval');
-      const runId = sessionIdMapper.resolveRunId();
-      const probe = sessionIdMapper.probeSessionState(internalId, task.id, 'evaluation', runId);
-      const sessionId = sessionIdMapper.generate(internalId, task.id, 'evaluation', {
-        runId,
-        state: probe.state,
-      });
-      // CP-02: 清理可能的 session-env 残留锁，避免 "Session ID already in use"
+      const runSalt = `${process.pid}-${Date.now()}`;
+      const probe = sessionIdMapper.probeSessionState(internalId, task.id, 'evaluation', runSalt);
+      const sessionId = sessionIdMapper.generate(internalId, task.id, 'evaluation', runSalt);
       ensureCleanSessionSlot(sessionId);
 
       const invokeOptions = {

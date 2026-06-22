@@ -151,15 +151,11 @@ export class HarnessExecutor {
 
       // V2.1 §6.1.7.6：稳定 internalId + runId + 三态探测
       // 同一任务同一阶段的 retry / --continue 恢复均生成相同 internalId → 相同 cliUuid，
-      // probeSessionState 据此识别 fresh/active/forked，由 buildSessionCliArgs 翻译为 CLI 参数。
+      // probeSessionState 据此识别 fresh/active，由 buildSessionCliArgs 翻译为 CLI 参数。
       const internalId = sessionIdMapper.buildStableInternalId(task.id, 'development', 'dev');
-      const runId = sessionIdMapper.resolveRunId();
-      const probe = sessionIdMapper.probeSessionState(internalId, task.id, 'development', runId);
-      const sessionId = sessionIdMapper.generate(internalId, task.id, 'development', {
-        runId,
-        state: probe.state,
-      });
-      // CP-02: 清理可能的 session-env 残留锁，避免 "Session ID already in use"
+      const runSalt = `${process.pid}-${Date.now()}`;
+      const probe = sessionIdMapper.probeSessionState(internalId, task.id, 'development', runSalt);
+      const sessionId = sessionIdMapper.generate(internalId, task.id, 'development', runSalt);
       ensureCleanSessionSlot(sessionId);
 
       const invokeOptions = {

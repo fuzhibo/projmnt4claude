@@ -13519,8 +13519,6 @@ var init_session_lock_cleanup = __esm(() => {
 
 // src/utils/session-id-mapper.ts
 import { createHash } from "crypto";
-import { existsSync as existsSync9, readFileSync as readFileSync8 } from "fs";
-import { join as join8 } from "path";
 
 class SessionIdMapper {
   mappings = new Map;
@@ -13528,11 +13526,9 @@ class SessionIdMapper {
   setAuditLogger(logger) {
     this.auditLogger = logger;
   }
-  generate(internalId, taskId, phase, options) {
-    const cliUuid = this.deriveDeterministicUuid(internalId, taskId, phase);
+  generate(internalId, taskId, phase, runSalt) {
+    const cliUuid = this.deriveDeterministicUuid(internalId, taskId, phase, runSalt);
     const now = new Date().toISOString();
-    const runId = options?.runId;
-    const state = options?.state;
     const existing = this.mappings.get(internalId);
     const isReused = existing?.cliUuid === cliUuid;
     if (existing && !isReused) {
@@ -13545,10 +13541,7 @@ class SessionIdMapper {
         taskId,
         phase,
         createdAt: now,
-        ...runId ? { runId } : {},
-        ...state ? { status: state } : {},
-        lastUsedAt: now,
-        forkCount: state === "forked" ? 1 : 0
+        lastUsedAt: now
       };
       this.mappings.set(internalId, mapping);
       this.mappings.set(cliUuid, mapping);
@@ -13556,26 +13549,15 @@ class SessionIdMapper {
         this.auditLogger({ mapping, isReused: false });
       }
     } else {
-      const reused = existing;
-      reused.lastUsedAt = now;
-      if (state) {
-        reused.status = state;
-      }
-      if (runId) {
-        if (reused.runId && reused.runId !== runId) {
-          reused.status = "forked";
-          reused.forkCount = (reused.forkCount ?? 0) + 1;
-        }
-        reused.runId = runId;
-      }
+      existing.lastUsedAt = now;
       if (this.auditLogger) {
-        this.auditLogger({ mapping: reused, isReused: true });
+        this.auditLogger({ mapping: existing, isReused: true });
       }
     }
     return cliUuid;
   }
-  deriveDeterministicUuid(internalId, taskId, phase) {
-    const hash = createHash("sha256").update(`${internalId}|${taskId}|${phase}`).digest("hex");
+  deriveDeterministicUuid(internalId, taskId, phase, runSalt) {
+    const hash = createHash("sha256").update(`${internalId}|${taskId}|${phase}|${runSalt}`).digest("hex");
     const variantChar = (parseInt(hash.slice(16, 18), 16) & 3 | 8).toString(16);
     return [
       hash.slice(0, 8),
@@ -13617,51 +13599,21 @@ class SessionIdMapper {
     }
     return seen.size;
   }
-  probeSessionState(internalId, taskId, phase, runId) {
-    const cliUuid = this.deriveDeterministicUuid(internalId, taskId, phase);
+  probeSessionState(internalId, taskId, phase, runSalt) {
+    const cliUuid = this.deriveDeterministicUuid(internalId, taskId, phase, runSalt);
     const existing = this.mappings.get(internalId);
     if (!existing || existing.cliUuid !== cliUuid) {
       return {
         state: "fresh",
         cliUuid,
-        runId,
         reason: `no existing mapping for internalId=${internalId}`
       };
     }
-    if (existing.runId && existing.runId === runId) {
-      return {
-        state: "active",
-        cliUuid,
-        mapping: existing,
-        runId,
-        reason: `same runId=${runId} → resume full history`
-      };
-    }
     return {
-      state: "forked",
+      state: "active",
       cliUuid,
-      mapping: existing,
-      runId,
-      reason: `existing runId=${existing.runId ?? "(unset)"} differs from current runId=${runId} → fork`
+      reason: `existing mapping found → resume full history`
     };
-  }
-  resolveRunId(explicit) {
-    if (explicit && explicit.trim()) {
-      return explicit.trim();
-    }
-    const envRunId = process.env.HARNESS_RUN_ID;
-    if (envRunId && envRunId.trim()) {
-      return envRunId.trim();
-    }
-    const projectRoot = process.env.PROJMNT4CLAUDE_ROOT ?? process.cwd();
-    const runIdFile = join8(projectRoot, ".projmnt4claude", "harness-run-id");
-    if (existsSync9(runIdFile)) {
-      const fileRunId = readFileSync8(runIdFile, "utf8").trim();
-      if (fileRunId) {
-        return fileRunId;
-      }
-    }
-    return `run-${process.pid}-${Date.now()}`;
   }
   buildStableInternalId(taskId, phase, prefix = "cr") {
     return `${prefix}-${taskId}-stable-${phase}`;
@@ -13679,9 +13631,6 @@ function deriveSessionStateFromLegacyFlags(options) {
   if (options.sessionState) {
     return options.sessionState;
   }
-  if (options.resumeSession && options.forkSession) {
-    return "forked";
-  }
   if (options.resumeSession) {
     return "active";
   }
@@ -13694,8 +13643,6 @@ function buildSessionCliArgs(state, cliUuid) {
       return ["--session-id", cliUuid];
     case "active":
       return ["--session-id", cliUuid, "--resume"];
-    case "forked":
-      return ["--session-id", cliUuid, "--resume", "--fork-session"];
     default: {
       const _exhaustive = state;
       throw new Error(`Unknown sessionState: ${String(_exhaustive)}`);
@@ -22295,7 +22242,7 @@ async function callAIForJSON(options, validator) {
   const output = result.output.trim();
   let jsonStr = output;
   const jsonBlockMatch = output.match(/```json\s*([\s\S]*?)\s*```/);
-  if (jsonBlockMatch && jsonBlockMatch[1]) {
+  if (jsonBlockMatch) {
     jsonStr = jsonBlockMatch[1].trim();
   } else {
     const start = output.indexOf("{");
@@ -34080,9 +34027,8 @@ async function loadTemplate(name, lang = "zh") {
 }
 function renderTemplate(template, params) {
   return template.replace(/\{(\w+)\}/g, (match, key) => {
-    const value = params[key];
-    if (value !== undefined) {
-      return value;
+    if (key in params) {
+      return params[key];
     }
     return match;
   });
@@ -34107,34 +34053,32 @@ var PREFIX_MAP2 = {
 var VALID_PREFIXES = Object.keys(PREFIX_MAP2);
 function parseCheckpoint(raw) {
   const match = raw.match(/^\[(verify|test|review|implem|doc)\]\s*(.+)/);
-  if (!match || !match[1])
+  if (!match)
     return null;
   const prefix = match[1];
   const mapped = PREFIX_MAP2[prefix];
-  if (!mapped)
-    return null;
   return {
     prefix,
-    description: match[2]?.trim() ?? "",
+    description: match[2].trim(),
     category: mapped.category,
     verificationMethod: mapped.method,
     requiresHuman: mapped.requiresHuman
   };
 }
 // src/utils/init-requirement/verification-commands.ts
-import { existsSync as existsSync23, readFileSync as readFileSync20 } from "node:fs";
+import { existsSync as existsSync22, readFileSync as readFileSync19 } from "node:fs";
 import path21 from "node:path";
 function detectPackageManager(cwd) {
-  if (existsSync23(path21.join(cwd, "bun.lockb")) || existsSync23(path21.join(cwd, "bun.lock"))) {
+  if (existsSync22(path21.join(cwd, "bun.lockb")) || existsSync22(path21.join(cwd, "bun.lock"))) {
     return "bun";
   }
-  if (existsSync23(path21.join(cwd, "pnpm-lock.yaml"))) {
+  if (existsSync22(path21.join(cwd, "pnpm-lock.yaml"))) {
     return "pnpm";
   }
-  if (existsSync23(path21.join(cwd, "yarn.lock"))) {
+  if (existsSync22(path21.join(cwd, "yarn.lock"))) {
     return "yarn";
   }
-  if (existsSync23(path21.join(cwd, "package-lock.json"))) {
+  if (existsSync22(path21.join(cwd, "package-lock.json"))) {
     return "npm";
   }
   return;
@@ -34155,8 +34099,8 @@ function detectTestFramework(pkg) {
 }
 function detectProjectConfig(cwd) {
   const packageJsonPath = path21.join(cwd, "package.json");
-  if (existsSync23(packageJsonPath)) {
-    const pkg = JSON.parse(readFileSync20(packageJsonPath, "utf-8"));
+  if (existsSync22(packageJsonPath)) {
+    const pkg = JSON.parse(readFileSync19(packageJsonPath, "utf-8"));
     const packageManager = detectPackageManager(cwd);
     const testFramework = detectTestFramework(pkg);
     let testCommand;
@@ -34178,21 +34122,21 @@ function detectProjectConfig(cwd) {
       testFilePattern: "**/__tests__/*.test.ts"
     };
   }
-  if (existsSync23(path21.join(cwd, "go.mod"))) {
+  if (existsSync22(path21.join(cwd, "go.mod"))) {
     return {
       type: "go",
       testCommand: "go test ./...",
       testFilePattern: "**/*_test.go"
     };
   }
-  if (existsSync23(path21.join(cwd, "pyproject.toml")) || existsSync23(path21.join(cwd, "setup.py"))) {
+  if (existsSync22(path21.join(cwd, "pyproject.toml")) || existsSync22(path21.join(cwd, "setup.py"))) {
     return {
       type: "python",
       testCommand: "pytest",
       testFilePattern: "**/test_*.py"
     };
   }
-  if (existsSync23(path21.join(cwd, "Cargo.toml"))) {
+  if (existsSync22(path21.join(cwd, "Cargo.toml"))) {
     return {
       type: "rust",
       testCommand: "cargo test",
@@ -34222,7 +34166,7 @@ function generateVerificationCommands(checkpoint, taskFiles, projectConfig) {
     case "test": {
       if (!testCommand)
         return [];
-      const mappedTestFiles = taskFiles.map((f) => mapSourceToTestFile(f, projectConfig)).filter((f) => existsSync23(f));
+      const mappedTestFiles = taskFiles.map((f) => mapSourceToTestFile(f, projectConfig)).filter((f) => existsSync22(f));
       if (mappedTestFiles.length > 0) {
         return [`${testCommand} ${mappedTestFiles.join(" ")}`];
       }
@@ -34407,8 +34351,8 @@ async function runGateCheck(taskId, cwd, attempt, maxRetries, isResumed, deps) {
     failures.push({
       source: "preDevGate",
       detail: "Pre-dev gate failed",
-      ruleResults: preDevResult.ruleResults,
-      suggestions: preDevResult.ruleResults?.filter((r) => !r.passed).map((r) => r.ruleName)
+      ruleResults: preDevResult.results,
+      suggestions: preDevResult.results?.map((r) => r.message).filter(Boolean)
     });
   }
   const qualityResult = await deps.checkQualityGate(taskId, DEFAULT_QUALITY_GATE_CONFIG2, cwd);
@@ -34435,7 +34379,7 @@ async function runAIFix(taskId, cwd, failures, deps, alignmentIssues) {
   Suggestions: ` + f.suggestions.join("; ") : ""}`).join(`
 `);
   const currentMeta = JSON.stringify(deps.readTaskMeta(taskId, cwd), null, 2);
-  const prompt = await loadAndRenderTemplate("taskFix", {
+  const prompt = loadAndRenderTemplate("taskFix", {
     currentMeta,
     gateErrors: gateErrors || "None",
     qualityIssues: qualityIssues || "None",
@@ -34991,7 +34935,7 @@ function parseReport(markdown) {
 }
 function extractDependenciesFromMarkdown(markdown) {
   const depLine = markdown.match(/^- \*\*依赖子报告\*\*: (.+)$/m) || markdown.match(/^- \*\*Depends On\*\*: (.+)$/m);
-  if (!depLine || !depLine[1])
+  if (!depLine)
     return [];
   return depLine[1].split(",").map((s) => s.trim()).filter(Boolean);
 }
@@ -35013,7 +34957,7 @@ function parseMetadata(md) {
 function extractField(md, label) {
   const re = new RegExp(`^- \\*\\*${escapeRegex(label)}\\*\\*: (.+)$`, "m");
   const m = md.match(re);
-  return m && m[1] ? m[1].trim() : null;
+  return m ? m[1].trim() : null;
 }
 function parseRootCauseAnalysis(md) {
   const items = [];
@@ -35028,12 +34972,10 @@ function parseRootCauseAnalysis(md) {
   }
   for (let i = 0;i < matches.length; i++) {
     const m = matches[i];
-    if (!m)
-      continue;
-    const id = m[1] ?? "";
-    const title = (m[2] ?? "").trim();
-    const descStart = (m.index ?? 0) + m[0].length;
-    const descEnd = i < matches.length - 1 ? matches[i + 1]?.index ?? sectionMd.length : sectionMd.length;
+    const id = m[1];
+    const title = m[2].trim();
+    const descStart = m.index + m[0].length;
+    const descEnd = i < matches.length - 1 ? matches[i + 1].index : sectionMd.length;
     const description = sectionMd.slice(descStart, descEnd).trim();
     items.push({ id, title, description });
   }
@@ -35052,12 +34994,10 @@ function parseSolutions(md) {
   }
   for (let i = 0;i < matches.length; i++) {
     const m = matches[i];
-    if (!m)
-      continue;
-    const id = m[1] ?? "";
-    const title = (m[2] ?? "").trim();
-    const descStart = (m.index ?? 0) + m[0].length;
-    const descEnd = i < matches.length - 1 ? matches[i + 1]?.index ?? sectionMd.length : sectionMd.length;
+    const id = m[1];
+    const title = m[2].trim();
+    const descStart = m.index + m[0].length;
+    const descEnd = i < matches.length - 1 ? matches[i + 1].index : sectionMd.length;
     const body = sectionMd.slice(descStart, descEnd).trim();
     const correspondsTo = extractInlineField(body, "对应原因", "Corresponds To") || "";
     const filesRaw = extractInlineField(body, "涉及文件", "Files") || "";
@@ -35079,13 +35019,13 @@ function parseCheckpoints2(md) {
   const re = /^- \[([a-z]+)\] (.+) \(→ (SOL-\d+)\)$/gm;
   let match;
   while ((match = re.exec(sectionMd)) !== null) {
-    const prefix = match[1] ?? "";
+    const prefix = match[1];
     if (!validPrefixes.has(prefix))
       continue;
     items.push({
       prefix,
-      description: (match[2] ?? "").trim(),
-      belongsTo: match[3] ?? ""
+      description: match[2].trim(),
+      belongsTo: match[3]
     });
   }
   return items;
@@ -35097,19 +35037,19 @@ function parseAssessment(md) {
   const minutesRaw = extractInlineField(sectionMd, "预估工时", "Estimated Minutes") || "60";
   return {
     complexity: validateComplexity(complexity),
-    impactScope: validateImpactScope(impactRaw),
+    impactScope: impactRaw,
     estimatedMinutes: parseInt(minutesRaw.replace(/[^\d]/g, ""), 10) || 60
   };
 }
 function extractSection(md, zhTitle, enTitle) {
   const re = new RegExp(`^## (?:${escapeRegex(zhTitle)}|${escapeRegex(enTitle)})\\s*\\n([\\s\\S]*?)(?=^## |\\n## |\\n# |(?![\\s\\S]))`, "m");
   const m = md.match(re);
-  return m && m[1] ? m[1] : null;
+  return m ? m[1] : null;
 }
 function extractInlineField(text, zhLabel, enLabel) {
   const re = new RegExp(`\\*\\*(?:${escapeRegex(zhLabel)}|${escapeRegex(enLabel)})\\*\\*: (.+)$`, "m");
   const m = text.match(re);
-  return m && m[1] ? m[1].trim() : null;
+  return m ? m[1].trim() : null;
 }
 function escapeRegex(s) {
   return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
@@ -35125,23 +35065,12 @@ function validateComplexity(v) {
     return "high";
   return "medium";
 }
-function validateImpactScope(v) {
-  if (v === "有限" || v === "中等" || v === "广泛")
-    return v;
-  if (v === "limited")
-    return "有限";
-  if (v === "medium" || v === "moderate")
-    return "中等";
-  if (v === "wide" || v === "broad" || v === "extensive")
-    return "广泛";
-  return "中等";
-}
 
 // src/utils/investigation/report-reviewer.ts
 init_ai_integration();
 async function reviewReport(requirement, report, cwd, lang = "zh") {
   const reportMarkdown = generateReport(report);
-  const prompt = await loadAndRenderTemplate("review", { report: reportMarkdown }, lang);
+  const prompt = loadAndRenderTemplate("review", { report: reportMarkdown }, lang);
   return callAIForJSON({ prompt, cwd }, validateReviewResult);
 }
 async function reviewWithRetry(requirement, report, options) {
@@ -35156,7 +35085,7 @@ async function reviewWithRetry(requirement, report, options) {
       const issuesText = lastReview.issues.map((i) => `[${i.severity}] ${i.dimension}: ${i.description} → ${i.suggestion}`).join(`
 `);
       const previousReport = generateReport(currentReport);
-      const prompt = await loadAndRenderTemplate("investigateWithFeedback", { requirement, previousReport, issues: issuesText }, options.lang);
+      const prompt = loadAndRenderTemplate("investigateWithFeedback", { requirement, previousReport, issues: issuesText }, options.lang);
       const aiResult = await callAI({ prompt, outputFormat: "text", cwd: options.cwd });
       if (!aiResult.success) {
         throw new Error(`AI regeneration failed: ${aiResult.error}`);
@@ -35196,14 +35125,14 @@ function shouldSplit(reportPath, thresholdKB) {
 }
 async function generateSplitPlan(report, cwd, lang = "zh") {
   const reportMarkdown = generateReport(report);
-  const prompt = await loadAndRenderTemplate("split", { report: reportMarkdown }, lang);
+  const prompt = loadAndRenderTemplate("split", { report: reportMarkdown }, lang);
   const { callAIForJSON: callAIForJSON2 } = await Promise.resolve().then(() => (init_ai_integration(), exports_ai_integration));
   return callAIForJSON2({ prompt, cwd }, validateSplitPlan);
 }
 async function reviewSplitPlan(report, splitPlan, cwd, lang = "zh") {
   const summary = summarizeReport(report);
   const planJson = JSON.stringify(splitPlan, null, 2);
-  const prompt = await loadAndRenderTemplate("splitReview", { reportSummary: summary, splitPlan: planJson }, lang);
+  const prompt = loadAndRenderTemplate("splitReview", { reportSummary: summary, splitPlan: planJson }, lang);
   const { callAIForJSON: callAIForJSON2 } = await Promise.resolve().then(() => (init_ai_integration(), exports_ai_integration));
   return callAIForJSON2({ prompt, cwd }, validateSplitReviewResult);
 }
@@ -37551,7 +37480,9 @@ async function runDoctorDeep(cwd = process.cwd()) {
 init_harness();
 init_path();
 init_i18n();
+import { createHash as createHash2 } from "crypto";
 import * as fs44 from "fs";
+import { homedir as homedir3 } from "os";
 import * as path40 from "path";
 
 // src/utils/hd-assembly-line.ts
@@ -37802,8 +37733,6 @@ init_headless_agent();
 init_i18n();
 init_logger();
 init_session_id_mapper();
-init_session_lock_cleanup();
-import { randomUUID } from "crypto";
 var logger = new Logger({ component: "feedback-constraint-engine" });
 var jsonParseableRule = {
   id: "json-parseable",
@@ -37999,16 +37928,13 @@ class FeedbackConstraintEngineImpl {
     let lastResult;
     let internalId;
     let sessionId;
-    if (options.sessionId) {
-      sessionId = options.sessionId;
-      internalId = sessionIdMapper.toInternalId(sessionId) || `fce-${Date.now()}-${randomUUID().slice(0, 8)}`;
-      if (!sessionIdMapper.toInternalId(sessionId)) {
-        sessionIdMapper.generate(internalId, "unknown", "feedback");
-      }
-    } else {
-      internalId = `fce-${Date.now()}-${randomUUID().slice(0, 8)}`;
-      sessionId = sessionIdMapper.generate(internalId, "unknown", "feedback");
-      ensureCleanSessionSlot(sessionId);
+    if (!options.sessionId) {
+      throw new Error("FCE requires an upstream sessionId");
+    }
+    sessionId = options.sessionId;
+    internalId = sessionIdMapper.toInternalId(sessionId) || `fce-${Date.now()}-${process.pid}`;
+    if (!sessionIdMapper.toInternalId(sessionId)) {
+      sessionIdMapper.generate(internalId, "unknown", "feedback", `${process.pid}-${Date.now()}`);
     }
     let currentOptions = { ...options, sessionId };
     while (true) {
@@ -38278,12 +38204,9 @@ class HarnessExecutor {
       const effectiveTools = buildEffectiveTools("development", this.config.cwd, task);
       const phaseOptions = this.config.perPhaseOptions?.["development"];
       const internalId = sessionIdMapper.buildStableInternalId(task.id, "development", "dev");
-      const runId = sessionIdMapper.resolveRunId();
-      const probe = sessionIdMapper.probeSessionState(internalId, task.id, "development", runId);
-      const sessionId = sessionIdMapper.generate(internalId, task.id, "development", {
-        runId,
-        state: probe.state
-      });
+      const runSalt = `${process.pid}-${Date.now()}`;
+      const probe = sessionIdMapper.probeSessionState(internalId, task.id, "development", runSalt);
+      const sessionId = sessionIdMapper.generate(internalId, task.id, "development", runSalt);
       ensureCleanSessionSlot(sessionId);
       const invokeOptions = {
         timeout: effectiveTimeout,
@@ -38968,12 +38891,9 @@ class HarnessCodeReviewer {
     const effectiveTools = buildEffectiveTools("codeReview", this.config.cwd, task);
     const phaseOptions = this.config.perPhaseOptions?.["codeReview"];
     const internalId = sessionIdMapper.buildStableInternalId(task.id, "codeReview", "cr");
-    const runId = sessionIdMapper.resolveRunId();
-    const probe = sessionIdMapper.probeSessionState(internalId, task.id, "codeReview", runId);
-    const sessionId = sessionIdMapper.generate(internalId, task.id, "codeReview", {
-      runId,
-      state: probe.state
-    });
+    const runSalt = `${process.pid}-${Date.now()}`;
+    const probe = sessionIdMapper.probeSessionState(internalId, task.id, "codeReview", runSalt);
+    const sessionId = sessionIdMapper.generate(internalId, task.id, "codeReview", runSalt);
     ensureCleanSessionSlot(sessionId);
     const invokeOptions = {
       allowedTools: effectiveTools.tools,
@@ -40361,12 +40281,9 @@ ${truncated}`];
     const effectiveTools = buildEffectiveTools("qaVerification", this.config.cwd, task);
     const phaseOptions = this.config.perPhaseOptions?.["qaVerification"];
     const internalId = sessionIdMapper.buildStableInternalId(task.id, "qaVerification", "qa");
-    const runId = sessionIdMapper.resolveRunId();
-    const probe = sessionIdMapper.probeSessionState(internalId, task.id, "qaVerification", runId);
-    const sessionId = sessionIdMapper.generate(internalId, task.id, "qaVerification", {
-      runId,
-      state: probe.state
-    });
+    const runSalt = `${process.pid}-${Date.now()}`;
+    const probe = sessionIdMapper.probeSessionState(internalId, task.id, "qaVerification", runSalt);
+    const sessionId = sessionIdMapper.generate(internalId, task.id, "qaVerification", runSalt);
     ensureCleanSessionSlot(sessionId);
     const invokeOptions = {
       allowedTools: effectiveTools.tools,
@@ -40928,12 +40845,9 @@ class HarnessEvaluator {
       const effectiveTools = buildEffectiveTools("evaluation", this.config.cwd, task);
       const phaseOptions = this.config.perPhaseOptions?.["evaluation"];
       const internalId = sessionIdMapper.buildStableInternalId(task.id, "evaluation", "eval");
-      const runId = sessionIdMapper.resolveRunId();
-      const probe = sessionIdMapper.probeSessionState(internalId, task.id, "evaluation", runId);
-      const sessionId = sessionIdMapper.generate(internalId, task.id, "evaluation", {
-        runId,
-        state: probe.state
-      });
+      const runSalt = `${process.pid}-${Date.now()}`;
+      const probe = sessionIdMapper.probeSessionState(internalId, task.id, "evaluation", runSalt);
+      const sessionId = sessionIdMapper.generate(internalId, task.id, "evaluation", runSalt);
       ensureCleanSessionSlot(sessionId);
       const invokeOptions = {
         allowedTools: effectiveTools.tools,
@@ -42181,10 +42095,10 @@ class HarnessReporter {
 }
 
 // src/commands/harness.ts
+import * as fs40 from "fs";
 init_harness();
 init_path();
 init_i18n();
-import * as fs40 from "fs";
 import * as path36 from "path";
 init_harness_helpers();
 init_session_lock_cleanup();
@@ -44148,12 +44062,9 @@ class AssemblyLine {
   constructor(config, sessionId) {
     this.config = config;
     const internalId = sessionId || sessionIdMapper.buildStableInternalId("pipeline", "assembly-line", "harness");
-    const runId = sessionIdMapper.resolveRunId();
-    const probe = sessionIdMapper.probeSessionState(internalId, "pipeline", "assembly-line", runId);
-    this.sessionId = sessionIdMapper.generate(internalId, "pipeline", "assembly-line", {
-      runId,
-      state: probe.state
-    });
+    const runSalt = `${process.pid}-${Date.now()}`;
+    const probe = sessionIdMapper.probeSessionState(internalId, "pipeline", "assembly-line", runSalt);
+    this.sessionId = sessionIdMapper.generate(internalId, "pipeline", "assembly-line", runSalt);
     ensureCleanSessionSlot(this.sessionId);
     this.taskRetryContexts = new Map;
     this.executor = new HarnessExecutor(config);
@@ -46873,6 +46784,17 @@ async function harnessCommand(options, cwd = process.cwd()) {
     process.removeListener("SIGINT", gracefulShutdown);
     process.removeListener("SIGTERM", gracefulShutdown);
     uninstallExitHooks();
+    const projectDir = process.env.PROJMNT4CLAUDE_ROOT ?? process.cwd();
+    const projectHash = createHash2("sha256").update(projectDir).digest("hex").slice(0, 16);
+    const sessionsDir = path40.join(homedir3(), ".claude", "projects", projectHash);
+    const mappings = sessionIdMapper.serialize();
+    for (const m of mappings) {
+      const jsonlPath = path40.join(sessionsDir, `${m.cliUuid}.jsonl`);
+      try {
+        if (fs44.existsSync(jsonlPath))
+          fs44.unlinkSync(jsonlPath);
+      } catch {}
+    }
   }
 }
 function getRuntimeStatePath2(cwd) {

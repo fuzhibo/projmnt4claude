@@ -281,7 +281,7 @@ describe('FeedbackConstraintEngineImpl.runWithFeedback', () => {
     engine.addRuleSet(makeRuleSet('s', [makeRule('always-pass', () => null)]));
 
     const invoke = mockInvoke([{ output: '{"ok":true}', exitCode: 0 }]);
-    const result = await engine.runWithFeedback(invoke, 'prompt', {});
+    const result = await engine.runWithFeedback(invoke, 'prompt', { sessionId: 'test-session-id' });
 
     expect(result.passed).toBe(true);
     expect(result.violations).toHaveLength(0);
@@ -304,7 +304,7 @@ describe('FeedbackConstraintEngineImpl.runWithFeedback', () => {
       { output: 'bad', exitCode: 0 },
       { output: 'good', exitCode: 0 },
     ]);
-    const result = await engine.runWithFeedback(invoke, 'prompt', {});
+    const result = await engine.runWithFeedback(invoke, 'prompt', { sessionId: 'test-session-id' });
 
     expect(result.passed).toBe(true);
     expect(result.retries).toBe(1);
@@ -324,7 +324,7 @@ describe('FeedbackConstraintEngineImpl.runWithFeedback', () => {
       { output: 'bad', exitCode: 0 },
       { output: 'bad2', exitCode: 0 },
     ]);
-    const result = await engine.runWithFeedback(invoke, 'prompt', {});
+    const result = await engine.runWithFeedback(invoke, 'prompt', { sessionId: 'test-session-id' });
 
     expect(result.passed).toBe(false);
     expect(result.retries).toBe(1);
@@ -343,11 +343,18 @@ describe('FeedbackConstraintEngineImpl.runWithFeedback', () => {
     engine.addRuleSet(makeRuleSet('s', [rule], 3));
 
     const invoke = mockInvoke([{ output: 'data', exitCode: 0 }]);
-    const result = await engine.runWithFeedback(invoke, 'prompt', {});
+    const result = await engine.runWithFeedback(invoke, 'prompt', { sessionId: 'test-session-id' });
 
     expect(result.passed).toBe(true); // no errors = passed
     expect(result.retries).toBe(0);
     expect(invoke.callCount()).toBe(1);
+  });
+
+  test('throws when sessionId is missing', async () => {
+    const engine = new FeedbackConstraintEngineImpl();
+    engine.addRuleSet(makeRuleSet('s', [makeRule('always-pass', () => null)]));
+    const invoke = mockInvoke([{ output: 'ok', exitCode: 0 }]);
+    await expect(engine.runWithFeedback(invoke, 'prompt', {})).rejects.toThrow('FCE requires an upstream sessionId');
   });
 });
 
