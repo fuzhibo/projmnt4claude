@@ -2,8 +2,8 @@
  * PREFIX_MAP + parseCheckpoint 单元测试
  *
  * 覆盖检查点 §3.1 和 §3.2：
- * - 3.1 PREFIX_MAP：5 种前缀映射正确、category/verificationMethod/requiresHuman 完整
- * - 3.2 检查点解析：前缀提取、无前缀报错、category 推断
+ * - 3.1 PREFIX_MAP：9 种前缀映射正确、category/verificationMethod/requiresHuman 完整
+ * - 3.2 检查点解析：前缀提取（System A + System B）、无前缀报错、category 推断
  */
 
 import { describe, test, expect } from '@jest/globals';
@@ -20,9 +20,12 @@ import {
 // ============================================================
 
 describe('PREFIX_MAP (§3.1)', () => {
-  test('contains all 5 required prefixes', () => {
-    expect(VALID_PREFIXES).toEqual(['verify', 'test', 'review', 'implem', 'doc']);
-    expect(Object.keys(PREFIX_MAP).length).toBe(5);
+  test('contains all 9 required prefixes (System A + System B)', () => {
+    expect(VALID_PREFIXES).toEqual(expect.arrayContaining([
+      'verify', 'test', 'review', 'implem', 'doc',
+      'ai-review', 'ai-qa', 'human-qa', 'script',
+    ]));
+    expect(Object.keys(PREFIX_MAP).length).toBe(9);
   });
 
   test('verify: category=qa_verification, method=functional_test, requiresHuman=false', () => {
@@ -67,7 +70,7 @@ describe('PREFIX_MAP (§3.1)', () => {
 
   test('every prefix has complete category/method/requiresHuman', () => {
     for (const prefix of VALID_PREFIXES) {
-      const entry = PREFIX_MAP[prefix];
+      const entry = PREFIX_MAP[prefix]!;
       expect(entry.category).toBeTruthy();
       expect(entry.method).toBeTruthy();
       expect(typeof entry.requiresHuman).toBe('boolean');
@@ -127,6 +130,47 @@ describe('parseCheckpoint (§3.2)', () => {
     expect(result!.requiresHuman).toBe(false);
   });
 
+  // System B (§3.2b) — 新前缀
+
+  test('parses [ai review] prefix → category=code_review', () => {
+    const result = parseCheckpoint('[ai review] 检查代码质量');
+    expect(result).not.toBeNull();
+    expect(result!.prefix).toBe('ai-review');
+    expect(result!.description).toBe('检查代码质量');
+    expect(result!.category).toBe('code_review');
+    expect(result!.verificationMethod).toBe('code_review');
+    expect(result!.requiresHuman).toBe(false);
+  });
+
+  test('parses [ai qa] prefix → category=qa_verification', () => {
+    const result = parseCheckpoint('[ai qa] 测试登录流程');
+    expect(result).not.toBeNull();
+    expect(result!.prefix).toBe('ai-qa');
+    expect(result!.description).toBe('测试登录流程');
+    expect(result!.category).toBe('qa_verification');
+    expect(result!.verificationMethod).toBe('automated');
+    expect(result!.requiresHuman).toBe(false);
+  });
+
+  test('parses [human qa] prefix → requiresHuman=true', () => {
+    const result = parseCheckpoint('[human qa] 人工审核UI');
+    expect(result).not.toBeNull();
+    expect(result!.prefix).toBe('human-qa');
+    expect(result!.description).toBe('人工审核UI');
+    expect(result!.category).toBe('qa_verification');
+    expect(result!.requiresHuman).toBe(true);
+  });
+
+  test('parses [script] prefix → category=evaluation', () => {
+    const result = parseCheckpoint('[script] 运行性能基准测试');
+    expect(result).not.toBeNull();
+    expect(result!.prefix).toBe('script');
+    expect(result!.description).toBe('运行性能基准测试');
+    expect(result!.category).toBe('evaluation');
+    expect(result!.verificationMethod).toBe('automated');
+    expect(result!.requiresHuman).toBe(false);
+  });
+
   test('returns null for invalid prefix', () => {
     expect(parseCheckpoint('[invalid] test')).toBeNull();
   });
@@ -167,11 +211,18 @@ describe('parseCheckpoint (§3.2)', () => {
   });
 
   test('hasValidPrefix detects valid and invalid prefixes', () => {
+    // System A
     expect(hasValidPrefix('[verify] test')).toBe(true);
     expect(hasValidPrefix('[test] something')).toBe(true);
     expect(hasValidPrefix('[review] code')).toBe(true);
     expect(hasValidPrefix('[implem] feature')).toBe(true);
     expect(hasValidPrefix('[doc] update')).toBe(true);
+    // System B
+    expect(hasValidPrefix('[ai review] code quality')).toBe(true);
+    expect(hasValidPrefix('[ai qa] test coverage')).toBe(true);
+    expect(hasValidPrefix('[human qa] manual check')).toBe(true);
+    expect(hasValidPrefix('[script] auto verify')).toBe(true);
+    // Invalid
     expect(hasValidPrefix('no prefix')).toBe(false);
     expect(hasValidPrefix('[invalid] test')).toBe(false);
   });

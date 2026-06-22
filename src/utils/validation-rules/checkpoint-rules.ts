@@ -488,6 +488,7 @@ export function inferCheckpointAttributesFromPrefix(description: string): {
   if (trimmed.startsWith('[ai review]')) {
     return {
       requiresHuman: false,
+      verificationMethod: 'code_review',
       category: 'code_review',
     };
   }

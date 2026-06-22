@@ -204,7 +204,9 @@ export class HarnessQATester {
       cp.verification?.method === 'integration_test' ||
       cp.verification?.method === 'e2e_test' ||
       cp.verification?.method === 'automated' ||
-      cp.requiresHuman === true
+      cp.requiresHuman === true ||
+      cp.description?.toLowerCase().includes('[ai qa]') ||
+      cp.description?.toLowerCase().includes('[human qa]')
     );
   }
 

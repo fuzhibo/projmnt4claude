@@ -136,7 +136,8 @@ export class HarnessCodeReviewer {
       cp.category === 'code_review' ||
       cp.verification?.method === 'code_review' ||
       cp.verification?.method === 'lint' ||
-      cp.verification?.method === 'architect_review'
+      cp.verification?.method === 'architect_review' ||
+      cp.description?.toLowerCase().includes('[ai review]')
     );
   }
 
