@@ -12491,6 +12491,7 @@ function inferCheckpointAttributesFromPrefix(description) {
   if (trimmed.startsWith("[ai review]")) {
     return {
       requiresHuman: false,
+      verificationMethod: "code_review",
       category: "code_review"
     };
   }
@@ -34066,23 +34067,41 @@ var DEFAULT_QUALITY_GATE_CONFIG2 = {
   minQualityScore: 60
 };
 // src/utils/init-requirement/prefix-map.ts
+init_checkpoint_rules();
 var PREFIX_MAP2 = {
   verify: { category: "qa_verification", method: "functional_test", requiresHuman: false },
   test: { category: "qa_verification", method: "unit_test", requiresHuman: false },
   review: { category: "code_review", method: "code_review", requiresHuman: true },
   implem: { category: "implementation", method: "automated", requiresHuman: false },
-  doc: { category: "documentation", method: "automated", requiresHuman: false }
+  doc: { category: "documentation", method: "automated", requiresHuman: false },
+  "ai-review": { category: "code_review", method: "code_review", requiresHuman: false },
+  "ai-qa": { category: "qa_verification", method: "automated", requiresHuman: false },
+  "human-qa": { category: "qa_verification", method: "automated", requiresHuman: true },
+  script: { category: "evaluation", method: "automated", requiresHuman: false }
 };
 var VALID_PREFIXES = Object.keys(PREFIX_MAP2);
 function parseCheckpoint(raw) {
-  const match = raw.match(/^\[(verify|test|review|implem|doc)\]\s*(.+)/);
-  if (!match)
+  const systemBMatch = raw.match(/^\[(ai review|ai qa|human qa|script)\]\s*(.+)/);
+  if (systemBMatch) {
+    const prefix2 = systemBMatch[1];
+    const desc = systemBMatch[2].trim();
+    const attrs = inferCheckpointAttributesFromPrefix(`[${prefix2}] ${desc}`);
+    return {
+      prefix: prefix2.replace(" ", "-"),
+      description: desc,
+      category: attrs.category || "qa_verification",
+      verificationMethod: attrs.verificationMethod || null,
+      requiresHuman: attrs.requiresHuman ?? false
+    };
+  }
+  const legacyMatch = raw.match(/^\[(verify|test|review|implem|doc)\]\s*(.+)/);
+  if (!legacyMatch)
     return null;
-  const prefix = match[1];
+  const prefix = legacyMatch[1];
   const mapped = PREFIX_MAP2[prefix];
   return {
     prefix,
-    description: match[2].trim(),
+    description: legacyMatch[2].trim(),
     category: mapped.category,
     verificationMethod: mapped.method,
     requiresHuman: mapped.requiresHuman
@@ -38861,7 +38880,7 @@ class HarnessCodeReviewer {
     return verdict;
   }
   getCodeReviewCheckpoints(task) {
-    return filterCheckpoints(task, (cp) => cp.category === "code_review" || cp.verification?.method === "code_review" || cp.verification?.method === "lint" || cp.verification?.method === "architect_review");
+    return filterCheckpoints(task, (cp) => cp.category === "code_review" || cp.verification?.method === "code_review" || cp.verification?.method === "lint" || cp.verification?.method === "architect_review" || cp.description?.toLowerCase().includes("[ai review]"));
   }
   async runCodeReview(task, devReport, checkpoints, retryContext) {
     let texts;
@@ -39908,7 +39927,7 @@ ${errorStack}`);
     return verdict;
   }
   getQACheckpoints(task) {
-    return filterCheckpoints(task, (cp) => cp.category === "qa_verification" || cp.verification?.method === "unit_test" || cp.verification?.method === "functional_test" || cp.verification?.method === "integration_test" || cp.verification?.method === "e2e_test" || cp.verification?.method === "automated" || cp.requiresHuman === true);
+    return filterCheckpoints(task, (cp) => cp.category === "qa_verification" || cp.verification?.method === "unit_test" || cp.verification?.method === "functional_test" || cp.verification?.method === "integration_test" || cp.verification?.method === "e2e_test" || cp.verification?.method === "automated" || cp.requiresHuman === true || cp.description?.toLowerCase().includes("[ai qa]") || cp.description?.toLowerCase().includes("[human qa]"));
   }
   verifyFileCoverage(task) {
     let texts;
