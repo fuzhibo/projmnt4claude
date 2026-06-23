@@ -11126,6 +11126,36 @@ var init_config2 = __esm(() => {
   };
 });
 
+// src/utils/child-process-registry.ts
+function killAllActiveChildren(signal = "SIGTERM") {
+  let killed = 0;
+  const pids = [...activeChildProcesses];
+  for (const pid of pids) {
+    try {
+      process.kill(pid, signal);
+      killed++;
+    } catch (err) {
+      const errCode = err.code;
+      if (errCode === "ESRCH") {
+        activeChildProcesses.delete(pid);
+      } else {
+        console.warn(`   ⚠️  Failed to kill child ${pid}: ${err.message}`);
+      }
+    }
+  }
+  if (killed > 0) {
+    console.log(`   \uD83D\uDED1 Sent ${signal} to ${killed} child process(es)`);
+  }
+  if (signal === "SIGKILL") {
+    activeChildProcesses.clear();
+  }
+  return killed;
+}
+var activeChildProcesses;
+var init_child_process_registry = __esm(() => {
+  activeChildProcesses = new Set;
+});
+
 // src/utils/spawn-utils.ts
 import { spawn, execSync } from "child_process";
 import * as fs4 from "fs";
@@ -11259,6 +11289,18 @@ function spawnWithMemoryLimit(command, args, options, type = "default") {
       throw new Error(pressure.message);
     }
   }
+  const registerChild = (child2) => {
+    if (child2.pid) {
+      activeChildProcesses.add(child2.pid);
+      const unregister = () => {
+        if (child2.pid)
+          activeChildProcesses.delete(child2.pid);
+      };
+      child2.on("exit", unregister);
+      child2.on("close", unregister);
+      child2.on("error", unregister);
+    }
+  };
   if (cfg.enabled && hasCgroupV2Support() && !isInSystemdScope()) {
     const maxGB = type === "coverage" ? cfg.overrides.coverage : type === "claudeAgent" ? cfg.overrides.claudeAgent : type === "build" ? cfg.overrides.build : cfg.defaultGB;
     const swapMax = cfg.swapMaxGB === 0 ? "0" : `${cfg.swapMaxGB}G`;
@@ -11273,12 +11315,13 @@ function spawnWithMemoryLimit(command, args, options, type = "default") {
       command,
       ...args
     ];
-    const child = spawn("systemd-run", wrappedArgs, options);
-    child.on("spawn", () => {
-      if (child.pid)
-        setCgroupOOMGroup(child.pid);
+    const child2 = spawn("systemd-run", wrappedArgs, options);
+    child2.on("spawn", () => {
+      if (child2.pid)
+        setCgroupOOMGroup(child2.pid);
     });
-    return child;
+    registerChild(child2);
+    return child2;
   }
   if (cfg.enabled && (isInSystemdScope() || !hasCgroupV2Support())) {
     const maxGB = type === "coverage" ? cfg.overrides.coverage : type === "claudeAgent" ? cfg.overrides.claudeAgent : type === "build" ? cfg.overrides.build : cfg.defaultGB;
@@ -11294,9 +11337,13 @@ function spawnWithMemoryLimit(command, args, options, type = "default") {
       command,
       ...args
     ];
-    return spawn("prlimit", prlimitArgs, options);
+    const child2 = spawn("prlimit", prlimitArgs, options);
+    registerChild(child2);
+    return child2;
   }
-  return spawn(command, args, options);
+  const child = spawn(command, args, options);
+  registerChild(child);
+  return child;
 }
 function execSyncWithMemoryLimit(command, options, type = "default") {
   const cfg = getMemoryLimitConfig(options.cwd);
@@ -11343,6 +11390,7 @@ function execSyncWithMemoryLimit(command, options, type = "default") {
 var DEFAULT_MEMORY_LIMIT_CONFIG, _cgroupV2Available = null;
 var init_spawn_utils = __esm(() => {
   init_config2();
+  init_child_process_registry();
   DEFAULT_MEMORY_LIMIT_CONFIG = {
     defaultGB: 4,
     overrides: {
@@ -13678,29 +13726,6 @@ var init_session_id_mapper = __esm(() => {
 // src/utils/harness-helpers.ts
 import * as fs11 from "fs";
 import * as path8 from "path";
-function killAllActiveChildren(signal = "SIGTERM") {
-  let killed = 0;
-  for (const pid of activeChildProcesses) {
-    try {
-      process.kill(pid, signal);
-      killed++;
-    } catch (err) {
-      const errCode = err.code;
-      if (errCode === "ESRCH") {
-        activeChildProcesses.delete(pid);
-      } else {
-        console.warn(`   ⚠️  Failed to kill child ${pid}: ${err.message}`);
-      }
-    }
-  }
-  if (killed > 0) {
-    console.log(`   \uD83D\uDED1 Sent ${signal} to ${killed} child process(es)`);
-  }
-  if (signal === "SIGKILL") {
-    activeChildProcesses.clear();
-  }
-  return killed;
-}
 function installExitHooks(knownCliUuids = new Set, sessionEnvRoot) {
   if (installedHooks) {
     return;
@@ -13832,9 +13857,6 @@ async function runHeadlessClaude(options) {
         stdio: ["pipe", "pipe", "pipe"],
         timeout: options.timeout * 1000
       }, "claudeAgent");
-      if (child.pid) {
-        activeChildProcesses.add(child.pid);
-      }
       if (child.stdin) {
         let writeNextChunk = function() {
           if (offset >= options.prompt.length) {
@@ -13862,14 +13884,9 @@ async function runHeadlessClaude(options) {
       child.stderr?.on("data", (data) => {
         stderr += data.toString();
       });
-      child.on("exit", () => {
-        if (child.pid) {
-          activeChildProcesses.delete(child.pid);
-        }
-      });
       child.on("close", (code) => {
-        if (child.pid) {
-          activeChildProcesses.delete(child.pid);
+        if (options.sessionId) {
+          ensureCleanSessionSlot(options.sessionId);
         }
         const classified = classifyExitResult(code, stderr, stdout);
         resolve3({
@@ -13882,8 +13899,8 @@ async function runHeadlessClaude(options) {
         });
       });
       child.on("error", (error) => {
-        if (child.pid) {
-          activeChildProcesses.delete(child.pid);
+        if (options.sessionId) {
+          ensureCleanSessionSlot(options.sessionId);
         }
         resolve3({
           success: false,
@@ -13894,6 +13911,9 @@ async function runHeadlessClaude(options) {
         });
       });
     } catch (error) {
+      if (options.sessionId) {
+        ensureCleanSessionSlot(options.sessionId);
+      }
       resolve3({
         success: false,
         output: "",
@@ -14060,14 +14080,14 @@ function getReportDir(taskId, cwd) {
 function getReportPath(taskId, reportType, cwd) {
   return path8.join(getReportDir(taskId, cwd), `${reportType}-report.md`);
 }
-var REVIEW_TIMEOUT_RATIO = 3, activeChildProcesses, installedHooks = null;
+var REVIEW_TIMEOUT_RATIO = 3, installedHooks = null;
 var init_harness_helpers = __esm(() => {
   init_path();
   init_i18n();
   init_spawn_utils();
+  init_child_process_registry();
   init_session_lock_cleanup();
   init_session_id_mapper();
-  activeChildProcesses = new Set;
 });
 
 // src/utils/headless-agent.ts
