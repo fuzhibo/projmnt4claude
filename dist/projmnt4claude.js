@@ -13710,7 +13710,7 @@ function buildSessionCliArgs(state, cliUuid) {
     case "fresh":
       return ["--session-id", cliUuid];
     case "active":
-      return ["--session-id", cliUuid, "--resume"];
+      return ["--resume", cliUuid];
     default: {
       const _exhaustive = state;
       throw new Error(`Unknown sessionState: ${String(_exhaustive)}`);
