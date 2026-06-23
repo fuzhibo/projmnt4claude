@@ -19484,7 +19484,8 @@ var init_harness = __esm(() => {
     batchGitTagCommit: false,
     taskGitCommit: false,
     forceContinue: false,
-    debug: false
+    debug: false,
+    perPhaseOptions: {}
   };
   VALID_VERDICT_ACTIONS = [
     "resolve",
@@ -42113,6 +42114,7 @@ init_session_lock_cleanup();
 init_session_id_mapper();
 init_task2();
 init_task();
+init_config2();
 
 // src/commands/plan.ts
 var import_prompts10 = __toESM(require_prompts3(), 1);
@@ -46468,6 +46470,7 @@ init_session_lock_cleanup();
 init_session_id_mapper();
 init_task2();
 init_task();
+init_config2();
 init_quality_gate();
 var currentSnapshotId = null;
 function buildBatchAwareQueue(taskQueue, batches) {
@@ -46609,6 +46612,7 @@ async function harnessCommand(options, cwd = process.cwd()) {
     taskGitCommit: options.taskGitCommit ?? DEFAULT_HARNESS_CONFIG.taskGitCommit,
     forceContinue: options.forceContinue ?? DEFAULT_HARNESS_CONFIG.forceContinue,
     debug: options.debug ?? DEFAULT_HARNESS_CONFIG.debug,
+    perPhaseOptions: readConfig(cwd)?.harness?.perPhaseOptions ?? DEFAULT_HARNESS_CONFIG.perPhaseOptions,
     cwd
   };
   if (config.maxRetries < 0) {
@@ -46946,7 +46950,10 @@ function validateAndRepairState(data, cwd) {
       continue: false,
       jsonOutput: false,
       batchGitTagCommit: false,
-      forceContinue: false
+      taskGitCommit: false,
+      forceContinue: false,
+      debug: false,
+      perPhaseOptions: {}
     };
     for (const [key, defaultValue] of Object.entries(configDefaults)) {
       if (!(key in config) || config[key] === undefined || config[key] === null) {

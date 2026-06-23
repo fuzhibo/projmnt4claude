@@ -51,6 +51,7 @@ import { readPlan, type ExecutionPlan } from '../utils/plan.js';
 import { readTaskMeta } from '../utils/task.js';
 import { normalizeStatus, TERMINAL_STATUSES } from '../types/task.js';
 import { SEPARATOR_WIDTH } from '../utils/format';
+import { readConfig } from './config.js';
 import { recommendPlan } from './plan.js';
 import {
   batchCheckQualityGate,
@@ -338,6 +339,7 @@ export async function harnessCommand(
     taskGitCommit: options.taskGitCommit ?? DEFAULT_HARNESS_CONFIG.taskGitCommit,
     forceContinue: options.forceContinue ?? DEFAULT_HARNESS_CONFIG.forceContinue,
     debug: options.debug ?? DEFAULT_HARNESS_CONFIG.debug,
+    perPhaseOptions: readConfig(cwd)?.harness?.perPhaseOptions ?? DEFAULT_HARNESS_CONFIG.perPhaseOptions,
     cwd,
   };
 
@@ -789,7 +791,10 @@ function validateAndRepairState(
       continue: false,
       jsonOutput: false,
       batchGitTagCommit: false,
+      taskGitCommit: false,
       forceContinue: false,
+      debug: false,
+      perPhaseOptions: {},
     };
 
     for (const [key, defaultValue] of Object.entries(configDefaults)) {

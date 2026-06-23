@@ -9,6 +9,7 @@
 
 import type { TaskMeta, TaskStatus, TaskRole, CheckpointCategory, TaskFailureReason } from './task.js';
 import type { QAAcceptanceResult } from './qa-acceptance-criteria.js';
+import type { HarnessPhaseOptions } from './config.js';
 
 /**
  * Harness execution configuration
@@ -48,6 +49,8 @@ export interface HarnessConfig {
   forceContinue: boolean;
   /** Enable debug mode for detailed logging (--debug) */
   debug: boolean;
+  /** 各阶段 CLI 选项配置（从 config.json 加载，如 bare、effort 等） */
+  perPhaseOptions?: Record<string, HarnessPhaseOptions>;
 }
 
 /**
@@ -64,6 +67,7 @@ export const DEFAULT_HARNESS_CONFIG: Omit<HarnessConfig, 'cwd'> = {
   taskGitCommit: false,
   forceContinue: false,
   debug: false,
+  perPhaseOptions: {},
 };
 
 /**

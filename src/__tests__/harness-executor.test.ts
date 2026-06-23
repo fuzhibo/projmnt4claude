@@ -19,7 +19,11 @@ function createConfig(tempDir: string, overrides: Partial<HarnessConfig> = {}): 
     continue: false,
     jsonOutput: false,
     cwd: tempDir,
+    batchGitTagCommit: false,
+    taskGitCommit: false,
     forceContinue: false,
+    debug: false,
+    perPhaseOptions: {},
     ...overrides,
   };
 }
