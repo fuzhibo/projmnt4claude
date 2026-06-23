@@ -18,6 +18,7 @@ export { activeChildProcesses, killAllActiveChildren };
 import {
   listOrphanedSessions,
   cleanupOrphanedSessions,
+  ensureCleanSessionSlot,
 } from './session-lock-cleanup.js';
 import {
   buildSessionCliArgs,
@@ -366,6 +367,9 @@ export async function runHeadlessClaude(options: HeadlessClaudeOptions): Promise
       // PID 反注册由 spawnWithMemoryLimit 内部 exit/close/error 事件自动处理（CP-03）
 
       child.on('close', (code) => {
+        if (options.sessionId) {
+          ensureCleanSessionSlot(options.sessionId);
+        }
         const classified = classifyExitResult(code, stderr, stdout);
         resolve({
           success: classified.success,
@@ -378,6 +382,9 @@ export async function runHeadlessClaude(options: HeadlessClaudeOptions): Promise
       });
 
       child.on('error', (error) => {
+        if (options.sessionId) {
+          ensureCleanSessionSlot(options.sessionId);
+        }
         resolve({
           success: false,
           output: '',
@@ -388,6 +395,9 @@ export async function runHeadlessClaude(options: HeadlessClaudeOptions): Promise
       });
 
     } catch (error) {
+      if (options.sessionId) {
+        ensureCleanSessionSlot(options.sessionId);
+      }
       resolve({
         success: false,
         output: '',

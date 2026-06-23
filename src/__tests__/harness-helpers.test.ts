@@ -886,6 +886,135 @@ describe('runHeadlessClaude', () => {
     expect(args).not.toContain('--resume');
     expect(args).not.toContain('--fork-session');
   });
+
+  // ==========================================================
+  // CP-SE-V1/V2/V4: session-env lock cleanup on process exit
+  // ==========================================================
+
+  describe('session-env cleanup on process exit', () => {
+    let sessionEnvRoot: string;
+    const sessionId = '12345678-1234-4123-8123-123456789abc';
+
+    beforeEach(() => {
+      spawnMock.mockClear();
+      sessionEnvRoot = path.join(env.tempDir, 'session-env');
+      fs.mkdirSync(sessionEnvRoot, { recursive: true });
+      process.env.PROJMNT4CLAUDE_SESSION_ENV_ROOT = sessionEnvRoot;
+    });
+
+    afterEach(() => {
+      delete process.env.PROJMNT4CLAUDE_SESSION_ENV_ROOT;
+    });
+
+    function createLockDir(sid: string): string {
+      const lockDir = path.join(sessionEnvRoot, sid);
+      fs.mkdirSync(lockDir, { recursive: true });
+      return lockDir;
+    }
+
+    test('cleans session-env lock dir on process close (CP-SE-V1)', async () => {
+      const lockDir = createLockDir(sessionId);
+      expect(fs.existsSync(lockDir)).toBe(true);
+
+      setupMockSpawn({ exitCode: 0, stdout: 'done' });
+      const result = await runHeadlessClaude({
+        prompt: 'test',
+        allowedTools: ['Read'],
+        timeout: 30,
+        cwd: env.tempDir,
+        sessionId,
+      });
+
+      expect(result.success).toBe(true);
+      expect(fs.existsSync(lockDir)).toBe(false);
+    });
+
+    test('cleans session-env lock dir on spawn error (CP-SE-V2)', async () => {
+      const lockDir = createLockDir(sessionId);
+      expect(fs.existsSync(lockDir)).toBe(true);
+
+      setupMockSpawn({ spawnError: new Error('command not found') });
+      const result = await runHeadlessClaude({
+        prompt: 'test',
+        allowedTools: ['Read'],
+        timeout: 30,
+        cwd: env.tempDir,
+        sessionId,
+      });
+
+      expect(result.success).toBe(false);
+      expect(fs.existsSync(lockDir)).toBe(false);
+    });
+
+    test('cleans session-env lock dir on sync spawn throw (CP-SE-V3a)', async () => {
+      const lockDir = createLockDir(sessionId);
+      expect(fs.existsSync(lockDir)).toBe(true);
+
+      // Simulate spawnWithMemoryLimit throwing synchronously before returning a child
+      const syncError = new Error('ENOENT: claude not found');
+      spawnMock.mockImplementation(() => { throw syncError; });
+      const result = await runHeadlessClaude({
+        prompt: 'test',
+        allowedTools: ['Read'],
+        timeout: 30,
+        cwd: env.tempDir,
+        sessionId,
+      });
+
+      expect(result.success).toBe(false);
+      expect(fs.existsSync(lockDir)).toBe(false);
+    });
+
+    test('FCE retry with same sessionId succeeds after cleanup (CP-SE-V3)', async () => {
+      // 模拟调查报告 §5.2 CP-SE-V3: FCE 重试场景
+      // 第一次调用 → 进程退出时清理锁目录 → 第二次调用（FCE 重试）无 "Session ID already in use"
+      const lockDir = createLockDir(sessionId);
+
+      // 第一次调用: 正常退出
+      setupMockSpawn({ exitCode: 0, stdout: 'first run' });
+      const firstResult = await runHeadlessClaude({
+        prompt: 'test',
+        allowedTools: ['Read'],
+        timeout: 30,
+        cwd: env.tempDir,
+        sessionId,
+      });
+      expect(firstResult.success).toBe(true);
+      // 第一次调用后锁目录应被清理
+      expect(fs.existsSync(lockDir)).toBe(false);
+
+      // 模拟 FCE 重试前重新创建锁目录（如同 headless Claude CLI 所为）
+      createLockDir(sessionId);
+      expect(fs.existsSync(lockDir)).toBe(true);
+
+      // 第二次调用（FCE 重试）: 应同样成功，锁目录被清理
+      setupMockSpawn({ exitCode: 0, stdout: 'second run (FCE retry)' });
+      const secondResult = await runHeadlessClaude({
+        prompt: 'test',
+        allowedTools: ['Read'],
+        timeout: 30,
+        cwd: env.tempDir,
+        sessionId,
+      });
+      expect(secondResult.success).toBe(true);
+      expect(fs.existsSync(lockDir)).toBe(false);
+    });
+
+    test('does not attempt cleanup when sessionId is not provided (CP-SE-V4)', async () => {
+      const otherLockDir = createLockDir(sessionId);
+      expect(fs.existsSync(otherLockDir)).toBe(true);
+
+      setupMockSpawn({ exitCode: 0, stdout: '' });
+      await runHeadlessClaude({
+        prompt: 'test',
+        allowedTools: ['Read'],
+        timeout: 30,
+        cwd: env.tempDir,
+      });
+
+      expect(fs.existsSync(otherLockDir)).toBe(true);
+    });
+  });
 });
 
 // ============================================================
