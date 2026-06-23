@@ -13595,32 +13595,28 @@ class SessionIdMapper {
     this.auditLogger = logger;
   }
   generate(internalId, taskId, phase, runSalt) {
-    const cliUuid = this.deriveDeterministicUuid(internalId, taskId, phase, runSalt);
     const now = new Date().toISOString();
     const existing = this.mappings.get(internalId);
-    const isReused = existing?.cliUuid === cliUuid;
-    if (existing && !isReused) {
-      this.mappings.delete(existing.cliUuid);
-    }
-    if (!isReused) {
-      const mapping = {
-        internalId,
-        cliUuid,
-        taskId,
-        phase,
-        createdAt: now,
-        lastUsedAt: now
-      };
-      this.mappings.set(internalId, mapping);
-      this.mappings.set(cliUuid, mapping);
-      if (this.auditLogger) {
-        this.auditLogger({ mapping, isReused: false });
-      }
-    } else {
+    if (existing) {
       existing.lastUsedAt = now;
       if (this.auditLogger) {
         this.auditLogger({ mapping: existing, isReused: true });
       }
+      return existing.cliUuid;
+    }
+    const cliUuid = this.deriveDeterministicUuid(internalId, taskId, phase, runSalt);
+    const mapping = {
+      internalId,
+      cliUuid,
+      taskId,
+      phase,
+      createdAt: now,
+      lastUsedAt: now
+    };
+    this.mappings.set(internalId, mapping);
+    this.mappings.set(cliUuid, mapping);
+    if (this.auditLogger) {
+      this.auditLogger({ mapping, isReused: false });
     }
     return cliUuid;
   }
@@ -13667,19 +13663,18 @@ class SessionIdMapper {
     }
     return seen.size;
   }
-  probeSessionState(internalId, taskId, phase, runSalt) {
-    const cliUuid = this.deriveDeterministicUuid(internalId, taskId, phase, runSalt);
+  probeSessionState(internalId) {
     const existing = this.mappings.get(internalId);
-    if (!existing || existing.cliUuid !== cliUuid) {
+    if (!existing) {
       return {
         state: "fresh",
-        cliUuid,
+        cliUuid: "",
         reason: `no existing mapping for internalId=${internalId}`
       };
     }
     return {
       state: "active",
-      cliUuid,
+      cliUuid: existing.cliUuid,
       reason: `existing mapping found → resume full history`
     };
   }
@@ -38261,9 +38256,8 @@ class HarnessExecutor {
       const effectiveTools = buildEffectiveTools("development", this.config.cwd, task);
       const phaseOptions = this.config.perPhaseOptions?.["development"];
       const internalId = sessionIdMapper.buildStableInternalId(task.id, "development", "dev");
-      const runSalt = `${process.pid}-${Date.now()}`;
-      const probe = sessionIdMapper.probeSessionState(internalId, task.id, "development", runSalt);
-      const sessionId = sessionIdMapper.generate(internalId, task.id, "development", runSalt);
+      const probe = sessionIdMapper.probeSessionState(internalId);
+      const sessionId = probe.state === "active" ? probe.cliUuid : sessionIdMapper.generate(internalId, task.id, "development", `${process.pid}-${Date.now()}`);
       ensureCleanSessionSlot(sessionId);
       const invokeOptions = {
         timeout: effectiveTimeout,
@@ -38914,9 +38908,8 @@ class HarnessCodeReviewer {
     const effectiveTools = buildEffectiveTools("codeReview", this.config.cwd, task);
     const phaseOptions = this.config.perPhaseOptions?.["codeReview"];
     const internalId = sessionIdMapper.buildStableInternalId(task.id, "codeReview", "cr");
-    const runSalt = `${process.pid}-${Date.now()}`;
-    const probe = sessionIdMapper.probeSessionState(internalId, task.id, "codeReview", runSalt);
-    const sessionId = sessionIdMapper.generate(internalId, task.id, "codeReview", runSalt);
+    const probe = sessionIdMapper.probeSessionState(internalId);
+    const sessionId = probe.state === "active" ? probe.cliUuid : sessionIdMapper.generate(internalId, task.id, "codeReview", `${process.pid}-${Date.now()}`);
     ensureCleanSessionSlot(sessionId);
     const invokeOptions = {
       allowedTools: effectiveTools.tools,
@@ -40304,9 +40297,8 @@ ${truncated}`];
     const effectiveTools = buildEffectiveTools("qaVerification", this.config.cwd, task);
     const phaseOptions = this.config.perPhaseOptions?.["qaVerification"];
     const internalId = sessionIdMapper.buildStableInternalId(task.id, "qaVerification", "qa");
-    const runSalt = `${process.pid}-${Date.now()}`;
-    const probe = sessionIdMapper.probeSessionState(internalId, task.id, "qaVerification", runSalt);
-    const sessionId = sessionIdMapper.generate(internalId, task.id, "qaVerification", runSalt);
+    const probe = sessionIdMapper.probeSessionState(internalId);
+    const sessionId = probe.state === "active" ? probe.cliUuid : sessionIdMapper.generate(internalId, task.id, "qaVerification", `${process.pid}-${Date.now()}`);
     ensureCleanSessionSlot(sessionId);
     const invokeOptions = {
       allowedTools: effectiveTools.tools,
@@ -40868,9 +40860,8 @@ class HarnessEvaluator {
       const effectiveTools = buildEffectiveTools("evaluation", this.config.cwd, task);
       const phaseOptions = this.config.perPhaseOptions?.["evaluation"];
       const internalId = sessionIdMapper.buildStableInternalId(task.id, "evaluation", "eval");
-      const runSalt = `${process.pid}-${Date.now()}`;
-      const probe = sessionIdMapper.probeSessionState(internalId, task.id, "evaluation", runSalt);
-      const sessionId = sessionIdMapper.generate(internalId, task.id, "evaluation", runSalt);
+      const probe = sessionIdMapper.probeSessionState(internalId);
+      const sessionId = probe.state === "active" ? probe.cliUuid : sessionIdMapper.generate(internalId, task.id, "evaluation", `${process.pid}-${Date.now()}`);
       ensureCleanSessionSlot(sessionId);
       const invokeOptions = {
         allowedTools: effectiveTools.tools,
@@ -44086,9 +44077,8 @@ class AssemblyLine {
   constructor(config, sessionId) {
     this.config = config;
     const internalId = sessionId || sessionIdMapper.buildStableInternalId("pipeline", "assembly-line", "harness");
-    const runSalt = `${process.pid}-${Date.now()}`;
-    const probe = sessionIdMapper.probeSessionState(internalId, "pipeline", "assembly-line", runSalt);
-    this.sessionId = sessionIdMapper.generate(internalId, "pipeline", "assembly-line", runSalt);
+    const probe = sessionIdMapper.probeSessionState(internalId);
+    this.sessionId = probe.state === "active" ? probe.cliUuid : sessionIdMapper.generate(internalId, "pipeline", "assembly-line", `${process.pid}-${Date.now()}`);
     ensureCleanSessionSlot(this.sessionId);
     this.taskRetryContexts = new Map;
     this.executor = new HarnessExecutor(config);
