@@ -303,10 +303,10 @@ export function assertIsValidUuidV4(value: string, label = 'sessionId'): void {
  * 从遗留标志推导 sessionState（V2.1 向后兼容 §6.1.4.2）
  *
  * 调用方未显式传入 sessionState 时使用此辅助。
- * 推导规则保留 V2 之前的行为语义：
- *  - resumeSession=true && forkSession=true → 'forked'
- *  - resumeSession=true（无 forkSession）   → 'active'
- *  - 其它                                    → 'fresh'
+ * 推导规则（forked 已移除，forkSession 忽略）：
+ *  - sessionState 显式传入 → 直接返回
+ *  - resumeSession=true     → 'active'
+ *  - 其它                   → 'fresh'
  *
  * 注意：V2 之后调用方应直接传入 sessionState，此函数仅为兼容旧 API。
  */
@@ -325,12 +325,11 @@ export function deriveSessionStateFromLegacyFlags(options: {
 }
 
 /**
- * 根据 sessionState 构造 CLI session 相关参数（V2.1 §6.1.4.2 三态分支）
+ * 根据 sessionState 构造 CLI session 相关参数（V2.1 §6.1.4.2 二态分支）
  *
  * 分支：
  *  - fresh:  --session-id <uuid>                           （创建新会话）
- *  - active: --session-id <uuid> --resume                  （同 runId 续接）
- *  - forked: --session-id <uuid> --resume --fork-session   （跨 runId 分叉）
+ *  - active: --resume <uuid>                                （续接已有会话）
  *
  * @returns argv 片段，调用方 push 到完整 args 中
  */
@@ -343,7 +342,7 @@ export function buildSessionCliArgs(
     case 'fresh':
       return ['--session-id', cliUuid];
     case 'active':
-      return ['--session-id', cliUuid, '--resume'];
+      return ['--resume', cliUuid];
     default: {
       const _exhaustive: never = state;
       throw new Error(`Unknown sessionState: ${String(_exhaustive)}`);

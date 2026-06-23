@@ -88,22 +88,12 @@ describe('CP-3: session state switch (fresh/active/forked)', () => {
     expect(args).toEqual(['--session-id', uuid]);
   });
 
-  it('buildSessionCliArgs: active 含 --resume 但无 --fork-session', () => {
+  it('buildSessionCliArgs: active 含 --resume <uuid>，不含 --session-id', () => {
     const uuid = '12345678-1234-4234-8234-123456789012';
     const args = buildSessionCliArgs('active', uuid);
-    expect(args).toEqual(['--session-id', uuid, '--resume']);
+    expect(args).toEqual(['--resume', uuid]);
+    expect(args).not.toContain('--session-id');
     expect(args).not.toContain('--fork-session');
-  });
-
-  it('buildSessionCliArgs: forked 同时含 --resume 和 --fork-session', () => {
-    const uuid = '12345678-1234-4234-8234-123456789012';
-    const args = buildSessionCliArgs('forked', uuid);
-    expect(args).toEqual([
-      '--session-id',
-      uuid,
-      '--resume',
-      '--fork-session',
-    ]);
   });
 
   it('buildSessionCliArgs: 非法 UUID 抛出（UUID v4 校验）', () => {

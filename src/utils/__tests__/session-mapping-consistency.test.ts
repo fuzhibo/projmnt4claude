@@ -131,14 +131,14 @@ describe('CP-SE-007: CLI 参数构造（fresh vs active）', () => {
     expect(args).not.toContain('--fork-session');
   });
 
-  it('active 状态包含 --session-id + --resume（CP-SE-007 核心）', () => {
+  it('active 状态包含 --resume <uuid>，不含 --session-id（CP-SE-007 核心）', () => {
     const args = buildSessionCliArgs(
       'active',
       '12345678-1234-4123-8123-123456789abc',
     );
 
-    expect(args).toContain('--session-id');
-    expect(args).toContain('--resume');
+    expect(args).toEqual(['--resume', '12345678-1234-4123-8123-123456789abc']);
+    expect(args).not.toContain('--session-id');
     expect(args).not.toContain('--fork-session');
   });
 

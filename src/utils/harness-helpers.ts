@@ -58,7 +58,7 @@ export interface HeadlessClaudeOptions {
   sessionState?: SessionState;
   /** @deprecated V2.1：改用 sessionState='active'。恢复已有 session（对应 --resume），需配合 sessionId 使用 */
   resumeSession?: boolean;
-  /** @deprecated V2.1：改用 sessionState='forked'。分叉 session 而非覆盖原 session（对应 --fork-session） */
+  /** @deprecated V2.1：forkSession 不再使用。改用 sessionState 字段控制会话行为。 */
   forkSession?: boolean;
   /** 最小模式：跳过 hooks, LSP, plugin sync, auto-memory 等（对应 --bare） */
   bare?: boolean;
