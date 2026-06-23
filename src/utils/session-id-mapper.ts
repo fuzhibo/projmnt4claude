@@ -96,36 +96,33 @@ export class SessionIdMapper {
     phase: string,
     runSalt: string,
   ): string {
-    const cliUuid = this.deriveDeterministicUuid(internalId, taskId, phase, runSalt);
     const now = new Date().toISOString();
 
+    // 如果 internalId 已有映射，直接复用已有 UUID
     const existing = this.mappings.get(internalId);
-    const isReused = existing?.cliUuid === cliUuid;
-
-    if (existing && !isReused) {
-      this.mappings.delete(existing.cliUuid);
-    }
-
-    if (!isReused) {
-      const mapping: SessionMapping = {
-        internalId,
-        cliUuid,
-        taskId,
-        phase,
-        createdAt: now,
-        lastUsedAt: now,
-      };
-      this.mappings.set(internalId, mapping);
-      this.mappings.set(cliUuid, mapping);
-
-      if (this.auditLogger) {
-        this.auditLogger({ mapping, isReused: false });
-      }
-    } else {
+    if (existing) {
       existing.lastUsedAt = now;
       if (this.auditLogger) {
         this.auditLogger({ mapping: existing, isReused: true });
       }
+      return existing.cliUuid;
+    }
+
+    // 无映射，利用 runSalt 变动性生成不冲突的新 UUID
+    const cliUuid = this.deriveDeterministicUuid(internalId, taskId, phase, runSalt);
+    const mapping: SessionMapping = {
+      internalId,
+      cliUuid,
+      taskId,
+      phase,
+      createdAt: now,
+      lastUsedAt: now,
+    };
+    this.mappings.set(internalId, mapping);
+    this.mappings.set(cliUuid, mapping);
+
+    if (this.auditLogger) {
+      this.auditLogger({ mapping, isReused: false });
     }
 
     return cliUuid;
@@ -229,30 +226,24 @@ export class SessionIdMapper {
     /**
      * 探测 session 状态
      *
-     * 决策矩阵：
-     *  - 无既有映射 → fresh（CLI 创建新会话）
-     *  - 有既有映射 → active（--resume 续接完整历史）
+     * 决策矩阵（直接检查内存映射，不依赖 runSalt）：
+     *  - 无既有映射 → fresh（由 generate() 使用 runSalt 生成新 UUID）
+     *  - 有既有映射 → active（复用已有 cliUuid，--resume 续接完整历史）
      */
-    probeSessionState(
-      internalId: string,
-      taskId: string,
-      phase: string,
-      runSalt: string,
-    ): SessionProbeResult {
-      const cliUuid = this.deriveDeterministicUuid(internalId, taskId, phase, runSalt);
+    probeSessionState(internalId: string): SessionProbeResult {
       const existing = this.mappings.get(internalId);
 
-      if (!existing || existing.cliUuid !== cliUuid) {
+      if (!existing) {
         return {
           state: 'fresh',
-          cliUuid,
+          cliUuid: '',
           reason: `no existing mapping for internalId=${internalId}`,
         };
       }
 
       return {
         state: 'active',
-        cliUuid,
+        cliUuid: existing.cliUuid,
         reason: `existing mapping found → resume full history`,
       };
     }

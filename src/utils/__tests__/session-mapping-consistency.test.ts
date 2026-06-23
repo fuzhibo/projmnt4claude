@@ -151,32 +151,112 @@ describe('CP-SE-007: CLI 参数构造（fresh vs active）', () => {
     );
 
     // 重试时重新探测同一 internalId → state: 'active'
-    const result = sessionIdMapper.probeSessionState(
-      'retry-internal',
-      'TASK-retry',
-      'development',
-      'run-salt',
-    );
+    const result = sessionIdMapper.probeSessionState('retry-internal');
 
     expect(result.state).toBe('active');
     expect(result.cliUuid).toBe(cliUuid);
   });
 
   it('probeSessionState: 无既有映射返回 fresh', () => {
-    const result = sessionIdMapper.probeSessionState(
-      'never-seen',
-      'TASK-new',
-      'development',
-      'run-salt',
-    );
+    const result = sessionIdMapper.probeSessionState('never-seen');
 
     expect(result.state).toBe('fresh');
   });
 
   it('不同 runSalt 产生不同 cliUuid（跨运行隔离）', () => {
-    const uuid1 = sessionIdMapper.generate('int-x', 'TASK-x', 'dev', 'salt-a');
-    const uuid2 = sessionIdMapper.generate('int-x', 'TASK-x', 'dev', 'salt-b');
+    const uuid1 = sessionIdMapper.generate('int-x-a', 'TASK-x', 'dev', 'salt-a');
+    const uuid2 = sessionIdMapper.generate('int-x-b', 'TASK-x', 'dev', 'salt-b');
 
     expect(uuid1).not.toBe(uuid2);
+  });
+});
+
+// ─── CP-SE-009: 集成测试 — 阶段级重试 ─────────────────────────
+
+describe('CP-SE-009: 阶段级重试集成测试', () => {
+  beforeEach(() => {
+    sessionIdMapper.clear();
+  });
+
+  afterEach(() => {
+    sessionIdMapper.clear();
+  });
+
+  const simulatePhaseCall = (taskId: string, phase: string, prefix: string) => {
+    const internalId = sessionIdMapper.buildStableInternalId(taskId, phase, prefix);
+    const probe = sessionIdMapper.probeSessionState(internalId);
+    if (probe.state === 'active') {
+      return { sessionId: probe.cliUuid, args: buildSessionCliArgs('active', probe.cliUuid) };
+    }
+    const sessionId = sessionIdMapper.generate(
+      internalId, taskId, phase, `${process.pid}-${Date.now()}`,
+    );
+    return { sessionId, args: buildSessionCliArgs('fresh', sessionId) };
+  };
+
+  it('首次调用返回 --session-id，重试返回 --resume（阶段内重试）', () => {
+    // 首次调用
+    const first = simulatePhaseCall('TASK-001', 'codeReview', 'cr');
+    expect(first.args).toContain('--session-id');
+    expect(first.args).not.toContain('--resume');
+
+    // 重试：同一 taskId + phase → probe 命中，返回 --resume
+    const retry = simulatePhaseCall('TASK-001', 'codeReview', 'cr');
+    expect(retry.args).toEqual(['--resume', first.sessionId]);
+    expect(retry.sessionId).toBe(first.sessionId);
+  });
+
+  it('不同阶段使用不同 UUID', () => {
+    const dev = simulatePhaseCall('TASK-002', 'development', 'dev');
+    const cr = simulatePhaseCall('TASK-002', 'codeReview', 'cr');
+    const qa = simulatePhaseCall('TASK-002', 'qaVerification', 'qa');
+
+    expect(dev.sessionId).not.toBe(cr.sessionId);
+    expect(cr.sessionId).not.toBe(qa.sessionId);
+    expect(dev.args).toContain('--session-id');
+    expect(cr.args).toContain('--session-id');
+  });
+
+  it('同一阶段多次重试始终复用同一 UUID', () => {
+    const first = simulatePhaseCall('TASK-003', 'evaluation', 'eval');
+
+    for (let i = 0; i < 5; i++) {
+      const retry = simulatePhaseCall('TASK-003', 'evaluation', 'eval');
+      expect(retry.sessionId).toBe(first.sessionId);
+      expect(retry.args).toEqual(['--resume', first.sessionId]);
+    }
+  });
+
+  it('不同任务同一阶段使用不同 UUID', () => {
+    const taskA = simulatePhaseCall('TASK-A', 'development', 'dev');
+    const taskB = simulatePhaseCall('TASK-B', 'development', 'dev');
+
+    expect(taskA.sessionId).not.toBe(taskB.sessionId);
+  });
+
+  it('完整流水线模拟：4 阶段首次 + 全部重试', () => {
+    const phases = [
+      { phase: 'development', prefix: 'dev' },
+      { phase: 'codeReview', prefix: 'cr' },
+      { phase: 'qaVerification', prefix: 'qa' },
+      { phase: 'evaluation', prefix: 'eval' },
+    ] as const;
+
+    // 首次调用所有阶段
+    const firstPass = phases.map(({ phase, prefix }) =>
+      simulatePhaseCall('PIPELINE-001', phase, prefix));
+
+    firstPass.forEach(r => {
+      expect(r.args).toContain('--session-id');
+    });
+
+    // 所有阶段重试
+    const retryPass = phases.map(({ phase, prefix }) =>
+      simulatePhaseCall('PIPELINE-001', phase, prefix));
+
+    retryPass.forEach((r, i) => {
+      expect(r.sessionId).toBe(firstPass[i]!.sessionId);
+      expect(r.args).toEqual(['--resume', firstPass[i]!.sessionId]);
+    });
   });
 });

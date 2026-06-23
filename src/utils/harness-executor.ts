@@ -149,13 +149,13 @@ export class HarnessExecutor {
       const effectiveTools = buildEffectiveTools('development', this.config.cwd, task);
       const phaseOptions = this.config.perPhaseOptions?.['development'];
 
-      // V2.1 §6.1.7.6：稳定 internalId + runId + 三态探测
-      // 同一任务同一阶段的 retry / --continue 恢复均生成相同 internalId → 相同 cliUuid，
-      // probeSessionState 据此识别 fresh/active，由 buildSessionCliArgs 翻译为 CLI 参数。
+      // V2.1 §6.1.7.6：稳定 internalId + 二态探测（fresh/active）
+      // probeSessionState 直接检查内存映射，不依赖 runSalt；首次调用 fresh → generate 生成 UUID，重试 active → 复用已有 UUID
       const internalId = sessionIdMapper.buildStableInternalId(task.id, 'development', 'dev');
-      const runSalt = `${process.pid}-${Date.now()}`;
-      const probe = sessionIdMapper.probeSessionState(internalId, task.id, 'development', runSalt);
-      const sessionId = sessionIdMapper.generate(internalId, task.id, 'development', runSalt);
+      const probe = sessionIdMapper.probeSessionState(internalId);
+      const sessionId = probe.state === 'active'
+        ? probe.cliUuid
+        : sessionIdMapper.generate(internalId, task.id, 'development', `${process.pid}-${Date.now()}`);
       ensureCleanSessionSlot(sessionId);
 
       const invokeOptions = {

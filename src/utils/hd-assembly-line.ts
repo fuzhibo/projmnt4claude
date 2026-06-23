@@ -118,9 +118,10 @@ export class AssemblyLine {
     // probeSessionState 识别 fresh/active，由 buildSessionCliArgs 翻译为 CLI 参数。
     // 外部显式传入 sessionId（如 --session-id）优先，否则使用稳定派生 ID。
     const internalId = sessionId || sessionIdMapper.buildStableInternalId('pipeline', 'assembly-line', 'harness');
-    const runSalt = `${process.pid}-${Date.now()}`;
-    const probe = sessionIdMapper.probeSessionState(internalId, 'pipeline', 'assembly-line', runSalt);
-    this.sessionId = sessionIdMapper.generate(internalId, 'pipeline', 'assembly-line', runSalt);
+    const probe = sessionIdMapper.probeSessionState(internalId);
+    this.sessionId = probe.state === 'active'
+      ? probe.cliUuid
+      : sessionIdMapper.generate(internalId, 'pipeline', 'assembly-line', `${process.pid}-${Date.now()}`);
     ensureCleanSessionSlot(this.sessionId);
 
     this.taskRetryContexts = new Map();

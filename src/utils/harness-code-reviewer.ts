@@ -173,11 +173,13 @@ export class HarnessCodeReviewer {
     const effectiveTools = buildEffectiveTools('codeReview', this.config.cwd, task);
     const phaseOptions = this.config.perPhaseOptions?.['codeReview'];
 
-    // V2.1 §6.1.7.6：稳定 internalId + runSalt + 二态探测（fresh/active）
+    // V2.1 §6.1.7.6：稳定 internalId + 二态探测（fresh/active）
+    // probeSessionState 直接检查内存映射，不依赖 runSalt；首次调用 fresh → generate 生成 UUID，重试 active → 复用已有 UUID
     const internalId = sessionIdMapper.buildStableInternalId(task.id, 'codeReview', 'cr');
-    const runSalt = `${process.pid}-${Date.now()}`;
-    const probe = sessionIdMapper.probeSessionState(internalId, task.id, 'codeReview', runSalt);
-    const sessionId = sessionIdMapper.generate(internalId, task.id, 'codeReview', runSalt);
+    const probe = sessionIdMapper.probeSessionState(internalId);
+    const sessionId = probe.state === 'active'
+      ? probe.cliUuid
+      : sessionIdMapper.generate(internalId, task.id, 'codeReview', `${process.pid}-${Date.now()}`);
     ensureCleanSessionSlot(sessionId);
 
     const invokeOptions = {

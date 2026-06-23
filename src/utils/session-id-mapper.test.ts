@@ -59,39 +59,40 @@ describe('SessionIdMapper', () => {
       expect(second).toBe(first);
     });
 
-    it('should differ when taskId changes', () => {
+    it('should differ when taskId changes (different internalIds)', () => {
       const mapper = new SessionIdMapper();
-      const internalId = 'dev-shared-1781756282985-cafebabe';
+      const internalIdA = 'dev-TASK-A-1781756282985-cafebabe';
+      const internalIdB = 'dev-TASK-B-1781756282985-deadbeef';
 
-      const uuidA = mapper.generate(internalId, 'TASK-A', 'development', 'test-salt');
-      const uuidB = mapper.generate(internalId, 'TASK-B', 'development', 'test-salt');
+      const uuidA = mapper.generate(internalIdA, 'TASK-A', 'development', 'test-salt');
+      const uuidB = mapper.generate(internalIdB, 'TASK-B', 'development', 'test-salt');
 
       expect(uuidA).not.toBe(uuidB);
     });
 
-    it('should differ when phase changes', () => {
+    it('should differ when phase changes (different internalIds)', () => {
       const mapper = new SessionIdMapper();
-      const internalId = 'shared-TASK-200-1781756282985-abcdef01';
+      const internalIdDev = 'dev-TASK-200-1781756282985-abcdef01';
+      const internalIdCr = 'cr-TASK-200-1781756282985-01234567';
 
-      const devUuid = mapper.generate(internalId, 'TASK-200', 'development', 'test-salt');
-      const crUuid = mapper.generate(internalId, 'TASK-200', 'codeReview', 'test-salt');
+      const devUuid = mapper.generate(internalIdDev, 'TASK-200', 'development', 'test-salt');
+      const crUuid = mapper.generate(internalIdCr, 'TASK-200', 'codeReview', 'test-salt');
 
       expect(devUuid).not.toBe(crUuid);
     });
 
-    it('should clean up old cliUuid mapping when internalId reused with new phase', () => {
+    it('should reuse existing UUID when internalId already has a mapping', () => {
       const mapper = new SessionIdMapper();
       const internalId = 'reuse-TASK-300-1781756282985-01234567';
 
-      const devUuid = mapper.generate(internalId, 'TASK-300', 'development', 'test-salt');
-      // internalId 现在切换到 codeReview 阶段
-      const crUuid = mapper.generate(internalId, 'TASK-300', 'codeReview', 'test-salt');
+      const firstUuid = mapper.generate(internalId, 'TASK-300', 'development', 'test-salt');
+      // 同一 internalId 再次调用 generate（模拟阶段重试），应复用已有 UUID
+      const secondUuid = mapper.generate(internalId, 'TASK-300', 'development', 'different-salt');
 
-      expect(devUuid).not.toBe(crUuid);
-      // 旧 devUuid 不应再映射回 internalId
-      expect(mapper.toInternalId(devUuid)).toBeUndefined();
-      // 新 crUuid 正常工作
-      expect(mapper.toInternalId(crUuid)).toBe(internalId);
+      expect(secondUuid).toBe(firstUuid);
+      // 双向映射依然正确
+      expect(mapper.toInternalId(firstUuid)).toBe(internalId);
+      expect(mapper.toCliUuid(internalId)).toBe(firstUuid);
     });
 
     it('should always produce valid UUID v4 format with correct version and variant', () => {
@@ -104,14 +105,13 @@ describe('SessionIdMapper', () => {
         expect(uuid).toMatch(uuidRegex);
       }
     });
-    it('should produce different UUID when runSalt differs', () => {
+    it('should produce different UUID when runSalt differs (different internalIds)', () => {
       const mapper = new SessionIdMapper();
-      const internalId = 'dev-TASK-999-1781756282985-abcdef99';
       const taskId = 'TASK-999';
       const phase = 'development';
 
-      const uuidSalt1 = mapper.generate(internalId, taskId, phase, 'salt-one');
-      const uuidSalt2 = mapper.generate(internalId, taskId, phase, 'salt-two');
+      const uuidSalt1 = mapper.generate('dev-TASK-999-s1-1781756282985-abcdef99', taskId, phase, 'salt-one');
+      const uuidSalt2 = mapper.generate('dev-TASK-999-s2-1781756282985-abcdef98', taskId, phase, 'salt-two');
 
       expect(uuidSalt1).not.toBe(uuidSalt2);
     });
@@ -126,6 +126,96 @@ describe('SessionIdMapper', () => {
       const second = mapper.generate(internalId, taskId, phase, 'stable-salt');
 
       expect(second).toBe(first);
+    });
+  });
+
+  describe('probeSessionState (CP-07)', () => {
+    it('should return fresh when no mapping exists', () => {
+      const mapper = new SessionIdMapper();
+      const internalId = 'dev-TASK-001-stable-development';
+
+      const probe = mapper.probeSessionState(internalId);
+
+      expect(probe.state).toBe('fresh');
+      expect(probe.cliUuid).toBe('');
+      expect(probe.reason).toContain('no existing mapping');
+    });
+
+    it('should return active with existing cliUuid when mapping exists', () => {
+      const mapper = new SessionIdMapper();
+      const internalId = 'dev-TASK-002-stable-development';
+      const cliUuid = mapper.generate(internalId, 'TASK-002', 'development', 'test-salt');
+
+      const probe = mapper.probeSessionState(internalId);
+
+      expect(probe.state).toBe('active');
+      expect(probe.cliUuid).toBe(cliUuid);
+      expect(probe.reason).toContain('resume full history');
+    });
+
+    it('should return active after retry (same internalId, different runSalt)', () => {
+      const mapper = new SessionIdMapper();
+      const internalId = 'cr-TASK-003-stable-codeReview';
+      const firstUuid = mapper.generate(internalId, 'TASK-003', 'codeReview', 'salt-one');
+
+      // 模拟阶段重试：同一 internalId，但 runSalt 不同
+      const probe = mapper.probeSessionState(internalId);
+
+      expect(probe.state).toBe('active');
+      expect(probe.cliUuid).toBe(firstUuid);
+    });
+
+    it('should return fresh for different internalIds', () => {
+      const mapper = new SessionIdMapper();
+      const internalIdA = 'dev-TASK-004-stable-development';
+      const internalIdB = 'cr-TASK-004-stable-codeReview';
+
+      mapper.generate(internalIdA, 'TASK-004', 'development', 'test-salt');
+
+      const probe = mapper.probeSessionState(internalIdB);
+
+      expect(probe.state).toBe('fresh');
+      expect(probe.cliUuid).toBe('');
+    });
+  });
+
+  describe('generate reuse (CP-08)', () => {
+    it('should reuse existing UUID on repeated generate calls', () => {
+      const mapper = new SessionIdMapper();
+      const internalId = 'dev-TASK-010-stable-development';
+
+      const firstUuid = mapper.generate(internalId, 'TASK-010', 'development', 'salt-one');
+      const secondUuid = mapper.generate(internalId, 'TASK-010', 'development', 'salt-two');
+
+      expect(secondUuid).toBe(firstUuid);
+    });
+
+    it('should update lastUsedAt on reuse', () => {
+      const mapper = new SessionIdMapper();
+      const internalId = 'dev-TASK-011-stable-development';
+
+      mapper.generate(internalId, 'TASK-011', 'development', 'test-salt');
+      const mappingBefore = mapper.getMapping(internalId);
+      const beforeLastUsed = mappingBefore!.lastUsedAt;
+
+      // 等待 1ms 确保时间戳不同
+      const start = Date.now();
+      while (Date.now() === start) { /* busy wait */ }
+      mapper.generate(internalId, 'TASK-011', 'development', 'test-salt');
+
+      const mappingAfter = mapper.getMapping(internalId);
+      expect(mappingAfter!.lastUsedAt).not.toBe(beforeLastUsed);
+    });
+
+    it('should generate new UUID for different internalId', () => {
+      const mapper = new SessionIdMapper();
+      const internalIdA = 'dev-TASK-012A-stable-development';
+      const internalIdB = 'dev-TASK-012B-stable-development';
+
+      const uuidA = mapper.generate(internalIdA, 'TASK-012', 'development', 'test-salt');
+      const uuidB = mapper.generate(internalIdB, 'TASK-012', 'development', 'test-salt');
+
+      expect(uuidA).not.toBe(uuidB);
     });
   });
 
