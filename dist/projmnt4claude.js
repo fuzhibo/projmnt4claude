@@ -13742,6 +13742,9 @@ function installExitHooks(knownCliUuids = new Set, sessionEnvRoot) {
   const exitHandler = (_code) => {
     try {
       killAllActiveChildren("SIGKILL");
+      for (const uuid of knownCliUuids) {
+        ensureCleanSessionSlot(uuid, sessionEnvRoot);
+      }
       const orphans = listOrphanedSessions(knownCliUuids, sessionEnvRoot);
       if (orphans.length > 0) {
         cleanupOrphanedSessions(orphans);
@@ -13885,9 +13888,6 @@ async function runHeadlessClaude(options) {
         stderr += data.toString();
       });
       child.on("close", (code) => {
-        if (options.sessionId) {
-          ensureCleanSessionSlot(options.sessionId);
-        }
         const classified = classifyExitResult(code, stderr, stdout);
         resolve3({
           success: classified.success,
@@ -13899,9 +13899,6 @@ async function runHeadlessClaude(options) {
         });
       });
       child.on("error", (error) => {
-        if (options.sessionId) {
-          ensureCleanSessionSlot(options.sessionId);
-        }
         resolve3({
           success: false,
           output: "",
@@ -13911,9 +13908,6 @@ async function runHeadlessClaude(options) {
         });
       });
     } catch (error) {
-      if (options.sessionId) {
-        ensureCleanSessionSlot(options.sessionId);
-      }
       resolve3({
         success: false,
         output: "",
