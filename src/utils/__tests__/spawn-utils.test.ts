@@ -1,4 +1,4 @@
-import { describe, test, expect, beforeEach, afterEach} from '@jest/globals';
+import { describe, test, expect, beforeEach, afterEach, jest } from '@jest/globals';
 import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
@@ -14,7 +14,7 @@ import {
   spawnWithMemoryLimit,
   execSyncWithMemoryLimit,
 } from '../spawn-utils.js';
-import type { MemoryLimitType } from '../spawn-utils.js';
+import { activeChildProcesses } from '../child-process-registry.js';
 
 // ─── 辅助：创建临时 config.json ───
 
@@ -266,5 +266,104 @@ describe('memory pressure check behavior', () => {
     // 在正常环境下应该可以 spawn（内存充足）
     // 此测试验证 throw 机制存在而非 console.warn
     expect(true).toBe(true);
+  });
+});
+
+// ─── 10. SYS-ORPHAN-2026-006: PID 自动注册/反注册测试 ───
+
+describe('spawnWithMemoryLimit PID auto-registration (SYS-ORPHAN-2026-006)', () => {
+  beforeEach(() => {
+    activeChildProcesses.clear();
+  });
+
+  afterEach(() => {
+    activeChildProcesses.clear();
+    jest.restoreAllMocks();
+  });
+
+  test('CP-02: spawnWithMemoryLimit auto-registers child PID in activeChildProcesses', async () => {
+    // 屏蔽 console.warn（prlimit 降级路径会产生 warning）
+    jest.spyOn(console, 'warn').mockImplementation(() => undefined);
+
+    const child = spawnWithMemoryLimit('sleep', ['0.1'], {
+      cwd: process.cwd(),
+      stdio: 'pipe',
+    });
+
+    expect(child.pid).toBeDefined();
+    expect(activeChildProcesses.has(child.pid!)).toBe(true);
+
+    // 等待子进程退出
+    await new Promise<void>((resolve) => {
+      child.on('close', () => resolve());
+    });
+  });
+
+  test('CP-03: spawnWithMemoryLimit auto-unregisters PID on child exit', async () => {
+    jest.spyOn(console, 'warn').mockImplementation(() => undefined);
+
+    const child = spawnWithMemoryLimit('true', [], {
+      cwd: process.cwd(),
+      stdio: 'pipe',
+    });
+
+    const pid = child.pid!;
+    expect(activeChildProcesses.has(pid)).toBe(true);
+
+    // 等待子进程退出
+    await new Promise<void>((resolve) => {
+      child.on('close', () => {
+        expect(activeChildProcesses.has(pid)).toBe(false);
+        resolve();
+      });
+    });
+  });
+
+  test('CP-03: spawnWithMemoryLimit auto-unregisters PID on child error', async () => {
+    jest.spyOn(console, 'warn').mockImplementation(() => undefined);
+
+    // spawn 一个不存在的命令触发 error 事件
+    const child = spawnWithMemoryLimit('/nonexistent/command/xyz', [], {
+      cwd: process.cwd(),
+      stdio: 'pipe',
+    });
+
+    // error 事件可能同步也可能异步触发
+    await new Promise<void>((resolve) => {
+      child.on('error', () => {
+        // error 事件后 PID 应从注册表移除（如果 pid 存在）
+        setImmediate(() => {
+          if (child.pid) {
+            expect(activeChildProcesses.has(child.pid)).toBe(false);
+          }
+          resolve();
+        });
+      });
+      // 如果 error 没有在合理时间内触发，直接 resolve
+      setTimeout(() => resolve(), 1000);
+    });
+  });
+
+  test('SYS-ORPHAN-2026-006: all three spawn paths register PID', async () => {
+    // 验证 spawnWithMemoryLimit 的三条路径都会注册 PID：
+    // 1. systemd-run（cgroup v2 + 非 scope）
+    // 2. prlimit（scope 内 或 非 cgroup v2）
+    // 3. 直接 spawn（disabled）
+    // 本测试验证实际执行路径（依赖当前环境）
+    jest.spyOn(console, 'warn').mockImplementation(() => undefined);
+
+    const child = spawnWithMemoryLimit('echo', ['registry-test'], {
+      cwd: process.cwd(),
+      stdio: 'pipe',
+    });
+
+    // 无论走哪条路径，PID 都应被注册
+    if (child.pid) {
+      expect(activeChildProcesses.has(child.pid)).toBe(true);
+    }
+
+    await new Promise<void>((resolve) => {
+      child.on('close', () => resolve());
+    });
   });
 });

@@ -23,6 +23,7 @@ import * as os from 'os';
 import * as path from 'path';
 import { readConfig } from '../commands/config.js';
 import type { HarnessMemoryLimitConfig } from '../types/config.js';
+import { activeChildProcesses } from './child-process-registry.js';
 
 // ─── 类型定义 ───
 
@@ -303,6 +304,17 @@ export function spawnWithMemoryLimit(
     }
   }
 
+  // 注册子进程 PID 到全局注册表（SYS-ORPHAN-2026-006 修复：统一在 spawnWithMemoryLimit 内部注册）
+  const registerChild = (child: ReturnType<typeof spawn>) => {
+    if (child.pid) {
+      activeChildProcesses.add(child.pid);
+      const unregister = () => { if (child.pid) activeChildProcesses.delete(child.pid); };
+      child.on('exit', unregister);
+      child.on('close', unregister);
+      child.on('error', unregister);
+    }
+  };
+
   if (cfg.enabled && hasCgroupV2Support() && !isInSystemdScope()) {
     const maxGB = type === 'coverage' ? cfg.overrides.coverage
       : type === 'claudeAgent' ? cfg.overrides.claudeAgent
@@ -326,6 +338,7 @@ export function spawnWithMemoryLimit(
       if (child.pid) setCgroupOOMGroup(child.pid);
     });
 
+    registerChild(child);
     return child;
   }
 
@@ -358,10 +371,14 @@ export function spawnWithMemoryLimit(
       command,
       ...args,
     ];
-    return spawn('prlimit', prlimitArgs, options);
+    const child = spawn('prlimit', prlimitArgs, options);
+    registerChild(child);
+    return child;
   }
 
-  return spawn(command, args, options);
+  const child = spawn(command, args, options);
+  registerChild(child);
+  return child;
 }
 
 // ─── execSync 封装 ───
