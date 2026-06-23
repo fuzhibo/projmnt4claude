@@ -145,8 +145,13 @@ export function installExitHooks(
 
   const exitHandler = (_code: number): void => {
     try {
-      // 进程即将退出：SIGKILL 兜底，防止僵尸；清理孤儿锁
+      // 进程即将退出：SIGKILL 兜底，防止僵尸
       killAllActiveChildren('SIGKILL');
+      // 清理所有已知 UUID 的锁目录（进程退出时无需保留）
+      for (const uuid of knownCliUuids) {
+        ensureCleanSessionSlot(uuid, sessionEnvRoot);
+      }
+      // 清理孤儿锁（不在已知集合中的残留）
       const orphans = listOrphanedSessions(knownCliUuids, sessionEnvRoot);
       if (orphans.length > 0) {
         cleanupOrphanedSessions(orphans);
@@ -367,9 +372,6 @@ export async function runHeadlessClaude(options: HeadlessClaudeOptions): Promise
       // PID 反注册由 spawnWithMemoryLimit 内部 exit/close/error 事件自动处理（CP-03）
 
       child.on('close', (code) => {
-        if (options.sessionId) {
-          ensureCleanSessionSlot(options.sessionId);
-        }
         const classified = classifyExitResult(code, stderr, stdout);
         resolve({
           success: classified.success,
@@ -382,9 +384,6 @@ export async function runHeadlessClaude(options: HeadlessClaudeOptions): Promise
       });
 
       child.on('error', (error) => {
-        if (options.sessionId) {
-          ensureCleanSessionSlot(options.sessionId);
-        }
         resolve({
           success: false,
           output: '',
@@ -395,9 +394,6 @@ export async function runHeadlessClaude(options: HeadlessClaudeOptions): Promise
       });
 
     } catch (error) {
-      if (options.sessionId) {
-        ensureCleanSessionSlot(options.sessionId);
-      }
       resolve({
         success: false,
         output: '',

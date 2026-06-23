@@ -912,7 +912,7 @@ describe('runHeadlessClaude', () => {
       return lockDir;
     }
 
-    test('cleans session-env lock dir on process close (CP-SE-V1)', async () => {
+    test('preserves session-env lock dir on process close for retry (CP-SE-V1)', async () => {
       const lockDir = createLockDir(sessionId);
       expect(fs.existsSync(lockDir)).toBe(true);
 
@@ -926,10 +926,11 @@ describe('runHeadlessClaude', () => {
       });
 
       expect(result.success).toBe(true);
-      expect(fs.existsSync(lockDir)).toBe(false);
+      // lock dir preserved for phase-internal retry (not cleaned in runHeadlessClaude close)
+      expect(fs.existsSync(lockDir)).toBe(true);
     });
 
-    test('cleans session-env lock dir on spawn error (CP-SE-V2)', async () => {
+    test('preserves session-env lock dir on spawn error for retry (CP-SE-V2)', async () => {
       const lockDir = createLockDir(sessionId);
       expect(fs.existsSync(lockDir)).toBe(true);
 
@@ -943,10 +944,11 @@ describe('runHeadlessClaude', () => {
       });
 
       expect(result.success).toBe(false);
-      expect(fs.existsSync(lockDir)).toBe(false);
+      // lock dir preserved for phase-internal retry (not cleaned in runHeadlessClaude error handler)
+      expect(fs.existsSync(lockDir)).toBe(true);
     });
 
-    test('cleans session-env lock dir on sync spawn throw (CP-SE-V3a)', async () => {
+    test('preserves session-env lock dir on sync spawn throw for retry (CP-SE-V3a)', async () => {
       const lockDir = createLockDir(sessionId);
       expect(fs.existsSync(lockDir)).toBe(true);
 
@@ -962,12 +964,13 @@ describe('runHeadlessClaude', () => {
       });
 
       expect(result.success).toBe(false);
-      expect(fs.existsSync(lockDir)).toBe(false);
+      // lock dir preserved for phase-internal retry (not cleaned in runHeadlessClaude catch handler)
+      expect(fs.existsSync(lockDir)).toBe(true);
     });
 
-    test('FCE retry with same sessionId succeeds after cleanup (CP-SE-V3)', async () => {
-      // 模拟调查报告 §5.2 CP-SE-V3: FCE 重试场景
-      // 第一次调用 → 进程退出时清理锁目录 → 第二次调用（FCE 重试）无 "Session ID already in use"
+    test('FCE retry preserves sessionId lock dir for session continuity (CP-SE-V3)', async () => {
+      // 调查报告 §2.4: 阶段内重试时锁目录应保留，支持 --resume 续接
+      // runHeadlessClaude close/error/catch 不再清理锁目录
       const lockDir = createLockDir(sessionId);
 
       // 第一次调用: 正常退出
@@ -980,14 +983,10 @@ describe('runHeadlessClaude', () => {
         sessionId,
       });
       expect(firstResult.success).toBe(true);
-      // 第一次调用后锁目录应被清理
-      expect(fs.existsSync(lockDir)).toBe(false);
-
-      // 模拟 FCE 重试前重新创建锁目录（如同 headless Claude CLI 所为）
-      createLockDir(sessionId);
+      // 锁目录保留，供阶段内重试使用
       expect(fs.existsSync(lockDir)).toBe(true);
 
-      // 第二次调用（FCE 重试）: 应同样成功，锁目录被清理
+      // FCE 重试: 锁目录仍在，可直接续接
       setupMockSpawn({ exitCode: 0, stdout: 'second run (FCE retry)' });
       const secondResult = await runHeadlessClaude({
         prompt: 'test',
@@ -997,7 +996,8 @@ describe('runHeadlessClaude', () => {
         sessionId,
       });
       expect(secondResult.success).toBe(true);
-      expect(fs.existsSync(lockDir)).toBe(false);
+      // 锁目录仍然保留（由 installExitHooks exit handler 在进程退出时统一清理）
+      expect(fs.existsSync(lockDir)).toBe(true);
     });
 
     test('does not attempt cleanup when sessionId is not provided (CP-SE-V4)', async () => {
