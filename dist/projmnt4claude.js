@@ -14230,6 +14230,7 @@ class ClaudeCodeProvider {
       dangerouslySkipPermissions: options.dangerouslySkipPermissions,
       outputFormat: options.outputFormat,
       sessionId: options.sessionId,
+      sessionState: options.sessionState,
       resumeSession: options.resumeSession,
       forkSession: options.forkSession
     });
@@ -14241,6 +14242,7 @@ class ClaudeCodeProvider {
       dangerouslySkipPermissions: options.dangerouslySkipPermissions,
       outputFormat: options.outputFormat === "json" ? "json" : undefined,
       sessionId: options.sessionId,
+      sessionState: options.sessionState,
       resumeSession: options.resumeSession,
       forkSession: options.forkSession,
       bare: options.bare,
