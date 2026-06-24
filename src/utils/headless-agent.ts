@@ -142,7 +142,7 @@ export function translateOptionsToCliArgs(options: AgentInvokeOptions): string[]
     args.push('--output-format', 'json');
   }
 
-  // Session 连续性支持（V2.1 §6.1.4.2 三态分支）
+  // Session 连续性支持（V2.1 §6.1.4.2 二态分支）
   if (options.sessionId) {
     const state = deriveSessionStateFromLegacyFlags({
       sessionState: options.sessionState,
@@ -349,6 +349,7 @@ export class ClaudeCodeProvider implements HeadlessAgent {
       dangerouslySkipPermissions: options.dangerouslySkipPermissions,
       outputFormat: options.outputFormat,
       sessionId: options.sessionId,
+      sessionState: options.sessionState,
       resumeSession: options.resumeSession,
       forkSession: options.forkSession,
     });
@@ -361,6 +362,7 @@ export class ClaudeCodeProvider implements HeadlessAgent {
       dangerouslySkipPermissions: options.dangerouslySkipPermissions,
       outputFormat: options.outputFormat === 'json' ? 'json' : undefined,
       sessionId: options.sessionId,
+      sessionState: options.sessionState,
       resumeSession: options.resumeSession,
       forkSession: options.forkSession,
       // 新增: 资源控制相关选项

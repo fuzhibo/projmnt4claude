@@ -52,7 +52,7 @@ export interface HeadlessClaudeOptions {
   /** 指定 Claude Code CLI session ID，用于跨调用保持上下文连续性 */
   sessionId?: string;
   /**
-   * Session 三态（V2.1 §6.1.4.2）：fresh | active | forked
+   * Session 二态（V2.1 §6.1.4.2）：fresh | active
    * 优先使用此字段；未设置时由 deriveSessionStateFromLegacyFlags 从遗留标志推导。
    */
   sessionState?: SessionState;
