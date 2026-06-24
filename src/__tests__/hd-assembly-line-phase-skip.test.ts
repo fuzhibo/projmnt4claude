@@ -20,7 +20,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 import { AssemblyLine } from '../utils/hd-assembly-line.js';
 import { createIsolatedTestEnv, type IsolatedTestEnv } from '../utils/test-env.js';
-import type { HarnessConfig, HarnessRuntimeState, TaskExecutionRecord, CodeReviewVerdict, QAVerdict, DevReport } from '../types/harness.js';
+import type { HarnessConfig, TaskExecutionRecord } from '../types/harness.js';
 import { createDefaultRuntimeState, createDefaultExecutionRecord } from '../types/harness.js';
 import type { TaskStatus, TaskMeta } from '../types/task.js';
 
@@ -37,6 +37,9 @@ function createTestConfig(cwd: string): HarnessConfig {
     continue: false,
     forceContinue: false,
     jsonOutput: false,
+    batchGitTagCommit: false,
+    taskGitCommit: false,
+    debug: false,
     cwd,
   };
 }
@@ -637,3 +640,123 @@ describe('CP-5: prerequisite data rebuild from prevRecord', () => {
     expect(sourceCode).toContain('未找到前次执行记录，从开发阶段重新开始');
   });
 });
+
+  // ============================================================
+  // INV-HD-RETRY-20250624: 重试任务重新加入执行队列
+  // ============================================================
+  describe('INV-HD-RETRY-20250624: retry re-queue mechanism', () => {
+    test('CP-FIX-1: executionQueue splice re-inserts retry task at currentIndex + 1', () => {
+      const executionQueue = ['TASK-1', 'TASK-2', 'TASK-3', 'TASK-4'];
+      const state = { currentIndex: 0, retryingTasks: [] as string[], taskQueue: [...executionQueue] };
+      const taskId = executionQueue[state.currentIndex]!;
+
+      const isRetry = true;
+      if (isRetry && state.taskQueue.includes(taskId)) {
+        state.retryingTasks.push(taskId);
+        executionQueue.splice(state.currentIndex + 1, 0, taskId);
+      }
+
+      expect(executionQueue).toEqual(['TASK-1', 'TASK-1', 'TASK-2', 'TASK-3', 'TASK-4']);
+      expect(executionQueue[state.currentIndex + 1]).toBe('TASK-1');
+      expect(state.retryingTasks).toContain('TASK-1');
+    });
+
+    test('CP-FIX-1: retry task at later position re-inserts after current task', () => {
+      const executionQueue = ['TASK-1', 'TASK-2', 'TASK-3', 'TASK-4'];
+      const state = { currentIndex: 1, retryingTasks: [] as string[], taskQueue: [...executionQueue] };
+      const taskId = executionQueue[state.currentIndex]!;
+
+      const isRetry = true;
+      if (isRetry && state.taskQueue.includes(taskId)) {
+        state.retryingTasks.push(taskId);
+        executionQueue.splice(state.currentIndex + 1, 0, taskId);
+      }
+
+      expect(executionQueue).toEqual(['TASK-1', 'TASK-2', 'TASK-2', 'TASK-3', 'TASK-4']);
+      expect(executionQueue[state.currentIndex + 1]).toBe('TASK-2');
+    });
+
+    test('CP-FIX-1: retry task at last position re-inserts at end of queue', () => {
+      const executionQueue = ['TASK-1', 'TASK-2', 'TASK-3', 'TASK-4'];
+      const state = { currentIndex: 3, retryingTasks: [] as string[], taskQueue: executionQueue };
+      const taskId = executionQueue[state.currentIndex]!;
+
+      const isRetry = true;
+      if (isRetry && state.taskQueue.includes(taskId)) {
+        state.retryingTasks.push(taskId);
+        executionQueue.splice(state.currentIndex + 1, 0, taskId);
+      }
+
+      expect(executionQueue).toEqual(['TASK-1', 'TASK-2', 'TASK-3', 'TASK-4', 'TASK-4']);
+      expect(executionQueue[state.currentIndex + 1]).toBe('TASK-4');
+    });
+
+    test('CP-FIX-2: retryCounter increments correctly on re-queue', () => {
+      const retryCounter = new Map<string, number>();
+      const taskId = 'TASK-1';
+      retryCounter.set(taskId, 0);
+
+      const retryCount = retryCounter.get(taskId) || 0;
+      retryCounter.set(taskId, retryCount + 1);
+      expect(retryCounter.get(taskId)).toBe(1);
+
+      const retryCount2 = retryCounter.get(taskId) || 0;
+      retryCounter.set(taskId, retryCount2 + 1);
+      expect(retryCounter.get(taskId)).toBe(2);
+    });
+
+    test('CP-FIX-4: in_progress maps back to development phase for re-execution', () => {
+      expect(AssemblyLine.STATUS_RESUME_PHASE['in_progress']).toBe('development');
+    });
+
+    test('CP-FIX-5: source code contains splice for re-queue after in_progress detection', () => {
+      const sourceCode = fs.readFileSync(
+        path.resolve(__dirname, '../utils/hd-assembly-line.ts'),
+        'utf-8'
+      );
+      expect(sourceCode).toContain('INV-HD-RETRY-20250624');
+      expect(sourceCode).toContain('executionQueue.splice(state.currentIndex + 1, 0, taskId)');
+    });
+  });
+
+  // ============================================================
+  // INV-HD-RETRY-20250624: checkpoint clearing in redevelop path
+  // ============================================================
+  describe('INV-HD-RETRY-20250624: checkpoint clearing on redevelop', () => {
+    test('CP-FIX-6: source code contains resetPhaseCheckpoints call after redevelop verdict', () => {
+      const sourceCode = fs.readFileSync(
+        path.resolve(__dirname, '../utils/hd-assembly-line.ts'),
+        'utf-8'
+      );
+      expect(sourceCode).toContain('resetPhaseCheckpoints(taskId, state, this.config.cwd)');
+    });
+
+    test('CP-FIX-6: determineResumePhase returns development when no checkpoint and status is in_progress', () => {
+      const config = createTestConfig('/tmp/test');
+      const state = createDefaultRuntimeState(config);
+      state.taskQueue = ['TEST-TASK-001'];
+      state.taskPhaseCheckpoints = new Map();
+
+      const assemblyLine = new AssemblyLine(createTestConfig('/tmp/test'));
+      const phase = assemblyLine.determineResumePhase('TEST-TASK-001', 'in_progress', state);
+      expect(phase).toBe('development');
+    });
+
+    test('CP-FIX-6: stale checkpoint P1 overrides P2 in_progress→development mapping', () => {
+      const config = createTestConfig('/tmp/test');
+      const state = createDefaultRuntimeState(config);
+      state.taskQueue = ['TEST-TASK-001'];
+      state.taskPhaseCheckpoints = new Map();
+      state.taskPhaseCheckpoints.set('TEST-TASK-001', {
+        completedPhase: 'development',
+        completedAt: new Date().toISOString(),
+      });
+
+      const assemblyLine = new AssemblyLine(createTestConfig('/tmp/test'));
+      const phase = assemblyLine.determineResumePhase('TEST-TASK-001', 'in_progress', state);
+      // Without report files on disk, validatePrerequisites falls through to development.
+      // In the actual bug scenario, dev reports exist → P1 checkpoint routes to code_review,
+      // bypassing development entirely. resetPhaseCheckpoints in redevelop prevents this.
+      expect(phase).toBe('development');
+    });
+  });

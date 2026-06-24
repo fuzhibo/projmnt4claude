@@ -297,6 +297,10 @@ export class AssemblyLine {
           this.markDependentTasksAsFailed(state, taskId, failureReason);
         } else if (record.finalStatus === 'in_progress' && state.taskQueue.includes(taskId)) {
           state.retryingTasks.push(taskId);
+
+          // INV-HD-RETRY-20250624: 将任务重新加入执行队列，在当前任务后立即重试
+          executionQueue.splice(state.currentIndex + 1, 0, taskId);
+
           const retryCount = state.retryCounter.get(taskId) || 0;
           // 推断重试阶段：从最近的时间线条目获取
           const lastRetryEntry = record.timeline.findLast(e => e.event === 'retry');
@@ -1754,6 +1758,11 @@ export class AssemblyLine {
         addTimeline('retry', `任务将从 ${targetPhase} 阶段重试 (第 ${retryCount + 1}/${retryLimit} 次)`, { action, phase, targetStatus, targetPhase, failureCategory });
         console.log(`⚠️  任务将从 ${targetPhase} 阶段重试 (第 ${retryCount + 1}/${retryLimit} 次)${routeDescription}`);
         this.statusReporter.recordTaskRetrying(taskId, retryCount + 1, retryLimit, targetPhase, `${phase} 阶段失败${routeDescription}，回退到 ${targetPhase} 阶段`);
+        // INV-HD-RETRY-20250624: 清除残留的 taskPhaseCheckpoints
+        // 防止 determineResumePhase Priority 1 checkpoint 覆盖 Priority 2 的 in_progress→development 映射
+        if (this.config.cwd) {
+          resetPhaseCheckpoints(taskId, state, this.config.cwd);
+        }
         record.finalStatus = targetStatus;
         record.retryCount = retryCount + 1;
         // P5: 返回记录，由 executeTask 的阶段循环处理重试
