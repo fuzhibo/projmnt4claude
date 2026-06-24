@@ -44205,7 +44205,7 @@ ${"━".repeat(SEPARATOR_WIDTH)}`);
           console.log(`      失败位置: ${failureReason.failedAt}`);
           this.cascadeFailureToDownstream(taskId, state);
           this.markDependentTasksAsFailed(state, taskId, failureReason);
-        } else if (record.finalStatus === "in_progress" && state.taskQueue.includes(taskId)) {
+        } else if ((record.finalStatus === "in_progress" || record.finalStatus === "wait_review" || record.finalStatus === "wait_qa") && state.taskQueue.includes(taskId)) {
           state.retryingTasks.push(taskId);
           executionQueue.splice(state.currentIndex + 1, 0, taskId);
           const retryCount = state.retryCounter.get(taskId) || 0;
@@ -45158,6 +45158,11 @@ ${"━".repeat(SEPARATOR_WIDTH)}`);
         this.statusReporter.recordTaskRetrying(taskId, retryCount + 1, retryLimit, targetPhase, `${phase} 阶段失败${routeDescription}，回退到 ${targetPhase} 阶段`);
         if (this.config.cwd) {
           resetPhaseCheckpoints(taskId, state, this.config.cwd);
+        } else {
+          console.warn(`[INV-20260624-001] cwd 为空，无法清除 taskPhaseCheckpoints，回退路由可能错误`);
+        }
+        if (failureReason && targetPhase) {
+          this.storeFailureContext(taskId, targetPhase, failureReason, state);
         }
         record.finalStatus = targetStatus;
         record.retryCount = retryCount + 1;
@@ -45395,13 +45400,16 @@ ${"━".repeat(SEPARATOR_WIDTH)}`);
       return "skip";
     }
     if (status === "wait_qa") {
-      const projectDir = getProjectDir(this.config.cwd);
-      const qaReportPath = path39.join(projectDir, "reports", "harness", taskId, "qa-report.md");
-      if (fs43.existsSync(qaReportPath)) {
-        const content = fs43.readFileSync(qaReportPath, "utf-8");
-        if (content.trim().length > 0) {
-          console.log(`   \uD83D\uDCCB 检测到 wait_qa 但 qa-report.md 已存在，自动迁移为 wait_evaluation`);
-          return "evaluation";
+      const task = readTaskMeta(taskId, this.config.cwd);
+      if (task?.resumeAction !== "retry") {
+        const projectDir = getProjectDir(this.config.cwd);
+        const qaReportPath = path39.join(projectDir, "reports", "harness", taskId, "qa-report.md");
+        if (fs43.existsSync(qaReportPath)) {
+          const content = fs43.readFileSync(qaReportPath, "utf-8");
+          if (content.trim().length > 0) {
+            console.log(`   \uD83D\uDCCB 检测到 wait_qa 但 qa-report.md 已存在，自动迁移为 wait_evaluation`);
+            return "evaluation";
+          }
         }
       }
     }
@@ -45546,7 +45554,11 @@ ${"━".repeat(SEPARATOR_WIDTH)}`);
       attemptNumber: phaseRetryCount + 1,
       maxRetries: this.getPhaseRetryLimit(phase),
       partialProgress: Object.keys(partialProgress).length > 0 ? partialProgress : existing?.partialProgress,
-      upstreamFailureInfo: existing?.upstreamFailureInfo,
+      upstreamFailureInfo: existing?.upstreamFailureInfo ?? (existing?.previousFailureReason ? {
+        taskId,
+        reason: existing.previousFailureReason,
+        failedAt: new Date().toISOString()
+      } : undefined),
       previousErrors: [],
       accumulatedInsights: [],
       suggestedFixes: []
