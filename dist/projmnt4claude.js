@@ -44207,6 +44207,7 @@ ${"━".repeat(SEPARATOR_WIDTH)}`);
           this.markDependentTasksAsFailed(state, taskId, failureReason);
         } else if (record.finalStatus === "in_progress" && state.taskQueue.includes(taskId)) {
           state.retryingTasks.push(taskId);
+          executionQueue.splice(state.currentIndex + 1, 0, taskId);
           const retryCount = state.retryCounter.get(taskId) || 0;
           const lastRetryEntry = record.timeline.findLast((e) => e.event === "retry");
           const retryPhase = lastRetryEntry?.data?.phase;
@@ -45155,6 +45156,9 @@ ${"━".repeat(SEPARATOR_WIDTH)}`);
         addTimeline("retry", `任务将从 ${targetPhase} 阶段重试 (第 ${retryCount + 1}/${retryLimit} 次)`, { action, phase, targetStatus, targetPhase, failureCategory });
         console.log(`⚠️  任务将从 ${targetPhase} 阶段重试 (第 ${retryCount + 1}/${retryLimit} 次)${routeDescription}`);
         this.statusReporter.recordTaskRetrying(taskId, retryCount + 1, retryLimit, targetPhase, `${phase} 阶段失败${routeDescription}，回退到 ${targetPhase} 阶段`);
+        if (this.config.cwd) {
+          resetPhaseCheckpoints(taskId, state, this.config.cwd);
+        }
         record.finalStatus = targetStatus;
         record.retryCount = retryCount + 1;
         return record;
@@ -46468,6 +46472,14 @@ ${"━".repeat(SEPARATOR_WIDTH)}`);
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 `);
   }
+}
+function resetPhaseCheckpoints(taskId, state, cwd) {
+  const newState = { ...state };
+  newState.taskPhaseCheckpoints = new Map(state.taskPhaseCheckpoints);
+  newState.taskPhaseCheckpoints.delete(taskId);
+  newState.updatedAt = new Date().toISOString();
+  saveRuntimeState(newState, cwd);
+  return newState;
 }
 
 // src/commands/harness.ts
