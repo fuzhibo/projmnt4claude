@@ -295,7 +295,12 @@ export class AssemblyLine {
           this.cascadeFailureToDownstream(taskId, state);
           // CP-P1-8: 使用新的级联失败处理函数记录详细原因
           this.markDependentTasksAsFailed(state, taskId, failureReason);
-        } else if (record.finalStatus === 'in_progress' && state.taskQueue.includes(taskId)) {
+        } else if (
+          (record.finalStatus === 'in_progress' ||
+           record.finalStatus === 'wait_review' ||
+           record.finalStatus === 'wait_qa') &&
+          state.taskQueue.includes(taskId)
+        ) {
           state.retryingTasks.push(taskId);
 
           // INV-HD-RETRY-20250624: 将任务重新加入执行队列，在当前任务后立即重试
@@ -1762,6 +1767,14 @@ export class AssemblyLine {
         // 防止 determineResumePhase Priority 1 checkpoint 覆盖 Priority 2 的 in_progress→development 映射
         if (this.config.cwd) {
           resetPhaseCheckpoints(taskId, state, this.config.cwd);
+        } else {
+          console.warn(`[INV-20260624-001] cwd 为空，无法清除 taskPhaseCheckpoints，回退路由可能错误`);
+        }
+
+        // INV-HD-RETRY-20260624-P1: 将上游阶段的失败信息存入目标阶段的 retry context
+        // 确保目标阶段（dev/code_review/qa）能获取上游 verdict 的详细反馈
+        if (failureReason && targetPhase) {
+          this.storeFailureContext(taskId, targetPhase, failureReason, state);
         }
         record.finalStatus = targetStatus;
         record.retryCount = retryCount + 1;
@@ -2165,14 +2178,19 @@ export class AssemblyLine {
     }
 
     // 旧状态迁移: wait_qa + qa-report.md 存在 → 自动转为 wait_evaluation
+    // INV-HD-RETRY-20260624-P3: retreat 场景（resumeAction=retry）不触发自动迁移
+    // 避免 eval(test_failure)→qa 回退时因旧 qa-report.md 残留而错误跳过 QA 阶段
     if (status === 'wait_qa') {
-      const projectDir = getProjectDir(this.config.cwd);
-      const qaReportPath = path.join(projectDir, 'reports', 'harness', taskId, 'qa-report.md');
-      if (fs.existsSync(qaReportPath)) {
-        const content = fs.readFileSync(qaReportPath, 'utf-8');
-        if (content.trim().length > 0) {
-          console.log(`   📋 检测到 wait_qa 但 qa-report.md 已存在，自动迁移为 wait_evaluation`);
-          return 'evaluation';
+      const task = readTaskMeta(taskId, this.config.cwd);
+      if (task?.resumeAction !== 'retry') {
+        const projectDir = getProjectDir(this.config.cwd);
+        const qaReportPath = path.join(projectDir, 'reports', 'harness', taskId, 'qa-report.md');
+        if (fs.existsSync(qaReportPath)) {
+          const content = fs.readFileSync(qaReportPath, 'utf-8');
+          if (content.trim().length > 0) {
+            console.log(`   📋 检测到 wait_qa 但 qa-report.md 已存在，自动迁移为 wait_evaluation`);
+            return 'evaluation';
+          }
         }
       }
     }
@@ -2433,7 +2451,11 @@ export class AssemblyLine {
       attemptNumber: phaseRetryCount + 1,
       maxRetries: this.getPhaseRetryLimit(phase),
       partialProgress: Object.keys(partialProgress).length > 0 ? partialProgress : existing?.partialProgress,
-      upstreamFailureInfo: existing?.upstreamFailureInfo,
+      upstreamFailureInfo: existing?.upstreamFailureInfo ?? (existing?.previousFailureReason ? {
+        taskId,
+        reason: existing.previousFailureReason,
+        failedAt: new Date().toISOString(),
+      } : undefined),
       // P6 字段
       previousErrors: [],
       accumulatedInsights: [],
