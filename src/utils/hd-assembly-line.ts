@@ -515,6 +515,8 @@ export class AssemblyLine {
           this.statusReporter.recordTaskPassed(taskId);
           // CP-P16-PROGRESS: 任务完成，实时更新进度
           this.statusReporter.completeTaskProgress(taskId, true);
+          // 清理任务相关的运行时数据
+          this.cleanupTaskRuntimeData(taskId, state);
         } else if (record.finalStatus === 'failed') {
           state.failedTasks.push(taskId);
           this.statusReporter.recordTaskFailed(taskId, 'task_failed', 'execution');
@@ -544,6 +546,8 @@ export class AssemblyLine {
           this.cascadeFailureToDownstream(taskId, state);
           // CP-P1-8: 使用新的级联失败处理函数记录详细原因
           this.markDependentTasksAsFailed(state, taskId, failureReason);
+          // 清理任务相关的运行时数据
+          this.cleanupTaskRuntimeData(taskId, state);
         } else if (
           (record.finalStatus === 'in_progress' ||
            record.finalStatus === 'wait_review' ||
@@ -1042,6 +1046,8 @@ export class AssemblyLine {
             // A 类门禁失败 或 B 类重试耗尽 → 链式回退
             console.log(`   🚫 ${failureClassification.needsChainRollback ? 'A 类门禁失败' : 'B 类重试耗尽'}，执行链式回退`);
             this.statusReporter.failPhase('qa_verification', new Error(postQAGateResult.summary), taskId);
+            // 将 Post-QA Gate 失败原因写入 failureHistory，确保回退阶段可通过 getAllFailuresForTask 看到
+            this.storeFailureContext(taskId, 'qa', postQAGateResult.summary, state);
             return this.handleVerdictBasedTransition(taskId, record, state, addTimeline, 'qa', 'redevelop');
           }
 
@@ -2619,12 +2625,11 @@ export class AssemblyLine {
     state: HarnessRuntimeState,
   ): RetryContext | undefined {
     const stored = this.taskRetryContexts.get(taskId);
-    const phaseKey = `${taskId}:${phase}`;
     const attemptNumber = this.getPhaseRetryCount(taskId, phase, state) + 1;
     const maxRetries = this.getPhaseRetryLimit(phase);
 
-    // P6: 从 failureHistory 获取完整的失败历史
-    const failureHistory = state.failureHistory?.get(phaseKey) || [];
+    // P6: 跨阶段获取该任务所有失败历史（修复反馈断裂问题）
+    const failureHistory = this.getAllFailuresForTask(taskId, state);
 
     // CP-P6-1: 构建 previousErrors
     const previousErrors = failureHistory.map(f => f.error);
@@ -2638,9 +2643,9 @@ export class AssemblyLine {
     // 如果没有存储的上下文且没有失败历史，返回 undefined
     if (!stored && failureHistory.length === 0) return undefined;
 
-    // CP-5: 对于 QA 阶段，从 state 获取覆盖率缺口数据
+    // CP-5: 获取覆盖率缺口数据（所有回退阶段均可见，供修复参考）
     let qaCoverageGapContext: RetryContext['qaCoverageGapContext'] | undefined;
-    if (phase === 'qa' && state.qaCoverageGapContexts?.has(taskId)) {
+    if (state.qaCoverageGapContexts?.has(taskId)) {
       const gapData = state.qaCoverageGapContexts.get(taskId)!;
       qaCoverageGapContext = {
         currentCoverage: gapData.currentCoverage,
@@ -2792,6 +2797,59 @@ export class AssemblyLine {
 
     history.push(record);
     state.failureHistory.set(phaseKey, history);
+  }
+
+  /**
+   * 获取任务所有阶段的失败历史（跨阶段聚合）
+   *
+   * 修复反馈断裂问题：当 code_review 失败回退到 development 时，
+   * development 重试需要看到 code_review 的失败原因。
+   * 遍历 failureHistory 中所有以 taskId: 开头的 key，合并并按时间排序。
+   */
+  private getAllFailuresForTask(
+    taskId: string,
+    state: HarnessRuntimeState,
+  ): FailureRecord[] {
+    if (!state.failureHistory || state.failureHistory.size === 0) return [];
+
+    const allFailures: FailureRecord[] = [];
+    const prefix = `${taskId}:`;
+
+    for (const [key, records] of state.failureHistory) {
+      if (key.startsWith(prefix)) {
+        allFailures.push(...records);
+      }
+    }
+
+    // 按时间戳升序（最早在前），与 recordFailure 的 push 顺序一致，
+    // 确保 buildRetryContextForPhase 中 [length-1] 取到最新失败
+    allFailures.sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime());
+
+    return allFailures;
+  }
+
+  /**
+   * 清理任务到达终态后的运行时数据
+   *
+   * 当任务达到 resolved/closed/failed 终态时，清理 failureHistory 和
+   * taskRetryContexts 中该任务的数据，避免内存泄漏。
+   */
+  private cleanupTaskRuntimeData(taskId: string, state: HarnessRuntimeState): void {
+    // 清理 failureHistory 中该任务所有阶段的记录
+    if (state.failureHistory && state.failureHistory.size > 0) {
+      const prefix = `${taskId}:`;
+      for (const key of state.failureHistory.keys()) {
+        if (key.startsWith(prefix)) {
+          state.failureHistory.delete(key);
+        }
+      }
+    }
+
+    // 清理重试上下文
+    this.taskRetryContexts?.delete(taskId);
+
+    // 清理失败原因记录（failed 路径在 cleanup 前设置了 taskFailureReasons）
+    state.taskFailureReasons?.delete(taskId);
   }
 
   /**

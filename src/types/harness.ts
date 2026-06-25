@@ -411,7 +411,7 @@ export interface RetryContext {
   /** CP-P6-3: Suggested fixes based on error patterns */
   suggestedFixes: string[];
 
-  /** Complete failure history for this task:phase */
+  /** Complete failure history for this task (all phases) */
   failureHistory?: FailureRecord[];
 
   /** CP-P6-4: Gate classification result */
