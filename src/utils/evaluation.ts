@@ -8,6 +8,7 @@
  */
 
 import type { RoutingDecision } from '../types/task.js';
+import type { FlowTarget } from '../types/harness.js';
 
 /**
  * Evaluation class
@@ -154,31 +155,21 @@ export class Evaluation {
    *
    * CP-6: Provides routing decision for chain fallback
    *
-   * @param failureType - Failure type ('A' or 'B')
+   * @param targetPhase - Target phase to route to (FlowTarget-based)
    * @param evaluationResult - Evaluation result message
    * @returns RoutingDecision with target phase
    */
   determineRoutingTarget(
-    failureType: 'A' | 'B',
+    targetPhase: FlowTarget,
     evaluationResult: string
   ): RoutingDecision {
     const analysis = this.analyzeEvaluationResult(evaluationResult);
 
-    // Type A failures (recoverable) may stay in current phase
-    if (failureType === 'A') {
-      // For recoverable issues, check if we can route to a lighter phase
-      if (analysis.targetPhase === 'development') {
-        return {
-          ...analysis,
-          reason: `可恢复问题(A类): ${analysis.reason}`,
-        };
-      }
-    }
-
-    // Type B failures (non-recoverable) require rollback
+    // Use analysis target phase, with fallback to provided targetPhase
+    const routeTarget = analysis.targetPhase;
     return {
       ...analysis,
-      reason: `不可恢复问题(B类): ${analysis.reason}`,
+      reason: `路由到 ${targetPhase} (分析建议: ${routeTarget}): ${analysis.reason}`,
     };
   }
 

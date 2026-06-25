@@ -721,13 +721,13 @@ describe('PostQAGateRunner', () => {
 
       const result = await runner.run(taskId);
 
-      // CP-4: Coverage check is now blocking with failureType: B
+      // CP-4: Coverage check is now blocking with targetPhase: qa
       expect(result.decision).toBe('POST_QA_FAIL');
       expect(result.allowed).toBe(false);
       expect(result.blockingFailures).toBeGreaterThan(0);
       // CP-6: Coverage gap data should be available for QA retry
       expect(result.coverageGapData).toBeDefined();
-      expect(result.coverageGapData?.failureType).toBe('B');
+      expect(result.coverageGapData?.targetPhase).toBe('qa');
     });
 
     it('should return POST_QA_FAIL when blocking checks fail', async () => {

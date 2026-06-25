@@ -54,7 +54,7 @@ describe('QA Gate Coverage Retry', () => {
             details: { coverage: 0.65, minCoverage: 0.8 },
             duration: 50,
             timestamp: new Date().toISOString(),
-            failureType: 'B',
+            targetPhase: 'qa',
           },
         ],
         passedRules: 0,
@@ -68,7 +68,7 @@ describe('QA Gate Coverage Retry', () => {
           minCoverage: 0.8,
           gap: 0.15,
           gapPercent: '15.0%',
-          failureType: 'B',
+          targetPhase: 'qa',
           message: '当前覆盖率: 65.0%，阈值要求: 80%，缺口: 15.0%',
         },
       };
@@ -76,7 +76,7 @@ describe('QA Gate Coverage Retry', () => {
       expect(runner.classifyQAFailureCategory(result)).toBe('coverage_retry');
     });
 
-    it('should return "chain_rollback" for A-type failures', () => {
+    it('should return "chain_rollback" for functional (targetPhase: development) failures', () => {
       const runner = createRunner();
       const result: PostQAGateRunResult = {
         taskId: 'TASK-test-003',
@@ -91,7 +91,7 @@ describe('QA Gate Coverage Retry', () => {
             details: {},
             duration: 10,
             timestamp: new Date().toISOString(),
-            failureType: 'A',
+            targetPhase: 'development',
           },
         ],
         passedRules: 0,
@@ -120,7 +120,7 @@ describe('QA Gate Coverage Retry', () => {
             details: {},
             duration: 50,
             timestamp: new Date().toISOString(),
-            failureType: 'B',
+            targetPhase: 'qa',
           },
         ],
         passedRules: 0,
@@ -143,7 +143,7 @@ describe('QA Gate Coverage Retry', () => {
         decision: 'POST_QA_FAIL',
         allowed: false,
         ruleResults: [
-          { ruleId: 'R-QA-POST-007', passed: false, ruleName: '覆盖率', message: '覆盖率不足', duration: 50, timestamp: new Date().toISOString(), failureType: 'B' },
+          { ruleId: 'R-QA-POST-007', passed: false, ruleName: '覆盖率', message: '覆盖率不足', duration: 50, timestamp: new Date().toISOString(), targetPhase: 'qa' },
         ],
         passedRules: 0,
         failedRules: 1,
@@ -151,7 +151,7 @@ describe('QA Gate Coverage Retry', () => {
         blockingFailures: 1,
         duration: 100,
         timestamp: new Date().toISOString(),
-        coverageGapData: { currentCoverage: 0.6, minCoverage: 0.8, gap: 0.2, gapPercent: '20.0%', failureType: 'B', message: '覆盖率不足' },
+        coverageGapData: { currentCoverage: 0.6, minCoverage: 0.8, gap: 0.2, gapPercent: '20.0%', targetPhase: 'qa', message: '覆盖率不足' },
       };
 
       // Functional issue → chain_rollback (QA → CR → Dev)
@@ -160,7 +160,7 @@ describe('QA Gate Coverage Retry', () => {
         decision: 'POST_QA_FAIL',
         allowed: false,
         ruleResults: [
-          { ruleId: 'R-QA-POST-003', passed: false, ruleName: '结果有效性', message: '结果无效', duration: 50, timestamp: new Date().toISOString(), failureType: 'A' },
+          { ruleId: 'R-QA-POST-003', passed: false, ruleName: '结果有效性', message: '结果无效', duration: 50, timestamp: new Date().toISOString(), targetPhase: 'development' },
         ],
         passedRules: 0,
         failedRules: 1,
@@ -194,7 +194,7 @@ describe('QA Gate Coverage Retry', () => {
             details: { coverage: 0.625, minCoverage: 0.8 },
             duration: 50,
             timestamp: new Date().toISOString(),
-            failureType: 'B',
+            targetPhase: 'qa',
           },
         ],
         passedRules: 0,
@@ -209,7 +209,7 @@ describe('QA Gate Coverage Retry', () => {
           gap: 0.175,
           gapPercent: '17.5%',
           coverageDetails: { lines: 0.60, branches: 0.55, functions: 0.70, statements: 0.65 },
-          failureType: 'B',
+          targetPhase: 'qa',
           message: '当前覆盖率: 62.5%，阈值要求: 80%，缺口: 17.5%',
         },
       };
@@ -226,14 +226,14 @@ describe('QA Gate Coverage Retry', () => {
       expect(classification.qaRetryPrompt).toContain('80%');
     });
 
-    it('should return needsChainRollback for A-type failures without coverage data', () => {
+    it('should return needsChainRollback for functional (targetPhase: development) failures without coverage data', () => {
       const runner = createRunner();
       const result: PostQAGateRunResult = {
         taskId: 'TASK-test-006',
         decision: 'POST_QA_FAIL',
         allowed: false,
         ruleResults: [
-          { ruleId: 'R-QA-POST-002', passed: false, ruleName: '报告格式', message: '格式无效', details: {}, duration: 20, timestamp: new Date().toISOString(), failureType: 'A' },
+          { ruleId: 'R-QA-POST-002', passed: false, ruleName: '报告格式', message: '格式无效', details: {}, duration: 20, timestamp: new Date().toISOString(), targetPhase: 'development' },
         ],
         passedRules: 0,
         failedRules: 1,
@@ -265,7 +265,7 @@ describe('QA Gate Coverage Retry', () => {
         gap: 0.25,
         gapPercent: '25.0%',
         coverageDetails: { lines: 0.50, branches: 0.45, functions: 0.60, statements: 0.55 },
-        failureType: 'B' as const,
+        targetPhase: 'qa' as const,
         message: '当前覆盖率: 55.0%，阈值要求: 80%，缺口: 25.0%',
       };
 
@@ -290,7 +290,7 @@ describe('QA Gate Coverage Retry', () => {
         minCoverage: 0.80,
         gap: 0.15,
         gapPercent: '15.0%',
-        failureType: 'B' as const,
+        targetPhase: 'qa' as const,
         message: '当前覆盖率: 65.0%，阈值要求: 80%，缺口: 15.0%',
       };
 

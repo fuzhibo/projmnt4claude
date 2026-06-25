@@ -17,7 +17,8 @@
 
 import * as fs from 'node:fs';
 import * as path from 'node:path';
-import type { TaskMeta, FailureType, QAFailureCategory } from '../../types/task.js';
+import type { TaskMeta, QAFailureCategory } from '../../types/task.js';
+import type { FlowTarget } from '../../types/harness.js';
 import { readTaskMeta } from '../task.js';
 import { QACheckpointSyncChecker } from './checkers/checkpoint-sync-checker.js';
 
@@ -57,13 +58,11 @@ export interface PostQAGateRule {
   /** 是否为阻塞规则 (失败则整体失败) */
   blocking: boolean;
   /**
-   * 失败类型分类
-   * - 'A': Task Foundation - 任务数据有效性检查，失败需中断流水线
-   * - 'B': Phase Artifact - 阶段输出质量检查，失败需回退到阶段起点重试
-   * Post-QA Gate 默认为 'B' 类（检查阶段输出质量）
-   * 特殊: 覆盖率检查失败触发 QA 内部重试，而非链式回退
+   * 失败路由目标阶段
+   * - 'development': 路由回开发阶段
+   * - 'qa': QA 内部重试
    */
-  failureType?: FailureType;
+  targetPhase?: FlowTarget;
   /** 规则配置参数 */
   config?: Record<string, unknown>;
 }
@@ -87,11 +86,9 @@ export interface PostQAGateRuleResult {
   /** 执行时间戳 */
   timestamp: string;
   /**
-   * CP-5: 失败类型分类
-   * 'A' = Task Foundation (中断流水线)
-   * 'B' = Phase Artifact (QA内部重试)
+   * CP-5: 路由目标阶段
    */
-  failureType?: FailureType;
+  targetPhase?: FlowTarget;
 }
 
 /**
@@ -142,8 +139,8 @@ export interface PostQAGateRunResult {
     gapPercent: string;
     /** 覆盖率详情 */
     coverageDetails?: { lines: number; branches: number; functions: number; statements: number };
-    /** 失败类型 */
-    failureType: 'A' | 'B';
+    /** 路由目标阶段 */
+    targetPhase: FlowTarget;
     /** 人类可读消息 */
     message: string;
   };
@@ -321,7 +318,7 @@ export const DEFAULT_POST_QA_GATE_RULES: PostQAGateRule[] = [
     enabled: true,
     priority: 1,
     blocking: true,
-    failureType: 'A',
+    targetPhase: 'development',
   },
   {
     id: 'R-QA-POST-002',
@@ -331,7 +328,7 @@ export const DEFAULT_POST_QA_GATE_RULES: PostQAGateRule[] = [
     enabled: true,
     priority: 2,
     blocking: true,
-    failureType: 'A',
+    targetPhase: 'development',
   },
   {
     id: 'R-QA-POST-003',
@@ -341,7 +338,7 @@ export const DEFAULT_POST_QA_GATE_RULES: PostQAGateRule[] = [
     enabled: true,
     priority: 3,
     blocking: true,
-    failureType: 'A',
+    targetPhase: 'development',
   },
   {
     id: 'R-QA-POST-004',
@@ -351,7 +348,7 @@ export const DEFAULT_POST_QA_GATE_RULES: PostQAGateRule[] = [
     enabled: true,
     priority: 4,
     blocking: false,
-    failureType: 'B',
+    targetPhase: 'qa',
   },
   {
     id: 'R-QA-POST-005',
@@ -361,7 +358,7 @@ export const DEFAULT_POST_QA_GATE_RULES: PostQAGateRule[] = [
     enabled: true,
     priority: 5,
     blocking: false,
-    failureType: 'B',
+    targetPhase: 'qa',
   },
   {
     id: 'R-QA-POST-005a',
@@ -371,7 +368,7 @@ export const DEFAULT_POST_QA_GATE_RULES: PostQAGateRule[] = [
     enabled: true,
     priority: 6,
     blocking: false,
-    failureType: 'B',
+    targetPhase: 'qa',
   },
   {
     id: 'R-QA-POST-006',
@@ -381,7 +378,7 @@ export const DEFAULT_POST_QA_GATE_RULES: PostQAGateRule[] = [
     enabled: true,
     priority: 7,
     blocking: true,
-    failureType: 'A',
+    targetPhase: 'development',
   },
   {
     id: 'R-QA-POST-007',
@@ -391,7 +388,7 @@ export const DEFAULT_POST_QA_GATE_RULES: PostQAGateRule[] = [
     enabled: true,
     priority: 8,
     blocking: true,
-    failureType: 'B',
+    targetPhase: 'qa',
   },
 ];
 
@@ -621,7 +618,7 @@ export class PostQAGateRunner {
           passed: false,
           ruleName: rule.name,
           message: `未找到规则类型 ${rule.type} 的处理器`,
-          failureType: rule.failureType ?? 'A',
+          targetPhase: rule.targetPhase ?? 'development',
           duration: Date.now() - startTime,
           timestamp,
         };
@@ -631,7 +628,7 @@ export class PostQAGateRunner {
       const result = await handler(task, rule, context);
       result.duration = Date.now() - startTime;
       result.ruleId = rule.id;
-      result.failureType = rule.failureType ?? (rule.blocking ? 'A' : 'B');
+      result.targetPhase = rule.targetPhase ?? (rule.blocking ? 'development' : 'qa');
       return result;
     } catch (error) {
       return {
@@ -639,7 +636,7 @@ export class PostQAGateRunner {
         passed: false,
         ruleName: rule.name,
         message: `规则执行失败: ${error instanceof Error ? error.message : String(error)}`,
-        failureType: rule.failureType ?? 'A',
+        targetPhase: rule.targetPhase ?? 'development',
         duration: Date.now() - startTime,
         timestamp,
       };
@@ -690,7 +687,7 @@ export class PostQAGateRunner {
 
     // Check for coverage-related failures (R-QA-POST-007: test_coverage)
     const coverageFailure = result.ruleResults.find(
-      r => !r.passed && r.failureType === 'B' && r.ruleId === 'R-QA-POST-007'
+      r => !r.passed && r.targetPhase === 'qa' && r.ruleId === 'R-QA-POST-007'
     );
 
     // If coverage failure exists and we have gap data → coverage_retry
@@ -712,9 +709,9 @@ export class PostQAGateRunner {
    *
    * 覆盖率问题触发 QA 内部重试，功能性问题触发链式回退
    *
-   * - 覆盖率问题 (failureType: B, ruleType: test_coverage) → QA 内部重试
-   * - 功能性问题 (failureType: A) → 链式回退 (QA → CR → Dev)
-   * - 其他 B 类问题 → 链式回退到阶段起点
+   * - 覆盖率问题 (targetPhase: qa, ruleType: test_coverage) → QA 内部重试
+   * - 功能性问题 (targetPhase: development) → 链式回退 (QA → CR → Dev)
+   * - 其他 QA 路由问题 → 链式回退到阶段起点
    *
    * @deprecated Use classifyQAFailureCategory for simple category check
    */
@@ -1279,7 +1276,7 @@ export class PostQAGateRunner {
         gap,
         gapPercent: `${(gap * 100).toFixed(1)}%`,
         coverageDetails,
-        failureType: 'B', // 覆盖率问题触发 QA 内部重试
+        targetPhase: 'qa', // 覆盖率问题触发 QA 内部重试
         message: `当前覆盖率: ${(coverage! * 100).toFixed(1)}%，阈值要求: ${(minCoverage * 100).toFixed(0)}%，缺口: ${(gap * 100).toFixed(1)}%`,
       });
     }
@@ -1299,7 +1296,7 @@ export class PostQAGateRunner {
         gap: gap,
         gapPercent: `${(gap * 100).toFixed(1)}%`,
         coverageDetails,
-        failureType: 'B',
+        targetPhase: 'qa',
       },
       duration: 0,
       timestamp: new Date().toISOString(),

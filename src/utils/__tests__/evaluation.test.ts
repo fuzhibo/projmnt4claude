@@ -116,28 +116,21 @@ describe('Evaluation', () => {
   });
 
   describe('determineRoutingTarget', () => {
-    test('should annotate Type A failures as recoverable', () => {
-      const result = evaluation.determineRoutingTarget('A', 'Code quality issues');
+    test('should route development issues correctly', () => {
+      const result = evaluation.determineRoutingTarget('development', 'Code quality issues');
 
-      expect(result.reason).toContain('A类');
+      expect(result.reason).toContain('development');
       expect(result.targetPhase).toBe('development');
     });
 
-    test('should annotate Type B failures as non-recoverable', () => {
-      const result = evaluation.determineRoutingTarget('B', 'Code quality issues');
-
-      expect(result.reason).toContain('B类');
-      expect(result.targetPhase).toBe('development');
-    });
-
-    test('should route Type A test failures to QA', () => {
-      const result = evaluation.determineRoutingTarget('A', 'Test failure detected');
+    test('should route QA test failures correctly', () => {
+      const result = evaluation.determineRoutingTarget('qa', 'Test failure detected');
 
       expect(result.targetPhase).toBe('qa');
     });
 
-    test('should route Type B code review issues to code_review', () => {
-      const result = evaluation.determineRoutingTarget('B', 'Code review not passed');
+    test('should route code_review issues correctly', () => {
+      const result = evaluation.determineRoutingTarget('code_review', 'Code review not passed');
 
       expect(result.targetPhase).toBe('code_review');
     });

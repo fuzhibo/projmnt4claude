@@ -930,9 +930,8 @@ export class HarnessQATester {
     if (retryContext?.gateFailureDetails) {
       const gate = retryContext.gateFailureDetails;
 
-      // Build enhanced feedback based on ruleId and failureType
+      // Build enhanced feedback based on ruleId and targetPhase
       const ruleId = gate.ruleId || '';
-      const failureType = gate.failureType || '';
 
       // Rule-specific精准反馈内容
       let ruleSpecificFeedback = '';
@@ -1021,26 +1020,7 @@ export class HarnessQATester {
           break;
 
         default:
-          // 对于未知规则，使用 failureType 生成通用反馈
-          if (failureType === 'format') {
-            ruleSpecificFeedback = '输出格式不正确。';
-            correctExample = [
-              '通用正确格式要求:',
-              '1. 输出第一行必须包含明确的结论标记',
-              '2. 使用 Markdown 格式组织内容',
-              '3. 包含必要的章节标题（如 ## 验证结果）',
-            ].join('\n');
-          } else if (failureType === 'ai_output') {
-            ruleSpecificFeedback = 'AI 服务输出异常。';
-            correctExample = [
-              '排查建议:',
-              '1. 检查 AI 服务 API 状态',
-              '2. 确认提示词格式正确且未超出 token 限制',
-              '3. 尝试简化请求内容',
-            ].join('\n');
-          } else {
-            ruleSpecificFeedback = gate.failureDetails || '门禁检查未通过。';
-          }
+          ruleSpecificFeedback = gate.failureDetails || '门禁检查未通过。';
       }
 
       // Build the enhanced section
@@ -1049,7 +1029,7 @@ export class HarnessQATester {
         '',
         `规则ID: ${gate.ruleId || '未知'}`,
         `规则名称: ${gate.ruleName || '未知'}`,
-        `失败类型: ${gate.failureType || '未知'}`,
+        `路由目标阶段: ${gate.targetPhase || '未知'}`,
         `严重等级: ${gate.severity || '未知'}`,
         '',
         `具体问题: ${ruleSpecificFeedback}`,
@@ -1070,27 +1050,6 @@ export class HarnessQATester {
           gateFailureDetailsSection += `${index + 1}. ${suggestion}\n`;
         });
         gateFailureDetailsSection += '\n';
-      }
-
-      // CP-007: Add failureType-specific targeted feedback
-      if (failureType === 'format') {
-        gateFailureDetailsSection += [
-          '---',
-          '**格式错误专项提醒**:',
-          '- 必须使用英文 VERDICT 标记，不要使用中文"通过"/"不通过"',
-          '- VERDICT 必须出现在输出第一行',
-          '- 确保输出可被正则表达式 `^VERDICT:\s*(PASS|NOPASS)` 匹配',
-          '',
-        ].join('\n');
-      } else if (failureType === 'ai_output') {
-        gateFailureDetailsSection += [
-          '---',
-          '**AI输出错误专项提醒**:',
-          '- 检查 API 密钥和权限配置',
-          '- 确认请求未超出模型的最大 token 限制',
-          '- 如果问题持续，考虑简化任务或分批处理',
-          '',
-        ].join('\n');
       }
     }
 

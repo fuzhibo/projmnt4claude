@@ -11,6 +11,71 @@ import type { TaskMeta, TaskStatus, TaskRole, CheckpointCategory, TaskFailureRea
 import type { QAAcceptanceResult } from './qa-acceptance-criteria.js';
 import type { HarnessPhaseOptions } from './config.js';
 
+// ============================================================
+// HD Assembly Line Gate Architecture: FlowTarget System
+// Replaces the legacy A/B FailureType with precise phase routing
+// ============================================================
+
+/**
+ * Flow target - where the pipeline should route after a gate decision.
+ *
+ * Phase targets (development/code_review/qa/evaluation): rollback to that phase
+ * RETRY: retry within current phase (handled by phase function internally)
+ * NEXT: proceed to next phase in pipeline sequence
+ * EXIT: terminate pipeline immediately (unrecoverable)
+ */
+export type FlowTarget = 'development' | 'code_review' | 'qa' | 'evaluation' | 'RETRY' | 'NEXT' | 'EXIT';
+
+/**
+ * Result of a single gate check.
+ * When passed=false, targetPhase indicates where to route.
+ */
+export interface GateCheckResult {
+  passed: boolean;
+  targetPhase?: FlowTarget;
+  reason?: string;
+}
+
+/**
+ * Context passed to every gate check function.
+ */
+export interface GateCheckContext {
+  task: TaskMeta;
+  cwd: string;
+  phaseResult?: any;
+}
+
+/**
+ * A single gate rule definition.
+ * Each rule has an onFailure target that routes the pipeline when the check fails.
+ */
+export interface GateRule {
+  id: string;
+  name: string;
+  onFailure: {
+    targetPhase: FlowTarget;
+    reason: string;
+  };
+  check: (ctx: GateCheckContext) => Promise<boolean>;
+}
+
+/**
+ * Result returned by a phase execution function (dev_step, code_review_step, etc.).
+ */
+export interface PhaseResult {
+  success: boolean;
+  targetPhase: FlowTarget;
+  reason?: string;
+}
+
+/**
+ * Final result returned by the harness main loop.
+ */
+export interface HarnessResult {
+  success: boolean;
+  reason?: string;
+}
+
 /**
  * Harness execution configuration
  */
@@ -294,7 +359,7 @@ export interface FailureRecord {
   gateInfo?: {
     ruleId?: string;
     ruleName?: string;
-    failureType?: string;
+    targetPhase?: string;
     failureDetails?: string;
     suggestions?: string[];
     severity?: 'ERROR' | 'WARNING' | 'INFO';
@@ -361,7 +426,7 @@ export interface RetryContext {
   gateFailureDetails?: {
     ruleId?: string;
     ruleName?: string;
-    failureType?: string;
+    targetPhase?: string;
     failureDetails?: string;
     suggestions?: string[];
     severity?: 'ERROR' | 'WARNING' | 'INFO';
@@ -393,7 +458,7 @@ export interface RetryContext {
     gap: number;
     gapPercent: string;
     coverageDetails?: { lines: number; branches: number; functions: number; statements: number };
-    failureType: 'A' | 'B';
+    targetPhase: string;
     message: string;
     qaRetryPrompt?: string;
   };
@@ -466,11 +531,9 @@ export type PhaseGatePhase =
   | 'evaluation';      // P14 (pre), P15 (post)
 
 /**
- * Gate check result classification (A/B classification)
- * A: Unrecoverable - interrupts pipeline
- * B: Recoverable - triggers phase retry
+ * Gate check result classification (FlowTarget-based)
+ * Replaced legacy A/B with FlowTarget phase routing
  */
-export type GateFailureClassification = 'A' | 'B';
 
 /**
  * Single phase gate integration record.
@@ -494,8 +557,8 @@ export interface PhaseGateIntegration {
   result: {
     /** Whether the gate passed */
     passed: boolean;
-    /** Gate failure classification (A=unrecoverable, B=recoverable) */
-    failureType?: GateFailureClassification;
+    /** Target phase to route to on failure */
+    targetPhase?: string;
     /** Human-readable failure message */
     message?: string;
     /** Structured gate failure details */
@@ -504,8 +567,8 @@ export interface PhaseGateIntegration {
       ruleId?: string;
       /** Rule name */
       ruleName?: string;
-      /** Failure type classification */
-      failureType?: string;
+      /** Target phase on failure */
+      targetPhase?: string;
       /** Detailed failure description */
       failureDetails?: string;
       /** Suggested fixes */
@@ -794,7 +857,7 @@ export interface HarnessRuntimeState {
   /**
    * CP-6: QA 覆盖率缺口上下文
    * 存储覆盖率缺口数据，供 QA 重试时使用
-   * key: taskId, value: { currentCoverage, minCoverage, gap, gapPercent, coverageDetails?, failureType, message, timestamp }
+   * key: taskId, value: { currentCoverage, minCoverage, gap, gapPercent, coverageDetails?, targetPhase, message, timestamp }
    */
   qaCoverageGapContexts?: Map<string, {
     currentCoverage: number;
@@ -802,7 +865,7 @@ export interface HarnessRuntimeState {
     gap: number;
     gapPercent: string;
     coverageDetails?: { lines: number; branches: number; functions: number; statements: number };
-    failureType: 'A' | 'B';
+    targetPhase: string;
     message: string;
     timestamp: string;
   }>;

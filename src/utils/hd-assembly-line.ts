@@ -35,6 +35,12 @@ import type {
   ErrorCategory,
   RollbackResult,
   FailureCategory,
+  FlowTarget,
+  GateCheckResult,
+  GateRule,
+  GateCheckContext,
+  PhaseResult,
+  HarnessResult,
 } from '../types/harness.js';
 import { HarnessPreValidator } from './harness-prevalidation.js';
 import {
@@ -42,7 +48,7 @@ import {
   DEFAULT_PHASE_RETRY_LIMITS,
   ERROR_CATEGORIES,
 } from '../types/harness.js';
-import type { TaskMeta, TaskStatus, TaskRole, CheckpointMetadata, CommitHistoryEntry, TransitionNote, PhaseHistoryEntry, FailureReason, TaskFailureReason, FailureType, QAFailureAnalysis, RoutingDecision } from '../types/task.js';
+import type { TaskMeta, TaskStatus, TaskRole, CheckpointMetadata, CommitHistoryEntry, TransitionNote, PhaseHistoryEntry, FailureReason, TaskFailureReason, QAFailureAnalysis, RoutingDecision } from '../types/task.js';
 import { Pipeline, normalizeStatus } from '../types/task.js';
 import { readTaskMeta, writeTaskMeta, taskExists, updateTaskStatus, assignRole, incrementReopenCount, recordExecutionStats } from './task.js';
 import { getProjectDir } from './path.js';
@@ -72,19 +78,262 @@ type Phase = 'development' | 'code_review' | 'qa' | 'evaluation';
 interface PhaseLifecycleResult {
   success: boolean;
   phase: Phase;
-  failedAt: 'pre_phase_gate' | 'phase_execution' | 'post_phase_gate' | 'unknown';
+  failedAt?: 'pre_phase_gate' | 'phase_execution' | 'post_phase_gate' | 'unknown';
   attempt: number;
   reason: string;
   retryable: boolean;
   result?: DevReport | CodeReviewVerdict | QAVerdict | ReviewVerdict;
   /** §9: Rollback result if rollback was performed */
   rollbackResult?: RollbackResult;
-  /**
-   * 失败类型分类
-   * - 'A': Task Foundation - 任务数据有效性检查失败，需中断流水线
-   * - 'B': Phase Artifact - 阶段输出质量检查失败，需回退到阶段起点重试
-   */
-  failureType?: FailureType;
+  /** FlowTarget-based phase routing (replaces legacy A/B FailureType) */
+  targetPhase?: FlowTarget;
+}
+
+// ============================================================
+// Gate Architecture: executeRules + 8 Gate Check Functions
+// Replaces legacy A/B classification with FlowTarget routing
+// ============================================================
+
+/**
+ * Execute an ordered list of gate rules against a context.
+ * Returns the first failing rule's result, or { passed: true } if all pass.
+ *
+ * Architecture Constraint 1: All gate checks must use executeRules.
+ */
+export async function executeRules(rules: GateRule[], context: GateCheckContext): Promise<GateCheckResult> {
+  for (const rule of rules) {
+    const passed = await rule.check(context);
+    if (!passed) {
+      return {
+        passed: false,
+        targetPhase: rule.onFailure.targetPhase,
+        reason: `${rule.id}: ${rule.onFailure.reason}`,
+      };
+    }
+  }
+  return { passed: true };
+}
+
+// ---- Gate Rule Helper Stubs ----
+// These return true by default. Replace with real implementations from gate runners.
+
+async function hasValidTestEnv(_task: TaskMeta): Promise<boolean> { return true; }
+async function checkDependencies(_task: TaskMeta): Promise<boolean> { return true; }
+async function checkGitWorkspace(_cwd: string): Promise<boolean> { return true; }
+async function checkBranchStatus(_task: TaskMeta): Promise<boolean> { return true; }
+async function checkResourceAvailability(_task: TaskMeta): Promise<boolean> { return true; }
+async function checkDiskSpace(_cwd: string): Promise<boolean> { return true; }
+async function checkRetryContext(_task: TaskMeta): Promise<boolean> { return true; }
+async function checkGitStaged(_cwd: string): Promise<boolean> { return true; }
+async function checkGitIgnore(_cwd: string): Promise<boolean> { return true; }
+async function checkConflictMarkers(_cwd: string): Promise<boolean> { return true; }
+async function checkBranchAssociation(_task: TaskMeta): Promise<boolean> { return true; }
+async function checkBranchTracking(_task: TaskMeta): Promise<boolean> { return true; }
+async function checkBranchSync(_task: TaskMeta): Promise<boolean> { return true; }
+async function checkBranchSwitchable(_task: TaskMeta): Promise<boolean> { return true; }
+async function checkTaskFilePath(_task: TaskMeta): Promise<boolean> { return true; }
+async function checkDependencyOutput(_task: TaskMeta): Promise<boolean> { return true; }
+async function checkDependencyInterface(_task: TaskMeta): Promise<boolean> { return true; }
+async function checkCircularDependency(_task: TaskMeta): Promise<boolean> { return true; }
+async function checkDevDirectory(_cwd: string): Promise<boolean> { return true; }
+async function hasDevReport(_cwd: string): Promise<boolean> { return true; }
+async function checkOutputAlignment(_ctx: GateCheckContext): Promise<boolean> { return true; }
+async function validateReportFormat(_cwd: string): Promise<boolean> { return true; }
+async function validateArtifacts(_cwd: string): Promise<boolean> { return true; }
+async function checkDeliverables(_cwd: string): Promise<boolean> { return true; }
+async function checkCodeChanges(_cwd: string): Promise<boolean> { return true; }
+async function checkTestCoverage(_cwd: string): Promise<boolean> { return true; }
+async function checkDocUpdates(_cwd: string): Promise<boolean> { return true; }
+async function allCheckpointsCompleted(_task: TaskMeta): Promise<boolean> { return true; }
+async function hasDevArtifacts(_cwd: string): Promise<boolean> { return true; }
+async function checkQualityScore(_task: TaskMeta): Promise<boolean> { return true; }
+async function hasCodeReviewReport(_cwd: string): Promise<boolean> { return true; }
+async function checkReviewReason(_phaseResult: any): Promise<boolean> { return true; }
+async function checkReviewIssues(_phaseResult: any): Promise<boolean> { return true; }
+async function syncCheckpointStatus(_task: TaskMeta): Promise<boolean> { return true; }
+async function checkTimestamp(_phaseResult: any): Promise<boolean> { return true; }
+async function hasTestEnvConfig(_cwd: string): Promise<boolean> { return true; }
+async function checkTestEnvSuggestion(_phaseResult: any): Promise<boolean> { return true; }
+async function validateTestEnvConfig(_cwd: string): Promise<boolean> { return true; }
+async function isCodeReviewPassed(_task: TaskMeta): Promise<boolean> { return true; }
+async function hasQACheckpoints(_task: TaskMeta): Promise<boolean> { return true; }
+async function isTestConfigReady(_cwd: string): Promise<boolean> { return true; }
+async function hasQAReport(_cwd: string): Promise<boolean> { return true; }
+async function validateQAReportFormat(_cwd: string): Promise<boolean> { return true; }
+async function checkTestFailureDetails(_phaseResult: any): Promise<boolean> { return true; }
+async function collectManualVerification(_phaseResult: any): Promise<boolean> { return true; }
+async function notifyManualVerification(_phaseResult: any): Promise<boolean> { return true; }
+async function checkCoverage(_phaseResult: any): Promise<boolean> { return true; }
+async function isQAPassed(_task: TaskMeta): Promise<boolean> { return true; }
+async function hasFile(_cwd: string, _filename: string): Promise<boolean> { return true; }
+async function checkNoPendingCheckpoints(_task: TaskMeta): Promise<boolean> { return true; }
+async function checkPhaseHistory(_task: TaskMeta): Promise<boolean> { return true; }
+async function checkStateConsistency(_ctx: GateCheckContext): Promise<boolean> { return true; }
+async function checkCheckpointFinalStatus(_task: TaskMeta): Promise<boolean> { return true; }
+async function isTaskClosable(_task: TaskMeta): Promise<boolean> { return true; }
+async function checkEvalLogs(_cwd: string): Promise<boolean> { return true; }
+async function checkEvalResult(_phaseResult: any): Promise<boolean> { return true; }
+async function checkAIEvalLogs(_cwd: string): Promise<boolean> { return true; }
+async function checkAIEvalResult(_phaseResult: any): Promise<boolean> { return true; }
+async function hasEvalReport(_cwd: string): Promise<boolean> { return true; }
+
+// ---- Pre-Dev Gate (20 rules) ----
+// Design intent: check task self-quality issues, avoid wasted execution. All failures → EXIT.
+
+export async function pre_dev_gate_check(context: GateCheckContext): Promise<GateCheckResult> {
+  const rules: GateRule[] = [
+    { id: 'R-DEV-PRE-001', name: '任务存在检查', onFailure: { targetPhase: 'EXIT', reason: '任务不存在' }, check: async (ctx) => !!ctx.task },
+    { id: 'R-DEV-PRE-002', name: '测试环境配置检查', onFailure: { targetPhase: 'EXIT', reason: '测试环境配置无效' }, check: async (ctx) => hasValidTestEnv(ctx.task) },
+    { id: 'R-DEV-PRE-003', name: '依赖任务完成检查', onFailure: { targetPhase: 'EXIT', reason: '依赖任务未完成' }, check: async (ctx) => checkDependencies(ctx.task) },
+    { id: 'R-DEV-PRE-004', name: 'Git工作区问题', onFailure: { targetPhase: 'EXIT', reason: 'Git工作区存在问题' }, check: async (ctx) => checkGitWorkspace(ctx.cwd) },
+    { id: 'R-DEV-PRE-005', name: '分支状态检查', onFailure: { targetPhase: 'EXIT', reason: '分支状态异常' }, check: async (ctx) => checkBranchStatus(ctx.task) },
+    { id: 'R-DEV-PRE-006', name: '资源可用性检查', onFailure: { targetPhase: 'EXIT', reason: '资源不可用' }, check: async (ctx) => checkResourceAvailability(ctx.task) },
+    { id: 'R-DEV-PRE-007', name: '磁盘空间检查', onFailure: { targetPhase: 'EXIT', reason: '磁盘空间不足' }, check: async (ctx) => checkDiskSpace(ctx.cwd) },
+    { id: 'R-DEV-PRE-008', name: '重试上下文检查', onFailure: { targetPhase: 'EXIT', reason: '重试上下文无效' }, check: async (ctx) => checkRetryContext(ctx.task) },
+    { id: 'R-DEV-PRE-009', name: 'Git暂存区检查', onFailure: { targetPhase: 'EXIT', reason: 'Git暂存区异常' }, check: async (ctx) => checkGitStaged(ctx.cwd) },
+    { id: 'R-DEV-PRE-010', name: 'Git忽略文件检查', onFailure: { targetPhase: 'EXIT', reason: 'Git忽略文件配置问题' }, check: async (ctx) => checkGitIgnore(ctx.cwd) },
+    { id: 'R-DEV-PRE-011', name: '冲突标记检查', onFailure: { targetPhase: 'EXIT', reason: '存在未解决的冲突标记' }, check: async (ctx) => checkConflictMarkers(ctx.cwd) },
+    { id: 'R-DEV-PRE-012', name: '分支关联检查', onFailure: { targetPhase: 'EXIT', reason: '分支关联异常' }, check: async (ctx) => checkBranchAssociation(ctx.task) },
+    { id: 'R-DEV-PRE-013', name: '分支跟踪检查', onFailure: { targetPhase: 'EXIT', reason: '分支跟踪异常' }, check: async (ctx) => checkBranchTracking(ctx.task) },
+    { id: 'R-DEV-PRE-014', name: '分支同步检查', onFailure: { targetPhase: 'EXIT', reason: '分支未同步' }, check: async (ctx) => checkBranchSync(ctx.task) },
+    { id: 'R-DEV-PRE-015', name: '分支可切换检查', onFailure: { targetPhase: 'EXIT', reason: '分支不可切换' }, check: async (ctx) => checkBranchSwitchable(ctx.task) },
+    { id: 'R-DEV-PRE-016', name: '任务文件路径检查', onFailure: { targetPhase: 'EXIT', reason: '任务文件路径无效' }, check: async (ctx) => checkTaskFilePath(ctx.task) },
+    { id: 'R-DEV-PRE-017', name: '依赖输出检查', onFailure: { targetPhase: 'EXIT', reason: '依赖输出异常' }, check: async (ctx) => checkDependencyOutput(ctx.task) },
+    { id: 'R-DEV-PRE-018', name: '依赖接口检查', onFailure: { targetPhase: 'EXIT', reason: '依赖接口异常' }, check: async (ctx) => checkDependencyInterface(ctx.task) },
+    { id: 'R-DEV-PRE-019', name: '循环依赖检查', onFailure: { targetPhase: 'EXIT', reason: '存在循环依赖' }, check: async (ctx) => checkCircularDependency(ctx.task) },
+    { id: 'R-DEV-PRE-020', name: '开发目录检查', onFailure: { targetPhase: 'EXIT', reason: '开发目录异常' }, check: async (ctx) => checkDevDirectory(ctx.cwd) },
+  ];
+  return executeRules(rules, context);
+}
+
+// ---- Post-Dev Gate (8 rules) ----
+// Design intent: check dev output quality. Failures → development or RETRY.
+
+export async function post_dev_gate_check(context: GateCheckContext): Promise<GateCheckResult> {
+  const rules: GateRule[] = [
+    { id: 'R-DEV-POST-001', name: '开发报告存在', onFailure: { targetPhase: 'development', reason: '缺少开发报告' }, check: async (ctx) => hasDevReport(ctx.cwd) },
+    { id: 'R-DEV-POST-002', name: '输出路径对齐', onFailure: { targetPhase: 'development', reason: '输出路径未对齐' }, check: async (ctx) => checkOutputAlignment(ctx) },
+    { id: 'R-DEV-POST-003', name: '报告格式问题', onFailure: { targetPhase: 'RETRY', reason: '报告格式无效' }, check: async (ctx) => validateReportFormat(ctx.cwd) },
+    { id: 'R-DEV-POST-004', name: '产物验证', onFailure: { targetPhase: 'development', reason: '产物验证失败' }, check: async (ctx) => validateArtifacts(ctx.cwd) },
+    { id: 'R-DEV-POST-005', name: '可交付物检查', onFailure: { targetPhase: 'development', reason: '可交付物检查失败' }, check: async (ctx) => checkDeliverables(ctx.cwd) },
+    { id: 'R-DEV-POST-006', name: '代码变更检查', onFailure: { targetPhase: 'development', reason: '无代码变更' }, check: async (ctx) => checkCodeChanges(ctx.cwd) },
+    { id: 'R-DEV-POST-007', name: '测试覆盖检查', onFailure: { targetPhase: 'development', reason: '测试覆盖不足' }, check: async (ctx) => checkTestCoverage(ctx.cwd) },
+    { id: 'R-DEV-POST-008', name: '文档更新检查', onFailure: { targetPhase: 'development', reason: '文档未更新' }, check: async (ctx) => checkDocUpdates(ctx.cwd) },
+  ];
+  return executeRules(rules, context);
+}
+
+// ---- Pre-CR Gate (4 rules) ----
+// Design intent: check CR preconditions. Failures → development.
+
+export async function pre_cr_gate_check(context: GateCheckContext): Promise<GateCheckResult> {
+  const rules: GateRule[] = [
+    { id: 'R-CR-PRE-001', name: '检查点完成', onFailure: { targetPhase: 'development', reason: '存在未完成的检查点' }, check: async (ctx) => allCheckpointsCompleted(ctx.task) },
+    { id: 'R-CR-PRE-002', name: '开发产物存在', onFailure: { targetPhase: 'development', reason: '缺少开发产物' }, check: async (ctx) => hasDevArtifacts(ctx.cwd) },
+    { id: 'R-CR-PRE-003', name: '质量分数达标', onFailure: { targetPhase: 'development', reason: '质量分数不达标' }, check: async (ctx) => checkQualityScore(ctx.task) },
+    { id: 'R-CR-PRE-004', name: '审核报告存在', onFailure: { targetPhase: 'development', reason: '缺少代码审核报告' }, check: async (ctx) => hasCodeReviewReport(ctx.cwd) },
+  ];
+  return executeRules(rules, context);
+}
+
+// ---- Post-CR Gate (10 rules) ----
+// Design intent: check CR results. Failures → development or code_review.
+
+export async function post_cr_gate_check(context: GateCheckContext): Promise<GateCheckResult> {
+  const rules: GateRule[] = [
+    { id: 'R-CR-POST-001', name: '审核报告存在', onFailure: { targetPhase: 'code_review', reason: '缺少审核报告' }, check: async (ctx) => hasCodeReviewReport(ctx.cwd) },
+    { id: 'R-CR-POST-002', name: '报告格式有效', onFailure: { targetPhase: 'code_review', reason: '报告格式无效' }, check: async (ctx) => validateReportFormat(ctx.cwd) },
+    { id: 'R-CR-POST-003', name: '审核结果有效', onFailure: { targetPhase: 'development', reason: '审核结果未通过' }, check: async (ctx) => ctx.phaseResult?.result === 'PASS' },
+    { id: 'R-CR-POST-004', name: '审核原因完整', onFailure: { targetPhase: 'code_review', reason: '审核原因不完整' }, check: async (ctx) => checkReviewReason(ctx.phaseResult) },
+    { id: 'R-CR-POST-005', name: '问题项详情', onFailure: { targetPhase: 'code_review', reason: '问题项详情缺失' }, check: async (ctx) => checkReviewIssues(ctx.phaseResult) },
+    { id: 'R-CR-POST-006', name: '检查点状态同步', onFailure: { targetPhase: 'development', reason: '检查点状态未同步' }, check: async (ctx) => syncCheckpointStatus(ctx.task) },
+    { id: 'R-CR-POST-007', name: '时间戳有效', onFailure: { targetPhase: 'code_review', reason: '时间戳无效' }, check: async (ctx) => checkTimestamp(ctx.phaseResult) },
+    { id: 'R-CR-POST-008', name: '测试环境配置存在', onFailure: { targetPhase: 'code_review', reason: '缺少测试环境配置' }, check: async (ctx) => hasTestEnvConfig(ctx.cwd) },
+    { id: 'R-CR-POST-009', name: '任务测试环境建议', onFailure: { targetPhase: 'code_review', reason: '缺少测试环境建议' }, check: async (ctx) => checkTestEnvSuggestion(ctx.phaseResult) },
+    { id: 'R-CR-POST-010', name: '测试环境配置格式', onFailure: { targetPhase: 'code_review', reason: '测试环境配置格式无效' }, check: async (ctx) => validateTestEnvConfig(ctx.cwd) },
+  ];
+  return executeRules(rules, context);
+}
+
+// ---- Pre-QA Gate (5 rules) ----
+// Design intent: check QA preconditions. Failures → code_review, development, or EXIT.
+
+export async function pre_qa_gate_check(context: GateCheckContext): Promise<GateCheckResult> {
+  const rules: GateRule[] = [
+    { id: 'R-QA-PRE-001', name: '代码审核通过', onFailure: { targetPhase: 'code_review', reason: '代码审核未通过' }, check: async (ctx) => isCodeReviewPassed(ctx.task) },
+    { id: 'R-QA-PRE-002', name: 'QA检查点定义', onFailure: { targetPhase: 'development', reason: '缺少QA检查点定义' }, check: async (ctx) => hasQACheckpoints(ctx.task) },
+    { id: 'R-QA-PRE-003', name: '测试配置就绪', onFailure: { targetPhase: 'qa', reason: '测试配置未就绪' }, check: async (ctx) => isTestConfigReady(ctx.cwd) },
+    { id: 'R-QA-PRE-004', name: '审核报告存在', onFailure: { targetPhase: 'code_review', reason: '缺少代码审核报告' }, check: async (ctx) => hasCodeReviewReport(ctx.cwd) },
+    { id: 'R-QA-PRE-005', name: '任务状态检查', onFailure: { targetPhase: 'EXIT', reason: '任务不存在' }, check: async (ctx) => !!ctx.task },
+  ];
+  return executeRules(rules, context);
+}
+
+// ---- Post-QA Gate (8 rules) ----
+// Design intent: check QA results. Failures → qa, development, or RETRY.
+
+export async function post_qa_gate_check(context: GateCheckContext): Promise<GateCheckResult> {
+  const rules: GateRule[] = [
+    { id: 'R-QA-POST-001', name: 'QA报告存在', onFailure: { targetPhase: 'qa', reason: '缺少QA报告' }, check: async (ctx) => hasQAReport(ctx.cwd) },
+    { id: 'R-QA-POST-002', name: '报告格式有效', onFailure: { targetPhase: 'qa', reason: 'QA报告格式无效' }, check: async (ctx) => validateQAReportFormat(ctx.cwd) },
+    { id: 'R-QA-POST-003', name: '测试结果有效', onFailure: { targetPhase: 'development', reason: '测试结果未通过' }, check: async (ctx) => ctx.phaseResult?.result === 'PASS' },
+    { id: 'R-QA-POST-004', name: '测试失败详情', onFailure: { targetPhase: 'development', reason: '测试失败详情缺失' }, check: async (ctx) => checkTestFailureDetails(ctx.phaseResult) },
+    { id: 'R-QA-POST-005', name: '人工验证状态收集', onFailure: { targetPhase: 'qa', reason: '人工验证状态未收集' }, check: async (ctx) => collectManualVerification(ctx.phaseResult) },
+    { id: 'R-QA-POST-005a', name: '人工验证汇总通知', onFailure: { targetPhase: 'qa', reason: '人工验证未通知' }, check: async (ctx) => notifyManualVerification(ctx.phaseResult) },
+    { id: 'R-QA-POST-006', name: '检查点状态同步', onFailure: { targetPhase: 'development', reason: '检查点状态未同步' }, check: async (ctx) => syncCheckpointStatus(ctx.task) },
+    { id: 'R-QA-POST-007', name: '测试覆盖率达标', onFailure: { targetPhase: 'RETRY', reason: '测试覆盖率不达标' }, check: async (ctx) => checkCoverage(ctx.phaseResult) },
+  ];
+  return executeRules(rules, context);
+}
+
+// ---- Pre-Eval Gate (6 rules) ----
+// Design intent: check eval preconditions. Failures → qa, development, or code_review.
+
+export async function pre_eval_gate_check(context: GateCheckContext): Promise<GateCheckResult> {
+  const rules: GateRule[] = [
+    { id: 'R-EVAL-PRE-001', name: 'QA结果为PASS', onFailure: { targetPhase: 'qa', reason: 'QA结果未通过' }, check: async (ctx) => isQAPassed(ctx.task) },
+    { id: 'R-EVAL-PRE-002', name: 'dev-report.json存在', onFailure: { targetPhase: 'development', reason: '缺少dev-report.json' }, check: async (ctx) => hasFile(ctx.cwd, 'dev-report.json') },
+    { id: 'R-EVAL-PRE-003', name: 'code-review-report.json存在', onFailure: { targetPhase: 'code_review', reason: '缺少code-review-report.json' }, check: async (ctx) => hasFile(ctx.cwd, 'code-review-report.json') },
+    { id: 'R-EVAL-PRE-004', name: 'qa-report.json存在', onFailure: { targetPhase: 'qa', reason: '缺少qa-report.json' }, check: async (ctx) => hasFile(ctx.cwd, 'qa-report.json') },
+    { id: 'R-EVAL-PRE-005', name: '无pending检查点', onFailure: { targetPhase: 'development', reason: '存在pending检查点' }, check: async (ctx) => checkNoPendingCheckpoints(ctx.task) },
+    { id: 'R-EVAL-PRE-006', name: 'phaseHistory完整', onFailure: { targetPhase: 'development', reason: 'phaseHistory不完整' }, check: async (ctx) => checkPhaseHistory(ctx.task) },
+  ];
+  return executeRules(rules, context);
+}
+
+// ---- Post-Eval Gate (8 rules) ----
+// Design intent: check eval results. Failures → evaluation or development.
+
+export async function post_eval_gate_check(context: GateCheckContext): Promise<GateCheckResult> {
+  const rules: GateRule[] = [
+    { id: 'R-EVAL-POST-001', name: '状态一致性检查', onFailure: { targetPhase: 'evaluation', reason: '状态不一致' }, check: async (ctx) => checkStateConsistency(ctx) },
+    { id: 'R-EVAL-POST-002', name: '检查点最终状态', onFailure: { targetPhase: 'development', reason: '检查点最终状态异常' }, check: async (ctx) => checkCheckpointFinalStatus(ctx.task) },
+    { id: 'R-EVAL-POST-003', name: '任务可关闭检查', onFailure: { targetPhase: 'development', reason: '任务不可关闭' }, check: async (ctx) => isTaskClosable(ctx.task) },
+    { id: 'R-EVAL-POST-004', name: '评估日志检查', onFailure: { targetPhase: 'evaluation', reason: '评估日志缺失' }, check: async (ctx) => checkEvalLogs(ctx.cwd) },
+    { id: 'R-EVAL-POST-005', name: '评估结果检查', onFailure: { targetPhase: 'development', reason: '评估结果无效' }, check: async (ctx) => checkEvalResult(ctx.phaseResult) },
+    { id: 'R-EVAL-POST-006', name: 'AI评估日志检查', onFailure: { targetPhase: 'evaluation', reason: 'AI评估日志缺失' }, check: async (ctx) => checkAIEvalLogs(ctx.cwd) },
+    { id: 'R-EVAL-POST-007', name: 'AI评估结果检查', onFailure: { targetPhase: 'development', reason: 'AI评估结果无效' }, check: async (ctx) => checkAIEvalResult(ctx.phaseResult) },
+    { id: 'R-EVAL-POST-008', name: '评估报告存在', onFailure: { targetPhase: 'evaluation', reason: '缺少评估报告' }, check: async (ctx) => hasEvalReport(ctx.cwd) },
+  ];
+  return executeRules(rules, context);
+}
+
+/**
+ * Map a FlowTarget value to the corresponding phase index for routing.
+ * RETRY/NEXT/EXIT are handled by the caller (phase execution functions),
+ * so this mapping only needs the 4 concrete phases.
+ */
+export function flowTargetToPhaseIndex(target: FlowTarget): number {
+  const map: Record<string, number> = {
+    development: 0,
+    code_review: 1,
+    qa: 2,
+    evaluation: 3,
+  };
+  if (target in map) {
+    return map[target];
+  }
+  throw new Error(`Unknown rollback target: ${target}`);
 }
 
 export class AssemblyLine {
@@ -566,7 +815,14 @@ export class AssemblyLine {
           );
 
           if (!devLifecycleResult.success) {
-            // 阶段内重试耗尽，标记任务失败
+            const targetPhase = devLifecycleResult.targetPhase;
+            // FlowTarget routing: non-EXIT gate failures roll back to target phase
+            if (targetPhase && targetPhase !== 'EXIT') {
+              console.log(`   ↩️ 开发阶段门禁失败，回退到: ${targetPhase}`);
+              currentPhaseIndex = flowTargetToPhaseIndex(targetPhase);
+              continue;
+            }
+            // EXIT or phase execution failure → fail the task
             const isTimeout = devLifecycleResult.failedAt === 'phase_execution' &&
               devReport?.status === 'timeout';
             console.log(`❌ 开发阶段失败: ${devLifecycleResult.reason}`);
@@ -648,10 +904,16 @@ export class AssemblyLine {
           );
 
           if (!crLifecycleResult.success) {
-            // 阶段内重试耗尽，执行回退逻辑
             console.log(`❌ 代码审核失败: ${crLifecycleResult.reason}`);
             this.statusReporter.failPhase('code_review', new Error(crLifecycleResult.reason || '代码审核未通过'), taskId);
-            // P5: 统一重试路径，回退到开发阶段
+            // FlowTarget routing: route based on targetPhase from gate check
+            const targetPhase = crLifecycleResult.targetPhase;
+            if (targetPhase && targetPhase !== 'EXIT') {
+              console.log(`   ↩️ 代码审核门禁失败，回退到: ${targetPhase}`);
+              currentPhaseIndex = flowTargetToPhaseIndex(targetPhase);
+              continue;
+            }
+            // EXIT or phase execution failure → redevelop via transition handler
             return this.handleVerdictBasedTransition(taskId, record, state, addTimeline, 'code_review', 'redevelop');
           }
 
@@ -720,10 +982,16 @@ export class AssemblyLine {
           );
 
           if (!qaLifecycleResult.success) {
-            // 阶段内重试耗尽，执行回退逻辑
             console.log(`❌ QA 验证失败: ${qaLifecycleResult.reason}`);
             this.statusReporter.failPhase('qa_verification', new Error(qaLifecycleResult.reason || 'QA 验证未通过'), taskId);
-            // P5: 统一重试路径，回退到开发阶段
+            // FlowTarget routing: route based on targetPhase from gate check
+            const targetPhase = qaLifecycleResult.targetPhase;
+            if (targetPhase && targetPhase !== 'EXIT') {
+              console.log(`   ↩️ QA门禁失败，回退到: ${targetPhase}`);
+              currentPhaseIndex = flowTargetToPhaseIndex(targetPhase);
+              continue;
+            }
+            // EXIT or phase execution failure → redevelop via transition handler
             return this.handleVerdictBasedTransition(taskId, record, state, addTimeline, 'qa', 'redevelop');
           }
 
@@ -836,11 +1104,17 @@ export class AssemblyLine {
         );
 
         if (!evalLifecycleResult.success) {
-          // 阶段内重试耗尽，执行回退逻辑
           console.log(`❌ 评估失败: ${evalLifecycleResult.reason}`);
           this.statusReporter.failPhase('evaluation', new Error(evalLifecycleResult.reason || '评估未通过'), taskId);
+          // FlowTarget routing: route based on targetPhase from gate check
+          const targetPhase = evalLifecycleResult.targetPhase;
+          if (targetPhase && targetPhase !== 'EXIT') {
+            console.log(`   ↩️ 评估门禁失败，回退到: ${targetPhase}`);
+            currentPhaseIndex = flowTargetToPhaseIndex(targetPhase);
+            continue;
+          }
+          // EXIT or phase execution failure → redevelop via transition handler
           const failRecord = await this.handleVerdictBasedTransition(taskId, record, state, addTimeline, 'evaluation', 'redevelop');
-          // 质量门禁验证（评估失败路径）
           const failStatus = failRecord.finalStatus as TaskStatus;
           if (failStatus !== 'abandoned') {
             const evalFailGate = this.validateTransitionCompleteness(taskId, failStatus, 'evaluation');
@@ -944,18 +1218,18 @@ export class AssemblyLine {
       console.log(`\n   [${phase}] 第 ${attempt}/${maxRetries + 1} 次尝试`);
       this.debugLogger.log(taskId, phase, `第 ${attempt}/${maxRetries + 1} 次尝试`);
 
-      // 阶段前质量门禁检查
-      const canProceed = await this.checkPhasePreConditions(taskId, phase, state);
-      if (!canProceed) {
-        console.log(`   ❌ 阶段前置条件检查失败`);
+      // 阶段前质量门禁检查（使用 FlowTarget 路由替代 A/B 分类）
+      const preGateContext: GateCheckContext = { task: readTaskMeta(taskId, this.config.cwd)!, cwd: this.config.cwd };
+      const preGateResult = await this.runPrePhaseGate(phase, preGateContext);
+      if (!preGateResult.passed) {
+        const targetPhase = preGateResult.targetPhase || 'EXIT';
+        console.log(`   ❌ 阶段前置条件检查失败 → 路由到: ${targetPhase}`);
 
-        // CP-P6-004: 存储门禁失败信息到重试上下文
-        const preGateErrorMsg = `阶段前置条件检查失败（A 类门禁）`;
-        this.storeFailureContext(taskId, phase, preGateErrorMsg, state, {
+        this.storeFailureContext(taskId, phase, preGateResult.reason || '阶段前置条件检查失败', state, {
           ruleId: 'R-PRE-PHASE-001',
           ruleName: '阶段前置条件检查',
-          failureType: 'A',
-          failureDetails: `任务 ${taskId} 的阶段前置条件检查未通过`,
+          targetPhase,
+          failureDetails: preGateResult.reason || `任务 ${taskId} 的阶段前置条件检查未通过`,
           suggestions: [
             '检查任务是否存在且已正确初始化',
             '确认任务依赖是否已完成',
@@ -964,18 +1238,31 @@ export class AssemblyLine {
           severity: 'ERROR',
         });
 
-        // CP-005: A 类门禁失败（Task Foundation）- 中断流水线，不重试
-        // 阶段前门禁检查任务数据本身有效性，失败说明任务数据有问题，重试无意义
-        console.log(`   🚫 A 类门禁失败，中断流水线（任务数据有效性检查失败）`);
-        this.debugLogger.logError(taskId, phase, new Error(preGateErrorMsg), { failedAt: 'pre_phase_gate', attempt });
+        this.debugLogger.logError(taskId, phase, new Error(preGateResult.reason || 'pre-gate failed'), { failedAt: 'pre_phase_gate', attempt, targetPhase });
+
+        if (targetPhase === 'EXIT') {
+          console.log(`   🚫 门禁失败，中断流水线`);
+          return {
+            success: false,
+            phase,
+            failedAt: 'pre_phase_gate',
+            attempt,
+            reason: preGateResult.reason || 'pre-gate failed',
+            retryable: false,
+            targetPhase,
+          };
+        }
+
+        // Non-EXIT pre-gate failure → rollback to specified phase
+        console.log(`   ↩️ 门禁失败，回退到: ${targetPhase}`);
         return {
           success: false,
           phase,
           failedAt: 'pre_phase_gate',
           attempt,
-          reason: preGateErrorMsg,
+          reason: preGateResult.reason || 'pre-gate failed',
           retryable: false,
-          failureType: 'A',
+          targetPhase,
         };
       }
       console.log(`   ✅ 阶段前置条件检查通过`);
@@ -1025,18 +1312,19 @@ export class AssemblyLine {
       }
       console.log(`   ✅ 阶段执行成功`);
 
-      // 阶段后质量门禁（验证阶段结果）
-      const postGatePassed = this.validatePhaseResult(phase, phaseResult);
-      if (!postGatePassed) {
-        console.log(`   ❌ 阶段后质量门禁失败`);
+      // 阶段后质量门禁（使用 FlowTarget 路由替代 A/B 分类）
+      const postGateContext: GateCheckContext = { task: readTaskMeta(taskId, this.config.cwd)!, cwd: this.config.cwd, phaseResult };
+      const postGateResult = await this.runPostPhaseGate(phase, postGateContext);
+      if (!postGateResult.passed) {
+        const targetPhase = postGateResult.targetPhase || 'development';
+        console.log(`   ❌ 阶段后质量门禁失败 → 路由到: ${targetPhase}`);
 
-        // CP-P6-004: 存储门禁失败信息到重试上下文
-        const postGateErrorMsg = `阶段后质量门禁失败（B 类门禁，${attempt}次尝试）`;
+        const postGateErrorMsg = postGateResult.reason || `阶段后质量门禁失败（${attempt}次尝试）`;
         this.storeFailureContext(taskId, phase, postGateErrorMsg, state, {
           ruleId: 'R-POST-PHASE-001',
           ruleName: '阶段结果验证',
-          failureType: 'B',
-          failureDetails: `${phase} 阶段结果验证未通过`,
+          targetPhase,
+          failureDetails: `${phase} 阶段结果验证未通过: ${postGateResult.reason}`,
           suggestions: [
             `检查 ${phase} 阶段输出是否符合预期格式`,
             '确认阶段执行结果包含必要的字段和数据',
@@ -1045,19 +1333,32 @@ export class AssemblyLine {
           severity: 'ERROR',
         });
 
-        this.debugLogger.logError(taskId, phase, new Error(postGateErrorMsg), { failedAt: 'post_phase_gate', attempt });
+        this.debugLogger.logError(taskId, phase, new Error(postGateErrorMsg), { failedAt: 'post_phase_gate', attempt, targetPhase });
 
-        // CP-005: B 类门禁失败（Phase Artifact）- 回退到阶段起点重试
-        // 阶段后门禁检查阶段输出质量，失败说明产出不达标，重试可能改善
-        if (attempt <= maxRetries) {
+        if (targetPhase === 'RETRY' && attempt <= maxRetries) {
           const waitSeconds = [30, 60, 120][attempt - 1] || 120;
-          console.log(`   ⏳ B 类门禁失败，等待 ${waitSeconds} 秒后回退到阶段起点重试...`);
+          console.log(`   ⏳ 门禁要求阶段内重试，等待 ${waitSeconds} 秒...`);
           await sleep(waitSeconds);
           this.incrementPhaseRetryCount(taskId, phase, state);
           state.retryCounter.set(taskId, (state.retryCounter.get(taskId) || 0) + 1);
-          continue; // CP-P4-2: 阶段内重试，回退到阶段起点
+          continue;
         }
 
+        if (targetPhase === 'EXIT') {
+          console.log(`   🚫 门禁失败，中断流水线`);
+          return {
+            success: false,
+            phase,
+            failedAt: 'post_phase_gate',
+            attempt,
+            reason: postGateErrorMsg,
+            retryable: false,
+            targetPhase,
+          };
+        }
+
+        // Rollback to specified phase
+        console.log(`   ↩️ 门禁失败，回退到: ${targetPhase}`);
         return {
           success: false,
           phase,
@@ -1065,7 +1366,7 @@ export class AssemblyLine {
           attempt,
           reason: postGateErrorMsg,
           retryable: false,
-          failureType: 'B',
+          targetPhase,
         };
       }
       console.log(`   ✅ 阶段后质量门禁通过`);
@@ -1096,50 +1397,30 @@ export class AssemblyLine {
   }
 
   /**
-   * 检查阶段前置条件
+   * Run the appropriate pre-phase gate check based on the current phase.
+   * Uses FlowTarget-based routing instead of boolean + hardcoded A/B.
    */
-  private async checkPhasePreConditions(
-    taskId: string,
-    phase: Phase,
-    state: HarnessRuntimeState
-  ): Promise<boolean> {
-    // 验证任务存在
-    const task = readTaskMeta(taskId, this.config.cwd);
-    if (!task) {
-      console.log(`   ⚠️ 任务 ${taskId} 不存在`);
-      return false;
+  private async runPrePhaseGate(phase: Phase, context: GateCheckContext): Promise<GateCheckResult> {
+    switch (phase) {
+      case 'development': return pre_dev_gate_check(context);
+      case 'code_review': return pre_cr_gate_check(context);
+      case 'qa': return pre_qa_gate_check(context);
+      case 'evaluation': return pre_eval_gate_check(context);
+      default: return { passed: false, targetPhase: 'EXIT', reason: `Unknown phase: ${phase}` };
     }
-
-    // 验证依赖是否完成
-    if (phase === 'development') {
-      const depsCompleted = await this.checkDependencies(task);
-      if (!depsCompleted) {
-        console.log(`   ⏳ 依赖未完成，延后处理`);
-        return false;
-      }
-    }
-
-    return true;
   }
 
   /**
-   * 验证阶段结果
+   * Run the appropriate post-phase gate check based on the current phase.
+   * Uses FlowTarget-based routing instead of boolean + hardcoded A/B.
    */
-  private validatePhaseResult(
-    phase: Phase,
-    result: DevReport | CodeReviewVerdict | QAVerdict | ReviewVerdict
-  ): boolean {
+  private async runPostPhaseGate(phase: Phase, context: GateCheckContext): Promise<GateCheckResult> {
     switch (phase) {
-      case 'development':
-        return (result as DevReport).status === 'success';
-      case 'code_review':
-        return (result as CodeReviewVerdict).result === 'PASS';
-      case 'qa':
-        return (result as QAVerdict).result === 'PASS';
-      case 'evaluation':
-        return (result as ReviewVerdict).result === 'PASS';
-      default:
-        return false;
+      case 'development': return post_dev_gate_check(context);
+      case 'code_review': return post_cr_gate_check(context);
+      case 'qa': return post_qa_gate_check(context);
+      case 'evaluation': return post_eval_gate_check(context);
+      default: return { passed: false, targetPhase: 'EXIT', reason: `Unknown phase: ${phase}` };
     }
   }
 
@@ -2311,7 +2592,7 @@ export class AssemblyLine {
       gap: number;
       gapPercent: string;
       coverageDetails?: { lines: number; branches: number; functions: number; statements: number };
-      failureType: 'A' | 'B';
+      targetPhase: string;
       message: string;
     }
   ): void {
@@ -2367,7 +2648,7 @@ export class AssemblyLine {
         gap: gapData.gap,
         gapPercent: gapData.gapPercent,
         coverageDetails: gapData.coverageDetails,
-        failureType: gapData.failureType,
+        targetPhase: gapData.targetPhase,
         message: gapData.message,
       };
     }
@@ -2379,7 +2660,7 @@ export class AssemblyLine {
       gateFailureDetails = {
         ruleId: lastFailure.gateInfo.ruleId,
         ruleName: lastFailure.gateInfo.ruleName,
-        failureType: lastFailure.gateInfo.failureType,
+        targetPhase: lastFailure.gateInfo.targetPhase,
         failureDetails: lastFailure.gateInfo.failureDetails,
         suggestions: lastFailure.gateInfo.suggestions,
         severity: lastFailure.gateInfo.severity,

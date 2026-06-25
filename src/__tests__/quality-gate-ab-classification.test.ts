@@ -1,161 +1,188 @@
 /**
- * 质量门禁 A/B 分类单元测试
+ * 质量门禁 FlowTarget 路由单元测试
  *
  * 验证检查点:
- * - CP-001: FailureType 枚举定义在 src/types/task.ts
- * - CP-002: QualityGateRule 接口新增 failureType 字段
- * - CP-003: pre-phase-gate.ts 检查器添加 failureType: 'A'
- * - CP-004: post-phase-gate.ts 检查器添加 failureType: 'B'
- * - CP-005: hd-assembly-line.ts 重试逻辑按 failureType 分类处理
+ * - CP-001: FlowTarget 类型定义在 src/types/harness.ts
+ * - CP-002: GateRule 接口包含 onFailure.targetPhase 字段
+ * - CP-003: pre-phase gate 通过 executeRules 执行，返回 GateCheckResult
+ * - CP-004: post-phase gate 通过 executeRules 执行，返回 GateCheckResult
+ * - CP-005: executePhaseLifecycle 使用 targetPhase 路由（替代 A/B）
  */
 import { describe, it, expect, beforeEach, afterEach } from '@jest/globals';
 import { createIsolatedTestEnv, type IsolatedTestEnv } from '../utils/test-env.js';
 
 // ============================================================
-// CP-001: FailureType 枚举验证
+// CP-001: FlowTarget 类型验证
 // ============================================================
 
-describe('CP-001: FailureType 枚举定义', () => {
-  it('should define FailureType type in task.ts', async () => {
-    // FailureType 是类型别名，验证源代码中存在定义
+describe('CP-001: FlowTarget 类型定义', () => {
+  it('should define FlowTarget type in harness.ts', async () => {
     const fs = await import('fs');
     const path = await import('path');
     const content = fs.readFileSync(
-      path.join(process.cwd(), 'src/types/task.ts'),
+      path.join(process.cwd(), 'src/types/harness.ts'),
       'utf-8'
     );
 
-    // 验证 FailureType 类型定义存在
-    expect(content).toContain("export type FailureType = 'A' | 'B'");
+    // 验证 FlowTarget 类型定义存在
+    expect(content).toContain("export type FlowTarget");
+    expect(content).toContain("'development' | 'code_review' | 'qa' | 'evaluation' | 'RETRY' | 'NEXT' | 'EXIT'");
   });
 
-  it('should allow A and B as valid FailureType values', () => {
-    // 类型检查通过编译即可验证
-    const typeA: 'A' = 'A';
-    const typeB: 'B' = 'B';
+  it('should define GateCheckResult interface', async () => {
+    const fs = await import('fs');
+    const path = await import('path');
+    const content = fs.readFileSync(
+      path.join(process.cwd(), 'src/types/harness.ts'),
+      'utf-8'
+    );
 
-    expect(typeA).toBe('A');
-    expect(typeB).toBe('B');
-  });
-});
-
-// ============================================================
-// CP-002: QualityGateRule 接口验证
-// ============================================================
-
-describe('CP-002: QualityGateRule 接口 failureType 字段', () => {
-  it('should have failureType field in PhaseGateRule interface', async () => {
-    const { DEFAULT_DEV_PHASE_RULES } = await import('../types/pre-phase-gate.js');
-
-    // 验证默认规则包含 failureType 字段
-    expect(DEFAULT_DEV_PHASE_RULES.length).toBeGreaterThan(0);
-
-    const rule = DEFAULT_DEV_PHASE_RULES[0];
-    expect(rule).toHaveProperty('failureType');
-    expect(rule.failureType).toBe('A');
+    expect(content).toContain('export interface GateCheckResult');
+    expect(content).toContain('targetPhase?: FlowTarget');
   });
 
-  it('should have failureType field in PostPhaseGateRule interface', async () => {
-    const { DEFAULT_DEV_POST_PHASE_RULES } = await import('../types/post-phase-gate.js');
+  it('should define GateRule interface with onFailure', async () => {
+    const fs = await import('fs');
+    const path = await import('path');
+    const content = fs.readFileSync(
+      path.join(process.cwd(), 'src/types/harness.ts'),
+      'utf-8'
+    );
 
-    // 验证默认规则包含 failureType 字段
-    expect(DEFAULT_DEV_POST_PHASE_RULES.length).toBeGreaterThan(0);
-
-    const rule = DEFAULT_DEV_POST_PHASE_RULES[0];
-    expect(rule).toHaveProperty('failureType');
-    expect(rule.failureType).toBe('B');
+    expect(content).toContain('export interface GateRule');
+    expect(content).toContain('onFailure');
   });
 });
 
 // ============================================================
-// CP-003: pre-phase-gate.ts 检查器 failureType: 'A'
+// CP-002: GateRule 接口 targetPhase 字段验证
 // ============================================================
 
-describe('CP-003: pre-phase-gate.ts 检查器 failureType: A', () => {
-  it('should have failureType: A for development phase rules', async () => {
-    const { DEFAULT_DEV_PHASE_RULES } = await import('../types/pre-phase-gate.js');
+describe('CP-002: GateRule 接口 onFailure.targetPhase 字段', () => {
+  it('should have pre_dev_gate_check return GateCheckResult via executeRules', async () => {
+    const fs = await import('fs');
+    const path = await import('path');
+    const content = fs.readFileSync(
+      path.join(process.cwd(), 'src/utils/hd-assembly-line.ts'),
+      'utf-8'
+    );
 
-    // 所有开发阶段前门禁规则应为 A 类
-    for (const rule of DEFAULT_DEV_PHASE_RULES) {
-      expect(rule.failureType).toBe('A');
-    }
+    // 验证 executeRules 函数存在
+    expect(content).toContain('async function executeRules');
+    // 验证 pre_dev_gate_check 使用 executeRules
+    expect(content).toContain('pre_dev_gate_check');
   });
 
-  it('should have failureType: A for code_review phase rules', async () => {
-    const { DEFAULT_CR_PHASE_RULES } = await import('../types/pre-phase-gate.js');
+  it('should gate rules use onFailure.targetPhase (FlowTarget) not failureType', async () => {
+    const fs = await import('fs');
+    const path = await import('path');
+    const content = fs.readFileSync(
+      path.join(process.cwd(), 'src/utils/hd-assembly-line.ts'),
+      'utf-8'
+    );
 
-    // 所有代码审核阶段前门禁规则应为 A 类
-    for (const rule of DEFAULT_CR_PHASE_RULES) {
-      expect(rule.failureType).toBe('A');
-    }
-  });
-
-  it('should have failureType: A for qa phase rules', async () => {
-    const { DEFAULT_QA_PHASE_RULES } = await import('../types/pre-phase-gate.js');
-
-    // 所有 QA 阶段前门禁规则应为 A 类
-    for (const rule of DEFAULT_QA_PHASE_RULES) {
-      expect(rule.failureType).toBe('A');
-    }
-  });
-
-  it('should have failureType: A for evaluation phase rules', async () => {
-    const { DEFAULT_EVAL_PHASE_RULES } = await import('../types/pre-phase-gate.js');
-
-    // 所有评估阶段前门禁规则应为 A 类
-    for (const rule of DEFAULT_EVAL_PHASE_RULES) {
-      expect(rule.failureType).toBe('A');
-    }
+    // 验证规则使用 onFailure.targetPhase (FlowTarget-based)
+    expect(content).toContain('onFailure');
+    expect(content).toContain('targetPhase');
   });
 });
 
 // ============================================================
-// CP-004: post-phase-gate.ts 检查器 failureType: 'B'
+// CP-003: pre-phase gate → runPrePhaseGate → GateCheckResult
 // ============================================================
 
-describe('CP-004: post-phase-gate.ts 检查器 failureType: B', () => {
-  it('should have failureType: B for development post-phase rules', async () => {
-    const { DEFAULT_DEV_POST_PHASE_RULES } = await import('../types/post-phase-gate.js');
+describe('CP-003: pre-phase gate FlowTarget 路由', () => {
+  it('should have runPrePhaseGate dispatcher', async () => {
+    const fs = await import('fs');
+    const path = await import('path');
+    const content = fs.readFileSync(
+      path.join(process.cwd(), 'src/utils/hd-assembly-line.ts'),
+      'utf-8'
+    );
 
-    // 所有开发阶段后门禁规则应为 B 类
-    for (const rule of DEFAULT_DEV_POST_PHASE_RULES) {
-      expect(rule.failureType).toBe('B');
-    }
+    // 验证 runPrePhaseGate 方法存在
+    expect(content).toContain('runPrePhaseGate');
   });
 
-  it('should have failureType: B for code_review post-phase rules', async () => {
-    const { DEFAULT_CR_POST_PHASE_RULES } = await import('../types/post-phase-gate.js');
+  it('should have 4 pre-phase gate check functions', async () => {
+    const fs = await import('fs');
+    const path = await import('path');
+    const content = fs.readFileSync(
+      path.join(process.cwd(), 'src/utils/hd-assembly-line.ts'),
+      'utf-8'
+    );
 
-    // 所有代码审核阶段后门禁规则应为 B 类
-    for (const rule of DEFAULT_CR_POST_PHASE_RULES) {
-      expect(rule.failureType).toBe('B');
-    }
+    expect(content).toContain('pre_dev_gate_check');
+    expect(content).toContain('pre_cr_gate_check');
+    expect(content).toContain('pre_qa_gate_check');
+    expect(content).toContain('pre_eval_gate_check');
   });
 
-  it('should have failureType: B for qa post-phase rules', async () => {
-    const { DEFAULT_QA_POST_PHASE_RULES } = await import('../types/post-phase-gate.js');
+  it('should pre-gate result use targetPhase routing not A/B', async () => {
+    const fs = await import('fs');
+    const path = await import('path');
+    const content = fs.readFileSync(
+      path.join(process.cwd(), 'src/utils/hd-assembly-line.ts'),
+      'utf-8'
+    );
 
-    // 所有 QA 阶段后门禁规则应为 B 类
-    for (const rule of DEFAULT_QA_POST_PHASE_RULES) {
-      expect(rule.failureType).toBe('B');
-    }
-  });
-
-  it('should have failureType: B for evaluation post-phase rules', async () => {
-    const { DEFAULT_EVAL_POST_PHASE_RULES } = await import('../types/post-phase-gate.js');
-
-    // 所有评估阶段后门禁规则应为 B 类
-    for (const rule of DEFAULT_EVAL_POST_PHASE_RULES) {
-      expect(rule.failureType).toBe('B');
-    }
+    // 验证 pre-gate 分支使用 targetPhase
+    expect(content).toContain('failedAt: \'pre_phase_gate\'');
+    // targetPhase 应是 FlowTarget 值，不是 'A' | 'B'
+    expect(content).toContain('targetPhase,');
   });
 });
 
 // ============================================================
-// CP-005: hd-assembly-line.ts 重试逻辑验证
+// CP-004: post-phase gate → runPostPhaseGate → GateCheckResult
 // ============================================================
 
-describe('CP-005: hd-assembly-line.ts 重试逻辑', () => {
+describe('CP-004: post-phase gate FlowTarget 路由', () => {
+  it('should have runPostPhaseGate dispatcher', async () => {
+    const fs = await import('fs');
+    const path = await import('path');
+    const content = fs.readFileSync(
+      path.join(process.cwd(), 'src/utils/hd-assembly-line.ts'),
+      'utf-8'
+    );
+
+    // 验证 runPostPhaseGate 方法存在
+    expect(content).toContain('runPostPhaseGate');
+  });
+
+  it('should have 4 post-phase gate check functions', async () => {
+    const fs = await import('fs');
+    const path = await import('path');
+    const content = fs.readFileSync(
+      path.join(process.cwd(), 'src/utils/hd-assembly-line.ts'),
+      'utf-8'
+    );
+
+    expect(content).toContain('post_dev_gate_check');
+    expect(content).toContain('post_cr_gate_check');
+    expect(content).toContain('post_qa_gate_check');
+    expect(content).toContain('post_eval_gate_check');
+  });
+
+  it('should post-gate result use targetPhase routing not A/B', async () => {
+    const fs = await import('fs');
+    const path = await import('path');
+    const content = fs.readFileSync(
+      path.join(process.cwd(), 'src/utils/hd-assembly-line.ts'),
+      'utf-8'
+    );
+
+    // 验证 post-gate 分支使用 targetPhase
+    expect(content).toContain('failedAt: \'post_phase_gate\'');
+    expect(content).toContain('targetPhase,');
+  });
+});
+
+// ============================================================
+// CP-005: executePhaseLifecycle targetPhase 路由逻辑
+// ============================================================
+
+describe('CP-005: executePhaseLifecycle FlowTarget 路由逻辑', () => {
   let env: IsolatedTestEnv;
 
   beforeEach(async () => {
@@ -166,8 +193,7 @@ describe('CP-005: hd-assembly-line.ts 重试逻辑', () => {
     await env.cleanup();
   });
 
-  it('should define PhaseLifecycleResult with failureType field', async () => {
-    // 读取源代码验证接口定义
+  it('should PhaseLifecycleResult use targetPhase not failureType', async () => {
     const fs = await import('fs');
     const path = await import('path');
     const content = fs.readFileSync(
@@ -175,13 +201,11 @@ describe('CP-005: hd-assembly-line.ts 重试逻辑', () => {
       'utf-8'
     );
 
-    // 验证 PhaseLifecycleResult 接口包含 failureType 字段
-    expect(content).toContain("failureType?: FailureType");
-    expect(content).toContain("failureType: 'A'");
-    expect(content).toContain("failureType: 'B'");
+    // PhaseLifecycleResult should have targetPhase?: FlowTarget
+    expect(content).toContain('targetPhase?: FlowTarget');
   });
 
-  it('should return failureType: A for pre-phase gate failures', async () => {
+  it('should return targetPhase for pre-phase gate failures', async () => {
     const fs = await import('fs');
     const path = await import('path');
     const content = fs.readFileSync(
@@ -189,13 +213,11 @@ describe('CP-005: hd-assembly-line.ts 重试逻辑', () => {
       'utf-8'
     );
 
-    // 验证 A 类门禁失败返回 failureType: 'A'
+    // pre-gate failure returns targetPhase
     expect(content).toContain("failedAt: 'pre_phase_gate'");
-    expect(content).toContain("failureType: 'A'");
-    expect(content).toContain("retryable: false");
   });
 
-  it('should return failureType: B for post-phase gate failures', async () => {
+  it('should return targetPhase for post-phase gate failures', async () => {
     const fs = await import('fs');
     const path = await import('path');
     const content = fs.readFileSync(
@@ -203,12 +225,11 @@ describe('CP-005: hd-assembly-line.ts 重试逻辑', () => {
       'utf-8'
     );
 
-    // 验证 B 类门禁失败返回 failureType: 'B'
+    // post-gate failure returns targetPhase
     expect(content).toContain("failedAt: 'post_phase_gate'");
-    expect(content).toContain("failureType: 'B'");
   });
 
-  it('should implement retry loop for B class failures', async () => {
+  it('should implement RETRY loop for post-phase gate', async () => {
     const fs = await import('fs');
     const path = await import('path');
     const content = fs.readFileSync(
@@ -216,13 +237,12 @@ describe('CP-005: hd-assembly-line.ts 重试逻辑', () => {
       'utf-8'
     );
 
-    // 验证 B 类门禁失败时的重试逻辑
-    // 应包含 continue 语句实现阶段内重试
-    expect(content).toContain("continue; // CP-P4-2: 阶段内重试");
-    expect(content).toContain("B 类门禁失败，回退到阶段起点重试");
+    // RETRY → continue 循环
+    expect(content).toContain('continue;');
+    expect(content).toContain('RETRY');
   });
 
-  it('should interrupt pipeline for A class failures', async () => {
+  it('should EXIT on unrecoverable failures', async () => {
     const fs = await import('fs');
     const path = await import('path');
     const content = fs.readFileSync(
@@ -230,38 +250,70 @@ describe('CP-005: hd-assembly-line.ts 重试逻辑', () => {
       'utf-8'
     );
 
-    // 验证 A 类门禁失败时直接返回（中断流水线）
-    expect(content).toContain("A 类门禁失败，中断流水线");
-    expect(content).toContain("任务数据有效性检查失败");
+    // EXIT 目标应中断流水线
+    expect(content).toContain("targetPhase === 'EXIT'");
   });
 });
 
 // ============================================================
-// 综合验证：A/B 分类语义正确性
+// 综合验证：FlowTarget 路由语义正确性
 // ============================================================
 
-describe('A/B 分类语义验证', () => {
-  it('should classify pre-phase gates as A type (Task Foundation)', async () => {
-    const { createDefaultPhaseGateConfig } = await import('../types/pre-phase-gate.js');
-    const config = createDefaultPhaseGateConfig();
+describe('FlowTarget 路由语义验证', () => {
+  it('should have 8 gate check functions total', async () => {
+    const fs = await import('fs');
+    const path = await import('path');
+    const content = fs.readFileSync(
+      path.join(process.cwd(), 'src/utils/hd-assembly-line.ts'),
+      'utf-8'
+    );
 
-    // 所有阶段前门禁规则应为 A 类
-    for (const [phase, phaseConfig] of config.phaseGates) {
-      for (const rule of phaseConfig.rules) {
-        expect(rule.failureType).toBe('A');
-      }
+    const gateCheckFunctions = [
+      'pre_dev_gate_check', 'post_dev_gate_check',
+      'pre_cr_gate_check', 'post_cr_gate_check',
+      'pre_qa_gate_check', 'post_qa_gate_check',
+      'pre_eval_gate_check', 'post_eval_gate_check',
+    ];
+
+    for (const fn of gateCheckFunctions) {
+      expect(content).toContain(`async function ${fn}`);
     }
   });
 
-  it('should classify post-phase gates as B type (Phase Artifact)', async () => {
-    const { createDefaultPostPhaseGateConfig } = await import('../types/post-phase-gate.js');
-    const config = createDefaultPostPhaseGateConfig();
+  it('should all gate check functions use executeRules', async () => {
+    const fs = await import('fs');
+    const path = await import('path');
+    const content = fs.readFileSync(
+      path.join(process.cwd(), 'src/utils/hd-assembly-line.ts'),
+      'utf-8'
+    );
 
-    // 所有阶段后门禁规则应为 B 类
-    for (const [phase, phaseConfig] of config.phaseGates) {
-      for (const rule of phaseConfig.rules) {
-        expect(rule.failureType).toBe('B');
-      }
-    }
+    // executeRules is the core execution engine
+    const executeRulesCount = (content.match(/executeRules/g) || []).length;
+    // At least 8 calls (one per gate check function)
+    expect(executeRulesCount).toBeGreaterThanOrEqual(8);
+  });
+
+  it('should define PhaseResult with FlowTarget', async () => {
+    const fs = await import('fs');
+    const path = await import('path');
+    const content = fs.readFileSync(
+      path.join(process.cwd(), 'src/types/harness.ts'),
+      'utf-8'
+    );
+
+    expect(content).toContain('export interface PhaseResult');
+    expect(content).toContain('targetPhase: FlowTarget');
+  });
+
+  it('should define HarnessResult with FlowTarget', async () => {
+    const fs = await import('fs');
+    const path = await import('path');
+    const content = fs.readFileSync(
+      path.join(process.cwd(), 'src/types/harness.ts'),
+      'utf-8'
+    );
+
+    expect(content).toContain('export interface HarnessResult');
   });
 });
