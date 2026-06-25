@@ -47,6 +47,9 @@ parcel-cache/
 claude_code_helper.sh
 checkpoint.md
 CLAUDE.md
+AGENTS.md
+DEVELOP_REPORT.md
+jest-migration-oom-investigation-report.md
 
 # Local development directories
 docs/
