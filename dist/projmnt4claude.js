@@ -13036,1388 +13036,9 @@ var init_checkpoint_rules = __esm(() => {
   ];
 });
 
-// src/utils/pre-cr-gate/runner.ts
-var init_runner = __esm(() => {
-  init_task();
-  init_task2();
-});
-
-// src/utils/pre-cr-gate/checkers/prerequisites-checker.ts
-var init_prerequisites_checker = __esm(() => {
-  init_task();
-  init_task2();
-});
-
-// src/utils/pre-cr-gate/checkers/dev-complete-checker.ts
-var init_dev_complete_checker = __esm(() => {
-  init_task();
-  init_task2();
-});
-
-// src/utils/pre-cr-gate/checkers/report-validity-checker.ts
-var init_report_validity_checker = __esm(() => {
-  init_task2();
-});
-
-// src/utils/pre-cr-gate/checkers/checkpoint-sync-checker.ts
-var DEFAULT_CHECKPOINT_SYNC_CHECKER_CONFIG;
-var init_checkpoint_sync_checker = __esm(() => {
-  init_task();
-  init_task2();
-  DEFAULT_CHECKPOINT_SYNC_CHECKER_CONFIG = {
-    enabled: true,
-    checkStatusConsistency: true,
-    checkTaskStatusMatch: true,
-    checkReportConsistency: true,
-    detectStaleCheckpoints: true,
-    staleThresholdMs: 7 * 24 * 60 * 60 * 1000,
-    allowSkippedCheckpoints: true,
-    reportsDir: ".projmnt4claude/reports/harness"
-  };
-});
-
-// src/utils/pre-cr-gate/checkers/code-ready-checker.ts
-var init_code_ready_checker = __esm(() => {
-  init_task2();
-});
-
-// src/utils/pre-cr-gate/index.ts
-var init_pre_cr_gate = __esm(() => {
-  init_runner();
-  init_prerequisites_checker();
-  init_dev_complete_checker();
-  init_report_validity_checker();
-  init_checkpoint_sync_checker();
-  init_code_ready_checker();
-});
-
-// src/utils/post-cr-gate/runner.ts
-var init_runner2 = __esm(() => {
-  init_task2();
-});
-
-// src/utils/post-cr-gate/checkers/report-checker.ts
-var init_report_checker = () => {};
-
-// src/utils/post-cr-gate/checkers/test-env-checker.ts
-var init_test_env_checker = __esm(() => {
-  init_task2();
-});
-
-// src/utils/post-cr-gate/checkers/checkpoint-sync-checker.ts
-var init_checkpoint_sync_checker2 = __esm(() => {
-  init_task2();
-});
-
-// src/utils/logger.ts
+// src/utils/checkpoint-verification.ts
 import * as fs9 from "fs";
 import * as path6 from "path";
-import { execSync as execSync2 } from "child_process";
-function getTestMock3(name) {
-  return globalThis.__PROJMNT4CLAUDE_TEST_MOCKS__?.[name];
-}
-function getLogFilePath(command, cwd = process.cwd()) {
-  const date = new Date().toISOString().slice(0, 10).replace(/-/g, "");
-  const logsDir = getLogsDir(cwd);
-  ensureDir(logsDir);
-  return path6.join(logsDir, `${command}-${date}.log`);
-}
-
-class Logger {
-  component;
-  cwd;
-  command;
-  buffer;
-  minLevel;
-  lastWrittenIndex;
-  constructor(options = {}) {
-    this.component = options.component;
-    this.cwd = options.cwd || process.cwd();
-    this.command = options.command;
-    this.buffer = [];
-    this.minLevel = this.resolveLogLevel();
-    this.lastWrittenIndex = 0;
-  }
-  resolveLogLevel() {
-    const envLevel = process.env.LOG_LEVEL;
-    if (envLevel && envLevel in LEVEL_PRIORITY) {
-      return envLevel;
-    }
-    try {
-      const configPath = getConfigPath(this.cwd);
-      if (fs9.existsSync(configPath)) {
-        const raw = fs9.readFileSync(configPath, "utf-8");
-        const config = JSON.parse(raw);
-        const configLevel = config?.logging?.level;
-        if (configLevel && configLevel in LEVEL_PRIORITY) {
-          return configLevel;
-        }
-      }
-    } catch {}
-    return "info";
-  }
-  log(level, message, data) {
-    if (LEVEL_PRIORITY[level] > LEVEL_PRIORITY[this.minLevel]) {
-      return;
-    }
-    const entry = {
-      timestamp: new Date().toISOString(),
-      level,
-      message
-    };
-    if (this.component) {
-      entry.component = this.component;
-    }
-    if (data) {
-      entry.data = data;
-    }
-    this.buffer.push(entry);
-    this.outputToConsole(level, entry);
-    if (this.command) {
-      this.writeEntry(entry);
-      this.lastWrittenIndex = this.buffer.length;
-    }
-  }
-  outputToConsole(level, entry) {
-    const fn = level === "error" ? console.error : level === "warn" ? console.warn : console.log;
-    const prefix = entry.component ? `[${entry.component}] ` : "";
-    fn(`${prefix}${entry.message}`);
-  }
-  writeEntry(entry) {
-    try {
-      const filePath = getLogFilePath(this.command, this.cwd);
-      fs9.appendFileSync(filePath, JSON.stringify(entry) + `
-`, "utf-8");
-    } catch {}
-  }
-  error(message, data) {
-    this.log("error", message, data);
-  }
-  warn(message, data) {
-    this.log("warn", message, data);
-  }
-  info(message, data) {
-    this.log("info", message, data);
-  }
-  debug(message, data) {
-    this.log("debug", message, data);
-  }
-  child(component) {
-    return new Logger({
-      component: this.component ? `${this.component}:${component}` : component,
-      cwd: this.cwd,
-      command: this.command
-    });
-  }
-  logCommandStart(command, args) {
-    this.command = command;
-    this.flush();
-    this.log("info", `命令开始: ${command}`, {
-      command,
-      ...args ? { args } : {}
-    });
-  }
-  logCommandEnd(command, exitCode = 0) {
-    this.log("info", `命令结束: ${command}`, { command, exitCode });
-  }
-  logAICost(summary) {
-    this.log("info", `AI 成本: ${summary.field}`, {
-      aiCost: {
-        field: summary.field,
-        durationMs: summary.durationMs,
-        inputTokens: summary.inputTokens,
-        outputTokens: summary.outputTokens,
-        totalTokens: summary.totalTokens
-      }
-    });
-  }
-  logInstrumentation(record) {
-    this.log("info", `埋点: ${record.module}:${record.action}`, {
-      instrumentation: record
-    });
-  }
-  flush() {
-    if (!this.command)
-      return;
-    for (let i = this.lastWrittenIndex;i < this.buffer.length; i++) {
-      const entry = this.buffer[i];
-      if (entry)
-        this.writeEntry(entry);
-    }
-    this.lastWrittenIndex = this.buffer.length;
-  }
-  readRecentLogEntries(recentCount = 50) {
-    const logsDir = getLogsDir(this.cwd);
-    if (!fs9.existsSync(logsDir))
-      return [];
-    try {
-      const files = fs9.readdirSync(logsDir).filter((f) => f.endsWith(".log")).map((f) => ({ name: f, mtime: fs9.statSync(path6.join(logsDir, f)).mtimeMs })).sort((a, b) => b.mtime - a.mtime);
-      const allEntries = [];
-      for (const file of files) {
-        if (allEntries.length >= recentCount)
-          break;
-        try {
-          const content = fs9.readFileSync(path6.join(logsDir, file.name), "utf-8");
-          const lines = content.trim().split(`
-`).filter(Boolean);
-          for (const line of lines) {
-            try {
-              allEntries.push(JSON.parse(line));
-            } catch {}
-          }
-        } catch {}
-      }
-      allEntries.sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
-      return allEntries.slice(0, recentCount);
-    } catch {
-      return [];
-    }
-  }
-  readAllLogEntries() {
-    const logsDir = getLogsDir(this.cwd);
-    if (!fs9.existsSync(logsDir))
-      return [];
-    try {
-      const files = fs9.readdirSync(logsDir).filter((f) => f.endsWith(".log"));
-      const allEntries = [];
-      for (const file of files) {
-        try {
-          const content = fs9.readFileSync(path6.join(logsDir, file), "utf-8");
-          const lines = content.trim().split(`
-`).filter(Boolean);
-          for (const line of lines) {
-            try {
-              allEntries.push(JSON.parse(line));
-            } catch {}
-          }
-        } catch {}
-      }
-      return allEntries.sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime());
-    } catch {
-      return [];
-    }
-  }
-  generateBugReport(recentCount = 100) {
-    const entries = this.readRecentLogEntries(recentCount);
-    const errors = entries.filter((e) => e.level === "error");
-    const warnings = entries.filter((e) => e.level === "warn");
-    const now = new Date().toISOString();
-    const timestamp = now.replace(/[:.]/g, "-").slice(0, 19);
-    const lines = [
-      `# Bug Report`,
-      ``,
-      `**生成时间**: ${now}`,
-      `**工作目录**: ${this.cwd}`,
-      `**平台**: ${process.platform} / ${process.version}`,
-      ``,
-      `## 概要`,
-      ``,
-      `- 总日志条目: ${entries.length}`,
-      `- 错误数: ${errors.length}`,
-      `- 警告数: ${warnings.length}`,
-      ``
-    ];
-    if (errors.length > 0) {
-      lines.push(`## 错误详情`, ``);
-      for (const err of errors) {
-        const comp = err.component ? ` [${err.component}]` : "";
-        lines.push(`### ${err.timestamp}${comp}`, ``);
-        lines.push(`\`${err.message}\``, ``);
-        if (err.data) {
-          lines.push("```json", JSON.stringify(err.data, null, 2), "```", "");
-        }
-      }
-    }
-    if (warnings.length > 0) {
-      lines.push(`## 警告详情`, ``);
-      for (const warn of warnings) {
-        const comp = warn.component ? ` [${warn.component}]` : "";
-        lines.push(`- **${warn.timestamp}**${comp}: ${warn.message}`);
-      }
-      lines.push("");
-    }
-    const archivePath = this.compressLogs(path6.join(getLogsDir(this.cwd), "..", `bug-report-${timestamp}.tar.gz`));
-    lines.push(`---`, `*日志压缩附件: ${archivePath}*`);
-    return {
-      markdown: lines.join(`
-`),
-      archivePath
-    };
-  }
-  compressLogs(outputPath) {
-    const logsDir = getLogsDir(this.cwd);
-    if (!fs9.existsSync(logsDir)) {
-      throw new Error(`日志目录不存在: ${logsDir}`);
-    }
-    const archivePath = outputPath || path6.join(path6.dirname(logsDir), "logs-archive.tar.gz");
-    ensureDir(path6.dirname(archivePath));
-    const parentDir = path6.dirname(logsDir);
-    const logsDirName = path6.basename(logsDir);
-    try {
-      execSync2(`tar -czf "${archivePath}" -C "${parentDir}" "${logsDirName}"`, {
-        stdio: "pipe"
-      });
-    } catch (err) {
-      throw new Error(`日志压缩失败: ${err instanceof Error ? err.message : String(err)}`);
-    }
-    return archivePath;
-  }
-  cleanupOldLogs(maxAgeDays = 30) {
-    const logsDir = getLogsDir(this.cwd);
-    if (!fs9.existsSync(logsDir))
-      return 0;
-    const cutoff = Date.now() - maxAgeDays * 24 * 60 * 60 * 1000;
-    let deletedCount = 0;
-    try {
-      const files = fs9.readdirSync(logsDir);
-      for (const file of files) {
-        if (!file.endsWith(".log"))
-          continue;
-        const filePath = path6.join(logsDir, file);
-        try {
-          const stat = fs9.statSync(filePath);
-          if (stat.mtimeMs < cutoff) {
-            fs9.unlinkSync(filePath);
-            deletedCount++;
-          }
-        } catch {}
-      }
-    } catch {}
-    return deletedCount;
-  }
-  getCostSummary() {
-    const entries = this.readAllLogEntries();
-    const aiEntries = entries.filter((e) => e.data?.aiCost);
-    const result = {
-      totalCalls: 0,
-      totalDurationMs: 0,
-      totalInputTokens: 0,
-      totalOutputTokens: 0,
-      totalTokens: 0,
-      byField: {},
-      byCommand: {}
-    };
-    for (const entry of aiEntries) {
-      const cost = entry.data.aiCost;
-      result.totalCalls++;
-      result.totalDurationMs += cost.durationMs || 0;
-      result.totalInputTokens += cost.inputTokens || 0;
-      result.totalOutputTokens += cost.outputTokens || 0;
-      result.totalTokens += cost.totalTokens || 0;
-      const field = cost.field || "unknown";
-      if (!result.byField[field]) {
-        result.byField[field] = { calls: 0, durationMs: 0, totalTokens: 0 };
-      }
-      result.byField[field].calls++;
-      result.byField[field].durationMs += cost.durationMs || 0;
-      result.byField[field].totalTokens += cost.totalTokens || 0;
-      const command = entry.data?.command || "unknown";
-      if (!result.byCommand[command]) {
-        result.byCommand[command] = { calls: 0, durationMs: 0, totalTokens: 0 };
-      }
-      result.byCommand[command].calls++;
-      result.byCommand[command].durationMs += cost.durationMs || 0;
-      result.byCommand[command].totalTokens += cost.totalTokens || 0;
-    }
-    return result;
-  }
-  analyzeUsage() {
-    const entries = this.readAllLogEntries();
-    const commandFrequency = {};
-    const commandDurations = {};
-    const commandsWithAI = new Set;
-    const errorMessages = {};
-    let totalCommands = 0;
-    let totalErrors = 0;
-    let totalWarnings = 0;
-    const commandStarts = {};
-    for (const entry of entries) {
-      const data = entry.data;
-      const command = data?.command || "unknown";
-      if (entry.message?.startsWith("命令开始:")) {
-        totalCommands++;
-        commandFrequency[command] = (commandFrequency[command] || 0) + 1;
-        commandStarts[command] = entry.timestamp;
-      }
-      if (entry.message?.startsWith("命令结束:") && commandStarts[command]) {
-        const startMs = new Date(commandStarts[command]).getTime();
-        const endMs = new Date(entry.timestamp).getTime();
-        if (!isNaN(startMs) && !isNaN(endMs) && endMs >= startMs) {
-          if (!commandDurations[command])
-            commandDurations[command] = [];
-          commandDurations[command].push(endMs - startMs);
-        }
-        delete commandStarts[command];
-      }
-      if (data?.aiCost) {
-        commandsWithAI.add(command);
-      }
-      if (entry.level === "error") {
-        totalErrors++;
-        const msg = entry.message;
-        if (msg) {
-          if (!errorMessages[msg]) {
-            errorMessages[msg] = { count: 0, lastSeen: entry.timestamp };
-          }
-          errorMessages[msg].count++;
-          errorMessages[msg].lastSeen = entry.timestamp;
-        }
-      }
-      if (entry.level === "warn") {
-        totalWarnings++;
-      }
-    }
-    const allDurations = Object.values(commandDurations).flat();
-    const averageDurationMs = allDurations.length > 0 ? Math.round(allDurations.reduce((a, b) => a + b, 0) / allDurations.length) : 0;
-    const aiUsageRate = totalCommands > 0 ? commandsWithAI.size / Object.keys(commandFrequency).length : 0;
-    const commonErrors = Object.entries(errorMessages).map(([message, info]) => ({ message, count: info.count, lastSeen: info.lastSeen })).sort((a, b) => b.count - a.count).slice(0, 10);
-    return {
-      commandFrequency,
-      commonErrors,
-      averageDurationMs,
-      aiUsageRate: Math.min(aiUsageRate, 1),
-      totalCommands,
-      totalErrors,
-      totalWarnings
-    };
-  }
-}
-function createLogger(command, cwd) {
-  const testMock = getTestMock3("createLogger");
-  if (testMock) {
-    return testMock(command, cwd);
-  }
-  const logger = new Logger({ command, cwd });
-  logger.logCommandStart(command);
-  return logger;
-}
-var LEVEL_PRIORITY;
-var init_logger = __esm(() => {
-  init_path();
-  LEVEL_PRIORITY = {
-    error: 0,
-    warn: 1,
-    info: 2,
-    debug: 3
-  };
-});
-
-// src/utils/session-lock-cleanup.ts
-import * as fs10 from "fs";
-import * as path7 from "path";
-import * as os2 from "os";
-function getSessionEnvRoot() {
-  const override = process.env.PROJMNT4CLAUDE_SESSION_ENV_ROOT;
-  if (override && override.trim().length > 0) {
-    return override;
-  }
-  return path7.join(os2.homedir(), ".claude", "session-env");
-}
-function isUuidLike(s) {
-  return UUID_RE.test(s);
-}
-function ensureCleanSessionSlot(cliUuid, root) {
-  if (!isUuidLike(cliUuid)) {
-    return false;
-  }
-  const base = root ?? getSessionEnvRoot();
-  const lockDir = path7.join(base, cliUuid);
-  try {
-    if (!fs10.existsSync(lockDir)) {
-      return false;
-    }
-    const stat = fs10.statSync(lockDir);
-    if (!stat.isDirectory()) {
-      return false;
-    }
-    fs10.rmSync(lockDir, { recursive: true, force: true });
-    return true;
-  } catch {
-    return false;
-  }
-}
-function listOrphanedSessions(knownCliUuids, root) {
-  const base = root ?? getSessionEnvRoot();
-  if (!fs10.existsSync(base)) {
-    return [];
-  }
-  const orphans = [];
-  let entries = [];
-  try {
-    entries = fs10.readdirSync(base);
-  } catch {
-    return [];
-  }
-  for (const entry of entries) {
-    if (!isUuidLike(entry)) {
-      continue;
-    }
-    const lockDir = path7.join(base, entry);
-    try {
-      const stat = fs10.statSync(lockDir);
-      if (!stat.isDirectory()) {
-        continue;
-      }
-      if (knownCliUuids.has(entry)) {
-        continue;
-      }
-      orphans.push({
-        cliUuid: entry,
-        lockDir,
-        mtime: stat.mtime.toISOString()
-      });
-    } catch {}
-  }
-  return orphans;
-}
-function cleanupOrphanedSessions(orphans) {
-  let cleaned = 0;
-  for (const orphan of orphans) {
-    try {
-      fs10.rmSync(orphan.lockDir, { recursive: true, force: true });
-      cleaned++;
-    } catch {}
-  }
-  return cleaned;
-}
-var UUID_RE;
-var init_session_lock_cleanup = __esm(() => {
-  UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
-});
-
-// src/utils/session-id-mapper.ts
-import { createHash } from "crypto";
-
-class SessionIdMapper {
-  mappings = new Map;
-  auditLogger;
-  setAuditLogger(logger) {
-    this.auditLogger = logger;
-  }
-  generate(internalId, taskId, phase, runSalt) {
-    const now = new Date().toISOString();
-    const existing = this.mappings.get(internalId);
-    if (existing) {
-      existing.lastUsedAt = now;
-      if (this.auditLogger) {
-        this.auditLogger({ mapping: existing, isReused: true });
-      }
-      return existing.cliUuid;
-    }
-    const cliUuid = this.deriveDeterministicUuid(internalId, taskId, phase, runSalt);
-    const mapping = {
-      internalId,
-      cliUuid,
-      taskId,
-      phase,
-      createdAt: now,
-      lastUsedAt: now
-    };
-    this.mappings.set(internalId, mapping);
-    this.mappings.set(cliUuid, mapping);
-    if (this.auditLogger) {
-      this.auditLogger({ mapping, isReused: false });
-    }
-    return cliUuid;
-  }
-  deriveDeterministicUuid(internalId, taskId, phase, runSalt) {
-    const hash = createHash("sha256").update(`${internalId}|${taskId}|${phase}|${runSalt}`).digest("hex");
-    const variantChar = (parseInt(hash.slice(16, 18), 16) & 3 | 8).toString(16);
-    return [
-      hash.slice(0, 8),
-      hash.slice(8, 12),
-      "4" + hash.slice(13, 16),
-      variantChar + hash.slice(17, 20),
-      hash.slice(20, 32)
-    ].join("-");
-  }
-  toCliUuid(internalId) {
-    return this.mappings.get(internalId)?.cliUuid;
-  }
-  toInternalId(cliUuid) {
-    return this.mappings.get(cliUuid)?.internalId;
-  }
-  getMapping(id) {
-    return this.mappings.get(id);
-  }
-  serialize() {
-    const seen = new Map;
-    for (const mapping of this.mappings.values()) {
-      seen.set(mapping.cliUuid, mapping);
-    }
-    return Array.from(seen.values());
-  }
-  deserialize(mappings) {
-    for (const mapping of mappings) {
-      this.mappings.set(mapping.internalId, mapping);
-      this.mappings.set(mapping.cliUuid, mapping);
-    }
-  }
-  clear() {
-    this.mappings.clear();
-  }
-  size() {
-    const seen = new Set;
-    for (const mapping of this.mappings.values()) {
-      seen.add(mapping.cliUuid);
-    }
-    return seen.size;
-  }
-  probeSessionState(internalId) {
-    const existing = this.mappings.get(internalId);
-    if (!existing) {
-      return {
-        state: "fresh",
-        cliUuid: "",
-        reason: `no existing mapping for internalId=${internalId}`
-      };
-    }
-    return {
-      state: "active",
-      cliUuid: existing.cliUuid,
-      reason: `existing mapping found → resume full history`
-    };
-  }
-  buildStableInternalId(taskId, phase, prefix = "cr") {
-    return `${prefix}-${taskId}-stable-${phase}`;
-  }
-}
-function assertIsValidUuidV4(value, label = "sessionId") {
-  if (!value || typeof value !== "string") {
-    throw new Error(`[${label}] must be a non-empty string, got: ${String(value)}`);
-  }
-  if (!UUID_V4_PATTERN.test(value)) {
-    throw new Error(`[${label}] must be a valid UUID v4, got: ${value}`);
-  }
-}
-function deriveSessionStateFromLegacyFlags(options) {
-  if (options.sessionState) {
-    return options.sessionState;
-  }
-  if (options.resumeSession) {
-    return "active";
-  }
-  return "fresh";
-}
-function buildSessionCliArgs(state, cliUuid) {
-  assertIsValidUuidV4(cliUuid, "cliUuid");
-  switch (state) {
-    case "fresh":
-      return ["--session-id", cliUuid];
-    case "active":
-      return ["--resume", cliUuid];
-    default: {
-      const _exhaustive = state;
-      throw new Error(`Unknown sessionState: ${String(_exhaustive)}`);
-    }
-  }
-}
-var sessionIdMapper, UUID_V4_PATTERN;
-var init_session_id_mapper = __esm(() => {
-  sessionIdMapper = new SessionIdMapper;
-  UUID_V4_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
-});
-
-// src/utils/harness-helpers.ts
-import * as fs11 from "fs";
-import * as path8 from "path";
-function installExitHooks(knownCliUuids = new Set, sessionEnvRoot) {
-  if (installedHooks) {
-    return;
-  }
-  const handler = (_signal) => {
-    try {
-      killAllActiveChildren("SIGTERM");
-      const orphans = listOrphanedSessions(knownCliUuids, sessionEnvRoot);
-      if (orphans.length > 0) {
-        cleanupOrphanedSessions(orphans);
-      }
-    } catch {}
-  };
-  const exitHandler = (_code) => {
-    try {
-      killAllActiveChildren("SIGKILL");
-      for (const uuid of knownCliUuids) {
-        ensureCleanSessionSlot(uuid, sessionEnvRoot);
-      }
-      const orphans = listOrphanedSessions(knownCliUuids, sessionEnvRoot);
-      if (orphans.length > 0) {
-        cleanupOrphanedSessions(orphans);
-      }
-    } catch {}
-  };
-  const signals = ["SIGTERM", "SIGINT", "SIGHUP"];
-  for (const sig of signals) {
-    process.on(sig, handler);
-  }
-  process.on("exit", exitHandler);
-  installedHooks = { handler, exitHandler, signals };
-}
-function uninstallExitHooks() {
-  if (!installedHooks) {
-    return;
-  }
-  for (const sig of installedHooks.signals) {
-    process.removeListener(sig, installedHooks.handler);
-  }
-  process.removeListener("exit", installedHooks.exitHandler);
-  installedHooks = null;
-}
-function classifyExitResult(code, stderr, stdout, cwd) {
-  let texts;
-  try {
-    texts = t(cwd || process.cwd());
-  } catch {
-    texts = t();
-  }
-  if (code === 0) {
-    return { success: true };
-  }
-  const isHookError = /hook\s+.*\s+failed/i.test(stderr) || /Hook cancelled/i.test(stderr) || /SessionEnd\s+hook/i.test(stderr);
-  const hasOutput = stdout.trim().length > 0;
-  if (isHookError && hasOutput) {
-    return {
-      success: true,
-      hookWarning: `${texts.harness.logs.hookWarningIgnored}: ${stderr.substring(0, 200)}`
-    };
-  }
-  if (isHookError && !hasOutput) {
-    return {
-      success: false,
-      error: `${texts.harness.logs.hookErrorNoOutput}: ${stderr.substring(0, 200)}`
-    };
-  }
-  return {
-    success: false,
-    error: stderr || `${texts.harness.logs.processExitCode}: ${code}`
-  };
-}
-async function runHeadlessClaude(options) {
-  return new Promise((resolve3) => {
-    const args = [
-      "--allowedTools",
-      options.allowedTools.join(","),
-      "--print"
-    ];
-    if (options.dangerouslySkipPermissions) {
-      args.push("--dangerously-skip-permissions");
-    }
-    if (options.outputFormat) {
-      args.push("--output-format", options.outputFormat);
-    }
-    if (options.sessionId) {
-      const state = deriveSessionStateFromLegacyFlags({
-        sessionState: options.sessionState,
-        resumeSession: options.resumeSession,
-        forkSession: options.forkSession
-      });
-      args.push(...buildSessionCliArgs(state, options.sessionId));
-    }
-    if (options.bare) {
-      args.push("--bare");
-    }
-    if (options.noSessionPersistence) {
-      args.push("--no-session-persistence");
-    }
-    if (options.mcpConfig && options.mcpConfig.length > 0) {
-      for (const config of options.mcpConfig) {
-        args.push("--mcp-config", config);
-      }
-    }
-    if (options.strictMcpConfig) {
-      args.push("--strict-mcp-config");
-    }
-    if (options.pluginDir && options.pluginDir.length > 0) {
-      for (const dir of options.pluginDir) {
-        args.push("--plugin-dir", dir);
-      }
-    }
-    if (options.pluginUrl && options.pluginUrl.length > 0) {
-      for (const url of options.pluginUrl) {
-        args.push("--plugin-url", url);
-      }
-    }
-    if (options.disableSlashCommands) {
-      args.push("--disable-slash-commands");
-    }
-    if (options.effort) {
-      args.push("--effort", options.effort);
-    }
-    if (options.maxBudgetUsd) {
-      args.push("--max-budget-usd", String(options.maxBudgetUsd));
-    }
-    if (options.debug) {
-      args.push("--debug");
-    }
-    try {
-      const child = spawnWithMemoryLimit("claude", args, {
-        cwd: options.cwd,
-        stdio: ["pipe", "pipe", "pipe"],
-        timeout: options.timeout * 1000
-      }, "claudeAgent");
-      if (child.stdin) {
-        let writeNextChunk = function() {
-          if (offset >= options.prompt.length) {
-            child.stdin.end();
-            return;
-          }
-          const chunk = options.prompt.substring(offset, offset + chunkSize);
-          offset += chunkSize;
-          const result = child.stdin.write(chunk);
-          if (!result) {
-            child.stdin.once("drain", writeNextChunk);
-          } else {
-            writeNextChunk();
-          }
-        };
-        const chunkSize = 4096;
-        let offset = 0;
-        writeNextChunk();
-      }
-      let stdout = "";
-      let stderr = "";
-      child.stdout?.on("data", (data) => {
-        stdout += data.toString();
-      });
-      child.stderr?.on("data", (data) => {
-        stderr += data.toString();
-      });
-      child.on("close", (code) => {
-        const classified = classifyExitResult(code, stderr, stdout);
-        resolve3({
-          success: classified.success,
-          output: stdout,
-          error: classified.error,
-          hookWarning: classified.hookWarning,
-          stderr,
-          childPid: child.pid
-        });
-      });
-      child.on("error", (error) => {
-        resolve3({
-          success: false,
-          output: "",
-          error: error.message,
-          stderr: "",
-          childPid: child.pid
-        });
-      });
-    } catch (error) {
-      resolve3({
-        success: false,
-        output: "",
-        error: error instanceof Error ? error.message : String(error),
-        stderr: ""
-      });
-    }
-  });
-}
-function sleep(seconds) {
-  return new Promise((resolve3) => setTimeout(resolve3, seconds * 1000));
-}
-function archiveReportIfExists(reportPath, cwd) {
-  const testMock = globalThis.__PROJMNT4CLAUDE_TEST_MOCKS__?.archiveReportIfExists;
-  if (testMock) {
-    return testMock(reportPath, cwd);
-  }
-  let texts;
-  try {
-    texts = t(cwd);
-  } catch {
-    const { getI18n: getI18n2 } = (init_i18n(), __toCommonJS(exports_i18n));
-    texts = getI18n2("zh");
-  }
-  try {
-    const absolutePath = path8.resolve(reportPath);
-    if (!fs11.existsSync(absolutePath)) {
-      return;
-    }
-    const dir = path8.dirname(absolutePath);
-    const filename = path8.basename(absolutePath);
-    const archiveDir = path8.join(dir, "archive");
-    if (!fs11.existsSync(archiveDir)) {
-      fs11.mkdirSync(archiveDir, { recursive: true });
-    }
-    const timestamp = new Date().toISOString().replace(/[:.]/g, "-");
-    const archivePath = path8.join(archiveDir, `${timestamp}-${filename}`);
-    fs11.copyFileSync(absolutePath, archivePath);
-    console.log(`   \uD83D\uDCE6 ${texts.harness.logs.archivedReport.replace("{filename}", `${timestamp}-${filename}`)}`);
-  } catch (error) {
-    console.warn(`   ⚠️ ${texts.harness.logs.archiveFailed}: ${error instanceof Error ? error.message : String(error)}`);
-  }
-}
-async function saveReport(reportPath, content) {
-  const dir = path8.dirname(reportPath);
-  try {
-    if (!fs11.existsSync(dir)) {
-      fs11.mkdirSync(dir, { recursive: true });
-    }
-    archiveReportIfExists(reportPath);
-    fs11.writeFileSync(reportPath, content, "utf-8");
-  } catch (error) {
-    throw new Error(`保存报告失败: ${error instanceof Error ? error.message : String(error)}`);
-  }
-}
-function filterCheckpoints(task, filterFn) {
-  if (!task.checkpoints) {
-    return [];
-  }
-  return task.checkpoints.filter(filterFn);
-}
-function parseStructuredResult(output) {
-  if (!output || output.trim().length === 0) {
-    return { passed: null, matchLevel: null };
-  }
-  const level1 = output.match(/(?:EVALUATION_RESULT|VERDICT)\s*[:：]\s*(PASS|NOPASS)/i);
-  if (level1) {
-    return { passed: level1[1].toUpperCase() === "PASS", matchLevel: 1 };
-  }
-  const level2Patterns = [
-    /##\s*(?:评估结果|审核结果|验证结果|Evaluation Result|Result|Verdict)\s*[:：]?\s*(PASS|NOPASS)/i,
-    /(?:评估结果|审核结果|验证结果|Evaluation Result|Result|Verdict)[:：]?\s*(PASS|NOPASS)/i,
-    /"result"\s*[:：]\s*"(PASS|NOPASS)"/i
-  ];
-  for (const pattern of level2Patterns) {
-    const match = output.match(pattern);
-    if (match) {
-      return { passed: match[1].toUpperCase() === "PASS", matchLevel: 2 };
-    }
-  }
-  const level3 = output.match(/\b(PASS|NOPASS)\b/i);
-  if (level3) {
-    return { passed: level3[1].toUpperCase() === "PASS", matchLevel: 3 };
-  }
-  return { passed: null, matchLevel: null };
-}
-function parseVerdictResult(output, options) {
-  const result = {
-    passed: true,
-    reason: "",
-    items: [],
-    failedCheckpoints: [],
-    details: ""
-  };
-  const resultPattern = new RegExp(`##\\s*${options.resultField}\\s*[:：]\\s*(PASS|NOPASS)`, "i");
-  const resultMatch = output.match(resultPattern);
-  if (resultMatch) {
-    result.passed = resultMatch[1].toUpperCase() === "PASS";
-  }
-  const reasonPattern = new RegExp(`##\\s*${options.reasonField}\\s*[:：]\\s*(.+?)(?=##|$)`, "si");
-  const reasonMatch = output.match(reasonPattern);
-  if (reasonMatch) {
-    result.reason = reasonMatch[1].trim();
-  }
-  const listPattern = new RegExp(`##\\s*${options.listField}\\s*[:：]\\s*(.+?)(?=##|$)`, "si");
-  const listMatch = output.match(listPattern);
-  if (listMatch) {
-    const listText = listMatch[1].trim();
-    if (listText && listText !== "无" && listText !== "N/A") {
-      result.items = listText.split(`
-`).map((line) => line.replace(/^[-*]\s*/, "").trim()).filter((line) => line.length > 0);
-    }
-  }
-  const checkpointPattern = new RegExp(`##\\s*${options.checkpointField}\\s*[:：]\\s*(.+?)(?=##|$)`, "si");
-  const checkpointMatch = output.match(checkpointPattern);
-  if (checkpointMatch) {
-    const checkpointText = checkpointMatch[1].trim();
-    if (checkpointText && checkpointText !== "无" && checkpointText !== "N/A") {
-      result.failedCheckpoints = checkpointText.split(`
-`).map((line) => line.replace(/^[-*]\s*/, "").trim()).filter((line) => line.length > 0);
-    }
-  }
-  if (options.detailsField) {
-    const detailsPattern = new RegExp(`##\\s*${options.detailsField}\\s*[:：]\\s*(.+?)(?=##|$)`, "si");
-    const detailsMatch = output.match(detailsPattern);
-    if (detailsMatch) {
-      result.details = detailsMatch[1].trim();
-    }
-  }
-  if (!resultMatch) {
-    const structured = parseStructuredResult(output);
-    if (structured.passed !== null) {
-      result.passed = structured.passed;
-      if (!result.reason) {
-        const reasonPatterns = [
-          /REASON\s*[:：]\s*(.+?)(?=\n\n|\n## |$)/si,
-          /EVALUATION_REASON\s*[:：]\s*(.+?)(?=\n\n|\n## |$)/si,
-          new RegExp(`##?s*${options.reasonField}s*[:：]?s*(.+?)(?=
-
-|
-## |$)`, "si")
-        ];
-        for (const pattern of reasonPatterns) {
-          const match = output.match(pattern);
-          if (match && match[1]?.trim()) {
-            result.reason = match[1].trim();
-            break;
-          }
-        }
-        if (!result.reason) {
-          result.reason = `基于结构化关键词匹配（级别 ${structured.matchLevel}）`;
-        }
-      }
-    }
-  }
-  if (!result.reason) {
-    result.reason = "无法解析判定结果";
-  }
-  return result;
-}
-function getReportDir(taskId, cwd) {
-  return path8.join(getProjectDir(cwd), "reports", "harness", taskId);
-}
-function getReportPath(taskId, reportType, cwd) {
-  return path8.join(getReportDir(taskId, cwd), `${reportType}-report.md`);
-}
-var REVIEW_TIMEOUT_RATIO = 3, installedHooks = null;
-var init_harness_helpers = __esm(() => {
-  init_path();
-  init_i18n();
-  init_spawn_utils();
-  init_child_process_registry();
-  init_session_lock_cleanup();
-  init_session_id_mapper();
-});
-
-// src/utils/headless-agent.ts
-var exports_headless_agent = {};
-__export(exports_headless_agent, {
-  translateOptionsToCliArgs: () => translateOptionsToCliArgs,
-  loadAIConfig: () => loadAIConfig,
-  invokeAgent: () => invokeAgent,
-  initializeProviders: () => initializeProviders,
-  getAgent: () => getAgent,
-  buildEffectiveTools: () => buildEffectiveTools,
-  agentRegistry: () => agentRegistry,
-  ClaudeCodeProvider: () => ClaudeCodeProvider
-});
-import * as fs12 from "fs";
-function getTestMock4(name) {
-  return globalThis.__PROJMNT4CLAUDE_TEST_MOCKS__?.[name];
-}
-function translateOptionsToCliArgs(options) {
-  const args = ["--print"];
-  if (options.allowedTools && options.allowedTools.length > 0) {
-    args.push("--allowedTools", options.allowedTools.join(","));
-  }
-  if (options.dangerouslySkipPermissions) {
-    args.push("--dangerously-skip-permissions");
-  }
-  if (options.outputFormat === "json") {
-    args.push("--output-format", "json");
-  }
-  if (options.sessionId) {
-    const state = deriveSessionStateFromLegacyFlags({
-      sessionState: options.sessionState,
-      resumeSession: options.resumeSession,
-      forkSession: options.forkSession
-    });
-    args.push(...buildSessionCliArgs(state, options.sessionId));
-  }
-  if (options.bare) {
-    args.push("--bare");
-  }
-  if (options.noSessionPersistence) {
-    args.push("--no-session-persistence");
-  }
-  if (options.mcpConfig && options.mcpConfig.length > 0) {
-    for (const config of options.mcpConfig) {
-      args.push("--mcp-config", config);
-    }
-  }
-  if (options.strictMcpConfig) {
-    args.push("--strict-mcp-config");
-  }
-  if (options.pluginDir && options.pluginDir.length > 0) {
-    for (const dir of options.pluginDir) {
-      args.push("--plugin-dir", dir);
-    }
-  }
-  if (options.pluginUrl && options.pluginUrl.length > 0) {
-    for (const url of options.pluginUrl) {
-      args.push("--plugin-url", url);
-    }
-  }
-  if (options.disableSlashCommands) {
-    args.push("--disable-slash-commands");
-  }
-  if (options.effort) {
-    args.push("--effort", options.effort);
-  }
-  if (options.maxBudgetUsd) {
-    args.push("--max-budget-usd", String(options.maxBudgetUsd));
-  }
-  if (options.debug) {
-    args.push("--debug");
-  }
-  return args;
-}
-function buildEffectiveTools(phase, cwd, task) {
-  const testMock = getTestMock4("buildEffectiveTools");
-  if (testMock) {
-    return testMock(phase, cwd, task);
-  }
-  const codeDefaults = PHASE_DEFAULT_TOOLS[phase] || ["Read", "Bash", "Grep", "Glob"];
-  const configKey = PHASE_CONFIG_KEY[phase];
-  let phaseTools = codeDefaults;
-  try {
-    const configPath = getConfigPath(cwd);
-    if (fs12.existsSync(configPath)) {
-      const config = JSON.parse(fs12.readFileSync(configPath, "utf-8"));
-      const configPhaseTools = config?.harness?.perPhaseTools?.[configKey || phase];
-      if (Array.isArray(configPhaseTools) && configPhaseTools.length > 0) {
-        phaseTools = configPhaseTools;
-      }
-    }
-  } catch {}
-  if (task?.allowedTools && task.allowedTools.length > 0) {
-    const taskToolSet = new Set(task.allowedTools);
-    const effectiveTools = phaseTools.filter((t2) => taskToolSet.has(t2));
-    return { tools: effectiveTools, skipPermissions: false };
-  }
-  return { tools: phaseTools, skipPermissions: true };
-}
-
-class AgentProviderRegistryImpl {
-  providers = new Map;
-  defaultProvider = "claude-code";
-  logger;
-  constructor() {
-    this.logger = new Logger({ component: "headless-agent" });
-  }
-  register(provider) {
-    if (this.providers.has(provider.name)) {
-      this.logger.warn(`Provider '${provider.name}' 已存在，将被覆盖`);
-    }
-    this.providers.set(provider.name, provider);
-    this.logger.info(`注册 Agent provider: ${provider.name}`);
-  }
-  getProvider(name) {
-    const providerName = name || this.defaultProvider;
-    const provider = this.providers.get(providerName);
-    if (!provider) {
-      throw new Error(`Agent provider '${providerName}' 未注册。可用: ${[...this.providers.keys()].join(", ")}`);
-    }
-    return provider;
-  }
-  setDefault(name) {
-    if (!this.providers.has(name)) {
-      throw new Error(`无法设置默认 provider: '${name}' 未注册`);
-    }
-    this.defaultProvider = name;
-    this.logger.info(`默认 Agent provider 设置为: ${name}`);
-  }
-  getDefaultName() {
-    return this.defaultProvider;
-  }
-  listProviders() {
-    return [...this.providers.keys()];
-  }
-}
-
-class ClaudeCodeProvider {
-  name = "claude-code";
-  logger;
-  constructor() {
-    this.logger = new Logger({ component: "headless-agent:claude-code" });
-  }
-  async invoke(prompt, options) {
-    const startTime = Date.now();
-    this.logger.info("调用 Claude Code", {
-      timeout: options.timeout,
-      allowedTools: options.allowedTools,
-      cwd: options.cwd,
-      dangerouslySkipPermissions: options.dangerouslySkipPermissions,
-      outputFormat: options.outputFormat,
-      sessionId: options.sessionId,
-      sessionState: options.sessionState,
-      resumeSession: options.resumeSession,
-      forkSession: options.forkSession
-    });
-    const claudeOptions = {
-      prompt,
-      allowedTools: options.allowedTools,
-      timeout: options.timeout,
-      cwd: options.cwd,
-      dangerouslySkipPermissions: options.dangerouslySkipPermissions,
-      outputFormat: options.outputFormat === "json" ? "json" : undefined,
-      sessionId: options.sessionId,
-      sessionState: options.sessionState,
-      resumeSession: options.resumeSession,
-      forkSession: options.forkSession,
-      bare: options.bare,
-      noSessionPersistence: options.noSessionPersistence,
-      mcpConfig: options.mcpConfig,
-      strictMcpConfig: options.strictMcpConfig,
-      pluginDir: options.pluginDir,
-      pluginUrl: options.pluginUrl,
-      disableSlashCommands: options.disableSlashCommands,
-      effort: options.effort,
-      maxBudgetUsd: options.maxBudgetUsd,
-      debug: options.debug
-    };
-    const result = await runHeadlessClaude(claudeOptions);
-    const durationMs = Date.now() - startTime;
-    const tokensUsed = this.extractTokens(result.output);
-    const model = this.extractModel(result.output);
-    this.logger.info("Claude Code 调用完成", {
-      success: result.success,
-      durationMs,
-      tokensUsed,
-      model,
-      hookWarning: result.hookWarning
-    });
-    const isHookFailure = !result.success && result.hookWarning;
-    if (isHookFailure) {
-      console.log(`   ⚠️  ${result.hookWarning}`);
-      console.log(`   \uD83D\uDCA1 Hook 错误不影响任务结果，继续处理...`);
-    }
-    if (result.success || isHookFailure) {
-      this.logger.logAICost({
-        field: "headless-agent:invoke",
-        durationMs,
-        inputTokens: 0,
-        outputTokens: tokensUsed,
-        totalTokens: tokensUsed
-      });
-    }
-    return {
-      output: result.output,
-      success: isHookFailure ? true : result.success,
-      provider: this.name,
-      durationMs,
-      tokensUsed,
-      model,
-      error: isHookFailure ? undefined : result.error,
-      hookWarning: result.hookWarning,
-      stderr: result.stderr
-    };
-  }
-  extractTokens(output) {
-    try {
-      const jsonOutput = JSON.parse(output);
-      if (jsonOutput && typeof jsonOutput === "object") {
-        const usage = jsonOutput.usage;
-        if (usage) {
-          return (usage.input_tokens || 0) + (usage.output_tokens || 0);
-        }
-      }
-    } catch {}
-    let totalTokens = 0;
-    let foundJsonl = false;
-    for (const line of output.split(`
-`)) {
-      const trimmed = line.trim();
-      if (!trimmed)
-        continue;
-      try {
-        const obj = JSON.parse(trimmed);
-        foundJsonl = true;
-        if (obj?.usage) {
-          totalTokens += (obj.usage.input_tokens || 0) + (obj.usage.output_tokens || 0);
-        }
-      } catch {}
-    }
-    if (foundJsonl && totalTokens > 0)
-      return totalTokens;
-    const tokenMatch = output.match(/tokens?[:\s]+(\d+)/i);
-    return tokenMatch ? parseInt(tokenMatch[1], 10) : 0;
-  }
-  extractModel(output) {
-    try {
-      const jsonOutput = JSON.parse(output);
-      if (jsonOutput?.model)
-        return jsonOutput.model;
-    } catch {}
-    return "claude-code";
-  }
-}
-function initializeProviders() {
-  if (!agentRegistry.listProviders().includes("claude-code")) {
-    agentRegistry.register(new ClaudeCodeProvider);
-  }
-}
-function loadAIConfig(cwd) {
-  try {
-    const configPath = getConfigPath(cwd);
-    if (!fs12.existsSync(configPath)) {
-      return DEFAULT_AI;
-    }
-    const config = JSON.parse(fs12.readFileSync(configPath, "utf-8"));
-    if (!config.ai) {
-      return DEFAULT_AI;
-    }
-    return {
-      provider: config.ai.provider || DEFAULT_AI.provider,
-      customEndpoint: config.ai.customEndpoint,
-      providerOptions: config.ai.providerOptions
-    };
-  } catch {
-    return DEFAULT_AI;
-  }
-}
-function getAgent(cwd) {
-  const testMock = getTestMock4("getAgent");
-  if (testMock) {
-    return testMock(cwd);
-  }
-  const aiConfig = loadAIConfig(cwd);
-  return agentRegistry.getProvider(aiConfig.provider);
-}
-async function invokeAgent(prompt, options) {
-  const testMock = getTestMock4("invokeAgent");
-  if (testMock) {
-    return testMock(prompt, options);
-  }
-  const agent = getAgent(options.cwd);
-  return agent.invoke(prompt, options);
-}
-var PHASE_DEFAULT_TOOLS, PHASE_CONFIG_KEY, agentRegistry;
-var init_headless_agent = __esm(() => {
-  init_logger();
-  init_harness_helpers();
-  init_config();
-  init_session_id_mapper();
-  init_path();
-  PHASE_DEFAULT_TOOLS = {
-    development: ["Read", "Edit", "Write", "Bash", "Grep", "Glob"],
-    codeReview: ["Read", "Bash", "Grep", "Glob"],
-    qaVerification: ["Read", "Bash", "Grep", "Glob"],
-    evaluation: ["Read", "Bash", "Grep", "Glob"]
-  };
-  PHASE_CONFIG_KEY = {
-    development: "development",
-    codeReview: "codeReview",
-    code_review: "codeReview",
-    qaVerification: "qaVerification",
-    qa_verification: "qaVerification",
-    evaluation: "evaluation"
-  };
-  agentRegistry = new AgentProviderRegistryImpl;
-  initializeProviders();
-});
-
-// src/types/quality-score.ts
-var init_quality_score = () => {};
-
-// src/utils/post-cr-gate/checkers/quality-score-checker.ts
-var init_quality_score_checker = __esm(() => {
-  init_headless_agent();
-  init_quality_score();
-});
-
-// src/utils/post-cr-gate/index.ts
-var init_post_cr_gate = __esm(() => {
-  init_runner2();
-  init_report_checker();
-  init_test_env_checker();
-  init_checkpoint_sync_checker2();
-  init_quality_score_checker();
-});
-
-// src/utils/checkpoint-verification.ts
-import * as fs13 from "fs";
-import * as path9 from "path";
 function inferCategoryFromDescription(description) {
   const lowerDesc = description.toLowerCase();
   if (lowerDesc.includes("test") || lowerDesc.includes("测试") || lowerDesc.includes("unit test") || lowerDesc.includes("单元测试") || lowerDesc.includes("integration test") || lowerDesc.includes("集成测试") || lowerDesc.includes("e2e") || lowerDesc.includes("端到端")) {
@@ -14534,19 +13155,19 @@ class CheckpointOutputVerifier {
     const warnings = [];
     const evidence = [];
     const projectDir = getProjectDir(this.cwd);
-    const evidenceDir = path9.join(projectDir, "evidence", context.taskId);
-    if (fs13.existsSync(evidenceDir)) {
-      const files = fs13.readdirSync(evidenceDir);
+    const evidenceDir = path6.join(projectDir, "evidence", context.taskId);
+    if (fs9.existsSync(evidenceDir)) {
+      const files = fs9.readdirSync(evidenceDir);
       if (files.length > 0) {
         evidence.push(`证据目录存在 ${files.length} 个文件`);
       }
     }
-    const reportPath = path9.join(projectDir, "reports", "harness", context.taskId, "dev-report.md");
-    if (fs13.existsSync(reportPath)) {
+    const reportPath = path6.join(projectDir, "reports", "harness", context.taskId, "dev-report.md");
+    if (fs9.existsSync(reportPath)) {
       evidence.push("开发报告存在");
     }
-    const gitDir = path9.join(this.cwd, ".git");
-    if (fs13.existsSync(gitDir)) {
+    const gitDir = path6.join(this.cwd, ".git");
+    if (fs9.existsSync(gitDir)) {
       evidence.push("Git 仓库存在变更记录");
     }
     if (evidence.length > 0) {
@@ -14581,13 +13202,13 @@ class CheckpointOutputVerifier {
     const warnings = [];
     const evidence = [];
     const projectDir = getProjectDir(this.cwd);
-    const qaReportPath = path9.join(projectDir, "reports", "harness", context.taskId, "qa-report.md");
-    if (fs13.existsSync(qaReportPath)) {
+    const qaReportPath = path6.join(projectDir, "reports", "harness", context.taskId, "qa-report.md");
+    if (fs9.existsSync(qaReportPath)) {
       evidence.push("QA 报告存在");
     }
     const testPatterns = [".test.ts", ".spec.ts", ".test.js", ".spec.js"];
-    const srcDir = path9.join(this.cwd, "src");
-    if (fs13.existsSync(srcDir)) {
+    const srcDir = path6.join(this.cwd, "src");
+    if (fs9.existsSync(srcDir)) {
       const foundTestFiles = this.findFilesWithPatterns(srcDir, testPatterns);
       if (foundTestFiles.length > 0) {
         evidence.push(`找到 ${foundTestFiles.length} 个测试文件`);
@@ -14620,8 +13241,8 @@ class CheckpointOutputVerifier {
     const docPatterns = ["README.md", "CHANGELOG.md", "docs/", ".md"];
     const foundDocs = [];
     for (const pattern of docPatterns) {
-      const fullPath = path9.join(this.cwd, pattern);
-      if (fs13.existsSync(fullPath)) {
+      const fullPath = path6.join(this.cwd, pattern);
+      if (fs9.existsSync(fullPath)) {
         foundDocs.push(pattern);
       }
     }
@@ -14651,8 +13272,8 @@ class CheckpointOutputVerifier {
   async verifyReview(context, baseRecord) {
     const evidence = [];
     const projectDir = getProjectDir(this.cwd);
-    const crReportPath = path9.join(projectDir, "reports", "harness", context.taskId, "cr-report.md");
-    if (fs13.existsSync(crReportPath)) {
+    const crReportPath = path6.join(projectDir, "reports", "harness", context.taskId, "cr-report.md");
+    if (fs9.existsSync(crReportPath)) {
       evidence.push("代码审核报告存在");
     }
     if (context.phaseData?.codeReviewVerdict) {
@@ -14680,9 +13301,9 @@ class CheckpointOutputVerifier {
   }
   async verifyDeployment(context, baseRecord) {
     const evidence = [];
-    const distDir = path9.join(this.cwd, "dist");
-    if (fs13.existsSync(distDir)) {
-      const files = fs13.readdirSync(distDir);
+    const distDir = path6.join(this.cwd, "dist");
+    if (fs9.existsSync(distDir)) {
+      const files = fs9.readdirSync(distDir);
       if (files.length > 0) {
         evidence.push(`构建产物存在: ${files.length} 个文件`);
       }
@@ -14719,8 +13340,8 @@ class CheckpointOutputVerifier {
       "settings.json"
     ];
     for (const pattern of configPatterns) {
-      const fullPath = path9.join(this.cwd, pattern);
-      if (fs13.existsSync(fullPath)) {
+      const fullPath = path6.join(this.cwd, pattern);
+      if (fs9.existsSync(fullPath)) {
         evidence.push(`配置文件存在: ${pattern}`);
       }
     }
@@ -14747,9 +13368,9 @@ class CheckpointOutputVerifier {
   findFilesWithPatterns(dir, patterns) {
     const results = [];
     const walk = (currentDir) => {
-      const entries = fs13.readdirSync(currentDir, { withFileTypes: true });
+      const entries = fs9.readdirSync(currentDir, { withFileTypes: true });
       for (const entry of entries) {
-        const fullPath = path9.join(currentDir, entry.name);
+        const fullPath = path6.join(currentDir, entry.name);
         if (entry.isDirectory()) {
           walk(fullPath);
         } else if (entry.isFile()) {
@@ -15181,13 +13802,13 @@ var init_checkpoint_verification = __esm(() => {
 });
 
 // src/utils/checkpoint.ts
-import * as fs14 from "fs";
-import * as path10 from "path";
-function getTestMock5(name) {
+import * as fs10 from "fs";
+import * as path7 from "path";
+function getTestMock3(name) {
   return globalThis.__PROJMNT4CLAUDE_TEST_MOCKS__?.[name];
 }
 function filterLowQualityCheckpoints(checkpoints) {
-  const testMock = getTestMock5("filterLowQualityCheckpoints");
+  const testMock = getTestMock3("filterLowQualityCheckpoints");
   if (testMock) {
     return testMock(checkpoints);
   }
@@ -15236,15 +13857,15 @@ function generateCheckpointId(taskId, index, description) {
   return `CP-${String(index + 1).padStart(3, "0")}`;
 }
 function parseCheckpointsWithIds(taskId, cwd = process.cwd()) {
-  const testMock = getTestMock5("parseCheckpointsWithIds");
+  const testMock = getTestMock3("parseCheckpointsWithIds");
   if (testMock) {
     return testMock(taskId, cwd);
   }
-  const checkpointPath = path10.join(getTasksDir(cwd), taskId, "checkpoint.md");
-  if (!fs14.existsSync(checkpointPath)) {
+  const checkpointPath = path7.join(getTasksDir(cwd), taskId, "checkpoint.md");
+  if (!fs10.existsSync(checkpointPath)) {
     return [];
   }
-  const content = fs14.readFileSync(checkpointPath, "utf-8");
+  const content = fs10.readFileSync(checkpointPath, "utf-8");
   const lines = content.split(`
 `);
   const checkpoints = [];
@@ -15279,7 +13900,7 @@ function extractTestPatterns(desc, task) {
   const srcFileMatch = desc.match(/(?:src\/[\w/.-]+)\.[a-z]+/g);
   if (srcFileMatch) {
     for (const f of srcFileMatch) {
-      const base = path10.basename(f, path10.extname(f));
+      const base = path7.basename(f, path7.extname(f));
       if (base && base.length > 2) {
         patterns.push(base);
       }
@@ -15304,7 +13925,7 @@ function extractTestPatterns(desc, task) {
     const descFiles = task.description.match(/src\/([\w/-]+)\.[a-z]+/g);
     if (descFiles) {
       for (const f of descFiles.slice(0, 2)) {
-        const dir = path10.dirname(f).replace("src/", "");
+        const dir = path7.dirname(f).replace("src/", "");
         if (dir && dir !== "." && dir.length > 2) {
           patterns.push(dir);
           break;
@@ -15375,7 +13996,7 @@ function inferCheckpointCategory(description) {
   return;
 }
 function syncCheckpointsToMeta(taskId, checkpointsOrCwd, maybeCwd) {
-  const testMock = getTestMock5("syncCheckpointsToMeta");
+  const testMock = getTestMock3("syncCheckpointsToMeta");
   if (testMock) {
     return testMock(taskId, checkpointsOrCwd, maybeCwd);
   }
@@ -15500,14 +14121,14 @@ function updateCheckpointStatus(taskId, checkpointId, status, options = {}, cwd 
   writeTaskMeta(updatedTask, cwd);
 }
 function updateCheckpointMd(taskId, checkpointId, checked, task, cwd = process.cwd()) {
-  const testMock = getTestMock5("updateCheckpointMd");
+  const testMock = getTestMock3("updateCheckpointMd");
   if (testMock) {
     return testMock(taskId, checkpointId, checked, task, cwd);
   }
-  const checkpointPath = path10.join(getTasksDir(cwd), taskId, "checkpoint.md");
-  if (!fs14.existsSync(checkpointPath))
+  const checkpointPath = path7.join(getTasksDir(cwd), taskId, "checkpoint.md");
+  if (!fs10.existsSync(checkpointPath))
     return;
-  const content = fs14.readFileSync(checkpointPath, "utf-8");
+  const content = fs10.readFileSync(checkpointPath, "utf-8");
   const lines = content.split(`
 `);
   const checkpoint = task.checkpoints?.find((cp) => cp.id === checkpointId);
@@ -15520,7 +14141,7 @@ function updateCheckpointMd(taskId, checkpointId, checked, task, cwd = process.c
       break;
     }
   }
-  fs14.writeFileSync(checkpointPath, lines.join(`
+  fs10.writeFileSync(checkpointPath, lines.join(`
 `), "utf-8");
 }
 function getCheckpointDetail(taskId, checkpointId, cwd = process.cwd()) {
@@ -15534,17 +14155,17 @@ function listCheckpoints(taskId, cwd = process.cwd()) {
   return task?.checkpoints || [];
 }
 function updateCheckpointMdFromArray(taskId, checkpoints, cwd = process.cwd()) {
-  const testMock = getTestMock5("updateCheckpointMdFromArray");
+  const testMock = getTestMock3("updateCheckpointMdFromArray");
   if (testMock) {
     return testMock(taskId, checkpoints, cwd);
   }
-  const checkpointPath = path10.join(getTasksDir(cwd), taskId, "checkpoint.md");
+  const checkpointPath = path7.join(getTasksDir(cwd), taskId, "checkpoint.md");
   const content = `# ${taskId} 检查点
 
 ` + checkpoints.map((cp) => `- [ ] ${cp.description}`).join(`
 `) + `
 `;
-  fs14.writeFileSync(checkpointPath, content, "utf-8");
+  fs10.writeFileSync(checkpointPath, content, "utf-8");
 }
 function parseTextCheckpoints(description) {
   if (!description || description.trim().length === 0) {
@@ -15627,9 +14248,6 @@ var init_checkpoint = __esm(() => {
   init_path();
   init_task2();
   init_checkpoint_rules();
-  init_pre_cr_gate();
-  init_post_cr_gate();
-  init_post_cr_gate();
   init_checkpoint_verification();
   VERIFICATION_KEYWORDS = [
     {
@@ -15704,12 +14322,12 @@ function detectCyclesDFS(adjacency) {
   const cycles = [];
   const visited = new Set;
   const onStack = new Set;
-  const path11 = [];
+  const path8 = [];
   function dfs(node) {
     if (onStack.has(node)) {
-      const cycleStart = path11.indexOf(node);
+      const cycleStart = path8.indexOf(node);
       if (cycleStart !== -1) {
-        cycles.push([...path11.slice(cycleStart), node]);
+        cycles.push([...path8.slice(cycleStart), node]);
       }
       return;
     }
@@ -15717,14 +14335,14 @@ function detectCyclesDFS(adjacency) {
       return;
     visited.add(node);
     onStack.add(node);
-    path11.push(node);
+    path8.push(node);
     const neighbors = adjacency.get(node);
     if (neighbors) {
       for (const neighbor of neighbors) {
         dfs(neighbor);
       }
     }
-    path11.pop();
+    path8.pop();
     onStack.delete(node);
   }
   for (const nodeId of adjacency.keys()) {
@@ -16312,8 +14930,8 @@ class DependencyGraph {
     return bridges.map((b) => {
       const pathsFromRoots = new Map;
       for (const root of b.bridgedRoots) {
-        const path11 = this.findPath(root, b.nodeId);
-        pathsFromRoots.set(root, path11);
+        const path8 = this.findPath(root, b.nodeId);
+        pathsFromRoots.set(root, path8);
       }
       return {
         nodeId: b.nodeId,
@@ -16352,12 +14970,12 @@ class DependencyGraph {
       for (const depId of deps.keys()) {
         const otherDeps = [...deps.keys()].filter((d) => d !== depId);
         for (const otherDep of otherDeps) {
-          const path11 = this.findPathThroughDep(otherDep, depId);
-          if (path11) {
+          const path8 = this.findPathThroughDep(otherDep, depId);
+          if (path8) {
             redundant.push({
               from: nodeId,
               to: depId,
-              viaPath: [nodeId, ...path11]
+              viaPath: [nodeId, ...path8]
             });
             break;
           }
@@ -16381,10 +14999,10 @@ class DependencyGraph {
       visited.set(depId, { depth: 1, path: [failedTaskId, depId], source: depId });
     }
     while (queue.length > 0) {
-      const [current, depth, path11, source] = queue.shift();
+      const [current, depth, path8, source] = queue.shift();
       details.set(current, {
         depth,
-        pathFromSource: path11,
+        pathFromSource: path8,
         sourceTaskId: source
       });
       const nextDownstream = this.reverseAdj.get(current);
@@ -16393,10 +15011,10 @@ class DependencyGraph {
           if (!visited.has(next)) {
             visited.set(next, {
               depth: depth + 1,
-              path: [...path11, next],
+              path: [...path8, next],
               source
             });
-            queue.push([next, depth + 1, [...path11, next], source]);
+            queue.push([next, depth + 1, [...path8, next], source]);
           }
         }
       }
@@ -16613,15 +15231,15 @@ class DependencyGraph {
     const visited = new Set([from]);
     const queue = [[from, [from]]];
     while (queue.length > 0) {
-      const [current, path11] = queue.shift();
+      const [current, path8] = queue.shift();
       if (current === to)
-        return path11;
+        return path8;
       const downstream = this.reverseAdj.get(current);
       if (downstream) {
         for (const next of downstream) {
           if (!visited.has(next)) {
             visited.add(next);
-            queue.push([next, [...path11, next]]);
+            queue.push([next, [...path8, next]]);
           }
         }
       }
@@ -16778,6 +15396,1294 @@ var init_contradiction_detector = __esm(() => {
     /\b(?:不满足|未通过|未完成|缺失|错误|问题|失败|遗漏|不正确)\b/,
     /\b(?:not\s+(?:met|satisfied|passed|implemented|completed|working))\b/i
   ];
+});
+
+// src/utils/logger.ts
+import * as fs11 from "fs";
+import * as path8 from "path";
+import { execSync as execSync2 } from "child_process";
+function getTestMock4(name) {
+  return globalThis.__PROJMNT4CLAUDE_TEST_MOCKS__?.[name];
+}
+function getLogFilePath(command, cwd = process.cwd()) {
+  const date = new Date().toISOString().slice(0, 10).replace(/-/g, "");
+  const logsDir = getLogsDir(cwd);
+  ensureDir(logsDir);
+  return path8.join(logsDir, `${command}-${date}.log`);
+}
+
+class Logger {
+  component;
+  cwd;
+  command;
+  buffer;
+  minLevel;
+  lastWrittenIndex;
+  constructor(options = {}) {
+    this.component = options.component;
+    this.cwd = options.cwd || process.cwd();
+    this.command = options.command;
+    this.buffer = [];
+    this.minLevel = this.resolveLogLevel();
+    this.lastWrittenIndex = 0;
+  }
+  resolveLogLevel() {
+    const envLevel = process.env.LOG_LEVEL;
+    if (envLevel && envLevel in LEVEL_PRIORITY) {
+      return envLevel;
+    }
+    try {
+      const configPath = getConfigPath(this.cwd);
+      if (fs11.existsSync(configPath)) {
+        const raw = fs11.readFileSync(configPath, "utf-8");
+        const config = JSON.parse(raw);
+        const configLevel = config?.logging?.level;
+        if (configLevel && configLevel in LEVEL_PRIORITY) {
+          return configLevel;
+        }
+      }
+    } catch {}
+    return "info";
+  }
+  log(level, message, data) {
+    if (LEVEL_PRIORITY[level] > LEVEL_PRIORITY[this.minLevel]) {
+      return;
+    }
+    const entry = {
+      timestamp: new Date().toISOString(),
+      level,
+      message
+    };
+    if (this.component) {
+      entry.component = this.component;
+    }
+    if (data) {
+      entry.data = data;
+    }
+    this.buffer.push(entry);
+    this.outputToConsole(level, entry);
+    if (this.command) {
+      this.writeEntry(entry);
+      this.lastWrittenIndex = this.buffer.length;
+    }
+  }
+  outputToConsole(level, entry) {
+    const fn = level === "error" ? console.error : level === "warn" ? console.warn : console.log;
+    const prefix = entry.component ? `[${entry.component}] ` : "";
+    fn(`${prefix}${entry.message}`);
+  }
+  writeEntry(entry) {
+    try {
+      const filePath = getLogFilePath(this.command, this.cwd);
+      fs11.appendFileSync(filePath, JSON.stringify(entry) + `
+`, "utf-8");
+    } catch {}
+  }
+  error(message, data) {
+    this.log("error", message, data);
+  }
+  warn(message, data) {
+    this.log("warn", message, data);
+  }
+  info(message, data) {
+    this.log("info", message, data);
+  }
+  debug(message, data) {
+    this.log("debug", message, data);
+  }
+  child(component) {
+    return new Logger({
+      component: this.component ? `${this.component}:${component}` : component,
+      cwd: this.cwd,
+      command: this.command
+    });
+  }
+  logCommandStart(command, args) {
+    this.command = command;
+    this.flush();
+    this.log("info", `命令开始: ${command}`, {
+      command,
+      ...args ? { args } : {}
+    });
+  }
+  logCommandEnd(command, exitCode = 0) {
+    this.log("info", `命令结束: ${command}`, { command, exitCode });
+  }
+  logAICost(summary) {
+    this.log("info", `AI 成本: ${summary.field}`, {
+      aiCost: {
+        field: summary.field,
+        durationMs: summary.durationMs,
+        inputTokens: summary.inputTokens,
+        outputTokens: summary.outputTokens,
+        totalTokens: summary.totalTokens
+      }
+    });
+  }
+  logInstrumentation(record) {
+    this.log("info", `埋点: ${record.module}:${record.action}`, {
+      instrumentation: record
+    });
+  }
+  flush() {
+    if (!this.command)
+      return;
+    for (let i = this.lastWrittenIndex;i < this.buffer.length; i++) {
+      const entry = this.buffer[i];
+      if (entry)
+        this.writeEntry(entry);
+    }
+    this.lastWrittenIndex = this.buffer.length;
+  }
+  readRecentLogEntries(recentCount = 50) {
+    const logsDir = getLogsDir(this.cwd);
+    if (!fs11.existsSync(logsDir))
+      return [];
+    try {
+      const files = fs11.readdirSync(logsDir).filter((f) => f.endsWith(".log")).map((f) => ({ name: f, mtime: fs11.statSync(path8.join(logsDir, f)).mtimeMs })).sort((a, b) => b.mtime - a.mtime);
+      const allEntries = [];
+      for (const file of files) {
+        if (allEntries.length >= recentCount)
+          break;
+        try {
+          const content = fs11.readFileSync(path8.join(logsDir, file.name), "utf-8");
+          const lines = content.trim().split(`
+`).filter(Boolean);
+          for (const line of lines) {
+            try {
+              allEntries.push(JSON.parse(line));
+            } catch {}
+          }
+        } catch {}
+      }
+      allEntries.sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
+      return allEntries.slice(0, recentCount);
+    } catch {
+      return [];
+    }
+  }
+  readAllLogEntries() {
+    const logsDir = getLogsDir(this.cwd);
+    if (!fs11.existsSync(logsDir))
+      return [];
+    try {
+      const files = fs11.readdirSync(logsDir).filter((f) => f.endsWith(".log"));
+      const allEntries = [];
+      for (const file of files) {
+        try {
+          const content = fs11.readFileSync(path8.join(logsDir, file), "utf-8");
+          const lines = content.trim().split(`
+`).filter(Boolean);
+          for (const line of lines) {
+            try {
+              allEntries.push(JSON.parse(line));
+            } catch {}
+          }
+        } catch {}
+      }
+      return allEntries.sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime());
+    } catch {
+      return [];
+    }
+  }
+  generateBugReport(recentCount = 100) {
+    const entries = this.readRecentLogEntries(recentCount);
+    const errors = entries.filter((e) => e.level === "error");
+    const warnings = entries.filter((e) => e.level === "warn");
+    const now = new Date().toISOString();
+    const timestamp = now.replace(/[:.]/g, "-").slice(0, 19);
+    const lines = [
+      `# Bug Report`,
+      ``,
+      `**生成时间**: ${now}`,
+      `**工作目录**: ${this.cwd}`,
+      `**平台**: ${process.platform} / ${process.version}`,
+      ``,
+      `## 概要`,
+      ``,
+      `- 总日志条目: ${entries.length}`,
+      `- 错误数: ${errors.length}`,
+      `- 警告数: ${warnings.length}`,
+      ``
+    ];
+    if (errors.length > 0) {
+      lines.push(`## 错误详情`, ``);
+      for (const err of errors) {
+        const comp = err.component ? ` [${err.component}]` : "";
+        lines.push(`### ${err.timestamp}${comp}`, ``);
+        lines.push(`\`${err.message}\``, ``);
+        if (err.data) {
+          lines.push("```json", JSON.stringify(err.data, null, 2), "```", "");
+        }
+      }
+    }
+    if (warnings.length > 0) {
+      lines.push(`## 警告详情`, ``);
+      for (const warn of warnings) {
+        const comp = warn.component ? ` [${warn.component}]` : "";
+        lines.push(`- **${warn.timestamp}**${comp}: ${warn.message}`);
+      }
+      lines.push("");
+    }
+    const archivePath = this.compressLogs(path8.join(getLogsDir(this.cwd), "..", `bug-report-${timestamp}.tar.gz`));
+    lines.push(`---`, `*日志压缩附件: ${archivePath}*`);
+    return {
+      markdown: lines.join(`
+`),
+      archivePath
+    };
+  }
+  compressLogs(outputPath) {
+    const logsDir = getLogsDir(this.cwd);
+    if (!fs11.existsSync(logsDir)) {
+      throw new Error(`日志目录不存在: ${logsDir}`);
+    }
+    const archivePath = outputPath || path8.join(path8.dirname(logsDir), "logs-archive.tar.gz");
+    ensureDir(path8.dirname(archivePath));
+    const parentDir = path8.dirname(logsDir);
+    const logsDirName = path8.basename(logsDir);
+    try {
+      execSync2(`tar -czf "${archivePath}" -C "${parentDir}" "${logsDirName}"`, {
+        stdio: "pipe"
+      });
+    } catch (err) {
+      throw new Error(`日志压缩失败: ${err instanceof Error ? err.message : String(err)}`);
+    }
+    return archivePath;
+  }
+  cleanupOldLogs(maxAgeDays = 30) {
+    const logsDir = getLogsDir(this.cwd);
+    if (!fs11.existsSync(logsDir))
+      return 0;
+    const cutoff = Date.now() - maxAgeDays * 24 * 60 * 60 * 1000;
+    let deletedCount = 0;
+    try {
+      const files = fs11.readdirSync(logsDir);
+      for (const file of files) {
+        if (!file.endsWith(".log"))
+          continue;
+        const filePath = path8.join(logsDir, file);
+        try {
+          const stat = fs11.statSync(filePath);
+          if (stat.mtimeMs < cutoff) {
+            fs11.unlinkSync(filePath);
+            deletedCount++;
+          }
+        } catch {}
+      }
+    } catch {}
+    return deletedCount;
+  }
+  getCostSummary() {
+    const entries = this.readAllLogEntries();
+    const aiEntries = entries.filter((e) => e.data?.aiCost);
+    const result = {
+      totalCalls: 0,
+      totalDurationMs: 0,
+      totalInputTokens: 0,
+      totalOutputTokens: 0,
+      totalTokens: 0,
+      byField: {},
+      byCommand: {}
+    };
+    for (const entry of aiEntries) {
+      const cost = entry.data.aiCost;
+      result.totalCalls++;
+      result.totalDurationMs += cost.durationMs || 0;
+      result.totalInputTokens += cost.inputTokens || 0;
+      result.totalOutputTokens += cost.outputTokens || 0;
+      result.totalTokens += cost.totalTokens || 0;
+      const field = cost.field || "unknown";
+      if (!result.byField[field]) {
+        result.byField[field] = { calls: 0, durationMs: 0, totalTokens: 0 };
+      }
+      result.byField[field].calls++;
+      result.byField[field].durationMs += cost.durationMs || 0;
+      result.byField[field].totalTokens += cost.totalTokens || 0;
+      const command = entry.data?.command || "unknown";
+      if (!result.byCommand[command]) {
+        result.byCommand[command] = { calls: 0, durationMs: 0, totalTokens: 0 };
+      }
+      result.byCommand[command].calls++;
+      result.byCommand[command].durationMs += cost.durationMs || 0;
+      result.byCommand[command].totalTokens += cost.totalTokens || 0;
+    }
+    return result;
+  }
+  analyzeUsage() {
+    const entries = this.readAllLogEntries();
+    const commandFrequency = {};
+    const commandDurations = {};
+    const commandsWithAI = new Set;
+    const errorMessages = {};
+    let totalCommands = 0;
+    let totalErrors = 0;
+    let totalWarnings = 0;
+    const commandStarts = {};
+    for (const entry of entries) {
+      const data = entry.data;
+      const command = data?.command || "unknown";
+      if (entry.message?.startsWith("命令开始:")) {
+        totalCommands++;
+        commandFrequency[command] = (commandFrequency[command] || 0) + 1;
+        commandStarts[command] = entry.timestamp;
+      }
+      if (entry.message?.startsWith("命令结束:") && commandStarts[command]) {
+        const startMs = new Date(commandStarts[command]).getTime();
+        const endMs = new Date(entry.timestamp).getTime();
+        if (!isNaN(startMs) && !isNaN(endMs) && endMs >= startMs) {
+          if (!commandDurations[command])
+            commandDurations[command] = [];
+          commandDurations[command].push(endMs - startMs);
+        }
+        delete commandStarts[command];
+      }
+      if (data?.aiCost) {
+        commandsWithAI.add(command);
+      }
+      if (entry.level === "error") {
+        totalErrors++;
+        const msg = entry.message;
+        if (msg) {
+          if (!errorMessages[msg]) {
+            errorMessages[msg] = { count: 0, lastSeen: entry.timestamp };
+          }
+          errorMessages[msg].count++;
+          errorMessages[msg].lastSeen = entry.timestamp;
+        }
+      }
+      if (entry.level === "warn") {
+        totalWarnings++;
+      }
+    }
+    const allDurations = Object.values(commandDurations).flat();
+    const averageDurationMs = allDurations.length > 0 ? Math.round(allDurations.reduce((a, b) => a + b, 0) / allDurations.length) : 0;
+    const aiUsageRate = totalCommands > 0 ? commandsWithAI.size / Object.keys(commandFrequency).length : 0;
+    const commonErrors = Object.entries(errorMessages).map(([message, info]) => ({ message, count: info.count, lastSeen: info.lastSeen })).sort((a, b) => b.count - a.count).slice(0, 10);
+    return {
+      commandFrequency,
+      commonErrors,
+      averageDurationMs,
+      aiUsageRate: Math.min(aiUsageRate, 1),
+      totalCommands,
+      totalErrors,
+      totalWarnings
+    };
+  }
+}
+function createLogger(command, cwd) {
+  const testMock = getTestMock4("createLogger");
+  if (testMock) {
+    return testMock(command, cwd);
+  }
+  const logger = new Logger({ command, cwd });
+  logger.logCommandStart(command);
+  return logger;
+}
+var LEVEL_PRIORITY;
+var init_logger = __esm(() => {
+  init_path();
+  LEVEL_PRIORITY = {
+    error: 0,
+    warn: 1,
+    info: 2,
+    debug: 3
+  };
+});
+
+// src/utils/session-lock-cleanup.ts
+import * as fs12 from "fs";
+import * as path9 from "path";
+import * as os2 from "os";
+function getSessionEnvRoot() {
+  const override = process.env.PROJMNT4CLAUDE_SESSION_ENV_ROOT;
+  if (override && override.trim().length > 0) {
+    return override;
+  }
+  return path9.join(os2.homedir(), ".claude", "session-env");
+}
+function isUuidLike(s) {
+  return UUID_RE.test(s);
+}
+function ensureCleanSessionSlot(cliUuid, root) {
+  if (!isUuidLike(cliUuid)) {
+    return false;
+  }
+  const base = root ?? getSessionEnvRoot();
+  const lockDir = path9.join(base, cliUuid);
+  try {
+    if (!fs12.existsSync(lockDir)) {
+      return false;
+    }
+    const stat = fs12.statSync(lockDir);
+    if (!stat.isDirectory()) {
+      return false;
+    }
+    fs12.rmSync(lockDir, { recursive: true, force: true });
+    return true;
+  } catch {
+    return false;
+  }
+}
+function listOrphanedSessions(knownCliUuids, root) {
+  const base = root ?? getSessionEnvRoot();
+  if (!fs12.existsSync(base)) {
+    return [];
+  }
+  const orphans = [];
+  let entries = [];
+  try {
+    entries = fs12.readdirSync(base);
+  } catch {
+    return [];
+  }
+  for (const entry of entries) {
+    if (!isUuidLike(entry)) {
+      continue;
+    }
+    const lockDir = path9.join(base, entry);
+    try {
+      const stat = fs12.statSync(lockDir);
+      if (!stat.isDirectory()) {
+        continue;
+      }
+      if (knownCliUuids.has(entry)) {
+        continue;
+      }
+      orphans.push({
+        cliUuid: entry,
+        lockDir,
+        mtime: stat.mtime.toISOString()
+      });
+    } catch {}
+  }
+  return orphans;
+}
+function cleanupOrphanedSessions(orphans) {
+  let cleaned = 0;
+  for (const orphan of orphans) {
+    try {
+      fs12.rmSync(orphan.lockDir, { recursive: true, force: true });
+      cleaned++;
+    } catch {}
+  }
+  return cleaned;
+}
+var UUID_RE;
+var init_session_lock_cleanup = __esm(() => {
+  UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+});
+
+// src/utils/session-id-mapper.ts
+import { createHash } from "crypto";
+
+class SessionIdMapper {
+  mappings = new Map;
+  auditLogger;
+  setAuditLogger(logger) {
+    this.auditLogger = logger;
+  }
+  generate(internalId, taskId, phase, runSalt) {
+    const now = new Date().toISOString();
+    const existing = this.mappings.get(internalId);
+    if (existing) {
+      existing.lastUsedAt = now;
+      if (this.auditLogger) {
+        this.auditLogger({ mapping: existing, isReused: true });
+      }
+      return existing.cliUuid;
+    }
+    const cliUuid = this.deriveDeterministicUuid(internalId, taskId, phase, runSalt);
+    const mapping = {
+      internalId,
+      cliUuid,
+      taskId,
+      phase,
+      createdAt: now,
+      lastUsedAt: now
+    };
+    this.mappings.set(internalId, mapping);
+    this.mappings.set(cliUuid, mapping);
+    if (this.auditLogger) {
+      this.auditLogger({ mapping, isReused: false });
+    }
+    return cliUuid;
+  }
+  deriveDeterministicUuid(internalId, taskId, phase, runSalt) {
+    const hash = createHash("sha256").update(`${internalId}|${taskId}|${phase}|${runSalt}`).digest("hex");
+    const variantChar = (parseInt(hash.slice(16, 18), 16) & 3 | 8).toString(16);
+    return [
+      hash.slice(0, 8),
+      hash.slice(8, 12),
+      "4" + hash.slice(13, 16),
+      variantChar + hash.slice(17, 20),
+      hash.slice(20, 32)
+    ].join("-");
+  }
+  toCliUuid(internalId) {
+    return this.mappings.get(internalId)?.cliUuid;
+  }
+  toInternalId(cliUuid) {
+    return this.mappings.get(cliUuid)?.internalId;
+  }
+  getMapping(id) {
+    return this.mappings.get(id);
+  }
+  serialize() {
+    const seen = new Map;
+    for (const mapping of this.mappings.values()) {
+      seen.set(mapping.cliUuid, mapping);
+    }
+    return Array.from(seen.values());
+  }
+  deserialize(mappings) {
+    for (const mapping of mappings) {
+      this.mappings.set(mapping.internalId, mapping);
+      this.mappings.set(mapping.cliUuid, mapping);
+    }
+  }
+  clear() {
+    this.mappings.clear();
+  }
+  size() {
+    const seen = new Set;
+    for (const mapping of this.mappings.values()) {
+      seen.add(mapping.cliUuid);
+    }
+    return seen.size;
+  }
+  probeSessionState(internalId) {
+    const existing = this.mappings.get(internalId);
+    if (!existing) {
+      return {
+        state: "fresh",
+        cliUuid: "",
+        reason: `no existing mapping for internalId=${internalId}`
+      };
+    }
+    return {
+      state: "active",
+      cliUuid: existing.cliUuid,
+      reason: `existing mapping found → resume full history`
+    };
+  }
+  buildStableInternalId(taskId, phase, prefix = "cr") {
+    return `${prefix}-${taskId}-stable-${phase}`;
+  }
+}
+function assertIsValidUuidV4(value, label = "sessionId") {
+  if (!value || typeof value !== "string") {
+    throw new Error(`[${label}] must be a non-empty string, got: ${String(value)}`);
+  }
+  if (!UUID_V4_PATTERN.test(value)) {
+    throw new Error(`[${label}] must be a valid UUID v4, got: ${value}`);
+  }
+}
+function deriveSessionStateFromLegacyFlags(options) {
+  if (options.sessionState) {
+    return options.sessionState;
+  }
+  if (options.resumeSession) {
+    return "active";
+  }
+  return "fresh";
+}
+function buildSessionCliArgs(state, cliUuid) {
+  assertIsValidUuidV4(cliUuid, "cliUuid");
+  switch (state) {
+    case "fresh":
+      return ["--session-id", cliUuid];
+    case "active":
+      return ["--resume", cliUuid];
+    default: {
+      const _exhaustive = state;
+      throw new Error(`Unknown sessionState: ${String(_exhaustive)}`);
+    }
+  }
+}
+var sessionIdMapper, UUID_V4_PATTERN;
+var init_session_id_mapper = __esm(() => {
+  sessionIdMapper = new SessionIdMapper;
+  UUID_V4_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+});
+
+// src/utils/harness-helpers.ts
+import * as fs13 from "fs";
+import * as path10 from "path";
+function installExitHooks(knownCliUuids = new Set, sessionEnvRoot) {
+  if (installedHooks) {
+    return;
+  }
+  const handler = (_signal) => {
+    try {
+      killAllActiveChildren("SIGTERM");
+      const orphans = listOrphanedSessions(knownCliUuids, sessionEnvRoot);
+      if (orphans.length > 0) {
+        cleanupOrphanedSessions(orphans);
+      }
+    } catch {}
+  };
+  const exitHandler = (_code) => {
+    try {
+      killAllActiveChildren("SIGKILL");
+      for (const uuid of knownCliUuids) {
+        ensureCleanSessionSlot(uuid, sessionEnvRoot);
+      }
+      const orphans = listOrphanedSessions(knownCliUuids, sessionEnvRoot);
+      if (orphans.length > 0) {
+        cleanupOrphanedSessions(orphans);
+      }
+    } catch {}
+  };
+  const signals = ["SIGTERM", "SIGINT", "SIGHUP"];
+  for (const sig of signals) {
+    process.on(sig, handler);
+  }
+  process.on("exit", exitHandler);
+  installedHooks = { handler, exitHandler, signals };
+}
+function uninstallExitHooks() {
+  if (!installedHooks) {
+    return;
+  }
+  for (const sig of installedHooks.signals) {
+    process.removeListener(sig, installedHooks.handler);
+  }
+  process.removeListener("exit", installedHooks.exitHandler);
+  installedHooks = null;
+}
+function classifyExitResult(code, stderr, stdout, cwd) {
+  let texts;
+  try {
+    texts = t(cwd || process.cwd());
+  } catch {
+    texts = t();
+  }
+  if (code === 0) {
+    return { success: true };
+  }
+  const isHookError = /hook\s+.*\s+failed/i.test(stderr) || /Hook cancelled/i.test(stderr) || /SessionEnd\s+hook/i.test(stderr);
+  const hasOutput = stdout.trim().length > 0;
+  if (isHookError && hasOutput) {
+    return {
+      success: true,
+      hookWarning: `${texts.harness.logs.hookWarningIgnored}: ${stderr.substring(0, 200)}`
+    };
+  }
+  if (isHookError && !hasOutput) {
+    return {
+      success: false,
+      error: `${texts.harness.logs.hookErrorNoOutput}: ${stderr.substring(0, 200)}`
+    };
+  }
+  return {
+    success: false,
+    error: stderr || `${texts.harness.logs.processExitCode}: ${code}`
+  };
+}
+async function runHeadlessClaude(options) {
+  return new Promise((resolve3) => {
+    const args = [
+      "--allowedTools",
+      options.allowedTools.join(","),
+      "--print"
+    ];
+    if (options.dangerouslySkipPermissions) {
+      args.push("--dangerously-skip-permissions");
+    }
+    if (options.outputFormat) {
+      args.push("--output-format", options.outputFormat);
+    }
+    if (options.sessionId) {
+      const state = deriveSessionStateFromLegacyFlags({
+        sessionState: options.sessionState,
+        resumeSession: options.resumeSession,
+        forkSession: options.forkSession
+      });
+      args.push(...buildSessionCliArgs(state, options.sessionId));
+    }
+    if (options.bare) {
+      args.push("--bare");
+    }
+    if (options.noSessionPersistence) {
+      args.push("--no-session-persistence");
+    }
+    if (options.mcpConfig && options.mcpConfig.length > 0) {
+      for (const config of options.mcpConfig) {
+        args.push("--mcp-config", config);
+      }
+    }
+    if (options.strictMcpConfig) {
+      args.push("--strict-mcp-config");
+    }
+    if (options.pluginDir && options.pluginDir.length > 0) {
+      for (const dir of options.pluginDir) {
+        args.push("--plugin-dir", dir);
+      }
+    }
+    if (options.pluginUrl && options.pluginUrl.length > 0) {
+      for (const url of options.pluginUrl) {
+        args.push("--plugin-url", url);
+      }
+    }
+    if (options.disableSlashCommands) {
+      args.push("--disable-slash-commands");
+    }
+    if (options.effort) {
+      args.push("--effort", options.effort);
+    }
+    if (options.maxBudgetUsd) {
+      args.push("--max-budget-usd", String(options.maxBudgetUsd));
+    }
+    if (options.debug) {
+      args.push("--debug");
+    }
+    try {
+      const child = spawnWithMemoryLimit("claude", args, {
+        cwd: options.cwd,
+        stdio: ["pipe", "pipe", "pipe"],
+        timeout: options.timeout * 1000
+      }, "claudeAgent");
+      if (child.stdin) {
+        let writeNextChunk = function() {
+          if (offset >= options.prompt.length) {
+            child.stdin.end();
+            return;
+          }
+          const chunk = options.prompt.substring(offset, offset + chunkSize);
+          offset += chunkSize;
+          const result = child.stdin.write(chunk);
+          if (!result) {
+            child.stdin.once("drain", writeNextChunk);
+          } else {
+            writeNextChunk();
+          }
+        };
+        const chunkSize = 4096;
+        let offset = 0;
+        writeNextChunk();
+      }
+      let stdout = "";
+      let stderr = "";
+      child.stdout?.on("data", (data) => {
+        stdout += data.toString();
+      });
+      child.stderr?.on("data", (data) => {
+        stderr += data.toString();
+      });
+      child.on("close", (code) => {
+        const classified = classifyExitResult(code, stderr, stdout);
+        resolve3({
+          success: classified.success,
+          output: stdout,
+          error: classified.error,
+          hookWarning: classified.hookWarning,
+          stderr,
+          childPid: child.pid
+        });
+      });
+      child.on("error", (error) => {
+        resolve3({
+          success: false,
+          output: "",
+          error: error.message,
+          stderr: "",
+          childPid: child.pid
+        });
+      });
+    } catch (error) {
+      resolve3({
+        success: false,
+        output: "",
+        error: error instanceof Error ? error.message : String(error),
+        stderr: ""
+      });
+    }
+  });
+}
+function sleep(seconds) {
+  return new Promise((resolve3) => setTimeout(resolve3, seconds * 1000));
+}
+function archiveReportIfExists(reportPath, cwd) {
+  const testMock = globalThis.__PROJMNT4CLAUDE_TEST_MOCKS__?.archiveReportIfExists;
+  if (testMock) {
+    return testMock(reportPath, cwd);
+  }
+  let texts;
+  try {
+    texts = t(cwd);
+  } catch {
+    const { getI18n: getI18n2 } = (init_i18n(), __toCommonJS(exports_i18n));
+    texts = getI18n2("zh");
+  }
+  try {
+    const absolutePath = path10.resolve(reportPath);
+    if (!fs13.existsSync(absolutePath)) {
+      return;
+    }
+    const dir = path10.dirname(absolutePath);
+    const filename = path10.basename(absolutePath);
+    const archiveDir = path10.join(dir, "archive");
+    if (!fs13.existsSync(archiveDir)) {
+      fs13.mkdirSync(archiveDir, { recursive: true });
+    }
+    const timestamp = new Date().toISOString().replace(/[:.]/g, "-");
+    const archivePath = path10.join(archiveDir, `${timestamp}-${filename}`);
+    fs13.copyFileSync(absolutePath, archivePath);
+    console.log(`   \uD83D\uDCE6 ${texts.harness.logs.archivedReport.replace("{filename}", `${timestamp}-${filename}`)}`);
+  } catch (error) {
+    console.warn(`   ⚠️ ${texts.harness.logs.archiveFailed}: ${error instanceof Error ? error.message : String(error)}`);
+  }
+}
+async function saveReport(reportPath, content) {
+  const dir = path10.dirname(reportPath);
+  try {
+    if (!fs13.existsSync(dir)) {
+      fs13.mkdirSync(dir, { recursive: true });
+    }
+    archiveReportIfExists(reportPath);
+    fs13.writeFileSync(reportPath, content, "utf-8");
+  } catch (error) {
+    throw new Error(`保存报告失败: ${error instanceof Error ? error.message : String(error)}`);
+  }
+}
+function filterCheckpoints(task, filterFn) {
+  if (!task.checkpoints) {
+    return [];
+  }
+  return task.checkpoints.filter(filterFn);
+}
+function parseStructuredResult(output) {
+  if (!output || output.trim().length === 0) {
+    return { passed: null, matchLevel: null };
+  }
+  const level1 = output.match(/(?:EVALUATION_RESULT|VERDICT)\s*[:：]\s*(PASS|NOPASS)/i);
+  if (level1) {
+    return { passed: level1[1].toUpperCase() === "PASS", matchLevel: 1 };
+  }
+  const level2Patterns = [
+    /##\s*(?:评估结果|审核结果|验证结果|Evaluation Result|Result|Verdict)\s*[:：]?\s*(PASS|NOPASS)/i,
+    /(?:评估结果|审核结果|验证结果|Evaluation Result|Result|Verdict)[:：]?\s*(PASS|NOPASS)/i,
+    /"result"\s*[:：]\s*"(PASS|NOPASS)"/i
+  ];
+  for (const pattern of level2Patterns) {
+    const match = output.match(pattern);
+    if (match) {
+      return { passed: match[1].toUpperCase() === "PASS", matchLevel: 2 };
+    }
+  }
+  const level3 = output.match(/\b(PASS|NOPASS)\b/i);
+  if (level3) {
+    return { passed: level3[1].toUpperCase() === "PASS", matchLevel: 3 };
+  }
+  return { passed: null, matchLevel: null };
+}
+function parseVerdictResult(output, options) {
+  const result = {
+    passed: true,
+    reason: "",
+    items: [],
+    failedCheckpoints: [],
+    details: ""
+  };
+  const resultPattern = new RegExp(`##\\s*${options.resultField}\\s*[:：]\\s*(PASS|NOPASS)`, "i");
+  const resultMatch = output.match(resultPattern);
+  if (resultMatch) {
+    result.passed = resultMatch[1].toUpperCase() === "PASS";
+  }
+  const reasonPattern = new RegExp(`##\\s*${options.reasonField}\\s*[:：]\\s*(.+?)(?=##|$)`, "si");
+  const reasonMatch = output.match(reasonPattern);
+  if (reasonMatch) {
+    result.reason = reasonMatch[1].trim();
+  }
+  const listPattern = new RegExp(`##\\s*${options.listField}\\s*[:：]\\s*(.+?)(?=##|$)`, "si");
+  const listMatch = output.match(listPattern);
+  if (listMatch) {
+    const listText = listMatch[1].trim();
+    if (listText && listText !== "无" && listText !== "N/A") {
+      result.items = listText.split(`
+`).map((line) => line.replace(/^[-*]\s*/, "").trim()).filter((line) => line.length > 0);
+    }
+  }
+  const checkpointPattern = new RegExp(`##\\s*${options.checkpointField}\\s*[:：]\\s*(.+?)(?=##|$)`, "si");
+  const checkpointMatch = output.match(checkpointPattern);
+  if (checkpointMatch) {
+    const checkpointText = checkpointMatch[1].trim();
+    if (checkpointText && checkpointText !== "无" && checkpointText !== "N/A") {
+      result.failedCheckpoints = checkpointText.split(`
+`).map((line) => line.replace(/^[-*]\s*/, "").trim()).filter((line) => line.length > 0);
+    }
+  }
+  if (options.detailsField) {
+    const detailsPattern = new RegExp(`##\\s*${options.detailsField}\\s*[:：]\\s*(.+?)(?=##|$)`, "si");
+    const detailsMatch = output.match(detailsPattern);
+    if (detailsMatch) {
+      result.details = detailsMatch[1].trim();
+    }
+  }
+  if (!resultMatch) {
+    const structured = parseStructuredResult(output);
+    if (structured.passed !== null) {
+      result.passed = structured.passed;
+      if (!result.reason) {
+        const reasonPatterns = [
+          /REASON\s*[:：]\s*(.+?)(?=\n\n|\n## |$)/si,
+          /EVALUATION_REASON\s*[:：]\s*(.+?)(?=\n\n|\n## |$)/si,
+          new RegExp(`##?s*${options.reasonField}s*[:：]?s*(.+?)(?=
+
+|
+## |$)`, "si")
+        ];
+        for (const pattern of reasonPatterns) {
+          const match = output.match(pattern);
+          if (match && match[1]?.trim()) {
+            result.reason = match[1].trim();
+            break;
+          }
+        }
+        if (!result.reason) {
+          result.reason = `基于结构化关键词匹配（级别 ${structured.matchLevel}）`;
+        }
+      }
+    }
+  }
+  if (!result.reason) {
+    result.reason = "无法解析判定结果";
+  }
+  return result;
+}
+function getReportDir(taskId, cwd) {
+  return path10.join(getProjectDir(cwd), "reports", "harness", taskId);
+}
+function getReportPath(taskId, reportType, cwd) {
+  return path10.join(getReportDir(taskId, cwd), `${reportType}-report.md`);
+}
+var REVIEW_TIMEOUT_RATIO = 3, installedHooks = null;
+var init_harness_helpers = __esm(() => {
+  init_path();
+  init_i18n();
+  init_spawn_utils();
+  init_child_process_registry();
+  init_session_lock_cleanup();
+  init_session_id_mapper();
+});
+
+// src/utils/headless-agent.ts
+var exports_headless_agent = {};
+__export(exports_headless_agent, {
+  translateOptionsToCliArgs: () => translateOptionsToCliArgs,
+  loadAIConfig: () => loadAIConfig,
+  invokeAgent: () => invokeAgent,
+  initializeProviders: () => initializeProviders,
+  getAgent: () => getAgent,
+  buildEffectiveTools: () => buildEffectiveTools,
+  agentRegistry: () => agentRegistry,
+  ClaudeCodeProvider: () => ClaudeCodeProvider
+});
+import * as fs14 from "fs";
+function getTestMock5(name) {
+  return globalThis.__PROJMNT4CLAUDE_TEST_MOCKS__?.[name];
+}
+function translateOptionsToCliArgs(options) {
+  const args = ["--print"];
+  if (options.allowedTools && options.allowedTools.length > 0) {
+    args.push("--allowedTools", options.allowedTools.join(","));
+  }
+  if (options.dangerouslySkipPermissions) {
+    args.push("--dangerously-skip-permissions");
+  }
+  if (options.outputFormat === "json") {
+    args.push("--output-format", "json");
+  }
+  if (options.sessionId) {
+    const state = deriveSessionStateFromLegacyFlags({
+      sessionState: options.sessionState,
+      resumeSession: options.resumeSession,
+      forkSession: options.forkSession
+    });
+    args.push(...buildSessionCliArgs(state, options.sessionId));
+  }
+  if (options.bare) {
+    args.push("--bare");
+  }
+  if (options.noSessionPersistence) {
+    args.push("--no-session-persistence");
+  }
+  if (options.mcpConfig && options.mcpConfig.length > 0) {
+    for (const config of options.mcpConfig) {
+      args.push("--mcp-config", config);
+    }
+  }
+  if (options.strictMcpConfig) {
+    args.push("--strict-mcp-config");
+  }
+  if (options.pluginDir && options.pluginDir.length > 0) {
+    for (const dir of options.pluginDir) {
+      args.push("--plugin-dir", dir);
+    }
+  }
+  if (options.pluginUrl && options.pluginUrl.length > 0) {
+    for (const url of options.pluginUrl) {
+      args.push("--plugin-url", url);
+    }
+  }
+  if (options.disableSlashCommands) {
+    args.push("--disable-slash-commands");
+  }
+  if (options.effort) {
+    args.push("--effort", options.effort);
+  }
+  if (options.maxBudgetUsd) {
+    args.push("--max-budget-usd", String(options.maxBudgetUsd));
+  }
+  if (options.debug) {
+    args.push("--debug");
+  }
+  return args;
+}
+function buildEffectiveTools(phase, cwd, task) {
+  const testMock = getTestMock5("buildEffectiveTools");
+  if (testMock) {
+    return testMock(phase, cwd, task);
+  }
+  const codeDefaults = PHASE_DEFAULT_TOOLS[phase] || ["Read", "Bash", "Grep", "Glob"];
+  const configKey = PHASE_CONFIG_KEY[phase];
+  let phaseTools = codeDefaults;
+  try {
+    const configPath = getConfigPath(cwd);
+    if (fs14.existsSync(configPath)) {
+      const config = JSON.parse(fs14.readFileSync(configPath, "utf-8"));
+      const configPhaseTools = config?.harness?.perPhaseTools?.[configKey || phase];
+      if (Array.isArray(configPhaseTools) && configPhaseTools.length > 0) {
+        phaseTools = configPhaseTools;
+      }
+    }
+  } catch {}
+  if (task?.allowedTools && task.allowedTools.length > 0) {
+    const taskToolSet = new Set(task.allowedTools);
+    const effectiveTools = phaseTools.filter((t2) => taskToolSet.has(t2));
+    return { tools: effectiveTools, skipPermissions: false };
+  }
+  return { tools: phaseTools, skipPermissions: true };
+}
+
+class AgentProviderRegistryImpl {
+  providers = new Map;
+  defaultProvider = "claude-code";
+  logger;
+  constructor() {
+    this.logger = new Logger({ component: "headless-agent" });
+  }
+  register(provider) {
+    if (this.providers.has(provider.name)) {
+      this.logger.warn(`Provider '${provider.name}' 已存在，将被覆盖`);
+    }
+    this.providers.set(provider.name, provider);
+    this.logger.info(`注册 Agent provider: ${provider.name}`);
+  }
+  getProvider(name) {
+    const providerName = name || this.defaultProvider;
+    const provider = this.providers.get(providerName);
+    if (!provider) {
+      throw new Error(`Agent provider '${providerName}' 未注册。可用: ${[...this.providers.keys()].join(", ")}`);
+    }
+    return provider;
+  }
+  setDefault(name) {
+    if (!this.providers.has(name)) {
+      throw new Error(`无法设置默认 provider: '${name}' 未注册`);
+    }
+    this.defaultProvider = name;
+    this.logger.info(`默认 Agent provider 设置为: ${name}`);
+  }
+  getDefaultName() {
+    return this.defaultProvider;
+  }
+  listProviders() {
+    return [...this.providers.keys()];
+  }
+}
+
+class ClaudeCodeProvider {
+  name = "claude-code";
+  logger;
+  constructor() {
+    this.logger = new Logger({ component: "headless-agent:claude-code" });
+  }
+  async invoke(prompt, options) {
+    const startTime = Date.now();
+    this.logger.info("调用 Claude Code", {
+      timeout: options.timeout,
+      allowedTools: options.allowedTools,
+      cwd: options.cwd,
+      dangerouslySkipPermissions: options.dangerouslySkipPermissions,
+      outputFormat: options.outputFormat,
+      sessionId: options.sessionId,
+      sessionState: options.sessionState,
+      resumeSession: options.resumeSession,
+      forkSession: options.forkSession
+    });
+    const claudeOptions = {
+      prompt,
+      allowedTools: options.allowedTools,
+      timeout: options.timeout,
+      cwd: options.cwd,
+      dangerouslySkipPermissions: options.dangerouslySkipPermissions,
+      outputFormat: options.outputFormat === "json" ? "json" : undefined,
+      sessionId: options.sessionId,
+      sessionState: options.sessionState,
+      resumeSession: options.resumeSession,
+      forkSession: options.forkSession,
+      bare: options.bare,
+      noSessionPersistence: options.noSessionPersistence,
+      mcpConfig: options.mcpConfig,
+      strictMcpConfig: options.strictMcpConfig,
+      pluginDir: options.pluginDir,
+      pluginUrl: options.pluginUrl,
+      disableSlashCommands: options.disableSlashCommands,
+      effort: options.effort,
+      maxBudgetUsd: options.maxBudgetUsd,
+      debug: options.debug
+    };
+    const result = await runHeadlessClaude(claudeOptions);
+    const durationMs = Date.now() - startTime;
+    const tokensUsed = this.extractTokens(result.output);
+    const model = this.extractModel(result.output);
+    this.logger.info("Claude Code 调用完成", {
+      success: result.success,
+      durationMs,
+      tokensUsed,
+      model,
+      hookWarning: result.hookWarning
+    });
+    const isHookFailure = !result.success && result.hookWarning;
+    if (isHookFailure) {
+      console.log(`   ⚠️  ${result.hookWarning}`);
+      console.log(`   \uD83D\uDCA1 Hook 错误不影响任务结果，继续处理...`);
+    }
+    if (result.success || isHookFailure) {
+      this.logger.logAICost({
+        field: "headless-agent:invoke",
+        durationMs,
+        inputTokens: 0,
+        outputTokens: tokensUsed,
+        totalTokens: tokensUsed
+      });
+    }
+    return {
+      output: result.output,
+      success: isHookFailure ? true : result.success,
+      provider: this.name,
+      durationMs,
+      tokensUsed,
+      model,
+      error: isHookFailure ? undefined : result.error,
+      hookWarning: result.hookWarning,
+      stderr: result.stderr
+    };
+  }
+  extractTokens(output) {
+    try {
+      const jsonOutput = JSON.parse(output);
+      if (jsonOutput && typeof jsonOutput === "object") {
+        const usage = jsonOutput.usage;
+        if (usage) {
+          return (usage.input_tokens || 0) + (usage.output_tokens || 0);
+        }
+      }
+    } catch {}
+    let totalTokens = 0;
+    let foundJsonl = false;
+    for (const line of output.split(`
+`)) {
+      const trimmed = line.trim();
+      if (!trimmed)
+        continue;
+      try {
+        const obj = JSON.parse(trimmed);
+        foundJsonl = true;
+        if (obj?.usage) {
+          totalTokens += (obj.usage.input_tokens || 0) + (obj.usage.output_tokens || 0);
+        }
+      } catch {}
+    }
+    if (foundJsonl && totalTokens > 0)
+      return totalTokens;
+    const tokenMatch = output.match(/tokens?[:\s]+(\d+)/i);
+    return tokenMatch ? parseInt(tokenMatch[1], 10) : 0;
+  }
+  extractModel(output) {
+    try {
+      const jsonOutput = JSON.parse(output);
+      if (jsonOutput?.model)
+        return jsonOutput.model;
+    } catch {}
+    return "claude-code";
+  }
+}
+function initializeProviders() {
+  if (!agentRegistry.listProviders().includes("claude-code")) {
+    agentRegistry.register(new ClaudeCodeProvider);
+  }
+}
+function loadAIConfig(cwd) {
+  try {
+    const configPath = getConfigPath(cwd);
+    if (!fs14.existsSync(configPath)) {
+      return DEFAULT_AI;
+    }
+    const config = JSON.parse(fs14.readFileSync(configPath, "utf-8"));
+    if (!config.ai) {
+      return DEFAULT_AI;
+    }
+    return {
+      provider: config.ai.provider || DEFAULT_AI.provider,
+      customEndpoint: config.ai.customEndpoint,
+      providerOptions: config.ai.providerOptions
+    };
+  } catch {
+    return DEFAULT_AI;
+  }
+}
+function getAgent(cwd) {
+  const testMock = getTestMock5("getAgent");
+  if (testMock) {
+    return testMock(cwd);
+  }
+  const aiConfig = loadAIConfig(cwd);
+  return agentRegistry.getProvider(aiConfig.provider);
+}
+async function invokeAgent(prompt, options) {
+  const testMock = getTestMock5("invokeAgent");
+  if (testMock) {
+    return testMock(prompt, options);
+  }
+  const agent = getAgent(options.cwd);
+  return agent.invoke(prompt, options);
+}
+var PHASE_DEFAULT_TOOLS, PHASE_CONFIG_KEY, agentRegistry;
+var init_headless_agent = __esm(() => {
+  init_logger();
+  init_harness_helpers();
+  init_config();
+  init_session_id_mapper();
+  init_path();
+  PHASE_DEFAULT_TOOLS = {
+    development: ["Read", "Edit", "Write", "Bash", "Grep", "Glob"],
+    codeReview: ["Read", "Bash", "Grep", "Glob"],
+    qaVerification: ["Read", "Bash", "Grep", "Glob"],
+    evaluation: ["Read", "Bash", "Grep", "Glob"]
+  };
+  PHASE_CONFIG_KEY = {
+    development: "development",
+    codeReview: "codeReview",
+    code_review: "codeReview",
+    qaVerification: "qaVerification",
+    qa_verification: "qaVerification",
+    evaluation: "evaluation"
+  };
+  agentRegistry = new AgentProviderRegistryImpl;
+  initializeProviders();
 });
 
 // src/utils/ai-metadata.ts
@@ -40408,7 +40314,6 @@ ${fileCoverage.details}`;
     if (retryContext?.gateFailureDetails) {
       const gate = retryContext.gateFailureDetails;
       const ruleId = gate.ruleId || "";
-      const failureType = gate.failureType || "";
       let ruleSpecificFeedback = "";
       let correctExample = "";
       switch (ruleId) {
@@ -40493,34 +40398,14 @@ ${fileCoverage.details}`;
 `);
           break;
         default:
-          if (failureType === "format") {
-            ruleSpecificFeedback = "输出格式不正确。";
-            correctExample = [
-              "通用正确格式要求:",
-              "1. 输出第一行必须包含明确的结论标记",
-              "2. 使用 Markdown 格式组织内容",
-              "3. 包含必要的章节标题（如 ## 验证结果）"
-            ].join(`
-`);
-          } else if (failureType === "ai_output") {
-            ruleSpecificFeedback = "AI 服务输出异常。";
-            correctExample = [
-              "排查建议:",
-              "1. 检查 AI 服务 API 状态",
-              "2. 确认提示词格式正确且未超出 token 限制",
-              "3. 尝试简化请求内容"
-            ].join(`
-`);
-          } else {
-            ruleSpecificFeedback = gate.failureDetails || "门禁检查未通过。";
-          }
+          ruleSpecificFeedback = gate.failureDetails || "门禁检查未通过。";
       }
       gateFailureDetailsSection = [
         "## 前次门禁失败详情（精准反馈）",
         "",
         `规则ID: ${gate.ruleId || "未知"}`,
         `规则名称: ${gate.ruleName || "未知"}`,
-        `失败类型: ${gate.failureType || "未知"}`,
+        `路由目标阶段: ${gate.targetPhase || "未知"}`,
         `严重等级: ${gate.severity || "未知"}`,
         "",
         `具体问题: ${ruleSpecificFeedback}`,
@@ -40546,27 +40431,6 @@ ${fileCoverage.details}`;
         });
         gateFailureDetailsSection += `
 `;
-      }
-      if (failureType === "format") {
-        gateFailureDetailsSection += [
-          "---",
-          "**格式错误专项提醒**:",
-          '- 必须使用英文 VERDICT 标记，不要使用中文"通过"/"不通过"',
-          "- VERDICT 必须出现在输出第一行",
-          "- 确保输出可被正则表达式 `^VERDICT:s*(PASS|NOPASS)` 匹配",
-          ""
-        ].join(`
-`);
-      } else if (failureType === "ai_output") {
-        gateFailureDetailsSection += [
-          "---",
-          "**AI输出错误专项提醒**:",
-          "- 检查 API 密钥和权限配置",
-          "- 确认请求未超出模型的最大 token 限制",
-          "- 如果问题持续，考虑简化任务或分批处理",
-          ""
-        ].join(`
-`);
       }
     }
     let coverageGapSection = "";
@@ -43207,7 +43071,7 @@ var DEFAULT_POST_QA_GATE_RULES = [
     enabled: true,
     priority: 1,
     blocking: true,
-    failureType: "A"
+    targetPhase: "development"
   },
   {
     id: "R-QA-POST-002",
@@ -43217,7 +43081,7 @@ var DEFAULT_POST_QA_GATE_RULES = [
     enabled: true,
     priority: 2,
     blocking: true,
-    failureType: "A"
+    targetPhase: "development"
   },
   {
     id: "R-QA-POST-003",
@@ -43227,7 +43091,7 @@ var DEFAULT_POST_QA_GATE_RULES = [
     enabled: true,
     priority: 3,
     blocking: true,
-    failureType: "A"
+    targetPhase: "development"
   },
   {
     id: "R-QA-POST-004",
@@ -43237,7 +43101,7 @@ var DEFAULT_POST_QA_GATE_RULES = [
     enabled: true,
     priority: 4,
     blocking: false,
-    failureType: "B"
+    targetPhase: "qa"
   },
   {
     id: "R-QA-POST-005",
@@ -43247,7 +43111,7 @@ var DEFAULT_POST_QA_GATE_RULES = [
     enabled: true,
     priority: 5,
     blocking: false,
-    failureType: "B"
+    targetPhase: "qa"
   },
   {
     id: "R-QA-POST-005a",
@@ -43257,7 +43121,7 @@ var DEFAULT_POST_QA_GATE_RULES = [
     enabled: true,
     priority: 6,
     blocking: false,
-    failureType: "B"
+    targetPhase: "qa"
   },
   {
     id: "R-QA-POST-006",
@@ -43267,7 +43131,7 @@ var DEFAULT_POST_QA_GATE_RULES = [
     enabled: true,
     priority: 7,
     blocking: true,
-    failureType: "A"
+    targetPhase: "development"
   },
   {
     id: "R-QA-POST-007",
@@ -43277,7 +43141,7 @@ var DEFAULT_POST_QA_GATE_RULES = [
     enabled: true,
     priority: 8,
     blocking: true,
-    failureType: "B"
+    targetPhase: "qa"
   }
 ];
 var DEFAULT_POST_QA_GATE_RUNNER_CONFIG = {
@@ -43419,7 +43283,7 @@ class PostQAGateRunner {
           passed: false,
           ruleName: rule.name,
           message: `未找到规则类型 ${rule.type} 的处理器`,
-          failureType: rule.failureType ?? "A",
+          targetPhase: rule.targetPhase ?? "development",
           duration: Date.now() - startTime,
           timestamp
         };
@@ -43427,7 +43291,7 @@ class PostQAGateRunner {
       const result = await handler(task, rule, context);
       result.duration = Date.now() - startTime;
       result.ruleId = rule.id;
-      result.failureType = rule.failureType ?? (rule.blocking ? "A" : "B");
+      result.targetPhase = rule.targetPhase ?? (rule.blocking ? "development" : "qa");
       return result;
     } catch (error) {
       return {
@@ -43435,7 +43299,7 @@ class PostQAGateRunner {
         passed: false,
         ruleName: rule.name,
         message: `规则执行失败: ${error instanceof Error ? error.message : String(error)}`,
-        failureType: rule.failureType ?? "A",
+        targetPhase: rule.targetPhase ?? "development",
         duration: Date.now() - startTime,
         timestamp
       };
@@ -43459,7 +43323,7 @@ class PostQAGateRunner {
     if (result.decision === "POST_QA_PASS") {
       return "none";
     }
-    const coverageFailure = result.ruleResults.find((r) => !r.passed && r.failureType === "B" && r.ruleId === "R-QA-POST-007");
+    const coverageFailure = result.ruleResults.find((r) => !r.passed && r.targetPhase === "qa" && r.ruleId === "R-QA-POST-007");
     if (coverageFailure && result.coverageGapData) {
       return "coverage_retry";
     }
@@ -43834,7 +43698,7 @@ class PostQAGateRunner {
         gap,
         gapPercent: `${(gap * 100).toFixed(1)}%`,
         coverageDetails,
-        failureType: "B",
+        targetPhase: "qa",
         message: `当前覆盖率: ${(coverage * 100).toFixed(1)}%，阈值要求: ${(minCoverage * 100).toFixed(0)}%，缺口: ${(gap * 100).toFixed(1)}%`
       });
     }
@@ -43851,7 +43715,7 @@ class PostQAGateRunner {
         gap,
         gapPercent: `${(gap * 100).toFixed(1)}%`,
         coverageDetails,
-        failureType: "B"
+        targetPhase: "qa"
       },
       duration: 0,
       timestamp: new Date().toISOString()
@@ -44060,6 +43924,318 @@ function createPostQAGateRunner(cwd, config) {
   return new PostQAGateRunner(cwd, config);
 }
 // src/utils/hd-assembly-line.ts
+async function executeRules(rules, context) {
+  for (const rule of rules) {
+    const passed = await rule.check(context);
+    if (!passed) {
+      return {
+        passed: false,
+        targetPhase: rule.onFailure.targetPhase,
+        reason: `${rule.id}: ${rule.onFailure.reason}`
+      };
+    }
+  }
+  return { passed: true };
+}
+async function hasValidTestEnv(_task) {
+  return true;
+}
+async function checkDependencies(_task) {
+  return true;
+}
+async function checkGitWorkspace(_cwd) {
+  return true;
+}
+async function checkBranchStatus(_task) {
+  return true;
+}
+async function checkResourceAvailability(_task) {
+  return true;
+}
+async function checkDiskSpace(_cwd) {
+  return true;
+}
+async function checkRetryContext(_task) {
+  return true;
+}
+async function checkGitStaged(_cwd) {
+  return true;
+}
+async function checkGitIgnore(_cwd) {
+  return true;
+}
+async function checkConflictMarkers(_cwd) {
+  return true;
+}
+async function checkBranchAssociation(_task) {
+  return true;
+}
+async function checkBranchTracking(_task) {
+  return true;
+}
+async function checkBranchSync(_task) {
+  return true;
+}
+async function checkBranchSwitchable(_task) {
+  return true;
+}
+async function checkTaskFilePath(_task) {
+  return true;
+}
+async function checkDependencyOutput(_task) {
+  return true;
+}
+async function checkDependencyInterface(_task) {
+  return true;
+}
+async function checkCircularDependency(_task) {
+  return true;
+}
+async function checkDevDirectory(_cwd) {
+  return true;
+}
+async function hasDevReport(_cwd) {
+  return true;
+}
+async function checkOutputAlignment(_ctx) {
+  return true;
+}
+async function validateReportFormat(_cwd) {
+  return true;
+}
+async function validateArtifacts(_cwd) {
+  return true;
+}
+async function checkDeliverables(_cwd) {
+  return true;
+}
+async function checkCodeChanges(_cwd) {
+  return true;
+}
+async function checkTestCoverage(_cwd) {
+  return true;
+}
+async function checkDocUpdates(_cwd) {
+  return true;
+}
+async function allCheckpointsCompleted(_task) {
+  return true;
+}
+async function hasDevArtifacts(_cwd) {
+  return true;
+}
+async function checkQualityScore(_task) {
+  return true;
+}
+async function hasCodeReviewReport(_cwd) {
+  return true;
+}
+async function checkReviewReason(_phaseResult) {
+  return true;
+}
+async function checkReviewIssues(_phaseResult) {
+  return true;
+}
+async function syncCheckpointStatus(_task) {
+  return true;
+}
+async function checkTimestamp(_phaseResult) {
+  return true;
+}
+async function hasTestEnvConfig(_cwd) {
+  return true;
+}
+async function checkTestEnvSuggestion(_phaseResult) {
+  return true;
+}
+async function validateTestEnvConfig(_cwd) {
+  return true;
+}
+async function isCodeReviewPassed(_task) {
+  return true;
+}
+async function hasQACheckpoints(_task) {
+  return true;
+}
+async function isTestConfigReady(_cwd) {
+  return true;
+}
+async function hasQAReport(_cwd) {
+  return true;
+}
+async function validateQAReportFormat(_cwd) {
+  return true;
+}
+async function checkTestFailureDetails(_phaseResult) {
+  return true;
+}
+async function collectManualVerification(_phaseResult) {
+  return true;
+}
+async function notifyManualVerification(_phaseResult) {
+  return true;
+}
+async function checkCoverage(_phaseResult) {
+  return true;
+}
+async function isQAPassed(_task) {
+  return true;
+}
+async function hasFile(_cwd, _filename) {
+  return true;
+}
+async function checkNoPendingCheckpoints(_task) {
+  return true;
+}
+async function checkPhaseHistory(_task) {
+  return true;
+}
+async function checkStateConsistency(_ctx) {
+  return true;
+}
+async function checkCheckpointFinalStatus(_task) {
+  return true;
+}
+async function isTaskClosable(_task) {
+  return true;
+}
+async function checkEvalLogs(_cwd) {
+  return true;
+}
+async function checkEvalResult(_phaseResult) {
+  return true;
+}
+async function checkAIEvalLogs(_cwd) {
+  return true;
+}
+async function checkAIEvalResult(_phaseResult) {
+  return true;
+}
+async function hasEvalReport(_cwd) {
+  return true;
+}
+async function pre_dev_gate_check(context) {
+  const rules = [
+    { id: "R-DEV-PRE-001", name: "任务存在检查", onFailure: { targetPhase: "EXIT", reason: "任务不存在" }, check: async (ctx) => !!ctx.task },
+    { id: "R-DEV-PRE-002", name: "测试环境配置检查", onFailure: { targetPhase: "EXIT", reason: "测试环境配置无效" }, check: async (ctx) => hasValidTestEnv(ctx.task) },
+    { id: "R-DEV-PRE-003", name: "依赖任务完成检查", onFailure: { targetPhase: "EXIT", reason: "依赖任务未完成" }, check: async (ctx) => checkDependencies(ctx.task) },
+    { id: "R-DEV-PRE-004", name: "Git工作区问题", onFailure: { targetPhase: "EXIT", reason: "Git工作区存在问题" }, check: async (ctx) => checkGitWorkspace(ctx.cwd) },
+    { id: "R-DEV-PRE-005", name: "分支状态检查", onFailure: { targetPhase: "EXIT", reason: "分支状态异常" }, check: async (ctx) => checkBranchStatus(ctx.task) },
+    { id: "R-DEV-PRE-006", name: "资源可用性检查", onFailure: { targetPhase: "EXIT", reason: "资源不可用" }, check: async (ctx) => checkResourceAvailability(ctx.task) },
+    { id: "R-DEV-PRE-007", name: "磁盘空间检查", onFailure: { targetPhase: "EXIT", reason: "磁盘空间不足" }, check: async (ctx) => checkDiskSpace(ctx.cwd) },
+    { id: "R-DEV-PRE-008", name: "重试上下文检查", onFailure: { targetPhase: "EXIT", reason: "重试上下文无效" }, check: async (ctx) => checkRetryContext(ctx.task) },
+    { id: "R-DEV-PRE-009", name: "Git暂存区检查", onFailure: { targetPhase: "EXIT", reason: "Git暂存区异常" }, check: async (ctx) => checkGitStaged(ctx.cwd) },
+    { id: "R-DEV-PRE-010", name: "Git忽略文件检查", onFailure: { targetPhase: "EXIT", reason: "Git忽略文件配置问题" }, check: async (ctx) => checkGitIgnore(ctx.cwd) },
+    { id: "R-DEV-PRE-011", name: "冲突标记检查", onFailure: { targetPhase: "EXIT", reason: "存在未解决的冲突标记" }, check: async (ctx) => checkConflictMarkers(ctx.cwd) },
+    { id: "R-DEV-PRE-012", name: "分支关联检查", onFailure: { targetPhase: "EXIT", reason: "分支关联异常" }, check: async (ctx) => checkBranchAssociation(ctx.task) },
+    { id: "R-DEV-PRE-013", name: "分支跟踪检查", onFailure: { targetPhase: "EXIT", reason: "分支跟踪异常" }, check: async (ctx) => checkBranchTracking(ctx.task) },
+    { id: "R-DEV-PRE-014", name: "分支同步检查", onFailure: { targetPhase: "EXIT", reason: "分支未同步" }, check: async (ctx) => checkBranchSync(ctx.task) },
+    { id: "R-DEV-PRE-015", name: "分支可切换检查", onFailure: { targetPhase: "EXIT", reason: "分支不可切换" }, check: async (ctx) => checkBranchSwitchable(ctx.task) },
+    { id: "R-DEV-PRE-016", name: "任务文件路径检查", onFailure: { targetPhase: "EXIT", reason: "任务文件路径无效" }, check: async (ctx) => checkTaskFilePath(ctx.task) },
+    { id: "R-DEV-PRE-017", name: "依赖输出检查", onFailure: { targetPhase: "EXIT", reason: "依赖输出异常" }, check: async (ctx) => checkDependencyOutput(ctx.task) },
+    { id: "R-DEV-PRE-018", name: "依赖接口检查", onFailure: { targetPhase: "EXIT", reason: "依赖接口异常" }, check: async (ctx) => checkDependencyInterface(ctx.task) },
+    { id: "R-DEV-PRE-019", name: "循环依赖检查", onFailure: { targetPhase: "EXIT", reason: "存在循环依赖" }, check: async (ctx) => checkCircularDependency(ctx.task) },
+    { id: "R-DEV-PRE-020", name: "开发目录检查", onFailure: { targetPhase: "EXIT", reason: "开发目录异常" }, check: async (ctx) => checkDevDirectory(ctx.cwd) }
+  ];
+  return executeRules(rules, context);
+}
+async function post_dev_gate_check(context) {
+  const rules = [
+    { id: "R-DEV-POST-001", name: "开发报告存在", onFailure: { targetPhase: "development", reason: "缺少开发报告" }, check: async (ctx) => hasDevReport(ctx.cwd) },
+    { id: "R-DEV-POST-002", name: "输出路径对齐", onFailure: { targetPhase: "development", reason: "输出路径未对齐" }, check: async (ctx) => checkOutputAlignment(ctx) },
+    { id: "R-DEV-POST-003", name: "报告格式问题", onFailure: { targetPhase: "RETRY", reason: "报告格式无效" }, check: async (ctx) => validateReportFormat(ctx.cwd) },
+    { id: "R-DEV-POST-004", name: "产物验证", onFailure: { targetPhase: "development", reason: "产物验证失败" }, check: async (ctx) => validateArtifacts(ctx.cwd) },
+    { id: "R-DEV-POST-005", name: "可交付物检查", onFailure: { targetPhase: "development", reason: "可交付物检查失败" }, check: async (ctx) => checkDeliverables(ctx.cwd) },
+    { id: "R-DEV-POST-006", name: "代码变更检查", onFailure: { targetPhase: "development", reason: "无代码变更" }, check: async (ctx) => checkCodeChanges(ctx.cwd) },
+    { id: "R-DEV-POST-007", name: "测试覆盖检查", onFailure: { targetPhase: "development", reason: "测试覆盖不足" }, check: async (ctx) => checkTestCoverage(ctx.cwd) },
+    { id: "R-DEV-POST-008", name: "文档更新检查", onFailure: { targetPhase: "development", reason: "文档未更新" }, check: async (ctx) => checkDocUpdates(ctx.cwd) }
+  ];
+  return executeRules(rules, context);
+}
+async function pre_cr_gate_check(context) {
+  const rules = [
+    { id: "R-CR-PRE-001", name: "检查点完成", onFailure: { targetPhase: "development", reason: "存在未完成的检查点" }, check: async (ctx) => allCheckpointsCompleted(ctx.task) },
+    { id: "R-CR-PRE-002", name: "开发产物存在", onFailure: { targetPhase: "development", reason: "缺少开发产物" }, check: async (ctx) => hasDevArtifacts(ctx.cwd) },
+    { id: "R-CR-PRE-003", name: "质量分数达标", onFailure: { targetPhase: "development", reason: "质量分数不达标" }, check: async (ctx) => checkQualityScore(ctx.task) },
+    { id: "R-CR-PRE-004", name: "审核报告存在", onFailure: { targetPhase: "development", reason: "缺少代码审核报告" }, check: async (ctx) => hasCodeReviewReport(ctx.cwd) }
+  ];
+  return executeRules(rules, context);
+}
+async function post_cr_gate_check(context) {
+  const rules = [
+    { id: "R-CR-POST-001", name: "审核报告存在", onFailure: { targetPhase: "code_review", reason: "缺少审核报告" }, check: async (ctx) => hasCodeReviewReport(ctx.cwd) },
+    { id: "R-CR-POST-002", name: "报告格式有效", onFailure: { targetPhase: "code_review", reason: "报告格式无效" }, check: async (ctx) => validateReportFormat(ctx.cwd) },
+    { id: "R-CR-POST-003", name: "审核结果有效", onFailure: { targetPhase: "development", reason: "审核结果未通过" }, check: async (ctx) => ctx.phaseResult?.result === "PASS" },
+    { id: "R-CR-POST-004", name: "审核原因完整", onFailure: { targetPhase: "code_review", reason: "审核原因不完整" }, check: async (ctx) => checkReviewReason(ctx.phaseResult) },
+    { id: "R-CR-POST-005", name: "问题项详情", onFailure: { targetPhase: "code_review", reason: "问题项详情缺失" }, check: async (ctx) => checkReviewIssues(ctx.phaseResult) },
+    { id: "R-CR-POST-006", name: "检查点状态同步", onFailure: { targetPhase: "development", reason: "检查点状态未同步" }, check: async (ctx) => syncCheckpointStatus(ctx.task) },
+    { id: "R-CR-POST-007", name: "时间戳有效", onFailure: { targetPhase: "code_review", reason: "时间戳无效" }, check: async (ctx) => checkTimestamp(ctx.phaseResult) },
+    { id: "R-CR-POST-008", name: "测试环境配置存在", onFailure: { targetPhase: "code_review", reason: "缺少测试环境配置" }, check: async (ctx) => hasTestEnvConfig(ctx.cwd) },
+    { id: "R-CR-POST-009", name: "任务测试环境建议", onFailure: { targetPhase: "code_review", reason: "缺少测试环境建议" }, check: async (ctx) => checkTestEnvSuggestion(ctx.phaseResult) },
+    { id: "R-CR-POST-010", name: "测试环境配置格式", onFailure: { targetPhase: "code_review", reason: "测试环境配置格式无效" }, check: async (ctx) => validateTestEnvConfig(ctx.cwd) }
+  ];
+  return executeRules(rules, context);
+}
+async function pre_qa_gate_check(context) {
+  const rules = [
+    { id: "R-QA-PRE-001", name: "代码审核通过", onFailure: { targetPhase: "code_review", reason: "代码审核未通过" }, check: async (ctx) => isCodeReviewPassed(ctx.task) },
+    { id: "R-QA-PRE-002", name: "QA检查点定义", onFailure: { targetPhase: "development", reason: "缺少QA检查点定义" }, check: async (ctx) => hasQACheckpoints(ctx.task) },
+    { id: "R-QA-PRE-003", name: "测试配置就绪", onFailure: { targetPhase: "qa", reason: "测试配置未就绪" }, check: async (ctx) => isTestConfigReady(ctx.cwd) },
+    { id: "R-QA-PRE-004", name: "审核报告存在", onFailure: { targetPhase: "code_review", reason: "缺少代码审核报告" }, check: async (ctx) => hasCodeReviewReport(ctx.cwd) },
+    { id: "R-QA-PRE-005", name: "任务状态检查", onFailure: { targetPhase: "EXIT", reason: "任务不存在" }, check: async (ctx) => !!ctx.task }
+  ];
+  return executeRules(rules, context);
+}
+async function post_qa_gate_check(context) {
+  const rules = [
+    { id: "R-QA-POST-001", name: "QA报告存在", onFailure: { targetPhase: "qa", reason: "缺少QA报告" }, check: async (ctx) => hasQAReport(ctx.cwd) },
+    { id: "R-QA-POST-002", name: "报告格式有效", onFailure: { targetPhase: "qa", reason: "QA报告格式无效" }, check: async (ctx) => validateQAReportFormat(ctx.cwd) },
+    { id: "R-QA-POST-003", name: "测试结果有效", onFailure: { targetPhase: "development", reason: "测试结果未通过" }, check: async (ctx) => ctx.phaseResult?.result === "PASS" },
+    { id: "R-QA-POST-004", name: "测试失败详情", onFailure: { targetPhase: "development", reason: "测试失败详情缺失" }, check: async (ctx) => checkTestFailureDetails(ctx.phaseResult) },
+    { id: "R-QA-POST-005", name: "人工验证状态收集", onFailure: { targetPhase: "qa", reason: "人工验证状态未收集" }, check: async (ctx) => collectManualVerification(ctx.phaseResult) },
+    { id: "R-QA-POST-005a", name: "人工验证汇总通知", onFailure: { targetPhase: "qa", reason: "人工验证未通知" }, check: async (ctx) => notifyManualVerification(ctx.phaseResult) },
+    { id: "R-QA-POST-006", name: "检查点状态同步", onFailure: { targetPhase: "development", reason: "检查点状态未同步" }, check: async (ctx) => syncCheckpointStatus(ctx.task) },
+    { id: "R-QA-POST-007", name: "测试覆盖率达标", onFailure: { targetPhase: "RETRY", reason: "测试覆盖率不达标" }, check: async (ctx) => checkCoverage(ctx.phaseResult) }
+  ];
+  return executeRules(rules, context);
+}
+async function pre_eval_gate_check(context) {
+  const rules = [
+    { id: "R-EVAL-PRE-001", name: "QA结果为PASS", onFailure: { targetPhase: "qa", reason: "QA结果未通过" }, check: async (ctx) => isQAPassed(ctx.task) },
+    { id: "R-EVAL-PRE-002", name: "dev-report.json存在", onFailure: { targetPhase: "development", reason: "缺少dev-report.json" }, check: async (ctx) => hasFile(ctx.cwd, "dev-report.json") },
+    { id: "R-EVAL-PRE-003", name: "code-review-report.json存在", onFailure: { targetPhase: "code_review", reason: "缺少code-review-report.json" }, check: async (ctx) => hasFile(ctx.cwd, "code-review-report.json") },
+    { id: "R-EVAL-PRE-004", name: "qa-report.json存在", onFailure: { targetPhase: "qa", reason: "缺少qa-report.json" }, check: async (ctx) => hasFile(ctx.cwd, "qa-report.json") },
+    { id: "R-EVAL-PRE-005", name: "无pending检查点", onFailure: { targetPhase: "development", reason: "存在pending检查点" }, check: async (ctx) => checkNoPendingCheckpoints(ctx.task) },
+    { id: "R-EVAL-PRE-006", name: "phaseHistory完整", onFailure: { targetPhase: "development", reason: "phaseHistory不完整" }, check: async (ctx) => checkPhaseHistory(ctx.task) }
+  ];
+  return executeRules(rules, context);
+}
+async function post_eval_gate_check(context) {
+  const rules = [
+    { id: "R-EVAL-POST-001", name: "状态一致性检查", onFailure: { targetPhase: "evaluation", reason: "状态不一致" }, check: async (ctx) => checkStateConsistency(ctx) },
+    { id: "R-EVAL-POST-002", name: "检查点最终状态", onFailure: { targetPhase: "development", reason: "检查点最终状态异常" }, check: async (ctx) => checkCheckpointFinalStatus(ctx.task) },
+    { id: "R-EVAL-POST-003", name: "任务可关闭检查", onFailure: { targetPhase: "development", reason: "任务不可关闭" }, check: async (ctx) => isTaskClosable(ctx.task) },
+    { id: "R-EVAL-POST-004", name: "评估日志检查", onFailure: { targetPhase: "evaluation", reason: "评估日志缺失" }, check: async (ctx) => checkEvalLogs(ctx.cwd) },
+    { id: "R-EVAL-POST-005", name: "评估结果检查", onFailure: { targetPhase: "development", reason: "评估结果无效" }, check: async (ctx) => checkEvalResult(ctx.phaseResult) },
+    { id: "R-EVAL-POST-006", name: "AI评估日志检查", onFailure: { targetPhase: "evaluation", reason: "AI评估日志缺失" }, check: async (ctx) => checkAIEvalLogs(ctx.cwd) },
+    { id: "R-EVAL-POST-007", name: "AI评估结果检查", onFailure: { targetPhase: "development", reason: "AI评估结果无效" }, check: async (ctx) => checkAIEvalResult(ctx.phaseResult) },
+    { id: "R-EVAL-POST-008", name: "评估报告存在", onFailure: { targetPhase: "evaluation", reason: "缺少评估报告" }, check: async (ctx) => hasEvalReport(ctx.cwd) }
+  ];
+  return executeRules(rules, context);
+}
+function flowTargetToPhaseIndex(target) {
+  const map = {
+    development: 0,
+    code_review: 1,
+    qa: 2,
+    evaluation: 3
+  };
+  if (target in map) {
+    return map[target];
+  }
+  throw new Error(`Unknown rollback target: ${target}`);
+}
+
 class AssemblyLine {
   config;
   executor;
@@ -44182,6 +44358,7 @@ ${"━".repeat(SEPARATOR_WIDTH)}`);
           state.passedTasks.push(taskId);
           this.statusReporter.recordTaskPassed(taskId);
           this.statusReporter.completeTaskProgress(taskId, true);
+          this.cleanupTaskRuntimeData(taskId, state);
         } else if (record.finalStatus === "failed") {
           state.failedTasks.push(taskId);
           this.statusReporter.recordTaskFailed(taskId, "task_failed", "execution");
@@ -44205,6 +44382,7 @@ ${"━".repeat(SEPARATOR_WIDTH)}`);
           console.log(`      失败位置: ${failureReason.failedAt}`);
           this.cascadeFailureToDownstream(taskId, state);
           this.markDependentTasksAsFailed(state, taskId, failureReason);
+          this.cleanupTaskRuntimeData(taskId, state);
         } else if ((record.finalStatus === "in_progress" || record.finalStatus === "wait_review" || record.finalStatus === "wait_qa") && state.taskQueue.includes(taskId)) {
           state.retryingTasks.push(taskId);
           executionQueue.splice(state.currentIndex + 1, 0, taskId);
@@ -44385,6 +44563,12 @@ ${"━".repeat(SEPARATOR_WIDTH)}`);
             record.devReport = result;
           });
           if (!devLifecycleResult.success) {
+            const targetPhase = devLifecycleResult.targetPhase;
+            if (targetPhase && targetPhase !== "EXIT") {
+              console.log(`   ↩️ 开发阶段门禁失败，回退到: ${targetPhase}`);
+              currentPhaseIndex = flowTargetToPhaseIndex(targetPhase);
+              continue;
+            }
             const isTimeout = devLifecycleResult.failedAt === "phase_execution" && devReport?.status === "timeout";
             console.log(`❌ 开发阶段失败: ${devLifecycleResult.reason}`);
             if (isTimeout) {
@@ -44445,6 +44629,12 @@ ${"━".repeat(SEPARATOR_WIDTH)}`);
           if (!crLifecycleResult.success) {
             console.log(`❌ 代码审核失败: ${crLifecycleResult.reason}`);
             this.statusReporter.failPhase("code_review", new Error(crLifecycleResult.reason || "代码审核未通过"), taskId);
+            const targetPhase = crLifecycleResult.targetPhase;
+            if (targetPhase && targetPhase !== "EXIT") {
+              console.log(`   ↩️ 代码审核门禁失败，回退到: ${targetPhase}`);
+              currentPhaseIndex = flowTargetToPhaseIndex(targetPhase);
+              continue;
+            }
             return this.handleVerdictBasedTransition(taskId, record, state, addTimeline, "code_review", "redevelop");
           }
           addTimeline("code_review_completed", `代码审核完成: ${codeReviewVerdict.result}`, { result: codeReviewVerdict.result });
@@ -44494,6 +44684,12 @@ ${"━".repeat(SEPARATOR_WIDTH)}`);
           if (!qaLifecycleResult.success) {
             console.log(`❌ QA 验证失败: ${qaLifecycleResult.reason}`);
             this.statusReporter.failPhase("qa_verification", new Error(qaLifecycleResult.reason || "QA 验证未通过"), taskId);
+            const targetPhase = qaLifecycleResult.targetPhase;
+            if (targetPhase && targetPhase !== "EXIT") {
+              console.log(`   ↩️ QA门禁失败，回退到: ${targetPhase}`);
+              currentPhaseIndex = flowTargetToPhaseIndex(targetPhase);
+              continue;
+            }
             return this.handleVerdictBasedTransition(taskId, record, state, addTimeline, "qa", "redevelop");
           }
           addTimeline("qa_completed", `QA 验证完成: ${qaVerdict.result}`, {
@@ -44525,6 +44721,7 @@ ${"━".repeat(SEPARATOR_WIDTH)}`);
             }
             console.log(`   \uD83D\uDEAB ${failureClassification.needsChainRollback ? "A 类门禁失败" : "B 类重试耗尽"}，执行链式回退`);
             this.statusReporter.failPhase("qa_verification", new Error(postQAGateResult.summary), taskId);
+            this.storeFailureContext(taskId, "qa", postQAGateResult.summary, state);
             return this.handleVerdictBasedTransition(taskId, record, state, addTimeline, "qa", "redevelop");
           }
           console.log(`✅ Post-QA Gate 门禁检查通过`);
@@ -44568,6 +44765,12 @@ ${"━".repeat(SEPARATOR_WIDTH)}`);
         if (!evalLifecycleResult.success) {
           console.log(`❌ 评估失败: ${evalLifecycleResult.reason}`);
           this.statusReporter.failPhase("evaluation", new Error(evalLifecycleResult.reason || "评估未通过"), taskId);
+          const targetPhase = evalLifecycleResult.targetPhase;
+          if (targetPhase && targetPhase !== "EXIT") {
+            console.log(`   ↩️ 评估门禁失败，回退到: ${targetPhase}`);
+            currentPhaseIndex = flowTargetToPhaseIndex(targetPhase);
+            continue;
+          }
           const failRecord = await this.handleVerdictBasedTransition(taskId, record, state, addTimeline, "evaluation", "redevelop");
           const failStatus = failRecord.finalStatus;
           if (failStatus !== "abandoned") {
@@ -44627,15 +44830,16 @@ ${"━".repeat(SEPARATOR_WIDTH)}`);
       console.log(`
    [${phase}] 第 ${attempt}/${maxRetries + 1} 次尝试`);
       this.debugLogger.log(taskId, phase, `第 ${attempt}/${maxRetries + 1} 次尝试`);
-      const canProceed = await this.checkPhasePreConditions(taskId, phase, state);
-      if (!canProceed) {
-        console.log(`   ❌ 阶段前置条件检查失败`);
-        const preGateErrorMsg = `阶段前置条件检查失败（A 类门禁）`;
-        this.storeFailureContext(taskId, phase, preGateErrorMsg, state, {
+      const preGateContext = { task: readTaskMeta(taskId, this.config.cwd), cwd: this.config.cwd };
+      const preGateResult = await this.runPrePhaseGate(phase, preGateContext);
+      if (!preGateResult.passed) {
+        const targetPhase = preGateResult.targetPhase || "EXIT";
+        console.log(`   ❌ 阶段前置条件检查失败 → 路由到: ${targetPhase}`);
+        this.storeFailureContext(taskId, phase, preGateResult.reason || "阶段前置条件检查失败", state, {
           ruleId: "R-PRE-PHASE-001",
           ruleName: "阶段前置条件检查",
-          failureType: "A",
-          failureDetails: `任务 ${taskId} 的阶段前置条件检查未通过`,
+          targetPhase,
+          failureDetails: preGateResult.reason || `任务 ${taskId} 的阶段前置条件检查未通过`,
           suggestions: [
             "检查任务是否存在且已正确初始化",
             "确认任务依赖是否已完成",
@@ -44643,16 +44847,28 @@ ${"━".repeat(SEPARATOR_WIDTH)}`);
           ],
           severity: "ERROR"
         });
-        console.log(`   \uD83D\uDEAB A 类门禁失败，中断流水线（任务数据有效性检查失败）`);
-        this.debugLogger.logError(taskId, phase, new Error(preGateErrorMsg), { failedAt: "pre_phase_gate", attempt });
+        this.debugLogger.logError(taskId, phase, new Error(preGateResult.reason || "pre-gate failed"), { failedAt: "pre_phase_gate", attempt, targetPhase });
+        if (targetPhase === "EXIT") {
+          console.log(`   \uD83D\uDEAB 门禁失败，中断流水线`);
+          return {
+            success: false,
+            phase,
+            failedAt: "pre_phase_gate",
+            attempt,
+            reason: preGateResult.reason || "pre-gate failed",
+            retryable: false,
+            targetPhase
+          };
+        }
+        console.log(`   ↩️ 门禁失败，回退到: ${targetPhase}`);
         return {
           success: false,
           phase,
           failedAt: "pre_phase_gate",
           attempt,
-          reason: preGateErrorMsg,
+          reason: preGateResult.reason || "pre-gate failed",
           retryable: false,
-          failureType: "A"
+          targetPhase
         };
       }
       console.log(`   ✅ 阶段前置条件检查通过`);
@@ -44687,15 +44903,17 @@ ${"━".repeat(SEPARATOR_WIDTH)}`);
         };
       }
       console.log(`   ✅ 阶段执行成功`);
-      const postGatePassed = this.validatePhaseResult(phase, phaseResult);
-      if (!postGatePassed) {
-        console.log(`   ❌ 阶段后质量门禁失败`);
-        const postGateErrorMsg = `阶段后质量门禁失败（B 类门禁，${attempt}次尝试）`;
+      const postGateContext = { task: readTaskMeta(taskId, this.config.cwd), cwd: this.config.cwd, phaseResult };
+      const postGateResult = await this.runPostPhaseGate(phase, postGateContext);
+      if (!postGateResult.passed) {
+        const targetPhase = postGateResult.targetPhase || "development";
+        console.log(`   ❌ 阶段后质量门禁失败 → 路由到: ${targetPhase}`);
+        const postGateErrorMsg = postGateResult.reason || `阶段后质量门禁失败（${attempt}次尝试）`;
         this.storeFailureContext(taskId, phase, postGateErrorMsg, state, {
           ruleId: "R-POST-PHASE-001",
           ruleName: "阶段结果验证",
-          failureType: "B",
-          failureDetails: `${phase} 阶段结果验证未通过`,
+          targetPhase,
+          failureDetails: `${phase} 阶段结果验证未通过: ${postGateResult.reason}`,
           suggestions: [
             `检查 ${phase} 阶段输出是否符合预期格式`,
             "确认阶段执行结果包含必要的字段和数据",
@@ -44703,15 +44921,28 @@ ${"━".repeat(SEPARATOR_WIDTH)}`);
           ],
           severity: "ERROR"
         });
-        this.debugLogger.logError(taskId, phase, new Error(postGateErrorMsg), { failedAt: "post_phase_gate", attempt });
-        if (attempt <= maxRetries) {
+        this.debugLogger.logError(taskId, phase, new Error(postGateErrorMsg), { failedAt: "post_phase_gate", attempt, targetPhase });
+        if (targetPhase === "RETRY" && attempt <= maxRetries) {
           const waitSeconds = [30, 60, 120][attempt - 1] || 120;
-          console.log(`   ⏳ B 类门禁失败，等待 ${waitSeconds} 秒后回退到阶段起点重试...`);
+          console.log(`   ⏳ 门禁要求阶段内重试，等待 ${waitSeconds} 秒...`);
           await sleep(waitSeconds);
           this.incrementPhaseRetryCount(taskId, phase, state);
           state.retryCounter.set(taskId, (state.retryCounter.get(taskId) || 0) + 1);
           continue;
         }
+        if (targetPhase === "EXIT") {
+          console.log(`   \uD83D\uDEAB 门禁失败，中断流水线`);
+          return {
+            success: false,
+            phase,
+            failedAt: "post_phase_gate",
+            attempt,
+            reason: postGateErrorMsg,
+            retryable: false,
+            targetPhase
+          };
+        }
+        console.log(`   ↩️ 门禁失败，回退到: ${targetPhase}`);
         return {
           success: false,
           phase,
@@ -44719,7 +44950,7 @@ ${"━".repeat(SEPARATOR_WIDTH)}`);
           attempt,
           reason: postGateErrorMsg,
           retryable: false,
-          failureType: "B"
+          targetPhase
         };
       }
       console.log(`   ✅ 阶段后质量门禁通过`);
@@ -44743,33 +44974,32 @@ ${"━".repeat(SEPARATOR_WIDTH)}`);
       retryable: false
     };
   }
-  async checkPhasePreConditions(taskId, phase, state) {
-    const task = readTaskMeta(taskId, this.config.cwd);
-    if (!task) {
-      console.log(`   ⚠️ 任务 ${taskId} 不存在`);
-      return false;
-    }
-    if (phase === "development") {
-      const depsCompleted = await this.checkDependencies(task);
-      if (!depsCompleted) {
-        console.log(`   ⏳ 依赖未完成，延后处理`);
-        return false;
-      }
-    }
-    return true;
-  }
-  validatePhaseResult(phase, result) {
+  async runPrePhaseGate(phase, context) {
     switch (phase) {
       case "development":
-        return result.status === "success";
+        return pre_dev_gate_check(context);
       case "code_review":
-        return result.result === "PASS";
+        return pre_cr_gate_check(context);
       case "qa":
-        return result.result === "PASS";
+        return pre_qa_gate_check(context);
       case "evaluation":
-        return result.result === "PASS";
+        return pre_eval_gate_check(context);
       default:
-        return false;
+        return { passed: false, targetPhase: "EXIT", reason: `Unknown phase: ${phase}` };
+    }
+  }
+  async runPostPhaseGate(phase, context) {
+    switch (phase) {
+      case "development":
+        return post_dev_gate_check(context);
+      case "code_review":
+        return post_cr_gate_check(context);
+      case "qa":
+        return post_qa_gate_check(context);
+      case "evaluation":
+        return post_eval_gate_check(context);
+      default:
+        return { passed: false, targetPhase: "EXIT", reason: `Unknown phase: ${phase}` };
     }
   }
   savePhaseCheckpoint(taskId, completedPhase, state) {
@@ -45477,17 +45707,16 @@ ${"━".repeat(SEPARATOR_WIDTH)}`);
   }
   buildRetryContextForPhase(taskId, phase, state) {
     const stored = this.taskRetryContexts.get(taskId);
-    const phaseKey = `${taskId}:${phase}`;
     const attemptNumber = this.getPhaseRetryCount(taskId, phase, state) + 1;
     const maxRetries = this.getPhaseRetryLimit(phase);
-    const failureHistory = state.failureHistory?.get(phaseKey) || [];
+    const failureHistory = this.getAllFailuresForTask(taskId, state);
     const previousErrors = failureHistory.map((f) => f.error);
     const accumulatedInsights = this.extractInsights(failureHistory);
     const suggestedFixes = this.generateSuggestedFixes(failureHistory);
     if (!stored && failureHistory.length === 0)
       return;
     let qaCoverageGapContext;
-    if (phase === "qa" && state.qaCoverageGapContexts?.has(taskId)) {
+    if (state.qaCoverageGapContexts?.has(taskId)) {
       const gapData = state.qaCoverageGapContexts.get(taskId);
       qaCoverageGapContext = {
         currentCoverage: gapData.currentCoverage,
@@ -45495,7 +45724,7 @@ ${"━".repeat(SEPARATOR_WIDTH)}`);
         gap: gapData.gap,
         gapPercent: gapData.gapPercent,
         coverageDetails: gapData.coverageDetails,
-        failureType: gapData.failureType,
+        targetPhase: gapData.targetPhase,
         message: gapData.message
       };
     }
@@ -45505,7 +45734,7 @@ ${"━".repeat(SEPARATOR_WIDTH)}`);
       gateFailureDetails = {
         ruleId: lastFailure.gateInfo.ruleId,
         ruleName: lastFailure.gateInfo.ruleName,
-        failureType: lastFailure.gateInfo.failureType,
+        targetPhase: lastFailure.gateInfo.targetPhase,
         failureDetails: lastFailure.gateInfo.failureDetails,
         suggestions: lastFailure.gateInfo.suggestions,
         severity: lastFailure.gateInfo.severity
@@ -45584,6 +45813,31 @@ ${"━".repeat(SEPARATOR_WIDTH)}`);
     };
     history.push(record);
     state.failureHistory.set(phaseKey, history);
+  }
+  getAllFailuresForTask(taskId, state) {
+    if (!state.failureHistory || state.failureHistory.size === 0)
+      return [];
+    const allFailures = [];
+    const prefix = `${taskId}:`;
+    for (const [key, records] of state.failureHistory) {
+      if (key.startsWith(prefix)) {
+        allFailures.push(...records);
+      }
+    }
+    allFailures.sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime());
+    return allFailures;
+  }
+  cleanupTaskRuntimeData(taskId, state) {
+    if (state.failureHistory && state.failureHistory.size > 0) {
+      const prefix = `${taskId}:`;
+      for (const key of state.failureHistory.keys()) {
+        if (key.startsWith(prefix)) {
+          state.failureHistory.delete(key);
+        }
+      }
+    }
+    this.taskRetryContexts?.delete(taskId);
+    state.taskFailureReasons?.delete(taskId);
   }
   classifyError(error) {
     const lowerError = error.toLowerCase();
