@@ -44793,7 +44793,11 @@ ${"━".repeat(SEPARATOR_WIDTH)}`);
           }
         } else {
           for (const violation of checkpointViolations) {
-            errors.push(`[${violation.severity}] ${violation.message}`);
+            if (violation.severity === "error") {
+              errors.push(`[${violation.severity}] ${violation.message}`);
+            } else {
+              console.warn(`   ⚠️ 检查点验证警告: [${violation.severity}] ${violation.message}`);
+            }
           }
         }
       }
