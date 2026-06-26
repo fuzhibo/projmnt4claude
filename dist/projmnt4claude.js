@@ -7,39 +7,60 @@ var __defProp = Object.defineProperty;
 var __getOwnPropNames = Object.getOwnPropertyNames;
 var __getOwnPropDesc = Object.getOwnPropertyDescriptor;
 var __hasOwnProp = Object.prototype.hasOwnProperty;
+function __accessProp(key) {
+  return this[key];
+}
+var __toESMCache_node;
+var __toESMCache_esm;
 var __toESM = (mod, isNodeMode, target) => {
+  var canCache = mod != null && typeof mod === "object";
+  if (canCache) {
+    var cache = isNodeMode ? __toESMCache_node ??= new WeakMap : __toESMCache_esm ??= new WeakMap;
+    var cached = cache.get(mod);
+    if (cached)
+      return cached;
+  }
   target = mod != null ? __create(__getProtoOf(mod)) : {};
   const to = isNodeMode || !mod || !mod.__esModule ? __defProp(target, "default", { value: mod, enumerable: true }) : target;
   for (let key of __getOwnPropNames(mod))
     if (!__hasOwnProp.call(to, key))
       __defProp(to, key, {
-        get: () => mod[key],
+        get: __accessProp.bind(mod, key),
         enumerable: true
       });
+  if (canCache)
+    cache.set(mod, to);
   return to;
 };
-var __moduleCache = /* @__PURE__ */ new WeakMap;
 var __toCommonJS = (from) => {
-  var entry = __moduleCache.get(from), desc;
+  var entry = (__moduleCache ??= new WeakMap).get(from), desc;
   if (entry)
     return entry;
   entry = __defProp({}, "__esModule", { value: true });
-  if (from && typeof from === "object" || typeof from === "function")
-    __getOwnPropNames(from).map((key) => !__hasOwnProp.call(entry, key) && __defProp(entry, key, {
-      get: () => from[key],
-      enumerable: !(desc = __getOwnPropDesc(from, key)) || desc.enumerable
-    }));
+  if (from && typeof from === "object" || typeof from === "function") {
+    for (var key of __getOwnPropNames(from))
+      if (!__hasOwnProp.call(entry, key))
+        __defProp(entry, key, {
+          get: __accessProp.bind(from, key),
+          enumerable: !(desc = __getOwnPropDesc(from, key)) || desc.enumerable
+        });
+  }
   __moduleCache.set(from, entry);
   return entry;
 };
+var __moduleCache;
 var __commonJS = (cb, mod) => () => (mod || cb((mod = { exports: {} }).exports, mod), mod.exports);
+var __returnValue = (v) => v;
+function __exportSetter(name, newValue) {
+  this[name] = __returnValue.bind(null, newValue);
+}
 var __export = (target, all) => {
   for (var name in all)
     __defProp(target, name, {
       get: all[name],
       enumerable: true,
       configurable: true,
-      set: (newValue) => all[name] = () => newValue
+      set: __exportSetter.bind(all, name)
     });
 };
 var __esm = (fn, res) => () => (fn && (res = fn(fn = 0)), res);
@@ -1017,7 +1038,7 @@ Expecting one of '${allowedValues.join("', '")}'`);
         this._exitCallback = (err) => {
           if (err.code !== "commander.executeSubCommandAsync") {
             throw err;
-          } else {}
+          }
         };
       }
       return this;
@@ -19307,6 +19328,193 @@ var init_validation = __esm(() => {
   init_task2();
 });
 
+// src/utils/plan.ts
+import * as path15 from "path";
+import * as fs19 from "fs";
+function isExecutableStatus(status) {
+  const normalized = normalizeStatus(status);
+  return normalized in EXECUTABLE_STATUS_PRIORITY;
+}
+function getStatusPriority(status) {
+  const normalized = normalizeStatus(status);
+  return EXECUTABLE_STATUS_PRIORITY[normalized] ?? 999;
+}
+function getPlanPath(cwd = process.cwd()) {
+  return path15.join(getProjectDir(cwd), "current-plan.json");
+}
+function readPlan(cwd = process.cwd()) {
+  if (!isInitialized(cwd)) {
+    return null;
+  }
+  const planPath = getPlanPath(cwd);
+  try {
+    if (!fs19.existsSync(planPath)) {
+      return null;
+    }
+    const content = fs19.readFileSync(planPath, "utf-8");
+    return JSON.parse(content);
+  } catch {
+    return null;
+  }
+}
+function writePlan(plan, cwd = process.cwd()) {
+  const planPath = getPlanPath(cwd);
+  plan.updatedAt = new Date().toISOString();
+  fs19.writeFileSync(planPath, JSON.stringify(plan, null, 2), "utf-8");
+}
+function createEmptyPlan() {
+  const now = new Date().toISOString();
+  return {
+    tasks: [],
+    createdAt: now,
+    updatedAt: now
+  };
+}
+function getOrCreatePlan(cwd = process.cwd()) {
+  const plan = readPlan(cwd);
+  if (plan) {
+    return plan;
+  }
+  return createEmptyPlan();
+}
+function addTaskToPlan(taskId, afterId, cwd = process.cwd()) {
+  const plan = getOrCreatePlan(cwd);
+  if (plan.tasks.includes(taskId)) {
+    return false;
+  }
+  if (afterId) {
+    const index = plan.tasks.indexOf(afterId);
+    if (index === -1) {
+      plan.tasks.push(taskId);
+    } else {
+      plan.tasks.splice(index + 1, 0, taskId);
+    }
+  } else {
+    plan.tasks.push(taskId);
+  }
+  writePlan(plan, cwd);
+  return true;
+}
+function removeTaskFromPlan(taskId, cwd = process.cwd()) {
+  const plan = readPlan(cwd);
+  if (!plan) {
+    return false;
+  }
+  const index = plan.tasks.indexOf(taskId);
+  if (index === -1) {
+    return false;
+  }
+  plan.tasks.splice(index, 1);
+  writePlan(plan, cwd);
+  return true;
+}
+function clearPlan(cwd = process.cwd()) {
+  const plan = createEmptyPlan();
+  writePlan(plan, cwd);
+}
+function areDependenciesCompleted(taskId, cwd = process.cwd()) {
+  const task = readTaskMeta(taskId, cwd);
+  if (!task) {
+    return false;
+  }
+  for (const depId of task.dependencies) {
+    const depTask = readTaskMeta(depId, cwd);
+    if (!depTask) {
+      return false;
+    }
+    const normalizedStatus = normalizeStatus(depTask.status);
+    if (normalizedStatus !== "resolved" && normalizedStatus !== "closed") {
+      return false;
+    }
+  }
+  return true;
+}
+function isParentTaskCompleted(taskId, cwd = process.cwd()) {
+  const task = readTaskMeta(taskId, cwd);
+  if (!task || !task.parentId) {
+    return false;
+  }
+  const parentTask = readTaskMeta(task.parentId, cwd);
+  if (!parentTask) {
+    return false;
+  }
+  const normalizedStatus = normalizeStatus(parentTask.status);
+  return normalizedStatus === "resolved" || normalizedStatus === "closed";
+}
+function getExecutableTasks(cwd = process.cwd(), includeSubtasks = false) {
+  const tasks = getAllTasks(cwd);
+  const skippedDueToParent = [];
+  const executableTasks = tasks.filter((task) => {
+    if (!includeSubtasks && (isSubtask(task.id) || !!task.parentId)) {
+      return false;
+    }
+    if (task.subtaskIds && task.subtaskIds.length > 0) {
+      return false;
+    }
+    if (task.parentId && isParentTaskCompleted(task.id, cwd)) {
+      skippedDueToParent.push(task.id);
+      return false;
+    }
+    return isExecutableStatus(task.status) && areDependenciesCompleted(task.id, cwd);
+  });
+  executableTasks.sort((a, b) => {
+    const priorityA = getStatusPriority(a.status);
+    const priorityB = getStatusPriority(b.status);
+    return priorityA - priorityB;
+  });
+  if (skippedDueToParent.length > 0) {
+    console.log("");
+    console.log("⚠️  以下子任务的父任务已完成，跳过推荐:");
+    for (const taskId of skippedDueToParent) {
+      const task = tasks.find((t2) => t2.id === taskId);
+      if (task) {
+        console.log(`   - ${taskId} (父任务 ${task.parentId} 已 resolved)`);
+      }
+    }
+    console.log("");
+  }
+  return executableTasks.map((task) => task.id);
+}
+function detectMissingSubtasks(cwd = process.cwd()) {
+  const allTasks = getAllTasks(cwd);
+  const warnings = [];
+  for (const task of allTasks) {
+    if (!task.subtaskIds || task.subtaskIds.length === 0) {
+      continue;
+    }
+    const missingIds = [];
+    let actualCount = 0;
+    for (const subtaskId of task.subtaskIds) {
+      const subtask = readTaskMeta(subtaskId, cwd);
+      if (subtask) {
+        actualCount++;
+      } else {
+        missingIds.push(subtaskId);
+      }
+    }
+    if (missingIds.length > 0) {
+      warnings.push({
+        parentTaskId: task.id,
+        parentTitle: task.title,
+        missingSubtaskIds: missingIds,
+        expectedCount: task.subtaskIds.length,
+        actualCount
+      });
+    }
+  }
+  return warnings;
+}
+var EXECUTABLE_STATUS_PRIORITY;
+var init_plan = __esm(() => {
+  init_path();
+  init_task2();
+  init_task();
+  EXECUTABLE_STATUS_PRIORITY = {
+    in_progress: 1,
+    open: 2
+  };
+});
+
 // src/types/harness.ts
 function createDefaultSprintContract(taskId) {
   const now = new Date().toISOString();
@@ -22447,8 +22655,8 @@ var {
 } = import__.default;
 
 // src/index.ts
-import * as fs46 from "fs";
-import * as path42 from "path";
+import * as fs45 from "fs";
+import * as path41 from "path";
 
 // src/commands/setup.ts
 init_path();
@@ -26490,198 +26698,13 @@ function renameTaskCommand(oldTaskId, newTaskId, cwd = process.cwd()) {
 }
 
 // src/commands/plan.ts
-var import_prompts3 = __toESM(require_prompts3(), 1);
-
-// src/utils/plan.ts
-init_path();
-init_task2();
-init_task();
-import * as path15 from "path";
-import * as fs19 from "fs";
-var EXECUTABLE_STATUS_PRIORITY = {
-  in_progress: 1,
-  open: 2
-};
-function isExecutableStatus(status) {
-  const normalized = normalizeStatus(status);
-  return normalized in EXECUTABLE_STATUS_PRIORITY;
-}
-function getStatusPriority(status) {
-  const normalized = normalizeStatus(status);
-  return EXECUTABLE_STATUS_PRIORITY[normalized] ?? 999;
-}
-function getPlanPath(cwd = process.cwd()) {
-  return path15.join(getProjectDir(cwd), "current-plan.json");
-}
-function readPlan(cwd = process.cwd()) {
-  if (!isInitialized(cwd)) {
-    return null;
-  }
-  const planPath = getPlanPath(cwd);
-  try {
-    if (!fs19.existsSync(planPath)) {
-      return null;
-    }
-    const content = fs19.readFileSync(planPath, "utf-8");
-    return JSON.parse(content);
-  } catch {
-    return null;
-  }
-}
-function writePlan(plan, cwd = process.cwd()) {
-  const planPath = getPlanPath(cwd);
-  plan.updatedAt = new Date().toISOString();
-  fs19.writeFileSync(planPath, JSON.stringify(plan, null, 2), "utf-8");
-}
-function createEmptyPlan() {
-  const now = new Date().toISOString();
-  return {
-    tasks: [],
-    createdAt: now,
-    updatedAt: now
-  };
-}
-function getOrCreatePlan(cwd = process.cwd()) {
-  const plan = readPlan(cwd);
-  if (plan) {
-    return plan;
-  }
-  return createEmptyPlan();
-}
-function addTaskToPlan(taskId, afterId, cwd = process.cwd()) {
-  const plan = getOrCreatePlan(cwd);
-  if (plan.tasks.includes(taskId)) {
-    return false;
-  }
-  if (afterId) {
-    const index = plan.tasks.indexOf(afterId);
-    if (index === -1) {
-      plan.tasks.push(taskId);
-    } else {
-      plan.tasks.splice(index + 1, 0, taskId);
-    }
-  } else {
-    plan.tasks.push(taskId);
-  }
-  writePlan(plan, cwd);
-  return true;
-}
-function removeTaskFromPlan(taskId, cwd = process.cwd()) {
-  const plan = readPlan(cwd);
-  if (!plan) {
-    return false;
-  }
-  const index = plan.tasks.indexOf(taskId);
-  if (index === -1) {
-    return false;
-  }
-  plan.tasks.splice(index, 1);
-  writePlan(plan, cwd);
-  return true;
-}
-function clearPlan(cwd = process.cwd()) {
-  const plan = createEmptyPlan();
-  writePlan(plan, cwd);
-}
-function areDependenciesCompleted(taskId, cwd = process.cwd()) {
-  const task = readTaskMeta(taskId, cwd);
-  if (!task) {
-    return false;
-  }
-  for (const depId of task.dependencies) {
-    const depTask = readTaskMeta(depId, cwd);
-    if (!depTask) {
-      return false;
-    }
-    const normalizedStatus = normalizeStatus(depTask.status);
-    if (normalizedStatus !== "resolved" && normalizedStatus !== "closed") {
-      return false;
-    }
-  }
-  return true;
-}
-function isParentTaskCompleted(taskId, cwd = process.cwd()) {
-  const task = readTaskMeta(taskId, cwd);
-  if (!task || !task.parentId) {
-    return false;
-  }
-  const parentTask = readTaskMeta(task.parentId, cwd);
-  if (!parentTask) {
-    return false;
-  }
-  const normalizedStatus = normalizeStatus(parentTask.status);
-  return normalizedStatus === "resolved" || normalizedStatus === "closed";
-}
-function getExecutableTasks(cwd = process.cwd(), includeSubtasks = false) {
-  const tasks = getAllTasks(cwd);
-  const skippedDueToParent = [];
-  const executableTasks = tasks.filter((task) => {
-    if (!includeSubtasks && (isSubtask(task.id) || !!task.parentId)) {
-      return false;
-    }
-    if (task.subtaskIds && task.subtaskIds.length > 0) {
-      return false;
-    }
-    if (task.parentId && isParentTaskCompleted(task.id, cwd)) {
-      skippedDueToParent.push(task.id);
-      return false;
-    }
-    return isExecutableStatus(task.status) && areDependenciesCompleted(task.id, cwd);
-  });
-  executableTasks.sort((a, b) => {
-    const priorityA = getStatusPriority(a.status);
-    const priorityB = getStatusPriority(b.status);
-    return priorityA - priorityB;
-  });
-  if (skippedDueToParent.length > 0) {
-    console.log("");
-    console.log("⚠️  以下子任务的父任务已完成，跳过推荐:");
-    for (const taskId of skippedDueToParent) {
-      const task = tasks.find((t2) => t2.id === taskId);
-      if (task) {
-        console.log(`   - ${taskId} (父任务 ${task.parentId} 已 resolved)`);
-      }
-    }
-    console.log("");
-  }
-  return executableTasks.map((task) => task.id);
-}
-function detectMissingSubtasks(cwd = process.cwd()) {
-  const allTasks = getAllTasks(cwd);
-  const warnings = [];
-  for (const task of allTasks) {
-    if (!task.subtaskIds || task.subtaskIds.length === 0) {
-      continue;
-    }
-    const missingIds = [];
-    let actualCount = 0;
-    for (const subtaskId of task.subtaskIds) {
-      const subtask = readTaskMeta(subtaskId, cwd);
-      if (subtask) {
-        actualCount++;
-      } else {
-        missingIds.push(subtaskId);
-      }
-    }
-    if (missingIds.length > 0) {
-      warnings.push({
-        parentTaskId: task.id,
-        parentTitle: task.title,
-        missingSubtaskIds: missingIds,
-        expectedCount: task.subtaskIds.length,
-        actualCount
-      });
-    }
-  }
-  return warnings;
-}
-
-// src/commands/plan.ts
+init_plan();
 init_path();
 init_task2();
 init_task();
 init_logger();
 init_quality_gate();
+var import_prompts3 = __toESM(require_prompts3(), 1);
 
 // src/utils/quality-gate-registry.ts
 init_checkpoint_rules();
@@ -36470,7 +36493,7 @@ function getBuiltInAnalyzers() {
 // src/commands/doctor.ts
 init_config();
 init_i18n();
-var __dirname = "/home/fuzhibo/workerplace/data/git/projmnt4claude/src/commands";
+var __dirname = "/home/fuzhibo/workerplace/git/projmnt4claude/src/commands";
 async function runDoctor(fix = false, cwd = process.cwd()) {
   const texts = t(cwd).doctorCmd;
   console.log("");
@@ -37441,15 +37464,15 @@ init_harness();
 init_path();
 init_i18n();
 import { createHash as createHash2 } from "crypto";
-import * as fs44 from "fs";
+import * as fs43 from "fs";
 import { homedir as homedir3 } from "os";
-import * as path40 from "path";
+import * as path39 from "path";
 
 // src/utils/hd-assembly-line.ts
 init_session_id_mapper();
 init_session_lock_cleanup();
-import * as path39 from "path";
-import * as fs43 from "fs";
+import * as path38 from "path";
+import * as fs42 from "fs";
 import { execSync as execSync4 } from "child_process";
 
 // src/utils/harness-prevalidation.ts
@@ -41983,17 +42006,19 @@ import * as path36 from "path";
 init_harness_helpers();
 init_session_lock_cleanup();
 init_session_id_mapper();
+init_plan();
 init_task2();
 init_task();
 init_config2();
 
 // src/commands/plan.ts
-var import_prompts10 = __toESM(require_prompts3(), 1);
+init_plan();
 init_path();
 init_task2();
 init_task();
 init_logger();
 init_quality_gate();
+var import_prompts10 = __toESM(require_prompts3(), 1);
 init_ai_metadata();
 init_dependency_engine();
 init_dependency_graph();
@@ -42948,981 +42973,264 @@ init_dependency_graph();
 init_harness_helpers();
 init_checkpoint_verification();
 
-// src/utils/post-qa-gate/runner.ts
+// src/utils/gate-rules/qa-post-gate-rules.ts
 init_task2();
-import * as fs42 from "node:fs";
-import * as path38 from "node:path";
-
-// src/utils/post-qa-gate/checkers/checkpoint-sync-checker.ts
 init_checkpoint_rules();
 import * as fs41 from "node:fs";
 import * as path37 from "node:path";
-var DEFAULT_CHECKPOINT_SYNC_CONFIG = {
-  reportPath: ".projmnt4claude/outputs/{taskId}/qa-report.json"
-};
-
-class QACheckpointSyncChecker {
-  cwd;
-  config;
-  constructor(cwd, config) {
-    this.cwd = cwd;
-    this.config = { ...DEFAULT_CHECKPOINT_SYNC_CONFIG, ...config };
+function getQAReportPath(cwd, taskId) {
+  return path37.join(cwd, ".projmnt4claude", "outputs", taskId, "qa-report.json");
+}
+function loadQAReport(reportPath) {
+  try {
+    const content = fs41.readFileSync(reportPath, "utf-8");
+    return JSON.parse(content);
+  } catch {
+    return null;
   }
-  async check(taskId, checkpoints) {
-    const qaCheckpoints = this.getQACheckpoints(checkpoints);
-    if (qaCheckpoints.length === 0) {
-      return {
-        passed: true,
-        check: "checkpoint_sync",
-        message: "任务没有QA相关检查点，跳过同步检查",
-        details: {
-          totalCheckpoints: checkpoints.length,
-          qaCheckpoints: 0
-        }
-      };
-    }
-    const reportVerdict = this.readReportVerdict(taskId);
-    if (!reportVerdict) {
-      return {
-        passed: true,
-        check: "checkpoint_sync",
-        message: "QA报告不存在，跳过同步检查",
-        details: {
-          totalCheckpoints: checkpoints.length,
-          qaCheckpoints: qaCheckpoints.length,
-          reportVerdict: null
-        }
-      };
-    }
-    const mismatched = [];
-    if (reportVerdict === "PASS") {
-      for (const cp of qaCheckpoints) {
-        const effectiveRequiresHuman = this.inferRequiresHuman(cp);
-        if (cp.status !== "completed" && !effectiveRequiresHuman) {
-          mismatched.push({
-            id: cp.id,
-            description: cp.description,
-            status: cp.status,
-            expectedStatus: "completed",
-            requiresHuman: effectiveRequiresHuman
-          });
-        }
-      }
-    }
-    const passed = mismatched.length === 0;
-    return {
-      passed,
-      check: "checkpoint_sync",
-      message: passed ? `检查点状态同步 (${this.countCompleted(qaCheckpoints)}/${qaCheckpoints.length} QA检查点完成)` : `检查点状态不同步: ${mismatched.length} 个QA检查点未完成`,
-      details: {
-        reportVerdict,
-        totalCheckpoints: checkpoints.length,
-        qaCheckpoints: qaCheckpoints.length,
-        completedQACheckpoints: this.countCompleted(qaCheckpoints),
-        mismatched,
-        checkpoints: qaCheckpoints.map((cp) => ({
+}
+var R_QA_POST_001 = {
+  id: "R-QA-POST-001",
+  name: "QA报告存在",
+  onFailure: {
+    targetPhase: "development",
+    reason: "QA报告不存在，无法进入评估阶段"
+  },
+  check: async (ctx) => {
+    const reportPath = getQAReportPath(ctx.cwd, ctx.task.id);
+    return fs41.existsSync(reportPath);
+  }
+};
+var R_QA_POST_002 = {
+  id: "R-QA-POST-002",
+  name: "报告格式有效",
+  onFailure: {
+    targetPhase: "development",
+    reason: "QA报告格式无效，无法解析为有效JSON"
+  },
+  check: async (ctx) => {
+    const reportPath = getQAReportPath(ctx.cwd, ctx.task.id);
+    const report = loadQAReport(reportPath);
+    if (!report)
+      return false;
+    return !!(report.version && report.taskId && report.verdict && report.verifiedAt);
+  }
+};
+var R_QA_POST_003 = {
+  id: "R-QA-POST-003",
+  name: "测试结果有效",
+  onFailure: {
+    targetPhase: "development",
+    reason: "QA测试结果无效 (verdict 必须为 PASS 或 NOPASS)"
+  },
+  check: async (ctx) => {
+    const reportPath = getQAReportPath(ctx.cwd, ctx.task.id);
+    const report = loadQAReport(reportPath);
+    if (!report)
+      return false;
+    return report.verdict === "PASS" || report.verdict === "NOPASS";
+  }
+};
+var R_QA_POST_004 = {
+  id: "R-QA-POST-004",
+  name: "测试失败详情",
+  onFailure: {
+    targetPhase: "qa",
+    reason: "QA测试失败但缺少详细失败信息"
+  },
+  check: async (ctx) => {
+    const reportPath = getQAReportPath(ctx.cwd, ctx.task.id);
+    const report = loadQAReport(reportPath);
+    if (!report)
+      return true;
+    if (report.verdict === "PASS")
+      return true;
+    return !!(report.testFailures && report.testFailures.length > 0);
+  }
+};
+var R_QA_POST_005 = {
+  id: "R-QA-POST-005",
+  name: "人工验证状态收集",
+  onFailure: {
+    targetPhase: "qa",
+    reason: "存在待人工验证检查点，已收集到待验证列表"
+  },
+  check: async (ctx) => {
+    const taskMeta = await readTaskMeta(ctx.task.id, ctx.cwd);
+    if (!taskMeta?.checkpoints)
+      return true;
+    const pendingHuman = [];
+    for (const cp of taskMeta.checkpoints) {
+      const requiresHuman = inferRequiresHuman(cp);
+      if (requiresHuman && cp.status !== "completed") {
+        pendingHuman.push({
           id: cp.id,
           description: cp.description,
-          status: cp.status,
-          requiresHuman: this.inferRequiresHuman(cp)
-        }))
+          taskId: ctx.task.id
+        });
       }
-    };
-  }
-  inferRequiresHuman(cp) {
-    if (cp.requiresHuman !== null && cp.requiresHuman !== undefined) {
-      return cp.requiresHuman;
     }
-    const inferred = inferCheckpointAttributesFromPrefix(cp.description ?? "");
-    if (inferred.requiresHuman !== undefined) {
-      return inferred.requiresHuman;
+    if (ctx.sharedData) {
+      ctx.sharedData.set("pendingHumanVerifications", pendingHuman);
     }
-    return false;
+    return true;
   }
-  getQACheckpoints(checkpoints) {
-    return checkpoints.filter((cp) => cp.category === "qa_verification");
-  }
-  countCompleted(checkpoints) {
-    return checkpoints.filter((cp) => cp.status === "completed").length;
-  }
-  readReportVerdict(taskId) {
-    const reportPath = this.config.reportPath.replace("{taskId}", taskId);
-    const fullPath = path37.join(this.cwd, reportPath);
-    if (!fs41.existsSync(fullPath)) {
-      return null;
+};
+var R_QA_POST_005a = {
+  id: "R-QA-POST-005a",
+  name: "人工验证汇总通知",
+  onFailure: {
+    targetPhase: "qa",
+    reason: "流水线退出前通知待人工验证检查点"
+  },
+  check: async (ctx) => {
+    const pendingHuman = ctx.sharedData?.get("pendingHumanVerifications");
+    if (pendingHuman && pendingHuman.length > 0) {
+      if (ctx.sharedData) {
+        ctx.sharedData.set("humanVerificationNotification", {
+          count: pendingHuman.length,
+          checkpoints: pendingHuman,
+          notifiedAt: new Date().toISOString()
+        });
+      }
     }
+    return true;
+  }
+};
+var R_QA_POST_006 = {
+  id: "R-QA-POST-006",
+  name: "检查点状态同步",
+  onFailure: {
+    targetPhase: "development",
+    reason: "QA结果与检查点状态不一致"
+  },
+  check: async (ctx) => {
+    const reportPath = getQAReportPath(ctx.cwd, ctx.task.id);
+    const report = loadQAReport(reportPath);
+    if (!report)
+      return true;
+    const taskMeta = await readTaskMeta(ctx.task.id, ctx.cwd);
+    if (!taskMeta?.checkpoints)
+      return true;
+    const qaCheckpoints = taskMeta.checkpoints.filter((cp) => cp.category === "qa_verification");
+    if (report.verdict === "PASS") {
+      for (const cp of qaCheckpoints) {
+        const requiresHuman = inferRequiresHuman(cp);
+        if (!requiresHuman && cp.status !== "completed") {
+          return false;
+        }
+      }
+    }
+    return true;
+  }
+};
+var DEFAULT_COVERAGE_WEIGHTS = {
+  lines: 0.4,
+  branches: 0.3,
+  functions: 0.2,
+  statements: 0.1
+};
+var DEFAULT_MIN_COVERAGE = 0.6;
+var COVERAGE_FILES = [
+  "coverage/coverage-summary.json",
+  "coverage/lcov-report/coverage-summary.json",
+  "coverage.json"
+];
+function loadCoverageData(cwd) {
+  for (const file of COVERAGE_FILES) {
+    const fullPath = path37.join(cwd, file);
+    if (!fs41.existsSync(fullPath))
+      continue;
     try {
       const content = fs41.readFileSync(fullPath, "utf-8");
-      const report = JSON.parse(content);
-      return report.verdict ?? null;
-    } catch {
-      return null;
-    }
+      const data = JSON.parse(content);
+      if (data.total) {
+        return {
+          lines: data.total.lines?.pct ?? 0,
+          branches: data.total.branches?.pct ?? 0,
+          functions: data.total.functions?.pct ?? 0,
+          statements: data.total.statements?.pct ?? 0
+        };
+      }
+      if (typeof data.lines === "number") {
+        return {
+          lines: data.lines,
+          branches: data.branches ?? data.lines,
+          functions: data.functions ?? data.lines,
+          statements: data.statements ?? data.lines
+        };
+      }
+    } catch {}
   }
+  return null;
 }
-
-// src/utils/post-qa-gate/runner.ts
-var DEFAULT_POST_QA_GATE_RULES = [
-  {
-    id: "R-QA-POST-001",
-    type: "qa_report_existence",
-    name: "QA报告存在",
-    description: "验证 qa-report.json 是否存在",
-    enabled: true,
-    priority: 1,
-    blocking: true,
-    targetPhase: "development"
+function calculateWeightedCoverage(coverage) {
+  return coverage.lines * DEFAULT_COVERAGE_WEIGHTS.lines + coverage.branches * DEFAULT_COVERAGE_WEIGHTS.branches + coverage.functions * DEFAULT_COVERAGE_WEIGHTS.functions + coverage.statements * DEFAULT_COVERAGE_WEIGHTS.statements;
+}
+var R_QA_POST_007 = {
+  id: "R-QA-POST-007",
+  name: "测试覆盖率达标",
+  onFailure: {
+    targetPhase: "qa",
+    reason: "测试覆盖率未达标，触发QA内部重试"
   },
-  {
-    id: "R-QA-POST-002",
-    type: "qa_report_format",
-    name: "报告格式有效",
-    description: "验证 qa-report.json 是否可解析为有效JSON",
-    enabled: true,
-    priority: 2,
-    blocking: true,
-    targetPhase: "development"
-  },
-  {
-    id: "R-QA-POST-003",
-    type: "qa_verdict_validity",
-    name: "测试结果有效",
-    description: "验证 result 是否为 PASS 或 NOPASS",
-    enabled: true,
-    priority: 3,
-    blocking: true,
-    targetPhase: "development"
-  },
-  {
-    id: "R-QA-POST-004",
-    type: "qa_failures_detail",
-    name: "测试失败详情",
-    description: "NOPASS 时验证 testFailures 是否有详细记录",
-    enabled: true,
-    priority: 4,
-    blocking: false,
-    targetPhase: "qa"
-  },
-  {
-    id: "R-QA-POST-005",
-    type: "human_verification_collect",
-    name: "人工验证状态收集",
-    description: "收集 requiresHuman 的检查点状态到待人工验证列表",
-    enabled: true,
-    priority: 5,
-    blocking: false,
-    targetPhase: "qa"
-  },
-  {
-    id: "R-QA-POST-005a",
-    type: "pipeline_exit_notify",
-    name: "人工验证汇总通知",
-    description: "流水线退出前统一通知所有待人工验证任务",
-    enabled: true,
-    priority: 6,
-    blocking: false,
-    targetPhase: "qa"
-  },
-  {
-    id: "R-QA-POST-006",
-    type: "checkpoint_sync",
-    name: "检查点状态同步",
-    description: "QA结果与检查点状态一致",
-    enabled: true,
-    priority: 7,
-    blocking: true,
-    targetPhase: "development"
-  },
-  {
-    id: "R-QA-POST-007",
-    type: "test_coverage",
-    name: "测试覆盖率达标",
-    description: "coverage >= 阈值，覆盖率不足触发QA内部重试而非链式回退",
-    enabled: true,
-    priority: 8,
-    blocking: true,
-    targetPhase: "qa"
-  }
-];
-var DEFAULT_POST_QA_GATE_RUNNER_CONFIG = {
-  enabled: true,
-  rules: DEFAULT_POST_QA_GATE_RULES,
-  stopOnFailure: false,
-  generateReport: true,
-  reportPath: ".projmnt4claude/reports/post-qa-gate-report.json",
-  qaReportPath: ".projmnt4claude/outputs/{taskId}/qa-report.json",
-  enableFeedbackLoop: true
-};
-
-class PostQAGateRunner {
-  config;
-  customHandlers;
-  cwd;
-  constructor(cwd, config) {
-    this.cwd = cwd;
-    this.config = this.mergeConfig(config);
-    this.customHandlers = new Map(config?.customRuleHandlers || []);
-    this.registerBuiltinHandlers();
-  }
-  mergeConfig(config) {
-    return {
-      ...DEFAULT_POST_QA_GATE_RUNNER_CONFIG,
-      ...config,
-      rules: config?.rules ?? DEFAULT_POST_QA_GATE_RULES
-    };
-  }
-  registerBuiltinHandlers() {
-    this.customHandlers.set("qa_report_existence", this.handleQAReportExistenceRule.bind(this));
-    this.customHandlers.set("qa_report_format", this.handleQAReportFormatRule.bind(this));
-    this.customHandlers.set("qa_verdict_validity", this.handleQAVerdictValidityRule.bind(this));
-    this.customHandlers.set("qa_failures_detail", this.handleQAFailuresDetailRule.bind(this));
-    this.customHandlers.set("human_verification_collect", this.handleHumanVerificationCollectRule.bind(this));
-    this.customHandlers.set("pipeline_exit_notify", this.handlePipelineExitNotifyRule.bind(this));
-    this.customHandlers.set("checkpoint_sync", this.handleCheckpointSyncRule.bind(this));
-    this.customHandlers.set("test_coverage", this.handleTestCoverageRule.bind(this));
-  }
-  async run(taskId, options) {
-    const startTime = Date.now();
-    const timestamp = new Date().toISOString();
-    if (!this.config.enabled) {
-      return {
-        taskId,
-        decision: "POST_QA_PASS",
-        allowed: true,
-        ruleResults: [],
-        passedRules: 0,
-        failedRules: 0,
-        warningCount: 0,
-        blockingFailures: 0,
-        duration: 0,
-        timestamp
-      };
-    }
-    const task = readTaskMeta(taskId, this.cwd);
-    if (!task) {
-      return {
-        taskId,
-        decision: "POST_QA_FAIL",
-        allowed: false,
-        ruleResults: [{
-          ruleId: "task-existence",
-          passed: false,
-          ruleName: "任务存在性检查",
-          message: `任务 ${taskId} 不存在`,
-          duration: 0,
-          timestamp
-        }],
-        passedRules: 0,
-        failedRules: 1,
-        warningCount: 0,
-        blockingFailures: 1,
-        duration: Date.now() - startTime,
-        timestamp
-      };
-    }
-    const qaReportPath = options?.qaReportPath ?? this.config.qaReportPath.replace("{taskId}", taskId);
-    const context = {
-      taskId,
-      cwd: this.cwd,
-      qaReportPath,
-      sharedData: new Map
-    };
-    const sortedRules = [...this.config.rules].filter((rule) => rule.enabled).sort((a, b) => a.priority - b.priority);
-    const ruleResults = [];
-    let blockingFailures = 0;
-    let failedRules = 0;
-    for (const rule of sortedRules) {
-      const result = await this.executeRule(task, rule, context);
-      ruleResults.push(result);
-      if (!result.passed) {
-        failedRules++;
-        if (rule.blocking) {
-          blockingFailures++;
-          if (this.config.stopOnFailure) {
-            break;
-          }
-        }
+  check: async (ctx) => {
+    const reportPath = getQAReportPath(ctx.cwd, ctx.task.id);
+    const report = loadQAReport(reportPath);
+    let coverageValue = report?.coverage;
+    if (coverageValue === undefined) {
+      const rawCoverage = loadCoverageData(ctx.cwd);
+      if (rawCoverage) {
+        coverageValue = calculateWeightedCoverage(rawCoverage);
       }
     }
-    const decision = this.calculateDecision(ruleResults, blockingFailures);
-    const allowed = decision === "POST_QA_PASS" || decision === "POST_QA_WARN" && blockingFailures === 0;
-    const duration = Date.now() - startTime;
-    const passedRules = ruleResults.filter((r) => r.passed).length;
-    const warningCount = ruleResults.filter((r) => !r.passed && !this.isBlockingRule(r.ruleId)).length;
-    const pendingHumanVerifications = context.sharedData.get("pendingHumanVerifications") ?? [];
-    const coverageGapData = context.sharedData.get("coverageGap");
-    const runResult = {
-      taskId,
-      decision,
-      allowed,
-      ruleResults,
-      passedRules,
-      failedRules,
-      warningCount,
-      blockingFailures,
-      duration,
-      timestamp: new Date().toISOString(),
-      qaReportPath,
-      pendingHumanVerifications: pendingHumanVerifications.length > 0 ? pendingHumanVerifications : undefined,
-      coverageGapData
-    };
-    if (this.config.generateReport) {
-      const report = this.generateReport(runResult, context);
-      await this.saveReport(report);
-    }
-    return runResult;
-  }
-  async executeRule(task, rule, context) {
-    const startTime = Date.now();
-    const timestamp = new Date().toISOString();
-    try {
-      const handler = this.customHandlers.get(rule.type);
-      if (!handler) {
-        return {
-          ruleId: rule.id,
-          passed: false,
-          ruleName: rule.name,
-          message: `未找到规则类型 ${rule.type} 的处理器`,
-          targetPhase: rule.targetPhase ?? "development",
-          duration: Date.now() - startTime,
-          timestamp
-        };
-      }
-      const result = await handler(task, rule, context);
-      result.duration = Date.now() - startTime;
-      result.ruleId = rule.id;
-      result.targetPhase = rule.targetPhase ?? (rule.blocking ? "development" : "qa");
-      return result;
-    } catch (error) {
-      return {
-        ruleId: rule.id,
-        passed: false,
-        ruleName: rule.name,
-        message: `规则执行失败: ${error instanceof Error ? error.message : String(error)}`,
-        targetPhase: rule.targetPhase ?? "development",
-        duration: Date.now() - startTime,
-        timestamp
-      };
-    }
-  }
-  calculateDecision(results, blockingFailures) {
-    if (blockingFailures > 0) {
-      return "POST_QA_FAIL";
-    }
-    const failedCount = results.filter((r) => !r.passed).length;
-    if (failedCount === 0) {
-      return "POST_QA_PASS";
-    }
-    return "POST_QA_WARN";
-  }
-  isBlockingRule(ruleId) {
-    const rule = this.config.rules.find((r) => r.id === ruleId);
-    return rule?.blocking ?? false;
-  }
-  classifyQAFailureCategory(result) {
-    if (result.decision === "POST_QA_PASS") {
-      return "none";
-    }
-    const coverageFailure = result.ruleResults.find((r) => !r.passed && r.targetPhase === "qa" && r.ruleId === "R-QA-POST-007");
-    if (coverageFailure && result.coverageGapData) {
-      return "coverage_retry";
-    }
-    const hasFailures = result.ruleResults.some((r) => !r.passed);
-    if (hasFailures) {
-      return "chain_rollback";
-    }
-    return "none";
-  }
-  classifyQAGateFailure(result) {
-    const category = this.classifyQAFailureCategory(result);
-    if (category === "none") {
-      return { needsQARetry: false, needsChainRollback: false, failureCategory: "none" };
-    }
-    if (category === "coverage_retry" && result.coverageGapData) {
-      const prompt = this.generateQARetryPrompt(result.coverageGapData);
-      return {
-        needsQARetry: true,
-        needsChainRollback: false,
-        failureCategory: "coverage_retry",
-        coverageGapData: result.coverageGapData,
-        qaRetryPrompt: prompt
-      };
-    }
-    return { needsQARetry: false, needsChainRollback: true, failureCategory: "chain_rollback" };
-  }
-  generateQARetryPrompt(gapData) {
-    const lines = [];
-    lines.push("覆盖率门禁未通过，需要扩展测试用例。");
-    lines.push("");
-    lines.push(`当前覆盖率: ${(gapData.currentCoverage * 100).toFixed(1)}%`);
-    lines.push(`阈值要求: ${(gapData.minCoverage * 100).toFixed(0)}%`);
-    lines.push(`覆盖率缺口: ${gapData.gapPercent}`);
-    lines.push("");
-    if (gapData.coverageDetails) {
-      const d = gapData.coverageDetails;
-      lines.push("覆盖率详情:");
-      lines.push(`  行覆盖率: ${(d.lines * 100).toFixed(1)}%`);
-      lines.push(`  分支覆盖率: ${(d.branches * 100).toFixed(1)}%`);
-      lines.push(`  函数覆盖率: ${(d.functions * 100).toFixed(1)}%`);
-      lines.push(`  语句覆盖率: ${(d.statements * 100).toFixed(1)}%`);
-      lines.push("");
-      const dimensions = [
-        { name: "行覆盖率", value: d.lines },
-        { name: "分支覆盖率", value: d.branches },
-        { name: "函数覆盖率", value: d.functions },
-        { name: "语句覆盖率", value: d.statements }
-      ].sort((a, b) => a.value - b.value);
-      lines.push(`最低覆盖率维度: ${dimensions[0].name} (${(dimensions[0].value * 100).toFixed(1)}%)`);
-      lines.push("建议优先补充该维度的测试用例。");
-    }
-    lines.push("");
-    lines.push("请扩展测试用例，覆盖上述未覆盖的代码路径。");
-    return lines.join(`
-`);
-  }
-  async handleQAReportExistenceRule(_task, rule, context) {
-    const reportPath = path38.join(context.cwd, context.qaReportPath);
-    const exists = fs42.existsSync(reportPath);
-    return {
-      ruleId: rule.id,
-      passed: exists,
-      ruleName: rule.name,
-      message: exists ? `QA报告存在: ${context.qaReportPath}` : `QA报告不存在: ${context.qaReportPath}`,
-      details: {
-        reportPath: context.qaReportPath,
-        fullPath: reportPath,
-        exists
-      },
-      duration: 0,
-      timestamp: new Date().toISOString()
-    };
-  }
-  async handleQAReportFormatRule(_task, rule, context) {
-    const reportPath = path38.join(context.cwd, context.qaReportPath);
-    if (!fs42.existsSync(reportPath)) {
-      return {
-        ruleId: rule.id,
-        passed: false,
-        ruleName: rule.name,
-        message: "无法检查QA报告格式: 报告文件不存在",
-        details: { reportPath: context.qaReportPath },
-        duration: 0,
-        timestamp: new Date().toISOString()
-      };
-    }
-    try {
-      const content = fs42.readFileSync(reportPath, "utf-8");
-      const report = JSON.parse(content);
-      const requiredFields = ["version", "taskId", "verdict", "verifiedAt", "verifier", "summary"];
-      const missingFields = requiredFields.filter((field) => !(field in report));
-      const passed = missingFields.length === 0;
-      return {
-        ruleId: rule.id,
-        passed,
-        ruleName: rule.name,
-        message: passed ? "QA报告格式有效" : `QA报告格式无效: 缺少字段 [${missingFields.join(", ")}]`,
-        details: {
-          reportPath: context.qaReportPath,
-          requiredFields,
-          missingFields
-        },
-        duration: 0,
-        timestamp: new Date().toISOString()
-      };
-    } catch (error) {
-      return {
-        ruleId: rule.id,
-        passed: false,
-        ruleName: rule.name,
-        message: `QA报告格式检查失败: ${error instanceof Error ? error.message : String(error)}`,
-        details: { reportPath: context.qaReportPath },
-        duration: 0,
-        timestamp: new Date().toISOString()
-      };
-    }
-  }
-  async handleQAVerdictValidityRule(_task, rule, context) {
-    const reportPath = path38.join(context.cwd, context.qaReportPath);
-    if (!fs42.existsSync(reportPath)) {
-      return {
-        ruleId: rule.id,
-        passed: false,
-        ruleName: rule.name,
-        message: "无法检查QA验证结果: 报告文件不存在",
-        details: { reportPath: context.qaReportPath },
-        duration: 0,
-        timestamp: new Date().toISOString()
-      };
-    }
-    try {
-      const content = fs42.readFileSync(reportPath, "utf-8");
-      const report = JSON.parse(content);
-      const validVerdicts = ["PASS", "NOPASS"];
-      const isValid = validVerdicts.includes(report.verdict);
-      return {
-        ruleId: rule.id,
-        passed: isValid,
-        ruleName: rule.name,
-        message: isValid ? `QA验证结果有效: ${report.verdict}` : `QA验证结果无效: ${report.verdict} (应为 PASS 或 NOPASS)`,
-        details: {
-          verdict: report.verdict,
-          validVerdicts
-        },
-        duration: 0,
-        timestamp: new Date().toISOString()
-      };
-    } catch (error) {
-      return {
-        ruleId: rule.id,
-        passed: false,
-        ruleName: rule.name,
-        message: `QA验证结果检查失败: ${error instanceof Error ? error.message : String(error)}`,
-        details: { reportPath: context.qaReportPath },
-        duration: 0,
-        timestamp: new Date().toISOString()
-      };
-    }
-  }
-  async handleQAFailuresDetailRule(_task, rule, context) {
-    const reportPath = path38.join(context.cwd, context.qaReportPath);
-    if (!fs42.existsSync(reportPath)) {
-      return {
-        ruleId: rule.id,
-        passed: false,
-        ruleName: rule.name,
-        message: "无法检查测试失败详情: 报告文件不存在",
-        details: { reportPath: context.qaReportPath },
-        duration: 0,
-        timestamp: new Date().toISOString()
-      };
-    }
-    try {
-      const content = fs42.readFileSync(reportPath, "utf-8");
-      const report = JSON.parse(content);
-      if (report.verdict === "PASS") {
-        return {
-          ruleId: rule.id,
-          passed: true,
-          ruleName: rule.name,
-          message: "QA结果为PASS，无需检查测试失败详情",
-          details: { verdict: report.verdict },
-          duration: 0,
-          timestamp: new Date().toISOString()
-        };
-      }
-      const hasTestFailures = !!report.testFailures && Array.isArray(report.testFailures);
-      if (!hasTestFailures || report.testFailures.length === 0) {
-        return {
-          ruleId: rule.id,
-          passed: false,
-          ruleName: rule.name,
-          message: "QA结果为NOPASS但缺少测试失败详情",
-          details: { verdict: report.verdict, hasTestFailures },
-          duration: 0,
-          timestamp: new Date().toISOString()
-        };
-      }
-      const failuresWithDetails = report.testFailures.filter((f) => f.testName && f.reason && f.severity);
-      const passed = failuresWithDetails.length === report.testFailures.length;
-      return {
-        ruleId: rule.id,
-        passed,
-        ruleName: rule.name,
-        message: passed ? `测试失败文档完整 (${failuresWithDetails.length}/${report.testFailures.length})` : `测试失败文档不完整: ${report.testFailures.length - failuresWithDetails.length} 个失败项缺少详情`,
-        details: {
-          totalFailures: report.testFailures.length,
-          failuresWithDetails: failuresWithDetails.length
-        },
-        duration: 0,
-        timestamp: new Date().toISOString()
-      };
-    } catch (error) {
-      return {
-        ruleId: rule.id,
-        passed: false,
-        ruleName: rule.name,
-        message: `测试失败详情检查失败: ${error instanceof Error ? error.message : String(error)}`,
-        duration: 0,
-        timestamp: new Date().toISOString()
-      };
-    }
-  }
-  async handleHumanVerificationCollectRule(task, rule, context) {
-    const reportPath = path38.join(context.cwd, context.qaReportPath);
-    let qaReport;
-    if (fs42.existsSync(reportPath)) {
-      try {
-        const content = fs42.readFileSync(reportPath, "utf-8");
-        qaReport = JSON.parse(content);
-      } catch {}
-    }
-    const pendingHuman = [];
-    for (const cp of task.checkpoints || []) {
-      if (cp.requiresHuman && cp.status !== "completed") {
-        const verified = qaReport?.humanVerificationCheckpoints?.includes(cp.id);
-        if (!verified) {
-          pendingHuman.push({
-            id: cp.id,
-            description: cp.description,
-            taskId: context.taskId
-          });
-        }
-      }
-    }
-    if (pendingHuman.length > 0) {
-      context.sharedData.set("pendingHumanVerifications", pendingHuman);
-    }
-    return {
-      ruleId: rule.id,
-      passed: true,
-      ruleName: rule.name,
-      message: pendingHuman.length === 0 ? "无待人工验证检查点" : `已收集 ${pendingHuman.length} 个待人工验证检查点`,
-      details: {
-        pendingHumanVerifications: pendingHuman,
-        willNotifyAtPipelineExit: pendingHuman.length > 0
-      },
-      duration: 0,
-      timestamp: new Date().toISOString()
-    };
-  }
-  async handlePipelineExitNotifyRule(_task, rule, context) {
-    const pendingList = context.sharedData.get("pendingHumanVerifications") ?? [];
-    if (pendingList.length === 0) {
-      return {
-        ruleId: rule.id,
-        passed: true,
-        ruleName: rule.name,
-        message: "无待人工验证检查点，跳过通知",
-        details: { pendingCount: 0 },
-        duration: 0,
-        timestamp: new Date().toISOString()
-      };
-    }
-    const groupedByTask = new Map;
-    for (const item of pendingList) {
-      const existing = groupedByTask.get(item.taskId) || [];
-      existing.push(item);
-      groupedByTask.set(item.taskId, existing);
-    }
-    const notificationSummary = this.formatHumanVerificationNotification(groupedByTask);
-    return {
-      ruleId: rule.id,
-      passed: true,
-      ruleName: rule.name,
-      message: `已生成待人工验证通知: ${pendingList.length} 个检查点待验证`,
-      details: {
-        pendingCount: pendingList.length,
-        taskCount: groupedByTask.size,
-        notificationSummary,
-        pendingItems: pendingList
-      },
-      duration: 0,
-      timestamp: new Date().toISOString()
-    };
-  }
-  formatHumanVerificationNotification(groupedByTask) {
-    const lines = [
-      "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━",
-      "         待人工验证检查点汇总",
-      "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━",
-      ""
-    ];
-    for (const [taskId, items] of groupedByTask) {
-      lines.push(`任务: ${taskId}`);
-      lines.push("");
-      for (const item of items) {
-        lines.push(`  - ${item.id}`);
-        lines.push(`    ${item.description}`);
-        lines.push("");
-      }
-    }
-    lines.push("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
-    lines.push(`总计: ${Array.from(groupedByTask.values()).flat().length} 个检查点待人工验证`);
-    lines.push("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
-    return lines.join(`
-`);
-  }
-  async handleCheckpointSyncRule(task, rule, context) {
-    const syncChecker = new QACheckpointSyncChecker(context.cwd, {
-      reportPath: this.config.qaReportPath
-    });
-    const result = await syncChecker.check(context.taskId, task.checkpoints ?? []);
-    return {
-      ruleId: rule.id,
-      passed: result.passed,
-      ruleName: rule.name,
-      message: result.message,
-      details: result.details,
-      duration: 0,
-      timestamp: new Date().toISOString()
-    };
-  }
-  async handleTestCoverageRule(_task, rule, context) {
-    const reportPath = path38.join(context.cwd, context.qaReportPath);
-    const minCoverage = rule.config?.minCoverage ?? 0.6;
-    let coverage;
-    let coverageDetails;
-    if (fs42.existsSync(reportPath)) {
-      try {
-        const content = fs42.readFileSync(reportPath, "utf-8");
-        const report = JSON.parse(content);
-        coverage = report.coverage;
-      } catch {}
-    }
-    if (coverage === undefined) {
-      const result = await this.calculateCoverageFromReportsWithDetails(context);
-      coverage = result.coverage;
-      coverageDetails = result.details;
-    }
-    if (coverage === undefined) {
-      return {
-        ruleId: rule.id,
-        passed: true,
-        ruleName: rule.name,
-        message: "无覆盖率数据，跳过覆盖率检查（任务可能无关联测试文件）",
-        details: {
-          coverage: undefined,
-          minCoverage,
-          skipped: true,
-          reason: "no_coverage_data"
-        },
-        timestamp: new Date().toISOString()
-      };
-    }
-    const passed = coverage >= minCoverage;
-    const gap = passed ? 0 : minCoverage - coverage;
-    if (!passed) {
-      context.sharedData.set("coverageGap", {
-        currentCoverage: coverage,
-        minCoverage,
+    if (coverageValue === undefined)
+      return true;
+    const passed = coverageValue >= DEFAULT_MIN_COVERAGE;
+    if (!passed && ctx.sharedData) {
+      const gap = DEFAULT_MIN_COVERAGE - coverageValue;
+      const rawCoverage = loadCoverageData(ctx.cwd);
+      ctx.sharedData.set("coverageGap", {
+        currentCoverage: coverageValue,
+        minCoverage: DEFAULT_MIN_COVERAGE,
         gap,
         gapPercent: `${(gap * 100).toFixed(1)}%`,
-        coverageDetails,
+        coverageDetails: rawCoverage ? {
+          lines: rawCoverage.lines,
+          branches: rawCoverage.branches,
+          functions: rawCoverage.functions,
+          statements: rawCoverage.statements
+        } : undefined,
         targetPhase: "qa",
-        message: `当前覆盖率: ${(coverage * 100).toFixed(1)}%，阈值要求: ${(minCoverage * 100).toFixed(0)}%，缺口: ${(gap * 100).toFixed(1)}%`
+        message: `覆盖率不足: ${(coverageValue * 100).toFixed(1)}% < ${(DEFAULT_MIN_COVERAGE * 100).toFixed(0)}%`
       });
     }
-    return {
-      ruleId: rule.id,
-      passed,
-      ruleName: rule.name,
-      message: passed ? `测试覆盖率达标: ${(coverage * 100).toFixed(1)}% >= ${(minCoverage * 100).toFixed(0)}%` : `测试覆盖率未达标: ${(coverage * 100).toFixed(1)}% < ${(minCoverage * 100).toFixed(0)}%`,
-      details: {
-        coverage,
-        minCoverage,
-        coveragePercent: `${(coverage * 100).toFixed(1)}%`,
-        thresholdPercent: `${(minCoverage * 100).toFixed(0)}%`,
-        gap,
-        gapPercent: `${(gap * 100).toFixed(1)}%`,
-        coverageDetails,
-        targetPhase: "qa"
-      },
-      duration: 0,
-      timestamp: new Date().toISOString()
-    };
+    return passed;
   }
-  async calculateCoverageFromReports(context) {
-    const result = await this.calculateCoverageFromReportsWithDetails(context);
-    return result.coverage;
+};
+function inferRequiresHuman(cp) {
+  if (cp.requiresHuman === true)
+    return true;
+  if (cp.requiresHuman === false)
+    return false;
+  const prefix = cp.description?.toLowerCase() ?? "";
+  if (prefix.startsWith("[human qa]") || prefix.startsWith("[human]")) {
+    return true;
   }
-  async calculateCoverageFromReportsWithDetails(context) {
-    const coverageFiles = [
-      path38.join(context.cwd, "coverage", "coverage-summary.json"),
-      path38.join(context.cwd, "coverage", "lcov-report", "coverage-summary.json"),
-      path38.join(context.cwd, ".projmnt4claude", "outputs", context.taskId, "coverage-report.json")
-    ];
-    for (const filePath of coverageFiles) {
-      if (fs42.existsSync(filePath)) {
-        try {
-          const content = JSON.parse(fs42.readFileSync(filePath, "utf-8"));
-          const raw = this.parseCoverageData(content);
-          const coverage = Math.round((raw.lines * 0.4 + raw.branches * 0.3 + raw.functions * 0.2 + raw.statements * 0.1) * 1000) / 1000;
-          return {
-            coverage,
-            details: raw
-          };
-        } catch {}
-      }
-    }
-    return { coverage: undefined };
-  }
-  parseCoverageData(content) {
-    const total = content.total;
-    if (total) {
-      return {
-        lines: (total.lines?.pct ?? 0) / 100,
-        branches: (total.branches?.pct ?? 0) / 100,
-        functions: (total.functions?.pct ?? 0) / 100,
-        statements: (total.statements?.pct ?? 0) / 100
-      };
-    }
-    return {
-      lines: (content.lines?.pct ?? 0) / 100,
-      branches: (content.branches?.pct ?? 0) / 100,
-      functions: (content.functions?.pct ?? 0) / 100,
-      statements: (content.statements?.pct ?? 0) / 100
-    };
-  }
-  generateReport(result, context) {
-    const recommendations = [];
-    const feedbackItems = [];
-    for (const ruleResult of result.ruleResults) {
-      if (!ruleResult.passed) {
-        switch (ruleResult.ruleId) {
-          case "R-QA-POST-001":
-            recommendations.push("QA报告不存在: 请先生成QA验证报告");
-            feedbackItems.push({
-              type: "missing_qa_report",
-              description: "QA报告不存在",
-              suggestedAction: "在QA验证阶段生成QA报告",
-              targetPhase: "qa_verification",
-              severity: "error"
-            });
-            break;
-          case "R-QA-POST-002":
-            recommendations.push("QA报告格式无效: 检查报告文件格式");
-            feedbackItems.push({
-              type: "qa_report_invalid",
-              description: "QA报告格式无效",
-              suggestedAction: "修复QA报告格式",
-              targetPhase: "qa_verification",
-              severity: "error"
-            });
-            break;
-          case "R-QA-POST-003":
-            recommendations.push("QA验证结果无效: 确保验证结果为 PASS 或 NOPASS");
-            break;
-          case "R-QA-POST-004":
-            recommendations.push("测试失败详情不完整: 为所有失败项添加详细信息");
-            feedbackItems.push({
-              type: "test_failures",
-              description: "测试失败文档不完整",
-              suggestedAction: "补充测试失败项的详细信息",
-              targetPhase: "qa_verification",
-              severity: "warning"
-            });
-            break;
-          case "R-QA-POST-006":
-            recommendations.push("检查点状态不同步: 同步QA结果与检查点状态");
-            feedbackItems.push({
-              type: "checkpoint_mismatch",
-              description: "QA结果与检查点状态不一致",
-              suggestedAction: "更新检查点状态以匹配QA结果",
-              targetPhase: "qa_verification",
-              severity: "warning"
-            });
-            break;
-          case "R-QA-POST-007":
-            recommendations.push("测试覆盖率未达标: 增加测试用例提高覆盖率");
-            break;
-        }
-      }
-    }
-    if (result.pendingHumanVerifications && result.pendingHumanVerifications.length > 0) {
-      recommendations.push(`有 ${result.pendingHumanVerifications.length} 个检查点需要人工验证`);
-      feedbackItems.push({
-        type: "human_verification_pending",
-        description: `${result.pendingHumanVerifications.length} 个检查点待人工验证`,
-        suggestedAction: "请在流水线退出前完成人工验证",
-        targetPhase: "qa_verification",
-        severity: "warning"
-      });
-    }
-    if (result.decision === "POST_QA_PASS") {
-      recommendations.push("QA验证后质量门禁通过，可以进入评估阶段");
-    }
-    return {
-      reportId: `post-qa-gate-report-${result.taskId}-${Date.now()}`,
-      taskId: result.taskId,
-      generatedAt: new Date().toISOString(),
-      result,
-      recommendations,
-      feedbackItems,
-      metadata: {
-        version: "1.0.0",
-        runnerVersion: "1.0.0",
-        rulesExecuted: result.ruleResults.length
-      }
-    };
-  }
-  async saveReport(report) {
-    if (!this.config.reportPath)
-      return;
-    const reportDir = path38.dirname(path38.join(this.cwd, this.config.reportPath));
-    if (!fs42.existsSync(reportDir)) {
-      fs42.mkdirSync(reportDir, { recursive: true });
-    }
-    const reportPath = path38.join(this.cwd, this.config.reportPath);
-    fs42.writeFileSync(reportPath, JSON.stringify(report, null, 2));
-  }
-  formatResult(result) {
-    const lines = [];
-    const separator = "━".repeat(60);
-    const decisionIcon = result.decision === "POST_QA_PASS" ? "✅" : result.decision === "POST_QA_WARN" ? "⚠️ " : "❌";
-    lines.push("");
-    lines.push(separator);
-    lines.push(`${decisionIcon} QA验证后质量门禁检查: ${result.taskId}`);
-    lines.push(separator);
-    lines.push("");
-    lines.push(`\uD83D\uDCCA 决策结果: ${result.decision}`);
-    lines.push(`   允许进入评估阶段: ${result.allowed ? "是" : "否"}`);
-    lines.push("");
-    lines.push(`\uD83D\uDCCB 规则统计:`);
-    lines.push(`   通过: ${result.passedRules}`);
-    lines.push(`   失败: ${result.failedRules}`);
-    if (result.warningCount > 0) {
-      lines.push(`   警告: ${result.warningCount}`);
-    }
-    if (result.blockingFailures > 0) {
-      lines.push(`   阻塞失败: ${result.blockingFailures}`);
-    }
-    lines.push("");
-    if (result.ruleResults.length > 0) {
-      lines.push("\uD83D\uDD0D 详细结果:");
-      lines.push("");
-      for (const ruleResult of result.ruleResults) {
-        const icon = ruleResult.passed ? "✅" : this.isBlockingRule(ruleResult.ruleId) ? "❌" : "⚠️ ";
-        lines.push(`   ${icon} ${ruleResult.ruleName}`);
-        lines.push(`      ${ruleResult.message}`);
-        lines.push("");
-      }
-    }
-    if (result.pendingHumanVerifications && result.pendingHumanVerifications.length > 0) {
-      lines.push("\uD83D\uDD14 待人工验证检查点:");
-      for (const item of result.pendingHumanVerifications) {
-        lines.push(`   - ${item.id}: ${item.description}`);
-      }
-      lines.push("");
-    }
-    lines.push(`⏱️  执行时长: ${result.duration}ms`);
-    lines.push("");
-    lines.push(separator);
-    return lines.join(`
-`);
-  }
-  updateConfig(config) {
-    this.config = {
-      ...this.config,
-      ...config
-    };
-  }
-  getConfig() {
-    return { ...this.config };
-  }
-  registerRuleHandler(ruleType, handler) {
-    this.customHandlers.set(ruleType, handler);
-  }
-  addRule(rule) {
-    this.config.rules = this.config.rules.filter((r) => r.id !== rule.id);
-    this.config.rules.push(rule);
-  }
-  removeRule(ruleId) {
-    this.config.rules = this.config.rules.filter((r) => r.id !== ruleId);
-  }
+  const inferred = inferCheckpointAttributesFromPrefix(cp.description);
+  return inferred.requiresHuman ?? false;
 }
-function createPostQAGateRunner(cwd, config) {
-  return new PostQAGateRunner(cwd, config);
-}
+var QA_POST_GATE_RULES = [
+  R_QA_POST_001,
+  R_QA_POST_002,
+  R_QA_POST_003,
+  R_QA_POST_004,
+  R_QA_POST_005,
+  R_QA_POST_005a,
+  R_QA_POST_006,
+  R_QA_POST_007
+];
+
 // src/utils/hd-assembly-line.ts
 async function executeRules(rules, context) {
   for (const rule of rules) {
@@ -44060,24 +43368,6 @@ async function hasQACheckpoints(_task) {
 async function isTestConfigReady(_cwd) {
   return true;
 }
-async function hasQAReport(_cwd) {
-  return true;
-}
-async function validateQAReportFormat(_cwd) {
-  return true;
-}
-async function checkTestFailureDetails(_phaseResult) {
-  return true;
-}
-async function collectManualVerification(_phaseResult) {
-  return true;
-}
-async function notifyManualVerification(_phaseResult) {
-  return true;
-}
-async function checkCoverage(_phaseResult) {
-  return true;
-}
 async function isQAPassed(_task) {
   return true;
 }
@@ -44187,17 +43477,7 @@ async function pre_qa_gate_check(context) {
   return executeRules(rules, context);
 }
 async function post_qa_gate_check(context) {
-  const rules = [
-    { id: "R-QA-POST-001", name: "QA报告存在", onFailure: { targetPhase: "qa", reason: "缺少QA报告" }, check: async (ctx) => hasQAReport(ctx.cwd) },
-    { id: "R-QA-POST-002", name: "报告格式有效", onFailure: { targetPhase: "qa", reason: "QA报告格式无效" }, check: async (ctx) => validateQAReportFormat(ctx.cwd) },
-    { id: "R-QA-POST-003", name: "测试结果有效", onFailure: { targetPhase: "development", reason: "测试结果未通过" }, check: async (ctx) => ctx.phaseResult?.result === "PASS" },
-    { id: "R-QA-POST-004", name: "测试失败详情", onFailure: { targetPhase: "development", reason: "测试失败详情缺失" }, check: async (ctx) => checkTestFailureDetails(ctx.phaseResult) },
-    { id: "R-QA-POST-005", name: "人工验证状态收集", onFailure: { targetPhase: "qa", reason: "人工验证状态未收集" }, check: async (ctx) => collectManualVerification(ctx.phaseResult) },
-    { id: "R-QA-POST-005a", name: "人工验证汇总通知", onFailure: { targetPhase: "qa", reason: "人工验证未通知" }, check: async (ctx) => notifyManualVerification(ctx.phaseResult) },
-    { id: "R-QA-POST-006", name: "检查点状态同步", onFailure: { targetPhase: "development", reason: "检查点状态未同步" }, check: async (ctx) => syncCheckpointStatus(ctx.task) },
-    { id: "R-QA-POST-007", name: "测试覆盖率达标", onFailure: { targetPhase: "RETRY", reason: "测试覆盖率不达标" }, check: async (ctx) => checkCoverage(ctx.phaseResult) }
-  ];
-  return executeRules(rules, context);
+  return executeRules(QA_POST_GATE_RULES, context);
 }
 async function pre_eval_gate_check(context) {
   const rules = [
@@ -44697,17 +43977,22 @@ ${"━".repeat(SEPARATOR_WIDTH)}`);
             requiresHuman: qaVerdict.requiresHuman
           });
           this.statusReporter.completePhase("qa_verification", taskId, `QA 验证完成: ${qaVerdict.result}`);
-          const postQAGateRunner = createPostQAGateRunner(this.config.cwd, { coverageThreshold: this.config.coverageThreshold ?? 0.8 });
           console.log(`
 \uD83D\uDD12 Post-QA Gate 门禁检查...`);
-          const postQAGateResult = await postQAGateRunner.run(taskId);
-          if (!postQAGateResult.passed) {
+          const postGateContext = {
+            task: record,
+            cwd: this.config.cwd,
+            phaseResult: qaVerdict,
+            sharedData: new Map
+          };
+          const postGateResult = await this.runPostPhaseGate("qa", postGateContext);
+          if (!postGateResult.passed) {
             console.log(`❌ Post-QA Gate 门禁检查失败`);
-            const failureClassification = postQAGateRunner.classifyQAGateFailure(postQAGateResult);
-            if (failureClassification.needsQARetry) {
+            const coverageGapData = postGateContext.sharedData?.get("coverageGap");
+            if (coverageGapData && postGateResult.targetPhase === "qa") {
               console.log(`   \uD83D\uDD04 B 类门禁失败（覆盖率不足），触发 QA 内部重试...`);
-              console.log(`   \uD83D\uDCCA ${failureClassification.coverageGapData?.message}`);
-              this.storeQACoverageGapContext(taskId, state, failureClassification.coverageGapData);
+              console.log(`   \uD83D\uDCCA ${coverageGapData.message}`);
+              this.storeQACoverageGapContext(taskId, state, coverageGapData);
               const qaRetryLimit = this.getPhaseRetryLimit("qa");
               const qaRetryCount = this.getPhaseRetryCount(taskId, "qa", state);
               if (qaRetryCount < qaRetryLimit) {
@@ -44719,9 +44004,9 @@ ${"━".repeat(SEPARATOR_WIDTH)}`);
               }
               console.log(`   ❌ QA 内部重试耗尽，转为链式回退`);
             }
-            console.log(`   \uD83D\uDEAB ${failureClassification.needsChainRollback ? "A 类门禁失败" : "B 类重试耗尽"}，执行链式回退`);
-            this.statusReporter.failPhase("qa_verification", new Error(postQAGateResult.summary), taskId);
-            this.storeFailureContext(taskId, "qa", postQAGateResult.summary, state);
+            console.log(`   \uD83D\uDEAB ${postGateResult.reason || "Post-QA Gate 失败"}，执行链式回退`);
+            this.statusReporter.failPhase("qa_verification", new Error(postGateResult.reason || "Post-QA Gate 失败"), taskId);
+            this.storeFailureContext(taskId, "qa", postGateResult.reason || "Post-QA Gate 失败", state);
             return this.handleVerdictBasedTransition(taskId, record, state, addTimeline, "qa", "redevelop");
           }
           console.log(`✅ Post-QA Gate 门禁检查通过`);
@@ -45633,9 +44918,9 @@ ${"━".repeat(SEPARATOR_WIDTH)}`);
       const task = readTaskMeta(taskId, this.config.cwd);
       if (task?.resumeAction !== "retry") {
         const projectDir = getProjectDir(this.config.cwd);
-        const qaReportPath = path39.join(projectDir, "reports", "harness", taskId, "qa-report.md");
-        if (fs43.existsSync(qaReportPath)) {
-          const content = fs43.readFileSync(qaReportPath, "utf-8");
+        const qaReportPath = path38.join(projectDir, "reports", "harness", taskId, "qa-report.md");
+        if (fs42.existsSync(qaReportPath)) {
+          const content = fs42.readFileSync(qaReportPath, "utf-8");
           if (content.trim().length > 0) {
             console.log(`   \uD83D\uDCCB 检测到 wait_qa 但 qa-report.md 已存在，自动迁移为 wait_evaluation`);
             return "evaluation";
@@ -45663,14 +44948,14 @@ ${"━".repeat(SEPARATOR_WIDTH)}`);
       return true;
     }
     const projectDir = getProjectDir(this.config.cwd);
-    const reportDir = path39.join(projectDir, "reports", "harness", taskId);
+    const reportDir = path38.join(projectDir, "reports", "harness", taskId);
     for (const reportFile of required) {
-      const filePath = path39.join(reportDir, reportFile);
-      if (!fs43.existsSync(filePath)) {
+      const filePath = path38.join(reportDir, reportFile);
+      if (!fs42.existsSync(filePath)) {
         return false;
       }
       try {
-        const content = fs43.readFileSync(filePath, "utf-8");
+        const content = fs42.readFileSync(filePath, "utf-8");
         if (content.trim().length === 0) {
           return false;
         }
@@ -45840,6 +45125,9 @@ ${"━".repeat(SEPARATOR_WIDTH)}`);
     state.taskFailureReasons?.delete(taskId);
   }
   classifyError(error) {
+    if (!error || typeof error !== "string") {
+      return "unknown";
+    }
     const lowerError = error.toLowerCase();
     if (lowerError.includes("syntax") || lowerError.includes("syntaxerror") || lowerError.includes("unexpected token")) {
       return "syntax";
@@ -46021,31 +45309,31 @@ ${"━".repeat(SEPARATOR_WIDTH)}`);
     if (!resumePhase)
       return true;
     const projectDir = getProjectDir(this.config.cwd);
-    const reportDir = path39.join(projectDir, "reports", "harness", taskId);
+    const reportDir = path38.join(projectDir, "reports", "harness", taskId);
     const checks = [];
     switch (resumePhase) {
       case "qa":
-        checks.push({ file: path39.join(reportDir, "dev-report.md"), label: "开发报告" });
-        checks.push({ file: path39.join(reportDir, "code-review-report.md"), label: "代码审核报告" });
+        checks.push({ file: path38.join(reportDir, "dev-report.md"), label: "开发报告" });
+        checks.push({ file: path38.join(reportDir, "code-review-report.md"), label: "代码审核报告" });
         break;
       case "evaluation":
-        checks.push({ file: path39.join(reportDir, "dev-report.md"), label: "开发报告" });
-        checks.push({ file: path39.join(reportDir, "code-review-report.md"), label: "代码审核报告" });
-        checks.push({ file: path39.join(reportDir, "qa-report.md"), label: "QA报告" });
+        checks.push({ file: path38.join(reportDir, "dev-report.md"), label: "开发报告" });
+        checks.push({ file: path38.join(reportDir, "code-review-report.md"), label: "代码审核报告" });
+        checks.push({ file: path38.join(reportDir, "qa-report.md"), label: "QA报告" });
         break;
       case "code_review":
-        checks.push({ file: path39.join(reportDir, "dev-report.md"), label: "开发报告" });
+        checks.push({ file: path38.join(reportDir, "dev-report.md"), label: "开发报告" });
         break;
       case "development":
         return true;
     }
     for (const check of checks) {
-      if (!fs43.existsSync(check.file)) {
+      if (!fs42.existsSync(check.file)) {
         console.log(`   ⚠️ 缺少${check.label}: ${check.file}`);
         return false;
       }
       try {
-        const content = fs43.readFileSync(check.file, "utf-8");
+        const content = fs42.readFileSync(check.file, "utf-8");
         if (content.trim().length === 0) {
           console.log(`   ⚠️ ${check.label}为空: ${check.file}`);
           return false;
@@ -46246,15 +45534,15 @@ ${"━".repeat(SEPARATOR_WIDTH)}`);
         }
       }
       const stageFiles = [
-        path39.join(this.config.cwd, ".projmnt4claude", "reports", taskId, "dev-report.json"),
-        path39.join(this.config.cwd, ".projmnt4claude", "reports", taskId, "code-review-report.json"),
-        path39.join(this.config.cwd, ".projmnt4claude", "reports", taskId, "qa-report.json"),
-        path39.join(this.config.cwd, ".projmnt4claude", "reports", taskId, "evaluation-report.json")
+        path38.join(this.config.cwd, ".projmnt4claude", "reports", taskId, "dev-report.json"),
+        path38.join(this.config.cwd, ".projmnt4claude", "reports", taskId, "code-review-report.json"),
+        path38.join(this.config.cwd, ".projmnt4claude", "reports", taskId, "qa-report.json"),
+        path38.join(this.config.cwd, ".projmnt4claude", "reports", taskId, "evaluation-report.json")
       ];
       for (const file of stageFiles) {
-        if (fs43.existsSync(file)) {
+        if (fs42.existsSync(file)) {
           try {
-            fs43.unlinkSync(file);
+            fs42.unlinkSync(file);
             result.cleanedFiles.push(file);
           } catch (unlinkError) {
             console.warn(`   ⚠️ 无法删除文件 ${file}: ${unlinkError instanceof Error ? unlinkError.message : String(unlinkError)}`);
@@ -46752,6 +46040,7 @@ function resetPhaseCheckpoints(taskId, state, cwd) {
 init_harness_helpers();
 init_session_lock_cleanup();
 init_session_id_mapper();
+init_plan();
 init_task2();
 init_task();
 init_config2();
@@ -47102,19 +46391,19 @@ async function harnessCommand(options, cwd = process.cwd()) {
     uninstallExitHooks();
     const projectDir = process.env.PROJMNT4CLAUDE_ROOT ?? process.cwd();
     const projectHash = createHash2("sha256").update(projectDir).digest("hex").slice(0, 16);
-    const sessionsDir = path40.join(homedir3(), ".claude", "projects", projectHash);
+    const sessionsDir = path39.join(homedir3(), ".claude", "projects", projectHash);
     const mappings = sessionIdMapper.serialize();
     for (const m of mappings) {
-      const jsonlPath = path40.join(sessionsDir, `${m.cliUuid}.jsonl`);
+      const jsonlPath = path39.join(sessionsDir, `${m.cliUuid}.jsonl`);
       try {
-        if (fs44.existsSync(jsonlPath))
-          fs44.unlinkSync(jsonlPath);
+        if (fs43.existsSync(jsonlPath))
+          fs43.unlinkSync(jsonlPath);
       } catch {}
     }
   }
 }
 function getRuntimeStatePath2(cwd) {
-  return path40.join(getProjectDir(cwd), "harness-state.json");
+  return path39.join(getProjectDir(cwd), "harness-state.json");
 }
 function validateAndRepairState(data, cwd) {
   const errors = [];
@@ -47277,12 +46566,12 @@ function validateAndRepairState(data, cwd) {
 }
 function loadRuntimeState(cwd) {
   const statePath = getRuntimeStatePath2(cwd);
-  if (!fs44.existsSync(statePath)) {
+  if (!fs43.existsSync(statePath)) {
     return null;
   }
   const texts = t(cwd);
   try {
-    const content = fs44.readFileSync(statePath, "utf-8");
+    const content = fs43.readFileSync(statePath, "utf-8");
     if (!content.trim()) {
       console.warn(texts.harnessCmd.emptyStateFile);
       return null;
@@ -47328,8 +46617,8 @@ function loadRuntimeState(cwd) {
 }
 function clearRuntimeState(cwd) {
   const statePath = getRuntimeStatePath2(cwd);
-  if (fs44.existsSync(statePath)) {
-    fs44.unlinkSync(statePath);
+  if (fs43.existsSync(statePath)) {
+    fs43.unlinkSync(statePath);
   }
 }
 function summaryToJSON(summary) {
@@ -47356,13 +46645,13 @@ function summaryToJSON(summary) {
 }
 async function loadTaskQueue(options, cwd) {
   if (options.plan) {
-    const planFile = path40.resolve(cwd, options.plan);
-    if (!fs44.existsSync(planFile)) {
+    const planFile = path39.resolve(cwd, options.plan);
+    if (!fs43.existsSync(planFile)) {
       console.error(`Error: Plan file does not exist: ${planFile}`);
       process.exit(1);
     }
     try {
-      const planContent = fs44.readFileSync(planFile, "utf-8");
+      const planContent = fs43.readFileSync(planFile, "utf-8");
       const planData = JSON.parse(planContent);
       let taskQueue = planData.recommendation?.suggestedOrder || [];
       const batches = planData.batchOrder || planData.batches;
@@ -47464,14 +46753,14 @@ function printSummary(summary) {
 }
 
 // src/utils/path.ts
-import * as path41 from "path";
-import * as fs45 from "fs";
+import * as path40 from "path";
+import * as fs44 from "fs";
 function getProjectDir5(cwd = process.cwd()) {
   const testMocks = globalThis.__PROJMNT4CLAUDE_TEST_MOCKS__;
   if (testMocks?.getProjectDir) {
     return testMocks.getProjectDir(cwd);
   }
-  return path41.join(cwd, ".projmnt4claude");
+  return path40.join(cwd, ".projmnt4claude");
 }
 function isInitialized2(cwd = process.cwd()) {
   const testMocks = globalThis.__PROJMNT4CLAUDE_TEST_MOCKS__;
@@ -47479,17 +46768,17 @@ function isInitialized2(cwd = process.cwd()) {
     return testMocks.isInitialized(cwd);
   }
   const projectDir = getProjectDir5(cwd);
-  const configPath = path41.join(projectDir, "config.json");
-  if (fs45.existsSync(configPath)) {
+  const configPath = path40.join(projectDir, "config.json");
+  if (fs44.existsSync(configPath)) {
     return true;
   }
-  const tasksDir = path41.join(projectDir, "tasks");
-  if (fs45.existsSync(tasksDir)) {
+  const tasksDir = path40.join(projectDir, "tasks");
+  if (fs44.existsSync(tasksDir)) {
     try {
-      const taskDirs = fs45.readdirSync(tasksDir);
+      const taskDirs = fs44.readdirSync(tasksDir);
       return taskDirs.some((taskDir) => {
-        const metaPath = path41.join(tasksDir, taskDir, "meta.json");
-        return fs45.existsSync(metaPath);
+        const metaPath = path40.join(tasksDir, taskDir, "meta.json");
+        return fs44.existsSync(metaPath);
       });
     } catch {
       return false;
@@ -47620,12 +46909,12 @@ rename format:
     case "create": {
       let taskDescription = options.description;
       if (options.file) {
-        const filePath = path42.resolve(options.file);
-        if (!fs46.existsSync(filePath)) {
+        const filePath = path41.resolve(options.file);
+        if (!fs45.existsSync(filePath)) {
           console.error("(X) Error: Description file not found: " + filePath);
           process.exit(1);
         }
-        const stat = fs46.statSync(filePath);
+        const stat = fs45.statSync(filePath);
         if (!stat.isFile()) {
           console.error("(X) Error: Path is not a file: " + filePath);
           process.exit(1);
@@ -47636,14 +46925,14 @@ rename format:
           process.exit(1);
         }
         try {
-          taskDescription = fs46.readFileSync(filePath, "utf-8");
+          taskDescription = fs45.readFileSync(filePath, "utf-8");
         } catch (error) {
           console.error("(X) Error: Cannot read description file: " + error.message);
           process.exit(1);
         }
         if (filePath.startsWith("/tmp/")) {
           try {
-            fs46.unlinkSync(filePath);
+            fs45.unlinkSync(filePath);
           } catch {}
         }
       }
@@ -48129,12 +47418,12 @@ program2.command("investigation-requirement [description]").description(`\u9700\
 ` + "\u524D\u63D0: \u9700\u5148\u8FD0\u884C projmnt4claude setup \u521D\u59CB\u5316\u9879\u76EE").option("-y, --yes", "\u975E\u4EA4\u4E92\u6A21\u5F0F").option("--interactive", "\u4EA4\u4E92\u6A21\u5F0F: \u4E0E\u7528\u6237\u8BC4\u5BA1\u53CD\u9988\u5FAA\u73AF").option("--feedback", "\u53CD\u9988\u4FEE\u6B63\u6A21\u5F0F: \u57FA\u4E8E\u53CD\u9988\u4FEE\u6B63\u5DF2\u6709\u62A5\u544A").option("--review", "\u8BC4\u5BA1\u6A21\u5F0F: \u4EC5\u8BC4\u5BA1\u5DF2\u6709\u62A5\u544A").option("--split", "\u62C6\u5206\u6A21\u5F0F: \u5BF9\u8FC7\u5927\u62A5\u544A\u8FDB\u884C\u62C6\u5206").option("--report-path <path>", "\u5DF2\u6709\u62A5\u544A\u8DEF\u5F84 (feedback/review/split \u5FC5\u9700)").option("--file <path>", "\u4ECE\u6587\u4EF6\u8BFB\u53D6\u9700\u6C42\u63CF\u8FF0").option("--output-dir <path>", "\u8F93\u51FA\u76EE\u5F55").option("--output-file <path>", "\u8F93\u51FA\u6587\u4EF6\u8DEF\u5F84").option("--max-retry <n>", "\u6700\u5927\u91CD\u8BD5\u6B21\u6570", "3").option("--split-threshold <kb>", "\u62C6\u5206\u9608\u503C (KB)", "20").option("--language <lang>", "\u8BED\u8A00 (zh/en)", "zh").option("--skip-review", "\u8DF3\u8FC7 AI \u8BC4\u5BA1").option("--skip-split", "\u8DF3\u8FC7\u62C6\u5206").option("-f, --force", "\u5F3A\u5236\u8986\u76D6").option("--json", "JSON \u8F93\u51FA").option("-q, --quiet", "\u9759\u9ED8\u6A21\u5F0F").action(async (description, options) => {
   let finalDescription = description;
   if (options.file) {
-    const filePath = path42.resolve(options.file);
-    if (!fs46.existsSync(filePath)) {
+    const filePath = path41.resolve(options.file);
+    if (!fs45.existsSync(filePath)) {
       console.error("(X) Error: Description file not found: " + filePath);
       process.exit(1);
     }
-    const stat = fs46.statSync(filePath);
+    const stat = fs45.statSync(filePath);
     if (!stat.isFile()) {
       console.error("(X) Error: Path is not a file: " + filePath);
       process.exit(1);
@@ -48145,14 +47434,14 @@ program2.command("investigation-requirement [description]").description(`\u9700\
       process.exit(1);
     }
     try {
-      finalDescription = fs46.readFileSync(filePath, "utf-8");
+      finalDescription = fs45.readFileSync(filePath, "utf-8");
     } catch (error) {
       console.error("(X) Error: Cannot read description file: " + error.message);
       process.exit(1);
     }
     if (filePath.startsWith("/tmp/")) {
       try {
-        fs46.unlinkSync(filePath);
+        fs45.unlinkSync(filePath);
       } catch {}
     }
   }
