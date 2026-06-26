@@ -68,7 +68,7 @@ import {
   verifyAndRecordCheckpoint,
   inferCategoryFromCheckpoint,
 } from './checkpoint-verification.js';
-import { PostQAGateRunner, createPostQAGateRunner, type PostQAGateRunResult } from './post-qa-gate/index.js';
+import { QA_POST_GATE_RULES } from './gate-rules/qa-post-gate-rules.js';
 import { DebugLogger } from './debug-logger.js';
 
 /** 阶段类型定义 (P4: 阶段内重试) */
@@ -271,19 +271,10 @@ export async function pre_qa_gate_check(context: GateCheckContext): Promise<Gate
 
 // ---- Post-QA Gate (8 rules) ----
 // Design intent: check QA results. Failures → qa, development, or RETRY.
+// Migrated to unified framework: src/utils/gate-rules/qa-post-gate-rules.ts
 
 export async function post_qa_gate_check(context: GateCheckContext): Promise<GateCheckResult> {
-  const rules: GateRule[] = [
-    { id: 'R-QA-POST-001', name: 'QA报告存在', onFailure: { targetPhase: 'qa', reason: '缺少QA报告' }, check: async (ctx) => hasQAReport(ctx.cwd) },
-    { id: 'R-QA-POST-002', name: '报告格式有效', onFailure: { targetPhase: 'qa', reason: 'QA报告格式无效' }, check: async (ctx) => validateQAReportFormat(ctx.cwd) },
-    { id: 'R-QA-POST-003', name: '测试结果有效', onFailure: { targetPhase: 'development', reason: '测试结果未通过' }, check: async (ctx) => ctx.phaseResult?.result === 'PASS' },
-    { id: 'R-QA-POST-004', name: '测试失败详情', onFailure: { targetPhase: 'development', reason: '测试失败详情缺失' }, check: async (ctx) => checkTestFailureDetails(ctx.phaseResult) },
-    { id: 'R-QA-POST-005', name: '人工验证状态收集', onFailure: { targetPhase: 'qa', reason: '人工验证状态未收集' }, check: async (ctx) => collectManualVerification(ctx.phaseResult) },
-    { id: 'R-QA-POST-005a', name: '人工验证汇总通知', onFailure: { targetPhase: 'qa', reason: '人工验证未通知' }, check: async (ctx) => notifyManualVerification(ctx.phaseResult) },
-    { id: 'R-QA-POST-006', name: '检查点状态同步', onFailure: { targetPhase: 'development', reason: '检查点状态未同步' }, check: async (ctx) => syncCheckpointStatus(ctx.task) },
-    { id: 'R-QA-POST-007', name: '测试覆盖率达标', onFailure: { targetPhase: 'RETRY', reason: '测试覆盖率不达标' }, check: async (ctx) => checkCoverage(ctx.phaseResult) },
-  ];
-  return executeRules(rules, context);
+  return executeRules(QA_POST_GATE_RULES, context);
 }
 
 // ---- Pre-Eval Gate (6 rules) ----
@@ -1006,26 +997,30 @@ export class AssemblyLine {
           this.statusReporter.completePhase('qa_verification', taskId, `QA 验证完成: ${qaVerdict!.result}`);
 
           // CP-6: Post-QA Gate 门禁检查
-          // QA 验证成功后，运行 PostQAGateRunner 进行质量门禁检查
-          const postQAGateRunner = createPostQAGateRunner(
-            this.config.cwd,
-            { coverageThreshold: this.config.coverageThreshold ?? 0.8 }
-          );
-
+          // 使用统一门禁框架执行 QA Post-Gate 规则
           console.log('\n🔒 Post-QA Gate 门禁检查...');
-          const postQAGateResult = await postQAGateRunner.run(taskId);
 
-          if (!postQAGateResult.passed) {
+          const postGateContext: GateCheckContext = {
+            task: record,
+            cwd: this.config.cwd,
+            phaseResult: qaVerdict,
+            sharedData: new Map(),
+          };
+
+          const postGateResult = await this.runPostPhaseGate('qa', postGateContext);
+
+          if (!postGateResult.passed) {
             console.log(`❌ Post-QA Gate 门禁检查失败`);
-            const failureClassification = postQAGateRunner.classifyQAGateFailure(postQAGateResult);
 
-            if (failureClassification.needsQARetry) {
+            // 检查覆盖率缺口数据（B 类门禁失败）
+            const coverageGapData = postGateContext.sharedData?.get('coverageGap');
+            if (coverageGapData && postGateResult.targetPhase === 'qa') {
               // B 类门禁失败（覆盖率不足）→ QA 内部重试
               console.log(`   🔄 B 类门禁失败（覆盖率不足），触发 QA 内部重试...`);
-              console.log(`   📊 ${failureClassification.coverageGapData?.message}`);
+              console.log(`   📊 ${coverageGapData.message}`);
 
               // 将覆盖率缺口数据存入重试上下文，供 QA 重试使用
-              this.storeQACoverageGapContext(taskId, state, failureClassification.coverageGapData!);
+              this.storeQACoverageGapContext(taskId, state, coverageGapData);
 
               // 触发 QA 阶段内重试
               const qaRetryLimit = this.getPhaseRetryLimit('qa');
@@ -1044,10 +1039,10 @@ export class AssemblyLine {
             }
 
             // A 类门禁失败 或 B 类重试耗尽 → 链式回退
-            console.log(`   🚫 ${failureClassification.needsChainRollback ? 'A 类门禁失败' : 'B 类重试耗尽'}，执行链式回退`);
-            this.statusReporter.failPhase('qa_verification', new Error(postQAGateResult.summary), taskId);
-            // 将 Post-QA Gate 失败原因写入 failureHistory，确保回退阶段可通过 getAllFailuresForTask 看到
-            this.storeFailureContext(taskId, 'qa', postQAGateResult.summary, state);
+            console.log(`   🚫 ${postGateResult.reason || 'Post-QA Gate 失败'}，执行链式回退`);
+            this.statusReporter.failPhase('qa_verification', new Error(postGateResult.reason || 'Post-QA Gate 失败'), taskId);
+            // 将 Post-QA Gate 失败原因写入 failureHistory
+            this.storeFailureContext(taskId, 'qa', postGateResult.reason || 'Post-QA Gate 失败', state);
             return this.handleVerdictBasedTransition(taskId, record, state, addTimeline, 'qa', 'redevelop');
           }
 
@@ -2861,6 +2856,11 @@ export class AssemblyLine {
    * 根据错误内容分类为：syntax, import, test, type, lint, timeout, api, format, ai_output, other
    */
   private classifyError(error: string): string {
+    // 防御性检查：null/undefined/非字符串
+    if (!error || typeof error !== 'string') {
+      return 'unknown';
+    }
+
     const lowerError = error.toLowerCase();
 
     if (lowerError.includes('syntax') || lowerError.includes('syntaxerror') || lowerError.includes('unexpected token')) {

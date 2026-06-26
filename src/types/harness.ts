@@ -27,14 +27,21 @@ import type { HarnessPhaseOptions } from './config.js';
 export type FlowTarget = 'development' | 'code_review' | 'qa' | 'evaluation' | 'RETRY' | 'NEXT' | 'EXIT';
 
 /**
- * Result of a single gate check.
- * When passed=false, targetPhase indicates where to route.
+ * Base gate result - shared contract for all gate check results.
+ * Ensures consistent field naming (passed/reason/targetPhase) across
+ * all gate implementations, preventing interface contract mismatches.
  */
-export interface GateCheckResult {
+export interface BaseGateResult {
   passed: boolean;
   targetPhase?: FlowTarget;
   reason?: string;
 }
+
+/**
+ * Result of a single gate check.
+ * When passed=false, targetPhase indicates where to route.
+ */
+export interface GateCheckResult extends BaseGateResult {}
 
 /**
  * Context passed to every gate check function.
@@ -43,6 +50,8 @@ export interface GateCheckContext {
   task: TaskMeta;
   cwd: string;
   phaseResult?: any;
+  /** 共享数据存储，用于传递覆盖率缺口等特殊数据 */
+  sharedData?: Map<string, any>;
 }
 
 /**
