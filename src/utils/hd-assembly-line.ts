@@ -1000,8 +1000,11 @@ export class AssemblyLine {
           // 使用统一门禁框架执行 QA Post-Gate 规则
           console.log('\n🔒 Post-QA Gate 门禁检查...');
 
+          // 注意: record 是 TaskExecutionRecord，GateCheckContext.task 需要 TaskMeta
+          // 使用 record.task 获取正确的 TaskMeta 实例（包含 id 字段）
+          // 详见: docs/investigation/post-qa-gate-path-undefined-error-investigation-20260626.md
           const postGateContext: GateCheckContext = {
-            task: record,
+            task: record.task,
             cwd: this.config.cwd,
             phaseResult: qaVerdict,
             sharedData: new Map(),
@@ -2247,8 +2250,13 @@ export class AssemblyLine {
             console.warn(`      - [${violation.severity}] ${violation.message}`);
           }
         } else {
+          // 只将 error 级别的检查点违规添加到 errors，warning 级别仅记录日志
           for (const violation of checkpointViolations) {
-            errors.push(`[${violation.severity}] ${violation.message}`);
+            if (violation.severity === 'error') {
+              errors.push(`[${violation.severity}] ${violation.message}`);
+            } else {
+              console.warn(`   ⚠️ 检查点验证警告: [${violation.severity}] ${violation.message}`);
+            }
           }
         }
       }

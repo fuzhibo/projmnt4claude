@@ -43980,7 +43980,7 @@ ${"━".repeat(SEPARATOR_WIDTH)}`);
           console.log(`
 \uD83D\uDD12 Post-QA Gate 门禁检查...`);
           const postGateContext = {
-            task: record,
+            task: record.task,
             cwd: this.config.cwd,
             phaseResult: qaVerdict,
             sharedData: new Map
