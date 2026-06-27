@@ -771,6 +771,8 @@ export class AssemblyLine {
     let devReport: DevReport | undefined;
     let codeReviewVerdict: CodeReviewVerdict | undefined;
     let qaVerdict: QAVerdict | undefined;
+    // FIX-20260627-002: 区分正向推进与回退后重试，防止 retryCounter 被错误重置
+    let assumeTargetPhase: string | null = this.getNextPhaseForRetry(resumePhase);
 
     while (currentPhaseIndex <= 3) {
       const phase = phases[currentPhaseIndex];
@@ -825,6 +827,10 @@ export class AssemblyLine {
                 return record;
               }
               console.log(`   ↩️ 开发阶段门禁失败，回退到: ${targetPhase} (重试 ${currentRetryCount + 1}/${maxRetries})`);
+              // FIX-20260627-002: 同阶段回退时提前推进 assumeTargetPhase，防止成功后错误重置计数器
+              if (targetPhase === 'development') {
+                assumeTargetPhase = this.getNextPhaseForRetry('code_review');
+              }
               currentPhaseIndex = flowTargetToPhaseIndex(targetPhase);
               continue;
             }
@@ -847,8 +853,11 @@ export class AssemblyLine {
 
           addTimeline('dev_completed', `开发完成: ${devReport!.status}`, { status: devReport!.status });
           this.statusReporter.completePhase('development', taskId, `开发完成: ${devReport!.status}`);
-          // FIX-20260627: 阶段成功，重置任务级全局重试计数器
-          state.retryCounter.set(taskId, 0);
+          // FIX-20260627-002: 仅正向推进时重置，回退后重试不重置
+          if (assumeTargetPhase == devLifecycleResult.targetPhase) {
+            state.retryCounter.set(taskId, 0);
+            assumeTargetPhase = this.getNextPhaseForRetry(devLifecycleResult.targetPhase!);
+          }
 
           // 4.5 同步检查点状态（开发完成后）
           this.syncCheckpointStatus(taskId, 'development', { devReport });
@@ -929,6 +938,9 @@ export class AssemblyLine {
                 return record;
               }
               console.log(`   ↩️ 代码审核门禁失败，回退到: ${targetPhase} (重试 ${currentRetryCount + 1}/${maxRetries})`);
+              if (targetPhase === 'code_review') {
+                assumeTargetPhase = this.getNextPhaseForRetry('qa');
+              }
               currentPhaseIndex = flowTargetToPhaseIndex(targetPhase);
               continue;
             }
@@ -938,8 +950,11 @@ export class AssemblyLine {
 
           addTimeline('code_review_completed', `代码审核完成: ${codeReviewVerdict!.result}`, { result: codeReviewVerdict!.result });
           this.statusReporter.completePhase('code_review', taskId, `代码审核完成: ${codeReviewVerdict!.result}`);
-          // FIX-20260627: 阶段成功，重置任务级全局重试计数器
-          state.retryCounter.set(taskId, 0);
+          // FIX-20260627-002: 仅正向推进时重置，回退后重试不重置
+          if (assumeTargetPhase == crLifecycleResult.targetPhase) {
+            state.retryCounter.set(taskId, 0);
+            assumeTargetPhase = this.getNextPhaseForRetry(crLifecycleResult.targetPhase!);
+          }
 
           // 6.5 同步检查点状态（代码审核通过后）
           this.syncCheckpointStatus(taskId, 'code_review', { codeReviewVerdict });
@@ -1020,6 +1035,9 @@ export class AssemblyLine {
                 return record;
               }
               console.log(`   ↩️ QA门禁失败，回退到: ${targetPhase} (重试 ${currentRetryCount + 1}/${maxRetries})`);
+              if (targetPhase === 'qa') {
+                assumeTargetPhase = this.getNextPhaseForRetry('evaluation');
+              }
               currentPhaseIndex = flowTargetToPhaseIndex(targetPhase);
               continue;
             }
@@ -1032,8 +1050,11 @@ export class AssemblyLine {
             requiresHuman: qaVerdict!.requiresHuman
           });
           this.statusReporter.completePhase('qa_verification', taskId, `QA 验证完成: ${qaVerdict!.result}`);
-          // FIX-20260627: 阶段成功，重置任务级全局重试计数器
-          state.retryCounter.set(taskId, 0);
+          // FIX-20260627-002: 仅正向推进时重置，回退后重试不重置
+          if (assumeTargetPhase == qaLifecycleResult.targetPhase) {
+            state.retryCounter.set(taskId, 0);
+            assumeTargetPhase = this.getNextPhaseForRetry(qaLifecycleResult.targetPhase!);
+          }
 
           // CP-6: Post-QA Gate 门禁检查
           // 使用统一门禁框架执行 QA Post-Gate 规则
@@ -1164,6 +1185,10 @@ export class AssemblyLine {
               return record;
             }
             console.log(`   ↩️ 评估门禁失败，回退到: ${targetPhase} (重试 ${currentRetryCount + 1}/${maxRetries})`);
+            if (targetPhase === 'evaluation') {
+              // evaluation 之后无阶段，使用 sentinel 避免 null == undefined 匹配
+              assumeTargetPhase = '__SAME_PHASE_ROLLBACK__';
+            }
             currentPhaseIndex = flowTargetToPhaseIndex(targetPhase);
             continue;
           }
@@ -1182,8 +1207,10 @@ export class AssemblyLine {
         const verdict = record.reviewVerdict!;
         addTimeline('review_completed', `评估完成: ${verdict.result}`, { result: verdict.result });
         this.statusReporter.completePhase('evaluation', taskId, `评估完成: ${verdict.result}`);
-        // FIX-20260627: 阶段成功，重置任务级全局重试计数器
-        state.retryCounter.set(taskId, 0);
+        // FIX-20260627-002: 仅正向推进时重置，回退后重试不重置
+        if (assumeTargetPhase == evalLifecycleResult.targetPhase) {
+          state.retryCounter.set(taskId, 0);
+        }
 
         // 评估通过后的处理
         // 评估通过后，将所有剩余 pending 检查点标记为 completed
@@ -1400,6 +1427,20 @@ export class AssemblyLine {
           continue;
         }
 
+        // FIX-20260627-002: RETRY 耗尽后转为硬失败，防止 'RETRY' 泄漏到 flowTargetToPhaseIndex 导致崩溃
+        if (targetPhase === 'RETRY') {
+          console.log(`   ❌ 阶段内重试耗尽 (${attempt}/${maxRetries})，中断流水线`);
+          return {
+            success: false,
+            phase,
+            failedAt: 'post_phase_gate',
+            attempt,
+            reason: `阶段内重试耗尽: ${postGateErrorMsg}`,
+            retryable: false,
+            targetPhase: 'EXIT',
+          };
+        }
+
         if (targetPhase === 'EXIT') {
           console.log(`   🚫 门禁失败，中断流水线`);
           return {
@@ -1438,6 +1479,15 @@ export class AssemblyLine {
         result: phaseResult,
         reason: '阶段执行成功',
         retryable: false,
+        targetPhase: (() => {
+          const map: Record<string, string | undefined> = {
+            development: 'code_review',
+            code_review: 'qa',
+            qa: 'evaluation',
+            evaluation: undefined,
+          };
+          return map[phase] as FlowTarget | undefined;
+        })(),
       };
     }
 
@@ -2566,6 +2616,21 @@ export class AssemblyLine {
       return 'skip'; // evaluation 之后没有下一阶段
     }
     return order[idx + 1] as 'code_review' | 'qa' | 'evaluation';
+  }
+
+  /**
+   * FIX-20260627-002: 获取重试场景下的预期下一阶段
+   *
+   * 与 nextPhaseAfter 不同，evaluation 之后返回 null 而非 'skip'，
+   * 用于 assumeTargetPhase 比较：只有实际推进到预期阶段时才重置 retryCounter。
+   */
+  private getNextPhaseForRetry(currentPhase: string): string | null {
+    const phaseOrder = ['development', 'code_review', 'qa', 'evaluation'];
+    const currentIndex = phaseOrder.indexOf(currentPhase);
+    if (currentIndex === -1 || currentIndex === phaseOrder.length - 1) {
+      return null;
+    }
+    return phaseOrder[currentIndex + 1] ?? null;
   }
 
   /**
