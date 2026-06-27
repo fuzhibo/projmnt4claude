@@ -190,6 +190,96 @@ export const qaVerdictHasReason: ValidationRule = {
   },
 };
 
+/**
+ * Rule 5: codeReviewVerdictResultMarker (severity: error)
+ * Code Review 输出必须包含 VERDICT: PASS 或 VERDICT: NOPASS 标记
+ */
+export const codeReviewVerdictResultMarker: ValidationRule = {
+  id: 'code-review-verdict-result-marker',
+  description: 'Code Review 输出必须包含 VERDICT: PASS 或 VERDICT: NOPASS 标记',
+  severity: 'error' as const,
+  check: (output: unknown): ValidationViolation | null => {
+    if (typeof output !== 'string') {
+      return {
+        ruleId: 'code-review-verdict-result-marker',
+        severity: 'error',
+        message: '输出不是字符串类型，无法检测 VERDICT 标记',
+        value: typeof output,
+      };
+    }
+
+    const trimmed = output.trim();
+    if (trimmed.length === 0) {
+      return {
+        ruleId: 'code-review-verdict-result-marker',
+        severity: 'error',
+        message: '输出为空字符串，无法检测 VERDICT 标记',
+      };
+    }
+
+    const passMatch = /VERDICT\s*:\s*PASS/i.test(trimmed);
+    const nopassMatch = /VERDICT\s*:\s*NOPASS/i.test(trimmed);
+
+    if (passMatch || nopassMatch) {
+      return null;
+    }
+
+    return {
+      ruleId: 'code-review-verdict-result-marker',
+      severity: 'error',
+      message: '输出中未包含 VERDICT: PASS 或 VERDICT: NOPASS 标记',
+      value: trimmed.slice(0, 200),
+    };
+  },
+};
+
+/**
+ * Rule 6: codeReviewVerdictHasReason (severity: warning)
+ * Code Review 输出应包含原因说明章节
+ */
+export const codeReviewVerdictHasReason: ValidationRule = {
+  id: 'code-review-verdict-has-reason',
+  description: 'Code Review 输出应包含原因说明章节（## 审核结果 或 ## 原因）',
+  severity: 'warning' as const,
+  check: (output: unknown): ValidationViolation | null => {
+    if (typeof output !== 'string') {
+      return {
+        ruleId: 'code-review-verdict-has-reason',
+        severity: 'warning',
+        message: '输出不是字符串类型，无法检测原因说明',
+        value: typeof output,
+      };
+    }
+
+    const trimmed = output.trim();
+    if (trimmed.length === 0) {
+      return {
+        ruleId: 'code-review-verdict-has-reason',
+        severity: 'warning',
+        message: '输出为空字符串，无法检测原因说明',
+      };
+    }
+
+    const reasonPatterns = [
+      /##\s*审核结果/i,
+      /##\s*原因/i,
+      /##\s*Reason/i,
+      /原因[:：]/i,
+    ];
+
+    const hasReason = reasonPatterns.some(p => p.test(trimmed));
+    if (hasReason) {
+      return null;
+    }
+
+    return {
+      ruleId: 'code-review-verdict-has-reason',
+      severity: 'warning',
+      message: '输出中未包含原因说明章节（缺少 ## 审核结果 或 ## 原因 标记）',
+    };
+  },
+};
+
 /** 所有 Verdict 验证规则（评估阶段用） */
 export const verdictValidationRules: ValidationRule[] = [
   verdictResultMarker,
@@ -200,4 +290,10 @@ export const verdictValidationRules: ValidationRule[] = [
 export const qaVerdictValidationRules: ValidationRule[] = [
   qaVerdictResultMarker,
   qaVerdictHasReason,
+];
+
+/** Code Review 验证规则（Code Review 阶段用） */
+export const codeReviewVerdictValidationRules: ValidationRule[] = [
+  codeReviewVerdictResultMarker,
+  codeReviewVerdictHasReason,
 ];

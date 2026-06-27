@@ -27,7 +27,7 @@ import { getAgent, buildEffectiveTools } from './headless-agent.js';
 import { getCodeReviewRoleTemplate } from './role-prompts.js';
 import { detectContradiction } from './contradiction-detector.js';
 import { createSessionAwareEngine } from './feedback-constraint-engine.js';
-import { verdictResultMarker, verdictHasReason } from './validation-rules/verdict-rules.js';
+import { codeReviewVerdictResultMarker, codeReviewVerdictHasReason } from './validation-rules/verdict-rules.js';
 import { loadPromptTemplate, resolveTemplate, loadCustomRequirements } from './prompt-templates.js';
 import { t, getI18n } from '../i18n/index.js';
 import type { HarnessPhaseOptions } from '../types/config.js';
@@ -204,7 +204,7 @@ export class HarnessCodeReviewer {
 
     const engine = createSessionAwareEngine(
       'markdown',
-      [verdictResultMarker, verdictHasReason],
+      [codeReviewVerdictResultMarker, codeReviewVerdictHasReason],
       1, // maxRetriesOnError (code review: 1 retry)
     );
     const engineResult = await engine.runWithFeedback(
