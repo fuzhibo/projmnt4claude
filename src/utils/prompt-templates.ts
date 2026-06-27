@@ -142,6 +142,11 @@ export const DEFAULT_DEV_TEMPLATE: PromptTemplate = {
 
 {timeoutInstruction}
 
+### 重试反馈阅读
+
+如果前次尝试失败，失败原因中可能包含报告路径（以 "详细信息请参考：" 开头）。
+请使用 Read 工具读取该路径的报告文件，获取具体的错误位置、类型和修复建议。
+
 ### 开发步骤（按顺序执行）
 
 1. **理解检查点要求** — 仔细阅读每个检查点，理解需要实现什么代码或功能
@@ -195,6 +200,11 @@ export const DEFAULT_DEV_TEMPLATE: PromptTemplate = {
 {roleDeclaration}
 
 {timeoutInstruction}
+
+### Retry Feedback Reading
+
+If the previous attempt failed, the failure reason may contain a report path (starting with "Detailed information please refer to:").
+Please use the Read tool to read the report file at that path to get specific error locations, types, and fix suggestions.
 
 ### Development Steps (Execute in order)
 
@@ -257,7 +267,11 @@ VERDICT: PASS 或 VERDICT: NOPASS
 ## 原因: [简要说明为什么通过或不通过]
 ## 代码质量问题: [列出发现的问题，如果没有则为空]
 ## 未通过的检查点: [列出未通过的检查点ID，如果没有则为空]
-## 详细反馈: [可选的详细反馈]
+## 详细反馈: [**必须**包含以下内容，不可省略]
+- **错误文件**: 列出所有有问题的文件路径
+- **错误位置**: 行号、函数名等
+- **错误描述**: 具体的错误信息
+- **修复建议**: 如何修复每个问题
 \`\`\`
 
 **重要**: 必须输出 VERDICT: PASS 或 VERDICT: NOPASS，不得使用"通过"、"不通过"等中文词语。
@@ -291,7 +305,11 @@ VERDICT: PASS or VERDICT: NOPASS
 ## Reason: [Brief explanation of why it passed or failed]
 ## Code Quality Issues: [List of issues found, empty if none]
 ## Failed Checkpoints: [List of checkpoint IDs that failed, empty if none]
-## Detailed Feedback: [Optional detailed feedback]
+## Detailed Feedback: [**MUST** include the following, do not omit]
+- **Error Files**: List all files with issues
+- **Error Location**: Line numbers, function names, etc.
+- **Error Description**: Specific error messages
+- **Fix Suggestions**: How to fix each issue
 \`\`\`
 
 **Important**: Must output VERDICT: PASS or VERDICT: NOPASS, do not use "passed", "failed", or other words.
@@ -389,7 +407,11 @@ VERDICT: PASS 或 VERDICT: NOPASS
 ## 未通过的检查点: [列出未通过的检查点ID，如果没有则为空]
 ## 新增测试用例: [列出本次验证新增的测试用例，如果没有则为空]
 ## 覆盖缺口: [列出本次验证覆盖的缺口类型，如果没有则为空]
-## 详细反馈: [可选的详细反馈]
+## 详细反馈: [**必须**包含以下内容，不可省略]
+- **失败文件**: 列出所有有问题的文件路径
+- **失败位置**: 行号、函数名等
+- **失败描述**: 具体的错误信息
+- **修复建议**: 如何修复每个问题
 \`\`\`
 
 **重要格式要求**:
@@ -496,7 +518,11 @@ VERDICT: PASS or VERDICT: NOPASS
 ## Failed Checkpoints: [List of checkpoint IDs that failed, empty if none]
 ## New Test Cases: [List of new test cases added in this verification, empty if none]
 ## Coverage Gaps: [List of gap types covered in this verification, empty if none]
-## Detailed Feedback: [Optional detailed feedback]
+## Detailed Feedback: [**MUST** include the following, do not omit]
+- **Failed Files**: List all files with issues
+- **Failed Location**: Line numbers, function names, etc.
+- **Failed Description**: Specific error messages
+- **Fix Suggestions**: How to fix each issue
 \`\`\`
 
 **Important Format Requirements**:
@@ -577,7 +603,11 @@ EVALUATION_REASON: [简要说明为什么通过或不通过]
 ## 失败分类: [acceptance_criteria|code_quality|test_failure|architecture|specification|phantom_task|incomplete|other]
 ## 未满足的标准: [列出未满足的验收标准，如果没有则为空]
 ## 未完成的检查点: [列出未完成的检查点，如果没有则为空]
-## 详细反馈: [可选的详细反馈]
+## 详细反馈: [**必须**包含以下内容，不可省略]
+- **失败文件**: 列出所有有问题的文件路径
+- **失败位置**: 行号、函数名等
+- **失败描述**: 具体的错误信息
+- **修复建议**: 如何修复每个问题
 \`\`\`
 
 **重要格式要求**:
@@ -677,7 +707,11 @@ Then output detailed evaluation in this Markdown format:
 ## Failure Category: [acceptance_criteria|code_quality|test_failure|architecture|specification|phantom_task|incomplete|other]
 ## Unmet Criteria: [List unmet acceptance criteria, empty if none]
 ## Incomplete Checkpoints: [List incomplete checkpoints, empty if none]
-## Detailed Feedback: [Optional detailed feedback]
+## Detailed Feedback: [**MUST** include the following, do not omit]
+- **Failed Files**: List all files with issues
+- **Failed Location**: Line numbers, function names, etc.
+- **Failed Description**: Specific error messages
+- **Fix Suggestions**: How to fix each issue
 \`\`\`
 
 **Important Format Requirements**:

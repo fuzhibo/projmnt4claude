@@ -7,60 +7,39 @@ var __defProp = Object.defineProperty;
 var __getOwnPropNames = Object.getOwnPropertyNames;
 var __getOwnPropDesc = Object.getOwnPropertyDescriptor;
 var __hasOwnProp = Object.prototype.hasOwnProperty;
-function __accessProp(key) {
-  return this[key];
-}
-var __toESMCache_node;
-var __toESMCache_esm;
 var __toESM = (mod, isNodeMode, target) => {
-  var canCache = mod != null && typeof mod === "object";
-  if (canCache) {
-    var cache = isNodeMode ? __toESMCache_node ??= new WeakMap : __toESMCache_esm ??= new WeakMap;
-    var cached = cache.get(mod);
-    if (cached)
-      return cached;
-  }
   target = mod != null ? __create(__getProtoOf(mod)) : {};
   const to = isNodeMode || !mod || !mod.__esModule ? __defProp(target, "default", { value: mod, enumerable: true }) : target;
   for (let key of __getOwnPropNames(mod))
     if (!__hasOwnProp.call(to, key))
       __defProp(to, key, {
-        get: __accessProp.bind(mod, key),
+        get: () => mod[key],
         enumerable: true
       });
-  if (canCache)
-    cache.set(mod, to);
   return to;
 };
+var __moduleCache = /* @__PURE__ */ new WeakMap;
 var __toCommonJS = (from) => {
-  var entry = (__moduleCache ??= new WeakMap).get(from), desc;
+  var entry = __moduleCache.get(from), desc;
   if (entry)
     return entry;
   entry = __defProp({}, "__esModule", { value: true });
-  if (from && typeof from === "object" || typeof from === "function") {
-    for (var key of __getOwnPropNames(from))
-      if (!__hasOwnProp.call(entry, key))
-        __defProp(entry, key, {
-          get: __accessProp.bind(from, key),
-          enumerable: !(desc = __getOwnPropDesc(from, key)) || desc.enumerable
-        });
-  }
+  if (from && typeof from === "object" || typeof from === "function")
+    __getOwnPropNames(from).map((key) => !__hasOwnProp.call(entry, key) && __defProp(entry, key, {
+      get: () => from[key],
+      enumerable: !(desc = __getOwnPropDesc(from, key)) || desc.enumerable
+    }));
   __moduleCache.set(from, entry);
   return entry;
 };
-var __moduleCache;
 var __commonJS = (cb, mod) => () => (mod || cb((mod = { exports: {} }).exports, mod), mod.exports);
-var __returnValue = (v) => v;
-function __exportSetter(name, newValue) {
-  this[name] = __returnValue.bind(null, newValue);
-}
 var __export = (target, all) => {
   for (var name in all)
     __defProp(target, name, {
       get: all[name],
       enumerable: true,
       configurable: true,
-      set: __exportSetter.bind(all, name)
+      set: (newValue) => all[name] = () => newValue
     });
 };
 var __esm = (fn, res) => () => (fn && (res = fn(fn = 0)), res);
@@ -1038,7 +1017,7 @@ Expecting one of '${allowedValues.join("', '")}'`);
         this._exitCallback = (err) => {
           if (err.code !== "commander.executeSubCommandAsync") {
             throw err;
-          }
+          } else {}
         };
       }
       return this;
@@ -9503,6 +9482,11 @@ var init_prompt_templates = __esm(() => {
 
 {timeoutInstruction}
 
+### 重试反馈阅读
+
+如果前次尝试失败，失败原因中可能包含报告路径（以 "详细信息请参考：" 开头）。
+请使用 Read 工具读取该路径的报告文件，获取具体的错误位置、类型和修复建议。
+
 ### 开发步骤（按顺序执行）
 
 1. **理解检查点要求** — 仔细阅读每个检查点，理解需要实现什么代码或功能
@@ -9556,6 +9540,11 @@ var init_prompt_templates = __esm(() => {
 {roleDeclaration}
 
 {timeoutInstruction}
+
+### Retry Feedback Reading
+
+If the previous attempt failed, the failure reason may contain a report path (starting with "Detailed information please refer to:").
+Please use the Read tool to read the report file at that path to get specific error locations, types, and fix suggestions.
 
 ### Development Steps (Execute in order)
 
@@ -9613,7 +9602,11 @@ VERDICT: PASS 或 VERDICT: NOPASS
 ## 原因: [简要说明为什么通过或不通过]
 ## 代码质量问题: [列出发现的问题，如果没有则为空]
 ## 未通过的检查点: [列出未通过的检查点ID，如果没有则为空]
-## 详细反馈: [可选的详细反馈]
+## 详细反馈: [**必须**包含以下内容，不可省略]
+- **错误文件**: 列出所有有问题的文件路径
+- **错误位置**: 行号、函数名等
+- **错误描述**: 具体的错误信息
+- **修复建议**: 如何修复每个问题
 \`\`\`
 
 **重要**: 必须输出 VERDICT: PASS 或 VERDICT: NOPASS，不得使用"通过"、"不通过"等中文词语。
@@ -9647,7 +9640,11 @@ VERDICT: PASS or VERDICT: NOPASS
 ## Reason: [Brief explanation of why it passed or failed]
 ## Code Quality Issues: [List of issues found, empty if none]
 ## Failed Checkpoints: [List of checkpoint IDs that failed, empty if none]
-## Detailed Feedback: [Optional detailed feedback]
+## Detailed Feedback: [**MUST** include the following, do not omit]
+- **Error Files**: List all files with issues
+- **Error Location**: Line numbers, function names, etc.
+- **Error Description**: Specific error messages
+- **Fix Suggestions**: How to fix each issue
 \`\`\`
 
 **Important**: Must output VERDICT: PASS or VERDICT: NOPASS, do not use "passed", "failed", or other words.
@@ -9740,7 +9737,11 @@ VERDICT: PASS 或 VERDICT: NOPASS
 ## 未通过的检查点: [列出未通过的检查点ID，如果没有则为空]
 ## 新增测试用例: [列出本次验证新增的测试用例，如果没有则为空]
 ## 覆盖缺口: [列出本次验证覆盖的缺口类型，如果没有则为空]
-## 详细反馈: [可选的详细反馈]
+## 详细反馈: [**必须**包含以下内容，不可省略]
+- **失败文件**: 列出所有有问题的文件路径
+- **失败位置**: 行号、函数名等
+- **失败描述**: 具体的错误信息
+- **修复建议**: 如何修复每个问题
 \`\`\`
 
 **重要格式要求**:
@@ -9847,7 +9848,11 @@ VERDICT: PASS or VERDICT: NOPASS
 ## Failed Checkpoints: [List of checkpoint IDs that failed, empty if none]
 ## New Test Cases: [List of new test cases added in this verification, empty if none]
 ## Coverage Gaps: [List of gap types covered in this verification, empty if none]
-## Detailed Feedback: [Optional detailed feedback]
+## Detailed Feedback: [**MUST** include the following, do not omit]
+- **Failed Files**: List all files with issues
+- **Failed Location**: Line numbers, function names, etc.
+- **Failed Description**: Specific error messages
+- **Fix Suggestions**: How to fix each issue
 \`\`\`
 
 **Important Format Requirements**:
@@ -9923,7 +9928,11 @@ EVALUATION_REASON: [简要说明为什么通过或不通过]
 ## 失败分类: [acceptance_criteria|code_quality|test_failure|architecture|specification|phantom_task|incomplete|other]
 ## 未满足的标准: [列出未满足的验收标准，如果没有则为空]
 ## 未完成的检查点: [列出未完成的检查点，如果没有则为空]
-## 详细反馈: [可选的详细反馈]
+## 详细反馈: [**必须**包含以下内容，不可省略]
+- **失败文件**: 列出所有有问题的文件路径
+- **失败位置**: 行号、函数名等
+- **失败描述**: 具体的错误信息
+- **修复建议**: 如何修复每个问题
 \`\`\`
 
 **重要格式要求**:
@@ -10023,7 +10032,11 @@ Then output detailed evaluation in this Markdown format:
 ## Failure Category: [acceptance_criteria|code_quality|test_failure|architecture|specification|phantom_task|incomplete|other]
 ## Unmet Criteria: [List unmet acceptance criteria, empty if none]
 ## Incomplete Checkpoints: [List incomplete checkpoints, empty if none]
-## Detailed Feedback: [Optional detailed feedback]
+## Detailed Feedback: [**MUST** include the following, do not omit]
+- **Failed Files**: List all files with issues
+- **Failed Location**: Line numbers, function names, etc.
+- **Failed Description**: Specific error messages
+- **Fix Suggestions**: How to fix each issue
 \`\`\`
 
 **Important Format Requirements**:
@@ -19328,193 +19341,6 @@ var init_validation = __esm(() => {
   init_task2();
 });
 
-// src/utils/plan.ts
-import * as path15 from "path";
-import * as fs19 from "fs";
-function isExecutableStatus(status) {
-  const normalized = normalizeStatus(status);
-  return normalized in EXECUTABLE_STATUS_PRIORITY;
-}
-function getStatusPriority(status) {
-  const normalized = normalizeStatus(status);
-  return EXECUTABLE_STATUS_PRIORITY[normalized] ?? 999;
-}
-function getPlanPath(cwd = process.cwd()) {
-  return path15.join(getProjectDir(cwd), "current-plan.json");
-}
-function readPlan(cwd = process.cwd()) {
-  if (!isInitialized(cwd)) {
-    return null;
-  }
-  const planPath = getPlanPath(cwd);
-  try {
-    if (!fs19.existsSync(planPath)) {
-      return null;
-    }
-    const content = fs19.readFileSync(planPath, "utf-8");
-    return JSON.parse(content);
-  } catch {
-    return null;
-  }
-}
-function writePlan(plan, cwd = process.cwd()) {
-  const planPath = getPlanPath(cwd);
-  plan.updatedAt = new Date().toISOString();
-  fs19.writeFileSync(planPath, JSON.stringify(plan, null, 2), "utf-8");
-}
-function createEmptyPlan() {
-  const now = new Date().toISOString();
-  return {
-    tasks: [],
-    createdAt: now,
-    updatedAt: now
-  };
-}
-function getOrCreatePlan(cwd = process.cwd()) {
-  const plan = readPlan(cwd);
-  if (plan) {
-    return plan;
-  }
-  return createEmptyPlan();
-}
-function addTaskToPlan(taskId, afterId, cwd = process.cwd()) {
-  const plan = getOrCreatePlan(cwd);
-  if (plan.tasks.includes(taskId)) {
-    return false;
-  }
-  if (afterId) {
-    const index = plan.tasks.indexOf(afterId);
-    if (index === -1) {
-      plan.tasks.push(taskId);
-    } else {
-      plan.tasks.splice(index + 1, 0, taskId);
-    }
-  } else {
-    plan.tasks.push(taskId);
-  }
-  writePlan(plan, cwd);
-  return true;
-}
-function removeTaskFromPlan(taskId, cwd = process.cwd()) {
-  const plan = readPlan(cwd);
-  if (!plan) {
-    return false;
-  }
-  const index = plan.tasks.indexOf(taskId);
-  if (index === -1) {
-    return false;
-  }
-  plan.tasks.splice(index, 1);
-  writePlan(plan, cwd);
-  return true;
-}
-function clearPlan(cwd = process.cwd()) {
-  const plan = createEmptyPlan();
-  writePlan(plan, cwd);
-}
-function areDependenciesCompleted(taskId, cwd = process.cwd()) {
-  const task = readTaskMeta(taskId, cwd);
-  if (!task) {
-    return false;
-  }
-  for (const depId of task.dependencies) {
-    const depTask = readTaskMeta(depId, cwd);
-    if (!depTask) {
-      return false;
-    }
-    const normalizedStatus = normalizeStatus(depTask.status);
-    if (normalizedStatus !== "resolved" && normalizedStatus !== "closed") {
-      return false;
-    }
-  }
-  return true;
-}
-function isParentTaskCompleted(taskId, cwd = process.cwd()) {
-  const task = readTaskMeta(taskId, cwd);
-  if (!task || !task.parentId) {
-    return false;
-  }
-  const parentTask = readTaskMeta(task.parentId, cwd);
-  if (!parentTask) {
-    return false;
-  }
-  const normalizedStatus = normalizeStatus(parentTask.status);
-  return normalizedStatus === "resolved" || normalizedStatus === "closed";
-}
-function getExecutableTasks(cwd = process.cwd(), includeSubtasks = false) {
-  const tasks = getAllTasks(cwd);
-  const skippedDueToParent = [];
-  const executableTasks = tasks.filter((task) => {
-    if (!includeSubtasks && (isSubtask(task.id) || !!task.parentId)) {
-      return false;
-    }
-    if (task.subtaskIds && task.subtaskIds.length > 0) {
-      return false;
-    }
-    if (task.parentId && isParentTaskCompleted(task.id, cwd)) {
-      skippedDueToParent.push(task.id);
-      return false;
-    }
-    return isExecutableStatus(task.status) && areDependenciesCompleted(task.id, cwd);
-  });
-  executableTasks.sort((a, b) => {
-    const priorityA = getStatusPriority(a.status);
-    const priorityB = getStatusPriority(b.status);
-    return priorityA - priorityB;
-  });
-  if (skippedDueToParent.length > 0) {
-    console.log("");
-    console.log("⚠️  以下子任务的父任务已完成，跳过推荐:");
-    for (const taskId of skippedDueToParent) {
-      const task = tasks.find((t2) => t2.id === taskId);
-      if (task) {
-        console.log(`   - ${taskId} (父任务 ${task.parentId} 已 resolved)`);
-      }
-    }
-    console.log("");
-  }
-  return executableTasks.map((task) => task.id);
-}
-function detectMissingSubtasks(cwd = process.cwd()) {
-  const allTasks = getAllTasks(cwd);
-  const warnings = [];
-  for (const task of allTasks) {
-    if (!task.subtaskIds || task.subtaskIds.length === 0) {
-      continue;
-    }
-    const missingIds = [];
-    let actualCount = 0;
-    for (const subtaskId of task.subtaskIds) {
-      const subtask = readTaskMeta(subtaskId, cwd);
-      if (subtask) {
-        actualCount++;
-      } else {
-        missingIds.push(subtaskId);
-      }
-    }
-    if (missingIds.length > 0) {
-      warnings.push({
-        parentTaskId: task.id,
-        parentTitle: task.title,
-        missingSubtaskIds: missingIds,
-        expectedCount: task.subtaskIds.length,
-        actualCount
-      });
-    }
-  }
-  return warnings;
-}
-var EXECUTABLE_STATUS_PRIORITY;
-var init_plan = __esm(() => {
-  init_path();
-  init_task2();
-  init_task();
-  EXECUTABLE_STATUS_PRIORITY = {
-    in_progress: 1,
-    open: 2
-  };
-});
-
 // src/types/harness.ts
 function createDefaultSprintContract(taskId) {
   const now = new Date().toISOString();
@@ -26698,13 +26524,198 @@ function renameTaskCommand(oldTaskId, newTaskId, cwd = process.cwd()) {
 }
 
 // src/commands/plan.ts
-init_plan();
+var import_prompts3 = __toESM(require_prompts3(), 1);
+
+// src/utils/plan.ts
+init_path();
+init_task2();
+init_task();
+import * as path15 from "path";
+import * as fs19 from "fs";
+var EXECUTABLE_STATUS_PRIORITY = {
+  in_progress: 1,
+  open: 2
+};
+function isExecutableStatus(status) {
+  const normalized = normalizeStatus(status);
+  return normalized in EXECUTABLE_STATUS_PRIORITY;
+}
+function getStatusPriority(status) {
+  const normalized = normalizeStatus(status);
+  return EXECUTABLE_STATUS_PRIORITY[normalized] ?? 999;
+}
+function getPlanPath(cwd = process.cwd()) {
+  return path15.join(getProjectDir(cwd), "current-plan.json");
+}
+function readPlan(cwd = process.cwd()) {
+  if (!isInitialized(cwd)) {
+    return null;
+  }
+  const planPath = getPlanPath(cwd);
+  try {
+    if (!fs19.existsSync(planPath)) {
+      return null;
+    }
+    const content = fs19.readFileSync(planPath, "utf-8");
+    return JSON.parse(content);
+  } catch {
+    return null;
+  }
+}
+function writePlan(plan, cwd = process.cwd()) {
+  const planPath = getPlanPath(cwd);
+  plan.updatedAt = new Date().toISOString();
+  fs19.writeFileSync(planPath, JSON.stringify(plan, null, 2), "utf-8");
+}
+function createEmptyPlan() {
+  const now = new Date().toISOString();
+  return {
+    tasks: [],
+    createdAt: now,
+    updatedAt: now
+  };
+}
+function getOrCreatePlan(cwd = process.cwd()) {
+  const plan = readPlan(cwd);
+  if (plan) {
+    return plan;
+  }
+  return createEmptyPlan();
+}
+function addTaskToPlan(taskId, afterId, cwd = process.cwd()) {
+  const plan = getOrCreatePlan(cwd);
+  if (plan.tasks.includes(taskId)) {
+    return false;
+  }
+  if (afterId) {
+    const index = plan.tasks.indexOf(afterId);
+    if (index === -1) {
+      plan.tasks.push(taskId);
+    } else {
+      plan.tasks.splice(index + 1, 0, taskId);
+    }
+  } else {
+    plan.tasks.push(taskId);
+  }
+  writePlan(plan, cwd);
+  return true;
+}
+function removeTaskFromPlan(taskId, cwd = process.cwd()) {
+  const plan = readPlan(cwd);
+  if (!plan) {
+    return false;
+  }
+  const index = plan.tasks.indexOf(taskId);
+  if (index === -1) {
+    return false;
+  }
+  plan.tasks.splice(index, 1);
+  writePlan(plan, cwd);
+  return true;
+}
+function clearPlan(cwd = process.cwd()) {
+  const plan = createEmptyPlan();
+  writePlan(plan, cwd);
+}
+function areDependenciesCompleted(taskId, cwd = process.cwd()) {
+  const task = readTaskMeta(taskId, cwd);
+  if (!task) {
+    return false;
+  }
+  for (const depId of task.dependencies) {
+    const depTask = readTaskMeta(depId, cwd);
+    if (!depTask) {
+      return false;
+    }
+    const normalizedStatus = normalizeStatus(depTask.status);
+    if (normalizedStatus !== "resolved" && normalizedStatus !== "closed") {
+      return false;
+    }
+  }
+  return true;
+}
+function isParentTaskCompleted(taskId, cwd = process.cwd()) {
+  const task = readTaskMeta(taskId, cwd);
+  if (!task || !task.parentId) {
+    return false;
+  }
+  const parentTask = readTaskMeta(task.parentId, cwd);
+  if (!parentTask) {
+    return false;
+  }
+  const normalizedStatus = normalizeStatus(parentTask.status);
+  return normalizedStatus === "resolved" || normalizedStatus === "closed";
+}
+function getExecutableTasks(cwd = process.cwd(), includeSubtasks = false) {
+  const tasks = getAllTasks(cwd);
+  const skippedDueToParent = [];
+  const executableTasks = tasks.filter((task) => {
+    if (!includeSubtasks && (isSubtask(task.id) || !!task.parentId)) {
+      return false;
+    }
+    if (task.subtaskIds && task.subtaskIds.length > 0) {
+      return false;
+    }
+    if (task.parentId && isParentTaskCompleted(task.id, cwd)) {
+      skippedDueToParent.push(task.id);
+      return false;
+    }
+    return isExecutableStatus(task.status) && areDependenciesCompleted(task.id, cwd);
+  });
+  executableTasks.sort((a, b) => {
+    const priorityA = getStatusPriority(a.status);
+    const priorityB = getStatusPriority(b.status);
+    return priorityA - priorityB;
+  });
+  if (skippedDueToParent.length > 0) {
+    console.log("");
+    console.log("⚠️  以下子任务的父任务已完成，跳过推荐:");
+    for (const taskId of skippedDueToParent) {
+      const task = tasks.find((t2) => t2.id === taskId);
+      if (task) {
+        console.log(`   - ${taskId} (父任务 ${task.parentId} 已 resolved)`);
+      }
+    }
+    console.log("");
+  }
+  return executableTasks.map((task) => task.id);
+}
+function detectMissingSubtasks(cwd = process.cwd()) {
+  const allTasks = getAllTasks(cwd);
+  const warnings = [];
+  for (const task of allTasks) {
+    if (!task.subtaskIds || task.subtaskIds.length === 0) {
+      continue;
+    }
+    const missingIds = [];
+    let actualCount = 0;
+    for (const subtaskId of task.subtaskIds) {
+      const subtask = readTaskMeta(subtaskId, cwd);
+      if (subtask) {
+        actualCount++;
+      } else {
+        missingIds.push(subtaskId);
+      }
+    }
+    if (missingIds.length > 0) {
+      warnings.push({
+        parentTaskId: task.id,
+        parentTitle: task.title,
+        missingSubtaskIds: missingIds,
+        expectedCount: task.subtaskIds.length,
+        actualCount
+      });
+    }
+  }
+  return warnings;
+}
+
+// src/commands/plan.ts
 init_path();
 init_task2();
 init_task();
 init_logger();
 init_quality_gate();
-var import_prompts3 = __toESM(require_prompts3(), 1);
 
 // src/utils/quality-gate-registry.ts
 init_checkpoint_rules();
@@ -36493,7 +36504,7 @@ function getBuiltInAnalyzers() {
 // src/commands/doctor.ts
 init_config();
 init_i18n();
-var __dirname = "/home/fuzhibo/workerplace/git/projmnt4claude/src/commands";
+var __dirname = "/home/fuzhibo/workerplace/data/git/projmnt4claude/src/commands";
 async function runDoctor(fix = false, cwd = process.cwd()) {
   const texts = t(cwd).doctorCmd;
   console.log("");
@@ -42006,19 +42017,17 @@ import * as path36 from "path";
 init_harness_helpers();
 init_session_lock_cleanup();
 init_session_id_mapper();
-init_plan();
 init_task2();
 init_task();
 init_config2();
 
 // src/commands/plan.ts
-init_plan();
+var import_prompts10 = __toESM(require_prompts3(), 1);
 init_path();
 init_task2();
 init_task();
 init_logger();
 init_quality_gate();
-var import_prompts10 = __toESM(require_prompts3(), 1);
 init_ai_metadata();
 init_dependency_engine();
 init_dependency_graph();
@@ -44901,6 +44910,12 @@ ${"━".repeat(SEPARATOR_WIDTH)}`);
     qa: ["dev-report.md", "code-review-report.md"],
     evaluation: ["dev-report.md", "code-review-report.md", "qa-report.md"]
   };
+  static PHASE_REPORT_TYPE = {
+    development: "dev",
+    code_review: "code-review",
+    qa: "qa",
+    evaluation: "evaluation"
+  };
   determineResumePhase(taskId, status, state) {
     const checkpoint = state.taskPhaseCheckpoints?.get(taskId);
     if (checkpoint) {
@@ -45047,6 +45062,16 @@ ${"━".repeat(SEPARATOR_WIDTH)}`);
     return retryContext;
   }
   storeFailureContext(taskId, phase, reason, state, gateInfo) {
+    const reportType = AssemblyLine.PHASE_REPORT_TYPE[phase];
+    let enhancedReason = reason;
+    if (reportType) {
+      const reportPath = getReportPath(taskId, reportType, this.config.cwd);
+      if (fs42.existsSync(reportPath)) {
+        enhancedReason = `${reason}
+
+详细信息请参考：${reportPath}`;
+      }
+    }
     const existing = this.taskRetryContexts.get(taskId);
     const phaseRetryCount = this.getPhaseRetryCount(taskId, phase, state);
     const prevRecord = this.executionRecords.get(taskId);
@@ -45067,7 +45092,7 @@ ${"━".repeat(SEPARATOR_WIDTH)}`);
         partialProgress.passedPhases = passedPhases;
     }
     this.taskRetryContexts.set(taskId, {
-      previousFailureReason: reason,
+      previousFailureReason: enhancedReason,
       previousPhase: phase,
       attemptNumber: phaseRetryCount + 1,
       maxRetries: this.getPhaseRetryLimit(phase),
@@ -45081,7 +45106,7 @@ ${"━".repeat(SEPARATOR_WIDTH)}`);
       accumulatedInsights: [],
       suggestedFixes: []
     });
-    this.recordFailure(taskId, phase, phaseRetryCount + 1, reason, state, gateInfo);
+    this.recordFailure(taskId, phase, phaseRetryCount + 1, enhancedReason, state, gateInfo);
   }
   recordFailure(taskId, phase, attempt, error, state, gateInfo) {
     const phaseKey = `${taskId}:${phase}`;
@@ -46044,7 +46069,6 @@ function resetPhaseCheckpoints(taskId, state, cwd) {
 init_harness_helpers();
 init_session_lock_cleanup();
 init_session_id_mapper();
-init_plan();
 init_task2();
 init_task();
 init_config2();

@@ -63,7 +63,7 @@ import { saveRuntimeState } from '../commands/harness.js';
 import { validateBasicFields, validateCheckpoints } from './quality-gate.js';
 import { DependencyGraph, executeFailureCascade } from './dependency-graph/index.js';
 import { SEPARATOR_WIDTH } from './format';
-import { sleep, killAllActiveChildren } from './harness-helpers.js';
+import { sleep, killAllActiveChildren, getReportPath } from './harness-helpers.js';
 import {
   verifyAndRecordCheckpoint,
   inferCategoryFromCheckpoint,
@@ -2427,6 +2427,14 @@ export class AssemblyLine {
     evaluation: ['dev-report.md', 'code-review-report.md', 'qa-report.md'],
   };
 
+  /** 各阶段对应的报告文件类型（用于重试反馈路径追加） */
+  private static readonly PHASE_REPORT_TYPE: Record<string, string> = {
+    development: 'dev',
+    code_review: 'code-review',
+    qa: 'qa',
+    evaluation: 'evaluation',
+  };
+
   /**
    * 三级优先级恢复决策
    *
@@ -2715,6 +2723,16 @@ export class AssemblyLine {
     state: HarnessRuntimeState,
     gateInfo?: FailureRecord['gateInfo'],
   ): void {
+    // 追加报告路径到失败原因，使重试时能获取详细反馈
+    const reportType = AssemblyLine.PHASE_REPORT_TYPE[phase];
+    let enhancedReason = reason;
+    if (reportType) {
+      const reportPath = getReportPath(taskId, reportType, this.config.cwd);
+      if (fs.existsSync(reportPath)) {
+        enhancedReason = `${reason}\n\n详细信息请参考：${reportPath}`;
+      }
+    }
+
     const existing = this.taskRetryContexts.get(taskId);
     const phaseRetryCount = this.getPhaseRetryCount(taskId, phase, state);
 
@@ -2735,7 +2753,7 @@ export class AssemblyLine {
 
     // 更新 taskRetryContexts（向后兼容）
     this.taskRetryContexts.set(taskId, {
-      previousFailureReason: reason,
+      previousFailureReason: enhancedReason,
       previousPhase: phase,
       attemptNumber: phaseRetryCount + 1,
       maxRetries: this.getPhaseRetryLimit(phase),
@@ -2752,7 +2770,7 @@ export class AssemblyLine {
     });
 
     // P6: 记录到 failureHistory（含门禁信息）
-    this.recordFailure(taskId, phase, phaseRetryCount + 1, reason, state, gateInfo);
+    this.recordFailure(taskId, phase, phaseRetryCount + 1, enhancedReason, state, gateInfo);
   }
 
   // ============================================================
