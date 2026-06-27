@@ -43854,7 +43854,17 @@ ${"━".repeat(SEPARATOR_WIDTH)}`);
           if (!devLifecycleResult.success) {
             const targetPhase = devLifecycleResult.targetPhase;
             if (targetPhase && targetPhase !== "EXIT") {
-              console.log(`   ↩️ 开发阶段门禁失败，回退到: ${targetPhase}`);
+              const currentRetryCount = state.retryCounter.get(taskId) || 0;
+              const maxRetries = this.config.maxRetries;
+              state.retryCounter.set(taskId, currentRetryCount + 1);
+              if (currentRetryCount + 1 > maxRetries) {
+                console.log(`   ❌ 任务级重试次数已耗尽 (${currentRetryCount + 1}/${maxRetries})，终止任务`);
+                await this.markTaskFailed(taskId, "max_retries_exceeded", `任务重试次数已达上限: ${devLifecycleResult.reason}`);
+                record.finalStatus = "failed";
+                addTimeline("failed", `任务重试次数已达上限，任务标记为 failed`);
+                return record;
+              }
+              console.log(`   ↩️ 开发阶段门禁失败，回退到: ${targetPhase} (重试 ${currentRetryCount + 1}/${maxRetries})`);
               currentPhaseIndex = flowTargetToPhaseIndex(targetPhase);
               continue;
             }
@@ -43873,6 +43883,7 @@ ${"━".repeat(SEPARATOR_WIDTH)}`);
           }
           addTimeline("dev_completed", `开发完成: ${devReport.status}`, { status: devReport.status });
           this.statusReporter.completePhase("development", taskId, `开发完成: ${devReport.status}`);
+          state.retryCounter.set(taskId, 0);
           this.syncCheckpointStatus(taskId, "development", { devReport });
           await this.ensureTransition(taskId, "wait_review", "开发完成，等待代码审核");
           record.finalStatus = "wait_review";
@@ -43920,7 +43931,17 @@ ${"━".repeat(SEPARATOR_WIDTH)}`);
             this.statusReporter.failPhase("code_review", new Error(crLifecycleResult.reason || "代码审核未通过"), taskId);
             const targetPhase = crLifecycleResult.targetPhase;
             if (targetPhase && targetPhase !== "EXIT") {
-              console.log(`   ↩️ 代码审核门禁失败，回退到: ${targetPhase}`);
+              const currentRetryCount = state.retryCounter.get(taskId) || 0;
+              const maxRetries = this.config.maxRetries;
+              state.retryCounter.set(taskId, currentRetryCount + 1);
+              if (currentRetryCount + 1 > maxRetries) {
+                console.log(`   ❌ 任务级重试次数已耗尽 (${currentRetryCount + 1}/${maxRetries})，终止任务`);
+                await this.markTaskFailed(taskId, "max_retries_exceeded", `任务重试次数已达上限: ${crLifecycleResult.reason}`);
+                record.finalStatus = "failed";
+                addTimeline("failed", `任务重试次数已达上限，任务标记为 failed`);
+                return record;
+              }
+              console.log(`   ↩️ 代码审核门禁失败，回退到: ${targetPhase} (重试 ${currentRetryCount + 1}/${maxRetries})`);
               currentPhaseIndex = flowTargetToPhaseIndex(targetPhase);
               continue;
             }
@@ -43928,6 +43949,7 @@ ${"━".repeat(SEPARATOR_WIDTH)}`);
           }
           addTimeline("code_review_completed", `代码审核完成: ${codeReviewVerdict.result}`, { result: codeReviewVerdict.result });
           this.statusReporter.completePhase("code_review", taskId, `代码审核完成: ${codeReviewVerdict.result}`);
+          state.retryCounter.set(taskId, 0);
           this.syncCheckpointStatus(taskId, "code_review", { codeReviewVerdict });
           await this.ensureTransition(taskId, "wait_qa", "代码审核通过，等待QA验证");
           record.finalStatus = "wait_qa";
@@ -43975,7 +43997,17 @@ ${"━".repeat(SEPARATOR_WIDTH)}`);
             this.statusReporter.failPhase("qa_verification", new Error(qaLifecycleResult.reason || "QA 验证未通过"), taskId);
             const targetPhase = qaLifecycleResult.targetPhase;
             if (targetPhase && targetPhase !== "EXIT") {
-              console.log(`   ↩️ QA门禁失败，回退到: ${targetPhase}`);
+              const currentRetryCount = state.retryCounter.get(taskId) || 0;
+              const maxRetries = this.config.maxRetries;
+              state.retryCounter.set(taskId, currentRetryCount + 1);
+              if (currentRetryCount + 1 > maxRetries) {
+                console.log(`   ❌ 任务级重试次数已耗尽 (${currentRetryCount + 1}/${maxRetries})，终止任务`);
+                await this.markTaskFailed(taskId, "max_retries_exceeded", `任务重试次数已达上限: ${qaLifecycleResult.reason}`);
+                record.finalStatus = "failed";
+                addTimeline("failed", `任务重试次数已达上限，任务标记为 failed`);
+                return record;
+              }
+              console.log(`   ↩️ QA门禁失败，回退到: ${targetPhase} (重试 ${currentRetryCount + 1}/${maxRetries})`);
               currentPhaseIndex = flowTargetToPhaseIndex(targetPhase);
               continue;
             }
@@ -43986,6 +44018,7 @@ ${"━".repeat(SEPARATOR_WIDTH)}`);
             requiresHuman: qaVerdict.requiresHuman
           });
           this.statusReporter.completePhase("qa_verification", taskId, `QA 验证完成: ${qaVerdict.result}`);
+          state.retryCounter.set(taskId, 0);
           console.log(`
 \uD83D\uDD12 Post-QA Gate 门禁检查...`);
           const postGateContext = {
@@ -44061,7 +44094,17 @@ ${"━".repeat(SEPARATOR_WIDTH)}`);
           this.statusReporter.failPhase("evaluation", new Error(evalLifecycleResult.reason || "评估未通过"), taskId);
           const targetPhase = evalLifecycleResult.targetPhase;
           if (targetPhase && targetPhase !== "EXIT") {
-            console.log(`   ↩️ 评估门禁失败，回退到: ${targetPhase}`);
+            const currentRetryCount = state.retryCounter.get(taskId) || 0;
+            const maxRetries = this.config.maxRetries;
+            state.retryCounter.set(taskId, currentRetryCount + 1);
+            if (currentRetryCount + 1 > maxRetries) {
+              console.log(`   ❌ 任务级重试次数已耗尽 (${currentRetryCount + 1}/${maxRetries})，终止任务`);
+              await this.markTaskFailed(taskId, "max_retries_exceeded", `任务重试次数已达上限: ${evalLifecycleResult.reason}`);
+              record.finalStatus = "failed";
+              addTimeline("failed", `任务重试次数已达上限，任务标记为 failed`);
+              return record;
+            }
+            console.log(`   ↩️ 评估门禁失败，回退到: ${targetPhase} (重试 ${currentRetryCount + 1}/${maxRetries})`);
             currentPhaseIndex = flowTargetToPhaseIndex(targetPhase);
             continue;
           }
@@ -44078,6 +44121,7 @@ ${"━".repeat(SEPARATOR_WIDTH)}`);
         const verdict = record.reviewVerdict;
         addTimeline("review_completed", `评估完成: ${verdict.result}`, { result: verdict.result });
         this.statusReporter.completePhase("evaluation", taskId, `评估完成: ${verdict.result}`);
+        state.retryCounter.set(taskId, 0);
         this.syncAllPendingCheckpoints(taskId);
         await this.assignTaskRole(taskId, "executor");
         const retryCount = state.retryCounter.get(taskId) || 0;

@@ -813,7 +813,18 @@ export class AssemblyLine {
             const targetPhase = devLifecycleResult.targetPhase;
             // FlowTarget routing: non-EXIT gate failures roll back to target phase
             if (targetPhase && targetPhase !== 'EXIT') {
-              console.log(`   ↩️ 开发阶段门禁失败，回退到: ${targetPhase}`);
+              // FIX-20260627: 任务级全局重试计数器 — 递增并检查上限
+              const currentRetryCount = (state.retryCounter.get(taskId) || 0);
+              const maxRetries = this.config.maxRetries;
+              state.retryCounter.set(taskId, currentRetryCount + 1);
+              if (currentRetryCount + 1 > maxRetries) {
+                console.log(`   ❌ 任务级重试次数已耗尽 (${currentRetryCount + 1}/${maxRetries})，终止任务`);
+                await this.markTaskFailed(taskId, 'max_retries_exceeded', `任务重试次数已达上限: ${devLifecycleResult.reason}`);
+                record.finalStatus = 'failed';
+                addTimeline('failed', `任务重试次数已达上限，任务标记为 failed`);
+                return record;
+              }
+              console.log(`   ↩️ 开发阶段门禁失败，回退到: ${targetPhase} (重试 ${currentRetryCount + 1}/${maxRetries})`);
               currentPhaseIndex = flowTargetToPhaseIndex(targetPhase);
               continue;
             }
@@ -836,6 +847,8 @@ export class AssemblyLine {
 
           addTimeline('dev_completed', `开发完成: ${devReport!.status}`, { status: devReport!.status });
           this.statusReporter.completePhase('development', taskId, `开发完成: ${devReport!.status}`);
+          // FIX-20260627: 阶段成功，重置任务级全局重试计数器
+          state.retryCounter.set(taskId, 0);
 
           // 4.5 同步检查点状态（开发完成后）
           this.syncCheckpointStatus(taskId, 'development', { devReport });
@@ -904,7 +917,18 @@ export class AssemblyLine {
             // FlowTarget routing: route based on targetPhase from gate check
             const targetPhase = crLifecycleResult.targetPhase;
             if (targetPhase && targetPhase !== 'EXIT') {
-              console.log(`   ↩️ 代码审核门禁失败，回退到: ${targetPhase}`);
+              // FIX-20260627: 任务级全局重试计数器 — 递增并检查上限
+              const currentRetryCount = (state.retryCounter.get(taskId) || 0);
+              const maxRetries = this.config.maxRetries;
+              state.retryCounter.set(taskId, currentRetryCount + 1);
+              if (currentRetryCount + 1 > maxRetries) {
+                console.log(`   ❌ 任务级重试次数已耗尽 (${currentRetryCount + 1}/${maxRetries})，终止任务`);
+                await this.markTaskFailed(taskId, 'max_retries_exceeded', `任务重试次数已达上限: ${crLifecycleResult.reason}`);
+                record.finalStatus = 'failed';
+                addTimeline('failed', `任务重试次数已达上限，任务标记为 failed`);
+                return record;
+              }
+              console.log(`   ↩️ 代码审核门禁失败，回退到: ${targetPhase} (重试 ${currentRetryCount + 1}/${maxRetries})`);
               currentPhaseIndex = flowTargetToPhaseIndex(targetPhase);
               continue;
             }
@@ -914,6 +938,8 @@ export class AssemblyLine {
 
           addTimeline('code_review_completed', `代码审核完成: ${codeReviewVerdict!.result}`, { result: codeReviewVerdict!.result });
           this.statusReporter.completePhase('code_review', taskId, `代码审核完成: ${codeReviewVerdict!.result}`);
+          // FIX-20260627: 阶段成功，重置任务级全局重试计数器
+          state.retryCounter.set(taskId, 0);
 
           // 6.5 同步检查点状态（代码审核通过后）
           this.syncCheckpointStatus(taskId, 'code_review', { codeReviewVerdict });
@@ -982,7 +1008,18 @@ export class AssemblyLine {
             // FlowTarget routing: route based on targetPhase from gate check
             const targetPhase = qaLifecycleResult.targetPhase;
             if (targetPhase && targetPhase !== 'EXIT') {
-              console.log(`   ↩️ QA门禁失败，回退到: ${targetPhase}`);
+              // FIX-20260627: 任务级全局重试计数器 — 递增并检查上限（修复无限循环）
+              const currentRetryCount = (state.retryCounter.get(taskId) || 0);
+              const maxRetries = this.config.maxRetries;
+              state.retryCounter.set(taskId, currentRetryCount + 1);
+              if (currentRetryCount + 1 > maxRetries) {
+                console.log(`   ❌ 任务级重试次数已耗尽 (${currentRetryCount + 1}/${maxRetries})，终止任务`);
+                await this.markTaskFailed(taskId, 'max_retries_exceeded', `任务重试次数已达上限: ${qaLifecycleResult.reason}`);
+                record.finalStatus = 'failed';
+                addTimeline('failed', `任务重试次数已达上限，任务标记为 failed`);
+                return record;
+              }
+              console.log(`   ↩️ QA门禁失败，回退到: ${targetPhase} (重试 ${currentRetryCount + 1}/${maxRetries})`);
               currentPhaseIndex = flowTargetToPhaseIndex(targetPhase);
               continue;
             }
@@ -995,6 +1032,8 @@ export class AssemblyLine {
             requiresHuman: qaVerdict!.requiresHuman
           });
           this.statusReporter.completePhase('qa_verification', taskId, `QA 验证完成: ${qaVerdict!.result}`);
+          // FIX-20260627: 阶段成功，重置任务级全局重试计数器
+          state.retryCounter.set(taskId, 0);
 
           // CP-6: Post-QA Gate 门禁检查
           // 使用统一门禁框架执行 QA Post-Gate 规则
@@ -1113,7 +1152,18 @@ export class AssemblyLine {
           // FlowTarget routing: route based on targetPhase from gate check
           const targetPhase = evalLifecycleResult.targetPhase;
           if (targetPhase && targetPhase !== 'EXIT') {
-            console.log(`   ↩️ 评估门禁失败，回退到: ${targetPhase}`);
+            // FIX-20260627: 任务级全局重试计数器 — 递增并检查上限
+            const currentRetryCount = (state.retryCounter.get(taskId) || 0);
+            const maxRetries = this.config.maxRetries;
+            state.retryCounter.set(taskId, currentRetryCount + 1);
+            if (currentRetryCount + 1 > maxRetries) {
+              console.log(`   ❌ 任务级重试次数已耗尽 (${currentRetryCount + 1}/${maxRetries})，终止任务`);
+              await this.markTaskFailed(taskId, 'max_retries_exceeded', `任务重试次数已达上限: ${evalLifecycleResult.reason}`);
+              record.finalStatus = 'failed';
+              addTimeline('failed', `任务重试次数已达上限，任务标记为 failed`);
+              return record;
+            }
+            console.log(`   ↩️ 评估门禁失败，回退到: ${targetPhase} (重试 ${currentRetryCount + 1}/${maxRetries})`);
             currentPhaseIndex = flowTargetToPhaseIndex(targetPhase);
             continue;
           }
@@ -1132,6 +1182,8 @@ export class AssemblyLine {
         const verdict = record.reviewVerdict!;
         addTimeline('review_completed', `评估完成: ${verdict.result}`, { result: verdict.result });
         this.statusReporter.completePhase('evaluation', taskId, `评估完成: ${verdict.result}`);
+        // FIX-20260627: 阶段成功，重置任务级全局重试计数器
+        state.retryCounter.set(taskId, 0);
 
         // 评估通过后的处理
         // 评估通过后，将所有剩余 pending 检查点标记为 completed
