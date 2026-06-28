@@ -9683,6 +9683,11 @@ Begin review now.`
 - ID: {taskId}
 - 标题: {title}
 {descriptionSection}
+## 项目测试环境
+- 技术栈: {techStack}
+- 测试框架: {testFramework}
+- 测试命令: {testCommand}
+- 测试约定: {projectTestConventions}
 ## QA 验证检查点
 {checkpointsList}
 ## 代码审核结果
@@ -9699,9 +9704,23 @@ Begin review now.`
 3. 查看开发者编写的自测试用例
 4. 识别开发者已验证的范围
 
-### 步骤 2: 识别测试缺口
+### 步骤 2: 自动化测试实现与检查点补充
 
-基于开发报告和验收标准，识别以下类型的测试缺口：
+#### 2.1 思考并实现自动化测试覆盖
+基于开发报告和验收标准，主动思考并实现以下类型的自动化测试用例：
+- **异常测试**: 错误输入、网络异常、超时、资源不足等异常路径
+- **业务组合逻辑测试**: 多步骤操作、状态转换、并发场景等组合逻辑
+- **端到端场景测试**: 真实用户使用路径、完整业务流程
+确保每个测试用例对应可执行的测试脚本。
+
+#### 2.2 整理为检查点清单
+将步骤 2.1 中实现的测试用例整理为检查点格式：
+- 以 [ai qa] 为前缀描述每个检查点的验证目标
+- 在检查点描述中引用对应的测试用例脚本路径
+- 将新检查点追加到任务的检查点清单中，用于后续记录和追踪
+
+#### 2.3 识别剩余测试缺口
+基于开发报告和验收标准，识别经过 2.1 实现后仍存在的测试缺口：
 
 | 缺口类型 | 说明 | 示例 |
 |---------|------|------|
@@ -9711,17 +9730,21 @@ Begin review now.`
 | 回归测试缺失 | 变更可能影响的现有功能 | 重构后原有功能是否正常 |
 | 性能测试缺失 | 性能相关验证未覆盖 | 大数据量下的响应时间 |
 
-### 步骤 3: 扩展测试
+### 步骤 3: 运行并验证测试
 
-针对识别的缺口，编写并运行补充测试：
-
-1. 为每个缺口类型编写测试用例
-2. 运行新增测试用例
-3. 记录测试结果
+1. 运行新增测试用例
+2. 记录测试结果
+3. 确认所有测试通过
 
 ### 步骤 4: 报告结果
 
 汇总所有测试结果，输出验证报告。
+
+## 测试报告新增场景说明
+在测试报告中使用专门的段落说明本次新增的测试场景：
+- 列出新增的测试用例及其覆盖的场景类型（异常/组合/端到端）
+- 说明每个新增测试用例对应的检查点
+- 标注未覆盖的已知缺口及原因
 
 ## 验证要求
 {testStrategy}
@@ -9794,6 +9817,11 @@ Please follow these principles during verification:
 - ID: {taskId}
 - Title: {title}
 {descriptionSection}
+## Project Test Environment
+- Tech Stack: {techStack}
+- Test Framework: {testFramework}
+- Test Command: {testCommand}
+- Test Conventions: {projectTestConventions}
 ## QA Verification Checkpoints
 {checkpointsList}
 ## Code Review Result
@@ -9810,9 +9838,23 @@ Please follow these principles during verification:
 3. Review the self-test cases written by the developer
 4. Identify the scope already verified by the developer
 
-### Step 2: Identify Test Gaps
+### Step 2: Automated Test Implementation & Checkpoint Supplement
 
-Based on the development report and acceptance criteria, identify the following types of test gaps:
+#### 2.1 Design and Implement Automated Test Coverage
+Based on the development report and acceptance criteria, proactively design and implement automated test cases of the following types:
+- **Exception Tests**: Error inputs, network exceptions, timeouts, resource exhaustion and other exception paths
+- **Business Combination Logic Tests**: Multi-step operations, state transitions, concurrent scenarios and other combination logic
+- **End-to-End Scenario Tests**: Real user usage paths, complete business flows
+Ensure each test case corresponds to an executable test script.
+
+#### 2.2 Organize as Checkpoint List
+Organize the test cases implemented in step 2.1 into checkpoint format:
+- Use [ai qa] as prefix to describe the verification objective of each checkpoint
+- Reference the corresponding test script path in the checkpoint description
+- Append new checkpoints to the task checkpoint list for subsequent tracking
+
+#### 2.3 Identify Remaining Test Gaps
+Based on the development report and acceptance criteria, identify test gaps that remain after 2.1 implementation:
 
 | Gap Type | Description | Example |
 |----------|-------------|---------|
@@ -9822,17 +9864,21 @@ Based on the development report and acceptance criteria, identify the following 
 | Missing Regression Tests | Existing functionality potentially affected by changes | Whether original functionality works after refactoring |
 | Missing Performance Tests | Performance-related verification not covered | Response time under large data volumes |
 
-### Step 3: Expand Testing
+### Step 3: Run and Verify Tests
 
-For identified gaps, write and run supplementary tests:
-
-1. Write test cases for each gap type
-2. Run the new test cases
-3. Record test results
+1. Run the new test cases
+2. Record test results
+3. Confirm all tests pass
 
 ### Step 4: Report Results
 
 Summarize all test results and output a verification report.
+
+## Test Report New Scenario Description
+In the test report, use a dedicated section to describe the new test scenarios added:
+- List the new test cases and their covered scenario types (exception/combination/end-to-end)
+- Explain the corresponding checkpoint for each new test case
+- Note the known gaps not yet covered and the reasons
 
 ## Verification Requirements
 {testStrategy}
@@ -11538,7 +11584,7 @@ function normalizePriority(priority) {
   };
   return priorityMap[priority] || "P2";
 }
-function createDefaultTaskMeta(id, title, type = "feature", description, createdBy) {
+function createDefaultTaskMeta(id, title, type = "feature", description, createdBy, testMeta) {
   const now = new Date().toISOString();
   const priority = "P2";
   const checkpointPolicy = inferCheckpointPolicy(type, priority);
@@ -11560,7 +11606,11 @@ function createDefaultTaskMeta(id, title, type = "feature", description, created
     requirementHistory: [],
     createdBy,
     schemaVersion: CURRENT_TASK_SCHEMA_VERSION,
-    checkpointPolicy
+    checkpointPolicy,
+    ...testMeta?.testFramework && { testFramework: testMeta.testFramework },
+    ...testMeta?.testCommand && { testCommand: testMeta.testCommand },
+    ...testMeta?.techStack && { techStack: testMeta.techStack },
+    ...testMeta?.projectTestConventions && { projectTestConventions: testMeta.projectTestConventions }
   };
 }
 function isValidTaskId(id) {
@@ -22464,6 +22514,2076 @@ Compare the following investigation report with the created task metadata to det
   };
 });
 
+// src/utils/pre-dev-phase-gate/checkers/git-checker.ts
+var exports_git_checker = {};
+__export(exports_git_checker, {
+  checkGitWorkspaceClean: () => checkGitWorkspaceClean,
+  checkGitStaged: () => checkGitStaged,
+  checkGitIgnore: () => checkGitIgnore,
+  checkConflictMarkers: () => checkConflictMarkers
+});
+import { execSync as execSync4 } from "node:child_process";
+import * as fs42 from "node:fs";
+import * as path38 from "node:path";
+async function checkGitWorkspaceClean(rule, context) {
+  const startTime = Date.now();
+  try {
+    const stdout = execSync4("git status --porcelain", {
+      cwd: context.cwd,
+      encoding: "utf-8"
+    });
+    const lines = stdout.trim().split(`
+`).filter((line) => line.length > 0);
+    const isClean = lines.length === 0;
+    const staged = lines.filter((line) => /^[AMDRC]./.test(line));
+    const unstaged = lines.filter((line) => /^.[MD]/.test(line));
+    const untracked = lines.filter((line) => line.startsWith("??"));
+    const config = rule.config;
+    const allowUncommitted = config?.allowUncommitted ?? false;
+    const maxUntrackedFiles = config?.maxUntrackedFiles ?? 10;
+    let passed = isClean;
+    let severity = rule.severity;
+    let message = "Git工作区干净";
+    let suggestions;
+    if (!isClean) {
+      if (allowUncommitted) {
+        if (untracked.length > maxUntrackedFiles) {
+          passed = false;
+          severity = "warning";
+          message = `未跟踪文件过多: ${untracked.length} 个 (最大允许: ${maxUntrackedFiles})`;
+          suggestions = [
+            "添加.gitignore规则忽略临时文件",
+            "或清理未跟踪文件: git clean -fd"
+          ];
+        } else {
+          passed = true;
+          severity = "info";
+          message = `允许未提交更改: ${lines.length} 个文件`;
+        }
+      } else {
+        passed = false;
+        message = `Git工作区有未提交更改: ${lines.length} 个文件`;
+        suggestions = [
+          "提交当前更改:",
+          '  git add . && git commit -m "保存当前进度"',
+          "或使用储藏:",
+          '  git stash push -m "WIP: before harness"'
+        ];
+      }
+    }
+    const details = {
+      hasUncommittedChanges: !isClean,
+      uncommittedFileCount: lines.length,
+      currentBranch: getCurrentBranch(context.cwd),
+      isSyncedWithRemote: false,
+      hasConflicts: false,
+      status: {
+        staged: staged.map((l) => l.slice(3)),
+        unstaged: unstaged.map((l) => l.slice(3)),
+        untracked: untracked.map((l) => l.slice(3))
+      }
+    };
+    return {
+      checkId: "R-GIT-001",
+      checkName: "Git工作区干净检查",
+      ruleId: rule.id,
+      passed,
+      severity,
+      message,
+      details,
+      suggestions,
+      duration: Date.now() - startTime,
+      timestamp: new Date().toISOString()
+    };
+  } catch (error) {
+    return {
+      checkId: "R-GIT-001",
+      checkName: "Git工作区干净检查",
+      ruleId: rule.id,
+      passed: false,
+      severity: "error",
+      message: `Git命令执行失败: ${error instanceof Error ? error.message : String(error)}`,
+      suggestions: [
+        "检查Git是否已安装",
+        "确认当前目录是Git仓库"
+      ],
+      duration: Date.now() - startTime,
+      timestamp: new Date().toISOString()
+    };
+  }
+}
+async function checkGitStaged(rule, context) {
+  const startTime = Date.now();
+  try {
+    const stdout = execSync4("git diff --cached --name-only", {
+      cwd: context.cwd,
+      encoding: "utf-8"
+    });
+    const stagedFiles = stdout.trim().split(`
+`).filter((f) => f.length > 0);
+    const hasStaged = stagedFiles.length > 0;
+    return {
+      checkId: "R-GIT-002",
+      checkName: "暂存区为空检查",
+      ruleId: rule.id,
+      passed: !hasStaged,
+      severity: "info",
+      message: hasStaged ? `暂存区有 ${stagedFiles.length} 个文件待提交` : "暂存区为空",
+      details: {
+        stagedFiles: stagedFiles.slice(0, 10),
+        totalStaged: stagedFiles.length
+      },
+      suggestions: hasStaged ? ['提交暂存区更改: git commit -m "提交暂存更改"'] : undefined,
+      duration: Date.now() - startTime,
+      timestamp: new Date().toISOString()
+    };
+  } catch (error) {
+    return {
+      checkId: "R-GIT-002",
+      checkName: "暂存区为空检查",
+      ruleId: rule.id,
+      passed: false,
+      severity: "error",
+      message: `检查失败: ${error instanceof Error ? error.message : String(error)}`,
+      duration: Date.now() - startTime,
+      timestamp: new Date().toISOString()
+    };
+  }
+}
+async function checkGitIgnore(rule, context) {
+  const startTime = Date.now();
+  try {
+    const gitignorePath = path38.join(context.cwd, ".gitignore");
+    const excludePath = path38.join(context.cwd, ".git", "info", "exclude");
+    let gitignoreContent = "";
+    let excludeContent = "";
+    if (fs42.existsSync(gitignorePath)) {
+      gitignoreContent = fs42.readFileSync(gitignorePath, "utf-8");
+    }
+    if (fs42.existsSync(excludePath)) {
+      excludeContent = fs42.readFileSync(excludePath, "utf-8");
+    }
+    const requiredPatterns = [".projmnt4claude/", ".projmnt4claude/tasks/"];
+    const combinedContent = gitignoreContent + `
+` + excludeContent;
+    const missingPatterns = [];
+    for (const pattern of requiredPatterns) {
+      if (!combinedContent.includes(pattern)) {
+        missingPatterns.push(pattern);
+      }
+    }
+    const passed = missingPatterns.length === 0;
+    return {
+      checkId: "R-GIT-003",
+      checkName: "忽略文件配置检查",
+      ruleId: rule.id,
+      passed,
+      severity: "warning",
+      message: passed ? ".gitignore 配置正确" : `.gitignore 缺少推荐配置: ${missingPatterns.join(", ")}`,
+      details: {
+        gitignoreExists: fs42.existsSync(gitignorePath),
+        missingPatterns,
+        recommendedPatterns: requiredPatterns
+      },
+      suggestions: missingPatterns.length > 0 ? [
+        `在 .gitignore 中添加:`,
+        ...missingPatterns.map((p) => `  ${p}`)
+      ] : undefined,
+      autoFix: missingPatterns.length > 0 ? {
+        description: "自动添加缺失的 .gitignore 配置",
+        fix: async () => {
+          const content = missingPatterns.map((p) => p).join(`
+`) + `
+`;
+          if (fs42.existsSync(gitignorePath)) {
+            fs42.appendFileSync(gitignorePath, `
+` + content);
+          } else {
+            fs42.writeFileSync(gitignorePath, content);
+          }
+          return { success: true, message: "已添加 .gitignore 配置" };
+        }
+      } : undefined,
+      duration: Date.now() - startTime,
+      timestamp: new Date().toISOString()
+    };
+  } catch (error) {
+    return {
+      checkId: "R-GIT-003",
+      checkName: "忽略文件配置检查",
+      ruleId: rule.id,
+      passed: false,
+      severity: "warning",
+      message: `检查失败: ${error instanceof Error ? error.message : String(error)}`,
+      duration: Date.now() - startTime,
+      timestamp: new Date().toISOString()
+    };
+  }
+}
+async function checkConflictMarkers(rule, context) {
+  const startTime = Date.now();
+  const conflictPatterns = [
+    { pattern: /^<{7}\s/m, name: "<<<<<<<" },
+    { pattern: /^={7}\s/m, name: "=======" },
+    { pattern: /^>{7}\s/m, name: ">>>>>>>" }
+  ];
+  try {
+    const trackedFiles = execSync4("git ls-files", {
+      cwd: context.cwd,
+      encoding: "utf-8"
+    }).trim().split(`
+`).filter((f) => f.length > 0);
+    const filesWithConflicts = [];
+    const filesToCheck = trackedFiles.slice(0, 100);
+    for (const file of filesToCheck) {
+      const filePath = path38.join(context.cwd, file);
+      if (!fs42.existsSync(filePath))
+        continue;
+      try {
+        const content = fs42.readFileSync(filePath, "utf-8");
+        if (conflictPatterns.some((cp) => cp.pattern.test(content))) {
+          filesWithConflicts.push(file);
+        }
+      } catch {}
+    }
+    const passed = filesWithConflicts.length === 0;
+    return {
+      checkId: "R-GIT-004",
+      checkName: "冲突标记检查",
+      ruleId: rule.id,
+      passed,
+      severity: "error",
+      message: passed ? "未发现冲突标记" : `发现冲突标记: ${filesWithConflicts.length} 个文件`,
+      details: {
+        filesWithConflicts: filesWithConflicts.slice(0, 10),
+        totalConflicts: filesWithConflicts.length,
+        conflictMarkers: conflictPatterns.map((cp) => cp.name)
+      },
+      suggestions: passed ? undefined : [
+        "解决冲突后重新运行:",
+        "  1. 编辑文件解决冲突",
+        "  2. git add <file>",
+        '  3. git commit -m "解决冲突"'
+      ],
+      duration: Date.now() - startTime,
+      timestamp: new Date().toISOString()
+    };
+  } catch (error) {
+    return {
+      checkId: "R-GIT-004",
+      checkName: "冲突标记检查",
+      ruleId: rule.id,
+      passed: false,
+      severity: "warning",
+      message: `冲突检查失败: ${error instanceof Error ? error.message : String(error)}`,
+      duration: Date.now() - startTime,
+      timestamp: new Date().toISOString()
+    };
+  }
+}
+function getCurrentBranch(cwd) {
+  try {
+    return execSync4("git branch --show-current", {
+      cwd,
+      encoding: "utf-8"
+    }).trim();
+  } catch {
+    return "unknown";
+  }
+}
+var init_git_checker = () => {};
+
+// src/utils/pre-dev-phase-gate/checkers/branch-checker.ts
+var exports_branch_checker = {};
+__export(exports_branch_checker, {
+  checkBranchTracking: () => checkBranchTracking,
+  checkBranchSync: () => checkBranchSync,
+  checkBranchSwitchable: () => checkBranchSwitchable,
+  checkBranchExists: () => checkBranchExists,
+  checkBranchAssociation: () => checkBranchAssociation
+});
+import { execSync as execSync5 } from "node:child_process";
+async function checkBranchExists(rule, context) {
+  const startTime = Date.now();
+  const targetBranch = context.task.branch;
+  if (!targetBranch) {
+    return {
+      checkId: "R-BR-001",
+      checkName: "目标分支存在性检查",
+      ruleId: rule.id,
+      passed: true,
+      severity: "info",
+      message: "任务未配置分支，跳过检查",
+      duration: Date.now() - startTime,
+      timestamp: new Date().toISOString()
+    };
+  }
+  try {
+    execSync5(`git rev-parse --verify ${targetBranch}`, {
+      cwd: context.cwd,
+      encoding: "utf-8"
+    });
+    return {
+      checkId: "R-BR-001",
+      checkName: "目标分支存在性检查",
+      ruleId: rule.id,
+      passed: true,
+      severity: "error",
+      message: `分支存在: ${targetBranch}`,
+      details: {
+        targetBranch,
+        exists: true
+      },
+      duration: Date.now() - startTime,
+      timestamp: new Date().toISOString()
+    };
+  } catch {
+    return {
+      checkId: "R-BR-001",
+      checkName: "目标分支存在性检查",
+      ruleId: rule.id,
+      passed: false,
+      severity: "error",
+      message: `分支不存在: ${targetBranch}`,
+      details: {
+        targetBranch,
+        exists: false
+      },
+      suggestions: [
+        `创建分支: git checkout -b ${targetBranch}`,
+        "或更新任务的分支配置"
+      ],
+      duration: Date.now() - startTime,
+      timestamp: new Date().toISOString()
+    };
+  }
+}
+async function checkBranchAssociation(rule, context) {
+  const startTime = Date.now();
+  const targetBranch = context.task.branch;
+  const taskId = context.task.id;
+  if (!targetBranch) {
+    return {
+      checkId: "R-BR-002",
+      checkName: "分支关联正确性检查",
+      ruleId: rule.id,
+      passed: true,
+      severity: "info",
+      message: "任务未配置分支，跳过检查",
+      duration: Date.now() - startTime,
+      timestamp: new Date().toISOString()
+    };
+  }
+  const taskIdPattern = taskId.toLowerCase().replace(/-/g, "[-_]");
+  const containsTaskId = new RegExp(taskIdPattern, "i").test(targetBranch);
+  const validPrefixes = ["feature/", "bugfix/", "hotfix/", "release/", "task/", "dev/"];
+  const hasValidPrefix2 = validPrefixes.some((prefix) => targetBranch.toLowerCase().startsWith(prefix));
+  const passed = containsTaskId || hasValidPrefix2;
+  return {
+    checkId: "R-BR-002",
+    checkName: "分支关联正确性检查",
+    ruleId: rule.id,
+    passed,
+    severity: "warning",
+    message: passed ? `分支名称符合约定: ${targetBranch}` : `分支名称可能不符合约定: ${targetBranch}`,
+    details: {
+      targetBranch,
+      taskId,
+      containsTaskId,
+      hasValidPrefix: hasValidPrefix2,
+      validPrefixes
+    },
+    suggestions: !passed ? [
+      `建议分支名包含任务ID: ${taskId}`,
+      `或使用标准前缀: ${validPrefixes.join(", ")}`,
+      `示例: feature/${taskId}-description`
+    ] : undefined,
+    duration: Date.now() - startTime,
+    timestamp: new Date().toISOString()
+  };
+}
+async function checkBranchTracking(rule, context) {
+  const startTime = Date.now();
+  const targetBranch = context.task.branch;
+  if (!targetBranch) {
+    return {
+      checkId: "R-BR-003",
+      checkName: "远程分支追踪检查",
+      ruleId: rule.id,
+      passed: true,
+      severity: "info",
+      message: "任务未配置分支，跳过检查",
+      duration: Date.now() - startTime,
+      timestamp: new Date().toISOString()
+    };
+  }
+  try {
+    const upstream = execSync5(`git rev-parse --abbrev-ref --symbolic-full-name ${targetBranch}@{u}`, { cwd: context.cwd, encoding: "utf-8" }).trim();
+    const hasRemoteTracking = upstream.length > 0;
+    return {
+      checkId: "R-BR-003",
+      checkName: "远程分支追踪检查",
+      ruleId: rule.id,
+      passed: true,
+      severity: "warning",
+      message: hasRemoteTracking ? `分支已追踪远程: ${upstream}` : "分支未配置远程追踪",
+      details: {
+        targetBranch,
+        upstream,
+        hasRemoteTracking
+      },
+      suggestions: !hasRemoteTracking ? [
+        `推送并设置上游: git push -u origin ${targetBranch}`,
+        "或手动设置上游: git branch --set-upstream-to=origin/" + targetBranch
+      ] : undefined,
+      autoFixable: !hasRemoteTracking,
+      duration: Date.now() - startTime,
+      timestamp: new Date().toISOString()
+    };
+  } catch {
+    const autoFix = {
+      description: `设置分支 ${targetBranch} 的远程追踪`,
+      fix: async () => {
+        try {
+          execSync5(`git branch -u origin/${targetBranch}`, {
+            cwd: context.cwd,
+            encoding: "utf-8"
+          });
+          return {
+            success: true,
+            message: `成功设置分支 ${targetBranch} 追踪远程 origin/${targetBranch}`
+          };
+        } catch (error) {
+          return {
+            success: false,
+            message: `设置远程追踪失败: ${error instanceof Error ? error.message : String(error)}`
+          };
+        }
+      }
+    };
+    return {
+      checkId: "R-BR-003",
+      checkName: "远程分支追踪检查",
+      ruleId: rule.id,
+      passed: false,
+      severity: "warning",
+      message: `分支未追踪远程: ${targetBranch}`,
+      details: {
+        targetBranch,
+        hasRemoteTracking: false
+      },
+      suggestions: [
+        `推送并设置上游: git push -u origin ${targetBranch}`
+      ],
+      autoFixable: true,
+      autoFix,
+      duration: Date.now() - startTime,
+      timestamp: new Date().toISOString()
+    };
+  }
+}
+async function checkBranchSync(rule, context) {
+  const startTime = Date.now();
+  const targetBranch = context.task.branch;
+  const currentBranch = getCurrentBranch2(context.cwd);
+  if (!targetBranch) {
+    return {
+      checkId: "R-BR-004",
+      checkName: "分支同步状态检查",
+      ruleId: rule.id,
+      passed: true,
+      severity: "info",
+      message: "任务未配置分支，跳过检查",
+      duration: Date.now() - startTime,
+      timestamp: new Date().toISOString()
+    };
+  }
+  try {
+    execSync5("git fetch origin", {
+      cwd: context.cwd,
+      encoding: "utf-8",
+      stdio: "pipe"
+    });
+    let hasUpstream = false;
+    try {
+      execSync5(`git rev-parse --abbrev-ref --symbolic-full-name ${targetBranch}@{u}`, { cwd: context.cwd, encoding: "utf-8" });
+      hasUpstream = true;
+    } catch {
+      hasUpstream = false;
+    }
+    if (!hasUpstream) {
+      return {
+        checkId: "R-BR-004",
+        checkName: "分支同步状态检查",
+        ruleId: rule.id,
+        passed: true,
+        severity: "warning",
+        message: "分支未设置远程追踪，无法检查同步状态",
+        suggestions: [
+          `设置远程追踪: git push -u origin ${targetBranch}`
+        ],
+        duration: Date.now() - startTime,
+        timestamp: new Date().toISOString()
+      };
+    }
+    const behindOutput = execSync5(`git rev-list --count ${targetBranch}..${targetBranch}@{u}`, { cwd: context.cwd, encoding: "utf-8" }).trim();
+    const aheadOutput = execSync5(`git rev-list --count ${targetBranch}@{u}..${targetBranch}`, { cwd: context.cwd, encoding: "utf-8" }).trim();
+    const behindCount = parseInt(behindOutput, 10) || 0;
+    const aheadCount = parseInt(aheadOutput, 10) || 0;
+    const isBehind = behindCount > 0;
+    const isAhead = aheadCount > 0;
+    let passed = !isBehind;
+    let message = "分支已与远程同步";
+    if (isBehind && isAhead) {
+      message = `分支与远程分歧: 落后 ${behindCount} 个提交，领先 ${aheadCount} 个提交`;
+    } else if (isBehind) {
+      message = `分支落后远程 ${behindCount} 个提交`;
+    } else if (isAhead) {
+      message = `分支领先远程 ${aheadCount} 个提交`;
+      passed = true;
+    }
+    const autoFix = isBehind ? {
+      description: `同步分支 ${targetBranch} 与远程`,
+      fix: async () => {
+        try {
+          execSync5(`git pull origin ${targetBranch}`, {
+            cwd: context.cwd,
+            encoding: "utf-8"
+          });
+          return {
+            success: true,
+            message: `成功同步分支 ${targetBranch}，拉取了 ${behindCount} 个提交`
+          };
+        } catch (error) {
+          return {
+            success: false,
+            message: `同步分支失败: ${error instanceof Error ? error.message : String(error)}`
+          };
+        }
+      }
+    } : undefined;
+    return {
+      checkId: "R-BR-004",
+      checkName: "分支同步状态检查",
+      ruleId: rule.id,
+      passed,
+      severity: "warning",
+      message,
+      details: {
+        targetBranch,
+        currentBranch,
+        behindCount,
+        aheadCount,
+        isBehind,
+        isAhead,
+        isSynced: !isBehind
+      },
+      suggestions: isBehind ? [`同步分支: git pull origin ${targetBranch}`] : undefined,
+      autoFixable: isBehind,
+      autoFix,
+      duration: Date.now() - startTime,
+      timestamp: new Date().toISOString()
+    };
+  } catch (error) {
+    return {
+      checkId: "R-BR-004",
+      checkName: "分支同步状态检查",
+      ruleId: rule.id,
+      passed: true,
+      severity: "warning",
+      message: `无法检查同步状态: ${error instanceof Error ? error.message : String(error)}`,
+      duration: Date.now() - startTime,
+      timestamp: new Date().toISOString()
+    };
+  }
+}
+async function checkBranchSwitchable(rule, context) {
+  const startTime = Date.now();
+  const targetBranch = context.task.branch;
+  const currentBranch = getCurrentBranch2(context.cwd);
+  if (!targetBranch) {
+    return {
+      checkId: "R-BR-005",
+      checkName: "分支可切换性检查",
+      ruleId: rule.id,
+      passed: true,
+      severity: "info",
+      message: "任务未配置分支，跳过检查",
+      duration: Date.now() - startTime,
+      timestamp: new Date().toISOString()
+    };
+  }
+  if (currentBranch === targetBranch) {
+    return {
+      checkId: "R-BR-005",
+      checkName: "分支可切换性检查",
+      ruleId: rule.id,
+      passed: true,
+      severity: "error",
+      message: `已在目标分支上: ${targetBranch}`,
+      details: {
+        currentBranch,
+        targetBranch
+      },
+      duration: Date.now() - startTime,
+      timestamp: new Date().toISOString()
+    };
+  }
+  try {
+    const statusOutput = execSync5("git status --porcelain", {
+      cwd: context.cwd,
+      encoding: "utf-8"
+    });
+    const hasUncommittedChanges = statusOutput.trim().length > 0;
+    let branchExists = false;
+    try {
+      execSync5(`git rev-parse --verify ${targetBranch}`, {
+        cwd: context.cwd,
+        encoding: "utf-8"
+      });
+      branchExists = true;
+    } catch {
+      branchExists = false;
+    }
+    if (!branchExists) {
+      return {
+        checkId: "R-BR-005",
+        checkName: "分支可切换性检查",
+        ruleId: rule.id,
+        passed: false,
+        severity: "error",
+        message: `目标分支不存在: ${targetBranch}`,
+        details: {
+          currentBranch,
+          targetBranch,
+          branchExists: false
+        },
+        suggestions: [
+          `创建分支: git checkout -b ${targetBranch}`,
+          `或检出远程分支: git checkout -t origin/${targetBranch}`
+        ],
+        duration: Date.now() - startTime,
+        timestamp: new Date().toISOString()
+      };
+    }
+    const passed = !hasUncommittedChanges;
+    return {
+      checkId: "R-BR-005",
+      checkName: "分支可切换性检查",
+      ruleId: rule.id,
+      passed,
+      severity: "error",
+      message: passed ? `可以切换到分支: ${targetBranch}` : "有未提交更改，切换分支可能失败",
+      details: {
+        currentBranch,
+        targetBranch,
+        branchExists: true,
+        hasUncommittedChanges
+      },
+      suggestions: hasUncommittedChanges ? [
+        "提交更改后切换:",
+        '  git commit -m "保存进度" && git checkout ' + targetBranch,
+        "或使用储藏:",
+        "  git stash && git checkout " + targetBranch
+      ] : [`切换到分支: git checkout ${targetBranch}`],
+      duration: Date.now() - startTime,
+      timestamp: new Date().toISOString()
+    };
+  } catch (error) {
+    return {
+      checkId: "R-BR-005",
+      checkName: "分支可切换性检查",
+      ruleId: rule.id,
+      passed: false,
+      severity: "error",
+      message: `检查失败: ${error instanceof Error ? error.message : String(error)}`,
+      duration: Date.now() - startTime,
+      timestamp: new Date().toISOString()
+    };
+  }
+}
+function getCurrentBranch2(cwd) {
+  try {
+    return execSync5("git branch --show-current", {
+      cwd,
+      encoding: "utf-8"
+    }).trim();
+  } catch {
+    return "unknown";
+  }
+}
+var init_branch_checker = () => {};
+
+// src/utils/pre-dev-phase-gate/checkers/dependency-checker.ts
+var exports_dependency_checker = {};
+__export(exports_dependency_checker, {
+  checkDependencyOutputAvailable: () => checkDependencyOutputAvailable,
+  checkDependencyInterface: () => checkDependencyInterface,
+  checkCircularDependency: () => checkCircularDependency
+});
+import * as fs43 from "node:fs";
+import * as path39 from "node:path";
+async function checkDependencyOutputAvailable(rule, context) {
+  const startTime = Date.now();
+  const taskDeps = context.task.dependencies || [];
+  if (taskDeps.length === 0) {
+    return {
+      checkId: "R-DEPOUT-001",
+      checkName: "依赖任务输出可用性检查",
+      ruleId: rule.id,
+      passed: true,
+      severity: "info",
+      message: "任务没有依赖，跳过检查",
+      details: {
+        dependencyCount: 0,
+        dependencies: []
+      },
+      duration: Date.now() - startTime,
+      timestamp: new Date().toISOString()
+    };
+  }
+  const config = rule.config;
+  const outputPathPattern = config?.outputPathPattern ?? ".projmnt4claude/outputs/{taskId}/";
+  const requiredOutputs = config?.requiredOutputs ?? ["output.json", "interface.json"];
+  const dependencyResults = [];
+  const missingOutputsList = [];
+  for (const depId of taskDeps) {
+    const outputDir = outputPathPattern.replace("{taskId}", depId);
+    const outputFullPath = path39.join(context.cwd, outputDir);
+    const dirExists = fs43.existsSync(outputFullPath);
+    const foundOutputs = [];
+    const missingForDep = [];
+    if (dirExists) {
+      for (const output of requiredOutputs) {
+        const outputFile = path39.join(outputFullPath, output);
+        if (fs43.existsSync(outputFile)) {
+          foundOutputs.push(output);
+        } else {
+          missingForDep.push(output);
+          missingOutputsList.push(`${depId}/${output}`);
+        }
+      }
+    } else {
+      missingForDep.push(...requiredOutputs);
+      missingOutputsList.push(...requiredOutputs.map((o) => `${depId}/${o}`));
+    }
+    dependencyResults.push({
+      dependencyTaskId: depId,
+      dependencyStatus: dirExists ? "completed" : "pending",
+      outputsAvailable: foundOutputs.length === requiredOutputs.length,
+      outputPaths: foundOutputs.map((o) => path39.join(outputDir, o)),
+      interfacesAvailable: foundOutputs.includes("interface.json"),
+      missingOutputs: missingForDep
+    });
+  }
+  const allOutputsAvailable = dependencyResults.every((r) => r.outputsAvailable);
+  const passed = allOutputsAvailable;
+  return {
+    checkId: "R-DEPOUT-001",
+    checkName: "依赖任务输出可用性检查",
+    ruleId: rule.id,
+    passed,
+    severity: rule.severity,
+    message: passed ? `所有 ${taskDeps.length} 个依赖任务的输出已就绪` : `发现 ${missingOutputsList.length} 个缺失的依赖输出`,
+    details: {
+      dependencyCount: taskDeps.length,
+      dependencies: dependencyResults,
+      missingOutputs: missingOutputsList,
+      outputPathPattern,
+      requiredOutputs
+    },
+    suggestions: !passed ? [
+      "等待依赖任务完成并生成输出",
+      ...missingOutputsList.map((mo) => `  - 缺失: ${mo}`),
+      "或检查依赖输出路径配置"
+    ] : undefined,
+    duration: Date.now() - startTime,
+    timestamp: new Date().toISOString()
+  };
+}
+async function checkDependencyInterface(rule, context) {
+  const startTime = Date.now();
+  const taskDeps = context.task.dependencies || [];
+  if (taskDeps.length === 0) {
+    return {
+      checkId: "R-DEPOUT-002",
+      checkName: "依赖接口定义检查",
+      ruleId: rule.id,
+      passed: true,
+      severity: "info",
+      message: "任务没有依赖，跳过检查",
+      duration: Date.now() - startTime,
+      timestamp: new Date().toISOString()
+    };
+  }
+  const config = rule.config;
+  const interfaceFileName = config?.interfaceFileName ?? "interface.json";
+  const requiredFields = config?.requiredFields ?? ["exports", "version"];
+  const interfaceResults = [];
+  let allInterfacesValid = true;
+  for (const depId of taskDeps) {
+    const interfacePath = path39.join(context.cwd, ".projmnt4claude/outputs", depId, interfaceFileName);
+    const interfaceExists = fs43.existsSync(interfacePath);
+    let valid = false;
+    const missingFields = [];
+    const errors = [];
+    if (interfaceExists) {
+      try {
+        const content = fs43.readFileSync(interfacePath, "utf-8");
+        const interfaceData = JSON.parse(content);
+        for (const field of requiredFields) {
+          if (!(field in interfaceData)) {
+            missingFields.push(field);
+          }
+        }
+        valid = missingFields.length === 0;
+        if (!valid) {
+          allInterfacesValid = false;
+        }
+      } catch (error) {
+        valid = false;
+        allInterfacesValid = false;
+        errors.push(`解析失败: ${error instanceof Error ? error.message : String(error)}`);
+      }
+    } else {
+      allInterfacesValid = false;
+      missingFields.push(...requiredFields);
+      errors.push(`接口文件不存在: ${interfacePath}`);
+    }
+    interfaceResults.push({
+      dependencyId: depId,
+      interfaceExists,
+      valid,
+      missingFields,
+      errors
+    });
+  }
+  const passed = allInterfacesValid;
+  const invalidCount = interfaceResults.filter((r) => !r.valid).length;
+  return {
+    checkId: "R-DEPOUT-002",
+    checkName: "依赖接口定义检查",
+    ruleId: rule.id,
+    passed,
+    severity: rule.severity,
+    message: passed ? `所有 ${taskDeps.length} 个依赖的接口定义完整` : `发现 ${invalidCount} 个依赖的接口定义不完整`,
+    details: {
+      dependencyCount: taskDeps.length,
+      interfaceFileName,
+      requiredFields,
+      results: interfaceResults
+    },
+    suggestions: !passed ? [
+      "确保依赖任务生成有效的接口定义文件",
+      `接口文件应包含字段: ${requiredFields.join(", ")}`,
+      ...interfaceResults.filter((r) => !r.valid).flatMap((r) => [`${r.dependencyId}:`, ...r.errors.map((e) => `  - ${e}`)])
+    ] : undefined,
+    duration: Date.now() - startTime,
+    timestamp: new Date().toISOString()
+  };
+}
+async function checkCircularDependency(rule, context) {
+  const startTime = Date.now();
+  const taskId = context.taskId;
+  const directDeps = context.task.dependencies || [];
+  if (directDeps.length === 0) {
+    return {
+      checkId: "R-DEPOUT-003",
+      checkName: "循环依赖检查",
+      ruleId: rule.id,
+      passed: true,
+      severity: "info",
+      message: "任务没有依赖，不存在循环依赖",
+      duration: Date.now() - startTime,
+      timestamp: new Date().toISOString()
+    };
+  }
+  const directCycles = [];
+  const tasksDir = path39.join(context.cwd, ".projmnt4claude/tasks");
+  for (const depId of directDeps) {
+    const depMetaPath = path39.join(tasksDir, depId, "meta.json");
+    if (fs43.existsSync(depMetaPath)) {
+      try {
+        const content = fs43.readFileSync(depMetaPath, "utf-8");
+        const depMeta = JSON.parse(content);
+        if (depMeta.dependencies?.includes(taskId)) {
+          directCycles.push([taskId, depId]);
+        }
+      } catch {}
+    }
+  }
+  const visited = new Set;
+  const recursionStack = new Set;
+  const indirectCycles = [];
+  function hasCycle(currentTaskId, pathStack, deps) {
+    visited.add(currentTaskId);
+    recursionStack.add(currentTaskId);
+    for (const depId of deps) {
+      if (depId === taskId) {
+        const cycleStart = pathStack.indexOf(taskId);
+        if (cycleStart !== -1) {
+          indirectCycles.push([...pathStack.slice(cycleStart), taskId]);
+        }
+        recursionStack.delete(currentTaskId);
+        return true;
+      }
+      if (!visited.has(depId)) {
+        const depMetaPath = path39.join(tasksDir, depId, "meta.json");
+        let subDeps = [];
+        if (fs43.existsSync(depMetaPath)) {
+          try {
+            const content = fs43.readFileSync(depMetaPath, "utf-8");
+            const depMeta = JSON.parse(content);
+            subDeps = depMeta.dependencies || [];
+          } catch {}
+        }
+        if (hasCycle(depId, [...pathStack, depId], subDeps)) {
+          return true;
+        }
+      } else if (recursionStack.has(depId)) {
+        const cycleStart = pathStack.indexOf(depId);
+        if (cycleStart !== -1) {
+          indirectCycles.push([...pathStack.slice(cycleStart), depId]);
+        }
+        recursionStack.delete(currentTaskId);
+        return true;
+      }
+    }
+    recursionStack.delete(currentTaskId);
+    return false;
+  }
+  for (const depId of directDeps) {
+    if (!visited.has(depId)) {
+      const depMetaPath = path39.join(tasksDir, depId, "meta.json");
+      let subDeps = [];
+      if (fs43.existsSync(depMetaPath)) {
+        try {
+          const content = fs43.readFileSync(depMetaPath, "utf-8");
+          const depMeta = JSON.parse(content);
+          subDeps = depMeta.dependencies || [];
+        } catch {}
+      }
+      hasCycle(depId, [taskId, depId], subDeps);
+    }
+  }
+  const allCycles = [...directCycles, ...indirectCycles];
+  const hasAnyCycle = allCycles.length > 0;
+  return {
+    checkId: "R-DEPOUT-003",
+    checkName: "循环依赖检查",
+    ruleId: rule.id,
+    passed: !hasAnyCycle,
+    severity: "error",
+    message: hasAnyCycle ? `发现 ${allCycles.length} 个循环依赖` : "未发现循环依赖",
+    details: {
+      directDependencyCount: directDeps.length,
+      directCycles: directCycles.length,
+      indirectCycles: indirectCycles.length,
+      cycles: allCycles.map((cycle) => cycle.join(" -> "))
+    },
+    suggestions: hasAnyCycle ? [
+      "检测到以下循环依赖:",
+      ...allCycles.map((cycle) => `  ${cycle.join(" -> ")}`),
+      "",
+      "建议解决方案:",
+      "  1. 重新设计任务依赖关系",
+      "  2. 将循环依赖的任务合并",
+      "  3. 提取公共逻辑为独立任务"
+    ] : undefined,
+    duration: Date.now() - startTime,
+    timestamp: new Date().toISOString()
+  };
+}
+var init_dependency_checker = () => {};
+
+// src/utils/pre-dev-phase-gate/checkers/resource-checker.ts
+var exports_resource_checker = {};
+__export(exports_resource_checker, {
+  checkEnvConfig: () => checkEnvConfig,
+  checkDiskSpace: () => checkDiskSpace,
+  checkDevDirectoryConfig: () => checkDevDirectoryConfig,
+  checkDevBranchConfig: () => checkDevBranchConfig
+});
+import * as fs44 from "node:fs";
+import * as path40 from "node:path";
+import { execSync as execSync6 } from "node:child_process";
+async function checkDevBranchConfig(rule, context) {
+  const startTime = Date.now();
+  const targetBranch = context.task.branch;
+  if (!targetBranch) {
+    return {
+      checkId: "R-RES-001",
+      checkName: "开发分支配置检查",
+      ruleId: rule.id,
+      passed: true,
+      severity: "info",
+      message: "任务未配置分支，跳过检查",
+      details: {
+        branchConfigured: false
+      },
+      duration: Date.now() - startTime,
+      timestamp: new Date().toISOString()
+    };
+  }
+  try {
+    execSync6(`git rev-parse --verify ${targetBranch}`, {
+      cwd: context.cwd,
+      encoding: "utf-8"
+    });
+    const branchExists = true;
+    const config = rule.config;
+    const allowedPrefixes = config?.allowedPrefixes ?? ["feature/", "bugfix/", "hotfix/", "task/"];
+    const pattern = config?.pattern;
+    let validName = false;
+    const lowerBranch = targetBranch.toLowerCase();
+    const hasValidPrefix2 = allowedPrefixes.some((prefix) => lowerBranch.startsWith(prefix.toLowerCase()));
+    let matchesPattern = true;
+    if (pattern) {
+      matchesPattern = new RegExp(pattern).test(targetBranch);
+    }
+    validName = hasValidPrefix2 && matchesPattern;
+    const passed = branchExists && validName;
+    return {
+      checkId: "R-RES-001",
+      checkName: "开发分支配置检查",
+      ruleId: rule.id,
+      passed,
+      severity: rule.severity,
+      message: passed ? `分支配置正确: ${targetBranch}` : branchExists ? `分支名称不符合约定: ${targetBranch}` : `分支不存在: ${targetBranch}`,
+      details: {
+        branchConfigured: true,
+        targetBranch,
+        branchExists,
+        validName,
+        hasValidPrefix: hasValidPrefix2,
+        matchesPattern,
+        allowedPrefixes,
+        pattern
+      },
+      suggestions: !passed ? branchExists ? [
+        `分支名称应符合以下约定之一:`,
+        ...allowedPrefixes.map((p) => `  - ${p}*`),
+        ...pattern ? [`  - 匹配正则: ${pattern}`] : [],
+        `示例: feature/${context.task.id}-description`
+      ] : [
+        `创建分支: git checkout -b ${targetBranch}`,
+        "或更新任务的分支配置"
+      ] : undefined,
+      duration: Date.now() - startTime,
+      timestamp: new Date().toISOString()
+    };
+  } catch {
+    return {
+      checkId: "R-RES-001",
+      checkName: "开发分支配置检查",
+      ruleId: rule.id,
+      passed: false,
+      severity: rule.severity,
+      message: `分支不存在: ${targetBranch}`,
+      details: {
+        branchConfigured: true,
+        targetBranch,
+        branchExists: false
+      },
+      suggestions: [
+        `创建分支: git checkout -b ${targetBranch}`,
+        "或更新任务的分支配置"
+      ],
+      duration: Date.now() - startTime,
+      timestamp: new Date().toISOString()
+    };
+  }
+}
+async function checkDevDirectoryConfig(rule, context) {
+  const startTime = Date.now();
+  try {
+    const dirExists = fs44.existsSync(context.cwd);
+    if (!dirExists) {
+      return {
+        checkId: "R-RES-002",
+        checkName: "开发目录配置检查",
+        ruleId: rule.id,
+        passed: false,
+        severity: "error",
+        message: `工作目录不存在: ${context.cwd}`,
+        details: {
+          path: context.cwd,
+          exists: false,
+          writable: false
+        },
+        suggestions: [
+          `创建工作目录: mkdir -p ${context.cwd}`,
+          "或检查工作目录配置"
+        ],
+        duration: Date.now() - startTime,
+        timestamp: new Date().toISOString()
+      };
+    }
+    let writable = false;
+    try {
+      const testFile = path40.join(context.cwd, `.write-test-${Date.now()}`);
+      fs44.writeFileSync(testFile, "test");
+      fs44.unlinkSync(testFile);
+      writable = true;
+    } catch {
+      writable = false;
+    }
+    const config = rule.config;
+    const requiredSubdirs = config?.requiredSubdirs ?? ["src", ".projmnt4claude/tasks"];
+    const missingSubdirs = [];
+    for (const subdir of requiredSubdirs) {
+      const subdirPath = path40.join(context.cwd, subdir);
+      if (!fs44.existsSync(subdirPath)) {
+        missingSubdirs.push(subdir);
+      }
+    }
+    const passed = writable && missingSubdirs.length === 0;
+    return {
+      checkId: "R-RES-002",
+      checkName: "开发目录配置检查",
+      ruleId: rule.id,
+      passed,
+      severity: rule.severity,
+      message: passed ? "开发目录配置正确" : !writable ? `工作目录不可写: ${context.cwd}` : `缺少 ${missingSubdirs.length} 个必需子目录`,
+      details: {
+        path: context.cwd,
+        exists: true,
+        writable,
+        requiredSubdirs,
+        missingSubdirs
+      },
+      suggestions: !passed ? !writable ? [
+        `检查目录权限: ls -la ${context.cwd}`,
+        "确保当前用户有写权限"
+      ] : [
+        `创建缺失的子目录:`,
+        ...missingSubdirs.map((d) => `  mkdir -p ${d}`)
+      ] : undefined,
+      duration: Date.now() - startTime,
+      timestamp: new Date().toISOString()
+    };
+  } catch (error) {
+    return {
+      checkId: "R-RES-002",
+      checkName: "开发目录配置检查",
+      ruleId: rule.id,
+      passed: false,
+      severity: "error",
+      message: `检查失败: ${error instanceof Error ? error.message : String(error)}`,
+      duration: Date.now() - startTime,
+      timestamp: new Date().toISOString()
+    };
+  }
+}
+async function checkEnvConfig(rule, context) {
+  const startTime = Date.now();
+  const config = rule.config;
+  const requiredEnvVars = config?.requiredEnvVars ?? ["NODE_ENV"];
+  const optionalEnvVars = config?.optionalEnvVars ?? [];
+  const missingRequired = [];
+  const missingOptional = [];
+  const configuredVars = {};
+  for (const envVar of requiredEnvVars) {
+    const value = process.env[envVar];
+    configuredVars[envVar] = value;
+    if (!value) {
+      missingRequired.push(envVar);
+    }
+  }
+  for (const envVar of optionalEnvVars) {
+    const value = process.env[envVar];
+    if (!value) {
+      missingOptional.push(envVar);
+    }
+  }
+  const passed = missingRequired.length === 0;
+  return {
+    checkId: "R-RES-003",
+    checkName: "环境变量配置检查",
+    ruleId: rule.id,
+    passed,
+    severity: rule.severity,
+    message: passed ? `所有 ${requiredEnvVars.length} 个必需环境变量已配置` : `缺少 ${missingRequired.length} 个必需环境变量`,
+    details: {
+      requiredEnvVars,
+      optionalEnvVars,
+      missingRequired,
+      missingOptional,
+      configuredVars
+    },
+    suggestions: missingRequired.length > 0 ? [
+      "设置缺失的环境变量:",
+      ...missingRequired.map((v) => `  export ${v}=value`),
+      "",
+      "或在 .env 文件中添加:",
+      ...missingRequired.map((v) => `${v}=value`)
+    ] : missingOptional.length > 0 ? [
+      "可选环境变量未配置:",
+      ...missingOptional.map((v) => `  ${v}`)
+    ] : undefined,
+    duration: Date.now() - startTime,
+    timestamp: new Date().toISOString()
+  };
+}
+async function checkDiskSpace(rule, context) {
+  const startTime = Date.now();
+  const config = rule.config;
+  const minFreeSpaceMB = config?.minFreeSpaceMB ?? 100;
+  const minFreeSpacePercent = config?.minFreeSpacePercent ?? 10;
+  try {
+    let availableMB = 0;
+    let totalMB = 0;
+    let usedPercent = 0;
+    try {
+      const dfOutput = execSync6(`df -m "${context.cwd}" | tail -1`, {
+        encoding: "utf-8"
+      }).trim();
+      const parts = dfOutput.split(/\s+/);
+      if (parts.length >= 4) {
+        totalMB = parseInt(parts[1], 10) || 0;
+        availableMB = parseInt(parts[3], 10) || 0;
+        usedPercent = parseInt(parts[4]?.replace("%", "") || "0", 10);
+      }
+    } catch {
+      try {
+        const statfs = fs44.statfsSync || fs44.statSync;
+        const stats = statfs(context.cwd);
+        if (stats && "bavail" in stats) {
+          const blockSize = stats.bsize;
+          availableMB = Math.floor(stats.bavail * blockSize / (1024 * 1024));
+          totalMB = Math.floor(stats.blocks * blockSize / (1024 * 1024));
+          usedPercent = Math.floor((stats.blocks - stats.bfree) / stats.blocks * 100);
+        }
+      } catch {}
+    }
+    const freePercent = 100 - usedPercent;
+    const sufficientSpace = availableMB >= minFreeSpaceMB && freePercent >= minFreeSpacePercent;
+    return {
+      checkId: "R-RES-004",
+      checkName: "磁盘空间检查",
+      ruleId: rule.id,
+      passed: sufficientSpace,
+      severity: rule.severity,
+      message: sufficientSpace ? `磁盘空间充足: ${availableMB}MB 可用 (${freePercent}% 空闲)` : availableMB < minFreeSpaceMB ? `磁盘空间不足: ${availableMB}MB 可用 (需要 ${minFreeSpaceMB}MB)` : `磁盘空间不足: ${freePercent}% 空闲 (需要 ${minFreeSpacePercent}%)`,
+      details: {
+        availableMB,
+        totalMB,
+        usedPercent,
+        freePercent,
+        minFreeSpaceMB,
+        minFreeSpacePercent,
+        sufficient: sufficientSpace
+      },
+      suggestions: !sufficientSpace ? [
+        "清理磁盘空间:",
+        "  1. 删除临时文件: rm -rf /tmp/*",
+        "  2. 清理包管理器缓存",
+        "  3. 删除不必要的依赖",
+        "  4. 清理旧的构建输出"
+      ] : undefined,
+      duration: Date.now() - startTime,
+      timestamp: new Date().toISOString()
+    };
+  } catch (error) {
+    return {
+      checkId: "R-RES-004",
+      checkName: "磁盘空间检查",
+      ruleId: rule.id,
+      passed: true,
+      severity: "warning",
+      message: `无法检查磁盘空间: ${error instanceof Error ? error.message : String(error)}`,
+      duration: Date.now() - startTime,
+      timestamp: new Date().toISOString()
+    };
+  }
+}
+var init_resource_checker = () => {};
+
+// src/utils/pre-dev-phase-gate/checkers/path-checker.ts
+var exports_path_checker = {};
+__export(exports_path_checker, {
+  checkTaskFilePath: () => checkTaskFilePath,
+  checkResourceReferencePath: () => checkResourceReferencePath,
+  checkCodeReferencePath: () => checkCodeReferencePath
+});
+import * as fs45 from "node:fs";
+import * as path41 from "node:path";
+async function checkTaskFilePath(rule, context) {
+  const startTime = Date.now();
+  try {
+    const taskId = context.taskId;
+    const expectedTaskDir = path41.join(context.cwd, ".projmnt4claude", "tasks", taskId);
+    const expectedPaths = {
+      metaJson: path41.join(expectedTaskDir, "meta.json"),
+      contractJson: path41.join(expectedTaskDir, "contract.json")
+    };
+    const misalignedFiles = [];
+    if (!fs45.existsSync(expectedPaths.metaJson)) {
+      misalignedFiles.push(`meta.json 不在期望位置: ${expectedPaths.metaJson}`);
+    }
+    if (!fs45.existsSync(expectedPaths.contractJson)) {
+      misalignedFiles.push(`contract.json 不在期望位置: ${expectedPaths.contractJson}`);
+    }
+    const aligned = misalignedFiles.length === 0;
+    const config = rule.config;
+    const strictMode = config?.strictMode ?? true;
+    const severity = !aligned && strictMode ? "error" : "warning";
+    return {
+      checkId: "R-PATH-001",
+      checkName: "任务文件路径对齐检查",
+      ruleId: rule.id,
+      passed: aligned,
+      severity,
+      message: aligned ? "任务文件路径符合规范" : `发现 ${misalignedFiles.length} 个路径不对齐的文件`,
+      details: {
+        taskRootPath: expectedTaskDir,
+        expectedPath: expectedPaths.metaJson,
+        misalignedFiles
+      },
+      suggestions: misalignedFiles.length > 0 ? [
+        `确保任务文件位于: .projmnt4claude/tasks/${taskId}/`,
+        "检查 meta.json 和 contract.json 是否存在"
+      ] : undefined,
+      duration: Date.now() - startTime,
+      timestamp: new Date().toISOString()
+    };
+  } catch (error) {
+    return {
+      checkId: "R-PATH-001",
+      checkName: "任务文件路径对齐检查",
+      ruleId: rule.id,
+      passed: false,
+      severity: "error",
+      message: `路径对齐检查失败: ${error instanceof Error ? error.message : String(error)}`,
+      duration: Date.now() - startTime,
+      timestamp: new Date().toISOString()
+    };
+  }
+}
+async function checkCodeReferencePath(rule, context) {
+  const startTime = Date.now();
+  try {
+    const config = rule.config;
+    const checkPatterns = config?.checkPatterns ?? ["src/**/*.{ts,js}"];
+    const excludePatterns = config?.excludePatterns ?? ["node_modules/**", "dist/**"];
+    const invalidReferences = [];
+    const criticalFiles = [
+      "package.json",
+      "tsconfig.json",
+      ".projmnt4claude/config.json"
+    ];
+    for (const file of criticalFiles) {
+      const fullPath = path41.join(context.cwd, file);
+      if (!fs45.existsSync(fullPath)) {
+        invalidReferences.push(`引用的关键文件不存在: ${file}`);
+      }
+    }
+    const aligned = invalidReferences.length === 0;
+    return {
+      checkId: "R-PATH-002",
+      checkName: "代码引用路径检查",
+      ruleId: rule.id,
+      passed: aligned,
+      severity: aligned ? "info" : "warning",
+      message: aligned ? "代码引用路径正确" : `发现 ${invalidReferences.length} 个无效引用`,
+      details: {
+        checkPatterns,
+        excludePatterns,
+        invalidReferences,
+        checkedFiles: criticalFiles
+      },
+      suggestions: invalidReferences.length > 0 ? ["检查引用的文件路径是否正确", "确保配置文件存在于项目根目录"] : undefined,
+      duration: Date.now() - startTime,
+      timestamp: new Date().toISOString()
+    };
+  } catch (error) {
+    return {
+      checkId: "R-PATH-002",
+      checkName: "代码引用路径检查",
+      ruleId: rule.id,
+      passed: false,
+      severity: "error",
+      message: `代码引用路径检查失败: ${error instanceof Error ? error.message : String(error)}`,
+      duration: Date.now() - startTime,
+      timestamp: new Date().toISOString()
+    };
+  }
+}
+async function checkResourceReferencePath(rule, context) {
+  const startTime = Date.now();
+  try {
+    const config = rule.config;
+    const requiredPaths = config?.requiredPaths ?? [
+      ".projmnt4claude/tasks",
+      ".projmnt4claude/reports",
+      ".projmnt4claude/outputs"
+    ];
+    const invalidPaths = [];
+    for (const requiredPath of requiredPaths) {
+      const fullPath = path41.join(context.cwd, requiredPath);
+      if (!fs45.existsSync(fullPath)) {
+        invalidPaths.push(requiredPath);
+      }
+    }
+    const aligned = invalidPaths.length === 0;
+    return {
+      checkId: "R-PATH-003",
+      checkName: "资源引用路径检查",
+      ruleId: rule.id,
+      passed: aligned,
+      severity: aligned ? "info" : "warning",
+      message: aligned ? "资源引用路径有效" : `发现 ${invalidPaths.length} 个无效资源路径`,
+      details: {
+        requiredPaths,
+        invalidPaths,
+        missingDirectories: invalidPaths
+      },
+      suggestions: invalidPaths.length > 0 ? invalidPaths.map((p) => `创建缺失的目录: mkdir -p ${p}`) : undefined,
+      duration: Date.now() - startTime,
+      timestamp: new Date().toISOString()
+    };
+  } catch (error) {
+    return {
+      checkId: "R-PATH-003",
+      checkName: "资源引用路径检查",
+      ruleId: rule.id,
+      passed: false,
+      severity: "error",
+      message: `资源引用路径检查失败: ${error instanceof Error ? error.message : String(error)}`,
+      duration: Date.now() - startTime,
+      timestamp: new Date().toISOString()
+    };
+  }
+}
+var init_path_checker = () => {};
+
+// src/utils/pre-dev-phase-gate/checkers/test-env-checker.ts
+var exports_test_env_checker = {};
+__export(exports_test_env_checker, {
+  default: () => test_env_checker_default,
+  createTestEnvChecker: () => createTestEnvChecker,
+  checkTestEnvRule: () => checkTestEnvRule,
+  checkTestEnv: () => checkTestEnv,
+  TestEnvChecker: () => TestEnvChecker,
+  DEFAULT_TEST_ENV_CHECKER_CONFIG: () => DEFAULT_TEST_ENV_CHECKER_CONFIG
+});
+import { exec } from "child_process";
+import { promisify } from "util";
+
+class TestEnvChecker {
+  id = "R-DEV-PRE-006";
+  name = "测试环境检查";
+  description = "运行任务定义的测试环境检测指令，验证环境是否就绪";
+  failureType = "A";
+  config;
+  cwd;
+  constructor(cwd, config) {
+    this.cwd = cwd;
+    this.config = { ...DEFAULT_TEST_ENV_CHECKER_CONFIG, ...config };
+  }
+  async check(context) {
+    const startTime = Date.now();
+    const timestamp = new Date().toISOString();
+    const commands = this.getTestEnvCommands(context);
+    if (commands.length === 0) {
+      return {
+        checkId: "test-env-check",
+        checkName: this.name,
+        ruleId: this.id,
+        passed: true,
+        severity: "info",
+        message: "未定义测试环境检测指令，跳过检查",
+        duration: Date.now() - startTime,
+        timestamp
+      };
+    }
+    const results = [];
+    const failures = [];
+    for (const cmd of commands) {
+      const result = await this.executeCommand(cmd);
+      results.push(result);
+      if (!result.passed && cmd.required !== false) {
+        failures.push(`${cmd.id}: ${result.message}`);
+      }
+    }
+    const passed = failures.length === 0;
+    const duration = Date.now() - startTime;
+    return {
+      checkId: "test-env-check",
+      checkName: this.name,
+      ruleId: this.id,
+      passed,
+      severity: passed ? "info" : "error",
+      message: passed ? `所有 ${commands.length} 个检测指令通过` : `${failures.length} 个必需检测指令失败`,
+      details: {
+        results,
+        failures,
+        totalCommands: commands.length,
+        passedCommands: results.filter((r) => r.passed).length,
+        failedCommands: results.filter((r) => !r.passed).length,
+        failureType: this.failureType
+      },
+      suggestions: passed ? undefined : [
+        "检查检测命令是否正确",
+        "确认相关服务是否已启动",
+        "验证环境变量是否已配置",
+        "检查 task.meta.json 中的 testEnvCheckCommands 配置"
+      ],
+      duration,
+      timestamp
+    };
+  }
+  getTestEnvCommands(context) {
+    const taskCommands = context.task.testEnvCheckCommands;
+    return taskCommands ?? [];
+  }
+  async executeCommand(cmd) {
+    const timeout = cmd.timeout ?? this.config.defaultTimeout;
+    const expectedExitCode = cmd.expectedExitCode ?? this.config.defaultExpectedExitCode;
+    try {
+      const { stdout, stderr } = await execAsync(cmd.command, {
+        timeout,
+        cwd: this.cwd
+      });
+      return {
+        id: cmd.id,
+        description: cmd.description,
+        passed: true,
+        exitCode: 0,
+        output: stdout,
+        message: "检测通过"
+      };
+    } catch (error) {
+      const execError = error;
+      const exitCode = execError.code ?? 1;
+      const passed = exitCode === expectedExitCode;
+      return {
+        id: cmd.id,
+        description: cmd.description,
+        passed,
+        exitCode,
+        output: execError.stdout ?? "",
+        error: execError.stderr ?? execError.message ?? "未知错误",
+        message: passed ? "检测通过（预期退出码）" : `检测失败: 退出码 ${exitCode}`
+      };
+    }
+  }
+}
+function createTestEnvChecker(cwd, config) {
+  return new TestEnvChecker(cwd, config);
+}
+async function checkTestEnv(context, cwd = process.cwd(), config) {
+  const checker = new TestEnvChecker(cwd, config);
+  return checker.check(context);
+}
+async function checkTestEnvRule(rule, context) {
+  const cwd = context.cwd;
+  const checker = new TestEnvChecker(cwd, rule.config);
+  return checker.check(context);
+}
+var execAsync, DEFAULT_TEST_ENV_CHECKER_CONFIG, test_env_checker_default;
+var init_test_env_checker = __esm(() => {
+  execAsync = promisify(exec);
+  DEFAULT_TEST_ENV_CHECKER_CONFIG = {
+    defaultTimeout: 30000,
+    defaultExpectedExitCode: 0,
+    defaultRequired: true
+  };
+  test_env_checker_default = TestEnvChecker;
+});
+
+// src/utils/pre-dev-phase-gate/checkers/test-framework-checker.ts
+var exports_test_framework_checker = {};
+__export(exports_test_framework_checker, {
+  default: () => test_framework_checker_default,
+  createTestFrameworkChecker: () => createTestFrameworkChecker,
+  checkTestFramework: () => checkTestFramework,
+  TestFrameworkChecker: () => TestFrameworkChecker,
+  DEFAULT_TEST_FRAMEWORK_CHECKER_CONFIG: () => DEFAULT_TEST_FRAMEWORK_CHECKER_CONFIG
+});
+import * as fs46 from "node:fs";
+import * as path42 from "node:path";
+import { execSync as execSync7 } from "child_process";
+
+class JestDetector {
+  async detect(cwd) {
+    const pkgPath = path42.join(cwd, "package.json");
+    if (!fs46.existsSync(pkgPath)) {
+      return { detected: false };
+    }
+    try {
+      const pkgContent = fs46.readFileSync(pkgPath, "utf-8");
+      const pkg = JSON.parse(pkgContent);
+      const hasTestScript = pkg.scripts?.test !== undefined;
+      const hasJestDep = Boolean(pkg.devDependencies?.jest || pkg.dependencies?.jest);
+      const hasVitestDep = Boolean(pkg.devDependencies?.vitest || pkg.dependencies?.vitest);
+      const hasJestConfig = fs46.existsSync(path42.join(cwd, "jest.config.js")) || fs46.existsSync(path42.join(cwd, "jest.config.ts")) || fs46.existsSync(path42.join(cwd, "jest.config.json")) || pkg.jest !== undefined;
+      const hasVitestConfig = fs46.existsSync(path42.join(cwd, "vitest.config.ts")) || fs46.existsSync(path42.join(cwd, "vitest.config.js"));
+      if (hasVitestDep || hasVitestConfig) {
+        return {
+          detected: true,
+          type: "Node.js/Vitest",
+          frameworkReady: hasTestScript,
+          configPath: hasVitestConfig ? path42.join(cwd, "vitest.config.ts") : pkgPath,
+          testCommand: hasTestScript ? pkg.scripts.test : "vitest run",
+          reason: !hasTestScript ? "package.json 缺少 test 脚本" : undefined
+        };
+      }
+      return {
+        detected: true,
+        type: "Node.js/Jest",
+        frameworkReady: hasTestScript && (hasJestDep || hasJestConfig),
+        configPath: pkgPath,
+        testCommand: hasTestScript ? pkg.scripts.test : "npm test",
+        reason: !hasTestScript ? "package.json 缺少 test 脚本" : !hasJestDep && !hasJestConfig ? "未检测到 Jest 依赖或配置" : undefined
+      };
+    } catch {
+      return { detected: false };
+    }
+  }
+}
+
+class PytestDetector {
+  async detect(cwd) {
+    const hasPyFiles = this.hasPythonFiles(cwd);
+    if (!hasPyFiles) {
+      return { detected: false };
+    }
+    const pytestAvailable = this.checkPytestAvailable();
+    return {
+      detected: true,
+      type: "Python/pytest",
+      frameworkReady: pytestAvailable,
+      testCommand: "pytest",
+      reason: !pytestAvailable ? "pytest 未安装或不可用" : undefined
+    };
+  }
+  hasPythonFiles(cwd) {
+    try {
+      const files = fs46.readdirSync(cwd);
+      if (files.some((f) => f.endsWith(".py"))) {
+        return true;
+      }
+      const srcDir = path42.join(cwd, "src");
+      const testsDir = path42.join(cwd, "tests");
+      if (fs46.existsSync(srcDir)) {
+        const srcFiles = fs46.readdirSync(srcDir);
+        if (srcFiles.some((f) => f.endsWith(".py"))) {
+          return true;
+        }
+      }
+      if (fs46.existsSync(testsDir)) {
+        const testFiles = fs46.readdirSync(testsDir);
+        if (testFiles.some((f) => f.endsWith(".py"))) {
+          return true;
+        }
+      }
+      return false;
+    } catch {
+      return false;
+    }
+  }
+  checkPytestAvailable() {
+    try {
+      execSync7("pytest --version", { stdio: "pipe", timeout: 5000 });
+      return true;
+    } catch {
+      try {
+        execSync7("python -m pytest --version", { stdio: "pipe", timeout: 5000 });
+        return true;
+      } catch {
+        return false;
+      }
+    }
+  }
+}
+
+class GoTestDetector {
+  async detect(cwd) {
+    const hasGoFiles = this.hasGoFiles(cwd);
+    if (!hasGoFiles) {
+      return { detected: false };
+    }
+    const goTestAvailable = this.checkGoTestAvailable();
+    return {
+      detected: true,
+      type: "Go/go test",
+      frameworkReady: goTestAvailable,
+      testCommand: "go test ./...",
+      reason: !goTestAvailable ? "go test 不可用" : undefined
+    };
+  }
+  hasGoFiles(cwd) {
+    try {
+      const files = fs46.readdirSync(cwd);
+      return files.some((f) => f.endsWith(".go"));
+    } catch {
+      return false;
+    }
+  }
+  checkGoTestAvailable() {
+    try {
+      execSync7("go version", { stdio: "pipe", timeout: 5000 });
+      return true;
+    } catch {
+      return false;
+    }
+  }
+}
+
+class CargoTestDetector {
+  async detect(cwd) {
+    const cargoPath = path42.join(cwd, "Cargo.toml");
+    if (!fs46.existsSync(cargoPath)) {
+      return { detected: false };
+    }
+    const cargoAvailable = this.checkCargoAvailable();
+    return {
+      detected: true,
+      type: "Rust/cargo test",
+      frameworkReady: cargoAvailable,
+      configPath: cargoPath,
+      testCommand: "cargo test",
+      reason: !cargoAvailable ? "cargo 不可用" : undefined
+    };
+  }
+  checkCargoAvailable() {
+    try {
+      execSync7("cargo --version", { stdio: "pipe", timeout: 5000 });
+      return true;
+    } catch {
+      return false;
+    }
+  }
+}
+
+class MavenTestDetector {
+  async detect(cwd) {
+    const pomPath = path42.join(cwd, "pom.xml");
+    if (!fs46.existsSync(pomPath)) {
+      return { detected: false };
+    }
+    const mavenAvailable = this.checkMavenAvailable();
+    return {
+      detected: true,
+      type: "Java/mvn test",
+      frameworkReady: mavenAvailable,
+      configPath: pomPath,
+      testCommand: "mvn test",
+      reason: !mavenAvailable ? "mvn 不可用" : undefined
+    };
+  }
+  checkMavenAvailable() {
+    try {
+      execSync7("mvn --version", { stdio: "pipe", timeout: 1e4 });
+      return true;
+    } catch {
+      return false;
+    }
+  }
+}
+
+class TestFrameworkChecker {
+  id = "R-DEV-PRE-007";
+  name = "测试框架检查";
+  description = "检测项目是否安装了测试框架";
+  failureType = "A";
+  config;
+  cwd;
+  detectors;
+  constructor(cwd, config) {
+    this.cwd = cwd;
+    this.config = { ...DEFAULT_TEST_FRAMEWORK_CHECKER_CONFIG, ...config };
+    this.detectors = [
+      new JestDetector,
+      new PytestDetector,
+      new GoTestDetector,
+      new CargoTestDetector,
+      new MavenTestDetector
+    ];
+  }
+  async check(context) {
+    const startTime = Date.now();
+    const timestamp = new Date().toISOString();
+    if (!this.config.enabled) {
+      return {
+        checkId: "test-framework-check",
+        checkName: this.name,
+        ruleId: this.id,
+        passed: true,
+        severity: "info",
+        message: "测试框架检查已禁用",
+        duration: Date.now() - startTime,
+        timestamp
+      };
+    }
+    for (const detector of this.detectors) {
+      const result = await detector.detect(this.cwd);
+      if (result.detected) {
+        const duration2 = Date.now() - startTime;
+        context.frameworkDetection = result;
+        return {
+          checkId: "test-framework-check",
+          checkName: this.name,
+          ruleId: this.id,
+          passed: result.frameworkReady ?? false,
+          severity: result.frameworkReady ? "info" : "error",
+          message: result.frameworkReady ? `测试框架就绪: ${result.type}` : `测试框架未就绪: ${result.type} - ${result.reason}`,
+          details: {
+            type: result.type,
+            frameworkReady: result.frameworkReady,
+            configPath: result.configPath,
+            testCommand: result.testCommand,
+            reason: result.reason,
+            failureType: this.failureType
+          },
+          suggestions: result.frameworkReady ? undefined : this.getSuggestions(result.type),
+          duration: duration2,
+          timestamp
+        };
+      }
+    }
+    const duration = Date.now() - startTime;
+    context.frameworkDetection = { detected: false };
+    return {
+      checkId: "test-framework-check",
+      checkName: this.name,
+      ruleId: this.id,
+      passed: false,
+      severity: "error",
+      message: "未检测到测试框架",
+      details: {
+        failureType: this.failureType
+      },
+      suggestions: [
+        "安装测试框架: npm install --save-dev jest",
+        "或安装 Vitest: npm install --save-dev vitest",
+        "配置测试脚本: 在 package.json 中添加 test 脚本"
+      ],
+      duration,
+      timestamp
+    };
+  }
+  getSuggestions(type) {
+    const suggestions = {
+      "Node.js/Jest": [
+        "安装 Jest: npm install --save-dev jest",
+        '配置测试脚本: 在 package.json 中添加 "test": "jest"',
+        "创建 Jest 配置文件: jest.config.js"
+      ],
+      "Node.js/Vitest": [
+        "安装 Vitest: npm install --save-dev vitest",
+        '配置测试脚本: 在 package.json 中添加 "test": "vitest run"',
+        "创建 Vitest 配置文件: vitest.config.ts"
+      ],
+      "Python/pytest": [
+        "安装 pytest: pip install pytest",
+        "或使用: python -m pip install pytest"
+      ],
+      "Go/go test": [
+        "确保 Go 环境已正确安装",
+        "运行: go mod download"
+      ],
+      "Rust/cargo test": [
+        "确保 Rust 环境已正确安装",
+        "运行: cargo build"
+      ],
+      "Java/mvn test": [
+        "确保 Maven 环境已正确安装",
+        "检查 pom.xml 配置"
+      ]
+    };
+    return suggestions[type ?? ""] ?? ["请安装相应的测试框架"];
+  }
+}
+function createTestFrameworkChecker(cwd, config) {
+  return new TestFrameworkChecker(cwd, config);
+}
+async function checkTestFramework(context, cwd = process.cwd(), config) {
+  const checker = new TestFrameworkChecker(cwd, config);
+  return checker.check(context);
+}
+var DEFAULT_TEST_FRAMEWORK_CHECKER_CONFIG, test_framework_checker_default;
+var init_test_framework_checker = __esm(() => {
+  DEFAULT_TEST_FRAMEWORK_CHECKER_CONFIG = {
+    enabled: true,
+    detectionTimeout: 5000
+  };
+  test_framework_checker_default = TestFrameworkChecker;
+});
+
+// src/utils/pre-dev-phase-gate/checkers/test-metadata-checker.ts
+var exports_test_metadata_checker = {};
+__export(exports_test_metadata_checker, {
+  default: () => test_metadata_checker_default,
+  createTestMetadataChecker: () => createTestMetadataChecker,
+  checkTestMetadataRule: () => checkTestMetadataRule,
+  checkTestMetadata: () => checkTestMetadata,
+  TestMetadataChecker: () => TestMetadataChecker,
+  DEFAULT_TEST_METADATA_CHECKER_CONFIG: () => DEFAULT_TEST_METADATA_CHECKER_CONFIG
+});
+
+class TestMetadataChecker {
+  id = "R-DEV-PRE-008";
+  name = "测试元数据检查";
+  description = "检查 TaskMeta 中测试相关元数据字段是否完整";
+  failureType = "A";
+  config;
+  constructor(config) {
+    this.config = { ...DEFAULT_TEST_METADATA_CHECKER_CONFIG, ...config };
+  }
+  async check(context) {
+    const startTime = Date.now();
+    const timestamp = new Date().toISOString();
+    if (!this.config.enabled) {
+      return {
+        checkId: "test-metadata-check",
+        checkName: this.name,
+        ruleId: this.id,
+        passed: true,
+        severity: "info",
+        message: "测试元数据检查已禁用",
+        duration: Date.now() - startTime,
+        timestamp
+      };
+    }
+    const metadata = this.extractMetadata(context);
+    const fieldResults = this.checkFields(metadata);
+    const missingFields = fieldResults.filter((r) => !r.present);
+    const allPresent = missingFields.length === 0;
+    const duration = Date.now() - startTime;
+    if (allPresent) {
+      const detection = context.frameworkDetection;
+      if (detection?.detected && detection?.frameworkReady) {
+        const declaredFramework = (metadata.testFramework || "").toLowerCase();
+        const detectedType = (detection.type || "").toLowerCase();
+        const isMatch = declaredFramework.includes(detectedType) || detectedType.includes(declaredFramework);
+        if (!isMatch) {
+          return {
+            checkId: "test-metadata-check",
+            checkName: this.name,
+            ruleId: this.id,
+            passed: false,
+            severity: "error",
+            message: `测试框架声明与探测不一致: 声明="${metadata.testFramework}", 探测="${detection.type}"`,
+            details: {
+              fields: fieldResults,
+              allPresent: true,
+              failureType: this.failureType,
+              declaredFramework: metadata.testFramework,
+              detectedFramework: detection.type,
+              mismatch: true
+            },
+            suggestions: [
+              `将 task.meta.json 中的 testFramework 从 "${metadata.testFramework}" 修改为 "${detection.type}"`,
+              "或重新运行测试框架检测以更新探测结果"
+            ],
+            duration,
+            timestamp
+          };
+        }
+      }
+      return {
+        checkId: "test-metadata-check",
+        checkName: this.name,
+        ruleId: this.id,
+        passed: true,
+        severity: "info",
+        message: `测试元数据完整: testFramework=${metadata.testFramework}, testCommand=${metadata.testCommand}`,
+        details: {
+          fields: fieldResults,
+          allPresent: true,
+          failureType: this.failureType
+        },
+        duration,
+        timestamp
+      };
+    }
+    const missingLabels = missingFields.map((f) => f.label).join("、");
+    return {
+      checkId: "test-metadata-check",
+      checkName: this.name,
+      ruleId: this.id,
+      passed: false,
+      severity: "error",
+      message: `测试元数据不完整: 缺少 ${missingLabels}`,
+      details: {
+        fields: fieldResults,
+        missingFields: missingFields.map((f) => f.field),
+        allPresent: false,
+        failureType: this.failureType
+      },
+      suggestions: [
+        "在 task.meta.json 中补充缺失的测试元数据字段",
+        `缺少: ${missingLabels}`,
+        "testFramework: 测试框架名称，如 jest / pytest / go test",
+        "testCommand: 测试运行命令，如 npx jest --config jest.config.js",
+        "techStack: 技术栈描述，如 Node.js 18 + TypeScript 5.x",
+        "projectTestConventions: 测试约定，如 __tests__/ 目录, *.test.ts"
+      ],
+      duration,
+      timestamp
+    };
+  }
+  extractMetadata(context) {
+    return {
+      testFramework: context.task.testFramework,
+      testCommand: context.task.testCommand,
+      techStack: context.task.techStack,
+      projectTestConventions: context.task.projectTestConventions
+    };
+  }
+  checkFields(metadata) {
+    return [
+      {
+        field: "testFramework",
+        label: "测试框架",
+        present: this.isNonEmpty(metadata.testFramework),
+        value: metadata.testFramework
+      },
+      {
+        field: "testCommand",
+        label: "测试命令",
+        present: this.isNonEmpty(metadata.testCommand),
+        value: metadata.testCommand
+      },
+      {
+        field: "techStack",
+        label: "技术栈",
+        present: this.isNonEmpty(metadata.techStack),
+        value: metadata.techStack
+      },
+      {
+        field: "projectTestConventions",
+        label: "测试约定",
+        present: this.isNonEmpty(metadata.projectTestConventions),
+        value: metadata.projectTestConventions
+      }
+    ];
+  }
+  isNonEmpty(value) {
+    return value !== undefined && value.trim().length > 0;
+  }
+}
+function createTestMetadataChecker(config) {
+  return new TestMetadataChecker(config);
+}
+async function checkTestMetadata(context, config) {
+  const checker = new TestMetadataChecker(config);
+  return checker.check(context);
+}
+async function checkTestMetadataRule(rule, context) {
+  const checker = new TestMetadataChecker(rule.config);
+  return checker.check(context);
+}
+var DEFAULT_TEST_METADATA_CHECKER_CONFIG, test_metadata_checker_default;
+var init_test_metadata_checker = __esm(() => {
+  DEFAULT_TEST_METADATA_CHECKER_CONFIG = {
+    enabled: true
+  };
+  test_metadata_checker_default = TestMetadataChecker;
+});
+
 // node_modules/commander/esm.mjs
 var import__ = __toESM(require_commander(), 1);
 var {
@@ -22481,8 +24601,8 @@ var {
 } = import__.default;
 
 // src/index.ts
-import * as fs45 from "fs";
-import * as path41 from "path";
+import * as fs51 from "fs";
+import * as path47 from "path";
 
 // src/commands/setup.ts
 init_path();
@@ -23544,7 +25664,12 @@ async function createTask(options = {}, cwd = process.cwd()) {
       console.log("Task creation cancelled");
       process.exit(0);
     }
-    const task2 = createDefaultTaskMeta(taskId2, options.title, taskType, options.parentId, "cli");
+    const task2 = createDefaultTaskMeta(taskId2, options.title, taskType, options.parentId, "cli", {
+      testFramework: options.testFramework,
+      testCommand: options.testCommand,
+      techStack: options.techStack,
+      projectTestConventions: options.projectTestConventions
+    });
     task2.priority = taskPriority;
     let finalCheckpoints = [];
     let finalRelatedFiles = options.relatedFiles || [];
@@ -24646,6 +26771,22 @@ async function updateTask(taskId, options, cwd = process.cwd()) {
   }
   if (options.needsDiscussion !== undefined) {
     task.needsDiscussion = options.needsDiscussion;
+    updated = true;
+  }
+  if (options.testFramework !== undefined) {
+    task.testFramework = options.testFramework;
+    updated = true;
+  }
+  if (options.testCommand !== undefined) {
+    task.testCommand = options.testCommand;
+    updated = true;
+  }
+  if (options.techStack !== undefined) {
+    task.techStack = options.techStack;
+    updated = true;
+  }
+  if (options.projectTestConventions !== undefined) {
+    task.projectTestConventions = options.projectTestConventions;
     updated = true;
   }
   if (!updated) {
@@ -33113,7 +35254,12 @@ async function createTask2(options = {}, cwd = process.cwd()) {
       console.log("Task creation cancelled");
       process.exit(0);
     }
-    const task2 = createDefaultTaskMeta(taskId2, options.title, taskType, options.parentId, "cli");
+    const task2 = createDefaultTaskMeta(taskId2, options.title, taskType, options.parentId, "cli", {
+      testFramework: options.testFramework,
+      testCommand: options.testCommand,
+      techStack: options.techStack,
+      projectTestConventions: options.projectTestConventions
+    });
     task2.priority = taskPriority;
     let finalCheckpoints = [];
     let finalRelatedFiles = options.relatedFiles || [];
@@ -34530,7 +36676,11 @@ async function convertSingleReport(reportPath, cwd, options) {
     aiEnhancement: false,
     suggestedCheckpoints: extractedMeta.checkpoints.map((cp) => `[${cp.prefix}] ${cp.description}`),
     potentialDependencies: extractedMeta.dependencies,
-    relatedFiles: extractedMeta.files
+    relatedFiles: extractedMeta.files,
+    testFramework: extractedMeta.testFramework,
+    testCommand: extractedMeta.testCommand,
+    techStack: extractedMeta.techStack,
+    projectTestConventions: extractedMeta.projectTestConventions
   }, cwd);
   const createdTaskId = task.id;
   if (extractedMeta.checkpoints.length > 0) {
@@ -34723,7 +36873,11 @@ function validateExtractedMeta(data) {
   const files = Array.isArray(d.files) ? d.files.filter((f) => typeof f === "string") : [];
   const estimatedMinutes = typeof d.estimatedMinutes === "number" ? d.estimatedMinutes : 30;
   const dependencies = Array.isArray(d.dependencies) ? d.dependencies.filter((d2) => typeof d2 === "string") : [];
-  return { title, type, priority, description, checkpoints, files, estimatedMinutes, dependencies };
+  const testFramework = typeof d.testFramework === "string" ? d.testFramework : undefined;
+  const testCommand = typeof d.testCommand === "string" ? d.testCommand : undefined;
+  const techStack = typeof d.techStack === "string" ? d.techStack : undefined;
+  const projectTestConventions = typeof d.projectTestConventions === "string" ? d.projectTestConventions : undefined;
+  return { title, type, priority, description, checkpoints, files, estimatedMinutes, dependencies, testFramework, testCommand, techStack, projectTestConventions };
 }
 function parseReportContent(content) {
   const titleMatch = content.match(/^#\s+(.+)/m);
@@ -37475,16 +39629,16 @@ init_harness();
 init_path();
 init_i18n();
 import { createHash as createHash2 } from "crypto";
-import * as fs43 from "fs";
+import * as fs49 from "fs";
 import { homedir as homedir3 } from "os";
-import * as path39 from "path";
+import * as path45 from "path";
 
 // src/utils/hd-assembly-line.ts
 init_session_id_mapper();
 init_session_lock_cleanup();
-import * as path38 from "path";
-import * as fs42 from "fs";
-import { execSync as execSync4 } from "child_process";
+import * as path44 from "path";
+import * as fs48 from "fs";
+import { execSync as execSync9 } from "child_process";
 
 // src/utils/harness-prevalidation.ts
 init_task();
@@ -38748,6 +40902,78 @@ var qaVerdictHasReason = {
     };
   }
 };
+var codeReviewVerdictResultMarker = {
+  id: "code-review-verdict-result-marker",
+  description: "Code Review 输出必须包含 VERDICT: PASS 或 VERDICT: NOPASS 标记",
+  severity: "error",
+  check: (output) => {
+    if (typeof output !== "string") {
+      return {
+        ruleId: "code-review-verdict-result-marker",
+        severity: "error",
+        message: "输出不是字符串类型，无法检测 VERDICT 标记",
+        value: typeof output
+      };
+    }
+    const trimmed = output.trim();
+    if (trimmed.length === 0) {
+      return {
+        ruleId: "code-review-verdict-result-marker",
+        severity: "error",
+        message: "输出为空字符串，无法检测 VERDICT 标记"
+      };
+    }
+    const passMatch = /VERDICT\s*:\s*PASS/i.test(trimmed);
+    const nopassMatch = /VERDICT\s*:\s*NOPASS/i.test(trimmed);
+    if (passMatch || nopassMatch) {
+      return null;
+    }
+    return {
+      ruleId: "code-review-verdict-result-marker",
+      severity: "error",
+      message: "输出中未包含 VERDICT: PASS 或 VERDICT: NOPASS 标记",
+      value: trimmed.slice(0, 200)
+    };
+  }
+};
+var codeReviewVerdictHasReason = {
+  id: "code-review-verdict-has-reason",
+  description: "Code Review 输出应包含原因说明章节（## 审核结果 或 ## 原因）",
+  severity: "warning",
+  check: (output) => {
+    if (typeof output !== "string") {
+      return {
+        ruleId: "code-review-verdict-has-reason",
+        severity: "warning",
+        message: "输出不是字符串类型，无法检测原因说明",
+        value: typeof output
+      };
+    }
+    const trimmed = output.trim();
+    if (trimmed.length === 0) {
+      return {
+        ruleId: "code-review-verdict-has-reason",
+        severity: "warning",
+        message: "输出为空字符串，无法检测原因说明"
+      };
+    }
+    const reasonPatterns = [
+      /##\s*审核结果/i,
+      /##\s*原因/i,
+      /##\s*Reason/i,
+      /原因[:：]/i
+    ];
+    const hasReason = reasonPatterns.some((p) => p.test(trimmed));
+    if (hasReason) {
+      return null;
+    }
+    return {
+      ruleId: "code-review-verdict-has-reason",
+      severity: "warning",
+      message: "输出中未包含原因说明章节（缺少 ## 审核结果 或 ## 原因 标记）"
+    };
+  }
+};
 
 // src/utils/harness-code-reviewer.ts
 init_prompt_templates();
@@ -38872,7 +41098,7 @@ class HarnessCodeReviewer {
       maxBudgetUsd: phaseOptions?.maxBudgetUsd,
       debug: phaseOptions?.debug
     };
-    const engine = createSessionAwareEngine("markdown", [verdictResultMarker, verdictHasReason], 1);
+    const engine = createSessionAwareEngine("markdown", [codeReviewVerdictResultMarker, codeReviewVerdictHasReason], 1);
     const engineResult = await engine.runWithFeedback(agent.invoke.bind(agent), prompt, invokeOptions);
     if (engineResult.retries > 0) {
       console.log(`   \uD83D\uDD04 ${texts.harness.logs.codeReviewRetry.replace("{retries}", String(engineResult.retries))}`);
@@ -40374,7 +42600,7 @@ ${fileCoverage.details}`;
             "正确行为: QA 验证完成后应自动生成 qa-report.json 文件。",
             "检查点:",
             "1. 确保 saveReport() 被正确调用",
-            "2. 确认报告文件路径: .projmnt4claude/outputs/{taskId}/qa-report.json",
+            `2. 确认报告文件路径: ${getReportPath(task.id, "qa", this.config.cwd)}`,
             "3. 验证报告文件内容包含有效的 JSON 格式"
           ].join(`
 `);
@@ -40423,7 +42649,7 @@ ${fileCoverage.details}`;
         case "R-PRE-PHASE-002":
           ruleSpecificFeedback = "任务不存在：指定的任务 ID 未找到或已被删除。";
           correctExample = [
-            "正确行为: 确保任务在 .projmnt4claude/tasks/ 目录下存在对应的 meta.json 文件。",
+            "正确行为: 确保任务 ID 对应的 meta.json 文件存在且状态正确。",
             "检查点:",
             "1. 确认任务 ID 拼写正确",
             "2. 验证任务目录结构完整",
@@ -40550,7 +42776,11 @@ ${task.description}` : "";
       retryContextSection,
       gateFailureDetailsSection,
       coverageGapSection,
-      devReportPath
+      devReportPath,
+      techStack: task.techStack || "请根据项目实际情况确定技术栈",
+      testFramework: task.testFramework || "请根据项目实际情况确定测试框架",
+      testCommand: task.testCommand || "请根据项目实际情况运行测试",
+      projectTestConventions: task.projectTestConventions || "请根据项目实际情况确定测试约定"
     }).replace(/\n{3,}/g, `
 
 `);
@@ -43240,6 +45470,952 @@ var QA_POST_GATE_RULES = [
   R_QA_POST_007
 ];
 
+// src/utils/pre-dev-phase-gate/coordinator.ts
+import * as fs47 from "node:fs";
+import * as path43 from "node:path";
+import { execSync as execSync8 } from "node:child_process";
+
+// src/types/pre-dev-phase-gate.ts
+var DEFAULT_PRE_DEV_PHASE_GATE_CONFIG = {
+  enabled: true,
+  rules: new Map,
+  enableRetryRules: true,
+  stopOnFailure: true,
+  generateReport: true,
+  reportPath: ".projmnt4claude/reports/pre-dev-gate-report.json"
+};
+var DEFAULT_GIT_WORKSPACE_RULE = {
+  id: "R-GIT-001",
+  type: "git_workspace",
+  name: "Git工作区检查",
+  description: "检查Git工作区是否有未提交更改",
+  enabled: true,
+  severity: "warning",
+  config: {
+    allowUncommitted: false,
+    maxUntrackedFiles: 10
+  }
+};
+var DEFAULT_BRANCH_STATUS_RULE = {
+  id: "R-BR-001",
+  type: "branch_status",
+  name: "分支状态检查",
+  description: "检查当前分支状态和远程同步情况",
+  enabled: true,
+  severity: "error",
+  config: {
+    requireSync: true,
+    allowedBranches: ["main", "master", "develop"]
+  }
+};
+var DEFAULT_DEPENDENCY_OUTPUT_RULE = {
+  id: "R-DEPOUT-001",
+  type: "dependency_output",
+  name: "依赖输出检查",
+  description: "检查上游依赖任务的输出是否可用",
+  enabled: true,
+  severity: "error",
+  config: {
+    outputPathPattern: ".projmnt4claude/outputs/{taskId}/",
+    requiredOutputs: ["output.json", "interface.json"]
+  }
+};
+var DEFAULT_DEPENDENCY_INTERFACE_RULE = {
+  id: "R-DEPOUT-002",
+  type: "dependency_output",
+  name: "依赖接口定义检查",
+  description: "检查依赖任务的接口定义是否完整",
+  enabled: true,
+  severity: "error",
+  config: {
+    interfaceFileName: "interface.json",
+    requiredFields: ["exports", "version"]
+  }
+};
+var DEFAULT_CIRCULAR_DEPENDENCY_RULE = {
+  id: "R-DEPOUT-003",
+  type: "dependency_output",
+  name: "循环依赖检查",
+  description: "检查是否存在循环依赖",
+  enabled: true,
+  severity: "error"
+};
+var DEFAULT_RESOURCE_CONFIG_RULE = {
+  id: "R-RES-001",
+  type: "resource_config",
+  name: "开发分支配置检查",
+  description: "检查开发分支是否存在且配置正确",
+  enabled: true,
+  severity: "error",
+  config: {
+    allowedPrefixes: ["feature/", "bugfix/", "hotfix/", "task/"]
+  }
+};
+var DEFAULT_DEV_DIRECTORY_RULE = {
+  id: "R-RES-002",
+  type: "resource_config",
+  name: "开发目录配置检查",
+  description: "检查开发目录是否存在且可写",
+  enabled: true,
+  severity: "error",
+  config: {
+    requiredSubdirs: ["src", ".projmnt4claude/tasks"]
+  }
+};
+var DEFAULT_ENV_CONFIG_RULE = {
+  id: "R-RES-003",
+  type: "resource_config",
+  name: "环境变量配置检查",
+  description: "检查必需的环境变量是否已配置",
+  enabled: true,
+  severity: "error",
+  config: {
+    requiredEnvVars: ["NODE_ENV"],
+    optionalEnvVars: []
+  }
+};
+var DEFAULT_DISK_SPACE_RULE = {
+  id: "R-RES-004",
+  type: "resource_config",
+  name: "磁盘空间检查",
+  description: "检查可用磁盘空间是否足够",
+  enabled: true,
+  severity: "warning",
+  config: {
+    minFreeSpaceMB: 100,
+    minFreeSpacePercent: 10
+  }
+};
+var DEFAULT_RETRY_CONTEXT_RULE = {
+  id: "R-RETRY-001",
+  type: "retry_context",
+  name: "重试上下文检查",
+  description: "检查重试上下文并应用特定规则",
+  enabled: true,
+  severity: "info",
+  isApplicable: (context) => context.isResumed || context.attempt > 1
+};
+var DEFAULT_TEST_ENV_RULE = {
+  id: "R-DEV-PRE-006",
+  type: "test_env_check",
+  name: "测试环境检查",
+  description: "检查项目测试环境配置（.projmnt4claude/test-env）是否就绪",
+  enabled: true,
+  severity: "error",
+  config: {}
+};
+var DEFAULT_TEST_FRAMEWORK_RULE = {
+  id: "R-DEV-PRE-007",
+  type: "test_env_check",
+  name: "测试框架检查",
+  description: "检测项目是否安装了测试框架（Jest/pytest/go test 等）",
+  enabled: true,
+  severity: "error",
+  config: {}
+};
+var DEFAULT_TEST_METADATA_RULE = {
+  id: "R-DEV-PRE-008",
+  type: "test_env_check",
+  name: "测试元数据检查",
+  description: "检查 TaskMeta 中测试相关元数据字段是否完整并与框架探测结果一致",
+  enabled: true,
+  severity: "error",
+  config: {}
+};
+var DEFAULT_GIT_STAGED_RULE = {
+  id: "R-GIT-002",
+  type: "git_workspace",
+  name: "暂存区为空检查",
+  description: "检查暂存区是否有未提交的更改",
+  enabled: true,
+  severity: "info"
+};
+var DEFAULT_GIT_IGNORE_RULE = {
+  id: "R-GIT-003",
+  type: "git_workspace",
+  name: "忽略文件配置检查",
+  description: "检查.gitignore是否正确配置",
+  enabled: true,
+  severity: "warning"
+};
+var DEFAULT_CONFLICT_MARKER_RULE = {
+  id: "R-GIT-004",
+  type: "git_workspace",
+  name: "冲突标记检查",
+  description: "检查工作区文件是否包含冲突标记",
+  enabled: true,
+  severity: "error"
+};
+var DEFAULT_BRANCH_ASSOCIATION_RULE = {
+  id: "R-BR-002",
+  type: "branch_status",
+  name: "分支关联正确性检查",
+  description: "检查分支名称是否符合约定",
+  enabled: true,
+  severity: "warning"
+};
+var DEFAULT_BRANCH_TRACKING_RULE = {
+  id: "R-BR-003",
+  type: "branch_status",
+  name: "远程分支追踪检查",
+  description: "检查分支是否有远程追踪配置",
+  enabled: true,
+  severity: "warning"
+};
+var DEFAULT_BRANCH_SYNC_RULE = {
+  id: "R-BR-004",
+  type: "branch_status",
+  name: "分支同步状态检查",
+  description: "检查本地分支是否与远程同步",
+  enabled: true,
+  severity: "warning"
+};
+var DEFAULT_BRANCH_SWITCHABLE_RULE = {
+  id: "R-BR-005",
+  type: "branch_status",
+  name: "分支可切换性检查",
+  description: "检查当前是否可以切换到目标分支",
+  enabled: true,
+  severity: "error"
+};
+var DEFAULT_TASK_FILE_PATH_RULE = {
+  id: "R-PATH-001",
+  type: "path_alignment",
+  name: "任务文件路径对齐检查",
+  description: "检查任务文件是否存放在正确的路径位置",
+  enabled: true,
+  severity: "error",
+  config: {
+    strictMode: true,
+    expectedPaths: [".projmnt4claude/tasks/{taskId}/meta.json", ".projmnt4claude/tasks/{taskId}/contract.json"]
+  }
+};
+var DEFAULT_CODE_REFERENCE_PATH_RULE = {
+  id: "R-PATH-002",
+  type: "path_alignment",
+  name: "代码引用路径检查",
+  description: "检查代码中的文件引用是否指向有效路径",
+  enabled: true,
+  severity: "warning",
+  config: {
+    checkPatterns: ["src/**/*.{ts,js}"],
+    excludePatterns: ["node_modules/**", "dist/**"]
+  }
+};
+var DEFAULT_RESOURCE_REFERENCE_PATH_RULE = {
+  id: "R-PATH-003",
+  type: "path_alignment",
+  name: "资源引用路径检查",
+  description: "检查项目资源路径配置是否有效",
+  enabled: true,
+  severity: "warning",
+  config: {
+    requiredPaths: [".projmnt4claude/tasks", ".projmnt4claude/reports", ".projmnt4claude/outputs"]
+  }
+};
+var DEFAULT_PRE_DEV_PHASE_RULES = [
+  DEFAULT_GIT_WORKSPACE_RULE,
+  DEFAULT_GIT_STAGED_RULE,
+  DEFAULT_GIT_IGNORE_RULE,
+  DEFAULT_CONFLICT_MARKER_RULE,
+  DEFAULT_BRANCH_STATUS_RULE,
+  DEFAULT_BRANCH_ASSOCIATION_RULE,
+  DEFAULT_BRANCH_TRACKING_RULE,
+  DEFAULT_BRANCH_SYNC_RULE,
+  DEFAULT_BRANCH_SWITCHABLE_RULE,
+  DEFAULT_DEPENDENCY_OUTPUT_RULE,
+  DEFAULT_DEPENDENCY_INTERFACE_RULE,
+  DEFAULT_CIRCULAR_DEPENDENCY_RULE,
+  DEFAULT_RESOURCE_CONFIG_RULE,
+  DEFAULT_DEV_DIRECTORY_RULE,
+  DEFAULT_ENV_CONFIG_RULE,
+  DEFAULT_DISK_SPACE_RULE,
+  DEFAULT_RETRY_CONTEXT_RULE,
+  DEFAULT_TASK_FILE_PATH_RULE,
+  DEFAULT_CODE_REFERENCE_PATH_RULE,
+  DEFAULT_RESOURCE_REFERENCE_PATH_RULE,
+  DEFAULT_TEST_ENV_RULE,
+  DEFAULT_TEST_FRAMEWORK_RULE,
+  DEFAULT_TEST_METADATA_RULE
+];
+
+// src/utils/pre-dev-phase-gate/coordinator.ts
+class PreDevPhaseGateCoordinator {
+  config;
+  constructor(config = {}) {
+    this.config = {
+      enabled: true,
+      rules: new Map,
+      enableRetryRules: true,
+      stopOnFailure: true,
+      generateReport: true,
+      reportPath: ".projmnt4claude/reports/pre-dev-gate-report.json",
+      ...config
+    };
+  }
+  async runGate(context) {
+    const startTime = Date.now();
+    if (!this.config.enabled) {
+      return this.createSkippedResult(context.taskId, startTime);
+    }
+    const registry = new PreDevPhaseRuleRegistry;
+    const applicableRules = registry.getApplicableRules(context);
+    const ruleResults = [];
+    const allChecks = [];
+    let blockingFailures = 0;
+    for (const rule of applicableRules) {
+      const ruleResult = await this.executeRule(rule, context);
+      ruleResults.push(ruleResult);
+      allChecks.push(...ruleResult.checkResults);
+      if (!ruleResult.passed && ruleResult.severity === "error") {
+        blockingFailures++;
+        if (this.config.stopOnFailure) {
+          break;
+        }
+      }
+    }
+    const passedCount = ruleResults.filter((r) => r.passed).length;
+    const failedCount = ruleResults.filter((r) => !r.passed && r.severity === "error").length;
+    const warningCount = ruleResults.filter((r) => !r.passed && r.severity === "warning").length;
+    const passed = failedCount === 0;
+    const recommendations = this.generateRecommendations(ruleResults, context);
+    const summary = this.generateSummary(passedCount, failedCount, warningCount, applicableRules.length);
+    const result = {
+      taskId: context.taskId,
+      passed,
+      summary,
+      ruleResults,
+      checks: allChecks,
+      passedCount,
+      failedCount,
+      warningCount,
+      blockingFailures,
+      duration: Date.now() - startTime,
+      timestamp: new Date().toISOString(),
+      recommendations
+    };
+    if (this.config.generateReport) {
+      await this.saveReport(result, context);
+    }
+    return result;
+  }
+  async tryAutoFix(result, context) {
+    const fixResults = new Map;
+    for (const check of result.checks) {
+      if (check.passed || !check.autoFixable || !check.autoFix) {
+        continue;
+      }
+      try {
+        const fixResult = await check.autoFix.fix();
+        fixResults.set(check.checkId, fixResult);
+        if (fixResult.success) {
+          console.log(`✅ 自动修复成功 [${check.checkId}]: ${fixResult.message}`);
+        } else {
+          console.log(`❌ 自动修复失败 [${check.checkId}]: ${fixResult.message}`);
+        }
+      } catch (error) {
+        const errorResult = {
+          success: false,
+          message: `执行自动修复时发生错误: ${error instanceof Error ? error.message : String(error)}`
+        };
+        fixResults.set(check.checkId, errorResult);
+        console.log(`❌ 自动修复异常 [${check.checkId}]: ${errorResult.message}`);
+      }
+    }
+    return fixResults;
+  }
+  async executeRule(rule, context) {
+    const startTime = Date.now();
+    const checkResults = [];
+    try {
+      switch (rule.id) {
+        case "R-GIT-001":
+          checkResults.push(await this.executeGitChecker("checkGitWorkspaceClean", rule, context));
+          break;
+        case "R-GIT-002":
+          checkResults.push(await this.executeGitChecker("checkGitStaged", rule, context));
+          break;
+        case "R-GIT-003":
+          checkResults.push(await this.executeGitChecker("checkGitIgnore", rule, context));
+          break;
+        case "R-GIT-004":
+          checkResults.push(await this.executeGitChecker("checkConflictMarkers", rule, context));
+          break;
+        case "R-BR-001":
+          checkResults.push(await this.executeBranchChecker("checkBranchExists", rule, context));
+          break;
+        case "R-BR-002":
+          checkResults.push(await this.executeBranchChecker("checkBranchAssociation", rule, context));
+          break;
+        case "R-BR-003":
+          checkResults.push(await this.executeBranchChecker("checkBranchTracking", rule, context));
+          break;
+        case "R-BR-004":
+          checkResults.push(await this.executeBranchChecker("checkBranchSync", rule, context));
+          break;
+        case "R-BR-005":
+          checkResults.push(await this.executeBranchChecker("checkBranchSwitchable", rule, context));
+          break;
+        case "R-DEPOUT-001":
+          checkResults.push(await this.executeDependencyChecker("checkDependencyOutputAvailable", rule, context));
+          break;
+        case "R-DEPOUT-002":
+          checkResults.push(await this.executeDependencyChecker("checkDependencyInterface", rule, context));
+          break;
+        case "R-DEPOUT-003":
+          checkResults.push(await this.executeDependencyChecker("checkCircularDependency", rule, context));
+          break;
+        case "R-RES-001":
+          checkResults.push(await this.executeResourceChecker("checkDevBranchConfig", rule, context));
+          break;
+        case "R-RES-002":
+          checkResults.push(await this.executeResourceChecker("checkDevDirectoryConfig", rule, context));
+          break;
+        case "R-RES-003":
+          checkResults.push(await this.executeResourceChecker("checkEnvConfig", rule, context));
+          break;
+        case "R-RES-004":
+          checkResults.push(await this.executeResourceChecker("checkDiskSpace", rule, context));
+          break;
+        case "R-PATH-001":
+          checkResults.push(await this.executePathChecker("checkTaskFilePath", rule, context));
+          break;
+        case "R-PATH-002":
+          checkResults.push(await this.executePathChecker("checkCodeReferencePath", rule, context));
+          break;
+        case "R-PATH-003":
+          checkResults.push(await this.executePathChecker("checkResourceReferencePath", rule, context));
+          break;
+        case "R-DEV-PRE-006":
+          checkResults.push(await this.executeDevChecker("testEnv", rule, context));
+          break;
+        case "R-DEV-PRE-007":
+          checkResults.push(await this.executeDevChecker("testFramework", rule, context));
+          break;
+        case "R-DEV-PRE-008":
+          checkResults.push(await this.executeDevChecker("testMetadata", rule, context));
+          break;
+        default:
+          switch (rule.type) {
+            case "git_workspace":
+              checkResults.push(await this.checkGitWorkspace(rule, context));
+              break;
+            case "branch_status":
+              checkResults.push(await this.checkBranchStatus(rule, context));
+              break;
+            case "dependency_output":
+              checkResults.push(await this.checkDependencyOutput(rule, context));
+              break;
+            case "resource_config":
+              checkResults.push(await this.checkResourceConfig(rule, context));
+              break;
+            case "retry_context":
+              checkResults.push(await this.checkRetryContext(rule, context));
+              break;
+            case "path_alignment":
+              checkResults.push(await this.checkPathAlignment(rule, context));
+              break;
+            default:
+              checkResults.push({
+                checkId: `${rule.id}-unknown`,
+                checkName: "未知检查类型",
+                ruleId: rule.id,
+                passed: false,
+                severity: "warning",
+                message: `未实现的规则类型: ${rule.type}`,
+                duration: 0,
+                timestamp: new Date().toISOString()
+              });
+          }
+      }
+    } catch (error) {
+      checkResults.push({
+        checkId: `${rule.id}-error`,
+        checkName: "规则执行错误",
+        ruleId: rule.id,
+        passed: false,
+        severity: "error",
+        message: `执行规则时发生错误: ${error instanceof Error ? error.message : String(error)}`,
+        duration: Date.now() - startTime,
+        timestamp: new Date().toISOString()
+      });
+    }
+    const passed = checkResults.every((c) => c.passed);
+    return {
+      ruleId: rule.id,
+      ruleName: rule.name,
+      ruleType: rule.type,
+      passed,
+      severity: rule.severity,
+      checkResults,
+      duration: Date.now() - startTime,
+      timestamp: new Date().toISOString()
+    };
+  }
+  async executeGitChecker(checkerName, rule, context) {
+    const { [checkerName]: checkerFn } = await Promise.resolve().then(() => (init_git_checker(), exports_git_checker));
+    return checkerFn(rule, context);
+  }
+  async executeBranchChecker(checkerName, rule, context) {
+    const { [checkerName]: checkerFn } = await Promise.resolve().then(() => (init_branch_checker(), exports_branch_checker));
+    return checkerFn(rule, context);
+  }
+  async executeDependencyChecker(checkerName, rule, context) {
+    const { [checkerName]: checkerFn } = await Promise.resolve().then(() => (init_dependency_checker(), exports_dependency_checker));
+    return checkerFn(rule, context);
+  }
+  async executeResourceChecker(checkerName, rule, context) {
+    const { [checkerName]: checkerFn } = await Promise.resolve().then(() => (init_resource_checker(), exports_resource_checker));
+    return checkerFn(rule, context);
+  }
+  async executePathChecker(checkerName, rule, context) {
+    const { [checkerName]: checkerFn } = await Promise.resolve().then(() => (init_path_checker(), exports_path_checker));
+    return checkerFn(rule, context);
+  }
+  async executeDevChecker(checkerName, rule, context) {
+    switch (checkerName) {
+      case "testEnv": {
+        const { createTestEnvChecker: createTestEnvChecker2 } = await Promise.resolve().then(() => (init_test_env_checker(), exports_test_env_checker));
+        return createTestEnvChecker2(rule.config).check(context);
+      }
+      case "testFramework": {
+        const { createTestFrameworkChecker: createTestFrameworkChecker2 } = await Promise.resolve().then(() => (init_test_framework_checker(), exports_test_framework_checker));
+        return createTestFrameworkChecker2(rule.config).check(context);
+      }
+      case "testMetadata": {
+        const { createTestMetadataChecker: createTestMetadataChecker2 } = await Promise.resolve().then(() => (init_test_metadata_checker(), exports_test_metadata_checker));
+        return createTestMetadataChecker2(rule.config).check(context);
+      }
+    }
+  }
+  async checkGitWorkspace(rule, context) {
+    const startTime = Date.now();
+    try {
+      const statusOutput = execSync8("git status --porcelain", {
+        cwd: context.cwd,
+        encoding: "utf-8"
+      });
+      const lines = statusOutput.trim().split(`
+`).filter((line) => line.length > 0);
+      const staged = lines.filter((line) => line.startsWith("A") || line.startsWith("M") || line.startsWith("D"));
+      const unstaged = lines.filter((line) => line.startsWith(" ") || line.startsWith("?"));
+      const untracked = lines.filter((line) => line.startsWith("??"));
+      const hasUncommittedChanges = lines.length > 0;
+      const config = rule.config;
+      const allowUncommitted = config?.allowUncommitted ?? false;
+      const maxUntrackedFiles = config?.maxUntrackedFiles ?? 10;
+      let passed = true;
+      let severity = rule.severity;
+      let message = "Git工作区干净，没有未提交更改";
+      if (hasUncommittedChanges) {
+        if (!allowUncommitted) {
+          passed = false;
+          message = `检测到 ${lines.length} 个未提交的文件更改`;
+        } else if (untracked.length > maxUntrackedFiles) {
+          passed = false;
+          severity = "warning";
+          message = `未跟踪文件过多: ${untracked.length} 个 (最大允许: ${maxUntrackedFiles})`;
+        } else {
+          passed = true;
+          severity = "info";
+          message = `允许未提交更改: ${lines.length} 个文件`;
+        }
+      }
+      const details = {
+        hasUncommittedChanges,
+        uncommittedFileCount: lines.length,
+        currentBranch: this.getCurrentBranch(context.cwd),
+        isSyncedWithRemote: false,
+        hasConflicts: false,
+        status: {
+          staged: staged.map((l) => l.slice(3)),
+          unstaged: unstaged.map((l) => l.slice(3)),
+          untracked: untracked.map((l) => l.slice(3))
+        }
+      };
+      return {
+        checkId: "git-workspace-status",
+        checkName: "Git工作区状态",
+        ruleId: rule.id,
+        passed,
+        severity,
+        message,
+        details,
+        suggestions: hasUncommittedChanges && !allowUncommitted ? ["执行 git add 和 git commit 提交更改", "或配置 allowUncommitted: true 允许未提交更改"] : undefined,
+        duration: Date.now() - startTime,
+        timestamp: new Date().toISOString()
+      };
+    } catch (error) {
+      return {
+        checkId: "git-workspace-status",
+        checkName: "Git工作区状态",
+        ruleId: rule.id,
+        passed: false,
+        severity: "error",
+        message: `Git工作区检查失败: ${error instanceof Error ? error.message : String(error)}`,
+        duration: Date.now() - startTime,
+        timestamp: new Date().toISOString()
+      };
+    }
+  }
+  async checkBranchStatus(rule, context) {
+    const startTime = Date.now();
+    try {
+      const currentBranch = this.getCurrentBranch(context.cwd);
+      const config = rule.config;
+      const requireSync = config?.requireSync ?? true;
+      const allowedBranches = config?.allowedBranches ?? ["main", "master", "develop"];
+      const isAllowedBranch = allowedBranches.includes(currentBranch);
+      let isSynced = true;
+      if (requireSync) {
+        try {
+          execSync8("git fetch --dry-run", { cwd: context.cwd, encoding: "utf-8" });
+        } catch {
+          isSynced = false;
+        }
+      }
+      const passed = isAllowedBranch && (!requireSync || isSynced);
+      let message = `当前分支: ${currentBranch}`;
+      if (!isAllowedBranch) {
+        message += ` (不在允许的分支列表: ${allowedBranches.join(", ")})`;
+      } else if (requireSync && !isSynced) {
+        message += " (与远程不同步)";
+      }
+      return {
+        checkId: "branch-status-check",
+        checkName: "分支状态检查",
+        ruleId: rule.id,
+        passed,
+        severity: rule.severity,
+        message,
+        details: {
+          currentBranch,
+          isAllowedBranch,
+          isSyncedWithRemote: isSynced,
+          allowedBranches,
+          requireSync
+        },
+        suggestions: !isAllowedBranch ? [`切换到允许的分支: git checkout ${allowedBranches[0]}`, "或更新配置添加当前分支到允许列表"] : !isSynced ? ["执行 git pull 同步远程更改"] : undefined,
+        duration: Date.now() - startTime,
+        timestamp: new Date().toISOString()
+      };
+    } catch (error) {
+      return {
+        checkId: "branch-status-check",
+        checkName: "分支状态检查",
+        ruleId: rule.id,
+        passed: false,
+        severity: "error",
+        message: `分支状态检查失败: ${error instanceof Error ? error.message : String(error)}`,
+        duration: Date.now() - startTime,
+        timestamp: new Date().toISOString()
+      };
+    }
+  }
+  async checkDependencyOutput(rule, context) {
+    const startTime = Date.now();
+    const taskDeps = context.task.dependencies || [];
+    if (taskDeps.length === 0) {
+      return {
+        checkId: "dependency-output-check",
+        checkName: "依赖输出检查",
+        ruleId: rule.id,
+        passed: true,
+        severity: "info",
+        message: "任务没有依赖，跳过依赖输出检查",
+        duration: Date.now() - startTime,
+        timestamp: new Date().toISOString()
+      };
+    }
+    return {
+      checkId: "dependency-output-check",
+      checkName: "依赖输出检查",
+      ruleId: rule.id,
+      passed: true,
+      severity: "info",
+      message: `任务有 ${taskDeps.length} 个依赖待检查`,
+      details: {
+        dependencyCount: taskDeps.length,
+        dependencies: taskDeps
+      },
+      duration: Date.now() - startTime,
+      timestamp: new Date().toISOString()
+    };
+  }
+  async checkResourceConfig(rule, context) {
+    const startTime = Date.now();
+    const config = rule.config;
+    const requiredEnvVars = config?.requiredEnvVars ?? ["NODE_ENV"];
+    const missingVars = requiredEnvVars.filter((v) => !process.env[v]);
+    const passed = missingVars.length === 0;
+    const details = {
+      devBranch: {
+        exists: true,
+        name: this.getCurrentBranch(context.cwd),
+        valid: true
+      },
+      devDirectory: {
+        exists: fs47.existsSync(context.cwd),
+        path: context.cwd,
+        writable: true
+      },
+      envConfig: {
+        valid: missingVars.length === 0,
+        missingVars
+      }
+    };
+    return {
+      checkId: "resource-config-check",
+      checkName: "资源配置检查",
+      ruleId: rule.id,
+      passed,
+      severity: rule.severity,
+      message: passed ? "所有资源配置检查通过" : `缺少必需的环境变量: ${missingVars.join(", ")}`,
+      details,
+      suggestions: missingVars.length > 0 ? missingVars.map((v) => `设置环境变量: export ${v}=value`) : undefined,
+      duration: Date.now() - startTime,
+      timestamp: new Date().toISOString()
+    };
+  }
+  async checkRetryContext(rule, context) {
+    const startTime = Date.now();
+    if (!context.isResumed && context.attempt === 1) {
+      return {
+        checkId: "retry-context-check",
+        checkName: "重试上下文检查",
+        ruleId: rule.id,
+        passed: true,
+        severity: "info",
+        message: "首次执行，跳过重试上下文检查",
+        duration: Date.now() - startTime,
+        timestamp: new Date().toISOString()
+      };
+    }
+    const previousFailure = context.previousFailure;
+    if (!previousFailure) {
+      return {
+        checkId: "retry-context-check",
+        checkName: "重试上下文检查",
+        ruleId: rule.id,
+        passed: true,
+        severity: "info",
+        message: `第 ${context.attempt} 次尝试，无前次失败信息`,
+        duration: Date.now() - startTime,
+        timestamp: new Date().toISOString()
+      };
+    }
+    return {
+      checkId: "retry-context-check",
+      checkName: "重试上下文检查",
+      ruleId: rule.id,
+      passed: true,
+      severity: "info",
+      message: `重试上下文已加载 (尝试 ${context.attempt}/${context.maxRetries})`,
+      details: {
+        attempt: context.attempt,
+        maxRetries: context.maxRetries,
+        previousFailure: {
+          phase: previousFailure.phase,
+          reason: previousFailure.reason,
+          attempt: previousFailure.attempt
+        }
+      },
+      suggestions: previousFailure.suggestedFixes,
+      duration: Date.now() - startTime,
+      timestamp: new Date().toISOString()
+    };
+  }
+  async checkPathAlignment(rule, context) {
+    const startTime = Date.now();
+    try {
+      switch (rule.id) {
+        case "R-PATH-001": {
+          const { checkTaskFilePath: checkTaskFilePath2 } = await Promise.resolve().then(() => (init_path_checker(), exports_path_checker));
+          return checkTaskFilePath2(rule, context);
+        }
+        case "R-PATH-002": {
+          const { checkCodeReferencePath: checkCodeReferencePath2 } = await Promise.resolve().then(() => (init_path_checker(), exports_path_checker));
+          return checkCodeReferencePath2(rule, context);
+        }
+        case "R-PATH-003": {
+          const { checkResourceReferencePath: checkResourceReferencePath2 } = await Promise.resolve().then(() => (init_path_checker(), exports_path_checker));
+          return checkResourceReferencePath2(rule, context);
+        }
+        default: {
+          return {
+            checkId: "path-alignment-check",
+            checkName: "路径对齐检查",
+            ruleId: rule.id,
+            passed: true,
+            severity: "info",
+            message: `未知路径规则: ${rule.id}，跳过检查`,
+            duration: Date.now() - startTime,
+            timestamp: new Date().toISOString()
+          };
+        }
+      }
+    } catch (error) {
+      return {
+        checkId: "path-alignment-check",
+        checkName: "路径对齐检查",
+        ruleId: rule.id,
+        passed: false,
+        severity: "error",
+        message: `路径对齐检查失败: ${error instanceof Error ? error.message : String(error)}`,
+        duration: Date.now() - startTime,
+        timestamp: new Date().toISOString()
+      };
+    }
+  }
+  getCurrentBranch(cwd) {
+    try {
+      return execSync8("git branch --show-current", {
+        cwd,
+        encoding: "utf-8"
+      }).trim();
+    } catch {
+      return "unknown";
+    }
+  }
+  generateRecommendations(ruleResults, context) {
+    const recommendations = [];
+    for (const result of ruleResults) {
+      for (const check of result.checkResults) {
+        if (check.suggestions) {
+          recommendations.push(...check.suggestions);
+        }
+      }
+    }
+    if (context.isResumed) {
+      recommendations.push(`这是第 ${context.attempt} 次尝试，之前在第 ${context.previousFailure?.attempt} 次尝试时失败`);
+    }
+    return Array.from(new Set(recommendations));
+  }
+  generateSummary(passed, failed, warnings, total) {
+    if (failed > 0) {
+      return `门禁检查未通过: ${failed} 个错误, ${warnings} 个警告 (共 ${total} 项)`;
+    }
+    if (warnings > 0) {
+      return `门禁检查通过: ${passed}/${total} 项通过，有 ${warnings} 个警告`;
+    }
+    return `门禁检查全部通过: ${passed}/${total} 项`;
+  }
+  createSkippedResult(taskId, startTime) {
+    return {
+      taskId,
+      passed: true,
+      summary: "门禁检查已禁用，自动通过",
+      ruleResults: [],
+      checks: [],
+      passedCount: 0,
+      failedCount: 0,
+      warningCount: 0,
+      blockingFailures: 0,
+      duration: Date.now() - startTime,
+      timestamp: new Date().toISOString(),
+      recommendations: ["门禁检查当前已禁用"]
+    };
+  }
+  async saveReport(result, context) {
+    if (!this.config.reportPath)
+      return;
+    const reportDir = path43.dirname(this.config.reportPath);
+    if (!fs47.existsSync(reportDir)) {
+      fs47.mkdirSync(reportDir, { recursive: true });
+    }
+    const report = {
+      reportId: `predev-${context.taskId}-${Date.now()}`,
+      taskId: context.taskId,
+      generatedAt: new Date().toISOString(),
+      result,
+      recommendations: result.recommendations,
+      metadata: {
+        version: "1.0.0",
+        checkerVersion: "1.0.0",
+        rulesExecuted: result.ruleResults.length,
+        attempt: context.attempt,
+        isResumed: context.isResumed
+      }
+    };
+    fs47.writeFileSync(this.config.reportPath, JSON.stringify(report, null, 2));
+  }
+}
+
+class PreDevPhaseRuleRegistry {
+  rules = [];
+  constructor() {
+    this.initializeDefaultRules();
+  }
+  registerRule(rule) {
+    if (this.rules.some((r) => r.id === rule.id)) {
+      throw new Error(`Rule '${rule.id}' already registered`);
+    }
+    this.rules.push(rule);
+  }
+  getRule(id) {
+    return this.rules.find((r) => r.id === id);
+  }
+  getAllRules() {
+    return [...this.rules];
+  }
+  getApplicableRules(context) {
+    return this.rules.filter((rule) => {
+      const ruleConfig = context.config.rules.get(rule.id);
+      const enabled = ruleConfig?.enabled ?? rule.enabled;
+      if (!enabled)
+        return false;
+      if (rule.id.startsWith("R-RETRY")) {
+        if (!context.config.enableRetryRules)
+          return false;
+        if (rule.isApplicable) {
+          return rule.isApplicable(context);
+        }
+      }
+      return true;
+    });
+  }
+  getRulesByType(type) {
+    return this.rules.filter((r) => r.type === type);
+  }
+  clear() {
+    this.rules = [];
+  }
+  initializeDefaultRules() {
+    for (const rule of DEFAULT_PRE_DEV_PHASE_RULES) {
+      this.rules.push(rule);
+    }
+  }
+}
+function createPreDevPhaseGateCoordinator(config) {
+  return new PreDevPhaseGateCoordinator(config);
+}
+async function runPreDevPhaseGate(taskId, cwd, attempt, config) {
+  const { readTaskMeta: readTaskMeta3 } = await Promise.resolve().then(() => (init_task2(), exports_task2));
+  const task = readTaskMeta3(taskId, cwd);
+  if (!task) {
+    throw new Error(`任务不存在: ${taskId}`);
+  }
+  const coordinator = createPreDevPhaseGateCoordinator(config);
+  const context = {
+    taskId,
+    task,
+    cwd,
+    attempt,
+    maxRetries: 3,
+    isResumed: attempt > 1,
+    config: {
+      enabled: true,
+      rules: new Map,
+      enableRetryRules: true,
+      stopOnFailure: true,
+      generateReport: true,
+      reportPath: ".projmnt4claude/reports/pre-dev-gate-report.json",
+      ...config
+    }
+  };
+  return coordinator.runGate(context);
+}
+
 // src/utils/hd-assembly-line.ts
 async function executeRules(rules, context) {
   for (const rule of rules) {
@@ -43269,43 +46445,43 @@ async function checkBranchStatus(_task) {
 async function checkResourceAvailability(_task) {
   return true;
 }
-async function checkDiskSpace(_cwd) {
+async function checkDiskSpace2(_cwd) {
   return true;
 }
 async function checkRetryContext(_task) {
   return true;
 }
-async function checkGitStaged(_cwd) {
+async function checkGitStaged2(_cwd) {
   return true;
 }
-async function checkGitIgnore(_cwd) {
+async function checkGitIgnore2(_cwd) {
   return true;
 }
-async function checkConflictMarkers(_cwd) {
+async function checkConflictMarkers2(_cwd) {
   return true;
 }
-async function checkBranchAssociation(_task) {
+async function checkBranchAssociation2(_task) {
   return true;
 }
-async function checkBranchTracking(_task) {
+async function checkBranchTracking2(_task) {
   return true;
 }
-async function checkBranchSync(_task) {
+async function checkBranchSync2(_task) {
   return true;
 }
-async function checkBranchSwitchable(_task) {
+async function checkBranchSwitchable2(_task) {
   return true;
 }
-async function checkTaskFilePath(_task) {
+async function checkTaskFilePath2(_task) {
   return true;
 }
 async function checkDependencyOutput(_task) {
   return true;
 }
-async function checkDependencyInterface(_task) {
+async function checkDependencyInterface2(_task) {
   return true;
 }
-async function checkCircularDependency(_task) {
+async function checkCircularDependency2(_task) {
   return true;
 }
 async function checkDevDirectory(_cwd) {
@@ -43420,23 +46596,39 @@ async function pre_dev_gate_check(context) {
     { id: "R-DEV-PRE-003", name: "依赖任务完成检查", onFailure: { targetPhase: "EXIT", reason: "依赖任务未完成" }, check: async (ctx) => checkDependencies(ctx.task) },
     { id: "R-DEV-PRE-004", name: "Git工作区问题", onFailure: { targetPhase: "EXIT", reason: "Git工作区存在问题" }, check: async (ctx) => checkGitWorkspace(ctx.cwd) },
     { id: "R-DEV-PRE-005", name: "分支状态检查", onFailure: { targetPhase: "EXIT", reason: "分支状态异常" }, check: async (ctx) => checkBranchStatus(ctx.task) },
-    { id: "R-DEV-PRE-006", name: "资源可用性检查", onFailure: { targetPhase: "EXIT", reason: "资源不可用" }, check: async (ctx) => checkResourceAvailability(ctx.task) },
-    { id: "R-DEV-PRE-007", name: "磁盘空间检查", onFailure: { targetPhase: "EXIT", reason: "磁盘空间不足" }, check: async (ctx) => checkDiskSpace(ctx.cwd) },
-    { id: "R-DEV-PRE-008", name: "重试上下文检查", onFailure: { targetPhase: "EXIT", reason: "重试上下文无效" }, check: async (ctx) => checkRetryContext(ctx.task) },
-    { id: "R-DEV-PRE-009", name: "Git暂存区检查", onFailure: { targetPhase: "EXIT", reason: "Git暂存区异常" }, check: async (ctx) => checkGitStaged(ctx.cwd) },
-    { id: "R-DEV-PRE-010", name: "Git忽略文件检查", onFailure: { targetPhase: "EXIT", reason: "Git忽略文件配置问题" }, check: async (ctx) => checkGitIgnore(ctx.cwd) },
-    { id: "R-DEV-PRE-011", name: "冲突标记检查", onFailure: { targetPhase: "EXIT", reason: "存在未解决的冲突标记" }, check: async (ctx) => checkConflictMarkers(ctx.cwd) },
-    { id: "R-DEV-PRE-012", name: "分支关联检查", onFailure: { targetPhase: "EXIT", reason: "分支关联异常" }, check: async (ctx) => checkBranchAssociation(ctx.task) },
-    { id: "R-DEV-PRE-013", name: "分支跟踪检查", onFailure: { targetPhase: "EXIT", reason: "分支跟踪异常" }, check: async (ctx) => checkBranchTracking(ctx.task) },
-    { id: "R-DEV-PRE-014", name: "分支同步检查", onFailure: { targetPhase: "EXIT", reason: "分支未同步" }, check: async (ctx) => checkBranchSync(ctx.task) },
-    { id: "R-DEV-PRE-015", name: "分支可切换检查", onFailure: { targetPhase: "EXIT", reason: "分支不可切换" }, check: async (ctx) => checkBranchSwitchable(ctx.task) },
-    { id: "R-DEV-PRE-016", name: "任务文件路径检查", onFailure: { targetPhase: "EXIT", reason: "任务文件路径无效" }, check: async (ctx) => checkTaskFilePath(ctx.task) },
+    { id: "R-DEV-PRE-021", name: "资源可用性检查", onFailure: { targetPhase: "EXIT", reason: "资源不可用" }, check: async (ctx) => checkResourceAvailability(ctx.task) },
+    { id: "R-DEV-PRE-022", name: "磁盘空间检查", onFailure: { targetPhase: "EXIT", reason: "磁盘空间不足" }, check: async (ctx) => checkDiskSpace2(ctx.cwd) },
+    { id: "R-DEV-PRE-023", name: "重试上下文检查", onFailure: { targetPhase: "EXIT", reason: "重试上下文无效" }, check: async (ctx) => checkRetryContext(ctx.task) },
+    { id: "R-DEV-PRE-009", name: "Git暂存区检查", onFailure: { targetPhase: "EXIT", reason: "Git暂存区异常" }, check: async (ctx) => checkGitStaged2(ctx.cwd) },
+    { id: "R-DEV-PRE-010", name: "Git忽略文件检查", onFailure: { targetPhase: "EXIT", reason: "Git忽略文件配置问题" }, check: async (ctx) => checkGitIgnore2(ctx.cwd) },
+    { id: "R-DEV-PRE-011", name: "冲突标记检查", onFailure: { targetPhase: "EXIT", reason: "存在未解决的冲突标记" }, check: async (ctx) => checkConflictMarkers2(ctx.cwd) },
+    { id: "R-DEV-PRE-012", name: "分支关联检查", onFailure: { targetPhase: "EXIT", reason: "分支关联异常" }, check: async (ctx) => checkBranchAssociation2(ctx.task) },
+    { id: "R-DEV-PRE-013", name: "分支跟踪检查", onFailure: { targetPhase: "EXIT", reason: "分支跟踪异常" }, check: async (ctx) => checkBranchTracking2(ctx.task) },
+    { id: "R-DEV-PRE-014", name: "分支同步检查", onFailure: { targetPhase: "EXIT", reason: "分支未同步" }, check: async (ctx) => checkBranchSync2(ctx.task) },
+    { id: "R-DEV-PRE-015", name: "分支可切换检查", onFailure: { targetPhase: "EXIT", reason: "分支不可切换" }, check: async (ctx) => checkBranchSwitchable2(ctx.task) },
+    { id: "R-DEV-PRE-016", name: "任务文件路径检查", onFailure: { targetPhase: "EXIT", reason: "任务文件路径无效" }, check: async (ctx) => checkTaskFilePath2(ctx.task) },
     { id: "R-DEV-PRE-017", name: "依赖输出检查", onFailure: { targetPhase: "EXIT", reason: "依赖输出异常" }, check: async (ctx) => checkDependencyOutput(ctx.task) },
-    { id: "R-DEV-PRE-018", name: "依赖接口检查", onFailure: { targetPhase: "EXIT", reason: "依赖接口异常" }, check: async (ctx) => checkDependencyInterface(ctx.task) },
-    { id: "R-DEV-PRE-019", name: "循环依赖检查", onFailure: { targetPhase: "EXIT", reason: "存在循环依赖" }, check: async (ctx) => checkCircularDependency(ctx.task) },
+    { id: "R-DEV-PRE-018", name: "依赖接口检查", onFailure: { targetPhase: "EXIT", reason: "依赖接口异常" }, check: async (ctx) => checkDependencyInterface2(ctx.task) },
+    { id: "R-DEV-PRE-019", name: "循环依赖检查", onFailure: { targetPhase: "EXIT", reason: "存在循环依赖" }, check: async (ctx) => checkCircularDependency2(ctx.task) },
     { id: "R-DEV-PRE-020", name: "开发目录检查", onFailure: { targetPhase: "EXIT", reason: "开发目录异常" }, check: async (ctx) => checkDevDirectory(ctx.cwd) }
   ];
-  return executeRules(rules, context);
+  const inlineResult = await executeRules(rules, context);
+  if (!inlineResult.passed) {
+    return inlineResult;
+  }
+  try {
+    const coordinatorResult = await runPreDevPhaseGate(context.task.id, context.cwd, 1);
+    if (!coordinatorResult.passed) {
+      return {
+        passed: false,
+        targetPhase: "EXIT",
+        reason: `R-DEV-PRE-COORD: ${coordinatorResult.summary}`
+      };
+    }
+  } catch (error) {
+    console.warn(`[pre_dev_gate_check] Coordinator 门禁检查失败（非阻塞）: ${error instanceof Error ? error.message : String(error)}`);
+  }
+  return { passed: true };
 }
 async function post_dev_gate_check(context) {
   const rules = [
@@ -43829,6 +47021,7 @@ ${"━".repeat(SEPARATOR_WIDTH)}`);
     let devReport;
     let codeReviewVerdict;
     let qaVerdict;
+    let assumeTargetPhase = this.getNextPhaseForRetry(resumePhase);
     while (currentPhaseIndex <= 3) {
       const phase = phases[currentPhaseIndex];
       if (phase === "development") {
@@ -43865,6 +47058,9 @@ ${"━".repeat(SEPARATOR_WIDTH)}`);
                 return record;
               }
               console.log(`   ↩️ 开发阶段门禁失败，回退到: ${targetPhase} (重试 ${currentRetryCount + 1}/${maxRetries})`);
+              if (targetPhase === "development") {
+                assumeTargetPhase = this.getNextPhaseForRetry("code_review");
+              }
               currentPhaseIndex = flowTargetToPhaseIndex(targetPhase);
               continue;
             }
@@ -43883,7 +47079,10 @@ ${"━".repeat(SEPARATOR_WIDTH)}`);
           }
           addTimeline("dev_completed", `开发完成: ${devReport.status}`, { status: devReport.status });
           this.statusReporter.completePhase("development", taskId, `开发完成: ${devReport.status}`);
-          state.retryCounter.set(taskId, 0);
+          if (assumeTargetPhase == devLifecycleResult.targetPhase) {
+            state.retryCounter.set(taskId, 0);
+            assumeTargetPhase = this.getNextPhaseForRetry(devLifecycleResult.targetPhase);
+          }
           this.syncCheckpointStatus(taskId, "development", { devReport });
           await this.ensureTransition(taskId, "wait_review", "开发完成，等待代码审核");
           record.finalStatus = "wait_review";
@@ -43942,6 +47141,9 @@ ${"━".repeat(SEPARATOR_WIDTH)}`);
                 return record;
               }
               console.log(`   ↩️ 代码审核门禁失败，回退到: ${targetPhase} (重试 ${currentRetryCount + 1}/${maxRetries})`);
+              if (targetPhase === "code_review") {
+                assumeTargetPhase = this.getNextPhaseForRetry("qa");
+              }
               currentPhaseIndex = flowTargetToPhaseIndex(targetPhase);
               continue;
             }
@@ -43949,7 +47151,10 @@ ${"━".repeat(SEPARATOR_WIDTH)}`);
           }
           addTimeline("code_review_completed", `代码审核完成: ${codeReviewVerdict.result}`, { result: codeReviewVerdict.result });
           this.statusReporter.completePhase("code_review", taskId, `代码审核完成: ${codeReviewVerdict.result}`);
-          state.retryCounter.set(taskId, 0);
+          if (assumeTargetPhase == crLifecycleResult.targetPhase) {
+            state.retryCounter.set(taskId, 0);
+            assumeTargetPhase = this.getNextPhaseForRetry(crLifecycleResult.targetPhase);
+          }
           this.syncCheckpointStatus(taskId, "code_review", { codeReviewVerdict });
           await this.ensureTransition(taskId, "wait_qa", "代码审核通过，等待QA验证");
           record.finalStatus = "wait_qa";
@@ -44008,6 +47213,9 @@ ${"━".repeat(SEPARATOR_WIDTH)}`);
                 return record;
               }
               console.log(`   ↩️ QA门禁失败，回退到: ${targetPhase} (重试 ${currentRetryCount + 1}/${maxRetries})`);
+              if (targetPhase === "qa") {
+                assumeTargetPhase = this.getNextPhaseForRetry("evaluation");
+              }
               currentPhaseIndex = flowTargetToPhaseIndex(targetPhase);
               continue;
             }
@@ -44018,7 +47226,10 @@ ${"━".repeat(SEPARATOR_WIDTH)}`);
             requiresHuman: qaVerdict.requiresHuman
           });
           this.statusReporter.completePhase("qa_verification", taskId, `QA 验证完成: ${qaVerdict.result}`);
-          state.retryCounter.set(taskId, 0);
+          if (assumeTargetPhase == qaLifecycleResult.targetPhase) {
+            state.retryCounter.set(taskId, 0);
+            assumeTargetPhase = this.getNextPhaseForRetry(qaLifecycleResult.targetPhase);
+          }
           console.log(`
 \uD83D\uDD12 Post-QA Gate 门禁检查...`);
           const postGateContext = {
@@ -44105,6 +47316,9 @@ ${"━".repeat(SEPARATOR_WIDTH)}`);
               return record;
             }
             console.log(`   ↩️ 评估门禁失败，回退到: ${targetPhase} (重试 ${currentRetryCount + 1}/${maxRetries})`);
+            if (targetPhase === "evaluation") {
+              assumeTargetPhase = "__SAME_PHASE_ROLLBACK__";
+            }
             currentPhaseIndex = flowTargetToPhaseIndex(targetPhase);
             continue;
           }
@@ -44121,7 +47335,9 @@ ${"━".repeat(SEPARATOR_WIDTH)}`);
         const verdict = record.reviewVerdict;
         addTimeline("review_completed", `评估完成: ${verdict.result}`, { result: verdict.result });
         this.statusReporter.completePhase("evaluation", taskId, `评估完成: ${verdict.result}`);
-        state.retryCounter.set(taskId, 0);
+        if (assumeTargetPhase == evalLifecycleResult.targetPhase) {
+          state.retryCounter.set(taskId, 0);
+        }
         this.syncAllPendingCheckpoints(taskId);
         await this.assignTaskRole(taskId, "executor");
         const retryCount = state.retryCounter.get(taskId) || 0;
@@ -44268,6 +47484,18 @@ ${"━".repeat(SEPARATOR_WIDTH)}`);
           state.retryCounter.set(taskId, (state.retryCounter.get(taskId) || 0) + 1);
           continue;
         }
+        if (targetPhase === "RETRY") {
+          console.log(`   ❌ 阶段内重试耗尽 (${attempt}/${maxRetries})，中断流水线`);
+          return {
+            success: false,
+            phase,
+            failedAt: "post_phase_gate",
+            attempt,
+            reason: `阶段内重试耗尽: ${postGateErrorMsg}`,
+            retryable: false,
+            targetPhase: "EXIT"
+          };
+        }
         if (targetPhase === "EXIT") {
           console.log(`   \uD83D\uDEAB 门禁失败，中断流水线`);
           return {
@@ -44300,7 +47528,16 @@ ${"━".repeat(SEPARATOR_WIDTH)}`);
         attempt,
         result: phaseResult,
         reason: "阶段执行成功",
-        retryable: false
+        retryable: false,
+        targetPhase: (() => {
+          const map = {
+            development: "code_review",
+            code_review: "qa",
+            qa: "evaluation",
+            evaluation: undefined
+          };
+          return map[phase];
+        })()
       };
     }
     return {
@@ -44981,9 +48218,9 @@ ${"━".repeat(SEPARATOR_WIDTH)}`);
       const task = readTaskMeta(taskId, this.config.cwd);
       if (task?.resumeAction !== "retry") {
         const projectDir = getProjectDir(this.config.cwd);
-        const qaReportPath = path38.join(projectDir, "reports", "harness", taskId, "qa-report.md");
-        if (fs42.existsSync(qaReportPath)) {
-          const content = fs42.readFileSync(qaReportPath, "utf-8");
+        const qaReportPath = path44.join(projectDir, "reports", "harness", taskId, "qa-report.md");
+        if (fs48.existsSync(qaReportPath)) {
+          const content = fs48.readFileSync(qaReportPath, "utf-8");
           if (content.trim().length > 0) {
             console.log(`   \uD83D\uDCCB 检测到 wait_qa 但 qa-report.md 已存在，自动迁移为 wait_evaluation`);
             return "evaluation";
@@ -45005,20 +48242,28 @@ ${"━".repeat(SEPARATOR_WIDTH)}`);
     }
     return order[idx + 1];
   }
+  getNextPhaseForRetry(currentPhase) {
+    const phaseOrder = ["development", "code_review", "qa", "evaluation"];
+    const currentIndex = phaseOrder.indexOf(currentPhase);
+    if (currentIndex === -1 || currentIndex === phaseOrder.length - 1) {
+      return null;
+    }
+    return phaseOrder[currentIndex + 1] ?? null;
+  }
   validatePrerequisites(taskId, phase) {
     const required = AssemblyLine.PHASE_PREREQUISITES[phase];
     if (!required || required.length === 0) {
       return true;
     }
     const projectDir = getProjectDir(this.config.cwd);
-    const reportDir = path38.join(projectDir, "reports", "harness", taskId);
+    const reportDir = path44.join(projectDir, "reports", "harness", taskId);
     for (const reportFile of required) {
-      const filePath = path38.join(reportDir, reportFile);
-      if (!fs42.existsSync(filePath)) {
+      const filePath = path44.join(reportDir, reportFile);
+      if (!fs48.existsSync(filePath)) {
         return false;
       }
       try {
-        const content = fs42.readFileSync(filePath, "utf-8");
+        const content = fs48.readFileSync(filePath, "utf-8");
         if (content.trim().length === 0) {
           return false;
         }
@@ -45110,7 +48355,7 @@ ${"━".repeat(SEPARATOR_WIDTH)}`);
     let enhancedReason = reason;
     if (reportType) {
       const reportPath = getReportPath(taskId, reportType, this.config.cwd);
-      if (fs42.existsSync(reportPath)) {
+      if (fs48.existsSync(reportPath)) {
         enhancedReason = `${reason}
 
 详细信息请参考：${reportPath}`;
@@ -45382,31 +48627,31 @@ ${"━".repeat(SEPARATOR_WIDTH)}`);
     if (!resumePhase)
       return true;
     const projectDir = getProjectDir(this.config.cwd);
-    const reportDir = path38.join(projectDir, "reports", "harness", taskId);
+    const reportDir = path44.join(projectDir, "reports", "harness", taskId);
     const checks = [];
     switch (resumePhase) {
       case "qa":
-        checks.push({ file: path38.join(reportDir, "dev-report.md"), label: "开发报告" });
-        checks.push({ file: path38.join(reportDir, "code-review-report.md"), label: "代码审核报告" });
+        checks.push({ file: path44.join(reportDir, "dev-report.md"), label: "开发报告" });
+        checks.push({ file: path44.join(reportDir, "code-review-report.md"), label: "代码审核报告" });
         break;
       case "evaluation":
-        checks.push({ file: path38.join(reportDir, "dev-report.md"), label: "开发报告" });
-        checks.push({ file: path38.join(reportDir, "code-review-report.md"), label: "代码审核报告" });
-        checks.push({ file: path38.join(reportDir, "qa-report.md"), label: "QA报告" });
+        checks.push({ file: path44.join(reportDir, "dev-report.md"), label: "开发报告" });
+        checks.push({ file: path44.join(reportDir, "code-review-report.md"), label: "代码审核报告" });
+        checks.push({ file: path44.join(reportDir, "qa-report.md"), label: "QA报告" });
         break;
       case "code_review":
-        checks.push({ file: path38.join(reportDir, "dev-report.md"), label: "开发报告" });
+        checks.push({ file: path44.join(reportDir, "dev-report.md"), label: "开发报告" });
         break;
       case "development":
         return true;
     }
     for (const check of checks) {
-      if (!fs42.existsSync(check.file)) {
+      if (!fs48.existsSync(check.file)) {
         console.log(`   ⚠️ 缺少${check.label}: ${check.file}`);
         return false;
       }
       try {
-        const content = fs42.readFileSync(check.file, "utf-8");
+        const content = fs48.readFileSync(check.file, "utf-8");
         if (content.trim().length === 0) {
           console.log(`   ⚠️ ${check.label}为空: ${check.file}`);
           return false;
@@ -45489,7 +48734,7 @@ ${"━".repeat(SEPARATOR_WIDTH)}`);
       return "";
     }
     try {
-      const statusOutput = execSync4("git status --porcelain", {
+      const statusOutput = execSync9("git status --porcelain", {
         cwd: this.config.cwd,
         encoding: "utf-8",
         timeout: 1e4
@@ -45501,13 +48746,13 @@ ${"━".repeat(SEPARATOR_WIDTH)}`);
       }
       const changedFiles = statusOutput.trim().split(`
 `).length;
-      execSync4("git add -A", {
+      execSync9("git add -A", {
         cwd: this.config.cwd,
         encoding: "utf-8",
         timeout: 30000
       });
       const commitMessage = `feat: ${taskId} - ${taskTitle}`;
-      const commitOutput = execSync4(`git commit -m ${JSON.stringify(commitMessage)}`, {
+      const commitOutput = execSync9(`git commit -m ${JSON.stringify(commitMessage)}`, {
         cwd: this.config.cwd,
         encoding: "utf-8",
         timeout: 30000
@@ -45518,7 +48763,7 @@ ${"━".repeat(SEPARATOR_WIDTH)}`);
         commitSha = shaMatch[1];
       } else {
         try {
-          commitSha = execSync4("git rev-parse HEAD", {
+          commitSha = execSync9("git rev-parse HEAD", {
             cwd: this.config.cwd,
             encoding: "utf-8",
             timeout: 5000
@@ -45571,29 +48816,29 @@ ${"━".repeat(SEPARATOR_WIDTH)}`);
     try {
       if (this.config.taskGitCommit) {
         try {
-          const lastCommitMsg = execSync4("git log -1 --pretty=%s", {
+          const lastCommitMsg = execSync9("git log -1 --pretty=%s", {
             cwd: this.config.cwd,
             encoding: "utf-8",
             timeout: 5000
           }).trim();
           if (lastCommitMsg.includes(taskId)) {
-            const currentBranch = execSync4("git rev-parse --abbrev-ref HEAD", {
+            const currentBranch = execSync9("git rev-parse --abbrev-ref HEAD", {
               cwd: this.config.cwd,
               encoding: "utf-8",
               timeout: 5000
             }).trim();
-            const unpushedCheck = execSync4(`git log origin/${currentBranch}..HEAD --oneline 2>/dev/null || echo ""`, {
+            const unpushedCheck = execSync9(`git log origin/${currentBranch}..HEAD --oneline 2>/dev/null || echo ""`, {
               cwd: this.config.cwd,
               encoding: "utf-8",
               timeout: 5000
             }).trim();
             if (unpushedCheck.includes(taskId) || unpushedCheck.length > 0) {
-              const commitSha = execSync4("git rev-parse HEAD", {
+              const commitSha = execSync9("git rev-parse HEAD", {
                 cwd: this.config.cwd,
                 encoding: "utf-8",
                 timeout: 5000
               }).trim();
-              execSync4("git reset --soft HEAD~1", {
+              execSync9("git reset --soft HEAD~1", {
                 cwd: this.config.cwd,
                 encoding: "utf-8",
                 timeout: 1e4
@@ -45607,15 +48852,15 @@ ${"━".repeat(SEPARATOR_WIDTH)}`);
         }
       }
       const stageFiles = [
-        path38.join(this.config.cwd, ".projmnt4claude", "reports", taskId, "dev-report.json"),
-        path38.join(this.config.cwd, ".projmnt4claude", "reports", taskId, "code-review-report.json"),
-        path38.join(this.config.cwd, ".projmnt4claude", "reports", taskId, "qa-report.json"),
-        path38.join(this.config.cwd, ".projmnt4claude", "reports", taskId, "evaluation-report.json")
+        path44.join(this.config.cwd, ".projmnt4claude", "reports", taskId, "dev-report.json"),
+        path44.join(this.config.cwd, ".projmnt4claude", "reports", taskId, "code-review-report.json"),
+        path44.join(this.config.cwd, ".projmnt4claude", "reports", taskId, "qa-report.json"),
+        path44.join(this.config.cwd, ".projmnt4claude", "reports", taskId, "evaluation-report.json")
       ];
       for (const file of stageFiles) {
-        if (fs42.existsSync(file)) {
+        if (fs48.existsSync(file)) {
           try {
-            fs42.unlinkSync(file);
+            fs48.unlinkSync(file);
             result.cleanedFiles.push(file);
           } catch (unlinkError) {
             console.warn(`   ⚠️ 无法删除文件 ${file}: ${unlinkError instanceof Error ? unlinkError.message : String(unlinkError)}`);
@@ -45804,7 +49049,7 @@ ${"━".repeat(SEPARATOR_WIDTH)}`);
       return;
     }
     try {
-      const statusOutput = execSync4("git status --porcelain", {
+      const statusOutput = execSync9("git status --porcelain", {
         cwd: this.config.cwd,
         encoding: "utf-8",
         timeout: 1e4
@@ -45817,7 +49062,7 @@ ${"━".repeat(SEPARATOR_WIDTH)}`);
             const batchNumber = batchIndex + 1;
             const timestamp = Math.floor(Date.now() / 1000);
             const tagName2 = `batch-${batchNumber}-${timestamp}`;
-            execSync4(`git tag ${tagName2}`, {
+            execSync9(`git tag ${tagName2}`, {
               cwd: this.config.cwd,
               encoding: "utf-8",
               timeout: 1e4
@@ -45831,13 +49076,13 @@ ${"━".repeat(SEPARATOR_WIDTH)}`);
       }
       const changedFiles = statusOutput.trim().split(`
 `).length;
-      execSync4("git add -A", {
+      execSync9("git add -A", {
         cwd: this.config.cwd,
         encoding: "utf-8",
         timeout: 30000
       });
       const commitMessage = `harness: ${label} 完成 (${passed} 通过, ${failed} 失败, ${changedFiles} 文件变更)`;
-      const commitOutput = execSync4(`git commit -m ${JSON.stringify(commitMessage)}`, {
+      const commitOutput = execSync9(`git commit -m ${JSON.stringify(commitMessage)}`, {
         cwd: this.config.cwd,
         encoding: "utf-8",
         timeout: 30000
@@ -45848,7 +49093,7 @@ ${"━".repeat(SEPARATOR_WIDTH)}`);
         commitSha = shaMatch[1];
       } else {
         try {
-          commitSha = execSync4("git rev-parse HEAD", {
+          commitSha = execSync9("git rev-parse HEAD", {
             cwd: this.config.cwd,
             encoding: "utf-8",
             timeout: 5000
@@ -45863,7 +49108,7 @@ ${"━".repeat(SEPARATOR_WIDTH)}`);
           const batchNumber = batchIndex + 1;
           const timestamp = Math.floor(Date.now() / 1000);
           tagName = `batch-${batchNumber}-${timestamp}`;
-          execSync4(`git tag ${tagName}`, {
+          execSync9(`git tag ${tagName}`, {
             cwd: this.config.cwd,
             encoding: "utf-8",
             timeout: 1e4
@@ -46463,19 +49708,19 @@ async function harnessCommand(options, cwd = process.cwd()) {
     uninstallExitHooks();
     const projectDir = process.env.PROJMNT4CLAUDE_ROOT ?? process.cwd();
     const projectHash = createHash2("sha256").update(projectDir).digest("hex").slice(0, 16);
-    const sessionsDir = path39.join(homedir3(), ".claude", "projects", projectHash);
+    const sessionsDir = path45.join(homedir3(), ".claude", "projects", projectHash);
     const mappings = sessionIdMapper.serialize();
     for (const m of mappings) {
-      const jsonlPath = path39.join(sessionsDir, `${m.cliUuid}.jsonl`);
+      const jsonlPath = path45.join(sessionsDir, `${m.cliUuid}.jsonl`);
       try {
-        if (fs43.existsSync(jsonlPath))
-          fs43.unlinkSync(jsonlPath);
+        if (fs49.existsSync(jsonlPath))
+          fs49.unlinkSync(jsonlPath);
       } catch {}
     }
   }
 }
 function getRuntimeStatePath2(cwd) {
-  return path39.join(getProjectDir(cwd), "harness-state.json");
+  return path45.join(getProjectDir(cwd), "harness-state.json");
 }
 function validateAndRepairState(data, cwd) {
   const errors = [];
@@ -46638,12 +49883,12 @@ function validateAndRepairState(data, cwd) {
 }
 function loadRuntimeState(cwd) {
   const statePath = getRuntimeStatePath2(cwd);
-  if (!fs43.existsSync(statePath)) {
+  if (!fs49.existsSync(statePath)) {
     return null;
   }
   const texts = t(cwd);
   try {
-    const content = fs43.readFileSync(statePath, "utf-8");
+    const content = fs49.readFileSync(statePath, "utf-8");
     if (!content.trim()) {
       console.warn(texts.harnessCmd.emptyStateFile);
       return null;
@@ -46689,8 +49934,8 @@ function loadRuntimeState(cwd) {
 }
 function clearRuntimeState(cwd) {
   const statePath = getRuntimeStatePath2(cwd);
-  if (fs43.existsSync(statePath)) {
-    fs43.unlinkSync(statePath);
+  if (fs49.existsSync(statePath)) {
+    fs49.unlinkSync(statePath);
   }
 }
 function summaryToJSON(summary) {
@@ -46717,13 +49962,13 @@ function summaryToJSON(summary) {
 }
 async function loadTaskQueue(options, cwd) {
   if (options.plan) {
-    const planFile = path39.resolve(cwd, options.plan);
-    if (!fs43.existsSync(planFile)) {
+    const planFile = path45.resolve(cwd, options.plan);
+    if (!fs49.existsSync(planFile)) {
       console.error(`Error: Plan file does not exist: ${planFile}`);
       process.exit(1);
     }
     try {
-      const planContent = fs43.readFileSync(planFile, "utf-8");
+      const planContent = fs49.readFileSync(planFile, "utf-8");
       const planData = JSON.parse(planContent);
       let taskQueue = planData.recommendation?.suggestedOrder || [];
       const batches = planData.batchOrder || planData.batches;
@@ -46825,14 +50070,14 @@ function printSummary(summary) {
 }
 
 // src/utils/path.ts
-import * as path40 from "path";
-import * as fs44 from "fs";
+import * as path46 from "path";
+import * as fs50 from "fs";
 function getProjectDir5(cwd = process.cwd()) {
   const testMocks = globalThis.__PROJMNT4CLAUDE_TEST_MOCKS__;
   if (testMocks?.getProjectDir) {
     return testMocks.getProjectDir(cwd);
   }
-  return path40.join(cwd, ".projmnt4claude");
+  return path46.join(cwd, ".projmnt4claude");
 }
 function isInitialized2(cwd = process.cwd()) {
   const testMocks = globalThis.__PROJMNT4CLAUDE_TEST_MOCKS__;
@@ -46840,17 +50085,17 @@ function isInitialized2(cwd = process.cwd()) {
     return testMocks.isInitialized(cwd);
   }
   const projectDir = getProjectDir5(cwd);
-  const configPath = path40.join(projectDir, "config.json");
-  if (fs44.existsSync(configPath)) {
+  const configPath = path46.join(projectDir, "config.json");
+  if (fs50.existsSync(configPath)) {
     return true;
   }
-  const tasksDir = path40.join(projectDir, "tasks");
-  if (fs44.existsSync(tasksDir)) {
+  const tasksDir = path46.join(projectDir, "tasks");
+  if (fs50.existsSync(tasksDir)) {
     try {
-      const taskDirs = fs44.readdirSync(tasksDir);
+      const taskDirs = fs50.readdirSync(tasksDir);
       return taskDirs.some((taskDir) => {
-        const metaPath = path40.join(tasksDir, taskDir, "meta.json");
-        return fs44.existsSync(metaPath);
+        const metaPath = path46.join(tasksDir, taskDir, "meta.json");
+        return fs50.existsSync(metaPath);
       });
     } catch {
       return false;
@@ -46928,9 +50173,13 @@ Global Options:
   -f, --force            Force operation
 
 create Options:
-  --into <id>            Create as subtask
-  --from-requirement     Create from requirement
-  --requirement-text <text>  Requirement text
+  --into <id>                  Create as subtask
+  --from-requirement           Create from requirement
+  --requirement-text <text>    Requirement text
+  --test-framework <framework> Test framework: jest/pytest/go test
+  --test-command <command>     Test command: npx jest --config jest.config.js
+  --tech-stack <stack>         Tech stack: Node.js 18 + TypeScript 5.x
+  --project-test-conventions <conventions>  Test conventions: __tests__/ dir, *.test.ts
 
 list Options:
   --status <status>      Filter by status
@@ -46975,18 +50224,18 @@ rename format:
   task rename <oldTaskId> <newTaskId>
 
   Example:
-    task rename TASK-001 TASK-feature-new-name`).allowExcessArguments(true).option("-s, --status <status>", "Filter by status (list only)").option("-p, --priority <priority>", "Filter by priority (list only)").option("-r, --role <role>", "Filter by recommended role (list only)").option("--dep-id <depId>", "Dependency task ID (dependency only)").option("--title <title>", "Task title (create/update only)").option("--description <description>", "Task description (create/update only)").option("--type <type>", "Task type (create/count): bug/feature/research/docs/refactor/test").option("-y, --yes", "Non-interactive mode (create/checkpoint/delete only)").option("--token <n>", "Token estimation").option("--sync-children", "Sync subtask status (update resolved/closed only)").option("--no-sync", "Do not sync subtask status (update only)").option("--topic <topic>", "Discussion topic (discuss only)").option("-v, --verbose", "\u663E\u793A\u5B8C\u6574\u4FE1\u606F (\u4EC5 show)").option("--history", "Show change history only (show only)").option("--json", "JSON format output (show/get/list/status/count only)").option("--compact", "Compact output (show only)").option("--fields <fields>", "Custom output fields (list only)").option("--missing-verification", "Filter tasks missing verification (list only)").option("-g, --group <field>", "Group display (list only): status/priority/type/role").option("--checkpoints", "Show checkpoint details (show only)").option("--format <format>", "Output format (show only): panel/classic").option("--result <result>", "Verification result (checkpoint complete only)").option("--note <note>", "Checkpoint note (checkpoint note/fail only)").option("--into <count>", "Split count (split only)").option("--titles <titles>", "Subtask title list (split only)").option("--skip-validation", "Skip checkpoint quality validation (create only)").option("-f, --force", "Force operation").option("--file <path>", "Read description from file (create only, for long descriptions with special characters)").option("--from-requirement", "Create from requirement (create only)").option("--requirement-text <text>", "Requirement text (create only)").option("--branch <branch>", "Associated branch (create only)").option("--from <id>", "Dependency source (dependency only)").option("--to <id>", "Dependency target (dependency only)").option("--remove", "Remove dependency (dependency only)").option("--parts <n>", "Split count (split only)").option("--strategy <strategy>", "Split strategy (split only)").option("--pass", "Pass checkpoint (checkpoint only)").option("--fail", "Fail checkpoint (checkpoint only)").option("--all", "Include all tasks including resolved/closed (batch-update only)").option("--tasks <ids>", "Specify task ID list, comma-separated (batch-update only)", collectValues, []).option("--task-file <path>", "Read task ID list from file, one per line or comma-separated (batch-update only)").option("--change-note <note>", "Change note, at least 10 characters, recorded in transitionNotes (batch-update only)").option("--source <source>", "Filter log source (batch-update-logs only): cli/ide/hook/script/unknown").option("--summary", "Show log statistics summary (batch-update-logs only)").option("--enhancement", "Mark reopen as enhancement request (reopen only)").option("--failed-checkpoints <ids>", "Failed checkpoint IDs, comma-separated (reopen only)").option("--qa-feedback <text>", "QA feedback for reopen (reopen only)").action(async (action, id, options) => {
+    task rename TASK-001 TASK-feature-new-name`).allowExcessArguments(true).option("-s, --status <status>", "Filter by status (list only)").option("-p, --priority <priority>", "Filter by priority (list only)").option("-r, --role <role>", "Filter by recommended role (list only)").option("--dep-id <depId>", "Dependency task ID (dependency only)").option("--title <title>", "Task title (create/update only)").option("--description <description>", "Task description (create/update only)").option("--type <type>", "Task type (create/count): bug/feature/research/docs/refactor/test").option("-y, --yes", "Non-interactive mode (create/checkpoint/delete only)").option("--token <n>", "Token estimation").option("--sync-children", "Sync subtask status (update resolved/closed only)").option("--no-sync", "Do not sync subtask status (update only)").option("--topic <topic>", "Discussion topic (discuss only)").option("-v, --verbose", "\u663E\u793A\u5B8C\u6574\u4FE1\u606F (\u4EC5 show)").option("--history", "Show change history only (show only)").option("--json", "JSON format output (show/get/list/status/count only)").option("--compact", "Compact output (show only)").option("--fields <fields>", "Custom output fields (list only)").option("--missing-verification", "Filter tasks missing verification (list only)").option("-g, --group <field>", "Group display (list only): status/priority/type/role").option("--checkpoints", "Show checkpoint details (show only)").option("--format <format>", "Output format (show only): panel/classic").option("--result <result>", "Verification result (checkpoint complete only)").option("--note <note>", "Checkpoint note (checkpoint note/fail only)").option("--into <count>", "Split count (split only)").option("--titles <titles>", "Subtask title list (split only)").option("--skip-validation", "Skip checkpoint quality validation (create only)").option("-f, --force", "Force operation").option("--file <path>", "Read description from file (create only, for long descriptions with special characters)").option("--from-requirement", "Create from requirement (create only)").option("--requirement-text <text>", "Requirement text (create only)").option("--branch <branch>", "Associated branch (create only)").option("--test-framework <framework>", "Test framework name (create only): jest/pytest/go test").option("--test-command <command>", "Test run command (create only): npx jest --config jest.config.js").option("--tech-stack <stack>", "Tech stack description (create only): Node.js 18 + TypeScript 5.x").option("--project-test-conventions <conventions>", "Project test conventions (create only): __tests__/ dir, *.test.ts").option("--from <id>", "Dependency source (dependency only)").option("--to <id>", "Dependency target (dependency only)").option("--remove", "Remove dependency (dependency only)").option("--parts <n>", "Split count (split only)").option("--strategy <strategy>", "Split strategy (split only)").option("--pass", "Pass checkpoint (checkpoint only)").option("--fail", "Fail checkpoint (checkpoint only)").option("--all", "Include all tasks including resolved/closed (batch-update only)").option("--tasks <ids>", "Specify task ID list, comma-separated (batch-update only)", collectValues, []).option("--task-file <path>", "Read task ID list from file, one per line or comma-separated (batch-update only)").option("--change-note <note>", "Change note, at least 10 characters, recorded in transitionNotes (batch-update only)").option("--source <source>", "Filter log source (batch-update-logs only): cli/ide/hook/script/unknown").option("--summary", "Show log statistics summary (batch-update-logs only)").option("--enhancement", "Mark reopen as enhancement request (reopen only)").option("--failed-checkpoints <ids>", "Failed checkpoint IDs, comma-separated (reopen only)").option("--qa-feedback <text>", "QA feedback for reopen (reopen only)").action(async (action, id, options) => {
   requireInit();
   switch (action) {
     case "create": {
       let taskDescription = options.description;
       if (options.file) {
-        const filePath = path41.resolve(options.file);
-        if (!fs45.existsSync(filePath)) {
+        const filePath = path47.resolve(options.file);
+        if (!fs51.existsSync(filePath)) {
           console.error("(X) Error: Description file not found: " + filePath);
           process.exit(1);
         }
-        const stat = fs45.statSync(filePath);
+        const stat = fs51.statSync(filePath);
         if (!stat.isFile()) {
           console.error("(X) Error: Path is not a file: " + filePath);
           process.exit(1);
@@ -46997,14 +50246,14 @@ rename format:
           process.exit(1);
         }
         try {
-          taskDescription = fs45.readFileSync(filePath, "utf-8");
+          taskDescription = fs51.readFileSync(filePath, "utf-8");
         } catch (error) {
           console.error("(X) Error: Cannot read description file: " + error.message);
           process.exit(1);
         }
         if (filePath.startsWith("/tmp/")) {
           try {
-            fs45.unlinkSync(filePath);
+            fs51.unlinkSync(filePath);
           } catch {}
         }
       }
@@ -47016,7 +50265,11 @@ rename format:
         nonInteractive: options.yes,
         skipValidation: options.skipValidation,
         id,
-        branch: options.branch
+        branch: options.branch,
+        testFramework: options.testFramework,
+        testCommand: options.testCommand,
+        techStack: options.techStack,
+        projectTestConventions: options.projectTestConventions
       });
       break;
     }
@@ -47490,12 +50743,12 @@ program2.command("investigation-requirement [description]").description(`\u9700\
 ` + "\u524D\u63D0: \u9700\u5148\u8FD0\u884C projmnt4claude setup \u521D\u59CB\u5316\u9879\u76EE").option("-y, --yes", "\u975E\u4EA4\u4E92\u6A21\u5F0F").option("--interactive", "\u4EA4\u4E92\u6A21\u5F0F: \u4E0E\u7528\u6237\u8BC4\u5BA1\u53CD\u9988\u5FAA\u73AF").option("--feedback", "\u53CD\u9988\u4FEE\u6B63\u6A21\u5F0F: \u57FA\u4E8E\u53CD\u9988\u4FEE\u6B63\u5DF2\u6709\u62A5\u544A").option("--review", "\u8BC4\u5BA1\u6A21\u5F0F: \u4EC5\u8BC4\u5BA1\u5DF2\u6709\u62A5\u544A").option("--split", "\u62C6\u5206\u6A21\u5F0F: \u5BF9\u8FC7\u5927\u62A5\u544A\u8FDB\u884C\u62C6\u5206").option("--report-path <path>", "\u5DF2\u6709\u62A5\u544A\u8DEF\u5F84 (feedback/review/split \u5FC5\u9700)").option("--file <path>", "\u4ECE\u6587\u4EF6\u8BFB\u53D6\u9700\u6C42\u63CF\u8FF0").option("--output-dir <path>", "\u8F93\u51FA\u76EE\u5F55").option("--output-file <path>", "\u8F93\u51FA\u6587\u4EF6\u8DEF\u5F84").option("--max-retry <n>", "\u6700\u5927\u91CD\u8BD5\u6B21\u6570", "3").option("--split-threshold <kb>", "\u62C6\u5206\u9608\u503C (KB)", "20").option("--language <lang>", "\u8BED\u8A00 (zh/en)", "zh").option("--skip-review", "\u8DF3\u8FC7 AI \u8BC4\u5BA1").option("--skip-split", "\u8DF3\u8FC7\u62C6\u5206").option("-f, --force", "\u5F3A\u5236\u8986\u76D6").option("--json", "JSON \u8F93\u51FA").option("-q, --quiet", "\u9759\u9ED8\u6A21\u5F0F").action(async (description, options) => {
   let finalDescription = description;
   if (options.file) {
-    const filePath = path41.resolve(options.file);
-    if (!fs45.existsSync(filePath)) {
+    const filePath = path47.resolve(options.file);
+    if (!fs51.existsSync(filePath)) {
       console.error("(X) Error: Description file not found: " + filePath);
       process.exit(1);
     }
-    const stat = fs45.statSync(filePath);
+    const stat = fs51.statSync(filePath);
     if (!stat.isFile()) {
       console.error("(X) Error: Path is not a file: " + filePath);
       process.exit(1);
@@ -47506,14 +50759,14 @@ program2.command("investigation-requirement [description]").description(`\u9700\
       process.exit(1);
     }
     try {
-      finalDescription = fs45.readFileSync(filePath, "utf-8");
+      finalDescription = fs51.readFileSync(filePath, "utf-8");
     } catch (error) {
       console.error("(X) Error: Cannot read description file: " + error.message);
       process.exit(1);
     }
     if (filePath.startsWith("/tmp/")) {
       try {
-        fs45.unlinkSync(filePath);
+        fs51.unlinkSync(filePath);
       } catch {}
     }
   }
