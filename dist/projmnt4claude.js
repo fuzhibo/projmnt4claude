@@ -45976,11 +45976,11 @@ class PreDevPhaseGateCoordinator {
     switch (checkerName) {
       case "testEnv": {
         const { createTestEnvChecker: createTestEnvChecker2 } = await Promise.resolve().then(() => (init_test_env_checker(), exports_test_env_checker));
-        return createTestEnvChecker2(rule.config).check(context);
+        return createTestEnvChecker2(context.cwd, rule.config).check(context);
       }
       case "testFramework": {
         const { createTestFrameworkChecker: createTestFrameworkChecker2 } = await Promise.resolve().then(() => (init_test_framework_checker(), exports_test_framework_checker));
-        return createTestFrameworkChecker2(rule.config).check(context);
+        return createTestFrameworkChecker2(context.cwd, rule.config).check(context);
       }
       case "testMetadata": {
         const { createTestMetadataChecker: createTestMetadataChecker2 } = await Promise.resolve().then(() => (init_test_metadata_checker(), exports_test_metadata_checker));

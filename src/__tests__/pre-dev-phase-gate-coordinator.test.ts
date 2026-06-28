@@ -314,6 +314,86 @@ describe('PreDevPhaseGateCoordinator', () => {
       expect(ruleTypes.size).toBeGreaterThan(0);
     });
   });
+
+  describe('CP-PDGC-3: 开发前检查器调度 (executeDevChecker)', () => {
+    it('R-DEV-PRE-006 应正确调度 testEnv 检查器，不抛出 TypeError', async () => {
+      const coordinator = new PreDevPhaseGateCoordinator({
+        enabled: true,
+        stopOnFailure: false, // 不提前终止，确保 R-DEV-PRE 规则执行
+        generateReport: false,
+      });
+      const context = createMockContext(testDir, {
+        config: {
+          enabled: true,
+          rules: new Map(),
+          enableRetryRules: true,
+          stopOnFailure: false,
+          generateReport: false,
+        },
+      });
+
+      const result = await coordinator.runGate(context);
+
+      const testEnvChecks = result.checks.filter(
+        c => c.checkId === 'test-env-check' && c.ruleId === 'R-DEV-PRE-006'
+      );
+      expect(testEnvChecks.length).toBeGreaterThan(0);
+      // 不应抛出 TypeError（之前因 cwd 参数传 Object 导致）
+      expect(testEnvChecks.every(c => typeof c.duration === 'number')).toBe(true);
+    });
+
+    it('R-DEV-PRE-007 应正确调度 testFramework 检查器，不抛出 TypeError', async () => {
+      const coordinator = new PreDevPhaseGateCoordinator({
+        enabled: true,
+        stopOnFailure: false,
+        generateReport: false,
+      });
+      const context = createMockContext(testDir, {
+        config: {
+          enabled: true,
+          rules: new Map(),
+          enableRetryRules: true,
+          stopOnFailure: false,
+          generateReport: false,
+        },
+      });
+
+      const result = await coordinator.runGate(context);
+
+      const testFrameworkChecks = result.checks.filter(
+        c => c.checkId === 'test-framework-check' && c.ruleId === 'R-DEV-PRE-007'
+      );
+      expect(testFrameworkChecks.length).toBeGreaterThan(0);
+      // 不应抛出 TypeError（之前因 cwd 参数传 Object 导致 path.join 报错）
+      expect(testFrameworkChecks.every(c => typeof c.duration === 'number')).toBe(true);
+    });
+
+    it('R-DEV-PRE-008 应正确调度 testMetadata 检查器', async () => {
+      const coordinator = new PreDevPhaseGateCoordinator({
+        enabled: true,
+        stopOnFailure: false,
+        generateReport: false,
+      });
+      const context = createMockContext(testDir, {
+        config: {
+          enabled: true,
+          rules: new Map(),
+          enableRetryRules: true,
+          stopOnFailure: false,
+          generateReport: false,
+        },
+      });
+
+      const result = await coordinator.runGate(context);
+
+      const testMetadataChecks = result.checks.filter(
+        c => c.checkId === 'test-metadata-check' && c.ruleId === 'R-DEV-PRE-008'
+      );
+      expect(testMetadataChecks.length).toBeGreaterThan(0);
+      // testMetadata 不需要 cwd 参数，验证其正常返回
+      expect(testMetadataChecks.every(c => typeof c.passed === 'boolean')).toBe(true);
+    });
+  });
 });
 
 describe('PreDevPhaseRuleRegistry', () => {
