@@ -58,3 +58,4 @@ test-project/
 
 # Local build output
 dist/index.js
+.env
