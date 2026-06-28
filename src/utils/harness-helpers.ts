@@ -557,36 +557,36 @@ export function parseVerdictResult(
     result.passed = resultMatch[1]!.toUpperCase() === 'PASS';
   }
 
-  const reasonPattern = new RegExp(`##\\s*${options.reasonField}\\s*[:：]\\s*(.+?)(?=##|$)`, 'si');
+  const reasonPattern = new RegExp(`##\\s*${options.reasonField}\\s*[:：]?\\s*(.+?)(?=\\n##[^#]|$)`, 'si');
   const reasonMatch = output.match(reasonPattern);
   if (reasonMatch) {
     result.reason = reasonMatch[1]!.trim();
   }
 
-  const listPattern = new RegExp(`##\\s*${options.listField}\\s*[:：]\\s*(.+?)(?=##|$)`, 'si');
+  const listPattern = new RegExp(`##\\s*${options.listField}\\s*[:：]?\\s*(.+?)(?=\\n##[^#]|$)`, 'si');
   const listMatch = output.match(listPattern);
   if (listMatch) {
     const listText = listMatch[1]!.trim();
-    if (listText && listText !== '无' && listText !== 'N/A') {
+    if (listText && listText !== '无' && listText !== 'N/A' && listText !== '#') {
       result.items = listText.split('\n')
         .map(line => line.replace(/^[-*]\s*/, '').trim())
-        .filter(line => line.length > 0);
+        .filter(line => line.length > 0 && line !== '#');
     }
   }
 
-  const checkpointPattern = new RegExp(`##\\s*${options.checkpointField}\\s*[:：]\\s*(.+?)(?=##|$)`, 'si');
+  const checkpointPattern = new RegExp(`##\\s*${options.checkpointField}\\s*[:：]?\\s*(.+?)(?=\\n##[^#]|$)`, 'si');
   const checkpointMatch = output.match(checkpointPattern);
   if (checkpointMatch) {
     const checkpointText = checkpointMatch[1]!.trim();
-    if (checkpointText && checkpointText !== '无' && checkpointText !== 'N/A') {
+    if (checkpointText && checkpointText !== '无' && checkpointText !== 'N/A' && checkpointText !== '#') {
       result.failedCheckpoints = checkpointText.split('\n')
         .map(line => line.replace(/^[-*]\s*/, '').trim())
-        .filter(line => line.length > 0);
+        .filter(line => line.length > 0 && line !== '#');
     }
   }
 
   if (options.detailsField) {
-    const detailsPattern = new RegExp(`##\\s*${options.detailsField}\\s*[:：]\\s*(.+?)(?=##|$)`, 'si');
+    const detailsPattern = new RegExp(`##\\s*${options.detailsField}\\s*[:：]?\\s*(.+?)(?=\\n##[^#]|$)`, 'si');
     const detailsMatch = output.match(detailsPattern);
     if (detailsMatch) {
       result.details = detailsMatch[1]!.trim();
