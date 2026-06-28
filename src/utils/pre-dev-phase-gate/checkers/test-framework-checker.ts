@@ -360,6 +360,7 @@ export class TestFrameworkChecker {
       const result = await detector.detect(this.cwd);
       if (result.detected) {
         const duration = Date.now() - startTime;
+        (context as any).frameworkDetection = result;
 
         return {
           checkId: 'test-framework-check',
@@ -389,6 +390,8 @@ export class TestFrameworkChecker {
 
     // 未检测到任何测试框架
     const duration = Date.now() - startTime;
+    // 写入未检测到结果到 context
+    (context as any).frameworkDetection = { detected: false };
     return {
       checkId: 'test-framework-check',
       checkName: this.name,

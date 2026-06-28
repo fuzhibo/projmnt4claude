@@ -353,6 +353,11 @@ export const DEFAULT_QA_TEMPLATE: PromptTemplate = {
 - ID: {taskId}
 - 标题: {title}
 {descriptionSection}
+## 项目测试环境
+- 技术栈: {techStack}
+- 测试框架: {testFramework}
+- 测试命令: {testCommand}
+- 测试约定: {projectTestConventions}
 ## QA 验证检查点
 {checkpointsList}
 ## 代码审核结果
@@ -369,9 +374,23 @@ export const DEFAULT_QA_TEMPLATE: PromptTemplate = {
 3. 查看开发者编写的自测试用例
 4. 识别开发者已验证的范围
 
-### 步骤 2: 识别测试缺口
+### 步骤 2: 自动化测试实现与检查点补充
 
-基于开发报告和验收标准，识别以下类型的测试缺口：
+#### 2.1 思考并实现自动化测试覆盖
+基于开发报告和验收标准，主动思考并实现以下类型的自动化测试用例：
+- **异常测试**: 错误输入、网络异常、超时、资源不足等异常路径
+- **业务组合逻辑测试**: 多步骤操作、状态转换、并发场景等组合逻辑
+- **端到端场景测试**: 真实用户使用路径、完整业务流程
+确保每个测试用例对应可执行的测试脚本。
+
+#### 2.2 整理为检查点清单
+将步骤 2.1 中实现的测试用例整理为检查点格式：
+- 以 [ai qa] 为前缀描述每个检查点的验证目标
+- 在检查点描述中引用对应的测试用例脚本路径
+- 将新检查点追加到任务的检查点清单中，用于后续记录和追踪
+
+#### 2.3 识别剩余测试缺口
+基于开发报告和验收标准，识别经过 2.1 实现后仍存在的测试缺口：
 
 | 缺口类型 | 说明 | 示例 |
 |---------|------|------|
@@ -381,17 +400,21 @@ export const DEFAULT_QA_TEMPLATE: PromptTemplate = {
 | 回归测试缺失 | 变更可能影响的现有功能 | 重构后原有功能是否正常 |
 | 性能测试缺失 | 性能相关验证未覆盖 | 大数据量下的响应时间 |
 
-### 步骤 3: 扩展测试
+### 步骤 3: 运行并验证测试
 
-针对识别的缺口，编写并运行补充测试：
-
-1. 为每个缺口类型编写测试用例
-2. 运行新增测试用例
-3. 记录测试结果
+1. 运行新增测试用例
+2. 记录测试结果
+3. 确认所有测试通过
 
 ### 步骤 4: 报告结果
 
 汇总所有测试结果，输出验证报告。
+
+## 测试报告新增场景说明
+在测试报告中使用专门的段落说明本次新增的测试场景：
+- 列出新增的测试用例及其覆盖的场景类型（异常/组合/端到端）
+- 说明每个新增测试用例对应的检查点
+- 标注未覆盖的已知缺口及原因
 
 ## 验证要求
 {testStrategy}
@@ -464,6 +487,11 @@ Please follow these principles during verification:
 - ID: {taskId}
 - Title: {title}
 {descriptionSection}
+## Project Test Environment
+- Tech Stack: {techStack}
+- Test Framework: {testFramework}
+- Test Command: {testCommand}
+- Test Conventions: {projectTestConventions}
 ## QA Verification Checkpoints
 {checkpointsList}
 ## Code Review Result
@@ -480,9 +508,23 @@ Please follow these principles during verification:
 3. Review the self-test cases written by the developer
 4. Identify the scope already verified by the developer
 
-### Step 2: Identify Test Gaps
+### Step 2: Automated Test Implementation & Checkpoint Supplement
 
-Based on the development report and acceptance criteria, identify the following types of test gaps:
+#### 2.1 Design and Implement Automated Test Coverage
+Based on the development report and acceptance criteria, proactively design and implement automated test cases of the following types:
+- **Exception Tests**: Error inputs, network exceptions, timeouts, resource exhaustion and other exception paths
+- **Business Combination Logic Tests**: Multi-step operations, state transitions, concurrent scenarios and other combination logic
+- **End-to-End Scenario Tests**: Real user usage paths, complete business flows
+Ensure each test case corresponds to an executable test script.
+
+#### 2.2 Organize as Checkpoint List
+Organize the test cases implemented in step 2.1 into checkpoint format:
+- Use [ai qa] as prefix to describe the verification objective of each checkpoint
+- Reference the corresponding test script path in the checkpoint description
+- Append new checkpoints to the task checkpoint list for subsequent tracking
+
+#### 2.3 Identify Remaining Test Gaps
+Based on the development report and acceptance criteria, identify test gaps that remain after 2.1 implementation:
 
 | Gap Type | Description | Example |
 |----------|-------------|---------|
@@ -492,17 +534,21 @@ Based on the development report and acceptance criteria, identify the following 
 | Missing Regression Tests | Existing functionality potentially affected by changes | Whether original functionality works after refactoring |
 | Missing Performance Tests | Performance-related verification not covered | Response time under large data volumes |
 
-### Step 3: Expand Testing
+### Step 3: Run and Verify Tests
 
-For identified gaps, write and run supplementary tests:
-
-1. Write test cases for each gap type
-2. Run the new test cases
-3. Record test results
+1. Run the new test cases
+2. Record test results
+3. Confirm all tests pass
 
 ### Step 4: Report Results
 
 Summarize all test results and output a verification report.
+
+## Test Report New Scenario Description
+In the test report, use a dedicated section to describe the new test scenarios added:
+- List the new test cases and their covered scenario types (exception/combination/end-to-end)
+- Explain the corresponding checkpoint for each new test case
+- Note the known gaps not yet covered and the reasons
 
 ## Verification Requirements
 {testStrategy}

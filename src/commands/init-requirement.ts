@@ -70,6 +70,10 @@ interface ExtractedTaskMeta {
   files: string[];
   estimatedMinutes: number;
   dependencies: string[];
+  testFramework?: string;
+  testCommand?: string;
+  techStack?: string;
+  projectTestConventions?: string;
 }
 
 /** 单报告转换结果 */
@@ -276,6 +280,10 @@ async function convertSingleReport(
     suggestedCheckpoints: extractedMeta.checkpoints.map(cp => `[${cp.prefix}] ${cp.description}`),
     potentialDependencies: extractedMeta.dependencies,
     relatedFiles: extractedMeta.files,
+    testFramework: extractedMeta.testFramework,
+    testCommand: extractedMeta.testCommand,
+    techStack: extractedMeta.techStack,
+    projectTestConventions: extractedMeta.projectTestConventions,
   }, cwd);
 
   const createdTaskId = task.id;
@@ -558,7 +566,12 @@ function validateExtractedMeta(data: unknown): ExtractedTaskMeta {
   const dependencies = Array.isArray(d.dependencies)
     ? d.dependencies.filter((d: unknown) => typeof d === 'string') as string[] : [];
 
-  return { title, type, priority, description, checkpoints, files, estimatedMinutes, dependencies };
+  const testFramework = typeof d.testFramework === 'string' ? d.testFramework : undefined;
+  const testCommand = typeof d.testCommand === 'string' ? d.testCommand : undefined;
+  const techStack = typeof d.techStack === 'string' ? d.techStack : undefined;
+  const projectTestConventions = typeof d.projectTestConventions === 'string' ? d.projectTestConventions : undefined;
+
+  return { title, type, priority, description, checkpoints, files, estimatedMinutes, dependencies, testFramework, testCommand, techStack, projectTestConventions };
 }
 
 // ============================================================

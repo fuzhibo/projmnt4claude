@@ -962,7 +962,7 @@ export class HarnessQATester {
             '正确行为: QA 验证完成后应自动生成 qa-report.json 文件。',
             '检查点:',
             '1. 确保 saveReport() 被正确调用',
-            '2. 确认报告文件路径: .projmnt4claude/outputs/{taskId}/qa-report.json',
+            `2. 确认报告文件路径: ${getReportPath(task.id, 'qa', this.config.cwd)}`,
             '3. 验证报告文件内容包含有效的 JSON 格式',
           ].join('\n');
           break;
@@ -1011,7 +1011,7 @@ export class HarnessQATester {
         case 'R-PRE-PHASE-002':
           ruleSpecificFeedback = '任务不存在：指定的任务 ID 未找到或已被删除。';
           correctExample = [
-            '正确行为: 确保任务在 .projmnt4claude/tasks/ 目录下存在对应的 meta.json 文件。',
+            '正确行为: 确保任务 ID 对应的 meta.json 文件存在且状态正确。',
             '检查点:',
             '1. 确认任务 ID 拼写正确',
             '2. 验证任务目录结构完整',
@@ -1143,6 +1143,10 @@ export class HarnessQATester {
       gateFailureDetailsSection,
       coverageGapSection,
       devReportPath,
+      techStack: task.techStack || '请根据项目实际情况确定技术栈',
+      testFramework: task.testFramework || '请根据项目实际情况确定测试框架',
+      testCommand: task.testCommand || '请根据项目实际情况运行测试',
+      projectTestConventions: task.projectTestConventions || '请根据项目实际情况确定测试约定',
     }).replace(/\n{3,}/g, '\n\n');
   }
 

@@ -430,6 +430,16 @@ export interface CreateTaskOptions {
   // 分支选项
   /** Related分支 */
   branch?: string;
+
+  // 测试元数据选项
+  /** 项目测试框架名称，如 jest / pytest / go test */
+  testFramework?: string;
+  /** 项目测试命令，如 npx jest --config jest.config.js */
+  testCommand?: string;
+  /** 项目技术栈描述，如 Node.js 18 + TypeScript 5.x */
+  techStack?: string;
+  /** 项目测试约定，如 __tests__/ 目录, *.test.ts, describe/it 结构 */
+  projectTestConventions?: string;
 }
 
 /**
@@ -481,7 +491,12 @@ export async function createTask(
     }
 
     // CreatedTask元数据
-    const task = createDefaultTaskMeta(taskId, options.title, taskType, options.parentId, 'cli');
+    const task = createDefaultTaskMeta(taskId, options.title, taskType, options.parentId, 'cli', {
+      testFramework: options.testFramework,
+      testCommand: options.testCommand,
+      techStack: options.techStack,
+      projectTestConventions: options.projectTestConventions,
+    });
     task.priority = taskPriority;
 
     // AI 增强: 结构化Description和Checkpoints推断
@@ -1777,6 +1792,10 @@ export async function updateTask(
     enhancement?: boolean;
     failedCheckpoints?: string;
     qaFeedback?: string;
+    testFramework?: string;
+    testCommand?: string;
+    techStack?: string;
+    projectTestConventions?: string;
   },
   cwd: string = process.cwd()
 ): Promise<void> {
@@ -1979,6 +1998,22 @@ export async function updateTask(
   }
   if (options.needsDiscussion !== undefined) {
     task.needsDiscussion = options.needsDiscussion;
+    updated = true;
+  }
+  if (options.testFramework !== undefined) {
+    task.testFramework = options.testFramework;
+    updated = true;
+  }
+  if (options.testCommand !== undefined) {
+    task.testCommand = options.testCommand;
+    updated = true;
+  }
+  if (options.techStack !== undefined) {
+    task.techStack = options.techStack;
+    updated = true;
+  }
+  if (options.projectTestConventions !== undefined) {
+    task.projectTestConventions = options.projectTestConventions;
     updated = true;
   }
 

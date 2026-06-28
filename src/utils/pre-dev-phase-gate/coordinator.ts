@@ -238,6 +238,16 @@ export class PreDevPhaseGateCoordinator {
         case 'R-PATH-003':
           checkResults.push(await this.executePathChecker('checkResourceReferencePath', rule, context));
           break;
+        // 开发前检查规则 (A类 - 中断任务)
+        case 'R-DEV-PRE-006':
+          checkResults.push(await this.executeDevChecker('testEnv', rule, context));
+          break;
+        case 'R-DEV-PRE-007':
+          checkResults.push(await this.executeDevChecker('testFramework', rule, context));
+          break;
+        case 'R-DEV-PRE-008':
+          checkResults.push(await this.executeDevChecker('testMetadata', rule, context));
+          break;
         // 其他规则按类型处理
         default:
           switch (rule.type) {
@@ -357,6 +367,30 @@ export class PreDevPhaseGateCoordinator {
   ): Promise<PreDevPhaseCheckItemResult> {
     const { [checkerName]: checkerFn } = await import('./checkers/path-checker.js');
     return checkerFn(rule, context);
+  }
+
+  /**
+   * 执行开发前检查器 (A类 - 中断任务)
+   */
+  private async executeDevChecker(
+    checkerName: 'testEnv' | 'testFramework' | 'testMetadata',
+    rule: PreDevPhaseRule,
+    context: PreDevPhaseCheckContext
+  ): Promise<PreDevPhaseCheckItemResult> {
+    switch (checkerName) {
+      case 'testEnv': {
+        const { createTestEnvChecker } = await import('./checkers/test-env-checker.js');
+        return createTestEnvChecker(rule.config as any).check(context);
+      }
+      case 'testFramework': {
+        const { createTestFrameworkChecker } = await import('./checkers/test-framework-checker.js');
+        return createTestFrameworkChecker(rule.config as any).check(context);
+      }
+      case 'testMetadata': {
+        const { createTestMetadataChecker } = await import('./checkers/test-metadata-checker.js');
+        return createTestMetadataChecker(rule.config as any).check(context);
+      }
+    }
   }
 
   /**

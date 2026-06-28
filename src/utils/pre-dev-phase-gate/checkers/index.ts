@@ -115,6 +115,16 @@ export {
   type TestFrameworkCheckerConfig,
 } from './test-framework-checker.js';
 
+// 导出测试元数据检查器 (A类 - 中断任务)
+export {
+  TestMetadataChecker,
+  createTestMetadataChecker,
+  checkTestMetadata,
+  checkTestMetadataRule,
+  DEFAULT_TEST_METADATA_CHECKER_CONFIG,
+  type TestMetadataCheckerConfig,
+} from './test-metadata-checker.js';
+
 /**
  * 检查器接口
  */

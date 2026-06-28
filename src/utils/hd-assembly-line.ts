@@ -70,6 +70,7 @@ import {
 } from './checkpoint-verification.js';
 import { QA_POST_GATE_RULES } from './gate-rules/qa-post-gate-rules.js';
 import { DebugLogger } from './debug-logger.js';
+import { runPreDevPhaseGate } from './pre-dev-phase-gate/coordinator.js';
 
 /** 阶段类型定义 (P4: 阶段内重试) */
 type Phase = 'development' | 'code_review' | 'qa' | 'evaluation';
@@ -187,9 +188,9 @@ export async function pre_dev_gate_check(context: GateCheckContext): Promise<Gat
     { id: 'R-DEV-PRE-003', name: '依赖任务完成检查', onFailure: { targetPhase: 'EXIT', reason: '依赖任务未完成' }, check: async (ctx) => checkDependencies(ctx.task) },
     { id: 'R-DEV-PRE-004', name: 'Git工作区问题', onFailure: { targetPhase: 'EXIT', reason: 'Git工作区存在问题' }, check: async (ctx) => checkGitWorkspace(ctx.cwd) },
     { id: 'R-DEV-PRE-005', name: '分支状态检查', onFailure: { targetPhase: 'EXIT', reason: '分支状态异常' }, check: async (ctx) => checkBranchStatus(ctx.task) },
-    { id: 'R-DEV-PRE-006', name: '资源可用性检查', onFailure: { targetPhase: 'EXIT', reason: '资源不可用' }, check: async (ctx) => checkResourceAvailability(ctx.task) },
-    { id: 'R-DEV-PRE-007', name: '磁盘空间检查', onFailure: { targetPhase: 'EXIT', reason: '磁盘空间不足' }, check: async (ctx) => checkDiskSpace(ctx.cwd) },
-    { id: 'R-DEV-PRE-008', name: '重试上下文检查', onFailure: { targetPhase: 'EXIT', reason: '重试上下文无效' }, check: async (ctx) => checkRetryContext(ctx.task) },
+    { id: 'R-DEV-PRE-021', name: '资源可用性检查', onFailure: { targetPhase: 'EXIT', reason: '资源不可用' }, check: async (ctx) => checkResourceAvailability(ctx.task) },
+    { id: 'R-DEV-PRE-022', name: '磁盘空间检查', onFailure: { targetPhase: 'EXIT', reason: '磁盘空间不足' }, check: async (ctx) => checkDiskSpace(ctx.cwd) },
+    { id: 'R-DEV-PRE-023', name: '重试上下文检查', onFailure: { targetPhase: 'EXIT', reason: '重试上下文无效' }, check: async (ctx) => checkRetryContext(ctx.task) },
     { id: 'R-DEV-PRE-009', name: 'Git暂存区检查', onFailure: { targetPhase: 'EXIT', reason: 'Git暂存区异常' }, check: async (ctx) => checkGitStaged(ctx.cwd) },
     { id: 'R-DEV-PRE-010', name: 'Git忽略文件检查', onFailure: { targetPhase: 'EXIT', reason: 'Git忽略文件配置问题' }, check: async (ctx) => checkGitIgnore(ctx.cwd) },
     { id: 'R-DEV-PRE-011', name: '冲突标记检查', onFailure: { targetPhase: 'EXIT', reason: '存在未解决的冲突标记' }, check: async (ctx) => checkConflictMarkers(ctx.cwd) },
@@ -203,7 +204,32 @@ export async function pre_dev_gate_check(context: GateCheckContext): Promise<Gat
     { id: 'R-DEV-PRE-019', name: '循环依赖检查', onFailure: { targetPhase: 'EXIT', reason: '存在循环依赖' }, check: async (ctx) => checkCircularDependency(ctx.task) },
     { id: 'R-DEV-PRE-020', name: '开发目录检查', onFailure: { targetPhase: 'EXIT', reason: '开发目录异常' }, check: async (ctx) => checkDevDirectory(ctx.cwd) },
   ];
-  return executeRules(rules, context);
+  const inlineResult = await executeRules(rules, context);
+  if (!inlineResult.passed) {
+    return inlineResult;
+  }
+
+  // 阶段 2：Coordinator 门禁检查（含 M6 TestMetadataChecker / TestFrameworkChecker / TestEnvChecker）
+  try {
+    const coordinatorResult = await runPreDevPhaseGate(
+      context.task.id,
+      context.cwd,
+      1
+    );
+    if (!coordinatorResult.passed) {
+      return {
+        passed: false,
+        targetPhase: 'EXIT',
+        reason: `R-DEV-PRE-COORD: ${coordinatorResult.summary}`,
+      };
+    }
+  } catch (error) {
+    console.warn(
+      `[pre_dev_gate_check] Coordinator 门禁检查失败（非阻塞）: ${error instanceof Error ? error.message : String(error)}`
+    );
+  }
+
+  return { passed: true };
 }
 
 // ---- Post-Dev Gate (8 rules) ----

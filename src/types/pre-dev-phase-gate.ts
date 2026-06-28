@@ -21,7 +21,8 @@ export type PreDevPhaseRuleType =
   | 'dependency_output'  // 依赖输出检查
   | 'resource_config'    // 资源配置检查
   | 'retry_context'      // 重试上下文检查
-  | 'path_alignment';    // 路径对齐检查
+  | 'path_alignment'      // 路径对齐检查
+  | 'test_env_check';    // 测试环境/框架/元数据检查（R-DEV-PRE-006~008）
 
 /**
  * 规则严重级别
@@ -88,6 +89,8 @@ export interface PreDevPhaseCheckContext {
   isResumed: boolean;
   /** 前次失败信息（重试时） */
   previousFailure?: RetryContext;
+  /** 测试框架探测结果（由 test-framework-checker 写入，供 test-metadata-checker 消费） */
+  frameworkDetection?: import('../utils/pre-dev-phase-gate/checkers/test-framework-checker.js').FrameworkDetectionResult;
   /** 门禁配置 */
   config: PreDevPhaseGateConfig;
 }
@@ -494,6 +497,48 @@ export const DEFAULT_RETRY_CONTEXT_RULE: PreDevPhaseRule = {
 };
 
 /**
+ * 测试环境检查规则默认配置
+ * R-DEV-PRE-006: TestEnvChecker
+ */
+export const DEFAULT_TEST_ENV_RULE: PreDevPhaseRule = {
+  id: 'R-DEV-PRE-006',
+  type: 'test_env_check',
+  name: '测试环境检查',
+  description: '检查项目测试环境配置（.projmnt4claude/test-env）是否就绪',
+  enabled: true,
+  severity: 'error',
+  config: {},
+};
+
+/**
+ * 测试框架检查规则默认配置
+ * R-DEV-PRE-007: TestFrameworkChecker
+ */
+export const DEFAULT_TEST_FRAMEWORK_RULE: PreDevPhaseRule = {
+  id: 'R-DEV-PRE-007',
+  type: 'test_env_check',
+  name: '测试框架检查',
+  description: '检测项目是否安装了测试框架（Jest/pytest/go test 等）',
+  enabled: true,
+  severity: 'error',
+  config: {},
+};
+
+/**
+ * 测试元数据检查规则默认配置
+ * R-DEV-PRE-008: TestMetadataChecker（M6）
+ */
+export const DEFAULT_TEST_METADATA_RULE: PreDevPhaseRule = {
+  id: 'R-DEV-PRE-008',
+  type: 'test_env_check',
+  name: '测试元数据检查',
+  description: '检查 TaskMeta 中测试相关元数据字段是否完整并与框架探测结果一致',
+  enabled: true,
+  severity: 'error',
+  config: {},
+};
+
+/**
  * Git暂存区规则默认配置
  * R-GIT-002: 暂存区为空检查
  */
@@ -668,6 +713,9 @@ export const DEFAULT_PRE_DEV_PHASE_RULES: PreDevPhaseRule[] = [
   DEFAULT_TASK_FILE_PATH_RULE,
   DEFAULT_CODE_REFERENCE_PATH_RULE,
   DEFAULT_RESOURCE_REFERENCE_PATH_RULE,
+  DEFAULT_TEST_ENV_RULE,
+  DEFAULT_TEST_FRAMEWORK_RULE,
+  DEFAULT_TEST_METADATA_RULE,
 ];
 
 // ============================================================================

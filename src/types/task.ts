@@ -808,6 +808,14 @@ export interface TaskMeta {
    * Pre-Dev Gate 的 TestEnvChecker 运行这些检测指令，验证环境是否就绪。
    */
   testEnvCheckCommands?: TestEnvCheckCommand[];
+  /** 项目测试框架名称，如 jest / pytest / go test */
+  testFramework?: string;
+  /** 项目测试命令，如 npx jest --config jest.config.js */
+  testCommand?: string;
+  /** 项目技术栈描述，如 Node.js 18 + TypeScript 5.x */
+  techStack?: string;
+  /** 项目测试约定，如 __tests__/ 目录, *.test.ts, describe/it 结构 */
+  projectTestConventions?: string;
 }
 
 /**
@@ -871,7 +879,13 @@ export function createDefaultTaskMeta(
   title: string,
   type: TaskType = 'feature',
   description?: string,
-  createdBy?: TaskCreatedBy
+  createdBy?: TaskCreatedBy,
+  testMeta?: {
+    testFramework?: string;
+    testCommand?: string;
+    techStack?: string;
+    projectTestConventions?: string;
+  }
 ): TaskMeta {
   const now = new Date().toISOString();
   const priority: TaskPriority = 'P2';
@@ -896,6 +910,10 @@ export function createDefaultTaskMeta(
     createdBy,
     schemaVersion: CURRENT_TASK_SCHEMA_VERSION,
     checkpointPolicy,
+    ...(testMeta?.testFramework && { testFramework: testMeta.testFramework }),
+    ...(testMeta?.testCommand && { testCommand: testMeta.testCommand }),
+    ...(testMeta?.techStack && { techStack: testMeta.techStack }),
+    ...(testMeta?.projectTestConventions && { projectTestConventions: testMeta.projectTestConventions }),
   };
 }
 

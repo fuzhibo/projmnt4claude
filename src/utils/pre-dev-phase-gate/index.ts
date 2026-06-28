@@ -35,4 +35,8 @@ export {
   TestFrameworkChecker,
   createTestFrameworkChecker,
   checkTestFramework,
+  TestMetadataChecker,
+  createTestMetadataChecker,
+  checkTestMetadata,
+  checkTestMetadataRule,
 } from './checkers/index.js';
