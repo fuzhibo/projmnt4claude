@@ -380,11 +380,11 @@ export class PreDevPhaseGateCoordinator {
     switch (checkerName) {
       case 'testEnv': {
         const { createTestEnvChecker } = await import('./checkers/test-env-checker.js');
-        return createTestEnvChecker(rule.config as any).check(context);
+        return createTestEnvChecker(context.cwd, rule.config as any).check(context);
       }
       case 'testFramework': {
         const { createTestFrameworkChecker } = await import('./checkers/test-framework-checker.js');
-        return createTestFrameworkChecker(rule.config as any).check(context);
+        return createTestFrameworkChecker(context.cwd, rule.config as any).check(context);
       }
       case 'testMetadata': {
         const { createTestMetadataChecker } = await import('./checkers/test-metadata-checker.js');
