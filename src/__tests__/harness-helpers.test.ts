@@ -26,7 +26,7 @@ import type { TaskMeta, CheckpointMetadata } from '../types/task.js';
 // Mock spawnWithMemoryLimit via test injection point (SWC/ESM compatible)
 // Instead of jest.mock (which doesn't work with SWC/ESM), we use the
 // global __PROJMNT4CLAUDE_TEST_MOCKS__ injection point in spawn-utils.ts.
-const spawnMock = jest.fn(() => {
+const spawnMock = jest.fn<(...args: any[]) => any>(() => {
   throw new Error('spawn not configured');
 });
 
@@ -426,6 +426,74 @@ describe('parseVerdictResult', () => {
     const result = parseVerdictResult(output, defaultOptions);
     expect(result.reason).toBe('First reason');
   });
+
+  test('captures details with ### sub-headings without truncation', () => {
+    const output = [
+      '## 判定结果: NOPASS',
+      '## 原因: TypeScript type errors',
+      '## 问题列表: 无',
+      '## 失败检查点: 无',
+      '## 详细反馈:',
+      '',
+      '### **错误文件**: src/utils/gate-check-fix.ts',
+      '',
+      '**错误位置**: 第 146 行',
+      '**错误描述**: PreDevPhaseRuleResult 类型没有 message 属性',
+      '',
+      '### **警告**: src/utils/other.ts',
+      '',
+      '**位置**: 第 200 行',
+    ].join('\n');
+    const result = parseVerdictResult(output, { ...defaultOptions, detailsField: '详细反馈' });
+    expect(result.details).toContain('### **错误文件**');
+    expect(result.details).toContain('PreDevPhaseRuleResult 类型没有 message 属性');
+    expect(result.details).toContain('### **警告**');
+    // 验证不被 ### 截断：应包含两个 ### 块
+    const hash3Matches = (result.details?.match(/###/g) || []).length;
+    expect(hash3Matches).toBeGreaterThanOrEqual(2);
+  });
+
+  test('parses detailsField without colon', () => {
+    const output = [
+      '## 判定结果: NOPASS',
+      '## 原因: Issue',
+      '## 问题列表: 无',
+      '## 失败检查点: 无',
+      '## 详细反馈',
+      '',
+      '### 错误文件',
+      'Line 42: type mismatch',
+    ].join('\n');
+    const result = parseVerdictResult(output, { ...defaultOptions, detailsField: '详细反馈' });
+    expect(result.details).toContain('### 错误文件');
+    expect(result.details).toContain('Line 42');
+  });
+
+  test('treats # placeholder as empty for list and checkpoints', () => {
+    const output = [
+      '## 判定结果: NOPASS',
+      '## 原因: Error',
+      '## 问题列表: #',
+      '## 失败检查点: #',
+    ].join('\n');
+    const result = parseVerdictResult(output, defaultOptions);
+    expect(result.items).toEqual([]);
+    expect(result.failedCheckpoints).toEqual([]);
+  });
+
+  test('filters # placeholder lines from list items', () => {
+    const output = [
+      '## 判定结果: NOPASS',
+      '## 原因: Error',
+      '## 问题列表:',
+      '- Real issue 1',
+      '#',
+      '- Real issue 2',
+      '## 失败检查点: 无',
+    ].join('\n');
+    const result = parseVerdictResult(output, defaultOptions);
+    expect(result.items).toEqual(['Real issue 1', 'Real issue 2']);
+  });
 });
 
 // ============================================================
@@ -452,8 +520,8 @@ describe('filterCheckpoints', () => {
     const task = createTestTask({ checkpoints: cps });
     const result = filterCheckpoints(task, cp => cp.status === 'pending' || cp.status === 'failed');
     expect(result).toHaveLength(2);
-    expect(result[0].id).toBe('CP-002');
-    expect(result[1].id).toBe('CP-003');
+    expect(result[0]!.id).toBe('CP-002');
+    expect(result[1]!.id).toBe('CP-003');
   });
 
   test('returns all checkpoints when filter always returns true', () => {
@@ -707,7 +775,7 @@ describe('runHeadlessClaude', () => {
     ]), expect.any(Object), 'claudeAgent');
   });
 
-  test('passes session options to spawn (legacy flags → forked)', async () => {
+  test('passes session options to spawn (legacy resumeSession → active)', async () => {
     setupMockSpawn({ exitCode: 0, stdout: '' });
     await runHeadlessClaude({
       prompt: 'test',
@@ -716,13 +784,15 @@ describe('runHeadlessClaude', () => {
       cwd: env.tempDir,
       sessionId: '12345678-1234-4123-8123-123456789abc',
       resumeSession: true,
-      forkSession: true,
+      forkSession: true, // deprecated, ignored by V2.1
     });
     expect(spawnMock).toHaveBeenCalledWith('claude', expect.arrayContaining([
-      '--session-id', '12345678-1234-4123-8123-123456789abc',
-      '--resume',
-      '--fork-session',
+      '--resume', '12345678-1234-4123-8123-123456789abc',
     ]), expect.any(Object), 'claudeAgent');
+    // forkSession deprecated → --fork-session NOT emitted
+    const callArgs = spawnMock.mock.calls[0] as unknown as [string, string[], unknown];
+    expect(callArgs[1]).not.toContain('--fork-session');
+    expect(callArgs[1]).not.toContain('--session-id');
   });
 
   test('sessionState=fresh only emits --session-id (V2.1 §6.1.4.2)', async () => {
@@ -743,7 +813,7 @@ describe('runHeadlessClaude', () => {
     expect(args).not.toContain('--fork-session');
   });
 
-  test('sessionState=active emits --session-id + --resume (V2.1 §6.1.4.2)', async () => {
+  test('sessionState=active emits --resume only (V2.1 §6.1.4.2)', async () => {
     setupMockSpawn({ exitCode: 0, stdout: '' });
     await runHeadlessClaude({
       prompt: 'test',
@@ -755,26 +825,23 @@ describe('runHeadlessClaude', () => {
     });
     const callArgs = spawnMock.mock.calls[0] as unknown as [string, string[], unknown];
     const args = callArgs[1];
-    expect(args).toContain('--session-id');
     expect(args).toContain('--resume');
+    expect(args).toContain('12345678-1234-4123-8123-123456789abc');
+    expect(args).not.toContain('--session-id');
     expect(args).not.toContain('--fork-session');
   });
 
-  test('sessionState=forked emits --session-id + --resume + --fork-session (V2.1 §6.1.4.2)', async () => {
+  test('sessionState=forked rejects with invalid SessionState (V2.1: forked removed)', async () => {
     setupMockSpawn({ exitCode: 0, stdout: '' });
-    await runHeadlessClaude({
+    await expect(runHeadlessClaude({
       prompt: 'test',
       allowedTools: ['Read'],
       timeout: 30,
       cwd: env.tempDir,
       sessionId: '12345678-1234-4123-8123-123456789abc',
-      sessionState: 'forked',
-    });
-    const callArgs = spawnMock.mock.calls[0] as unknown as [string, string[], unknown];
-    const args = callArgs[1];
-    expect(args).toContain('--session-id');
-    expect(args).toContain('--resume');
-    expect(args).toContain('--fork-session');
+      sessionState: 'forked' as any,
+    })).rejects.toThrow(/Unknown sessionState/);
+    expect(spawnMock).not.toHaveBeenCalled();
   });
 
   test('rejects invalid UUID v4 in sessionId (V2.1 §6.1.4.2)', async () => {
@@ -880,7 +947,7 @@ describe('runHeadlessClaude', () => {
       timeout: 30,
       cwd: env.tempDir,
     });
-    const callArgs = spawnMock.mock.calls[0] as [string, string[], any];
+    const callArgs = spawnMock.mock.calls[0] as unknown as [string, string[], any];
     const args = callArgs[1];
     expect(args).not.toContain('--session-id');
     expect(args).not.toContain('--resume');
