@@ -4,45 +4,48 @@
  * 定义 PREFIX_MAP 常量和 parseCheckpoint 函数，
  * 确保门禁字段（category/verificationMethod/requiresHuman）对齐。
  *
- * System A (旧): [verify]/[test]/[review]/[implem]/[doc]
- * System B (新): [ai review]/[ai qa]/[human qa]/[script]
+ * System B 标准前缀: [ai review]/[ai qa]/[human qa]/[script]
  */
 
-import { inferCheckpointAttributesFromPrefix } from '../validation-rules/checkpoint-rules.js';
-
 // ============================================================
-// PREFIX_MAP: 前缀 → 门禁字段映射
+// PREFIX_MAP: 前缀 → 门禁字段映射（仅 System B）
 // ============================================================
 
-export const PREFIX_MAP: Record<string, { category: string; method: string; requiresHuman: boolean }> = {
-  // System A (旧前缀，向后兼容)
-  verify: { category: 'qa_verification', method: 'functional_test', requiresHuman: false },
-  test:   { category: 'qa_verification', method: 'unit_test',       requiresHuman: false },
-  review: { category: 'code_review',     method: 'code_review',     requiresHuman: true  },
-  implem: { category: 'implementation',  method: 'automated',       requiresHuman: false },
-  doc:    { category: 'documentation',   method: 'automated',       requiresHuman: false },
-  // System B (新前缀)
-  'ai-review': { category: 'code_review',     method: 'code_review',     requiresHuman: false },
-  'ai-qa':     { category: 'qa_verification', method: 'automated',       requiresHuman: false },
-  'human-qa':  { category: 'qa_verification', method: 'automated',       requiresHuman: true  },
-  script:      { category: 'evaluation',      method: 'automated',       requiresHuman: false },
-};
+export const PREFIX_MAP = {
+  'ai-review': { category: 'code_review',     method: 'code_review', requiresHuman: false },
+  'ai-qa':     { category: 'qa_verification', method: 'automated',   requiresHuman: false },
+  'human-qa':  { category: 'qa_verification', method: 'automated',   requiresHuman: true  },
+  'script':    { category: 'evaluation',      method: 'automated',   requiresHuman: false },
+} as const;
 
 export type CheckpointPrefix = keyof typeof PREFIX_MAP;
 
-export const VALID_PREFIXES = Object.keys(PREFIX_MAP) as CheckpointPrefix[];
+export const VALID_PREFIXES: CheckpointPrefix[] = Object.keys(PREFIX_MAP) as CheckpointPrefix[];
 
 // ============================================================
 // ParsedCheckpoint 类型
 // ============================================================
 
 export interface ParsedCheckpoint {
-  prefix: CheckpointPrefix | null;
+  prefix: CheckpointPrefix;
   description: string;
   category: string;
   verificationMethod: string | null;
   requiresHuman: boolean;
+  warnings: string[];
 }
+
+// ============================================================
+// 废弃前缀迁移映射
+// ============================================================
+
+const MIGRATION_MAP: Record<string, { prefix: CheckpointPrefix; descPrefix: string }> = {
+  verify: { prefix: 'ai-qa',    descPrefix: '[ai qa]' },
+  test:   { prefix: 'ai-qa',    descPrefix: '[ai qa]' },
+  review: { prefix: 'ai-review', descPrefix: '[ai review]' },
+  implem: { prefix: 'ai-qa',    descPrefix: '[ai qa] (implementation)' },
+  doc:    { prefix: 'script',   descPrefix: '[script] (doc)' },
+};
 
 // ============================================================
 // parseCheckpoint: 纯函数，解析检查点文本
@@ -50,36 +53,54 @@ export interface ParsedCheckpoint {
 
 /** 从检查点文本解析前缀并映射门禁字段，无匹配返回 null */
 export function parseCheckpoint(raw: string): ParsedCheckpoint | null {
-  // Step 1: 尝试 System B 前缀 ([ai review]/[ai qa]/[human qa]/[script])
-  const systemBMatch = raw.match(/^\[(ai review|ai qa|human qa|script)\]\s*(.+)/);
+  const trimmed = raw.trim();
+
+  // Step 1: 匹配 System B 标准前缀 ([ai review]/[ai qa]/[human qa]/[script])
+  const systemBMatch = trimmed.match(/^\[(ai review|ai qa|human qa|script)\]\s*(.+)/i);
   if (systemBMatch) {
-    const prefix = systemBMatch[1]!;
+    const prefixStr = systemBMatch[1]!.toLowerCase().replace(' ', '-') as CheckpointPrefix;
     const desc = systemBMatch[2]!.trim();
-    const attrs = inferCheckpointAttributesFromPrefix(`[${prefix}] ${desc}`);
+    const attrs = PREFIX_MAP[prefixStr];
     return {
-      prefix: prefix.replace(' ', '-') as CheckpointPrefix,
+      prefix: prefixStr,
       description: desc,
-      category: attrs.category || 'qa_verification',
-      verificationMethod: attrs.verificationMethod || null,
-      requiresHuman: attrs.requiresHuman ?? false,
+      category: attrs.category,
+      verificationMethod: attrs.method,
+      requiresHuman: attrs.requiresHuman,
+      warnings: [],
     };
   }
 
-  // Step 2: 兼容 System A 旧前缀 ([verify]/[test]/[review]/[implem]/[doc])
-  const legacyMatch = raw.match(/^\[(verify|test|review|implem|doc)\]\s*(.+)/);
-  if (!legacyMatch) return null;
-  const prefix = legacyMatch[1] as CheckpointPrefix;
-  const mapped = PREFIX_MAP[prefix]!;
-  return {
-    prefix,
-    description: legacyMatch[2]!.trim(),
-    category: mapped.category,
-    verificationMethod: mapped.method,
-    requiresHuman: mapped.requiresHuman,
-  };
+  // Step 2: 兼容废弃的 System A 前缀，发出警告并迁移
+  const legacyMatch = trimmed.match(/^\[(verify|test|review|implem|doc)\]\s*(.+)/i);
+  if (legacyMatch) {
+    const oldPrefix = legacyMatch[1]!.toLowerCase();
+    const originalDesc = legacyMatch[2]!.trim();
+    const migration = MIGRATION_MAP[oldPrefix];
+    if (!migration) return null;
+    const attrs = PREFIX_MAP[migration.prefix];
+
+    return {
+      prefix: migration.prefix,
+      description: `${migration.descPrefix} ${originalDesc}`,
+      category: attrs.category,
+      verificationMethod: attrs.method,
+      requiresHuman: attrs.requiresHuman,
+      warnings: [
+        `前缀 "[${oldPrefix}]" 已废弃，已自动迁移为 "${migration.descPrefix} ${originalDesc}"`,
+      ],
+    };
+  }
+
+  return null;
 }
 
-/** 检查字符串是否包含有效的检查点前缀（System A + System B） */
+/** 检查字符串是否包含有效的检查点前缀（仅 System B） */
 export function hasValidPrefix(text: string): boolean {
-  return /^\[(verify|test|review|implem|doc|ai review|ai qa|human qa|script)\]/.test(text);
+  return /^\[(ai review|ai qa|human qa|script)\]/i.test(text);
+}
+
+/** 检查字符串是否包含废弃的 System A 前缀 */
+export function hasDeprecatedPrefix(text: string): boolean {
+  return /^\[(verify|test|review|implem|doc)\]/i.test(text);
 }

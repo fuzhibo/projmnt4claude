@@ -584,7 +584,7 @@ export const zhTexts: I18nTexts = {
     errorViolations: '🚫 以下错误必须在创建任务前修复：',
     followingErrorsMustFix: '以下错误必须在创建任务前修复：',
     fixSuggestions: '💡 修复建议：',
-    checkpointPrefixTip: 'Checkpoints 必须以标准前缀开头：[implem]、[test]、[doc]、[verify]',
+    checkpointPrefixTip: 'Checkpoints 必须以标准前缀开头：[ai review]、[ai qa]、[human qa]、[script]',
     metaJsonFormatTip: 'meta.json 必须是标准格式，包含所有必需字段',
     skipQualityGateTip: '使用 --skip-quality-gate 临时跳过（不推荐用于生产环境）',
     qualityGateLowScore: '❌ 质量门禁失败：{score} < {threshold}',

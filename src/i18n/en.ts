@@ -584,7 +584,7 @@ export const enTexts: I18nTexts = {
     errorViolations: '🚫 The following errors must be fixed before creating task:',
     followingErrorsMustFix: 'Errors must fix',
     fixSuggestions: '💡 Fix suggestions:',
-    checkpointPrefixTip: 'Checkpoints must start with standard prefixes: [implem], [test], [doc], [verify]',
+    checkpointPrefixTip: 'Checkpoints must start with standard prefixes: [ai review], [ai qa], [human qa], [script]',
     metaJsonFormatTip: 'meta.json must be in standard format with all required fields',
     skipQualityGateTip: 'Use --skip-quality-gate to skip temporarily (not recommended for production)',
     qualityGateLowScore: '❌ Quality gate failed: {score} < {threshold}',

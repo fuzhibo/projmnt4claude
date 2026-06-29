@@ -50,8 +50,8 @@ export const investigationTemplates: Record<string, string> = {
 
 ## 检查点覆盖清单
 ### SOL-001 相关检查点
-- [verify] 验证 {具体验证内容}
-- [test] 测试 {具体测试内容}
+- [ai qa] 验证 {具体验证内容}
+- [script] 测试 {具体测试内容}
 
 ## 评估
 - 复杂度: {low|medium|high}
@@ -62,7 +62,7 @@ export const investigationTemplates: Record<string, string> = {
 - 原因分析必须追溯到需求本身，确保"需求→原因"链路完整
 - 解决方案必须逐一对应原因分析中的每个结论
 - 检查点必须覆盖解决方案中的每个要点
-- 检查点使用门禁标准前缀: [verify], [test], [review], [implem], [doc]
+- 检查点使用门禁标准前缀: [ai review], [ai qa], [human qa], [script]
 `,
 
   review: `你是 projmnt4claude 项目的调查报告质量评审员。

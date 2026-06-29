@@ -787,6 +787,44 @@ export const metaJsonValid: ValidationRule = {
   },
 };
 
+/**
+ * Rule 9: deprecatedPrefixDetector (severity: warning)
+ * 检测已废弃的 System A 前缀，建议迁移到 System B
+ */
+export const deprecatedPrefixDetector: ValidationRule = {
+  id: 'deprecated-prefix-detector',
+  description: '检测已废弃的 System A 前缀 ([verify]/[test]/[review]/[implem]/[doc])',
+  severity: 'warning' as const,
+  check: (output: unknown): ValidationViolation | null => {
+    const checkpoints = extractCheckpointDescriptions(output);
+    const deprecated = checkpoints.filter(cp => {
+      const desc = cp.trim().toLowerCase();
+      return /^\[(verify|test|review|implem|doc)\]/i.test(desc);
+    });
+
+    if (deprecated.length === 0) return null;
+
+    const migrationGuide = {
+      verify: '[ai qa]',
+      test: '[ai qa]',
+      review: '[ai review]',
+      implem: '[ai qa] (implementation)',
+      doc: '[script] (doc)',
+    };
+
+    return {
+      ruleId: 'deprecated-prefix-detector',
+      severity: 'warning',
+      message: `发现 ${deprecated.length} 条使用废弃前缀的检查点，建议迁移到 System B:\n${deprecated.slice(0, 5).map(d => {
+        const match = d.match(/^\[(verify|test|review|implem|doc)\]/i);
+        const oldPrefix = match?.[1]?.toLowerCase() || '';
+        const newPrefix = migrationGuide[oldPrefix as keyof typeof migrationGuide] || '[ai review]';
+        return `  "${d}" → 使用 "${newPrefix}"`;
+      }).join('\n')}`,
+    };
+  },
+};
+
 // ============================================================
 // 导出规则集
 // ============================================================
@@ -802,4 +840,5 @@ export const checkpointValidationRules: ValidationRule[] = [
   checkpointHasVerificationCommands,
   checkpointScriptHasCommands,
   metaJsonValid,
+  deprecatedPrefixDetector,
 ];
