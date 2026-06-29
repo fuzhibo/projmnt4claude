@@ -7,22 +7,24 @@
  * - 3.8 清理：失败任务移至 archive/、meta.json 历史记录
  */
 
-import { describe, test, expect,  beforeEach, afterEach } from '@jest/globals';
+import { describe, test, expect, beforeEach, afterEach, jest } from '@jest/globals';
 import { gateCheckAndFix } from '../gate-check-fix.js';
 import type { GateDependencies, ConversionState } from '../types.js';
 import { existsSync, mkdirSync, rmSync, writeFileSync } from 'node:fs';
-import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { createIsolatedTestEnv, type IsolatedTestEnv } from '../../test-env.js';
 
+let env: IsolatedTestEnv;
 let tempDir: string;
 
-beforeEach(() => {
-  tempDir = join(tmpdir(), `gate-check-test-${Date.now()}`);
-  mkdirSync(tempDir, { recursive: true });
+beforeEach(async () => {
+  env = await createIsolatedTestEnv({ prefix: 'gate-check-test-' });
+  tempDir = env.tempDir;
 });
 
 afterEach(() => {
-  rmSync(tempDir, { recursive: true, force: true });
+  env.cleanup();
+  jest.restoreAllMocks();
 });
 
 // ============================================================
@@ -34,7 +36,13 @@ describe('gateCheckAndFix (§3.6)', () => {
     const mockDeps: GateDependencies = {
       runPreDevGate: jest.fn(async () => ({
         taskId: 'TASK-001', passed: true, summary: 'All checks passed',
-        results: [], duration: 100, timestamp: new Date().toISOString(),
+        ruleResults: [],
+        checks: [],
+        passedCount: 0,
+        failedCount: 0,
+        warningCount: 0,
+        blockingFailures: 0,
+        recommendations: [], duration: 100, timestamp: new Date().toISOString(),
       })),
       checkQualityGate: jest.fn(async () => ({
         passed: true, score: { totalScore: 80 }, suggestions: [],
@@ -76,8 +84,14 @@ describe('gateCheckAndFix (§3.6)', () => {
         // First call: fail, after fix: pass
         return {
           taskId: 'TASK-001', passed: callCount > 1, summary: callCount > 1 ? 'Passed' : 'Gate failed',
-          results: callCount > 1 ? [] : [{ ruleId: 'R-001', passed: false, message: 'Missing checkpoints' }],
+          ruleResults: callCount > 1 ? [] : [{ ruleId: 'R-001', ruleName: 'Missing checkpoints', ruleType: 'test_env_check', passed: false, severity: 'error', checkResults: [{ checkId: 'C-001', checkName: 'Check', ruleId: 'R-001', passed: false, severity: 'error', message: 'Missing checkpoints', duration: 10, timestamp: new Date().toISOString() }], duration: 100, timestamp: new Date().toISOString() }],
+          checks: [],
+          passedCount: callCount > 1 ? 1 : 0,
+          failedCount: callCount > 1 ? 0 : 1,
+          warningCount: 0,
+          blockingFailures: callCount > 1 ? 0 : 1,
           duration: 100, timestamp: new Date().toISOString(),
+          recommendations: [],
         };
       }),
       checkQualityGate: jest.fn(async () => ({
@@ -118,7 +132,13 @@ describe('gateCheckAndFix (§3.6)', () => {
     const mockDeps: GateDependencies = {
       runPreDevGate: jest.fn(async () => ({
         taskId: 'TASK-001', passed: true, summary: 'Passed',
-        results: [], duration: 100, timestamp: new Date().toISOString(),
+        ruleResults: [],
+        checks: [],
+        passedCount: 0,
+        failedCount: 0,
+        warningCount: 0,
+        blockingFailures: 0,
+        recommendations: [], duration: 100, timestamp: new Date().toISOString(),
       })),
       checkQualityGate: jest.fn(async () => ({
         passed: true, score: { totalScore: 80 }, suggestions: [],
@@ -155,7 +175,13 @@ describe('gateCheckAndFix (§3.6)', () => {
     const mockDeps: GateDependencies = {
       runPreDevGate: jest.fn(async () => ({
         taskId: 'TASK-001', passed: false, summary: 'Always fails',
-        results: [], duration: 100, timestamp: new Date().toISOString(),
+        ruleResults: [],
+        checks: [],
+        passedCount: 0,
+        failedCount: 0,
+        warningCount: 0,
+        blockingFailures: 0,
+        recommendations: [], duration: 100, timestamp: new Date().toISOString(),
       })),
       checkQualityGate: jest.fn(async () => ({
         passed: false, score: { totalScore: 40 }, suggestions: ['Fix checkpoints'],
@@ -194,7 +220,7 @@ describe('gateCheckAndFix (§3.6)', () => {
     const mockDeps: GateDependencies = {
       runPreDevGate: jest.fn(async () => ({
         taskId: originalTaskId, passed: false, summary: 'Gate failed',
-        results: [{ ruleId: 'R-001', passed: false, message: 'Missing checkpoints' }],
+        ruleResults: [{ ruleId: 'R-001', passed: false, message: 'Missing checkpoints' }],
         duration: 100, timestamp: new Date().toISOString(),
       })),
       checkQualityGate: jest.fn(async () => ({
@@ -234,7 +260,13 @@ describe('gateCheckAndFix (§3.6)', () => {
     const mockDeps: GateDependencies = {
       runPreDevGate: jest.fn(async () => ({
         taskId: 'TASK-001', passed: true, summary: 'Passed',
-        results: [], duration: 100, timestamp: new Date().toISOString(),
+        ruleResults: [],
+        checks: [],
+        passedCount: 0,
+        failedCount: 0,
+        warningCount: 0,
+        blockingFailures: 0,
+        recommendations: [], duration: 100, timestamp: new Date().toISOString(),
       })),
       checkQualityGate: jest.fn(async () => ({
         passed: true, score: { totalScore: 80 }, suggestions: [],
@@ -277,7 +309,13 @@ describe('Alignment Verification Three Levels (§3.7)', () => {
     const mockDeps: GateDependencies = {
       runPreDevGate: jest.fn(async () => ({
         taskId: 'TASK-001', passed: true, summary: 'Passed',
-        results: [], duration: 100, timestamp: new Date().toISOString(),
+        ruleResults: [],
+        checks: [],
+        passedCount: 0,
+        failedCount: 0,
+        warningCount: 0,
+        blockingFailures: 0,
+        recommendations: [], duration: 100, timestamp: new Date().toISOString(),
       })),
       checkQualityGate: jest.fn(async () => ({
         passed: true, score: { totalScore: 80 }, suggestions: [],
@@ -314,7 +352,13 @@ describe('Alignment Verification Three Levels (§3.7)', () => {
     const mockDeps: GateDependencies = {
       runPreDevGate: jest.fn(async () => ({
         taskId: 'TASK-001', passed: true, summary: 'Passed',
-        results: [], duration: 100, timestamp: new Date().toISOString(),
+        ruleResults: [],
+        checks: [],
+        passedCount: 0,
+        failedCount: 0,
+        warningCount: 0,
+        blockingFailures: 0,
+        recommendations: [], duration: 100, timestamp: new Date().toISOString(),
       })),
       checkQualityGate: jest.fn(async () => ({
         passed: true, score: { totalScore: 80 }, suggestions: [],
@@ -351,7 +395,13 @@ describe('Alignment Verification Three Levels (§3.7)', () => {
     const mockDeps: GateDependencies = {
       runPreDevGate: jest.fn(async () => ({
         taskId: 'TASK-001', passed: true, summary: 'Passed',
-        results: [], duration: 100, timestamp: new Date().toISOString(),
+        ruleResults: [],
+        checks: [],
+        passedCount: 0,
+        failedCount: 0,
+        warningCount: 0,
+        blockingFailures: 0,
+        recommendations: [], duration: 100, timestamp: new Date().toISOString(),
       })),
       checkQualityGate: jest.fn(async () => ({
         passed: true, score: { totalScore: 80 }, suggestions: [],
@@ -386,7 +436,13 @@ describe('Alignment Verification Three Levels (§3.7)', () => {
     const mockDeps: GateDependencies = {
       runPreDevGate: jest.fn(async () => ({
         taskId: 'TASK-001', passed: true, summary: 'Passed',
-        results: [], duration: 100, timestamp: new Date().toISOString(),
+        ruleResults: [],
+        checks: [],
+        passedCount: 0,
+        failedCount: 0,
+        warningCount: 0,
+        blockingFailures: 0,
+        recommendations: [], duration: 100, timestamp: new Date().toISOString(),
       })),
       checkQualityGate: jest.fn(async () => ({
         passed: true, score: { totalScore: 80 }, suggestions: [],
@@ -432,7 +488,13 @@ describe('Archive Cleanup (§3.8)', () => {
     const mockDeps: GateDependencies = {
       runPreDevGate: jest.fn(async () => ({
         taskId: 'TASK-001', passed: false, summary: 'Always fails',
-        results: [], duration: 100, timestamp: new Date().toISOString(),
+        ruleResults: [],
+        checks: [],
+        passedCount: 0,
+        failedCount: 0,
+        warningCount: 0,
+        blockingFailures: 0,
+        recommendations: [], duration: 100, timestamp: new Date().toISOString(),
       })),
       checkQualityGate: jest.fn(async () => ({
         passed: false, score: { totalScore: 40 }, suggestions: ['Fix checkpoints'],
@@ -486,7 +548,13 @@ describe('Archive Cleanup (§3.8)', () => {
     const mockDeps: GateDependencies = {
       runPreDevGate: jest.fn(async () => ({
         taskId: 'TASK-001', passed: false, summary: 'Gate failed',
-        results: [], duration: 100, timestamp: new Date().toISOString(),
+        ruleResults: [],
+        checks: [],
+        passedCount: 0,
+        failedCount: 0,
+        warningCount: 0,
+        blockingFailures: 0,
+        recommendations: [], duration: 100, timestamp: new Date().toISOString(),
       })),
       checkQualityGate: jest.fn(async () => ({
         passed: false, score: { totalScore: 40 }, suggestions: ['Fix'],
@@ -533,7 +601,13 @@ describe('Archive Cleanup (§3.8)', () => {
         resumedValue = params.isResumed;
         return {
           taskId: 'TASK-001', passed: true, summary: 'All checks passed',
-          results: [], duration: 100, timestamp: new Date().toISOString(),
+          ruleResults: [],
+        checks: [],
+        passedCount: 0,
+        failedCount: 0,
+        warningCount: 0,
+        blockingFailures: 0,
+        recommendations: [], duration: 100, timestamp: new Date().toISOString(),
         };
       }),
       checkQualityGate: jest.fn(async () => ({
@@ -570,7 +644,13 @@ describe('Archive Cleanup (§3.8)', () => {
     const mockDeps: GateDependencies = {
       runPreDevGate: jest.fn(async () => ({
         taskId: 'TASK-001', passed: true, summary: 'Pre-dev passed',
-        results: [], duration: 100, timestamp: new Date().toISOString(),
+        ruleResults: [],
+        checks: [],
+        passedCount: 0,
+        failedCount: 0,
+        warningCount: 0,
+        blockingFailures: 0,
+        recommendations: [], duration: 100, timestamp: new Date().toISOString(),
       })),
       checkQualityGate: jest.fn(async () => ({
         passed: false, score: { totalScore: 40 }, suggestions: ['Improve coverage'],
@@ -609,7 +689,13 @@ describe('Archive Cleanup (§3.8)', () => {
     const mockDeps: GateDependencies = {
       runPreDevGate: jest.fn(async () => ({
         taskId: 'TASK-001', passed: true, summary: 'Passed',
-        results: [], duration: 100, timestamp: new Date().toISOString(),
+        ruleResults: [],
+        checks: [],
+        passedCount: 0,
+        failedCount: 0,
+        warningCount: 0,
+        blockingFailures: 0,
+        recommendations: [], duration: 100, timestamp: new Date().toISOString(),
       })),
       checkQualityGate: jest.fn(async () => ({
         passed: true, score: { totalScore: 80 }, suggestions: [],
@@ -644,7 +730,13 @@ describe('Archive Cleanup (§3.8)', () => {
     const mockDeps: GateDependencies = {
       runPreDevGate: jest.fn(async () => ({
         taskId: 'TASK-001', passed: true, summary: 'Passed',
-        results: [], duration: 100, timestamp: new Date().toISOString(),
+        ruleResults: [],
+        checks: [],
+        passedCount: 0,
+        failedCount: 0,
+        warningCount: 0,
+        blockingFailures: 0,
+        recommendations: [], duration: 100, timestamp: new Date().toISOString(),
       })),
       checkQualityGate: jest.fn(async () => ({
         passed: true, score: { totalScore: 80 }, suggestions: [],

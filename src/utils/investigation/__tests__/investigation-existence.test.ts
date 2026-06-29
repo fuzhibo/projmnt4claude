@@ -62,14 +62,11 @@ describe('Investigation 模块存在性验证', () => {
   });
 
   describe('类型定义文件包含所有必要导出', () => {
-    it('should export PREFIX_MAP with 5 prefixes', () => {
+    it('should export PREFIX_MAP from init-requirement/prefix-map', () => {
       const typesPath = path.join(INVESTIGATION_DIR, 'types.ts');
       const content = fs.readFileSync(typesPath, 'utf-8');
-      expect(content).toContain("verify");
-      expect(content).toContain("test");
-      expect(content).toContain("review");
-      expect(content).toContain("implem");
-      expect(content).toContain("doc");
+      expect(content).toContain("PREFIX_MAP");
+      expect(content).toContain("init-requirement/prefix-map");
     });
 
     it('should define InvestigationReport interface', () => {

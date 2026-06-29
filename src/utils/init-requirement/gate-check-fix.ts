@@ -142,8 +142,8 @@ async function runGateCheck(
     failures.push({
       source: 'preDevGate',
       detail: 'Pre-dev gate failed',
-      ruleResults: preDevResult.results,
-      suggestions: preDevResult.results?.map(r => r.message).filter(Boolean),
+      ruleResults: preDevResult.ruleResults,
+      suggestions: preDevResult.ruleResults?.flatMap(r => r.checkResults?.map(c => c.message) ?? []).filter(Boolean),
     });
   }
 

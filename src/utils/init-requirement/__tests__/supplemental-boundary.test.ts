@@ -11,7 +11,7 @@
  * - 拓扑排序：空列表、单节点、复杂依赖链
  */
 
-import { describe, test, expect, beforeEach, afterEach } from '@jest/globals';
+import { describe, test, expect, beforeEach, afterEach, jest } from '@jest/globals';
 import {
   PREFIX_MAP,
   VALID_PREFIXES,
@@ -33,19 +33,21 @@ import {
 } from '../conversion-status.js';
 import type { ConversionStatus, GateDependencies } from '../types.js';
 import { gateCheckAndFix } from '../gate-check-fix.js';
-import { existsSync, mkdirSync, rmSync, writeFileSync } from 'node:fs';
-import { tmpdir } from 'node:os';
+import { existsSync, mkdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
+import { createIsolatedTestEnv, type IsolatedTestEnv } from '../../test-env.js';
 
+let env: IsolatedTestEnv;
 let tempDir: string;
 
-beforeEach(() => {
-  tempDir = join(tmpdir(), `init-req-supplemental-${Date.now()}`);
-  mkdirSync(tempDir, { recursive: true });
+beforeEach(async () => {
+  env = await createIsolatedTestEnv({ prefix: 'init-req-supplemental-' });
+  tempDir = env.tempDir;
 });
 
 afterEach(() => {
-  rmSync(tempDir, { recursive: true, force: true });
+  env.cleanup();
+  jest.restoreAllMocks();
 });
 
 // ============================================================
@@ -53,25 +55,38 @@ afterEach(() => {
 // ============================================================
 
 describe('PREFIX_MAP Boundary Tests', () => {
-  test('PREFIX_MAP is frozen/immutable at runtime', () => {
-    // Verify the map contains exactly 5 entries
-    expect(Object.keys(PREFIX_MAP).length).toBe(5);
+  test('PREFIX_MAP contains all 9 prefixes (System A + System B)', () => {
+    // System A (5) + System B (4) = 9 prefixes
+    expect(Object.keys(PREFIX_MAP).length).toBe(9);
+    // Verify System A prefixes exist
+    expect(PREFIX_MAP).toHaveProperty('verify');
+    expect(PREFIX_MAP).toHaveProperty('test');
+    expect(PREFIX_MAP).toHaveProperty('review');
+    expect(PREFIX_MAP).toHaveProperty('implem');
+    expect(PREFIX_MAP).toHaveProperty('doc');
+    // Verify System B prefixes exist
+    expect(PREFIX_MAP).toHaveProperty('ai-review');
+    expect(PREFIX_MAP).toHaveProperty('ai-qa');
+    expect(PREFIX_MAP).toHaveProperty('human-qa');
+    expect(PREFIX_MAP).toHaveProperty('script');
     // Verify no extra prefixes exist
     expect(PREFIX_MAP).not.toHaveProperty('build');
     expect(PREFIX_MAP).not.toHaveProperty('deploy');
     expect(PREFIX_MAP).not.toHaveProperty('');
   });
 
-  test('VALID_PREFIXES contains exactly 5 items in expected order', () => {
-    expect(VALID_PREFIXES.length).toBe(5);
-    expect(new Set(VALID_PREFIXES).size).toBe(5); // No duplicates
+  test('VALID_PREFIXES contains exactly 9 items (System A + System B)', () => {
+    expect(VALID_PREFIXES.length).toBe(9);
+    expect(new Set(VALID_PREFIXES).size).toBe(9); // No duplicates
   });
 
-  test('each prefix has distinct category-method combination', () => {
-    const combos = new Set(
-      VALID_PREFIXES.map(p => `${PREFIX_MAP[p].category}-${PREFIX_MAP[p].method}`)
-    );
-    expect(combos.size).toBe(5);
+  test('each prefix has complete category/method/requiresHuman', () => {
+    for (const prefix of VALID_PREFIXES) {
+      const entry = PREFIX_MAP[prefix]!;
+      expect(entry.category).toBeTruthy();
+      expect(entry.method).toBeTruthy();
+      expect(typeof entry.requiresHuman).toBe('boolean');
+    }
   });
 });
 
@@ -473,7 +488,13 @@ describe('gateCheckAndFix Boundary Tests', () => {
         gateCalled = true;
         return {
           taskId: 'TASK-001', passed: true, summary: 'Passed',
-          results: [], duration: 100, timestamp: new Date().toISOString(),
+          ruleResults: [],
+        checks: [],
+        passedCount: 0,
+        failedCount: 0,
+        warningCount: 0,
+        blockingFailures: 0,
+        recommendations: [], duration: 100, timestamp: new Date().toISOString(),
         };
       }),
       checkQualityGate: jest.fn(async () => ({ passed: true, score: { totalScore: 80 }, suggestions: [] })),
@@ -510,7 +531,13 @@ describe('gateCheckAndFix Boundary Tests', () => {
     const mockDeps: GateDependencies = {
       runPreDevGate: jest.fn(async () => ({
         taskId: 'TASK-001', passed: true, summary: 'Passed',
-        results: [], duration: 100, timestamp: new Date().toISOString(),
+        ruleResults: [],
+        checks: [],
+        passedCount: 0,
+        failedCount: 0,
+        warningCount: 0,
+        blockingFailures: 0,
+        recommendations: [], duration: 100, timestamp: new Date().toISOString(),
       })),
       checkQualityGate: jest.fn(async () => ({ passed: true, score: { totalScore: 80 }, suggestions: [] })),
       validateNewTaskDeps: jest.fn(() => true),
@@ -545,7 +572,13 @@ describe('gateCheckAndFix Boundary Tests', () => {
     const mockDeps: GateDependencies = {
       runPreDevGate: jest.fn(async () => ({
         taskId: 'TASK-001', passed: true, summary: 'Passed',
-        results: [], duration: 100, timestamp: new Date().toISOString(),
+        ruleResults: [],
+        checks: [],
+        passedCount: 0,
+        failedCount: 0,
+        warningCount: 0,
+        blockingFailures: 0,
+        recommendations: [], duration: 100, timestamp: new Date().toISOString(),
       })),
       checkQualityGate: jest.fn(async () => ({ passed: true, score: { totalScore: 80 }, suggestions: [] })),
       validateNewTaskDeps: jest.fn(() => true),
@@ -578,7 +611,7 @@ describe('gateCheckAndFix Boundary Tests', () => {
     const mockDeps: GateDependencies = {
       runPreDevGate: jest.fn(async () => ({
         taskId: 'TASK-001', passed: false, summary: 'Pre-dev failed',
-        results: [{ ruleId: 'R-001', passed: false, message: 'Missing checkpoints' }],
+        ruleResults: [{ ruleId: 'R-001', passed: false, message: 'Missing checkpoints' }],
         duration: 100, timestamp: new Date().toISOString(),
       })),
       checkQualityGate: jest.fn(async () => ({ passed: true, score: { totalScore: 80 }, suggestions: [] })),
@@ -616,7 +649,13 @@ describe('gateCheckAndFix Boundary Tests', () => {
         resumedValue = params.isResumed;
         return {
           taskId: 'TASK-001', passed: true, summary: 'Passed',
-          results: [], duration: 100, timestamp: new Date().toISOString(),
+          ruleResults: [],
+        checks: [],
+        passedCount: 0,
+        failedCount: 0,
+        warningCount: 0,
+        blockingFailures: 0,
+        recommendations: [], duration: 100, timestamp: new Date().toISOString(),
         };
       }),
       checkQualityGate: jest.fn(async () => ({ passed: true, score: { totalScore: 80 }, suggestions: [] })),

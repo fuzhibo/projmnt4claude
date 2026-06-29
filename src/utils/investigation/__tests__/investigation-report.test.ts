@@ -4,7 +4,7 @@
  * 覆盖 §3.2 配置读取 + §3.3 报告格式 + §3.4 工具模块
  */
 
-import { describe, it, expect, beforeEach } from '@jest/globals';
+import { describe, it, expect, beforeEach, afterEach } from '@jest/globals';
 import * as fs from 'fs';
 import * as path from 'path';
 import * as os from 'os';
@@ -84,6 +84,18 @@ function createFullTestReport(): InvestigationReport {
 // ============================================================
 
 describe('§3.2 配置读取', () => {
+  let tmpDir: string;
+
+  beforeEach(() => {
+    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'inv-report-test-'));
+  });
+
+  afterEach(() => {
+    if (fs.existsSync(tmpDir)) {
+      fs.rmSync(tmpDir, { recursive: true, force: true });
+    }
+  });
+
   describe('splitThreshold 默认 30KB', () => {
     it('should return default splitThreshold of 30', () => {
       const config = getDefaultConfig();
@@ -103,14 +115,8 @@ describe('§3.2 配置读取', () => {
 
   describe('语言配置', () => {
     it('should fallback to zh when config missing', () => {
-      // Create temp dir without config
-      const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'inv-config-test-'));
-      try {
-        const lang = loadLanguageConfig(tmpDir);
-        expect(lang).toBe('zh');
-      } finally {
-        fs.rmSync(tmpDir, { recursive: true, force: true });
-      }
+      const lang = loadLanguageConfig(tmpDir);
+      expect(lang).toBe('zh');
     });
   });
 });

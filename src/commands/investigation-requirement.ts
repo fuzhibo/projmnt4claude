@@ -26,7 +26,7 @@ import {
   generateSplitPlan,
   reviewSplitPlan,
 } from '../utils/investigation/report-splitter';
-import { loadInvestigationConfig, loadLanguageConfig } from '../utils/investigation/config';
+import { loadInvestigationConfig, loadLanguageConfig } from '../utils/investigation/config-reader';
 import { isInitialized } from '../utils/path';
 
 // ============================================================

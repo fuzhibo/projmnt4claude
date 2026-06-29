@@ -10,7 +10,7 @@
  * - 3.6 gateCheckAndFix: 门禁失败→AI修正→对齐→重试闭环
  */
 
-import { describe, test, expect, beforeEach, afterEach} from '@jest/globals';
+import { describe, test, expect, beforeEach, afterEach, jest } from '@jest/globals';
 import {
   PREFIX_MAP,
   VALID_PREFIXES,
@@ -35,22 +35,24 @@ import {
 import type { ConversionStatus, ConversionState, GateDependencies, GateFixResult } from '../types.js';
 import { gateCheckAndFix } from '../gate-check-fix.js';
 import { existsSync, mkdirSync, rmSync, writeFileSync } from 'node:fs';
-import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { createIsolatedTestEnv, type IsolatedTestEnv } from '../../test-env.js';
 
 // ============================================================
 // 测试数据与临时目录
 // ============================================================
 
+let env: IsolatedTestEnv;
 let tempDir: string;
 
-beforeEach(() => {
-  tempDir = join(tmpdir(), `init-req-test-${Date.now()}`);
-  mkdirSync(tempDir, { recursive: true });
+beforeEach(async () => {
+  env = await createIsolatedTestEnv({ prefix: 'init-req-test-' });
+  tempDir = env.tempDir;
 });
 
 afterEach(() => {
-  rmSync(tempDir, { recursive: true, force: true });
+  env.cleanup();
+  jest.restoreAllMocks();
 });
 
 // ============================================================
@@ -58,9 +60,12 @@ afterEach(() => {
 // ============================================================
 
 describe('PREFIX_MAP (§3.1)', () => {
-  test('contains all 5 required prefixes', () => {
-    expect(VALID_PREFIXES).toEqual(['verify', 'test', 'review', 'implem', 'doc']);
-    expect(Object.keys(PREFIX_MAP).length).toBe(5);
+  test('contains all 9 required prefixes (System A + System B)', () => {
+    expect(VALID_PREFIXES).toEqual(expect.arrayContaining([
+      'verify', 'test', 'review', 'implem', 'doc',
+      'ai-review', 'ai-qa', 'human-qa', 'script',
+    ]));
+    expect(Object.keys(PREFIX_MAP).length).toBe(9);
   });
 
   test('verify prefix maps to qa_verification/functional_test', () => {
@@ -359,7 +364,13 @@ describe('gateCheckAndFix (§3.6)', () => {
         taskId: 'TASK-001',
         passed: true,
         summary: 'All checks passed',
-        results: [],
+        ruleResults: [],
+        checks: [],
+        passedCount: 0,
+        failedCount: 0,
+        warningCount: 0,
+        blockingFailures: 0,
+        recommendations: [],
         duration: 100,
         timestamp: new Date().toISOString(),
       })),
@@ -407,7 +418,7 @@ describe('gateCheckAndFix (§3.6)', () => {
         taskId: 'TASK-001',
         passed: false,
         summary: 'Gate failed',
-        results: [{ ruleId: 'R-001', passed: false, message: 'Missing checkpoints' }],
+        ruleResults: [{ ruleId: 'R-001', passed: false, message: 'Missing checkpoints' }],
         duration: 100,
         timestamp: new Date().toISOString(),
       })),
@@ -460,7 +471,13 @@ describe('gateCheckAndFix (§3.6)', () => {
         taskId: 'TASK-001',
         passed: false,
         summary: 'Always fails',
-        results: [],
+        ruleResults: [],
+        checks: [],
+        passedCount: 0,
+        failedCount: 0,
+        warningCount: 0,
+        blockingFailures: 0,
+        recommendations: [],
         duration: 100,
         timestamp: new Date().toISOString(),
       })),
@@ -510,7 +527,13 @@ describe('gateCheckAndFix (§3.6)', () => {
         taskId: 'TASK-001',
         passed: true,
         summary: 'Passed',
-        results: [],
+        ruleResults: [],
+        checks: [],
+        passedCount: 0,
+        failedCount: 0,
+        warningCount: 0,
+        blockingFailures: 0,
+        recommendations: [],
         duration: 100,
         timestamp: new Date().toISOString(),
       })),
@@ -568,7 +591,13 @@ describe('Alignment Verification Three Levels (§3.7)', () => {
         taskId: 'TASK-001',
         passed: true,
         summary: 'Passed',
-        results: [],
+        ruleResults: [],
+        checks: [],
+        passedCount: 0,
+        failedCount: 0,
+        warningCount: 0,
+        blockingFailures: 0,
+        recommendations: [],
         duration: 100,
         timestamp: new Date().toISOString(),
       })),
@@ -619,7 +648,13 @@ describe('Alignment Verification Three Levels (§3.7)', () => {
         taskId: 'TASK-001',
         passed: true,
         summary: 'Passed',
-        results: [],
+        ruleResults: [],
+        checks: [],
+        passedCount: 0,
+        failedCount: 0,
+        warningCount: 0,
+        blockingFailures: 0,
+        recommendations: [],
         duration: 100,
         timestamp: new Date().toISOString(),
       })),
@@ -665,7 +700,13 @@ describe('Alignment Verification Three Levels (§3.7)', () => {
         taskId: 'TASK-001',
         passed: true,
         summary: 'Passed',
-        results: [],
+        ruleResults: [],
+        checks: [],
+        passedCount: 0,
+        failedCount: 0,
+        warningCount: 0,
+        blockingFailures: 0,
+        recommendations: [],
         duration: 100,
         timestamp: new Date().toISOString(),
       })),
@@ -711,7 +752,13 @@ describe('Alignment Verification Three Levels (§3.7)', () => {
         taskId: 'TASK-001',
         passed: true,
         summary: 'Passed',
-        results: [],
+        ruleResults: [],
+        checks: [],
+        passedCount: 0,
+        failedCount: 0,
+        warningCount: 0,
+        blockingFailures: 0,
+        recommendations: [],
         duration: 100,
         timestamp: new Date().toISOString(),
       })),
@@ -769,7 +816,13 @@ describe('Archive Cleanup (§3.8)', () => {
         taskId: 'TASK-001',
         passed: false,
         summary: 'Always fails',
-        results: [],
+        ruleResults: [],
+        checks: [],
+        passedCount: 0,
+        failedCount: 0,
+        warningCount: 0,
+        blockingFailures: 0,
+        recommendations: [],
         duration: 100,
         timestamp: new Date().toISOString(),
       })),
@@ -838,7 +891,13 @@ describe('Archive Cleanup (§3.8)', () => {
         taskId: 'TASK-001',
         passed: false,
         summary: 'Gate failed',
-        results: [],
+        ruleResults: [],
+        checks: [],
+        passedCount: 0,
+        failedCount: 0,
+        warningCount: 0,
+        blockingFailures: 0,
+        recommendations: [],
         duration: 100,
         timestamp: new Date().toISOString(),
       })),

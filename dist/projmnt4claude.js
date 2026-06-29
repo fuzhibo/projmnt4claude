@@ -7,39 +7,60 @@ var __defProp = Object.defineProperty;
 var __getOwnPropNames = Object.getOwnPropertyNames;
 var __getOwnPropDesc = Object.getOwnPropertyDescriptor;
 var __hasOwnProp = Object.prototype.hasOwnProperty;
+function __accessProp(key) {
+  return this[key];
+}
+var __toESMCache_node;
+var __toESMCache_esm;
 var __toESM = (mod, isNodeMode, target) => {
+  var canCache = mod != null && typeof mod === "object";
+  if (canCache) {
+    var cache = isNodeMode ? __toESMCache_node ??= new WeakMap : __toESMCache_esm ??= new WeakMap;
+    var cached = cache.get(mod);
+    if (cached)
+      return cached;
+  }
   target = mod != null ? __create(__getProtoOf(mod)) : {};
   const to = isNodeMode || !mod || !mod.__esModule ? __defProp(target, "default", { value: mod, enumerable: true }) : target;
   for (let key of __getOwnPropNames(mod))
     if (!__hasOwnProp.call(to, key))
       __defProp(to, key, {
-        get: () => mod[key],
+        get: __accessProp.bind(mod, key),
         enumerable: true
       });
+  if (canCache)
+    cache.set(mod, to);
   return to;
 };
-var __moduleCache = /* @__PURE__ */ new WeakMap;
 var __toCommonJS = (from) => {
-  var entry = __moduleCache.get(from), desc;
+  var entry = (__moduleCache ??= new WeakMap).get(from), desc;
   if (entry)
     return entry;
   entry = __defProp({}, "__esModule", { value: true });
-  if (from && typeof from === "object" || typeof from === "function")
-    __getOwnPropNames(from).map((key) => !__hasOwnProp.call(entry, key) && __defProp(entry, key, {
-      get: () => from[key],
-      enumerable: !(desc = __getOwnPropDesc(from, key)) || desc.enumerable
-    }));
+  if (from && typeof from === "object" || typeof from === "function") {
+    for (var key of __getOwnPropNames(from))
+      if (!__hasOwnProp.call(entry, key))
+        __defProp(entry, key, {
+          get: __accessProp.bind(from, key),
+          enumerable: !(desc = __getOwnPropDesc(from, key)) || desc.enumerable
+        });
+  }
   __moduleCache.set(from, entry);
   return entry;
 };
+var __moduleCache;
 var __commonJS = (cb, mod) => () => (mod || cb((mod = { exports: {} }).exports, mod), mod.exports);
+var __returnValue = (v) => v;
+function __exportSetter(name, newValue) {
+  this[name] = __returnValue.bind(null, newValue);
+}
 var __export = (target, all) => {
   for (var name in all)
     __defProp(target, name, {
       get: all[name],
       enumerable: true,
       configurable: true,
-      set: (newValue) => all[name] = () => newValue
+      set: __exportSetter.bind(all, name)
     });
 };
 var __esm = (fn, res) => () => (fn && (res = fn(fn = 0)), res);
@@ -1017,7 +1038,7 @@ Expecting one of '${allowedValues.join("', '")}'`);
         this._exitCallback = (err) => {
           if (err.code !== "commander.executeSubCommandAsync") {
             throw err;
-          } else {}
+          }
         };
       }
       return this;
@@ -19391,6 +19412,193 @@ var init_validation = __esm(() => {
   init_task2();
 });
 
+// src/utils/plan.ts
+import * as path15 from "path";
+import * as fs19 from "fs";
+function isExecutableStatus(status) {
+  const normalized = normalizeStatus(status);
+  return normalized in EXECUTABLE_STATUS_PRIORITY;
+}
+function getStatusPriority(status) {
+  const normalized = normalizeStatus(status);
+  return EXECUTABLE_STATUS_PRIORITY[normalized] ?? 999;
+}
+function getPlanPath(cwd = process.cwd()) {
+  return path15.join(getProjectDir(cwd), "current-plan.json");
+}
+function readPlan(cwd = process.cwd()) {
+  if (!isInitialized(cwd)) {
+    return null;
+  }
+  const planPath = getPlanPath(cwd);
+  try {
+    if (!fs19.existsSync(planPath)) {
+      return null;
+    }
+    const content = fs19.readFileSync(planPath, "utf-8");
+    return JSON.parse(content);
+  } catch {
+    return null;
+  }
+}
+function writePlan(plan, cwd = process.cwd()) {
+  const planPath = getPlanPath(cwd);
+  plan.updatedAt = new Date().toISOString();
+  fs19.writeFileSync(planPath, JSON.stringify(plan, null, 2), "utf-8");
+}
+function createEmptyPlan() {
+  const now = new Date().toISOString();
+  return {
+    tasks: [],
+    createdAt: now,
+    updatedAt: now
+  };
+}
+function getOrCreatePlan(cwd = process.cwd()) {
+  const plan = readPlan(cwd);
+  if (plan) {
+    return plan;
+  }
+  return createEmptyPlan();
+}
+function addTaskToPlan(taskId, afterId, cwd = process.cwd()) {
+  const plan = getOrCreatePlan(cwd);
+  if (plan.tasks.includes(taskId)) {
+    return false;
+  }
+  if (afterId) {
+    const index = plan.tasks.indexOf(afterId);
+    if (index === -1) {
+      plan.tasks.push(taskId);
+    } else {
+      plan.tasks.splice(index + 1, 0, taskId);
+    }
+  } else {
+    plan.tasks.push(taskId);
+  }
+  writePlan(plan, cwd);
+  return true;
+}
+function removeTaskFromPlan(taskId, cwd = process.cwd()) {
+  const plan = readPlan(cwd);
+  if (!plan) {
+    return false;
+  }
+  const index = plan.tasks.indexOf(taskId);
+  if (index === -1) {
+    return false;
+  }
+  plan.tasks.splice(index, 1);
+  writePlan(plan, cwd);
+  return true;
+}
+function clearPlan(cwd = process.cwd()) {
+  const plan = createEmptyPlan();
+  writePlan(plan, cwd);
+}
+function areDependenciesCompleted(taskId, cwd = process.cwd()) {
+  const task = readTaskMeta(taskId, cwd);
+  if (!task) {
+    return false;
+  }
+  for (const depId of task.dependencies) {
+    const depTask = readTaskMeta(depId, cwd);
+    if (!depTask) {
+      return false;
+    }
+    const normalizedStatus = normalizeStatus(depTask.status);
+    if (normalizedStatus !== "resolved" && normalizedStatus !== "closed") {
+      return false;
+    }
+  }
+  return true;
+}
+function isParentTaskCompleted(taskId, cwd = process.cwd()) {
+  const task = readTaskMeta(taskId, cwd);
+  if (!task || !task.parentId) {
+    return false;
+  }
+  const parentTask = readTaskMeta(task.parentId, cwd);
+  if (!parentTask) {
+    return false;
+  }
+  const normalizedStatus = normalizeStatus(parentTask.status);
+  return normalizedStatus === "resolved" || normalizedStatus === "closed";
+}
+function getExecutableTasks(cwd = process.cwd(), includeSubtasks = false) {
+  const tasks = getAllTasks(cwd);
+  const skippedDueToParent = [];
+  const executableTasks = tasks.filter((task) => {
+    if (!includeSubtasks && (isSubtask(task.id) || !!task.parentId)) {
+      return false;
+    }
+    if (task.subtaskIds && task.subtaskIds.length > 0) {
+      return false;
+    }
+    if (task.parentId && isParentTaskCompleted(task.id, cwd)) {
+      skippedDueToParent.push(task.id);
+      return false;
+    }
+    return isExecutableStatus(task.status) && areDependenciesCompleted(task.id, cwd);
+  });
+  executableTasks.sort((a, b) => {
+    const priorityA = getStatusPriority(a.status);
+    const priorityB = getStatusPriority(b.status);
+    return priorityA - priorityB;
+  });
+  if (skippedDueToParent.length > 0) {
+    console.log("");
+    console.log("⚠️  以下子任务的父任务已完成，跳过推荐:");
+    for (const taskId of skippedDueToParent) {
+      const task = tasks.find((t2) => t2.id === taskId);
+      if (task) {
+        console.log(`   - ${taskId} (父任务 ${task.parentId} 已 resolved)`);
+      }
+    }
+    console.log("");
+  }
+  return executableTasks.map((task) => task.id);
+}
+function detectMissingSubtasks(cwd = process.cwd()) {
+  const allTasks = getAllTasks(cwd);
+  const warnings = [];
+  for (const task of allTasks) {
+    if (!task.subtaskIds || task.subtaskIds.length === 0) {
+      continue;
+    }
+    const missingIds = [];
+    let actualCount = 0;
+    for (const subtaskId of task.subtaskIds) {
+      const subtask = readTaskMeta(subtaskId, cwd);
+      if (subtask) {
+        actualCount++;
+      } else {
+        missingIds.push(subtaskId);
+      }
+    }
+    if (missingIds.length > 0) {
+      warnings.push({
+        parentTaskId: task.id,
+        parentTitle: task.title,
+        missingSubtaskIds: missingIds,
+        expectedCount: task.subtaskIds.length,
+        actualCount
+      });
+    }
+  }
+  return warnings;
+}
+var EXECUTABLE_STATUS_PRIORITY;
+var init_plan = __esm(() => {
+  init_path();
+  init_task2();
+  init_task();
+  EXECUTABLE_STATUS_PRIORITY = {
+    in_progress: 1,
+    open: 2
+  };
+});
+
 // src/types/harness.ts
 function createDefaultSprintContract(taskId) {
   const now = new Date().toISOString();
@@ -28665,198 +28873,13 @@ function renameTaskCommand(oldTaskId, newTaskId, cwd = process.cwd()) {
 }
 
 // src/commands/plan.ts
-var import_prompts3 = __toESM(require_prompts3(), 1);
-
-// src/utils/plan.ts
-init_path();
-init_task2();
-init_task();
-import * as path15 from "path";
-import * as fs19 from "fs";
-var EXECUTABLE_STATUS_PRIORITY = {
-  in_progress: 1,
-  open: 2
-};
-function isExecutableStatus(status) {
-  const normalized = normalizeStatus(status);
-  return normalized in EXECUTABLE_STATUS_PRIORITY;
-}
-function getStatusPriority(status) {
-  const normalized = normalizeStatus(status);
-  return EXECUTABLE_STATUS_PRIORITY[normalized] ?? 999;
-}
-function getPlanPath(cwd = process.cwd()) {
-  return path15.join(getProjectDir(cwd), "current-plan.json");
-}
-function readPlan(cwd = process.cwd()) {
-  if (!isInitialized(cwd)) {
-    return null;
-  }
-  const planPath = getPlanPath(cwd);
-  try {
-    if (!fs19.existsSync(planPath)) {
-      return null;
-    }
-    const content = fs19.readFileSync(planPath, "utf-8");
-    return JSON.parse(content);
-  } catch {
-    return null;
-  }
-}
-function writePlan(plan, cwd = process.cwd()) {
-  const planPath = getPlanPath(cwd);
-  plan.updatedAt = new Date().toISOString();
-  fs19.writeFileSync(planPath, JSON.stringify(plan, null, 2), "utf-8");
-}
-function createEmptyPlan() {
-  const now = new Date().toISOString();
-  return {
-    tasks: [],
-    createdAt: now,
-    updatedAt: now
-  };
-}
-function getOrCreatePlan(cwd = process.cwd()) {
-  const plan = readPlan(cwd);
-  if (plan) {
-    return plan;
-  }
-  return createEmptyPlan();
-}
-function addTaskToPlan(taskId, afterId, cwd = process.cwd()) {
-  const plan = getOrCreatePlan(cwd);
-  if (plan.tasks.includes(taskId)) {
-    return false;
-  }
-  if (afterId) {
-    const index = plan.tasks.indexOf(afterId);
-    if (index === -1) {
-      plan.tasks.push(taskId);
-    } else {
-      plan.tasks.splice(index + 1, 0, taskId);
-    }
-  } else {
-    plan.tasks.push(taskId);
-  }
-  writePlan(plan, cwd);
-  return true;
-}
-function removeTaskFromPlan(taskId, cwd = process.cwd()) {
-  const plan = readPlan(cwd);
-  if (!plan) {
-    return false;
-  }
-  const index = plan.tasks.indexOf(taskId);
-  if (index === -1) {
-    return false;
-  }
-  plan.tasks.splice(index, 1);
-  writePlan(plan, cwd);
-  return true;
-}
-function clearPlan(cwd = process.cwd()) {
-  const plan = createEmptyPlan();
-  writePlan(plan, cwd);
-}
-function areDependenciesCompleted(taskId, cwd = process.cwd()) {
-  const task = readTaskMeta(taskId, cwd);
-  if (!task) {
-    return false;
-  }
-  for (const depId of task.dependencies) {
-    const depTask = readTaskMeta(depId, cwd);
-    if (!depTask) {
-      return false;
-    }
-    const normalizedStatus = normalizeStatus(depTask.status);
-    if (normalizedStatus !== "resolved" && normalizedStatus !== "closed") {
-      return false;
-    }
-  }
-  return true;
-}
-function isParentTaskCompleted(taskId, cwd = process.cwd()) {
-  const task = readTaskMeta(taskId, cwd);
-  if (!task || !task.parentId) {
-    return false;
-  }
-  const parentTask = readTaskMeta(task.parentId, cwd);
-  if (!parentTask) {
-    return false;
-  }
-  const normalizedStatus = normalizeStatus(parentTask.status);
-  return normalizedStatus === "resolved" || normalizedStatus === "closed";
-}
-function getExecutableTasks(cwd = process.cwd(), includeSubtasks = false) {
-  const tasks = getAllTasks(cwd);
-  const skippedDueToParent = [];
-  const executableTasks = tasks.filter((task) => {
-    if (!includeSubtasks && (isSubtask(task.id) || !!task.parentId)) {
-      return false;
-    }
-    if (task.subtaskIds && task.subtaskIds.length > 0) {
-      return false;
-    }
-    if (task.parentId && isParentTaskCompleted(task.id, cwd)) {
-      skippedDueToParent.push(task.id);
-      return false;
-    }
-    return isExecutableStatus(task.status) && areDependenciesCompleted(task.id, cwd);
-  });
-  executableTasks.sort((a, b) => {
-    const priorityA = getStatusPriority(a.status);
-    const priorityB = getStatusPriority(b.status);
-    return priorityA - priorityB;
-  });
-  if (skippedDueToParent.length > 0) {
-    console.log("");
-    console.log("⚠️  以下子任务的父任务已完成，跳过推荐:");
-    for (const taskId of skippedDueToParent) {
-      const task = tasks.find((t2) => t2.id === taskId);
-      if (task) {
-        console.log(`   - ${taskId} (父任务 ${task.parentId} 已 resolved)`);
-      }
-    }
-    console.log("");
-  }
-  return executableTasks.map((task) => task.id);
-}
-function detectMissingSubtasks(cwd = process.cwd()) {
-  const allTasks = getAllTasks(cwd);
-  const warnings = [];
-  for (const task of allTasks) {
-    if (!task.subtaskIds || task.subtaskIds.length === 0) {
-      continue;
-    }
-    const missingIds = [];
-    let actualCount = 0;
-    for (const subtaskId of task.subtaskIds) {
-      const subtask = readTaskMeta(subtaskId, cwd);
-      if (subtask) {
-        actualCount++;
-      } else {
-        missingIds.push(subtaskId);
-      }
-    }
-    if (missingIds.length > 0) {
-      warnings.push({
-        parentTaskId: task.id,
-        parentTitle: task.title,
-        missingSubtaskIds: missingIds,
-        expectedCount: task.subtaskIds.length,
-        actualCount
-      });
-    }
-  }
-  return warnings;
-}
-
-// src/commands/plan.ts
+init_plan();
 init_path();
 init_task2();
 init_task();
 init_logger();
 init_quality_gate();
+var import_prompts3 = __toESM(require_prompts3(), 1);
 
 // src/utils/quality-gate-registry.ts
 init_checkpoint_rules();
@@ -35488,15 +35511,47 @@ function formatPriority2(priority, cwd) {
 init_logger();
 init_ai_integration();
 
-// src/utils/investigation/types.ts
+// src/utils/init-requirement/prefix-map.ts
+init_checkpoint_rules();
 var PREFIX_MAP = {
   verify: { category: "qa_verification", method: "functional_test", requiresHuman: false },
   test: { category: "qa_verification", method: "unit_test", requiresHuman: false },
   review: { category: "code_review", method: "code_review", requiresHuman: true },
   implem: { category: "implementation", method: "automated", requiresHuman: false },
-  doc: { category: "documentation", method: "automated", requiresHuman: false }
+  doc: { category: "documentation", method: "automated", requiresHuman: false },
+  "ai-review": { category: "code_review", method: "code_review", requiresHuman: false },
+  "ai-qa": { category: "qa_verification", method: "automated", requiresHuman: false },
+  "human-qa": { category: "qa_verification", method: "automated", requiresHuman: true },
+  script: { category: "evaluation", method: "automated", requiresHuman: false }
 };
-
+var VALID_PREFIXES = Object.keys(PREFIX_MAP);
+function parseCheckpoint(raw) {
+  const systemBMatch = raw.match(/^\[(ai review|ai qa|human qa|script)\]\s*(.+)/);
+  if (systemBMatch) {
+    const prefix2 = systemBMatch[1];
+    const desc = systemBMatch[2].trim();
+    const attrs = inferCheckpointAttributesFromPrefix(`[${prefix2}] ${desc}`);
+    return {
+      prefix: prefix2.replace(" ", "-"),
+      description: desc,
+      category: attrs.category || "qa_verification",
+      verificationMethod: attrs.verificationMethod || null,
+      requiresHuman: attrs.requiresHuman ?? false
+    };
+  }
+  const legacyMatch = raw.match(/^\[(verify|test|review|implem|doc)\]\s*(.+)/);
+  if (!legacyMatch)
+    return null;
+  const prefix = legacyMatch[1];
+  const mapped = PREFIX_MAP[prefix];
+  return {
+    prefix,
+    description: legacyMatch[2].trim(),
+    category: mapped.category,
+    verificationMethod: mapped.method,
+    requiresHuman: mapped.requiresHuman
+  };
+}
 // src/utils/investigation/report-validator.ts
 function validateReport(report) {
   const errors = [];
@@ -36164,47 +36219,6 @@ async function loadAndRenderTemplate(name, params, lang = "zh") {
 var DEFAULT_QUALITY_GATE_CONFIG2 = {
   minQualityScore: 60
 };
-// src/utils/init-requirement/prefix-map.ts
-init_checkpoint_rules();
-var PREFIX_MAP2 = {
-  verify: { category: "qa_verification", method: "functional_test", requiresHuman: false },
-  test: { category: "qa_verification", method: "unit_test", requiresHuman: false },
-  review: { category: "code_review", method: "code_review", requiresHuman: true },
-  implem: { category: "implementation", method: "automated", requiresHuman: false },
-  doc: { category: "documentation", method: "automated", requiresHuman: false },
-  "ai-review": { category: "code_review", method: "code_review", requiresHuman: false },
-  "ai-qa": { category: "qa_verification", method: "automated", requiresHuman: false },
-  "human-qa": { category: "qa_verification", method: "automated", requiresHuman: true },
-  script: { category: "evaluation", method: "automated", requiresHuman: false }
-};
-var VALID_PREFIXES = Object.keys(PREFIX_MAP2);
-function parseCheckpoint(raw) {
-  const systemBMatch = raw.match(/^\[(ai review|ai qa|human qa|script)\]\s*(.+)/);
-  if (systemBMatch) {
-    const prefix2 = systemBMatch[1];
-    const desc = systemBMatch[2].trim();
-    const attrs = inferCheckpointAttributesFromPrefix(`[${prefix2}] ${desc}`);
-    return {
-      prefix: prefix2.replace(" ", "-"),
-      description: desc,
-      category: attrs.category || "qa_verification",
-      verificationMethod: attrs.verificationMethod || null,
-      requiresHuman: attrs.requiresHuman ?? false
-    };
-  }
-  const legacyMatch = raw.match(/^\[(verify|test|review|implem|doc)\]\s*(.+)/);
-  if (!legacyMatch)
-    return null;
-  const prefix = legacyMatch[1];
-  const mapped = PREFIX_MAP2[prefix];
-  return {
-    prefix,
-    description: legacyMatch[2].trim(),
-    category: mapped.category,
-    verificationMethod: mapped.method,
-    requiresHuman: mapped.requiresHuman
-  };
-}
 // src/utils/init-requirement/verification-commands.ts
 import { existsSync as existsSync22, readFileSync as readFileSync19 } from "node:fs";
 import path21 from "node:path";
@@ -36491,8 +36505,8 @@ async function runGateCheck(taskId, cwd, attempt, maxRetries, isResumed, deps) {
     failures.push({
       source: "preDevGate",
       detail: "Pre-dev gate failed",
-      ruleResults: preDevResult.results,
-      suggestions: preDevResult.results?.map((r) => r.message).filter(Boolean)
+      ruleResults: preDevResult.ruleResults,
+      suggestions: preDevResult.ruleResults?.flatMap((r) => r.checkResults?.map((c) => c.message) ?? []).filter(Boolean)
     });
   }
   const qualityResult = await deps.checkQualityGate(taskId, DEFAULT_QUALITY_GATE_CONFIG2, cwd);
@@ -36840,7 +36854,7 @@ Processing: ${path23.basename(reportFile)}`);
   console.log("");
 }
 async function extractTaskMeta(reportContent, cwd) {
-  const prefixMapStr = Object.entries(PREFIX_MAP2).map(([prefix, mapping]) => `[${prefix}] → category: ${mapping.category}, method: ${mapping.method}, requiresHuman: ${mapping.requiresHuman}`).join(`
+  const prefixMapStr = Object.entries(PREFIX_MAP).map(([prefix, mapping]) => `[${prefix}] → category: ${mapping.category}, method: ${mapping.method}, requiresHuman: ${mapping.requiresHuman}`).join(`
 `);
   const prompt = loadAndRenderTemplate("reportToTask", {
     report: reportContent,
@@ -36862,7 +36876,7 @@ function validateExtractedMeta(data) {
   const checkpoints = rawCheckpoints.map((cp) => {
     const prefix = ["verify", "test", "review", "implem", "doc"].includes(cp.prefix) ? cp.prefix : "verify";
     const cpDesc = typeof cp.description === "string" ? cp.description : "Checkpoint";
-    const mapping = PREFIX_MAP2[prefix];
+    const mapping = PREFIX_MAP[prefix];
     return {
       prefix,
       description: cpDesc,
@@ -37336,7 +37350,7 @@ function validateSplitReviewResult(data) {
   };
 }
 
-// src/utils/investigation/config.ts
+// src/utils/investigation/config-reader.ts
 import * as fs28 from "fs";
 import * as path24 from "path";
 var DEFAULT_CONFIG2 = {
@@ -37344,18 +37358,27 @@ var DEFAULT_CONFIG2 = {
   maxRetry: 3,
   outputDir: "docs/investigation"
 };
+function findConfigPath(cwd) {
+  const projConfigPath = path24.join(cwd, ".projmnt4claude", "config.json");
+  if (fs28.existsSync(projConfigPath))
+    return projConfigPath;
+  const rootConfigPath = path24.join(cwd, "config.json");
+  if (fs28.existsSync(rootConfigPath))
+    return rootConfigPath;
+  return null;
+}
 function loadInvestigationConfig(cwd, cliThreshold) {
   try {
     const configPath = findConfigPath(cwd);
     if (configPath && fs28.existsSync(configPath)) {
-      const raw = fs28.readFileSync(configPath, "utf-8");
-      const config = JSON.parse(raw);
-      const inv = config?.investigation;
-      if (inv) {
+      const content = fs28.readFileSync(configPath, "utf-8");
+      const config = JSON.parse(content);
+      const invConfig = config?.investigation;
+      if (invConfig) {
         return {
-          splitThreshold: cliThreshold ?? inv.splitThreshold ?? DEFAULT_CONFIG2.splitThreshold,
-          maxRetry: inv.maxRetry ?? DEFAULT_CONFIG2.maxRetry,
-          outputDir: inv.outputDir ?? DEFAULT_CONFIG2.outputDir
+          splitThreshold: cliThreshold ?? invConfig.splitThreshold ?? DEFAULT_CONFIG2.splitThreshold,
+          maxRetry: invConfig.maxRetry ?? DEFAULT_CONFIG2.maxRetry,
+          outputDir: invConfig.outputDir ?? DEFAULT_CONFIG2.outputDir
         };
       }
     }
@@ -37369,23 +37392,19 @@ function loadLanguageConfig(cwd) {
   try {
     const configPath = findConfigPath(cwd);
     if (configPath && fs28.existsSync(configPath)) {
-      const raw = fs28.readFileSync(configPath, "utf-8");
-      const config = JSON.parse(raw);
+      const content = fs28.readFileSync(configPath, "utf-8");
+      const config = JSON.parse(content);
       const lang = config?.prompts?.language;
-      if (lang === "zh" || lang === "en")
+      if (lang === "en" || lang === "zh") {
         return lang;
+      }
     }
   } catch {}
+  const envLang = process.env.LANG || process.env.LC_ALL || "";
+  if (envLang.toLowerCase().includes("zh")) {
+    return "zh";
+  }
   return "zh";
-}
-function findConfigPath(cwd) {
-  const configPath = path24.join(cwd, ".projmnt4claude", "config.json");
-  if (fs28.existsSync(configPath))
-    return configPath;
-  const rootConfig = path24.join(cwd, "config.json");
-  if (fs28.existsSync(rootConfig))
-    return rootConfig;
-  return null;
 }
 
 // src/commands/investigation-requirement.ts
@@ -38658,7 +38677,7 @@ function getBuiltInAnalyzers() {
 // src/commands/doctor.ts
 init_config();
 init_i18n();
-var __dirname = "/home/fuzhibo/workerplace/data/git/projmnt4claude/src/commands";
+var __dirname = "/home/fuzhibo/workerplace/git/projmnt4claude/src/commands";
 async function runDoctor(fix = false, cwd = process.cwd()) {
   const texts = t(cwd).doctorCmd;
   console.log("");
@@ -44247,17 +44266,19 @@ import * as path36 from "path";
 init_harness_helpers();
 init_session_lock_cleanup();
 init_session_id_mapper();
+init_plan();
 init_task2();
 init_task();
 init_config2();
 
 // src/commands/plan.ts
-var import_prompts10 = __toESM(require_prompts3(), 1);
+init_plan();
 init_path();
 init_task2();
 init_task();
 init_logger();
 init_quality_gate();
+var import_prompts10 = __toESM(require_prompts3(), 1);
 init_ai_metadata();
 init_dependency_engine();
 init_dependency_graph();
@@ -49358,6 +49379,7 @@ function resetPhaseCheckpoints(taskId, state, cwd) {
 init_harness_helpers();
 init_session_lock_cleanup();
 init_session_id_mapper();
+init_plan();
 init_task2();
 init_task();
 init_config2();

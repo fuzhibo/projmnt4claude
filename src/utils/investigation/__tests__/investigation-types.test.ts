@@ -150,15 +150,21 @@ describe('§3.1 类型系统', () => {
     });
   });
 
-  describe('PREFIX_MAP 5 种前缀', () => {
-    it('should contain all 5 prefixes', () => {
+  describe('PREFIX_MAP 9 种前缀 (System A + System B)', () => {
+    it('should contain all 9 prefixes', () => {
       const keys = Object.keys(PREFIX_MAP);
-      expect(keys).toHaveLength(5);
+      expect(keys).toHaveLength(9);
+      // System A
       expect(keys).toContain('verify');
       expect(keys).toContain('test');
       expect(keys).toContain('review');
       expect(keys).toContain('implem');
       expect(keys).toContain('doc');
+      // System B
+      expect(keys).toContain('ai-review');
+      expect(keys).toContain('ai-qa');
+      expect(keys).toContain('human-qa');
+      expect(keys).toContain('script');
     });
 
     it('should have correct mapping for verify', () => {
@@ -191,10 +197,10 @@ describe('§3.1 类型系统', () => {
       });
     });
 
-    it('should have only review with requiresHuman=true', () => {
+    it('should have review and human-qa with requiresHuman=true', () => {
       const humanRequired = Object.entries(PREFIX_MAP)
         .filter(([, v]) => v.requiresHuman).map(([k]) => k);
-      expect(humanRequired).toEqual(['review']);
+      expect(humanRequired).toEqual(['review', 'human-qa']);
     });
   });
 

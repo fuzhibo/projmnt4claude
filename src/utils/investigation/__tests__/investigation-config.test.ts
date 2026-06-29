@@ -3,7 +3,7 @@
  * 覆盖 §3.2 配置
  */
 
-import { describe, it, expect } from '@jest/globals';
+import { describe, it, expect, beforeEach, afterEach } from '@jest/globals';
 import * as fs from 'fs';
 import * as path from 'path';
 import * as os from 'os';
@@ -72,6 +72,18 @@ function createFullTestReport(): InvestigationReport {
 }
 
 describe('§3.2 配置读取', () => {
+  let tmpDir: string;
+
+  beforeEach(() => {
+    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'inv-config-test-'));
+  });
+
+  afterEach(() => {
+    if (fs.existsSync(tmpDir)) {
+      fs.rmSync(tmpDir, { recursive: true, force: true });
+    }
+  });
+
   describe('splitThreshold 默认 30KB', () => {
     it('should use default 30KB when config missing', () => {
       const config = getDefaultConfig();
@@ -79,7 +91,6 @@ describe('§3.2 配置读取', () => {
     });
 
     it('should read splitThreshold from config.json', () => {
-      const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'inv-config-test-'));
       const configDir = path.join(tmpDir, '.projmnt4claude');
       fs.mkdirSync(configDir, { recursive: true });
       fs.writeFileSync(
@@ -89,14 +100,11 @@ describe('§3.2 配置读取', () => {
 
       const config = loadInvestigationConfig(tmpDir);
       expect(config.splitThreshold).toBe(50);
-
-      fs.rmSync(tmpDir, { recursive: true, force: true });
     });
   });
 
   describe('CLI 优先级覆盖', () => {
     it('should prioritize CLI threshold over config.json', () => {
-      const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'inv-config-test-'));
       const configDir = path.join(tmpDir, '.projmnt4claude');
       fs.mkdirSync(configDir, { recursive: true });
       fs.writeFileSync(
@@ -106,28 +114,21 @@ describe('§3.2 配置读取', () => {
 
       const config = loadInvestigationConfig(tmpDir, 100);
       expect(config.splitThreshold).toBe(100);
-
-      fs.rmSync(tmpDir, { recursive: true, force: true });
     });
 
     it('should use default when both config and CLI are missing', () => {
-      const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'inv-config-test-'));
       const config = loadInvestigationConfig(tmpDir);
       expect(config.splitThreshold).toBe(30);
-      fs.rmSync(tmpDir, { recursive: true, force: true });
     });
   });
 
   describe('语言配置', () => {
     it('should default to zh when config missing', () => {
-      const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'inv-config-test-'));
       const lang = loadLanguageConfig(tmpDir);
       expect(lang).toBe('zh');
-      fs.rmSync(tmpDir, { recursive: true, force: true });
     });
 
     it('should read language from config file', () => {
-      const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'inv-config-test-'));
       const configDir = path.join(tmpDir, '.projmnt4claude');
       fs.mkdirSync(configDir, { recursive: true });
       fs.writeFileSync(
@@ -137,12 +138,9 @@ describe('§3.2 配置读取', () => {
 
       const lang = loadLanguageConfig(tmpDir);
       expect(lang).toBe('en');
-
-      fs.rmSync(tmpDir, { recursive: true, force: true });
     });
 
     it('should fallback to zh for invalid language', () => {
-      const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'inv-config-test-'));
       const configDir = path.join(tmpDir, '.projmnt4claude');
       fs.mkdirSync(configDir, { recursive: true });
       fs.writeFileSync(
@@ -152,8 +150,6 @@ describe('§3.2 配置读取', () => {
 
       const lang = loadLanguageConfig(tmpDir);
       expect(lang).toBe('zh');
-
-      fs.rmSync(tmpDir, { recursive: true, force: true });
     });
   });
 });

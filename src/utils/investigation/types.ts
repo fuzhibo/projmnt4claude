@@ -6,19 +6,11 @@
  */
 
 // ============================================================
-// 检查点前缀映射（与 init-requirement 共享）
+// 检查点前缀映射 - 从 init-requirement 导入（单一来源）
 // ============================================================
 
-/** 检查点前缀 → 门禁字段映射（两指令间接口契约） */
-export const PREFIX_MAP: Record<string, { category: string; method: string; requiresHuman: boolean }> = {
-  verify: { category: 'qa_verification', method: 'functional_test', requiresHuman: false },
-  test:   { category: 'qa_verification', method: 'unit_test',       requiresHuman: false },
-  review: { category: 'code_review',     method: 'code_review',     requiresHuman: true  },
-  implem: { category: 'implementation',  method: 'automated',       requiresHuman: false },
-  doc:    { category: 'documentation',   method: 'automated',       requiresHuman: false },
-};
-
-export type CheckpointPrefix = keyof typeof PREFIX_MAP;
+// PREFIX_MAP 从 init-requirement/prefix-map.ts 导入，避免重复定义
+export { PREFIX_MAP, type CheckpointPrefix } from '../init-requirement/prefix-map.js';
 
 // ============================================================
 // 核心报告类型

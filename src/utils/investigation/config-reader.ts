@@ -16,10 +16,22 @@ const DEFAULT_CONFIG: InvestigationConfig = {
 };
 
 /**
- * 获取项目配置文件路径
+ * 查找项目配置文件路径
+ *
+ * 查找顺序：
+ * 1. .projmnt4claude/config.json
+ * 2. 项目根目录 config.json（回退）
  */
-function getConfigPath(cwd: string): string {
-  return path.join(cwd, '.projmnt4claude', 'config.json');
+function findConfigPath(cwd: string): string | null {
+  // 查找 .projmnt4claude/config.json
+  const projConfigPath = path.join(cwd, '.projmnt4claude', 'config.json');
+  if (fs.existsSync(projConfigPath)) return projConfigPath;
+
+  // 回退：项目根目录 config.json
+  const rootConfigPath = path.join(cwd, 'config.json');
+  if (fs.existsSync(rootConfigPath)) return rootConfigPath;
+
+  return null;
 }
 
 /**
@@ -28,13 +40,12 @@ function getConfigPath(cwd: string): string {
  * 优先级：
  * 1. CLI 参数（cliThreshold）
  * 2. config.json investigation.splitThreshold
- * 3. 硬编码默认值
+ * 3. 硬编码默认值 30KB
  */
 export function loadInvestigationConfig(cwd: string, cliThreshold?: number): InvestigationConfig {
-  const configPath = getConfigPath(cwd);
-
   try {
-    if (fs.existsSync(configPath)) {
+    const configPath = findConfigPath(cwd);
+    if (configPath && fs.existsSync(configPath)) {
       const content = fs.readFileSync(configPath, 'utf-8');
       const config = JSON.parse(content);
       const invConfig = config?.investigation;
@@ -59,12 +70,16 @@ export function loadInvestigationConfig(cwd: string, cliThreshold?: number): Inv
 
 /**
  * 加载 prompts.language 配置
+ *
+ * 优先级：
+ * 1. config.json → prompts.language
+ * 2. 系统环境 LANG → 推断
+ * 3. 默认 → 'zh'
  */
 export function loadLanguageConfig(cwd: string): 'zh' | 'en' {
-  const configPath = getConfigPath(cwd);
-
   try {
-    if (fs.existsSync(configPath)) {
+    const configPath = findConfigPath(cwd);
+    if (configPath && fs.existsSync(configPath)) {
       const content = fs.readFileSync(configPath, 'utf-8');
       const config = JSON.parse(content);
       const lang = config?.prompts?.language;

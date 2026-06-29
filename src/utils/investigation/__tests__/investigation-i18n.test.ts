@@ -210,10 +210,14 @@ describe('§3.8 接口契约', () => {
   });
 
   describe('PREFIX_MAP 两端一致', () => {
-    it('should have consistent prefixes', () => {
+    it('should have consistent prefixes (System A + System B)', () => {
       const prefixMapKeys = new Set(Object.keys(PREFIX_MAP));
-      const validatorPrefixes = new Set(['verify', 'test', 'review', 'implem', 'doc']);
-      expect(prefixMapKeys).toEqual(validatorPrefixes);
+      // All 9 prefixes should be present
+      const expectedPrefixes = new Set([
+        'verify', 'test', 'review', 'implem', 'doc',
+        'ai-review', 'ai-qa', 'human-qa', 'script',
+      ]);
+      expect(prefixMapKeys).toEqual(expectedPrefixes);
     });
 
     it('should use PREFIX_MAP in validator', () => {
