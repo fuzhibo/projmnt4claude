@@ -7,60 +7,39 @@ var __defProp = Object.defineProperty;
 var __getOwnPropNames = Object.getOwnPropertyNames;
 var __getOwnPropDesc = Object.getOwnPropertyDescriptor;
 var __hasOwnProp = Object.prototype.hasOwnProperty;
-function __accessProp(key) {
-  return this[key];
-}
-var __toESMCache_node;
-var __toESMCache_esm;
 var __toESM = (mod, isNodeMode, target) => {
-  var canCache = mod != null && typeof mod === "object";
-  if (canCache) {
-    var cache = isNodeMode ? __toESMCache_node ??= new WeakMap : __toESMCache_esm ??= new WeakMap;
-    var cached = cache.get(mod);
-    if (cached)
-      return cached;
-  }
   target = mod != null ? __create(__getProtoOf(mod)) : {};
   const to = isNodeMode || !mod || !mod.__esModule ? __defProp(target, "default", { value: mod, enumerable: true }) : target;
   for (let key of __getOwnPropNames(mod))
     if (!__hasOwnProp.call(to, key))
       __defProp(to, key, {
-        get: __accessProp.bind(mod, key),
+        get: () => mod[key],
         enumerable: true
       });
-  if (canCache)
-    cache.set(mod, to);
   return to;
 };
+var __moduleCache = /* @__PURE__ */ new WeakMap;
 var __toCommonJS = (from) => {
-  var entry = (__moduleCache ??= new WeakMap).get(from), desc;
+  var entry = __moduleCache.get(from), desc;
   if (entry)
     return entry;
   entry = __defProp({}, "__esModule", { value: true });
-  if (from && typeof from === "object" || typeof from === "function") {
-    for (var key of __getOwnPropNames(from))
-      if (!__hasOwnProp.call(entry, key))
-        __defProp(entry, key, {
-          get: __accessProp.bind(from, key),
-          enumerable: !(desc = __getOwnPropDesc(from, key)) || desc.enumerable
-        });
-  }
+  if (from && typeof from === "object" || typeof from === "function")
+    __getOwnPropNames(from).map((key) => !__hasOwnProp.call(entry, key) && __defProp(entry, key, {
+      get: () => from[key],
+      enumerable: !(desc = __getOwnPropDesc(from, key)) || desc.enumerable
+    }));
   __moduleCache.set(from, entry);
   return entry;
 };
-var __moduleCache;
 var __commonJS = (cb, mod) => () => (mod || cb((mod = { exports: {} }).exports, mod), mod.exports);
-var __returnValue = (v) => v;
-function __exportSetter(name, newValue) {
-  this[name] = __returnValue.bind(null, newValue);
-}
 var __export = (target, all) => {
   for (var name in all)
     __defProp(target, name, {
       get: all[name],
       enumerable: true,
       configurable: true,
-      set: __exportSetter.bind(all, name)
+      set: (newValue) => all[name] = () => newValue
     });
 };
 var __esm = (fn, res) => () => (fn && (res = fn(fn = 0)), res);
@@ -1038,7 +1017,7 @@ Expecting one of '${allowedValues.join("', '")}'`);
         this._exitCallback = (err) => {
           if (err.code !== "commander.executeSubCommandAsync") {
             throw err;
-          }
+          } else {}
         };
       }
       return this;
@@ -7732,7 +7711,7 @@ var init_zh = __esm(() => {
       errorViolations: "\uD83D\uDEAB 以下错误必须在创建任务前修复：",
       followingErrorsMustFix: "以下错误必须在创建任务前修复：",
       fixSuggestions: "\uD83D\uDCA1 修复建议：",
-      checkpointPrefixTip: "Checkpoints 必须以标准前缀开头：[implem]、[test]、[doc]、[verify]",
+      checkpointPrefixTip: "Checkpoints 必须以标准前缀开头：[ai review]、[ai qa]、[human qa]、[script]",
       metaJsonFormatTip: "meta.json 必须是标准格式，包含所有必需字段",
       skipQualityGateTip: "使用 --skip-quality-gate 临时跳过（不推荐用于生产环境）",
       qualityGateLowScore: "❌ 质量门禁失败：{score} < {threshold}",
@@ -8810,7 +8789,7 @@ var init_en = __esm(() => {
       errorViolations: "\uD83D\uDEAB The following errors must be fixed before creating task:",
       followingErrorsMustFix: "Errors must fix",
       fixSuggestions: "\uD83D\uDCA1 Fix suggestions:",
-      checkpointPrefixTip: "Checkpoints must start with standard prefixes: [implem], [test], [doc], [verify]",
+      checkpointPrefixTip: "Checkpoints must start with standard prefixes: [ai review], [ai qa], [human qa], [script]",
       metaJsonFormatTip: "meta.json must be in standard format with all required fields",
       skipQualityGateTip: "Use --skip-quality-gate to skip temporarily (not recommended for production)",
       qualityGateLowScore: "❌ Quality gate failed: {score} < {threshold}",
@@ -12478,6 +12457,7 @@ __export(exports_checkpoint_rules, {
   inferCheckpointAttributesFromPrefix: () => inferCheckpointAttributesFromPrefix,
   getCheckpointPhase: () => getCheckpointPhase,
   getCategoryFromPrefix: () => getCategoryFromPrefix,
+  deprecatedPrefixDetector: () => deprecatedPrefixDetector,
   checkpointVerbPrefix: () => checkpointVerbPrefix,
   checkpointValidationRules: () => checkpointValidationRules,
   checkpointScriptHasCommands: () => checkpointScriptHasCommands,
@@ -12487,6 +12467,7 @@ __export(exports_checkpoint_rules, {
   checkpointMinLength: () => checkpointMinLength,
   checkpointHasVerificationCommands: () => checkpointHasVerificationCommands,
   checkpointCountControl: () => checkpointCountControl,
+  checkpointConsistencyValidator: () => checkpointConsistencyValidator,
   VALID_CHECKPOINT_PREFIXES: () => VALID_CHECKPOINT_PREFIXES
 });
 function normalize(text) {
@@ -12755,7 +12736,7 @@ function detectStringFormatIssues(value) {
   }
   return issues;
 }
-var CHINESE_VERBS, ENGLISH_VERBS, checkpointNoDuplicate, checkpointNoFilePath, checkpointCountControl, checkpointVerbPrefix, checkpointMinLength, METHODS_REQUIRING_COMMANDS2, VALID_CHECKPOINT_PREFIXES, checkpointRequiredPrefix, checkpointHasVerificationCommands, checkpointScriptHasCommands, metaJsonValid, checkpointValidationRules;
+var CHINESE_VERBS, ENGLISH_VERBS, checkpointNoDuplicate, checkpointNoFilePath, checkpointCountControl, checkpointVerbPrefix, checkpointMinLength, METHODS_REQUIRING_COMMANDS2, VALID_CHECKPOINT_PREFIXES, checkpointRequiredPrefix, checkpointHasVerificationCommands, checkpointScriptHasCommands, metaJsonValid, deprecatedPrefixDetector, checkpointConsistencyValidator, checkpointValidationRules;
 var init_checkpoint_rules = __esm(() => {
   CHINESE_VERBS = new Set([
     "实现",
@@ -12979,7 +12960,7 @@ var init_checkpoint_rules = __esm(() => {
   checkpointHasVerificationCommands = {
     id: "checkpoint-has-verification-commands",
     description: "使用自动化验证方法的检查点应包含 verification.commands 或 verification.steps",
-    severity: "warning",
+    severity: "error",
     check: (output) => {
       const checkpoints = extractCheckpointObjects(output);
       if (checkpoints.length === 0)
@@ -13004,7 +12985,7 @@ var init_checkpoint_rules = __esm(() => {
         return null;
       return {
         ruleId: "checkpoint-has-verification-commands",
-        severity: "warning",
+        severity: "error",
         message: `${missing.length} 条检查点的自动化验证方法缺少 commands 或 steps: ${missing.map((cp) => {
           const desc = cp["description"] || cp["id"] || "unknown";
           const method = cp["verification"]?.["method"] || "";
@@ -13128,6 +13109,95 @@ var init_checkpoint_rules = __esm(() => {
       };
     }
   };
+  deprecatedPrefixDetector = {
+    id: "deprecated-prefix-detector",
+    description: "检测已废弃的 System A 前缀 ([verify]/[test]/[review]/[implem]/[doc])",
+    severity: "warning",
+    check: (output) => {
+      const checkpoints = extractCheckpointDescriptions(output);
+      const deprecated = checkpoints.filter((cp) => {
+        const desc = cp.trim().toLowerCase();
+        return /^\[(verify|test|review|implem|doc)\]/i.test(desc);
+      });
+      if (deprecated.length === 0)
+        return null;
+      const migrationGuide = {
+        verify: "[ai qa]",
+        test: "[ai qa]",
+        review: "[ai review]",
+        implem: "[ai qa] (implementation)",
+        doc: "[script] (doc)"
+      };
+      return {
+        ruleId: "deprecated-prefix-detector",
+        severity: "warning",
+        message: `发现 ${deprecated.length} 条使用废弃前缀的检查点，建议迁移到 System B:
+${deprecated.slice(0, 5).map((d) => {
+          const match = d.match(/^\[(verify|test|review|implem|doc)\]/i);
+          const oldPrefix = match?.[1]?.toLowerCase() || "";
+          const newPrefix = migrationGuide[oldPrefix] || "[ai review]";
+          return `  "${d}" → 使用 "${newPrefix}"`;
+        }).join(`
+`)}`
+      };
+    }
+  };
+  checkpointConsistencyValidator = {
+    id: "checkpoint-consistency-validator",
+    description: "检查点属性一致性验证（category / method / requiresHuman 对齐）",
+    severity: "error",
+    check: (output) => {
+      const checkpoints = extractCheckpointObjects(output);
+      if (checkpoints.length === 0)
+        return null;
+      const errors = [];
+      for (const cp of checkpoints) {
+        const desc = cp["description"];
+        const category = cp["category"];
+        const verification = cp["verification"];
+        const requiresHuman = cp["requiresHuman"];
+        const method = verification?.["method"];
+        const commands = verification?.["commands"];
+        if (category === "code_review") {
+          if (method !== "code_review") {
+            errors.push(`"${desc}": category=code_review 但 method=${method}（应为 code_review）`);
+          }
+          if (requiresHuman !== false) {
+            errors.push(`"${desc}": category=code_review 但 requiresHuman=${requiresHuman}（应为 false）`);
+          }
+        }
+        if (category === "qa_verification") {
+          if (method !== "automated" && method !== "manual") {
+            errors.push(`"${desc}": category=qa_verification 但 method=${method}（应为 automated/manual）`);
+          }
+          if (method === "automated" && requiresHuman !== false) {
+            errors.push(`"${desc}": method=automated 但 requiresHuman=${requiresHuman}（应为 false）`);
+          }
+          if (method === "manual" && requiresHuman !== true) {
+            errors.push(`"${desc}": method=manual 但 requiresHuman=${requiresHuman}（应为 true）`);
+          }
+        }
+        if (category === "evaluation") {
+          if (method !== "automated") {
+            errors.push(`"${desc}": category=evaluation 但 method=${method}（应为 automated）`);
+          }
+          if (requiresHuman !== false) {
+            errors.push(`"${desc}": category=evaluation 但 requiresHuman=${requiresHuman}（应为 false）`);
+          }
+        }
+        if (desc?.toLowerCase().startsWith("[script]") && (!commands || commands.length === 0)) {
+          errors.push(`"${desc}": [script] 前缀缺少 commands`);
+        }
+      }
+      if (errors.length === 0)
+        return null;
+      return {
+        ruleId: "checkpoint-consistency-validator",
+        severity: "error",
+        message: `检查点属性不一致: ${errors.join("; ")}`
+      };
+    }
+  };
   checkpointValidationRules = [
     checkpointNoDuplicate,
     checkpointNoFilePath,
@@ -13137,8 +13207,53 @@ var init_checkpoint_rules = __esm(() => {
     checkpointRequiredPrefix,
     checkpointHasVerificationCommands,
     checkpointScriptHasCommands,
-    metaJsonValid
+    metaJsonValid,
+    deprecatedPrefixDetector,
+    checkpointConsistencyValidator
   ];
+});
+
+// src/types/checkpoint-verification.ts
+var SYSTEM_B_CATEGORY_STRATEGIES;
+var init_checkpoint_verification = __esm(() => {
+  SYSTEM_B_CATEGORY_STRATEGIES = {
+    "ai-review": {
+      verifyFiles: true,
+      verifyCodeChange: true,
+      verifyTests: false,
+      verifyCoverage: false,
+      verifyReport: true,
+      verifyCommands: false,
+      verifyExpected: true
+    },
+    "ai-qa": {
+      verifyFiles: true,
+      verifyCodeChange: false,
+      verifyTests: true,
+      verifyCoverage: true,
+      verifyReport: false,
+      verifyCommands: false,
+      verifyExpected: true
+    },
+    "human-qa": {
+      verifyFiles: false,
+      verifyCodeChange: false,
+      verifyTests: false,
+      verifyCoverage: false,
+      verifyReport: true,
+      verifyCommands: false,
+      verifyExpected: true
+    },
+    script: {
+      verifyFiles: false,
+      verifyCodeChange: false,
+      verifyTests: false,
+      verifyCoverage: false,
+      verifyReport: false,
+      verifyCommands: true,
+      verifyExpected: true
+    }
+  };
 });
 
 // src/utils/checkpoint-verification.ts
@@ -13313,13 +13428,26 @@ class CheckpointOutputVerifier {
     }
     const testPatterns = [".test.ts", ".spec.ts", ".test.js", ".spec.js"];
     const srcDir = path6.join(this.cwd, "src");
+    let foundTestFiles = [];
     if (fs9.existsSync(srcDir)) {
-      const foundTestFiles = this.findFilesWithPatterns(srcDir, testPatterns);
+      foundTestFiles = this.findFilesWithPatterns(srcDir, testPatterns);
       if (foundTestFiles.length > 0) {
         evidence.push(`找到 ${foundTestFiles.length} 个测试文件`);
       }
     }
-    if (evidence.length > 0) {
+    const expected = context.existingVerification?.expected;
+    if (expected) {
+      const expectedResult = await verifyAgainstExpected({
+        testFiles: foundTestFiles,
+        coverage: context.phaseData?.qaVerdict?.coverage
+      }, expected, "testing");
+      if (!expectedResult.met) {
+        warnings.push(`expected 验证失败: ${expectedResult.details}`);
+      } else {
+        evidence.push(`expected: ${expectedResult.details}`);
+      }
+    }
+    if (evidence.length > 0 && warnings.length === 0) {
       return {
         result: "verified",
         record: {
@@ -13327,6 +13455,17 @@ class CheckpointOutputVerifier {
           result: "verified",
           evidence
         }
+      };
+    }
+    if (warnings.length > 0) {
+      return {
+        result: "failed",
+        record: {
+          ...baseRecord,
+          result: "failed",
+          failureReason: warnings.join("; ")
+        },
+        warnings
       };
     }
     warnings.push(`测试检查点 ${context.checkpointId} 没有找到测试证据`);
@@ -13376,6 +13515,7 @@ class CheckpointOutputVerifier {
   }
   async verifyReview(context, baseRecord) {
     const evidence = [];
+    const warnings = [];
     const projectDir = getProjectDir(this.cwd);
     const crReportPath = path6.join(projectDir, "reports", "harness", context.taskId, "cr-report.md");
     if (fs9.existsSync(crReportPath)) {
@@ -13384,7 +13524,19 @@ class CheckpointOutputVerifier {
     if (context.phaseData?.codeReviewVerdict) {
       evidence.push("存在审核结论");
     }
-    if (evidence.length > 0) {
+    const expected = context.existingVerification?.expected;
+    if (expected) {
+      const expectedResult = await verifyAgainstExpected({
+        files: context.phaseData?.codeReviewVerdict?.filesReviewed,
+        reportPath: crReportPath
+      }, expected, "code_review");
+      if (!expectedResult.met) {
+        warnings.push(`expected 验证失败: ${expectedResult.details}`);
+      } else {
+        evidence.push(`expected: ${expectedResult.details}`);
+      }
+    }
+    if (evidence.length > 0 && warnings.length === 0) {
       return {
         result: "verified",
         record: {
@@ -13392,6 +13544,17 @@ class CheckpointOutputVerifier {
           result: "verified",
           evidence
         }
+      };
+    }
+    if (warnings.length > 0) {
+      return {
+        result: "failed",
+        record: {
+          ...baseRecord,
+          result: "failed",
+          failureReason: warnings.join("; ")
+        },
+        warnings
       };
     }
     return {
@@ -13520,7 +13683,8 @@ async function verifyAndRecordCheckpoint(task, checkpointId, source, cwd = proce
     existingVerification: checkpoint.verification ? {
       method: checkpoint.verification.method,
       result: checkpoint.verification.result,
-      evidencePath: checkpoint.verification.evidencePath
+      evidencePath: checkpoint.verification.evidencePath,
+      expected: checkpoint.verification.expected
     } : undefined,
     phaseData
   };
@@ -13850,10 +14014,237 @@ class CheckpointStatusMismatchFixer {
     };
   }
 }
+function extractSystemBPrefix(description) {
+  const lowerDesc = description.toLowerCase();
+  if (lowerDesc.includes("[ai review]") || lowerDesc.includes("ai-review")) {
+    return "ai-review";
+  }
+  if (lowerDesc.includes("[ai qa]") || lowerDesc.includes("ai-qa")) {
+    return "ai-qa";
+  }
+  if (lowerDesc.includes("[human qa]") || lowerDesc.includes("human-qa")) {
+    return "human-qa";
+  }
+  if (lowerDesc.includes("[script]") || lowerDesc.includes("script-")) {
+    return "script";
+  }
+  return;
+}
+async function verifyAgainstExpected(output, expected, category) {
+  if (!expected) {
+    return { met: true, details: "无 expected 定义，跳过验证" };
+  }
+  const lowerExpected = expected.toLowerCase();
+  switch (category) {
+    case "code_review":
+    case "review":
+      return verifyCodeReviewExpected(output, lowerExpected);
+    case "qa_verification":
+    case "testing":
+      return verifyQAExpected(output, lowerExpected);
+    case "evaluation":
+      return verifyEvaluationExpected(output, lowerExpected);
+    case "script_execution":
+    case "script":
+      return verifyScriptExpected(output, lowerExpected);
+    default:
+      return { met: true, details: `未知分类 ${category}，跳过 expected 验证` };
+  }
+}
+function verifyCodeReviewExpected(output, expected) {
+  if (expected.includes("代码变更") || expected.includes("code change")) {
+    if (!output.codeChange || !output.codeChange.files?.length) {
+      return { met: false, details: "缺少代码变更产出" };
+    }
+  }
+  if (expected.includes("报告") || expected.includes("report")) {
+    if (!output.reportPath) {
+      return { met: false, details: "缺少 review 报告产出" };
+    }
+  }
+  if (expected.includes("文件") || expected.includes("file")) {
+    if (!output.files?.length) {
+      return { met: false, details: "缺少文件产出" };
+    }
+  }
+  return { met: true, details: "expected 验证通过" };
+}
+function verifyQAExpected(output, expected) {
+  const coverageMatch = expected.match(/(?:≥|>=)\s*(\d+)%|覆盖率\s*(\d+)%/);
+  if (coverageMatch) {
+    const threshold = parseInt(coverageMatch[1] ?? coverageMatch[2] ?? "0");
+    if (output.coverage === undefined || output.coverage < threshold) {
+      return {
+        met: false,
+        details: `覆盖率 ${output.coverage ?? "未知"}% 未达到阈值 ${threshold}%`
+      };
+    }
+  }
+  if (expected.includes("测试") || expected.includes("test")) {
+    if (!output.testFiles?.length) {
+      return { met: false, details: "缺少测试文件产出" };
+    }
+  }
+  return { met: true, details: "expected 验证通过" };
+}
+function verifyEvaluationExpected(output, expected) {
+  if (expected.includes("报告") || expected.includes("report")) {
+    if (!output.reportPath) {
+      return { met: false, details: "缺少评估报告产出" };
+    }
+  }
+  if (expected.includes("文件") || expected.includes("file")) {
+    if (!output.files?.length) {
+      return { met: false, details: "缺少评估文件产出" };
+    }
+  }
+  return { met: true, details: "expected 验证通过" };
+}
+function verifyScriptExpected(output, expected) {
+  if (expected.includes("执行") || expected.includes("execute") || expected.includes("命令")) {
+    if (!output.commandsExecuted?.length) {
+      return { met: false, details: "缺少脚本执行结果" };
+    }
+  }
+  return { met: true, details: "expected 验证通过" };
+}
+async function executeCodeReviewPostGate(verdict, checkpoints, _cwd) {
+  const results = [];
+  for (const checkpoint of checkpoints) {
+    const prefix = extractSystemBPrefix(checkpoint.description);
+    if (prefix !== "ai-review") {
+      continue;
+    }
+    const strategy = SYSTEM_B_CATEGORY_STRATEGIES["ai-review"];
+    const evidence = [];
+    const missingOutputs = [];
+    if (strategy.verifyFiles && verdict.filesReviewed?.length) {
+      evidence.push(`文件审查: ${verdict.filesReviewed.length} 个文件`);
+    } else if (strategy.verifyFiles) {
+      missingOutputs.push("缺少文件审查记录");
+    }
+    if (strategy.verifyReport && verdict.reportPath) {
+      evidence.push(`报告: ${verdict.reportPath}`);
+    } else if (strategy.verifyReport) {
+      missingOutputs.push("缺少 review 报告");
+    }
+    const expected = checkpoint.verification?.expected;
+    if (strategy.verifyExpected && expected) {
+      const expectedResult = await verifyAgainstExpected({
+        files: verdict.filesReviewed,
+        reportPath: verdict.reportPath
+      }, expected, "code_review");
+      if (!expectedResult.met) {
+        missingOutputs.push(`expected 验证失败: ${expectedResult.details}`);
+      } else {
+        evidence.push(`expected: ${expectedResult.details}`);
+      }
+    }
+    results.push({
+      checkpointId: checkpoint.id,
+      valid: missingOutputs.length === 0,
+      evidence,
+      missingOutputs,
+      strategy
+    });
+  }
+  return {
+    passed: results.every((r) => r.valid),
+    results
+  };
+}
+async function executeQAPostGate(verdict, checkpoints, _cwd) {
+  const results = [];
+  for (const checkpoint of checkpoints) {
+    const prefix = extractSystemBPrefix(checkpoint.description);
+    if (prefix !== "ai-qa" && prefix !== "human-qa") {
+      continue;
+    }
+    const strategy = SYSTEM_B_CATEGORY_STRATEGIES[prefix || "ai-qa"];
+    const evidence = [];
+    const missingOutputs = [];
+    if (strategy.verifyTests && verdict.testFiles?.length) {
+      evidence.push(`测试文件: ${verdict.testFiles.length} 个`);
+    } else if (strategy.verifyTests) {
+      missingOutputs.push("缺少测试文件");
+    }
+    if (strategy.verifyCoverage && verdict.coverage !== undefined) {
+      evidence.push(`覆盖率: ${verdict.coverage}%`);
+    } else if (strategy.verifyCoverage) {
+      missingOutputs.push("缺少覆盖率数据");
+    }
+    const expected = checkpoint.verification?.expected;
+    if (strategy.verifyExpected && expected) {
+      const expectedResult = await verifyAgainstExpected({
+        testFiles: verdict.testFiles,
+        coverage: verdict.coverage
+      }, expected, "qa_verification");
+      if (!expectedResult.met) {
+        missingOutputs.push(`expected 验证失败: ${expectedResult.details}`);
+      } else {
+        evidence.push(`expected: ${expectedResult.details}`);
+      }
+    }
+    results.push({
+      checkpointId: checkpoint.id,
+      valid: missingOutputs.length === 0,
+      evidence,
+      missingOutputs,
+      strategy
+    });
+  }
+  return {
+    passed: results.every((r) => r.valid),
+    results
+  };
+}
+async function executeEvaluationPostGate(verdict, checkpoints, _cwd) {
+  const results = [];
+  for (const checkpoint of checkpoints) {
+    const prefix = extractSystemBPrefix(checkpoint.description);
+    if (prefix !== "script") {
+      continue;
+    }
+    const strategy = SYSTEM_B_CATEGORY_STRATEGIES["script"];
+    const evidence = [];
+    const missingOutputs = [];
+    if (strategy.verifyFiles && verdict.evalFiles?.length) {
+      evidence.push(`评估文件: ${verdict.evalFiles.length} 个`);
+    }
+    if (strategy.verifyReport && verdict.reportPath) {
+      evidence.push(`报告: ${verdict.reportPath}`);
+    }
+    const expected = checkpoint.verification?.expected;
+    if (strategy.verifyExpected && expected) {
+      const expectedResult = await verifyAgainstExpected({
+        files: verdict.evalFiles,
+        reportPath: verdict.reportPath
+      }, expected, "evaluation");
+      if (!expectedResult.met) {
+        missingOutputs.push(`expected 验证失败: ${expectedResult.details}`);
+      } else {
+        evidence.push(`expected: ${expectedResult.details}`);
+      }
+    }
+    results.push({
+      checkpointId: checkpoint.id,
+      valid: missingOutputs.length === 0,
+      evidence,
+      missingOutputs,
+      strategy
+    });
+  }
+  return {
+    passed: results.every((r) => r.valid),
+    results
+  };
+}
 var CATEGORY_STRATEGIES;
-var init_checkpoint_verification = __esm(() => {
+var init_checkpoint_verification2 = __esm(() => {
   init_path();
   init_task2();
+  init_checkpoint_verification();
+  init_checkpoint_verification();
   CATEGORY_STRATEGIES = {
     implementation: {
       category: "implementation",
@@ -14353,7 +14744,7 @@ var init_checkpoint = __esm(() => {
   init_path();
   init_task2();
   init_checkpoint_rules();
-  init_checkpoint_verification();
+  init_checkpoint_verification2();
   VERIFICATION_KEYWORDS = [
     {
       method: "functional_test",
@@ -19412,193 +19803,6 @@ var init_validation = __esm(() => {
   init_task2();
 });
 
-// src/utils/plan.ts
-import * as path15 from "path";
-import * as fs19 from "fs";
-function isExecutableStatus(status) {
-  const normalized = normalizeStatus(status);
-  return normalized in EXECUTABLE_STATUS_PRIORITY;
-}
-function getStatusPriority(status) {
-  const normalized = normalizeStatus(status);
-  return EXECUTABLE_STATUS_PRIORITY[normalized] ?? 999;
-}
-function getPlanPath(cwd = process.cwd()) {
-  return path15.join(getProjectDir(cwd), "current-plan.json");
-}
-function readPlan(cwd = process.cwd()) {
-  if (!isInitialized(cwd)) {
-    return null;
-  }
-  const planPath = getPlanPath(cwd);
-  try {
-    if (!fs19.existsSync(planPath)) {
-      return null;
-    }
-    const content = fs19.readFileSync(planPath, "utf-8");
-    return JSON.parse(content);
-  } catch {
-    return null;
-  }
-}
-function writePlan(plan, cwd = process.cwd()) {
-  const planPath = getPlanPath(cwd);
-  plan.updatedAt = new Date().toISOString();
-  fs19.writeFileSync(planPath, JSON.stringify(plan, null, 2), "utf-8");
-}
-function createEmptyPlan() {
-  const now = new Date().toISOString();
-  return {
-    tasks: [],
-    createdAt: now,
-    updatedAt: now
-  };
-}
-function getOrCreatePlan(cwd = process.cwd()) {
-  const plan = readPlan(cwd);
-  if (plan) {
-    return plan;
-  }
-  return createEmptyPlan();
-}
-function addTaskToPlan(taskId, afterId, cwd = process.cwd()) {
-  const plan = getOrCreatePlan(cwd);
-  if (plan.tasks.includes(taskId)) {
-    return false;
-  }
-  if (afterId) {
-    const index = plan.tasks.indexOf(afterId);
-    if (index === -1) {
-      plan.tasks.push(taskId);
-    } else {
-      plan.tasks.splice(index + 1, 0, taskId);
-    }
-  } else {
-    plan.tasks.push(taskId);
-  }
-  writePlan(plan, cwd);
-  return true;
-}
-function removeTaskFromPlan(taskId, cwd = process.cwd()) {
-  const plan = readPlan(cwd);
-  if (!plan) {
-    return false;
-  }
-  const index = plan.tasks.indexOf(taskId);
-  if (index === -1) {
-    return false;
-  }
-  plan.tasks.splice(index, 1);
-  writePlan(plan, cwd);
-  return true;
-}
-function clearPlan(cwd = process.cwd()) {
-  const plan = createEmptyPlan();
-  writePlan(plan, cwd);
-}
-function areDependenciesCompleted(taskId, cwd = process.cwd()) {
-  const task = readTaskMeta(taskId, cwd);
-  if (!task) {
-    return false;
-  }
-  for (const depId of task.dependencies) {
-    const depTask = readTaskMeta(depId, cwd);
-    if (!depTask) {
-      return false;
-    }
-    const normalizedStatus = normalizeStatus(depTask.status);
-    if (normalizedStatus !== "resolved" && normalizedStatus !== "closed") {
-      return false;
-    }
-  }
-  return true;
-}
-function isParentTaskCompleted(taskId, cwd = process.cwd()) {
-  const task = readTaskMeta(taskId, cwd);
-  if (!task || !task.parentId) {
-    return false;
-  }
-  const parentTask = readTaskMeta(task.parentId, cwd);
-  if (!parentTask) {
-    return false;
-  }
-  const normalizedStatus = normalizeStatus(parentTask.status);
-  return normalizedStatus === "resolved" || normalizedStatus === "closed";
-}
-function getExecutableTasks(cwd = process.cwd(), includeSubtasks = false) {
-  const tasks = getAllTasks(cwd);
-  const skippedDueToParent = [];
-  const executableTasks = tasks.filter((task) => {
-    if (!includeSubtasks && (isSubtask(task.id) || !!task.parentId)) {
-      return false;
-    }
-    if (task.subtaskIds && task.subtaskIds.length > 0) {
-      return false;
-    }
-    if (task.parentId && isParentTaskCompleted(task.id, cwd)) {
-      skippedDueToParent.push(task.id);
-      return false;
-    }
-    return isExecutableStatus(task.status) && areDependenciesCompleted(task.id, cwd);
-  });
-  executableTasks.sort((a, b) => {
-    const priorityA = getStatusPriority(a.status);
-    const priorityB = getStatusPriority(b.status);
-    return priorityA - priorityB;
-  });
-  if (skippedDueToParent.length > 0) {
-    console.log("");
-    console.log("⚠️  以下子任务的父任务已完成，跳过推荐:");
-    for (const taskId of skippedDueToParent) {
-      const task = tasks.find((t2) => t2.id === taskId);
-      if (task) {
-        console.log(`   - ${taskId} (父任务 ${task.parentId} 已 resolved)`);
-      }
-    }
-    console.log("");
-  }
-  return executableTasks.map((task) => task.id);
-}
-function detectMissingSubtasks(cwd = process.cwd()) {
-  const allTasks = getAllTasks(cwd);
-  const warnings = [];
-  for (const task of allTasks) {
-    if (!task.subtaskIds || task.subtaskIds.length === 0) {
-      continue;
-    }
-    const missingIds = [];
-    let actualCount = 0;
-    for (const subtaskId of task.subtaskIds) {
-      const subtask = readTaskMeta(subtaskId, cwd);
-      if (subtask) {
-        actualCount++;
-      } else {
-        missingIds.push(subtaskId);
-      }
-    }
-    if (missingIds.length > 0) {
-      warnings.push({
-        parentTaskId: task.id,
-        parentTitle: task.title,
-        missingSubtaskIds: missingIds,
-        expectedCount: task.subtaskIds.length,
-        actualCount
-      });
-    }
-  }
-  return warnings;
-}
-var EXECUTABLE_STATUS_PRIORITY;
-var init_plan = __esm(() => {
-  init_path();
-  init_task2();
-  init_task();
-  EXECUTABLE_STATUS_PRIORITY = {
-    in_progress: 1,
-    open: 2
-  };
-});
-
 // src/types/harness.ts
 function createDefaultSprintContract(taskId) {
   const now = new Date().toISOString();
@@ -22423,7 +22627,7 @@ var init_analyze_fix_pipeline = __esm(() => {
   init_harness();
   init_checkpoint_rules();
   init_checkpoint();
-  init_checkpoint_verification();
+  init_checkpoint_verification2();
   init_i18n();
   init_analyze();
   import_prompts5 = __toESM(require_prompts3(), 1);
@@ -25413,7 +25617,7 @@ function setConfig2(key, value, cwd = process.cwd()) {
 init_path();
 init_task2();
 init_checkpoint();
-init_checkpoint_verification();
+init_checkpoint_verification2();
 init_task();
 init_dependency_graph();
 init_dependency_engine();
@@ -28873,13 +29077,198 @@ function renameTaskCommand(oldTaskId, newTaskId, cwd = process.cwd()) {
 }
 
 // src/commands/plan.ts
-init_plan();
+var import_prompts3 = __toESM(require_prompts3(), 1);
+
+// src/utils/plan.ts
+init_path();
+init_task2();
+init_task();
+import * as path15 from "path";
+import * as fs19 from "fs";
+var EXECUTABLE_STATUS_PRIORITY = {
+  in_progress: 1,
+  open: 2
+};
+function isExecutableStatus(status) {
+  const normalized = normalizeStatus(status);
+  return normalized in EXECUTABLE_STATUS_PRIORITY;
+}
+function getStatusPriority(status) {
+  const normalized = normalizeStatus(status);
+  return EXECUTABLE_STATUS_PRIORITY[normalized] ?? 999;
+}
+function getPlanPath(cwd = process.cwd()) {
+  return path15.join(getProjectDir(cwd), "current-plan.json");
+}
+function readPlan(cwd = process.cwd()) {
+  if (!isInitialized(cwd)) {
+    return null;
+  }
+  const planPath = getPlanPath(cwd);
+  try {
+    if (!fs19.existsSync(planPath)) {
+      return null;
+    }
+    const content = fs19.readFileSync(planPath, "utf-8");
+    return JSON.parse(content);
+  } catch {
+    return null;
+  }
+}
+function writePlan(plan, cwd = process.cwd()) {
+  const planPath = getPlanPath(cwd);
+  plan.updatedAt = new Date().toISOString();
+  fs19.writeFileSync(planPath, JSON.stringify(plan, null, 2), "utf-8");
+}
+function createEmptyPlan() {
+  const now = new Date().toISOString();
+  return {
+    tasks: [],
+    createdAt: now,
+    updatedAt: now
+  };
+}
+function getOrCreatePlan(cwd = process.cwd()) {
+  const plan = readPlan(cwd);
+  if (plan) {
+    return plan;
+  }
+  return createEmptyPlan();
+}
+function addTaskToPlan(taskId, afterId, cwd = process.cwd()) {
+  const plan = getOrCreatePlan(cwd);
+  if (plan.tasks.includes(taskId)) {
+    return false;
+  }
+  if (afterId) {
+    const index = plan.tasks.indexOf(afterId);
+    if (index === -1) {
+      plan.tasks.push(taskId);
+    } else {
+      plan.tasks.splice(index + 1, 0, taskId);
+    }
+  } else {
+    plan.tasks.push(taskId);
+  }
+  writePlan(plan, cwd);
+  return true;
+}
+function removeTaskFromPlan(taskId, cwd = process.cwd()) {
+  const plan = readPlan(cwd);
+  if (!plan) {
+    return false;
+  }
+  const index = plan.tasks.indexOf(taskId);
+  if (index === -1) {
+    return false;
+  }
+  plan.tasks.splice(index, 1);
+  writePlan(plan, cwd);
+  return true;
+}
+function clearPlan(cwd = process.cwd()) {
+  const plan = createEmptyPlan();
+  writePlan(plan, cwd);
+}
+function areDependenciesCompleted(taskId, cwd = process.cwd()) {
+  const task = readTaskMeta(taskId, cwd);
+  if (!task) {
+    return false;
+  }
+  for (const depId of task.dependencies) {
+    const depTask = readTaskMeta(depId, cwd);
+    if (!depTask) {
+      return false;
+    }
+    const normalizedStatus = normalizeStatus(depTask.status);
+    if (normalizedStatus !== "resolved" && normalizedStatus !== "closed") {
+      return false;
+    }
+  }
+  return true;
+}
+function isParentTaskCompleted(taskId, cwd = process.cwd()) {
+  const task = readTaskMeta(taskId, cwd);
+  if (!task || !task.parentId) {
+    return false;
+  }
+  const parentTask = readTaskMeta(task.parentId, cwd);
+  if (!parentTask) {
+    return false;
+  }
+  const normalizedStatus = normalizeStatus(parentTask.status);
+  return normalizedStatus === "resolved" || normalizedStatus === "closed";
+}
+function getExecutableTasks(cwd = process.cwd(), includeSubtasks = false) {
+  const tasks = getAllTasks(cwd);
+  const skippedDueToParent = [];
+  const executableTasks = tasks.filter((task) => {
+    if (!includeSubtasks && (isSubtask(task.id) || !!task.parentId)) {
+      return false;
+    }
+    if (task.subtaskIds && task.subtaskIds.length > 0) {
+      return false;
+    }
+    if (task.parentId && isParentTaskCompleted(task.id, cwd)) {
+      skippedDueToParent.push(task.id);
+      return false;
+    }
+    return isExecutableStatus(task.status) && areDependenciesCompleted(task.id, cwd);
+  });
+  executableTasks.sort((a, b) => {
+    const priorityA = getStatusPriority(a.status);
+    const priorityB = getStatusPriority(b.status);
+    return priorityA - priorityB;
+  });
+  if (skippedDueToParent.length > 0) {
+    console.log("");
+    console.log("⚠️  以下子任务的父任务已完成，跳过推荐:");
+    for (const taskId of skippedDueToParent) {
+      const task = tasks.find((t2) => t2.id === taskId);
+      if (task) {
+        console.log(`   - ${taskId} (父任务 ${task.parentId} 已 resolved)`);
+      }
+    }
+    console.log("");
+  }
+  return executableTasks.map((task) => task.id);
+}
+function detectMissingSubtasks(cwd = process.cwd()) {
+  const allTasks = getAllTasks(cwd);
+  const warnings = [];
+  for (const task of allTasks) {
+    if (!task.subtaskIds || task.subtaskIds.length === 0) {
+      continue;
+    }
+    const missingIds = [];
+    let actualCount = 0;
+    for (const subtaskId of task.subtaskIds) {
+      const subtask = readTaskMeta(subtaskId, cwd);
+      if (subtask) {
+        actualCount++;
+      } else {
+        missingIds.push(subtaskId);
+      }
+    }
+    if (missingIds.length > 0) {
+      warnings.push({
+        parentTaskId: task.id,
+        parentTitle: task.title,
+        missingSubtaskIds: missingIds,
+        expectedCount: task.subtaskIds.length,
+        actualCount
+      });
+    }
+  }
+  return warnings;
+}
+
+// src/commands/plan.ts
 init_path();
 init_task2();
 init_task();
 init_logger();
 init_quality_gate();
-var import_prompts3 = __toESM(require_prompts3(), 1);
 
 // src/utils/quality-gate-registry.ts
 init_checkpoint_rules();
@@ -33683,7 +34072,7 @@ init_dependency_graph();
 init_harness();
 init_checkpoint_rules();
 init_checkpoint();
-init_checkpoint_verification();
+init_checkpoint_verification2();
 init_i18n();
 init_analyze();
 var import_prompts7 = __toESM(require_prompts3(), 1);
@@ -35057,7 +35446,7 @@ import * as path23 from "path";
 init_path();
 init_task2();
 init_checkpoint();
-init_checkpoint_verification();
+init_checkpoint_verification2();
 init_task();
 var import_prompts8 = __toESM(require_prompts3(), 1);
 import * as fs24 from "fs";
@@ -35512,45 +35901,56 @@ init_logger();
 init_ai_integration();
 
 // src/utils/init-requirement/prefix-map.ts
-init_checkpoint_rules();
 var PREFIX_MAP = {
-  verify: { category: "qa_verification", method: "functional_test", requiresHuman: false },
-  test: { category: "qa_verification", method: "unit_test", requiresHuman: false },
-  review: { category: "code_review", method: "code_review", requiresHuman: true },
-  implem: { category: "implementation", method: "automated", requiresHuman: false },
-  doc: { category: "documentation", method: "automated", requiresHuman: false },
   "ai-review": { category: "code_review", method: "code_review", requiresHuman: false },
   "ai-qa": { category: "qa_verification", method: "automated", requiresHuman: false },
   "human-qa": { category: "qa_verification", method: "automated", requiresHuman: true },
   script: { category: "evaluation", method: "automated", requiresHuman: false }
 };
 var VALID_PREFIXES = Object.keys(PREFIX_MAP);
+var MIGRATION_MAP = {
+  verify: { prefix: "ai-qa", descPrefix: "[ai qa]" },
+  test: { prefix: "ai-qa", descPrefix: "[ai qa]" },
+  review: { prefix: "ai-review", descPrefix: "[ai review]" },
+  implem: { prefix: "ai-qa", descPrefix: "[ai qa] (implementation)" },
+  doc: { prefix: "script", descPrefix: "[script] (doc)" }
+};
 function parseCheckpoint(raw) {
-  const systemBMatch = raw.match(/^\[(ai review|ai qa|human qa|script)\]\s*(.+)/);
+  const trimmed = raw.trim();
+  const systemBMatch = trimmed.match(/^\[(ai review|ai qa|human qa|script)\]\s*(.+)/i);
   if (systemBMatch) {
-    const prefix2 = systemBMatch[1];
+    const prefixStr = systemBMatch[1].toLowerCase().replace(" ", "-");
     const desc = systemBMatch[2].trim();
-    const attrs = inferCheckpointAttributesFromPrefix(`[${prefix2}] ${desc}`);
+    const attrs = PREFIX_MAP[prefixStr];
     return {
-      prefix: prefix2.replace(" ", "-"),
+      prefix: prefixStr,
       description: desc,
-      category: attrs.category || "qa_verification",
-      verificationMethod: attrs.verificationMethod || null,
-      requiresHuman: attrs.requiresHuman ?? false
+      category: attrs.category,
+      verificationMethod: attrs.method,
+      requiresHuman: attrs.requiresHuman,
+      warnings: []
     };
   }
-  const legacyMatch = raw.match(/^\[(verify|test|review|implem|doc)\]\s*(.+)/);
-  if (!legacyMatch)
-    return null;
-  const prefix = legacyMatch[1];
-  const mapped = PREFIX_MAP[prefix];
-  return {
-    prefix,
-    description: legacyMatch[2].trim(),
-    category: mapped.category,
-    verificationMethod: mapped.method,
-    requiresHuman: mapped.requiresHuman
-  };
+  const legacyMatch = trimmed.match(/^\[(verify|test|review|implem|doc)\]\s*(.+)/i);
+  if (legacyMatch) {
+    const oldPrefix = legacyMatch[1].toLowerCase();
+    const originalDesc = legacyMatch[2].trim();
+    const migration = MIGRATION_MAP[oldPrefix];
+    if (!migration)
+      return null;
+    const attrs = PREFIX_MAP[migration.prefix];
+    return {
+      prefix: migration.prefix,
+      description: `${migration.descPrefix} ${originalDesc}`,
+      category: attrs.category,
+      verificationMethod: attrs.method,
+      requiresHuman: attrs.requiresHuman,
+      warnings: [
+        `前缀 "[${oldPrefix}]" 已废弃，已自动迁移为 "${migration.descPrefix} ${originalDesc}"`
+      ]
+    };
+  }
+  return null;
 }
 // src/utils/investigation/report-validator.ts
 function validateReport(report) {
@@ -35671,8 +36071,8 @@ var investigationTemplates = {
 
 ## 检查点覆盖清单
 ### SOL-001 相关检查点
-- [verify] 验证 {具体验证内容}
-- [test] 测试 {具体测试内容}
+- [ai qa] 验证 {具体验证内容}
+- [script] 测试 {具体测试内容}
 
 ## 评估
 - 复杂度: {low|medium|high}
@@ -35683,7 +36083,7 @@ var investigationTemplates = {
 - 原因分析必须追溯到需求本身，确保"需求→原因"链路完整
 - 解决方案必须逐一对应原因分析中的每个结论
 - 检查点必须覆盖解决方案中的每个要点
-- 检查点使用门禁标准前缀: [verify], [test], [review], [implem], [doc]
+- 检查点使用门禁标准前缀: [ai review], [ai qa], [human qa], [script]
 `,
   review: `你是 projmnt4claude 项目的调查报告质量评审员。
 
@@ -38677,7 +39077,7 @@ function getBuiltInAnalyzers() {
 // src/commands/doctor.ts
 init_config();
 init_i18n();
-var __dirname = "/home/fuzhibo/workerplace/git/projmnt4claude/src/commands";
+var __dirname = "/home/fuzhibo/workerplace/data/git/projmnt4claude/src/commands";
 async function runDoctor(fix = false, cwd = process.cwd()) {
   const texts = t(cwd).doctorCmd;
   console.log("");
@@ -40168,7 +40568,7 @@ function createSessionAwareEngine(outputType = "json", rules = [], maxRetriesOnE
 
 // src/utils/harness-executor.ts
 init_prompt_templates();
-init_checkpoint_verification();
+init_checkpoint_verification2();
 init_i18n();
 init_harness_helpers();
 init_session_id_mapper();
@@ -44266,19 +44666,17 @@ import * as path36 from "path";
 init_harness_helpers();
 init_session_lock_cleanup();
 init_session_id_mapper();
-init_plan();
 init_task2();
 init_task();
 init_config2();
 
 // src/commands/plan.ts
-init_plan();
+var import_prompts10 = __toESM(require_prompts3(), 1);
 init_path();
 init_task2();
 init_task();
 init_logger();
 init_quality_gate();
-var import_prompts10 = __toESM(require_prompts3(), 1);
 init_ai_metadata();
 init_dependency_engine();
 init_dependency_graph();
@@ -45231,11 +45629,12 @@ function saveRuntimeState(state, cwd) {
 init_quality_gate();
 init_dependency_graph();
 init_harness_helpers();
-init_checkpoint_verification();
+init_checkpoint_verification2();
 
 // src/utils/gate-rules/qa-post-gate-rules.ts
 init_task2();
 init_checkpoint_rules();
+init_checkpoint_verification2();
 import * as fs41 from "node:fs";
 import * as path37 from "node:path";
 function getQAReportPath(cwd, taskId) {
@@ -45480,6 +45879,39 @@ function inferRequiresHuman(cp) {
   const inferred = inferCheckpointAttributesFromPrefix(cp.description);
   return inferred.requiresHuman ?? false;
 }
+var R_QA_POST_008 = {
+  id: "R-QA-POST-008",
+  name: "B类门禁验证",
+  onFailure: {
+    targetPhase: "qa",
+    reason: "QA B类门禁验证失败：产出不符合预期"
+  },
+  check: async (ctx) => {
+    const taskMeta = ctx.task;
+    if (!taskMeta?.checkpoints?.length)
+      return true;
+    const qaCheckpoints = taskMeta.checkpoints.filter((cp) => {
+      const prefix = extractSystemBPrefix(cp.description);
+      return prefix === "ai-qa" || prefix === "human-qa";
+    });
+    if (qaCheckpoints.length === 0)
+      return true;
+    const verdict = ctx.phaseResult;
+    if (!verdict)
+      return true;
+    const adaptedVerdict = {
+      testFiles: verdict.testFiles,
+      coverage: verdict.coverage,
+      passed: verdict.passed ?? verdict.result === "PASS",
+      summary: verdict.summary ?? verdict.details ?? verdict.reason
+    };
+    const postGateResult = await executeQAPostGate(adaptedVerdict, qaCheckpoints, ctx.cwd);
+    if (ctx.sharedData) {
+      ctx.sharedData.set("qaPostGateResult", postGateResult);
+    }
+    return postGateResult.passed;
+  }
+};
 var QA_POST_GATE_RULES = [
   R_QA_POST_001,
   R_QA_POST_002,
@@ -45488,7 +45920,91 @@ var QA_POST_GATE_RULES = [
   R_QA_POST_005,
   R_QA_POST_005a,
   R_QA_POST_006,
-  R_QA_POST_007
+  R_QA_POST_007,
+  R_QA_POST_008
+];
+
+// src/utils/gate-rules/cr-post-gate-rules.ts
+init_checkpoint_verification2();
+function getCodeReviewVerdict(ctx) {
+  const verdict = ctx.phaseResult;
+  if (!verdict)
+    return null;
+  return verdict;
+}
+var R_CR_POST_011 = {
+  id: "R-CR-POST-011",
+  name: "B类门禁验证",
+  onFailure: {
+    targetPhase: "code_review",
+    reason: "Code Review B类门禁验证失败：产出不符合预期"
+  },
+  check: async (ctx) => {
+    const taskMeta = ctx.task;
+    if (!taskMeta?.checkpoints?.length)
+      return true;
+    const reviewCheckpoints = taskMeta.checkpoints.filter((cp) => {
+      const prefix = extractSystemBPrefix(cp.description);
+      return prefix === "ai-review";
+    });
+    if (reviewCheckpoints.length === 0)
+      return true;
+    const verdict = getCodeReviewVerdict(ctx);
+    if (!verdict)
+      return true;
+    const adaptedVerdict = {
+      filesReviewed: verdict.codeQualityIssues,
+      reportPath: undefined,
+      summary: verdict.details ?? verdict.reason
+    };
+    const postGateResult = await executeCodeReviewPostGate(adaptedVerdict, reviewCheckpoints, ctx.cwd);
+    if (ctx.sharedData) {
+      ctx.sharedData.set("crPostGateResult", postGateResult);
+    }
+    return postGateResult.passed;
+  }
+};
+var CR_POST_GATE_RULES_B = [
+  R_CR_POST_011
+];
+
+// src/utils/gate-rules/eval-post-gate-rules.ts
+init_checkpoint_verification2();
+var R_EVAL_POST_009 = {
+  id: "R-EVAL-POST-009",
+  name: "B类门禁验证",
+  onFailure: {
+    targetPhase: "evaluation",
+    reason: "Evaluation B类门禁验证失败：产出不符合预期"
+  },
+  check: async (ctx) => {
+    const taskMeta = ctx.task;
+    if (!taskMeta?.checkpoints?.length)
+      return true;
+    const evalCheckpoints = taskMeta.checkpoints.filter((cp) => {
+      const prefix = extractSystemBPrefix(cp.description);
+      return prefix === "script";
+    });
+    if (evalCheckpoints.length === 0)
+      return true;
+    const verdict = ctx.phaseResult;
+    if (!verdict)
+      return true;
+    const adaptedVerdict = {
+      evalFiles: verdict.evalFiles,
+      reportPath: verdict.reportPath,
+      summary: verdict.summary ?? verdict.details ?? verdict.reason,
+      conclusion: verdict.conclusion ?? verdict.result
+    };
+    const postGateResult = await executeEvaluationPostGate(adaptedVerdict, evalCheckpoints, ctx.cwd);
+    if (ctx.sharedData) {
+      ctx.sharedData.set("evalPostGateResult", postGateResult);
+    }
+    return postGateResult.passed;
+  }
+};
+var EVAL_POST_GATE_RULES_B = [
+  R_EVAL_POST_009
 ];
 
 // src/utils/pre-dev-phase-gate/coordinator.ts
@@ -45623,7 +46139,7 @@ var DEFAULT_TEST_ENV_RULE = {
   description: "检查项目测试环境配置（.projmnt4claude/test-env）是否就绪",
   enabled: true,
   severity: "error",
-  config: {}
+  config: { type: "testEnv" }
 };
 var DEFAULT_TEST_FRAMEWORK_RULE = {
   id: "R-DEV-PRE-007",
@@ -45632,7 +46148,7 @@ var DEFAULT_TEST_FRAMEWORK_RULE = {
   description: "检测项目是否安装了测试框架（Jest/pytest/go test 等）",
   enabled: true,
   severity: "error",
-  config: {}
+  config: { type: "testFramework" }
 };
 var DEFAULT_TEST_METADATA_RULE = {
   id: "R-DEV-PRE-008",
@@ -45641,7 +46157,7 @@ var DEFAULT_TEST_METADATA_RULE = {
   description: "检查 TaskMeta 中测试相关元数据字段是否完整并与框架探测结果一致",
   enabled: true,
   severity: "error",
-  config: {}
+  config: { type: "testMetadata" }
 };
 var DEFAULT_GIT_STAGED_RULE = {
   id: "R-GIT-002",
@@ -45759,6 +46275,15 @@ var DEFAULT_PRE_DEV_PHASE_RULES = [
   DEFAULT_TEST_FRAMEWORK_RULE,
   DEFAULT_TEST_METADATA_RULE
 ];
+function isTestEnvRuleConfig(config) {
+  return typeof config === "object" && config !== null && "type" in config && config["type"] === "testEnv";
+}
+function isTestFrameworkRuleConfig(config) {
+  return typeof config === "object" && config !== null && "type" in config && config["type"] === "testFramework";
+}
+function isTestMetadataRuleConfig(config) {
+  return typeof config === "object" && config !== null && "type" in config && config["type"] === "testMetadata";
+}
 
 // src/utils/pre-dev-phase-gate/coordinator.ts
 class PreDevPhaseGateCoordinator {
@@ -45994,20 +46519,47 @@ class PreDevPhaseGateCoordinator {
     return checkerFn(rule, context);
   }
   async executeDevChecker(checkerName, rule, context) {
+    const startTime = Date.now();
+    const timestamp = new Date().toISOString();
     switch (checkerName) {
       case "testEnv": {
         const { createTestEnvChecker: createTestEnvChecker2 } = await Promise.resolve().then(() => (init_test_env_checker(), exports_test_env_checker));
+        if (!isTestEnvRuleConfig(rule.config)) {
+          return this.createInvalidConfigResult(rule, "testEnv", startTime, timestamp);
+        }
         return createTestEnvChecker2(context.cwd, rule.config).check(context);
       }
       case "testFramework": {
         const { createTestFrameworkChecker: createTestFrameworkChecker2 } = await Promise.resolve().then(() => (init_test_framework_checker(), exports_test_framework_checker));
+        if (!isTestFrameworkRuleConfig(rule.config)) {
+          return this.createInvalidConfigResult(rule, "testFramework", startTime, timestamp);
+        }
         return createTestFrameworkChecker2(context.cwd, rule.config).check(context);
       }
       case "testMetadata": {
         const { createTestMetadataChecker: createTestMetadataChecker2 } = await Promise.resolve().then(() => (init_test_metadata_checker(), exports_test_metadata_checker));
+        if (!isTestMetadataRuleConfig(rule.config)) {
+          return this.createInvalidConfigResult(rule, "testMetadata", startTime, timestamp);
+        }
         return createTestMetadataChecker2(rule.config).check(context);
       }
     }
+  }
+  createInvalidConfigResult(rule, checkerName, startTime, timestamp) {
+    return {
+      checkId: `${checkerName}-config-error`,
+      checkName: `${checkerName} 配置检查`,
+      ruleId: rule.id,
+      passed: false,
+      severity: "error",
+      message: `规则 ${rule.id} 的配置无效: 缺少或错误的 type 字段`,
+      details: {
+        expectedType: checkerName,
+        actualConfig: rule.config
+      },
+      duration: Date.now() - startTime,
+      timestamp
+    };
   }
   async checkGitWorkspace(rule, context) {
     const startTime = Date.now();
@@ -46411,8 +46963,8 @@ function createPreDevPhaseGateCoordinator(config) {
   return new PreDevPhaseGateCoordinator(config);
 }
 async function runPreDevPhaseGate(taskId, cwd, attempt, config) {
-  const { readTaskMeta: readTaskMeta3 } = await Promise.resolve().then(() => (init_task2(), exports_task2));
-  const task = readTaskMeta3(taskId, cwd);
+  const { readTaskMeta: readTaskMeta2 } = await Promise.resolve().then(() => (init_task2(), exports_task2));
+  const task = readTaskMeta2(taskId, cwd);
   if (!task) {
     throw new Error(`任务不存在: ${taskId}`);
   }
@@ -46674,7 +47226,7 @@ async function pre_cr_gate_check(context) {
   return executeRules(rules, context);
 }
 async function post_cr_gate_check(context) {
-  const rules = [
+  const aRules = [
     { id: "R-CR-POST-001", name: "审核报告存在", onFailure: { targetPhase: "code_review", reason: "缺少审核报告" }, check: async (ctx) => hasCodeReviewReport(ctx.cwd) },
     { id: "R-CR-POST-002", name: "报告格式有效", onFailure: { targetPhase: "code_review", reason: "报告格式无效" }, check: async (ctx) => validateReportFormat(ctx.cwd) },
     { id: "R-CR-POST-003", name: "审核结果有效", onFailure: { targetPhase: "development", reason: "审核结果未通过" }, check: async (ctx) => ctx.phaseResult?.result === "PASS" },
@@ -46686,6 +47238,7 @@ async function post_cr_gate_check(context) {
     { id: "R-CR-POST-009", name: "任务测试环境建议", onFailure: { targetPhase: "code_review", reason: "缺少测试环境建议" }, check: async (ctx) => checkTestEnvSuggestion(ctx.phaseResult) },
     { id: "R-CR-POST-010", name: "测试环境配置格式", onFailure: { targetPhase: "code_review", reason: "测试环境配置格式无效" }, check: async (ctx) => validateTestEnvConfig(ctx.cwd) }
   ];
+  const rules = [...aRules, ...CR_POST_GATE_RULES_B];
   return executeRules(rules, context);
 }
 async function pre_qa_gate_check(context) {
@@ -46713,7 +47266,7 @@ async function pre_eval_gate_check(context) {
   return executeRules(rules, context);
 }
 async function post_eval_gate_check(context) {
-  const rules = [
+  const aRules = [
     { id: "R-EVAL-POST-001", name: "状态一致性检查", onFailure: { targetPhase: "evaluation", reason: "状态不一致" }, check: async (ctx) => checkStateConsistency(ctx) },
     { id: "R-EVAL-POST-002", name: "检查点最终状态", onFailure: { targetPhase: "development", reason: "检查点最终状态异常" }, check: async (ctx) => checkCheckpointFinalStatus(ctx.task) },
     { id: "R-EVAL-POST-003", name: "任务可关闭检查", onFailure: { targetPhase: "development", reason: "任务不可关闭" }, check: async (ctx) => isTaskClosable(ctx.task) },
@@ -46723,6 +47276,7 @@ async function post_eval_gate_check(context) {
     { id: "R-EVAL-POST-007", name: "AI评估结果检查", onFailure: { targetPhase: "development", reason: "AI评估结果无效" }, check: async (ctx) => checkAIEvalResult(ctx.phaseResult) },
     { id: "R-EVAL-POST-008", name: "评估报告存在", onFailure: { targetPhase: "evaluation", reason: "缺少评估报告" }, check: async (ctx) => hasEvalReport(ctx.cwd) }
   ];
+  const rules = [...aRules, ...EVAL_POST_GATE_RULES_B];
   return executeRules(rules, context);
 }
 function flowTargetToPhaseIndex(target) {
@@ -49379,7 +49933,6 @@ function resetPhaseCheckpoints(taskId, state, cwd) {
 init_harness_helpers();
 init_session_lock_cleanup();
 init_session_id_mapper();
-init_plan();
 init_task2();
 init_task();
 init_config2();
