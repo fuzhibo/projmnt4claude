@@ -393,6 +393,139 @@ describe('PreDevPhaseGateCoordinator', () => {
       // testMetadata 不需要 cwd 参数，验证其正常返回
       expect(testMetadataChecks.every(c => typeof c.passed === 'boolean')).toBe(true);
     });
+
+    // CP-007: 类型守卫拒绝无效配置测试
+    it('testEnv: 应拒绝缺少 type 字段的无效配置', async () => {
+      const coordinator = new PreDevPhaseGateCoordinator({
+        enabled: true,
+        stopOnFailure: false,
+        generateReport: false,
+      });
+      const context = createMockContext(testDir);
+
+      const rule = createMockRule({
+        id: 'R-DEV-PRE-006',
+        type: 'test_env_check',
+        name: '测试环境检查',
+        config: { commands: [] }, // 缺少 type 字段
+      });
+
+      // 通过反射调用私有方法
+      const result = await (coordinator as any).executeDevChecker('testEnv', rule, context);
+
+      expect(result.passed).toBe(false);
+      expect(result.severity).toBe('error');
+      expect(result.message).toContain('配置无效');
+    });
+
+    it('testFramework: 应拒绝缺少 type 字段的无效配置', async () => {
+      const coordinator = new PreDevPhaseGateCoordinator({
+        enabled: true,
+        stopOnFailure: false,
+        generateReport: false,
+      });
+      const context = createMockContext(testDir);
+
+      const rule = createMockRule({
+        id: 'R-DEV-PRE-007',
+        type: 'test_env_check',
+        name: '测试框架检查',
+        config: { framework: 'jest' }, // 缺少 type 字段
+      });
+
+      const result = await (coordinator as any).executeDevChecker('testFramework', rule, context);
+
+      expect(result.passed).toBe(false);
+      expect(result.severity).toBe('error');
+      expect(result.message).toContain('配置无效');
+    });
+
+    it('testMetadata: 应拒绝缺少 type 字段的无效配置', async () => {
+      const coordinator = new PreDevPhaseGateCoordinator({
+        enabled: true,
+        stopOnFailure: false,
+        generateReport: false,
+      });
+      const context = createMockContext(testDir);
+
+      const rule = createMockRule({
+        id: 'R-DEV-PRE-008',
+        type: 'test_env_check',
+        name: '测试元数据检查',
+        config: { metadata: {} }, // 缺少 type 字段
+      });
+
+      const result = await (coordinator as any).executeDevChecker('testMetadata', rule, context);
+
+      expect(result.passed).toBe(false);
+      expect(result.severity).toBe('error');
+      expect(result.message).toContain('配置无效');
+    });
+
+    // CP-007: 参数正确传递测试
+    it('testEnv: 应正确传递 context.cwd 和 rule.config', async () => {
+      const coordinator = new PreDevPhaseGateCoordinator({
+        enabled: true,
+        stopOnFailure: false,
+        generateReport: false,
+      });
+      const context = createMockContext(testDir);
+
+      const rule = createMockRule({
+        id: 'R-DEV-PRE-006',
+        type: 'test_env_check',
+        name: '测试环境检查',
+        config: { type: 'testEnv', commands: [] },
+      });
+
+      const result = await (coordinator as any).executeDevChecker('testEnv', rule, context);
+
+      // 验证未返回配置错误（即类型守卫通过）
+      expect(result.checkId).not.toBe('testEnv-config-error');
+      expect(typeof result.duration).toBe('number');
+    });
+
+    it('testFramework: 应正确传递 context.cwd 和 rule.config', async () => {
+      const coordinator = new PreDevPhaseGateCoordinator({
+        enabled: true,
+        stopOnFailure: false,
+        generateReport: false,
+      });
+      const context = createMockContext(testDir);
+
+      const rule = createMockRule({
+        id: 'R-DEV-PRE-007',
+        type: 'test_env_check',
+        name: '测试框架检查',
+        config: { type: 'testFramework' },
+      });
+
+      const result = await (coordinator as any).executeDevChecker('testFramework', rule, context);
+
+      expect(result.checkId).not.toBe('testFramework-config-error');
+      expect(typeof result.duration).toBe('number');
+    });
+
+    it('testMetadata: 应正确传递 rule.config（无 cwd）', async () => {
+      const coordinator = new PreDevPhaseGateCoordinator({
+        enabled: true,
+        stopOnFailure: false,
+        generateReport: false,
+      });
+      const context = createMockContext(testDir);
+
+      const rule = createMockRule({
+        id: 'R-DEV-PRE-008',
+        type: 'test_env_check',
+        name: '测试元数据检查',
+        config: { type: 'testMetadata', metadata: {} },
+      });
+
+      const result = await (coordinator as any).executeDevChecker('testMetadata', rule, context);
+
+      expect(result.checkId).not.toBe('testMetadata-config-error');
+      expect(typeof result.passed).toBe('boolean');
+    });
   });
 });
 

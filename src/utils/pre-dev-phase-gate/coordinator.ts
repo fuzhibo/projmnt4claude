@@ -27,7 +27,12 @@ import type {
   RetryContext,
   AutoFixResult,
 } from '../../types/pre-dev-phase-gate.js';
-import { DEFAULT_PRE_DEV_PHASE_RULES } from '../../types/pre-dev-phase-gate.js';
+import {
+  DEFAULT_PRE_DEV_PHASE_RULES,
+  isTestEnvRuleConfig,
+  isTestFrameworkRuleConfig,
+  isTestMetadataRuleConfig,
+} from '../../types/pre-dev-phase-gate.js';
 
 /**
  * 开发前门禁协调器
@@ -377,20 +382,58 @@ export class PreDevPhaseGateCoordinator {
     rule: PreDevPhaseRule,
     context: PreDevPhaseCheckContext
   ): Promise<PreDevPhaseCheckItemResult> {
+    const startTime = Date.now();
+    const timestamp = new Date().toISOString();
+
+    // CP-006: 使用类型守卫替代 as any
     switch (checkerName) {
       case 'testEnv': {
         const { createTestEnvChecker } = await import('./checkers/test-env-checker.js');
-        return createTestEnvChecker(context.cwd, rule.config as any).check(context);
+        if (!isTestEnvRuleConfig(rule.config)) {
+          return this.createInvalidConfigResult(rule, 'testEnv', startTime, timestamp);
+        }
+        return createTestEnvChecker(context.cwd, rule.config).check(context);
       }
       case 'testFramework': {
         const { createTestFrameworkChecker } = await import('./checkers/test-framework-checker.js');
-        return createTestFrameworkChecker(context.cwd, rule.config as any).check(context);
+        if (!isTestFrameworkRuleConfig(rule.config)) {
+          return this.createInvalidConfigResult(rule, 'testFramework', startTime, timestamp);
+        }
+        return createTestFrameworkChecker(context.cwd, rule.config).check(context);
       }
       case 'testMetadata': {
         const { createTestMetadataChecker } = await import('./checkers/test-metadata-checker.js');
-        return createTestMetadataChecker(rule.config as any).check(context);
+        if (!isTestMetadataRuleConfig(rule.config)) {
+          return this.createInvalidConfigResult(rule, 'testMetadata', startTime, timestamp);
+        }
+        return createTestMetadataChecker(rule.config).check(context);
       }
     }
+  }
+
+  /**
+   * 创建无效配置结果 (CP-006)
+   */
+  private createInvalidConfigResult(
+    rule: PreDevPhaseRule,
+    checkerName: string,
+    startTime: number,
+    timestamp: string
+  ): PreDevPhaseCheckItemResult {
+    return {
+      checkId: `${checkerName}-config-error`,
+      checkName: `${checkerName} 配置检查`,
+      ruleId: rule.id,
+      passed: false,
+      severity: 'error',
+      message: `规则 ${rule.id} 的配置无效: 缺少或错误的 type 字段`,
+      details: {
+        expectedType: checkerName,
+        actualConfig: rule.config,
+      },
+      duration: Date.now() - startTime,
+      timestamp,
+    };
   }
 
   /**

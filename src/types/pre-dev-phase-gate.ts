@@ -507,7 +507,7 @@ export const DEFAULT_TEST_ENV_RULE: PreDevPhaseRule = {
   description: '检查项目测试环境配置（.projmnt4claude/test-env）是否就绪',
   enabled: true,
   severity: 'error',
-  config: {},
+  config: { type: 'testEnv' },
 };
 
 /**
@@ -521,7 +521,7 @@ export const DEFAULT_TEST_FRAMEWORK_RULE: PreDevPhaseRule = {
   description: '检测项目是否安装了测试框架（Jest/pytest/go test 等）',
   enabled: true,
   severity: 'error',
-  config: {},
+  config: { type: 'testFramework' },
 };
 
 /**
@@ -535,7 +535,7 @@ export const DEFAULT_TEST_METADATA_RULE: PreDevPhaseRule = {
   description: '检查 TaskMeta 中测试相关元数据字段是否完整并与框架探测结果一致',
   enabled: true,
   severity: 'error',
-  config: {},
+  config: { type: 'testMetadata' },
 };
 
 /**
@@ -717,6 +717,94 @@ export const DEFAULT_PRE_DEV_PHASE_RULES: PreDevPhaseRule[] = [
   DEFAULT_TEST_FRAMEWORK_RULE,
   DEFAULT_TEST_METADATA_RULE,
 ];
+
+// ============================================================================
+// 开发前检查器配置类型 (CP-006 类型安全修复)
+// ============================================================================
+
+/**
+ * 测试环境检查器配置
+ */
+/**
+ * 测试环境检查器规则配置
+ * CP-006: 扩展检查器配置以支持类型安全传递
+ */
+export interface TestEnvRuleConfig extends Partial<import('../utils/pre-dev-phase-gate/checkers/test-env-checker.js').TestEnvCheckerConfig> {
+  /** 配置类型标识 */
+  type: 'testEnv';
+  /** 工作目录路径 */
+  cwd?: string;
+  /** 测试环境检测指令列表 */
+  commands?: import('../utils/pre-dev-phase-gate/checkers/test-env-checker.js').TestEnvCheckCommand[];
+}
+
+/**
+ * 测试框架检查器规则配置
+ * CP-006: 扩展检查器配置以支持类型安全传递
+ */
+export interface TestFrameworkRuleConfig extends Partial<import('../utils/pre-dev-phase-gate/checkers/test-framework-checker.js').TestFrameworkCheckerConfig> {
+  /** 配置类型标识 */
+  type: 'testFramework';
+  /** 工作目录路径 */
+  cwd?: string;
+  /** 指定框架名称 */
+  framework?: string;
+}
+
+/**
+ * 测试元数据检查器规则配置
+ * CP-006: 扩展检查器配置以支持类型安全传递
+ */
+export interface TestMetadataRuleConfig extends Partial<import('../utils/pre-dev-phase-gate/checkers/test-metadata-checker.js').TestMetadataCheckerConfig> {
+  /** 配置类型标识 */
+  type: 'testMetadata';
+  /** 元数据字段 */
+  metadata?: Record<string, unknown>;
+}
+
+/**
+ * 开发前检查器配置联合类型
+ */
+export type DevCheckerRuleConfig =
+  | TestEnvRuleConfig
+  | TestFrameworkRuleConfig
+  | TestMetadataRuleConfig;
+
+/**
+ * 类型守卫: 验证是否为测试环境检查器配置
+ */
+export function isTestEnvRuleConfig(config: unknown): config is TestEnvRuleConfig {
+  return (
+    typeof config === 'object' &&
+    config !== null &&
+    'type' in config &&
+    (config as Record<string, unknown>)['type'] === 'testEnv'
+  );
+}
+
+/**
+ * 类型守卫: 验证是否为测试框架检查器配置
+ */
+export function isTestFrameworkRuleConfig(config: unknown): config is TestFrameworkRuleConfig {
+  return (
+    typeof config === 'object' &&
+    config !== null &&
+    'type' in config &&
+    (config as Record<string, unknown>)['type'] === 'testFramework'
+  );
+}
+
+/**
+ * 类型守卫: 验证是否为测试元数据检查器配置
+ */
+export function isTestMetadataRuleConfig(config: unknown): config is TestMetadataRuleConfig {
+  return (
+    typeof config === 'object' &&
+    config !== null &&
+    'type' in config &&
+    (config as Record<string, unknown>)['type'] === 'testMetadata'
+  );
+}
 
 // ============================================================================
 // 检查器接口和结果类型 (QA验证要求)
