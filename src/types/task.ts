@@ -194,7 +194,8 @@ export type VerificationMethod =
   | 'integration_test'  // Integration test
   | 'e2e_test'          // End-to-end test
   | 'architect_review'  // Architect review
-  | 'automated';        // Automated verification (generic)
+  | 'automated'         // Automated verification (generic)
+  | 'manual';           // Manual verification (human QA)
 
 /**
  * Task role type
@@ -218,7 +219,7 @@ export type CheckpointCategory =
  * Checkpoint verification info
  */
 export interface CheckpointVerification {
-  method: VerificationMethod;  // Verification method ('manual' is prohibited)
+  method: VerificationMethod;  // Verification method
   commands?: string[];         // Verification command list
   steps?: string[];            // Verification step descriptions (used when commands cannot express)
   expected?: string;           // Expected result

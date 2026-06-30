@@ -600,13 +600,14 @@ export const checkpointRequiredPrefix: ValidationRule = {
 };
 
 /**
- * Rule 7: checkpointHasVerificationCommands (severity: warning)
+ * Rule 7: checkpointHasVerificationCommands (severity: error)
  * 使用自动化验证方法的检查点应包含验证命令或步骤
+ * A 类门禁：失败即中断流水线
  */
 export const checkpointHasVerificationCommands: ValidationRule = {
   id: 'checkpoint-has-verification-commands',
   description: '使用自动化验证方法的检查点应包含 verification.commands 或 verification.steps',
-  severity: 'warning' as const,
+  severity: 'error' as const,
   check: (output: unknown): ValidationViolation | null => {
     const checkpoints = extractCheckpointObjects(output);
     if (checkpoints.length === 0) return null;
@@ -634,7 +635,7 @@ export const checkpointHasVerificationCommands: ValidationRule = {
 
     return {
       ruleId: 'checkpoint-has-verification-commands',
-      severity: 'warning',
+      severity: 'error',
       message: `${missing.length} 条检查点的自动化验证方法缺少 commands 或 steps: ${missing.map(cp => {
         const desc = (cp['description'] as string) || (cp['id'] as string) || 'unknown';
         const method = ((cp['verification'] as Record<string, unknown>)?.['method'] as string) || '';
@@ -825,6 +826,85 @@ export const deprecatedPrefixDetector: ValidationRule = {
   },
 };
 
+/**
+ * Rule 10: checkpointConsistencyValidator (severity: error)
+ * 检查点属性一致性验证：不同分类有不同检测逻辑
+ *
+ * - code_review: method=code_review, requiresHuman=false
+ * - qa_verification: method=automated/manual, requiresHuman 与 method 一致
+ * - evaluation: method=automated, requiresHuman=false
+ * - [script] 前缀必须有 commands
+ */
+export const checkpointConsistencyValidator: ValidationRule = {
+  id: 'checkpoint-consistency-validator',
+  description: '检查点属性一致性验证（category / method / requiresHuman 对齐）',
+  severity: 'error' as const,
+  check: (output: unknown): ValidationViolation | null => {
+    const checkpoints = extractCheckpointObjects(output);
+    if (checkpoints.length === 0) return null;
+
+    const errors: string[] = [];
+
+    for (const cp of checkpoints) {
+      const desc = cp['description'] as string;
+      const category = cp['category'] as string | undefined;
+      const verification = cp['verification'] as Record<string, unknown> | undefined;
+      const requiresHuman = cp['requiresHuman'] as boolean | undefined;
+      const method = verification?.['method'] as string | undefined;
+      const commands = verification?.['commands'] as unknown[] | undefined;
+
+      // ── 约束 1: code_review 分类 ──
+      if (category === 'code_review') {
+        if (method !== 'code_review') {
+          errors.push(`"${desc}": category=code_review 但 method=${method}（应为 code_review）`);
+        }
+        if (requiresHuman !== false) {
+          errors.push(`"${desc}": category=code_review 但 requiresHuman=${requiresHuman}（应为 false）`);
+        }
+      }
+
+      // ── 约束 2: qa_verification 分类 ──
+      if (category === 'qa_verification') {
+        // method 必须是 automated 或 manual
+        if (method !== 'automated' && method !== 'manual') {
+          errors.push(`"${desc}": category=qa_verification 但 method=${method}（应为 automated/manual）`);
+        }
+        // requiresHuman 与 method 一致
+        if (method === 'automated' && requiresHuman !== false) {
+          errors.push(`"${desc}": method=automated 但 requiresHuman=${requiresHuman}（应为 false）`);
+        }
+        if (method === 'manual' && requiresHuman !== true) {
+          errors.push(`"${desc}": method=manual 但 requiresHuman=${requiresHuman}（应为 true）`);
+        }
+      }
+
+      // ── 约束 3: evaluation 分类 ──
+      if (category === 'evaluation') {
+        if (method !== 'automated') {
+          errors.push(`"${desc}": category=evaluation 但 method=${method}（应为 automated）`);
+        }
+        if (requiresHuman !== false) {
+          errors.push(`"${desc}": category=evaluation 但 requiresHuman=${requiresHuman}（应为 false）`);
+        }
+      }
+
+      // ── 约束 4: [script] 前缀必须有 commands ──
+      if (desc?.toLowerCase().startsWith('[script]') &&
+          (!commands || commands.length === 0)) {
+        errors.push(`"${desc}": [script] 前缀缺少 commands`);
+      }
+    }
+
+    if (errors.length === 0) return null;
+
+    return {
+      ruleId: 'checkpoint-consistency-validator',
+      severity: 'error',
+      message: `检查点属性不一致: ${errors.join('; ')}`,
+    };
+  },
+};
+
 // ============================================================
 // 导出规则集
 // ============================================================
@@ -841,4 +921,5 @@ export const checkpointValidationRules: ValidationRule[] = [
   checkpointScriptHasCommands,
   metaJsonValid,
   deprecatedPrefixDetector,
+  checkpointConsistencyValidator,
 ];
