@@ -37964,7 +37964,7 @@ async function runInteractiveMode(requirement, cwd, options) {
     }
     console.log(`
 \uD83D\uDD04 Refining report based on feedback...`);
-    const prompt = loadAndRenderTemplate("investigateWithFeedback", { requirement, currentReport: reportMarkdown, feedback, date: new Date().toISOString() }, lang);
+    const prompt = await loadAndRenderTemplate("investigateWithFeedback", { requirement, currentReport: reportMarkdown, feedback, date: new Date().toISOString() }, lang);
     const aiResult = await callAI({ prompt, cwd, outputFormat: "text" });
     if (aiResult.success) {
       report = parseReport(aiResult.output);
@@ -38012,7 +38012,7 @@ async function runFeedbackMode(requirement, cwd, options) {
   const existingReportContent = fs29.readFileSync(options.reportPath, "utf-8");
   const report = parseReport(existingReportContent);
   const feedbackContent = requirement || "Please review and improve this report.";
-  const prompt = loadAndRenderTemplate("investigateWithFeedback", {
+  const prompt = await loadAndRenderTemplate("investigateWithFeedback", {
     requirement: report.metadata.requirementSource,
     currentReport: existingReportContent,
     feedback: feedbackContent,
@@ -38199,7 +38199,7 @@ async function generateInvestigationReport(requirement, cwd, lang) {
   const slug = slugify(requirement);
   const date = new Date().toISOString();
   const projectContext = await getProjectContext(cwd);
-  const prompt = loadAndRenderTemplate("investigate", { requirement, projectContext, date, slug }, lang);
+  const prompt = await loadAndRenderTemplate("investigate", { requirement, projectContext, date, slug }, lang);
   const result = await callAI({ prompt, cwd, outputFormat: "text" });
   if (!result.success) {
     throw new Error(`Failed to generate investigation report: ${result.error}`);
@@ -38224,7 +38224,7 @@ async function getProjectContext(cwd) {
 `);
 }
 async function generateSubReport(parentReport, splitItem, requirement, cwd, lang) {
-  const subPrompt = loadAndRenderTemplate("investigate", {
+  const subPrompt = await loadAndRenderTemplate("investigate", {
     requirement: `[Sub-investigation] ${splitItem.title}
 
 Scope: ${splitItem.scope}

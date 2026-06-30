@@ -314,7 +314,7 @@ async function runInteractiveMode(
     // 基于反馈修正报告（使用 investigateWithFeedback 模板）
     console.log('\n🔄 Refining report based on feedback...');
 
-    const prompt = loadAndRenderTemplate(
+    const prompt = await loadAndRenderTemplate(
       'investigateWithFeedback',
       { requirement, currentReport: reportMarkdown, feedback, date: new Date().toISOString() },
       lang,
@@ -388,7 +388,7 @@ async function runFeedbackMode(
   const feedbackContent = requirement || 'Please review and improve this report.';
 
   // 使用 investigateWithFeedback 模板（参数: requirement, currentReport, feedback, date）
-  const prompt = loadAndRenderTemplate(
+  const prompt = await loadAndRenderTemplate(
     'investigateWithFeedback',
     {
       requirement: report.metadata.requirementSource,
@@ -676,7 +676,7 @@ async function generateInvestigationReport(
   const date = new Date().toISOString();
   const projectContext = await getProjectContext(cwd);
 
-  const prompt = loadAndRenderTemplate(
+  const prompt = await loadAndRenderTemplate(
     'investigate',
     { requirement, projectContext, date, slug },
     lang,
@@ -725,7 +725,7 @@ async function generateSubReport(
   cwd: string,
   lang: 'zh' | 'en',
 ): Promise<InvestigationReport> {
-  const subPrompt = loadAndRenderTemplate(
+  const subPrompt = await loadAndRenderTemplate(
     'investigate',
     {
       requirement: `[Sub-investigation] ${splitItem.title}\n\nScope: ${splitItem.scope}\nDescription: ${splitItem.description}\n\nOriginal requirement: ${requirement}`,
