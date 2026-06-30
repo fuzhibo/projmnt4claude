@@ -387,3 +387,150 @@ describe('verifyAndRecordCheckpoint', () => {
     expect(output.record.source).toBe('cli_manual');
   });
 });
+
+// ============== CP-008: expected 验证 ==============
+
+describe('CP-008 expected verification', () => {
+  let env: IsolatedTestEnv;
+
+  beforeEach(async () => {
+    env = await createIsolatedTestEnv({ prefix: 'cp008-expected' });
+  });
+
+  afterEach(async () => {
+    await env.cleanup();
+  });
+
+  it('verifies review checkpoint with expected files', async () => {
+    const now = new Date().toISOString();
+    const task: TaskMeta = {
+      id: 'TASK-001',
+      title: 'Test Task',
+      status: 'in_progress',
+      type: 'feature',
+      priority: 'P1',
+      dependencies: [],
+      createdAt: now,
+      updatedAt: now,
+      history: [],
+      checkpoints: [
+        {
+          id: 'CP-REVIEW-001',
+          description: '[ai review] 代码审查',
+          status: 'completed',
+          createdAt: now,
+          updatedAt: now,
+          verification: {
+            method: 'code_review',
+            result: 'verified',
+            expected: '审查文件',
+          },
+        },
+      ],
+    };
+
+    // 创建 expected 文件
+    const expectedFile = path.join(env.tempDir, 'src', 'utils', 'example.ts');
+    fs.mkdirSync(path.dirname(expectedFile), { recursive: true });
+    fs.writeFileSync(expectedFile, 'export const example = 1;');
+
+    // 提供 phaseData 以满足验证
+    const phaseData = {
+      phase: 'code_review' as const,
+      codeReviewVerdict: {
+        filesReviewed: ['src/utils/example.ts'],
+        result: 'approved',
+      },
+    };
+
+    const output = await verifyAndRecordCheckpoint(task, 'CP-REVIEW-001', 'cli_manual', env.tempDir, phaseData);
+
+    expect(output.result).toBe('verified');
+  });
+
+  it('fails review checkpoint when expected file missing', async () => {
+    const now = new Date().toISOString();
+    const task: TaskMeta = {
+      id: 'TASK-001',
+      title: 'Test Task',
+      status: 'in_progress',
+      type: 'feature',
+      priority: 'P1',
+      dependencies: [],
+      createdAt: now,
+      updatedAt: now,
+      history: [],
+      checkpoints: [
+        {
+          id: 'CP-REVIEW-002',
+          description: '[ai review] 代码审查',
+          status: 'completed',
+          createdAt: now,
+          updatedAt: now,
+          verification: {
+            method: 'code_review',
+            result: 'verified',
+            expected: '审查文件',
+          },
+        },
+      ],
+    };
+
+    // 提供空的 phaseData 以触发 expected 验证失败
+    const phaseData = {
+      phase: 'code_review' as const,
+      codeReviewVerdict: {
+        filesReviewed: [] as string[],
+        result: 'approved',
+      },
+    };
+
+    const output = await verifyAndRecordCheckpoint(task, 'CP-REVIEW-002', 'cli_manual', env.tempDir, phaseData);
+
+    expect(output.result).toBe('failed');
+    expect(output.record.failureReason).toContain('expected');
+  });
+
+  it('verifies qa checkpoint with expected test coverage', async () => {
+    const now = new Date().toISOString();
+    const task: TaskMeta = {
+      id: 'TASK-001',
+      title: 'Test Task',
+      status: 'in_progress',
+      type: 'feature',
+      priority: 'P1',
+      dependencies: [],
+      createdAt: now,
+      updatedAt: now,
+      history: [],
+      checkpoints: [
+        {
+          id: 'CP-QA-001',
+          description: '[ai qa] QA 验证',
+          status: 'completed',
+          createdAt: now,
+          updatedAt: now,
+          verification: {
+            method: 'unit_test',
+            result: 'verified',
+            expected: '覆盖率 ≥80%',
+          },
+        },
+      ],
+    };
+
+    // 提供满足覆盖率的 phaseData
+    const phaseData = {
+      phase: 'qa' as const,
+      qaVerdict: {
+        coverage: 85,
+        result: 'passed',
+        testFiles: ['src/utils/example.test.ts'],
+      },
+    };
+
+    const output = await verifyAndRecordCheckpoint(task, 'CP-QA-001', 'cli_manual', env.tempDir, phaseData);
+
+    expect(output.result).toBe('verified');
+  });
+});

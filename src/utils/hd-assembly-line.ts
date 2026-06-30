@@ -69,6 +69,8 @@ import {
   inferCategoryFromCheckpoint,
 } from './checkpoint-verification.js';
 import { QA_POST_GATE_RULES } from './gate-rules/qa-post-gate-rules.js';
+import { CR_POST_GATE_RULES_B } from './gate-rules/cr-post-gate-rules.js';
+import { EVAL_POST_GATE_RULES_B } from './gate-rules/eval-post-gate-rules.js';
 import { DebugLogger } from './debug-logger.js';
 import { runPreDevPhaseGate } from './pre-dev-phase-gate/coordinator.js';
 
@@ -266,7 +268,8 @@ export async function pre_cr_gate_check(context: GateCheckContext): Promise<Gate
 // Design intent: check CR results. Failures → development or code_review.
 
 export async function post_cr_gate_check(context: GateCheckContext): Promise<GateCheckResult> {
-  const rules: GateRule[] = [
+  // A 类规则：阶段前验证
+  const aRules: GateRule[] = [
     { id: 'R-CR-POST-001', name: '审核报告存在', onFailure: { targetPhase: 'code_review', reason: '缺少审核报告' }, check: async (ctx) => hasCodeReviewReport(ctx.cwd) },
     { id: 'R-CR-POST-002', name: '报告格式有效', onFailure: { targetPhase: 'code_review', reason: '报告格式无效' }, check: async (ctx) => validateReportFormat(ctx.cwd) },
     { id: 'R-CR-POST-003', name: '审核结果有效', onFailure: { targetPhase: 'development', reason: '审核结果未通过' }, check: async (ctx) => ctx.phaseResult?.result === 'PASS' },
@@ -278,6 +281,8 @@ export async function post_cr_gate_check(context: GateCheckContext): Promise<Gat
     { id: 'R-CR-POST-009', name: '任务测试环境建议', onFailure: { targetPhase: 'code_review', reason: '缺少测试环境建议' }, check: async (ctx) => checkTestEnvSuggestion(ctx.phaseResult) },
     { id: 'R-CR-POST-010', name: '测试环境配置格式', onFailure: { targetPhase: 'code_review', reason: '测试环境配置格式无效' }, check: async (ctx) => validateTestEnvConfig(ctx.cwd) },
   ];
+  // B 类规则：CP-008 产出验证
+  const rules = [...aRules, ...CR_POST_GATE_RULES_B];
   return executeRules(rules, context);
 }
 
@@ -322,7 +327,8 @@ export async function pre_eval_gate_check(context: GateCheckContext): Promise<Ga
 // Design intent: check eval results. Failures → evaluation or development.
 
 export async function post_eval_gate_check(context: GateCheckContext): Promise<GateCheckResult> {
-  const rules: GateRule[] = [
+  // A 类规则：阶段前验证
+  const aRules: GateRule[] = [
     { id: 'R-EVAL-POST-001', name: '状态一致性检查', onFailure: { targetPhase: 'evaluation', reason: '状态不一致' }, check: async (ctx) => checkStateConsistency(ctx) },
     { id: 'R-EVAL-POST-002', name: '检查点最终状态', onFailure: { targetPhase: 'development', reason: '检查点最终状态异常' }, check: async (ctx) => checkCheckpointFinalStatus(ctx.task) },
     { id: 'R-EVAL-POST-003', name: '任务可关闭检查', onFailure: { targetPhase: 'development', reason: '任务不可关闭' }, check: async (ctx) => isTaskClosable(ctx.task) },
@@ -332,6 +338,8 @@ export async function post_eval_gate_check(context: GateCheckContext): Promise<G
     { id: 'R-EVAL-POST-007', name: 'AI评估结果检查', onFailure: { targetPhase: 'development', reason: 'AI评估结果无效' }, check: async (ctx) => checkAIEvalResult(ctx.phaseResult) },
     { id: 'R-EVAL-POST-008', name: '评估报告存在', onFailure: { targetPhase: 'evaluation', reason: '缺少评估报告' }, check: async (ctx) => hasEvalReport(ctx.cwd) },
   ];
+  // B 类规则：CP-008 产出验证
+  const rules = [...aRules, ...EVAL_POST_GATE_RULES_B];
   return executeRules(rules, context);
 }
 

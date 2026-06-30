@@ -11,11 +11,11 @@ import type {
   VerificationContext,
   VerificationOutput,
   VerificationRecord,
-  VerificationResult,
+  VerificationSource,
 } from '../types/checkpoint-verification.js';
 import { getProjectDir } from './path.js';
-import { readTaskMeta, writeTaskMeta } from './task.js';
-import type { TaskMeta, CheckpointMetadata, CheckpointVerification } from '../types/task.js';
+import { writeTaskMeta } from './task.js';
+import type { TaskMeta, CheckpointMetadata } from '../types/task.js';
 
 /**
  * 类别到验证策略的映射
@@ -323,14 +323,33 @@ export class CheckpointOutputVerifier {
     const testPatterns = ['.test.ts', '.spec.ts', '.test.js', '.spec.js'];
     const srcDir = path.join(this.cwd, 'src');
 
+    let foundTestFiles: string[] = [];
     if (fs.existsSync(srcDir)) {
-      const foundTestFiles = this.findFilesWithPatterns(srcDir, testPatterns);
+      foundTestFiles = this.findFilesWithPatterns(srcDir, testPatterns);
       if (foundTestFiles.length > 0) {
         evidence.push(`找到 ${foundTestFiles.length} 个测试文件`);
       }
     }
 
-    if (evidence.length > 0) {
+    // CP-008: 验证 expected 字段（覆盖率阈值等）
+    const expected = context.existingVerification?.expected;
+    if (expected) {
+      const expectedResult = await verifyAgainstExpected(
+        {
+          testFiles: foundTestFiles,
+          coverage: context.phaseData?.qaVerdict?.coverage,
+        },
+        expected,
+        'testing'
+      );
+      if (!expectedResult.met) {
+        warnings.push(`expected 验证失败: ${expectedResult.details}`);
+      } else {
+        evidence.push(`expected: ${expectedResult.details}`);
+      }
+    }
+
+    if (evidence.length > 0 && warnings.length === 0) {
       return {
         result: 'verified',
         record: {
@@ -338,6 +357,18 @@ export class CheckpointOutputVerifier {
           result: 'verified',
           evidence,
         },
+      };
+    }
+
+    if (warnings.length > 0) {
+      return {
+        result: 'failed',
+        record: {
+          ...baseRecord,
+          result: 'failed',
+          failureReason: warnings.join('; '),
+        },
+        warnings,
       };
     }
 
@@ -409,6 +440,7 @@ export class CheckpointOutputVerifier {
     baseRecord: VerificationRecord
   ): Promise<VerificationOutput> {
     const evidence: string[] = [];
+    const warnings: string[] = [];
 
     // 检查审核报告
     const projectDir = getProjectDir(this.cwd);
@@ -423,7 +455,25 @@ export class CheckpointOutputVerifier {
       evidence.push('存在审核结论');
     }
 
-    if (evidence.length > 0) {
+    // CP-008: 验证 expected 字段
+    const expected = context.existingVerification?.expected;
+    if (expected) {
+      const expectedResult = await verifyAgainstExpected(
+        {
+          files: context.phaseData?.codeReviewVerdict?.filesReviewed,
+          reportPath: crReportPath,
+        },
+        expected,
+        'code_review'
+      );
+      if (!expectedResult.met) {
+        warnings.push(`expected 验证失败: ${expectedResult.details}`);
+      } else {
+        evidence.push(`expected: ${expectedResult.details}`);
+      }
+    }
+
+    if (evidence.length > 0 && warnings.length === 0) {
       return {
         result: 'verified',
         record: {
@@ -431,6 +481,18 @@ export class CheckpointOutputVerifier {
           result: 'verified',
           evidence,
         },
+      };
+    }
+
+    if (warnings.length > 0) {
+      return {
+        result: 'failed',
+        record: {
+          ...baseRecord,
+          result: 'failed',
+          failureReason: warnings.join('; '),
+        },
+        warnings,
       };
     }
 
@@ -661,6 +723,7 @@ export async function verifyAndRecordCheckpoint(
       method: checkpoint.verification.method,
       result: checkpoint.verification.result,
       evidencePath: checkpoint.verification.evidencePath,
+      expected: checkpoint.verification.expected,
     } : undefined,
     phaseData,
   };
@@ -789,7 +852,6 @@ export async function verifyPhaseSyncCheckpoint(
 ): Promise<PhaseSyncVerificationResult> {
   const category = inferCategoryFromCheckpoint(checkpoint);
   const source = getVerificationSource(phase);
-  const now = new Date().toISOString();
 
   // 跳过人工验证检查点
   if (checkpoint.requiresHuman) {
@@ -806,6 +868,7 @@ export async function verifyPhaseSyncCheckpoint(
 
   const verifier = new CheckpointOutputVerifier(cwd);
 
+  // CP-008: 类型安全的 phaseData 处理
   const context: VerificationContext = {
     taskId: task.id,
     checkpointId: checkpoint.id,
@@ -817,13 +880,14 @@ export async function verifyPhaseSyncCheckpoint(
       method: checkpoint.verification.method,
       result: checkpoint.verification.result,
       evidencePath: checkpoint.verification.evidencePath,
+      expected: checkpoint.verification.expected,
     } : undefined,
-    phaseData: {
+    phaseData: phaseData ? {
       phase,
-      devReport: phaseData?.devReport,
-      codeReviewVerdict: phaseData?.codeReviewVerdict,
-      qaVerdict: phaseData?.qaVerdict,
-    },
+      devReport: (phaseData as { devReport?: unknown }).devReport as VerificationContext['phaseData'] extends { devReport?: infer T } | undefined ? T : never,
+      codeReviewVerdict: (phaseData as { codeReviewVerdict?: unknown }).codeReviewVerdict as VerificationContext['phaseData'] extends { codeReviewVerdict?: infer T } | undefined ? T : never,
+      qaVerdict: (phaseData as { qaVerdict?: unknown }).qaVerdict as VerificationContext['phaseData'] extends { qaVerdict?: infer T } | undefined ? T : never,
+    } : { phase },
   };
 
   const output = await verifier.verify(context);
@@ -1390,3 +1454,495 @@ export class CheckpointStatusMismatchFixer {
     };
   }
 }
+
+// ============== CP-008: System B B类门禁验证 ==============
+
+import type {
+  SystemBPrefix,
+  SystemBVerificationStrategy,
+} from '../types/checkpoint-verification.js';
+import { SYSTEM_B_CATEGORY_STRATEGIES } from '../types/checkpoint-verification.js';
+
+/**
+ * 从检查点描述提取 System B 前缀
+ *
+ * @param description - 检查点描述
+ * @returns System B 前缀或 undefined
+ */
+export function extractSystemBPrefix(description: string): SystemBPrefix | undefined {
+  const lowerDesc = description.toLowerCase();
+
+  if (lowerDesc.includes('[ai review]') || lowerDesc.includes('ai-review')) {
+    return 'ai-review';
+  }
+  if (lowerDesc.includes('[ai qa]') || lowerDesc.includes('ai-qa')) {
+    return 'ai-qa';
+  }
+  if (lowerDesc.includes('[human qa]') || lowerDesc.includes('human-qa')) {
+    return 'human-qa';
+  }
+  if (lowerDesc.includes('[script]') || lowerDesc.includes('script-')) {
+    return 'script';
+  }
+
+  return undefined;
+}
+
+/**
+ * 获取 System B 验证策略
+ *
+ * @param checkpoint - 检查点元数据
+ * @returns System B 验证策略或 undefined
+ */
+export function getSystemBStrategy(
+  checkpoint: CheckpointMetadata
+): SystemBVerificationStrategy | undefined {
+  const prefix = extractSystemBPrefix(checkpoint.description);
+  if (!prefix) return undefined;
+
+  return SYSTEM_B_CATEGORY_STRATEGIES[prefix];
+}
+
+/**
+ * expected 字段验证结果
+ */
+export interface ExpectedVerificationResult {
+  /** 是否符合 expected */
+  met: boolean;
+  /** 详细说明 */
+  details: string;
+}
+
+/**
+ * 验证产出是否符合 expected 定义（CP-008 核心）
+ *
+ * @param output - 检查点产出数据
+ * @param expected - expected 字段内容
+ * @param category - 检查点类别
+ * @returns 验证结果
+ */
+export async function verifyAgainstExpected(
+  output: {
+    files?: string[];
+    codeChange?: { description: string; files?: string[] };
+    testFiles?: string[];
+    coverage?: number;
+    reportPath?: string;
+    commandsExecuted?: string[];
+  },
+  expected: string | undefined,
+  category: string
+): Promise<ExpectedVerificationResult> {
+  // 无 expected 定义，跳过验证
+  if (!expected) {
+    return { met: true, details: '无 expected 定义，跳过验证' };
+  }
+
+  const lowerExpected = expected.toLowerCase();
+
+  // 根据类别解析 expected
+  switch (category) {
+    case 'code_review':
+    case 'review':
+      return verifyCodeReviewExpected(output, lowerExpected);
+
+    case 'qa_verification':
+    case 'testing':
+      return verifyQAExpected(output, lowerExpected);
+
+    case 'evaluation':
+      return verifyEvaluationExpected(output, lowerExpected);
+
+    case 'script_execution':
+    case 'script':
+      return verifyScriptExpected(output, lowerExpected);
+
+    default:
+      return { met: true, details: `未知分类 ${category}，跳过 expected 验证` };
+  }
+}
+
+/**
+ * 验证 code_review 类 expected
+ *
+ * @param output - 产出数据
+ * @param expected - expected 内容（小写）
+ * @returns 验证结果
+ */
+function verifyCodeReviewExpected(
+  output: {
+    files?: string[];
+    codeChange?: { description: string; files?: string[] };
+    reportPath?: string;
+  },
+  expected: string
+): ExpectedVerificationResult {
+  // expected 可能是：报告包含特定内容、代码变更符合标准
+
+  // 检查是否有代码变更产出
+  if (expected.includes('代码变更') || expected.includes('code change')) {
+    if (!output.codeChange || !output.codeChange.files?.length) {
+      return { met: false, details: '缺少代码变更产出' };
+    }
+  }
+
+  // 检查是否有报告产出
+  if (expected.includes('报告') || expected.includes('report')) {
+    if (!output.reportPath) {
+      return { met: false, details: '缺少 review 报告产出' };
+    }
+  }
+
+  // 检查特定文件
+  if (expected.includes('文件') || expected.includes('file')) {
+    if (!output.files?.length) {
+      return { met: false, details: '缺少文件产出' };
+    }
+  }
+
+  return { met: true, details: 'expected 验证通过' };
+}
+
+/**
+ * 验证 qa_verification 类 expected
+ *
+ * @param output - 产出数据
+ * @param expected - expected 内容（小写）
+ * @returns 验证结果
+ */
+function verifyQAExpected(
+  output: {
+    testFiles?: string[];
+    coverage?: number;
+  },
+  expected: string
+): ExpectedVerificationResult {
+  // expected 可能是：覆盖率 ≥ 80%、测试通过率 ≥ 90%
+
+  // 解析覆盖率阈值
+  const coverageMatch = expected.match(/(?:≥|>=)\s*(\d+)%|覆盖率\s*(\d+)%/);
+  if (coverageMatch) {
+    const threshold = parseInt(coverageMatch[1] ?? coverageMatch[2] ?? '0');
+    if (output.coverage === undefined || output.coverage < threshold) {
+      return {
+        met: false,
+        details: `覆盖率 ${output.coverage ?? '未知'}% 未达到阈值 ${threshold}%`,
+      };
+    }
+  }
+
+  // 检查测试文件产出
+  if (expected.includes('测试') || expected.includes('test')) {
+    if (!output.testFiles?.length) {
+      return { met: false, details: '缺少测试文件产出' };
+    }
+  }
+
+  return { met: true, details: 'expected 验证通过' };
+}
+
+/**
+ * 验证 evaluation 类 expected
+ *
+ * @param output - 产出数据
+ * @param expected - expected 内容（小写）
+ * @returns 验证结果
+ */
+function verifyEvaluationExpected(
+  output: {
+    reportPath?: string;
+    files?: string[];
+  },
+  expected: string
+): ExpectedVerificationResult {
+  // expected 可能是：评估结论为 PASS、有评估报告
+
+  if (expected.includes('报告') || expected.includes('report')) {
+    if (!output.reportPath) {
+      return { met: false, details: '缺少评估报告产出' };
+    }
+  }
+
+  if (expected.includes('文件') || expected.includes('file')) {
+    if (!output.files?.length) {
+      return { met: false, details: '缺少评估文件产出' };
+    }
+  }
+
+  return { met: true, details: 'expected 验证通过' };
+}
+
+/**
+ * 验证 script 类 expected
+ *
+ * @param output - 产出数据
+ * @param expected - expected 内容（小写）
+ * @returns 验证结果
+ */
+function verifyScriptExpected(
+  output: {
+    commandsExecuted?: string[];
+    reportPath?: string;
+  },
+  expected: string
+): ExpectedVerificationResult {
+  // expected 可能是：脚本执行成功、有执行结果
+
+  if (expected.includes('执行') || expected.includes('execute') || expected.includes('命令')) {
+    if (!output.commandsExecuted?.length) {
+      return { met: false, details: '缺少脚本执行结果' };
+    }
+  }
+
+  return { met: true, details: 'expected 验证通过' };
+}
+
+/**
+ * B类门禁验证结果
+ */
+export interface PostGateResult {
+  /** 是否通过 */
+  passed: boolean;
+  /** 各检查点验证结果 */
+  results: Array<{
+    checkpointId: string;
+    valid: boolean;
+    evidence: string[];
+    missingOutputs: string[];
+    strategy?: SystemBVerificationStrategy;
+  }>;
+}
+
+/**
+ * code_review 阶段 B类门禁
+ *
+ * @param verdict - Code Review 结论
+ * @param checkpoints - 相关检查点
+ * @param cwd - 工作目录
+ * @returns B类门禁结果
+ */
+export async function executeCodeReviewPostGate(
+  verdict: {
+    filesReviewed?: string[];
+    reportPath?: string;
+    summary?: string;
+  },
+  checkpoints: CheckpointMetadata[],
+  _cwd: string
+): Promise<PostGateResult> {
+  const results: PostGateResult['results'] = [];
+
+  for (const checkpoint of checkpoints) {
+    // 只处理 code_review 类检查点
+    const prefix = extractSystemBPrefix(checkpoint.description);
+    if (prefix !== 'ai-review') {
+      continue;
+    }
+
+    const strategy = SYSTEM_B_CATEGORY_STRATEGIES['ai-review'];
+    const evidence: string[] = [];
+    const missingOutputs: string[] = [];
+
+    // 验证文件产出
+    if (strategy.verifyFiles && verdict.filesReviewed?.length) {
+      evidence.push(`文件审查: ${verdict.filesReviewed.length} 个文件`);
+    } else if (strategy.verifyFiles) {
+      missingOutputs.push('缺少文件审查记录');
+    }
+
+    // 验证报告产出
+    if (strategy.verifyReport && verdict.reportPath) {
+      evidence.push(`报告: ${verdict.reportPath}`);
+    } else if (strategy.verifyReport) {
+      missingOutputs.push('缺少 review 报告');
+    }
+
+    // 验证 expected
+    const expected = checkpoint.verification?.expected;
+    if (strategy.verifyExpected && expected) {
+      const expectedResult = await verifyAgainstExpected(
+        {
+          files: verdict.filesReviewed,
+          reportPath: verdict.reportPath,
+        },
+        expected,
+        'code_review'
+      );
+      if (!expectedResult.met) {
+        missingOutputs.push(`expected 验证失败: ${expectedResult.details}`);
+      } else {
+        evidence.push(`expected: ${expectedResult.details}`);
+      }
+    }
+
+    results.push({
+      checkpointId: checkpoint.id,
+      valid: missingOutputs.length === 0,
+      evidence,
+      missingOutputs,
+      strategy,
+    });
+  }
+
+  return {
+    passed: results.every(r => r.valid),
+    results,
+  };
+}
+
+/**
+ * qa 阶段 B类门禁
+ *
+ * @param verdict - QA 结论
+ * @param checkpoints - 相关检查点
+ * @param cwd - 工作目录
+ * @returns B类门禁结果
+ */
+export async function executeQAPostGate(
+  verdict: {
+    testFiles?: string[];
+    coverage?: number;
+    passed?: boolean;
+    summary?: string;
+  },
+  checkpoints: CheckpointMetadata[],
+  _cwd: string
+): Promise<PostGateResult> {
+  const results: PostGateResult['results'] = [];
+
+  for (const checkpoint of checkpoints) {
+    // 只处理 qa 相关检查点
+    const prefix = extractSystemBPrefix(checkpoint.description);
+    if (prefix !== 'ai-qa' && prefix !== 'human-qa') {
+      continue;
+    }
+
+    const strategy = SYSTEM_B_CATEGORY_STRATEGIES[prefix || 'ai-qa'];
+    const evidence: string[] = [];
+    const missingOutputs: string[] = [];
+
+    // 验证测试文件
+    if (strategy.verifyTests && verdict.testFiles?.length) {
+      evidence.push(`测试文件: ${verdict.testFiles.length} 个`);
+    } else if (strategy.verifyTests) {
+      missingOutputs.push('缺少测试文件');
+    }
+
+    // 验证覆盖率
+    if (strategy.verifyCoverage && verdict.coverage !== undefined) {
+      evidence.push(`覆盖率: ${verdict.coverage}%`);
+    } else if (strategy.verifyCoverage) {
+      missingOutputs.push('缺少覆盖率数据');
+    }
+
+    // 验证 expected
+    const expected = checkpoint.verification?.expected;
+    if (strategy.verifyExpected && expected) {
+      const expectedResult = await verifyAgainstExpected(
+        {
+          testFiles: verdict.testFiles,
+          coverage: verdict.coverage,
+        },
+        expected,
+        'qa_verification'
+      );
+      if (!expectedResult.met) {
+        missingOutputs.push(`expected 验证失败: ${expectedResult.details}`);
+      } else {
+        evidence.push(`expected: ${expectedResult.details}`);
+      }
+    }
+
+    results.push({
+      checkpointId: checkpoint.id,
+      valid: missingOutputs.length === 0,
+      evidence,
+      missingOutputs,
+      strategy,
+    });
+  }
+
+  return {
+    passed: results.every(r => r.valid),
+    results,
+  };
+}
+
+/**
+ * evaluation 阶段 B类门禁
+ *
+ * @param verdict - Evaluation 结论
+ * @param checkpoints - 相关检查点
+ * @param cwd - 工作目录
+ * @returns B类门禁结果
+ */
+export async function executeEvaluationPostGate(
+  verdict: {
+    evalFiles?: string[];
+    reportPath?: string;
+    summary?: string;
+    conclusion?: string;
+  },
+  checkpoints: CheckpointMetadata[],
+  _cwd: string
+): Promise<PostGateResult> {
+  const results: PostGateResult['results'] = [];
+
+  for (const checkpoint of checkpoints) {
+    // 只处理 script 类检查点
+    const prefix = extractSystemBPrefix(checkpoint.description);
+    if (prefix !== 'script') {
+      continue;
+    }
+
+    const strategy = SYSTEM_B_CATEGORY_STRATEGIES['script'];
+    const evidence: string[] = [];
+    const missingOutputs: string[] = [];
+
+    // 验证评估文件
+    if (strategy.verifyFiles && verdict.evalFiles?.length) {
+      evidence.push(`评估文件: ${verdict.evalFiles.length} 个`);
+    }
+
+    // 验证报告
+    if (strategy.verifyReport && verdict.reportPath) {
+      evidence.push(`报告: ${verdict.reportPath}`);
+    }
+
+    // 验证 expected
+    const expected = checkpoint.verification?.expected;
+    if (strategy.verifyExpected && expected) {
+      const expectedResult = await verifyAgainstExpected(
+        {
+          files: verdict.evalFiles,
+          reportPath: verdict.reportPath,
+        },
+        expected,
+        'evaluation'
+      );
+      if (!expectedResult.met) {
+        missingOutputs.push(`expected 验证失败: ${expectedResult.details}`);
+      } else {
+        evidence.push(`expected: ${expectedResult.details}`);
+      }
+    }
+
+    results.push({
+      checkpointId: checkpoint.id,
+      valid: missingOutputs.length === 0,
+      evidence,
+      missingOutputs,
+      strategy,
+    });
+  }
+
+  return {
+    passed: results.every(r => r.valid),
+    results,
+  };
+}
+
+/**
+ * Re-export System B strategies
+ */
+export { SYSTEM_B_CATEGORY_STRATEGIES } from '../types/checkpoint-verification.js';

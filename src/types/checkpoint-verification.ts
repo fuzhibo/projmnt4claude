@@ -1,7 +1,75 @@
 /**
- * 检查点产出验证类型定义
- * 用于假成功检测机制
+ * System B 前缀分类
+ * 用于 CP-008 B 类门禁的 System B 前缀验证策略
  */
+export type SystemBPrefix =
+  | 'ai-review'       // [ai review] 代码审查检查点
+  | 'ai-qa'           // [ai qa] QA 验证检查点
+  | 'human-qa'        // [human qa] 人工 QA 检查点
+  | 'script';         // [script] 脚本执行检查点
+
+/**
+ * 扩展的验证策略（CP-008 B 类门禁）
+ * 在基础 VerificationStrategy 上增加 System B 特有验证字段
+ */
+export interface SystemBVerificationStrategy {
+  /** 是否验证文件产出 */
+  verifyFiles: boolean;
+  /** 是否验证代码变更 */
+  verifyCodeChange: boolean;
+  /** 是否验证测试 */
+  verifyTests: boolean;
+  /** 是否验证覆盖率 */
+  verifyCoverage: boolean;
+  /** 是否验证报告 */
+  verifyReport: boolean;
+  /** 是否验证自定义命令 */
+  verifyCommands: boolean;
+  /** 是否验证 expected 字段（CP-008 新增） */
+  verifyExpected: boolean;
+}
+
+/**
+ * System B 分类策略映射
+ */
+export const SYSTEM_B_CATEGORY_STRATEGIES: Record<SystemBPrefix, SystemBVerificationStrategy> = {
+  'ai-review': {
+    verifyFiles: true,
+    verifyCodeChange: true,
+    verifyTests: false,
+    verifyCoverage: false,
+    verifyReport: true,
+    verifyCommands: false,
+    verifyExpected: true,
+  },
+  'ai-qa': {
+    verifyFiles: true,
+    verifyCodeChange: false,
+    verifyTests: true,
+    verifyCoverage: true,
+    verifyReport: false,
+    verifyCommands: false,
+    verifyExpected: true,
+  },
+  'human-qa': {
+    verifyFiles: false,
+    verifyCodeChange: false,
+    verifyTests: false,
+    verifyCoverage: false,
+    verifyReport: true,
+    verifyCommands: false,
+    verifyExpected: true,
+  },
+  'script': {
+    verifyFiles: false,
+    verifyCodeChange: false,
+    verifyTests: false,
+    verifyCoverage: false,
+    verifyReport: false,
+    verifyCommands: true,
+    verifyExpected: true,
+  },
+};
 
 /**
  * 检查点分类
@@ -93,13 +161,15 @@ export interface VerificationContext {
     method?: string;
     result?: string;
     evidencePath?: string;
+    /** CP-008: expected 字段，用于验证产出是否符合预期 */
+    expected?: string;
   };
   /** 阶段数据（用于阶段同步验证） */
   phaseData?: {
     phase?: 'development' | 'code_review' | 'qa' | 'evaluation';
-    devReport?: unknown;
-    codeReviewVerdict?: unknown;
-    qaVerdict?: unknown;
+    devReport?: { status?: string; files?: string[] };
+    codeReviewVerdict?: { result?: string; filesReviewed?: string[]; reportPath?: string; approved?: boolean };
+    qaVerdict?: { result?: string; testFiles?: string[]; coverage?: number; approved?: boolean };
   };
 }
 
