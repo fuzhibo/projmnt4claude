@@ -100,6 +100,10 @@ program
     if (opts.json || opts.ai) {
       process.env.PROJMNT4CLAUDE_JSON_OUTPUT = 'true';
     }
+    // --debug 参数设置 LOG_LEVEL=debug（设计文档 §6.1）
+    if (opts.debug) {
+      process.env.LOG_LEVEL = 'debug';
+    }
   });
 
 // setup command
@@ -750,6 +754,8 @@ program
   .option('--max-retry <num>', '修正循环最大重试次数（默认 3）', parseInt)
   .option('--no-plan', '不添加到执行计划')
   .option('--skip-gate', '跳过门禁预检（仅用于调试）')
+  .option('--timeout <seconds>', 'AI 调用超时时间（秒）', '300')
+  .option('--debug', '启用调试模式输出详细日志')
   .action(async (reportPath, options) => {
     requireInit();
     await initRequirement(reportPath, process.cwd(), {
@@ -757,6 +763,8 @@ program
       maxRetry: options.maxRetry,
       noPlan: options.noPlan,
       skipGate: options.skipGate,
+      timeout: options.timeout ? parseInt(options.timeout) : undefined,
+      debug: options.debug,
     });
   });
 
@@ -813,6 +821,8 @@ program
   .option('--max-retry <n>', '最大重试次数', '3')
   .option('--split-threshold <kb>', '拆分阈值 (KB)', '20')
   .option('--language <lang>', '语言 (zh/en)', 'zh')
+  .option('--timeout <seconds>', 'AI 调用超时时间（秒）', '300')
+  .option('--debug', '调试模式：输出详细日志')
   .option('--skip-review', '跳过 AI 评审')
   .option('--skip-split', '跳过拆分')
   .option('-f, --force', '强制覆盖')
@@ -868,6 +878,8 @@ program
       maxRetry: options.maxRetry ? parseInt(options.maxRetry, 10) : undefined,
       splitThreshold: options.splitThreshold ? parseInt(options.splitThreshold, 10) : undefined,
       language: options.language,
+      timeout: options.timeout ? parseInt(options.timeout, 10) : undefined,
+      debug: options.debug,
       skipReview: options.skipReview,
       skipSplit: options.skipSplit,
       force: options.force,

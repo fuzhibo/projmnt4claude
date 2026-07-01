@@ -36764,7 +36764,7 @@ function mapSourceToTestFile(sourceFile, config) {
 function generateVerificationCommands(checkpoint, taskFiles, projectConfig) {
   const { type, buildCommand, testCommand } = projectConfig;
   switch (checkpoint.prefix) {
-    case "test": {
+    case "ai-qa": {
       if (!testCommand)
         return [];
       const mappedTestFiles = taskFiles.map((f) => mapSourceToTestFile(f, projectConfig)).filter((f) => existsSync22(f));
@@ -36773,7 +36773,7 @@ function generateVerificationCommands(checkpoint, taskFiles, projectConfig) {
       }
       return [`${testCommand} --testNamePattern="${checkpoint.description}"`];
     }
-    case "verify": {
+    case "human-qa": {
       const commands = [];
       if (buildCommand)
         commands.push(buildCommand);
@@ -36781,10 +36781,9 @@ function generateVerificationCommands(checkpoint, taskFiles, projectConfig) {
         commands.push(testCommand);
       return commands;
     }
-    case "review":
+    case "ai-review":
       return [`git diff HEAD -- ${taskFiles.join(" ")}`];
-    case "implem":
-    case "doc":
+    case "script":
       return buildCommand ? [buildCommand] : [];
     default:
       return [];
@@ -37015,11 +37014,19 @@ async function archiveAndCleanup(taskId, investigationDir, reportPath, failures,
 // src/commands/init-requirement.ts
 init_dependency_engine();
 var DEFAULT_MAX_RETRY = 3;
-var AI_TIMEOUT_SECONDS = 120;
+var AI_TIMEOUT_SECONDS = 300;
 async function initRequirement(reportPath, cwd = process.cwd(), options = {}) {
-  const { interactive = false, maxRetry = DEFAULT_MAX_RETRY, noPlan = false, skipGate = false } = options;
+  const { interactive = false, maxRetry = DEFAULT_MAX_RETRY, noPlan = false, skipGate = false, timeout, debug } = options;
   const logger = createLogger("init-requirement", cwd);
   const startTime = Date.now();
+  logger.info("命令开始: init-requirement", {
+    reportPath: reportPath.substring(0, 100),
+    interactive,
+    maxRetry,
+    skipGate,
+    timeout,
+    debug: debug ?? false
+  });
   if (!isInitialized(cwd)) {
     console.error("Project not initialized. Run: projmnt4claude setup");
     process.exit(1);
@@ -37031,14 +37038,16 @@ async function initRequirement(reportPath, cwd = process.cwd(), options = {}) {
   }
   const stat = fs26.statSync(resolvedPath);
   if (stat.isDirectory()) {
-    await convertDirectory(resolvedPath, cwd, { interactive, maxRetry, skipGate, logger });
+    await convertDirectory(resolvedPath, cwd, { interactive, maxRetry, skipGate, investigationDir: resolvedPath, logger, timeout, debug });
   } else if (stat.isFile()) {
     const result = await convertSingleReport(resolvedPath, cwd, {
       interactive,
       maxRetry,
       skipGate,
       investigationDir: path23.dirname(resolvedPath),
-      logger
+      logger,
+      timeout,
+      debug
     });
     if (!result.success) {
       process.exit(1);
@@ -37057,10 +37066,18 @@ async function initRequirement(reportPath, cwd = process.cwd(), options = {}) {
     duration_ms: Date.now() - startTime,
     user_edit_count: 0
   });
+  logger.info("命令完成: init-requirement", {
+    success: true,
+    totalDurationMs: Date.now() - startTime
+  });
   logger.flush();
 }
 async function convertSingleReport(reportPath, cwd, options) {
-  const { interactive, maxRetry, skipGate, investigationDir, logger } = options;
+  const { interactive, maxRetry, skipGate, investigationDir, logger, debug } = options;
+  logger.info("开始转换报告", {
+    report: path23.basename(reportPath),
+    debug: debug ?? false
+  });
   console.log("");
   console.log("━".repeat(SEPARATOR_WIDTH));
   console.log(`Converting report: ${path23.basename(reportPath)}`);
@@ -37093,9 +37110,10 @@ async function convertSingleReport(reportPath, cwd, options) {
     return { success: true, taskId: existingTaskId, gateScore: 100, aligned: true };
   }
   console.log("Step 2: Extracting task metadata from report...");
+  logger.debug("阶段开始: AI 提取任务元数据", { reportPath });
   let extractedMeta;
   try {
-    extractedMeta = await extractTaskMeta(reportContent, cwd);
+    extractedMeta = await extractTaskMeta(reportContent, cwd, options.timeout, debug);
   } catch (err) {
     const errorMsg = err instanceof Error ? err.message : String(err);
     console.error(`AI metadata extraction failed: ${errorMsg}`);
@@ -37105,6 +37123,12 @@ async function convertSingleReport(reportPath, cwd, options) {
     });
     return { success: false, error: `Extraction failed: ${errorMsg}` };
   }
+  logger.info("阶段完成: AI 提取任务元数据", {
+    title: extractedMeta.title,
+    type: extractedMeta.type,
+    priority: extractedMeta.priority,
+    checkpointCount: extractedMeta.checkpoints.length
+  });
   if (interactive) {
     console.log("");
     console.log("Extracted task metadata:");
@@ -37167,7 +37191,8 @@ async function convertSingleReport(reportPath, cwd, options) {
   let aligned = false;
   if (!skipGate) {
     console.log("Step 4-5: Gate check + alignment verification...");
-    const deps = createGateDependencies(cwd, reportPath);
+    logger.debug("阶段开始: 门禁预检与对齐验证");
+    const deps = createGateDependencies(cwd, reportPath, options.timeout, debug);
     const fixResult = await gateCheckAndFix({
       taskId: createdTaskId,
       reportPath,
@@ -37186,10 +37211,16 @@ async function convertSingleReport(reportPath, cwd, options) {
     }
     gateScore = 100;
     aligned = true;
+    logger.info("阶段完成: 门禁预检与对齐验证", {
+      gateScore,
+      aligned,
+      attempts: fixResult.attempt
+    });
   } else {
     console.log("Step 4-5: Skipped (--skip-gate)");
     gateScore = 100;
     aligned = true;
+    logger.debug("门禁预检已跳过", { skipGate: true });
   }
   updateConversionStatus(investigationDir, relativePath, "completed", {
     taskId: createdTaskId
@@ -37206,7 +37237,7 @@ async function convertSingleReport(reportPath, cwd, options) {
   return { success: true, taskId: createdTaskId, gateScore, aligned };
 }
 async function convertDirectory(dirPath, cwd, options) {
-  const { interactive, maxRetry, skipGate, logger } = options;
+  const { interactive, maxRetry, skipGate, logger, timeout, debug } = options;
   const subDir = path23.join(dirPath, "sub");
   let reportFiles;
   if (fs26.existsSync(subDir) && fs26.statSync(subDir).isDirectory()) {
@@ -37270,7 +37301,9 @@ Processing: ${path23.basename(reportFile)}`);
       maxRetry,
       skipGate,
       investigationDir: dirPath,
-      logger
+      logger,
+      timeout,
+      debug
     });
     results.push(result);
     taskMapping.push({ report: reportFile, taskId: result.taskId });
@@ -37300,14 +37333,14 @@ Processing: ${path23.basename(reportFile)}`);
   }
   console.log("");
 }
-async function extractTaskMeta(reportContent, cwd) {
+async function extractTaskMeta(reportContent, cwd, timeout, debug) {
   const prefixMapStr = Object.entries(PREFIX_MAP).map(([prefix, mapping]) => `[${prefix}] → category: ${mapping.category}, method: ${mapping.method}, requiresHuman: ${mapping.requiresHuman}`).join(`
 `);
   const prompt = loadAndRenderTemplate("reportToTask", {
     report: reportContent,
     prefixMap: prefixMapStr
   });
-  const result = await callAIForJSON({ prompt, cwd, timeout: AI_TIMEOUT_SECONDS }, validateExtractedMeta);
+  const result = await callAIForJSON({ prompt, cwd, timeout: timeout ?? AI_TIMEOUT_SECONDS, debug }, validateExtractedMeta);
   return result;
 }
 function validateExtractedMeta(data) {
@@ -37321,7 +37354,7 @@ function validateExtractedMeta(data) {
   const description = typeof d.description === "string" ? d.description : "";
   const rawCheckpoints = Array.isArray(d.checkpoints) ? d.checkpoints : [];
   const checkpoints = rawCheckpoints.map((cp) => {
-    const prefix = ["verify", "test", "review", "implem", "doc"].includes(cp.prefix) ? cp.prefix : "verify";
+    const prefix = VALID_PREFIXES.includes(cp.prefix) ? cp.prefix : "ai-qa";
     const cpDesc = typeof cp.description === "string" ? cp.description : "Checkpoint";
     const mapping = PREFIX_MAP[prefix];
     return {
@@ -37364,7 +37397,7 @@ function parseReportContent(content) {
     investigationDir: metadata["调查目录"] || metadata["Investigation Directory"] || ""
   };
 }
-function createGateDependencies(cwd, reportPath) {
+function createGateDependencies(cwd, reportPath, timeout, debug) {
   return {
     runPreDevGate: async () => ({ passed: true, results: [] }),
     checkQualityGate: async () => ({ passed: true, score: { totalScore: 100 } }),
@@ -37374,15 +37407,16 @@ function createGateDependencies(cwd, reportPath) {
     invokeAIAgent: async (prompt, options) => {
       const { invokeAgent: invokeAgent2 } = await Promise.resolve().then(() => (init_headless_agent(), exports_headless_agent));
       return invokeAgent2(prompt, {
-        timeout: options.timeout / 1000,
+        timeout: options.timeout,
         allowedTools: options.allowedTools,
         outputFormat: options.outputFormat,
         cwd: options.cwd,
-        dangerouslySkipPermissions: true
+        dangerouslySkipPermissions: true,
+        debug
       });
     },
     runAlignmentCheck: async (rPath, taskId, c) => {
-      return runAlignmentCheck(rPath, taskId, c);
+      return runAlignmentCheck(rPath, taskId, c, timeout, debug);
     },
     moveTaskToArchive: (taskId) => {
       const tasksDir = getTasksDir(cwd);
@@ -37399,7 +37433,7 @@ function createGateDependencies(cwd, reportPath) {
     }
   };
 }
-async function runAlignmentCheck(reportPath, taskId, cwd) {
+async function runAlignmentCheck(reportPath, taskId, cwd, timeout, debug) {
   const reportContent = fs26.readFileSync(reportPath, "utf-8");
   const taskMeta = readTaskMeta(taskId, cwd);
   const prompt = loadAndRenderTemplate("aiAlignmentCheck", {
@@ -37407,7 +37441,7 @@ async function runAlignmentCheck(reportPath, taskId, cwd) {
     taskMeta: JSON.stringify(taskMeta, null, 2)
   });
   try {
-    const result = await callAIForJSON({ prompt, cwd, timeout: AI_TIMEOUT_SECONDS });
+    const result = await callAIForJSON({ prompt, cwd, timeout: timeout ?? AI_TIMEOUT_SECONDS, debug });
     return result;
   } catch {
     return {
@@ -51368,13 +51402,15 @@ program2.command("init-requirement <report-path>").description(`\u4ECE\u8C03\u67
 ` + `  --no-plan               \u4E0D\u6DFB\u52A0\u5230\u6267\u884C\u8BA1\u5212
 ` + `  --skip-gate             \u8DF3\u8FC7\u95E8\u7981\u9884\u68C0\uFF08\u4EC5\u7528\u4E8E\u8C03\u8BD5\uFF09
 
-` + "\u524D\u63D0: \u9700\u5148\u8FD0\u884C projmnt4claude setup \u521D\u59CB\u5316\u9879\u76EE").option("--interactive", "\u4EA4\u4E92\u6A21\u5F0F\uFF08\u6BCF\u4E2A\u4EFB\u52A1\u521B\u5EFA\u524D\u9700\u7528\u6237\u786E\u8BA4\uFF09").option("--max-retry <num>", "\u4FEE\u6B63\u5FAA\u73AF\u6700\u5927\u91CD\u8BD5\u6B21\u6570\uFF08\u9ED8\u8BA4 3\uFF09", parseInt).option("--no-plan", "\u4E0D\u6DFB\u52A0\u5230\u6267\u884C\u8BA1\u5212").option("--skip-gate", "\u8DF3\u8FC7\u95E8\u7981\u9884\u68C0\uFF08\u4EC5\u7528\u4E8E\u8C03\u8BD5\uFF09").action(async (reportPath, options) => {
+` + "\u524D\u63D0: \u9700\u5148\u8FD0\u884C projmnt4claude setup \u521D\u59CB\u5316\u9879\u76EE").option("--interactive", "\u4EA4\u4E92\u6A21\u5F0F\uFF08\u6BCF\u4E2A\u4EFB\u52A1\u521B\u5EFA\u524D\u9700\u7528\u6237\u786E\u8BA4\uFF09").option("--max-retry <num>", "\u4FEE\u6B63\u5FAA\u73AF\u6700\u5927\u91CD\u8BD5\u6B21\u6570\uFF08\u9ED8\u8BA4 3\uFF09", parseInt).option("--no-plan", "\u4E0D\u6DFB\u52A0\u5230\u6267\u884C\u8BA1\u5212").option("--skip-gate", "\u8DF3\u8FC7\u95E8\u7981\u9884\u68C0\uFF08\u4EC5\u7528\u4E8E\u8C03\u8BD5\uFF09").option("--timeout <seconds>", "AI \u8C03\u7528\u8D85\u65F6\u65F6\u95F4\uFF08\u79D2\uFF09", "300").option("--debug", "\u542F\u7528\u8C03\u8BD5\u6A21\u5F0F\u8F93\u51FA\u8BE6\u7EC6\u65E5\u5FD7").action(async (reportPath, options) => {
   requireInit();
   await initRequirement(reportPath, process.cwd(), {
     interactive: options.interactive,
     maxRetry: options.maxRetry,
     noPlan: options.noPlan,
-    skipGate: options.skipGate
+    skipGate: options.skipGate,
+    timeout: options.timeout ? parseInt(options.timeout) : undefined,
+    debug: options.debug
   });
 });
 program2.command("investigation-requirement [description]").description(`\u9700\u6C42\u8C03\u67E5\u6307\u4EE4 - \u4ECE\u81EA\u7136\u8BED\u8A00\u9700\u6C42\u751F\u6210\u7ED3\u6784\u5316\u8C03\u67E5\u62A5\u544A
