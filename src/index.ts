@@ -755,6 +755,7 @@ program
   .option('--no-plan', '不添加到执行计划')
   .option('--skip-gate', '跳过门禁预检（仅用于调试）')
   .option('--timeout <seconds>', 'AI 调用超时时间（秒）', '300')
+  .option('--debug', '启用调试模式输出详细日志')
   .action(async (reportPath, options) => {
     requireInit();
     await initRequirement(reportPath, process.cwd(), {
@@ -763,6 +764,7 @@ program
       noPlan: options.noPlan,
       skipGate: options.skipGate,
       timeout: options.timeout ? parseInt(options.timeout) : undefined,
+      debug: options.debug,
     });
   });
 

@@ -57,6 +57,8 @@ export interface InitRequirementOptions {
   skipGate?: boolean;
   /** AI 调用超时时间（秒） */
   timeout?: number;
+  /** 启用调试模式输出详细日志 */
+  debug?: boolean;
 }
 
 /** AI 提取的任务元数据结构 */
@@ -112,9 +114,19 @@ export async function initRequirement(
   cwd: string = process.cwd(),
   options: InitRequirementOptions = {},
 ): Promise<void> {
-  const { interactive = false, maxRetry = DEFAULT_MAX_RETRY, noPlan = false, skipGate = false, timeout } = options;
+  const { interactive = false, maxRetry = DEFAULT_MAX_RETRY, noPlan = false, skipGate = false, timeout, debug } = options;
   const logger = createLogger('init-requirement', cwd);
   const startTime = Date.now();
+
+  // 命令入口日志
+  logger.info('命令开始: init-requirement', {
+    reportPath: reportPath.substring(0, 100),
+    interactive,
+    maxRetry,
+    skipGate,
+    timeout,
+    debug: debug ?? false,
+  });
 
   // 前置检查
   if (!isInitialized(cwd)) {
@@ -133,7 +145,7 @@ export async function initRequirement(
 
   if (stat.isDirectory()) {
     // 目录模式：批量转换
-    await convertDirectory(resolvedPath, cwd, { interactive, maxRetry, skipGate, investigationDir: resolvedPath, logger, timeout });
+    await convertDirectory(resolvedPath, cwd, { interactive, maxRetry, skipGate, investigationDir: resolvedPath, logger, timeout, debug });
   } else if (stat.isFile()) {
     // 单文件模式
     const result = await convertSingleReport(resolvedPath, cwd, {
@@ -143,6 +155,7 @@ export async function initRequirement(
       investigationDir: path.dirname(resolvedPath),
       logger,
       timeout,
+      debug,
     });
 
     if (!result.success) {
@@ -163,6 +176,10 @@ export async function initRequirement(
     duration_ms: Date.now() - startTime,
     user_edit_count: 0,
   });
+  logger.info('命令完成: init-requirement', {
+    success: true,
+    totalDurationMs: Date.now() - startTime,
+  });
   logger.flush();
 }
 
@@ -178,6 +195,8 @@ interface ConvertOptions {
   logger: ReturnType<typeof createLogger>;
   /** AI 调用超时时间（秒） */
   timeout?: number;
+  /** 启用调试模式输出详细日志 */
+  debug?: boolean;
 }
 
 /**
@@ -188,7 +207,13 @@ async function convertSingleReport(
   cwd: string,
   options: ConvertOptions,
 ): Promise<ConversionResult> {
-  const { interactive, maxRetry, skipGate, investigationDir, logger } = options;
+  const { interactive, maxRetry, skipGate, investigationDir, logger, debug } = options;
+
+  // 命令入口日志
+  logger.info('开始转换报告', {
+    report: path.basename(reportPath),
+    debug: debug ?? false,
+  });
 
   console.log('');
   console.log('━'.repeat(SEPARATOR_WIDTH));
@@ -232,9 +257,10 @@ async function convertSingleReport(
 
   // Step 2: AI 提取任务元数据
   console.log('Step 2: Extracting task metadata from report...');
+  logger.debug('阶段开始: AI 提取任务元数据', { reportPath });
   let extractedMeta: ExtractedTaskMeta;
   try {
-    extractedMeta = await extractTaskMeta(reportContent, cwd, options.timeout);
+    extractedMeta = await extractTaskMeta(reportContent, cwd, options.timeout, debug);
   } catch (err) {
     const errorMsg = err instanceof Error ? err.message : String(err);
     console.error(`AI metadata extraction failed: ${errorMsg}`);
@@ -244,6 +270,13 @@ async function convertSingleReport(
     });
     return { success: false, error: `Extraction failed: ${errorMsg}` };
   }
+
+  logger.info('阶段完成: AI 提取任务元数据', {
+    title: extractedMeta.title,
+    type: extractedMeta.type,
+    priority: extractedMeta.priority,
+    checkpointCount: extractedMeta.checkpoints.length,
+  });
 
   // 交互模式：用户确认
   if (interactive) {
@@ -327,7 +360,8 @@ async function convertSingleReport(
 
   if (!skipGate) {
     console.log('Step 4-5: Gate check + alignment verification...');
-    const deps = createGateDependencies(cwd, reportPath, options.timeout);
+    logger.debug('阶段开始: 门禁预检与对齐验证');
+    const deps = createGateDependencies(cwd, reportPath, options.timeout, debug);
     const fixResult = await gateCheckAndFix(
       {
         taskId: createdTaskId,
@@ -351,10 +385,16 @@ async function convertSingleReport(
 
     gateScore = 100; // passed
     aligned = true;
+    logger.info('阶段完成: 门禁预检与对齐验证', {
+      gateScore,
+      aligned,
+      attempts: fixResult.attempt,
+    });
   } else {
     console.log('Step 4-5: Skipped (--skip-gate)');
     gateScore = 100;
     aligned = true;
+    logger.debug('门禁预检已跳过', { skipGate: true });
   }
 
   // Step 6: 输出结果
@@ -387,7 +427,7 @@ async function convertDirectory(
   cwd: string,
   options: ConvertOptions,
 ): Promise<void> {
-  const { interactive, maxRetry, skipGate, logger } = options;
+  const { interactive, maxRetry, skipGate, logger, timeout, debug } = options;
   const subDir = path.join(dirPath, 'sub');
 
   // 检查是否有 sub/ 目录
@@ -471,6 +511,8 @@ async function convertDirectory(
       skipGate,
       investigationDir: dirPath,
       logger,
+      timeout,
+      debug,
     });
 
     results.push(result);
@@ -517,6 +559,7 @@ async function extractTaskMeta(
   reportContent: string,
   cwd: string,
   timeout?: number,
+  debug?: boolean,
 ): Promise<ExtractedTaskMeta> {
   const prefixMapStr = Object.entries(PREFIX_MAP)
     .map(([prefix, mapping]) => `[${prefix}] → category: ${mapping.category}, method: ${mapping.method}, requiresHuman: ${mapping.requiresHuman}`)
@@ -528,7 +571,7 @@ async function extractTaskMeta(
   });
 
   const result = await callAIForJSON<ExtractedTaskMeta>(
-    { prompt, cwd, timeout: timeout ?? AI_TIMEOUT_SECONDS },
+    { prompt, cwd, timeout: timeout ?? AI_TIMEOUT_SECONDS, debug },
     validateExtractedMeta,
   );
 
@@ -620,7 +663,7 @@ function parseReportContent(content: string): Record<string, unknown> {
 /**
  * 创建门禁依赖注入对象
  */
-function createGateDependencies(cwd: string, reportPath: string, timeout?: number): GateDependencies {
+function createGateDependencies(cwd: string, reportPath: string, timeout?: number, debug?: boolean): GateDependencies {
   return {
     runPreDevGate: async () => ({ passed: true, results: [] }),
     checkQualityGate: async () => ({ passed: true, score: { totalScore: 100 } }),
@@ -635,10 +678,11 @@ function createGateDependencies(cwd: string, reportPath: string, timeout?: numbe
         outputFormat: options.outputFormat as 'text' | 'json' | 'markdown',
         cwd: options.cwd,
         dangerouslySkipPermissions: true,
+        debug,
       });
     },
     runAlignmentCheck: async (rPath: string, taskId: string, c: string) => {
-      return runAlignmentCheck(rPath, taskId, c, timeout);
+      return runAlignmentCheck(rPath, taskId, c, timeout, debug);
     },
     moveTaskToArchive: (taskId: string) => {
       const tasksDir = getTasksDir(cwd);
@@ -663,6 +707,7 @@ async function runAlignmentCheck(
   taskId: string,
   cwd: string,
   timeout?: number,
+  debug?: boolean,
 ): Promise<AlignmentResult> {
   const reportContent = fs.readFileSync(reportPath, 'utf-8');
   const taskMeta = readTaskMeta(taskId, cwd);
@@ -674,7 +719,7 @@ async function runAlignmentCheck(
 
   try {
     const result = await callAIForJSON<AlignmentResult>(
-      { prompt, cwd, timeout: timeout ?? AI_TIMEOUT_SECONDS },
+      { prompt, cwd, timeout: timeout ?? AI_TIMEOUT_SECONDS, debug },
     );
     return result;
   } catch {
