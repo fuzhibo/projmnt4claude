@@ -754,6 +754,7 @@ program
   .option('--max-retry <num>', '修正循环最大重试次数（默认 3）', parseInt)
   .option('--no-plan', '不添加到执行计划')
   .option('--skip-gate', '跳过门禁预检（仅用于调试）')
+  .option('--timeout <seconds>', 'AI 调用超时时间（秒）', '300')
   .action(async (reportPath, options) => {
     requireInit();
     await initRequirement(reportPath, process.cwd(), {
@@ -761,6 +762,7 @@ program
       maxRetry: options.maxRetry,
       noPlan: options.noPlan,
       skipGate: options.skipGate,
+      timeout: options.timeout ? parseInt(options.timeout) : undefined,
     });
   });
 

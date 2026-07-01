@@ -23,6 +23,7 @@ import { validateReport } from '../utils/investigation/report-validator';
 import { loadAndRenderTemplate } from '../utils/prompt-templates/loader';
 import {
   PREFIX_MAP,
+  VALID_PREFIXES,
   parseCheckpoint,
   generateVerificationCommands,
   loadConversionStatus,
@@ -36,6 +37,7 @@ import {
   type GateFixResult,
   type AlignmentResult,
   type GateDependencies,
+  type CheckpointPrefix,
 } from '../utils/init-requirement';
 import { SEPARATOR_WIDTH } from '../utils/format';
 
@@ -53,6 +55,8 @@ export interface InitRequirementOptions {
   noPlan?: boolean;
   /** 跳过门禁预检（仅用于调试） */
   skipGate?: boolean;
+  /** AI 调用超时时间（秒） */
+  timeout?: number;
 }
 
 /** AI 提取的任务元数据结构 */
@@ -90,7 +94,7 @@ export interface ConversionResult {
 // ============================================================
 
 const DEFAULT_MAX_RETRY = 3;
-const AI_TIMEOUT_SECONDS = 120;
+const AI_TIMEOUT_SECONDS = 300;
 
 // ============================================================
 // 主入口函数
@@ -108,7 +112,7 @@ export async function initRequirement(
   cwd: string = process.cwd(),
   options: InitRequirementOptions = {},
 ): Promise<void> {
-  const { interactive = false, maxRetry = DEFAULT_MAX_RETRY, noPlan = false, skipGate = false } = options;
+  const { interactive = false, maxRetry = DEFAULT_MAX_RETRY, noPlan = false, skipGate = false, timeout } = options;
   const logger = createLogger('init-requirement', cwd);
   const startTime = Date.now();
 
@@ -129,7 +133,7 @@ export async function initRequirement(
 
   if (stat.isDirectory()) {
     // 目录模式：批量转换
-    await convertDirectory(resolvedPath, cwd, { interactive, maxRetry, skipGate, logger });
+    await convertDirectory(resolvedPath, cwd, { interactive, maxRetry, skipGate, investigationDir: resolvedPath, logger, timeout });
   } else if (stat.isFile()) {
     // 单文件模式
     const result = await convertSingleReport(resolvedPath, cwd, {
@@ -138,6 +142,7 @@ export async function initRequirement(
       skipGate,
       investigationDir: path.dirname(resolvedPath),
       logger,
+      timeout,
     });
 
     if (!result.success) {
@@ -171,6 +176,8 @@ interface ConvertOptions {
   skipGate: boolean;
   investigationDir: string;
   logger: ReturnType<typeof createLogger>;
+  /** AI 调用超时时间（秒） */
+  timeout?: number;
 }
 
 /**
@@ -227,7 +234,7 @@ async function convertSingleReport(
   console.log('Step 2: Extracting task metadata from report...');
   let extractedMeta: ExtractedTaskMeta;
   try {
-    extractedMeta = await extractTaskMeta(reportContent, cwd);
+    extractedMeta = await extractTaskMeta(reportContent, cwd, options.timeout);
   } catch (err) {
     const errorMsg = err instanceof Error ? err.message : String(err);
     console.error(`AI metadata extraction failed: ${errorMsg}`);
@@ -320,7 +327,7 @@ async function convertSingleReport(
 
   if (!skipGate) {
     console.log('Step 4-5: Gate check + alignment verification...');
-    const deps = createGateDependencies(cwd, reportPath);
+    const deps = createGateDependencies(cwd, reportPath, options.timeout);
     const fixResult = await gateCheckAndFix(
       {
         taskId: createdTaskId,
@@ -509,6 +516,7 @@ async function convertDirectory(
 async function extractTaskMeta(
   reportContent: string,
   cwd: string,
+  timeout?: number,
 ): Promise<ExtractedTaskMeta> {
   const prefixMapStr = Object.entries(PREFIX_MAP)
     .map(([prefix, mapping]) => `[${prefix}] → category: ${mapping.category}, method: ${mapping.method}, requiresHuman: ${mapping.requiresHuman}`)
@@ -520,7 +528,7 @@ async function extractTaskMeta(
   });
 
   const result = await callAIForJSON<ExtractedTaskMeta>(
-    { prompt, cwd, timeout: AI_TIMEOUT_SECONDS },
+    { prompt, cwd, timeout: timeout ?? AI_TIMEOUT_SECONDS },
     validateExtractedMeta,
   );
 
@@ -548,8 +556,8 @@ function validateExtractedMeta(data: unknown): ExtractedTaskMeta {
   // 检查点验证
   const rawCheckpoints = Array.isArray(d.checkpoints) ? d.checkpoints : [];
   const checkpoints = rawCheckpoints.map((cp: Record<string, unknown>) => {
-    const prefix = ['verify', 'test', 'review', 'implem', 'doc'].includes(cp.prefix as string)
-      ? (cp.prefix as string) : 'verify';
+    const prefix = VALID_PREFIXES.includes(cp.prefix as CheckpointPrefix)
+      ? (cp.prefix as CheckpointPrefix) : 'ai-qa';
     const cpDesc = typeof cp.description === 'string' ? cp.description : 'Checkpoint';
     const mapping = PREFIX_MAP[prefix];
     return {
@@ -612,7 +620,7 @@ function parseReportContent(content: string): Record<string, unknown> {
 /**
  * 创建门禁依赖注入对象
  */
-function createGateDependencies(cwd: string, reportPath: string): GateDependencies {
+function createGateDependencies(cwd: string, reportPath: string, timeout?: number): GateDependencies {
   return {
     runPreDevGate: async () => ({ passed: true, results: [] }),
     checkQualityGate: async () => ({ passed: true, score: { totalScore: 100 } }),
@@ -622,7 +630,7 @@ function createGateDependencies(cwd: string, reportPath: string): GateDependenci
     invokeAIAgent: async (prompt: string, options: { outputFormat: string; timeout: number; allowedTools: string[]; cwd: string }) => {
       const { invokeAgent } = await import('../utils/headless-agent');
       return invokeAgent(prompt, {
-        timeout: options.timeout / 1000,
+        timeout: options.timeout,
         allowedTools: options.allowedTools,
         outputFormat: options.outputFormat as 'text' | 'json' | 'markdown',
         cwd: options.cwd,
@@ -630,7 +638,7 @@ function createGateDependencies(cwd: string, reportPath: string): GateDependenci
       });
     },
     runAlignmentCheck: async (rPath: string, taskId: string, c: string) => {
-      return runAlignmentCheck(rPath, taskId, c);
+      return runAlignmentCheck(rPath, taskId, c, timeout);
     },
     moveTaskToArchive: (taskId: string) => {
       const tasksDir = getTasksDir(cwd);
@@ -654,6 +662,7 @@ async function runAlignmentCheck(
   reportPath: string,
   taskId: string,
   cwd: string,
+  timeout?: number,
 ): Promise<AlignmentResult> {
   const reportContent = fs.readFileSync(reportPath, 'utf-8');
   const taskMeta = readTaskMeta(taskId, cwd);
@@ -665,7 +674,7 @@ async function runAlignmentCheck(
 
   try {
     const result = await callAIForJSON<AlignmentResult>(
-      { prompt, cwd, timeout: AI_TIMEOUT_SECONDS },
+      { prompt, cwd, timeout: timeout ?? AI_TIMEOUT_SECONDS },
     );
     return result;
   } catch {

@@ -161,7 +161,7 @@ export function generateVerificationCommands(
   const { type, buildCommand, testCommand } = projectConfig;
 
   switch (checkpoint.prefix) {
-    case 'test': {
+    case 'ai-qa': {
       if (!testCommand) return [];
       const mappedTestFiles = taskFiles
         .map(f => mapSourceToTestFile(f, projectConfig))
@@ -174,18 +174,17 @@ export function generateVerificationCommands(
       return [`${testCommand} --testNamePattern="${checkpoint.description}"`];
     }
 
-    case 'verify': {
+    case 'human-qa': {
       const commands: string[] = [];
       if (buildCommand) commands.push(buildCommand);
       if (testCommand) commands.push(testCommand);
       return commands;
     }
 
-    case 'review':
+    case 'ai-review':
       return [`git diff HEAD -- ${taskFiles.join(' ')}`];
 
-    case 'implem':
-    case 'doc':
+    case 'script':
       return buildCommand ? [buildCommand] : [];
 
     default:

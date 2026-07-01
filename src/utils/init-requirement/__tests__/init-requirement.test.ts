@@ -60,49 +60,40 @@ afterEach(() => {
 // ============================================================
 
 describe('PREFIX_MAP (§3.1)', () => {
-  test('contains all 9 required prefixes (System A + System B)', () => {
+  test('contains only 4 System B prefixes (System A deprecated)', () => {
     expect(VALID_PREFIXES).toEqual(expect.arrayContaining([
-      'verify', 'test', 'review', 'implem', 'doc',
       'ai-review', 'ai-qa', 'human-qa', 'script',
     ]));
-    expect(Object.keys(PREFIX_MAP).length).toBe(9);
+    expect(Object.keys(PREFIX_MAP).length).toBe(4);
   });
 
-  test('verify prefix maps to qa_verification/functional_test', () => {
-    expect(PREFIX_MAP.verify).toEqual({
+  test('ai-qa prefix maps to qa_verification/automated', () => {
+    expect(PREFIX_MAP['ai-qa']).toEqual({
       category: 'qa_verification',
-      method: 'functional_test',
-      requiresHuman: false,
-    });
-  });
-
-  test('test prefix maps to qa_verification/unit_test', () => {
-    expect(PREFIX_MAP.test).toEqual({
-      category: 'qa_verification',
-      method: 'unit_test',
-      requiresHuman: false,
-    });
-  });
-
-  test('review prefix maps to code_review/code_review with requiresHuman=true', () => {
-    expect(PREFIX_MAP.review).toEqual({
-      category: 'code_review',
-      method: 'code_review',
-      requiresHuman: true,
-    });
-  });
-
-  test('implem prefix maps to implementation/automated', () => {
-    expect(PREFIX_MAP.implem).toEqual({
-      category: 'implementation',
       method: 'automated',
       requiresHuman: false,
     });
   });
 
-  test('doc prefix maps to documentation/automated', () => {
-    expect(PREFIX_MAP.doc).toEqual({
-      category: 'documentation',
+  test('ai-review prefix maps to code_review/code_review', () => {
+    expect(PREFIX_MAP['ai-review']).toEqual({
+      category: 'code_review',
+      method: 'code_review',
+      requiresHuman: false,
+    });
+  });
+
+  test('human-qa prefix maps to qa_verification/automated with requiresHuman=true', () => {
+    expect(PREFIX_MAP['human-qa']).toEqual({
+      category: 'qa_verification',
+      method: 'automated',
+      requiresHuman: true,
+    });
+  });
+
+  test('script prefix maps to evaluation/automated', () => {
+    expect(PREFIX_MAP.script).toEqual({
+      category: 'evaluation',
       method: 'automated',
       requiresHuman: false,
     });
@@ -114,46 +105,85 @@ describe('PREFIX_MAP (§3.1)', () => {
 // ============================================================
 
 describe('parseCheckpoint (§3.2)', () => {
-  test('parses [verify] prefix correctly', () => {
-    const result = parseCheckpoint('[verify] 验证JWT token有效性');
+  // System B 标准前缀解析测试
+  test('parses [ai review] prefix correctly (case-insensitive)', () => {
+    const result = parseCheckpoint('[ai review] 验证JWT token有效性');
     expect(result).not.toBeNull();
-    expect(result!.prefix).toBe('verify');
+    expect(result!.prefix).toBe('ai-review');
     expect(result!.description).toBe('验证JWT token有效性');
-    expect(result!.category).toBe('qa_verification');
-    expect(result!.verificationMethod).toBe('functional_test');
+    expect(result!.category).toBe('code_review');
+    expect(result!.verificationMethod).toBe('code_review');
     expect(result!.requiresHuman).toBe(false);
   });
 
-  test('parses [test] prefix correctly', () => {
-    const result = parseCheckpoint('[test] 测试认证流程');
+  test('parses [ai qa] prefix correctly', () => {
+    const result = parseCheckpoint('[ai qa] 测试认证流程');
     expect(result).not.toBeNull();
-    expect(result!.prefix).toBe('test');
+    expect(result!.prefix).toBe('ai-qa');
     expect(result!.description).toBe('测试认证流程');
     expect(result!.category).toBe('qa_verification');
-    expect(result!.verificationMethod).toBe('unit_test');
+    expect(result!.verificationMethod).toBe('automated');
+    expect(result!.requiresHuman).toBe(false);
   });
 
-  test('parses [review] prefix correctly', () => {
-    const result = parseCheckpoint('[review] 审核安全实现');
+  test('parses [human qa] prefix correctly', () => {
+    const result = parseCheckpoint('[human qa] 审核安全实现');
     expect(result).not.toBeNull();
-    expect(result!.prefix).toBe('review');
+    expect(result!.prefix).toBe('human-qa');
     expect(result!.requiresHuman).toBe(true);
+    expect(result!.category).toBe('qa_verification');
   });
 
-  test('parses [implem] prefix correctly', () => {
-    const result = parseCheckpoint('[implem] 实现密码哈希');
+  test('parses [script] prefix correctly', () => {
+    const result = parseCheckpoint('[script] 实现密码哈希');
     expect(result).not.toBeNull();
-    expect(result!.prefix).toBe('implem');
-    expect(result!.category).toBe('implementation');
+    expect(result!.prefix).toBe('script');
+    expect(result!.category).toBe('evaluation');
+    expect(result!.verificationMethod).toBe('automated');
   });
 
-  test('parses [doc] prefix correctly', () => {
-    const result = parseCheckpoint('[doc] 更新API文档');
+  // System A 废弃前缀迁移测试
+  test('migrates [verify] to [ai qa] with warning', () => {
+    const result = parseCheckpoint('[verify] 验证功能');
     expect(result).not.toBeNull();
-    expect(result!.prefix).toBe('doc');
-    expect(result!.category).toBe('documentation');
+    expect(result!.prefix).toBe('ai-qa');
+    expect(result!.description).toBe('[ai qa] 验证功能');
+    expect(result!.warnings).toContain('前缀 "[verify]" 已废弃，已自动迁移为 "[ai qa] 验证功能"');
   });
 
+  test('migrates [test] to [ai qa] with warning', () => {
+    const result = parseCheckpoint('[test] 测试功能');
+    expect(result).not.toBeNull();
+    expect(result!.prefix).toBe('ai-qa');
+    expect(result!.description).toBe('[ai qa] 测试功能');
+    expect(result!.warnings.length).toBeGreaterThan(0);
+  });
+
+  test('migrates [review] to [ai review] with warning', () => {
+    const result = parseCheckpoint('[review] 代码审核');
+    expect(result).not.toBeNull();
+    expect(result!.prefix).toBe('ai-review');
+    expect(result!.description).toBe('[ai review] 代码审核');
+    expect(result!.warnings.length).toBeGreaterThan(0);
+  });
+
+  test('migrates [implem] to [ai qa] with implementation note', () => {
+    const result = parseCheckpoint('[implem] 实现功能');
+    expect(result).not.toBeNull();
+    expect(result!.prefix).toBe('ai-qa');
+    expect(result!.description).toBe('[ai qa] (implementation) 实现功能');
+    expect(result!.warnings.length).toBeGreaterThan(0);
+  });
+
+  test('migrates [doc] to [script] with doc note', () => {
+    const result = parseCheckpoint('[doc] 更新文档');
+    expect(result).not.toBeNull();
+    expect(result!.prefix).toBe('script');
+    expect(result!.description).toBe('[script] (doc) 更新文档');
+    expect(result!.warnings.length).toBeGreaterThan(0);
+  });
+
+  // 边界测试
   test('returns null for invalid prefix', () => {
     expect(parseCheckpoint('[invalid] test')).toBeNull();
   });
@@ -167,9 +197,18 @@ describe('parseCheckpoint (§3.2)', () => {
     expect(parseCheckpoint('[verify missing closing bracket')).toBeNull();
   });
 
-  test('hasValidPrefix detects valid prefix', () => {
-    expect(hasValidPrefix('[verify] test')).toBe(true);
+  test('hasValidPrefix detects System B prefix', () => {
+    expect(hasValidPrefix('[ai review] test')).toBe(true);
+    expect(hasValidPrefix('[ai qa] test')).toBe(true);
+    expect(hasValidPrefix('[human qa] test')).toBe(true);
+    expect(hasValidPrefix('[script] test')).toBe(true);
     expect(hasValidPrefix('no prefix')).toBe(false);
+  });
+
+  test('hasValidPrefix rejects System A deprecated prefix', () => {
+    expect(hasValidPrefix('[verify] test')).toBe(false);
+    expect(hasValidPrefix('[test] test')).toBe(false);
+    expect(hasValidPrefix('[review] test')).toBe(false);
   });
 });
 
@@ -178,12 +217,12 @@ describe('parseCheckpoint (§3.2)', () => {
 // ============================================================
 
 describe('generateVerificationCommands (§3.3)', () => {
-  test('test prefix with existing test files generates npm test command', () => {
+  test('ai-qa prefix with existing test files generates npm test command', () => {
     const checkpoint: ParsedCheckpoint = {
-      prefix: 'test',
+      prefix: 'ai-qa',
       description: '测试认证',
       category: 'qa_verification',
-      verificationMethod: 'unit_test',
+      verificationMethod: 'automated',
       requiresHuman: false,
     };
 
@@ -199,12 +238,12 @@ describe('generateVerificationCommands (§3.3)', () => {
     expect(commands[0]).toContain('npm test');
   });
 
-  test('test prefix without test files generates pattern command', () => {
+  test('ai-qa prefix without test files generates pattern command', () => {
     const checkpoint: ParsedCheckpoint = {
-      prefix: 'test',
+      prefix: 'ai-qa',
       description: '测试认证流程',
       category: 'qa_verification',
-      verificationMethod: 'unit_test',
+      verificationMethod: 'automated',
       requiresHuman: false,
     };
 
@@ -213,13 +252,28 @@ describe('generateVerificationCommands (§3.3)', () => {
     expect(commands).toEqual(['npm test --testNamePattern="测试认证流程"']);
   });
 
-  test('verify prefix generates build and test', () => {
+  test('ai-review prefix generates git diff', () => {
     const checkpoint: ParsedCheckpoint = {
-      prefix: 'verify',
-      description: '验证功能',
-      category: 'qa_verification',
-      verificationMethod: 'functional_test',
+      prefix: 'ai-review',
+      description: '代码审核',
+      category: 'code_review',
+      verificationMethod: 'code_review',
       requiresHuman: false,
+    };
+
+    const taskFiles = ['src/auth.ts', 'src/middleware.ts'];
+    const config: ProjectConfig = { type: 'node' };
+    const commands = generateVerificationCommands(checkpoint, taskFiles, config);
+    expect(commands).toEqual(['git diff HEAD -- src/auth.ts src/middleware.ts']);
+  });
+
+  test('human-qa prefix generates build and test', () => {
+    const checkpoint: ParsedCheckpoint = {
+      prefix: 'human-qa',
+      description: '人工验证',
+      category: 'qa_verification',
+      verificationMethod: 'automated',
+      requiresHuman: true,
     };
 
     const config: ProjectConfig = {
@@ -231,40 +285,11 @@ describe('generateVerificationCommands (§3.3)', () => {
     expect(commands).toEqual(['npm run build', 'npm test']);
   });
 
-  test('review prefix generates git diff', () => {
+  test('script prefix generates build', () => {
     const checkpoint: ParsedCheckpoint = {
-      prefix: 'review',
-      description: '代码审核',
-      category: 'code_review',
-      verificationMethod: 'code_review',
-      requiresHuman: true,
-    };
-
-    const taskFiles = ['src/auth.ts', 'src/middleware.ts'];
-    const config: ProjectConfig = { type: 'node' };
-    const commands = generateVerificationCommands(checkpoint, taskFiles, config);
-    expect(commands).toEqual(['git diff HEAD -- src/auth.ts src/middleware.ts']);
-  });
-
-  test('implem prefix generates build', () => {
-    const checkpoint: ParsedCheckpoint = {
-      prefix: 'implem',
-      description: '实现功能',
-      category: 'implementation',
-      verificationMethod: 'automated',
-      requiresHuman: false,
-    };
-
-    const config: ProjectConfig = { type: 'node', buildCommand: 'npm run build' };
-    const commands = generateVerificationCommands(checkpoint, [], config);
-    expect(commands).toEqual(['npm run build']);
-  });
-
-  test('doc prefix generates build', () => {
-    const checkpoint: ParsedCheckpoint = {
-      prefix: 'doc',
-      description: '文档更新',
-      category: 'documentation',
+      prefix: 'script',
+      description: '脚本验证',
+      category: 'evaluation',
       verificationMethod: 'automated',
       requiresHuman: false,
     };

@@ -105,8 +105,8 @@ describe('mapSourceToTestFile', () => {
 // ============================================================
 
 describe('generateVerificationCommands', () => {
-  test('test 前缀 + 存在测试文件 → npm test', () => {
-    const checkpoint = { prefix: 'test', description: '测试认证流程' } as any;
+  test('ai-qa 前缀 + 存在测试文件 → npm test', () => {
+    const checkpoint = { prefix: 'ai-qa', description: '测试认证流程' } as any;
     const taskFiles = ['src/utils/auth.ts'];
     const config: ProjectConfig = { type: 'node', testCommand: 'npm test' };
     // Mock existsSync to return true for mapped test file
@@ -122,8 +122,8 @@ describe('generateVerificationCommands', () => {
     fs.existsSync = origExistsSync;
   });
 
-  test('test 前缀 + 无测试文件 → 描述模式匹配', () => {
-    const checkpoint = { prefix: 'test', description: '测试认证流程' } as any;
+  test('ai-qa 前缀 + 无测试文件 → 描述模式匹配', () => {
+    const checkpoint = { prefix: 'ai-qa', description: '测试认证流程' } as any;
     const taskFiles: string[] = [];
     const config: ProjectConfig = { type: 'node', testCommand: 'npm test' };
 
@@ -133,8 +133,8 @@ describe('generateVerificationCommands', () => {
     expect(commands[0]).toContain('--testNamePattern');
   });
 
-  test('verify 前缀 → build + test', () => {
-    const checkpoint = { prefix: 'verify', description: '验证功能' } as any;
+  test('human-qa 前缀 → build + test', () => {
+    const checkpoint = { prefix: 'human-qa', description: '验证功能' } as any;
     const config: ProjectConfig = {
       type: 'node',
       buildCommand: 'npm run build',
@@ -147,8 +147,8 @@ describe('generateVerificationCommands', () => {
     expect(commands).toContain('npm test');
   });
 
-  test('review 前缀 → git diff', () => {
-    const checkpoint = { prefix: 'review', description: '审核代码' } as any;
+  test('ai-review 前缀 → git diff', () => {
+    const checkpoint = { prefix: 'ai-review', description: '审核代码' } as any;
     const config: ProjectConfig = { type: 'node' };
 
     const commands = generateVerificationCommands(checkpoint, ['src/auth.ts'], config);
@@ -157,17 +157,8 @@ describe('generateVerificationCommands', () => {
     expect(commands[0]).toContain('git diff');
   });
 
-  test('implem 前缀 → build', () => {
-    const checkpoint = { prefix: 'implem', description: '实现功能' } as any;
-    const config: ProjectConfig = { type: 'node', buildCommand: 'npm run build' };
-
-    const commands = generateVerificationCommands(checkpoint, [], config);
-
-    expect(commands).toContain('npm run build');
-  });
-
-  test('doc 前缀 → build', () => {
-    const checkpoint = { prefix: 'doc', description: '更新文档' } as any;
+  test('script 前缀 → build', () => {
+    const checkpoint = { prefix: 'script', description: '脚本验证' } as any;
     const config: ProjectConfig = { type: 'node', buildCommand: 'npm run build' };
 
     const commands = generateVerificationCommands(checkpoint, [], config);
@@ -176,7 +167,7 @@ describe('generateVerificationCommands', () => {
   });
 
   test('unknown 技术栈 → 返回空数组', () => {
-    const checkpoint = { prefix: 'test', description: '测试' } as any;
+    const checkpoint = { prefix: 'ai-qa', description: '测试' } as any;
     const config: ProjectConfig = { type: 'unknown' };
 
     const commands = generateVerificationCommands(checkpoint, [], config);
@@ -299,8 +290,8 @@ describe('mapSourceToTestFile - edge cases', () => {
 // ============================================================
 
 describe('generateVerificationCommands - boundary conditions', () => {
-  test('verify prefix with only buildCommand (no testCommand)', () => {
-    const checkpoint = { prefix: 'verify', description: '验证功能' } as any;
+  test('human-qa prefix with only buildCommand (no testCommand)', () => {
+    const checkpoint = { prefix: 'human-qa', description: '验证功能' } as any;
     const config: ProjectConfig = { type: 'node', buildCommand: 'npm run build' };
 
     const commands = generateVerificationCommands(checkpoint, [], config);
@@ -308,8 +299,8 @@ describe('generateVerificationCommands - boundary conditions', () => {
     expect(commands).toEqual(['npm run build']);
   });
 
-  test('verify prefix with only testCommand (no buildCommand)', () => {
-    const checkpoint = { prefix: 'verify', description: '验证功能' } as any;
+  test('human-qa prefix with only testCommand (no buildCommand)', () => {
+    const checkpoint = { prefix: 'human-qa', description: '验证功能' } as any;
     const config: ProjectConfig = { type: 'node', testCommand: 'npm test' };
 
     const commands = generateVerificationCommands(checkpoint, [], config);
@@ -317,8 +308,8 @@ describe('generateVerificationCommands - boundary conditions', () => {
     expect(commands).toEqual(['npm test']);
   });
 
-  test('review prefix with empty taskFiles returns git diff HEAD -- ', () => {
-    const checkpoint = { prefix: 'review', description: '审核代码' } as any;
+  test('ai-review prefix with empty taskFiles returns git diff HEAD -- ', () => {
+    const checkpoint = { prefix: 'ai-review', description: '审核代码' } as any;
     const config: ProjectConfig = { type: 'node' };
 
     const commands = generateVerificationCommands(checkpoint, [], config);
@@ -326,8 +317,8 @@ describe('generateVerificationCommands - boundary conditions', () => {
     expect(commands).toEqual(['git diff HEAD -- ']); // Edge: trailing space
   });
 
-  test('test prefix with description containing quotes', () => {
-    const checkpoint = { prefix: 'test', description: '测试"特殊"字符' } as any;
+  test('ai-qa prefix with description containing quotes', () => {
+    const checkpoint = { prefix: 'ai-qa', description: '测试"特殊"字符' } as any;
     const config: ProjectConfig = { type: 'node', testCommand: 'npm test' };
 
     const commands = generateVerificationCommands(checkpoint, [], config);
@@ -337,8 +328,8 @@ describe('generateVerificationCommands - boundary conditions', () => {
 });
 
 describe('generateVerificationCommands - fallback and boundary', () => {
-  test('无构建命令: implem 前缀 → 返回空数组', () => {
-    const checkpoint = { prefix: 'implem', description: '实现功能' } as any;
+  test('无构建命令: script 前缀 → 返回空数组', () => {
+    const checkpoint = { prefix: 'script', description: '脚本验证' } as any;
     const config: ProjectConfig = { type: 'node' }; // no buildCommand
 
     const commands = generateVerificationCommands(checkpoint, [], config);
@@ -346,8 +337,8 @@ describe('generateVerificationCommands - fallback and boundary', () => {
     expect(commands).toEqual([]);
   });
 
-  test('无测试命令: test 前缀 → 返回空数组', () => {
-    const checkpoint = { prefix: 'test', description: '测试功能' } as any;
+  test('无测试命令: ai-qa 前缀 → 返回空数组', () => {
+    const checkpoint = { prefix: 'ai-qa', description: '测试功能' } as any;
     const config: ProjectConfig = { type: 'node' }; // no testCommand
 
     const commands = generateVerificationCommands(checkpoint, [], config);
@@ -355,8 +346,8 @@ describe('generateVerificationCommands - fallback and boundary', () => {
     expect(commands).toEqual([]);
   });
 
-  test('空任务文件列表: test 前缀 → 回退到描述模式匹配', () => {
-    const checkpoint = { prefix: 'test', description: '测试认证流程' } as any;
+  test('空任务文件列表: ai-qa 前缀 → 回退到描述模式匹配', () => {
+    const checkpoint = { prefix: 'ai-qa', description: '测试认证流程' } as any;
     const config: ProjectConfig = { type: 'node', testCommand: 'npm test' };
 
     const commands = generateVerificationCommands(checkpoint, [], config);

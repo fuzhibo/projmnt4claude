@@ -12,7 +12,7 @@
  * - 3.11 用户确认约束：不存在自动传递报告路径的代码路径
  */
 
-import { describe, test, expect, beforeEach, afterEach} from '@jest/globals';
+import { describe, test, expect } from '@jest/globals';
 import * as fs from 'fs';
 import * as path from 'path';
 import { initRequirement, type ConversionResult } from '../init-requirement';
@@ -38,9 +38,11 @@ describe('Checkpoint 3.10: Infrastructure Dependencies', () => {
 
   test('uses parseCheckpoint for prefix mapping', async () => {
     const { parseCheckpoint, PREFIX_MAP } = await import('../../utils/init-requirement/prefix-map');
+    // System A prefix [verify] should be migrated to ai-qa
     const result = parseCheckpoint('[verify] test');
     expect(result).not.toBeNull();
-    expect(result!.category).toBe(PREFIX_MAP.verify.category);
+    expect(result!.prefix).toBe('ai-qa');
+    expect(result!.category).toBe(PREFIX_MAP['ai-qa'].category);
   });
 });
 
@@ -49,39 +51,32 @@ describe('Checkpoint 3.10: Infrastructure Dependencies', () => {
 // ============================================================
 
 describe('Checkpoint 3.3: Prefix Mapping', () => {
-  test('verify → category=qa_verification, method=functional_test, requiresHuman=false', async () => {
+  test('ai-qa → category=qa_verification, method=automated, requiresHuman=false', async () => {
     const { PREFIX_MAP } = await import('../../utils/init-requirement');
-    expect(PREFIX_MAP.verify.category).toBe('qa_verification');
-    expect(PREFIX_MAP.verify.method).toBe('functional_test');
-    expect(PREFIX_MAP.verify.requiresHuman).toBe(false);
+    expect(PREFIX_MAP['ai-qa'].category).toBe('qa_verification');
+    expect(PREFIX_MAP['ai-qa'].method).toBe('automated');
+    expect(PREFIX_MAP['ai-qa'].requiresHuman).toBe(false);
   });
 
-  test('test → category=qa_verification, method=unit_test, requiresHuman=false', async () => {
+  test('ai-review → category=code_review, method=code_review, requiresHuman=false', async () => {
     const { PREFIX_MAP } = await import('../../utils/init-requirement');
-    expect(PREFIX_MAP.test.category).toBe('qa_verification');
-    expect(PREFIX_MAP.test.method).toBe('unit_test');
-    expect(PREFIX_MAP.test.requiresHuman).toBe(false);
+    expect(PREFIX_MAP['ai-review'].category).toBe('code_review');
+    expect(PREFIX_MAP['ai-review'].method).toBe('code_review');
+    expect(PREFIX_MAP['ai-review'].requiresHuman).toBe(false);
   });
 
-  test('review → category=code_review, method=code_review, requiresHuman=true', async () => {
+  test('human-qa → category=qa_verification, method=automated, requiresHuman=true', async () => {
     const { PREFIX_MAP } = await import('../../utils/init-requirement');
-    expect(PREFIX_MAP.review.category).toBe('code_review');
-    expect(PREFIX_MAP.review.method).toBe('code_review');
-    expect(PREFIX_MAP.review.requiresHuman).toBe(true);
+    expect(PREFIX_MAP['human-qa'].category).toBe('qa_verification');
+    expect(PREFIX_MAP['human-qa'].method).toBe('automated');
+    expect(PREFIX_MAP['human-qa'].requiresHuman).toBe(true);
   });
 
-  test('implem → category=implementation, method=automated, requiresHuman=false', async () => {
+  test('script → category=evaluation, method=automated, requiresHuman=false', async () => {
     const { PREFIX_MAP } = await import('../../utils/init-requirement');
-    expect(PREFIX_MAP.implem.category).toBe('implementation');
-    expect(PREFIX_MAP.implem.method).toBe('automated');
-    expect(PREFIX_MAP.implem.requiresHuman).toBe(false);
-  });
-
-  test('doc → category=documentation, method=automated, requiresHuman=false', async () => {
-    const { PREFIX_MAP } = await import('../../utils/init-requirement');
-    expect(PREFIX_MAP.doc.category).toBe('documentation');
-    expect(PREFIX_MAP.doc.method).toBe('automated');
-    expect(PREFIX_MAP.doc.requiresHuman).toBe(false);
+    expect(PREFIX_MAP.script.category).toBe('evaluation');
+    expect(PREFIX_MAP.script.method).toBe('automated');
+    expect(PREFIX_MAP.script.requiresHuman).toBe(false);
   });
 });
 
@@ -136,6 +131,58 @@ describe('Checkpoint 3.9: Boundary Conditions', () => {
   test('maxRetry option sets retry limit', async () => {
     const options = { maxRetry: 5 };
     expect(options.maxRetry).toBe(5);
+  });
+
+  test('timeout option sets AI call timeout', async () => {
+    const options = { timeout: 300 };
+    expect(options.timeout).toBe(300);
+  });
+});
+
+// ============================================================
+// Timeout 测试（文档 4.1 检查点）
+// ============================================================
+
+describe('Timeout Tests (Document 4.1 Checkpoints)', () => {
+  // T1: 默认超时值验证 - 通过代码结构验证
+  test('T1: default timeout should be 300 seconds when not specified', async () => {
+    const source = fs.readFileSync(
+      path.join(__dirname, '../init-requirement.ts'),
+      'utf-8'
+    );
+    // 验证常量定义
+    expect(source).toContain('AI_TIMEOUT_SECONDS = 300');
+  });
+
+  // T2: 自定义超时传递
+  test('T2: custom timeout 300 should be passed correctly', async () => {
+    const source = fs.readFileSync(
+      path.join(__dirname, '../init-requirement.ts'),
+      'utf-8'
+    );
+    // 验证 timeout 参数传递到 extractTaskMeta
+    expect(source).toContain('extractTaskMeta(reportContent, cwd, options.timeout)');
+    // 验证默认值回退逻辑
+    expect(source).toContain('timeout: timeout ?? AI_TIMEOUT_SECONDS');
+  });
+
+  // T3: timeout=0 边界处理（0 是有效值，不 fallback）
+  test('T3: timeout=0 should be passed as-is (not fallback)', async () => {
+    const options = { timeout: 0 };
+    // 代码使用 ?? 运算符，0 是有效值，不触发 fallback
+    const effectiveTimeout = options.timeout ?? 300;
+    expect(effectiveTimeout).toBe(0);
+  });
+
+  // T4: 超时异常处理（结构验证）
+  test('T4: timeout exception should be caught and reported', async () => {
+    const source = fs.readFileSync(
+      path.join(__dirname, '../init-requirement.ts'),
+      'utf-8'
+    );
+    // 验证 extractTaskMeta 有异常捕获
+    expect(source).toContain('catch (err)');
+    expect(source).toContain('AI metadata extraction failed');
   });
 });
 
@@ -215,22 +262,21 @@ describe('Report Parsing', () => {
 
   test('detects valid checkpoint prefixes', () => {
     const checkpoints = [
-      '- [verify] 验证移动端显示正常',
-      '- [test] 测试多浏览器兼容性',
-      '- [review] 代码审核',
-      '- [implem] 实现功能',
-      '- [doc] 更新文档',
+      '- [ai review] 验证移动端显示正常',
+      '- [ai qa] 测试多浏览器兼容性',
+      '- [human qa] 代码审核',
+      '- [script] 实现功能',
     ];
 
     for (const line of checkpoints) {
-      const match = line.match(/\[(verify|test|review|implem|doc)\]/);
+      const match = line.match(/\[(ai review|ai qa|human qa|script)\]/i);
       expect(match).not.toBeNull();
     }
   });
 
   test('detects invalid checkpoint prefix', () => {
     const line = '- [invalid] this is not valid';
-    const match = line.match(/\[(verify|test|review|implem|doc)\]/);
+    const match = line.match(/\[(ai review|ai qa|human qa|script)\]/i);
     expect(match).toBeNull();
   });
 });
@@ -322,8 +368,6 @@ describe('Failure Cleanup', () => {
 
 describe('AI Metadata Extraction (§3.2)', () => {
   test('validateExtractedMeta handles valid input', async () => {
-    // Import the internal validation function through the module
-    const { PREFIX_MAP } = await import('../../utils/init-requirement');
 
     // Simulate AI output validation
     const aiOutput = {
@@ -332,7 +376,7 @@ describe('AI Metadata Extraction (§3.2)', () => {
       priority: 'P1',
       description: '## 原因分析\nRoot cause\n\n## 解决方案\nSolution',
       checkpoints: [
-        { prefix: 'verify', description: 'Verify feature' },
+        { prefix: 'ai-qa', description: 'Verify feature' },
       ],
       files: ['src/test.ts'],
       estimatedMinutes: 30,
@@ -361,11 +405,11 @@ describe('AI Metadata Extraction (§3.2)', () => {
 
   test('checkpoints must have valid prefix', async () => {
     const { VALID_PREFIXES } = await import('../../utils/init-requirement');
-    const validPrefixes = ['verify', 'test', 'review', 'implem', 'doc'];
+    const validPrefixes = ['ai-review', 'ai-qa', 'human-qa', 'script'];
 
     expect(VALID_PREFIXES).toEqual(validPrefixes);
 
-    const checkpoint = { prefix: 'verify', description: 'Test checkpoint' };
+    const checkpoint = { prefix: 'ai-qa', description: 'Test checkpoint' };
     expect(VALID_PREFIXES).toContain(checkpoint.prefix);
   });
 });

@@ -55,29 +55,25 @@ afterEach(() => {
 // ============================================================
 
 describe('PREFIX_MAP Boundary Tests', () => {
-  test('PREFIX_MAP contains all 9 prefixes (System A + System B)', () => {
-    // System A (5) + System B (4) = 9 prefixes
-    expect(Object.keys(PREFIX_MAP).length).toBe(9);
-    // Verify System A prefixes exist
-    expect(PREFIX_MAP).toHaveProperty('verify');
-    expect(PREFIX_MAP).toHaveProperty('test');
-    expect(PREFIX_MAP).toHaveProperty('review');
-    expect(PREFIX_MAP).toHaveProperty('implem');
-    expect(PREFIX_MAP).toHaveProperty('doc');
+  test('PREFIX_MAP contains only 4 System B prefixes (System A deprecated)', () => {
+    // System A 已废弃，仅保留 System B (4 prefixes)
+    expect(Object.keys(PREFIX_MAP).length).toBe(4);
     // Verify System B prefixes exist
     expect(PREFIX_MAP).toHaveProperty('ai-review');
     expect(PREFIX_MAP).toHaveProperty('ai-qa');
     expect(PREFIX_MAP).toHaveProperty('human-qa');
     expect(PREFIX_MAP).toHaveProperty('script');
-    // Verify no extra prefixes exist
-    expect(PREFIX_MAP).not.toHaveProperty('build');
-    expect(PREFIX_MAP).not.toHaveProperty('deploy');
-    expect(PREFIX_MAP).not.toHaveProperty('');
+    // Verify System A prefixes NOT in PREFIX_MAP (they are in MIGRATION_MAP)
+    expect(PREFIX_MAP).not.toHaveProperty('verify');
+    expect(PREFIX_MAP).not.toHaveProperty('test');
+    expect(PREFIX_MAP).not.toHaveProperty('review');
+    expect(PREFIX_MAP).not.toHaveProperty('implem');
+    expect(PREFIX_MAP).not.toHaveProperty('doc');
   });
 
-  test('VALID_PREFIXES contains exactly 9 items (System A + System B)', () => {
-    expect(VALID_PREFIXES.length).toBe(9);
-    expect(new Set(VALID_PREFIXES).size).toBe(9); // No duplicates
+  test('VALID_PREFIXES contains exactly 4 System B prefixes', () => {
+    expect(VALID_PREFIXES.length).toBe(4);
+    expect(new Set(VALID_PREFIXES).size).toBe(4); // No duplicates
   });
 
   test('each prefix has complete category/method/requiresHuman', () => {
@@ -96,73 +92,80 @@ describe('PREFIX_MAP Boundary Tests', () => {
 
 describe('parseCheckpoint Boundary Tests', () => {
   test('parses prefix with multiple spaces between bracket and description', () => {
-    const result = parseCheckpoint('[test]    multiple spaces');
+    const result = parseCheckpoint('[ai qa]    multiple spaces');
     expect(result).not.toBeNull();
-    expect(result!.prefix).toBe('test');
+    expect(result!.prefix).toBe('ai-qa');
     expect(result!.description).toBe('multiple spaces');
   });
 
   test('parses prefix with tab character', () => {
-    const result = parseCheckpoint('[test]\ttab description');
+    const result = parseCheckpoint('[ai qa]\ttab description');
     expect(result).not.toBeNull();
-    expect(result!.prefix).toBe('test');
+    expect(result!.prefix).toBe('ai-qa');
     expect(result!.description).toBe('tab description');
   });
 
   test('parses prefix with Unicode description', () => {
-    const result = parseCheckpoint('[doc] 更新API文档 🚀');
+    const result = parseCheckpoint('[script] 更新API文档 🚀');
     expect(result).not.toBeNull();
     expect(result!.description).toBe('更新API文档 🚀');
   });
 
   test('parses prefix with special characters in description', () => {
-    const result = parseCheckpoint('[verify] test [bracket] and {brace}');
+    const result = parseCheckpoint('[ai review] test [bracket] and {brace}');
     expect(result).not.toBeNull();
     expect(result!.description).toBe('test [bracket] and {brace}');
   });
 
-  test('returns null for prefix with uppercase letters', () => {
-    expect(parseCheckpoint('[Test] uppercase')).toBeNull();
-    expect(parseCheckpoint('[TEST] uppercase')).toBeNull();
+  test('accepts uppercase letters (regex /i flag)', () => {
+    // parseCheckpoint uses /i flag, so uppercase is accepted
+    expect(parseCheckpoint('[AI QA] uppercase')).not.toBeNull();
+    expect(parseCheckpoint('[Ai Qa] uppercase')).not.toBeNull();
   });
 
   test('returns null for prefix with trailing text inside brackets', () => {
-    expect(parseCheckpoint('[testx] invalid')).toBeNull();
-    expect(parseCheckpoint('[xtest] invalid')).toBeNull();
+    expect(parseCheckpoint('[ai qax] invalid')).toBeNull();
+    expect(parseCheckpoint('[xai qa] invalid')).toBeNull();
   });
 
   test('returns null for nested brackets', () => {
-    expect(parseCheckpoint('[[test]] nested')).toBeNull();
+    expect(parseCheckpoint('[[ai qa]] nested')).toBeNull();
   });
 
   test('returns null for prefix with numbers', () => {
-    expect(parseCheckpoint('[test1] invalid')).toBeNull();
+    expect(parseCheckpoint('[ai qa1] invalid')).toBeNull();
   });
 
   test('parses very long description', () => {
     const longDesc = 'a'.repeat(10000);
-    const result = parseCheckpoint(`[test] ${longDesc}`);
+    const result = parseCheckpoint(`[ai qa] ${longDesc}`);
     expect(result).not.toBeNull();
     expect(result!.description).toBe(longDesc);
   });
 });
 
 describe('hasValidPrefix Boundary Tests', () => {
-  test('is case-sensitive', () => {
-    expect(hasValidPrefix('[test] lowercase')).toBe(true);
-    expect(hasValidPrefix('[Test] mixed')).toBe(false);
-    expect(hasValidPrefix('[TEST] upper')).toBe(false);
+  test('is case-insensitive (regex /i flag)', () => {
+    expect(hasValidPrefix('[ai qa] lowercase')).toBe(true);
+    expect(hasValidPrefix('[Ai Qa] mixed')).toBe(true);
+    expect(hasValidPrefix('[AI QA] upper')).toBe(true);
   });
 
   test('handles partial matches', () => {
-    expect(hasValidPrefix('prefix [test] suffix')).toBe(false);
-    expect(hasValidPrefix('[test]')).toBe(true);
+    expect(hasValidPrefix('prefix [ai qa] suffix')).toBe(false);
+    expect(hasValidPrefix('[ai qa]')).toBe(true);
   });
 
   test('handles empty and whitespace-only strings', () => {
     expect(hasValidPrefix('')).toBe(false);
     expect(hasValidPrefix('   ')).toBe(false);
     expect(hasValidPrefix('\t\n')).toBe(false);
+  });
+
+  test('System A prefixes are not valid (deprecated)', () => {
+    expect(hasValidPrefix('[verify] deprecated')).toBe(false);
+    expect(hasValidPrefix('[test] deprecated')).toBe(false);
+    expect(hasValidPrefix('[review] deprecated')).toBe(false);
   });
 });
 
@@ -267,16 +270,16 @@ describe('detectProjectConfig Boundary Tests', () => {
 // ============================================================
 
 describe('generateVerificationCommands Boundary Tests', () => {
-  test('test prefix with multiple task files', () => {
-    const checkpoint = { prefix: 'test', description: '测试', category: 'qa_verification', verificationMethod: 'unit_test', requiresHuman: false } as any;
+  test('ai-qa prefix with multiple task files', () => {
+    const checkpoint = { prefix: 'ai-qa', description: '测试', category: 'qa_verification', verificationMethod: 'automated', requiresHuman: false } as any;
     const taskFiles = ['src/a.ts', 'src/b.ts'];
     const config: ProjectConfig = { type: 'node', testCommand: 'npm test' };
     const commands = generateVerificationCommands(checkpoint, taskFiles, config);
     expect(commands.length).toBeGreaterThan(0);
   });
 
-  test('review prefix with multiple task files', () => {
-    const checkpoint = { prefix: 'review', description: '审核', category: 'code_review', verificationMethod: 'code_review', requiresHuman: true } as any;
+  test('ai-review prefix with multiple task files', () => {
+    const checkpoint = { prefix: 'ai-review', description: '审核', category: 'code_review', verificationMethod: 'code_review', requiresHuman: false } as any;
     const taskFiles = ['src/a.ts', 'src/b.ts'];
     const config: ProjectConfig = { type: 'node' };
     const commands = generateVerificationCommands(checkpoint, taskFiles, config);
@@ -284,40 +287,40 @@ describe('generateVerificationCommands Boundary Tests', () => {
     expect(commands[0]).toContain('src/b.ts');
   });
 
-  test('review prefix with empty taskFiles', () => {
-    const checkpoint = { prefix: 'review', description: '审核', category: 'code_review', verificationMethod: 'code_review', requiresHuman: true } as any;
+  test('ai-review prefix with empty taskFiles', () => {
+    const checkpoint = { prefix: 'ai-review', description: '审核', category: 'code_review', verificationMethod: 'code_review', requiresHuman: false } as any;
     const config: ProjectConfig = { type: 'node' };
     const commands = generateVerificationCommands(checkpoint, [], config);
     expect(commands.length).toBe(1);
     expect(commands[0]).toBe('git diff HEAD -- ');
   });
 
-  test('verify prefix with only buildCommand', () => {
-    const checkpoint = { prefix: 'verify', description: '验证', category: 'qa_verification', verificationMethod: 'functional_test', requiresHuman: false } as any;
+  test('human-qa prefix with only buildCommand', () => {
+    const checkpoint = { prefix: 'human-qa', description: '验证', category: 'qa_verification', verificationMethod: 'automated', requiresHuman: true } as any;
     const config: ProjectConfig = { type: 'node', buildCommand: 'npm run build' };
     const commands = generateVerificationCommands(checkpoint, [], config);
     expect(commands).toEqual(['npm run build']);
   });
 
-  test('verify prefix with only testCommand', () => {
-    const checkpoint = { prefix: 'verify', description: '验证', category: 'qa_verification', verificationMethod: 'functional_test', requiresHuman: false } as any;
+  test('human-qa prefix with only testCommand', () => {
+    const checkpoint = { prefix: 'human-qa', description: '验证', category: 'qa_verification', verificationMethod: 'automated', requiresHuman: true } as any;
     const config: ProjectConfig = { type: 'node', testCommand: 'npm test' };
     const commands = generateVerificationCommands(checkpoint, [], config);
     expect(commands).toEqual(['npm test']);
   });
 
-  test('implem prefix with no buildCommand returns empty', () => {
-    const checkpoint = { prefix: 'implem', description: '实现', category: 'implementation', verificationMethod: 'automated', requiresHuman: false } as any;
+  test('script prefix with no buildCommand returns empty', () => {
+    const checkpoint = { prefix: 'script', description: '脚本', category: 'evaluation', verificationMethod: 'automated', requiresHuman: false } as any;
     const config: ProjectConfig = { type: 'node' };
     const commands = generateVerificationCommands(checkpoint, [], config);
     expect(commands).toEqual([]);
   });
 
-  test('doc prefix with no buildCommand returns empty', () => {
-    const checkpoint = { prefix: 'doc', description: '文档', category: 'documentation', verificationMethod: 'automated', requiresHuman: false } as any;
-    const config: ProjectConfig = { type: 'node' };
+  test('script prefix with buildCommand returns build', () => {
+    const checkpoint = { prefix: 'script', description: '脚本', category: 'evaluation', verificationMethod: 'automated', requiresHuman: false } as any;
+    const config: ProjectConfig = { type: 'node', buildCommand: 'npm run build' };
     const commands = generateVerificationCommands(checkpoint, [], config);
-    expect(commands).toEqual([]);
+    expect(commands).toEqual(['npm run build']);
   });
 
   test('unknown prefix returns empty array', () => {

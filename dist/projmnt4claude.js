@@ -17008,6 +17008,16 @@ class ClaudeCodeProvider {
   }
   async invoke(prompt, options) {
     const startTime = Date.now();
+    this.logger.debug("invoke called", {
+      promptLength: prompt.length,
+      timeout: options.timeout,
+      allowedTools: options.allowedTools,
+      cwd: options.cwd,
+      outputFormat: options.outputFormat,
+      sessionId: options.sessionId,
+      sessionState: options.sessionState,
+      debug: options.debug
+    });
     this.logger.info("调用 Claude Code", {
       timeout: options.timeout,
       allowedTools: options.allowedTools,
@@ -17043,6 +17053,15 @@ class ClaudeCodeProvider {
     };
     const result = await runHeadlessClaude(claudeOptions);
     const durationMs = Date.now() - startTime;
+    this.logger.debug("invoke result", {
+      success: result.success,
+      durationMs,
+      outputLength: result.output?.length ?? 0,
+      childPid: result.childPid,
+      hasStderr: !!result.stderr,
+      stderrLength: result.stderr?.length ?? 0,
+      hookWarning: result.hookWarning
+    });
     const tokensUsed = this.extractTokens(result.output);
     const model = this.extractModel(result.output);
     this.logger.info("Claude Code 调用完成", {
@@ -22644,6 +22663,14 @@ function getTestMock11(name) {
 }
 async function callAI(options) {
   const startTime = Date.now();
+  const logger = createLogger("investigation-requirement", options.cwd);
+  const aiLogger = logger.child("ai-integration");
+  aiLogger.debug("callAI invoked", {
+    timeout: options.timeout ?? DEFAULT_TIMEOUT,
+    cwd: options.cwd,
+    outputFormat: options.outputFormat,
+    promptLength: options.prompt.length
+  });
   try {
     const { invokeAgent: invokeAgent2 } = await Promise.resolve().then(() => (init_headless_agent(), exports_headless_agent));
     const result = await invokeAgent2(options.prompt, {
@@ -22651,8 +22678,23 @@ async function callAI(options) {
       allowedTools: options.allowedTools ?? DEFAULT_ALLOWED_TOOLS,
       outputFormat: options.outputFormat,
       cwd: options.cwd,
-      dangerouslySkipPermissions: true
+      dangerouslySkipPermissions: true,
+      debug: options.debug
     });
+    aiLogger.debug("callAI result", {
+      success: result.success,
+      durationMs: result.durationMs,
+      outputLength: result.output?.length ?? 0
+    });
+    if (result.tokensUsed && result.tokensUsed > 0) {
+      aiLogger.logAICost({
+        field: "callAI",
+        durationMs: result.durationMs,
+        inputTokens: 0,
+        outputTokens: result.tokensUsed,
+        totalTokens: result.tokensUsed
+      });
+    }
     return {
       output: result.output,
       success: result.success,
@@ -22660,6 +22702,10 @@ async function callAI(options) {
       error: result.error
     };
   } catch (err) {
+    aiLogger.debug("callAI exception", {
+      error: err instanceof Error ? err.message : String(err),
+      durationMs: Date.now() - startTime
+    });
     return {
       output: "",
       success: false,
@@ -22680,7 +22726,7 @@ async function callAIForJSON(options, validator) {
   const output = result.output.trim();
   let jsonStr = output;
   const jsonBlockMatch = output.match(/```json\s*([\s\S]*?)\s*```/);
-  if (jsonBlockMatch) {
+  if (jsonBlockMatch && jsonBlockMatch[1]) {
     jsonStr = jsonBlockMatch[1].trim();
   } else {
     const start = output.indexOf("{");
@@ -22705,8 +22751,9 @@ Output: ${output.substring(0, 500)}`);
   }
   return parsed;
 }
-var DEFAULT_TIMEOUT = 120, DEFAULT_ALLOWED_TOOLS;
+var DEFAULT_TIMEOUT = 300, DEFAULT_ALLOWED_TOOLS;
 var init_ai_integration = __esm(() => {
+  init_logger();
   DEFAULT_ALLOWED_TOOLS = [];
 });
 
@@ -37630,16 +37677,16 @@ function validateComplexity(v) {
 
 // src/utils/investigation/report-reviewer.ts
 init_ai_integration();
-async function reviewReport(requirement, report, cwd, lang = "zh") {
+async function reviewReport(requirement, report, cwd, lang = "zh", timeout, debug) {
   const reportMarkdown = generateReport(report);
-  const prompt = loadAndRenderTemplate("review", { report: reportMarkdown }, lang);
-  return callAIForJSON({ prompt, cwd }, validateReviewResult);
+  const prompt = await loadAndRenderTemplate("review", { report: reportMarkdown }, lang);
+  return callAIForJSON({ prompt, cwd, timeout, debug }, validateReviewResult);
 }
 async function reviewWithRetry(requirement, report, options) {
   let currentReport = report;
   let lastReview;
   for (let attempt = 0;attempt <= options.maxRetry; attempt++) {
-    lastReview = await reviewReport(requirement, currentReport, options.cwd, options.lang);
+    lastReview = await reviewReport(requirement, currentReport, options.cwd, options.lang, options.timeout, options.debug);
     if (lastReview.pass) {
       return { report: currentReport, review: lastReview };
     }
@@ -37647,8 +37694,8 @@ async function reviewWithRetry(requirement, report, options) {
       const issuesText = lastReview.issues.map((i) => `[${i.severity}] ${i.dimension}: ${i.description} → ${i.suggestion}`).join(`
 `);
       const previousReport = generateReport(currentReport);
-      const prompt = loadAndRenderTemplate("investigateWithFeedback", { requirement, previousReport, issues: issuesText }, options.lang);
-      const aiResult = await callAI({ prompt, outputFormat: "text", cwd: options.cwd });
+      const prompt = await loadAndRenderTemplate("investigateWithFeedback", { requirement, previousReport, issues: issuesText }, options.lang);
+      const aiResult = await callAI({ prompt, outputFormat: "text", cwd: options.cwd, timeout: options.timeout, debug: options.debug });
       if (!aiResult.success) {
         throw new Error(`AI regeneration failed: ${aiResult.error}`);
       }
@@ -37809,16 +37856,28 @@ function loadLanguageConfig(cwd) {
 
 // src/commands/investigation-requirement.ts
 init_path();
+init_logger();
 var DEFAULT_MAX_RETRY2 = 3;
 var DEFAULT_SPLIT_THRESHOLD = 30;
 var DEFAULT_LANGUAGE = "zh";
 var MIN_REQUIREMENT_LENGTH = 5;
 var MAX_SPLIT_DEPTH = 3;
 async function investigationRequirement(description, cwd, options) {
+  const logger = createLogger("investigation-requirement", cwd);
+  logger.debug("investigation-requirement invoked", {
+    mode: options.interactive ? "interactive" : options.feedback ? "feedback" : options.review ? "review" : options.split ? "split" : "new",
+    timeout: options.timeout,
+    debug: options.debug,
+    cwd,
+    requirement: description?.substring(0, 50)
+  });
+  const startTime = Date.now();
   if (!isInitialized()) {
+    const error = "Project not initialized. Run `projmnt4claude setup` first.";
+    logger.debug("investigation-requirement failed: not initialized", { error });
     return {
       success: false,
-      error: "Project not initialized. Run `projmnt4claude setup` first."
+      error
     };
   }
   const config = loadInvestigationConfig(cwd);
@@ -37830,30 +37889,70 @@ async function investigationRequirement(description, cwd, options) {
     requirement = readFileContent(options.file);
   }
   if (options.feedback) {
-    return runFeedbackMode(requirement ?? "", cwd, { ...options, lang, maxRetry, splitThreshold });
+    const result2 = await runFeedbackMode(requirement ?? "", cwd, { ...options, lang, maxRetry, splitThreshold });
+    logger.debug("investigation-requirement completed", {
+      success: result2.success,
+      totalDurationMs: Date.now() - startTime,
+      reportPath: result2.reportPath,
+      error: result2.error
+    });
+    return result2;
   }
   if (options.review) {
-    return runReviewMode(requirement ?? "", cwd, { ...options, lang, maxRetry });
+    const result2 = await runReviewMode(requirement ?? "", cwd, { ...options, lang, maxRetry });
+    logger.debug("investigation-requirement completed", {
+      success: result2.success,
+      totalDurationMs: Date.now() - startTime,
+      reportPath: result2.reportPath,
+      error: result2.error
+    });
+    return result2;
   }
   if (options.split) {
-    return runSplitMode(cwd, { ...options, lang, maxRetry, splitThreshold });
+    const result2 = await runSplitMode(cwd, { ...options, lang, maxRetry, splitThreshold });
+    logger.debug("investigation-requirement completed", {
+      success: result2.success,
+      totalDurationMs: Date.now() - startTime,
+      reportPath: result2.reportPath,
+      error: result2.error
+    });
+    return result2;
   }
   if (options.interactive) {
-    return runInteractiveMode(requirement ?? "", cwd, { ...options, lang, maxRetry, splitThreshold });
+    const result2 = await runInteractiveMode(requirement ?? "", cwd, { ...options, lang, maxRetry, splitThreshold });
+    logger.debug("investigation-requirement completed", {
+      success: result2.success,
+      totalDurationMs: Date.now() - startTime,
+      reportPath: result2.reportPath,
+      error: result2.error
+    });
+    return result2;
   }
   if (!requirement) {
+    const error = "Requirement description required. Provide description or use --file option.";
+    logger.debug("investigation-requirement failed", { error, totalDurationMs: Date.now() - startTime });
     return {
       success: false,
-      error: "Requirement description required. Provide description or use --file option."
+      error
     };
   }
   if (requirement.length < MIN_REQUIREMENT_LENGTH) {
+    const error = `Requirement description must be at least ${MIN_REQUIREMENT_LENGTH} characters. Got: ${requirement.length}`;
+    logger.debug("investigation-requirement failed", { error, requirementLength: requirement.length, totalDurationMs: Date.now() - startTime });
     return {
       success: false,
-      error: `Requirement description must be at least ${MIN_REQUIREMENT_LENGTH} characters. Got: ${requirement.length}`
+      error
     };
   }
-  return runNewInvestigation(requirement, cwd, { ...options, lang, maxRetry, splitThreshold });
+  const result = await runNewInvestigation(requirement, cwd, { ...options, lang, maxRetry, splitThreshold });
+  logger.debug("investigation-requirement completed", {
+    success: result.success,
+    totalDurationMs: Date.now() - startTime,
+    reportPath: result.reportPath,
+    subReports: result.subReports?.length ?? 0,
+    error: result.error
+  });
+  return result;
 }
 async function runNewInvestigation(requirement, cwd, options) {
   const { lang, maxRetry, splitThreshold } = options;
@@ -37865,7 +37964,7 @@ async function runNewInvestigation(requirement, cwd, options) {
     console.log(`   Split threshold: ${splitThreshold} KB`);
     console.log("");
   }
-  let report = await generateInvestigationReport(requirement, cwd, lang);
+  let report = await generateInvestigationReport(requirement, cwd, lang, options.timeout, options.debug);
   const formatValidation = validateReport(report);
   if (!formatValidation.valid) {
     if (!options.quiet) {
@@ -37874,14 +37973,16 @@ async function runNewInvestigation(requirement, cwd, options) {
     }
     report = await generateInvestigationReport(`${requirement}
 
-[Format correction needed: ${formatValidation.errors.map((e) => e.message).join("; ")}]`, cwd, lang);
+[Format correction needed: ${formatValidation.errors.map((e) => e.message).join("; ")}]`, cwd, lang, options.timeout, options.debug);
   }
   let reviewResult;
   if (!options.skipReview) {
     const retryResult = await reviewWithRetry(requirement, report, {
       cwd,
       lang,
-      maxRetry
+      maxRetry,
+      timeout: options.timeout,
+      debug: options.debug
     });
     reviewResult = retryResult.review;
     if (!reviewResult.pass) {
@@ -37965,7 +38066,7 @@ async function runInteractiveMode(requirement, cwd, options) {
     console.log(`
 \uD83D\uDD04 Refining report based on feedback...`);
     const prompt = await loadAndRenderTemplate("investigateWithFeedback", { requirement, currentReport: reportMarkdown, feedback, date: new Date().toISOString() }, lang);
-    const aiResult = await callAI({ prompt, cwd, outputFormat: "text" });
+    const aiResult = await callAI({ prompt, cwd, outputFormat: "text", timeout: options.timeout, debug: options.debug });
     if (aiResult.success) {
       report = parseReport(aiResult.output);
     }
@@ -38018,7 +38119,7 @@ async function runFeedbackMode(requirement, cwd, options) {
     feedback: feedbackContent,
     date: new Date().toISOString()
   }, lang);
-  const aiResult = await callAI({ prompt, cwd, outputFormat: "text" });
+  const aiResult = await callAI({ prompt, cwd, outputFormat: "text", timeout: options.timeout, debug: options.debug });
   if (!aiResult.success) {
     return {
       success: false,
@@ -38166,7 +38267,7 @@ async function runSplitFlow(report, requirement, cwd, options) {
     if (!quiet) {
       console.log(`   \uD83D\uDCC4 Generating sub-report ${i + 1}/${splitPlan.items.length}: ${item.title}`);
     }
-    const subReport = await generateSubReport(report, item, requirement, cwd, lang);
+    const subReport = await generateSubReport(report, item, requirement, cwd, lang, options.timeout, options.debug);
     const subSlug = slugify(item.title);
     const subReportPath = path25.join(subDir, `${subSlug}.md`);
     fs29.writeFileSync(subReportPath, generateReport(subReport));
@@ -38195,12 +38296,12 @@ async function runSplitFlow(report, requirement, cwd, options) {
     splitReviewResult
   };
 }
-async function generateInvestigationReport(requirement, cwd, lang) {
+async function generateInvestigationReport(requirement, cwd, lang, timeout, debug) {
   const slug = slugify(requirement);
   const date = new Date().toISOString();
   const projectContext = await getProjectContext(cwd);
   const prompt = await loadAndRenderTemplate("investigate", { requirement, projectContext, date, slug }, lang);
-  const result = await callAI({ prompt, cwd, outputFormat: "text" });
+  const result = await callAI({ prompt, cwd, outputFormat: "text", timeout, debug });
   if (!result.success) {
     throw new Error(`Failed to generate investigation report: ${result.error}`);
   }
@@ -38223,7 +38324,7 @@ async function getProjectContext(cwd) {
   return parts.join(`
 `);
 }
-async function generateSubReport(parentReport, splitItem, requirement, cwd, lang) {
+async function generateSubReport(parentReport, splitItem, requirement, cwd, lang, timeout, debug) {
   const subPrompt = await loadAndRenderTemplate("investigate", {
     requirement: `[Sub-investigation] ${splitItem.title}
 
@@ -38232,7 +38333,7 @@ Description: ${splitItem.description}
 
 Original requirement: ${requirement}`
   }, lang);
-  const result = await callAI({ prompt: subPrompt, cwd, outputFormat: "text" });
+  const result = await callAI({ prompt: subPrompt, cwd, outputFormat: "text", timeout, debug });
   if (!result.success) {
     throw new Error(`Failed to generate sub-report: ${result.error}`);
   }
@@ -50705,6 +50806,9 @@ program2.name("projmnt4claude").description("Claude Code Project Management CLI 
   if (opts.json || opts.ai) {
     process.env.PROJMNT4CLAUDE_JSON_OUTPUT = "true";
   }
+  if (opts.debug) {
+    process.env.LOG_LEVEL = "debug";
+  }
 });
 program2.command("setup").description("Initialize project management environment in current project, with language selection (Chinese/English)").option("-y, --yes", "Non-interactive mode: skip all confirmations, use default settings").option("-l, --language <language>", "Specify language (zh/en)").option("-f, --force", "Force re-initialization (re-copy skill files)").action(async (options) => {
   await setup(process.cwd(), { nonInteractive: options.yes, language: options.language, force: options.force });
@@ -51315,7 +51419,7 @@ program2.command("investigation-requirement [description]").description(`\u9700\
 ` + `  split                    \u62C6\u5206\u6A21\u677F
 ` + `  splitReview              \u62C6\u5206\u5BA1\u6838\u6A21\u677F
 
-` + "\u524D\u63D0: \u9700\u5148\u8FD0\u884C projmnt4claude setup \u521D\u59CB\u5316\u9879\u76EE").option("-y, --yes", "\u975E\u4EA4\u4E92\u6A21\u5F0F").option("--interactive", "\u4EA4\u4E92\u6A21\u5F0F: \u4E0E\u7528\u6237\u8BC4\u5BA1\u53CD\u9988\u5FAA\u73AF").option("--feedback", "\u53CD\u9988\u4FEE\u6B63\u6A21\u5F0F: \u57FA\u4E8E\u53CD\u9988\u4FEE\u6B63\u5DF2\u6709\u62A5\u544A").option("--review", "\u8BC4\u5BA1\u6A21\u5F0F: \u4EC5\u8BC4\u5BA1\u5DF2\u6709\u62A5\u544A").option("--split", "\u62C6\u5206\u6A21\u5F0F: \u5BF9\u8FC7\u5927\u62A5\u544A\u8FDB\u884C\u62C6\u5206").option("--report-path <path>", "\u5DF2\u6709\u62A5\u544A\u8DEF\u5F84 (feedback/review/split \u5FC5\u9700)").option("--file <path>", "\u4ECE\u6587\u4EF6\u8BFB\u53D6\u9700\u6C42\u63CF\u8FF0").option("--output-dir <path>", "\u8F93\u51FA\u76EE\u5F55").option("--output-file <path>", "\u8F93\u51FA\u6587\u4EF6\u8DEF\u5F84").option("--max-retry <n>", "\u6700\u5927\u91CD\u8BD5\u6B21\u6570", "3").option("--split-threshold <kb>", "\u62C6\u5206\u9608\u503C (KB)", "20").option("--language <lang>", "\u8BED\u8A00 (zh/en)", "zh").option("--skip-review", "\u8DF3\u8FC7 AI \u8BC4\u5BA1").option("--skip-split", "\u8DF3\u8FC7\u62C6\u5206").option("-f, --force", "\u5F3A\u5236\u8986\u76D6").option("--json", "JSON \u8F93\u51FA").option("-q, --quiet", "\u9759\u9ED8\u6A21\u5F0F").action(async (description, options) => {
+` + "\u524D\u63D0: \u9700\u5148\u8FD0\u884C projmnt4claude setup \u521D\u59CB\u5316\u9879\u76EE").option("-y, --yes", "\u975E\u4EA4\u4E92\u6A21\u5F0F").option("--interactive", "\u4EA4\u4E92\u6A21\u5F0F: \u4E0E\u7528\u6237\u8BC4\u5BA1\u53CD\u9988\u5FAA\u73AF").option("--feedback", "\u53CD\u9988\u4FEE\u6B63\u6A21\u5F0F: \u57FA\u4E8E\u53CD\u9988\u4FEE\u6B63\u5DF2\u6709\u62A5\u544A").option("--review", "\u8BC4\u5BA1\u6A21\u5F0F: \u4EC5\u8BC4\u5BA1\u5DF2\u6709\u62A5\u544A").option("--split", "\u62C6\u5206\u6A21\u5F0F: \u5BF9\u8FC7\u5927\u62A5\u544A\u8FDB\u884C\u62C6\u5206").option("--report-path <path>", "\u5DF2\u6709\u62A5\u544A\u8DEF\u5F84 (feedback/review/split \u5FC5\u9700)").option("--file <path>", "\u4ECE\u6587\u4EF6\u8BFB\u53D6\u9700\u6C42\u63CF\u8FF0").option("--output-dir <path>", "\u8F93\u51FA\u76EE\u5F55").option("--output-file <path>", "\u8F93\u51FA\u6587\u4EF6\u8DEF\u5F84").option("--max-retry <n>", "\u6700\u5927\u91CD\u8BD5\u6B21\u6570", "3").option("--split-threshold <kb>", "\u62C6\u5206\u9608\u503C (KB)", "20").option("--language <lang>", "\u8BED\u8A00 (zh/en)", "zh").option("--timeout <seconds>", "AI \u8C03\u7528\u8D85\u65F6\u65F6\u95F4\uFF08\u79D2\uFF09", "300").option("--debug", "\u8C03\u8BD5\u6A21\u5F0F\uFF1A\u8F93\u51FA\u8BE6\u7EC6\u65E5\u5FD7").option("--skip-review", "\u8DF3\u8FC7 AI \u8BC4\u5BA1").option("--skip-split", "\u8DF3\u8FC7\u62C6\u5206").option("-f, --force", "\u5F3A\u5236\u8986\u76D6").option("--json", "JSON \u8F93\u51FA").option("-q, --quiet", "\u9759\u9ED8\u6A21\u5F0F").action(async (description, options) => {
   let finalDescription = description;
   if (options.file) {
     const filePath = path47.resolve(options.file);
@@ -51359,6 +51463,8 @@ program2.command("investigation-requirement [description]").description(`\u9700\
     maxRetry: options.maxRetry ? parseInt(options.maxRetry, 10) : undefined,
     splitThreshold: options.splitThreshold ? parseInt(options.splitThreshold, 10) : undefined,
     language: options.language,
+    timeout: options.timeout ? parseInt(options.timeout, 10) : undefined,
+    debug: options.debug,
     skipReview: options.skipReview,
     skipSplit: options.skipSplit,
     force: options.force,
