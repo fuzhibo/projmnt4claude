@@ -100,6 +100,10 @@ program
     if (opts.json || opts.ai) {
       process.env.PROJMNT4CLAUDE_JSON_OUTPUT = 'true';
     }
+    // --debug 参数设置 LOG_LEVEL=debug（设计文档 §6.1）
+    if (opts.debug) {
+      process.env.LOG_LEVEL = 'debug';
+    }
   });
 
 // setup command

@@ -28,6 +28,7 @@ import {
 } from '../utils/investigation/report-splitter';
 import { loadInvestigationConfig, loadLanguageConfig } from '../utils/investigation/config-reader';
 import { isInitialized } from '../utils/path';
+import { createLogger } from '../utils/logger.js';
 
 // ============================================================
 // 命令参数接口
@@ -103,11 +104,27 @@ export async function investigationRequirement(
   cwd: string,
   options: InvestigationRequirementOptions,
 ): Promise<InvestigationResult> {
+  // 创建 Logger
+  const logger = createLogger('investigation-requirement', cwd);
+
+  // 记录命令启动参数
+  logger.debug('investigation-requirement invoked', {
+    mode: options.interactive ? 'interactive' : options.feedback ? 'feedback' : options.review ? 'review' : options.split ? 'split' : 'new',
+    timeout: options.timeout,
+    debug: options.debug,
+    cwd,
+    requirement: description?.substring(0, 50),
+  });
+
+  const startTime = Date.now();
+
   // 验证项目已初始化
   if (!isInitialized()) {
+    const error = 'Project not initialized. Run `projmnt4claude setup` first.';
+    logger.debug('investigation-requirement failed: not initialized', { error });
     return {
       success: false,
-      error: 'Project not initialized. Run `projmnt4claude setup` first.',
+      error,
     };
   }
 
@@ -125,38 +142,78 @@ export async function investigationRequirement(
 
   // 根据模式路由
   if (options.feedback) {
-    return runFeedbackMode(requirement ?? '', cwd, { ...options, lang, maxRetry, splitThreshold });
+    const result = await runFeedbackMode(requirement ?? '', cwd, { ...options, lang, maxRetry, splitThreshold });
+    logger.debug('investigation-requirement completed', {
+      success: result.success,
+      totalDurationMs: Date.now() - startTime,
+      reportPath: result.reportPath,
+      error: result.error,
+    });
+    return result;
   }
 
   if (options.review) {
-    return runReviewMode(requirement ?? '', cwd, { ...options, lang, maxRetry });
+    const result = await runReviewMode(requirement ?? '', cwd, { ...options, lang, maxRetry });
+    logger.debug('investigation-requirement completed', {
+      success: result.success,
+      totalDurationMs: Date.now() - startTime,
+      reportPath: result.reportPath,
+      error: result.error,
+    });
+    return result;
   }
 
   if (options.split) {
-    return runSplitMode(cwd, { ...options, lang, maxRetry, splitThreshold });
+    const result = await runSplitMode(cwd, { ...options, lang, maxRetry, splitThreshold });
+    logger.debug('investigation-requirement completed', {
+      success: result.success,
+      totalDurationMs: Date.now() - startTime,
+      reportPath: result.reportPath,
+      error: result.error,
+    });
+    return result;
   }
 
   if (options.interactive) {
-    return runInteractiveMode(requirement ?? '', cwd, { ...options, lang, maxRetry, splitThreshold });
+    const result = await runInteractiveMode(requirement ?? '', cwd, { ...options, lang, maxRetry, splitThreshold });
+    logger.debug('investigation-requirement completed', {
+      success: result.success,
+      totalDurationMs: Date.now() - startTime,
+      reportPath: result.reportPath,
+      error: result.error,
+    });
+    return result;
   }
 
   // 默认：新建调查（非交互模式）
   if (!requirement) {
+    const error = 'Requirement description required. Provide description or use --file option.';
+    logger.debug('investigation-requirement failed', { error, totalDurationMs: Date.now() - startTime });
     return {
       success: false,
-      error: 'Requirement description required. Provide description or use --file option.',
+      error,
     };
   }
 
   // 验证需求长度
   if (requirement.length < MIN_REQUIREMENT_LENGTH) {
+    const error = `Requirement description must be at least ${MIN_REQUIREMENT_LENGTH} characters. Got: ${requirement.length}`;
+    logger.debug('investigation-requirement failed', { error, requirementLength: requirement.length, totalDurationMs: Date.now() - startTime });
     return {
       success: false,
-      error: `Requirement description must be at least ${MIN_REQUIREMENT_LENGTH} characters. Got: ${requirement.length}`,
+      error,
     };
   }
 
-  return runNewInvestigation(requirement, cwd, { ...options, lang, maxRetry, splitThreshold });
+  const result = await runNewInvestigation(requirement, cwd, { ...options, lang, maxRetry, splitThreshold });
+  logger.debug('investigation-requirement completed', {
+    success: result.success,
+    totalDurationMs: Date.now() - startTime,
+    reportPath: result.reportPath,
+    subReports: result.subReports?.length ?? 0,
+    error: result.error,
+  });
+  return result;
 }
 
 // ============================================================

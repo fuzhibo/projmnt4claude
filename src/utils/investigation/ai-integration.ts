@@ -1,5 +1,6 @@
 import type { AICallOptions, AICallResult } from './types';
 import type { AgentResult } from '../headless-agent.js';
+import { createLogger } from '../logger.js';
 
 const DEFAULT_TIMEOUT = 300;
 const DEFAULT_ALLOWED_TOOLS: string[] = [];
@@ -18,6 +19,18 @@ function getTestMock(name: string): any {
 export async function callAI(options: AICallOptions): Promise<AICallResult> {
   const startTime = Date.now();
 
+  // 创建 logger 用于记录调试日志
+  const logger = createLogger('investigation-requirement', options.cwd);
+  const aiLogger = logger.child('ai-integration');
+
+  // 调试日志：输出调用参数
+  aiLogger.debug('callAI invoked', {
+    timeout: options.timeout ?? DEFAULT_TIMEOUT,
+    cwd: options.cwd,
+    outputFormat: options.outputFormat,
+    promptLength: options.prompt.length,
+  });
+
   try {
     // 动态导入避免测试时拉入庞大的依赖树（harness-helpers 等）
     const { invokeAgent } = await import('../headless-agent.js');
@@ -30,6 +43,24 @@ export async function callAI(options: AICallOptions): Promise<AICallResult> {
       debug: options.debug,
     });
 
+    // 调试日志：输出返回结果
+    aiLogger.debug('callAI result', {
+      success: result.success,
+      durationMs: result.durationMs,
+      outputLength: result.output?.length ?? 0,
+    });
+
+    // 记录 AI 成本
+    if (result.tokensUsed && result.tokensUsed > 0) {
+      aiLogger.logAICost({
+        field: 'callAI',
+        durationMs: result.durationMs,
+        inputTokens: 0, // tokensUsed is total, split not available
+        outputTokens: result.tokensUsed,
+        totalTokens: result.tokensUsed,
+      });
+    }
+
     return {
       output: result.output,
       success: result.success,
@@ -37,6 +68,12 @@ export async function callAI(options: AICallOptions): Promise<AICallResult> {
       error: result.error,
     };
   } catch (err) {
+    // 调试日志：输出异常
+    aiLogger.debug('callAI exception', {
+      error: err instanceof Error ? err.message : String(err),
+      durationMs: Date.now() - startTime,
+    });
+
     return {
       output: '',
       success: false,
@@ -72,7 +109,7 @@ export async function callAIForJSON<T>(
   // 提取 JSON 块
   let jsonStr = output;
   const jsonBlockMatch = output.match(/```json\s*([\s\S]*?)\s*```/);
-  if (jsonBlockMatch) {
+  if (jsonBlockMatch && jsonBlockMatch[1]) {
     jsonStr = jsonBlockMatch[1].trim();
   } else {
     const start = output.indexOf('{');

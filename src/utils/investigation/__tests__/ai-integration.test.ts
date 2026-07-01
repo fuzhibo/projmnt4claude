@@ -124,23 +124,23 @@ describe('callAI debug 模式日志 (T3-T4)', () => {
 
     await callAI({ prompt: 'test', cwd: '/tmp', outputFormat: 'text', debug: false });
 
-    // callAI 当前实现不输出日志，验证无 console.log/error
-    expect(consoleLogSpy).not.toHaveBeenCalled();
-    expect(consoleErrorSpy).not.toHaveBeenCalled();
+    // callAI 现在使用 Logger 输出日志（info/debug 级别），不验证 console 输出
+    // 只验证 debug 参数正确传递即可
+    expect(mockInvokeAgent).toHaveBeenCalled();
+    const callArgs = mockInvokeAgent.mock.calls[0];
+    expect(callArgs![1].debug).toBe(false);
   });
 
   // T4: debug=true 输出日志
-  it('T4: debug=true 当前实现无日志（待增强）', async () => {
+  it('T4: debug=true 应输出 Logger 日志', async () => {
     const mockResult = createMockResult();
     mockInvokeAgent.mockResolvedValue(mockResult);
 
     await callAI({ prompt: 'test', cwd: '/tmp', outputFormat: 'text', debug: true });
 
-    // 当前 callAI 实现未使用 debug 参数输出日志
-    // 此测试记录现状，未来增强 debug 功能时应更新此测试
-    // 期望行为：console.log 被调用，输出调用参数和结果
-    // 实际行为：无日志输出
-    expect(consoleLogSpy).not.toHaveBeenCalled();
+    // 现在 callAI 使用 Logger 输出日志，验证 logger 被调用
+    // 由于 Logger 内部可能使用 console.log，这里验证不报错即可
+    expect(consoleLogSpy).toHaveBeenCalled();
   });
 });
 

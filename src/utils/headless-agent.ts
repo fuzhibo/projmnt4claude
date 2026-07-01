@@ -342,6 +342,19 @@ export class ClaudeCodeProvider implements HeadlessAgent {
 
   async invoke(prompt: string, options: AgentInvokeOptions): Promise<AgentResult> {
     const startTime = Date.now();
+
+    // Debug 日志：记录调用参数
+    this.logger.debug('invoke called', {
+      promptLength: prompt.length,
+      timeout: options.timeout,
+      allowedTools: options.allowedTools,
+      cwd: options.cwd,
+      outputFormat: options.outputFormat,
+      sessionId: options.sessionId,
+      sessionState: options.sessionState,
+      debug: options.debug,
+    });
+
     this.logger.info('调用 Claude Code', {
       timeout: options.timeout,
       allowedTools: options.allowedTools,
@@ -381,6 +394,17 @@ export class ClaudeCodeProvider implements HeadlessAgent {
     const result = await runHeadlessClaude(claudeOptions);
 
     const durationMs = Date.now() - startTime;
+
+    // Debug 日志：记录子进程返回结果
+    this.logger.debug('invoke result', {
+      success: result.success,
+      durationMs,
+      outputLength: result.output?.length ?? 0,
+      childPid: result.childPid,
+      hasStderr: !!result.stderr,
+      stderrLength: result.stderr?.length ?? 0,
+      hookWarning: result.hookWarning,
+    });
 
     // 从输出中提取 token 使用量（支持 JSON/text 格式）
     const tokensUsed = this.extractTokens(result.output);
