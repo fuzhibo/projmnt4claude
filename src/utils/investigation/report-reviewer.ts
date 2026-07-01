@@ -11,12 +11,14 @@ export async function reviewReport(
   report: InvestigationReport,
   cwd: string,
   lang: 'zh' | 'en' = 'zh',
+  timeout?: number,
+  debug?: boolean,
 ): Promise<ReviewResult> {
   const reportMarkdown = generateReport(report);
-  const prompt = loadAndRenderTemplate('review', { report: reportMarkdown }, lang);
+  const prompt = await loadAndRenderTemplate('review', { report: reportMarkdown }, lang);
 
   return callAIForJSON<ReviewResult>(
-    { prompt, cwd },
+    { prompt, cwd, timeout, debug },
     validateReviewResult,
   );
 }
@@ -28,13 +30,13 @@ export async function reviewReport(
 export async function reviewWithRetry(
   requirement: string,
   report: InvestigationReport,
-  options: { cwd: string; lang: 'zh' | 'en'; maxRetry: number },
+  options: { cwd: string; lang: 'zh' | 'en'; maxRetry: number; timeout?: number; debug?: boolean },
 ): Promise<{ report: InvestigationReport; review: ReviewResult }> {
   let currentReport = report;
   let lastReview: ReviewResult | undefined;
 
   for (let attempt = 0; attempt <= options.maxRetry; attempt++) {
-    lastReview = await reviewReport(requirement, currentReport, options.cwd, options.lang);
+    lastReview = await reviewReport(requirement, currentReport, options.cwd, options.lang, options.timeout, options.debug);
 
     if (lastReview.pass) {
       return { report: currentReport, review: lastReview };
@@ -46,13 +48,13 @@ export async function reviewWithRetry(
         .map(i => `[${i.severity}] ${i.dimension}: ${i.description} → ${i.suggestion}`)
         .join('\n');
       const previousReport = generateReport(currentReport);
-      const prompt = loadAndRenderTemplate(
+      const prompt = await loadAndRenderTemplate(
         'investigateWithFeedback',
         { requirement, previousReport, issues: issuesText },
         options.lang,
       );
 
-      const aiResult = await callAI({ prompt, outputFormat: 'text', cwd: options.cwd });
+      const aiResult = await callAI({ prompt, outputFormat: 'text', cwd: options.cwd, timeout: options.timeout, debug: options.debug });
       if (!aiResult.success) {
         throw new Error(`AI regeneration failed: ${aiResult.error}`);
       }

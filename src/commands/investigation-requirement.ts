@@ -68,6 +68,10 @@ export interface InvestigationRequirementOptions {
   json?: boolean;
   /** 静默模式 */
   quiet?: boolean;
+  /** AI 调用超时时间（秒） */
+  timeout?: number;
+  /** 调试模式：输出详细日志 */
+  debug?: boolean;
 }
 
 export interface InvestigationResult {
@@ -176,7 +180,7 @@ async function runNewInvestigation(
   }
 
   // Step 1: 生成调查报告
-  let report = await generateInvestigationReport(requirement, cwd, lang);
+  let report = await generateInvestigationReport(requirement, cwd, lang, options.timeout, options.debug);
 
   // Step 1.5: 格式验证
   const formatValidation = validateReport(report);
@@ -190,6 +194,8 @@ async function runNewInvestigation(
       `${requirement}\n\n[Format correction needed: ${formatValidation.errors.map(e => e.message).join('; ')}]`,
       cwd,
       lang,
+      options.timeout,
+      options.debug,
     );
   }
 
@@ -200,6 +206,8 @@ async function runNewInvestigation(
       cwd,
       lang,
       maxRetry,
+      timeout: options.timeout,
+      debug: options.debug,
     });
 
     reviewResult = retryResult.review;
@@ -320,7 +328,7 @@ async function runInteractiveMode(
       lang,
     );
 
-    const aiResult = await callAI({ prompt, cwd, outputFormat: 'text' });
+    const aiResult = await callAI({ prompt, cwd, outputFormat: 'text', timeout: options.timeout, debug: options.debug });
     if (aiResult.success) {
       report = parseReport(aiResult.output);
     }
@@ -399,7 +407,7 @@ async function runFeedbackMode(
     lang,
   );
 
-  const aiResult = await callAI({ prompt, cwd, outputFormat: 'text' });
+  const aiResult = await callAI({ prompt, cwd, outputFormat: 'text', timeout: options.timeout, debug: options.debug });
 
   if (!aiResult.success) {
     return {
@@ -549,6 +557,10 @@ interface SplitFlowOptions {
   outputDir: string;
   quiet?: boolean;
   depth?: number;
+  /** AI 调用超时时间（秒） */
+  timeout?: number;
+  /** 调试模式 */
+  debug?: boolean;
 }
 
 async function runSplitFlow(
@@ -623,7 +635,7 @@ async function runSplitFlow(
     }
 
     // 为子项生成独立调查报告
-    const subReport = await generateSubReport(report, item, requirement, cwd, lang);
+    const subReport = await generateSubReport(report, item, requirement, cwd, lang, options.timeout, options.debug);
     const subSlug = slugify(item.title);
     const subReportPath = path.join(subDir, `${subSlug}.md`);
     fs.writeFileSync(subReportPath, generateReport(subReport));
@@ -671,6 +683,8 @@ async function generateInvestigationReport(
   requirement: string,
   cwd: string,
   lang: 'zh' | 'en',
+  timeout?: number,
+  debug?: boolean,
 ): Promise<InvestigationReport> {
   const slug = slugify(requirement);
   const date = new Date().toISOString();
@@ -681,7 +695,7 @@ async function generateInvestigationReport(
     { requirement, projectContext, date, slug },
     lang,
   );
-  const result = await callAI({ prompt, cwd, outputFormat: 'text' });
+  const result = await callAI({ prompt, cwd, outputFormat: 'text', timeout, debug });
 
   if (!result.success) {
     throw new Error(`Failed to generate investigation report: ${result.error}`);
@@ -724,6 +738,8 @@ async function generateSubReport(
   requirement: string,
   cwd: string,
   lang: 'zh' | 'en',
+  timeout?: number,
+  debug?: boolean,
 ): Promise<InvestigationReport> {
   const subPrompt = await loadAndRenderTemplate(
     'investigate',
@@ -733,7 +749,7 @@ async function generateSubReport(
     lang,
   );
 
-  const result = await callAI({ prompt: subPrompt, cwd, outputFormat: 'text' });
+  const result = await callAI({ prompt: subPrompt, cwd, outputFormat: 'text', timeout, debug });
 
   if (!result.success) {
     throw new Error(`Failed to generate sub-report: ${result.error}`);

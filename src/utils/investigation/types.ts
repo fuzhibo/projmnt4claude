@@ -147,6 +147,8 @@ export interface AICallOptions {
   timeout?: number;
   allowedTools?: string[];
   cwd: string;
+  /** 调试模式：输出详细日志 */
+  debug?: boolean;
 }
 
 export interface AICallResult {

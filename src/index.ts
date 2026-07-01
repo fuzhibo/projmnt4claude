@@ -813,6 +813,8 @@ program
   .option('--max-retry <n>', '最大重试次数', '3')
   .option('--split-threshold <kb>', '拆分阈值 (KB)', '20')
   .option('--language <lang>', '语言 (zh/en)', 'zh')
+  .option('--timeout <seconds>', 'AI 调用超时时间（秒）', '300')
+  .option('--debug', '调试模式：输出详细日志')
   .option('--skip-review', '跳过 AI 评审')
   .option('--skip-split', '跳过拆分')
   .option('-f, --force', '强制覆盖')
@@ -868,6 +870,8 @@ program
       maxRetry: options.maxRetry ? parseInt(options.maxRetry, 10) : undefined,
       splitThreshold: options.splitThreshold ? parseInt(options.splitThreshold, 10) : undefined,
       language: options.language,
+      timeout: options.timeout ? parseInt(options.timeout, 10) : undefined,
+      debug: options.debug,
       skipReview: options.skipReview,
       skipSplit: options.skipSplit,
       force: options.force,

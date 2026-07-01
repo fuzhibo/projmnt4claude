@@ -1,7 +1,7 @@
 import type { AICallOptions, AICallResult } from './types';
 import type { AgentResult } from '../headless-agent.js';
 
-const DEFAULT_TIMEOUT = 120;
+const DEFAULT_TIMEOUT = 300;
 const DEFAULT_ALLOWED_TOOLS: string[] = [];
 
 // 测试注入点：允许测试通过全局变量注入 mock
@@ -27,6 +27,7 @@ export async function callAI(options: AICallOptions): Promise<AICallResult> {
       outputFormat: options.outputFormat,
       cwd: options.cwd,
       dangerouslySkipPermissions: true,
+      debug: options.debug,
     });
 
     return {
