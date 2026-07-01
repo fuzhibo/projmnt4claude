@@ -150,57 +150,45 @@ describe('§3.1 类型系统', () => {
     });
   });
 
-  describe('PREFIX_MAP 9 种前缀 (System A + System B)', () => {
-    it('should contain all 9 prefixes', () => {
+  describe('PREFIX_MAP 4 种 System B 前缀', () => {
+    it('should contain all 4 System B prefixes', () => {
       const keys = Object.keys(PREFIX_MAP);
-      expect(keys).toHaveLength(9);
-      // System A
-      expect(keys).toContain('verify');
-      expect(keys).toContain('test');
-      expect(keys).toContain('review');
-      expect(keys).toContain('implem');
-      expect(keys).toContain('doc');
-      // System B
+      expect(keys).toHaveLength(4);
+      // System B only
       expect(keys).toContain('ai-review');
       expect(keys).toContain('ai-qa');
       expect(keys).toContain('human-qa');
       expect(keys).toContain('script');
     });
 
-    it('should have correct mapping for verify', () => {
-      expect(PREFIX_MAP.verify).toEqual({
-        category: 'qa_verification', method: 'functional_test', requiresHuman: false,
+    it('should have correct mapping for ai-review', () => {
+      expect(PREFIX_MAP['ai-review']).toEqual({
+        category: 'code_review', method: 'code_review', requiresHuman: false,
       });
     });
 
-    it('should have correct mapping for test', () => {
-      expect(PREFIX_MAP.test).toEqual({
-        category: 'qa_verification', method: 'unit_test', requiresHuman: false,
+    it('should have correct mapping for ai-qa', () => {
+      expect(PREFIX_MAP['ai-qa']).toEqual({
+        category: 'qa_verification', method: 'automated', requiresHuman: false,
       });
     });
 
-    it('should have correct mapping for review', () => {
-      expect(PREFIX_MAP.review).toEqual({
-        category: 'code_review', method: 'code_review', requiresHuman: true,
+    it('should have correct mapping for human-qa', () => {
+      expect(PREFIX_MAP['human-qa']).toEqual({
+        category: 'qa_verification', method: 'automated', requiresHuman: true,
       });
     });
 
-    it('should have correct mapping for implem', () => {
-      expect(PREFIX_MAP.implem).toEqual({
-        category: 'implementation', method: 'automated', requiresHuman: false,
+    it('should have correct mapping for script', () => {
+      expect(PREFIX_MAP['script']).toEqual({
+        category: 'evaluation', method: 'automated', requiresHuman: false,
       });
     });
 
-    it('should have correct mapping for doc', () => {
-      expect(PREFIX_MAP.doc).toEqual({
-        category: 'documentation', method: 'automated', requiresHuman: false,
-      });
-    });
-
-    it('should have review and human-qa with requiresHuman=true', () => {
+    it('should have human-qa with requiresHuman=true', () => {
       const humanRequired = Object.entries(PREFIX_MAP)
         .filter(([, v]) => v.requiresHuman).map(([k]) => k);
-      expect(humanRequired).toEqual(['review', 'human-qa']);
+      expect(humanRequired).toEqual(['human-qa']);
     });
   });
 

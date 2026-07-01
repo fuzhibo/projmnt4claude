@@ -210,11 +210,10 @@ describe('§3.8 接口契约', () => {
   });
 
   describe('PREFIX_MAP 两端一致', () => {
-    it('should have consistent prefixes (System A + System B)', () => {
+    it('should have consistent prefixes (System B only)', () => {
       const prefixMapKeys = new Set(Object.keys(PREFIX_MAP));
-      // All 9 prefixes should be present
+      // System B prefixes only (System A is deprecated and in MIGRATION_MAP)
       const expectedPrefixes = new Set([
-        'verify', 'test', 'review', 'implem', 'doc',
         'ai-review', 'ai-qa', 'human-qa', 'script',
       ]);
       expect(prefixMapKeys).toEqual(expectedPrefixes);
@@ -223,11 +222,10 @@ describe('§3.8 接口契约', () => {
     it('should use PREFIX_MAP in validator', () => {
       const validReport = createTestReport({
         checkpoints: [
-          { prefix: 'verify', description: 'Verify', belongsTo: 'SOL-001' },
-          { prefix: 'test', description: 'Test', belongsTo: 'SOL-001' },
-          { prefix: 'review', description: 'Review', belongsTo: 'SOL-001' },
-          { prefix: 'implem', description: 'Implement', belongsTo: 'SOL-001' },
-          { prefix: 'doc', description: 'Document', belongsTo: 'SOL-001' },
+          { prefix: 'ai-review', description: 'AI Review', belongsTo: 'SOL-001' },
+          { prefix: 'ai-qa', description: 'AI QA', belongsTo: 'SOL-001' },
+          { prefix: 'human-qa', description: 'Human QA', belongsTo: 'SOL-001' },
+          { prefix: 'script', description: 'Script', belongsTo: 'SOL-001' },
         ],
       });
       const result = validateReport(validReport);
