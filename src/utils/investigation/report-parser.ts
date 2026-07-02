@@ -75,8 +75,10 @@ function parseMetadata(md: string): ReportMetadata {
 }
 
 function extractField(md: string, label: string): string | null {
-  const re = new RegExp(`^- \\*\\*${escapeRegex(label)}\\*\\*: (.+)$`, 'm');
-  const m = md.match(re);
+  // 同时支持加粗/非加粗、中文/英文冒号
+  const re = new RegExp(`^- \\*\\*${escapeRegex(label)}\\*\\*[:：]\\s*(.+)$`, 'm');
+  const fallback = new RegExp(`^- ${escapeRegex(label)}[:：]\\s*(.+)$`, 'm');
+  const m = md.match(re) || md.match(fallback);
   return m ? m[1].trim() : null;
 }
 

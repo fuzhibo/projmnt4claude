@@ -33,10 +33,10 @@ export const investigationTemplates: Record<string, string> = {
 # 调查报告：{title}
 
 ## 元数据
-- 需求来源: {requirement}
-- 调查时间: {date}
-- 调查目录: investigation-{slug}
-- 语言: zh
+- **需求来源**: {requirement}
+- **调查时间**: {date}
+- **调查目录**: investigation-{slug}
+- **语言**: zh
 
 ## 原因分析
 ### CA-001: {原因标题}

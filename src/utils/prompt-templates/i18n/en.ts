@@ -33,10 +33,10 @@ Output the investigation report in the following format (en):
 # Investigation Report: {title}
 
 ## Metadata
-- Requirement Source: {requirement}
-- Investigation Date: {date}
-- Investigation Directory: investigation-{slug}
-- Language: en
+- **Requirement Source**: {requirement}
+- **Investigation Date**: {date}
+- **Investigation Directory**: investigation-{slug}
+- **Language**: en
 
 ## Root Cause Analysis
 ### CA-001: {Root cause title}
