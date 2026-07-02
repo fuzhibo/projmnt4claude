@@ -36650,12 +36650,18 @@ async function loadTemplate(name, lang = "zh") {
   return template;
 }
 function renderTemplate(template, params) {
-  return template.replace(/\{(\w+)\}/g, (match, key) => {
+  const result = template.replace(/\{(\w+)\}/g, (match, key) => {
     if (key in params) {
       return params[key];
     }
     return match;
   });
+  const unmatched = result.match(/\{(\w+)\}/g);
+  if (unmatched) {
+    const keys = [...new Set(unmatched.map((m) => m.slice(1, -1)))];
+    console.warn(`[renderTemplate] 以下占位符未替换: ${keys.join(", ")}`);
+  }
+  return result;
 }
 async function loadAndRenderTemplate(name, params, lang = "zh") {
   const template = await loadTemplate(name, lang);
@@ -37713,7 +37719,7 @@ function validateComplexity(v) {
 init_ai_integration();
 async function reviewReport(requirement, report, cwd, lang = "zh", timeout, debug) {
   const reportMarkdown = generateReport(report);
-  const prompt = await loadAndRenderTemplate("review", { report: reportMarkdown }, lang);
+  const prompt = await loadAndRenderTemplate("review", { requirement, report: reportMarkdown }, lang);
   return callAIForJSON({ prompt, cwd, timeout, debug }, validateReviewResult);
 }
 async function reviewWithRetry(requirement, report, options) {
