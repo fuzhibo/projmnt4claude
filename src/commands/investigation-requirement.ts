@@ -239,21 +239,54 @@ async function runNewInvestigation(
   // Step 1: 生成调查报告
   let report = await generateInvestigationReport(requirement, cwd, lang, options.timeout, options.debug);
 
-  // Step 1.5: 格式验证
-  const formatValidation = validateReport(report);
-  if (!formatValidation.valid) {
+  // Step 1.5: 格式验证 + 循环重试（附回退机制）
+  let retryCount = 0;
+  let lastValidReport: InvestigationReport | null = null;
+
+  while (retryCount < maxRetry) {
+    const formatValidation = validateReport(report);
+
+    if (formatValidation.valid) {
+      break;
+    }
+
+    // 保存当前报告（可能包含部分有效内容）
+    lastValidReport = report;
+
     if (!options.quiet) {
-      console.log(`   ⚠️ Format validation failed: ${formatValidation.errors.map(e => e.message).join('; ')}`);
+      console.log(`   ⚠️ Format validation failed (attempt ${retryCount + 1}/${maxRetry}): ${formatValidation.errors.map(e => e.message).join('; ')}`);
       console.log('   Retrying report generation with format corrections...');
     }
-    // 重新生成，注入格式错误信息
-    report = await generateInvestigationReport(
-      `${requirement}\n\n[Format correction needed: ${formatValidation.errors.map(e => e.message).join('; ')}]`,
-      cwd,
-      lang,
-      options.timeout,
-      options.debug,
-    );
+
+    try {
+      report = await generateInvestigationReport(
+        `${requirement}\n\n[Format correction needed: ${formatValidation.errors.map(e => e.message).join('; ')}]`,
+        cwd,
+        lang,
+        options.timeout,
+        options.debug,
+      );
+    } catch (err) {
+      if (lastValidReport) {
+        if (!options.quiet) {
+          console.log('   ⚠️ Retry failed, using last valid report with partial results');
+        }
+        report = lastValidReport;
+        break;
+      }
+      throw err;
+    }
+
+    retryCount++;
+  }
+
+  // 最终验证（记录警告但不阻断）
+  const finalValidation = validateReport(report);
+  if (!finalValidation.valid) {
+    if (!options.quiet) {
+      console.log('   ⚠️ Final report has validation issues, using with warnings:');
+      finalValidation.errors.forEach(e => console.log(`     - ${e.message}`));
+    }
   }
 
   // Step 2: AI 评审闭环
