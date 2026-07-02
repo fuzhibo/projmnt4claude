@@ -37609,11 +37609,14 @@ function extractField(md, label) {
   if (!m || m[1] === undefined)
     return null;
   let value = m[1];
-  const afterMatch = md.slice((m.index ?? 0) + m[0].length);
-  const contMatch = afterMatch.match(/^\n( {2,}|\t)(.+)/);
-  if (contMatch && contMatch[2] !== undefined) {
+  let tail = md.slice((m.index ?? 0) + m[0].length);
+  while (true) {
+    const contMatch = tail.match(/^\n( {2,}|\t)(.*)/);
+    if (!contMatch || contMatch[2] === undefined)
+      break;
     value += `
 ` + contMatch[2];
+    tail = tail.slice(contMatch[0].length);
   }
   return value.trim();
 }

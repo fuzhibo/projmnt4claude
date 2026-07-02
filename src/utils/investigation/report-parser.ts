@@ -84,11 +84,13 @@ function extractField(md: string, label: string): string | null {
   if (!m || m[1] === undefined) return null;
 
   let value = m[1];
-  // 支持多行续行（以 2+ 空格缩进开头）
-  const afterMatch = md.slice((m.index ?? 0) + m[0].length);
-  const contMatch = afterMatch.match(/^\n( {2,}|\t)(.+)/);
-  if (contMatch && contMatch[2] !== undefined) {
+  // 支持多行续行（循环捕获连续缩进行）
+  let tail = md.slice((m.index ?? 0) + m[0].length);
+  while (true) {
+    const contMatch = tail.match(/^\n( {2,}|\t)(.*)/);
+    if (!contMatch || contMatch[2] === undefined) break;
     value += '\n' + contMatch[2];
+    tail = tail.slice(contMatch[0].length);
   }
 
   return value.trim();

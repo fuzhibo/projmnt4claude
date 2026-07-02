@@ -81,6 +81,43 @@ ${validReportHeader}`;
     const parsed = parseReport(md);
     expect(parsed.metadata.requirementSource).toBe('第一行\n第二行');
   });
+
+  it('三行续行全部合并', () => {
+    const md = `# 调查报告
+
+- **需求来源**: 第一行
+  第二行
+  第三行
+
+${validReportHeader}`;
+    const parsed = parseReport(md);
+    expect(parsed.metadata.requirementSource).toBe('第一行\n第二行\n第三行');
+  });
+
+  it('四行续行全部合并', () => {
+    const md = `# 调查报告
+
+- **调查目录**: path/to
+  /continued/dir
+  /more/path
+  /final
+
+${validReportHeader}`;
+    const parsed = parseReport(md);
+    expect(parsed.metadata.investigationDir).toBe('path/to\n/continued/dir\n/more/path\n/final');
+  });
+
+  it('Tab 缩进续行合并', () => {
+    const md = `# 调查报告
+
+- **需求来源**: 首行
+\t续行1
+\t续行2
+
+${validReportHeader}`;
+    const parsed = parseReport(md);
+    expect(parsed.metadata.requirementSource).toBe('首行\n续行1\n续行2');
+  });
 });
 
 describe('extractInlineField format variants', () => {
@@ -137,5 +174,71 @@ describe('extractDependenciesFromMarkdown format variants', () => {
   it('无加粗中文冒号', () => {
     const md = `- Depends On：docs/f.md`;
     expect(extractDependenciesFromMarkdown(md)).toEqual(['docs/f.md']);
+  });
+});
+
+describe('English label variants (CP-5)', () => {
+  const validReportHeaderEn = `## Checkpoint Checklist
+
+## Assessment
+
+- Complexity: medium
+- Impact Scope: moderate
+- Estimated Minutes: 60
+`;
+
+  it('Requirement Source label', () => {
+    const md = `# Investigation Report
+
+- **Requirement Source**: test-source
+
+${validReportHeaderEn}`;
+    const parsed = parseReport(md);
+    expect(parsed.metadata.requirementSource).toBe('test-source');
+  });
+
+  it('Investigation Date label', () => {
+    const md = `# Investigation Report
+
+- **Investigation Date**: 2026-01-01
+
+${validReportHeaderEn}`;
+    const parsed = parseReport(md);
+    expect(parsed.metadata.investigationDate).toBe('2026-01-01');
+  });
+
+  it('Investigation Dir label', () => {
+    const md = `# Investigation Report
+
+- **Investigation Dir**: docs/en-test
+
+${validReportHeaderEn}`;
+    const parsed = parseReport(md);
+    expect(parsed.metadata.investigationDir).toBe('docs/en-test');
+  });
+
+  it('Language label', () => {
+    const md = `# Investigation Report
+
+- **Language**: en
+
+${validReportHeaderEn}`;
+    const parsed = parseReport(md);
+    expect(parsed.metadata.language).toBe('en');
+  });
+
+  it('Parent Report label', () => {
+    const md = `# Investigation Report
+
+- **Parent Report**: docs/parent.md
+
+${validReportHeaderEn}`;
+    const parsed = parseReport(md);
+    expect(parsed.metadata.parentReport).toBe('docs/parent.md');
+  });
+
+  it('Depends On label', () => {
+    const md = `- **Depends On**: docs/dep1.md, docs/dep2.md`;
+    expect(extractDependenciesFromMarkdown(md)).toEqual(['docs/dep1.md', 'docs/dep2.md']);
   });
 });
