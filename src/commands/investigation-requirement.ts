@@ -746,10 +746,12 @@ async function generateInvestigationReport(
   const slug = slugify(requirement);
   const date = new Date().toISOString();
   const projectContext = await getProjectContext(cwd);
+  const title = requirement.slice(0, 50);
+  const N = '60';
 
   const prompt = await loadAndRenderTemplate(
     'investigate',
-    { requirement, projectContext, date, slug },
+    { requirement, projectContext, date, slug, title, N },
     lang,
   );
   const result = await callAI({ prompt, cwd, outputFormat: 'text', timeout, debug });
@@ -802,6 +804,11 @@ async function generateSubReport(
     'investigate',
     {
       requirement: `[Sub-investigation] ${splitItem.title}\n\nScope: ${splitItem.scope}\nDescription: ${splitItem.description}\n\nOriginal requirement: ${requirement}`,
+      projectContext: await getProjectContext(cwd),
+      date: new Date().toISOString(),
+      slug: slugify(splitItem.title),
+      title: splitItem.title.slice(0, 50),
+      N: '60',
     },
     lang,
   );
