@@ -85,12 +85,22 @@ export function loadInvestigationTemplateSync(name: InvestigationTemplateName, l
  * 渲染模板：替换 {placeholder} 风格的占位符
  */
 export function renderTemplate(template: string, params: Record<string, string>): string {
-  return template.replace(/\{(\w+)\}/g, (match, key: string) => {
+  const result = template.replace(/\{(\w+)\}/g, (match, key: string) => {
     if (key in params) {
       return params[key];
     }
     return match;
   });
+
+  // 检测未替换的占位符并输出警告
+  const unmatched = result.match(/\{(\w+)\}/g);
+  if (unmatched) {
+    const keys = [...new Set(unmatched.map(m => m.slice(1, -1)))];
+    // eslint-disable-next-line no-console
+    console.warn(`[renderTemplate] 以下占位符未替换: ${keys.join(', ')}`);
+  }
+
+  return result;
 }
 
 /**

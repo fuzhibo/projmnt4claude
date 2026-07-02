@@ -15,7 +15,7 @@ export async function reviewReport(
   debug?: boolean,
 ): Promise<ReviewResult> {
   const reportMarkdown = generateReport(report);
-  const prompt = await loadAndRenderTemplate('review', { report: reportMarkdown }, lang);
+  const prompt = await loadAndRenderTemplate('review', { requirement, report: reportMarkdown }, lang);
 
   return callAIForJSON<ReviewResult>(
     { prompt, cwd, timeout, debug },
