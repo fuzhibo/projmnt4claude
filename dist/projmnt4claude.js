@@ -36101,10 +36101,10 @@ var investigationTemplates = {
 # 调查报告：{title}
 
 ## 元数据
-- 需求来源: {requirement}
-- 调查时间: {date}
-- 调查目录: investigation-{slug}
-- 语言: zh
+- **需求来源**: {requirement}
+- **调查时间**: {date}
+- **调查目录**: investigation-{slug}
+- **语言**: zh
 
 ## 原因分析
 ### CA-001: {原因标题}
@@ -36370,10 +36370,10 @@ Output the investigation report in the following format (en):
 # Investigation Report: {title}
 
 ## Metadata
-- Requirement Source: {requirement}
-- Investigation Date: {date}
-- Investigation Directory: investigation-{slug}
-- Language: en
+- **Requirement Source**: {requirement}
+- **Investigation Date**: {date}
+- **Investigation Directory**: investigation-{slug}
+- **Language**: en
 
 ## Root Cause Analysis
 ### CA-001: {Root cause title}
@@ -37583,10 +37583,10 @@ function parseReport(markdown) {
   return { metadata, rootCauseAnalysis, solutions, checkpoints, assessment };
 }
 function extractDependenciesFromMarkdown(markdown) {
-  const depLine = markdown.match(/^- \*\*依赖子报告\*\*: (.+)$/m) || markdown.match(/^- \*\*Depends On\*\*: (.+)$/m);
-  if (!depLine)
+  const depRaw = extractField(markdown, "依赖子报告") || extractField(markdown, "Depends On");
+  if (!depRaw)
     return [];
-  return depLine[1].split(",").map((s) => s.trim()).filter(Boolean);
+  return depRaw.split(",").map((s) => s.trim()).filter(Boolean);
 }
 function parseMetadata(md) {
   const source = extractField(md, "需求来源") || extractField(md, "Requirement Source") || "";
@@ -37604,9 +37604,18 @@ function parseMetadata(md) {
   };
 }
 function extractField(md, label) {
-  const re = new RegExp(`^- \\*\\*${escapeRegex(label)}\\*\\*: (.+)$`, "m");
+  const re = new RegExp(`^- (?:\\*\\*)?${escapeRegex(label)}(?:\\*\\*)?(?::|：)\\s*(.+)$`, "m");
   const m = md.match(re);
-  return m ? m[1].trim() : null;
+  if (!m || m[1] === undefined)
+    return null;
+  let value = m[1];
+  const afterMatch = md.slice((m.index ?? 0) + m[0].length);
+  const contMatch = afterMatch.match(/^\n( {2,}|\t)(.+)/);
+  if (contMatch && contMatch[2] !== undefined) {
+    value += `
+` + contMatch[2];
+  }
+  return value.trim();
 }
 function parseRootCauseAnalysis(md) {
   const items = [];
@@ -37696,9 +37705,9 @@ function extractSection(md, zhTitle, enTitle) {
   return m ? m[1] : null;
 }
 function extractInlineField(text, zhLabel, enLabel) {
-  const re = new RegExp(`\\*\\*(?:${escapeRegex(zhLabel)}|${escapeRegex(enLabel)})\\*\\*: (.+)$`, "m");
+  const re = new RegExp(`(?:\\*\\*)?(?:${escapeRegex(zhLabel)}|${escapeRegex(enLabel)})(?:\\*\\*)?(?::|：)\\s*(.+)$`, "m");
   const m = text.match(re);
-  return m ? m[1].trim() : null;
+  return m?.[1]?.trim() ?? null;
 }
 function escapeRegex(s) {
   return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
@@ -38005,15 +38014,40 @@ async function runNewInvestigation(requirement, cwd, options) {
     console.log("");
   }
   let report = await generateInvestigationReport(requirement, cwd, lang, options.timeout, options.debug);
-  const formatValidation = validateReport(report);
-  if (!formatValidation.valid) {
+  let retryCount = 0;
+  let lastValidReport = null;
+  while (retryCount < maxRetry) {
+    const formatValidation = validateReport(report);
+    if (formatValidation.valid) {
+      break;
+    }
+    lastValidReport = report;
     if (!options.quiet) {
-      console.log(`   ⚠️ Format validation failed: ${formatValidation.errors.map((e) => e.message).join("; ")}`);
+      console.log(`   ⚠️ Format validation failed (attempt ${retryCount + 1}/${maxRetry}): ${formatValidation.errors.map((e) => e.message).join("; ")}`);
       console.log("   Retrying report generation with format corrections...");
     }
-    report = await generateInvestigationReport(`${requirement}
+    try {
+      report = await generateInvestigationReport(`${requirement}
 
 [Format correction needed: ${formatValidation.errors.map((e) => e.message).join("; ")}]`, cwd, lang, options.timeout, options.debug);
+    } catch (err) {
+      if (lastValidReport) {
+        if (!options.quiet) {
+          console.log("   ⚠️ Retry failed, using last valid report with partial results");
+        }
+        report = lastValidReport;
+        break;
+      }
+      throw err;
+    }
+    retryCount++;
+  }
+  const finalValidation = validateReport(report);
+  if (!finalValidation.valid) {
+    if (!options.quiet) {
+      console.log("   ⚠️ Final report has validation issues, using with warnings:");
+      finalValidation.errors.forEach((e) => console.log(`     - ${e.message}`));
+    }
   }
   let reviewResult;
   if (!options.skipReview) {
@@ -38340,7 +38374,9 @@ async function generateInvestigationReport(requirement, cwd, lang, timeout, debu
   const slug = slugify(requirement);
   const date = new Date().toISOString();
   const projectContext = await getProjectContext(cwd);
-  const prompt = await loadAndRenderTemplate("investigate", { requirement, projectContext, date, slug }, lang);
+  const title = requirement.slice(0, 50);
+  const N = "60";
+  const prompt = await loadAndRenderTemplate("investigate", { requirement, projectContext, date, slug, title, N }, lang);
   const result = await callAI({ prompt, cwd, outputFormat: "text", timeout, debug });
   if (!result.success) {
     throw new Error(`Failed to generate investigation report: ${result.error}`);
@@ -38371,7 +38407,12 @@ async function generateSubReport(parentReport, splitItem, requirement, cwd, lang
 Scope: ${splitItem.scope}
 Description: ${splitItem.description}
 
-Original requirement: ${requirement}`
+Original requirement: ${requirement}`,
+    projectContext: await getProjectContext(cwd),
+    date: new Date().toISOString(),
+    slug: slugify(splitItem.title),
+    title: splitItem.title.slice(0, 50),
+    N: "60"
   }, lang);
   const result = await callAI({ prompt: subPrompt, cwd, outputFormat: "text", timeout, debug });
   if (!result.success) {

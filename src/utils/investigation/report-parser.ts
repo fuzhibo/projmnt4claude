@@ -36,10 +36,10 @@ export function readReport(reportPath: string, cwd: string): InvestigationReport
  * 从报告 markdown 中提取子报告依赖路径
  */
 export function extractDependenciesFromMarkdown(markdown: string): string[] {
-  const depLine = markdown.match(/^- \*\*依赖子报告\*\*: (.+)$/m)
-    || markdown.match(/^- \*\*Depends On\*\*: (.+)$/m);
-  if (!depLine) return [];
-  return depLine[1].split(',').map(s => s.trim()).filter(Boolean);
+  const depRaw = extractField(markdown, '依赖子报告')
+    || extractField(markdown, 'Depends On');
+  if (!depRaw) return [];
+  return depRaw.split(',').map(s => s.trim()).filter(Boolean);
 }
 
 /**
@@ -75,11 +75,23 @@ function parseMetadata(md: string): ReportMetadata {
 }
 
 function extractField(md: string, label: string): string | null {
-  // 同时支持加粗/非加粗、中文/英文冒号
-  const re = new RegExp(`^- \\*\\*${escapeRegex(label)}\\*\\*[:：]\\s*(.+)$`, 'm');
-  const fallback = new RegExp(`^- ${escapeRegex(label)}[:：]\\s*(.+)$`, 'm');
-  const m = md.match(re) || md.match(fallback);
-  return m ? m[1].trim() : null;
+  // 支持格式变体：可选加粗、中英文冒号、冒号后可选空格、多行续行
+  const re = new RegExp(
+    `^- (?:\\*\\*)?${escapeRegex(label)}(?:\\*\\*)?(?::|：)\\s*(.+)$`,
+    'm'
+  );
+  const m = md.match(re);
+  if (!m || m[1] === undefined) return null;
+
+  let value = m[1];
+  // 支持多行续行（以 2+ 空格缩进开头）
+  const afterMatch = md.slice((m.index ?? 0) + m[0].length);
+  const contMatch = afterMatch.match(/^\n( {2,}|\t)(.+)/);
+  if (contMatch && contMatch[2] !== undefined) {
+    value += '\n' + contMatch[2];
+  }
+
+  return value.trim();
 }
 
 function parseRootCauseAnalysis(md: string): RootCauseItem[] {
@@ -181,9 +193,9 @@ function extractSection(md: string, zhTitle: string, enTitle: string): string | 
 }
 
 function extractInlineField(text: string, zhLabel: string, enLabel: string): string | null {
-  const re = new RegExp(`\\*\\*(?:${escapeRegex(zhLabel)}|${escapeRegex(enLabel)})\\*\\*: (.+)$`, 'm');
+  const re = new RegExp(`(?:\\*\\*)?(?:${escapeRegex(zhLabel)}|${escapeRegex(enLabel)})(?:\\*\\*)?(?::|：)\\s*(.+)$`, 'm');
   const m = text.match(re);
-  return m ? m[1].trim() : null;
+  return m?.[1]?.trim() ?? null;
 }
 
 function escapeRegex(s: string): string {
