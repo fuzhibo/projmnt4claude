@@ -37633,10 +37633,10 @@ function parseRootCauseAnalysis(md) {
   }
   for (let i = 0;i < matches.length; i++) {
     const m = matches[i];
-    const id = m[1];
-    const title = m[2].trim();
-    const descStart = m.index + m[0].length;
-    const descEnd = i < matches.length - 1 ? matches[i + 1].index : sectionMd.length;
+    const id = m[1] ?? "";
+    const title = (m[2] ?? "").trim();
+    const descStart = (m.index ?? 0) + (m[0]?.length ?? 0);
+    const descEnd = i < matches.length - 1 ? matches[i + 1]?.index ?? sectionMd.length : sectionMd.length;
     const description = sectionMd.slice(descStart, descEnd).trim();
     items.push({ id, title, description });
   }
@@ -37655,10 +37655,10 @@ function parseSolutions(md) {
   }
   for (let i = 0;i < matches.length; i++) {
     const m = matches[i];
-    const id = m[1];
-    const title = m[2].trim();
-    const descStart = m.index + m[0].length;
-    const descEnd = i < matches.length - 1 ? matches[i + 1].index : sectionMd.length;
+    const id = m[1] ?? "";
+    const title = (m[2] ?? "").trim();
+    const descStart = (m.index ?? 0) + (m[0]?.length ?? 0);
+    const descEnd = i < matches.length - 1 ? matches[i + 1]?.index ?? sectionMd.length : sectionMd.length;
     const body = sectionMd.slice(descStart, descEnd).trim();
     const correspondsTo = extractInlineField(body, "对应原因", "Corresponds To") || "";
     const filesRaw = extractInlineField(body, "涉及文件", "Files") || "";
@@ -37681,12 +37681,16 @@ function parseCheckpoints2(md) {
   let match;
   while ((match = re.exec(sectionMd)) !== null) {
     const prefix = match[1];
+    const description = match[2];
+    const belongsTo = match[3];
+    if (!prefix || !description || !belongsTo)
+      continue;
     if (!validPrefixes.has(prefix))
       continue;
     items.push({
       prefix,
-      description: match[2].trim(),
-      belongsTo: match[3]
+      description: description.trim(),
+      belongsTo
     });
   }
   return items;
@@ -37698,14 +37702,16 @@ function parseAssessment(md) {
   const minutesRaw = extractInlineField(sectionMd, "预估工时", "Estimated Minutes") || "60";
   return {
     complexity: validateComplexity(complexity),
-    impactScope: impactRaw,
+    impactScope: validateImpactScope(impactRaw),
     estimatedMinutes: parseInt(minutesRaw.replace(/[^\d]/g, ""), 10) || 60
   };
 }
 function extractSection(md, zhTitle, enTitle) {
   const re = new RegExp(`^## (?:${escapeRegex(zhTitle)}|${escapeRegex(enTitle)})\\s*\\n([\\s\\S]*?)(?=^## |\\n## |\\n# |(?![\\s\\S]))`, "m");
   const m = md.match(re);
-  return m ? m[1] : null;
+  if (!m)
+    return null;
+  return m[1] ?? null;
 }
 function extractInlineField(text, zhLabel, enLabel) {
   const re = new RegExp(`(?:\\*\\*)?(?:${escapeRegex(zhLabel)}|${escapeRegex(enLabel)})(?:\\*\\*)?(?::|：)\\s*(.+)$`, "m");
@@ -37725,6 +37731,21 @@ function validateComplexity(v) {
   if (v === "高")
     return "high";
   return "medium";
+}
+function validateImpactScope(v) {
+  if (v === "有限")
+    return "有限";
+  if (v === "中等")
+    return "中等";
+  if (v === "广泛")
+    return "广泛";
+  if (v === "limited")
+    return "有限";
+  if (v === "medium" || v === "moderate")
+    return "中等";
+  if (v === "wide" || v === "broad" || v === "extensive")
+    return "广泛";
+  return "中等";
 }
 
 // src/utils/investigation/report-reviewer.ts

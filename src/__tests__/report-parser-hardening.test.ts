@@ -177,6 +177,83 @@ describe('extractDependenciesFromMarkdown format variants', () => {
   });
 });
 
+describe('validateImpactScope value-domain narrowing (CP-8)', () => {
+  function buildReport(impactRaw: string): string {
+    return `# 调查报告
+
+- **需求来源**: test
+
+## 评估
+
+- **复杂度**: medium
+- **影响范围**: ${impactRaw}
+- **预估工时**: 60
+`;
+  }
+
+  it('中文 "有限" → 有限', () => {
+    const parsed = parseReport(buildReport('有限'));
+    expect(parsed.assessment.impactScope).toBe('有限');
+  });
+
+  it('中文 "中等" → 中等', () => {
+    const parsed = parseReport(buildReport('中等'));
+    expect(parsed.assessment.impactScope).toBe('中等');
+  });
+
+  it('中文 "广泛" → 广泛', () => {
+    const parsed = parseReport(buildReport('广泛'));
+    expect(parsed.assessment.impactScope).toBe('广泛');
+  });
+
+  it('英文 "limited" → 有限', () => {
+    const parsed = parseReport(buildReport('limited'));
+    expect(parsed.assessment.impactScope).toBe('有限');
+  });
+
+  it('英文 "medium" → 中等', () => {
+    const parsed = parseReport(buildReport('medium'));
+    expect(parsed.assessment.impactScope).toBe('中等');
+  });
+
+  it('英文 "moderate" → 中等', () => {
+    const parsed = parseReport(buildReport('moderate'));
+    expect(parsed.assessment.impactScope).toBe('中等');
+  });
+
+  it('英文 "wide" → 广泛', () => {
+    const parsed = parseReport(buildReport('wide'));
+    expect(parsed.assessment.impactScope).toBe('广泛');
+  });
+
+  it('英文 "broad" → 广泛', () => {
+    const parsed = parseReport(buildReport('broad'));
+    expect(parsed.assessment.impactScope).toBe('广泛');
+  });
+
+  it('英文 "extensive" → 广泛', () => {
+    const parsed = parseReport(buildReport('extensive'));
+    expect(parsed.assessment.impactScope).toBe('广泛');
+  });
+
+  it('非标准值回退到 "中等"', () => {
+    const parsed = parseReport(buildReport('unknown-value'));
+    expect(parsed.assessment.impactScope).toBe('中等');
+  });
+
+  it('空评估段默认值 "中等"', () => {
+    const parsed = parseReport(`# 调查报告
+
+- **需求来源**: test
+
+## 评估
+
+- **复杂度**: medium
+`);
+    expect(parsed.assessment.impactScope).toBe('中等');
+  });
+});
+
 describe('English label variants (CP-5)', () => {
   const validReportHeaderEn = `## Checkpoint Checklist
 
