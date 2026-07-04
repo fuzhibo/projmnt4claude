@@ -16506,6 +16506,19 @@ var init_session_id_mapper = __esm(() => {
 // src/utils/harness-helpers.ts
 import * as fs13 from "fs";
 import * as path10 from "path";
+function createDiagnosticsLogger() {
+  return {
+    warn: (message, meta) => {
+      console.warn(`[WARN] ${message}: ${JSON.stringify(meta)}`);
+    },
+    error: (message, meta) => {
+      console.error(`[ERROR] ${message}: ${JSON.stringify(meta)}`);
+    },
+    info: (message, meta) => {
+      console.info(`[INFO] ${message}: ${JSON.stringify(meta)}`);
+    }
+  };
+}
 function installExitHooks(knownCliUuids = new Set, sessionEnvRoot) {
   if (installedHooks) {
     return;
@@ -16579,6 +16592,30 @@ function classifyExitResult(code, stderr, stdout, cwd) {
 }
 async function runHeadlessClaude(options) {
   return new Promise((resolve3) => {
+    const logger = createDiagnosticsLogger();
+    globalSpawnCount++;
+    const currentSpawnId = globalSpawnCount;
+    const startTimeMs = Date.now();
+    const contextInfo = {
+      spawnId: currentSpawnId,
+      isInHeadlessMode: !!process.env.CLAUDE_CLI_MODE,
+      spawnDepth: parseInt(process.env.CLAUDE_SPAWN_DEPTH || "0") + 1,
+      parentPid: process.pid,
+      cwd: options.cwd,
+      timeout: options.timeout,
+      timestamp: new Date().toISOString()
+    };
+    logger.info("spawn_start", contextInfo);
+    if (process.env.CLAUDE_CLI_MODE === "headless") {
+      logger.error("POTENTIAL_NESTED_EXECUTION", {
+        message: "Detected spawn from within headless context",
+        spawnId: currentSpawnId,
+        spawnDepth: contextInfo.spawnDepth,
+        recommendation: "Check docs/investigation-init-requirement/CA-006-nested-headless-execution-risk.md for root cause analysis"
+      });
+    }
+    process.env.CLAUDE_CLI_MODE = "headless";
+    process.env.CLAUDE_SPAWN_DEPTH = String(contextInfo.spawnDepth);
     const args = [
       "--allowedTools",
       options.allowedTools.join(","),
@@ -16669,6 +16706,14 @@ async function runHeadlessClaude(options) {
       });
       child.on("close", (code) => {
         const classified = classifyExitResult(code, stderr, stdout);
+        const durationMs = Date.now() - startTimeMs;
+        logger.info("spawn_end", {
+          spawnId: currentSpawnId,
+          success: classified.success,
+          code,
+          durationMs,
+          totalSpawnCount: globalSpawnCount
+        });
         resolve3({
           success: classified.success,
           output: stdout,
@@ -16679,6 +16724,11 @@ async function runHeadlessClaude(options) {
         });
       });
       child.on("error", (error) => {
+        logger.error("spawn_error", {
+          spawnId: currentSpawnId,
+          error: error.message,
+          totalSpawnCount: globalSpawnCount
+        });
         resolve3({
           success: false,
           output: "",
@@ -16854,7 +16904,7 @@ function getReportDir(taskId, cwd) {
 function getReportPath(taskId, reportType, cwd) {
   return path10.join(getReportDir(taskId, cwd), `${reportType}-report.md`);
 }
-var REVIEW_TIMEOUT_RATIO = 3, installedHooks = null;
+var globalSpawnCount = 0, REVIEW_TIMEOUT_RATIO = 3, installedHooks = null;
 var init_harness_helpers = __esm(() => {
   init_path();
   init_i18n();
@@ -22663,6 +22713,9 @@ function getTestMock11(name) {
 }
 async function callAI(options) {
   const startTime = Date.now();
+  if (options.timeout !== undefined && (!Number.isFinite(options.timeout) || options.timeout <= 0)) {
+    throw new Error(`callAI: invalid timeout ${options.timeout} (must be positive finite number)`);
+  }
   const logger = createLogger("investigation-requirement", options.cwd);
   const aiLogger = logger.child("ai-integration");
   aiLogger.debug("callAI invoked", {
@@ -22787,7 +22840,7 @@ var init_init_requirement_zh = __esm(() => {
   "description": "完整的任务描述，必须包含: ## 原因分析\\n{对应报告CA章节}\\n\\n## 解决方案\\n{对应报告SOL章节}",
   "checkpoints": [
     {
-      "prefix": "verify|test|review|implem|doc",
+      "prefix": "ai-review|ai-qa|human-qa|script",
       "description": "检查点描述（去除前缀后的纯文本）",
       "category": "按 PREFIX_MAP 推断",
       "verificationMethod": "按 PREFIX_MAP 推断"
@@ -22801,7 +22854,7 @@ var init_init_requirement_zh = __esm(() => {
 
 ## 约束
 - 检查点必须从报告的「检查点覆盖清单」章节提取
-- 每个检查点必须包含标准前缀 [verify]/[test]/[review]/[implem]/[doc]
+- 每个检查点必须包含标准前缀 [ai review]/[ai qa]/[human qa]/[script]
 - 按照 PREFIX_MAP 正确设置 category 和 verificationMethod
 - description 必须包含「原因分析」和「解决方案」两个章节
 - 输出纯 JSON，不要包含 markdown 代码块标记`,
@@ -22895,7 +22948,7 @@ Output a complete JSON object with the following fields:
   "description": "Full task description, must include: ## Root Cause Analysis\\n{map report CA sections}\\n\\n## Solution\\n{map report SOL sections}",
   "checkpoints": [
     {
-      "prefix": "verify|test|review|implem|doc",
+      "prefix": "ai-review|ai-qa|human-qa|script",
       "description": "Checkpoint description (plain text without prefix)",
       "category": "Inferred from PREFIX_MAP",
       "verificationMethod": "Inferred from PREFIX_MAP"
@@ -22909,7 +22962,7 @@ Output a complete JSON object with the following fields:
 
 ## Constraints
 - Checkpoints MUST be extracted from the report's "Checkpoint Checklist" section
-- Each checkpoint MUST include a standard prefix: [verify]/[test]/[review]/[implem]/[doc]
+- Each checkpoint MUST include a standard prefix: [ai review]/[ai qa]/[human qa]/[script]
 - Correctly set category and verificationMethod according to PREFIX_MAP
 - description MUST include both "Root Cause Analysis" and "Solution" sections
 - Output pure JSON only, do NOT include markdown code block markers`,
@@ -36118,8 +36171,9 @@ var investigationTemplates = {
 
 ## 检查点覆盖清单
 ### SOL-001 相关检查点
-- [ai qa] 验证 {具体验证内容}
-- [script] 测试 {具体测试内容}
+- [ai review] 验证解决方案设计是否符合需求 → SOL-001
+- [ai qa] 测试核心功能是否正常工作 → SOL-001
+- [script] 运行单元测试确保无回归 → SOL-001
 
 ## 评估
 - 复杂度: {low|medium|high}
@@ -36130,6 +36184,8 @@ var investigationTemplates = {
 - 原因分析必须追溯到需求本身，确保"需求→原因"链路完整
 - 解决方案必须逐一对应原因分析中的每个结论
 - 检查点必须覆盖解决方案中的每个要点
+- 检查点必须标注归属的解决方案编号（格式：→ SOL-NNN）
+- 检查点格式：'- [prefix] 描述 → SOL-NNN'
 - 检查点使用门禁标准前缀: [ai review], [ai qa], [human qa], [script]
 `,
   review: `你是 projmnt4claude 项目的调查报告质量评审员。
@@ -36387,8 +36443,9 @@ Output the investigation report in the following format (en):
 
 ## Checkpoint Checklist
 ### SOL-001 Related Checkpoints
-- [verify] Verify {specific verification content}
-- [test] Test {specific test content}
+- [ai review] Verify solution design meets requirements → SOL-001
+- [ai qa] Test core functionality works correctly → SOL-001
+- [script] Run unit tests to ensure no regression → SOL-001
 
 ## Assessment
 - Complexity: {low|medium|high}
@@ -36399,7 +36456,9 @@ Output the investigation report in the following format (en):
 - Root cause analysis must trace back to the requirement, ensuring a complete "requirement→cause" chain
 - Solutions must correspond one-to-one with each conclusion in the root cause analysis
 - Checkpoints must cover every key point in the solution
-- Use standard gate prefixes for checkpoints: [verify], [test], [review], [implem], [doc]
+- Checkpoints must annotate the solution number they belong to (format: → SOL-NNN)
+- Checkpoint format: '- [prefix] description → SOL-NNN'
+- Use standard gate prefixes for checkpoints: [ai review], [ai qa], [human qa], [script]
 `,
   review: `You are an investigation report quality reviewer for the projmnt4claude project.
 
@@ -37547,7 +37606,8 @@ function renderCheckpoints(items, lang) {
   const title = lang === "en" ? "Checkpoints" : "检查点覆盖清单";
   const lines = [`## ${title}`, ""];
   for (const cp of items) {
-    lines.push(`- [${cp.prefix}] ${cp.description} (→ ${cp.belongsTo})`);
+    const prefixDisplay = cp.prefix.replace(/-/g, " ");
+    lines.push(`- [${prefixDisplay}] ${cp.description} → ${cp.belongsTo}`);
   }
   return lines.join(`
 `);
@@ -37573,7 +37633,121 @@ function renderAssessment(a, lang) {
 `);
 }
 
+// src/utils/investigation/checkpoint-format.ts
+var PREFIX_NORMALIZE_MAP = {
+  "ai review": "ai-review",
+  "ai qa": "ai-qa",
+  "human qa": "human-qa",
+  script: "script",
+  ai: "ai-qa",
+  review: "ai-review",
+  qa: "ai-qa",
+  human: "human-qa",
+  verify: "ai-qa",
+  test: "ai-qa",
+  implem: "ai-qa",
+  doc: "script",
+  "ai-review": "ai-review",
+  "ai-qa": "ai-qa",
+  "human-qa": "human-qa"
+};
+var CHECKPOINT_REGEX = {
+  full: /^- \[([a-z][a-z\s-]*?)\] (.+?)(?:\s*\(?\s*(?:→|->)\s*(SOL-\d+)\s*\)?)?\s*$/gm,
+  simple: /^- \[([a-z][a-z\s-]*?)\] (.+)$/gm,
+  sectionTitle: /^### (SOL-\d+)(?:\s+(?:相关检查点|Related Checkpoints))?$/m
+};
+var CheckpointFormat = {
+  generate(prefix, description, belongsTo) {
+    return `- [${prefix}] ${description} → ${belongsTo}`;
+  },
+  generateSectionTitle(solId, language = "zh") {
+    return language === "zh" ? `### ${solId} 相关检查点` : `### ${solId} Related Checkpoints`;
+  },
+  validateFull(checkpoint) {
+    const re = new RegExp(CHECKPOINT_REGEX.full.source, "m");
+    const match = re.exec(checkpoint);
+    if (!match || !match[1] || !match[2] || !match[3]) {
+      return { valid: false };
+    }
+    const normalizedPrefix = this.normalizePrefix(match[1]);
+    if (!normalizedPrefix) {
+      return { valid: false };
+    }
+    return {
+      valid: true,
+      prefix: normalizedPrefix,
+      description: match[2].trim(),
+      belongsTo: match[3]
+    };
+  },
+  validateSimple(checkpoint) {
+    const re = new RegExp(CHECKPOINT_REGEX.simple.source, "m");
+    const match = re.exec(checkpoint);
+    if (!match || !match[1] || !match[2]) {
+      return { valid: false };
+    }
+    const normalizedPrefix = this.normalizePrefix(match[1]);
+    if (!normalizedPrefix) {
+      return { valid: false };
+    }
+    return {
+      valid: true,
+      prefix: normalizedPrefix,
+      description: match[2].trim()
+    };
+  },
+  normalizePrefix(rawPrefix) {
+    const key = rawPrefix.trim().toLowerCase();
+    return PREFIX_NORMALIZE_MAP[key] ?? null;
+  },
+  extractSolFromTitle(title) {
+    const match = CHECKPOINT_REGEX.sectionTitle.exec(title);
+    return match?.[1] ?? null;
+  },
+  inferBelongsToFromContext(sectionMd, checkpointIndex) {
+    const beforeMatch = sectionMd.substring(0, checkpointIndex);
+    const titleMatches = [...beforeMatch.matchAll(new RegExp(CHECKPOINT_REGEX.sectionTitle.source, "gm"))];
+    if (titleMatches.length === 0)
+      return "";
+    return titleMatches[titleMatches.length - 1]?.[1] ?? "";
+  },
+  validateContract(checkpointsMd) {
+    const errors = [];
+    const warnings = [];
+    const lines = checkpointsMd.split(`
+`).filter((l) => l.trim());
+    let currentSection = null;
+    for (const line of lines) {
+      const sectionSol = this.extractSolFromTitle(line);
+      if (sectionSol) {
+        currentSection = sectionSol;
+        continue;
+      }
+      const fullResult = this.validateFull(line);
+      if (fullResult.valid) {
+        if (currentSection && fullResult.belongsTo !== currentSection) {
+          warnings.push(`检查点 "${line}" 的 belongsTo (${fullResult.belongsTo}) 与分组标题 (${currentSection}) 不一致`);
+        }
+        continue;
+      }
+      const simpleResult = this.validateSimple(line);
+      if (simpleResult.valid) {
+        if (!currentSection) {
+          errors.push(`简化格式检查点 "${line}" 缺少分组标题无法推断 belongsTo`);
+        }
+        continue;
+      }
+    }
+    return {
+      valid: errors.length === 0,
+      errors,
+      warnings
+    };
+  }
+};
+
 // src/utils/investigation/report-parser.ts
+init_logger();
 function parseReport(markdown) {
   const metadata = parseMetadata(markdown);
   const rootCauseAnalysis = parseRootCauseAnalysis(markdown);
@@ -37671,29 +37845,60 @@ function parseSolutions(md) {
   }
   return items;
 }
-function parseCheckpoints2(md) {
+function parseCheckpoints2(md, options = {}) {
   const items = [];
   const sectionMd = extractSection(md, "检查点覆盖清单", "Checkpoint Checklist");
   if (!sectionMd)
     return items;
-  const validPrefixes = new Set(["verify", "test", "review", "implem", "doc"]);
-  const re = /^- \[([a-z]+)\] (.+) \(→ (SOL-\d+)\)$/gm;
-  let match;
-  while ((match = re.exec(sectionMd)) !== null) {
-    const prefix = match[1];
-    const description = match[2];
-    const belongsTo = match[3];
-    if (!prefix || !description || !belongsTo)
-      continue;
-    if (!validPrefixes.has(prefix))
-      continue;
-    items.push({
-      prefix,
-      description: description.trim(),
-      belongsTo
-    });
+  const tolerance = options.tolerance ?? "normal";
+  const warnOnInvalid = options.warnOnInvalidFormat ?? false;
+  const inferBelongsTo = options.inferBelongsTo ?? true;
+  const unparsedLines = [];
+  if (tolerance === "strict") {
+    parseWithRegex(CHECKPOINT_REGEX.full, true);
+  } else if (tolerance === "loose") {
+    parseWithRegex(CHECKPOINT_REGEX.simple, false);
+  } else {
+    parseWithRegex(CHECKPOINT_REGEX.full, false);
+    if (items.length === 0) {
+      parseWithRegex(CHECKPOINT_REGEX.simple, false);
+    }
+    if (items.length === 0) {
+      const minimalRe = /^-\s*\[([a-z][a-z\s-]*?)\]\s*(.+)$/gm;
+      parseWithRegex(minimalRe, false);
+    }
+  }
+  if (warnOnInvalid && unparsedLines.length > 0) {
+    const logger = createLogger("report-parser");
+    for (const line of unparsedLines) {
+      logger.warn("checkpoint line not parsed", {
+        line: line.trim(),
+        section: "Checkpoint Checklist",
+        tolerance
+      });
+    }
   }
   return items;
+  function parseWithRegex(re, requireBelongsTo) {
+    const localRe = new RegExp(re.source, "gm");
+    let match;
+    while ((match = localRe.exec(sectionMd)) !== null) {
+      const prefixRaw = (match[1] ?? "").trim();
+      const description = (match[2] ?? "").trim();
+      const belongsToRaw = match[3] ?? "";
+      const belongsTo = requireBelongsTo ? belongsToRaw : belongsToRaw || (inferBelongsTo ? CheckpointFormat.inferBelongsToFromContext(sectionMd, match.index ?? 0) : "");
+      const normalizedPrefix = CheckpointFormat.normalizePrefix(prefixRaw);
+      if (!normalizedPrefix) {
+        unparsedLines.push(match[0]);
+        continue;
+      }
+      items.push({
+        prefix: normalizedPrefix,
+        description,
+        belongsTo
+      });
+    }
+  }
 }
 function parseAssessment(md) {
   const sectionMd = extractSection(md, "评估", "Assessment") || "";
@@ -37930,6 +38135,7 @@ function loadLanguageConfig(cwd) {
 // src/commands/investigation-requirement.ts
 init_path();
 init_logger();
+init_child_process_registry();
 var DEFAULT_MAX_RETRY2 = 3;
 var DEFAULT_SPLIT_THRESHOLD = 30;
 var DEFAULT_LANGUAGE = "zh";
@@ -38029,6 +38235,7 @@ async function investigationRequirement(description, cwd, options) {
 }
 async function runNewInvestigation(requirement, cwd, options) {
   const { lang, maxRetry, splitThreshold } = options;
+  const logger = createLogger("investigation-requirement", cwd);
   if (!options.quiet) {
     console.log("");
     console.log("\uD83D\uDD0D Starting investigation...");
@@ -38037,7 +38244,7 @@ async function runNewInvestigation(requirement, cwd, options) {
     console.log(`   Split threshold: ${splitThreshold} KB`);
     console.log("");
   }
-  let report = await generateInvestigationReport(requirement, cwd, lang, options.timeout, options.debug);
+  let report = await withTimeoutRace(generateInvestigationReport(requirement, cwd, lang, options.timeout, options.debug), (options.timeout ?? DEFAULT_RETRY_TIMEOUT_S) * 1000, "generateInvestigationReport(initial)");
   let retryCount = 0;
   let lastValidReport = null;
   while (retryCount < maxRetry) {
@@ -38051,10 +38258,31 @@ async function runNewInvestigation(requirement, cwd, options) {
       console.log("   Retrying report generation with format corrections...");
     }
     try {
-      report = await generateInvestigationReport(`${requirement}
-
-[Format correction needed: ${formatValidation.errors.map((e) => e.message).join("; ")}]`, cwd, lang, options.timeout, options.debug);
+      killAllActiveChildren("SIGTERM");
+    } catch (cleanupErr) {
+      logger.warn("cleanup before retry failed", {
+        error: cleanupErr instanceof Error ? cleanupErr.message : String(cleanupErr)
+      });
+    }
+    await new Promise((resolve10) => setTimeout(resolve10, RETRY_CLEANUP_DELAY_MS));
+    try {
+      const retryPrompt = buildRetryPrompt(requirement, formatValidation.errors);
+      const timeoutS = options.timeout ?? DEFAULT_RETRY_TIMEOUT_S;
+      report = await withTimeoutRace(generateInvestigationReport(retryPrompt, cwd, lang, options.timeout, options.debug), timeoutS * 1000, "generateInvestigationReport(retry)");
     } catch (err) {
+      const isTimeout = err instanceof Error && err.message.includes("timeout after");
+      if (isTimeout) {
+        logger.error("retry timeout", {
+          error: err.message,
+          retryCount,
+          timeout: options.timeout ?? DEFAULT_RETRY_TIMEOUT_S
+        });
+      } else {
+        logger.warn("retry attempt failed", {
+          error: err instanceof Error ? err.message : String(err),
+          retryCount
+        });
+      }
       if (lastValidReport) {
         if (!options.quiet) {
           console.log("   ⚠️ Retry failed, using last valid report with partial results");
@@ -38393,6 +38621,33 @@ async function runSplitFlow(report, requirement, cwd, options) {
     splitPlan,
     splitReviewResult
   };
+}
+var DEFAULT_RETRY_TIMEOUT_S = 300;
+var RETRY_CLEANUP_DELAY_MS = 1000;
+var MAX_RETRY_FEEDBACK_LEN = 500;
+function buildRetryPrompt(requirement, errors) {
+  const feedback = errors.map((e) => `- ${e.message}`).join(`
+`).substring(0, MAX_RETRY_FEEDBACK_LEN);
+  return `${requirement}
+
+---
+**格式纠正要求**:
+上一次输出存在以下格式问题，请重新生成：
+
+${feedback}
+
+请确保输出格式符合要求。
+`;
+}
+function withTimeoutRace(promise, timeoutMs, label) {
+  let timer;
+  const timeoutPromise = new Promise((_, reject) => {
+    timer = setTimeout(() => reject(new Error(`${label} timeout after ${timeoutMs}ms`)), timeoutMs);
+  });
+  return Promise.race([promise, timeoutPromise]).finally(() => {
+    if (timer)
+      clearTimeout(timer);
+  });
 }
 async function generateInvestigationReport(requirement, cwd, lang, timeout, debug) {
   const slug = slugify(requirement);

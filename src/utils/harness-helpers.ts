@@ -27,6 +27,39 @@ import {
 } from './session-id-mapper.js';
 
 // ============================================================
+// CA-006: 嵌套执行检测诊断日志
+// ============================================================
+
+/** 全局 spawn 计数器（SOL-006-2） */
+let globalSpawnCount = 0;
+
+/** 获取当前 spawn 统计信息（SOL-006-2） */
+export function getSpawnStatistics(): { totalSpawnCount: number; timestamp: string } {
+  return {
+    totalSpawnCount: globalSpawnCount,
+    timestamp: new Date().toISOString(),
+  };
+}
+
+/** 创建诊断日志记录器 */
+function createDiagnosticsLogger() {
+  return {
+    warn: (message: string, meta: Record<string, unknown>): void => {
+      // eslint-disable-next-line no-console
+      console.warn(`[WARN] ${message}: ${JSON.stringify(meta)}`);
+    },
+    error: (message: string, meta: Record<string, unknown>): void => {
+      // eslint-disable-next-line no-console
+      console.error(`[ERROR] ${message}: ${JSON.stringify(meta)}`);
+    },
+    info: (message: string, meta: Record<string, unknown>): void => {
+      // eslint-disable-next-line no-console
+      console.info(`[INFO] ${message}: ${JSON.stringify(meta)}`);
+    },
+  };
+}
+
+// ============================================================
 // 常量定义
 // ============================================================
 
@@ -259,6 +292,41 @@ export interface ParsedVerdict {
 
 export async function runHeadlessClaude(options: HeadlessClaudeOptions): Promise<HeadlessClaudeResult> {
   return new Promise((resolve) => {
+    // CA-006 SOL-006-1 + SOL-006-2: 嵌套执行诊断日志
+    const logger = createDiagnosticsLogger();
+    globalSpawnCount++;
+    const currentSpawnId = globalSpawnCount;
+    const startTimeMs = Date.now();
+
+    // 记录执行上下文（诊断，不中断）
+    const contextInfo = {
+      spawnId: currentSpawnId,
+      isInHeadlessMode: !!process.env.CLAUDE_CLI_MODE,
+      spawnDepth: (parseInt(process.env.CLAUDE_SPAWN_DEPTH || '0') + 1),
+      parentPid: process.pid,
+      cwd: options.cwd,
+      timeout: options.timeout,
+      timestamp: new Date().toISOString(),
+    };
+
+    logger.info('spawn_start', contextInfo);
+
+    // 嵌套检测：记录警告日志（不中断流程）
+    if (process.env.CLAUDE_CLI_MODE === 'headless') {
+      logger.error('POTENTIAL_NESTED_EXECUTION', {
+        message: 'Detected spawn from within headless context',
+        spawnId: currentSpawnId,
+        spawnDepth: contextInfo.spawnDepth,
+        recommendation: 'Check docs/investigation-init-requirement/CA-006-nested-headless-execution-risk.md for root cause analysis',
+      });
+      // 注意：不抛出异常，继续执行
+      // 原因：抛出异常可能触发上层重试，反而增加 spawn 次数
+    }
+
+    // 设置环境标记（子进程继承）
+    process.env.CLAUDE_CLI_MODE = 'headless';
+    process.env.CLAUDE_SPAWN_DEPTH = String(contextInfo.spawnDepth);
+
     // 注意：prompt 通过 stdin 传递，而不是命令行参数
     // 这样可以避免多行文本作为命令行参数时的解析问题
     const args = [
@@ -361,18 +429,26 @@ export async function runHeadlessClaude(options: HeadlessClaudeOptions): Promise
       let stdout = '';
       let stderr = '';
 
-      child.stdout?.on('data', (data) => {
+      child.stdout?.on('data', (data: Buffer) => {
         stdout += data.toString();
       });
 
-      child.stderr?.on('data', (data) => {
+      child.stderr?.on('data', (data: Buffer) => {
         stderr += data.toString();
       });
 
       // PID 反注册由 spawnWithMemoryLimit 内部 exit/close/error 事件自动处理（CP-03）
 
-      child.on('close', (code) => {
+      child.on('close', (code: number | null) => {
         const classified = classifyExitResult(code, stderr, stdout);
+        const durationMs = Date.now() - startTimeMs;
+        logger.info('spawn_end', {
+          spawnId: currentSpawnId,
+          success: classified.success,
+          code,
+          durationMs,
+          totalSpawnCount: globalSpawnCount,
+        });
         resolve({
           success: classified.success,
           output: stdout,
@@ -383,7 +459,12 @@ export async function runHeadlessClaude(options: HeadlessClaudeOptions): Promise
         });
       });
 
-      child.on('error', (error) => {
+      child.on('error', (error: Error) => {
+        logger.error('spawn_error', {
+          spawnId: currentSpawnId,
+          error: error.message,
+          totalSpawnCount: globalSpawnCount,
+        });
         resolve({
           success: false,
           output: '',
