@@ -30,7 +30,7 @@ export const initRequirementTemplates: Record<string, string> = {
   "description": "完整的任务描述，必须包含: ## 原因分析\\n{对应报告CA章节}\\n\\n## 解决方案\\n{对应报告SOL章节}",
   "checkpoints": [
     {
-      "prefix": "verify|test|review|implem|doc",
+      "prefix": "ai-review|ai-qa|human-qa|script",
       "description": "检查点描述（去除前缀后的纯文本）",
       "category": "按 PREFIX_MAP 推断",
       "verificationMethod": "按 PREFIX_MAP 推断"
@@ -44,7 +44,7 @@ export const initRequirementTemplates: Record<string, string> = {
 
 ## 约束
 - 检查点必须从报告的「检查点覆盖清单」章节提取
-- 每个检查点必须包含标准前缀 [verify]/[test]/[review]/[implem]/[doc]
+- 每个检查点必须包含标准前缀 [ai review]/[ai qa]/[human qa]/[script]
 - 按照 PREFIX_MAP 正确设置 category 和 verificationMethod
 - description 必须包含「原因分析」和「解决方案」两个章节
 - 输出纯 JSON，不要包含 markdown 代码块标记`,

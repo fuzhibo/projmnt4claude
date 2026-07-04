@@ -297,7 +297,7 @@ describe('initRequirement', () => {
         type: 'feature',
         priority: 'P2',
         description: 'Test description',
-        checkpoints: [{ prefix: 'test', description: 'Implement feature', category: 'implementation', verificationMethod: 'Unit test' }],
+        checkpoints: [{ prefix: 'ai-qa', description: 'Implement feature', category: 'implementation', verificationMethod: 'Unit test' }],
         files: [],
         estimatedMinutes: 30,
         dependencies: [],

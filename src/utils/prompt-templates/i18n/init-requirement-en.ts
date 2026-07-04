@@ -30,7 +30,7 @@ Output a complete JSON object with the following fields:
   "description": "Full task description, must include: ## Root Cause Analysis\\n{map report CA sections}\\n\\n## Solution\\n{map report SOL sections}",
   "checkpoints": [
     {
-      "prefix": "verify|test|review|implem|doc",
+      "prefix": "ai-review|ai-qa|human-qa|script",
       "description": "Checkpoint description (plain text without prefix)",
       "category": "Inferred from PREFIX_MAP",
       "verificationMethod": "Inferred from PREFIX_MAP"
@@ -44,7 +44,7 @@ Output a complete JSON object with the following fields:
 
 ## Constraints
 - Checkpoints MUST be extracted from the report's "Checkpoint Checklist" section
-- Each checkpoint MUST include a standard prefix: [verify]/[test]/[review]/[implem]/[doc]
+- Each checkpoint MUST include a standard prefix: [ai review]/[ai qa]/[human qa]/[script]
 - Correctly set category and verificationMethod according to PREFIX_MAP
 - description MUST include both "Root Cause Analysis" and "Solution" sections
 - Output pure JSON only, do NOT include markdown code block markers`,

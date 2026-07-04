@@ -35,7 +35,7 @@ function createTestReport(overrides: Partial<InvestigationReport> = {}): Investi
       { id: 'SOL-001', title: 'Test Solution', correspondsTo: 'CA-001', description: 'Test solution description', files: ['src/test.ts'], expectedChanges: 'Add test code' },
     ],
     checkpoints: [
-      { prefix: 'verify', description: 'Verify test', belongsTo: 'SOL-001' },
+      { prefix: 'ai-qa', description: 'Verify test', belongsTo: 'SOL-001' },
     ],
     assessment: {
       complexity: 'low',
@@ -65,11 +65,11 @@ function createFullTestReport(): InvestigationReport {
       { id: 'SOL-002', title: 'Solution 2', correspondsTo: 'CA-002', description: 'Description for SOL-002', files: ['src/c.ts'], expectedChanges: 'Add c.ts' },
     ],
     checkpoints: [
-      { prefix: 'verify', description: 'Verify solution 1 works', belongsTo: 'SOL-001' },
-      { prefix: 'test', description: 'Test solution 1', belongsTo: 'SOL-001' },
-      { prefix: 'review', description: 'Review solution 2', belongsTo: 'SOL-002' },
-      { prefix: 'implem', description: 'Implement solution 2', belongsTo: 'SOL-002' },
-      { prefix: 'doc', description: 'Document changes', belongsTo: 'SOL-001' },
+      { prefix: 'ai-qa', description: 'Verify solution 1 works', belongsTo: 'SOL-001' },
+      { prefix: 'ai-qa', description: 'Test solution 1', belongsTo: 'SOL-001' },
+      { prefix: 'ai-review', description: 'Review solution 2', belongsTo: 'SOL-002' },
+      { prefix: 'ai-qa', description: 'Implement solution 2', belongsTo: 'SOL-002' },
+      { prefix: 'script', description: 'Document changes', belongsTo: 'SOL-001' },
     ],
     assessment: {
       complexity: 'high',
@@ -305,9 +305,9 @@ describe('§3.4 工具模块', () => {
       const md = generateReport(report, 'zh');
       const parsed = parseReport(md);
       expect(parsed.checkpoints.length).toBeGreaterThanOrEqual(1);
-      const verifyCp = parsed.checkpoints.find(cp => cp.prefix === 'verify');
-      expect(verifyCp).toBeDefined();
-      expect(verifyCp!.belongsTo).toBe('SOL-001');
+      const aiQaCp = parsed.checkpoints.find(cp => cp.prefix === 'ai-qa');
+      expect(aiQaCp).toBeDefined();
+      expect(aiQaCp!.belongsTo).toBe('SOL-001');
     });
 
     it('should handle empty sections gracefully', () => {

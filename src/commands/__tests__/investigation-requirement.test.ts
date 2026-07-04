@@ -34,7 +34,7 @@ function createTestReport(overrides: Partial<InvestigationReport> = {}): Investi
       { id: 'SOL-001', title: 'Test Solution', correspondsTo: 'CA-001', description: 'Test solution description', files: ['src/test.ts'], expectedChanges: 'Add test code' },
     ],
     checkpoints: [
-      { prefix: 'verify', description: 'Verify test', belongsTo: 'SOL-001' },
+      { prefix: 'ai-qa', description: 'Verify test', belongsTo: 'SOL-001' },
     ],
     assessment: {
       complexity: 'low',

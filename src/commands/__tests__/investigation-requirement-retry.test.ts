@@ -83,7 +83,7 @@ function makeValidReport() {
         expectedChanges: 'Test',
       },
     ],
-    checkpoints: [{ prefix: 'verify', description: 'Test', belongsTo: 'SOL-001' }],
+    checkpoints: [{ prefix: 'ai-qa', description: 'Test', belongsTo: 'SOL-001' }],
     assessment: { complexity: 'low', impactScope: '有限', estimatedMinutes: 30 },
   };
 }
