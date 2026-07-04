@@ -8,7 +8,7 @@ import type {
   ReportCheckpoint,
   ReportAssessment,
 } from './types';
-import { normalizePrefix } from '../init-requirement/prefix-map.js';
+import { CHECKPOINT_REGEX, CheckpointFormat } from './checkpoint-format.js';
 
 /**
  * 将 markdown 文本解析为 InvestigationReport 结构化数据
@@ -158,15 +158,15 @@ function parseCheckpoints(md: string): ReportCheckpoint[] {
   const sectionMd = extractSection(md, '检查点覆盖清单', 'Checkpoint Checklist');
   if (!sectionMd) return items;
 
-  // 正则：支持含空格/连字符的前缀（System B），可选 belongsTo（兼容 →/-> 及可选圆括号）
-  const re = /^- \[([a-z][a-z\s-]*?)\] (.+?)(?:\s*\(?\s*(?:→|->)\s*(SOL-\d+)\s*\)?)?\s*$/gm;
+  // 使用共享规范中的正则表达式
+  const re = new RegExp(CHECKPOINT_REGEX.full.source, 'gm');
   let match: RegExpExecArray | null;
   while ((match = re.exec(sectionMd)) !== null) {
     const prefixRaw = match[1]!.trim();
     const description = match[2]!.trim();
-    const belongsTo = match[3] || inferBelongsToFromContext(sectionMd, match.index);
+    const belongsTo = match[3] || CheckpointFormat.inferBelongsToFromContext(sectionMd, match.index);
 
-    const normalizedPrefix = normalizePrefix(prefixRaw);
+    const normalizedPrefix = CheckpointFormat.normalizePrefix(prefixRaw);
     if (!normalizedPrefix) continue;
 
     items.push({
@@ -176,14 +176,6 @@ function parseCheckpoints(md: string): ReportCheckpoint[] {
     });
   }
   return items;
-}
-
-/** 从匹配位置前的 ### SOL-NNN 标题推断检查点归属 */
-function inferBelongsToFromContext(sectionMd: string, matchIndex: number): string {
-  const beforeMatch = sectionMd.substring(0, matchIndex);
-  const titleMatches = [...beforeMatch.matchAll(/### (SOL-\d+)/g)];
-  if (titleMatches.length === 0) return '';
-  return titleMatches[titleMatches.length - 1]![1] ?? '';
 }
 
 function parseAssessment(md: string): ReportAssessment {
