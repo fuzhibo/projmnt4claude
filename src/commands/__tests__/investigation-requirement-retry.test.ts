@@ -15,6 +15,7 @@ const mockGenerateReport = jest.fn();
 const mockWriteReport = jest.fn();
 const mockValidateReport = jest.fn();
 const mockReviewWithRetry = jest.fn();
+const mockKillAllActiveChildren = jest.fn();
 
 // 需要 mock 的模块必须在 import 之前声明
 jest.mock('../../utils/investigation/report-generator', () => ({
@@ -58,6 +59,10 @@ jest.mock('../../utils/investigation/config-reader', () => ({
 
 jest.mock('../../utils/investigation/report-parser', () => ({
   parseReport: (input: string) => JSON.parse(input),
+}));
+
+jest.mock('../../utils/child-process-registry.js', () => ({
+  killAllActiveChildren: (...args: unknown[]) => mockKillAllActiveChildren(...args),
 }));
 
 // ============================================================
@@ -350,7 +355,7 @@ describe('investigation-requirement retry logic', () => {
       expect(mockCallAI).toHaveBeenCalledTimes(2);
       const retryCallArg = mockCallAI.mock.calls[1][0] as { prompt: string };
       expect(retryCallArg.prompt).toContain('original requirement text');
-      expect(retryCallArg.prompt).toContain('Format correction needed');
+      expect(retryCallArg.prompt).toContain('格式纠正要求');
       expect(retryCallArg.prompt).toContain('metadata.requirementSource 缺失或为空');
       expect(retryCallArg.prompt).toContain('checkpoints 为空，至少需要 1 个检查点');
     });
@@ -378,6 +383,114 @@ describe('investigation-requirement retry logic', () => {
       expect(mockCallAI).toHaveBeenCalledTimes(1);
       // validateReport 不应被调用（循环未进入）
       expect(mockValidateReport).not.toHaveBeenCalled();
+    });
+  });
+
+  // ============================================================
+  // CA-003: 重试超时保护与清理
+  // ============================================================
+
+  describe('CA-003-4: child cleanup before retry', () => {
+    it('should call killAllActiveChildren before each retry attempt', async () => {
+      mockValidateReport
+        .mockReturnValueOnce({
+          valid: false,
+          errors: [{ rule: 'R-META-001', message: 'metadata.requirementSource 缺失或为空' }],
+          warnings: [],
+        })
+        .mockReturnValueOnce({ valid: true, errors: [], warnings: [] })
+        .mockReturnValueOnce({ valid: true, errors: [], warnings: [] });
+
+      const { investigationRequirement } = await import('../investigation-requirement');
+
+      await investigationRequirement('cleanup test', env.tempDir, {
+        quiet: true,
+        maxRetry: 3,
+        skipReview: true,
+        skipSplit: true,
+        outputDir: env.tempDir,
+      });
+
+      expect(mockKillAllActiveChildren).toHaveBeenCalledTimes(1);
+      expect(mockKillAllActiveChildren).toHaveBeenCalledWith('SIGTERM');
+    });
+  });
+
+  describe('CA-003-3: structured retry prompt', () => {
+    it('should produce prompt containing **格式纠正要求** section and structured error list', async () => {
+      mockValidateReport
+        .mockReturnValueOnce({
+          valid: false,
+          errors: [
+            { rule: 'R-META-001', message: 'metadata.requirementSource 缺失或为空' },
+            { rule: 'R-CP-001', message: 'checkpoints 为空，至少需要 1 个检查点' },
+          ],
+          warnings: [],
+        })
+        .mockReturnValueOnce({ valid: true, errors: [], warnings: [] })
+        .mockReturnValueOnce({ valid: true, errors: [], warnings: [] });
+
+      const { investigationRequirement } = await import('../investigation-requirement');
+
+      await investigationRequirement('structured prompt test', env.tempDir, {
+        quiet: true,
+        maxRetry: 3,
+        skipReview: true,
+        skipSplit: true,
+        outputDir: env.tempDir,
+      });
+
+      const retryCallArg = mockCallAI.mock.calls[1][0] as { prompt: string };
+      expect(retryCallArg.prompt).toContain('**格式纠正要求**');
+      expect(retryCallArg.prompt).toContain('- metadata.requirementSource 缺失或为空');
+      expect(retryCallArg.prompt).toContain('- checkpoints 为空，至少需要 1 个检查点');
+    });
+
+    it('should truncate feedback to MAX_RETRY_FEEDBACK_LEN (500 chars)', async () => {
+      const longMessage = 'X'.repeat(800);
+      mockValidateReport
+        .mockReturnValueOnce({
+          valid: false,
+          errors: [{ rule: 'R-LONG', message: longMessage }],
+          warnings: [],
+        })
+        .mockReturnValueOnce({ valid: true, errors: [], warnings: [] })
+        .mockReturnValueOnce({ valid: true, errors: [], warnings: [] });
+
+      const { investigationRequirement } = await import('../investigation-requirement');
+
+      await investigationRequirement('trunc test', env.tempDir, {
+        quiet: true,
+        maxRetry: 3,
+        skipReview: true,
+        skipSplit: true,
+        outputDir: env.tempDir,
+      });
+
+      const retryCallArg = mockCallAI.mock.calls[1][0] as { prompt: string };
+      // 长消息应被截断到 500 字符
+      expect(retryCallArg.prompt).not.toContain('X'.repeat(800));
+      expect(retryCallArg.prompt).toMatch(/X{400,500}/);
+    });
+  });
+
+  describe('CA-003-2: Promise.race timeout protection', () => {
+    it('should reject with timeout when generateInvestigationReport never resolves', async () => {
+      // callAI 永不 resolve 触发 Promise.race 超时
+      mockCallAI.mockReturnValue(new Promise(() => {}));
+
+      const { investigationRequirement } = await import('../investigation-requirement');
+
+      await expect(
+        investigationRequirement('timeout test', env.tempDir, {
+          quiet: true,
+          maxRetry: 1,
+          timeout: 0.1, // 100ms
+          skipReview: true,
+          skipSplit: true,
+          outputDir: env.tempDir,
+        }),
+      ).rejects.toThrow(/timeout after \d+ms/);
     });
   });
 });

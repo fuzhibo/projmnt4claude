@@ -19,6 +19,10 @@ function getTestMock(name: string): any {
 export async function callAI(options: AICallOptions): Promise<AICallResult> {
   const startTime = Date.now();
 
+  if (options.timeout !== undefined && (!Number.isFinite(options.timeout) || options.timeout <= 0)) {
+    throw new Error(`callAI: invalid timeout ${options.timeout} (must be positive finite number)`);
+  }
+
   // 创建 logger 用于记录调试日志
   const logger = createLogger('investigation-requirement', options.cwd);
   const aiLogger = logger.child('ai-integration');

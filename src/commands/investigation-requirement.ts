@@ -29,6 +29,7 @@ import {
 import { loadInvestigationConfig, loadLanguageConfig } from '../utils/investigation/config-reader';
 import { isInitialized } from '../utils/path';
 import { createLogger } from '../utils/logger.js';
+import { killAllActiveChildren } from '../utils/child-process-registry.js';
 
 // ============================================================
 // 命令参数接口
@@ -226,6 +227,7 @@ async function runNewInvestigation(
   options: Required<Pick<InvestigationRequirementOptions, 'lang' | 'maxRetry' | 'splitThreshold'>> & InvestigationRequirementOptions,
 ): Promise<InvestigationResult> {
   const { lang, maxRetry, splitThreshold } = options;
+  const logger = createLogger('investigation-requirement', cwd);
 
   if (!options.quiet) {
     console.log('');
@@ -237,7 +239,11 @@ async function runNewInvestigation(
   }
 
   // Step 1: 生成调查报告
-  let report = await generateInvestigationReport(requirement, cwd, lang, options.timeout, options.debug);
+  let report = await withTimeoutRace(
+    generateInvestigationReport(requirement, cwd, lang, options.timeout, options.debug),
+    (options.timeout ?? DEFAULT_RETRY_TIMEOUT_S) * 1000,
+    'generateInvestigationReport(initial)',
+  );
 
   // Step 1.5: 格式验证 + 循环重试（附回退机制）
   let retryCount = 0;
@@ -258,15 +264,40 @@ async function runNewInvestigation(
       console.log('   Retrying report generation with format corrections...');
     }
 
+    // 重试前清理子进程残留（SOL-003-4）
     try {
-      report = await generateInvestigationReport(
-        `${requirement}\n\n[Format correction needed: ${formatValidation.errors.map(e => e.message).join('; ')}]`,
-        cwd,
-        lang,
-        options.timeout,
-        options.debug,
+      killAllActiveChildren('SIGTERM');
+    } catch (cleanupErr) {
+      logger.warn('cleanup before retry failed', {
+        error: cleanupErr instanceof Error ? cleanupErr.message : String(cleanupErr),
+      });
+    }
+    await new Promise(resolve => setTimeout(resolve, RETRY_CLEANUP_DELAY_MS));
+
+    try {
+      const retryPrompt = buildRetryPrompt(requirement, formatValidation.errors);
+      const timeoutS = options.timeout ?? DEFAULT_RETRY_TIMEOUT_S;
+
+      report = await withTimeoutRace(
+        generateInvestigationReport(retryPrompt, cwd, lang, options.timeout, options.debug),
+        timeoutS * 1000,
+        'generateInvestigationReport(retry)',
       );
     } catch (err) {
+      const isTimeout = err instanceof Error && err.message.includes('timeout after');
+      if (isTimeout) {
+        logger.error('retry timeout', {
+          error: err.message,
+          retryCount,
+          timeout: options.timeout ?? DEFAULT_RETRY_TIMEOUT_S,
+        });
+      } else {
+        logger.warn('retry attempt failed', {
+          error: err instanceof Error ? err.message : String(err),
+          retryCount,
+        });
+      }
+
       if (lastValidReport) {
         if (!options.quiet) {
           console.log('   ⚠️ Retry failed, using last valid report with partial results');
@@ -760,6 +791,38 @@ async function runSplitFlow(
     splitPlan,
     splitReviewResult,
   };
+}
+
+// ============================================================
+// 重试超时与清理辅助函数
+// ============================================================
+
+const DEFAULT_RETRY_TIMEOUT_S = 300;
+const RETRY_CLEANUP_DELAY_MS = 1000;
+const MAX_RETRY_FEEDBACK_LEN = 500;
+
+/**
+ * 构建结构化重试 prompt
+ */
+function buildRetryPrompt(requirement: string, errors: Array<{ message: string }>): string {
+  const feedback = errors
+    .map(e => `- ${e.message}`)
+    .join('\n')
+    .substring(0, MAX_RETRY_FEEDBACK_LEN);
+  return `${requirement}\n\n---\n**格式纠正要求**:\n上一次输出存在以下格式问题，请重新生成：\n\n${feedback}\n\n请确保输出格式符合要求。\n`;
+}
+
+/**
+ * Promise.race 超时包装
+ */
+function withTimeoutRace<T>(promise: Promise<T>, timeoutMs: number, label: string): Promise<T> {
+  let timer: NodeJS.Timeout | undefined;
+  const timeoutPromise = new Promise<never>((_, reject) => {
+    timer = setTimeout(() => reject(new Error(`${label} timeout after ${timeoutMs}ms`)), timeoutMs);
+  });
+  return Promise.race([promise, timeoutPromise]).finally(() => {
+    if (timer) clearTimeout(timer);
+  });
 }
 
 // ============================================================
