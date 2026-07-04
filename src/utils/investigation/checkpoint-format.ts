@@ -31,6 +31,10 @@ export const PREFIX_NORMALIZE_MAP: Record<string, CheckpointPrefix | null> = {
   'review': 'ai-review',
   'qa': 'ai-qa',
   'human': 'human-qa',
+  'verify': 'ai-qa',
+  'test': 'ai-qa',
+  'implem': 'ai-qa',
+  'doc': 'script',
   // Hyphenated variants (already kebab-case)
   'ai-review': 'ai-review',
   'ai-qa': 'ai-qa',
