@@ -10,7 +10,9 @@
 // ============================================================
 
 // PREFIX_MAP 从 init-requirement/prefix-map.ts 导入，避免重复定义
-export { PREFIX_MAP, type CheckpointPrefix } from '../init-requirement/prefix-map.js';
+import type { CheckpointPrefix } from '../init-requirement/prefix-map.js';
+export { PREFIX_MAP } from '../init-requirement/prefix-map.js';
+export type { CheckpointPrefix };
 
 // ============================================================
 // 核心报告类型

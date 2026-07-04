@@ -36,12 +36,12 @@ const mockReport: InvestigationReport = {
   ],
   checkpoints: [
     {
-      prefix: 'verify',
+      prefix: 'ai-qa',
       description: '验证模板输出格式与解析器正则一致',
       belongsTo: 'SOL-001',
     },
     {
-      prefix: 'test',
+      prefix: 'ai-qa',
       description: 'generate → parse 循环闭环测试',
       belongsTo: 'SOL-001',
     },

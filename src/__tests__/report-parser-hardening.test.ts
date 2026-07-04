@@ -319,3 +319,214 @@ ${validReportHeaderEn}`;
     expect(extractDependenciesFromMarkdown(md)).toEqual(['docs/dep1.md', 'docs/dep2.md']);
   });
 });
+
+// ============================================================
+// CA-001: parseCheckpoints 独立单元测试 (文档 §6.1)
+// ============================================================
+
+describe('parseCheckpoints - belongsTo optional (CA-001 §6.1)', () => {
+  it('无 belongsTo 时从分组标题推断', () => {
+    const md = `# 调查报告
+
+- **需求来源**: test
+
+## 检查点覆盖清单
+### SOL-001 相关检查点
+- [ai review] 验证解决方案设计
+
+## 评估
+- 复杂度: medium
+- 影响范围: 中等
+- 预估工时: 60
+`;
+    const result = parseReport(md);
+    expect(result.checkpoints).toHaveLength(1);
+    expect(result.checkpoints[0]!.belongsTo).toBe('SOL-001');
+  });
+
+  it('显式 belongsTo（→ 箭头）', () => {
+    const md = `# 调查报告
+
+- **需求来源**: test
+
+## 检查点覆盖清单
+- [ai review] 验证解决方案设计 → SOL-001
+
+## 评估
+- 复杂度: medium
+- 影响范围: 中等
+- 预估工时: 60
+`;
+    const result = parseReport(md);
+    expect(result.checkpoints).toHaveLength(1);
+    expect(result.checkpoints[0]!.belongsTo).toBe('SOL-001');
+  });
+
+  it('显式 belongsTo（-> ASCII 箭头）', () => {
+    const md = `# 调查报告
+
+- **需求来源**: test
+
+## 检查点覆盖清单
+- [ai qa] 测试核心功能 -> SOL-001
+
+## 评估
+- 复杂度: medium
+- 影响范围: 中等
+- 预估工时: 60
+`;
+    const result = parseReport(md);
+    expect(result.checkpoints).toHaveLength(1);
+    expect(result.checkpoints[0]!.belongsTo).toBe('SOL-001');
+  });
+});
+
+describe('parseCheckpoints - System B 前缀支持 (CA-001)', () => {
+  it('支持含空格的 System B 前缀 [ai review]', () => {
+    const md = `# 调查报告
+
+- **需求来源**: test
+
+## 检查点覆盖清单
+- [ai review] 验证方案 → SOL-001
+
+## 评估
+- 复杂度: medium
+- 影响范围: 中等
+- 预估工时: 60
+`;
+    const result = parseReport(md);
+    expect(result.checkpoints).toHaveLength(1);
+    expect(result.checkpoints[0]!.prefix).toBe('ai-review');
+  });
+
+  it('支持全部 4 种 System B 前缀', () => {
+    const md = `# 调查报告
+
+- **需求来源**: test
+
+## 检查点覆盖清单
+- [ai review] 验证设计 → SOL-001
+- [ai qa] 测试功能 → SOL-001
+- [human qa] 人工验证 → SOL-001
+- [script] 运行脚本 → SOL-001
+
+## 评估
+- 复杂度: medium
+- 影响范围: 中等
+- 预估工时: 60
+`;
+    const result = parseReport(md);
+    expect(result.checkpoints).toHaveLength(4);
+    expect(result.checkpoints.map((c) => c.prefix)).toEqual([
+      'ai-review',
+      'ai-qa',
+      'human-qa',
+      'script',
+    ]);
+  });
+});
+
+describe('parseCheckpoints - 多 SOL 分组上下文推断 (CA-001 §6.1)', () => {
+  it('多个 SOL 分组标题正确推断归属', () => {
+    const md = `# 调查报告
+
+- **需求来源**: test
+
+## 检查点覆盖清单
+### SOL-001 相关检查点
+- [ai review] 验证方案 A
+- [script] 测试方案 A
+
+### SOL-002 相关检查点
+- [ai qa] 测试方案 B
+- [human qa] 人工验证方案 B
+
+## 评估
+- 复杂度: medium
+- 影响范围: 中等
+- 预估工时: 60
+`;
+    const result = parseReport(md);
+    expect(result.checkpoints).toHaveLength(4);
+    expect(result.checkpoints[0]!.belongsTo).toBe('SOL-001');
+    expect(result.checkpoints[1]!.belongsTo).toBe('SOL-001');
+    expect(result.checkpoints[2]!.belongsTo).toBe('SOL-002');
+    expect(result.checkpoints[3]!.belongsTo).toBe('SOL-002');
+  });
+
+  it('显式 belongsTo 优先于上下文推断', () => {
+    const md = `# 调查报告
+
+- **需求来源**: test
+
+## 检查点覆盖清单
+### SOL-001 相关检查点
+- [ai review] 验证方案 A → SOL-002
+
+## 评估
+- 复杂度: medium
+- 影响范围: 中等
+- 预估工时: 60
+`;
+    const result = parseReport(md);
+    expect(result.checkpoints).toHaveLength(1);
+    expect(result.checkpoints[0]!.belongsTo).toBe('SOL-002');
+  });
+});
+
+describe('parseCheckpoints - System A 废弃前缀迁移 (CA-001)', () => {
+  it('System A verify 迁移为 ai-qa', () => {
+    const md = `# 调查报告
+
+- **需求来源**: test
+
+## 检查点覆盖清单
+- [verify] 验证方案 → SOL-001
+
+## 评估
+- 复杂度: medium
+- 影响范围: 中等
+- 预估工时: 60
+`;
+    const result = parseReport(md);
+    expect(result.checkpoints).toHaveLength(1);
+    expect(result.checkpoints[0]!.prefix).toBe('ai-qa');
+  });
+
+  it('System A test 迁移为 ai-qa', () => {
+    const md = `# 调查报告
+
+- **需求来源**: test
+
+## 检查点覆盖清单
+- [test] 测试功能 → SOL-001
+
+## 评估
+- 复杂度: medium
+- 影响范围: 中等
+- 预估工时: 60
+`;
+    const result = parseReport(md);
+    expect(result.checkpoints).toHaveLength(1);
+    expect(result.checkpoints[0]!.prefix).toBe('ai-qa');
+  });
+
+  it('System A review 迁移为 ai-review', () => {
+    const md = `# 调查报告
+
+- **需求来源**: test
+
+## 检查点覆盖清单
+- [review] 评审设计 → SOL-001
+
+## 评估
+- 复杂度: medium
+- 影响范围: 中等
+- 预估工时: 60
+`;
+    const result = parseReport(md);
+    expect(result.checkpoints).toHaveLength(1);
+    expect(result.checkpoints[0]!.prefix).toBe('ai-review');
+  });
+});

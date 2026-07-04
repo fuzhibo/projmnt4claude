@@ -50,8 +50,9 @@ Output the investigation report in the following format (en):
 
 ## Checkpoint Checklist
 ### SOL-001 Related Checkpoints
-- [verify] Verify {specific verification content}
-- [test] Test {specific test content}
+- [ai review] Verify solution design meets requirements → SOL-001
+- [ai qa] Test core functionality works correctly → SOL-001
+- [script] Run unit tests to ensure no regression → SOL-001
 
 ## Assessment
 - Complexity: {low|medium|high}
@@ -62,7 +63,9 @@ Output the investigation report in the following format (en):
 - Root cause analysis must trace back to the requirement, ensuring a complete "requirement→cause" chain
 - Solutions must correspond one-to-one with each conclusion in the root cause analysis
 - Checkpoints must cover every key point in the solution
-- Use standard gate prefixes for checkpoints: [verify], [test], [review], [implem], [doc]
+- Checkpoints must annotate the solution number they belong to (format: → SOL-NNN)
+- Checkpoint format: '- [prefix] description → SOL-NNN'
+- Use standard gate prefixes for checkpoints: [ai review], [ai qa], [human qa], [script]
 `,
 
   review: `You are an investigation report quality reviewer for the projmnt4claude project.

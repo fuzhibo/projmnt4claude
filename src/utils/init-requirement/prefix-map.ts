@@ -95,7 +95,14 @@ export function parseCheckpoint(raw: string): ParsedCheckpoint | null {
   return null;
 }
 
-/** 检查字符串是否包含有效的检查点前缀（仅 System B） */
+/** 将任意前缀（System A 或 B）归一化为 System B CheckpointPrefix，未知返回 null */
+export function normalizePrefix(raw: string): CheckpointPrefix | null {
+  const trimmed = raw.trim().toLowerCase();
+  const kebab = trimmed.replace(/\s+/g, '-');
+  if (kebab in PREFIX_MAP) return kebab as CheckpointPrefix;
+  const migration = MIGRATION_MAP[trimmed];
+  return migration?.prefix ?? null;
+}
 export function hasValidPrefix(text: string): boolean {
   return /^\[(ai review|ai qa|human qa|script)\]/i.test(text);
 }

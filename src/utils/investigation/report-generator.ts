@@ -105,7 +105,8 @@ function renderCheckpoints(items: ReportCheckpoint[], lang: 'zh' | 'en'): string
   const title = lang === 'en' ? 'Checkpoints' : '检查点覆盖清单';
   const lines = [`## ${title}`, ''];
   for (const cp of items) {
-    lines.push(`- [${cp.prefix}] ${cp.description} (→ ${cp.belongsTo})`);
+    const prefixDisplay = cp.prefix.replace(/-/g, ' ');
+    lines.push(`- [${prefixDisplay}] ${cp.description} → ${cp.belongsTo}`);
   }
   return lines.join('\n');
 }
