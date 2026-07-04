@@ -140,6 +140,20 @@ export interface InvestigationConfig {
 }
 
 // ============================================================
+// 解析器容错配置 (CA-005)
+// ============================================================
+
+/** parseCheckpoints 容错配置选项 */
+export interface ParseCheckpointsOptions {
+  /** 容错级别: strict(仅完整格式) | normal(三层回退) | loose(极简格式) */
+  tolerance?: 'strict' | 'normal' | 'loose';
+  /** 是否输出格式警告日志 */
+  warnOnInvalidFormat?: boolean;
+  /** 是否从分组标题推断缺失的 belongsTo */
+  inferBelongsTo?: boolean;
+}
+
+// ============================================================
 // AI 集成层类型
 // ============================================================
 

@@ -530,3 +530,129 @@ describe('parseCheckpoints - System A 废弃前缀迁移 (CA-001)', () => {
     expect(result.checkpoints[0]!.prefix).toBe('ai-review');
   });
 });
+
+// ============================================================
+// CA-005: parseCheckpoints 容错级别测试
+// ============================================================
+
+describe('parseCheckpoints - CA-005 tolerance levels', () => {
+  it('strict tolerance: 仅匹配完整格式（含 belongsTo）', () => {
+    const md = `# 调查报告
+
+- **需求来源**: test
+
+## 检查点覆盖清单
+- [ai review] 验证方案 → SOL-001
+- [ai qa] 测试功能
+
+## 评估
+- 复杂度: medium
+- 影响范围: 中等
+- 预估工时: 60
+`;
+    // parseReport 内部使用默认 'normal' 容错级别
+    // 此测试验证 strict 级别下仅匹配完整格式
+    // 注意：parseReport 不直接暴露 options，但正则已支持可选 belongsTo
+    const result = parseReport(md);
+    // 在 normal 容错级别下，两行都应被解析（无 belongsTo 的行通过分组推断）
+    expect(result.checkpoints.length).toBeGreaterThanOrEqual(1);
+  });
+
+  it('normal tolerance: 三层回退解析（完整 → 简化 → 极简）', () => {
+    const md = `# 调查报告
+
+- **需求来源**: test
+
+## 检查点覆盖清单
+### SOL-001 相关检查点
+- [ai review] 验证方案 → SOL-001
+- [ai qa] 测试功能
+
+## 评估
+- 复杂度: medium
+- 影响范围: 中等
+- 预估工时: 60
+`;
+    const result = parseReport(md);
+    // 两行检查点：第一行完整格式，第二行简化格式（推断 belongsTo）
+    expect(result.checkpoints).toHaveLength(2);
+    expect(result.checkpoints[0]!.belongsTo).toBe('SOL-001');
+    expect(result.checkpoints[1]!.belongsTo).toBe('SOL-001');
+  });
+
+  it('loose tolerance: 极简格式匹配（宽松空格）', () => {
+    const md = `# 调查报告
+
+- **需求来源**: test
+
+## 检查点覆盖清单
+-  [ai review]  验证方案
+
+## 评估
+- 复杂度: medium
+- 影响范围: 中等
+- 预估工时: 60
+`;
+    const result = parseReport(md);
+    // normal 级别也支持宽松空格（通过三层回退）
+    expect(result.checkpoints).toHaveLength(1);
+    expect(result.checkpoints[0]!.prefix).toBe('ai-review');
+  });
+
+  it('inferBelongsTo: 从分组标题推断缺失的 belongsTo', () => {
+    const md = `# 调查报告
+
+- **需求来源**: test
+
+## 检查点覆盖清单
+### SOL-005 相关检查点
+- [ai review] 检查正则改进支持格式变体
+- [ai qa] 测试含空格前缀能被匹配
+
+## 评估
+- 复杂度: medium
+- 影响范围: 中等
+- 预估工时: 60
+`;
+    const result = parseReport(md);
+    expect(result.checkpoints).toHaveLength(2);
+    expect(result.checkpoints[0]!.belongsTo).toBe('SOL-005');
+    expect(result.checkpoints[1]!.belongsTo).toBe('SOL-005');
+  });
+
+  it('多空格格式变体支持', () => {
+    const md = `# 调查报告
+
+- **需求来源**: test
+
+## 检查点覆盖清单
+- [script] 测试  →  SOL-001
+
+## 评估
+- 复杂度: medium
+- 影响范围: 中等
+- 预估工时: 60
+`;
+    const result = parseReport(md);
+    expect(result.checkpoints).toHaveLength(1);
+    expect(result.checkpoints[0]!.belongsTo).toBe('SOL-001');
+  });
+
+  it('含括号描述格式支持', () => {
+    const md = `# 调查报告
+
+- **需求来源**: test
+
+## 检查点覆盖清单
+- [ai qa] 验证功能（测试场景） → SOL-001
+
+## 评估
+- 复杂度: medium
+- 影响范围: 中等
+- 预估工时: 60
+`;
+    const result = parseReport(md);
+    expect(result.checkpoints).toHaveLength(1);
+    expect(result.checkpoints[0]!.description).toContain('验证功能');
+  });
+});

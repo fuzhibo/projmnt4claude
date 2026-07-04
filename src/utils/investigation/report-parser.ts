@@ -7,8 +7,10 @@ import type {
   SolutionItem,
   ReportCheckpoint,
   ReportAssessment,
+  ParseCheckpointsOptions,
 } from './types';
 import { CHECKPOINT_REGEX, CheckpointFormat } from './checkpoint-format.js';
+import { createLogger } from '../logger.js';
 
 /**
  * 将 markdown 文本解析为 InvestigationReport 结构化数据
@@ -153,29 +155,81 @@ function parseSolutions(md: string): SolutionItem[] {
   return items;
 }
 
-function parseCheckpoints(md: string): ReportCheckpoint[] {
+function parseCheckpoints(md: string, options: ParseCheckpointsOptions = {}): ReportCheckpoint[] {
   const items: ReportCheckpoint[] = [];
   const sectionMd = extractSection(md, '检查点覆盖清单', 'Checkpoint Checklist');
   if (!sectionMd) return items;
 
-  // 使用共享规范中的正则表达式
-  const re = new RegExp(CHECKPOINT_REGEX.full.source, 'gm');
-  let match: RegExpExecArray | null;
-  while ((match = re.exec(sectionMd)) !== null) {
-    const prefixRaw = match[1]!.trim();
-    const description = match[2]!.trim();
-    const belongsTo = match[3] || CheckpointFormat.inferBelongsToFromContext(sectionMd, match.index);
+  const tolerance = options.tolerance ?? 'normal';
+  const warnOnInvalid = options.warnOnInvalidFormat ?? false;
+  const inferBelongsTo = options.inferBelongsTo ?? true;
 
-    const normalizedPrefix = CheckpointFormat.normalizePrefix(prefixRaw);
-    if (!normalizedPrefix) continue;
+  // 收集所有可能的检查点行（用于日志和回退）
+  const unparsedLines: string[] = [];
 
-    items.push({
-      prefix: normalizedPrefix,
-      description,
-      belongsTo,
-    });
+  // 根据容错级别选择解析策略
+  if (tolerance === 'strict') {
+    // strict: 仅使用完整格式
+    parseWithRegex(CHECKPOINT_REGEX.full, true);
+  } else if (tolerance === 'loose') {
+    // loose: 仅使用极简格式
+    parseWithRegex(CHECKPOINT_REGEX.simple, false);
+  } else {
+    // normal: 三层回退解析 (full -> simple -> minimal)
+    // 层级1: 完整格式（支持可选 belongsTo）
+    parseWithRegex(CHECKPOINT_REGEX.full, false);
+
+    // 层级2: 如果匹配数不足，尝试简化格式
+    if (items.length === 0) {
+      parseWithRegex(CHECKPOINT_REGEX.simple, false);
+    }
+
+    // 层级3: 如果仍无匹配，尝试极简格式（宽松空格）
+    if (items.length === 0) {
+      const minimalRe = /^-\s*\[([a-z][a-z\s-]*?)\]\s*(.+)$/gm;
+      parseWithRegex(minimalRe, false);
+    }
   }
+
+  // 记录未解析的行
+  if (warnOnInvalid && unparsedLines.length > 0) {
+    const logger = createLogger('report-parser');
+    for (const line of unparsedLines) {
+      logger.warn('checkpoint line not parsed', {
+        line: line.trim(),
+        section: 'Checkpoint Checklist',
+        tolerance,
+      });
+    }
+  }
+
   return items;
+
+  // 内部辅助：使用指定正则解析检查点
+  function parseWithRegex(re: RegExp, requireBelongsTo: boolean): void {
+    const localRe = new RegExp(re.source, 'gm');
+    let match: RegExpExecArray | null;
+    while ((match = localRe.exec(sectionMd)) !== null) {
+      const prefixRaw = (match[1] ?? '').trim();
+      const description = (match[2] ?? '').trim();
+      const belongsToRaw = match[3] ?? '';
+      const belongsTo = requireBelongsTo
+        ? belongsToRaw
+        : (belongsToRaw || (inferBelongsTo ? CheckpointFormat.inferBelongsToFromContext(sectionMd, match.index ?? 0) : ''));
+
+      const normalizedPrefix = CheckpointFormat.normalizePrefix(prefixRaw);
+      if (!normalizedPrefix) {
+        unparsedLines.push(match[0]);
+        continue;
+      }
+
+      items.push({
+        prefix: normalizedPrefix,
+        description,
+        belongsTo,
+      });
+    }
+  }
 }
 
 function parseAssessment(md: string): ReportAssessment {
