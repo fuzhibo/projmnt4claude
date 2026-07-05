@@ -12,7 +12,7 @@
  * - 3.11 用户确认约束：不存在自动传递报告路径的代码路径
  */
 
-import { describe, test, expect } from '@jest/globals';
+import { describe, test, expect, jest } from '@jest/globals';
 import * as fs from 'fs';
 import * as path from 'path';
 import { initRequirement, type ConversionResult } from '../init-requirement';
@@ -160,8 +160,8 @@ describe('Timeout Tests (Document 4.1 Checkpoints)', () => {
       path.join(__dirname, '../init-requirement.ts'),
       'utf-8'
     );
-    // 验证 timeout 参数传递到 extractTaskMeta
-    expect(source).toContain('extractTaskMeta(reportContent, cwd, options.timeout)');
+    // 验证 timeout 参数传递到 extractTaskMeta（调用处签名）
+    expect(source).toContain('extractTaskMeta(reportContent, cwd, options.timeout, debug)');
     // 验证默认值回退逻辑
     expect(source).toContain('timeout: timeout ?? AI_TIMEOUT_SECONDS');
   });
