@@ -1,5 +1,5 @@
 import type { InvestigationReport, ReviewResult, ReviewIssue } from './types';
-import { callAI, callAIForJSON } from './ai-integration';
+import { callAIForJSON } from './ai-integration';
 import { loadAndRenderTemplate } from '../prompt-templates/loader';
 import { generateReport } from './report-generator';
 
@@ -24,51 +24,31 @@ export async function reviewReport(
 }
 
 /**
- * 带重试的评审：评审 FAIL → 将 issues 注入反馈模板重新生成 → 再次评审
- * 达到 maxRetry 仍失败则抛出错误
+ * 带重试的评审：评审 FAIL → 返回失败结果，不重新生成报告
+ * 达到 maxRetry 仍失败则返回最后一次评审结果（pass=false）
  */
-export async function reviewWithRetry(
+export async function reviewReportWithRetry(
   requirement: string,
   report: InvestigationReport,
   options: { cwd: string; lang: 'zh' | 'en'; maxRetry: number; timeout?: number; debug?: boolean },
 ): Promise<{ report: InvestigationReport; review: ReviewResult }> {
-  let currentReport = report;
   let lastReview: ReviewResult | undefined;
 
   for (let attempt = 0; attempt <= options.maxRetry; attempt++) {
-    lastReview = await reviewReport(requirement, currentReport, options.cwd, options.lang, options.timeout, options.debug);
+    lastReview = await reviewReport(requirement, report, options.cwd, options.lang, options.timeout, options.debug);
 
     if (lastReview.pass) {
-      return { report: currentReport, review: lastReview };
+      return { report, review: lastReview };
     }
 
-    if (attempt < options.maxRetry) {
-      // 用反馈模板重新生成
-      const issuesText = lastReview.issues
-        .map(i => `[${i.severity}] ${i.dimension}: ${i.description} → ${i.suggestion}`)
-        .join('\n');
-      const previousReport = generateReport(currentReport);
-      const prompt = await loadAndRenderTemplate(
-        'investigateWithFeedback',
-        { requirement, previousReport, issues: issuesText },
-        options.lang,
-      );
-
-      const aiResult = await callAI({ prompt, outputFormat: 'text', cwd: options.cwd, timeout: options.timeout, debug: options.debug });
-      if (!aiResult.success) {
-        throw new Error(`AI regeneration failed: ${aiResult.error}`);
-      }
-      // 将 AI 输出作为新报告（简化处理，实际场景中应解析为 InvestigationReport）
-      currentReport = {
-        ...currentReport,
-        metadata: { ...currentReport.metadata, investigationDate: new Date().toISOString() },
-      };
+    if (attempt >= options.maxRetry) {
+      // 达到最大重试次数，返回失败结果
+      return { report, review: lastReview };
     }
   }
 
-  throw new Error(
-    `Review failed after ${options.maxRetry} retries. Last issues: ${lastReview?.issues.map(i => i.description).join('; ')}`,
-  );
+  // 不可达，但 TypeScript 需要返回类型
+  throw new Error('reviewReportWithRetry: unreachable');
 }
 
 function validateReviewResult(data: unknown): ReviewResult {

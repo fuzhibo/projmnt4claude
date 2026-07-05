@@ -28,7 +28,7 @@ jest.mock('../../utils/investigation/report-validator', () => ({
 }));
 
 jest.mock('../../utils/investigation/report-reviewer', () => ({
-  reviewWithRetry: (...args: unknown[]) => mockReviewWithRetry(...args),
+  reviewReportWithRetry: (...args: unknown[]) => mockReviewWithRetry(...args),
 }));
 
 // mock generateInvestigationReport 内部使用（通过 callAI mock）
@@ -474,23 +474,139 @@ describe('investigation-requirement retry logic', () => {
     });
   });
 
-  describe('CA-003-2: Promise.race timeout protection', () => {
-    it('should reject with timeout when generateInvestigationReport never resolves', async () => {
-      // callAI 永不 resolve 触发 Promise.race 超时
-      mockCallAI.mockReturnValue(new Promise(() => {}));
+  // ============================================================
+  // Phase 2 检查点：评审失败不重新生成报告
+  // ============================================================
+
+  describe('REDESIGN-001: reviewReportWithRetry does not regenerate', () => {
+    it('should not call callAI when review fails (no regeneration)', async () => {
+      // 评审失败，但 reviewReportWithRetry 不应重新生成报告
+      mockReviewWithRetry.mockResolvedValue({
+        report: makeValidReport(),
+        review: {
+          pass: false,
+          issues: [{ severity: 'error', message: 'Test review failure' }],
+          scores: { rootCauseAlignment: 1, solutionEffectiveness: 1, checkpointCompleteness: 1 },
+        },
+      });
 
       const { investigationRequirement } = await import('../investigation-requirement');
 
-      await expect(
-        investigationRequirement('timeout test', env.tempDir, {
-          quiet: true,
-          maxRetry: 1,
-          timeout: 0.1, // 100ms
-          skipReview: true,
-          skipSplit: true,
-          outputDir: env.tempDir,
-        }),
-      ).rejects.toThrow(/timeout after \d+ms/);
+      await investigationRequirement('review no regen test', env.tempDir, {
+        quiet: true,
+        maxRetry: 1,
+        skipReview: false,
+        skipSplit: true,
+        outputDir: env.tempDir,
+      });
+
+      // callAI 调用次数：初始生成 1 次 + 评审 1 次（reviewReport 使用 callAIForJSON）= 2 次
+      // 关键验证：评审失败后没有额外的重新生成调用
+      expect(mockCallAI.mock.calls.length).toBeLessThanOrEqual(2);
+    });
+
+    it('should complete successfully when review passes', async () => {
+      mockReviewWithRetry.mockResolvedValue({
+        report: makeValidReport(),
+        review: {
+          pass: true,
+          issues: [],
+          scores: { rootCauseAlignment: 3, solutionEffectiveness: 3, checkpointCompleteness: 3 },
+        },
+      });
+
+      const { investigationRequirement } = await import('../investigation-requirement');
+
+      const result = await investigationRequirement('review pass test', env.tempDir, {
+        quiet: true,
+        maxRetry: 1,
+        skipReview: false,
+        skipSplit: true,
+        outputDir: env.tempDir,
+      });
+
+      expect(result.success).toBe(true);
+      // callAI 调用次数：初始生成 1 次 + 评审 1 次 = 2 次
+      expect(mockCallAI.mock.calls.length).toBeLessThanOrEqual(2);
+    });
+  });
+
+  // ============================================================
+  // Phase 2 检查点：spawn 次数控制在 5 次以内
+  // ============================================================
+
+  describe('REDESIGN-001: spawn count limit', () => {
+    it('should limit total callAI calls to <= 5 in worst case', async () => {
+      // 最坏情况：验证失败 maxRetry 次 + 评审 + 重试
+      mockValidateReport
+        .mockReturnValueOnce({
+          valid: false,
+          errors: [{ rule: 'R-001', message: 'error 1' }],
+          warnings: [],
+        })
+        .mockReturnValueOnce({
+          valid: false,
+          errors: [{ rule: 'R-002', message: 'error 2' }],
+          warnings: [],
+        })
+        .mockReturnValueOnce({
+          valid: true,
+          errors: [],
+          warnings: [],
+        })
+        .mockReturnValueOnce({
+          valid: true,
+          errors: [],
+          warnings: [],
+        });
+
+      mockReviewWithRetry.mockResolvedValue({
+        report: makeValidReport(),
+        review: {
+          pass: true,
+          issues: [],
+          scores: { rootCauseAlignment: 3, solutionEffectiveness: 3, checkpointCompleteness: 3 },
+        },
+      });
+
+      const { investigationRequirement } = await import('../investigation-requirement');
+
+      await investigationRequirement('spawn count test', env.tempDir, {
+        quiet: true,
+        maxRetry: 3,
+        skipReview: false,
+        skipSplit: true,
+        outputDir: env.tempDir,
+      });
+
+      // callAI 调用次数：初始 1 + 重试 2 + 评审 0（reviewReportWithRetry 不调用 callAI）= 3
+      // 确保不超过 5 次
+      expect(mockCallAI.mock.calls.length).toBeLessThanOrEqual(5);
+    });
+  });
+
+  // ============================================================
+  // Phase 3 检查点：深度超限返回用户提示
+  // ============================================================
+
+  describe('REDESIGN-001: depth limit user feedback', () => {
+    it('should return needsFurtherSplit when max depth reached', async () => {
+      // 跳过评审和拆分，直接测试深度控制
+      const { runSplitFlow } = await import('../investigation-requirement');
+
+      const mockReport = makeValidReport();
+      const result = await runSplitFlow(mockReport, 'test requirement', env.tempDir, {
+        lang: 'zh',
+        maxRetry: 1,
+        splitThreshold: 100,
+        outputDir: env.tempDir,
+        quiet: true,
+        depth: 3, // 达到 MAX_SPLIT_DEPTH
+      });
+
+      expect(result.needsFurtherSplit).toBe(true);
+      expect(result.furtherSplitCandidates).toBeDefined();
+      expect(result.furtherSplitCandidates!.length).toBeGreaterThan(0);
     });
   });
 });

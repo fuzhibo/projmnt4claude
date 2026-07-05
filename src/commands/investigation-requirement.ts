@@ -15,12 +15,13 @@ import * as fs from 'fs';
 import * as path from 'path';
 import * as readline from 'readline';
 import type { InvestigationReport, ReviewResult, SplitPlan, SplitReviewResult, OutputMode } from '../utils/investigation/types';
-import { callAI, callAIForJSON } from '../utils/investigation/ai-integration';
+import { callAI } from '../utils/investigation/ai-integration';
 import { loadAndRenderTemplate, type InvestigationTemplateName } from '../utils/prompt-templates/loader';
 import { generateReport } from '../utils/investigation/report-generator';
 import { parseReport } from '../utils/investigation/report-parser';
-import { validateReport, type ValidationResult } from '../utils/investigation/report-validator';
-import { reviewReport, reviewWithRetry } from '../utils/investigation/report-reviewer';
+import { validateReport } from '../utils/investigation/report-validator';
+import type { ValidationResult } from '../utils/investigation/types';
+import { reviewReportWithRetry, reviewReport } from '../utils/investigation/report-reviewer';
 import {
   shouldSplit,
   generateSplitPlan,
@@ -84,6 +85,10 @@ export interface InvestigationResult {
   splitPlan?: SplitPlan;
   splitReviewResult?: SplitReviewResult;
   error?: string;
+  /** 深度超限标记：子报告仍可能需要拆分 */
+  needsFurtherSplit?: boolean;
+  /** 深度超限的子报告路径列表 */
+  furtherSplitCandidates?: string[];
 }
 
 // ============================================================
@@ -323,7 +328,7 @@ async function runNewInvestigation(
   // Step 2: AI 评审闭环
   let reviewResult: ReviewResult | undefined;
   if (!options.skipReview) {
-    const retryResult = await reviewWithRetry(requirement, report, {
+    const retryResult = await reviewReportWithRetry(requirement, report, {
       cwd,
       lang,
       maxRetry,
@@ -693,12 +698,18 @@ async function runSplitFlow(
   const { lang, maxRetry, splitThreshold, outputDir, quiet } = options;
   const depth = options.depth ?? 0;
 
-  // 递归深度检查
+  // 递归深度检查 - 触及深度底线直接返回，不强制继续拆分
   if (depth >= MAX_SPLIT_DEPTH) {
     if (!quiet) {
-      console.log(`   ⚠️ Max split depth (${MAX_SPLIT_DEPTH}) reached, skipping further splits`);
+      console.log(`   ⚠️ Max split depth (${MAX_SPLIT_DEPTH}) reached`);
+      console.log(`   💡 Sub-report may still need splitting. Use --split mode to continue.`);
     }
-    return { success: true, subReports: [] };
+    return {
+      success: true,
+      subReports: [],
+      needsFurtherSplit: true,
+      furtherSplitCandidates: [outputDir], // 当前报告路径
+    };
   }
 
   // Step 1: 生成拆分方案
@@ -751,6 +762,7 @@ async function runSplitFlow(
 
   for (let i = 0; i < splitPlan.items.length; i++) {
     const item = splitPlan.items[i];
+    if (!item) continue; // 类型安全检查
     if (!quiet) {
       console.log(`   📄 Generating sub-report ${i + 1}/${splitPlan.items.length}: ${item.title}`);
     }
@@ -764,6 +776,17 @@ async function runSplitFlow(
 
     // Step 4: 递归检查子报告是否需要拆分（含深度限制）
     if (shouldSplit(subReportPath, splitThreshold)) {
+      // 深度预检查：下一层是否会超限？
+      if (depth + 1 >= MAX_SPLIT_DEPTH) {
+        // 触及底线 → 记录为待拆分候选，不强制递归
+        if (!quiet) {
+          console.log(`   📊 Sub-report ${i + 1} exceeds threshold, but depth limit reached`);
+          console.log(`   💡 Run: projmnt4claude investigation-requirement --split --report-path "${subReportPath}"`);
+        }
+        // 继续处理其他子项，不阻塞
+        continue;
+      }
+
       if (!quiet) {
         console.log(`   📊 Sub-report ${i + 1} exceeds threshold, recursing (depth ${depth + 1}/${MAX_SPLIT_DEPTH})...`);
       }

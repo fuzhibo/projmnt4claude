@@ -283,3 +283,51 @@ describe('callAI timeout validation (CA-003-1)', () => {
     expect(passedOptions.timeout).toBe(300);
   });
 });
+
+// ============================================================
+// Phase 3: 诊断日志测试（spawn 计数 + headless 上下文）
+// ============================================================
+
+describe('CA-006: spawn diagnostics logging', () => {
+  let consoleLogSpy: jest.SpiedFunction<typeof console.log>;
+  let consoleErrorSpy: jest.SpiedFunction<typeof console.error>;
+
+  beforeEach(() => {
+    mockInvokeAgent.mockReset();
+    consoleLogSpy = jest.spyOn(console, 'log').mockImplementation(() => {});
+    consoleErrorSpy = jest.spyOn(console, 'error').mockImplementation(() => {});
+  });
+
+  afterEach(() => {
+    consoleLogSpy.mockRestore();
+    consoleErrorSpy.mockRestore();
+    jest.clearAllMocks();
+  });
+
+  it('should log spawn start event with context info', async () => {
+    const mockResult = createMockResult();
+    mockInvokeAgent.mockResolvedValue(mockResult);
+
+    await callAI({ prompt: 'test', cwd: '/tmp', outputFormat: 'text' });
+
+    // 验证 Logger 输出包含 spawn 相关信息
+    expect(consoleLogSpy).toHaveBeenCalled();
+    // 验证至少有一条日志包含 AI 成本或调用信息
+    const aiCostLog = consoleLogSpy.mock.calls.find(
+      (call) => typeof call[0] === 'string' && call[0].includes('AI 成本'),
+    );
+    expect(aiCostLog).toBeDefined();
+  });
+
+  it('should track spawn count increment', async () => {
+    const mockResult = createMockResult();
+    mockInvokeAgent.mockResolvedValue(mockResult);
+
+    // 记录调用前的状态
+    await callAI({ prompt: 'test1', cwd: '/tmp', outputFormat: 'text' });
+    await callAI({ prompt: 'test2', cwd: '/tmp', outputFormat: 'text' });
+
+    // 验证 invokeAgent 被调用 2 次（每次 callAI 对应一次 spawn）
+    expect(mockInvokeAgent).toHaveBeenCalledTimes(2);
+  });
+});
