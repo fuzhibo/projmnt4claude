@@ -63,9 +63,9 @@ describe('callAI 超时参数传递 (T1-T2)', () => {
 
     // 验证 invokeAgent 被调用且 timeout 参数为 300
     expect(mockInvokeAgent).toHaveBeenCalledTimes(1);
-    const callArgs = mockInvokeAgent.mock.calls[0];
+    const callArgs = mockInvokeAgent.mock.calls[0] as [string, { timeout?: number }];
     expect(callArgs).toBeDefined();
-    expect(callArgs![1].timeout).toBe(300);
+    expect(callArgs[1].timeout).toBe(300);
   });
 
   // T2: 自定义超时传递
@@ -76,9 +76,9 @@ describe('callAI 超时参数传递 (T1-T2)', () => {
     await callAI({ prompt: 'test', cwd: '/tmp', outputFormat: 'text', timeout: 600 });
 
     expect(mockInvokeAgent).toHaveBeenCalledTimes(1);
-    const callArgs = mockInvokeAgent.mock.calls[0];
+    const callArgs = mockInvokeAgent.mock.calls[0] as [string, { timeout?: number }];
     expect(callArgs).toBeDefined();
-    expect(callArgs![1].timeout).toBe(600);
+    expect(callArgs[1].timeout).toBe(600);
   });
 
   // 边界测试：timeout=0 现在被视为无效值（CA-003-1）
@@ -119,8 +119,8 @@ describe('callAI debug 模式日志 (T3-T4)', () => {
     // callAI 现在使用 Logger 输出日志（info/debug 级别），不验证 console 输出
     // 只验证 debug 参数正确传递即可
     expect(mockInvokeAgent).toHaveBeenCalled();
-    const callArgs = mockInvokeAgent.mock.calls[0];
-    expect(callArgs![1].debug).toBe(false);
+    const callArgs = mockInvokeAgent.mock.calls[0] as [string, { debug?: boolean }];
+    expect(callArgs[1].debug).toBe(false);
   });
 
   // T4: debug=true 输出日志
@@ -256,30 +256,30 @@ describe('callAI timeout validation (CA-003-1)', () => {
 
   it('should throw on negative timeout', async () => {
     await expect(
-      callAI({ prompt: 'test', cwd: '/tmp', timeout: -1 }),
+      callAI({ prompt: 'test', cwd: '/tmp', timeout: -1, outputFormat: 'text' }),
     ).rejects.toThrow('callAI: invalid timeout -1');
   });
 
   it('should throw on NaN timeout', async () => {
     await expect(
-      callAI({ prompt: 'test', cwd: '/tmp', timeout: NaN }),
+      callAI({ prompt: 'test', cwd: '/tmp', timeout: NaN, outputFormat: 'text' }),
     ).rejects.toThrow('callAI: invalid timeout NaN');
   });
 
   it('should throw on zero timeout', async () => {
     await expect(
-      callAI({ prompt: 'test', cwd: '/tmp', timeout: 0 }),
+      callAI({ prompt: 'test', cwd: '/tmp', timeout: 0, outputFormat: 'text' }),
     ).rejects.toThrow('callAI: invalid timeout 0');
   });
 
   it('should not throw when timeout is undefined (uses DEFAULT_TIMEOUT)', async () => {
     mockInvokeAgent.mockResolvedValue(createMockResult());
 
-    await callAI({ prompt: 'test', cwd: '/tmp' });
+    await callAI({ prompt: 'test', cwd: '/tmp', outputFormat: 'text' });
 
     expect(mockInvokeAgent).toHaveBeenCalledTimes(1);
     // 验证 timeout 被默认设置为 300
-    const passedOptions = mockInvokeAgent.mock.calls[0][1] as { timeout: number };
+    const passedOptions = (mockInvokeAgent.mock.calls[0] as [string, { timeout: number }])[1];
     expect(passedOptions.timeout).toBe(300);
   });
 });
