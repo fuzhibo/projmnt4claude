@@ -12,10 +12,10 @@
 import { describe, it, expect, jest, beforeEach, afterEach } from '@jest/globals';
 
 // Mock invokeAgent 避免真实 AI 调用
-const mockInvokeAgent = jest.fn();
+const mockInvokeAgent = jest.fn() as jest.MockedFunction<(cmd: string, opts: unknown) => Promise<AgentResult>>;
 
 jest.mock('../../headless-agent.js', () => ({
-  invokeAgent: mockInvokeAgent,
+  invokeAgent: (...args: [string, unknown]) => mockInvokeAgent(...args),
 }));
 
 import { callAI, callAIForJSON } from '../ai-integration.js';

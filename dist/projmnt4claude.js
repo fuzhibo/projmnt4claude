@@ -37960,30 +37960,18 @@ async function reviewReport(requirement, report, cwd, lang = "zh", timeout, debu
   const prompt = await loadAndRenderTemplate("review", { requirement, report: reportMarkdown }, lang);
   return callAIForJSON({ prompt, cwd, timeout, debug }, validateReviewResult);
 }
-async function reviewWithRetry(requirement, report, options) {
-  let currentReport = report;
+async function reviewReportWithRetry(requirement, report, options) {
   let lastReview;
   for (let attempt = 0;attempt <= options.maxRetry; attempt++) {
-    lastReview = await reviewReport(requirement, currentReport, options.cwd, options.lang, options.timeout, options.debug);
+    lastReview = await reviewReport(requirement, report, options.cwd, options.lang, options.timeout, options.debug);
     if (lastReview.pass) {
-      return { report: currentReport, review: lastReview };
+      return { report, review: lastReview };
     }
-    if (attempt < options.maxRetry) {
-      const issuesText = lastReview.issues.map((i) => `[${i.severity}] ${i.dimension}: ${i.description} → ${i.suggestion}`).join(`
-`);
-      const previousReport = generateReport(currentReport);
-      const prompt = await loadAndRenderTemplate("investigateWithFeedback", { requirement, previousReport, issues: issuesText }, options.lang);
-      const aiResult = await callAI({ prompt, outputFormat: "text", cwd: options.cwd, timeout: options.timeout, debug: options.debug });
-      if (!aiResult.success) {
-        throw new Error(`AI regeneration failed: ${aiResult.error}`);
-      }
-      currentReport = {
-        ...currentReport,
-        metadata: { ...currentReport.metadata, investigationDate: new Date().toISOString() }
-      };
+    if (attempt >= options.maxRetry) {
+      return { report, review: lastReview };
     }
   }
-  throw new Error(`Review failed after ${options.maxRetry} retries. Last issues: ${lastReview?.issues.map((i) => i.description).join("; ")}`);
+  throw new Error("reviewReportWithRetry: unreachable");
 }
 function validateReviewResult(data) {
   if (!data || typeof data !== "object")
@@ -38303,7 +38291,7 @@ async function runNewInvestigation(requirement, cwd, options) {
   }
   let reviewResult;
   if (!options.skipReview) {
-    const retryResult = await reviewWithRetry(requirement, report, {
+    const retryResult = await reviewReportWithRetry(requirement, report, {
       cwd,
       lang,
       maxRetry,
@@ -38548,9 +38536,15 @@ async function runSplitFlow(report, requirement, cwd, options) {
   const depth = options.depth ?? 0;
   if (depth >= MAX_SPLIT_DEPTH) {
     if (!quiet) {
-      console.log(`   ⚠️ Max split depth (${MAX_SPLIT_DEPTH}) reached, skipping further splits`);
+      console.log(`   ⚠️ Max split depth (${MAX_SPLIT_DEPTH}) reached`);
+      console.log(`   \uD83D\uDCA1 Sub-report may still need splitting. Use --split mode to continue.`);
     }
-    return { success: true, subReports: [] };
+    return {
+      success: true,
+      subReports: [],
+      needsFurtherSplit: true,
+      furtherSplitCandidates: [outputDir]
+    };
   }
   if (!quiet) {
     console.log("   \uD83D\uDCCB Generating split plan...");
@@ -38590,6 +38584,8 @@ async function runSplitFlow(report, requirement, cwd, options) {
   const outputMode = { type: "dir", path: subDir };
   for (let i = 0;i < splitPlan.items.length; i++) {
     const item = splitPlan.items[i];
+    if (!item)
+      continue;
     if (!quiet) {
       console.log(`   \uD83D\uDCC4 Generating sub-report ${i + 1}/${splitPlan.items.length}: ${item.title}`);
     }
@@ -38599,6 +38595,13 @@ async function runSplitFlow(report, requirement, cwd, options) {
     fs29.writeFileSync(subReportPath, generateReport(subReport));
     subReports.push(subReportPath);
     if (shouldSplit(subReportPath, splitThreshold)) {
+      if (depth + 1 >= MAX_SPLIT_DEPTH) {
+        if (!quiet) {
+          console.log(`   \uD83D\uDCCA Sub-report ${i + 1} exceeds threshold, but depth limit reached`);
+          console.log(`   \uD83D\uDCA1 Run: projmnt4claude investigation-requirement --split --report-path "${subReportPath}"`);
+        }
+        continue;
+      }
       if (!quiet) {
         console.log(`   \uD83D\uDCCA Sub-report ${i + 1} exceeds threshold, recursing (depth ${depth + 1}/${MAX_SPLIT_DEPTH})...`);
       }
