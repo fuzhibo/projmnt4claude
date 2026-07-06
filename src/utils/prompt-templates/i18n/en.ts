@@ -21,7 +21,8 @@ Generate a structured investigation report based on the following requirement de
 
 ## Layout Hierarchy Constraints (Must Strictly Follow)
 - Title hierarchy: # Level 1 → ## Level 2 → ### Level 3, no skipping
-- Section numbering: Use digit.digit format (e.g., 1.1, 1.2), no mixed numbering
+- Section numbering: Use CA-NNN / SOL-NNN format (e.g., CA-001, SOL-001), consistent with parser contract
+- Numbering explanation: CA-NNN for Cause Analysis, SOL-NNN for Solution
 - List hierarchy: Use 2-space indentation, max 3 levels nested
 - Code blocks: Must specify language type
 - Tables: Must have header row, columns aligned
@@ -42,7 +43,7 @@ Output the investigation report in the following format (en):
 ### CA-001: {Root cause title}
 {Root cause detailed description}
 
-## Solution
+## Solutions
 ### SOL-001: {Solution title} → Corresponds to CA-001
 {Solution detailed description}
 - Involved Files: \`src/path/to/file.ts\`
@@ -66,6 +67,7 @@ Output the investigation report in the following format (en):
 - Checkpoints must annotate the solution number they belong to (format: → SOL-NNN)
 - Checkpoint format: '- [prefix] description → SOL-NNN'
 - Use standard gate prefixes for checkpoints: [ai review], [ai qa], [human qa], [script]
+- Numbering format: CA-NNN (Cause Analysis), SOL-NNN (Solution), NNN is at least 3 digits
 `,
 
   review: `You are an investigation report quality reviewer for the projmnt4claude project.
@@ -81,7 +83,7 @@ Review the quality of the following investigation report across three dimensions
 
 ## Layout Hierarchy Constraints (Check During Review)
 - Title hierarchy: # Level 1 → ## Level 2 → ### Level 3, no skipping
-- Section numbering: Use digit.digit format
+- Section numbering: Use CA-NNN / SOL-NNN format (e.g., CA-001, SOL-001), consistent with parser contract
 - List hierarchy: Use 2-space indentation, max 3 levels nested
 - Code blocks: Must specify language type
 - Tables: Must have header row, columns aligned
@@ -151,7 +153,7 @@ Revise the following investigation report based on user feedback.
 
 ## Layout Hierarchy Constraints (Must Strictly Follow)
 - Title hierarchy: # Level 1 → ## Level 2 → ### Level 3, no skipping
-- Section numbering: Use digit.digit format
+- Section numbering: Use CA-NNN / SOL-NNN format (e.g., CA-001, SOL-001), consistent with parser contract
 - List hierarchy: Use 2-space indentation, max 3 levels nested
 - Code blocks: Must specify language type
 - Tables: Must have header row, columns aligned

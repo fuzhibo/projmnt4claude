@@ -21,7 +21,8 @@ export const investigationTemplates: Record<string, string> = {
 
 ## 排版层级约束（必须严格遵守）
 - 标题层级：# 一级 → ## 二级 → ### 三级，不得跳级
-- 章节编号：使用 数字. 数字 格式（如 1.1, 1.2），不使用混合编号
+- 章节编号：使用 CA-NNN / SOL-NNN 格式（如 CA-001, SOL-001），与解析器契约一致
+- 编号说明：CA-NNN 表示原因分析编号（Cause Analysis），SOL-NNN 表示解决方案编号（Solution）
 - 列表层级：缩进使用 2 空格，最多 3 级嵌套
 - 代码块：必须标注语言类型
 - 表格：必须有表头行，列对齐
@@ -66,6 +67,7 @@ export const investigationTemplates: Record<string, string> = {
 - 检查点必须标注归属的解决方案编号（格式：→ SOL-NNN）
 - 检查点格式：'- [prefix] 描述 → SOL-NNN'
 - 检查点使用门禁标准前缀: [ai review], [ai qa], [human qa], [script]
+- 编号格式：CA-NNN（原因分析）、SOL-NNN（解决方案），NNN 为至少 3 位数字
 `,
 
   review: `你是 projmnt4claude 项目的调查报告质量评审员。
@@ -81,7 +83,7 @@ export const investigationTemplates: Record<string, string> = {
 
 ## 排版层级约束（评审时检查）
 - 标题层级：# 一级 → ## 二级 → ### 三级，不得跳级
-- 章节编号：使用 数字. 数字 格式
+- 章节编号：使用 CA-NNN / SOL-NNN 格式（如 CA-001, SOL-001），与解析器契约一致
 - 列表层级：缩进使用 2 空格，最多 3 级嵌套
 - 代码块：必须标注语言类型
 - 表格：必须有表头行，列对齐
@@ -151,7 +153,7 @@ export const investigationTemplates: Record<string, string> = {
 
 ## 排版层级约束（必须严格遵守）
 - 标题层级：# 一级 → ## 二级 → ### 三级，不得跳级
-- 章节编号：使用 数字. 数字 格式
+- 章节编号：使用 CA-NNN / SOL-NNN 格式（如 CA-001, SOL-001），与解析器契约一致
 - 列表层级：缩进使用 2 空格，最多 3 级嵌套
 - 代码块：必须标注语言类型
 - 表格：必须有表头行，列对齐
