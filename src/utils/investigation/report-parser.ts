@@ -207,6 +207,8 @@ function parseCheckpoints(md: string, options: ParseCheckpointsOptions = {}): Re
 
   // 内部辅助：使用指定正则解析检查点
   function parseWithRegex(re: RegExp, requireBelongsTo: boolean): void {
+    // null 守卫：TypeScript 不保留跨嵌套函数的类型收窄
+    if (!sectionMd) return;
     const localRe = new RegExp(re.source, 'gm');
     let match: RegExpExecArray | null;
     while ((match = localRe.exec(sectionMd)) !== null) {

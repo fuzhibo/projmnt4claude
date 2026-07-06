@@ -6,16 +6,17 @@
 
 import { describe, it, expect, jest, beforeEach, afterEach } from '@jest/globals';
 import { createIsolatedTestEnv, type IsolatedTestEnv } from '../../utils/test-env.js';
+import type { InvestigationReport } from '../../utils/investigation/types.js';
 
 // ============================================================
 // Mock setup
 // ============================================================
 
-const mockGenerateReport = jest.fn();
-const mockWriteReport = jest.fn();
-const mockValidateReport = jest.fn();
-const mockReviewWithRetry = jest.fn();
-const mockKillAllActiveChildren = jest.fn();
+const mockGenerateReport = jest.fn<(...args: any[]) => any>();
+const mockWriteReport = jest.fn<(...args: any[]) => any>();
+const mockValidateReport = jest.fn<(...args: any[]) => any>();
+const mockReviewWithRetry = jest.fn<(...args: any[]) => any>();
+const mockKillAllActiveChildren = jest.fn<(...args: any[]) => any>();
 
 // 需要 mock 的模块必须在 import 之前声明
 jest.mock('../../utils/investigation/report-generator', () => ({
@@ -32,7 +33,7 @@ jest.mock('../../utils/investigation/report-reviewer', () => ({
 }));
 
 // mock generateInvestigationReport 内部使用（通过 callAI mock）
-const mockCallAI = jest.fn();
+const mockCallAI = jest.fn<(...args: any[]) => any>();
 jest.mock('../../utils/investigation/ai-integration', () => ({
   callAI: (...args: unknown[]) => mockCallAI(...args),
   callAIForJSON: (...args: unknown[]) => mockCallAI(...args),
@@ -69,7 +70,7 @@ jest.mock('../../utils/child-process-registry.js', () => ({
 // Helpers
 // ============================================================
 
-function makeValidReport() {
+function makeValidReport(): InvestigationReport {
   return {
     metadata: {
       requirementSource: 'Test requirement',
@@ -353,7 +354,7 @@ describe('investigation-requirement retry logic', () => {
 
       // 第二次 callAI（重试）的 options.prompt 应包含原始需求 + 格式修正提示
       expect(mockCallAI).toHaveBeenCalledTimes(2);
-      const retryCallArg = mockCallAI.mock.calls[1][0] as { prompt: string };
+      const retryCallArg = mockCallAI.mock.calls[1]![0] as { prompt: string };
       expect(retryCallArg.prompt).toContain('original requirement text');
       expect(retryCallArg.prompt).toContain('格式纠正要求');
       expect(retryCallArg.prompt).toContain('metadata.requirementSource 缺失或为空');
@@ -440,7 +441,7 @@ describe('investigation-requirement retry logic', () => {
         outputDir: env.tempDir,
       });
 
-      const retryCallArg = mockCallAI.mock.calls[1][0] as { prompt: string };
+      const retryCallArg = mockCallAI.mock.calls[1]![0] as { prompt: string };
       expect(retryCallArg.prompt).toContain('**格式纠正要求**');
       expect(retryCallArg.prompt).toContain('- metadata.requirementSource 缺失或为空');
       expect(retryCallArg.prompt).toContain('- checkpoints 为空，至少需要 1 个检查点');
@@ -467,7 +468,7 @@ describe('investigation-requirement retry logic', () => {
         outputDir: env.tempDir,
       });
 
-      const retryCallArg = mockCallAI.mock.calls[1][0] as { prompt: string };
+      const retryCallArg = mockCallAI.mock.calls[1]![0] as { prompt: string };
       // 长消息应被截断到 500 字符
       expect(retryCallArg.prompt).not.toContain('X'.repeat(800));
       expect(retryCallArg.prompt).toMatch(/X{400,500}/);

@@ -60,7 +60,7 @@ export interface InvestigationRequirementOptions {
   /** 拆分阈值（KB） */
   splitThreshold?: number;
   /** 语言 */
-  language?: 'zh' | 'en';
+  lang?: 'zh' | 'en';
   /** 跳过 AI 评审 */
   skipReview?: boolean;
   /** 跳过拆分 */
@@ -136,7 +136,7 @@ export async function investigationRequirement(
 
   // 加载配置
   const config = loadInvestigationConfig(cwd);
-  const lang: 'zh' | 'en' = options.language ?? loadLanguageConfig(cwd) ?? DEFAULT_LANGUAGE;
+  const lang: 'zh' | 'en' = options.lang ?? loadLanguageConfig(cwd) ?? DEFAULT_LANGUAGE;
   const maxRetry = options.maxRetry ?? config.maxRetry ?? DEFAULT_MAX_RETRY;
   const splitThreshold = options.splitThreshold ?? config.splitThreshold ?? DEFAULT_SPLIT_THRESHOLD;
 
