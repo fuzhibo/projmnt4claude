@@ -16591,31 +16591,51 @@ function classifyExitResult(code, stderr, stdout, cwd) {
   };
 }
 async function runHeadlessClaude(options) {
-  return new Promise((resolve3) => {
-    const logger = createDiagnosticsLogger();
-    globalSpawnCount++;
-    const currentSpawnId = globalSpawnCount;
-    const startTimeMs = Date.now();
-    const contextInfo = {
-      spawnId: currentSpawnId,
-      isInHeadlessMode: !!process.env.CLAUDE_CLI_MODE,
-      spawnDepth: parseInt(process.env.CLAUDE_SPAWN_DEPTH || "0") + 1,
-      parentPid: process.pid,
-      cwd: options.cwd,
-      timeout: options.timeout,
-      timestamp: new Date().toISOString()
-    };
-    logger.info("spawn_start", contextInfo);
-    if (process.env.CLAUDE_CLI_MODE === "headless") {
+  const logger = createDiagnosticsLogger();
+  globalSpawnCount++;
+  const currentSpawnId = globalSpawnCount;
+  const startTimeMs = Date.now();
+  const contextInfo = {
+    spawnId: currentSpawnId,
+    isInHeadlessMode: !!process.env.CLAUDE_CLI_MODE,
+    spawnDepth: parseInt(process.env.CLAUDE_SPAWN_DEPTH || "0") + 1,
+    parentPid: process.pid,
+    parentPpid: process.ppid,
+    expectedParentPid: parseInt(process.env.CLAUDE_SPAWN_PARENT_PID || "0"),
+    cwd: options.cwd,
+    timeout: options.timeout,
+    timestamp: new Date().toISOString()
+  };
+  logger.info("spawn_start", contextInfo);
+  if (process.env.CLAUDE_CLI_MODE === "headless") {
+    const isTrueNesting = contextInfo.expectedParentPid > 0 && process.pid !== contextInfo.expectedParentPid;
+    if (isTrueNesting) {
       logger.error("POTENTIAL_NESTED_EXECUTION", {
-        message: "Detected spawn from within headless context",
+        message: "检测到真正的嵌套 spawn（子进程内部再 spawn 子进程）",
         spawnId: currentSpawnId,
         spawnDepth: contextInfo.spawnDepth,
-        recommendation: "Check docs/investigation-init-requirement/CA-006-nested-headless-execution-risk.md for root cause analysis"
+        parentPid: contextInfo.parentPid,
+        parentPpid: contextInfo.parentPpid,
+        expectedParentPid: contextInfo.expectedParentPid,
+        recommendation: "检查调用链，避免在 headless 上下文中再次 spawn"
+      });
+    } else {
+      logger.warn("SAME_PROCESS_RE_SPAWN", {
+        message: "同一进程内再次 spawn headless Claude（非嵌套，可能是重试）",
+        spawnId: currentSpawnId,
+        spawnDepth: contextInfo.spawnDepth,
+        parentPpid: contextInfo.parentPpid,
+        expectedParentPid: contextInfo.expectedParentPid,
+        recommendation: "检查是否遗漏了环境变量清除（SOL-001）"
       });
     }
+  }
+  const originalCliMode = process.env.CLAUDE_CLI_MODE;
+  const originalSpawnDepth = process.env.CLAUDE_SPAWN_DEPTH;
+  try {
     process.env.CLAUDE_CLI_MODE = "headless";
     process.env.CLAUDE_SPAWN_DEPTH = String(contextInfo.spawnDepth);
+    process.env.CLAUDE_SPAWN_PARENT_PID = String(process.pid);
     const args = [
       "--allowedTools",
       options.allowedTools.join(","),
@@ -16678,7 +16698,9 @@ async function runHeadlessClaude(options) {
         timeout: options.timeout * 1000
       }, "claudeAgent");
       if (child.stdin) {
-        let writeNextChunk = function() {
+        const chunkSize = 4096;
+        let offset = 0;
+        const writeNextChunk = () => {
           if (offset >= options.prompt.length) {
             child.stdin.end();
             return;
@@ -16692,60 +16714,72 @@ async function runHeadlessClaude(options) {
             writeNextChunk();
           }
         };
-        const chunkSize = 4096;
-        let offset = 0;
         writeNextChunk();
       }
-      let stdout = "";
-      let stderr = "";
-      child.stdout?.on("data", (data) => {
-        stdout += data.toString();
-      });
-      child.stderr?.on("data", (data) => {
-        stderr += data.toString();
-      });
-      child.on("close", (code) => {
-        const classified = classifyExitResult(code, stderr, stdout);
-        const durationMs = Date.now() - startTimeMs;
-        logger.info("spawn_end", {
-          spawnId: currentSpawnId,
-          success: classified.success,
-          code,
-          durationMs,
-          totalSpawnCount: globalSpawnCount
+      return await new Promise((resolve3) => {
+        let stdout = "";
+        let stderr = "";
+        child.stdout?.on("data", (data) => {
+          stdout += data.toString();
         });
-        resolve3({
-          success: classified.success,
-          output: stdout,
-          error: classified.error,
-          hookWarning: classified.hookWarning,
-          stderr,
-          childPid: child.pid
+        child.stderr?.on("data", (data) => {
+          stderr += data.toString();
         });
-      });
-      child.on("error", (error) => {
-        logger.error("spawn_error", {
-          spawnId: currentSpawnId,
-          error: error.message,
-          totalSpawnCount: globalSpawnCount
+        child.on("close", (code) => {
+          const classified = classifyExitResult(code, stderr, stdout);
+          const durationMs = Date.now() - startTimeMs;
+          logger.info("spawn_end", {
+            spawnId: currentSpawnId,
+            success: classified.success,
+            code,
+            durationMs,
+            totalSpawnCount: globalSpawnCount
+          });
+          resolve3({
+            success: classified.success,
+            output: stdout,
+            error: classified.error,
+            hookWarning: classified.hookWarning,
+            stderr,
+            childPid: child.pid
+          });
         });
-        resolve3({
-          success: false,
-          output: "",
-          error: error.message,
-          stderr: "",
-          childPid: child.pid
+        child.on("error", (error) => {
+          logger.error("spawn_error", {
+            spawnId: currentSpawnId,
+            error: error.message,
+            totalSpawnCount: globalSpawnCount
+          });
+          resolve3({
+            success: false,
+            output: "",
+            error: error.message,
+            stderr: "",
+            childPid: child.pid
+          });
         });
       });
     } catch (error) {
-      resolve3({
+      return {
         success: false,
         output: "",
         error: error instanceof Error ? error.message : String(error),
         stderr: ""
-      });
+      };
     }
-  });
+  } finally {
+    if (originalCliMode === undefined) {
+      delete process.env.CLAUDE_CLI_MODE;
+    } else {
+      process.env.CLAUDE_CLI_MODE = originalCliMode;
+    }
+    if (originalSpawnDepth === undefined) {
+      delete process.env.CLAUDE_SPAWN_DEPTH;
+    } else {
+      process.env.CLAUDE_SPAWN_DEPTH = originalSpawnDepth;
+    }
+    delete process.env.CLAUDE_SPAWN_PARENT_PID;
+  }
 }
 function sleep(seconds) {
   return new Promise((resolve3) => setTimeout(resolve3, seconds * 1000));
@@ -36142,7 +36176,8 @@ var investigationTemplates = {
 
 ## 排版层级约束（必须严格遵守）
 - 标题层级：# 一级 → ## 二级 → ### 三级，不得跳级
-- 章节编号：使用 数字. 数字 格式（如 1.1, 1.2），不使用混合编号
+- 章节编号：使用 CA-NNN / SOL-NNN 格式（如 CA-001, SOL-001），与解析器契约一致
+- 编号说明：CA-NNN 表示原因分析编号（Cause Analysis），SOL-NNN 表示解决方案编号（Solution）
 - 列表层级：缩进使用 2 空格，最多 3 级嵌套
 - 代码块：必须标注语言类型
 - 表格：必须有表头行，列对齐
@@ -36187,6 +36222,7 @@ var investigationTemplates = {
 - 检查点必须标注归属的解决方案编号（格式：→ SOL-NNN）
 - 检查点格式：'- [prefix] 描述 → SOL-NNN'
 - 检查点使用门禁标准前缀: [ai review], [ai qa], [human qa], [script]
+- 编号格式：CA-NNN（原因分析）、SOL-NNN（解决方案），NNN 为至少 3 位数字
 `,
   review: `你是 projmnt4claude 项目的调查报告质量评审员。
 
@@ -36201,7 +36237,7 @@ var investigationTemplates = {
 
 ## 排版层级约束（评审时检查）
 - 标题层级：# 一级 → ## 二级 → ### 三级，不得跳级
-- 章节编号：使用 数字. 数字 格式
+- 章节编号：使用 CA-NNN / SOL-NNN 格式（如 CA-001, SOL-001），与解析器契约一致
 - 列表层级：缩进使用 2 空格，最多 3 级嵌套
 - 代码块：必须标注语言类型
 - 表格：必须有表头行，列对齐
@@ -36270,7 +36306,7 @@ var investigationTemplates = {
 
 ## 排版层级约束（必须严格遵守）
 - 标题层级：# 一级 → ## 二级 → ### 三级，不得跳级
-- 章节编号：使用 数字. 数字 格式
+- 章节编号：使用 CA-NNN / SOL-NNN 格式（如 CA-001, SOL-001），与解析器契约一致
 - 列表层级：缩进使用 2 空格，最多 3 级嵌套
 - 代码块：必须标注语言类型
 - 表格：必须有表头行，列对齐
@@ -36414,7 +36450,8 @@ Generate a structured investigation report based on the following requirement de
 
 ## Layout Hierarchy Constraints (Must Strictly Follow)
 - Title hierarchy: # Level 1 → ## Level 2 → ### Level 3, no skipping
-- Section numbering: Use digit.digit format (e.g., 1.1, 1.2), no mixed numbering
+- Section numbering: Use CA-NNN / SOL-NNN format (e.g., CA-001, SOL-001), consistent with parser contract
+- Numbering explanation: CA-NNN for Cause Analysis, SOL-NNN for Solution
 - List hierarchy: Use 2-space indentation, max 3 levels nested
 - Code blocks: Must specify language type
 - Tables: Must have header row, columns aligned
@@ -36435,7 +36472,7 @@ Output the investigation report in the following format (en):
 ### CA-001: {Root cause title}
 {Root cause detailed description}
 
-## Solution
+## Solutions
 ### SOL-001: {Solution title} → Corresponds to CA-001
 {Solution detailed description}
 - Involved Files: \`src/path/to/file.ts\`
@@ -36459,6 +36496,7 @@ Output the investigation report in the following format (en):
 - Checkpoints must annotate the solution number they belong to (format: → SOL-NNN)
 - Checkpoint format: '- [prefix] description → SOL-NNN'
 - Use standard gate prefixes for checkpoints: [ai review], [ai qa], [human qa], [script]
+- Numbering format: CA-NNN (Cause Analysis), SOL-NNN (Solution), NNN is at least 3 digits
 `,
   review: `You are an investigation report quality reviewer for the projmnt4claude project.
 
@@ -36473,7 +36511,7 @@ Review the quality of the following investigation report across three dimensions
 
 ## Layout Hierarchy Constraints (Check During Review)
 - Title hierarchy: # Level 1 → ## Level 2 → ### Level 3, no skipping
-- Section numbering: Use digit.digit format
+- Section numbering: Use CA-NNN / SOL-NNN format (e.g., CA-001, SOL-001), consistent with parser contract
 - List hierarchy: Use 2-space indentation, max 3 levels nested
 - Code blocks: Must specify language type
 - Tables: Must have header row, columns aligned
@@ -36542,7 +36580,7 @@ Revise the following investigation report based on user feedback.
 
 ## Layout Hierarchy Constraints (Must Strictly Follow)
 - Title hierarchy: # Level 1 → ## Level 2 → ### Level 3, no skipping
-- Section numbering: Use digit.digit format
+- Section numbering: Use CA-NNN / SOL-NNN format (e.g., CA-001, SOL-001), consistent with parser contract
 - List hierarchy: Use 2-space indentation, max 3 levels nested
 - Code blocks: Must specify language type
 - Tables: Must have header row, columns aligned
@@ -37880,6 +37918,8 @@ function parseCheckpoints2(md, options = {}) {
   }
   return items;
   function parseWithRegex(re, requireBelongsTo) {
+    if (!sectionMd)
+      return;
     const localRe = new RegExp(re.source, "gm");
     let match;
     while ((match = localRe.exec(sectionMd)) !== null) {
@@ -38148,7 +38188,7 @@ async function investigationRequirement(description, cwd, options) {
     };
   }
   const config = loadInvestigationConfig(cwd);
-  const lang = options.language ?? loadLanguageConfig(cwd) ?? DEFAULT_LANGUAGE;
+  const lang = options.lang ?? loadLanguageConfig(cwd) ?? DEFAULT_LANGUAGE;
   const maxRetry = options.maxRetry ?? config.maxRetry ?? DEFAULT_MAX_RETRY2;
   const splitThreshold = options.splitThreshold ?? config.splitThreshold ?? DEFAULT_SPLIT_THRESHOLD;
   let requirement = description;
@@ -38233,6 +38273,10 @@ async function runNewInvestigation(requirement, cwd, options) {
     console.log("");
   }
   let report = await withTimeoutRace(generateInvestigationReport(requirement, cwd, lang, options.timeout, options.debug), (options.timeout ?? DEFAULT_RETRY_TIMEOUT_S) * 1000, "generateInvestigationReport(initial)");
+  const attemptOutputDir = options.outputDir ?? determineOutputMode(options, cwd).path;
+  if (!fs29.existsSync(attemptOutputDir)) {
+    fs29.mkdirSync(attemptOutputDir, { recursive: true });
+  }
   let retryCount = 0;
   let lastValidReport = null;
   while (retryCount < maxRetry) {
@@ -38240,10 +38284,33 @@ async function runNewInvestigation(requirement, cwd, options) {
     if (formatValidation.valid) {
       break;
     }
+    const attemptNum = retryCount + 1;
     lastValidReport = report;
     if (!options.quiet) {
-      console.log(`   ⚠️ Format validation failed (attempt ${retryCount + 1}/${maxRetry}): ${formatValidation.errors.map((e) => e.message).join("; ")}`);
+      console.log(`   ⚠️ Format validation failed (attempt ${attemptNum}/${maxRetry}): ${formatValidation.errors.map((e) => e.message).join("; ")}`);
       console.log("   Retrying report generation with format corrections...");
+    }
+    try {
+      const attemptPath = await saveAttemptReport(report, attemptOutputDir, attemptNum);
+      if (!options.quiet) {
+        console.log(`   \uD83D\uDCC4 尝试报告已保存: ${attemptPath}`);
+      }
+    } catch (saveErr) {
+      logger.warn("save attempt report failed", {
+        error: saveErr instanceof Error ? saveErr.message : String(saveErr)
+      });
+    }
+    let reviewPath;
+    try {
+      const reviewResult2 = await reviewReport(requirement, report, cwd, lang, options.timeout, options.debug);
+      reviewPath = await saveReviewReport(reviewResult2, attemptOutputDir, attemptNum, lang);
+      if (!options.quiet) {
+        console.log(`   \uD83D\uDCCB 审核报告已保存: ${reviewPath}`);
+      }
+    } catch (reviewErr) {
+      logger.warn("review report generation failed", {
+        error: reviewErr instanceof Error ? reviewErr.message : String(reviewErr)
+      });
     }
     try {
       killAllActiveChildren("SIGTERM");
@@ -38254,7 +38321,11 @@ async function runNewInvestigation(requirement, cwd, options) {
     }
     await new Promise((resolve10) => setTimeout(resolve10, RETRY_CLEANUP_DELAY_MS));
     try {
-      const retryPrompt = buildRetryPrompt(requirement, formatValidation.errors);
+      const retryPrompt = buildRetryPrompt(requirement, formatValidation.errors, {
+        reviewPath,
+        attemptNum,
+        lang
+      });
       const timeoutS = options.timeout ?? DEFAULT_RETRY_TIMEOUT_S;
       report = await withTimeoutRace(generateInvestigationReport(retryPrompt, cwd, lang, options.timeout, options.debug), timeoutS * 1000, "generateInvestigationReport(retry)");
     } catch (err) {
@@ -38288,6 +38359,16 @@ async function runNewInvestigation(requirement, cwd, options) {
       console.log("   ⚠️ Final report has validation issues, using with warnings:");
       finalValidation.errors.forEach((e) => console.log(`     - ${e.message}`));
     }
+  }
+  try {
+    const finalPath = await saveFinalReport(report, attemptOutputDir);
+    if (!options.quiet) {
+      console.log(`   \uD83D\uDCC4 最终报告快照已保存: ${finalPath}`);
+    }
+  } catch (saveErr) {
+    logger.warn("save final report snapshot failed", {
+      error: saveErr instanceof Error ? saveErr.message : String(saveErr)
+    });
   }
   let reviewResult;
   if (!options.skipReview) {
@@ -38628,10 +38709,40 @@ async function runSplitFlow(report, requirement, cwd, options) {
 var DEFAULT_RETRY_TIMEOUT_S = 300;
 var RETRY_CLEANUP_DELAY_MS = 1000;
 var MAX_RETRY_FEEDBACK_LEN = 500;
-function buildRetryPrompt(requirement, errors) {
+function buildRetryPrompt(requirement, errors, options) {
+  const lang = options?.lang ?? "zh";
+  const reviewPath = options?.reviewPath;
+  const attemptNum = options?.attemptNum ?? 1;
   const feedback = errors.map((e) => `- ${e.message}`).join(`
 `).substring(0, MAX_RETRY_FEEDBACK_LEN);
-  return `${requirement}
+  if (reviewPath) {
+    if (lang === "zh") {
+      return `${requirement}
+
+---
+**格式纠正要求（第 ${attemptNum} 次重试）**:
+
+` + `上次生成的报告未能通过格式验证。
+` + `AI 评审员已生成详细的审核报告，请查阅了解具体问题：
+` + `- 审核报告路径: ${reviewPath}
+
+` + `请根据审核报告中的问题和建议，修正报告格式后重新生成。
+`;
+    }
+    return `${requirement}
+
+---
+**Format Correction Request (Attempt ${attemptNum})**:
+
+` + `The previous report did not pass format validation.
+` + `The AI reviewer has generated a detailed review report. Please review it to understand the specific issues:
+` + `- Review Report Path: ${reviewPath}
+
+` + `Please correct the report format based on the issues and suggestions in the review report, then regenerate.
+`;
+  }
+  if (lang === "zh") {
+    return `${requirement}
 
 ---
 **格式纠正要求**:
@@ -38641,6 +38752,78 @@ ${feedback}
 
 请确保输出格式符合要求。
 `;
+  }
+  return `${requirement}
+
+---
+**Format Correction Request**:
+The previous output has the following format issues, please regenerate:
+
+${feedback}
+
+Please ensure the output format is correct.
+`;
+}
+async function saveAttemptReport(report, outputDir, attemptNum) {
+  const content = generateReport(report);
+  const filePath = path25.join(outputDir, `report-attempt-${attemptNum}.md`);
+  fs29.writeFileSync(filePath, content, "utf-8");
+  return filePath;
+}
+function formatReviewReport(reviewResult, attemptNum, lang) {
+  const { pass, scores, issues } = reviewResult;
+  if (lang === "zh") {
+    const lines2 = [
+      `# 审核报告（第 ${attemptNum} 次尝试）`,
+      "",
+      "## 审核结果",
+      `- **通过状态**: ${pass ? "通过" : "未通过"}`,
+      `- **根因对齐度**: ${scores.rootCauseAlignment}/100`,
+      `- **解决方案有效性**: ${scores.solutionEffectiveness}/100`,
+      `- **检查点完善度**: ${scores.checkpointCompleteness}/100`,
+      "",
+      "## 问题列表"
+    ];
+    issues.forEach((issue, i) => {
+      lines2.push("", `### 问题 ${i + 1}: ${issue.dimension}`, `- **严重度**: ${issue.severity}`, `- **描述**: ${issue.description}`, `- **建议**: ${issue.suggestion}`);
+    });
+    lines2.push("", "## 修正建议汇总");
+    issues.filter((i) => i.severity === "critical").forEach((i) => lines2.push(`- [关键] ${i.suggestion}`));
+    issues.filter((i) => i.severity === "major").forEach((i) => lines2.push(`- [重要] ${i.suggestion}`));
+    return lines2.join(`
+`);
+  }
+  const lines = [
+    `# Review Report (Attempt ${attemptNum})`,
+    "",
+    "## Review Results",
+    `- **Pass Status**: ${pass ? "Passed" : "Failed"}`,
+    `- **Root Cause Alignment**: ${scores.rootCauseAlignment}/100`,
+    `- **Solution Effectiveness**: ${scores.solutionEffectiveness}/100`,
+    `- **Checkpoint Completeness**: ${scores.checkpointCompleteness}/100`,
+    "",
+    "## Issue List"
+  ];
+  issues.forEach((issue, i) => {
+    lines.push("", `### Issue ${i + 1}: ${issue.dimension}`, `- **Severity**: ${issue.severity}`, `- **Description**: ${issue.description}`, `- **Suggestion**: ${issue.suggestion}`);
+  });
+  lines.push("", "## Correction Suggestions Summary");
+  issues.filter((i) => i.severity === "critical").forEach((i) => lines.push(`- [Critical] ${i.suggestion}`));
+  issues.filter((i) => i.severity === "major").forEach((i) => lines.push(`- [Major] ${i.suggestion}`));
+  return lines.join(`
+`);
+}
+async function saveFinalReport(report, outputDir) {
+  const content = generateReport(report);
+  const filePath = path25.join(outputDir, "report-final.md");
+  fs29.writeFileSync(filePath, content, "utf-8");
+  return filePath;
+}
+async function saveReviewReport(reviewResult, outputDir, attemptNum, lang) {
+  const reviewPath = path25.join(outputDir, `report-attempt-${attemptNum}-review.md`);
+  const content = formatReviewReport(reviewResult, attemptNum, lang);
+  fs29.writeFileSync(reviewPath, content, "utf-8");
+  return reviewPath;
 }
 function withTimeoutRace(promise, timeoutMs, label) {
   let timer;
@@ -51827,7 +52010,7 @@ program2.command("investigation-requirement [description]").description(`\u9700\
     outputFile: options.outputFile,
     maxRetry: options.maxRetry ? parseInt(options.maxRetry, 10) : undefined,
     splitThreshold: options.splitThreshold ? parseInt(options.splitThreshold, 10) : undefined,
-    language: options.language,
+    lang: options.language,
     timeout: options.timeout ? parseInt(options.timeout, 10) : undefined,
     debug: options.debug,
     skipReview: options.skipReview,
