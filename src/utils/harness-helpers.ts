@@ -6,6 +6,7 @@
 
 import * as fs from 'fs';
 import * as path from 'path';
+// process.ppid 是 Node.js 内置属性（9.3+），无需单独导入
 import type { TaskMeta, CheckpointMetadata } from '../types/task.js';
 import { getProjectDir } from './path.js';
 import { t } from '../i18n/index.js';
@@ -291,41 +292,74 @@ export interface ParsedVerdict {
 // ============================================================
 
 export async function runHeadlessClaude(options: HeadlessClaudeOptions): Promise<HeadlessClaudeResult> {
-  return new Promise((resolve) => {
-    // CA-006 SOL-006-1 + SOL-006-2: 嵌套执行诊断日志
-    const logger = createDiagnosticsLogger();
-    globalSpawnCount++;
-    const currentSpawnId = globalSpawnCount;
-    const startTimeMs = Date.now();
+  // CA-006 SOL-006-1 + SOL-006-2: 嵌套执行诊断日志
+  const logger = createDiagnosticsLogger();
+  globalSpawnCount++;
+  const currentSpawnId = globalSpawnCount;
+  const startTimeMs = Date.now();
 
-    // 记录执行上下文（诊断，不中断）
-    const contextInfo = {
-      spawnId: currentSpawnId,
-      isInHeadlessMode: !!process.env.CLAUDE_CLI_MODE,
-      spawnDepth: (parseInt(process.env.CLAUDE_SPAWN_DEPTH || '0') + 1),
-      parentPid: process.pid,
-      cwd: options.cwd,
-      timeout: options.timeout,
-      timestamp: new Date().toISOString(),
-    };
+  // 记录执行上下文（诊断，不中断）
+  // SOL-002: 引入 parentPpid（操作系统层面的父进程 PID）用于诊断
+  // - 与 expectedParentPid（环境变量中记录的"期望父进程"）配合，可交叉验证嵌套场景
+  // - 顺序重试场景：expectedParentPid=0（finally 已清除），不触发检测
+  // - 真嵌套场景：expectedParentPid>0 且 process.pid 与之不同，触发 ERROR
+  const contextInfo = {
+    spawnId: currentSpawnId,
+    isInHeadlessMode: !!process.env.CLAUDE_CLI_MODE,
+    spawnDepth: (parseInt(process.env.CLAUDE_SPAWN_DEPTH || '0') + 1),
+    parentPid: process.pid,
+    parentPpid: process.ppid,
+    expectedParentPid: parseInt(process.env.CLAUDE_SPAWN_PARENT_PID || '0'),
+    cwd: options.cwd,
+    timeout: options.timeout,
+    timestamp: new Date().toISOString(),
+  };
 
-    logger.info('spawn_start', contextInfo);
+  logger.info('spawn_start', contextInfo);
 
-    // 嵌套检测：记录警告日志（不中断流程）
-    if (process.env.CLAUDE_CLI_MODE === 'headless') {
+  // SOL-002: 改进嵌套检测，区分真正嵌套 vs 顺序重试
+  // 使用 contextInfo 中预计算的 expectedParentPid（已避免重复读取环境变量）
+  if (process.env.CLAUDE_CLI_MODE === 'headless') {
+    const isTrueNesting = contextInfo.expectedParentPid > 0 && process.pid !== contextInfo.expectedParentPid;
+
+    if (isTrueNesting) {
+      // 真正的嵌套：当前进程 PID 与设置环境变量时的进程 PID 不同
       logger.error('POTENTIAL_NESTED_EXECUTION', {
-        message: 'Detected spawn from within headless context',
+        message: '检测到真正的嵌套 spawn（子进程内部再 spawn 子进程）',
         spawnId: currentSpawnId,
         spawnDepth: contextInfo.spawnDepth,
-        recommendation: 'Check docs/investigation-init-requirement/CA-006-nested-headless-execution-risk.md for root cause analysis',
+        parentPid: contextInfo.parentPid,
+        parentPpid: contextInfo.parentPpid,
+        expectedParentPid: contextInfo.expectedParentPid,
+        recommendation: '检查调用链，避免在 headless 上下文中再次 spawn',
       });
-      // 注意：不抛出异常，继续执行
-      // 原因：抛出异常可能触发上层重试，反而增加 spawn 次数
+    } else {
+      // 顺序重试：同一进程内再次 spawn（非嵌套）
+      logger.warn('SAME_PROCESS_RE_SPAWN', {
+        message: '同一进程内再次 spawn headless Claude（非嵌套，可能是重试）',
+        spawnId: currentSpawnId,
+        spawnDepth: contextInfo.spawnDepth,
+        parentPpid: contextInfo.parentPpid,
+        expectedParentPid: contextInfo.expectedParentPid,
+        recommendation: '检查是否遗漏了环境变量清除（SOL-001）',
+      });
     }
+    // 注意：不抛出异常，继续执行
+    // 原因：抛出异常可能触发上层重试，反而增加 spawn 次数
+  }
 
+  // SOL-001: 保存原始环境变量，用于 finally 恢复
+  const originalCliMode = process.env.CLAUDE_CLI_MODE;
+  const originalSpawnDepth = process.env.CLAUDE_SPAWN_DEPTH;
+
+  try {
     // 设置环境标记（子进程继承）
     process.env.CLAUDE_CLI_MODE = 'headless';
     process.env.CLAUDE_SPAWN_DEPTH = String(contextInfo.spawnDepth);
+    // CLAUDE_SPAWN_PARENT_PID 是纯临时标记（transient marker），不在 finally 中保存/恢复，
+    // 而是无条件 delete。与 CLAUDE_CLI_MODE / CLAUDE_SPAWN_DEPTH 的 save-restore 模式不同，
+    // 因为此变量仅在当前函数作用域内有效，不反映外部预设状态。
+    process.env.CLAUDE_SPAWN_PARENT_PID = String(process.pid);
 
     // 注意：prompt 通过 stdin 传递，而不是命令行参数
     // 这样可以避免多行文本作为命令行参数时的解析问题
@@ -392,7 +426,12 @@ export async function runHeadlessClaude(options: HeadlessClaudeOptions): Promise
       args.push('--debug');
     }
 
+    // spawn + promise 部分用内层 try-catch 捕获 spawn 级同步错误并 resolve 为失败结果
+    // 验证错误（如 deriveSessionStateFromLegacyFlags/buildSessionCliArgs 抛出）不在此 catch 范围内，
+    // 会向上传播为 rejection，保持 V2.1 forked 拒绝语义
     try {
+      // 省略 env 选项：子进程直接继承当前 process.env（含已设置的 headless 标记），
+      // 与旧版显式 `env: { ...process.env }` 快照式拷贝功能等价（spawn 同步执行，中间无 env 修改）
       const child = spawnWithMemoryLimit('claude', args, {
         cwd: options.cwd,
         stdio: ['pipe', 'pipe', 'pipe'],  // stdin 改为 pipe 以支持写入
@@ -406,7 +445,7 @@ export async function runHeadlessClaude(options: HeadlessClaudeOptions): Promise
         const chunkSize = 4096;
         let offset = 0;
 
-        function writeNextChunk() {
+        const writeNextChunk = (): void => {
           if (offset >= options.prompt.length) {
             child.stdin!.end();
             return;
@@ -421,68 +460,84 @@ export async function runHeadlessClaude(options: HeadlessClaudeOptions): Promise
           } else {
             writeNextChunk();
           }
-        }
+        };
 
         writeNextChunk();
       }
 
-      let stdout = '';
-      let stderr = '';
+      return await new Promise<HeadlessClaudeResult>((resolve) => {
+        let stdout = '';
+        let stderr = '';
 
-      child.stdout?.on('data', (data: Buffer) => {
-        stdout += data.toString();
-      });
-
-      child.stderr?.on('data', (data: Buffer) => {
-        stderr += data.toString();
-      });
-
-      // PID 反注册由 spawnWithMemoryLimit 内部 exit/close/error 事件自动处理（CP-03）
-
-      child.on('close', (code: number | null) => {
-        const classified = classifyExitResult(code, stderr, stdout);
-        const durationMs = Date.now() - startTimeMs;
-        logger.info('spawn_end', {
-          spawnId: currentSpawnId,
-          success: classified.success,
-          code,
-          durationMs,
-          totalSpawnCount: globalSpawnCount,
+        child.stdout?.on('data', (data: Buffer) => {
+          stdout += data.toString();
         });
-        resolve({
-          success: classified.success,
-          output: stdout,
-          error: classified.error,
-          hookWarning: classified.hookWarning,
-          stderr,
-          childPid: child.pid,
+
+        child.stderr?.on('data', (data: Buffer) => {
+          stderr += data.toString();
+        });
+
+        // PID 反注册由 spawnWithMemoryLimit 内部 exit/close/error 事件自动处理（CP-03）
+
+        child.on('close', (code: number | null) => {
+          const classified = classifyExitResult(code, stderr, stdout);
+          const durationMs = Date.now() - startTimeMs;
+          logger.info('spawn_end', {
+            spawnId: currentSpawnId,
+            success: classified.success,
+            code,
+            durationMs,
+            totalSpawnCount: globalSpawnCount,
+          });
+          resolve({
+            success: classified.success,
+            output: stdout,
+            error: classified.error,
+            hookWarning: classified.hookWarning,
+            stderr,
+            childPid: child.pid,
+          });
+        });
+
+        child.on('error', (error: Error) => {
+          logger.error('spawn_error', {
+            spawnId: currentSpawnId,
+            error: error.message,
+            totalSpawnCount: globalSpawnCount,
+          });
+          resolve({
+            success: false,
+            output: '',
+            error: error.message,
+            stderr: '',
+            childPid: child.pid,
+          });
         });
       });
-
-      child.on('error', (error: Error) => {
-        logger.error('spawn_error', {
-          spawnId: currentSpawnId,
-          error: error.message,
-          totalSpawnCount: globalSpawnCount,
-        });
-        resolve({
-          success: false,
-          output: '',
-          error: error.message,
-          stderr: '',
-          childPid: child.pid,
-        });
-      });
-
     } catch (error) {
-      resolve({
+      return {
         success: false,
         output: '',
         error: error instanceof Error ? error.message : String(error),
         stderr: '',
-      });
+      };
     }
-  });
+  } finally {
+    // SOL-001: 恢复原始环境变量
+    if (originalCliMode === undefined) {
+      delete process.env.CLAUDE_CLI_MODE;
+    } else {
+      process.env.CLAUDE_CLI_MODE = originalCliMode;
+    }
+
+    if (originalSpawnDepth === undefined) {
+      delete process.env.CLAUDE_SPAWN_DEPTH;
+    } else {
+      process.env.CLAUDE_SPAWN_DEPTH = originalSpawnDepth;
+    }
+
+    delete process.env.CLAUDE_SPAWN_PARENT_PID;
+  }
 }
 
 /**
