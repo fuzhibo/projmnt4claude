@@ -877,7 +877,7 @@ program
       outputFile: options.outputFile,
       maxRetry: options.maxRetry ? parseInt(options.maxRetry, 10) : undefined,
       splitThreshold: options.splitThreshold ? parseInt(options.splitThreshold, 10) : undefined,
-      language: options.language,
+      lang: options.language,
       timeout: options.timeout ? parseInt(options.timeout, 10) : undefined,
       debug: options.debug,
       skipReview: options.skipReview,
