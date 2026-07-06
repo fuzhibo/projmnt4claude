@@ -251,6 +251,12 @@ async function runNewInvestigation(
   );
 
   // Step 1.5: 格式验证 + 循环重试（附回退机制）
+  // SOL-002: 确定尝试报告输出目录
+  const attemptOutputDir = options.outputDir ?? determineOutputMode(options, cwd).path;
+  if (!fs.existsSync(attemptOutputDir)) {
+    fs.mkdirSync(attemptOutputDir, { recursive: true });
+  }
+
   let retryCount = 0;
   let lastValidReport: InvestigationReport | null = null;
 
@@ -261,12 +267,39 @@ async function runNewInvestigation(
       break;
     }
 
+    const attemptNum = retryCount + 1;
     // 保存当前报告（可能包含部分有效内容）
     lastValidReport = report;
 
     if (!options.quiet) {
-      console.log(`   ⚠️ Format validation failed (attempt ${retryCount + 1}/${maxRetry}): ${formatValidation.errors.map(e => e.message).join('; ')}`);
+      console.log(`   ⚠️ Format validation failed (attempt ${attemptNum}/${maxRetry}): ${formatValidation.errors.map(e => e.message).join('; ')}`);
       console.log('   Retrying report generation with format corrections...');
+    }
+
+    // SOL-002: 保存当前失败的尝试报告
+    try {
+      const attemptPath = await saveAttemptReport(report, attemptOutputDir, attemptNum);
+      if (!options.quiet) {
+        console.log(`   📄 尝试报告已保存: ${attemptPath}`);
+      }
+    } catch (saveErr) {
+      logger.warn('save attempt report failed', {
+        error: saveErr instanceof Error ? saveErr.message : String(saveErr),
+      });
+    }
+
+    // SOL-001: 调用 AI 评审生成审核报告并保存
+    let reviewPath: string | undefined;
+    try {
+      const reviewResult = await reviewReport(requirement, report, cwd, lang, options.timeout, options.debug);
+      reviewPath = await saveReviewReport(reviewResult, attemptOutputDir, attemptNum, lang);
+      if (!options.quiet) {
+        console.log(`   📋 审核报告已保存: ${reviewPath}`);
+      }
+    } catch (reviewErr) {
+      logger.warn('review report generation failed', {
+        error: reviewErr instanceof Error ? reviewErr.message : String(reviewErr),
+      });
     }
 
     // 重试前清理子进程残留（SOL-003-4）
@@ -280,7 +313,12 @@ async function runNewInvestigation(
     await new Promise(resolve => setTimeout(resolve, RETRY_CLEANUP_DELAY_MS));
 
     try {
-      const retryPrompt = buildRetryPrompt(requirement, formatValidation.errors);
+      // SOL-001: 有审核报告时引用路径，否则降级为原始反馈
+      const retryPrompt = buildRetryPrompt(requirement, formatValidation.errors, {
+        reviewPath,
+        attemptNum,
+        lang,
+      });
       const timeoutS = options.timeout ?? DEFAULT_RETRY_TIMEOUT_S;
 
       report = await withTimeoutRace(
@@ -323,6 +361,18 @@ async function runNewInvestigation(
       console.log('   ⚠️ Final report has validation issues, using with warnings:');
       finalValidation.errors.forEach(e => console.log(`     - ${e.message}`));
     }
+  }
+
+  // SOL-002: 保存最终报告快照到尝试目录，与 report-attempt-N.md 并列，便于追溯
+  try {
+    const finalPath = await saveFinalReport(report, attemptOutputDir);
+    if (!options.quiet) {
+      console.log(`   📄 最终报告快照已保存: ${finalPath}`);
+    }
+  } catch (saveErr) {
+    logger.warn('save final report snapshot failed', {
+      error: saveErr instanceof Error ? saveErr.message : String(saveErr),
+    });
   }
 
   // Step 2: AI 评审闭环
@@ -825,14 +875,150 @@ const RETRY_CLEANUP_DELAY_MS = 1000;
 const MAX_RETRY_FEEDBACK_LEN = 500;
 
 /**
- * 构建结构化重试 prompt
+ * 构建结构化重试 prompt（SOL-001: 支持引用审核报告路径 + i18n）
  */
-function buildRetryPrompt(requirement: string, errors: Array<{ message: string }>): string {
+function buildRetryPrompt(
+  requirement: string,
+  errors: Array<{ message: string }>,
+  options?: { reviewPath?: string; attemptNum?: number; lang?: 'zh' | 'en' },
+): string {
+  const lang = options?.lang ?? 'zh';
+  const reviewPath = options?.reviewPath;
+  const attemptNum = options?.attemptNum ?? 1;
+
+  // 保留原始格式错误摘要（用于降级场景）
   const feedback = errors
     .map(e => `- ${e.message}`)
     .join('\n')
     .substring(0, MAX_RETRY_FEEDBACK_LEN);
-  return `${requirement}\n\n---\n**格式纠正要求**:\n上一次输出存在以下格式问题，请重新生成：\n\n${feedback}\n\n请确保输出格式符合要求。\n`;
+
+  if (reviewPath) {
+    // SOL-001: 引用审核报告路径，让 AI 自行查阅
+    if (lang === 'zh') {
+      return `${requirement}\n\n---\n**格式纠正要求（第 ${attemptNum} 次重试）**:\n\n` +
+        `上次生成的报告未能通过格式验证。\n` +
+        `AI 评审员已生成详细的审核报告，请查阅了解具体问题：\n` +
+        `- 审核报告路径: ${reviewPath}\n\n` +
+        `请根据审核报告中的问题和建议，修正报告格式后重新生成。\n`;
+    }
+    return `${requirement}\n\n---\n**Format Correction Request (Attempt ${attemptNum})**:\n\n` +
+      `The previous report did not pass format validation.\n` +
+      `The AI reviewer has generated a detailed review report. Please review it to understand the specific issues:\n` +
+      `- Review Report Path: ${reviewPath}\n\n` +
+      `Please correct the report format based on the issues and suggestions in the review report, then regenerate.\n`;
+  }
+
+  // 降级：无审核报告时仍保留原始错误反馈
+  if (lang === 'zh') {
+    return `${requirement}\n\n---\n**格式纠正要求**:\n上一次输出存在以下格式问题，请重新生成：\n\n${feedback}\n\n请确保输出格式符合要求。\n`;
+  }
+  return `${requirement}\n\n---\n**Format Correction Request**:\nThe previous output has the following format issues, please regenerate:\n\n${feedback}\n\nPlease ensure the output format is correct.\n`;
+}
+
+/**
+ * SOL-002: 保存尝试报告
+ */
+async function saveAttemptReport(
+  report: InvestigationReport,
+  outputDir: string,
+  attemptNum: number,
+): Promise<string> {
+  const content = generateReport(report);
+  const filePath = path.join(outputDir, `report-attempt-${attemptNum}.md`);
+  fs.writeFileSync(filePath, content, 'utf-8');
+  return filePath;
+}
+
+/**
+ * SOL-001/002: 格式化审核报告为 Markdown（支持 i18n）
+ */
+function formatReviewReport(
+  reviewResult: ReviewResult,
+  attemptNum: number,
+  lang: 'zh' | 'en',
+): string {
+  const { pass, scores, issues } = reviewResult;
+
+  if (lang === 'zh') {
+    const lines = [
+      `# 审核报告（第 ${attemptNum} 次尝试）`,
+      '',
+      '## 审核结果',
+      `- **通过状态**: ${pass ? '通过' : '未通过'}`,
+      `- **根因对齐度**: ${scores.rootCauseAlignment}/100`,
+      `- **解决方案有效性**: ${scores.solutionEffectiveness}/100`,
+      `- **检查点完善度**: ${scores.checkpointCompleteness}/100`,
+      '',
+      '## 问题列表',
+    ];
+    issues.forEach((issue, i) => {
+      lines.push(
+        '',
+        `### 问题 ${i + 1}: ${issue.dimension}`,
+        `- **严重度**: ${issue.severity}`,
+        `- **描述**: ${issue.description}`,
+        `- **建议**: ${issue.suggestion}`,
+      );
+    });
+    lines.push('', '## 修正建议汇总');
+    issues.filter(i => i.severity === 'critical').forEach(i => lines.push(`- [关键] ${i.suggestion}`));
+    issues.filter(i => i.severity === 'major').forEach(i => lines.push(`- [重要] ${i.suggestion}`));
+    return lines.join('\n');
+  }
+
+  // English
+  const lines = [
+    `# Review Report (Attempt ${attemptNum})`,
+    '',
+    '## Review Results',
+    `- **Pass Status**: ${pass ? 'Passed' : 'Failed'}`,
+    `- **Root Cause Alignment**: ${scores.rootCauseAlignment}/100`,
+    `- **Solution Effectiveness**: ${scores.solutionEffectiveness}/100`,
+    `- **Checkpoint Completeness**: ${scores.checkpointCompleteness}/100`,
+    '',
+    '## Issue List',
+  ];
+  issues.forEach((issue, i) => {
+    lines.push(
+      '',
+      `### Issue ${i + 1}: ${issue.dimension}`,
+      `- **Severity**: ${issue.severity}`,
+      `- **Description**: ${issue.description}`,
+      `- **Suggestion**: ${issue.suggestion}`,
+    );
+  });
+  lines.push('', '## Correction Suggestions Summary');
+  issues.filter(i => i.severity === 'critical').forEach(i => lines.push(`- [Critical] ${i.suggestion}`));
+  issues.filter(i => i.severity === 'major').forEach(i => lines.push(`- [Major] ${i.suggestion}`));
+  return lines.join('\n');
+}
+
+/**
+ * SOL-002: 保存最终报告快照（循环结束后的最终状态）
+ */
+async function saveFinalReport(
+  report: InvestigationReport,
+  outputDir: string,
+): Promise<string> {
+  const content = generateReport(report);
+  const filePath = path.join(outputDir, 'report-final.md');
+  fs.writeFileSync(filePath, content, 'utf-8');
+  return filePath;
+}
+
+/**
+ * SOL-001/002: 保存审核报告
+ */
+async function saveReviewReport(
+  reviewResult: ReviewResult,
+  outputDir: string,
+  attemptNum: number,
+  lang: 'zh' | 'en',
+): Promise<string> {
+  const reviewPath = path.join(outputDir, `report-attempt-${attemptNum}-review.md`);
+  const content = formatReviewReport(reviewResult, attemptNum, lang);
+  fs.writeFileSync(reviewPath, content, 'utf-8');
+  return reviewPath;
 }
 
 /**
