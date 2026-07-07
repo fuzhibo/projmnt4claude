@@ -67,10 +67,18 @@ describe('SOL-003 buildRetryPrompt', () => {
       ],
     };
 
-    it('should include review suggestions when reviewResult has issues', () => {
+    it('should include review scores and full issues when reviewResult has issues', () => {
       const prompt = buildRetryPrompt({ ...baseOptions, reviewResult });
-      expect(prompt).toContain('- [major] rootCauseAlignment: 补充 5 Whys 分析');
-      expect(prompt).toContain('- [critical] checkpointCompleteness: 添加 ai qa 检查点');
+      // SOL-004: 审核评分块
+      expect(prompt).toContain('**审核评分**');
+      expect(prompt).toContain('- 原因分析对齐度: 60');
+      expect(prompt).toContain('- 解决方案有效性: 50');
+      expect(prompt).toContain('- 检查点完善度: 40');
+      // SOL-004: 完整 issue 信息（description + suggestion）
+      expect(prompt).toContain('- [major] rootCauseAlignment: 原因分析不够深入');
+      expect(prompt).toContain('建议: 补充 5 Whys 分析');
+      expect(prompt).toContain('- [critical] checkpointCompleteness: 缺少测试检查点');
+      expect(prompt).toContain('建议: 添加 ai qa 检查点');
     });
 
     it('should show fallback text when no reviewResult', () => {
@@ -86,9 +94,20 @@ describe('SOL-003 buildRetryPrompt', () => {
       expect(prompt).toContain('无具体建议');
     });
 
-    it('should show en fallback text for en lang without reviewResult', () => {
+    it('should show en fallback text when no reviewResult', () => {
       const prompt = buildRetryPrompt({ ...baseOptions, lang: 'en' });
       expect(prompt).toContain('No specific suggestions');
+    });
+
+    it('should include review scores and full issues in en', () => {
+      const prompt = buildRetryPrompt({ ...baseOptions, lang: 'en', reviewResult });
+      expect(prompt).toContain('**Review Scores**');
+      expect(prompt).toContain('- Root Cause Alignment: 60');
+      expect(prompt).toContain('- Solution Effectiveness: 50');
+      expect(prompt).toContain('- Checkpoint Completeness: 40');
+      expect(prompt).toContain('**Review Issues**');
+      expect(prompt).toContain('- [major] rootCauseAlignment: 原因分析不够深入');
+      expect(prompt).toContain('Suggestion: 补充 5 Whys 分析');
     });
   });
 
@@ -167,6 +186,30 @@ describe('SOL-003 buildRetryPrompt', () => {
       const suggestionPart = prompt.split('## 审核建议')[1]?.split('##')[0] ?? '';
       expect(suggestionPart.length).toBeGreaterThan(0);
       expect(suggestionPart.length).toBeLessThanOrEqual(550);
+    });
+
+    it('SOL-004: should keep scores block intact when issues are truncated (scores+issues combo)', () => {
+      // 场景：scoresBlock 固定长度约 80 字符，issues 总长超 500
+      // 截断后 scores 部分应完整保留，issues 尾部可被截断
+      const longDescription = 'D'.repeat(300);
+      const longSuggestion = 'S'.repeat(300);
+      const reviewResult: ReviewResult = {
+        pass: false,
+        scores: { rootCauseAlignment: 60, solutionEffectiveness: 50, checkpointCompleteness: 40 },
+        issues: [
+          { dimension: 'rootCauseAlignment', severity: 'major', description: longDescription, suggestion: longSuggestion },
+          { dimension: 'checkpointCompleteness', severity: 'critical', description: longDescription, suggestion: longSuggestion },
+        ],
+      };
+      const prompt = buildRetryPrompt({ ...baseOptions, reviewResult });
+      // scores 块完整保留
+      expect(prompt).toContain('**审核评分**');
+      expect(prompt).toContain('- 原因分析对齐度: 60');
+      expect(prompt).toContain('- 解决方案有效性: 50');
+      expect(prompt).toContain('- 检查点完善度: 40');
+      // 整体 suggestionsSummary 不超过 MAX_RETRY_FEEDBACK_LEN
+      const suggestionPart = prompt.split('## 审核建议')[1]?.split('##')[0] ?? '';
+      expect(suggestionPart.length).toBeLessThanOrEqual(520); // 标题行 + 截断内容
     });
   });
 

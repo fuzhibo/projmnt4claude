@@ -1060,13 +1060,28 @@ function buildRetryPrompt(options: RetryPromptOptions): string {
     .join('\n')
     .substring(0, MAX_RETRY_FEEDBACK_LEN);
 
-  // 构建审核建议摘要（来自 AI 评审员的结构化 issues）
+  // SOL-004: 构建审核建议摘要（来自 AI 评审员的结构化 issues）
+  // 包含审核评分块 + 完整 issue 信息（severity/dimension/description + suggestion）
   // 显式三段守卫确保 TS 缩窄 reviewResult 和 issues 非空
   let suggestionsSummary: string;
   if (reviewResult && reviewResult.issues && reviewResult.issues.length > 0) {
-    suggestionsSummary = reviewResult.issues
-      .map(i => `- [${i.severity}] ${i.dimension}: ${i.suggestion}`)
-      .join('\n')
+    const scores = reviewResult.scores;
+    const scoresBlock = lang === 'zh'
+      ? `**审核评分**:\n` +
+        `- 原因分析对齐度: ${scores.rootCauseAlignment}\n` +
+        `- 解决方案有效性: ${scores.solutionEffectiveness}\n` +
+        `- 检查点完善度: ${scores.checkpointCompleteness}`
+      : `**Review Scores**:\n` +
+        `- Root Cause Alignment: ${scores.rootCauseAlignment}\n` +
+        `- Solution Effectiveness: ${scores.solutionEffectiveness}\n` +
+        `- Checkpoint Completeness: ${scores.checkpointCompleteness}`;
+    const issuesBlock = reviewResult.issues
+      .map(i =>
+        `- [${i.severity}] ${i.dimension}: ${i.description}\n` +
+        `  ${lang === 'zh' ? '建议' : 'Suggestion'}: ${i.suggestion}`,
+      )
+      .join('\n');
+    suggestionsSummary = `${scoresBlock}\n\n**${lang === 'zh' ? '审核发现的问题' : 'Review Issues'}**:\n${issuesBlock}`
       .substring(0, MAX_RETRY_FEEDBACK_LEN);
   } else {
     suggestionsSummary = lang === 'zh' ? '无具体建议' : 'No specific suggestions';
