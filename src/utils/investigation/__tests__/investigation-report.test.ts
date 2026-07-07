@@ -210,8 +210,8 @@ describe('§3.3 报告格式', () => {
       const report = createFullTestReport();
       const md = generateReport(report, 'zh');
       const parsed = parseReport(md);
-      expect(parsed.solutions[0].correspondsTo).toBe('CA-001');
-      expect(parsed.solutions[1].correspondsTo).toBe('CA-002');
+      expect(parsed.solutions[0]!.correspondsTo).toBe('CA-001');
+      expect(parsed.solutions[1]!.correspondsTo).toBe('CA-002');
     });
   });
 
@@ -278,9 +278,9 @@ describe('§3.4 工具模块', () => {
       const parsed = parseReport(md);
       expect(parsed.metadata.requirementSource).toBe('Test requirement');
       expect(parsed.rootCauseAnalysis).toHaveLength(1);
-      expect(parsed.rootCauseAnalysis[0].id).toBe('CA-001');
+      expect(parsed.rootCauseAnalysis[0]!.id).toBe('CA-001');
       expect(parsed.solutions).toHaveLength(1);
-      expect(parsed.solutions[0].id).toBe('SOL-001');
+      expect(parsed.solutions[0]!.id).toBe('SOL-001');
     });
 
     it('should parse root cause analysis items', () => {
@@ -288,16 +288,16 @@ describe('§3.4 工具模块', () => {
       const md = generateReport(report, 'zh');
       const parsed = parseReport(md);
       expect(parsed.rootCauseAnalysis).toHaveLength(2);
-      expect(parsed.rootCauseAnalysis[0].id).toBe('CA-001');
-      expect(parsed.rootCauseAnalysis[1].id).toBe('CA-002');
+      expect(parsed.rootCauseAnalysis[0]!.id).toBe('CA-001');
+      expect(parsed.rootCauseAnalysis[1]!.id).toBe('CA-002');
     });
 
     it('should parse solutions with files and expectedChanges', () => {
       const report = createFullTestReport();
       const md = generateReport(report, 'zh');
       const parsed = parseReport(md);
-      expect(parsed.solutions[0].files).toEqual(['src/a.ts', 'src/b.ts']);
-      expect(parsed.solutions[0].expectedChanges).toBe('Modify a.ts and add b.ts');
+      expect(parsed.solutions[0]!.files).toEqual(['src/a.ts', 'src/b.ts']);
+      expect(parsed.solutions[0]!.expectedChanges).toBe('Modify a.ts and add b.ts');
     });
 
     it('should parse checkpoints with prefix and belongsTo', () => {
@@ -388,7 +388,7 @@ describe('§3.4 工具模块', () => {
     it('should return rules via getValidationRules', () => {
       const rules = getValidationRules();
       expect(rules).toHaveLength(8);
-      expect(rules[0].name).toBe('metadata-required');
+      expect(rules[0]!.name).toBe('metadata-required');
     });
 
     it('should return specific rule via getRule', () => {

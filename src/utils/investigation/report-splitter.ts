@@ -22,7 +22,7 @@ export async function generateSplitPlan(
   lang: 'zh' | 'en' = 'zh',
 ): Promise<SplitPlan> {
   const reportMarkdown = generateReport(report);
-  const prompt = loadAndRenderTemplate('split', { report: reportMarkdown }, lang);
+  const prompt = await loadAndRenderTemplate('split', { report: reportMarkdown }, lang);
 
   const { callAIForJSON } = await import('./ai-integration');
   return callAIForJSON<SplitPlan>({ prompt, cwd }, validateSplitPlan);
@@ -39,7 +39,7 @@ export async function reviewSplitPlan(
 ): Promise<SplitReviewResult> {
   const summary = summarizeReport(report);
   const planJson = JSON.stringify(splitPlan, null, 2);
-  const prompt = loadAndRenderTemplate('splitReview', { reportSummary: summary, splitPlan: planJson }, lang);
+  const prompt = await loadAndRenderTemplate('splitReview', { reportSummary: summary, splitPlan: planJson }, lang);
 
   const { callAIForJSON } = await import('./ai-integration');
   return callAIForJSON<SplitReviewResult>({ prompt, cwd }, validateSplitReviewResult);
@@ -135,12 +135,12 @@ function validateSplitReviewResult(data: unknown): SplitReviewResult {
   return {
     pass: r.pass,
     scores: {
-      coverage: s.coverage,
-      boundaryClarity: s.boundaryClarity,
-      independence: s.independence,
-      dependencyReasonability: s.dependencyReasonability,
-      antiPhaseSplitting: s.antiPhaseSplitting,
-      granularity: s.granularity,
+      coverage: s.coverage!,
+      boundaryClarity: s.boundaryClarity!,
+      independence: s.independence!,
+      dependencyReasonability: s.dependencyReasonability!,
+      antiPhaseSplitting: s.antiPhaseSplitting!,
+      granularity: s.granularity!,
     },
     issues: (r.issues || []) as SplitReviewIssue[],
   };

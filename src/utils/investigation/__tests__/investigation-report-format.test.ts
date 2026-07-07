@@ -154,8 +154,8 @@ describe('§3.3 报告格式', () => {
       const report = createFullTestReport();
       const md = generateReport(report, 'zh');
       const parsed = parseReport(md);
-      expect(parsed.solutions[0].correspondsTo).toBe('CA-001');
-      expect(parsed.solutions[1].correspondsTo).toBe('CA-002');
+      expect(parsed.solutions[0]!.correspondsTo).toBe('CA-001');
+      expect(parsed.solutions[1]!.correspondsTo).toBe('CA-002');
     });
   });
 

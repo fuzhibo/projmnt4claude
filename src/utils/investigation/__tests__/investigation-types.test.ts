@@ -231,8 +231,8 @@ describe('§3.1 类型系统', () => {
         ],
       };
       expect(plan.items).toHaveLength(1);
-      expect(plan.items[0].relationship).toBe('parallel');
-      expect(plan.items[0].estimatedSize).toBe(10);
+      expect(plan.items[0]!.relationship).toBe('parallel');
+      expect(plan.items[0]!.estimatedSize).toBe(10);
     });
 
     it('should support hierarchical relationship', () => {
