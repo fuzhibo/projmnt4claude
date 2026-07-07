@@ -11,6 +11,15 @@ import type {
 } from './types';
 import { CHECKPOINT_REGEX, CheckpointFormat } from './checkpoint-format.js';
 import { createLogger } from '../logger.js';
+import {
+  REPORT_SECTIONS,
+  METADATA_FIELDS,
+  SOLUTION_FIELDS,
+  ASSESSMENT_FIELDS,
+  ASSESSMENT_VALUES,
+  buildCaHeadingRegex,
+  buildSolHeadingRegex,
+} from './report-contract.js';
 
 /**
  * 将 markdown 文本解析为 InvestigationReport 结构化数据
@@ -38,8 +47,8 @@ export function readReport(reportPath: string, cwd: string): InvestigationReport
  * 从报告 markdown 中提取子报告依赖路径
  */
 export function extractDependenciesFromMarkdown(markdown: string): string[] {
-  const depRaw = extractField(markdown, '依赖子报告')
-    || extractField(markdown, 'Depends On');
+  const depRaw = extractField(markdown, METADATA_FIELDS.dependsOn.zh)
+    || extractField(markdown, METADATA_FIELDS.dependsOn.en);
   if (!depRaw) return [];
   return depRaw.split(',').map(s => s.trim()).filter(Boolean);
 }
@@ -60,11 +69,11 @@ export function extractDependencies(report: InvestigationReport): Map<string, st
 // ---- 内部解析辅助 ----
 
 function parseMetadata(md: string): ReportMetadata {
-  const source = extractField(md, '需求来源') || extractField(md, 'Requirement Source') || '';
-  const date = extractField(md, '调查时间') || extractField(md, 'Investigation Date') || new Date().toISOString();
-  const dir = extractField(md, '调查目录') || extractField(md, 'Investigation Dir') || '';
-  const langRaw = extractField(md, '语言') || extractField(md, 'Language') || 'zh';
-  const parent = extractField(md, '父报告') || extractField(md, 'Parent Report');
+  const source = extractField(md, METADATA_FIELDS.requirementSource.zh) || extractField(md, METADATA_FIELDS.requirementSource.en) || '';
+  const date = extractField(md, METADATA_FIELDS.investigationDate.zh) || extractField(md, METADATA_FIELDS.investigationDate.en) || new Date().toISOString();
+  const dir = extractField(md, METADATA_FIELDS.investigationDir.zh) || extractField(md, METADATA_FIELDS.investigationDir.en) || '';
+  const langRaw = extractField(md, METADATA_FIELDS.language.zh) || extractField(md, METADATA_FIELDS.language.en) || 'zh';
+  const parent = extractField(md, METADATA_FIELDS.parentReport.zh) || extractField(md, METADATA_FIELDS.parentReport.en);
 
   return {
     requirementSource: source,
@@ -100,12 +109,12 @@ function extractField(md: string, label: string): string | null {
 
 function parseRootCauseAnalysis(md: string): RootCauseItem[] {
   const items: RootCauseItem[] = [];
-  const sectionMd = extractSection(md, '原因分析', 'Root Cause Analysis');
+  const sectionMd = extractSection(md, REPORT_SECTIONS.rootCauseAnalysis.zh, REPORT_SECTIONS.rootCauseAnalysis.en);
   if (!sectionMd) return items;
 
   // Collect all matches first to avoid interfering with regex state
   const matches: RegExpExecArray[] = [];
-  const re = /### (CA-\d+): (.+)/g;
+  const re = buildCaHeadingRegex();
   let match: RegExpExecArray | null;
   while ((match = re.exec(sectionMd)) !== null) {
     matches.push(match);
@@ -125,12 +134,12 @@ function parseRootCauseAnalysis(md: string): RootCauseItem[] {
 
 function parseSolutions(md: string): SolutionItem[] {
   const items: SolutionItem[] = [];
-  const sectionMd = extractSection(md, '解决方案', 'Solutions');
+  const sectionMd = extractSection(md, REPORT_SECTIONS.solutions.zh, REPORT_SECTIONS.solutions.en);
   if (!sectionMd) return items;
 
   // Collect all matches first to avoid interfering with regex state
   const matches: RegExpExecArray[] = [];
-  const re = /### (SOL-\d+): (.+)/g;
+  const re = buildSolHeadingRegex();
   let match: RegExpExecArray | null;
   while ((match = re.exec(sectionMd)) !== null) {
     matches.push(match);
@@ -144,10 +153,10 @@ function parseSolutions(md: string): SolutionItem[] {
     const descEnd = i < matches.length - 1 ? (matches[i + 1]?.index ?? sectionMd.length) : sectionMd.length;
     const body = sectionMd.slice(descStart, descEnd).trim();
 
-    const correspondsTo = extractInlineField(body, '对应原因', 'Corresponds To') || '';
-    const filesRaw = extractInlineField(body, '涉及文件', 'Files') || '';
+    const correspondsTo = extractInlineField(body, SOLUTION_FIELDS.correspondsTo.zh, SOLUTION_FIELDS.correspondsTo.en) || '';
+    const filesRaw = extractInlineField(body, SOLUTION_FIELDS.files.zh, SOLUTION_FIELDS.files.en) || '';
     const files = filesRaw.split(',').map(s => s.trim()).filter(Boolean);
-    const expectedChanges = extractInlineField(body, '预期变更', 'Expected Changes') || '';
+    const expectedChanges = extractInlineField(body, SOLUTION_FIELDS.expectedChanges.zh, SOLUTION_FIELDS.expectedChanges.en) || '';
     const description = body.split('\n').filter(l => !l.startsWith('- ')).join('\n').trim();
 
     items.push({ id, title, correspondsTo, description, files, expectedChanges });
@@ -157,7 +166,7 @@ function parseSolutions(md: string): SolutionItem[] {
 
 function parseCheckpoints(md: string, options: ParseCheckpointsOptions = {}): ReportCheckpoint[] {
   const items: ReportCheckpoint[] = [];
-  const sectionMd = extractSection(md, '检查点覆盖清单', 'Checkpoint Checklist');
+  const sectionMd = extractSection(md, REPORT_SECTIONS.checkpoints.zh, REPORT_SECTIONS.checkpoints.en);
   if (!sectionMd) return items;
 
   const tolerance = options.tolerance ?? 'normal';
@@ -197,7 +206,7 @@ function parseCheckpoints(md: string, options: ParseCheckpointsOptions = {}): Re
     for (const line of unparsedLines) {
       logger.warn('checkpoint line not parsed', {
         line: line.trim(),
-        section: 'Checkpoint Checklist',
+        section: REPORT_SECTIONS.checkpoints.en,
         tolerance,
       });
     }
@@ -235,10 +244,10 @@ function parseCheckpoints(md: string, options: ParseCheckpointsOptions = {}): Re
 }
 
 function parseAssessment(md: string): ReportAssessment {
-  const sectionMd = extractSection(md, '评估', 'Assessment') || '';
-  const complexity = extractInlineField(sectionMd, '复杂度', 'Complexity') || 'medium';
-  const impactRaw = extractInlineField(sectionMd, '影响范围', 'Impact Scope') || '中等';
-  const minutesRaw = extractInlineField(sectionMd, '预估工时', 'Estimated Minutes') || '60';
+  const sectionMd = extractSection(md, REPORT_SECTIONS.assessment.zh, REPORT_SECTIONS.assessment.en) || '';
+  const complexity = extractInlineField(sectionMd, ASSESSMENT_FIELDS.complexity.zh, ASSESSMENT_FIELDS.complexity.en) || 'medium';
+  const impactRaw = extractInlineField(sectionMd, ASSESSMENT_FIELDS.impactScope.zh, ASSESSMENT_FIELDS.impactScope.en) || '中等';
+  const minutesRaw = extractInlineField(sectionMd, ASSESSMENT_FIELDS.estimatedMinutes.zh, ASSESSMENT_FIELDS.estimatedMinutes.en) || '60';
 
   return {
     complexity: validateComplexity(complexity),
@@ -267,19 +276,17 @@ function escapeRegex(s: string): string {
 }
 
 function validateComplexity(v: string): 'low' | 'medium' | 'high' {
-  if (v === 'low' || v === 'medium' || v === 'high') return v;
-  if (v === '低') return 'low';
-  if (v === '中') return 'medium';
-  if (v === '高') return 'high';
-  return 'medium';
+  const opts = ASSESSMENT_VALUES.complexity.options;
+  if ((opts as readonly string[]).includes(v)) return v as 'low' | 'medium' | 'high';
+  const mapped = ASSESSMENT_VALUES.complexity.zhMapping[v as keyof typeof ASSESSMENT_VALUES.complexity.zhMapping];
+  if (mapped) return mapped;
+  return ASSESSMENT_VALUES.complexity.fallback;
 }
 
 function validateImpactScope(v: string): '有限' | '中等' | '广泛' {
-  if (v === '有限') return '有限';
-  if (v === '中等') return '中等';
-  if (v === '广泛') return '广泛';
-  if (v === 'limited') return '有限';
-  if (v === 'medium' || v === 'moderate') return '中等';
-  if (v === 'wide' || v === 'broad' || v === 'extensive') return '广泛';
-  return '中等';
+  const opts = ASSESSMENT_VALUES.impactScope.options;
+  if ((opts as readonly string[]).includes(v)) return v as '有限' | '中等' | '广泛';
+  const mapped = ASSESSMENT_VALUES.impactScope.enMapping[v as keyof typeof ASSESSMENT_VALUES.impactScope.enMapping];
+  if (mapped) return mapped;
+  return ASSESSMENT_VALUES.impactScope.fallback;
 }

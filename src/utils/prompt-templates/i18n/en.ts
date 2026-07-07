@@ -5,7 +5,18 @@
  * - 调查类: investigate, investigateWithFeedback
  * - 评审类: review
  * - 拆分类: split, splitReview
+ *
+ * 章节标题、字段标签、编号格式通过引用 report-contract.ts 契约常量生成，
+ * 确保模板与解析器契约一致（SOL-001）。
  */
+import {
+  REPORT_SECTIONS,
+  METADATA_FIELDS,
+  SOLUTION_FIELDS,
+  ASSESSMENT_FIELDS,
+  buildCaId,
+  buildSolId,
+} from '../../investigation/report-contract.js';
 
 export const investigationTemplates: Record<string, string> = {
   investigate: `You are a requirement investigation analyst for the projmnt4claude project.
@@ -33,32 +44,32 @@ Output the investigation report in the following format (en):
 
 # Investigation Report: {title}
 
-## Metadata
-- **Requirement Source**: {requirement}
-- **Investigation Date**: {date}
-- **Investigation Directory**: investigation-{slug}
-- **Language**: en
+## ${REPORT_SECTIONS.metadata.en}
+- **${METADATA_FIELDS.requirementSource.en}**: {requirement}
+- **${METADATA_FIELDS.investigationDate.en}**: {date}
+- **${METADATA_FIELDS.investigationDir.en}**: investigation-{slug}
+- **${METADATA_FIELDS.language.en}**: en
 
-## Root Cause Analysis
-### CA-001: {Root cause title}
+## ${REPORT_SECTIONS.rootCauseAnalysis.en}
+### ${buildCaId(1)}: {Root cause title}
 {Root cause detailed description}
 
-## Solutions
-### SOL-001: {Solution title} → Corresponds to CA-001
+## ${REPORT_SECTIONS.solutions.en}
+### ${buildSolId(1)}: {Solution title} → Corresponds to ${buildCaId(1)}
 {Solution detailed description}
-- Involved Files: \`src/path/to/file.ts\`
-- Expected Changes: {Change description}
+- ${SOLUTION_FIELDS.files.en}: \`src/path/to/file.ts\`
+- ${SOLUTION_FIELDS.expectedChanges.en}: {Change description}
 
-## Checkpoint Checklist
-### SOL-001 Related Checkpoints
-- [ai review] Verify solution design meets requirements → SOL-001
-- [ai qa] Test core functionality works correctly → SOL-001
-- [script] Run unit tests to ensure no regression → SOL-001
+## ${REPORT_SECTIONS.checkpoints.en}
+### ${buildSolId(1)} Related Checkpoints
+- [ai review] Verify solution design meets requirements → ${buildSolId(1)}
+- [ai qa] Test core functionality works correctly → ${buildSolId(1)}
+- [script] Run unit tests to ensure no regression → ${buildSolId(1)}
 
-## Assessment
-- Complexity: {low|medium|high}
-- Impact Scope: {limited|moderate|extensive}
-- Estimated Effort: {N} minutes
+## ${REPORT_SECTIONS.assessment.en}
+- ${ASSESSMENT_FIELDS.complexity.en}: {low|medium|high}
+- ${ASSESSMENT_FIELDS.impactScope.en}: {limited|moderate|extensive}
+- ${ASSESSMENT_FIELDS.estimatedMinutes.en}: {N} minutes
 
 ## Notes
 - Root cause analysis must trace back to the requirement, ensuring a complete "requirement→cause" chain

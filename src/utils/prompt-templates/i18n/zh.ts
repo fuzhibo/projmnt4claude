@@ -5,7 +5,18 @@
  * - 调查类: investigate, investigateWithFeedback
  * - 评审类: review
  * - 拆分类: split, splitReview
+ *
+ * 章节标题、字段标签、编号格式通过引用 report-contract.ts 契约常量生成，
+ * 确保模板与解析器契约一致（SOL-001）。
  */
+import {
+  REPORT_SECTIONS,
+  METADATA_FIELDS,
+  SOLUTION_FIELDS,
+  ASSESSMENT_FIELDS,
+  buildCaId,
+  buildSolId,
+} from '../../investigation/report-contract.js';
 
 export const investigationTemplates: Record<string, string> = {
   investigate: `你是 projmnt4claude 项目的需求调查分析师。
@@ -33,32 +44,32 @@ export const investigationTemplates: Record<string, string> = {
 
 # 调查报告：{title}
 
-## 元数据
-- **需求来源**: {requirement}
-- **调查时间**: {date}
-- **调查目录**: investigation-{slug}
-- **语言**: zh
+## ${REPORT_SECTIONS.metadata.zh}
+- **${METADATA_FIELDS.requirementSource.zh}**: {requirement}
+- **${METADATA_FIELDS.investigationDate.zh}**: {date}
+- **${METADATA_FIELDS.investigationDir.zh}**: investigation-{slug}
+- **${METADATA_FIELDS.language.zh}**: zh
 
-## 原因分析
-### CA-001: {原因标题}
+## ${REPORT_SECTIONS.rootCauseAnalysis.zh}
+### ${buildCaId(1)}: {原因标题}
 {原因详细描述}
 
-## 解决方案
-### SOL-001: {方案标题} → 对应 CA-001
+## ${REPORT_SECTIONS.solutions.zh}
+### ${buildSolId(1)}: {方案标题} → 对应 ${buildCaId(1)}
 {方案详细描述}
-- 涉及文件: \`src/path/to/file.ts\`
-- 预期变更: {变更描述}
+- ${SOLUTION_FIELDS.files.zh}: \`src/path/to/file.ts\`
+- ${SOLUTION_FIELDS.expectedChanges.zh}: {变更描述}
 
-## 检查点覆盖清单
-### SOL-001 相关检查点
-- [ai review] 验证解决方案设计是否符合需求 → SOL-001
-- [ai qa] 测试核心功能是否正常工作 → SOL-001
-- [script] 运行单元测试确保无回归 → SOL-001
+## ${REPORT_SECTIONS.checkpoints.zh}
+### ${buildSolId(1)} 相关检查点
+- [ai review] 验证解决方案设计是否符合需求 → ${buildSolId(1)}
+- [ai qa] 测试核心功能是否正常工作 → ${buildSolId(1)}
+- [script] 运行单元测试确保无回归 → ${buildSolId(1)}
 
-## 评估
-- 复杂度: {low|medium|high}
-- 影响范围: {有限|中等|广泛}
-- 预估工时: {N} 分钟
+## ${REPORT_SECTIONS.assessment.zh}
+- ${ASSESSMENT_FIELDS.complexity.zh}: {low|medium|high}
+- ${ASSESSMENT_FIELDS.impactScope.zh}: {有限|中等|广泛}
+- ${ASSESSMENT_FIELDS.estimatedMinutes.zh}: {N} 分钟
 
 ## 注意事项
 - 原因分析必须追溯到需求本身，确保"需求→原因"链路完整
