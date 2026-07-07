@@ -23,6 +23,14 @@ import { validateReport } from '../utils/investigation/report-validator';
 import type { ValidationResult } from '../utils/investigation/types';
 import { reviewReportWithRetry, reviewReport } from '../utils/investigation/report-reviewer';
 import {
+  REPORT_SECTIONS,
+  METADATA_FIELDS,
+  SOLUTION_FIELDS,
+  ASSESSMENT_FIELDS,
+  buildCaId,
+  buildSolId,
+} from '../utils/investigation/report-contract.js';
+import {
   shouldSplit,
   generateSplitPlan,
   reviewSplitPlan,
@@ -100,6 +108,85 @@ const DEFAULT_SPLIT_THRESHOLD = 30; // KB (设计文档默认 30KB)
 const DEFAULT_LANGUAGE: 'zh' | 'en' = 'zh';
 const MIN_REQUIREMENT_LENGTH = 5;
 const MAX_SPLIT_DEPTH = 3;
+const MAX_RETRY_FEEDBACK_LEN = 500;
+
+// ============================================================
+// SOL-003: 重试提示词结构化模板
+// ============================================================
+
+/** 重试提示词配置选项 */
+interface RetryPromptOptions {
+  requirement: string;
+  errors: Array<{ rule: string; message: string }>;
+  reviewResult?: ReviewResult;
+  reviewPath?: string;
+  attemptNum: number;
+  lang: 'zh' | 'en';
+}
+
+/** 中文重试提示词模板 */
+const RETRY_PROMPT_TEMPLATE_ZH = `你是 projmnt4claude 项目的需求调查分析师。
+
+## 任务
+这是第 {attemptNum} 次重试。上一次输出存在格式问题，请根据以下指导重新生成调查报告。
+
+## 原始需求
+{requirement}
+
+## 上一次输出的格式问题
+{errorSummary}
+
+## 审核建议（来自 AI 评审员）
+{suggestionsSummary}
+
+## 审核报告路径
+审核报告已保存到: {reviewPath}
+（请查看审核报告获取更详细的问题分析和修正建议）
+
+## ⚠️ 重要：必须严格按照以下格式输出
+
+{formatExample}
+
+**注意**:
+1. 本次是第 {attemptNum} 次重试，请务必修正所有格式问题
+2. 必须填充所有占位符
+3. 原因分析必须使用 CA-NNN 编号格式
+4. 解决方案必须使用 SOL-NNN 编号格式
+5. 检查点必须标注归属的解决方案编号
+6. 每个章节必须有实质内容，不能为空
+`;
+
+/** 英文重试提示词模板 */
+const RETRY_PROMPT_TEMPLATE_EN = `You are an investigation analyst for the projmnt4claude project.
+
+## Task
+This is attempt {attemptNum}. Your previous output had format issues. Please regenerate the investigation report following the guidance below.
+
+## Original Requirement
+{requirement}
+
+## Format Issues in Previous Output
+{errorSummary}
+
+## Review Suggestions (from AI Reviewer)
+{suggestionsSummary}
+
+## Review Report Path
+Review report saved to: {reviewPath}
+(Please check the review report for detailed issue analysis and correction suggestions)
+
+## ⚠️ Important: You MUST strictly follow this output format
+
+{formatExample}
+
+**Notes**:
+1. This is attempt {attemptNum}. You MUST fix all format issues
+2. Must fill all placeholders
+3. Root Cause Analysis must use CA-NNN numbering format
+4. Solutions must use SOL-NNN numbering format
+5. Checkpoints must mark their corresponding solution ID
+6. Every section must have substantive content, cannot be empty
+`;
 
 // ============================================================
 // 主命令入口
@@ -289,9 +376,11 @@ async function runNewInvestigation(
     }
 
     // SOL-001: 调用 AI 评审生成审核报告并保存
+    // SOL-003: reviewResult 提升至外层作用域，供 buildRetryPrompt 使用
     let reviewPath: string | undefined;
+    let reviewResult: ReviewResult | undefined;
     try {
-      const reviewResult = await reviewReport(requirement, report, cwd, lang, options.timeout, options.debug);
+      reviewResult = await reviewReport(requirement, report, cwd, lang, options.timeout, options.debug);
       reviewPath = await saveReviewReport(reviewResult, attemptOutputDir, attemptNum, lang);
       if (!options.quiet) {
         console.log(`   📋 审核报告已保存: ${reviewPath}`);
@@ -313,8 +402,11 @@ async function runNewInvestigation(
     await new Promise(resolve => setTimeout(resolve, RETRY_CLEANUP_DELAY_MS));
 
     try {
-      // SOL-001: 有审核报告时引用路径，否则降级为原始反馈
-      const retryPrompt = buildRetryPrompt(requirement, formatValidation.errors, {
+      // SOL-003: 使用结构化 RetryPromptOptions，传入 reviewResult 供建议摘要构建
+      const retryPrompt = buildRetryPrompt({
+        requirement,
+        errors: formatValidation.errors,
+        reviewResult,
         reviewPath,
         attemptNum,
         lang,
@@ -872,47 +964,125 @@ async function runSplitFlow(
 
 const DEFAULT_RETRY_TIMEOUT_S = 300;
 const RETRY_CLEANUP_DELAY_MS = 1000;
-const MAX_RETRY_FEEDBACK_LEN = 500;
 
 /**
- * 构建结构化重试 prompt（SOL-001: 支持引用审核报告路径 + i18n）
+ * 获取完整格式示例（与 investigate 模板示例一致，SOL-003）
+ *
+ * 直接复用 report-contract 契约常量构建，确保重试提示词中的格式示例
+ * 与初始 prompt 模板、解析器三方契约一致，杜绝漂移。
  */
-function buildRetryPrompt(
-  requirement: string,
-  errors: Array<{ message: string }>,
-  options?: { reviewPath?: string; attemptNum?: number; lang?: 'zh' | 'en' },
-): string {
-  const lang = options?.lang ?? 'zh';
-  const reviewPath = options?.reviewPath;
-  const attemptNum = options?.attemptNum ?? 1;
+function getFormatExample(lang: 'zh' | 'en'): string {
+  if (lang === 'zh') {
+    return [
+      '---',
+      '# 调查报告：{title}',
+      '',
+      `## ${REPORT_SECTIONS.metadata.zh}`,
+      `- **${METADATA_FIELDS.requirementSource.zh}**: {requirement}`,
+      `- **${METADATA_FIELDS.investigationDate.zh}**: {date}`,
+      `- **${METADATA_FIELDS.investigationDir.zh}**: investigation-{slug}`,
+      `- **${METADATA_FIELDS.language.zh}**: zh`,
+      '',
+      `## ${REPORT_SECTIONS.rootCauseAnalysis.zh}`,
+      `### ${buildCaId(1)}: {原因标题}`,
+      '{原因详细描述}',
+      '',
+      `## ${REPORT_SECTIONS.solutions.zh}`,
+      `### ${buildSolId(1)}: {方案标题} → 对应 ${buildCaId(1)}`,
+      '{方案详细描述}',
+      `- ${SOLUTION_FIELDS.files.zh}: \`src/path/to/file.ts\``,
+      `- ${SOLUTION_FIELDS.expectedChanges.zh}: {变更描述}`,
+      '',
+      `## ${REPORT_SECTIONS.checkpoints.zh}`,
+      `### ${buildSolId(1)} 相关检查点`,
+      `- [ai review] 验证解决方案设计是否符合需求 → ${buildSolId(1)}`,
+      `- [ai qa] 测试核心功能是否正常工作 → ${buildSolId(1)}`,
+      `- [script] 运行单元测试确保无回归 → ${buildSolId(1)}`,
+      '',
+      `## ${REPORT_SECTIONS.assessment.zh}`,
+      `- ${ASSESSMENT_FIELDS.complexity.zh}: {low|medium|high}`,
+      `- ${ASSESSMENT_FIELDS.impactScope.zh}: {有限|中等|广泛}`,
+      `- ${ASSESSMENT_FIELDS.estimatedMinutes.zh}: {N} 分钟`,
+      '---',
+    ].join('\n');
+  }
 
-  // 保留原始格式错误摘要（用于降级场景）
-  const feedback = errors
-    .map(e => `- ${e.message}`)
+  return [
+    '---',
+    '# Investigation Report: {title}',
+    '',
+    `## ${REPORT_SECTIONS.metadata.en}`,
+    `- **${METADATA_FIELDS.requirementSource.en}**: {requirement}`,
+    `- **${METADATA_FIELDS.investigationDate.en}**: {date}`,
+    `- **${METADATA_FIELDS.investigationDir.en}**: investigation-{slug}`,
+    `- **${METADATA_FIELDS.language.en}**: en`,
+    '',
+    `## ${REPORT_SECTIONS.rootCauseAnalysis.en}`,
+    `### ${buildCaId(1)}: {Root cause title}`,
+    '{Root cause detailed description}',
+    '',
+    `## ${REPORT_SECTIONS.solutions.en}`,
+    `### ${buildSolId(1)}: {Solution title} → Corresponds to ${buildCaId(1)}`,
+    '{Solution detailed description}',
+    `- ${SOLUTION_FIELDS.files.en}: \`src/path/to/file.ts\``,
+    `- ${SOLUTION_FIELDS.expectedChanges.en}: {Change description}`,
+    '',
+    `## ${REPORT_SECTIONS.checkpoints.en}`,
+    `### ${buildSolId(1)} Related Checkpoints`,
+    `- [ai review] Verify solution design meets requirements → ${buildSolId(1)}`,
+    `- [ai qa] Test core functionality works correctly → ${buildSolId(1)}`,
+    `- [script] Run unit tests to ensure no regression → ${buildSolId(1)}`,
+    '',
+    `## ${REPORT_SECTIONS.assessment.en}`,
+    `- ${ASSESSMENT_FIELDS.complexity.en}: {low|medium|high}`,
+    `- ${ASSESSMENT_FIELDS.impactScope.en}: {limited|moderate|extensive}`,
+    `- ${ASSESSMENT_FIELDS.estimatedMinutes.en}: {N} minutes`,
+    '---',
+  ].join('\n');
+}
+
+/**
+ * 构建结构化重试 prompt（SOL-003: 结构化模板 + 审核建议摘要 + 完整格式示例）
+ *
+ * 相较 SOL-001 仅引用审核报告路径的方案，SOL-003 进一步：
+ * 1. 直接在重试提示中嵌入审核建议摘要（severity + dimension + suggestion）
+ * 2. 嵌入完整格式示例，避免 AI 仅凭错误消息推断修正方向
+ * 3. 使用模板常量 + 占位符替换，i18n 双语支持
+ *
+ * 降级策略：无 reviewResult/reviewPath 时仍保留原始错误反馈，确保异常路径可用。
+ */
+function buildRetryPrompt(options: RetryPromptOptions): string {
+  const { requirement, errors, reviewResult, reviewPath, attemptNum, lang } = options;
+
+  // 构建错误摘要（含 rule 标识，便于 AI 定位校验规则）
+  const errorSummary = errors
+    .map(e => `- [${e.rule}] ${e.message}`)
     .join('\n')
     .substring(0, MAX_RETRY_FEEDBACK_LEN);
 
-  if (reviewPath) {
-    // SOL-001: 引用审核报告路径，让 AI 自行查阅
-    if (lang === 'zh') {
-      return `${requirement}\n\n---\n**格式纠正要求（第 ${attemptNum} 次重试）**:\n\n` +
-        `上次生成的报告未能通过格式验证。\n` +
-        `AI 评审员已生成详细的审核报告，请查阅了解具体问题：\n` +
-        `- 审核报告路径: ${reviewPath}\n\n` +
-        `请根据审核报告中的问题和建议，修正报告格式后重新生成。\n`;
-    }
-    return `${requirement}\n\n---\n**Format Correction Request (Attempt ${attemptNum})**:\n\n` +
-      `The previous report did not pass format validation.\n` +
-      `The AI reviewer has generated a detailed review report. Please review it to understand the specific issues:\n` +
-      `- Review Report Path: ${reviewPath}\n\n` +
-      `Please correct the report format based on the issues and suggestions in the review report, then regenerate.\n`;
+  // 构建审核建议摘要（来自 AI 评审员的结构化 issues）
+  // 显式三段守卫确保 TS 缩窄 reviewResult 和 issues 非空
+  let suggestionsSummary: string;
+  if (reviewResult && reviewResult.issues && reviewResult.issues.length > 0) {
+    suggestionsSummary = reviewResult.issues
+      .map(i => `- [${i.severity}] ${i.dimension}: ${i.suggestion}`)
+      .join('\n')
+      .substring(0, MAX_RETRY_FEEDBACK_LEN);
+  } else {
+    suggestionsSummary = lang === 'zh' ? '无具体建议' : 'No specific suggestions';
   }
 
-  // 降级：无审核报告时仍保留原始错误反馈
-  if (lang === 'zh') {
-    return `${requirement}\n\n---\n**格式纠正要求**:\n上一次输出存在以下格式问题，请重新生成：\n\n${feedback}\n\n请确保输出格式符合要求。\n`;
-  }
-  return `${requirement}\n\n---\n**Format Correction Request**:\nThe previous output has the following format issues, please regenerate:\n\n${feedback}\n\nPlease ensure the output format is correct.\n`;
+  const formatExample = getFormatExample(lang);
+  const template = lang === 'zh' ? RETRY_PROMPT_TEMPLATE_ZH : RETRY_PROMPT_TEMPLATE_EN;
+  const reviewPathDisplay = reviewPath ?? (lang === 'zh' ? '未生成审核报告' : 'No review report generated');
+
+  return template
+    .replace('{requirement}', requirement)
+    .replaceAll('{attemptNum}', String(attemptNum))
+    .replace('{errorSummary}', errorSummary || (lang === 'zh' ? '无格式错误详情' : 'No format error details'))
+    .replace('{suggestionsSummary}', suggestionsSummary)
+    .replace('{reviewPath}', reviewPathDisplay)
+    .replace('{formatExample}', formatExample);
 }
 
 /**
@@ -1242,7 +1412,9 @@ function promptUser(prompt: string): Promise<string> {
 // ============================================================
 
 export {
+  buildRetryPrompt,
   generateInvestigationReport,
   runSplitFlow,
   writeReport,
 };
+export type { RetryPromptOptions };

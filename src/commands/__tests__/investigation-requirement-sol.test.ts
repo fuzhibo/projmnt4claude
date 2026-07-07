@@ -278,9 +278,15 @@ describe('investigation-requirement SOL-001 / SOL-002', () => {
       // 验证重试 prompt 引用了审核报告路径
       expect(mockCallAI).toHaveBeenCalledTimes(2);
       const retryCallArg = mockCallAI.mock.calls[1]![0] as { prompt: string };
+      // SOL-003: 新模板使用 "审核报告路径" 章节标题
       expect(retryCallArg.prompt).toContain('审核报告路径');
       expect(retryCallArg.prompt).toContain(reviewPath);
-      expect(retryCallArg.prompt).toContain('格式纠正要求（第 1 次重试）');
+      // SOL-003: 新模板包含审核建议摘要（reviewResult.issues 渲染）
+      expect(retryCallArg.prompt).toContain('审核建议');
+      // SOL-003: 新模板包含完整格式示例
+      expect(retryCallArg.prompt).toContain('## 元数据');
+      // SOL-003: 新模板包含重试次数提示
+      expect(retryCallArg.prompt).toContain('第 1 次重试');
     });
 
     it('should save review report and reference it in retry prompt (en)', async () => {
@@ -318,9 +324,15 @@ describe('investigation-requirement SOL-001 / SOL-002', () => {
       expect(reviewContent).toContain('[Critical] 请补充根因分析段落');
 
       const retryCallArg = mockCallAI.mock.calls[1]![0] as { prompt: string };
+      // SOL-003: 新模板使用 "Review Report Path" 章节标题
       expect(retryCallArg.prompt).toContain('Review Report Path');
       expect(retryCallArg.prompt).toContain(reviewPath);
-      expect(retryCallArg.prompt).toContain('Format Correction Request (Attempt 1)');
+      // SOL-003: 新模板包含审核建议摘要
+      expect(retryCallArg.prompt).toContain('Review Suggestions');
+      // SOL-003: 新模板包含完整格式示例
+      expect(retryCallArg.prompt).toContain('## Metadata');
+      // SOL-003: 新模板包含重试次数提示
+      expect(retryCallArg.prompt).toContain('attempt 1');
     });
 
     it('should fallback to original feedback when reviewReport throws', async () => {
@@ -345,14 +357,19 @@ describe('investigation-requirement SOL-001 / SOL-002', () => {
         outputDir: env.tempDir,
       });
 
-      // 审核报告文件不应存在
-      expect(fs.existsSync(path.join(env.tempDir, 'report-attempt-1-review.md'))).toBe(false);
+      const reviewPath = path.join(env.tempDir, 'report-attempt-1-review.md');
 
-      // 重试 prompt 应降级为原始反馈
+      // 审核报告文件不应存在
+      expect(fs.existsSync(reviewPath)).toBe(false);
+
+      // 重试 prompt 应降级为原始反馈（SOL-003: 新模板仍有格式问题章节，但无审核报告路径）
       const retryCallArg = mockCallAI.mock.calls[1]![0] as { prompt: string };
-      expect(retryCallArg.prompt).toContain('格式纠正要求');
-      expect(retryCallArg.prompt).toContain('rootCauseAnalysis empty');
-      expect(retryCallArg.prompt).not.toContain('审核报告路径');
+      // SOL-003: 新模板使用 "上一次输出的格式问题" 章节
+      expect(retryCallArg.prompt).toContain('上一次输出的格式问题');
+      expect(retryCallArg.prompt).toContain('[R-001] rootCauseAnalysis empty');
+      // 审核报告未生成，应显示降级文案而非路径
+      expect(retryCallArg.prompt).toContain('未生成审核报告');
+      expect(retryCallArg.prompt).not.toContain(reviewPath);
     });
 
     it('should fallback to original feedback when reviewReport returns undefined', async () => {
@@ -380,7 +397,8 @@ describe('investigation-requirement SOL-001 / SOL-002', () => {
       expect(fs.existsSync(path.join(env.tempDir, 'report-attempt-1-review.md'))).toBe(false);
 
       const retryCallArg = mockCallAI.mock.calls[1]![0] as { prompt: string };
-      expect(retryCallArg.prompt).toContain('格式问题');
+      // SOL-003: 新模板使用 "上一次输出的格式问题" 章节
+      expect(retryCallArg.prompt).toContain('上一次输出的格式问题');
     });
   });
 
