@@ -36161,6 +36161,72 @@ function validateReport(report) {
   };
 }
 
+// src/utils/investigation/report-contract.ts
+var REPORT_SECTIONS = {
+  metadata: { zh: "元数据", en: "Metadata" },
+  rootCauseAnalysis: { zh: "原因分析", en: "Root Cause Analysis" },
+  solutions: { zh: "解决方案", en: "Solutions" },
+  checkpoints: { zh: "检查点覆盖清单", en: "Checkpoint Checklist" },
+  assessment: { zh: "评估", en: "Assessment" }
+};
+var CA_PREFIX = "CA-";
+var SOL_PREFIX = "SOL-";
+function buildCaId(n) {
+  const digits = typeof n === "number" ? String(n).padStart(3, "0") : n;
+  return `${CA_PREFIX}${digits}`;
+}
+function buildSolId(n) {
+  const digits = typeof n === "number" ? String(n).padStart(3, "0") : n;
+  return `${SOL_PREFIX}${digits}`;
+}
+function buildCaHeadingRegex() {
+  return new RegExp(`### (${CA_PREFIX}\\d+): (.+)`, "g");
+}
+function buildSolHeadingRegex() {
+  return new RegExp(`### (${SOL_PREFIX}\\d+): (.+)`, "g");
+}
+var METADATA_FIELDS = {
+  requirementSource: { zh: "需求来源", en: "Requirement Source" },
+  investigationDate: { zh: "调查时间", en: "Investigation Date" },
+  investigationDir: { zh: "调查目录", en: "Investigation Dir" },
+  language: { zh: "语言", en: "Language" },
+  parentReport: { zh: "父报告", en: "Parent Report" },
+  dependsOn: { zh: "依赖子报告", en: "Depends On" }
+};
+var SOLUTION_FIELDS = {
+  correspondsTo: { zh: "对应原因", en: "Corresponds To" },
+  files: { zh: "涉及文件", en: "Files" },
+  expectedChanges: { zh: "预期变更", en: "Expected Changes" }
+};
+var ASSESSMENT_FIELDS = {
+  complexity: { zh: "复杂度", en: "Complexity" },
+  impactScope: { zh: "影响范围", en: "Impact Scope" },
+  estimatedMinutes: { zh: "预估工时", en: "Estimated Minutes" }
+};
+var ASSESSMENT_VALUES = {
+  impactScope: {
+    options: ["有限", "中等", "广泛"],
+    enMapping: {
+      limited: "有限",
+      medium: "中等",
+      moderate: "中等",
+      wide: "广泛",
+      broad: "广泛",
+      extensive: "广泛"
+    },
+    fallback: "中等"
+  },
+  complexity: {
+    options: ["low", "medium", "high"],
+    zhMapping: {
+      低: "low",
+      中: "medium",
+      高: "high"
+    },
+    fallback: "medium"
+  }
+};
+
 // src/utils/prompt-templates/i18n/zh.ts
 var investigationTemplates = {
   investigate: `你是 projmnt4claude 项目的需求调查分析师。
@@ -36183,46 +36249,53 @@ var investigationTemplates = {
 - 表格：必须有表头行，列对齐
 - 检查点：必须使用 [prefix] 标准前缀格式
 
-## 输出格式
-请严格按照以下格式输出调查报告（zh）：
+## ⚠️ 重要：必须严格按照以下格式输出
 
+以下是完整的输出格式示例，请严格遵循：
+
+---
 # 调查报告：{title}
 
-## 元数据
-- **需求来源**: {requirement}
-- **调查时间**: {date}
-- **调查目录**: investigation-{slug}
-- **语言**: zh
+## ${REPORT_SECTIONS.metadata.zh}
+- **${METADATA_FIELDS.requirementSource.zh}**: {requirement}
+- **${METADATA_FIELDS.investigationDate.zh}**: {date}
+- **${METADATA_FIELDS.investigationDir.zh}**: investigation-{slug}
+- **${METADATA_FIELDS.language.zh}**: zh
 
-## 原因分析
-### CA-001: {原因标题}
+## ${REPORT_SECTIONS.rootCauseAnalysis.zh}
+### ${buildCaId(1)}: {原因标题}
 {原因详细描述}
 
-## 解决方案
-### SOL-001: {方案标题} → 对应 CA-001
+## ${REPORT_SECTIONS.solutions.zh}
+### ${buildSolId(1)}: {方案标题} → 对应 ${buildCaId(1)}
 {方案详细描述}
-- 涉及文件: \`src/path/to/file.ts\`
-- 预期变更: {变更描述}
+- ${SOLUTION_FIELDS.files.zh}: \`src/path/to/file.ts\`
+- ${SOLUTION_FIELDS.expectedChanges.zh}: {变更描述}
 
-## 检查点覆盖清单
-### SOL-001 相关检查点
-- [ai review] 验证解决方案设计是否符合需求 → SOL-001
-- [ai qa] 测试核心功能是否正常工作 → SOL-001
-- [script] 运行单元测试确保无回归 → SOL-001
+## ${REPORT_SECTIONS.checkpoints.zh}
+### ${buildSolId(1)} 相关检查点
+- [ai review] 验证解决方案设计是否符合需求 → ${buildSolId(1)}
+- [ai qa] 测试核心功能是否正常工作 → ${buildSolId(1)}
+- [script] 运行单元测试确保无回归 → ${buildSolId(1)}
 
-## 评估
-- 复杂度: {low|medium|high}
-- 影响范围: {有限|中等|广泛}
-- 预估工时: {N} 分钟
+## ${REPORT_SECTIONS.assessment.zh}
+- ${ASSESSMENT_FIELDS.complexity.zh}: {low|medium|high}
+- ${ASSESSMENT_FIELDS.impactScope.zh}: {有限|中等|广泛}
+- ${ASSESSMENT_FIELDS.estimatedMinutes.zh}: {N} 分钟
+---
 
-## 注意事项
-- 原因分析必须追溯到需求本身，确保"需求→原因"链路完整
-- 解决方案必须逐一对应原因分析中的每个结论
-- 检查点必须覆盖解决方案中的每个要点
-- 检查点必须标注归属的解决方案编号（格式：→ SOL-NNN）
-- 检查点格式：'- [prefix] 描述 → SOL-NNN'
-- 检查点使用门禁标准前缀: [ai review], [ai qa], [human qa], [script]
-- 编号格式：CA-NNN（原因分析）、SOL-NNN（解决方案），NNN 为至少 3 位数字
+**注意**:
+1. 必须填充所有占位符 {title}、{requirement}、{slug}、{date} 等
+2. 原因分析必须使用 CA-NNN 编号格式
+3. 解决方案必须使用 SOL-NNN 编号格式
+4. 检查点必须标注归属的解决方案编号（格式：→ SOL-NNN）
+5. 每个章节必须有实质内容，不能为空
+6. 原因分析必须追溯到需求本身，确保"需求→原因"链路完整
+7. 解决方案必须逐一对应原因分析中的每个结论
+8. 检查点必须覆盖解决方案中的每个要点
+9. 检查点格式：'- [prefix] 描述 → SOL-NNN'
+10. 检查点使用门禁标准前缀: [ai review], [ai qa], [human qa], [script]
+11. 编号格式：CA-NNN（原因分析）、SOL-NNN（解决方案），NNN 为至少 3 位数字
 `,
   review: `你是 projmnt4claude 项目的调查报告质量评审员。
 
@@ -36457,46 +36530,54 @@ Generate a structured investigation report based on the following requirement de
 - Tables: Must have header row, columns aligned
 - Checkpoints: Must use [prefix] standard prefix format
 
-## Output Format
-Output the investigation report in the following format (en):
+## ⚠️ Important: You MUST strictly follow this output format
+
+Below is a complete output format example, please follow it strictly:
+
+---
 
 # Investigation Report: {title}
 
-## Metadata
-- **Requirement Source**: {requirement}
-- **Investigation Date**: {date}
-- **Investigation Directory**: investigation-{slug}
-- **Language**: en
+## ${REPORT_SECTIONS.metadata.en}
+- **${METADATA_FIELDS.requirementSource.en}**: {requirement}
+- **${METADATA_FIELDS.investigationDate.en}**: {date}
+- **${METADATA_FIELDS.investigationDir.en}**: investigation-{slug}
+- **${METADATA_FIELDS.language.en}**: en
 
-## Root Cause Analysis
-### CA-001: {Root cause title}
+## ${REPORT_SECTIONS.rootCauseAnalysis.en}
+### ${buildCaId(1)}: {Root cause title}
 {Root cause detailed description}
 
-## Solutions
-### SOL-001: {Solution title} → Corresponds to CA-001
+## ${REPORT_SECTIONS.solutions.en}
+### ${buildSolId(1)}: {Solution title} → Corresponds to ${buildCaId(1)}
 {Solution detailed description}
-- Involved Files: \`src/path/to/file.ts\`
-- Expected Changes: {Change description}
+- ${SOLUTION_FIELDS.files.en}: \`src/path/to/file.ts\`
+- ${SOLUTION_FIELDS.expectedChanges.en}: {Change description}
 
-## Checkpoint Checklist
-### SOL-001 Related Checkpoints
-- [ai review] Verify solution design meets requirements → SOL-001
-- [ai qa] Test core functionality works correctly → SOL-001
-- [script] Run unit tests to ensure no regression → SOL-001
+## ${REPORT_SECTIONS.checkpoints.en}
+### ${buildSolId(1)} Related Checkpoints
+- [ai review] Verify solution design meets requirements → ${buildSolId(1)}
+- [ai qa] Test core functionality works correctly → ${buildSolId(1)}
+- [script] Run unit tests to ensure no regression → ${buildSolId(1)}
 
-## Assessment
-- Complexity: {low|medium|high}
-- Impact Scope: {limited|moderate|extensive}
-- Estimated Effort: {N} minutes
+## ${REPORT_SECTIONS.assessment.en}
+- ${ASSESSMENT_FIELDS.complexity.en}: {low|medium|high}
+- ${ASSESSMENT_FIELDS.impactScope.en}: {limited|moderate|extensive}
+- ${ASSESSMENT_FIELDS.estimatedMinutes.en}: {N} minutes
+---
 
-## Notes
-- Root cause analysis must trace back to the requirement, ensuring a complete "requirement→cause" chain
-- Solutions must correspond one-to-one with each conclusion in the root cause analysis
-- Checkpoints must cover every key point in the solution
-- Checkpoints must annotate the solution number they belong to (format: → SOL-NNN)
-- Checkpoint format: '- [prefix] description → SOL-NNN'
-- Use standard gate prefixes for checkpoints: [ai review], [ai qa], [human qa], [script]
-- Numbering format: CA-NNN (Cause Analysis), SOL-NNN (Solution), NNN is at least 3 digits
+**Notes**:
+1. You MUST fill in all placeholders: {title}, {requirement}, {slug}, {date}, etc.
+2. Root cause analysis MUST use CA-NNN numbering format
+3. Solutions MUST use SOL-NNN numbering format
+4. Checkpoints MUST annotate the solution number they belong to (format: → SOL-NNN)
+5. Each section MUST have substantive content; do not leave any section empty
+6. Root cause analysis must trace back to the requirement, ensuring a complete "requirement→cause" chain
+7. Solutions must correspond one-to-one with each conclusion in the root cause analysis
+8. Checkpoints must cover every key point in the solution
+9. Checkpoint format: '- [prefix] description → SOL-NNN'
+10. Use standard gate prefixes for checkpoints: [ai review], [ai qa], [human qa], [script]
+11. Numbering format: CA-NNN (Cause Analysis), SOL-NNN (Solution), NNN is at least 3 digits
 `,
   review: `You are an investigation report quality reviewer for the projmnt4claude project.
 
@@ -37795,17 +37876,17 @@ function parseReport(markdown) {
   return { metadata, rootCauseAnalysis, solutions, checkpoints, assessment };
 }
 function extractDependenciesFromMarkdown(markdown) {
-  const depRaw = extractField(markdown, "依赖子报告") || extractField(markdown, "Depends On");
+  const depRaw = extractField(markdown, METADATA_FIELDS.dependsOn.zh) || extractField(markdown, METADATA_FIELDS.dependsOn.en);
   if (!depRaw)
     return [];
   return depRaw.split(",").map((s) => s.trim()).filter(Boolean);
 }
 function parseMetadata(md) {
-  const source = extractField(md, "需求来源") || extractField(md, "Requirement Source") || "";
-  const date = extractField(md, "调查时间") || extractField(md, "Investigation Date") || new Date().toISOString();
-  const dir = extractField(md, "调查目录") || extractField(md, "Investigation Dir") || "";
-  const langRaw = extractField(md, "语言") || extractField(md, "Language") || "zh";
-  const parent = extractField(md, "父报告") || extractField(md, "Parent Report");
+  const source = extractField(md, METADATA_FIELDS.requirementSource.zh) || extractField(md, METADATA_FIELDS.requirementSource.en) || "";
+  const date = extractField(md, METADATA_FIELDS.investigationDate.zh) || extractField(md, METADATA_FIELDS.investigationDate.en) || new Date().toISOString();
+  const dir = extractField(md, METADATA_FIELDS.investigationDir.zh) || extractField(md, METADATA_FIELDS.investigationDir.en) || "";
+  const langRaw = extractField(md, METADATA_FIELDS.language.zh) || extractField(md, METADATA_FIELDS.language.en) || "zh";
+  const parent = extractField(md, METADATA_FIELDS.parentReport.zh) || extractField(md, METADATA_FIELDS.parentReport.en);
   return {
     requirementSource: source,
     investigationDate: date,
@@ -37834,11 +37915,11 @@ function extractField(md, label) {
 }
 function parseRootCauseAnalysis(md) {
   const items = [];
-  const sectionMd = extractSection(md, "原因分析", "Root Cause Analysis");
+  const sectionMd = extractSection(md, REPORT_SECTIONS.rootCauseAnalysis.zh, REPORT_SECTIONS.rootCauseAnalysis.en);
   if (!sectionMd)
     return items;
   const matches = [];
-  const re = /### (CA-\d+): (.+)/g;
+  const re = buildCaHeadingRegex();
   let match;
   while ((match = re.exec(sectionMd)) !== null) {
     matches.push(match);
@@ -37856,11 +37937,11 @@ function parseRootCauseAnalysis(md) {
 }
 function parseSolutions(md) {
   const items = [];
-  const sectionMd = extractSection(md, "解决方案", "Solutions");
+  const sectionMd = extractSection(md, REPORT_SECTIONS.solutions.zh, REPORT_SECTIONS.solutions.en);
   if (!sectionMd)
     return items;
   const matches = [];
-  const re = /### (SOL-\d+): (.+)/g;
+  const re = buildSolHeadingRegex();
   let match;
   while ((match = re.exec(sectionMd)) !== null) {
     matches.push(match);
@@ -37872,10 +37953,10 @@ function parseSolutions(md) {
     const descStart = (m.index ?? 0) + (m[0]?.length ?? 0);
     const descEnd = i < matches.length - 1 ? matches[i + 1]?.index ?? sectionMd.length : sectionMd.length;
     const body = sectionMd.slice(descStart, descEnd).trim();
-    const correspondsTo = extractInlineField(body, "对应原因", "Corresponds To") || "";
-    const filesRaw = extractInlineField(body, "涉及文件", "Files") || "";
+    const correspondsTo = extractInlineField(body, SOLUTION_FIELDS.correspondsTo.zh, SOLUTION_FIELDS.correspondsTo.en) || "";
+    const filesRaw = extractInlineField(body, SOLUTION_FIELDS.files.zh, SOLUTION_FIELDS.files.en) || "";
     const files = filesRaw.split(",").map((s) => s.trim()).filter(Boolean);
-    const expectedChanges = extractInlineField(body, "预期变更", "Expected Changes") || "";
+    const expectedChanges = extractInlineField(body, SOLUTION_FIELDS.expectedChanges.zh, SOLUTION_FIELDS.expectedChanges.en) || "";
     const description = body.split(`
 `).filter((l) => !l.startsWith("- ")).join(`
 `).trim();
@@ -37885,7 +37966,7 @@ function parseSolutions(md) {
 }
 function parseCheckpoints2(md, options = {}) {
   const items = [];
-  const sectionMd = extractSection(md, "检查点覆盖清单", "Checkpoint Checklist");
+  const sectionMd = extractSection(md, REPORT_SECTIONS.checkpoints.zh, REPORT_SECTIONS.checkpoints.en);
   if (!sectionMd)
     return items;
   const tolerance = options.tolerance ?? "normal";
@@ -37911,7 +37992,7 @@ function parseCheckpoints2(md, options = {}) {
     for (const line of unparsedLines) {
       logger.warn("checkpoint line not parsed", {
         line: line.trim(),
-        section: "Checkpoint Checklist",
+        section: REPORT_SECTIONS.checkpoints.en,
         tolerance
       });
     }
@@ -37941,10 +38022,10 @@ function parseCheckpoints2(md, options = {}) {
   }
 }
 function parseAssessment(md) {
-  const sectionMd = extractSection(md, "评估", "Assessment") || "";
-  const complexity = extractInlineField(sectionMd, "复杂度", "Complexity") || "medium";
-  const impactRaw = extractInlineField(sectionMd, "影响范围", "Impact Scope") || "中等";
-  const minutesRaw = extractInlineField(sectionMd, "预估工时", "Estimated Minutes") || "60";
+  const sectionMd = extractSection(md, REPORT_SECTIONS.assessment.zh, REPORT_SECTIONS.assessment.en) || "";
+  const complexity = extractInlineField(sectionMd, ASSESSMENT_FIELDS.complexity.zh, ASSESSMENT_FIELDS.complexity.en) || "medium";
+  const impactRaw = extractInlineField(sectionMd, ASSESSMENT_FIELDS.impactScope.zh, ASSESSMENT_FIELDS.impactScope.en) || "中等";
+  const minutesRaw = extractInlineField(sectionMd, ASSESSMENT_FIELDS.estimatedMinutes.zh, ASSESSMENT_FIELDS.estimatedMinutes.en) || "60";
   return {
     complexity: validateComplexity(complexity),
     impactScope: validateImpactScope(impactRaw),
@@ -37967,30 +38048,22 @@ function escapeRegex(s) {
   return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 function validateComplexity(v) {
-  if (v === "low" || v === "medium" || v === "high")
+  const opts = ASSESSMENT_VALUES.complexity.options;
+  if (opts.includes(v))
     return v;
-  if (v === "低")
-    return "low";
-  if (v === "中")
-    return "medium";
-  if (v === "高")
-    return "high";
-  return "medium";
+  const mapped = ASSESSMENT_VALUES.complexity.zhMapping[v];
+  if (mapped)
+    return mapped;
+  return ASSESSMENT_VALUES.complexity.fallback;
 }
 function validateImpactScope(v) {
-  if (v === "有限")
-    return "有限";
-  if (v === "中等")
-    return "中等";
-  if (v === "广泛")
-    return "广泛";
-  if (v === "limited")
-    return "有限";
-  if (v === "medium" || v === "moderate")
-    return "中等";
-  if (v === "wide" || v === "broad" || v === "extensive")
-    return "广泛";
-  return "中等";
+  const opts = ASSESSMENT_VALUES.impactScope.options;
+  if (opts.includes(v))
+    return v;
+  const mapped = ASSESSMENT_VALUES.impactScope.enMapping[v];
+  if (mapped)
+    return mapped;
+  return ASSESSMENT_VALUES.impactScope.fallback;
 }
 
 // src/utils/investigation/report-reviewer.ts
@@ -38040,14 +38113,14 @@ function shouldSplit(reportPath, thresholdKB) {
 }
 async function generateSplitPlan(report, cwd, lang = "zh") {
   const reportMarkdown = generateReport(report);
-  const prompt = loadAndRenderTemplate("split", { report: reportMarkdown }, lang);
+  const prompt = await loadAndRenderTemplate("split", { report: reportMarkdown }, lang);
   const { callAIForJSON: callAIForJSON2 } = await Promise.resolve().then(() => (init_ai_integration(), exports_ai_integration));
   return callAIForJSON2({ prompt, cwd }, validateSplitPlan);
 }
 async function reviewSplitPlan(report, splitPlan, cwd, lang = "zh") {
   const summary = summarizeReport(report);
   const planJson = JSON.stringify(splitPlan, null, 2);
-  const prompt = loadAndRenderTemplate("splitReview", { reportSummary: summary, splitPlan: planJson }, lang);
+  const prompt = await loadAndRenderTemplate("splitReview", { reportSummary: summary, splitPlan: planJson }, lang);
   const { callAIForJSON: callAIForJSON2 } = await Promise.resolve().then(() => (init_ai_integration(), exports_ai_integration));
   return callAIForJSON2({ prompt, cwd }, validateSplitReviewResult);
 }
@@ -38169,6 +38242,67 @@ var DEFAULT_SPLIT_THRESHOLD = 30;
 var DEFAULT_LANGUAGE = "zh";
 var MIN_REQUIREMENT_LENGTH = 5;
 var MAX_SPLIT_DEPTH = 3;
+var MAX_RETRY_FEEDBACK_LEN = 500;
+var RETRY_PROMPT_TEMPLATE_ZH = `你是 projmnt4claude 项目的需求调查分析师。
+
+## 任务
+这是第 {attemptNum} 次重试。上一次输出存在格式问题，请根据以下指导重新生成调查报告。
+
+## 原始需求
+{requirement}
+
+## 上一次输出的格式问题
+{errorSummary}
+
+## 审核建议（来自 AI 评审员）
+{suggestionsSummary}
+
+## 审核报告路径
+审核报告已保存到: {reviewPath}
+（请查看审核报告获取更详细的问题分析和修正建议）
+
+## ⚠️ 重要：必须严格按照以下格式输出
+
+{formatExample}
+
+**注意**:
+1. 本次是第 {attemptNum} 次重试，请务必修正所有格式问题
+2. 必须填充所有占位符
+3. 原因分析必须使用 CA-NNN 编号格式
+4. 解决方案必须使用 SOL-NNN 编号格式
+5. 检查点必须标注归属的解决方案编号
+6. 每个章节必须有实质内容，不能为空
+`;
+var RETRY_PROMPT_TEMPLATE_EN = `You are an investigation analyst for the projmnt4claude project.
+
+## Task
+This is attempt {attemptNum}. Your previous output had format issues. Please regenerate the investigation report following the guidance below.
+
+## Original Requirement
+{requirement}
+
+## Format Issues in Previous Output
+{errorSummary}
+
+## Review Suggestions (from AI Reviewer)
+{suggestionsSummary}
+
+## Review Report Path
+Review report saved to: {reviewPath}
+(Please check the review report for detailed issue analysis and correction suggestions)
+
+## ⚠️ Important: You MUST strictly follow this output format
+
+{formatExample}
+
+**Notes**:
+1. This is attempt {attemptNum}. You MUST fix all format issues
+2. Must fill all placeholders
+3. Root Cause Analysis must use CA-NNN numbering format
+4. Solutions must use SOL-NNN numbering format
+5. Checkpoints must mark their corresponding solution ID
+6. Every section must have substantive content, cannot be empty
+`;
 async function investigationRequirement(description, cwd, options) {
   const logger = createLogger("investigation-requirement", cwd);
   logger.debug("investigation-requirement invoked", {
@@ -38301,8 +38435,9 @@ async function runNewInvestigation(requirement, cwd, options) {
       });
     }
     let reviewPath;
+    let reviewResult2;
     try {
-      const reviewResult2 = await reviewReport(requirement, report, cwd, lang, options.timeout, options.debug);
+      reviewResult2 = await reviewReport(requirement, report, cwd, lang, options.timeout, options.debug);
       reviewPath = await saveReviewReport(reviewResult2, attemptOutputDir, attemptNum, lang);
       if (!options.quiet) {
         console.log(`   \uD83D\uDCCB 审核报告已保存: ${reviewPath}`);
@@ -38321,7 +38456,10 @@ async function runNewInvestigation(requirement, cwd, options) {
     }
     await new Promise((resolve10) => setTimeout(resolve10, RETRY_CLEANUP_DELAY_MS));
     try {
-      const retryPrompt = buildRetryPrompt(requirement, formatValidation.errors, {
+      const retryPrompt = buildRetryPrompt({
+        requirement,
+        errors: formatValidation.errors,
+        reviewResult: reviewResult2,
         reviewPath,
         attemptNum,
         lang
@@ -38708,61 +38846,104 @@ async function runSplitFlow(report, requirement, cwd, options) {
 }
 var DEFAULT_RETRY_TIMEOUT_S = 300;
 var RETRY_CLEANUP_DELAY_MS = 1000;
-var MAX_RETRY_FEEDBACK_LEN = 500;
-function buildRetryPrompt(requirement, errors, options) {
-  const lang = options?.lang ?? "zh";
-  const reviewPath = options?.reviewPath;
-  const attemptNum = options?.attemptNum ?? 1;
-  const feedback = errors.map((e) => `- ${e.message}`).join(`
-`).substring(0, MAX_RETRY_FEEDBACK_LEN);
-  if (reviewPath) {
-    if (lang === "zh") {
-      return `${requirement}
-
----
-**格式纠正要求（第 ${attemptNum} 次重试）**:
-
-` + `上次生成的报告未能通过格式验证。
-` + `AI 评审员已生成详细的审核报告，请查阅了解具体问题：
-` + `- 审核报告路径: ${reviewPath}
-
-` + `请根据审核报告中的问题和建议，修正报告格式后重新生成。
-`;
-    }
-    return `${requirement}
-
----
-**Format Correction Request (Attempt ${attemptNum})**:
-
-` + `The previous report did not pass format validation.
-` + `The AI reviewer has generated a detailed review report. Please review it to understand the specific issues:
-` + `- Review Report Path: ${reviewPath}
-
-` + `Please correct the report format based on the issues and suggestions in the review report, then regenerate.
-`;
-  }
+function getFormatExample(lang) {
   if (lang === "zh") {
-    return `${requirement}
-
----
-**格式纠正要求**:
-上一次输出存在以下格式问题，请重新生成：
-
-${feedback}
-
-请确保输出格式符合要求。
-`;
+    return [
+      "---",
+      "# 调查报告：{title}",
+      "",
+      `## ${REPORT_SECTIONS.metadata.zh}`,
+      `- **${METADATA_FIELDS.requirementSource.zh}**: {requirement}`,
+      `- **${METADATA_FIELDS.investigationDate.zh}**: {date}`,
+      `- **${METADATA_FIELDS.investigationDir.zh}**: investigation-{slug}`,
+      `- **${METADATA_FIELDS.language.zh}**: zh`,
+      "",
+      `## ${REPORT_SECTIONS.rootCauseAnalysis.zh}`,
+      `### ${buildCaId(1)}: {原因标题}`,
+      "{原因详细描述}",
+      "",
+      `## ${REPORT_SECTIONS.solutions.zh}`,
+      `### ${buildSolId(1)}: {方案标题} → 对应 ${buildCaId(1)}`,
+      "{方案详细描述}",
+      `- ${SOLUTION_FIELDS.files.zh}: \`src/path/to/file.ts\``,
+      `- ${SOLUTION_FIELDS.expectedChanges.zh}: {变更描述}`,
+      "",
+      `## ${REPORT_SECTIONS.checkpoints.zh}`,
+      `### ${buildSolId(1)} 相关检查点`,
+      `- [ai review] 验证解决方案设计是否符合需求 → ${buildSolId(1)}`,
+      `- [ai qa] 测试核心功能是否正常工作 → ${buildSolId(1)}`,
+      `- [script] 运行单元测试确保无回归 → ${buildSolId(1)}`,
+      "",
+      `## ${REPORT_SECTIONS.assessment.zh}`,
+      `- ${ASSESSMENT_FIELDS.complexity.zh}: {low|medium|high}`,
+      `- ${ASSESSMENT_FIELDS.impactScope.zh}: {有限|中等|广泛}`,
+      `- ${ASSESSMENT_FIELDS.estimatedMinutes.zh}: {N} 分钟`,
+      "---"
+    ].join(`
+`);
   }
-  return `${requirement}
+  return [
+    "---",
+    "# Investigation Report: {title}",
+    "",
+    `## ${REPORT_SECTIONS.metadata.en}`,
+    `- **${METADATA_FIELDS.requirementSource.en}**: {requirement}`,
+    `- **${METADATA_FIELDS.investigationDate.en}**: {date}`,
+    `- **${METADATA_FIELDS.investigationDir.en}**: investigation-{slug}`,
+    `- **${METADATA_FIELDS.language.en}**: en`,
+    "",
+    `## ${REPORT_SECTIONS.rootCauseAnalysis.en}`,
+    `### ${buildCaId(1)}: {Root cause title}`,
+    "{Root cause detailed description}",
+    "",
+    `## ${REPORT_SECTIONS.solutions.en}`,
+    `### ${buildSolId(1)}: {Solution title} → Corresponds to ${buildCaId(1)}`,
+    "{Solution detailed description}",
+    `- ${SOLUTION_FIELDS.files.en}: \`src/path/to/file.ts\``,
+    `- ${SOLUTION_FIELDS.expectedChanges.en}: {Change description}`,
+    "",
+    `## ${REPORT_SECTIONS.checkpoints.en}`,
+    `### ${buildSolId(1)} Related Checkpoints`,
+    `- [ai review] Verify solution design meets requirements → ${buildSolId(1)}`,
+    `- [ai qa] Test core functionality works correctly → ${buildSolId(1)}`,
+    `- [script] Run unit tests to ensure no regression → ${buildSolId(1)}`,
+    "",
+    `## ${REPORT_SECTIONS.assessment.en}`,
+    `- ${ASSESSMENT_FIELDS.complexity.en}: {low|medium|high}`,
+    `- ${ASSESSMENT_FIELDS.impactScope.en}: {limited|moderate|extensive}`,
+    `- ${ASSESSMENT_FIELDS.estimatedMinutes.en}: {N} minutes`,
+    "---"
+  ].join(`
+`);
+}
+function buildRetryPrompt(options) {
+  const { requirement, errors, reviewResult, reviewPath, attemptNum, lang } = options;
+  const errorSummary = errors.map((e) => `- [${e.rule}] ${e.message}`).join(`
+`).substring(0, MAX_RETRY_FEEDBACK_LEN);
+  let suggestionsSummary;
+  if (reviewResult && reviewResult.issues && reviewResult.issues.length > 0) {
+    const scores = reviewResult.scores;
+    const scoresBlock = lang === "zh" ? `**审核评分**:
+` + `- 原因分析对齐度: ${scores.rootCauseAlignment}
+` + `- 解决方案有效性: ${scores.solutionEffectiveness}
+` + `- 检查点完善度: ${scores.checkpointCompleteness}` : `**Review Scores**:
+` + `- Root Cause Alignment: ${scores.rootCauseAlignment}
+` + `- Solution Effectiveness: ${scores.solutionEffectiveness}
+` + `- Checkpoint Completeness: ${scores.checkpointCompleteness}`;
+    const issuesBlock = reviewResult.issues.map((i) => `- [${i.severity}] ${i.dimension}: ${i.description}
+` + `  ${lang === "zh" ? "建议" : "Suggestion"}: ${i.suggestion}`).join(`
+`);
+    suggestionsSummary = `${scoresBlock}
 
----
-**Format Correction Request**:
-The previous output has the following format issues, please regenerate:
-
-${feedback}
-
-Please ensure the output format is correct.
-`;
+**${lang === "zh" ? "审核发现的问题" : "Review Issues"}**:
+${issuesBlock}`.substring(0, MAX_RETRY_FEEDBACK_LEN);
+  } else {
+    suggestionsSummary = lang === "zh" ? "无具体建议" : "No specific suggestions";
+  }
+  const formatExample = getFormatExample(lang);
+  const template = lang === "zh" ? RETRY_PROMPT_TEMPLATE_ZH : RETRY_PROMPT_TEMPLATE_EN;
+  const reviewPathDisplay = reviewPath ?? (lang === "zh" ? "未生成审核报告" : "No review report generated");
+  return template.replace("{requirement}", requirement).replaceAll("{attemptNum}", String(attemptNum)).replace("{errorSummary}", errorSummary || (lang === "zh" ? "无格式错误详情" : "No format error details")).replace("{suggestionsSummary}", suggestionsSummary).replace("{reviewPath}", reviewPathDisplay).replace("{formatExample}", formatExample);
 }
 async function saveAttemptReport(report, outputDir, attemptNum) {
   const content = generateReport(report);
