@@ -39,8 +39,11 @@ Generate a structured investigation report based on the following requirement de
 - Tables: Must have header row, columns aligned
 - Checkpoints: Must use [prefix] standard prefix format
 
-## Output Format
-Output the investigation report in the following format (en):
+## ⚠️ Important: You MUST strictly follow this output format
+
+Below is a complete output format example, please follow it strictly:
+
+---
 
 # Investigation Report: {title}
 
@@ -70,15 +73,20 @@ Output the investigation report in the following format (en):
 - ${ASSESSMENT_FIELDS.complexity.en}: {low|medium|high}
 - ${ASSESSMENT_FIELDS.impactScope.en}: {limited|moderate|extensive}
 - ${ASSESSMENT_FIELDS.estimatedMinutes.en}: {N} minutes
+---
 
-## Notes
-- Root cause analysis must trace back to the requirement, ensuring a complete "requirement→cause" chain
-- Solutions must correspond one-to-one with each conclusion in the root cause analysis
-- Checkpoints must cover every key point in the solution
-- Checkpoints must annotate the solution number they belong to (format: → SOL-NNN)
-- Checkpoint format: '- [prefix] description → SOL-NNN'
-- Use standard gate prefixes for checkpoints: [ai review], [ai qa], [human qa], [script]
-- Numbering format: CA-NNN (Cause Analysis), SOL-NNN (Solution), NNN is at least 3 digits
+**Notes**:
+1. You MUST fill in all placeholders: {title}, {requirement}, {slug}, {date}, etc.
+2. Root cause analysis MUST use CA-NNN numbering format
+3. Solutions MUST use SOL-NNN numbering format
+4. Checkpoints MUST annotate the solution number they belong to (format: → SOL-NNN)
+5. Each section MUST have substantive content; do not leave any section empty
+6. Root cause analysis must trace back to the requirement, ensuring a complete "requirement→cause" chain
+7. Solutions must correspond one-to-one with each conclusion in the root cause analysis
+8. Checkpoints must cover every key point in the solution
+9. Checkpoint format: '- [prefix] description → SOL-NNN'
+10. Use standard gate prefixes for checkpoints: [ai review], [ai qa], [human qa], [script]
+11. Numbering format: CA-NNN (Cause Analysis), SOL-NNN (Solution), NNN is at least 3 digits
 `,
 
   review: `You are an investigation report quality reviewer for the projmnt4claude project.

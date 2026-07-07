@@ -39,9 +39,11 @@ export const investigationTemplates: Record<string, string> = {
 - 表格：必须有表头行，列对齐
 - 检查点：必须使用 [prefix] 标准前缀格式
 
-## 输出格式
-请严格按照以下格式输出调查报告（zh）：
+## ⚠️ 重要：必须严格按照以下格式输出
 
+以下是完整的输出格式示例，请严格遵循：
+
+---
 # 调查报告：{title}
 
 ## ${REPORT_SECTIONS.metadata.zh}
@@ -70,15 +72,20 @@ export const investigationTemplates: Record<string, string> = {
 - ${ASSESSMENT_FIELDS.complexity.zh}: {low|medium|high}
 - ${ASSESSMENT_FIELDS.impactScope.zh}: {有限|中等|广泛}
 - ${ASSESSMENT_FIELDS.estimatedMinutes.zh}: {N} 分钟
+---
 
-## 注意事项
-- 原因分析必须追溯到需求本身，确保"需求→原因"链路完整
-- 解决方案必须逐一对应原因分析中的每个结论
-- 检查点必须覆盖解决方案中的每个要点
-- 检查点必须标注归属的解决方案编号（格式：→ SOL-NNN）
-- 检查点格式：'- [prefix] 描述 → SOL-NNN'
-- 检查点使用门禁标准前缀: [ai review], [ai qa], [human qa], [script]
-- 编号格式：CA-NNN（原因分析）、SOL-NNN（解决方案），NNN 为至少 3 位数字
+**注意**:
+1. 必须填充所有占位符 {title}、{requirement}、{slug}、{date} 等
+2. 原因分析必须使用 CA-NNN 编号格式
+3. 解决方案必须使用 SOL-NNN 编号格式
+4. 检查点必须标注归属的解决方案编号（格式：→ SOL-NNN）
+5. 每个章节必须有实质内容，不能为空
+6. 原因分析必须追溯到需求本身，确保"需求→原因"链路完整
+7. 解决方案必须逐一对应原因分析中的每个结论
+8. 检查点必须覆盖解决方案中的每个要点
+9. 检查点格式：'- [prefix] 描述 → SOL-NNN'
+10. 检查点使用门禁标准前缀: [ai review], [ai qa], [human qa], [script]
+11. 编号格式：CA-NNN（原因分析）、SOL-NNN（解决方案），NNN 为至少 3 位数字
 `,
 
   review: `你是 projmnt4claude 项目的调查报告质量评审员。
