@@ -137,6 +137,63 @@ describe('§3.7 i18n 模板', () => {
       expect(result).toBe('Hello Claude, {unknown}');
     });
 
+    describe('renderTemplate modes', () => {
+      const template = 'Hello {name}, your order {orderId} is ready.';
+      const params = { name: 'Alice' };
+
+      it('strict mode should throw error on unreplaced placeholder', () => {
+        expect(() => renderTemplate(template, params, { mode: 'strict' }))
+          .toThrow('[renderTemplate] 未替换占位符: orderId');
+      });
+
+      it('strict mode should not throw when all placeholders replaced', () => {
+        expect(() => renderTemplate(template, { name: 'Alice', orderId: '123' }, { mode: 'strict' }))
+          .not.toThrow();
+      });
+
+      it('lenient mode should warn but continue', () => {
+        const consoleWarnSpy = jest.spyOn(console, 'warn').mockImplementation();
+        const result = renderTemplate(template, params, { mode: 'lenient' });
+
+        expect(consoleWarnSpy).toHaveBeenCalledWith('[renderTemplate] 以下占位符未替换: orderId');
+        expect(result).toBe('Hello Alice, your order {orderId} is ready.');
+
+        consoleWarnSpy.mockRestore();
+      });
+
+      it('auto-fill mode should use default value', () => {
+        const result = renderTemplate(template, params, {
+          mode: 'auto-fill',
+          autoFillDefaults: { orderId: 'DEFAULT-001' },
+        });
+
+        expect(result).toBe('Hello Alice, your order DEFAULT-001 is ready.');
+      });
+
+      it('auto-fill mode should use fallback when no default provided', () => {
+        const result = renderTemplate(template, params, { mode: 'auto-fill' });
+
+        expect(result).toBe('Hello Alice, your order [待填充:orderId] is ready.');
+      });
+
+      it('onUnreplaced callback should be invoked', () => {
+        const onUnreplaced = jest.fn();
+        renderTemplate(template, params, { mode: 'lenient', onUnreplaced });
+
+        expect(onUnreplaced).toHaveBeenCalledWith(['orderId']);
+      });
+
+      it('renderTemplate function-level default should be lenient (backward compatible)', () => {
+        const consoleWarnSpy = jest.spyOn(console, 'warn').mockImplementation();
+        const result = renderTemplate(template, params);
+
+        expect(consoleWarnSpy).toHaveBeenCalled();
+        expect(result).toBe('Hello Alice, your order {orderId} is ready.');
+
+        consoleWarnSpy.mockRestore();
+      });
+    });
+
     it('should loadAndRenderTemplate correctly', async () => {
       const result = await loadAndRenderTemplate('investigate', {
         requirement: 'Test requirement',

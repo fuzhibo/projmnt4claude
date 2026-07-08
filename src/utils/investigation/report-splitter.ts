@@ -22,7 +22,7 @@ export async function generateSplitPlan(
   lang: 'zh' | 'en' = 'zh',
 ): Promise<SplitPlan> {
   const reportMarkdown = generateReport(report);
-  const prompt = await loadAndRenderTemplate('split', { report: reportMarkdown }, lang);
+  const prompt = await loadAndRenderTemplate('split', { report: reportMarkdown }, lang, { mode: 'strict' });
 
   const { callAIForJSON } = await import('./ai-integration');
   return callAIForJSON<SplitPlan>({ prompt, cwd }, validateSplitPlan);
@@ -39,7 +39,7 @@ export async function reviewSplitPlan(
 ): Promise<SplitReviewResult> {
   const summary = summarizeReport(report);
   const planJson = JSON.stringify(splitPlan, null, 2);
-  const prompt = await loadAndRenderTemplate('splitReview', { reportSummary: summary, splitPlan: planJson }, lang);
+  const prompt = await loadAndRenderTemplate('splitReview', { reportSummary: summary, splitPlan: planJson }, lang, { mode: 'strict' });
 
   const { callAIForJSON } = await import('./ai-integration');
   return callAIForJSON<SplitReviewResult>({ prompt, cwd }, validateSplitReviewResult);

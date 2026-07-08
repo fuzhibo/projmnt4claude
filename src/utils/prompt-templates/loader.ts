@@ -81,10 +81,39 @@ export function loadInvestigationTemplateSync(name: InvestigationTemplateName, l
   return template;
 }
 
+/** renderTemplate 错误处理模式 */
+export type RenderTemplateMode = 'strict' | 'lenient' | 'auto-fill';
+
+/** renderTemplate 选项 */
+export interface RenderTemplateOptions {
+  /** 错误处理模式：strict 抛错、lenient 仅警告（默认）、auto-fill 用默认值替换 */
+  mode?: RenderTemplateMode;
+  /** auto-fill 模式下，自动替换占位符的默认值映射 */
+  autoFillDefaults?: Record<string, string>;
+  /** 检测到未替换占位符时的回调通知 */
+  onUnreplaced?: (placeholderNames: string[]) => void;
+}
+
 /**
  * 渲染模板：替换 {placeholder} 风格的占位符
+ *
+ * @param template - 模板字符串，包含 {placeholder} 风格的占位符
+ * @param params - 占位符替换值映射
+ * @param options - 渲染选项（模式、默认值、回调）
+ * @returns 渲染后的字符串
+ * @throws {Error} strict 模式下检测到未替换占位符时抛出
  */
-export function renderTemplate(template: string, params: Record<string, string>): string {
+export function renderTemplate(
+  template: string,
+  params: Record<string, string>,
+  options?: RenderTemplateOptions,
+): string {
+  const {
+    mode = 'lenient',
+    autoFillDefaults = {},
+    onUnreplaced,
+  } = options ?? {};
+
   const result = template.replace(/\{(\w+)\}/g, (match, key: string) => {
     if (key in params) {
       return params[key];
@@ -92,12 +121,30 @@ export function renderTemplate(template: string, params: Record<string, string>)
     return match;
   });
 
-  // 检测未替换的占位符并输出警告
+  // 检测未替换的占位符
   const unmatched = result.match(/\{(\w+)\}/g);
   if (unmatched) {
-    const keys = [...new Set(unmatched.map(m => m.slice(1, -1)))];
-    // eslint-disable-next-line no-console
-    console.warn(`[renderTemplate] 以下占位符未替换: ${keys.join(', ')}`);
+    const placeholderNames = [...new Set(unmatched.map(m => m.slice(1, -1)))];
+
+    // 回调通知
+    onUnreplaced?.(placeholderNames);
+
+    if (mode === 'strict') {
+      throw new Error(`[renderTemplate] 未替换占位符: ${placeholderNames.join(', ')}`);
+    } else if (mode === 'auto-fill') {
+      let filled = result;
+      for (const name of placeholderNames) {
+        const defaultValue = autoFillDefaults[name] ?? `[待填充:${name}]`;
+        filled = filled.replace(new RegExp(`\\{${name}\\}`, 'g'), defaultValue);
+      }
+      // eslint-disable-next-line no-console
+      console.warn(`[renderTemplate] 自动替换未替换占位符: ${placeholderNames.join(', ')}`);
+      return filled;
+    } else {
+      // lenient 模式：仅警告（保持向后兼容）
+      // eslint-disable-next-line no-console
+      console.warn(`[renderTemplate] 以下占位符未替换: ${placeholderNames.join(', ')}`);
+    }
   }
 
   return result;
@@ -110,9 +157,10 @@ export async function loadAndRenderTemplate(
   name: TemplateName,
   params: Record<string, string>,
   lang: 'zh' | 'en' = 'zh',
+  options?: RenderTemplateOptions,
 ): Promise<string> {
   const template = await loadTemplate(name, lang);
-  return renderTemplate(template, params);
+  return renderTemplate(template, params, options);
 }
 
 /**

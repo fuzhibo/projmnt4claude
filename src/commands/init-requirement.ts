@@ -568,7 +568,7 @@ async function extractTaskMeta(
   const prompt = loadAndRenderTemplate('reportToTask', {
     report: reportContent,
     prefixMap: prefixMapStr,
-  });
+  }, 'zh', { mode: 'strict' });
 
   const result = await callAIForJSON<ExtractedTaskMeta>(
     { prompt, cwd, timeout: timeout ?? AI_TIMEOUT_SECONDS, debug },
@@ -715,7 +715,7 @@ async function runAlignmentCheck(
   const prompt = loadAndRenderTemplate('aiAlignmentCheck', {
     report: reportContent,
     taskMeta: JSON.stringify(taskMeta, null, 2),
-  });
+  }, 'zh', { mode: 'strict' });
 
   try {
     const result = await callAIForJSON<AlignmentResult>(

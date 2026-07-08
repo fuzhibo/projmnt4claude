@@ -16,7 +16,7 @@ import * as path from 'path';
 import * as readline from 'readline';
 import type { InvestigationReport, ReviewResult, SplitPlan, SplitReviewResult, OutputMode } from '../utils/investigation/types';
 import { callAI } from '../utils/investigation/ai-integration';
-import { loadAndRenderTemplate, type InvestigationTemplateName } from '../utils/prompt-templates/loader';
+import { loadAndRenderTemplate, type InvestigationTemplateName, type RenderTemplateMode } from '../utils/prompt-templates/loader';
 import { generateReport } from '../utils/investigation/report-generator';
 import { parseReport } from '../utils/investigation/report-parser';
 import { validateReport } from '../utils/investigation/report-validator';
@@ -83,6 +83,8 @@ export interface InvestigationRequirementOptions {
   timeout?: number;
   /** 调试模式：输出详细日志 */
   debug?: boolean;
+  /** 模板渲染模式：strict（默认，未替换占位符抛错）、lenient（仅警告）、auto-fill（默认值替换） */
+  templateMode?: RenderTemplateMode;
 }
 
 export interface InvestigationResult {
@@ -332,7 +334,12 @@ async function runNewInvestigation(
 
   // Step 1: 生成调查报告
   let report = await withTimeoutRace(
-    generateInvestigationReport(requirement, cwd, lang, options.timeout, options.debug),
+    generateInvestigationReport(requirement, cwd, {
+      lang,
+      timeout: options.timeout,
+      debug: options.debug,
+      templateMode: options.templateMode,
+    }),
     (options.timeout ?? DEFAULT_RETRY_TIMEOUT_S) * 1000,
     'generateInvestigationReport(initial)',
   );
@@ -419,6 +426,7 @@ async function runNewInvestigation(
           lang,
           timeout: options.timeout,
           debug: options.debug,
+          templateMode: options.templateMode,
         }),
         timeoutS * 1000,
         'generateInvestigationReport(retry)',
@@ -519,6 +527,9 @@ async function runNewInvestigation(
       splitThreshold,
       outputDir: path.dirname(reportPath),
       quiet: options.quiet,
+      timeout: options.timeout,
+      debug: options.debug,
+      templateMode: options.templateMode,
     });
 
     if (splitResult.success && splitResult.subReports) {
@@ -558,7 +569,7 @@ async function runInteractiveMode(
   console.log('');
 
   // Step 1: 生成初始报告
-  let report = await generateInvestigationReport(requirement, cwd, lang);
+  let report = await generateInvestigationReport(requirement, cwd, { lang, templateMode: options.templateMode });
   let reportPath = '';
 
   // Step 2: 用户评审循环
@@ -599,6 +610,7 @@ async function runInteractiveMode(
       'investigateWithFeedback',
       { requirement, currentReport: reportMarkdown, feedback, date: new Date().toISOString() },
       lang,
+      { mode: options.templateMode ?? 'strict' },
     );
 
     const aiResult = await callAI({ prompt, cwd, outputFormat: 'text', timeout: options.timeout, debug: options.debug });
@@ -616,6 +628,9 @@ async function runInteractiveMode(
       splitThreshold,
       outputDir: path.dirname(reportPath),
       quiet: options.quiet,
+      timeout: options.timeout,
+      debug: options.debug,
+      templateMode: options.templateMode,
     });
     if (splitResult.success && splitResult.subReports) {
       subReports = splitResult.subReports;
@@ -678,6 +693,7 @@ async function runFeedbackMode(
       date: new Date().toISOString(),
     },
     lang,
+    { mode: options.templateMode ?? 'strict' },
   );
 
   const aiResult = await callAI({ prompt, cwd, outputFormat: 'text', timeout: options.timeout, debug: options.debug });
@@ -814,6 +830,9 @@ async function runSplitMode(
     splitThreshold,
     outputDir: path.dirname(options.reportPath),
     quiet: options.quiet,
+    timeout: options.timeout,
+    debug: options.debug,
+    templateMode: options.templateMode,
   });
 
   return result;
@@ -834,6 +853,7 @@ interface SplitFlowOptions {
   timeout?: number;
   /** 调试模式 */
   debug?: boolean;
+  templateMode?: RenderTemplateMode;
 }
 
 async function runSplitFlow(
@@ -915,7 +935,7 @@ async function runSplitFlow(
     }
 
     // 为子项生成独立调查报告
-    const subReport = await generateSubReport(report, item, requirement, cwd, lang, options.timeout, options.debug);
+    const subReport = await generateSubReport(report, item, requirement, cwd, lang, options.timeout, options.debug, options.templateMode);
     const subSlug = slugify(item.title);
     const subReportPath = path.join(subDir, `${subSlug}.md`);
     fs.writeFileSync(subReportPath, generateReport(subReport));
@@ -1267,6 +1287,8 @@ interface GenerateInvestigationReportOptions {
   debug?: boolean;
   /** SOL-001: 跳过模板渲染，直接使用原始 prompt（避免双层格式示例嵌套） */
   rawPrompt?: string;
+  /** 模板渲染模式：strict（默认）、lenient、auto-fill */
+  templateMode?: RenderTemplateMode;
 }
 
 async function generateInvestigationReport(
@@ -1298,6 +1320,7 @@ async function generateInvestigationReport(
       'investigate',
       { requirement, projectContext, date, slug, title, N },
       opts.lang,
+      { mode: opts.templateMode ?? 'strict' },
     );
   }
 
@@ -1346,6 +1369,7 @@ async function generateSubReport(
   lang: 'zh' | 'en',
   timeout?: number,
   debug?: boolean,
+  templateMode?: RenderTemplateMode,
 ): Promise<InvestigationReport> {
   const subPrompt = await loadAndRenderTemplate(
     'investigate',
@@ -1358,6 +1382,7 @@ async function generateSubReport(
       N: '60',
     },
     lang,
+    { mode: templateMode ?? 'strict' },
   );
 
   const result = await callAI({ prompt: subPrompt, cwd, outputFormat: 'text', timeout, debug });

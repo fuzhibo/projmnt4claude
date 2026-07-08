@@ -198,7 +198,7 @@ async function runAIFix(
     gateErrors: gateErrors || 'None',
     qualityIssues: qualityIssues || 'None',
     alignmentIssues: alignmentIssues || 'None',
-  });
+  }, 'zh', { mode: 'strict' });
 
   const result = await deps.invokeAIAgent(prompt, {
     outputFormat: 'json',
