@@ -36087,6 +36087,16 @@ function parseCheckpoint(raw) {
   return null;
 }
 // src/utils/investigation/report-validator.ts
+var VALIDATION_RULES = [
+  { name: "metadata-required", condition: "metadata 字段存在且非空", investigationAction: "block", initAction: "block" },
+  { name: "root-cause-non-empty", condition: "rootCauseAnalysis 至少包含 1 项", investigationAction: "block", initAction: "block" },
+  { name: "solution-non-empty", condition: "solutions 至少包含 1 项", investigationAction: "block", initAction: "block" },
+  { name: "ca-sol-correspondence", condition: "每个 SOL 的 correspondsTo 指向有效的 CA 编号", investigationAction: "block", initAction: "block" },
+  { name: "checkpoint-prefix", condition: "检查点前缀必须在 PREFIX_MAP 中定义", investigationAction: "warn", initAction: "block" },
+  { name: "checkpoint-belongsto", condition: "检查点 belongsTo 必须指向有效的 SOL 编号", investigationAction: "warn", initAction: "block" },
+  { name: "assessment-required", condition: "assessment 字段存在且 complexity 值合法", investigationAction: "warn", initAction: "warn" },
+  { name: "id-format", condition: "CA 编号为 CA-NNN、SOL 编号为 SOL-NNN 格式", investigationAction: "warn", initAction: "block" }
+];
 function validateReport(report) {
   const errors = [];
   const warnings = [];
@@ -36106,13 +36116,13 @@ function validateReport(report) {
   for (const ca of report.rootCauseAnalysis || []) {
     caIds.add(ca.id);
     if (!caFormatRe.test(ca.id)) {
-      warnings.push({ rule: "id-format", message: `CA 编号格式不合法: ${ca.id}，期望 CA-NNN` });
+      errors.push({ rule: "id-format", message: `CA 编号格式不合法: ${ca.id}，期望 CA-NNN` });
     }
   }
   for (const sol of report.solutions || []) {
     solIds.add(sol.id);
     if (!solFormatRe.test(sol.id)) {
-      warnings.push({ rule: "id-format", message: `SOL 编号格式不合法: ${sol.id}，期望 SOL-NNN` });
+      errors.push({ rule: "id-format", message: `SOL 编号格式不合法: ${sol.id}，期望 SOL-NNN` });
     }
   }
   for (const sol of report.solutions || []) {
@@ -36129,7 +36139,7 @@ function validateReport(report) {
   }
   for (const cp of report.checkpoints || []) {
     if (!validPrefixes.has(cp.prefix)) {
-      warnings.push({
+      errors.push({
         rule: "checkpoint-prefix",
         message: `检查点前缀 "${cp.prefix}" 不在 PREFIX_MAP 中，有效值: ${[...validPrefixes].join(", ")}`
       });
@@ -36137,27 +36147,37 @@ function validateReport(report) {
   }
   for (const cp of report.checkpoints || []) {
     if (cp.belongsTo && !solIds.has(cp.belongsTo)) {
-      warnings.push({
+      errors.push({
         rule: "checkpoint-belongsto",
         message: `检查点 belongsTo "${cp.belongsTo}" 未在解决方案中找到对应 SOL`
       });
     }
   }
   if (!report.assessment) {
-    warnings.push({ rule: "assessment-required", message: "assessment 缺失" });
+    errors.push({ rule: "assessment-required", message: "assessment 缺失" });
   } else {
     const validComplexity = new Set(["low", "medium", "high"]);
     if (!validComplexity.has(report.assessment.complexity)) {
-      warnings.push({
+      errors.push({
         rule: "assessment-required",
         message: `assessment.complexity "${report.assessment.complexity}" 不合法，有效值: low, medium, high`
       });
     }
   }
+  const blockingErrors = errors.filter((e) => {
+    const rule = VALIDATION_RULES.find((r) => r.name === e.rule);
+    return rule?.investigationAction === "block";
+  });
+  const warningErrors = errors.filter((e) => {
+    const rule = VALIDATION_RULES.find((r) => r.name === e.rule);
+    return rule?.investigationAction === "warn";
+  });
   return {
     valid: errors.length === 0,
     errors,
-    warnings
+    warnings,
+    blockingErrors,
+    warningErrors
   };
 }
 
@@ -36827,7 +36847,12 @@ async function loadTemplate(name, lang = "zh") {
   }
   return template;
 }
-function renderTemplate(template, params) {
+function renderTemplate(template, params, options) {
+  const {
+    mode = "lenient",
+    autoFillDefaults = {},
+    onUnreplaced
+  } = options ?? {};
   const result = template.replace(/\{(\w+)\}/g, (match, key) => {
     if (key in params) {
       return params[key];
@@ -36836,14 +36861,27 @@ function renderTemplate(template, params) {
   });
   const unmatched = result.match(/\{(\w+)\}/g);
   if (unmatched) {
-    const keys = [...new Set(unmatched.map((m) => m.slice(1, -1)))];
-    console.warn(`[renderTemplate] 以下占位符未替换: ${keys.join(", ")}`);
+    const placeholderNames = [...new Set(unmatched.map((m) => m.slice(1, -1)))];
+    onUnreplaced?.(placeholderNames);
+    if (mode === "strict") {
+      throw new Error(`[renderTemplate] 未替换占位符: ${placeholderNames.join(", ")}`);
+    } else if (mode === "auto-fill") {
+      let filled = result;
+      for (const name of placeholderNames) {
+        const defaultValue = autoFillDefaults[name] ?? `[待填充:${name}]`;
+        filled = filled.replace(new RegExp(`\\{${name}\\}`, "g"), defaultValue);
+      }
+      console.warn(`[renderTemplate] 自动替换未替换占位符: ${placeholderNames.join(", ")}`);
+      return filled;
+    } else {
+      console.warn(`[renderTemplate] 以下占位符未替换: ${placeholderNames.join(", ")}`);
+    }
   }
   return result;
 }
-async function loadAndRenderTemplate(name, params, lang = "zh") {
+async function loadAndRenderTemplate(name, params, lang = "zh", options) {
   const template = await loadTemplate(name, lang);
-  return renderTemplate(template, params);
+  return renderTemplate(template, params, options);
 }
 
 // src/utils/init-requirement/types.ts
@@ -37168,7 +37206,7 @@ async function runAIFix(taskId, cwd, failures, deps, alignmentIssues) {
     gateErrors: gateErrors || "None",
     qualityIssues: qualityIssues || "None",
     alignmentIssues: alignmentIssues || "None"
-  });
+  }, "zh", { mode: "strict" });
   const result = await deps.invokeAIAgent(prompt, {
     outputFormat: "json",
     timeout: 60000,
@@ -37523,7 +37561,7 @@ async function extractTaskMeta(reportContent, cwd, timeout, debug) {
   const prompt = loadAndRenderTemplate("reportToTask", {
     report: reportContent,
     prefixMap: prefixMapStr
-  });
+  }, "zh", { mode: "strict" });
   const result = await callAIForJSON({ prompt, cwd, timeout: timeout ?? AI_TIMEOUT_SECONDS, debug }, validateExtractedMeta);
   return result;
 }
@@ -37623,7 +37661,7 @@ async function runAlignmentCheck(reportPath, taskId, cwd, timeout, debug) {
   const prompt = loadAndRenderTemplate("aiAlignmentCheck", {
     report: reportContent,
     taskMeta: JSON.stringify(taskMeta, null, 2)
-  });
+  }, "zh", { mode: "strict" });
   try {
     const result = await callAIForJSON({ prompt, cwd, timeout: timeout ?? AI_TIMEOUT_SECONDS, debug });
     return result;
@@ -38070,7 +38108,7 @@ function validateImpactScope(v) {
 init_ai_integration();
 async function reviewReport(requirement, report, cwd, lang = "zh", timeout, debug) {
   const reportMarkdown = generateReport(report);
-  const prompt = await loadAndRenderTemplate("review", { requirement, report: reportMarkdown }, lang);
+  const prompt = await loadAndRenderTemplate("review", { requirement, report: reportMarkdown }, lang, { mode: "strict" });
   return callAIForJSON({ prompt, cwd, timeout, debug }, validateReviewResult);
 }
 async function reviewReportWithRetry(requirement, report, options) {
@@ -38113,14 +38151,14 @@ function shouldSplit(reportPath, thresholdKB) {
 }
 async function generateSplitPlan(report, cwd, lang = "zh") {
   const reportMarkdown = generateReport(report);
-  const prompt = await loadAndRenderTemplate("split", { report: reportMarkdown }, lang);
+  const prompt = await loadAndRenderTemplate("split", { report: reportMarkdown }, lang, { mode: "strict" });
   const { callAIForJSON: callAIForJSON2 } = await Promise.resolve().then(() => (init_ai_integration(), exports_ai_integration));
   return callAIForJSON2({ prompt, cwd }, validateSplitPlan);
 }
 async function reviewSplitPlan(report, splitPlan, cwd, lang = "zh") {
   const summary = summarizeReport(report);
   const planJson = JSON.stringify(splitPlan, null, 2);
-  const prompt = await loadAndRenderTemplate("splitReview", { reportSummary: summary, splitPlan: planJson }, lang);
+  const prompt = await loadAndRenderTemplate("splitReview", { reportSummary: summary, splitPlan: planJson }, lang, { mode: "strict" });
   const { callAIForJSON: callAIForJSON2 } = await Promise.resolve().then(() => (init_ai_integration(), exports_ai_integration));
   return callAIForJSON2({ prompt, cwd }, validateSplitReviewResult);
 }
@@ -38237,6 +38275,24 @@ function loadLanguageConfig(cwd) {
 init_path();
 init_logger();
 init_child_process_registry();
+class UnrecoverableError extends Error {
+  constructor(message) {
+    super(message);
+    this.name = "UnrecoverableError";
+  }
+}
+function classifyRetryError(error) {
+  if (error.message.includes("[renderTemplate]") || error.message.includes("占位符未替换")) {
+    return "TEMPLATE_BUILD_ERROR" /* TEMPLATE_BUILD_ERROR */;
+  }
+  if (error.message.includes("timeout after")) {
+    return "TRANSIENT_ERROR" /* TRANSIENT_ERROR */;
+  }
+  if (error.message.includes("validateReport") || error.message.includes("validation logic")) {
+    return "VALIDATION_LOGIC_ERROR" /* VALIDATION_LOGIC_ERROR */;
+  }
+  return "AI_GENERATION_ERROR" /* AI_GENERATION_ERROR */;
+}
 var DEFAULT_MAX_RETRY2 = 3;
 var DEFAULT_SPLIT_THRESHOLD = 30;
 var DEFAULT_LANGUAGE = "zh";
@@ -38406,7 +38462,12 @@ async function runNewInvestigation(requirement, cwd, options) {
     console.log(`   Split threshold: ${splitThreshold} KB`);
     console.log("");
   }
-  let report = await withTimeoutRace(generateInvestigationReport(requirement, cwd, lang, options.timeout, options.debug), (options.timeout ?? DEFAULT_RETRY_TIMEOUT_S) * 1000, "generateInvestigationReport(initial)");
+  let report = await withTimeoutRace(generateInvestigationReport(requirement, cwd, {
+    lang,
+    timeout: options.timeout,
+    debug: options.debug,
+    templateMode: options.templateMode
+  }), (options.timeout ?? DEFAULT_RETRY_TIMEOUT_S) * 1000, "generateInvestigationReport(initial)");
   const attemptOutputDir = options.outputDir ?? determineOutputMode(options, cwd).path;
   if (!fs29.existsSync(attemptOutputDir)) {
     fs29.mkdirSync(attemptOutputDir, { recursive: true });
@@ -38415,13 +38476,17 @@ async function runNewInvestigation(requirement, cwd, options) {
   let lastValidReport = null;
   while (retryCount < maxRetry) {
     const formatValidation = validateReport(report);
-    if (formatValidation.valid) {
+    if (formatValidation.blockingErrors.length === 0) {
+      if (formatValidation.warningErrors.length > 0 && !options.quiet) {
+        console.log(`   ⚠️ Non-blocking validation issues detected: ${formatValidation.warningErrors.map((e) => e.message).join("; ")}`);
+        console.log("   Continuing with warnings...");
+      }
       break;
     }
     const attemptNum = retryCount + 1;
     lastValidReport = report;
     if (!options.quiet) {
-      console.log(`   ⚠️ Format validation failed (attempt ${attemptNum}/${maxRetry}): ${formatValidation.errors.map((e) => e.message).join("; ")}`);
+      console.log(`   ⚠️ Format validation failed (attempt ${attemptNum}/${maxRetry}): ${formatValidation.blockingErrors.map((e) => e.message).join("; ")}`);
       console.log("   Retrying report generation with format corrections...");
     }
     try {
@@ -38458,26 +38523,40 @@ async function runNewInvestigation(requirement, cwd, options) {
     try {
       const retryPrompt = buildRetryPrompt({
         requirement,
-        errors: formatValidation.errors,
+        errors: formatValidation.blockingErrors,
         reviewResult: reviewResult2,
         reviewPath,
         attemptNum,
         lang
       });
       const timeoutS = options.timeout ?? DEFAULT_RETRY_TIMEOUT_S;
-      report = await withTimeoutRace(generateInvestigationReport(retryPrompt, cwd, lang, options.timeout, options.debug), timeoutS * 1000, "generateInvestigationReport(retry)");
+      report = await withTimeoutRace(generateInvestigationReport(retryPrompt, cwd, {
+        rawPrompt: retryPrompt,
+        lang,
+        timeout: options.timeout,
+        debug: options.debug,
+        templateMode: options.templateMode
+      }), timeoutS * 1000, "generateInvestigationReport(retry)");
     } catch (err) {
-      const isTimeout = err instanceof Error && err.message.includes("timeout after");
+      const errorType = classifyRetryError(err instanceof Error ? err : new Error(String(err)));
+      if (errorType === "TEMPLATE_BUILD_ERROR" /* TEMPLATE_BUILD_ERROR */) {
+        console.error(`[investigation-requirement] 检测到提示词模板构建错误（代码缺陷），无法通过重试解决。`);
+        console.error(`错误详情: ${err instanceof Error ? err.message : String(err)}`);
+        console.error(`建议: 请检查插件代码中的模板构建逻辑。`);
+        throw new UnrecoverableError(err instanceof Error ? err.message : String(err));
+      }
+      const isTimeout = errorType === "TRANSIENT_ERROR" /* TRANSIENT_ERROR */;
       if (isTimeout) {
         logger.error("retry timeout", {
-          error: err.message,
+          error: err instanceof Error ? err.message : String(err),
           retryCount,
           timeout: options.timeout ?? DEFAULT_RETRY_TIMEOUT_S
         });
       } else {
         logger.warn("retry attempt failed", {
           error: err instanceof Error ? err.message : String(err),
-          retryCount
+          retryCount,
+          errorType
         });
       }
       if (lastValidReport) {
@@ -38492,10 +38571,10 @@ async function runNewInvestigation(requirement, cwd, options) {
     retryCount++;
   }
   const finalValidation = validateReport(report);
-  if (!finalValidation.valid) {
+  if (finalValidation.warningErrors.length > 0) {
     if (!options.quiet) {
-      console.log("   ⚠️ Final report has validation issues, using with warnings:");
-      finalValidation.errors.forEach((e) => console.log(`     - ${e.message}`));
+      console.log("   ⚠️ Final report has non-blocking validation issues:");
+      finalValidation.warningErrors.forEach((e) => console.log(`     - ${e.message}`));
     }
   }
   try {
@@ -38544,7 +38623,10 @@ async function runNewInvestigation(requirement, cwd, options) {
       maxRetry,
       splitThreshold,
       outputDir: path25.dirname(reportPath),
-      quiet: options.quiet
+      quiet: options.quiet,
+      timeout: options.timeout,
+      debug: options.debug,
+      templateMode: options.templateMode
     });
     if (splitResult.success && splitResult.subReports) {
       subReports = splitResult.subReports;
@@ -38569,7 +38651,7 @@ async function runInteractiveMode(requirement, cwd, options) {
   console.log("\uD83D\uDD0D Starting interactive investigation...");
   console.log('   Type "quit" or Ctrl+C to exit at any time');
   console.log("");
-  let report = await generateInvestigationReport(requirement, cwd, lang);
+  let report = await generateInvestigationReport(requirement, cwd, { lang, templateMode: options.templateMode });
   let reportPath = "";
   let iteration = 0;
   const maxIterations = maxRetry * 2;
@@ -38598,7 +38680,7 @@ async function runInteractiveMode(requirement, cwd, options) {
     }
     console.log(`
 \uD83D\uDD04 Refining report based on feedback...`);
-    const prompt = await loadAndRenderTemplate("investigateWithFeedback", { requirement, currentReport: reportMarkdown, feedback, date: new Date().toISOString() }, lang);
+    const prompt = await loadAndRenderTemplate("investigateWithFeedback", { requirement, currentReport: reportMarkdown, feedback, date: new Date().toISOString() }, lang, { mode: options.templateMode ?? "strict" });
     const aiResult = await callAI({ prompt, cwd, outputFormat: "text", timeout: options.timeout, debug: options.debug });
     if (aiResult.success) {
       report = parseReport(aiResult.output);
@@ -38611,7 +38693,10 @@ async function runInteractiveMode(requirement, cwd, options) {
       maxRetry,
       splitThreshold,
       outputDir: path25.dirname(reportPath),
-      quiet: options.quiet
+      quiet: options.quiet,
+      timeout: options.timeout,
+      debug: options.debug,
+      templateMode: options.templateMode
     });
     if (splitResult.success && splitResult.subReports) {
       subReports = splitResult.subReports;
@@ -38651,7 +38736,7 @@ async function runFeedbackMode(requirement, cwd, options) {
     currentReport: existingReportContent,
     feedback: feedbackContent,
     date: new Date().toISOString()
-  }, lang);
+  }, lang, { mode: options.templateMode ?? "strict" });
   const aiResult = await callAI({ prompt, cwd, outputFormat: "text", timeout: options.timeout, debug: options.debug });
   if (!aiResult.success) {
     return {
@@ -38746,7 +38831,10 @@ async function runSplitMode(cwd, options) {
     maxRetry,
     splitThreshold,
     outputDir: path25.dirname(options.reportPath),
-    quiet: options.quiet
+    quiet: options.quiet,
+    timeout: options.timeout,
+    debug: options.debug,
+    templateMode: options.templateMode
   });
   return result;
 }
@@ -38808,7 +38896,7 @@ async function runSplitFlow(report, requirement, cwd, options) {
     if (!quiet) {
       console.log(`   \uD83D\uDCC4 Generating sub-report ${i + 1}/${splitPlan.items.length}: ${item.title}`);
     }
-    const subReport = await generateSubReport(report, item, requirement, cwd, lang, options.timeout, options.debug);
+    const subReport = await generateSubReport(report, item, requirement, cwd, lang, options.timeout, options.debug, options.templateMode);
     const subSlug = slugify(item.title);
     const subReportPath = path25.join(subDir, `${subSlug}.md`);
     fs29.writeFileSync(subReportPath, generateReport(subReport));
@@ -38941,9 +39029,21 @@ ${issuesBlock}`.substring(0, MAX_RETRY_FEEDBACK_LEN);
     suggestionsSummary = lang === "zh" ? "无具体建议" : "No specific suggestions";
   }
   const formatExample = getFormatExample(lang);
+  const slug = slugify(requirement);
+  const date = new Date().toISOString().split("T")[0] ?? new Date().toISOString();
+  const title = requirement.slice(0, 50);
+  const N = "60";
+  const filledFormatExample = formatExample.replace("{title}", title).replace("{requirement}", requirement).replace("{date}", date).replace("{slug}", slug).replaceAll("{N}", N).replace("{low|medium|high}", "medium").replace("{原因标题}", "示例原因标题").replace("{原因详细描述}", "示例原因详细描述").replace("{方案标题}", "示例方案标题").replace("{方案详细描述}", "示例方案详细描述").replace("{变更描述}", "示例变更描述").replace("{有限|中等|广泛}", "中等").replace("{Root cause title}", "Sample root cause title").replace("{Root cause detailed description}", "Sample root cause detailed description").replace("{Solution title}", "Sample solution title").replace("{Solution detailed description}", "Sample solution detailed description").replace("{Change description}", "Sample change description").replace("{limited|moderate|extensive}", "moderate");
   const template = lang === "zh" ? RETRY_PROMPT_TEMPLATE_ZH : RETRY_PROMPT_TEMPLATE_EN;
   const reviewPathDisplay = reviewPath ?? (lang === "zh" ? "未生成审核报告" : "No review report generated");
-  return template.replace("{requirement}", requirement).replaceAll("{attemptNum}", String(attemptNum)).replace("{errorSummary}", errorSummary || (lang === "zh" ? "无格式错误详情" : "No format error details")).replace("{suggestionsSummary}", suggestionsSummary).replace("{reviewPath}", reviewPathDisplay).replace("{formatExample}", formatExample);
+  return renderTemplate(template, {
+    requirement,
+    attemptNum: String(attemptNum),
+    errorSummary: errorSummary || (lang === "zh" ? "无格式错误详情" : "No format error details"),
+    suggestionsSummary,
+    reviewPath: reviewPathDisplay,
+    formatExample: filledFormatExample
+  }, { mode: "strict" });
 }
 async function saveAttemptReport(report, outputDir, attemptNum) {
   const content = generateReport(report);
@@ -39016,14 +39116,20 @@ function withTimeoutRace(promise, timeoutMs, label) {
       clearTimeout(timer);
   });
 }
-async function generateInvestigationReport(requirement, cwd, lang, timeout, debug) {
-  const slug = slugify(requirement);
-  const date = new Date().toISOString();
-  const projectContext = await getProjectContext(cwd);
-  const title = requirement.slice(0, 50);
-  const N = "60";
-  const prompt = await loadAndRenderTemplate("investigate", { requirement, projectContext, date, slug, title, N }, lang);
-  const result = await callAI({ prompt, cwd, outputFormat: "text", timeout, debug });
+async function generateInvestigationReport(requirement, cwd, optionsOrLang, timeout, debug) {
+  const opts = typeof optionsOrLang === "string" ? { lang: optionsOrLang, timeout, debug } : optionsOrLang;
+  let prompt;
+  if (opts.rawPrompt) {
+    prompt = opts.rawPrompt;
+  } else {
+    const slug = slugify(requirement);
+    const date = new Date().toISOString();
+    const projectContext = await getProjectContext(cwd);
+    const title = requirement.slice(0, 50);
+    const N = "60";
+    prompt = await loadAndRenderTemplate("investigate", { requirement, projectContext, date, slug, title, N }, opts.lang, { mode: opts.templateMode ?? "strict" });
+  }
+  const result = await callAI({ prompt, cwd, outputFormat: "text", timeout: opts.timeout, debug: opts.debug });
   if (!result.success) {
     throw new Error(`Failed to generate investigation report: ${result.error}`);
   }
@@ -39046,7 +39152,7 @@ async function getProjectContext(cwd) {
   return parts.join(`
 `);
 }
-async function generateSubReport(parentReport, splitItem, requirement, cwd, lang, timeout, debug) {
+async function generateSubReport(parentReport, splitItem, requirement, cwd, lang, timeout, debug, templateMode) {
   const subPrompt = await loadAndRenderTemplate("investigate", {
     requirement: `[Sub-investigation] ${splitItem.title}
 
@@ -39059,7 +39165,7 @@ Original requirement: ${requirement}`,
     slug: slugify(splitItem.title),
     title: splitItem.title.slice(0, 50),
     N: "60"
-  }, lang);
+  }, lang, { mode: templateMode ?? "strict" });
   const result = await callAI({ prompt: subPrompt, cwd, outputFormat: "text", timeout, debug });
   if (!result.success) {
     throw new Error(`Failed to generate sub-report: ${result.error}`);
@@ -52148,7 +52254,7 @@ program2.command("investigation-requirement [description]").description(`\u9700\
 ` + `  split                    \u62C6\u5206\u6A21\u677F
 ` + `  splitReview              \u62C6\u5206\u5BA1\u6838\u6A21\u677F
 
-` + "\u524D\u63D0: \u9700\u5148\u8FD0\u884C projmnt4claude setup \u521D\u59CB\u5316\u9879\u76EE").option("-y, --yes", "\u975E\u4EA4\u4E92\u6A21\u5F0F").option("--interactive", "\u4EA4\u4E92\u6A21\u5F0F: \u4E0E\u7528\u6237\u8BC4\u5BA1\u53CD\u9988\u5FAA\u73AF").option("--feedback", "\u53CD\u9988\u4FEE\u6B63\u6A21\u5F0F: \u57FA\u4E8E\u53CD\u9988\u4FEE\u6B63\u5DF2\u6709\u62A5\u544A").option("--review", "\u8BC4\u5BA1\u6A21\u5F0F: \u4EC5\u8BC4\u5BA1\u5DF2\u6709\u62A5\u544A").option("--split", "\u62C6\u5206\u6A21\u5F0F: \u5BF9\u8FC7\u5927\u62A5\u544A\u8FDB\u884C\u62C6\u5206").option("--report-path <path>", "\u5DF2\u6709\u62A5\u544A\u8DEF\u5F84 (feedback/review/split \u5FC5\u9700)").option("--file <path>", "\u4ECE\u6587\u4EF6\u8BFB\u53D6\u9700\u6C42\u63CF\u8FF0").option("--output-dir <path>", "\u8F93\u51FA\u76EE\u5F55").option("--output-file <path>", "\u8F93\u51FA\u6587\u4EF6\u8DEF\u5F84").option("--max-retry <n>", "\u6700\u5927\u91CD\u8BD5\u6B21\u6570", "3").option("--split-threshold <kb>", "\u62C6\u5206\u9608\u503C (KB)", "20").option("--language <lang>", "\u8BED\u8A00 (zh/en)", "zh").option("--timeout <seconds>", "AI \u8C03\u7528\u8D85\u65F6\u65F6\u95F4\uFF08\u79D2\uFF09", "300").option("--debug", "\u8C03\u8BD5\u6A21\u5F0F\uFF1A\u8F93\u51FA\u8BE6\u7EC6\u65E5\u5FD7").option("--skip-review", "\u8DF3\u8FC7 AI \u8BC4\u5BA1").option("--skip-split", "\u8DF3\u8FC7\u62C6\u5206").option("-f, --force", "\u5F3A\u5236\u8986\u76D6").option("--json", "JSON \u8F93\u51FA").option("-q, --quiet", "\u9759\u9ED8\u6A21\u5F0F").action(async (description, options) => {
+` + "\u524D\u63D0: \u9700\u5148\u8FD0\u884C projmnt4claude setup \u521D\u59CB\u5316\u9879\u76EE").option("-y, --yes", "\u975E\u4EA4\u4E92\u6A21\u5F0F").option("--interactive", "\u4EA4\u4E92\u6A21\u5F0F: \u4E0E\u7528\u6237\u8BC4\u5BA1\u53CD\u9988\u5FAA\u73AF").option("--feedback", "\u53CD\u9988\u4FEE\u6B63\u6A21\u5F0F: \u57FA\u4E8E\u53CD\u9988\u4FEE\u6B63\u5DF2\u6709\u62A5\u544A").option("--review", "\u8BC4\u5BA1\u6A21\u5F0F: \u4EC5\u8BC4\u5BA1\u5DF2\u6709\u62A5\u544A").option("--split", "\u62C6\u5206\u6A21\u5F0F: \u5BF9\u8FC7\u5927\u62A5\u544A\u8FDB\u884C\u62C6\u5206").option("--report-path <path>", "\u5DF2\u6709\u62A5\u544A\u8DEF\u5F84 (feedback/review/split \u5FC5\u9700)").option("--file <path>", "\u4ECE\u6587\u4EF6\u8BFB\u53D6\u9700\u6C42\u63CF\u8FF0").option("--output-dir <path>", "\u8F93\u51FA\u76EE\u5F55").option("--output-file <path>", "\u8F93\u51FA\u6587\u4EF6\u8DEF\u5F84").option("--max-retry <n>", "\u6700\u5927\u91CD\u8BD5\u6B21\u6570", "3").option("--split-threshold <kb>", "\u62C6\u5206\u9608\u503C (KB)", "20").option("--language <lang>", "\u8BED\u8A00 (zh/en)", "zh").option("--timeout <seconds>", "AI \u8C03\u7528\u8D85\u65F6\u65F6\u95F4\uFF08\u79D2\uFF09", "300").option("--debug", "\u8C03\u8BD5\u6A21\u5F0F\uFF1A\u8F93\u51FA\u8BE6\u7EC6\u65E5\u5FD7").option("--template-mode <mode>", "\u6A21\u677F\u6E32\u67D3\u6A21\u5F0F (strict/lenient/auto-fill)", "strict").option("--skip-review", "\u8DF3\u8FC7 AI \u8BC4\u5BA1").option("--skip-split", "\u8DF3\u8FC7\u62C6\u5206").option("-f, --force", "\u5F3A\u5236\u8986\u76D6").option("--json", "JSON \u8F93\u51FA").option("-q, --quiet", "\u9759\u9ED8\u6A21\u5F0F").action(async (description, options) => {
   let finalDescription = description;
   if (options.file) {
     const filePath = path47.resolve(options.file);
@@ -52198,7 +52304,8 @@ program2.command("investigation-requirement [description]").description(`\u9700\
     skipSplit: options.skipSplit,
     force: options.force,
     json: options.json || program2.opts().json || false,
-    quiet: options.quiet
+    quiet: options.quiet,
+    templateMode: options.templateMode
   });
   if (!result.success) {
     console.error("");

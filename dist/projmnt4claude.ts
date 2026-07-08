@@ -823,6 +823,7 @@ program
   .option('--language <lang>', '语言 (zh/en)', 'zh')
   .option('--timeout <seconds>', 'AI 调用超时时间（秒）', '300')
   .option('--debug', '调试模式：输出详细日志')
+  .option('--template-mode <mode>', '模板渲染模式 (strict/lenient/auto-fill)', 'strict')
   .option('--skip-review', '跳过 AI 评审')
   .option('--skip-split', '跳过拆分')
   .option('-f, --force', '强制覆盖')
@@ -885,6 +886,7 @@ program
       force: options.force,
       json: options.json || program.opts().json || false,
       quiet: options.quiet,
+      templateMode: options.templateMode,
     });
 
     if (!result.success) {
