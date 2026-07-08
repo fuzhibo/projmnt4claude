@@ -480,6 +480,120 @@ describe('investigation-requirement retry logic', () => {
       expect(retryCallArg.prompt).not.toContain('X'.repeat(800));
       expect(retryCallArg.prompt).toMatch(/X{400,500}/);
     });
+
+    // SOL-001: 验证重试提示词中格式示例的占位符已被替换
+    it('should replace all placeholders in format example within retry prompt', async () => {
+      mockValidateReport
+        .mockReturnValueOnce({
+          valid: false,
+          errors: [{ rule: 'R-PLACEHOLDER', message: '格式验证失败' }],
+          warnings: [],
+        })
+        .mockReturnValueOnce({ valid: true, errors: [], warnings: [] })
+        .mockReturnValueOnce({ valid: true, errors: [], warnings: [] });
+
+      const { investigationRequirement } = await import('../investigation-requirement');
+
+      const requirement = 'SOL-001 占位符替换测试需求';
+      await investigationRequirement(requirement, env.tempDir, {
+        quiet: true,
+        maxRetry: 3,
+        skipReview: true,
+        skipSplit: true,
+        outputDir: env.tempDir,
+      });
+
+      const retryCallArg = mockCallAI.mock.calls[1]![0] as { prompt: string };
+      const prompt = retryCallArg.prompt;
+
+      // 通用占位符必须已被替换（不能出现在 prompt 中）
+      expect(prompt).not.toContain('{title}');
+      expect(prompt).not.toContain('{requirement}');
+      expect(prompt).not.toContain('{date}');
+      expect(prompt).not.toContain('{slug}');
+      expect(prompt).not.toContain('{N}');
+      expect(prompt).not.toContain('{low|medium|high}');
+
+      // 中文示例占位符必须已被替换
+      expect(prompt).not.toContain('{原因标题}');
+      expect(prompt).not.toContain('{原因详细描述}');
+      expect(prompt).not.toContain('{方案标题}');
+      expect(prompt).not.toContain('{方案详细描述}');
+      expect(prompt).not.toContain('{变更描述}');
+      expect(prompt).not.toContain('{有限|中等|广泛}');
+
+      // 英文示例占位符必须已被替换
+      expect(prompt).not.toContain('{Root cause title}');
+      expect(prompt).not.toContain('{Root cause detailed description}');
+      expect(prompt).not.toContain('{Solution title}');
+      expect(prompt).not.toContain('{Solution detailed description}');
+      expect(prompt).not.toContain('{Change description}');
+      expect(prompt).not.toContain('{limited|moderate|extensive}');
+
+      // 验证实际值已嵌入（反向确认替换成功）
+      expect(prompt).toContain('SOL-001 占位符替换测试需求'); // {requirement} 替换值
+      expect(prompt).toContain('investigation-sol-001-占位符替换测试需求'); // {slug}
+      expect(prompt).toContain('60 分钟'); // {N} 替换值
+      expect(prompt).toContain('示例原因标题'); // 中文示例占位符替换值
+      expect(prompt).toContain('示例方案标题'); // 中文示例占位符替换值
+    });
+
+    // SOL-001 验证方法 1: 直接调用 buildRetryPrompt 的单元测试
+    it('buildRetryPrompt should replace all placeholders in format example (direct unit test)', async () => {
+      const { buildRetryPrompt } = await import('../investigation-requirement');
+      const requirement = '测试需求描述';
+      const errors = [{ rule: 'metadata-required', message: 'metadata.requirementSource 缺失' }];
+      const attemptNum = 1;
+      const lang = 'zh';
+
+      const retryPrompt = buildRetryPrompt({
+        requirement,
+        errors,
+        attemptNum,
+        lang,
+      });
+
+      // 验证格式示例中的通用占位符已被替换
+      expect(retryPrompt).not.toContain('{title}');
+      expect(retryPrompt).not.toContain('{date}');
+      expect(retryPrompt).not.toContain('{slug}');
+      expect(retryPrompt).not.toContain('{N}');
+      // 中文示例占位符已被替换
+      expect(retryPrompt).not.toContain('{原因标题}');
+      expect(retryPrompt).not.toContain('{方案标题}');
+      // 复杂度占位符已被替换
+      expect(retryPrompt).not.toContain('{low|medium|high}');
+
+      // 验证实际值已嵌入
+      expect(retryPrompt).toContain('测试需求描述');
+      expect(retryPrompt).toContain('investigation-');
+    });
+
+    // SOL-001 验证方法 1 (英文分支): 直接调用 buildRetryPrompt 的单元测试
+    it('buildRetryPrompt should replace all English placeholders in format example (en)', async () => {
+      const { buildRetryPrompt } = await import('../investigation-requirement');
+      const requirement = 'Test requirement description';
+      const errors = [{ rule: 'metadata-required', message: 'metadata.requirementSource missing' }];
+      const attemptNum = 1;
+      const lang = 'en';
+
+      const retryPrompt = buildRetryPrompt({
+        requirement,
+        errors,
+        attemptNum,
+        lang,
+      });
+
+      // 英文占位符已被替换
+      expect(retryPrompt).not.toContain('{title}');
+      expect(retryPrompt).not.toContain('{Root cause title}');
+      expect(retryPrompt).not.toContain('{Solution title}');
+      expect(retryPrompt).not.toContain('{limited|moderate|extensive}');
+
+      // 实际值已嵌入
+      expect(retryPrompt).toContain('Test requirement description');
+      expect(retryPrompt).toContain('Sample solution title');
+    });
   });
 
   // ============================================================

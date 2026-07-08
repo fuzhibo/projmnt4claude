@@ -414,7 +414,12 @@ async function runNewInvestigation(
       const timeoutS = options.timeout ?? DEFAULT_RETRY_TIMEOUT_S;
 
       report = await withTimeoutRace(
-        generateInvestigationReport(retryPrompt, cwd, lang, options.timeout, options.debug),
+        generateInvestigationReport(retryPrompt, cwd, {
+          rawPrompt: retryPrompt,
+          lang,
+          timeout: options.timeout,
+          debug: options.debug,
+        }),
         timeoutS * 1000,
         'generateInvestigationReport(retry)',
       );
@@ -1088,6 +1093,36 @@ function buildRetryPrompt(options: RetryPromptOptions): string {
   }
 
   const formatExample = getFormatExample(lang);
+
+  // SOL-001: 替换格式示例中的占位符，避免向 AI 传递含占位符的格式参考
+  const slug = slugify(requirement);
+  const date = new Date().toISOString().split('T')[0] ?? new Date().toISOString();
+  const title = requirement.slice(0, 50);
+  const N = '60';
+
+  const filledFormatExample = formatExample
+    // 通用占位符
+    .replace('{title}', title)
+    .replace('{requirement}', requirement)
+    .replace('{date}', date)
+    .replace('{slug}', slug)
+    .replaceAll('{N}', N)
+    .replace('{low|medium|high}', 'medium')
+    // 中文示例占位符
+    .replace('{原因标题}', '示例原因标题')
+    .replace('{原因详细描述}', '示例原因详细描述')
+    .replace('{方案标题}', '示例方案标题')
+    .replace('{方案详细描述}', '示例方案详细描述')
+    .replace('{变更描述}', '示例变更描述')
+    .replace('{有限|中等|广泛}', '中等')
+    // 英文示例占位符
+    .replace('{Root cause title}', 'Sample root cause title')
+    .replace('{Root cause detailed description}', 'Sample root cause detailed description')
+    .replace('{Solution title}', 'Sample solution title')
+    .replace('{Solution detailed description}', 'Sample solution detailed description')
+    .replace('{Change description}', 'Sample change description')
+    .replace('{limited|moderate|extensive}', 'moderate');
+
   const template = lang === 'zh' ? RETRY_PROMPT_TEMPLATE_ZH : RETRY_PROMPT_TEMPLATE_EN;
   const reviewPathDisplay = reviewPath ?? (lang === 'zh' ? '未生成审核报告' : 'No review report generated');
 
@@ -1097,7 +1132,7 @@ function buildRetryPrompt(options: RetryPromptOptions): string {
     .replace('{errorSummary}', errorSummary || (lang === 'zh' ? '无格式错误详情' : 'No format error details'))
     .replace('{suggestionsSummary}', suggestionsSummary)
     .replace('{reviewPath}', reviewPathDisplay)
-    .replace('{formatExample}', formatExample);
+    .replace('{formatExample}', filledFormatExample);
 }
 
 /**
@@ -1226,25 +1261,47 @@ function withTimeoutRace<T>(promise: Promise<T>, timeoutMs: number, label: strin
 /**
  * 生成调查报告
  */
+interface GenerateInvestigationReportOptions {
+  lang: 'zh' | 'en';
+  timeout?: number;
+  debug?: boolean;
+  /** SOL-001: 跳过模板渲染，直接使用原始 prompt（避免双层格式示例嵌套） */
+  rawPrompt?: string;
+}
+
 async function generateInvestigationReport(
   requirement: string,
   cwd: string,
-  lang: 'zh' | 'en',
+  optionsOrLang: GenerateInvestigationReportOptions | 'zh' | 'en',
   timeout?: number,
   debug?: boolean,
 ): Promise<InvestigationReport> {
-  const slug = slugify(requirement);
-  const date = new Date().toISOString();
-  const projectContext = await getProjectContext(cwd);
-  const title = requirement.slice(0, 50);
-  const N = '60';
+  // 兼容旧签名：直接传 lang 字符串
+  const opts: GenerateInvestigationReportOptions =
+    typeof optionsOrLang === 'string'
+      ? { lang: optionsOrLang, timeout, debug }
+      : optionsOrLang;
 
-  const prompt = await loadAndRenderTemplate(
-    'investigate',
-    { requirement, projectContext, date, slug, title, N },
-    lang,
-  );
-  const result = await callAI({ prompt, cwd, outputFormat: 'text', timeout, debug });
+  let prompt: string;
+
+  if (opts.rawPrompt) {
+    // SOL-001: retry 场景直接使用已构建的 prompt，避免 investigate 模板再嵌入未替换格式示例
+    prompt = opts.rawPrompt;
+  } else {
+    const slug = slugify(requirement);
+    const date = new Date().toISOString();
+    const projectContext = await getProjectContext(cwd);
+    const title = requirement.slice(0, 50);
+    const N = '60';
+
+    prompt = await loadAndRenderTemplate(
+      'investigate',
+      { requirement, projectContext, date, slug, title, N },
+      opts.lang,
+    );
+  }
+
+  const result = await callAI({ prompt, cwd, outputFormat: 'text', timeout: opts.timeout, debug: opts.debug });
 
   if (!result.success) {
     throw new Error(`Failed to generate investigation report: ${result.error}`);
