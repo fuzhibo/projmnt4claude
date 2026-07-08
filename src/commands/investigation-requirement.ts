@@ -16,11 +16,10 @@ import * as path from 'path';
 import * as readline from 'readline';
 import type { InvestigationReport, ReviewResult, SplitPlan, SplitReviewResult, OutputMode } from '../utils/investigation/types';
 import { callAI } from '../utils/investigation/ai-integration';
-import { loadAndRenderTemplate, type InvestigationTemplateName, type RenderTemplateMode } from '../utils/prompt-templates/loader';
+import { loadAndRenderTemplate, renderTemplate, type RenderTemplateMode } from '../utils/prompt-templates/loader';
 import { generateReport } from '../utils/investigation/report-generator';
 import { parseReport } from '../utils/investigation/report-parser';
 import { validateReport } from '../utils/investigation/report-validator';
-import type { ValidationResult } from '../utils/investigation/types';
 import { reviewReportWithRetry, reviewReport } from '../utils/investigation/report-reviewer';
 import {
   REPORT_SECTIONS,
@@ -39,6 +38,42 @@ import { loadInvestigationConfig, loadLanguageConfig } from '../utils/investigat
 import { isInitialized } from '../utils/path';
 import { createLogger } from '../utils/logger.js';
 import { killAllActiveChildren } from '../utils/child-process-registry.js';
+
+// ============================================================
+// SOL-003: 重试错误分类
+// ============================================================
+
+/** 重试错误类型枚举 */
+enum RetryErrorType {
+  AI_GENERATION_ERROR = 'AI_GENERATION_ERROR',
+  TEMPLATE_BUILD_ERROR = 'TEMPLATE_BUILD_ERROR',
+  VALIDATION_LOGIC_ERROR = 'VALIDATION_LOGIC_ERROR',
+  TRANSIENT_ERROR = 'TRANSIENT_ERROR',
+}
+
+/** 不可恢复错误（代码缺陷） */
+class UnrecoverableError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'UnrecoverableError';
+  }
+}
+
+/** 错误分类函数 */
+function classifyRetryError(error: Error): RetryErrorType {
+  if (error.message.includes('[renderTemplate]') ||
+      error.message.includes('占位符未替换')) {
+    return RetryErrorType.TEMPLATE_BUILD_ERROR;
+  }
+  if (error.message.includes('timeout after')) {
+    return RetryErrorType.TRANSIENT_ERROR;
+  }
+  if (error.message.includes('validateReport') ||
+      error.message.includes('validation logic')) {
+    return RetryErrorType.VALIDATION_LOGIC_ERROR;
+  }
+  return RetryErrorType.AI_GENERATION_ERROR;
+}
 
 // ============================================================
 // 命令参数接口
@@ -357,7 +392,13 @@ async function runNewInvestigation(
   while (retryCount < maxRetry) {
     const formatValidation = validateReport(report);
 
-    if (formatValidation.valid) {
+    // ✅ SOL-003: 只看阻断性错误决定是否重试
+    if (formatValidation.blockingErrors.length === 0) {
+      // 只有警告性错误，记录但不重试
+      if (formatValidation.warningErrors.length > 0 && !options.quiet) {
+        console.log(`   ⚠️ Non-blocking validation issues detected: ${formatValidation.warningErrors.map(e => e.message).join('; ')}`);
+        console.log('   Continuing with warnings...');
+      }
       break;
     }
 
@@ -366,7 +407,7 @@ async function runNewInvestigation(
     lastValidReport = report;
 
     if (!options.quiet) {
-      console.log(`   ⚠️ Format validation failed (attempt ${attemptNum}/${maxRetry}): ${formatValidation.errors.map(e => e.message).join('; ')}`);
+      console.log(`   ⚠️ Format validation failed (attempt ${attemptNum}/${maxRetry}): ${formatValidation.blockingErrors.map(e => e.message).join('; ')}`);
       console.log('   Retrying report generation with format corrections...');
     }
 
@@ -409,15 +450,16 @@ async function runNewInvestigation(
     await new Promise(resolve => setTimeout(resolve, RETRY_CLEANUP_DELAY_MS));
 
     try {
-      // SOL-003: 使用结构化 RetryPromptOptions，传入 reviewResult 供建议摘要构建
+      // ✅ SOL-003: 使用结构化 RetryPromptOptions，传入 blockingErrors
       const retryPrompt = buildRetryPrompt({
         requirement,
-        errors: formatValidation.errors,
+        errors: formatValidation.blockingErrors,
         reviewResult,
         reviewPath,
         attemptNum,
         lang,
       });
+
       const timeoutS = options.timeout ?? DEFAULT_RETRY_TIMEOUT_S;
 
       report = await withTimeoutRace(
@@ -432,10 +474,20 @@ async function runNewInvestigation(
         'generateInvestigationReport(retry)',
       );
     } catch (err) {
-      const isTimeout = err instanceof Error && err.message.includes('timeout after');
+      const errorType = classifyRetryError(err instanceof Error ? err : new Error(String(err)));
+
+      if (errorType === RetryErrorType.TEMPLATE_BUILD_ERROR) {
+        // ✅ SOL-003: 检测到提示词模板构建错误（代码缺陷），直接中断
+        console.error(`[investigation-requirement] 检测到提示词模板构建错误（代码缺陷），无法通过重试解决。`);
+        console.error(`错误详情: ${err instanceof Error ? err.message : String(err)}`);
+        console.error(`建议: 请检查插件代码中的模板构建逻辑。`);
+        throw new UnrecoverableError(err instanceof Error ? err.message : String(err));
+      }
+
+      const isTimeout = errorType === RetryErrorType.TRANSIENT_ERROR;
       if (isTimeout) {
         logger.error('retry timeout', {
-          error: err.message,
+          error: err instanceof Error ? err.message : String(err),
           retryCount,
           timeout: options.timeout ?? DEFAULT_RETRY_TIMEOUT_S,
         });
@@ -443,6 +495,7 @@ async function runNewInvestigation(
         logger.warn('retry attempt failed', {
           error: err instanceof Error ? err.message : String(err),
           retryCount,
+          errorType,
         });
       }
 
@@ -461,10 +514,10 @@ async function runNewInvestigation(
 
   // 最终验证（记录警告但不阻断）
   const finalValidation = validateReport(report);
-  if (!finalValidation.valid) {
+  if (finalValidation.warningErrors.length > 0) {
     if (!options.quiet) {
-      console.log('   ⚠️ Final report has validation issues, using with warnings:');
-      finalValidation.errors.forEach(e => console.log(`     - ${e.message}`));
+      console.log('   ⚠️ Final report has non-blocking validation issues:');
+      finalValidation.warningErrors.forEach(e => console.log(`     - ${e.message}`));
     }
   }
 
@@ -1146,13 +1199,16 @@ function buildRetryPrompt(options: RetryPromptOptions): string {
   const template = lang === 'zh' ? RETRY_PROMPT_TEMPLATE_ZH : RETRY_PROMPT_TEMPLATE_EN;
   const reviewPathDisplay = reviewPath ?? (lang === 'zh' ? '未生成审核报告' : 'No review report generated');
 
-  return template
-    .replace('{requirement}', requirement)
-    .replaceAll('{attemptNum}', String(attemptNum))
-    .replace('{errorSummary}', errorSummary || (lang === 'zh' ? '无格式错误详情' : 'No format error details'))
-    .replace('{suggestionsSummary}', suggestionsSummary)
-    .replace('{reviewPath}', reviewPathDisplay)
-    .replace('{formatExample}', filledFormatExample);
+  // SOL-003: 使用 renderTemplate + strict 模式，在模板渲染阶段检测未替换占位符
+  // 如果有占位符未替换，renderTemplate 会抛出错误，被外层 catch 捕获并触发 TEMPLATE_BUILD_ERROR
+  return renderTemplate(template, {
+    requirement,
+    attemptNum: String(attemptNum),
+    errorSummary: errorSummary || (lang === 'zh' ? '无格式错误详情' : 'No format error details'),
+    suggestionsSummary,
+    reviewPath: reviewPathDisplay,
+    formatExample: filledFormatExample,
+  }, { mode: 'strict' });
 }
 
 /**

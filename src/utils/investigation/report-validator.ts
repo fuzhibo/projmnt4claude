@@ -40,6 +40,7 @@ export function validateReport(report: InvestigationReport): ValidationResult {
   }
 
   // Rule 8: id-format (先验证格式，后续规则依赖编号)
+  // SOL-003: 警告规则推入 errors 数组，供 warningErrors 过滤
   const caIds = new Set<string>();
   const solIds = new Set<string>();
   const caFormatRe = /^CA-\d{3,}$/;
@@ -48,13 +49,13 @@ export function validateReport(report: InvestigationReport): ValidationResult {
   for (const ca of report.rootCauseAnalysis || []) {
     caIds.add(ca.id);
     if (!caFormatRe.test(ca.id)) {
-      warnings.push({ rule: 'id-format', message: `CA 编号格式不合法: ${ca.id}，期望 CA-NNN` });
+      errors.push({ rule: 'id-format', message: `CA 编号格式不合法: ${ca.id}，期望 CA-NNN` });
     }
   }
   for (const sol of report.solutions || []) {
     solIds.add(sol.id);
     if (!solFormatRe.test(sol.id)) {
-      warnings.push({ rule: 'id-format', message: `SOL 编号格式不合法: ${sol.id}，期望 SOL-NNN` });
+      errors.push({ rule: 'id-format', message: `SOL 编号格式不合法: ${sol.id}，期望 SOL-NNN` });
     }
   }
 
@@ -69,13 +70,14 @@ export function validateReport(report: InvestigationReport): ValidationResult {
   }
 
   // Rule 5: checkpoint-prefix
+  // SOL-003: 警告规则推入 errors 数组
   const validPrefixes = new Set(Object.keys(PREFIX_MAP));
   if (!report.checkpoints || report.checkpoints.length === 0) {
     errors.push({ rule: 'checkpoint-prefix', message: 'checkpoints 为空，至少需要 1 个检查点' });
   }
   for (const cp of report.checkpoints || []) {
     if (!validPrefixes.has(cp.prefix)) {
-      warnings.push({
+      errors.push({
         rule: 'checkpoint-prefix',
         message: `检查点前缀 "${cp.prefix}" 不在 PREFIX_MAP 中，有效值: ${[...validPrefixes].join(', ')}`,
       });
@@ -83,9 +85,10 @@ export function validateReport(report: InvestigationReport): ValidationResult {
   }
 
   // Rule 6: checkpoint-belongsto
+  // SOL-003: 警告规则推入 errors 数组
   for (const cp of report.checkpoints || []) {
     if (cp.belongsTo && !solIds.has(cp.belongsTo)) {
-      warnings.push({
+      errors.push({
         rule: 'checkpoint-belongsto',
         message: `检查点 belongsTo "${cp.belongsTo}" 未在解决方案中找到对应 SOL`,
       });
@@ -93,22 +96,38 @@ export function validateReport(report: InvestigationReport): ValidationResult {
   }
 
   // Rule 7: assessment-required
+  // SOL-003: 警告规则推入 errors 数组
   if (!report.assessment) {
-    warnings.push({ rule: 'assessment-required', message: 'assessment 缺失' });
+    errors.push({ rule: 'assessment-required', message: 'assessment 缺失' });
   } else {
     const validComplexity = new Set(['low', 'medium', 'high']);
     if (!validComplexity.has(report.assessment.complexity)) {
-      warnings.push({
+      errors.push({
         rule: 'assessment-required',
         message: `assessment.complexity "${report.assessment.complexity}" 不合法，有效值: low, medium, high`,
       });
     }
   }
 
+  // ✅ SOL-003: 按 investigationAction 分类错误
+  // blockingErrors: 阻断性错误（必须重试）- 从 errors 数组过滤
+  // warningErrors: 警告性错误（无需重试）- 从 errors 数组过滤
+  const blockingErrors = errors.filter(e => {
+    const rule = VALIDATION_RULES.find(r => r.name === e.rule);
+    return rule?.investigationAction === 'block';
+  });
+
+  const warningErrors = errors.filter(e => {
+    const rule = VALIDATION_RULES.find(r => r.name === e.rule);
+    return rule?.investigationAction === 'warn';
+  });
+
   return {
     valid: errors.length === 0,
     errors,
-    warnings,
+    warnings,  // 保留向后兼容
+    blockingErrors,
+    warningErrors,
   };
 }
 

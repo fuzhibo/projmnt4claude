@@ -182,6 +182,8 @@ export interface ValidationResult {
   valid: boolean;
   errors: ValidationError[];
   warnings: ValidationWarning[];
+  blockingErrors: ValidationError[];
+  warningErrors: ValidationError[];
 }
 
 export interface ValidationError {

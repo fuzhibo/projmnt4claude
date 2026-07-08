@@ -13,7 +13,7 @@ import { createIsolatedTestEnv, type IsolatedTestEnv } from '../../utils/test-en
 const mockCallAI = jest.fn<(...args: any[]) => any>();
 
 jest.mock('../../utils/investigation/report-validator', () => ({
-  validateReport: () => ({ valid: true, errors: [], warnings: [] }),
+  validateReport: () => ({ valid: true, errors: [], warnings: [], blockingErrors: [], warningErrors: [] }),
   VALIDATION_RULES: [],
 }));
 

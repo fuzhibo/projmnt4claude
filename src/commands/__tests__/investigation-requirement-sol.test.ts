@@ -152,9 +152,11 @@ describe('investigation-requirement SOL-001 / SOL-002', () => {
           valid: false,
           errors: [{ rule: 'R-META-001', message: 'metadata missing' }],
           warnings: [],
+          blockingErrors: [{ rule: 'R-META-001', message: 'metadata missing' }],
+          warningErrors: [],
         })
-        .mockReturnValueOnce({ valid: true, errors: [], warnings: [] })
-        .mockReturnValueOnce({ valid: true, errors: [], warnings: [] });
+        .mockReturnValueOnce({ valid: true, errors: [], warnings: [], blockingErrors: [], warningErrors: [] })
+        .mockReturnValueOnce({ valid: true, errors: [], warnings: [], blockingErrors: [], warningErrors: [] });
 
       const { investigationRequirement } = await import('../investigation-requirement');
 
@@ -178,14 +180,18 @@ describe('investigation-requirement SOL-001 / SOL-002', () => {
           valid: false,
           errors: [{ rule: 'R-001', message: 'error 1' }],
           warnings: [],
+          blockingErrors: [{ rule: 'R-001', message: 'error 1' }],
+          warningErrors: [],
         })
         .mockReturnValueOnce({
           valid: false,
           errors: [{ rule: 'R-002', message: 'error 2' }],
           warnings: [],
+          blockingErrors: [{ rule: 'R-002', message: 'error 2' }],
+          warningErrors: [],
         })
-        .mockReturnValueOnce({ valid: true, errors: [], warnings: [] })
-        .mockReturnValueOnce({ valid: true, errors: [], warnings: [] });
+        .mockReturnValueOnce({ valid: true, errors: [], warnings: [], blockingErrors: [], warningErrors: [] })
+        .mockReturnValueOnce({ valid: true, errors: [], warnings: [], blockingErrors: [], warningErrors: [] });
 
       const { investigationRequirement } = await import('../investigation-requirement');
 
@@ -213,9 +219,11 @@ describe('investigation-requirement SOL-001 / SOL-002', () => {
           valid: false,
           errors: [{ rule: 'R-001', message: 'error 1' }],
           warnings: [],
+          blockingErrors: [{ rule: 'R-001', message: 'error 1' }],
+          warningErrors: [],
         })
-        .mockReturnValueOnce({ valid: true, errors: [], warnings: [] })
-        .mockReturnValueOnce({ valid: true, errors: [], warnings: [] });
+        .mockReturnValueOnce({ valid: true, errors: [], warnings: [], blockingErrors: [], warningErrors: [] })
+        .mockReturnValueOnce({ valid: true, errors: [], warnings: [], blockingErrors: [], warningErrors: [] });
 
       const { investigationRequirement } = await import('../investigation-requirement');
 
@@ -247,9 +255,11 @@ describe('investigation-requirement SOL-001 / SOL-002', () => {
           valid: false,
           errors: [{ rule: 'R-001', message: 'rootCauseAnalysis empty' }],
           warnings: [],
+          blockingErrors: [{ rule: 'R-001', message: 'rootCauseAnalysis empty' }],
+          warningErrors: [],
         })
-        .mockReturnValueOnce({ valid: true, errors: [], warnings: [] })
-        .mockReturnValueOnce({ valid: true, errors: [], warnings: [] });
+        .mockReturnValueOnce({ valid: true, errors: [], warnings: [], blockingErrors: [], warningErrors: [] })
+        .mockReturnValueOnce({ valid: true, errors: [], warnings: [], blockingErrors: [], warningErrors: [] });
 
       mockReviewReport.mockResolvedValue(reviewResult);
 
@@ -297,9 +307,11 @@ describe('investigation-requirement SOL-001 / SOL-002', () => {
           valid: false,
           errors: [{ rule: 'R-001', message: 'rootCauseAnalysis empty' }],
           warnings: [],
+          blockingErrors: [{ rule: 'R-001', message: 'rootCauseAnalysis empty' }],
+          warningErrors: [],
         })
-        .mockReturnValueOnce({ valid: true, errors: [], warnings: [] })
-        .mockReturnValueOnce({ valid: true, errors: [], warnings: [] });
+        .mockReturnValueOnce({ valid: true, errors: [], warnings: [], blockingErrors: [], warningErrors: [] })
+        .mockReturnValueOnce({ valid: true, errors: [], warnings: [], blockingErrors: [], warningErrors: [] });
 
       mockReviewReport.mockResolvedValue(reviewResult);
 
@@ -341,9 +353,11 @@ describe('investigation-requirement SOL-001 / SOL-002', () => {
           valid: false,
           errors: [{ rule: 'R-001', message: 'rootCauseAnalysis empty' }],
           warnings: [],
+          blockingErrors: [{ rule: 'R-001', message: 'rootCauseAnalysis empty' }],
+          warningErrors: [],
         })
-        .mockReturnValueOnce({ valid: true, errors: [], warnings: [] })
-        .mockReturnValueOnce({ valid: true, errors: [], warnings: [] });
+        .mockReturnValueOnce({ valid: true, errors: [], warnings: [], blockingErrors: [], warningErrors: [] })
+        .mockReturnValueOnce({ valid: true, errors: [], warnings: [], blockingErrors: [], warningErrors: [] });
 
       mockReviewReport.mockRejectedValue(new Error('AI review service down'));
 
@@ -378,9 +392,11 @@ describe('investigation-requirement SOL-001 / SOL-002', () => {
           valid: false,
           errors: [{ rule: 'R-001', message: 'format error' }],
           warnings: [],
+          blockingErrors: [{ rule: 'R-001', message: 'format error' }],
+          warningErrors: [],
         })
-        .mockReturnValueOnce({ valid: true, errors: [], warnings: [] })
-        .mockReturnValueOnce({ valid: true, errors: [], warnings: [] });
+        .mockReturnValueOnce({ valid: true, errors: [], warnings: [], blockingErrors: [], warningErrors: [] })
+        .mockReturnValueOnce({ valid: true, errors: [], warnings: [], blockingErrors: [], warningErrors: [] });
 
       mockReviewReport.mockResolvedValue(undefined);
 
@@ -415,14 +431,18 @@ describe('investigation-requirement SOL-001 / SOL-002', () => {
           valid: false,
           errors: [{ rule: 'R-001', message: 'error 1' }],
           warnings: [],
+          blockingErrors: [{ rule: 'R-001', message: 'error 1' }],
+          warningErrors: [],
         })
         .mockReturnValueOnce({
           valid: false,
           errors: [{ rule: 'R-002', message: 'error 2' }],
           warnings: [],
+          blockingErrors: [{ rule: 'R-002', message: 'error 2' }],
+          warningErrors: [],
         })
-        .mockReturnValueOnce({ valid: true, errors: [], warnings: [] })
-        .mockReturnValueOnce({ valid: true, errors: [], warnings: [] });
+        .mockReturnValueOnce({ valid: true, errors: [], warnings: [], blockingErrors: [], warningErrors: [] })
+        .mockReturnValueOnce({ valid: true, errors: [], warnings: [], blockingErrors: [], warningErrors: [] });
 
       mockReviewReport.mockResolvedValue(reviewResult);
 
@@ -467,9 +487,11 @@ describe('investigation-requirement SOL-001 / SOL-002', () => {
           valid: false,
           errors: [{ rule: 'R-001', message: 'error' }],
           warnings: [],
+          blockingErrors: [{ rule: 'R-001', message: 'error' }],
+          warningErrors: [],
         })
-        .mockReturnValueOnce({ valid: true, errors: [], warnings: [] })
-        .mockReturnValueOnce({ valid: true, errors: [], warnings: [] });
+        .mockReturnValueOnce({ valid: true, errors: [], warnings: [], blockingErrors: [], warningErrors: [] })
+        .mockReturnValueOnce({ valid: true, errors: [], warnings: [], blockingErrors: [], warningErrors: [] });
 
       mockReviewReport.mockResolvedValue(reviewResult);
 
@@ -506,9 +528,11 @@ describe('investigation-requirement SOL-001 / SOL-002', () => {
           valid: false,
           errors: [{ rule: 'R-001', message: 'error' }],
           warnings: [],
+          blockingErrors: [{ rule: 'R-001', message: 'error' }],
+          warningErrors: [],
         })
-        .mockReturnValueOnce({ valid: true, errors: [], warnings: [] })
-        .mockReturnValueOnce({ valid: true, errors: [], warnings: [] });
+        .mockReturnValueOnce({ valid: true, errors: [], warnings: [], blockingErrors: [], warningErrors: [] })
+        .mockReturnValueOnce({ valid: true, errors: [], warnings: [], blockingErrors: [], warningErrors: [] });
 
       mockReviewReport.mockResolvedValue(reviewResult);
 

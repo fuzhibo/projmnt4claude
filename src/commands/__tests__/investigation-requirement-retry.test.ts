@@ -135,9 +135,11 @@ describe('investigation-requirement retry logic', () => {
           valid: false,
           errors: [{ rule: 'test', message: 'first error' }],
           warnings: [],
+          blockingErrors: [{ rule: 'test', message: 'first error' }],
+          warningErrors: [],
         })
-        .mockReturnValueOnce({ valid: true, errors: [], warnings: [] })
-        .mockReturnValueOnce({ valid: true, errors: [], warnings: [] });
+        .mockReturnValueOnce({ valid: true, errors: [], warnings: [], blockingErrors: [], warningErrors: [] })
+        .mockReturnValueOnce({ valid: true, errors: [], warnings: [], blockingErrors: [], warningErrors: [] });
 
       const { investigationRequirement } = await import('../investigation-requirement');
 
@@ -161,6 +163,8 @@ describe('investigation-requirement retry logic', () => {
         valid: false,
         errors: [{ rule: 'test', message: 'always fails' }],
         warnings: [],
+        blockingErrors: [{ rule: 'test', message: 'always fails' }],
+        warningErrors: [],
       });
 
       const { investigationRequirement } = await import('../investigation-requirement');
@@ -182,7 +186,7 @@ describe('investigation-requirement retry logic', () => {
 
   describe('CP-4: maxRetry=1 exits normally', () => {
     it('should complete with maxRetry=1 when validation passes', async () => {
-      mockValidateReport.mockReturnValue({ valid: true, errors: [], warnings: [] });
+      mockValidateReport.mockReturnValue({ valid: true, errors: [], warnings: [], blockingErrors: [], warningErrors: [] });
 
       const { investigationRequirement } = await import('../investigation-requirement');
 
@@ -206,6 +210,8 @@ describe('investigation-requirement retry logic', () => {
         valid: false,
         errors: [{ rule: 'test', message: 'not retried' }],
         warnings: [],
+        blockingErrors: [{ rule: 'test', message: 'not retried' }],
+        warningErrors: [],
       });
 
       const { investigationRequirement } = await import('../investigation-requirement');
@@ -234,6 +240,8 @@ describe('investigation-requirement retry logic', () => {
           valid: false,
           errors: [{ rule: 'test', message: 'first error' }],
           warnings: [],
+          blockingErrors: [{ rule: 'test', message: 'first error' }],
+          warningErrors: [],
         });
 
       // 第一次 callAI 返回报告（作为回退）
@@ -251,7 +259,7 @@ describe('investigation-requirement retry logic', () => {
       mockCallAI.mockRejectedValueOnce(new Error('Retry failed'));
 
       // 最终验证使用回退报告 → valid: true
-      mockValidateReport.mockReturnValueOnce({ valid: true, errors: [], warnings: [] });
+      mockValidateReport.mockReturnValueOnce({ valid: true, errors: [], warnings: [], blockingErrors: [], warningErrors: [] });
 
       const { investigationRequirement } = await import('../investigation-requirement');
 
@@ -273,6 +281,8 @@ describe('investigation-requirement retry logic', () => {
         valid: false,
         errors: [{ rule: 'test', message: 'always fails' }],
         warnings: [],
+        blockingErrors: [{ rule: 'test', message: 'always fails' }],
+        warningErrors: [],
       });
 
       // 每次 AI 调用返回有效报告
@@ -310,6 +320,8 @@ describe('investigation-requirement retry logic', () => {
         valid: false,
         errors: [{ rule: 'test', message: 'minor issue' }],
         warnings: [],
+        blockingErrors: [{ rule: 'test', message: 'minor issue' }],
+        warningErrors: [],
       });
 
       const { investigationRequirement } = await import('../investigation-requirement');
@@ -338,9 +350,14 @@ describe('investigation-requirement retry logic', () => {
             { rule: 'R-CP-001', message: 'checkpoints 为空，至少需要 1 个检查点' },
           ],
           warnings: [],
+          blockingErrors: [
+            { rule: 'R-META-001', message: 'metadata.requirementSource 缺失或为空' },
+            { rule: 'R-CP-001', message: 'checkpoints 为空，至少需要 1 个检查点' },
+          ],
+          warningErrors: [],
         })
-        .mockReturnValueOnce({ valid: true, errors: [], warnings: [] })
-        .mockReturnValueOnce({ valid: true, errors: [], warnings: [] });
+        .mockReturnValueOnce({ valid: true, errors: [], warnings: [], blockingErrors: [], warningErrors: [] })
+        .mockReturnValueOnce({ valid: true, errors: [], warnings: [], blockingErrors: [], warningErrors: [] });
 
       const { investigationRequirement } = await import('../investigation-requirement');
 
@@ -399,9 +416,11 @@ describe('investigation-requirement retry logic', () => {
           valid: false,
           errors: [{ rule: 'R-META-001', message: 'metadata.requirementSource 缺失或为空' }],
           warnings: [],
+          blockingErrors: [{ rule: 'R-META-001', message: 'metadata.requirementSource 缺失或为空' }],
+          warningErrors: [],
         })
-        .mockReturnValueOnce({ valid: true, errors: [], warnings: [] })
-        .mockReturnValueOnce({ valid: true, errors: [], warnings: [] });
+        .mockReturnValueOnce({ valid: true, errors: [], warnings: [], blockingErrors: [], warningErrors: [] })
+        .mockReturnValueOnce({ valid: true, errors: [], warnings: [], blockingErrors: [], warningErrors: [] });
 
       const { investigationRequirement } = await import('../investigation-requirement');
 
@@ -428,9 +447,14 @@ describe('investigation-requirement retry logic', () => {
             { rule: 'R-CP-001', message: 'checkpoints 为空，至少需要 1 个检查点' },
           ],
           warnings: [],
+          blockingErrors: [
+            { rule: 'R-META-001', message: 'metadata.requirementSource 缺失或为空' },
+            { rule: 'R-CP-001', message: 'checkpoints 为空，至少需要 1 个检查点' },
+          ],
+          warningErrors: [],
         })
-        .mockReturnValueOnce({ valid: true, errors: [], warnings: [] })
-        .mockReturnValueOnce({ valid: true, errors: [], warnings: [] });
+        .mockReturnValueOnce({ valid: true, errors: [], warnings: [], blockingErrors: [], warningErrors: [] })
+        .mockReturnValueOnce({ valid: true, errors: [], warnings: [], blockingErrors: [], warningErrors: [] });
 
       const { investigationRequirement } = await import('../investigation-requirement');
 
@@ -461,9 +485,11 @@ describe('investigation-requirement retry logic', () => {
           valid: false,
           errors: [{ rule: 'R-LONG', message: longMessage }],
           warnings: [],
+          blockingErrors: [{ rule: 'R-LONG', message: longMessage }],
+          warningErrors: [],
         })
-        .mockReturnValueOnce({ valid: true, errors: [], warnings: [] })
-        .mockReturnValueOnce({ valid: true, errors: [], warnings: [] });
+        .mockReturnValueOnce({ valid: true, errors: [], warnings: [], blockingErrors: [], warningErrors: [] })
+        .mockReturnValueOnce({ valid: true, errors: [], warnings: [], blockingErrors: [], warningErrors: [] });
 
       const { investigationRequirement } = await import('../investigation-requirement');
 
@@ -488,9 +514,11 @@ describe('investigation-requirement retry logic', () => {
           valid: false,
           errors: [{ rule: 'R-PLACEHOLDER', message: '格式验证失败' }],
           warnings: [],
+          blockingErrors: [{ rule: 'R-PLACEHOLDER', message: '格式验证失败' }],
+          warningErrors: [],
         })
-        .mockReturnValueOnce({ valid: true, errors: [], warnings: [] })
-        .mockReturnValueOnce({ valid: true, errors: [], warnings: [] });
+        .mockReturnValueOnce({ valid: true, errors: [], warnings: [], blockingErrors: [], warningErrors: [] })
+        .mockReturnValueOnce({ valid: true, errors: [], warnings: [], blockingErrors: [], warningErrors: [] });
 
       const { investigationRequirement } = await import('../investigation-requirement');
 
@@ -665,21 +693,29 @@ describe('investigation-requirement retry logic', () => {
           valid: false,
           errors: [{ rule: 'R-001', message: 'error 1' }],
           warnings: [],
+          blockingErrors: [{ rule: 'R-001', message: 'error 1' }],
+          warningErrors: [],
         })
         .mockReturnValueOnce({
           valid: false,
           errors: [{ rule: 'R-002', message: 'error 2' }],
           warnings: [],
+          blockingErrors: [{ rule: 'R-002', message: 'error 2' }],
+          warningErrors: [],
         })
         .mockReturnValueOnce({
           valid: true,
           errors: [],
           warnings: [],
+          blockingErrors: [],
+          warningErrors: [],
         })
         .mockReturnValueOnce({
           valid: true,
           errors: [],
           warnings: [],
+          blockingErrors: [],
+          warningErrors: [],
         });
 
       mockReviewWithRetry.mockResolvedValue({
