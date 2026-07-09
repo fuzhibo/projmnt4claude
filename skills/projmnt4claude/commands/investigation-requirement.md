@@ -1,6 +1,6 @@
 ---
-description: "从自然语言需求生成结构化调查报告 - 支持新建调查、交互评审、反馈修正、报告拆分等多种模式"
-argument-hint: "[description] | --interactive | --feedback | --review | --split"
+description: "调查/investigation - 从自然语言需求生成结构化调查报告。触发场景：(1) 用户要求调查问题、(2) 进行根因分析、(3) 分析问题根本原因、(4) investigate 某个问题、(5) root cause 分析。支持新建调查、交互评审、反馈修正、报告拆分等多种模式。"
+argument-hint: "<description> | --interactive | --feedback | --review | --split"
 ---
 
 # investigation-requirement - 需求调查指令

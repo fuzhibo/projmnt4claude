@@ -22742,6 +22742,28 @@ __export(exports_ai_integration, {
   callAIForJSON: () => callAIForJSON,
   callAI: () => callAI
 });
+function simpleHash(str) {
+  let hash = 0;
+  for (let i = 0;i < str.length; i++) {
+    const char = str.charCodeAt(i);
+    hash = (hash << 5) - hash + char;
+    hash = hash & hash;
+  }
+  return hash.toString(16);
+}
+function checkOutputFormat(output) {
+  const hasMetadata = output.includes("元数据") || output.includes("Metadata");
+  const hasRootCause = output.includes("原因分析") || output.includes("Root Cause");
+  const hasSolution = output.includes("解决方案") || output.includes("Solutions");
+  const hasCheckpoints = output.includes("检查点") || output.includes("Checkpoint");
+  return {
+    hasMetadata,
+    hasRootCause,
+    hasSolution,
+    hasCheckpoints,
+    hasAllSections: hasMetadata && hasRootCause && hasSolution
+  };
+}
 function getTestMock11(name) {
   return globalThis.__PROJMNT4CLAUDE_TEST_MOCKS__?.[name];
 }
@@ -22771,8 +22793,24 @@ async function callAI(options) {
     aiLogger.debug("callAI result", {
       success: result.success,
       durationMs: result.durationMs,
-      outputLength: result.output?.length ?? 0
+      outputLength: result.output?.length ?? 0,
+      outputPreview: result.output ? result.output.substring(0, 500) : null,
+      outputHash: result.output ? simpleHash(result.output) : null,
+      error: result.error
     });
+    if (result.output && result.output.length > 100) {
+      const formatCheck = checkOutputFormat(result.output);
+      aiLogger.debug("callAI output format check", formatCheck);
+      if (!formatCheck.hasAllSections) {
+        aiLogger.warn("Headless output missing expected sections", formatCheck);
+      }
+    }
+    if (result.success && (!result.output || result.output.trim().length === 0)) {
+      aiLogger.warn("Headless returned empty output", {
+        success: result.success,
+        durationMs: result.durationMs
+      });
+    }
     if (result.tokensUsed && result.tokensUsed > 0) {
       aiLogger.logAICost({
         field: "callAI",
@@ -22789,8 +22827,9 @@ async function callAI(options) {
       error: result.error
     };
   } catch (err) {
-    aiLogger.debug("callAI exception", {
+    aiLogger.error("callAI exception", {
       error: err instanceof Error ? err.message : String(err),
+      stack: err instanceof Error ? err.stack : undefined,
       durationMs: Date.now() - startTime
     });
     return {
@@ -36087,6 +36126,7 @@ function parseCheckpoint(raw) {
   return null;
 }
 // src/utils/investigation/report-validator.ts
+init_logger();
 var VALIDATION_RULES = [
   { name: "metadata-required", condition: "metadata 字段存在且非空", investigationAction: "block", initAction: "block" },
   { name: "root-cause-non-empty", condition: "rootCauseAnalysis 至少包含 1 项", investigationAction: "block", initAction: "block" },
@@ -36098,6 +36138,13 @@ var VALIDATION_RULES = [
   { name: "id-format", condition: "CA 编号为 CA-NNN、SOL 编号为 SOL-NNN 格式", investigationAction: "warn", initAction: "block" }
 ];
 function validateReport(report) {
+  const logger = createLogger("report-validator");
+  logger.debug("validateReport input", {
+    hasMetadata: !!report.metadata,
+    rootCauseCount: report.rootCauseAnalysis.length,
+    solutionCount: report.solutions.length,
+    checkpointCount: report.checkpoints.length
+  });
   const errors = [];
   const warnings = [];
   if (!report.metadata || !report.metadata.requirementSource) {
@@ -36171,6 +36218,12 @@ function validateReport(report) {
   const warningErrors = errors.filter((e) => {
     const rule = VALIDATION_RULES.find((r) => r.name === e.rule);
     return rule?.investigationAction === "warn";
+  });
+  logger.debug("validateReport result", {
+    blockingErrorCount: blockingErrors.length,
+    warningErrorCount: warningErrors.length,
+    blockingErrors: blockingErrors.map((e) => ({ rule: e.rule, message: e.message })),
+    warnings: warningErrors.map((e) => ({ rule: e.rule, message: e.message }))
   });
   return {
     valid: errors.length === 0,
@@ -36811,6 +36864,7 @@ Review the following split plan against split requirements across six dimensions
 };
 
 // src/utils/prompt-templates/loader.ts
+init_logger();
 var zhInitTemplates;
 var enInitTemplates;
 async function getZhInitTemplates() {
@@ -36848,20 +36902,29 @@ async function loadTemplate(name, lang = "zh") {
   return template;
 }
 function renderTemplate(template, params, options) {
+  const logger = createLogger("prompt-templates");
   const {
     mode = "lenient",
     autoFillDefaults = {},
     onUnreplaced
   } = options ?? {};
+  logger.debug("renderTemplate input", {
+    templateLength: template.length,
+    paramsKeys: Object.keys(params),
+    paramsPreview: Object.fromEntries(Object.entries(params).map(([k, v]) => [k, v.substring(0, 100)]))
+  });
   const result = template.replace(/\{(\w+)\}/g, (match, key) => {
     if (key in params) {
-      return params[key];
+      return params[key] ?? match;
     }
     return match;
   });
   const unmatched = result.match(/\{(\w+)\}/g);
   if (unmatched) {
     const placeholderNames = [...new Set(unmatched.map((m) => m.slice(1, -1)))];
+    logger.warn("renderTemplate has unreplaced placeholders", {
+      placeholders: placeholderNames
+    });
     onUnreplaced?.(placeholderNames);
     if (mode === "strict") {
       throw new Error(`[renderTemplate] 未替换占位符: ${placeholderNames.join(", ")}`);
@@ -37685,6 +37748,7 @@ import * as path25 from "path";
 import * as readline from "readline";
 
 // src/utils/investigation/report-generator.ts
+init_logger();
 function generateReport(report, lang = "zh") {
   const sections = [];
   sections.push(renderMetadata(report.metadata, lang));
@@ -37906,11 +37970,32 @@ var CheckpointFormat = {
 // src/utils/investigation/report-parser.ts
 init_logger();
 function parseReport(markdown) {
+  const logger = createLogger("report-parser");
+  logger.debug("parseReport input", {
+    inputLength: markdown.length,
+    inputPreview: markdown.substring(0, 300)
+  });
   const metadata = parseMetadata(markdown);
   const rootCauseAnalysis = parseRootCauseAnalysis(markdown);
   const solutions = parseSolutions(markdown);
   const checkpoints = parseCheckpoints2(markdown);
   const assessment = parseAssessment(markdown);
+  logger.debug("parseReport result", {
+    metadata: {
+      hasSource: !!metadata.requirementSource,
+      sourceLength: metadata.requirementSource.length
+    },
+    rootCauseCount: rootCauseAnalysis.length,
+    solutionCount: solutions.length,
+    checkpointCount: checkpoints.length
+  });
+  if (rootCauseAnalysis.length === 0 || solutions.length === 0) {
+    logger.warn("parseReport returned empty sections", {
+      rootCauseCount: rootCauseAnalysis.length,
+      solutionCount: solutions.length,
+      inputLength: markdown.length
+    });
+  }
   return { metadata, rootCauseAnalysis, solutions, checkpoints, assessment };
 }
 function extractDependenciesFromMarkdown(markdown) {
@@ -38071,10 +38156,17 @@ function parseAssessment(md) {
   };
 }
 function extractSection(md, zhTitle, enTitle) {
+  const logger = createLogger("report-parser");
   const re = new RegExp(`^## (?:${escapeRegex(zhTitle)}|${escapeRegex(enTitle)})\\s*\\n([\\s\\S]*?)(?=^## |\\n## |\\n# |(?![\\s\\S]))`, "m");
   const m = md.match(re);
-  if (!m)
+  if (!m) {
+    logger.debug("extractSection not found", {
+      zhTitle,
+      enTitle,
+      inputPreview: md.substring(0, 500)
+    });
     return null;
+  }
   return m[1] ?? null;
 }
 function extractInlineField(text, zhLabel, enLabel) {
@@ -38106,10 +38198,42 @@ function validateImpactScope(v) {
 
 // src/utils/investigation/report-reviewer.ts
 init_ai_integration();
+init_logger();
 async function reviewReport(requirement, report, cwd, lang = "zh", timeout, debug) {
+  const logger = createLogger("report-reviewer", cwd);
   const reportMarkdown = generateReport(report);
+  logger.debug("reviewReport input", {
+    requirementLength: requirement.length,
+    requirementPreview: requirement.substring(0, 200),
+    reportLength: reportMarkdown.length,
+    reportPreview: reportMarkdown.substring(0, 500),
+    reportStructure: {
+      rootCauseCount: report.rootCauseAnalysis.length,
+      solutionCount: report.solutions.length,
+      checkpointCount: report.checkpoints.length
+    }
+  });
   const prompt = await loadAndRenderTemplate("review", { requirement, report: reportMarkdown }, lang, { mode: "strict" });
-  return callAIForJSON({ prompt, cwd, timeout, debug }, validateReviewResult);
+  const result = await callAIForJSON({ prompt, cwd, timeout, debug }, validateReviewResult);
+  logger.debug("reviewReport output", {
+    pass: result.pass,
+    scores: result.scores,
+    issuesCount: result.issues.length,
+    criticalIssues: result.issues.filter((i) => i.severity === "critical").length,
+    majorIssues: result.issues.filter((i) => i.severity === "major").length,
+    issuesPreview: result.issues.slice(0, 5).map((i) => ({
+      dimension: i.dimension,
+      severity: i.severity,
+      description: i.description.substring(0, 100)
+    }))
+  });
+  if (result.pass && report.rootCauseAnalysis.length === 0) {
+    logger.warn("reviewReport passed with empty rootCauseAnalysis", {
+      scores: result.scores,
+      pass: result.pass
+    });
+  }
+  return result;
 }
 async function reviewReportWithRetry(requirement, report, options) {
   let lastReview;
@@ -38491,12 +38615,29 @@ async function runNewInvestigation(requirement, cwd, options) {
     }
     try {
       const attemptPath = await saveAttemptReport(report, attemptOutputDir, attemptNum);
+      logger.info("saveAttemptReport success", {
+        attemptPath,
+        attemptNum,
+        reportStructure: {
+          metadataKeys: Object.keys(report.metadata),
+          rootCauseCount: report.rootCauseAnalysis.length,
+          solutionCount: report.solutions.length
+        }
+      });
       if (!options.quiet) {
         console.log(`   \uD83D\uDCC4 尝试报告已保存: ${attemptPath}`);
       }
     } catch (saveErr) {
-      logger.warn("save attempt report failed", {
-        error: saveErr instanceof Error ? saveErr.message : String(saveErr)
+      logger.error("saveAttemptReport failed", {
+        error: saveErr instanceof Error ? saveErr.message : String(saveErr),
+        stack: saveErr instanceof Error ? saveErr.stack : undefined,
+        attemptOutputDir,
+        attemptNum,
+        reportStructure: {
+          metadataKeys: Object.keys(report.metadata),
+          rootCauseCount: report.rootCauseAnalysis.length,
+          solutionCount: report.solutions.length
+        }
       });
     }
     let reviewPath;
@@ -38504,12 +38645,25 @@ async function runNewInvestigation(requirement, cwd, options) {
     try {
       reviewResult2 = await reviewReport(requirement, report, cwd, lang, options.timeout, options.debug);
       reviewPath = await saveReviewReport(reviewResult2, attemptOutputDir, attemptNum, lang);
+      logger.info("reviewReport success", {
+        reviewPath,
+        attemptNum,
+        pass: reviewResult2.pass,
+        scores: reviewResult2.scores,
+        issuesCount: reviewResult2.issues.length
+      });
       if (!options.quiet) {
         console.log(`   \uD83D\uDCCB 审核报告已保存: ${reviewPath}`);
       }
     } catch (reviewErr) {
-      logger.warn("review report generation failed", {
-        error: reviewErr instanceof Error ? reviewErr.message : String(reviewErr)
+      logger.error("reviewReport failed", {
+        error: reviewErr instanceof Error ? reviewErr.message : String(reviewErr),
+        stack: reviewErr instanceof Error ? reviewErr.stack : undefined,
+        attemptNum,
+        reportStructure: {
+          rootCauseCount: report.rootCauseAnalysis.length,
+          solutionCount: report.solutions.length
+        }
       });
     }
     try {
@@ -39005,7 +39159,18 @@ function getFormatExample(lang) {
 `);
 }
 function buildRetryPrompt(options) {
+  const logger = createLogger("investigation-requirement");
   const { requirement, errors, reviewResult, reviewPath, attemptNum, lang } = options;
+  logger.debug("buildRetryPrompt input", {
+    requirementLength: requirement.length,
+    errorCount: errors.length,
+    errorRules: errors.map((e) => e.rule),
+    hasReviewResult: !!reviewResult,
+    reviewIssueCount: reviewResult?.issues?.length ?? 0,
+    reviewScores: reviewResult?.scores,
+    attemptNum,
+    lang
+  });
   const errorSummary = errors.map((e) => `- [${e.rule}] ${e.message}`).join(`
 `).substring(0, MAX_RETRY_FEEDBACK_LEN);
   let suggestionsSummary;
