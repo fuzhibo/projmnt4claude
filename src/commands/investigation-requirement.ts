@@ -159,6 +159,7 @@ interface RetryPromptOptions {
   reviewPath?: string;
   attemptNum: number;
   lang: 'zh' | 'en';
+  debug?: boolean;
 }
 
 /** 中文重试提示词模板 */
@@ -235,7 +236,7 @@ export async function investigationRequirement(
   options: InvestigationRequirementOptions,
 ): Promise<InvestigationResult> {
   // 创建 Logger
-  const logger = createLogger('investigation-requirement', cwd);
+  const logger = createLogger('investigation-requirement', cwd, options.debug);
 
   // 记录命令启动参数
   logger.debug('investigation-requirement invoked', {
@@ -356,7 +357,7 @@ async function runNewInvestigation(
   options: Required<Pick<InvestigationRequirementOptions, 'lang' | 'maxRetry' | 'splitThreshold'>> & InvestigationRequirementOptions,
 ): Promise<InvestigationResult> {
   const { lang, maxRetry, splitThreshold } = options;
-  const logger = createLogger('investigation-requirement', cwd);
+  const logger = createLogger('investigation-requirement', cwd, options.debug);
 
   if (!options.quiet) {
     console.log('');
@@ -492,6 +493,7 @@ async function runNewInvestigation(
         reviewPath,
         attemptNum,
         lang,
+        debug: options.debug,
       });
 
       const timeoutS = options.timeout ?? DEFAULT_RETRY_TIMEOUT_S;
@@ -702,7 +704,7 @@ async function runInteractiveMode(
 
     const aiResult = await callAI({ prompt, cwd, outputFormat: 'text', timeout: options.timeout, debug: options.debug });
     if (aiResult.success) {
-      report = parseReport(aiResult.output);
+      report = parseReport(aiResult.output, options.debug);
     }
   }
 
@@ -765,7 +767,7 @@ async function runFeedbackMode(
 
   // 解析已有报告
   const existingReportContent = fs.readFileSync(options.reportPath, 'utf-8');
-  const report = parseReport(existingReportContent);
+  const report = parseReport(existingReportContent, options.debug);
 
   // 构建反馈内容
   const feedbackContent = requirement || 'Please review and improve this report.';
@@ -793,7 +795,7 @@ async function runFeedbackMode(
   }
 
   // 解析修正后的报告
-  const revisedReport = parseReport(aiResult.output);
+  const revisedReport = parseReport(aiResult.output, options.debug);
 
   // 输出修正后的报告
   const outputPath = options.reportPath.replace('.md', '-revised.md');
@@ -843,7 +845,7 @@ async function runReviewMode(
 
   // 解析报告
   const reportContent = fs.readFileSync(options.reportPath, 'utf-8');
-  const report = parseReport(reportContent);
+  const report = parseReport(reportContent, options.debug);
 
   // AI 评审
   const reviewResult = await reviewReport(report.metadata.requirementSource, report, cwd, lang);
@@ -908,7 +910,7 @@ async function runSplitMode(
 
   // 解析报告
   const reportContent = fs.readFileSync(options.reportPath, 'utf-8');
-  const report = parseReport(reportContent);
+  const report = parseReport(reportContent, options.debug);
 
   // 执行拆分流程
   const result = await runSplitFlow(report, report.metadata.requirementSource, cwd, {
@@ -1164,7 +1166,7 @@ function getFormatExample(lang: 'zh' | 'en'): string {
  * 降级策略：无 reviewResult/reviewPath 时仍保留原始错误反馈，确保异常路径可用。
  */
 function buildRetryPrompt(options: RetryPromptOptions): string {
-  const logger = createLogger('investigation-requirement');
+  const logger = createLogger('investigation-requirement', undefined, options.debug);
   const { requirement, errors, reviewResult, reviewPath, attemptNum, lang } = options;
 
   // LOG-10: 重试提示词构建日志
@@ -1433,7 +1435,7 @@ async function generateInvestigationReport(
     throw new Error(`Failed to generate investigation report: ${result.error}`);
   }
 
-  return parseReport(result.output);
+  return parseReport(result.output, opts.debug);
 }
 
 /**
@@ -1494,7 +1496,7 @@ async function generateSubReport(
     throw new Error(`Failed to generate sub-report: ${result.error}`);
   }
 
-  const subReport = parseReport(result.output);
+  const subReport = parseReport(result.output, debug);
 
   // 继承父报告的元数据
   subReport.metadata.parentReport = '../report.md';

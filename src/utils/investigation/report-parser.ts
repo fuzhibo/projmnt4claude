@@ -25,8 +25,8 @@ import {
  * 将 markdown 文本解析为 InvestigationReport 结构化数据
  * LOG-04/05: 解析器日志增强
  */
-export function parseReport(markdown: string): InvestigationReport {
-  const logger = createLogger('report-parser');
+export function parseReport(markdown: string, debug?: boolean): InvestigationReport {
+  const logger = createLogger('report-parser', undefined, debug);
 
   // LOG-04: 解析输入日志
   logger.debug('parseReport input', {

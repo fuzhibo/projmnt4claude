@@ -61,7 +61,7 @@ export async function callAI(options: AICallOptions): Promise<AICallResult> {
   }
 
   // 创建 logger 用于记录调试日志
-  const logger = createLogger('investigation-requirement', options.cwd);
+  const logger = createLogger('investigation-requirement', options.cwd, options.debug);
   const aiLogger = logger.child('ai-integration');
 
   // 调试日志：输出调用参数

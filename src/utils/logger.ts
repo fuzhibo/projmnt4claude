@@ -94,6 +94,8 @@ export interface LoggerOptions {
   cwd?: string;
   /** 关联命令名（用于日志文件命名） */
   command?: string;
+  /** 启用 debug 模式，强制日志级别为 debug */
+  debug?: boolean;
 }
 
 /** 日志级别优先级映射 */
@@ -141,22 +143,29 @@ export class Logger {
   private buffer: LogEntry[];
   private minLevel: LogLevel;
   private lastWrittenIndex: number;
+  private debugMode: boolean;
 
   constructor(options: LoggerOptions = {}) {
     this.component = options.component;
     this.cwd = options.cwd || process.cwd();
     this.command = options.command;
     this.buffer = [];
+    this.debugMode = options.debug || false;
     this.minLevel = this.resolveLogLevel();
     this.lastWrittenIndex = 0;
   }
 
   /**
    * 解析日志级别
-   * 优先级: 环境变量 LOG_LEVEL > config.json logging.level > 默认 'info'
+   * 优先级: debug 参数 > 环境变量 LOG_LEVEL > config.json logging.level > 默认 'info'
    */
   private resolveLogLevel(): LogLevel {
-    // 1. 环境变量最高优先级
+    // 0. debug 参数最高优先级
+    if (this.debugMode) {
+      return 'debug';
+    }
+
+    // 1. 环境变量
     const envLevel = process.env.LOG_LEVEL;
     if (envLevel && envLevel in LEVEL_PRIORITY) {
       return envLevel as LogLevel;
@@ -274,6 +283,7 @@ export class Logger {
       component: this.component ? `${this.component}:${component}` : component,
       cwd: this.cwd,
       command: this.command,
+      debug: this.debugMode,
     });
   }
 
@@ -731,14 +741,14 @@ export interface InstrumentationRecord {
  * Logger 工厂函数
  * 创建指定命令名的 Logger 实例并记录命令开始
  */
-export function createLogger(command: string, cwd?: string): Logger {
+export function createLogger(command: string, cwd?: string, debug?: boolean): Logger {
   // 测试注入点
   const testMock = getTestMock('createLogger');
   if (testMock) {
     return testMock(command, cwd);
   }
 
-  const logger = new Logger({ command, cwd });
+  const logger = new Logger({ command, cwd, debug });
   logger.logCommandStart(command);
   return logger;
 }

@@ -200,6 +200,74 @@ describe('Logger', () => {
       expect(consoleWarnSpy).toHaveBeenCalled();
       expect(consoleErrorSpy).toHaveBeenCalled();
     });
+
+    // FC-1: 无 --debug 时日志级别为 info（debug 日志被过滤）
+    test('FC-1: should default to info level when debug is false', () => {
+      const logger = new Logger({ cwd: testCwd, debug: false });
+
+      logger.debug('Debug message should be filtered');
+      logger.info('Info message should appear');
+
+      expect(consoleLogSpy).toHaveBeenCalledTimes(1);
+      expect(consoleLogSpy).toHaveBeenCalledWith('Info message should appear');
+    });
+
+    // FC-2: 有 --debug 时日志级别为 debug（debug 日志输出）
+    test('FC-2: should set debug level when debug option is true', () => {
+      const logger = new Logger({ cwd: testCwd, debug: true });
+
+      logger.debug('Debug message should appear');
+      logger.info('Info message should also appear');
+
+      expect(consoleLogSpy).toHaveBeenCalledTimes(2);
+    });
+
+    // CP-1: LOG_LEVEL 环境变量优先级低于 debug 参数
+    test('CP-1: debug option should override LOG_LEVEL environment variable', () => {
+      const originalLevel = process.env.LOG_LEVEL;
+      process.env.LOG_LEVEL = 'error';
+
+      try {
+        const logger = new Logger({ cwd: testCwd, debug: true });
+
+        // debug=true 应该覆盖 LOG_LEVEL=error
+        logger.debug('Debug should appear despite LOG_LEVEL=error');
+        logger.info('Info should appear despite LOG_LEVEL=error');
+
+        expect(consoleLogSpy).toHaveBeenCalledTimes(2);
+      } finally {
+        if (originalLevel) {
+          process.env.LOG_LEVEL = originalLevel;
+        } else {
+          delete process.env.LOG_LEVEL;
+        }
+      }
+    });
+
+    // CP-3: debug 参数优先级最高
+    test('CP-3: debug option should have highest priority', () => {
+      const originalLevel = process.env.LOG_LEVEL;
+      process.env.LOG_LEVEL = 'warn';
+
+      try {
+        const logger = new Logger({ cwd: testCwd, debug: true });
+
+        logger.debug('Debug message');
+        logger.info('Info message');
+        logger.warn('Warn message');
+
+        // debug=true 时，所有级别都应该输出
+        // debug 和 info 使用 console.log，warn 使用 console.warn
+        expect(consoleLogSpy).toHaveBeenCalledTimes(2);
+        expect(consoleWarnSpy).toHaveBeenCalledTimes(1);
+      } finally {
+        if (originalLevel) {
+          process.env.LOG_LEVEL = originalLevel;
+        } else {
+          delete process.env.LOG_LEVEL;
+        }
+      }
+    });
   });
 
   describe('AI Cost Logging', () => {
@@ -397,7 +465,7 @@ describe('Logger', () => {
       expect(files.length).toBeGreaterThan(0);
 
       // Read and verify content
-      const logFile = path.join(logsDir, files[0]);
+      const logFile = path.join(logsDir, files[0]!);
       const content = fs.readFileSync(logFile, 'utf-8');
       expect(content).toContain('Before flush');
     });
@@ -412,7 +480,7 @@ describe('Logger', () => {
 
       const logsDir = getLogsDir(testCwd);
       const files = fs.readdirSync(logsDir).filter(f => f.endsWith('.log'));
-      const logFile = path.join(logsDir, files[0]);
+      const logFile = path.join(logsDir, files[0]!);
       const content = fs.readFileSync(logFile, 'utf-8');
 
       // Should have 5 JSON lines plus command start
