@@ -15915,15 +15915,20 @@ class Logger {
   buffer;
   minLevel;
   lastWrittenIndex;
+  debugMode;
   constructor(options = {}) {
     this.component = options.component;
     this.cwd = options.cwd || process.cwd();
     this.command = options.command;
     this.buffer = [];
+    this.debugMode = options.debug || false;
     this.minLevel = this.resolveLogLevel();
     this.lastWrittenIndex = 0;
   }
   resolveLogLevel() {
+    if (this.debugMode) {
+      return "debug";
+    }
     const envLevel = process.env.LOG_LEVEL;
     if (envLevel && envLevel in LEVEL_PRIORITY) {
       return envLevel;
@@ -15991,7 +15996,8 @@ class Logger {
     return new Logger({
       component: this.component ? `${this.component}:${component}` : component,
       cwd: this.cwd,
-      command: this.command
+      command: this.command,
+      debug: this.debugMode
     });
   }
   logCommandStart(command, args) {
@@ -16267,12 +16273,12 @@ class Logger {
     };
   }
 }
-function createLogger(command, cwd) {
+function createLogger(command, cwd, debug) {
   const testMock = getTestMock4("createLogger");
   if (testMock) {
     return testMock(command, cwd);
   }
-  const logger = new Logger({ command, cwd });
+  const logger = new Logger({ command, cwd, debug });
   logger.logCommandStart(command);
   return logger;
 }
@@ -22772,7 +22778,7 @@ async function callAI(options) {
   if (options.timeout !== undefined && (!Number.isFinite(options.timeout) || options.timeout <= 0)) {
     throw new Error(`callAI: invalid timeout ${options.timeout} (must be positive finite number)`);
   }
-  const logger = createLogger("investigation-requirement", options.cwd);
+  const logger = createLogger("investigation-requirement", options.cwd, options.debug);
   const aiLogger = logger.child("ai-integration");
   aiLogger.debug("callAI invoked", {
     timeout: options.timeout ?? DEFAULT_TIMEOUT,
@@ -37969,8 +37975,8 @@ var CheckpointFormat = {
 
 // src/utils/investigation/report-parser.ts
 init_logger();
-function parseReport(markdown) {
-  const logger = createLogger("report-parser");
+function parseReport(markdown, debug) {
+  const logger = createLogger("report-parser", undefined, debug);
   logger.debug("parseReport input", {
     inputLength: markdown.length,
     inputPreview: markdown.substring(0, 300)
@@ -38484,7 +38490,7 @@ Review report saved to: {reviewPath}
 6. Every section must have substantive content, cannot be empty
 `;
 async function investigationRequirement(description, cwd, options) {
-  const logger = createLogger("investigation-requirement", cwd);
+  const logger = createLogger("investigation-requirement", cwd, options.debug);
   logger.debug("investigation-requirement invoked", {
     mode: options.interactive ? "interactive" : options.feedback ? "feedback" : options.review ? "review" : options.split ? "split" : "new",
     timeout: options.timeout,
@@ -38577,7 +38583,7 @@ async function investigationRequirement(description, cwd, options) {
 }
 async function runNewInvestigation(requirement, cwd, options) {
   const { lang, maxRetry, splitThreshold } = options;
-  const logger = createLogger("investigation-requirement", cwd);
+  const logger = createLogger("investigation-requirement", cwd, options.debug);
   if (!options.quiet) {
     console.log("");
     console.log("\uD83D\uDD0D Starting investigation...");
@@ -38681,7 +38687,8 @@ async function runNewInvestigation(requirement, cwd, options) {
         reviewResult: reviewResult2,
         reviewPath,
         attemptNum,
-        lang
+        lang,
+        debug: options.debug
       });
       const timeoutS = options.timeout ?? DEFAULT_RETRY_TIMEOUT_S;
       report = await withTimeoutRace(generateInvestigationReport(retryPrompt, cwd, {
@@ -38837,7 +38844,7 @@ async function runInteractiveMode(requirement, cwd, options) {
     const prompt = await loadAndRenderTemplate("investigateWithFeedback", { requirement, currentReport: reportMarkdown, feedback, date: new Date().toISOString() }, lang, { mode: options.templateMode ?? "strict" });
     const aiResult = await callAI({ prompt, cwd, outputFormat: "text", timeout: options.timeout, debug: options.debug });
     if (aiResult.success) {
-      report = parseReport(aiResult.output);
+      report = parseReport(aiResult.output, options.debug);
     }
   }
   let subReports = [];
@@ -38883,7 +38890,7 @@ async function runFeedbackMode(requirement, cwd, options) {
     console.log("");
   }
   const existingReportContent = fs29.readFileSync(options.reportPath, "utf-8");
-  const report = parseReport(existingReportContent);
+  const report = parseReport(existingReportContent, options.debug);
   const feedbackContent = requirement || "Please review and improve this report.";
   const prompt = await loadAndRenderTemplate("investigateWithFeedback", {
     requirement: report.metadata.requirementSource,
@@ -38898,7 +38905,7 @@ async function runFeedbackMode(requirement, cwd, options) {
       error: `AI revision failed: ${aiResult.error}`
     };
   }
-  const revisedReport = parseReport(aiResult.output);
+  const revisedReport = parseReport(aiResult.output, options.debug);
   const outputPath = options.reportPath.replace(".md", "-revised.md");
   fs29.writeFileSync(outputPath, generateReport(revisedReport));
   if (!options.quiet) {
@@ -38930,7 +38937,7 @@ async function runReviewMode(requirement, cwd, options) {
     console.log("");
   }
   const reportContent = fs29.readFileSync(options.reportPath, "utf-8");
-  const report = parseReport(reportContent);
+  const report = parseReport(reportContent, options.debug);
   const reviewResult = await reviewReport(report.metadata.requirementSource, report, cwd, lang);
   if (options.json) {
     console.log(JSON.stringify(reviewResult, null, 2));
@@ -38979,7 +38986,7 @@ async function runSplitMode(cwd, options) {
     console.log("");
   }
   const reportContent = fs29.readFileSync(options.reportPath, "utf-8");
-  const report = parseReport(reportContent);
+  const report = parseReport(reportContent, options.debug);
   const result = await runSplitFlow(report, report.metadata.requirementSource, cwd, {
     lang,
     maxRetry,
@@ -39159,7 +39166,7 @@ function getFormatExample(lang) {
 `);
 }
 function buildRetryPrompt(options) {
-  const logger = createLogger("investigation-requirement");
+  const logger = createLogger("investigation-requirement", undefined, options.debug);
   const { requirement, errors, reviewResult, reviewPath, attemptNum, lang } = options;
   logger.debug("buildRetryPrompt input", {
     requirementLength: requirement.length,
@@ -39298,7 +39305,7 @@ async function generateInvestigationReport(requirement, cwd, optionsOrLang, time
   if (!result.success) {
     throw new Error(`Failed to generate investigation report: ${result.error}`);
   }
-  return parseReport(result.output);
+  return parseReport(result.output, opts.debug);
 }
 async function getProjectContext(cwd) {
   const parts = [];
@@ -39335,7 +39342,7 @@ Original requirement: ${requirement}`,
   if (!result.success) {
     throw new Error(`Failed to generate sub-report: ${result.error}`);
   }
-  const subReport = parseReport(result.output);
+  const subReport = parseReport(result.output, debug);
   subReport.metadata.parentReport = "../report.md";
   subReport.metadata.dependsOn = splitItem.dependsOn.length > 0 ? splitItem.dependsOn.map((d) => `sub-${String(d + 1).padStart(2, "0")}.md`) : undefined;
   return subReport;
