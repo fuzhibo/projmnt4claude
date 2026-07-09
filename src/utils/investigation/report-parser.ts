@@ -23,13 +23,42 @@ import {
 
 /**
  * 将 markdown 文本解析为 InvestigationReport 结构化数据
+ * LOG-04/05: 解析器日志增强
  */
 export function parseReport(markdown: string): InvestigationReport {
+  const logger = createLogger('report-parser');
+
+  // LOG-04: 解析输入日志
+  logger.debug('parseReport input', {
+    inputLength: markdown.length,
+    inputPreview: markdown.substring(0, 300),
+  });
+
   const metadata = parseMetadata(markdown);
   const rootCauseAnalysis = parseRootCauseAnalysis(markdown);
   const solutions = parseSolutions(markdown);
   const checkpoints = parseCheckpoints(markdown);
   const assessment = parseAssessment(markdown);
+
+  // LOG-05: 解析结果摘要
+  logger.debug('parseReport result', {
+    metadata: {
+      hasSource: !!metadata.requirementSource,
+      sourceLength: metadata.requirementSource.length,
+    },
+    rootCauseCount: rootCauseAnalysis.length,
+    solutionCount: solutions.length,
+    checkpointCount: checkpoints.length,
+  });
+
+  // LOG-05: 空结果警告
+  if (rootCauseAnalysis.length === 0 || solutions.length === 0) {
+    logger.warn('parseReport returned empty sections', {
+      rootCauseCount: rootCauseAnalysis.length,
+      solutionCount: solutions.length,
+      inputLength: markdown.length,
+    });
+  }
 
   return { metadata, rootCauseAnalysis, solutions, checkpoints, assessment };
 }
@@ -258,10 +287,19 @@ function parseAssessment(md: string): ReportAssessment {
 
 // ---- 工具函数 ----
 
+// LOG-04: 章节提取日志增强
 function extractSection(md: string, zhTitle: string, enTitle: string): string | null {
+  const logger = createLogger('report-parser');
   const re = new RegExp(`^## (?:${escapeRegex(zhTitle)}|${escapeRegex(enTitle)})\\s*\\n([\\s\\S]*?)(?=^## |\\n## |\\n# |(?![\\s\\S]))`, 'm');
   const m = md.match(re);
-  if (!m) return null;
+  if (!m) {
+    logger.debug('extractSection not found', {
+      zhTitle,
+      enTitle,
+      inputPreview: md.substring(0, 500),
+    });
+    return null;
+  }
   return m[1] ?? null;
 }
 

@@ -5,6 +5,43 @@ import { createLogger } from '../logger.js';
 const DEFAULT_TIMEOUT = 300;
 const DEFAULT_ALLOWED_TOOLS: string[] = [];
 
+/**
+ * LOG-02: 简单哈希函数（用于追踪输出内容）
+ */
+function simpleHash(str: string): string {
+  let hash = 0;
+  for (let i = 0; i < str.length; i++) {
+    const char = str.charCodeAt(i);
+    hash = ((hash << 5) - hash) + char;
+    hash = hash & hash;
+  }
+  return hash.toString(16);
+}
+
+/**
+ * LOG-03: 输出格式检查函数
+ */
+function checkOutputFormat(output: string): {
+  hasMetadata: boolean;
+  hasRootCause: boolean;
+  hasSolution: boolean;
+  hasCheckpoints: boolean;
+  hasAllSections: boolean;
+} {
+  const hasMetadata = output.includes('元数据') || output.includes('Metadata');
+  const hasRootCause = output.includes('原因分析') || output.includes('Root Cause');
+  const hasSolution = output.includes('解决方案') || output.includes('Solutions');
+  const hasCheckpoints = output.includes('检查点') || output.includes('Checkpoint');
+
+  return {
+    hasMetadata,
+    hasRootCause,
+    hasSolution,
+    hasCheckpoints,
+    hasAllSections: hasMetadata && hasRootCause && hasSolution,
+  };
+}
+
 // 测试注入点：允许测试通过全局变量注入 mock
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 function getTestMock(name: string): any {
@@ -47,12 +84,36 @@ export async function callAI(options: AICallOptions): Promise<AICallResult> {
       debug: options.debug,
     });
 
-    // 调试日志：输出返回结果
+    // 调试日志：输出返回结果（LOG-02/03: Headless 输出日志）
     aiLogger.debug('callAI result', {
       success: result.success,
       durationMs: result.durationMs,
       outputLength: result.output?.length ?? 0,
+      // LOG-02: 输出内容预览（前 500 字符）
+      outputPreview: result.output ? result.output.substring(0, 500) : null,
+      // LOG-02: 输出内容哈希（用于追踪）
+      outputHash: result.output ? simpleHash(result.output) : null,
+      // LOG-02: 错误信息（如果失败）
+      error: result.error,
     });
+
+    // LOG-03: 初步格式验证
+    if (result.output && result.output.length > 100) {
+      const formatCheck = checkOutputFormat(result.output);
+      aiLogger.debug('callAI output format check', formatCheck);
+
+      if (!formatCheck.hasAllSections) {
+        aiLogger.warn('Headless output missing expected sections', formatCheck);
+      }
+    }
+
+    // LOG-03: 空输出警告
+    if (result.success && (!result.output || result.output.trim().length === 0)) {
+      aiLogger.warn('Headless returned empty output', {
+        success: result.success,
+        durationMs: result.durationMs,
+      });
+    }
 
     // 记录 AI 成本
     if (result.tokensUsed && result.tokensUsed > 0) {
@@ -72,9 +133,10 @@ export async function callAI(options: AICallOptions): Promise<AICallResult> {
       error: result.error,
     };
   } catch (err) {
-    // 调试日志：输出异常
-    aiLogger.debug('callAI exception', {
+    // LOG-02: 增强异常详情
+    aiLogger.error('callAI exception', {
       error: err instanceof Error ? err.message : String(err),
+      stack: err instanceof Error ? err.stack : undefined,
       durationMs: Date.now() - startTime,
     });
 

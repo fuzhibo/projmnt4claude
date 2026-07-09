@@ -1,6 +1,7 @@
 import type { InvestigationReport, RootCauseItem, SolutionItem, ReportCheckpoint, ReportAssessment, OutputMode } from './types';
 import * as fs from 'fs';
 import * as path from 'path';
+import { createLogger } from '../logger.js';
 
 /**
  * 将 InvestigationReport 结构化数据渲染为 markdown 文本
@@ -22,9 +23,22 @@ export function generateReport(report: InvestigationReport, lang: 'zh' | 'en' = 
  * - 目录模式：写入 dir/report.md
  * - 文件模式：写入指定文件路径
  * @returns 写入的文件路径
+ * LOG-11: 最终报告写入日志
  */
 export function writeReport(report: InvestigationReport, mode: OutputMode, cwd: string): string {
+  const logger = createLogger('report-generator', cwd);
   const markdown = generateReport(report, report.metadata.language);
+
+  // LOG-11: 报告生成与写入日志
+  logger.debug('writeReport input', {
+    hasMetadata: !!report.metadata,
+    rootCauseCount: report.rootCauseAnalysis.length,
+    solutionCount: report.solutions.length,
+    checkpointCount: report.checkpoints.length,
+    markdownLength: markdown.length,
+    outputMode: mode.type,
+    outputModePath: mode.path,
+  });
 
   let filePath: string;
   if (mode.type === 'dir') {

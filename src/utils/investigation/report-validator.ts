@@ -1,5 +1,6 @@
 import type { InvestigationReport, ValidationResult, ValidationError, ValidationWarning, ValidationRule } from './types';
 import { PREFIX_MAP } from './types';
+import { createLogger } from '../logger';
 
 /**
  * 八项格式验证规则（investigation 和 init-requirement 共享）
@@ -19,8 +20,19 @@ export const VALIDATION_RULES: ValidationRule[] = [
 
 /**
  * 验证 InvestigationReport 的格式完整性
+ * LOG-06: 验证结果日志增强
  */
 export function validateReport(report: InvestigationReport): ValidationResult {
+  const logger = createLogger('report-validator');
+
+  // LOG-06: 验证输入摘要
+  logger.debug('validateReport input', {
+    hasMetadata: !!report.metadata,
+    rootCauseCount: report.rootCauseAnalysis.length,
+    solutionCount: report.solutions.length,
+    checkpointCount: report.checkpoints.length,
+  });
+
   const errors: ValidationError[] = [];
   const warnings: ValidationWarning[] = [];
 
@@ -120,6 +132,14 @@ export function validateReport(report: InvestigationReport): ValidationResult {
   const warningErrors = errors.filter(e => {
     const rule = VALIDATION_RULES.find(r => r.name === e.rule);
     return rule?.investigationAction === 'warn';
+  });
+
+  // LOG-06: 验证结果详情
+  logger.debug('validateReport result', {
+    blockingErrorCount: blockingErrors.length,
+    warningErrorCount: warningErrors.length,
+    blockingErrors: blockingErrors.map(e => ({ rule: e.rule, message: e.message })),
+    warnings: warningErrors.map(e => ({ rule: e.rule, message: e.message })),
   });
 
   return {

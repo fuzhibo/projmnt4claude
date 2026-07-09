@@ -412,30 +412,64 @@ async function runNewInvestigation(
     }
 
     // SOL-002: 保存当前失败的尝试报告
+    // LOG-07: 增强保存尝试报告日志
     try {
       const attemptPath = await saveAttemptReport(report, attemptOutputDir, attemptNum);
+      logger.info('saveAttemptReport success', {
+        attemptPath,
+        attemptNum,
+        reportStructure: {
+          metadataKeys: Object.keys(report.metadata),
+          rootCauseCount: report.rootCauseAnalysis.length,
+          solutionCount: report.solutions.length,
+        },
+      });
       if (!options.quiet) {
         console.log(`   📄 尝试报告已保存: ${attemptPath}`);
       }
     } catch (saveErr) {
-      logger.warn('save attempt report failed', {
+      // LOG-07: 使用 error 级别，输出完整信息
+      logger.error('saveAttemptReport failed', {
         error: saveErr instanceof Error ? saveErr.message : String(saveErr),
+        stack: saveErr instanceof Error ? saveErr.stack : undefined,
+        attemptOutputDir,
+        attemptNum,
+        reportStructure: {
+          metadataKeys: Object.keys(report.metadata),
+          rootCauseCount: report.rootCauseAnalysis.length,
+          solutionCount: report.solutions.length,
+        },
       });
     }
 
     // SOL-001: 调用 AI 评审生成审核报告并保存
     // SOL-003: reviewResult 提升至外层作用域，供 buildRetryPrompt 使用
+    // LOG-08/09: 增强评审日志
     let reviewPath: string | undefined;
     let reviewResult: ReviewResult | undefined;
     try {
       reviewResult = await reviewReport(requirement, report, cwd, lang, options.timeout, options.debug);
       reviewPath = await saveReviewReport(reviewResult, attemptOutputDir, attemptNum, lang);
+      logger.info('reviewReport success', {
+        reviewPath,
+        attemptNum,
+        pass: reviewResult.pass,
+        scores: reviewResult.scores,
+        issuesCount: reviewResult.issues.length,
+      });
       if (!options.quiet) {
         console.log(`   📋 审核报告已保存: ${reviewPath}`);
       }
     } catch (reviewErr) {
-      logger.warn('review report generation failed', {
+      // LOG-09: 使用 error 级别，输出完整信息
+      logger.error('reviewReport failed', {
         error: reviewErr instanceof Error ? reviewErr.message : String(reviewErr),
+        stack: reviewErr instanceof Error ? reviewErr.stack : undefined,
+        attemptNum,
+        reportStructure: {
+          rootCauseCount: report.rootCauseAnalysis.length,
+          solutionCount: report.solutions.length,
+        },
       });
     }
 
@@ -1130,7 +1164,20 @@ function getFormatExample(lang: 'zh' | 'en'): string {
  * 降级策略：无 reviewResult/reviewPath 时仍保留原始错误反馈，确保异常路径可用。
  */
 function buildRetryPrompt(options: RetryPromptOptions): string {
+  const logger = createLogger('investigation-requirement');
   const { requirement, errors, reviewResult, reviewPath, attemptNum, lang } = options;
+
+  // LOG-10: 重试提示词构建日志
+  logger.debug('buildRetryPrompt input', {
+    requirementLength: requirement.length,
+    errorCount: errors.length,
+    errorRules: errors.map(e => e.rule),
+    hasReviewResult: !!reviewResult,
+    reviewIssueCount: reviewResult?.issues?.length ?? 0,
+    reviewScores: reviewResult?.scores,
+    attemptNum,
+    lang,
+  });
 
   // 构建错误摘要（含 rule 标识，便于 AI 定位校验规则）
   const errorSummary = errors

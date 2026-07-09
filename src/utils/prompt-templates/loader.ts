@@ -7,6 +7,7 @@
 
 import { investigationTemplates as zhTemplates } from './i18n/zh.js';
 import { investigationTemplates as enTemplates } from './i18n/en.js';
+import { createLogger } from '../logger.js';
 
 // init-requirement 模板使用动态导入，避免测试时拉入庞大的模板字符串导致 OOM
 let zhInitTemplates: Record<string, string> | undefined;
@@ -96,6 +97,7 @@ export interface RenderTemplateOptions {
 
 /**
  * 渲染模板：替换 {placeholder} 风格的占位符
+ * LOG-01: 模板渲染日志增强
  *
  * @param template - 模板字符串，包含 {placeholder} 风格的占位符
  * @param params - 占位符替换值映射
@@ -108,11 +110,21 @@ export function renderTemplate(
   params: Record<string, string>,
   options?: RenderTemplateOptions,
 ): string {
+  const logger = createLogger('prompt-templates');
   const {
     mode = 'lenient',
     autoFillDefaults = {},
     onUnreplaced,
   } = options ?? {};
+
+  // LOG-01: 记录模板渲染输入
+  logger.debug('renderTemplate input', {
+    templateLength: template.length,
+    paramsKeys: Object.keys(params),
+    paramsPreview: Object.fromEntries(
+      Object.entries(params).map(([k, v]) => [k, v.substring(0, 100)])
+    ),
+  });
 
   const result = template.replace(/\{(\w+)\}/g, (match, key: string) => {
     if (key in params) {
@@ -125,6 +137,11 @@ export function renderTemplate(
   const unmatched = result.match(/\{(\w+)\}/g);
   if (unmatched) {
     const placeholderNames = [...new Set(unmatched.map(m => m.slice(1, -1)))];
+
+    // LOG-01: 检测到未替换占位符
+    logger.warn('renderTemplate has unreplaced placeholders', {
+      placeholders: placeholderNames,
+    });
 
     // 回调通知
     onUnreplaced?.(placeholderNames);

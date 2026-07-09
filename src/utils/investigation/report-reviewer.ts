@@ -2,9 +2,11 @@ import type { InvestigationReport, ReviewResult, ReviewIssue } from './types';
 import { callAIForJSON } from './ai-integration';
 import { loadAndRenderTemplate } from '../prompt-templates/loader';
 import { generateReport } from './report-generator';
+import { createLogger } from '../logger';
 
 /**
  * 对调查报告进行 AI 质量评审（三维度评分）
+ * LOG-08: AI 评审器日志
  */
 export async function reviewReport(
   requirement: string,
@@ -14,13 +16,52 @@ export async function reviewReport(
   timeout?: number,
   debug?: boolean,
 ): Promise<ReviewResult> {
+  const logger = createLogger('report-reviewer', cwd);
   const reportMarkdown = generateReport(report);
+
+  // LOG-08: 评审输入日志
+  logger.debug('reviewReport input', {
+    requirementLength: requirement.length,
+    requirementPreview: requirement.substring(0, 200),
+    reportLength: reportMarkdown.length,
+    reportPreview: reportMarkdown.substring(0, 500),
+    reportStructure: {
+      rootCauseCount: report.rootCauseAnalysis.length,
+      solutionCount: report.solutions.length,
+      checkpointCount: report.checkpoints.length,
+    },
+  });
+
   const prompt = await loadAndRenderTemplate('review', { requirement, report: reportMarkdown }, lang, { mode: 'strict' });
 
-  return callAIForJSON<ReviewResult>(
+  const result = await callAIForJSON<ReviewResult>(
     { prompt, cwd, timeout, debug },
     validateReviewResult,
   );
+
+  // LOG-08: 评审输出日志
+  logger.debug('reviewReport output', {
+    pass: result.pass,
+    scores: result.scores,
+    issuesCount: result.issues.length,
+    criticalIssues: result.issues.filter(i => i.severity === 'critical').length,
+    majorIssues: result.issues.filter(i => i.severity === 'major').length,
+    issuesPreview: result.issues.slice(0, 5).map(i => ({
+      dimension: i.dimension,
+      severity: i.severity,
+      description: i.description.substring(0, 100),
+    })),
+  });
+
+  // LOG-08: 高分但空内容警告
+  if (result.pass && report.rootCauseAnalysis.length === 0) {
+    logger.warn('reviewReport passed with empty rootCauseAnalysis', {
+      scores: result.scores,
+      pass: result.pass,
+    });
+  }
+
+  return result;
 }
 
 /**
