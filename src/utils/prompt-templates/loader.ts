@@ -29,7 +29,7 @@ async function getEnInitTemplates(): Promise<Record<string, string>> {
   return enInitTemplates;
 }
 
-const baseRegistry: Record<string, Record<string, Record<string, string>>> = {
+const baseRegistry: Record<string, Record<string, string>> = {
   zh: { ...zhTemplates },
   en: { ...enTemplates },
 };
@@ -126,9 +126,9 @@ export function renderTemplate(
     ),
   });
 
-  const result = template.replace(/\{(\w+)\}/g, (match, key: string) => {
+  const result = template.replace(/\{(\w+)\}/g, (match, key: string): string => {
     if (key in params) {
-      return params[key];
+      return params[key] ?? match;
     }
     return match;
   });
