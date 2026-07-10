@@ -93,12 +93,13 @@ export async function callAI(options: AICallOptions): Promise<AICallResult> {
     });
   }
 
-  // 调试日志：输出调用参数
-  aiLogger.debug('callAI invoked', {
-    timeout: options.timeout ?? DEFAULT_TIMEOUT,
+  // 调试日志：输出调用参数（SOL-003: 增强）
+  aiLogger.info('callAI started', {
+    promptPreview: prompt.slice(0, 200) + (prompt.length > 200 ? '...' : ''),
+    allowedTools: effectiveAllowedTools,
     cwd: options.cwd,
+    timeout: options.timeout ?? DEFAULT_TIMEOUT,
     outputFormat: options.outputFormat,
-    promptLength: prompt.length,
     outputFile: outputFile ?? null,
   });
 
@@ -149,20 +150,14 @@ export async function callAI(options: AICallOptions): Promise<AICallResult> {
       }
     }
 
-    // 调试日志：输出返回结果（LOG-02/03: Headless 输出日志）
-    aiLogger.debug('callAI result', {
+    // SOL-003: 增强 Headless 输出日志
+    aiLogger.info('callAI completed', {
       success: result.success,
       durationMs: result.durationMs,
       outputLength: finalOutput?.length ?? 0,
-      // LOG-02: 输出内容预览（前 500 字符）
-      outputPreview: finalOutput ? finalOutput.substring(0, 500) : null,
-      // LOG-02: 输出内容哈希（用于追踪）
-      outputHash: finalOutput ? simpleHash(finalOutput) : null,
-      // LOG-02: 错误信息（如果失败）
-      error: result.error,
-      // SOL-002: 文件优先流程信息
       outputPath: outputPath ?? null,
       usedFileFlow: !!outputFile,
+      outputHash: finalOutput ? simpleHash(finalOutput) : null,
     });
 
     // LOG-03: 初步格式验证
@@ -192,6 +187,20 @@ export async function callAI(options: AICallOptions): Promise<AICallResult> {
         outputTokens: result.tokensUsed,
         totalTokens: result.tokensUsed,
       });
+    }
+
+    // SOL-003: debug 模式下保存原始输出到文件
+    if (options.debug && finalOutput) {
+      const debugOutputPath = path.join(options.cwd, 'debug-output.md');
+      try {
+        fs.writeFileSync(debugOutputPath, finalOutput, 'utf-8');
+        aiLogger.info('SOL-003: Raw output saved', { path: debugOutputPath });
+      } catch (writeErr) {
+        aiLogger.warn('SOL-003: Failed to save debug output', {
+          path: debugOutputPath,
+          error: writeErr instanceof Error ? writeErr.message : String(writeErr),
+        });
+      }
     }
 
     return {
