@@ -82,6 +82,11 @@ export interface AgentInvokeOptions {
   maxBudgetUsd?: number;
   /** 调试模式（对应 --debug） */
   debug?: boolean;
+  /**
+   * SOL-007: 指定输出文件路径（让 AI 通过 Write 工具写入）
+   * 当设置时，prompt 会自动包含文件路径指令，确保 AI 输出到文件而非 stdout。
+   */
+  outputFile?: string;
 }
 
 /** Agent 调用结果 */
@@ -378,6 +383,8 @@ export class ClaudeCodeProvider implements HeadlessAgent {
       sessionState: options.sessionState,
       resumeSession: options.resumeSession,
       forkSession: options.forkSession,
+      // SOL-007: 文件优先流程
+      outputFile: options.outputFile,
       // 新增: 资源控制相关选项
       bare: options.bare,
       noSessionPersistence: options.noSessionPersistence,

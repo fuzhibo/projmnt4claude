@@ -165,6 +165,8 @@ export interface AICallOptions {
   cwd: string;
   /** 调试模式：输出详细日志 */
   debug?: boolean;
+  /** SOL-007: 指定输出文件路径，让 AI 通过 Write 工具写入 */
+  outputFile?: string;
 }
 
 export interface AICallResult {
@@ -172,6 +174,8 @@ export interface AICallResult {
   success: boolean;
   durationMs: number;
   error?: string;
+  /** SOL-007: 当使用 outputFile 时，返回实际写入的文件路径 */
+  outputPath?: string;
 }
 
 // ============================================================

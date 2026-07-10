@@ -1,3 +1,5 @@
+import * as fs from 'fs';
+import * as path from 'path';
 import type { AICallOptions, AICallResult } from './types';
 import type { AgentResult } from '../headless-agent.js';
 import { createLogger } from '../logger.js';
@@ -52,6 +54,13 @@ function getTestMock(name: string): any {
  * 统一的 AI 调用入口
  *
  * 内部复用 invokeAgent → runHeadlessClaude 接口。
+ *
+ * SOL-002: 文件优先流程
+ * 当 options.outputFile 指定时：
+ * 1. 在 prompt 中嵌入文件路径指令，引导 AI 通过 Write 工具写入文件
+ * 2. 确保 allowedTools 包含 'Write'
+ * 3. 调用后检查文件存在性，读取文件内容返回
+ * 4. 返回结果中设置 outputPath
  */
 export async function callAI(options: AICallOptions): Promise<AICallResult> {
   const startTime = Date.now();
@@ -64,42 +73,101 @@ export async function callAI(options: AICallOptions): Promise<AICallResult> {
   const logger = createLogger('investigation-requirement', options.cwd, options.debug);
   const aiLogger = logger.child('ai-integration');
 
+  // SOL-002: 文件优先流程 — 在 prompt 中嵌入文件路径指令
+  let prompt = options.prompt;
+  const outputFile = options.outputFile;
+  let effectiveAllowedTools = options.allowedTools ?? DEFAULT_ALLOWED_TOOLS;
+
+  if (outputFile) {
+    const filePathInstruction = `\n\n【重要】请将你的完整输出写入以下文件：${outputFile}\n`;
+    prompt = prompt + filePathInstruction;
+
+    // 确保 allowedTools 包含 'Write'
+    if (!effectiveAllowedTools.includes('Write')) {
+      effectiveAllowedTools = [...effectiveAllowedTools, 'Write'];
+    }
+
+    aiLogger.debug('SOL-002: 文件优先流程已启用', {
+      outputFile,
+      allowedTools: effectiveAllowedTools,
+    });
+  }
+
   // 调试日志：输出调用参数
   aiLogger.debug('callAI invoked', {
     timeout: options.timeout ?? DEFAULT_TIMEOUT,
     cwd: options.cwd,
     outputFormat: options.outputFormat,
-    promptLength: options.prompt.length,
+    promptLength: prompt.length,
+    outputFile: outputFile ?? null,
   });
 
   try {
     // 动态导入避免测试时拉入庞大的依赖树（harness-helpers 等）
     const { invokeAgent } = await import('../headless-agent.js');
-    const result: AgentResult = await invokeAgent(options.prompt, {
+    const result: AgentResult = await invokeAgent(prompt, {
       timeout: options.timeout ?? DEFAULT_TIMEOUT,
-      allowedTools: options.allowedTools ?? DEFAULT_ALLOWED_TOOLS,
+      allowedTools: effectiveAllowedTools,
       outputFormat: options.outputFormat,
       cwd: options.cwd,
       dangerouslySkipPermissions: true,
       debug: options.debug,
+      // SOL-002: 传递 outputFile 到 headless-agent
+      outputFile: outputFile,
     });
+
+    // SOL-002: 文件优先流程 — 从文件读取输出
+    let finalOutput = result.output;
+    let outputPath: string | undefined = undefined;
+
+    if (outputFile && result.success) {
+      const absolutePath = path.isAbsolute(outputFile)
+        ? outputFile
+        : path.join(options.cwd, outputFile);
+
+      aiLogger.debug('SOL-002: 检查输出文件存在性', { absolutePath });
+
+      if (fs.existsSync(absolutePath)) {
+        try {
+          const fileContent = fs.readFileSync(absolutePath, 'utf-8');
+          finalOutput = fileContent;
+          outputPath = absolutePath;
+          aiLogger.info('SOL-002: 已从文件读取输出', {
+            absolutePath,
+            contentLength: fileContent.length,
+          });
+        } catch (readErr) {
+          aiLogger.warn('SOL-002: 读取输出文件失败，回退到 stdout', {
+            absolutePath,
+            error: readErr instanceof Error ? readErr.message : String(readErr),
+          });
+        }
+      } else {
+        aiLogger.warn('SOL-002: 输出文件不存在，回退到 stdout', {
+          absolutePath,
+        });
+      }
+    }
 
     // 调试日志：输出返回结果（LOG-02/03: Headless 输出日志）
     aiLogger.debug('callAI result', {
       success: result.success,
       durationMs: result.durationMs,
-      outputLength: result.output?.length ?? 0,
+      outputLength: finalOutput?.length ?? 0,
       // LOG-02: 输出内容预览（前 500 字符）
-      outputPreview: result.output ? result.output.substring(0, 500) : null,
+      outputPreview: finalOutput ? finalOutput.substring(0, 500) : null,
       // LOG-02: 输出内容哈希（用于追踪）
-      outputHash: result.output ? simpleHash(result.output) : null,
+      outputHash: finalOutput ? simpleHash(finalOutput) : null,
       // LOG-02: 错误信息（如果失败）
       error: result.error,
+      // SOL-002: 文件优先流程信息
+      outputPath: outputPath ?? null,
+      usedFileFlow: !!outputFile,
     });
 
     // LOG-03: 初步格式验证
-    if (result.output && result.output.length > 100) {
-      const formatCheck = checkOutputFormat(result.output);
+    if (finalOutput && finalOutput.length > 100) {
+      const formatCheck = checkOutputFormat(finalOutput);
       aiLogger.debug('callAI output format check', formatCheck);
 
       if (!formatCheck.hasAllSections) {
@@ -108,7 +176,7 @@ export async function callAI(options: AICallOptions): Promise<AICallResult> {
     }
 
     // LOG-03: 空输出警告
-    if (result.success && (!result.output || result.output.trim().length === 0)) {
+    if (result.success && (!finalOutput || finalOutput.trim().length === 0)) {
       aiLogger.warn('Headless returned empty output', {
         success: result.success,
         durationMs: result.durationMs,
@@ -127,10 +195,12 @@ export async function callAI(options: AICallOptions): Promise<AICallResult> {
     }
 
     return {
-      output: result.output,
+      output: finalOutput,
       success: result.success,
       durationMs: result.durationMs,
       error: result.error,
+      // SOL-002: 文件优先流程返回文件路径
+      outputPath: outputPath,
     };
   } catch (err) {
     // LOG-02: 增强异常详情

@@ -368,25 +368,33 @@ async function runNewInvestigation(
     console.log('');
   }
 
-  // Step 1: 生成调查报告
-  let report = await withTimeoutRace(
-    generateInvestigationReport(requirement, cwd, {
-      lang,
-      timeout: options.timeout,
-      debug: options.debug,
-      templateMode: options.templateMode,
-    }),
-    (options.timeout ?? DEFAULT_RETRY_TIMEOUT_S) * 1000,
-    'generateInvestigationReport(initial)',
-  );
-
-  // Step 1.5: 格式验证 + 循环重试（附回退机制）
-  // SOL-002: 确定尝试报告输出目录
+  // SOL-002: 确定尝试报告输出目录（提前到生成报告之前）
   const attemptOutputDir = options.outputDir ?? determineOutputMode(options, cwd).path;
   if (!fs.existsSync(attemptOutputDir)) {
     fs.mkdirSync(attemptOutputDir, { recursive: true });
   }
 
+  // Step 1: 生成调查报告
+  // SOL-002: 文件优先流程 — 确定临时输出文件路径
+  const tempOutputFile = path.join(attemptOutputDir, `report-generated-${Date.now()}.md`);
+
+  const initialResult = await withTimeoutRace(
+    generateInvestigationReport(requirement, cwd, {
+      lang,
+      timeout: options.timeout,
+      debug: options.debug,
+      templateMode: options.templateMode,
+      // SOL-002: 启用文件优先流程
+      outputFile: tempOutputFile,
+    }),
+    (options.timeout ?? DEFAULT_RETRY_TIMEOUT_S) * 1000,
+    'generateInvestigationReport(initial)',
+  );
+
+  let report = initialResult.report;
+  let generatedOutputPath = initialResult.outputPath;
+
+  // Step 1.5: 格式验证 + 循环重试（附回退机制）
   let retryCount = 0;
   let lastValidReport: InvestigationReport | null = null;
 
@@ -498,17 +506,25 @@ async function runNewInvestigation(
 
       const timeoutS = options.timeout ?? DEFAULT_RETRY_TIMEOUT_S;
 
-      report = await withTimeoutRace(
+      // SOL-002: 重试时也使用文件优先流程
+      const retryOutputFile = path.join(attemptOutputDir, `report-generated-retry-${Date.now()}.md`);
+
+      const retryResult = await withTimeoutRace(
         generateInvestigationReport(retryPrompt, cwd, {
           rawPrompt: retryPrompt,
           lang,
           timeout: options.timeout,
           debug: options.debug,
           templateMode: options.templateMode,
+          // SOL-002: 启用文件优先流程
+          outputFile: retryOutputFile,
         }),
         timeoutS * 1000,
         'generateInvestigationReport(retry)',
       );
+
+      report = retryResult.report;
+      generatedOutputPath = retryResult.outputPath;
     } catch (err) {
       const errorType = classifyRetryError(err instanceof Error ? err : new Error(String(err)));
 
@@ -557,16 +573,40 @@ async function runNewInvestigation(
     }
   }
 
-  // SOL-002: 保存最终报告快照到尝试目录，与 report-attempt-N.md 并列，便于追溯
-  try {
-    const finalPath = await saveFinalReport(report, attemptOutputDir);
-    if (!options.quiet) {
-      console.log(`   📄 最终报告快照已保存: ${finalPath}`);
+  // SOL-002 Step 8: 保存最终报告
+  // 如果 AI 成功写入文件，使用该文件；否则基于内存对象生成
+  let finalReportPath: string;
+  if (generatedOutputPath && fs.existsSync(generatedOutputPath)) {
+    // AI 成功写入文件，使用该文件作为最终报告
+    finalReportPath = path.join(attemptOutputDir, 'report-final.md');
+    try {
+      // 确保目标目录存在
+      if (!fs.existsSync(attemptOutputDir)) {
+        fs.mkdirSync(attemptOutputDir, { recursive: true });
+      }
+      // 移动文件到最终位置
+      fs.renameSync(generatedOutputPath, finalReportPath);
+      logger.info('SOL-002 Step 8: 已移动临时文件到最终位置', {
+        from: generatedOutputPath,
+        to: finalReportPath,
+      });
+    } catch (moveErr) {
+      // 移动失败，回退到重新生成
+      logger.warn('SOL-002 Step 8: 移动文件失败，回退到重新生成', {
+        error: moveErr instanceof Error ? moveErr.message : String(moveErr),
+      });
+      finalReportPath = await saveFinalReport(report, attemptOutputDir);
     }
-  } catch (saveErr) {
-    logger.warn('save final report snapshot failed', {
-      error: saveErr instanceof Error ? saveErr.message : String(saveErr),
+  } else {
+    // AI 未写入文件，基于内存对象生成
+    finalReportPath = await saveFinalReport(report, attemptOutputDir);
+    logger.info('SOL-002 Step 8: AI 未写入文件，已基于内存对象生成最终报告', {
+      path: finalReportPath,
     });
+  }
+
+  if (!options.quiet) {
+    console.log(`   📄 最终报告已保存: ${finalReportPath}`);
   }
 
   // Step 2: AI 评审闭环
@@ -658,7 +698,8 @@ async function runInteractiveMode(
   console.log('');
 
   // Step 1: 生成初始报告
-  let report = await generateInvestigationReport(requirement, cwd, { lang, templateMode: options.templateMode });
+  const initialResult = await generateInvestigationReport(requirement, cwd, { lang, templateMode: options.templateMode });
+  let report = initialResult.report;
   let reportPath = '';
 
   // Step 2: 用户评审循环
@@ -1385,6 +1426,10 @@ function withTimeoutRace<T>(promise: Promise<T>, timeoutMs: number, label: strin
 
 /**
  * 生成调查报告
+ *
+ * SOL-002: 文件优先流程
+ * 当 outputFile 指定时，AI 会通过 Write 工具将报告写入文件，
+ * 然后 callAI 会读取文件内容返回，避免 stdout 解析问题。
  */
 interface GenerateInvestigationReportOptions {
   lang: 'zh' | 'en';
@@ -1394,6 +1439,15 @@ interface GenerateInvestigationReportOptions {
   rawPrompt?: string;
   /** 模板渲染模式：strict（默认）、lenient、auto-fill */
   templateMode?: RenderTemplateMode;
+  /** SOL-002: 指定输出文件路径，启用文件优先流程 */
+  outputFile?: string;
+}
+
+/** SOL-002: generateInvestigationReport 返回结果 */
+interface GenerateInvestigationReportResult {
+  report: InvestigationReport;
+  /** 文件优先流程实际写入的文件路径（如果 AI 成功写入文件） */
+  outputPath?: string;
 }
 
 async function generateInvestigationReport(
@@ -1402,7 +1456,7 @@ async function generateInvestigationReport(
   optionsOrLang: GenerateInvestigationReportOptions | 'zh' | 'en',
   timeout?: number,
   debug?: boolean,
-): Promise<InvestigationReport> {
+): Promise<GenerateInvestigationReportResult> {
   // 兼容旧签名：直接传 lang 字符串
   const opts: GenerateInvestigationReportOptions =
     typeof optionsOrLang === 'string'
@@ -1429,13 +1483,27 @@ async function generateInvestigationReport(
     );
   }
 
-  const result = await callAI({ prompt, cwd, outputFormat: 'text', timeout: opts.timeout, debug: opts.debug, allowedTools: ['Read', 'Edit', 'Write', 'Bash', 'Grep', 'Glob'] });
+  // SOL-002: 调用 AI 时传递 outputFile，启用文件优先流程
+  const result = await callAI({
+    prompt,
+    cwd,
+    outputFormat: 'text',
+    timeout: opts.timeout,
+    debug: opts.debug,
+    allowedTools: ['Read', 'Edit', 'Write', 'Bash', 'Grep', 'Glob'],
+    outputFile: opts.outputFile,
+  });
 
   if (!result.success) {
     throw new Error(`Failed to generate investigation report: ${result.error}`);
   }
 
-  return parseReport(result.output, opts.debug);
+  // SOL-002: 返回报告和文件路径
+  const report = parseReport(result.output, opts.debug);
+  return {
+    report,
+    outputPath: result.outputPath,
+  };
 }
 
 /**
