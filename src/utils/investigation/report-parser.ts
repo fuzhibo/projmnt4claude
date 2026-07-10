@@ -24,9 +24,14 @@ import {
 /**
  * 将 markdown 文本解析为 InvestigationReport 结构化数据
  * LOG-04/05: 解析器日志增强
+ * SOL-003: 支持传递 checkpoint 解析选项
  */
-export function parseReport(markdown: string, debug?: boolean): InvestigationReport {
-  const logger = createLogger('report-parser', undefined, debug);
+export function parseReport(markdown: string, checkpointOptions?: ParseCheckpointsOptions | boolean): InvestigationReport {
+  const logger = createLogger('report-parser');
+
+  // 兼容旧调用：boolean 参数视为 debug 标志（已废弃）
+  const options: ParseCheckpointsOptions | undefined =
+    typeof checkpointOptions === 'boolean' ? undefined : checkpointOptions;
 
   // LOG-04: 解析输入日志
   logger.debug('parseReport input', {
@@ -37,7 +42,8 @@ export function parseReport(markdown: string, debug?: boolean): InvestigationRep
   const metadata = parseMetadata(markdown);
   const rootCauseAnalysis = parseRootCauseAnalysis(markdown);
   const solutions = parseSolutions(markdown);
-  const checkpoints = parseCheckpoints(markdown);
+  // SOL-003: 支持传递 checkpoint 解析选项
+  const checkpoints = parseCheckpoints(markdown, options);
   const assessment = parseAssessment(markdown);
 
   // LOG-05: 解析结果摘要
@@ -201,14 +207,33 @@ function parseCheckpoints(md: string, options: ParseCheckpointsOptions = {}): Re
   const tolerance = options.tolerance ?? 'normal';
   const warnOnInvalid = options.warnOnInvalidFormat ?? false;
   const inferBelongsTo = options.inferBelongsTo ?? true;
+  const shouldValidateContract = options.validateContract !== false;
+
+  // SOL-002: strict 模式前置契约验证
+  if (shouldValidateContract && tolerance === 'strict') {
+    const contractResult = CheckpointFormat.validateContract(sectionMd);
+    if (!contractResult.valid) {
+      const logger = createLogger('report-parser');
+      logger.warn('strict mode: contract validation failed, rejecting checkpoints', {
+        errors: contractResult.errors,
+        warnings: contractResult.warnings,
+      });
+      return []; // strict 拒绝契约错误
+    }
+  }
 
   // 收集所有可能的检查点行（用于日志和回退）
   const unparsedLines: string[] = [];
 
   // 根据容错级别选择解析策略
   if (tolerance === 'strict') {
-    // strict: 仅使用完整格式
-    parseWithRegex(CHECKPOINT_REGEX.full, true);
+    // SOL-002: strict 模式 - 先尝试完整格式，再尝试简化格式（契约验证已通过）
+    // 层级1: 完整格式（有 → belongsTo）
+    parseWithRegex(CHECKPOINT_REGEX.full, false);
+    // 层级2: 如果匹配数不足，尝试简化格式（从分组标题推断 belongsTo）
+    if (items.length === 0) {
+      parseWithRegex(CHECKPOINT_REGEX.simple, false);
+    }
   } else if (tolerance === 'loose') {
     // loose: 仅使用极简格式
     parseWithRegex(CHECKPOINT_REGEX.simple, false);

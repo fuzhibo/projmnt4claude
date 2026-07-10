@@ -143,7 +143,7 @@ export interface InvestigationConfig {
 // 解析器容错配置 (CA-005)
 // ============================================================
 
-/** parseCheckpoints 容错配置选项 */
+/** parseCheckpoints 容错配置选项 (CA-005 / SOL-003) */
 export interface ParseCheckpointsOptions {
   /** 容错级别: strict(仅完整格式) | normal(三层回退) | loose(极简格式) */
   tolerance?: 'strict' | 'normal' | 'loose';
@@ -151,6 +151,8 @@ export interface ParseCheckpointsOptions {
   warnOnInvalidFormat?: boolean;
   /** 是否从分组标题推断缺失的 belongsTo */
   inferBelongsTo?: boolean;
+  /** 是否在解析前验证契约（SOL-003: 默认 true，设为 false 可跳过） */
+  validateContract?: boolean;
 }
 
 // ============================================================
