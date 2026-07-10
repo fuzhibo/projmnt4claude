@@ -35,7 +35,7 @@ export async function reviewReport(
   const prompt = await loadAndRenderTemplate('review', { requirement, report: reportMarkdown }, lang, { mode: 'strict' });
 
   const result = await callAIForJSON<ReviewResult>(
-    { prompt, cwd, timeout, debug },
+    { prompt, cwd, timeout, debug, allowedTools: ['Read'] },
     validateReviewResult,
   );
 

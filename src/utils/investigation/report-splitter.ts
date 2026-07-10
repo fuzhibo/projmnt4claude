@@ -25,7 +25,7 @@ export async function generateSplitPlan(
   const prompt = await loadAndRenderTemplate('split', { report: reportMarkdown }, lang, { mode: 'strict' });
 
   const { callAIForJSON } = await import('./ai-integration');
-  return callAIForJSON<SplitPlan>({ prompt, cwd }, validateSplitPlan);
+  return callAIForJSON<SplitPlan>({ prompt, cwd, allowedTools: ['Read'] }, validateSplitPlan);
 }
 
 /**
@@ -42,7 +42,7 @@ export async function reviewSplitPlan(
   const prompt = await loadAndRenderTemplate('splitReview', { reportSummary: summary, splitPlan: planJson }, lang, { mode: 'strict' });
 
   const { callAIForJSON } = await import('./ai-integration');
-  return callAIForJSON<SplitReviewResult>({ prompt, cwd }, validateSplitReviewResult);
+  return callAIForJSON<SplitReviewResult>({ prompt, cwd, allowedTools: ['Read'] }, validateSplitReviewResult);
 }
 
 /**

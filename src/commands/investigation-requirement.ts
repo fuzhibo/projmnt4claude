@@ -702,7 +702,7 @@ async function runInteractiveMode(
       { mode: options.templateMode ?? 'strict' },
     );
 
-    const aiResult = await callAI({ prompt, cwd, outputFormat: 'text', timeout: options.timeout, debug: options.debug });
+    const aiResult = await callAI({ prompt, cwd, outputFormat: 'text', timeout: options.timeout, debug: options.debug, allowedTools: ['Read', 'Edit', 'Write'] });
     if (aiResult.success) {
       report = parseReport(aiResult.output, options.debug);
     }
@@ -785,7 +785,7 @@ async function runFeedbackMode(
     { mode: options.templateMode ?? 'strict' },
   );
 
-  const aiResult = await callAI({ prompt, cwd, outputFormat: 'text', timeout: options.timeout, debug: options.debug });
+  const aiResult = await callAI({ prompt, cwd, outputFormat: 'text', timeout: options.timeout, debug: options.debug, allowedTools: ['Read', 'Write'] });
 
   if (!aiResult.success) {
     return {
@@ -1429,7 +1429,7 @@ async function generateInvestigationReport(
     );
   }
 
-  const result = await callAI({ prompt, cwd, outputFormat: 'text', timeout: opts.timeout, debug: opts.debug });
+  const result = await callAI({ prompt, cwd, outputFormat: 'text', timeout: opts.timeout, debug: opts.debug, allowedTools: ['Read', 'Edit', 'Write', 'Bash', 'Grep', 'Glob'] });
 
   if (!result.success) {
     throw new Error(`Failed to generate investigation report: ${result.error}`);
@@ -1490,7 +1490,7 @@ async function generateSubReport(
     { mode: templateMode ?? 'strict' },
   );
 
-  const result = await callAI({ prompt: subPrompt, cwd, outputFormat: 'text', timeout, debug });
+  const result = await callAI({ prompt: subPrompt, cwd, outputFormat: 'text', timeout, debug, allowedTools: ['Read', 'Edit', 'Write', 'Bash', 'Grep', 'Glob'] });
 
   if (!result.success) {
     throw new Error(`Failed to generate sub-report: ${result.error}`);
