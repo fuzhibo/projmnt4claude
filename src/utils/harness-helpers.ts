@@ -5,6 +5,7 @@
  */
 
 import * as fs from 'fs';
+import * as os from 'os';
 import * as path from 'path';
 // process.ppid 是 Node.js 内置属性（9.3+），无需单独导入
 import type { TaskMeta, CheckpointMetadata } from '../types/task.js';
@@ -69,6 +70,10 @@ export const DEFAULT_TIMEOUT_SECONDS = 300;
 
 /** 审核阶段超时比例（使用总超时的 1/3） */
 export const REVIEW_TIMEOUT_RATIO = 3;
+
+// SOL-001: 提示词文件传递阈值（字节）
+// 当提示词超过此阈值时，自动切换为临时文件传递模式
+const PROMPT_FILE_THRESHOLD_BYTES = 4096;
 
 // ============================================================
 // 类型定义
@@ -352,6 +357,10 @@ export async function runHeadlessClaude(options: HeadlessClaudeOptions): Promise
   const originalCliMode = process.env.CLAUDE_CLI_MODE;
   const originalSpawnDepth = process.env.CLAUDE_SPAWN_DEPTH;
 
+  // SOL-001: 临时文件路径和清理状态（在外层 try 块之前声明，确保 finally 块可访问）
+  let tempFile: string | undefined;
+  let tempFileCleaned = false;
+
   try {
     // 设置环境标记（子进程继承）
     process.env.CLAUDE_CLI_MODE = 'headless';
@@ -426,6 +435,17 @@ export async function runHeadlessClaude(options: HeadlessClaudeOptions): Promise
       args.push('--debug');
     }
 
+    // SOL-001: 基于阈值选择传递模式
+    const promptBytes = Buffer.byteLength(options.prompt, 'utf8');
+    const useFileMode = promptBytes > PROMPT_FILE_THRESHOLD_BYTES;
+
+    logger.info('prompt_mode_decision', {
+      promptBytes,
+      threshold: PROMPT_FILE_THRESHOLD_BYTES,
+      useFileMode,
+      promptChars: options.prompt.length,
+    });
+
     // spawn + promise 部分用内层 try-catch 捕获 spawn 级同步错误并 resolve 为失败结果
     // 验证错误（如 deriveSessionStateFromLegacyFlags/buildSessionCliArgs 抛出）不在此 catch 范围内，
     // 会向上传播为 rejection，保持 V2.1 forked 拒绝语义
@@ -440,29 +460,37 @@ export async function runHeadlessClaude(options: HeadlessClaudeOptions): Promise
 
       // PID 已由 spawnWithMemoryLimit 自动注册到 child-process-registry（CP-01/CP-02/CP-03）
 
-      // 通过 stdin 传递 prompt（分块写入以避免大数据丢失）
-      if (child.stdin) {
-        const chunkSize = 4096;
-        let offset = 0;
+      // SOL-001: 根据阈值选择传递模式
+      if (useFileMode) {
+        // 临时文件模式：解决复杂提示词输出不稳定问题
+        tempFile = path.join(os.tmpdir(), `claude-prompt-${Date.now()}-${process.pid}.txt`);
+        try {
+          fs.writeFileSync(tempFile, options.prompt, 'utf8');
 
-        const writeNextChunk = (): void => {
-          if (offset >= options.prompt.length) {
-            child.stdin!.end();
-            return;
-          }
+          logger.info('temp_file_created', {
+            tempFile,
+            fileSize: fs.statSync(tempFile).size,
+            promptBytes,
+            promptChars: options.prompt.length,
+          });
 
-          const chunk = options.prompt.substring(offset, offset + chunkSize);
-          offset += chunkSize;
+          const readStream = fs.createReadStream(tempFile, 'utf8');
+          readStream.pipe(child.stdin!);
 
-          const result = child.stdin!.write(chunk);
-          if (!result) {
-            child.stdin!.once('drain', writeNextChunk);
-          } else {
-            writeNextChunk();
-          }
-        };
-
-        writeNextChunk();
+          logger.info('file_stream_started', { tempFile, promptBytes });
+        } catch (fileError) {
+          // 文件创建失败，回退到 stdin 模式
+          const failedTempFile = tempFile;
+          tempFile = undefined;
+          logger.error('temp_file_create_failed', {
+            tempFile: failedTempFile,
+            error: fileError instanceof Error ? fileError.message : String(fileError),
+          });
+          writePromptViaStdin(child, options.prompt);
+        }
+      } else {
+        // stdin 模式：通过 stdin 分块写入
+        writePromptViaStdin(child, options.prompt);
       }
 
       return await new Promise<HeadlessClaudeResult>((resolve) => {
@@ -482,6 +510,16 @@ export async function runHeadlessClaude(options: HeadlessClaudeOptions): Promise
         child.on('close', (code: number | null) => {
           const classified = classifyExitResult(code, stderr, stdout);
           const durationMs = Date.now() - startTimeMs;
+
+          // SOL-001: 文件模式完成日志
+          if (useFileMode && tempFile) {
+            logger.info('file_stream_completed', {
+              tempFile,
+              durationMs,
+              outputLength: stdout.length,
+            });
+          }
+
           logger.info('spawn_end', {
             spawnId: currentSpawnId,
             success: classified.success,
@@ -489,6 +527,21 @@ export async function runHeadlessClaude(options: HeadlessClaudeOptions): Promise
             durationMs,
             totalSpawnCount: globalSpawnCount,
           });
+
+          // SOL-001: 清理临时文件
+          if (tempFile) {
+            try {
+              fs.unlinkSync(tempFile);
+              tempFileCleaned = true;
+              logger.info('temp_file_cleaned', { tempFile });
+            } catch (cleanupError) {
+              logger.error('temp_file_cleanup_failed', {
+                tempFile,
+                error: cleanupError instanceof Error ? cleanupError.message : String(cleanupError),
+              });
+            }
+          }
+
           resolve({
             success: classified.success,
             output: stdout,
@@ -505,6 +558,21 @@ export async function runHeadlessClaude(options: HeadlessClaudeOptions): Promise
             error: error.message,
             totalSpawnCount: globalSpawnCount,
           });
+
+          // SOL-001: 错误时也清理临时文件
+          if (tempFile) {
+            try {
+              fs.unlinkSync(tempFile);
+              tempFileCleaned = true;
+              logger.info('temp_file_cleaned', { tempFile });
+            } catch (cleanupError) {
+              logger.error('temp_file_cleanup_failed', {
+                tempFile,
+                error: cleanupError instanceof Error ? cleanupError.message : String(cleanupError),
+              });
+            }
+          }
+
           resolve({
             success: false,
             output: '',
@@ -537,7 +605,50 @@ export async function runHeadlessClaude(options: HeadlessClaudeOptions): Promise
     }
 
     delete process.env.CLAUDE_SPAWN_PARENT_PID;
+
+    // SOL-001: 兜底清理临时文件（处理超时等异常场景）
+    if (tempFile && !tempFileCleaned) {
+      try {
+        fs.unlinkSync(tempFile);
+        logger.info('temp_file_cleaned', { tempFile, source: 'finally_fallback' });
+      } catch (cleanupError) {
+        logger.error('temp_file_cleanup_failed', {
+          tempFile,
+          error: cleanupError instanceof Error ? cleanupError.message : String(cleanupError),
+          source: 'finally_fallback',
+        });
+      }
+    }
   }
+}
+
+/**
+ * 通过 stdin 分块写入 prompt（SOL-001 提取的公共方法）
+ */
+function writePromptViaStdin(child: ReturnType<typeof spawnWithMemoryLimit>, prompt: string): void {
+  if (!child.stdin) return;
+
+  const chunkSize = 4096;
+  let offset = 0;
+
+  const writeNextChunk = (): void => {
+    if (offset >= prompt.length) {
+      child.stdin!.end();
+      return;
+    }
+
+    const chunk = prompt.substring(offset, offset + chunkSize);
+    offset += chunkSize;
+
+    const result = child.stdin!.write(chunk);
+    if (!result) {
+      child.stdin!.once('drain', writeNextChunk);
+    } else {
+      writeNextChunk();
+    }
+  };
+
+  writeNextChunk();
 }
 
 /**
