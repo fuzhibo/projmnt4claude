@@ -16511,6 +16511,7 @@ var init_session_id_mapper = __esm(() => {
 
 // src/utils/harness-helpers.ts
 import * as fs13 from "fs";
+import * as os3 from "os";
 import * as path10 from "path";
 function createDiagnosticsLogger() {
   return {
@@ -16638,6 +16639,8 @@ async function runHeadlessClaude(options) {
   }
   const originalCliMode = process.env.CLAUDE_CLI_MODE;
   const originalSpawnDepth = process.env.CLAUDE_SPAWN_DEPTH;
+  let tempFile;
+  let tempFileCleaned = false;
   try {
     process.env.CLAUDE_CLI_MODE = "headless";
     process.env.CLAUDE_SPAWN_DEPTH = String(contextInfo.spawnDepth);
@@ -16697,30 +16700,44 @@ async function runHeadlessClaude(options) {
     if (options.debug) {
       args.push("--debug");
     }
+    const promptBytes = Buffer.byteLength(options.prompt, "utf8");
+    const useFileMode = promptBytes > PROMPT_FILE_THRESHOLD_BYTES;
+    logger.info("prompt_mode_decision", {
+      promptBytes,
+      threshold: PROMPT_FILE_THRESHOLD_BYTES,
+      useFileMode,
+      promptChars: options.prompt.length
+    });
     try {
       const child = spawnWithMemoryLimit("claude", args, {
         cwd: options.cwd,
         stdio: ["pipe", "pipe", "pipe"],
         timeout: options.timeout * 1000
       }, "claudeAgent");
-      if (child.stdin) {
-        const chunkSize = 4096;
-        let offset = 0;
-        const writeNextChunk = () => {
-          if (offset >= options.prompt.length) {
-            child.stdin.end();
-            return;
-          }
-          const chunk = options.prompt.substring(offset, offset + chunkSize);
-          offset += chunkSize;
-          const result = child.stdin.write(chunk);
-          if (!result) {
-            child.stdin.once("drain", writeNextChunk);
-          } else {
-            writeNextChunk();
-          }
-        };
-        writeNextChunk();
+      if (useFileMode) {
+        tempFile = path10.join(os3.tmpdir(), `claude-prompt-${Date.now()}-${process.pid}.txt`);
+        try {
+          fs13.writeFileSync(tempFile, options.prompt, "utf8");
+          logger.info("temp_file_created", {
+            tempFile,
+            fileSize: fs13.statSync(tempFile).size,
+            promptBytes,
+            promptChars: options.prompt.length
+          });
+          const readStream = fs13.createReadStream(tempFile, "utf8");
+          readStream.pipe(child.stdin);
+          logger.info("file_stream_started", { tempFile, promptBytes });
+        } catch (fileError) {
+          const failedTempFile = tempFile;
+          tempFile = undefined;
+          logger.error("temp_file_create_failed", {
+            tempFile: failedTempFile,
+            error: fileError instanceof Error ? fileError.message : String(fileError)
+          });
+          writePromptViaStdin(child, options.prompt);
+        }
+      } else {
+        writePromptViaStdin(child, options.prompt);
       }
       return await new Promise((resolve3) => {
         let stdout = "";
@@ -16734,6 +16751,13 @@ async function runHeadlessClaude(options) {
         child.on("close", (code) => {
           const classified = classifyExitResult(code, stderr, stdout);
           const durationMs = Date.now() - startTimeMs;
+          if (useFileMode && tempFile) {
+            logger.info("file_stream_completed", {
+              tempFile,
+              durationMs,
+              outputLength: stdout.length
+            });
+          }
           logger.info("spawn_end", {
             spawnId: currentSpawnId,
             success: classified.success,
@@ -16741,6 +16765,18 @@ async function runHeadlessClaude(options) {
             durationMs,
             totalSpawnCount: globalSpawnCount
           });
+          if (tempFile) {
+            try {
+              fs13.unlinkSync(tempFile);
+              tempFileCleaned = true;
+              logger.info("temp_file_cleaned", { tempFile });
+            } catch (cleanupError) {
+              logger.error("temp_file_cleanup_failed", {
+                tempFile,
+                error: cleanupError instanceof Error ? cleanupError.message : String(cleanupError)
+              });
+            }
+          }
           resolve3({
             success: classified.success,
             output: stdout,
@@ -16756,6 +16792,18 @@ async function runHeadlessClaude(options) {
             error: error.message,
             totalSpawnCount: globalSpawnCount
           });
+          if (tempFile) {
+            try {
+              fs13.unlinkSync(tempFile);
+              tempFileCleaned = true;
+              logger.info("temp_file_cleaned", { tempFile });
+            } catch (cleanupError) {
+              logger.error("temp_file_cleanup_failed", {
+                tempFile,
+                error: cleanupError instanceof Error ? cleanupError.message : String(cleanupError)
+              });
+            }
+          }
           resolve3({
             success: false,
             output: "",
@@ -16785,7 +16833,40 @@ async function runHeadlessClaude(options) {
       process.env.CLAUDE_SPAWN_DEPTH = originalSpawnDepth;
     }
     delete process.env.CLAUDE_SPAWN_PARENT_PID;
+    if (tempFile && !tempFileCleaned) {
+      try {
+        fs13.unlinkSync(tempFile);
+        logger.info("temp_file_cleaned", { tempFile, source: "finally_fallback" });
+      } catch (cleanupError) {
+        logger.error("temp_file_cleanup_failed", {
+          tempFile,
+          error: cleanupError instanceof Error ? cleanupError.message : String(cleanupError),
+          source: "finally_fallback"
+        });
+      }
+    }
   }
+}
+function writePromptViaStdin(child, prompt) {
+  if (!child.stdin)
+    return;
+  const chunkSize = 4096;
+  let offset = 0;
+  const writeNextChunk = () => {
+    if (offset >= prompt.length) {
+      child.stdin.end();
+      return;
+    }
+    const chunk = prompt.substring(offset, offset + chunkSize);
+    offset += chunkSize;
+    const result = child.stdin.write(chunk);
+    if (!result) {
+      child.stdin.once("drain", writeNextChunk);
+    } else {
+      writeNextChunk();
+    }
+  };
+  writeNextChunk();
 }
 function sleep(seconds) {
   return new Promise((resolve3) => setTimeout(resolve3, seconds * 1000));
@@ -16944,7 +17025,7 @@ function getReportDir(taskId, cwd) {
 function getReportPath(taskId, reportType, cwd) {
   return path10.join(getReportDir(taskId, cwd), `${reportType}-report.md`);
 }
-var globalSpawnCount = 0, REVIEW_TIMEOUT_RATIO = 3, installedHooks = null;
+var globalSpawnCount = 0, REVIEW_TIMEOUT_RATIO = 3, PROMPT_FILE_THRESHOLD_BYTES = 4096, installedHooks = null;
 var init_harness_helpers = __esm(() => {
   init_path();
   init_i18n();
@@ -39592,7 +39673,7 @@ init_logger();
 init_config2();
 import * as fs32 from "fs";
 import * as path28 from "path";
-import * as os3 from "os";
+import * as os4 from "os";
 
 // src/utils/log-analyzer.ts
 init_path();
@@ -40392,7 +40473,7 @@ function checkDirectoryStructure(cwd) {
 }
 function checkPluginInstallationScope(cwd) {
   const results = [];
-  const homeDir = os3.homedir();
+  const homeDir = os4.homedir();
   const installedPluginsPath = path28.join(homeDir, ".claude", "plugins", "installed_plugins.json");
   if (!fs32.existsSync(installedPluginsPath)) {
     return results;
