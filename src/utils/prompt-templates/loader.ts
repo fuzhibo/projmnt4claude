@@ -168,6 +168,33 @@ export function renderTemplate(
 }
 
 /**
+ * 验证模板中是否存在未定义的占位符（预检查机制）
+ *
+ * 用途：开发时手动调用，检测模板示例占位符与真实占位符冲突。
+ * 此函数检测 {xxx} 格式占位符，与 renderTemplate 使用相同正则。
+ * 生产环境不自动调用，避免性能开销。
+ *
+ * @param template - 模板字符串
+ * @param knownPlaceholders - 已知的合法占位符列表
+ * @param templateName - 模板名称（用于日志）
+ */
+export function validateTemplate(
+  template: string,
+  knownPlaceholders: string[],
+  templateName: string = 'unknown',
+): void {
+  const logger = createLogger('prompt-templates');
+  const allPlaceholders = template.match(/\{(\w+)\}/g) || [];
+  const unmatched = [...new Set(allPlaceholders.map(m => m.slice(1, -1)))].filter(
+    key => !knownPlaceholders.includes(key),
+  );
+
+  if (unmatched.length > 0) {
+    logger.warn(`[Template Warning] 模板 "${templateName}" 中存在未定义的占位符: ${unmatched.join(', ')}`);
+  }
+}
+
+/**
  * 便捷方法：加载并渲染模板
  */
 export async function loadAndRenderTemplate(

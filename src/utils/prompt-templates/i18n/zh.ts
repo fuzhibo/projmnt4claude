@@ -53,14 +53,14 @@ export const investigationTemplates: Record<string, string> = {
 - **${METADATA_FIELDS.language.zh}**: zh
 
 ## ${REPORT_SECTIONS.rootCauseAnalysis.zh}
-### ${buildCaId(1)}: {原因标题}
-{原因详细描述}
+### ${buildCaId(1)}: <原因标题>
+<原因详细描述>
 
 ## ${REPORT_SECTIONS.solutions.zh}
-### ${buildSolId(1)}: {方案标题} → 对应 ${buildCaId(1)}
-{方案详细描述}
+### ${buildSolId(1)}: <方案标题> → 对应 ${buildCaId(1)}
+<方案详细描述>
 - ${SOLUTION_FIELDS.files.zh}: \`src/path/to/file.ts\`
-- ${SOLUTION_FIELDS.expectedChanges.zh}: {变更描述}
+- ${SOLUTION_FIELDS.expectedChanges.zh}: <变更描述>
 
 ## ${REPORT_SECTIONS.checkpoints.zh}
 ### ${buildSolId(1)} 相关检查点
@@ -69,8 +69,8 @@ export const investigationTemplates: Record<string, string> = {
 - [script] 运行单元测试确保无回归 → ${buildSolId(1)}
 
 ## ${REPORT_SECTIONS.assessment.zh}
-- ${ASSESSMENT_FIELDS.complexity.zh}: {low|medium|high}
-- ${ASSESSMENT_FIELDS.impactScope.zh}: {有限|中等|广泛}
+- ${ASSESSMENT_FIELDS.complexity.zh}: low|medium|high
+- ${ASSESSMENT_FIELDS.impactScope.zh}: 有限|中等|广泛
 - ${ASSESSMENT_FIELDS.estimatedMinutes.zh}: {N} 分钟
 ---
 

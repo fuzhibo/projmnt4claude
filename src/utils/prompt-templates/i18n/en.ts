@@ -54,14 +54,14 @@ Below is a complete output format example, please follow it strictly:
 - **${METADATA_FIELDS.language.en}**: en
 
 ## ${REPORT_SECTIONS.rootCauseAnalysis.en}
-### ${buildCaId(1)}: {Root cause title}
-{Root cause detailed description}
+### ${buildCaId(1)}: <Root cause title>
+<Root cause detailed description>
 
 ## ${REPORT_SECTIONS.solutions.en}
-### ${buildSolId(1)}: {Solution title} → Corresponds to ${buildCaId(1)}
-{Solution detailed description}
+### ${buildSolId(1)}: <Solution title> → Corresponds to ${buildCaId(1)}
+<Solution detailed description>
 - ${SOLUTION_FIELDS.files.en}: \`src/path/to/file.ts\`
-- ${SOLUTION_FIELDS.expectedChanges.en}: {Change description}
+- ${SOLUTION_FIELDS.expectedChanges.en}: <Change description>
 
 ## ${REPORT_SECTIONS.checkpoints.en}
 ### ${buildSolId(1)} Related Checkpoints
@@ -70,8 +70,8 @@ Below is a complete output format example, please follow it strictly:
 - [script] Run unit tests to ensure no regression → ${buildSolId(1)}
 
 ## ${REPORT_SECTIONS.assessment.en}
-- ${ASSESSMENT_FIELDS.complexity.en}: {low|medium|high}
-- ${ASSESSMENT_FIELDS.impactScope.en}: {limited|moderate|extensive}
+- ${ASSESSMENT_FIELDS.complexity.en}: low|medium|high
+- ${ASSESSMENT_FIELDS.impactScope.en}: limited|moderate|extensive
 - ${ASSESSMENT_FIELDS.estimatedMinutes.en}: {N} minutes
 ---
 
