@@ -125,6 +125,11 @@ Review the quality of the following investigation report across three dimensions
 - Are the checkpoint verification methods specific and executable?
 - Do the checkpoints use standard prefix categorization?
 
+## ⚠️ Important: Output Format Constraint
+
+【MANDATORY】Regardless of the review conclusion, you MUST return JSON wrapped in a \`\`\`json code block.
+Do NOT use Markdown text, HTML, or any other format.
+
 ## Output Format
 \`\`\`json
 {
@@ -143,6 +148,26 @@ Review the quality of the following investigation report across three dimensions
     }
   ]
 }
+\`\`\`
+
+## ❌ Incorrect Format Examples (These will cause parsing failures, DO NOT use)
+
+Incorrect Example 1 - Markdown text:
+\`\`\`
+Review complete. Report is **unqualified**, all three dimensions scored 0.
+Root Cause Analysis: empty
+Solutions: empty
+\`\`\`
+
+Incorrect Example 2 - Mixed format:
+\`\`\`
+## Review Results
+
+### Overall Conclusion: **Failed (pass: false)**
+
+- Root Cause Alignment: 0
+- Solution Effectiveness: 0
+- Checkpoint Completeness: 0
 \`\`\`
 
 ## Pass Criteria

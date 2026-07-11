@@ -243,7 +243,14 @@ export async function callAIForJSON<T>(
     return testMock(options, validator);
   }
 
-  const result = await callAI({ ...options, outputFormat: 'text' });
+  // 【SOL-001】注入 JSON 格式提醒前缀，防止 AI 返回 Markdown 而非 JSON
+  const jsonReminder = '【格式要求】你必须返回 JSON 格式（包裹在 ```json 代码块中），不得使用 Markdown 文本或其他格式。\n\n';
+  const modifiedOptions = {
+    ...options,
+    prompt: jsonReminder + options.prompt,
+  };
+
+  const result = await callAI({ ...modifiedOptions, outputFormat: 'text' });
 
   if (!result.success) {
     throw new Error(`AI call failed: ${result.error}`);
