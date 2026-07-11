@@ -410,21 +410,55 @@ async function runNewInvestigation(
   let report = initialResult.report;
   let generatedOutputPath = initialResult.outputPath;
 
-  // Step 1.5: 格式验证 + 循环重试（附回退机制）
+  // Step 1.5: 格式验证 + AI 评审 + 循环重试（SOL-001: 合并 Step 2）
+  // 统一触发条件：格式验证失败 OR AI 评审不通过 → 触发重试
   let retryCount = 0;
   let lastValidReport: InvestigationReport | null = null;
+  let finalReviewResult: ReviewResult | undefined;
 
-  while (retryCount < maxRetry) {
+  while (retryCount <= maxRetry) {
+    // 1. 格式验证
     const formatValidation = validateReport(report);
 
-    // ✅ SOL-003: 只看阻断性错误决定是否重试
-    if (formatValidation.blockingErrors.length === 0) {
+    // 2. AI 评审（SOL-001: 从 Step 2 合并到此处）
+    // 注意：重试循环中始终调用 reviewReport 以生成审核报告
+    // skipReview 只影响最终输出决策，不影响重试循环中的评审调用
+    let reviewResult: ReviewResult | undefined;
+    try {
+      reviewResult = await reviewReport(requirement, report, cwd, lang, options.timeout, options.debug);
+    } catch (reviewErr) {
+      // 评审失败时降级处理：使用 undefined，后续会回退到原始格式错误反馈
+      logger.warn('reviewReport failed, falling back to format errors', {
+        error: reviewErr instanceof Error ? reviewErr.message : String(reviewErr),
+      });
+      reviewResult = undefined;
+    }
+
+    // 3. 判断是否通过
+    const formatPassed = formatValidation.blockingErrors.length === 0;
+    // skipReview=true 时，评审结果不影响跳出循环的决策，但仍保存审核报告
+    const reviewPassed = options.skipReview || (reviewResult?.pass ?? false);
+
+    if (formatPassed && reviewPassed) {
       // 只有警告性错误，记录但不重试
       if (formatValidation.warningErrors.length > 0 && !options.quiet) {
         console.log(`   ⚠️ Non-blocking validation issues detected: ${formatValidation.warningErrors.map(e => e.message).join('; ')}`);
         console.log('   Continuing with warnings...');
       }
-      break;
+      finalReviewResult = reviewResult;
+      break; // 格式正确且评审通过，跳出循环
+    }
+
+    // 4. 达到最大重试次数，返回失败
+    if (retryCount >= maxRetry) {
+      if (!options.quiet) {
+        console.log(`   ❌ Max retry (${maxRetry}) reached. Format: ${formatPassed ? '✅' : '❌'}, Review: ${reviewPassed ? '✅' : '❌'}`);
+      }
+      return {
+        success: false,
+        reviewResult,
+        error: `Investigation report failed after ${maxRetry} retries. Format errors: ${formatValidation.blockingErrors.map(e => e.message).join('; ')}. Review issues: ${reviewResult?.issues.map(i => i.description).join('; ') ?? 'none'}`,
+      };
     }
 
     const attemptNum = retryCount + 1;
@@ -432,8 +466,11 @@ async function runNewInvestigation(
     lastValidReport = report;
 
     if (!options.quiet) {
-      console.log(`   ⚠️ Format validation failed (attempt ${attemptNum}/${maxRetry}): ${formatValidation.blockingErrors.map(e => e.message).join('; ')}`);
-      console.log('   Retrying report generation with format corrections...');
+      const reasons: string[] = [];
+      if (!formatPassed) reasons.push(`format: ${formatValidation.blockingErrors.map(e => e.message).join('; ')}`);
+      if (!reviewPassed) reasons.push(`review: ${reviewResult?.issues.map(i => i.description).join('; ') ?? 'failed'}`);
+      console.log(`   ⚠️ Attempt ${attemptNum}/${maxRetry} failed: ${reasons.join(' | ')}`);
+      console.log('   Retrying report generation with corrections...');
     }
 
     // SOL-002: 保存当前失败的尝试报告
@@ -467,35 +504,34 @@ async function runNewInvestigation(
       });
     }
 
-    // SOL-001: 调用 AI 评审生成审核报告并保存
-    // SOL-003: reviewResult 提升至外层作用域，供 buildRetryPrompt 使用
+    // SOL-001: 保存审核报告（如果有评审结果）
     // LOG-08/09: 增强评审日志
     let reviewPath: string | undefined;
-    let reviewResult: ReviewResult | undefined;
-    try {
-      reviewResult = await reviewReport(requirement, report, cwd, lang, options.timeout, options.debug);
-      reviewPath = await saveReviewReport(reviewResult, attemptOutputDir, attemptNum, lang);
-      logger.info('reviewReport success', {
-        reviewPath,
-        attemptNum,
-        pass: reviewResult.pass,
-        scores: reviewResult.scores,
-        issuesCount: reviewResult.issues.length,
-      });
-      if (!options.quiet) {
-        console.log(`   📋 审核报告已保存: ${reviewPath}`);
+    if (reviewResult) {
+      try {
+        reviewPath = await saveReviewReport(reviewResult, attemptOutputDir, attemptNum, lang);
+        logger.info('reviewReport success', {
+          reviewPath,
+          attemptNum,
+          pass: reviewResult.pass,
+          scores: reviewResult.scores,
+          issuesCount: reviewResult.issues.length,
+        });
+        if (!options.quiet) {
+          console.log(`   📋 审核报告已保存: ${reviewPath}`);
+        }
+      } catch (reviewErr) {
+        // LOG-09: 使用 error 级别，输出完整信息
+        logger.error('saveReviewReport failed', {
+          error: reviewErr instanceof Error ? reviewErr.message : String(reviewErr),
+          stack: reviewErr instanceof Error ? reviewErr.stack : undefined,
+          attemptNum,
+          reportStructure: {
+            rootCauseCount: report.rootCauseAnalysis.length,
+            solutionCount: report.solutions.length,
+          },
+        });
       }
-    } catch (reviewErr) {
-      // LOG-09: 使用 error 级别，输出完整信息
-      logger.error('reviewReport failed', {
-        error: reviewErr instanceof Error ? reviewErr.message : String(reviewErr),
-        stack: reviewErr instanceof Error ? reviewErr.stack : undefined,
-        attemptNum,
-        reportStructure: {
-          rootCauseCount: report.rootCauseAnalysis.length,
-          solutionCount: report.solutions.length,
-        },
-      });
     }
 
     // 重试前清理子进程残留（SOL-003-4）
@@ -625,39 +661,63 @@ async function runNewInvestigation(
     console.log(`   📄 最终报告已保存: ${finalReportPath}`);
   }
 
-  // Step 2: AI 评审闭环
-  let reviewResult: ReviewResult | undefined;
-  if (!options.skipReview) {
-    const retryResult = await reviewReportWithRetry(requirement, report, {
-      cwd,
-      lang,
-      maxRetry,
-      timeout: options.timeout,
-      debug: options.debug,
-    });
+  // Step 2 已移除（SOL-001: AI 评审已合并到 Step 1.5）
 
-    reviewResult = retryResult.review;
-
-    if (!reviewResult.pass) {
-      return {
-        success: false,
-        reviewResult,
-        error: `Investigation report review failed after ${maxRetry} retries. Issues: ${reviewResult.issues.map(i => i.description).join('; ')}`,
-      };
-    }
-
-    if (!options.quiet) {
-      console.log(`   ✅ Review passed (scores: ${formatScores(reviewResult.scores)})`);
-    }
-  }
-
-  // Step 3: 输出报告
+  // Step 3: 输出报告（SOL-002: 重命名/删除逻辑）
+  let reportPath: string;
   const outputMode = determineOutputMode(options, cwd);
-  const reportPath = await writeReport(report, outputMode, { force: options.force });
+
+  if (finalReviewResult?.pass || options.skipReview) {
+    // 评审通过（或跳过评审）：重命名 report-final.md → investigation-{slug}.md
+    const slug = slugify(report.metadata.requirementSource);
+    reportPath = path.join(outputMode.path, `investigation-${slug}.md`);
+
+    // 确保目标目录存在
+    if (!fs.existsSync(outputMode.path)) {
+      fs.mkdirSync(outputMode.path, { recursive: true });
+    }
+
+    // 检查文件是否存在（非 force 模式）
+    if (fs.existsSync(reportPath) && !options.force) {
+      const ext = path.extname(reportPath);
+      const base = reportPath.slice(0, -ext.length);
+      reportPath = `${base}-${Date.now()}${ext}`;
+    }
+
+    // 重命名最终报告
+    if (fs.existsSync(finalReportPath)) {
+      fs.renameSync(finalReportPath, reportPath);
+      logger.info('SOL-002: 已重命名最终报告', {
+        from: finalReportPath,
+        to: reportPath,
+      });
+    } else {
+      // 回退：重新生成
+      reportPath = await writeReport(report, outputMode, { force: options.force });
+      logger.warn('SOL-002: 最终报告不存在，回退到重新生成', { reportPath });
+    }
+  } else {
+    // 评审不通过：删除中间文件
+    if (fs.existsSync(finalReportPath)) {
+      fs.unlinkSync(finalReportPath);
+      logger.info('SOL-002: 评审不通过，已删除中间文件', { path: finalReportPath });
+    }
+    // 清理尝试报告目录中的临时文件（SOL-003: 兜底清理）
+    cleanupIntermediateFiles(attemptOutputDir, logger);
+    return {
+      success: false,
+      reviewResult: finalReviewResult,
+      error: `Investigation report review failed after ${maxRetry} retries. Issues: ${finalReviewResult?.issues.map(i => i.description).join('; ') ?? 'unknown'}`,
+    };
+  }
 
   if (!options.quiet) {
     console.log(`   📄 Report saved: ${reportPath}`);
   }
+
+  // SOL-003: 成功路径的兜底清理（清理尝试目录中的中间文件）
+  // 注意：最终报告已重命名为 investigation-{slug}.md，不再需要清理
+  cleanupIntermediateFiles(attemptOutputDir, logger);
 
   // Step 4: 拆分流程（如果需要）
   let subReports: string[] = [];
@@ -686,7 +746,7 @@ async function runNewInvestigation(
     success: true,
     reportPath,
     subReports,
-    reviewResult,
+    reviewResult: finalReviewResult,
   };
 }
 
@@ -1434,6 +1494,55 @@ function withTimeoutRace<T>(promise: Promise<T>, timeoutMs: number, label: strin
   return Promise.race([promise, timeoutPromise]).finally(() => {
     if (timer) clearTimeout(timer);
   });
+}
+
+/**
+ * SOL-003: 清理中间文件（兜底机制）
+ *
+ * 清理 report-final.md、report-generated-*.md 等临时文件
+ * 保留 report-attempt-*.md 作为重试历史记录
+ * 在命令正常结束或异常退出时调用
+ */
+function cleanupIntermediateFiles(outputDir: string, logger: ReturnType<typeof createLogger>): void {
+  const patterns = [
+    'report-final.md',
+    /^report-generated(-\d+)?\.md$/,
+    /^report-generated-retry-\d+\.md$/,
+  ];
+
+  if (!fs.existsSync(outputDir)) {
+    return;
+  }
+
+  const files = fs.readdirSync(outputDir);
+  let cleanedCount = 0;
+
+  for (const file of files) {
+    const shouldClean = patterns.some(pattern => {
+      if (typeof pattern === 'string') {
+        return file === pattern;
+      }
+      return pattern.test(file);
+    });
+
+    if (shouldClean) {
+      const filePath = path.join(outputDir, file);
+      try {
+        fs.unlinkSync(filePath);
+        cleanedCount++;
+        logger.debug('cleanupIntermediateFiles: 已删除中间文件', { file });
+      } catch (err) {
+        logger.warn('cleanupIntermediateFiles: 删除失败', {
+          file,
+          error: err instanceof Error ? err.message : String(err),
+        });
+      }
+    }
+  }
+
+  if (cleanedCount > 0) {
+    logger.info('cleanupIntermediateFiles: 清理完成', { cleanedCount, outputDir });
+  }
 }
 
 // ============================================================

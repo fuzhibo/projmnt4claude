@@ -28,8 +28,11 @@ jest.mock('../../utils/investigation/report-validator', () => ({
   VALIDATION_RULES: [],
 }));
 
+// mock reviewReport（SOL-001: 重试循环中使用）
+const mockReviewReport = jest.fn<(...args: unknown[]) => any>();
 jest.mock('../../utils/investigation/report-reviewer', () => ({
   reviewReportWithRetry: (...args: unknown[]) => mockReviewWithRetry(...args),
+  reviewReport: (...args: unknown[]) => mockReviewReport(...args),
 }));
 
 // mock generateInvestigationReport 内部使用（通过 callAI mock）
@@ -105,9 +108,14 @@ describe('investigation-requirement retry logic', () => {
     env = await createIsolatedTestEnv();
     jest.clearAllMocks();
 
-    // 默认 mock
-    mockReviewWithRetry.mockResolvedValue({
-      review: { pass: true, issues: [], scores: { rootCauseAlignment: 3, solutionEffectiveness: 3, checkpointCompleteness: 3 } },
+    // mock validateReport 默认返回验证通过
+    mockValidateReport.mockReturnValue({ valid: true, errors: [], warnings: [], blockingErrors: [], warningErrors: [] });
+
+    // mock reviewReport（SOL-001: 重试循环中使用）
+    mockReviewReport.mockResolvedValue({
+      pass: true,
+      issues: [],
+      scores: { rootCauseAlignment: 3, solutionEffectiveness: 3, checkpointCompleteness: 3 },
     });
 
     mockWriteReport.mockResolvedValue('/tmp/report.md');
@@ -275,8 +283,9 @@ describe('investigation-requirement retry logic', () => {
       expect(result.success).toBe(true);
     });
 
-    it('should exhaust retries then proceed when validation keeps failing', async () => {
-      // 所有验证都失败，包括最终验证
+    it('should return failure when max retry reached (SOL-001: merged AI review)', async () => {
+      // SOL-001 设计意图：达到最大重试次数后返回失败，而非"耗尽重试后仍成功"
+      // 所有验证都失败
       mockValidateReport.mockReturnValue({
         valid: false,
         errors: [{ rule: 'test', message: 'always fails' }],
@@ -305,9 +314,10 @@ describe('investigation-requirement retry logic', () => {
         outputDir: env.tempDir,
       });
 
-      // 最终验证不阻断流程
-      expect(result.success).toBe(true);
-      // 循环内 2 次 + 最终 1 次 = 3 次验证
+      // SOL-001: 达到最大重试次数后返回失败（与设计文档对齐）
+      expect(result.success).toBe(false);
+      expect(result.error).toContain('failed after 2 retries');
+      // 循环内 3 次（初始 + 2 次重试）验证
       expect(mockValidateReport).toHaveBeenCalledTimes(3);
       // 初始 + 2 次重试 = 3 次 callAI
       expect(mockCallAI).toHaveBeenCalledTimes(3);
@@ -315,7 +325,8 @@ describe('investigation-requirement retry logic', () => {
   });
 
   describe('final validation warning (post-loop)', () => {
-    it('should log warning but not block when final validation fails', async () => {
+    it('should return failure when final validation fails after max retries (SOL-001)', async () => {
+      // SOL-001: 达到最大重试次数后返回失败，不再"最终验证不阻断"
       mockValidateReport.mockReturnValue({
         valid: false,
         errors: [{ rule: 'test', message: 'minor issue' }],
@@ -334,8 +345,9 @@ describe('investigation-requirement retry logic', () => {
         outputDir: env.tempDir,
       });
 
-      // 最终验证不阻断流程
-      expect(result.success).toBe(true);
+      // SOL-001: 达到最大重试次数后返回失败
+      expect(result.success).toBe(false);
+      expect(result.error).toContain('failed after 2 retries');
     });
   });
 
@@ -655,14 +667,13 @@ describe('investigation-requirement retry logic', () => {
       expect(mockCallAI.mock.calls.length).toBeLessThanOrEqual(2);
     });
 
-    it('should complete successfully when review passes', async () => {
-      mockReviewWithRetry.mockResolvedValue({
-        report: makeValidReport(),
-        review: {
-          pass: true,
-          issues: [],
-          scores: { rootCauseAlignment: 3, solutionEffectiveness: 3, checkpointCompleteness: 3 },
-        },
+    it('should succeed when review passes (SOL-001: merged review in retry loop)', async () => {
+      // SOL-001: 评审通过 → 成功
+      // mock reviewReport（重试循环中实际调用的函数）
+      mockReviewReport.mockResolvedValue({
+        pass: true,
+        issues: [],
+        scores: { rootCauseAlignment: 3, solutionEffectiveness: 3, checkpointCompleteness: 3 },
       });
 
       const { investigationRequirement } = await import('../investigation-requirement');
@@ -675,6 +686,7 @@ describe('investigation-requirement retry logic', () => {
         outputDir: env.tempDir,
       });
 
+      // 评审通过时成功
       expect(result.success).toBe(true);
       // callAI 调用次数：初始生成 1 次 + 评审 1 次 = 2 次
       expect(mockCallAI.mock.calls.length).toBeLessThanOrEqual(2);

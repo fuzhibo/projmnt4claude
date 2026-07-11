@@ -160,7 +160,7 @@ describe('investigation-requirement SOL-001 / SOL-002', () => {
 
       const { investigationRequirement } = await import('../investigation-requirement');
 
-      await investigationRequirement('test save attempt', env.tempDir, {
+      const result = await investigationRequirement('test save attempt', env.tempDir, {
         quiet: true,
         maxRetry: 2,
         skipReview: true,
@@ -213,7 +213,7 @@ describe('investigation-requirement SOL-001 / SOL-002', () => {
   // ============================================================
 
   describe('SOL-002: saveFinalReport', () => {
-    it('should write report-final.md after retry loop ends', async () => {
+    it('should rename report-final.md to investigation-{slug}.md on success', async () => {
       mockValidateReport
         .mockReturnValueOnce({
           valid: false,
@@ -227,7 +227,7 @@ describe('investigation-requirement SOL-001 / SOL-002', () => {
 
       const { investigationRequirement } = await import('../investigation-requirement');
 
-      await investigationRequirement('test final report', env.tempDir, {
+      const result = await investigationRequirement('test final report', env.tempDir, {
         quiet: true,
         maxRetry: 2,
         skipReview: true,
@@ -235,10 +235,16 @@ describe('investigation-requirement SOL-001 / SOL-002', () => {
         outputDir: env.tempDir,
       });
 
-      const finalPath = path.join(env.tempDir, 'report-final.md');
-      expect(fs.existsSync(finalPath)).toBe(true);
-      const content = fs.readFileSync(finalPath, 'utf-8');
+      // 成功路径：report-final.md 被重命名为 investigation-{slug}.md
+      expect(result.success).toBe(true);
+      expect(result.reportPath).toBeDefined();
+      expect(fs.existsSync(result.reportPath!)).toBe(true);
+      const content = fs.readFileSync(result.reportPath!, 'utf-8');
       expect(content).toContain('Test requirement');
+
+      // report-final.md 不应存在（已被重命名）
+      const finalPath = path.join(env.tempDir, 'report-final.md');
+      expect(fs.existsSync(finalPath)).toBe(false);
     });
   });
 
@@ -448,7 +454,7 @@ describe('investigation-requirement SOL-001 / SOL-002', () => {
 
       const { investigationRequirement } = await import('../investigation-requirement');
 
-      await investigationRequirement('test history', env.tempDir, {
+      const result = await investigationRequirement('test history', env.tempDir, {
         quiet: true,
         maxRetry: 3,
         skipReview: true,
@@ -456,12 +462,16 @@ describe('investigation-requirement SOL-001 / SOL-002', () => {
         outputDir: env.tempDir,
       });
 
-      // 期望文件列表
+      // 期望文件列表：历史记录保留，最终报告已重命名
       expect(fs.existsSync(path.join(env.tempDir, 'report-attempt-1.md'))).toBe(true);
       expect(fs.existsSync(path.join(env.tempDir, 'report-attempt-1-review.md'))).toBe(true);
       expect(fs.existsSync(path.join(env.tempDir, 'report-attempt-2.md'))).toBe(true);
       expect(fs.existsSync(path.join(env.tempDir, 'report-attempt-2-review.md'))).toBe(true);
-      expect(fs.existsSync(path.join(env.tempDir, 'report-final.md'))).toBe(true);
+      // report-final.md 已被重命名为 investigation-{slug}.md
+      expect(fs.existsSync(path.join(env.tempDir, 'report-final.md'))).toBe(false);
+      // 最终报告存在
+      expect(result.success).toBe(true);
+      expect(fs.existsSync(result.reportPath!)).toBe(true);
     });
   });
 

@@ -36501,14 +36501,14 @@ var investigationTemplates = {
 - **${METADATA_FIELDS.language.zh}**: zh
 
 ## ${REPORT_SECTIONS.rootCauseAnalysis.zh}
-### ${buildCaId(1)}: {原因标题}
-{原因详细描述}
+### ${buildCaId(1)}: <原因标题>
+<原因详细描述>
 
 ## ${REPORT_SECTIONS.solutions.zh}
-### ${buildSolId(1)}: {方案标题} → 对应 ${buildCaId(1)}
-{方案详细描述}
+### ${buildSolId(1)}: <方案标题> → 对应 ${buildCaId(1)}
+<方案详细描述>
 - ${SOLUTION_FIELDS.files.zh}: \`src/path/to/file.ts\`
-- ${SOLUTION_FIELDS.expectedChanges.zh}: {变更描述}
+- ${SOLUTION_FIELDS.expectedChanges.zh}: <变更描述>
 
 ## ${REPORT_SECTIONS.checkpoints.zh}
 ### ${buildSolId(1)} 相关检查点
@@ -36517,8 +36517,8 @@ var investigationTemplates = {
 - [script] 运行单元测试确保无回归 → ${buildSolId(1)}
 
 ## ${REPORT_SECTIONS.assessment.zh}
-- ${ASSESSMENT_FIELDS.complexity.zh}: {low|medium|high}
-- ${ASSESSMENT_FIELDS.impactScope.zh}: {有限|中等|广泛}
+- ${ASSESSMENT_FIELDS.complexity.zh}: low|medium|high
+- ${ASSESSMENT_FIELDS.impactScope.zh}: 有限|中等|广泛
 - ${ASSESSMENT_FIELDS.estimatedMinutes.zh}: {N} 分钟
 ---
 
@@ -36808,14 +36808,14 @@ Below is a complete output format example, please follow it strictly:
 - **${METADATA_FIELDS.language.en}**: en
 
 ## ${REPORT_SECTIONS.rootCauseAnalysis.en}
-### ${buildCaId(1)}: {Root cause title}
-{Root cause detailed description}
+### ${buildCaId(1)}: <Root cause title>
+<Root cause detailed description>
 
 ## ${REPORT_SECTIONS.solutions.en}
-### ${buildSolId(1)}: {Solution title} → Corresponds to ${buildCaId(1)}
-{Solution detailed description}
+### ${buildSolId(1)}: <Solution title> → Corresponds to ${buildCaId(1)}
+<Solution detailed description>
 - ${SOLUTION_FIELDS.files.en}: \`src/path/to/file.ts\`
-- ${SOLUTION_FIELDS.expectedChanges.en}: {Change description}
+- ${SOLUTION_FIELDS.expectedChanges.en}: <Change description>
 
 ## ${REPORT_SECTIONS.checkpoints.en}
 ### ${buildSolId(1)} Related Checkpoints
@@ -36824,8 +36824,8 @@ Below is a complete output format example, please follow it strictly:
 - [script] Run unit tests to ensure no regression → ${buildSolId(1)}
 
 ## ${REPORT_SECTIONS.assessment.en}
-- ${ASSESSMENT_FIELDS.complexity.en}: {low|medium|high}
-- ${ASSESSMENT_FIELDS.impactScope.en}: {limited|moderate|extensive}
+- ${ASSESSMENT_FIELDS.complexity.en}: low|medium|high
+- ${ASSESSMENT_FIELDS.impactScope.en}: limited|moderate|extensive
 - ${ASSESSMENT_FIELDS.estimatedMinutes.en}: {N} minutes
 ---
 
@@ -38476,19 +38476,6 @@ async function reviewReport(requirement, report, cwd, lang = "zh", timeout, debu
   }
   return result;
 }
-async function reviewReportWithRetry(requirement, report, options) {
-  let lastReview;
-  for (let attempt = 0;attempt <= options.maxRetry; attempt++) {
-    lastReview = await reviewReport(requirement, report, options.cwd, options.lang, options.timeout, options.debug);
-    if (lastReview.pass) {
-      return { report, review: lastReview };
-    }
-    if (attempt >= options.maxRetry) {
-      return { report, review: lastReview };
-    }
-  }
-  throw new Error("reviewReportWithRetry: unreachable");
-}
 function validateReviewResult(data) {
   if (!data || typeof data !== "object")
     throw new Error("Invalid review result: expected object");
@@ -38859,20 +38846,43 @@ async function runNewInvestigation(requirement, cwd, options) {
   let generatedOutputPath = initialResult.outputPath;
   let retryCount = 0;
   let lastValidReport = null;
-  while (retryCount < maxRetry) {
+  let finalReviewResult;
+  while (retryCount <= maxRetry) {
     const formatValidation = validateReport(report);
-    if (formatValidation.blockingErrors.length === 0) {
+    let reviewResult;
+    if (!options.skipReview) {
+      reviewResult = await reviewReport(requirement, report, cwd, lang, options.timeout, options.debug);
+    }
+    const formatPassed = formatValidation.blockingErrors.length === 0;
+    const reviewPassed = options.skipReview || (reviewResult?.pass ?? false);
+    if (formatPassed && reviewPassed) {
       if (formatValidation.warningErrors.length > 0 && !options.quiet) {
         console.log(`   ⚠️ Non-blocking validation issues detected: ${formatValidation.warningErrors.map((e) => e.message).join("; ")}`);
         console.log("   Continuing with warnings...");
       }
+      finalReviewResult = reviewResult;
       break;
+    }
+    if (retryCount >= maxRetry) {
+      if (!options.quiet) {
+        console.log(`   ❌ Max retry (${maxRetry}) reached. Format: ${formatPassed ? "✅" : "❌"}, Review: ${reviewPassed ? "✅" : "❌"}`);
+      }
+      return {
+        success: false,
+        reviewResult,
+        error: `Investigation report failed after ${maxRetry} retries. Format errors: ${formatValidation.blockingErrors.map((e) => e.message).join("; ")}. Review issues: ${reviewResult?.issues.map((i) => i.description).join("; ") ?? "none"}`
+      };
     }
     const attemptNum = retryCount + 1;
     lastValidReport = report;
     if (!options.quiet) {
-      console.log(`   ⚠️ Format validation failed (attempt ${attemptNum}/${maxRetry}): ${formatValidation.blockingErrors.map((e) => e.message).join("; ")}`);
-      console.log("   Retrying report generation with format corrections...");
+      const reasons = [];
+      if (!formatPassed)
+        reasons.push(`format: ${formatValidation.blockingErrors.map((e) => e.message).join("; ")}`);
+      if (!reviewPassed)
+        reasons.push(`review: ${reviewResult?.issues.map((i) => i.description).join("; ") ?? "failed"}`);
+      console.log(`   ⚠️ Attempt ${attemptNum}/${maxRetry} failed: ${reasons.join(" | ")}`);
+      console.log("   Retrying report generation with corrections...");
     }
     try {
       const attemptPath = await saveAttemptReport(report, attemptOutputDir, attemptNum);
@@ -38902,30 +38912,30 @@ async function runNewInvestigation(requirement, cwd, options) {
       });
     }
     let reviewPath;
-    let reviewResult2;
-    try {
-      reviewResult2 = await reviewReport(requirement, report, cwd, lang, options.timeout, options.debug);
-      reviewPath = await saveReviewReport(reviewResult2, attemptOutputDir, attemptNum, lang);
-      logger.info("reviewReport success", {
-        reviewPath,
-        attemptNum,
-        pass: reviewResult2.pass,
-        scores: reviewResult2.scores,
-        issuesCount: reviewResult2.issues.length
-      });
-      if (!options.quiet) {
-        console.log(`   \uD83D\uDCCB 审核报告已保存: ${reviewPath}`);
-      }
-    } catch (reviewErr) {
-      logger.error("reviewReport failed", {
-        error: reviewErr instanceof Error ? reviewErr.message : String(reviewErr),
-        stack: reviewErr instanceof Error ? reviewErr.stack : undefined,
-        attemptNum,
-        reportStructure: {
-          rootCauseCount: report.rootCauseAnalysis.length,
-          solutionCount: report.solutions.length
+    if (reviewResult) {
+      try {
+        reviewPath = await saveReviewReport(reviewResult, attemptOutputDir, attemptNum, lang);
+        logger.info("reviewReport success", {
+          reviewPath,
+          attemptNum,
+          pass: reviewResult.pass,
+          scores: reviewResult.scores,
+          issuesCount: reviewResult.issues.length
+        });
+        if (!options.quiet) {
+          console.log(`   \uD83D\uDCCB 审核报告已保存: ${reviewPath}`);
         }
-      });
+      } catch (reviewErr) {
+        logger.error("saveReviewReport failed", {
+          error: reviewErr instanceof Error ? reviewErr.message : String(reviewErr),
+          stack: reviewErr instanceof Error ? reviewErr.stack : undefined,
+          attemptNum,
+          reportStructure: {
+            rootCauseCount: report.rootCauseAnalysis.length,
+            solutionCount: report.solutions.length
+          }
+        });
+      }
     }
     try {
       killAllActiveChildren("SIGTERM");
@@ -38939,7 +38949,7 @@ async function runNewInvestigation(requirement, cwd, options) {
       const retryPrompt = buildRetryPrompt({
         requirement,
         errors: formatValidation.blockingErrors,
-        reviewResult: reviewResult2,
+        reviewResult,
         reviewPath,
         attemptNum,
         lang,
@@ -39024,32 +39034,45 @@ async function runNewInvestigation(requirement, cwd, options) {
   if (!options.quiet) {
     console.log(`   \uD83D\uDCC4 最终报告已保存: ${finalReportPath}`);
   }
-  let reviewResult;
-  if (!options.skipReview) {
-    const retryResult = await reviewReportWithRetry(requirement, report, {
-      cwd,
-      lang,
-      maxRetry,
-      timeout: options.timeout,
-      debug: options.debug
-    });
-    reviewResult = retryResult.review;
-    if (!reviewResult.pass) {
-      return {
-        success: false,
-        reviewResult,
-        error: `Investigation report review failed after ${maxRetry} retries. Issues: ${reviewResult.issues.map((i) => i.description).join("; ")}`
-      };
-    }
-    if (!options.quiet) {
-      console.log(`   ✅ Review passed (scores: ${formatScores(reviewResult.scores)})`);
-    }
-  }
+  let reportPath;
   const outputMode = determineOutputMode(options, cwd);
-  const reportPath = await writeReport(report, outputMode, { force: options.force });
+  if (finalReviewResult?.pass || options.skipReview) {
+    const slug = slugify(report.metadata.requirementSource);
+    reportPath = path26.join(outputMode.path, `investigation-${slug}.md`);
+    if (!fs30.existsSync(outputMode.path)) {
+      fs30.mkdirSync(outputMode.path, { recursive: true });
+    }
+    if (fs30.existsSync(reportPath) && !options.force) {
+      const ext = path26.extname(reportPath);
+      const base = reportPath.slice(0, -ext.length);
+      reportPath = `${base}-${Date.now()}${ext}`;
+    }
+    if (fs30.existsSync(finalReportPath)) {
+      fs30.renameSync(finalReportPath, reportPath);
+      logger.info("SOL-002: 已重命名最终报告", {
+        from: finalReportPath,
+        to: reportPath
+      });
+    } else {
+      reportPath = await writeReport(report, outputMode, { force: options.force });
+      logger.warn("SOL-002: 最终报告不存在，回退到重新生成", { reportPath });
+    }
+  } else {
+    if (fs30.existsSync(finalReportPath)) {
+      fs30.unlinkSync(finalReportPath);
+      logger.info("SOL-002: 评审不通过，已删除中间文件", { path: finalReportPath });
+    }
+    cleanupIntermediateFiles(attemptOutputDir, logger);
+    return {
+      success: false,
+      reviewResult: finalReviewResult,
+      error: `Investigation report review failed after ${maxRetry} retries. Issues: ${finalReviewResult?.issues.map((i) => i.description).join("; ") ?? "unknown"}`
+    };
+  }
   if (!options.quiet) {
     console.log(`   \uD83D\uDCC4 Report saved: ${reportPath}`);
   }
+  cleanupIntermediateFiles(attemptOutputDir, logger);
   let subReports = [];
   if (!options.skipSplit && shouldSplit(reportPath, splitThreshold)) {
     if (!options.quiet) {
@@ -39073,7 +39096,7 @@ async function runNewInvestigation(requirement, cwd, options) {
     success: true,
     reportPath,
     subReports,
-    reviewResult
+    reviewResult: finalReviewResult
   };
 }
 async function runInteractiveMode(requirement, cwd, options) {
@@ -39565,6 +39588,44 @@ function withTimeoutRace(promise, timeoutMs, label) {
       clearTimeout(timer);
   });
 }
+function cleanupIntermediateFiles(outputDir, logger) {
+  const patterns = [
+    "report-final.md",
+    /^report-attempt-\d+\.md$/,
+    /^report-attempt-\d+-review\.md$/,
+    /^report-generated(-\d+)?\.md$/,
+    /^report-generated-retry-\d+\.md$/
+  ];
+  if (!fs30.existsSync(outputDir)) {
+    return;
+  }
+  const files = fs30.readdirSync(outputDir);
+  let cleanedCount = 0;
+  for (const file of files) {
+    const shouldClean = patterns.some((pattern) => {
+      if (typeof pattern === "string") {
+        return file === pattern;
+      }
+      return pattern.test(file);
+    });
+    if (shouldClean) {
+      const filePath = path26.join(outputDir, file);
+      try {
+        fs30.unlinkSync(filePath);
+        cleanedCount++;
+        logger.debug("cleanupIntermediateFiles: 已删除中间文件", { file });
+      } catch (err) {
+        logger.warn("cleanupIntermediateFiles: 删除失败", {
+          file,
+          error: err instanceof Error ? err.message : String(err)
+        });
+      }
+    }
+  }
+  if (cleanedCount > 0) {
+    logger.info("cleanupIntermediateFiles: 清理完成", { cleanedCount, outputDir });
+  }
+}
 async function generateInvestigationReport(requirement, cwd, optionsOrLang, timeout, debug) {
   const opts = typeof optionsOrLang === "string" ? { lang: optionsOrLang, timeout, debug } : optionsOrLang;
   let prompt;
@@ -39675,9 +39736,6 @@ function readFileContent(filePath) {
 }
 function slugify(text) {
   return text.toLowerCase().replace(/[^a-z0-9一-龥]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 50);
-}
-function formatScores(scores) {
-  return `RCA=${scores.rootCauseAlignment}, SOL=${scores.solutionEffectiveness}, CP=${scores.checkpointCompleteness}`;
 }
 function promptUser(prompt) {
   const rl = readline.createInterface({
