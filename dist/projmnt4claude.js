@@ -22827,6 +22827,7 @@ var init_analyze_fix_pipeline = __esm(() => {
 // src/utils/investigation/ai-integration.ts
 var exports_ai_integration = {};
 __export(exports_ai_integration, {
+  checkOutputFormat: () => checkOutputFormat,
   callAIForJSON: () => callAIForJSON,
   callAI: () => callAI
 });
@@ -22842,16 +22843,17 @@ function simpleHash(str) {
   return hash.toString(16);
 }
 function checkOutputFormat(output) {
-  const hasMetadata = output.includes("元数据") || output.includes("Metadata");
   const hasRootCause = output.includes("原因分析") || output.includes("Root Cause");
   const hasSolution = output.includes("解决方案") || output.includes("Solutions");
+  const hasMetadata = output.includes("元数据") || output.includes("Metadata");
   const hasCheckpoints = output.includes("检查点") || output.includes("Checkpoint");
   return {
-    hasMetadata,
     hasRootCause,
     hasSolution,
+    hasMetadata,
     hasCheckpoints,
-    hasAllSections: hasMetadata && hasRootCause && hasSolution
+    hasCoreSections: hasRootCause && hasSolution,
+    hasAllSections: hasMetadata && hasRootCause && hasSolution && hasCheckpoints
   };
 }
 function getTestMock11(name) {
@@ -22937,8 +22939,17 @@ async function callAI(options) {
     if (finalOutput && finalOutput.length > 100) {
       const formatCheck = checkOutputFormat(finalOutput);
       aiLogger.debug("callAI output format check", formatCheck);
-      if (!formatCheck.hasAllSections) {
-        aiLogger.warn("Headless output missing expected sections", formatCheck);
+      if (!formatCheck.hasCoreSections) {
+        aiLogger.warn("Headless output missing core sections (rootCause/solution)", {
+          hasRootCause: formatCheck.hasRootCause,
+          hasSolution: formatCheck.hasSolution
+        });
+      }
+      if (!formatCheck.hasMetadata || !formatCheck.hasCheckpoints) {
+        aiLogger.debug("Headless output missing auxiliary sections", {
+          hasMetadata: formatCheck.hasMetadata,
+          hasCheckpoints: formatCheck.hasCheckpoints
+        });
       }
     }
     if (result.success && (!finalOutput || finalOutput.trim().length === 0)) {
@@ -22994,7 +23005,12 @@ async function callAIForJSON(options, validator) {
   if (testMock) {
     return testMock(options, validator);
   }
-  const result = await callAI({ ...options, outputFormat: "text" });
+  const jsonReminder = "【格式要求】你必须返回 JSON 格式（包裹在 ```json 代码块中），不得使用 Markdown 文本或其他格式。\n\n";
+  const modifiedOptions = {
+    ...options,
+    prompt: jsonReminder + options.prompt
+  };
+  const result = await callAI({ ...modifiedOptions, outputFormat: "text" });
   if (!result.success) {
     throw new Error(`AI call failed: ${result.error}`);
   }
@@ -36555,6 +36571,11 @@ var investigationTemplates = {
 - 检查点的验证方法是否具体且可执行？
 - 检查点是否使用了标准前缀分类？
 
+## ⚠️ 重要：输出格式约束
+
+【强制】无论评审结论如何，必须返回 \`\`\`json 代码块包裹的 JSON 格式。
+不得使用 Markdown 文本、HTML 或其他格式替代。
+
 ## 输出格式
 \`\`\`json
 {
@@ -36573,6 +36594,26 @@ var investigationTemplates = {
     }
   ]
 }
+\`\`\`
+
+## ❌ 错误格式示例（以下格式会导致解析失败，严禁使用）
+
+错误示例 1 - Markdown 文本：
+\`\`\`
+评审完成。调查报告**不合格**，三个核心维度均为 0 分。
+原因分析：空
+解决方案：空
+\`\`\`
+
+错误示例 2 - 混合格式：
+\`\`\`
+## 评审结果
+
+### 总体结论：**不通过 (pass: false)**
+
+- 原因分析对齐度：0 分
+- 解决方案有效性：0 分
+- 检查点完善度：0 分
 \`\`\`
 
 ## 通过标准
@@ -36837,6 +36878,11 @@ Review the quality of the following investigation report across three dimensions
 - Are the checkpoint verification methods specific and executable?
 - Do the checkpoints use standard prefix categorization?
 
+## ⚠️ Important: Output Format Constraint
+
+【MANDATORY】Regardless of the review conclusion, you MUST return JSON wrapped in a \`\`\`json code block.
+Do NOT use Markdown text, HTML, or any other format.
+
 ## Output Format
 \`\`\`json
 {
@@ -36855,6 +36901,26 @@ Review the quality of the following investigation report across three dimensions
     }
   ]
 }
+\`\`\`
+
+## ❌ Incorrect Format Examples (These will cause parsing failures, DO NOT use)
+
+Incorrect Example 1 - Markdown text:
+\`\`\`
+Review complete. Report is **unqualified**, all three dimensions scored 0.
+Root Cause Analysis: empty
+Solutions: empty
+\`\`\`
+
+Incorrect Example 2 - Mixed format:
+\`\`\`
+## Review Results
+
+### Overall Conclusion: **Failed (pass: false)**
+
+- Root Cause Alignment: 0
+- Solution Effectiveness: 0
+- Checkpoint Completeness: 0
 \`\`\`
 
 ## Pass Criteria
@@ -38122,28 +38188,38 @@ function parseReport(markdown, checkpointOptions) {
   const logger = createLogger("report-parser");
   const options = typeof checkpointOptions === "boolean" ? undefined : checkpointOptions;
   logger.debug("parseReport input", {
-    inputLength: markdown.length,
-    inputPreview: markdown.substring(0, 300)
+    inputLength: markdown.length
   });
   const metadata = parseMetadata(markdown);
   const rootCauseAnalysis = parseRootCauseAnalysis(markdown);
   const solutions = parseSolutions(markdown);
   const checkpoints = parseCheckpoints2(markdown, options);
   const assessment = parseAssessment(markdown);
-  logger.debug("parseReport result", {
-    metadata: {
-      hasSource: !!metadata.requirementSource,
-      sourceLength: metadata.requirementSource.length
-    },
-    rootCauseCount: rootCauseAnalysis.length,
-    solutionCount: solutions.length,
-    checkpointCount: checkpoints.length
-  });
   if (rootCauseAnalysis.length === 0 || solutions.length === 0) {
-    logger.warn("parseReport returned empty sections", {
+    const detectedH2Headers = markdown.match(/^##\s+.+$/gm) ?? [];
+    const detectedH3Headers = markdown.match(/^###\s+.+$/gm) ?? [];
+    const expectedSections = ["原因分析", "解决方案", "检查点覆盖清单"];
+    const foundSections = [
+      markdown.includes("原因分析") ? "原因分析" : null,
+      markdown.includes("解决方案") ? "解决方案" : null,
+      markdown.includes("检查点") ? "检查点覆盖清单" : null
+    ].filter(Boolean);
+    logger.error("parseReport failed: empty core sections", {
       rootCauseCount: rootCauseAnalysis.length,
       solutionCount: solutions.length,
-      inputLength: markdown.length
+      checkpointCount: checkpoints.length,
+      inputLength: markdown.length,
+      inputPreview: markdown.substring(0, 500),
+      detectedH2Headers,
+      detectedH3Headers,
+      expectedSections,
+      foundSections
+    });
+  }
+  if (rootCauseAnalysis.length > 0 && solutions.length > 0 && checkpoints.length === 0) {
+    logger.warn("parseReport: checkpoints section empty", {
+      checkpointCount: 0,
+      hasCheckpointsSection: markdown.includes("检查点")
     });
   }
   return { metadata, rootCauseAnalysis, solutions, checkpoints, assessment };
@@ -38606,9 +38682,17 @@ var RETRY_PROMPT_TEMPLATE_ZH = `你是 projmnt4claude 项目的需求调查分�
 审核报告已保存到: {reviewPath}
 （请查看审核报告获取更详细的问题分析和修正建议）
 
-## ⚠️ 重要：必须严格按照以下格式输出
+## ⚠️【强制】输出格式约束
+
+**必须**：直接输出完整的调查报告 Markdown 内容，格式如下：
 
 {formatExample}
+
+**禁止**：以下格式会导致解析失败，严禁使用：
+1. ❌ 摘要性文本（如"调查报告已生成。以下是关键发现摘要..."）
+2. ❌ 报告路径提示（如"报告已保存到 docs/..."）
+3. ❌ 验证结果摘要（如"格式检查通过..."）
+4. ❌ 任何非 Markdown 结构化报告的输出
 
 **注意**:
 1. 本次是第 {attemptNum} 次重试，请务必修正所有格式问题
@@ -38636,9 +38720,17 @@ This is attempt {attemptNum}. Your previous output had format issues. Please reg
 Review report saved to: {reviewPath}
 (Please check the review report for detailed issue analysis and correction suggestions)
 
-## ⚠️ Important: You MUST strictly follow this output format
+## ⚠️【MANDATORY】Output Format Constraints
+
+You MUST output the complete investigation report in Markdown format as follows:
 
 {formatExample}
+
+**FORBIDDEN**: The following formats will cause parsing failures and are strictly prohibited:
+1. ❌ Summary text (e.g., "Investigation report generated. Key findings summary...")
+2. ❌ Report path hints (e.g., "Report saved to docs/...")
+3. ❌ Validation result summary (e.g., "Format check passed...")
+4. ❌ Any non-Markdown structured report output
 
 **Notes**:
 1. This is attempt {attemptNum}. You MUST fix all format issues
