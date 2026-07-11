@@ -36,7 +36,9 @@ parcel-cache/
 
 # Temporary files
 *.tmp
+.tmp/
 .tmp-*/
+tmp/
 tmp-*/
 
 # Claude Code related (development only)
