@@ -18,7 +18,7 @@ jest.mock('../../headless-agent.js', () => ({
   invokeAgent: (...args: [string, unknown]) => mockInvokeAgent(...args),
 }));
 
-import { callAI, callAIForJSON } from '../ai-integration.js';
+import { callAI, callAIForJSON, checkOutputFormat } from '../ai-integration.js';
 import type { AgentResult } from '../../headless-agent.js';
 
 // Mock 结果工厂函数
@@ -285,7 +285,106 @@ describe('callAI timeout validation (CA-003-1)', () => {
 });
 
 // ============================================================
-// Phase 3: 诊断日志测试（spawn 计数 + headless 上下文）
+// CA-005: 输出格式检查函数测试（hasCoreSections + 日志级别）
+// ============================================================
+
+describe('CA-005: checkOutputFormat 格式检查', () => {
+  it('应正确识别核心章节完整的情况', () => {
+    const output = '## 原因分析\nroot cause content\n## 解决方案\nsolution content';
+    const result = checkOutputFormat(output);
+    expect(result.hasRootCause).toBe(true);
+    expect(result.hasSolution).toBe(true);
+    expect(result.hasCoreSections).toBe(true);
+  });
+
+  it('应正确识别核心章节缺失的情况（hasRootCause=false）', () => {
+    const output = '## 解决方案\nsolution content\n## 元数据\nmetadata';
+    const result = checkOutputFormat(output);
+    expect(result.hasRootCause).toBe(false);
+    expect(result.hasSolution).toBe(true);
+    expect(result.hasCoreSections).toBe(false);
+  });
+
+  it('应正确识别核心章节缺失的情况（hasSolution=false）', () => {
+    const output = '## 原因分析\nroot cause content\n## 元数据\nmetadata';
+    const result = checkOutputFormat(output);
+    expect(result.hasRootCause).toBe(true);
+    expect(result.hasSolution).toBe(false);
+    expect(result.hasCoreSections).toBe(false);
+  });
+
+  it('应正确识别辅助章节', () => {
+    const output = '## 原因分析\nroot\n## 解决方案\nsol\n## 元数据\nmeta\n## 检查点\ncheck';
+    const result = checkOutputFormat(output);
+    expect(result.hasMetadata).toBe(true);
+    expect(result.hasCheckpoints).toBe(true);
+    expect(result.hasAllSections).toBe(true);
+  });
+
+  it('hasAllSections 应为 false 当辅助章节缺失时', () => {
+    const output = '## 原因分析\nroot\n## 解决方案\nsol';
+    const result = checkOutputFormat(output);
+    expect(result.hasMetadata).toBe(false);
+    expect(result.hasCheckpoints).toBe(false);
+    expect(result.hasAllSections).toBe(false);
+    expect(result.hasCoreSections).toBe(true);
+  });
+});
+
+describe('CA-005: 日志级别验证', () => {
+  let consoleWarnSpy: jest.SpiedFunction<typeof console.warn>;
+  let consoleDebugSpy: jest.SpiedFunction<typeof console.debug>;
+  let consoleLogSpy: jest.SpiedFunction<typeof console.log>;
+
+  beforeEach(() => {
+    mockInvokeAgent.mockReset();
+    consoleWarnSpy = jest.spyOn(console, 'warn').mockImplementation(() => {});
+    consoleDebugSpy = jest.spyOn(console, 'debug').mockImplementation(() => {});
+    consoleLogSpy = jest.spyOn(console, 'log').mockImplementation(() => {});
+  });
+
+  afterEach(() => {
+    consoleWarnSpy.mockRestore();
+    consoleDebugSpy.mockRestore();
+    consoleLogSpy.mockRestore();
+    jest.clearAllMocks();
+  });
+
+  it('核心章节缺失时应触发 warn 日志', async () => {
+    // 输出长度需 > 100 才会触发格式检查
+    const mockResult = createMockResult({
+      output: '## 原因分析\nroot cause only\n## 元数据\nmeta\n\n' + 'padding '.repeat(20),
+    });
+    mockInvokeAgent.mockResolvedValue(mockResult);
+
+    await callAI({ prompt: 'test', cwd: '/tmp', outputFormat: 'text' });
+
+    // Logger.warn 使用 console.warn
+    const warnCalls = consoleWarnSpy.mock.calls.filter(
+      (call) => typeof call[0] === 'string' && call[0].includes('missing core sections'),
+    );
+    expect(warnCalls.length).toBeGreaterThan(0);
+  });
+
+  it('辅助章节缺失时不应触发 warn 日志', async () => {
+    // 输出长度需 > 100 才会触发格式检查
+    const mockResult = createMockResult({
+      output: '## 原因分析\nroot cause\n## 解决方案\nsolution\n\n' + 'padding '.repeat(20),
+    });
+    mockInvokeAgent.mockResolvedValue(mockResult);
+
+    await callAI({ prompt: 'test', cwd: '/tmp', outputFormat: 'text' });
+
+    // 验证 warn 未被触发（核心章节完整）
+    const warnCalls = consoleWarnSpy.mock.calls.filter(
+      (call) => typeof call[0] === 'string' && call[0].includes('missing core sections'),
+    );
+    expect(warnCalls).toHaveLength(0);
+  });
+});
+
+// ============================================================
+// CA-006: spawn diagnostics logging
 // ============================================================
 
 describe('CA-006: spawn diagnostics logging', () => {

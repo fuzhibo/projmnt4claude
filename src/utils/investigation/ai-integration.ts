@@ -23,24 +23,29 @@ function simpleHash(str: string): string {
 /**
  * LOG-03: 输出格式检查函数
  */
-function checkOutputFormat(output: string): {
-  hasMetadata: boolean;
+export function checkOutputFormat(output: string): {
+  // 核心章节（必须存在）
   hasRootCause: boolean;
   hasSolution: boolean;
+  // 辅助章节（建议存在，但不阻断）
+  hasMetadata: boolean;
   hasCheckpoints: boolean;
+  // 综合健康度指标
+  hasCoreSections: boolean;
   hasAllSections: boolean;
 } {
-  const hasMetadata = output.includes('元数据') || output.includes('Metadata');
   const hasRootCause = output.includes('原因分析') || output.includes('Root Cause');
   const hasSolution = output.includes('解决方案') || output.includes('Solutions');
+  const hasMetadata = output.includes('元数据') || output.includes('Metadata');
   const hasCheckpoints = output.includes('检查点') || output.includes('Checkpoint');
 
   return {
-    hasMetadata,
     hasRootCause,
     hasSolution,
+    hasMetadata,
     hasCheckpoints,
-    hasAllSections: hasMetadata && hasRootCause && hasSolution,
+    hasCoreSections: hasRootCause && hasSolution,
+    hasAllSections: hasMetadata && hasRootCause && hasSolution && hasCheckpoints,
   };
 }
 
@@ -165,8 +170,20 @@ export async function callAI(options: AICallOptions): Promise<AICallResult> {
       const formatCheck = checkOutputFormat(finalOutput);
       aiLogger.debug('callAI output format check', formatCheck);
 
-      if (!formatCheck.hasAllSections) {
-        aiLogger.warn('Headless output missing expected sections', formatCheck);
+      // 核心章节缺失 → warn（需要关注）
+      if (!formatCheck.hasCoreSections) {
+        aiLogger.warn('Headless output missing core sections (rootCause/solution)', {
+          hasRootCause: formatCheck.hasRootCause,
+          hasSolution: formatCheck.hasSolution,
+        });
+      }
+
+      // 辅助章节缺失 → debug（仅调试信息）
+      if (!formatCheck.hasMetadata || !formatCheck.hasCheckpoints) {
+        aiLogger.debug('Headless output missing auxiliary sections', {
+          hasMetadata: formatCheck.hasMetadata,
+          hasCheckpoints: formatCheck.hasCheckpoints,
+        });
       }
     }
 
