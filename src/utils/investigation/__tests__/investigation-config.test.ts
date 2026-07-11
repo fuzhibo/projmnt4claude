@@ -9,7 +9,7 @@ import * as path from 'path';
 import * as os from 'os';
 
 import type { InvestigationReport } from '../types.js';
-import { loadInvestigationConfig, loadLanguageConfig, getDefaultConfig } from '../config-reader.js';
+import { loadInvestigationConfig, loadLanguageConfig, getDefaultConfig, loadCustomRequirements, formatCustomRequirements } from '../config-reader.js';
 
 function createTestReport(overrides: Partial<InvestigationReport> = {}): InvestigationReport {
   return {
@@ -150,6 +150,74 @@ describe('§3.2 配置读取', () => {
 
       const lang = loadLanguageConfig(tmpDir);
       expect(lang).toBe('zh');
+    });
+  });
+
+  describe('loadCustomRequirements', () => {
+    it('should return empty strings when config missing', () => {
+      const customReqs = loadCustomRequirements(tmpDir);
+      expect(customReqs.investigate).toBe('');
+      expect(customReqs.review).toBe('');
+      expect(customReqs.investigateWithFeedback).toBe('');
+      expect(customReqs.split).toBe('');
+      expect(customReqs.splitReview).toBe('');
+    });
+
+    it('should read customRequirements from config.json', () => {
+      const configDir = path.join(tmpDir, '.projmnt4claude');
+      fs.mkdirSync(configDir, { recursive: true });
+      fs.writeFileSync(
+        path.join(configDir, 'config.json'),
+        JSON.stringify({
+          prompts: {
+            customRequirements: {
+              investigate: '请确保包含代码位置引用',
+              review: '检查原因分析完整性',
+            },
+          },
+        }),
+      );
+
+      const customReqs = loadCustomRequirements(tmpDir);
+      expect(customReqs.investigate).toBe('请确保包含代码位置引用');
+      expect(customReqs.review).toBe('检查原因分析完整性');
+      expect(customReqs.investigateWithFeedback).toBe('');
+    });
+  });
+
+  describe('formatCustomRequirements', () => {
+    it('should return empty string for empty input', () => {
+      expect(formatCustomRequirements('', 'investigate', 'zh')).toBe('');
+      expect(formatCustomRequirements('   ', 'review', 'en')).toBe('');
+    });
+
+    it('should add guidance prefix for zh', () => {
+      const result = formatCustomRequirements('请确保包含代码位置', 'investigate', 'zh');
+      expect(result).toContain('## 用户定制要求');
+      expect(result).toContain('请在调查过程中遵循以下定制要求');
+      expect(result).toContain('请确保包含代码位置');
+    });
+
+    it('should add guidance prefix for en', () => {
+      const result = formatCustomRequirements('Include code references', 'review', 'en');
+      expect(result).toContain('## Custom Requirements');
+      expect(result).toContain('Please follow the custom requirements below during review');
+      expect(result).toContain('Include code references');
+    });
+
+    it('should use different guidance for each phase', () => {
+      const phases: Array<'investigate' | 'review' | 'investigateWithFeedback' | 'split' | 'splitReview'> =
+        ['investigate', 'review', 'investigateWithFeedback', 'split', 'splitReview'];
+
+      const zhGuidanceTexts = phases.map(phase =>
+        formatCustomRequirements('test', phase, 'zh'),
+      );
+
+      expect(zhGuidanceTexts[0]).toContain('调查过程中');
+      expect(zhGuidanceTexts[1]).toContain('评审过程中');
+      expect(zhGuidanceTexts[2]).toContain('修正过程中');
+      expect(zhGuidanceTexts[3]).toContain('拆分过程中');
+      expect(zhGuidanceTexts[4]).toContain('审核过程中');
     });
   });
 });

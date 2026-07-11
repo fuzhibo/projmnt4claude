@@ -226,4 +226,43 @@ describe('SOL-002: Investigation Template E2E', () => {
       cleanupTempDir(testDir);
     }
   }, 60000);
+
+  // ── SOL-005: customRequirements 注入验证 ───────────────────────────
+  it('should inject customRequirements into rendered template', async () => {
+    const testDir = await createTempProject();
+    const logger = createLogger('e2e-test', testDir, true);
+
+    try {
+      // 创建带 customRequirements 的配置
+      const configPath = path.join(testDir, '.projmnt4claude', 'config.json');
+      fs.mkdirSync(path.dirname(configPath), { recursive: true });
+      fs.writeFileSync(configPath, JSON.stringify({
+        prompts: {
+          customRequirements: {
+            investigate: '请确保包含代码位置引用',
+          },
+        },
+      }, null, 2));
+
+      // 使用 loadAndRenderTemplate 渲染模板（内部会读取 customRequirements）
+      const { loadAndRenderTemplate } = await import('../utils/prompt-templates/loader.js');
+      const rendered = await loadAndRenderTemplate('investigate', {
+        requirement: '测试需求',
+        projectContext: '测试上下文',
+        date: '2026-07-11',
+        slug: 'test-slug',
+        title: '测试标题',
+        N: '30',
+        customRequirements: '## 用户定制要求\n请在调查过程中遵循以下定制要求：\n请确保包含代码位置引用\n',
+      }, 'zh', { mode: 'strict' });
+
+      // 验证 customRequirements 内容被注入
+      expect(rendered).toContain('请确保包含代码位置引用');
+      expect(rendered).toContain('用户定制要求');
+
+      logger.info('E2E: customRequirements injection verified');
+    } finally {
+      cleanupTempDir(testDir);
+    }
+  });
 });

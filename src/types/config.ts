@@ -98,13 +98,19 @@ export interface PromptsConfig {
   customTemplates?: Record<string, string>;
   /**
    * 用户定制需求，按阶段注入到对应 Prompt 中
-   * 键为阶段名（dev, codeReview, qa, evaluation），值为该阶段的定制需求内容
+   * 键为阶段名（dev, codeReview, qa, evaluation, investigate, review, investigateWithFeedback, split, splitReview），值为该阶段的定制需求内容
    */
   customRequirements?: {
     dev?: string;
     codeReview?: string;
     qa?: string;
     evaluation?: string;
+    // 新增 investigation-requirement 指令支持
+    investigate?: string;
+    review?: string;
+    investigateWithFeedback?: string;
+    split?: string;
+    splitReview?: string;
   };
   /** 向后兼容：直接以模板名称为键 */
   [templateName: string]: string | 'zh' | 'en' | Record<string, string> | undefined;

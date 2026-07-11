@@ -3,6 +3,7 @@ import { callAIForJSON } from './ai-integration';
 import { loadAndRenderTemplate } from '../prompt-templates/loader';
 import { generateReport } from './report-generator';
 import { createLogger } from '../logger';
+import { loadCustomRequirements, formatCustomRequirements } from './config-reader';
 
 /**
  * 对调查报告进行 AI 质量评审（三维度评分）
@@ -18,6 +19,7 @@ export async function reviewReport(
 ): Promise<ReviewResult> {
   const logger = createLogger('report-reviewer', cwd);
   const reportMarkdown = generateReport(report);
+  const customReqs = loadCustomRequirements(cwd);
 
   // LOG-08: 评审输入日志
   logger.debug('reviewReport input', {
@@ -32,7 +34,16 @@ export async function reviewReport(
     },
   });
 
-  const prompt = await loadAndRenderTemplate('review', { requirement, report: reportMarkdown }, lang, { mode: 'strict' });
+  const prompt = await loadAndRenderTemplate(
+    'review',
+    {
+      requirement,
+      report: reportMarkdown,
+      customRequirements: formatCustomRequirements(customReqs.review, 'review', lang),
+    },
+    lang,
+    { mode: 'strict' }
+  );
 
   const result = await callAIForJSON<ReviewResult>(
     { prompt, cwd, timeout, debug, allowedTools: ['Read'] },

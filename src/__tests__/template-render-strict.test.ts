@@ -16,7 +16,7 @@ import { investigationTemplates as enTemplates } from '../utils/prompt-templates
 // ── renderTemplate strict 模式测试（SOL-001 验证）──────────────────
 describe('renderTemplate strict mode', () => {
   test('strict 模式下中文 investigation 模板渲染正常', () => {
-    const template = zhTemplates.investigate;
+    const template = zhTemplates.investigate!;
     const params = {
       requirement: '测试需求',
       projectContext: '测试上下文',
@@ -24,6 +24,7 @@ describe('renderTemplate strict mode', () => {
       slug: 'test-slug',
       title: '测试标题',
       N: '30',
+      customRequirements: '## 用户定制要求\n请在调查过程中遵循以下定制要求：\n请确保包含代码位置引用\n',
     };
 
     expect(() => {
@@ -32,7 +33,7 @@ describe('renderTemplate strict mode', () => {
   });
 
   test('strict 模式下英文 investigation 模板渲染正常', () => {
-    const template = enTemplates.investigate;
+    const template = enTemplates.investigate!;
     const params = {
       requirement: 'Test requirement',
       projectContext: 'Test context',
@@ -40,6 +41,24 @@ describe('renderTemplate strict mode', () => {
       slug: 'test-slug',
       title: 'Test title',
       N: '30',
+      customRequirements: '## Custom Requirements\nPlease follow the custom requirements below during investigation:\nInclude code references\n',
+    };
+
+    expect(() => {
+      renderTemplate(template, params, { mode: 'strict' });
+    }).not.toThrow();
+  });
+
+  test('strict 模式下中文 investigation 模板无 customRequirements 时渲染正常', () => {
+    const template = zhTemplates.investigate!;
+    const params = {
+      requirement: '测试需求',
+      projectContext: '测试上下文',
+      date: '2026-07-11',
+      slug: 'test-slug',
+      title: '测试标题',
+      N: '30',
+      customRequirements: '', // 空值
     };
 
     expect(() => {
@@ -87,7 +106,7 @@ describe('validateTemplate', () => {
   });
 
   test('investigation 模板预检查通过', () => {
-    const template = zhTemplates.investigate;
+    const template = zhTemplates.investigate!;
     const knownPlaceholders = [
       'requirement', 'projectContext', 'date', 'slug', 'title', 'N',
     ];

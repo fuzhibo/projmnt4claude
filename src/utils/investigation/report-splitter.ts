@@ -3,6 +3,7 @@ import * as path from 'path';
 import type { InvestigationReport, SplitPlan, SplitItem, SplitReviewResult, SplitReviewIssue, OutputMode } from './types';
 import { loadAndRenderTemplate } from '../prompt-templates/loader';
 import { generateReport } from './report-generator';
+import { loadCustomRequirements, formatCustomRequirements, loadInvestigationConfig } from './config-reader';
 
 /**
  * 检查是否需要拆分（文件大小超过阈值）
@@ -22,7 +23,18 @@ export async function generateSplitPlan(
   lang: 'zh' | 'en' = 'zh',
 ): Promise<SplitPlan> {
   const reportMarkdown = generateReport(report);
-  const prompt = await loadAndRenderTemplate('split', { report: reportMarkdown }, lang, { mode: 'strict' });
+  const customReqs = loadCustomRequirements(cwd);
+  const invConfig = loadInvestigationConfig(cwd);
+  const prompt = await loadAndRenderTemplate(
+    'split',
+    {
+      report: reportMarkdown,
+      splitThreshold: String(invConfig.splitThreshold),
+      customRequirements: formatCustomRequirements(customReqs.split, 'split', lang),
+    },
+    lang,
+    { mode: 'strict' }
+  );
 
   const { callAIForJSON } = await import('./ai-integration');
   return callAIForJSON<SplitPlan>({ prompt, cwd, allowedTools: ['Read'] }, validateSplitPlan);
@@ -39,7 +51,17 @@ export async function reviewSplitPlan(
 ): Promise<SplitReviewResult> {
   const summary = summarizeReport(report);
   const planJson = JSON.stringify(splitPlan, null, 2);
-  const prompt = await loadAndRenderTemplate('splitReview', { reportSummary: summary, splitPlan: planJson }, lang, { mode: 'strict' });
+  const customReqs = loadCustomRequirements(cwd);
+  const prompt = await loadAndRenderTemplate(
+    'splitReview',
+    {
+      reportSummary: summary,
+      splitPlan: planJson,
+      customRequirements: formatCustomRequirements(customReqs.splitReview, 'splitReview', lang),
+    },
+    lang,
+    { mode: 'strict' }
+  );
 
   const { callAIForJSON } = await import('./ai-integration');
   return callAIForJSON<SplitReviewResult>({ prompt, cwd, allowedTools: ['Read'] }, validateSplitReviewResult);

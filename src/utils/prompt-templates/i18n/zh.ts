@@ -30,6 +30,8 @@ export const investigationTemplates: Record<string, string> = {
 ## 项目上下文
 {projectContext}
 
+{customRequirements}
+
 ## 排版层级约束（必须严格遵守）
 - 标题层级：# 一级 → ## 二级 → ### 三级，不得跳级
 - 章节编号：使用 CA-NNN / SOL-NNN 格式（如 CA-001, SOL-001），与解析器契约一致
@@ -98,6 +100,8 @@ export const investigationTemplates: Record<string, string> = {
 
 ## 调查报告
 {report}
+
+{customRequirements}
 
 ## 排版层级约束（评审时检查）
 - 标题层级：# 一级 → ## 二级 → ### 三级，不得跳级
@@ -188,6 +192,8 @@ export const investigationTemplates: Record<string, string> = {
 ## 用户反馈
 {feedback}
 
+{customRequirements}
+
 ## 修正指导
 - 针对反馈中提到的问题，在报告中对应章节进行修正
 - 修正时保持报告整体结构不变
@@ -216,6 +222,8 @@ export const investigationTemplates: Record<string, string> = {
 
 ## 当前拆分阈值
 {splitThreshold} KB
+
+{customRequirements}
 
 ## 拆分指导
 
@@ -265,6 +273,8 @@ export const investigationTemplates: Record<string, string> = {
 
 ## 拆分方案
 {splitPlan}
+
+{customRequirements}
 
 ## 当前拆分阈值
 {splitThreshold} KB

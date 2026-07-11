@@ -398,6 +398,56 @@ describe('setConfig', () => {
     expect(written!.prompts!.customRequirements!.evaluation).toBe('Ensure backward compatibility');
   });
 
+  test('设置 prompts.customRequirements.investigate', () => {
+    createTestConfigFile(env.projectDir, baseConfig({ prompts: { customRequirements: {} } }));
+    const origLog = console.log;
+    console.log = () => {};
+    setConfig('prompts.customRequirements.investigate', '请确保包含代码位置引用', env.tempDir);
+    console.log = origLog;
+    const written = readTestConfigFile(env.projectDir);
+    expect(written!.prompts!.customRequirements!.investigate).toBe('请确保包含代码位置引用');
+  });
+
+  test('设置 prompts.customRequirements.review', () => {
+    createTestConfigFile(env.projectDir, baseConfig({ prompts: { customRequirements: {} } }));
+    const origLog = console.log;
+    console.log = () => {};
+    setConfig('prompts.customRequirements.review', '检查原因分析完整性', env.tempDir);
+    console.log = origLog;
+    const written = readTestConfigFile(env.projectDir);
+    expect(written!.prompts!.customRequirements!.review).toBe('检查原因分析完整性');
+  });
+
+  test('设置 prompts.customRequirements.investigateWithFeedback', () => {
+    createTestConfigFile(env.projectDir, baseConfig({ prompts: { customRequirements: {} } }));
+    const origLog = console.log;
+    console.log = () => {};
+    setConfig('prompts.customRequirements.investigateWithFeedback', '修正时保持报告结构不变', env.tempDir);
+    console.log = origLog;
+    const written = readTestConfigFile(env.projectDir);
+    expect(written!.prompts!.customRequirements!.investigateWithFeedback).toBe('修正时保持报告结构不变');
+  });
+
+  test('设置 prompts.customRequirements.split', () => {
+    createTestConfigFile(env.projectDir, baseConfig({ prompts: { customRequirements: {} } }));
+    const origLog = console.log;
+    console.log = () => {};
+    setConfig('prompts.customRequirements.split', '每个子项必须包含完整闭环', env.tempDir);
+    console.log = origLog;
+    const written = readTestConfigFile(env.projectDir);
+    expect(written!.prompts!.customRequirements!.split).toBe('每个子项必须包含完整闭环');
+  });
+
+  test('设置 prompts.customRequirements.splitReview', () => {
+    createTestConfigFile(env.projectDir, baseConfig({ prompts: { customRequirements: {} } }));
+    const origLog = console.log;
+    console.log = () => {};
+    setConfig('prompts.customRequirements.splitReview', '检查反阶段拆分', env.tempDir);
+    console.log = origLog;
+    const written = readTestConfigFile(env.projectDir);
+    expect(written!.prompts!.customRequirements!.splitReview).toBe('检查反阶段拆分');
+  });
+
   test('未知 phase 名被拒绝', () => {
     const restore = mockProcessExit();
     const origError = console.error;

@@ -148,7 +148,10 @@ interface ConfigKeySchema {
 }
 
 /** Valid phase names for customRequirements */
-const VALID_PHASE_NAMES = ['dev', 'codeReview', 'qa', 'evaluation'] as const;
+const VALID_PHASE_NAMES = [
+  'dev', 'codeReview', 'qa', 'evaluation',
+  'investigate', 'review', 'investigateWithFeedback', 'split', 'splitReview'
+] as const;
 
 /** Known config keys and their validation rules */
 const CONFIG_SCHEMA: Record<string, ConfigKeySchema> = {

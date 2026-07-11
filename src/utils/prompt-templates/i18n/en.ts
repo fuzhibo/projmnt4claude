@@ -30,6 +30,8 @@ Generate a structured investigation report based on the following requirement de
 ## Project Context
 {projectContext}
 
+{customRequirements}
+
 ## Layout Hierarchy Constraints (Must Strictly Follow)
 - Title hierarchy: # Level 1 → ## Level 2 → ### Level 3, no skipping
 - Section numbering: Use CA-NNN / SOL-NNN format (e.g., CA-001, SOL-001), consistent with parser contract
@@ -99,6 +101,8 @@ Review the quality of the following investigation report across three dimensions
 
 ## Investigation Report
 {report}
+
+{customRequirements}
 
 ## Layout Hierarchy Constraints (Check During Review)
 - Title hierarchy: # Level 1 → ## Level 2 → ### Level 3, no skipping
@@ -189,6 +193,8 @@ Revise the following investigation report based on user feedback.
 ## User Feedback
 {feedback}
 
+{customRequirements}
+
 ## Revision Guidelines
 - Address the issues raised in the feedback in the corresponding sections of the report
 - Keep the overall report structure unchanged
@@ -217,6 +223,8 @@ Split the following investigation report into independent sub-problem/sub-requir
 
 ## Current Split Threshold
 {splitThreshold} KB
+
+{customRequirements}
 
 ## Split Guidelines
 
@@ -266,6 +274,8 @@ Review the following split plan against split requirements across six dimensions
 
 ## Split Plan
 {splitPlan}
+
+{customRequirements}
 
 ## Current Split Threshold
 {splitThreshold} KB

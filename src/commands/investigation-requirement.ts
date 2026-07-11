@@ -34,7 +34,7 @@ import {
   generateSplitPlan,
   reviewSplitPlan,
 } from '../utils/investigation/report-splitter';
-import { loadInvestigationConfig, loadLanguageConfig } from '../utils/investigation/config-reader';
+import { loadInvestigationConfig, loadLanguageConfig, loadCustomRequirements, formatCustomRequirements } from '../utils/investigation/config-reader';
 import { isInitialized } from '../utils/path';
 import { createLogger } from '../utils/logger.js';
 import { killAllActiveChildren } from '../utils/child-process-registry.js';
@@ -812,9 +812,17 @@ async function runInteractiveMode(
     // 基于反馈修正报告（使用 investigateWithFeedback 模板）
     console.log('\n🔄 Refining report based on feedback...');
 
+    const customReqs = loadCustomRequirements(cwd);
+
     const prompt = await loadAndRenderTemplate(
       'investigateWithFeedback',
-      { requirement, currentReport: reportMarkdown, feedback, date: new Date().toISOString() },
+      {
+        requirement,
+        currentReport: reportMarkdown,
+        feedback,
+        date: new Date().toISOString(),
+        customRequirements: formatCustomRequirements(customReqs.investigateWithFeedback, 'investigateWithFeedback', lang),
+      },
       lang,
       { mode: options.templateMode ?? 'strict' },
     );
@@ -890,6 +898,7 @@ async function runFeedbackMode(
   const feedbackContent = requirement || 'Please review and improve this report.';
 
   // 使用 investigateWithFeedback 模板（参数: requirement, currentReport, feedback, date）
+  const customReqs = loadCustomRequirements(cwd);
   const prompt = await loadAndRenderTemplate(
     'investigateWithFeedback',
     {
@@ -897,6 +906,7 @@ async function runFeedbackMode(
       currentReport: existingReportContent,
       feedback: feedbackContent,
       date: new Date().toISOString(),
+      customRequirements: formatCustomRequirements(customReqs.investigateWithFeedback, 'investigateWithFeedback', lang),
     },
     lang,
     { mode: options.templateMode ?? 'strict' },
@@ -1600,9 +1610,19 @@ async function generateInvestigationReport(
     const title = requirement.slice(0, 50);
     const N = '60';
 
+    const customReqs = loadCustomRequirements(cwd);
+
     prompt = await loadAndRenderTemplate(
       'investigate',
-      { requirement, projectContext, date, slug, title, N },
+      {
+        requirement,
+        projectContext,
+        date,
+        slug,
+        title,
+        N,
+        customRequirements: formatCustomRequirements(customReqs.investigate, 'investigate', opts.lang),
+      },
       opts.lang,
       { mode: opts.templateMode ?? 'strict' },
     );
@@ -1669,6 +1689,7 @@ async function generateSubReport(
   debug?: boolean,
   templateMode?: RenderTemplateMode,
 ): Promise<InvestigationReport> {
+  const customReqs = loadCustomRequirements(cwd);
   const subPrompt = await loadAndRenderTemplate(
     'investigate',
     {
@@ -1678,6 +1699,7 @@ async function generateSubReport(
       slug: slugify(splitItem.title),
       title: splitItem.title.slice(0, 50),
       N: '60',
+      customRequirements: formatCustomRequirements(customReqs.investigate, 'investigate', lang),
     },
     lang,
     { mode: templateMode ?? 'strict' },
