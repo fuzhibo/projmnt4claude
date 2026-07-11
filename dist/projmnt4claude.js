@@ -11181,7 +11181,17 @@ var init_config2 = __esm(() => {
   init_path();
   init_prompt_templates();
   init_config();
-  VALID_PHASE_NAMES = ["dev", "codeReview", "qa", "evaluation"];
+  VALID_PHASE_NAMES = [
+    "dev",
+    "codeReview",
+    "qa",
+    "evaluation",
+    "investigate",
+    "review",
+    "investigateWithFeedback",
+    "split",
+    "splitReview"
+  ];
   CONFIG_SCHEMA = {
     projectName: { type: "string" },
     branchPrefix: { type: "string" },
@@ -25723,7 +25733,17 @@ function setConfigValue2(config, key, value) {
   }
   return result;
 }
-var VALID_PHASE_NAMES2 = ["dev", "codeReview", "qa", "evaluation"];
+var VALID_PHASE_NAMES2 = [
+  "dev",
+  "codeReview",
+  "qa",
+  "evaluation",
+  "investigate",
+  "review",
+  "investigateWithFeedback",
+  "split",
+  "splitReview"
+];
 var CONFIG_SCHEMA2 = {
   projectName: { type: "string" },
   branchPrefix: { type: "string" },
@@ -36478,6 +36498,8 @@ var investigationTemplates = {
 ## 项目上下文
 {projectContext}
 
+{customRequirements}
+
 ## 排版层级约束（必须严格遵守）
 - 标题层级：# 一级 → ## 二级 → ### 三级，不得跳级
 - 章节编号：使用 CA-NNN / SOL-NNN 格式（如 CA-001, SOL-001），与解析器契约一致
@@ -36545,6 +36567,8 @@ var investigationTemplates = {
 
 ## 调查报告
 {report}
+
+{customRequirements}
 
 ## 排版层级约束（评审时检查）
 - 标题层级：# 一级 → ## 二级 → ### 三级，不得跳级
@@ -36634,6 +36658,8 @@ var investigationTemplates = {
 ## 用户反馈
 {feedback}
 
+{customRequirements}
+
 ## 修正指导
 - 针对反馈中提到的问题，在报告中对应章节进行修正
 - 修正时保持报告整体结构不变
@@ -36661,6 +36687,8 @@ var investigationTemplates = {
 
 ## 当前拆分阈值
 {splitThreshold} KB
+
+{customRequirements}
 
 ## 拆分指导
 
@@ -36709,6 +36737,8 @@ var investigationTemplates = {
 
 ## 拆分方案
 {splitPlan}
+
+{customRequirements}
 
 ## 当前拆分阈值
 {splitThreshold} KB
@@ -36784,6 +36814,8 @@ Generate a structured investigation report based on the following requirement de
 ## Project Context
 {projectContext}
 
+{customRequirements}
+
 ## Layout Hierarchy Constraints (Must Strictly Follow)
 - Title hierarchy: # Level 1 → ## Level 2 → ### Level 3, no skipping
 - Section numbering: Use CA-NNN / SOL-NNN format (e.g., CA-001, SOL-001), consistent with parser contract
@@ -36852,6 +36884,8 @@ Review the quality of the following investigation report across three dimensions
 
 ## Investigation Report
 {report}
+
+{customRequirements}
 
 ## Layout Hierarchy Constraints (Check During Review)
 - Title hierarchy: # Level 1 → ## Level 2 → ### Level 3, no skipping
@@ -36941,6 +36975,8 @@ Revise the following investigation report based on user feedback.
 ## User Feedback
 {feedback}
 
+{customRequirements}
+
 ## Revision Guidelines
 - Address the issues raised in the feedback in the corresponding sections of the report
 - Keep the overall report structure unchanged
@@ -36968,6 +37004,8 @@ Split the following investigation report into independent sub-problem/sub-requir
 
 ## Current Split Threshold
 {splitThreshold} KB
+
+{customRequirements}
 
 ## Split Guidelines
 
@@ -37016,6 +37054,8 @@ Review the following split plan against split requirements across six dimensions
 
 ## Split Plan
 {splitPlan}
+
+{customRequirements}
 
 ## Current Split Threshold
 {splitThreshold} KB
@@ -38440,9 +38480,121 @@ function validateImpactScope(v) {
 // src/utils/investigation/report-reviewer.ts
 init_ai_integration();
 init_logger();
+
+// src/utils/investigation/config-reader.ts
+import * as fs28 from "fs";
+import * as path25 from "path";
+var DEFAULT_CONFIG2 = {
+  splitThreshold: 30,
+  maxRetry: 3,
+  outputDir: "docs/investigation"
+};
+function findConfigPath(cwd) {
+  const projConfigPath = path25.join(cwd, ".projmnt4claude", "config.json");
+  if (fs28.existsSync(projConfigPath))
+    return projConfigPath;
+  const rootConfigPath = path25.join(cwd, "config.json");
+  if (fs28.existsSync(rootConfigPath))
+    return rootConfigPath;
+  return null;
+}
+function loadInvestigationConfig(cwd, cliThreshold) {
+  try {
+    const configPath = findConfigPath(cwd);
+    if (configPath && fs28.existsSync(configPath)) {
+      const content = fs28.readFileSync(configPath, "utf-8");
+      const config = JSON.parse(content);
+      const invConfig = config?.investigation;
+      if (invConfig) {
+        return {
+          splitThreshold: cliThreshold ?? invConfig.splitThreshold ?? DEFAULT_CONFIG2.splitThreshold,
+          maxRetry: invConfig.maxRetry ?? DEFAULT_CONFIG2.maxRetry,
+          outputDir: invConfig.outputDir ?? DEFAULT_CONFIG2.outputDir
+        };
+      }
+    }
+  } catch {}
+  return {
+    ...DEFAULT_CONFIG2,
+    splitThreshold: cliThreshold ?? DEFAULT_CONFIG2.splitThreshold
+  };
+}
+function loadLanguageConfig(cwd) {
+  try {
+    const configPath = findConfigPath(cwd);
+    if (configPath && fs28.existsSync(configPath)) {
+      const content = fs28.readFileSync(configPath, "utf-8");
+      const config = JSON.parse(content);
+      const lang = config?.prompts?.language;
+      if (lang === "en" || lang === "zh") {
+        return lang;
+      }
+    }
+  } catch {}
+  const envLang = process.env.LANG || process.env.LC_ALL || "";
+  if (envLang.toLowerCase().includes("zh")) {
+    return "zh";
+  }
+  return "zh";
+}
+var GUIDANCE_TEMPLATES = {
+  zh: {
+    investigate: `## 用户定制要求
+请在调查过程中遵循以下定制要求：`,
+    review: `## 用户定制要求
+请在评审过程中遵循以下定制要求：`,
+    investigateWithFeedback: `## 用户定制要求
+请在修正过程中遵循以下定制要求：`,
+    split: `## 用户定制要求
+请在拆分过程中遵循以下定制要求：`,
+    splitReview: `## 用户定制要求
+请在审核过程中遵循以下定制要求：`
+  },
+  en: {
+    investigate: `## Custom Requirements
+Please follow the custom requirements below during investigation:`,
+    review: `## Custom Requirements
+Please follow the custom requirements below during review:`,
+    investigateWithFeedback: `## Custom Requirements
+Please follow the custom requirements below during revision:`,
+    split: `## Custom Requirements
+Please follow the custom requirements below during splitting:`,
+    splitReview: `## Custom Requirements
+Please follow the custom requirements below during split review:`
+  }
+};
+function loadCustomRequirements2(cwd) {
+  const configPath = findConfigPath(cwd);
+  if (configPath && fs28.existsSync(configPath)) {
+    try {
+      const content = fs28.readFileSync(configPath, "utf-8");
+      const config = JSON.parse(content);
+      const customReqs = config?.prompts?.customRequirements || {};
+      return {
+        investigate: customReqs.investigate || "",
+        review: customReqs.review || "",
+        investigateWithFeedback: customReqs.investigateWithFeedback || "",
+        split: customReqs.split || "",
+        splitReview: customReqs.splitReview || ""
+      };
+    } catch {}
+  }
+  return { investigate: "", review: "", investigateWithFeedback: "", split: "", splitReview: "" };
+}
+function formatCustomRequirements(text, phase, lang) {
+  if (!text || text.trim() === "")
+    return "";
+  const guidance = GUIDANCE_TEMPLATES[lang]?.[phase] || "";
+  return `${guidance}
+${text}
+`;
+}
+
+// src/utils/investigation/report-reviewer.ts
 async function reviewReport(requirement, report, cwd, lang = "zh", timeout, debug) {
   const logger = createLogger("report-reviewer", cwd);
   const reportMarkdown = generateReport(report);
+  const customReqs = loadCustomRequirements2(cwd);
   logger.debug("reviewReport input", {
     requirementLength: requirement.length,
     requirementPreview: requirement.substring(0, 200),
@@ -38454,7 +38606,11 @@ async function reviewReport(requirement, report, cwd, lang = "zh", timeout, debu
       checkpointCount: report.checkpoints.length
     }
   });
-  const prompt = await loadAndRenderTemplate("review", { requirement, report: reportMarkdown }, lang, { mode: "strict" });
+  const prompt = await loadAndRenderTemplate("review", {
+    requirement,
+    report: reportMarkdown,
+    customRequirements: formatCustomRequirements(customReqs.review, "review", lang)
+  }, lang, { mode: "strict" });
   const result = await callAIForJSON({ prompt, cwd, timeout, debug, allowedTools: ["Read"] }, validateReviewResult);
   logger.debug("reviewReport output", {
     pass: result.pass,
@@ -38494,23 +38650,34 @@ function validateReviewResult(data) {
 }
 
 // src/utils/investigation/report-splitter.ts
-import * as fs28 from "fs";
+import * as fs29 from "fs";
 function shouldSplit(reportPath, thresholdKB) {
-  if (!fs28.existsSync(reportPath))
+  if (!fs29.existsSync(reportPath))
     return false;
-  const sizeKB = fs28.statSync(reportPath).size / 1024;
+  const sizeKB = fs29.statSync(reportPath).size / 1024;
   return sizeKB > thresholdKB;
 }
 async function generateSplitPlan(report, cwd, lang = "zh") {
   const reportMarkdown = generateReport(report);
-  const prompt = await loadAndRenderTemplate("split", { report: reportMarkdown }, lang, { mode: "strict" });
+  const customReqs = loadCustomRequirements2(cwd);
+  const invConfig = loadInvestigationConfig(cwd);
+  const prompt = await loadAndRenderTemplate("split", {
+    report: reportMarkdown,
+    splitThreshold: String(invConfig.splitThreshold),
+    customRequirements: formatCustomRequirements(customReqs.split, "split", lang)
+  }, lang, { mode: "strict" });
   const { callAIForJSON: callAIForJSON2 } = await Promise.resolve().then(() => (init_ai_integration(), exports_ai_integration));
   return callAIForJSON2({ prompt, cwd, allowedTools: ["Read"] }, validateSplitPlan);
 }
 async function reviewSplitPlan(report, splitPlan, cwd, lang = "zh") {
   const summary = summarizeReport(report);
   const planJson = JSON.stringify(splitPlan, null, 2);
-  const prompt = await loadAndRenderTemplate("splitReview", { reportSummary: summary, splitPlan: planJson }, lang, { mode: "strict" });
+  const customReqs = loadCustomRequirements2(cwd);
+  const prompt = await loadAndRenderTemplate("splitReview", {
+    reportSummary: summary,
+    splitPlan: planJson,
+    customRequirements: formatCustomRequirements(customReqs.splitReview, "splitReview", lang)
+  }, lang, { mode: "strict" });
   const { callAIForJSON: callAIForJSON2 } = await Promise.resolve().then(() => (init_ai_integration(), exports_ai_integration));
   return callAIForJSON2({ prompt, cwd, allowedTools: ["Read"] }, validateSplitReviewResult);
 }
@@ -38564,63 +38731,6 @@ function validateSplitReviewResult(data) {
     },
     issues: r.issues || []
   };
-}
-
-// src/utils/investigation/config-reader.ts
-import * as fs29 from "fs";
-import * as path25 from "path";
-var DEFAULT_CONFIG2 = {
-  splitThreshold: 30,
-  maxRetry: 3,
-  outputDir: "docs/investigation"
-};
-function findConfigPath(cwd) {
-  const projConfigPath = path25.join(cwd, ".projmnt4claude", "config.json");
-  if (fs29.existsSync(projConfigPath))
-    return projConfigPath;
-  const rootConfigPath = path25.join(cwd, "config.json");
-  if (fs29.existsSync(rootConfigPath))
-    return rootConfigPath;
-  return null;
-}
-function loadInvestigationConfig(cwd, cliThreshold) {
-  try {
-    const configPath = findConfigPath(cwd);
-    if (configPath && fs29.existsSync(configPath)) {
-      const content = fs29.readFileSync(configPath, "utf-8");
-      const config = JSON.parse(content);
-      const invConfig = config?.investigation;
-      if (invConfig) {
-        return {
-          splitThreshold: cliThreshold ?? invConfig.splitThreshold ?? DEFAULT_CONFIG2.splitThreshold,
-          maxRetry: invConfig.maxRetry ?? DEFAULT_CONFIG2.maxRetry,
-          outputDir: invConfig.outputDir ?? DEFAULT_CONFIG2.outputDir
-        };
-      }
-    }
-  } catch {}
-  return {
-    ...DEFAULT_CONFIG2,
-    splitThreshold: cliThreshold ?? DEFAULT_CONFIG2.splitThreshold
-  };
-}
-function loadLanguageConfig(cwd) {
-  try {
-    const configPath = findConfigPath(cwd);
-    if (configPath && fs29.existsSync(configPath)) {
-      const content = fs29.readFileSync(configPath, "utf-8");
-      const config = JSON.parse(content);
-      const lang = config?.prompts?.language;
-      if (lang === "en" || lang === "zh") {
-        return lang;
-      }
-    }
-  } catch {}
-  const envLang = process.env.LANG || process.env.LC_ALL || "";
-  if (envLang.toLowerCase().includes("zh")) {
-    return "zh";
-  }
-  return "zh";
 }
 
 // src/commands/investigation-requirement.ts
@@ -38850,8 +38960,13 @@ async function runNewInvestigation(requirement, cwd, options) {
   while (retryCount <= maxRetry) {
     const formatValidation = validateReport(report);
     let reviewResult;
-    if (!options.skipReview) {
+    try {
       reviewResult = await reviewReport(requirement, report, cwd, lang, options.timeout, options.debug);
+    } catch (reviewErr) {
+      logger.warn("reviewReport failed, falling back to format errors", {
+        error: reviewErr instanceof Error ? reviewErr.message : String(reviewErr)
+      });
+      reviewResult = undefined;
     }
     const formatPassed = formatValidation.blockingErrors.length === 0;
     const reviewPassed = options.skipReview || (reviewResult?.pass ?? false);
@@ -39141,7 +39256,14 @@ async function runInteractiveMode(requirement, cwd, options) {
     }
     console.log(`
 \uD83D\uDD04 Refining report based on feedback...`);
-    const prompt = await loadAndRenderTemplate("investigateWithFeedback", { requirement, currentReport: reportMarkdown, feedback, date: new Date().toISOString() }, lang, { mode: options.templateMode ?? "strict" });
+    const customReqs = loadCustomRequirements2(cwd);
+    const prompt = await loadAndRenderTemplate("investigateWithFeedback", {
+      requirement,
+      currentReport: reportMarkdown,
+      feedback,
+      date: new Date().toISOString(),
+      customRequirements: formatCustomRequirements(customReqs.investigateWithFeedback, "investigateWithFeedback", lang)
+    }, lang, { mode: options.templateMode ?? "strict" });
     const aiResult = await callAI({ prompt, cwd, outputFormat: "text", timeout: options.timeout, debug: options.debug, allowedTools: ["Read", "Edit", "Write"] });
     if (aiResult.success) {
       report = parseReport(aiResult.output, options.debug);
@@ -39192,11 +39314,13 @@ async function runFeedbackMode(requirement, cwd, options) {
   const existingReportContent = fs30.readFileSync(options.reportPath, "utf-8");
   const report = parseReport(existingReportContent, options.debug);
   const feedbackContent = requirement || "Please review and improve this report.";
+  const customReqs = loadCustomRequirements2(cwd);
   const prompt = await loadAndRenderTemplate("investigateWithFeedback", {
     requirement: report.metadata.requirementSource,
     currentReport: existingReportContent,
     feedback: feedbackContent,
-    date: new Date().toISOString()
+    date: new Date().toISOString(),
+    customRequirements: formatCustomRequirements(customReqs.investigateWithFeedback, "investigateWithFeedback", lang)
   }, lang, { mode: options.templateMode ?? "strict" });
   const aiResult = await callAI({ prompt, cwd, outputFormat: "text", timeout: options.timeout, debug: options.debug, allowedTools: ["Read", "Write"] });
   if (!aiResult.success) {
@@ -39591,8 +39715,6 @@ function withTimeoutRace(promise, timeoutMs, label) {
 function cleanupIntermediateFiles(outputDir, logger) {
   const patterns = [
     "report-final.md",
-    /^report-attempt-\d+\.md$/,
-    /^report-attempt-\d+-review\.md$/,
     /^report-generated(-\d+)?\.md$/,
     /^report-generated-retry-\d+\.md$/
   ];
@@ -39637,7 +39759,16 @@ async function generateInvestigationReport(requirement, cwd, optionsOrLang, time
     const projectContext = await getProjectContext(cwd);
     const title = requirement.slice(0, 50);
     const N = "60";
-    prompt = await loadAndRenderTemplate("investigate", { requirement, projectContext, date, slug, title, N }, opts.lang, { mode: opts.templateMode ?? "strict" });
+    const customReqs = loadCustomRequirements2(cwd);
+    prompt = await loadAndRenderTemplate("investigate", {
+      requirement,
+      projectContext,
+      date,
+      slug,
+      title,
+      N,
+      customRequirements: formatCustomRequirements(customReqs.investigate, "investigate", opts.lang)
+    }, opts.lang, { mode: opts.templateMode ?? "strict" });
   }
   const result = await callAI({
     prompt,
@@ -39675,6 +39806,7 @@ async function getProjectContext(cwd) {
 `);
 }
 async function generateSubReport(parentReport, splitItem, requirement, cwd, lang, timeout, debug, templateMode) {
+  const customReqs = loadCustomRequirements2(cwd);
   const subPrompt = await loadAndRenderTemplate("investigate", {
     requirement: `[Sub-investigation] ${splitItem.title}
 
@@ -39686,7 +39818,8 @@ Original requirement: ${requirement}`,
     date: new Date().toISOString(),
     slug: slugify(splitItem.title),
     title: splitItem.title.slice(0, 50),
-    N: "60"
+    N: "60",
+    customRequirements: formatCustomRequirements(customReqs.investigate, "investigate", lang)
   }, lang, { mode: templateMode ?? "strict" });
   const result = await callAI({ prompt: subPrompt, cwd, outputFormat: "text", timeout, debug, allowedTools: ["Read", "Edit", "Write", "Bash", "Grep", "Glob"] });
   if (!result.success) {
