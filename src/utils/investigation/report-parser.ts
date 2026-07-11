@@ -33,10 +33,9 @@ export function parseReport(markdown: string, checkpointOptions?: ParseCheckpoin
   const options: ParseCheckpointsOptions | undefined =
     typeof checkpointOptions === 'boolean' ? undefined : checkpointOptions;
 
-  // LOG-04: 解析输入日志
+  // LOG-04: 解析输入日志（仅 debug 模式）
   logger.debug('parseReport input', {
     inputLength: markdown.length,
-    inputPreview: markdown.substring(0, 300),
   });
 
   const metadata = parseMetadata(markdown);
@@ -46,23 +45,42 @@ export function parseReport(markdown: string, checkpointOptions?: ParseCheckpoin
   const checkpoints = parseCheckpoints(markdown, options);
   const assessment = parseAssessment(markdown);
 
-  // LOG-05: 解析结果摘要
-  logger.debug('parseReport result', {
-    metadata: {
-      hasSource: !!metadata.requirementSource,
-      sourceLength: metadata.requirementSource.length,
-    },
-    rootCauseCount: rootCauseAnalysis.length,
-    solutionCount: solutions.length,
-    checkpointCount: checkpoints.length,
-  });
-
-  // LOG-05: 空结果警告
+  // SOL-002: 异常报错日志增强 - 仅在核心章节缺失时记录详细诊断信息
   if (rootCauseAnalysis.length === 0 || solutions.length === 0) {
-    logger.warn('parseReport returned empty sections', {
+    // 检测到的标题（帮助定位格式问题）
+    const detectedH2Headers = markdown.match(/^##\s+.+$/gm) ?? [];
+    const detectedH3Headers = markdown.match(/^###\s+.+$/gm) ?? [];
+
+    // 章节匹配结果
+    const expectedSections = ['原因分析', '解决方案', '检查点覆盖清单'];
+    const foundSections = [
+      markdown.includes('原因分析') ? '原因分析' : null,
+      markdown.includes('解决方案') ? '解决方案' : null,
+      markdown.includes('检查点') ? '检查点覆盖清单' : null,
+    ].filter(Boolean);
+
+    logger.error('parseReport failed: empty core sections', {
+      // 1. 解析结果
       rootCauseCount: rootCauseAnalysis.length,
       solutionCount: solutions.length,
+      checkpointCount: checkpoints.length,
+      // 2. AI 输出摘要
       inputLength: markdown.length,
+      inputPreview: markdown.substring(0, 500),
+      // 3. 检测到的标题（帮助定位格式问题）
+      detectedH2Headers,
+      detectedH3Headers,
+      // 4. 章节匹配结果
+      expectedSections,
+      foundSections,
+    });
+  }
+
+  // 警告性缺失（如 checkpoints 为空但核心章节存在）
+  if (rootCauseAnalysis.length > 0 && solutions.length > 0 && checkpoints.length === 0) {
+    logger.warn('parseReport: checkpoints section empty', {
+      checkpointCount: 0,
+      hasCheckpointsSection: markdown.includes('检查点'),
     });
   }
 

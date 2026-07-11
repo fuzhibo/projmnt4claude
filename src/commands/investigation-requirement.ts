@@ -181,9 +181,17 @@ const RETRY_PROMPT_TEMPLATE_ZH = `你是 projmnt4claude 项目的需求调查分
 审核报告已保存到: {reviewPath}
 （请查看审核报告获取更详细的问题分析和修正建议）
 
-## ⚠️ 重要：必须严格按照以下格式输出
+## ⚠️【强制】输出格式约束
+
+**必须**：直接输出完整的调查报告 Markdown 内容，格式如下：
 
 {formatExample}
+
+**禁止**：以下格式会导致解析失败，严禁使用：
+1. ❌ 摘要性文本（如"调查报告已生成。以下是关键发现摘要..."）
+2. ❌ 报告路径提示（如"报告已保存到 docs/..."）
+3. ❌ 验证结果摘要（如"格式检查通过..."）
+4. ❌ 任何非 Markdown 结构化报告的输出
 
 **注意**:
 1. 本次是第 {attemptNum} 次重试，请务必修正所有格式问题
@@ -213,9 +221,17 @@ This is attempt {attemptNum}. Your previous output had format issues. Please reg
 Review report saved to: {reviewPath}
 (Please check the review report for detailed issue analysis and correction suggestions)
 
-## ⚠️ Important: You MUST strictly follow this output format
+## ⚠️【MANDATORY】Output Format Constraints
+
+You MUST output the complete investigation report in Markdown format as follows:
 
 {formatExample}
+
+**FORBIDDEN**: The following formats will cause parsing failures and are strictly prohibited:
+1. ❌ Summary text (e.g., "Investigation report generated. Key findings summary...")
+2. ❌ Report path hints (e.g., "Report saved to docs/...")
+3. ❌ Validation result summary (e.g., "Format check passed...")
+4. ❌ Any non-Markdown structured report output
 
 **Notes**:
 1. This is attempt {attemptNum}. You MUST fix all format issues
