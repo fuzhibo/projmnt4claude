@@ -212,26 +212,26 @@ describe('§3.4 工具模块', () => {
       expect(result.errors.some(e => e.rule === 'ca-sol-correspondence')).toBe(true);
     });
 
-    it('should warn on invalid checkpoint prefix', () => {
+    it('should error on invalid checkpoint prefix (SOL-003: warnings→errors)', () => {
       const report = createTestReport({
         checkpoints: [{ prefix: 'invalid' as CheckpointPrefix, description: 'Bad prefix', belongsTo: 'SOL-001' }],
       });
       const result = validateReport(report);
-      expect(result.warnings.some(w => w.rule === 'checkpoint-prefix')).toBe(true);
+      expect(result.errors.some(e => e.rule === 'checkpoint-prefix')).toBe(true);
     });
 
-    it('should warn on invalid CA id format', () => {
+    it('should error on invalid CA id format (SOL-003: warnings→errors)', () => {
       const report = createTestReport({
         rootCauseAnalysis: [{ id: 'CA-1', title: 'Bad ID', description: 'Desc' }],
       });
       const result = validateReport(report);
-      expect(result.warnings.some(w => w.rule === 'id-format')).toBe(true);
+      expect(result.errors.some(e => e.rule === 'id-format')).toBe(true);
     });
 
-    it('should warn on missing assessment', () => {
+    it('should error on missing assessment (SOL-003: warnings→errors)', () => {
       const report = createTestReport({ assessment: undefined as any });
       const result = validateReport(report);
-      expect(result.warnings.some(w => w.rule === 'assessment-required')).toBe(true);
+      expect(result.errors.some(e => e.rule === 'assessment-required')).toBe(true);
     });
 
     it('should have exactly 8 validation rules', () => {
@@ -251,12 +251,12 @@ describe('§3.4 工具模块', () => {
       expect(rule!.initAction).toBe('block');
     });
 
-    it('should warn on checkpoint belongsTo pointing to invalid SOL', () => {
+    it('should error on checkpoint belongsTo pointing to invalid SOL (SOL-003: warnings→errors)', () => {
       const report = createTestReport({
         checkpoints: [{ prefix: 'ai-qa', description: 'Verify', belongsTo: 'SOL-999' }],
       });
       const result = validateReport(report);
-      expect(result.warnings.some(w => w.rule === 'checkpoint-belongsto')).toBe(true);
+      expect(result.errors.some(e => e.rule === 'checkpoint-belongsto')).toBe(true);
     });
 
     it('should error on missing checkpoints', () => {
@@ -266,12 +266,12 @@ describe('§3.4 工具模块', () => {
       expect(result.errors.some(e => e.rule === 'checkpoint-prefix')).toBe(true);
     });
 
-    it('should warn on invalid SOL id format', () => {
+    it('should error on invalid SOL id format (SOL-003: warnings→errors)', () => {
       const report = createTestReport({
         solutions: [{ id: 'SOL-1', title: 'Bad', correspondsTo: 'CA-001', description: 'Desc', files: [], expectedChanges: 'Changes' }],
       });
       const result = validateReport(report);
-      expect(result.warnings.some(w => w.rule === 'id-format')).toBe(true);
+      expect(result.errors.some(e => e.rule === 'id-format')).toBe(true);
     });
   });
 });
