@@ -217,8 +217,10 @@ export const investigationTemplates: Record<string, string> = {
 ## 任务
 将以下调查报告拆分为多个独立的子问题/子需求调查报告。
 
-## 原始调查报告
-{report}
+## 原始调查报告路径
+{reportPath}
+
+**重要**: 请使用 Read 工具读取报告文件内容，然后基于报告内容进行拆分分析。
 
 ## 当前拆分阈值
 {splitThreshold} KB
@@ -268,8 +270,10 @@ export const investigationTemplates: Record<string, string> = {
 ## 任务
 审核以下拆分方案是否满足拆分要求，从六个维度进行评估。
 
-## 原始调查报告
-{report}
+## 原始调查报告路径
+{reportPath}
+
+**重要**: 请使用 Read 工具读取报告文件内容，然后基于报告内容审核拆分方案。
 
 ## 拆分方案
 {splitPlan}

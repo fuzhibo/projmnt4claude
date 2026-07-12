@@ -1,8 +1,6 @@
 import * as fs from 'fs';
-import * as path from 'path';
-import type { InvestigationReport, SplitPlan, SplitItem, SplitReviewResult, SplitReviewIssue, OutputMode } from './types';
+import type { InvestigationReport, SplitPlan, SplitItem, SplitReviewResult, SplitReviewIssue } from './types';
 import { loadAndRenderTemplate } from '../prompt-templates/loader';
-import { generateReport } from './report-generator';
 import { loadCustomRequirements, formatCustomRequirements, loadInvestigationConfig } from './config-reader';
 
 /**
@@ -16,19 +14,20 @@ export function shouldSplit(reportPath: string, thresholdKB: number): boolean {
 
 /**
  * 生成拆分方案
+ *
+ * SOL-001: 采用文件路径注入方案，AI 通过 Read 工具读取报告内容
  */
 export async function generateSplitPlan(
-  report: InvestigationReport,
+  reportPath: string,
   cwd: string,
   lang: 'zh' | 'en' = 'zh',
 ): Promise<SplitPlan> {
-  const reportMarkdown = generateReport(report);
   const customReqs = loadCustomRequirements(cwd);
   const invConfig = loadInvestigationConfig(cwd);
   const prompt = await loadAndRenderTemplate(
     'split',
     {
-      report: reportMarkdown,
+      reportPath,
       splitThreshold: String(invConfig.splitThreshold),
       customRequirements: formatCustomRequirements(customReqs.split, 'split', lang),
     },
@@ -42,21 +41,24 @@ export async function generateSplitPlan(
 
 /**
  * AI 审核拆分方案（六维度，含反阶段拆分检测）
+ *
+ * SOL-001: 采用文件路径注入方案，AI 通过 Read 工具读取报告内容
  */
 export async function reviewSplitPlan(
-  report: InvestigationReport,
+  reportPath: string,
   splitPlan: SplitPlan,
   cwd: string,
   lang: 'zh' | 'en' = 'zh',
+  splitThreshold: number,
 ): Promise<SplitReviewResult> {
-  const summary = summarizeReport(report);
   const planJson = JSON.stringify(splitPlan, null, 2);
   const customReqs = loadCustomRequirements(cwd);
   const prompt = await loadAndRenderTemplate(
     'splitReview',
     {
-      reportSummary: summary,
+      reportPath,
       splitPlan: planJson,
+      splitThreshold: String(splitThreshold),
       customRequirements: formatCustomRequirements(customReqs.splitReview, 'splitReview', lang),
     },
     lang,
@@ -70,18 +72,25 @@ export async function reviewSplitPlan(
 /**
  * 完整拆分流程：生成方案 → 审核 → 对每个子项生成子报告
  * 审核失败时重试，达到上限抛出错误
+ *
+ * SOL-001: 采用文件路径注入方案
  */
 export async function executeSplit(
-  report: InvestigationReport,
+  reportPath: string,
   requirement: string,
   options: { cwd: string; lang: 'zh' | 'en'; maxRetry: number; splitThreshold: number; outputDir: string },
 ): Promise<InvestigationReport[]> {
   let currentPlan: SplitPlan | undefined;
   let lastReview: SplitReviewResult | undefined;
 
+  // 读取原始报告用于构建子报告
+  const reportContent = fs.readFileSync(reportPath, 'utf-8');
+  const { parseReport } = await import('./report-parser');
+  const report = parseReport(reportContent);
+
   for (let attempt = 0; attempt <= options.maxRetry; attempt++) {
-    currentPlan = await generateSplitPlan(report, options.cwd, options.lang);
-    lastReview = await reviewSplitPlan(report, currentPlan, options.cwd, options.lang);
+    currentPlan = await generateSplitPlan(reportPath, options.cwd, options.lang);
+    lastReview = await reviewSplitPlan(reportPath, currentPlan, options.cwd, options.lang, options.splitThreshold);
 
     if (lastReview.pass) break;
 
@@ -119,14 +128,6 @@ function buildSubReport(parent: InvestigationReport, item: SplitItem, index: num
       estimatedMinutes: item.estimatedSize * 2,
     },
   };
-}
-
-function summarizeReport(report: InvestigationReport): string {
-  return [
-    `原因分析: ${report.rootCauseAnalysis.length} 项`,
-    `解决方案: ${report.solutions.length} 项`,
-    `检查点: ${report.checkpoints.length} 项`,
-  ].join('\n');
 }
 
 function validateSplitPlan(data: unknown): SplitPlan {

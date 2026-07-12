@@ -5,6 +5,8 @@
  */
 
 import { describe, it, expect, jest, beforeEach, afterEach } from '@jest/globals';
+import * as fs from 'fs';
+import * as path from 'path';
 import { createIsolatedTestEnv, type IsolatedTestEnv } from '../../utils/test-env.js';
 import type { InvestigationReport } from '../../utils/investigation/types.js';
 
@@ -763,9 +765,14 @@ describe('investigation-requirement retry logic', () => {
     it('should return needsFurtherSplit when max depth reached', async () => {
       // 跳过评审和拆分，直接测试深度控制
       const { runSplitFlow } = await import('../investigation-requirement');
+      const { generateReport } = await import('../../utils/investigation/report-generator');
 
+      // SOL-001: 创建临时报告文件，因为 runSplitFlow 现在接受文件路径
       const mockReport = makeValidReport();
-      const result = await runSplitFlow(mockReport, 'test requirement', env.tempDir, {
+      const reportPath = path.join(env.tempDir, 'test-report.md');
+      fs.writeFileSync(reportPath, generateReport(mockReport));
+
+      const result = await runSplitFlow(reportPath, 'test requirement', env.tempDir, {
         lang: 'zh',
         maxRetry: 1,
         splitThreshold: 100,

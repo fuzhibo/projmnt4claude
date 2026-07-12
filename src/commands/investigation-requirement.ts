@@ -726,7 +726,7 @@ async function runNewInvestigation(
       console.log(`   📊 Report exceeds ${splitThreshold} KB, triggering split...`);
     }
 
-    const splitResult = await runSplitFlow(report, requirement, cwd, {
+    const splitResult = await runSplitFlow(reportPath, requirement, cwd, {
       lang,
       maxRetry,
       splitThreshold,
@@ -836,7 +836,7 @@ async function runInteractiveMode(
   // Step 3: 拆分（如果需要）
   let subReports: string[] = [];
   if (!options.skipSplit && reportPath && shouldSplit(reportPath, splitThreshold)) {
-    const splitResult = await runSplitFlow(report, requirement, cwd, {
+    const splitResult = await runSplitFlow(reportPath, requirement, cwd, {
       lang,
       maxRetry,
       splitThreshold,
@@ -1040,7 +1040,7 @@ async function runSplitMode(
   const report = parseReport(reportContent, options.debug);
 
   // 执行拆分流程
-  const result = await runSplitFlow(report, report.metadata.requirementSource, cwd, {
+  const result = await runSplitFlow(options.reportPath, report.metadata.requirementSource, cwd, {
     lang,
     maxRetry,
     splitThreshold,
@@ -1073,7 +1073,7 @@ interface SplitFlowOptions {
 }
 
 async function runSplitFlow(
-  report: InvestigationReport,
+  reportPath: string,
   requirement: string,
   cwd: string,
   options: SplitFlowOptions,
@@ -1105,8 +1105,8 @@ async function runSplitFlow(
 
   // Step 2: 拆分方案审核闭环（含重试）
   for (let attempt = 0; attempt <= maxRetry; attempt++) {
-    splitPlan = await generateSplitPlan(report, cwd, lang);
-    splitReviewResult = await reviewSplitPlan(report, splitPlan, cwd, lang);
+    splitPlan = await generateSplitPlan(reportPath, cwd, lang);
+    splitReviewResult = await reviewSplitPlan(reportPath, splitPlan, cwd, lang, splitThreshold);
 
     if (splitReviewResult.pass) {
       break;
@@ -1151,7 +1151,7 @@ async function runSplitFlow(
     }
 
     // 为子项生成独立调查报告
-    const subReport = await generateSubReport(report, item, requirement, cwd, lang, options.timeout, options.debug, options.templateMode);
+    const subReport = await generateSubReport(reportPath, item, requirement, cwd, lang, options.timeout, options.debug, options.templateMode);
     const subSlug = slugify(item.title);
     const subReportPath = path.join(subDir, `${subSlug}.md`);
     fs.writeFileSync(subReportPath, generateReport(subReport));
@@ -1174,7 +1174,7 @@ async function runSplitFlow(
         console.log(`   📊 Sub-report ${i + 1} exceeds threshold, recursing (depth ${depth + 1}/${MAX_SPLIT_DEPTH})...`);
       }
 
-      const recursiveResult = await runSplitFlow(subReport, item.description, cwd, {
+      const recursiveResult = await runSplitFlow(subReportPath, item.description, cwd, {
         ...options,
         outputDir: path.dirname(subReportPath),
         depth: depth + 1,
@@ -1678,9 +1678,11 @@ async function getProjectContext(cwd: string): Promise<string> {
 
 /**
  * 生成子报告（基于拆分项）
+ *
+ * SOL-001: 改为文件路径注入方案
  */
 async function generateSubReport(
-  parentReport: InvestigationReport,
+  parentReportPath: string,
   splitItem: SplitPlan['items'][0],
   requirement: string,
   cwd: string,
@@ -1689,6 +1691,10 @@ async function generateSubReport(
   debug?: boolean,
   templateMode?: RenderTemplateMode,
 ): Promise<InvestigationReport> {
+  // 读取父报告内容
+  const parentReportContent = fs.readFileSync(parentReportPath, 'utf-8');
+  const parentReport = parseReport(parentReportContent, debug);
+
   const customReqs = loadCustomRequirements(cwd);
   const subPrompt = await loadAndRenderTemplate(
     'investigate',

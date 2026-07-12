@@ -218,8 +218,10 @@ Revise the following investigation report based on user feedback.
 ## Task
 Split the following investigation report into independent sub-problem/sub-requirement reports.
 
-## Original Report
-{report}
+## Original Report Path
+{reportPath}
+
+**Important**: Please use the Read tool to read the report file content, then perform the split analysis based on the content.
 
 ## Current Split Threshold
 {splitThreshold} KB
@@ -269,8 +271,10 @@ Each sub-item's estimated size should stay within the {splitThreshold} KB thresh
 ## Task
 Review the following split plan against split requirements across six dimensions.
 
-## Original Report
-{report}
+## Original Report Path
+{reportPath}
+
+**Important**: Please use the Read tool to read the report file content, then review the split plan based on the report content.
 
 ## Split Plan
 {splitPlan}
