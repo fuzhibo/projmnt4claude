@@ -23058,6 +23058,73 @@ var init_ai_integration = __esm(() => {
   DEFAULT_ALLOWED_TOOLS = [];
 });
 
+// src/utils/investigation/report-contract.ts
+function buildCaId(n) {
+  const digits = typeof n === "number" ? String(n).padStart(3, "0") : n;
+  return `${CA_PREFIX}${digits}`;
+}
+function buildSolId(n) {
+  const digits = typeof n === "number" ? String(n).padStart(3, "0") : n;
+  return `${SOL_PREFIX}${digits}`;
+}
+function buildCaHeadingRegex() {
+  return new RegExp(`### (${CA_PREFIX}\\d+): (.+)`, "g");
+}
+function buildSolHeadingRegex() {
+  return new RegExp(`### (${SOL_PREFIX}\\d+): (.+)`, "g");
+}
+var REPORT_SECTIONS, CA_PREFIX = "CA-", SOL_PREFIX = "SOL-", METADATA_FIELDS, SOLUTION_FIELDS, ASSESSMENT_FIELDS, ASSESSMENT_VALUES;
+var init_report_contract = __esm(() => {
+  REPORT_SECTIONS = {
+    metadata: { zh: "元数据", en: "Metadata" },
+    rootCauseAnalysis: { zh: "原因分析", en: "Root Cause Analysis" },
+    solutions: { zh: "解决方案", en: "Solutions" },
+    checkpoints: { zh: "检查点覆盖清单", en: "Checkpoint Checklist" },
+    assessment: { zh: "评估", en: "Assessment" }
+  };
+  METADATA_FIELDS = {
+    requirementSource: { zh: "需求来源", en: "Requirement Source" },
+    investigationDate: { zh: "调查时间", en: "Investigation Date" },
+    investigationDir: { zh: "调查目录", en: "Investigation Dir" },
+    language: { zh: "语言", en: "Language" },
+    parentReport: { zh: "父报告", en: "Parent Report" },
+    dependsOn: { zh: "依赖子报告", en: "Depends On" }
+  };
+  SOLUTION_FIELDS = {
+    correspondsTo: { zh: "对应原因", en: "Corresponds To" },
+    files: { zh: "涉及文件", en: "Files" },
+    expectedChanges: { zh: "预期变更", en: "Expected Changes" }
+  };
+  ASSESSMENT_FIELDS = {
+    complexity: { zh: "复杂度", en: "Complexity" },
+    impactScope: { zh: "影响范围", en: "Impact Scope" },
+    estimatedMinutes: { zh: "预估工时", en: "Estimated Minutes" }
+  };
+  ASSESSMENT_VALUES = {
+    impactScope: {
+      options: ["有限", "中等", "广泛"],
+      enMapping: {
+        limited: "有限",
+        medium: "中等",
+        moderate: "中等",
+        wide: "广泛",
+        broad: "广泛",
+        extensive: "广泛"
+      },
+      fallback: "中等"
+    },
+    complexity: {
+      options: ["low", "medium", "high"],
+      zhMapping: {
+        低: "low",
+        中: "medium",
+        高: "high"
+      },
+      fallback: "medium"
+    }
+  };
+});
+
 // src/utils/prompt-templates/i18n/init-requirement-zh.ts
 var exports_init_requirement_zh = {};
 __export(exports_init_requirement_zh, {
@@ -23272,6 +23339,381 @@ Compare the following investigation report with the created task metadata to det
 }
 \`\`\``
   };
+});
+
+// src/utils/investigation/checkpoint-format.ts
+var PREFIX_NORMALIZE_MAP, CHECKPOINT_REGEX, CheckpointFormat;
+var init_checkpoint_format = __esm(() => {
+  PREFIX_NORMALIZE_MAP = {
+    "ai review": "ai-review",
+    "ai qa": "ai-qa",
+    "human qa": "human-qa",
+    script: "script",
+    ai: "ai-qa",
+    review: "ai-review",
+    qa: "ai-qa",
+    human: "human-qa",
+    verify: "ai-qa",
+    test: "ai-qa",
+    implem: "ai-qa",
+    doc: "script",
+    "ai-review": "ai-review",
+    "ai-qa": "ai-qa",
+    "human-qa": "human-qa"
+  };
+  CHECKPOINT_REGEX = {
+    full: /^- \[([a-z][a-z\s-]*?)\] (.+?)(?:\s*\(?\s*(?:→|->)\s*(SOL-\d+)\s*\)?)?\s*$/gm,
+    simple: /^- \[([a-z][a-z\s-]*?)\] (.+)$/gm,
+    sectionTitle: /^### (SOL-\d+)(?:\s+(?:相关检查点|Related Checkpoints))?$/m
+  };
+  CheckpointFormat = {
+    generate(prefix, description, belongsTo) {
+      return `- [${prefix}] ${description} → ${belongsTo}`;
+    },
+    generateSectionTitle(solId, language = "zh") {
+      return language === "zh" ? `### ${solId} 相关检查点` : `### ${solId} Related Checkpoints`;
+    },
+    validateFull(checkpoint) {
+      const re = new RegExp(CHECKPOINT_REGEX.full.source, "m");
+      const match = re.exec(checkpoint);
+      if (!match || !match[1] || !match[2] || !match[3]) {
+        return { valid: false };
+      }
+      const normalizedPrefix = this.normalizePrefix(match[1]);
+      if (!normalizedPrefix) {
+        return { valid: false };
+      }
+      return {
+        valid: true,
+        prefix: normalizedPrefix,
+        description: match[2].trim(),
+        belongsTo: match[3]
+      };
+    },
+    validateSimple(checkpoint) {
+      const re = new RegExp(CHECKPOINT_REGEX.simple.source, "m");
+      const match = re.exec(checkpoint);
+      if (!match || !match[1] || !match[2]) {
+        return { valid: false };
+      }
+      const normalizedPrefix = this.normalizePrefix(match[1]);
+      if (!normalizedPrefix) {
+        return { valid: false };
+      }
+      return {
+        valid: true,
+        prefix: normalizedPrefix,
+        description: match[2].trim()
+      };
+    },
+    normalizePrefix(rawPrefix) {
+      const key = rawPrefix.trim().toLowerCase();
+      return PREFIX_NORMALIZE_MAP[key] ?? null;
+    },
+    extractSolFromTitle(title) {
+      const match = CHECKPOINT_REGEX.sectionTitle.exec(title);
+      return match?.[1] ?? null;
+    },
+    inferBelongsToFromContext(sectionMd, checkpointIndex) {
+      const beforeMatch = sectionMd.substring(0, checkpointIndex);
+      const titleMatches = [...beforeMatch.matchAll(new RegExp(CHECKPOINT_REGEX.sectionTitle.source, "gm"))];
+      if (titleMatches.length === 0)
+        return "";
+      return titleMatches[titleMatches.length - 1]?.[1] ?? "";
+    },
+    validateContract(checkpointsMd) {
+      const errors = [];
+      const warnings = [];
+      const lines = checkpointsMd.split(`
+`).filter((l) => l.trim());
+      let currentSection = null;
+      for (const line of lines) {
+        const sectionSol = this.extractSolFromTitle(line);
+        if (sectionSol) {
+          currentSection = sectionSol;
+          continue;
+        }
+        const fullResult = this.validateFull(line);
+        if (fullResult.valid) {
+          if (currentSection && fullResult.belongsTo !== currentSection) {
+            warnings.push(`检查点 "${line}" 的 belongsTo (${fullResult.belongsTo}) 与分组标题 (${currentSection}) 不一致`);
+          }
+          continue;
+        }
+        const simpleResult = this.validateSimple(line);
+        if (simpleResult.valid) {
+          if (!currentSection) {
+            errors.push(`简化格式检查点 "${line}" 缺少分组标题无法推断 belongsTo`);
+          }
+          continue;
+        }
+      }
+      return {
+        valid: errors.length === 0,
+        errors,
+        warnings
+      };
+    }
+  };
+});
+
+// src/utils/investigation/report-parser.ts
+function parseReport(markdown, checkpointOptions) {
+  const logger = createLogger("report-parser");
+  const options = typeof checkpointOptions === "boolean" ? undefined : checkpointOptions;
+  logger.debug("parseReport input", {
+    inputLength: markdown.length
+  });
+  const metadata = parseMetadata(markdown);
+  const rootCauseAnalysis = parseRootCauseAnalysis(markdown);
+  const solutions = parseSolutions(markdown);
+  const checkpoints = parseCheckpoints2(markdown, options);
+  const assessment = parseAssessment(markdown);
+  if (rootCauseAnalysis.length === 0 || solutions.length === 0) {
+    const detectedH2Headers = markdown.match(/^##\s+.+$/gm) ?? [];
+    const detectedH3Headers = markdown.match(/^###\s+.+$/gm) ?? [];
+    const expectedSections = ["原因分析", "解决方案", "检查点覆盖清单"];
+    const foundSections = [
+      markdown.includes("原因分析") ? "原因分析" : null,
+      markdown.includes("解决方案") ? "解决方案" : null,
+      markdown.includes("检查点") ? "检查点覆盖清单" : null
+    ].filter(Boolean);
+    logger.error("parseReport failed: empty core sections", {
+      rootCauseCount: rootCauseAnalysis.length,
+      solutionCount: solutions.length,
+      checkpointCount: checkpoints.length,
+      inputLength: markdown.length,
+      inputPreview: markdown.substring(0, 500),
+      detectedH2Headers,
+      detectedH3Headers,
+      expectedSections,
+      foundSections
+    });
+  }
+  if (rootCauseAnalysis.length > 0 && solutions.length > 0 && checkpoints.length === 0) {
+    logger.warn("parseReport: checkpoints section empty", {
+      checkpointCount: 0,
+      hasCheckpointsSection: markdown.includes("检查点")
+    });
+  }
+  return { metadata, rootCauseAnalysis, solutions, checkpoints, assessment };
+}
+function extractDependenciesFromMarkdown(markdown) {
+  const depRaw = extractField(markdown, METADATA_FIELDS.dependsOn.zh) || extractField(markdown, METADATA_FIELDS.dependsOn.en);
+  if (!depRaw)
+    return [];
+  return depRaw.split(",").map((s) => s.trim()).filter(Boolean);
+}
+function parseMetadata(md) {
+  const source = extractField(md, METADATA_FIELDS.requirementSource.zh) || extractField(md, METADATA_FIELDS.requirementSource.en) || "";
+  const date = extractField(md, METADATA_FIELDS.investigationDate.zh) || extractField(md, METADATA_FIELDS.investigationDate.en) || new Date().toISOString();
+  const dir = extractField(md, METADATA_FIELDS.investigationDir.zh) || extractField(md, METADATA_FIELDS.investigationDir.en) || "";
+  const langRaw = extractField(md, METADATA_FIELDS.language.zh) || extractField(md, METADATA_FIELDS.language.en) || "zh";
+  const parent = extractField(md, METADATA_FIELDS.parentReport.zh) || extractField(md, METADATA_FIELDS.parentReport.en);
+  return {
+    requirementSource: source,
+    investigationDate: date,
+    investigationDir: dir,
+    language: langRaw === "en" ? "en" : "zh",
+    parentReport: parent || undefined,
+    dependsOn: extractDependenciesFromMarkdown(md)
+  };
+}
+function extractField(md, label) {
+  const re = new RegExp(`^- (?:\\*\\*)?${escapeRegex(label)}(?:\\*\\*)?(?::|：)\\s*(.+)$`, "m");
+  const m = md.match(re);
+  if (!m || m[1] === undefined)
+    return null;
+  let value = m[1];
+  let tail = md.slice((m.index ?? 0) + m[0].length);
+  while (true) {
+    const contMatch = tail.match(/^\n( {2,}|\t)(.*)/);
+    if (!contMatch || contMatch[2] === undefined)
+      break;
+    value += `
+` + contMatch[2];
+    tail = tail.slice(contMatch[0].length);
+  }
+  return value.trim();
+}
+function parseRootCauseAnalysis(md) {
+  const items = [];
+  const sectionMd = extractSection(md, REPORT_SECTIONS.rootCauseAnalysis.zh, REPORT_SECTIONS.rootCauseAnalysis.en);
+  if (!sectionMd)
+    return items;
+  const matches = [];
+  const re = buildCaHeadingRegex();
+  let match;
+  while ((match = re.exec(sectionMd)) !== null) {
+    matches.push(match);
+  }
+  for (let i = 0;i < matches.length; i++) {
+    const m = matches[i];
+    const id = m[1] ?? "";
+    const title = (m[2] ?? "").trim();
+    const descStart = (m.index ?? 0) + (m[0]?.length ?? 0);
+    const descEnd = i < matches.length - 1 ? matches[i + 1]?.index ?? sectionMd.length : sectionMd.length;
+    const description = sectionMd.slice(descStart, descEnd).trim();
+    items.push({ id, title, description });
+  }
+  return items;
+}
+function parseSolutions(md) {
+  const items = [];
+  const sectionMd = extractSection(md, REPORT_SECTIONS.solutions.zh, REPORT_SECTIONS.solutions.en);
+  if (!sectionMd)
+    return items;
+  const matches = [];
+  const re = buildSolHeadingRegex();
+  let match;
+  while ((match = re.exec(sectionMd)) !== null) {
+    matches.push(match);
+  }
+  for (let i = 0;i < matches.length; i++) {
+    const m = matches[i];
+    const id = m[1] ?? "";
+    const title = (m[2] ?? "").trim();
+    const descStart = (m.index ?? 0) + (m[0]?.length ?? 0);
+    const descEnd = i < matches.length - 1 ? matches[i + 1]?.index ?? sectionMd.length : sectionMd.length;
+    const body = sectionMd.slice(descStart, descEnd).trim();
+    const correspondsTo = extractInlineField(body, SOLUTION_FIELDS.correspondsTo.zh, SOLUTION_FIELDS.correspondsTo.en) || "";
+    const filesRaw = extractInlineField(body, SOLUTION_FIELDS.files.zh, SOLUTION_FIELDS.files.en) || "";
+    const files = filesRaw.split(",").map((s) => s.trim()).filter(Boolean);
+    const expectedChanges = extractInlineField(body, SOLUTION_FIELDS.expectedChanges.zh, SOLUTION_FIELDS.expectedChanges.en) || "";
+    const description = body.split(`
+`).filter((l) => !l.startsWith("- ")).join(`
+`).trim();
+    items.push({ id, title, correspondsTo, description, files, expectedChanges });
+  }
+  return items;
+}
+function parseCheckpoints2(md, options = {}) {
+  const items = [];
+  const sectionMd = extractSection(md, REPORT_SECTIONS.checkpoints.zh, REPORT_SECTIONS.checkpoints.en);
+  if (!sectionMd)
+    return items;
+  const tolerance = options.tolerance ?? "normal";
+  const warnOnInvalid = options.warnOnInvalidFormat ?? false;
+  const inferBelongsTo = options.inferBelongsTo ?? true;
+  const shouldValidateContract = options.validateContract !== false;
+  if (shouldValidateContract && tolerance === "strict") {
+    const contractResult = CheckpointFormat.validateContract(sectionMd);
+    if (!contractResult.valid) {
+      const logger = createLogger("report-parser");
+      logger.warn("strict mode: contract validation failed, rejecting checkpoints", {
+        errors: contractResult.errors,
+        warnings: contractResult.warnings
+      });
+      return [];
+    }
+  }
+  const unparsedLines = [];
+  if (tolerance === "strict") {
+    parseWithRegex(CHECKPOINT_REGEX.full, false);
+    if (items.length === 0) {
+      parseWithRegex(CHECKPOINT_REGEX.simple, false);
+    }
+  } else if (tolerance === "loose") {
+    parseWithRegex(CHECKPOINT_REGEX.simple, false);
+  } else {
+    parseWithRegex(CHECKPOINT_REGEX.full, false);
+    if (items.length === 0) {
+      parseWithRegex(CHECKPOINT_REGEX.simple, false);
+    }
+    if (items.length === 0) {
+      const minimalRe = /^-\s*\[([a-z][a-z\s-]*?)\]\s*(.+)$/gm;
+      parseWithRegex(minimalRe, false);
+    }
+  }
+  if (warnOnInvalid && unparsedLines.length > 0) {
+    const logger = createLogger("report-parser");
+    for (const line of unparsedLines) {
+      logger.warn("checkpoint line not parsed", {
+        line: line.trim(),
+        section: REPORT_SECTIONS.checkpoints.en,
+        tolerance
+      });
+    }
+  }
+  return items;
+  function parseWithRegex(re, requireBelongsTo) {
+    if (!sectionMd)
+      return;
+    const localRe = new RegExp(re.source, "gm");
+    let match;
+    while ((match = localRe.exec(sectionMd)) !== null) {
+      const prefixRaw = (match[1] ?? "").trim();
+      const description = (match[2] ?? "").trim();
+      const belongsToRaw = match[3] ?? "";
+      const belongsTo = requireBelongsTo ? belongsToRaw : belongsToRaw || (inferBelongsTo ? CheckpointFormat.inferBelongsToFromContext(sectionMd, match.index ?? 0) : "");
+      const normalizedPrefix = CheckpointFormat.normalizePrefix(prefixRaw);
+      if (!normalizedPrefix) {
+        unparsedLines.push(match[0]);
+        continue;
+      }
+      items.push({
+        prefix: normalizedPrefix,
+        description,
+        belongsTo
+      });
+    }
+  }
+}
+function parseAssessment(md) {
+  const sectionMd = extractSection(md, REPORT_SECTIONS.assessment.zh, REPORT_SECTIONS.assessment.en) || "";
+  const complexity = extractInlineField(sectionMd, ASSESSMENT_FIELDS.complexity.zh, ASSESSMENT_FIELDS.complexity.en) || "medium";
+  const impactRaw = extractInlineField(sectionMd, ASSESSMENT_FIELDS.impactScope.zh, ASSESSMENT_FIELDS.impactScope.en) || "中等";
+  const minutesRaw = extractInlineField(sectionMd, ASSESSMENT_FIELDS.estimatedMinutes.zh, ASSESSMENT_FIELDS.estimatedMinutes.en) || "60";
+  return {
+    complexity: validateComplexity(complexity),
+    impactScope: validateImpactScope(impactRaw),
+    estimatedMinutes: parseInt(minutesRaw.replace(/[^\d]/g, ""), 10) || 60
+  };
+}
+function extractSection(md, zhTitle, enTitle) {
+  const logger = createLogger("report-parser");
+  const re = new RegExp(`^## (?:${escapeRegex(zhTitle)}|${escapeRegex(enTitle)})\\s*\\n([\\s\\S]*?)(?=^## |\\n## |\\n# |(?![\\s\\S]))`, "m");
+  const m = md.match(re);
+  if (!m) {
+    logger.debug("extractSection not found", {
+      zhTitle,
+      enTitle,
+      inputPreview: md.substring(0, 500)
+    });
+    return null;
+  }
+  return m[1] ?? null;
+}
+function extractInlineField(text, zhLabel, enLabel) {
+  const re = new RegExp(`(?:\\*\\*)?(?:${escapeRegex(zhLabel)}|${escapeRegex(enLabel)})(?:\\*\\*)?(?::|：)\\s*(.+)$`, "m");
+  const m = text.match(re);
+  return m?.[1]?.trim() ?? null;
+}
+function escapeRegex(s) {
+  return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+function validateComplexity(v) {
+  const opts = ASSESSMENT_VALUES.complexity.options;
+  if (opts.includes(v))
+    return v;
+  const mapped = ASSESSMENT_VALUES.complexity.zhMapping[v];
+  if (mapped)
+    return mapped;
+  return ASSESSMENT_VALUES.complexity.fallback;
+}
+function validateImpactScope(v) {
+  const opts = ASSESSMENT_VALUES.impactScope.options;
+  if (opts.includes(v))
+    return v;
+  const mapped = ASSESSMENT_VALUES.impactScope.enMapping[v];
+  if (mapped)
+    return mapped;
+  return ASSESSMENT_VALUES.impactScope.fallback;
+}
+var init_report_parser = __esm(() => {
+  init_checkpoint_format();
+  init_logger();
+  init_report_contract();
 });
 
 // src/utils/pre-dev-phase-gate/checkers/git-checker.ts
@@ -36419,73 +36861,8 @@ function validateReport(report) {
   };
 }
 
-// src/utils/investigation/report-contract.ts
-var REPORT_SECTIONS = {
-  metadata: { zh: "元数据", en: "Metadata" },
-  rootCauseAnalysis: { zh: "原因分析", en: "Root Cause Analysis" },
-  solutions: { zh: "解决方案", en: "Solutions" },
-  checkpoints: { zh: "检查点覆盖清单", en: "Checkpoint Checklist" },
-  assessment: { zh: "评估", en: "Assessment" }
-};
-var CA_PREFIX = "CA-";
-var SOL_PREFIX = "SOL-";
-function buildCaId(n) {
-  const digits = typeof n === "number" ? String(n).padStart(3, "0") : n;
-  return `${CA_PREFIX}${digits}`;
-}
-function buildSolId(n) {
-  const digits = typeof n === "number" ? String(n).padStart(3, "0") : n;
-  return `${SOL_PREFIX}${digits}`;
-}
-function buildCaHeadingRegex() {
-  return new RegExp(`### (${CA_PREFIX}\\d+): (.+)`, "g");
-}
-function buildSolHeadingRegex() {
-  return new RegExp(`### (${SOL_PREFIX}\\d+): (.+)`, "g");
-}
-var METADATA_FIELDS = {
-  requirementSource: { zh: "需求来源", en: "Requirement Source" },
-  investigationDate: { zh: "调查时间", en: "Investigation Date" },
-  investigationDir: { zh: "调查目录", en: "Investigation Dir" },
-  language: { zh: "语言", en: "Language" },
-  parentReport: { zh: "父报告", en: "Parent Report" },
-  dependsOn: { zh: "依赖子报告", en: "Depends On" }
-};
-var SOLUTION_FIELDS = {
-  correspondsTo: { zh: "对应原因", en: "Corresponds To" },
-  files: { zh: "涉及文件", en: "Files" },
-  expectedChanges: { zh: "预期变更", en: "Expected Changes" }
-};
-var ASSESSMENT_FIELDS = {
-  complexity: { zh: "复杂度", en: "Complexity" },
-  impactScope: { zh: "影响范围", en: "Impact Scope" },
-  estimatedMinutes: { zh: "预估工时", en: "Estimated Minutes" }
-};
-var ASSESSMENT_VALUES = {
-  impactScope: {
-    options: ["有限", "中等", "广泛"],
-    enMapping: {
-      limited: "有限",
-      medium: "中等",
-      moderate: "中等",
-      wide: "广泛",
-      broad: "广泛",
-      extensive: "广泛"
-    },
-    fallback: "中等"
-  },
-  complexity: {
-    options: ["low", "medium", "high"],
-    zhMapping: {
-      低: "low",
-      中: "medium",
-      高: "high"
-    },
-    fallback: "medium"
-  }
-};
-
 // src/utils/prompt-templates/i18n/zh.ts
+init_report_contract();
 var investigationTemplates = {
   investigate: `你是 projmnt4claude 项目的需求调查分析师。
 
@@ -36682,8 +37059,10 @@ var investigationTemplates = {
 ## 任务
 将以下调查报告拆分为多个独立的子问题/子需求调查报告。
 
-## 原始调查报告
-{report}
+## 原始调查报告路径
+{reportPath}
+
+**重要**: 请使用 Read 工具读取报告文件内容，然后基于报告内容进行拆分分析。
 
 ## 当前拆分阈值
 {splitThreshold} KB
@@ -36732,8 +37111,10 @@ var investigationTemplates = {
 ## 任务
 审核以下拆分方案是否满足拆分要求，从六个维度进行评估。
 
-## 原始调查报告
-{report}
+## 原始调查报告路径
+{reportPath}
+
+**重要**: 请使用 Read 工具读取报告文件内容，然后基于报告内容审核拆分方案。
 
 ## 拆分方案
 {splitPlan}
@@ -36802,6 +37183,7 @@ var investigationTemplates = {
 };
 
 // src/utils/prompt-templates/i18n/en.ts
+init_report_contract();
 var investigationTemplates2 = {
   investigate: `You are a requirement investigation analyst for the projmnt4claude project.
 
@@ -36999,8 +37381,10 @@ Revise the following investigation report based on user feedback.
 ## Task
 Split the following investigation report into independent sub-problem/sub-requirement reports.
 
-## Original Report
-{report}
+## Original Report Path
+{reportPath}
+
+**Important**: Please use the Read tool to read the report file content, then perform the split analysis based on the content.
 
 ## Current Split Threshold
 {splitThreshold} KB
@@ -37049,8 +37433,10 @@ Each sub-item's estimated size should stay within the {splitThreshold} KB thresh
 ## Task
 Review the following split plan against split requirements across six dimensions.
 
-## Original Report
-{report}
+## Original Report Path
+{reportPath}
+
+**Important**: Please use the Read tool to read the report file content, then review the split plan based on the report content.
 
 ## Split Plan
 {splitPlan}
@@ -38109,373 +38495,8 @@ function renderAssessment(a, lang) {
 `);
 }
 
-// src/utils/investigation/checkpoint-format.ts
-var PREFIX_NORMALIZE_MAP = {
-  "ai review": "ai-review",
-  "ai qa": "ai-qa",
-  "human qa": "human-qa",
-  script: "script",
-  ai: "ai-qa",
-  review: "ai-review",
-  qa: "ai-qa",
-  human: "human-qa",
-  verify: "ai-qa",
-  test: "ai-qa",
-  implem: "ai-qa",
-  doc: "script",
-  "ai-review": "ai-review",
-  "ai-qa": "ai-qa",
-  "human-qa": "human-qa"
-};
-var CHECKPOINT_REGEX = {
-  full: /^- \[([a-z][a-z\s-]*?)\] (.+?)(?:\s*\(?\s*(?:→|->)\s*(SOL-\d+)\s*\)?)?\s*$/gm,
-  simple: /^- \[([a-z][a-z\s-]*?)\] (.+)$/gm,
-  sectionTitle: /^### (SOL-\d+)(?:\s+(?:相关检查点|Related Checkpoints))?$/m
-};
-var CheckpointFormat = {
-  generate(prefix, description, belongsTo) {
-    return `- [${prefix}] ${description} → ${belongsTo}`;
-  },
-  generateSectionTitle(solId, language = "zh") {
-    return language === "zh" ? `### ${solId} 相关检查点` : `### ${solId} Related Checkpoints`;
-  },
-  validateFull(checkpoint) {
-    const re = new RegExp(CHECKPOINT_REGEX.full.source, "m");
-    const match = re.exec(checkpoint);
-    if (!match || !match[1] || !match[2] || !match[3]) {
-      return { valid: false };
-    }
-    const normalizedPrefix = this.normalizePrefix(match[1]);
-    if (!normalizedPrefix) {
-      return { valid: false };
-    }
-    return {
-      valid: true,
-      prefix: normalizedPrefix,
-      description: match[2].trim(),
-      belongsTo: match[3]
-    };
-  },
-  validateSimple(checkpoint) {
-    const re = new RegExp(CHECKPOINT_REGEX.simple.source, "m");
-    const match = re.exec(checkpoint);
-    if (!match || !match[1] || !match[2]) {
-      return { valid: false };
-    }
-    const normalizedPrefix = this.normalizePrefix(match[1]);
-    if (!normalizedPrefix) {
-      return { valid: false };
-    }
-    return {
-      valid: true,
-      prefix: normalizedPrefix,
-      description: match[2].trim()
-    };
-  },
-  normalizePrefix(rawPrefix) {
-    const key = rawPrefix.trim().toLowerCase();
-    return PREFIX_NORMALIZE_MAP[key] ?? null;
-  },
-  extractSolFromTitle(title) {
-    const match = CHECKPOINT_REGEX.sectionTitle.exec(title);
-    return match?.[1] ?? null;
-  },
-  inferBelongsToFromContext(sectionMd, checkpointIndex) {
-    const beforeMatch = sectionMd.substring(0, checkpointIndex);
-    const titleMatches = [...beforeMatch.matchAll(new RegExp(CHECKPOINT_REGEX.sectionTitle.source, "gm"))];
-    if (titleMatches.length === 0)
-      return "";
-    return titleMatches[titleMatches.length - 1]?.[1] ?? "";
-  },
-  validateContract(checkpointsMd) {
-    const errors = [];
-    const warnings = [];
-    const lines = checkpointsMd.split(`
-`).filter((l) => l.trim());
-    let currentSection = null;
-    for (const line of lines) {
-      const sectionSol = this.extractSolFromTitle(line);
-      if (sectionSol) {
-        currentSection = sectionSol;
-        continue;
-      }
-      const fullResult = this.validateFull(line);
-      if (fullResult.valid) {
-        if (currentSection && fullResult.belongsTo !== currentSection) {
-          warnings.push(`检查点 "${line}" 的 belongsTo (${fullResult.belongsTo}) 与分组标题 (${currentSection}) 不一致`);
-        }
-        continue;
-      }
-      const simpleResult = this.validateSimple(line);
-      if (simpleResult.valid) {
-        if (!currentSection) {
-          errors.push(`简化格式检查点 "${line}" 缺少分组标题无法推断 belongsTo`);
-        }
-        continue;
-      }
-    }
-    return {
-      valid: errors.length === 0,
-      errors,
-      warnings
-    };
-  }
-};
-
-// src/utils/investigation/report-parser.ts
-init_logger();
-function parseReport(markdown, checkpointOptions) {
-  const logger = createLogger("report-parser");
-  const options = typeof checkpointOptions === "boolean" ? undefined : checkpointOptions;
-  logger.debug("parseReport input", {
-    inputLength: markdown.length
-  });
-  const metadata = parseMetadata(markdown);
-  const rootCauseAnalysis = parseRootCauseAnalysis(markdown);
-  const solutions = parseSolutions(markdown);
-  const checkpoints = parseCheckpoints2(markdown, options);
-  const assessment = parseAssessment(markdown);
-  if (rootCauseAnalysis.length === 0 || solutions.length === 0) {
-    const detectedH2Headers = markdown.match(/^##\s+.+$/gm) ?? [];
-    const detectedH3Headers = markdown.match(/^###\s+.+$/gm) ?? [];
-    const expectedSections = ["原因分析", "解决方案", "检查点覆盖清单"];
-    const foundSections = [
-      markdown.includes("原因分析") ? "原因分析" : null,
-      markdown.includes("解决方案") ? "解决方案" : null,
-      markdown.includes("检查点") ? "检查点覆盖清单" : null
-    ].filter(Boolean);
-    logger.error("parseReport failed: empty core sections", {
-      rootCauseCount: rootCauseAnalysis.length,
-      solutionCount: solutions.length,
-      checkpointCount: checkpoints.length,
-      inputLength: markdown.length,
-      inputPreview: markdown.substring(0, 500),
-      detectedH2Headers,
-      detectedH3Headers,
-      expectedSections,
-      foundSections
-    });
-  }
-  if (rootCauseAnalysis.length > 0 && solutions.length > 0 && checkpoints.length === 0) {
-    logger.warn("parseReport: checkpoints section empty", {
-      checkpointCount: 0,
-      hasCheckpointsSection: markdown.includes("检查点")
-    });
-  }
-  return { metadata, rootCauseAnalysis, solutions, checkpoints, assessment };
-}
-function extractDependenciesFromMarkdown(markdown) {
-  const depRaw = extractField(markdown, METADATA_FIELDS.dependsOn.zh) || extractField(markdown, METADATA_FIELDS.dependsOn.en);
-  if (!depRaw)
-    return [];
-  return depRaw.split(",").map((s) => s.trim()).filter(Boolean);
-}
-function parseMetadata(md) {
-  const source = extractField(md, METADATA_FIELDS.requirementSource.zh) || extractField(md, METADATA_FIELDS.requirementSource.en) || "";
-  const date = extractField(md, METADATA_FIELDS.investigationDate.zh) || extractField(md, METADATA_FIELDS.investigationDate.en) || new Date().toISOString();
-  const dir = extractField(md, METADATA_FIELDS.investigationDir.zh) || extractField(md, METADATA_FIELDS.investigationDir.en) || "";
-  const langRaw = extractField(md, METADATA_FIELDS.language.zh) || extractField(md, METADATA_FIELDS.language.en) || "zh";
-  const parent = extractField(md, METADATA_FIELDS.parentReport.zh) || extractField(md, METADATA_FIELDS.parentReport.en);
-  return {
-    requirementSource: source,
-    investigationDate: date,
-    investigationDir: dir,
-    language: langRaw === "en" ? "en" : "zh",
-    parentReport: parent || undefined,
-    dependsOn: extractDependenciesFromMarkdown(md)
-  };
-}
-function extractField(md, label) {
-  const re = new RegExp(`^- (?:\\*\\*)?${escapeRegex(label)}(?:\\*\\*)?(?::|：)\\s*(.+)$`, "m");
-  const m = md.match(re);
-  if (!m || m[1] === undefined)
-    return null;
-  let value = m[1];
-  let tail = md.slice((m.index ?? 0) + m[0].length);
-  while (true) {
-    const contMatch = tail.match(/^\n( {2,}|\t)(.*)/);
-    if (!contMatch || contMatch[2] === undefined)
-      break;
-    value += `
-` + contMatch[2];
-    tail = tail.slice(contMatch[0].length);
-  }
-  return value.trim();
-}
-function parseRootCauseAnalysis(md) {
-  const items = [];
-  const sectionMd = extractSection(md, REPORT_SECTIONS.rootCauseAnalysis.zh, REPORT_SECTIONS.rootCauseAnalysis.en);
-  if (!sectionMd)
-    return items;
-  const matches = [];
-  const re = buildCaHeadingRegex();
-  let match;
-  while ((match = re.exec(sectionMd)) !== null) {
-    matches.push(match);
-  }
-  for (let i = 0;i < matches.length; i++) {
-    const m = matches[i];
-    const id = m[1] ?? "";
-    const title = (m[2] ?? "").trim();
-    const descStart = (m.index ?? 0) + (m[0]?.length ?? 0);
-    const descEnd = i < matches.length - 1 ? matches[i + 1]?.index ?? sectionMd.length : sectionMd.length;
-    const description = sectionMd.slice(descStart, descEnd).trim();
-    items.push({ id, title, description });
-  }
-  return items;
-}
-function parseSolutions(md) {
-  const items = [];
-  const sectionMd = extractSection(md, REPORT_SECTIONS.solutions.zh, REPORT_SECTIONS.solutions.en);
-  if (!sectionMd)
-    return items;
-  const matches = [];
-  const re = buildSolHeadingRegex();
-  let match;
-  while ((match = re.exec(sectionMd)) !== null) {
-    matches.push(match);
-  }
-  for (let i = 0;i < matches.length; i++) {
-    const m = matches[i];
-    const id = m[1] ?? "";
-    const title = (m[2] ?? "").trim();
-    const descStart = (m.index ?? 0) + (m[0]?.length ?? 0);
-    const descEnd = i < matches.length - 1 ? matches[i + 1]?.index ?? sectionMd.length : sectionMd.length;
-    const body = sectionMd.slice(descStart, descEnd).trim();
-    const correspondsTo = extractInlineField(body, SOLUTION_FIELDS.correspondsTo.zh, SOLUTION_FIELDS.correspondsTo.en) || "";
-    const filesRaw = extractInlineField(body, SOLUTION_FIELDS.files.zh, SOLUTION_FIELDS.files.en) || "";
-    const files = filesRaw.split(",").map((s) => s.trim()).filter(Boolean);
-    const expectedChanges = extractInlineField(body, SOLUTION_FIELDS.expectedChanges.zh, SOLUTION_FIELDS.expectedChanges.en) || "";
-    const description = body.split(`
-`).filter((l) => !l.startsWith("- ")).join(`
-`).trim();
-    items.push({ id, title, correspondsTo, description, files, expectedChanges });
-  }
-  return items;
-}
-function parseCheckpoints2(md, options = {}) {
-  const items = [];
-  const sectionMd = extractSection(md, REPORT_SECTIONS.checkpoints.zh, REPORT_SECTIONS.checkpoints.en);
-  if (!sectionMd)
-    return items;
-  const tolerance = options.tolerance ?? "normal";
-  const warnOnInvalid = options.warnOnInvalidFormat ?? false;
-  const inferBelongsTo = options.inferBelongsTo ?? true;
-  const shouldValidateContract = options.validateContract !== false;
-  if (shouldValidateContract && tolerance === "strict") {
-    const contractResult = CheckpointFormat.validateContract(sectionMd);
-    if (!contractResult.valid) {
-      const logger = createLogger("report-parser");
-      logger.warn("strict mode: contract validation failed, rejecting checkpoints", {
-        errors: contractResult.errors,
-        warnings: contractResult.warnings
-      });
-      return [];
-    }
-  }
-  const unparsedLines = [];
-  if (tolerance === "strict") {
-    parseWithRegex(CHECKPOINT_REGEX.full, false);
-    if (items.length === 0) {
-      parseWithRegex(CHECKPOINT_REGEX.simple, false);
-    }
-  } else if (tolerance === "loose") {
-    parseWithRegex(CHECKPOINT_REGEX.simple, false);
-  } else {
-    parseWithRegex(CHECKPOINT_REGEX.full, false);
-    if (items.length === 0) {
-      parseWithRegex(CHECKPOINT_REGEX.simple, false);
-    }
-    if (items.length === 0) {
-      const minimalRe = /^-\s*\[([a-z][a-z\s-]*?)\]\s*(.+)$/gm;
-      parseWithRegex(minimalRe, false);
-    }
-  }
-  if (warnOnInvalid && unparsedLines.length > 0) {
-    const logger = createLogger("report-parser");
-    for (const line of unparsedLines) {
-      logger.warn("checkpoint line not parsed", {
-        line: line.trim(),
-        section: REPORT_SECTIONS.checkpoints.en,
-        tolerance
-      });
-    }
-  }
-  return items;
-  function parseWithRegex(re, requireBelongsTo) {
-    if (!sectionMd)
-      return;
-    const localRe = new RegExp(re.source, "gm");
-    let match;
-    while ((match = localRe.exec(sectionMd)) !== null) {
-      const prefixRaw = (match[1] ?? "").trim();
-      const description = (match[2] ?? "").trim();
-      const belongsToRaw = match[3] ?? "";
-      const belongsTo = requireBelongsTo ? belongsToRaw : belongsToRaw || (inferBelongsTo ? CheckpointFormat.inferBelongsToFromContext(sectionMd, match.index ?? 0) : "");
-      const normalizedPrefix = CheckpointFormat.normalizePrefix(prefixRaw);
-      if (!normalizedPrefix) {
-        unparsedLines.push(match[0]);
-        continue;
-      }
-      items.push({
-        prefix: normalizedPrefix,
-        description,
-        belongsTo
-      });
-    }
-  }
-}
-function parseAssessment(md) {
-  const sectionMd = extractSection(md, REPORT_SECTIONS.assessment.zh, REPORT_SECTIONS.assessment.en) || "";
-  const complexity = extractInlineField(sectionMd, ASSESSMENT_FIELDS.complexity.zh, ASSESSMENT_FIELDS.complexity.en) || "medium";
-  const impactRaw = extractInlineField(sectionMd, ASSESSMENT_FIELDS.impactScope.zh, ASSESSMENT_FIELDS.impactScope.en) || "中等";
-  const minutesRaw = extractInlineField(sectionMd, ASSESSMENT_FIELDS.estimatedMinutes.zh, ASSESSMENT_FIELDS.estimatedMinutes.en) || "60";
-  return {
-    complexity: validateComplexity(complexity),
-    impactScope: validateImpactScope(impactRaw),
-    estimatedMinutes: parseInt(minutesRaw.replace(/[^\d]/g, ""), 10) || 60
-  };
-}
-function extractSection(md, zhTitle, enTitle) {
-  const logger = createLogger("report-parser");
-  const re = new RegExp(`^## (?:${escapeRegex(zhTitle)}|${escapeRegex(enTitle)})\\s*\\n([\\s\\S]*?)(?=^## |\\n## |\\n# |(?![\\s\\S]))`, "m");
-  const m = md.match(re);
-  if (!m) {
-    logger.debug("extractSection not found", {
-      zhTitle,
-      enTitle,
-      inputPreview: md.substring(0, 500)
-    });
-    return null;
-  }
-  return m[1] ?? null;
-}
-function extractInlineField(text, zhLabel, enLabel) {
-  const re = new RegExp(`(?:\\*\\*)?(?:${escapeRegex(zhLabel)}|${escapeRegex(enLabel)})(?:\\*\\*)?(?::|：)\\s*(.+)$`, "m");
-  const m = text.match(re);
-  return m?.[1]?.trim() ?? null;
-}
-function escapeRegex(s) {
-  return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-}
-function validateComplexity(v) {
-  const opts = ASSESSMENT_VALUES.complexity.options;
-  if (opts.includes(v))
-    return v;
-  const mapped = ASSESSMENT_VALUES.complexity.zhMapping[v];
-  if (mapped)
-    return mapped;
-  return ASSESSMENT_VALUES.complexity.fallback;
-}
-function validateImpactScope(v) {
-  const opts = ASSESSMENT_VALUES.impactScope.options;
-  if (opts.includes(v))
-    return v;
-  const mapped = ASSESSMENT_VALUES.impactScope.enMapping[v];
-  if (mapped)
-    return mapped;
-  return ASSESSMENT_VALUES.impactScope.fallback;
-}
+// src/commands/investigation-requirement.ts
+init_report_parser();
 
 // src/utils/investigation/report-reviewer.ts
 init_ai_integration();
@@ -38649,6 +38670,9 @@ function validateReviewResult(data) {
   };
 }
 
+// src/commands/investigation-requirement.ts
+init_report_contract();
+
 // src/utils/investigation/report-splitter.ts
 import * as fs29 from "fs";
 function shouldSplit(reportPath, thresholdKB) {
@@ -38657,37 +38681,28 @@ function shouldSplit(reportPath, thresholdKB) {
   const sizeKB = fs29.statSync(reportPath).size / 1024;
   return sizeKB > thresholdKB;
 }
-async function generateSplitPlan(report, cwd, lang = "zh") {
-  const reportMarkdown = generateReport(report);
+async function generateSplitPlan(reportPath, cwd, lang = "zh") {
   const customReqs = loadCustomRequirements2(cwd);
   const invConfig = loadInvestigationConfig(cwd);
   const prompt = await loadAndRenderTemplate("split", {
-    report: reportMarkdown,
+    reportPath,
     splitThreshold: String(invConfig.splitThreshold),
     customRequirements: formatCustomRequirements(customReqs.split, "split", lang)
   }, lang, { mode: "strict" });
   const { callAIForJSON: callAIForJSON2 } = await Promise.resolve().then(() => (init_ai_integration(), exports_ai_integration));
   return callAIForJSON2({ prompt, cwd, allowedTools: ["Read"] }, validateSplitPlan);
 }
-async function reviewSplitPlan(report, splitPlan, cwd, lang = "zh") {
-  const summary = summarizeReport(report);
+async function reviewSplitPlan(reportPath, splitPlan, cwd, lang = "zh", splitThreshold) {
   const planJson = JSON.stringify(splitPlan, null, 2);
   const customReqs = loadCustomRequirements2(cwd);
   const prompt = await loadAndRenderTemplate("splitReview", {
-    reportSummary: summary,
+    reportPath,
     splitPlan: planJson,
+    splitThreshold: String(splitThreshold),
     customRequirements: formatCustomRequirements(customReqs.splitReview, "splitReview", lang)
   }, lang, { mode: "strict" });
   const { callAIForJSON: callAIForJSON2 } = await Promise.resolve().then(() => (init_ai_integration(), exports_ai_integration));
   return callAIForJSON2({ prompt, cwd, allowedTools: ["Read"] }, validateSplitReviewResult);
-}
-function summarizeReport(report) {
-  return [
-    `原因分析: ${report.rootCauseAnalysis.length} 项`,
-    `解决方案: ${report.solutions.length} 项`,
-    `检查点: ${report.checkpoints.length} 项`
-  ].join(`
-`);
 }
 function validateSplitPlan(data) {
   if (!data || typeof data !== "object")
@@ -39193,7 +39208,7 @@ async function runNewInvestigation(requirement, cwd, options) {
     if (!options.quiet) {
       console.log(`   \uD83D\uDCCA Report exceeds ${splitThreshold} KB, triggering split...`);
     }
-    const splitResult = await runSplitFlow(report, requirement, cwd, {
+    const splitResult = await runSplitFlow(reportPath, requirement, cwd, {
       lang,
       maxRetry,
       splitThreshold,
@@ -39271,7 +39286,7 @@ async function runInteractiveMode(requirement, cwd, options) {
   }
   let subReports = [];
   if (!options.skipSplit && reportPath && shouldSplit(reportPath, splitThreshold)) {
-    const splitResult = await runSplitFlow(report, requirement, cwd, {
+    const splitResult = await runSplitFlow(reportPath, requirement, cwd, {
       lang,
       maxRetry,
       splitThreshold,
@@ -39411,7 +39426,7 @@ async function runSplitMode(cwd, options) {
   }
   const reportContent = fs30.readFileSync(options.reportPath, "utf-8");
   const report = parseReport(reportContent, options.debug);
-  const result = await runSplitFlow(report, report.metadata.requirementSource, cwd, {
+  const result = await runSplitFlow(options.reportPath, report.metadata.requirementSource, cwd, {
     lang,
     maxRetry,
     splitThreshold,
@@ -39423,7 +39438,7 @@ async function runSplitMode(cwd, options) {
   });
   return result;
 }
-async function runSplitFlow(report, requirement, cwd, options) {
+async function runSplitFlow(reportPath, requirement, cwd, options) {
   const { lang, maxRetry, splitThreshold, outputDir, quiet } = options;
   const depth = options.depth ?? 0;
   if (depth >= MAX_SPLIT_DEPTH) {
@@ -39444,8 +39459,8 @@ async function runSplitFlow(report, requirement, cwd, options) {
   let splitPlan;
   let splitReviewResult;
   for (let attempt = 0;attempt <= maxRetry; attempt++) {
-    splitPlan = await generateSplitPlan(report, cwd, lang);
-    splitReviewResult = await reviewSplitPlan(report, splitPlan, cwd, lang);
+    splitPlan = await generateSplitPlan(reportPath, cwd, lang);
+    splitReviewResult = await reviewSplitPlan(reportPath, splitPlan, cwd, lang, splitThreshold);
     if (splitReviewResult.pass) {
       break;
     }
@@ -39481,7 +39496,7 @@ async function runSplitFlow(report, requirement, cwd, options) {
     if (!quiet) {
       console.log(`   \uD83D\uDCC4 Generating sub-report ${i + 1}/${splitPlan.items.length}: ${item.title}`);
     }
-    const subReport = await generateSubReport(report, item, requirement, cwd, lang, options.timeout, options.debug, options.templateMode);
+    const subReport = await generateSubReport(reportPath, item, requirement, cwd, lang, options.timeout, options.debug, options.templateMode);
     const subSlug = slugify(item.title);
     const subReportPath = path26.join(subDir, `${subSlug}.md`);
     fs30.writeFileSync(subReportPath, generateReport(subReport));
@@ -39497,7 +39512,7 @@ async function runSplitFlow(report, requirement, cwd, options) {
       if (!quiet) {
         console.log(`   \uD83D\uDCCA Sub-report ${i + 1} exceeds threshold, recursing (depth ${depth + 1}/${MAX_SPLIT_DEPTH})...`);
       }
-      const recursiveResult = await runSplitFlow(subReport, item.description, cwd, {
+      const recursiveResult = await runSplitFlow(subReportPath, item.description, cwd, {
         ...options,
         outputDir: path26.dirname(subReportPath),
         depth: depth + 1
@@ -39805,7 +39820,9 @@ async function getProjectContext(cwd) {
   return parts.join(`
 `);
 }
-async function generateSubReport(parentReport, splitItem, requirement, cwd, lang, timeout, debug, templateMode) {
+async function generateSubReport(parentReportPath, splitItem, requirement, cwd, lang, timeout, debug, templateMode) {
+  const parentReportContent = fs30.readFileSync(parentReportPath, "utf-8");
+  const parentReport = parseReport(parentReportContent, debug);
   const customReqs = loadCustomRequirements2(cwd);
   const subPrompt = await loadAndRenderTemplate("investigate", {
     requirement: `[Sub-investigation] ${splitItem.title}
