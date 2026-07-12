@@ -36,7 +36,7 @@ export function checkOutputFormat(output: string): {
 } {
   const hasRootCause = output.includes('原因分析') || output.includes('Root Cause');
   const hasSolution = output.includes('解决方案') || output.includes('Solutions');
-  const hasMetadata = output.includes('元数据') || output.includes('Metadata');
+  const hasMetadata = output.includes('需求来源') || output.includes('Requirement Source');
   const hasCheckpoints = output.includes('检查点') || output.includes('Checkpoint');
 
   return {

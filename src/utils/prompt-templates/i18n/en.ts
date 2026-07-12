@@ -102,7 +102,14 @@ Review the quality of the following investigation report across three dimensions
 ## Investigation Report
 {report}
 
+## Custom Requirements (Primary Constraint - Must Be Followed First)
 {customRequirements}
+
+## Mandatory Pre-Review Constraints (Must Be Followed)
+1. Before reviewing any data claim, you MUST use the Read tool to verify the corresponding file
+2. Do NOT estimate or infer codebase data; all data must come from actual reads
+3. If data inconsistency is found, suspect yourself first, not the report being reviewed
+4. Each data point in your review must include evidence (file path:line number)
 
 ## Layout Hierarchy Constraints (Check During Review)
 - Title hierarchy: # Level 1 → ## Level 2 → ### Level 3, no skipping
