@@ -22855,7 +22855,7 @@ function simpleHash(str) {
 function checkOutputFormat(output) {
   const hasRootCause = output.includes("原因分析") || output.includes("Root Cause");
   const hasSolution = output.includes("解决方案") || output.includes("Solutions");
-  const hasMetadata = output.includes("元数据") || output.includes("Metadata");
+  const hasMetadata = output.includes("需求来源") || output.includes("Requirement Source");
   const hasCheckpoints = output.includes("检查点") || output.includes("Checkpoint");
   return {
     hasRootCause,
@@ -36945,7 +36945,14 @@ var investigationTemplates = {
 ## 调查报告
 {report}
 
+## 用户定制要求（首要约束 - 必须优先遵循）
 {customRequirements}
+
+## 评审前强制约束（必须遵守）
+1. 评审任何数据声明前，必须使用 Read 工具读取对应文件验证
+2. 不允许估算或推断代码库数据，所有数据必须来自实际读取
+3. 如果发现数据不一致，优先怀疑自身而非被评审报告
+4. 评审报告中的每个数据点必须附带证据（文件路径:行号）
 
 ## 排版层级约束（评审时检查）
 - 标题层级：# 一级 → ## 二级 → ### 三级，不得跳级
@@ -37267,7 +37274,14 @@ Review the quality of the following investigation report across three dimensions
 ## Investigation Report
 {report}
 
+## Custom Requirements (Primary Constraint - Must Be Followed First)
 {customRequirements}
+
+## Mandatory Pre-Review Constraints (Must Be Followed)
+1. Before reviewing any data claim, you MUST use the Read tool to verify the corresponding file
+2. Do NOT estimate or infer codebase data; all data must come from actual reads
+3. If data inconsistency is found, suspect yourself first, not the report being reviewed
+4. Each data point in your review must include evidence (file path:line number)
 
 ## Layout Hierarchy Constraints (Check During Review)
 - Title hierarchy: # Level 1 → ## Level 2 → ### Level 3, no skipping
