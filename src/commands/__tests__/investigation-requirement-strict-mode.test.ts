@@ -19,7 +19,6 @@ jest.mock('../../utils/investigation/report-validator', () => ({
 
 jest.mock('../../utils/investigation/report-reviewer', () => ({
   reviewReport: () => ({ pass: true }),
-  reviewReportWithRetry: () => ({ pass: true }),
 }));
 
 jest.mock('../../utils/investigation/ai-integration', () => ({
@@ -43,6 +42,8 @@ jest.mock('../../utils/logger.js', () => ({
 jest.mock('../../utils/investigation/config-reader', () => ({
   loadInvestigationConfig: () => ({}),
   loadLanguageConfig: () => 'zh',
+  loadCustomRequirements: () => [],
+  formatCustomRequirements: () => '',
 }));
 
 jest.mock('../../utils/investigation/report-parser', () => ({

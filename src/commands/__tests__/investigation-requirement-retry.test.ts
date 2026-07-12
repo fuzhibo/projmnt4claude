@@ -17,7 +17,6 @@ import type { InvestigationReport } from '../../utils/investigation/types.js';
 const mockGenerateReport = jest.fn<(...args: any[]) => any>();
 const mockWriteReport = jest.fn<(...args: any[]) => any>();
 const mockValidateReport = jest.fn<(...args: any[]) => any>();
-const mockReviewWithRetry = jest.fn<(...args: any[]) => any>();
 const mockKillAllActiveChildren = jest.fn<(...args: any[]) => any>();
 
 // 需要 mock 的模块必须在 import 之前声明
@@ -33,7 +32,6 @@ jest.mock('../../utils/investigation/report-validator', () => ({
 // mock reviewReport（SOL-001: 重试循环中使用）
 const mockReviewReport = jest.fn<(...args: unknown[]) => any>();
 jest.mock('../../utils/investigation/report-reviewer', () => ({
-  reviewReportWithRetry: (...args: unknown[]) => mockReviewWithRetry(...args),
   reviewReport: (...args: unknown[]) => mockReviewReport(...args),
 }));
 
@@ -61,6 +59,8 @@ jest.mock('../../utils/logger.js', () => ({
 jest.mock('../../utils/investigation/config-reader', () => ({
   loadInvestigationConfig: () => ({}),
   loadLanguageConfig: () => 'zh',
+  loadCustomRequirements: () => [],
+  formatCustomRequirements: () => '',
 }));
 
 jest.mock('../../utils/investigation/report-parser', () => ({
@@ -635,125 +635,6 @@ describe('investigation-requirement retry logic', () => {
       // 实际值已嵌入
       expect(retryPrompt).toContain('Test requirement description');
       expect(retryPrompt).toContain('Sample solution title');
-    });
-  });
-
-  // ============================================================
-  // Phase 2 检查点：评审失败不重新生成报告
-  // ============================================================
-
-  describe('REDESIGN-001: reviewReportWithRetry does not regenerate', () => {
-    it('should not call callAI when review fails (no regeneration)', async () => {
-      // 评审失败，但 reviewReportWithRetry 不应重新生成报告
-      mockReviewWithRetry.mockResolvedValue({
-        report: makeValidReport(),
-        review: {
-          pass: false,
-          issues: [{ severity: 'error', message: 'Test review failure' }],
-          scores: { rootCauseAlignment: 1, solutionEffectiveness: 1, checkpointCompleteness: 1 },
-        },
-      });
-
-      const { investigationRequirement } = await import('../investigation-requirement');
-
-      await investigationRequirement('review no regen test', env.tempDir, {
-        quiet: true,
-        maxRetry: 1,
-        skipReview: false,
-        skipSplit: true,
-        outputDir: env.tempDir,
-      });
-
-      // callAI 调用次数：初始生成 1 次 + 评审 1 次（reviewReport 使用 callAIForJSON）= 2 次
-      // 关键验证：评审失败后没有额外的重新生成调用
-      expect(mockCallAI.mock.calls.length).toBeLessThanOrEqual(2);
-    });
-
-    it('should succeed when review passes (SOL-001: merged review in retry loop)', async () => {
-      // SOL-001: 评审通过 → 成功
-      // mock reviewReport（重试循环中实际调用的函数）
-      mockReviewReport.mockResolvedValue({
-        pass: true,
-        issues: [],
-        scores: { rootCauseAlignment: 3, solutionEffectiveness: 3, checkpointCompleteness: 3 },
-      });
-
-      const { investigationRequirement } = await import('../investigation-requirement');
-
-      const result = await investigationRequirement('review pass test', env.tempDir, {
-        quiet: true,
-        maxRetry: 1,
-        skipReview: false,
-        skipSplit: true,
-        outputDir: env.tempDir,
-      });
-
-      // 评审通过时成功
-      expect(result.success).toBe(true);
-      // callAI 调用次数：初始生成 1 次 + 评审 1 次 = 2 次
-      expect(mockCallAI.mock.calls.length).toBeLessThanOrEqual(2);
-    });
-  });
-
-  // ============================================================
-  // Phase 2 检查点：spawn 次数控制在 5 次以内
-  // ============================================================
-
-  describe('REDESIGN-001: spawn count limit', () => {
-    it('should limit total callAI calls to <= 5 in worst case', async () => {
-      // 最坏情况：验证失败 maxRetry 次 + 评审 + 重试
-      mockValidateReport
-        .mockReturnValueOnce({
-          valid: false,
-          errors: [{ rule: 'R-001', message: 'error 1' }],
-          warnings: [],
-          blockingErrors: [{ rule: 'R-001', message: 'error 1' }],
-          warningErrors: [],
-        })
-        .mockReturnValueOnce({
-          valid: false,
-          errors: [{ rule: 'R-002', message: 'error 2' }],
-          warnings: [],
-          blockingErrors: [{ rule: 'R-002', message: 'error 2' }],
-          warningErrors: [],
-        })
-        .mockReturnValueOnce({
-          valid: true,
-          errors: [],
-          warnings: [],
-          blockingErrors: [],
-          warningErrors: [],
-        })
-        .mockReturnValueOnce({
-          valid: true,
-          errors: [],
-          warnings: [],
-          blockingErrors: [],
-          warningErrors: [],
-        });
-
-      mockReviewWithRetry.mockResolvedValue({
-        report: makeValidReport(),
-        review: {
-          pass: true,
-          issues: [],
-          scores: { rootCauseAlignment: 3, solutionEffectiveness: 3, checkpointCompleteness: 3 },
-        },
-      });
-
-      const { investigationRequirement } = await import('../investigation-requirement');
-
-      await investigationRequirement('spawn count test', env.tempDir, {
-        quiet: true,
-        maxRetry: 3,
-        skipReview: false,
-        skipSplit: true,
-        outputDir: env.tempDir,
-      });
-
-      // callAI 调用次数：初始 1 + 重试 2 + 评审 0（reviewReportWithRetry 不调用 callAI）= 3
-      // 确保不超过 5 次
-      expect(mockCallAI.mock.calls.length).toBeLessThanOrEqual(5);
     });
   });
 

@@ -31,7 +31,6 @@ jest.mock('../../utils/investigation/report-validator', () => ({
 
 jest.mock('../../utils/investigation/report-reviewer', () => ({
   reviewReport: (...args: unknown[]) => mockReviewReport(...args),
-  reviewReportWithRetry: (...args: unknown[]) => mockReviewReport(...args),
 }));
 
 const mockCallAI = jest.fn<(...args: any[]) => any>();
@@ -56,6 +55,8 @@ jest.mock('../../utils/logger.js', () => ({
 jest.mock('../../utils/investigation/config-reader', () => ({
   loadInvestigationConfig: () => ({}),
   loadLanguageConfig: () => 'zh',
+  loadCustomRequirements: () => [],
+  formatCustomRequirements: () => '',
 }));
 
 jest.mock('../../utils/investigation/report-parser', () => ({

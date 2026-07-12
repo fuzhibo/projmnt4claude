@@ -20,7 +20,7 @@ import { loadAndRenderTemplate, renderTemplate, type RenderTemplateMode } from '
 import { generateReport } from '../utils/investigation/report-generator';
 import { parseReport } from '../utils/investigation/report-parser';
 import { validateReport } from '../utils/investigation/report-validator';
-import { reviewReportWithRetry, reviewReport } from '../utils/investigation/report-reviewer';
+import { reviewReport } from '../utils/investigation/report-reviewer';
 import {
   REPORT_SECTIONS,
   METADATA_FIELDS,
