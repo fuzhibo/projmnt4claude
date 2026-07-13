@@ -1,6 +1,6 @@
 ---
 description: "调查/investigation - 从自然语言需求生成结构化调查报告。触发场景：(1) 用户要求调查问题、(2) 进行根因分析、(3) 分析问题根本原因、(4) investigate 某个问题、(5) root cause 分析。支持新建调查、交互评审、反馈修正、报告拆分等多种模式。"
-argument-hint: "<description> | --interactive | --feedback | --review | --split"
+argument-hint: "<description> | --interactive | --feedback | --review | --split | --timeout <seconds>"
 ---
 
 # investigation-requirement - 需求调查指令
@@ -72,6 +72,7 @@ node ${CLAUDE_PLUGIN_ROOT}/skills/projmnt4claude/dist/projmnt4claude.js investig
 | `-f, --force` | 强制覆盖 |
 | `--json` | JSON 输出 |
 | `-q, --quiet` | 静默模式 |
+| `--timeout <seconds>` | AI 调用超时时间（秒），默认 300 |
 
 ## 输出格式
 
@@ -84,6 +85,11 @@ node ${CLAUDE_PLUGIN_ROOT}/skills/projmnt4claude/dist/projmnt4claude.js investig
 5. **解决方案**：建议的解决方案
 
 ## 使用示例
+
+### 使用自定义超时
+```bash
+node ${CLAUDE_PLUGIN_ROOT}/skills/projmnt4claude/dist/projmnt4claude.js investigation-requirement --timeout 1800 "分析登录模块性能问题"
+```
 
 ### 创建性能调查报告
 ```bash
@@ -134,3 +140,6 @@ A: 使用 `--split` 模式自动拆分，或调整 `--split-threshold` 阈值。
 
 **Q: 如何修改已生成的报告？**
 A: 使用 `--feedback --report-path` 模式基于反馈修正。
+
+**Q: AI 调用超时怎么办？**
+A: 使用 `--timeout <seconds>` 设置更长的超时时间（默认 300 秒，复杂调查建议设置 1800 秒）。
