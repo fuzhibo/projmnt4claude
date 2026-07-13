@@ -22855,8 +22855,8 @@ function simpleHash(str) {
 function checkOutputFormat(output) {
   const hasRootCause = output.includes("原因分析") || output.includes("Root Cause");
   const hasSolution = output.includes("解决方案") || output.includes("Solutions");
-  const hasMetadata = output.includes("需求来源") || output.includes("Requirement Source");
-  const hasCheckpoints = output.includes("检查点") || output.includes("Checkpoint");
+  const hasMetadata = output.includes("需求来源") || output.includes("Requirement Source") || output.includes("## 元数据") || output.includes("## Metadata");
+  const hasCheckpoints = output.includes("检查点") || output.includes("Checkpoint") || output.includes("## 检查点覆盖清单") || output.includes("## Checkpoints");
   return {
     hasRootCause,
     hasSolution,
@@ -36762,7 +36762,9 @@ var VALIDATION_RULES = [
   { name: "checkpoint-prefix", condition: "检查点前缀必须在 PREFIX_MAP 中定义", investigationAction: "warn", initAction: "block" },
   { name: "checkpoint-belongsto", condition: "检查点 belongsTo 必须指向有效的 SOL 编号", investigationAction: "warn", initAction: "block" },
   { name: "assessment-required", condition: "assessment 字段存在且 complexity 值合法", investigationAction: "warn", initAction: "warn" },
-  { name: "id-format", condition: "CA 编号为 CA-NNN、SOL 编号为 SOL-NNN 格式", investigationAction: "warn", initAction: "block" }
+  { name: "id-format", condition: "CA 编号为 CA-NNN、SOL 编号为 SOL-NNN 格式", investigationAction: "warn", initAction: "block" },
+  { name: "root-cause-content-depth", condition: "每个 CA 描述长度 >= 100 字符", investigationAction: "block", initAction: "block" },
+  { name: "solution-content-depth", condition: "每个 SOL 描述长度 >= 100 字符", investigationAction: "block", initAction: "block" }
 ];
 function validateReport(report) {
   const logger = createLogger("report-validator");
@@ -36835,6 +36837,25 @@ function validateReport(report) {
       errors.push({
         rule: "assessment-required",
         message: `assessment.complexity "${report.assessment.complexity}" 不合法，有效值: low, medium, high`
+      });
+    }
+  }
+  const MIN_CONTENT_LENGTH = 100;
+  for (const ca of report.rootCauseAnalysis || []) {
+    const len = ca.description?.length || 0;
+    if (len < MIN_CONTENT_LENGTH) {
+      errors.push({
+        rule: "root-cause-content-depth",
+        message: `CA ${ca.id} 描述过短（${len}字符），需 >= ${MIN_CONTENT_LENGTH}字符`
+      });
+    }
+  }
+  for (const sol of report.solutions || []) {
+    const len = sol.description?.length || 0;
+    if (len < MIN_CONTENT_LENGTH) {
+      errors.push({
+        rule: "solution-content-depth",
+        message: `SOL ${sol.id} 描述过短（${len}字符），需 >= ${MIN_CONTENT_LENGTH}字符`
       });
     }
   }
@@ -36979,6 +37000,12 @@ var investigationTemplates = {
 - 检查点的验证方法是否具体且可执行？
 - 检查点是否使用了标准前缀分类？
 
+### 维度4: 事实准确性
+- 报告中引用的代码位置（文件路径:行号）是否真实存在？
+- 函数签名和接口描述是否与实际代码一致？
+- 是否有重复设计（设计了已存在的函数）？
+- 是否有事实错误（功能描述与实际代码行为不符）？
+
 ## ⚠️ 重要：输出格式约束
 
 【强制】无论评审结论如何，必须返回 \`\`\`json 代码块包裹的 JSON 格式。
@@ -36991,11 +37018,12 @@ var investigationTemplates = {
   "scores": {
     "rootCauseAlignment": 0-100,
     "solutionEffectiveness": 0-100,
-    "checkpointCompleteness": 0-100
+    "checkpointCompleteness": 0-100,
+    "factAccuracy": 0-100
   },
   "issues": [
     {
-      "dimension": "rootCauseAlignment|solutionEffectiveness|checkpointCompleteness",
+      "dimension": "rootCauseAlignment|solutionEffectiveness|checkpointCompleteness|factAccuracy",
       "severity": "critical|major|minor",
       "description": "问题描述",
       "suggestion": "改进建议"
@@ -37027,6 +37055,44 @@ var investigationTemplates = {
 ## 通过标准
 - 所有维度分数 >= 70 且无 critical 问题 → pass: true
 - 任一维度分数 < 70 或存在 critical 问题 → pass: false
+- 事实准确性 < 70 自动判定为 pass: false（事实准确性是硬性要求）
+`,
+  retryPrompt: `你是 projmnt4claude 项目的需求调查分析师。
+
+## 任务
+这是第 {attemptNum} 次重试。上一次输出未满足质量红线，请根据以下指导重新生成调查报告。
+
+## 原始需求
+{requirement}
+
+## 质量红线要求（必须满足）
+
+### 1. 格式完整性
+- 报告必须包含：元数据、原因分析、解决方案、检查点、评估
+- 每个 SOL 必须有对应的 CA
+
+### 2. 内容深度
+- 每个 CA/SOL 的描述长度 >= 100 字符
+- 描述必须包含具体的问题分析或实现细节
+
+### 3. 事实准确性
+- 引用的代码位置必须真实存在
+- 函数签名必须与实际代码一致
+- 不得设计已存在的函数
+
+## 上一次输出的具体问题
+{errorSummary}
+
+## 审核建议
+{suggestionsSummary}
+
+## ⚠️【强制】修正要求
+1. 修正所有事实错误（代码位置、函数签名）
+2. 充实内容描述，确保每个 CA/SOL 都有足够深度
+3. 避免重复设计
+
+## 输出格式约束
+{formatExample}
 `,
   investigateWithFeedback: `你是 projmnt4claude 项目的需求调查分析师。
 
@@ -37308,6 +37374,12 @@ Review the quality of the following investigation report across three dimensions
 - Are the checkpoint verification methods specific and executable?
 - Do the checkpoints use standard prefix categorization?
 
+### Dimension 4: Fact Accuracy
+- Do the code references (file path:line number) in the report actually exist?
+- Are function signatures and interface descriptions consistent with actual code?
+- Are there duplicate designs (designing functions that already exist)?
+- Are there factual errors (feature descriptions inconsistent with actual code behavior)?
+
 ## ⚠️ Important: Output Format Constraint
 
 【MANDATORY】Regardless of the review conclusion, you MUST return JSON wrapped in a \`\`\`json code block.
@@ -37320,11 +37392,12 @@ Do NOT use Markdown text, HTML, or any other format.
   "scores": {
     "rootCauseAlignment": 0-100,
     "solutionEffectiveness": 0-100,
-    "checkpointCompleteness": 0-100
+    "checkpointCompleteness": 0-100,
+    "factAccuracy": 0-100
   },
   "issues": [
     {
-      "dimension": "rootCauseAlignment|solutionEffectiveness|checkpointCompleteness",
+      "dimension": "rootCauseAlignment|solutionEffectiveness|checkpointCompleteness|factAccuracy",
       "severity": "critical|major|minor",
       "description": "Problem description",
       "suggestion": "Improvement suggestion"
@@ -37356,6 +37429,7 @@ Incorrect Example 2 - Mixed format:
 ## Pass Criteria
 - All dimension scores >= 70 and no critical issues → pass: true
 - Any dimension score < 70 or critical issues exist → pass: false
+- Fact accuracy < 70 automatically results in pass: false (fact accuracy is a hard requirement)
 `,
   investigateWithFeedback: `You are a requirement investigation analyst for the projmnt4claude project.
 
@@ -37515,6 +37589,44 @@ Review the following split plan against split requirements across six dimensions
 ## Pass Criteria
 - All dimension scores >= 70 and no critical issues → pass: true
 - Any dimension score < 70 or critical issues exist → pass: false
+- Fact accuracy < 70 automatically results in pass: false (fact accuracy is a hard requirement)
+`,
+  retryPrompt: `You are an investigation analyst for the projmnt4claude project.
+
+## Task
+This is attempt {attemptNum}. The previous output did not meet the quality red line. Please regenerate the investigation report following the guidance below.
+
+## Original Requirement
+{requirement}
+
+## Quality Red Line Requirements (Must Satisfy)
+
+### 1. Format Completeness
+- The report must include: metadata, root cause analysis, solutions, checkpoints, assessment
+- Each SOL must have a corresponding CA
+
+### 2. Content Depth
+- Each CA/SOL description must be >= 100 characters
+- Descriptions must include specific problem analysis or implementation details
+
+### 3. Fact Accuracy
+- Referenced code locations must exist
+- Function signatures must match actual code
+- Do not design functions that already exist
+
+## Specific Issues in Previous Output
+{errorSummary}
+
+## Review Suggestions
+{suggestionsSummary}
+
+## ⚠️【Mandatory】Correction Requirements
+1. Fix all factual errors (code locations, function signatures)
+2. Enrich content descriptions to ensure each CA/SOL has sufficient depth
+3. Avoid duplicate designs
+
+## Output Format Constraints
+{formatExample}
 `
 };
 
@@ -38674,12 +38786,12 @@ function validateReviewResult(data) {
   if (typeof r.pass !== "boolean")
     throw new Error("Invalid review result: pass must be boolean");
   const s = r.scores;
-  if (!s || typeof s.rootCauseAlignment !== "number" || typeof s.solutionEffectiveness !== "number" || typeof s.checkpointCompleteness !== "number") {
+  if (!s || typeof s.rootCauseAlignment !== "number" || typeof s.solutionEffectiveness !== "number" || typeof s.checkpointCompleteness !== "number" || typeof s.factAccuracy !== "number") {
     throw new Error("Invalid review result: scores missing required dimensions");
   }
   return {
     pass: r.pass,
-    scores: { rootCauseAlignment: s.rootCauseAlignment, solutionEffectiveness: s.solutionEffectiveness, checkpointCompleteness: s.checkpointCompleteness },
+    scores: { rootCauseAlignment: s.rootCauseAlignment, solutionEffectiveness: s.solutionEffectiveness, checkpointCompleteness: s.checkpointCompleteness, factAccuracy: s.factAccuracy },
     issues: r.issues || []
   };
 }
@@ -38790,82 +38902,6 @@ var DEFAULT_LANGUAGE = "zh";
 var MIN_REQUIREMENT_LENGTH = 5;
 var MAX_SPLIT_DEPTH = 3;
 var MAX_RETRY_FEEDBACK_LEN = 500;
-var RETRY_PROMPT_TEMPLATE_ZH = `你是 projmnt4claude 项目的需求调查分析师。
-
-## 任务
-这是第 {attemptNum} 次重试。上一次输出存在格式问题，请根据以下指导重新生成调查报告。
-
-## 原始需求
-{requirement}
-
-## 上一次输出的格式问题
-{errorSummary}
-
-## 审核建议（来自 AI 评审员）
-{suggestionsSummary}
-
-## 审核报告路径
-审核报告已保存到: {reviewPath}
-（请查看审核报告获取更详细的问题分析和修正建议）
-
-## ⚠️【强制】输出格式约束
-
-**必须**：直接输出完整的调查报告 Markdown 内容，格式如下：
-
-{formatExample}
-
-**禁止**：以下格式会导致解析失败，严禁使用：
-1. ❌ 摘要性文本（如"调查报告已生成。以下是关键发现摘要..."）
-2. ❌ 报告路径提示（如"报告已保存到 docs/..."）
-3. ❌ 验证结果摘要（如"格式检查通过..."）
-4. ❌ 任何非 Markdown 结构化报告的输出
-
-**注意**:
-1. 本次是第 {attemptNum} 次重试，请务必修正所有格式问题
-2. 必须填充所有占位符
-3. 原因分析必须使用 CA-NNN 编号格式
-4. 解决方案必须使用 SOL-NNN 编号格式
-5. 检查点必须标注归属的解决方案编号
-6. 每个章节必须有实质内容，不能为空
-`;
-var RETRY_PROMPT_TEMPLATE_EN = `You are an investigation analyst for the projmnt4claude project.
-
-## Task
-This is attempt {attemptNum}. Your previous output had format issues. Please regenerate the investigation report following the guidance below.
-
-## Original Requirement
-{requirement}
-
-## Format Issues in Previous Output
-{errorSummary}
-
-## Review Suggestions (from AI Reviewer)
-{suggestionsSummary}
-
-## Review Report Path
-Review report saved to: {reviewPath}
-(Please check the review report for detailed issue analysis and correction suggestions)
-
-## ⚠️【MANDATORY】Output Format Constraints
-
-You MUST output the complete investigation report in Markdown format as follows:
-
-{formatExample}
-
-**FORBIDDEN**: The following formats will cause parsing failures and are strictly prohibited:
-1. ❌ Summary text (e.g., "Investigation report generated. Key findings summary...")
-2. ❌ Report path hints (e.g., "Report saved to docs/...")
-3. ❌ Validation result summary (e.g., "Format check passed...")
-4. ❌ Any non-Markdown structured report output
-
-**Notes**:
-1. This is attempt {attemptNum}. You MUST fix all format issues
-2. Must fill all placeholders
-3. Root Cause Analysis must use CA-NNN numbering format
-4. Solutions must use SOL-NNN numbering format
-5. Checkpoints must mark their corresponding solution ID
-6. Every section must have substantive content, cannot be empty
-`;
 async function investigationRequirement(description, cwd, options) {
   const logger = createLogger("investigation-requirement", cwd, options.debug);
   logger.debug("investigation-requirement invoked", {
@@ -39008,13 +39044,29 @@ async function runNewInvestigation(requirement, cwd, options) {
       break;
     }
     if (retryCount >= maxRetry) {
+      const formatRedLinePassed = formatValidation.blockingErrors.length === 0;
+      const contentDepthPassed = !formatValidation.errors.some((e) => e.rule === "root-cause-content-depth" || e.rule === "solution-content-depth");
+      const factAccuracyPassed = (reviewResult?.scores.factAccuracy ?? 0) >= 70;
+      if (formatRedLinePassed && contentDepthPassed && factAccuracyPassed) {
+        if (!options.quiet) {
+          console.log(`   ✅ Max retry reached, but quality red line passed. Accepting report.`);
+          console.log(`      Format: ✅, Content depth: ${contentDepthPassed ? "✅" : "❌"}, Fact accuracy: ${factAccuracyPassed ? "✅" : "❌"}`);
+        }
+        finalReviewResult = reviewResult;
+        break;
+      }
       if (!options.quiet) {
-        console.log(`   ❌ Max retry (${maxRetry}) reached. Format: ${formatPassed ? "✅" : "❌"}, Review: ${reviewPassed ? "✅" : "❌"}`);
+        console.log(`   ❌ Max retry (${maxRetry}) reached. Quality red line check failed.`);
+        console.log(`      Format: ${formatRedLinePassed ? "✅" : "❌"}, Content depth: ${contentDepthPassed ? "✅" : "❌"}, Fact accuracy: ${factAccuracyPassed ? "✅" : "❌"}`);
       }
       return {
         success: false,
         reviewResult,
-        error: `Investigation report failed after ${maxRetry} retries. Format errors: ${formatValidation.blockingErrors.map((e) => e.message).join("; ")}. Review issues: ${reviewResult?.issues.map((i) => i.description).join("; ") ?? "none"}`
+        error: `Investigation report failed after ${maxRetry} retries. Quality red line violations: ${[
+          !formatRedLinePassed ? `format errors: ${formatValidation.blockingErrors.map((e) => e.message).join("; ")}` : "",
+          !contentDepthPassed ? `content depth issues detected` : "",
+          !factAccuracyPassed ? `fact accuracy: ${reviewResult?.scores.factAccuracy ?? "N/A"} < 70` : ""
+        ].filter(Boolean).join(". ")}`
       };
     }
     const attemptNum = retryCount + 1;
@@ -39090,7 +39142,7 @@ async function runNewInvestigation(requirement, cwd, options) {
     }
     await new Promise((resolve10) => setTimeout(resolve10, RETRY_CLEANUP_DELAY_MS));
     try {
-      const retryPrompt = buildRetryPrompt({
+      const retryPrompt = await buildRetryPrompt({
         requirement,
         errors: formatValidation.blockingErrors,
         reviewResult,
@@ -39618,7 +39670,7 @@ function getFormatExample(lang) {
   ].join(`
 `);
 }
-function buildRetryPrompt(options) {
+async function buildRetryPrompt(options) {
   const logger = createLogger("investigation-requirement", undefined, options.debug);
   const { requirement, errors, reviewResult, reviewPath, attemptNum, lang } = options;
   logger.debug("buildRetryPrompt input", {
@@ -39659,16 +39711,15 @@ ${issuesBlock}`.substring(0, MAX_RETRY_FEEDBACK_LEN);
   const title = requirement.slice(0, 50);
   const N = "60";
   const filledFormatExample = formatExample.replace("{title}", title).replace("{requirement}", requirement).replace("{date}", date).replace("{slug}", slug).replaceAll("{N}", N).replace("{low|medium|high}", "medium").replace("{原因标题}", "示例原因标题").replace("{原因详细描述}", "示例原因详细描述").replace("{方案标题}", "示例方案标题").replace("{方案详细描述}", "示例方案详细描述").replace("{变更描述}", "示例变更描述").replace("{有限|中等|广泛}", "中等").replace("{Root cause title}", "Sample root cause title").replace("{Root cause detailed description}", "Sample root cause detailed description").replace("{Solution title}", "Sample solution title").replace("{Solution detailed description}", "Sample solution detailed description").replace("{Change description}", "Sample change description").replace("{limited|moderate|extensive}", "moderate");
-  const template = lang === "zh" ? RETRY_PROMPT_TEMPLATE_ZH : RETRY_PROMPT_TEMPLATE_EN;
   const reviewPathDisplay = reviewPath ?? (lang === "zh" ? "未生成审核报告" : "No review report generated");
-  return renderTemplate(template, {
+  return loadAndRenderTemplate("retryPrompt", {
     requirement,
     attemptNum: String(attemptNum),
     errorSummary: errorSummary || (lang === "zh" ? "无格式错误详情" : "No format error details"),
     suggestionsSummary,
     reviewPath: reviewPathDisplay,
     formatExample: filledFormatExample
-  }, { mode: "strict" });
+  }, lang, { mode: "strict" });
 }
 async function saveAttemptReport(report, outputDir, attemptNum) {
   const content = generateReport(report);

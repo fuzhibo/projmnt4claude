@@ -98,7 +98,7 @@ function makeValidReport(): InvestigationReport {
 function makeReviewResult(): ReviewResult {
   return {
     pass: false,
-    scores: { rootCauseAlignment: 50, solutionEffectiveness: 60, checkpointCompleteness: 40 },
+    scores: { rootCauseAlignment: 50, solutionEffectiveness: 60, checkpointCompleteness: 40, factAccuracy: 85 },
     issues: [
       {
         dimension: 'rootCauseAlignment',
@@ -484,7 +484,7 @@ describe('investigation-requirement SOL-001 / SOL-002', () => {
     it('should include all critical and major suggestions grouped by severity (zh)', async () => {
       const reviewResult: ReviewResult = {
         pass: false,
-        scores: { rootCauseAlignment: 10, solutionEffectiveness: 20, checkpointCompleteness: 30 },
+        scores: { rootCauseAlignment: 10, solutionEffectiveness: 20, checkpointCompleteness: 30, factAccuracy: 85 },
         issues: [
           { dimension: 'rootCauseAlignment', severity: 'critical', description: 'desc1', suggestion: 'fix1' },
           { dimension: 'solutionEffectiveness', severity: 'critical', description: 'desc2', suggestion: 'fix2' },
@@ -527,7 +527,7 @@ describe('investigation-requirement SOL-001 / SOL-002', () => {
     it('should include all critical and major suggestions grouped by severity (en)', async () => {
       const reviewResult: ReviewResult = {
         pass: false,
-        scores: { rootCauseAlignment: 10, solutionEffectiveness: 20, checkpointCompleteness: 30 },
+        scores: { rootCauseAlignment: 10, solutionEffectiveness: 20, checkpointCompleteness: 30, factAccuracy: 85 },
         issues: [
           { dimension: 'rootCauseAlignment', severity: 'critical', description: 'desc1', suggestion: 'fix1' },
           { dimension: 'checkpointCompleteness', severity: 'major', description: 'desc2', suggestion: 'fix2' },
