@@ -36,8 +36,12 @@ export function checkOutputFormat(output: string): {
 } {
   const hasRootCause = output.includes('原因分析') || output.includes('Root Cause');
   const hasSolution = output.includes('解决方案') || output.includes('Solutions');
-  const hasMetadata = output.includes('需求来源') || output.includes('Requirement Source');
-  const hasCheckpoints = output.includes('检查点') || output.includes('Checkpoint');
+  // 检查元数据章节：通过标题或内容关键字
+  const hasMetadata = output.includes('需求来源') || output.includes('Requirement Source') ||
+                      output.includes('## 元数据') || output.includes('## Metadata');
+  // 检查检查点章节：通过标题或内容关键字
+  const hasCheckpoints = output.includes('检查点') || output.includes('Checkpoint') ||
+                         output.includes('## 检查点覆盖清单') || output.includes('## Checkpoints');
 
   return {
     hasRootCause,

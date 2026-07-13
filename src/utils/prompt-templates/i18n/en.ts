@@ -136,6 +136,12 @@ Review the quality of the following investigation report across three dimensions
 - Are the checkpoint verification methods specific and executable?
 - Do the checkpoints use standard prefix categorization?
 
+### Dimension 4: Fact Accuracy
+- Do the code references (file path:line number) in the report actually exist?
+- Are function signatures and interface descriptions consistent with actual code?
+- Are there duplicate designs (designing functions that already exist)?
+- Are there factual errors (feature descriptions inconsistent with actual code behavior)?
+
 ## ⚠️ Important: Output Format Constraint
 
 【MANDATORY】Regardless of the review conclusion, you MUST return JSON wrapped in a \`\`\`json code block.
@@ -148,11 +154,12 @@ Do NOT use Markdown text, HTML, or any other format.
   "scores": {
     "rootCauseAlignment": 0-100,
     "solutionEffectiveness": 0-100,
-    "checkpointCompleteness": 0-100
+    "checkpointCompleteness": 0-100,
+    "factAccuracy": 0-100
   },
   "issues": [
     {
-      "dimension": "rootCauseAlignment|solutionEffectiveness|checkpointCompleteness",
+      "dimension": "rootCauseAlignment|solutionEffectiveness|checkpointCompleteness|factAccuracy",
       "severity": "critical|major|minor",
       "description": "Problem description",
       "suggestion": "Improvement suggestion"
@@ -184,6 +191,7 @@ Incorrect Example 2 - Mixed format:
 ## Pass Criteria
 - All dimension scores >= 70 and no critical issues → pass: true
 - Any dimension score < 70 or critical issues exist → pass: false
+- Fact accuracy < 70 automatically results in pass: false (fact accuracy is a hard requirement)
 `,
 
   investigateWithFeedback: `You are a requirement investigation analyst for the projmnt4claude project.
@@ -346,5 +354,44 @@ Review the following split plan against split requirements across six dimensions
 ## Pass Criteria
 - All dimension scores >= 70 and no critical issues → pass: true
 - Any dimension score < 70 or critical issues exist → pass: false
+- Fact accuracy < 70 automatically results in pass: false (fact accuracy is a hard requirement)
+`,
+
+  retryPrompt: `You are an investigation analyst for the projmnt4claude project.
+
+## Task
+This is attempt {attemptNum}. The previous output did not meet the quality red line. Please regenerate the investigation report following the guidance below.
+
+## Original Requirement
+{requirement}
+
+## Quality Red Line Requirements (Must Satisfy)
+
+### 1. Format Completeness
+- The report must include: metadata, root cause analysis, solutions, checkpoints, assessment
+- Each SOL must have a corresponding CA
+
+### 2. Content Depth
+- Each CA/SOL description must be >= 100 characters
+- Descriptions must include specific problem analysis or implementation details
+
+### 3. Fact Accuracy
+- Referenced code locations must exist
+- Function signatures must match actual code
+- Do not design functions that already exist
+
+## Specific Issues in Previous Output
+{errorSummary}
+
+## Review Suggestions
+{suggestionsSummary}
+
+## ⚠️【Mandatory】Correction Requirements
+1. Fix all factual errors (code locations, function signatures)
+2. Enrich content descriptions to ensure each CA/SOL has sufficient depth
+3. Avoid duplicate designs
+
+## Output Format Constraints
+{formatExample}
 `,
 };

@@ -8,5 +8,5 @@ export { parseReport, readReport, extractDependencies, extractDependenciesFromMa
 export { validateReport, VALIDATION_RULES, getValidationRules, getRule } from './report-validator.js';
 export { reviewReport, reviewReportWithRetry } from './report-reviewer.js';
 export { shouldSplit, generateSplitPlan, reviewSplitPlan, executeSplit } from './report-splitter.js';
-export { callAI, callAIForJSON } from './ai-integration.js';
+export { calculateFactAccuracy, verifyFactAccuracy, parseCodeReferences, verifyReference } from './fact-accuracy-verifier.js';
 export { loadInvestigationConfig, loadLanguageConfig, getDefaultConfig } from './config-reader.js';

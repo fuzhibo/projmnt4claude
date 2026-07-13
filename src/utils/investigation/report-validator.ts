@@ -16,6 +16,8 @@ export const VALIDATION_RULES: ValidationRule[] = [
   { name: 'checkpoint-belongsto',  condition: '检查点 belongsTo 必须指向有效的 SOL 编号',             investigationAction: 'warn',  initAction: 'block'  },
   { name: 'assessment-required',   condition: 'assessment 字段存在且 complexity 值合法',             investigationAction: 'warn',  initAction: 'warn'   },
   { name: 'id-format',             condition: 'CA 编号为 CA-NNN、SOL 编号为 SOL-NNN 格式',           investigationAction: 'warn',  initAction: 'block'  },
+  { name: 'root-cause-content-depth', condition: '每个 CA 描述长度 >= 100 字符',                      investigationAction: 'block', initAction: 'block'  },
+  { name: 'solution-content-depth',   condition: '每个 SOL 描述长度 >= 100 字符',                     investigationAction: 'block', initAction: 'block'  },
 ];
 
 /**
@@ -117,6 +119,31 @@ export function validateReport(report: InvestigationReport): ValidationResult {
       errors.push({
         rule: 'assessment-required',
         message: `assessment.complexity "${report.assessment.complexity}" 不合法，有效值: low, medium, high`,
+      });
+    }
+  }
+
+  // SOL-002: Rule 9 & 10 - 内容深度检查
+  const MIN_CONTENT_LENGTH = 100;
+
+  // Rule 9: root-cause-content-depth
+  for (const ca of report.rootCauseAnalysis || []) {
+    const len = ca.description?.length || 0;
+    if (len < MIN_CONTENT_LENGTH) {
+      errors.push({
+        rule: 'root-cause-content-depth',
+        message: `CA ${ca.id} 描述过短（${len}字符），需 >= ${MIN_CONTENT_LENGTH}字符`,
+      });
+    }
+  }
+
+  // Rule 10: solution-content-depth
+  for (const sol of report.solutions || []) {
+    const len = sol.description?.length || 0;
+    if (len < MIN_CONTENT_LENGTH) {
+      errors.push({
+        rule: 'solution-content-depth',
+        message: `SOL ${sol.id} 描述过短（${len}字符），需 >= ${MIN_CONTENT_LENGTH}字符`,
       });
     }
   }

@@ -35,7 +35,7 @@ const baseRegistry: Record<string, Record<string, string>> = {
 };
 
 /** 支持的模板名称 */
-export type InvestigationTemplateName = 'investigate' | 'review' | 'investigateWithFeedback' | 'split' | 'splitReview';
+export type InvestigationTemplateName = 'investigate' | 'review' | 'investigateWithFeedback' | 'split' | 'splitReview' | 'retryPrompt';
 
 /** init-requirement 模板名称 */
 export type InitRequirementTemplateName = 'reportToTask' | 'taskFix' | 'aiAlignmentCheck';

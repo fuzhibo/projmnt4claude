@@ -16,7 +16,7 @@ import * as path from 'path';
 import * as readline from 'readline';
 import type { InvestigationReport, ReviewResult, SplitPlan, SplitReviewResult, OutputMode } from '../utils/investigation/types';
 import { callAI } from '../utils/investigation/ai-integration';
-import { loadAndRenderTemplate, renderTemplate, type RenderTemplateMode } from '../utils/prompt-templates/loader';
+import { loadAndRenderTemplate, type RenderTemplateMode } from '../utils/prompt-templates/loader';
 import { generateReport } from '../utils/investigation/report-generator';
 import { parseReport } from '../utils/investigation/report-parser';
 import { validateReport } from '../utils/investigation/report-validator';
@@ -161,86 +161,6 @@ interface RetryPromptOptions {
   lang: 'zh' | 'en';
   debug?: boolean;
 }
-
-/** 中文重试提示词模板 */
-const RETRY_PROMPT_TEMPLATE_ZH = `你是 projmnt4claude 项目的需求调查分析师。
-
-## 任务
-这是第 {attemptNum} 次重试。上一次输出存在格式问题，请根据以下指导重新生成调查报告。
-
-## 原始需求
-{requirement}
-
-## 上一次输出的格式问题
-{errorSummary}
-
-## 审核建议（来自 AI 评审员）
-{suggestionsSummary}
-
-## 审核报告路径
-审核报告已保存到: {reviewPath}
-（请查看审核报告获取更详细的问题分析和修正建议）
-
-## ⚠️【强制】输出格式约束
-
-**必须**：直接输出完整的调查报告 Markdown 内容，格式如下：
-
-{formatExample}
-
-**禁止**：以下格式会导致解析失败，严禁使用：
-1. ❌ 摘要性文本（如"调查报告已生成。以下是关键发现摘要..."）
-2. ❌ 报告路径提示（如"报告已保存到 docs/..."）
-3. ❌ 验证结果摘要（如"格式检查通过..."）
-4. ❌ 任何非 Markdown 结构化报告的输出
-
-**注意**:
-1. 本次是第 {attemptNum} 次重试，请务必修正所有格式问题
-2. 必须填充所有占位符
-3. 原因分析必须使用 CA-NNN 编号格式
-4. 解决方案必须使用 SOL-NNN 编号格式
-5. 检查点必须标注归属的解决方案编号
-6. 每个章节必须有实质内容，不能为空
-`;
-
-/** 英文重试提示词模板 */
-const RETRY_PROMPT_TEMPLATE_EN = `You are an investigation analyst for the projmnt4claude project.
-
-## Task
-This is attempt {attemptNum}. Your previous output had format issues. Please regenerate the investigation report following the guidance below.
-
-## Original Requirement
-{requirement}
-
-## Format Issues in Previous Output
-{errorSummary}
-
-## Review Suggestions (from AI Reviewer)
-{suggestionsSummary}
-
-## Review Report Path
-Review report saved to: {reviewPath}
-(Please check the review report for detailed issue analysis and correction suggestions)
-
-## ⚠️【MANDATORY】Output Format Constraints
-
-You MUST output the complete investigation report in Markdown format as follows:
-
-{formatExample}
-
-**FORBIDDEN**: The following formats will cause parsing failures and are strictly prohibited:
-1. ❌ Summary text (e.g., "Investigation report generated. Key findings summary...")
-2. ❌ Report path hints (e.g., "Report saved to docs/...")
-3. ❌ Validation result summary (e.g., "Format check passed...")
-4. ❌ Any non-Markdown structured report output
-
-**Notes**:
-1. This is attempt {attemptNum}. You MUST fix all format issues
-2. Must fill all placeholders
-3. Root Cause Analysis must use CA-NNN numbering format
-4. Solutions must use SOL-NNN numbering format
-5. Checkpoints must mark their corresponding solution ID
-6. Every section must have substantive content, cannot be empty
-`;
 
 // ============================================================
 // 主命令入口
@@ -449,15 +369,38 @@ async function runNewInvestigation(
       break; // 格式正确且评审通过，跳出循环
     }
 
-    // 4. 达到最大重试次数，返回失败
+    // 4. 达到最大重试次数，检查质量红线（SOL-001）
     if (retryCount >= maxRetry) {
+      // 质量红线检查：格式无阻断性错误 + 内容深度达标 + 事实准确性达标
+      const formatRedLinePassed = formatValidation.blockingErrors.length === 0;
+      const contentDepthPassed = !formatValidation.errors.some(
+        e => e.rule === 'root-cause-content-depth' || e.rule === 'solution-content-depth'
+      );
+      const factAccuracyPassed = (reviewResult?.scores.factAccuracy ?? 0) >= 70;
+
+      if (formatRedLinePassed && contentDepthPassed && factAccuracyPassed) {
+        // 质量红线通过，接受报告
+        if (!options.quiet) {
+          console.log(`   ✅ Max retry reached, but quality red line passed. Accepting report.`);
+          console.log(`      Format: ✅, Content depth: ${contentDepthPassed ? '✅' : '❌'}, Fact accuracy: ${factAccuracyPassed ? '✅' : '❌'}`);
+        }
+        finalReviewResult = reviewResult;
+        break;
+      }
+
+      // 质量红线未通过，返回失败
       if (!options.quiet) {
-        console.log(`   ❌ Max retry (${maxRetry}) reached. Format: ${formatPassed ? '✅' : '❌'}, Review: ${reviewPassed ? '✅' : '❌'}`);
+        console.log(`   ❌ Max retry (${maxRetry}) reached. Quality red line check failed.`);
+        console.log(`      Format: ${formatRedLinePassed ? '✅' : '❌'}, Content depth: ${contentDepthPassed ? '✅' : '❌'}, Fact accuracy: ${factAccuracyPassed ? '✅' : '❌'}`);
       }
       return {
         success: false,
         reviewResult,
-        error: `Investigation report failed after ${maxRetry} retries. Format errors: ${formatValidation.blockingErrors.map(e => e.message).join('; ')}. Review issues: ${reviewResult?.issues.map(i => i.description).join('; ') ?? 'none'}`,
+        error: `Investigation report failed after ${maxRetry} retries. Quality red line violations: ${[
+          !formatRedLinePassed ? `format errors: ${formatValidation.blockingErrors.map(e => e.message).join('; ')}` : '',
+          !contentDepthPassed ? `content depth issues detected` : '',
+          !factAccuracyPassed ? `fact accuracy: ${reviewResult?.scores.factAccuracy ?? 'N/A'} < 70` : '',
+        ].filter(Boolean).join('. ')}`,
       };
     }
 
@@ -546,7 +489,7 @@ async function runNewInvestigation(
 
     try {
       // ✅ SOL-003: 使用结构化 RetryPromptOptions，传入 blockingErrors
-      const retryPrompt = buildRetryPrompt({
+      const retryPrompt = await buildRetryPrompt({
         requirement,
         errors: formatValidation.blockingErrors,
         reviewResult,
@@ -1292,7 +1235,7 @@ function getFormatExample(lang: 'zh' | 'en'): string {
  *
  * 降级策略：无 reviewResult/reviewPath 时仍保留原始错误反馈，确保异常路径可用。
  */
-function buildRetryPrompt(options: RetryPromptOptions): string {
+async function buildRetryPrompt(options: RetryPromptOptions): Promise<string> {
   const logger = createLogger('investigation-requirement', undefined, options.debug);
   const { requirement, errors, reviewResult, reviewPath, attemptNum, lang } = options;
 
@@ -1372,19 +1315,19 @@ function buildRetryPrompt(options: RetryPromptOptions): string {
     .replace('{Change description}', 'Sample change description')
     .replace('{limited|moderate|extensive}', 'moderate');
 
-  const template = lang === 'zh' ? RETRY_PROMPT_TEMPLATE_ZH : RETRY_PROMPT_TEMPLATE_EN;
+  // SOL-004: 使用 i18n 模板系统加载 retryPrompt 模板
   const reviewPathDisplay = reviewPath ?? (lang === 'zh' ? '未生成审核报告' : 'No review report generated');
 
-  // SOL-003: 使用 renderTemplate + strict 模式，在模板渲染阶段检测未替换占位符
+  // SOL-003: 使用 loadAndRenderTemplate + strict 模式，在模板渲染阶段检测未替换占位符
   // 如果有占位符未替换，renderTemplate 会抛出错误，被外层 catch 捕获并触发 TEMPLATE_BUILD_ERROR
-  return renderTemplate(template, {
+  return loadAndRenderTemplate('retryPrompt', {
     requirement,
     attemptNum: String(attemptNum),
     errorSummary: errorSummary || (lang === 'zh' ? '无格式错误详情' : 'No format error details'),
     suggestionsSummary,
     reviewPath: reviewPathDisplay,
     formatExample: filledFormatExample,
-  }, { mode: 'strict' });
+  }, lang, { mode: 'strict' });
 }
 
 /**

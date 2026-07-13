@@ -73,12 +73,13 @@ export interface ReviewResult {
     rootCauseAlignment: number;
     solutionEffectiveness: number;
     checkpointCompleteness: number;
+    factAccuracy: number;
   };
   issues: ReviewIssue[];
 }
 
 export interface ReviewIssue {
-  dimension: 'rootCauseAlignment' | 'solutionEffectiveness' | 'checkpointCompleteness';
+  dimension: 'rootCauseAlignment' | 'solutionEffectiveness' | 'checkpointCompleteness' | 'factAccuracy';
   severity: 'critical' | 'major' | 'minor';
   description: string;
   suggestion: string;

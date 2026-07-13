@@ -135,6 +135,12 @@ export const investigationTemplates: Record<string, string> = {
 - 检查点的验证方法是否具体且可执行？
 - 检查点是否使用了标准前缀分类？
 
+### 维度4: 事实准确性
+- 报告中引用的代码位置（文件路径:行号）是否真实存在？
+- 函数签名和接口描述是否与实际代码一致？
+- 是否有重复设计（设计了已存在的函数）？
+- 是否有事实错误（功能描述与实际代码行为不符）？
+
 ## ⚠️ 重要：输出格式约束
 
 【强制】无论评审结论如何，必须返回 \`\`\`json 代码块包裹的 JSON 格式。
@@ -147,11 +153,12 @@ export const investigationTemplates: Record<string, string> = {
   "scores": {
     "rootCauseAlignment": 0-100,
     "solutionEffectiveness": 0-100,
-    "checkpointCompleteness": 0-100
+    "checkpointCompleteness": 0-100,
+    "factAccuracy": 0-100
   },
   "issues": [
     {
-      "dimension": "rootCauseAlignment|solutionEffectiveness|checkpointCompleteness",
+      "dimension": "rootCauseAlignment|solutionEffectiveness|checkpointCompleteness|factAccuracy",
       "severity": "critical|major|minor",
       "description": "问题描述",
       "suggestion": "改进建议"
@@ -183,6 +190,45 @@ export const investigationTemplates: Record<string, string> = {
 ## 通过标准
 - 所有维度分数 >= 70 且无 critical 问题 → pass: true
 - 任一维度分数 < 70 或存在 critical 问题 → pass: false
+- 事实准确性 < 70 自动判定为 pass: false（事实准确性是硬性要求）
+`,
+
+  retryPrompt: `你是 projmnt4claude 项目的需求调查分析师。
+
+## 任务
+这是第 {attemptNum} 次重试。上一次输出未满足质量红线，请根据以下指导重新生成调查报告。
+
+## 原始需求
+{requirement}
+
+## 质量红线要求（必须满足）
+
+### 1. 格式完整性
+- 报告必须包含：元数据、原因分析、解决方案、检查点、评估
+- 每个 SOL 必须有对应的 CA
+
+### 2. 内容深度
+- 每个 CA/SOL 的描述长度 >= 100 字符
+- 描述必须包含具体的问题分析或实现细节
+
+### 3. 事实准确性
+- 引用的代码位置必须真实存在
+- 函数签名必须与实际代码一致
+- 不得设计已存在的函数
+
+## 上一次输出的具体问题
+{errorSummary}
+
+## 审核建议
+{suggestionsSummary}
+
+## ⚠️【强制】修正要求
+1. 修正所有事实错误（代码位置、函数签名）
+2. 充实内容描述，确保每个 CA/SOL 都有足够深度
+3. 避免重复设计
+
+## 输出格式约束
+{formatExample}
 `,
 
   investigateWithFeedback: `你是 projmnt4claude 项目的需求调查分析师。

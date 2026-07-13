@@ -33,8 +33,8 @@ describe('validateReport error classification (SOL-003)', () => {
   it('should not retry on warning-only errors', () => {
     const report: InvestigationReport = {
       metadata: { requirementSource: 'test', investigationDate: '2026-07-08', investigationDir: 'test', language: 'zh' },
-      rootCauseAnalysis: [{ id: 'CA-001', title: 'test', description: 'test' }],
-      solutions: [{ id: 'SOL-001', title: 'test', description: 'test', correspondsTo: 'CA-001', files: [], expectedChanges: 'none' }],
+      rootCauseAnalysis: [{ id: 'CA-001', title: 'test', description: 'This is a detailed root cause analysis description that explains the problem thoroughly and provides sufficient context for understanding the issue at hand with all relevant details included here.' }],
+      solutions: [{ id: 'SOL-001', title: 'test', description: 'This is a detailed solution description that explains the proposed fix thoroughly and provides sufficient context for implementing the solution with all relevant implementation details included here.', correspondsTo: 'CA-001', files: [], expectedChanges: 'none' }],
       checkpoints: [
         { prefix: 'script', description: 'test', belongsTo: 'SOL-001' },  // 有效前缀，有效 belongsTo
       ],
@@ -52,8 +52,8 @@ describe('validateReport error classification (SOL-003)', () => {
   it('should pass with valid report', () => {
     const report: InvestigationReport = {
       metadata: { requirementSource: 'test', investigationDate: '2026-07-08', investigationDir: 'test', language: 'zh' },
-      rootCauseAnalysis: [{ id: 'CA-001', title: 'test', description: 'test' }],
-      solutions: [{ id: 'SOL-001', title: 'test', description: 'test', correspondsTo: 'CA-001', files: [], expectedChanges: 'none' }],
+      rootCauseAnalysis: [{ id: 'CA-001', title: 'test', description: 'This is a detailed root cause analysis description that explains the problem thoroughly and provides sufficient context for understanding the issue at hand with all relevant details included here.' }],
+      solutions: [{ id: 'SOL-001', title: 'test', description: 'This is a detailed solution description that explains the proposed fix thoroughly and provides sufficient context for implementing the solution with all relevant implementation details included here.', correspondsTo: 'CA-001', files: [], expectedChanges: 'none' }],
       checkpoints: [
         { prefix: 'script', description: 'test', belongsTo: 'SOL-001' },
       ],

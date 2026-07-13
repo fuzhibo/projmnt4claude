@@ -23,10 +23,10 @@ function createTestReport(overrides: Partial<InvestigationReport> = {}): Investi
       ...overrides.metadata,
     },
     rootCauseAnalysis: [
-      { id: 'CA-001', title: 'Test Cause', description: 'Test cause description' },
+      { id: 'CA-001', title: 'Test Cause', description: 'This is a detailed root cause analysis description that explains the problem thoroughly and provides sufficient context for understanding the issue at hand with all relevant details included here.' },
     ],
     solutions: [
-      { id: 'SOL-001', title: 'Test Solution', correspondsTo: 'CA-001', description: 'Test solution description', files: ['src/test.ts'], expectedChanges: 'Add test code' },
+      { id: 'SOL-001', title: 'Test Solution', correspondsTo: 'CA-001', description: 'This is a detailed solution description that explains the proposed fix thoroughly and provides sufficient context for implementing the solution with all relevant implementation details included here.', files: ['src/test.ts'], expectedChanges: 'Add test code' },
     ],
     checkpoints: [
       { prefix: 'ai-qa', description: 'Verify test', belongsTo: 'SOL-001' },
@@ -51,12 +51,12 @@ function createFullTestReport(): InvestigationReport {
       dependsOn: ['sub-01', 'sub-02'],
     },
     rootCauseAnalysis: [
-      { id: 'CA-001', title: 'Root cause 1', description: 'Description for CA-001' },
-      { id: 'CA-002', title: 'Root cause 2', description: 'Description for CA-002' },
+      { id: 'CA-001', title: 'Root cause 1', description: 'This is a detailed root cause analysis description that explains the problem thoroughly and provides sufficient context for understanding the issue at hand with all relevant details included here for CA-001.' },
+      { id: 'CA-002', title: 'Root cause 2', description: 'This is a detailed root cause analysis description that explains the problem thoroughly and provides sufficient context for understanding the issue at hand with all relevant details included here for CA-002.' },
     ],
     solutions: [
-      { id: 'SOL-001', title: 'Solution 1', correspondsTo: 'CA-001', description: 'Description for SOL-001', files: ['src/a.ts', 'src/b.ts'], expectedChanges: 'Modify a.ts and add b.ts' },
-      { id: 'SOL-002', title: 'Solution 2', correspondsTo: 'CA-002', description: 'Description for SOL-002', files: ['src/c.ts'], expectedChanges: 'Add c.ts' },
+      { id: 'SOL-001', title: 'Solution 1', correspondsTo: 'CA-001', description: 'This is a detailed solution description that explains the proposed fix thoroughly and provides sufficient context for implementing the solution with all relevant implementation details included here for SOL-001.', files: ['src/a.ts', 'src/b.ts'], expectedChanges: 'Modify a.ts and add b.ts' },
+      { id: 'SOL-002', title: 'Solution 2', correspondsTo: 'CA-002', description: 'This is a detailed solution description that explains the proposed fix thoroughly and provides sufficient context for implementing the solution with all relevant implementation details included here for SOL-002.', files: ['src/c.ts'], expectedChanges: 'Add c.ts' },
     ],
     checkpoints: [
       { prefix: 'ai-qa', description: 'Verify solution 1 works', belongsTo: 'SOL-001' },
@@ -205,7 +205,7 @@ describe('§3.4 工具模块', () => {
       const report = createTestReport({
         solutions: [{
           id: 'SOL-001', title: 'Test', correspondsTo: 'CA-999',
-          description: 'Desc', files: [], expectedChanges: 'Changes',
+          description: 'This is a detailed solution description that explains the proposed fix thoroughly and provides sufficient context for implementing the solution with all relevant implementation details included here.', files: [], expectedChanges: 'Changes',
         }],
       });
       const result = validateReport(report);
@@ -222,7 +222,7 @@ describe('§3.4 工具模块', () => {
 
     it('should error on invalid CA id format (SOL-003: warnings→errors)', () => {
       const report = createTestReport({
-        rootCauseAnalysis: [{ id: 'CA-1', title: 'Bad ID', description: 'Desc' }],
+        rootCauseAnalysis: [{ id: 'CA-1', title: 'Bad ID', description: 'This is a detailed root cause analysis description that explains the problem thoroughly and provides sufficient context for understanding the issue at hand with all relevant details included here.' }],
       });
       const result = validateReport(report);
       expect(result.errors.some(e => e.rule === 'id-format')).toBe(true);
@@ -234,13 +234,13 @@ describe('§3.4 工具模块', () => {
       expect(result.errors.some(e => e.rule === 'assessment-required')).toBe(true);
     });
 
-    it('should have exactly 8 validation rules', () => {
-      expect(VALIDATION_RULES).toHaveLength(8);
+    it('should have exactly 10 validation rules', () => {
+      expect(VALIDATION_RULES).toHaveLength(10);
     });
 
     it('should return rules via getValidationRules', () => {
       const rules = getValidationRules();
-      expect(rules).toHaveLength(8);
+      expect(rules).toHaveLength(10);
       expect(rules[0]!.name).toBe('metadata-required');
     });
 
@@ -268,7 +268,7 @@ describe('§3.4 工具模块', () => {
 
     it('should error on invalid SOL id format (SOL-003: warnings→errors)', () => {
       const report = createTestReport({
-        solutions: [{ id: 'SOL-1', title: 'Bad', correspondsTo: 'CA-001', description: 'Desc', files: [], expectedChanges: 'Changes' }],
+        solutions: [{ id: 'SOL-1', title: 'Bad', correspondsTo: 'CA-001', description: 'This is a detailed solution description that explains the proposed fix thoroughly and provides sufficient context for implementing the solution with all relevant implementation details included here.', files: [], expectedChanges: 'Changes' }],
       });
       const result = validateReport(report);
       expect(result.errors.some(e => e.rule === 'id-format')).toBe(true);
@@ -337,7 +337,7 @@ describe('§3.8 接口契约补充', () => {
     expect(prefixes).toContain('script');
   });
 
-  it('should validate all 8 rules have both investigationAction and initAction', () => {
+  it('should validate all 10 rules have both investigationAction and initAction', () => {
     for (const rule of VALIDATION_RULES) {
       expect(rule).toHaveProperty('investigationAction');
       expect(rule).toHaveProperty('initAction');

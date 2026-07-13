@@ -196,7 +196,7 @@ describe('§3.1 类型系统', () => {
     it('should have pass/scores/issues fields', () => {
       const result: ReviewResult = {
         pass: true,
-        scores: { rootCauseAlignment: 8, solutionEffectiveness: 7, checkpointCompleteness: 9 },
+        scores: { rootCauseAlignment: 8, solutionEffectiveness: 7, checkpointCompleteness: 9, factAccuracy: 85 },
         issues: [],
       };
       expect(result.pass).toBe(true);

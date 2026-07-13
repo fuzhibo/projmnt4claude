@@ -50,7 +50,7 @@ describe('SOL-003 buildRetryPrompt', () => {
   describe('审核建议摘要', () => {
     const reviewResult: ReviewResult = {
       pass: false,
-      scores: { rootCauseAlignment: 60, solutionEffectiveness: 50, checkpointCompleteness: 40 },
+      scores: { rootCauseAlignment: 60, solutionEffectiveness: 50, checkpointCompleteness: 40, factAccuracy: 85 },
       issues: [
         {
           dimension: 'rootCauseAlignment',
@@ -89,7 +89,7 @@ describe('SOL-003 buildRetryPrompt', () => {
     it('should show fallback text when reviewResult has empty issues', () => {
       const prompt = buildRetryPrompt({
         ...baseOptions,
-        reviewResult: { pass: true, scores: { rootCauseAlignment: 90, solutionEffectiveness: 90, checkpointCompleteness: 90 }, issues: [] },
+        reviewResult: { pass: true, scores: { rootCauseAlignment: 90, solutionEffectiveness: 90, checkpointCompleteness: 90, factAccuracy: 85 }, issues: [] },
       });
       expect(prompt).toContain('无具体建议');
     });
@@ -171,7 +171,7 @@ describe('SOL-003 buildRetryPrompt', () => {
       const longSuggestion = 'S'.repeat(600);
       const reviewResult: ReviewResult = {
         pass: false,
-        scores: { rootCauseAlignment: 50, solutionEffectiveness: 50, checkpointCompleteness: 50 },
+        scores: { rootCauseAlignment: 50, solutionEffectiveness: 50, checkpointCompleteness: 50, factAccuracy: 85 },
         issues: [
           {
             dimension: 'rootCauseAlignment',
@@ -195,7 +195,7 @@ describe('SOL-003 buildRetryPrompt', () => {
       const longSuggestion = 'S'.repeat(300);
       const reviewResult: ReviewResult = {
         pass: false,
-        scores: { rootCauseAlignment: 60, solutionEffectiveness: 50, checkpointCompleteness: 40 },
+        scores: { rootCauseAlignment: 60, solutionEffectiveness: 50, checkpointCompleteness: 40, factAccuracy: 85 },
         issues: [
           { dimension: 'rootCauseAlignment', severity: 'major', description: longDescription, suggestion: longSuggestion },
           { dimension: 'checkpointCompleteness', severity: 'critical', description: longDescription, suggestion: longSuggestion },

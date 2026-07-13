@@ -108,12 +108,12 @@ function validateReviewResult(data: unknown): ReviewResult {
   const r = data as Record<string, unknown>;
   if (typeof r.pass !== 'boolean') throw new Error('Invalid review result: pass must be boolean');
   const s = r.scores as Record<string, number>;
-  if (!s || typeof s.rootCauseAlignment !== 'number' || typeof s.solutionEffectiveness !== 'number' || typeof s.checkpointCompleteness !== 'number') {
+  if (!s || typeof s.rootCauseAlignment !== 'number' || typeof s.solutionEffectiveness !== 'number' || typeof s.checkpointCompleteness !== 'number' || typeof s.factAccuracy !== 'number') {
     throw new Error('Invalid review result: scores missing required dimensions');
   }
   return {
     pass: r.pass,
-    scores: { rootCauseAlignment: s.rootCauseAlignment, solutionEffectiveness: s.solutionEffectiveness, checkpointCompleteness: s.checkpointCompleteness },
+    scores: { rootCauseAlignment: s.rootCauseAlignment, solutionEffectiveness: s.solutionEffectiveness, checkpointCompleteness: s.checkpointCompleteness, factAccuracy: s.factAccuracy },
     issues: (r.issues || []) as ReviewIssue[],
   };
 }
