@@ -36898,6 +36898,27 @@ var investigationTemplates = {
 
 {customRequirements}
 
+## ⚠️ 重要：验证优先原则（必须遵守）
+
+在生成调查报告前，**必须先验证后断言**：
+
+### 1. 代码位置验证
+对于每一个代码引用，必须：
+- 使用 Grep 工具验证函数/类的存在性
+- 使用 Read 工具验证代码位置和签名
+- 使用 Glob 工具验证文件路径
+
+### 2. 统计数据验证
+对于每一个统计数据，必须：
+- 使用 Grep -c 验证数量统计
+- 列出验证命令和结果
+
+### 3. 输出要求
+每一项断言必须附带验证证据：
+- 函数签名断言：列出实际代码片段
+- 统计数据断言：列出验证命令和结果
+- 文件位置断言：列出验证结果
+
 ## 排版层级约束（必须严格遵守）
 - 标题层级：# 一级 → ## 二级 → ### 三级，不得跳级
 - 章节编号：使用 CA-NNN / SOL-NNN 格式（如 CA-001, SOL-001），与解析器契约一致
@@ -37065,6 +37086,19 @@ var investigationTemplates = {
 ## 原始需求
 {requirement}
 
+## 审核报告路径
+{reviewPath}
+
+**重要**: 请先使用 Read 工具读取审核报告文件，了解具体的问题分析和修正建议，然后基于审核报告进行修正。
+
+审核报告包含：
+1. 评审分数（原因分析对齐度、解决方案有效性、检查点完善度、事实准确性）
+2. 问题列表（严重度、维度、描述、建议）
+3. 修正建议汇总
+
+## 上一次输出的具体问题
+{errorSummary}
+
 ## 质量红线要求（必须满足）
 
 ### 1. 格式完整性
@@ -37073,23 +37107,23 @@ var investigationTemplates = {
 
 ### 2. 内容深度
 - 每个 CA/SOL 的描述长度 >= 100 字符
-- 描述必须包含具体的问题分析或实现细节
 
 ### 3. 事实准确性
 - 引用的代码位置必须真实存在
 - 函数签名必须与实际代码一致
 - 不得设计已存在的函数
 
-## 上一次输出的具体问题
-{errorSummary}
-
-## 审核建议
-{suggestionsSummary}
+### 4. 验证优先原则
+在生成报告前，必须先验证：
+- 使用 Grep 工具验证函数/类的存在性
+- 使用 Read 工具验证代码位置和签名
+- 每一项断言必须附带验证证据
 
 ## ⚠️【强制】修正要求
-1. 修正所有事实错误（代码位置、函数签名）
-2. 充实内容描述，确保每个 CA/SOL 都有足够深度
-3. 避免重复设计
+1. **第一步**：使用 Read 工具读取审核报告
+2. **第二步**：针对审核报告中的每个问题进行验证
+3. **第三步**：修正所有事实错误
+4. **第四步**：充实内容描述
 
 ## 输出格式约束
 {formatExample}
@@ -37270,6 +37304,27 @@ Generate a structured investigation report based on the following requirement de
 {projectContext}
 
 {customRequirements}
+
+## ⚠️ Important: Verification Priority Principle (Must Follow)
+
+Before generating the investigation report, **must verify before asserting**:
+
+### 1. Code Location Verification
+For each code reference, must:
+- Use Grep tool to verify function/class existence
+- Use Read tool to verify code locations and signatures
+- Use Glob tool to verify file paths
+
+### 2. Statistics Verification
+For each statistic, must:
+- Use Grep -c to verify count statistics
+- List verification commands and results
+
+### 3. Output Requirements
+Each assertion must include verification evidence:
+- Function signature assertion: list actual code snippet
+- Statistics assertion: list verification command and result
+- File location assertion: list verification result
 
 ## Layout Hierarchy Constraints (Must Strictly Follow)
 - Title hierarchy: # Level 1 → ## Level 2 → ### Level 3, no skipping
@@ -37594,38 +37649,51 @@ Review the following split plan against split requirements across six dimensions
   retryPrompt: `You are an investigation analyst for the projmnt4claude project.
 
 ## Task
-This is attempt {attemptNum}. The previous output did not meet the quality red line. Please regenerate the investigation report following the guidance below.
+This is attempt {attemptNum}. The previous output did not meet the quality threshold. Please regenerate the investigation report following the guidance below.
 
 ## Original Requirement
 {requirement}
 
-## Quality Red Line Requirements (Must Satisfy)
+## Review Report Path
+{reviewPath}
 
-### 1. Format Completeness
-- The report must include: metadata, root cause analysis, solutions, checkpoints, assessment
-- Each SOL must have a corresponding CA
+**Important**: Please use the Read tool to read the review report file first to understand the specific issue analysis and correction suggestions, then make corrections based on the review report.
 
-### 2. Content Depth
-- Each CA/SOL description must be >= 100 characters
-- Descriptions must include specific problem analysis or implementation details
-
-### 3. Fact Accuracy
-- Referenced code locations must exist
-- Function signatures must match actual code
-- Do not design functions that already exist
+The review report contains:
+1. Review scores (root cause alignment, solution effectiveness, checkpoint completeness, fact accuracy)
+2. Issue list (severity, dimension, description, suggestion)
+3. Correction suggestion summary
 
 ## Specific Issues in Previous Output
 {errorSummary}
 
-## Review Suggestions
-{suggestionsSummary}
+## Quality Threshold Requirements (Must Meet)
+
+### 1. Format Completeness
+- Report must contain: Metadata, Root Cause Analysis, Solutions, Checkpoints, Assessment
+- Each SOL must have a corresponding CA
+
+### 2. Content Depth
+- Each CA/SOL description length >= 100 characters
+
+### 3. Fact Accuracy
+- Referenced code locations must actually exist
+- Function signatures must match actual code
+- Must not design functions that already exist
+
+### 4. Verification Priority Principle
+Before generating the report, must verify first:
+- Use Grep tool to verify function/class existence
+- Use Read tool to verify code locations and signatures
+- Each assertion must include verification evidence
 
 ## ⚠️【Mandatory】Correction Requirements
-1. Fix all factual errors (code locations, function signatures)
-2. Enrich content descriptions to ensure each CA/SOL has sufficient depth
-3. Avoid duplicate designs
+1. **Step 1**: Use Read tool to read the review report
+2. **Step 2**: Verify each issue in the review report
+3. **Step 3**: Correct all factual errors
+4. **Step 4**: Enrich content descriptions
 
-## Output Format Constraints
+## Output Format Constraint
 {formatExample}
 `
 };
@@ -39685,26 +39753,6 @@ async function buildRetryPrompt(options) {
   });
   const errorSummary = errors.map((e) => `- [${e.rule}] ${e.message}`).join(`
 `).substring(0, MAX_RETRY_FEEDBACK_LEN);
-  let suggestionsSummary;
-  if (reviewResult && reviewResult.issues && reviewResult.issues.length > 0) {
-    const scores = reviewResult.scores;
-    const scoresBlock = lang === "zh" ? `**审核评分**:
-` + `- 原因分析对齐度: ${scores.rootCauseAlignment}
-` + `- 解决方案有效性: ${scores.solutionEffectiveness}
-` + `- 检查点完善度: ${scores.checkpointCompleteness}` : `**Review Scores**:
-` + `- Root Cause Alignment: ${scores.rootCauseAlignment}
-` + `- Solution Effectiveness: ${scores.solutionEffectiveness}
-` + `- Checkpoint Completeness: ${scores.checkpointCompleteness}`;
-    const issuesBlock = reviewResult.issues.map((i) => `- [${i.severity}] ${i.dimension}: ${i.description}
-` + `  ${lang === "zh" ? "建议" : "Suggestion"}: ${i.suggestion}`).join(`
-`);
-    suggestionsSummary = `${scoresBlock}
-
-**${lang === "zh" ? "审核发现的问题" : "Review Issues"}**:
-${issuesBlock}`.substring(0, MAX_RETRY_FEEDBACK_LEN);
-  } else {
-    suggestionsSummary = lang === "zh" ? "无具体建议" : "No specific suggestions";
-  }
   const formatExample = getFormatExample(lang);
   const slug = slugify(requirement);
   const date = new Date().toISOString().split("T")[0] ?? new Date().toISOString();
@@ -39716,7 +39764,6 @@ ${issuesBlock}`.substring(0, MAX_RETRY_FEEDBACK_LEN);
     requirement,
     attemptNum: String(attemptNum),
     errorSummary: errorSummary || (lang === "zh" ? "无格式错误详情" : "No format error details"),
-    suggestionsSummary,
     reviewPath: reviewPathDisplay,
     formatExample: filledFormatExample
   }, lang, { mode: "strict" });
