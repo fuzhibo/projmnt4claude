@@ -387,8 +387,8 @@ describe('investigation-requirement retry logic', () => {
       expect(mockCallAI).toHaveBeenCalledTimes(2);
       const retryCallArg = mockCallAI.mock.calls[1]![0] as { prompt: string };
       expect(retryCallArg.prompt).toContain('original requirement text');
-      // SOL-003: 新模板使用 "上一次输出的格式问题" 章节替代旧 "格式纠正要求"
-      expect(retryCallArg.prompt).toContain('上一次输出的格式问题');
+      // SOL-003: 新模板使用 "上一次输出的具体问题" 章节，AI 通过 Read 工具读取审核报告
+      expect(retryCallArg.prompt).toContain('上一次输出的具体问题');
       expect(retryCallArg.prompt).toContain('[R-META-001] metadata.requirementSource 缺失或为空');
       expect(retryCallArg.prompt).toContain('[R-CP-001] checkpoints 为空，至少需要 1 个检查点');
     });
@@ -481,8 +481,8 @@ describe('investigation-requirement retry logic', () => {
       });
 
       const retryCallArg = mockCallAI.mock.calls[1]![0] as { prompt: string };
-      // SOL-003: 新模板使用 "上一次输出的格式问题" 章节标题
-      expect(retryCallArg.prompt).toContain('上一次输出的格式问题');
+      // SOL-003: 新模板使用 "上一次输出的具体问题" 章节，AI 通过 Read 工具读取审核报告
+      expect(retryCallArg.prompt).toContain('上一次输出的具体问题');
       // SOL-003: 错误项带 rule 标识 [R-XXX]
       expect(retryCallArg.prompt).toContain('[R-META-001] metadata.requirementSource 缺失或为空');
       expect(retryCallArg.prompt).toContain('[R-CP-001] checkpoints 为空，至少需要 1 个检查点');
@@ -588,7 +588,7 @@ describe('investigation-requirement retry logic', () => {
       const attemptNum = 1;
       const lang = 'zh';
 
-      const retryPrompt = buildRetryPrompt({
+      const retryPrompt = await buildRetryPrompt({
         requirement,
         errors,
         attemptNum,
@@ -619,7 +619,7 @@ describe('investigation-requirement retry logic', () => {
       const attemptNum = 1;
       const lang = 'en';
 
-      const retryPrompt = buildRetryPrompt({
+      const retryPrompt = await buildRetryPrompt({
         requirement,
         errors,
         attemptNum,

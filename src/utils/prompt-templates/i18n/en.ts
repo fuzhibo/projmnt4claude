@@ -32,6 +32,27 @@ Generate a structured investigation report based on the following requirement de
 
 {customRequirements}
 
+## ⚠️ Important: Verification Priority Principle (Must Follow)
+
+Before generating the investigation report, **must verify before asserting**:
+
+### 1. Code Location Verification
+For each code reference, must:
+- Use Grep tool to verify function/class existence
+- Use Read tool to verify code locations and signatures
+- Use Glob tool to verify file paths
+
+### 2. Statistics Verification
+For each statistic, must:
+- Use Grep -c to verify count statistics
+- List verification commands and results
+
+### 3. Output Requirements
+Each assertion must include verification evidence:
+- Function signature assertion: list actual code snippet
+- Statistics assertion: list verification command and result
+- File location assertion: list verification result
+
 ## Layout Hierarchy Constraints (Must Strictly Follow)
 - Title hierarchy: # Level 1 → ## Level 2 → ### Level 3, no skipping
 - Section numbering: Use CA-NNN / SOL-NNN format (e.g., CA-001, SOL-001), consistent with parser contract
@@ -360,38 +381,51 @@ Review the following split plan against split requirements across six dimensions
   retryPrompt: `You are an investigation analyst for the projmnt4claude project.
 
 ## Task
-This is attempt {attemptNum}. The previous output did not meet the quality red line. Please regenerate the investigation report following the guidance below.
+This is attempt {attemptNum}. The previous output did not meet the quality threshold. Please regenerate the investigation report following the guidance below.
 
 ## Original Requirement
 {requirement}
 
-## Quality Red Line Requirements (Must Satisfy)
+## Review Report Path
+{reviewPath}
 
-### 1. Format Completeness
-- The report must include: metadata, root cause analysis, solutions, checkpoints, assessment
-- Each SOL must have a corresponding CA
+**Important**: Please use the Read tool to read the review report file first to understand the specific issue analysis and correction suggestions, then make corrections based on the review report.
 
-### 2. Content Depth
-- Each CA/SOL description must be >= 100 characters
-- Descriptions must include specific problem analysis or implementation details
-
-### 3. Fact Accuracy
-- Referenced code locations must exist
-- Function signatures must match actual code
-- Do not design functions that already exist
+The review report contains:
+1. Review scores (root cause alignment, solution effectiveness, checkpoint completeness, fact accuracy)
+2. Issue list (severity, dimension, description, suggestion)
+3. Correction suggestion summary
 
 ## Specific Issues in Previous Output
 {errorSummary}
 
-## Review Suggestions
-{suggestionsSummary}
+## Quality Threshold Requirements (Must Meet)
+
+### 1. Format Completeness
+- Report must contain: Metadata, Root Cause Analysis, Solutions, Checkpoints, Assessment
+- Each SOL must have a corresponding CA
+
+### 2. Content Depth
+- Each CA/SOL description length >= 100 characters
+
+### 3. Fact Accuracy
+- Referenced code locations must actually exist
+- Function signatures must match actual code
+- Must not design functions that already exist
+
+### 4. Verification Priority Principle
+Before generating the report, must verify first:
+- Use Grep tool to verify function/class existence
+- Use Read tool to verify code locations and signatures
+- Each assertion must include verification evidence
 
 ## ⚠️【Mandatory】Correction Requirements
-1. Fix all factual errors (code locations, function signatures)
-2. Enrich content descriptions to ensure each CA/SOL has sufficient depth
-3. Avoid duplicate designs
+1. **Step 1**: Use Read tool to read the review report
+2. **Step 2**: Verify each issue in the review report
+3. **Step 3**: Correct all factual errors
+4. **Step 4**: Enrich content descriptions
 
-## Output Format Constraints
+## Output Format Constraint
 {formatExample}
 `,
 };
